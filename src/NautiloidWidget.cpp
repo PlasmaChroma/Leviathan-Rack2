@@ -1,5 +1,6 @@
 #include "Nautiloid.hpp"
 #include "NvgGraphicsLifecycle.hpp"
+#include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 
 #include <nanovg_gl.h>
@@ -11,6 +12,9 @@ namespace {
 constexpr float kNautiloidWidthMm = 101.6f;
 constexpr float kNautiloidHeightMm = 128.5f;
 constexpr float kNautiloidMaxFractalZoom = 4.f;
+
+#define NAUTILOID_GLSL_STRINGIFY_DETAIL(x) #x
+#define NAUTILOID_GLSL_STRINGIFY(x) NAUTILOID_GLSL_STRINGIFY_DETAIL(x)
 
 std::string nautiloidUserRootPath() {
   return system::join(asset::user(), "Leviathan/Nautiloid");
@@ -72,10 +76,10 @@ bool nautiloidVisibleViewOutgrowsCache(Nautiloid* module, float threshold) {
   return std::max(useX, useY) >= threshold;
 }
 
-bool nautiloidGpuPreviewEnabledForMandelbrot(Nautiloid* module) {
+bool nautiloidGpuPreviewEnabled(Nautiloid* module) {
   if (!module ||
       !isDragonKingDebugEnabled() ||
-      module->fractalMode != iris::FRACTAL_MANDELBROT ||
+      !iris::isBuiltinFractalMode(module->fractalMode) ||
       !module->debugGpuPreviewEnabled.load(std::memory_order_relaxed)) {
     return false;
   }
@@ -83,7 +87,7 @@ bool nautiloidGpuPreviewEnabledForMandelbrot(Nautiloid* module) {
 }
 
 bool nautiloidGpuPreviewActive(Nautiloid* module) {
-  return nautiloidGpuPreviewEnabledForMandelbrot(module) &&
+  return nautiloidGpuPreviewEnabled(module) &&
     module->debugGpuPreviewAvailable.load(std::memory_order_relaxed);
 }
 
@@ -98,6 +102,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
   GLuint fragmentShader = 0;
   GLint uniformCenter = -1;
   GLint uniformHalfSpan = -1;
+  GLint uniformMode = -1;
   bool shaderInitAttempted = false;
   bool shaderReady = false;
   bool lastEffectiveActive = false;
@@ -138,6 +143,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     fragmentShader = 0;
     uniformCenter = -1;
     uniformHalfSpan = -1;
+    uniformMode = -1;
     shaderReady = false;
     shaderInitAttempted = false;
   }
@@ -177,9 +183,14 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
 
     static const char* const kFragmentShaderSrc = R"GLSL(
       #version 120
+)GLSL"
+      "#define NAUTILOID_ESCAPE_MAX_ITER " NAUTILOID_GLSL_STRINGIFY(LEVIATHAN_NAUTILOID_ESCAPE_FRACTAL_MAX_ITER) "\n"
+      "#define NAUTILOID_ROOT_MAX_ITER " NAUTILOID_GLSL_STRINGIFY(LEVIATHAN_NAUTILOID_ROOT_FRACTAL_MAX_ITER) "\n"
+R"GLSL(
       varying vec2 vUv;
       uniform vec2 uCenter;
       uniform vec2 uHalfSpan;
+      uniform int uMode;
 
       vec3 hsvToRgb(float h, float s, float v) {
         h = fract(h);
@@ -213,22 +224,109 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
         return (c.x + 1.0) * (c.x + 1.0) + c.y * c.y < 0.0625;
       }
 
+      vec3 escapeColor(int iter, int maxIter, float mag2, float minOrbit) {
+        float smooth = float(iter) + 1.0 - log(log(sqrt(max(mag2, 1.000001)))) / log(2.0);
+        float t = clamp(smooth / float(maxIter), 0.0, 1.0);
+        float orbit = 1.0 - clamp(sqrt(min(minOrbit, 4.0)) * 0.5, 0.0, 1.0);
+        return hsvToRgb(0.64 + 1.35 * t + 0.08 * orbit,
+                        0.72 + 0.20 * orbit,
+                        0.18 + 0.82 * sqrt(t));
+      }
+
+      vec3 rootColor(vec2 z, int iter, int maxIter, float phase) {
+        float d0 = (z.x - 1.0) * (z.x - 1.0) + z.y * z.y;
+        float d1 = (z.x + 0.5) * (z.x + 0.5) + (z.y - 0.8660254) * (z.y - 0.8660254);
+        float d2 = (z.x + 0.5) * (z.x + 0.5) + (z.y + 0.8660254) * (z.y + 0.8660254);
+        int root = d0 < d1 && d0 < d2 ? 0 : (d1 < d2 ? 1 : 2);
+        float t = 1.0 - float(iter) / float(maxIter);
+        float v = 0.20 + 0.80 * sqrt(clamp(t, 0.0, 1.0));
+        return vec3((root == 0 ? 0.95 : 0.20 + phase) * v,
+                    (root == 1 ? 0.90 : 0.30 + phase) * v,
+                    (root == 2 ? 1.00 : 0.46 + phase) * v);
+      }
+
       void main() {
-        vec2 c = vec2(-0.75, 0.0) + uCenter + (vUv * 2.0 - 1.0) * uHalfSpan;
-        if (mandelbrotMainInterior(c)) {
-          gl_FragColor = vec4(7.0 / 255.0, 4.0 / 255.0, 18.0 / 255.0, 1.0);
+        vec2 p = uCenter + (vUv * 2.0 - 1.0) * uHalfSpan;
+        if (uMode == 12 || uMode == 13) {
+          vec2 z = p;
+          const int maxRootIter = NAUTILOID_ROOT_MAX_ITER;
+          int iter = 0;
+          for (int i = 0; i < maxRootIter; ++i) {
+            float zr2 = z.x * z.x;
+            float zi2 = z.y * z.y;
+            float denom = 3.0 * ((zr2 - zi2) * (zr2 - zi2) + 4.0 * zr2 * zi2);
+            if (denom < 1.0e-14) {
+              iter = i;
+              break;
+            }
+            vec2 nextZ = vec2((2.0 * z.x * (zr2 + zi2) + (zr2 - zi2)) / denom,
+                              (2.0 * z.y * (zr2 + zi2) - 2.0 * z.x * z.y) / denom);
+            if (uMode == 13) {
+              nextZ += vec2(-0.52, 0.38);
+            }
+            vec2 delta = nextZ - z;
+            z = nextZ;
+            iter = i;
+            if (dot(delta, delta) < 1.0e-12 || dot(z, z) > 64.0) {
+              break;
+            }
+          }
+          gl_FragColor = vec4(rootColor(z, iter, maxRootIter, uMode == 13 ? 0.18 : 0.0), 1.0);
           return;
         }
+
+        vec2 c = vec2(0.0);
         vec2 z = vec2(0.0);
+        vec2 prev = vec2(0.0);
+        if (uMode == 1) {
+          c = vec2(-0.75, 0.0) + p;
+          if (mandelbrotMainInterior(c)) {
+            gl_FragColor = vec4(7.0 / 255.0, 4.0 / 255.0, 18.0 / 255.0, 1.0);
+            return;
+          }
+        } else if (uMode == 4) {
+          c = vec2(-0.74543, 0.11301);
+          z = p;
+        } else if (uMode == 5) {
+          c = vec2(-0.42, 0.08);
+          z = p;
+        } else if (uMode == 7) {
+          c = vec2(-1.76, -0.045) + p;
+        } else if (uMode == 8) {
+          c = vec2(-0.25, 0.02) + p;
+        } else if (uMode == 11) {
+          c = vec2(-0.52, 0.0) + p;
+        } else {
+          c = vec2(-0.12, 0.0) + p;
+        }
+
         float minOrbit = 1.0e9;
         float mag2 = 0.0;
         int iter = 0;
-        const int maxIter = 140;
+        const int maxIter = NAUTILOID_ESCAPE_MAX_ITER;
         for (int i = 0; i < maxIter; ++i) {
+          if (uMode == 7) {
+            z = abs(z);
+          }
           float zr2 = z.x * z.x;
           float zi2 = z.y * z.y;
           minOrbit = min(minOrbit, zr2 + zi2);
-          z = vec2(zr2 - zi2 + c.x, 2.0 * z.x * z.y + c.y);
+          if (uMode == 5) {
+            vec2 nextZ = vec2(zr2 - zi2 + c.x + 0.48 * prev.x,
+                              2.0 * z.x * z.y + c.y + 0.48 * prev.y);
+            prev = z;
+            z = nextZ;
+          } else if (uMode == 10) {
+            z = vec2(zr2 - zi2 + c.x, -2.0 * z.x * z.y + c.y);
+          } else if (uMode == 8) {
+            z = vec2(abs(zr2 - zi2) + c.x, 2.0 * z.x * z.y + c.y);
+          } else if (uMode == 11) {
+            vec2 nextZ = vec2(zr2 - zi2 + c.x, 2.0 * z.x * z.y + c.y);
+            c = 0.5 * c + nextZ;
+            z = nextZ;
+          } else {
+            z = vec2(zr2 - zi2 + c.x, 2.0 * z.x * z.y + c.y);
+          }
           mag2 = dot(z, z);
           iter = i;
           if (mag2 > 16.0) {
@@ -239,13 +337,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
           gl_FragColor = vec4(7.0 / 255.0, 4.0 / 255.0, 18.0 / 255.0, 1.0);
           return;
         }
-        float smooth = float(iter) + 1.0 - log(log(sqrt(max(mag2, 1.000001)))) / log(2.0);
-        float t = clamp(smooth / float(maxIter), 0.0, 1.0);
-        float orbit = 1.0 - clamp(sqrt(min(minOrbit, 4.0)) * 0.5, 0.0, 1.0);
-        vec3 rgb = hsvToRgb(0.64 + 1.35 * t + 0.08 * orbit,
-                            0.72 + 0.20 * orbit,
-                            0.18 + 0.82 * sqrt(t));
-        gl_FragColor = vec4(rgb, 1.0);
+        gl_FragColor = vec4(escapeColor(iter, maxIter, mag2, minOrbit), 1.0);
       }
     )GLSL";
 
@@ -280,9 +372,11 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     }
     uniformCenter = glGetUniformLocation(program, "uCenter");
     uniformHalfSpan = glGetUniformLocation(program, "uHalfSpan");
+    uniformMode = glGetUniformLocation(program, "uMode");
     shaderReady =
       uniformCenter >= 0 &&
-      uniformHalfSpan >= 0;
+      uniformHalfSpan >= 0 &&
+      uniformMode >= 0;
     if (!shaderReady) {
       releaseGlResources(true);
       shaderInitAttempted = true;
@@ -293,7 +387,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
 
   void step() override {
     OpenGlWidget::step();
-    const bool effectiveActive = nautiloidGpuPreviewEnabledForMandelbrot(module);
+    const bool effectiveActive = nautiloidGpuPreviewEnabled(module);
     if (module) {
       module->debugGpuPreviewAvailable.store(effectiveActive && shaderReady, std::memory_order_relaxed);
     }
@@ -328,7 +422,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     glClearColor(0.f, 0.f, 0.f, 0.f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    if (!nautiloidGpuPreviewEnabledForMandelbrot(module) || !ensureShaderReady()) {
+    if (!nautiloidGpuPreviewEnabled(module) || !ensureShaderReady()) {
       if (module) {
         module->debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
       }
@@ -356,6 +450,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     glUseProgram(program);
     glUniform2f(uniformCenter, float(module->fractalCenterX), float(module->fractalCenterY));
     glUniform2f(uniformHalfSpan, halfSpan.x, halfSpan.y);
+    glUniform1i(uniformMode, module->fractalMode);
     glBegin(GL_TRIANGLE_STRIP);
     glTexCoord2f(0.f, 0.f);
     glVertex2f(0.f, 0.f);
@@ -715,6 +810,10 @@ struct NautiloidTileCacheGrid final : TransparentWidget {
   explicit NautiloidTileCacheGrid(Nautiloid* module) : module(module) {}
 
   void draw(const DrawArgs& args) override {
+    if (nautiloidGpuPreviewActive(module)) {
+      return;
+    }
+
     nvgBeginPath(args.vg);
     nvgRoundedRect(args.vg, 0.f, 0.f, box.size.x, box.size.y, 3.f);
     nvgFillColor(args.vg, nvgRGB(4, 7, 10));
@@ -970,14 +1069,25 @@ struct NautiloidZoomSlider final : ui::Slider {
 
   void step() override {
     const double now = system::getTime();
-    if (module && zoomActive && zoomSpeed) {
+    const bool cvConnected =
+      module && module->zoomRateCvConnected.load(std::memory_order_relaxed);
+    const float cvSpeed =
+      cvConnected ? module->zoomRateCvNorm.load(std::memory_order_relaxed) : 0.f;
+    const float manualSpeed =
+      (zoomActive && zoomSpeed) ? (zoomSpeed->getValue() - 0.5f) * 2.f : 0.f;
+    const float speed = clamp(manualSpeed + cvSpeed, -1.f, 1.f);
+    const bool speedActive = std::fabs(speed) > 0.015f;
+    const bool interactionActive = zoomActive || (cvConnected && speedActive);
+    if (module) {
+      module->zoomInteractionActive.store(interactionActive, std::memory_order_relaxed);
+    }
+    if (module && interactionActive) {
       if (!std::isfinite(lastStepTime)) {
         lastStepTime = now;
       }
       const double dt = std::max(0.0, std::min(now - lastStepTime, 0.05));
       lastStepTime = now;
-      const float speed = (zoomSpeed->getValue() - 0.5f) * 2.f;
-      if (std::fabs(speed) > 0.015f && dt > 0.0) {
+      if (speedActive && dt > 0.0) {
         const float shapedSpeed = speed * std::fabs(speed);
         const float next = clamp(module->fractalZoom + shapedSpeed * float(dt) * 0.85f, 0.f, kNautiloidMaxFractalZoom);
         if (std::fabs(module->fractalZoom - next) > 1e-5f) {
@@ -993,12 +1103,23 @@ struct NautiloidZoomSlider final : ui::Slider {
           }
         }
       }
+    } else {
+      lastStepTime = -INFINITY;
     }
     ui::Slider::step();
   }
 
   void draw(const DrawArgs& args) override {
-    const float value = zoomSpeed ? clamp(zoomSpeed->getValue(), 0.f, 1.f) : 0.5f;
+    const bool cvConnected =
+      module && module->zoomRateCvConnected.load(std::memory_order_relaxed);
+    const float cvSpeed =
+      cvConnected ? module->zoomRateCvNorm.load(std::memory_order_relaxed) : 0.f;
+    const float manualSpeed =
+      (zoomActive && zoomSpeed) ? (zoomSpeed->getValue() - 0.5f) * 2.f : 0.f;
+    const float displaySpeed = clamp(manualSpeed + cvSpeed, -1.f, 1.f);
+    const float value = (zoomActive || cvConnected)
+      ? 0.5f + 0.5f * displaySpeed
+      : (zoomSpeed ? clamp(zoomSpeed->getValue(), 0.f, 1.f) : 0.5f);
     const float zoomAmount =
       module ? clamp(module->fractalZoom / kNautiloidMaxFractalZoom, 0.f, 1.f) : 0.f;
     const float centerX = 0.5f * box.size.x;
@@ -1119,16 +1240,18 @@ struct NautiloidSourceButton final : TL1105 {
     TL1105::draw(args);
     const float cx = 0.5f * box.size.x;
     const float cy = 0.5f * box.size.y;
-    const float r = std::max(1.3f, 0.13f * box.size.x);
-    nvgStrokeWidth(args.vg, 1.1f);
-    nvgStrokeColor(args.vg, nvgRGBA(225, 232, 240, 244));
-    nvgBeginPath(args.vg);
-    nvgCircle(args.vg, cx, cy, r);
-    nvgMoveTo(args.vg, cx - r * 1.6f, cy);
-    nvgLineTo(args.vg, cx + r * 1.6f, cy);
-    nvgMoveTo(args.vg, cx, cy - r * 1.6f);
-    nvgLineTo(args.vg, cx, cy + r * 1.6f);
-    nvgStroke(args.vg);
+    const float dy = std::max(1.6f, 0.16f * box.size.y);
+    const float halfW = std::max(1.9f, 0.22f * box.size.x);
+    const float y0 = cy - dy;
+    for (int i = 0; i < 3; ++i) {
+      const float y = y0 + dy * float(i);
+      nvgBeginPath(args.vg);
+      nvgMoveTo(args.vg, cx - halfW, y);
+      nvgLineTo(args.vg, cx + halfW, y);
+      nvgStrokeWidth(args.vg, 1.2f);
+      nvgStrokeColor(args.vg, nvgRGBA(225, 232, 240, 244));
+      nvgStroke(args.vg);
+    }
   }
 };
 
@@ -1148,12 +1271,28 @@ struct NautiloidResetButton final : TL1105 {
     TL1105::draw(args);
     const float cx = 0.5f * box.size.x;
     const float cy = 0.5f * box.size.y;
-    const float r = std::max(2.f, 0.18f * box.size.x);
-    nvgStrokeWidth(args.vg, 1.2f);
-    nvgStrokeColor(args.vg, nvgRGBA(225, 232, 240, 244));
+    const float r = std::max(2.8f, 0.23f * std::min(box.size.x, box.size.y));
+    constexpr float startA = -0.22f * float(M_PI);
+    constexpr float endA = 1.32f * float(M_PI);
+
     nvgBeginPath(args.vg);
-    nvgArc(args.vg, cx, cy, r, -0.25f * float(M_PI), 1.35f * float(M_PI), NVG_CCW);
-    nvgLineTo(args.vg, cx - r * 0.95f, cy - r * 0.35f);
+    nvgArc(args.vg, cx, cy, r, startA, endA, NVG_CW);
+    nvgStrokeWidth(args.vg, 1.25f);
+    nvgStrokeColor(args.vg, nvgRGBA(225, 232, 240, 244));
+    nvgStroke(args.vg);
+
+    const float tipX = cx + std::cos(endA) * r;
+    const float tipY = cy + std::sin(endA) * r;
+    const float tangentA = endA + 0.5f * float(M_PI);
+    const float headLen = std::max(2.f, 0.18f * std::min(box.size.x, box.size.y));
+    const float spread = 0.78f;
+    nvgBeginPath(args.vg);
+    nvgMoveTo(args.vg, tipX, tipY);
+    nvgLineTo(args.vg, tipX + std::cos(tangentA - spread) * headLen, tipY + std::sin(tangentA - spread) * headLen);
+    nvgMoveTo(args.vg, tipX, tipY);
+    nvgLineTo(args.vg, tipX + std::cos(tangentA + spread) * headLen, tipY + std::sin(tangentA + spread) * headLen);
+    nvgStrokeWidth(args.vg, 1.25f);
+    nvgStrokeColor(args.vg, nvgRGBA(225, 232, 240, 244));
     nvgStroke(args.vg);
   }
 };
@@ -1182,9 +1321,22 @@ struct NautiloidZoomReadout final : TransparentWidget {
 struct NautiloidWidget final : ModuleWidget {
   explicit NautiloidWidget(Nautiloid* module) {
     setModule(module);
-    setPanel(createPanel(asset::plugin(pluginInstance, "res/nautiloid.panel.svg")));
+    const std::string panelPath = asset::plugin(pluginInstance, "res/nautiloid.panel.svg");
+    setPanel(createPanel(panelPath));
+    addChild(visual_assets::createPanelSurfaceEffectWidget(panelPath, box.size));
 
-    const math::Rect displayRectMm(Vec(1.8f, 6.5f), Vec(98.f, 65.27f));
+    auto rectMm = [&](const char* id, math::Rect fallback) {
+      math::Rect rect = fallback;
+      panel_svg::loadRectFromSvgMm(panelPath, id, &rect);
+      return rect;
+    };
+    auto pointMm = [&](const char* id, Vec fallback) {
+      Vec point = fallback;
+      panel_svg::loadPointFromSvgMm(panelPath, id, &point);
+      return point;
+    };
+
+    const math::Rect displayRectMm = rectMm("DISPLAY", math::Rect(Vec(1.8f, 6.5f), Vec(98.f, 65.27f)));
     addChild(visual_assets::createPreviewFrameEnhancementWidget(
       displayRectMm, visual_assets::PreviewFrameTint::Purple));
     NautiloidGlPreview* glPreview = new NautiloidGlPreview(module);
@@ -1207,36 +1359,43 @@ struct NautiloidWidget final : ModuleWidget {
     addChild(eyeMarker);
 
     NautiloidZoomReadout* zoomReadout = new NautiloidZoomReadout(module);
-    zoomReadout->box.pos = mm2px(Vec(34.f, 72.2f));
-    zoomReadout->box.size = mm2px(Vec(33.6f, 5.2f));
+    const math::Rect zoomReadoutRectMm = rectMm("ZOOM_READOUT", math::Rect(Vec(34.f, 72.2f), Vec(33.6f, 5.2f)));
+    zoomReadout->box.pos = mm2px(zoomReadoutRectMm.pos);
+    zoomReadout->box.size = mm2px(zoomReadoutRectMm.size);
     addChild(zoomReadout);
 
     NautiloidZoomSlider* zoomSlider = new NautiloidZoomSlider();
     zoomSlider->module = module;
-    zoomSlider->box.pos = mm2px(Vec(5.f, 79.f));
-    zoomSlider->box.size = mm2px(Vec(91.6f, 9.f));
+    const math::Rect zoomBarRectMm = rectMm("ZOOM_BAR", math::Rect(Vec(5.f, 79.f), Vec(91.6f, 9.f)));
+    zoomSlider->box.pos = mm2px(zoomBarRectMm.pos);
+    zoomSlider->box.size = mm2px(zoomBarRectMm.size);
     NautiloidZoomSpeedQuantity* zoomSpeed = new NautiloidZoomSpeedQuantity();
     zoomSlider->zoomSpeed = zoomSpeed;
     zoomSlider->quantity = zoomSpeed;
     addChild(zoomSlider);
 
     NautiloidSourceButton* sourceButton =
-      createParamCentered<NautiloidSourceButton>(mm2px(Vec(7.8f, 75.4f)), module, Nautiloid::SOURCE_MENU_PARAM);
+      createParamCentered<NautiloidSourceButton>(
+        mm2px(pointMm("SOURCE_MENU_PARAM", Vec(7.8f, 75.4f))), module, Nautiloid::SOURCE_MENU_PARAM);
     sourceButton->module = module;
     addParam(sourceButton);
 
     NautiloidResetButton* resetButton =
-      createParamCentered<NautiloidResetButton>(mm2px(Vec(19.2f, 75.4f)), module, Nautiloid::RESET_VIEW_PARAM);
+      createParamCentered<NautiloidResetButton>(
+        mm2px(pointMm("RESET_VIEW_PARAM", Vec(19.2f, 75.4f))), module, Nautiloid::RESET_VIEW_PARAM);
     resetButton->module = module;
     addParam(resetButton);
 
-    const math::Rect tileCacheRectMm(Vec(2.f, 102.f), Vec(42.f, 25.9f));
+    addInput(createInputCentered<Magitek2InputJack>(
+      mm2px(pointMm("ZOOM_RATE_INPUT", Vec(88.6f, 75.4f))), module, Nautiloid::ZOOM_RATE_INPUT));
+
+    const math::Rect tileCacheRectMm = rectMm("TILE_CACHE", math::Rect(Vec(2.f, 102.f), Vec(42.f, 25.9f)));
     NautiloidTileCacheGrid* tileCacheGrid = new NautiloidTileCacheGrid(module);
     tileCacheGrid->box.pos = mm2px(tileCacheRectMm.pos);
     tileCacheGrid->box.size = mm2px(tileCacheRectMm.size);
     addChild(tileCacheGrid);
 
-    const math::Rect irisPreviewRectMm(Vec(47.4f, 102.f), Vec(52.36f, 25.9f));
+    const math::Rect irisPreviewRectMm = rectMm("IRIS_PREVIEW", math::Rect(Vec(47.4f, 102.f), Vec(52.36f, 25.9f)));
     addChild(visual_assets::createPreviewFrameEnhancementWidget(
       irisPreviewRectMm, visual_assets::PreviewFrameTint::Purple));
     widget::FramebufferWidget* irisPreviewFb = new widget::FramebufferWidget();
@@ -1250,9 +1409,12 @@ struct NautiloidWidget final : ModuleWidget {
     addChild(irisPreviewFb);
 
     NautiloidDebugCounters* counters = new NautiloidDebugCounters(module);
-    counters->box.pos = mm2px(Vec(48.0f, 93.8f));
-    counters->box.size = mm2px(Vec(50.5f, 10.8f));
+    const math::Rect countersRectMm = rectMm("DEBUG_COUNTERS", math::Rect(Vec(48.0f, 93.8f), Vec(50.5f, 10.8f)));
+    counters->box.pos = mm2px(countersRectMm.pos);
+    counters->box.size = mm2px(countersRectMm.size);
     addChild(counters);
+
+    addChild(visual_assets::createPanelLabelsWidget("res/nautiloid.labels.svg", box.size));
   }
 
   void appendContextMenu(Menu* menu) override {
@@ -1272,7 +1434,7 @@ struct NautiloidWidget final : ModuleWidget {
         naut->debugFileLoggingEnabled.store(!current, std::memory_order_relaxed);
       }));
     menu->addChild(createCheckMenuItem(
-      "GPU preview for Mandelbrot", "",
+      "GPU preview for built-in fractals", "",
       [naut]() {
         return naut->debugGpuPreviewEnabled.load(std::memory_order_relaxed);
       },

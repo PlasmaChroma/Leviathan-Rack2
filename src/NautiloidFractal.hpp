@@ -7,9 +7,14 @@
 #include <cstdint>
 #include <utility>
 
+#define LEVIATHAN_NAUTILOID_ESCAPE_FRACTAL_MAX_ITER 192
+#define LEVIATHAN_NAUTILOID_ROOT_FRACTAL_MAX_ITER 64
+
 namespace iris {
 
 constexpr int kNautiloidFractalSourceVersion = 1;
+constexpr int kNautiloidEscapeFractalMaxIter = LEVIATHAN_NAUTILOID_ESCAPE_FRACTAL_MAX_ITER;
+constexpr int kNautiloidRootFractalMaxIter = LEVIATHAN_NAUTILOID_ROOT_FRACTAL_MAX_ITER;
 
 struct NautiloidFractalSourceParams {
   int mode = FRACTAL_MANDELBROT;
@@ -263,7 +268,9 @@ inline bool makeBuiltinFractalSourceSized(
   const int fullHeight = std::max(2, viewportPixelHeight);
   const int pixelX0 = std::max(0, viewportPixelX);
   const int pixelY0 = std::max(0, viewportPixelY);
-  const int maxIter = (mode == FRACTAL_NEWTON || mode == FRACTAL_NOVA) ? 36 : 140;
+  const int maxIter = (mode == FRACTAL_NEWTON || mode == FRACTAL_NOVA)
+    ? kNautiloidRootFractalMaxIter
+    : kNautiloidEscapeFractalMaxIter;
   const float simdMaxZoom = detail::mandelbrotFamilySimdMaxZoom(mode);
   const bool fullViewport = pixelX0 == 0 && pixelY0 == 0 &&
     source.width == fullWidth && source.height == fullHeight;

@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="101.6mm"
+   height="128.5mm"
+   viewBox="0 0 10160 12850"
+   version="1.1"
+   id="svg8"
+   sodipodi:docname="nautiloid.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs8" />
+  <sodipodi:namedview
+     id="namedview8"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="1.2096709"
+     inkscape:cx="100.44054"
+     inkscape:cy="166.57423"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg8" />
+  <rect
+     width="10160"
+     height="12850"
+     fill="#07090d"
+     id="rect1" />
+  <rect
+     x="180"
+     y="650"
+     width="9800"
+     height="6527"
+     rx="96"
+     fill="#030507"
+     stroke="#5841bf"
+     stroke-width="46"
+     id="rect3" />
+  <rect
+     x="500"
+     y="7900"
+     width="9160"
+     height="700"
+     rx="80"
+     fill="#111827"
+     stroke="#1cccd9"
+     stroke-width="34"
+     opacity="0.72"
+     id="rect4" />
+  <g
+     id="components"
+     style="display:none;opacity:0.5">
+    <rect
+       id="DISPLAY"
+       x="180"
+       y="650"
+       width="9800"
+       height="6527"
+       fill="#ff0000" />
+    <rect
+       id="ZOOM_READOUT"
+       x="3400"
+       y="7220"
+       width="3360"
+       height="520"
+       fill="#ff0000" />
+    <rect
+       id="ZOOM_BAR"
+       x="500"
+       y="7900"
+       width="9160"
+       height="900"
+       fill="#ff0000" />
+    <circle
+       id="SOURCE_MENU_PARAM"
+       cx="780"
+       cy="7540"
+       fill="#ff0000"
+       r="360" />
+    <circle
+       id="RESET_VIEW_PARAM"
+       cx="1920"
+       cy="7540"
+       fill="#ff0000"
+       r="360" />
+    <ellipse
+       id="ZOOM_RATE_INPUT"
+       cx="780"
+       cy="9246.043"
+       rx="398"
+       ry="405"
+       fill="#00ff00" />
+    <rect
+       id="TILE_CACHE"
+       x="200"
+       y="10200"
+       width="4200"
+       height="2590"
+       fill="#ff0000" />
+    <rect
+       id="IRIS_PREVIEW"
+       x="4740"
+       y="10200"
+       width="5236"
+       height="2590"
+       fill="#ff0000" />
+    <rect
+       id="DEBUG_COUNTERS"
+       x="4800"
+       y="9380"
+       width="5050"
+       height="1080"
+       fill="#ff0000" />
+  </g>
+  <g
+     id="labels">
+    <text
+       x="5080"
+       y="499.97812"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', Arial, sans-serif"
+       font-size="520px"
+       font-weight="700"
+       fill="#e8edf7"
+       id="text4">Nautiloid</text>
+    <text
+       x="778.87122"
+       y="10049.978"
+       text-anchor="middle"
+       font-family="DejaVu Sans, Arial, sans-serif"
+       font-size="260"
+       fill="#d9e5f7"
+       id="text5"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:middle;fill:#d9e5f7"><tspan
+         sodipodi:role="line"
+         id="tspan8"
+         x="778.87122"
+         y="10049.978">ZOOM CV</tspan></text>
+  </g>
+</svg>

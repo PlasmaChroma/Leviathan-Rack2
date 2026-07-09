@@ -19,6 +19,7 @@ struct Nautiloid final : Module {
   };
 
   enum InputId {
+    ZOOM_RATE_INPUT,
     INPUTS_LEN
   };
 
@@ -106,6 +107,8 @@ struct Nautiloid final : Module {
   std::atomic<bool> displayRenderBusy {false};
   std::atomic<bool> showMandelbrotEyeMarker {false};
   std::atomic<bool> loading {false};
+  std::atomic<float> zoomRateCvNorm {0.f};
+  std::atomic<bool> zoomRateCvConnected {false};
 
   struct DisplayCacheTile {
     int x = 0;

@@ -26,7 +26,7 @@ constexpr int kZoomAheadTileSize = 128;
 bool requestCanUseGpuPreview(int mode, bool shaderAvailable) {
   return shaderAvailable &&
     isDragonKingDebugEnabled() &&
-    mode == iris::FRACTAL_MANDELBROT;
+    iris::isBuiltinFractalMode(mode);
 }
 
 bool requestGpuPreviewVisible(int mode, bool shaderAvailable, const Nautiloid* module) {
@@ -620,6 +620,7 @@ Nautiloid::Nautiloid() {
   config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
   configButton(SOURCE_MENU_PARAM, "Fractal");
   configButton(RESET_VIEW_PARAM, "Reset view");
+  configInput(ZOOM_RATE_INPUT, "Zoom rate CV");
   displayTileCache.ensureStorage(kFractalCacheWidth, kFractalCacheHeight, kDisplayTileSize);
   startWorker();
   requestRender();
@@ -630,6 +631,12 @@ Nautiloid::~Nautiloid() {
 }
 
 void Nautiloid::process(const ProcessArgs& args) {
+  const bool zoomRateConnected = inputs[ZOOM_RATE_INPUT].isConnected();
+  zoomRateCvConnected.store(zoomRateConnected, std::memory_order_relaxed);
+  zoomRateCvNorm.store(
+    zoomRateConnected ? clamp(inputs[ZOOM_RATE_INPUT].getVoltage() / 10.f, -1.f, 1.f) : 0.f,
+    std::memory_order_relaxed);
+
   const uint64_t generation = irisPreviewGeneration.load(std::memory_order_acquire);
   if (generation == 0u) return;
   std::shared_ptr<const iris::SourceField> source;
