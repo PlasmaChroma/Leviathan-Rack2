@@ -25,18 +25,22 @@ Completed work:
 - Kept SIMD disabled while visual stability is being debugged.
 - Added predictive cache centering during panning.
 - Replaced the single expanded display cache bitmap with a first-pass tile cache:
-  - expanded cache still covers `1.5x` the visible display area
+  - expanded cache currently covers `3x` the visible display area
   - cache tiles are currently `128x128`
   - cache worker fills visible-near tiles first, then outward
-  - foreground display uses cached tiles only when the required crop is complete
-  - foreground display falls back to exact full-frame rendering when tiles are missing
+  - foreground display uses full cached crops when the required crop is complete
+  - foreground display can now publish partial cached crops over the previous completed frame while tiles are still filling
+  - foreground display falls back to exact full-frame rendering when no useful cached coverage is available
   - tile cache applies to all built-in Nautiloid fractal modes, not only Mandelbrot
+  - cache recentering can shift existing tiles when movement aligns to tile boundaries
+  - the panel now includes a tile cache grid visualization showing current/stale tiles and visible crop position
+  - tile lookup during display composition is now grid-indexed instead of a per-pixel linear tile scan
 
 Deferred or changed:
 
 - Instant frame reprojection during pan was tried and removed because edge flicker felt worse than waiting for real data.
 - The current tile cache is display-cache tiling, not yet a persistent infinite/world tile grid.
-- Partial/progressive visible tile composition is not enabled yet; the user still sees complete frames only.
+- Partial/progressive visible tile composition is enabled for display cache composites, but missing pixels currently reuse the previous display frame rather than rendering only the missing rectangles.
 - SIMD remains off pending scalar visual validation.
 
 ## Phase 1: Stabilize Current MVP
@@ -99,23 +103,26 @@ Goal: replace one oversized cache with smarter background work.
 - Cache can aim slightly ahead of movement.
 - Cache coverage is tracked by center/zoom/mode and visible crop coverage.
 - If current view is inside complete cached tiles, crop immediately.
-- If required tiles are missing, foreground display falls back to exact rendering.
+- If required tiles are partially available, foreground display can publish a partial cached composite over the previous display frame.
+- If no useful cached coverage is available, foreground display falls back to exact rendering.
 - Background cache now fills tiles instead of rendering one monolithic expanded cache image.
+- Full caches can be recentred by tile-shifting existing storage instead of always discarding all cached tiles.
 
 ## Phase 5: Progressive Rendering
 
 Goal: avoid all-or-nothing full frame renders.
 
-- Status: partially started.
+- Status: partially complete.
 - Split display cache render into tiles.
 - Render visible-near tiles first.
 - Render remaining cache tiles outward.
+- Publish display cache composites progressively as background tiles complete.
 - Add quality tiers:
   - fast preview iteration count
   - normal display iteration count
   - settled/high-quality iteration count
 - Replace stale tiles progressively instead of swapping whole frames only.
-- Not yet done: visible progressive tile composition. The display still swaps complete frames.
+- Current limitation: missing pixels in partial composites reuse the previous display frame; there is not yet a true missing-rectangle renderer or quality-tiered compositor.
 
 ## Phase 6: Precision and Deep Zoom
 
@@ -144,12 +151,14 @@ Goal: make the display feel fluid without replacing the CPU source pipeline.
 
 Move from cache plumbing to measurement and tuning:
 
-- Add tile-specific counters to the overlay/log:
+- Use the new tile-specific overlay/log counters to tune behavior:
   - current tile count
   - full tile count
   - tile cache resets
+  - tile cache shifts/reused tiles
   - tile render completions
   - tile render aborts
-- Separate foreground stale display drops from background cache aborts.
+  - partial cache hits and composite publishes
+- Split cache scheduling into visible tiles, Iris generation, then overscan tiles if Iris feels delayed by full cache sweeps.
 - Tune tile size after observing behavior, likely comparing `128x128` against `192x192`.
-- Consider visible progressive tile composition only if full-frame fallback still feels too slow.
+- Consider a true missing-rectangle renderer if partial composites show too much stale-frame patching during fast movement.

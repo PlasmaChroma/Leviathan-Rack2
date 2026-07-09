@@ -55,6 +55,8 @@ struct Nautiloid final : Module {
     bool current = false;
     float cacheCenterX = 0.f;
     float cacheCenterY = 0.f;
+    size_t currentTileCount = 0u;
+    size_t fullTileCount = 0u;
     std::vector<uint8_t> tileCurrent;
   };
 
@@ -70,10 +72,16 @@ struct Nautiloid final : Module {
   std::atomic<uint64_t> displayRendersCompleted {0u};
   std::atomic<uint64_t> displayRendersDroppedStale {0u};
   std::atomic<uint64_t> displayCacheHits {0u};
+  std::atomic<uint64_t> displayCachePartialHits {0u};
   std::atomic<uint64_t> displayCacheMisses {0u};
   std::atomic<uint64_t> cacheRequestsSubmitted {0u};
   std::atomic<uint64_t> cacheRequestsDequeued {0u};
   std::atomic<uint64_t> displayCacheRendersCompleted {0u};
+  std::atomic<uint64_t> displayCacheCompositePublishes {0u};
+  std::atomic<uint64_t> displayCacheTilesRendered {0u};
+  std::atomic<uint64_t> displayCacheTileAborts {0u};
+  std::atomic<uint64_t> displayTileCacheResets {0u};
+  std::atomic<uint64_t> displayTileCacheShifts {0u};
   std::atomic<uint64_t> irisRendersCompleted {0u};
   std::atomic<uint64_t> irisRendersDroppedStale {0u};
   std::atomic<uint64_t> irisExpanderPublishes {0u};
@@ -119,6 +127,7 @@ private:
   void submitCacheRequest(const WorkerRequest& request);
   void workerLoop();
   void cacheWorkerLoop();
+  bool publishDisplayCacheComposite(const WorkerRequest& request, bool allowPartial, bool* completeOut = nullptr);
 
   mutable std::mutex workerMutex;
   std::condition_variable workerCv;

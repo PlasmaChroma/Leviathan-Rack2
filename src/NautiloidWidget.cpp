@@ -449,17 +449,22 @@ struct NautiloidDebugCounters final : TransparentWidget {
     nvgFillColor(args.vg, nvgRGBA(205, 218, 235, 210));
 
     const std::string left = string::f(
-      "req %llu  disp %llu  hit/miss %llu/%llu",
+      "req %llu  disp %llu  hit/part/miss %llu/%llu/%llu",
       (unsigned long long) load(module->renderRequestsSubmitted),
       (unsigned long long) load(module->displayRendersCompleted),
       (unsigned long long) load(module->displayCacheHits),
+      (unsigned long long) load(module->displayCachePartialHits),
       (unsigned long long) load(module->displayCacheMisses));
+    Nautiloid::DisplayTileCacheSnapshot tileSnapshot;
+    module->displayTileCacheSnapshot(&tileSnapshot);
     const std::string right = string::f(
-      "iris %llu  exp %llu  cache %llu/%llu  stale d/i %llu/%llu",
+      "tile %llu/%llu r/s/a %llu/%llu/%llu  iris %llu stale d/i %llu/%llu",
+      (unsigned long long) tileSnapshot.currentTileCount,
+      (unsigned long long) tileSnapshot.fullTileCount,
+      (unsigned long long) load(module->displayCacheTilesRendered),
+      (unsigned long long) load(module->displayTileCacheShifts),
+      (unsigned long long) load(module->displayCacheTileAborts),
       (unsigned long long) load(module->irisRendersCompleted),
-      (unsigned long long) load(module->irisExpanderPublishes),
-      (unsigned long long) load(module->cacheRequestsDequeued),
-      (unsigned long long) load(module->displayCacheRendersCompleted),
       (unsigned long long) load(module->displayRendersDroppedStale),
       (unsigned long long) load(module->irisRendersDroppedStale));
 
@@ -476,9 +481,13 @@ struct NautiloidDebugCounters final : TransparentWidget {
     if (!log) return;
     if (needsHeader) {
       log << "time,zoom,center_x,center_y,loading,req,display_gen,iris_gen,display_done,"
-             "display_stale,cache_hits,cache_misses,cache_submitted,cache_dequeued,"
-             "cache_done,iris_done,iris_stale,iris_expander_publishes\n";
+             "display_stale,cache_hits,cache_partial_hits,cache_misses,cache_submitted,cache_dequeued,"
+             "cache_done,cache_composite_publishes,cache_tiles_current,cache_tiles_full,"
+             "cache_tiles_rendered,cache_tile_aborts,cache_resets,cache_shifts,"
+             "iris_done,iris_stale,iris_expander_publishes\n";
     }
+    Nautiloid::DisplayTileCacheSnapshot tileSnapshot;
+    module->displayTileCacheSnapshot(&tileSnapshot);
     log
       << now << ','
       << module->fractalZoom << ','
@@ -491,10 +500,18 @@ struct NautiloidDebugCounters final : TransparentWidget {
       << module->displayRendersCompleted.load(std::memory_order_relaxed) << ','
       << module->displayRendersDroppedStale.load(std::memory_order_relaxed) << ','
       << module->displayCacheHits.load(std::memory_order_relaxed) << ','
+      << module->displayCachePartialHits.load(std::memory_order_relaxed) << ','
       << module->displayCacheMisses.load(std::memory_order_relaxed) << ','
       << module->cacheRequestsSubmitted.load(std::memory_order_relaxed) << ','
       << module->cacheRequestsDequeued.load(std::memory_order_relaxed) << ','
       << module->displayCacheRendersCompleted.load(std::memory_order_relaxed) << ','
+      << module->displayCacheCompositePublishes.load(std::memory_order_relaxed) << ','
+      << tileSnapshot.currentTileCount << ','
+      << tileSnapshot.fullTileCount << ','
+      << module->displayCacheTilesRendered.load(std::memory_order_relaxed) << ','
+      << module->displayCacheTileAborts.load(std::memory_order_relaxed) << ','
+      << module->displayTileCacheResets.load(std::memory_order_relaxed) << ','
+      << module->displayTileCacheShifts.load(std::memory_order_relaxed) << ','
       << module->irisRendersCompleted.load(std::memory_order_relaxed) << ','
       << module->irisRendersDroppedStale.load(std::memory_order_relaxed)
       << ','
