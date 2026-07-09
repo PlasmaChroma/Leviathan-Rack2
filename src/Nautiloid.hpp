@@ -4,6 +4,7 @@
 #include "NautiloidFractal.hpp"
 
 #include <atomic>
+#include <array>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -63,6 +64,13 @@ struct Nautiloid final : Module {
   };
 
   void displayTileCacheSnapshot(DisplayTileCacheSnapshot* snapshot) const;
+  struct ZoomAheadCacheSnapshot {
+    std::array<size_t, 3> currentTileCount {};
+    std::array<size_t, 3> fullTileCount {};
+    std::array<float, 3> zoom {};
+  };
+
+  void zoomAheadCacheSnapshot(ZoomAheadCacheSnapshot* snapshot) const;
 
   int fractalMode = iris::FRACTAL_MANDELBROT;
   float fractalZoom = 0.f;
@@ -85,6 +93,8 @@ struct Nautiloid final : Module {
   std::atomic<uint64_t> displayTileCacheResets {0u};
   std::atomic<uint64_t> displayTileCacheShifts {0u};
   std::atomic<uint64_t> displayReprojectionPublishes {0u};
+  std::atomic<uint64_t> displayReprojectionZoomAheadHits {0u};
+  std::atomic<uint64_t> zoomAheadTilesRendered {0u};
   std::atomic<uint64_t> irisRendersCompleted {0u};
   std::atomic<uint64_t> irisRendersDroppedStale {0u};
   std::atomic<uint64_t> irisExpanderPublishes {0u};
@@ -116,7 +126,7 @@ struct Nautiloid final : Module {
     size_t validTileCount() const;
   };
 
-  struct DisplayPresentationCache {
+  struct PresentationLayer {
     int mode = iris::FRACTAL_NONE;
     float zoom = -1.f;
     float centerX = 0.f;
@@ -124,22 +134,19 @@ struct Nautiloid final : Module {
     int width = 0;
     int height = 0;
     float cacheScale = 1.f;
+    int tileSize = 0;
     std::vector<uint8_t> rgb8;
+    std::vector<uint8_t> tileValid;
 
     bool valid() const;
-  };
-
-  struct ZoomAheadCache {
-    int mode = iris::FRACTAL_NONE;
-    float zoom = -1.f;
-    float centerX = 0.f;
-    float centerY = 0.f;
-    int width = 0;
-    int height = 0;
-    float cacheScale = 1.f;
-    std::vector<uint8_t> rgb8;
-
-    bool valid() const;
+    void clear();
+    void ensureStorage(int layerWidth, int layerHeight, int layerTileSize);
+    int columns() const;
+    int rows() const;
+    size_t fullTileCount() const;
+    size_t validTileCount() const;
+    bool tileCoversPixel(int x, int y) const;
+    void writeTile(int tileX, int tileY, int tileW, int tileH, const std::vector<uint8_t>& tileRgb8);
   };
 
 private:
@@ -165,7 +172,7 @@ private:
   bool publishDisplayCacheComposite(const WorkerRequest& request, bool allowPartial, bool* completeOut = nullptr);
   bool publishDisplayReprojection(const WorkerRequest& request);
   void publishAuthoritativeDisplaySource(iris::SourceField source, const WorkerRequest& request);
-  void renderZoomAheadCache(const WorkerRequest& request);
+  void renderZoomAheadCaches(const WorkerRequest& request);
 
   mutable std::mutex workerMutex;
   std::condition_variable workerCv;
@@ -208,8 +215,8 @@ private:
 
   mutable std::mutex cacheDataMutex;
   DisplayTileCache displayTileCache;
-  DisplayPresentationCache displayPresentationCache;
-  ZoomAheadCache zoomAheadCache;
+  PresentationLayer displayPresentationCache;
+  std::array<PresentationLayer, 3> zoomAheadLayers;
 };
 
 extern Model* modelNautiloid;

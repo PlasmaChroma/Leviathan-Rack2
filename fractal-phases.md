@@ -40,8 +40,9 @@ Completed work:
 - Added display-only zoom reprojection:
   - keeps a separate authoritative display frame as the resampling base
   - publishes immediate bilinear-resampled zoom previews during zoom changes
-  - has a first single-level zoom-ahead cache at `zoom + 0.28` for zoom-in presentation
-  - zoom-ahead cache is currently `768x512` at `1.35x` cache scale and display-only
+  - has a three-level tiled zoom-ahead cache stack at approximately `zoom + 0.18`, `zoom + 0.36`, and `zoom + 0.54`
+  - zoom-ahead layers are currently `768x512` at `1.35x` cache scale and display-only
+  - zoom-ahead layers have stitched RGB buffers plus tile-valid masks, so partially completed layers can be sampled as soon as center/near tiles are available
   - samples the wider tile cache first when it can answer the requested world coordinate, then falls back to the display frame
   - tile-cache sampling now reads from the stitched presentation image while using tile validity as the mask
   - if the live tile cache has just reset, zoom reprojection can sample the retained stitched presentation snapshot before falling back to the display frame
@@ -92,8 +93,8 @@ Goal: make pan/zoom feel immediate even when exact render lags.
 - Consider a lower-resolution immediate display render while moving, then full resolution on settle.
 - Current direction: prefer real rendered frames plus better background cache coverage over fake shifted-frame preview.
 - Zoom is the exception: display-only resampling is now used as a temporary presentation layer until real tiles/full renders catch up.
-- Zoom-in now has an initial predictive display layer, but not yet a multi-level pyramid.
 - Zoom reprojection is handled by a latest-only presentation worker instead of being generated synchronously in the UI request path or waiting behind the main render worker.
+- Zoom-in now has the first fixed-size multi-level predictive stack, but not yet a fully generic cache manager or GPU texture-backed compositor.
 
 ## Phase 3: Better Display / Iris Split
 

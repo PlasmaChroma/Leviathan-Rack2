@@ -485,19 +485,28 @@ struct NautiloidDebugCounters final : TransparentWidget {
       (unsigned long long) load(module->displayCacheMisses));
     Nautiloid::DisplayTileCacheSnapshot tileSnapshot;
     module->displayTileCacheSnapshot(&tileSnapshot);
+    Nautiloid::ZoomAheadCacheSnapshot zoomAheadSnapshot;
+    module->zoomAheadCacheSnapshot(&zoomAheadSnapshot);
     const std::string right = string::f(
-      "tile %llu/%llu r/s/a %llu/%llu/%llu  iris %llu stale d/i %llu/%llu",
+      "tile %llu/%llu z %llu/%llu/%llu reprojZ %llu iris %llu",
       (unsigned long long) tileSnapshot.currentTileCount,
       (unsigned long long) tileSnapshot.fullTileCount,
+      (unsigned long long) zoomAheadSnapshot.currentTileCount[0],
+      (unsigned long long) zoomAheadSnapshot.currentTileCount[1],
+      (unsigned long long) zoomAheadSnapshot.currentTileCount[2],
+      (unsigned long long) load(module->displayReprojectionZoomAheadHits),
+      (unsigned long long) load(module->irisRendersCompleted));
+    const std::string third = string::f(
+      "cache r/s/a %llu/%llu/%llu  stale d/i %llu/%llu",
       (unsigned long long) load(module->displayCacheTilesRendered),
       (unsigned long long) load(module->displayTileCacheShifts),
       (unsigned long long) load(module->displayCacheTileAborts),
-      (unsigned long long) load(module->irisRendersCompleted),
       (unsigned long long) load(module->displayRendersDroppedStale),
       (unsigned long long) load(module->irisRendersDroppedStale));
 
     nvgText(args.vg, 0.f, 0.f, left.c_str(), nullptr);
     nvgText(args.vg, 0.f, 9.f, right.c_str(), nullptr);
+    nvgText(args.vg, 0.f, 18.f, third.c_str(), nullptr);
   }
 
   void appendLog(double now) {
@@ -509,13 +518,18 @@ struct NautiloidDebugCounters final : TransparentWidget {
     if (!log) return;
     if (needsHeader) {
       log << "time,zoom,center_x,center_y,loading,req,display_gen,iris_gen,display_done,"
-             "display_stale,display_reprojections,cache_hits,cache_partial_hits,cache_misses,cache_submitted,cache_dequeued,"
+             "display_stale,display_reprojections,display_reprojection_zoom_ahead_hits,"
+             "cache_hits,cache_partial_hits,cache_misses,cache_submitted,cache_dequeued,"
              "cache_done,cache_composite_publishes,cache_tiles_current,cache_tiles_full,"
              "cache_tiles_rendered,cache_tile_aborts,cache_resets,cache_shifts,"
+             "zoom_ahead_tiles_rendered,zoom_ahead_l0_tiles,zoom_ahead_l1_tiles,zoom_ahead_l2_tiles,"
+             "zoom_ahead_l0_full,zoom_ahead_l1_full,zoom_ahead_l2_full,"
              "iris_done,iris_stale,iris_expander_publishes\n";
     }
     Nautiloid::DisplayTileCacheSnapshot tileSnapshot;
     module->displayTileCacheSnapshot(&tileSnapshot);
+    Nautiloid::ZoomAheadCacheSnapshot zoomAheadSnapshot;
+    module->zoomAheadCacheSnapshot(&zoomAheadSnapshot);
     log
       << now << ','
       << module->fractalZoom << ','
@@ -528,6 +542,7 @@ struct NautiloidDebugCounters final : TransparentWidget {
       << module->displayRendersCompleted.load(std::memory_order_relaxed) << ','
       << module->displayRendersDroppedStale.load(std::memory_order_relaxed) << ','
       << module->displayReprojectionPublishes.load(std::memory_order_relaxed) << ','
+      << module->displayReprojectionZoomAheadHits.load(std::memory_order_relaxed) << ','
       << module->displayCacheHits.load(std::memory_order_relaxed) << ','
       << module->displayCachePartialHits.load(std::memory_order_relaxed) << ','
       << module->displayCacheMisses.load(std::memory_order_relaxed) << ','
@@ -541,6 +556,13 @@ struct NautiloidDebugCounters final : TransparentWidget {
       << module->displayCacheTileAborts.load(std::memory_order_relaxed) << ','
       << module->displayTileCacheResets.load(std::memory_order_relaxed) << ','
       << module->displayTileCacheShifts.load(std::memory_order_relaxed) << ','
+      << module->zoomAheadTilesRendered.load(std::memory_order_relaxed) << ','
+      << zoomAheadSnapshot.currentTileCount[0] << ','
+      << zoomAheadSnapshot.currentTileCount[1] << ','
+      << zoomAheadSnapshot.currentTileCount[2] << ','
+      << zoomAheadSnapshot.fullTileCount[0] << ','
+      << zoomAheadSnapshot.fullTileCount[1] << ','
+      << zoomAheadSnapshot.fullTileCount[2] << ','
       << module->irisRendersCompleted.load(std::memory_order_relaxed) << ','
       << module->irisRendersDroppedStale.load(std::memory_order_relaxed)
       << ','
@@ -826,8 +848,8 @@ struct NautiloidWidget final : ModuleWidget {
     addChild(irisPreviewFb);
 
     NautiloidDebugCounters* counters = new NautiloidDebugCounters(module);
-    counters->box.pos = mm2px(Vec(48.0f, 96.6f));
-    counters->box.size = mm2px(Vec(50.5f, 8.f));
+    counters->box.pos = mm2px(Vec(48.0f, 93.8f));
+    counters->box.size = mm2px(Vec(50.5f, 10.8f));
     addChild(counters);
   }
 
