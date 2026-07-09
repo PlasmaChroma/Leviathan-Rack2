@@ -7,7 +7,7 @@
 
 namespace {
 
-constexpr float kNautiloidMaxFractalZoom = 5.f;
+constexpr float kNautiloidMaxFractalZoom = 4.f;
 constexpr int kDisplaySourceWidth = 768;
 constexpr int kDisplaySourceHeight = 512;
 constexpr float kFractalCacheScale = 3.f;
@@ -22,7 +22,6 @@ constexpr float kZoomAheadCacheScale = 1.35f;
 constexpr int kZoomAheadWidth = 768;
 constexpr int kZoomAheadHeight = 512;
 constexpr int kZoomAheadTileSize = 128;
-constexpr float kGpuPreviewSkipCpuMaxMandelbrotZoom = kNautiloidMaxFractalZoom * 0.68f;
 
 bool requestCanUseGpuPreview(int mode, bool shaderAvailable) {
   return shaderAvailable &&
@@ -37,8 +36,8 @@ bool requestGpuPreviewVisible(int mode, bool shaderAvailable, const Nautiloid* m
 }
 
 bool requestGpuPreviewOwnsDisplay(int mode, float zoom, bool shaderAvailable, const Nautiloid* module) {
-  if (!requestGpuPreviewVisible(mode, shaderAvailable, module)) return false;
-  return zoom <= kGpuPreviewSkipCpuMaxMandelbrotZoom;
+  (void) zoom;
+  return requestGpuPreviewVisible(mode, shaderAvailable, module);
 }
 
 Vec nautiloidFractalViewportHalfSpan(int mode) {
@@ -742,6 +741,7 @@ void Nautiloid::requestInteractiveZoomPreview(double cacheCenterX, double cacheC
   }
   submitReprojectionRequest(request);
   submitCacheRequest(request);
+  submitIrisRequest(request);
 }
 
 void Nautiloid::requestRenderWithCenteredCache() {
@@ -899,9 +899,7 @@ void Nautiloid::submitRequest(const WorkerRequest& request) {
     loading.store(true, std::memory_order_release);
   }
   submitReprojectionRequest(submittedRequest);
-  if (!submittedRequest.zoomInteractionActive) {
-    submitIrisRequest(submittedRequest);
-  }
+  submitIrisRequest(submittedRequest);
   workerCv.notify_one();
 }
 
@@ -1644,7 +1642,10 @@ void Nautiloid::irisWorkerLoop() {
       std::lock_guard<std::mutex> lock(snapshotMutex);
       irisCompatibleCurrent =
         irisCompatibleSource.valid() &&
-        irisCompatibleSerial == request.serial;
+        irisCompatibleMode == request.mode &&
+        std::fabs(irisCompatibleZoom - request.zoom) <= 1e-5f &&
+        std::fabs(irisCompatibleCenterX - request.centerX) <= 1e-12 &&
+        std::fabs(irisCompatibleCenterY - request.centerY) <= 1e-12;
     }
     if (irisCompatibleCurrent) {
       continue;
@@ -1663,23 +1664,17 @@ void Nautiloid::irisWorkerLoop() {
       continue;
     }
 
-    std::lock_guard<std::mutex> workerLock(workerMutex);
-    if (request.serial == nextRequestSerial &&
-        !zoomInteractionActive.load(std::memory_order_relaxed)) {
-      std::shared_ptr<const iris::SourceField> nextSharedSource =
-        std::make_shared<const iris::SourceField>(nextIrisSource);
-      std::lock_guard<std::mutex> lock(snapshotMutex);
-      irisCompatibleSource = std::move(nextIrisSource);
-      std::atomic_store_explicit(&irisExpanderSource, nextSharedSource, std::memory_order_release);
-      irisCompatibleSerial = request.serial;
-      irisCompatibleMode = request.mode;
-      irisCompatibleZoom = request.zoom;
-      irisCompatibleCenterX = request.centerX;
-      irisCompatibleCenterY = request.centerY;
-      irisPreviewGeneration.fetch_add(1u, std::memory_order_release);
-      irisRendersCompleted.fetch_add(1u, std::memory_order_relaxed);
-    } else {
-      irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
-    }
+    std::shared_ptr<const iris::SourceField> nextSharedSource =
+      std::make_shared<const iris::SourceField>(nextIrisSource);
+    std::lock_guard<std::mutex> lock(snapshotMutex);
+    irisCompatibleSource = std::move(nextIrisSource);
+    std::atomic_store_explicit(&irisExpanderSource, nextSharedSource, std::memory_order_release);
+    irisCompatibleSerial = request.serial;
+    irisCompatibleMode = request.mode;
+    irisCompatibleZoom = request.zoom;
+    irisCompatibleCenterX = request.centerX;
+    irisCompatibleCenterY = request.centerY;
+    irisPreviewGeneration.fetch_add(1u, std::memory_order_release);
+    irisRendersCompleted.fetch_add(1u, std::memory_order_relaxed);
   }
 }

@@ -10,7 +10,7 @@ namespace {
 
 constexpr float kNautiloidWidthMm = 101.6f;
 constexpr float kNautiloidHeightMm = 128.5f;
-constexpr float kNautiloidMaxFractalZoom = 5.f;
+constexpr float kNautiloidMaxFractalZoom = 4.f;
 
 std::string nautiloidUserRootPath() {
   return system::join(asset::user(), "Leviathan/Nautiloid");

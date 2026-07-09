@@ -5,6 +5,8 @@
 Completed work:
 
 - Promoted Nautiloid fractal center coordinates and Iris generator center metadata to double precision so view state is not rounded before CPU/GPU render paths receive it
+- Iris rendering runs continuously during zoom with one in-flight render and one latest-only queued request; completed Iris renders publish instead of being dropped for active zoom
+- Capped Nautiloid max zoom to 80% of the previous range for both CPU and GPU preview paths
 - Removed the dedicated Eye of the World built-in mode; it is reachable as a Mandelbrot zoom target instead of a separate fractal selection
 - Mandelbrot reset now shows a temporary Eye of the World location marker that disappears as soon as pan or zoom movement starts
 - Added the Nautiloid MVP as a visual-only module with:
@@ -66,9 +68,8 @@ Completed work:
   - CPU rendering remains authoritative for Iris-compatible preview, expander handoff, cache, and export paths
   - Iris-compatible renders now run on a separate latest-only worker, so cache and zoom-ahead work cannot block Iris publication
   - CPU/NanoVG display remains the fallback if the GL shader is unavailable
-  - full-quad GPU preview is allowed through the full zoom range for visual comparison
-  - when GPU preview is active, available, and below roughly 68% of the zoom range, CPU display renders, display tile warming, and zoom-ahead display caches are skipped so Iris-compatible rendering can publish sooner
-  - above roughly 68% zoom, GPU preview remains visible while CPU full-display rendering resumes for comparison/handoff; regular display tile-cache warming remains skipped because those exact-zoom tiles are not visible during GPU ownership
+  - full-quad GPU preview owns the display through the full capped zoom range when active and available
+  - when GPU preview owns the display, CPU display renders, display tile warming, and zoom-ahead display caches are skipped so Iris-compatible rendering can publish sooner
   - tiled double-single GPU precision mode was tried and removed because it was not an obvious improvement over the full-quad shader
 
 Deferred or changed:
