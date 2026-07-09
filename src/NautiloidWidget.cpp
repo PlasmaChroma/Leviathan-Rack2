@@ -604,8 +604,10 @@ struct NautiloidZoomSlider final : ui::Slider {
     nvgStroke(args.vg);
 
     const float handleW = std::max(8.f, box.size.y * 0.42f);
-    const float handleH = std::max(trackH + 6.f, box.size.y * 0.72f);
-    const float handleY = 0.5f * (box.size.y - handleH);
+    const float desiredHandleH = std::max(trackH + 5.f, box.size.y * 0.42f);
+    const float handleH = std::min(desiredHandleH, std::max(trackH + 2.f, progressY - 1.f));
+    const float handleY =
+      clamp(trackY + 0.5f * (trackH - handleH), 0.f, std::max(0.f, progressY - handleH - 1.f));
     nvgBeginPath(args.vg);
     nvgRoundedRect(args.vg, handleX - 0.5f * handleW, handleY, handleW, handleH, 3.f);
     nvgFillColor(args.vg, nvgRGB(226, 232, 240));
@@ -628,7 +630,9 @@ struct NautiloidZoomSlider final : ui::Slider {
       nvgIntersectScissor(args.vg, 0.f, progressY - 1.f, progressW, progressH + 2.f);
       nvgBeginPath(args.vg);
       nvgRoundedRect(args.vg, 0.f, progressY, box.size.x, progressH, progressRadius);
-      nvgFillColor(args.vg, nvgRGB(28, 204, 217));
+      NVGpaint progressPaint = nvgLinearGradient(
+        args.vg, 0.f, progressY, box.size.x, progressY, nvgRGB(122, 92, 255), nvgRGB(28, 204, 217));
+      nvgFillPaint(args.vg, progressPaint);
       nvgFill(args.vg);
       nvgRestore(args.vg);
     }

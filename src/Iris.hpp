@@ -89,7 +89,6 @@ struct Iris final : Module {
   void dataFromJson(json_t* root) override;
 
   void requestImageLoad(const std::string& path);
-  void requestBuiltinFractal(int mode);
   void requestExpanderSource(std::shared_ptr<const iris::SourceField> source, uint64_t generation);
   void requestReload();
   void clearToDefault();
@@ -102,13 +101,8 @@ struct Iris final : Module {
   void waveformSnapshot(float scan, int sampleCount, std::vector<float>* samples) const;
   bool embedsSource() const { return embedSource; }
   void setEmbedSource(bool enabled) { embedSource = enabled; }
-  bool isBuiltinFractalSource() const;
-  int builtinFractalMode() const;
 
   iris::ConversionSettings conversionSettings;
-  float fractalZoom = 0.f;
-  float fractalCenterX = 0.f;
-  float fractalCenterY = 0.f;
   std::atomic<float> displayScan {0.f};
   std::atomic<float> displayFrequencyHz {0.f};
   std::atomic<int> displayImageChannelMode {iris::IMAGE_CHANNEL_ALL};
@@ -126,7 +120,6 @@ private:
     REQUEST_REBUILD_FROM_SOURCE = 3,
     REQUEST_DEFAULT = 4,
     REQUEST_RELOAD_IMAGE_FILE = 5,
-    REQUEST_BUILTIN_FRACTAL = 6,
     REQUEST_EXPANDER_SOURCE = 7,
     REQUEST_NAUTILOID_FRACTAL_SOURCE = 8,
   };
@@ -137,10 +130,10 @@ private:
     iris::ConversionSettings settings;
     iris::SourceField source;
     std::shared_ptr<const iris::SourceField> sharedSource;
-    int fractalMode = iris::FRACTAL_NONE;
-    float fractalZoom = 0.f;
-    float fractalCenterX = 0.f;
-    float fractalCenterY = 0.f;
+    int nautiloidFractalMode = iris::FRACTAL_NONE;
+    float nautiloidFractalZoom = 0.f;
+    float nautiloidFractalCenterX = 0.f;
+    float nautiloidFractalCenterY = 0.f;
     uint64_t sourceGeneration = 0u;
     uint64_t serial = 0u;
   };
@@ -151,7 +144,6 @@ private:
     bool hasSource = false;
     bool preserveExistingSource = false;
     int sourceKind = iris::SOURCE_IMAGE;
-    int fractalMode = iris::FRACTAL_NONE;
   };
 
   void startWorker();
@@ -177,18 +169,12 @@ private:
   mutable std::mutex snapshotMutex;
   iris::ImageWavetable snapshotTable;
   iris::SourceField snapshotSourceField;
-  iris::SourceField fractalCacheSource;
-  int fractalCacheMode = iris::FRACTAL_NONE;
-  float fractalCacheZoom = -1.f;
-  float fractalCacheCenterX = 0.f;
-  float fractalCacheCenterY = 0.f;
   std::vector<uint8_t> snapshotPreview;
   int previewWidth = iris::kSourcePreviewWidth;
   int previewHeight = iris::kSourcePreviewHeight;
   std::string lastError;
   bool embedSource = true;
   int currentSourceKind = iris::SOURCE_IMAGE;
-  int currentFractalMode = iris::FRACTAL_NONE;
   uint64_t lastExpanderSourceGeneration = 0u;
   std::shared_ptr<const iris::SourceField> lastExpanderSourceSeen;
   dsp::ClockDivider lightDivider;

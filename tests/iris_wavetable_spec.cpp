@@ -1,6 +1,6 @@
 #include "../src/IrisWavetable.hpp"
 #include "../src/IrisIO.hpp"
-#include "../src/IrisFractal.hpp"
+#include "../src/NautiloidFractal.hpp"
 
 #define QOI_IMPLEMENTATION
 #include "../src/third_party/qoi.h"
@@ -271,36 +271,6 @@ int main() {
     maxAbs = std::max(maxAbs, std::fabs(smoothed.samples[size_t(x)]));
   }
   check("wave smoothing reduces alternating jagged amplitude", maxAbs < 0.35f);
-
-  const int fractalModes[] = {
-    iris::FRACTAL_MANDELBROT,
-    iris::FRACTAL_MANDELBROT_SEAHORSE,
-    iris::FRACTAL_MANDELBROT_SPIRAL,
-    iris::FRACTAL_JULIA,
-    iris::FRACTAL_PHOENIX_JULIA,
-    iris::FRACTAL_BURNING_SHIP,
-    iris::FRACTAL_CELTIC,
-    iris::FRACTAL_BUFFALO,
-    iris::FRACTAL_TRICORN,
-    iris::FRACTAL_SPIDER,
-    iris::FRACTAL_NEWTON,
-    iris::FRACTAL_NOVA,
-  };
-  for (size_t modeIndex = 0; modeIndex < sizeof(fractalModes) / sizeof(fractalModes[0]); ++modeIndex) {
-    const int mode = fractalModes[modeIndex];
-    iris::SourceField fractal;
-    check(std::string("builtin fractal source generates: ") + iris::builtinFractalName(mode),
-          iris::makeBuiltinFractalSource(mode, &fractal));
-    check(std::string("builtin fractal uses canonical source dimensions: ") +
-            iris::builtinFractalName(mode),
-          fractal.valid() && fractal.width == iris::kCanonicalSourceWidth &&
-          fractal.height == iris::kCanonicalSourceHeight && !fractal.rgb8.empty());
-    iris::ImageWavetable fractalTable;
-    check(std::string("builtin fractal converts to wavetable: ") + iris::builtinFractalName(mode),
-          iris::buildWavetableFromSourceField(fractal, settings, &fractalTable, &ioError) &&
-          fractalTable.valid() &&
-          fractalTable.sourceName == std::string("Fractal: ") + iris::builtinFractalName(mode));
-  }
 
   iris::NautiloidFractalSourceParams nautiloidParams;
   nautiloidParams.mode = iris::FRACTAL_BURNING_SHIP;

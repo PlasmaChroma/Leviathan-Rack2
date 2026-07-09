@@ -1,7 +1,7 @@
 #pragma once
 
 #include "plugin.hpp"
-#include "IrisFractal.hpp"
+#include "NautiloidFractal.hpp"
 
 #include <atomic>
 #include <condition_variable>
