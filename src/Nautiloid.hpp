@@ -53,6 +53,8 @@ struct Nautiloid final : Module {
     int cacheHeight = 0;
     float cacheScale = 1.f;
     bool current = false;
+    int cacheMode = iris::FRACTAL_NONE;
+    float cacheZoom = -1.f;
     float cacheCenterX = 0.f;
     float cacheCenterY = 0.f;
     size_t currentTileCount = 0u;
@@ -82,6 +84,7 @@ struct Nautiloid final : Module {
   std::atomic<uint64_t> displayCacheTileAborts {0u};
   std::atomic<uint64_t> displayTileCacheResets {0u};
   std::atomic<uint64_t> displayTileCacheShifts {0u};
+  std::atomic<uint64_t> displayReprojectionPublishes {0u};
   std::atomic<uint64_t> irisRendersCompleted {0u};
   std::atomic<uint64_t> irisRendersDroppedStale {0u};
   std::atomic<uint64_t> irisExpanderPublishes {0u};
@@ -103,10 +106,40 @@ struct Nautiloid final : Module {
     float centerX = 0.f;
     float centerY = 0.f;
     std::vector<DisplayCacheTile> tiles;
+    int stitchedWidth = 0;
+    int stitchedHeight = 0;
+    std::vector<uint8_t> stitchedRgb8;
 
     void clear();
     void ensureStorage(int cacheWidth, int cacheHeight, int tileSize);
+    void writeTileToStitched(const DisplayCacheTile& tile);
     size_t validTileCount() const;
+  };
+
+  struct DisplayPresentationCache {
+    int mode = iris::FRACTAL_NONE;
+    float zoom = -1.f;
+    float centerX = 0.f;
+    float centerY = 0.f;
+    int width = 0;
+    int height = 0;
+    float cacheScale = 1.f;
+    std::vector<uint8_t> rgb8;
+
+    bool valid() const;
+  };
+
+  struct ZoomAheadCache {
+    int mode = iris::FRACTAL_NONE;
+    float zoom = -1.f;
+    float centerX = 0.f;
+    float centerY = 0.f;
+    int width = 0;
+    int height = 0;
+    float cacheScale = 1.f;
+    std::vector<uint8_t> rgb8;
+
+    bool valid() const;
   };
 
 private:
@@ -125,9 +158,14 @@ private:
   void stopWorker();
   void submitRequest(const WorkerRequest& request);
   void submitCacheRequest(const WorkerRequest& request);
+  void submitReprojectionRequest(const WorkerRequest& request);
   void workerLoop();
   void cacheWorkerLoop();
+  void reprojectionWorkerLoop();
   bool publishDisplayCacheComposite(const WorkerRequest& request, bool allowPartial, bool* completeOut = nullptr);
+  bool publishDisplayReprojection(const WorkerRequest& request);
+  void publishAuthoritativeDisplaySource(iris::SourceField source, const WorkerRequest& request);
+  void renderZoomAheadCache(const WorkerRequest& request);
 
   mutable std::mutex workerMutex;
   std::condition_variable workerCv;
@@ -144,8 +182,20 @@ private:
   WorkerRequest cacheRequest;
   std::thread cacheWorker;
 
+  mutable std::mutex reprojectionRequestMutex;
+  std::condition_variable reprojectionRequestCv;
+  bool reprojectionWorkerStop = false;
+  bool reprojectionRequestPending = false;
+  WorkerRequest reprojectionRequest;
+  std::thread reprojectionWorker;
+
   mutable std::mutex snapshotMutex;
   iris::SourceField previewSource;
+  iris::SourceField authoritativeDisplaySource;
+  int authoritativeDisplayMode = iris::FRACTAL_NONE;
+  float authoritativeDisplayZoom = -1.f;
+  float authoritativeDisplayCenterX = 0.f;
+  float authoritativeDisplayCenterY = 0.f;
   iris::SourceField irisCompatibleSource;
   std::shared_ptr<const iris::SourceField> irisExpanderSource;
   uint64_t irisCompatibleSerial = 0u;
@@ -158,6 +208,8 @@ private:
 
   mutable std::mutex cacheDataMutex;
   DisplayTileCache displayTileCache;
+  DisplayPresentationCache displayPresentationCache;
+  ZoomAheadCache zoomAheadCache;
 };
 
 extern Model* modelNautiloid;

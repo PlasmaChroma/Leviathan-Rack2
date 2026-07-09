@@ -53,6 +53,25 @@ bool nautiloidRequestDue(double* lastRequestTime, double minIntervalSec) {
   return false;
 }
 
+bool nautiloidVisibleViewOutgrowsCache(Nautiloid* module, float threshold) {
+  if (!module) return false;
+  Nautiloid::DisplayTileCacheSnapshot snapshot;
+  module->displayTileCacheSnapshot(&snapshot);
+  if (snapshot.cacheMode != module->fractalMode || snapshot.cacheZoom < 0.f || snapshot.cacheScale <= 1.f) {
+    return true;
+  }
+  const float viewZoomScale = std::pow(0.05f, clamp(module->fractalZoom, 0.f, kNautiloidMaxFractalZoom));
+  const Vec viewHalfSpan = nautiloidFractalViewportHalfSpan(module->fractalMode).mult(viewZoomScale);
+  const float cacheZoomScale = std::pow(0.05f, clamp(snapshot.cacheZoom, 0.f, kNautiloidMaxFractalZoom));
+  const Vec cacheHalfSpan = nautiloidFractalViewportHalfSpan(snapshot.cacheMode).mult(cacheZoomScale).mult(snapshot.cacheScale);
+  if (cacheHalfSpan.x <= 0.f || cacheHalfSpan.y <= 0.f) return true;
+  const float dx = std::fabs(module->fractalCenterX - snapshot.cacheCenterX);
+  const float dy = std::fabs(module->fractalCenterY - snapshot.cacheCenterY);
+  const float useX = (dx + viewHalfSpan.x) / cacheHalfSpan.x;
+  const float useY = (dy + viewHalfSpan.y) / cacheHalfSpan.y;
+  return std::max(useX, useY) >= threshold;
+}
+
 struct NautiloidDisplay final : OpaqueWidget {
   Nautiloid* module = nullptr;
   widget::FramebufferWidget* framebuffer = nullptr;
@@ -369,6 +388,7 @@ struct NautiloidTileCacheGrid final : TransparentWidget {
     const float x0 = 0.5f * (box.size.x - gridW);
     const float y0 = 0.5f * (box.size.y - gridH);
 
+    const bool compatibleCache = snapshot.cacheMode == module->fractalMode && snapshot.cacheZoom >= 0.f;
     const NVGcolor staleColor = snapshot.current ? nvgRGBA(33, 40, 56, 205) : nvgRGBA(45, 30, 70, 145);
     const NVGcolor currentColor = nvgRGB(28, 204, 217);
     const NVGcolor edgeColor = nvgRGBA(226, 232, 240, 58);
@@ -388,23 +408,30 @@ struct NautiloidTileCacheGrid final : TransparentWidget {
       }
     }
 
-    if (snapshot.current) {
-      const float zoomScale = std::pow(0.05f, clamp(module->fractalZoom, 0.f, kNautiloidMaxFractalZoom));
-      const Vec halfSpan = nautiloidFractalViewportHalfSpan(module->fractalMode).mult(zoomScale);
+    if (compatibleCache) {
+      const float viewZoomScale = std::pow(0.05f, clamp(module->fractalZoom, 0.f, kNautiloidMaxFractalZoom));
+      const Vec viewHalfSpan = nautiloidFractalViewportHalfSpan(module->fractalMode).mult(viewZoomScale);
+      const float cacheZoomScale = std::pow(0.05f, clamp(snapshot.cacheZoom, 0.f, kNautiloidMaxFractalZoom));
+      const Vec cacheBaseHalfSpan = nautiloidFractalViewportHalfSpan(snapshot.cacheMode).mult(cacheZoomScale);
       const float cacheScale = std::max(1.f, snapshot.cacheScale);
-      const float cacheHalfX = halfSpan.x * cacheScale;
-      const float cacheHalfY = halfSpan.y * cacheScale;
+      const float cacheHalfX = cacheBaseHalfSpan.x * cacheScale;
+      const float cacheHalfY = cacheBaseHalfSpan.y * cacheScale;
       if (cacheHalfX > 0.f && cacheHalfY > 0.f) {
         const float dx = module->fractalCenterX - snapshot.cacheCenterX;
         const float dy = module->fractalCenterY - snapshot.cacheCenterY;
         const float centerX = x0 + (0.5f + dx / (2.f * cacheHalfX)) * gridW;
         const float centerY = y0 + (0.5f + dy / (2.f * cacheHalfY)) * gridH;
-        const float viewW = gridW / cacheScale;
-        const float viewH = gridH / cacheScale;
+        const float viewW = gridW * viewHalfSpan.x / cacheHalfX;
+        const float viewH = gridH * viewHalfSpan.y / cacheHalfY;
+        const bool outgrown =
+          centerX - 0.5f * viewW < x0 ||
+          centerY - 0.5f * viewH < y0 ||
+          centerX + 0.5f * viewW > x0 + gridW ||
+          centerY + 0.5f * viewH > y0 + gridH;
         nvgBeginPath(args.vg);
         nvgRect(args.vg, centerX - 0.5f * viewW, centerY - 0.5f * viewH, viewW, viewH);
-        nvgStrokeWidth(args.vg, 1.2f);
-        nvgStrokeColor(args.vg, nvgRGBA(236, 240, 255, 190));
+        nvgStrokeWidth(args.vg, outgrown ? 1.55f : 1.2f);
+        nvgStrokeColor(args.vg, outgrown ? nvgRGBA(255, 177, 66, 230) : nvgRGBA(236, 240, 255, 190));
         nvgStroke(args.vg);
       }
     }
@@ -449,9 +476,10 @@ struct NautiloidDebugCounters final : TransparentWidget {
     nvgFillColor(args.vg, nvgRGBA(205, 218, 235, 210));
 
     const std::string left = string::f(
-      "req %llu  disp %llu  hit/part/miss %llu/%llu/%llu",
+      "req %llu  disp %llu  reproj %llu  hit/part/miss %llu/%llu/%llu",
       (unsigned long long) load(module->renderRequestsSubmitted),
       (unsigned long long) load(module->displayRendersCompleted),
+      (unsigned long long) load(module->displayReprojectionPublishes),
       (unsigned long long) load(module->displayCacheHits),
       (unsigned long long) load(module->displayCachePartialHits),
       (unsigned long long) load(module->displayCacheMisses));
@@ -481,7 +509,7 @@ struct NautiloidDebugCounters final : TransparentWidget {
     if (!log) return;
     if (needsHeader) {
       log << "time,zoom,center_x,center_y,loading,req,display_gen,iris_gen,display_done,"
-             "display_stale,cache_hits,cache_partial_hits,cache_misses,cache_submitted,cache_dequeued,"
+             "display_stale,display_reprojections,cache_hits,cache_partial_hits,cache_misses,cache_submitted,cache_dequeued,"
              "cache_done,cache_composite_publishes,cache_tiles_current,cache_tiles_full,"
              "cache_tiles_rendered,cache_tile_aborts,cache_resets,cache_shifts,"
              "iris_done,iris_stale,iris_expander_publishes\n";
@@ -499,6 +527,7 @@ struct NautiloidDebugCounters final : TransparentWidget {
       << module->irisPreviewGeneration.load(std::memory_order_relaxed) << ','
       << module->displayRendersCompleted.load(std::memory_order_relaxed) << ','
       << module->displayRendersDroppedStale.load(std::memory_order_relaxed) << ','
+      << module->displayReprojectionPublishes.load(std::memory_order_relaxed) << ','
       << module->displayCacheHits.load(std::memory_order_relaxed) << ','
       << module->displayCachePartialHits.load(std::memory_order_relaxed) << ','
       << module->displayCacheMisses.load(std::memory_order_relaxed) << ','
@@ -567,9 +596,14 @@ struct NautiloidZoomSlider final : ui::Slider {
         const float shapedSpeed = speed * std::fabs(speed);
         const float next = clamp(module->fractalZoom + shapedSpeed * float(dt) * 0.85f, 0.f, kNautiloidMaxFractalZoom);
         if (std::fabs(module->fractalZoom - next) > 1e-5f) {
+          const bool zoomingOut = next < module->fractalZoom;
           module->fractalZoom = next;
           if (nautiloidRequestDue(&lastRequestTime, 0.04)) {
-            module->requestRender();
+            if (zoomingOut && nautiloidVisibleViewOutgrowsCache(module, 0.78f)) {
+              module->requestRenderWithCenteredCache();
+            } else {
+              module->requestRender();
+            }
           }
         }
       }
@@ -607,7 +641,10 @@ struct NautiloidZoomSlider final : ui::Slider {
       nvgIntersectScissor(args.vg, fillLeft, trackY - 1.f, fillW, trackH + 2.f);
       nvgBeginPath(args.vg);
       nvgRect(args.vg, fillLeft, trackY, fillW, trackH);
-      nvgFillColor(args.vg, zoomIn ? nvgRGB(28, 204, 217) : nvgRGB(122, 92, 255));
+      const NVGcolor centerColor = nvgRGB(226, 232, 240);
+      const NVGcolor edgeColor = zoomIn ? nvgRGB(28, 204, 217) : nvgRGB(122, 92, 255);
+      NVGpaint speedPaint = nvgLinearGradient(args.vg, centerX, trackY, handleX, trackY, centerColor, edgeColor);
+      nvgFillPaint(args.vg, speedPaint);
       nvgFill(args.vg);
       nvgRestore(args.vg);
     }
@@ -661,7 +698,7 @@ struct NautiloidZoomSlider final : ui::Slider {
       zoomSpeed->setValue(0.5f);
     }
     if (module) {
-      module->requestRender();
+      module->requestRenderWithCenteredCache();
     }
   }
 };

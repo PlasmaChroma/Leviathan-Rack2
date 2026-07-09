@@ -28,6 +28,8 @@ Completed work:
   - expanded cache currently covers `3x` the visible display area
   - cache tiles are currently `128x128`
   - cache worker fills visible-near tiles first, then outward
+  - completed tiles are mirrored into a stitched cache presentation image for faster crop/downsample/reprojection sampling
+  - a retained stitched presentation snapshot survives live cache resets so zoom-out can keep sampling the last useful wide image
   - foreground display uses full cached crops when the required crop is complete
   - foreground display can now publish partial cached crops over the previous completed frame while tiles are still filling
   - foreground display falls back to exact full-frame rendering when no useful cached coverage is available
@@ -35,6 +37,21 @@ Completed work:
   - cache recentering can shift existing tiles when movement aligns to tile boundaries
   - the panel now includes a tile cache grid visualization showing current/stale tiles and visible crop position
   - tile lookup during display composition is now grid-indexed instead of a per-pixel linear tile scan
+- Added display-only zoom reprojection:
+  - keeps a separate authoritative display frame as the resampling base
+  - publishes immediate bilinear-resampled zoom previews during zoom changes
+  - has a first single-level zoom-ahead cache at `zoom + 0.28` for zoom-in presentation
+  - zoom-ahead cache is currently `768x512` at `1.35x` cache scale and display-only
+  - samples the wider tile cache first when it can answer the requested world coordinate, then falls back to the display frame
+  - tile-cache sampling now reads from the stitched presentation image while using tile validity as the mask
+  - if the live tile cache has just reset, zoom reprojection can sample the retained stitched presentation snapshot before falling back to the display frame
+  - display-frame fallback no longer edge-clamps outside the old display bounds, avoiding smeared borders when no wide cache can answer
+  - avoids feeding reprojected frames into Iris/export/cache or back into the reprojection base
+  - ignores pure pan requests to avoid reintroducing shifted-frame edge flicker
+  - tile cache grid now draws the live view rectangle against the cache's own zoom, so zoom-out shows the view box growing
+  - active zoom-out requests force a centered cache refresh once the live view consumes most of the cached span, and zoom release settles with a centered cache request
+- Updated zoom UI:
+  - active zoom-speed bar now uses center-out gradients, cyan for zoom-in and violet for zoom-out
 
 Deferred or changed:
 
@@ -74,6 +91,9 @@ Goal: make pan/zoom feel immediate even when exact render lags.
   - zoom-speed hold
 - Consider a lower-resolution immediate display render while moving, then full resolution on settle.
 - Current direction: prefer real rendered frames plus better background cache coverage over fake shifted-frame preview.
+- Zoom is the exception: display-only resampling is now used as a temporary presentation layer until real tiles/full renders catch up.
+- Zoom-in now has an initial predictive display layer, but not yet a multi-level pyramid.
+- Zoom reprojection is handled by a latest-only presentation worker instead of being generated synchronously in the UI request path or waiting behind the main render worker.
 
 ## Phase 3: Better Display / Iris Split
 
