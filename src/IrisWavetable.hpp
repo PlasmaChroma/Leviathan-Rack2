@@ -62,15 +62,13 @@ enum BuiltinFractalMode {
   FRACTAL_SPIDER = 11,
   FRACTAL_NEWTON = 12,
   FRACTAL_NOVA = 13,
-  FRACTAL_EYE_OF_THE_WORLD = 14,
 };
 
-constexpr int FRACTAL_MANDELBROT_SEAHORSE = FRACTAL_EYE_OF_THE_WORLD;
 constexpr int FRACTAL_MANDELBROT_SPIRAL = FRACTAL_MANDELBROT;
 constexpr int FRACTAL_BUFFALO = FRACTAL_CELTIC;
 constexpr int kBuiltinFractalVersion = 1;
 constexpr int kFirstBuiltinFractalMode = FRACTAL_MANDELBROT;
-constexpr int kLastBuiltinFractalMode = FRACTAL_EYE_OF_THE_WORLD;
+constexpr int kLastBuiltinFractalMode = FRACTAL_NOVA;
 
 inline bool isBuiltinFractalMode(int mode) {
   switch (mode) {
@@ -83,7 +81,6 @@ inline bool isBuiltinFractalMode(int mode) {
     case FRACTAL_SPIDER:
     case FRACTAL_NEWTON:
     case FRACTAL_NOVA:
-    case FRACTAL_EYE_OF_THE_WORLD:
       return true;
     default:
       return false;
@@ -101,7 +98,6 @@ inline const char* builtinFractalName(int mode) {
     case FRACTAL_SPIDER: return "Spider";
     case FRACTAL_NEWTON: return "Newton Roots";
     case FRACTAL_NOVA: return "Nova";
-    case FRACTAL_EYE_OF_THE_WORLD: return "Eye of the World";
     case FRACTAL_NONE:
     default: return "Image";
   }

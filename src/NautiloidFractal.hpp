@@ -103,6 +103,14 @@ inline void writeSetInterior(size_t base, std::vector<uint8_t>* rgb8) {
   (*rgb8)[base + 2u] = 18u;
 }
 
+inline bool isMandelbrotMainInterior(double cr, double ci) {
+  const double q = (cr - 0.25) * (cr - 0.25) + ci * ci;
+  if (q * (q + (cr - 0.25)) < 0.25 * ci * ci) {
+    return true;
+  }
+  return (cr + 1.0) * (cr + 1.0) + ci * ci < 0.0625;
+}
+
 inline void writeEscapeColor(int iter, int maxIter, float mag2, float minOrbit, size_t base, std::vector<uint8_t>* rgb8) {
   if (iter >= maxIter) {
     writeSetInterior(base, rgb8);
@@ -124,10 +132,10 @@ inline void renderMandelbrotFamilySimd(
   float panY,
   int maxIter,
   SourceField* source) {
-  const float baseR = mode == FRACTAL_EYE_OF_THE_WORLD ? -0.743643887037151f : -0.75f;
-  const float baseI = mode == FRACTAL_EYE_OF_THE_WORLD ? 0.131825904205330f : 0.0f;
-  const float spanX = (mode == FRACTAL_EYE_OF_THE_WORLD ? 0.0075f : 1.62f) * zoomScale * viewScale;
-  const float spanY = (mode == FRACTAL_EYE_OF_THE_WORLD ? 0.00395f : 0.86f) * zoomScale * viewScale;
+  const float baseR = -0.75f;
+  const float baseI = 0.0f;
+  const float spanX = 1.62f * zoomScale * viewScale;
+  const float spanY = 0.86f * zoomScale * viewScale;
   const float invWidth = 1.f / float(source->width);
   const float invHeight = 1.f / float(source->height);
   const rack::simd::float_4 lane(0.f, 1.f, 2.f, 3.f);
@@ -203,8 +211,6 @@ inline void renderMandelbrotFamilySimd(
 
 inline float mandelbrotFamilySimdMaxZoom(int mode) {
   switch (mode) {
-    case FRACTAL_EYE_OF_THE_WORLD:
-      return 1.75f;
     case FRACTAL_MANDELBROT:
       return 3.f;
     default:
@@ -257,9 +263,7 @@ inline bool makeBuiltinFractalSourceSized(
   const int fullHeight = std::max(2, viewportPixelHeight);
   const int pixelX0 = std::max(0, viewportPixelX);
   const int pixelY0 = std::max(0, viewportPixelY);
-  const int maxIter = (mode == FRACTAL_NEWTON || mode == FRACTAL_NOVA)
-    ? 36
-    : (mode == FRACTAL_EYE_OF_THE_WORLD ? 360 : 140);
+  const int maxIter = (mode == FRACTAL_NEWTON || mode == FRACTAL_NOVA) ? 36 : 140;
   const float simdMaxZoom = detail::mandelbrotFamilySimdMaxZoom(mode);
   const bool fullViewport = pixelX0 == 0 && pixelY0 == 0 &&
     source.width == fullWidth && source.height == fullHeight;
@@ -338,9 +342,10 @@ inline bool makeBuiltinFractalSourceSized(
       if (mode == FRACTAL_MANDELBROT) {
         cr = -0.75 + panX + double(nx) * 1.62 * zoomScale * viewScale;
         ci = panY + double(ny) * 0.86 * zoomScale * viewScale;
-      } else if (mode == FRACTAL_EYE_OF_THE_WORLD) {
-        cr = -0.743643887037151 + panX + double(nx) * 0.0075 * zoomScale * viewScale;
-        ci = 0.131825904205330 + panY + double(ny) * 0.00395 * zoomScale * viewScale;
+        if (detail::isMandelbrotMainInterior(cr, ci)) {
+          detail::writeSetInterior(base, &source.rgb8);
+          continue;
+        }
       } else if (mode == FRACTAL_JULIA) {
         cr = -0.74543;
         ci = 0.11301;

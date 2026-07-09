@@ -41,6 +41,7 @@ struct Nautiloid final : Module {
   void requestRender();
   void requestRenderWithCacheCenter(float cacheCenterX, float cacheCenterY, bool forceCacheRecenter = false);
   void requestRenderWithCenteredCache();
+  void requestInteractiveZoomPreview(float cacheCenterX, float cacheCenterY, bool forceCacheRecenter = false);
   void resetView();
   void previewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
   void irisPreviewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
@@ -102,6 +103,7 @@ struct Nautiloid final : Module {
   std::atomic<bool> debugGpuPreviewEnabled {false};
   std::atomic<bool> debugGpuPreviewAvailable {false};
   std::atomic<bool> zoomInteractionActive {false};
+  std::atomic<bool> displayRenderBusy {false};
   std::atomic<bool> loading {false};
 
   struct DisplayCacheTile {
@@ -170,9 +172,12 @@ private:
   void submitRequest(const WorkerRequest& request);
   void submitCacheRequest(const WorkerRequest& request);
   void submitReprojectionRequest(const WorkerRequest& request);
+  void submitIrisRequest(const WorkerRequest& request);
+  void markDisplayRenderFinished(uint64_t serial);
   void workerLoop();
   void cacheWorkerLoop();
   void reprojectionWorkerLoop();
+  void irisWorkerLoop();
   bool publishDisplayCacheComposite(const WorkerRequest& request, bool allowPartial, bool* completeOut = nullptr);
   bool publishDisplayReprojection(const WorkerRequest& request);
   void publishAuthoritativeDisplaySource(iris::SourceField source, const WorkerRequest& request);
@@ -199,6 +204,13 @@ private:
   bool reprojectionRequestPending = false;
   WorkerRequest reprojectionRequest;
   std::thread reprojectionWorker;
+
+  mutable std::mutex irisRequestMutex;
+  std::condition_variable irisRequestCv;
+  bool irisWorkerStop = false;
+  bool irisRequestPending = false;
+  WorkerRequest irisRequest;
+  std::thread irisWorker;
 
   mutable std::mutex snapshotMutex;
   iris::SourceField previewSource;

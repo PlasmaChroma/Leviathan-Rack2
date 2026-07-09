@@ -4,6 +4,7 @@
 
 Completed work:
 
+- Removed the dedicated Eye of the World built-in mode; it is reachable as a Mandelbrot zoom target instead of a separate fractal selection
 - Added the Nautiloid MVP as a visual-only module with:
   - large display-aspect fractal preview
   - bottom Iris-compatible `1024x256` mini preview
@@ -51,13 +52,17 @@ Completed work:
   - ignores pure pan requests to avoid reintroducing shifted-frame edge flicker
   - tile cache grid now draws the live view rectangle against the cache's own zoom, so zoom-out shows the view box growing
   - active zoom-out requests force a centered cache refresh once the live view consumes most of the cached span, and zoom release settles with a centered cache request
-  - active zoom gestures skip regular display tile-cache setup/reset and warming because exact-zoom cache tiles become stale immediately during continuous zoom; zoom-ahead cache warming remains the relevant display-cache work during the gesture
+  - active zoom gestures split cheap preview/cache requests from full CPU display renders, so frequent zoom ticks can keep reprojection and zoom-ahead warming current without invalidating every in-flight CPU render
+  - regular display tile-cache setup/reset/warming and Iris-compatible renders are deferred during active zoom because exact-zoom cache and Iris frames become stale immediately during continuous zoom
 - Updated zoom UI:
   - active zoom-speed bar now uses center-out gradients, cyan for zoom-in and violet for zoom-out
 - Added an experimental GPU preview path:
   - Dragon King-only context menu toggle
   - currently limited to the large Mandelbrot display preview
+  - Mandelbrot CPU and GPU paths skip the main cardioid and period-2 bulb analytically before iterating
+  - GPU Mandelbrot uses the same iteration budget as the CPU path, so preview geometry does not exceed the authoritative CPU/Iris classification
   - CPU rendering remains authoritative for Iris-compatible preview, expander handoff, cache, and export paths
+  - Iris-compatible renders now run on a separate latest-only worker, so cache and zoom-ahead work cannot block Iris publication
   - CPU/NanoVG display remains the fallback if the GL shader is unavailable
   - full-quad GPU preview is allowed through the full zoom range for visual comparison
   - when GPU preview is active, available, and below roughly 68% of the zoom range, CPU display renders, display tile warming, and zoom-ahead display caches are skipped so Iris-compatible rendering can publish sooner

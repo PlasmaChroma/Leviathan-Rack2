@@ -59,8 +59,6 @@ Vec nautiloidFractalViewportHalfSpan(int mode) {
       return Vec(2.0f, 0.86f);
     case iris::FRACTAL_NEWTON:
       return Vec(2.45f, 0.98f);
-    case iris::FRACTAL_EYE_OF_THE_WORLD:
-      return Vec(0.0075f, 0.00395f);
     case iris::FRACTAL_TRICORN:
     default:
       return Vec(1.68f, 0.90f);
@@ -722,6 +720,24 @@ void Nautiloid::requestRenderWithCacheCenter(float cacheCenterX, float cacheCent
   submitRequest(request);
 }
 
+void Nautiloid::requestInteractiveZoomPreview(float cacheCenterX, float cacheCenterY, bool forceCacheRecenter) {
+  WorkerRequest request;
+  request.mode = fractalMode;
+  request.zoom = clamp(fractalZoom, 0.f, kNautiloidMaxFractalZoom);
+  request.centerX = clamp(fractalCenterX, -2.f, 2.f);
+  request.centerY = clamp(fractalCenterY, -2.f, 2.f);
+  request.cacheCenterX = clamp(cacheCenterX, -2.f, 2.f);
+  request.cacheCenterY = clamp(cacheCenterY, -2.f, 2.f);
+  request.forceCacheRecenter = forceCacheRecenter;
+  request.zoomInteractionActive = true;
+  {
+    std::lock_guard<std::mutex> lock(workerMutex);
+    request.serial = nextRequestSerial;
+  }
+  submitReprojectionRequest(request);
+  submitCacheRequest(request);
+}
+
 void Nautiloid::requestRenderWithCenteredCache() {
   requestRenderWithCacheCenter(fractalCenterX, fractalCenterY, true);
 }
@@ -817,9 +833,11 @@ void Nautiloid::startWorker() {
   workerStop = false;
   cacheWorkerStop = false;
   reprojectionWorkerStop = false;
+  irisWorkerStop = false;
   worker = std::thread([this]() { workerLoop(); });
   cacheWorker = std::thread([this]() { cacheWorkerLoop(); });
   reprojectionWorker = std::thread([this]() { reprojectionWorkerLoop(); });
+  irisWorker = std::thread([this]() { irisWorkerLoop(); });
 }
 
 void Nautiloid::stopWorker() {
@@ -841,6 +859,12 @@ void Nautiloid::stopWorker() {
     reprojectionRequestPending = false;
   }
   reprojectionRequestCv.notify_one();
+  {
+    std::lock_guard<std::mutex> lock(irisRequestMutex);
+    irisWorkerStop = true;
+    irisRequestPending = false;
+  }
+  irisRequestCv.notify_one();
   if (worker.joinable()) {
     worker.join();
   }
@@ -849,6 +873,9 @@ void Nautiloid::stopWorker() {
   }
   if (reprojectionWorker.joinable()) {
     reprojectionWorker.join();
+  }
+  if (irisWorker.joinable()) {
+    irisWorker.join();
   }
 }
 
@@ -861,9 +888,13 @@ void Nautiloid::submitRequest(const WorkerRequest& request) {
     submittedRequest = workerRequest;
     renderRequestsSubmitted.fetch_add(1u, std::memory_order_relaxed);
     requestPending = true;
+    displayRenderBusy.store(true, std::memory_order_release);
     loading.store(true, std::memory_order_release);
   }
   submitReprojectionRequest(submittedRequest);
+  if (!submittedRequest.zoomInteractionActive) {
+    submitIrisRequest(submittedRequest);
+  }
   workerCv.notify_one();
 }
 
@@ -884,6 +915,22 @@ void Nautiloid::submitReprojectionRequest(const WorkerRequest& request) {
     reprojectionRequestPending = true;
   }
   reprojectionRequestCv.notify_one();
+}
+
+void Nautiloid::submitIrisRequest(const WorkerRequest& request) {
+  {
+    std::lock_guard<std::mutex> lock(irisRequestMutex);
+    irisRequest = request;
+    irisRequestPending = true;
+  }
+  irisRequestCv.notify_one();
+}
+
+void Nautiloid::markDisplayRenderFinished(uint64_t serial) {
+  std::lock_guard<std::mutex> lock(workerMutex);
+  if (serial == nextRequestSerial && !requestPending) {
+    displayRenderBusy.store(false, std::memory_order_release);
+  }
 }
 
 void Nautiloid::publishAuthoritativeDisplaySource(iris::SourceField source, const WorkerRequest& request) {
@@ -1251,7 +1298,14 @@ void Nautiloid::workerLoop() {
     if (gpuPreviewOwnsDisplay) {
       loading.store(false, std::memory_order_release);
       submitCacheRequest(request);
+      markDisplayRenderFinished(request.serial);
       continue;
+    }
+
+    bool cacheRequestSubmitted = false;
+    if (request.zoomInteractionActive) {
+      submitCacheRequest(request);
+      cacheRequestSubmitted = true;
     }
 
     bool cacheComplete = false;
@@ -1262,7 +1316,10 @@ void Nautiloid::workerLoop() {
       displayCachePartialHits.fetch_add(1u, std::memory_order_relaxed);
     }
     if (ok) {
-      submitCacheRequest(request);
+      if (!cacheRequestSubmitted) {
+        submitCacheRequest(request);
+      }
+      markDisplayRenderFinished(request.serial);
       continue;
     }
 
@@ -1284,23 +1341,25 @@ void Nautiloid::workerLoop() {
 
     if (!ok) {
       loading.store(false, std::memory_order_release);
+      markDisplayRenderFinished(request.serial);
       continue;
     }
 
     {
       std::lock_guard<std::mutex> lock(workerMutex);
       if (request.serial != nextRequestSerial) {
-        if (!(requestPending && workerRequest.mode == request.mode)) {
-          displayRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
-          continue;
-        }
+        displayRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
+        continue;
       }
     }
     publishAuthoritativeDisplaySource(std::move(source), request);
     previewGeneration.fetch_add(1u, std::memory_order_release);
     displayRendersCompleted.fetch_add(1u, std::memory_order_relaxed);
     loading.store(false, std::memory_order_release);
-    submitCacheRequest(request);
+    if (!cacheRequestSubmitted) {
+      submitCacheRequest(request);
+    }
+    markDisplayRenderFinished(request.serial);
   }
 }
 
@@ -1559,6 +1618,19 @@ void Nautiloid::cacheWorkerLoop() {
     if (!gpuPreviewOwnsDisplay) {
       renderZoomAheadCaches(request);
     }
+  }
+}
+
+void Nautiloid::irisWorkerLoop() {
+  while (true) {
+    WorkerRequest request;
+    {
+      std::unique_lock<std::mutex> lock(irisRequestMutex);
+      irisRequestCv.wait(lock, [this]() { return irisWorkerStop || irisRequestPending; });
+      if (irisWorkerStop) break;
+      request = irisRequest;
+      irisRequestPending = false;
+    }
 
     bool irisCompatibleCurrent = false;
     {
@@ -1567,35 +1639,40 @@ void Nautiloid::cacheWorkerLoop() {
         irisCompatibleSource.valid() &&
         irisCompatibleSerial == request.serial;
     }
-    if (!irisCompatibleCurrent) {
-      iris::SourceField nextIrisSource;
-      std::string irisError;
-      iris::NautiloidFractalSourceParams sourceParams;
-      sourceParams.mode = request.mode;
-      sourceParams.zoom = request.zoom;
-      sourceParams.centerX = request.centerX;
-      sourceParams.centerY = request.centerY;
-      sourceParams.generation = request.serial;
-      const bool irisOk = iris::makeNautiloidIrisSource(sourceParams, &nextIrisSource, &irisError);
-      if (irisOk) {
-        std::lock_guard<std::mutex> workerLock(workerMutex);
-        if (request.serial == nextRequestSerial) {
-          std::shared_ptr<const iris::SourceField> nextSharedSource =
-            std::make_shared<const iris::SourceField>(nextIrisSource);
-          std::lock_guard<std::mutex> lock(snapshotMutex);
-          irisCompatibleSource = std::move(nextIrisSource);
-          std::atomic_store_explicit(&irisExpanderSource, nextSharedSource, std::memory_order_release);
-          irisCompatibleSerial = request.serial;
-          irisCompatibleMode = request.mode;
-          irisCompatibleZoom = request.zoom;
-          irisCompatibleCenterX = request.centerX;
-          irisCompatibleCenterY = request.centerY;
-          irisPreviewGeneration.fetch_add(1u, std::memory_order_release);
-          irisRendersCompleted.fetch_add(1u, std::memory_order_relaxed);
-        } else {
-          irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
-        }
-      }
+    if (irisCompatibleCurrent) {
+      continue;
+    }
+
+    iris::SourceField nextIrisSource;
+    std::string irisError;
+    iris::NautiloidFractalSourceParams sourceParams;
+    sourceParams.mode = request.mode;
+    sourceParams.zoom = request.zoom;
+    sourceParams.centerX = request.centerX;
+    sourceParams.centerY = request.centerY;
+    sourceParams.generation = request.serial;
+    const bool irisOk = iris::makeNautiloidIrisSource(sourceParams, &nextIrisSource, &irisError);
+    if (!irisOk) {
+      continue;
+    }
+
+    std::lock_guard<std::mutex> workerLock(workerMutex);
+    if (request.serial == nextRequestSerial &&
+        !zoomInteractionActive.load(std::memory_order_relaxed)) {
+      std::shared_ptr<const iris::SourceField> nextSharedSource =
+        std::make_shared<const iris::SourceField>(nextIrisSource);
+      std::lock_guard<std::mutex> lock(snapshotMutex);
+      irisCompatibleSource = std::move(nextIrisSource);
+      std::atomic_store_explicit(&irisExpanderSource, nextSharedSource, std::memory_order_release);
+      irisCompatibleSerial = request.serial;
+      irisCompatibleMode = request.mode;
+      irisCompatibleZoom = request.zoom;
+      irisCompatibleCenterX = request.centerX;
+      irisCompatibleCenterY = request.centerY;
+      irisPreviewGeneration.fetch_add(1u, std::memory_order_release);
+      irisRendersCompleted.fetch_add(1u, std::memory_order_relaxed);
+    } else {
+      irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
     }
   }
 }

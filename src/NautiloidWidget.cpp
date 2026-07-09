@@ -38,8 +38,6 @@ Vec nautiloidFractalViewportHalfSpan(int mode) {
       return Vec(2.0f, 0.86f);
     case iris::FRACTAL_NEWTON:
       return Vec(2.45f, 0.98f);
-    case iris::FRACTAL_EYE_OF_THE_WORLD:
-      return Vec(0.0075f, 0.00395f);
     case iris::FRACTAL_TRICORN:
     default:
       return Vec(1.68f, 0.90f);
@@ -203,13 +201,25 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
         return rgb + vec3(v - c);
       }
 
+      bool mandelbrotMainInterior(vec2 c) {
+        float q = (c.x - 0.25) * (c.x - 0.25) + c.y * c.y;
+        if (q * (q + (c.x - 0.25)) < 0.25 * c.y * c.y) {
+          return true;
+        }
+        return (c.x + 1.0) * (c.x + 1.0) + c.y * c.y < 0.0625;
+      }
+
       void main() {
         vec2 c = vec2(-0.75, 0.0) + uCenter + (vUv * 2.0 - 1.0) * uHalfSpan;
+        if (mandelbrotMainInterior(c)) {
+          gl_FragColor = vec4(7.0 / 255.0, 4.0 / 255.0, 18.0 / 255.0, 1.0);
+          return;
+        }
         vec2 z = vec2(0.0);
         float minOrbit = 1.0e9;
         float mag2 = 0.0;
         int iter = 0;
-        const int maxIter = 192;
+        const int maxIter = 140;
         for (int i = 0; i < maxIter; ++i) {
           float zr2 = z.x * z.x;
           float zi2 = z.y * z.y;
@@ -867,7 +877,8 @@ struct NautiloidZoomSlider final : ui::Slider {
   NautiloidZoomSpeedQuantity* zoomSpeed = nullptr;
   bool zoomActive = false;
   double lastStepTime = -INFINITY;
-  double lastRequestTime = -INFINITY;
+  double lastPreviewRequestTime = -INFINITY;
+  double lastRenderRequestTime = -INFINITY;
 
   void onButton(const event::Button& e) override {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
@@ -917,12 +928,13 @@ struct NautiloidZoomSlider final : ui::Slider {
         if (std::fabs(module->fractalZoom - next) > 1e-5f) {
           const bool zoomingOut = next < module->fractalZoom;
           module->fractalZoom = next;
-          if (nautiloidRequestDue(&lastRequestTime, 0.04)) {
-            if (zoomingOut && nautiloidVisibleViewOutgrowsCache(module, 0.78f)) {
-              module->requestRenderWithCenteredCache();
-            } else {
-              module->requestRender();
-            }
+          const bool recenterCache = zoomingOut && nautiloidVisibleViewOutgrowsCache(module, 0.78f);
+          if (nautiloidRequestDue(&lastPreviewRequestTime, 0.04)) {
+            module->requestInteractiveZoomPreview(module->fractalCenterX, module->fractalCenterY, recenterCache);
+          }
+          if (!module->displayRenderBusy.load(std::memory_order_acquire) &&
+              nautiloidRequestDue(&lastRenderRequestTime, 0.12)) {
+            module->requestRenderWithCacheCenter(module->fractalCenterX, module->fractalCenterY, recenterCache);
           }
         }
       }
@@ -1013,6 +1025,8 @@ struct NautiloidZoomSlider final : ui::Slider {
   void stopZoom() {
     zoomActive = false;
     lastStepTime = -INFINITY;
+    lastPreviewRequestTime = -INFINITY;
+    lastRenderRequestTime = -INFINITY;
     if (module) {
       module->zoomInteractionActive.store(false, std::memory_order_relaxed);
     }
