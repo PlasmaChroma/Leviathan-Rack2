@@ -15,8 +15,8 @@ constexpr int kDefaultRows = 256;
 constexpr int kMaxRows = 256;
 static_assert(kCanonicalSourceWidth == kFrameSize, "Iris source width must match frame size");
 static_assert(kCanonicalSourceHeight == kDefaultRows, "Iris source height must match default rows");
-constexpr int kSourcePreviewWidth = 256;
-constexpr int kSourcePreviewHeight = 128;
+constexpr int kSourcePreviewWidth = kCanonicalSourceWidth;
+constexpr int kSourcePreviewHeight = kCanonicalSourceHeight;
 
 enum NormalizeMode {
   NORMALIZE_NONE = 0,

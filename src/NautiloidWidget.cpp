@@ -572,11 +572,10 @@ struct NautiloidZoomSlider final : ui::Slider {
     const float contentH = trackH + gap + progressH;
     const float trackY = std::max(0.f, 0.5f * (box.size.y - contentH));
     const float progressY = trackY + trackH + gap;
-    const float radius = 0.5f * trackH;
     const float progressRadius = 0.5f * progressH;
 
     nvgBeginPath(args.vg);
-    nvgRoundedRect(args.vg, 0.f, trackY, box.size.x, trackH, radius);
+    nvgRect(args.vg, 0.f, trackY, box.size.x, trackH);
     nvgFillColor(args.vg, nvgRGB(12, 16, 22));
     nvgFill(args.vg);
     nvgStrokeWidth(args.vg, 1.f);
@@ -590,7 +589,7 @@ struct NautiloidZoomSlider final : ui::Slider {
       nvgSave(args.vg);
       nvgIntersectScissor(args.vg, fillLeft, trackY - 1.f, fillW, trackH + 2.f);
       nvgBeginPath(args.vg);
-      nvgRoundedRect(args.vg, fillLeft - (zoomIn ? 0.f : radius), trackY, fillW + radius, trackH, radius);
+      nvgRect(args.vg, fillLeft, trackY, fillW, trackH);
       nvgFillColor(args.vg, zoomIn ? nvgRGB(28, 204, 217) : nvgRGB(122, 92, 255));
       nvgFill(args.vg);
       nvgRestore(args.vg);
