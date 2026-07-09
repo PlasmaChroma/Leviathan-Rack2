@@ -99,6 +99,8 @@ struct Nautiloid final : Module {
   std::atomic<uint64_t> irisRendersDroppedStale {0u};
   std::atomic<uint64_t> irisExpanderPublishes {0u};
   std::atomic<bool> debugFileLoggingEnabled {false};
+  std::atomic<bool> debugGpuPreviewEnabled {false};
+  std::atomic<bool> debugGpuPreviewAvailable {false};
   std::atomic<bool> loading {false};
 
   struct DisplayCacheTile {

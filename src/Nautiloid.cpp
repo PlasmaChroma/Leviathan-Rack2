@@ -656,6 +656,8 @@ json_t* Nautiloid::dataToJson() {
   json_object_set_new(root, "fractalCenterY", json_real(fractalCenterY));
   json_object_set_new(root, "debugFileLoggingEnabled",
                       json_boolean(debugFileLoggingEnabled.load(std::memory_order_relaxed)));
+  json_object_set_new(root, "debugGpuPreviewEnabled",
+                      json_boolean(debugGpuPreviewEnabled.load(std::memory_order_relaxed)));
   return root;
 }
 
@@ -668,6 +670,9 @@ void Nautiloid::dataFromJson(json_t* root) {
   fractalCenterY = clamp(jsonRealOr(root, "fractalCenterY", 0.f), -2.f, 2.f);
   debugFileLoggingEnabled.store(
     jsonBoolOr(root, "debugFileLoggingEnabled", false), std::memory_order_relaxed);
+  debugGpuPreviewEnabled.store(
+    jsonBoolOr(root, "debugGpuPreviewEnabled", false), std::memory_order_relaxed);
+  debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
   requestRender();
 }
 

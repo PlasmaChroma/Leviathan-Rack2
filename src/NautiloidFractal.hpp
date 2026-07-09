@@ -124,8 +124,8 @@ inline void renderMandelbrotFamilySimd(
   float panY,
   int maxIter,
   SourceField* source) {
-  const float baseR = mode == FRACTAL_EYE_OF_THE_WORLD ? -0.743643887037151f : -0.72f;
-  const float baseI = mode == FRACTAL_EYE_OF_THE_WORLD ? 0.131825904205330f : 0.03f;
+  const float baseR = mode == FRACTAL_EYE_OF_THE_WORLD ? -0.743643887037151f : -0.75f;
+  const float baseI = mode == FRACTAL_EYE_OF_THE_WORLD ? 0.131825904205330f : 0.0f;
   const float spanX = (mode == FRACTAL_EYE_OF_THE_WORLD ? 0.0075f : 1.62f) * zoomScale * viewScale;
   const float spanY = (mode == FRACTAL_EYE_OF_THE_WORLD ? 0.00395f : 0.86f) * zoomScale * viewScale;
   const float invWidth = 1.f / float(source->width);
@@ -336,8 +336,8 @@ inline bool makeBuiltinFractalSourceSized(
       double pr = 0.0;
       double pi = 0.0;
       if (mode == FRACTAL_MANDELBROT) {
-        cr = -0.72 + panX + double(nx) * 1.62 * zoomScale * viewScale;
-        ci = 0.03 + panY + double(ny) * 0.86 * zoomScale * viewScale;
+        cr = -0.75 + panX + double(nx) * 1.62 * zoomScale * viewScale;
+        ci = panY + double(ny) * 0.86 * zoomScale * viewScale;
       } else if (mode == FRACTAL_EYE_OF_THE_WORLD) {
         cr = -0.743643887037151 + panX + double(nx) * 0.0075 * zoomScale * viewScale;
         ci = 0.131825904205330 + panY + double(ny) * 0.00395 * zoomScale * viewScale;

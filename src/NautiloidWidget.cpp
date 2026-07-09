@@ -2,6 +2,8 @@
 #include "NvgGraphicsLifecycle.hpp"
 #include "visual/VisualAssets.hpp"
 
+#include <nanovg_gl.h>
+
 #include <fstream>
 
 namespace {
@@ -72,6 +74,283 @@ bool nautiloidVisibleViewOutgrowsCache(Nautiloid* module, float threshold) {
   return std::max(useX, useY) >= threshold;
 }
 
+bool nautiloidGpuPreviewEnabledForMandelbrot(Nautiloid* module) {
+  return module &&
+    isDragonKingDebugEnabled() &&
+    module->fractalMode == iris::FRACTAL_MANDELBROT &&
+    module->debugGpuPreviewEnabled.load(std::memory_order_relaxed);
+}
+
+bool nautiloidGpuPreviewActive(Nautiloid* module) {
+  return nautiloidGpuPreviewEnabledForMandelbrot(module) &&
+    module->debugGpuPreviewAvailable.load(std::memory_order_relaxed);
+}
+
+struct NautiloidGlPreview final : widget::OpenGlWidget {
+  Nautiloid* module = nullptr;
+  GLuint program = 0;
+  GLuint vertexShader = 0;
+  GLuint fragmentShader = 0;
+  GLint uniformCenter = -1;
+  GLint uniformHalfSpan = -1;
+  bool shaderInitAttempted = false;
+  bool shaderReady = false;
+  bool lastEffectiveActive = false;
+  int lastMode = -1;
+  float lastZoom = NAN;
+  float lastCenterX = NAN;
+  float lastCenterY = NAN;
+
+  explicit NautiloidGlPreview(Nautiloid* module) : module(module) {}
+
+  ~NautiloidGlPreview() override {
+    if (module) {
+      module->debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
+    }
+    releaseGlResources(false);
+  }
+
+  void onContextDestroy(const ContextDestroyEvent& e) override {
+    OpenGlWidget::onContextDestroy(e);
+    releaseGlResources(true);
+    if (module) {
+      module->debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
+    }
+  }
+
+  void releaseGlResources(bool deleteGlObjects) {
+    if (deleteGlObjects && program) {
+      glDeleteProgram(program);
+    }
+    if (deleteGlObjects && vertexShader) {
+      glDeleteShader(vertexShader);
+    }
+    if (deleteGlObjects && fragmentShader) {
+      glDeleteShader(fragmentShader);
+    }
+    program = 0;
+    vertexShader = 0;
+    fragmentShader = 0;
+    uniformCenter = -1;
+    uniformHalfSpan = -1;
+    shaderReady = false;
+    shaderInitAttempted = false;
+  }
+
+  static GLuint compileShader(GLenum type, const char* src) {
+    GLuint shader = glCreateShader(type);
+    if (!shader) return 0;
+    glShaderSource(shader, 1, &src, nullptr);
+    glCompileShader(shader);
+    GLint ok = GL_FALSE;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
+    if (ok != GL_TRUE) {
+      GLint logLen = 0;
+      glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLen);
+      std::vector<char> logBuf(size_t(std::max(logLen, 1)));
+      GLsizei written = 0;
+      glGetShaderInfoLog(shader, GLsizei(logBuf.size()), &written, logBuf.data());
+      WARN("Nautiloid GPU preview shader compile failed: %s", logBuf.data());
+      glDeleteShader(shader);
+      return 0;
+    }
+    return shader;
+  }
+
+  bool ensureShaderReady() {
+    if (shaderInitAttempted) return shaderReady;
+    shaderInitAttempted = true;
+
+    static const char* const kVertexShaderSrc = R"GLSL(
+      #version 120
+      varying vec2 vUv;
+      void main() {
+        gl_Position = ftransform();
+        vUv = gl_MultiTexCoord0.xy;
+      }
+    )GLSL";
+
+    static const char* const kFragmentShaderSrc = R"GLSL(
+      #version 120
+      varying vec2 vUv;
+      uniform vec2 uCenter;
+      uniform vec2 uHalfSpan;
+
+      vec3 hsvToRgb(float h, float s, float v) {
+        h = fract(h);
+        s = clamp(s, 0.0, 1.0);
+        v = clamp(v, 0.0, 1.0);
+        float c = v * s;
+        float hp = h * 6.0;
+        float x = c * (1.0 - abs(mod(hp, 2.0) - 1.0));
+        vec3 rgb = vec3(0.0);
+        if (hp < 1.0) {
+          rgb = vec3(c, x, 0.0);
+        } else if (hp < 2.0) {
+          rgb = vec3(x, c, 0.0);
+        } else if (hp < 3.0) {
+          rgb = vec3(0.0, c, x);
+        } else if (hp < 4.0) {
+          rgb = vec3(0.0, x, c);
+        } else if (hp < 5.0) {
+          rgb = vec3(x, 0.0, c);
+        } else {
+          rgb = vec3(c, 0.0, x);
+        }
+        return rgb + vec3(v - c);
+      }
+
+      void main() {
+        vec2 c = vec2(-0.75, 0.0) + uCenter + (vUv * 2.0 - 1.0) * uHalfSpan;
+        vec2 z = vec2(0.0);
+        float minOrbit = 1.0e9;
+        float mag2 = 0.0;
+        int iter = 0;
+        const int maxIter = 192;
+        for (int i = 0; i < maxIter; ++i) {
+          float zr2 = z.x * z.x;
+          float zi2 = z.y * z.y;
+          minOrbit = min(minOrbit, zr2 + zi2);
+          z = vec2(zr2 - zi2 + c.x, 2.0 * z.x * z.y + c.y);
+          mag2 = dot(z, z);
+          iter = i;
+          if (mag2 > 16.0) {
+            break;
+          }
+        }
+        if (mag2 <= 16.0) {
+          gl_FragColor = vec4(7.0 / 255.0, 4.0 / 255.0, 18.0 / 255.0, 1.0);
+          return;
+        }
+        float smooth = float(iter) + 1.0 - log(log(sqrt(max(mag2, 1.000001)))) / log(2.0);
+        float t = clamp(smooth / float(maxIter), 0.0, 1.0);
+        float orbit = 1.0 - clamp(sqrt(min(minOrbit, 4.0)) * 0.5, 0.0, 1.0);
+        vec3 rgb = hsvToRgb(0.64 + 1.35 * t + 0.08 * orbit,
+                            0.72 + 0.20 * orbit,
+                            0.18 + 0.82 * sqrt(t));
+        gl_FragColor = vec4(rgb, 1.0);
+      }
+    )GLSL";
+
+    vertexShader = compileShader(GL_VERTEX_SHADER, kVertexShaderSrc);
+    fragmentShader = compileShader(GL_FRAGMENT_SHADER, kFragmentShaderSrc);
+    if (!vertexShader || !fragmentShader) {
+      releaseGlResources(true);
+      shaderInitAttempted = true;
+      return false;
+    }
+    program = glCreateProgram();
+    if (!program) {
+      releaseGlResources(true);
+      shaderInitAttempted = true;
+      return false;
+    }
+    glAttachShader(program, vertexShader);
+    glAttachShader(program, fragmentShader);
+    glLinkProgram(program);
+    GLint linkOk = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &linkOk);
+    if (linkOk != GL_TRUE) {
+      GLint logLen = 0;
+      glGetProgramiv(program, GL_INFO_LOG_LENGTH, &logLen);
+      std::vector<char> logBuf(size_t(std::max(logLen, 1)));
+      GLsizei written = 0;
+      glGetProgramInfoLog(program, GLsizei(logBuf.size()), &written, logBuf.data());
+      WARN("Nautiloid GPU preview shader link failed: %s", logBuf.data());
+      releaseGlResources(true);
+      shaderInitAttempted = true;
+      return false;
+    }
+    uniformCenter = glGetUniformLocation(program, "uCenter");
+    uniformHalfSpan = glGetUniformLocation(program, "uHalfSpan");
+    shaderReady = uniformCenter >= 0 && uniformHalfSpan >= 0;
+    if (!shaderReady) {
+      releaseGlResources(true);
+      shaderInitAttempted = true;
+      return false;
+    }
+    return true;
+  }
+
+  void step() override {
+    OpenGlWidget::step();
+    const bool effectiveActive = nautiloidGpuPreviewEnabledForMandelbrot(module);
+    if (module) {
+      module->debugGpuPreviewAvailable.store(effectiveActive && shaderReady, std::memory_order_relaxed);
+    }
+    bool dirty = false;
+    if (effectiveActive != lastEffectiveActive) {
+      lastEffectiveActive = effectiveActive;
+      dirty = true;
+    }
+    if (module) {
+      if (module->fractalMode != lastMode ||
+          std::fabs(module->fractalZoom - lastZoom) > 1e-5f ||
+          std::fabs(module->fractalCenterX - lastCenterX) > 1e-7f ||
+          std::fabs(module->fractalCenterY - lastCenterY) > 1e-7f) {
+        lastMode = module->fractalMode;
+        lastZoom = module->fractalZoom;
+        lastCenterX = module->fractalCenterX;
+        lastCenterY = module->fractalCenterY;
+        dirty = true;
+      }
+    }
+    if (effectiveActive) {
+      dirty = true;
+    }
+    if (dirty) {
+      setDirty();
+    }
+  }
+
+  void drawFramebuffer() override {
+    Vec fbSize = getFramebufferSize();
+    glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
+    glClearColor(0.f, 0.f, 0.f, 0.f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    if (!nautiloidGpuPreviewEnabledForMandelbrot(module) || !ensureShaderReady()) {
+      if (module) {
+        module->debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
+      }
+      return;
+    }
+    if (module) {
+      module->debugGpuPreviewAvailable.store(true, std::memory_order_relaxed);
+    }
+
+    const float zoomScale = std::pow(0.05f, clamp(module->fractalZoom, 0.f, kNautiloidMaxFractalZoom));
+    const Vec halfSpan = nautiloidFractalViewportHalfSpan(module->fractalMode).mult(zoomScale);
+    const float w = std::max(box.size.x, 1.f);
+    const float h = std::max(box.size.y, 1.f);
+
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0.0, double(w), double(h), 0.0, -1.0, 1.0);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_BLEND);
+
+    glUseProgram(program);
+    glUniform2f(uniformCenter, module->fractalCenterX, module->fractalCenterY);
+    glUniform2f(uniformHalfSpan, halfSpan.x, halfSpan.y);
+    glBegin(GL_TRIANGLE_STRIP);
+    glTexCoord2f(0.f, 0.f);
+    glVertex2f(0.f, 0.f);
+    glTexCoord2f(1.f, 0.f);
+    glVertex2f(w, 0.f);
+    glTexCoord2f(0.f, 1.f);
+    glVertex2f(0.f, h);
+    glTexCoord2f(1.f, 1.f);
+    glVertex2f(w, h);
+    glEnd();
+    glUseProgram(0);
+  }
+};
+
 struct NautiloidDisplay final : OpaqueWidget {
   Nautiloid* module = nullptr;
   widget::FramebufferWidget* framebuffer = nullptr;
@@ -82,6 +361,7 @@ struct NautiloidDisplay final : OpaqueWidget {
   int uploadedHeight = 0;
   std::vector<uint8_t> rgba;
   bool panActive = false;
+  bool lastGpuPreviewActive = false;
   Vec lastPanLocal;
   double lastPanRequestTime = -INFINITY;
 
@@ -172,13 +452,19 @@ struct NautiloidDisplay final : OpaqueWidget {
   void step() override {
     const uint64_t currentGeneration =
       module ? module->previewGeneration.load(std::memory_order_acquire) : 0u;
-    if (generation != currentGeneration && framebuffer) {
+    const bool gpuPreviewActive = nautiloidGpuPreviewActive(module);
+    if ((generation != currentGeneration || gpuPreviewActive != lastGpuPreviewActive) && framebuffer) {
       framebuffer->setDirty();
     }
+    lastGpuPreviewActive = gpuPreviewActive;
     OpaqueWidget::step();
   }
 
   void draw(const DrawArgs& args) override {
+    if (nautiloidGpuPreviewActive(module)) {
+      return;
+    }
+
     nvgBeginPath(args.vg);
     nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
     nvgFillColor(args.vg, nvgRGB(4, 7, 10));
@@ -799,6 +1085,10 @@ struct NautiloidWidget final : ModuleWidget {
     const math::Rect displayRectMm(Vec(1.8f, 6.5f), Vec(98.f, 65.27f));
     addChild(visual_assets::createPreviewFrameEnhancementWidget(
       displayRectMm, visual_assets::PreviewFrameTint::Purple));
+    NautiloidGlPreview* glPreview = new NautiloidGlPreview(module);
+    glPreview->box.pos = mm2px(displayRectMm.pos.plus(Vec(0.4f, 0.4f)));
+    glPreview->box.size = mm2px(displayRectMm.size.minus(Vec(0.8f, 0.8f)));
+    addChild(glPreview);
     widget::FramebufferWidget* displayFb = new widget::FramebufferWidget();
     displayFb->box.pos = mm2px(displayRectMm.pos.plus(Vec(0.4f, 0.4f)));
     displayFb->box.size = mm2px(displayRectMm.size.minus(Vec(0.8f, 0.8f)));
@@ -868,6 +1158,16 @@ struct NautiloidWidget final : ModuleWidget {
       [naut]() {
         const bool current = naut->debugFileLoggingEnabled.load(std::memory_order_relaxed);
         naut->debugFileLoggingEnabled.store(!current, std::memory_order_relaxed);
+      }));
+    menu->addChild(createCheckMenuItem(
+      "GPU preview for Mandelbrot", "",
+      [naut]() {
+        return naut->debugGpuPreviewEnabled.load(std::memory_order_relaxed);
+      },
+      [naut]() {
+        const bool current = naut->debugGpuPreviewEnabled.load(std::memory_order_relaxed);
+        naut->debugGpuPreviewEnabled.store(!current, std::memory_order_relaxed);
+        naut->debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
       }));
     menu->addChild(createMenuLabel(nautiloidDebugLogPath()));
   }

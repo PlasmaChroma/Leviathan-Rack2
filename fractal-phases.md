@@ -53,6 +53,11 @@ Completed work:
   - active zoom-out requests force a centered cache refresh once the live view consumes most of the cached span, and zoom release settles with a centered cache request
 - Updated zoom UI:
   - active zoom-speed bar now uses center-out gradients, cyan for zoom-in and violet for zoom-out
+- Added an experimental GPU preview path:
+  - Dragon King-only context menu toggle
+  - currently limited to the large Mandelbrot display preview
+  - CPU rendering remains authoritative for Iris-compatible preview, expander handoff, cache, and export paths
+  - CPU/NanoVG display remains the fallback if the GL shader is unavailable
 
 Deferred or changed:
 
@@ -113,6 +118,7 @@ Goal: treat Nautiloid display and Iris-compatible output as separate products.
   - pending/stale state indicator
   - generation mismatch indicator
 - Current implementation has separate display and Iris-compatible buffers, but naming can still be cleaned up.
+- Experimental GPU preview intentionally does not feed `irisSource` or the expander handoff.
 
 ## Phase 4: Cache Scheduling
 
@@ -160,6 +166,7 @@ Goal: support deeper zoom without flat/unstable output.
 
 Goal: make the display feel fluid without replacing the CPU source pipeline.
 
+- Status: first experiment added for Mandelbrot only.
 - Add optional GPU display-only renderer for Mandelbrot-family formulas.
 - Keep CPU renderer authoritative for:
   - Iris-compatible output
