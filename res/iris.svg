@@ -288,6 +288,12 @@
        cx="5291"
        cy="11178.575"
        r="260" />
+    <circle
+       id="NAUTILOID_EXPANDER_LIGHT"
+       cx="180"
+       cy="8840"
+       r="180"
+       style="display:none" />
   </g>
   <rect
      id="IRIS_DISPLAY"

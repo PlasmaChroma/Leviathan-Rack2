@@ -28,6 +28,8 @@ struct Nautiloid final : Module {
   };
 
   enum LightId {
+    IRIS_LINK_LIGHT,
+    IRIS_READY_LIGHT,
     LIGHTS_LEN
   };
 

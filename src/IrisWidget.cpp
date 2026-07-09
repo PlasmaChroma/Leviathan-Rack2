@@ -882,6 +882,9 @@ struct IrisWidget final : ModuleWidget {
     addChild(createLightCentered<SmallAperture<BlueApertureLight>>(
       mm2px(anchor("IRIS_IMAGE_CHANNEL_BLUE_LIGHT", Vec(3.600001f, 99.925596f))),
       module, Iris::IMAGE_CHANNEL_BLUE_LIGHT));
+    addChild(createLightCentered<SmallAperture<AmberGreenApertureLight>>(
+      mm2px(anchor("NAUTILOID_EXPANDER_LIGHT", Vec(1.8f, 88.4f))),
+      module, Iris::NAUTILOID_LINK_LIGHT));
 
     addParam(createParamCentered<LeviathanHaloKnob2>(
       mm2px(anchor("IRIS_COARSE_PARAM", Vec(13.5f, 54.f))), module, Iris::COARSE_PARAM));

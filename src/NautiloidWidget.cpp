@@ -1388,6 +1388,8 @@ struct NautiloidWidget final : ModuleWidget {
 
     addInput(createInputCentered<Magitek2InputJack>(
       mm2px(pointMm("ZOOM_RATE_INPUT", Vec(88.6f, 75.4f))), module, Nautiloid::ZOOM_RATE_INPUT));
+    addChild(createLightCentered<SmallAperture<AmberGreenApertureLight>>(
+      mm2px(pointMm("IRIS_EXPANDER_LIGHT", Vec(98.4f, 88.4f))), module, Nautiloid::IRIS_LINK_LIGHT));
 
     const math::Rect tileCacheRectMm = rectMm("TILE_CACHE", math::Rect(Vec(2.f, 102.f), Vec(42.f, 25.9f)));
     NautiloidTileCacheGrid* tileCacheGrid = new NautiloidTileCacheGrid(module);

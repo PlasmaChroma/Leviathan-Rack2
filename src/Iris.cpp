@@ -1,4 +1,5 @@
 #include "Iris.hpp"
+#include "Nautiloid.hpp"
 #include "NautiloidFractal.hpp"
 
 #include <new>
@@ -14,6 +15,13 @@ constexpr float kLinFmDriveThreshold = 0.80f;
 constexpr float kLinFmMaxDrive = 4.0f;
 constexpr float kMinFrequencyHz = 8.f;
 constexpr float kMaxFrequencyHz = 20000.f;
+
+bool hasLeftNautiloid(const Iris* module) {
+  if (!module) return false;
+  const engine::Module* left = module->leftExpander.module;
+  return left && left->model &&
+    ((left->model == modelNautiloid) || left->model->slug == "Nautiloid");
+}
 
 float acCoupledLinFm(float x, Iris::Voice* voice, float sampleTime) {
   const float hpCoeff = clamp(1.f - 2.f * float(M_PI) * kLinHpCutoffHz * sampleTime, 0.f, 1.f);
@@ -130,6 +138,7 @@ void Iris::requestImageLoad(const std::string& path) {
 }
 
 void Iris::requestExpanderSource(std::shared_ptr<const iris::SourceField> source, uint64_t generation) {
+  if (!hasLeftNautiloid(this)) return;
   if (!source || !source->valid() || generation == 0u) return;
   if (generation == lastExpanderSourceGeneration && source == lastExpanderSourceSeen) return;
   lastExpanderSourceGeneration = generation;
@@ -482,6 +491,11 @@ void Iris::process(const ProcessArgs& args) {
     lights[IMAGE_CHANNEL_RED_LIGHT].setBrightness(imageChannelMode == iris::IMAGE_CHANNEL_RED ? 1.f : 0.f);
     lights[IMAGE_CHANNEL_GREEN_LIGHT].setBrightness(imageChannelMode == iris::IMAGE_CHANNEL_GREEN ? 1.f : 0.f);
     lights[IMAGE_CHANNEL_BLUE_LIGHT].setBrightness(imageChannelMode == iris::IMAGE_CHANNEL_BLUE ? 1.f : 0.f);
+    const bool nautiloidConnected = hasLeftNautiloid(this);
+    const bool nautiloidReady =
+      nautiloidConnected && lastExpanderSourceGeneration != 0u && lastExpanderSourceSeen != nullptr;
+    lights[NAUTILOID_LINK_LIGHT].setBrightness(nautiloidConnected && !nautiloidReady ? 1.f : 0.f);
+    lights[NAUTILOID_READY_LIGHT].setBrightness(nautiloidReady ? 1.f : 0.f);
   }
   if (measurePerf) {
     debugMetrics.recordProcess(debug_terminal::elapsedNsSince(processStart));

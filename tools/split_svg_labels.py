@@ -6,9 +6,9 @@ Split an SVG into:
   - a panel/art SVG with labels removed
   - a labels-only SVG containing only the chosen label group
 
-By default, the panel/art SVG also strips SVG text elements so the runtime
-panel does not depend on locally installed fonts. The labels-only SVG keeps
-text unchanged unless --outline-label-text is passed.
+By default, the panel/art SVG strips SVG text elements and the labels-only SVG
+converts text to paths so runtime panels do not depend on locally installed
+fonts. Pass --keep-label-text to keep font-backed text in the labels output.
 
 Expected source convention:
   <g id="labels"> ... </g>
@@ -16,6 +16,7 @@ Expected source convention:
 Example:
   python3 split_svg_labels.py res/IntegralFlux.svg
   python3 split_svg_labels.py res/IntegralFlux.svg --label-id labels
+  python3 split_svg_labels.py res/IntegralFlux.svg --keep-label-text
   python3 split_svg_labels.py res --recursive
 """
 
@@ -117,9 +118,8 @@ def strip_font_text_elements(root: ET.Element) -> int:
     """
     Remove SVG elements whose rendering depends on text/font layout.
 
-    This intentionally runs only on panel outputs. The labels output should
-    keep text intact so labels can be rendered in a dedicated cached layer or
-    converted separately by the asset pipeline.
+    This runs on panel outputs and on labels outputs when Inkscape fails to
+    convert some font-backed text to paths.
     """
     text_element_names = {
         "text",
@@ -427,9 +427,9 @@ def main() -> int:
         help="Do not strip font-backed SVG text elements from the panel output",
     )
     parser.add_argument(
-        "--outline-label-text",
+        "--keep-label-text",
         action="store_true",
-        help="Convert font-backed text in the labels output to paths using Inkscape",
+        help="Keep font-backed text in the labels output instead of converting it to paths",
     )
     parser.add_argument(
         "--inkscape-path",
@@ -468,7 +468,7 @@ def main() -> int:
                 overwrite=args.overwrite,
                 cleanup=not args.no_cleanup,
                 strip_panel_text=not args.keep_panel_text,
-                outline_label_text=args.outline_label_text,
+                outline_label_text=not args.keep_label_text,
                 inkscape_path=args.inkscape_path,
                 inkscape_timeout_sec=args.inkscape_timeout,
             )

@@ -101,6 +101,12 @@
        rx="398"
        ry="405"
        fill="#00ff00" />
+    <circle
+       id="IRIS_EXPANDER_LIGHT"
+       cx="9840"
+       cy="8840"
+       fill="#ff0000"
+       r="180" />
     <rect
        id="TILE_CACHE"
        x="200"

@@ -40,6 +40,11 @@ bool requestGpuPreviewOwnsDisplay(int mode, float zoom, bool shaderAvailable, co
   return requestGpuPreviewVisible(mode, shaderAvailable, module);
 }
 
+bool isIrisModule(const engine::Module* neighbor) {
+  return neighbor && neighbor->model &&
+    ((neighbor->model == modelIris) || neighbor->model->slug == "Iris");
+}
+
 Vec nautiloidFractalViewportHalfSpan(int mode) {
   switch (mode) {
     case iris::FRACTAL_MANDELBROT:
@@ -638,13 +643,13 @@ void Nautiloid::process(const ProcessArgs& args) {
     std::memory_order_relaxed);
 
   const uint64_t generation = irisPreviewGeneration.load(std::memory_order_acquire);
-  if (generation == 0u) return;
-  std::shared_ptr<const iris::SourceField> source;
-  if (Module* right = rightExpander.module) {
-    if (right->model == modelIris && generation != lastExpanderGenerationSentRight) {
-      if (!source) {
-        source = irisExpanderSourceSnapshot(nullptr);
-      }
+  Module* right = rightExpander.module;
+  const bool irisConnected = isIrisModule(right) && right->leftExpander.module == this;
+  bool irisReady = false;
+
+  if (irisConnected && generation != 0u) {
+    if (generation != lastExpanderGenerationSentRight) {
+      std::shared_ptr<const iris::SourceField> source = irisExpanderSourceSnapshot(nullptr);
       if (source) {
         if (Iris* irisModule = dynamic_cast<Iris*>(right)) {
           irisModule->requestExpanderSource(source, generation);
@@ -653,25 +658,14 @@ void Nautiloid::process(const ProcessArgs& args) {
         }
       }
     }
+    irisReady = irisConnected && lastExpanderGenerationSentRight == generation;
   } else {
     lastExpanderGenerationSentRight = 0u;
   }
-  if (Module* left = leftExpander.module) {
-    if (left->model == modelIris && generation != lastExpanderGenerationSentLeft) {
-      if (!source) {
-        source = irisExpanderSourceSnapshot(nullptr);
-      }
-      if (source) {
-        if (Iris* irisModule = dynamic_cast<Iris*>(left)) {
-          irisModule->requestExpanderSource(source, generation);
-          lastExpanderGenerationSentLeft = generation;
-          irisExpanderPublishes.fetch_add(1u, std::memory_order_relaxed);
-        }
-      }
-    }
-  } else {
-    lastExpanderGenerationSentLeft = 0u;
-  }
+
+  lastExpanderGenerationSentLeft = 0u;
+  lights[IRIS_LINK_LIGHT].setBrightness(irisConnected && !irisReady ? 1.f : 0.f);
+  lights[IRIS_READY_LIGHT].setBrightness(irisReady ? 1.f : 0.f);
 }
 
 json_t* Nautiloid::dataToJson() {
