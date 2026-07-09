@@ -65,8 +65,8 @@ bool nautiloidVisibleViewOutgrowsCache(Nautiloid* module, float threshold) {
   const float cacheZoomScale = std::pow(0.05f, clamp(snapshot.cacheZoom, 0.f, kNautiloidMaxFractalZoom));
   const Vec cacheHalfSpan = nautiloidFractalViewportHalfSpan(snapshot.cacheMode).mult(cacheZoomScale).mult(snapshot.cacheScale);
   if (cacheHalfSpan.x <= 0.f || cacheHalfSpan.y <= 0.f) return true;
-  const float dx = std::fabs(module->fractalCenterX - snapshot.cacheCenterX);
-  const float dy = std::fabs(module->fractalCenterY - snapshot.cacheCenterY);
+  const float dx = float(std::fabs(module->fractalCenterX - snapshot.cacheCenterX));
+  const float dy = float(std::fabs(module->fractalCenterY - snapshot.cacheCenterY));
   const float useX = (dx + viewHalfSpan.x) / cacheHalfSpan.x;
   const float useY = (dy + viewHalfSpan.y) / cacheHalfSpan.y;
   return std::max(useX, useY) >= threshold;
@@ -87,6 +87,10 @@ bool nautiloidGpuPreviewActive(Nautiloid* module) {
     module->debugGpuPreviewAvailable.load(std::memory_order_relaxed);
 }
 
+double nautiloidClampDouble(double value, double minValue, double maxValue) {
+  return std::max(minValue, std::min(value, maxValue));
+}
+
 struct NautiloidGlPreview final : widget::OpenGlWidget {
   Nautiloid* module = nullptr;
   GLuint program = 0;
@@ -99,8 +103,8 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
   bool lastEffectiveActive = false;
   int lastMode = -1;
   float lastZoom = NAN;
-  float lastCenterX = NAN;
-  float lastCenterY = NAN;
+  double lastCenterX = NAN;
+  double lastCenterY = NAN;
 
   explicit NautiloidGlPreview(Nautiloid* module) : module(module) {}
 
@@ -350,7 +354,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     glDisable(GL_BLEND);
 
     glUseProgram(program);
-    glUniform2f(uniformCenter, module->fractalCenterX, module->fractalCenterY);
+    glUniform2f(uniformCenter, float(module->fractalCenterX), float(module->fractalCenterY));
     glUniform2f(uniformHalfSpan, halfSpan.x, halfSpan.y);
     glBegin(GL_TRIANGLE_STRIP);
     glTexCoord2f(0.f, 0.f);
@@ -401,6 +405,7 @@ struct NautiloidDisplay final : OpaqueWidget {
 
   void onButton(const event::Button& e) override {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS && module) {
+      module->showMandelbrotEyeMarker.store(false, std::memory_order_relaxed);
       panActive = true;
       lastPanLocal = currentLocalMousePos();
       e.consume(this);
@@ -414,6 +419,7 @@ struct NautiloidDisplay final : OpaqueWidget {
 
   void onDragStart(const event::DragStart& e) override {
     if (module && e.button == GLFW_MOUSE_BUTTON_LEFT) {
+      module->showMandelbrotEyeMarker.store(false, std::memory_order_relaxed);
       panActive = true;
       lastPanLocal = currentLocalMousePos();
       e.consume(this);
@@ -433,16 +439,18 @@ struct NautiloidDisplay final : OpaqueWidget {
         const Vec centerDelta(
           -delta.x / box.size.x * 2.f * halfSpan.x,
           -delta.y / box.size.y * 2.f * halfSpan.y);
-        module->fractalCenterX = clamp(module->fractalCenterX + centerDelta.x, -2.f, 2.f);
-        module->fractalCenterY = clamp(module->fractalCenterY + centerDelta.y, -2.f, 2.f);
+        module->fractalCenterX = nautiloidClampDouble(module->fractalCenterX + double(centerDelta.x), -2.0, 2.0);
+        module->fractalCenterY = nautiloidClampDouble(module->fractalCenterY + double(centerDelta.y), -2.0, 2.0);
         if (nautiloidRequestDue(&lastPanRequestTime, 0.05)) {
           const float cacheLead = 3.f;
           const float maxLeadX = 0.35f * halfSpan.x;
           const float maxLeadY = 0.35f * halfSpan.y;
-          const float cacheCenterX =
-            clamp(module->fractalCenterX + clamp(centerDelta.x * cacheLead, -maxLeadX, maxLeadX), -2.f, 2.f);
-          const float cacheCenterY =
-            clamp(module->fractalCenterY + clamp(centerDelta.y * cacheLead, -maxLeadY, maxLeadY), -2.f, 2.f);
+          const double cacheCenterX =
+            nautiloidClampDouble(
+              module->fractalCenterX + double(clamp(centerDelta.x * cacheLead, -maxLeadX, maxLeadX)), -2.0, 2.0);
+          const double cacheCenterY =
+            nautiloidClampDouble(
+              module->fractalCenterY + double(clamp(centerDelta.y * cacheLead, -maxLeadY, maxLeadY)), -2.0, 2.0);
           module->requestRenderWithCacheCenter(cacheCenterX, cacheCenterY);
         }
       }
@@ -570,6 +578,51 @@ struct NautiloidZoomSpeedQuantity final : Quantity {
 
   std::string getDisplayValueString() override {
     return string::f("%+.0f", getDisplayValue());
+  }
+};
+
+struct NautiloidMandelbrotEyeMarker final : TransparentWidget {
+  Nautiloid* module = nullptr;
+
+  explicit NautiloidMandelbrotEyeMarker(Nautiloid* module) : module(module) {}
+
+  void draw(const DrawArgs& args) override {
+    if (!module ||
+        module->fractalMode != iris::FRACTAL_MANDELBROT ||
+        !module->showMandelbrotEyeMarker.load(std::memory_order_relaxed)) {
+      return;
+    }
+
+    constexpr double kEyeX = -0.743643887037151;
+    constexpr double kEyeY = 0.131825904205330;
+    constexpr double kMandelbrotBaseX = -0.75;
+    const float zoomScale = std::pow(0.05f, clamp(module->fractalZoom, 0.f, kNautiloidMaxFractalZoom));
+    const Vec halfSpan = nautiloidFractalViewportHalfSpan(module->fractalMode).mult(zoomScale);
+    if (halfSpan.x <= 0.f || halfSpan.y <= 0.f) return;
+
+    const double viewCenterX = kMandelbrotBaseX + module->fractalCenterX;
+    const double viewCenterY = module->fractalCenterY;
+    const float x = float((0.5 + (kEyeX - viewCenterX) / (2.0 * double(halfSpan.x))) * double(box.size.x));
+    const float y = float((0.5 + (kEyeY - viewCenterY) / (2.0 * double(halfSpan.y))) * double(box.size.y));
+    if (x < -24.f || y < -16.f || x > box.size.x + 24.f || y > box.size.y + 16.f) return;
+
+    nvgBeginPath(args.vg);
+    nvgCircle(args.vg, x, y, 3.8f);
+    nvgStrokeWidth(args.vg, 1.2f);
+    nvgStrokeColor(args.vg, nvgRGBA(255, 224, 122, 235));
+    nvgStroke(args.vg);
+
+    nvgBeginPath(args.vg);
+    nvgCircle(args.vg, x, y, 1.1f);
+    nvgFillColor(args.vg, nvgRGBA(255, 244, 194, 235));
+    nvgFill(args.vg);
+
+    nvgFontSize(args.vg, 7.5f);
+    nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+    nvgTextLetterSpacing(args.vg, 0.f);
+    nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+    nvgFillColor(args.vg, nvgRGBA(255, 238, 184, 230));
+    nvgText(args.vg, x + 7.f, y, "Eye of the World", nullptr);
   }
 };
 
@@ -718,8 +771,8 @@ struct NautiloidTileCacheGrid final : TransparentWidget {
       const float cacheHalfX = cacheBaseHalfSpan.x * cacheScale;
       const float cacheHalfY = cacheBaseHalfSpan.y * cacheScale;
       if (cacheHalfX > 0.f && cacheHalfY > 0.f) {
-        const float dx = module->fractalCenterX - snapshot.cacheCenterX;
-        const float dy = module->fractalCenterY - snapshot.cacheCenterY;
+        const float dx = float(module->fractalCenterX - snapshot.cacheCenterX);
+        const float dy = float(module->fractalCenterY - snapshot.cacheCenterY);
         const float centerX = x0 + (0.5f + dx / (2.f * cacheHalfX)) * gridW;
         const float centerY = y0 + (0.5f + dy / (2.f * cacheHalfY)) * gridH;
         const float viewW = gridW * viewHalfSpan.x / cacheHalfX;
@@ -885,6 +938,7 @@ struct NautiloidZoomSlider final : ui::Slider {
       if (e.action == GLFW_PRESS) {
         zoomActive = true;
         if (module) {
+          module->showMandelbrotEyeMarker.store(false, std::memory_order_relaxed);
           module->zoomInteractionActive.store(true, std::memory_order_relaxed);
         }
         lastStepTime = system::getTime();
@@ -899,6 +953,7 @@ struct NautiloidZoomSlider final : ui::Slider {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
       zoomActive = true;
       if (module) {
+        module->showMandelbrotEyeMarker.store(false, std::memory_order_relaxed);
         module->zoomInteractionActive.store(true, std::memory_order_relaxed);
       }
       lastStepTime = system::getTime();
@@ -1103,6 +1158,25 @@ struct NautiloidResetButton final : TL1105 {
   }
 };
 
+struct NautiloidZoomReadout final : TransparentWidget {
+  Nautiloid* module = nullptr;
+
+  explicit NautiloidZoomReadout(Nautiloid* module) : module(module) {}
+
+  void draw(const DrawArgs& args) override {
+    if (!module) return;
+    const float pct = 100.f * clamp(module->fractalZoom / kNautiloidMaxFractalZoom, 0.f, 1.f);
+    const std::string text = string::f("%.2f%%", pct);
+
+    nvgFontSize(args.vg, 8.4f);
+    nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+    nvgTextLetterSpacing(args.vg, 0.f);
+    nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+    nvgFillColor(args.vg, nvgRGBA(226, 232, 240, 220));
+    nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y, text.c_str(), nullptr);
+  }
+};
+
 } // namespace
 
 struct NautiloidWidget final : ModuleWidget {
@@ -1127,6 +1201,16 @@ struct NautiloidWidget final : ModuleWidget {
     displayFb->addChild(display);
     addChild(displayFb);
 
+    NautiloidMandelbrotEyeMarker* eyeMarker = new NautiloidMandelbrotEyeMarker(module);
+    eyeMarker->box.pos = displayFb->box.pos;
+    eyeMarker->box.size = displayFb->box.size;
+    addChild(eyeMarker);
+
+    NautiloidZoomReadout* zoomReadout = new NautiloidZoomReadout(module);
+    zoomReadout->box.pos = mm2px(Vec(34.f, 72.2f));
+    zoomReadout->box.size = mm2px(Vec(33.6f, 5.2f));
+    addChild(zoomReadout);
+
     NautiloidZoomSlider* zoomSlider = new NautiloidZoomSlider();
     zoomSlider->module = module;
     zoomSlider->box.pos = mm2px(Vec(5.f, 79.f));
@@ -1137,12 +1221,12 @@ struct NautiloidWidget final : ModuleWidget {
     addChild(zoomSlider);
 
     NautiloidSourceButton* sourceButton =
-      createParamCentered<NautiloidSourceButton>(mm2px(Vec(42.f, 75.4f)), module, Nautiloid::SOURCE_MENU_PARAM);
+      createParamCentered<NautiloidSourceButton>(mm2px(Vec(7.8f, 75.4f)), module, Nautiloid::SOURCE_MENU_PARAM);
     sourceButton->module = module;
     addParam(sourceButton);
 
     NautiloidResetButton* resetButton =
-      createParamCentered<NautiloidResetButton>(mm2px(Vec(59.6f, 75.4f)), module, Nautiloid::RESET_VIEW_PARAM);
+      createParamCentered<NautiloidResetButton>(mm2px(Vec(19.2f, 75.4f)), module, Nautiloid::RESET_VIEW_PARAM);
     resetButton->module = module;
     addParam(resetButton);
 

@@ -14,8 +14,8 @@ constexpr int kNautiloidFractalSourceVersion = 1;
 struct NautiloidFractalSourceParams {
   int mode = FRACTAL_MANDELBROT;
   float zoom = 0.f;
-  float centerX = 0.f;
-  float centerY = 0.f;
+  double centerX = 0.0;
+  double centerY = 0.0;
   uint64_t generation = 0u;
 };
 
@@ -223,8 +223,8 @@ inline float mandelbrotFamilySimdMaxZoom(int mode) {
 inline bool makeBuiltinFractalSourceSized(
   int mode,
   float zoom,
-  float centerX,
-  float centerY,
+  double centerX,
+  double centerY,
   int width,
   int height,
   float viewportScale,
@@ -257,8 +257,8 @@ inline bool makeBuiltinFractalSourceSized(
   zoom = std::max(0.f, zoom);
   const double zoomScale = std::pow(0.05, double(zoom));
   const double viewScale = std::max(1.f, viewportScale);
-  const double panX = std::max(-2.f, std::min(centerX, 2.f));
-  const double panY = std::max(-2.f, std::min(centerY, 2.f));
+  const double panX = std::max(-2.0, std::min(centerX, 2.0));
+  const double panY = std::max(-2.0, std::min(centerY, 2.0));
   const int fullWidth = std::max(2, viewportPixelWidth);
   const int fullHeight = std::max(2, viewportPixelHeight);
   const int pixelX0 = std::max(0, viewportPixelX);
@@ -435,8 +435,8 @@ inline bool makeBuiltinFractalSourceSized(
 inline bool makeBuiltinFractalSourceSized(
   int mode,
   float zoom,
-  float centerX,
-  float centerY,
+  double centerX,
+  double centerY,
   int width,
   int height,
   float viewportScale,
@@ -461,8 +461,8 @@ inline bool makeBuiltinFractalSourceSized(
 inline bool makeBuiltinFractalSource(
   int mode,
   float zoom,
-  float centerX,
-  float centerY,
+  double centerX,
+  double centerY,
   SourceField* out,
   std::string* error = nullptr) {
   return makeBuiltinFractalSourceSized(

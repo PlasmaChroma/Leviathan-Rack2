@@ -4,7 +4,9 @@
 
 Completed work:
 
+- Promoted Nautiloid fractal center coordinates and Iris generator center metadata to double precision so view state is not rounded before CPU/GPU render paths receive it
 - Removed the dedicated Eye of the World built-in mode; it is reachable as a Mandelbrot zoom target instead of a separate fractal selection
+- Mandelbrot reset now shows a temporary Eye of the World location marker that disappears as soon as pan or zoom movement starts
 - Added the Nautiloid MVP as a visual-only module with:
   - large display-aspect fractal preview
   - bottom Iris-compatible `1024x256` mini preview

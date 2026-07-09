@@ -70,14 +70,18 @@ int jsonIntegerOr(json_t* root, const char* key, int fallback) {
   return value ? int(json_integer_value(value)) : fallback;
 }
 
-float jsonRealOr(json_t* root, const char* key, float fallback) {
+double jsonRealOr(json_t* root, const char* key, double fallback) {
   json_t* value = json_object_get(root, key);
-  return value ? float(json_number_value(value)) : fallback;
+  return value ? json_number_value(value) : fallback;
 }
 
 bool jsonBoolOr(json_t* root, const char* key, bool fallback) {
   json_t* value = json_object_get(root, key);
   return value ? json_boolean_value(value) != 0 : fallback;
+}
+
+double clampDouble(double value, double minValue, double maxValue) {
+  return std::max(minValue, std::min(value, maxValue));
 }
 
 const Nautiloid::DisplayCacheTile* findDisplayTile(
@@ -120,8 +124,8 @@ bool cropDisplayTileCacheToSize(
   const Nautiloid::DisplayTileCache& cache,
   int mode,
   float zoom,
-  float centerX,
-  float centerY,
+  double centerX,
+  double centerY,
   float cacheScale,
   int outWidth,
   int outHeight,
@@ -136,8 +140,8 @@ bool cropDisplayTileCacheToSize(
   const Vec halfSpan = nautiloidFractalViewportHalfSpan(mode).mult(zoomScale);
   const float marginX = (cacheScale - 1.f) * halfSpan.x;
   const float marginY = (cacheScale - 1.f) * halfSpan.y;
-  const float dx = centerX - cache.centerX;
-  const float dy = centerY - cache.centerY;
+  const float dx = float(centerX - cache.centerX);
+  const float dy = float(centerY - cache.centerY);
   if (std::fabs(dx) > marginX || std::fabs(dy) > marginY) return false;
 
   iris::SourceField source;
@@ -219,8 +223,8 @@ bool displayTileCacheCoversView(
   const Nautiloid::DisplayTileCache& cache,
   int mode,
   float zoom,
-  float centerX,
-  float centerY,
+  double centerX,
+  double centerY,
   float cacheScale) {
   if (cache.validTileCount() == 0u || cache.mode != mode || std::fabs(cache.zoom - zoom) > 1e-5f) return false;
   const float zoomScale = std::pow(0.05f, clamp(zoom, 0.f, kNautiloidMaxFractalZoom));
@@ -235,8 +239,8 @@ bool displayTileCacheNeedsTileShiftRecentering(
   const Nautiloid::DisplayTileCache& cache,
   int mode,
   float zoom,
-  float centerX,
-  float centerY,
+  double centerX,
+  double centerY,
   float cacheScale) {
   if (cache.validTileCount() == 0u || cache.mode != mode || std::fabs(cache.zoom - zoom) > 1e-5f) return false;
   const float zoomScale = std::pow(0.05f, clamp(zoom, 0.f, kNautiloidMaxFractalZoom));
@@ -261,11 +265,11 @@ bool computeTileAlignedCacheCenter(
   const Nautiloid::DisplayTileCache& cache,
   int mode,
   float zoom,
-  float requestedCenterX,
-  float requestedCenterY,
+  double requestedCenterX,
+  double requestedCenterY,
   float cacheScale,
-  float* alignedCenterX,
-  float* alignedCenterY,
+  double* alignedCenterX,
+  double* alignedCenterY,
   int* shiftColumns,
   int* shiftRows) {
   if (!alignedCenterX || !alignedCenterY || !shiftColumns || !shiftRows) return false;
@@ -278,10 +282,10 @@ bool computeTileAlignedCacheCenter(
   const int rows = (kFractalCacheHeight + kDisplayTileSize - 1) / kDisplayTileSize;
   *shiftColumns = clamp(tileShiftForDelta(requestedCenterX - cache.centerX, tileWorldX), -columns, columns);
   *shiftRows = clamp(tileShiftForDelta(requestedCenterY - cache.centerY, tileWorldY), -rows, rows);
-  const float targetX = cache.centerX + float(*shiftColumns) * tileWorldX;
-  const float targetY = cache.centerY + float(*shiftRows) * tileWorldY;
-  *alignedCenterX = clamp(targetX, -2.f, 2.f);
-  *alignedCenterY = clamp(targetY, -2.f, 2.f);
+  const double targetX = cache.centerX + double(*shiftColumns) * double(tileWorldX);
+  const double targetY = cache.centerY + double(*shiftRows) * double(tileWorldY);
+  *alignedCenterX = clampDouble(targetX, -2.0, 2.0);
+  *alignedCenterY = clampDouble(targetY, -2.0, 2.0);
   return std::fabs(*alignedCenterX - targetX) <= 1e-5f &&
     std::fabs(*alignedCenterY - targetY) <= 1e-5f &&
     (*shiftColumns != 0 || *shiftRows != 0);
@@ -682,13 +686,14 @@ void Nautiloid::dataFromJson(json_t* root) {
   const int mode = jsonIntegerOr(root, "fractalMode", iris::FRACTAL_MANDELBROT);
   fractalMode = iris::isBuiltinFractalMode(mode) ? mode : iris::FRACTAL_MANDELBROT;
   fractalZoom = clamp(jsonRealOr(root, "fractalZoom", 0.f), 0.f, kNautiloidMaxFractalZoom);
-  fractalCenterX = clamp(jsonRealOr(root, "fractalCenterX", 0.f), -2.f, 2.f);
-  fractalCenterY = clamp(jsonRealOr(root, "fractalCenterY", 0.f), -2.f, 2.f);
+  fractalCenterX = clampDouble(jsonRealOr(root, "fractalCenterX", 0.0), -2.0, 2.0);
+  fractalCenterY = clampDouble(jsonRealOr(root, "fractalCenterY", 0.0), -2.0, 2.0);
   debugFileLoggingEnabled.store(
     jsonBoolOr(root, "debugFileLoggingEnabled", false), std::memory_order_relaxed);
   debugGpuPreviewEnabled.store(
     jsonBoolOr(root, "debugGpuPreviewEnabled", false), std::memory_order_relaxed);
   debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
+  showMandelbrotEyeMarker.store(false, std::memory_order_relaxed);
   requestRender();
 }
 
@@ -699,6 +704,7 @@ void Nautiloid::requestFractal(int mode) {
     fractalZoom = 0.f;
     fractalCenterX = 0.f;
     fractalCenterY = 0.f;
+    showMandelbrotEyeMarker.store(false, std::memory_order_relaxed);
   }
   requestRender();
 }
@@ -707,27 +713,27 @@ void Nautiloid::requestRender() {
   requestRenderWithCacheCenter(fractalCenterX, fractalCenterY);
 }
 
-void Nautiloid::requestRenderWithCacheCenter(float cacheCenterX, float cacheCenterY, bool forceCacheRecenter) {
+void Nautiloid::requestRenderWithCacheCenter(double cacheCenterX, double cacheCenterY, bool forceCacheRecenter) {
   WorkerRequest request;
   request.mode = fractalMode;
   request.zoom = clamp(fractalZoom, 0.f, kNautiloidMaxFractalZoom);
-  request.centerX = clamp(fractalCenterX, -2.f, 2.f);
-  request.centerY = clamp(fractalCenterY, -2.f, 2.f);
-  request.cacheCenterX = clamp(cacheCenterX, -2.f, 2.f);
-  request.cacheCenterY = clamp(cacheCenterY, -2.f, 2.f);
+  request.centerX = clampDouble(fractalCenterX, -2.0, 2.0);
+  request.centerY = clampDouble(fractalCenterY, -2.0, 2.0);
+  request.cacheCenterX = clampDouble(cacheCenterX, -2.0, 2.0);
+  request.cacheCenterY = clampDouble(cacheCenterY, -2.0, 2.0);
   request.forceCacheRecenter = forceCacheRecenter;
   request.zoomInteractionActive = zoomInteractionActive.load(std::memory_order_relaxed);
   submitRequest(request);
 }
 
-void Nautiloid::requestInteractiveZoomPreview(float cacheCenterX, float cacheCenterY, bool forceCacheRecenter) {
+void Nautiloid::requestInteractiveZoomPreview(double cacheCenterX, double cacheCenterY, bool forceCacheRecenter) {
   WorkerRequest request;
   request.mode = fractalMode;
   request.zoom = clamp(fractalZoom, 0.f, kNautiloidMaxFractalZoom);
-  request.centerX = clamp(fractalCenterX, -2.f, 2.f);
-  request.centerY = clamp(fractalCenterY, -2.f, 2.f);
-  request.cacheCenterX = clamp(cacheCenterX, -2.f, 2.f);
-  request.cacheCenterY = clamp(cacheCenterY, -2.f, 2.f);
+  request.centerX = clampDouble(fractalCenterX, -2.0, 2.0);
+  request.centerY = clampDouble(fractalCenterY, -2.0, 2.0);
+  request.cacheCenterX = clampDouble(cacheCenterX, -2.0, 2.0);
+  request.cacheCenterY = clampDouble(cacheCenterY, -2.0, 2.0);
   request.forceCacheRecenter = forceCacheRecenter;
   request.zoomInteractionActive = true;
   {
@@ -746,6 +752,7 @@ void Nautiloid::resetView() {
   fractalZoom = 0.f;
   fractalCenterX = 0.f;
   fractalCenterY = 0.f;
+  showMandelbrotEyeMarker.store(fractalMode == iris::FRACTAL_MANDELBROT, std::memory_order_relaxed);
   requestRender();
 }
 
@@ -947,8 +954,8 @@ bool Nautiloid::publishDisplayReprojection(const WorkerRequest& request) {
   iris::SourceField base;
   int baseMode = iris::FRACTAL_NONE;
   float baseZoom = -1.f;
-  float baseCenterX = 0.f;
-  float baseCenterY = 0.f;
+  double baseCenterX = 0.0;
+  double baseCenterY = 0.0;
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
     base = authoritativeDisplaySource;
@@ -973,8 +980,8 @@ bool Nautiloid::publishDisplayReprojection(const WorkerRequest& request) {
   if (oldHalfSpan.x <= 0.f || oldHalfSpan.y <= 0.f || newHalfSpan.x <= 0.f || newHalfSpan.y <= 0.f) {
     return false;
   }
-  const float centerPixelsX = std::fabs(request.centerX - baseCenterX) / (2.f * oldHalfSpan.x) * float(base.width);
-  const float centerPixelsY = std::fabs(request.centerY - baseCenterY) / (2.f * oldHalfSpan.y) * float(base.height);
+  const float centerPixelsX = float(std::fabs(request.centerX - baseCenterX) / (2.0 * double(oldHalfSpan.x)) * double(base.width));
+  const float centerPixelsY = float(std::fabs(request.centerY - baseCenterY) / (2.0 * double(oldHalfSpan.y)) * double(base.height));
   if (centerPixelsX > kDisplayReprojectionMaxCenterPixels || centerPixelsY > kDisplayReprojectionMaxCenterPixels) {
     return false;
   }
@@ -1028,29 +1035,29 @@ bool Nautiloid::publishDisplayReprojection(const WorkerRequest& request) {
     bool usedAheadForFrame = false;
     for (int y = 0; y < reprojected.height; ++y) {
       const float ny = (float(y) + 0.5f) / float(reprojected.height) * 2.f - 1.f;
-      const float worldY = request.centerY + ny * newHalfSpan.y;
-      const float oldNormY = (worldY - baseCenterY) / oldHalfSpan.y;
+      const double worldY = request.centerY + double(ny) * double(newHalfSpan.y);
+      const float oldNormY = float((worldY - baseCenterY) / double(oldHalfSpan.y));
       const float srcY = (oldNormY + 1.f) * 0.5f * float(base.height) - 0.5f;
       const float cacheSrcY = cacheUsable && cacheHalfSpan.y > 0.f
-        ? (0.5f + (worldY - displayTileCache.centerY) / (2.f * cacheHalfSpan.y)) * float(kFractalCacheHeight) - 0.5f
+        ? float((0.5 + (worldY - displayTileCache.centerY) / (2.0 * double(cacheHalfSpan.y))) * double(kFractalCacheHeight) - 0.5)
         : -1.f;
       const float retainedSrcY = retainedCacheUsable && retainedCacheHalfSpan.y > 0.f
-        ? (0.5f + (worldY - retainedCache.centerY) / (2.f * retainedCacheHalfSpan.y)) * float(retainedCache.height) - 0.5f
+        ? float((0.5 + (worldY - retainedCache.centerY) / (2.0 * double(retainedCacheHalfSpan.y))) * double(retainedCache.height) - 0.5)
         : -1.f;
       for (int x = 0; x < reprojected.width; ++x) {
         const float nx = (float(x) + 0.5f) / float(reprojected.width) * 2.f - 1.f;
-        const float worldX = request.centerX + nx * newHalfSpan.x;
-        const float oldNormX = (worldX - baseCenterX) / oldHalfSpan.x;
+        const double worldX = request.centerX + double(nx) * double(newHalfSpan.x);
+        const float oldNormX = float((worldX - baseCenterX) / double(oldHalfSpan.x));
         const float srcX = (oldNormX + 1.f) * 0.5f * float(base.width) - 0.5f;
         const size_t outBase = (size_t(y) * size_t(reprojected.width) + size_t(x)) * 3u;
         uint8_t r = 0u;
         uint8_t g = 0u;
         uint8_t b = 0u;
         const float cacheSrcX = cacheUsable && cacheHalfSpan.x > 0.f
-          ? (0.5f + (worldX - displayTileCache.centerX) / (2.f * cacheHalfSpan.x)) * float(kFractalCacheWidth) - 0.5f
+          ? float((0.5 + (worldX - displayTileCache.centerX) / (2.0 * double(cacheHalfSpan.x))) * double(kFractalCacheWidth) - 0.5)
           : -1.f;
         const float retainedSrcX = retainedCacheUsable && retainedCacheHalfSpan.x > 0.f
-          ? (0.5f + (worldX - retainedCache.centerX) / (2.f * retainedCacheHalfSpan.x)) * float(retainedCache.width) - 0.5f
+          ? float((0.5 + (worldX - retainedCache.centerX) / (2.0 * double(retainedCacheHalfSpan.x))) * double(retainedCache.width) - 0.5)
           : -1.f;
         bool sampledAhead = false;
         for (int layerIndex = kZoomAheadLayerCount - 1; layerIndex >= 0; --layerIndex) {
@@ -1058,9 +1065,9 @@ bool Nautiloid::publishDisplayReprojection(const WorkerRequest& request) {
           const Vec layerHalfSpan = aheadHalfSpans[size_t(layerIndex)];
           if (!layer.valid() || layerHalfSpan.x <= 0.f || layerHalfSpan.y <= 0.f) continue;
           const float layerSrcX =
-            (0.5f + (worldX - layer.centerX) / (2.f * layerHalfSpan.x)) * float(layer.width) - 0.5f;
+            float((0.5 + (worldX - layer.centerX) / (2.0 * double(layerHalfSpan.x))) * double(layer.width) - 0.5);
           const float layerSrcY =
-            (0.5f + (worldY - layer.centerY) / (2.f * layerHalfSpan.y)) * float(layer.height) - 0.5f;
+            float((0.5 + (worldY - layer.centerY) / (2.0 * double(layerHalfSpan.y))) * double(layer.height) - 0.5);
           if (bilinearPresentationCacheRgb(layer, layerSrcX, layerSrcY, &r, &g, &b)) {
             reprojected.rgb8[outBase + 0u] = r;
             reprojected.rgb8[outBase + 1u] = g;
@@ -1375,8 +1382,8 @@ void Nautiloid::cacheWorkerLoop() {
       cacheRequestsDequeued.fetch_add(1u, std::memory_order_relaxed);
     }
 
-    float targetCacheCenterX = request.cacheCenterX;
-    float targetCacheCenterY = request.cacheCenterY;
+    double targetCacheCenterX = request.cacheCenterX;
+    double targetCacheCenterY = request.cacheCenterY;
     const bool gpuPreviewOwnsDisplay =
       requestGpuPreviewOwnsDisplay(
         request.mode,
@@ -1487,14 +1494,14 @@ void Nautiloid::cacheWorkerLoop() {
     bool stale = false;
     bool renderedAnyTile = false;
     int renderedTilesSincePublish = 0;
-    const float visibleCenterX = (0.5f + (request.centerX - targetCacheCenterX) /
-      (2.f * nautiloidFractalViewportHalfSpan(request.mode).mult(
-        std::pow(0.05f, clamp(request.zoom, 0.f, kNautiloidMaxFractalZoom))).x * kFractalCacheScale)) *
-      float(kFractalCacheWidth);
-    const float visibleCenterY = (0.5f + (request.centerY - targetCacheCenterY) /
-      (2.f * nautiloidFractalViewportHalfSpan(request.mode).mult(
-        std::pow(0.05f, clamp(request.zoom, 0.f, kNautiloidMaxFractalZoom))).y * kFractalCacheScale)) *
-      float(kFractalCacheHeight);
+    const float visibleCenterX = float((0.5 + (request.centerX - targetCacheCenterX) /
+      (2.0 * double(nautiloidFractalViewportHalfSpan(request.mode).mult(
+        std::pow(0.05f, clamp(request.zoom, 0.f, kNautiloidMaxFractalZoom))).x) * double(kFractalCacheScale))) *
+      double(kFractalCacheWidth));
+    const float visibleCenterY = float((0.5 + (request.centerY - targetCacheCenterY) /
+      (2.0 * double(nautiloidFractalViewportHalfSpan(request.mode).mult(
+        std::pow(0.05f, clamp(request.zoom, 0.f, kNautiloidMaxFractalZoom))).y) * double(kFractalCacheScale))) *
+      double(kFractalCacheHeight));
     const std::vector<Vec> tileOrder = makeDisplayTileOrder(visibleCenterX, visibleCenterY);
     for (const Vec& tilePos : tileOrder) {
       if (skipDisplayTiles) break;

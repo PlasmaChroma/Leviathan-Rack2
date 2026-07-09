@@ -39,9 +39,9 @@ struct Nautiloid final : Module {
 
   void requestFractal(int mode);
   void requestRender();
-  void requestRenderWithCacheCenter(float cacheCenterX, float cacheCenterY, bool forceCacheRecenter = false);
+  void requestRenderWithCacheCenter(double cacheCenterX, double cacheCenterY, bool forceCacheRecenter = false);
   void requestRenderWithCenteredCache();
-  void requestInteractiveZoomPreview(float cacheCenterX, float cacheCenterY, bool forceCacheRecenter = false);
+  void requestInteractiveZoomPreview(double cacheCenterX, double cacheCenterY, bool forceCacheRecenter = false);
   void resetView();
   void previewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
   void irisPreviewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
@@ -57,8 +57,8 @@ struct Nautiloid final : Module {
     bool current = false;
     int cacheMode = iris::FRACTAL_NONE;
     float cacheZoom = -1.f;
-    float cacheCenterX = 0.f;
-    float cacheCenterY = 0.f;
+    double cacheCenterX = 0.0;
+    double cacheCenterY = 0.0;
     size_t currentTileCount = 0u;
     size_t fullTileCount = 0u;
     std::vector<uint8_t> tileCurrent;
@@ -75,8 +75,8 @@ struct Nautiloid final : Module {
 
   int fractalMode = iris::FRACTAL_MANDELBROT;
   float fractalZoom = 0.f;
-  float fractalCenterX = 0.f;
-  float fractalCenterY = 0.f;
+  double fractalCenterX = 0.0;
+  double fractalCenterY = 0.0;
   std::atomic<uint64_t> previewGeneration {0u};
   std::atomic<uint64_t> irisPreviewGeneration {0u};
   std::atomic<uint64_t> renderRequestsSubmitted {0u};
@@ -104,6 +104,7 @@ struct Nautiloid final : Module {
   std::atomic<bool> debugGpuPreviewAvailable {false};
   std::atomic<bool> zoomInteractionActive {false};
   std::atomic<bool> displayRenderBusy {false};
+  std::atomic<bool> showMandelbrotEyeMarker {false};
   std::atomic<bool> loading {false};
 
   struct DisplayCacheTile {
@@ -118,8 +119,8 @@ struct Nautiloid final : Module {
   struct DisplayTileCache {
     int mode = iris::FRACTAL_NONE;
     float zoom = -1.f;
-    float centerX = 0.f;
-    float centerY = 0.f;
+    double centerX = 0.0;
+    double centerY = 0.0;
     std::vector<DisplayCacheTile> tiles;
     int stitchedWidth = 0;
     int stitchedHeight = 0;
@@ -134,8 +135,8 @@ struct Nautiloid final : Module {
   struct PresentationLayer {
     int mode = iris::FRACTAL_NONE;
     float zoom = -1.f;
-    float centerX = 0.f;
-    float centerY = 0.f;
+    double centerX = 0.0;
+    double centerY = 0.0;
     int width = 0;
     int height = 0;
     float cacheScale = 1.f;
@@ -158,10 +159,10 @@ private:
   struct WorkerRequest {
     int mode = iris::FRACTAL_MANDELBROT;
     float zoom = 0.f;
-    float centerX = 0.f;
-    float centerY = 0.f;
-    float cacheCenterX = 0.f;
-    float cacheCenterY = 0.f;
+    double centerX = 0.0;
+    double centerY = 0.0;
+    double cacheCenterX = 0.0;
+    double cacheCenterY = 0.0;
     bool forceCacheRecenter = false;
     bool zoomInteractionActive = false;
     uint64_t serial = 0u;
@@ -217,15 +218,15 @@ private:
   iris::SourceField authoritativeDisplaySource;
   int authoritativeDisplayMode = iris::FRACTAL_NONE;
   float authoritativeDisplayZoom = -1.f;
-  float authoritativeDisplayCenterX = 0.f;
-  float authoritativeDisplayCenterY = 0.f;
+  double authoritativeDisplayCenterX = 0.0;
+  double authoritativeDisplayCenterY = 0.0;
   iris::SourceField irisCompatibleSource;
   std::shared_ptr<const iris::SourceField> irisExpanderSource;
   uint64_t irisCompatibleSerial = 0u;
   int irisCompatibleMode = iris::FRACTAL_NONE;
   float irisCompatibleZoom = -1.f;
-  float irisCompatibleCenterX = 0.f;
-  float irisCompatibleCenterY = 0.f;
+  double irisCompatibleCenterX = 0.0;
+  double irisCompatibleCenterY = 0.0;
   uint64_t lastExpanderGenerationSentLeft = 0u;
   uint64_t lastExpanderGenerationSentRight = 0u;
 
