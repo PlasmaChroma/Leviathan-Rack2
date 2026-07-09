@@ -101,6 +101,7 @@ struct Nautiloid final : Module {
   std::atomic<bool> debugFileLoggingEnabled {false};
   std::atomic<bool> debugGpuPreviewEnabled {false};
   std::atomic<bool> debugGpuPreviewAvailable {false};
+  std::atomic<bool> zoomInteractionActive {false};
   std::atomic<bool> loading {false};
 
   struct DisplayCacheTile {
@@ -160,6 +161,7 @@ private:
     float cacheCenterX = 0.f;
     float cacheCenterY = 0.f;
     bool forceCacheRecenter = false;
+    bool zoomInteractionActive = false;
     uint64_t serial = 0u;
   };
 

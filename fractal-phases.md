@@ -51,6 +51,7 @@ Completed work:
   - ignores pure pan requests to avoid reintroducing shifted-frame edge flicker
   - tile cache grid now draws the live view rectangle against the cache's own zoom, so zoom-out shows the view box growing
   - active zoom-out requests force a centered cache refresh once the live view consumes most of the cached span, and zoom release settles with a centered cache request
+  - active zoom gestures skip regular display tile-cache setup/reset and warming because exact-zoom cache tiles become stale immediately during continuous zoom; zoom-ahead cache warming remains the relevant display-cache work during the gesture
 - Updated zoom UI:
   - active zoom-speed bar now uses center-out gradients, cyan for zoom-in and violet for zoom-out
 - Added an experimental GPU preview path:
@@ -58,6 +59,10 @@ Completed work:
   - currently limited to the large Mandelbrot display preview
   - CPU rendering remains authoritative for Iris-compatible preview, expander handoff, cache, and export paths
   - CPU/NanoVG display remains the fallback if the GL shader is unavailable
+  - full-quad GPU preview is allowed through the full zoom range for visual comparison
+  - when GPU preview is active, available, and below roughly 68% of the zoom range, CPU display renders, display tile warming, and zoom-ahead display caches are skipped so Iris-compatible rendering can publish sooner
+  - above roughly 68% zoom, GPU preview remains visible while CPU full-display rendering resumes for comparison/handoff; regular display tile-cache warming remains skipped because those exact-zoom tiles are not visible during GPU ownership
+  - tiled double-single GPU precision mode was tried and removed because it was not an obvious improvement over the full-quad shader
 
 Deferred or changed:
 

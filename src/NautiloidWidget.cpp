@@ -75,10 +75,13 @@ bool nautiloidVisibleViewOutgrowsCache(Nautiloid* module, float threshold) {
 }
 
 bool nautiloidGpuPreviewEnabledForMandelbrot(Nautiloid* module) {
-  return module &&
-    isDragonKingDebugEnabled() &&
-    module->fractalMode == iris::FRACTAL_MANDELBROT &&
-    module->debugGpuPreviewEnabled.load(std::memory_order_relaxed);
+  if (!module ||
+      !isDragonKingDebugEnabled() ||
+      module->fractalMode != iris::FRACTAL_MANDELBROT ||
+      !module->debugGpuPreviewEnabled.load(std::memory_order_relaxed)) {
+    return false;
+  }
+  return true;
 }
 
 bool nautiloidGpuPreviewActive(Nautiloid* module) {
@@ -263,7 +266,9 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     }
     uniformCenter = glGetUniformLocation(program, "uCenter");
     uniformHalfSpan = glGetUniformLocation(program, "uHalfSpan");
-    shaderReady = uniformCenter >= 0 && uniformHalfSpan >= 0;
+    shaderReady =
+      uniformCenter >= 0 &&
+      uniformHalfSpan >= 0;
     if (!shaderReady) {
       releaseGlResources(true);
       shaderInitAttempted = true;
@@ -868,6 +873,9 @@ struct NautiloidZoomSlider final : ui::Slider {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
       if (e.action == GLFW_PRESS) {
         zoomActive = true;
+        if (module) {
+          module->zoomInteractionActive.store(true, std::memory_order_relaxed);
+        }
         lastStepTime = system::getTime();
       } else if (e.action == GLFW_RELEASE) {
         stopZoom();
@@ -879,6 +887,9 @@ struct NautiloidZoomSlider final : ui::Slider {
   void onDragStart(const event::DragStart& e) override {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
       zoomActive = true;
+      if (module) {
+        module->zoomInteractionActive.store(true, std::memory_order_relaxed);
+      }
       lastStepTime = system::getTime();
     }
     ui::Slider::onDragStart(e);
@@ -1002,6 +1013,9 @@ struct NautiloidZoomSlider final : ui::Slider {
   void stopZoom() {
     zoomActive = false;
     lastStepTime = -INFINITY;
+    if (module) {
+      module->zoomInteractionActive.store(false, std::memory_order_relaxed);
+    }
     if (zoomSpeed) {
       zoomSpeed->setValue(0.5f);
     }

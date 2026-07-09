@@ -22,6 +22,24 @@ constexpr float kZoomAheadCacheScale = 1.35f;
 constexpr int kZoomAheadWidth = 768;
 constexpr int kZoomAheadHeight = 512;
 constexpr int kZoomAheadTileSize = 128;
+constexpr float kGpuPreviewSkipCpuMaxMandelbrotZoom = kNautiloidMaxFractalZoom * 0.68f;
+
+bool requestCanUseGpuPreview(int mode, bool shaderAvailable) {
+  return shaderAvailable &&
+    isDragonKingDebugEnabled() &&
+    mode == iris::FRACTAL_MANDELBROT;
+}
+
+bool requestGpuPreviewVisible(int mode, bool shaderAvailable, const Nautiloid* module) {
+  if (!requestCanUseGpuPreview(mode, shaderAvailable) || !module) return false;
+  if (!module->debugGpuPreviewEnabled.load(std::memory_order_relaxed)) return false;
+  return true;
+}
+
+bool requestGpuPreviewOwnsDisplay(int mode, float zoom, bool shaderAvailable, const Nautiloid* module) {
+  if (!requestGpuPreviewVisible(mode, shaderAvailable, module)) return false;
+  return zoom <= kGpuPreviewSkipCpuMaxMandelbrotZoom;
+}
 
 Vec nautiloidFractalViewportHalfSpan(int mode) {
   switch (mode) {
@@ -700,6 +718,7 @@ void Nautiloid::requestRenderWithCacheCenter(float cacheCenterX, float cacheCent
   request.cacheCenterX = clamp(cacheCenterX, -2.f, 2.f);
   request.cacheCenterY = clamp(cacheCenterY, -2.f, 2.f);
   request.forceCacheRecenter = forceCacheRecenter;
+  request.zoomInteractionActive = zoomInteractionActive.load(std::memory_order_relaxed);
   submitRequest(request);
 }
 
@@ -1223,6 +1242,18 @@ void Nautiloid::workerLoop() {
       requestPending = false;
     }
 
+    const bool gpuPreviewOwnsDisplay =
+      requestGpuPreviewOwnsDisplay(
+        request.mode,
+        request.zoom,
+        debugGpuPreviewAvailable.load(std::memory_order_relaxed),
+        this);
+    if (gpuPreviewOwnsDisplay) {
+      loading.store(false, std::memory_order_release);
+      submitCacheRequest(request);
+      continue;
+    }
+
     bool cacheComplete = false;
     bool ok = publishDisplayCacheComposite(request, true, &cacheComplete);
     if (ok && cacheComplete) {
@@ -1287,8 +1318,19 @@ void Nautiloid::cacheWorkerLoop() {
 
     float targetCacheCenterX = request.cacheCenterX;
     float targetCacheCenterY = request.cacheCenterY;
-    bool skipDisplayTiles = false;
-    {
+    const bool gpuPreviewOwnsDisplay =
+      requestGpuPreviewOwnsDisplay(
+        request.mode,
+        request.zoom,
+        debugGpuPreviewAvailable.load(std::memory_order_relaxed),
+        this);
+    const bool gpuPreviewVisible =
+      requestGpuPreviewVisible(
+        request.mode,
+        debugGpuPreviewAvailable.load(std::memory_order_relaxed),
+        this);
+    bool skipDisplayTiles = gpuPreviewVisible || request.zoomInteractionActive;
+    if (!skipDisplayTiles) {
       std::lock_guard<std::mutex> lock(cacheDataMutex);
       const bool existingCacheCoversView = displayTileCacheCoversView(
         displayTileCache,
@@ -1514,7 +1556,9 @@ void Nautiloid::cacheWorkerLoop() {
       continue;
     }
 
-    renderZoomAheadCaches(request);
+    if (!gpuPreviewOwnsDisplay) {
+      renderZoomAheadCaches(request);
+    }
 
     bool irisCompatibleCurrent = false;
     {
