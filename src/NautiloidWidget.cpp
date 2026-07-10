@@ -485,13 +485,13 @@ struct NautiloidDisplay final : OpaqueWidget {
       return false;
     }
 
-    const float wheel = -e.scrollDelta.y;
+    const float wheel = e.scrollDelta.y;
     if (std::fabs(wheel) < 1e-4f) {
       return false;
     }
 
     const float previousZoom = clamp(module->fractalZoom, 0.f, kNautiloidMaxFractalZoom);
-    const float nextZoom = clamp(previousZoom + clamp(wheel, -4.f, 4.f) * 0.18f,
+    const float nextZoom = clamp(previousZoom + clamp(wheel, -4.f, 4.f) * 0.02f,
       0.f, kNautiloidMaxFractalZoom);
     if (std::fabs(nextZoom - previousZoom) < 1e-5f) {
       return true;
