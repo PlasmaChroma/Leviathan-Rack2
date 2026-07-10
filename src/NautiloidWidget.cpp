@@ -932,10 +932,23 @@ struct NautiloidDebugCounters final : TransparentWidget {
 struct NautiloidZoomSlider final : ui::Slider {
   Nautiloid* module = nullptr;
   NautiloidZoomSpeedQuantity* zoomSpeed = nullptr;
+  widget::FramebufferWidget* framebuffer = nullptr;
+  VCVSliderLight<LeviathanCyanPurpleLight>* handleLight = nullptr;
+  std::shared_ptr<window::Svg> handleSvg;
   bool zoomActive = false;
   double lastStepTime = -INFINITY;
   double lastPreviewRequestTime = -INFINITY;
   double lastRenderRequestTime = -INFINITY;
+  float lastDrawValue = -1.f;
+  float lastDrawSpeed = 100.f;
+  float lastDrawZoomAmount = -1.f;
+  Vec lastDrawSize;
+
+  NautiloidZoomSlider() {
+    handleSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/LeviathanSliderHandle.svg"));
+    handleLight = new VCVSliderLight<LeviathanCyanPurpleLight>;
+    addChild(handleLight);
+  }
 
   void onButton(const event::Button& e) override {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
@@ -1010,6 +1023,38 @@ struct NautiloidZoomSlider final : ui::Slider {
       lastStepTime = -INFINITY;
     }
     ui::Slider::step();
+
+    const float drawSpeed = clamp(manualSpeed + cvSpeed, -1.f, 1.f);
+    const float drawValue = (zoomActive || cvConnected)
+      ? 0.5f + 0.5f * drawSpeed
+      : (zoomSpeed ? clamp(zoomSpeed->getValue(), 0.f, 1.f) : 0.5f);
+    const float drawZoomAmount =
+      module ? clamp(module->fractalZoom / kNautiloidMaxFractalZoom, 0.f, 1.f) : 0.f;
+    if (framebuffer &&
+        (std::fabs(drawValue - lastDrawValue) > 1e-4f ||
+         std::fabs(drawSpeed - lastDrawSpeed) > 1e-4f ||
+         std::fabs(drawZoomAmount - lastDrawZoomAmount) > 1e-4f ||
+         std::fabs(box.size.x - lastDrawSize.x) > 1e-4f ||
+         std::fabs(box.size.y - lastDrawSize.y) > 1e-4f)) {
+      lastDrawValue = drawValue;
+      lastDrawSpeed = drawSpeed;
+      lastDrawZoomAmount = drawZoomAmount;
+      lastDrawSize = box.size;
+      framebuffer->setDirty();
+    }
+  }
+
+  void setHandleLightState(float displaySpeed, Vec pos, Vec size) {
+    if (!handleLight) return;
+    const float positive = std::max(displaySpeed, 0.f);
+    const float negative = std::max(-displaySpeed, 0.f);
+    handleLight->visible = true;
+    handleLight->box.pos = pos;
+    handleLight->box.size = size;
+    handleLight->setBrightnesses({
+      positive,
+      negative
+    });
   }
 
   void draw(const DrawArgs& args) override {
@@ -1030,12 +1075,13 @@ struct NautiloidZoomSlider final : ui::Slider {
     const float contentW = std::max(1.f, box.size.x - 2.f * insetX);
     const float centerX = insetX + 0.5f * contentW;
     const float handleX = insetX + value * contentW;
-    const float trackH = std::max(4.f, std::min(9.f, box.size.y * 0.36f));
+    const float trackH = std::max(4.f, std::min(8.f, box.size.y * 0.32f));
     const float progressH = std::max(4.f, std::min(8.f, box.size.y * 0.32f));
-    const float gap = std::max(1.5f, box.size.y * 0.09f);
-    const float contentH = trackH + gap + progressH;
-    const float trackY = std::max(insetY, 0.5f * (box.size.y - contentH));
-    const float progressY = trackY + trackH + gap;
+    const float gap = std::max(3.f, box.size.y * 0.16f);
+    const float progressY = std::max(
+      insetY + trackH + gap,
+      box.size.y - insetY - progressH - std::max(1.f, box.size.y * 0.03f));
+    const float trackY = std::max(insetY, progressY - gap - trackH);
     const float progressRadius = 0.5f * progressH;
 
     nvgBeginPath(args.vg);
@@ -1069,25 +1115,6 @@ struct NautiloidZoomSlider final : ui::Slider {
     nvgStrokeColor(args.vg, nvgRGBA(216, 194, 255, 132));
     nvgStroke(args.vg);
 
-    const float handleW = std::max(8.f, box.size.y * 0.42f);
-    const float desiredHandleH = std::max(trackH + 5.f, box.size.y * 0.42f);
-    const float handleH = std::min(desiredHandleH, std::max(trackH + 2.f, progressY - 1.f));
-    const float handleY =
-      clamp(trackY + 0.5f * (trackH - handleH), 0.f, std::max(0.f, progressY - handleH - 1.f));
-    nvgBeginPath(args.vg);
-    nvgRoundedRect(
-      args.vg,
-      clamp(handleX - 0.5f * handleW, 1.f, std::max(1.f, box.size.x - handleW - 1.f)),
-      handleY,
-      handleW,
-      handleH,
-      3.f);
-    nvgFillColor(args.vg, nvgRGB(226, 232, 240));
-    nvgFill(args.vg);
-    nvgStrokeWidth(args.vg, 1.f);
-    nvgStrokeColor(args.vg, nvgRGBA(20, 24, 30, 180));
-    nvgStroke(args.vg);
-
     nvgBeginPath(args.vg);
     nvgRoundedRect(args.vg, insetX, progressY, contentW, progressH, progressRadius);
     nvgFillColor(args.vg, nvgRGB(8, 11, 16));
@@ -1107,6 +1134,43 @@ struct NautiloidZoomSlider final : ui::Slider {
       nvgFillPaint(args.vg, progressPaint);
       nvgFill(args.vg);
       nvgRestore(args.vg);
+    }
+
+    if (handleSvg) {
+      const Vec svgSize = handleSvg->getSize();
+      if (svgSize.x > 1.f && svgSize.y > 1.f) {
+        const float sliderLaneTop = std::max(0.f, trackY - 3.f);
+        const float sliderLaneBottom = std::max(sliderLaneTop + trackH, progressY - 1.f);
+        const float sliderLaneH = sliderLaneBottom - sliderLaneTop;
+        const float handleH = std::min(
+          std::max(12.f, box.size.y * 0.56f),
+          std::max(trackH + 3.f, sliderLaneH - 0.5f));
+        const float scale = handleH / svgSize.y;
+        const float handleW = svgSize.x * scale;
+        const float handleDrawX =
+          clamp(handleX - 0.5f * handleW, 1.f, std::max(1.f, box.size.x - handleW - 1.f));
+        const float handleCenterX = handleDrawX + 0.5f * handleW;
+        const float handleCenterY = sliderLaneTop + 0.5f * sliderLaneH;
+
+        constexpr float kHandleLedX = 3.639865f;
+        constexpr float kHandleLedY = 4.371085f;
+        constexpr float kHandleLedW = 4.32027f;
+        constexpr float kHandleLedH = 6.00001f;
+        const Vec handleTopLeft(
+          handleCenterX - 0.5f * svgSize.x * scale,
+          handleCenterY - 0.5f * svgSize.y * scale);
+        setHandleLightState(
+          displaySpeed,
+          handleTopLeft.plus(Vec(kHandleLedX * scale, kHandleLedY * scale)),
+          Vec(kHandleLedW * scale, kHandleLedH * scale));
+
+        nvgSave(args.vg);
+        nvgTranslate(args.vg, handleCenterX, handleCenterY);
+        nvgScale(args.vg, scale, scale);
+        nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
+        handleSvg->draw(args.vg);
+        nvgRestore(args.vg);
+      }
     }
   }
 
@@ -1271,14 +1335,19 @@ struct NautiloidWidget final : ModuleWidget {
     const math::Rect zoomBarRectMm = rectMm("ZOOM_BAR", math::Rect(Vec(5.f, 79.f), Vec(91.6f, 9.f)));
     addChild(visual_assets::createPreviewFrameEnhancementWidget(
       zoomBarRectMm, visual_assets::PreviewFrameTint::Purple));
+    widget::FramebufferWidget* zoomFb = new widget::FramebufferWidget();
+    zoomFb->box.pos = mm2px(zoomBarRectMm.pos);
+    zoomFb->box.size = mm2px(zoomBarRectMm.size);
+    zoomFb->dirtyOnSubpixelChange = false;
     NautiloidZoomSlider* zoomSlider = new NautiloidZoomSlider();
     zoomSlider->module = module;
-    zoomSlider->box.pos = mm2px(zoomBarRectMm.pos);
-    zoomSlider->box.size = mm2px(zoomBarRectMm.size);
+    zoomSlider->framebuffer = zoomFb;
+    zoomSlider->box.size = zoomFb->box.size;
     NautiloidZoomSpeedQuantity* zoomSpeed = new NautiloidZoomSpeedQuantity();
     zoomSlider->zoomSpeed = zoomSpeed;
     zoomSlider->quantity = zoomSpeed;
-    addChild(zoomSlider);
+    zoomFb->addChild(zoomSlider);
+    addChild(zoomFb);
 
     NautiloidSourceButton* sourceButton =
       createParamCentered<NautiloidSourceButton>(
