@@ -41,6 +41,7 @@
     <circle id="IRIS_FINE_PARAM" cx="2274.4182" cy="7770.936" r="330" />
     <circle id="IRIS_SCAN_PARAM" cx="5268.6743" cy="9527.7002" r="520" />
     <circle id="IRIS_FM_ATTEN_PARAM" cx="1769.6008" cy="11178.575" r="330" />
+    <circle id="IRIS_LFO_MODE_PARAM" cx="2802.9001" cy="11178.575" r="240" />
     <circle id="IRIS_SCAN_ATTEN_PARAM" cx="3905.7871" cy="9533.3535" r="330" />
     <circle id="IRIS_COARSE_STEP_MODE_PARAM" cx="1889.9816" cy="9527.0713" r="240" />
     <circle id="IRIS_SMOOTHING_MENU_BUTTON" cx="346" cy="6710" r="113" />
@@ -60,7 +61,7 @@
     <circle id="IRIS_SYNC_INPUT" cx="5509.2969" cy="7793.5059" r="260" />
     <circle id="IRIS_OUT_OUTPUT" cx="4151" cy="11178.575" r="260" />
     <circle id="IRIS_INV_OUTPUT" cx="5291" cy="11178.575" r="260" />
-    <circle id="NAUTILOID_EXPANDER_LIGHT" cx="180" cy="8840" r="180" style="display:none" />
+    <circle id="NAUTILOID_EXPANDER_LIGHT" cx="320" cy="580" r="180" style="display:none" />
   </g>
   <rect id="IRIS_DISPLAY" x="96.52713" y="931.90002" width="5902.9458" height="3447.2776" rx="0" style="display:inline;stroke:#5841bf;stroke-width:23.3;stroke-dasharray:none;stroke-opacity:1" />
   <g id="screen">

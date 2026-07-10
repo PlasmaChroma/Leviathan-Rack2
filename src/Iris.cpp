@@ -74,6 +74,7 @@ Iris::Iris() {
   configParam(SCAN_PARAM, 0.f, 1.f, 0.f, "Image scan", " %", 0.f, 100.f);
   configParam(SCAN_ATTEN_PARAM, -1.f, 1.f, 0.f, "Scan CV attenuverter", " %", 0.f, 100.f);
   configParam(LIN_FM_PARAM, 0.f, 1.f, 0.f, "Linear FM", " %", 0.f, 100.f);
+  configSwitch(LFO_MODE_PARAM, 0.f, 1.f, 0.f, "LFO mode", {"Audio", "LFO"});
   configSwitch(COARSE_STEP_MODE_PARAM, 0.f, 1.f, 0.f, "Octave stepped", {"Continuous", "Octave stepped"});
   configSwitch(SOFT_SYNC_MODE_PARAM, 0.f, 1.f, 0.f, "Sync mode", {"Hard sync", "Soft sync"});
   configButton(SMOOTHING_MENU_PARAM, "Image options");
@@ -87,17 +88,18 @@ Iris::Iris() {
   configOutput(Q_OUTPUT, "Quadrature wavetable");
   lightDivider.setDivision(64);
 
-  activeTable = new iris::ImageWavetable(iris::makeDefaultTable());
-  snapshotTable = *activeTable;
+  tableBuffers[0] = iris::makeDefaultTable();
+  tableBuffers[1] = tableBuffers[0];
+  activeTableIndex = 0;
+  workerTableIndex.store(1, std::memory_order_release);
+  pendingTableIndex.store(-1, std::memory_order_release);
+  snapshotTable = tableBuffers[activeTableIndex];
   buildPreview(snapshotTable, &snapshotPreview);
   startWorker();
 }
 
 Iris::~Iris() {
   stopWorker();
-  delete pendingTable.exchange(nullptr, std::memory_order_acq_rel);
-  delete retiredTable.exchange(nullptr, std::memory_order_acq_rel);
-  delete activeTable;
 }
 
 void Iris::startWorker() {
@@ -109,6 +111,10 @@ void Iris::startWorker() {
 void Iris::stopWorker() {
   {
     std::lock_guard<std::mutex> lock(workerMutex);
+    if (requestPending && workerRequest.sourceSlot) {
+      nautiloid_iris_expander::releaseSourceSlot(workerRequest.sourceSlot);
+      workerRequest.sourceSlot = nullptr;
+    }
     workerStop = true;
     requestPending = false;
   }
@@ -119,6 +125,9 @@ void Iris::stopWorker() {
 void Iris::submitRequest(const WorkerRequest& request) {
   {
     std::lock_guard<std::mutex> lock(workerMutex);
+    if (requestPending && workerRequest.sourceSlot) {
+      nautiloid_iris_expander::releaseSourceSlot(workerRequest.sourceSlot);
+    }
     workerRequest = request;
     workerRequest.serial = ++nextRequestSerial;
     requestPending = true;
@@ -137,15 +146,22 @@ void Iris::requestImageLoad(const std::string& path) {
   submitRequest(request);
 }
 
-void Iris::requestExpanderSource(std::shared_ptr<const iris::SourceField> source, uint64_t generation) {
+void Iris::requestExpanderSource(const nautiloid_iris_expander::SourceSlot* sourceSlot, uint64_t generation) {
   if (!hasLeftNautiloid(this)) return;
-  if (!source || !source->valid() || generation == 0u) return;
-  if (generation == lastExpanderSourceGeneration && source == lastExpanderSourceSeen) return;
+  if (!nautiloid_iris_expander::acquireSourceSlot(sourceSlot, generation)) return;
+  if (generation == lastExpanderSourceGeneration && sourceSlot == lastExpanderSourceSlotSeen) {
+    std::lock_guard<std::mutex> lock(snapshotMutex);
+    if (currentSourceKind == iris::SOURCE_EXPANDER_IMAGE ||
+        currentSourceKind == iris::SOURCE_NAUTILOID_FRACTAL) {
+      nautiloid_iris_expander::releaseSourceSlot(sourceSlot);
+      return;
+    }
+  }
   lastExpanderSourceGeneration = generation;
-  lastExpanderSourceSeen = source;
+  lastExpanderSourceSlotSeen = sourceSlot;
   WorkerRequest request;
   request.type = REQUEST_EXPANDER_SOURCE;
-  request.sharedSource = std::move(source);
+  request.sourceSlot = sourceSlot;
   request.sourceGeneration = generation;
   request.settings = conversionSettings;
   submitRequest(request);
@@ -225,11 +241,11 @@ void Iris::clearToDefault() {
   submitRequest(request);
 }
 
-void Iris::publishWorkerResult(WorkerResult& result) {
-  if (!result.table.valid()) {
+void Iris::publishWorkerResult(WorkerResult& result, int tableIndex) {
+  if (tableIndex < 0 || tableIndex >= int(tableBuffers.size()) || !tableBuffers[size_t(tableIndex)].valid()) {
     return;
   }
-  iris::ImageWavetable* table = new iris::ImageWavetable(std::move(result.table));
+  const iris::ImageWavetable& table = tableBuffers[size_t(tableIndex)];
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
     if (result.hasSource) {
@@ -240,11 +256,11 @@ void Iris::publishWorkerResult(WorkerResult& result) {
     if (!result.preserveExistingSource) {
       currentSourceKind = result.sourceKind;
     }
-    snapshotTable = *table;
+    snapshotTable = table;
     buildPreview(snapshotTable, &snapshotPreview);
     lastError.clear();
   }
-  delete pendingTable.exchange(table, std::memory_order_acq_rel);
+  pendingTableIndex.store(tableIndex, std::memory_order_release);
   previewGeneration.fetch_add(1u, std::memory_order_release);
   loading.store(false, std::memory_order_release);
   loadFailed.store(false, std::memory_order_release);
@@ -252,27 +268,36 @@ void Iris::publishWorkerResult(WorkerResult& result) {
 
 void Iris::workerLoop() {
   while (true) {
-    if (iris::ImageWavetable* retired = retiredTable.exchange(nullptr, std::memory_order_acq_rel)) {
-      delete retired;
-    }
     WorkerRequest request;
+    int tableIndex = -1;
     {
       std::unique_lock<std::mutex> lock(workerMutex);
       workerCv.wait_for(lock, std::chrono::milliseconds(20), [this]() {
-        return workerStop || requestPending || retiredTable.load(std::memory_order_acquire) != nullptr;
+        return workerStop ||
+          (requestPending && pendingTableIndex.load(std::memory_order_acquire) < 0);
       });
       if (workerStop) break;
       if (!requestPending) continue;
       request = workerRequest;
+      workerRequest = WorkerRequest();
       requestPending = false;
+      tableIndex = workerTableIndex.load(std::memory_order_acquire);
     }
+    if (tableIndex < 0 || tableIndex >= int(tableBuffers.size())) {
+      if (request.sourceSlot) {
+        nautiloid_iris_expander::releaseSourceSlot(request.sourceSlot);
+        request.sourceSlot = nullptr;
+      }
+      continue;
+    }
+    iris::ImageWavetable* buildTable = &tableBuffers[size_t(tableIndex)];
 
     WorkerResult result;
     std::string error;
     bool ok = false;
     try {
       if (request.type == REQUEST_DEFAULT) {
-        result.table = iris::makeDefaultTable();
+        *buildTable = iris::makeDefaultTable();
         ok = true;
       } else if (request.type == REQUEST_LOAD_EMBEDDED_SOURCE) {
         iris::SourceField source;
@@ -283,18 +308,20 @@ void Iris::workerLoop() {
           source.originalWidth = request.source.originalWidth;
           source.originalHeight = request.source.originalHeight;
           source.originalChannels = request.source.originalChannels;
-          ok = iris::buildWavetableFromSourceField(source, request.settings, &result.table, &error);
+          ok = iris::buildWavetableFromSourceField(source, request.settings, buildTable, &error);
           result.source = std::move(source);
           result.hasSource = ok;
           result.sourceKind = iris::SOURCE_IMAGE;
         }
       } else if (request.type == REQUEST_REBUILD_FROM_SOURCE) {
-        ok = iris::buildWavetableFromSourceField(request.source, request.settings, &result.table, &error);
+        ok = iris::buildWavetableFromSourceField(request.source, request.settings, buildTable, &error);
         result.preserveExistingSource = true;
       } else if (request.type == REQUEST_EXPANDER_SOURCE) {
-        if (request.sharedSource && request.sharedSource->valid()) {
-          ok = iris::buildWavetableFromSourceField(*request.sharedSource, request.settings, &result.table, &error);
-          result.source = *request.sharedSource;
+        if (request.sourceSlot &&
+            request.sourceSlot->generation.load(std::memory_order_acquire) == request.sourceGeneration &&
+            request.sourceSlot->source.valid()) {
+          ok = iris::buildWavetableFromSourceField(request.sourceSlot->source, request.settings, buildTable, &error);
+          result.source = request.sourceSlot->source;
           result.source.sourcePath.clear();
           if (result.source.sourceName.empty()) {
             result.source.sourceName = "Nautiloid";
@@ -316,7 +343,7 @@ void Iris::workerLoop() {
         iris::SourceField source;
         ok = iris::makeNautiloidIrisSource(params, &source, &error);
         if (ok) {
-          ok = iris::buildWavetableFromSourceField(source, request.settings, &result.table, &error);
+          ok = iris::buildWavetableFromSourceField(source, request.settings, buildTable, &error);
           result.source = std::move(source);
           result.hasSource = ok;
           result.sourceKind = iris::SOURCE_NAUTILOID_FRACTAL;
@@ -325,13 +352,13 @@ void Iris::workerLoop() {
         iris::SourceField source;
         ok = iris::importImageFileToSourceField(request.path, &source, &error);
         if (ok) {
-          ok = iris::buildWavetableFromSourceField(source, request.settings, &result.table, &error);
+          ok = iris::buildWavetableFromSourceField(source, request.settings, buildTable, &error);
           result.source = std::move(source);
           result.hasSource = ok;
           result.sourceKind = iris::SOURCE_IMAGE;
         } else if (request.source.valid()) {
           const std::string reloadError = error;
-          ok = iris::buildWavetableFromSourceField(request.source, request.settings, &result.table, &error);
+          ok = iris::buildWavetableFromSourceField(request.source, request.settings, buildTable, &error);
           result.preserveExistingSource = true;
           if (ok && !reloadError.empty()) {
             error = reloadError;
@@ -341,7 +368,7 @@ void Iris::workerLoop() {
         iris::SourceField source;
         ok = iris::importImageFileToSourceField(request.path, &source, &error);
         if (ok) {
-          ok = iris::buildWavetableFromSourceField(source, request.settings, &result.table, &error);
+          ok = iris::buildWavetableFromSourceField(source, request.settings, buildTable, &error);
           result.source = std::move(source);
           result.hasSource = ok;
           result.sourceKind = iris::SOURCE_IMAGE;
@@ -376,13 +403,17 @@ void Iris::workerLoop() {
           requestPending &&
           workerRequest.type == REQUEST_EXPANDER_SOURCE;
         if (!publishIntermediateRebuild && !publishIntermediateExpander) {
+          if (request.sourceSlot) {
+            nautiloid_iris_expander::releaseSourceSlot(request.sourceSlot);
+            request.sourceSlot = nullptr;
+          }
           continue;
         }
       }
     }
     if (ok) {
       try {
-        publishWorkerResult(result);
+        publishWorkerResult(result, tableIndex);
       } catch (const std::bad_alloc&) {
         error = "Table publication allocation failed";
         ok = false;
@@ -397,9 +428,9 @@ void Iris::workerLoop() {
     if (!ok) {
       if (request.type != REQUEST_DEFAULT) {
         WorkerResult fallback;
-        fallback.table = iris::makeDefaultTable();
+        *buildTable = iris::makeDefaultTable();
         try {
-          publishWorkerResult(fallback);
+          publishWorkerResult(fallback, tableIndex);
         } catch (...) {
         }
       }
@@ -410,27 +441,32 @@ void Iris::workerLoop() {
       loading.store(false, std::memory_order_release);
       loadFailed.store(true, std::memory_order_release);
     }
+    if (request.sourceSlot) {
+      nautiloid_iris_expander::releaseSourceSlot(request.sourceSlot);
+      request.sourceSlot = nullptr;
+    }
   }
 }
 
 void Iris::process(const ProcessArgs& args) {
   const bool measurePerf = isDragonKingDebugEnabled();
   const auto processStart = debug_terminal::debugTimerStart(measurePerf);
-  if (retiredTable.load(std::memory_order_acquire) == nullptr) {
-    if (iris::ImageWavetable* pending = pendingTable.exchange(nullptr, std::memory_order_acq_rel)) {
-      iris::ImageWavetable* old = activeTable;
-      activeTable = pending;
-      retiredTable.store(old, std::memory_order_release);
-    }
+  const int pendingIndex = pendingTableIndex.exchange(-1, std::memory_order_acq_rel);
+  if (pendingIndex >= 0 && pendingIndex < int(tableBuffers.size()) && pendingIndex != activeTableIndex) {
+    const int oldActiveIndex = activeTableIndex;
+    activeTableIndex = pendingIndex;
+    workerTableIndex.store(oldActiveIndex, std::memory_order_release);
+    workerCv.notify_one();
   }
-  const iris::ImageWavetable* table = activeTable;
+  const iris::ImageWavetable* table = &tableBuffers[size_t(activeTableIndex)];
   const int channels = std::max(1, std::min(inputs[V_OCT_INPUT].getChannels(), 16));
   outputs[OUT_OUTPUT].setChannels(channels);
   outputs[Q_OUTPUT].setChannels(channels);
   const float coarseParam = params[COARSE_PARAM].getValue();
-  float coarsePitch = kIrisMinPitchFromC4 +
-    (std::isfinite(coarseParam) ? clamp(coarseParam, 0.f, 1.f) : irisKnobValueForFrequency(dsp::FREQ_C4)) *
-      kIrisCoarseOctaveSpan;
+  const bool lfoMode = params[LFO_MODE_PARAM].getValue() > 0.5f;
+  const float coarseKnob =
+    std::isfinite(coarseParam) ? clamp(coarseParam, 0.f, 1.f) : irisKnobValueForFrequency(dsp::FREQ_C4, lfoMode);
+  float coarsePitch = std::log2(irisBaseFrequencyFromKnob(coarseKnob, lfoMode) / dsp::FREQ_C4);
   const bool coarseStepped = params[COARSE_STEP_MODE_PARAM].getValue() > 0.5f;
   if (coarseStepped) coarsePitch = std::round(coarsePitch);
   const float fineParam = params[FINE_PARAM].getValue();
@@ -442,6 +478,8 @@ void Iris::process(const ProcessArgs& args) {
   const float scanAtten = std::isfinite(scanAttenParam) ? clamp(scanAttenParam, -1.f, 1.f) : 0.f;
   const float linFmAmount = std::isfinite(linFmParam) ? clamp(linFmParam, 0.f, 1.f) : 0.f;
   const bool softSync = params[SOFT_SYNC_MODE_PARAM].getValue() > 0.5f;
+  const float processMinFrequency = lfoMode ? 0.005f : kMinFrequencyHz;
+  const float processMaxFrequency = std::min(kMaxFrequencyHz, 0.45f * args.sampleRate);
   float scanDisplay = scanKnob;
   float frequencyDisplay = 0.f;
   for (int channel = 0; channel < channels; ++channel) {
@@ -449,13 +487,13 @@ void Iris::process(const ProcessArgs& args) {
     const float mainPitch = coarsePitch + fine + (std::isfinite(vOctInput) ? vOctInput : 0.f);
     const float basePitch = clamp(mainPitch, -24.f, 16.f);
     const float baseFrequency =
-      clamp(dsp::FREQ_C4 * dsp::exp2_taylor5(basePitch), kMinFrequencyHz, kMaxFrequencyHz);
+      clamp(dsp::FREQ_C4 * dsp::exp2_taylor5(basePitch), processMinFrequency, processMaxFrequency);
     const float linInput = inputs[LIN_FM_INPUT].getPolyVoltage(channel);
     const float lin = acCoupledLinFm(
       std::isfinite(linInput) ? linInput : 0.f, &voices[size_t(channel)], args.sampleTime);
     const float linBus = drivenLinFm(lin, linFmAmount);
     const float frequency =
-      clamp(baseFrequency + baseFrequency * linBus, kMinFrequencyHz, kMaxFrequencyHz);
+      clamp(baseFrequency + baseFrequency * linBus, processMinFrequency, processMaxFrequency);
     if (channel == 0) {
       frequencyDisplay = baseFrequency;
     }
@@ -486,6 +524,7 @@ void Iris::process(const ProcessArgs& args) {
     lights[ERROR_LIGHT].setBrightness(loadFailed.load(std::memory_order_relaxed) ? 1.f : 0.f);
     lights[COARSE_STEP_MODE_LIGHT].setBrightness(coarseStepped ? 0.5f : 0.f);
     lights[SOFT_SYNC_MODE_LIGHT].setBrightness(softSync ? 0.5f : 0.f);
+    lights[LFO_MODE_LIGHT].setBrightness(lfoMode ? 0.5f : 0.f);
     const int imageChannelMode = clamp(displayImageChannelMode.load(std::memory_order_relaxed), 0, 3);
     lights[IMAGE_CHANNEL_ALL_LIGHT].setBrightness(imageChannelMode == iris::IMAGE_CHANNEL_ALL ? 1.f : 0.f);
     lights[IMAGE_CHANNEL_RED_LIGHT].setBrightness(imageChannelMode == iris::IMAGE_CHANNEL_RED ? 1.f : 0.f);
@@ -493,7 +532,7 @@ void Iris::process(const ProcessArgs& args) {
     lights[IMAGE_CHANNEL_BLUE_LIGHT].setBrightness(imageChannelMode == iris::IMAGE_CHANNEL_BLUE ? 1.f : 0.f);
     const bool nautiloidConnected = hasLeftNautiloid(this);
     const bool nautiloidReady =
-      nautiloidConnected && lastExpanderSourceGeneration != 0u && lastExpanderSourceSeen != nullptr;
+      nautiloidConnected && lastExpanderSourceGeneration != 0u && lastExpanderSourceSlotSeen != nullptr;
     lights[NAUTILOID_LINK_LIGHT].setBrightness(nautiloidConnected && !nautiloidReady ? 1.f : 0.f);
     lights[NAUTILOID_READY_LIGHT].setBrightness(nautiloidReady ? 1.f : 0.f);
   }
@@ -719,6 +758,11 @@ std::string Iris::sourcePath() const {
   return snapshotSourceField.sourcePath.empty() ? snapshotTable.sourcePath : snapshotSourceField.sourcePath;
 }
 
+int Iris::sourceKind() const {
+  std::lock_guard<std::mutex> lock(snapshotMutex);
+  return currentSourceKind;
+}
+
 std::string Iris::statusText() const {
   if (loading.load(std::memory_order_relaxed)) return "Loading...";
   std::lock_guard<std::mutex> lock(snapshotMutex);
@@ -780,11 +824,15 @@ void Iris::waveformSnapshot(float scan, int sampleCount, std::vector<float>* sam
 }
 
 float IrisFreqQuantity::getDisplayValue() {
-  return irisBaseFrequencyFromKnob(getValue());
+  auto* iris = static_cast<Iris*>(module);
+  const bool lfoMode = iris ? (iris->params[Iris::LFO_MODE_PARAM].getValue() > 0.5f) : false;
+  return irisBaseFrequencyFromKnob(getValue(), lfoMode);
 }
 
 void IrisFreqQuantity::setDisplayValue(float displayValue) {
-  setImmediateValue(irisKnobValueForFrequency(displayValue));
+  auto* iris = static_cast<Iris*>(module);
+  const bool lfoMode = iris ? (iris->params[Iris::LFO_MODE_PARAM].getValue() > 0.5f) : false;
+  setImmediateValue(irisKnobValueForFrequency(displayValue, lfoMode));
 }
 
 std::string IrisFreqQuantity::getDisplayValueString() {

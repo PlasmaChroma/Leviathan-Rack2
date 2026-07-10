@@ -78,7 +78,6 @@ bool nautiloidVisibleViewOutgrowsCache(Nautiloid* module, float threshold) {
 
 bool nautiloidGpuPreviewEnabled(Nautiloid* module) {
   if (!module ||
-      !isDragonKingDebugEnabled() ||
       !iris::isBuiltinFractalMode(module->fractalMode) ||
       !module->debugGpuPreviewEnabled.load(std::memory_order_relaxed)) {
     return false;
@@ -915,53 +914,6 @@ struct NautiloidDebugCounters final : TransparentWidget {
     TransparentWidget::step();
   }
 
-  void draw(const DrawArgs& args) override {
-    if (!module) return;
-
-    const auto load = [](const std::atomic<uint64_t>& value) {
-      return value.load(std::memory_order_relaxed);
-    };
-
-    nvgFontSize(args.vg, 7.5f);
-    nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-    nvgTextLetterSpacing(args.vg, 0.f);
-    nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-    nvgFillColor(args.vg, nvgRGBA(205, 218, 235, 210));
-
-    const std::string left = string::f(
-      "req %llu  disp %llu  reproj %llu  hit/part/miss %llu/%llu/%llu",
-      (unsigned long long) load(module->renderRequestsSubmitted),
-      (unsigned long long) load(module->displayRendersCompleted),
-      (unsigned long long) load(module->displayReprojectionPublishes),
-      (unsigned long long) load(module->displayCacheHits),
-      (unsigned long long) load(module->displayCachePartialHits),
-      (unsigned long long) load(module->displayCacheMisses));
-    Nautiloid::DisplayTileCacheSnapshot tileSnapshot;
-    module->displayTileCacheSnapshot(&tileSnapshot);
-    Nautiloid::ZoomAheadCacheSnapshot zoomAheadSnapshot;
-    module->zoomAheadCacheSnapshot(&zoomAheadSnapshot);
-    const std::string right = string::f(
-      "tile %llu/%llu z %llu/%llu/%llu reprojZ %llu iris %llu",
-      (unsigned long long) tileSnapshot.currentTileCount,
-      (unsigned long long) tileSnapshot.fullTileCount,
-      (unsigned long long) zoomAheadSnapshot.currentTileCount[0],
-      (unsigned long long) zoomAheadSnapshot.currentTileCount[1],
-      (unsigned long long) zoomAheadSnapshot.currentTileCount[2],
-      (unsigned long long) load(module->displayReprojectionZoomAheadHits),
-      (unsigned long long) load(module->irisRendersCompleted));
-    const std::string third = string::f(
-      "cache r/s/a %llu/%llu/%llu  stale d/i %llu/%llu",
-      (unsigned long long) load(module->displayCacheTilesRendered),
-      (unsigned long long) load(module->displayTileCacheShifts),
-      (unsigned long long) load(module->displayCacheTileAborts),
-      (unsigned long long) load(module->displayRendersDroppedStale),
-      (unsigned long long) load(module->irisRendersDroppedStale));
-
-    nvgText(args.vg, 0.f, 0.f, left.c_str(), nullptr);
-    nvgText(args.vg, 0.f, 9.f, right.c_str(), nullptr);
-    nvgText(args.vg, 0.f, 18.f, third.c_str(), nullptr);
-  }
-
   void appendLog(double now) {
     const std::string dir = nautiloidUserRootPath();
     system::createDirectories(dir);
@@ -1298,6 +1250,7 @@ struct NautiloidResetButton final : TL1105 {
 };
 
 struct NautiloidZoomReadout final : TransparentWidget {
+  static constexpr float LABEL_FONT_SIZE = 11.5f;
   Nautiloid* module = nullptr;
 
   explicit NautiloidZoomReadout(Nautiloid* module) : module(module) {}
@@ -1305,13 +1258,13 @@ struct NautiloidZoomReadout final : TransparentWidget {
   void draw(const DrawArgs& args) override {
     if (!module) return;
     const float pct = 100.f * clamp(module->fractalZoom / kNautiloidMaxFractalZoom, 0.f, 1.f);
-    const std::string text = string::f("%.2f%%", pct);
+    const std::string text = string::f("Zoom: %.2f%%", pct);
 
-    nvgFontSize(args.vg, 8.4f);
+    nvgFontSize(args.vg, LABEL_FONT_SIZE);
     nvgFontFaceId(args.vg, APP->window->uiFont->handle);
     nvgTextLetterSpacing(args.vg, 0.f);
     nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-    nvgFillColor(args.vg, nvgRGBA(226, 232, 240, 220));
+    nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
     nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y, text.c_str(), nullptr);
   }
 };
@@ -1389,7 +1342,7 @@ struct NautiloidWidget final : ModuleWidget {
     addInput(createInputCentered<Magitek2InputJack>(
       mm2px(pointMm("ZOOM_RATE_INPUT", Vec(88.6f, 75.4f))), module, Nautiloid::ZOOM_RATE_INPUT));
     addChild(createLightCentered<SmallAperture<AmberGreenApertureLight>>(
-      mm2px(pointMm("IRIS_EXPANDER_LIGHT", Vec(98.4f, 88.4f))), module, Nautiloid::IRIS_LINK_LIGHT));
+      mm2px(pointMm("IRIS_EXPANDER_LIGHT", Vec(98.4f, 5.8f))), module, Nautiloid::IRIS_LINK_LIGHT));
 
     const math::Rect tileCacheRectMm = rectMm("TILE_CACHE", math::Rect(Vec(2.f, 102.f), Vec(42.f, 25.9f)));
     NautiloidTileCacheGrid* tileCacheGrid = new NautiloidTileCacheGrid(module);

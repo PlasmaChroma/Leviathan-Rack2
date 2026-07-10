@@ -248,7 +248,7 @@ inline bool makeBuiltinFractalSourceSized(
     return false;
   }
 
-  SourceField source;
+  SourceField& source = *out;
   source.width = std::max(2, width);
   source.height = std::max(2, height);
   source.channels = kCanonicalSourceChannels;
@@ -435,7 +435,6 @@ inline bool makeBuiltinFractalSourceSized(
     if (error) *error = "Generated fractal source is invalid";
     return false;
   }
-  *out = std::move(source);
   return true;
 }
 
@@ -495,7 +494,10 @@ inline bool makeNautiloidIrisSource(
   const NautiloidFractalSourceParams& params,
   SourceField* out,
   std::string* error = nullptr) {
-  SourceField source;
+  if (!out) {
+    if (error) *error = "Missing fractal output";
+    return false;
+  }
   if (!makeBuiltinFractalSourceSized(
         params.mode,
         params.zoom,
@@ -504,14 +506,13 @@ inline bool makeNautiloidIrisSource(
         kCanonicalSourceWidth,
         kCanonicalSourceHeight,
         1.f,
-        &source,
+        out,
         error)) {
     return false;
   }
-  source.sourcePath.clear();
-  source.sourceName = std::string("Nautiloid: ") + builtinFractalName(params.mode);
-  applyNautiloidFractalParams(&source, params);
-  *out = std::move(source);
+  out->sourcePath.clear();
+  out->sourceName = std::string("Nautiloid: ") + builtinFractalName(params.mode);
+  applyNautiloidFractalParams(out, params);
   return true;
 }
 

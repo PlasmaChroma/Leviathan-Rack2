@@ -1,4 +1,5 @@
 #include "Iris.hpp"
+#include "Nautiloid.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
@@ -68,6 +69,25 @@ void spawnNautiloidLeftOfIris(ModuleWidget* irisWidget) {
     h->name = "add Nautiloid";
     h->setModule(nautWidget);
     APP->history->push(h);
+  }
+}
+
+void selectNautiloidSourceForIris(ModuleWidget* irisWidget, Iris* iris) {
+  if (!irisWidget || !iris) return;
+  Module* left = iris->leftExpander.module;
+  if (!isNautiloidModule(left)) {
+    spawnNautiloidLeftOfIris(irisWidget);
+    return;
+  }
+
+  Nautiloid* naut = dynamic_cast<Nautiloid*>(left);
+  if (!naut) return;
+  uint64_t generation = 0u;
+  const nautiloid_iris_expander::SourceSlot* slot = naut->irisExpanderSourceSlotSnapshot(&generation);
+  if (slot && generation != 0u) {
+    iris->requestExpanderSource(slot, generation);
+  } else {
+    naut->requestRenderWithCenteredCache();
   }
 }
 
@@ -437,7 +457,8 @@ struct IrisFrequencyReadout final : TransparentWidget {
     if (module) {
       displayHz = module->displayFrequencyHz.load(std::memory_order_relaxed);
       if (displayHz <= 0.f) {
-        displayHz = irisBaseFrequencyFromKnob(module->params[Iris::COARSE_PARAM].getValue());
+        const bool lfoMode = module->params[Iris::LFO_MODE_PARAM].getValue() > 0.5f;
+        displayHz = irisBaseFrequencyFromKnob(module->params[Iris::COARSE_PARAM].getValue(), lfoMode);
       }
     }
     const std::string text = formatFrequencyText(displayHz);
@@ -594,9 +615,18 @@ struct IrisSourceMenuButton final : TL1105 {
     ui::Menu* menu = createMenu();
     menu->box.pos = getAbsoluteOffset(Vec(0.f, box.size.y));
     menu->addChild(createMenuLabel("Source"));
-    menu->addChild(createMenuItem("Image file...", "", [this]() { chooseIrisImage(module); }));
-    menu->addChild(createMenuItem("Nautiloid", "", [this]() { spawnNautiloidLeftOfIris(getAncestorOfType<ModuleWidget>()); },
-                                  isNautiloidModule(module->leftExpander.module)));
+    menu->addChild(createCheckMenuItem(
+      "Image file...", "",
+      [this]() { return module && module->sourceKind() == iris::SOURCE_IMAGE; },
+      [this]() { chooseIrisImage(module); }));
+    menu->addChild(createCheckMenuItem(
+      "Nautiloid", "",
+      [this]() {
+        if (!module || !isNautiloidModule(module->leftExpander.module)) return false;
+        const int kind = module->sourceKind();
+        return kind == iris::SOURCE_EXPANDER_IMAGE || kind == iris::SOURCE_NAUTILOID_FRACTAL;
+      },
+      [this]() { selectNautiloidSourceForIris(getAncestorOfType<ModuleWidget>(), module); }));
     e.consume(this);
   }
 
@@ -883,7 +913,7 @@ struct IrisWidget final : ModuleWidget {
       mm2px(anchor("IRIS_IMAGE_CHANNEL_BLUE_LIGHT", Vec(3.600001f, 99.925596f))),
       module, Iris::IMAGE_CHANNEL_BLUE_LIGHT));
     addChild(createLightCentered<SmallAperture<AmberGreenApertureLight>>(
-      mm2px(anchor("NAUTILOID_EXPANDER_LIGHT", Vec(1.8f, 88.4f))),
+      mm2px(anchor("NAUTILOID_EXPANDER_LIGHT", Vec(3.2f, 5.8f))),
       module, Iris::NAUTILOID_LINK_LIGHT));
 
     addParam(createParamCentered<LeviathanHaloKnob2>(
@@ -906,6 +936,11 @@ struct IrisWidget final : ModuleWidget {
       mm2px(anchor("IRIS_SOFT_SYNC_MODE_PARAM", Vec(44.64f, 76.73f))),
       module, Iris::SOFT_SYNC_MODE_PARAM, Iris::SOFT_SYNC_MODE_LIGHT);
     addParam(softSync);
+    SmallGoldApertureButton* lfoMode = createLightParamCentered<SmallGoldApertureButton>(
+      mm2px(anchor("IRIS_LFO_MODE_PARAM", Vec(25.3f, 111.8f))),
+      module, Iris::LFO_MODE_PARAM, Iris::LFO_MODE_LIGHT);
+    static_cast<SmallGoldApertureLight*>(lfoMode->getLight())->setBaseColor(nvgRGB(255, 118, 24));
+    addParam(lfoMode);
 
     addInput(createInputCentered<Magitek2InputJack>(
       mm2px(anchor("IRIS_V_OCT_INPUT", Vec(8.5f, 99.f))), module, Iris::V_OCT_INPUT));

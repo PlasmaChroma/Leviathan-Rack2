@@ -2,11 +2,11 @@
 
 #include "plugin.hpp"
 #include "NautiloidFractal.hpp"
+#include "NautiloidIrisExpander.hpp"
 
 #include <atomic>
 #include <array>
 #include <condition_variable>
-#include <memory>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -48,7 +48,7 @@ struct Nautiloid final : Module {
   void resetView();
   void previewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
   void irisPreviewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
-  std::shared_ptr<const iris::SourceField> irisExpanderSourceSnapshot(uint64_t* generation) const;
+  const nautiloid_iris_expander::SourceSlot* irisExpanderSourceSlotSnapshot(uint64_t* generation) const;
 
   struct DisplayTileCacheSnapshot {
     int columns = 0;
@@ -103,7 +103,7 @@ struct Nautiloid final : Module {
   std::atomic<uint64_t> irisRendersDroppedStale {0u};
   std::atomic<uint64_t> irisExpanderPublishes {0u};
   std::atomic<bool> debugFileLoggingEnabled {false};
-  std::atomic<bool> debugGpuPreviewEnabled {false};
+  std::atomic<bool> debugGpuPreviewEnabled {true};
   std::atomic<bool> debugGpuPreviewAvailable {false};
   std::atomic<bool> zoomInteractionActive {false};
   std::atomic<bool> displayRenderBusy {false};
@@ -226,7 +226,9 @@ private:
   double authoritativeDisplayCenterX = 0.0;
   double authoritativeDisplayCenterY = 0.0;
   iris::SourceField irisCompatibleSource;
-  std::shared_ptr<const iris::SourceField> irisExpanderSource;
+  std::array<nautiloid_iris_expander::SourceSlot, nautiloid_iris_expander::kSourceSlotCount> irisExpanderSlots;
+  std::atomic<int> irisExpanderPublishedSlot {-1};
+  int irisExpanderWriteSlot = 0;
   uint64_t irisCompatibleSerial = 0u;
   int irisCompatibleMode = iris::FRACTAL_NONE;
   float irisCompatibleZoom = -1.f;

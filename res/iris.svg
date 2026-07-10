@@ -196,6 +196,11 @@
        cy="11178.575"
        r="330" />
     <circle
+       id="IRIS_LFO_MODE_PARAM"
+       cx="2802.9001"
+       cy="11178.575"
+       r="240" />
+    <circle
        id="IRIS_SCAN_ATTEN_PARAM"
        cx="3905.7871"
        cy="9533.3535"
@@ -290,8 +295,8 @@
        r="260" />
     <circle
        id="NAUTILOID_EXPANDER_LIGHT"
-       cx="180"
-       cy="8840"
+       cx="320"
+       cy="580"
        r="180"
        style="display:none" />
   </g>
@@ -395,6 +400,15 @@
          id="tspan7"
          x="4146.061"
          y="11848.603">OUT</tspan></text>
+    <text
+       x="2798.949"
+       y="11848.603"
+       id="text17-7"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;display:inline"><tspan
+         sodipodi:role="line"
+         id="tspan1"
+         x="2798.949"
+         y="11848.603">LFO</tspan></text>
     <text
        x="5291"
        y="11848.603"

@@ -2,27 +2,33 @@
 
 #include "DebugTerminalMetrics.hpp"
 #include "IrisIO.hpp"
+#include "NautiloidIrisExpander.hpp"
 #include "plugin.hpp"
 
 #include <array>
 #include <atomic>
 #include <condition_variable>
-#include <memory>
 #include <mutex>
 #include <thread>
 
 constexpr float kIrisMinHz = 10.f;
 constexpr float kIrisMaxHz = 10000.f;
+constexpr float kIrisLfoMinHz = 0.01f;
+constexpr float kIrisLfoMaxHz = 100.f;
 constexpr float kIrisCoarseOctaveSpan = 9.96578428466f;
 constexpr float kIrisMinPitchFromC4 = -4.70919513631f;
 
-inline float irisBaseFrequencyFromKnob(float knobNorm) {
-  return kIrisMinHz * std::pow(kIrisMaxHz / kIrisMinHz, clamp(knobNorm, 0.f, 1.f));
+inline float irisBaseFrequencyFromKnob(float knobNorm, bool lfoMode = false) {
+  const float minHz = lfoMode ? kIrisLfoMinHz : kIrisMinHz;
+  const float maxHz = lfoMode ? kIrisLfoMaxHz : kIrisMaxHz;
+  return minHz * std::pow(maxHz / minHz, clamp(knobNorm, 0.f, 1.f));
 }
 
-inline float irisKnobValueForFrequency(float hz) {
-  hz = clamp(hz, kIrisMinHz, kIrisMaxHz);
-  return std::log(hz / kIrisMinHz) / std::log(kIrisMaxHz / kIrisMinHz);
+inline float irisKnobValueForFrequency(float hz, bool lfoMode = false) {
+  const float minHz = lfoMode ? kIrisLfoMinHz : kIrisMinHz;
+  const float maxHz = lfoMode ? kIrisLfoMaxHz : kIrisMaxHz;
+  hz = clamp(hz, minHz, maxHz);
+  return std::log(hz / minHz) / std::log(maxHz / minHz);
 }
 
 struct IrisFreqQuantity final : ParamQuantity {
@@ -38,6 +44,7 @@ struct Iris final : Module {
 	    SCAN_PARAM,
 	    SCAN_ATTEN_PARAM,
 	    LIN_FM_PARAM,
+	    LFO_MODE_PARAM,
 	    COARSE_STEP_MODE_PARAM,
 	    SOFT_SYNC_MODE_PARAM,
 	    SMOOTHING_MENU_PARAM,
@@ -66,6 +73,7 @@ struct Iris final : Module {
 	    ERROR_LIGHT,
 	    COARSE_STEP_MODE_LIGHT,
 	    SOFT_SYNC_MODE_LIGHT,
+	    LFO_MODE_LIGHT,
 	    IMAGE_CHANNEL_ALL_LIGHT,
 	    IMAGE_CHANNEL_RED_LIGHT,
 	    IMAGE_CHANNEL_GREEN_LIGHT,
@@ -91,13 +99,14 @@ struct Iris final : Module {
   void dataFromJson(json_t* root) override;
 
   void requestImageLoad(const std::string& path);
-  void requestExpanderSource(std::shared_ptr<const iris::SourceField> source, uint64_t generation);
+  void requestExpanderSource(const nautiloid_iris_expander::SourceSlot* sourceSlot, uint64_t generation);
   void requestReload();
   void clearToDefault();
   void requestRebuild();
   std::string sourceName() const;
   std::string sourcePath() const;
   std::string statusText() const;
+  int sourceKind() const;
   void previewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const;
   void sourcePreviewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const;
   void waveformSnapshot(float scan, int sampleCount, std::vector<float>* samples) const;
@@ -131,7 +140,7 @@ private:
     std::string path;
     iris::ConversionSettings settings;
     iris::SourceField source;
-    std::shared_ptr<const iris::SourceField> sharedSource;
+    const nautiloid_iris_expander::SourceSlot* sourceSlot = nullptr;
     int nautiloidFractalMode = iris::FRACTAL_NONE;
     float nautiloidFractalZoom = 0.f;
     float nautiloidFractalCenterX = 0.f;
@@ -142,7 +151,6 @@ private:
 
   struct WorkerResult {
     iris::SourceField source;
-    iris::ImageWavetable table;
     bool hasSource = false;
     bool preserveExistingSource = false;
     int sourceKind = iris::SOURCE_IMAGE;
@@ -152,13 +160,14 @@ private:
   void stopWorker();
   void submitRequest(const WorkerRequest& request);
   void workerLoop();
-  void publishWorkerResult(WorkerResult& result);
+  void publishWorkerResult(WorkerResult& result, int tableIndex);
   static void buildPreview(const iris::ImageWavetable& table, std::vector<uint8_t>* pixels);
 
   std::array<Voice, 16> voices;
-  iris::ImageWavetable* activeTable = nullptr;
-  std::atomic<iris::ImageWavetable*> pendingTable {nullptr};
-  std::atomic<iris::ImageWavetable*> retiredTable {nullptr};
+  std::array<iris::ImageWavetable, 2> tableBuffers;
+  int activeTableIndex = 0;
+  std::atomic<int> workerTableIndex {1};
+  std::atomic<int> pendingTableIndex {-1};
 
   std::thread worker;
   mutable std::mutex workerMutex;
@@ -178,7 +187,7 @@ private:
   bool embedSource = true;
   int currentSourceKind = iris::SOURCE_IMAGE;
   uint64_t lastExpanderSourceGeneration = 0u;
-  std::shared_ptr<const iris::SourceField> lastExpanderSourceSeen;
+  const nautiloid_iris_expander::SourceSlot* lastExpanderSourceSlotSeen = nullptr;
   dsp::ClockDivider lightDivider;
 };
 

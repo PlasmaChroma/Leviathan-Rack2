@@ -461,7 +461,7 @@ inline bool buildWavetableFromSourceField(const SourceField& source,
     }
   }
 
-  ImageWavetable table;
+  ImageWavetable& table = *out;
   table.frameSize = settings.frameSize;
   table.rowCount = int(rows.size());
   table.stride = settings.frameSize + 1;
@@ -481,7 +481,6 @@ inline bool buildWavetableFromSourceField(const SourceField& source,
     table.samples[base + size_t(table.frameSize)] = table.samples[base];
   }
   updateStatistics(&table);
-  *out = std::move(table);
   return true;
 }
 

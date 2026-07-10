@@ -25,7 +25,6 @@ constexpr int kZoomAheadTileSize = 128;
 
 bool requestCanUseGpuPreview(int mode, bool shaderAvailable) {
   return shaderAvailable &&
-    isDragonKingDebugEnabled() &&
     iris::isBuiltinFractalMode(mode);
 }
 
@@ -647,12 +646,29 @@ void Nautiloid::process(const ProcessArgs& args) {
   const bool irisConnected = isIrisModule(right) && right->leftExpander.module == this;
   bool irisReady = false;
 
-  if (irisConnected && generation != 0u) {
+  if (irisConnected && generation == 0u) {
+    if (lastExpanderGenerationSentRight != uint64_t(-1)) {
+      WorkerRequest request;
+      request.mode = fractalMode;
+      request.zoom = clamp(fractalZoom, 0.f, kNautiloidMaxFractalZoom);
+      request.centerX = clampDouble(fractalCenterX, -2.0, 2.0);
+      request.centerY = clampDouble(fractalCenterY, -2.0, 2.0);
+      request.cacheCenterX = request.centerX;
+      request.cacheCenterY = request.centerY;
+      request.zoomInteractionActive = false;
+      {
+        std::lock_guard<std::mutex> lock(workerMutex);
+        request.serial = ++nextRequestSerial;
+      }
+      submitIrisRequest(request);
+      lastExpanderGenerationSentRight = uint64_t(-1);
+    }
+  } else if (irisConnected && generation != 0u) {
     if (generation != lastExpanderGenerationSentRight) {
-      std::shared_ptr<const iris::SourceField> source = irisExpanderSourceSnapshot(nullptr);
-      if (source) {
+      const nautiloid_iris_expander::SourceSlot* slot = irisExpanderSourceSlotSnapshot(nullptr);
+      if (slot) {
         if (Iris* irisModule = dynamic_cast<Iris*>(right)) {
-          irisModule->requestExpanderSource(source, generation);
+          irisModule->requestExpanderSource(slot, generation);
           lastExpanderGenerationSentRight = generation;
           irisExpanderPublishes.fetch_add(1u, std::memory_order_relaxed);
         }
@@ -691,7 +707,7 @@ void Nautiloid::dataFromJson(json_t* root) {
   debugFileLoggingEnabled.store(
     jsonBoolOr(root, "debugFileLoggingEnabled", false), std::memory_order_relaxed);
   debugGpuPreviewEnabled.store(
-    jsonBoolOr(root, "debugGpuPreviewEnabled", false), std::memory_order_relaxed);
+    jsonBoolOr(root, "debugGpuPreviewEnabled", true), std::memory_order_relaxed);
   debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
   showMandelbrotEyeMarker.store(false, std::memory_order_relaxed);
   requestRender();
@@ -781,11 +797,14 @@ void Nautiloid::irisPreviewSnapshot(std::vector<uint8_t>* rgb, int* width, int* 
   }
 }
 
-std::shared_ptr<const iris::SourceField> Nautiloid::irisExpanderSourceSnapshot(uint64_t* generation) const {
-  if (generation) {
-    *generation = irisPreviewGeneration.load(std::memory_order_acquire);
-  }
-  return std::atomic_load_explicit(&irisExpanderSource, std::memory_order_acquire);
+const nautiloid_iris_expander::SourceSlot* Nautiloid::irisExpanderSourceSlotSnapshot(uint64_t* generation) const {
+  const uint64_t gen = irisPreviewGeneration.load(std::memory_order_acquire);
+  if (generation) *generation = gen;
+  if (gen == 0u) return nullptr;
+  const int slotIndex = irisExpanderPublishedSlot.load(std::memory_order_acquire);
+  if (slotIndex < 0 || slotIndex >= nautiloid_iris_expander::kSourceSlotCount) return nullptr;
+  const nautiloid_iris_expander::SourceSlot& slot = irisExpanderSlots[size_t(slotIndex)];
+  return slot.generation.load(std::memory_order_acquire) == gen ? &slot : nullptr;
 }
 
 void Nautiloid::displayTileCacheSnapshot(DisplayTileCacheSnapshot* snapshot) const {
@@ -1649,10 +1668,56 @@ void Nautiloid::irisWorkerLoop() {
         std::fabs(irisCompatibleCenterY - request.centerY) <= 1e-12;
     }
     if (irisCompatibleCurrent) {
+      if (irisExpanderSourceSlotSnapshot(nullptr)) {
+        continue;
+      }
+      iris::SourceField cachedSource;
+      {
+        std::lock_guard<std::mutex> lock(snapshotMutex);
+        cachedSource = irisCompatibleSource;
+      }
+      if (!cachedSource.valid()) {
+        continue;
+      }
+      const int publishedSlot = irisExpanderPublishedSlot.load(std::memory_order_acquire);
+      int slotIndex = -1;
+      for (int offset = 1; offset <= nautiloid_iris_expander::kSourceSlotCount; ++offset) {
+        const int candidate = (irisExpanderWriteSlot + offset) % nautiloid_iris_expander::kSourceSlotCount;
+        if (candidate == publishedSlot) continue;
+        if (irisExpanderSlots[size_t(candidate)].readers.load(std::memory_order_acquire) == 0u) {
+          slotIndex = candidate;
+          break;
+        }
+      }
+      if (slotIndex < 0) {
+        irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
+        continue;
+      }
+      nautiloid_iris_expander::SourceSlot& slot = irisExpanderSlots[size_t(slotIndex)];
+      slot.source = std::move(cachedSource);
+      slot.generation.store(request.serial, std::memory_order_release);
+      irisExpanderWriteSlot = slotIndex;
+      irisExpanderPublishedSlot.store(slotIndex, std::memory_order_release);
+      irisPreviewGeneration.store(request.serial, std::memory_order_release);
       continue;
     }
 
-    iris::SourceField nextIrisSource;
+    const int publishedSlot = irisExpanderPublishedSlot.load(std::memory_order_acquire);
+    int slotIndex = -1;
+    for (int offset = 1; offset <= nautiloid_iris_expander::kSourceSlotCount; ++offset) {
+      const int candidate = (irisExpanderWriteSlot + offset) % nautiloid_iris_expander::kSourceSlotCount;
+      if (candidate == publishedSlot) continue;
+      if (irisExpanderSlots[size_t(candidate)].readers.load(std::memory_order_acquire) == 0u) {
+        slotIndex = candidate;
+        break;
+      }
+    }
+    if (slotIndex < 0) {
+      irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
+      continue;
+    }
+
+    nautiloid_iris_expander::SourceSlot& slot = irisExpanderSlots[size_t(slotIndex)];
     std::string irisError;
     iris::NautiloidFractalSourceParams sourceParams;
     sourceParams.mode = request.mode;
@@ -1660,22 +1725,22 @@ void Nautiloid::irisWorkerLoop() {
     sourceParams.centerX = request.centerX;
     sourceParams.centerY = request.centerY;
     sourceParams.generation = request.serial;
-    const bool irisOk = iris::makeNautiloidIrisSource(sourceParams, &nextIrisSource, &irisError);
+    const bool irisOk = iris::makeNautiloidIrisSource(sourceParams, &slot.source, &irisError);
     if (!irisOk) {
       continue;
     }
 
-    std::shared_ptr<const iris::SourceField> nextSharedSource =
-      std::make_shared<const iris::SourceField>(nextIrisSource);
+    slot.generation.store(request.serial, std::memory_order_release);
     std::lock_guard<std::mutex> lock(snapshotMutex);
-    irisCompatibleSource = std::move(nextIrisSource);
-    std::atomic_store_explicit(&irisExpanderSource, nextSharedSource, std::memory_order_release);
+    irisCompatibleSource = slot.source;
     irisCompatibleSerial = request.serial;
     irisCompatibleMode = request.mode;
     irisCompatibleZoom = request.zoom;
     irisCompatibleCenterX = request.centerX;
     irisCompatibleCenterY = request.centerY;
-    irisPreviewGeneration.fetch_add(1u, std::memory_order_release);
+    irisExpanderWriteSlot = slotIndex;
+    irisExpanderPublishedSlot.store(slotIndex, std::memory_order_release);
+    irisPreviewGeneration.store(request.serial, std::memory_order_release);
     irisRendersCompleted.fetch_add(1u, std::memory_order_relaxed);
   }
 }

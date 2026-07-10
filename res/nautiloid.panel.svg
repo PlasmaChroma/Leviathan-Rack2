@@ -11,7 +11,7 @@
     <circle id="SOURCE_MENU_PARAM" cx="780" cy="7540" fill="#ff0000" r="360" />
     <circle id="RESET_VIEW_PARAM" cx="1920" cy="7540" fill="#ff0000" r="360" />
     <ellipse id="ZOOM_RATE_INPUT" cx="780" cy="9246.043" rx="398" ry="405" fill="#00ff00" />
-    <circle id="IRIS_EXPANDER_LIGHT" cx="9840" cy="8840" fill="#ff0000" r="180" />
+    <circle id="IRIS_EXPANDER_LIGHT" cx="9840" cy="580" fill="#ff0000" r="180" />
     <rect id="TILE_CACHE" x="200" y="10200" width="4200" height="2590" fill="#ff0000" />
     <rect id="IRIS_PREVIEW" x="4740" y="10200" width="5236" height="2590" fill="#ff0000" />
     <rect id="DEBUG_COUNTERS" x="4800" y="9380" width="5050" height="1080" fill="#ff0000" />

@@ -104,7 +104,7 @@
     <circle
        id="IRIS_EXPANDER_LIGHT"
        cx="9840"
-       cy="8840"
+       cy="580"
        fill="#ff0000"
        r="180" />
     <rect
