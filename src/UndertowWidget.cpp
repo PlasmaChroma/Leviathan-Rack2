@@ -259,9 +259,9 @@ struct UndertowWidget final : ModuleWidget {
   explicit UndertowWidget(Undertow* module) {
     setModule(module);
     PreviewBuildLogTimer previewBuildTimer("Undertow", module);
-    const std::string panelPath = asset::plugin(pluginInstance, "res/undertow.panel.svg");
-    setPanel(createPanel(panelPath));
-    addChild(visual_assets::createPanelSurfaceEffectWidget(panelPath, box.size));
+    visual_assets::SplitPanelRenderer splitPanel(this, "res/undertow.panel.svg");
+    const std::string& panelPath = splitPanel.panelPath();
+    splitPanel.addLabels("res/undertow.labels.svg");
     addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
     previewBuildTimer.markPanelDone();
@@ -352,8 +352,6 @@ struct UndertowWidget final : ModuleWidget {
 
     addTinyLight(Undertow::SYNC_LIGHT, "SYNC_LIGHT", Vec(14.456f, 42.500f), nvgRGB(255, 235, 120));
     addTinyLight(Undertow::S_GATE_LIGHT, "S_GATE_LIGHT", Vec(36.089f, 42.817f), nvgRGB(255, 235, 120));
-
-    addChild(visual_assets::createPanelLabelsWidget("res/undertow.labels.svg", box.size));
 
     previewBuildTimer.markAnchorsDone();
   }

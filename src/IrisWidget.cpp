@@ -815,10 +815,9 @@ struct IrisWidget final : ModuleWidget {
 
   explicit IrisWidget(Iris* module) {
     setModule(module);
-    const std::string panelPath = asset::plugin(pluginInstance, "res/iris.panel.svg");
-    setPanel(createPanel(panelPath));
-    addChild(visual_assets::createPanelSurfaceEffectWidget(panelPath, box.size));
-    addChild(visual_assets::createPanelLabelsWidget("res/iris.labels.svg", box.size));
+    visual_assets::SplitPanelRenderer splitPanel(this, "res/iris.panel.svg");
+    const std::string& panelPath = splitPanel.panelPath();
+    splitPanel.addLabels("res/iris.labels.svg");
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(0.f, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));

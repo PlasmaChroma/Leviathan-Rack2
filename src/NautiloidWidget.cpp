@@ -480,6 +480,44 @@ struct NautiloidDisplay final : OpaqueWidget {
 
   explicit NautiloidDisplay(Nautiloid* module) : module(module) {}
 
+  bool applyWheelZoom(const event::HoverScroll& e) {
+    if (!module || box.size.x <= 1.f || box.size.y <= 1.f) {
+      return false;
+    }
+
+    const float wheel = -e.scrollDelta.y;
+    if (std::fabs(wheel) < 1e-4f) {
+      return false;
+    }
+
+    const float previousZoom = clamp(module->fractalZoom, 0.f, kNautiloidMaxFractalZoom);
+    const float nextZoom = clamp(previousZoom + clamp(wheel, -4.f, 4.f) * 0.18f,
+      0.f, kNautiloidMaxFractalZoom);
+    if (std::fabs(nextZoom - previousZoom) < 1e-5f) {
+      return true;
+    }
+
+    // Preserve the fractal coordinate under the cursor while changing scale.
+    const Vec cursorNorm(
+      (e.pos.x / box.size.x - 0.5f) * 2.f,
+      (e.pos.y / box.size.y - 0.5f) * 2.f);
+    const Vec previousHalfSpan = nautiloidFractalViewportHalfSpan(module->fractalMode).mult(
+      std::pow(0.05f, previousZoom));
+    const Vec nextHalfSpan = nautiloidFractalViewportHalfSpan(module->fractalMode).mult(
+      std::pow(0.05f, nextZoom));
+    const double focusX = module->fractalCenterX + double(cursorNorm.x * previousHalfSpan.x);
+    const double focusY = module->fractalCenterY + double(cursorNorm.y * previousHalfSpan.y);
+
+    module->fractalZoom = nextZoom;
+    module->fractalCenterX = nautiloidClampDouble(focusX - double(cursorNorm.x * nextHalfSpan.x), -2.0, 2.0);
+    module->fractalCenterY = nautiloidClampDouble(focusY - double(cursorNorm.y * nextHalfSpan.y), -2.0, 2.0);
+
+    const bool recenterCache = nextZoom < previousZoom && nautiloidVisibleViewOutgrowsCache(module, 0.78f);
+    module->requestInteractiveZoomPreview(module->fractalCenterX, module->fractalCenterY, recenterCache);
+    module->requestRenderWithCacheCenter(module->fractalCenterX, module->fractalCenterY, recenterCache);
+    return true;
+  }
+
   ~NautiloidDisplay() override {
     if (APP && APP->window && APP->window->vg) {
       nvg_gfx_lifecycle::resetOwnedNvgImage(
@@ -508,6 +546,19 @@ struct NautiloidDisplay final : OpaqueWidget {
       panActive = false;
     }
     OpaqueWidget::onButton(e);
+  }
+
+  void onHoverScroll(const event::HoverScroll& e) override {
+    const int mods = (APP && APP->window) ? APP->window->getMods() : 0;
+    if ((mods & RACK_MOD_CTRL) != 0) {
+      Widget::onHoverScroll(e);
+      return;
+    }
+    if (applyWheelZoom(e)) {
+      e.consume(this);
+      return;
+    }
+    Widget::onHoverScroll(e);
   }
 
   void onDragStart(const event::DragStart& e) override {
@@ -1289,9 +1340,9 @@ struct NautiloidZoomReadout final : TransparentWidget {
 struct NautiloidWidget final : ModuleWidget {
   explicit NautiloidWidget(Nautiloid* module) {
     setModule(module);
-    const std::string panelPath = asset::plugin(pluginInstance, "res/nautiloid.panel.svg");
-    setPanel(createPanel(panelPath));
-    addChild(visual_assets::createPanelSurfaceEffectWidget(panelPath, box.size));
+    visual_assets::SplitPanelRenderer splitPanel(this, "res/nautiloid.panel.svg");
+    const std::string& panelPath = splitPanel.panelPath();
+    splitPanel.addLabels("res/nautiloid.labels.svg");
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
@@ -1376,7 +1427,6 @@ struct NautiloidWidget final : ModuleWidget {
     counters->box.size = mm2px(countersRectMm.size);
     addChild(counters);
 
-    addChild(visual_assets::createPanelLabelsWidget("res/nautiloid.labels.svg", box.size));
   }
 
   void appendContextMenu(Menu* menu) override {

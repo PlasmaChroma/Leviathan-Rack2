@@ -1641,10 +1641,9 @@ struct IntegralFluxWidget : ModuleWidget {
 	IntegralFluxWidget(IntegralFlux* module) {
 		setModule(module);
 		PreviewBuildLogTimer previewBuildTimer("IntegralFlux", module);
-		const std::string panelBasePath = asset::plugin(pluginInstance, "res/flux.panel.svg");
-		setPanel(createPanel(panelBasePath));
-		addChild(visual_assets::createPanelSurfaceEffectWidget(panelBasePath, box.size));
-		addChild(visual_assets::createPanelLabelsWidget("res/flux.labels.svg", box.size));
+		visual_assets::SplitPanelRenderer splitPanel(this, "res/flux.panel.svg");
+		const std::string& panelBasePath = splitPanel.panelPath();
+		splitPanel.addLabels("res/flux.labels.svg");
 		{
 			math::Rect dragonRectMm;
 			if (!panel_svg::loadRectFromSvgMm(panelBasePath, "DRAGON_RENDER_AREA", &dragonRectMm)) {

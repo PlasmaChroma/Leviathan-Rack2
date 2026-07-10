@@ -23,6 +23,18 @@ Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, PreviewFrameTint 
 Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, NVGcolor highlightColor);
 Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSizePx);
 Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float oversample = 2.0f);
+
+// Installs the standard static layers for modules with split panel and label SVGs.
+class SplitPanelRenderer final {
+	ModuleWidget* parent_ = nullptr;
+	std::string panelPath_;
+
+public:
+	SplitPanelRenderer(ModuleWidget* parent, const char* panelAssetPath);
+	const std::string& panelPath() const;
+	void addLabels(const char* labelsAssetPath) const;
+};
+
 bool isPanelGlassColorCycleEnabled();
 void togglePanelGlassColorCycle();
 float panelGlassTintAmount();

@@ -1508,7 +1508,8 @@ struct CachedPanelLabelsWidget final : Widget {
 
 		widget::SvgWidget* labels = new widget::SvgWidget();
 		labels->setSvg(loadPluginSvgCached(svgPath));
-		fb->box.size = labels->box.size;
+		labels->box.size = panelSizePx;
+		fb->box.size = panelSizePx;
 		fb->addChild(labels);
 		addChild(fb);
 	}
@@ -1529,6 +1530,27 @@ struct CachedPanelLabelsWidget final : Widget {
 Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float oversample) {
 	(void) oversample;
 	return new CachedPanelLabelsWidget(svgPath, panelSizePx);
+}
+
+SplitPanelRenderer::SplitPanelRenderer(ModuleWidget* parent, const char* panelAssetPath)
+	: parent_(parent) {
+	if (!parent_ || !panelAssetPath || panelAssetPath[0] == '\0') {
+		return;
+	}
+	panelPath_ = asset::plugin(pluginInstance, panelAssetPath);
+	parent_->setPanel(createPanel(panelPath_));
+	parent_->addChild(createPanelSurfaceEffectWidget(panelPath_, parent_->box.size));
+}
+
+const std::string& SplitPanelRenderer::panelPath() const {
+	return panelPath_;
+}
+
+void SplitPanelRenderer::addLabels(const char* labelsAssetPath) const {
+	if (!parent_ || !labelsAssetPath || labelsAssetPath[0] == '\0') {
+		return;
+	}
+	parent_->addChild(createPanelLabelsWidget(labelsAssetPath, parent_->box.size));
 }
 
 int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const std::string& idSubstring) {

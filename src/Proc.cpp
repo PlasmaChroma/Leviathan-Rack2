@@ -1769,10 +1769,9 @@ struct ProcWidget : ModuleWidget {
 	ProcWidget(Proc* module) {
 		setModule(module);
 		PreviewBuildLogTimer previewBuildTimer("Proc", module);
-		const std::string panelBasePath = asset::plugin(pluginInstance, "res/proc.panel.svg");
-		setPanel(createPanel(panelBasePath));
-		addChild(visual_assets::createPanelSurfaceEffectWidget(panelBasePath, box.size));
-		addChild(visual_assets::createPanelLabelsWidget("res/proc.labels.svg", box.size));
+		visual_assets::SplitPanelRenderer splitPanel(this, "res/proc.panel.svg");
+		const std::string& panelBasePath = splitPanel.panelPath();
+		splitPanel.addLabels("res/proc.labels.svg");
 		previewBuildTimer.markPanelDone();
 
 		addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0)));

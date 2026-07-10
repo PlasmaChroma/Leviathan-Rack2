@@ -777,12 +777,10 @@ struct BifurxWidget final : ModuleWidget {
 	explicit BifurxWidget(Bifurx* module) {
 		setModule(module);
 		PreviewBuildLogTimer previewBuildTimer("Bifurx", module);
-		const std::string panelPath = asset::plugin(pluginInstance, "res/bifurx.panel.svg");
-		try { setPanel(createPanel(panelPath)); }
-		catch (const std::exception& e) { setPanel(createPanel(asset::plugin(pluginInstance, "res/proc.svg"))); box.size = mm2px(Vec(kDefaultPanelWidthMm, kDefaultPanelHeightMm)); }
+		visual_assets::SplitPanelRenderer splitPanel(this, "res/bifurx.panel.svg");
+		const std::string& panelPath = splitPanel.panelPath();
 		previewBuildTimer.markPanelDone();
-		addChild(visual_assets::createPanelSurfaceEffectWidget(panelPath, box.size));
-		addChild(visual_assets::createPanelLabelsWidget("res/bifurx.labels.svg", box.size));
+		splitPanel.addLabels("res/bifurx.labels.svg");
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0))); addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH))); addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		auto applyPt = [&](const char* id, Vec* pos) { Vec p; if (panel_svg::loadPointFromSvgMm(panelPath, id, &p)) *pos = p; };

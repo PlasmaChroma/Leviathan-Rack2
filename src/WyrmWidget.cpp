@@ -246,10 +246,9 @@ struct WyrmWidget : ModuleWidget {
 	explicit WyrmWidget(Wyrm* module) {
 		setModule(module);
 		PreviewBuildLogTimer previewBuildTimer("Wyrm", module);
-		const std::string panelPath = asset::plugin(pluginInstance, "res/wyrm.panel.svg");
-		setPanel(createPanel(panelPath));
-		addChild(visual_assets::createPanelSurfaceEffectWidget(panelPath, box.size));
-		addChild(visual_assets::createPanelLabelsWidget("res/wyrm.labels.svg", box.size));
+		visual_assets::SplitPanelRenderer splitPanel(this, "res/wyrm.panel.svg");
+		const std::string& panelPath = splitPanel.panelPath();
+		splitPanel.addLabels("res/wyrm.labels.svg");
 		previewBuildTimer.markPanelDone();
 		try {
 			ageSigilSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/Vahdrim'Keth.svg"));
