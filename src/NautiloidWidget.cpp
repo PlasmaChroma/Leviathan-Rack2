@@ -929,11 +929,17 @@ struct NautiloidDebugCounters final : TransparentWidget {
   }
 };
 
+struct NautiloidZoomHandleLight final : VCVSliderLight<LeviathanCyanPurpleLight> {
+  void step() override {
+    widget::TransparentWidget::step();
+  }
+};
+
 struct NautiloidZoomSlider final : ui::Slider {
   Nautiloid* module = nullptr;
   NautiloidZoomSpeedQuantity* zoomSpeed = nullptr;
   widget::FramebufferWidget* framebuffer = nullptr;
-  VCVSliderLight<LeviathanCyanPurpleLight>* handleLight = nullptr;
+  NautiloidZoomHandleLight* handleLight = nullptr;
   std::shared_ptr<window::Svg> handleSvg;
   bool zoomActive = false;
   double lastStepTime = -INFINITY;
@@ -946,7 +952,7 @@ struct NautiloidZoomSlider final : ui::Slider {
 
   NautiloidZoomSlider() {
     handleSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/LeviathanSliderHandle.svg"));
-    handleLight = new VCVSliderLight<LeviathanCyanPurpleLight>;
+    handleLight = new NautiloidZoomHandleLight;
     addChild(handleLight);
   }
 
