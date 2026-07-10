@@ -1025,22 +1025,25 @@ struct NautiloidZoomSlider final : ui::Slider {
       : (zoomSpeed ? clamp(zoomSpeed->getValue(), 0.f, 1.f) : 0.5f);
     const float zoomAmount =
       module ? clamp(module->fractalZoom / kNautiloidMaxFractalZoom, 0.f, 1.f) : 0.f;
-    const float centerX = 0.5f * box.size.x;
-    const float handleX = value * box.size.x;
-    const float trackH = std::max(3.f, std::min(8.f, box.size.y * 0.34f));
-    const float progressH = std::max(2.f, std::min(4.f, box.size.y * 0.18f));
-    const float gap = std::max(2.f, box.size.y * 0.14f);
+    const float insetX = std::max(4.f, box.size.y * 0.32f);
+    const float insetY = std::max(2.f, box.size.y * 0.12f);
+    const float contentW = std::max(1.f, box.size.x - 2.f * insetX);
+    const float centerX = insetX + 0.5f * contentW;
+    const float handleX = insetX + value * contentW;
+    const float trackH = std::max(4.f, std::min(8.f, box.size.y * 0.32f));
+    const float progressH = std::max(4.f, std::min(7.f, box.size.y * 0.28f));
+    const float gap = std::max(2.f, box.size.y * 0.12f);
     const float contentH = trackH + gap + progressH;
-    const float trackY = std::max(0.f, 0.5f * (box.size.y - contentH));
+    const float trackY = std::max(insetY, 0.5f * (box.size.y - contentH));
     const float progressY = trackY + trackH + gap;
     const float progressRadius = 0.5f * progressH;
 
     nvgBeginPath(args.vg);
-    nvgRect(args.vg, 0.f, trackY, box.size.x, trackH);
+    nvgRoundedRect(args.vg, insetX, trackY, contentW, trackH, 1.5f);
     nvgFillColor(args.vg, nvgRGB(12, 16, 22));
     nvgFill(args.vg);
     nvgStrokeWidth(args.vg, 1.f);
-    nvgStrokeColor(args.vg, nvgRGBA(160, 170, 188, 72));
+    nvgStrokeColor(args.vg, nvgRGBA(174, 132, 255, 96));
     nvgStroke(args.vg);
 
     const float fillLeft = std::min(centerX, handleX);
@@ -1050,7 +1053,7 @@ struct NautiloidZoomSlider final : ui::Slider {
       nvgSave(args.vg);
       nvgIntersectScissor(args.vg, fillLeft, trackY - 1.f, fillW, trackH + 2.f);
       nvgBeginPath(args.vg);
-      nvgRect(args.vg, fillLeft, trackY, fillW, trackH);
+      nvgRoundedRect(args.vg, insetX, trackY, contentW, trackH, 1.5f);
       const NVGcolor centerColor = nvgRGB(226, 232, 240);
       const NVGcolor edgeColor = zoomIn ? nvgRGB(28, 204, 217) : nvgRGB(122, 92, 255);
       NVGpaint speedPaint = nvgLinearGradient(args.vg, centerX, trackY, handleX, trackY, centerColor, edgeColor);
@@ -1063,7 +1066,7 @@ struct NautiloidZoomSlider final : ui::Slider {
     nvgMoveTo(args.vg, centerX, trackY - 3.f);
     nvgLineTo(args.vg, centerX, trackY + trackH + 3.f);
     nvgStrokeWidth(args.vg, 1.25f);
-    nvgStrokeColor(args.vg, nvgRGBA(232, 238, 246, 118));
+    nvgStrokeColor(args.vg, nvgRGBA(216, 194, 255, 132));
     nvgStroke(args.vg);
 
     const float handleW = std::max(8.f, box.size.y * 0.42f);
@@ -1072,7 +1075,13 @@ struct NautiloidZoomSlider final : ui::Slider {
     const float handleY =
       clamp(trackY + 0.5f * (trackH - handleH), 0.f, std::max(0.f, progressY - handleH - 1.f));
     nvgBeginPath(args.vg);
-    nvgRoundedRect(args.vg, handleX - 0.5f * handleW, handleY, handleW, handleH, 3.f);
+    nvgRoundedRect(
+      args.vg,
+      clamp(handleX - 0.5f * handleW, 1.f, std::max(1.f, box.size.x - handleW - 1.f)),
+      handleY,
+      handleW,
+      handleH,
+      3.f);
     nvgFillColor(args.vg, nvgRGB(226, 232, 240));
     nvgFill(args.vg);
     nvgStrokeWidth(args.vg, 1.f);
@@ -1080,21 +1089,21 @@ struct NautiloidZoomSlider final : ui::Slider {
     nvgStroke(args.vg);
 
     nvgBeginPath(args.vg);
-    nvgRoundedRect(args.vg, 0.f, progressY, box.size.x, progressH, progressRadius);
+    nvgRoundedRect(args.vg, insetX, progressY, contentW, progressH, progressRadius);
     nvgFillColor(args.vg, nvgRGB(8, 11, 16));
     nvgFill(args.vg);
     nvgStrokeWidth(args.vg, 1.f);
-    nvgStrokeColor(args.vg, nvgRGBA(160, 170, 188, 58));
+    nvgStrokeColor(args.vg, nvgRGBA(174, 132, 255, 88));
     nvgStroke(args.vg);
 
-    const float progressW = zoomAmount * box.size.x;
+    const float progressW = zoomAmount * contentW;
     if (progressW > 0.5f) {
       nvgSave(args.vg);
-      nvgIntersectScissor(args.vg, 0.f, progressY - 1.f, progressW, progressH + 2.f);
+      nvgIntersectScissor(args.vg, insetX, progressY - 1.f, progressW, progressH + 2.f);
       nvgBeginPath(args.vg);
-      nvgRoundedRect(args.vg, 0.f, progressY, box.size.x, progressH, progressRadius);
+      nvgRoundedRect(args.vg, insetX, progressY, contentW, progressH, progressRadius);
       NVGpaint progressPaint = nvgLinearGradient(
-        args.vg, 0.f, progressY, box.size.x, progressY, nvgRGB(122, 92, 255), nvgRGB(28, 204, 217));
+        args.vg, insetX, progressY, insetX + contentW, progressY, nvgRGB(122, 92, 255), nvgRGB(28, 204, 217));
       nvgFillPaint(args.vg, progressPaint);
       nvgFill(args.vg);
       nvgRestore(args.vg);
@@ -1186,14 +1195,19 @@ struct NautiloidResetButton final : TL1105 {
 
     const float tipX = cx + std::cos(endA) * r;
     const float tipY = cy + std::sin(endA) * r;
-    const float tangentA = endA + 0.5f * float(M_PI);
+    const float tangentA = endA - 0.5f * float(M_PI);
     const float headLen = std::max(2.f, 0.18f * std::min(box.size.x, box.size.y));
-    const float spread = 0.78f;
+    const float leftSpread = 0.78f;
+    const float rightSpread = 1.08f;
     nvgBeginPath(args.vg);
     nvgMoveTo(args.vg, tipX, tipY);
-    nvgLineTo(args.vg, tipX + std::cos(tangentA - spread) * headLen, tipY + std::sin(tangentA - spread) * headLen);
+    nvgLineTo(args.vg,
+      tipX + std::cos(tangentA - leftSpread) * headLen,
+      tipY + std::sin(tangentA - leftSpread) * headLen);
     nvgMoveTo(args.vg, tipX, tipY);
-    nvgLineTo(args.vg, tipX + std::cos(tangentA + spread) * headLen, tipY + std::sin(tangentA + spread) * headLen);
+    nvgLineTo(args.vg,
+      tipX + std::cos(tangentA + rightSpread) * headLen,
+      tipY + std::sin(tangentA + rightSpread) * headLen);
     nvgStrokeWidth(args.vg, 1.25f);
     nvgStrokeColor(args.vg, nvgRGBA(225, 232, 240, 244));
     nvgStroke(args.vg);
@@ -1209,7 +1223,11 @@ struct NautiloidZoomReadout final : TransparentWidget {
   void draw(const DrawArgs& args) override {
     if (!module) return;
     const float pct = 100.f * clamp(module->fractalZoom / kNautiloidMaxFractalZoom, 0.f, 1.f);
-    const std::string text = string::f("Zoom: %.2f%%", pct);
+    const std::string text = string::f(
+      "X: %.3f Y: %.3f Zoom: %.2f%%",
+      module->fractalCenterX,
+      module->fractalCenterY,
+      pct);
 
     nvgFontSize(args.vg, LABEL_FONT_SIZE);
     nvgFontFaceId(args.vg, APP->window->uiFont->handle);
@@ -1228,6 +1246,11 @@ struct NautiloidWidget final : ModuleWidget {
     const std::string panelPath = asset::plugin(pluginInstance, "res/nautiloid.panel.svg");
     setPanel(createPanel(panelPath));
     addChild(visual_assets::createPanelSurfaceEffectWidget(panelPath, box.size));
+    addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
+    addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0.f)));
+    addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+    addChild(createWidget<CyanOrbScrew>(
+      Vec(box.size.x - 2.f * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
     auto rectMm = [&](const char* id, math::Rect fallback) {
       math::Rect rect = fallback;
@@ -1242,7 +1265,7 @@ struct NautiloidWidget final : ModuleWidget {
 
     const math::Rect displayRectMm = rectMm("DISPLAY", math::Rect(Vec(1.8f, 6.5f), Vec(98.f, 65.27f)));
     addChild(visual_assets::createPreviewFrameEnhancementWidget(
-      displayRectMm, visual_assets::PreviewFrameTint::Purple));
+      displayRectMm, visual_assets::PreviewFrameTint::Cyan));
     NautiloidGlPreview* glPreview = new NautiloidGlPreview(module);
     glPreview->box.pos = mm2px(displayRectMm.pos.plus(Vec(0.4f, 0.4f)));
     glPreview->box.size = mm2px(displayRectMm.size.minus(Vec(0.8f, 0.8f)));
@@ -1258,14 +1281,16 @@ struct NautiloidWidget final : ModuleWidget {
     addChild(displayFb);
 
     NautiloidZoomReadout* zoomReadout = new NautiloidZoomReadout(module);
-    const math::Rect zoomReadoutRectMm = rectMm("ZOOM_READOUT", math::Rect(Vec(34.f, 72.2f), Vec(33.6f, 5.2f)));
+    const math::Rect zoomReadoutRectMm = rectMm("ZOOM_READOUT", math::Rect(Vec(24.f, 72.2f), Vec(60.f, 5.2f)));
     zoomReadout->box.pos = mm2px(zoomReadoutRectMm.pos);
     zoomReadout->box.size = mm2px(zoomReadoutRectMm.size);
     addChild(zoomReadout);
 
+    const math::Rect zoomBarRectMm = rectMm("ZOOM_BAR", math::Rect(Vec(5.f, 79.f), Vec(91.6f, 9.f)));
+    addChild(visual_assets::createPreviewFrameEnhancementWidget(
+      zoomBarRectMm, visual_assets::PreviewFrameTint::Purple));
     NautiloidZoomSlider* zoomSlider = new NautiloidZoomSlider();
     zoomSlider->module = module;
-    const math::Rect zoomBarRectMm = rectMm("ZOOM_BAR", math::Rect(Vec(5.f, 79.f), Vec(91.6f, 9.f)));
     zoomSlider->box.pos = mm2px(zoomBarRectMm.pos);
     zoomSlider->box.size = mm2px(zoomBarRectMm.size);
     NautiloidZoomSpeedQuantity* zoomSpeed = new NautiloidZoomSpeedQuantity();

@@ -644,14 +644,16 @@ void Nautiloid::process(const ProcessArgs& args) {
   const uint64_t generation = irisPreviewGeneration.load(std::memory_order_acquire);
   Module* right = rightExpander.module;
   const bool irisConnected = isIrisModule(right) && right->leftExpander.module == this;
-  const bool irisJustAttached =
-    rightIrisConnectionObserved && !rightIrisWasConnected && irisConnected;
-  const bool forceIrisSync = forceIrisSourceSync.load(std::memory_order_acquire);
   Iris* rightIris = irisConnected ? dynamic_cast<Iris*>(right) : nullptr;
+  const bool irisJustAttached =
+    rightIrisConnectionObserved && irisConnected &&
+    (!rightIrisWasConnected || right != lastRightIrisModule);
   const bool restoredImageMode = irisJustAttached && rightIris && rightIris->consumeRestoredImageSourceMode();
   if (irisJustAttached && !restoredImageMode) {
+    lastExpanderGenerationSentRight = 0u;
     forceIrisSourceSync.store(true, std::memory_order_release);
   }
+  const bool forceIrisSync = forceIrisSourceSync.load(std::memory_order_acquire);
   const int rightIrisSourceKind = rightIris ? rightIris->sourceKind() : iris::SOURCE_IMAGE;
   const bool rightIrisUsingNautiloid =
     rightIrisSourceKind == iris::SOURCE_EXPANDER_IMAGE ||
@@ -700,6 +702,7 @@ void Nautiloid::process(const ProcessArgs& args) {
   lights[IRIS_READY_LIGHT].setBrightness(irisReady ? 1.f : 0.f);
   rightIrisConnectionObserved = true;
   rightIrisWasConnected = irisConnected;
+  lastRightIrisModule = irisConnected ? right : nullptr;
 }
 
 json_t* Nautiloid::dataToJson() {

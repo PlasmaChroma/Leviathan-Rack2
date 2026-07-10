@@ -47,15 +47,15 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="1.710733"
-     inkscape:cx="332.89824"
-     inkscape:cy="187.93114"
+     inkscape:zoom="3.421466"
+     inkscape:cx="212.92043"
+     inkscape:cy="275.75899"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="labels"
+     inkscape:current-layer="svg8"
      showgrid="false" />
   <rect
      width="10160"
@@ -71,10 +71,11 @@
      fill="#030507"
      stroke="#5841bf"
      stroke-width="46"
-     id="rect3" />
+     id="rect3"
+     style="stroke:#1cccd9;stroke-opacity:1" />
   <rect
      x="501.86398"
-     y="8251.8643"
+     y="8371.8643"
      width="9156.2725"
      height="862.27203"
      rx="79.967445"
@@ -82,7 +83,8 @@
      stroke="#1cccd9"
      stroke-width="37.728"
      opacity="0.72"
-     id="rect4" />
+     id="rect4"
+     style="display:none;fill:none;stroke:#5841bf;stroke-opacity:1" />
   <g
      id="components"
      style="display:none;opacity:0.5">
@@ -95,15 +97,15 @@
        fill="#ff0000" />
     <rect
        id="ZOOM_READOUT"
-       x="3400"
+       x="2400"
        y="7570"
-       width="3360"
+       width="6000"
        height="520"
        fill="#ff0000" />
     <rect
        id="ZOOM_BAR"
        x="500"
-       y="8250"
+       y="8370"
        width="9160"
        height="900"
        fill="#ff0000" />
@@ -122,7 +124,7 @@
     <ellipse
        id="ZOOM_RATE_INPUT"
        cx="780"
-       cy="9596.043"
+       cy="9756"
        rx="398"
        ry="405"
        fill="#00ff00" />
@@ -161,7 +163,7 @@
      id="labels">
     <text
        x="778.87122"
-       y="10399.978"
+       y="10559.935"
        text-anchor="middle"
        font-family="DejaVu Sans, Arial, sans-serif"
        font-size="260"
@@ -171,7 +173,7 @@
          sodipodi:role="line"
          id="tspan8"
          x="778.87122"
-         y="10399.978">ZOOM CV</tspan></text>
+         y="10559.935">ZOOM CV</tspan></text>
     <text
        id="reworked_module_title_text"
        x="5077.354"

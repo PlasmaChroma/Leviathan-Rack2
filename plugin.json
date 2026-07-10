@@ -82,7 +82,7 @@
         "Visual",
         "Expander"
       ],
-      "hidden": false
+      "hidden": true
     },
     {
       "slug": "Crownstep",

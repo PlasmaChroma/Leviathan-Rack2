@@ -239,6 +239,7 @@ private:
   uint64_t lastExpanderGenerationSentRight = 0u;
   bool rightIrisConnectionObserved = false;
   bool rightIrisWasConnected = false;
+  Module* lastRightIrisModule = nullptr;
 
   mutable std::mutex cacheDataMutex;
   DisplayTileCache displayTileCache;
