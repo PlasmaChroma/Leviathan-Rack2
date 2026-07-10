@@ -1,19 +1,25 @@
 <?xml version='1.0' encoding='utf-8'?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" width="101.6mm" height="128.5mm" viewBox="0 0 10160 12850" version="1.1" id="svg8" sodipodi:docname="nautiloid.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)">
-  <defs id="defs8" />
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="101.6mm" height="128.5mm" viewBox="0 0 10160 12850" version="1.1" id="svg8" sodipodi:docname="nautiloid.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)">
+  <defs id="defs8">
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient500" gradientUnits="userSpaceOnUse" x1="4981.3486" y1="1475.1766" x2="7254.189" y2="1486.7573" gradientTransform="matrix(0.99690805,0,0,0.99690805,-1018.8781,-888.30724)" />
+    <linearGradient id="linearGradient22" inkscape:collect="always">
+      <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop22" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop23" />
+    </linearGradient>
+  </defs>
   <rect width="10160" height="12850" fill="#07090d" id="rect1" />
-  <rect x="180" y="650" width="9800" height="6527" rx="96" fill="#030507" stroke="#5841bf" stroke-width="46" id="rect3" />
-  <rect x="500" y="7900" width="9160" height="700" rx="80" fill="#111827" stroke="#1cccd9" stroke-width="34" opacity="0.72" id="rect4" />
+  <rect x="180" y="943.29999" width="9800" height="6527" rx="0" fill="#030507" stroke="#5841bf" stroke-width="46" id="rect3" />
+  <rect x="501.86398" y="8251.8643" width="9156.2725" height="862.27203" rx="79.967445" fill="#111827" stroke="#1cccd9" stroke-width="37.728" opacity="0.72" id="rect4" />
   <g id="components" style="display:none;opacity:0.5">
-    <rect id="DISPLAY" x="180" y="650" width="9800" height="6527" fill="#ff0000" />
-    <rect id="ZOOM_READOUT" x="3400" y="7220" width="3360" height="520" fill="#ff0000" />
-    <rect id="ZOOM_BAR" x="500" y="7900" width="9160" height="900" fill="#ff0000" />
-    <circle id="SOURCE_MENU_PARAM" cx="780" cy="7540" fill="#ff0000" r="360" />
-    <circle id="RESET_VIEW_PARAM" cx="1920" cy="7540" fill="#ff0000" r="360" />
-    <ellipse id="ZOOM_RATE_INPUT" cx="780" cy="9246.043" rx="398" ry="405" fill="#00ff00" />
+    <rect id="DISPLAY" x="180" y="943.29999" width="9800" height="6527" fill="#ff0000" />
+    <rect id="ZOOM_READOUT" x="3400" y="7570" width="3360" height="520" fill="#ff0000" />
+    <rect id="ZOOM_BAR" x="500" y="8250" width="9160" height="900" fill="#ff0000" />
+    <circle id="SOURCE_MENU_PARAM" cx="540" cy="7890" fill="#ff0000" r="360" />
+    <circle id="RESET_VIEW_PARAM" cx="1330" cy="7890" fill="#ff0000" r="360" />
+    <ellipse id="ZOOM_RATE_INPUT" cx="780" cy="9596.043" rx="398" ry="405" fill="#00ff00" />
     <circle id="IRIS_EXPANDER_LIGHT" cx="9840" cy="580" fill="#ff0000" r="180" />
-    <rect id="TILE_CACHE" x="200" y="10200" width="4200" height="2590" fill="#ff0000" />
-    <rect id="IRIS_PREVIEW" x="4740" y="10200" width="5236" height="2590" fill="#ff0000" />
-    <rect id="DEBUG_COUNTERS" x="4800" y="9380" width="5050" height="1080" fill="#ff0000" />
+    <rect id="TILE_CACHE" x="200" y="10200" width="4200" height="2590" fill="#ff0000" style="display:none" />
+    <rect id="IRIS_PREVIEW" x="4740" y="10200" width="5236" height="2590" fill="#ff0000" style="display:none" />
+    <rect id="DEBUG_COUNTERS" x="4800" y="9380" width="5050" height="1080" fill="#ff0000" style="display:none" />
   </g>
 </svg>

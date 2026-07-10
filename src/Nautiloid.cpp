@@ -644,9 +644,24 @@ void Nautiloid::process(const ProcessArgs& args) {
   const uint64_t generation = irisPreviewGeneration.load(std::memory_order_acquire);
   Module* right = rightExpander.module;
   const bool irisConnected = isIrisModule(right) && right->leftExpander.module == this;
+  const bool irisJustAttached =
+    rightIrisConnectionObserved && !rightIrisWasConnected && irisConnected;
+  const bool forceIrisSync = forceIrisSourceSync.load(std::memory_order_acquire);
+  Iris* rightIris = irisConnected ? dynamic_cast<Iris*>(right) : nullptr;
+  const bool restoredImageMode = irisJustAttached && rightIris && rightIris->consumeRestoredImageSourceMode();
+  if (irisJustAttached && !restoredImageMode) {
+    forceIrisSourceSync.store(true, std::memory_order_release);
+  }
+  const int rightIrisSourceKind = rightIris ? rightIris->sourceKind() : iris::SOURCE_IMAGE;
+  const bool rightIrisUsingNautiloid =
+    rightIrisSourceKind == iris::SOURCE_EXPANDER_IMAGE ||
+    rightIrisSourceKind == iris::SOURCE_NAUTILOID_FRACTAL;
+  const bool irisAcceptsAutoSync =
+    forceIrisSync ||
+    (irisConnected && (!rightIris || rightIrisSourceKind != iris::SOURCE_IMAGE));
   bool irisReady = false;
 
-  if (irisConnected && generation == 0u) {
+  if (irisConnected && generation == 0u && irisAcceptsAutoSync) {
     if (lastExpanderGenerationSentRight != uint64_t(-1)) {
       WorkerRequest request;
       request.mode = fractalMode;
@@ -666,15 +681,16 @@ void Nautiloid::process(const ProcessArgs& args) {
   } else if (irisConnected && generation != 0u) {
     if (generation != lastExpanderGenerationSentRight) {
       const nautiloid_iris_expander::SourceSlot* slot = irisExpanderSourceSlotSnapshot(nullptr);
-      if (slot) {
+      if (slot && irisAcceptsAutoSync) {
         if (Iris* irisModule = dynamic_cast<Iris*>(right)) {
           irisModule->requestExpanderSource(slot, generation);
           lastExpanderGenerationSentRight = generation;
           irisExpanderPublishes.fetch_add(1u, std::memory_order_relaxed);
+          forceIrisSourceSync.store(false, std::memory_order_release);
         }
       }
     }
-    irisReady = irisConnected && lastExpanderGenerationSentRight == generation;
+    irisReady = irisConnected && rightIrisUsingNautiloid && lastExpanderGenerationSentRight == generation;
   } else {
     lastExpanderGenerationSentRight = 0u;
   }
@@ -682,6 +698,8 @@ void Nautiloid::process(const ProcessArgs& args) {
   lastExpanderGenerationSentLeft = 0u;
   lights[IRIS_LINK_LIGHT].setBrightness(irisConnected && !irisReady ? 1.f : 0.f);
   lights[IRIS_READY_LIGHT].setBrightness(irisReady ? 1.f : 0.f);
+  rightIrisConnectionObserved = true;
+  rightIrisWasConnected = irisConnected;
 }
 
 json_t* Nautiloid::dataToJson() {
@@ -759,6 +777,23 @@ void Nautiloid::requestInteractiveZoomPreview(double cacheCenterX, double cacheC
   submitReprojectionRequest(request);
   submitCacheRequest(request);
   submitIrisRequest(request);
+}
+
+void Nautiloid::requestIrisSourceSync() {
+  forceIrisSourceSync.store(true, std::memory_order_release);
+  const uint64_t generation = irisPreviewGeneration.load(std::memory_order_acquire);
+  const nautiloid_iris_expander::SourceSlot* slot = irisExpanderSourceSlotSnapshot(nullptr);
+  Module* right = rightExpander.module;
+  if (generation != 0u && slot && isIrisModule(right) && right->leftExpander.module == this) {
+    if (Iris* irisModule = dynamic_cast<Iris*>(right)) {
+      irisModule->requestExpanderSource(slot, generation);
+      lastExpanderGenerationSentRight = generation;
+      irisExpanderPublishes.fetch_add(1u, std::memory_order_relaxed);
+      forceIrisSourceSync.store(false, std::memory_order_release);
+      return;
+    }
+  }
+  requestRenderWithCenteredCache();
 }
 
 void Nautiloid::requestRenderWithCenteredCache() {

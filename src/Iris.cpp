@@ -139,6 +139,7 @@ void Iris::submitRequest(const WorkerRequest& request) {
 
 void Iris::requestImageLoad(const std::string& path) {
   if (path.empty()) return;
+  restoredImageSourceMode.store(false, std::memory_order_release);
   WorkerRequest request;
   request.type = REQUEST_IMPORT_IMAGE_FILE;
   request.path = path;
@@ -148,6 +149,7 @@ void Iris::requestImageLoad(const std::string& path) {
 
 void Iris::requestExpanderSource(const nautiloid_iris_expander::SourceSlot* sourceSlot, uint64_t generation) {
   if (!hasLeftNautiloid(this)) return;
+  restoredImageSourceMode.store(false, std::memory_order_release);
   if (!nautiloid_iris_expander::acquireSourceSlot(sourceSlot, generation)) return;
   if (generation == lastExpanderSourceGeneration && sourceSlot == lastExpanderSourceSlotSeen) {
     std::lock_guard<std::mutex> lock(snapshotMutex);
@@ -255,6 +257,7 @@ void Iris::publishWorkerResult(WorkerResult& result, int tableIndex) {
     }
     if (!result.preserveExistingSource) {
       currentSourceKind = result.sourceKind;
+      activeSourceKind.store(currentSourceKind, std::memory_order_release);
     }
     snapshotTable = table;
     buildPreview(snapshotTable, &snapshotPreview);
@@ -531,8 +534,13 @@ void Iris::process(const ProcessArgs& args) {
     lights[IMAGE_CHANNEL_GREEN_LIGHT].setBrightness(imageChannelMode == iris::IMAGE_CHANNEL_GREEN ? 1.f : 0.f);
     lights[IMAGE_CHANNEL_BLUE_LIGHT].setBrightness(imageChannelMode == iris::IMAGE_CHANNEL_BLUE ? 1.f : 0.f);
     const bool nautiloidConnected = hasLeftNautiloid(this);
+    const int sourceKindNow = activeSourceKind.load(std::memory_order_acquire);
+    const bool usingNautiloidSource =
+      sourceKindNow == iris::SOURCE_EXPANDER_IMAGE ||
+      sourceKindNow == iris::SOURCE_NAUTILOID_FRACTAL;
     const bool nautiloidReady =
-      nautiloidConnected && lastExpanderSourceGeneration != 0u && lastExpanderSourceSlotSeen != nullptr;
+      nautiloidConnected && usingNautiloidSource &&
+      lastExpanderSourceGeneration != 0u && lastExpanderSourceSlotSeen != nullptr;
     lights[NAUTILOID_LINK_LIGHT].setBrightness(nautiloidConnected && !nautiloidReady ? 1.f : 0.f);
     lights[NAUTILOID_READY_LIGHT].setBrightness(nautiloidReady ? 1.f : 0.f);
   }
@@ -619,7 +627,11 @@ json_t* Iris::dataToJson() {
     const int sourceWidth = snapshotSourceField.originalWidth > 0 ? snapshotSourceField.originalWidth : snapshotTable.sourceWidth;
     const int sourceHeight = snapshotSourceField.originalHeight > 0 ? snapshotSourceField.originalHeight : snapshotTable.sourceHeight;
     const int sourceChannels = snapshotSourceField.originalChannels > 0 ? snapshotSourceField.originalChannels : snapshotTable.sourceChannels;
+    const bool sourceIsNautiloid =
+      currentSourceKind == iris::SOURCE_EXPANDER_IMAGE ||
+      currentSourceKind == iris::SOURCE_NAUTILOID_FRACTAL;
     json_object_set_new(root, "sourceKind", json_integer(currentSourceKind));
+    json_object_set_new(root, "sourceMode", json_string(sourceIsNautiloid ? "nautiloid" : "image"));
     json_object_set_new(root, "sourcePath", json_string(sourcePath.c_str()));
     json_object_set_new(root, "sourceName", json_string(sourceName.c_str()));
     json_object_set_new(root, "sourceWidth", json_integer(sourceWidth));
@@ -674,15 +686,23 @@ void Iris::dataFromJson(json_t* root) {
   previewGeneration.fetch_add(1u, std::memory_order_release);
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
+    json_t* sourceModeJ = json_object_get(root, "sourceMode");
+    const bool savedNautiloidMode =
+      sourceModeJ && json_is_string(sourceModeJ) &&
+      std::string(json_string_value(sourceModeJ)) == "nautiloid";
     const int savedSourceKind = jsonIntegerOr(root, "sourceKind", iris::SOURCE_IMAGE);
-    currentSourceKind =
-      (savedSourceKind == iris::SOURCE_EXPANDER_IMAGE ||
-       savedSourceKind == iris::SOURCE_NAUTILOID_FRACTAL)
-        ? savedSourceKind
-        : iris::SOURCE_IMAGE;
+    currentSourceKind = iris::SOURCE_IMAGE;
+    if (savedSourceKind == iris::SOURCE_EXPANDER_IMAGE ||
+        savedSourceKind == iris::SOURCE_NAUTILOID_FRACTAL) {
+      currentSourceKind = savedSourceKind;
+    } else if (savedNautiloidMode) {
+      currentSourceKind = iris::SOURCE_EXPANDER_IMAGE;
+    }
     if (savedSourceKind != currentSourceKind) {
       currentSourceKind = iris::SOURCE_IMAGE;
     }
+    activeSourceKind.store(currentSourceKind, std::memory_order_release);
+    restoredImageSourceMode.store(currentSourceKind == iris::SOURCE_IMAGE, std::memory_order_release);
   }
   json_t* conversion = json_object_get(root, "conversion");
   if (conversion) {
@@ -743,6 +763,7 @@ void Iris::dataFromJson(json_t* root) {
       }
       if (!iris::sourceHasNautiloidFractalParams(snapshotSourceField)) {
         currentSourceKind = iris::SOURCE_IMAGE;
+        activeSourceKind.store(currentSourceKind, std::memory_order_release);
       }
     }
   }
@@ -759,8 +780,12 @@ std::string Iris::sourcePath() const {
 }
 
 int Iris::sourceKind() const {
-  std::lock_guard<std::mutex> lock(snapshotMutex);
-  return currentSourceKind;
+  return activeSourceKind.load(std::memory_order_acquire);
+}
+
+bool Iris::consumeRestoredImageSourceMode() {
+  return activeSourceKind.load(std::memory_order_acquire) == iris::SOURCE_IMAGE &&
+    restoredImageSourceMode.exchange(false, std::memory_order_acq_rel);
 }
 
 std::string Iris::statusText() const {

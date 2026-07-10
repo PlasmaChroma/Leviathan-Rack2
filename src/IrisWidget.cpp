@@ -37,24 +37,24 @@ bool isNautiloidModule(const engine::Module* neighbor) {
   return (neighbor->model == modelNautiloid) || (neighbor->model->slug == "Nautiloid");
 }
 
-void spawnNautiloidLeftOfIris(ModuleWidget* irisWidget) {
+Nautiloid* spawnNautiloidLeftOfIris(ModuleWidget* irisWidget) {
   if (!irisWidget || !irisWidget->module || !APP || !APP->scene || !APP->scene->rack || !modelNautiloid) {
-    return;
+    return nullptr;
   }
 
   Module* left = irisWidget->module->leftExpander.module;
   if (isNautiloidModule(left)) {
-    return;
+    return dynamic_cast<Nautiloid*>(left);
   }
 
   engine::Module* nautModule = modelNautiloid->createModule();
   if (!nautModule) {
-    return;
+    return nullptr;
   }
   app::ModuleWidget* nautWidget = modelNautiloid->createModuleWidget(nautModule);
   if (!nautWidget) {
     delete nautModule;
-    return;
+    return nullptr;
   }
 
   app::RackWidget* rack = APP->scene->rack;
@@ -70,25 +70,22 @@ void spawnNautiloidLeftOfIris(ModuleWidget* irisWidget) {
     h->setModule(nautWidget);
     APP->history->push(h);
   }
+  return dynamic_cast<Nautiloid*>(nautModule);
 }
 
 void selectNautiloidSourceForIris(ModuleWidget* irisWidget, Iris* iris) {
   if (!irisWidget || !iris) return;
   Module* left = iris->leftExpander.module;
   if (!isNautiloidModule(left)) {
-    spawnNautiloidLeftOfIris(irisWidget);
+    if (Nautiloid* naut = spawnNautiloidLeftOfIris(irisWidget)) {
+      naut->requestIrisSourceSync();
+    }
     return;
   }
 
   Nautiloid* naut = dynamic_cast<Nautiloid*>(left);
   if (!naut) return;
-  uint64_t generation = 0u;
-  const nautiloid_iris_expander::SourceSlot* slot = naut->irisExpanderSourceSlotSnapshot(&generation);
-  if (slot && generation != 0u) {
-    iris->requestExpanderSource(slot, generation);
-  } else {
-    naut->requestRenderWithCenteredCache();
-  }
+  naut->requestIrisSourceSync();
 }
 
 const iris::ImageWavetable& irisBrowserPreviewTable() {

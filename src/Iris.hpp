@@ -107,6 +107,7 @@ struct Iris final : Module {
   std::string sourcePath() const;
   std::string statusText() const;
   int sourceKind() const;
+  bool consumeRestoredImageSourceMode();
   void previewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const;
   void sourcePreviewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const;
   void waveformSnapshot(float scan, int sampleCount, std::vector<float>* samples) const;
@@ -118,10 +119,12 @@ struct Iris final : Module {
   std::atomic<float> displayFrequencyHz {0.f};
   std::atomic<int> displayImageChannelMode {iris::IMAGE_CHANNEL_ALL};
   std::atomic<bool> displayChannelPreview {false};
+  std::atomic<int> activeSourceKind {iris::SOURCE_IMAGE};
   std::atomic<bool> loading {false};
   std::atomic<bool> loadFailed {false};
   std::atomic<uint64_t> previewGeneration {0u};
   debug_terminal::BaselineModuleMetrics debugMetrics;
+  std::atomic<bool> restoredImageSourceMode {false};
 
 private:
   enum WorkerRequestType {

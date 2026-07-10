@@ -9,10 +9,34 @@
    inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
   <defs
-     id="defs8" />
+     id="defs8">
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient22"
+       id="linearGradient500"
+       gradientUnits="userSpaceOnUse"
+       x1="4981.3486"
+       y1="1475.1766"
+       x2="7254.189"
+       y2="1486.7573"
+       gradientTransform="matrix(0.99690805,0,0,0.99690805,-1018.8781,-888.30724)" />
+    <linearGradient
+       id="linearGradient22"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#7a5cff;stop-opacity:1;"
+         offset="0"
+         id="stop22" />
+      <stop
+         style="stop-color:#1cccd9;stop-opacity:1;"
+         offset="1"
+         id="stop23" />
+    </linearGradient>
+  </defs>
   <sodipodi:namedview
      id="namedview8"
      pagecolor="#ffffff"
@@ -23,15 +47,16 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="1.2096709"
-     inkscape:cx="100.44054"
-     inkscape:cy="166.57423"
+     inkscape:zoom="1.710733"
+     inkscape:cx="332.89824"
+     inkscape:cy="187.93114"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="svg8" />
+     inkscape:current-layer="labels"
+     showgrid="false" />
   <rect
      width="10160"
      height="12850"
@@ -39,23 +64,23 @@
      id="rect1" />
   <rect
      x="180"
-     y="650"
+     y="943.29999"
      width="9800"
      height="6527"
-     rx="96"
+     rx="0"
      fill="#030507"
      stroke="#5841bf"
      stroke-width="46"
      id="rect3" />
   <rect
-     x="500"
-     y="7900"
-     width="9160"
-     height="700"
-     rx="80"
+     x="501.86398"
+     y="8251.8643"
+     width="9156.2725"
+     height="862.27203"
+     rx="79.967445"
      fill="#111827"
      stroke="#1cccd9"
-     stroke-width="34"
+     stroke-width="37.728"
      opacity="0.72"
      id="rect4" />
   <g
@@ -64,40 +89,40 @@
     <rect
        id="DISPLAY"
        x="180"
-       y="650"
+       y="943.29999"
        width="9800"
        height="6527"
        fill="#ff0000" />
     <rect
        id="ZOOM_READOUT"
        x="3400"
-       y="7220"
+       y="7570"
        width="3360"
        height="520"
        fill="#ff0000" />
     <rect
        id="ZOOM_BAR"
        x="500"
-       y="7900"
+       y="8250"
        width="9160"
        height="900"
        fill="#ff0000" />
     <circle
        id="SOURCE_MENU_PARAM"
-       cx="780"
-       cy="7540"
+       cx="540"
+       cy="7890"
        fill="#ff0000"
        r="360" />
     <circle
        id="RESET_VIEW_PARAM"
-       cx="1920"
-       cy="7540"
+       cx="1330"
+       cy="7890"
        fill="#ff0000"
        r="360" />
     <ellipse
        id="ZOOM_RATE_INPUT"
        cx="780"
-       cy="9246.043"
+       cy="9596.043"
        rx="398"
        ry="405"
        fill="#00ff00" />
@@ -113,36 +138,30 @@
        y="10200"
        width="4200"
        height="2590"
-       fill="#ff0000" />
+       fill="#ff0000"
+       style="display:none" />
     <rect
        id="IRIS_PREVIEW"
        x="4740"
        y="10200"
        width="5236"
        height="2590"
-       fill="#ff0000" />
+       fill="#ff0000"
+       style="display:none" />
     <rect
        id="DEBUG_COUNTERS"
        x="4800"
        y="9380"
        width="5050"
        height="1080"
-       fill="#ff0000" />
+       fill="#ff0000"
+       style="display:none" />
   </g>
   <g
      id="labels">
     <text
-       x="5080"
-       y="499.97812"
-       text-anchor="middle"
-       font-family="'DejaVu Sans', Arial, sans-serif"
-       font-size="520px"
-       font-weight="700"
-       fill="#e8edf7"
-       id="text4">Nautiloid</text>
-    <text
        x="778.87122"
-       y="10049.978"
+       y="10399.978"
        text-anchor="middle"
        font-family="DejaVu Sans, Arial, sans-serif"
        font-size="260"
@@ -152,6 +171,28 @@
          sodipodi:role="line"
          id="tspan8"
          x="778.87122"
-         y="10049.978">ZOOM CV</tspan></text>
+         y="10399.978">ZOOM CV</tspan></text>
+    <text
+       id="reworked_module_title_text"
+       x="5077.354"
+       y="447.23813"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;opacity:1;fill:url(#linearGradient500);stroke-width:28.1347"
+       xml:space="preserve"><tspan
+         sodipodi:role="line"
+         id="tspan1"
+         style="fill:url(#linearGradient500)"
+         x="5077.354"
+         y="447.23813">Nautiloid</tspan></text>
+    <text
+       x="5074.1792"
+       y="839.47699"
+       fill="#8e9ba6"
+       font-family="sans-serif"
+       font-size="170"
+       text-anchor="middle"
+       id="text4"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:middle;display:inline;fill:#ffffff;fill-opacity:1;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan2">fractal explorer</tspan></text>
   </g>
 </svg>

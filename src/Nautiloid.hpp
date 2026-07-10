@@ -45,6 +45,7 @@ struct Nautiloid final : Module {
   void requestRenderWithCacheCenter(double cacheCenterX, double cacheCenterY, bool forceCacheRecenter = false);
   void requestRenderWithCenteredCache();
   void requestInteractiveZoomPreview(double cacheCenterX, double cacheCenterY, bool forceCacheRecenter = false);
+  void requestIrisSourceSync();
   void resetView();
   void previewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
   void irisPreviewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
@@ -107,6 +108,7 @@ struct Nautiloid final : Module {
   std::atomic<bool> debugGpuPreviewAvailable {false};
   std::atomic<bool> zoomInteractionActive {false};
   std::atomic<bool> displayRenderBusy {false};
+  std::atomic<bool> forceIrisSourceSync {false};
   std::atomic<bool> showMandelbrotEyeMarker {false};
   std::atomic<bool> loading {false};
   std::atomic<float> zoomRateCvNorm {0.f};
@@ -236,6 +238,8 @@ private:
   double irisCompatibleCenterY = 0.0;
   uint64_t lastExpanderGenerationSentLeft = 0u;
   uint64_t lastExpanderGenerationSentRight = 0u;
+  bool rightIrisConnectionObserved = false;
+  bool rightIrisWasConnected = false;
 
   mutable std::mutex cacheDataMutex;
   DisplayTileCache displayTileCache;
