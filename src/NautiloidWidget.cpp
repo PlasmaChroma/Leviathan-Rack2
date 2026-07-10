@@ -940,6 +940,7 @@ struct NautiloidZoomSlider final : ui::Slider {
   NautiloidZoomSpeedQuantity* zoomSpeed = nullptr;
   widget::FramebufferWidget* framebuffer = nullptr;
   NautiloidZoomHandleLight* handleLight = nullptr;
+  Vec handleLightNaturalSize;
   std::shared_ptr<window::Svg> handleSvg;
   bool zoomActive = false;
   double lastStepTime = -INFINITY;
@@ -953,6 +954,10 @@ struct NautiloidZoomSlider final : ui::Slider {
   NautiloidZoomSlider() {
     handleSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/LeviathanSliderHandle.svg"));
     handleLight = new NautiloidZoomHandleLight;
+    handleLightNaturalSize = handleLight->box.size;
+    if (handleLight->fb) {
+      handleLight->fb->dirtyOnSubpixelChange = false;
+    }
     addChild(handleLight);
   }
 
@@ -1050,13 +1055,16 @@ struct NautiloidZoomSlider final : ui::Slider {
     }
   }
 
-  void setHandleLightState(float displaySpeed, Vec pos, Vec size) {
+  void setHandleLightState(float displaySpeed, Vec center) {
     if (!handleLight) return;
     const float positive = std::max(displaySpeed, 0.f);
     const float negative = std::max(-displaySpeed, 0.f);
     handleLight->visible = true;
-    handleLight->box.pos = pos;
-    handleLight->box.size = size;
+    const Vec lightSize = (handleLightNaturalSize.x > 0.f && handleLightNaturalSize.y > 0.f)
+      ? handleLightNaturalSize
+      : handleLight->box.size;
+    handleLight->box.size = lightSize;
+    handleLight->box.pos = center.minus(lightSize.div(2.f));
     handleLight->setBrightnesses({
       positive,
       negative
@@ -1148,31 +1156,15 @@ struct NautiloidZoomSlider final : ui::Slider {
         const float sliderLaneTop = std::max(0.f, trackY - 3.f);
         const float sliderLaneBottom = std::max(sliderLaneTop + trackH, progressY - 1.f);
         const float sliderLaneH = sliderLaneBottom - sliderLaneTop;
-        const float handleH = std::min(
-          std::max(12.f, box.size.y * 0.56f),
-          std::max(trackH + 3.f, sliderLaneH - 0.5f));
-        const float scale = handleH / svgSize.y;
-        const float handleW = svgSize.x * scale;
+        const float handleW = svgSize.x;
         const float handleDrawX =
           clamp(handleX - 0.5f * handleW, 1.f, std::max(1.f, box.size.x - handleW - 1.f));
         const float handleCenterX = handleDrawX + 0.5f * handleW;
         const float handleCenterY = sliderLaneTop + 0.5f * sliderLaneH;
-
-        constexpr float kHandleLedX = 3.639865f;
-        constexpr float kHandleLedY = 4.371085f;
-        constexpr float kHandleLedW = 4.32027f;
-        constexpr float kHandleLedH = 6.00001f;
-        const Vec handleTopLeft(
-          handleCenterX - 0.5f * svgSize.x * scale,
-          handleCenterY - 0.5f * svgSize.y * scale);
-        setHandleLightState(
-          displaySpeed,
-          handleTopLeft.plus(Vec(kHandleLedX * scale, kHandleLedY * scale)),
-          Vec(kHandleLedW * scale, kHandleLedH * scale));
+        setHandleLightState(displaySpeed, Vec(handleCenterX, handleCenterY));
 
         nvgSave(args.vg);
         nvgTranslate(args.vg, handleCenterX, handleCenterY);
-        nvgScale(args.vg, scale, scale);
         nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
         handleSvg->draw(args.vg);
         nvgRestore(args.vg);
