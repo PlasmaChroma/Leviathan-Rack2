@@ -1025,14 +1025,14 @@ struct NautiloidZoomSlider final : ui::Slider {
       : (zoomSpeed ? clamp(zoomSpeed->getValue(), 0.f, 1.f) : 0.5f);
     const float zoomAmount =
       module ? clamp(module->fractalZoom / kNautiloidMaxFractalZoom, 0.f, 1.f) : 0.f;
-    const float insetX = std::max(4.f, box.size.y * 0.32f);
-    const float insetY = std::max(2.f, box.size.y * 0.12f);
+    const float insetX = std::max(2.f, box.size.y * 0.14f);
+    const float insetY = std::max(1.f, box.size.y * 0.08f);
     const float contentW = std::max(1.f, box.size.x - 2.f * insetX);
     const float centerX = insetX + 0.5f * contentW;
     const float handleX = insetX + value * contentW;
-    const float trackH = std::max(4.f, std::min(8.f, box.size.y * 0.32f));
-    const float progressH = std::max(4.f, std::min(7.f, box.size.y * 0.28f));
-    const float gap = std::max(2.f, box.size.y * 0.12f);
+    const float trackH = std::max(4.f, std::min(9.f, box.size.y * 0.36f));
+    const float progressH = std::max(4.f, std::min(8.f, box.size.y * 0.32f));
+    const float gap = std::max(1.5f, box.size.y * 0.09f);
     const float contentH = trackH + gap + progressH;
     const float trackY = std::max(insetY, 0.5f * (box.size.y - contentH));
     const float progressY = trackY + trackH + gap;
@@ -1169,6 +1169,11 @@ struct NautiloidSourceButton final : TL1105 {
 
 struct NautiloidResetButton final : TL1105 {
   Nautiloid* module = nullptr;
+  std::shared_ptr<window::Svg> resetSvg;
+
+  NautiloidResetButton() {
+    resetSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/reset-highlighted.svg"));
+  }
 
   void onButton(const event::Button& e) override {
     if (module && e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
@@ -1181,36 +1186,17 @@ struct NautiloidResetButton final : TL1105 {
 
   void draw(const DrawArgs& args) override {
     TL1105::draw(args);
-    const float cx = 0.5f * box.size.x;
-    const float cy = 0.5f * box.size.y;
-    const float r = std::max(2.8f, 0.23f * std::min(box.size.x, box.size.y));
-    constexpr float startA = -0.22f * float(M_PI);
-    constexpr float endA = 1.32f * float(M_PI);
-
-    nvgBeginPath(args.vg);
-    nvgArc(args.vg, cx, cy, r, startA, endA, NVG_CW);
-    nvgStrokeWidth(args.vg, 1.25f);
-    nvgStrokeColor(args.vg, nvgRGBA(225, 232, 240, 244));
-    nvgStroke(args.vg);
-
-    const float tipX = cx + std::cos(endA) * r;
-    const float tipY = cy + std::sin(endA) * r;
-    const float tangentA = endA - 0.5f * float(M_PI);
-    const float headLen = std::max(2.f, 0.18f * std::min(box.size.x, box.size.y));
-    const float leftSpread = 0.78f;
-    const float rightSpread = 1.08f;
-    nvgBeginPath(args.vg);
-    nvgMoveTo(args.vg, tipX, tipY);
-    nvgLineTo(args.vg,
-      tipX + std::cos(tangentA - leftSpread) * headLen,
-      tipY + std::sin(tangentA - leftSpread) * headLen);
-    nvgMoveTo(args.vg, tipX, tipY);
-    nvgLineTo(args.vg,
-      tipX + std::cos(tangentA + rightSpread) * headLen,
-      tipY + std::sin(tangentA + rightSpread) * headLen);
-    nvgStrokeWidth(args.vg, 1.25f);
-    nvgStrokeColor(args.vg, nvgRGBA(225, 232, 240, 244));
-    nvgStroke(args.vg);
+    if (!resetSvg) return;
+    const Vec svgSize = resetSvg->getSize();
+    if (svgSize.x <= 1.f || svgSize.y <= 1.f) return;
+    const float targetSize = 0.58f * std::min(box.size.x, box.size.y);
+    const float scale = targetSize / std::max(svgSize.x, svgSize.y);
+    nvgSave(args.vg);
+    nvgTranslate(args.vg, 0.5f * box.size.x, 0.5f * box.size.y);
+    nvgScale(args.vg, scale, scale);
+    nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
+    resetSvg->draw(args.vg);
+    nvgRestore(args.vg);
   }
 };
 
@@ -1223,11 +1209,7 @@ struct NautiloidZoomReadout final : TransparentWidget {
   void draw(const DrawArgs& args) override {
     if (!module) return;
     const float pct = 100.f * clamp(module->fractalZoom / kNautiloidMaxFractalZoom, 0.f, 1.f);
-    const std::string text = string::f(
-      "X: %.3f Y: %.3f Zoom: %.2f%%",
-      module->fractalCenterX,
-      module->fractalCenterY,
-      pct);
+    const std::string text = string::f("Zoom: %.2f%%", pct);
 
     nvgFontSize(args.vg, LABEL_FONT_SIZE);
     nvgFontFaceId(args.vg, APP->window->uiFont->handle);
@@ -1314,25 +1296,6 @@ struct NautiloidWidget final : ModuleWidget {
       mm2px(pointMm("ZOOM_RATE_INPUT", Vec(88.6f, 75.4f))), module, Nautiloid::ZOOM_RATE_INPUT));
     addChild(createLightCentered<SmallAperture<AmberGreenApertureLight>>(
       mm2px(pointMm("IRIS_EXPANDER_LIGHT", Vec(98.4f, 5.8f))), module, Nautiloid::IRIS_LINK_LIGHT));
-
-    const math::Rect tileCacheRectMm = rectMm("TILE_CACHE", math::Rect(Vec(2.f, 102.f), Vec(42.f, 25.9f)));
-    NautiloidTileCacheGrid* tileCacheGrid = new NautiloidTileCacheGrid(module);
-    tileCacheGrid->box.pos = mm2px(tileCacheRectMm.pos);
-    tileCacheGrid->box.size = mm2px(tileCacheRectMm.size);
-    addChild(tileCacheGrid);
-
-    const math::Rect irisPreviewRectMm = rectMm("IRIS_PREVIEW", math::Rect(Vec(47.4f, 102.f), Vec(52.36f, 25.9f)));
-    addChild(visual_assets::createPreviewFrameEnhancementWidget(
-      irisPreviewRectMm, visual_assets::PreviewFrameTint::Purple));
-    widget::FramebufferWidget* irisPreviewFb = new widget::FramebufferWidget();
-    irisPreviewFb->box.pos = mm2px(irisPreviewRectMm.pos.plus(Vec(0.35f, 0.35f)));
-    irisPreviewFb->box.size = mm2px(irisPreviewRectMm.size.minus(Vec(0.7f, 0.7f)));
-    irisPreviewFb->dirtyOnSubpixelChange = false;
-    NautiloidIrisMiniDisplay* irisPreview = new NautiloidIrisMiniDisplay(module);
-    irisPreview->framebuffer = irisPreviewFb;
-    irisPreview->box.size = irisPreviewFb->box.size;
-    irisPreviewFb->addChild(irisPreview);
-    addChild(irisPreviewFb);
 
     NautiloidDebugCounters* counters = new NautiloidDebugCounters(module);
     const math::Rect countersRectMm = rectMm("DEBUG_COUNTERS", math::Rect(Vec(48.0f, 93.8f), Vec(50.5f, 10.8f)));

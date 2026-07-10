@@ -49,7 +49,7 @@
      inkscape:document-units="mm"
      inkscape:zoom="3.421466"
      inkscape:cx="212.92043"
-     inkscape:cy="275.75899"
+     inkscape:cy="345.90436"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -97,34 +97,34 @@
        fill="#ff0000" />
     <rect
        id="ZOOM_READOUT"
-       x="2400"
+       x="2080"
        y="7570"
        width="6000"
        height="520"
        fill="#ff0000" />
     <rect
        id="ZOOM_BAR"
-       x="500"
+       x="499.99997"
        y="8370"
        width="9160"
        height="900"
        fill="#ff0000" />
     <circle
        id="SOURCE_MENU_PARAM"
-       cx="540"
+       cx="440"
        cy="7890"
        fill="#ff0000"
-       r="360" />
+       r="160" />
     <circle
        id="RESET_VIEW_PARAM"
-       cx="1330"
+       cx="9720"
        cy="7890"
        fill="#ff0000"
-       r="360" />
+       r="160" />
     <ellipse
        id="ZOOM_RATE_INPUT"
-       cx="780"
-       cy="9756"
+       cx="897.99994"
+       cy="9836"
        rx="398"
        ry="405"
        fill="#00ff00" />
@@ -162,8 +162,8 @@
   <g
      id="labels">
     <text
-       x="778.87122"
-       y="10559.935"
+       x="896.87115"
+       y="10639.935"
        text-anchor="middle"
        font-family="DejaVu Sans, Arial, sans-serif"
        font-size="260"
@@ -172,8 +172,8 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:middle;fill:#d9e5f7"><tspan
          sodipodi:role="line"
          id="tspan8"
-         x="778.87122"
-         y="10559.935">ZOOM CV</tspan></text>
+         x="896.87115"
+         y="10639.935">ZOOM CV</tspan></text>
     <text
        id="reworked_module_title_text"
        x="5077.354"

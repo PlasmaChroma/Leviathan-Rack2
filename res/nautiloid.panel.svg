@@ -12,11 +12,11 @@
   <rect x="501.86398" y="8371.8643" width="9156.2725" height="862.27203" rx="79.967445" fill="#111827" stroke="#1cccd9" stroke-width="37.728" opacity="0.72" id="rect4" style="display:none;fill:none;stroke:#5841bf;stroke-opacity:1" />
   <g id="components" style="display:none;opacity:0.5">
     <rect id="DISPLAY" x="180" y="943.29999" width="9800" height="6527" fill="#ff0000" />
-    <rect id="ZOOM_READOUT" x="2400" y="7570" width="6000" height="520" fill="#ff0000" />
-    <rect id="ZOOM_BAR" x="500" y="8370" width="9160" height="900" fill="#ff0000" />
-    <circle id="SOURCE_MENU_PARAM" cx="540" cy="7890" fill="#ff0000" r="360" />
-    <circle id="RESET_VIEW_PARAM" cx="1330" cy="7890" fill="#ff0000" r="360" />
-    <ellipse id="ZOOM_RATE_INPUT" cx="780" cy="9756" rx="398" ry="405" fill="#00ff00" />
+    <rect id="ZOOM_READOUT" x="2080" y="7570" width="6000" height="520" fill="#ff0000" />
+    <rect id="ZOOM_BAR" x="499.99997" y="8370" width="9160" height="900" fill="#ff0000" />
+    <circle id="SOURCE_MENU_PARAM" cx="440" cy="7890" fill="#ff0000" r="160" />
+    <circle id="RESET_VIEW_PARAM" cx="9720" cy="7890" fill="#ff0000" r="160" />
+    <ellipse id="ZOOM_RATE_INPUT" cx="897.99994" cy="9836" rx="398" ry="405" fill="#00ff00" />
     <circle id="IRIS_EXPANDER_LIGHT" cx="9840" cy="580" fill="#ff0000" r="180" />
     <rect id="TILE_CACHE" x="200" y="10200" width="4200" height="2590" fill="#ff0000" style="display:none" />
     <rect id="IRIS_PREVIEW" x="4740" y="10200" width="5236" height="2590" fill="#ff0000" style="display:none" />
