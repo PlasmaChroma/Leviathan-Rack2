@@ -929,6 +929,8 @@ struct NautiloidDebugCounters final : TransparentWidget {
   }
 };
 
+// Match the indicator embedded in Bifurx's LuminSlider. The slider control
+// owns positioning; this widget only supplies the LED and its glass overlay.
 struct NautiloidZoomHandleLight final : VCVSliderLight<LeviathanCyanPurpleLight> {
   void step() override {
     widget::TransparentWidget::step();
@@ -941,6 +943,7 @@ struct NautiloidZoomSlider final : ui::Slider {
   widget::FramebufferWidget* framebuffer = nullptr;
   NautiloidZoomHandleLight* handleLight = nullptr;
   Vec handleLightNaturalSize;
+  Vec lightOverlayOffset;
   std::shared_ptr<window::Svg> handleSvg;
   bool zoomActive = false;
   double lastStepTime = -INFINITY;
@@ -958,7 +961,6 @@ struct NautiloidZoomSlider final : ui::Slider {
     if (handleLight->fb) {
       handleLight->fb->dirtyOnSubpixelChange = false;
     }
-    addChild(handleLight);
   }
 
   void onButton(const event::Button& e) override {
@@ -1064,7 +1066,7 @@ struct NautiloidZoomSlider final : ui::Slider {
       ? handleLightNaturalSize
       : handleLight->box.size;
     handleLight->box.size = lightSize;
-    handleLight->box.pos = center.minus(lightSize.div(2.f));
+    handleLight->box.pos = lightOverlayOffset.plus(center).minus(lightSize.div(2.f));
     handleLight->setBrightnesses({
       positive,
       negative
@@ -1340,12 +1342,16 @@ struct NautiloidWidget final : ModuleWidget {
     NautiloidZoomSlider* zoomSlider = new NautiloidZoomSlider();
     zoomSlider->module = module;
     zoomSlider->framebuffer = zoomFb;
+    zoomSlider->lightOverlayOffset = zoomFb->box.pos;
     zoomSlider->box.size = zoomFb->box.size;
     NautiloidZoomSpeedQuantity* zoomSpeed = new NautiloidZoomSpeedQuantity();
     zoomSlider->zoomSpeed = zoomSpeed;
     zoomSlider->quantity = zoomSpeed;
     zoomFb->addChild(zoomSlider);
     addChild(zoomFb);
+    // Keep the LED out of the zoom artwork framebuffer, like LuminSlider.
+    // Its glass SVG and emissive rectangle then composite live over the handle.
+    addChild(zoomSlider->handleLight);
 
     NautiloidSourceButton* sourceButton =
       createParamCentered<NautiloidSourceButton>(
