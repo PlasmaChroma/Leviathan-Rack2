@@ -6,7 +6,7 @@
    version="1.1"
    id="svg8"
    sodipodi:docname="nautiloid.svg"
-   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -36,6 +36,16 @@
          offset="1"
          id="stop23" />
     </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient22"
+       id="linearGradient74"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(100,0,0,100,-162.33504,-50.762739)"
+       x1="41.355316"
+       y1="125.28868"
+       x2="63.491417"
+       y2="125.28868" />
   </defs>
   <sodipodi:namedview
      id="namedview8"
@@ -47,21 +57,60 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="3.421466"
-     inkscape:cx="212.92043"
-     inkscape:cy="345.90436"
-     inkscape:window-width="2560"
-     inkscape:window-height="1377"
-     inkscape:window-x="-8"
-     inkscape:window-y="-8"
+     inkscape:zoom="1.2096709"
+     inkscape:cx="221.54786"
+     inkscape:cy="291.40157"
+     inkscape:window-width="1862"
+     inkscape:window-height="1016"
+     inkscape:window-x="1978"
+     inkscape:window-y="27"
      inkscape:window-maximized="1"
-     inkscape:current-layer="svg8"
+     inkscape:current-layer="labels"
      showgrid="false" />
   <rect
      width="10160"
      height="12850"
      fill="#07090d"
-     id="rect1" />
+     id="panel_black" />
+  <g
+     id="waves_layer"
+     style="display:inline;opacity:0.5"
+     transform="translate(0.00337775,142.46186)">
+    <g
+       id="branding_wave_left"
+       transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)"
+       style="display:inline">
+      <path
+         style="fill:#4995ec"
+         d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713"
+         id="path149" />
+      <path
+         style="fill:#7a5cff"
+         d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
+         id="path151" />
+      <path
+         style="fill:#1cccd9"
+         d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
+         id="path155" />
+    </g>
+    <g
+       id="branding_wave_right"
+       transform="matrix(-1.72,0,0,1.72,7743.0744,11996.75)"
+       style="display:inline">
+      <path
+         style="fill:#4995ec"
+         d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713"
+         id="path158" />
+      <path
+         style="fill:#7a5cff"
+         d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
+         id="path160" />
+      <path
+         style="fill:#1cccd9"
+         d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
+         id="path164" />
+    </g>
+  </g>
   <rect
      x="180"
      y="943.29999"
@@ -71,7 +120,7 @@
      fill="#030507"
      stroke="#5841bf"
      stroke-width="46"
-     id="rect3"
+     id="fractal_display"
      style="stroke:#1cccd9;stroke-opacity:1" />
   <rect
      x="501.86398"
@@ -168,14 +217,14 @@
        font-family="DejaVu Sans, Arial, sans-serif"
        font-size="260"
        fill="#d9e5f7"
-       id="text5"
+       id="zoom_lbl"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:middle;fill:#d9e5f7"><tspan
          sodipodi:role="line"
          id="tspan8"
          x="896.87115"
          y="10639.935">ZOOM CV</tspan></text>
     <text
-       id="reworked_module_title_text"
+       id="module_title"
        x="5077.354"
        y="447.23813"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;opacity:1;fill:url(#linearGradient500);stroke-width:28.1347"
@@ -192,9 +241,20 @@
        font-family="sans-serif"
        font-size="170"
        text-anchor="middle"
-       id="text4"
+       id="module_description"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:middle;display:inline;fill:#ffffff;fill-opacity:1;font-variation-settings:'wght' 400"><tspan
          sodipodi:role="line"
          id="tspan2">fractal explorer</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;writing-mode:lr-tb;direction:ltr;display:inline;fill:url(#linearGradient74);fill-rule:evenodd;stroke:none;stroke-width:75.0001;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+       x="3963.6721"
+       y="12616.534"
+       id="Leviathan_Branding"><tspan
+         sodipodi:role="line"
+         id="tspan72"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;fill:url(#linearGradient74);stroke:none;stroke-width:75"
+         x="3963.6721"
+         y="12616.534">Leviathan</tspan></text>
   </g>
 </svg>

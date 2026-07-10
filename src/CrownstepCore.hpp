@@ -63,11 +63,12 @@ static const std::array<Scale, 13> SCALES = {{
 
 static constexpr std::array<int, 5> SEQ_CAPS = {{0, 8, 16, 32, 64}};
 static constexpr std::array<const char*, 5> SEQ_CAP_NAMES = {{"Full", "8", "16", "32", "64"}};
-static constexpr std::array<const char*, 4> DIFFICULTY_NAMES = {{
+static constexpr std::array<const char*, 5> DIFFICULTY_NAMES = {{
 	"Too young to die",
 	"Not too rough",
 	"Hurt me plenty",
-	"Ultra violence"
+	"Ultra violence",
+	"Nightmare!"
 }};
 static constexpr std::array<const char*, 3> PITCH_INTERPRETATION_NAMES = {
 	{"Origin Square", "Destination Square", "Blend (O+D)/2"}
@@ -447,10 +448,11 @@ inline int searchScore(const BoardState& sourceBoard, int sideToMove, int depth,
 }
 
 inline int searchDepthForDifficulty(int difficulty) {
-	switch (std::max(0, std::min(difficulty, 3))) {
+	switch (std::max(0, std::min(difficulty, 4))) {
 		case 0: return 1;
 		case 2: return 3;
 		case 3: return 4;
+		case 4: return 5;
 		default: return 2;
 	}
 }
@@ -1151,10 +1153,11 @@ inline void chessSortMovesForSearch(const BoardState& board, std::vector<Move>* 
 }
 
 inline int chessSearchDepthForDifficulty(int difficulty) {
-	switch (std::max(0, std::min(difficulty, 3))) {
+	switch (std::max(0, std::min(difficulty, 4))) {
 		case 0: return 1;
 		case 2: return 3;
 		case 3: return 4;
+		case 4: return 5;
 		default: return 2;
 	}
 }
@@ -1395,6 +1398,60 @@ inline int othelloCornerScore(const BoardState& board) {
 	return score;
 }
 
+inline int othelloPositionalScore(const BoardState& board) {
+	// Corners and their adjacent squares dominate early and mid-game strategy.
+	static constexpr std::array<int, OTHELLO_BOARD_SIZE> weights = {{
+		120, -25, 20, 5, 5, 20, -25, 120,
+		-25, -45, -5, -5, -5, -5, -45, -25,
+		20, -5, 15, 3, 3, 15, -5, 20,
+		5, -5, 3, 3, 3, 3, -5, 5,
+		5, -5, 3, 3, 3, 3, -5, 5,
+		20, -5, 15, 3, 3, 15, -5, 20,
+		-25, -45, -5, -5, -5, -5, -45, -25,
+		120, -25, 20, 5, 5, 20, -25, 120
+	}};
+	int score = 0;
+	for (int index = 0; index < OTHELLO_BOARD_SIZE; ++index) {
+		if (board[size_t(index)] == AI_SIDE) {
+			score += weights[size_t(index)];
+		}
+		else if (board[size_t(index)] == HUMAN_SIDE) {
+			score -= weights[size_t(index)];
+		}
+	}
+	return score;
+}
+
+inline int othelloFrontierScore(const BoardState& board) {
+	int score = 0;
+	for (int row = 0; row < 8; ++row) {
+		for (int col = 0; col < 8; ++col) {
+			int index = othelloCoordToIndex(row, col);
+			int piece = board[size_t(index)];
+			if (piece == 0) {
+				continue;
+			}
+			bool frontier = false;
+			for (int dr = -1; dr <= 1 && !frontier; ++dr) {
+				for (int dc = -1; dc <= 1; ++dc) {
+					if (dr == 0 && dc == 0) {
+						continue;
+					}
+					int neighbor = othelloCoordToIndex(row + dr, col + dc);
+					frontier = neighbor >= 0 && board[size_t(neighbor)] == 0;
+					if (frontier) {
+						break;
+					}
+				}
+			}
+			if (frontier) {
+				score += (piece == AI_SIDE) ? -1 : 1;
+			}
+		}
+	}
+	return score;
+}
+
 inline int othelloEvaluateBoardMaterial(const BoardState& board) {
 	int aiCount = othelloCountPiecesForSide(board, AI_SIDE);
 	int humanCount = othelloCountPiecesForSide(board, HUMAN_SIDE);
@@ -1404,18 +1461,51 @@ inline int othelloEvaluateBoardMaterial(const BoardState& board) {
 inline int othelloEvaluatePosition(const BoardState& board) {
 	std::vector<Move> aiMoves = othelloGenerateLegalMovesForSide(board, AI_SIDE);
 	std::vector<Move> humanMoves = othelloGenerateLegalMovesForSide(board, HUMAN_SIDE);
-	int score = othelloEvaluateBoardMaterial(board);
-	score += int(aiMoves.size()) * 6;
-	score -= int(humanMoves.size()) * 6;
-	score += othelloCornerScore(board);
+	int occupied = othelloCountPiecesForSide(board, AI_SIDE) + othelloCountPiecesForSide(board, HUMAN_SIDE);
+	int material = othelloEvaluateBoardMaterial(board);
+	if (aiMoves.empty() && humanMoves.empty()) {
+		return (material > 0 ? 100000 : (material < 0 ? -100000 : 0)) + material;
+	}
+
+	int score = othelloPositionalScore(board) * 4;
+	score += (int(aiMoves.size()) - int(humanMoves.size())) * 14;
+	score += othelloFrontierScore(board) * 8;
+	// Disc count is a liability while the board is open, but decides the endgame.
+	score += material * (occupied < 44 ? 1 : 8);
+	score += othelloCornerScore(board) * 8;
 	return score;
 }
 
+inline int othelloMoveOrderScore(const Move& move, int) {
+	static constexpr std::array<int, OTHELLO_BOARD_SIZE> weights = {{
+		120, -25, 20, 5, 5, 20, -25, 120,
+		-25, -45, -5, -5, -5, -5, -45, -25,
+		20, -5, 15, 3, 3, 15, -5, 20,
+		5, -5, 3, 3, 3, 3, -5, 5,
+		5, -5, 3, 3, 3, 3, -5, 5,
+		20, -5, 15, 3, 3, 15, -5, 20,
+		-25, -45, -5, -5, -5, -5, -45, -25,
+		120, -25, 20, 5, 5, 20, -25, 120
+	}};
+	int score = weights[size_t(move.destinationIndex)];
+	return score + int(move.captured.size());
+}
+
+inline void othelloSortMovesForSearch(std::vector<Move>* moves, int sideToMove) {
+	if (!moves) {
+		return;
+	}
+	std::sort(moves->begin(), moves->end(), [sideToMove](const Move& a, const Move& b) {
+		return othelloMoveOrderScore(a, sideToMove) > othelloMoveOrderScore(b, sideToMove);
+	});
+}
+
 inline int othelloSearchDepthForDifficulty(int difficulty) {
-	switch (std::max(0, std::min(difficulty, 3))) {
+	switch (std::max(0, std::min(difficulty, 4))) {
 		case 0: return 1;
-		case 2: return 3;
-		case 3: return 4;
+		case 2: return 4;
+		case 3: return 6;
+		case 4: return 7;
 		default: return 2;
 	}
 }
@@ -1432,6 +1522,7 @@ inline int othelloSearchScore(const BoardState& board, int sideToMove, int depth
 		return -othelloSearchScore(board, -sideToMove, depth - 1, -beta, -alpha);
 	}
 
+	othelloSortMovesForSearch(&moves, sideToMove);
 	int best = std::numeric_limits<int>::min();
 	for (const Move& move : moves) {
 		BoardState nextBoard = othelloApplyMoveToBoard(board, move, sideToMove);
@@ -1450,22 +1541,25 @@ inline Move othelloChooseAiMove(const BoardState& board, int difficulty) {
 	if (moves.empty()) {
 		return Move();
 	}
+	othelloSortMovesForSearch(&moves, AI_SIDE);
 	int depth = othelloSearchDepthForDifficulty(difficulty);
 	int bestIndex = 0;
 	int bestScore = std::numeric_limits<int>::min();
+	int alpha = std::numeric_limits<int>::min() / 2;
+	const int beta = std::numeric_limits<int>::max() / 2;
 	for (int i = 0; i < int(moves.size()); ++i) {
 		BoardState nextBoard = othelloApplyMoveToBoard(board, moves[size_t(i)], AI_SIDE);
 		int score = -othelloSearchScore(
 			nextBoard,
 			HUMAN_SIDE,
 			depth - 1,
-			std::numeric_limits<int>::min() / 2,
-			std::numeric_limits<int>::max() / 2
+			-beta,
+			-alpha
 		);
-		int flipBonus = int(moves[size_t(i)].captured.size());
-		if (score > bestScore || (score == bestScore && flipBonus > int(moves[size_t(bestIndex)].captured.size()))) {
+		if (score > bestScore) {
 			bestScore = score;
 			bestIndex = i;
+			alpha = std::max(alpha, bestScore);
 		}
 	}
 	return moves[size_t(bestIndex)];

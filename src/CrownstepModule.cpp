@@ -180,6 +180,7 @@ int othelloSearchForSide(const BoardState& board, int sideToMove, int maximizing
 		return -othelloSearchForSide(board, -sideToMove, maximizingSide, depth - 1, -beta, -alpha);
 	}
 
+	crownstep::othelloSortMovesForSearch(&moves, sideToMove);
 	int best = std::numeric_limits<int>::min();
 	for (const Move& move : moves) {
 		BoardState nextBoard = crownstep::othelloApplyMoveToBoard(board, move, sideToMove);
@@ -198,9 +199,12 @@ Move chooseOthelloMoveForSide(const BoardState& board, int difficulty, int aiSid
 	if (moves.empty()) {
 		return Move();
 	}
+	crownstep::othelloSortMovesForSearch(&moves, aiSide);
 	int depth = crownstep::othelloSearchDepthForDifficulty(difficulty);
 	int bestIndex = 0;
 	int bestScore = std::numeric_limits<int>::min();
+	int alpha = std::numeric_limits<int>::min() / 2;
+	const int beta = std::numeric_limits<int>::max() / 2;
 	for (int i = 0; i < int(moves.size()); ++i) {
 		BoardState nextBoard = crownstep::othelloApplyMoveToBoard(board, moves[size_t(i)], aiSide);
 		int score = -othelloSearchForSide(
@@ -208,13 +212,13 @@ Move chooseOthelloMoveForSide(const BoardState& board, int difficulty, int aiSid
 			-aiSide,
 			aiSide,
 			depth - 1,
-			std::numeric_limits<int>::min() / 2,
-			std::numeric_limits<int>::max() / 2
+			-beta,
+			-alpha
 		);
-		int flipBonus = int(moves[size_t(i)].captured.size());
-		if (score > bestScore || (score == bestScore && flipBonus > int(moves[size_t(bestIndex)].captured.size()))) {
+		if (score > bestScore) {
 			bestScore = score;
 			bestIndex = i;
+			alpha = std::max(alpha, bestScore);
 		}
 	}
 	return moves[size_t(bestIndex)];
