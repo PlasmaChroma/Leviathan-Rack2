@@ -109,7 +109,6 @@ struct Nautiloid final : Module {
   std::atomic<bool> zoomInteractionActive {false};
   std::atomic<bool> displayRenderBusy {false};
   std::atomic<bool> forceIrisSourceSync {false};
-  std::atomic<bool> showMandelbrotEyeMarker {false};
   std::atomic<bool> loading {false};
   std::atomic<float> zoomRateCvNorm {0.f};
   std::atomic<bool> zoomRateCvConnected {false};

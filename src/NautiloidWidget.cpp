@@ -499,7 +499,6 @@ struct NautiloidDisplay final : OpaqueWidget {
 
   void onButton(const event::Button& e) override {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS && module) {
-      module->showMandelbrotEyeMarker.store(false, std::memory_order_relaxed);
       panActive = true;
       lastPanLocal = currentLocalMousePos();
       e.consume(this);
@@ -513,7 +512,6 @@ struct NautiloidDisplay final : OpaqueWidget {
 
   void onDragStart(const event::DragStart& e) override {
     if (module && e.button == GLFW_MOUSE_BUTTON_LEFT) {
-      module->showMandelbrotEyeMarker.store(false, std::memory_order_relaxed);
       panActive = true;
       lastPanLocal = currentLocalMousePos();
       e.consume(this);
@@ -672,51 +670,6 @@ struct NautiloidZoomSpeedQuantity final : Quantity {
 
   std::string getDisplayValueString() override {
     return string::f("%+.0f", getDisplayValue());
-  }
-};
-
-struct NautiloidMandelbrotEyeMarker final : TransparentWidget {
-  Nautiloid* module = nullptr;
-
-  explicit NautiloidMandelbrotEyeMarker(Nautiloid* module) : module(module) {}
-
-  void draw(const DrawArgs& args) override {
-    if (!module ||
-        module->fractalMode != iris::FRACTAL_MANDELBROT ||
-        !module->showMandelbrotEyeMarker.load(std::memory_order_relaxed)) {
-      return;
-    }
-
-    constexpr double kEyeX = -0.743643887037151;
-    constexpr double kEyeY = 0.131825904205330;
-    constexpr double kMandelbrotBaseX = -0.75;
-    const float zoomScale = std::pow(0.05f, clamp(module->fractalZoom, 0.f, kNautiloidMaxFractalZoom));
-    const Vec halfSpan = nautiloidFractalViewportHalfSpan(module->fractalMode).mult(zoomScale);
-    if (halfSpan.x <= 0.f || halfSpan.y <= 0.f) return;
-
-    const double viewCenterX = kMandelbrotBaseX + module->fractalCenterX;
-    const double viewCenterY = module->fractalCenterY;
-    const float x = float((0.5 + (kEyeX - viewCenterX) / (2.0 * double(halfSpan.x))) * double(box.size.x));
-    const float y = float((0.5 + (kEyeY - viewCenterY) / (2.0 * double(halfSpan.y))) * double(box.size.y));
-    if (x < -24.f || y < -16.f || x > box.size.x + 24.f || y > box.size.y + 16.f) return;
-
-    nvgBeginPath(args.vg);
-    nvgCircle(args.vg, x, y, 3.8f);
-    nvgStrokeWidth(args.vg, 1.2f);
-    nvgStrokeColor(args.vg, nvgRGBA(255, 224, 122, 235));
-    nvgStroke(args.vg);
-
-    nvgBeginPath(args.vg);
-    nvgCircle(args.vg, x, y, 1.1f);
-    nvgFillColor(args.vg, nvgRGBA(255, 244, 194, 235));
-    nvgFill(args.vg);
-
-    nvgFontSize(args.vg, 7.5f);
-    nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-    nvgTextLetterSpacing(args.vg, 0.f);
-    nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-    nvgFillColor(args.vg, nvgRGBA(255, 238, 184, 230));
-    nvgText(args.vg, x + 7.f, y, "Eye of the World", nullptr);
   }
 };
 
@@ -989,7 +942,6 @@ struct NautiloidZoomSlider final : ui::Slider {
       if (e.action == GLFW_PRESS) {
         zoomActive = true;
         if (module) {
-          module->showMandelbrotEyeMarker.store(false, std::memory_order_relaxed);
           module->zoomInteractionActive.store(true, std::memory_order_relaxed);
         }
         lastStepTime = system::getTime();
@@ -1004,7 +956,6 @@ struct NautiloidZoomSlider final : ui::Slider {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
       zoomActive = true;
       if (module) {
-        module->showMandelbrotEyeMarker.store(false, std::memory_order_relaxed);
         module->zoomInteractionActive.store(true, std::memory_order_relaxed);
       }
       lastStepTime = system::getTime();
@@ -1305,11 +1256,6 @@ struct NautiloidWidget final : ModuleWidget {
     display->box.size = displayFb->box.size;
     displayFb->addChild(display);
     addChild(displayFb);
-
-    NautiloidMandelbrotEyeMarker* eyeMarker = new NautiloidMandelbrotEyeMarker(module);
-    eyeMarker->box.pos = displayFb->box.pos;
-    eyeMarker->box.size = displayFb->box.size;
-    addChild(eyeMarker);
 
     NautiloidZoomReadout* zoomReadout = new NautiloidZoomReadout(module);
     const math::Rect zoomReadoutRectMm = rectMm("ZOOM_READOUT", math::Rect(Vec(34.f, 72.2f), Vec(33.6f, 5.2f)));

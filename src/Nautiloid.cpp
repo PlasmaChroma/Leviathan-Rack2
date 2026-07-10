@@ -727,7 +727,6 @@ void Nautiloid::dataFromJson(json_t* root) {
   debugGpuPreviewEnabled.store(
     jsonBoolOr(root, "debugGpuPreviewEnabled", true), std::memory_order_relaxed);
   debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
-  showMandelbrotEyeMarker.store(false, std::memory_order_relaxed);
   requestRender();
 }
 
@@ -738,7 +737,6 @@ void Nautiloid::requestFractal(int mode) {
     fractalZoom = 0.f;
     fractalCenterX = 0.f;
     fractalCenterY = 0.f;
-    showMandelbrotEyeMarker.store(false, std::memory_order_relaxed);
   }
   requestRender();
 }
@@ -804,7 +802,6 @@ void Nautiloid::resetView() {
   fractalZoom = 0.f;
   fractalCenterX = 0.f;
   fractalCenterY = 0.f;
-  showMandelbrotEyeMarker.store(fractalMode == iris::FRACTAL_MANDELBROT, std::memory_order_relaxed);
   requestRender();
 }
 

@@ -534,6 +534,9 @@ void Iris::process(const ProcessArgs& args) {
     lights[IMAGE_CHANNEL_GREEN_LIGHT].setBrightness(imageChannelMode == iris::IMAGE_CHANNEL_GREEN ? 1.f : 0.f);
     lights[IMAGE_CHANNEL_BLUE_LIGHT].setBrightness(imageChannelMode == iris::IMAGE_CHANNEL_BLUE ? 1.f : 0.f);
     const bool nautiloidConnected = hasLeftNautiloid(this);
+    if (!nautiloidConnected) {
+      restoredImageSourceMode.store(false, std::memory_order_release);
+    }
     const int sourceKindNow = activeSourceKind.load(std::memory_order_acquire);
     const bool usingNautiloidSource =
       sourceKindNow == iris::SOURCE_EXPANDER_IMAGE ||
@@ -632,6 +635,7 @@ json_t* Iris::dataToJson() {
       currentSourceKind == iris::SOURCE_NAUTILOID_FRACTAL;
     json_object_set_new(root, "sourceKind", json_integer(currentSourceKind));
     json_object_set_new(root, "sourceMode", json_string(sourceIsNautiloid ? "nautiloid" : "image"));
+    json_object_set_new(root, "sourceModeNautiloidAttached", json_boolean(hasLeftNautiloid(this)));
     json_object_set_new(root, "sourcePath", json_string(sourcePath.c_str()));
     json_object_set_new(root, "sourceName", json_string(sourceName.c_str()));
     json_object_set_new(root, "sourceWidth", json_integer(sourceWidth));
@@ -690,6 +694,8 @@ void Iris::dataFromJson(json_t* root) {
     const bool savedNautiloidMode =
       sourceModeJ && json_is_string(sourceModeJ) &&
       std::string(json_string_value(sourceModeJ)) == "nautiloid";
+    const bool savedWithNautiloidAttached =
+      jsonBoolOr(root, "sourceModeNautiloidAttached", false);
     const int savedSourceKind = jsonIntegerOr(root, "sourceKind", iris::SOURCE_IMAGE);
     currentSourceKind = iris::SOURCE_IMAGE;
     if (savedSourceKind == iris::SOURCE_EXPANDER_IMAGE ||
@@ -702,7 +708,9 @@ void Iris::dataFromJson(json_t* root) {
       currentSourceKind = iris::SOURCE_IMAGE;
     }
     activeSourceKind.store(currentSourceKind, std::memory_order_release);
-    restoredImageSourceMode.store(currentSourceKind == iris::SOURCE_IMAGE, std::memory_order_release);
+    restoredImageSourceMode.store(
+      currentSourceKind == iris::SOURCE_IMAGE && savedWithNautiloidAttached,
+      std::memory_order_release);
   }
   json_t* conversion = json_object_get(root, "conversion");
   if (conversion) {
