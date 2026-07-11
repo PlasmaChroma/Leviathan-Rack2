@@ -270,8 +270,8 @@ extern volatile double g_music_ticks_per_sec;
 extern volatile unsigned int g_time_division;
 extern volatile unsigned int g_tempo;
 extern volatile unsigned int g_next_event_tick;
+extern volatile unsigned int g_music_generation;
 extern void *g_active_midi_file;
 extern void *g_active_midi_iter;
 
 #endif
-

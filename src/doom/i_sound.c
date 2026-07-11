@@ -17,6 +17,7 @@ volatile double g_music_ticks_per_sec = 0.0;
 volatile unsigned int g_time_division = 0;
 volatile unsigned int g_tempo = 500000;
 volatile unsigned int g_next_event_tick = 0;
+volatile unsigned int g_music_generation = 0;
 void *g_active_midi_file = NULL;
 void *g_active_midi_iter = NULL;
 
@@ -253,6 +254,7 @@ void I_PlaySong(void *handle, boolean looping)
     g_active_midi_iter = (void *)MIDI_IterateTrack((midi_file_t *)handle, 0);
     g_next_event_tick = MIDI_GetDeltaTime((midi_track_iter_t *)g_active_midi_iter);
     g_music_playing = 1;
+    ++g_music_generation;
 }
 
 void I_StopSong(void)
@@ -263,6 +265,7 @@ void I_StopSong(void)
         g_active_midi_iter = NULL;
     }
     g_active_midi_file = NULL;
+    ++g_music_generation;
 }
 
 boolean I_MusicIsPlaying(void)

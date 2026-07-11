@@ -45,6 +45,7 @@ struct ChronoDoomModule : Module {
 	};
 	Voice voices[16];
 	int voiceTriggerCounter = 0;
+	unsigned int musicGeneration = 0;
 
 	// Focus state
 	std::atomic<bool> isFocused{false};

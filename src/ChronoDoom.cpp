@@ -97,6 +97,16 @@ void ChronoDoomModule::process(const ProcessArgs& args) {
 			g_cv_weapon = -1;
 		}
 
+		// Song changes can happen entirely between two Rack process calls.
+		// Clear all prior notes when Doom publishes a new music generation.
+		if (musicGeneration != g_music_generation) {
+			musicGeneration = g_music_generation;
+			for (int i = 0; i < 16; ++i) {
+				voices[i].gate = 0.f;
+				voices[i].note = -1;
+			}
+		}
+
 		// 2. Process CV Outputs
 		float healthVolt = (float)g_game_health / 100.f * 10.f;
 		outputs[HEALTH_OUTPUT].setVoltage(clamp(healthVolt, 0.f, 10.f));
