@@ -2,6 +2,7 @@
 #include "UndertowShape.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
+#include "visual/PreviewSurface.hpp"
 #include "WavePreviewTracer.hpp"
 #include <array>
 
@@ -186,10 +187,9 @@ struct UndertowShapePreviewWidget final : Widget {
     const float bottom = std::max(top + 1.f, h - drawPad);
     const float drawH = bottom - top;
 
-    nvgSave(args.vg);
-    nvgScissor(args.vg, 0.f, 0.f, w, h);
-
-    nvgBeginPath(args.vg);
+	 nvgSave(args.vg);
+	 nvgScissor(args.vg, 0.f, 0.f, w, h);
+	 nvgBeginPath(args.vg);
     nvgMoveTo(args.vg, left, top + 0.5f * drawH);
     nvgLineTo(args.vg, right, top + 0.5f * drawH);
     nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 36));
@@ -323,6 +323,9 @@ struct UndertowWidget final : ModuleWidget {
         auto* previewWidget = new UndertowShapePreviewWidget(module);
         previewWidget->box.pos = mm2px(previewRectMm.pos);
         previewWidget->box.size = mm2px(previewRectMm.size);
+        widget::FramebufferWidget* previewSurface = preview_surface::createCachedOpaqueGrid(previewWidget->box.size);
+        previewSurface->box.pos = previewWidget->box.pos;
+        addChild(previewSurface);
         addChild(previewWidget);
       }
     }

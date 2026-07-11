@@ -3,6 +3,7 @@
 #include "MathHelpers.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
+#include "visual/PreviewSurface.hpp"
 #include "WavePreviewTracer.hpp"
 #include <dsp/minblep.hpp>
 #include <array>
@@ -1415,7 +1416,6 @@ struct WavePreviewWidget : Widget {
 	void draw(const DrawArgs& args) override {
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
-
 		if (pointsValid) {
 			ModuleWidget* moduleWidget = getAncestorOfType<ModuleWidget>();
 			Proc* modulePtr = moduleWidget ? moduleWidget->getModule<Proc>() : nullptr;
@@ -1882,6 +1882,9 @@ struct ProcWidget : ModuleWidget {
 				previewWidget->box.pos = mm2px(previewFallbackMm.pos);
 				previewWidget->box.size = mm2px(previewFallbackMm.size);
 			}
+			widget::FramebufferWidget* previewSurface = preview_surface::createCachedOpaqueGrid(previewWidget->box.size);
+			previewSurface->box.pos = previewWidget->box.pos;
+			addChild(previewSurface);
 			addChild(previewWidget);
 		}
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelBasePath));

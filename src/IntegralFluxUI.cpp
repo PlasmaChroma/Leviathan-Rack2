@@ -5,6 +5,7 @@
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
+#include "visual/PreviewSurface.hpp"
 #include "WavePreviewTracer.hpp"
 #include <array>
 #include <atomic>
@@ -1067,9 +1068,9 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			gIntegralFluxPreviewFramebufferNsByChannel[clamp(channel, 0, 4)], isDragonKingDebugEnabled());
 		math::Vec fbSize = getFramebufferSize();
 		glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
-		// The preview is a self-contained display surface. Keep its framebuffer
-		// opaque so panel glass effects below cannot bleed through its interior.
-		glClearColor(0.f, 0.f, 0.f, 1.f);
+		// The cached preview surface below supplies the opaque black/grid layer.
+		// Keep this live waveform framebuffer transparent above it.
+		glClearColor(0.f, 0.f, 0.f, 0.f);
 		glClear(GL_COLOR_BUFFER_BIT);
 		if (!pointsValid || !useOpenGlRenderer()) {
 			return;
@@ -1085,7 +1086,6 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		glDisable(GL_LINE_SMOOTH);
-		drawGlGrid();
 
 		const double nowSec = system::getTime();
 		const float xScale = fbSize.x / std::max(box.size.x, 1.f);
@@ -1316,12 +1316,6 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		}
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
-		nvgFillColor(args.vg, nvgRGB(0, 0, 0));
-		nvgFill(args.vg);
-		drawNvgGrid(args);
-
 		if (pointsValid) {
 			const double nowSec = system::getTime();
 			const bool tracerEnabled = modulePtr && modulePtr->previewTracerEnabledControl().load(std::memory_order_relaxed);
@@ -2316,6 +2310,9 @@ struct IntegralFluxWidget : ModuleWidget {
 				ch1Preview->box.pos = mm2px(previewFallbackMm.pos);
 				ch1Preview->box.size = mm2px(previewFallbackMm.size);
 			}
+			widget::FramebufferWidget* previewSurface = preview_surface::createCachedOpaqueGrid(ch1Preview->box.size);
+			previewSurface->box.pos = ch1Preview->box.pos;
+			addChild(previewSurface);
 			addChild(ch1Preview);
 		}
 		{
@@ -2335,6 +2332,9 @@ struct IntegralFluxWidget : ModuleWidget {
 				ch4Preview->box.pos = mm2px(previewFallbackMm.pos);
 				ch4Preview->box.size = mm2px(previewFallbackMm.size);
 			}
+			widget::FramebufferWidget* previewSurface = preview_surface::createCachedOpaqueGrid(ch4Preview->box.size);
+			previewSurface->box.pos = ch4Preview->box.pos;
+			addChild(previewSurface);
 			addChild(ch4Preview);
 		}
 

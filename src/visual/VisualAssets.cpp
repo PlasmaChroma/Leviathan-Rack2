@@ -1072,9 +1072,6 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		for (const GlassPathArt& glass : glassPaths) {
 			drawGlassPath(args, glass);
 		}
-		for (const math::Rect& screen : screenRectsPx) {
-			drawScreenGrid(args, screen);
-		}
 	}
 
 	void step() override {

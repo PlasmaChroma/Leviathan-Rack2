@@ -3,6 +3,7 @@
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
+#include "visual/PreviewSurface.hpp"
 
 #include <cctype>
 #include <cstdlib>
@@ -848,6 +849,10 @@ struct IrisWidget final : ModuleWidget {
     math::Rect waveformContentRectMm = waveformRectMm;
     waveformContentRectMm.pos = waveformContentRectMm.pos.plus(Vec(0.2f, 0.2f));
     waveformContentRectMm.size = waveformContentRectMm.size.minus(Vec(0.4f, 0.4f));
+    widget::FramebufferWidget* waveformSurface = preview_surface::createCachedOpaqueGrid(
+      mm2px(waveformContentRectMm.size));
+    waveformSurface->box.pos = mm2px(waveformContentRectMm.pos);
+    addChild(waveformSurface);
     widget::FramebufferWidget* waveformFb = new widget::FramebufferWidget();
     waveformFb->box.pos = mm2px(waveformContentRectMm.pos);
     waveformFb->box.size = mm2px(waveformContentRectMm.size);
