@@ -10,12 +10,14 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdio>
 #include <ctime>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 
@@ -42,22 +44,57 @@ thread_local uint32_t gIntegralFluxHaloDirtyDrawCountThisFrame = 0u;
 thread_local uint32_t gIntegralFluxHaloActiveDrawCountThisFrame = 0u;
 thread_local uint32_t gIntegralFluxHaloDraggingDrawCountThisFrame = 0u;
 
-// MVP visual expander: a Nautiloid immediately to the left lends its latest
-// fractal frame to Integral Flux's panel glass. This is deliberately UI-only;
-// it does not enter Flux's audio or serialized module state.
+// MVP visual expander: Integral Flux receives Nautiloid's fractal parameters
+// and renders its own compact glass texture. No Nautiloid pixel buffer crosses
+// the expander boundary, and neither module's audio/state is affected.
 struct IntegralFluxNautiloidGlassOverlay final : TransparentWidget {
+	static constexpr int kRenderWidth = 192;
+	static constexpr int kRenderHeight = 240;
+
+	struct RenderRequest {
+		iris::NautiloidFractalSourceParams params;
+		uint64_t serial = 0u;
+	};
+
 	IntegralFlux* module = nullptr;
 	widget::FramebufferWidget* framebuffer = nullptr;
 	NVGcontext* imageContext = nullptr;
 	int imageHandle = -1;
 	int uploadedWidth = 0;
 	int uploadedHeight = 0;
-	uint64_t uploadedGeneration = uint64_t(-1);
-	uint64_t observedGeneration = uint64_t(-1);
+	uint64_t uploadedRenderGeneration = uint64_t(-1);
+	uint64_t observedRenderGeneration = uint64_t(-1);
 	bool observedConnection = false;
 	std::vector<uint8_t> rgba;
+	std::mutex requestMutex;
+	std::condition_variable requestCv;
+	bool workerStop = false;
+	bool requestPending = false;
+	RenderRequest pendingRequest;
+	uint64_t nextRequestSerial = 0u;
+	std::thread renderThread;
+	std::mutex resultMutex;
+	std::vector<uint8_t> renderedRgb;
+	int renderedWidth = 0;
+	int renderedHeight = 0;
+	std::atomic<uint64_t> renderedGeneration {0u};
+	bool submittedParamsValid = false;
+	iris::NautiloidFractalSourceParams submittedParams;
 
 	explicit IntegralFluxNautiloidGlassOverlay(IntegralFlux* module) : module(module) {
+		renderThread = std::thread([this]() { renderLoop(); });
+	}
+
+	~IntegralFluxNautiloidGlassOverlay() override {
+		{
+			std::lock_guard<std::mutex> lock(requestMutex);
+			workerStop = true;
+			requestPending = false;
+		}
+		requestCv.notify_one();
+		if (renderThread.joinable()) {
+			renderThread.join();
+		}
 	}
 
 	Nautiloid* leftNautiloid() const {
@@ -69,16 +106,93 @@ struct IntegralFluxNautiloidGlassOverlay final : TransparentWidget {
 		return dynamic_cast<Nautiloid*>(left);
 	}
 
+	static iris::NautiloidFractalSourceParams paramsFromNautiloid(const Nautiloid& naut) {
+		iris::NautiloidFractalSourceParams params;
+		params.mode = naut.fractalMode;
+		params.zoom = naut.fractalZoom;
+		params.centerX = naut.fractalCenterX;
+		params.centerY = naut.fractalCenterY;
+		return params;
+	}
+
+	static bool sameParams(const iris::NautiloidFractalSourceParams& a,
+		const iris::NautiloidFractalSourceParams& b) {
+		return a.mode == b.mode && std::fabs(a.zoom - b.zoom) <= 1e-5f &&
+			std::fabs(a.centerX - b.centerX) <= 1e-7 && std::fabs(a.centerY - b.centerY) <= 1e-7;
+	}
+
+	void submitRender(const iris::NautiloidFractalSourceParams& params) {
+		std::lock_guard<std::mutex> lock(requestMutex);
+		pendingRequest.params = params;
+		pendingRequest.serial = ++nextRequestSerial;
+		requestPending = true;
+		requestCv.notify_one();
+	}
+
+	void renderLoop() {
+		while (true) {
+			RenderRequest request;
+			{
+				std::unique_lock<std::mutex> lock(requestMutex);
+				requestCv.wait(lock, [this]() { return workerStop || requestPending; });
+				if (workerStop) {
+					return;
+				}
+				request = pendingRequest;
+				requestPending = false;
+			}
+
+			iris::SourceField source;
+			if (!iris::makeBuiltinFractalSourceSized(
+					request.params.mode, request.params.zoom, request.params.centerX, request.params.centerY,
+					kRenderWidth, kRenderHeight, 1.f, &source) || !source.valid()) {
+				continue;
+			}
+
+			std::lock_guard<std::mutex> requestLock(requestMutex);
+			if (request.serial != nextRequestSerial) {
+				continue;
+			}
+			{
+				std::lock_guard<std::mutex> resultLock(resultMutex);
+				renderedRgb = std::move(source.rgb8);
+				renderedWidth = source.width;
+				renderedHeight = source.height;
+			}
+			renderedGeneration.fetch_add(1u, std::memory_order_release);
+		}
+	}
+
+	bool snapshotRendered(std::vector<uint8_t>* rgb, int* width, int* height) {
+		std::lock_guard<std::mutex> lock(resultMutex);
+		if (renderedWidth <= 0 || renderedHeight <= 0 || renderedRgb.empty()) {
+			return false;
+		}
+		if (rgb) *rgb = renderedRgb;
+		if (width) *width = renderedWidth;
+		if (height) *height = renderedHeight;
+		return true;
+	}
+
 	void step() override {
 		Nautiloid* naut = leftNautiloid();
 		const bool connected = naut != nullptr;
-		const uint64_t generation =
-			naut ? naut->previewGeneration.load(std::memory_order_acquire) : 0u;
-		if (framebuffer && (connected != observedConnection || generation != observedGeneration)) {
+		if (naut) {
+			const iris::NautiloidFractalSourceParams params = paramsFromNautiloid(*naut);
+			if (!submittedParamsValid || !sameParams(params, submittedParams)) {
+				submittedParams = params;
+				submittedParamsValid = true;
+				submitRender(params);
+			}
+		} else {
+			submittedParamsValid = false;
+		}
+		const uint64_t generation = renderedGeneration.load(std::memory_order_acquire);
+		if (framebuffer && (connected != observedConnection || generation != observedRenderGeneration)) {
 			framebuffer->setDirty();
 		}
 		observedConnection = connected;
-		observedGeneration = generation;
+		observedRenderGeneration = generation;
 		TransparentWidget::step();
 	}
 
@@ -88,20 +202,20 @@ struct IntegralFluxNautiloidGlassOverlay final : TransparentWidget {
 			return;
 		}
 
-		const uint64_t generation = naut->previewGeneration.load(std::memory_order_acquire);
+		const uint64_t generation = renderedGeneration.load(std::memory_order_acquire);
 		if (imageContext != args.vg) {
 			nvg_gfx_lifecycle::resetOwnedNvgImage(
 				imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, false);
 			imageContext = args.vg;
-			uploadedGeneration = uint64_t(-1);
+			uploadedRenderGeneration = uint64_t(-1);
 		}
-		if (generation != uploadedGeneration ||
+		if (generation != uploadedRenderGeneration ||
 			(imageHandle >= 0 && !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(
 				args.vg, imageHandle, uploadedWidth, uploadedHeight))) {
 			std::vector<uint8_t> rgb;
 			int width = 0;
 			int height = 0;
-			naut->previewSnapshot(&rgb, &width, &height);
+			snapshotRendered(&rgb, &width, &height);
 			rgba.resize(rgb.size() / 3u * 4u);
 			for (size_t i = 0; i + 2u < rgb.size(); i += 3u) {
 				const size_t out = (i / 3u) * 4u;
@@ -118,7 +232,7 @@ struct IntegralFluxNautiloidGlassOverlay final : TransparentWidget {
 				uploadedWidth = width;
 				uploadedHeight = height;
 			}
-			uploadedGeneration = generation;
+			uploadedRenderGeneration = generation;
 		}
 
 		const float inset = 2.f;
