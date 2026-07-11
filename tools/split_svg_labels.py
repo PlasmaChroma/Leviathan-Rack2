@@ -345,6 +345,11 @@ def split_svg(
 
     labels_tree = ET.ElementTree(labels_root)
     ET.indent(labels_tree, space="  ")
+    # ElementTree's pretty-printer adds indentation back as text/tail content.
+    # Do this after indenting as well, otherwise xml:space-aware Inkscape can
+    # outline that formatting whitespace and shift centered labels right.
+    if outline_label_text:
+        normalize_text_for_outline(labels_root)
     labels_tree.write(labels_path, encoding="utf-8", xml_declaration=True)
 
     if outline_label_text:

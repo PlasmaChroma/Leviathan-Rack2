@@ -3865,14 +3865,9 @@ struct CrownstepWidget final : ModuleWidget {
 	explicit CrownstepWidget(Crownstep* module) {
 		setModule(module);
 		PreviewBuildLogTimer previewBuildTimer("Crownstep", module);
-		const std::string panelPath = asset::plugin(pluginInstance, "res/crownstep.svg");
-		try {
-			setPanel(createPanel(panelPath));
-		}
-		catch (const std::exception& e) {
-			WARN("Crownstep panel load failed (%s), using fallback: %s", panelPath.c_str(), e.what());
-			setPanel(createPanel(asset::plugin(pluginInstance, "res/proc.svg")));
-		}
+		visual_assets::SplitPanelRenderer splitPanel(this, "res/crownstep.panel.svg");
+		const std::string& panelPath = splitPanel.panelPath();
+		splitPanel.addLabels("res/crownstep.labels.svg");
 		previewBuildTimer.markPanelDone();
 
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0)));

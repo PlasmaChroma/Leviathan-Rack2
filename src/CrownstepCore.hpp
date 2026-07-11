@@ -619,7 +619,10 @@ inline void chessAppendMove(
 	Move move;
 	move.originIndex = originIndex;
 	move.destinationIndex = destinationIndex;
-	move.path.push_back(destinationIndex);
+	// A chess move is always a single origin-to-destination hop.  Keeping this
+	// empty avoids a heap allocation for every pseudo-move in the search; the
+	// animation path builder already supplies destinationIndex when path is
+	// empty.  (Checkers retains its explicit multi-hop paths.)
 	move.isCapture = capturedIndex >= 0;
 	move.isMultiCapture = false;
 	move.isKing = (chessPieceType(movingPiece) == CHESS_KING);
