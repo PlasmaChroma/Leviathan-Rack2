@@ -146,6 +146,16 @@
         "Reverb"
       ],
       "hidden": true
+    },
+    {
+      "slug": "ChronoDoom",
+      "name": "ChronoDoom",
+      "description": "Embedded Doom engine with CV input/output",
+      "tags": [
+        "Visual",
+        "External"
+      ],
+      "hidden": false
     }
   ]
 }
