@@ -20,6 +20,8 @@ struct ChronoDoomModule : Module {
 		FRAG_TRIG_OUTPUT,
 		AUDIO_L_OUTPUT,
 		AUDIO_R_OUTPUT,
+		MIDI_PITCH_OUTPUT,
+		MIDI_GATE_OUTPUT,
 		OUTPUTS_LEN
 	};
 	enum LightId {
@@ -33,6 +35,16 @@ struct ChronoDoomModule : Module {
 	// Dummy framebuffer for Phase 1 skeleton
 	uint8_t dummyFramebuffer[320 * 200 * 4];
 	std::atomic<bool> dirtyFrame{false};
+	int fragTrigTime = 0;
+
+	struct Voice {
+		int note = -1;
+		int channel = -1;
+		float pitch = 0.f;
+		float gate = 0.f;
+	};
+	Voice voices[16];
+	int voiceTriggerCounter = 0;
 
 	// Focus state
 	std::atomic<bool> isFocused{false};
@@ -43,6 +55,7 @@ struct ChronoDoomModule : Module {
 	void process(const ProcessArgs& args) override;
 
 	// WAD loading, validation, and settings persistence
+	bool isEngineOwner() const;
 	bool loadWad(const std::string& path);
 	void saveGlobalSettings();
 	void loadGlobalSettings();

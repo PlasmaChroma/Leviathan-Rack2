@@ -3,6 +3,39 @@
 #include "visual/VisualAssets.hpp"
 #include <osdialog.h>
 
+extern "C" {
+#include "doom/d_event.h"
+#include "doom/doomkeys.h"
+}
+
+static int mapGlfwToDoomKey(int glfwKey) {
+	switch (glfwKey) {
+		case GLFW_KEY_RIGHT: return KEY_RIGHTARROW;
+		case GLFW_KEY_LEFT: return KEY_LEFTARROW;
+		case GLFW_KEY_UP: return KEY_UPARROW;
+		case GLFW_KEY_DOWN: return KEY_DOWNARROW;
+		case GLFW_KEY_ESCAPE: return KEY_ESCAPE;
+		case GLFW_KEY_ENTER: return KEY_ENTER;
+		case GLFW_KEY_TAB: return KEY_TAB;
+		case GLFW_KEY_BACKSPACE: return KEY_BACKSPACE;
+		case GLFW_KEY_LEFT_SHIFT:
+		case GLFW_KEY_RIGHT_SHIFT: return KEY_RSHIFT;
+		case GLFW_KEY_LEFT_CONTROL:
+		case GLFW_KEY_RIGHT_CONTROL: return KEY_RCTRL;
+		case GLFW_KEY_LEFT_ALT:
+		case GLFW_KEY_RIGHT_ALT: return KEY_RALT;
+		case GLFW_KEY_SPACE: return ' ';
+		default:
+			if (glfwKey >= GLFW_KEY_A && glfwKey <= GLFW_KEY_Z) {
+				return (glfwKey - GLFW_KEY_A) + 'a';
+			}
+			if (glfwKey >= GLFW_KEY_0 && glfwKey <= GLFW_KEY_9) {
+				return (glfwKey - GLFW_KEY_0) + '0';
+			}
+			return 0;
+	}
+}
+
 struct ChronoDoomViewportWidget final : Widget {
 	ChronoDoomModule* module = nullptr;
 	int doomImage = -1;
@@ -37,8 +70,12 @@ struct ChronoDoomViewportWidget final : Widget {
 			return;
 		}
 
+		if (!module->isEngineOwner() || !module->hasWad) {
+			Widget::onSelectKey(e);
+			return;
+		}
+
 		// Consume game keys to prevent bubbling to Rack.
-		// For Phase 1, we just log the key press or consume it.
 		// If Ctrl or Alt is held, let Rack handle it.
 		bool hasMod = (e.mods & (RACK_MOD_MASK));
 		if (hasMod) {
@@ -53,8 +90,23 @@ struct ChronoDoomViewportWidget final : Widget {
 		if (e.key == GLFW_KEY_UP || e.key == GLFW_KEY_DOWN || e.key == GLFW_KEY_LEFT || e.key == GLFW_KEY_RIGHT) consumeKey = true;
 		if (e.key == GLFW_KEY_SPACE || e.key == GLFW_KEY_ENTER || e.key == GLFW_KEY_ESCAPE) consumeKey = true;
 		if (e.key == GLFW_KEY_LEFT_SHIFT || e.key == GLFW_KEY_RIGHT_SHIFT || e.key == GLFW_KEY_E) consumeKey = true;
+		if (e.key == GLFW_KEY_LEFT_CONTROL || e.key == GLFW_KEY_RIGHT_CONTROL) consumeKey = true;
 
 		if (consumeKey) {
+			int doomKey = mapGlfwToDoomKey(e.key);
+			if (doomKey != 0) {
+				event_t ev;
+				memset(&ev, 0, sizeof(event_t));
+				if (e.action == GLFW_PRESS) {
+					ev.type = ev_keydown;
+					ev.data1 = doomKey;
+					D_PostEvent(&ev);
+				} else if (e.action == GLFW_RELEASE) {
+					ev.type = ev_keyup;
+					ev.data1 = doomKey;
+					D_PostEvent(&ev);
+				}
+			}
 			e.consume(this);
 		} else {
 			Widget::onSelectKey(e);
@@ -69,6 +121,23 @@ struct ChronoDoomViewportWidget final : Widget {
 		nvgFill(args.vg);
 
 		if (!module) {
+			return;
+		}
+
+		if (!module->isEngineOwner()) {
+			// Draw secondary instance warning splash screen
+			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+			
+			// Glowing title
+			nvgFontSize(args.vg, 20.f);
+			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+			nvgFillColor(args.vg, nvgRGBA(255, 100, 100, 255));
+			nvgText(args.vg, box.size.x / 2.f, box.size.y / 2.f - 20.f, "CHRONODOOM", nullptr);
+
+			// Instruction
+			nvgFontSize(args.vg, 13.f);
+			nvgFillColor(args.vg, nvgRGBA(180, 200, 220, 255));
+			nvgText(args.vg, box.size.x / 2.f, box.size.y / 2.f + 15.f, "Engine running in another module.", nullptr);
 			return;
 		}
 
@@ -165,10 +234,12 @@ struct ChronoDoomWidget final : ModuleWidget {
 		addInput(createInputCentered<Magitek2InputJack>(Vec(33.333f, 300.f), module, ChronoDoomModule::WEAPON_CV_INPUT));
 
 		// Outputs (spaced vertically)
-		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(566.666f, 60.f), module, ChronoDoomModule::HEALTH_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(566.666f, 140.f), module, ChronoDoomModule::FRAG_TRIG_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(566.666f, 220.f), module, ChronoDoomModule::AUDIO_L_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(566.666f, 300.f), module, ChronoDoomModule::AUDIO_R_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(566.666f, 40.f), module, ChronoDoomModule::HEALTH_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(566.666f, 100.f), module, ChronoDoomModule::FRAG_TRIG_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(566.666f, 160.f), module, ChronoDoomModule::AUDIO_L_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(566.666f, 220.f), module, ChronoDoomModule::AUDIO_R_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(566.666f, 280.f), module, ChronoDoomModule::MIDI_PITCH_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(566.666f, 340.f), module, ChronoDoomModule::MIDI_GATE_OUTPUT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
@@ -248,10 +319,12 @@ struct ChronoDoomWidget final : ModuleWidget {
 		nvgText(args.vg, 33.333f, 315.f, "WEAPON", nullptr);
 
 		// Output labels
-		nvgText(args.vg, 566.666f, 75.f, "HEALTH", nullptr);
-		nvgText(args.vg, 566.666f, 155.f, "FRAG", nullptr);
-		nvgText(args.vg, 566.666f, 235.f, "AUDIO L", nullptr);
-		nvgText(args.vg, 566.666f, 315.f, "AUDIO R", nullptr);
+		nvgText(args.vg, 566.666f, 55.f, "HEALTH", nullptr);
+		nvgText(args.vg, 566.666f, 115.f, "FRAG", nullptr);
+		nvgText(args.vg, 566.666f, 175.f, "AUDIO L", nullptr);
+		nvgText(args.vg, 566.666f, 235.f, "AUDIO R", nullptr);
+		nvgText(args.vg, 566.666f, 295.f, "PITCH", nullptr);
+		nvgText(args.vg, 566.666f, 355.f, "GATE", nullptr);
 
 		ModuleWidget::draw(args);
 	}
