@@ -927,10 +927,12 @@ struct IrisWidget final : ModuleWidget {
     SmallGoldApertureButton* octaveStep = createLightParamCentered<SmallGoldApertureButton>(
       mm2px(anchor("IRIS_COARSE_STEP_MODE_PARAM", Vec(14.2f, 94.07f))),
       module, Iris::COARSE_STEP_MODE_PARAM, Iris::COARSE_STEP_MODE_LIGHT);
+    static_cast<SmallGoldApertureLight*>(octaveStep->getLight())->setBaseColor(nvgRGB(255, 118, 24));
     addParam(octaveStep);
     SmallGoldApertureButton* softSync = createLightParamCentered<SmallGoldApertureButton>(
       mm2px(anchor("IRIS_SOFT_SYNC_MODE_PARAM", Vec(44.64f, 76.73f))),
       module, Iris::SOFT_SYNC_MODE_PARAM, Iris::SOFT_SYNC_MODE_LIGHT);
+    static_cast<SmallGoldApertureLight*>(softSync->getLight())->setBaseColor(nvgRGB(255, 118, 24));
     addParam(softSync);
     SmallGoldApertureButton* lfoMode = createLightParamCentered<SmallGoldApertureButton>(
       mm2px(anchor("IRIS_LFO_MODE_PARAM", Vec(25.3f, 111.8f))),
