@@ -1839,7 +1839,7 @@ struct ProcWidget : ModuleWidget {
 			addChild(linearPointFb);
 		}
 
-		addParam(createParamCentered<GoldButton>(mm2px(cyclePos), module, Proc::CYCLE_PARAM));
+		addParam(createParamCentered<LoopGoldButton>(mm2px(cyclePos), module, Proc::CYCLE_PARAM));
 		{
 			ProcEdgeHalo2Knob* riseKnob = createParamCentered<ProcEdgeHalo2Knob>(mm2px(risePos), module, Proc::RISE_PARAM);
 			riseKnob->setPreviewInteraction(&previewEdgeInteraction, ProcEdgeHalo2Knob::PREVIEW_EDGE_RISE);

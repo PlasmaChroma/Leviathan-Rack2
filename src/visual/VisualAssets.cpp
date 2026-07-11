@@ -3091,9 +3091,9 @@ struct SmallGoldButtonShadowLayer : TransparentWidget {
 		if (!owner) {
 			return;
 		}
-		const float s = kSmallGoldButtonSizePx;
+		const float s = owner->sizePx;
 		const float p = clamp(owner->pressAmount, 0.f, 1.f);
-		const Vec center = Vec(kSmallGoldButtonShadowBleedPx * 0.5f)
+		const Vec center = Vec(owner->shadowBleedPx * 0.5f)
 			.plus(Vec(s * 0.5f));
 
 		// Broad socket shadow. The oversized framebuffer allows this gradient
@@ -3171,7 +3171,7 @@ struct SmallGoldButtonFaceLayer : TransparentWidget {
 		}
 		const float p = clamp(owner->pressAmount, 0.f, 1.f);
 		const Vec center = box.size.mult(0.5f);
-		const Vec faceCenter = center.plus(Vec(0.f, crossfade(0.f, 0.72f, p)));
+		const Vec faceCenter = center.plus(Vec(0.f, s * crossfade(0.f, 0.04f, p)));
 		const float faceR = s * crossfade(0.375f, 0.352f, p);
 
 		nvgBeginPath(args.vg);
@@ -3210,14 +3210,21 @@ struct SmallGoldButtonFaceLayer : TransparentWidget {
 	}
 };
 
-SmallGoldButton::SmallGoldButton() {
+SmallGoldButton::SmallGoldButton() : SmallGoldButton(kSmallGoldButtonSizePx) {
+}
+
+SmallGoldButton::SmallGoldButton(float buttonSizePx) {
 	momentary = true;
-	box.size = Vec(kSmallGoldButtonSizePx, kSmallGoldButtonSizePx);
+	sizePx = std::max(buttonSizePx, 1.f);
+	// Preserve the original visual proportions: at 18 px the shadow has a
+	// 12 px bleed, and all rendering dimensions below scale from sizePx.
+	shadowBleedPx = sizePx * (kSmallGoldButtonShadowBleedPx / kSmallGoldButtonSizePx);
+	box.size = Vec(sizePx, sizePx);
 
 	shadowFb = new widget::FramebufferWidget();
 	shadowFb->dirtyOnSubpixelChange = false;
-	shadowFb->box.pos = Vec(-kSmallGoldButtonShadowBleedPx * 0.5f);
-	shadowFb->box.size = box.size.plus(Vec(kSmallGoldButtonShadowBleedPx));
+	shadowFb->box.pos = Vec(-shadowBleedPx * 0.5f);
+	shadowFb->box.size = box.size.plus(Vec(shadowBleedPx));
 	SmallGoldButtonShadowLayer* shadowLayer = new SmallGoldButtonShadowLayer(this);
 	shadowLayer->box.size = shadowFb->box.size;
 	shadowFb->addChild(shadowLayer);

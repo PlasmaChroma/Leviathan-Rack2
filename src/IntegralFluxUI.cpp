@@ -1837,8 +1837,8 @@ struct IntegralFluxWidget : ModuleWidget {
 			addCurveModeOverlay(linLog4KnobPos, IntegralFlux::SHAPE_MODE_4_PARAM, true);
 		}
 
-		addParam(createParamCentered<GoldButton>(mm2px(cycle1ButtonPos), module, IntegralFlux::CYCLE_1_PARAM));
-		addParam(createParamCentered<GoldButton>(mm2px(cycle4ButtonPos), module, IntegralFlux::CYCLE_4_PARAM));
+		addParam(createParamCentered<LoopGoldButton>(mm2px(cycle1ButtonPos), module, IntegralFlux::CYCLE_1_PARAM));
+		addParam(createParamCentered<LoopGoldButton>(mm2px(cycle4ButtonPos), module, IntegralFlux::CYCLE_4_PARAM));
 
 		auto addEdgeKnob = [&](Vec posMm, int paramId, IntegralFluxPreviewEdgeInteraction* interaction,
 			IntegralFluxHalo2Knob::PreviewEdge edge, int channel, const char* tooltipLabel) {

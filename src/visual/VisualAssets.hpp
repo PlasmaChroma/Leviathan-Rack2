@@ -182,12 +182,21 @@ struct SmallGoldButton : app::Switch {
 	widget::FramebufferWidget* shadowFb = nullptr;
 	widget::FramebufferWidget* staticFb = nullptr;
 	widget::FramebufferWidget* faceFb = nullptr;
+	float sizePx = 18.f;
+	float shadowBleedPx = 12.f;
 	float pressAmount = 0.f;
 	float lastRenderedPressAmount = -1.f;
 
 	SmallGoldButton();
+	explicit SmallGoldButton(float sizePx);
 	void step() override;
 	void draw(const DrawArgs& args) override;
+};
+
+// Standard 24 px loop/cycle control, matching the former GoldButton hit area.
+struct LoopGoldButton : SmallGoldButton {
+	LoopGoldButton() : SmallGoldButton(24.f) {
+	}
 };
 
 struct SmallGoldApertureLight : app::ModuleLightWidget {
