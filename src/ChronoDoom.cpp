@@ -232,6 +232,12 @@ void ChronoDoomModule::process(const ProcessArgs& args) {
 					g_next_event_tick += delta;
 				} else {
 					if (g_music_looping) {
+						// A MUS/MIDI loop can end with active notes. Clear them before
+						// restarting so a missing note-off cannot leave a gate latched.
+						for (int i = 0; i < 16; ++i) {
+							voices[i].gate = 0.f;
+							voices[i].note = -1;
+						}
 						MIDI_RestartIterator((midi_track_iter_t*)g_active_midi_iter);
 						g_music_ticks = 0.0;
 						g_next_event_tick = MIDI_GetDeltaTime((midi_track_iter_t*)g_active_midi_iter);
