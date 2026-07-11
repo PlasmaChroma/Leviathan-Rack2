@@ -183,12 +183,12 @@ struct IntegralFluxNautiloidGlassOverlay final : TransparentWidget {
 		const int g = int(std::round(clamp(color.g, 0.f, 1.f) * 255.f));
 		const int b = int(std::round(clamp(color.b, 0.f, 1.f) * 255.f));
 		iris::FractalPalette palette;
-		palette.shadowR = uint8_t(std::max(1, r / 8));
-		palette.shadowG = uint8_t(std::max(1, g / 8));
-		palette.shadowB = uint8_t(std::max(1, b / 8));
-		palette.highlightR = uint8_t(std::min(255, r + (255 - r) / 3));
-		palette.highlightG = uint8_t(std::min(255, g + (255 - g) / 3));
-		palette.highlightB = uint8_t(std::min(255, b + (255 - b) / 3));
+		palette.shadowR = uint8_t(std::max(1, r / 16));
+		palette.shadowG = uint8_t(std::max(1, g / 16));
+		palette.shadowB = uint8_t(std::max(1, b / 16));
+		palette.highlightR = uint8_t(std::min(255, r + (255 - r) / 2));
+		palette.highlightG = uint8_t(std::min(255, g + (255 - g) / 2));
+		palette.highlightB = uint8_t(std::min(255, b + (255 - b) / 2));
 		return palette;
 	}
 
@@ -379,7 +379,7 @@ struct IntegralFluxNautiloidGlassOverlay final : TransparentWidget {
 			// Keep every glass region in one module-local fractal coordinate space.
 			// The region is only a clip; it does not restart or stretch the field.
 			nvgFillPaint(args.vg, nvgImagePattern(args.vg, 0.f, 0.f,
-				box.size.x, box.size.y, 0.f, imageHandle, 0.24f));
+				box.size.x, box.size.y, 0.f, imageHandle, 0.30f));
 			nvgFill(args.vg);
 			nvgRestore(args.vg);
 		}
@@ -803,6 +803,80 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		return nvgRGBA(230, 230, 220, 255);
 	}
 
+	void drawNvgGrid(const DrawArgs& args) const {
+		const float w = box.size.x;
+		const float h = box.size.y;
+		const int majorCols = std::max(3, int(std::round(w / 16.f)));
+		const int majorRows = std::max(3, int(std::round(h / 16.f)));
+		const float majorX = w / float(majorCols);
+		const float majorY = h / float(majorRows);
+		nvgBeginPath(args.vg);
+		for (int col = 0; col < majorCols; ++col) {
+			for (int sub = 1; sub < 4; ++sub) {
+				const float x = float(col) * majorX + majorX * (float(sub) * 0.25f);
+				nvgMoveTo(args.vg, x, 0.f);
+				nvgLineTo(args.vg, x, h);
+			}
+		}
+		for (int row = 0; row < majorRows; ++row) {
+			for (int sub = 1; sub < 4; ++sub) {
+				const float y = float(row) * majorY + majorY * (float(sub) * 0.25f);
+				nvgMoveTo(args.vg, 0.f, y);
+				nvgLineTo(args.vg, w, y);
+			}
+		}
+		nvgStrokeWidth(args.vg, 0.38f);
+		nvgStrokeColor(args.vg, nvgRGBA(0x1c, 0xcc, 0xd9, 30));
+		nvgStroke(args.vg);
+		nvgBeginPath(args.vg);
+		for (int col = 1; col < majorCols; ++col) {
+			const float x = float(col) * majorX;
+			nvgMoveTo(args.vg, x, 0.f);
+			nvgLineTo(args.vg, x, h);
+		}
+		for (int row = 1; row < majorRows; ++row) {
+			const float y = float(row) * majorY;
+			nvgMoveTo(args.vg, 0.f, y);
+			nvgLineTo(args.vg, w, y);
+		}
+		nvgStrokeWidth(args.vg, 0.55f);
+		nvgStrokeColor(args.vg, nvgRGBA(0x72, 0x8d, 0xff, 46));
+		nvgStroke(args.vg);
+	}
+
+	void drawGlGrid() const {
+		const float w = box.size.x;
+		const float h = box.size.y;
+		const int majorCols = std::max(3, int(std::round(w / 16.f)));
+		const int majorRows = std::max(3, int(std::round(h / 16.f)));
+		const float majorX = w / float(majorCols);
+		const float majorY = h / float(majorRows);
+		glLineWidth(0.38f);
+		glColor4f(0x1c / 255.f, 0xcc / 255.f, 0xd9 / 255.f, 30.f / 255.f);
+		glBegin(GL_LINES);
+		for (int col = 0; col < majorCols; ++col) for (int sub = 1; sub < 4; ++sub) {
+			const float x = float(col) * majorX + majorX * (float(sub) * 0.25f);
+			glVertex2f(x, 0.f); glVertex2f(x, h);
+		}
+		for (int row = 0; row < majorRows; ++row) for (int sub = 1; sub < 4; ++sub) {
+			const float y = float(row) * majorY + majorY * (float(sub) * 0.25f);
+			glVertex2f(0.f, y); glVertex2f(w, y);
+		}
+		glEnd();
+		glLineWidth(0.55f);
+		glColor4f(0x72 / 255.f, 0x8d / 255.f, 1.f, 46.f / 255.f);
+		glBegin(GL_LINES);
+		for (int col = 1; col < majorCols; ++col) {
+			const float x = float(col) * majorX;
+			glVertex2f(x, 0.f); glVertex2f(x, h);
+		}
+		for (int row = 1; row < majorRows; ++row) {
+			const float y = float(row) * majorY;
+			glVertex2f(0.f, y); glVertex2f(w, y);
+		}
+		glEnd();
+	}
+
 	NVGcolor activeEdgeColor(int edge) const {
 		const NVGcolor purple = nvgRGB(0x86, 0x5c, 0xff);
 		const NVGcolor cyan = nvgRGB(0x00, 0xc6, 0xe4);
@@ -993,7 +1067,9 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			gIntegralFluxPreviewFramebufferNsByChannel[clamp(channel, 0, 4)], isDragonKingDebugEnabled());
 		math::Vec fbSize = getFramebufferSize();
 		glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
-		glClearColor(0.f, 0.f, 0.f, 0.f);
+		// The preview is a self-contained display surface. Keep its framebuffer
+		// opaque so panel glass effects below cannot bleed through its interior.
+		glClearColor(0.f, 0.f, 0.f, 1.f);
 		glClear(GL_COLOR_BUFFER_BIT);
 		if (!pointsValid || !useOpenGlRenderer()) {
 			return;
@@ -1009,6 +1085,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		glDisable(GL_LINE_SMOOTH);
+		drawGlGrid();
 
 		const double nowSec = system::getTime();
 		const float xScale = fbSize.x / std::max(box.size.x, 1.f);
@@ -1239,6 +1316,11 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		}
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		nvgFillColor(args.vg, nvgRGB(0, 0, 0));
+		nvgFill(args.vg);
+		drawNvgGrid(args);
 
 		if (pointsValid) {
 			const double nowSec = system::getTime();

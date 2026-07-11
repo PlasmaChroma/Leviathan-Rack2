@@ -41,9 +41,10 @@ inline void applyFractalPalette(SourceField* source, const FractalPalette& palet
   for (size_t i = 0; i + 2u < source->rgb8.size(); i += 3u) {
     const uint32_t luminance =
       uint32_t(source->rgb8[i]) * 54u + uint32_t(source->rgb8[i + 1u]) * 183u + uint32_t(source->rgb8[i + 2u]) * 19u;
-    // Lift the glass-facing palette slightly so fine fractal detail remains
-    // visible through the panel tint without washing out the dark structure.
-    const uint32_t amount = std::min(255u, ((luminance >> 8u) * 3u + 255u) / 4u);
+    // Gamma-lift the midrange for readable glass detail while retaining a
+    // genuinely dark floor and a broad climb toward the highlight shade.
+    const float normalized = float(luminance) * (1.f / (255.f * 256.f));
+    const uint32_t amount = uint32_t(std::round(std::sqrt(normalized) * 255.f));
     source->rgb8[i] = uint8_t(
       int(palette.shadowR) + ((int(palette.highlightR) - int(palette.shadowR)) * int(amount) + 127) / 255);
     source->rgb8[i + 1u] = uint8_t(
