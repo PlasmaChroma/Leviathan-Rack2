@@ -8,8 +8,10 @@
 #include <windows.h>
 #else
 #include <unistd.h>
-#include <pthread.h>
 #endif
+
+// ChronoDoom runs the engine in its own thread on every platform.
+#include <pthread.h>
 
 #include "config.h"
 #include "deh_str.h"
@@ -27,6 +29,11 @@
 
 #define DEFAULT_RAM 16 /* MiB */
 #define MIN_RAM     4  /* MiB */
+
+// Exposed to the Rack module so startup failures in the headless engine do
+// not disappear into the host process' stderr stream.
+volatile int doom_engine_status = 0;
+char doom_engine_error[256] = "";
 
 typedef struct atexit_listentry_s atexit_listentry_t;
 
@@ -187,6 +194,7 @@ static boolean already_quitting = false;
 void I_Error (char *error, ...)
 {
     va_list argptr;
+    va_list error_copy;
     atexit_listentry_t *entry;
 
     if (already_quitting)
@@ -201,6 +209,10 @@ void I_Error (char *error, ...)
 
     // Message first.
     va_start(argptr, error);
+    va_copy(error_copy, argptr);
+    vsnprintf(doom_engine_error, sizeof(doom_engine_error), error, error_copy);
+    va_end(error_copy);
+    doom_engine_status = -1;
     fprintf(stderr, "\nError: ");
     vfprintf(stderr, error, argptr);
     fprintf(stderr, "\n\n");

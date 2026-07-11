@@ -249,8 +249,8 @@ static char *GetRegistryString(registry_value_t *reg_val)
 
     // Open the key (directory where the value is stored)
 
-    if (RegOpenKeyEx(reg_val->root, reg_val->path,
-                     0, KEY_READ, &key) != ERROR_SUCCESS)
+    if (RegOpenKeyExA(reg_val->root, reg_val->path,
+                      0, KEY_READ, &key) != ERROR_SUCCESS)
     {
         return NULL;
     }
@@ -259,16 +259,16 @@ static char *GetRegistryString(registry_value_t *reg_val)
 
     // Find the type and length of the string, and only accept strings.
 
-    if (RegQueryValueEx(key, reg_val->value,
-                        NULL, &valtype, NULL, &len) == ERROR_SUCCESS
+    if (RegQueryValueExA(key, reg_val->value,
+                         NULL, &valtype, NULL, &len) == ERROR_SUCCESS
      && valtype == REG_SZ)
     {
         // Allocate a buffer for the value and read the value
 
         result = malloc(len + 1);
 
-        if (RegQueryValueEx(key, reg_val->value, NULL, &valtype,
-                            (unsigned char *) result, &len) != ERROR_SUCCESS)
+        if (RegQueryValueExA(key, reg_val->value, NULL, &valtype,
+                             (unsigned char *) result, &len) != ERROR_SUCCESS)
         {
             free(result);
             result = NULL;
@@ -945,4 +945,3 @@ char *D_SuggestGameName(GameMission_t mission, GameMode_t mode)
 
     return "Unknown game?";
 }
-

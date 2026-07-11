@@ -87,19 +87,18 @@
 
 #include <inttypes.h>
 
-#if defined(__cplusplus) || defined(__bool_true_false_are_defined)
+#ifdef __cplusplus
 
-// Use builtin bool type with C++.
-
+// C++ has a built-in bool type.
 typedef bool boolean;
 
 #else
 
-typedef enum 
-{
-    false, 
-    true
-} boolean;
+// C23 reserves true and false as keywords.  Doom's boolean values also use
+// -1 as an uninitialized sentinel in several places, so this must remain an
+// int rather than the one-bit standard bool type.
+#include <stdbool.h>
+typedef int boolean;
 
 #endif
 
@@ -126,4 +125,3 @@ typedef int16_t dpixel_t;
 #define arrlen(array) (sizeof(array) / sizeof(*array))
 
 #endif
-

@@ -6,6 +6,8 @@
 extern "C" {
 #include "doom/d_event.h"
 #include "doom/doomkeys.h"
+	extern volatile int doom_engine_status;
+	extern char doom_engine_error[256];
 }
 
 static int mapGlfwToDoomKey(int glfwKey) {
@@ -155,6 +157,18 @@ struct ChronoDoomViewportWidget final : Widget {
 			nvgFontSize(args.vg, 13.f);
 			nvgFillColor(args.vg, nvgRGBA(180, 200, 220, 255));
 			nvgText(args.vg, box.size.x / 2.f, box.size.y / 2.f + 15.f, "Right-click -> Load WAD...", nullptr);
+			return;
+		}
+
+		if (doom_engine_status < 0) {
+			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+			nvgFontSize(args.vg, 16.f);
+			nvgFillColor(args.vg, nvgRGBA(255, 100, 100, 255));
+			nvgText(args.vg, box.size.x / 2.f, box.size.y / 2.f - 18.f, "DOOM STARTUP FAILED", nullptr);
+			nvgFontSize(args.vg, 11.f);
+			nvgFillColor(args.vg, nvgRGBA(220, 220, 220, 255));
+			nvgTextBox(args.vg, 20.f, box.size.y / 2.f + 2.f, box.size.x - 40.f, doom_engine_error, nullptr);
 			return;
 		}
 

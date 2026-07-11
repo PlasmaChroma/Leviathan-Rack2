@@ -7,6 +7,8 @@ extern "C" {
 	void D_DoomMain(void);
 	void I_SetTargetRGBA(uint8_t *buffer);
 	extern int doom_exit_requested;
+	extern volatile int doom_engine_status;
+	extern char doom_engine_error[256];
 	extern volatile int doom_dirty_frame;
 	void W_Shutdown(void);
 	extern int myargc;
@@ -251,8 +253,10 @@ void ChronoDoomModule::process(const ProcessArgs& args) {
 		}
 
 		// 5. Output Polyphonic MIDI CV
-		outputs[MIDI_PITCH_OUTPUT].setChannels(16);
-		outputs[MIDI_GATE_OUTPUT].setChannels(16);
+		// All channels are written below, so avoid the SDK's redundant
+		// higher-channel clearing pass (which also trips a GCC false positive).
+		outputs[MIDI_PITCH_OUTPUT].channels = 16;
+		outputs[MIDI_GATE_OUTPUT].channels = 16;
 		for (int i = 0; i < 16; ++i) {
 			outputs[MIDI_PITCH_OUTPUT].setVoltage(voices[i].pitch, i);
 			outputs[MIDI_GATE_OUTPUT].setVoltage(voices[i].gate, i);
@@ -271,8 +275,8 @@ void ChronoDoomModule::process(const ProcessArgs& args) {
 			voices[i].gate = 0.f;
 			voices[i].note = -1;
 		}
-		outputs[MIDI_PITCH_OUTPUT].setChannels(0);
-		outputs[MIDI_GATE_OUTPUT].setChannels(0);
+		outputs[MIDI_PITCH_OUTPUT].channels = 0;
+		outputs[MIDI_GATE_OUTPUT].channels = 0;
 	}
 
 	outputs[AUDIO_L_OUTPUT].setVoltage(outL * 5.f);
@@ -294,7 +298,7 @@ bool ChronoDoomModule::loadWad(const std::string& path) {
 		return false;
 	}
 
-	// Basic WAD header check: First 4 bytes must be "IWAD" or "PWAD"
+	// Basic WAD header check: First 4 bytes must be "IWAD" or "PWAD".
 	char header[4];
 	file.read(header, 4);
 	if (file.gcount() < 4) {
@@ -319,6 +323,8 @@ bool ChronoDoomModule::loadWad(const std::string& path) {
 	// Start a new thread
 	doom_exit_requested = 0;
 	doom_dirty_frame = 0;
+	doom_engine_error[0] = '\0';
+	doom_engine_status = 1;
 	gDoomThread = std::thread([this]() {
 		I_SetTargetRGBA(dummyFramebuffer);
 

@@ -647,8 +647,19 @@ midi_file_t *MIDI_LoadFileFromMemory(const void *buf, size_t size)
     file->buffer = NULL;
     file->buffer_size = 0;
 
-    // Open stream from memory buffer
-    stream = fmemopen((void *)buf, size, "rb");
+    // fmemopen() is not available in the Windows C runtime. MIDI files are
+    // loaded only during setup, so use a portable temporary binary stream.
+    stream = tmpfile();
+
+    if (stream != NULL)
+    {
+        if ((size > 0 && fwrite(buf, 1, size, stream) != size)
+         || fseek(stream, 0, SEEK_SET) != 0)
+        {
+            fclose(stream);
+            stream = NULL;
+        }
+    }
 
     if (stream == NULL)
     {
@@ -868,4 +879,3 @@ int main(int argc, char *argv[])
 }
 
 #endif
-
