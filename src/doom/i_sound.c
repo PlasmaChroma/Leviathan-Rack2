@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "doomtype.h"
@@ -57,7 +58,12 @@ void I_ShutdownSound(void)
 
 int I_GetSfxLumpNum(sfxinfo_t *sfxinfo)
 {
-    return sfxinfo->lumpnum;
+    char lumpname[9];
+
+    // Doom's S_sfx table stores names without the WAD's "DS" prefix.
+    // Return the real lump number so S_StartSound can cache it.
+    snprintf(lumpname, sizeof(lumpname), "DS%.6s", sfxinfo->name);
+    return W_GetNumForName(lumpname);
 }
 
 void I_UpdateSound(void)
@@ -85,9 +91,17 @@ int I_StartSound(sfxinfo_t *sfxinfo, int channel, int vol, int sep, int pitch)
     if (!data)
         return 0;
 
-    // Header parsing
+    // DMX sound lump header: format, sample rate, then sample count.
+    const uint32_t lump_length = (uint32_t) W_LumpLength(sfxinfo->lumpnum);
+    if (lump_length <= 8)
+        return 0;
+
     int samplerate = (data[3] << 8) | data[2];
     uint32_t length = (data[7] << 24) | (data[6] << 16) | (data[5] << 8) | data[4];
+
+    // Keep malformed headers from reading past the cached WAD lump.
+    if (length > lump_length - 8)
+        length = lump_length - 8;
 
     if (length == 0)
         return 0;
@@ -127,7 +141,9 @@ int I_StartSound(sfxinfo_t *sfxinfo, int channel, int vol, int sep, int pitch)
     // Mark active
     chan->active = 1;
 
-    return channel + 1;
+    // The Doom sound layer stores this handle and passes it unchanged to
+    // I_UpdateSoundParams(), I_StopSound(), and I_SoundIsPlaying().
+    return channel;
 }
 
 void I_StopSound(int channel)
@@ -189,7 +205,8 @@ void *I_RegisterSong(void *data, int len)
         return NULL;
     }
     
-    if (!mus2mid(mus_file, mid_file)) {
+    // mus2mid() follows the Doom convention: false means success.
+    if (mus2mid(mus_file, mid_file)) {
         mem_fclose(mus_file);
         mem_fclose(mid_file);
         return NULL;
