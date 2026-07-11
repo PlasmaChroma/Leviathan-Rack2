@@ -6,6 +6,7 @@
 extern "C" {
 #include "doom/d_event.h"
 #include "doom/doomkeys.h"
+#include "doom/m_controls.h"
 	extern volatile int doom_engine_status;
 	extern char doom_engine_error[256];
 }
@@ -27,6 +28,10 @@ static int mapGlfwToDoomKey(int glfwKey) {
 		case GLFW_KEY_LEFT_ALT:
 		case GLFW_KEY_RIGHT_ALT: return KEY_RALT;
 		case GLFW_KEY_SPACE: return ' ';
+		case GLFW_KEY_W: return key_up;
+		case GLFW_KEY_S: return key_down;
+		case GLFW_KEY_A: return key_strafeleft;
+		case GLFW_KEY_D: return key_straferight;
 		default:
 			if (glfwKey >= GLFW_KEY_A && glfwKey <= GLFW_KEY_Z) {
 				return (glfwKey - GLFW_KEY_A) + 'a';
@@ -43,27 +48,154 @@ struct ChronoDoomViewportWidget final : Widget {
 	int doomImage = -1;
 	int doomImageW = 0, doomImageH = 0;
 	NVGcontext* ownerVg = nullptr;
+	int mouseButtons = 0;
+	double lastMouseX = 0.0;
+	double lastMouseY = 0.0;
+	double mouseAccumX = 0.0;
+	double mouseAccumY = 0.0;
+	bool mousePositionValid = false;
 
 	explicit ChronoDoomViewportWidget(ChronoDoomModule* module) : module(module) {
 	}
 
-	void onEnter(const EnterEvent& e) override {
-		Widget::onEnter(e);
+	void postKey(evtype_t type, int doomKey) {
+		event_t ev{};
+		ev.type = type;
+		ev.data1 = doomKey;
+		D_PostEvent(&ev);
+	}
+
+	void postMouse(int dx, int dy) {
+		event_t ev{};
+		ev.type = ev_mouse;
+		ev.data1 = mouseButtons;
+		ev.data2 = dx;
+		ev.data3 = dy;
+		D_PostEvent(&ev);
+	}
+
+	void releaseInputState() {
+		// Rack will receive subsequent physical key releases, so release every
+		// game key that might currently be held to avoid latched movement/fire.
+		static const int keys[] = {
+			KEY_RIGHTARROW, KEY_LEFTARROW, KEY_UPARROW, KEY_DOWNARROW,
+			KEY_ENTER, KEY_TAB, KEY_BACKSPACE, KEY_RSHIFT, KEY_RCTRL,
+			KEY_RALT, ' ', 'w', 'a', 's', 'd', 'e',
+			'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'
+		};
+		for (int key : keys) {
+			postKey(ev_keyup, key);
+		}
+		postKey(ev_keyup, key_strafeleft);
+		postKey(ev_keyup, key_straferight);
+		mouseButtons = 0;
+		postMouse(0, 0);
+		APP->window->cursorUnlock();
+		mousePositionValid = false;
+		mouseAccumX = 0.0;
+		mouseAccumY = 0.0;
+
 		if (module) {
-			module->isFocused.store(true);
-			// Claim keyboard focus from Rack
-			APP->event->setSelectedWidget(this);
+			module->isFocused.store(false);
 		}
 	}
 
-	void onLeave(const LeaveEvent& e) override {
-		Widget::onLeave(e);
-		if (module) {
-			module->isFocused.store(false);
-			if (APP->event->selectedWidget == this) {
-				APP->event->setSelectedWidget(nullptr);
+	void releaseCapture() {
+		releaseInputState();
+		if (APP->event->selectedWidget == this) {
+			APP->event->setSelectedWidget(nullptr);
+		}
+	}
+
+	void onButton(const ButtonEvent& e) override {
+		if (module && module->isEngineOwner() && module->hasWad
+				&& e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
+			if (module->isFocused.load()) {
+				// A captured viewport must remain Rack's selected widget or it
+				// stops receiving keyboard events, including the release key.
+				APP->event->setSelectedWidget(this);
+				mouseButtons |= 1;
+				postMouse(0, 0);
+			} else {
+				module->isFocused.store(true);
+				APP->event->setSelectedWidget(this);
+				APP->window->cursorLock();
+				glfwGetCursorPos(APP->window->win, &lastMouseX, &lastMouseY);
+				mousePositionValid = true;
+			}
+			e.consume(this);
+			return;
+		}
+
+		if (module && module->isFocused.load()) {
+			int mask = 0;
+			if (e.button == GLFW_MOUSE_BUTTON_LEFT) mask = 1;
+			else if (e.button == GLFW_MOUSE_BUTTON_RIGHT) mask = 2;
+			else if (e.button == GLFW_MOUSE_BUTTON_MIDDLE) mask = 4;
+
+			if (mask != 0) {
+				if (e.action == GLFW_PRESS) mouseButtons |= mask;
+				else if (e.action == GLFW_RELEASE) mouseButtons &= ~mask;
+				postMouse(0, 0);
+				e.consume(this);
+				return;
 			}
 		}
+		Widget::onButton(e);
+	}
+
+	void onHover(const HoverEvent& e) override {
+		if (module && module->isFocused.load()) {
+			e.consume(this);
+			return;
+		}
+		Widget::onHover(e);
+	}
+
+	void step() override {
+		Widget::step();
+		if (!module || !module->isFocused.load()) {
+			return;
+		}
+		if (!APP->window->isCursorLocked()) {
+			// The OS can break cursor lock when focus changes. Treat that as a
+			// full release so the next click starts from a known state.
+			releaseInputState();
+			return;
+		}
+		if (APP->event->selectedWidget != this) {
+			APP->event->setSelectedWidget(this);
+		}
+
+		double x = 0.0;
+		double y = 0.0;
+		glfwGetCursorPos(APP->window->win, &x, &y);
+		if (!mousePositionValid) {
+			lastMouseX = x;
+			lastMouseY = y;
+			mousePositionValid = true;
+			return;
+		}
+
+		mouseAccumX += x - lastMouseX;
+		// Vanilla Doom has no vertical-look axis. Ignore mouse Y so it cannot
+		// inject unintended forward/back movement alongside WASD controls.
+		lastMouseX = x;
+		lastMouseY = y;
+
+		const int dx = (int) mouseAccumX;
+		mouseAccumX -= dx;
+		mouseAccumY = 0.0;
+		if (dx != 0) {
+			postMouse(dx, 0);
+		}
+	}
+
+	void onRemove(const RemoveEvent& e) override {
+		if (module && module->isFocused.load()) {
+			releaseInputState();
+		}
+		Widget::onRemove(e);
 	}
 
 	void onSelectKey(const SelectKeyEvent& e) override {
@@ -77,11 +209,12 @@ struct ChronoDoomViewportWidget final : Widget {
 			return;
 		}
 
-		// Consume game keys to prevent bubbling to Rack.
-		// If Ctrl or Alt is held, let Rack handle it.
-		bool hasMod = (e.mods & (RACK_MOD_MASK));
-		if (hasMod) {
-			Widget::onSelectKey(e);
+		// 0 is reserved as the explicit path back to Rack while captured.
+		if (e.key == GLFW_KEY_0) {
+			if (e.action == GLFW_PRESS) {
+				releaseCapture();
+			}
+			e.consume(this);
 			return;
 		}
 
@@ -97,16 +230,10 @@ struct ChronoDoomViewportWidget final : Widget {
 		if (consumeKey) {
 			int doomKey = mapGlfwToDoomKey(e.key);
 			if (doomKey != 0) {
-				event_t ev;
-				memset(&ev, 0, sizeof(event_t));
 				if (e.action == GLFW_PRESS) {
-					ev.type = ev_keydown;
-					ev.data1 = doomKey;
-					D_PostEvent(&ev);
+					postKey(ev_keydown, doomKey);
 				} else if (e.action == GLFW_RELEASE) {
-					ev.type = ev_keyup;
-					ev.data1 = doomKey;
-					D_PostEvent(&ev);
+					postKey(ev_keyup, doomKey);
 				}
 			}
 			e.consume(this);
@@ -210,6 +337,13 @@ struct ChronoDoomViewportWidget final : Widget {
 			float pulse = 0.5f * std::sin(system::getTime() * 6.f) + 0.5f;
 			nvgStrokeColor(args.vg, nvgRGBA(0, 255, 204, 150 + 105 * pulse));
 			nvgStroke(args.vg);
+
+			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+			nvgFontSize(args.vg, 10.f);
+			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
+			nvgFillColor(args.vg, nvgRGBA(0, 255, 204, 220));
+			nvgText(args.vg, box.size.x / 2.f, box.size.y - 5.f,
+				"INPUT CAPTURED - PRESS 0 TO RELEASE", nullptr);
 		}
 	}
 };
@@ -220,10 +354,9 @@ struct ChronoDoomWidget final : ModuleWidget {
 	explicit ChronoDoomWidget(ChronoDoomModule* module) {
 		setModule(module);
 
-		// Size derived from full vertical height (380px) and 4:3 corrected aspect ratio (350px * 4/3 = 466.66px)
-		// Total Width = 40 HP = 600 pixels.
-		// Viewport centered: Left margin = 66.66px, Viewport Width = 466.66px, Right margin = 66.66px.
-		box.size = Vec(40.f * RACK_GRID_WIDTH, RACK_GRID_HEIGHT);
+		// 42 HP gives each jack column one more HP of clearance from the
+		// full-height 4:3 viewport.
+		box.size = Vec(42.f * RACK_GRID_WIDTH, RACK_GRID_HEIGHT);
 
 		// 1. Screws
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0)));
@@ -231,15 +364,15 @@ struct ChronoDoomWidget final : ModuleWidget {
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		// 2. Viewport (Centered vertically from Y=15 to Y=365)
+		// 2. Full-height 4:3 viewport, centered between the side jack columns.
 		viewport = new ChronoDoomViewportWidget(module);
-		viewport->box.pos = Vec(66.666f, 15.f);
-		viewport->box.size = Vec(466.666f, 350.f);
+		viewport->box.pos = Vec(61.666f, 0.f);
+		viewport->box.size = Vec(506.666f, RACK_GRID_HEIGHT);
 		addChild(viewport);
 
 		// 3. Port Layout: CV inputs on the left margin, outputs on the right margin
 		// Center of left margin is at X = 33.333f.
-		// Center of right margin is at X = box.size.x - 33.333f = 566.666f.
+		// Center of right margin is at X = box.size.x - 33.333f.
 		
 		// Inputs (spaced vertically)
 		addInput(createInputCentered<Magitek2InputJack>(Vec(33.333f, 60.f), module, ChronoDoomModule::X_MOVE_INPUT));
@@ -248,12 +381,12 @@ struct ChronoDoomWidget final : ModuleWidget {
 		addInput(createInputCentered<Magitek2InputJack>(Vec(33.333f, 300.f), module, ChronoDoomModule::WEAPON_CV_INPUT));
 
 		// Outputs (spaced vertically)
-		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(566.666f, 40.f), module, ChronoDoomModule::HEALTH_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(566.666f, 100.f), module, ChronoDoomModule::FRAG_TRIG_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(566.666f, 160.f), module, ChronoDoomModule::AUDIO_L_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(566.666f, 220.f), module, ChronoDoomModule::AUDIO_R_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(566.666f, 280.f), module, ChronoDoomModule::MIDI_PITCH_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(566.666f, 340.f), module, ChronoDoomModule::MIDI_GATE_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(box.size.x - 33.333f, 40.f), module, ChronoDoomModule::HEALTH_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(box.size.x - 33.333f, 100.f), module, ChronoDoomModule::FRAG_TRIG_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(box.size.x - 33.333f, 160.f), module, ChronoDoomModule::AUDIO_L_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(box.size.x - 33.333f, 220.f), module, ChronoDoomModule::AUDIO_R_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(box.size.x - 33.333f, 280.f), module, ChronoDoomModule::MIDI_PITCH_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(box.size.x - 33.333f, 340.f), module, ChronoDoomModule::MIDI_GATE_OUTPUT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
@@ -295,21 +428,21 @@ struct ChronoDoomWidget final : ModuleWidget {
 		for (float y = 40.f; y < box.size.y; y += 40.f) {
 			nvgBeginPath(args.vg);
 			nvgMoveTo(args.vg, 0, y);
-			nvgLineTo(args.vg, 66.666f, y);
+			nvgLineTo(args.vg, 61.666f, y);
 			nvgStroke(args.vg);
 
 			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, box.size.x - 66.666f, y);
+			nvgMoveTo(args.vg, box.size.x - 61.666f, y);
 			nvgLineTo(args.vg, box.size.x, y);
 			nvgStroke(args.vg);
 		}
 
 		// Vertical divider lines separating margins from the screen viewport
 		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, 66.666f, 0);
-		nvgLineTo(args.vg, 66.666f, box.size.y);
-		nvgMoveTo(args.vg, box.size.x - 66.666f, 0);
-		nvgLineTo(args.vg, box.size.x - 66.666f, box.size.y);
+		nvgMoveTo(args.vg, 61.666f, 0);
+		nvgLineTo(args.vg, 61.666f, box.size.y);
+		nvgMoveTo(args.vg, box.size.x - 61.666f, 0);
+		nvgLineTo(args.vg, box.size.x - 61.666f, box.size.y);
 		nvgStrokeColor(args.vg, nvgRGBA(0, 255, 204, 40));
 		nvgStroke(args.vg);
 
@@ -333,12 +466,12 @@ struct ChronoDoomWidget final : ModuleWidget {
 		nvgText(args.vg, 33.333f, 315.f, "WEAPON", nullptr);
 
 		// Output labels
-		nvgText(args.vg, 566.666f, 55.f, "HEALTH", nullptr);
-		nvgText(args.vg, 566.666f, 115.f, "FRAG", nullptr);
-		nvgText(args.vg, 566.666f, 175.f, "AUDIO L", nullptr);
-		nvgText(args.vg, 566.666f, 235.f, "AUDIO R", nullptr);
-		nvgText(args.vg, 566.666f, 295.f, "PITCH", nullptr);
-		nvgText(args.vg, 566.666f, 355.f, "GATE", nullptr);
+		nvgText(args.vg, box.size.x - 33.333f, 55.f, "HEALTH", nullptr);
+		nvgText(args.vg, box.size.x - 33.333f, 115.f, "FRAG", nullptr);
+		nvgText(args.vg, box.size.x - 33.333f, 175.f, "AUDIO L", nullptr);
+		nvgText(args.vg, box.size.x - 33.333f, 235.f, "AUDIO R", nullptr);
+		nvgText(args.vg, box.size.x - 33.333f, 295.f, "PITCH", nullptr);
+		nvgText(args.vg, box.size.x - 33.333f, 355.f, "GATE", nullptr);
 
 		ModuleWidget::draw(args);
 	}
