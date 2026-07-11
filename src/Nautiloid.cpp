@@ -44,6 +44,16 @@ bool isIrisModule(const engine::Module* neighbor) {
     ((neighbor->model == modelIris) || neighbor->model->slug == "Iris");
 }
 
+// Integral Flux's glass expander consumes Nautiloid's CPU preview source.
+// Keep the GPU preview fast for Nautiloid itself, but do not suppress the
+// worker publication when that adjacent visual consumer is present.
+bool hasRightIntegralFluxGlassConsumer(const Nautiloid* module) {
+  if (!module) return false;
+  const engine::Module* right = module->rightExpander.module;
+  return right && right->leftExpander.module == module && right->model &&
+    ((right->model == modelIntegralFlux) || right->model->slug == "IntegralFlux");
+}
+
 Vec nautiloidFractalViewportHalfSpan(int mode) {
   switch (mode) {
     case iris::FRACTAL_MANDELBROT:
@@ -1354,7 +1364,7 @@ void Nautiloid::workerLoop() {
         request.mode,
         request.zoom,
         debugGpuPreviewAvailable.load(std::memory_order_relaxed),
-        this);
+        this) && !hasRightIntegralFluxGlassConsumer(this);
     if (gpuPreviewOwnsDisplay) {
       loading.store(false, std::memory_order_release);
       submitCacheRequest(request);

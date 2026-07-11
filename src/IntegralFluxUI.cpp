@@ -1,6 +1,8 @@
 #include "IntegralFlux.hpp"
 #include "DebugTerminalTransport.hpp"
 #include "MathHelpers.hpp"
+#include "Nautiloid.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "WavePreviewTracer.hpp"
@@ -39,6 +41,112 @@ thread_local uint32_t gIntegralFluxShapeGlyphDirtyRequestsThisFrame = 0u;
 thread_local uint32_t gIntegralFluxHaloDirtyDrawCountThisFrame = 0u;
 thread_local uint32_t gIntegralFluxHaloActiveDrawCountThisFrame = 0u;
 thread_local uint32_t gIntegralFluxHaloDraggingDrawCountThisFrame = 0u;
+
+// MVP visual expander: a Nautiloid immediately to the left lends its latest
+// fractal frame to Integral Flux's panel glass. This is deliberately UI-only;
+// it does not enter Flux's audio or serialized module state.
+struct IntegralFluxNautiloidGlassOverlay final : TransparentWidget {
+	IntegralFlux* module = nullptr;
+	widget::FramebufferWidget* framebuffer = nullptr;
+	NVGcontext* imageContext = nullptr;
+	int imageHandle = -1;
+	int uploadedWidth = 0;
+	int uploadedHeight = 0;
+	uint64_t uploadedGeneration = uint64_t(-1);
+	uint64_t observedGeneration = uint64_t(-1);
+	bool observedConnection = false;
+	std::vector<uint8_t> rgba;
+
+	explicit IntegralFluxNautiloidGlassOverlay(IntegralFlux* module) : module(module) {
+	}
+
+	Nautiloid* leftNautiloid() const {
+		Module* left = module ? module->leftExpander.module : nullptr;
+		if (!left || !left->model ||
+			(left->model != modelNautiloid && left->model->slug != "Nautiloid")) {
+			return nullptr;
+		}
+		return dynamic_cast<Nautiloid*>(left);
+	}
+
+	void step() override {
+		Nautiloid* naut = leftNautiloid();
+		const bool connected = naut != nullptr;
+		const uint64_t generation =
+			naut ? naut->previewGeneration.load(std::memory_order_acquire) : 0u;
+		if (framebuffer && (connected != observedConnection || generation != observedGeneration)) {
+			framebuffer->setDirty();
+		}
+		observedConnection = connected;
+		observedGeneration = generation;
+		TransparentWidget::step();
+	}
+
+	void draw(const DrawArgs& args) override {
+		Nautiloid* naut = leftNautiloid();
+		if (!naut || box.size.x <= 2.f || box.size.y <= 2.f) {
+			return;
+		}
+
+		const uint64_t generation = naut->previewGeneration.load(std::memory_order_acquire);
+		if (imageContext != args.vg) {
+			nvg_gfx_lifecycle::resetOwnedNvgImage(
+				imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, false);
+			imageContext = args.vg;
+			uploadedGeneration = uint64_t(-1);
+		}
+		if (generation != uploadedGeneration ||
+			(imageHandle >= 0 && !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(
+				args.vg, imageHandle, uploadedWidth, uploadedHeight))) {
+			std::vector<uint8_t> rgb;
+			int width = 0;
+			int height = 0;
+			naut->previewSnapshot(&rgb, &width, &height);
+			rgba.resize(rgb.size() / 3u * 4u);
+			for (size_t i = 0; i + 2u < rgb.size(); i += 3u) {
+				const size_t out = (i / 3u) * 4u;
+				rgba[out] = rgb[i];
+				rgba[out + 1u] = rgb[i + 1u];
+				rgba[out + 2u] = rgb[i + 2u];
+				rgba[out + 3u] = 255u;
+			}
+			nvg_gfx_lifecycle::resetOwnedNvgImage(
+				imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, imageContext == args.vg);
+			imageContext = args.vg;
+			if (width > 0 && height > 0 && !rgba.empty()) {
+				imageHandle = nvgCreateImageRGBA(args.vg, width, height, NVG_IMAGE_PREMULTIPLIED, rgba.data());
+				uploadedWidth = width;
+				uploadedHeight = height;
+			}
+			uploadedGeneration = generation;
+		}
+
+		const float inset = 2.f;
+		const float width = box.size.x - inset * 2.f;
+		const float height = box.size.y - inset * 2.f;
+		nvgSave(args.vg);
+		nvgScissor(args.vg, inset, inset, width, height);
+		if (imageHandle >= 0) {
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, inset, inset, width, height);
+			nvgFillPaint(args.vg, nvgImagePattern(args.vg, inset, inset, width, height, 0.f, imageHandle, 0.13f));
+			nvgFill(args.vg);
+		}
+		// A cool, low-alpha tint keeps the borrowed fractal behind the panel's
+		// typography while making the connection read as a glass phenomenon.
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, inset, inset, width, height);
+		nvgFillColor(args.vg, nvgRGBA(20, 120, 156, 16));
+		nvgFill(args.vg);
+		nvgRestore(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, inset, inset, width, height, 4.f);
+		nvgStrokeWidth(args.vg, 0.8f);
+		nvgStrokeColor(args.vg, nvgRGBA(105, 230, 255, 42));
+		nvgStroke(args.vg);
+	}
+};
 
 struct IntegralFluxScopedDrawTimer {
 	using Clock = std::chrono::steady_clock;
@@ -1644,6 +1752,14 @@ struct IntegralFluxWidget : ModuleWidget {
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/flux.panel.svg");
 		const std::string& panelBasePath = splitPanel.panelPath();
 		splitPanel.addLabels("res/flux.labels.svg");
+		auto* nautiloidGlassFb = new widget::FramebufferWidget();
+		nautiloidGlassFb->box.size = box.size;
+		nautiloidGlassFb->dirtyOnSubpixelChange = false;
+		auto* nautiloidGlass = new IntegralFluxNautiloidGlassOverlay(module);
+		nautiloidGlass->framebuffer = nautiloidGlassFb;
+		nautiloidGlass->box.size = box.size;
+		nautiloidGlassFb->addChild(nautiloidGlass);
+		addChild(nautiloidGlassFb);
 		{
 			math::Rect dragonRectMm;
 			if (!panel_svg::loadRectFromSvgMm(panelBasePath, "DRAGON_RENDER_AREA", &dragonRectMm)) {
