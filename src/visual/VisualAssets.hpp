@@ -28,11 +28,15 @@ Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float over
 class SplitPanelRenderer final {
 	ModuleWidget* parent_ = nullptr;
 	std::string panelPath_;
+	std::string labelsAssetPath_;
 
 public:
 	SplitPanelRenderer(ModuleWidget* parent, const char* panelAssetPath);
+	~SplitPanelRenderer();
 	const std::string& panelPath() const;
-	void addLabels(const char* labelsAssetPath) const;
+	// Labels are inserted when this scoped renderer is destroyed, after the
+	// module constructor has added its controls and dynamic visual layers.
+	void addLabels(const char* labelsAssetPath);
 };
 
 bool isPanelGlassColorCycleEnabled();

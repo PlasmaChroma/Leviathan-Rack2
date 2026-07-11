@@ -24,6 +24,35 @@ struct NautiloidFractalSourceParams {
   uint64_t generation = 0u;
 };
 
+// A lightweight post-render palette used when one fractal source is displayed
+// through multiple colored surfaces. It preserves the source's structure while
+// mapping its luminance between the supplied shadow and highlight shades.
+struct FractalPalette {
+  uint8_t shadowR = 0u;
+  uint8_t shadowG = 0u;
+  uint8_t shadowB = 0u;
+  uint8_t highlightR = 255u;
+  uint8_t highlightG = 255u;
+  uint8_t highlightB = 255u;
+};
+
+inline void applyFractalPalette(SourceField* source, const FractalPalette& palette) {
+  if (!source || !source->valid()) return;
+  for (size_t i = 0; i + 2u < source->rgb8.size(); i += 3u) {
+    const uint32_t luminance =
+      uint32_t(source->rgb8[i]) * 54u + uint32_t(source->rgb8[i + 1u]) * 183u + uint32_t(source->rgb8[i + 2u]) * 19u;
+    // Lift the glass-facing palette slightly so fine fractal detail remains
+    // visible through the panel tint without washing out the dark structure.
+    const uint32_t amount = std::min(255u, ((luminance >> 8u) * 3u + 255u) / 4u);
+    source->rgb8[i] = uint8_t(
+      int(palette.shadowR) + ((int(palette.highlightR) - int(palette.shadowR)) * int(amount) + 127) / 255);
+    source->rgb8[i + 1u] = uint8_t(
+      int(palette.shadowG) + ((int(palette.highlightG) - int(palette.shadowG)) * int(amount) + 127) / 255);
+    source->rgb8[i + 2u] = uint8_t(
+      int(palette.shadowB) + ((int(palette.highlightB) - int(palette.shadowB)) * int(amount) + 127) / 255);
+  }
+}
+
 inline bool sourceHasNautiloidFractalParams(const SourceField& source) {
   return source.generatorKind == SOURCE_GENERATOR_NAUTILOID_FRACTAL &&
          source.generatorVersion == kNautiloidFractalSourceVersion &&

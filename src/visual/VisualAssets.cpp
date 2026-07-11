@@ -618,10 +618,7 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		const float smallBoost = clamp((90.f - std::min(w, h)) / 55.f, 0.f, 1.f);
 		const float glowAlpha = 0.105f + smallBoost * 0.08f;
 		const float baseWashAlpha = 0.055f + smallBoost * 0.07f;
-		const int topWhiteAlpha = int(std::round(20.f + smallBoost * 16.f));
-		const int sheenAlpha = int(std::round(10.f + smallBoost * 16.f));
 		const int strokeWhiteAlpha = int(std::round(24.f + smallBoost * 24.f));
-		const int topLineAlpha = int(std::round(34.f + smallBoost * 34.f));
 		const float edgeAlphaBoost = 1.f + smallBoost * 0.7f;
 
 		nvgSave(args.vg);
@@ -635,25 +632,11 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		nvgFill(args.vg);
 
 		NVGpaint glassFill = nvgLinearGradient(args.vg, x, y, x, y + h,
-			nvgRGBA(255, 255, 255, topWhiteAlpha), nvgRGBAf(base.r, base.g, base.b, baseWashAlpha));
+			nvgRGBAf(base.r, base.g, base.b, baseWashAlpha), nvgRGBAf(base.r, base.g, base.b, baseWashAlpha));
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, x + 0.6f, y + 0.6f, w - 1.2f, h - 1.2f, r);
 		nvgFillPaint(args.vg, glassFill);
 		nvgFill(args.vg);
-
-		nvgSave(args.vg);
-		nvgScissor(args.vg, x + 1.f, y + 1.f, w - 2.f, h - 2.f);
-		NVGpaint sheen = nvgLinearGradient(args.vg, x + w * 0.12f, y + h * 0.05f, x + w * 0.55f, y + h * 0.62f,
-			nvgRGBA(255, 255, 255, sheenAlpha), nvgRGBA(255, 255, 255, 0));
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, x + w * 0.06f, y);
-		nvgLineTo(args.vg, x + w * 0.23f, y);
-		nvgLineTo(args.vg, x + w * 0.64f, y + h);
-		nvgLineTo(args.vg, x + w * 0.46f, y + h);
-		nvgClosePath(args.vg);
-		nvgFillPaint(args.vg, sheen);
-		nvgFill(args.vg);
-		nvgRestore(args.vg);
 
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, x + 0.75f, y + 0.75f, w - 1.5f, h - 1.5f, r);
@@ -668,13 +651,6 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		nvgRoundedRect(args.vg, x + 1.35f, y + 1.35f, w - 2.7f, h - 2.7f, std::max(1.f, r - 1.f));
 		nvgStrokeWidth(args.vg, 0.55f);
 		nvgStrokePaint(args.vg, edge);
-		nvgStroke(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, x + r + 2.f, y + 2.2f);
-		nvgLineTo(args.vg, x + w - r - 2.f, y + 2.2f);
-		nvgStrokeWidth(args.vg, 0.8f);
-		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, topLineAlpha));
 		nvgStroke(args.vg);
 
 		if (smallBoost > 0.f) {
@@ -958,7 +934,6 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		const NVGcolor violet = applyPanelGlassTint(nvgRGB(0x7a, 0x5c, 0xff));
 		const float smallBoost = clamp((90.f - std::min(w, h)) / 55.f, 0.f, 1.f);
 		const float edgeAlphaBoost = 1.f + smallBoost * 0.7f;
-		const int glassTopAlpha = int(std::round(12.f + smallBoost * 6.f));
 		const float glassBaseAlpha = 0.05f + smallBoost * 0.032f;
 
 		nvgSave(args.vg);
@@ -971,34 +946,12 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		nvgFill(args.vg);
 
 		NVGpaint glassFill = nvgLinearGradient(args.vg, x, y, x, y + h,
-			nvgRGBA(255, 255, 255, glassTopAlpha),
+			nvgRGBAf(base.r, base.g, base.b, glassBaseAlpha),
 			nvgRGBAf(base.r, base.g, base.b, glassBaseAlpha));
 		nvgBeginPath(args.vg);
 		appendGlassPath(args.vg, glass, Vec(0.f, 0.f));
 		nvgFillPaint(args.vg, glassFill);
 		nvgFill(args.vg);
-
-		if (glass.useTemporalDeckInputsGlare) {
-			drawTemporalDeckInputsPathGlare(args, glass, smallBoost);
-		}
-		else if (glass.useBifurxInputsGlare) {
-			drawBifurxInputsPathGlare(args, glass, smallBoost);
-		}
-		else if (glass.useWyrmInputsGlare) {
-			drawWyrmInputsPathGlare(args, glass, smallBoost);
-		}
-		else if (glass.useIrisInputsGlare) {
-			drawIrisInputsPathGlare(args, glass, smallBoost);
-		}
-		else {
-			nvgBeginPath(args.vg);
-			appendGlassPath(args.vg, glass, Vec(0.f, 0.f));
-			nvgStrokeWidth(args.vg, 2.4f);
-			nvgStrokePaint(args.vg, nvgLinearGradient(args.vg, x, y, x + w * 0.72f, y + h * 0.38f,
-				nvgRGBA(255, 255, 255, int(std::round(10.f + smallBoost * 5.f))),
-				nvgRGBA(255, 255, 255, 0)));
-			nvgStroke(args.vg);
-		}
 
 		nvgBeginPath(args.vg);
 		appendGlassPath(args.vg, glass, Vec(-0.65f, -0.65f));
@@ -1028,22 +981,6 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 			nvgRGBA(255, 255, 255, int(std::round(18.f + smallBoost * 12.f))),
 			nvgRGBA(0, 0, 0, int(std::round(30.f + smallBoost * 16.f)))));
 		nvgStroke(args.vg);
-
-		if (!glass.useTemporalDeckInputsGlare && !glass.useBifurxInputsGlare && !glass.useWyrmInputsGlare && !glass.useIrisInputsGlare) {
-			nvgBeginPath(args.vg);
-			appendGlassPathTopContour(args.vg, glass);
-			nvgStrokeWidth(args.vg, 1.35f);
-			nvgStrokePaint(args.vg, nvgLinearGradient(args.vg, x, y, x + w * 0.82f, y + h * 0.16f,
-				nvgRGBA(255, 255, 255, int(std::round(34.f + smallBoost * 12.f))),
-				nvgRGBA(255, 255, 255, 0)));
-			nvgStroke(args.vg);
-
-			nvgBeginPath(args.vg);
-			appendGlassPathTopContour(args.vg, glass);
-			nvgStrokeWidth(args.vg, 0.42f);
-			nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, int(std::round(58.f + smallBoost * 14.f))));
-			nvgStroke(args.vg);
-		}
 
 		if (gPanelGlassTint.currentAmount > 0.f) {
 			nvgBeginPath(args.vg);
@@ -1546,11 +1483,18 @@ const std::string& SplitPanelRenderer::panelPath() const {
 	return panelPath_;
 }
 
-void SplitPanelRenderer::addLabels(const char* labelsAssetPath) const {
+SplitPanelRenderer::~SplitPanelRenderer() {
+	if (!parent_ || labelsAssetPath_.empty()) {
+		return;
+	}
+	parent_->addChild(createPanelLabelsWidget(labelsAssetPath_.c_str(), parent_->box.size));
+}
+
+void SplitPanelRenderer::addLabels(const char* labelsAssetPath) {
 	if (!parent_ || !labelsAssetPath || labelsAssetPath[0] == '\0') {
 		return;
 	}
-	parent_->addChild(createPanelLabelsWidget(labelsAssetPath, parent_->box.size));
+	labelsAssetPath_ = labelsAssetPath;
 }
 
 int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const std::string& idSubstring) {

@@ -71,7 +71,7 @@
       </g>
       <g id="connector_lines">
         <path style="display:none;opacity:1;fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:#ffffff;stroke-width:50.155;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1" d="m 2161.9375,6802.2764 -657.9069,-539.492" id="linear_line" sodipodi:nodetypes="cc" />
-        <path style="display:inline;opacity:1;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:58.7818;stroke-dasharray:none;stroke-opacity:1" d="m 2982.8495,4254.2432 1264.2608,327.6294" id="surge_connector" sodipodi:nodetypes="cc" />
+        <path style="display:inline;opacity:1;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:58.7818;stroke-dasharray:none;stroke-opacity:1" d="m 2982.8495,4194.0677 1264.2608,327.6294" id="surge_connector" sodipodi:nodetypes="cc" />
         <path style="display:inline;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.1551;stroke-dasharray:none;stroke-opacity:1" d="m 4237.3591,6376.5454 -865.0558,976.6498" id="sink_connector" sodipodi:nodetypes="cc" />
       </g>
     </g>
@@ -95,24 +95,23 @@
     </g>
     <path d="m 224.91839,952.22269 3600.46661,0.01" stroke="url(#accentGrad)" stroke-width="49.8454" stroke-linecap="round" opacity="0.55" fill="none" id="top_horizontal_line" style="display:none;opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
   </g>
-  <g id="panel_labels_reworked" inkscape:label="Labels Reworked" style="display:none" />
   <g id="components" style="display:none;opacity:0.5">
     <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="LIN_LOG_1" cx="1177.5327" cy="5792.6074" rx="294.84427" ry="295.80988" />
-    <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="AMP" cx="724.64429" cy="2871.01" rx="294.84427" ry="295.80988" />
+    <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="AMP" cx="724.64429" cy="2811.01" rx="294.84427" ry="295.80988" />
     <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="FALL_1" cx="3240.7444" cy="5357.9102" rx="294.84427" ry="295.80988" />
-    <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="CYCLE_1" cx="3307.5281" cy="2013.8008" rx="294.84427" ry="295.80988" />
-    <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="RISE_1" cx="3240.7441" cy="3589.3101" rx="294.84427" ry="295.80988" />
+    <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="CYCLE_1" cx="3244.9297" cy="1893.8008" rx="294.84427" ry="295.80988" />
+    <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="RISE_1" cx="3240.7441" cy="3529.3103" rx="294.84427" ry="295.80988" />
     <ellipse style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597" id="EOR_LIGHT" cx="1593.6866" cy="9694.5723" rx="114.98675" ry="120.83137" />
     <ellipse style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597" id="MAIN_LIGHT" cx="1594.6865" cy="11068.226" rx="114.98675" ry="120.83137" />
     <ellipse style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302" id="EOR_OUTPUT" cx="943.69867" cy="9694.5723" rx="398.39865" ry="405.17139" />
     <ellipse style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302" id="MAIN_OUTPUT" cx="944.70752" cy="11068.226" rx="398.39865" ry="405.17139" />
-    <ellipse style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302" id="TRIGGER_INPUT" cx="1994.2986" cy="1665.4272" rx="398.39865" ry="405.17139" />
+    <ellipse style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302" id="TRIGGER_INPUT" cx="1994.2986" cy="1505.4714" rx="398.39865" ry="405.17139" />
     <ellipse style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021" id="FALL_CV_INPUT" cx="2360.3987" cy="6326.3164" rx="398.39865" ry="405.17142" />
     <ellipse style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021" id="BOTH_CV_INPUT" cx="1994.2986" cy="4449.7715" rx="398.39865" ry="405.17142" />
-    <ellipse style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021" id="RISE_CV_INPUT" cx="1994.2986" cy="3241.5713" rx="398.39865" ry="405.17142" />
+    <ellipse style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021" id="RISE_CV_INPUT" cx="1994.2986" cy="3181.5715" rx="398.39865" ry="405.17142" />
     <ellipse style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021" id="HALT_INPUT" cx="720.69867" cy="4036.6716" rx="398.39865" ry="405.17142" />
-    <ellipse style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021" id="SIGNAL_INPUT" cx="724.70056" cy="1665.4274" rx="398.39865" ry="405.17142" />
-    <ellipse style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597" id="CYCLE_LIGHT" cx="3307.5261" cy="1405.5314" rx="114.98675" ry="120.83137" />
+    <ellipse style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021" id="SIGNAL_INPUT" cx="724.70056" cy="1505.4716" rx="398.39865" ry="405.17142" />
+    <ellipse style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597" id="CYCLE_LIGHT" cx="3244.9277" cy="1285.5314" rx="114.98675" ry="120.83137" />
     <ellipse style="display:inline;fill:#0000ff;fill-opacity:1;fill-rule:evenodd;stroke-width:38.302" id="NEG_OUTPUT" cx="2655.1987" cy="11068.226" rx="398.39865" ry="405.17139" />
     <ellipse style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597" id="NEG_LIGHT" cx="3357.8699" cy="11068.226" rx="114.98675" ry="120.83137" />
     <ellipse style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597" id="EOC_LIGHT" cx="3364.5483" cy="9694.5723" rx="114.98675" ry="120.83137" />

@@ -48,8 +48,15 @@ thread_local uint32_t gIntegralFluxHaloDraggingDrawCountThisFrame = 0u;
 // and renders its own compact glass texture. No Nautiloid pixel buffer crosses
 // the expander boundary, and neither module's audio/state is affected.
 struct IntegralFluxNautiloidGlassOverlay final : TransparentWidget {
-	static constexpr int kRenderWidth = 192;
-	static constexpr int kRenderHeight = 240;
+	static constexpr int kRenderWidth = 384;
+	static constexpr int kRenderHeight = 480;
+
+	struct GlassRegion {
+		math::Rect rectPx;
+		float radiusPx = 0.f;
+		NVGcolor color = nvgRGB(124, 92, 255);
+		iris::FractalPalette palette;
+	};
 
 	struct RenderRequest {
 		iris::NautiloidFractalSourceParams params;
@@ -59,12 +66,13 @@ struct IntegralFluxNautiloidGlassOverlay final : TransparentWidget {
 	IntegralFlux* module = nullptr;
 	widget::FramebufferWidget* framebuffer = nullptr;
 	NVGcontext* imageContext = nullptr;
-	int imageHandle = -1;
 	int uploadedWidth = 0;
 	int uploadedHeight = 0;
 	uint64_t uploadedRenderGeneration = uint64_t(-1);
 	uint64_t observedRenderGeneration = uint64_t(-1);
 	bool observedConnection = false;
+	std::vector<GlassRegion> regions;
+	std::vector<int> regionImageHandles;
 	std::vector<uint8_t> rgba;
 	std::mutex requestMutex;
 	std::condition_variable requestCv;
@@ -74,14 +82,15 @@ struct IntegralFluxNautiloidGlassOverlay final : TransparentWidget {
 	uint64_t nextRequestSerial = 0u;
 	std::thread renderThread;
 	std::mutex resultMutex;
-	std::vector<uint8_t> renderedRgb;
+	std::vector<std::vector<uint8_t>> renderedRegionRgb;
 	int renderedWidth = 0;
 	int renderedHeight = 0;
 	std::atomic<uint64_t> renderedGeneration {0u};
 	bool submittedParamsValid = false;
 	iris::NautiloidFractalSourceParams submittedParams;
 
-	explicit IntegralFluxNautiloidGlassOverlay(IntegralFlux* module) : module(module) {
+	explicit IntegralFluxNautiloidGlassOverlay(IntegralFlux* module, const std::string& panelPath) : module(module) {
+		loadGlassRegions(panelPath);
 		renderThread = std::thread([this]() { renderLoop(); });
 	}
 
@@ -104,6 +113,42 @@ struct IntegralFluxNautiloidGlassOverlay final : TransparentWidget {
 			return nullptr;
 		}
 		return dynamic_cast<Nautiloid*>(left);
+	}
+
+	static iris::FractalPalette paletteForColor(NVGcolor color) {
+		const int r = int(std::round(clamp(color.r, 0.f, 1.f) * 255.f));
+		const int g = int(std::round(clamp(color.g, 0.f, 1.f) * 255.f));
+		const int b = int(std::round(clamp(color.b, 0.f, 1.f) * 255.f));
+		iris::FractalPalette palette;
+		palette.shadowR = uint8_t(std::max(1, r / 8));
+		palette.shadowG = uint8_t(std::max(1, g / 8));
+		palette.shadowB = uint8_t(std::max(1, b / 8));
+		palette.highlightR = uint8_t(std::min(255, r + (255 - r) / 3));
+		palette.highlightG = uint8_t(std::min(255, g + (255 - g) / 3));
+		palette.highlightB = uint8_t(std::min(255, b + (255 - b) / 3));
+		return palette;
+	}
+
+	void loadGlassRegions(const std::string& panelPath) {
+		std::vector<panel_svg::SvgRectMatch> matches;
+		if (!panel_svg::findRectsInGroupsWithIdSubstringMm(panelPath, "glass", &matches)) {
+			return;
+		}
+		regions.reserve(matches.size());
+		for (const panel_svg::SvgRectMatch& match : matches) {
+			GlassRegion region;
+			region.rectPx = math::Rect(mm2px(match.rect.pos), mm2px(match.rect.size));
+			if (match.hasCornerRadius) {
+				const Vec radiusPx = mm2px(match.cornerRadius);
+				region.radiusPx = std::min(radiusPx.x, radiusPx.y);
+			}
+			if (match.hasFillColor) {
+				region.color = match.fillColor;
+			}
+			region.palette = paletteForColor(region.color);
+			regions.push_back(region);
+		}
+		regionImageHandles.assign(regions.size(), -1);
 	}
 
 	static iris::NautiloidFractalSourceParams paramsFromNautiloid(const Nautiloid& naut) {
@@ -155,7 +200,12 @@ struct IntegralFluxNautiloidGlassOverlay final : TransparentWidget {
 			}
 			{
 				std::lock_guard<std::mutex> resultLock(resultMutex);
-				renderedRgb = std::move(source.rgb8);
+				renderedRegionRgb.resize(regions.size());
+				for (size_t i = 0; i < regions.size(); ++i) {
+					iris::SourceField tinted = source;
+					iris::applyFractalPalette(&tinted, regions[i].palette);
+					renderedRegionRgb[i] = std::move(tinted.rgb8);
+				}
 				renderedWidth = source.width;
 				renderedHeight = source.height;
 			}
@@ -163,12 +213,12 @@ struct IntegralFluxNautiloidGlassOverlay final : TransparentWidget {
 		}
 	}
 
-	bool snapshotRendered(std::vector<uint8_t>* rgb, int* width, int* height) {
+	bool snapshotRendered(std::vector<std::vector<uint8_t>>* rgbByRegion, int* width, int* height) {
 		std::lock_guard<std::mutex> lock(resultMutex);
-		if (renderedWidth <= 0 || renderedHeight <= 0 || renderedRgb.empty()) {
+		if (renderedWidth <= 0 || renderedHeight <= 0 || renderedRegionRgb.empty()) {
 			return false;
 		}
-		if (rgb) *rgb = renderedRgb;
+		if (rgbByRegion) *rgbByRegion = renderedRegionRgb;
 		if (width) *width = renderedWidth;
 		if (height) *height = renderedHeight;
 		return true;
@@ -198,67 +248,78 @@ struct IntegralFluxNautiloidGlassOverlay final : TransparentWidget {
 
 	void draw(const DrawArgs& args) override {
 		Nautiloid* naut = leftNautiloid();
-		if (!naut || box.size.x <= 2.f || box.size.y <= 2.f) {
+		if (!naut || regions.empty()) {
 			return;
 		}
 
 		const uint64_t generation = renderedGeneration.load(std::memory_order_acquire);
+		auto resetImages = [&](bool deleteCurrentHandles) {
+			if (deleteCurrentHandles && imageContext == args.vg) {
+				for (int handle : regionImageHandles) {
+					if (handle >= 0) nvgDeleteImage(args.vg, handle);
+				}
+			}
+			regionImageHandles.assign(regions.size(), -1);
+			uploadedWidth = 0;
+			uploadedHeight = 0;
+		};
 		if (imageContext != args.vg) {
-			nvg_gfx_lifecycle::resetOwnedNvgImage(
-				imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, false);
+			resetImages(false);
 			imageContext = args.vg;
 			uploadedRenderGeneration = uint64_t(-1);
 		}
-		if (generation != uploadedRenderGeneration ||
-			(imageHandle >= 0 && !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(
-				args.vg, imageHandle, uploadedWidth, uploadedHeight))) {
-			std::vector<uint8_t> rgb;
+		bool imagesValid = regionImageHandles.size() == regions.size() && uploadedWidth > 0 && uploadedHeight > 0;
+		if (imagesValid) {
+			for (int handle : regionImageHandles) {
+				if (!nvg_gfx_lifecycle::ownedNvgImageSizeMatches(args.vg, handle, uploadedWidth, uploadedHeight)) {
+					imagesValid = false;
+					break;
+				}
+			}
+		}
+		if (generation != uploadedRenderGeneration || !imagesValid) {
+			std::vector<std::vector<uint8_t>> rgbByRegion;
 			int width = 0;
 			int height = 0;
-			snapshotRendered(&rgb, &width, &height);
-			rgba.resize(rgb.size() / 3u * 4u);
-			for (size_t i = 0; i + 2u < rgb.size(); i += 3u) {
-				const size_t out = (i / 3u) * 4u;
-				rgba[out] = rgb[i];
-				rgba[out + 1u] = rgb[i + 1u];
-				rgba[out + 2u] = rgb[i + 2u];
-				rgba[out + 3u] = 255u;
-			}
-			nvg_gfx_lifecycle::resetOwnedNvgImage(
-				imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, imageContext == args.vg);
-			imageContext = args.vg;
-			if (width > 0 && height > 0 && !rgba.empty()) {
-				imageHandle = nvgCreateImageRGBA(args.vg, width, height, NVG_IMAGE_PREMULTIPLIED, rgba.data());
+			if (snapshotRendered(&rgbByRegion, &width, &height) && rgbByRegion.size() == regions.size()) {
+				resetImages(true);
+				for (size_t regionIndex = 0; regionIndex < rgbByRegion.size(); ++regionIndex) {
+					const std::vector<uint8_t>& rgb = rgbByRegion[regionIndex];
+					rgba.resize(rgb.size() / 3u * 4u);
+					for (size_t i = 0; i + 2u < rgb.size(); i += 3u) {
+						const size_t out = (i / 3u) * 4u;
+						rgba[out] = rgb[i];
+						rgba[out + 1u] = rgb[i + 1u];
+						rgba[out + 2u] = rgb[i + 2u];
+						rgba[out + 3u] = 255u;
+					}
+					if (!rgba.empty()) {
+						regionImageHandles[regionIndex] = nvgCreateImageRGBA(
+							args.vg, width, height, NVG_IMAGE_PREMULTIPLIED, rgba.data());
+					}
+				}
 				uploadedWidth = width;
 				uploadedHeight = height;
 			}
 			uploadedRenderGeneration = generation;
 		}
 
-		const float inset = 2.f;
-		const float width = box.size.x - inset * 2.f;
-		const float height = box.size.y - inset * 2.f;
-		nvgSave(args.vg);
-		nvgScissor(args.vg, inset, inset, width, height);
-		if (imageHandle >= 0) {
+		for (size_t regionIndex = 0; regionIndex < regions.size(); ++regionIndex) {
+			const GlassRegion& region = regions[regionIndex];
+			const int imageHandle = regionImageHandles[regionIndex];
+			if (imageHandle < 0) continue;
+			nvgSave(args.vg);
+			nvgScissor(args.vg, region.rectPx.pos.x, region.rectPx.pos.y, region.rectPx.size.x, region.rectPx.size.y);
 			nvgBeginPath(args.vg);
-			nvgRect(args.vg, inset, inset, width, height);
-			nvgFillPaint(args.vg, nvgImagePattern(args.vg, inset, inset, width, height, 0.f, imageHandle, 0.13f));
+			nvgRoundedRect(args.vg, region.rectPx.pos.x, region.rectPx.pos.y,
+				region.rectPx.size.x, region.rectPx.size.y, region.radiusPx);
+			// Keep every glass region in one module-local fractal coordinate space.
+			// The region is only a clip; it does not restart or stretch the field.
+			nvgFillPaint(args.vg, nvgImagePattern(args.vg, 0.f, 0.f,
+				box.size.x, box.size.y, 0.f, imageHandle, 0.24f));
 			nvgFill(args.vg);
+			nvgRestore(args.vg);
 		}
-		// A cool, low-alpha tint keeps the borrowed fractal behind the panel's
-		// typography while making the connection read as a glass phenomenon.
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, inset, inset, width, height);
-		nvgFillColor(args.vg, nvgRGBA(20, 120, 156, 16));
-		nvgFill(args.vg);
-		nvgRestore(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, inset, inset, width, height, 4.f);
-		nvgStrokeWidth(args.vg, 0.8f);
-		nvgStrokeColor(args.vg, nvgRGBA(105, 230, 255, 42));
-		nvgStroke(args.vg);
 	}
 };
 
@@ -1869,7 +1930,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		auto* nautiloidGlassFb = new widget::FramebufferWidget();
 		nautiloidGlassFb->box.size = box.size;
 		nautiloidGlassFb->dirtyOnSubpixelChange = false;
-		auto* nautiloidGlass = new IntegralFluxNautiloidGlassOverlay(module);
+		auto* nautiloidGlass = new IntegralFluxNautiloidGlassOverlay(module, panelBasePath);
 		nautiloidGlass->framebuffer = nautiloidGlassFb;
 		nautiloidGlass->box.size = box.size;
 		nautiloidGlassFb->addChild(nautiloidGlass);

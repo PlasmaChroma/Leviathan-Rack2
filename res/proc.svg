@@ -501,8 +501,8 @@
    style="display:none;opacity:1;stroke:#5740bf;stroke-opacity:1"
    sodipodi:nodetypes="cc" /></g>
   <g
-   id="panel_labels_reworked"
-   inkscape:label="Labels Reworked"
+   id="labels"
+   inkscape:label="labels"
    style="display:inline"><text
    id="reworked_module_title_text"
    x="2021.4169"
@@ -566,7 +566,7 @@
    xml:space="preserve">BOTH</text>
         <text
    id="reworked_text36"
-   x="3296.0046"
+   x="3233.4062"
    y="2509.6912"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
    xml:space="preserve">LOOP</text>
@@ -646,7 +646,7 @@
         
       </g><g
    id="components"
-   style="display:inline;opacity:0.5"><ellipse
+   style="display:none;opacity:0.5"><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="LIN_LOG_1"
      cx="1177.5327"
@@ -667,7 +667,7 @@
      ry="295.80988" /><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="CYCLE_1"
-     cx="3307.5281"
+     cx="3244.9297"
      cy="1893.8008"
      rx="294.84427"
      ry="295.80988" /><ellipse
@@ -739,7 +739,7 @@
      ry="405.17142" /><ellipse
      style="display:inline;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597"
      id="CYCLE_LIGHT"
-     cx="3307.5261"
+     cx="3244.9277"
      cy="1285.5314"
      rx="114.98675"
      ry="120.83137" /><ellipse
