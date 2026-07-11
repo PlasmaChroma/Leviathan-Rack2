@@ -24,6 +24,8 @@
 namespace {
 
 constexpr double kIntegralFluxDebugTerminalSubmitIntervalSec = debug_terminal::kTimingRangeSubmitIntervalSec;
+constexpr int kIntegralFluxNautiloidGlassRenderWidth = 384;
+constexpr int kIntegralFluxNautiloidGlassRenderHeight = 480;
 std::unordered_map<uint32_t, double> gIntegralFluxDebugTerminalLastSubmitSec;
 thread_local uint64_t gIntegralFluxGearDrawNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxEclipseDrawNsThisFrame = 0u;
@@ -44,12 +46,78 @@ thread_local uint32_t gIntegralFluxHaloDirtyDrawCountThisFrame = 0u;
 thread_local uint32_t gIntegralFluxHaloActiveDrawCountThisFrame = 0u;
 thread_local uint32_t gIntegralFluxHaloDraggingDrawCountThisFrame = 0u;
 
+std::string integralFluxFractalParamsRootPath() {
+	return system::join(asset::user(), "Leviathan/IntegralFlux");
+}
+
+std::string integralFluxFractalParamsPath() {
+	return system::join(integralFluxFractalParamsRootPath(), "FractalParams.json");
+}
+
+Nautiloid* leftNautiloidForIntegralFlux(const IntegralFlux* module) {
+	Module* left = module ? module->leftExpander.module : nullptr;
+	if (!left || !left->model ||
+		(left->model != modelNautiloid && left->model->slug != "Nautiloid")) {
+		return nullptr;
+	}
+	return dynamic_cast<Nautiloid*>(left);
+}
+
+bool appendIntegralFluxFractalParamsCapture(const IntegralFlux* module) {
+	Nautiloid* naut = leftNautiloidForIntegralFlux(module);
+	if (!naut) {
+		return false;
+	}
+	system::createDirectories(integralFluxFractalParamsRootPath());
+
+	const std::string path = integralFluxFractalParamsPath();
+	json_error_t error;
+	json_t* root = json_load_file(path.c_str(), 0, &error);
+	if (!root || !json_is_object(root)) {
+		if (root) json_decref(root);
+		root = json_object();
+	}
+	json_t* entries = json_object_get(root, "entries");
+	if (!entries || !json_is_array(entries)) {
+		entries = json_array();
+		json_object_set_new(root, "entries", entries);
+	}
+	json_object_set_new(root, "schemaVersion", json_integer(1));
+
+	json_t* entry = json_object();
+	json_object_set_new(entry, "capturedAtUnix", json_integer(json_int_t(std::time(nullptr))));
+	json_object_set_new(entry, "source", json_string("Nautiloid"));
+	json_object_set_new(entry, "fractalSourceVersion", json_integer(iris::kNautiloidFractalSourceVersion));
+	json_t* fractal = json_object();
+	json_object_set_new(fractal, "mode", json_integer(naut->fractalMode));
+	json_object_set_new(fractal, "modeName", json_string(iris::builtinFractalName(naut->fractalMode)));
+	json_object_set_new(fractal, "zoom", json_real(naut->fractalZoom));
+	json_object_set_new(fractal, "centerX", json_real(naut->fractalCenterX));
+	json_object_set_new(fractal, "centerY", json_real(naut->fractalCenterY));
+	json_object_set_new(entry, "fractal", fractal);
+	json_t* target = json_object();
+	json_object_set_new(target, "width", json_integer(kIntegralFluxNautiloidGlassRenderWidth));
+	json_object_set_new(target, "height", json_integer(kIntegralFluxNautiloidGlassRenderHeight));
+	json_object_set_new(target, "viewportScale", json_real(1.f));
+	json_object_set_new(target, "coordinateSpace", json_string("IntegralFlux module-local"));
+	json_object_set_new(target, "palette", json_string("glass-region-fill-color"));
+	json_object_set_new(entry, "renderTarget", target);
+	json_array_append_new(entries, entry);
+
+	const int result = json_dump_file(root, path.c_str(), JSON_INDENT(2) | JSON_SORT_KEYS);
+	json_decref(root);
+	if (result != 0) {
+		WARN("Integral Flux: failed to save Nautiloid fractal parameters: %s", path.c_str());
+	}
+	return result == 0;
+}
+
 // MVP visual expander: Integral Flux receives Nautiloid's fractal parameters
 // and renders its own compact glass texture. No Nautiloid pixel buffer crosses
 // the expander boundary, and neither module's audio/state is affected.
 struct IntegralFluxNautiloidGlassOverlay final : TransparentWidget {
-	static constexpr int kRenderWidth = 384;
-	static constexpr int kRenderHeight = 480;
+	static constexpr int kRenderWidth = kIntegralFluxNautiloidGlassRenderWidth;
+	static constexpr int kRenderHeight = kIntegralFluxNautiloidGlassRenderHeight;
 
 	struct GlassRegion {
 		math::Rect rectPx;
@@ -107,12 +175,7 @@ struct IntegralFluxNautiloidGlassOverlay final : TransparentWidget {
 	}
 
 	Nautiloid* leftNautiloid() const {
-		Module* left = module ? module->leftExpander.module : nullptr;
-		if (!left || !left->model ||
-			(left->model != modelNautiloid && left->model->slug != "Nautiloid")) {
-			return nullptr;
-		}
-		return dynamic_cast<Nautiloid*>(left);
+		return leftNautiloidForIntegralFlux(module);
 	}
 
 	static iris::FractalPalette paletteForColor(NVGcolor color) {
@@ -2490,6 +2553,16 @@ struct IntegralFluxWidget : ModuleWidget {
 			menu->addChild(createMenuItem("Reset Crystal", "", [=]() {
 				visual_assets::resetPanelGlassColorCycle();
 			}));
+			if (isDragonKingDebugEnabled()) {
+				const bool hasNautiloid = leftNautiloidForIntegralFlux(maths) != nullptr;
+				menu->addChild(new MenuSeparator());
+				menu->addChild(createMenuLabel("Integral Flux Debug"));
+				menu->addChild(createMenuItem(
+					"Save Nautiloid Fractal Parameters", "", [=]() {
+						appendIntegralFluxFractalParamsCapture(maths);
+					}, !hasNautiloid));
+				menu->addChild(createMenuLabel(integralFluxFractalParamsPath()));
+			}
 		}
 	}
 };
