@@ -1,4 +1,4 @@
-#include "ChronoDoom.hpp"
+#include "VcvDoom.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "visual/VisualAssets.hpp"
 #include <osdialog.h>
@@ -66,8 +66,8 @@ static int mapGlfwToDoomKey(int glfwKey) {
 	}
 }
 
-struct ChronoDoomViewportWidget final : Widget {
-	ChronoDoomModule* module = nullptr;
+struct VcvDoomViewportWidget final : Widget {
+	VcvDoomModule* module = nullptr;
 	int doomImage = -1;
 	int doomImageW = 0, doomImageH = 0;
 	NVGcontext* ownerVg = nullptr;
@@ -76,7 +76,52 @@ struct ChronoDoomViewportWidget final : Widget {
 	bool lookDragging = false;
 	double captureHintUntil = 0.0;
 	bool ignoreFirstLeftClick = false;
-	explicit ChronoDoomViewportWidget(ChronoDoomModule* module) : module(module) {
+	bool physicalKeyStates[512] = {};
+	explicit VcvDoomViewportWidget(VcvDoomModule* module) : module(module) {
+	}
+
+	bool isKeyMonitored(int glfwKey) {
+		if (glfwKey >= GLFW_KEY_A && glfwKey <= GLFW_KEY_Z) return true;
+		if (glfwKey >= GLFW_KEY_0 && glfwKey <= GLFW_KEY_9) return true;
+		if (glfwKey >= GLFW_KEY_KP_0 && glfwKey <= GLFW_KEY_KP_9) return true;
+		switch (glfwKey) {
+			case GLFW_KEY_UP:
+			case GLFW_KEY_DOWN:
+			case GLFW_KEY_LEFT:
+			case GLFW_KEY_RIGHT:
+			case GLFW_KEY_ESCAPE:
+			case GLFW_KEY_ENTER:
+			case GLFW_KEY_TAB:
+			case GLFW_KEY_BACKSPACE:
+			case GLFW_KEY_DELETE:
+			case GLFW_KEY_LEFT_SHIFT:
+			case GLFW_KEY_RIGHT_SHIFT:
+			case GLFW_KEY_LEFT_CONTROL:
+			case GLFW_KEY_RIGHT_CONTROL:
+			case GLFW_KEY_LEFT_ALT:
+			case GLFW_KEY_RIGHT_ALT:
+			case GLFW_KEY_SPACE:
+			case GLFW_KEY_MINUS:
+			case GLFW_KEY_EQUAL:
+			case GLFW_KEY_COMMA:
+			case GLFW_KEY_PERIOD:
+			case GLFW_KEY_SLASH:
+			case GLFW_KEY_SEMICOLON:
+			case GLFW_KEY_APOSTROPHE:
+			case GLFW_KEY_LEFT_BRACKET:
+			case GLFW_KEY_RIGHT_BRACKET:
+			case GLFW_KEY_BACKSLASH:
+			case GLFW_KEY_GRAVE_ACCENT:
+			case GLFW_KEY_KP_DECIMAL:
+			case GLFW_KEY_KP_DIVIDE:
+			case GLFW_KEY_KP_MULTIPLY:
+			case GLFW_KEY_KP_SUBTRACT:
+			case GLFW_KEY_KP_ADD:
+			case GLFW_KEY_KP_ENTER:
+				return true;
+			default:
+				return false;
+		}
 	}
 
 	void postKey(evtype_t type, int doomKey) {
@@ -119,6 +164,9 @@ struct ChronoDoomViewportWidget final : Widget {
 		mouseAccumX = 0.0;
 		captureHintUntil = 0.0;
 		ignoreFirstLeftClick = false;
+		for (int i = 0; i < 512; ++i) {
+			physicalKeyStates[i] = false;
+		}
 
 		if (module) {
 			module->isFocused.store(false);
@@ -200,9 +248,33 @@ struct ChronoDoomViewportWidget final : Widget {
 				APP->event->setDraggedWidget(this, 99);
 			}
 
+			GLFWwindow* win = APP->window->win;
+
+			// Poll keyboard keys directly from GLFW to avoid stuck keys
+			for (int k = 0; k <= GLFW_KEY_LAST; ++k) {
+				if (isKeyMonitored(k)) {
+					bool pressed = (glfwGetKey(win, k) == GLFW_PRESS);
+					if (pressed != physicalKeyStates[k]) {
+						physicalKeyStates[k] = pressed;
+						if (k == GLFW_KEY_0 && pressed) {
+							releaseCapture();
+							break;
+						}
+						
+						int doomKey = mapGlfwToDoomKey(k);
+						if (doomKey != 0) {
+							if (pressed) {
+								postKey(ev_keydown, doomKey);
+							} else {
+								postKey(ev_keyup, doomKey);
+							}
+						}
+					}
+				}
+			}
+
 			// Poll mouse buttons directly from GLFW since VCV Rack's event system
 			// ignores physical button presses/releases when a drag is active.
-			GLFWwindow* win = APP->window->win;
 			int mask = 0;
 			if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
 				if (!ignoreFirstLeftClick) {
@@ -249,14 +321,6 @@ struct ChronoDoomViewportWidget final : Widget {
 		}
 
 		if (module->isFocused.load()) {
-			int doomKey = mapGlfwToDoomKey(e.key);
-			if (doomKey != 0) {
-				if (e.action == GLFW_PRESS) {
-					postKey(ev_keydown, doomKey);
-				} else if (e.action == GLFW_RELEASE) {
-					postKey(ev_keyup, doomKey);
-				}
-			}
 			e.consume(this);
 		} else {
 			Widget::onSelectKey(e);
@@ -282,7 +346,7 @@ struct ChronoDoomViewportWidget final : Widget {
 			nvgFontSize(args.vg, 20.f);
 			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 			nvgFillColor(args.vg, nvgRGBA(255, 100, 100, 255));
-			nvgText(args.vg, box.size.x / 2.f, box.size.y / 2.f - 20.f, "CHRONODOOM", nullptr);
+			nvgText(args.vg, box.size.x / 2.f, box.size.y / 2.f - 20.f, "VCV DOOM", nullptr);
 
 			// Instruction
 			nvgFontSize(args.vg, 13.f);
@@ -299,7 +363,7 @@ struct ChronoDoomViewportWidget final : Widget {
 			nvgFontSize(args.vg, 20.f);
 			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 			nvgFillColor(args.vg, nvgRGBA(0, 255, 204, 255));
-			nvgText(args.vg, box.size.x / 2.f, box.size.y / 2.f - 20.f, "CHRONODOOM", nullptr);
+			nvgText(args.vg, box.size.x / 2.f, box.size.y / 2.f - 20.f, "VCV DOOM", nullptr);
 
 			// Instruction
 			nvgFontSize(args.vg, 13.f);
@@ -377,10 +441,10 @@ struct ChronoDoomViewportWidget final : Widget {
 	}
 };
 
-struct ChronoDoomWidget final : ModuleWidget {
-	ChronoDoomViewportWidget* viewport = nullptr;
+struct VcvDoomWidget final : ModuleWidget {
+	VcvDoomViewportWidget* viewport = nullptr;
 
-	explicit ChronoDoomWidget(ChronoDoomModule* module) {
+	explicit VcvDoomWidget(VcvDoomModule* module) {
 		setModule(module);
 
 		// 42 HP gives each jack column one more HP of clearance from the
@@ -394,7 +458,7 @@ struct ChronoDoomWidget final : ModuleWidget {
 		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 		// 2. Full-height 4:3 viewport, centered between the side jack columns.
-		viewport = new ChronoDoomViewportWidget(module);
+		viewport = new VcvDoomViewportWidget(module);
 		viewport->box.pos = Vec(61.666f, 0.f);
 		viewport->box.size = Vec(506.666f, RACK_GRID_HEIGHT);
 		addChild(viewport);
@@ -404,29 +468,29 @@ struct ChronoDoomWidget final : ModuleWidget {
 		// Center of right margin is at X = box.size.x - 33.333f.
 		
 		// Inputs (spaced vertically)
-		addInput(createInputCentered<Magitek2InputJack>(Vec(33.333f, 60.f), module, ChronoDoomModule::X_MOVE_INPUT));
-		addInput(createInputCentered<Magitek2InputJack>(Vec(33.333f, 140.f), module, ChronoDoomModule::Y_MOVE_INPUT));
-		addInput(createInputCentered<Magitek2InputJack>(Vec(33.333f, 220.f), module, ChronoDoomModule::FIRE_GATE_INPUT));
-		addInput(createInputCentered<Magitek2InputJack>(Vec(33.333f, 300.f), module, ChronoDoomModule::WEAPON_CV_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(Vec(33.333f, 60.f), module, VcvDoomModule::X_MOVE_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(Vec(33.333f, 140.f), module, VcvDoomModule::Y_MOVE_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(Vec(33.333f, 220.f), module, VcvDoomModule::FIRE_GATE_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(Vec(33.333f, 300.f), module, VcvDoomModule::WEAPON_CV_INPUT));
 
 		// Outputs (spaced vertically)
-		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(box.size.x - 33.333f, 40.f), module, ChronoDoomModule::HEALTH_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(box.size.x - 33.333f, 100.f), module, ChronoDoomModule::FRAG_TRIG_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(box.size.x - 33.333f, 160.f), module, ChronoDoomModule::AUDIO_L_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(box.size.x - 33.333f, 220.f), module, ChronoDoomModule::AUDIO_R_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(box.size.x - 33.333f, 280.f), module, ChronoDoomModule::MIDI_PITCH_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(box.size.x - 33.333f, 340.f), module, ChronoDoomModule::MIDI_GATE_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(box.size.x - 33.333f, 40.f), module, VcvDoomModule::HEALTH_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(box.size.x - 33.333f, 100.f), module, VcvDoomModule::FRAG_TRIG_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(box.size.x - 33.333f, 160.f), module, VcvDoomModule::AUDIO_L_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(box.size.x - 33.333f, 220.f), module, VcvDoomModule::AUDIO_R_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(box.size.x - 33.333f, 280.f), module, VcvDoomModule::MIDI_PITCH_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(Vec(box.size.x - 33.333f, 340.f), module, VcvDoomModule::MIDI_GATE_OUTPUT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
 		ModuleWidget::appendContextMenu(menu);
-		auto* m = dynamic_cast<ChronoDoomModule*>(module);
+		auto* m = dynamic_cast<VcvDoomModule*>(module);
 		if (!m) {
 			return;
 		}
 
 		menu->addChild(new MenuSeparator());
-		menu->addChild(createMenuLabel("ChronoDoom Settings"));
+		menu->addChild(createMenuLabel("VCV Doom Settings"));
 		menu->addChild(createMenuItem("Load WAD...", "", [=]() {
 			osdialog_filters* filters = osdialog_filters_parse("Doom WAD:wad,WAD");
 			char* pathC = osdialog_file(OSDIALOG_OPEN, nullptr, nullptr, filters);
@@ -513,4 +577,4 @@ struct ChronoDoomWidget final : ModuleWidget {
 	}
 };
 
-Model* modelChronoDoom = createModel<ChronoDoomModule, ChronoDoomWidget>("ChronoDoom");
+Model* modelVcvDoom = createModel<VcvDoomModule, VcvDoomWidget>("VcvDoom");

@@ -1,4 +1,4 @@
-#include "ChronoDoom.hpp"
+#include "VcvDoom.hpp"
 #include <cstdio>
 #include <fstream>
 #include <thread>
@@ -29,7 +29,7 @@ extern "C" {
 static uint8_t gFallbackFramebuffer[320 * 200 * 4];
 
 // Single-instance engine owner
-static ChronoDoomModule* gDoomModuleOwner = nullptr;
+static VcvDoomModule* gDoomModuleOwner = nullptr;
 static std::thread gDoomThread;
 
 // Static global guard to handle the thread when the plugin dynamic library is unloaded/exited.
@@ -45,7 +45,7 @@ struct DoomThreadGuard {
 };
 static DoomThreadGuard gThreadGuard;
 
-ChronoDoomModule::ChronoDoomModule() {
+VcvDoomModule::VcvDoomModule() {
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 
 	// Config inputs
@@ -84,7 +84,7 @@ ChronoDoomModule::ChronoDoomModule() {
 	loadGlobalSettings();
 }
 
-ChronoDoomModule::~ChronoDoomModule() {
+VcvDoomModule::~VcvDoomModule() {
 	if (gDoomModuleOwner == this) {
 		gDoomModuleOwner = nullptr;
 		// Safely divert the running thread's framebuffer output to our fallback buffer
@@ -92,11 +92,11 @@ ChronoDoomModule::~ChronoDoomModule() {
 	}
 }
 
-bool ChronoDoomModule::isEngineOwner() const {
+bool VcvDoomModule::isEngineOwner() const {
 	return gDoomModuleOwner == this;
 }
 
-void ChronoDoomModule::process(const ProcessArgs& args) {
+void VcvDoomModule::process(const ProcessArgs& args) {
 	float outL = 0.f;
 	float outR = 0.f;
 
@@ -318,7 +318,7 @@ void ChronoDoomModule::process(const ProcessArgs& args) {
 	outputs[AUDIO_R_OUTPUT].setVoltage(outR * 5.f);
 }
 
-bool ChronoDoomModule::loadWad(const std::string& path, int startSlot) {
+bool VcvDoomModule::loadWad(const std::string& path, int startSlot) {
 	if (path.empty()) {
 		return false;
 	}
@@ -361,7 +361,7 @@ bool ChronoDoomModule::loadWad(const std::string& path, int startSlot) {
 	W_Shutdown();
 
 	// Ensure the save directory exists
-	std::string saveDir = system::join(asset::user(), "Leviathan/chronodoom_saves");
+	std::string saveDir = system::join(asset::user(), "Leviathan/vcvdoom_saves");
 	system::createDirectories(saveDir);
 
 	// Start a new thread
@@ -374,7 +374,7 @@ bool ChronoDoomModule::loadWad(const std::string& path, int startSlot) {
 
 		// Set up argc / argv using std::vector for clean formatting
 		std::vector<std::string> args;
-		args.push_back("chronodoom");
+		args.push_back("vcvdoom");
 		args.push_back("-iwad");
 		args.push_back(wadPath);
 		args.push_back("-savedir");
@@ -405,13 +405,13 @@ bool ChronoDoomModule::loadWad(const std::string& path, int startSlot) {
 	return true;
 }
 
-void ChronoDoomModule::saveGlobalSettings() {
+void VcvDoomModule::saveGlobalSettings() {
 	json_t* rootJ = json_object();
 	json_object_set_new(rootJ, "wadPath", json_string(wadPath.c_str()));
 
 	const std::string dir = system::join(asset::user(), "Leviathan");
 	system::createDirectories(dir);
-	const std::string path = system::join(dir, "chronodoom.json");
+	const std::string path = system::join(dir, "vcvdoom.json");
 	FILE* file = std::fopen(path.c_str(), "w");
 	if (file) {
 		json_dumpf(rootJ, file, JSON_INDENT(2));
@@ -420,9 +420,9 @@ void ChronoDoomModule::saveGlobalSettings() {
 	json_decref(rootJ);
 }
 
-void ChronoDoomModule::loadGlobalSettings() {
+void VcvDoomModule::loadGlobalSettings() {
 	const std::string dir = system::join(asset::user(), "Leviathan");
-	const std::string path = system::join(dir, "chronodoom.json");
+	const std::string path = system::join(dir, "vcvdoom.json");
 	FILE* file = std::fopen(path.c_str(), "r");
 	if (!file) {
 		return;
@@ -438,7 +438,7 @@ void ChronoDoomModule::loadGlobalSettings() {
 	if (pathJ && json_is_string(pathJ)) {
 		std::string savedPath = json_string_value(pathJ);
 		if (!loadWad(savedPath)) {
-			WARN("ChronoDoom: Saved WAD path '%s' failed validation", savedPath.c_str());
+			WARN("VCV Doom: Saved WAD path '%s' failed validation", savedPath.c_str());
 		}
 	}
 	json_decref(rootJ);
@@ -475,13 +475,13 @@ static std::vector<uint8_t> decodeHex(const std::string& hex) {
 	return result;
 }
 
-json_t* ChronoDoomModule::dataToJson() {
+json_t* VcvDoomModule::dataToJson() {
 	json_t* rootJ = json_object();
 	json_object_set_new(rootJ, "saveGameHex", json_string(savedGameHex.c_str()));
 	return rootJ;
 }
 
-void ChronoDoomModule::dataFromJson(json_t* rootJ) {
+void VcvDoomModule::dataFromJson(json_t* rootJ) {
 	json_t* hexJ = json_object_get(rootJ, "saveGameHex");
 	if (hexJ && json_is_string(hexJ)) {
 		savedGameHex = json_string_value(hexJ);
@@ -489,7 +489,7 @@ void ChronoDoomModule::dataFromJson(json_t* rootJ) {
 		if (!savedGameHex.empty()) {
 			std::vector<uint8_t> buffer = decodeHex(savedGameHex);
 			if (!buffer.empty()) {
-				std::string saveDir = system::join(asset::user(), "Leviathan/chronodoom_saves");
+				std::string saveDir = system::join(asset::user(), "Leviathan/vcvdoom_saves");
 				system::createDirectories(saveDir);
 				std::string savePath = system::join(saveDir, "doomsav8.dsg");
 				
@@ -507,9 +507,9 @@ void ChronoDoomModule::dataFromJson(json_t* rootJ) {
 	}
 }
 
-void ChronoDoomModule::triggerExplicitSave() {
+void VcvDoomModule::triggerExplicitSave() {
 	if (gDoomModuleOwner == this && hasWad && doom_engine_status == 2) {
-		std::string saveDir = system::join(asset::user(), "Leviathan/chronodoom_saves");
+		std::string saveDir = system::join(asset::user(), "Leviathan/vcvdoom_saves");
 		std::string savePath = system::join(saveDir, "doomsav8.dsg");
 		
 		std::remove(savePath.c_str());
@@ -540,11 +540,11 @@ void ChronoDoomModule::triggerExplicitSave() {
 	}
 }
 
-void ChronoDoomModule::triggerExplicitLoad() {
+void VcvDoomModule::triggerExplicitLoad() {
 	if (!savedGameHex.empty()) {
 		std::vector<uint8_t> buffer = decodeHex(savedGameHex);
 		if (!buffer.empty()) {
-			std::string saveDir = system::join(asset::user(), "Leviathan/chronodoom_saves");
+			std::string saveDir = system::join(asset::user(), "Leviathan/vcvdoom_saves");
 			system::createDirectories(saveDir);
 			std::string savePath = system::join(saveDir, "doomsav8.dsg");
 			

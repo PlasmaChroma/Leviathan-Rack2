@@ -10,7 +10,7 @@
 #include <unistd.h>
 #endif
 
-// ChronoDoom runs the engine in its own thread on every platform.
+// VCV Doom runs the engine in its own thread on every platform.
 #include <pthread.h>
 
 #include "config.h"

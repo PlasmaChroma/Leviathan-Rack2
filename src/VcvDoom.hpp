@@ -4,7 +4,7 @@
 #include <atomic>
 #include <string>
 
-struct ChronoDoomModule : Module {
+struct VcvDoomModule : Module {
 	enum ParamId {
 		PARAMS_LEN
 	};
@@ -51,8 +51,8 @@ struct ChronoDoomModule : Module {
 	// Focus state
 	std::atomic<bool> isFocused{false};
 
-	ChronoDoomModule();
-	~ChronoDoomModule() override;
+	VcvDoomModule();
+	~VcvDoomModule() override;
 
 	void process(const ProcessArgs& args) override;
 	json_t* dataToJson() override;

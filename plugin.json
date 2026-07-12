@@ -148,8 +148,8 @@
       "hidden": true
     },
     {
-      "slug": "ChronoDoom",
-      "name": "ChronoDoom",
+      "slug": "VcvDoom",
+      "name": "VCV Doom",
       "description": "Embedded Doom engine with CV input/output",
       "tags": [
         "Visual",

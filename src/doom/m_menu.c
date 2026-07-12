@@ -1387,7 +1387,7 @@ boolean M_Responder (event_t* ev)
     // "close" button pressed on window?
     if (ev->type == ev_quit)
     {
-        // ChronoDoom is hosted by Rack; module destruction owns shutdown.
+        // VCV Doom is hosted by Rack; module destruction owns shutdown.
         return true;
     }
 
@@ -2076,7 +2076,7 @@ void M_Init (void)
     if (gamemode == commercial)
     {
         // Commercial Doom normally replaces "Read This" with "Quit Game".
-        // ChronoDoom is hosted by Rack, so remove that final item instead.
+        // VCV Doom is hosted by Rack, so remove that final item instead.
         MainDef.numitems--;
         MainDef.y += 8;
         NewDef.prevMenu = &MainDef;
