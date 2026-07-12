@@ -75,6 +75,7 @@ struct ChronoDoomViewportWidget final : Widget {
 	double mouseAccumX = 0.0;
 	bool lookDragging = false;
 	double captureHintUntil = 0.0;
+	bool ignoreFirstLeftClick = false;
 	explicit ChronoDoomViewportWidget(ChronoDoomModule* module) : module(module) {
 	}
 
@@ -117,6 +118,7 @@ struct ChronoDoomViewportWidget final : Widget {
 		}
 		mouseAccumX = 0.0;
 		captureHintUntil = 0.0;
+		ignoreFirstLeftClick = false;
 
 		if (module) {
 			module->isFocused.store(false);
@@ -139,6 +141,7 @@ struct ChronoDoomViewportWidget final : Widget {
 			APP->window->cursorLock();
 			APP->event->setDraggedWidget(this, 99); // Force dragging mode on dummy button 99 to receive smooth mouseDelta in onDragMove
 			captureHintUntil = system::getTime() + 6.0;
+			ignoreFirstLeftClick = true;
 			e.consume(this);
 			return;
 		}
@@ -201,7 +204,13 @@ struct ChronoDoomViewportWidget final : Widget {
 			// ignores physical button presses/releases when a drag is active.
 			GLFWwindow* win = APP->window->win;
 			int mask = 0;
-			if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) mask |= 1;
+			if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+				if (!ignoreFirstLeftClick) {
+					mask |= 1;
+				}
+			} else {
+				ignoreFirstLeftClick = false;
+			}
 			if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) mask |= 2;
 			if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS) mask |= 4;
 
