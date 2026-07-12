@@ -32,6 +32,7 @@ static int mapGlfwToDoomKey(int glfwKey) {
 		case GLFW_KEY_S: return key_down;
 		case GLFW_KEY_A: return key_strafeleft;
 		case GLFW_KEY_D: return key_straferight;
+		case GLFW_KEY_E: return key_use;
 		default:
 			if (glfwKey >= GLFW_KEY_A && glfwKey <= GLFW_KEY_Z) {
 				return (glfwKey - GLFW_KEY_A) + 'a';
@@ -93,6 +94,7 @@ struct ChronoDoomViewportWidget final : Widget {
 			APP->event->setDraggedWidget(nullptr, 0);
 		}
 		mouseAccumX = 0.0;
+		captureHintUntil = 0.0;
 
 		if (module) {
 			module->isFocused.store(false);
@@ -327,7 +329,7 @@ struct ChronoDoomViewportWidget final : Widget {
 
 		if (captureHintUntil > system::getTime()) {
 			nvgBeginPath(args.vg);
-			nvgRect(args.vg, 0.f, 0.f, box.size.x, 28.f);
+			nvgRect(args.vg, 0.f, 0.f, box.size.x, 20.f);
 			nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 170));
 			nvgFill(args.vg);
 
@@ -335,7 +337,7 @@ struct ChronoDoomViewportWidget final : Widget {
 			nvgFontSize(args.vg, 12.f);
 			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
 			nvgFillColor(args.vg, nvgRGBA(0, 255, 204, 230));
-			nvgText(args.vg, box.size.x / 2.f, 6.f,
+			nvgText(args.vg, box.size.x / 2.f, 4.f,
 				"MOVE MOUSE TO TURN  -  PRESS 0 TO RELEASE", nullptr);
 		}
 
