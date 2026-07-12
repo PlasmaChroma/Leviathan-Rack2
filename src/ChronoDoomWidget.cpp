@@ -90,6 +90,9 @@ struct ChronoDoomViewportWidget final : Widget {
 		lookDragging = false;
 		postMouse(0, 0);
 		APP->window->cursorUnlock();
+		if (APP->event->draggedWidget == this) {
+			APP->event->setDraggedWidget(nullptr, 0);
+		}
 		mouseAccumX = 0.0;
 
 		if (module) {
@@ -116,9 +119,8 @@ struct ChronoDoomViewportWidget final : Widget {
 			} else {
 				module->isFocused.store(true);
 				APP->event->setSelectedWidget(this);
-				// Cursor lock prevents Rack from routing hover deltas to this
-				// child widget reliably. Keep the cursor free and use local motion.
-				APP->window->cursorUnlock();
+				APP->window->cursorLock();
+				APP->event->setDraggedWidget(this, GLFW_MOUSE_BUTTON_LEFT);
 				captureHintUntil = system::getTime() + 6.0;
 			}
 			e.consume(this);
@@ -126,12 +128,6 @@ struct ChronoDoomViewportWidget final : Widget {
 		}
 
 		if (module && module->isFocused.load()) {
-			if (e.button == GLFW_MOUSE_BUTTON_RIGHT) {
-				lookDragging = (e.action == GLFW_PRESS);
-				e.consume(this);
-				return;
-			}
-
 			int mask = 0;
 			if (e.button == GLFW_MOUSE_BUTTON_LEFT) mask = 1;
 			else if (e.button == GLFW_MOUSE_BUTTON_RIGHT) mask = 2;
@@ -150,14 +146,6 @@ struct ChronoDoomViewportWidget final : Widget {
 
 	void onHover(const HoverEvent& e) override {
 		if (module && module->isFocused.load()) {
-			if (mouseButtons == 0 && !lookDragging) {
-				mouseAccumX += e.mouseDelta.x * 4.0;
-				const int dx = (int) mouseAccumX;
-				mouseAccumX -= dx;
-				if (dx != 0) {
-					postMouse(dx, 0);
-				}
-			}
 			e.consume(this);
 			return;
 		}
@@ -165,8 +153,7 @@ struct ChronoDoomViewportWidget final : Widget {
 	}
 
 	void onDragMove(const DragMoveEvent& e) override {
-		if (module && module->isFocused.load()
-				&& (lookDragging || mouseButtons != 0)) {
+		if (module && module->isFocused.load()) {
 			mouseAccumX += e.mouseDelta.x * 4.0;
 			const int dx = (int) mouseAccumX;
 			mouseAccumX -= dx;
@@ -181,11 +168,13 @@ struct ChronoDoomViewportWidget final : Widget {
 
 	void onDragEnd(const DragEndEvent& e) override {
 		if (module && module->isFocused.load()) {
-			if (e.button == GLFW_MOUSE_BUTTON_RIGHT) {
-				lookDragging = false;
-			}
-			else if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
-				mouseButtons &= ~1;
+			int mask = 0;
+			if (e.button == GLFW_MOUSE_BUTTON_LEFT) mask = 1;
+			else if (e.button == GLFW_MOUSE_BUTTON_RIGHT) mask = 2;
+			else if (e.button == GLFW_MOUSE_BUTTON_MIDDLE) mask = 4;
+
+			if (mask != 0) {
+				mouseButtons &= ~mask;
 				postMouse(0, 0);
 			}
 			e.consume(this);
@@ -196,9 +185,20 @@ struct ChronoDoomViewportWidget final : Widget {
 
 	void step() override {
 		Widget::step();
-		if (module && module->isFocused.load()
-				&& APP->event->selectedWidget != this) {
-			APP->event->setSelectedWidget(this);
+		if (module && module->isFocused.load()) {
+			if (glfwGetWindowAttrib(APP->window->win, GLFW_FOCUSED) == GLFW_FALSE) {
+				releaseCapture();
+				return;
+			}
+			if (APP->event->selectedWidget != this) {
+				APP->event->setSelectedWidget(this);
+			}
+			if (!APP->window->isCursorLocked()) {
+				APP->window->cursorLock();
+			}
+			if (APP->event->draggedWidget != this) {
+				APP->event->setDraggedWidget(this, GLFW_MOUSE_BUTTON_LEFT);
+			}
 		}
 	}
 
@@ -350,7 +350,7 @@ struct ChronoDoomViewportWidget final : Widget {
 			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
 			nvgFillColor(args.vg, nvgRGBA(0, 255, 204, 230));
 			nvgText(args.vg, box.size.x / 2.f, 6.f,
-				"RIGHT-DRAG TO TURN  -  PRESS 0 TO RELEASE", nullptr);
+				"MOVE MOUSE TO TURN  -  PRESS 0 TO RELEASE", nullptr);
 		}
 
 		// Draw focus indicator (glowing border / brackets)
