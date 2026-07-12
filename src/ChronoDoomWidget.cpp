@@ -7,6 +7,7 @@ extern "C" {
 #include "doom/d_event.h"
 #include "doom/doomkeys.h"
 #include "doom/m_controls.h"
+#include "doom/doomstat.h"
 	extern volatile int doom_engine_status;
 	extern char doom_engine_error[256];
 }
@@ -21,6 +22,7 @@ static int mapGlfwToDoomKey(int glfwKey) {
 		case GLFW_KEY_ENTER: return KEY_ENTER;
 		case GLFW_KEY_TAB: return KEY_TAB;
 		case GLFW_KEY_BACKSPACE: return KEY_BACKSPACE;
+		case GLFW_KEY_DELETE: return KEY_DEL;
 		case GLFW_KEY_LEFT_SHIFT:
 		case GLFW_KEY_RIGHT_SHIFT: return KEY_RSHIFT;
 		case GLFW_KEY_LEFT_CONTROL:
@@ -28,17 +30,37 @@ static int mapGlfwToDoomKey(int glfwKey) {
 		case GLFW_KEY_LEFT_ALT:
 		case GLFW_KEY_RIGHT_ALT: return KEY_RALT;
 		case GLFW_KEY_SPACE: return ' ';
-		case GLFW_KEY_W: return key_up;
-		case GLFW_KEY_S: return key_down;
-		case GLFW_KEY_A: return key_strafeleft;
-		case GLFW_KEY_D: return key_straferight;
-		case GLFW_KEY_E: return key_use;
+		case GLFW_KEY_W: return menuactive ? 'w' : key_up;
+		case GLFW_KEY_S: return menuactive ? 's' : key_down;
+		case GLFW_KEY_A: return menuactive ? 'a' : key_strafeleft;
+		case GLFW_KEY_D: return menuactive ? 'd' : key_straferight;
+		case GLFW_KEY_E: return menuactive ? 'e' : key_use;
+		case GLFW_KEY_MINUS: return '-';
+		case GLFW_KEY_EQUAL: return '=';
+		case GLFW_KEY_COMMA: return ',';
+		case GLFW_KEY_PERIOD: return '.';
+		case GLFW_KEY_SLASH: return '/';
+		case GLFW_KEY_SEMICOLON: return ';';
+		case GLFW_KEY_APOSTROPHE: return '\'';
+		case GLFW_KEY_LEFT_BRACKET: return '[';
+		case GLFW_KEY_RIGHT_BRACKET: return ']';
+		case GLFW_KEY_BACKSLASH: return '\\';
+		case GLFW_KEY_GRAVE_ACCENT: return '`';
+		case GLFW_KEY_KP_DECIMAL: return '.';
+		case GLFW_KEY_KP_DIVIDE: return '/';
+		case GLFW_KEY_KP_MULTIPLY: return '*';
+		case GLFW_KEY_KP_SUBTRACT: return '-';
+		case GLFW_KEY_KP_ADD: return '+';
+		case GLFW_KEY_KP_ENTER: return KEY_ENTER;
 		default:
 			if (glfwKey >= GLFW_KEY_A && glfwKey <= GLFW_KEY_Z) {
 				return (glfwKey - GLFW_KEY_A) + 'a';
 			}
 			if (glfwKey >= GLFW_KEY_0 && glfwKey <= GLFW_KEY_9) {
 				return (glfwKey - GLFW_KEY_0) + '0';
+			}
+			if (glfwKey >= GLFW_KEY_KP_0 && glfwKey <= GLFW_KEY_KP_9) {
+				return (glfwKey - GLFW_KEY_KP_0) + '0';
 			}
 			return 0;
 	}
@@ -217,16 +239,7 @@ struct ChronoDoomViewportWidget final : Widget {
 			return;
 		}
 
-		// List of keys to consume (WASD, Arrows, Space, Enter, Shift, Numbers 1-7, E, Esc)
-		bool consumeKey = false;
-		if (e.key >= GLFW_KEY_0 && e.key <= GLFW_KEY_9) consumeKey = true;
-		if (e.key == GLFW_KEY_W || e.key == GLFW_KEY_A || e.key == GLFW_KEY_S || e.key == GLFW_KEY_D) consumeKey = true;
-		if (e.key == GLFW_KEY_UP || e.key == GLFW_KEY_DOWN || e.key == GLFW_KEY_LEFT || e.key == GLFW_KEY_RIGHT) consumeKey = true;
-		if (e.key == GLFW_KEY_SPACE || e.key == GLFW_KEY_ENTER || e.key == GLFW_KEY_ESCAPE) consumeKey = true;
-		if (e.key == GLFW_KEY_LEFT_SHIFT || e.key == GLFW_KEY_RIGHT_SHIFT || e.key == GLFW_KEY_E) consumeKey = true;
-		if (e.key == GLFW_KEY_LEFT_CONTROL || e.key == GLFW_KEY_RIGHT_CONTROL) consumeKey = true;
-
-		if (consumeKey) {
+		if (module->isFocused.load()) {
 			int doomKey = mapGlfwToDoomKey(e.key);
 			if (doomKey != 0) {
 				if (e.action == GLFW_PRESS) {

@@ -25,9 +25,25 @@ extern "C" {
 	void G_SaveGame(int slot, char* description);
 }
 
+// Fallback framebuffer for when no module owns the engine
+static uint8_t gFallbackFramebuffer[320 * 200 * 4];
+
 // Single-instance engine owner
 static ChronoDoomModule* gDoomModuleOwner = nullptr;
 static std::thread gDoomThread;
+
+// Static global guard to handle the thread when the plugin dynamic library is unloaded/exited.
+// We detach the thread rather than joining it to prevent blocking VCV Rack's shutdown sequence
+// in case system audio/MIDI devices are shut down before this destructor is called.
+struct DoomThreadGuard {
+	~DoomThreadGuard() {
+		doom_exit_requested = 1;
+		if (gDoomThread.joinable()) {
+			gDoomThread.detach();
+		}
+	}
+};
+static DoomThreadGuard gThreadGuard;
 
 ChronoDoomModule::ChronoDoomModule() {
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -59,6 +75,10 @@ ChronoDoomModule::ChronoDoomModule() {
 
 	if (gDoomModuleOwner == nullptr) {
 		gDoomModuleOwner = this;
+		if (gDoomThread.joinable() && doom_engine_status == 2) {
+			// Redirect running thread's output to our new instance's framebuffer
+			I_SetTargetRGBA(dummyFramebuffer);
+		}
 	}
 
 	loadGlobalSettings();
@@ -66,12 +86,9 @@ ChronoDoomModule::ChronoDoomModule() {
 
 ChronoDoomModule::~ChronoDoomModule() {
 	if (gDoomModuleOwner == this) {
-		doom_exit_requested = 1;
-		if (gDoomThread.joinable()) {
-			gDoomThread.join();
-		}
-		W_Shutdown();
 		gDoomModuleOwner = nullptr;
+		// Safely divert the running thread's framebuffer output to our fallback buffer
+		I_SetTargetRGBA(gFallbackFramebuffer);
 	}
 }
 
@@ -308,6 +325,11 @@ bool ChronoDoomModule::loadWad(const std::string& path, int startSlot) {
 
 	if (gDoomModuleOwner != this) {
 		return false;
+	}
+
+	if (hasWad && wadPath == path && startSlot < 0 && gDoomThread.joinable() && doom_engine_status == 2) {
+		I_SetTargetRGBA(dummyFramebuffer);
+		return true;
 	}
 
 	// Phase 1 validation: file must exist and be readable

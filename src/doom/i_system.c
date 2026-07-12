@@ -174,28 +174,34 @@ void I_BindVariables(void)
     I_BindSoundVariables();
 }
 
+static boolean already_quitting = false;
+
 void I_Quit (void)
 {
     atexit_listentry_t *entry;
+    atexit_listentry_t *next;
 
     entry = exit_funcs; 
+    exit_funcs = NULL;
 
     while (entry != NULL)
     {
         entry->func();
-        entry = entry->next;
+        next = entry->next;
+        free(entry);
+        entry = next;
     }
 
+    already_quitting = false;
     pthread_exit(NULL);
 }
-
-static boolean already_quitting = false;
 
 void I_Error (char *error, ...)
 {
     va_list argptr;
     va_list error_copy;
     atexit_listentry_t *entry;
+    atexit_listentry_t *next;
 
     if (already_quitting)
     {
@@ -220,6 +226,7 @@ void I_Error (char *error, ...)
     fflush(stderr);
 
     entry = exit_funcs;
+    exit_funcs = NULL;
 
     while (entry != NULL)
     {
@@ -228,9 +235,12 @@ void I_Error (char *error, ...)
             entry->func();
         }
 
-        entry = entry->next;
+        next = entry->next;
+        free(entry);
+        entry = next;
     }
 
+    already_quitting = false;
     pthread_exit(NULL);
 }
 
