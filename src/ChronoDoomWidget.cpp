@@ -52,7 +52,6 @@ struct ChronoDoomViewportWidget final : Widget {
 	double mouseAccumX = 0.0;
 	bool lookDragging = false;
 	double captureHintUntil = 0.0;
-
 	explicit ChronoDoomViewportWidget(ChronoDoomModule* module) : module(module) {
 	}
 
@@ -109,37 +108,20 @@ struct ChronoDoomViewportWidget final : Widget {
 
 	void onButton(const ButtonEvent& e) override {
 		if (module && module->isEngineOwner() && module->hasWad
-				&& e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
-			if (module->isFocused.load()) {
-				// A captured viewport must remain Rack's selected widget or it
-				// stops receiving keyboard events, including the release key.
-				APP->event->setSelectedWidget(this);
-				mouseButtons |= 1;
-				postMouse(0, 0);
-			} else {
-				module->isFocused.store(true);
-				APP->event->setSelectedWidget(this);
-				APP->window->cursorLock();
-				APP->event->setDraggedWidget(this, GLFW_MOUSE_BUTTON_LEFT);
-				captureHintUntil = system::getTime() + 6.0;
-			}
+				&& e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS
+				&& !module->isFocused.load()) {
+			module->isFocused.store(true);
+			APP->event->setSelectedWidget(this);
+			APP->window->cursorLock();
+			APP->event->setDraggedWidget(this, 99); // Force dragging mode on dummy button 99 to receive smooth mouseDelta in onDragMove
+			captureHintUntil = system::getTime() + 6.0;
 			e.consume(this);
 			return;
 		}
 
 		if (module && module->isFocused.load()) {
-			int mask = 0;
-			if (e.button == GLFW_MOUSE_BUTTON_LEFT) mask = 1;
-			else if (e.button == GLFW_MOUSE_BUTTON_RIGHT) mask = 2;
-			else if (e.button == GLFW_MOUSE_BUTTON_MIDDLE) mask = 4;
-
-			if (mask != 0) {
-				if (e.action == GLFW_PRESS) mouseButtons |= mask;
-				else if (e.action == GLFW_RELEASE) mouseButtons &= ~mask;
-				postMouse(0, 0);
-				e.consume(this);
-				return;
-			}
+			e.consume(this);
+			return;
 		}
 		Widget::onButton(e);
 	}
@@ -168,15 +150,6 @@ struct ChronoDoomViewportWidget final : Widget {
 
 	void onDragEnd(const DragEndEvent& e) override {
 		if (module && module->isFocused.load()) {
-			int mask = 0;
-			if (e.button == GLFW_MOUSE_BUTTON_LEFT) mask = 1;
-			else if (e.button == GLFW_MOUSE_BUTTON_RIGHT) mask = 2;
-			else if (e.button == GLFW_MOUSE_BUTTON_MIDDLE) mask = 4;
-
-			if (mask != 0) {
-				mouseButtons &= ~mask;
-				postMouse(0, 0);
-			}
 			e.consume(this);
 			return;
 		}
@@ -197,7 +170,20 @@ struct ChronoDoomViewportWidget final : Widget {
 				APP->window->cursorLock();
 			}
 			if (APP->event->draggedWidget != this) {
-				APP->event->setDraggedWidget(this, GLFW_MOUSE_BUTTON_LEFT);
+				APP->event->setDraggedWidget(this, 99);
+			}
+
+			// Poll mouse buttons directly from GLFW since VCV Rack's event system
+			// ignores physical button presses/releases when a drag is active.
+			GLFWwindow* win = APP->window->win;
+			int mask = 0;
+			if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) mask |= 1;
+			if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) mask |= 2;
+			if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS) mask |= 4;
+
+			if (mask != mouseButtons) {
+				mouseButtons = mask;
+				postMouse(0, 0);
 			}
 		}
 	}
