@@ -237,7 +237,6 @@ enum
     loadgame,
     savegame,
     readthis,
-    quitdoom,
     main_end
 } main_e;
 
@@ -247,9 +246,7 @@ menuitem_t MainMenu[]=
     {1,"M_OPTION",M_Options,'o'},
     {1,"M_LOADG",M_LoadGame,'l'},
     {1,"M_SAVEG",M_SaveGame,'s'},
-    // Another hickup with Special edition.
-    {1,"M_RDTHIS",M_ReadThis,'r'},
-    {1,"M_QUITG",M_QuitDOOM,'q'}
+    {1,"M_RDTHIS",M_ReadThis,'r'}
 };
 
 menu_t  MainDef =
@@ -1377,9 +1374,8 @@ boolean M_Responder (event_t* ev)
 
     if (testcontrols)
     {
-        if (ev->type == ev_quit
-         || (ev->type == ev_keydown
-          && (ev->data1 == key_menu_activate || ev->data1 == key_menu_quit)))
+        if (ev->type == ev_keydown
+         && ev->data1 == key_menu_activate)
         {
             I_Quit();
             return true;
@@ -1391,19 +1387,7 @@ boolean M_Responder (event_t* ev)
     // "close" button pressed on window?
     if (ev->type == ev_quit)
     {
-        // First click on close button = bring up quit confirm message.
-        // Second click on close button = confirm quit
-
-        if (menuactive && messageToPrint && messageRoutine == M_QuitResponse)
-        {
-            M_QuitResponse(key_menu_confirm);
-        }
-        else
-        {
-            S_StartSound(NULL,sfx_swtchn);
-            M_QuitDOOM(0);
-        }
-
+        // ChronoDoom is hosted by Rack; module destruction owns shutdown.
         return true;
     }
 
@@ -1726,12 +1710,6 @@ boolean M_Responder (event_t* ev)
         {
 	    S_StartSound(NULL,sfx_swtchn);
 	    M_QuickLoad();
-	    return true;
-        }
-        else if (key == key_menu_quit)     // Quit DOOM
-        {
-	    S_StartSound(NULL,sfx_swtchn);
-	    M_QuitDOOM(0);
 	    return true;
         }
         else if (key == key_menu_gamma)    // gamma toggle
@@ -2097,7 +2075,8 @@ void M_Init (void)
 
     if (gamemode == commercial)
     {
-        MainMenu[readthis] = MainMenu[quitdoom];
+        // Commercial Doom normally replaces "Read This" with "Quit Game".
+        // ChronoDoom is hosted by Rack, so remove that final item instead.
         MainDef.numitems--;
         MainDef.y += 8;
         NewDef.prevMenu = &MainDef;

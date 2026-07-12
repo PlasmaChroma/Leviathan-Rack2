@@ -49,11 +49,9 @@ struct ChronoDoomViewportWidget final : Widget {
 	int doomImageW = 0, doomImageH = 0;
 	NVGcontext* ownerVg = nullptr;
 	int mouseButtons = 0;
-	double lastMouseX = 0.0;
-	double lastMouseY = 0.0;
 	double mouseAccumX = 0.0;
-	double mouseAccumY = 0.0;
-	bool mousePositionValid = false;
+	bool lookDragging = false;
+	double captureHintUntil = 0.0;
 
 	explicit ChronoDoomViewportWidget(ChronoDoomModule* module) : module(module) {
 	}
@@ -89,11 +87,10 @@ struct ChronoDoomViewportWidget final : Widget {
 		postKey(ev_keyup, key_strafeleft);
 		postKey(ev_keyup, key_straferight);
 		mouseButtons = 0;
+		lookDragging = false;
 		postMouse(0, 0);
 		APP->window->cursorUnlock();
-		mousePositionValid = false;
 		mouseAccumX = 0.0;
-		mouseAccumY = 0.0;
 
 		if (module) {
 			module->isFocused.store(false);
@@ -119,15 +116,22 @@ struct ChronoDoomViewportWidget final : Widget {
 			} else {
 				module->isFocused.store(true);
 				APP->event->setSelectedWidget(this);
-				APP->window->cursorLock();
-				glfwGetCursorPos(APP->window->win, &lastMouseX, &lastMouseY);
-				mousePositionValid = true;
+				// Cursor lock prevents Rack from routing hover deltas to this
+				// child widget reliably. Keep the cursor free and use local motion.
+				APP->window->cursorUnlock();
+				captureHintUntil = system::getTime() + 6.0;
 			}
 			e.consume(this);
 			return;
 		}
 
 		if (module && module->isFocused.load()) {
+			if (e.button == GLFW_MOUSE_BUTTON_RIGHT) {
+				lookDragging = (e.action == GLFW_PRESS);
+				e.consume(this);
+				return;
+			}
+
 			int mask = 0;
 			if (e.button == GLFW_MOUSE_BUTTON_LEFT) mask = 1;
 			else if (e.button == GLFW_MOUSE_BUTTON_RIGHT) mask = 2;
@@ -146,48 +150,55 @@ struct ChronoDoomViewportWidget final : Widget {
 
 	void onHover(const HoverEvent& e) override {
 		if (module && module->isFocused.load()) {
+			if (mouseButtons == 0 && !lookDragging) {
+				mouseAccumX += e.mouseDelta.x * 4.0;
+				const int dx = (int) mouseAccumX;
+				mouseAccumX -= dx;
+				if (dx != 0) {
+					postMouse(dx, 0);
+				}
+			}
 			e.consume(this);
 			return;
 		}
 		Widget::onHover(e);
 	}
 
+	void onDragMove(const DragMoveEvent& e) override {
+		if (module && module->isFocused.load()
+				&& (lookDragging || mouseButtons != 0)) {
+			mouseAccumX += e.mouseDelta.x * 4.0;
+			const int dx = (int) mouseAccumX;
+			mouseAccumX -= dx;
+			if (dx != 0) {
+				postMouse(dx, 0);
+			}
+			e.consume(this);
+			return;
+		}
+		Widget::onDragMove(e);
+	}
+
+	void onDragEnd(const DragEndEvent& e) override {
+		if (module && module->isFocused.load()) {
+			if (e.button == GLFW_MOUSE_BUTTON_RIGHT) {
+				lookDragging = false;
+			}
+			else if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
+				mouseButtons &= ~1;
+				postMouse(0, 0);
+			}
+			e.consume(this);
+			return;
+		}
+		Widget::onDragEnd(e);
+	}
+
 	void step() override {
 		Widget::step();
-		if (!module || !module->isFocused.load()) {
-			return;
-		}
-		if (!APP->window->isCursorLocked()) {
-			// The OS can break cursor lock when focus changes. Treat that as a
-			// full release so the next click starts from a known state.
-			releaseInputState();
-			return;
-		}
-		if (APP->event->selectedWidget != this) {
+		if (module && module->isFocused.load()
+				&& APP->event->selectedWidget != this) {
 			APP->event->setSelectedWidget(this);
-		}
-
-		double x = 0.0;
-		double y = 0.0;
-		glfwGetCursorPos(APP->window->win, &x, &y);
-		if (!mousePositionValid) {
-			lastMouseX = x;
-			lastMouseY = y;
-			mousePositionValid = true;
-			return;
-		}
-
-		mouseAccumX += x - lastMouseX;
-		// Vanilla Doom has no vertical-look axis. Ignore mouse Y so it cannot
-		// inject unintended forward/back movement alongside WASD controls.
-		lastMouseX = x;
-		lastMouseY = y;
-
-		const int dx = (int) mouseAccumX;
-		mouseAccumX -= dx;
-		mouseAccumY = 0.0;
-		if (dx != 0) {
-			postMouse(dx, 0);
 		}
 	}
 
@@ -325,7 +336,21 @@ struct ChronoDoomViewportWidget final : Widget {
 			nvgBeginPath(args.vg);
 			nvgRect(args.vg, 0, 0, box.size.x, box.size.y);
 			nvgFillPaint(args.vg, imgPaint);
+			 nvgFill(args.vg);
+		}
+
+		if (captureHintUntil > system::getTime()) {
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, 0.f, 0.f, box.size.x, 28.f);
+			nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 170));
 			nvgFill(args.vg);
+
+			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+			nvgFontSize(args.vg, 12.f);
+			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
+			nvgFillColor(args.vg, nvgRGBA(0, 255, 204, 230));
+			nvgText(args.vg, box.size.x / 2.f, 6.f,
+				"RIGHT-DRAG TO TURN  -  PRESS 0 TO RELEASE", nullptr);
 		}
 
 		// Draw focus indicator (glowing border / brackets)
@@ -338,12 +363,6 @@ struct ChronoDoomViewportWidget final : Widget {
 			nvgStrokeColor(args.vg, nvgRGBA(0, 255, 204, 150 + 105 * pulse));
 			nvgStroke(args.vg);
 
-			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-			nvgFontSize(args.vg, 10.f);
-			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
-			nvgFillColor(args.vg, nvgRGBA(0, 255, 204, 220));
-			nvgText(args.vg, box.size.x / 2.f, box.size.y - 5.f,
-				"INPUT CAPTURED - PRESS 0 TO RELEASE", nullptr);
 		}
 	}
 };
