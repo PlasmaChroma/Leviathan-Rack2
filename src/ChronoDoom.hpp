@@ -31,6 +31,7 @@ struct ChronoDoomModule : Module {
 	// WAD Configuration & State
 	std::string wadPath = "";
 	bool hasWad = false;
+	std::string savedGameHex = "";
 
 	// Dummy framebuffer for Phase 1 skeleton
 	uint8_t dummyFramebuffer[320 * 200 * 4];
@@ -54,10 +55,15 @@ struct ChronoDoomModule : Module {
 	~ChronoDoomModule() override;
 
 	void process(const ProcessArgs& args) override;
+	json_t* dataToJson() override;
+	void dataFromJson(json_t* root) override;
 
 	// WAD loading, validation, and settings persistence
 	bool isEngineOwner() const;
-	bool loadWad(const std::string& path);
+	bool loadWad(const std::string& path, int startSlot = -1);
 	void saveGlobalSettings();
 	void loadGlobalSettings();
+
+	void triggerExplicitSave();
+	void triggerExplicitLoad();
 };

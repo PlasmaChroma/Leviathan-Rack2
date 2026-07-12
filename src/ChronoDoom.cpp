@@ -21,6 +21,8 @@ extern "C" {
 	extern volatile int g_cv_weapon;
 	extern volatile int g_game_health;
 	extern volatile int g_game_frag_trigger;
+
+	void G_SaveGame(int slot, char* description);
 }
 
 // Single-instance engine owner
@@ -299,7 +301,7 @@ void ChronoDoomModule::process(const ProcessArgs& args) {
 	outputs[AUDIO_R_OUTPUT].setVoltage(outR * 5.f);
 }
 
-bool ChronoDoomModule::loadWad(const std::string& path) {
+bool ChronoDoomModule::loadWad(const std::string& path, int startSlot) {
 	if (path.empty()) {
 		return false;
 	}
@@ -336,21 +338,36 @@ bool ChronoDoomModule::loadWad(const std::string& path) {
 	}
 	W_Shutdown();
 
+	// Ensure the save directory exists
+	std::string saveDir = system::join(asset::user(), "Leviathan/chronodoom_saves");
+	system::createDirectories(saveDir);
+
 	// Start a new thread
 	doom_exit_requested = 0;
 	doom_dirty_frame = 0;
 	doom_engine_error[0] = '\0';
 	doom_engine_status = 1;
-	gDoomThread = std::thread([this]() {
+	gDoomThread = std::thread([this, saveDir, startSlot]() {
 		I_SetTargetRGBA(dummyFramebuffer);
 
-		// Set up argc / argv
-		int argc = 3;
+		// Set up argc / argv using std::vector for clean formatting
+		std::vector<std::string> args;
+		args.push_back("chronodoom");
+		args.push_back("-iwad");
+		args.push_back(wadPath);
+		args.push_back("-savedir");
+		args.push_back(saveDir);
+		if (startSlot >= 0) {
+			args.push_back("-loadgame");
+			args.push_back(std::to_string(startSlot));
+		}
+
+		int argc = args.size();
 		char** argv = (char**)malloc((argc + 1) * sizeof(char*));
-		argv[0] = strdup("chronodoom");
-		argv[1] = strdup("-iwad");
-		argv[2] = strdup(wadPath.c_str());
-		argv[3] = NULL;
+		for (int i = 0; i < argc; ++i) {
+			argv[i] = strdup(args[i].c_str());
+		}
+		argv[argc] = NULL;
 		myargc = argc;
 		myargv = argv;
 
@@ -403,4 +420,121 @@ void ChronoDoomModule::loadGlobalSettings() {
 		}
 	}
 	json_decref(rootJ);
+}
+
+static std::string encodeHex(const std::vector<uint8_t>& data) {
+	static const char hexChars[] = "0123456789abcdef";
+	std::string result;
+	result.reserve(data.size() * 2);
+	for (uint8_t byte : data) {
+		result.push_back(hexChars[(byte >> 4) & 0xF]);
+		result.push_back(hexChars[byte & 0xF]);
+	}
+	return result;
+}
+
+static std::vector<uint8_t> decodeHex(const std::string& hex) {
+	std::vector<uint8_t> result;
+	result.reserve(hex.size() / 2);
+	for (size_t i = 0; i + 1 < hex.size(); i += 2) {
+		char high = hex[i];
+		char low = hex[i + 1];
+		uint8_t byte = 0;
+		if (high >= '0' && high <= '9') byte |= (high - '0') << 4;
+		else if (high >= 'a' && high <= 'f') byte |= (high - 'a' + 10) << 4;
+		else if (high >= 'A' && high <= 'F') byte |= (high - 'A' + 10) << 4;
+		
+		if (low >= '0' && low <= '9') byte |= (low - '0');
+		else if (low >= 'a' && low <= 'f') byte |= (low - 'a' + 10);
+		else if (low >= 'A' && low <= 'F') byte |= (low - 'A' + 10);
+		
+		result.push_back(byte);
+	}
+	return result;
+}
+
+json_t* ChronoDoomModule::dataToJson() {
+	json_t* rootJ = json_object();
+	json_object_set_new(rootJ, "saveGameHex", json_string(savedGameHex.c_str()));
+	return rootJ;
+}
+
+void ChronoDoomModule::dataFromJson(json_t* rootJ) {
+	json_t* hexJ = json_object_get(rootJ, "saveGameHex");
+	if (hexJ && json_is_string(hexJ)) {
+		savedGameHex = json_string_value(hexJ);
+		// Automatically reload the saved game state on patch loading
+		if (!savedGameHex.empty()) {
+			std::vector<uint8_t> buffer = decodeHex(savedGameHex);
+			if (!buffer.empty()) {
+				std::string saveDir = system::join(asset::user(), "Leviathan/chronodoom_saves");
+				system::createDirectories(saveDir);
+				std::string savePath = system::join(saveDir, "doomsav8.dsg");
+				
+				std::ofstream file(savePath, std::ios::binary);
+				if (file.good()) {
+					file.write((const char*)buffer.data(), buffer.size());
+					file.close();
+					
+					if (!wadPath.empty()) {
+						loadWad(wadPath, 8);
+					}
+				}
+			}
+		}
+	}
+}
+
+void ChronoDoomModule::triggerExplicitSave() {
+	if (gDoomModuleOwner == this && hasWad && doom_engine_status == 2) {
+		std::string saveDir = system::join(asset::user(), "Leviathan/chronodoom_saves");
+		std::string savePath = system::join(saveDir, "doomsav8.dsg");
+		
+		std::remove(savePath.c_str());
+		G_SaveGame(8, (char*)"vcv_explicit_save");
+		
+		// Wait up to 500ms for the file to be written by the Doom thread
+		bool saved = false;
+		for (int i = 0; i < 100; ++i) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
+			std::ifstream check(savePath, std::ios::binary);
+			if (check.good()) {
+				check.seekg(0, std::ios::end);
+				size_t size = check.tellg();
+				if (size > 0) {
+					saved = true;
+					break;
+				}
+			}
+		}
+
+		if (saved) {
+			std::ifstream file(savePath, std::ios::binary);
+			if (file.good()) {
+				std::vector<uint8_t> buffer((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+				savedGameHex = encodeHex(buffer);
+			}
+		}
+	}
+}
+
+void ChronoDoomModule::triggerExplicitLoad() {
+	if (!savedGameHex.empty()) {
+		std::vector<uint8_t> buffer = decodeHex(savedGameHex);
+		if (!buffer.empty()) {
+			std::string saveDir = system::join(asset::user(), "Leviathan/chronodoom_saves");
+			system::createDirectories(saveDir);
+			std::string savePath = system::join(saveDir, "doomsav8.dsg");
+			
+			std::ofstream file(savePath, std::ios::binary);
+			if (file.good()) {
+				file.write((const char*)buffer.data(), buffer.size());
+				file.close();
+				
+				if (!wadPath.empty()) {
+					loadWad(wadPath, 8);
+				}
+			}
+		}
+	}
 }

@@ -1714,13 +1714,16 @@ void G_DoSaveGame (void)
     remove(savegame_file);
     rename(temp_savegame_file, savegame_file);
 
+    boolean silent = (strcmp(savedescription, "vcv_autosave") == 0);
     gameaction = ga_nothing;
     M_StringCopy(savedescription, "", sizeof(savedescription));
 
-    players[consoleplayer].message = DEH_String(GGSAVED);
+    if (!silent) {
+        players[consoleplayer].message = DEH_String(GGSAVED);
 
-    // draw the pattern into the back screen
-    R_FillBackScreen ();
+        // draw the pattern into the back screen
+        R_FillBackScreen ();
+    }
 }
  
 

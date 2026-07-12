@@ -417,6 +417,13 @@ struct ChronoDoomWidget final : ModuleWidget {
 				}
 			}
 		}));
+
+		menu->addChild(createMenuItem("Save Doom Game State to Patch", "", [=]() {
+			m->triggerExplicitSave();
+		}));
+		menu->addChild(createMenuItem("Load Doom Game State from Patch", "", [=]() {
+			m->triggerExplicitLoad();
+		}));
 	}
 
 	void draw(const DrawArgs& args) override {
