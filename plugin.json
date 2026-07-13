@@ -146,16 +146,6 @@
         "Reverb"
       ],
       "hidden": true
-    },
-    {
-      "slug": "VcvDoom",
-      "name": "VCV Doom",
-      "description": "Embedded Doom engine with CV input/output",
-      "tags": [
-        "Visual",
-        "External"
-      ],
-      "hidden": false
     }
   ]
 }
