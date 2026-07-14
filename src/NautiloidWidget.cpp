@@ -490,7 +490,8 @@ struct NautiloidDisplay final : OpaqueWidget {
       return false;
     }
 
-    const float previousZoom = clamp(module->fractalZoom, 0.f, kNautiloidMaxFractalZoom);
+    Nautiloid::FractalState state = module->fractalStateSnapshot();
+    const float previousZoom = clamp(state.zoom, 0.f, kNautiloidMaxFractalZoom);
     const float nextZoom = clamp(previousZoom + clamp(wheel, -4.f, 4.f) * 0.02f,
       0.f, kNautiloidMaxFractalZoom);
     if (std::fabs(nextZoom - previousZoom) < 1e-5f) {
@@ -501,16 +502,17 @@ struct NautiloidDisplay final : OpaqueWidget {
     const Vec cursorNorm(
       (e.pos.x / box.size.x - 0.5f) * 2.f,
       (e.pos.y / box.size.y - 0.5f) * 2.f);
-    const Vec previousHalfSpan = nautiloidFractalViewportHalfSpan(module->fractalMode).mult(
+    const Vec previousHalfSpan = nautiloidFractalViewportHalfSpan(state.mode).mult(
       std::pow(0.05f, previousZoom));
-    const Vec nextHalfSpan = nautiloidFractalViewportHalfSpan(module->fractalMode).mult(
+    const Vec nextHalfSpan = nautiloidFractalViewportHalfSpan(state.mode).mult(
       std::pow(0.05f, nextZoom));
-    const double focusX = module->fractalCenterX + double(cursorNorm.x * previousHalfSpan.x);
-    const double focusY = module->fractalCenterY + double(cursorNorm.y * previousHalfSpan.y);
+    const double focusX = state.centerX + double(cursorNorm.x * previousHalfSpan.x);
+    const double focusY = state.centerY + double(cursorNorm.y * previousHalfSpan.y);
 
-    module->fractalZoom = nextZoom;
-    module->fractalCenterX = nautiloidClampDouble(focusX - double(cursorNorm.x * nextHalfSpan.x), -2.0, 2.0);
-    module->fractalCenterY = nautiloidClampDouble(focusY - double(cursorNorm.y * nextHalfSpan.y), -2.0, 2.0);
+    state.zoom = nextZoom;
+    state.centerX = nautiloidClampDouble(focusX - double(cursorNorm.x * nextHalfSpan.x), -2.0, 2.0);
+    state.centerY = nautiloidClampDouble(focusY - double(cursorNorm.y * nextHalfSpan.y), -2.0, 2.0);
+    module->setFractalState(state);
 
     const bool recenterCache = nextZoom < previousZoom && nautiloidVisibleViewOutgrowsCache(module, 0.78f);
     module->requestInteractiveZoomPreview(module->fractalCenterX, module->fractalCenterY, recenterCache);
@@ -577,23 +579,25 @@ struct NautiloidDisplay final : OpaqueWidget {
       const Vec delta = current.minus(lastPanLocal);
       lastPanLocal = current;
       if (box.size.x > 1.f && box.size.y > 1.f && (std::fabs(delta.x) > 0.f || std::fabs(delta.y) > 0.f)) {
-        const float zoomScale = std::pow(0.05f, clamp(module->fractalZoom, 0.f, kNautiloidMaxFractalZoom));
-        const Vec halfSpan = nautiloidFractalViewportHalfSpan(module->fractalMode).mult(zoomScale);
+        Nautiloid::FractalState state = module->fractalStateSnapshot();
+        const float zoomScale = std::pow(0.05f, clamp(state.zoom, 0.f, kNautiloidMaxFractalZoom));
+        const Vec halfSpan = nautiloidFractalViewportHalfSpan(state.mode).mult(zoomScale);
         const Vec centerDelta(
           -delta.x / box.size.x * 2.f * halfSpan.x,
           -delta.y / box.size.y * 2.f * halfSpan.y);
-        module->fractalCenterX = nautiloidClampDouble(module->fractalCenterX + double(centerDelta.x), -2.0, 2.0);
-        module->fractalCenterY = nautiloidClampDouble(module->fractalCenterY + double(centerDelta.y), -2.0, 2.0);
+        state.centerX = nautiloidClampDouble(state.centerX + double(centerDelta.x), -2.0, 2.0);
+        state.centerY = nautiloidClampDouble(state.centerY + double(centerDelta.y), -2.0, 2.0);
+        module->setFractalState(state);
         if (nautiloidRequestDue(&lastPanRequestTime, 0.05)) {
           const float cacheLead = 3.f;
           const float maxLeadX = 0.35f * halfSpan.x;
           const float maxLeadY = 0.35f * halfSpan.y;
           const double cacheCenterX =
             nautiloidClampDouble(
-              module->fractalCenterX + double(clamp(centerDelta.x * cacheLead, -maxLeadX, maxLeadX)), -2.0, 2.0);
+              state.centerX + double(clamp(centerDelta.x * cacheLead, -maxLeadX, maxLeadX)), -2.0, 2.0);
           const double cacheCenterY =
             nautiloidClampDouble(
-              module->fractalCenterY + double(clamp(centerDelta.y * cacheLead, -maxLeadY, maxLeadY)), -2.0, 2.0);
+              state.centerY + double(clamp(centerDelta.y * cacheLead, -maxLeadY, maxLeadY)), -2.0, 2.0);
           module->requestRenderWithCacheCenter(cacheCenterX, cacheCenterY);
         }
       }
@@ -1069,10 +1073,12 @@ struct NautiloidZoomSlider final : ui::Slider {
       lastStepTime = now;
       if (speedActive && dt > 0.0) {
         const float shapedSpeed = speed * std::fabs(speed);
-        const float next = clamp(module->fractalZoom + shapedSpeed * float(dt) * 0.85f, 0.f, kNautiloidMaxFractalZoom);
-        if (std::fabs(module->fractalZoom - next) > 1e-5f) {
-          const bool zoomingOut = next < module->fractalZoom;
-          module->fractalZoom = next;
+        Nautiloid::FractalState state = module->fractalStateSnapshot();
+        const float next = clamp(state.zoom + shapedSpeed * float(dt) * 0.85f, 0.f, kNautiloidMaxFractalZoom);
+        if (std::fabs(state.zoom - next) > 1e-5f) {
+          const bool zoomingOut = next < state.zoom;
+          state.zoom = next;
+          module->setFractalState(state);
           const bool recenterCache = zoomingOut && nautiloidVisibleViewOutgrowsCache(module, 0.78f);
           if (nautiloidRequestDue(&lastPreviewRequestTime, 0.04)) {
             module->requestInteractiveZoomPreview(module->fractalCenterX, module->fractalCenterY, recenterCache);

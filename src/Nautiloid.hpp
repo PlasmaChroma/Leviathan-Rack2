@@ -11,6 +11,20 @@
 #include <thread>
 #include <vector>
 
+template <typename T>
+struct NautiloidAtomicValue {
+  std::atomic<T> value;
+
+  NautiloidAtomicValue(T initial = T()) : value(initial) {}
+  NautiloidAtomicValue(const NautiloidAtomicValue&) = delete;
+  NautiloidAtomicValue& operator=(const NautiloidAtomicValue&) = delete;
+  operator T() const { return value.load(std::memory_order_acquire); }
+  NautiloidAtomicValue& operator=(T next) {
+    value.store(next, std::memory_order_release);
+    return *this;
+  }
+};
+
 struct Nautiloid final : Module {
   enum ParamId {
     SOURCE_MENU_PARAM,
@@ -77,10 +91,20 @@ struct Nautiloid final : Module {
 
   void zoomAheadCacheSnapshot(ZoomAheadCacheSnapshot* snapshot) const;
 
-  int fractalMode = iris::FRACTAL_MANDELBROT;
-  float fractalZoom = 0.f;
-  double fractalCenterX = 0.0;
-  double fractalCenterY = 0.0;
+  struct FractalState {
+    int mode = iris::FRACTAL_MANDELBROT;
+    float zoom = 0.f;
+    double centerX = 0.0;
+    double centerY = 0.0;
+  };
+
+  FractalState fractalStateSnapshot() const;
+  void setFractalState(const FractalState& state);
+
+  NautiloidAtomicValue<int> fractalMode {iris::FRACTAL_MANDELBROT};
+  NautiloidAtomicValue<float> fractalZoom {0.f};
+  NautiloidAtomicValue<double> fractalCenterX {0.0};
+  NautiloidAtomicValue<double> fractalCenterY {0.0};
   std::atomic<uint64_t> previewGeneration {0u};
   std::atomic<uint64_t> irisPreviewGeneration {0u};
   std::atomic<uint64_t> renderRequestsSubmitted {0u};
@@ -189,6 +213,10 @@ private:
   bool publishDisplayReprojection(const WorkerRequest& request);
   void publishAuthoritativeDisplaySource(iris::SourceField source, const WorkerRequest& request);
   void renderZoomAheadCaches(const WorkerRequest& request);
+
+  std::atomic<uint64_t> fractalStateSequence {0u};
+  mutable std::mutex fractalStateWriteMutex;
+  std::atomic<bool> stopRequested {false};
 
   mutable std::mutex workerMutex;
   std::condition_variable workerCv;

@@ -2,6 +2,7 @@
 #include "Iris.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <memory>
 #include <utility>
 
@@ -665,11 +666,12 @@ void Nautiloid::process(const ProcessArgs& args) {
 
   if (irisConnected && generation == 0u && irisAcceptsAutoSync) {
     if (lastExpanderGenerationSentRight != uint64_t(-1)) {
+      const FractalState state = fractalStateSnapshot();
       WorkerRequest request;
-      request.mode = fractalMode;
-      request.zoom = clamp(fractalZoom, 0.f, kNautiloidMaxFractalZoom);
-      request.centerX = clampDouble(fractalCenterX, -2.0, 2.0);
-      request.centerY = clampDouble(fractalCenterY, -2.0, 2.0);
+      request.mode = state.mode;
+      request.zoom = clamp(state.zoom, 0.f, kNautiloidMaxFractalZoom);
+      request.centerX = clampDouble(state.centerX, -2.0, 2.0);
+      request.centerY = clampDouble(state.centerY, -2.0, 2.0);
       request.cacheCenterX = request.centerX;
       request.cacheCenterY = request.centerY;
       request.zoomInteractionActive = false;
@@ -705,12 +707,38 @@ void Nautiloid::process(const ProcessArgs& args) {
   lastRightIrisModule = irisConnected ? right : nullptr;
 }
 
+Nautiloid::FractalState Nautiloid::fractalStateSnapshot() const {
+  FractalState state;
+  while (true) {
+    const uint64_t before = fractalStateSequence.load(std::memory_order_acquire);
+    if (before & 1u) continue;
+    state.mode = fractalMode;
+    state.zoom = fractalZoom;
+    state.centerX = fractalCenterX;
+    state.centerY = fractalCenterY;
+    const uint64_t after = fractalStateSequence.load(std::memory_order_acquire);
+    if (before == after) return state;
+  }
+}
+
+void Nautiloid::setFractalState(const FractalState& requested) {
+  std::lock_guard<std::mutex> lock(fractalStateWriteMutex);
+  fractalStateSequence.fetch_add(1u, std::memory_order_acq_rel);
+  fractalMode = iris::isBuiltinFractalMode(requested.mode)
+    ? requested.mode : iris::FRACTAL_MANDELBROT;
+  fractalZoom = clamp(requested.zoom, 0.f, kNautiloidMaxFractalZoom);
+  fractalCenterX = clampDouble(requested.centerX, -2.0, 2.0);
+  fractalCenterY = clampDouble(requested.centerY, -2.0, 2.0);
+  fractalStateSequence.fetch_add(1u, std::memory_order_release);
+}
+
 json_t* Nautiloid::dataToJson() {
   json_t* root = json_object();
-  json_object_set_new(root, "fractalMode", json_integer(fractalMode));
-  json_object_set_new(root, "fractalZoom", json_real(fractalZoom));
-  json_object_set_new(root, "fractalCenterX", json_real(fractalCenterX));
-  json_object_set_new(root, "fractalCenterY", json_real(fractalCenterY));
+  const FractalState state = fractalStateSnapshot();
+  json_object_set_new(root, "fractalMode", json_integer(state.mode));
+  json_object_set_new(root, "fractalZoom", json_real(state.zoom));
+  json_object_set_new(root, "fractalCenterX", json_real(state.centerX));
+  json_object_set_new(root, "fractalCenterY", json_real(state.centerY));
   json_object_set_new(root, "debugFileLoggingEnabled",
                       json_boolean(debugFileLoggingEnabled.load(std::memory_order_relaxed)));
   json_object_set_new(root, "debugGpuPreviewEnabled",
@@ -721,10 +749,12 @@ json_t* Nautiloid::dataToJson() {
 void Nautiloid::dataFromJson(json_t* root) {
   if (!root) return;
   const int mode = jsonIntegerOr(root, "fractalMode", iris::FRACTAL_MANDELBROT);
-  fractalMode = iris::isBuiltinFractalMode(mode) ? mode : iris::FRACTAL_MANDELBROT;
-  fractalZoom = clamp(jsonRealOr(root, "fractalZoom", 0.f), 0.f, kNautiloidMaxFractalZoom);
-  fractalCenterX = clampDouble(jsonRealOr(root, "fractalCenterX", 0.0), -2.0, 2.0);
-  fractalCenterY = clampDouble(jsonRealOr(root, "fractalCenterY", 0.0), -2.0, 2.0);
+  FractalState state;
+  state.mode = mode;
+  state.zoom = float(jsonRealOr(root, "fractalZoom", 0.f));
+  state.centerX = jsonRealOr(root, "fractalCenterX", 0.0);
+  state.centerY = jsonRealOr(root, "fractalCenterY", 0.0);
+  setFractalState(state);
   debugFileLoggingEnabled.store(
     jsonBoolOr(root, "debugFileLoggingEnabled", false), std::memory_order_relaxed);
   debugGpuPreviewEnabled.store(
@@ -735,11 +765,13 @@ void Nautiloid::dataFromJson(json_t* root) {
 
 void Nautiloid::requestFractal(int mode) {
   if (!iris::isBuiltinFractalMode(mode)) return;
-  if (fractalMode != mode) {
-    fractalMode = mode;
-    fractalZoom = 0.f;
-    fractalCenterX = 0.f;
-    fractalCenterY = 0.f;
+  FractalState state = fractalStateSnapshot();
+  if (state.mode != mode) {
+    state.mode = mode;
+    state.zoom = 0.f;
+    state.centerX = 0.0;
+    state.centerY = 0.0;
+    setFractalState(state);
   }
   requestRender();
 }
@@ -749,11 +781,12 @@ void Nautiloid::requestRender() {
 }
 
 void Nautiloid::requestRenderWithCacheCenter(double cacheCenterX, double cacheCenterY, bool forceCacheRecenter) {
+  const FractalState state = fractalStateSnapshot();
   WorkerRequest request;
-  request.mode = fractalMode;
-  request.zoom = clamp(fractalZoom, 0.f, kNautiloidMaxFractalZoom);
-  request.centerX = clampDouble(fractalCenterX, -2.0, 2.0);
-  request.centerY = clampDouble(fractalCenterY, -2.0, 2.0);
+  request.mode = state.mode;
+  request.zoom = clamp(state.zoom, 0.f, kNautiloidMaxFractalZoom);
+  request.centerX = clampDouble(state.centerX, -2.0, 2.0);
+  request.centerY = clampDouble(state.centerY, -2.0, 2.0);
   request.cacheCenterX = clampDouble(cacheCenterX, -2.0, 2.0);
   request.cacheCenterY = clampDouble(cacheCenterY, -2.0, 2.0);
   request.forceCacheRecenter = forceCacheRecenter;
@@ -762,11 +795,12 @@ void Nautiloid::requestRenderWithCacheCenter(double cacheCenterX, double cacheCe
 }
 
 void Nautiloid::requestInteractiveZoomPreview(double cacheCenterX, double cacheCenterY, bool forceCacheRecenter) {
+  const FractalState state = fractalStateSnapshot();
   WorkerRequest request;
-  request.mode = fractalMode;
-  request.zoom = clamp(fractalZoom, 0.f, kNautiloidMaxFractalZoom);
-  request.centerX = clampDouble(fractalCenterX, -2.0, 2.0);
-  request.centerY = clampDouble(fractalCenterY, -2.0, 2.0);
+  request.mode = state.mode;
+  request.zoom = clamp(state.zoom, 0.f, kNautiloidMaxFractalZoom);
+  request.centerX = clampDouble(state.centerX, -2.0, 2.0);
+  request.centerY = clampDouble(state.centerY, -2.0, 2.0);
   request.cacheCenterX = clampDouble(cacheCenterX, -2.0, 2.0);
   request.cacheCenterY = clampDouble(cacheCenterY, -2.0, 2.0);
   request.forceCacheRecenter = forceCacheRecenter;
@@ -802,9 +836,11 @@ void Nautiloid::requestRenderWithCenteredCache() {
 }
 
 void Nautiloid::resetView() {
-  fractalZoom = 0.f;
-  fractalCenterX = 0.f;
-  fractalCenterY = 0.f;
+  FractalState state = fractalStateSnapshot();
+  state.zoom = 0.f;
+  state.centerX = 0.0;
+  state.centerY = 0.0;
+  setFractalState(state);
   requestRender();
 }
 
@@ -892,6 +928,7 @@ void Nautiloid::zoomAheadCacheSnapshot(ZoomAheadCacheSnapshot* snapshot) const {
 }
 
 void Nautiloid::startWorker() {
+  stopRequested.store(false, std::memory_order_release);
   workerStop = false;
   cacheWorkerStop = false;
   reprojectionWorkerStop = false;
@@ -903,6 +940,7 @@ void Nautiloid::startWorker() {
 }
 
 void Nautiloid::stopWorker() {
+  stopRequested.store(true, std::memory_order_release);
   {
     std::lock_guard<std::mutex> lock(workerMutex);
     workerStop = true;
@@ -1087,6 +1125,7 @@ bool Nautiloid::publishDisplayReprojection(const WorkerRequest& request) {
 
     bool usedAheadForFrame = false;
     for (int y = 0; y < reprojected.height; ++y) {
+      if (stopRequested.load(std::memory_order_acquire)) return false;
       const float ny = (float(y) + 0.5f) / float(reprojected.height) * 2.f - 1.f;
       const double worldY = request.centerY + double(ny) * double(newHalfSpan.y);
       const float oldNormY = float((worldY - baseCenterY) / double(oldHalfSpan.y));
@@ -1225,6 +1264,7 @@ bool Nautiloid::publishDisplayCacheComposite(const WorkerRequest& request, bool 
 
 void Nautiloid::renderZoomAheadCaches(const WorkerRequest& request) {
   for (int layerIndex = 0; layerIndex < kZoomAheadLayerCount; ++layerIndex) {
+    if (stopRequested.load(std::memory_order_acquire)) return;
     const float aheadZoom = clamp(
       request.zoom + kZoomAheadLeads[size_t(layerIndex)], 0.f, kNautiloidMaxFractalZoom);
     if (aheadZoom <= request.zoom + 1e-4f) continue;
@@ -1264,6 +1304,7 @@ void Nautiloid::renderZoomAheadCaches(const WorkerRequest& request) {
       0.5f * float(kZoomAheadWidth),
       0.5f * float(kZoomAheadHeight));
     for (const Vec& tilePos : tileOrder) {
+      if (stopRequested.load(std::memory_order_acquire)) return;
       const int tileX = int(tilePos.x);
       const int tileY = int(tilePos.y);
       if (tileX >= kZoomAheadWidth || tileY >= kZoomAheadHeight) continue;
@@ -1399,6 +1440,9 @@ void Nautiloid::workerLoop() {
       &source,
       &error);
 
+    if (stopRequested.load(std::memory_order_acquire)) {
+      continue;
+    }
     if (!ok) {
       loading.store(false, std::memory_order_release);
       markDisplayRenderFinished(request.serial);
@@ -1557,6 +1601,7 @@ void Nautiloid::cacheWorkerLoop() {
       double(kFractalCacheHeight));
     const std::vector<Vec> tileOrder = makeDisplayTileOrder(visibleCenterX, visibleCenterY);
     for (const Vec& tilePos : tileOrder) {
+      if (stopRequested.load(std::memory_order_acquire)) break;
       if (skipDisplayTiles) break;
       if (stale) break;
       const int tileX = int(tilePos.x);
@@ -1666,12 +1711,12 @@ void Nautiloid::cacheWorkerLoop() {
           renderedTilesSincePublish = 0;
         }
     }
-    if (renderedAnyTile && !stale) {
+    if (renderedAnyTile && !stale && !stopRequested.load(std::memory_order_acquire)) {
       displayCacheRendersCompleted.fetch_add(1u, std::memory_order_relaxed);
       publishDisplayCacheComposite(request, true);
     }
 
-    if (stale) {
+    if (stale || stopRequested.load(std::memory_order_acquire)) {
       continue;
     }
 
@@ -1682,14 +1727,30 @@ void Nautiloid::cacheWorkerLoop() {
 }
 
 void Nautiloid::irisWorkerLoop() {
+  WorkerRequest retryRequest;
+  bool retryPending = false;
   while (true) {
     WorkerRequest request;
     {
       std::unique_lock<std::mutex> lock(irisRequestMutex);
-      irisRequestCv.wait(lock, [this]() { return irisWorkerStop || irisRequestPending; });
+      if (!irisRequestPending && retryPending) {
+        irisRequestCv.wait_for(lock, std::chrono::milliseconds(5), [this]() {
+          return irisWorkerStop || irisRequestPending;
+        });
+      } else {
+        irisRequestCv.wait(lock, [this]() { return irisWorkerStop || irisRequestPending; });
+      }
       if (irisWorkerStop) break;
-      request = irisRequest;
-      irisRequestPending = false;
+      if (irisRequestPending) {
+        request = irisRequest;
+        irisRequestPending = false;
+        retryPending = false;
+      } else if (retryPending) {
+        request = retryRequest;
+        retryPending = false;
+      } else {
+        continue;
+      }
     }
 
     bool irisCompatibleCurrent = false;
@@ -1727,6 +1788,8 @@ void Nautiloid::irisWorkerLoop() {
       }
       if (slotIndex < 0) {
         irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
+        retryRequest = request;
+        retryPending = true;
         continue;
       }
       nautiloid_iris_expander::SourceSlot& slot = irisExpanderSlots[size_t(slotIndex)];
@@ -1752,6 +1815,8 @@ void Nautiloid::irisWorkerLoop() {
     }
     if (slotIndex < 0) {
       irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
+      retryRequest = request;
+      retryPending = true;
       continue;
     }
 
@@ -1765,6 +1830,11 @@ void Nautiloid::irisWorkerLoop() {
     sourceParams.generation = request.serial;
     const bool irisOk = iris::makeNautiloidIrisSource(sourceParams, &slot.source, &irisError);
     if (!irisOk) {
+      nautiloid_iris_expander::releaseSourceSlotWrite(&slot);
+      continue;
+    }
+
+    if (stopRequested.load(std::memory_order_acquire)) {
       nautiloid_iris_expander::releaseSourceSlotWrite(&slot);
       continue;
     }
