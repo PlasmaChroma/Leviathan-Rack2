@@ -189,8 +189,8 @@ private:
   std::string lastError;
   bool embedSource = true;
   int currentSourceKind = iris::SOURCE_IMAGE;
-  uint64_t lastExpanderSourceGeneration = 0u;
-  const nautiloid_iris_expander::SourceSlot* lastExpanderSourceSlotSeen = nullptr;
+  std::atomic<uint64_t> lastExpanderSourceGeneration {0u};
+  std::atomic<const nautiloid_iris_expander::SourceSlot*> lastExpanderSourceSlotSeen {nullptr};
   dsp::ClockDivider lightDivider;
 };
 

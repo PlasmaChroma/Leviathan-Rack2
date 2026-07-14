@@ -151,7 +151,8 @@ void Iris::requestExpanderSource(const nautiloid_iris_expander::SourceSlot* sour
   if (!hasLeftNautiloid(this)) return;
   restoredImageSourceMode.store(false, std::memory_order_release);
   if (!nautiloid_iris_expander::acquireSourceSlot(sourceSlot, generation)) return;
-  if (generation == lastExpanderSourceGeneration && sourceSlot == lastExpanderSourceSlotSeen) {
+  if (generation == lastExpanderSourceGeneration.load(std::memory_order_acquire) &&
+      sourceSlot == lastExpanderSourceSlotSeen.load(std::memory_order_acquire)) {
     std::lock_guard<std::mutex> lock(snapshotMutex);
     if (currentSourceKind == iris::SOURCE_EXPANDER_IMAGE ||
         currentSourceKind == iris::SOURCE_NAUTILOID_FRACTAL) {
@@ -159,8 +160,8 @@ void Iris::requestExpanderSource(const nautiloid_iris_expander::SourceSlot* sour
       return;
     }
   }
-  lastExpanderSourceGeneration = generation;
-  lastExpanderSourceSlotSeen = sourceSlot;
+  lastExpanderSourceGeneration.store(generation, std::memory_order_release);
+  lastExpanderSourceSlotSeen.store(sourceSlot, std::memory_order_release);
   WorkerRequest request;
   request.type = REQUEST_EXPANDER_SOURCE;
   request.sourceSlot = sourceSlot;
@@ -543,7 +544,8 @@ void Iris::process(const ProcessArgs& args) {
       sourceKindNow == iris::SOURCE_NAUTILOID_FRACTAL;
     const bool nautiloidReady =
       nautiloidConnected && usingNautiloidSource &&
-      lastExpanderSourceGeneration != 0u && lastExpanderSourceSlotSeen != nullptr;
+      lastExpanderSourceGeneration.load(std::memory_order_acquire) != 0u &&
+      lastExpanderSourceSlotSeen.load(std::memory_order_acquire) != nullptr;
     lights[NAUTILOID_LINK_LIGHT].setBrightness(nautiloidConnected && !nautiloidReady ? 1.f : 0.f);
     lights[NAUTILOID_READY_LIGHT].setBrightness(nautiloidReady ? 1.f : 0.f);
   }

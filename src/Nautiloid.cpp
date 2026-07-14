@@ -1719,7 +1719,8 @@ void Nautiloid::irisWorkerLoop() {
       for (int offset = 1; offset <= nautiloid_iris_expander::kSourceSlotCount; ++offset) {
         const int candidate = (irisExpanderWriteSlot + offset) % nautiloid_iris_expander::kSourceSlotCount;
         if (candidate == publishedSlot) continue;
-        if (irisExpanderSlots[size_t(candidate)].readers.load(std::memory_order_acquire) == 0u) {
+        if (nautiloid_iris_expander::claimSourceSlotForWrite(
+              &irisExpanderSlots[size_t(candidate)])) {
           slotIndex = candidate;
           break;
         }
@@ -1732,6 +1733,7 @@ void Nautiloid::irisWorkerLoop() {
       slot.source = std::move(cachedSource);
       slot.generation.store(request.serial, std::memory_order_release);
       irisExpanderWriteSlot = slotIndex;
+      nautiloid_iris_expander::releaseSourceSlotWrite(&slot);
       irisExpanderPublishedSlot.store(slotIndex, std::memory_order_release);
       irisPreviewGeneration.store(request.serial, std::memory_order_release);
       continue;
@@ -1742,7 +1744,8 @@ void Nautiloid::irisWorkerLoop() {
     for (int offset = 1; offset <= nautiloid_iris_expander::kSourceSlotCount; ++offset) {
       const int candidate = (irisExpanderWriteSlot + offset) % nautiloid_iris_expander::kSourceSlotCount;
       if (candidate == publishedSlot) continue;
-      if (irisExpanderSlots[size_t(candidate)].readers.load(std::memory_order_acquire) == 0u) {
+      if (nautiloid_iris_expander::claimSourceSlotForWrite(
+            &irisExpanderSlots[size_t(candidate)])) {
         slotIndex = candidate;
         break;
       }
@@ -1762,6 +1765,7 @@ void Nautiloid::irisWorkerLoop() {
     sourceParams.generation = request.serial;
     const bool irisOk = iris::makeNautiloidIrisSource(sourceParams, &slot.source, &irisError);
     if (!irisOk) {
+      nautiloid_iris_expander::releaseSourceSlotWrite(&slot);
       continue;
     }
 
@@ -1774,6 +1778,7 @@ void Nautiloid::irisWorkerLoop() {
     irisCompatibleCenterX = request.centerX;
     irisCompatibleCenterY = request.centerY;
     irisExpanderWriteSlot = slotIndex;
+    nautiloid_iris_expander::releaseSourceSlotWrite(&slot);
     irisExpanderPublishedSlot.store(slotIndex, std::memory_order_release);
     irisPreviewGeneration.store(request.serial, std::memory_order_release);
     irisRendersCompleted.fetch_add(1u, std::memory_order_relaxed);
