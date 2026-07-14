@@ -58,7 +58,7 @@
     {
       "slug": "Undertow",
       "name": "Undertow",
-      "description": "Compact sub-harmonic oscillator with sine, morph, and sub outputs.",
+      "description": "Compact analog-style oscillator with sine, morphing shape, and sub-octave outputs.",
       "tags": [
         "Oscillator"
       ],
