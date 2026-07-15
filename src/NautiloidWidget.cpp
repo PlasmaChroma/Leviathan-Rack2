@@ -28,6 +28,10 @@ Vec nautiloidFractalViewportHalfSpan(int mode) {
   switch (mode) {
     case iris::FRACTAL_MANDELBROT:
       return Vec(1.62f, 0.86f);
+    case iris::FRACTAL_MULTIBROT:
+      return Vec(1.45f, 0.90f);
+    case iris::FRACTAL_MULTIJULIA:
+      return Vec(1.45f, 0.84f);
     case iris::FRACTAL_JULIA:
       return Vec(1.58f, 0.72f);
     case iris::FRACTAL_PHOENIX_JULIA:
@@ -282,6 +286,12 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
             gl_FragColor = vec4(7.0 / 255.0, 4.0 / 255.0, 18.0 / 255.0, 1.0);
             return;
           }
+        } else if (NAUTILOID_MODE == 2) {
+          c = p;
+        } else if (NAUTILOID_MODE == 3) {
+          // Keep this in sync with kNautiloidMultijuliaReal/Imag.
+          c = vec2(-0.18, 0.76);
+          z = p;
         } else if (NAUTILOID_MODE == 4) {
           c = vec2(-0.74543, 0.11301);
           z = p;
@@ -309,7 +319,10 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
           float zr2 = z.x * z.x;
           float zi2 = z.y * z.y;
           minOrbit = min(minOrbit, zr2 + zi2);
-          if (NAUTILOID_MODE == 5) {
+          if (NAUTILOID_MODE == 2 || NAUTILOID_MODE == 3) {
+            z = vec2(z.x * (zr2 - 3.0 * zi2) + c.x,
+                     z.y * (3.0 * zr2 - zi2) + c.y);
+          } else if (NAUTILOID_MODE == 5) {
             vec2 nextZ = vec2(zr2 - zi2 + c.x + 0.48 * prev.x,
                               2.0 * z.x * z.y + c.y + 0.48 * prev.y);
             prev = z;
@@ -1307,8 +1320,20 @@ struct NautiloidSourceButton final : TL1105 {
     ui::Menu* menu = createMenu();
     menu->box.pos = getAbsoluteOffset(Vec(0.f, box.size.y));
     menu->addChild(createMenuLabel("Fractals"));
-    for (int mode = iris::kFirstBuiltinFractalMode; mode <= iris::kLastBuiltinFractalMode; ++mode) {
-      if (!iris::isBuiltinFractalMode(mode)) continue;
+    const std::array<int, 11> modes = {{
+      iris::FRACTAL_MANDELBROT,
+      iris::FRACTAL_MULTIBROT,
+      iris::FRACTAL_JULIA,
+      iris::FRACTAL_MULTIJULIA,
+      iris::FRACTAL_PHOENIX_JULIA,
+      iris::FRACTAL_BURNING_SHIP,
+      iris::FRACTAL_CELTIC,
+      iris::FRACTAL_TRICORN,
+      iris::FRACTAL_SPIDER,
+      iris::FRACTAL_NEWTON,
+      iris::FRACTAL_NOVA,
+    }};
+    for (int mode : modes) {
       menu->addChild(createCheckMenuItem(
         iris::builtinFractalName(mode), "",
         [this, mode]() { return module->fractalMode == mode; },

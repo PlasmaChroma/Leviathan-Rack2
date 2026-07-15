@@ -54,6 +54,8 @@ enum SourceKind {
 enum BuiltinFractalMode {
   FRACTAL_NONE = 0,
   FRACTAL_MANDELBROT = 1,
+  FRACTAL_MULTIBROT = 2,
+  FRACTAL_MULTIJULIA = 3,
   FRACTAL_JULIA = 4,
   FRACTAL_PHOENIX_JULIA = 5,
   FRACTAL_BURNING_SHIP = 7,
@@ -65,7 +67,6 @@ enum BuiltinFractalMode {
 };
 
 constexpr int FRACTAL_MANDELBROT_SPIRAL = FRACTAL_MANDELBROT;
-constexpr int FRACTAL_BUFFALO = FRACTAL_CELTIC;
 constexpr int kBuiltinFractalVersion = 1;
 constexpr int kFirstBuiltinFractalMode = FRACTAL_MANDELBROT;
 constexpr int kLastBuiltinFractalMode = FRACTAL_NOVA;
@@ -73,6 +74,8 @@ constexpr int kLastBuiltinFractalMode = FRACTAL_NOVA;
 inline bool isBuiltinFractalMode(int mode) {
   switch (mode) {
     case FRACTAL_MANDELBROT:
+    case FRACTAL_MULTIBROT:
+    case FRACTAL_MULTIJULIA:
     case FRACTAL_JULIA:
     case FRACTAL_PHOENIX_JULIA:
     case FRACTAL_BURNING_SHIP:
@@ -90,6 +93,8 @@ inline bool isBuiltinFractalMode(int mode) {
 inline const char* builtinFractalName(int mode) {
   switch (mode) {
     case FRACTAL_MANDELBROT: return "Mandelbrot";
+    case FRACTAL_MULTIBROT: return "Multibrot";
+    case FRACTAL_MULTIJULIA: return "Multijulia";
     case FRACTAL_JULIA: return "Julia Lattice";
     case FRACTAL_PHOENIX_JULIA: return "Phoenix Julia";
     case FRACTAL_BURNING_SHIP: return "Burning Ship";

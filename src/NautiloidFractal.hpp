@@ -15,6 +15,8 @@ namespace iris {
 constexpr int kNautiloidFractalSourceVersion = 1;
 constexpr int kNautiloidEscapeFractalMaxIter = LEVIATHAN_NAUTILOID_ESCAPE_FRACTAL_MAX_ITER;
 constexpr int kNautiloidRootFractalMaxIter = LEVIATHAN_NAUTILOID_ROOT_FRACTAL_MAX_ITER;
+constexpr double kNautiloidMultijuliaReal = -0.18;
+constexpr double kNautiloidMultijuliaImag = 0.76;
 
 struct NautiloidFractalSourceParams {
   int mode = FRACTAL_MANDELBROT;
@@ -383,6 +385,14 @@ inline bool makeBuiltinFractalSourceSized(
           detail::writeSetInterior(base, &source.rgb8);
           continue;
         }
+      } else if (mode == FRACTAL_MULTIBROT) {
+        cr = panX + double(nx) * 1.45 * zoomScale * viewScale;
+        ci = panY + double(ny) * 0.90 * zoomScale * viewScale;
+      } else if (mode == FRACTAL_MULTIJULIA) {
+        cr = kNautiloidMultijuliaReal;
+        ci = kNautiloidMultijuliaImag;
+        zr = panX + double(nx) * 1.45 * zoomScale * viewScale;
+        zi = panY + double(ny) * 0.84 * zoomScale * viewScale;
       } else if (mode == FRACTAL_JULIA) {
         cr = -0.74543;
         ci = 0.11301;
@@ -418,7 +428,12 @@ inline bool makeBuiltinFractalSourceSized(
         const double zr2 = zr * zr;
         const double zi2 = zi * zi;
         minOrbit = std::min(minOrbit, zr2 + zi2);
-        if (mode == FRACTAL_PHOENIX_JULIA) {
+        if (mode == FRACTAL_MULTIBROT || mode == FRACTAL_MULTIJULIA) {
+          const double nextR = zr * (zr2 - 3.0 * zi2) + cr;
+          const double nextI = zi * (3.0 * zr2 - zi2) + ci;
+          zr = nextR;
+          zi = nextI;
+        } else if (mode == FRACTAL_PHOENIX_JULIA) {
           const double nextR = zr2 - zi2 + cr + 0.48 * pr;
           const double nextI = 2.0 * zr * zi + ci + 0.48 * pi;
           pr = zr;

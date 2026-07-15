@@ -295,6 +295,39 @@ int main() {
         iris::buildWavetableFromSourceField(nautiloidSource, settings, &nautiloidTable, &ioError) &&
         nautiloidTable.valid());
 
+  iris::SourceField multibrotSource;
+  iris::SourceField multijuliaSource;
+  check("cubic Multibrot generates a source",
+        iris::makeBuiltinFractalSourceSized(
+          iris::FRACTAL_MULTIBROT, 0.f, 0.0, 0.0,
+          64, 32, 1.f, 64, 32, 0, 0, &multibrotSource, &ioError) &&
+        multibrotSource.valid());
+  check("cubic Multijulia generates a source",
+        iris::makeBuiltinFractalSourceSized(
+          iris::FRACTAL_MULTIJULIA, 0.f, 0.0, 0.0,
+          64, 32, 1.f, 64, 32, 0, 0, &multijuliaSource, &ioError) &&
+        multijuliaSource.valid());
+  const auto sourceHasVariation = [](const iris::SourceField& source) {
+    for (size_t i = 1u; i < source.rgb8.size(); ++i) {
+      if (source.rgb8[i] != source.rgb8[0]) return true;
+    }
+    return false;
+  };
+  check("cubic Multibrot source has visible variation", sourceHasVariation(multibrotSource));
+  check("cubic Multijulia source has visible variation", sourceHasVariation(multijuliaSource));
+  size_t multijuliaInteriorPixels = 0u;
+  for (size_t i = 0u; i + 2u < multijuliaSource.rgb8.size(); i += 3u) {
+    if (multijuliaSource.rgb8[i] == 7u &&
+        multijuliaSource.rgb8[i + 1u] == 4u &&
+        multijuliaSource.rgb8[i + 2u] == 18u) {
+      ++multijuliaInteriorPixels;
+    }
+  }
+  check("cubic Multijulia default exposes boundary detail",
+        multijuliaInteriorPixels * 4u < size_t(multijuliaSource.width * multijuliaSource.height));
+  check("Multibrot and Multijulia sources are distinct",
+        multibrotSource.rgb8 != multijuliaSource.rgb8);
+
   std::cout << "Summary: " << (checks - failures) << "/" << checks << " passed\n";
   return failures == 0 ? 0 : 1;
 }
