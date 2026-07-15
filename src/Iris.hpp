@@ -167,8 +167,10 @@ private:
   static void buildPreview(const iris::ImageWavetable& table, std::vector<uint8_t>* pixels);
 
   std::array<Voice, 16> voices;
-  std::array<iris::ImageWavetable, 2> tableBuffers;
+  std::array<iris::ImageWavetable, 3> tableBuffers;
   int activeTableIndex = 0;
+  int fadeFromTableIndex = -1;
+  float tableCrossfade = 1.f;
   std::atomic<int> workerTableIndex {1};
   std::atomic<int> pendingTableIndex {-1};
 

@@ -15,6 +15,7 @@ constexpr float kLinFmDriveThreshold = 0.80f;
 constexpr float kLinFmMaxDrive = 4.0f;
 constexpr float kMinFrequencyHz = 8.f;
 constexpr float kMaxFrequencyHz = 20000.f;
+constexpr float kTableCrossfadeSeconds = 0.03f;
 
 bool hasLeftNautiloid(const Iris* module) {
   if (!module) return false;
@@ -90,7 +91,10 @@ Iris::Iris() {
 
   tableBuffers[0] = iris::makeDefaultTable();
   tableBuffers[1] = tableBuffers[0];
+  tableBuffers[2] = tableBuffers[0];
   activeTableIndex = 0;
+  fadeFromTableIndex = -1;
+  tableCrossfade = 1.f;
   workerTableIndex.store(1, std::memory_order_release);
   pendingTableIndex.store(-1, std::memory_order_release);
   snapshotTable = tableBuffers[activeTableIndex];
@@ -455,14 +459,30 @@ void Iris::workerLoop() {
 void Iris::process(const ProcessArgs& args) {
   const bool measurePerf = isDragonKingDebugEnabled();
   const auto processStart = debug_terminal::debugTimerStart(measurePerf);
-  const int pendingIndex = pendingTableIndex.exchange(-1, std::memory_order_acq_rel);
-  if (pendingIndex >= 0 && pendingIndex < int(tableBuffers.size()) && pendingIndex != activeTableIndex) {
-    const int oldActiveIndex = activeTableIndex;
-    activeTableIndex = pendingIndex;
-    workerTableIndex.store(oldActiveIndex, std::memory_order_release);
-    workerCv.notify_one();
+  if (fadeFromTableIndex < 0) {
+    const int pendingIndex = pendingTableIndex.exchange(-1, std::memory_order_acq_rel);
+    if (pendingIndex >= 0 && pendingIndex < int(tableBuffers.size()) && pendingIndex != activeTableIndex) {
+      const int oldActiveIndex = activeTableIndex;
+      activeTableIndex = pendingIndex;
+      fadeFromTableIndex = oldActiveIndex;
+      tableCrossfade = 0.f;
+
+      // The third table remains writable while the old and new active tables
+      // are held immutable for the audio-rate crossfade.
+      for (int index = 0; index < int(tableBuffers.size()); ++index) {
+        if (index != activeTableIndex && index != fadeFromTableIndex) {
+          workerTableIndex.store(index, std::memory_order_release);
+          break;
+        }
+      }
+      workerCv.notify_one();
+    }
   }
   const iris::ImageWavetable* table = &tableBuffers[size_t(activeTableIndex)];
+  const iris::ImageWavetable* fadeFromTable =
+    fadeFromTableIndex >= 0 && fadeFromTableIndex < int(tableBuffers.size())
+      ? &tableBuffers[size_t(fadeFromTableIndex)] : nullptr;
+  const float tableMix = fadeFromTable ? clamp(tableCrossfade, 0.f, 1.f) : 1.f;
   const int channels = std::max(1, std::min(inputs[V_OCT_INPUT].getChannels(), 16));
   outputs[OUT_OUTPUT].setChannels(channels);
   outputs[Q_OUTPUT].setChannels(channels);
@@ -514,12 +534,26 @@ void Iris::process(const ProcessArgs& args) {
         voice.oscillator.reset();
       }
     }
-    const float quadWave = table ? table->sample(voice.oscillator.phase + 0.25f, scan) : 0.f;
-    const float wave = table ? voice.oscillator.process(*table, frequency, args.sampleTime, scan) : 0.f;
+    const float phase = voice.oscillator.phase;
+    const float nextQuadWave = table ? table->sample(phase + 0.25f, scan) : 0.f;
+    const float previousQuadWave = fadeFromTable
+      ? fadeFromTable->sample(phase + 0.25f, scan) : nextQuadWave;
+    const float nextWave = table ? voice.oscillator.process(*table, frequency, args.sampleTime, scan) : 0.f;
+    const float previousWave = fadeFromTable
+      ? fadeFromTable->sample(phase, scan) : nextWave;
+    const float wave = previousWave + (nextWave - previousWave) * tableMix;
+    const float quadWave = previousQuadWave + (nextQuadWave - previousQuadWave) * tableMix;
     const float volts = std::isfinite(wave) ? 5.f * wave : 0.f;
     const float quadVolts = std::isfinite(quadWave) ? 5.f * quadWave : 0.f;
     outputs[OUT_OUTPUT].setVoltage(volts, channel);
     outputs[Q_OUTPUT].setVoltage(quadVolts, channel);
+  }
+  if (fadeFromTable) {
+    tableCrossfade = std::min(
+      1.f, tableCrossfade + std::max(args.sampleTime, 0.f) / kTableCrossfadeSeconds);
+    if (tableCrossfade >= 1.f) {
+      fadeFromTableIndex = -1;
+    }
   }
   displayScan.store(scanDisplay, std::memory_order_relaxed);
   displayFrequencyHz.store(frequencyDisplay, std::memory_order_relaxed);
