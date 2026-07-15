@@ -1119,9 +1119,11 @@ struct NautiloidZoomSlider final : ui::Slider {
           state.centerY = nautiloidClampDouble(
             state.centerY + double(2.f * halfSpan.y * yVelocity * std::fabs(yVelocity) * float(dt) * 0.85f), -2.0, 2.0);
         }
-        if (std::fabs(previousZoom - state.zoom) > 1e-5f ||
-            std::fabs(previousX - state.centerX) > 1e-7 ||
-            std::fabs(previousY - state.centerY) > 1e-7) {
+        // Deep zoom makes a screen-relative pan step extremely small in world
+        // coordinates. Preserve every representable step so it can accumulate.
+        if (previousZoom != state.zoom ||
+            previousX != state.centerX ||
+            previousY != state.centerY) {
           const bool zoomingOut = state.zoom < previousZoom;
           module->setFractalState(state);
           const bool recenterCache = (zoomingOut || velocityActive) &&
