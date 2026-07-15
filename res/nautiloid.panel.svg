@@ -30,6 +30,8 @@
     <circle id="SOURCE_MENU_PARAM" cx="440" cy="7890" fill="#ff0000" r="160" />
     <circle id="RESET_VIEW_PARAM" cx="9720" cy="7890" fill="#ff0000" r="160" />
     <ellipse id="ZOOM_RATE_INPUT" cx="897.99994" cy="9836" rx="398" ry="405" fill="#00ff00" />
+    <ellipse id="X_VELOCITY_INPUT" cx="2200" cy="9836" rx="398" ry="405" fill="#00ff00" />
+    <ellipse id="Y_VELOCITY_INPUT" cx="3500" cy="9836" rx="398" ry="405" fill="#00ff00" />
     <circle id="IRIS_EXPANDER_LIGHT" cx="9840" cy="580" fill="#ff0000" r="180" />
     <rect id="TILE_CACHE" x="200" y="10200" width="4200" height="2590" fill="#ff0000" style="display:none" />
     <rect id="IRIS_PREVIEW" x="4740" y="10200" width="5236" height="2590" fill="#ff0000" style="display:none" />

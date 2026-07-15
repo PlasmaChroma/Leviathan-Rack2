@@ -95,15 +95,19 @@ double nautiloidClampDouble(double value, double minValue, double maxValue) {
 }
 
 struct NautiloidGlPreview final : widget::OpenGlWidget {
+  struct ModeProgram {
+    GLuint program = 0;
+    GLuint fragmentShader = 0;
+    GLint uniformCenter = -1;
+    GLint uniformHalfSpan = -1;
+    bool initAttempted = false;
+    bool ready = false;
+  };
+
   Nautiloid* module = nullptr;
-  GLuint program = 0;
   GLuint vertexShader = 0;
-  GLuint fragmentShader = 0;
-  GLint uniformCenter = -1;
-  GLint uniformHalfSpan = -1;
-  GLint uniformMode = -1;
-  bool shaderInitAttempted = false;
-  bool shaderReady = false;
+  bool vertexShaderInitAttempted = false;
+  std::array<ModeProgram, size_t(iris::kLastBuiltinFractalMode) + 1u> modePrograms {};
   bool lastEffectiveActive = false;
   int lastMode = -1;
   float lastZoom = NAN;
@@ -128,23 +132,20 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
   }
 
   void releaseGlResources(bool deleteGlObjects) {
-    if (deleteGlObjects && program) {
-      glDeleteProgram(program);
+    for (ModeProgram& modeProgram : modePrograms) {
+      if (deleteGlObjects && modeProgram.program) {
+        glDeleteProgram(modeProgram.program);
+      }
+      if (deleteGlObjects && modeProgram.fragmentShader) {
+        glDeleteShader(modeProgram.fragmentShader);
+      }
+      modeProgram = ModeProgram();
     }
     if (deleteGlObjects && vertexShader) {
       glDeleteShader(vertexShader);
     }
-    if (deleteGlObjects && fragmentShader) {
-      glDeleteShader(fragmentShader);
-    }
-    program = 0;
     vertexShader = 0;
-    fragmentShader = 0;
-    uniformCenter = -1;
-    uniformHalfSpan = -1;
-    uniformMode = -1;
-    shaderReady = false;
-    shaderInitAttempted = false;
+    vertexShaderInitAttempted = false;
   }
 
   static GLuint compileShader(GLenum type, const char* src) {
@@ -167,9 +168,13 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     return shader;
   }
 
-  bool ensureShaderReady() {
-    if (shaderInitAttempted) return shaderReady;
-    shaderInitAttempted = true;
+  bool ensureShaderReady(int mode) {
+    if (!iris::isBuiltinFractalMode(mode) || mode < 0 || size_t(mode) >= modePrograms.size()) {
+      return false;
+    }
+    ModeProgram& modeProgram = modePrograms[size_t(mode)];
+    if (modeProgram.initAttempted) return modeProgram.ready;
+    modeProgram.initAttempted = true;
 
     static const char* const kVertexShaderSrc = R"GLSL(
       #version 120
@@ -180,16 +185,10 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
       }
     )GLSL";
 
-    static const char* const kFragmentShaderSrc = R"GLSL(
-      #version 120
-)GLSL"
-      "#define NAUTILOID_ESCAPE_MAX_ITER " NAUTILOID_GLSL_STRINGIFY(LEVIATHAN_NAUTILOID_ESCAPE_FRACTAL_MAX_ITER) "\n"
-      "#define NAUTILOID_ROOT_MAX_ITER " NAUTILOID_GLSL_STRINGIFY(LEVIATHAN_NAUTILOID_ROOT_FRACTAL_MAX_ITER) "\n"
-R"GLSL(
+    static const char* const kFragmentShaderBody = R"GLSL(
       varying vec2 vUv;
       uniform vec2 uCenter;
       uniform vec2 uHalfSpan;
-      uniform int uMode;
 
       vec3 hsvToRgb(float h, float s, float v) {
         h = fract(h);
@@ -246,7 +245,7 @@ R"GLSL(
 
       void main() {
         vec2 p = uCenter + (vUv * 2.0 - 1.0) * uHalfSpan;
-        if (uMode == 12 || uMode == 13) {
+        if (NAUTILOID_MODE == 12 || NAUTILOID_MODE == 13) {
           vec2 z = p;
           const int maxRootIter = NAUTILOID_ROOT_MAX_ITER;
           int iter = 0;
@@ -260,7 +259,7 @@ R"GLSL(
             }
             vec2 nextZ = vec2((2.0 * z.x * (zr2 + zi2) + (zr2 - zi2)) / denom,
                               (2.0 * z.y * (zr2 + zi2) - 2.0 * z.x * z.y) / denom);
-            if (uMode == 13) {
+            if (NAUTILOID_MODE == 13) {
               nextZ += vec2(-0.52, 0.38);
             }
             vec2 delta = nextZ - z;
@@ -270,30 +269,30 @@ R"GLSL(
               break;
             }
           }
-          gl_FragColor = vec4(rootColor(z, iter, maxRootIter, uMode == 13 ? 0.18 : 0.0), 1.0);
+          gl_FragColor = vec4(rootColor(z, iter, maxRootIter, NAUTILOID_MODE == 13 ? 0.18 : 0.0), 1.0);
           return;
         }
 
         vec2 c = vec2(0.0);
         vec2 z = vec2(0.0);
         vec2 prev = vec2(0.0);
-        if (uMode == 1) {
+        if (NAUTILOID_MODE == 1) {
           c = vec2(-0.75, 0.0) + p;
           if (mandelbrotMainInterior(c)) {
             gl_FragColor = vec4(7.0 / 255.0, 4.0 / 255.0, 18.0 / 255.0, 1.0);
             return;
           }
-        } else if (uMode == 4) {
+        } else if (NAUTILOID_MODE == 4) {
           c = vec2(-0.74543, 0.11301);
           z = p;
-        } else if (uMode == 5) {
+        } else if (NAUTILOID_MODE == 5) {
           c = vec2(-0.42, 0.08);
           z = p;
-        } else if (uMode == 7) {
+        } else if (NAUTILOID_MODE == 7) {
           c = vec2(-1.76, -0.045) + p;
-        } else if (uMode == 8) {
+        } else if (NAUTILOID_MODE == 8) {
           c = vec2(-0.25, 0.02) + p;
-        } else if (uMode == 11) {
+        } else if (NAUTILOID_MODE == 11) {
           c = vec2(-0.52, 0.0) + p;
         } else {
           c = vec2(-0.12, 0.0) + p;
@@ -304,22 +303,22 @@ R"GLSL(
         int iter = 0;
         const int maxIter = NAUTILOID_ESCAPE_MAX_ITER;
         for (int i = 0; i < maxIter; ++i) {
-          if (uMode == 7) {
+          if (NAUTILOID_MODE == 7) {
             z = abs(z);
           }
           float zr2 = z.x * z.x;
           float zi2 = z.y * z.y;
           minOrbit = min(minOrbit, zr2 + zi2);
-          if (uMode == 5) {
+          if (NAUTILOID_MODE == 5) {
             vec2 nextZ = vec2(zr2 - zi2 + c.x + 0.48 * prev.x,
                               2.0 * z.x * z.y + c.y + 0.48 * prev.y);
             prev = z;
             z = nextZ;
-          } else if (uMode == 10) {
+          } else if (NAUTILOID_MODE == 10) {
             z = vec2(zr2 - zi2 + c.x, -2.0 * z.x * z.y + c.y);
-          } else if (uMode == 8) {
+          } else if (NAUTILOID_MODE == 8) {
             z = vec2(abs(zr2 - zi2) + c.x, 2.0 * z.x * z.y + c.y);
-          } else if (uMode == 11) {
+          } else if (NAUTILOID_MODE == 11) {
             vec2 nextZ = vec2(zr2 - zi2 + c.x, 2.0 * z.x * z.y + c.y);
             c = 0.5 * c + nextZ;
             z = nextZ;
@@ -340,55 +339,72 @@ R"GLSL(
       }
     )GLSL";
 
-    vertexShader = compileShader(GL_VERTEX_SHADER, kVertexShaderSrc);
-    fragmentShader = compileShader(GL_FRAGMENT_SHADER, kFragmentShaderSrc);
-    if (!vertexShader || !fragmentShader) {
-      releaseGlResources(true);
-      shaderInitAttempted = true;
+    if (!vertexShader) {
+      if (vertexShaderInitAttempted) return false;
+      vertexShaderInitAttempted = true;
+      vertexShader = compileShader(GL_VERTEX_SHADER, kVertexShaderSrc);
+    }
+    if (!vertexShader) {
       return false;
     }
-    program = glCreateProgram();
-    if (!program) {
-      releaseGlResources(true);
-      shaderInitAttempted = true;
+
+    const std::string fragmentSource =
+      std::string("#version 120\n") +
+      "#define NAUTILOID_ESCAPE_MAX_ITER " NAUTILOID_GLSL_STRINGIFY(LEVIATHAN_NAUTILOID_ESCAPE_FRACTAL_MAX_ITER) "\n" +
+      "#define NAUTILOID_ROOT_MAX_ITER " NAUTILOID_GLSL_STRINGIFY(LEVIATHAN_NAUTILOID_ROOT_FRACTAL_MAX_ITER) "\n" +
+      "#define NAUTILOID_MODE " + std::to_string(mode) + "\n" +
+      kFragmentShaderBody;
+    modeProgram.fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentSource.c_str());
+    if (!modeProgram.fragmentShader) {
       return false;
     }
-    glAttachShader(program, vertexShader);
-    glAttachShader(program, fragmentShader);
-    glLinkProgram(program);
+    modeProgram.program = glCreateProgram();
+    if (!modeProgram.program) {
+      glDeleteShader(modeProgram.fragmentShader);
+      modeProgram.fragmentShader = 0;
+      return false;
+    }
+    glAttachShader(modeProgram.program, vertexShader);
+    glAttachShader(modeProgram.program, modeProgram.fragmentShader);
+    glLinkProgram(modeProgram.program);
     GLint linkOk = GL_FALSE;
-    glGetProgramiv(program, GL_LINK_STATUS, &linkOk);
+    glGetProgramiv(modeProgram.program, GL_LINK_STATUS, &linkOk);
     if (linkOk != GL_TRUE) {
       GLint logLen = 0;
-      glGetProgramiv(program, GL_INFO_LOG_LENGTH, &logLen);
+      glGetProgramiv(modeProgram.program, GL_INFO_LOG_LENGTH, &logLen);
       std::vector<char> logBuf(size_t(std::max(logLen, 1)));
       GLsizei written = 0;
-      glGetProgramInfoLog(program, GLsizei(logBuf.size()), &written, logBuf.data());
-      WARN("Nautiloid GPU preview shader link failed: %s", logBuf.data());
-      releaseGlResources(true);
-      shaderInitAttempted = true;
+      glGetProgramInfoLog(modeProgram.program, GLsizei(logBuf.size()), &written, logBuf.data());
+      WARN("Nautiloid GPU preview shader link failed for mode %d: %s", mode, logBuf.data());
+      glDeleteProgram(modeProgram.program);
+      glDeleteShader(modeProgram.fragmentShader);
+      modeProgram.program = 0;
+      modeProgram.fragmentShader = 0;
       return false;
     }
-    uniformCenter = glGetUniformLocation(program, "uCenter");
-    uniformHalfSpan = glGetUniformLocation(program, "uHalfSpan");
-    uniformMode = glGetUniformLocation(program, "uMode");
-    shaderReady =
-      uniformCenter >= 0 &&
-      uniformHalfSpan >= 0 &&
-      uniformMode >= 0;
-    if (!shaderReady) {
-      releaseGlResources(true);
-      shaderInitAttempted = true;
+    modeProgram.uniformCenter = glGetUniformLocation(modeProgram.program, "uCenter");
+    modeProgram.uniformHalfSpan = glGetUniformLocation(modeProgram.program, "uHalfSpan");
+    modeProgram.ready = modeProgram.uniformCenter >= 0 && modeProgram.uniformHalfSpan >= 0;
+    if (!modeProgram.ready) {
+      glDeleteProgram(modeProgram.program);
+      glDeleteShader(modeProgram.fragmentShader);
+      modeProgram.program = 0;
+      modeProgram.fragmentShader = 0;
       return false;
     }
     return true;
   }
 
   void step() override {
-    OpenGlWidget::step();
+    FramebufferWidget::step();
     const bool effectiveActive = nautiloidGpuPreviewEnabled(module);
+    bool currentModeReady = false;
+    if (module && iris::isBuiltinFractalMode(module->fractalMode) &&
+        module->fractalMode >= 0 && size_t(module->fractalMode) < modePrograms.size()) {
+      currentModeReady = modePrograms[size_t(module->fractalMode)].ready;
+    }
     if (module) {
-      module->debugGpuPreviewAvailable.store(effectiveActive && shaderReady, std::memory_order_relaxed);
+      module->debugGpuPreviewAvailable.store(effectiveActive && currentModeReady, std::memory_order_relaxed);
     }
     bool dirty = false;
     if (effectiveActive != lastEffectiveActive) {
@@ -397,18 +413,15 @@ R"GLSL(
     }
     if (module) {
       if (module->fractalMode != lastMode ||
-          std::fabs(module->fractalZoom - lastZoom) > 1e-5f ||
-          std::fabs(module->fractalCenterX - lastCenterX) > 1e-7f ||
-          std::fabs(module->fractalCenterY - lastCenterY) > 1e-7f) {
+          module->fractalZoom != lastZoom ||
+          module->fractalCenterX != lastCenterX ||
+          module->fractalCenterY != lastCenterY) {
         lastMode = module->fractalMode;
         lastZoom = module->fractalZoom;
         lastCenterX = module->fractalCenterX;
         lastCenterY = module->fractalCenterY;
         dirty = true;
       }
-    }
-    if (effectiveActive) {
-      dirty = true;
     }
     if (dirty) {
       setDirty();
@@ -421,7 +434,8 @@ R"GLSL(
     glClearColor(0.f, 0.f, 0.f, 0.f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    if (!nautiloidGpuPreviewEnabled(module) || !ensureShaderReady()) {
+    const int mode = module ? int(module->fractalMode) : iris::FRACTAL_NONE;
+    if (!nautiloidGpuPreviewEnabled(module) || !ensureShaderReady(mode)) {
       if (module) {
         module->debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
       }
@@ -431,6 +445,7 @@ R"GLSL(
       module->debugGpuPreviewAvailable.store(true, std::memory_order_relaxed);
     }
 
+    ModeProgram& modeProgram = modePrograms[size_t(mode)];
     const float zoomScale = std::pow(0.05f, clamp(module->fractalZoom, 0.f, kNautiloidMaxFractalZoom));
     const Vec halfSpan = nautiloidFractalViewportHalfSpan(module->fractalMode).mult(zoomScale);
     const float w = std::max(box.size.x, 1.f);
@@ -446,10 +461,9 @@ R"GLSL(
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_BLEND);
 
-    glUseProgram(program);
-    glUniform2f(uniformCenter, float(module->fractalCenterX), float(module->fractalCenterY));
-    glUniform2f(uniformHalfSpan, halfSpan.x, halfSpan.y);
-    glUniform1i(uniformMode, module->fractalMode);
+    glUseProgram(modeProgram.program);
+    glUniform2f(modeProgram.uniformCenter, float(module->fractalCenterX), float(module->fractalCenterY));
+    glUniform2f(modeProgram.uniformHalfSpan, halfSpan.x, halfSpan.y);
     glBegin(GL_TRIANGLE_STRIP);
     glTexCoord2f(0.f, 0.f);
     glVertex2f(0.f, 0.f);
@@ -1057,11 +1071,28 @@ struct NautiloidZoomSlider final : ui::Slider {
       module && module->zoomRateCvConnected.load(std::memory_order_relaxed);
     const float cvSpeed =
       cvConnected ? module->zoomRateCvNorm.load(std::memory_order_relaxed) : 0.f;
+    bool xVelocityConnected = false;
+    bool yVelocityConnected = false;
+    float xVelocity = 0.f;
+    float yVelocity = 0.f;
+    if (module) {
+      xVelocityConnected = module->xVelocityCvConnected.load(std::memory_order_relaxed);
+      yVelocityConnected = module->yVelocityCvConnected.load(std::memory_order_relaxed);
+      if (xVelocityConnected) {
+        xVelocity = module->xVelocityCvNorm.load(std::memory_order_relaxed);
+      }
+      if (yVelocityConnected) {
+        yVelocity = module->yVelocityCvNorm.load(std::memory_order_relaxed);
+      }
+    }
     const float manualSpeed =
       (zoomActive && zoomSpeed) ? (zoomSpeed->getValue() - 0.5f) * 2.f : 0.f;
     const float speed = clamp(manualSpeed + cvSpeed, -1.f, 1.f);
     const bool speedActive = std::fabs(speed) > 0.015f;
-    const bool interactionActive = zoomActive || (cvConnected && speedActive);
+    const bool xVelocityActive = std::fabs(xVelocity) > 0.015f;
+    const bool yVelocityActive = std::fabs(yVelocity) > 0.015f;
+    const bool velocityActive = xVelocityActive || yVelocityActive;
+    const bool interactionActive = zoomActive || (cvConnected && speedActive) || velocityActive;
     if (module) {
       module->zoomInteractionActive.store(interactionActive, std::memory_order_relaxed);
     }
@@ -1071,15 +1102,30 @@ struct NautiloidZoomSlider final : ui::Slider {
       }
       const double dt = std::max(0.0, std::min(now - lastStepTime, 0.05));
       lastStepTime = now;
-      if (speedActive && dt > 0.0) {
-        const float shapedSpeed = speed * std::fabs(speed);
+      if ((speedActive || velocityActive) && dt > 0.0) {
         Nautiloid::FractalState state = module->fractalStateSnapshot();
-        const float next = clamp(state.zoom + shapedSpeed * float(dt) * 0.85f, 0.f, kNautiloidMaxFractalZoom);
-        if (std::fabs(state.zoom - next) > 1e-5f) {
-          const bool zoomingOut = next < state.zoom;
-          state.zoom = next;
+        const float previousZoom = state.zoom;
+        const double previousX = state.centerX;
+        const double previousY = state.centerY;
+        if (speedActive) {
+          const float shapedSpeed = speed * std::fabs(speed);
+          state.zoom = clamp(state.zoom + shapedSpeed * float(dt) * 0.85f, 0.f, kNautiloidMaxFractalZoom);
+        }
+        if (velocityActive) {
+          const float zoomScale = std::pow(0.05f, clamp(state.zoom, 0.f, kNautiloidMaxFractalZoom));
+          const Vec halfSpan = nautiloidFractalViewportHalfSpan(state.mode).mult(zoomScale);
+          state.centerX = nautiloidClampDouble(
+            state.centerX + double(2.f * halfSpan.x * xVelocity * std::fabs(xVelocity) * float(dt) * 0.85f), -2.0, 2.0);
+          state.centerY = nautiloidClampDouble(
+            state.centerY + double(2.f * halfSpan.y * yVelocity * std::fabs(yVelocity) * float(dt) * 0.85f), -2.0, 2.0);
+        }
+        if (std::fabs(previousZoom - state.zoom) > 1e-5f ||
+            std::fabs(previousX - state.centerX) > 1e-7 ||
+            std::fabs(previousY - state.centerY) > 1e-7) {
+          const bool zoomingOut = state.zoom < previousZoom;
           module->setFractalState(state);
-          const bool recenterCache = zoomingOut && nautiloidVisibleViewOutgrowsCache(module, 0.78f);
+          const bool recenterCache = (zoomingOut || velocityActive) &&
+            nautiloidVisibleViewOutgrowsCache(module, 0.78f);
           if (nautiloidRequestDue(&lastPreviewRequestTime, 0.04)) {
             module->requestInteractiveZoomPreview(module->fractalCenterX, module->fractalCenterY, recenterCache);
           }
@@ -1424,6 +1470,10 @@ struct NautiloidWidget final : ModuleWidget {
 
     addInput(createInputCentered<Magitek2InputJack>(
       mm2px(pointMm("ZOOM_RATE_INPUT", Vec(88.6f, 75.4f))), module, Nautiloid::ZOOM_RATE_INPUT));
+    addInput(createInputCentered<Magitek2InputJack>(
+      mm2px(pointMm("X_VELOCITY_INPUT", Vec(22.f, 98.36f))), module, Nautiloid::X_VELOCITY_INPUT));
+    addInput(createInputCentered<Magitek2InputJack>(
+      mm2px(pointMm("Y_VELOCITY_INPUT", Vec(35.f, 98.36f))), module, Nautiloid::Y_VELOCITY_INPUT));
     addChild(createLightCentered<SmallAperture<AmberGreenVioletApertureLight>>(
       mm2px(pointMm("IRIS_EXPANDER_LIGHT", Vec(98.4f, 5.8f))), module, Nautiloid::IRIS_LINK_LIGHT));
 

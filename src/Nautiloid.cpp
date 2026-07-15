@@ -631,6 +631,8 @@ Nautiloid::Nautiloid() {
   configButton(SOURCE_MENU_PARAM, "Fractal");
   configButton(RESET_VIEW_PARAM, "Reset view");
   configInput(ZOOM_RATE_INPUT, "Zoom rate CV");
+  configInput(X_VELOCITY_INPUT, "X velocity CV");
+  configInput(Y_VELOCITY_INPUT, "Y velocity CV");
   displayTileCache.ensureStorage(kFractalCacheWidth, kFractalCacheHeight, kDisplayTileSize);
   startWorker();
   requestRender();
@@ -645,6 +647,16 @@ void Nautiloid::process(const ProcessArgs& args) {
   zoomRateCvConnected.store(zoomRateConnected, std::memory_order_relaxed);
   zoomRateCvNorm.store(
     zoomRateConnected ? clamp(inputs[ZOOM_RATE_INPUT].getVoltage() / 10.f, -1.f, 1.f) : 0.f,
+    std::memory_order_relaxed);
+  const bool xVelocityConnected = inputs[X_VELOCITY_INPUT].isConnected();
+  xVelocityCvConnected.store(xVelocityConnected, std::memory_order_relaxed);
+  xVelocityCvNorm.store(
+    xVelocityConnected ? clamp(inputs[X_VELOCITY_INPUT].getVoltage() / 10.f, -1.f, 1.f) : 0.f,
+    std::memory_order_relaxed);
+  const bool yVelocityConnected = inputs[Y_VELOCITY_INPUT].isConnected();
+  yVelocityCvConnected.store(yVelocityConnected, std::memory_order_relaxed);
+  yVelocityCvNorm.store(
+    yVelocityConnected ? clamp(inputs[Y_VELOCITY_INPUT].getVoltage() / 10.f, -1.f, 1.f) : 0.f,
     std::memory_order_relaxed);
 
   const uint64_t generation = irisPreviewGeneration.load(std::memory_order_acquire);

@@ -223,7 +223,9 @@ inline void smoothRowsCyclic(std::vector<std::vector<float> >* rows, float smoot
     return;
   }
   constexpr int passes = 6;
-  const float amount = 0.44f * clamp01(smoothing);
+  // Keep the former full-strength amount at the midpoint of the control,
+  // while allowing the upper half to provide an additional equal range.
+  const float amount = 0.88f * clamp01(smoothing);
   if (!(amount > 0.f)) {
     return;
   }
