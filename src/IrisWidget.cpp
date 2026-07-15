@@ -3,6 +3,7 @@
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 #include "visual/PreviewSurface.hpp"
 
 #include <cctype>
@@ -819,6 +820,7 @@ struct IrisWidget final : ModuleWidget {
     visual_assets::SplitPanelRenderer splitPanel(this, "res/iris.panel.svg");
     const std::string& panelPath = splitPanel.panelPath();
     splitPanel.addLabels("res/iris.labels.svg");
+    visual_assets::addFractalGlassOverlay(this, panelPath);
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(0.f, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));

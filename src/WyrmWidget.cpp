@@ -2,6 +2,7 @@
 #include "WyrmSand.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 
 #include <cstdio>
 
@@ -249,6 +250,7 @@ struct WyrmWidget : ModuleWidget {
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/wyrm.panel.svg");
 		const std::string& panelPath = splitPanel.panelPath();
 		splitPanel.addLabels("res/wyrm.labels.svg");
+		visual_assets::addFractalGlassOverlay(this, panelPath);
 		previewBuildTimer.markPanelDone();
 		try {
 			ageSigilSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/Vahdrim'Keth.svg"));

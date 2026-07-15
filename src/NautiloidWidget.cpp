@@ -1424,7 +1424,7 @@ struct NautiloidWidget final : ModuleWidget {
 
     addInput(createInputCentered<Magitek2InputJack>(
       mm2px(pointMm("ZOOM_RATE_INPUT", Vec(88.6f, 75.4f))), module, Nautiloid::ZOOM_RATE_INPUT));
-    addChild(createLightCentered<SmallAperture<AmberGreenApertureLight>>(
+    addChild(createLightCentered<SmallAperture<AmberGreenVioletApertureLight>>(
       mm2px(pointMm("IRIS_EXPANDER_LIGHT", Vec(98.4f, 5.8f))), module, Nautiloid::IRIS_LINK_LIGHT));
 
     NautiloidDebugCounters* counters = new NautiloidDebugCounters(module);

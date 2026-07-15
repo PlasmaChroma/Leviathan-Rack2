@@ -3,6 +3,7 @@
 #include "MathHelpers.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 #include "visual/PreviewSurface.hpp"
 #include "WavePreviewTracer.hpp"
 #include <dsp/minblep.hpp>
@@ -1772,6 +1773,7 @@ struct ProcWidget : ModuleWidget {
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/proc.panel.svg");
 		const std::string& panelBasePath = splitPanel.panelPath();
 		splitPanel.addLabels("res/proc.labels.svg");
+		visual_assets::addFractalGlassOverlay(this, panelBasePath);
 		previewBuildTimer.markPanelDone();
 
 		addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0)));

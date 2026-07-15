@@ -2,6 +2,7 @@
 #include "UndertowShape.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 #include "visual/PreviewSurface.hpp"
 #include "WavePreviewTracer.hpp"
 #include <array>
@@ -262,6 +263,7 @@ struct UndertowWidget final : ModuleWidget {
     visual_assets::SplitPanelRenderer splitPanel(this, "res/undertow.panel.svg");
     const std::string& panelPath = splitPanel.panelPath();
     splitPanel.addLabels("res/undertow.labels.svg");
+    visual_assets::addFractalGlassOverlay(this, panelPath);
     addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
     previewBuildTimer.markPanelDone();

@@ -5,6 +5,7 @@
 #include "PanelSvgUtils.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "visual/VisualAssets.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 
 #include <algorithm>
 #include <array>
@@ -3555,6 +3556,7 @@ struct TemporalDeckWidget : ModuleWidget {
     visual_assets::SplitPanelRenderer splitPanel(this, "res/deck.panel.svg");
     const std::string& panelPath = splitPanel.panelPath();
     splitPanel.addLabels("res/deck.labels.svg");
+    visual_assets::addFractalGlassOverlay(this, panelPath);
     previewBuildTimer.markPanelDone();
     if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
       panelBorder = findPanelBorder(svgPanel->fb);

@@ -493,6 +493,17 @@ AmberGreenApertureLight::AmberGreenApertureLight() {
 	invalidateBloomCache();
 }
 
+AmberGreenVioletApertureLight::AmberGreenVioletApertureLight() {
+	baseColor = nvgRGB(255, 195, 62);
+	activeColor = baseColor;
+	baseColors.clear();
+	addBaseColor(baseColor);
+	addBaseColor(nvgRGB(134, 255, 107));
+	addBaseColor(nvgRGB(193, 72, 255));
+	invalidateStaticBackgroundCache();
+	invalidateBloomCache();
+}
+
 RedApertureLight::RedApertureLight() {
 	setApertureBaseColor(this, nvgRGB(255, 84, 84));
 }

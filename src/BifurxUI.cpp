@@ -2,6 +2,7 @@
 #include "DebugTerminalTransport.hpp"
 #include "BifurxWorker.hpp"
 #include "visual/VisualAssets.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 #include <unordered_map>
 
 namespace bifurx {
@@ -781,6 +782,7 @@ struct BifurxWidget final : ModuleWidget {
 		const std::string& panelPath = splitPanel.panelPath();
 		previewBuildTimer.markPanelDone();
 		splitPanel.addLabels("res/bifurx.labels.svg");
+		visual_assets::addFractalGlassOverlay(this, panelPath);
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0))); addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH))); addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		auto applyPt = [&](const char* id, Vec* pos) { Vec p; if (panel_svg::loadPointFromSvgMm(panelPath, id, &p)) *pos = p; };

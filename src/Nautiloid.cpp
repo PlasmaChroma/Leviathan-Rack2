@@ -45,6 +45,11 @@ bool isIrisModule(const engine::Module* neighbor) {
     ((neighbor->model == modelIris) || neighbor->model->slug == "Iris");
 }
 
+bool isIntegralFluxModule(const engine::Module* neighbor) {
+  return neighbor && neighbor->model &&
+    ((neighbor->model == modelIntegralFlux) || neighbor->model->slug == "IntegralFlux");
+}
+
 Vec nautiloidFractalViewportHalfSpan(int mode) {
   switch (mode) {
     case iris::FRACTAL_MANDELBROT:
@@ -645,6 +650,8 @@ void Nautiloid::process(const ProcessArgs& args) {
   const uint64_t generation = irisPreviewGeneration.load(std::memory_order_acquire);
   Module* right = rightExpander.module;
   const bool irisConnected = isIrisModule(right) && right->leftExpander.module == this;
+  const bool integralFluxConnected =
+    isIntegralFluxModule(right) && right->leftExpander.module == this;
   Iris* rightIris = irisConnected ? dynamic_cast<Iris*>(right) : nullptr;
   const bool irisJustAttached =
     rightIrisConnectionObserved && irisConnected &&
@@ -702,6 +709,7 @@ void Nautiloid::process(const ProcessArgs& args) {
   lastExpanderGenerationSentLeft = 0u;
   lights[IRIS_LINK_LIGHT].setBrightness(irisConnected && !irisReady ? 1.f : 0.f);
   lights[IRIS_READY_LIGHT].setBrightness(irisReady ? 1.f : 0.f);
+  lights[INTEGRAL_FLUX_LINK_LIGHT].setBrightness(integralFluxConnected ? 1.f : 0.f);
   rightIrisConnectionObserved = true;
   rightIrisWasConnected = irisConnected;
   lastRightIrisModule = irisConnected ? right : nullptr;

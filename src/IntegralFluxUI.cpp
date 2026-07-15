@@ -5,6 +5,7 @@
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 #include "visual/PreviewSurface.hpp"
 #include "WavePreviewTracer.hpp"
 #include <array>
@@ -112,280 +113,6 @@ bool appendIntegralFluxFractalParamsCapture(const IntegralFlux* module) {
 	}
 	return result == 0;
 }
-
-// MVP visual expander: Integral Flux receives Nautiloid's fractal parameters
-// and renders its own compact glass texture. No Nautiloid pixel buffer crosses
-// the expander boundary, and neither module's audio/state is affected.
-struct IntegralFluxNautiloidGlassOverlay final : TransparentWidget {
-	static constexpr int kRenderWidth = kIntegralFluxNautiloidGlassRenderWidth;
-	static constexpr int kRenderHeight = kIntegralFluxNautiloidGlassRenderHeight;
-
-	struct GlassRegion {
-		math::Rect rectPx;
-		float radiusPx = 0.f;
-		NVGcolor color = nvgRGB(124, 92, 255);
-		iris::FractalPalette palette;
-	};
-
-	struct RenderRequest {
-		iris::NautiloidFractalSourceParams params;
-		uint64_t serial = 0u;
-	};
-
-	IntegralFlux* module = nullptr;
-	widget::FramebufferWidget* framebuffer = nullptr;
-	NVGcontext* imageContext = nullptr;
-	int uploadedWidth = 0;
-	int uploadedHeight = 0;
-	uint64_t uploadedRenderGeneration = uint64_t(-1);
-	uint64_t observedRenderGeneration = uint64_t(-1);
-	bool observedConnection = false;
-	std::vector<GlassRegion> regions;
-	std::vector<int> regionImageHandles;
-	std::vector<uint8_t> rgba;
-	std::mutex requestMutex;
-	std::condition_variable requestCv;
-	bool workerStop = false;
-	bool requestPending = false;
-	RenderRequest pendingRequest;
-	uint64_t nextRequestSerial = 0u;
-	std::thread renderThread;
-	std::mutex resultMutex;
-	std::vector<std::vector<uint8_t>> renderedRegionRgb;
-	int renderedWidth = 0;
-	int renderedHeight = 0;
-	std::atomic<uint64_t> renderedGeneration {0u};
-	bool submittedParamsValid = false;
-	iris::NautiloidFractalSourceParams submittedParams;
-
-	explicit IntegralFluxNautiloidGlassOverlay(IntegralFlux* module, const std::string& panelPath) : module(module) {
-		loadGlassRegions(panelPath);
-		renderThread = std::thread([this]() { renderLoop(); });
-	}
-
-	~IntegralFluxNautiloidGlassOverlay() override {
-		{
-			std::lock_guard<std::mutex> lock(requestMutex);
-			workerStop = true;
-			requestPending = false;
-		}
-		requestCv.notify_one();
-		if (renderThread.joinable()) {
-			renderThread.join();
-		}
-	}
-
-	Nautiloid* leftNautiloid() const {
-		return leftNautiloidForIntegralFlux(module);
-	}
-
-	static iris::FractalPalette paletteForColor(NVGcolor color) {
-		const int r = int(std::round(clamp(color.r, 0.f, 1.f) * 255.f));
-		const int g = int(std::round(clamp(color.g, 0.f, 1.f) * 255.f));
-		const int b = int(std::round(clamp(color.b, 0.f, 1.f) * 255.f));
-		iris::FractalPalette palette;
-		palette.shadowR = uint8_t(std::max(1, r / 16));
-		palette.shadowG = uint8_t(std::max(1, g / 16));
-		palette.shadowB = uint8_t(std::max(1, b / 16));
-		palette.highlightR = uint8_t(std::min(255, r + (255 - r) / 2));
-		palette.highlightG = uint8_t(std::min(255, g + (255 - g) / 2));
-		palette.highlightB = uint8_t(std::min(255, b + (255 - b) / 2));
-		return palette;
-	}
-
-	void loadGlassRegions(const std::string& panelPath) {
-		std::vector<panel_svg::SvgRectMatch> matches;
-		if (!panel_svg::findRectsInGroupsWithIdSubstringMm(panelPath, "glass", &matches)) {
-			return;
-		}
-		regions.reserve(matches.size());
-		for (const panel_svg::SvgRectMatch& match : matches) {
-			GlassRegion region;
-			region.rectPx = math::Rect(mm2px(match.rect.pos), mm2px(match.rect.size));
-			if (match.hasCornerRadius) {
-				const Vec radiusPx = mm2px(match.cornerRadius);
-				region.radiusPx = std::min(radiusPx.x, radiusPx.y);
-			}
-			if (match.hasFillColor) {
-				region.color = match.fillColor;
-			}
-			region.palette = paletteForColor(region.color);
-			regions.push_back(region);
-		}
-		regionImageHandles.assign(regions.size(), -1);
-	}
-
-	static iris::NautiloidFractalSourceParams paramsFromNautiloid(const Nautiloid& naut) {
-		iris::NautiloidFractalSourceParams params;
-		params.mode = naut.fractalMode;
-		params.zoom = naut.fractalZoom;
-		params.centerX = naut.fractalCenterX;
-		params.centerY = naut.fractalCenterY;
-		return params;
-	}
-
-	static bool sameParams(const iris::NautiloidFractalSourceParams& a,
-		const iris::NautiloidFractalSourceParams& b) {
-		return a.mode == b.mode && std::fabs(a.zoom - b.zoom) <= 1e-5f &&
-			std::fabs(a.centerX - b.centerX) <= 1e-7 && std::fabs(a.centerY - b.centerY) <= 1e-7;
-	}
-
-	void submitRender(const iris::NautiloidFractalSourceParams& params) {
-		std::lock_guard<std::mutex> lock(requestMutex);
-		pendingRequest.params = params;
-		pendingRequest.serial = ++nextRequestSerial;
-		requestPending = true;
-		requestCv.notify_one();
-	}
-
-	void renderLoop() {
-		while (true) {
-			RenderRequest request;
-			{
-				std::unique_lock<std::mutex> lock(requestMutex);
-				requestCv.wait(lock, [this]() { return workerStop || requestPending; });
-				if (workerStop) {
-					return;
-				}
-				request = pendingRequest;
-				requestPending = false;
-			}
-
-			iris::SourceField source;
-			if (!iris::makeBuiltinFractalSourceSized(
-					request.params.mode, request.params.zoom, request.params.centerX, request.params.centerY,
-					kRenderWidth, kRenderHeight, 1.f, &source) || !source.valid()) {
-				continue;
-			}
-
-			std::lock_guard<std::mutex> requestLock(requestMutex);
-			if (request.serial != nextRequestSerial) {
-				continue;
-			}
-			{
-				std::lock_guard<std::mutex> resultLock(resultMutex);
-				renderedRegionRgb.resize(regions.size());
-				for (size_t i = 0; i < regions.size(); ++i) {
-					iris::SourceField tinted = source;
-					iris::applyFractalPalette(&tinted, regions[i].palette);
-					renderedRegionRgb[i] = std::move(tinted.rgb8);
-				}
-				renderedWidth = source.width;
-				renderedHeight = source.height;
-			}
-			renderedGeneration.fetch_add(1u, std::memory_order_release);
-		}
-	}
-
-	bool snapshotRendered(std::vector<std::vector<uint8_t>>* rgbByRegion, int* width, int* height) {
-		std::lock_guard<std::mutex> lock(resultMutex);
-		if (renderedWidth <= 0 || renderedHeight <= 0 || renderedRegionRgb.empty()) {
-			return false;
-		}
-		if (rgbByRegion) *rgbByRegion = renderedRegionRgb;
-		if (width) *width = renderedWidth;
-		if (height) *height = renderedHeight;
-		return true;
-	}
-
-	void step() override {
-		Nautiloid* naut = leftNautiloid();
-		const bool connected = naut != nullptr;
-		if (naut) {
-			const iris::NautiloidFractalSourceParams params = paramsFromNautiloid(*naut);
-			if (!submittedParamsValid || !sameParams(params, submittedParams)) {
-				submittedParams = params;
-				submittedParamsValid = true;
-				submitRender(params);
-			}
-		} else {
-			submittedParamsValid = false;
-		}
-		const uint64_t generation = renderedGeneration.load(std::memory_order_acquire);
-		if (framebuffer && (connected != observedConnection || generation != observedRenderGeneration)) {
-			framebuffer->setDirty();
-		}
-		observedConnection = connected;
-		observedRenderGeneration = generation;
-		TransparentWidget::step();
-	}
-
-	void draw(const DrawArgs& args) override {
-		Nautiloid* naut = leftNautiloid();
-		if (!naut || regions.empty()) {
-			return;
-		}
-
-		const uint64_t generation = renderedGeneration.load(std::memory_order_acquire);
-		auto resetImages = [&](bool deleteCurrentHandles) {
-			if (deleteCurrentHandles && imageContext == args.vg) {
-				for (int handle : regionImageHandles) {
-					if (handle >= 0) nvgDeleteImage(args.vg, handle);
-				}
-			}
-			regionImageHandles.assign(regions.size(), -1);
-			uploadedWidth = 0;
-			uploadedHeight = 0;
-		};
-		if (imageContext != args.vg) {
-			resetImages(false);
-			imageContext = args.vg;
-			uploadedRenderGeneration = uint64_t(-1);
-		}
-		bool imagesValid = regionImageHandles.size() == regions.size() && uploadedWidth > 0 && uploadedHeight > 0;
-		if (imagesValid) {
-			for (int handle : regionImageHandles) {
-				if (!nvg_gfx_lifecycle::ownedNvgImageSizeMatches(args.vg, handle, uploadedWidth, uploadedHeight)) {
-					imagesValid = false;
-					break;
-				}
-			}
-		}
-		if (generation != uploadedRenderGeneration || !imagesValid) {
-			std::vector<std::vector<uint8_t>> rgbByRegion;
-			int width = 0;
-			int height = 0;
-			if (snapshotRendered(&rgbByRegion, &width, &height) && rgbByRegion.size() == regions.size()) {
-				resetImages(true);
-				for (size_t regionIndex = 0; regionIndex < rgbByRegion.size(); ++regionIndex) {
-					const std::vector<uint8_t>& rgb = rgbByRegion[regionIndex];
-					rgba.resize(rgb.size() / 3u * 4u);
-					for (size_t i = 0; i + 2u < rgb.size(); i += 3u) {
-						const size_t out = (i / 3u) * 4u;
-						rgba[out] = rgb[i];
-						rgba[out + 1u] = rgb[i + 1u];
-						rgba[out + 2u] = rgb[i + 2u];
-						rgba[out + 3u] = 255u;
-					}
-					if (!rgba.empty()) {
-						regionImageHandles[regionIndex] = nvgCreateImageRGBA(
-							args.vg, width, height, NVG_IMAGE_PREMULTIPLIED, rgba.data());
-					}
-				}
-				uploadedWidth = width;
-				uploadedHeight = height;
-			}
-			uploadedRenderGeneration = generation;
-		}
-
-		for (size_t regionIndex = 0; regionIndex < regions.size(); ++regionIndex) {
-			const GlassRegion& region = regions[regionIndex];
-			const int imageHandle = regionImageHandles[regionIndex];
-			if (imageHandle < 0) continue;
-			nvgSave(args.vg);
-			nvgScissor(args.vg, region.rectPx.pos.x, region.rectPx.pos.y, region.rectPx.size.x, region.rectPx.size.y);
-			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, region.rectPx.pos.x, region.rectPx.pos.y,
-				region.rectPx.size.x, region.rectPx.size.y, region.radiusPx);
-			// Keep every glass region in one module-local fractal coordinate space.
-			// The region is only a clip; it does not restart or stretch the field.
-			nvgFillPaint(args.vg, nvgImagePattern(args.vg, 0.f, 0.f,
-				box.size.x, box.size.y, 0.f, imageHandle, 0.30f));
-			nvgFill(args.vg);
-			nvgRestore(args.vg);
-		}
-	}
-};
 
 struct IntegralFluxScopedDrawTimer {
 	using Clock = std::chrono::steady_clock;
@@ -1874,6 +1601,7 @@ struct IntegralFluxWidget : ModuleWidget {
 	IntegralFluxPreviewEdgeInteraction ch1EdgeInteraction;
 	IntegralFluxPreviewEdgeInteraction ch4EdgeInteraction;
 	IntegralFluxKnobTooltipState centralTooltipState;
+	visual_assets::FractalGlassOverlay* nautiloidGlass = nullptr;
 
 	struct DrawLogRow {
 		uint64_t row = 0u;
@@ -2047,6 +1775,19 @@ struct IntegralFluxWidget : ModuleWidget {
 		using PerfClock = std::chrono::steady_clock;
 		const bool measurePerf = isDragonKingDebugEnabled();
 		const PerfClock::time_point stepStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
+		if (nautiloidGlass) {
+			Nautiloid* naut = leftNautiloidForIntegralFlux(static_cast<IntegralFlux*>(module));
+			if (naut) {
+				iris::NautiloidFractalSourceParams params;
+				params.mode = naut->fractalMode;
+				params.zoom = naut->fractalZoom;
+				params.centerX = naut->fractalCenterX;
+				params.centerY = naut->fractalCenterY;
+				nautiloidGlass->setLiveParams(&params);
+			} else {
+				nautiloidGlass->setLiveParams(nullptr);
+			}
+		}
 		ModuleWidget::step();
 		if (measurePerf) {
 			const float stepMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -2066,14 +1807,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/flux.panel.svg");
 		const std::string& panelBasePath = splitPanel.panelPath();
 		splitPanel.addLabels("res/flux.labels.svg");
-		auto* nautiloidGlassFb = new widget::FramebufferWidget();
-		nautiloidGlassFb->box.size = box.size;
-		nautiloidGlassFb->dirtyOnSubpixelChange = false;
-		auto* nautiloidGlass = new IntegralFluxNautiloidGlassOverlay(module, panelBasePath);
-		nautiloidGlass->framebuffer = nautiloidGlassFb;
-		nautiloidGlass->box.size = box.size;
-		nautiloidGlassFb->addChild(nautiloidGlass);
-		addChild(nautiloidGlassFb);
+		nautiloidGlass = visual_assets::addFractalGlassOverlay(this, panelBasePath);
 		{
 			math::Rect dragonRectMm;
 			if (!panel_svg::loadRectFromSvgMm(panelBasePath, "DRAGON_RENDER_AREA", &dragonRectMm)) {
@@ -2639,10 +2373,15 @@ struct IntegralFluxWidget : ModuleWidget {
 				const bool hasNautiloid = leftNautiloidForIntegralFlux(maths) != nullptr;
 				menu->addChild(new MenuSeparator());
 				menu->addChild(createMenuLabel("Integral Flux Debug"));
-				menu->addChild(createMenuItem(
-					"Save Nautiloid Fractal Parameters", "", [=]() {
+				if (hasNautiloid) {
+					menu->addChild(createMenuItem("Save Nautiloid Fractal Parameters", "", [=]() {
 						appendIntegralFluxFractalParamsCapture(maths);
-					}, !hasNautiloid));
+					}));
+				} else {
+					menu->addChild(createMenuItem("Delete Selected Fractal Parameters", "", [=]() {
+						nautiloidGlass->deleteFallbackSelection();
+					}, !nautiloidGlass || !nautiloidGlass->hasFallbackSelection()));
+				}
 				menu->addChild(createMenuLabel(integralFluxFractalParamsPath()));
 			}
 		}

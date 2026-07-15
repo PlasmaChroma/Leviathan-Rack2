@@ -3,6 +3,7 @@
 #include "PanelSvgUtils.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "visual/VisualAssets.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 
 #define NANOSVGRAST_IMPLEMENTATION
 #include <nanosvgrast.h>
@@ -3868,6 +3869,7 @@ struct CrownstepWidget final : ModuleWidget {
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/crownstep.panel.svg");
 		const std::string& panelPath = splitPanel.panelPath();
 		splitPanel.addLabels("res/crownstep.labels.svg");
+		visual_assets::addFractalGlassOverlay(this, panelPath);
 		previewBuildTimer.markPanelDone();
 
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0)));
