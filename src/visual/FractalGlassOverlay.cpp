@@ -6,8 +6,10 @@
 #include <atomic>
 #include <cmath>
 #include <condition_variable>
+#include <cstring>
 #include <mutex>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 namespace visual_assets {
@@ -41,7 +43,52 @@ iris::FractalPalette paletteForColor(NVGcolor color) {
 	return palette;
 }
 
-bool selectRandomEntry(iris::NautiloidFractalSourceParams* params, size_t* entryIndex) {
+struct SavedEntry {
+	iris::NautiloidFractalSourceParams params;
+	size_t index = 0u;
+};
+
+struct SelectionPool {
+	uint64_t librarySignature = 0u;
+	std::vector<size_t> shuffledEntries;
+	size_t nextEntry = 0u;
+};
+
+std::mutex gSelectionPoolMutex;
+std::unordered_map<std::string, SelectionPool> gSelectionPools;
+
+uint64_t savedEntriesSignature(const std::vector<SavedEntry>& entries) {
+	uint64_t hash = 1469598103934665603ull;
+	auto mix = [&](uint64_t value) {
+		hash ^= value;
+		hash *= 1099511628211ull;
+	};
+	for (const SavedEntry& entry : entries) {
+		mix(uint64_t(entry.index));
+		mix(uint64_t(uint32_t(entry.params.mode)));
+		uint32_t zoomBits = 0u;
+		uint64_t centerXBits = 0u;
+		uint64_t centerYBits = 0u;
+		std::memcpy(&zoomBits, &entry.params.zoom, sizeof(zoomBits));
+		std::memcpy(&centerXBits, &entry.params.centerX, sizeof(centerXBits));
+		std::memcpy(&centerYBits, &entry.params.centerY, sizeof(centerYBits));
+		mix(zoomBits);
+		mix(centerXBits);
+		mix(centerYBits);
+	}
+	return hash;
+}
+
+void shuffleEntryOrder(std::vector<size_t>* order) {
+	if (!order) return;
+	for (size_t i = order->size(); i > 1u; --i) {
+		const size_t swapIndex = size_t(random::u32()) % i;
+		std::swap((*order)[i - 1u], (*order)[swapIndex]);
+	}
+}
+
+bool selectRandomEntry(const std::string& selectionKey,
+	iris::NautiloidFractalSourceParams* params, size_t* entryIndex) {
 	if (!params || !entryIndex) return false;
 	json_error_t error;
 	json_t* root = json_load_file(libraryPath().c_str(), 0, &error);
@@ -50,8 +97,7 @@ bool selectRandomEntry(iris::NautiloidFractalSourceParams* params, size_t* entry
 		if (root) json_decref(root);
 		return false;
 	}
-	struct Entry { iris::NautiloidFractalSourceParams params; size_t index = 0u; };
-	std::vector<Entry> valid;
+	std::vector<SavedEntry> valid;
 	for (size_t i = 0; i < json_array_size(entries); ++i) {
 		json_t* entry = json_array_get(entries, i);
 		json_t* fractal = entry && json_is_object(entry) ? json_object_get(entry, "fractal") : nullptr;
@@ -61,7 +107,7 @@ bool selectRandomEntry(iris::NautiloidFractalSourceParams* params, size_t* entry
 		json_t* y = fractal ? json_object_get(fractal, "centerY") : nullptr;
 		if (!json_is_integer(mode) || !json_is_number(zoom) ||
 			!json_is_number(x) || !json_is_number(y)) continue;
-		Entry candidate;
+		SavedEntry candidate;
 		candidate.params.mode = int(json_integer_value(mode));
 		candidate.params.zoom = float(json_number_value(zoom));
 		candidate.params.centerX = json_number_value(x);
@@ -77,7 +123,17 @@ bool selectRandomEntry(iris::NautiloidFractalSourceParams* params, size_t* entry
 	}
 	json_decref(root);
 	if (valid.empty()) return false;
-	const Entry& selected = valid[size_t(random::u32()) % valid.size()];
+	const uint64_t signature = savedEntriesSignature(valid);
+	std::lock_guard<std::mutex> poolLock(gSelectionPoolMutex);
+	SelectionPool& pool = gSelectionPools[selectionKey];
+	if (pool.librarySignature != signature || pool.nextEntry >= pool.shuffledEntries.size()) {
+		pool.librarySignature = signature;
+		pool.shuffledEntries.resize(valid.size());
+		for (size_t i = 0; i < valid.size(); ++i) pool.shuffledEntries[i] = i;
+		shuffleEntryOrder(&pool.shuffledEntries);
+		pool.nextEntry = 0u;
+	}
+	const SavedEntry& selected = valid[pool.shuffledEntries[pool.nextEntry++]];
 	*params = selected.params;
 	*entryIndex = selected.index;
 	return true;
@@ -101,7 +157,12 @@ bool deleteEntry(size_t index) {
 } // namespace
 
 struct FractalGlassOverlay::Impl {
-	struct Region { math::Rect rect; float radius = 0.f; iris::FractalPalette palette; };
+	struct Region {
+		math::Rect rect;
+		float radius = 0.f;
+		std::vector<panel_svg::SvgPathCommand> path;
+		iris::FractalPalette palette;
+	};
 	struct Request { iris::NautiloidFractalSourceParams params; uint64_t serial = 0u; };
 	widget::FramebufferWidget* framebuffer = nullptr;
 	std::vector<Region> regions;
@@ -133,8 +194,10 @@ struct FractalGlassOverlay::Impl {
 	size_t fallbackIndex = size_t(-1);
 	bool submittedValid = false;
 	iris::NautiloidFractalSourceParams submitted;
+	std::string selectionKey;
 
-	explicit Impl(const std::string& panelPath) {
+	Impl(const std::string& panelPath, const std::string& requestedSelectionKey)
+		: selectionKey(requestedSelectionKey) {
 		std::vector<panel_svg::SvgRectMatch> matches;
 		if (panel_svg::findRectsInGroupsWithIdSubstringMm(panelPath, "glass", &matches)) {
 			for (const auto& match : matches) {
@@ -142,6 +205,23 @@ struct FractalGlassOverlay::Impl {
 				region.rect = math::Rect(mm2px(match.rect.pos), mm2px(match.rect.size));
 				if (match.hasCornerRadius) { Vec r = mm2px(match.cornerRadius); region.radius = std::min(r.x, r.y); }
 				region.palette = paletteForColor(match.hasFillColor ? match.fillColor : nvgRGB(124, 92, 255));
+				regions.push_back(region);
+			}
+		}
+		std::vector<panel_svg::SvgPathMatch> pathMatches;
+		if (panel_svg::findPathsInGroupsWithIdSubstringMm(panelPath, "glass", &pathMatches)) {
+			for (const auto& match : pathMatches) {
+				Region region;
+				region.rect = math::Rect(mm2px(match.bounds.pos), mm2px(match.bounds.size));
+				region.path.reserve(match.commands.size());
+				for (panel_svg::SvgPathCommand command : match.commands) {
+					command.p1 = mm2px(command.p1);
+					command.p2 = mm2px(command.p2);
+					command.p3 = mm2px(command.p3);
+					region.path.push_back(command);
+				}
+				region.palette = paletteForColor(
+					match.hasFillColor ? match.fillColor : nvgRGB(124, 92, 255));
 				regions.push_back(region);
 			}
 		}
@@ -194,8 +274,9 @@ struct FractalGlassOverlay::Impl {
 	}
 };
 
-FractalGlassOverlay::FractalGlassOverlay(const std::string& panelPath)
-	: impl(new Impl(panelPath)) {}
+FractalGlassOverlay::FractalGlassOverlay(
+	const std::string& panelPath, const std::string& selectionKey)
+	: impl(new Impl(panelPath, selectionKey)) {}
 
 FractalGlassOverlay::~FractalGlassOverlay() = default;
 
@@ -242,7 +323,8 @@ void FractalGlassOverlay::step() {
 	} else {
 		if (impl->wasLive) impl->fallbackAttempted = false;
 		if (!impl->fallbackAttempted) {
-			impl->fallbackValid = selectRandomEntry(&impl->fallback, &impl->fallbackIndex);
+			impl->fallbackValid = selectRandomEntry(
+				impl->selectionKey, &impl->fallback, &impl->fallbackIndex);
 			impl->fallbackAttempted = true;
 		}
 		if (impl->fallbackValid && (!impl->submittedValid || !sameParams(impl->fallback, impl->submitted))) {
@@ -299,9 +381,35 @@ void FractalGlassOverlay::draw(const DrawArgs& args) {
 		if (impl->images[i] < 0) continue;
 		const auto& region = impl->regions[i];
 		nvgSave(args.vg);
-		nvgScissor(args.vg, region.rect.pos.x, region.rect.pos.y, region.rect.size.x, region.rect.size.y);
 		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, region.rect.pos.x, region.rect.pos.y, region.rect.size.x, region.rect.size.y, region.radius);
+		if (region.path.empty()) {
+			nvgScissor(args.vg, region.rect.pos.x, region.rect.pos.y,
+				region.rect.size.x, region.rect.size.y);
+			nvgRoundedRect(args.vg, region.rect.pos.x, region.rect.pos.y,
+				region.rect.size.x, region.rect.size.y, region.radius);
+		} else {
+			for (const panel_svg::SvgPathCommand& command : region.path) {
+				switch (command.type) {
+					case panel_svg::SvgPathCommand::MoveTo:
+						nvgMoveTo(args.vg, command.p1.x, command.p1.y);
+						break;
+					case panel_svg::SvgPathCommand::LineTo:
+						nvgLineTo(args.vg, command.p1.x, command.p1.y);
+						break;
+					case panel_svg::SvgPathCommand::QuadTo:
+						nvgQuadTo(args.vg, command.p1.x, command.p1.y,
+							command.p2.x, command.p2.y);
+						break;
+					case panel_svg::SvgPathCommand::BezierTo:
+						nvgBezierTo(args.vg, command.p1.x, command.p1.y,
+							command.p2.x, command.p2.y, command.p3.x, command.p3.y);
+						break;
+					case panel_svg::SvgPathCommand::Close:
+						nvgClosePath(args.vg);
+						break;
+				}
+			}
+		}
 		nvgFillPaint(args.vg, nvgImagePattern(args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, impl->images[i], 0.26f));
 		nvgFill(args.vg);
 		nvgRestore(args.vg);
@@ -313,7 +421,8 @@ FractalGlassOverlay* addFractalGlassOverlay(ModuleWidget* parent, const std::str
 	auto* framebuffer = new widget::FramebufferWidget();
 	framebuffer->box.size = parent->box.size;
 	framebuffer->dirtyOnSubpixelChange = false;
-	auto* overlay = new FractalGlassOverlay(panelPath);
+	const std::string selectionKey = panelPath + (parent->module ? "" : "#preview");
+	auto* overlay = new FractalGlassOverlay(panelPath, selectionKey);
 	overlay->box.size = parent->box.size;
 	overlay->setFramebuffer(framebuffer);
 	framebuffer->addChild(overlay);
