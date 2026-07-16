@@ -489,13 +489,15 @@ struct IrisSmoothingMenuQuantity final : Quantity {
   Iris* module = nullptr;
   float* setting = nullptr;
   const char* label = "";
+  float maximum = 1.f;
 
-  IrisSmoothingMenuQuantity(Iris* module, float* setting, const char* label)
-    : module(module), setting(setting), label(label) {}
+  IrisSmoothingMenuQuantity(Iris* module, float* setting, const char* label,
+                            float maximum = 1.f)
+    : module(module), setting(setting), label(label), maximum(maximum) {}
 
   void setValue(float value) override {
     if (!module || !setting) return;
-    const float next = clamp(value, 0.f, 1.f);
+    const float next = clamp(value, 0.f, maximum);
     if (std::fabs(*setting - next) > 1e-5f) {
       *setting = next;
       module->requestRebuild();
@@ -515,7 +517,7 @@ struct IrisSmoothingMenuQuantity final : Quantity {
   }
 
   float getMaxValue() override {
-    return 1.f;
+    return maximum;
   }
 
   std::string getLabel() override {
@@ -523,11 +525,11 @@ struct IrisSmoothingMenuQuantity final : Quantity {
   }
 
   float getDisplayValue() override {
-    return getValue() * 100.f;
+    return maximum > 0.f ? getValue() / maximum * 100.f : 0.f;
   }
 
   void setDisplayValue(float value) override {
-    setValue(value * 0.01f);
+    setValue(value * 0.01f * maximum);
   }
 
   std::string getDisplayValueString() override {
@@ -547,12 +549,12 @@ struct IrisSmoothingMenuButton final : TL1105 {
     menu->box.pos = getAbsoluteOffset(Vec(0.f, box.size.y));
     menu->addChild(createMenuLabel("Smoothing"));
     ui::Slider* seamSlider = new ui::Slider();
-    seamSlider->box.size = Vec(180.f, 24.f);
+    seamSlider->box.size = Vec(270.f, 24.f);
     seamSlider->quantity = new IrisSmoothingMenuQuantity(
       module, &module->conversionSettings.seamSmoothing, "Seam smoothing");
     menu->addChild(seamSlider);
     ui::Slider* waveSlider = new ui::Slider();
-    waveSlider->box.size = Vec(180.f, 24.f);
+    waveSlider->box.size = Vec(270.f, 24.f);
     waveSlider->quantity = new IrisSmoothingMenuQuantity(
       module, &module->conversionSettings.waveSmoothing, "Wave smoothing");
     menu->addChild(waveSlider);

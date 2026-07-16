@@ -10,6 +10,10 @@
 
 namespace iris {
 
+constexpr float kMaxSeamSmoothing = 1.f;
+constexpr float kMaxWaveSmoothing = 1.f;
+constexpr float kWaveSmoothingCapacityScale = 1.2f;
+
 constexpr int kFrameSize = 1024;
 constexpr int kDefaultRows = 256;
 constexpr int kMaxRows = 256;
@@ -230,7 +234,9 @@ inline void smoothRowsCyclic(std::vector<std::vector<float> >* rows, float smoot
   constexpr int passes = 6;
   // Keep the former full-strength amount at the midpoint of the control,
   // while allowing the upper half to provide an additional equal range.
-  const float amount = 0.88f * clamp01(smoothing);
+  const float scaledSmoothing =
+    clamp01(smoothing) * kWaveSmoothingCapacityScale;
+  const float amount = 0.88f * clamp01(scaledSmoothing);
   if (!(amount > 0.f)) {
     return;
   }
@@ -241,15 +247,26 @@ inline void smoothRowsCyclic(std::vector<std::vector<float> >* rows, float smoot
       continue;
     }
     std::vector<float> scratch(values.size(), 0.f);
-    for (int pass = 0; pass < passes; ++pass) {
+    auto applyPass = [&](float passAmount) {
       const size_t last = values.size() - 1u;
       for (size_t x = 0; x < values.size(); ++x) {
         const float left = values[x == 0u ? last : x - 1u];
         const float right = values[x == last ? 0u : x + 1u];
         const float neighborAverage = 0.5f * (left + right);
-        scratch[x] = values[x] + (neighborAverage - values[x]) * amount;
+        scratch[x] = values[x] + (neighborAverage - values[x]) * passAmount;
       }
       values.swap(scratch);
+    };
+    for (int pass = 0; pass < passes; ++pass) {
+      applyPass(amount);
+    }
+    // The upper part of the 0-100% control adds one monotonic diffusion pass.
+    // Keeping its blend at or below 0.5 avoids the high-frequency inversion
+    // that a direct 1.2x multiplier on the aggressive 0.88 blend would cause.
+    const float extension = clamp01(
+      (scaledSmoothing - 1.f) / (kWaveSmoothingCapacityScale - 1.f));
+    if (extension > 0.f) {
+      applyPass(0.5f * extension);
     }
   }
 }
@@ -326,8 +343,8 @@ inline bool buildWavetableFromSourceField(const SourceField& source,
   settings.contrast = std::isfinite(settings.contrast) ? std::max(settings.contrast, 0.f) : 1.f;
   settings.brightness = std::isfinite(settings.brightness) ? settings.brightness : 0.f;
   settings.gamma = std::isfinite(settings.gamma) ? std::max(settings.gamma, 0.01f) : 1.f;
-  settings.seamSmoothing = clamp01(settings.seamSmoothing);
-  settings.waveSmoothing = clamp01(settings.waveSmoothing);
+  settings.seamSmoothing = std::max(0.f, std::min(settings.seamSmoothing, kMaxSeamSmoothing));
+  settings.waveSmoothing = std::max(0.f, std::min(settings.waveSmoothing, kMaxWaveSmoothing));
 
   std::vector<std::vector<float> > rows(size_t(settings.rows),
                                         std::vector<float>(size_t(settings.frameSize), 0.f));

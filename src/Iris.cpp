@@ -760,9 +760,9 @@ void Iris::dataFromJson(json_t* root) {
       jsonIntegerOr(conversion, "imageChannelMode", iris::IMAGE_CHANNEL_ALL), 0, 3));
     displayImageChannelMode.store(int(conversionSettings.imageChannelMode), std::memory_order_relaxed);
     conversionSettings.seamSmoothing =
-      clamp(jsonRealOr(conversion, "seamSmoothing", 0.f), 0.f, 1.f);
+      clamp(jsonRealOr(conversion, "seamSmoothing", 0.f), 0.f, iris::kMaxSeamSmoothing);
     conversionSettings.waveSmoothing =
-      clamp(jsonRealOr(conversion, "waveSmoothing", 0.f), 0.f, 1.f);
+      clamp(jsonRealOr(conversion, "waveSmoothing", 0.f), 0.f, iris::kMaxWaveSmoothing);
     conversionSettings.dcRemove = jsonBoolOr(conversion, "dcRemove", false);
     conversionSettings.invert = jsonBoolOr(conversion, "invert", false);
     conversionSettings.contrast = jsonRealOr(conversion, "contrast", 1.f);

@@ -1463,6 +1463,11 @@ struct NautiloidLocationCodeField final : app::LedDisplayTextField {
     (void) e;
     if (internalTextUpdate) return;
     manualEditActive = true;
+    if (text.size() > nautiloid_location::kEncodedLength) {
+      text.resize(nautiloid_location::kEncodedLength);
+      cursor = std::min(cursor, int(text.size()));
+      selection = std::min(selection, int(text.size()));
+    }
     const nautiloid_location::DecodeResult decoded = nautiloid_location::decode(text);
     if (!decoded.valid || !module) {
       currentTextValid = decoded.valid;
@@ -1637,12 +1642,12 @@ struct NautiloidWidget final : ModuleWidget {
     NautiloidLocationCodeField* locationCodeField = new NautiloidLocationCodeField();
     locationCodeField->module = module;
     const math::Rect locationCodeRectMm = rectMm(
-      "LOCATION_CODE_FIELD", math::Rect(Vec(12.f, 104.5f), Vec(73.f, 7.f)));
+      "LOCATION_CODE_FIELD", math::Rect(Vec(18.f, 109.f), Vec(62.f, 7.f)));
     locationCodeField->box.pos = mm2px(locationCodeRectMm.pos);
     locationCodeField->box.size = mm2px(locationCodeRectMm.size);
     addChild(locationCodeField);
     addChild(createLightCentered<NautiloidLocationValidLight>(
-      mm2px(pointMm("LOCATION_CODE_VALID_LIGHT", Vec(90.f, 108.f))),
+      mm2px(pointMm("LOCATION_CODE_VALID_LIGHT", Vec(85.f, 112.5f))),
       module, Nautiloid::LOCATION_CODE_VALID_LIGHT));
     addChild(createLightCentered<SmallAperture<AmberGreenVioletApertureLight>>(
       mm2px(pointMm("IRIS_EXPANDER_LIGHT", Vec(98.4f, 5.8f))), module, Nautiloid::IRIS_LINK_LIGHT));

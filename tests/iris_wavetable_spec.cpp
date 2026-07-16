@@ -254,7 +254,7 @@ int main() {
   smoothingSettings.frameSize = 8;
   smoothingSettings.rows = 2;
   smoothingSettings.normalizeMode = iris::NORMALIZE_NONE;
-  smoothingSettings.waveSmoothing = 1.f;
+  smoothingSettings.waveSmoothing = 1.f / iris::kWaveSmoothingCapacityScale;
   std::vector<uint8_t> jagged(size_t(8 * 2) * 4u, 255u);
   for (int y = 0; y < 2; ++y) {
     for (int x = 0; x < 8; ++x) {
@@ -271,6 +271,19 @@ int main() {
     maxAbs = std::max(maxAbs, std::fabs(smoothed.samples[size_t(x)]));
   }
   check("wave smoothing reduces alternating jagged amplitude", maxAbs < 0.35f);
+
+  smoothingSettings.waveSmoothing = iris::kMaxWaveSmoothing;
+  iris::ImageWavetable extendedSmoothed;
+  check("extended wave smoothing converts jagged image",
+        iris::buildWavetableFromRgba(
+          jagged.data(), 8, 2, 4, smoothingSettings, &extendedSmoothed));
+  float extendedMaxAbs = 0.f;
+  for (int x = 0; x < extendedSmoothed.frameSize; ++x) {
+    extendedMaxAbs = std::max(
+      extendedMaxAbs, std::fabs(extendedSmoothed.samples[size_t(x)]));
+  }
+  check("expanded wave smoothing maximum exceeds former capacity",
+        extendedMaxAbs < maxAbs);
 
   iris::NautiloidFractalSourceParams nautiloidParams;
   nautiloidParams.mode = iris::FRACTAL_BURNING_SHIP;
