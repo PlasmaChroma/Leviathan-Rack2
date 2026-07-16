@@ -383,26 +383,22 @@ inline bool buildWavetableFromSourceField(const SourceField& source,
   }
 
   if (settings.normalizeMode == NORMALIZE_BALANCED) {
-    std::vector<float> distribution;
-    distribution.reserve(size_t(settings.rows) * size_t(settings.frameSize));
     for (size_t row = 0; row < rows.size(); ++row) {
-      distribution.insert(distribution.end(), rows[row].begin(), rows[row].end());
-    }
-    std::sort(distribution.begin(), distribution.end());
-    const auto percentile = [&](float p) {
-      const float position = p * float(distribution.size() - 1u);
-      const size_t lower = size_t(position);
-      const size_t upper = std::min(lower + 1u, distribution.size() - 1u);
-      const float fraction = position - float(lower);
-      return distribution[lower] + (distribution[upper] - distribution[lower]) * fraction;
-    };
-    const float low = percentile(0.01f);
-    const float midpoint = percentile(0.50f);
-    const float high = percentile(0.99f);
-    if (high - low > 1e-6f) {
-      const float negativeRange = std::max(midpoint - low, 1e-6f);
-      const float positiveRange = std::max(high - midpoint, 1e-6f);
-      for (size_t row = 0; row < rows.size(); ++row) {
+      std::vector<float> distribution = rows[row];
+      std::sort(distribution.begin(), distribution.end());
+      const auto percentile = [&](float p) {
+        const float position = p * float(distribution.size() - 1u);
+        const size_t lower = size_t(position);
+        const size_t upper = std::min(lower + 1u, distribution.size() - 1u);
+        const float fraction = position - float(lower);
+        return distribution[lower] + (distribution[upper] - distribution[lower]) * fraction;
+      };
+      const float low = percentile(0.01f);
+      const float midpoint = percentile(0.50f);
+      const float high = percentile(0.99f);
+      if (high - low > 1e-6f) {
+        const float negativeRange = std::max(midpoint - low, 1e-6f);
+        const float positiveRange = std::max(high - midpoint, 1e-6f);
         for (size_t x = 0; x < rows[row].size(); ++x) {
           const float centered = rows[row][x] - midpoint;
           rows[row][x] = centered < 0.f ? centered / negativeRange : centered / positiveRange;

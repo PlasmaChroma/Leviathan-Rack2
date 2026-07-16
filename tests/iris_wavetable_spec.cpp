@@ -217,6 +217,33 @@ int main() {
   check("balanced normalization retains both polarities",
         balanced.samples[0] < -0.9f && balanced.samples[4] > 0.9f);
 
+  const uint8_t separatedLevels[2][5] = {
+    {0u, 24u, 48u, 72u, 96u},
+    {160u, 184u, 208u, 232u, 255u},
+  };
+  for (int y = 0; y < 2; ++y) {
+    for (int x = 0; x < 5; ++x) {
+      const size_t base = size_t(y * 5 + x) * 4u;
+      pixels[base + 0u] = pixels[base + 1u] = pixels[base + 2u] =
+        separatedLevels[y][x];
+    }
+  }
+  iris::ImageWavetable rowBalanced;
+  check("balanced normalization converts separated row ranges",
+        iris::buildWavetableFromRgba(pixels.data(), 5, 2, 4, settings, &rowBalanced));
+  bool everyRowHasBothPolarities = true;
+  for (int row = 0; row < rowBalanced.rowCount; ++row) {
+    const size_t base = size_t(row) * size_t(rowBalanced.stride);
+    bool hasNegative = false;
+    bool hasPositive = false;
+    for (int x = 0; x < rowBalanced.frameSize; ++x) {
+      hasNegative = hasNegative || rowBalanced.samples[base + size_t(x)] < -1e-5f;
+      hasPositive = hasPositive || rowBalanced.samples[base + size_t(x)] > 1e-5f;
+    }
+    everyRowHasBothPolarities = everyRowHasBothPolarities && hasNegative && hasPositive;
+  }
+  check("balanced normalization prevents unipolar rows", everyRowHasBothPolarities);
+
   const iris::ImageWavetable factory = iris::makeDefaultTable();
   check("factory table has full row terrain", factory.rowCount == iris::kDefaultRows);
   check("factory table starts with sine",
