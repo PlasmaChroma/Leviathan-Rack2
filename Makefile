@@ -70,6 +70,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/bulkhead_geometry_spec \
 	build/tests/aperture_light_transfer_spec \
 	build/tests/iris_wavetable_spec \
+	build/tests/nautiloid_location_code_spec \
 	build/tests/wave_preview_simplification_spec
 
 
@@ -215,6 +216,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/bulkhead_geometry_spec)
 	$(call run_test_bin,build/tests/aperture_light_transfer_spec)
 	$(call run_test_bin,build/tests/iris_wavetable_spec)
+	$(call run_test_bin,build/tests/nautiloid_location_code_spec)
 	$(call run_test_bin,build/tests/wave_preview_simplification_spec)
 
 test-rack: test-build-rack
@@ -310,6 +312,9 @@ build/tests/aperture_light_transfer_spec: tests/aperture_light_transfer_spec.cpp
 
 build/tests/iris_wavetable_spec: tests/iris_wavetable_spec.cpp src/IrisWavetable.hpp src/IrisIO.cpp src/IrisIO.hpp src/IrisSourceField.cpp src/IrisSourceField.hpp | build/tests
 	$(CXX) -std=c++11 -O3 -Wall -Wextra -I$(RACK_DIR)/dep/include tests/iris_wavetable_spec.cpp src/IrisIO.cpp src/IrisSourceField.cpp -o $@
+
+build/tests/nautiloid_location_code_spec: tests/nautiloid_location_code_spec.cpp src/NautiloidLocationCode.cpp src/NautiloidLocationCode.hpp src/NautiloidFractal.hpp | build/tests
+	$(CXX) -std=c++17 -O3 -Wall -Wextra tests/nautiloid_location_code_spec.cpp src/NautiloidLocationCode.cpp -o $@
 
 build/tests/temporaldeck_virtual_integration_spec: tests/temporaldeck_virtual_integration_spec.cpp src/TemporalDeckPlatterInput.cpp src/TemporalDeckTransportControl.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@

@@ -3,6 +3,7 @@
 #include "plugin.hpp"
 #include "NautiloidFractal.hpp"
 #include "NautiloidIrisExpander.hpp"
+#include "NautiloidLocationCode.hpp"
 
 #include <atomic>
 #include <array>
@@ -47,6 +48,7 @@ struct Nautiloid final : Module {
     IRIS_LINK_LIGHT,
     IRIS_READY_LIGHT,
     INTEGRAL_FLUX_LINK_LIGHT,
+    LOCATION_CODE_VALID_LIGHT,
     LIGHTS_LEN
   };
 
@@ -94,15 +96,12 @@ struct Nautiloid final : Module {
 
   void zoomAheadCacheSnapshot(ZoomAheadCacheSnapshot* snapshot) const;
 
-  struct FractalState {
-    int mode = iris::FRACTAL_MANDELBROT;
-    float zoom = 0.f;
-    double centerX = 0.0;
-    double centerY = 0.0;
-  };
+  using FractalState = nautiloid_location::State;
 
   FractalState fractalStateSnapshot() const;
   void setFractalState(const FractalState& state);
+  bool loadLocationCode(const std::string& code, std::string* error = nullptr);
+  std::string locationCodeSnapshot() const;
 
   NautiloidAtomicValue<int> fractalMode {iris::FRACTAL_MANDELBROT};
   NautiloidAtomicValue<float> fractalZoom {0.f};
@@ -137,6 +136,7 @@ struct Nautiloid final : Module {
   std::atomic<bool> displayRenderBusy {false};
   std::atomic<bool> forceIrisSourceSync {false};
   std::atomic<bool> loading {false};
+  std::atomic<bool> locationCodeInputValid {true};
   std::atomic<float> zoomRateCvNorm {0.f};
   std::atomic<bool> zoomRateCvConnected {false};
   std::atomic<float> xVelocityCvNorm {0.f};

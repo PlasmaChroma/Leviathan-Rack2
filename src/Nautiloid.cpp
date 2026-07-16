@@ -8,7 +8,7 @@
 
 namespace {
 
-constexpr float kNautiloidMaxFractalZoom = 4.f;
+constexpr float kNautiloidMaxFractalZoom = nautiloid_location::kMaxZoom;
 constexpr int kDisplaySourceWidth = 768;
 constexpr int kDisplaySourceHeight = 512;
 constexpr float kFractalCacheScale = 3.f;
@@ -726,6 +726,8 @@ void Nautiloid::process(const ProcessArgs& args) {
   lights[IRIS_LINK_LIGHT].setBrightness(irisConnected && !irisReady ? 1.f : 0.f);
   lights[IRIS_READY_LIGHT].setBrightness(irisReady ? 1.f : 0.f);
   lights[INTEGRAL_FLUX_LINK_LIGHT].setBrightness(integralFluxConnected ? 1.f : 0.f);
+  lights[LOCATION_CODE_VALID_LIGHT].setBrightness(
+    locationCodeInputValid.load(std::memory_order_relaxed) ? 1.f : 0.f);
   rightIrisConnectionObserved = true;
   rightIrisWasConnected = irisConnected;
   lastRightIrisModule = irisConnected ? right : nullptr;
@@ -746,14 +748,30 @@ Nautiloid::FractalState Nautiloid::fractalStateSnapshot() const {
 }
 
 void Nautiloid::setFractalState(const FractalState& requested) {
+  const FractalState canonical = nautiloid_location::canonicalize(requested);
   std::lock_guard<std::mutex> lock(fractalStateWriteMutex);
   fractalStateSequence.fetch_add(1u, std::memory_order_acq_rel);
-  fractalMode = iris::isBuiltinFractalMode(requested.mode)
-    ? requested.mode : iris::FRACTAL_MANDELBROT;
-  fractalZoom = clamp(requested.zoom, 0.f, kNautiloidMaxFractalZoom);
-  fractalCenterX = clampDouble(requested.centerX, -2.0, 2.0);
-  fractalCenterY = clampDouble(requested.centerY, -2.0, 2.0);
+  fractalMode = canonical.mode;
+  fractalZoom = canonical.zoom;
+  fractalCenterX = canonical.centerX;
+  fractalCenterY = canonical.centerY;
   fractalStateSequence.fetch_add(1u, std::memory_order_release);
+}
+
+bool Nautiloid::loadLocationCode(const std::string& code, std::string* error) {
+  const nautiloid_location::DecodeResult decoded = nautiloid_location::decode(code);
+  if (!decoded.valid) {
+    if (error) *error = decoded.error;
+    return false;
+  }
+  setFractalState(decoded.state);
+  requestRenderWithCenteredCache();
+  if (error) error->clear();
+  return true;
+}
+
+std::string Nautiloid::locationCodeSnapshot() const {
+  return nautiloid_location::encode(fractalStateSnapshot());
 }
 
 json_t* Nautiloid::dataToJson() {
