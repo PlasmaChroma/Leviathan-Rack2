@@ -506,6 +506,9 @@ void Iris::process(const ProcessArgs& args) {
   const float processMaxFrequency = std::min(kMaxFrequencyHz, 0.45f * args.sampleRate);
   float scanDisplay = scanKnob;
   float frequencyDisplay = 0.f;
+  float phaseDisplay = 0.f;
+  float waveDisplay = 0.f;
+  float phaseFrequencyDisplay = 0.f;
   for (int channel = 0; channel < channels; ++channel) {
     const float vOctInput = inputs[V_OCT_INPUT].getPolyVoltage(channel);
     const float mainPitch = coarsePitch + fine + (std::isfinite(vOctInput) ? vOctInput : 0.f);
@@ -547,6 +550,11 @@ void Iris::process(const ProcessArgs& args) {
     const float quadVolts = std::isfinite(quadWave) ? 5.f * quadWave : 0.f;
     outputs[OUT_OUTPUT].setVoltage(volts, channel);
     outputs[Q_OUTPUT].setVoltage(quadVolts, channel);
+    if (channel == 0) {
+      phaseDisplay = std::isfinite(phase) ? phase : 0.f;
+      waveDisplay = std::isfinite(wave) ? wave : 0.f;
+      phaseFrequencyDisplay = std::isfinite(frequency) ? frequency : 0.f;
+    }
   }
   if (fadeFromTable) {
     tableCrossfade = std::min(
@@ -557,6 +565,17 @@ void Iris::process(const ProcessArgs& args) {
   }
   displayScan.store(scanDisplay, std::memory_order_relaxed);
   displayFrequencyHz.store(frequencyDisplay, std::memory_order_relaxed);
+  phaseTracerPublishTimer += args.sampleTime;
+  constexpr float phaseTracerPublishInterval = 1.f / 120.f;
+  if (phaseTracerPublishTimer >= phaseTracerPublishInterval) {
+    phaseTracerPublishTimer -= phaseTracerPublishInterval;
+    if (phaseTracerPublishTimer >= phaseTracerPublishInterval) {
+      phaseTracerPublishTimer = 0.f;
+    }
+    displayPhase.store(phaseDisplay, std::memory_order_relaxed);
+    displayWaveValue.store(waveDisplay, std::memory_order_relaxed);
+    displayPhaseFrequencyHz.store(phaseFrequencyDisplay, std::memory_order_relaxed);
+  }
   if (lightDivider.process()) {
     lights[LOAD_LIGHT].setBrightness(loading.load(std::memory_order_relaxed) ? 1.f : 0.f);
     lights[ERROR_LIGHT].setBrightness(loadFailed.load(std::memory_order_relaxed) ? 1.f : 0.f);

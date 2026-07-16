@@ -436,6 +436,60 @@ struct IrisWaveformPreview final : TransparentWidget {
   }
 };
 
+struct IrisPhaseTracerOverlay final : TransparentWidget {
+  static constexpr float DOT_RADIUS = 2.1f;
+  static constexpr float DOT_SHOW_MAX_HZ = 2.f;
+  static constexpr float DOT_HIDE_MIN_HZ = 2.4f;
+
+  Iris* module = nullptr;
+  bool dotVisible = false;
+
+  explicit IrisPhaseTracerOverlay(Iris* module) : module(module) {}
+
+  void step() override {
+    if (!module) {
+      dotVisible = false;
+    }
+    else {
+      const float frequency = module->displayPhaseFrequencyHz.load(std::memory_order_relaxed);
+      if (!std::isfinite(frequency) || frequency >= DOT_HIDE_MIN_HZ) {
+        dotVisible = false;
+      }
+      else if (frequency > 0.f && frequency <= DOT_SHOW_MAX_HZ) {
+        dotVisible = true;
+      }
+    }
+    TransparentWidget::step();
+  }
+
+  void draw(const DrawArgs& args) override {
+    if (!module || !dotVisible) return;
+
+    const float phase = module->displayPhase.load(std::memory_order_relaxed);
+    const float wave = module->displayWaveValue.load(std::memory_order_relaxed);
+    if (!std::isfinite(phase) || !std::isfinite(wave)) return;
+
+    const float top = 2.f;
+    const float bottom = box.size.y - 2.f;
+    const float center = 0.5f * (top + bottom);
+    const float left = 2.f;
+    const float right = box.size.x - 2.f;
+    const float phase01 = phase - std::floor(phase);
+    const float x = left + phase01 * (right - left);
+    const float y = center - clamp(wave, -1.f, 1.f) * 0.5f * (bottom - top);
+
+    nvgBeginPath(args.vg);
+    nvgCircle(args.vg, x, y, DOT_RADIUS);
+    nvgFillColor(args.vg, nvgRGBA(255, 232, 72, 255));
+    nvgFill(args.vg);
+    nvgBeginPath(args.vg);
+    nvgCircle(args.vg, x, y, DOT_RADIUS + 0.55f);
+    nvgStrokeWidth(args.vg, 0.9f);
+    nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 220));
+    nvgStroke(args.vg);
+  }
+};
+
 struct IrisFrequencyReadout final : TransparentWidget {
   static constexpr float LABEL_FONT_SIZE = 11.5f;
   Iris* module = nullptr;
@@ -866,6 +920,10 @@ struct IrisWidget final : ModuleWidget {
     waveformPreview->framebuffer = waveformFb;
     waveformFb->addChild(waveformPreview);
     addChild(waveformFb);
+    IrisPhaseTracerOverlay* phaseTracer = new IrisPhaseTracerOverlay(module);
+    phaseTracer->box.pos = mm2px(waveformContentRectMm.pos);
+    phaseTracer->box.size = mm2px(waveformContentRectMm.size);
+    addChild(phaseTracer);
     IrisFrequencyReadout* frequencyReadout = new IrisFrequencyReadout(module);
     frequencyReadout->box.pos = mm2px(Vec(
       waveformRectMm.pos.x, waveformRectMm.pos.y + waveformRectMm.size.y));

@@ -117,6 +117,10 @@ struct Iris final : Module {
   iris::ConversionSettings conversionSettings;
   std::atomic<float> displayScan {0.f};
   std::atomic<float> displayFrequencyHz {0.f};
+  // Rate-limited channel-one state for the low-frequency waveform tracer.
+  std::atomic<float> displayPhase {0.f};
+  std::atomic<float> displayWaveValue {0.f};
+  std::atomic<float> displayPhaseFrequencyHz {0.f};
   std::atomic<int> displayImageChannelMode {iris::IMAGE_CHANNEL_ALL};
   std::atomic<bool> displayChannelPreview {false};
   std::atomic<int> activeSourceKind {iris::SOURCE_IMAGE};
@@ -194,6 +198,7 @@ private:
   std::atomic<uint64_t> lastExpanderSourceGeneration {0u};
   std::atomic<const nautiloid_iris_expander::SourceSlot*> lastExpanderSourceSlotSeen {nullptr};
   dsp::ClockDivider lightDivider;
+  float phaseTracerPublishTimer = 0.f;
 };
 
 extern Model* modelIris;
