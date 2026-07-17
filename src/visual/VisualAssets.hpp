@@ -205,15 +205,22 @@ struct LoopGoldButton : SmallGoldButton {
 	}
 };
 
-// Standard momentary reset control. Modules provide the reset behavior while
-// this class owns the shared Leviathan button artwork and interaction.
-struct LeviathanResetButton : TL1105 {
-	std::shared_ptr<window::Svg> resetSvg;
-	std::function<void()> resetAction;
+// Standard Leviathan button body with a centered icon and optional state-driven
+// artwork. Modules provide the behavior without reimplementing button visuals.
+struct LeviathanIconButton : TL1105 {
+	std::shared_ptr<window::Svg> iconSvg;
+	std::function<std::shared_ptr<window::Svg>()> iconProvider;
+	std::function<void()> buttonAction;
+	float iconScale = 0.58f;
 
-	LeviathanResetButton();
+	LeviathanIconButton();
 	void onButton(const event::Button& e) override;
 	void draw(const DrawArgs& args) override;
+};
+
+// Standard reset control using the generic Leviathan icon-button treatment.
+struct LeviathanResetButton : LeviathanIconButton {
+	LeviathanResetButton();
 };
 
 struct SmallGoldApertureLight : app::ModuleLightWidget {

@@ -92,81 +92,6 @@ struct WyrmPointCountMenuItem : MenuItem {
 	}
 };
 
-struct WyrmEditorLockButton : TransparentWidget {
-	Wyrm* module = nullptr;
-	bool hovered = false;
-	std::shared_ptr<window::Svg> lockClosedNormalSvg;
-	std::shared_ptr<window::Svg> lockClosedHighlightedSvg;
-	std::shared_ptr<window::Svg> lockOpenNormalSvg;
-	std::shared_ptr<window::Svg> lockOpenHighlightedSvg;
-
-	explicit WyrmEditorLockButton(Wyrm* module) {
-		this->module = module;
-		lockClosedNormalSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/lock_closed-normal.svg"));
-		lockClosedHighlightedSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/lock_closed-highlighted.svg"));
-		lockOpenNormalSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/lock_open-normal.svg"));
-		lockOpenHighlightedSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/lock_open-highlighted.svg"));
-	}
-
-	void step() override {
-		hovered = false;
-		if (parent && APP && APP->scene && APP->scene->rack) {
-			const Vec local = APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos);
-			hovered = (local.x >= 0.f && local.x <= box.size.x && local.y >= 0.f && local.y <= box.size.y);
-		}
-		TransparentWidget::step();
-	}
-
-	void onHover(const event::Hover& e) override {
-		hovered = true;
-		TransparentWidget::onHover(e);
-	}
-
-	void onLeave(const event::Leave& e) override {
-		hovered = false;
-		TransparentWidget::onLeave(e);
-	}
-
-	void onButton(const event::Button& e) override {
-		if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) {
-			TransparentWidget::onButton(e);
-			return;
-		}
-		module->editorLocked.store(!module->editorLocked.load(std::memory_order_relaxed), std::memory_order_relaxed);
-		e.consume(this);
-	}
-
-	void drawSvgIcon(const DrawArgs& args, const std::shared_ptr<window::Svg>& svg) {
-		if (!svg) {
-			return;
-		}
-		const Vec svgSize = svg->getSize();
-		if (svgSize.x <= 1.f || svgSize.y <= 1.f) {
-			return;
-		}
-		const float targetSize = 0.72f * std::min(box.size.x, box.size.y);
-		const float scale = targetSize / std::max(svgSize.x, svgSize.y);
-		nvgSave(args.vg);
-		nvgTranslate(args.vg, 0.5f * box.size.x, 0.5f * box.size.y);
-		nvgScale(args.vg, scale, scale);
-		nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
-		svg->draw(args.vg);
-		nvgRestore(args.vg);
-	}
-
-	void drawLockIcon(const DrawArgs& args) {
-		const bool locked = module && module->editorLocked.load(std::memory_order_relaxed);
-		const std::shared_ptr<window::Svg>& svg = locked
-			? (hovered ? lockClosedHighlightedSvg : lockClosedNormalSvg)
-			: (hovered ? lockOpenHighlightedSvg : lockOpenNormalSvg);
-		drawSvgIcon(args, svg);
-	}
-
-	void draw(const DrawArgs& args) override {
-		drawLockIcon(args);
-	}
-};
-
 struct WyrmFrequencyReadoutWidget final : Widget {
 	Wyrm* module = nullptr;
 
@@ -307,14 +232,23 @@ struct WyrmWidget : ModuleWidget {
 		freqReadout->box.size = mm2px(freqReadoutRectMm.size);
 		addChild(freqReadout);
 
-		auto* lockButton = new WyrmEditorLockButton(module);
-		lockButton->box.size = mm2px(Vec(5.2f, 5.2f));
+		auto* lockButton = new LeviathanIconButton();
+		const std::shared_ptr<window::Svg> lockClosedSvg = visual_assets::loadPluginSvgCached("res/icon/lock_closed-highlighted.svg");
+		const std::shared_ptr<window::Svg> lockOpenSvg = visual_assets::loadPluginSvgCached("res/icon/lock_open-highlighted.svg");
+		lockButton->iconProvider = [module, lockClosedSvg, lockOpenSvg]() {
+			return (module && module->editorLocked.load(std::memory_order_relaxed)) ? lockClosedSvg : lockOpenSvg;
+		};
+		if (module) {
+			lockButton->buttonAction = [module]() {
+				module->editorLocked.store(!module->editorLocked.load(std::memory_order_relaxed), std::memory_order_relaxed);
+			};
+		}
 		lockButton->box.pos = mm2px(lockPos).minus(lockButton->box.size.mult(0.5f));
 		addChild(lockButton);
 		auto* resetButton = new LeviathanResetButton();
 		resetButton->box.pos = mm2px(resetPos).minus(resetButton->box.size.mult(0.5f));
 		if (module) {
-			resetButton->resetAction = [module]() { module->setFactoryShape(module->selectedShape); };
+			resetButton->buttonAction = [module]() { module->setFactoryShape(module->selectedShape); };
 		}
 		addChild(resetButton);
 		auto* waveLeft = createParamCentered<WyrmWaveLeftButton>(mm2px(waveformSelectPos.plus(Vec(-2.5f, 0.f))), module, Wyrm::WAVE_LEFT_PARAM);

@@ -3022,39 +3022,43 @@ void GoldButton::step() {
 	}
 }
 
-LeviathanResetButton::LeviathanResetButton() {
+LeviathanIconButton::LeviathanIconButton() {
 	// Drive the pressed/released SVG frames from pointer state so callback-only
 	// uses (such as Wyrm) animate the same way as parameter-backed buttons.
 	latch = true;
-	resetSvg = visual_assets::loadPluginSvgCached("res/icon/leviathan-reset.svg");
 }
 
-void LeviathanResetButton::onButton(const event::Button& e) {
-	if (resetAction && e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
-		resetAction();
+void LeviathanIconButton::onButton(const event::Button& e) {
+	if (buttonAction && e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
+		buttonAction();
 		e.consume(this);
 		return;
 	}
 	TL1105::onButton(e);
 }
 
-void LeviathanResetButton::draw(const DrawArgs& args) {
+void LeviathanIconButton::draw(const DrawArgs& args) {
 	TL1105::draw(args);
-	if (!resetSvg) {
+	const std::shared_ptr<window::Svg> svg = iconProvider ? iconProvider() : iconSvg;
+	if (!svg) {
 		return;
 	}
-	const Vec svgSize = resetSvg->getSize();
+	const Vec svgSize = svg->getSize();
 	if (svgSize.x <= 1.f || svgSize.y <= 1.f) {
 		return;
 	}
-	const float targetSize = 0.58f * std::min(box.size.x, box.size.y);
+	const float targetSize = clamp(iconScale, 0.f, 1.f) * std::min(box.size.x, box.size.y);
 	const float scale = targetSize / std::max(svgSize.x, svgSize.y);
 	nvgSave(args.vg);
 	nvgTranslate(args.vg, 0.5f * box.size.x, 0.5f * box.size.y);
 	nvgScale(args.vg, scale, scale);
 	nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
-	resetSvg->draw(args.vg);
+	svg->draw(args.vg);
 	nvgRestore(args.vg);
+}
+
+LeviathanResetButton::LeviathanResetButton() {
+	iconSvg = visual_assets::loadPluginSvgCached("res/icon/leviathan-reset.svg");
 }
 
 struct SmallGoldButtonShadowLayer : TransparentWidget {

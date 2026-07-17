@@ -1598,7 +1598,7 @@ struct NautiloidWidget final : ModuleWidget {
       createParamCentered<LeviathanResetButton>(
         mm2px(pointMm("RESET_VIEW_PARAM", Vec(19.2f, 75.4f))), module, Nautiloid::RESET_VIEW_PARAM);
     if (module) {
-      resetButton->resetAction = [module]() { module->resetView(); };
+      resetButton->buttonAction = [module]() { module->resetView(); };
     }
     addParam(resetButton);
 
