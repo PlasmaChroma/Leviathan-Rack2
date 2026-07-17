@@ -3023,6 +3023,9 @@ void GoldButton::step() {
 }
 
 LeviathanResetButton::LeviathanResetButton() {
+	// Drive the pressed/released SVG frames from pointer state so callback-only
+	// uses (such as Wyrm) animate the same way as parameter-backed buttons.
+	latch = true;
 	resetSvg = visual_assets::loadPluginSvgCached("res/icon/leviathan-reset.svg");
 }
 

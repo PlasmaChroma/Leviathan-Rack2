@@ -231,18 +231,52 @@ int main() {
   iris::ImageWavetable rowBalanced;
   check("balanced normalization converts separated row ranges",
         iris::buildWavetableFromRgba(pixels.data(), 5, 2, 4, settings, &rowBalanced));
-  bool everyRowHasBothPolarities = true;
-  for (int row = 0; row < rowBalanced.rowCount; ++row) {
-    const size_t base = size_t(row) * size_t(rowBalanced.stride);
+  const size_t secondRowBase = size_t(rowBalanced.stride);
+  bool separatedRowsRetainPolarity = true;
+  for (int x = 0; x < rowBalanced.frameSize; ++x) {
+    separatedRowsRetainPolarity = separatedRowsRetainPolarity &&
+      rowBalanced.samples[size_t(x)] < 0.f &&
+      rowBalanced.samples[secondRowBase + size_t(x)] > 0.f;
+  }
+  check("balanced normalization preserves image-wide row relationships",
+        separatedRowsRetainPolarity);
+
+  const uint8_t overlappingLevels[2][5] = {
+    {0u, 32u, 64u, 96u, 128u},
+    {64u, 96u, 128u, 160u, 192u},
+  };
+  for (int y = 0; y < 2; ++y) {
+    for (int x = 0; x < 5; ++x) {
+      const size_t base = size_t(y * 5 + x) * 4u;
+      pixels[base + 0u] = pixels[base + 1u] = pixels[base + 2u] =
+        overlappingLevels[y][x];
+    }
+  }
+  iris::ImageWavetable globallyBalanced;
+  check("balanced normalization converts overlapping row ranges",
+        iris::buildWavetableFromRgba(pixels.data(), 5, 2, 4, settings, &globallyBalanced));
+  check("balanced normalization uses one image-wide transfer function",
+        std::fabs(globallyBalanced.samples[2] -
+                  globallyBalanced.samples[size_t(globallyBalanced.stride)]) < 1e-5f);
+
+  settings.dcRemove = true;
+  iris::ImageWavetable dcBalanced;
+  check("DC removal converts overlapping row ranges",
+        iris::buildWavetableFromRgba(pixels.data(), 5, 2, 4, settings, &dcBalanced));
+  bool everyNonFlatRowHasBothPolarities = true;
+  for (int row = 0; row < dcBalanced.rowCount; ++row) {
+    const size_t base = size_t(row) * size_t(dcBalanced.stride);
     bool hasNegative = false;
     bool hasPositive = false;
-    for (int x = 0; x < rowBalanced.frameSize; ++x) {
-      hasNegative = hasNegative || rowBalanced.samples[base + size_t(x)] < -1e-5f;
-      hasPositive = hasPositive || rowBalanced.samples[base + size_t(x)] > 1e-5f;
+    for (int x = 0; x < dcBalanced.frameSize; ++x) {
+      hasNegative = hasNegative || dcBalanced.samples[base + size_t(x)] < -1e-5f;
+      hasPositive = hasPositive || dcBalanced.samples[base + size_t(x)] > 1e-5f;
     }
-    everyRowHasBothPolarities = everyRowHasBothPolarities && hasNegative && hasPositive;
+    everyNonFlatRowHasBothPolarities = everyNonFlatRowHasBothPolarities && hasNegative && hasPositive;
   }
-  check("balanced normalization prevents unipolar rows", everyRowHasBothPolarities);
+  check("DC removal gives every non-flat row both polarities",
+        everyNonFlatRowHasBothPolarities);
+  settings.dcRemove = false;
 
   const iris::ImageWavetable factory = iris::makeDefaultTable();
   check("factory table has full row terrain", factory.rowCount == iris::kDefaultRows);
