@@ -4,6 +4,8 @@
 #include "ApertureLight.hpp"
 #include "PlasmaSwitch.hpp"
 
+#include <functional>
+
 namespace visual_assets {
 
 std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path);
@@ -201,6 +203,17 @@ struct SmallGoldButton : app::Switch {
 struct LoopGoldButton : SmallGoldButton {
 	LoopGoldButton() : SmallGoldButton(24.f) {
 	}
+};
+
+// Standard momentary reset control. Modules provide the reset behavior while
+// this class owns the shared Leviathan button artwork and interaction.
+struct LeviathanResetButton : TL1105 {
+	std::shared_ptr<window::Svg> resetSvg;
+	std::function<void()> resetAction;
+
+	LeviathanResetButton();
+	void onButton(const event::Button& e) override;
+	void draw(const DrawArgs& args) override;
 };
 
 struct SmallGoldApertureLight : app::ModuleLightWidget {

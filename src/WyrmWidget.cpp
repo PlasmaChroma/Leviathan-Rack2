@@ -92,35 +92,20 @@ struct WyrmPointCountMenuItem : MenuItem {
 	}
 };
 
-struct WyrmEditorIconButton : TransparentWidget {
-	enum Kind {
-		LOCK,
-		RESET
-	};
-
+struct WyrmEditorLockButton : TransparentWidget {
 	Wyrm* module = nullptr;
-	Kind kind = LOCK;
 	bool hovered = false;
 	std::shared_ptr<window::Svg> lockClosedNormalSvg;
 	std::shared_ptr<window::Svg> lockClosedHighlightedSvg;
 	std::shared_ptr<window::Svg> lockOpenNormalSvg;
 	std::shared_ptr<window::Svg> lockOpenHighlightedSvg;
-	std::shared_ptr<window::Svg> resetNormalSvg;
-	std::shared_ptr<window::Svg> resetHighlightedSvg;
 
-	WyrmEditorIconButton(Wyrm* module, Kind kind) {
+	explicit WyrmEditorLockButton(Wyrm* module) {
 		this->module = module;
-		this->kind = kind;
-		if (kind == LOCK) {
-			lockClosedNormalSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/lock_closed-normal.svg"));
-			lockClosedHighlightedSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/lock_closed-highlighted.svg"));
-			lockOpenNormalSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/lock_open-normal.svg"));
-			lockOpenHighlightedSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/lock_open-highlighted.svg"));
-		}
-		else {
-			resetNormalSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/reset-normal.svg"));
-			resetHighlightedSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/reset-highlighted.svg"));
-		}
+		lockClosedNormalSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/lock_closed-normal.svg"));
+		lockClosedHighlightedSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/lock_closed-highlighted.svg"));
+		lockOpenNormalSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/lock_open-normal.svg"));
+		lockOpenHighlightedSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/lock_open-highlighted.svg"));
 	}
 
 	void step() override {
@@ -147,12 +132,7 @@ struct WyrmEditorIconButton : TransparentWidget {
 			TransparentWidget::onButton(e);
 			return;
 		}
-		if (kind == LOCK) {
-			module->editorLocked.store(!module->editorLocked.load(std::memory_order_relaxed), std::memory_order_relaxed);
-		}
-		else {
-			module->setFactoryShape(module->selectedShape);
-		}
+		module->editorLocked.store(!module->editorLocked.load(std::memory_order_relaxed), std::memory_order_relaxed);
 		e.consume(this);
 	}
 
@@ -182,17 +162,8 @@ struct WyrmEditorIconButton : TransparentWidget {
 		drawSvgIcon(args, svg);
 	}
 
-	void drawResetIcon(const DrawArgs& args) {
-		drawSvgIcon(args, hovered ? resetHighlightedSvg : resetNormalSvg);
-	}
-
 	void draw(const DrawArgs& args) override {
-		if (kind == LOCK) {
-			drawLockIcon(args);
-		}
-		else {
-			drawResetIcon(args);
-		}
+		drawLockIcon(args);
 	}
 };
 
@@ -336,14 +307,16 @@ struct WyrmWidget : ModuleWidget {
 		freqReadout->box.size = mm2px(freqReadoutRectMm.size);
 		addChild(freqReadout);
 
-		auto addEditorIconButton = [&](WyrmEditorIconButton::Kind kind, Vec posMm) {
-			auto* button = new WyrmEditorIconButton(module, kind);
-			button->box.size = mm2px(Vec(5.2f, 5.2f));
-			button->box.pos = mm2px(posMm).minus(button->box.size.mult(0.5f));
-			addChild(button);
-		};
-		addEditorIconButton(WyrmEditorIconButton::LOCK, lockPos);
-		addEditorIconButton(WyrmEditorIconButton::RESET, resetPos);
+		auto* lockButton = new WyrmEditorLockButton(module);
+		lockButton->box.size = mm2px(Vec(5.2f, 5.2f));
+		lockButton->box.pos = mm2px(lockPos).minus(lockButton->box.size.mult(0.5f));
+		addChild(lockButton);
+		auto* resetButton = new LeviathanResetButton();
+		resetButton->box.pos = mm2px(resetPos).minus(resetButton->box.size.mult(0.5f));
+		if (module) {
+			resetButton->resetAction = [module]() { module->setFactoryShape(module->selectedShape); };
+		}
+		addChild(resetButton);
 		auto* waveLeft = createParamCentered<WyrmWaveLeftButton>(mm2px(waveformSelectPos.plus(Vec(-2.5f, 0.f))), module, Wyrm::WAVE_LEFT_PARAM);
 		waveLeft->module = module;
 		addParam(waveLeft);

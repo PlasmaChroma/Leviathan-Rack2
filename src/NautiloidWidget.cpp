@@ -1361,39 +1361,6 @@ struct NautiloidSourceButton final : TL1105 {
   }
 };
 
-struct NautiloidResetButton final : TL1105 {
-  Nautiloid* module = nullptr;
-  std::shared_ptr<window::Svg> resetSvg;
-
-  NautiloidResetButton() {
-    resetSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/nautiloid-reset-highlighted.svg"));
-  }
-
-  void onButton(const event::Button& e) override {
-    if (module && e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
-      module->resetView();
-      e.consume(this);
-      return;
-    }
-    TL1105::onButton(e);
-  }
-
-  void draw(const DrawArgs& args) override {
-    TL1105::draw(args);
-    if (!resetSvg) return;
-    const Vec svgSize = resetSvg->getSize();
-    if (svgSize.x <= 1.f || svgSize.y <= 1.f) return;
-    const float targetSize = 0.58f * std::min(box.size.x, box.size.y);
-    const float scale = targetSize / std::max(svgSize.x, svgSize.y);
-    nvgSave(args.vg);
-    nvgTranslate(args.vg, 0.5f * box.size.x, 0.5f * box.size.y);
-    nvgScale(args.vg, scale, scale);
-    nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
-    resetSvg->draw(args.vg);
-    nvgRestore(args.vg);
-  }
-};
-
 struct NautiloidZoomReadout final : TransparentWidget {
   static constexpr float LABEL_FONT_SIZE = 11.5f;
   Nautiloid* module = nullptr;
@@ -1627,10 +1594,12 @@ struct NautiloidWidget final : ModuleWidget {
     sourceButton->module = module;
     addParam(sourceButton);
 
-    NautiloidResetButton* resetButton =
-      createParamCentered<NautiloidResetButton>(
+    LeviathanResetButton* resetButton =
+      createParamCentered<LeviathanResetButton>(
         mm2px(pointMm("RESET_VIEW_PARAM", Vec(19.2f, 75.4f))), module, Nautiloid::RESET_VIEW_PARAM);
-    resetButton->module = module;
+    if (module) {
+      resetButton->resetAction = [module]() { module->resetView(); };
+    }
     addParam(resetButton);
 
     addInput(createInputCentered<Magitek2InputJack>(
