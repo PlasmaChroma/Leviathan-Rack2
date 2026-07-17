@@ -269,7 +269,7 @@
    xlink:href="#linearGradient20"
    id="linearGradient35"
    gradientUnits="userSpaceOnUse"
-   gradientTransform="matrix(1.3902179,0,0,1.3902178,-4174.4961,-5187.5518)"
+   gradientTransform="matrix(1.3902179,0,0,1.3902178,-4174.4961,-5161.5621)"
    x1="5486.8237"
    y1="12735.478"
    x2="7088.8071"
@@ -294,15 +294,15 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="3.3736828"
-   inkscape:cx="108.63499"
-   inkscape:cy="311.6772"
+   inkscape:zoom="6.7473656"
+   inkscape:cx="162.80428"
+   inkscape:cy="445.4331"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
    inkscape:window-y="-8"
    inkscape:window-maximized="1"
-   inkscape:current-layer="svg488"
+   inkscape:current-layer="Background_Rect"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -463,7 +463,7 @@
      y="357.32468">Crownstep</tspan></text><text
    id="reworked_LEVIATHAN_LOGO"
    x="4570.0957"
-   y="12572.233"
+   y="12598.223"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient35);fill-rule:evenodd;stroke-width:37.088"
    xml:space="preserve"
    inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>

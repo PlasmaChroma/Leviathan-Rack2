@@ -149,6 +149,8 @@ void submitIrisMetrics(uint32_t instanceId,
                        TimingRangeUs stepUs,
                        TimingRangeUs drawUs);
 
+void submitCrownstepAiMetrics(uint32_t instanceId, int aiThinkMs);
+
 void submitBaselineMetrics(const char* moduleName,
                            uint32_t instanceId,
                            TimingRangeUs processUs,

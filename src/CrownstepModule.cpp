@@ -1,4 +1,5 @@
 #include "CrownstepShared.hpp"
+#include "DebugTerminalTransport.hpp"
 #include <random>
 #include <unordered_map>
 
@@ -1321,6 +1322,8 @@ void Crownstep::serviceAiTurnFromUiThread() {
 		if (readyMove.originIndex >= 0 && readyMove.destinationIndex >= 0) {
 			commitMove(readyMove, aiSide());
 			lastAiThinkMs = std::max(0, readyThinkMs);
+			const uint32_t debugInstanceId = (id >= 0) ? uint32_t(id) : 0u;
+			debug_terminal::submitCrownstepAiMetrics(debugInstanceId, lastAiThinkMs);
 		}
 		else if (isOthelloMode()) {
 			advanceForcedPassesIfNeeded();

@@ -1,6 +1,7 @@
 {
   "debug": true,
-  "PreviewWidgetOptions": true,
+  "PreviewWidgetOptions": false,
+  "CrownstepAddMove": false,
   "clockworkDragLogging": false,
   "temporalDeckLifetimeLogging": false,
   "ScopeDrawLogging": false,

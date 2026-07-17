@@ -12,6 +12,7 @@
 Plugin* pluginInstance;
 static std::atomic<bool> gDragonKingDebugEnabled{false};
 static std::atomic<bool> gDragonKingPreviewWidgetOptionsEnabled{false};
+static std::atomic<bool> gCrownstepAddMoveEnabled{false};
 static std::atomic<bool> gClockworkDragDebugLoggingEnabled{false};
 static std::atomic<bool> gTemporalDeckLifetimeLoggingEnabled{false};
 static std::atomic<bool> gModuleTeardownLoggingEnabled{false};
@@ -23,6 +24,7 @@ static std::mutex gModuleTeardownLogMutex;
 void refreshDragonKingDebugEnabled() {
 	gDragonKingDebugEnabled.store(false, std::memory_order_relaxed);
 	gDragonKingPreviewWidgetOptionsEnabled.store(false, std::memory_order_relaxed);
+	gCrownstepAddMoveEnabled.store(false, std::memory_order_relaxed);
 	gClockworkDragDebugLoggingEnabled.store(false, std::memory_order_relaxed);
 	gTemporalDeckLifetimeLoggingEnabled.store(false, std::memory_order_relaxed);
 	gModuleTeardownLoggingEnabled.store(false, std::memory_order_relaxed);
@@ -46,6 +48,7 @@ void refreshDragonKingDebugEnabled() {
 	if (json_is_object(root)) {
 		json_t* debugJ = json_object_get(root, "debug");
 		json_t* previewWidgetOptionsJ = json_object_get(root, "PreviewWidgetOptions");
+		json_t* crownstepAddMoveJ = json_object_get(root, "CrownstepAddMove");
 		json_t* clockworkDragLoggingJ = json_object_get(root, "clockworkDragLogging");
 		json_t* temporalDeckLifetimeLoggingJ = json_object_get(root, "temporalDeckLifetimeLogging");
 		json_t* moduleTeardownLoggingJ = json_object_get(root, "moduleTeardownLogging");
@@ -57,6 +60,7 @@ void refreshDragonKingDebugEnabled() {
 		}
 		gDragonKingDebugEnabled.store(!debugJ || json_boolean_value(debugJ), std::memory_order_relaxed);
 		gDragonKingPreviewWidgetOptionsEnabled.store(json_boolean_value(previewWidgetOptionsJ), std::memory_order_relaxed);
+		gCrownstepAddMoveEnabled.store(json_boolean_value(crownstepAddMoveJ), std::memory_order_relaxed);
 		gClockworkDragDebugLoggingEnabled.store(json_boolean_value(clockworkDragLoggingJ), std::memory_order_relaxed);
 		gTemporalDeckLifetimeLoggingEnabled.store(json_boolean_value(temporalDeckLifetimeLoggingJ), std::memory_order_relaxed);
 		gModuleTeardownLoggingEnabled.store(json_boolean_value(moduleTeardownLoggingJ), std::memory_order_relaxed);
@@ -73,6 +77,10 @@ bool isDragonKingDebugEnabled() {
 
 bool isDragonKingPreviewWidgetOptionsEnabled() {
 	return gDragonKingPreviewWidgetOptionsEnabled.load(std::memory_order_relaxed);
+}
+
+bool isCrownstepAddMoveEnabled() {
+	return gCrownstepAddMoveEnabled.load(std::memory_order_relaxed);
 }
 
 bool isClockworkDragDebugLoggingEnabled() {

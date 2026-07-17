@@ -45,12 +45,12 @@
     <linearGradient inkscape:collect="always" xlink:href="#oceanWaveGrad" id="linearGradient10" gradientUnits="userSpaceOnUse" x1="-323.57697" y1="-103.93273" x2="723.81177" y2="943.45605" gradientTransform="matrix(-1.435811,0,0,0.69647048,8750.0001,12953.568)" />
     <linearGradient inkscape:collect="always" xlink:href="#oceanWaveGrad" id="linearGradient11" gradientUnits="userSpaceOnUse" x1="-323.57697" y1="-103.93273" x2="723.81177" y2="943.45605" gradientTransform="matrix(1.435811,0,0,0.69647048,3420,12953.568)" />
     <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient500" gradientUnits="userSpaceOnUse" x1="5355.9189" y1="1516.2338" x2="6904.7725" y2="1512.3004" gradientTransform="matrix(0.99690805,0,0,0.99690805,-2554.7836,-888.26714)" />
-    <linearGradient inkscape:collect="always" xlink:href="#linearGradient20" id="linearGradient300" gradientUnits="userSpaceOnUse" gradientTransform="matrix(1.3902179,0,0,1.3902178,-5190.496,-5277.5491)" x1="5486.8237" y1="12735.478" x2="7088.8071" y2="12738.298" spreadMethod="pad" />
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient20" id="linearGradient300" gradientUnits="userSpaceOnUse" gradientTransform="matrix(1.3902179,0,0,1.3902178,-5190.496,-5161.5586)" x1="5486.8237" y1="12735.478" x2="7088.8071" y2="12738.298" spreadMethod="pad" />
   </defs>
   <g id="panel_art" style="display:inline">
     <g id="Background_Rect" style="display:inline" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
       <rect x="986.18201" y="997.229" width="7135.2925" height="12887.627" rx="0" ry="0" fill="url(#bgGrad)" id="black_background" style="display:inline;fill:url(#bgGrad);stroke-width:23.6122" sodipodi:insensitive="true" />
-      <g id="waves_layer" style="display:inline;opacity:0.5" transform="matrix(1.0032752,0,0,1.0029283,-542.80623,1109.6544)">
+      <g id="waves_layer" style="display:inline;opacity:0.5" transform="matrix(1.0032752,0,0,1.0029283,-542.80623,1140.1067)">
         <g id="branding_wave_left" transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)" style="display:inline">
           <path style="fill:#4995ec" d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713" id="path149" />
           <path style="fill:#7a5cff" d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z" id="path151" />
@@ -107,10 +107,9 @@
     <rect x="3974.6584" y="10837.059" width="1077.783" height="1338.3831" rx="73.67926" ry="73.546219" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="45.117" id="outputs" style="display:none;opacity:1;fill:#000000;fill-opacity:1;stroke:none" inkscape:label="Out_Under_Black" />
     <g id="glass" style="display:inline">
       <path d="M 235.31167,7794.9995 H 6845.0156 c 118.627,0 177.9405,39.1554 177.9405,117.4661 v 4105.9274 c 0,78.311 -59.3135,117.466 -177.9405,117.466 H 5052.4033 c -33.3333,0 -50,-16.667 -50,-50 V 10930.6 c 0,-21.561 -14.5838,-52.337 -63.7033,-52.337 h -850.4 c -49.1195,0 -63.6797,30.776 -63.6797,52.337 v 1155.259 c 0,33.333 -16.6667,50 -50,50 H 235.31167 c -118.62701,0 -177.94052,-39.155 -177.94052,-117.466 V 7912.4656 c 0,-78.3107 59.31351,-117.4661 177.94052,-117.4661 z" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="43.3423" id="inputs" style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" inkscape:label="inputs" sodipodi:nodetypes="sssssssssssssssss" />
-      <rect x="4042.1721" y="10894.673" width="944.95349" height="1240.9196" rx="58.695" ry="63.420082" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="40.2695" id="outputs-3" style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.501961;stroke:none;stroke-opacity:0.33" inkscape:label="outputs" />
+      <rect x="4042.1721" y="10894.673" width="944.95349" height="1250.9" rx="58.695" ry="63.930157" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="40.4311" id="outputs-3" style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.501961;stroke:none;stroke-opacity:0.33" inkscape:label="outputs" />
     </g>
   </g>
-  <g id="panel_labels_reworked" inkscape:groupmode="layer" inkscape:label="Labels Reworked" style="display:none" />
   <g id="components" style="display:none;opacity:0.169">
     <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="MODE_PARAM" cx="1150.0443" cy="7570.0098" rx="294.84427" ry="295.80988" />
     <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:11.8608" id="MODE_MENU_BUTTON" cx="313.15613" cy="7570.0098" rx="113.15611" ry="113.84389" />

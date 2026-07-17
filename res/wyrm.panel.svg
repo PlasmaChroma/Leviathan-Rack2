@@ -45,12 +45,12 @@
     <linearGradient inkscape:collect="always" xlink:href="#oceanWaveGrad" id="linearGradient10" gradientUnits="userSpaceOnUse" x1="-323.57697" y1="-103.93273" x2="723.81177" y2="943.45605" gradientTransform="matrix(-1.435811,0,0,0.69647048,8750.0001,12953.568)" />
     <linearGradient inkscape:collect="always" xlink:href="#oceanWaveGrad" id="linearGradient11" gradientUnits="userSpaceOnUse" x1="-323.57697" y1="-103.93273" x2="723.81177" y2="943.45605" gradientTransform="matrix(1.435811,0,0,0.69647048,3420,12953.568)" />
     <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient500" gradientUnits="userSpaceOnUse" x1="5355.9189" y1="1516.2338" x2="6904.7725" y2="1512.3004" gradientTransform="matrix(0.99690805,0,0,0.99690805,-2554.7836,-888.26714)" />
-    <linearGradient inkscape:collect="always" xlink:href="#linearGradient20" id="linearGradient300" gradientUnits="userSpaceOnUse" gradientTransform="matrix(1.3902179,0,0,1.3902178,-5190.496,-5277.5491)" x1="5486.8237" y1="12735.478" x2="7088.8071" y2="12738.298" spreadMethod="pad" />
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient20" id="linearGradient300" gradientUnits="userSpaceOnUse" gradientTransform="matrix(1.3902179,0,0,1.3902178,-5190.496,-5161.5586)" x1="5486.8237" y1="12735.478" x2="7088.8071" y2="12738.298" spreadMethod="pad" />
   </defs>
   <g id="panel_art" style="display:inline">
     <g id="Background_Rect" style="display:inline" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
       <rect x="986.18201" y="997.229" width="7135.2925" height="12887.627" rx="0" ry="0" fill="url(#bgGrad)" id="black_background" style="display:inline;fill:url(#bgGrad);stroke-width:23.6122" sodipodi:insensitive="true" />
-      <g id="waves_layer" style="display:inline;opacity:0.5" transform="matrix(1.0032752,0,0,1.0029283,-542.80623,1109.6544)">
+      <g id="waves_layer" style="display:inline;opacity:0.5" transform="matrix(1.0032752,0,0,1.0029283,-542.80623,1140.1067)">
         <g id="branding_wave_left" transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)" style="display:inline">
           <path style="fill:#4995ec" d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713" id="path149" />
           <path style="fill:#7a5cff" d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z" id="path151" />
@@ -77,7 +77,7 @@
     <path d="m 5152.6983,8493.414 -2.2633,1293.6516" stroke="url(#accentGrad)" stroke-width="40.7513" stroke-linecap="round" opacity="0.55" fill="none" id="FM_purple_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
     <path d="m 6369.939,8474.0757 -2.2633,1293.6516" stroke="url(#accentGrad)" stroke-width="40.7513" stroke-linecap="round" opacity="0.55" fill="none" id="fold_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
   </g>
-  <g id="wyrm_components" inkscape:groupmode="layer" inkscape:label="wyrm_components" style="display:none">
+  <g id="wyrm_components" inkscape:label="wyrm_components" style="display:none">
     <circle id="WYRM_FREQ_PARAM" cx="814.55664" cy="8622.5996" r="260" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_FINE_PARAM" cx="2225.269" cy="8622.5996" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_FM_ATTEN_PARAM" cx="5148.5684" cy="8486.3018" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
@@ -95,9 +95,8 @@
     <circle id="WYRM_SYNC_MODE_PARAM" cx="2875" cy="9954.583" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_LFO_MODE_PARAM" cx="3950.0149" cy="9954.583" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_FOLD_CV_INPUT" cx="6364.8999" cy="9805.0596" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
-    <circle id="WYRM_RAW_OUTPUT" cx="5145.6001" cy="11260" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
-    <circle id="WYRM_OUT_OUTPUT" cx="6360.0532" cy="11260" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_RAW_OUTPUT" cx="5218.3877" cy="11260" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_OUT_OUTPUT" cx="6432.8408" cy="11260" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
   </g>
-  <g id="panel_labels_reworked" inkscape:groupmode="layer" inkscape:label="Labels" style="display:inline" />
   <rect id="WYRM_WAVE_EDITOR" x="78.404099" y="952.07806" width="6950.8921" height="6331.0181" style="display:inline;fill:none;stroke:#5841bf;stroke-width:40.3259;stroke-dasharray:none;stroke-opacity:1" />
 </svg>

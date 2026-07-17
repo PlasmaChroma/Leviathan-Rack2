@@ -449,6 +449,22 @@ void submitTemporalDeckUiMetrics(uint32_t instanceId,
   transport().submit("TemporalDeck", instanceId, "ui", "metric", dataBuf, ts);
 }
 
+void submitCrownstepAiMetrics(uint32_t instanceId, int aiThinkMs) {
+  if (shouldSubmitSchema("Crownstep", "ai")) {
+    transport().submit(
+      "Crownstep",
+      0u,
+      "ai",
+      "schema",
+      "{\"schema\":1,\"target_kind\":\"metric\",\"columns\":[{\"key\":\"ai_ms\",\"label\":\"AI (ms)\"}]}",
+      system::getTime());
+  }
+
+  char dataBuf[64];
+  std::snprintf(dataBuf, sizeof(dataBuf), "{\"ai_ms\":%d}", std::max(0, aiThinkMs));
+  transport().submit("Crownstep", instanceId, "ai", "metric", dataBuf, system::getTime());
+}
+
 void submitBifurxUiMetrics(uint32_t instanceId,
                            TimingRangeUs processUs,
                            TimingRangeUs stepUs,

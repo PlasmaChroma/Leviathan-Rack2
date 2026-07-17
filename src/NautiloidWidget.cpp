@@ -1366,7 +1366,7 @@ struct NautiloidResetButton final : TL1105 {
   std::shared_ptr<window::Svg> resetSvg;
 
   NautiloidResetButton() {
-    resetSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/reset-highlighted.svg"));
+    resetSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/nautiloid-reset-highlighted.svg"));
   }
 
   void onButton(const event::Button& e) override {
