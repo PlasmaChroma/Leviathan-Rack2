@@ -44,6 +44,8 @@ struct WyrmWaveEditor : TransparentWidget {
 	int lastSandDetail = -1;
 	int lastSandPersistence = -1;
 	bool lastEditorLocked = false;
+	bool tracerDotVisible = false;
+	float lastTracerPhase = -1.f;
 	float lastEditorDrawUs = 0.f;
 	float lastStepUsEma = 0.f;
 	debug_terminal::UiTimingRangeAccumulator stepUsRange;
@@ -623,6 +625,23 @@ struct WyrmWaveEditor : TransparentWidget {
 			dirty = true;
 		}
 
+		bool tracerDotVisibleNow = tracerDotVisible;
+		const bool lfoModeNow = module->lfoMode.load(std::memory_order_relaxed);
+		const float tracerFrequencyNow = module->displayPhaseFrequencyHz.load(std::memory_order_relaxed);
+		if (!lfoModeNow || !std::isfinite(tracerFrequencyNow) || tracerFrequencyNow >= 2.4f) {
+			tracerDotVisibleNow = false;
+		}
+		else if (tracerFrequencyNow > 0.f && tracerFrequencyNow <= 2.f) {
+			tracerDotVisibleNow = true;
+		}
+		const float tracerPhaseNow = levi_math::wrap01(module->displayPhase.load(std::memory_order_relaxed));
+		if (tracerDotVisibleNow != tracerDotVisible
+			|| (tracerDotVisibleNow && std::fabs(tracerPhaseNow - lastTracerPhase) > 1e-5f)) {
+			dirty = true;
+		}
+		tracerDotVisible = tracerDotVisibleNow;
+		lastTracerPhase = tracerPhaseNow;
+
 		const Vec mouseLocal = currentLocalMousePos();
 		const bool mouseInside = (mouseLocal.x >= 0.f && mouseLocal.x <= box.size.x && mouseLocal.y >= 0.f && mouseLocal.y <= box.size.y);
 		const int hoverColumnNow = mouseInside ? indexFromX(mouseLocal.x) : -1;
@@ -1127,6 +1146,23 @@ struct WyrmWaveEditor : TransparentWidget {
 				nvgFillColor(args.vg, arrowColor);
 				nvgText(args.vg, labelX, labelY, modeText, nullptr);
 			}
+		}
+
+		if (hasModule && tracerDotVisible) {
+			const float phase = levi_math::wrap01(module->displayPhase.load(std::memory_order_relaxed));
+			const float x = pointEdgeInset() + phase * pointDrawWidth();
+			const float y = yFromValue(bodyWaveValueAtPhase(phase));
+			constexpr float dotRadius = 2.8f;
+
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, x, y, dotRadius);
+			nvgFillColor(args.vg, nvgRGBA(148, 255, 64, 255));
+			nvgFill(args.vg);
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, x, y, dotRadius + 0.7f);
+			nvgStrokeWidth(args.vg, 1.15f);
+			nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 235));
+			nvgStroke(args.vg);
 		}
 		nvgResetScissor(args.vg);
 		nvgRestore(args.vg);

@@ -231,6 +231,9 @@ struct Wyrm : Module {
 	std::atomic<uint32_t> waveVersion {1};
 	uint32_t appliedWaveVersion = 0;
 	std::atomic<float> displayFrequencyHz {0.f};
+	// Rate-limited channel-one state for the low-frequency waveform tracer.
+	std::atomic<float> displayPhase {0.f};
+	std::atomic<float> displayPhaseFrequencyHz {0.f};
 	std::atomic<float> displaySlitherPhase {0.f};
 	std::atomic<float> uiSlitherPhase {0.f};
 	std::atomic<float> displaySlitherAmount {0.f};
@@ -271,6 +274,7 @@ struct Wyrm : Module {
 	std::atomic<float> perfSandGlUs {0.f};
 	std::atomic<uint64_t> perfBodySampleCacheHits {0};
 	std::atomic<uint64_t> perfBodySampleCacheMisses {0};
+	float phaseTracerPublishTimer = 0.f;
 	uint32_t debugInstanceId = 0;
 	double createdUnixTimeSec = 0.0;
 

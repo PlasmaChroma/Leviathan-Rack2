@@ -1056,6 +1056,8 @@ void Wyrm::process(const ProcessArgs& args) {
 	float fastPathDisplayHzNoFm = 0.f;
 	float fastPathPhaseStep = 0.f;
 	float fastPathSlitherStep = 0.f;
+	float phaseDisplay = 0.f;
+	float phaseFrequencyDisplay = 0.f;
 	if (canUsePlainFastPath) {
 		fastPathDisplayHzNoFm = clamp(baseFreq * rack::dsp::exp2_taylor5(monoVoct + fine), 0.005f, 0.45f * args.sampleRate);
 		float hz = baseFreq * rack::dsp::exp2_taylor5(monoVoct + monoFmVoltage * fmAtten + fine);
@@ -1096,6 +1098,10 @@ void Wyrm::process(const ProcessArgs& args) {
 			const float raw = clamp(finiteOr(lookupWave(phase[c], fastPathPhaseStep)), -1.f, 1.f);
 			outputs[RAW_OUTPUT].setVoltage(5.f * raw, c);
 			outputs[OUT_OUTPUT].setVoltage(5.f * raw, c);
+			if (c == 0) {
+				phaseDisplay = phase[c];
+				phaseFrequencyDisplay = fastPathHz;
+			}
 			continue;
 		}
 		const float voct = readPolyOrMonoVoltage(VOCT_INPUT, c, voctPoly, monoVoct);
@@ -1134,6 +1140,21 @@ void Wyrm::process(const ProcessArgs& args) {
 		}
 		outputs[RAW_OUTPUT].setVoltage(5.f * raw, c);
 		outputs[OUT_OUTPUT].setVoltage(5.f * folded, c);
+		if (c == 0) {
+			phaseDisplay = phase[c];
+			phaseFrequencyDisplay = hz;
+		}
+	}
+
+	phaseTracerPublishTimer += args.sampleTime;
+	constexpr float phaseTracerPublishInterval = 1.f / 120.f;
+	if (phaseTracerPublishTimer >= phaseTracerPublishInterval) {
+		phaseTracerPublishTimer -= phaseTracerPublishInterval;
+		if (phaseTracerPublishTimer >= phaseTracerPublishInterval) {
+			phaseTracerPublishTimer = 0.f;
+		}
+		displayPhase.store(phaseDisplay, std::memory_order_relaxed);
+		displayPhaseFrequencyHz.store(phaseFrequencyDisplay, std::memory_order_relaxed);
 	}
 
 	if (isDragonKingDebugEnabled()) {
