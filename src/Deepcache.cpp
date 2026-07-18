@@ -1668,15 +1668,15 @@ struct DeepcacheProgressWidget : widget::TransparentWidget {
 		if (enabled && progress > 0.f) {
 			nvgBeginPath(args.vg);
 			nvgRoundedRect(args.vg, 2.f, 2.f, (box.size.x - 4.f) * progress, box.size.y - 4.f, 1.25f);
-			nvgFillColor(args.vg, framebufferStage ? nvgRGBA(139, 104, 255, 220)
-			                                               : nvgRGBA(35, 205, 225, 220));
+			nvgFillColor(args.vg, framebufferStage ? nvgRGBA(35, 205, 225, 220)
+			                                               : nvgRGBA(139, 104, 255, 220));
 			nvgFill(args.vg);
 		}
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, 0.75f, 0.75f, box.size.x - 1.5f, box.size.y - 1.5f, 2.f);
 		nvgStrokeWidth(args.vg, 1.5f);
-		nvgStrokeColor(args.vg, framebufferStage ? nvgRGBA(139, 104, 255, 190)
-		                                               : nvgRGBA(56, 221, 232, 190));
+		nvgStrokeColor(args.vg, framebufferStage ? nvgRGBA(56, 221, 232, 190)
+		                                               : nvgRGBA(139, 104, 255, 190));
 		nvgStroke(args.vg);
 		nvgFontSize(args.vg, 9.f);
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
@@ -1693,10 +1693,7 @@ struct DeepcacheModuleCountWidget : widget::TransparentWidget {
 	}
 	void draw(const DrawArgs& args) override {
 		const int completed = module ? module->constructionCompletedCount.load(std::memory_order_relaxed) : 0;
-		const int total = module ? module->constructionTotalCount.load(std::memory_order_relaxed) : 0;
-		const std::string text = total > 0
-			? std::to_string(completed) + " / " + std::to_string(total) + " MODULES"
-			: "0 MODULES";
+		const std::string text = std::to_string(completed);
 		nvgFontSize(args.vg, 7.5f);
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 		nvgFillColor(args.vg, nvgRGBA(188, 204, 224, 220));

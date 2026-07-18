@@ -92,9 +92,9 @@ resident cache as well as future rebuilds. Graphics-context destruction
 downgrades framebuffer-ready cards to resident, clears stale completion, and
 schedules a raster-only rewarm for the next valid draw context.
 
-The panel exposes the two phases separately. A bordered cyan bar reports module
-widget construction as a percentage, with the exact constructed/total module
-count beneath it. A second bordered violet bar reports framebuffer attempts and
+The panel exposes the two phases separately. A bordered violet bar reports module
+widget construction as a percentage, with the constructed-module count beneath
+it. A second bordered cyan bar reports framebuffer attempts and
 shows `OFF` while the experimental pass is disabled. READY is published only
 after both bars have completed when framebuffer warming is enabled.
 
