@@ -58,7 +58,9 @@ cards in place. The header provides stock-style search, brand, multi-tag,
 favorites, reset, sort, zoom, count, and Library controls. Search covers plugin
 and module names/slugs, descriptions, and tag aliases; brand, every selected tag,
 favorites, enablement, visibility, and the Rack module whitelist are combined as
-intersections.
+intersections. The brand popup retains Rack's normal single-column layout when
+it fits and automatically flows into screen-bounded columns when it would exceed
+the available window height.
 
 Immutable normalized search metadata is built once when the browser is created.
 Refreshes update only mutable Rack settings and usage fields, so typing in the

@@ -141,6 +141,11 @@ struct DeepcacheZoomButton : ui::ChoiceButton {
 	void step() override;
 };
 
+struct DeepcacheBrandMenu : ui::Menu {
+	math::Vec anchorPos;
+	void step() override;
+};
+
 struct DeepcacheBrandItem : ui::MenuItem {
 	DeepcacheBrowser* browser = nullptr;
 	std::string brand;
@@ -1156,6 +1161,58 @@ float DeepcacheFavoriteQuantity::getValue() {
 	return browser->favoritesOnly ? 1.f : 0.f;
 }
 
+void DeepcacheBrandMenu::step() {
+	// Let Rack establish the natural item heights and menu width first, then
+	// replace only an overflowing vertical layout with an adaptive column grid.
+	ui::Menu::step();
+	if (!APP || !APP->scene || children.empty())
+		return;
+
+	const float screenMargin = 10.f;
+	const math::Vec sceneSize = APP->scene->box.size;
+	const float availableHeight = std::max(100.f, sceneSize.y - 2.f * screenMargin);
+	float totalHeight = 0.f;
+	for (Widget* child : children)
+		totalHeight += child->box.size.y;
+	if (totalHeight <= availableHeight)
+		return;
+
+	int columnCount = 1;
+	float columnHeight = 0.f;
+	for (Widget* child : children) {
+		const float itemHeight = child->box.size.y;
+		if (columnHeight > 0.f && columnHeight + itemHeight > availableHeight) {
+			columnCount++;
+			columnHeight = 0.f;
+		}
+		columnHeight += itemHeight;
+	}
+
+	const float availableWidth = std::max(120.f, sceneSize.x - 2.f * screenMargin);
+	const float naturalColumnWidth = std::max(150.f, box.size.x);
+	const float columnWidth = std::min(naturalColumnWidth, availableWidth / columnCount);
+	float x = 0.f;
+	float y = 0.f;
+	float tallestColumn = 0.f;
+	for (Widget* child : children) {
+		const float itemHeight = child->box.size.y;
+		if (y > 0.f && y + itemHeight > availableHeight) {
+			tallestColumn = std::max(tallestColumn, y);
+			x += columnWidth;
+			y = 0.f;
+		}
+		child->box.pos = math::Vec(x, y);
+		child->box.size.x = columnWidth;
+		y += itemHeight;
+	}
+	tallestColumn = std::max(tallestColumn, y);
+	box.size = math::Vec(columnWidth * columnCount, tallestColumn);
+	box.pos.x = math::clamp(anchorPos.x, screenMargin,
+	                       std::max(screenMargin, sceneSize.x - box.size.x - screenMargin));
+	box.pos.y = math::clamp(anchorPos.y, screenMargin,
+	                       std::max(screenMargin, sceneSize.y - box.size.y - screenMargin));
+}
+
 void DeepcacheBrandItem::onAction(const ActionEvent& e) {
 	browser->brand = browser->brand == brand ? "" : brand;
 	browser->refresh();
@@ -1167,8 +1224,9 @@ void DeepcacheBrandItem::step() {
 }
 
 void DeepcacheBrandButton::onAction(const ActionEvent& e) {
-	ui::Menu* menu = createMenu();
-	menu->box.pos = getAbsoluteOffset(math::Vec(0, box.size.y));
+	auto* menu = createMenu<DeepcacheBrandMenu>();
+	menu->anchorPos = getAbsoluteOffset(math::Vec(0, box.size.y));
+	menu->box.pos = menu->anchorPos;
 	menu->box.size.x = box.size.x;
 	auto* allItem = new DeepcacheBrandItem;
 	allItem->text = string::translate("Browser.allBrands");
