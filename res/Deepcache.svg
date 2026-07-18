@@ -1,52 +1,230 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg"
-     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-     width="20.32mm" height="128.5mm" viewBox="0 0 2032 12850">
-  <defs>
-    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#090d16"/>
-      <stop offset="0.55" stop-color="#111a29"/>
-      <stop offset="1" stop-color="#080b13"/>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="20.32mm"
+   height="128.5mm"
+   viewBox="0 0 2032 12850"
+   version="1.1"
+   id="svg16"
+   sodipodi:docname="Deepcache.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview16"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     showgrid="false"
+     inkscape:zoom="2.4193418"
+     inkscape:cx="38.440208"
+     inkscape:cy="242.83465"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="labels" />
+  <defs
+     id="defs5">
+    <linearGradient
+       id="panel"
+       x1="0"
+       y1="0"
+       x2="0"
+       y2="1">
+      <stop
+         offset="0"
+         stop-color="#090d16"
+         id="stop1" />
+      <stop
+         offset="0.55"
+         stop-color="#111a29"
+         id="stop2" />
+      <stop
+         offset="1"
+         stop-color="#080b13"
+         id="stop3" />
     </linearGradient>
-    <linearGradient id="trace" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#21d7df"/>
-      <stop offset="1" stop-color="#8d62ff"/>
+    <linearGradient
+       id="trace"
+       x1="0"
+       y1="0"
+       x2="1"
+       y2="0">
+      <stop
+         offset="0"
+         stop-color="#21d7df"
+         id="stop4" />
+      <stop
+         offset="1"
+         stop-color="#8d62ff"
+         id="stop5" />
     </linearGradient>
   </defs>
-  <g inkscape:groupmode="layer" inkscape:label="panel" transform="scale(100)">
-    <rect width="20.32" height="128.5" fill="url(#panel)"/>
-    <rect x="0.45" y="0.45" width="19.42" height="127.6" rx="1.2"
-          fill="none" stroke="#31425e" stroke-width="0.35"/>
-    <path d="M3 30 C7 24, 13 36, 17.3 29 M3 33 C7 27, 13 39, 17.3 32"
-          fill="none" stroke="url(#trace)" stroke-width="0.55" opacity="0.82"/>
-    <text x="10.16" y="9.2" fill="#e8f9ff" font-family="sans-serif" font-size="3.1"
-          font-weight="700" text-anchor="middle">DEEP</text>
-    <text x="10.16" y="13" fill="#8b68ff" font-family="sans-serif" font-size="3.1"
-          font-weight="700" text-anchor="middle">CACHE</text>
-    <text x="10.16" y="48" fill="#a98cff" font-family="sans-serif" font-size="1.25"
-          letter-spacing="0.18" text-anchor="middle">MODULE CACHE</text>
-    <text x="10.16" y="64" fill="#70dce7" font-family="sans-serif" font-size="1.25"
-          letter-spacing="0.18" text-anchor="middle">FRAMEBUFFER</text>
-    <text x="10.16" y="75.2" fill="#889bb3" font-family="sans-serif" font-size="1.05"
-          letter-spacing="0.14" text-anchor="middle">DATABASE</text>
-    <text x="10.16" y="100.5" fill="#9fb3c8" font-family="sans-serif" font-size="1.7"
-          letter-spacing="0.3" text-anchor="middle">CACHE</text>
-    <text x="10.16" y="92" fill="#73869c" font-family="sans-serif" font-size="1.25"
-          text-anchor="middle">PLAN  WARM  READY  ERR</text>
-    <text x="10.16" y="119.5" fill="#b4c9dd" font-family="sans-serif" font-size="1.5"
-          text-anchor="middle">LEVIATHAN</text>
-    <circle cx="10.16" cy="110" r="5.8" fill="none" stroke="#18273c" stroke-width="0.45"/>
-    <circle cx="10.16" cy="110" r="3.5" fill="#0b121e" stroke="url(#trace)" stroke-width="0.4"/>
+  <g
+     inkscape:label="panel"
+     transform="scale(100)"
+     id="g15">
+    <rect
+       width="20.32"
+       height="128.5"
+       fill="url(#panel)"
+       id="rect5"
+       x="0"
+       y="0" />
+    <rect
+       x="0.44999999"
+       y="0.44999999"
+       width="19.42"
+       height="127.6"
+       rx="1.2"
+       fill="none"
+       stroke="#31425e"
+       stroke-width="0.35"
+       id="rect6" />
+    <path
+       d="m 3,30 c 4,-6 10,6 14.3,-1 M 3,33 c 4,-6 10,6 14.3,-1"
+       fill="none"
+       stroke="url(#trace)"
+       stroke-width="0.55"
+       opacity="0.82"
+       id="path6" />
   </g>
-  <g inkscape:groupmode="layer" inkscape:label="components" opacity="0">
-    <circle id="cache_param" cx="1016" cy="11000" r="100"/>
-    <rect id="progress" x="300" y="5000" width="1432" height="700"/>
-    <rect id="progress_count" x="300" y="5720" width="1432" height="450"/>
-    <rect id="framebuffer_progress" x="300" y="6600" width="1432" height="700"/>
-    <rect id="database_status" x="300" y="7600" width="1432" height="650"/>
-    <circle id="planning_light" cx="400" cy="8600" r="50"/>
-    <circle id="warming_light" cx="800" cy="8600" r="50"/>
-    <circle id="ready_light" cx="1200" cy="8600" r="50"/>
-    <circle id="error_light" cx="1600" cy="8600" r="50"/>
+  <g
+     inkscape:label="components"
+     opacity="0"
+     id="g16">
+    <rect
+       id="progress"
+       x="300"
+       y="5000"
+       width="1432"
+       height="700" />
+    <rect
+       id="progress_count"
+       x="300"
+       y="5720"
+       width="1432"
+       height="450" />
+    <rect
+       id="framebuffer_progress"
+       x="300"
+       y="6600"
+       width="1432"
+       height="700" />
+    <rect
+       id="database_status"
+       x="300"
+       y="7600"
+       width="1432"
+       height="650" />
+    <circle
+       id="planning_light"
+       cx="280"
+       cy="8700"
+       r="50" />
+    <circle
+       id="warming_light"
+       cx="770"
+       cy="8700"
+       r="50" />
+    <circle
+       id="ready_light"
+       cx="1262"
+       cy="8700"
+       r="50" />
+    <circle
+       id="error_light"
+       cx="1752"
+       cy="8700"
+       r="50" />
+  </g>
+  <g
+     id="labels"
+     transform="scale(100)">
+    <text
+       x="10.16"
+       y="9.1999998"
+       fill="#e8f9ff"
+       font-family="sans-serif"
+       font-size="3.1px"
+       font-weight="700"
+       text-anchor="middle"
+       id="text6">DEEP</text>
+    <text
+       x="10.16"
+       y="13"
+       fill="#8b68ff"
+       font-family="sans-serif"
+       font-size="3.1px"
+       font-weight="700"
+       text-anchor="middle"
+       id="text7">CACHE</text>
+    <text
+       x="10.16"
+       y="48"
+       fill="#a98cff"
+       font-family="sans-serif"
+       font-size="1.25px"
+       letter-spacing="0.18"
+       text-anchor="middle"
+       id="text8">PLUGIN BUILDS</text>
+    <text
+       x="10.16"
+       y="64"
+       fill="#70dce7"
+       font-family="sans-serif"
+       font-size="1.25px"
+       letter-spacing="0.18"
+       text-anchor="middle"
+       id="text9">PLUGIN RASTERS</text>
+    <text
+       x="10.16"
+       y="75.199997"
+       fill="#889bb3"
+       font-family="sans-serif"
+       font-size="1.05px"
+       letter-spacing="0.14"
+       text-anchor="middle"
+       id="text10">DATABASE</text>
+    <text
+       x="10.16"
+       y="119.5"
+       fill="#b4c9dd"
+       font-family="sans-serif"
+       font-size="1.5px"
+       text-anchor="middle"
+       id="text15">LEVIATHAN</text>
+    <g
+       fill="#73869c"
+       font-family="sans-serif"
+       font-size="1.05px"
+       text-anchor="middle"
+       id="led_labels">
+      <text
+         x="2.8"
+         y="93"
+         id="text11">PLAN</text>
+      <text
+         x="7.6999998"
+         y="93"
+         id="text12">WARM</text>
+      <text
+         x="12.62"
+         y="93"
+         font-size="0.95px"
+         id="text13">READY</text>
+      <text
+         x="17.52"
+         y="93"
+         id="text14">ERR</text>
+    </g>
   </g>
 </svg>

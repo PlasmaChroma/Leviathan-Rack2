@@ -8,7 +8,6 @@
 
 struct DeepcacheModule : rack::engine::Module {
 	enum ParamIds {
-		CACHE_PARAM,
 		NUM_PARAMS
 	};
 
@@ -32,28 +31,24 @@ struct DeepcacheModule : rack::engine::Module {
 	std::atomic<int> completedCount {0};
 	std::atomic<int> totalCount {0};
 	std::atomic<int> failedCount {0};
-	std::atomic<int> constructionCompletedCount {0};
-	std::atomic<int> constructionTotalCount {0};
-	std::atomic<int> framebufferCompletedCount {0};
-	std::atomic<int> framebufferTotalCount {0};
+	std::atomic<int> constructionPluginCompletedCount {0};
+	std::atomic<int> constructionPluginTotalCount {0};
+	std::atomic<int> framebufferPluginCompletedCount {0};
+	std::atomic<int> framebufferPluginTotalCount {0};
 	std::atomic<int> databaseState {0};
-	std::atomic<int> databaseReadyCount {0};
-	std::atomic<int> databaseTargetCount {0};
+	std::atomic<int> databaseReadyPluginCount {0};
+	std::atomic<int> databaseTargetPluginCount {0};
 	std::atomic<std::uint64_t> databaseBytes {0};
 	std::atomic<int> databaseErrorCode {0};
-	std::atomic<std::uint64_t> buttonPressSerial {0};
 	std::atomic<bool> autoStart {true};
 	std::atomic<int> uiBudgetMicros {2000};
 	std::atomic<int> cacheScope {static_cast<int>(deepcache::CacheScope::ALL)};
-	std::atomic<bool> experimentalFramebufferWarm {true};
 
 	DeepcacheModule();
 	void process(const ProcessArgs& args) override;
 	json_t* dataToJson() override;
 	void dataFromJson(json_t* rootJ) override;
 
-private:
-	bool cacheButtonHigh_ = false;
 };
 
 struct DeepcacheWidget : rack::app::ModuleWidget {

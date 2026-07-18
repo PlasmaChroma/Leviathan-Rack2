@@ -81,7 +81,7 @@ int main() {
 	std::uint64_t sizeAfterUpdate = 0;
 	{
 		deepcache::DeepcacheArchiveWorker worker;
-		worker.start(directory, {{"one", "fp-one"}, {"two", "fp-two"}});
+		worker.start(directory, {{"one", "fp-one", "plugin-a"}, {"two", "fp-two", "plugin-a"}});
 		deepcache::PreviewWrite first;
 		first.cacheKey = "one";
 		first.fingerprint = "fp-one";
@@ -96,7 +96,8 @@ int main() {
 		second.height = 11;
 		second.rgba = secondPixels;
 		worker.enqueue(std::move(second));
-		if (!waitUntil([&]() { return worker.readyCount() == 2; })) {
+		if (!waitUntil([&]() { return worker.readyCount() == 2; }) ||
+		    worker.targetPluginCount() != 1 || worker.readyPluginCount() != 1) {
 			std::cerr << "[FAIL] initial append did not commit\n";
 			return 1;
 		}
@@ -121,7 +122,7 @@ int main() {
 	std::uint64_t compactedSize = sizeAfterUpdate;
 	{
 		deepcache::DeepcacheArchiveWorker worker;
-		worker.start(directory, {{"one", "fp-one"}, {"two", "stale-fingerprint"}});
+		worker.start(directory, {{"one", "fp-one", "plugin-a"}, {"two", "stale-fingerprint", "plugin-a"}});
 		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
 			std::cerr << "[FAIL] reload did not finish\n";
 			return 1;
@@ -133,6 +134,7 @@ int main() {
 			if (preview.cacheKey == "two")
 				staleRejected = false;
 		}
+		staleRejected = staleRejected && worker.readyPluginCount() == 0;
 		worker.requestCompaction();
 		if (!waitUntil([&]() { return worker.packBytes() < sizeAfterUpdate; })) {
 			std::cerr << "[FAIL] compaction did not reclaim the superseded payload\n";
@@ -146,13 +148,13 @@ int main() {
 	// safely while leaving the authoritative pair readable.
 	{
 		deepcache::DeepcacheArchiveWorker worker;
-		worker.start(directory, {{"one", "fp-one"}});
+		worker.start(directory, {{"one", "fp-one", "plugin-a"}});
 		worker.requestCompaction();
 		worker.shutdown();
 	}
 	{
 		deepcache::DeepcacheArchiveWorker worker;
-		worker.start(directory, {{"one", "fp-one"}});
+		worker.start(directory, {{"one", "fp-one", "plugin-a"}});
 		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
 			std::cerr << "[FAIL] cache was unreadable after canceled shutdown\n";
 			return 1;

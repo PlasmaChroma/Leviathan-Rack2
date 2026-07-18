@@ -26,6 +26,7 @@ enum class DatabaseState {
 struct ArchiveWantedEntry {
 	std::string cacheKey;
 	std::string fingerprint;
+	std::string pluginKey;
 };
 
 struct DecodedPreview {
@@ -63,6 +64,8 @@ public:
 	DatabaseState state() const { return static_cast<DatabaseState>(state_.load(std::memory_order_relaxed)); }
 	int readyCount() const { return readyCount_.load(std::memory_order_relaxed); }
 	int targetCount() const { return targetCount_.load(std::memory_order_relaxed); }
+	int readyPluginCount() const { return readyPluginCount_.load(std::memory_order_relaxed); }
+	int targetPluginCount() const { return targetPluginCount_.load(std::memory_order_relaxed); }
 	std::uint64_t packBytes() const { return packBytes_.load(std::memory_order_relaxed); }
 	int errorCode() const { return errorCode_.load(std::memory_order_relaxed); }
 
@@ -84,13 +87,18 @@ private:
 	bool saveIndexAtomically();
 	bool canceled() const { return stopping_.load(std::memory_order_relaxed); }
 	void setState(DatabaseState state) { state_.store(static_cast<int>(state), std::memory_order_relaxed); }
+	void markReady(const std::string& cacheKey);
 
 	std::string directory_;
 	std::string packPath_;
 	std::string indexPath_;
 	std::unordered_map<std::string, std::string> wanted_;
+	std::unordered_map<std::string, std::string> wantedPluginByKey_;
+	std::unordered_map<std::string, int> pluginTargetCounts_;
+	std::unordered_map<std::string, int> pluginReadyCounts_;
 	std::unordered_map<std::string, Entry> entries_;
 	std::unordered_set<std::string> readyKeys_;
+	std::unordered_set<std::string> readyPlugins_;
 	std::vector<std::uint8_t> packedBytes_;
 
 	mutable std::mutex mutex_;
@@ -104,6 +112,8 @@ private:
 	std::atomic<int> state_ {static_cast<int>(DatabaseState::EMPTY)};
 	std::atomic<int> readyCount_ {0};
 	std::atomic<int> targetCount_ {0};
+	std::atomic<int> readyPluginCount_ {0};
+	std::atomic<int> targetPluginCount_ {0};
 	std::atomic<std::uint64_t> packBytes_ {0};
 	std::atomic<int> errorCode_ {0};
 };

@@ -183,7 +183,6 @@ Suggested state:
 ```cpp
 struct DeepcacheModule : rack::engine::Module {
     enum ParamIds {
-        CACHE_PARAM,
         NUM_PARAMS
     };
 
@@ -624,9 +623,9 @@ Do not implement memory-pressure eviction in the first version.
 
 ---
 
-# 10. Optional Hidden Framebuffer Warm Pass
+# 10. Required Hidden Framebuffer Warm Pass
 
-After RAM-resident widget warming works, implement a feasibility spike for rendering framebuffers before the browser is opened.
+Render framebuffers before the browser is opened so every completed preview can be reused as a persistent raster asset.
 
 This work must still occur on the UI thread.
 
@@ -670,20 +669,13 @@ This stage is preferred but must not block the initial RAM-cache proof.
 
 The initial panel should contain:
 
-* one illuminated **CACHE** button;
-* one compact progress indicator;
-* state LEDs or a multicolor aperture LED.
+* separate construction and framebuffer progress indicators;
+* a two-row database status display;
+* planning, warming, ready, and error LEDs.
 
-Suggested CACHE button behavior:
-
-```text
-IDLE       -> Start
-PLANNING   -> Cancel
-WARMING    -> Pause
-PAUSED     -> Resume
-READY      -> Rebuild
-ERROR      -> Retry
-```
+Cache operations use explicitly named context-menu actions. Deepcache has no
+state-dependent panel button because auto-start handles normal operation and a
+single multifunction control obscures whether it will pause, cancel, or rebuild.
 
 ## Status indication
 
@@ -732,7 +724,7 @@ Add the following context-menu options:
   * Visible search results
   * All installed modules
 * Show cache statistics
-* Enable experimental framebuffer warm pass
+* Compact preview database
 
 Defaults:
 
@@ -740,7 +732,7 @@ Defaults:
 Auto-start:                    enabled
 UI work budget:                2 ms
 Cache scope:                   all installed modules
-Framebuffer warm pass:         disabled until validated
+Framebuffer warm pass:         always enabled
 Retain resident previews:      enabled
 ```
 
@@ -756,8 +748,7 @@ Suggested JSON:
 {
   "autoStart": true,
   "uiBudgetMs": 2.0,
-  "cacheScope": "all",
-  "experimentalFramebufferWarm": false
+  "cacheScope": "all"
 }
 ```
 
@@ -904,7 +895,9 @@ src/
     WarmRenderHost.hpp
 
 res/
-  Deepcache.svg
+  Deepcache.svg         # Combined authoring/reference asset
+  Deepcache.panel.svg   # Runtime panel surface and component anchors
+  Deepcache.labels.svg  # Runtime outlined label layer
 ```
 
 Update:
@@ -1019,11 +1012,11 @@ Do not include SQLite, QOI, PNG encoding, or database migrations in the MVP.
 * test Rack shutdown;
 * test multiple Deepcache instances.
 
-## Phase 6 — Hidden framebuffer experiment
+## Phase 6 — Hidden framebuffer warming
 
 * attempt invisible UI-thread framebuffer rendering;
 * measure GPU-memory impact;
-* keep behind an experimental context-menu toggle until proven stable.
+* keep the pass always enabled as part of normal cache construction.
 
 ---
 
@@ -1122,7 +1115,7 @@ Record baseline browser behavior before Deepcache:
 Compare against:
 
 * Deepcache after RAM warm-up;
-* Deepcache after experimental framebuffer warm-up.
+* Deepcache after framebuffer warm-up.
 
 The MVP is successful even if framebuffer rasterization still occurs lazily, provided widget construction and resource initialization are measurably removed from browser interaction.
 
@@ -1163,6 +1156,7 @@ Do not begin with persistent database storage.
 
 Do not attempt to render previews from the audio thread or worker thread.
 
-First prove browser replacement and persistent RAM-resident preview widgets. Then add the worker-planned, UI-executed warming queue. Treat invisible framebuffer warming as a separate experimental phase after the stable RAM-cache path is complete.
+Browser replacement, persistent RAM-resident previews, and the worker-planned,
+UI-executed framebuffer warming queue are all required parts of Deepcache.
 
 Document any Rack private implementation behavior that Deepcache depends upon, particularly browser replacement, framebuffer cleanup, preview construction, and module insertion.

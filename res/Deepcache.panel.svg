@@ -1,0 +1,29 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" width="20.32mm" height="128.5mm" viewBox="0 0 2032 12850" version="1.1" id="svg16" sodipodi:docname="Deepcache.panel.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)">
+  <defs id="defs5">
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#090d16" id="stop1" />
+      <stop offset="0.55" stop-color="#111a29" id="stop2" />
+      <stop offset="1" stop-color="#080b13" id="stop3" />
+    </linearGradient>
+    <linearGradient id="trace" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#21d7df" id="stop4" />
+      <stop offset="1" stop-color="#8d62ff" id="stop5" />
+    </linearGradient>
+  </defs>
+  <g inkscape:label="panel" transform="scale(100)" id="g15">
+    <rect width="20.32" height="128.5" fill="url(#panel)" id="rect5" x="0" y="0" />
+    <rect x="0.44999999" y="0.44999999" width="19.42" height="127.6" rx="1.2" fill="none" stroke="#31425e" stroke-width="0.35" id="rect6" />
+    <path d="m 3,30 c 4,-6 10,6 14.3,-1 M 3,33 c 4,-6 10,6 14.3,-1" fill="none" stroke="url(#trace)" stroke-width="0.55" opacity="0.82" id="path6" />
+  </g>
+  <g inkscape:label="components" opacity="0" id="g16">
+    <rect id="progress" x="300" y="5000" width="1432" height="700" />
+    <rect id="progress_count" x="300" y="5720" width="1432" height="450" />
+    <rect id="framebuffer_progress" x="300" y="6600" width="1432" height="700" />
+    <rect id="database_status" x="300" y="7600" width="1432" height="650" />
+    <circle id="planning_light" cx="280" cy="8700" r="50" />
+    <circle id="warming_light" cx="770" cy="8700" r="50" />
+    <circle id="ready_light" cx="1262" cy="8700" r="50" />
+    <circle id="error_light" cx="1752" cy="8700" r="50" />
+  </g>
+</svg>

@@ -99,9 +99,14 @@ void DeepcacheArchiveWorker::start(const std::string& directory, std::vector<Arc
 	directory_ = directory;
 	packPath_ = directory + "/previews-v1.pack";
 	indexPath_ = directory + "/index-v1.bin";
-	for (const ArchiveWantedEntry& entry : wanted)
+	for (const ArchiveWantedEntry& entry : wanted) {
 		wanted_[entry.cacheKey] = entry.fingerprint;
+		const std::string pluginKey = entry.pluginKey.empty() ? entry.cacheKey : entry.pluginKey;
+		wantedPluginByKey_[entry.cacheKey] = pluginKey;
+		pluginTargetCounts_[pluginKey]++;
+	}
 	targetCount_.store(static_cast<int>(wanted_.size()), std::memory_order_relaxed);
+	targetPluginCount_.store(static_cast<int>(pluginTargetCounts_.size()), std::memory_order_relaxed);
 	setState(DatabaseState::LOADING);
 	started_ = true;
 	try {
@@ -131,6 +136,21 @@ bool DeepcacheArchiveWorker::tryPopDecoded(DecodedPreview& preview) {
 	preview = std::move(decoded_.front());
 	decoded_.pop_front();
 	return true;
+}
+
+void DeepcacheArchiveWorker::markReady(const std::string& cacheKey) {
+	if (!readyKeys_.insert(cacheKey).second)
+		return;
+	readyCount_.store(static_cast<int>(readyKeys_.size()), std::memory_order_relaxed);
+	const auto plugin = wantedPluginByKey_.find(cacheKey);
+	if (plugin == wantedPluginByKey_.end())
+		return;
+	const int ready = ++pluginReadyCounts_[plugin->second];
+	const auto target = pluginTargetCounts_.find(plugin->second);
+	if (target != pluginTargetCounts_.end() && ready >= target->second) {
+		readyPlugins_.insert(plugin->second);
+		readyPluginCount_.store(static_cast<int>(readyPlugins_.size()), std::memory_order_relaxed);
+	}
 }
 
 void DeepcacheArchiveWorker::requestCompaction() {
@@ -273,7 +293,6 @@ bool DeepcacheArchiveWorker::loadArchive() {
 			++it;
 	}
 
-	int ready = 0;
 	for (const auto& wanted : wanted_) {
 		if (canceled())
 			return true;
@@ -296,8 +315,7 @@ bool DeepcacheArchiveWorker::loadArchive() {
 			std::lock_guard<std::mutex> lock(mutex_);
 			decoded_.push_back(std::move(preview));
 		}
-		readyKeys_.insert(wanted.first);
-		readyCount_.store(++ready, std::memory_order_relaxed);
+		markReady(wanted.first);
 	}
 	setState(entries_.empty() ? DatabaseState::EMPTY : DatabaseState::READY);
 	return true;
@@ -372,8 +390,7 @@ bool DeepcacheArchiveWorker::appendPreview(PreviewWrite write) {
 	entries_[write.cacheKey] = std::move(entry);
 	const auto wanted = wanted_.find(write.cacheKey);
 	if (wanted != wanted_.end() && wanted->second == entries_[write.cacheKey].fingerprint) {
-		readyKeys_.insert(write.cacheKey);
-		readyCount_.store(static_cast<int>(readyKeys_.size()), std::memory_order_relaxed);
+		markReady(write.cacheKey);
 	}
 	packBytes_.store(offset + static_cast<std::uint64_t>(encodedLength), std::memory_order_relaxed);
 	if (canceled())

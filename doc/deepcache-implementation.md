@@ -105,7 +105,7 @@ the Deepcache browser during conflict retirement. It mirrors the relevant Rack
 `FramebufferWidget::onContextDestroy()` contract and avoids destructor-time GL
 deletion after the Window has gone away.
 
-The experimental framebuffer warm pass runs from a transparent scene-level host
+The framebuffer warm pass always runs from a transparent scene-level host
 during Rack's normal draw phase. After the resident-widget phase completes, it
 calls each outer preview `FramebufferWidget::render()` without compositing the
 result, validates the resulting NanoVG image, and promotes the card to
@@ -113,17 +113,17 @@ result, validates the resulting NanoVG image, and promotes the card to
 cooperative UI budget. Transient failures are retried twice; a permanent failure
 is isolated to that preview and remains available for Rack's normal lazy draw.
 
-The setting remains disabled by default because warming every installed preview
-can use substantial GPU memory. Enabling it applies immediately to an existing
-resident cache as well as future rebuilds. Graphics-context destruction
+Framebuffer warming is a required part of Deepcache and has no disable option,
+because it produces the raster assets used by the persistent database.
+Graphics-context destruction
 downgrades framebuffer-ready cards to resident, clears stale completion, and
 schedules a raster-only rewarm for the next valid draw context.
 
-The panel exposes the two phases separately. A bordered violet bar reports module
-widget construction as a percentage, with the constructed-module count beneath
-it. A second bordered cyan bar reports framebuffer attempts and
-shows `OFF` while the experimental pass is disabled. READY is published only
-after both bars have completed when framebuffer warming is enabled.
+The panel exposes the two phases separately. A bordered violet bar reports
+completed plugin builds as a percentage, with the completed-plugin count beneath
+it. A second bordered cyan bar reports plugins whose complete model set has
+finished framebuffer warming. Hidden models remain part of their owning plugin's
+work without appearing as surprising extra units in the displayed count.
 
 ## Thread boundary
 
