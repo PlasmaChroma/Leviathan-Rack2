@@ -13,8 +13,7 @@ Leviathan VCV Rack plugin
 * **Category:** Utility
 * **Initial width:** 4 HP
 * **Description:** Preloads module-browser previews for faster browsing.
-* **MVP storage:** Process memory only
-* **Future storage:** Persistent database-backed raster preview cache
+* **Storage:** Persistent QOI raster previews plus hot process/GPU memory
 
 ---
 
@@ -32,7 +31,16 @@ The MVP must prove that:
 6. Removing Deepcache restores the browser that was active before Deepcache.
 7. Rack can close without OpenGL or framebuffer teardown crashes.
 
-The MVP does not need to serialize previews to disk. Persistent database storage is a future phase, but the implementation should avoid architectural choices that make a database backend difficult later.
+Deepcache persists completed framebuffer previews beneath
+`<Rack user>/Leviathan/Deepcache`. The complete compressed pack is read
+sequentially into RAM at startup, decoded off the UI thread, and uploaded to
+NanoVG before cached cards are considered framebuffer-ready.
+
+The database is append-only during normal updates. Changed previews append new
+QOI payloads and atomically publish a compact binary index; superseded payloads
+become reclaimable dead space. Compaction copies live payloads into temporary
+files and commits them as a recoverable pair. Shutdown cooperatively cancels
+database work and joins the worker instead of waiting for all remaining work.
 
 ---
 

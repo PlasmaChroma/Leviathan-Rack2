@@ -1,5 +1,32 @@
 # Deepcache MVP implementation notes
 
+## Persistent raster database
+
+Deepcache stores lossless QOI payloads in
+`<Rack user>/Leviathan/Deepcache/previews-v1.pack` with a versioned binary index.
+The binary index is intentionally small and fast to validate; it records each
+cache key, artifact fingerprint, pack offset and length, image dimensions, and
+payload checksum.
+
+Startup performs one sequential read of the complete pack. QOI decoding runs on
+the archive worker, while NanoVG image creation remains on Rack's draw thread.
+Decoded RGBA and compressed pack data remain resident so browser scrolling does
+not cause disk reads and graphics-context recreation does not require disk I/O.
+
+Normal updates append instead of rewriting the pack. Compaction is requested
+automatically only after at least 64 MB is reclaimable and dead space reaches
+25%, or manually from the module menu. A transaction marker and old pack/index
+backups make an interrupted compaction recoverable on the next launch.
+
+Plugin render fingerprints include the plugin identity, version, path, Rack's
+high-resolution plugin modification timestamp, relevant artifact sizes, panel
+theme, and the Deepcache raster schema. Development builds therefore invalidate
+without requiring a semantic version change.
+
+The archive worker checks cancellation between entries and before commits. The
+module destructor signals cancellation and joins it before browser teardown;
+temporary data is discarded or recovered on the next launch.
+
 Deepcache targets the Rack source available beside this repository at commit
 `061ccf63`. It intentionally uses only public SDK declarations from plugin code,
 although several required behaviors depend on conventions observed in Rack's

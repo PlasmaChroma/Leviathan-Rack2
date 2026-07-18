@@ -92,7 +92,7 @@ TestResult testStableCacheKey() {
 	const std::string key = deepcache::makePreviewCacheKey(models[0]);
 	models[0].modelIndex = 12345;
 	const bool pass = key == deepcache::makePreviewCacheKey(models[0]) &&
-	                  key == "deepcache-v1/alpha/2.0/zeta";
+	                  key == "deepcache-raster-v1/alpha/2.0/zeta";
 	return {"cache key excludes runtime model index", pass, key};
 }
 

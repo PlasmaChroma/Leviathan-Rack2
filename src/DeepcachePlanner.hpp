@@ -47,6 +47,7 @@ struct ModelDescriptor {
 	std::string modelSlug;
 	std::string brand;
 	std::string displayName;
+	std::string artifactFingerprint;
 	bool favorite = false;
 	bool hidden = false;
 
@@ -58,13 +59,15 @@ struct ModelDescriptor {
 	                std::string brand,
 	                std::string displayName,
 	                bool favorite,
-	                bool hidden)
+	                bool hidden,
+	                std::string artifactFingerprint = std::string())
 		: modelIndex(modelIndex),
 		  pluginSlug(std::move(pluginSlug)),
 		  pluginVersion(std::move(pluginVersion)),
 		  modelSlug(std::move(modelSlug)),
 		  brand(std::move(brand)),
 		  displayName(std::move(displayName)),
+		  artifactFingerprint(std::move(artifactFingerprint)),
 		  favorite(favorite),
 		  hidden(hidden) {
 	}
