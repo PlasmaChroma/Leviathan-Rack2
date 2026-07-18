@@ -14,6 +14,11 @@ namespace {
 
 const char kIndexMagic[8] = {'L', 'V', 'D', 'C', 'I', 'D', 'X', '1'};
 const std::uint32_t kIndexVersion = 1;
+const std::size_t kMaxDecodedQueueEntries = 16;
+const std::size_t kMaxDecodedQueueBytes = 64u * 1024u * 1024u;
+const std::size_t kMaxWriteQueueEntries = 16;
+const std::size_t kMaxWriteQueueBytes = 64u * 1024u * 1024u;
+const std::size_t kReadChunkBytes = 4u * 1024u * 1024u;
 
 template <typename T>
 bool readValue(std::istream& stream, T& value) {
@@ -100,6 +105,10 @@ void DeepcacheArchiveWorker::start(const std::string& directory, std::vector<Arc
 	packPath_ = directory + "/previews-v1.pack";
 	indexPath_ = directory + "/index-v1.bin";
 	for (const ArchiveWantedEntry& entry : wanted) {
+		if (wanted_.count(entry.cacheKey) != 0) {
+			wanted_[entry.cacheKey] = entry.fingerprint;
+			continue;
+		}
 		wanted_[entry.cacheKey] = entry.fingerprint;
 		const std::string pluginKey = entry.pluginKey.empty() ? entry.cacheKey : entry.pluginKey;
 		wantedPluginByKey_[entry.cacheKey] = pluginKey;
@@ -114,28 +123,51 @@ void DeepcacheArchiveWorker::start(const std::string& directory, std::vector<Arc
 	}
 	catch (...) {
 		started_ = false;
+		fatalError_.store(true, std::memory_order_relaxed);
 		errorCode_.store(4, std::memory_order_relaxed);
 		setState(DatabaseState::ERROR);
 	}
 }
 
-void DeepcacheArchiveWorker::enqueue(PreviewWrite write) {
-	if (!started_ || canceled() || write.rgba.empty())
-		return;
+bool DeepcacheArchiveWorker::enqueue(PreviewWrite write) {
+	if (!started_ || canceled() || fatalError_.load(std::memory_order_relaxed) || write.rgba.empty() ||
+	    write.rgba.size() > 128u * 1024u * 1024u)
+		return false;
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
+		if (writes_.size() >= kMaxWriteQueueEntries || queuedWriteBytes_ >= kMaxWriteQueueBytes)
+			return false;
+		queuedWriteBytes_ += write.rgba.size();
 		writes_.push_back(std::move(write));
 	}
 	condition_.notify_one();
+	return true;
+}
+
+bool DeepcacheArchiveWorker::canAcceptWrite() const {
+	if (!started_ || canceled() || fatalError_.load(std::memory_order_relaxed))
+		return true;
+	std::lock_guard<std::mutex> lock(mutex_);
+	return writes_.size() < kMaxWriteQueueEntries && queuedWriteBytes_ < kMaxWriteQueueBytes;
 }
 
 bool DeepcacheArchiveWorker::tryPopDecoded(DecodedPreview& preview) {
-	std::lock_guard<std::mutex> lock(mutex_);
-	if (decoded_.empty())
-		return false;
-	preview = std::move(decoded_.front());
-	decoded_.pop_front();
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		if (decoded_.empty())
+			return false;
+		const std::size_t byteCount = decoded_.front().rgba.size();
+		preview = std::move(decoded_.front());
+		decoded_.pop_front();
+		decodedBytes_ = byteCount <= decodedBytes_ ? decodedBytes_ - byteCount : 0;
+	}
+	condition_.notify_one();
 	return true;
+}
+
+bool DeepcacheArchiveWorker::hasPendingDecoded() const {
+	std::lock_guard<std::mutex> lock(mutex_);
+	return !decoded_.empty();
 }
 
 void DeepcacheArchiveWorker::markReady(const std::string& cacheKey) {
@@ -154,7 +186,7 @@ void DeepcacheArchiveWorker::markReady(const std::string& cacheKey) {
 }
 
 void DeepcacheArchiveWorker::requestCompaction() {
-	if (!started_ || canceled())
+	if (!started_ || canceled() || fatalError_.load(std::memory_order_relaxed))
 		return;
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
@@ -175,49 +207,88 @@ void DeepcacheArchiveWorker::shutdown() {
 }
 
 void DeepcacheArchiveWorker::run() {
-	if (!loadArchive() && !canceled()) {
-		errorCode_.store(1, std::memory_order_relaxed);
-		setState(DatabaseState::ERROR);
-	}
-	while (!canceled()) {
-		PreviewWrite write;
-		bool compact = false;
-		{
-			std::unique_lock<std::mutex> lock(mutex_);
-			condition_.wait(lock, [&]() { return canceled() || !writes_.empty() || compactRequested_; });
-			if (canceled())
-				break;
-			if (!writes_.empty()) {
-				write = std::move(writes_.front());
-				writes_.pop_front();
+	try {
+		if (!loadArchive()) {
+			if (!canceled()) {
+				fatalError_.store(true, std::memory_order_relaxed);
+				errorCode_.store(1, std::memory_order_relaxed);
+				setState(DatabaseState::ERROR);
 			}
-			else {
-				compact = compactRequested_;
-				compactRequested_ = false;
-			}
+			return;
 		}
-		const bool ok = compact ? compactArchive() : appendPreview(std::move(write));
-		if (!ok && !canceled()) {
-			errorCode_.store(compact ? 3 : 2, std::memory_order_relaxed);
-			setState(DatabaseState::ERROR);
-		}
-		else if (!canceled()) {
-			std::lock_guard<std::mutex> lock(mutex_);
-			if (!compact && writes_.empty() && !compactRequested_) {
-				std::uint64_t liveBytes = 0;
-				for (const auto& entry : entries_)
-					liveBytes += entry.second.length;
-				const std::uint64_t packBytes = packBytes_.load(std::memory_order_relaxed);
-				const std::uint64_t deadBytes = packBytes > liveBytes ? packBytes - liveBytes : 0;
-				if (deadBytes >= 64ull * 1024ull * 1024ull && deadBytes * 4ull >= packBytes) {
-					compactRequested_ = true;
-					condition_.notify_one();
+		while (!canceled()) {
+			PreviewWrite write;
+			bool compact = false;
+			{
+				std::unique_lock<std::mutex> lock(mutex_);
+				condition_.wait(lock, [&]() { return canceled() || !writes_.empty() || compactRequested_; });
+				if (canceled())
+					break;
+				if (!writes_.empty()) {
+					const std::size_t byteCount = writes_.front().rgba.size();
+					write = std::move(writes_.front());
+					writes_.pop_front();
+					queuedWriteBytes_ = byteCount <= queuedWriteBytes_ ? queuedWriteBytes_ - byteCount : 0;
+				}
+				else {
+					compact = compactRequested_;
+					compactRequested_ = false;
 				}
 			}
-			if (writes_.empty() && !compactRequested_)
-				setState(entries_.empty() ? DatabaseState::EMPTY : DatabaseState::READY);
+			const bool ok = compact ? compactArchive() : appendPreview(std::move(write));
+			if (!ok && !canceled()) {
+				fatalError_.store(true, std::memory_order_relaxed);
+				errorCode_.store(compact ? 3 : 2, std::memory_order_relaxed);
+				setState(DatabaseState::ERROR);
+				return;
+			}
+			else if (!canceled()) {
+				std::lock_guard<std::mutex> lock(mutex_);
+				if (!compact && writes_.empty() && !compactRequested_) {
+					std::uint64_t liveBytes = 0;
+					for (const auto& entry : entries_)
+						liveBytes += entry.second.length;
+					const std::uint64_t packBytes = packBytes_.load(std::memory_order_relaxed);
+					const std::uint64_t deadBytes = packBytes > liveBytes ? packBytes - liveBytes : 0;
+					if (deadBytes >= 64ull * 1024ull * 1024ull && deadBytes * 4ull >= packBytes) {
+						compactRequested_ = true;
+						condition_.notify_one();
+					}
+				}
+				if (writes_.empty() && !compactRequested_)
+					setState(entries_.empty() ? DatabaseState::EMPTY : DatabaseState::READY);
+			}
 		}
 	}
+	catch (...) {
+		if (!canceled()) {
+			fatalError_.store(true, std::memory_order_relaxed);
+			errorCode_.store(5, std::memory_order_relaxed);
+			setState(DatabaseState::ERROR);
+		}
+	}
+}
+
+bool DeepcacheArchiveWorker::readPackFile(const std::string& path, std::vector<std::uint8_t>& bytes) {
+	std::ifstream input(path.c_str(), std::ios::binary | std::ios::ate);
+	if (!input)
+		return false;
+	const std::streamoff fileSize = input.tellg();
+	if (fileSize < 0 || static_cast<std::uint64_t>(fileSize) > std::numeric_limits<std::size_t>::max())
+		return false;
+	std::vector<std::uint8_t> loaded(static_cast<std::size_t>(fileSize));
+	input.seekg(0);
+	std::size_t offset = 0;
+	while (offset < loaded.size()) {
+		if (canceled())
+			return false;
+		const std::size_t count = std::min(kReadChunkBytes, loaded.size() - offset);
+		if (!input.read(reinterpret_cast<char*>(loaded.data() + offset), static_cast<std::streamsize>(count)))
+			return false;
+		offset += count;
+	}
+	bytes.swap(loaded);
+	return true;
 }
 
 bool DeepcacheArchiveWorker::loadIndex(const std::string& path) {
@@ -256,29 +327,28 @@ bool DeepcacheArchiveWorker::loadArchive() {
 		if (oldPack) {
 			oldPack.close();
 			std::remove(packPath_.c_str());
-			std::rename(packBackup.c_str(), packPath_.c_str());
+			if (std::rename(packBackup.c_str(), packPath_.c_str()) != 0)
+				return false;
 		}
 		std::ifstream oldIndex(indexBackup.c_str(), std::ios::binary);
 		if (oldIndex) {
 			oldIndex.close();
 			std::remove(indexPath_.c_str());
-			std::rename(indexBackup.c_str(), indexPath_.c_str());
+			if (std::rename(indexBackup.c_str(), indexPath_.c_str()) != 0)
+				return false;
 		}
-		std::remove(compactMarker.c_str());
+		if (std::remove(compactMarker.c_str()) != 0)
+			return false;
 		std::remove((packPath_ + ".tmp").c_str());
 		std::remove((indexPath_ + ".compact").c_str());
 	}
-	std::ifstream pack(packPath_.c_str(), std::ios::binary | std::ios::ate);
-	if (!pack) {
+	std::ifstream packExists(packPath_.c_str(), std::ios::binary);
+	if (!packExists) {
 		setState(DatabaseState::EMPTY);
 		return true;
 	}
-	const std::streamoff size = pack.tellg();
-	if (size < 0)
-		return false;
-	packedBytes_.resize(static_cast<std::size_t>(size));
-	pack.seekg(0);
-	if (size > 0 && !pack.read(reinterpret_cast<char*>(packedBytes_.data()), size))
+	packExists.close();
+	if (!readPackFile(packPath_, packedBytes_))
 		return false;
 	packBytes_.store(packedBytes_.size(), std::memory_order_relaxed);
 	if (!loadIndex(indexPath_) && !loadIndex(indexPath_ + ".bak")) {
@@ -293,30 +363,52 @@ bool DeepcacheArchiveWorker::loadArchive() {
 			++it;
 	}
 
+	std::vector<std::string> invalidEntries;
 	for (const auto& wanted : wanted_) {
 		if (canceled())
 			return true;
 		const auto found = entries_.find(wanted.first);
-		if (found == entries_.end() || found->second.fingerprint != wanted.second)
+		if (found == entries_.end())
 			continue;
+		if (found->second.fingerprint != wanted.second) {
+			invalidEntries.push_back(wanted.first);
+			continue;
+		}
 		const Entry& entry = found->second;
-		if (entry.offset > packedBytes_.size() || entry.length > packedBytes_.size() - entry.offset)
+		if (entry.offset > packedBytes_.size() || entry.length > packedBytes_.size() - entry.offset) {
+			invalidEntries.push_back(wanted.first);
 			continue;
+		}
 		const std::uint8_t* payload = packedBytes_.data() + entry.offset;
-		if (deepcacheChecksum(payload, static_cast<std::size_t>(entry.length)) != entry.checksum)
+		if (deepcacheChecksum(payload, static_cast<std::size_t>(entry.length)) != entry.checksum) {
+			invalidEntries.push_back(wanted.first);
 			continue;
+		}
 		DecodedPreview preview;
 		preview.cacheKey = wanted.first;
 		preview.fingerprint = wanted.second;
 		if (!decodeQoi(payload, static_cast<std::size_t>(entry.length), preview) ||
-		    preview.width != static_cast<int>(entry.width) || preview.height != static_cast<int>(entry.height))
+		    preview.width != static_cast<int>(entry.width) || preview.height != static_cast<int>(entry.height)) {
+			invalidEntries.push_back(wanted.first);
 			continue;
+		}
 		{
-			std::lock_guard<std::mutex> lock(mutex_);
+			std::unique_lock<std::mutex> lock(mutex_);
+			const std::size_t byteCount = preview.rgba.size();
+			condition_.wait(lock, [&]() {
+				return canceled() ||
+				       (decoded_.size() < kMaxDecodedQueueEntries &&
+				        (decoded_.empty() || decodedBytes_ + byteCount <= kMaxDecodedQueueBytes));
+			});
+			if (canceled())
+				return false;
+			decodedBytes_ += byteCount;
 			decoded_.push_back(std::move(preview));
 		}
 		markReady(wanted.first);
 	}
+	for (const std::string& cacheKey : invalidEntries)
+		entries_.erase(cacheKey);
 	setState(entries_.empty() ? DatabaseState::EMPTY : DatabaseState::READY);
 	return true;
 }
@@ -349,6 +441,15 @@ bool DeepcacheArchiveWorker::saveIndexAtomically() {
 bool DeepcacheArchiveWorker::appendPreview(PreviewWrite write) {
 	if (canceled())
 		return true;
+	const auto wanted = wanted_.find(write.cacheKey);
+	if (wanted == wanted_.end() || wanted->second != write.fingerprint)
+		return true;
+	const std::uint64_t byteCount = write.width > 0 && write.height > 0
+		? static_cast<std::uint64_t>(write.width) * static_cast<std::uint64_t>(write.height) * 4ull
+		: 0;
+	if (write.width <= 0 || write.height <= 0 || write.width > 8192 || write.height > 8192 ||
+	    byteCount > 128ull * 1024ull * 1024ull || byteCount != write.rgba.size())
+		return false;
 	setState(DatabaseState::UPDATING);
 	qoi_desc desc = {};
 	desc.width = static_cast<unsigned int>(write.width);
@@ -388,14 +489,13 @@ bool DeepcacheArchiveWorker::appendPreview(PreviewWrite write) {
 	packedBytes_.insert(packedBytes_.end(), encodedBytes, encodedBytes + encodedLength);
 	std::free(encoded);
 	entries_[write.cacheKey] = std::move(entry);
-	const auto wanted = wanted_.find(write.cacheKey);
-	if (wanted != wanted_.end() && wanted->second == entries_[write.cacheKey].fingerprint) {
-		markReady(write.cacheKey);
-	}
 	packBytes_.store(offset + static_cast<std::uint64_t>(encodedLength), std::memory_order_relaxed);
 	if (canceled())
 		return true; // Appended bytes are harmless until the index commits.
-	return saveIndexAtomically();
+	if (!saveIndexAtomically())
+		return false;
+	markReady(write.cacheKey);
+	return true;
 }
 
 bool DeepcacheArchiveWorker::compactArchive() {
@@ -451,41 +551,62 @@ bool DeepcacheArchiveWorker::compactArchive() {
 	const std::string markerPath = directory_ + "/compaction-v1.pending";
 	{
 		std::ofstream marker(markerPath.c_str(), std::ios::binary | std::ios::trunc);
-		if (!marker)
+		if (!marker) {
+			entries_ = std::move(previous);
+			std::remove(temporaryPack.c_str());
+			std::remove(stagedIndex.c_str());
 			return false;
+		}
 		marker << "pending";
 		marker.flush();
-		if (!marker)
+		if (!marker) {
+			marker.close();
+			entries_ = std::move(previous);
+			std::remove(markerPath.c_str());
+			std::remove(temporaryPack.c_str());
+			std::remove(stagedIndex.c_str());
 			return false;
+		}
 	}
 	const std::string packBackup = packPath_ + ".bak";
 	const std::string indexBackup = indexPath_ + ".bak";
 	std::remove(packBackup.c_str());
 	std::remove(indexBackup.c_str());
-	if (std::rename(packPath_.c_str(), packBackup.c_str()) != 0 ||
-	    std::rename(temporaryPack.c_str(), packPath_.c_str()) != 0 ||
-	    std::rename(indexPath_.c_str(), indexBackup.c_str()) != 0 ||
-	    std::rename(stagedIndex.c_str(), indexPath_.c_str()) != 0) {
-		std::remove(packPath_.c_str());
-		std::rename(packBackup.c_str(), packPath_.c_str());
-		std::remove(indexPath_.c_str());
-		std::rename(indexBackup.c_str(), indexPath_.c_str());
-		std::remove(markerPath.c_str());
+	bool packBackedUp = false;
+	bool packInstalled = false;
+	bool indexBackedUp = false;
+	bool indexInstalled = false;
+	packBackedUp = std::rename(packPath_.c_str(), packBackup.c_str()) == 0;
+	if (packBackedUp)
+		packInstalled = std::rename(temporaryPack.c_str(), packPath_.c_str()) == 0;
+	if (packInstalled)
+		indexBackedUp = std::rename(indexPath_.c_str(), indexBackup.c_str()) == 0;
+	if (indexBackedUp)
+		indexInstalled = std::rename(stagedIndex.c_str(), indexPath_.c_str()) == 0;
+	if (!indexInstalled) {
+		if (packBackedUp) {
+			if (packInstalled)
+				std::remove(packPath_.c_str());
+			std::rename(packBackup.c_str(), packPath_.c_str());
+		}
+		if (indexBackedUp) {
+			std::rename(indexBackup.c_str(), indexPath_.c_str());
+		}
+		// Keep the marker until a fully successful commit. If either best-effort
+		// restore above failed, the next launch can finish recovery from whatever
+		// backup still exists.
 		entries_ = std::move(previous);
 		return false;
 	}
 	std::remove(markerPath.c_str());
 	std::remove(packBackup.c_str());
 	std::remove(indexBackup.c_str());
-	std::ifstream input(packPath_.c_str(), std::ios::binary | std::ios::ate);
-	if (!input)
+	std::vector<std::uint8_t> compactedBytes;
+	if (!readPackFile(packPath_, compactedBytes))
 		return false;
-	packedBytes_.resize(static_cast<std::size_t>(input.tellg()));
-	input.seekg(0);
-	if (!packedBytes_.empty())
-		input.read(reinterpret_cast<char*>(packedBytes_.data()), packedBytes_.size());
+	packedBytes_.swap(compactedBytes);
 	packBytes_.store(packedBytes_.size(), std::memory_order_relaxed);
-	return static_cast<bool>(input) || packedBytes_.empty();
+	return true;
 }
 
 }  // namespace deepcache

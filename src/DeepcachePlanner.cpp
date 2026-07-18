@@ -93,8 +93,17 @@ PreviewPlanResult planPreviewRequests(const std::vector<ModelDescriptor>& descri
 	struct PlannedDescriptor {
 		const ModelDescriptor* descriptor = nullptr;
 		int priority = 0;
+		std::string normalizedBrand;
+		std::string normalizedDisplayName;
+		std::string normalizedPluginSlug;
+		std::string normalizedModelSlug;
 		PlannedDescriptor(const ModelDescriptor* descriptor, int priority)
-			: descriptor(descriptor), priority(priority) {
+			: descriptor(descriptor),
+			  priority(priority),
+			  normalizedBrand(lowercase(descriptor->brand)),
+			  normalizedDisplayName(lowercase(descriptor->displayName)),
+			  normalizedPluginSlug(lowercase(descriptor->pluginSlug)),
+			  normalizedModelSlug(lowercase(descriptor->modelSlug)) {
 		}
 	};
 
@@ -122,12 +131,10 @@ PreviewPlanResult planPreviewRequests(const std::vector<ModelDescriptor>& descri
 	}
 
 	std::stable_sort(planned.begin(), planned.end(), [](const PlannedDescriptor& a, const PlannedDescriptor& b) {
-		const ModelDescriptor& da = *a.descriptor;
-		const ModelDescriptor& db = *b.descriptor;
-		return std::make_tuple(a.priority, lowercase(da.brand), lowercase(da.displayName),
-		                       lowercase(da.pluginSlug), lowercase(da.modelSlug), da.modelIndex) <
-		       std::make_tuple(b.priority, lowercase(db.brand), lowercase(db.displayName),
-		                       lowercase(db.pluginSlug), lowercase(db.modelSlug), db.modelIndex);
+		return std::tie(a.priority, a.normalizedBrand, a.normalizedDisplayName,
+		                a.normalizedPluginSlug, a.normalizedModelSlug, a.descriptor->modelIndex) <
+		       std::tie(b.priority, b.normalizedBrand, b.normalizedDisplayName,
+		                b.normalizedPluginSlug, b.normalizedModelSlug, b.descriptor->modelIndex);
 	});
 
 	result.requests.reserve(planned.size());
@@ -174,6 +181,7 @@ void PreviewPlannerWorker::submit(std::vector<ModelDescriptor> descriptors, Prev
 	jobSerial_++;
 	activeGeneration_ = input.generation;
 	readyGeneration_ = 0;
+	failedGeneration_ = 0;
 	plannedCount_ = 0;
 	output_.clear();
 	pendingDescriptors_ = std::move(descriptors);
@@ -190,6 +198,7 @@ void PreviewPlannerWorker::cancel(std::uint64_t generation) {
 	hasJob_ = false;
 	activeGeneration_ = 0;
 	readyGeneration_ = 0;
+	failedGeneration_ = 0;
 	plannedCount_ = 0;
 	pendingDescriptors_.clear();
 	output_.clear();
@@ -237,6 +246,11 @@ bool PreviewPlannerWorker::isPlanReady(std::uint64_t generation) const {
 	return readyGeneration_ == generation;
 }
 
+bool PreviewPlannerWorker::hasPlanFailed(std::uint64_t generation) const {
+	std::lock_guard<std::mutex> lock(mutex_);
+	return failedGeneration_ == generation;
+}
+
 std::size_t PreviewPlannerWorker::plannedRequestCount(std::uint64_t generation) const {
 	std::lock_guard<std::mutex> lock(mutex_);
 	return readyGeneration_ == generation ? plannedCount_ : 0;
@@ -277,12 +291,19 @@ void PreviewPlannerWorker::run() {
 			if (stopping_)
 				return;
 			serial = jobSerial_;
-			descriptors = pendingDescriptors_;
-			input = pendingInput_;
+			descriptors = std::move(pendingDescriptors_);
+			input = std::move(pendingInput_);
 			hasJob_ = false;
 		}
 
-		PreviewPlanResult result = planPreviewRequests(descriptors, input);
+		PreviewPlanResult result;
+		bool failed = false;
+		try {
+			result = planPreviewRequests(descriptors, input);
+		}
+		catch (...) {
+			failed = true;
+		}
 
 		std::unique_lock<std::mutex> lock(mutex_);
 		condition_.wait(lock, [&]() { return stopping_ || !paused_ || serial != jobSerial_; });
@@ -290,6 +311,13 @@ void PreviewPlannerWorker::run() {
 			return;
 		if (serial != jobSerial_ || input.generation != activeGeneration_)
 			continue;
+		if (failed) {
+			output_.clear();
+			plannedCount_ = 0;
+			readyGeneration_ = 0;
+			failedGeneration_ = input.generation;
+			continue;
+		}
 		output_.insert(output_.end(), std::make_move_iterator(result.requests.begin()),
 		               std::make_move_iterator(result.requests.end()));
 		plannedCount_ = output_.size();

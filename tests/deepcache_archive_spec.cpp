@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -65,6 +66,20 @@ bool waitUntil(Predicate predicate) {
 		std::this_thread::sleep_for(std::chrono::milliseconds(2));
 	}
 	return false;
+}
+
+bool corruptFirstByte(const std::string& path) {
+	std::fstream stream(path.c_str(), std::ios::binary | std::ios::in | std::ios::out);
+	if (!stream)
+		return false;
+	char byte = 0;
+	if (!stream.read(&byte, 1))
+		return false;
+	byte ^= 0x5a;
+	stream.seekp(0);
+	stream.write(&byte, 1);
+	stream.flush();
+	return static_cast<bool>(stream);
 }
 
 }  // namespace
@@ -168,10 +183,106 @@ int main() {
 		}
 	}
 
+	// A damaged payload must be treated as a cache miss, then replaced by a
+	// normal append without exposing corrupt pixels or poisoning the archive.
+	if (!corruptFirstByte(directory + "/previews-v1.pack")) {
+		std::cerr << "[FAIL] could not prepare corrupt pack test\n";
+		return 1;
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(directory, {{"one", "fp-one", "plugin-a"}});
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] corrupt pack reload did not finish\n";
+			return 1;
+		}
+		deepcache::DecodedPreview preview;
+		if (worker.tryPopDecoded(preview) || worker.readyCount() != 0 ||
+		    worker.state() == deepcache::DatabaseState::ERROR) {
+			std::cerr << "[FAIL] corrupt pack payload was not isolated as a cache miss\n";
+			return 1;
+		}
+		deepcache::PreviewWrite repair;
+		repair.cacheKey = "one";
+		repair.fingerprint = "fp-one";
+		repair.width = 13;
+		repair.height = 9;
+		repair.rgba = updatedPixels;
+		worker.enqueue(std::move(repair));
+		if (!waitUntil([&]() { return worker.readyCount() == 1; })) {
+			std::cerr << "[FAIL] corrupt pack payload was not repairable\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(directory, {{"one", "fp-one", "plugin-a"}});
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] repaired pack reload did not finish\n";
+			return 1;
+		}
+		deepcache::DecodedPreview preview;
+		const bool repaired = worker.tryPopDecoded(preview) && preview.rgba == updatedPixels;
+		worker.shutdown();
+		if (!repaired) {
+			std::cerr << "[FAIL] repaired pack did not persist readable pixels\n";
+			return 1;
+		}
+	}
+
+	// A damaged index must likewise discard metadata, rebuild from a normal
+	// write, and produce a valid index for the next process launch.
+	if (!corruptFirstByte(directory + "/index-v1.bin")) {
+		std::cerr << "[FAIL] could not prepare corrupt index test\n";
+		return 1;
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(directory, {{"one", "fp-one", "plugin-a"}});
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] corrupt index reload did not finish\n";
+			return 1;
+		}
+		deepcache::DecodedPreview preview;
+		if (worker.tryPopDecoded(preview) || worker.readyCount() != 0 ||
+		    worker.state() == deepcache::DatabaseState::ERROR) {
+			std::cerr << "[FAIL] corrupt index was not isolated as an empty cache\n";
+			return 1;
+		}
+		deepcache::PreviewWrite repair;
+		repair.cacheKey = "one";
+		repair.fingerprint = "fp-one";
+		repair.width = 13;
+		repair.height = 9;
+		repair.rgba = updatedPixels;
+		worker.enqueue(std::move(repair));
+		if (!waitUntil([&]() { return worker.readyCount() == 1; })) {
+			std::cerr << "[FAIL] corrupt index was not repairable\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(directory, {{"one", "fp-one", "plugin-a"}});
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] repaired index reload did not finish\n";
+			return 1;
+		}
+		deepcache::DecodedPreview preview;
+		const bool repaired = worker.tryPopDecoded(preview) && preview.rgba == updatedPixels;
+		worker.shutdown();
+		if (!repaired) {
+			std::cerr << "[FAIL] repaired index did not persist readable pixels\n";
+			return 1;
+		}
+	}
+
 	removeDirectory(directory);
 	const bool pass = decodedLatest && staleRejected && compactedSize < sizeAfterUpdate;
 	std::cout << (pass ? "[PASS]" : "[FAIL]")
-	          << " append-only QOI archive reloads, invalidates, compacts, and cancels safely"
+	          << " append-only QOI archive reloads, invalidates, compacts, cancels, and repairs corruption"
 	          << " :: append=" << sizeAfterUpdate << " compact=" << compactedSize << "\n";
 	return pass ? 0 : 1;
 }

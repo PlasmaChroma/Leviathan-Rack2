@@ -448,6 +448,7 @@ public:
 	void clear() {
 		if (!browser_)
 			return;
+		startRequested_ = false;
 		if (activeGeneration_ != 0)
 			worker_.cancel(activeGeneration_);
 		activeGeneration_ = 0;
@@ -525,6 +526,12 @@ public:
 		if (startRequested_ && archiveReadyForPlanning()) {
 			startRequested_ = false;
 			start();
+			return;
+		}
+
+		if (state_ == deepcache::CacheState::PLANNING && worker_.hasPlanFailed(activeGeneration_)) {
+			failed_++;
+			setState(deepcache::CacheState::ERROR);
 			return;
 		}
 
@@ -616,6 +623,8 @@ public:
 		const double budgetMs = std::max(0.5, module_->uiBudgetMicros.load(std::memory_order_relaxed) / 1000.0);
 		int processedThisFrame = 0;
 		while (processedThisFrame < 4 && !framebufferWarmQueue_.empty()) {
+			if (!archive_.canAcceptWrite())
+				break;
 			if (processedThisFrame > 0 && (system::getTime() - frameStart) * 1000.0 >= budgetMs)
 				break;
 			auto request = framebufferWarmQueue_.front();
@@ -722,7 +731,8 @@ private:
 
 	bool archiveReadyForPlanning() const {
 		const deepcache::DatabaseState databaseState = archive_.state();
-		return databaseState != deepcache::DatabaseState::LOADING && persistentUploadQueue_.empty();
+		return databaseState != deepcache::DatabaseState::LOADING &&
+		       !archive_.hasPendingDecoded() && persistentUploadQueue_.empty();
 	}
 
 	void initializeArchive() {
@@ -750,21 +760,28 @@ private:
 	}
 
 	void drainArchiveDecoded() {
+		const double startedAt = system::getTime();
+		const double budgetMs = std::max(0.5, module_->uiBudgetMicros.load(std::memory_order_relaxed) / 1000.0);
+		int drained = 0;
 		deepcache::DecodedPreview preview;
-		while (archive_.tryPopDecoded(preview)) {
+		while (drained < 16 && archive_.tryPopDecoded(preview)) {
 			if (ignoreArchiveResults_) {
 				preview = deepcache::DecodedPreview();
-				continue;
 			}
-			const auto found = modelIndexByCacheKey_.find(preview.cacheKey);
-			if (found != modelIndexByCacheKey_.end()) {
-				DeepcacheModelBox* box = browser_->getModelBox(found->second);
-				if (box && box->installDecodedPreview(std::move(preview))) {
-					persistentModelIndices_.insert(found->second);
-					persistentUploadQueue_.push_back(found->second);
+			else {
+				const auto found = modelIndexByCacheKey_.find(preview.cacheKey);
+				if (found != modelIndexByCacheKey_.end()) {
+					DeepcacheModelBox* box = browser_->getModelBox(found->second);
+					if (box && box->installDecodedPreview(std::move(preview))) {
+						persistentModelIndices_.insert(found->second);
+						persistentUploadQueue_.push_back(found->second);
+					}
 				}
 			}
 			preview = deepcache::DecodedPreview();
+			drained++;
+			if ((system::getTime() - startedAt) * 1000.0 >= budgetMs)
+				break;
 		}
 	}
 
@@ -901,12 +918,41 @@ struct DeepcacheBrowserOverlay : ui::MenuOverlay {
 				APP->scene->removeChild(previousBrowser);
 			releaseFramebuffers(previousBrowser);
 		}
-		browser = new DeepcacheBrowser(cacheManager);
-		addChild(browser);
-		APP->scene->browser = this;
-		APP->scene->addChild(this);
-		hide();
-		installed = true;
+		auto rollback = [this]() {
+			if (!APP || !APP->scene)
+				return;
+			if (APP->scene->browser == this)
+				APP->scene->browser = previousBrowser;
+			if (parent == APP->scene)
+				APP->scene->removeChild(this);
+			if (browser) {
+				releaseFramebuffers(browser);
+				if (browser->parent == this)
+					removeChild(browser);
+				delete browser;
+				browser = nullptr;
+			}
+			if (previousBrowser && !previousBrowser->parent) {
+				APP->scene->addChild(previousBrowser);
+				previousBrowser->hide();
+			}
+		};
+		try {
+			browser = new DeepcacheBrowser(cacheManager);
+			addChild(browser);
+			APP->scene->browser = this;
+			APP->scene->addChild(this);
+			hide();
+			installed = true;
+		}
+		catch (const std::exception& exception) {
+			WARN("Leviathan Deepcache: browser installation failed: %s", exception.what());
+			rollback();
+		}
+		catch (...) {
+			WARN("Leviathan Deepcache: browser installation failed: unknown exception");
+			rollback();
+		}
 	}
 
 	bool ownsBrowserSlot() const {
@@ -1399,14 +1445,18 @@ DeepcacheBrowser::DeepcacheBrowser(PreviewCacheManager* manager)
 	modelBoxes.reserve(models.size());
 	modelDescriptors.reserve(models.size());
 	browserRecords.reserve(models.size());
+	std::unordered_map<const plugin::Plugin*, std::string> pluginFingerprints;
 	for (std::size_t index = 0; index < models.size(); ++index) {
 		plugin::Model* model = models[index];
+		auto fingerprint = pluginFingerprints.find(model->plugin);
+		if (fingerprint == pluginFingerprints.end())
+			fingerprint = pluginFingerprints.emplace(model->plugin, pluginArtifactFingerprint(model->plugin)).first;
 		auto* modelBox = new DeepcacheModelBox(model, index, pluginModelOrders[model], manager);
 		modelBoxes.push_back(modelBox);
 		modelContainer->addChild(modelBox);
 		modelDescriptors.push_back({index, model->plugin->slug, model->plugin->version, model->slug,
 		                            model->plugin->brand, model->name, model->isFavorite(), model->hidden,
-		                            pluginArtifactFingerprint(model->plugin)});
+		                            fingerprint->second});
 		browserRecords.push_back(makeBrowserRecord(modelBox));
 	}
 	lastBrowserZoom = settings::browserZoom;

@@ -56,8 +56,10 @@ public:
 	DeepcacheArchiveWorker& operator=(const DeepcacheArchiveWorker&) = delete;
 
 	void start(const std::string& directory, std::vector<ArchiveWantedEntry> wanted);
-	void enqueue(PreviewWrite write);
+	bool enqueue(PreviewWrite write);
+	bool canAcceptWrite() const;
 	bool tryPopDecoded(DecodedPreview& preview);
+	bool hasPendingDecoded() const;
 	void requestCompaction();
 	void shutdown();
 
@@ -83,6 +85,7 @@ private:
 	bool loadArchive();
 	bool appendPreview(PreviewWrite write);
 	bool compactArchive();
+	bool readPackFile(const std::string& path, std::vector<std::uint8_t>& bytes);
 	bool loadIndex(const std::string& path);
 	bool saveIndexAtomically();
 	bool canceled() const { return stopping_.load(std::memory_order_relaxed); }
@@ -105,10 +108,13 @@ private:
 	std::condition_variable condition_;
 	std::thread thread_;
 	std::deque<PreviewWrite> writes_;
+	std::size_t queuedWriteBytes_ = 0;
 	std::deque<DecodedPreview> decoded_;
+	std::size_t decodedBytes_ = 0;
 	bool compactRequested_ = false;
 	bool started_ = false;
 	std::atomic<bool> stopping_ {false};
+	std::atomic<bool> fatalError_ {false};
 	std::atomic<int> state_ {static_cast<int>(DatabaseState::EMPTY)};
 	std::atomic<int> readyCount_ {0};
 	std::atomic<int> targetCount_ {0};

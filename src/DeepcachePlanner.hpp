@@ -127,6 +127,7 @@ public:
 	bool promote(std::size_t modelIndex, std::uint64_t generation);
 	bool tryPop(PreviewBuildRequest& request);
 	bool isPlanReady(std::uint64_t generation) const;
+	bool hasPlanFailed(std::uint64_t generation) const;
 	std::size_t plannedRequestCount(std::uint64_t generation) const;
 	std::size_t pendingRequestCount(std::uint64_t generation) const;
 	void shutdown();
@@ -143,6 +144,7 @@ private:
 	std::uint64_t jobSerial_ = 0;
 	std::uint64_t activeGeneration_ = 0;
 	std::uint64_t readyGeneration_ = 0;
+	std::uint64_t failedGeneration_ = 0;
 	std::size_t plannedCount_ = 0;
 	std::vector<ModelDescriptor> pendingDescriptors_;
 	PreviewPlanInput pendingInput_;
