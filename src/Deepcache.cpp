@@ -1170,12 +1170,16 @@ void DeepcacheBrandMenu::step() {
 
 	const float screenMargin = 10.f;
 	const math::Vec sceneSize = APP->scene->box.size;
-	const float availableHeight = std::max(100.f, sceneSize.y - 2.f * screenMargin);
+	const float menuTop = math::clamp(anchorPos.y, screenMargin,
+	                                  std::max(screenMargin, sceneSize.y - screenMargin));
+	const float availableHeight = std::max(1.f, sceneSize.y - menuTop - screenMargin);
 	float totalHeight = 0.f;
 	for (Widget* child : children)
 		totalHeight += child->box.size.y;
-	if (totalHeight <= availableHeight)
+	if (totalHeight <= availableHeight) {
+		box.pos.y = menuTop;
 		return;
+	}
 
 	int columnCount = 1;
 	float columnHeight = 0.f;
@@ -1209,8 +1213,7 @@ void DeepcacheBrandMenu::step() {
 	box.size = math::Vec(columnWidth * columnCount, tallestColumn);
 	box.pos.x = math::clamp(anchorPos.x, screenMargin,
 	                       std::max(screenMargin, sceneSize.x - box.size.x - screenMargin));
-	box.pos.y = math::clamp(anchorPos.y, screenMargin,
-	                       std::max(screenMargin, sceneSize.y - box.size.y - screenMargin));
+	box.pos.y = menuTop;
 }
 
 void DeepcacheBrandItem::onAction(const ActionEvent& e) {
