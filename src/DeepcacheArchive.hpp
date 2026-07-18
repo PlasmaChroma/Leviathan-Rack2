@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <deque>
 #include <mutex>
+#include <memory>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -20,6 +21,7 @@ enum class DatabaseState {
 	UPDATING,
 	COMPACTING,
 	CANCELING,
+	BUSY,
 	ERROR
 };
 
@@ -42,11 +44,13 @@ struct PreviewWrite {
 	std::string fingerprint;
 	int width = 0;
 	int height = 0;
-	std::vector<std::uint8_t> rgba;
+	std::shared_ptr<const std::vector<std::uint8_t>> rgba;
 };
 
-// Owns all disk I/O and QOI work. The UI thread only submits copied RGBA data
-// and drains decoded results. shutdown() is cooperatively cancelable and joins.
+// Owns all disk I/O and QOI work. The UI thread submits immutable shared RGBA
+// data and drains decoded results. One process holds the archive lease; a
+// contender reports BUSY and remains memory-only. shutdown() cancels queued
+// work, interrupts encode/read/write loops at small boundaries, and joins.
 class DeepcacheArchiveWorker {
 public:
 	DeepcacheArchiveWorker();
@@ -82,6 +86,9 @@ private:
 	};
 
 	void run();
+	void runOwned();
+	bool acquireLease();
+	void releaseLease();
 	bool loadArchive();
 	bool appendPreview(PreviewWrite write);
 	bool compactArchive();
@@ -115,6 +122,7 @@ private:
 	bool started_ = false;
 	std::atomic<bool> stopping_ {false};
 	std::atomic<bool> fatalError_ {false};
+	std::atomic<bool> leaseUnavailable_ {false};
 	std::atomic<int> state_ {static_cast<int>(DatabaseState::EMPTY)};
 	std::atomic<int> readyCount_ {0};
 	std::atomic<int> targetCount_ {0};
@@ -122,6 +130,7 @@ private:
 	std::atomic<int> targetPluginCount_ {0};
 	std::atomic<std::uint64_t> packBytes_ {0};
 	std::atomic<int> errorCode_ {0};
+	std::uintptr_t leaseHandle_ = 0;
 };
 
 std::uint64_t deepcacheChecksum(const std::uint8_t* data, std::size_t size);

@@ -9,6 +9,22 @@
 #include <fstream>
 #include <limits>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+// wingdi.h defines ERROR as a macro, which collides with DatabaseState::ERROR.
+#ifdef ERROR
+#undef ERROR
+#endif
+#else
+#include <cerrno>
+#include <fcntl.h>
+#include <sys/file.h>
+#include <unistd.h>
+#endif
+
 namespace deepcache {
 namespace {
 
@@ -19,6 +35,122 @@ const std::size_t kMaxDecodedQueueBytes = 64u * 1024u * 1024u;
 const std::size_t kMaxWriteQueueEntries = 16;
 const std::size_t kMaxWriteQueueBytes = 64u * 1024u * 1024u;
 const std::size_t kReadChunkBytes = 4u * 1024u * 1024u;
+const std::size_t kWriteChunkBytes = 1u * 1024u * 1024u;
+
+struct QoiPixel {
+	std::uint8_t r;
+	std::uint8_t g;
+	std::uint8_t b;
+	std::uint8_t a;
+
+	QoiPixel(std::uint8_t r = 0, std::uint8_t g = 0, std::uint8_t b = 0, std::uint8_t a = 0)
+		: r(r), g(g), b(b), a(a) {}
+};
+
+bool samePixel(const QoiPixel& a, const QoiPixel& b) {
+	return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
+std::size_t qoiHash(const QoiPixel& pixel) {
+	return (pixel.r * 3u + pixel.g * 5u + pixel.b * 7u + pixel.a * 11u) & 63u;
+}
+
+void appendBigEndian32(std::vector<std::uint8_t>& output, std::uint32_t value) {
+	output.push_back(static_cast<std::uint8_t>((value >> 24) & 0xff));
+	output.push_back(static_cast<std::uint8_t>((value >> 16) & 0xff));
+	output.push_back(static_cast<std::uint8_t>((value >> 8) & 0xff));
+	output.push_back(static_cast<std::uint8_t>(value & 0xff));
+}
+
+bool encodeQoiCancelable(const std::vector<std::uint8_t>& rgba, int width, int height,
+	                     const std::atomic<bool>& stopping, std::vector<std::uint8_t>& output) {
+	const std::size_t pixelCount = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+	output.clear();
+	output.reserve(pixelCount * 5u + 22u);
+	appendBigEndian32(output, 0x716f6966u);
+	appendBigEndian32(output, static_cast<std::uint32_t>(width));
+	appendBigEndian32(output, static_cast<std::uint32_t>(height));
+	output.push_back(4);
+	output.push_back(QOI_SRGB);
+
+	QoiPixel index[64] = {};
+	QoiPixel previous;
+	previous.a = 255;
+	int run = 0;
+	for (std::size_t i = 0; i < pixelCount; ++i) {
+		if ((i & 4095u) == 0 && stopping.load(std::memory_order_relaxed))
+			return false;
+		const std::size_t offset = i * 4u;
+		QoiPixel pixel(rgba[offset], rgba[offset + 1], rgba[offset + 2], rgba[offset + 3]);
+		if (samePixel(pixel, previous)) {
+			++run;
+			if (run == 62 || i + 1 == pixelCount) {
+				output.push_back(static_cast<std::uint8_t>(0xc0 | (run - 1)));
+				run = 0;
+			}
+		}
+		else {
+			if (run > 0) {
+				output.push_back(static_cast<std::uint8_t>(0xc0 | (run - 1)));
+				run = 0;
+			}
+			const std::size_t indexPosition = qoiHash(pixel);
+			if (samePixel(index[indexPosition], pixel)) {
+				output.push_back(static_cast<std::uint8_t>(indexPosition));
+			}
+			else {
+				index[indexPosition] = pixel;
+				if (pixel.a == previous.a) {
+					const int dr = int(pixel.r) - int(previous.r);
+					const int dg = int(pixel.g) - int(previous.g);
+					const int db = int(pixel.b) - int(previous.b);
+					const int drdg = dr - dg;
+					const int dbdg = db - dg;
+					if (dr > -3 && dr < 2 && dg > -3 && dg < 2 && db > -3 && db < 2) {
+						output.push_back(static_cast<std::uint8_t>(0x40 | ((dr + 2) << 4) |
+						                                           ((dg + 2) << 2) | (db + 2)));
+					}
+					else if (drdg > -9 && drdg < 8 && dg > -33 && dg < 32 && dbdg > -9 && dbdg < 8) {
+						output.push_back(static_cast<std::uint8_t>(0x80 | (dg + 32)));
+						output.push_back(static_cast<std::uint8_t>(((drdg + 8) << 4) | (dbdg + 8)));
+					}
+					else {
+						output.push_back(0xfe);
+						output.push_back(pixel.r);
+						output.push_back(pixel.g);
+						output.push_back(pixel.b);
+					}
+				}
+				else {
+					output.push_back(0xff);
+					output.push_back(pixel.r);
+					output.push_back(pixel.g);
+					output.push_back(pixel.b);
+					output.push_back(pixel.a);
+				}
+			}
+		}
+		previous = pixel;
+	}
+	static const std::uint8_t padding[8] = {0, 0, 0, 0, 0, 0, 0, 1};
+	output.insert(output.end(), padding, padding + sizeof(padding));
+	return !stopping.load(std::memory_order_relaxed);
+}
+
+bool writeCancelable(std::ostream& stream, const std::uint8_t* data, std::size_t size,
+	                 const std::atomic<bool>& stopping) {
+	std::size_t offset = 0;
+	while (offset < size) {
+		if (stopping.load(std::memory_order_relaxed))
+			return false;
+		const std::size_t count = std::min(kWriteChunkBytes, size - offset);
+		stream.write(reinterpret_cast<const char*>(data + offset), static_cast<std::streamsize>(count));
+		if (!stream)
+			return false;
+		offset += count;
+	}
+	return true;
+}
 
 template <typename T>
 bool readValue(std::istream& stream, T& value) {
@@ -130,14 +262,20 @@ void DeepcacheArchiveWorker::start(const std::string& directory, std::vector<Arc
 }
 
 bool DeepcacheArchiveWorker::enqueue(PreviewWrite write) {
-	if (!started_ || canceled() || fatalError_.load(std::memory_order_relaxed) || write.rgba.empty() ||
-	    write.rgba.size() > 128u * 1024u * 1024u)
+	if (!started_ || canceled() || fatalError_.load(std::memory_order_relaxed) ||
+	    leaseUnavailable_.load(std::memory_order_relaxed) || !write.rgba || write.rgba->empty() ||
+	    write.rgba->size() > 128u * 1024u * 1024u)
 		return false;
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
+		// Recheck after acquiring the queue mutex so shutdown or a failed lease
+		// cannot race an already-entered producer and leave pixels stranded.
+		if (canceled() || fatalError_.load(std::memory_order_relaxed) ||
+		    leaseUnavailable_.load(std::memory_order_relaxed))
+			return false;
 		if (writes_.size() >= kMaxWriteQueueEntries || queuedWriteBytes_ >= kMaxWriteQueueBytes)
 			return false;
-		queuedWriteBytes_ += write.rgba.size();
+		queuedWriteBytes_ += write.rgba->size();
 		writes_.push_back(std::move(write));
 	}
 	condition_.notify_one();
@@ -145,7 +283,8 @@ bool DeepcacheArchiveWorker::enqueue(PreviewWrite write) {
 }
 
 bool DeepcacheArchiveWorker::canAcceptWrite() const {
-	if (!started_ || canceled() || fatalError_.load(std::memory_order_relaxed))
+	if (!started_ || canceled() || fatalError_.load(std::memory_order_relaxed) ||
+	    leaseUnavailable_.load(std::memory_order_relaxed))
 		return true;
 	std::lock_guard<std::mutex> lock(mutex_);
 	return writes_.size() < kMaxWriteQueueEntries && queuedWriteBytes_ < kMaxWriteQueueBytes;
@@ -200,6 +339,14 @@ void DeepcacheArchiveWorker::shutdown() {
 		return;
 	setState(DatabaseState::CANCELING);
 	stopping_.store(true, std::memory_order_relaxed);
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		writes_.clear();
+		queuedWriteBytes_ = 0;
+		decoded_.clear();
+		decodedBytes_ = 0;
+		compactRequested_ = false;
+	}
 	condition_.notify_all();
 	if (thread_.joinable())
 		thread_.join();
@@ -207,6 +354,35 @@ void DeepcacheArchiveWorker::shutdown() {
 }
 
 void DeepcacheArchiveWorker::run() {
+	if (!acquireLease()) {
+		if (errorCode_.load(std::memory_order_relaxed) != 0) {
+			fatalError_.store(true, std::memory_order_relaxed);
+			{
+				std::lock_guard<std::mutex> lock(mutex_);
+				writes_.clear();
+				queuedWriteBytes_ = 0;
+				compactRequested_ = false;
+			}
+			setState(DatabaseState::ERROR);
+			return;
+		}
+		leaseUnavailable_.store(true, std::memory_order_relaxed);
+		{
+			std::lock_guard<std::mutex> lock(mutex_);
+			writes_.clear();
+			queuedWriteBytes_ = 0;
+			compactRequested_ = false;
+		}
+		setState(DatabaseState::BUSY);
+		std::unique_lock<std::mutex> lock(mutex_);
+		condition_.wait(lock, [&]() { return canceled(); });
+		return;
+	}
+	runOwned();
+	releaseLease();
+}
+
+void DeepcacheArchiveWorker::runOwned() {
 	try {
 		if (!loadArchive()) {
 			if (!canceled()) {
@@ -225,7 +401,7 @@ void DeepcacheArchiveWorker::run() {
 				if (canceled())
 					break;
 				if (!writes_.empty()) {
-					const std::size_t byteCount = writes_.front().rgba.size();
+					const std::size_t byteCount = writes_.front().rgba ? writes_.front().rgba->size() : 0;
 					write = std::move(writes_.front());
 					writes_.pop_front();
 					queuedWriteBytes_ = byteCount <= queuedWriteBytes_ ? queuedWriteBytes_ - byteCount : 0;
@@ -267,6 +443,59 @@ void DeepcacheArchiveWorker::run() {
 			setState(DatabaseState::ERROR);
 		}
 	}
+}
+
+bool DeepcacheArchiveWorker::acquireLease() {
+	const std::string leasePath = directory_ + "/archive-v1.lock";
+#ifdef _WIN32
+	const int wideLength = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, leasePath.c_str(), -1, nullptr, 0);
+	if (wideLength <= 0) {
+		errorCode_.store(6, std::memory_order_relaxed);
+		return false;
+	}
+	std::vector<wchar_t> widePath(static_cast<std::size_t>(wideLength));
+	if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, leasePath.c_str(), -1, widePath.data(), wideLength)) {
+		errorCode_.store(6, std::memory_order_relaxed);
+		return false;
+	}
+	HANDLE handle = CreateFileW(widePath.data(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS,
+	                            FILE_ATTRIBUTE_NORMAL, nullptr);
+	if (handle == INVALID_HANDLE_VALUE) {
+		const DWORD error = GetLastError();
+		if (error != ERROR_SHARING_VIOLATION && error != ERROR_LOCK_VIOLATION)
+			errorCode_.store(6, std::memory_order_relaxed);
+		return false;
+	}
+	leaseHandle_ = reinterpret_cast<std::uintptr_t>(handle);
+#else
+	const int descriptor = ::open(leasePath.c_str(), O_CREAT | O_RDWR, 0600);
+	if (descriptor < 0) {
+		errorCode_.store(6, std::memory_order_relaxed);
+		return false;
+	}
+	if (::flock(descriptor, LOCK_EX | LOCK_NB) != 0) {
+		const int lockError = errno;
+		::close(descriptor);
+		if (lockError != EWOULDBLOCK && lockError != EAGAIN)
+			errorCode_.store(6, std::memory_order_relaxed);
+		return false;
+	}
+	leaseHandle_ = static_cast<std::uintptr_t>(descriptor + 1);
+#endif
+	return true;
+}
+
+void DeepcacheArchiveWorker::releaseLease() {
+	if (leaseHandle_ == 0)
+		return;
+#ifdef _WIN32
+	CloseHandle(reinterpret_cast<HANDLE>(leaseHandle_));
+#else
+	const int descriptor = static_cast<int>(leaseHandle_ - 1);
+	::flock(descriptor, LOCK_UN);
+	::close(descriptor);
+#endif
+	leaseHandle_ = 0;
 }
 
 bool DeepcacheArchiveWorker::readPackFile(const std::string& path, std::vector<std::uint8_t>& bytes) {
@@ -448,48 +677,35 @@ bool DeepcacheArchiveWorker::appendPreview(PreviewWrite write) {
 		? static_cast<std::uint64_t>(write.width) * static_cast<std::uint64_t>(write.height) * 4ull
 		: 0;
 	if (write.width <= 0 || write.height <= 0 || write.width > 8192 || write.height > 8192 ||
-	    byteCount > 128ull * 1024ull * 1024ull || byteCount != write.rgba.size())
+	    byteCount > 128ull * 1024ull * 1024ull || !write.rgba || byteCount != write.rgba->size())
 		return false;
 	setState(DatabaseState::UPDATING);
-	qoi_desc desc = {};
-	desc.width = static_cast<unsigned int>(write.width);
-	desc.height = static_cast<unsigned int>(write.height);
-	desc.channels = 4;
-	desc.colorspace = QOI_SRGB;
-	int encodedLength = 0;
-	void* encoded = qoi_encode(write.rgba.data(), &desc, &encodedLength);
-	if (!encoded || encodedLength <= 0) {
-		std::free(encoded);
+	std::vector<std::uint8_t> encoded;
+	if (!encodeQoiCancelable(*write.rgba, write.width, write.height, stopping_, encoded))
+		return canceled();
+	if (encoded.empty())
 		return false;
-	}
-	if (canceled()) {
-		std::free(encoded);
+	if (canceled())
 		return true;
-	}
 	std::ofstream pack(packPath_.c_str(), std::ios::binary | std::ios::app);
-	if (!pack) {
-		std::free(encoded);
+	if (!pack)
 		return false;
-	}
 	const std::uint64_t offset = packBytes_.load(std::memory_order_relaxed);
-	pack.write(static_cast<const char*>(encoded), encodedLength);
+	if (!writeCancelable(pack, encoded.data(), encoded.size(), stopping_))
+		return canceled();
 	pack.flush();
-	if (!pack) {
-		std::free(encoded);
+	if (!pack)
 		return false;
-	}
 	Entry entry;
 	entry.fingerprint = std::move(write.fingerprint);
 	entry.offset = offset;
-	entry.length = static_cast<std::uint64_t>(encodedLength);
-	entry.checksum = deepcacheChecksum(static_cast<const std::uint8_t*>(encoded), encodedLength);
+	entry.length = static_cast<std::uint64_t>(encoded.size());
+	entry.checksum = deepcacheChecksum(encoded.data(), encoded.size());
 	entry.width = static_cast<std::uint32_t>(write.width);
 	entry.height = static_cast<std::uint32_t>(write.height);
-	const std::uint8_t* encodedBytes = static_cast<const std::uint8_t*>(encoded);
-	packedBytes_.insert(packedBytes_.end(), encodedBytes, encodedBytes + encodedLength);
-	std::free(encoded);
+	packedBytes_.insert(packedBytes_.end(), encoded.begin(), encoded.end());
 	entries_[write.cacheKey] = std::move(entry);
-	packBytes_.store(offset + static_cast<std::uint64_t>(encodedLength), std::memory_order_relaxed);
+	packBytes_.store(offset + static_cast<std::uint64_t>(encoded.size()), std::memory_order_relaxed);
 	if (canceled())
 		return true; // Appended bytes are harmless until the index commits.
 	if (!saveIndexAtomically())
@@ -517,9 +733,12 @@ bool DeepcacheArchiveWorker::compactArchive() {
 		const Entry& source = item.second;
 		if (source.offset > packedBytes_.size() || source.length > packedBytes_.size() - source.offset)
 			continue;
-		output.write(reinterpret_cast<const char*>(packedBytes_.data() + source.offset), source.length);
-		if (!output)
-			return false;
+		if (!writeCancelable(output, packedBytes_.data() + source.offset,
+		                     static_cast<std::size_t>(source.length), stopping_)) {
+			output.close();
+			std::remove(temporaryPack.c_str());
+			return canceled();
+		}
 		Entry destination = source;
 		destination.offset = offset;
 		offset += source.length;

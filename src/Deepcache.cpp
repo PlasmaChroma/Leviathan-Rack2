@@ -132,7 +132,7 @@ struct ModuleWidgetContainer : widget::Widget {
 };
 
 struct DeepcacheRasterWidget : widget::TransparentWidget {
-	std::vector<std::uint8_t> rgba;
+	std::shared_ptr<const std::vector<std::uint8_t>> rgba;
 	int width = 0;
 	int height = 0;
 	NVGcontext* ownerVg = nullptr;
@@ -147,12 +147,12 @@ struct DeepcacheRasterWidget : widget::TransparentWidget {
 	}
 
 	bool ensureImage(NVGcontext* vg) {
-		if (!vg || rgba.empty() || width <= 0 || height <= 0)
+		if (!vg || !rgba || rgba->empty() || width <= 0 || height <= 0)
 			return false;
 		if (ownerVg != vg || !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(vg, imageHandle, width, height)) {
 			nvg_gfx_lifecycle::resetOwnedNvgImage(ownerVg, imageHandle, imageWidth, imageHeight,
 			                                         vg, ownerVg == vg);
-			imageHandle = nvgCreateImageRGBA(vg, width, height, NVG_IMAGE_PREMULTIPLIED, rgba.data());
+			imageHandle = nvgCreateImageRGBA(vg, width, height, NVG_IMAGE_PREMULTIPLIED, rgba->data());
 			if (imageHandle < 0)
 				return false;
 			ownerVg = vg;
@@ -199,6 +199,7 @@ struct DeepcacheModelBox : widget::OpaqueWidget {
 	~DeepcacheModelBox() override;
 	bool ensurePreviewConstructed();
 	bool installDecodedPreview(deepcache::DecodedPreview preview);
+	bool installRasterPreview(std::shared_ptr<const std::vector<std::uint8_t>> rgba, int width, int height);
 	bool ensurePersistentImage(NVGcontext* vg);
 	bool captureFramebuffer(std::vector<std::uint8_t>& rgba, int& width, int& height) const;
 	FramebufferWarmResult warmFramebuffer();
@@ -374,7 +375,6 @@ public:
 		constructionCountedIndices_.clear();
 		constructionPluginTarget_ = 0;
 		constructionPluginCompleted_ = 0;
-		framebufferWarmQueue_.clear();
 		generationResidentIndices_.clear();
 		constructionTotalMs_ = 0.0;
 		constructionMaxMs_ = 0.0;
@@ -436,7 +436,7 @@ public:
 		constructionFailed_ = 0;
 		framebufferTarget_ = 0;
 		framebufferCompleted_ = 0;
-		framebufferWarmQueue_.clear();
+		warmTrackedGeneration_.clear();
 		generationResidentIndices_.clear();
 		constructionPluginRemaining_.clear();
 		constructionCountedIndices_.clear();
@@ -467,6 +467,10 @@ public:
 		framebufferTarget_ = 0;
 		framebufferCompleted_ = 0;
 		framebufferWarmQueue_.clear();
+		warmQueuedIndices_.clear();
+		warmTrackedGeneration_.clear();
+		onDemandBuildQueue_.clear();
+		onDemandQueuedIndices_.clear();
 		generationResidentIndices_.clear();
 		constructionPluginRemaining_.clear();
 		constructionCountedIndices_.clear();
@@ -492,6 +496,20 @@ public:
 			worker_.promote(modelIndex, activeGeneration_);
 	}
 
+	void requestOnDemand(std::size_t modelIndex) {
+		if (stopped_ || !browser_)
+			return;
+		DeepcacheModelBox* box = browser_->getModelBox(modelIndex);
+		if (!box || (box->state != deepcache::PreviewEntryState::EMPTY &&
+		             box->state != deepcache::PreviewEntryState::QUEUED))
+			return;
+		if (activeGeneration_ != 0)
+			worker_.promote(modelIndex, activeGeneration_);
+		box->state = deepcache::PreviewEntryState::QUEUED;
+		if (onDemandQueuedIndices_.insert(modelIndex).second)
+			onDemandBuildQueue_.push_back(modelIndex);
+	}
+
 	void compactDatabase() {
 		archive_.requestCompaction();
 		publishDatabase();
@@ -508,10 +526,16 @@ public:
 		if (constructionTarget_ <= 0)
 			return;
 		framebufferWarmQueue_.clear();
+		warmQueuedIndices_.clear();
+		warmTrackedGeneration_.clear();
 		completed_ = constructionFailed_;
 		failed_ = constructionFailed_;
-		for (std::size_t modelIndex : generationResidentIndices_)
-			framebufferWarmQueue_.push_back({modelIndex, 0});
+		for (std::size_t modelIndex = 0; modelIndex < browser_->modelBoxes.size(); ++modelIndex) {
+			DeepcacheModelBox* box = browser_->getModelBox(modelIndex);
+			if (box && box->state == deepcache::PreviewEntryState::RESIDENT)
+				queueFramebufferWarm(modelIndex, generationResidentIndices_.count(modelIndex) != 0,
+				                     activeGeneration_);
+		}
 		if (state_ == deepcache::CacheState::READY)
 			setState(deepcache::CacheState::WARMING);
 		else
@@ -544,9 +568,6 @@ public:
 				setState(deepcache::CacheState::WARMING);
 		}
 
-		if (state_ != deepcache::CacheState::WARMING)
-			return;
-
 		const double frameStart = system::getTime();
 		const double budgetMs = std::max(0.5, module_->uiBudgetMicros.load(std::memory_order_relaxed) / 1000.0);
 		int processedThisFrame = 0;
@@ -554,17 +575,31 @@ public:
 			if (processedThisFrame > 0 && (system::getTime() - frameStart) * 1000.0 >= budgetMs)
 				break;
 			deepcache::PreviewBuildRequest request;
-			if (!worker_.tryPop(request))
-				break;
-			if (request.generation != activeGeneration_)
-				continue;
+			bool tracked = false;
+			if (!onDemandBuildQueue_.empty()) {
+				request.modelIndex = onDemandBuildQueue_.front();
+				onDemandBuildQueue_.pop_front();
+				onDemandQueuedIndices_.erase(request.modelIndex);
+				const auto key = cacheKeyByModelIndex_.find(request.modelIndex);
+				if (key != cacheKeyByModelIndex_.end())
+					request.cacheKey = key->second;
+			}
+			else {
+				if (state_ != deepcache::CacheState::WARMING || !worker_.tryPop(request))
+					break;
+				if (request.generation != activeGeneration_)
+					continue;
+				tracked = true;
+			}
 			DeepcacheModelBox* box = browser_->getModelBox(request.modelIndex);
 			if (!box) {
-				constructionCompleted_++;
-				constructionFailed_++;
-				completed_++;
-				failed_++;
-				markConstructionModelComplete(request.modelIndex);
+				if (tracked) {
+					constructionCompleted_++;
+					constructionFailed_++;
+					completed_++;
+					failed_++;
+					markConstructionModelComplete(request.modelIndex);
+				}
 				processedThisFrame++;
 				publish();
 				continue;
@@ -587,24 +622,30 @@ public:
 				}
 			}
 			if (!resident) {
-				failed_++;
-				constructionFailed_++;
+				if (tracked) {
+					failed_++;
+					constructionFailed_++;
+				}
 				backend_.invalidate(request.cacheKey);
 			}
 			else {
-				generationResidentIndices_.insert(request.modelIndex);
+				if (tracked)
+					generationResidentIndices_.insert(request.modelIndex);
 				backend_.store(request.cacheKey);
 				if (box->state == deepcache::PreviewEntryState::FRAMEBUFFER_READY) {
-					completed_++;
+					if (tracked)
+						completed_++;
 					markFramebufferModelComplete(request.modelIndex);
 				}
 				else
-					framebufferWarmQueue_.push_back({request.modelIndex, 0});
+					queueFramebufferWarm(request.modelIndex, tracked, request.generation);
 			}
-			constructionCompleted_++;
-			if (!resident)
-				completed_++;
-			markConstructionModelComplete(request.modelIndex);
+			if (tracked) {
+				constructionCompleted_++;
+				if (!resident)
+					completed_++;
+				markConstructionModelComplete(request.modelIndex);
+			}
 			processedThisFrame++;
 			publish();
 		}
@@ -616,8 +657,7 @@ public:
 
 	void warmFramebuffers() {
 		uploadPersistentImages();
-		if (stopped_ || !browser_ || state_ != deepcache::CacheState::WARMING ||
-		    constructionCompleted_ < constructionTarget_)
+		if (stopped_ || !browser_ || framebufferWarmQueue_.empty())
 			return;
 		const double frameStart = system::getTime();
 		const double budgetMs = std::max(0.5, module_->uiBudgetMicros.load(std::memory_order_relaxed) / 1000.0);
@@ -631,23 +671,21 @@ public:
 			framebufferWarmQueue_.pop_front();
 			DeepcacheModelBox* box = browser_->getModelBox(request.first);
 			const double startedAt = system::getTime();
-			const FramebufferWarmResult result = box ? box->warmFramebuffer() : FramebufferWarmResult::FAILED;
-			const double durationMs = (system::getTime() - startedAt) * 1000.0;
-			processedThisFrame++;
-			if (result == FramebufferWarmResult::RETRY && request.second < 2) {
-				request.second++;
-				framebufferWarmQueue_.push_back(request);
-			}
-			else {
-				completed_++;
-				markFramebufferModelComplete(request.first);
-				if (result != FramebufferWarmResult::READY)
-					failed_++;
-				else if (box) {
-					std::vector<std::uint8_t> rgba;
-					int width = 0;
-					int height = 0;
-					if (box->captureFramebuffer(rgba, width, height)) {
+			FramebufferWarmResult result = box ? box->warmFramebuffer() : FramebufferWarmResult::FAILED;
+			if (result == FramebufferWarmResult::READY && box && box->framebuffer) {
+				std::vector<std::uint8_t> captured;
+				int width = 0;
+				int height = 0;
+				if (!box->captureFramebuffer(captured, width, height)) {
+					result = FramebufferWarmResult::RETRY;
+				}
+				else {
+					auto pixels = std::make_shared<const std::vector<std::uint8_t>>(std::move(captured));
+					if (!box->installRasterPreview(pixels, width, height)) {
+						result = FramebufferWarmResult::FAILED;
+					}
+					else {
+						persistentModelIndices_.insert(request.first);
 						const auto key = cacheKeyByModelIndex_.find(request.first);
 						if (key != cacheKeyByModelIndex_.end()) {
 							deepcache::PreviewWrite write;
@@ -655,11 +693,35 @@ public:
 							write.fingerprint = fingerprintByModelIndex_[request.first];
 							write.width = width;
 							write.height = height;
-							write.rgba = std::move(rgba);
+							write.rgba = pixels;
 							archive_.enqueue(std::move(write));
 						}
+						result = box->ensurePersistentImage(APP && APP->window ? APP->window->vg : nullptr)
+						       ? FramebufferWarmResult::READY : FramebufferWarmResult::RETRY;
 					}
 				}
+			}
+			const double durationMs = (system::getTime() - startedAt) * 1000.0;
+			processedThisFrame++;
+			if (result == FramebufferWarmResult::RETRY && request.second < 3) {
+				request.second++;
+				framebufferWarmQueue_.push_back(request);
+			}
+			else {
+				warmQueuedIndices_.erase(request.first);
+				const auto tracked = warmTrackedGeneration_.find(request.first);
+				const bool countsForActiveGeneration = tracked != warmTrackedGeneration_.end() &&
+				                                      tracked->second == activeGeneration_ && activeGeneration_ != 0;
+				warmTrackedGeneration_.erase(request.first);
+				if (countsForActiveGeneration) {
+					completed_++;
+					if (result != FramebufferWarmResult::READY)
+						failed_++;
+				}
+				if (result == FramebufferWarmResult::READY)
+					markFramebufferModelComplete(request.first);
+				else if (box && box->framebuffer)
+					box->clearPreview();
 				if (isDragonKingDebugEnabled() && durationMs >= 16.0) {
 					WARN("Leviathan Deepcache: slow framebuffer warm %.2f ms: %s", durationMs,
 					     box && box->model ? box->model->getFullName().c_str() : "unknown");
@@ -683,7 +745,7 @@ private:
 	void finishIfComplete() {
 		if (state_ != deepcache::CacheState::WARMING || constructionCompleted_ < constructionTarget_ ||
 		    worker_.pendingRequestCount(activeGeneration_) != 0 || completed_ < total_ ||
-		    !framebufferWarmQueue_.empty())
+		    !warmTrackedGeneration_.empty())
 			return;
 		if (isDragonKingDebugEnabled()) {
 			const double elapsedMs = (system::getTime() - warmingStartedAt_) * 1000.0;
@@ -808,6 +870,13 @@ private:
 		publish();
 	}
 
+	void queueFramebufferWarm(std::size_t modelIndex, bool tracked, std::uint64_t generation) {
+		if (warmQueuedIndices_.insert(modelIndex).second)
+			framebufferWarmQueue_.push_back({modelIndex, 0});
+		if (tracked)
+			warmTrackedGeneration_[modelIndex] = generation;
+	}
+
 	void markConstructionModelComplete(std::size_t modelIndex) {
 		if (!constructionCountedIndices_.insert(modelIndex).second)
 			return;
@@ -856,6 +925,10 @@ private:
 	int framebufferTarget_ = 0;
 	int framebufferCompleted_ = 0;
 	std::deque<std::pair<std::size_t, int>> framebufferWarmQueue_;
+	std::unordered_set<std::size_t> warmQueuedIndices_;
+	std::unordered_map<std::size_t, std::uint64_t> warmTrackedGeneration_;
+	std::deque<std::size_t> onDemandBuildQueue_;
+	std::unordered_set<std::size_t> onDemandQueuedIndices_;
 	std::unordered_set<std::size_t> generationResidentIndices_;
 	std::unordered_set<std::size_t> persistentModelIndices_;
 	std::deque<std::size_t> persistentUploadQueue_;
@@ -1052,11 +1125,20 @@ bool DeepcacheModelBox::installDecodedPreview(deepcache::DecodedPreview preview)
 	if (preview.rgba.empty() || preview.width <= 0 || preview.height <= 0 ||
 	    state == deepcache::PreviewEntryState::CONSTRUCTING)
 		return false;
+	auto pixels = std::make_shared<const std::vector<std::uint8_t>>(std::move(preview.rgba));
+	return installRasterPreview(std::move(pixels), preview.width, preview.height);
+}
+
+bool DeepcacheModelBox::installRasterPreview(std::shared_ptr<const std::vector<std::uint8_t>> rgba,
+	                                         int width, int height) {
+	if (!rgba || rgba->empty() || width <= 0 || height <= 0 ||
+	    state == deepcache::PreviewEntryState::CONSTRUCTING)
+		return false;
 	clearPreview();
 	rasterWidget = new DeepcacheRasterWidget;
-	rasterWidget->rgba = std::move(preview.rgba);
-	rasterWidget->width = preview.width;
-	rasterWidget->height = preview.height;
+	rasterWidget->rgba = std::move(rgba);
+	rasterWidget->width = width;
+	rasterWidget->height = height;
 	addChild(rasterWidget);
 	state = deepcache::PreviewEntryState::RESIDENT;
 	updateZoom();
@@ -1182,6 +1264,12 @@ bool DeepcacheModelBox::hasValidFramebufferImage() const {
 FramebufferWarmResult DeepcacheModelBox::warmFramebuffer() {
 	if (state == deepcache::PreviewEntryState::FRAMEBUFFER_READY && hasValidFramebufferImage())
 		return FramebufferWarmResult::READY;
+	if (state == deepcache::PreviewEntryState::RESIDENT && rasterWidget) {
+		if (!APP || !APP->window || !APP->window->vg)
+			return FramebufferWarmResult::RETRY;
+		return ensurePersistentImage(APP->window->vg) ? FramebufferWarmResult::READY
+		                                              : FramebufferWarmResult::RETRY;
+	}
 	if (state != deepcache::PreviewEntryState::RESIDENT || !framebuffer)
 		return FramebufferWarmResult::FAILED;
 	if (!APP || !APP->window || !APP->window->vg || !APP->window->fbVg)
@@ -1250,8 +1338,7 @@ void DeepcacheModelBox::clearPreview() {
 void DeepcacheModelBox::draw(const DrawArgs& args) {
 	if (state == deepcache::PreviewEntryState::EMPTY || state == deepcache::PreviewEntryState::QUEUED) {
 		if (cacheManager)
-			cacheManager->promote(modelIndex);
-		ensurePreviewConstructed();
+			cacheManager->requestOnDemand(modelIndex);
 	}
 
 	nvgBeginPath(args.vg);
@@ -1356,7 +1443,7 @@ void DeepcacheModelBox::createContextMenu() {
 			state = deepcache::PreviewEntryState::EMPTY;
 			failureReason.clear();
 			if (cacheManager)
-				cacheManager->promote(modelIndex);
+				cacheManager->requestOnDemand(modelIndex);
 		}));
 	}
 }
@@ -2045,6 +2132,7 @@ struct DeepcacheDatabaseStatusWidget : widget::TransparentWidget {
 	explicit DeepcacheDatabaseStatusWidget(DeepcacheModule* module) : module(module) {}
 
 	void draw(const DrawArgs& args) override {
+		const bool browserStandby = module && module->browserStandby.load(std::memory_order_relaxed);
 		const auto rawState = module ? static_cast<deepcache::DatabaseState>(
 			module->databaseState.load(std::memory_order_relaxed)) : deepcache::DatabaseState::EMPTY;
 		const auto cacheState = module ? static_cast<deepcache::CacheState>(
@@ -2062,20 +2150,27 @@ struct DeepcacheDatabaseStatusWidget : widget::TransparentWidget {
 		     rawState == deepcache::DatabaseState::READY ||
 		     rawState == deepcache::DatabaseState::UPDATING))
 			state = deepcache::DatabaseState::UPDATING;
-		const char* status = "EMPTY";
-		switch (state) {
-			case deepcache::DatabaseState::LOADING: status = "LOADING"; break;
-			case deepcache::DatabaseState::READY: status = "READY"; break;
-			case deepcache::DatabaseState::UPDATING: status = "UPDATING"; break;
-			case deepcache::DatabaseState::COMPACTING: status = "COMPACTING"; break;
-			case deepcache::DatabaseState::CANCELING: status = "CANCELING"; break;
-			case deepcache::DatabaseState::ERROR: status = "ERROR"; break;
-			case deepcache::DatabaseState::EMPTY: break;
+		const char* status = browserStandby ? "STANDBY" : "EMPTY";
+		if (!browserStandby) {
+			switch (state) {
+				case deepcache::DatabaseState::LOADING: status = "LOADING"; break;
+				case deepcache::DatabaseState::READY: status = "READY"; break;
+				case deepcache::DatabaseState::UPDATING: status = "UPDATING"; break;
+				case deepcache::DatabaseState::COMPACTING: status = "COMPACTING"; break;
+				case deepcache::DatabaseState::CANCELING: status = "CANCELING"; break;
+				case deepcache::DatabaseState::BUSY: status = "MEMORY ONLY"; break;
+				case deepcache::DatabaseState::ERROR: status = "ERROR"; break;
+				case deepcache::DatabaseState::EMPTY: break;
+			}
 		}
 		const std::uint64_t bytes = module ? module->databaseBytes.load(std::memory_order_relaxed) : 0;
 		std::string detail;
-		if (state == deepcache::DatabaseState::LOADING || state == deepcache::DatabaseState::UPDATING)
+		if (browserStandby)
+			detail = "MB ACTIVE";
+		else if (state == deepcache::DatabaseState::LOADING || state == deepcache::DatabaseState::UPDATING)
 			detail = std::to_string(ready) + " OF " + std::to_string(target);
+		else if (state == deepcache::DatabaseState::BUSY)
+			detail = "DATABASE IN USE";
 		else if (state == deepcache::DatabaseState::ERROR)
 			detail = "CODE " + std::to_string(module ? module->databaseErrorCode.load(std::memory_order_relaxed) : 0);
 		else
@@ -2092,6 +2187,23 @@ struct DeepcacheDatabaseStatusWidget : widget::TransparentWidget {
 };
 
 DeepcacheWidget* gActiveDeepcacheWidget = nullptr;
+
+bool isStoermelderMb(const plugin::Model* model) {
+	if (!model || !model->plugin || model->slug != "Mb")
+		return false;
+	return model->plugin->slug == "Stoermelder-P1" ||
+	       model->plugin->slug == "Stoermelder-PackTau";
+}
+
+bool rackContainsStoermelderMb() {
+	if (!APP || !APP->scene || !APP->scene->rack)
+		return false;
+	for (app::ModuleWidget* moduleWidget : APP->scene->rack->getModules()) {
+		if (moduleWidget && isStoermelderMb(moduleWidget->model))
+			return true;
+	}
+	return false;
+}
 
 }  // namespace
 
@@ -2194,6 +2306,16 @@ DeepcacheWidget::DeepcacheWidget(DeepcacheModule* module) {
 		return;
 	internal_ = new Internal;
 	internal_->module = module;
+	module->browserStandby.store(false, std::memory_order_relaxed);
+	// MB owns and mutates the same raw Scene::browser slot. In particular, its
+	// live browser is not safe to detach/traverse as though it were Rack's stock
+	// browser. Decline installation before touching that pointer. The module can
+	// remain in the patch as an explicit standby without affecting MB.
+	if (rackContainsStoermelderMb()) {
+		module->browserStandby.store(true, std::memory_order_relaxed);
+		module->cacheState.store(static_cast<int>(deepcache::CacheState::DISABLED), std::memory_order_relaxed);
+		return;
+	}
 	if (!gActiveDeepcacheWidget) {
 		gActiveDeepcacheWidget = this;
 		internal_->active = true;
@@ -2267,6 +2389,11 @@ void DeepcacheWidget::appendContextMenu(ui::Menu* menu) {
 	if (!internal_ || !internal_->module)
 		return;
 	menu->addChild(new ui::MenuSeparator);
+	if (internal_->module->browserStandby.load(std::memory_order_relaxed)) {
+		menu->addChild(createMenuLabel("Standby: Stoermelder MB owns the browser"));
+		menu->addChild(createMenuLabel("Remove and re-add Deepcache after removing MB"));
+		return;
+	}
 	if (!internal_->active) {
 		menu->addChild(createMenuLabel("Passive: another Deepcache owns the browser"));
 		return;

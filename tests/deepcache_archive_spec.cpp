@@ -37,7 +37,7 @@ void makeDirectory(const std::string& path) {
 void removeDirectory(const std::string& path) {
 	const char* files[] = {"previews-v1.pack", "previews-v1.pack.bak", "previews-v1.pack.tmp",
 	                       "index-v1.bin", "index-v1.bin.bak", "index-v1.bin.tmp",
-	                       "index-v1.bin.compact", "compaction-v1.pending"};
+	                       "index-v1.bin.compact", "compaction-v1.pending", "archive-v1.lock"};
 	for (const char* file : files)
 		std::remove((path + "/" + file).c_str());
 #ifdef _WIN32
@@ -53,7 +53,7 @@ std::vector<std::uint8_t> pixels(int width, int height, int salt) {
 		result[i + 0] = static_cast<std::uint8_t>((i + salt * 17) & 0xff);
 		result[i + 1] = static_cast<std::uint8_t>((i * 3 + salt * 29) & 0xff);
 		result[i + 2] = static_cast<std::uint8_t>((i * 7 + salt * 11) & 0xff);
-		result[i + 3] = 255;
+		result[i + 3] = static_cast<std::uint8_t>(((i / 4u) * 13u + salt * 31u) & 0xff);
 	}
 	return result;
 }
@@ -102,27 +102,56 @@ int main() {
 		first.fingerprint = "fp-one";
 		first.width = 13;
 		first.height = 9;
-		first.rgba = firstPixels;
+		first.rgba = std::make_shared<const std::vector<std::uint8_t>>(firstPixels);
 		worker.enqueue(std::move(first));
 		deepcache::PreviewWrite second;
 		second.cacheKey = "two";
 		second.fingerprint = "fp-two";
 		second.width = 7;
 		second.height = 11;
-		second.rgba = secondPixels;
+		second.rgba = std::make_shared<const std::vector<std::uint8_t>>(secondPixels);
 		worker.enqueue(std::move(second));
 		if (!waitUntil([&]() { return worker.readyCount() == 2; }) ||
 		    worker.targetPluginCount() != 1 || worker.readyPluginCount() != 1) {
 			std::cerr << "[FAIL] initial append did not commit\n";
 			return 1;
 		}
+		deepcache::DeepcacheArchiveWorker contender;
+		contender.start(directory, {{"one", "fp-one", "plugin-a"}});
+		auto contenderPixels = std::make_shared<const std::vector<std::uint8_t>>(updatedPixels);
+		deepcache::PreviewWrite raced;
+		raced.cacheKey = "one";
+		raced.fingerprint = "fp-one";
+		raced.width = 13;
+		raced.height = 9;
+		raced.rgba = contenderPixels;
+		contender.enqueue(std::move(raced));
+		if (!waitUntil([&]() { return contender.state() == deepcache::DatabaseState::BUSY; })) {
+			std::cerr << "[FAIL] second archive worker did not enter memory-only BUSY state\n";
+			return 1;
+		}
+		if (!waitUntil([&]() { return contenderPixels.use_count() == 1; })) {
+			std::cerr << "[FAIL] memory-only archive worker retained a raced queued write\n";
+			return 1;
+		}
+		deepcache::PreviewWrite denied;
+		denied.cacheKey = "one";
+		denied.fingerprint = "fp-one";
+		denied.width = 13;
+		denied.height = 9;
+		denied.rgba = contenderPixels;
+		if (contender.enqueue(std::move(denied))) {
+			std::cerr << "[FAIL] memory-only archive worker accepted a disk write\n";
+			return 1;
+		}
+		contender.shutdown();
 		sizeBeforeUpdate = worker.packBytes();
 		deepcache::PreviewWrite updated;
 		updated.cacheKey = "one";
 		updated.fingerprint = "fp-one";
 		updated.width = 13;
 		updated.height = 9;
-		updated.rgba = updatedPixels;
+		updated.rgba = std::make_shared<const std::vector<std::uint8_t>>(updatedPixels);
 		worker.enqueue(std::move(updated));
 		if (!waitUntil([&]() { return worker.packBytes() > sizeBeforeUpdate; })) {
 			std::cerr << "[FAIL] incremental replacement was not appended\n";
@@ -207,7 +236,7 @@ int main() {
 		repair.fingerprint = "fp-one";
 		repair.width = 13;
 		repair.height = 9;
-		repair.rgba = updatedPixels;
+		repair.rgba = std::make_shared<const std::vector<std::uint8_t>>(updatedPixels);
 		worker.enqueue(std::move(repair));
 		if (!waitUntil([&]() { return worker.readyCount() == 1; })) {
 			std::cerr << "[FAIL] corrupt pack payload was not repairable\n";
@@ -255,7 +284,7 @@ int main() {
 		repair.fingerprint = "fp-one";
 		repair.width = 13;
 		repair.height = 9;
-		repair.rgba = updatedPixels;
+		repair.rgba = std::make_shared<const std::vector<std::uint8_t>>(updatedPixels);
 		worker.enqueue(std::move(repair));
 		if (!waitUntil([&]() { return worker.readyCount() == 1; })) {
 			std::cerr << "[FAIL] corrupt index was not repairable\n";

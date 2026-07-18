@@ -858,6 +858,13 @@ Deepcache cannot recover from a segmentation fault inside a third-party plugin, 
 
 Deepcache may coexist in a Rack installation with MB or another browser-replacement module.
 
+Stoermelder MB is a known hard conflict because it owns the same raw browser
+slot. If an `Stoermelder-P1/Mb` or legacy `Stoermelder-PackTau/Mb` module is
+already present when Deepcache is added, Deepcache must enter standby before it
+reads, detaches, traverses, or replaces the active browser. The panel displays
+`STANDBY / MB ACTIVE`; removing and re-adding Deepcache after MB is removed
+activates Deepcache normally.
+
 Rules:
 
 1. Store whatever browser is active when Deepcache activates.

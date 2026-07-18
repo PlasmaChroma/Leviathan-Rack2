@@ -40,6 +40,7 @@ struct DeepcacheModule : rack::engine::Module {
 	std::atomic<int> databaseTargetPluginCount {0};
 	std::atomic<std::uint64_t> databaseBytes {0};
 	std::atomic<int> databaseErrorCode {0};
+	std::atomic<bool> browserStandby {false};
 	std::atomic<bool> autoStart {true};
 	std::atomic<int> uiBudgetMicros {2000};
 	std::atomic<int> cacheScope {static_cast<int>(deepcache::CacheScope::ALL)};

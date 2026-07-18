@@ -20,10 +20,13 @@ marker and backups for restart recovery. Hard I/O or transaction errors stop
 that archive worker session instead of allowing later writes to publish offsets
 against uncertain pack contents.
 
-There are no known P0 issues after the fixes made during this review. The most
-important remaining work is inter-process archive locking, removing unbudgeted
-module construction from `draw()`, releasing live preview hierarchies after
-raster capture, and deciding how strictly Rack shutdown must be time-bounded.
+There are no known P0 or P1 issues after the fixes made during this review and
+the subsequent Stoermelder MB coexistence fix. The
+archive now has exclusive cross-process ownership with a memory-only fallback,
+browser cache misses use the budgeted executor, successful captures retire live
+module trees immediately, and archive shutdown cancels queued work plus observes
+cancellation during QOI encode and chunked I/O. Filesystem flush and rename
+latency remains OS-controlled, as it is for any safely joined file worker.
 
 ## Severity scale
 
@@ -35,83 +38,55 @@ raster capture, and deciding how strictly Rack shutdown must be time-bounded.
   or performance problems with narrower triggers.
 - **P3 — Low:** hardening, diagnostics, portability, or documentation debt.
 
-## Open findings
+## P1 findings resolved
 
-### P1-1: The archive has no inter-process ownership or locking
+### P1-1: Inter-process archive ownership
 
-All Rack processes use the same
-`<Rack user>/Leviathan/Deepcache/previews-v1.pack` and `index-v1.bin`. The
-archive serializes access inside one `DeepcacheArchiveWorker`, but it has no OS
-file lock, lease file, per-process database, or single-writer protocol.
-Append offsets are derived from process-local `packBytes_`, while index replace
-and compaction rename shared paths ([DeepcacheArchive.cpp](src/DeepcacheArchive.cpp#L437),
-[DeepcacheArchive.cpp](src/DeepcacheArchive.cpp#L497)). Two standalone/DAW Rack
-processes can therefore append using stale offsets, overwrite one another's
-indexes, or rename files while the other process is using them.
+**Resolved.** `archive-v1.lock` is held exclusively for the archive worker's
+entire disk lifetime. Windows uses an exclusive Unicode `CreateFileW` handle;
+POSIX uses nonblocking `flock`. A contender enters `BUSY`, performs no database
+reads or writes, and leaves browser warming operational in memory. Other lease
+failures are reported as archive error code 6 rather than being mistaken for
+contention. The archive spec exercises simultaneous workers and denied writes.
 
-Checksums should prevent corrupt pixels from being displayed on the next
-restart, but they do not prevent loss of cache coverage or live archive errors.
-Before release, choose one of:
+### P1-2: Budgeted construction for visible cache misses
 
-1. a cross-platform exclusive writer lock with read-only fallback;
-2. one pack per process followed by a controlled merge; or
-3. a process-specific cache directory and no sharing.
+**Resolved.** `draw()` now submits a deduplicated on-demand index and paints the
+placeholder. Both on-demand and planner work pass through the same executor,
+four-item ceiling, and configured UI-time budget. On-demand work continues even
+without an active full-cache pass and always enters the framebuffer/persistence
+pipeline.
 
-### P1-2: A cache miss visible in the browser constructs a module inside `draw()`
+### P1-3: Same-session retirement of live preview trees
 
-`DeepcacheModelBox::draw()` promotes the request and then immediately calls
-`ensurePreviewConstructed()` ([Deepcache.cpp](src/Deepcache.cpp#L1250)). This
-bypasses the configured UI budget and the four-items-per-frame executor. A fast
-scroll across uncached cards can synchronously call arbitrary third-party
-`createModuleWidget(nullptr)` implementations in one draw frame. This is the
-path most likely to recreate the perceived fill-in/stutter that Deepcache is
-intended to eliminate.
+**Resolved.** After framebuffer readback, the card immediately replaces its
+live third-party widget hierarchy with `DeepcacheRasterWidget` and releases the
+framebuffer through the existing lifecycle path. The raster and pending archive
+write share one immutable RGBA allocation, avoiding a second full pixel copy.
+Raster upload remains context-aware and retryable.
 
-The draw path also does not independently schedule persistence. If no cache
-generation is active, an on-demand preview can remain process-local. If normal
-browser drawing makes the framebuffer ready before its planner request is
-consumed, the existing ready branch does not necessarily run the capture/write
-path used by `warmFramebuffers()`.
+### P1-4: Bounded cooperative shutdown
 
-Recommended fix: `draw()` should render a cheap placeholder and submit a
-deduplicated on-demand request. Only the budgeted executor should construct it.
-Framebuffer readiness should feed a separate idempotent persistence queue keyed
-by model index, regardless of whether readiness came from hidden warming or
-normal browser drawing.
+**Resolved to the strongest safe joined-thread guarantee available here.**
+Shutdown rejects new work, immediately drops queued writes/decoded results, and
+the QOI encoder checks cancellation every 4,096 pixels. Pack/compaction writes
+check between 1 MB chunks and pack reads between 4 MB chunks. The join can now
+wait only for a small compute/I/O chunk or an already-entered filesystem
+flush/rename call. The latter is controlled by the OS and cannot safely be
+aborted without detaching a thread that owns archive state. Physical-disk and
+network-mounted user folders remain part of the authoritative Windows test
+matrix.
 
-### P1-3: Newly built previews retain every live module widget and framebuffer
+### P1-5: Stoermelder MB-first browser collision
 
-After a successful warm/capture, RGBA is sent to the archive
-([Deepcache.cpp](src/Deepcache.cpp#L617)), but the card continues to own its
-`ModuleWidget`, `ZoomWidget`, `FramebufferWidget`, and module-specific child
-resources. It is only converted to `DeepcacheRasterWidget` when a persisted QOI
-is loaded on a later launch. With roughly 1,700 models, the initial-build
-session can retain a very large number of third-party widget trees and GPU
-framebuffers. When the browser is visible, their step behavior may also add
-ongoing UI cost.
-
-Recommended fix: after successful capture, replace the live hierarchy with a
-raster widget in the same session and release the framebuffer through the
-existing lifecycle path. Avoid doubling every RGBA buffer by sharing immutable
-pixel ownership between the raster card and pending archive write, or by
-installing the raster after QOI encoding acknowledges the write.
-
-### P1-4: Shutdown is cooperative but not strictly time-bounded
-
-`shutdown()` signals cancellation and immediately joins the archive thread
-([DeepcacheArchive.cpp](src/DeepcacheArchive.cpp#L194)). Startup and final pack
-reads are now chunked and cancellation-aware. Compaction checks between entries.
-However, cancellation cannot interrupt a QOI encode, one payload write, a
-filesystem flush, index serialization, or rename transaction
-([DeepcacheArchive.cpp](src/DeepcacheArchive.cpp#L412),
-[DeepcacheArchive.cpp](src/DeepcacheArchive.cpp#L437)). A slow or failing disk can
-therefore block removal or Rack shutdown until the current operation returns.
-
-This cannot be solved safely by detaching the thread because it owns object
-state and shared files. Options are to reduce the maximum raster size, chunk all
-possible writes, avoid forced flush on cancellation, or accept/document a
-bounded-to-one-operation shutdown policy. Physical disk or network-mounted user
-folders should be included in the authoritative Windows test matrix.
+**Resolved after reproduction by the user.** Adding Deepcache to a rack that
+already contained Stoermelder MB could freeze Rack while Deepcache detached and
+traversed MB's live replacement browser as though it were Rack's stock browser.
+Deepcache now detects both `Stoermelder-P1/Mb` and the legacy
+`Stoermelder-PackTau/Mb` before reading or modifying the browser slot. It enters
+an inert `STANDBY / MB ACTIVE` state and creates no cache manager, overlay, warm
+host, archive thread, or browser tree. Removing and re-adding Deepcache after MB
+is removed activates it normally.
 
 ### P2-1: Cache fingerprints do not fully identify rendered plugin assets
 
@@ -295,6 +270,21 @@ continuing the in-memory cache path.
     plugin rather than once per model. Planner inputs move to the worker, and
     normalized sort keys are computed once per descriptor rather than inside
     every comparator call.
+13. **Exclusive archive lease.** A process holds `archive-v1.lock` across load,
+    append, index publication, and compaction. Contention is a visible
+    `MEMORY ONLY / DATABASE IN USE` state rather than a corruption risk.
+14. **Budgeted on-demand construction.** Browser drawing no longer constructs
+    third-party module widgets. Visible misses are deduplicated and consumed by
+    the same bounded UI executor as planned work.
+15. **Same-session raster retirement.** Successful captures immediately delete
+    live preview widget/framebuffer trees and install context-safe raster cards;
+    archive encoding shares their immutable pixel ownership.
+16. **Finer shutdown cancellation.** Queued memory is released immediately;
+    QOI encode and payload/compaction writes now observe cancellation inside a
+    single preview rather than only between previews.
+17. **MB-first compatibility gate.** Known Stoermelder MB modules are detected
+    before any browser mutation. Deepcache remains visibly inert instead of
+    stacking two incompatible owners of Rack's raw browser pointer.
 
 ## Corruption and restart behavior after this review
 
@@ -319,8 +309,10 @@ pixels.
 
 - Complete `make test-fast`: passed.
 - `build/tests/deepcache_archive_spec`: passed, including append/replacement,
-  restart, stale fingerprint rejection, cancellation, compaction, corrupt pack,
-  corrupt index, repair, and a second restart.
+  restart, stale fingerprint rejection, simultaneous-worker lease contention,
+  raced-write release in memory-only mode, cancellation, compaction, corrupt
+  pack, corrupt index, repair, and a second restart. Test pixels include varying
+  alpha to exercise the cancelable QOI encoder's RGBA path.
 - `build/tests/deepcache_planner_spec`: 11/11 passed.
 - `build/src/Deepcache.cpp.o`: compiled cleanly with the Rack SDK headers.
 - Archive test under AddressSanitizer and UndefinedBehaviorSanitizer: passed
@@ -331,15 +323,10 @@ pixels.
 - Final full plugin linking is intentionally not treated as authoritative in
   WSL; it remains a Windows/MSYS2 validation item.
 
-## Recommended implementation order
+## Recommended remaining implementation order
 
-1. Add and test a cross-process archive ownership strategy.
-2. Replace draw-time construction with a deduplicated budgeted on-demand queue.
-3. Convert newly captured live module trees into same-session raster cards.
-4. Decide and document the maximum acceptable shutdown wait; then bound the
-   remaining noninterruptible operation accordingly.
-5. Replace per-card promotion with bulk/viewport prioritization.
-6. Strengthen artifact/resource fingerprints and runtime theme invalidation.
-7. Clarify global-coverage versus scoped-run semantics for the cyan bar.
-8. Add persistent-upload retries, memory telemetry/limits, and corruption
+1. Replace per-card promotion with bulk/viewport prioritization.
+2. Strengthen artifact/resource fingerprints and runtime theme invalidation.
+3. Clarify global-coverage versus scoped-run semantics for the cyan bar.
+4. Add persistent-upload retries, memory telemetry/limits, and corruption
    diagnostics.
