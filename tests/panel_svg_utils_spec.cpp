@@ -189,14 +189,19 @@ TestResult testDeepcachePanelAnchorsUseRepositoryUnits() {
   Vec cache;
   Vec ready;
   math::Rect progress;
+  math::Rect framebufferProgress;
   const bool cacheOk = panel_svg::loadPointFromSvgMm("res/Deepcache.svg", "cache_param", &cache);
   const bool readyOk = panel_svg::loadPointFromSvgMm("res/Deepcache.svg", "ready_light", &ready);
   const bool progressOk = panel_svg::loadRectFromSvgMm("res/Deepcache.svg", "progress", &progress);
-  const bool pass = cacheOk && readyOk && progressOk
+  const bool framebufferProgressOk = panel_svg::loadRectFromSvgMm(
+    "res/Deepcache.svg", "framebuffer_progress", &framebufferProgress);
+  const bool pass = cacheOk && readyOk && progressOk && framebufferProgressOk
     && nearlyEqual(cache.x, 10.16f) && nearlyEqual(cache.y, 110.f)
     && nearlyEqual(ready.x, 12.f) && nearlyEqual(ready.y, 78.f)
-    && nearlyEqual(progress.pos.x, 3.f) && nearlyEqual(progress.pos.y, 61.f)
-    && nearlyEqual(progress.size.x, 14.32f) && nearlyEqual(progress.size.y, 8.f);
+    && nearlyEqual(progress.pos.x, 3.f) && nearlyEqual(progress.pos.y, 50.f)
+    && nearlyEqual(progress.size.x, 14.32f) && nearlyEqual(progress.size.y, 7.f)
+    && nearlyEqual(framebufferProgress.pos.x, 3.f) && nearlyEqual(framebufferProgress.pos.y, 66.f)
+    && nearlyEqual(framebufferProgress.size.x, 14.32f) && nearlyEqual(framebufferProgress.size.y, 7.f);
   return {"Deepcache anchors use 1/100mm component coordinates", pass,
           "cache=" + std::to_string(cache.x) + "," + std::to_string(cache.y) +
             " ready=" + std::to_string(ready.x) + "," + std::to_string(ready.y) +

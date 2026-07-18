@@ -78,10 +78,25 @@ the Deepcache browser during conflict retirement. It mirrors the relevant Rack
 `FramebufferWidget::onContextDestroy()` contract and avoids destructor-time GL
 deletion after the Window has gone away.
 
-The experimental invisible framebuffer warm pass is persisted as a setting but
-is intentionally not active in the MVP. The current cache guarantee is retained,
-once-stepped preview widget hierarchies; rasterization may still occur on first
-visible draw.
+The experimental framebuffer warm pass runs from a transparent scene-level host
+during Rack's normal draw phase. After the resident-widget phase completes, it
+calls each outer preview `FramebufferWidget::render()` without compositing the
+result, validates the resulting NanoVG image, and promotes the card to
+`FRAMEBUFFER_READY`. Work is limited to four previews per frame under the same
+cooperative UI budget. Transient failures are retried twice; a permanent failure
+is isolated to that preview and remains available for Rack's normal lazy draw.
+
+The setting remains disabled by default because warming every installed preview
+can use substantial GPU memory. Enabling it applies immediately to an existing
+resident cache as well as future rebuilds. Graphics-context destruction
+downgrades framebuffer-ready cards to resident, clears stale completion, and
+schedules a raster-only rewarm for the next valid draw context.
+
+The panel exposes the two phases separately. A bordered cyan bar reports module
+widget construction as a percentage, with the exact constructed/total module
+count beneath it. A second bordered violet bar reports framebuffer attempts and
+shows `OFF` while the experimental pass is disabled. READY is published only
+after both bars have completed when framebuffer warming is enabled.
 
 ## Thread boundary
 

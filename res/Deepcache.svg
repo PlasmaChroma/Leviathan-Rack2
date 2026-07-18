@@ -23,6 +23,10 @@
           font-weight="700" text-anchor="middle">DEEP</text>
     <text x="10.16" y="13" fill="#8b68ff" font-family="sans-serif" font-size="3.1"
           font-weight="700" text-anchor="middle">CACHE</text>
+    <text x="10.16" y="48" fill="#70dce7" font-family="sans-serif" font-size="1.25"
+          letter-spacing="0.18" text-anchor="middle">MODULE CACHE</text>
+    <text x="10.16" y="64" fill="#a98cff" font-family="sans-serif" font-size="1.25"
+          letter-spacing="0.18" text-anchor="middle">FRAMEBUFFER</text>
     <text x="10.16" y="100.5" fill="#9fb3c8" font-family="sans-serif" font-size="1.7"
           letter-spacing="0.3" text-anchor="middle">CACHE</text>
     <text x="10.16" y="89" fill="#73869c" font-family="sans-serif" font-size="1.25"
@@ -34,7 +38,9 @@
   </g>
   <g inkscape:groupmode="layer" inkscape:label="components" opacity="0">
     <circle id="cache_param" cx="1016" cy="11000" r="100"/>
-    <rect id="progress" x="300" y="6100" width="1432" height="800"/>
+    <rect id="progress" x="300" y="5000" width="1432" height="700"/>
+    <rect id="progress_count" x="300" y="5720" width="1432" height="450"/>
+    <rect id="framebuffer_progress" x="300" y="6600" width="1432" height="700"/>
     <circle id="planning_light" cx="400" cy="7800" r="50"/>
     <circle id="warming_light" cx="800" cy="7800" r="50"/>
     <circle id="ready_light" cx="1200" cy="7800" r="50"/>

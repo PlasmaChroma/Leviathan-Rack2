@@ -32,6 +32,10 @@ struct DeepcacheModule : rack::engine::Module {
 	std::atomic<int> completedCount {0};
 	std::atomic<int> totalCount {0};
 	std::atomic<int> failedCount {0};
+	std::atomic<int> constructionCompletedCount {0};
+	std::atomic<int> constructionTotalCount {0};
+	std::atomic<int> framebufferCompletedCount {0};
+	std::atomic<int> framebufferTotalCount {0};
 	std::atomic<std::uint64_t> buttonPressSerial {0};
 	std::atomic<bool> autoStart {true};
 	std::atomic<int> uiBudgetMicros {2000};

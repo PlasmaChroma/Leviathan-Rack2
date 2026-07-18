@@ -102,9 +102,10 @@ TestResult testStateTransitions() {
 	                       deepcache::isValidTransition(CacheState::WARMING, CacheState::READY);
 	const bool pausePath = deepcache::isValidTransition(CacheState::WARMING, CacheState::PAUSED) &&
 	                       deepcache::isValidTransition(CacheState::PAUSED, CacheState::WARMING);
+	const bool contextRewarm = deepcache::isValidTransition(CacheState::READY, CacheState::WARMING);
 	const bool invalid = !deepcache::isValidTransition(CacheState::IDLE, CacheState::READY) &&
 	                     !deepcache::isValidTransition(CacheState::STOPPING, CacheState::IDLE);
-	return {"cache state machine accepts only explicit transitions", happyPath && pausePath && invalid,
+	return {"cache state machine accepts only explicit transitions", happyPath && pausePath && contextRewarm && invalid,
 	        "happy/pause/invalid paths checked"};
 }
 

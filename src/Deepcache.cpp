@@ -45,6 +45,13 @@ namespace {
 
 class PreviewCacheManager;
 struct DeepcacheBrowser;
+struct DeepcacheWarmRenderHost;
+
+enum class FramebufferWarmResult {
+	READY,
+	RETRY,
+	FAILED
+};
 
 void releaseFramebuffers(widget::Widget* root) {
 	if (!root)
@@ -109,6 +116,9 @@ struct DeepcacheModelBox : widget::OpaqueWidget {
 	                  PreviewCacheManager* manager);
 	~DeepcacheModelBox() override;
 	bool ensurePreviewConstructed();
+	FramebufferWarmResult warmFramebuffer();
+	bool hasValidFramebufferImage() const;
+	void invalidateFramebufferReadiness();
 	void clearPreview();
 	void updateZoom();
 	void draw(const DrawArgs& args) override;
@@ -228,6 +238,8 @@ struct DeepcacheBrowser : widget::OpaqueWidget {
 	std::vector<deepcache::ModelDescriptor> snapshotModelDescriptors() const;
 	std::unordered_set<std::size_t> visibleModelIndices() const;
 	std::size_t residentPreviewCount() const;
+	std::size_t framebufferReadyPreviewCount() const;
+	void invalidateFramebufferReadiness();
 	app::ModuleWidget* chooseModel(plugin::Model* model);
 };
 
@@ -265,6 +277,14 @@ public:
 		completed_ = 0;
 		total_ = 0;
 		failed_ = 0;
+		constructionTarget_ = 0;
+		constructionCompleted_ = 0;
+		constructionFailed_ = 0;
+		framebufferTarget_ = 0;
+		framebufferCompleted_ = 0;
+		framebufferWarmQueue_.clear();
+		generationResidentIndices_.clear();
+		framebufferWarmForGeneration_ = module_->experimentalFramebufferWarm.load(std::memory_order_relaxed);
 		constructionTotalMs_ = 0.0;
 		constructionMaxMs_ = 0.0;
 		constructedCount_ = 0;
@@ -304,6 +324,13 @@ public:
 		completed_ = 0;
 		total_ = 0;
 		failed_ = 0;
+		constructionTarget_ = 0;
+		constructionCompleted_ = 0;
+		constructionFailed_ = 0;
+		framebufferTarget_ = 0;
+		framebufferCompleted_ = 0;
+		framebufferWarmQueue_.clear();
+		generationResidentIndices_.clear();
 		setState(deepcache::CacheState::IDLE);
 	}
 
@@ -319,6 +346,13 @@ public:
 		completed_ = 0;
 		total_ = 0;
 		failed_ = 0;
+		constructionTarget_ = 0;
+		constructionCompleted_ = 0;
+		constructionFailed_ = 0;
+		framebufferTarget_ = 0;
+		framebufferCompleted_ = 0;
+		framebufferWarmQueue_.clear();
+		generationResidentIndices_.clear();
 		setState(deepcache::CacheState::IDLE);
 	}
 
@@ -364,12 +398,74 @@ public:
 		}
 	}
 
+	void setFramebufferWarmEnabled(bool enabled) {
+		module_->experimentalFramebufferWarm.store(enabled, std::memory_order_relaxed);
+		framebufferWarmForGeneration_ = enabled;
+		framebufferWarmQueue_.clear();
+		if (constructionTarget_ <= 0) {
+			publish();
+			return;
+		}
+
+		if (!enabled) {
+			failed_ = constructionFailed_;
+			completed_ = constructionCompleted_;
+			framebufferTarget_ = 0;
+			framebufferCompleted_ = 0;
+			if (constructionCompleted_ >= constructionTarget_ && state_ != deepcache::CacheState::PAUSED)
+				setState(deepcache::CacheState::READY);
+			else
+				publish();
+			return;
+		}
+
+		failed_ = constructionFailed_;
+		completed_ = constructionFailed_;
+		framebufferTarget_ = static_cast<int>(generationResidentIndices_.size());
+		framebufferCompleted_ = 0;
+		for (std::size_t modelIndex : generationResidentIndices_) {
+			DeepcacheModelBox* box = browser_ ? browser_->getModelBox(modelIndex) : nullptr;
+			if (box && box->state == deepcache::PreviewEntryState::FRAMEBUFFER_READY) {
+				completed_++;
+				framebufferCompleted_++;
+			}
+			else
+				framebufferWarmQueue_.push_back({modelIndex, 0});
+		}
+		if (state_ == deepcache::CacheState::READY && completed_ < total_)
+			setState(deepcache::CacheState::WARMING);
+		else {
+			publish();
+			finishIfComplete();
+		}
+	}
+
+	void onGraphicsContextDestroy() {
+		if (!browser_)
+			return;
+		browser_->invalidateFramebufferReadiness();
+		if (!framebufferWarmForGeneration_ || constructionTarget_ <= 0)
+			return;
+		framebufferWarmQueue_.clear();
+		completed_ = constructionFailed_;
+		failed_ = constructionFailed_;
+		framebufferTarget_ = static_cast<int>(generationResidentIndices_.size());
+		framebufferCompleted_ = 0;
+		for (std::size_t modelIndex : generationResidentIndices_)
+			framebufferWarmQueue_.push_back({modelIndex, 0});
+		if (state_ == deepcache::CacheState::READY)
+			setState(deepcache::CacheState::WARMING);
+		else
+			publish();
+	}
+
 	void step() {
 		if (stopped_ || !browser_)
 			return;
 
 		if (state_ == deepcache::CacheState::PLANNING && worker_.isPlanReady(activeGeneration_)) {
 			total_ = static_cast<int>(worker_.plannedRequestCount(activeGeneration_));
+			constructionTarget_ = total_;
 			if (total_ == 0)
 				setState(deepcache::CacheState::READY);
 			else
@@ -391,8 +487,15 @@ public:
 			if (request.generation != activeGeneration_)
 				continue;
 			DeepcacheModelBox* box = browser_->getModelBox(request.modelIndex);
-			if (!box)
+			if (!box) {
+				constructionCompleted_++;
+				constructionFailed_++;
+				completed_++;
+				failed_++;
+				processedThisFrame++;
+				publish();
 				continue;
+			}
 
 			const bool wasComplete = box->state == deepcache::PreviewEntryState::RESIDENT ||
 			                         box->state == deepcache::PreviewEntryState::FRAMEBUFFER_READY ||
@@ -412,25 +515,68 @@ public:
 			}
 			if (!resident) {
 				failed_++;
+				constructionFailed_++;
 				backend_.invalidate(request.cacheKey);
 			}
 			else {
+				generationResidentIndices_.insert(request.modelIndex);
 				backend_.store(request.cacheKey);
+				if (framebufferWarmForGeneration_) {
+					if (box->state == deepcache::PreviewEntryState::FRAMEBUFFER_READY) {
+						completed_++;
+						framebufferCompleted_++;
+					}
+					else
+						framebufferWarmQueue_.push_back({request.modelIndex, 0});
+				}
 			}
-			completed_++;
+			constructionCompleted_++;
+			if (!framebufferWarmForGeneration_ || !resident)
+				completed_++;
 			processedThisFrame++;
 			publish();
 		}
-
-		if (completed_ >= total_ && worker_.pendingRequestCount(activeGeneration_) == 0) {
-			if (isDragonKingDebugEnabled()) {
-				const double elapsedMs = (system::getTime() - warmingStartedAt_) * 1000.0;
-				const double averageMs = constructedCount_ > 0 ? constructionTotalMs_ / constructedCount_ : 0.0;
-				INFO("Leviathan Deepcache: ready %d/%d, failed=%d, elapsed=%.2f ms, average=%.2f ms, max=%.2f ms",
-				     completed_, total_, failed_, elapsedMs, averageMs, constructionMaxMs_);
-			}
-			setState(deepcache::CacheState::READY);
+		if (framebufferWarmForGeneration_ && constructionCompleted_ >= constructionTarget_) {
+			framebufferTarget_ = static_cast<int>(generationResidentIndices_.size());
+			publish();
 		}
+		finishIfComplete();
+	}
+
+	void warmFramebuffers() {
+		if (stopped_ || !browser_ || state_ != deepcache::CacheState::WARMING ||
+		    !framebufferWarmForGeneration_ || constructionCompleted_ < constructionTarget_)
+			return;
+		const double frameStart = system::getTime();
+		const double budgetMs = std::max(0.5, module_->uiBudgetMicros.load(std::memory_order_relaxed) / 1000.0);
+		int processedThisFrame = 0;
+		while (processedThisFrame < 4 && !framebufferWarmQueue_.empty()) {
+			if (processedThisFrame > 0 && (system::getTime() - frameStart) * 1000.0 >= budgetMs)
+				break;
+			auto request = framebufferWarmQueue_.front();
+			framebufferWarmQueue_.pop_front();
+			DeepcacheModelBox* box = browser_->getModelBox(request.first);
+			const double startedAt = system::getTime();
+			const FramebufferWarmResult result = box ? box->warmFramebuffer() : FramebufferWarmResult::FAILED;
+			const double durationMs = (system::getTime() - startedAt) * 1000.0;
+			processedThisFrame++;
+			if (result == FramebufferWarmResult::RETRY && request.second < 2) {
+				request.second++;
+				framebufferWarmQueue_.push_back(request);
+			}
+			else {
+				completed_++;
+				framebufferCompleted_++;
+				if (result != FramebufferWarmResult::READY)
+					failed_++;
+				if (isDragonKingDebugEnabled() && durationMs >= 16.0) {
+					WARN("Leviathan Deepcache: slow framebuffer warm %.2f ms: %s", durationMs,
+					     box && box->model ? box->model->getFullName().c_str() : "unknown");
+				}
+			}
+			publish();
+		}
+		finishIfComplete();
 	}
 
 	int completedCount() const { return completed_; }
@@ -438,10 +584,27 @@ public:
 	int failedCount() const { return failed_; }
 	std::size_t residentRecordCount() const { return backend_.size(); }
 	std::size_t residentPreviewCount() const { return browser_ ? browser_->residentPreviewCount() : 0; }
+	std::size_t framebufferReadyPreviewCount() const { return browser_ ? browser_->framebufferReadyPreviewCount() : 0; }
 	double averageConstructionMs() const { return constructedCount_ > 0 ? constructionTotalMs_ / constructedCount_ : 0.0; }
 	double maximumConstructionMs() const { return constructionMaxMs_; }
 
 private:
+	void finishIfComplete() {
+		if (state_ != deepcache::CacheState::WARMING || constructionCompleted_ < constructionTarget_ ||
+		    worker_.pendingRequestCount(activeGeneration_) != 0 || completed_ < total_ ||
+		    (framebufferWarmForGeneration_ && !framebufferWarmQueue_.empty()))
+			return;
+		if (isDragonKingDebugEnabled()) {
+			const double elapsedMs = (system::getTime() - warmingStartedAt_) * 1000.0;
+			const double averageMs = constructedCount_ > 0 ? constructionTotalMs_ / constructedCount_ : 0.0;
+			INFO("Leviathan Deepcache: ready %d/%d, failed=%d, framebufferReady=%llu, elapsed=%.2f ms, average=%.2f ms, max=%.2f ms",
+			     completed_, total_, failed_,
+			     static_cast<unsigned long long>(framebufferReadyPreviewCount()),
+			     elapsedMs, averageMs, constructionMaxMs_);
+		}
+		setState(deepcache::CacheState::READY);
+	}
+
 	void setState(deepcache::CacheState next) {
 		if (!deepcache::isValidTransition(state_, next) && state_ != deepcache::CacheState::DISABLED) {
 			WARN("Leviathan Deepcache: invalid cache state transition %d -> %d",
@@ -458,6 +621,10 @@ private:
 		module_->completedCount.store(completed_, std::memory_order_relaxed);
 		module_->totalCount.store(total_, std::memory_order_relaxed);
 		module_->failedCount.store(failed_, std::memory_order_relaxed);
+		module_->constructionCompletedCount.store(constructionCompleted_, std::memory_order_relaxed);
+		module_->constructionTotalCount.store(constructionTarget_, std::memory_order_relaxed);
+		module_->framebufferCompletedCount.store(framebufferCompleted_, std::memory_order_relaxed);
+		module_->framebufferTotalCount.store(framebufferTarget_, std::memory_order_relaxed);
 	}
 
 	DeepcacheModule* module_ = nullptr;
@@ -470,11 +637,41 @@ private:
 	int completed_ = 0;
 	int total_ = 0;
 	int failed_ = 0;
+	int constructionTarget_ = 0;
+	int constructionCompleted_ = 0;
+	int constructionFailed_ = 0;
+	int framebufferTarget_ = 0;
+	int framebufferCompleted_ = 0;
+	bool framebufferWarmForGeneration_ = false;
+	std::deque<std::pair<std::size_t, int>> framebufferWarmQueue_;
+	std::unordered_set<std::size_t> generationResidentIndices_;
 	double warmingStartedAt_ = 0.0;
 	double constructionTotalMs_ = 0.0;
 	double constructionMaxMs_ = 0.0;
 	int constructedCount_ = 0;
 	bool stopped_ = false;
+};
+
+struct DeepcacheWarmRenderHost : widget::TransparentWidget {
+	PreviewCacheManager* cacheManager = nullptr;
+
+	void step() override {
+		if (parent)
+			box = parent->box.zeroPos();
+		widget::TransparentWidget::step();
+	}
+
+	void draw(const DrawArgs& args) override {
+		(void)args;
+		if (cacheManager)
+			cacheManager->warmFramebuffers();
+	}
+
+	void onContextDestroy(const ContextDestroyEvent& e) override {
+		if (cacheManager)
+			cacheManager->onGraphicsContextDestroy();
+		widget::TransparentWidget::onContextDestroy(e);
+	}
 };
 
 struct DeepcacheBrowserOverlay : ui::MenuOverlay {
@@ -608,6 +805,7 @@ bool DeepcacheModelBox::ensurePreviewConstructed() {
 		framebuffer = new widget::FramebufferWidget;
 		if (APP && APP->window && APP->window->pixelRatio < 2.f)
 			framebuffer->oversample = 2.f;
+		framebuffer->dirtyOnSubpixelChange = false;
 		zoomWidget->addChild(framebuffer);
 		moduleContainer = new ModuleWidgetContainer;
 		framebuffer->addChild(moduleContainer);
@@ -616,6 +814,7 @@ bool DeepcacheModelBox::ensurePreviewConstructed() {
 			throw std::runtime_error("createModuleWidget(nullptr) returned null");
 		moduleContainer->addChild(moduleWidget);
 		moduleContainer->box.size = moduleWidget->box.size;
+		framebuffer->box.size = moduleWidget->box.size;
 		moduleWidget->step();
 		updateZoom();
 		state = deepcache::PreviewEntryState::RESIDENT;
@@ -639,6 +838,61 @@ bool DeepcacheModelBox::ensurePreviewConstructed() {
 	failureReason = capturedFailure;
 	state = deepcache::PreviewEntryState::FAILED;
 	return false;
+}
+
+bool DeepcacheModelBox::hasValidFramebufferImage() const {
+	if (!framebuffer || !APP || !APP->window || !APP->window->vg)
+		return false;
+	const int imageHandle = framebuffer->getImageHandle();
+	if (imageHandle < 0)
+		return false;
+	int imageWidth = 0;
+	int imageHeight = 0;
+	nvgImageSize(APP->window->vg, imageHandle, &imageWidth, &imageHeight);
+	return imageWidth > 0 && imageHeight > 0;
+}
+
+FramebufferWarmResult DeepcacheModelBox::warmFramebuffer() {
+	if (state == deepcache::PreviewEntryState::FRAMEBUFFER_READY && hasValidFramebufferImage())
+		return FramebufferWarmResult::READY;
+	if (state != deepcache::PreviewEntryState::RESIDENT || !framebuffer)
+		return FramebufferWarmResult::FAILED;
+	if (!APP || !APP->window || !APP->window->vg || !APP->window->fbVg)
+		return FramebufferWarmResult::RETRY;
+	if (hasValidFramebufferImage()) {
+		state = deepcache::PreviewEntryState::FRAMEBUFFER_READY;
+		return FramebufferWarmResult::READY;
+	}
+
+	try {
+		framebuffer->step();
+		framebuffer->setDirty();
+		// Called only by the scene-level warm host during Rack's draw phase.
+		// render() builds the texture without compositing it into the scene.
+		framebuffer->render();
+		if (!hasValidFramebufferImage())
+			return FramebufferWarmResult::RETRY;
+		state = deepcache::PreviewEntryState::FRAMEBUFFER_READY;
+		return FramebufferWarmResult::READY;
+	}
+	catch (const std::exception& exception) {
+		if (isDragonKingDebugEnabled()) {
+			WARN("Leviathan Deepcache: framebuffer warm failed: %s: %s",
+			     model ? model->getFullName().c_str() : "unknown", exception.what());
+		}
+	}
+	catch (...) {
+		if (isDragonKingDebugEnabled()) {
+			WARN("Leviathan Deepcache: framebuffer warm failed: %s: unknown exception",
+			     model ? model->getFullName().c_str() : "unknown");
+		}
+	}
+	return FramebufferWarmResult::FAILED;
+}
+
+void DeepcacheModelBox::invalidateFramebufferReadiness() {
+	if (state == deepcache::PreviewEntryState::FRAMEBUFFER_READY)
+		state = deepcache::PreviewEntryState::RESIDENT;
 }
 
 void DeepcacheModelBox::clearPreview() {
@@ -690,6 +944,8 @@ void DeepcacheModelBox::draw(const DrawArgs& args) {
 	const float brightness = math::clamp(settings::rackBrightness + 0.2f, 0.f, 1.f);
 	nvgGlobalTint(args.vg, nvgRGBAf(brightness, brightness, brightness, 1.f));
 	OpaqueWidget::draw(args);
+	if (state == deepcache::PreviewEntryState::RESIDENT && hasValidFramebufferImage())
+		state = deepcache::PreviewEntryState::FRAMEBUFFER_READY;
 
 	if (model && model->isFavorite()) {
 		nvgBeginPath(args.vg);
@@ -1064,6 +1320,17 @@ std::size_t DeepcacheBrowser::residentPreviewCount() const {
 	}));
 }
 
+std::size_t DeepcacheBrowser::framebufferReadyPreviewCount() const {
+	return static_cast<std::size_t>(std::count_if(modelBoxes.begin(), modelBoxes.end(), [](const DeepcacheModelBox* box) {
+		return box->state == deepcache::PreviewEntryState::FRAMEBUFFER_READY;
+	}));
+}
+
+void DeepcacheBrowser::invalidateFramebufferReadiness() {
+	for (DeepcacheModelBox* box : modelBoxes)
+		box->invalidateFramebufferReadiness();
+}
+
 app::ModuleWidget* DeepcacheBrowser::chooseModel(plugin::Model* model) {
 	if (!model || !APP || !APP->engine || !APP->scene || !APP->scene->rack)
 		return nullptr;
@@ -1373,32 +1640,67 @@ void DeepcacheZoomButton::step() {
 }
 
 struct DeepcacheProgressWidget : widget::TransparentWidget {
+	enum class Stage {
+		MODULES,
+		FRAMEBUFFERS
+	};
+
 	DeepcacheModule* module = nullptr;
-	explicit DeepcacheProgressWidget(DeepcacheModule* module)
-		: module(module) {
+	Stage stage = Stage::MODULES;
+	DeepcacheProgressWidget(DeepcacheModule* module, Stage stage)
+		: module(module), stage(stage) {
 	}
 	void draw(const DrawArgs& args) override {
-		const int completed = module ? module->completedCount.load(std::memory_order_relaxed) : 0;
-		const int total = module ? module->totalCount.load(std::memory_order_relaxed) : 0;
-		const auto state = module ? static_cast<deepcache::CacheState>(module->cacheState.load(std::memory_order_relaxed))
-		                          : deepcache::CacheState::DISABLED;
+		const bool framebufferStage = stage == Stage::FRAMEBUFFERS;
+		const int completed = !module ? 0 : framebufferStage
+			? module->framebufferCompletedCount.load(std::memory_order_relaxed)
+			: module->constructionCompletedCount.load(std::memory_order_relaxed);
+		const int total = !module ? 0 : framebufferStage
+			? module->framebufferTotalCount.load(std::memory_order_relaxed)
+			: module->constructionTotalCount.load(std::memory_order_relaxed);
+		const bool enabled = !framebufferStage ||
+			(module && module->experimentalFramebufferWarm.load(std::memory_order_relaxed));
 		const float progress = total > 0 ? math::clamp(completed / static_cast<float>(total), 0.f, 1.f) : 0.f;
 		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, 0, 0, box.size.x, box.size.y, 2.f);
+		nvgRoundedRect(args.vg, 0.75f, 0.75f, box.size.x - 1.5f, box.size.y - 1.5f, 2.f);
 		nvgFillColor(args.vg, nvgRGBA(8, 13, 22, 235));
 		nvgFill(args.vg);
-		if (progress > 0.f) {
+		if (enabled && progress > 0.f) {
 			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, 1.f, 1.f, (box.size.x - 2.f) * progress, box.size.y - 2.f, 1.5f);
-			nvgFillColor(args.vg, nvgRGBA(35, 205, 225, 220));
+			nvgRoundedRect(args.vg, 2.f, 2.f, (box.size.x - 4.f) * progress, box.size.y - 4.f, 1.25f);
+			nvgFillColor(args.vg, framebufferStage ? nvgRGBA(139, 104, 255, 220)
+			                                               : nvgRGBA(35, 205, 225, 220));
 			nvgFill(args.vg);
 		}
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, 0.75f, 0.75f, box.size.x - 1.5f, box.size.y - 1.5f, 2.f);
+		nvgStrokeWidth(args.vg, 1.5f);
+		nvgStrokeColor(args.vg, framebufferStage ? nvgRGBA(139, 104, 255, 190)
+		                                               : nvgRGBA(56, 221, 232, 190));
+		nvgStroke(args.vg);
 		nvgFontSize(args.vg, 9.f);
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 		nvgFillColor(args.vg, color::WHITE);
-		const std::string text = state == deepcache::CacheState::DISABLED ? "PASSIVE" :
-		                         total > 0 ? std::to_string(completed) + " / " + std::to_string(total) : "IDLE";
+		const std::string text = !enabled ? "OFF" : std::to_string(static_cast<int>(std::round(progress * 100.f))) + "%";
 		nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.52f, text.c_str(), nullptr);
+	}
+};
+
+struct DeepcacheModuleCountWidget : widget::TransparentWidget {
+	DeepcacheModule* module = nullptr;
+	explicit DeepcacheModuleCountWidget(DeepcacheModule* module)
+		: module(module) {
+	}
+	void draw(const DrawArgs& args) override {
+		const int completed = module ? module->constructionCompletedCount.load(std::memory_order_relaxed) : 0;
+		const int total = module ? module->constructionTotalCount.load(std::memory_order_relaxed) : 0;
+		const std::string text = total > 0
+			? std::to_string(completed) + " / " + std::to_string(total) + " MODULES"
+			: "0 MODULES";
+		nvgFontSize(args.vg, 7.5f);
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		nvgFillColor(args.vg, nvgRGBA(188, 204, 224, 220));
+		nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.5f, text.c_str(), nullptr);
 	}
 };
 
@@ -1485,6 +1787,7 @@ struct DeepcacheWidget::Internal {
 	DeepcacheModule* module = nullptr;
 	PreviewCacheManager* cacheManager = nullptr;
 	DeepcacheBrowserOverlay* overlay = nullptr;
+	DeepcacheWarmRenderHost* warmRenderHost = nullptr;
 	bool active = false;
 	bool autoStartPending = false;
 	std::uint64_t handledButtonSerial = 0;
@@ -1496,7 +1799,6 @@ DeepcacheWidget::DeepcacheWidget(DeepcacheModule* module) {
 	setPanel(createPanel(panelPath));
 
 	math::Vec cacheButtonMm(10.16f, 110.f);
-	math::Vec progressMm(3.f, 61.f);
 	math::Vec planningMm(4.f, 78.f);
 	math::Vec warmingMm(8.f, 78.f);
 	math::Vec readyMm(12.f, 78.f);
@@ -1507,16 +1809,28 @@ DeepcacheWidget::DeepcacheWidget(DeepcacheModule* module) {
 	panel_svg::loadPointFromSvgMm(panelPath, "ready_light", &readyMm);
 	panel_svg::loadPointFromSvgMm(panelPath, "error_light", &errorMm);
 
-	math::Rect progressRectMm(progressMm, math::Vec(14.32f, 8.f));
+	math::Rect progressRectMm(math::Vec(3.f, 50.f), math::Vec(14.32f, 7.f));
+	math::Rect moduleCountRectMm(math::Vec(3.f, 57.2f), math::Vec(14.32f, 4.5f));
+	math::Rect framebufferProgressRectMm(math::Vec(3.f, 66.f), math::Vec(14.32f, 7.f));
 	panel_svg::loadRectFromSvgMm(panelPath, "progress", &progressRectMm);
+	panel_svg::loadRectFromSvgMm(panelPath, "progress_count", &moduleCountRectMm);
+	panel_svg::loadRectFromSvgMm(panelPath, "framebuffer_progress", &framebufferProgressRectMm);
 	auto* cacheButton = createParamCentered<DeepcacheCacheButton>(
 		mm2px(cacheButtonMm), module, DeepcacheModule::CACHE_PARAM);
 	cacheButton->deepcacheModule = module;
 	addParam(cacheButton);
-	auto* progress = new DeepcacheProgressWidget(module);
+	auto* progress = new DeepcacheProgressWidget(module, DeepcacheProgressWidget::Stage::MODULES);
 	progress->box.pos = mm2px(progressRectMm.pos);
 	progress->box.size = mm2px(progressRectMm.size);
 	addChild(progress);
+	auto* moduleCount = new DeepcacheModuleCountWidget(module);
+	moduleCount->box.pos = mm2px(moduleCountRectMm.pos);
+	moduleCount->box.size = mm2px(moduleCountRectMm.size);
+	addChild(moduleCount);
+	auto* framebufferProgress = new DeepcacheProgressWidget(module, DeepcacheProgressWidget::Stage::FRAMEBUFFERS);
+	framebufferProgress->box.pos = mm2px(framebufferProgressRectMm.pos);
+	framebufferProgress->box.size = mm2px(framebufferProgressRectMm.size);
+	addChild(framebufferProgress);
 	addChild(createLightCentered<TinyLight<YellowLight>>(mm2px(planningMm), module, DeepcacheModule::PLANNING_LIGHT));
 	addChild(createLightCentered<TinyLight<BlueLight>>(mm2px(warmingMm), module, DeepcacheModule::WARMING_LIGHT));
 	addChild(createLightCentered<TinyLight<GreenLight>>(mm2px(readyMm), module, DeepcacheModule::READY_LIGHT));
@@ -1535,6 +1849,9 @@ DeepcacheWidget::DeepcacheWidget(DeepcacheModule* module) {
 		internal_->overlay = new DeepcacheBrowserOverlay(internal_->cacheManager);
 		if (internal_->overlay->installed && internal_->overlay->browser) {
 			internal_->cacheManager->setBrowser(internal_->overlay->browser);
+			internal_->warmRenderHost = new DeepcacheWarmRenderHost;
+			internal_->warmRenderHost->cacheManager = internal_->cacheManager;
+			APP->scene->addChild(internal_->warmRenderHost);
 			internal_->autoStartPending = module->autoStart.load(std::memory_order_relaxed);
 		}
 		else {
@@ -1550,6 +1867,13 @@ DeepcacheWidget::~DeepcacheWidget() {
 	if (!internal_)
 		return;
 	if (internal_->active) {
+		if (internal_->warmRenderHost) {
+			internal_->warmRenderHost->cacheManager = nullptr;
+			if (internal_->warmRenderHost->parent)
+				internal_->warmRenderHost->parent->removeChild(internal_->warmRenderHost);
+			delete internal_->warmRenderHost;
+			internal_->warmRenderHost = nullptr;
+		}
 		if (internal_->cacheManager)
 			internal_->cacheManager->stop();
 		if (internal_->overlay) {
@@ -1637,16 +1961,17 @@ void DeepcacheWidget::appendContextMenu(ui::Menu* menu) {
 	}));
 	menu->addChild(createCheckMenuItem("Experimental framebuffer warm pass", "",
 		[deepcacheModule]() { return deepcacheModule->experimentalFramebufferWarm.load(std::memory_order_relaxed); },
-		[deepcacheModule]() {
+		[deepcacheModule, manager]() {
 			const bool value = deepcacheModule->experimentalFramebufferWarm.load(std::memory_order_relaxed);
-			deepcacheModule->experimentalFramebufferWarm.store(!value, std::memory_order_relaxed);
+			manager->setFramebufferWarmEnabled(!value);
 		}));
-	menu->addChild(createMenuLabel("Framebuffer warm pass is not active in the MVP"));
+	menu->addChild(createMenuLabel("Uses additional GPU memory; applied immediately"));
 	menu->addChild(createSubmenuItem("Cache statistics", "", [manager](ui::Menu* child) {
 		child->addChild(createMenuLabel("Completed: " + std::to_string(manager->completedCount()) +
 		                                    " / " + std::to_string(manager->totalCount())));
 		child->addChild(createMenuLabel("Resident records: " + std::to_string(manager->residentRecordCount())));
 		child->addChild(createMenuLabel("Resident previews: " + std::to_string(manager->residentPreviewCount())));
+		child->addChild(createMenuLabel("Framebuffer-ready: " + std::to_string(manager->framebufferReadyPreviewCount())));
 		child->addChild(createMenuLabel("Failed: " + std::to_string(manager->failedCount())));
 		child->addChild(createMenuLabel(string::f("Average construction: %.2f ms", manager->averageConstructionMs())));
 		child->addChild(createMenuLabel(string::f("Maximum construction: %.2f ms", manager->maximumConstructionMs())));

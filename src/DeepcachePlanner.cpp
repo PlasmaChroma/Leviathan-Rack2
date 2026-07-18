@@ -69,7 +69,8 @@ bool isValidTransition(CacheState from, CacheState to) {
 			return to == CacheState::WARMING || to == CacheState::IDLE || to == CacheState::CLEARING ||
 			       to == CacheState::ERROR;
 		case CacheState::READY:
-			return to == CacheState::PLANNING || to == CacheState::CLEARING || to == CacheState::ERROR;
+			return to == CacheState::PLANNING || to == CacheState::WARMING ||
+			       to == CacheState::CLEARING || to == CacheState::ERROR;
 		case CacheState::CLEARING:
 			return to == CacheState::IDLE || to == CacheState::ERROR;
 		case CacheState::ERROR:
