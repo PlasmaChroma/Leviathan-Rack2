@@ -397,11 +397,18 @@ inline bool buildWavetableFromSourceField(const SourceField& source,
       return distribution[lower] + (distribution[upper] - distribution[lower]) * fraction;
     };
     const float low = percentile(0.01f);
-    const float midpoint = percentile(0.50f);
+    const float median = percentile(0.50f);
     const float high = percentile(0.99f);
     if (high - low > 1e-6f) {
-      const float negativeRange = std::max(midpoint - low, 1e-6f);
-      const float positiveRange = std::max(high - midpoint, 1e-6f);
+      // A median can collapse onto a repeated dark or bright floor, leaving
+      // the image with no meaningful range on one side of zero. Keep the
+      // global median when it is well-behaved, but reserve enough of the
+      // robust image-wide span for both polarities when it is not.
+      const float minimumSideRange = 0.15f * (high - low);
+      const float midpoint = std::max(low + minimumSideRange,
+                                      std::min(median, high - minimumSideRange));
+      const float negativeRange = midpoint - low;
+      const float positiveRange = high - midpoint;
       for (size_t row = 0; row < rows.size(); ++row) {
         for (size_t x = 0; x < rows[row].size(); ++x) {
           const float centered = rows[row][x] - midpoint;

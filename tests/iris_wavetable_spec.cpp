@@ -217,10 +217,38 @@ int main() {
   check("balanced normalization retains both polarities",
         balanced.samples[0] < -0.9f && balanced.samples[4] > 0.9f);
 
+  const uint8_t darkDominantLevels[10] = {0u, 0u, 0u, 0u, 0u, 0u, 0u, 64u, 128u, 255u};
+  pixels.resize(10u * 2u * 4u, 255u);
+  settings.frameSize = 10;
+  for (int y = 0; y < 2; ++y) {
+    for (int x = 0; x < 10; ++x) {
+      const size_t base = size_t(y * 10 + x) * 4u;
+      pixels[base + 0u] = pixels[base + 1u] = pixels[base + 2u] = darkDominantLevels[x];
+    }
+  }
+  iris::ImageWavetable darkDominantBalanced;
+  check("balanced normalization rescues a median collapsed onto the dark floor",
+        iris::buildWavetableFromRgba(pixels.data(), 10, 2, 4, settings, &darkDominantBalanced) &&
+        darkDominantBalanced.samples[0] < -0.9f && darkDominantBalanced.samples[9] > 0.9f);
+
+  const uint8_t brightDominantLevels[10] = {0u, 127u, 191u, 255u, 255u, 255u, 255u, 255u, 255u, 255u};
+  for (int y = 0; y < 2; ++y) {
+    for (int x = 0; x < 10; ++x) {
+      const size_t base = size_t(y * 10 + x) * 4u;
+      pixels[base + 0u] = pixels[base + 1u] = pixels[base + 2u] = brightDominantLevels[x];
+    }
+  }
+  iris::ImageWavetable brightDominantBalanced;
+  check("balanced normalization rescues a median collapsed onto the bright ceiling",
+        iris::buildWavetableFromRgba(pixels.data(), 10, 2, 4, settings, &brightDominantBalanced) &&
+        brightDominantBalanced.samples[0] < -0.9f && brightDominantBalanced.samples[9] > 0.9f);
+
   const uint8_t separatedLevels[2][5] = {
     {0u, 24u, 48u, 72u, 96u},
     {160u, 184u, 208u, 232u, 255u},
   };
+  pixels.resize(5u * 2u * 4u, 255u);
+  settings.frameSize = 5;
   for (int y = 0; y < 2; ++y) {
     for (int x = 0; x < 5; ++x) {
       const size_t base = size_t(y * 5 + x) * 4u;

@@ -1611,7 +1611,7 @@ struct NautiloidWidget final : ModuleWidget {
     NautiloidLocationCodeField* locationCodeField = new NautiloidLocationCodeField();
     locationCodeField->module = module;
     const math::Rect locationCodeRectMm = rectMm(
-      "LOCATION_CODE_FIELD", math::Rect(Vec(18.f, 109.f), Vec(62.f, 7.f)));
+      "LOCATION_CODE_FIELD", math::Rect(Vec(24.5f, 109.f), Vec(49.f, 7.f)));
     locationCodeField->box.pos = mm2px(locationCodeRectMm.pos);
     locationCodeField->box.size = mm2px(locationCodeRectMm.size);
     addChild(locationCodeField);

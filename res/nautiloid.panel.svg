@@ -32,7 +32,7 @@
     <ellipse id="ZOOM_RATE_INPUT" cx="897.99994" cy="9836" rx="398" ry="405" fill="#00ff00" />
     <ellipse id="X_VELOCITY_INPUT" cx="2200" cy="9836" rx="398" ry="405" fill="#00ff00" />
     <ellipse id="Y_VELOCITY_INPUT" cx="3500" cy="9836" rx="398" ry="405" fill="#00ff00" />
-    <rect id="LOCATION_CODE_FIELD" x="1800" y="10900" width="6200" height="700" fill="#ff0000" />
+    <rect id="LOCATION_CODE_FIELD" x="2450" y="10900" width="4900" height="700" fill="#ff0000" />
     <circle id="LOCATION_CODE_VALID_LIGHT" cx="8500" cy="11250" fill="#00ff00" r="160" />
     <circle id="IRIS_EXPANDER_LIGHT" cx="9840" cy="580" fill="#ff0000" r="180" />
     <rect id="TILE_CACHE" x="200" y="10200" width="4200" height="2590" fill="#ff0000" style="display:none" />
