@@ -71,7 +71,8 @@ TEST_BINS_NON_RACK := \
 	build/tests/aperture_light_transfer_spec \
 	build/tests/iris_wavetable_spec \
 	build/tests/nautiloid_location_code_spec \
-	build/tests/wave_preview_simplification_spec
+	build/tests/wave_preview_simplification_spec \
+	build/tests/deepcache_planner_spec
 
 
 TEST_BINS_RACK := \
@@ -218,6 +219,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/iris_wavetable_spec)
 	$(call run_test_bin,build/tests/nautiloid_location_code_spec)
 	$(call run_test_bin,build/tests/wave_preview_simplification_spec)
+	$(call run_test_bin,build/tests/deepcache_planner_spec)
 
 test-rack: test-build-rack
 	$(call run_rack_test_bin,build/tests/bifurx_runtime_spec)
@@ -330,6 +332,9 @@ build/tests/bifurx_filter_spec: tests/bifurx_filter_spec.cpp tests/bifurx_filter
 
 build/tests/wave_preview_simplification_spec: tests/wave_preview_simplification_spec.cpp src/WavePreviewSimplifier.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/wave_preview_simplification_spec.cpp -o $@
+
+build/tests/deepcache_planner_spec: tests/deepcache_planner_spec.cpp src/DeepcachePlanner.cpp src/DeepcachePlanner.hpp src/DeepcacheBrowserLogic.cpp src/DeepcacheBrowserLogic.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread tests/deepcache_planner_spec.cpp src/DeepcachePlanner.cpp src/DeepcacheBrowserLogic.cpp -o $@
 
 build/tests/bifurx_runtime_spec: tests/bifurx_runtime_spec.cpp src/Bifurx.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp | build/tests
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra -Wno-subobject-linkage $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@

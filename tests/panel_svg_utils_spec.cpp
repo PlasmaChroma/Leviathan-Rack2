@@ -185,6 +185,25 @@ TestResult testGeneratedAtlasFindsRealPanelAnchor() {
             " cy=" + std::to_string(anchor.cy)};
 }
 
+TestResult testDeepcachePanelAnchorsUseRepositoryUnits() {
+  Vec cache;
+  Vec ready;
+  math::Rect progress;
+  const bool cacheOk = panel_svg::loadPointFromSvgMm("res/Deepcache.svg", "cache_param", &cache);
+  const bool readyOk = panel_svg::loadPointFromSvgMm("res/Deepcache.svg", "ready_light", &ready);
+  const bool progressOk = panel_svg::loadRectFromSvgMm("res/Deepcache.svg", "progress", &progress);
+  const bool pass = cacheOk && readyOk && progressOk
+    && nearlyEqual(cache.x, 10.16f) && nearlyEqual(cache.y, 110.f)
+    && nearlyEqual(ready.x, 12.f) && nearlyEqual(ready.y, 78.f)
+    && nearlyEqual(progress.pos.x, 3.f) && nearlyEqual(progress.pos.y, 61.f)
+    && nearlyEqual(progress.size.x, 14.32f) && nearlyEqual(progress.size.y, 8.f);
+  return {"Deepcache anchors use 1/100mm component coordinates", pass,
+          "cache=" + std::to_string(cache.x) + "," + std::to_string(cache.y) +
+            " ready=" + std::to_string(ready.x) + "," + std::to_string(ready.y) +
+            " progress=" + std::to_string(progress.pos.x) + "," +
+            std::to_string(progress.pos.y)};
+}
+
 TestResult testBifurxGlassPathParses() {
   std::vector<panel_svg::SvgPathMatch> matches;
   bool ok = panel_svg::findPathsInGroupsWithIdSubstringMm("res/bifurx.panel.svg", "glass", &matches);
@@ -215,6 +234,7 @@ int main() {
   tests.push_back(testCircleParsesWithExplicitScale());
   tests.push_back(testMissingElementFailsGracefully());
   tests.push_back(testGeneratedAtlasFindsRealPanelAnchor());
+  tests.push_back(testDeepcachePanelAnchorsUseRepositoryUnits());
   tests.push_back(testBifurxGlassPathParses());
 
   int failed = 0;

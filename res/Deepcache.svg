@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     width="20.32mm" height="128.5mm" viewBox="0 0 2032 12850">
+  <defs>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#090d16"/>
+      <stop offset="0.55" stop-color="#111a29"/>
+      <stop offset="1" stop-color="#080b13"/>
+    </linearGradient>
+    <linearGradient id="trace" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#21d7df"/>
+      <stop offset="1" stop-color="#8d62ff"/>
+    </linearGradient>
+  </defs>
+  <g inkscape:groupmode="layer" inkscape:label="panel" transform="scale(100)">
+    <rect width="20.32" height="128.5" fill="url(#panel)"/>
+    <rect x="0.45" y="0.45" width="19.42" height="127.6" rx="1.2"
+          fill="none" stroke="#31425e" stroke-width="0.35"/>
+    <path d="M3 30 C7 24, 13 36, 17.3 29 M3 33 C7 27, 13 39, 17.3 32"
+          fill="none" stroke="url(#trace)" stroke-width="0.55" opacity="0.82"/>
+    <text x="10.16" y="9.2" fill="#e8f9ff" font-family="sans-serif" font-size="3.1"
+          font-weight="700" text-anchor="middle">DEEP</text>
+    <text x="10.16" y="13" fill="#8b68ff" font-family="sans-serif" font-size="3.1"
+          font-weight="700" text-anchor="middle">CACHE</text>
+    <text x="10.16" y="100.5" fill="#9fb3c8" font-family="sans-serif" font-size="1.7"
+          letter-spacing="0.3" text-anchor="middle">CACHE</text>
+    <text x="10.16" y="89" fill="#73869c" font-family="sans-serif" font-size="1.25"
+          text-anchor="middle">PLAN  WARM  READY  ERR</text>
+    <text x="10.16" y="119.5" fill="#b4c9dd" font-family="sans-serif" font-size="1.5"
+          text-anchor="middle">LEVIATHAN</text>
+    <circle cx="10.16" cy="110" r="5.8" fill="none" stroke="#18273c" stroke-width="0.45"/>
+    <circle cx="10.16" cy="110" r="3.5" fill="#0b121e" stroke="url(#trace)" stroke-width="0.4"/>
+  </g>
+  <g inkscape:groupmode="layer" inkscape:label="components" opacity="0">
+    <circle id="cache_param" cx="1016" cy="11000" r="100"/>
+    <rect id="progress" x="300" y="6100" width="1432" height="800"/>
+    <circle id="planning_light" cx="400" cy="7800" r="50"/>
+    <circle id="warming_light" cx="800" cy="7800" r="50"/>
+    <circle id="ready_light" cx="1200" cy="7800" r="50"/>
+    <circle id="error_light" cx="1600" cy="7800" r="50"/>
+  </g>
+</svg>

@@ -146,6 +146,15 @@
         "Reverb"
       ],
       "hidden": true
+    },
+    {
+      "slug": "Deepcache",
+      "name": "Deepcache",
+      "description": "Preloads module-browser previews for faster browsing.",
+      "tags": [
+        "Utility"
+      ],
+      "hidden": false
     }
   ]
 }
