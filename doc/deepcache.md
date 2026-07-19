@@ -1195,6 +1195,6 @@ persistence error but does not disable memory-only browser acceleration.
 
 Plugin fingerprints include the plugin identity, Rack panel-theme preference,
 plugin directory timestamp, and binary/manifest size plus file modification time.
-Changing the panel theme during a session invalidates resident rasters; images
-for a theme that differs from the startup archive fingerprint are not persisted
-under the old fingerprint.
+Changing the panel theme during a session is detected even while the browser is
+closed. It invalidates resident rasters, refreshes their fingerprints, and
+persists the rebuilt images so the next launch can reuse them.

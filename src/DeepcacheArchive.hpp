@@ -64,6 +64,7 @@ public:
 	void start(const std::string& directory, std::vector<ArchiveWantedEntry> wanted);
 	void markUnavailable(int errorCode);
 	bool enqueue(PreviewWrite write);
+	void discardPendingWrites();
 	bool canAcceptWrite() const;
 	bool tryPopDecoded(DecodedPreview& preview);
 	bool hasPendingDecoded() const;
