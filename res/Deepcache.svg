@@ -23,9 +23,9 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      showgrid="false"
-     inkscape:zoom="4.8386836"
-     inkscape:cx="-5.9933656"
-     inkscape:cy="353.50524"
+     inkscape:zoom="3.421466"
+     inkscape:cx="-49.101759"
+     inkscape:cy="158.55777"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -164,7 +164,7 @@
        stroke-width="0.55"
        opacity="0.82"
        id="path6"
-       style="stroke:#7a5cff;fill:none;stroke-opacity:1" />
+       style="stroke:#7a5cff;fill:none;stroke-opacity:1;fill-opacity:1;opacity:1" />
   </g>
   <g
      inkscape:label="components"
@@ -186,7 +186,7 @@
     <rect
        id="framebuffer_progress"
        x="300"
-       y="4939.9771"
+       y="4919.9771"
        width="1432"
        height="700" />
     <rect
@@ -269,7 +269,7 @@
          id="tspan22">BUILDS</tspan></text>
     <text
        x="10.16"
-       y="47.399776"
+       y="47.199776"
        fill="#70dce7"
        font-family="sans-serif"
        font-size="1.25px"
@@ -280,7 +280,7 @@
          sodipodi:role="line"
          id="tspan23"
          x="10.25"
-         y="47.399776">RASTERS</tspan></text>
+         y="47.199776">RASTERS</tspan></text>
     <defs
        id="defs1">
       <text

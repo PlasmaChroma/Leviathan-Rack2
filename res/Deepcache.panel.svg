@@ -29,12 +29,12 @@
   <g inkscape:label="panel" transform="scale(100)" id="g15">
     <rect width="20.32" height="128.5" fill="url(#panel)" id="rect5" x="0" y="0" />
     <rect x="0.44999999" y="0.44999999" width="19.42" height="127.6" rx="1.2" fill="none" stroke="#31425e" stroke-width="0.35" id="rect6" style="display:none" />
-    <path d="m 3,15.100084 c 4,-5.9999991 10,6 14.3,-1 m -14.3,4 c 4,-6 10,6 14.3,-1" fill="none" stroke="url(#trace)" stroke-width="0.55" opacity="0.82" id="path6" style="stroke:#7a5cff;fill:none;stroke-opacity:1" />
+    <path d="m 3,15.100084 c 4,-5.9999991 10,6 14.3,-1 m -14.3,4 c 4,-6 10,6 14.3,-1" fill="none" stroke="url(#trace)" stroke-width="0.55" opacity="0.82" id="path6" style="stroke:#7a5cff;fill:none;stroke-opacity:1;fill-opacity:1;opacity:1" />
   </g>
   <g inkscape:label="components" opacity="0" id="g16" style="display:none;opacity:1">
     <rect id="progress" x="300" y="2709.9751" width="1432" height="700" />
     <rect id="progress_count" x="300" y="3429.9751" width="1432" height="450" />
-    <rect id="framebuffer_progress" x="300" y="4939.9771" width="1432" height="700" />
+    <rect id="framebuffer_progress" x="300" y="4919.9771" width="1432" height="700" />
     <rect id="database_status" x="300" y="7260.0005" width="1432" height="1218.6809" style="stroke-width:1.36927" />
     <circle id="planning_light" cx="450" cy="9359.958" r="50" />
     <circle id="warming_light" cx="450" cy="10059.958" r="50" />
