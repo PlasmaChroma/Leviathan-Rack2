@@ -245,6 +245,8 @@ struct DeepcacheBrandMenu : ui::Menu {
 struct DeepcacheBrandItem : ui::MenuItem {
 	DeepcacheBrowser* browser = nullptr;
 	std::string brand;
+	int availableModelCount = 0;
+	int registeredModelCount = 0;
 	void onAction(const ActionEvent& e) override;
 	void step() override;
 };
@@ -553,13 +555,15 @@ public:
 			return;
 		}
 
-		if (state_ == deepcache::CacheState::PLANNING && worker_.hasPlanFailed(activeGeneration_)) {
+		if (state_ == deepcache::CacheState::PLANNING && activeGeneration_ != 0 &&
+		    worker_.hasPlanFailed(activeGeneration_)) {
 			failed_++;
 			setState(deepcache::CacheState::ERROR);
 			return;
 		}
 
-		if (state_ == deepcache::CacheState::PLANNING && worker_.isPlanReady(activeGeneration_)) {
+		if (state_ == deepcache::CacheState::PLANNING && activeGeneration_ != 0 &&
+		    worker_.isPlanReady(activeGeneration_)) {
 			total_ = static_cast<int>(worker_.plannedRequestCount(activeGeneration_));
 			constructionTarget_ = total_;
 			if (total_ == 0)
@@ -1914,7 +1918,16 @@ void DeepcacheBrandItem::onAction(const ActionEvent& e) {
 }
 
 void DeepcacheBrandItem::step() {
-	rightText = CHECKMARK(browser->brand == brand);
+	rightText.clear();
+	if (registeredModelCount > 0 && availableModelCount < registeredModelCount) {
+		rightText = "A: " + std::to_string(availableModelCount) + "/" +
+		            std::to_string(registeredModelCount);
+	}
+	if (browser->brand == brand) {
+		if (!rightText.empty())
+			rightText += "  ";
+		rightText += CHECKMARK(true);
+	}
 	ui::MenuItem::step();
 }
 
@@ -1928,13 +1941,24 @@ void DeepcacheBrandButton::onAction(const ActionEvent& e) {
 	allItem->browser = browser;
 	menu->addChild(allItem);
 	menu->addChild(new ui::MenuSeparator);
-	std::set<std::string, string::CaseInsensitiveCompare> brands;
-	for (plugin::Plugin* plugin : plugin::plugins)
-		brands.insert(plugin->brand);
-	for (const std::string& brand : brands) {
+	// The plugin binary can register more models than Rack's current library
+	// manifest permits. Show that coverage gap rather than model->hidden, which
+	// is only a browser presentation flag.
+	std::map<std::string, std::pair<int, int>, string::CaseInsensitiveCompare> modelCountsByBrand;
+	for (plugin::Plugin* plugin : plugin::plugins) {
+		std::pair<int, int>& counts = modelCountsByBrand[plugin->brand];
+		for (plugin::Model* model : plugin->models) {
+			counts.second++;
+			if (settings::isModuleWhitelisted(model->plugin->slug, model->slug))
+				counts.first++;
+		}
+	}
+	for (const auto& brandEntry : modelCountsByBrand) {
 		auto* item = new DeepcacheBrandItem;
-		item->text = brand;
-		item->brand = brand;
+		item->text = brandEntry.first;
+		item->brand = brandEntry.first;
+		item->availableModelCount = brandEntry.second.first;
+		item->registeredModelCount = brandEntry.second.second;
 		item->browser = browser;
 		menu->addChild(item);
 	}

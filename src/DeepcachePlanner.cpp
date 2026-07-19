@@ -243,12 +243,12 @@ bool PreviewPlannerWorker::tryPop(PreviewBuildRequest& request) {
 
 bool PreviewPlannerWorker::isPlanReady(std::uint64_t generation) const {
 	std::lock_guard<std::mutex> lock(mutex_);
-	return readyGeneration_ == generation;
+	return generation != 0 && readyGeneration_ == generation;
 }
 
 bool PreviewPlannerWorker::hasPlanFailed(std::uint64_t generation) const {
 	std::lock_guard<std::mutex> lock(mutex_);
-	return failedGeneration_ == generation;
+	return generation != 0 && failedGeneration_ == generation;
 }
 
 std::size_t PreviewPlannerWorker::plannedRequestCount(std::uint64_t generation) const {

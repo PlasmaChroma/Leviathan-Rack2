@@ -285,6 +285,10 @@ continuing the in-memory cache path.
 17. **MB-first compatibility gate.** Known Stoermelder MB modules are detected
     before any browser mutation. Deepcache remains visibly inert instead of
     stacking two incompatible owners of Rack's raw browser pointer.
+18. **Generation-zero startup sentinel fix.** While database loading delays the
+    first planner submission, generation zero is now explicitly neither ready
+    nor failed. This prevents a false cache `ERROR` state—and ERR LED—during a
+    normal database load.
 
 ## Corruption and restart behavior after this review
 

@@ -36,7 +36,7 @@ static const SvgAtlasRecord kSvgAtlas[] = {
 	{"res/deck.labels.svg", 111689ull, 0x27517adb01e138b6ull},
 	{"res/deck.panel.svg", 11869ull, 0x5190ef69ef5af333ull},
 	{"res/deck.svg", 138392ull, 0x8eef440b1e68a03dull},
-	{"res/Deepcache.panel.svg", 1921ull, 0x47ae22c0f79a358aull},
+	{"res/Deepcache.panel.svg", 1955ull, 0xaea91a71c4883242ull},
 	{"res/flux.labels.svg", 123181ull, 0x4a6b335cab647765ull},
 	{"res/flux.panel.svg", 28878ull, 0xc083daeee8fed65full},
 	{"res/flux.svg", 168852ull, 0x31aa1b41d4c986d2ull},

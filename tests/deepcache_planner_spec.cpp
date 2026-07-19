@@ -121,6 +121,7 @@ bool waitForPlan(deepcache::PreviewPlannerWorker& worker, std::uint64_t generati
 
 TestResult testWorkerPublicationAndCancellation() {
 	deepcache::PreviewPlannerWorker worker;
+	const bool zeroIsIdle = !worker.isPlanReady(0) && !worker.hasPlanFailed(0);
 	PreviewPlanInput first;
 	first.generation = 100;
 	worker.submit(descriptors(), first);
@@ -135,9 +136,10 @@ TestResult testWorkerPublicationAndCancellation() {
 	worker.cancel(101);
 	const bool staleAbsent = !worker.tryPop(request) && !worker.isPlanReady(101);
 	worker.shutdown();
-	const bool pass = firstReady && promoted && popped && request.modelIndex == 3 && staleAbsent;
+	const bool pass = zeroIsIdle && firstReady && promoted && popped && request.modelIndex == 3 && staleAbsent;
 	return {"worker publishes, promotes, cancels, and joins", pass,
-	        "firstReady=" + std::to_string(firstReady) + " staleAbsent=" + std::to_string(staleAbsent)};
+	        "zeroIdle=" + std::to_string(zeroIsIdle) + " firstReady=" + std::to_string(firstReady) +
+	            " staleAbsent=" + std::to_string(staleAbsent)};
 }
 
 TestResult testMemoryBackendLifecycle() {

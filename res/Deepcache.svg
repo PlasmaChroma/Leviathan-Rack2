@@ -54,9 +54,10 @@
     </linearGradient>
     <linearGradient
        id="trace"
-       x1="0"
+       gradientUnits="userSpaceOnUse"
+       x1="3"
        y1="0"
-       x2="1"
+       x2="17.3"
        y2="0">
       <stop
          offset="0"

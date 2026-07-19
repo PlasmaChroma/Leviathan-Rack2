@@ -149,7 +149,7 @@
     },
     {
       "slug": "Deepcache",
-      "name": "Deepcache",
+      "name": "Deep Cache",
       "description": "Preloads module-browser previews for faster browsing.",
       "tags": [
         "Utility"
