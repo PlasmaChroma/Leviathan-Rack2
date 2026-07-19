@@ -1,7 +1,7 @@
 {
   "slug": "Leviathan",
   "name": "Leviathan",
-  "version": "2.8.1",
+  "version": "2.6.0",
   "license": "GPL-3.0-or-later",
   "brand": "Leviathan",
   "author": "Levi Kendall",
@@ -63,89 +63,6 @@
         "Oscillator"
       ],
       "hidden": false
-    },
-    {
-      "slug": "Iris",
-      "name": "Iris",
-      "description": "Polyphonic image-to-wavetable oscillator with smooth table scanning.",
-      "tags": [
-        "Oscillator",
-        "Visual"
-      ],
-      "hidden": false
-    },
-    {
-      "slug": "Nautiloid",
-      "name": "Nautiloid",
-      "description": "Fractal exploration display for image-source workflows.",
-      "tags": [
-        "Visual",
-        "Expander"
-      ],
-      "hidden": true
-    },
-    {
-      "slug": "Crownstep",
-      "name": "Crownstep",
-      "description": "Checkers-driven sequencer.",
-      "tags": [
-        "Sequencer"
-      ],
-      "hidden": false
-    },
-    {
-      "slug": "Bifurx",
-      "name": "Bifurx",
-      "description": "Dual-peak multimode filter with live response and spectrum preview.",
-      "tags": [
-        "Filter",
-        "Distortion",
-        "Visual"
-      ],
-      "hidden": false
-    },
-    {
-      "slug": "Wyrm",
-      "name": "Wyrm",
-      "description": "Custom drawable wavetable oscillator with FM, sync, and fold.",
-      "tags": [
-        "Oscillator",
-        "Waveshaper",
-        "LFO"
-      ],
-      "hidden": false
-    },
-    {
-      "slug": "Sil",
-      "name": "Sil",
-      "description": "Automatic mastering module.",
-      "tags": [
-        "Dynamics",
-        "Distortion",
-        "EQ"
-      ],
-      "hidden": false
-    },
-    {
-      "slug": "Chronomaw",
-      "name": "Chronomaw",
-      "description": "Rack-native eight-output clock and modulation engine with direct visual editing.",
-      "tags": [
-        "Clock generator",
-        "Function generator",
-        "Sequencer",
-        "Random"
-      ],
-      "hidden": true
-    },
-    {
-      "slug": "Bulkhead",
-      "name": "Bulkhead",
-      "description": "Spatial room reverb with interactive wall and listener geometry.",
-      "tags": [
-        "Reverb"
-      ],
-      "hidden": true
     },
     {
       "slug": "Deepcache",
