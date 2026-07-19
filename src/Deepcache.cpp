@@ -1010,8 +1010,8 @@ struct DeepcacheBrowserDragon : widget::TransparentWidget {
 		const float drawHeight = drawWidth * cropHeight / cropWidth;
 		box.size = math::Vec(drawWidth, drawHeight);
 		box.pos.x = browser->box.pos.x + browser->box.size.x - 12.f - drawWidth;
-		// The body rides just above the frame while the legs and claws cross it.
-		box.pos.y = browser->box.pos.y - drawHeight * 0.58f;
+		// Keep the body clear of Rack's top bar while the legs and claws cross the browser frame.
+		box.pos.y = browser->box.pos.y - drawHeight * 0.35f;
 		widget::TransparentWidget::step();
 	}
 
