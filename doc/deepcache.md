@@ -26,7 +26,7 @@ The MVP must prove that:
 1. A Rack plugin can safely replace `APP->scene->browser`.
 2. Deepcache can enumerate all installed Rack models.
 3. Deepcache can incrementally construct browser preview widgets before the user scrolls to them.
-4. Those preview objects remain resident in memory and are reused by the Deepcache browser.
+4. Completed preview rasters remain recoverable from hot QOI data and are reused by the Deepcache browser.
 5. Cache generation does not block the audio engine or cause large UI stalls.
 6. Removing Deepcache restores the browser that was active before Deepcache.
 7. Rack can close without OpenGL or framebuffer teardown crashes.
@@ -34,7 +34,9 @@ The MVP must prove that:
 Deepcache persists completed framebuffer previews beneath
 `<Rack user>/Leviathan/Deepcache`. The complete compressed pack is read
 sequentially into RAM at startup, decoded off the UI thread, and uploaded to
-NanoVG before cached cards are considered framebuffer-ready.
+NanoVG before cached cards are considered framebuffer-ready. Decoded RGBA is
+released after a successful upload once a committed QOI recovery source exists.
+Only a bounded handoff/upload window retains full bitmap data.
 
 Persisted previews use a canonical 2x render scale independent of browser zoom.
 They are displayed at the normal browser card dimensions, trading roughly four
@@ -1158,7 +1160,7 @@ Do not begin with persistent database storage.
 
 Do not attempt to render previews from the audio thread or worker thread.
 
-Browser replacement, persistent RAM-resident previews, and the worker-planned,
+Browser replacement, persistent recoverable previews, and the worker-planned,
 UI-executed framebuffer warming queue are all required parts of Deepcache.
 
 Document any Rack private implementation behavior that Deepcache depends upon, particularly browser replacement, framebuffer cleanup, preview construction, and module insertion.
@@ -1183,6 +1185,18 @@ previews in memory. Failure to create the database directory is reported as a
 persistence error but does not disable memory-only browser acceleration.
 The owning worker evaluates archive compaction after startup and after writes;
 it compacts when dead data is at least 64 MB and at least 25% of the pack.
+
+The archive's QOI pack remains hot in process memory, but successfully uploaded
+cards do not permanently retain decoded RGBA. On a DAW graphics-context destroy,
+NanoVG handles are invalidated and decoding pauses. When a new context appears,
+the archive worker re-decodes from the in-memory QOI pack through the same
+bounded handoff, visible cards are prioritized, and each temporary RGBA buffer
+is released again after upload. Read-only archive workers support the same
+disk-free restoration path. Memory-only previews without a recoverable QOI
+entry are encoded into a volatile in-memory QOI entry by read-only workers; they
+never mutate the shared database. RGBA is retained only while encoding/upload is
+pending or when the archive worker cannot accept either persistent or volatile
+work.
 
 Plugin fingerprints include the plugin identity, Rack panel-theme preference,
 plugin directory timestamp, and binary/manifest size plus file modification time.

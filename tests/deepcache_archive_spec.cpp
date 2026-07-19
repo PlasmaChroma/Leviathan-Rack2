@@ -165,6 +165,19 @@ int main() {
 			std::cerr << "[FAIL] initial append did not commit\n";
 			return 1;
 		}
+		bool committedOne = false;
+		bool committedTwo = false;
+		std::string committedKey;
+		if (!waitUntil([&]() {
+			while (worker.tryPopCommitted(committedKey)) {
+				committedOne = committedOne || committedKey == "one";
+				committedTwo = committedTwo || committedKey == "two";
+			}
+			return committedOne && committedTwo;
+		})) {
+			std::cerr << "[FAIL] successful archive commits were not acknowledged\n";
+			return 1;
+		}
 		deepcache::DeepcacheArchiveWorker contender;
 		contender.start(directory, {{"one", "fp-one", "plugin-a"}});
 		auto contenderPixels = std::make_shared<const std::vector<std::uint8_t>>(updatedPixels);
@@ -186,18 +199,47 @@ int main() {
 			std::cerr << "[FAIL] read-only archive worker did not consume the committed snapshot\n";
 			return 1;
 		}
+		if (!contender.requestDecode("one", 77)) {
+			std::cerr << "[FAIL] read-only archive worker rejected an in-memory re-decode\n";
+			return 1;
+		}
+		deepcache::DecodedPreview restoredPreview;
+		if (!waitUntil([&]() { return contender.tryPopDecoded(restoredPreview); }) ||
+		    restoredPreview.cacheKey != "one" || restoredPreview.decodeGeneration != 77 ||
+		    restoredPreview.rgba != firstPixels) {
+			std::cerr << "[FAIL] hot QOI re-decode did not restore the requested generation\n";
+			return 1;
+		}
 		if (!waitUntil([&]() { return contenderPixels.use_count() == 1; })) {
 			std::cerr << "[FAIL] read-only archive worker retained a raced queued write\n";
 			return 1;
 		}
-		deepcache::PreviewWrite denied;
-		denied.cacheKey = "one";
-		denied.fingerprint = "fp-one";
-		denied.width = 13;
-		denied.height = 9;
-		denied.rgba = contenderPixels;
-		if (contender.enqueue(std::move(denied))) {
-			std::cerr << "[FAIL] read-only archive worker accepted a disk write\n";
+		const std::uint64_t contenderPackBytes = contender.packBytes();
+		deepcache::PreviewWrite memoryOnly;
+		memoryOnly.cacheKey = "one";
+		memoryOnly.fingerprint = "fp-one";
+		memoryOnly.width = 13;
+		memoryOnly.height = 9;
+		memoryOnly.rgba = contenderPixels;
+		if (!contender.enqueue(std::move(memoryOnly))) {
+			std::cerr << "[FAIL] read-only archive worker rejected a volatile QOI write\n";
+			return 1;
+		}
+		std::string volatileCommit;
+		if (!waitUntil([&]() { return contender.tryPopCommitted(volatileCommit); }) ||
+		    volatileCommit != "one" || contender.packBytes() != contenderPackBytes ||
+		    contender.hotCompressedBytes() <= contender.packBytes()) {
+			std::cerr << "[FAIL] read-only QOI write was not kept strictly in memory\n";
+			return 1;
+		}
+		if (!contender.requestDecode("one", 78)) {
+			std::cerr << "[FAIL] volatile QOI entry rejected a restore decode\n";
+			return 1;
+		}
+		deepcache::DecodedPreview volatilePreview;
+		if (!waitUntil([&]() { return contender.tryPopDecoded(volatilePreview); }) ||
+		    volatilePreview.decodeGeneration != 78 || volatilePreview.rgba != updatedPixels) {
+			std::cerr << "[FAIL] volatile QOI entry did not restore memory-only pixels\n";
 			return 1;
 		}
 		if (contender.requestReset()) {

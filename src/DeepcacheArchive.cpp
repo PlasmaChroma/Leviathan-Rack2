@@ -279,20 +279,28 @@ void DeepcacheArchiveWorker::start(const std::string& directory, std::vector<Arc
 
 bool DeepcacheArchiveWorker::enqueue(PreviewWrite write) {
 	if (!started_ || canceled() || fatalError_.load(std::memory_order_relaxed) ||
-	    leaseUnavailable_.load(std::memory_order_relaxed) || !write.rgba || write.rgba->empty() ||
+	    !write.rgba || write.rgba->empty() ||
 	    write.rgba->size() > 128u * 1024u * 1024u)
 		return false;
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
 		// Recheck after acquiring the queue mutex so shutdown or a failed lease
 		// cannot race an already-entered producer and leave pixels stranded.
-		if (canceled() || fatalError_.load(std::memory_order_relaxed) ||
-		    leaseUnavailable_.load(std::memory_order_relaxed))
+		if (canceled() || fatalError_.load(std::memory_order_relaxed))
 			return false;
-		if (writes_.size() >= kMaxWriteQueueEntries || queuedWriteBytes_ >= kMaxWriteQueueBytes)
-			return false;
-		queuedWriteBytes_ += write.rgba->size();
-		writes_.push_back(std::move(write));
+		if (leaseUnavailable_.load(std::memory_order_relaxed)) {
+			if (volatileWrites_.size() >= kMaxWriteQueueEntries ||
+			    queuedVolatileWriteBytes_ >= kMaxWriteQueueBytes)
+				return false;
+			queuedVolatileWriteBytes_ += write.rgba->size();
+			volatileWrites_.push_back(std::move(write));
+		}
+		else {
+			if (writes_.size() >= kMaxWriteQueueEntries || queuedWriteBytes_ >= kMaxWriteQueueBytes)
+				return false;
+			queuedWriteBytes_ += write.rgba->size();
+			writes_.push_back(std::move(write));
+		}
 	}
 	condition_.notify_one();
 	return true;
@@ -302,13 +310,17 @@ void DeepcacheArchiveWorker::discardPendingWrites() {
 	std::lock_guard<std::mutex> lock(mutex_);
 	writes_.clear();
 	queuedWriteBytes_ = 0;
+	volatileWrites_.clear();
+	queuedVolatileWriteBytes_ = 0;
 }
 
 bool DeepcacheArchiveWorker::canAcceptWrite() const {
-	if (!started_ || canceled() || fatalError_.load(std::memory_order_relaxed) ||
-	    leaseUnavailable_.load(std::memory_order_relaxed))
+	if (!started_ || canceled() || fatalError_.load(std::memory_order_relaxed))
 		return true;
 	std::lock_guard<std::mutex> lock(mutex_);
+	if (leaseUnavailable_.load(std::memory_order_relaxed))
+		return volatileWrites_.size() < kMaxWriteQueueEntries &&
+		       queuedVolatileWriteBytes_ < kMaxWriteQueueBytes;
 	return writes_.size() < kMaxWriteQueueEntries && queuedWriteBytes_ < kMaxWriteQueueBytes;
 }
 
@@ -329,6 +341,44 @@ bool DeepcacheArchiveWorker::tryPopDecoded(DecodedPreview& preview) {
 bool DeepcacheArchiveWorker::hasPendingDecoded() const {
 	std::lock_guard<std::mutex> lock(mutex_);
 	return !decoded_.empty();
+}
+
+bool DeepcacheArchiveWorker::requestDecode(const std::string& cacheKey,
+	                                        std::uint64_t decodeGeneration) {
+	if (!started_ || cacheKey.empty() || canceled() || fatalError_.load(std::memory_order_relaxed))
+		return false;
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		if (canceled() || fatalError_.load(std::memory_order_relaxed))
+			return false;
+		const auto existing = requestedDecodeGeneration_.find(cacheKey);
+		if (existing != requestedDecodeGeneration_.end() && existing->second == decodeGeneration)
+			return true;
+		requestedDecodeGeneration_[cacheKey] = decodeGeneration;
+		decodeRequests_.push_back({cacheKey, decodeGeneration});
+	}
+	condition_.notify_one();
+	return true;
+}
+
+void DeepcacheArchiveWorker::discardPendingDecodes() {
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		decodeRequests_.clear();
+		requestedDecodeGeneration_.clear();
+		decoded_.clear();
+		decodedBytes_ = 0;
+	}
+	condition_.notify_all();
+}
+
+bool DeepcacheArchiveWorker::tryPopCommitted(std::string& cacheKey) {
+	std::lock_guard<std::mutex> lock(mutex_);
+	if (committed_.empty())
+		return false;
+	cacheKey = std::move(committed_.front());
+	committed_.pop_front();
+	return true;
 }
 
 void DeepcacheArchiveWorker::markReady(const std::string& cacheKey) {
@@ -370,8 +420,13 @@ bool DeepcacheArchiveWorker::requestReset() {
 			return false;
 		writes_.clear();
 		queuedWriteBytes_ = 0;
+		volatileWrites_.clear();
+		queuedVolatileWriteBytes_ = 0;
 		decoded_.clear();
 		decodedBytes_ = 0;
+		decodeRequests_.clear();
+		requestedDecodeGeneration_.clear();
+		committed_.clear();
 		compactRequested_ = false;
 		resetRequested_ = true;
 		// Publish LOADING before releasing the mutex. The worker can already be
@@ -392,8 +447,13 @@ void DeepcacheArchiveWorker::shutdown() {
 		std::lock_guard<std::mutex> lock(mutex_);
 		writes_.clear();
 		queuedWriteBytes_ = 0;
+		volatileWrites_.clear();
+		queuedVolatileWriteBytes_ = 0;
 		decoded_.clear();
 		decodedBytes_ = 0;
+		decodeRequests_.clear();
+		requestedDecodeGeneration_.clear();
+		committed_.clear();
 		compactRequested_ = false;
 		resetRequested_ = false;
 	}
@@ -411,6 +471,8 @@ void DeepcacheArchiveWorker::run() {
 				std::lock_guard<std::mutex> lock(mutex_);
 				writes_.clear();
 				queuedWriteBytes_ = 0;
+				volatileWrites_.clear();
+				queuedVolatileWriteBytes_ = 0;
 				compactRequested_ = false;
 			}
 			setState(DatabaseState::ERROR);
@@ -421,6 +483,11 @@ void DeepcacheArchiveWorker::run() {
 			std::lock_guard<std::mutex> lock(mutex_);
 			writes_.clear();
 			queuedWriteBytes_ = 0;
+			volatileWrites_.clear();
+			queuedVolatileWriteBytes_ = 0;
+			decodeRequests_.clear();
+			requestedDecodeGeneration_.clear();
+			committed_.clear();
 			compactRequested_ = false;
 			resetRequested_ = false;
 		}
@@ -437,8 +504,40 @@ void DeepcacheArchiveWorker::run() {
 			condition_.wait_for(retryLock, std::chrono::milliseconds(100), [&]() { return canceled(); });
 		}
 		setState(loadedReadOnly && !entries_.empty() ? DatabaseState::READ_ONLY : DatabaseState::BUSY);
-		std::unique_lock<std::mutex> lock(mutex_);
-		condition_.wait(lock, [&]() { return canceled(); });
+		while (!canceled()) {
+			DecodeRequest request;
+			PreviewWrite volatileWrite;
+			bool encodeVolatile = false;
+			{
+				std::unique_lock<std::mutex> lock(mutex_);
+				condition_.wait(lock, [&]() {
+					return canceled() || !volatileWrites_.empty() || !decodeRequests_.empty();
+				});
+				if (canceled())
+					break;
+				if (!volatileWrites_.empty()) {
+					const std::size_t byteCount = volatileWrites_.front().rgba ? volatileWrites_.front().rgba->size() : 0;
+					volatileWrite = std::move(volatileWrites_.front());
+					volatileWrites_.pop_front();
+					queuedVolatileWriteBytes_ = byteCount <= queuedVolatileWriteBytes_
+					                              ? queuedVolatileWriteBytes_ - byteCount : 0;
+					encodeVolatile = true;
+				}
+				else {
+					request = std::move(decodeRequests_.front());
+					decodeRequests_.pop_front();
+					const auto latest = requestedDecodeGeneration_.find(request.cacheKey);
+					if (latest == requestedDecodeGeneration_.end() || latest->second != request.generation)
+						continue;
+					requestedDecodeGeneration_.erase(latest);
+				}
+			}
+			condition_.notify_all();
+			if (encodeVolatile)
+				storeVolatilePreview(std::move(volatileWrite));
+			else
+				decodeEntry(request);
+		}
 		return;
 	}
 	ownsLease_.store(true, std::memory_order_relaxed);
@@ -501,11 +600,15 @@ void DeepcacheArchiveWorker::runOwned() {
 			}
 
 			PreviewWrite write;
+			DecodeRequest decodeRequest;
+			bool decode = false;
+			bool skip = false;
 			bool compact = false;
 			{
 				std::unique_lock<std::mutex> lock(mutex_);
 				condition_.wait(lock, [&]() {
-					return canceled() || resetRequested_ || !writes_.empty() || compactRequested_;
+					return canceled() || resetRequested_ || !writes_.empty() ||
+					       !decodeRequests_.empty() || compactRequested_;
 				});
 				if (canceled())
 					break;
@@ -519,12 +622,27 @@ void DeepcacheArchiveWorker::runOwned() {
 					writes_.pop_front();
 					queuedWriteBytes_ = byteCount <= queuedWriteBytes_ ? queuedWriteBytes_ - byteCount : 0;
 				}
+				else if (!decodeRequests_.empty()) {
+					decodeRequest = std::move(decodeRequests_.front());
+					decodeRequests_.pop_front();
+					const auto latest = requestedDecodeGeneration_.find(decodeRequest.cacheKey);
+					if (latest != requestedDecodeGeneration_.end() && latest->second == decodeRequest.generation) {
+						requestedDecodeGeneration_.erase(latest);
+						decode = true;
+					}
+					else {
+						skip = true;
+					}
+				}
 				else {
 					compact = compactRequested_;
 					compactRequested_ = false;
 				}
 			}
-			const bool ok = compact ? compactArchive() : appendPreview(std::move(write));
+			if (skip)
+				continue;
+			const bool ok = compact ? compactArchive() :
+			                decode ? decodeEntry(decodeRequest) : appendPreview(std::move(write));
 			if (!ok && !canceled()) {
 				std::lock_guard<std::mutex> lock(mutex_);
 				if (resetRequested_) {
@@ -533,17 +651,18 @@ void DeepcacheArchiveWorker::runOwned() {
 				}
 				else {
 					fatalError_.store(true, std::memory_order_relaxed);
-					errorCode_.store(compact ? 3 : 2, std::memory_order_relaxed);
+					errorCode_.store(compact ? 3 : decode ? 9 : 2, std::memory_order_relaxed);
 					setState(DatabaseState::ERROR);
 				}
 			}
 			else if (!canceled()) {
 				std::lock_guard<std::mutex> lock(mutex_);
-				if (!resetRequested_ && !compact && writes_.empty() && !compactRequested_ && shouldCompactArchive()) {
+				if (!resetRequested_ && !compact && !decode && writes_.empty() &&
+				    decodeRequests_.empty() && !compactRequested_ && shouldCompactArchive()) {
 					compactRequested_ = true;
 					condition_.notify_one();
 				}
-				if (!resetRequested_ && writes_.empty() && !compactRequested_)
+				if (!resetRequested_ && writes_.empty() && decodeRequests_.empty() && !compactRequested_)
 					setState(entries_.empty() ? DatabaseState::EMPTY : DatabaseState::READY);
 			}
 		}
@@ -582,9 +701,19 @@ bool DeepcacheArchiveWorker::resetArchive() {
 	readyPlugins_.clear();
 	pluginReadyCounts_.clear();
 	packedBytes_.clear();
+	volatileEntries_.clear();
 	packBytes_.store(0, std::memory_order_relaxed);
+	volatileBytes_.store(0, std::memory_order_relaxed);
 	readyCount_.store(0, std::memory_order_relaxed);
 	readyPluginCount_.store(0, std::memory_order_relaxed);
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		decoded_.clear();
+		decodedBytes_ = 0;
+		decodeRequests_.clear();
+		requestedDecodeGeneration_.clear();
+		committed_.clear();
+	}
 	setState(DatabaseState::EMPTY);
 	return true;
 }
@@ -706,6 +835,94 @@ bool DeepcacheArchiveWorker::loadIndex(const std::string& path) {
 	return true;
 }
 
+bool DeepcacheArchiveWorker::pushDecoded(DecodedPreview preview) {
+	const std::size_t byteCount = preview.rgba.size();
+	std::unique_lock<std::mutex> lock(mutex_);
+	condition_.wait(lock, [&]() {
+		return canceled() || resetRequested_ ||
+		       (decoded_.size() < kMaxDecodedQueueEntries &&
+		        (decoded_.empty() || decodedBytes_ + byteCount <= kMaxDecodedQueueBytes));
+	});
+	if (canceled() || resetRequested_)
+		return false;
+	decodedBytes_ += byteCount;
+	decoded_.push_back(std::move(preview));
+	return true;
+}
+
+bool DeepcacheArchiveWorker::storeVolatilePreview(PreviewWrite write) {
+	if (canceled())
+		return true;
+	const auto wanted = wanted_.find(write.cacheKey);
+	const std::uint64_t byteCount = write.width > 0 && write.height > 0
+		? static_cast<std::uint64_t>(write.width) * static_cast<std::uint64_t>(write.height) * 4ull
+		: 0;
+	if (wanted == wanted_.end() || write.width <= 0 || write.height <= 0 ||
+	    write.width > 8192 || write.height > 8192 || byteCount > 128ull * 1024ull * 1024ull ||
+	    !write.rgba || byteCount != write.rgba->size())
+		return false;
+	std::vector<std::uint8_t> encoded;
+	if (!encodeQoiCancelable(*write.rgba, write.width, write.height, stopping_, encoded))
+		return canceled();
+	if (encoded.empty() || canceled())
+		return canceled();
+	wanted->second = write.fingerprint;
+	std::uint64_t totalBytes = volatileBytes_.load(std::memory_order_relaxed);
+	const auto previous = volatileEntries_.find(write.cacheKey);
+	if (previous != volatileEntries_.end() && previous->second.qoi.size() <= totalBytes)
+		totalBytes -= previous->second.qoi.size();
+	VolatileEntry entry;
+	entry.fingerprint = std::move(write.fingerprint);
+	entry.width = write.width;
+	entry.height = write.height;
+	entry.qoi = std::move(encoded);
+	totalBytes += entry.qoi.size();
+	volatileEntries_[write.cacheKey] = std::move(entry);
+	volatileBytes_.store(totalBytes, std::memory_order_relaxed);
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		committed_.push_back(write.cacheKey);
+	}
+	return true;
+}
+
+bool DeepcacheArchiveWorker::decodeEntry(const DecodeRequest& request) {
+	DecodedPreview preview;
+	preview.cacheKey = request.cacheKey;
+	preview.decodeGeneration = request.generation;
+	const auto wanted = wanted_.find(request.cacheKey);
+	if (wanted != wanted_.end())
+		preview.fingerprint = wanted->second;
+	const auto volatileFound = volatileEntries_.find(request.cacheKey);
+	if (wanted != wanted_.end() && volatileFound != volatileEntries_.end() &&
+	    volatileFound->second.fingerprint == wanted->second) {
+		const VolatileEntry& entry = volatileFound->second;
+		if (!decodeQoi(entry.qoi.data(), entry.qoi.size(), preview) ||
+		    preview.width != entry.width || preview.height != entry.height) {
+			preview.width = 0;
+			preview.height = 0;
+			preview.rgba.clear();
+		}
+		return pushDecoded(std::move(preview));
+	}
+	const auto found = entries_.find(request.cacheKey);
+	if (wanted == wanted_.end() || found == entries_.end())
+		return pushDecoded(std::move(preview));
+	const Entry& entry = found->second;
+	if (entry.fingerprint != wanted->second || entry.offset > packedBytes_.size() ||
+	    entry.length > packedBytes_.size() - entry.offset)
+		return pushDecoded(std::move(preview));
+	const std::uint8_t* payload = packedBytes_.data() + entry.offset;
+	if (deepcacheChecksum(payload, static_cast<std::size_t>(entry.length)) != entry.checksum ||
+	    !decodeQoi(payload, static_cast<std::size_t>(entry.length), preview) ||
+	    preview.width != static_cast<int>(entry.width) || preview.height != static_cast<int>(entry.height)) {
+		preview.width = 0;
+		preview.height = 0;
+		preview.rgba.clear();
+	}
+	return pushDecoded(std::move(preview));
+}
+
 bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 	const std::string compactMarker = directory_ + "/compaction-v1.pending";
 	std::ifstream marker(compactMarker.c_str(), std::ios::binary);
@@ -790,19 +1007,8 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 			invalidEntries.push_back(wanted.first);
 			continue;
 		}
-		{
-			std::unique_lock<std::mutex> lock(mutex_);
-			const std::size_t byteCount = preview.rgba.size();
-			condition_.wait(lock, [&]() {
-				return canceled() || resetRequested_ ||
-				       (decoded_.size() < kMaxDecodedQueueEntries &&
-				        (decoded_.empty() || decodedBytes_ + byteCount <= kMaxDecodedQueueBytes));
-			});
-			if (canceled() || resetRequested_)
-				return false;
-			decodedBytes_ += byteCount;
-			decoded_.push_back(std::move(preview));
-		}
+		if (!pushDecoded(std::move(preview)))
+			return false;
 		markReady(wanted.first);
 	}
 	for (const std::string& cacheKey : invalidEntries)
@@ -887,7 +1093,13 @@ bool DeepcacheArchiveWorker::appendPreview(PreviewWrite write) {
 		return true; // Appended bytes are harmless until the index commits.
 	if (!saveIndexAtomically())
 		return false;
+	if (resetPending())
+		return true;
 	markReady(write.cacheKey);
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		committed_.push_back(write.cacheKey);
+	}
 	return true;
 }
 

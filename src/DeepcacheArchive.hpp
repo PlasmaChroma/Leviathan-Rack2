@@ -10,6 +10,7 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace deepcache {
@@ -35,6 +36,9 @@ struct ArchiveWantedEntry {
 struct DecodedPreview {
 	std::string cacheKey;
 	std::string fingerprint;
+	// Zero identifies the initial archive load. Later values identify the
+	// graphics-context generation that requested an in-memory QOI re-decode.
+	std::uint64_t decodeGeneration = 0;
 	int width = 0;
 	int height = 0;
 	std::vector<std::uint8_t> rgba;
@@ -68,6 +72,13 @@ public:
 	bool canAcceptWrite() const;
 	bool tryPopDecoded(DecodedPreview& preview);
 	bool hasPendingDecoded() const;
+	// Re-decodes an already validated entry from the hot in-memory QOI pack.
+	// This never performs disk I/O and is safe for read-only archive workers.
+	bool requestDecode(const std::string& cacheKey, std::uint64_t decodeGeneration);
+	void discardPendingDecodes();
+	// Reports a successful append/index commit so the UI can release the source
+	// RGBA knowing that a recoverable compressed representation now exists.
+	bool tryPopCommitted(std::string& cacheKey);
 	void requestCompaction();
 	// Discards the persistent archive on the worker thread while it owns the
 	// write lease. The worker remains alive and accepts fresh preview writes
@@ -81,6 +92,9 @@ public:
 	int readyPluginCount() const { return readyPluginCount_.load(std::memory_order_relaxed); }
 	int targetPluginCount() const { return targetPluginCount_.load(std::memory_order_relaxed); }
 	std::uint64_t packBytes() const { return packBytes_.load(std::memory_order_relaxed); }
+	std::uint64_t hotCompressedBytes() const {
+		return packBytes_.load(std::memory_order_relaxed) + volatileBytes_.load(std::memory_order_relaxed);
+	}
 	int errorCode() const { return errorCode_.load(std::memory_order_relaxed); }
 
 private:
@@ -92,12 +106,29 @@ private:
 		std::uint32_t width = 0;
 		std::uint32_t height = 0;
 	};
+	struct DecodeRequest {
+		std::string cacheKey;
+		std::uint64_t generation = 0;
+
+		DecodeRequest() = default;
+		DecodeRequest(std::string cacheKey, std::uint64_t generation)
+			: cacheKey(std::move(cacheKey)), generation(generation) {}
+	};
+	struct VolatileEntry {
+		std::string fingerprint;
+		int width = 0;
+		int height = 0;
+		std::vector<std::uint8_t> qoi;
+	};
 
 	void run();
 	void runOwned();
 	bool acquireLease();
 	void releaseLease();
 	bool loadArchive(bool allowRecovery);
+	bool decodeEntry(const DecodeRequest& request);
+	bool pushDecoded(DecodedPreview preview);
+	bool storeVolatilePreview(PreviewWrite write);
 	bool appendPreview(PreviewWrite write);
 	bool compactArchive();
 	bool resetArchive();
@@ -127,8 +158,14 @@ private:
 	std::thread thread_;
 	std::deque<PreviewWrite> writes_;
 	std::size_t queuedWriteBytes_ = 0;
+	std::deque<PreviewWrite> volatileWrites_;
+	std::size_t queuedVolatileWriteBytes_ = 0;
 	std::deque<DecodedPreview> decoded_;
 	std::size_t decodedBytes_ = 0;
+	std::deque<DecodeRequest> decodeRequests_;
+	std::unordered_map<std::string, std::uint64_t> requestedDecodeGeneration_;
+	std::deque<std::string> committed_;
+	std::unordered_map<std::string, VolatileEntry> volatileEntries_;
 	bool compactRequested_ = false;
 	bool resetRequested_ = false;
 	bool started_ = false;
@@ -142,6 +179,7 @@ private:
 	std::atomic<int> readyPluginCount_ {0};
 	std::atomic<int> targetPluginCount_ {0};
 	std::atomic<std::uint64_t> packBytes_ {0};
+	std::atomic<std::uint64_t> volatileBytes_ {0};
 	std::atomic<int> errorCode_ {0};
 	std::uintptr_t leaseHandle_ = 0;
 };
