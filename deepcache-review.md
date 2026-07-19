@@ -22,7 +22,7 @@ against uncertain pack contents.
 
 There are no known P0 or P1 issues after the fixes made during this review and
 the subsequent Stoermelder MB coexistence fix. The
-archive now has exclusive cross-process ownership with a memory-only fallback,
+archive now has exclusive cross-process write ownership with a read-only snapshot fallback,
 browser cache misses use the budgeted executor, successful captures retire live
 module trees immediately, and archive shutdown cancels queued work plus observes
 cancellation during QOI encode and chunked I/O. Filesystem flush and rename
@@ -44,10 +44,12 @@ latency remains OS-controlled, as it is for any safely joined file worker.
 
 **Resolved.** `archive-v1.lock` is held exclusively for the archive worker's
 entire disk lifetime. Windows uses an exclusive Unicode `CreateFileW` handle;
-POSIX uses nonblocking `flock`. A contender enters `BUSY`, performs no database
-reads or writes, and leaves browser warming operational in memory. Other lease
-failures are reported as archive error code 6 rather than being mistaken for
-contention. The archive spec exercises simultaneous workers and denied writes.
+POSIX uses nonblocking `flock`. A contender loads the committed pack/index as a
+validated read-only snapshot, enters `READ_ONLY`, and leaves browser warming
+operational in memory for missing entries. It never repairs, appends, or compacts.
+Other lease failures are reported as archive error code 6 rather than being
+mistaken for contention. The archive spec exercises simultaneous workers,
+snapshot decoding, and denied writes.
 
 ### P1-2: Budgeted construction for visible cache misses
 
@@ -85,79 +87,53 @@ traversed MB's live replacement browser as though it were Rack's stock browser.
 Deepcache now detects both `Stoermelder-P1/Mb` and the legacy
 `Stoermelder-PackTau/Mb` before reading or modifying the browser slot. It enters
 an inert `STANDBY / MB ACTIVE` state and creates no cache manager, overlay, warm
-host, archive thread, or browser tree. Removing and re-adding Deepcache after MB
-is removed activates it normally.
+host, archive thread, or browser tree. After MB is removed, the surviving
+Deepcache detects the free scene slot and activates automatically.
 
-### P2-1: Cache fingerprints do not fully identify rendered plugin assets
+### P2-1: Cache fingerprints do not fully identify rendered plugin assets — partially resolved
 
-The fingerprint includes plugin slug/version/path, the plugin directory's
-`modifiedTimestamp`, dark-panel preference, and the sizes of the plugin binary
-and `plugin.json` ([Deepcache.cpp](src/Deepcache.cpp#L89)). It does not include
-artifact modification times or contents, nor any `res/` files. An in-place
-development build that preserves version and binary size can reuse a stale
-raster if the directory timestamp is unchanged. Panel/resource-only changes can
-also be missed.
+The raster schema is now versioned at revision 2, and binary/manifest artifact
+fingerprints include file modification time (with subsecond precision where the
+platform exposes it) as well as size. Same-version development rebuilds therefore
+invalidate normally even when the linked binary size is unchanged.
 
-The implementation note currently overstates this as reliable development-build
-invalidation. A better design is a cheap persisted artifact manifest using
-high-resolution mtimes and sizes for the binary, manifest, and relevant resource
-tree, with a content hash fallback when metadata is unchanged or unavailable.
-Hashing every plugin binary in full on every Rack startup would be correct but
-works against Deepcache's startup-performance goal.
+Resource-only changes can still be missed because recursively statting or hashing
+every installed plugin resource would work against the startup-performance goal.
+A future persisted artifact manifest can close that gap without repeating the
+full resource-tree scan on every launch.
 
-### P2-2: The cyan progress denominator ignores the selected cache scope
+### P2-2: The cyan progress denominator ignores the selected cache scope — resolved by definition
 
-Framebuffer plugin totals are built once from every installed model
-([Deepcache.cpp](src/Deepcache.cpp#L738), [Deepcache.cpp](src/Deepcache.cpp#L822)),
-while the planner can run only favorites or visible search results. Such a run
-can enter `READY` with the cyan bar permanently partial because untouched models
-still count against each plugin's completion.
+Cyan is intentionally global framebuffer/database coverage across installed
+plugin builds. Purple is the scoped construction pass. A favorites-only or
+filtered pass can therefore finish with purple complete and cyan partial; cyan
+must not be relabeled as progress for that scoped operation.
 
-Define whether cyan means "database coverage of all installed plugin builds" or
-"framebuffer completion for this run." If it means global coverage, label it as
-coverage and decouple it from the active-run state. If it means stage progress,
-build its target map from the scoped descriptor set.
+### P2-3: Browser refresh can promote requests in quadratic time — resolved
 
-### P2-3: Browser refresh can promote requests in quadratic time
+Refresh now collects matching indices and submits one bulk promotion. The worker
+partitions its queue once under one mutex acquisition, preserving promoted and
+unpromoted ordering. Pending-count queries are constant-time because the output
+deque contains only the active generation.
 
-Every search/filter refresh loops over all cards and calls `promote()` for every
-filter-visible model ([Deepcache.cpp](src/Deepcache.cpp#L1518)). Each promotion
-linearly searches and erases from the planner deque while holding its mutex
-([DeepcachePlanner.cpp](src/DeepcachePlanner.cpp#L219)). With most of ~1,700
-models visible, typing a character can perform O(N²) queue work on the UI
-thread. "Visible" here means filter-visible, not viewport-visible.
+### P2-4: Same-process panel-theme changes do not invalidate raster previews — resolved
 
-Use a bulk-priority update with an indexable queue/set, or promote only cards in
-the scroll viewport. Search refresh should never issue thousands of individual
-mutex acquisitions and deque scans.
+A theme change clears stale rasters and restarts an active pass. When the new
+theme differs from the archive fingerprint, rebuilt images remain memory-only
+instead of being published under an incorrect fingerprint. Returning to the
+archive theme restores persistence.
 
-### P2-4: Same-process panel-theme changes do not invalidate raster previews
+### P2-5: A transient NanoVG upload failure is not retried by the startup queue — resolved
 
-The startup fingerprint includes `preferDarkPanels`, but a runtime preference
-change only sends a dirty event to the model container
-([Deepcache.cpp](src/Deepcache.cpp#L1480)). Existing `DeepcacheRasterWidget`
-pixels remain from the previous theme. Invalidate/reload the raster set when the
-preference changes, or explicitly state that a Deepcache rebuild/restart is
-required.
+Persistent uploads now carry a bounded retry count and a failed item is deferred
+to a later UI frame, rather than being retried repeatedly in one frame or being
+dropped immediately.
 
-### P2-5: A transient NanoVG upload failure is not retried by the startup queue
+### P2-6: Removing the active Deepcache does not promote a passive instance — resolved
 
-`uploadPersistentImages()` pops an index before `ensurePersistentImage()` and
-does not requeue it when image creation fails
-([Deepcache.cpp](src/Deepcache.cpp#L788)). A transient allocation/context failure
-can leave that card resident but not manager-counted as framebuffer ready,
-making cyan coverage stick below 100%. Add a bounded retry count and retain the
-RGBA fallback even after retries are exhausted.
-
-### P2-6: Removing the active Deepcache does not promote a passive instance
-
-Only the first widget becomes `gActiveDeepcacheWidget`; later instances are
-permanently marked passive ([Deepcache.cpp](src/Deepcache.cpp#L2197)). When the
-active widget is destroyed, the global is cleared, but an existing passive
-widget is not elected ([Deepcache.cpp](src/Deepcache.cpp#L2218)). The custom
-browser therefore disappears until a new Deepcache is added or the patch is
-reloaded. Maintain a UI-thread registry and promote the oldest surviving
-instance after browser restoration.
+Inactive widgets perform a throttled ownership check once per second. A surviving
+duplicate automatically claims the scene after the active owner is removed. The
+same path promotes an MB-standby Deepcache after Stoermelder MB is removed.
 
 ### P2-7: Full-pack residency has no memory ceiling or admission policy
 
@@ -208,14 +184,10 @@ a retired overlay shell alive to protect a successor's raw backup pointer
 `Scene::browser` API, but it is an intentional lifetime extension that should
 remain in manual removal-order and shutdown tests.
 
-### P3-4: Database-directory creation failure is reported as `EMPTY`
+### P3-4: Database-directory creation failure is reported as `EMPTY` — resolved
 
-If `<Rack user>/Leviathan/Deepcache` cannot be created, initialization emits a
-warning and returns before starting the archive worker
-([Deepcache.cpp](src/Deepcache.cpp#L738)). Memory warming still works, which is a
-good fallback, but the panel remains `EMPTY` rather than explaining that
-persistence is unavailable. Publish a dedicated database error code while
-continuing the in-memory cache path.
+Directory creation failure now publishes database error code 7 and `ERROR`, while
+the browser continues using the existing memory-only rendering path.
 
 ## Fixes made during this review
 
@@ -270,9 +242,9 @@ continuing the in-memory cache path.
     plugin rather than once per model. Planner inputs move to the worker, and
     normalized sort keys are computed once per descriptor rather than inside
     every comparator call.
-13. **Exclusive archive lease.** A process holds `archive-v1.lock` across load,
-    append, index publication, and compaction. Contention is a visible
-    `MEMORY ONLY / DATABASE IN USE` state rather than a corruption risk.
+13. **Exclusive archive write lease.** One worker holds `archive-v1.lock` across
+    recovery, append, index publication, and compaction. Contenders validate and
+    decode a read-only committed snapshot without risking archive corruption.
 14. **Budgeted on-demand construction.** Browser drawing no longer constructs
     third-party module widgets. Visible misses are deduplicated and consumed by
     the same bounded UI executor as planned work.
@@ -289,6 +261,21 @@ continuing the in-memory cache path.
     first planner submission, generation zero is now explicitly neither ready
     nor failed. This prevents a false cache `ERROR` state—and ERR LED—during a
     normal database load.
+19. **Linear-time filter promotion.** Browser refresh submits one set of visible
+    indices; the planner partitions the queue once and reports pending work in
+    constant time.
+20. **Development-build and theme invalidation.** Binary/manifest mtimes join
+    sizes in raster schema 2. Runtime panel-theme changes clear stale rasters and
+    suppress persistence whenever the active theme does not match the archive.
+21. **Bounded persistent-upload retry.** Transient NanoVG image creation failures
+    retry across later UI frames without creating an unbounded queue.
+22. **Safe UI and ownership lifetimes.** Context-menu callbacks use an expiring
+    manager token, stopped managers clear their browser pointer, and inactive
+    Deepcache widgets can claim a newly free scene slot once per second.
+23. **Archive hardening.** Index entry/string allocations are realistically
+    bounded, compaction retains its already-copied byte vector instead of
+    rereading the committed pack, and database-directory failure publishes a
+    dedicated error while leaving memory-only warming available.
 
 ## Corruption and restart behavior after this review
 
@@ -313,11 +300,12 @@ pixels.
 
 - Complete `make test-fast`: passed.
 - `build/tests/deepcache_archive_spec`: passed, including append/replacement,
-  restart, stale fingerprint rejection, simultaneous-worker lease contention,
-  raced-write release in memory-only mode, cancellation, compaction, corrupt
-  pack, corrupt index, repair, and a second restart. Test pixels include varying
-  alpha to exercise the cancelable QOI encoder's RGBA path.
-- `build/tests/deepcache_planner_spec`: 11/11 passed.
+  restart, stale fingerprint rejection, simultaneous-worker read-only snapshot
+  loading, raced-write release and denial, cancellation, compaction, corrupt
+  pack, corrupt index, repair, a pack-only interrupted-compaction backup, an
+  oversized index-key declaration, and a second restart. Test pixels include
+  varying alpha to exercise the cancelable QOI encoder's RGBA path.
+- `build/tests/deepcache_planner_spec`: 12/12 passed, including stable bulk promotion.
 - `build/src/Deepcache.cpp.o`: compiled cleanly with the Rack SDK headers.
 - Archive test under AddressSanitizer and UndefinedBehaviorSanitizer: passed
   with leak detection disabled because LeakSanitizer is unavailable under this
@@ -329,8 +317,9 @@ pixels.
 
 ## Recommended remaining implementation order
 
-1. Replace per-card promotion with bulk/viewport prioritization.
-2. Strengthen artifact/resource fingerprints and runtime theme invalidation.
-3. Clarify global-coverage versus scoped-run semantics for the cyan bar.
-4. Add persistent-upload retries, memory telemetry/limits, and corruption
-   diagnostics.
+1. Extend fingerprinting to resource-only changes without imposing a large
+   physical-disk metadata scan at startup.
+2. Add memory telemetry/admission policy without reintroducing browser disk hits.
+3. Add user-visible recoverable-corruption diagnostics.
+4. Measure synchronous framebuffer readback stalls on representative Windows GPUs
+   before deciding whether a PBO/fence pipeline is justified.

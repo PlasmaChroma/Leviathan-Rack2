@@ -3,6 +3,7 @@
 #include "third_party/qoi.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
@@ -36,6 +37,9 @@ const std::size_t kMaxWriteQueueEntries = 16;
 const std::size_t kMaxWriteQueueBytes = 64u * 1024u * 1024u;
 const std::size_t kReadChunkBytes = 4u * 1024u * 1024u;
 const std::size_t kWriteChunkBytes = 1u * 1024u * 1024u;
+const std::uint32_t kMaxIndexEntries = 100000u;
+const std::uint32_t kMaxCacheKeyBytes = 4096u;
+const std::uint32_t kMaxFingerprintBytes = 1024u;
 
 struct QoiPixel {
 	std::uint8_t r;
@@ -162,9 +166,9 @@ void writeValue(std::ostream& stream, const T& value) {
 	stream.write(reinterpret_cast<const char*>(&value), sizeof(value));
 }
 
-bool readString(std::istream& stream, std::string& value) {
+bool readString(std::istream& stream, std::string& value, std::uint32_t maxLength) {
 	std::uint32_t length = 0;
-	if (!readValue(stream, length) || length > 1024u * 1024u)
+	if (!readValue(stream, length) || length > maxLength)
 		return false;
 	value.resize(length);
 	return length == 0 || static_cast<bool>(stream.read(&value[0], length));
@@ -228,6 +232,14 @@ DeepcacheArchiveWorker::DeepcacheArchiveWorker() = default;
 
 DeepcacheArchiveWorker::~DeepcacheArchiveWorker() {
 	shutdown();
+}
+
+void DeepcacheArchiveWorker::markUnavailable(int errorCode) {
+	if (started_)
+		return;
+	fatalError_.store(true, std::memory_order_relaxed);
+	errorCode_.store(errorCode, std::memory_order_relaxed);
+	setState(DatabaseState::ERROR);
 }
 
 void DeepcacheArchiveWorker::start(const std::string& directory, std::vector<ArchiveWantedEntry> wanted) {
@@ -325,7 +337,8 @@ void DeepcacheArchiveWorker::markReady(const std::string& cacheKey) {
 }
 
 void DeepcacheArchiveWorker::requestCompaction() {
-	if (!started_ || canceled() || fatalError_.load(std::memory_order_relaxed))
+	if (!started_ || canceled() || fatalError_.load(std::memory_order_relaxed) ||
+	    leaseUnavailable_.load(std::memory_order_relaxed))
 		return;
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
@@ -373,7 +386,19 @@ void DeepcacheArchiveWorker::run() {
 			queuedWriteBytes_ = 0;
 			compactRequested_ = false;
 		}
-		setState(DatabaseState::BUSY);
+		// A lease contender must never repair, append, or compact the shared
+		// archive, but it can safely consume a committed pack/index snapshot.
+		// Brief retries cover the small rename window during owner compaction.
+		bool loadedReadOnly = false;
+		for (int attempt = 0; attempt < 20 && !canceled(); ++attempt) {
+			if (loadArchive(false)) {
+				loadedReadOnly = true;
+				break;
+			}
+			std::unique_lock<std::mutex> retryLock(mutex_);
+			condition_.wait_for(retryLock, std::chrono::milliseconds(100), [&]() { return canceled(); });
+		}
+		setState(loadedReadOnly && !entries_.empty() ? DatabaseState::READ_ONLY : DatabaseState::BUSY);
 		std::unique_lock<std::mutex> lock(mutex_);
 		condition_.wait(lock, [&]() { return canceled(); });
 		return;
@@ -384,7 +409,7 @@ void DeepcacheArchiveWorker::run() {
 
 void DeepcacheArchiveWorker::runOwned() {
 	try {
-		if (!loadArchive()) {
+		if (!loadArchive(true)) {
 			if (!canceled()) {
 				fatalError_.store(true, std::memory_order_relaxed);
 				errorCode_.store(1, std::memory_order_relaxed);
@@ -528,13 +553,14 @@ bool DeepcacheArchiveWorker::loadIndex(const std::string& path) {
 	std::uint32_t version = 0;
 	std::uint32_t count = 0;
 	if (!stream.read(magic, sizeof(magic)) || std::memcmp(magic, kIndexMagic, sizeof(magic)) != 0 ||
-	    !readValue(stream, version) || version != kIndexVersion || !readValue(stream, count) || count > 1000000u)
+	    !readValue(stream, version) || version != kIndexVersion || !readValue(stream, count) || count > kMaxIndexEntries)
 		return false;
 	std::unordered_map<std::string, Entry> loaded;
 	for (std::uint32_t i = 0; i < count; ++i) {
 		std::string key;
 		Entry entry;
-		if (!readString(stream, key) || !readString(stream, entry.fingerprint) ||
+		if (!readString(stream, key, kMaxCacheKeyBytes) ||
+		    !readString(stream, entry.fingerprint, kMaxFingerprintBytes) ||
 		    !readValue(stream, entry.offset) || !readValue(stream, entry.length) ||
 		    !readValue(stream, entry.checksum) || !readValue(stream, entry.width) ||
 		    !readValue(stream, entry.height))
@@ -545,11 +571,13 @@ bool DeepcacheArchiveWorker::loadIndex(const std::string& path) {
 	return true;
 }
 
-bool DeepcacheArchiveWorker::loadArchive() {
+bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 	const std::string compactMarker = directory_ + "/compaction-v1.pending";
 	std::ifstream marker(compactMarker.c_str(), std::ios::binary);
 	if (marker) {
 		marker.close();
+		if (!allowRecovery)
+			return false;
 		const std::string packBackup = packPath_ + ".bak";
 		const std::string indexBackup = indexPath_ + ".bak";
 		std::ifstream oldPack(packBackup.c_str(), std::ios::binary);
@@ -723,6 +751,7 @@ bool DeepcacheArchiveWorker::compactArchive() {
 	if (!output)
 		return false;
 	std::unordered_map<std::string, Entry> compacted;
+	std::vector<std::uint8_t> compactedBytes;
 	std::uint64_t offset = 0;
 	for (const auto& item : entries_) {
 		if (canceled()) {
@@ -739,14 +768,19 @@ bool DeepcacheArchiveWorker::compactArchive() {
 			std::remove(temporaryPack.c_str());
 			return canceled();
 		}
+		compactedBytes.insert(compactedBytes.end(), packedBytes_.begin() + source.offset,
+		                      packedBytes_.begin() + source.offset + source.length);
 		Entry destination = source;
 		destination.offset = offset;
 		offset += source.length;
 		compacted[item.first] = std::move(destination);
 	}
 	output.flush();
-	if (!output)
+	if (!output) {
+		output.close();
+		std::remove(temporaryPack.c_str());
 		return false;
+	}
 	output.close();
 	if (canceled()) {
 		std::remove(temporaryPack.c_str());
@@ -820,9 +854,6 @@ bool DeepcacheArchiveWorker::compactArchive() {
 	std::remove(markerPath.c_str());
 	std::remove(packBackup.c_str());
 	std::remove(indexBackup.c_str());
-	std::vector<std::uint8_t> compactedBytes;
-	if (!readPackFile(packPath_, compactedBytes))
-		return false;
 	packedBytes_.swap(compactedBytes);
 	packBytes_.store(packedBytes_.size(), std::memory_order_relaxed);
 	return true;

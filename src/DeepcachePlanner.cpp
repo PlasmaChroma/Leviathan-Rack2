@@ -232,6 +232,34 @@ bool PreviewPlannerWorker::promote(std::size_t modelIndex, std::uint64_t generat
 	return true;
 }
 
+std::size_t PreviewPlannerWorker::promote(const std::unordered_set<std::size_t>& modelIndices,
+	                                      std::uint64_t generation) {
+	if (modelIndices.empty())
+		return 0;
+	std::lock_guard<std::mutex> lock(mutex_);
+	if (generation != activeGeneration_)
+		return 0;
+
+	std::deque<PreviewBuildRequest> promoted;
+	std::deque<PreviewBuildRequest> remaining;
+	while (!output_.empty()) {
+		PreviewBuildRequest request = std::move(output_.front());
+		output_.pop_front();
+		if (request.generation == generation && modelIndices.count(request.modelIndex) != 0) {
+			request.priority = -1;
+			promoted.push_back(std::move(request));
+		}
+		else {
+			remaining.push_back(std::move(request));
+		}
+	}
+	const std::size_t promotedCount = promoted.size();
+	promoted.insert(promoted.end(), std::make_move_iterator(remaining.begin()),
+	                std::make_move_iterator(remaining.end()));
+	output_.swap(promoted);
+	return promotedCount;
+}
+
 bool PreviewPlannerWorker::tryPop(PreviewBuildRequest& request) {
 	std::lock_guard<std::mutex> lock(mutex_);
 	if (paused_ || output_.empty())
@@ -260,9 +288,9 @@ std::size_t PreviewPlannerWorker::pendingRequestCount(std::uint64_t generation) 
 	std::lock_guard<std::mutex> lock(mutex_);
 	if (generation != activeGeneration_)
 		return 0;
-	return static_cast<std::size_t>(std::count_if(output_.begin(), output_.end(), [&](const PreviewBuildRequest& request) {
-		return request.generation == generation;
-	}));
+	// submit(), cancel(), and publication replace the entire queue generation,
+	// so every output entry belongs to activeGeneration_.
+	return output_.size();
 }
 
 void PreviewPlannerWorker::shutdown() {

@@ -22,6 +22,7 @@ enum class DatabaseState {
 	COMPACTING,
 	CANCELING,
 	BUSY,
+	READ_ONLY,
 	ERROR
 };
 
@@ -48,9 +49,10 @@ struct PreviewWrite {
 };
 
 // Owns all disk I/O and QOI work. The UI thread submits immutable shared RGBA
-// data and drains decoded results. One process holds the archive lease; a
-// contender reports BUSY and remains memory-only. shutdown() cancels queued
-// work, interrupts encode/read/write loops at small boundaries, and joins.
+// data and drains decoded results. One worker holds the archive write lease; a
+// contender loads a validated read-only snapshot and keeps new work in memory.
+// shutdown() cancels queued work, interrupts encode/read/write loops at small
+// boundaries, and joins.
 class DeepcacheArchiveWorker {
 public:
 	DeepcacheArchiveWorker();
@@ -60,6 +62,7 @@ public:
 	DeepcacheArchiveWorker& operator=(const DeepcacheArchiveWorker&) = delete;
 
 	void start(const std::string& directory, std::vector<ArchiveWantedEntry> wanted);
+	void markUnavailable(int errorCode);
 	bool enqueue(PreviewWrite write);
 	bool canAcceptWrite() const;
 	bool tryPopDecoded(DecodedPreview& preview);
@@ -89,7 +92,7 @@ private:
 	void runOwned();
 	bool acquireLease();
 	void releaseLease();
-	bool loadArchive();
+	bool loadArchive(bool allowRecovery);
 	bool appendPreview(PreviewWrite write);
 	bool compactArchive();
 	bool readPackFile(const std::string& path, std::vector<std::uint8_t>& bytes);

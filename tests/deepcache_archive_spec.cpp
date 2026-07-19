@@ -82,6 +82,36 @@ bool corruptFirstByte(const std::string& path) {
 	return static_cast<bool>(stream);
 }
 
+bool copyFile(const std::string& source, const std::string& destination) {
+	std::ifstream input(source.c_str(), std::ios::binary);
+	std::ofstream output(destination.c_str(), std::ios::binary | std::ios::trunc);
+	output << input.rdbuf();
+	output.flush();
+	return static_cast<bool>(input) && static_cast<bool>(output);
+}
+
+bool writePendingMarker(const std::string& directory) {
+	std::ofstream marker((directory + "/compaction-v1.pending").c_str(),
+	                     std::ios::binary | std::ios::trunc);
+	marker << "pending";
+	marker.flush();
+	return static_cast<bool>(marker);
+}
+
+bool writeOversizedKeyIndex(const std::string& path) {
+	std::ofstream stream(path.c_str(), std::ios::binary | std::ios::trunc);
+	const char magic[8] = {'L', 'V', 'D', 'C', 'I', 'D', 'X', '1'};
+	const std::uint32_t version = 1;
+	const std::uint32_t count = 1;
+	const std::uint32_t oversizedKeyLength = 4097;
+	stream.write(magic, sizeof(magic));
+	stream.write(reinterpret_cast<const char*>(&version), sizeof(version));
+	stream.write(reinterpret_cast<const char*>(&count), sizeof(count));
+	stream.write(reinterpret_cast<const char*>(&oversizedKeyLength), sizeof(oversizedKeyLength));
+	stream.flush();
+	return static_cast<bool>(stream);
+}
+
 }  // namespace
 
 int main() {
@@ -126,12 +156,19 @@ int main() {
 		raced.height = 9;
 		raced.rgba = contenderPixels;
 		contender.enqueue(std::move(raced));
-		if (!waitUntil([&]() { return contender.state() == deepcache::DatabaseState::BUSY; })) {
-			std::cerr << "[FAIL] second archive worker did not enter memory-only BUSY state\n";
+		if (!waitUntil([&]() { return contender.state() == deepcache::DatabaseState::READ_ONLY; })) {
+			std::cerr << "[FAIL] second archive worker did not enter read-only state\n";
+			return 1;
+		}
+		deepcache::DecodedPreview contenderPreview;
+		if (!contender.tryPopDecoded(contenderPreview) || contenderPreview.cacheKey != "one" ||
+		    contenderPreview.rgba != firstPixels || contender.readyCount() != 1 ||
+		    contender.readyPluginCount() != 1) {
+			std::cerr << "[FAIL] read-only archive worker did not consume the committed snapshot\n";
 			return 1;
 		}
 		if (!waitUntil([&]() { return contenderPixels.use_count() == 1; })) {
-			std::cerr << "[FAIL] memory-only archive worker retained a raced queued write\n";
+			std::cerr << "[FAIL] read-only archive worker retained a raced queued write\n";
 			return 1;
 		}
 		deepcache::PreviewWrite denied;
@@ -141,7 +178,7 @@ int main() {
 		denied.height = 9;
 		denied.rgba = contenderPixels;
 		if (contender.enqueue(std::move(denied))) {
-			std::cerr << "[FAIL] memory-only archive worker accepted a disk write\n";
+			std::cerr << "[FAIL] read-only archive worker accepted a disk write\n";
 			return 1;
 		}
 		contender.shutdown();
@@ -304,6 +341,53 @@ int main() {
 		worker.shutdown();
 		if (!repaired) {
 			std::cerr << "[FAIL] repaired index did not persist readable pixels\n";
+			return 1;
+		}
+	}
+
+	// If a crash occurs after the old pack is backed up but before the old
+	// index is backed up, the pack backup and still-current index are a matching
+	// pair. Recovery must restore that pair rather than discard the cache.
+	if (!copyFile(directory + "/previews-v1.pack", directory + "/previews-v1.pack.bak") ||
+	    !corruptFirstByte(directory + "/previews-v1.pack") || !writePendingMarker(directory)) {
+		std::cerr << "[FAIL] could not prepare interrupted compaction recovery test\n";
+		return 1;
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(directory, {{"one", "fp-one", "plugin-a"}});
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] interrupted compaction recovery did not finish\n";
+			return 1;
+		}
+		deepcache::DecodedPreview preview;
+		const bool recovered = worker.tryPopDecoded(preview) && preview.rgba == updatedPixels;
+		worker.shutdown();
+		if (!recovered) {
+			std::cerr << "[FAIL] pack-only backup did not recover with the current index\n";
+			return 1;
+		}
+	}
+
+	// Index strings are bounded before allocation. An oversized declared key is
+	// isolated as an empty cache instead of allocating attacker-controlled data.
+	if (!writeOversizedKeyIndex(directory + "/index-v1.bin")) {
+		std::cerr << "[FAIL] could not prepare oversized index-key test\n";
+		return 1;
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(directory, {{"one", "fp-one", "plugin-a"}});
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] oversized index-key reload did not finish\n";
+			return 1;
+		}
+		deepcache::DecodedPreview preview;
+		const bool rejected = !worker.tryPopDecoded(preview) && worker.readyCount() == 0 &&
+		                      worker.state() != deepcache::DatabaseState::ERROR;
+		worker.shutdown();
+		if (!rejected) {
+			std::cerr << "[FAIL] oversized index key was not isolated as an empty cache\n";
 			return 1;
 		}
 	}
