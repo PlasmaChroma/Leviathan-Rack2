@@ -237,7 +237,7 @@ struct DeepcacheZoomButton : ui::ChoiceButton {
 	void step() override;
 };
 
-struct DeepcacheBrandMenu : ui::Menu {
+struct DeepcacheMulticolumnMenu : ui::Menu {
 	math::Vec anchorPos;
 	void step() override;
 };
@@ -1857,7 +1857,7 @@ float DeepcacheFavoriteQuantity::getValue() {
 	return browser->favoritesOnly ? 1.f : 0.f;
 }
 
-void DeepcacheBrandMenu::step() {
+void DeepcacheMulticolumnMenu::step() {
 	// Let Rack establish the natural item heights and menu width first, then
 	// replace only an overflowing vertical layout with an adaptive column grid.
 	ui::Menu::step();
@@ -1932,7 +1932,7 @@ void DeepcacheBrandItem::step() {
 }
 
 void DeepcacheBrandButton::onAction(const ActionEvent& e) {
-	auto* menu = createMenu<DeepcacheBrandMenu>();
+	auto* menu = createMenu<DeepcacheMulticolumnMenu>();
 	menu->anchorPos = getAbsoluteOffset(math::Vec(0, box.size.y));
 	menu->box.pos = menu->anchorPos;
 	menu->box.size.x = box.size.x;
@@ -2001,8 +2001,9 @@ void DeepcacheTagItem::step() {
 }
 
 void DeepcacheTagButton::onAction(const ActionEvent& e) {
-	ui::Menu* menu = createMenu();
-	menu->box.pos = getAbsoluteOffset(math::Vec(0, box.size.y));
+	auto* menu = createMenu<DeepcacheMulticolumnMenu>();
+	menu->anchorPos = getAbsoluteOffset(math::Vec(0, box.size.y));
+	menu->box.pos = menu->anchorPos;
 	menu->box.size.x = box.size.x;
 	auto* allItem = new DeepcacheTagItem;
 	allItem->text = string::translate("Browser.allTags");
