@@ -432,6 +432,8 @@ public:
 
 	void rebuild() {
 		clear();
+		if (archive_.requestReset())
+			ignoreArchiveResults_ = false;
 		start();
 	}
 

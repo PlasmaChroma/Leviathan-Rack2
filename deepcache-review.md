@@ -159,6 +159,19 @@ budget substantially. Measure this on representative GPUs. If it is material,
 use a staged PBO/fence pipeline or reduce capture dimensions; either requires
 careful context-recreation handling.
 
+### P2-9: Rebuild could not recover a fatal archive worker — resolved
+
+`Rebuild cache` now requests a destructive reset from the archive worker that
+owns the inter-process write lease. The reset runs off the UI thread, removes
+the pack, index, backups, compaction marker, and staging files, clears archive
+progress, and leaves the worker ready to persist the newly rendered previews.
+A read-only lease contender cannot reset the shared database. Fatal load,
+append, and compaction errors keep the owner thread alive waiting for either
+shutdown or this explicit recovery request.
+
+The QOI encoder also rejects non-positive dimensions, overflowing pixel counts,
+and undersized RGBA input before indexing the source buffer.
+
 ### P3-1: Recoverable corruption has no user-visible repair diagnostic
 
 Corruption is safely converted into cache misses, but the panel reports
