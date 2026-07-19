@@ -294,6 +294,12 @@ bool DeepcacheArchiveWorker::enqueue(PreviewWrite write) {
 	return true;
 }
 
+void DeepcacheArchiveWorker::discardPendingWrites() {
+	std::lock_guard<std::mutex> lock(mutex_);
+	writes_.clear();
+	queuedWriteBytes_ = 0;
+}
+
 bool DeepcacheArchiveWorker::canAcceptWrite() const {
 	if (!started_ || canceled() || fatalError_.load(std::memory_order_relaxed) ||
 	    leaseUnavailable_.load(std::memory_order_relaxed))
@@ -698,9 +704,12 @@ bool DeepcacheArchiveWorker::saveIndexAtomically() {
 bool DeepcacheArchiveWorker::appendPreview(PreviewWrite write) {
 	if (canceled())
 		return true;
-	const auto wanted = wanted_.find(write.cacheKey);
-	if (wanted == wanted_.end() || wanted->second != write.fingerprint)
+	auto wanted = wanted_.find(write.cacheKey);
+	if (wanted == wanted_.end())
 		return true;
+	// Live panel-theme changes update the fingerprint for a known key. Writes
+	// are serialized here, so the newest completed render is authoritative.
+	wanted->second = write.fingerprint;
 	const std::uint64_t byteCount = write.width > 0 && write.height > 0
 		? static_cast<std::uint64_t>(write.width) * static_cast<std::uint64_t>(write.height) * 4ull
 		: 0;

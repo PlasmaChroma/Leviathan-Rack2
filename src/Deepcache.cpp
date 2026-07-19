@@ -329,7 +329,6 @@ struct DeepcacheBrowser : widget::OpaqueWidget {
 	bool favoritesOnly = false;
 	float lastBrowserZoom = NAN;
 	bool lastPreferDarkPanels = false;
-	bool archivePreferDarkPanels = false;
 	NVGcontext* dragonOwnerVg = nullptr;
 	int dragonImageHandle = -1;
 	int dragonImageWidth = 0;
@@ -362,7 +361,8 @@ struct DeepcacheBrowser : widget::OpaqueWidget {
 class PreviewCacheManager {
 public:
 	explicit PreviewCacheManager(DeepcacheModule* module)
-		: module_(module) {
+		: module_(module),
+		  lastPreferDarkPanels_(settings::preferDarkPanels) {
 		publish();
 	}
 
@@ -556,12 +556,25 @@ public:
 		publishDatabase();
 	}
 
-	void onPanelThemeChanged(bool archiveFingerprintMatches) {
+	void onPanelThemeChanged() {
 		const bool restart = startRequested_ || activeGeneration_ != 0 || state_ == deepcache::CacheState::PLANNING ||
 		                     state_ == deepcache::CacheState::WARMING || state_ == deepcache::CacheState::PAUSED ||
 		                     state_ == deepcache::CacheState::READY;
+		archive_.discardPendingWrites();
 		clear();
-		persistenceSuppressed_ = !archiveFingerprintMatches;
+		std::unordered_map<const plugin::Plugin*, std::string> pluginFingerprints;
+		for (std::size_t modelIndex = 0; modelIndex < browser_->modelBoxes.size(); ++modelIndex) {
+			DeepcacheModelBox* box = browser_->getModelBox(modelIndex);
+			if (!box || !box->model || !box->model->plugin)
+				continue;
+			const plugin::Plugin* plugin = box->model->plugin;
+			auto fingerprint = pluginFingerprints.find(plugin);
+			if (fingerprint == pluginFingerprints.end())
+				fingerprint = pluginFingerprints.emplace(plugin, pluginArtifactFingerprint(plugin)).first;
+			fingerprintByModelIndex_[modelIndex] = fingerprint->second;
+			if (modelIndex < browser_->modelDescriptors.size())
+				browser_->modelDescriptors[modelIndex].artifactFingerprint = fingerprint->second;
+		}
 		if (restart)
 			start();
 	}
@@ -596,6 +609,10 @@ public:
 	void step() {
 		if (stopped_ || !browser_)
 			return;
+		if (settings::preferDarkPanels != lastPreferDarkPanels_) {
+			lastPreferDarkPanels_ = settings::preferDarkPanels;
+			onPanelThemeChanged();
+		}
 		drainArchiveDecoded();
 		publishDatabase();
 		if (startRequested_ && archiveReadyForPlanning()) {
@@ -716,7 +733,7 @@ public:
 		const double budgetMs = std::max(0.5, module_->uiBudgetMicros.load(std::memory_order_relaxed) / 1000.0);
 		int processedThisFrame = 0;
 		while (processedThisFrame < 4 && !framebufferWarmQueue_.empty()) {
-			if (!persistenceSuppressed_ && !archive_.canAcceptWrite())
+			if (!archive_.canAcceptWrite())
 				break;
 			if (processedThisFrame > 0 && (system::getTime() - frameStart) * 1000.0 >= budgetMs)
 				break;
@@ -740,7 +757,7 @@ public:
 					else {
 						persistentModelIndices_.insert(request.first);
 						const auto key = cacheKeyByModelIndex_.find(request.first);
-						if (!persistenceSuppressed_ && key != cacheKeyByModelIndex_.end()) {
+						if (key != cacheKeyByModelIndex_.end()) {
 							deepcache::PreviewWrite write;
 							write.cacheKey = key->second;
 							write.fingerprint = fingerprintByModelIndex_[request.first];
@@ -1010,7 +1027,7 @@ private:
 	bool archiveStarted_ = false;
 	bool startRequested_ = false;
 	bool ignoreArchiveResults_ = false;
-	bool persistenceSuppressed_ = false;
+	bool lastPreferDarkPanels_ = false;
 	std::shared_ptr<int> lifetimeToken_ = std::make_shared<int>(0);
 };
 
@@ -1722,7 +1739,6 @@ DeepcacheBrowser::DeepcacheBrowser(PreviewCacheManager* manager)
 	}
 	lastBrowserZoom = settings::browserZoom;
 	lastPreferDarkPanels = settings::preferDarkPanels;
-	archivePreferDarkPanels = settings::preferDarkPanels;
 	refresh();
 }
 
@@ -1749,8 +1765,6 @@ void DeepcacheBrowser::step() {
 	}
 	if (settings::preferDarkPanels != lastPreferDarkPanels) {
 		lastPreferDarkPanels = settings::preferDarkPanels;
-		if (cacheManager)
-			cacheManager->onPanelThemeChanged(settings::preferDarkPanels == archivePreferDarkPanels);
 		Widget::DirtyEvent dirty;
 		modelContainer->onDirty(dirty);
 	}

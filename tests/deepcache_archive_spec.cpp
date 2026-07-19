@@ -392,6 +392,44 @@ int main() {
 		}
 	}
 
+	// A live panel-theme rebuild changes the fingerprint without changing the
+	// model cache key. The replacement must persist under the new fingerprint.
+	const std::string themeDirectory = directory + "-theme";
+	removeDirectory(themeDirectory);
+	makeDirectory(themeDirectory);
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(themeDirectory, {{"theme-model", "light-fingerprint", "plugin-theme"}});
+		deepcache::PreviewWrite themed;
+		themed.cacheKey = "theme-model";
+		themed.fingerprint = "dark-fingerprint";
+		themed.width = 13;
+		themed.height = 9;
+		themed.rgba = std::make_shared<const std::vector<std::uint8_t>>(updatedPixels);
+		worker.enqueue(std::move(themed));
+		if (!waitUntil([&]() { return worker.readyCount() == 1; })) {
+			std::cerr << "[FAIL] live theme fingerprint replacement did not commit\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(themeDirectory, {{"theme-model", "dark-fingerprint", "plugin-theme"}});
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] live theme fingerprint replacement did not reload\n";
+			return 1;
+		}
+		deepcache::DecodedPreview preview;
+		const bool persisted = worker.tryPopDecoded(preview) && preview.rgba == updatedPixels;
+		worker.shutdown();
+		if (!persisted) {
+			std::cerr << "[FAIL] rebuilt theme preview was not persisted under its new fingerprint\n";
+			return 1;
+		}
+	}
+	removeDirectory(themeDirectory);
+
 	removeDirectory(directory);
 	const bool pass = decodedLatest && staleRejected && compactedSize < sizeAfterUpdate;
 	std::cout << (pass ? "[PASS]" : "[FAIL]")

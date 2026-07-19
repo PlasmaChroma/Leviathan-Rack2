@@ -118,10 +118,10 @@ deque contains only the active generation.
 
 ### P2-4: Same-process panel-theme changes do not invalidate raster previews — resolved
 
-A theme change clears stale rasters and restarts an active pass. When the new
-theme differs from the archive fingerprint, rebuilt images remain memory-only
-instead of being published under an incorrect fingerprint. Returning to the
-archive theme restores persistence.
+A theme change is detected by the always-running manager, clears stale rasters,
+recomputes artifact fingerprints, and restarts an active pass. The archive
+worker accepts the new fingerprint for each known cache key, so rebuilt images
+are persisted immediately and do not require another rebuild after restart.
 
 ### P2-5: A transient NanoVG upload failure is not retried by the startup queue — resolved
 
@@ -265,8 +265,8 @@ the browser continues using the existing memory-only rendering path.
     indices; the planner partitions the queue once and reports pending work in
     constant time.
 20. **Development-build and theme invalidation.** Binary/manifest mtimes join
-    sizes in raster schema 2. Runtime panel-theme changes clear stale rasters and
-    suppress persistence whenever the active theme does not match the archive.
+    sizes in raster schema 2. Runtime panel-theme changes are detected while the
+    browser is closed, refresh fingerprints, and persist the replacement rasters.
 21. **Bounded persistent-upload retry.** Transient NanoVG image creation failures
     retry across later UI frames without creating an unbounded queue.
 22. **Safe UI and ownership lifetimes.** Context-menu callbacks use an expiring
@@ -303,8 +303,9 @@ pixels.
   restart, stale fingerprint rejection, simultaneous-worker read-only snapshot
   loading, raced-write release and denial, cancellation, compaction, corrupt
   pack, corrupt index, repair, a pack-only interrupted-compaction backup, an
-  oversized index-key declaration, and a second restart. Test pixels include
-  varying alpha to exercise the cancelable QOI encoder's RGBA path.
+  oversized index-key declaration, live theme-fingerprint replacement across a
+  restart, and a second restart. Test pixels include varying alpha to exercise
+  the cancelable QOI encoder's RGBA path.
 - `build/tests/deepcache_planner_spec`: 12/12 passed, including stable bulk promotion.
 - `build/src/Deepcache.cpp.o`: compiled cleanly with the Rack SDK headers.
 - Archive test under AddressSanitizer and UndefinedBehaviorSanitizer: passed
