@@ -257,6 +257,10 @@ struct DeepcacheMulticolumnMenu : ui::Menu {
 	void step() override;
 };
 
+struct DeepcacheSingleLineChoiceButton : ui::ChoiceButton {
+	void draw(const DrawArgs& args) override;
+};
+
 struct DeepcacheBrandItem : ui::MenuItem {
 	DeepcacheBrowser* browser = nullptr;
 	std::string brand;
@@ -266,7 +270,7 @@ struct DeepcacheBrandItem : ui::MenuItem {
 	void step() override;
 };
 
-struct DeepcacheBrandButton : ui::ChoiceButton {
+struct DeepcacheBrandButton : DeepcacheSingleLineChoiceButton {
 	DeepcacheBrowser* browser = nullptr;
 	void onAction(const ActionEvent& e) override;
 	void step() override;
@@ -279,7 +283,7 @@ struct DeepcacheTagItem : ui::MenuItem {
 	void step() override;
 };
 
-struct DeepcacheTagButton : ui::ChoiceButton {
+struct DeepcacheTagButton : DeepcacheSingleLineChoiceButton {
 	DeepcacheBrowser* browser = nullptr;
 	void onAction(const ActionEvent& e) override;
 	void step() override;
@@ -1614,12 +1618,12 @@ DeepcacheBrowser::DeepcacheBrowser(PreviewCacheManager* manager)
 
 	brandButton = new DeepcacheBrandButton;
 	brandButton->browser = this;
-	brandButton->box.size.x = 120.f;
+	brandButton->box.size.x = 150.f;
 	headerLayout->addChild(brandButton);
 
 	tagButton = new DeepcacheTagButton;
 	tagButton->browser = this;
-	tagButton->box.size.x = 120.f;
+	tagButton->box.size.x = 150.f;
 	headerLayout->addChild(tagButton);
 
 	auto* slugButton = new DeepcacheSlugButton;
@@ -2127,6 +2131,27 @@ void DeepcacheMulticolumnMenu::step() {
 	box.pos.y = menuTop;
 }
 
+void DeepcacheSingleLineChoiceButton::draw(const DrawArgs& args) {
+	const std::string fullText = text;
+	const float availableWidth = std::max(1.f, box.size.x - 14.f);
+	if (bndLabelWidth(args.vg, -1, text.c_str()) > availableWidth) {
+		const std::string suffix = "...";
+		text = suffix;
+		for (std::size_t codepoints = fullText.size(); codepoints > 0; --codepoints) {
+			const std::string prefix = string::truncate(fullText, codepoints);
+			if (prefix == fullText)
+				continue;
+			const std::string candidate = string::trim(prefix) + suffix;
+			if (bndLabelWidth(args.vg, -1, candidate.c_str()) <= availableWidth) {
+				text = candidate;
+				break;
+			}
+		}
+	}
+	ui::ChoiceButton::draw(args);
+	text = fullText;
+}
+
 void DeepcacheBrandItem::onAction(const ActionEvent& e) {
 	browser->brand = browser->brand == brand ? "" : brand;
 	browser->refresh();
@@ -2183,7 +2208,6 @@ void DeepcacheBrandButton::step() {
 	text = string::translate("Browser.brand");
 	if (!browser->brand.empty())
 		text += ": " + browser->brand;
-	text = string::ellipsize(text, 20);
 	ui::ChoiceButton::step();
 }
 
@@ -2255,7 +2279,6 @@ void DeepcacheTagButton::step() {
 			first = false;
 		}
 	}
-	text = string::ellipsize(text, 20);
 	ui::ChoiceButton::step();
 }
 
