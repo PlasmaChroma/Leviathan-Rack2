@@ -2443,9 +2443,15 @@ struct DeepcacheProgressWidget : widget::TransparentWidget {
 		nvgStroke(args.vg);
 		nvgFontSize(args.vg, 8.f);
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		nvgFillColor(args.vg, color::WHITE);
 		const std::string text = std::to_string(static_cast<int>(std::round(progress * 100.f))) + "%";
-		nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.52f, text.c_str(), nullptr);
+		const float textX = box.size.x * 0.5f;
+		const float textY = box.size.y * 0.52f;
+		// A small dark offset keeps the white percentage legible over both the
+		// violet and cyan fills without making the compact type look outlined.
+		nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 185));
+		nvgText(args.vg, textX + 0.75f, textY + 0.75f, text.c_str(), nullptr);
+		nvgFillColor(args.vg, color::WHITE);
+		nvgText(args.vg, textX, textY, text.c_str(), nullptr);
 	}
 };
 
