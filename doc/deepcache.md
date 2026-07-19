@@ -36,6 +36,10 @@ Deepcache persists completed framebuffer previews beneath
 sequentially into RAM at startup, decoded off the UI thread, and uploaded to
 NanoVG before cached cards are considered framebuffer-ready.
 
+Persisted previews use a canonical 2x render scale independent of browser zoom.
+They are displayed at the normal browser card dimensions, trading roughly four
+times the uncompressed pixels for sharper scaling when cards are enlarged.
+
 Only one archive worker may write at a time. Other Deepcache instances load a
 validated read-only snapshot of the committed pack and index, then render only
 missing or stale previews into their own memory/GPU context.

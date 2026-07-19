@@ -69,6 +69,10 @@ public:
 	bool tryPopDecoded(DecodedPreview& preview);
 	bool hasPendingDecoded() const;
 	void requestCompaction();
+	// Discards the persistent archive on the worker thread while it owns the
+	// write lease. The worker remains alive and accepts fresh preview writes
+	// after the reset completes.
+	bool requestReset();
 	void shutdown();
 
 	DatabaseState state() const { return static_cast<DatabaseState>(state_.load(std::memory_order_relaxed)); }
@@ -96,6 +100,7 @@ private:
 	bool loadArchive(bool allowRecovery);
 	bool appendPreview(PreviewWrite write);
 	bool compactArchive();
+	bool resetArchive();
 	bool shouldCompactArchive() const;
 	bool readPackFile(const std::string& path, std::vector<std::uint8_t>& bytes);
 	bool loadIndex(const std::string& path);
@@ -124,10 +129,12 @@ private:
 	std::deque<DecodedPreview> decoded_;
 	std::size_t decodedBytes_ = 0;
 	bool compactRequested_ = false;
+	bool resetRequested_ = false;
 	bool started_ = false;
 	std::atomic<bool> stopping_ {false};
 	std::atomic<bool> fatalError_ {false};
 	std::atomic<bool> leaseUnavailable_ {false};
+	std::atomic<bool> ownsLease_ {false};
 	std::atomic<int> state_ {static_cast<int>(DatabaseState::EMPTY)};
 	std::atomic<int> readyCount_ {0};
 	std::atomic<int> targetCount_ {0};

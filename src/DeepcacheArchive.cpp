@@ -3,6 +3,7 @@
 #include "third_party/qoi.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cstdlib>
 #include <cstdio>
@@ -20,7 +21,6 @@
 #undef ERROR
 #endif
 #else
-#include <cerrno>
 #include <fcntl.h>
 #include <sys/file.h>
 #include <unistd.h>
@@ -68,7 +68,11 @@ void appendBigEndian32(std::vector<std::uint8_t>& output, std::uint32_t value) {
 
 bool encodeQoiCancelable(const std::vector<std::uint8_t>& rgba, int width, int height,
 	                     const std::atomic<bool>& stopping, std::vector<std::uint8_t>& output) {
+	if (width <= 0 || height <= 0)
+		return false;
 	const std::size_t pixelCount = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+	if (pixelCount > std::numeric_limits<std::size_t>::max() / 4u || rgba.size() < pixelCount * 4u)
+		return false;
 	output.clear();
 	output.reserve(pixelCount * 5u + 22u);
 	appendBigEndian32(output, 0x716f6966u);
@@ -353,6 +357,25 @@ void DeepcacheArchiveWorker::requestCompaction() {
 	condition_.notify_one();
 }
 
+bool DeepcacheArchiveWorker::requestReset() {
+	if (!started_ || canceled() || !ownsLease_.load(std::memory_order_relaxed))
+		return false;
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		if (canceled() || !ownsLease_.load(std::memory_order_relaxed))
+			return false;
+		writes_.clear();
+		queuedWriteBytes_ = 0;
+		decoded_.clear();
+		decodedBytes_ = 0;
+		compactRequested_ = false;
+		resetRequested_ = true;
+	}
+	setState(DatabaseState::LOADING);
+	condition_.notify_all();
+	return true;
+}
+
 void DeepcacheArchiveWorker::shutdown() {
 	if (!started_)
 		return;
@@ -365,6 +388,7 @@ void DeepcacheArchiveWorker::shutdown() {
 		decoded_.clear();
 		decodedBytes_ = 0;
 		compactRequested_ = false;
+		resetRequested_ = false;
 	}
 	condition_.notify_all();
 	if (thread_.joinable())
@@ -409,33 +433,72 @@ void DeepcacheArchiveWorker::run() {
 		condition_.wait(lock, [&]() { return canceled(); });
 		return;
 	}
+	ownsLease_.store(true, std::memory_order_relaxed);
 	runOwned();
+	ownsLease_.store(false, std::memory_order_relaxed);
 	releaseLease();
 }
 
 void DeepcacheArchiveWorker::runOwned() {
-	try {
-		if (!loadArchive(true)) {
-			if (!canceled()) {
-				fatalError_.store(true, std::memory_order_relaxed);
-				errorCode_.store(1, std::memory_order_relaxed);
-				setState(DatabaseState::ERROR);
+	bool needsLoad = true;
+	while (!canceled()) {
+		try {
+			if (needsLoad) {
+				bool reset = false;
+				{
+					std::lock_guard<std::mutex> lock(mutex_);
+					reset = resetRequested_;
+					resetRequested_ = false;
+				}
+				if (reset && !resetArchive()) {
+					fatalError_.store(true, std::memory_order_relaxed);
+					errorCode_.store(8, std::memory_order_relaxed);
+					setState(DatabaseState::ERROR);
+				}
+				else if (!loadArchive(true)) {
+					if (!canceled()) {
+						fatalError_.store(true, std::memory_order_relaxed);
+						errorCode_.store(1, std::memory_order_relaxed);
+						setState(DatabaseState::ERROR);
+					}
+				}
+				else {
+					std::lock_guard<std::mutex> lock(mutex_);
+					if (resetRequested_) {
+						setState(DatabaseState::LOADING);
+						needsLoad = true;
+						continue;
+					}
+					fatalError_.store(false, std::memory_order_relaxed);
+					errorCode_.store(0, std::memory_order_relaxed);
+					if (!canceled() && shouldCompactArchive())
+						compactRequested_ = true;
+				}
+				needsLoad = false;
 			}
-			return;
-		}
-		{
-			std::lock_guard<std::mutex> lock(mutex_);
-			if (!canceled() && shouldCompactArchive())
-				compactRequested_ = true;
-		}
-		while (!canceled()) {
+
+			if (fatalError_.load(std::memory_order_relaxed)) {
+				std::unique_lock<std::mutex> lock(mutex_);
+				condition_.wait(lock, [&]() { return canceled() || resetRequested_; });
+				if (canceled())
+					break;
+				needsLoad = true;
+				continue;
+			}
+
 			PreviewWrite write;
 			bool compact = false;
 			{
 				std::unique_lock<std::mutex> lock(mutex_);
-				condition_.wait(lock, [&]() { return canceled() || !writes_.empty() || compactRequested_; });
+				condition_.wait(lock, [&]() {
+					return canceled() || resetRequested_ || !writes_.empty() || compactRequested_;
+				});
 				if (canceled())
 					break;
+				if (resetRequested_) {
+					needsLoad = true;
+					continue;
+				}
 				if (!writes_.empty()) {
 					const std::size_t byteCount = writes_.front().rgba ? writes_.front().rgba->size() : 0;
 					write = std::move(writes_.front());
@@ -449,29 +512,67 @@ void DeepcacheArchiveWorker::runOwned() {
 			}
 			const bool ok = compact ? compactArchive() : appendPreview(std::move(write));
 			if (!ok && !canceled()) {
-				fatalError_.store(true, std::memory_order_relaxed);
-				errorCode_.store(compact ? 3 : 2, std::memory_order_relaxed);
-				setState(DatabaseState::ERROR);
-				return;
+				std::lock_guard<std::mutex> lock(mutex_);
+				if (resetRequested_) {
+					setState(DatabaseState::LOADING);
+					needsLoad = true;
+				}
+				else {
+					fatalError_.store(true, std::memory_order_relaxed);
+					errorCode_.store(compact ? 3 : 2, std::memory_order_relaxed);
+					setState(DatabaseState::ERROR);
+				}
 			}
 			else if (!canceled()) {
 				std::lock_guard<std::mutex> lock(mutex_);
-				if (!compact && writes_.empty() && !compactRequested_ && shouldCompactArchive()) {
+				if (!resetRequested_ && !compact && writes_.empty() && !compactRequested_ && shouldCompactArchive()) {
 					compactRequested_ = true;
 					condition_.notify_one();
 				}
-				if (writes_.empty() && !compactRequested_)
+				if (!resetRequested_ && writes_.empty() && !compactRequested_)
 					setState(entries_.empty() ? DatabaseState::EMPTY : DatabaseState::READY);
 			}
 		}
-	}
-	catch (...) {
-		if (!canceled()) {
-			fatalError_.store(true, std::memory_order_relaxed);
-			errorCode_.store(5, std::memory_order_relaxed);
-			setState(DatabaseState::ERROR);
+		catch (...) {
+			if (!canceled()) {
+				std::lock_guard<std::mutex> lock(mutex_);
+				if (resetRequested_) {
+					setState(DatabaseState::LOADING);
+					needsLoad = true;
+				}
+				else {
+					fatalError_.store(true, std::memory_order_relaxed);
+					errorCode_.store(5, std::memory_order_relaxed);
+					setState(DatabaseState::ERROR);
+					needsLoad = false;
+				}
+			}
 		}
 	}
+}
+
+bool DeepcacheArchiveWorker::resetArchive() {
+	const std::string paths[] = {
+		packPath_, packPath_ + ".bak", packPath_ + ".tmp",
+		indexPath_, indexPath_ + ".bak", indexPath_ + ".tmp", indexPath_ + ".compact",
+		indexPath_ + ".compact.tmp",
+		directory_ + "/compaction-v1.pending"
+	};
+	for (const std::string& path : paths) {
+		errno = 0;
+		if (std::remove(path.c_str()) != 0 && errno != ENOENT)
+			return false;
+	}
+	entries_.clear();
+	readyKeys_.clear();
+	readyPlugins_.clear();
+	pluginReadyCounts_.clear();
+	packedBytes_.clear();
+	packBytes_.store(0, std::memory_order_relaxed);
+	readyCount_.store(0, std::memory_order_relaxed);
+	readyPluginCount_.store(0, std::memory_order_relaxed);
+	setState(DatabaseState::EMPTY);
+	return true;
 }
 
 bool DeepcacheArchiveWorker::shouldCompactArchive() const {

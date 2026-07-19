@@ -37,7 +37,8 @@ void makeDirectory(const std::string& path) {
 void removeDirectory(const std::string& path) {
 	const char* files[] = {"previews-v1.pack", "previews-v1.pack.bak", "previews-v1.pack.tmp",
 	                       "index-v1.bin", "index-v1.bin.bak", "index-v1.bin.tmp",
-	                       "index-v1.bin.compact", "compaction-v1.pending", "archive-v1.lock"};
+	                       "index-v1.bin.compact", "index-v1.bin.compact.tmp",
+	                       "compaction-v1.pending", "archive-v1.lock"};
 	for (const char* file : files)
 		std::remove((path + "/" + file).c_str());
 #ifdef _WIN32
@@ -197,6 +198,10 @@ int main() {
 		denied.rgba = contenderPixels;
 		if (contender.enqueue(std::move(denied))) {
 			std::cerr << "[FAIL] read-only archive worker accepted a disk write\n";
+			return 1;
+		}
+		if (contender.requestReset()) {
+			std::cerr << "[FAIL] read-only archive worker accepted a database reset\n";
 			return 1;
 		}
 		contender.shutdown();
@@ -471,6 +476,105 @@ int main() {
 		}
 	}
 	removeDirectory(startupCompactDirectory);
+
+	// A user-requested rebuild resets the archive on its owning worker thread,
+	// clears progress, and leaves the same worker ready to persist fresh data.
+	const std::string resetDirectory = directory + "-reset";
+	removeDirectory(resetDirectory);
+	makeDirectory(resetDirectory);
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(resetDirectory, {{"reset-model", "fp-reset", "plugin-reset"}});
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] reset archive did not finish initial load\n";
+			return 1;
+		}
+		deepcache::PreviewWrite original;
+		original.cacheKey = "reset-model";
+		original.fingerprint = "fp-reset";
+		original.width = 13;
+		original.height = 9;
+		original.rgba = std::make_shared<const std::vector<std::uint8_t>>(firstPixels);
+		worker.enqueue(std::move(original));
+		if (!waitUntil([&]() { return worker.readyCount() == 1; }) || !worker.requestReset()) {
+			std::cerr << "[FAIL] archive reset request was not accepted\n";
+			return 1;
+		}
+		if (!waitUntil([&]() {
+			return worker.state() == deepcache::DatabaseState::EMPTY &&
+			       worker.readyCount() == 0 && worker.readyPluginCount() == 0 && worker.packBytes() == 0;
+		})) {
+			std::cerr << "[FAIL] archive reset did not clear persistent state\n";
+			return 1;
+		}
+		deepcache::PreviewWrite replacement;
+		replacement.cacheKey = "reset-model";
+		replacement.fingerprint = "fp-reset";
+		replacement.width = 13;
+		replacement.height = 9;
+		replacement.rgba = std::make_shared<const std::vector<std::uint8_t>>(updatedPixels);
+		worker.enqueue(std::move(replacement));
+		if (!waitUntil([&]() { return worker.readyCount() == 1; })) {
+			std::cerr << "[FAIL] archive did not accept a fresh write after reset\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(resetDirectory, {{"reset-model", "fp-reset", "plugin-reset"}});
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] rebuilt archive did not reload\n";
+			return 1;
+		}
+		deepcache::DecodedPreview preview;
+		const bool rebuilt = worker.tryPopDecoded(preview) && preview.rgba == updatedPixels;
+		worker.shutdown();
+		if (!rebuilt) {
+			std::cerr << "[FAIL] rebuilt archive did not persist only the replacement preview\n";
+			return 1;
+		}
+	}
+	removeDirectory(resetDirectory);
+
+#ifndef _WIN32
+	// A fatal archive I/O error keeps the owning worker available for an
+	// explicit reset once the underlying filesystem problem is corrected.
+	const std::string errorResetDirectory = directory + "-error-reset";
+	removeDirectory(errorResetDirectory);
+	makeDirectory(errorResetDirectory);
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(errorResetDirectory, {{"error-model", "fp-error", "plugin-error"}});
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] error-reset archive did not finish initial load\n";
+			return 1;
+		}
+		if (chmod(errorResetDirectory.c_str(), 0500) != 0) {
+			std::cerr << "[FAIL] could not make archive temporarily unwritable\n";
+			return 1;
+		}
+		deepcache::PreviewWrite blocked;
+		blocked.cacheKey = "error-model";
+		blocked.fingerprint = "fp-error";
+		blocked.width = 13;
+		blocked.height = 9;
+		blocked.rgba = std::make_shared<const std::vector<std::uint8_t>>(firstPixels);
+		worker.enqueue(std::move(blocked));
+		const bool enteredError = waitUntil([&]() {
+			return worker.state() == deepcache::DatabaseState::ERROR;
+		});
+		chmod(errorResetDirectory.c_str(), 0700);
+		if (!enteredError || !worker.requestReset() || !waitUntil([&]() {
+			return worker.state() == deepcache::DatabaseState::EMPTY && worker.errorCode() == 0;
+		})) {
+			std::cerr << "[FAIL] fatal archive worker did not recover through reset\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	removeDirectory(errorResetDirectory);
+#endif
 
 	removeDirectory(directory);
 	const bool pass = decodedLatest && staleRejected && compactedSize < sizeAfterUpdate;
