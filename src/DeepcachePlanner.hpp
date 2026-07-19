@@ -133,6 +133,7 @@ private:
 	std::condition_variable condition_;
 	std::thread thread_;
 	bool stopping_ = false;
+	bool startupFailed_ = false;
 	bool paused_ = false;
 	bool hasJob_ = false;
 	std::uint64_t jobSerial_ = 0;

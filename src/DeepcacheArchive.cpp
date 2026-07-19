@@ -358,11 +358,15 @@ void DeepcacheArchiveWorker::requestCompaction() {
 }
 
 bool DeepcacheArchiveWorker::requestReset() {
-	if (!started_ || canceled() || !ownsLease_.load(std::memory_order_relaxed))
+	if (!started_ || canceled() || leaseUnavailable_.load(std::memory_order_relaxed))
 		return false;
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
-		if (canceled() || !ownsLease_.load(std::memory_order_relaxed))
+		// Accept a reset while initial lease acquisition is still in progress. If
+		// this worker becomes a read-only contender, run() clears the request
+		// without touching the shared archive.
+		if (canceled() || leaseUnavailable_.load(std::memory_order_relaxed) ||
+		    (!ownsLease_.load(std::memory_order_relaxed) && state() != DatabaseState::LOADING))
 			return false;
 		writes_.clear();
 		queuedWriteBytes_ = 0;
@@ -370,8 +374,11 @@ bool DeepcacheArchiveWorker::requestReset() {
 		decodedBytes_ = 0;
 		compactRequested_ = false;
 		resetRequested_ = true;
+		// Publish LOADING before releasing the mutex. The worker can already be
+		// between operations, so publishing afterward could overwrite its fast
+		// EMPTY completion and strand the visible state at LOADING.
+		setState(DatabaseState::LOADING);
 	}
-	setState(DatabaseState::LOADING);
 	condition_.notify_all();
 	return true;
 }
@@ -415,6 +422,7 @@ void DeepcacheArchiveWorker::run() {
 			writes_.clear();
 			queuedWriteBytes_ = 0;
 			compactRequested_ = false;
+			resetRequested_ = false;
 		}
 		// A lease contender must never repair, append, or compact the shared
 		// archive, but it can safely consume a committed pack/index snapshot.
@@ -456,6 +464,12 @@ void DeepcacheArchiveWorker::runOwned() {
 					setState(DatabaseState::ERROR);
 				}
 				else if (!loadArchive(true)) {
+					std::lock_guard<std::mutex> lock(mutex_);
+					if (resetRequested_) {
+						setState(DatabaseState::LOADING);
+						needsLoad = true;
+						continue;
+					}
 					if (!canceled()) {
 						fatalError_.store(true, std::memory_order_relaxed);
 						errorCode_.store(1, std::memory_order_relaxed);
@@ -575,6 +589,11 @@ bool DeepcacheArchiveWorker::resetArchive() {
 	return true;
 }
 
+bool DeepcacheArchiveWorker::resetPending() const {
+	std::lock_guard<std::mutex> lock(mutex_);
+	return resetRequested_;
+}
+
 bool DeepcacheArchiveWorker::shouldCompactArchive() const {
 	std::uint64_t liveBytes = 0;
 	for (const auto& entry : entries_)
@@ -644,11 +663,13 @@ bool DeepcacheArchiveWorker::readPackFile(const std::string& path, std::vector<s
 	const std::streamoff fileSize = input.tellg();
 	if (fileSize < 0 || static_cast<std::uint64_t>(fileSize) > std::numeric_limits<std::size_t>::max())
 		return false;
+	if (resetPending())
+		return false;
 	std::vector<std::uint8_t> loaded(static_cast<std::size_t>(fileSize));
 	input.seekg(0);
 	std::size_t offset = 0;
 	while (offset < loaded.size()) {
-		if (canceled())
+		if (canceled() || resetPending())
 			return false;
 		const std::size_t count = std::min(kReadChunkBytes, loaded.size() - offset);
 		if (!input.read(reinterpret_cast<char*>(loaded.data() + offset), static_cast<std::streamsize>(count)))
@@ -715,6 +736,9 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 	}
 	std::ifstream packExists(packPath_.c_str(), std::ios::binary);
 	if (!packExists) {
+		std::lock_guard<std::mutex> lock(mutex_);
+		if (resetRequested_)
+			return false;
 		setState(DatabaseState::EMPTY);
 		return true;
 	}
@@ -724,6 +748,9 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 	packBytes_.store(packedBytes_.size(), std::memory_order_relaxed);
 	if (!loadIndex(indexPath_) && !loadIndex(indexPath_ + ".bak")) {
 		entries_.clear();
+		std::lock_guard<std::mutex> lock(mutex_);
+		if (resetRequested_)
+			return false;
 		setState(DatabaseState::EMPTY);
 		return true;
 	}
@@ -736,8 +763,8 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 
 	std::vector<std::string> invalidEntries;
 	for (const auto& wanted : wanted_) {
-		if (canceled())
-			return true;
+		if (canceled() || resetPending())
+			return false;
 		const auto found = entries_.find(wanted.first);
 		if (found == entries_.end())
 			continue;
@@ -767,11 +794,11 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 			std::unique_lock<std::mutex> lock(mutex_);
 			const std::size_t byteCount = preview.rgba.size();
 			condition_.wait(lock, [&]() {
-				return canceled() ||
+				return canceled() || resetRequested_ ||
 				       (decoded_.size() < kMaxDecodedQueueEntries &&
 				        (decoded_.empty() || decodedBytes_ + byteCount <= kMaxDecodedQueueBytes));
 			});
-			if (canceled())
+			if (canceled() || resetRequested_)
 				return false;
 			decodedBytes_ += byteCount;
 			decoded_.push_back(std::move(preview));
@@ -780,7 +807,12 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 	}
 	for (const std::string& cacheKey : invalidEntries)
 		entries_.erase(cacheKey);
-	setState(entries_.empty() ? DatabaseState::EMPTY : DatabaseState::READY);
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		if (resetRequested_)
+			return false;
+		setState(entries_.empty() ? DatabaseState::EMPTY : DatabaseState::READY);
+	}
 	return true;
 }
 

@@ -151,8 +151,13 @@ bool promotePreviewRequest(std::vector<PreviewBuildRequest>& requests,
 	return true;
 }
 
-PreviewPlannerWorker::PreviewPlannerWorker()
-	: thread_(&PreviewPlannerWorker::run, this) {
+PreviewPlannerWorker::PreviewPlannerWorker() {
+	try {
+		thread_ = std::thread(&PreviewPlannerWorker::run, this);
+	}
+	catch (...) {
+		startupFailed_ = true;
+	}
 }
 
 PreviewPlannerWorker::~PreviewPlannerWorker() {
@@ -163,6 +168,14 @@ void PreviewPlannerWorker::submit(std::vector<ModelDescriptor> descriptors, Prev
 	std::lock_guard<std::mutex> lock(mutex_);
 	if (stopping_)
 		return;
+	if (startupFailed_) {
+		activeGeneration_ = input.generation;
+		readyGeneration_ = 0;
+		failedGeneration_ = input.generation;
+		plannedCount_ = 0;
+		output_.clear();
+		return;
+	}
 	jobSerial_++;
 	activeGeneration_ = input.generation;
 	readyGeneration_ = 0;

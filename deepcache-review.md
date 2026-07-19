@@ -1,6 +1,6 @@
 # Deepcache correctness, performance, and lifecycle review
 
-Date: 2026-07-18
+Date: 2026-07-19 (post-churn follow-up)
 
 ## Executive assessment
 
@@ -20,9 +20,13 @@ marker and backups for restart recovery. Hard I/O or transaction errors stop
 that archive worker session instead of allowing later writes to publish offsets
 against uncertain pack contents.
 
-There are no known P0 or P1 issues after the fixes made during this review and
-the subsequent Stoermelder MB coexistence fix. The
-archive now has exclusive cross-process write ownership with a read-only snapshot fallback,
+There are no known P0 correctness issues after this follow-up. Two P1 risks
+remain architectural rather than newly introduced bugs: canonical 2x previews
+can consume several gigabytes across a large library because compressed bytes,
+decoded RGBA, and GPU images are all retained; and arbitrary third-party widget
+construction/rendering cannot be isolated from a hard in-process hang or fault.
+
+The archive now has exclusive cross-process write ownership with a read-only snapshot fallback,
 browser cache misses use the budgeted executor, successful captures retire live
 module trees immediately, and archive shutdown cancels queued work plus observes
 cancellation during QOI encode and chunked I/O. Filesystem flush and rename
@@ -37,6 +41,35 @@ latency remains OS-controlled, as it is for any safely joined file worker.
 - **P2 — Medium:** incorrect status/invalidation, recoverable lifecycle gaps,
   or performance problems with narrower triggers.
 - **P3 — Low:** hardening, diagnostics, portability, or documentation debt.
+
+## Open P1 findings
+
+### P1-A: Canonical 2x all-library residency has no memory admission policy
+
+The new raster format is intentionally fixed at twice the module's logical width
+and height, independent of browser zoom and Rack UI scale. That quadruples RGBA
+pixels relative to a 1x cache. Deepcache currently retains the complete QOI pack,
+every decoded RGBA buffer for graphics-context recovery, and a NanoVG image for
+every warmed preview. For a library around 1,700 modules, ordinary panel widths
+can plausibly put combined system/GPU memory in the multi-gigabyte range.
+
+This is the principal remaining operational risk. Preserve the hot compressed
+pack, but add memory telemetry and a policy that releases decoded RGBA after
+upload and decodes from the in-RAM QOI payload when a graphics context must be
+rebuilt. This keeps the no-disk-hit requirement without permanently holding all
+three representations.
+
+### P1-B: Third-party preview code cannot be hard-failure isolated in-process
+
+Deepcache proactively calls `createModuleWidget(nullptr)`, `step()`, and drawing
+code for every installed model. C++ exceptions are contained, but an infinite
+loop, deadlock, access violation, or plugin-level global conflict cannot be
+timed out or recovered safely on Rack's UI thread. The proactive all-model pass
+increases exposure compared with waiting for the user to scroll to a model.
+
+A persistent user/developer denylist can handle known offenders. True generic
+containment would require an out-of-process renderer or host support; detaching
+or aborting a stuck UI call is not safe.
 
 ## P1 findings resolved
 
@@ -90,9 +123,18 @@ an inert `STANDBY / MB ACTIVE` state and creates no cache manager, overlay, warm
 host, archive thread, or browser tree. After MB is removed, the surviving
 Deepcache detects the free scene slot and activates automatically.
 
+### P1-6: Detached browser menus retained raw pointers after teardown — resolved
+
+Brand/tag menu items, the sort action, and the failed-preview retry action could
+outlive the custom browser because Rack menus are separate scene overlays. If
+Deepcache was removed while one remained open, a later menu step or action could
+dereference a deleted browser/card. Detached menu objects now carry weak browser
+or manager lifetime tokens and become inert after teardown; retry routes through
+the manager using a stable model index rather than capturing a card pointer.
+
 ### P2-1: Cache fingerprints do not fully identify rendered plugin assets — partially resolved
 
-The raster schema is now versioned at revision 2, and binary/manifest artifact
+The cache identity is now `deepcache-raster-v3-canonical-2x`, and binary/manifest artifact
 fingerprints include file modification time (with subsecond precision where the
 platform exposes it) as well as size. Same-version development rebuilds therefore
 invalidate normally even when the linked binary size is unchanged.
@@ -136,7 +178,9 @@ same path promotes an MB-standby Deepcache after Stoermelder MB is removed.
 
 ### P2-7: Full-pack residency has no memory ceiling or admission policy
 
-Loading the entire compressed pack is an explicit latency choice, but
+Loading the entire compressed pack is an explicit latency choice, but the 2x
+raster experiment makes the total-residency problem severe enough to track as
+open P1-A above. In particular,
 `readPackFile()` sizes a vector from the complete file length
 ([DeepcacheArchive.cpp](src/DeepcacheArchive.cpp#L268)). The worker now catches
 allocation exceptions and reports an archive error, yet a very large valid pack
@@ -172,6 +216,54 @@ shutdown or this explicit recovery request.
 The QOI encoder also rejects non-positive dimensions, overflowing pixel counts,
 and undersized RGBA input before indexing the source buffer.
 
+### P2-10: Browser drawing could bypass canonical 2x warming — resolved
+
+`DeepcacheModelBox::draw()` treated any lazily created Rack framebuffer as
+`FRAMEBUFFER_READY`. Depending on whether the browser drew a card before the
+hidden warm host reached it, the warm pass could skip its canonical render and
+persist dimensions derived from the current browser/UI transform. This explains
+the observed sequence-dependent top-left cropping at 200% and 300% UI scale.
+
+Only successfully uploaded raster widgets now become framebuffer-ready. Live
+module trees remain resident until the warm host deletes any opportunistic Rack
+framebuffer, applies the pixel-ratio-compensated canonical transform, captures
+the result, and replaces the tree with its raster.
+
+### P2-11: Rebuild could admit stale startup decodes and lose reset state — resolved
+
+A Rebuild requested during archive startup cleared the current browser, then
+immediately allowed archive results again. The archive thread could finish and
+publish old decoded entries after that clear; the next planner pass saw those
+cards as complete and skipped them. Separately, publishing `LOADING` after
+releasing the reset mutex allowed a fast worker completion to be overwritten by
+a late `LOADING`, potentially stranding the displayed state.
+
+Rebuild now rejects decoded results until the archive handoff is empty and the
+new planner generation actually begins. Pack reads and decoded-queue waits
+observe reset requests, reset publication is ordered under the queue mutex, and
+an owner can accept a reset while initial lease acquisition is still underway.
+A 20-entry regression test fills the bounded startup handoff, resets mid-decode,
+and verifies that no pre-reset pixels escape after `EMPTY` is published.
+
+### P2-12: A surviving read-only archive instance never promotes to owner
+
+When another Rack process/context holds the write lease, the contender loads one
+validated snapshot and then waits only for shutdown. If the original owner exits,
+the survivor remains `READ_ONLY`/memory-only for the rest of its lifetime and
+does not persist previews it rendered while secondary. A throttled lease retry is
+straightforward, but reconciling already-rendered memory-only rasters into a newly
+owned archive needs an explicit manager/worker handoff and should not be improvised.
+
+### P2-13: Generic browser-successor conflict handling is intentionally terminal
+
+If an unknown plugin replaces `Scene::browser` after Deepcache is active,
+Deepcache safely detects pointer loss and stops its workers. If that successor is
+later removed, the retired overlay can heal the raw backup chain, but the stopped
+manager does not reactivate. This avoids touching an unknown owner's browser or
+restarting non-reusable workers, at the cost of requiring Deepcache to be removed
+and re-added for recovery. Known MB-first cases still use automatic standby
+promotion.
+
 ### P3-1: Recoverable corruption has no user-visible repair diagnostic
 
 Corruption is safely converted into cache misses, but the panel reports
@@ -200,6 +292,22 @@ remain in manual removal-order and shutdown tests.
 
 Directory creation failure now publishes database error code 7 and `ERROR`, while
 the browser continues using the existing memory-only rendering path.
+
+### P3-5: Database errors and scale-churn oversampling were inconsistent — resolved
+
+The ERR aperture now includes an explicit archive `ERROR` state without treating
+normal `LOADING` as failure. Before each canonical render, framebuffer oversample
+is also refreshed from the current Rack pixel ratio, so a card constructed before
+a UI-scale change cannot retain an unnecessarily expensive low-DPI temporary
+oversample policy.
+
+### P3-6: Planner thread creation could escape module activation — resolved
+
+The archive worker already converted `std::thread` construction failure into a
+published error, while the planner constructed its thread directly in the member
+initializer and could throw through `PreviewCacheManager` activation. The planner
+now contains startup failure and publishes the submitted generation as failed, so
+the existing cache state machine reaches `ERROR` without an exception escaping.
 
 ## Fixes made during this review
 
@@ -290,6 +398,24 @@ the browser continues using the existing memory-only rendering path.
     dedicated error while leaving memory-only warming available. The normal
     compaction threshold is evaluated at startup as well as after writes, including
     safe truncation when the pack contains no live entries.
+24. **Worker-owned persistent reset.** Rebuild can recover a fatal owner session
+    without UI-thread file deletion, while read-only contenders remain unable to
+    purge shared data.
+25. **Canonical 2x raster identity.** Persisted previews use the versioned
+    `deepcache-raster-v3-canonical-2x` key and compensate for Rack's framebuffer
+    pixel ratio at 100%, 150%, 200%, and 300% UI scale.
+26. **Canonical warm-state enforcement.** A normal browser draw no longer marks
+    a live module framebuffer as cache-ready or bypasses canonical rendering.
+27. **Reset/load race closure.** Reset interrupts pack/decode startup, orders
+    visible state publication with the reset flag, and keeps the UI-side stale
+    result gate closed until the replacement planner generation begins.
+28. **Detached-menu lifetime guards.** Brand, tag, sort, and retry actions use
+    weak owner tokens instead of dereferencing deleted browser objects.
+29. **Post-churn status/performance cleanup.** Archive failures light ERR, and
+    framebuffer oversampling is refreshed after Rack UI-scale changes.
+30. **Planner startup containment.** Failure to allocate the planner thread is
+    reported through the normal failed-generation state rather than escaping
+    Deepcache activation.
 
 ## Corruption and restart behavior after this review
 
@@ -303,8 +429,8 @@ the browser continues using the existing memory-only rendering path.
 | Malformed QOI or dimension mismatch | Entry rejected; no pixels reach NanoVG. |
 | Interrupted index replace with usable `.bak` | Backup index is accepted; missing newest writes rebuild. |
 | Interrupted compaction with marker/backups | Old authoritative pair is restored before load. |
-| Read, append, index, or compaction I/O failure | Archive worker enters `ERROR`, stops accepting persistence work, and joins safely on teardown. In-memory browser operation can continue. |
-| Unexpected archive-worker exception | Converted to database error code 5 rather than terminating the process. |
+| Read, append, index, or compaction I/O failure | Archive worker enters `ERROR`, stops accepting persistence work, retains the write lease, and waits for explicit Rebuild/reset or joined teardown. In-memory browser operation can continue. |
+| Unexpected archive-worker exception | Converted to database error code 5; the owner waits for reset or shutdown rather than terminating the process. |
 
 The database remains a disposable performance cache. Recovery intentionally
 prefers dropping coverage and rerendering over attempting to salvage uncertain
@@ -318,9 +444,12 @@ pixels.
   loading, raced-write release and denial, cancellation, compaction, corrupt
   pack, corrupt index, repair, a pack-only interrupted-compaction backup, an
   oversized index-key declaration, live theme-fingerprint replacement across a
-  restart, and a second restart. Test pixels include varying alpha to exercise
-  the cancelable QOI encoder's RGBA path.
-- `build/tests/deepcache_planner_spec`: 11/11 passed, including stable bulk promotion.
+  restart, fatal-I/O reset recovery, worker-owned database reset, and reset while
+  the bounded startup decode handoff is full. The race-focused archive suite also
+  passed ten consecutive runs. Test pixels include varying alpha to exercise the
+  cancelable QOI encoder's RGBA path.
+- `build/tests/deepcache_planner_spec`: 12/12 passed, including stable bulk
+  promotion and canonical render transforms at 100%, 150%, 200%, and 300% UI scale.
 - `build/src/Deepcache.cpp.o`: compiled cleanly with the Rack SDK headers.
 - Archive test under AddressSanitizer and UndefinedBehaviorSanitizer: passed
   with leak detection disabled because LeakSanitizer is unavailable under this
@@ -332,9 +461,14 @@ pixels.
 
 ## Recommended remaining implementation order
 
-1. Extend fingerprinting to resource-only changes without imposing a large
+1. Add system/GPU memory telemetry, then replace permanent decoded-RGBA residency
+   with re-decode from the hot in-RAM QOI pack on graphics-context recreation.
+2. Add a persistent denylist for known unsafe third-party models; document that
+   generic hard-failure isolation requires an out-of-process renderer or host support.
+3. Extend fingerprinting to resource-only changes without imposing a large
    physical-disk metadata scan at startup.
-2. Add memory telemetry/admission policy without reintroducing browser disk hits.
-3. Add user-visible recoverable-corruption diagnostics.
-4. Measure synchronous framebuffer readback stalls on representative Windows GPUs
-   before deciding whether a PBO/fence pipeline is justified.
+4. Add user-visible recoverable-corruption diagnostics.
+5. Measure synchronous 2x framebuffer readback stalls on representative Windows
+   GPUs before deciding whether a PBO/fence pipeline is justified.
+6. Consider lease promotion for a surviving read-only DAW/standalone instance
+   after the original archive owner exits.

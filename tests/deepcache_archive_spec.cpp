@@ -576,6 +576,64 @@ int main() {
 	removeDirectory(errorResetDirectory);
 #endif
 
+	// Reset must interrupt a startup decode that is already filling the bounded
+	// handoff queue. No pre-reset pixels may appear after EMPTY is published.
+	const std::string loadingResetDirectory = directory + "-loading-reset";
+	removeDirectory(loadingResetDirectory);
+	makeDirectory(loadingResetDirectory);
+	std::vector<deepcache::ArchiveWantedEntry> loadingWanted;
+	for (int i = 0; i < 20; ++i) {
+		const std::string key = "loading-" + std::to_string(i);
+		loadingWanted.push_back({key, "fp-" + std::to_string(i), "plugin-loading"});
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(loadingResetDirectory, loadingWanted);
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] loading-reset archive did not initialize\n";
+			return 1;
+		}
+		for (int i = 0; i < 20; ++i) {
+			deepcache::PreviewWrite write;
+			write.cacheKey = "loading-" + std::to_string(i);
+			write.fingerprint = "fp-" + std::to_string(i);
+			write.width = 13;
+			write.height = 9;
+			write.rgba = std::make_shared<const std::vector<std::uint8_t>>(pixels(13, 9, 10 + i));
+			if (!waitUntil([&]() { return worker.enqueue(write); })) {
+				std::cerr << "[FAIL] loading-reset archive write queue stalled\n";
+				return 1;
+			}
+		}
+		if (!waitUntil([&]() { return worker.readyCount() == 20; })) {
+			std::cerr << "[FAIL] loading-reset archive was not populated\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(loadingResetDirectory, loadingWanted);
+		if (!waitUntil([&]() { return worker.hasPendingDecoded(); }) || !worker.requestReset()) {
+			std::cerr << "[FAIL] reset was not accepted during startup decode\n";
+			return 1;
+		}
+		if (!waitUntil([&]() {
+			return worker.state() == deepcache::DatabaseState::EMPTY &&
+			       worker.readyCount() == 0 && worker.packBytes() == 0;
+		})) {
+			std::cerr << "[FAIL] startup decode reset did not reach an empty archive\n";
+			return 1;
+		}
+		deepcache::DecodedPreview stale;
+		if (worker.tryPopDecoded(stale)) {
+			std::cerr << "[FAIL] pre-reset startup pixels escaped after reset completion\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	removeDirectory(loadingResetDirectory);
+
 	removeDirectory(directory);
 	const bool pass = decodedLatest && staleRejected && compactedSize < sizeAfterUpdate;
 	std::cout << (pass ? "[PASS]" : "[FAIL]")
