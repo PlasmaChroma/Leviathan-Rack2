@@ -62,6 +62,7 @@ public:
 	DeepcacheArchiveWorker& operator=(const DeepcacheArchiveWorker&) = delete;
 
 	void start(const std::string& directory, std::vector<ArchiveWantedEntry> wanted);
+	void markUnavailable(int errorCode);
 	bool enqueue(PreviewWrite write);
 	bool canAcceptWrite() const;
 	bool tryPopDecoded(DecodedPreview& preview);

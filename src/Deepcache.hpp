@@ -61,6 +61,7 @@ struct DeepcacheWidget : rack::app::ModuleWidget {
 	void appendContextMenu(rack::ui::Menu* menu) override;
 
 private:
+	void activate();
 	struct Internal;
 	Internal* internal_ = nullptr;
 };

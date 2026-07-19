@@ -37,6 +37,9 @@ const std::size_t kMaxWriteQueueEntries = 16;
 const std::size_t kMaxWriteQueueBytes = 64u * 1024u * 1024u;
 const std::size_t kReadChunkBytes = 4u * 1024u * 1024u;
 const std::size_t kWriteChunkBytes = 1u * 1024u * 1024u;
+const std::uint32_t kMaxIndexEntries = 100000u;
+const std::uint32_t kMaxCacheKeyBytes = 4096u;
+const std::uint32_t kMaxFingerprintBytes = 1024u;
 
 struct QoiPixel {
 	std::uint8_t r;
@@ -163,9 +166,9 @@ void writeValue(std::ostream& stream, const T& value) {
 	stream.write(reinterpret_cast<const char*>(&value), sizeof(value));
 }
 
-bool readString(std::istream& stream, std::string& value) {
+bool readString(std::istream& stream, std::string& value, std::uint32_t maxLength) {
 	std::uint32_t length = 0;
-	if (!readValue(stream, length) || length > 1024u * 1024u)
+	if (!readValue(stream, length) || length > maxLength)
 		return false;
 	value.resize(length);
 	return length == 0 || static_cast<bool>(stream.read(&value[0], length));
@@ -229,6 +232,14 @@ DeepcacheArchiveWorker::DeepcacheArchiveWorker() = default;
 
 DeepcacheArchiveWorker::~DeepcacheArchiveWorker() {
 	shutdown();
+}
+
+void DeepcacheArchiveWorker::markUnavailable(int errorCode) {
+	if (started_)
+		return;
+	fatalError_.store(true, std::memory_order_relaxed);
+	errorCode_.store(errorCode, std::memory_order_relaxed);
+	setState(DatabaseState::ERROR);
 }
 
 void DeepcacheArchiveWorker::start(const std::string& directory, std::vector<ArchiveWantedEntry> wanted) {
@@ -542,13 +553,14 @@ bool DeepcacheArchiveWorker::loadIndex(const std::string& path) {
 	std::uint32_t version = 0;
 	std::uint32_t count = 0;
 	if (!stream.read(magic, sizeof(magic)) || std::memcmp(magic, kIndexMagic, sizeof(magic)) != 0 ||
-	    !readValue(stream, version) || version != kIndexVersion || !readValue(stream, count) || count > 1000000u)
+	    !readValue(stream, version) || version != kIndexVersion || !readValue(stream, count) || count > kMaxIndexEntries)
 		return false;
 	std::unordered_map<std::string, Entry> loaded;
 	for (std::uint32_t i = 0; i < count; ++i) {
 		std::string key;
 		Entry entry;
-		if (!readString(stream, key) || !readString(stream, entry.fingerprint) ||
+		if (!readString(stream, key, kMaxCacheKeyBytes) ||
+		    !readString(stream, entry.fingerprint, kMaxFingerprintBytes) ||
 		    !readValue(stream, entry.offset) || !readValue(stream, entry.length) ||
 		    !readValue(stream, entry.checksum) || !readValue(stream, entry.width) ||
 		    !readValue(stream, entry.height))
@@ -739,6 +751,7 @@ bool DeepcacheArchiveWorker::compactArchive() {
 	if (!output)
 		return false;
 	std::unordered_map<std::string, Entry> compacted;
+	std::vector<std::uint8_t> compactedBytes;
 	std::uint64_t offset = 0;
 	for (const auto& item : entries_) {
 		if (canceled()) {
@@ -755,14 +768,19 @@ bool DeepcacheArchiveWorker::compactArchive() {
 			std::remove(temporaryPack.c_str());
 			return canceled();
 		}
+		compactedBytes.insert(compactedBytes.end(), packedBytes_.begin() + source.offset,
+		                      packedBytes_.begin() + source.offset + source.length);
 		Entry destination = source;
 		destination.offset = offset;
 		offset += source.length;
 		compacted[item.first] = std::move(destination);
 	}
 	output.flush();
-	if (!output)
+	if (!output) {
+		output.close();
+		std::remove(temporaryPack.c_str());
 		return false;
+	}
 	output.close();
 	if (canceled()) {
 		std::remove(temporaryPack.c_str());
@@ -836,9 +854,6 @@ bool DeepcacheArchiveWorker::compactArchive() {
 	std::remove(markerPath.c_str());
 	std::remove(packBackup.c_str());
 	std::remove(indexBackup.c_str());
-	std::vector<std::uint8_t> compactedBytes;
-	if (!readPackFile(packPath_, compactedBytes))
-		return false;
 	packedBytes_.swap(compactedBytes);
 	packBytes_.store(packedBytes_.size(), std::memory_order_relaxed);
 	return true;

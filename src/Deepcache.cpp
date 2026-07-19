@@ -40,6 +40,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <sys/stat.h>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -97,7 +98,7 @@ std::string pluginArtifactFingerprint(const plugin::Plugin* plugin) {
 			hash *= 1099511628211ull;
 		}
 	};
-	mix("deepcache-raster-schema-1");
+	mix("deepcache-raster-schema-2");
 	mix(plugin->slug);
 	mix(plugin->version);
 	mix(plugin->path);
@@ -109,6 +110,15 @@ std::string pluginArtifactFingerprint(const plugin::Plugin* plugin) {
 		if (system::isFile(path)) {
 			mix(artifact);
 			mix(std::to_string(static_cast<unsigned long long>(system::getFileSize(path))));
+			struct stat metadata = {};
+			if (::stat(path.c_str(), &metadata) == 0) {
+				mix(std::to_string(static_cast<long long>(metadata.st_mtime)));
+#if defined(__APPLE__)
+				mix(std::to_string(static_cast<long long>(metadata.st_mtimespec.tv_nsec)));
+#elif !defined(_WIN32)
+				mix(std::to_string(static_cast<long long>(metadata.st_mtim.tv_nsec)));
+#endif
+			}
 		}
 	}
 	return string::f("%016llx", static_cast<unsigned long long>(hash));
@@ -319,6 +329,7 @@ struct DeepcacheBrowser : widget::OpaqueWidget {
 	bool favoritesOnly = false;
 	float lastBrowserZoom = NAN;
 	bool lastPreferDarkPanels = false;
+	bool archivePreferDarkPanels = false;
 	NVGcontext* dragonOwnerVg = nullptr;
 	int dragonImageHandle = -1;
 	int dragonImageWidth = 0;
@@ -508,11 +519,22 @@ public:
 		worker_.shutdown();
 		archive_.shutdown();
 		activeGeneration_ = 0;
+		browser_ = nullptr;
+		lifetimeToken_.reset();
+	}
+
+	std::weak_ptr<int> lifetimeToken() const {
+		return lifetimeToken_;
 	}
 
 	void promote(std::size_t modelIndex) {
 		if (activeGeneration_ != 0)
 			worker_.promote(modelIndex, activeGeneration_);
+	}
+
+	void promote(const std::unordered_set<std::size_t>& modelIndices) {
+		if (activeGeneration_ != 0)
+			worker_.promote(modelIndices, activeGeneration_);
 	}
 
 	void requestOnDemand(std::size_t modelIndex) {
@@ -534,13 +556,23 @@ public:
 		publishDatabase();
 	}
 
+	void onPanelThemeChanged(bool archiveFingerprintMatches) {
+		const bool restart = startRequested_ || activeGeneration_ != 0 || state_ == deepcache::CacheState::PLANNING ||
+		                     state_ == deepcache::CacheState::WARMING || state_ == deepcache::CacheState::PAUSED ||
+		                     state_ == deepcache::CacheState::READY;
+		clear();
+		persistenceSuppressed_ = !archiveFingerprintMatches;
+		if (restart)
+			start();
+	}
+
 	void onGraphicsContextDestroy() {
 		if (!browser_)
 			return;
 		browser_->invalidateFramebufferReadiness();
 		persistentUploadQueue_.clear();
 		for (std::size_t modelIndex : persistentModelIndices_)
-			persistentUploadQueue_.push_back(modelIndex);
+			persistentUploadQueue_.push_back({modelIndex, 0});
 		resetFramebufferPluginProgress();
 		if (constructionTarget_ <= 0)
 			return;
@@ -684,7 +716,7 @@ public:
 		const double budgetMs = std::max(0.5, module_->uiBudgetMicros.load(std::memory_order_relaxed) / 1000.0);
 		int processedThisFrame = 0;
 		while (processedThisFrame < 4 && !framebufferWarmQueue_.empty()) {
-			if (!archive_.canAcceptWrite())
+			if (!persistenceSuppressed_ && !archive_.canAcceptWrite())
 				break;
 			if (processedThisFrame > 0 && (system::getTime() - frameStart) * 1000.0 >= budgetMs)
 				break;
@@ -708,7 +740,7 @@ public:
 					else {
 						persistentModelIndices_.insert(request.first);
 						const auto key = cacheKeyByModelIndex_.find(request.first);
-						if (key != cacheKeyByModelIndex_.end()) {
+						if (!persistenceSuppressed_ && key != cacheKeyByModelIndex_.end()) {
 							deepcache::PreviewWrite write;
 							write.cacheKey = key->second;
 							write.fingerprint = fingerprintByModelIndex_[request.first];
@@ -825,6 +857,8 @@ private:
 		const std::string directory = system::join(asset::user(), "Leviathan/Deepcache");
 		if (!system::createDirectories(directory) && !system::isDirectory(directory)) {
 			WARN("Leviathan Deepcache: could not create database directory: %s", directory.c_str());
+			archive_.markUnavailable(7);
+			publishDatabase();
 			return;
 		}
 		std::vector<deepcache::ArchiveWantedEntry> wanted;
@@ -857,7 +891,7 @@ private:
 					DeepcacheModelBox* box = browser_->getModelBox(found->second);
 					if (box && box->installDecodedPreview(std::move(preview))) {
 						persistentModelIndices_.insert(found->second);
-						persistentUploadQueue_.push_back(found->second);
+						persistentUploadQueue_.push_back({found->second, 0});
 					}
 				}
 			}
@@ -874,17 +908,23 @@ private:
 		const double startedAt = system::getTime();
 		const double budgetMs = std::max(0.5, module_->uiBudgetMicros.load(std::memory_order_relaxed) / 1000.0);
 		int uploaded = 0;
-		while (!persistentUploadQueue_.empty() && uploaded < 16) {
+		const std::size_t queuedAtStart = persistentUploadQueue_.size();
+		while (!persistentUploadQueue_.empty() && uploaded < 16 &&
+		       static_cast<std::size_t>(uploaded) < queuedAtStart) {
 			if (uploaded > 0 && (system::getTime() - startedAt) * 1000.0 >= budgetMs)
 				break;
-			const std::size_t modelIndex = persistentUploadQueue_.front();
+			const auto request = persistentUploadQueue_.front();
 			persistentUploadQueue_.pop_front();
+			const std::size_t modelIndex = request.first;
 			DeepcacheModelBox* box = browser_->getModelBox(modelIndex);
 			if (box && box->ensurePersistentImage(APP->window->vg)) {
 				const auto key = cacheKeyByModelIndex_.find(modelIndex);
 				if (key != cacheKeyByModelIndex_.end())
 					backend_.store(key->second);
 				markFramebufferModelComplete(modelIndex);
+			}
+			else if (box && request.second < 3) {
+				persistentUploadQueue_.push_back({modelIndex, request.second + 1});
 			}
 			uploaded++;
 		}
@@ -952,7 +992,7 @@ private:
 	std::unordered_set<std::size_t> onDemandQueuedIndices_;
 	std::unordered_set<std::size_t> generationResidentIndices_;
 	std::unordered_set<std::size_t> persistentModelIndices_;
-	std::deque<std::size_t> persistentUploadQueue_;
+	std::deque<std::pair<std::size_t, int>> persistentUploadQueue_;
 	std::unordered_map<std::string, std::size_t> modelIndexByCacheKey_;
 	std::unordered_map<std::size_t, std::string> cacheKeyByModelIndex_;
 	std::unordered_map<std::size_t, std::string> fingerprintByModelIndex_;
@@ -970,6 +1010,8 @@ private:
 	bool archiveStarted_ = false;
 	bool startRequested_ = false;
 	bool ignoreArchiveResults_ = false;
+	bool persistenceSuppressed_ = false;
+	std::shared_ptr<int> lifetimeToken_ = std::make_shared<int>(0);
 };
 
 struct DeepcacheWarmRenderHost : widget::TransparentWidget {
@@ -1637,18 +1679,28 @@ DeepcacheBrowser::DeepcacheBrowser(PreviewCacheManager* manager)
 	modelContainer->spacing = math::Vec(margin, margin);
 	modelMargin->addChild(modelContainer);
 
-	std::vector<plugin::Model*> models;
-	std::map<plugin::Model*, int> pluginModelOrders;
+	struct ModelSortRecord {
+		plugin::Model* model = nullptr;
+		int pluginModelOrder = 0;
+		std::string brand;
+		std::string name;
+		std::string slug;
+		ModelSortRecord(plugin::Model* model, int pluginModelOrder)
+			: model(model),
+			  pluginModelOrder(pluginModelOrder),
+			  brand(lowercase(model->plugin->brand)),
+			  name(lowercase(model->name)),
+			  slug(lowercase(model->slug)) {
+		}
+	};
+	std::vector<ModelSortRecord> models;
 	for (plugin::Plugin* plugin : plugin::plugins) {
 		int pluginModelOrder = 0;
-		for (plugin::Model* model : plugin->models) {
-			models.push_back(model);
-			pluginModelOrders[model] = pluginModelOrder++;
-		}
+		for (plugin::Model* model : plugin->models)
+			models.emplace_back(model, pluginModelOrder++);
 	}
-	std::stable_sort(models.begin(), models.end(), [](plugin::Model* a, plugin::Model* b) {
-		return std::make_tuple(lowercase(a->plugin->brand), lowercase(a->name), lowercase(a->slug)) <
-		       std::make_tuple(lowercase(b->plugin->brand), lowercase(b->name), lowercase(b->slug));
+	std::stable_sort(models.begin(), models.end(), [](const ModelSortRecord& a, const ModelSortRecord& b) {
+		return std::tie(a.brand, a.name, a.slug) < std::tie(b.brand, b.name, b.slug);
 	});
 
 	modelBoxes.reserve(models.size());
@@ -1656,11 +1708,11 @@ DeepcacheBrowser::DeepcacheBrowser(PreviewCacheManager* manager)
 	browserRecords.reserve(models.size());
 	std::unordered_map<const plugin::Plugin*, std::string> pluginFingerprints;
 	for (std::size_t index = 0; index < models.size(); ++index) {
-		plugin::Model* model = models[index];
+		plugin::Model* model = models[index].model;
 		auto fingerprint = pluginFingerprints.find(model->plugin);
 		if (fingerprint == pluginFingerprints.end())
 			fingerprint = pluginFingerprints.emplace(model->plugin, pluginArtifactFingerprint(model->plugin)).first;
-		auto* modelBox = new DeepcacheModelBox(model, index, pluginModelOrders[model], manager);
+		auto* modelBox = new DeepcacheModelBox(model, index, models[index].pluginModelOrder, manager);
 		modelBoxes.push_back(modelBox);
 		modelContainer->addChild(modelBox);
 		modelDescriptors.push_back({index, model->plugin->slug, model->plugin->version, model->slug,
@@ -1670,6 +1722,7 @@ DeepcacheBrowser::DeepcacheBrowser(PreviewCacheManager* manager)
 	}
 	lastBrowserZoom = settings::browserZoom;
 	lastPreferDarkPanels = settings::preferDarkPanels;
+	archivePreferDarkPanels = settings::preferDarkPanels;
 	refresh();
 }
 
@@ -1696,6 +1749,8 @@ void DeepcacheBrowser::step() {
 	}
 	if (settings::preferDarkPanels != lastPreferDarkPanels) {
 		lastPreferDarkPanels = settings::preferDarkPanels;
+		if (cacheManager)
+			cacheManager->onPanelThemeChanged(settings::preferDarkPanels == archivePreferDarkPanels);
 		Widget::DirtyEvent dirty;
 		modelContainer->onDirty(dirty);
 	}
@@ -1785,16 +1840,19 @@ void DeepcacheBrowser::refresh() {
 	filter.favoritesOnly = favoritesOnly;
 	deepcache::normalizeBrowserFilter(filter);
 	int visibleCount = 0;
+	std::unordered_set<std::size_t> visibleIndices;
+	visibleIndices.reserve(modelBoxes.size());
 	for (DeepcacheModelBox* box : modelBoxes) {
 		updateBrowserRecord(box);
 		const bool visible = deepcache::browserModelMatches(browserRecords[box->modelIndex], filter);
 		box->setVisible(visible);
 		if (visible) {
 			visibleCount++;
-			if (cacheManager)
-				cacheManager->promote(box->modelIndex);
+			visibleIndices.insert(box->modelIndex);
 		}
 	}
+	if (cacheManager)
+		cacheManager->promote(visibleIndices);
 	sortModels();
 	countLabel->text = std::to_string(visibleCount) + (visibleCount == 1 ? " module" : " modules");
 }
@@ -2502,7 +2560,29 @@ struct DeepcacheWidget::Internal {
 	bool active = false;
 	bool autoStartPending = false;
 	bool ownershipConflictHandled = false;
+	double nextActivationCheck = 0.0;
 };
+
+void DeepcacheWidget::activate() {
+	if (!internal_ || internal_->active || !internal_->module || !internal_->scene)
+		return;
+	internal_->active = true;
+	internal_->module->browserStandby.store(false, std::memory_order_relaxed);
+	internal_->module->duplicateInstance.store(false, std::memory_order_relaxed);
+	internal_->module->browserOwnershipConflict.store(false, std::memory_order_relaxed);
+	internal_->cacheManager = new PreviewCacheManager(internal_->module);
+	internal_->overlay = new DeepcacheBrowserOverlay(internal_->cacheManager, internal_->scene);
+	if (internal_->overlay->installed && internal_->overlay->browser) {
+		internal_->cacheManager->setBrowser(internal_->overlay->browser);
+		internal_->warmRenderHost = new DeepcacheWarmRenderHost;
+		internal_->warmRenderHost->cacheManager = internal_->cacheManager;
+		internal_->scene->addChild(internal_->warmRenderHost);
+		internal_->autoStartPending = internal_->module->autoStart.load(std::memory_order_relaxed);
+	}
+	else {
+		internal_->module->cacheState.store(static_cast<int>(deepcache::CacheState::ERROR), std::memory_order_relaxed);
+	}
+}
 
 DeepcacheWidget::DeepcacheWidget(DeepcacheModule* module) {
 	setModule(module);
@@ -2571,19 +2651,7 @@ DeepcacheWidget::DeepcacheWidget(DeepcacheModule* module) {
 		return;
 	}
 	if (claimDeepcacheScene(internal_->scene, this)) {
-		internal_->active = true;
-		internal_->cacheManager = new PreviewCacheManager(module);
-		internal_->overlay = new DeepcacheBrowserOverlay(internal_->cacheManager, internal_->scene);
-		if (internal_->overlay->installed && internal_->overlay->browser) {
-			internal_->cacheManager->setBrowser(internal_->overlay->browser);
-			internal_->warmRenderHost = new DeepcacheWarmRenderHost;
-			internal_->warmRenderHost->cacheManager = internal_->cacheManager;
-			internal_->scene->addChild(internal_->warmRenderHost);
-			internal_->autoStartPending = module->autoStart.load(std::memory_order_relaxed);
-		}
-		else {
-			module->cacheState.store(static_cast<int>(deepcache::CacheState::ERROR), std::memory_order_relaxed);
-		}
+		activate();
 	}
 	else {
 		module->duplicateInstance.store(true, std::memory_order_relaxed);
@@ -2628,6 +2696,24 @@ DeepcacheWidget::~DeepcacheWidget() {
 }
 
 void DeepcacheWidget::step() {
+	if (internal_ && !internal_->active && internal_->module && internal_->scene) {
+		const double now = system::getTime();
+		if (now >= internal_->nextActivationCheck) {
+			internal_->nextActivationCheck = now + 1.0;
+			if (rackContainsStoermelderMb(internal_->scene)) {
+				internal_->module->browserStandby.store(true, std::memory_order_relaxed);
+				internal_->module->duplicateInstance.store(false, std::memory_order_relaxed);
+				internal_->module->cacheState.store(static_cast<int>(deepcache::CacheState::DISABLED), std::memory_order_relaxed);
+			}
+			else if (claimDeepcacheScene(internal_->scene, this)) {
+				activate();
+			}
+			else {
+				internal_->module->browserStandby.store(false, std::memory_order_relaxed);
+				internal_->module->duplicateInstance.store(true, std::memory_order_relaxed);
+			}
+		}
+	}
 	if (internal_ && internal_->active && internal_->cacheManager) {
 		// Rack exposes no browser-owner notification. Once installed, pointer
 		// identity is enough to detect a successor without inspecting or mutating it.
@@ -2663,7 +2749,7 @@ void DeepcacheWidget::appendContextMenu(ui::Menu* menu) {
 	menu->addChild(new ui::MenuSeparator);
 	if (internal_->module->browserStandby.load(std::memory_order_relaxed)) {
 		menu->addChild(createMenuLabel("Standby: Stoermelder MB owns the browser"));
-		menu->addChild(createMenuLabel("Remove and re-add Deepcache after removing MB"));
+		menu->addChild(createMenuLabel("Deepcache activates automatically when MB is removed"));
 		return;
 	}
 	if (!internal_->active) {
@@ -2677,30 +2763,41 @@ void DeepcacheWidget::appendContextMenu(ui::Menu* menu) {
 		return;
 	}
 	PreviewCacheManager* manager = internal_->cacheManager;
-	menu->addChild(createMenuItem("Start cache", "", [manager]() { manager->start(); }));
-	menu->addChild(createMenuItem("Pause cache", "", [manager]() { manager->pause(); }));
-	menu->addChild(createMenuItem("Resume cache", "", [manager]() { manager->resume(); }));
-	menu->addChild(createMenuItem("Cancel cache", "", [manager]() { manager->cancel(); }));
-	menu->addChild(createMenuItem("Clear memory cache", "", [manager]() { manager->clear(); }));
-	menu->addChild(createMenuItem("Rebuild cache", "", [manager]() { manager->rebuild(); }));
-	menu->addChild(createMenuItem("Compact preview database", "", [manager]() { manager->compactDatabase(); }));
+	const std::weak_ptr<int> lifetime = manager->lifetimeToken();
+	menu->addChild(createMenuItem("Start cache", "", [manager, lifetime]() { if (!lifetime.expired()) manager->start(); }));
+	menu->addChild(createMenuItem("Pause cache", "", [manager, lifetime]() { if (!lifetime.expired()) manager->pause(); }));
+	menu->addChild(createMenuItem("Resume cache", "", [manager, lifetime]() { if (!lifetime.expired()) manager->resume(); }));
+	menu->addChild(createMenuItem("Cancel cache", "", [manager, lifetime]() { if (!lifetime.expired()) manager->cancel(); }));
+	menu->addChild(createMenuItem("Clear memory cache", "", [manager, lifetime]() { if (!lifetime.expired()) manager->clear(); }));
+	menu->addChild(createMenuItem("Rebuild cache", "", [manager, lifetime]() { if (!lifetime.expired()) manager->rebuild(); }));
+	menu->addChild(createMenuItem("Compact preview database", "", [manager, lifetime]() { if (!lifetime.expired()) manager->compactDatabase(); }));
 	menu->addChild(new ui::MenuSeparator);
 	DeepcacheModule* deepcacheModule = internal_->module;
 	menu->addChild(createCheckMenuItem("Auto-start on patch load", "",
-		[deepcacheModule]() { return deepcacheModule->autoStart.load(std::memory_order_relaxed); },
-		[deepcacheModule]() {
+		[deepcacheModule, lifetime]() { return !lifetime.expired() && deepcacheModule->autoStart.load(std::memory_order_relaxed); },
+		[deepcacheModule, lifetime]() {
+			if (lifetime.expired())
+				return;
 			const bool value = deepcacheModule->autoStart.load(std::memory_order_relaxed);
 			deepcacheModule->autoStart.store(!value, std::memory_order_relaxed);
 		}));
-	menu->addChild(createSubmenuItem("UI work budget", "", [deepcacheModule](ui::Menu* child) {
+	menu->addChild(createSubmenuItem("UI work budget", "", [deepcacheModule, lifetime](ui::Menu* child) {
+		if (lifetime.expired()) {
+			child->addChild(createMenuLabel("Deepcache is no longer available"));
+			return;
+		}
 		for (int micros : {500, 1000, 2000, 4000, 8000}) {
 			const std::string label = micros < 1000 ? "0.5 ms" : std::to_string(micros / 1000) + " ms";
 			child->addChild(createCheckMenuItem(label, "",
-				[deepcacheModule, micros]() { return deepcacheModule->uiBudgetMicros.load(std::memory_order_relaxed) == micros; },
-				[deepcacheModule, micros]() { deepcacheModule->uiBudgetMicros.store(micros, std::memory_order_relaxed); }));
+				[deepcacheModule, lifetime, micros]() { return !lifetime.expired() && deepcacheModule->uiBudgetMicros.load(std::memory_order_relaxed) == micros; },
+				[deepcacheModule, lifetime, micros]() { if (!lifetime.expired()) deepcacheModule->uiBudgetMicros.store(micros, std::memory_order_relaxed); }));
 		}
 	}));
-	menu->addChild(createSubmenuItem("Cache scope", "", [deepcacheModule](ui::Menu* child) {
+	menu->addChild(createSubmenuItem("Cache scope", "", [deepcacheModule, lifetime](ui::Menu* child) {
+		if (lifetime.expired()) {
+			child->addChild(createMenuLabel("Deepcache is no longer available"));
+			return;
+		}
 		const std::pair<const char*, deepcache::CacheScope> scopes[] = {
 			{"Favorites", deepcache::CacheScope::FAVORITES},
 			{"Visible search results", deepcache::CacheScope::VISIBLE_SEARCH_RESULTS},
@@ -2708,11 +2805,15 @@ void DeepcacheWidget::appendContextMenu(ui::Menu* menu) {
 		};
 		for (const auto& scope : scopes) {
 			child->addChild(createCheckMenuItem(scope.first, "",
-				[deepcacheModule, scope]() { return deepcacheModule->cacheScope.load(std::memory_order_relaxed) == static_cast<int>(scope.second); },
-				[deepcacheModule, scope]() { deepcacheModule->cacheScope.store(static_cast<int>(scope.second), std::memory_order_relaxed); }));
+				[deepcacheModule, lifetime, scope]() { return !lifetime.expired() && deepcacheModule->cacheScope.load(std::memory_order_relaxed) == static_cast<int>(scope.second); },
+				[deepcacheModule, lifetime, scope]() { if (!lifetime.expired()) deepcacheModule->cacheScope.store(static_cast<int>(scope.second), std::memory_order_relaxed); }));
 		}
 	}));
-	menu->addChild(createSubmenuItem("Cache statistics", "", [manager](ui::Menu* child) {
+	menu->addChild(createSubmenuItem("Cache statistics", "", [manager, lifetime](ui::Menu* child) {
+		if (lifetime.expired()) {
+			child->addChild(createMenuLabel("Deepcache is no longer available"));
+			return;
+		}
 		child->addChild(createMenuLabel("Completed: " + std::to_string(manager->completedCount()) +
 		                                    " / " + std::to_string(manager->totalCount())));
 		child->addChild(createMenuLabel("Resident records: " + std::to_string(manager->residentRecordCount())));

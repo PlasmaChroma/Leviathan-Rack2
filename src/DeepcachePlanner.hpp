@@ -125,6 +125,7 @@ public:
 	void pause();
 	void resume();
 	bool promote(std::size_t modelIndex, std::uint64_t generation);
+	std::size_t promote(const std::unordered_set<std::size_t>& modelIndices, std::uint64_t generation);
 	bool tryPop(PreviewBuildRequest& request);
 	bool isPlanReady(std::uint64_t generation) const;
 	bool hasPlanFailed(std::uint64_t generation) const;

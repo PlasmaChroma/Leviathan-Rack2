@@ -142,6 +142,25 @@ TestResult testWorkerPublicationAndCancellation() {
 	            " staleAbsent=" + std::to_string(staleAbsent)};
 }
 
+TestResult testWorkerBulkPromotion() {
+	deepcache::PreviewPlannerWorker worker;
+	PreviewPlanInput input;
+	input.generation = 150;
+	worker.submit(descriptors(), input);
+	const bool ready = waitForPlan(worker, 150);
+	const std::size_t promoted = worker.promote({0, 3}, 150);
+	const std::size_t pendingBeforePop = worker.pendingRequestCount(150);
+	std::vector<std::size_t> order;
+	deepcache::PreviewBuildRequest request;
+	while (worker.tryPop(request))
+		order.push_back(request.modelIndex);
+	const bool pass = ready && promoted == 2 && pendingBeforePop == 4 &&
+	                  order == std::vector<std::size_t>({0, 3, 1, 2}) &&
+	                  worker.pendingRequestCount(150) == 0;
+	return {"worker promotes a visible set in one stable bulk operation", pass,
+	        "promoted=" + std::to_string(promoted) + " pending=" + std::to_string(pendingBeforePop)};
+}
+
 TestResult testMemoryBackendLifecycle() {
 	deepcache::MemoryPreviewCacheBackend backend;
 	backend.store("one");
@@ -285,6 +304,7 @@ int main() {
 		testStableCacheKey(),
 		testStateTransitions(),
 		testWorkerPublicationAndCancellation(),
+		testWorkerBulkPromotion(),
 		testMemoryBackendLifecycle(),
 		testWorkerPauseAndReplacement(),
 		testBrowserFilterParity(),

@@ -1174,3 +1174,27 @@ Browser replacement, persistent RAM-resident previews, and the worker-planned,
 UI-executed framebuffer warming queue are all required parts of Deepcache.
 
 Document any Rack private implementation behavior that Deepcache depends upon, particularly browser replacement, framebuffer cleanup, preview construction, and module insertion.
+
+---
+
+# 25. Current Persistent Implementation Notes
+
+The implemented status bars intentionally describe different domains:
+
+* purple is progress for the current construction scope;
+* cyan is global framebuffer/database coverage across installed plugin builds.
+
+Consequently, a favorites-only or filtered construction pass can complete while
+cyan remains partial. This is coverage information, not a stalled second stage.
+
+The persistent archive is an append-only QOI pack plus atomic binary index under
+`<Rack user>/Leviathan/Deepcache`. One process owns the write lease; additional
+Rack contexts load a validated read-only snapshot and continue warming missing
+previews in memory. Failure to create the database directory is reported as a
+persistence error but does not disable memory-only browser acceleration.
+
+Plugin fingerprints include the plugin identity, Rack panel-theme preference,
+plugin directory timestamp, and binary/manifest size plus file modification time.
+Changing the panel theme during a session invalidates resident rasters; images
+for a theme that differs from the startup archive fingerprint are not persisted
+under the old fingerprint.
