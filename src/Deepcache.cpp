@@ -412,22 +412,14 @@ public:
 		warmingStartedAt_ = system::getTime();
 		deepcache::PreviewPlanInput input;
 		input.generation = activeGeneration_;
-		input.scope = static_cast<deepcache::CacheScope>(module_->cacheScope.load(std::memory_order_relaxed));
 		input.visibleModelIndices = browser_->visibleModelIndices();
 		std::vector<deepcache::ModelDescriptor> descriptors = browser_->snapshotModelDescriptors();
 		descriptors.erase(std::remove_if(descriptors.begin(), descriptors.end(), [this](const deepcache::ModelDescriptor& descriptor) {
 			DeepcacheModelBox* box = browser_->getModelBox(descriptor.modelIndex);
 			return box && box->state == deepcache::PreviewEntryState::FRAMEBUFFER_READY;
 		}), descriptors.end());
-		for (const deepcache::ModelDescriptor& descriptor : descriptors) {
-			bool inScope = true;
-			if (input.scope == deepcache::CacheScope::FAVORITES)
-				inScope = descriptor.favorite;
-			else if (input.scope == deepcache::CacheScope::VISIBLE_SEARCH_RESULTS)
-				inScope = input.visibleModelIndices.count(descriptor.modelIndex) != 0;
-			if (inScope)
-				constructionPluginRemaining_[descriptor.pluginSlug]++;
-		}
+		for (const deepcache::ModelDescriptor& descriptor : descriptors)
+			constructionPluginRemaining_[descriptor.pluginSlug]++;
 		constructionPluginTarget_ = static_cast<int>(constructionPluginRemaining_.size());
 		worker_.resume();
 		worker_.submit(std::move(descriptors), std::move(input));
@@ -437,20 +429,6 @@ public:
 	void rebuild() {
 		clear();
 		start();
-	}
-
-	void pause() {
-		if (state_ != deepcache::CacheState::WARMING)
-			return;
-		worker_.pause();
-		setState(deepcache::CacheState::PAUSED);
-	}
-
-	void resume() {
-		if (state_ != deepcache::CacheState::PAUSED)
-			return;
-		worker_.resume();
-		setState(deepcache::CacheState::WARMING);
 	}
 
 	void cancel() {
@@ -549,11 +527,6 @@ public:
 		box->state = deepcache::PreviewEntryState::QUEUED;
 		if (onDemandQueuedIndices_.insert(modelIndex).second)
 			onDemandBuildQueue_.push_back(modelIndex);
-	}
-
-	void compactDatabase() {
-		archive_.requestCompaction();
-		publishDatabase();
 	}
 
 	void onPanelThemeChanged() {
@@ -2540,28 +2513,14 @@ void DeepcacheModule::process(const ProcessArgs& args) {
 
 json_t* DeepcacheModule::dataToJson() {
 	json_t* root = json_object();
-	json_object_set_new(root, "autoStart", json_boolean(autoStart.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "uiBudgetMs", json_real(uiBudgetMicros.load(std::memory_order_relaxed) / 1000.0));
-	const auto scope = static_cast<deepcache::CacheScope>(cacheScope.load(std::memory_order_relaxed));
-	const char* scopeName = scope == deepcache::CacheScope::FAVORITES ? "favorites" :
-	                        scope == deepcache::CacheScope::VISIBLE_SEARCH_RESULTS ? "visible" : "all";
-	json_object_set_new(root, "cacheScope", json_string(scopeName));
 	return root;
 }
 
 void DeepcacheModule::dataFromJson(json_t* root) {
-	if (json_t* value = json_object_get(root, "autoStart"))
-		autoStart.store(json_boolean_value(value), std::memory_order_relaxed);
 	if (json_t* value = json_object_get(root, "uiBudgetMs")) {
 		const double budget = std::max(0.5, std::min(8.0, json_number_value(value)));
 		uiBudgetMicros.store(static_cast<int>(std::round(budget * 1000.0)), std::memory_order_relaxed);
-	}
-	if (json_t* value = json_object_get(root, "cacheScope")) {
-		const std::string scope = json_string_value(value) ? json_string_value(value) : "all";
-		cacheScope.store(static_cast<int>(scope == "favorites" ? deepcache::CacheScope::FAVORITES :
-		                                  scope == "visible" ? deepcache::CacheScope::VISIBLE_SEARCH_RESULTS :
-		                                                       deepcache::CacheScope::ALL),
-		                 std::memory_order_relaxed);
 	}
 }
 
@@ -2572,7 +2531,7 @@ struct DeepcacheWidget::Internal {
 	DeepcacheBrowserOverlay* overlay = nullptr;
 	DeepcacheWarmRenderHost* warmRenderHost = nullptr;
 	bool active = false;
-	bool autoStartPending = false;
+	bool startPending = false;
 	bool ownershipConflictHandled = false;
 	double nextActivationCheck = 0.0;
 };
@@ -2591,7 +2550,7 @@ void DeepcacheWidget::activate() {
 		internal_->warmRenderHost = new DeepcacheWarmRenderHost;
 		internal_->warmRenderHost->cacheManager = internal_->cacheManager;
 		internal_->scene->addChild(internal_->warmRenderHost);
-		internal_->autoStartPending = internal_->module->autoStart.load(std::memory_order_relaxed);
+		internal_->startPending = true;
 	}
 	else {
 		internal_->module->cacheState.store(static_cast<int>(deepcache::CacheState::ERROR), std::memory_order_relaxed);
@@ -2734,7 +2693,7 @@ void DeepcacheWidget::step() {
 		if (!internal_->ownershipConflictHandled && internal_->overlay && internal_->overlay->installed &&
 		    !internal_->overlay->ownsBrowserSlot()) {
 			internal_->ownershipConflictHandled = true;
-			internal_->autoStartPending = false;
+			internal_->startPending = false;
 			internal_->overlay->ownershipConflict = true;
 			if (internal_->overlay->dragon) {
 				internal_->overlay->dragon->enabled = false;
@@ -2746,8 +2705,8 @@ void DeepcacheWidget::step() {
 			internal_->cacheManager->stop();
 		}
 		if (!internal_->ownershipConflictHandled) {
-			if (internal_->autoStartPending) {
-				internal_->autoStartPending = false;
+			if (internal_->startPending) {
+				internal_->startPending = false;
 				internal_->cacheManager->start();
 			}
 			internal_->cacheManager->step();
@@ -2778,23 +2737,9 @@ void DeepcacheWidget::appendContextMenu(ui::Menu* menu) {
 	}
 	PreviewCacheManager* manager = internal_->cacheManager;
 	const std::weak_ptr<int> lifetime = manager->lifetimeToken();
-	menu->addChild(createMenuItem("Start cache", "", [manager, lifetime]() { if (!lifetime.expired()) manager->start(); }));
-	menu->addChild(createMenuItem("Pause cache", "", [manager, lifetime]() { if (!lifetime.expired()) manager->pause(); }));
-	menu->addChild(createMenuItem("Resume cache", "", [manager, lifetime]() { if (!lifetime.expired()) manager->resume(); }));
-	menu->addChild(createMenuItem("Cancel cache", "", [manager, lifetime]() { if (!lifetime.expired()) manager->cancel(); }));
-	menu->addChild(createMenuItem("Clear memory cache", "", [manager, lifetime]() { if (!lifetime.expired()) manager->clear(); }));
 	menu->addChild(createMenuItem("Rebuild cache", "", [manager, lifetime]() { if (!lifetime.expired()) manager->rebuild(); }));
-	menu->addChild(createMenuItem("Compact preview database", "", [manager, lifetime]() { if (!lifetime.expired()) manager->compactDatabase(); }));
 	menu->addChild(new ui::MenuSeparator);
 	DeepcacheModule* deepcacheModule = internal_->module;
-	menu->addChild(createCheckMenuItem("Auto-start on patch load", "",
-		[deepcacheModule, lifetime]() { return !lifetime.expired() && deepcacheModule->autoStart.load(std::memory_order_relaxed); },
-		[deepcacheModule, lifetime]() {
-			if (lifetime.expired())
-				return;
-			const bool value = deepcacheModule->autoStart.load(std::memory_order_relaxed);
-			deepcacheModule->autoStart.store(!value, std::memory_order_relaxed);
-		}));
 	menu->addChild(createSubmenuItem("UI work budget", "", [deepcacheModule, lifetime](ui::Menu* child) {
 		if (lifetime.expired()) {
 			child->addChild(createMenuLabel("Deepcache is no longer available"));
@@ -2805,22 +2750,6 @@ void DeepcacheWidget::appendContextMenu(ui::Menu* menu) {
 			child->addChild(createCheckMenuItem(label, "",
 				[deepcacheModule, lifetime, micros]() { return !lifetime.expired() && deepcacheModule->uiBudgetMicros.load(std::memory_order_relaxed) == micros; },
 				[deepcacheModule, lifetime, micros]() { if (!lifetime.expired()) deepcacheModule->uiBudgetMicros.store(micros, std::memory_order_relaxed); }));
-		}
-	}));
-	menu->addChild(createSubmenuItem("Cache scope", "", [deepcacheModule, lifetime](ui::Menu* child) {
-		if (lifetime.expired()) {
-			child->addChild(createMenuLabel("Deepcache is no longer available"));
-			return;
-		}
-		const std::pair<const char*, deepcache::CacheScope> scopes[] = {
-			{"Favorites", deepcache::CacheScope::FAVORITES},
-			{"Visible search results", deepcache::CacheScope::VISIBLE_SEARCH_RESULTS},
-			{"All installed modules", deepcache::CacheScope::ALL},
-		};
-		for (const auto& scope : scopes) {
-			child->addChild(createCheckMenuItem(scope.first, "",
-				[deepcacheModule, lifetime, scope]() { return !lifetime.expired() && deepcacheModule->cacheScope.load(std::memory_order_relaxed) == static_cast<int>(scope.second); },
-				[deepcacheModule, lifetime, scope]() { if (!lifetime.expired()) deepcacheModule->cacheScope.store(static_cast<int>(scope.second), std::memory_order_relaxed); }));
 		}
 	}));
 	menu->addChild(createSubmenuItem("Cache statistics", "", [manager, lifetime](ui::Menu* child) {

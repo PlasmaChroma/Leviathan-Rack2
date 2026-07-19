@@ -102,12 +102,11 @@ every installed plugin resource would work against the startup-performance goal.
 A future persisted artifact manifest can close that gap without repeating the
 full resource-tree scan on every launch.
 
-### P2-2: The cyan progress denominator ignores the selected cache scope — resolved by definition
+### P2-2: The cyan progress denominator ignores the selected cache scope — resolved
 
-Cyan is intentionally global framebuffer/database coverage across installed
-plugin builds. Purple is the scoped construction pass. A favorites-only or
-filtered pass can therefore finish with purple complete and cyan partial; cyan
-must not be relabeled as progress for that scoped operation.
+User-selectable cache scopes were removed. Every cache pass now covers all
+installed modules. Purple reports the construction stage and cyan reports global
+framebuffer/database coverage across installed plugin builds.
 
 ### P2-3: Browser refresh can promote requests in quadratic time — resolved
 
@@ -193,7 +192,7 @@ the browser continues using the existing memory-only rendering path.
 
 1. **Bounded persisted startup flow.** The decoded handoff is limited to 16
    entries/64 MB with worker backpressure, and UI installation is limited by the
-   configured frame budget. Auto-start waits until both decoded and upload
+   configured frame budget. Automatic startup waits until both decoded and upload
    queues are empty ([DeepcacheArchive.cpp](src/DeepcacheArchive.cpp#L150),
    [Deepcache.cpp](src/Deepcache.cpp#L732)).
 2. **Bounded archive write production.** Framebuffer warming pauses when the QOI
@@ -275,7 +274,9 @@ the browser continues using the existing memory-only rendering path.
 23. **Archive hardening.** Index entry/string allocations are realistically
     bounded, compaction retains its already-copied byte vector instead of
     rereading the committed pack, and database-directory failure publishes a
-    dedicated error while leaving memory-only warming available.
+    dedicated error while leaving memory-only warming available. The normal
+    compaction threshold is evaluated at startup as well as after writes, including
+    safe truncation when the pack contains no live entries.
 
 ## Corruption and restart behavior after this review
 
@@ -306,7 +307,7 @@ pixels.
   oversized index-key declaration, live theme-fingerprint replacement across a
   restart, and a second restart. Test pixels include varying alpha to exercise
   the cancelable QOI encoder's RGBA path.
-- `build/tests/deepcache_planner_spec`: 12/12 passed, including stable bulk promotion.
+- `build/tests/deepcache_planner_spec`: 11/11 passed, including stable bulk promotion.
 - `build/src/Deepcache.cpp.o`: compiled cleanly with the Rack SDK headers.
 - Archive test under AddressSanitizer and UndefinedBehaviorSanitizer: passed
   with leak detection disabled because LeakSanitizer is unavailable under this

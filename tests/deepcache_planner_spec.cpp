@@ -9,7 +9,6 @@
 
 namespace {
 
-using deepcache::CacheScope;
 using deepcache::CacheState;
 using deepcache::ModelDescriptor;
 using deepcache::PreviewPlanInput;
@@ -55,24 +54,6 @@ TestResult testDeduplicationAndInvalidEntries() {
 	        "requests=" + std::to_string(result.requests.size()) +
 	            " duplicates=" + std::to_string(result.duplicateCount) +
 	            " invalid=" + std::to_string(result.invalidCount)};
-}
-
-TestResult testScopes() {
-	PreviewPlanInput favorites;
-	favorites.scope = CacheScope::FAVORITES;
-	auto favoriteResult = deepcache::planPreviewRequests(descriptors(), favorites);
-
-	PreviewPlanInput visible;
-	visible.scope = CacheScope::VISIBLE_SEARCH_RESULTS;
-	visible.visibleModelIndices = {0, 3};
-	auto visibleResult = deepcache::planPreviewRequests(descriptors(), visible);
-
-	const bool pass = favoriteResult.requests.size() == 1 && favoriteResult.requests[0].modelIndex == 1 &&
-	                  visibleResult.requests.size() == 2 && visibleResult.requests[0].modelIndex == 0 &&
-	                  visibleResult.requests[1].modelIndex == 3;
-	return {"cache scopes select only intended models", pass,
-	        "favorites=" + std::to_string(favoriteResult.requests.size()) +
-	            " visible=" + std::to_string(visibleResult.requests.size())};
 }
 
 TestResult testGenerationAndPromotion() {
@@ -188,13 +169,17 @@ TestResult testWorkerPauseAndReplacement() {
 
 	PreviewPlanInput replacement;
 	replacement.generation = 201;
-	replacement.scope = CacheScope::FAVORITES;
 	worker.submit(descriptors(), replacement);
 	const bool replacementReady = waitForPlan(worker, 201);
 	deepcache::PreviewBuildRequest request;
-	const bool popped = worker.tryPop(request);
-	const bool onlyReplacement = popped && request.generation == 201 && request.modelIndex == 1 &&
-	                             !worker.tryPop(request);
+	std::vector<std::size_t> replacementOrder;
+	bool onlyReplacementGeneration = true;
+	while (worker.tryPop(request)) {
+		onlyReplacementGeneration = onlyReplacementGeneration && request.generation == 201;
+		replacementOrder.push_back(request.modelIndex);
+	}
+	const bool onlyReplacement = onlyReplacementGeneration && replacementOrder.size() == 4 &&
+	                             replacementOrder.front() == 1;
 	return {"worker pause and replacement discard stale work", remainedPaused && resumed && replacementReady && onlyReplacement,
 	        "paused=" + std::to_string(remainedPaused) + " replacement=" + std::to_string(onlyReplacement)};
 }
@@ -299,7 +284,6 @@ int main() {
 	const std::vector<TestResult> tests = {
 		testPriorityOrdering(),
 		testDeduplicationAndInvalidEntries(),
-		testScopes(),
 		testGenerationAndPromotion(),
 		testStableCacheKey(),
 		testStateTransitions(),

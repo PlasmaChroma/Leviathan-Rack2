@@ -681,7 +681,7 @@ The initial panel should contain:
 * planning, warming, ready, and error LEDs.
 
 Cache operations use explicitly named context-menu actions. Deepcache has no
-state-dependent panel button because auto-start handles normal operation and a
+state-dependent panel button because automatic startup handles normal operation and a
 single multifunction control obscures whether it will pause, cancel, or rebuild.
 
 ## Status indication
@@ -711,13 +711,7 @@ The panel must remain understandable without requiring the custom browser to be 
 
 Add the following context-menu options:
 
-* Start cache
-* Pause cache
-* Resume cache
-* Cancel cache
-* Clear memory cache
 * Rebuild cache
-* Auto-start on patch load
 * UI work budget
 
   * 0.5 ms
@@ -725,20 +719,12 @@ Add the following context-menu options:
   * 2 ms
   * 4 ms
   * 8 ms
-* Cache scope
-
-  * Favorites
-  * Visible search results
-  * All installed modules
 * Show cache statistics
-* Compact preview database
 
 Defaults:
 
 ```text
-Auto-start:                    enabled
 UI work budget:                2 ms
-Cache scope:                   all installed modules
 Framebuffer warm pass:         always enabled
 Retain resident previews:      enabled
 ```
@@ -753,9 +739,7 @@ Suggested JSON:
 
 ```json
 {
-  "autoStart": true,
-  "uiBudgetMs": 2.0,
-  "cacheScope": "all"
+  "uiBudgetMs": 2.0
 }
 ```
 
@@ -1066,7 +1050,7 @@ Where practical, test:
 
 1. Start with a cold Rack session.
 2. Add Deepcache.
-3. Start cache generation.
+3. Allow automatic cache generation to begin.
 4. Open and close the browser while warming.
 5. Scroll rapidly through uncached and cached sections.
 6. Confirm visible models receive priority.
@@ -1181,17 +1165,20 @@ Document any Rack private implementation behavior that Deepcache depends upon, p
 
 The implemented status bars intentionally describe different domains:
 
-* purple is progress for the current construction scope;
+* purple is progress for the all-module construction stage;
 * cyan is global framebuffer/database coverage across installed plugin builds.
 
-Consequently, a favorites-only or filtered construction pass can complete while
-cyan remains partial. This is coverage information, not a stalled second stage.
+Deepcache no longer exposes a cache-scope setting. Visible and favorite modules
+can still receive scheduling priority, but every complete pass targets all
+installed modules.
 
 The persistent archive is an append-only QOI pack plus atomic binary index under
 `<Rack user>/Leviathan/Deepcache`. One process owns the write lease; additional
 Rack contexts load a validated read-only snapshot and continue warming missing
 previews in memory. Failure to create the database directory is reported as a
 persistence error but does not disable memory-only browser acceleration.
+The owning worker evaluates archive compaction after startup and after writes;
+it compacts when dead data is at least 64 MB and at least 25% of the pack.
 
 Plugin fingerprints include the plugin identity, Rack panel-theme preference,
 plugin directory timestamp, and binary/manifest size plus file modification time.

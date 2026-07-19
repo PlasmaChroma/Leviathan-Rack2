@@ -34,18 +34,6 @@ int requestPriority(const ModelDescriptor& descriptor, const PreviewPlanInput& i
 	return 3;
 }
 
-bool descriptorIsInScope(const ModelDescriptor& descriptor, const PreviewPlanInput& input) {
-	switch (input.scope) {
-		case CacheScope::FAVORITES:
-			return descriptor.favorite;
-		case CacheScope::VISIBLE_SEARCH_RESULTS:
-			return input.visibleModelIndices.count(descriptor.modelIndex) != 0;
-		case CacheScope::ALL:
-			return true;
-	}
-	return false;
-}
-
 }  // namespace
 
 bool isValidTransition(CacheState from, CacheState to) {
@@ -123,9 +111,6 @@ PreviewPlanResult planPreviewRequests(const std::vector<ModelDescriptor>& descri
 			result.duplicateCount++;
 			continue;
 		}
-
-		if (!descriptorIsInScope(descriptor, input))
-			continue;
 
 		planned.push_back({&descriptor, requestPriority(descriptor, input)});
 	}

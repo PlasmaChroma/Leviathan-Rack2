@@ -43,9 +43,7 @@ struct DeepcacheModule : rack::engine::Module {
 	std::atomic<bool> browserStandby {false};
 	std::atomic<bool> duplicateInstance {false};
 	std::atomic<bool> browserOwnershipConflict {false};
-	std::atomic<bool> autoStart {true};
 	std::atomic<int> uiBudgetMicros {2000};
-	std::atomic<int> cacheScope {static_cast<int>(deepcache::CacheScope::ALL)};
 
 	DeepcacheModule();
 	void process(const ProcessArgs& args) override;

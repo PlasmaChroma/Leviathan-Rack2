@@ -423,6 +423,11 @@ void DeepcacheArchiveWorker::runOwned() {
 			}
 			return;
 		}
+		{
+			std::lock_guard<std::mutex> lock(mutex_);
+			if (!canceled() && shouldCompactArchive())
+				compactRequested_ = true;
+		}
 		while (!canceled()) {
 			PreviewWrite write;
 			bool compact = false;
@@ -451,16 +456,9 @@ void DeepcacheArchiveWorker::runOwned() {
 			}
 			else if (!canceled()) {
 				std::lock_guard<std::mutex> lock(mutex_);
-				if (!compact && writes_.empty() && !compactRequested_) {
-					std::uint64_t liveBytes = 0;
-					for (const auto& entry : entries_)
-						liveBytes += entry.second.length;
-					const std::uint64_t packBytes = packBytes_.load(std::memory_order_relaxed);
-					const std::uint64_t deadBytes = packBytes > liveBytes ? packBytes - liveBytes : 0;
-					if (deadBytes >= 64ull * 1024ull * 1024ull && deadBytes * 4ull >= packBytes) {
-						compactRequested_ = true;
-						condition_.notify_one();
-					}
+				if (!compact && writes_.empty() && !compactRequested_ && shouldCompactArchive()) {
+					compactRequested_ = true;
+					condition_.notify_one();
 				}
 				if (writes_.empty() && !compactRequested_)
 					setState(entries_.empty() ? DatabaseState::EMPTY : DatabaseState::READY);
@@ -474,6 +472,15 @@ void DeepcacheArchiveWorker::runOwned() {
 			setState(DatabaseState::ERROR);
 		}
 	}
+}
+
+bool DeepcacheArchiveWorker::shouldCompactArchive() const {
+	std::uint64_t liveBytes = 0;
+	for (const auto& entry : entries_)
+		liveBytes += entry.second.length;
+	const std::uint64_t packBytes = packBytes_.load(std::memory_order_relaxed);
+	const std::uint64_t deadBytes = packBytes > liveBytes ? packBytes - liveBytes : 0;
+	return deadBytes >= 64ull * 1024ull * 1024ull && deadBytes >= packBytes / 4ull;
 }
 
 bool DeepcacheArchiveWorker::acquireLease() {
@@ -752,9 +759,21 @@ bool DeepcacheArchiveWorker::appendPreview(PreviewWrite write) {
 }
 
 bool DeepcacheArchiveWorker::compactArchive() {
-	if (entries_.empty() || canceled())
+	if (canceled() || packedBytes_.empty())
 		return true;
 	setState(DatabaseState::COMPACTING);
+	if (entries_.empty()) {
+		std::ofstream pack(packPath_.c_str(), std::ios::binary | std::ios::trunc);
+		if (!pack)
+			return false;
+		pack.flush();
+		if (!pack)
+			return false;
+		pack.close();
+		packedBytes_.clear();
+		packBytes_.store(0, std::memory_order_relaxed);
+		return saveIndexAtomically();
+	}
 	const std::string temporaryPack = packPath_ + ".tmp";
 	std::ofstream output(temporaryPack.c_str(), std::ios::binary | std::ios::trunc);
 	if (!output)
