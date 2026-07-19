@@ -34,12 +34,6 @@ enum class PreviewEntryState {
 	FAILED
 };
 
-enum class CacheScope {
-	FAVORITES,
-	VISIBLE_SEARCH_RESULTS,
-	ALL
-};
-
 struct ModelDescriptor {
 	std::size_t modelIndex = 0;
 	std::string pluginSlug;
@@ -90,7 +84,6 @@ struct PreviewBuildRequest {
 
 struct PreviewPlanInput {
 	std::uint64_t generation = 0;
-	CacheScope scope = CacheScope::ALL;
 	std::unordered_set<std::size_t> visibleModelIndices;
 	std::unordered_set<std::size_t> recentlyRequestedModelIndices;
 };

@@ -96,6 +96,7 @@ private:
 	bool loadArchive(bool allowRecovery);
 	bool appendPreview(PreviewWrite write);
 	bool compactArchive();
+	bool shouldCompactArchive() const;
 	bool readPackFile(const std::string& path, std::vector<std::uint8_t>& bytes);
 	bool loadIndex(const std::string& path);
 	bool saveIndexAtomically();

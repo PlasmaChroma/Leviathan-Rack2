@@ -112,6 +112,24 @@ bool writeOversizedKeyIndex(const std::string& path) {
 	return static_cast<bool>(stream);
 }
 
+bool createSizedFile(const std::string& path, std::uint64_t size) {
+	if (size == 0)
+		return false;
+	std::ofstream stream(path.c_str(), std::ios::binary | std::ios::trunc);
+	stream.seekp(static_cast<std::streamoff>(size - 1));
+	stream.put('\0');
+	stream.flush();
+	return static_cast<bool>(stream);
+}
+
+std::uint64_t fileSize(const std::string& path) {
+	std::ifstream stream(path.c_str(), std::ios::binary | std::ios::ate);
+	if (!stream)
+		return 0;
+	const std::streamoff size = static_cast<std::streamoff>(stream.tellg());
+	return size >= 0 ? static_cast<std::uint64_t>(size) : 0;
+}
+
 }  // namespace
 
 int main() {
@@ -429,6 +447,30 @@ int main() {
 		}
 	}
 	removeDirectory(themeDirectory);
+
+	// Startup evaluates the normal compaction threshold even when no new writes
+	// arrive. With no live index entries, a fully dead pack is truncated safely.
+	const std::string startupCompactDirectory = directory + "-startup-compact";
+	removeDirectory(startupCompactDirectory);
+	makeDirectory(startupCompactDirectory);
+	const std::string deadPackPath = startupCompactDirectory + "/previews-v1.pack";
+	if (!createSizedFile(deadPackPath, 65ull * 1024ull * 1024ull)) {
+		std::cerr << "[FAIL] could not prepare startup compaction test\n";
+		return 1;
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(startupCompactDirectory, {});
+		const bool compactedAtStartup = waitUntil([&]() {
+			return worker.state() == deepcache::DatabaseState::EMPTY && fileSize(deadPackPath) == 0;
+		});
+		worker.shutdown();
+		if (!compactedAtStartup) {
+			std::cerr << "[FAIL] dead archive was not compacted during startup\n";
+			return 1;
+		}
+	}
+	removeDirectory(startupCompactDirectory);
 
 	removeDirectory(directory);
 	const bool pass = decodedLatest && staleRejected && compactedSize < sizeAfterUpdate;
