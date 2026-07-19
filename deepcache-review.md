@@ -44,20 +44,30 @@ latency remains OS-controlled, as it is for any safely joined file worker.
 
 ## Open P1 findings
 
-### P1-A: Canonical 2x all-library residency has no memory admission policy
+### P1-A: Canonical 2x all-GPU residency still has no admission policy — mitigated
 
 The new raster format is intentionally fixed at twice the module's logical width
 and height, independent of browser zoom and Rack UI scale. That quadruples RGBA
-pixels relative to a 1x cache. Deepcache currently retains the complete QOI pack,
-every decoded RGBA buffer for graphics-context recovery, and a NanoVG image for
-every warmed preview. For a library around 1,700 modules, ordinary panel widths
-can plausibly put combined system/GPU memory in the multi-gigabyte range.
+pixels relative to a 1x cache. A measured library around 1,700 modules added at
+least 1.6 GB while Deepcache retained the complete QOI pack, every decoded RGBA
+buffer, and a NanoVG image for every warmed preview.
 
-This is the principal remaining operational risk. Preserve the hot compressed
-pack, but add memory telemetry and a policy that releases decoded RGBA after
-upload and decodes from the in-RAM QOI payload when a graphics context must be
-rebuilt. This keeps the no-disk-hit requirement without permanently holding all
-three representations.
+Permanent decoded-RGBA residency is now removed for recoverable entries. The UI
+releases pixels after GPU upload and a confirmed archive commit; archive-loaded
+entries release them immediately after upload. Startup handoff plus pending UI
+uploads are bounded, and the Cache statistics menu reports hot QOI, retained
+RGBA, pending upload RGBA, and estimated GPU RGBA separately. On graphics-context
+recreation, the worker re-decodes from the hot pack without disk I/O, prioritizes
+visible cards, tags results by context generation, uploads them, and releases the
+temporary pixels again. Read-only DAW workers service the same re-decode requests.
+Missing previews rendered by a read-only worker are encoded into volatile QOI
+entries, allowing the second DAW context to release RGBA and restore later
+without acquiring the database write lease.
+
+The remaining risk is the combination of a fully resident compressed pack and
+one uncompressed GPU texture for every 2x card. Measure the new steady state on
+Windows before choosing a GPU admission/LRU policy; retaining every GPU image is
+the feature that eliminates first-scroll upload latency.
 
 ### P1-B: Third-party preview code cannot be hard-failure isolated in-process
 
@@ -82,7 +92,7 @@ validated read-only snapshot, enters `READ_ONLY`, and leaves browser warming
 operational in memory for missing entries. It never repairs, appends, or compacts.
 Other lease failures are reported as archive error code 6 rather than being
 mistaken for contention. The archive spec exercises simultaneous workers,
-snapshot decoding, and denied writes.
+snapshot decoding, denial of shared-pack writes, and volatile-QOI fallback.
 
 ### P1-2: Budgeted construction for visible cache misses
 
@@ -176,7 +186,7 @@ Inactive widgets perform a throttled ownership check once per second. A survivin
 duplicate automatically claims the scene after the active owner is removed. The
 same path promotes an MB-standby Deepcache after Stoermelder MB is removed.
 
-### P2-7: Full-pack residency has no memory ceiling or admission policy
+### P2-7: Full-pack residency has no memory ceiling or admission policy — partially resolved
 
 Loading the entire compressed pack is an explicit latency choice, but the 2x
 raster experiment makes the total-residency problem severe enough to track as
@@ -185,14 +195,11 @@ open P1-A above. In particular,
 ([DeepcacheArchive.cpp](src/DeepcacheArchive.cpp#L268)). The worker now catches
 allocation exceptions and reports an archive error, yet a very large valid pack
 can still cause severe process memory pressure or an OS-level kill before C++
-recovery. The decoded queue is bounded, but installed raster cards intentionally
-retain RGBA for graphics-context recovery.
-
-Expose expected/actual RAM use, define a supported ceiling, and consider a
-hybrid policy: keep the QOI pack hot, retain decoded RGBA for recently used or
-currently visible cards, and decode other in-RAM QOI payloads on demand. This
-avoids disk hits without requiring every preview in three forms (compressed
-RAM, decoded RAM, and GPU image).
+recovery. Both the archive decoded queue and UI upload handoff are now bounded;
+installed recoverable cards release RGBA rather than retaining it for context
+recovery. Cache statistics expose the remaining QOI, RGBA, pending-upload, and
+estimated GPU components. A very large valid compressed pack itself still has
+no admission ceiling.
 
 ### P2-8: Framebuffer capture uses synchronous GPU readback on the UI thread
 
@@ -416,6 +423,11 @@ the existing cache state machine reaches `ERROR` without an exception escaping.
 30. **Planner startup containment.** Failure to allocate the planner thread is
     reported through the normal failed-generation state rather than escaping
     Deepcache activation.
+31. **Compressed/GPU steady-state lifecycle.** Recoverable cards release decoded
+    RGBA after upload, committed writes acknowledge when release is safe, startup
+    and UI upload handoffs are bounded, and graphics-context recreation re-decodes
+    from hot QOI by generation. Read-only workers keep newly rendered misses as
+    volatile QOI instead of retaining their full bitmap indefinitely.
 
 ## Corruption and restart behavior after this review
 
@@ -441,7 +453,9 @@ pixels.
 - Complete `make test-fast`: passed.
 - `build/tests/deepcache_archive_spec`: passed, including append/replacement,
   restart, stale fingerprint rejection, simultaneous-worker read-only snapshot
-  loading, raced-write release and denial, cancellation, compaction, corrupt
+  loading, commit acknowledgement, disk-free QOI re-decode by graphics generation,
+  read-only volatile-QOI encode/restore without pack mutation, raced-write release,
+  cancellation, compaction, corrupt
   pack, corrupt index, repair, a pack-only interrupted-compaction backup, an
   oversized index-key declaration, live theme-fingerprint replacement across a
   restart, fatal-I/O reset recovery, worker-owned database reset, and reset while
@@ -461,8 +475,9 @@ pixels.
 
 ## Recommended remaining implementation order
 
-1. Add system/GPU memory telemetry, then replace permanent decoded-RGBA residency
-   with re-decode from the hot in-RAM QOI pack on graphics-context recreation.
+1. Measure the new Windows steady-state telemetry after decoded-RGBA release. If
+   GPU residency remains excessive, add a visible/recent GPU LRU while retaining
+   the hot QOI pack for disk-free restoration.
 2. Add a persistent denylist for known unsafe third-party models; document that
    generic hard-failure isolation requires an out-of-process renderer or host support.
 3. Extend fingerprinting to resource-only changes without imposing a large
