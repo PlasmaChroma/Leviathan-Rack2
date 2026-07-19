@@ -194,6 +194,8 @@ struct DeepcacheModelBox : widget::OpaqueWidget {
 	ui::Tooltip* tooltip = nullptr;
 	deepcache::PreviewEntryState state = deepcache::PreviewEntryState::EMPTY;
 	std::string failureReason;
+	app::ModuleWidget* pendingAddedWidget = nullptr;
+	math::Vec pendingDragDelta;
 
 	DeepcacheModelBox(plugin::Model* model, std::size_t modelIndex, int pluginModelOrder,
 	                  PreviewCacheManager* manager);
@@ -210,6 +212,8 @@ struct DeepcacheModelBox : widget::OpaqueWidget {
 	void updateZoom();
 	void draw(const DrawArgs& args) override;
 	void onButton(const ButtonEvent& e) override;
+	void onDragMove(const DragMoveEvent& e) override;
+	void onDragEnd(const DragEndEvent& e) override;
 	void onEnter(const EnterEvent& e) override;
 	void onLeave(const LeaveEvent& e) override;
 	void onHide(const HideEvent& e) override;
@@ -1459,7 +1463,12 @@ void DeepcacheModelBox::onButton(const ButtonEvent& e) {
 	if (e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT && (e.mods & RACK_MOD_MASK) == 0) {
 		if (auto* browser = getAncestorOfType<DeepcacheBrowser>()) {
 			if (app::ModuleWidget* addedWidget = browser->chooseModel(model)) {
-				e.consume(addedWidget);
+				// Keep ownership of the initiating click. Passing it directly to the
+				// module makes its drag offset relative to this browser card, moving it
+				// away from the rack position where the browser was opened.
+				pendingAddedWidget = addedWidget;
+				pendingDragDelta = math::Vec();
+				e.consume(this);
 			}
 			else {
 				e.consume(this);
@@ -1479,6 +1488,36 @@ void DeepcacheModelBox::onButton(const ButtonEvent& e) {
 	}
 	if (!e.isConsumed())
 		OpaqueWidget::onButton(e);
+}
+
+void DeepcacheModelBox::onDragMove(const DragMoveEvent& e) {
+	if (!pendingAddedWidget)
+		return;
+
+	pendingDragDelta = pendingDragDelta.plus(e.mouseDelta);
+	constexpr float transferDistance = 4.f;
+	if (pendingDragDelta.x * pendingDragDelta.x + pendingDragDelta.y * pendingDragDelta.y <
+	    transferDistance * transferDistance)
+		return;
+
+	if (!APP || !APP->event || !APP->scene || !APP->scene->rack || !pendingAddedWidget->parent) {
+		pendingAddedWidget = nullptr;
+		pendingDragDelta = math::Vec();
+		return;
+	}
+
+	app::ModuleWidget* addedWidget = pendingAddedWidget;
+	pendingAddedWidget = nullptr;
+	pendingDragDelta = math::Vec();
+	app::RackWidget* rack = APP->scene->rack;
+	rack->setModulePosNearest(addedWidget, rack->getMousePos().minus(addedWidget->box.size.div(2.f)));
+	APP->event->setDraggedWidget(addedWidget, e.button);
+}
+
+void DeepcacheModelBox::onDragEnd(const DragEndEvent& e) {
+	pendingAddedWidget = nullptr;
+	pendingDragDelta = math::Vec();
+	OpaqueWidget::onDragEnd(e);
 }
 
 void DeepcacheModelBox::setTooltip(ui::Tooltip* nextTooltip) {
