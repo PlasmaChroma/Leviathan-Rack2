@@ -36,6 +36,10 @@ Deepcache persists completed framebuffer previews beneath
 sequentially into RAM at startup, decoded off the UI thread, and uploaded to
 NanoVG before cached cards are considered framebuffer-ready.
 
+Only one archive worker may write at a time. Other Deepcache instances load a
+validated read-only snapshot of the committed pack and index, then render only
+missing or stale previews into their own memory/GPU context.
+
 The database is append-only during normal updates. Changed previews append new
 QOI payloads and atomically publish a compact binary index; superseded payloads
 become reclaimable dead space. Compaction copies live payloads into temporary
@@ -221,16 +225,19 @@ When constructed with `module == nullptr`, it must only create the static panel 
 
 When constructed with a real module:
 
-1. Attempt to become the active Deepcache singleton.
+1. Attempt to become the active Deepcache owner for the current Rack scene.
 2. If successful, create the cache manager.
 3. Install the Deepcache browser overlay.
 4. Start the planner worker.
 5. Optionally begin automatic cache warming.
 6. Publish status to the module through atomics.
 
-Only one Deepcache instance may modify the browser at a time.
+Only one Deepcache instance may modify a particular scene's browser at a time.
+Rack Pro DAW instances have independent scenes, so each stem may have its own
+active Deepcache even though the plugin DLL and archive path are process-global.
 
-Additional Deepcache modules may exist in the patch, but they must remain passive and clearly indicate that another instance is active.
+Additional Deepcache modules in the same scene may exist, but they must remain
+passive and clearly indicate that another instance is active.
 
 When the active instance is removed:
 
@@ -238,8 +245,8 @@ When the active instance is removed:
 2. join the worker thread;
 3. stop UI cache processing;
 4. delete Deepcache framebuffers while the graphics context is valid;
-5. restore the previous browser when Deepcache still owns `APP->scene->browser`;
-6. unregister the singleton.
+5. restore the previous browser when Deepcache still owns its recorded scene's browser;
+6. unregister that scene's owner.
 
 Never detach cache objects while the worker can still publish tasks.
 

@@ -3,6 +3,7 @@
 #include "third_party/qoi.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
@@ -325,7 +326,8 @@ void DeepcacheArchiveWorker::markReady(const std::string& cacheKey) {
 }
 
 void DeepcacheArchiveWorker::requestCompaction() {
-	if (!started_ || canceled() || fatalError_.load(std::memory_order_relaxed))
+	if (!started_ || canceled() || fatalError_.load(std::memory_order_relaxed) ||
+	    leaseUnavailable_.load(std::memory_order_relaxed))
 		return;
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
@@ -373,7 +375,19 @@ void DeepcacheArchiveWorker::run() {
 			queuedWriteBytes_ = 0;
 			compactRequested_ = false;
 		}
-		setState(DatabaseState::BUSY);
+		// A lease contender must never repair, append, or compact the shared
+		// archive, but it can safely consume a committed pack/index snapshot.
+		// Brief retries cover the small rename window during owner compaction.
+		bool loadedReadOnly = false;
+		for (int attempt = 0; attempt < 20 && !canceled(); ++attempt) {
+			if (loadArchive(false)) {
+				loadedReadOnly = true;
+				break;
+			}
+			std::unique_lock<std::mutex> retryLock(mutex_);
+			condition_.wait_for(retryLock, std::chrono::milliseconds(100), [&]() { return canceled(); });
+		}
+		setState(loadedReadOnly && !entries_.empty() ? DatabaseState::READ_ONLY : DatabaseState::BUSY);
 		std::unique_lock<std::mutex> lock(mutex_);
 		condition_.wait(lock, [&]() { return canceled(); });
 		return;
@@ -384,7 +398,7 @@ void DeepcacheArchiveWorker::run() {
 
 void DeepcacheArchiveWorker::runOwned() {
 	try {
-		if (!loadArchive()) {
+		if (!loadArchive(true)) {
 			if (!canceled()) {
 				fatalError_.store(true, std::memory_order_relaxed);
 				errorCode_.store(1, std::memory_order_relaxed);
@@ -545,11 +559,13 @@ bool DeepcacheArchiveWorker::loadIndex(const std::string& path) {
 	return true;
 }
 
-bool DeepcacheArchiveWorker::loadArchive() {
+bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 	const std::string compactMarker = directory_ + "/compaction-v1.pending";
 	std::ifstream marker(compactMarker.c_str(), std::ios::binary);
 	if (marker) {
 		marker.close();
+		if (!allowRecovery)
+			return false;
 		const std::string packBackup = packPath_ + ".bak";
 		const std::string indexBackup = indexPath_ + ".bak";
 		std::ifstream oldPack(packBackup.c_str(), std::ios::binary);

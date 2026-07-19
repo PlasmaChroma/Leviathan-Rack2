@@ -35,6 +35,7 @@
 #include <exception>
 #include <memory>
 #include <map>
+#include <mutex>
 #include <numeric>
 #include <set>
 #include <stdexcept>
@@ -1034,6 +1035,7 @@ struct DeepcacheBrowserDragon : widget::TransparentWidget {
 };
 
 struct DeepcacheBrowserOverlay : ui::MenuOverlay {
+	app::Scene* ownerScene = nullptr;
 	widget::Widget* previousBrowser = nullptr;
 	DeepcacheBrowser* browser = nullptr;
 	DeepcacheBrowserDragon* dragon = nullptr;
@@ -1041,24 +1043,25 @@ struct DeepcacheBrowserOverlay : ui::MenuOverlay {
 	bool retired = false;
 	bool ownershipConflict = false;
 
-	explicit DeepcacheBrowserOverlay(PreviewCacheManager* cacheManager) {
+	explicit DeepcacheBrowserOverlay(PreviewCacheManager* cacheManager, app::Scene* scene)
+		: ownerScene(scene) {
 		bgColor = nvgRGBAf(0.f, 0.f, 0.f, 0.33f);
-		if (!APP || !APP->scene)
+		if (!ownerScene)
 			return;
-		previousBrowser = APP->scene->browser;
+		previousBrowser = ownerScene->browser;
 		if (previousBrowser) {
 			previousBrowser->hide();
-			if (previousBrowser->parent == APP->scene)
-				APP->scene->removeChild(previousBrowser);
+			if (previousBrowser->parent == ownerScene)
+				ownerScene->removeChild(previousBrowser);
 			releaseFramebuffers(previousBrowser);
 		}
 		auto rollback = [this]() {
-			if (!APP || !APP->scene)
+			if (!ownerScene)
 				return;
-			if (APP->scene->browser == this)
-				APP->scene->browser = previousBrowser;
-			if (parent == APP->scene)
-				APP->scene->removeChild(this);
+			if (ownerScene->browser == this)
+				ownerScene->browser = previousBrowser;
+			if (parent == ownerScene)
+				ownerScene->removeChild(this);
 			if (browser) {
 				releaseFramebuffers(browser);
 				if (dragon) {
@@ -1073,7 +1076,7 @@ struct DeepcacheBrowserOverlay : ui::MenuOverlay {
 				browser = nullptr;
 			}
 			if (previousBrowser && !previousBrowser->parent) {
-				APP->scene->addChild(previousBrowser);
+				ownerScene->addChild(previousBrowser);
 				previousBrowser->hide();
 			}
 		};
@@ -1083,8 +1086,8 @@ struct DeepcacheBrowserOverlay : ui::MenuOverlay {
 			dragon = new DeepcacheBrowserDragon;
 			dragon->browser = browser;
 			addChild(dragon);
-			APP->scene->browser = this;
-			APP->scene->addChild(this);
+			ownerScene->browser = this;
+			ownerScene->addChild(this);
 			hide();
 			installed = true;
 		}
@@ -1099,7 +1102,7 @@ struct DeepcacheBrowserOverlay : ui::MenuOverlay {
 	}
 
 	bool ownsBrowserSlot() const {
-		return installed && APP && APP->scene && APP->scene->browser == this;
+		return installed && ownerScene && ownerScene->browser == this;
 	}
 
 	void restore() {
@@ -1107,13 +1110,13 @@ struct DeepcacheBrowserOverlay : ui::MenuOverlay {
 			ownershipConflict = installed;
 			return;
 		}
-		APP->scene->browser = previousBrowser;
+		ownerScene->browser = previousBrowser;
 		if (previousBrowser && !previousBrowser->parent) {
-			APP->scene->addChild(previousBrowser);
+			ownerScene->addChild(previousBrowser);
 			previousBrowser->hide();
 		}
-		if (parent == APP->scene)
-			APP->scene->removeChild(this);
+		if (parent == ownerScene)
+			ownerScene->removeChild(this);
 		installed = false;
 	}
 
@@ -1139,14 +1142,14 @@ struct DeepcacheBrowserOverlay : ui::MenuOverlay {
 		// heal the chain back to the browser that preceded Deepcache. The tiny
 		// detached shell is intentionally retained because the successor owns a
 		// raw pointer to it and Rack provides no chain notification mechanism.
-		if (retired && APP && APP->scene && APP->scene->browser == this) {
-			APP->scene->browser = previousBrowser;
+		if (retired && ownerScene && ownerScene->browser == this) {
+			ownerScene->browser = previousBrowser;
 			if (previousBrowser && !previousBrowser->parent) {
-				APP->scene->addChild(previousBrowser);
+				ownerScene->addChild(previousBrowser);
 				previousBrowser->hide();
 			}
-			if (parent == APP->scene)
-				APP->scene->removeChild(this);
+			if (parent == ownerScene)
+				ownerScene->removeChild(this);
 			return;
 		}
 		if (!parent)
@@ -2342,6 +2345,7 @@ struct DeepcacheDatabaseStatusWidget : widget::TransparentWidget {
 				case deepcache::DatabaseState::COMPACTING: status = "COMPACTING"; break;
 				case deepcache::DatabaseState::CANCELING: status = "CANCELING"; break;
 				case deepcache::DatabaseState::BUSY: status = "MEMORY ONLY"; break;
+				case deepcache::DatabaseState::READ_ONLY: status = "READ ONLY"; break;
 				case deepcache::DatabaseState::ERROR: status = "ERROR"; break;
 				case deepcache::DatabaseState::EMPTY: break;
 			}
@@ -2361,7 +2365,31 @@ struct DeepcacheDatabaseStatusWidget : widget::TransparentWidget {
 	}
 };
 
-DeepcacheWidget* gActiveDeepcacheWidget = nullptr;
+// Rack Pro can host several independent Rack contexts in one DAW process, while
+// this plugin DLL's globals are shared by all of them. Scene::browser is the
+// actual collision domain, so permit one Deepcache owner per Scene.
+std::mutex gDeepcacheSceneOwnersMutex;
+std::unordered_map<app::Scene*, DeepcacheWidget*> gDeepcacheSceneOwners;
+
+bool claimDeepcacheScene(app::Scene* scene, DeepcacheWidget* widget) {
+	if (!scene || !widget)
+		return false;
+	std::lock_guard<std::mutex> lock(gDeepcacheSceneOwnersMutex);
+	const auto existing = gDeepcacheSceneOwners.find(scene);
+	if (existing != gDeepcacheSceneOwners.end())
+		return existing->second == widget;
+	gDeepcacheSceneOwners.emplace(scene, widget);
+	return true;
+}
+
+void releaseDeepcacheScene(app::Scene* scene, DeepcacheWidget* widget) {
+	if (!scene || !widget)
+		return;
+	std::lock_guard<std::mutex> lock(gDeepcacheSceneOwnersMutex);
+	const auto existing = gDeepcacheSceneOwners.find(scene);
+	if (existing != gDeepcacheSceneOwners.end() && existing->second == widget)
+		gDeepcacheSceneOwners.erase(existing);
+}
 
 bool isStoermelderMb(const plugin::Model* model) {
 	if (!model || !model->plugin || model->slug != "Mb")
@@ -2370,10 +2398,10 @@ bool isStoermelderMb(const plugin::Model* model) {
 	       model->plugin->slug == "Stoermelder-PackTau";
 }
 
-bool rackContainsStoermelderMb() {
-	if (!APP || !APP->scene || !APP->scene->rack)
+bool rackContainsStoermelderMb(app::Scene* scene) {
+	if (!scene || !scene->rack)
 		return false;
-	for (app::ModuleWidget* moduleWidget : APP->scene->rack->getModules()) {
+	for (app::ModuleWidget* moduleWidget : scene->rack->getModules()) {
 		if (moduleWidget && isStoermelderMb(moduleWidget->model))
 			return true;
 	}
@@ -2428,6 +2456,7 @@ void DeepcacheModule::dataFromJson(json_t* root) {
 
 struct DeepcacheWidget::Internal {
 	DeepcacheModule* module = nullptr;
+	app::Scene* scene = nullptr;
 	PreviewCacheManager* cacheManager = nullptr;
 	DeepcacheBrowserOverlay* overlay = nullptr;
 	DeepcacheWarmRenderHost* warmRenderHost = nullptr;
@@ -2485,28 +2514,32 @@ DeepcacheWidget::DeepcacheWidget(DeepcacheModule* module) {
 		return;
 	internal_ = new Internal;
 	internal_->module = module;
+	internal_->scene = APP ? APP->scene : nullptr;
 	module->browserStandby.store(false, std::memory_order_relaxed);
 	module->duplicateInstance.store(false, std::memory_order_relaxed);
 	module->browserOwnershipConflict.store(false, std::memory_order_relaxed);
+	if (!internal_->scene) {
+		module->cacheState.store(static_cast<int>(deepcache::CacheState::ERROR), std::memory_order_relaxed);
+		return;
+	}
 	// MB owns and mutates the same raw Scene::browser slot. In particular, its
 	// live browser is not safe to detach/traverse as though it were Rack's stock
 	// browser. Decline installation before touching that pointer. The module can
 	// remain in the patch as an explicit standby without affecting MB.
-	if (rackContainsStoermelderMb()) {
+	if (rackContainsStoermelderMb(internal_->scene)) {
 		module->browserStandby.store(true, std::memory_order_relaxed);
 		module->cacheState.store(static_cast<int>(deepcache::CacheState::DISABLED), std::memory_order_relaxed);
 		return;
 	}
-	if (!gActiveDeepcacheWidget) {
-		gActiveDeepcacheWidget = this;
+	if (claimDeepcacheScene(internal_->scene, this)) {
 		internal_->active = true;
 		internal_->cacheManager = new PreviewCacheManager(module);
-		internal_->overlay = new DeepcacheBrowserOverlay(internal_->cacheManager);
+		internal_->overlay = new DeepcacheBrowserOverlay(internal_->cacheManager, internal_->scene);
 		if (internal_->overlay->installed && internal_->overlay->browser) {
 			internal_->cacheManager->setBrowser(internal_->overlay->browser);
 			internal_->warmRenderHost = new DeepcacheWarmRenderHost;
 			internal_->warmRenderHost->cacheManager = internal_->cacheManager;
-			APP->scene->addChild(internal_->warmRenderHost);
+			internal_->scene->addChild(internal_->warmRenderHost);
 			internal_->autoStartPending = module->autoStart.load(std::memory_order_relaxed);
 		}
 		else {
@@ -2549,7 +2582,7 @@ DeepcacheWidget::~DeepcacheWidget() {
 			}
 		}
 		delete internal_->cacheManager;
-		gActiveDeepcacheWidget = nullptr;
+		releaseDeepcacheScene(internal_->scene, this);
 	}
 	delete internal_;
 	internal_ = nullptr;
@@ -2560,7 +2593,7 @@ void DeepcacheWidget::step() {
 		// Rack exposes no browser-owner notification. Once installed, pointer
 		// identity is enough to detect a successor without inspecting or mutating it.
 		if (!internal_->ownershipConflictHandled && internal_->overlay && internal_->overlay->installed &&
-		    APP && APP->scene && !internal_->overlay->ownsBrowserSlot()) {
+		    !internal_->overlay->ownsBrowserSlot()) {
 			internal_->ownershipConflictHandled = true;
 			internal_->autoStartPending = false;
 			internal_->overlay->ownershipConflict = true;

@@ -22,7 +22,7 @@ against uncertain pack contents.
 
 There are no known P0 or P1 issues after the fixes made during this review and
 the subsequent Stoermelder MB coexistence fix. The
-archive now has exclusive cross-process ownership with a memory-only fallback,
+archive now has exclusive cross-process write ownership with a read-only snapshot fallback,
 browser cache misses use the budgeted executor, successful captures retire live
 module trees immediately, and archive shutdown cancels queued work plus observes
 cancellation during QOI encode and chunked I/O. Filesystem flush and rename
@@ -44,10 +44,12 @@ latency remains OS-controlled, as it is for any safely joined file worker.
 
 **Resolved.** `archive-v1.lock` is held exclusively for the archive worker's
 entire disk lifetime. Windows uses an exclusive Unicode `CreateFileW` handle;
-POSIX uses nonblocking `flock`. A contender enters `BUSY`, performs no database
-reads or writes, and leaves browser warming operational in memory. Other lease
-failures are reported as archive error code 6 rather than being mistaken for
-contention. The archive spec exercises simultaneous workers and denied writes.
+POSIX uses nonblocking `flock`. A contender loads the committed pack/index as a
+validated read-only snapshot, enters `READ_ONLY`, and leaves browser warming
+operational in memory for missing entries. It never repairs, appends, or compacts.
+Other lease failures are reported as archive error code 6 rather than being
+mistaken for contention. The archive spec exercises simultaneous workers,
+snapshot decoding, and denied writes.
 
 ### P1-2: Budgeted construction for visible cache misses
 
@@ -270,9 +272,9 @@ continuing the in-memory cache path.
     plugin rather than once per model. Planner inputs move to the worker, and
     normalized sort keys are computed once per descriptor rather than inside
     every comparator call.
-13. **Exclusive archive lease.** A process holds `archive-v1.lock` across load,
-    append, index publication, and compaction. Contention is a visible
-    `MEMORY ONLY / DATABASE IN USE` state rather than a corruption risk.
+13. **Exclusive archive write lease.** One worker holds `archive-v1.lock` across
+    recovery, append, index publication, and compaction. Contenders validate and
+    decode a read-only committed snapshot without risking archive corruption.
 14. **Budgeted on-demand construction.** Browser drawing no longer constructs
     third-party module widgets. Visible misses are deduplicated and consumed by
     the same bounded UI executor as planned work.
@@ -313,8 +315,8 @@ pixels.
 
 - Complete `make test-fast`: passed.
 - `build/tests/deepcache_archive_spec`: passed, including append/replacement,
-  restart, stale fingerprint rejection, simultaneous-worker lease contention,
-  raced-write release in memory-only mode, cancellation, compaction, corrupt
+  restart, stale fingerprint rejection, simultaneous-worker read-only snapshot
+  loading, raced-write release and denial, cancellation, compaction, corrupt
   pack, corrupt index, repair, and a second restart. Test pixels include varying
   alpha to exercise the cancelable QOI encoder's RGBA path.
 - `build/tests/deepcache_planner_spec`: 11/11 passed.

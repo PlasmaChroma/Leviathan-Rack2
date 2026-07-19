@@ -126,12 +126,19 @@ int main() {
 		raced.height = 9;
 		raced.rgba = contenderPixels;
 		contender.enqueue(std::move(raced));
-		if (!waitUntil([&]() { return contender.state() == deepcache::DatabaseState::BUSY; })) {
-			std::cerr << "[FAIL] second archive worker did not enter memory-only BUSY state\n";
+		if (!waitUntil([&]() { return contender.state() == deepcache::DatabaseState::READ_ONLY; })) {
+			std::cerr << "[FAIL] second archive worker did not enter read-only state\n";
+			return 1;
+		}
+		deepcache::DecodedPreview contenderPreview;
+		if (!contender.tryPopDecoded(contenderPreview) || contenderPreview.cacheKey != "one" ||
+		    contenderPreview.rgba != firstPixels || contender.readyCount() != 1 ||
+		    contender.readyPluginCount() != 1) {
+			std::cerr << "[FAIL] read-only archive worker did not consume the committed snapshot\n";
 			return 1;
 		}
 		if (!waitUntil([&]() { return contenderPixels.use_count() == 1; })) {
-			std::cerr << "[FAIL] memory-only archive worker retained a raced queued write\n";
+			std::cerr << "[FAIL] read-only archive worker retained a raced queued write\n";
 			return 1;
 		}
 		deepcache::PreviewWrite denied;
@@ -141,7 +148,7 @@ int main() {
 		denied.height = 9;
 		denied.rgba = contenderPixels;
 		if (contender.enqueue(std::move(denied))) {
-			std::cerr << "[FAIL] memory-only archive worker accepted a disk write\n";
+			std::cerr << "[FAIL] read-only archive worker accepted a disk write\n";
 			return 1;
 		}
 		contender.shutdown();
