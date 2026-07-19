@@ -2448,8 +2448,8 @@ struct DeepcacheProgressWidget : widget::TransparentWidget {
 		const float textY = box.size.y * 0.52f;
 		// A small dark offset keeps the white percentage legible over both the
 		// violet and cyan fills without making the compact type look outlined.
-		nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 185));
-		nvgText(args.vg, textX + 0.75f, textY + 0.75f, text.c_str(), nullptr);
+		nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 156));
+		nvgText(args.vg, textX + 0.50f, textY + 0.56f, text.c_str(), nullptr);
 		nvgFillColor(args.vg, color::WHITE);
 		nvgText(args.vg, textX, textY, text.c_str(), nullptr);
 	}
