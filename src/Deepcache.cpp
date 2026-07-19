@@ -270,6 +270,11 @@ struct DeepcacheTagButton : ui::ChoiceButton {
 	void step() override;
 };
 
+struct DeepcacheSlugButton : ui::ChoiceButton {
+	void onAction(const ActionEvent& e) override;
+	void step() override;
+};
+
 struct DeepcacheClearButton : ui::Button {
 	DeepcacheBrowser* browser = nullptr;
 	void onAction(const ActionEvent& e) override;
@@ -309,11 +314,16 @@ struct DeepcacheBrowser : widget::OpaqueWidget {
 	bool favoritesOnly = false;
 	float lastBrowserZoom = NAN;
 	bool lastPreferDarkPanels = false;
+	NVGcontext* dragonOwnerVg = nullptr;
+	int dragonImageHandle = -1;
+	int dragonImageWidth = 0;
+	int dragonImageHeight = 0;
 
 	explicit DeepcacheBrowser(PreviewCacheManager* manager);
 	~DeepcacheBrowser() override;
 	void step() override;
 	void draw(const DrawArgs& args) override;
+	void onContextDestroy(const ContextDestroyEvent& e) override;
 	void onButton(const ButtonEvent& e) override;
 	void refresh();
 	void clearFilters();
@@ -329,6 +339,8 @@ struct DeepcacheBrowser : widget::OpaqueWidget {
 	std::size_t framebufferReadyPreviewCount() const;
 	void invalidateFramebufferReadiness();
 	app::ModuleWidget* chooseModel(plugin::Model* model);
+	bool ensureDragonImage(NVGcontext* vg);
+	float headerContentWidth() const;
 };
 
 class PreviewCacheManager {
@@ -977,9 +989,54 @@ struct DeepcacheWarmRenderHost : widget::TransparentWidget {
 	}
 };
 
+struct DeepcacheBrowserDragon : widget::TransparentWidget {
+	DeepcacheBrowser* browser = nullptr;
+	bool enabled = true;
+
+	void step() override {
+		if (!enabled || !browser || !browser->parent) {
+			hide();
+			return;
+		}
+		const float freeHeaderWidth = browser->box.size.x - browser->headerContentWidth() - 20.f;
+		if (freeHeaderWidth < 140.f) {
+			hide();
+			return;
+		}
+		show();
+		constexpr float cropWidth = 325.f;
+		constexpr float cropHeight = 63.f;
+		const float drawWidth = std::min(280.f, freeHeaderWidth);
+		const float drawHeight = drawWidth * cropHeight / cropWidth;
+		box.size = math::Vec(drawWidth, drawHeight);
+		box.pos.x = browser->box.pos.x + browser->box.size.x - 12.f - drawWidth;
+		// The body rides just above the frame while the legs and claws cross it.
+		box.pos.y = browser->box.pos.y - drawHeight * 0.58f;
+		widget::TransparentWidget::step();
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (!browser || !browser->ensureDragonImage(args.vg) || box.size.x <= 0.f)
+			return;
+		constexpr float sourceWidth = 338.f;
+		constexpr float sourceHeight = 113.f;
+		constexpr float cropX = 6.f;
+		constexpr float cropY = 24.f;
+		constexpr float cropWidth = 325.f;
+		const float scale = box.size.x / cropWidth;
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		nvgFillPaint(args.vg, nvgImagePattern(args.vg, -cropX * scale, -cropY * scale,
+		                                      sourceWidth * scale, sourceHeight * scale,
+		                                      0.f, browser->dragonImageHandle, 0.82f));
+		nvgFill(args.vg);
+	}
+};
+
 struct DeepcacheBrowserOverlay : ui::MenuOverlay {
 	widget::Widget* previousBrowser = nullptr;
 	DeepcacheBrowser* browser = nullptr;
+	DeepcacheBrowserDragon* dragon = nullptr;
 	bool installed = false;
 	bool retired = false;
 	bool ownershipConflict = false;
@@ -1004,6 +1061,12 @@ struct DeepcacheBrowserOverlay : ui::MenuOverlay {
 				APP->scene->removeChild(this);
 			if (browser) {
 				releaseFramebuffers(browser);
+				if (dragon) {
+					if (dragon->parent == this)
+						removeChild(dragon);
+					delete dragon;
+					dragon = nullptr;
+				}
 				if (browser->parent == this)
 					removeChild(browser);
 				delete browser;
@@ -1017,6 +1080,9 @@ struct DeepcacheBrowserOverlay : ui::MenuOverlay {
 		try {
 			browser = new DeepcacheBrowser(cacheManager);
 			addChild(browser);
+			dragon = new DeepcacheBrowserDragon;
+			dragon->browser = browser;
+			addChild(dragon);
 			APP->scene->browser = this;
 			APP->scene->addChild(this);
 			hide();
@@ -1054,6 +1120,12 @@ struct DeepcacheBrowserOverlay : ui::MenuOverlay {
 	void retireForSuccessor() {
 		ownershipConflict = true;
 		retired = true;
+		if (dragon) {
+			if (dragon->parent == this)
+				removeChild(dragon);
+			delete dragon;
+			dragon = nullptr;
+		}
 		if (browser) {
 			releaseFramebuffers(browser);
 			removeChild(browser);
@@ -1468,13 +1540,17 @@ DeepcacheBrowser::DeepcacheBrowser(PreviewCacheManager* manager)
 
 	brandButton = new DeepcacheBrandButton;
 	brandButton->browser = this;
-	brandButton->box.size.x = 150.f;
+	brandButton->box.size.x = 120.f;
 	headerLayout->addChild(brandButton);
 
 	tagButton = new DeepcacheTagButton;
 	tagButton->browser = this;
-	tagButton->box.size.x = 150.f;
+	tagButton->box.size.x = 120.f;
 	headerLayout->addChild(tagButton);
+
+	auto* slugButton = new DeepcacheSlugButton;
+	slugButton->box.size.x = 70.f;
+	headerLayout->addChild(slugButton);
 
 	favoriteQuantity = new DeepcacheFavoriteQuantity;
 	favoriteQuantity->browser = this;
@@ -1487,7 +1563,7 @@ DeepcacheBrowser::DeepcacheBrowser(PreviewCacheManager* manager)
 	auto* clearButton = new DeepcacheClearButton;
 	clearButton->browser = this;
 	clearButton->text = string::translate("Browser.resetFilters");
-	clearButton->box.size.x = 130.f;
+	clearButton->box.size.x = 110.f;
 	headerLayout->addChild(clearButton);
 
 	countLabel = new ui::Label;
@@ -1556,6 +1632,10 @@ DeepcacheBrowser::DeepcacheBrowser(PreviewCacheManager* manager)
 }
 
 DeepcacheBrowser::~DeepcacheBrowser() {
+	NVGcontext* current = APP && APP->window ? APP->window->vg : nullptr;
+	nvg_gfx_lifecycle::resetOwnedNvgImage(dragonOwnerVg, dragonImageHandle,
+	                                     dragonImageWidth, dragonImageHeight,
+	                                     current, dragonOwnerVg == current);
 	delete favoriteQuantity;
 }
 
@@ -1597,6 +1677,54 @@ void DeepcacheBrowser::draw(const DrawArgs& args) {
 	nvgStrokeColor(args.vg, nvgRGBA(117, 91, 190, 68));
 	nvgStroke(args.vg);
 	Widget::draw(args);
+}
+
+bool DeepcacheBrowser::ensureDragonImage(NVGcontext* vg) {
+	if (!vg)
+		return false;
+	if (dragonOwnerVg == vg && dragonImageHandle >= 0 && dragonImageWidth > 0 && dragonImageHeight > 0 &&
+	    nvg_gfx_lifecycle::ownedNvgImageSizeMatches(vg, dragonImageHandle,
+	                                                dragonImageWidth, dragonImageHeight))
+		return true;
+
+	nvg_gfx_lifecycle::resetOwnedNvgImage(dragonOwnerVg, dragonImageHandle,
+	                                     dragonImageWidth, dragonImageHeight,
+	                                     vg, dragonOwnerVg == vg);
+	const std::string path = asset::plugin(pluginInstance, "res/icon/Leviathan_DrHSmall.png");
+	dragonImageHandle = nvgCreateImage(vg, path.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
+	if (dragonImageHandle < 0)
+		return false;
+	dragonOwnerVg = vg;
+	nvgImageSize(vg, dragonImageHandle, &dragonImageWidth, &dragonImageHeight);
+	if (dragonImageWidth <= 0 || dragonImageHeight <= 0) {
+		nvg_gfx_lifecycle::resetOwnedNvgImage(dragonOwnerVg, dragonImageHandle,
+		                                     dragonImageWidth, dragonImageHeight, vg, true);
+		return false;
+	}
+	return true;
+}
+
+float DeepcacheBrowser::headerContentWidth() const {
+	if (!headerLayout)
+		return 0.f;
+	float width = 2.f * headerLayout->margin.x;
+	bool hasVisibleChild = false;
+	for (Widget* child : headerLayout->children) {
+		if (!child || !child->isVisible())
+			continue;
+		if (hasVisibleChild)
+			width += headerLayout->spacing.x;
+		width += child->box.size.x;
+		hasVisibleChild = true;
+	}
+	return width;
+}
+
+void DeepcacheBrowser::onContextDestroy(const ContextDestroyEvent& e) {
+	nvg_gfx_lifecycle::resetOwnedNvgImage(dragonOwnerVg, dragonImageHandle,
+	                                     dragonImageWidth, dragonImageHeight,
+	                                     nullptr, false);
+	widget::OpaqueWidget::onContextDestroy(e);
 }
 
 void DeepcacheBrowser::onButton(const ButtonEvent& e) {
@@ -2044,6 +2172,32 @@ void DeepcacheTagButton::step() {
 	ui::ChoiceButton::step();
 }
 
+void DeepcacheSlugButton::onAction(const ActionEvent& e) {
+	auto* menu = createMenu<DeepcacheMulticolumnMenu>();
+	menu->anchorPos = getAbsoluteOffset(math::Vec(0, box.size.y));
+	menu->box.pos = menu->anchorPos;
+	menu->box.size.x = box.size.x;
+	menu->addChild(createMenuLabel("Plugin slug → brand"));
+	menu->addChild(new ui::MenuSeparator);
+
+	std::vector<plugin::Plugin*> plugins = plugin::plugins;
+	std::stable_sort(plugins.begin(), plugins.end(), [](const plugin::Plugin* a, const plugin::Plugin* b) {
+		return lowercase(a->slug) < lowercase(b->slug);
+	});
+	for (const plugin::Plugin* plugin : plugins) {
+		auto* item = new ui::MenuItem;
+		item->text = plugin->slug;
+		item->rightText = "→ " + plugin->brand;
+		item->disabled = true;
+		menu->addChild(item);
+	}
+}
+
+void DeepcacheSlugButton::step() {
+	text = "Slugs";
+	ui::ChoiceButton::step();
+}
+
 void DeepcacheClearButton::onAction(const ActionEvent& e) {
 	browser->clearFilters();
 }
@@ -2158,6 +2312,8 @@ struct DeepcacheDatabaseStatusWidget : widget::TransparentWidget {
 
 	void draw(const DrawArgs& args) override {
 		const bool browserStandby = module && module->browserStandby.load(std::memory_order_relaxed);
+		const bool duplicateInstance = module && module->duplicateInstance.load(std::memory_order_relaxed);
+		const bool ownershipConflict = module && module->browserOwnershipConflict.load(std::memory_order_relaxed);
 		const auto rawState = module ? static_cast<deepcache::DatabaseState>(
 			module->databaseState.load(std::memory_order_relaxed)) : deepcache::DatabaseState::EMPTY;
 		const auto cacheState = module ? static_cast<deepcache::CacheState>(
@@ -2175,8 +2331,10 @@ struct DeepcacheDatabaseStatusWidget : widget::TransparentWidget {
 		     rawState == deepcache::DatabaseState::READY ||
 		     rawState == deepcache::DatabaseState::UPDATING))
 			state = deepcache::DatabaseState::UPDATING;
-		const char* status = browserStandby ? "STANDBY" : "EMPTY";
-		if (!browserStandby) {
+		const char* status = ownershipConflict ? "CONFLICT" :
+		                     duplicateInstance ? "DUPLICATE" :
+		                     browserStandby ? "STANDBY" : "EMPTY";
+		if (!browserStandby && !duplicateInstance && !ownershipConflict) {
 			switch (state) {
 				case deepcache::DatabaseState::LOADING: status = "LOADING"; break;
 				case deepcache::DatabaseState::READY: status = "READY"; break;
@@ -2190,7 +2348,11 @@ struct DeepcacheDatabaseStatusWidget : widget::TransparentWidget {
 		}
 		const std::uint64_t bytes = module ? module->databaseBytes.load(std::memory_order_relaxed) : 0;
 		std::string detail;
-		if (browserStandby)
+		if (ownershipConflict)
+			detail = "BROWSER REPLACED";
+		else if (duplicateInstance)
+			detail = "INACTIVE COPY";
+		else if (browserStandby)
 			detail = "MB ACTIVE";
 		else if (state == deepcache::DatabaseState::LOADING || state == deepcache::DatabaseState::UPDATING)
 			detail = std::to_string(ready) + " OF " + std::to_string(target);
@@ -2202,8 +2364,9 @@ struct DeepcacheDatabaseStatusWidget : widget::TransparentWidget {
 			detail = std::to_string(ready) + " · " + string::f("%.1f MB", bytes / (1024.0 * 1024.0));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 		nvgFontSize(args.vg, 8.f);
-		nvgFillColor(args.vg, state == deepcache::DatabaseState::ERROR ? nvgRGBA(255, 95, 120, 245)
-		                                                                : nvgRGBA(224, 234, 247, 245));
+		nvgFillColor(args.vg, ownershipConflict || duplicateInstance || state == deepcache::DatabaseState::ERROR
+		                              ? nvgRGBA(255, 95, 120, 245)
+		                              : nvgRGBA(224, 234, 247, 245));
 		nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.28f, status, nullptr);
 		nvgFontSize(args.vg, 6.5f);
 		nvgFillColor(args.vg, nvgRGBA(143, 163, 188, 225));
@@ -2239,11 +2402,14 @@ DeepcacheModule::DeepcacheModule() {
 void DeepcacheModule::process(const ProcessArgs& args) {
 	(void)args;
 	const auto state = static_cast<deepcache::CacheState>(cacheState.load(std::memory_order_relaxed));
+	const bool duplicate = duplicateInstance.load(std::memory_order_relaxed);
+	const bool ownershipConflict = browserOwnershipConflict.load(std::memory_order_relaxed);
 	lights[PLANNING_LIGHT].setBrightness(state == deepcache::CacheState::PLANNING ? 1.f : 0.f);
 	lights[WARMING_LIGHT].setBrightness(state == deepcache::CacheState::WARMING ? 1.f :
 	                                    state == deepcache::CacheState::PAUSED ? 0.3f : 0.f);
 	lights[READY_LIGHT].setBrightness(state == deepcache::CacheState::READY ? 1.f : 0.f);
-	lights[ERROR_LIGHT].setBrightness(state == deepcache::CacheState::ERROR ? 1.f : 0.f);
+	lights[ERROR_LIGHT].setBrightness(
+		state == deepcache::CacheState::ERROR || duplicate || ownershipConflict ? 1.f : 0.f);
 }
 
 json_t* DeepcacheModule::dataToJson() {
@@ -2280,6 +2446,7 @@ struct DeepcacheWidget::Internal {
 	DeepcacheWarmRenderHost* warmRenderHost = nullptr;
 	bool active = false;
 	bool autoStartPending = false;
+	bool ownershipConflictHandled = false;
 };
 
 DeepcacheWidget::DeepcacheWidget(DeepcacheModule* module) {
@@ -2288,19 +2455,19 @@ DeepcacheWidget::DeepcacheWidget(DeepcacheModule* module) {
 	const std::string& panelPath = splitPanel.panelPath();
 	splitPanel.addLabels("res/Deepcache.labels.svg");
 
-	math::Vec planningMm(2.8f, 87.f);
-	math::Vec warmingMm(7.7f, 87.f);
-	math::Vec readyMm(12.62f, 87.f);
-	math::Vec errorMm(17.52f, 87.f);
+	math::Vec planningMm(10.16f, 82.f);
+	math::Vec warmingMm(10.16f, 89.f);
+	math::Vec readyMm(10.16f, 96.f);
+	math::Vec errorMm(10.16f, 103.f);
 	panel_svg::loadPointFromSvgMm(panelPath, "planning_light", &planningMm);
 	panel_svg::loadPointFromSvgMm(panelPath, "warming_light", &warmingMm);
 	panel_svg::loadPointFromSvgMm(panelPath, "ready_light", &readyMm);
 	panel_svg::loadPointFromSvgMm(panelPath, "error_light", &errorMm);
 
-	math::Rect progressRectMm(math::Vec(3.f, 50.f), math::Vec(14.32f, 7.f));
-	math::Rect moduleCountRectMm(math::Vec(3.f, 57.2f), math::Vec(14.32f, 4.5f));
-	math::Rect framebufferProgressRectMm(math::Vec(3.f, 66.f), math::Vec(14.32f, 7.f));
-	math::Rect databaseStatusRectMm(math::Vec(3.f, 76.f), math::Vec(14.32f, 6.5f));
+	math::Rect progressRectMm(math::Vec(3.f, 27.099751f), math::Vec(14.32f, 7.f));
+	math::Rect moduleCountRectMm(math::Vec(3.f, 34.299751f), math::Vec(14.32f, 4.5f));
+	math::Rect framebufferProgressRectMm(math::Vec(3.f, 44.799746f), math::Vec(14.32f, 7.f));
+	math::Rect databaseStatusRectMm(math::Vec(3.f, 68.399761f), math::Vec(14.32f, 6.5f));
 	panel_svg::loadRectFromSvgMm(panelPath, "progress", &progressRectMm);
 	panel_svg::loadRectFromSvgMm(panelPath, "progress_count", &moduleCountRectMm);
 	panel_svg::loadRectFromSvgMm(panelPath, "framebuffer_progress", &framebufferProgressRectMm);
@@ -2332,6 +2499,8 @@ DeepcacheWidget::DeepcacheWidget(DeepcacheModule* module) {
 	internal_ = new Internal;
 	internal_->module = module;
 	module->browserStandby.store(false, std::memory_order_relaxed);
+	module->duplicateInstance.store(false, std::memory_order_relaxed);
+	module->browserOwnershipConflict.store(false, std::memory_order_relaxed);
 	// MB owns and mutates the same raw Scene::browser slot. In particular, its
 	// live browser is not safe to detach/traverse as though it were Rack's stock
 	// browser. Decline installation before touching that pointer. The module can
@@ -2358,6 +2527,7 @@ DeepcacheWidget::DeepcacheWidget(DeepcacheModule* module) {
 		}
 	}
 	else {
+		module->duplicateInstance.store(true, std::memory_order_relaxed);
 		module->cacheState.store(static_cast<int>(deepcache::CacheState::DISABLED), std::memory_order_relaxed);
 	}
 }
@@ -2400,11 +2570,29 @@ DeepcacheWidget::~DeepcacheWidget() {
 
 void DeepcacheWidget::step() {
 	if (internal_ && internal_->active && internal_->cacheManager) {
-		if (internal_->autoStartPending) {
+		// Rack exposes no browser-owner notification. Once installed, pointer
+		// identity is enough to detect a successor without inspecting or mutating it.
+		if (!internal_->ownershipConflictHandled && internal_->overlay && internal_->overlay->installed &&
+		    APP && APP->scene && !internal_->overlay->ownsBrowserSlot()) {
+			internal_->ownershipConflictHandled = true;
 			internal_->autoStartPending = false;
-			internal_->cacheManager->start();
+			internal_->overlay->ownershipConflict = true;
+			if (internal_->overlay->dragon) {
+				internal_->overlay->dragon->enabled = false;
+				internal_->overlay->dragon->hide();
+			}
+			internal_->module->browserOwnershipConflict.store(true, std::memory_order_relaxed);
+			if (internal_->warmRenderHost)
+				internal_->warmRenderHost->cacheManager = nullptr;
+			internal_->cacheManager->stop();
 		}
-		internal_->cacheManager->step();
+		if (!internal_->ownershipConflictHandled) {
+			if (internal_->autoStartPending) {
+				internal_->autoStartPending = false;
+				internal_->cacheManager->start();
+			}
+			internal_->cacheManager->step();
+		}
 	}
 	ModuleWidget::step();
 }
@@ -2420,7 +2608,13 @@ void DeepcacheWidget::appendContextMenu(ui::Menu* menu) {
 		return;
 	}
 	if (!internal_->active) {
-		menu->addChild(createMenuLabel("Passive: another Deepcache owns the browser"));
+		menu->addChild(createMenuLabel("Duplicate: another Deepcache owns the browser"));
+		menu->addChild(createMenuLabel("This copy is inactive and can be removed"));
+		return;
+	}
+	if (internal_->module->browserOwnershipConflict.load(std::memory_order_relaxed)) {
+		menu->addChild(createMenuLabel("Conflict: another plugin replaced the browser"));
+		menu->addChild(createMenuLabel("Deepcache background work has stopped"));
 		return;
 	}
 	PreviewCacheManager* manager = internal_->cacheManager;
