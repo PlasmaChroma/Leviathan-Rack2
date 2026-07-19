@@ -72,7 +72,7 @@ bool isValidTransition(CacheState from, CacheState to) {
 std::string makePreviewCacheKey(const ModelDescriptor& descriptor) {
 	// Human-readable for the memory backend and deliberately versioned so a future
 	// persistent backend can extend the same identity without pointer-derived data.
-	return "deepcache-raster-v1/" + descriptor.pluginSlug + "/" + descriptor.pluginVersion + "/" +
+	return "deepcache-raster-v3-canonical-2x/" + descriptor.pluginSlug + "/" + descriptor.pluginVersion + "/" +
 	       descriptor.modelSlug;
 }
 

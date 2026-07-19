@@ -3,6 +3,8 @@
 
 #include <iostream>
 #include <chrono>
+#include <cmath>
+#include <limits>
 #include <string>
 #include <thread>
 #include <vector>
@@ -73,8 +75,23 @@ TestResult testStableCacheKey() {
 	const std::string key = deepcache::makePreviewCacheKey(models[0]);
 	models[0].modelIndex = 12345;
 	const bool pass = key == deepcache::makePreviewCacheKey(models[0]) &&
-	                  key == "deepcache-raster-v1/alpha/2.0/zeta";
+	                  key == "deepcache-raster-v3-canonical-2x/alpha/2.0/zeta";
 	return {"cache key excludes runtime model index", pass, key};
+}
+
+TestResult testCanonicalPreviewRenderScale() {
+	const float at100 = deepcache::previewRenderTransformScale(1.f);
+	const float at150 = deepcache::previewRenderTransformScale(1.5f);
+	const float at200 = deepcache::previewRenderTransformScale(2.f);
+	const float at300 = deepcache::previewRenderTransformScale(3.f);
+	const float invalid = deepcache::previewRenderTransformScale(
+		std::numeric_limits<float>::quiet_NaN());
+	const bool pass = std::abs(at100 - 2.f) < 1e-6f && std::abs(at150 - 2.f) < 1e-6f &&
+	                  std::abs(at200 - 1.f) < 1e-6f && std::abs(at300 - (2.f / 3.f)) < 1e-6f &&
+	                  std::abs(invalid - 2.f) < 1e-6f;
+	return {"preview render scale cancels Rack framebuffer pixel ratio", pass,
+	        "100/150/200/300=" + std::to_string(at100) + "/" + std::to_string(at150) + "/" +
+	            std::to_string(at200) + "/" + std::to_string(at300)};
 }
 
 TestResult testStateTransitions() {
@@ -286,6 +303,7 @@ int main() {
 		testDeduplicationAndInvalidEntries(),
 		testGenerationAndPromotion(),
 		testStableCacheKey(),
+		testCanonicalPreviewRenderScale(),
 		testStateTransitions(),
 		testWorkerPublicationAndCancellation(),
 		testWorkerBulkPromotion(),

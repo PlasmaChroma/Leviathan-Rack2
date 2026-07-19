@@ -56,6 +56,11 @@ void normalizeBrowserFilter(BrowserFilter& filter);
 
 bool browserModelMatches(const BrowserModelRecord& record, const BrowserFilter& filter);
 
+// FramebufferWidget multiplies its render transform by floor(windowPixelRatio).
+// Return the transform that produces a canonical 2x physical preview at every
+// Rack UI scale.
+float previewRenderTransformScale(float windowPixelRatio);
+
 std::vector<std::size_t> sortBrowserModelIndices(const std::vector<BrowserModelRecord>& records,
 	                                             BrowserSortMode sortMode,
 	                                             const std::string& search);

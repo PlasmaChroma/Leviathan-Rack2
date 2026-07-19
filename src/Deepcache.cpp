@@ -1395,17 +1395,19 @@ FramebufferWarmResult DeepcacheModelBox::warmFramebuffer() {
 		return FramebufferWarmResult::FAILED;
 	if (!APP || !APP->window || !APP->window->vg || !APP->window->fbVg)
 		return FramebufferWarmResult::RETRY;
-	if (hasValidFramebufferImage()) {
-		state = deepcache::PreviewEntryState::FRAMEBUFFER_READY;
-		return FramebufferWarmResult::READY;
-	}
-
 	try {
+		// Rack can lazily render this framebuffer while the browser is open, in
+		// which case its resolution follows the current browser transform. Always
+		// replace that image with Deepcache's canonical render before capture so
+		// persistence does not depend on browser timing or zoom.
+		if (hasValidFramebufferImage())
+			framebuffer->deleteFramebuffer();
 		framebuffer->step();
 		framebuffer->setDirty();
 		// Called only by the scene-level warm host during Rack's draw phase.
 		// render() builds the texture without compositing it into the scene.
-		framebuffer->render();
+		const float renderScale = deepcache::previewRenderTransformScale(APP->window->pixelRatio);
+		framebuffer->render(math::Vec(renderScale, renderScale));
 		if (!hasValidFramebufferImage())
 			return FramebufferWarmResult::RETRY;
 		state = deepcache::PreviewEntryState::FRAMEBUFFER_READY;
