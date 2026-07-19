@@ -106,6 +106,7 @@ private:
 	bool loadIndex(const std::string& path);
 	bool saveIndexAtomically();
 	bool canceled() const { return stopping_.load(std::memory_order_relaxed); }
+	bool resetPending() const;
 	void setState(DatabaseState state) { state_.store(static_cast<int>(state), std::memory_order_relaxed); }
 	void markReady(const std::string& cacheKey);
 

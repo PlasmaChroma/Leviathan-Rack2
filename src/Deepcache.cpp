@@ -263,6 +263,7 @@ struct DeepcacheSingleLineChoiceButton : ui::ChoiceButton {
 
 struct DeepcacheBrandItem : ui::MenuItem {
 	DeepcacheBrowser* browser = nullptr;
+	std::weak_ptr<int> browserLifetime;
 	std::string brand;
 	int availableModelCount = 0;
 	int registeredModelCount = 0;
@@ -278,6 +279,7 @@ struct DeepcacheBrandButton : DeepcacheSingleLineChoiceButton {
 
 struct DeepcacheTagItem : ui::MenuItem {
 	DeepcacheBrowser* browser = nullptr;
+	std::weak_ptr<int> browserLifetime;
 	int tagId = -1;
 	void onAction(const ActionEvent& e) override;
 	void step() override;
@@ -337,6 +339,7 @@ struct DeepcacheBrowser : widget::OpaqueWidget {
 	int dragonImageHandle = -1;
 	int dragonImageWidth = 0;
 	int dragonImageHeight = 0;
+	std::shared_ptr<int> lifetimeToken = std::make_shared<int>(0);
 
 	explicit DeepcacheBrowser(PreviewCacheManager* manager);
 	~DeepcacheBrowser() override;
@@ -397,6 +400,9 @@ public:
 		}
 		if (activeGeneration_ != 0)
 			cancel();
+		// clear() rejects late startup decodes. Re-enable archive results only
+		// after its handoff queues are drained and a new planner pass truly begins.
+		ignoreArchiveResults_ = false;
 
 		activeGeneration_ = ++nextGeneration_;
 		completed_ = 0;
@@ -432,8 +438,7 @@ public:
 
 	void rebuild() {
 		clear();
-		if (archive_.requestReset())
-			ignoreArchiveResults_ = false;
+		archive_.requestReset();
 		start();
 	}
 
@@ -533,6 +538,17 @@ public:
 		box->state = deepcache::PreviewEntryState::QUEUED;
 		if (onDemandQueuedIndices_.insert(modelIndex).second)
 			onDemandBuildQueue_.push_back(modelIndex);
+	}
+
+	void retryPreview(std::size_t modelIndex) {
+		if (stopped_ || !browser_)
+			return;
+		DeepcacheModelBox* box = browser_->getModelBox(modelIndex);
+		if (!box || box->state != deepcache::PreviewEntryState::FAILED)
+			return;
+		box->state = deepcache::PreviewEntryState::EMPTY;
+		box->failureReason.clear();
+		requestOnDemand(modelIndex);
 	}
 
 	void onPanelThemeChanged() {
@@ -1402,6 +1418,10 @@ FramebufferWarmResult DeepcacheModelBox::warmFramebuffer() {
 		// persistence does not depend on browser timing or zoom.
 		if (hasValidFramebufferImage())
 			framebuffer->deleteFramebuffer();
+		// Match Rack's own policy at the current UI scale. A preview constructed
+		// before a scale change must not retain an unnecessarily expensive 2x
+		// temporary oversample after the window has moved to HiDPI rendering.
+		framebuffer->oversample = APP->window->pixelRatio < 2.f ? 2.f : 1.f;
 		framebuffer->step();
 		framebuffer->setDirty();
 		// Called only by the scene-level warm host during Rack's draw phase.
@@ -1487,8 +1507,6 @@ void DeepcacheModelBox::draw(const DrawArgs& args) {
 	const float brightness = math::clamp(settings::rackBrightness + 0.2f, 0.f, 1.f);
 	nvgGlobalTint(args.vg, nvgRGBAf(brightness, brightness, brightness, 1.f));
 	OpaqueWidget::draw(args);
-	if (state == deepcache::PreviewEntryState::RESIDENT && hasValidFramebufferImage())
-		state = deepcache::PreviewEntryState::FRAMEBUFFER_READY;
 
 	if (model && model->isFavorite()) {
 		nvgBeginPath(args.vg);
@@ -1597,11 +1615,12 @@ void DeepcacheModelBox::createContextMenu() {
 	model->appendContextMenu(menu, true);
 	if (state == deepcache::PreviewEntryState::FAILED) {
 		menu->addChild(new ui::MenuSeparator);
-		menu->addChild(createMenuItem("Retry Deepcache preview", "", [this]() {
-			state = deepcache::PreviewEntryState::EMPTY;
-			failureReason.clear();
-			if (cacheManager)
-				cacheManager->requestOnDemand(modelIndex);
+		PreviewCacheManager* manager = cacheManager;
+		const std::weak_ptr<int> lifetime = manager ? manager->lifetimeToken() : std::weak_ptr<int>();
+		const std::size_t retryIndex = modelIndex;
+		menu->addChild(createMenuItem("Retry Deepcache preview", "", [manager, lifetime, retryIndex]() {
+			if (!lifetime.expired())
+				manager->retryPreview(retryIndex);
 		}));
 	}
 }
@@ -1724,6 +1743,7 @@ DeepcacheBrowser::DeepcacheBrowser(PreviewCacheManager* manager)
 }
 
 DeepcacheBrowser::~DeepcacheBrowser() {
+	lifetimeToken.reset();
 	NVGcontext* current = APP && APP->window ? APP->window->vg : nullptr;
 	nvg_gfx_lifecycle::resetOwnedNvgImage(dragonOwnerVg, dragonImageHandle,
 	                                     dragonImageWidth, dragonImageHeight,
@@ -2157,11 +2177,19 @@ void DeepcacheSingleLineChoiceButton::draw(const DrawArgs& args) {
 }
 
 void DeepcacheBrandItem::onAction(const ActionEvent& e) {
+	if (!browser || browserLifetime.expired())
+		return;
 	browser->brand = browser->brand == brand ? "" : brand;
 	browser->refresh();
 }
 
 void DeepcacheBrandItem::step() {
+	if (!browser || browserLifetime.expired()) {
+		disabled = true;
+		rightText.clear();
+		ui::MenuItem::step();
+		return;
+	}
 	rightText.clear();
 	if (registeredModelCount > 0 && availableModelCount < registeredModelCount) {
 		rightText = "A: " + std::to_string(availableModelCount) + "/" +
@@ -2183,6 +2211,7 @@ void DeepcacheBrandButton::onAction(const ActionEvent& e) {
 	auto* allItem = new DeepcacheBrandItem;
 	allItem->text = string::translate("Browser.allBrands");
 	allItem->browser = browser;
+	allItem->browserLifetime = browser->lifetimeToken;
 	menu->addChild(allItem);
 	menu->addChild(new ui::MenuSeparator);
 	// The plugin binary can register more models than Rack's current library
@@ -2204,6 +2233,7 @@ void DeepcacheBrandButton::onAction(const ActionEvent& e) {
 		item->availableModelCount = brandEntry.second.first;
 		item->registeredModelCount = brandEntry.second.second;
 		item->browser = browser;
+		item->browserLifetime = browser->lifetimeToken;
 		menu->addChild(item);
 	}
 }
@@ -2216,6 +2246,8 @@ void DeepcacheBrandButton::step() {
 }
 
 void DeepcacheTagItem::onAction(const ActionEvent& e) {
+	if (!browser || browserLifetime.expired())
+		return;
 	if (tagId < 0) {
 		browser->tagIds.clear();
 		browser->refresh();
@@ -2239,6 +2271,12 @@ void DeepcacheTagItem::onAction(const ActionEvent& e) {
 }
 
 void DeepcacheTagItem::step() {
+	if (!browser || browserLifetime.expired()) {
+		disabled = true;
+		rightText.clear();
+		ui::MenuItem::step();
+		return;
+	}
 	rightText = CHECKMARK(tagId < 0 ? browser->tagIds.empty() : browser->tagIds.count(tagId) != 0);
 	ui::MenuItem::step();
 }
@@ -2252,6 +2290,7 @@ void DeepcacheTagButton::onAction(const ActionEvent& e) {
 	allItem->text = string::translate("Browser.allTags");
 	allItem->tagId = -1;
 	allItem->browser = browser;
+	allItem->browserLifetime = browser->lifetimeToken;
 	menu->addChild(allItem);
 	menu->addChild(createMenuLabel(widget::getKeyCommandName(0, RACK_MOD_CTRL) +
 	                                   string::translate("key.click") +
@@ -2267,6 +2306,7 @@ void DeepcacheTagButton::onAction(const ActionEvent& e) {
 		item->text = string::translate("tag." + tag::getTag(tagId));
 		item->tagId = tagId;
 		item->browser = browser;
+		item->browserLifetime = browser->lifetimeToken;
 		menu->addChild(item);
 	}
 }
@@ -2321,12 +2361,16 @@ void DeepcacheSortButton::onAction(const ActionEvent& e) {
 	menu->box.pos = getAbsoluteOffset(math::Vec(0, box.size.y));
 	menu->box.size.x = box.size.x;
 	const auto names = deepcacheSortNames();
+	DeepcacheBrowser* targetBrowser = browser;
+	const std::weak_ptr<int> lifetime = browser ? browser->lifetimeToken : std::weak_ptr<int>();
 	for (int sortId = settings::BROWSER_SORT_UPDATED; sortId <= settings::BROWSER_SORT_RANDOM; ++sortId) {
 		menu->addChild(createCheckMenuItem(names[sortId], "",
 			[sortId]() { return settings::browserSort == sortId; },
-			[this, sortId]() {
+			[targetBrowser, lifetime, sortId]() {
+				if (lifetime.expired())
+					return;
 				settings::browserSort = static_cast<settings::BrowserSort>(sortId);
-				browser->refresh();
+				targetBrowser->refresh();
 			}));
 	}
 }
@@ -2530,12 +2574,14 @@ void DeepcacheModule::process(const ProcessArgs& args) {
 	const auto state = static_cast<deepcache::CacheState>(cacheState.load(std::memory_order_relaxed));
 	const bool duplicate = duplicateInstance.load(std::memory_order_relaxed);
 	const bool ownershipConflict = browserOwnershipConflict.load(std::memory_order_relaxed);
+	const bool databaseError = static_cast<deepcache::DatabaseState>(
+		databaseState.load(std::memory_order_relaxed)) == deepcache::DatabaseState::ERROR;
 	lights[PLANNING_LIGHT].setBrightness(state == deepcache::CacheState::PLANNING ? 1.f : 0.f);
 	lights[WARMING_LIGHT].setBrightness(state == deepcache::CacheState::WARMING ? 1.f :
 	                                    state == deepcache::CacheState::PAUSED ? 0.3f : 0.f);
 	lights[READY_LIGHT].setBrightness(state == deepcache::CacheState::READY ? 1.f : 0.f);
 	lights[ERROR_LIGHT].setBrightness(
-		state == deepcache::CacheState::ERROR || duplicate || ownershipConflict ? 1.f : 0.f);
+		state == deepcache::CacheState::ERROR || databaseError || duplicate || ownershipConflict ? 1.f : 0.f);
 }
 
 json_t* DeepcacheModule::dataToJson() {
