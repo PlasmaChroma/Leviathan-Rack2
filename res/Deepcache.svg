@@ -23,9 +23,9 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      showgrid="false"
-     inkscape:zoom="3.421466"
-     inkscape:cx="-66.053557"
-     inkscape:cy="403.77429"
+     inkscape:zoom="4.8386836"
+     inkscape:cx="-5.9933656"
+     inkscape:cy="353.50524"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -170,7 +170,7 @@
      inkscape:label="components"
      opacity="0"
      id="g16"
-     style="opacity:1">
+     style="display:none;opacity:1">
     <rect
        id="progress"
        x="300"
@@ -186,34 +186,35 @@
     <rect
        id="framebuffer_progress"
        x="300"
-       y="4479.9746"
+       y="4939.9771"
        width="1432"
        height="700" />
     <rect
        id="database_status"
        x="300"
-       y="6839.9761"
+       y="7260.0005"
        width="1432"
-       height="650" />
+       height="1218.6809"
+       style="stroke-width:1.36927" />
     <circle
        id="planning_light"
-       cx="1016"
-       cy="8600"
+       cx="450"
+       cy="9359.958"
        r="50" />
     <circle
        id="warming_light"
-       cx="1016"
-       cy="9300"
+       cx="450"
+       cy="10059.958"
        r="50" />
     <circle
        id="ready_light"
-       cx="1016"
-       cy="10000"
+       cx="450"
+       cy="10759.958"
        r="50" />
     <circle
        id="error_light"
-       cx="1016"
-       cy="10700"
+       cx="450"
+       cy="11459.958"
        r="50" />
   </g>
   <g
@@ -268,7 +269,7 @@
          id="tspan22">BUILDS</tspan></text>
     <text
        x="10.16"
-       y="42.799774"
+       y="47.399776"
        fill="#70dce7"
        font-family="sans-serif"
        font-size="1.25px"
@@ -277,17 +278,46 @@
        id="text9"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;letter-spacing:0.18;text-anchor:middle;fill:#70dce7;stroke:none;stroke-opacity:1"><tspan
          sodipodi:role="line"
-         id="tspan23">RASTERS</tspan></text>
-    <text
-       x="10.16"
-       y="67.599777"
-       fill="#889bb3"
-       font-family="sans-serif"
-       font-size="1.05px"
-       letter-spacing="0.14"
-       text-anchor="middle"
-       id="text10"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;stroke:none;stroke-opacity:1;fill:#ffffff;fill-opacity:1">DATABASE</text>
+         id="tspan23"
+         x="10.25"
+         y="47.399776">RASTERS</tspan></text>
+    <defs
+       id="defs1">
+      <text
+         x="10.16"
+         y="67.599777"
+         fill="#889bb3"
+         font-family="sans-serif"
+         font-size="1.05px"
+         letter-spacing="0.14"
+         text-anchor="middle"
+         id="text10"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;stroke:none;stroke-opacity:1;fill:#ffffff;fill-opacity:1">DATABASE</text>
+    </defs>
+    <g
+       id="database_icon"
+       fill="none"
+       stroke="#ffffff"
+       stroke-width="0.55"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       transform="translate(0,2.6000033)">
+      <ellipse
+         cx="10.16"
+         cy="61.799999"
+         rx="4"
+         ry="1.4"
+         id="ellipse1" />
+      <path
+         d="m 6.16,61.8 v 5.6 c 0,0.773 1.791,1.4 4,1.4 2.209,0 4,-0.627 4,-1.4 v -5.6"
+         id="path1" />
+      <path
+         d="m 6.16,64.6 c 0,0.773 1.791,1.4 4,1.4 2.209,0 4,-0.627 4,-1.4"
+         id="path2" />
+      <path
+         d="m 6.16,67.4 c 0,0.773 1.791,1.4 4,1.4 2.209,0 4,-0.627 4,-1.4"
+         id="path3" />
+    </g>
     <g
        fill="#73869c"
        font-family="sans-serif"
@@ -295,24 +325,28 @@
        text-anchor="middle"
        id="led_labels">
       <text
-         x="10.16"
-         y="90.449585"
+         x="11.75"
+         y="94.599564"
          id="text11"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1;stroke:none;stroke-opacity:1">PLAN</text>
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;fill:#ffffff;fill-opacity:1;stroke:none;stroke-opacity:1"><tspan
+           sodipodi:role="line"
+           id="tspan1"
+           x="11.75"
+           y="94.599564">PLAN</tspan></text>
       <text
-         x="10.079565"
-         y="97.449585"
+         x="11.75"
+         y="101.59956"
          id="text12"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1;stroke:none;stroke-opacity:1">WARM</text>
       <text
-         x="10.079565"
-         y="104.44962"
+         x="11.75"
+         y="108.59959"
          font-size="0.95px"
          id="text13"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1;stroke:none;stroke-opacity:1">READY</text>
       <text
-         x="10.079565"
-         y="111.44962"
+         x="11.75"
+         y="115.59959"
          id="text14"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1;stroke:none;stroke-opacity:1">ERR</text>
     </g>

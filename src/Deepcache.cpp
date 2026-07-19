@@ -1430,9 +1430,9 @@ void DeepcacheModelBox::draw(const DrawArgs& args) {
 		nvgRect(args.vg, 0, 0, box.size.x, box.size.y);
 		nvgFillColor(args.vg, nvgRGBA(35, 10, 18, 255));
 		nvgFill(args.vg);
-		nvgFontSize(args.vg, 13.f);
+		nvgFontSize(args.vg, 8.f);
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		nvgFillColor(args.vg, nvgRGBA(255, 120, 145, 255));
+		nvgFillColor(args.vg, color::WHITE);
 		nvgTextBox(args.vg, 8.f, box.size.y * 0.45f, box.size.x - 16.f,
 		           model ? model->name.c_str() : "Preview failed", nullptr);
 	}
@@ -2283,7 +2283,7 @@ struct DeepcacheProgressWidget : widget::TransparentWidget {
 		nvgStrokeColor(args.vg, framebufferStage ? nvgRGBA(56, 221, 232, 190)
 		                                               : nvgRGBA(139, 104, 255, 190));
 		nvgStroke(args.vg);
-		nvgFontSize(args.vg, 9.f);
+		nvgFontSize(args.vg, 8.f);
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 		nvgFillColor(args.vg, color::WHITE);
 		const std::string text = std::to_string(static_cast<int>(std::round(progress * 100.f))) + "%";
@@ -2299,9 +2299,9 @@ struct DeepcacheModuleCountWidget : widget::TransparentWidget {
 	void draw(const DrawArgs& args) override {
 		const int completed = module ? module->constructionPluginCompletedCount.load(std::memory_order_relaxed) : 0;
 		const std::string text = std::to_string(completed);
-		nvgFontSize(args.vg, 7.5f);
+		nvgFontSize(args.vg, 8.f);
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		nvgFillColor(args.vg, nvgRGBA(188, 204, 224, 220));
+		nvgFillColor(args.vg, color::WHITE);
 		nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.5f, text.c_str(), nullptr);
 	}
 };
@@ -2347,30 +2347,17 @@ struct DeepcacheDatabaseStatusWidget : widget::TransparentWidget {
 			}
 		}
 		const std::uint64_t bytes = module ? module->databaseBytes.load(std::memory_order_relaxed) : 0;
-		std::string detail;
-		if (ownershipConflict)
-			detail = "BROWSER REPLACED";
-		else if (duplicateInstance)
-			detail = "INACTIVE COPY";
-		else if (browserStandby)
-			detail = "MB ACTIVE";
-		else if (state == deepcache::DatabaseState::LOADING || state == deepcache::DatabaseState::UPDATING)
-			detail = std::to_string(ready) + " OF " + std::to_string(target);
-		else if (state == deepcache::DatabaseState::BUSY)
-			detail = "DATABASE IN USE";
-		else if (state == deepcache::DatabaseState::ERROR)
-			detail = "CODE " + std::to_string(module ? module->databaseErrorCode.load(std::memory_order_relaxed) : 0);
-		else
-			detail = std::to_string(ready) + " · " + string::f("%.1f MB", bytes / (1024.0 * 1024.0));
+		std::string pluginCount = "Plugins: " + std::to_string(ready);
+		if (!ownershipConflict && !duplicateInstance && !browserStandby && target > 0 && ready < target &&
+		    (state == deepcache::DatabaseState::LOADING || state == deepcache::DatabaseState::UPDATING))
+			pluginCount += "/" + std::to_string(target);
+		const std::string databaseSize = string::f("%.1f MB", bytes / (1024.0 * 1024.0));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 		nvgFontSize(args.vg, 8.f);
-		nvgFillColor(args.vg, ownershipConflict || duplicateInstance || state == deepcache::DatabaseState::ERROR
-		                              ? nvgRGBA(255, 95, 120, 245)
-		                              : nvgRGBA(224, 234, 247, 245));
-		nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.28f, status, nullptr);
-		nvgFontSize(args.vg, 6.5f);
-		nvgFillColor(args.vg, nvgRGBA(143, 163, 188, 225));
-		nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.76f, detail.c_str(), nullptr);
+		nvgFillColor(args.vg, color::WHITE);
+		nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.17f, status, nullptr);
+		nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.50f, pluginCount.c_str(), nullptr);
+		nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.83f, databaseSize.c_str(), nullptr);
 	}
 };
 
@@ -2455,10 +2442,10 @@ DeepcacheWidget::DeepcacheWidget(DeepcacheModule* module) {
 	const std::string& panelPath = splitPanel.panelPath();
 	splitPanel.addLabels("res/Deepcache.labels.svg");
 
-	math::Vec planningMm(10.16f, 82.f);
-	math::Vec warmingMm(10.16f, 89.f);
-	math::Vec readyMm(10.16f, 96.f);
-	math::Vec errorMm(10.16f, 103.f);
+	math::Vec planningMm(4.5f, 91.59958f);
+	math::Vec warmingMm(4.5f, 98.59958f);
+	math::Vec readyMm(4.5f, 105.59958f);
+	math::Vec errorMm(4.5f, 112.59958f);
 	panel_svg::loadPointFromSvgMm(panelPath, "planning_light", &planningMm);
 	panel_svg::loadPointFromSvgMm(panelPath, "warming_light", &warmingMm);
 	panel_svg::loadPointFromSvgMm(panelPath, "ready_light", &readyMm);
@@ -2466,8 +2453,8 @@ DeepcacheWidget::DeepcacheWidget(DeepcacheModule* module) {
 
 	math::Rect progressRectMm(math::Vec(3.f, 27.099751f), math::Vec(14.32f, 7.f));
 	math::Rect moduleCountRectMm(math::Vec(3.f, 34.299751f), math::Vec(14.32f, 4.5f));
-	math::Rect framebufferProgressRectMm(math::Vec(3.f, 44.799746f), math::Vec(14.32f, 7.f));
-	math::Rect databaseStatusRectMm(math::Vec(3.f, 68.399761f), math::Vec(14.32f, 6.5f));
+	math::Rect framebufferProgressRectMm(math::Vec(3.f, 49.599771f), math::Vec(14.32f, 7.f));
+	math::Rect databaseStatusRectMm(math::Vec(3.f, 70.f), math::Vec(14.32f, 12.186809f));
 	panel_svg::loadRectFromSvgMm(panelPath, "progress", &progressRectMm);
 	panel_svg::loadRectFromSvgMm(panelPath, "progress_count", &moduleCountRectMm);
 	panel_svg::loadRectFromSvgMm(panelPath, "framebuffer_progress", &framebufferProgressRectMm);

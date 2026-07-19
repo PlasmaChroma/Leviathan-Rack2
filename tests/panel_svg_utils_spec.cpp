@@ -197,13 +197,13 @@ TestResult testDeepcachePanelAnchorsUseRepositoryUnits() {
   const bool databaseStatusOk = panel_svg::loadRectFromSvgMm(
     "res/Deepcache.panel.svg", "database_status", &databaseStatus);
   const bool pass = readyOk && progressOk && framebufferProgressOk && databaseStatusOk
-    && nearlyEqual(ready.x, 10.16f) && nearlyEqual(ready.y, 96.f)
+    && nearlyEqual(ready.x, 4.5f) && nearlyEqual(ready.y, 105.59958f)
     && nearlyEqual(progress.pos.x, 3.f) && nearlyEqual(progress.pos.y, 27.099751f)
     && nearlyEqual(progress.size.x, 14.32f) && nearlyEqual(progress.size.y, 7.f)
-    && nearlyEqual(framebufferProgress.pos.x, 3.f) && nearlyEqual(framebufferProgress.pos.y, 44.799746f)
+    && nearlyEqual(framebufferProgress.pos.x, 3.f) && nearlyEqual(framebufferProgress.pos.y, 49.599771f)
     && nearlyEqual(framebufferProgress.size.x, 14.32f) && nearlyEqual(framebufferProgress.size.y, 7.f)
-    && nearlyEqual(databaseStatus.pos.x, 3.f) && nearlyEqual(databaseStatus.pos.y, 68.399761f)
-    && nearlyEqual(databaseStatus.size.x, 14.32f) && nearlyEqual(databaseStatus.size.y, 6.5f);
+    && nearlyEqual(databaseStatus.pos.x, 3.f) && nearlyEqual(databaseStatus.pos.y, 70.f)
+    && nearlyEqual(databaseStatus.size.x, 14.32f) && nearlyEqual(databaseStatus.size.y, 12.186809f);
   return {"Deepcache anchors use 1/100mm component coordinates", pass,
           "ready=" + std::to_string(ready.x) + "," + std::to_string(ready.y) +
             " progress=" + std::to_string(progress.pos.x) + "," +

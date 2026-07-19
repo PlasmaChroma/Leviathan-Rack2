@@ -25,6 +25,7 @@ RES_EXCLUDES := \
 	res/deck.svg \
 	res/undertow.svg \
 	res/bifurx.svg \
+	res/Deepcache.svg \
 	$(shell find res/panels-source -type f 2>/dev/null)
 
 DISTRIBUTABLES += res/icon
