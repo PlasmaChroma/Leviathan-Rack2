@@ -231,10 +231,14 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
           low = vec3(18.0, 3.0, 2.0) / 255.0;
           middle = vec3(202.0, 42.0, 8.0) / 255.0;
           high = vec3(255.0, 231.0, 104.0) / 255.0;
-        } else {
+        } else if (uColorMode == 3) {
           low = vec3(11.0, 3.0, 22.0) / 255.0;
           middle = vec3(126.0, 25.0, 194.0) / 255.0;
           high = vec3(255.0, 171.0, 246.0) / 255.0;
+        } else {
+          low = vec3(2.0, 15.0, 10.0) / 255.0;
+          middle = vec3(0.0, 168.0, 107.0) / 255.0;
+          high = vec3(166.0, 255.0, 207.0) / 255.0;
         }
         const float split = 0.52;
         return value < split
@@ -1518,8 +1522,19 @@ struct NautiloidClipboardButton final : LeviathanIconButton {
 };
 
 struct NautiloidColorModeButton final : LeviathanIconButton {
+  static constexpr float BUTTON_SCALE = 4.f / 3.f;
+
   Nautiloid* module = nullptr;
   ui::Tooltip* tooltip = nullptr;
+
+  NautiloidColorModeButton() {
+    // This control benefits from being more prominent than the utility icon
+    // buttons. Draw the switch SVG ourselves so both its artwork and hit area
+    // grow together; merely changing box.size would only enlarge the latter.
+    box.size = box.size.mult(BUTTON_SCALE);
+    fb->hide();
+    shadow->hide();
+  }
 
   ~NautiloidColorModeButton() override {
     destroyTooltip();
@@ -1562,7 +1577,18 @@ struct NautiloidColorModeButton final : LeviathanIconButton {
   }
 
   void draw(const DrawArgs& args) override {
-    LeviathanIconButton::draw(args);
+    if (sw && sw->svg) {
+      const Vec svgSize = sw->svg->getSize();
+      if (svgSize.x > 0.f && svgSize.y > 0.f) {
+        const float scale = std::min(box.size.x / svgSize.x, box.size.y / svgSize.y);
+        nvgSave(args.vg);
+        nvgTranslate(args.vg, 0.5f * box.size.x, 0.5f * box.size.y);
+        nvgScale(args.vg, scale, scale);
+        nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
+        sw->svg->draw(args.vg);
+        nvgRestore(args.vg);
+      }
+    }
     const int mode = nautiloidColorMode(module);
     const float radius = std::min(box.size.x, box.size.y) * 0.105f;
     const float gap = radius * 1.55f;

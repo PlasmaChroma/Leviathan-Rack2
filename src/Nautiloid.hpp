@@ -33,6 +33,7 @@ struct Nautiloid final : Module {
     COLOR_ABYSS = nautiloid_color::ABYSS,
     COLOR_EMBER = nautiloid_color::EMBER,
     COLOR_AMETHYST = nautiloid_color::AMETHYST,
+    COLOR_EMERALD = nautiloid_color::EMERALD,
     FRACTAL_COLOR_MODES_LEN = nautiloid_color::MODES_LEN
   };
 

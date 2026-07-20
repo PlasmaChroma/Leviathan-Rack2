@@ -12,6 +12,7 @@ enum Mode {
   ABYSS,
   EMBER,
   AMETHYST,
+  EMERALD,
   MODES_LEN
 };
 
@@ -30,18 +31,20 @@ inline const char* name(int mode) {
     case ABYSS: return "Abyss";
     case EMBER: return "Ember";
     case AMETHYST: return "Amethyst";
+    case EMERALD: return "Emerald";
     case PRISM:
     default: return "Prism";
   }
 }
 
 inline Rgb stop(int mode, int index) {
-  static constexpr Rgb palettes[3][3] = {
+  static constexpr Rgb palettes[4][3] = {
     {{2.f, 7.f, 18.f}, {5.f, 100.f, 172.f}, {144.f, 247.f, 255.f}},
     {{18.f, 3.f, 2.f}, {202.f, 42.f, 8.f}, {255.f, 231.f, 104.f}},
-    {{11.f, 3.f, 22.f}, {126.f, 25.f, 194.f}, {255.f, 171.f, 246.f}}
+    {{11.f, 3.f, 22.f}, {126.f, 25.f, 194.f}, {255.f, 171.f, 246.f}},
+    {{2.f, 15.f, 10.f}, {0.f, 168.f, 107.f}, {166.f, 255.f, 207.f}}
   };
-  const int palette = std::max(0, std::min(normalize(mode) - int(ABYSS), 2));
+  const int palette = std::max(0, std::min(normalize(mode) - int(ABYSS), 3));
   return palettes[palette][std::max(0, std::min(index, 2))];
 }
 
