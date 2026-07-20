@@ -2,6 +2,9 @@
 
 All notable changes to this project are documented in this file.
 
+## [v2.6.2]
+- Adding Deepcache to plugin
+
 ## [v2.5.4]
 - Fix visual glitch for high DPI displays
 - Fix browser preview for Temporal Deck to show arc lights widget
@@ -14,8 +17,6 @@ All notable changes to this project are documented in this file.
 - Resolve trigger issue in Integral Flux and Proc allowing trigger restarts in rising edge
 - Fix save sample from Temporal Deck being at totally the wrong level
 - New module Undertow
-
-## [v2.5.0]
 - New module TD.Scope
 
 ## [v2.3.12]
