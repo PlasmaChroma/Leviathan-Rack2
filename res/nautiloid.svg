@@ -41,7 +41,7 @@
        xlink:href="#linearGradient22"
        id="linearGradient74"
        gradientUnits="userSpaceOnUse"
-       gradientTransform="matrix(100,0,0,100,-162.33504,-50.762739)"
+       gradientTransform="matrix(100,0,0,100,-162.33504,65.228557)"
        x1="41.355316"
        y1="125.28868"
        x2="63.491417"
@@ -89,17 +89,17 @@
        id="inputs"
        style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1" />
     <rect
-       x="2024.2794"
-       y="10837.734"
-       width="6324.1567"
-       height="1224.4751"
-       rx="162.28107"
-       ry="182.12364"
+       x="2025.1"
+       y="10838.555"
+       width="6322.5156"
+       height="1372.7999"
+       rx="162.23895"
+       ry="204.18486"
        fill="#000000"
        opacity="0.1"
        stroke="#ffffff"
        stroke-opacity="0.06"
-       stroke-width="27.9588"
+       stroke-width="29.6001"
        id="outputs"
        style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.5" />
   </g>
@@ -203,21 +203,21 @@
        r="160" />
     <ellipse
        id="ZOOM_RATE_INPUT"
-       cx="897.99994"
+       cx="948.02448"
        cy="9836"
        rx="398"
        ry="405"
        fill="#00ff00" />
     <ellipse
        id="X_VELOCITY_INPUT"
-       cx="2200"
+       cx="2250.0247"
        cy="9836"
        rx="398"
        ry="405"
        fill="#00ff00" />
     <ellipse
        id="Y_VELOCITY_INPUT"
-       cx="3500"
+       cx="3550.0247"
        cy="9836"
        rx="398"
        ry="405"
@@ -225,26 +225,26 @@
     <rect
        id="LOCATION_CODE_FIELD"
        x="2165"
-       y="11099.972"
+       y="11010"
        width="3600"
        height="700"
        fill="#ff0000" />
     <circle
        id="LOCATION_CODE_VALID_LIGHT"
        cx="6295"
-       cy="11449.972"
+       cy="11360"
        fill="#00ff00"
        r="160" />
     <circle
        id="COPY_LOCATION_BUTTON"
        cx="7025"
-       cy="11449.972"
+       cy="11360"
        fill="#ff0000"
        r="200" />
     <circle
        id="PASTE_LOCATION_BUTTON"
        cx="7795"
-       cy="11449.972"
+       cy="11360"
        fill="#ff0000"
        r="200" />
     <circle
@@ -281,18 +281,33 @@
   <g
      id="labels">
     <text
-       x="896.87115"
+       x="946.89569"
        y="10639.935"
        text-anchor="middle"
        font-family="DejaVu Sans, Arial, sans-serif"
        font-size="260"
        fill="#d9e5f7"
        id="zoom_lbl"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:middle;fill:#d9e5f7;font-variation-settings:'wght' 400"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7"><tspan
          sodipodi:role="line"
-         id="tspan6">ZOOM-V</tspan></text>
+         id="tspan6"
+         x="946.89569"
+         y="10639.935">ZOOM-V</tspan></text>
     <text
-       x="2201.27"
+       x="3960.061"
+       y="12066.577"
+       text-anchor="middle"
+       font-family="DejaVu Sans, Arial, sans-serif"
+       font-size="260"
+       fill="#d9e5f7"
+       id="lcode_lbl"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7"><tspan
+         sodipodi:role="line"
+         id="tspan3"
+         x="3960.061"
+         y="12066.577">LOC CODE</tspan></text>
+    <text
+       x="2251.2947"
        y="10639.935"
        text-anchor="middle"
        font-family="DejaVu Sans, Arial, sans-serif"
@@ -302,10 +317,10 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7"><tspan
          sodipodi:role="line"
          id="tspan7"
-         x="2201.27"
+         x="2251.2947"
          y="10639.935">X-V</tspan></text>
     <text
-       x="3500.4233"
+       x="3550.448"
        y="10639.935"
        text-anchor="middle"
        font-family="DejaVu Sans, Arial, sans-serif"
@@ -315,7 +330,7 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7"><tspan
          sodipodi:role="line"
          id="tspan8"
-         x="3500.4233"
+         x="3550.448"
          y="10639.935">Y-V</tspan></text>
     <text
        id="module_title"
@@ -343,12 +358,12 @@
        xml:space="preserve"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;writing-mode:lr-tb;direction:ltr;display:inline;fill:url(#linearGradient74);fill-rule:evenodd;stroke:none;stroke-width:75.0001;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
        x="3963.6721"
-       y="12616.534"
+       y="12732.525"
        id="Leviathan_Branding"><tspan
          sodipodi:role="line"
          id="tspan72"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;fill:url(#linearGradient74);stroke:none;stroke-width:75"
          x="3963.6721"
-         y="12616.534">Leviathan</tspan></text>
+         y="12732.525">Leviathan</tspan></text>
   </g>
 </svg>

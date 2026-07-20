@@ -13,6 +13,7 @@ namespace {
 constexpr float kNautiloidWidthMm = 101.6f;
 constexpr float kNautiloidHeightMm = 128.5f;
 constexpr float kNautiloidMaxFractalZoom = nautiloid_location::kMaxZoom;
+constexpr float kNautiloidWheelZoomStep = 0.015f;
 
 #define NAUTILOID_GLSL_STRINGIFY_DETAIL(x) #x
 #define NAUTILOID_GLSL_STRINGIFY(x) NAUTILOID_GLSL_STRINGIFY_DETAIL(x)
@@ -520,7 +521,7 @@ struct NautiloidDisplay final : OpaqueWidget {
 
     Nautiloid::FractalState state = module->fractalStateSnapshot();
     const float previousZoom = clamp(state.zoom, 0.f, kNautiloidMaxFractalZoom);
-    const float nextZoom = clamp(previousZoom + clamp(wheel, -4.f, 4.f) * 0.02f,
+    const float nextZoom = clamp(previousZoom + clamp(wheel, -4.f, 4.f) * kNautiloidWheelZoomStep,
       0.f, kNautiloidMaxFractalZoom);
     if (std::fabs(nextZoom - previousZoom) < 1e-5f) {
       return true;
@@ -1420,6 +1421,42 @@ struct NautiloidLocationCodeDisplay final : Widget {
   }
 };
 
+struct NautiloidClipboardButton final : LeviathanIconButton {
+  std::string tooltipText;
+  ui::Tooltip* tooltip = nullptr;
+
+  ~NautiloidClipboardButton() override {
+    destroyTooltip();
+  }
+
+  void createTooltip() {
+    if (!settings::tooltips || tooltip || !APP || !APP->scene)
+      return;
+    tooltip = new ui::Tooltip();
+    tooltip->text = tooltipText;
+    APP->scene->addChild(tooltip);
+  }
+
+  void destroyTooltip() {
+    if (!tooltip)
+      return;
+    if (APP && APP->scene)
+      APP->scene->removeChild(tooltip);
+    delete tooltip;
+    tooltip = nullptr;
+  }
+
+  void onEnter(const event::Enter& e) override {
+    LeviathanIconButton::onEnter(e);
+    createTooltip();
+  }
+
+  void onLeave(const event::Leave& e) override {
+    LeviathanIconButton::onLeave(e);
+    destroyTooltip();
+  }
+};
+
 struct NautiloidLocationValidLight final : SmallAperture<GreenApertureLight> {
   void step() override {
     if (module) {
@@ -1530,7 +1567,8 @@ struct NautiloidWidget final : ModuleWidget {
     addChild(createLightCentered<NautiloidLocationValidLight>(
       mm2px(pointMm("LOCATION_CODE_VALID_LIGHT", Vec(69.3f, 112.5f))),
       module, Nautiloid::LOCATION_CODE_VALID_LIGHT));
-    auto* copyLocationButton = new LeviathanIconButton();
+    auto* copyLocationButton = new NautiloidClipboardButton();
+    copyLocationButton->tooltipText = "Copy location code";
     copyLocationButton->iconSvg = visual_assets::loadPluginSvgCached("res/icon/nautiloid-copy.svg");
     copyLocationButton->iconScale = 0.52f;
     copyLocationButton->box.pos = mm2px(
@@ -1546,7 +1584,8 @@ struct NautiloidWidget final : ModuleWidget {
       };
     }
     addChild(copyLocationButton);
-    auto* pasteLocationButton = new LeviathanIconButton();
+    auto* pasteLocationButton = new NautiloidClipboardButton();
+    pasteLocationButton->tooltipText = "Paste location code";
     pasteLocationButton->iconSvg = visual_assets::loadPluginSvgCached("res/icon/nautiloid-paste.svg");
     pasteLocationButton->iconScale = 0.52f;
     pasteLocationButton->box.pos = mm2px(
