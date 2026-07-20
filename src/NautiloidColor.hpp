@@ -13,6 +13,7 @@ enum Mode {
   EMBER,
   AMETHYST,
   EMERALD,
+  INVERTED,
   MODES_LEN
 };
 
@@ -32,6 +33,7 @@ inline const char* name(int mode) {
     case EMBER: return "Ember";
     case AMETHYST: return "Amethyst";
     case EMERALD: return "Emerald";
+    case INVERTED: return "Inverted";
     case PRISM:
     default: return "Prism";
   }
@@ -55,6 +57,15 @@ inline void applyPixel(int mode, uint8_t r, uint8_t g, uint8_t b,
     *outR = r;
     *outG = g;
     *outB = b;
+    return;
+  }
+  if (mode == INVERTED) {
+    // Preserve Prism's near-black set interior while reversing the escaped
+    // exterior colors. Without this exception the fractal's bulb turns white.
+    const bool setInterior = r == 7u && g == 4u && b == 18u;
+    *outR = setInterior ? r : uint8_t(255u - r);
+    *outG = setInterior ? g : uint8_t(255u - g);
+    *outB = setInterior ? b : uint8_t(255u - b);
     return;
   }
   // The canonical palette's maximum channel is its HSV value component. This

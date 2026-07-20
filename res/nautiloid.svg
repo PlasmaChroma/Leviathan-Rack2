@@ -57,13 +57,13 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="1.710733"
-     inkscape:cx="56.116296"
-     inkscape:cy="407.71997"
-     inkscape:window-width="1862"
-     inkscape:window-height="1016"
-     inkscape:window-x="58"
-     inkscape:window-y="27"
+     inkscape:zoom="3.421466"
+     inkscape:cx="248.86993"
+     inkscape:cy="373.81637"
+     inkscape:window-width="1920"
+     inkscape:window-height="1043"
+     inkscape:window-x="3840"
+     inkscape:window-y="0"
      inkscape:window-maximized="1"
      inkscape:current-layer="svg8"
      showgrid="false" />
@@ -228,6 +228,13 @@
        cy="9836"
        fill="#ff0000"
        r="200" />
+    <rect
+       id="POSITION_READOUT"
+       x="5660"
+       y="9480"
+       width="4000"
+       height="945"
+       fill="#ff0000" />
     <rect
        id="LOCATION_CODE_FIELD"
        x="2058.6421"

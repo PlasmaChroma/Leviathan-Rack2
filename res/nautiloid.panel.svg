@@ -37,6 +37,7 @@
     <ellipse id="X_VELOCITY_INPUT" cx="2250.0247" cy="9836" rx="398" ry="405" fill="#00ff00" />
     <ellipse id="Y_VELOCITY_INPUT" cx="3550.0247" cy="9836" rx="398" ry="405" fill="#00ff00" />
     <circle id="COLOR_MODE_BUTTON" cx="4850" cy="9836" fill="#ff0000" r="200" />
+    <rect id="POSITION_READOUT" x="5660" y="9480" width="4000" height="945" fill="#ff0000" />
     <rect id="LOCATION_CODE_FIELD" x="2058.6421" y="11010" width="3600" height="700" fill="#ff0000" />
     <circle id="LOCATION_CODE_VALID_LIGHT" cx="6188.6421" cy="11360" fill="#00ff00" r="160" />
     <circle id="COPY_LOCATION_BUTTON" cx="6918.6421" cy="11360" fill="#ff0000" r="200" />

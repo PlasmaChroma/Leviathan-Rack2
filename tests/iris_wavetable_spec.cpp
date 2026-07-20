@@ -410,6 +410,28 @@ int main() {
         prismBuilt && prismNautiloidSource.rgb8 != nautiloidSource.rgb8);
   check("Nautiloid color mode changes the resulting wavetable",
         prismBuilt && prismNautiloidTable.samples != nautiloidTable.samples);
+  iris::NautiloidFractalSourceParams invertedParams = prismParams;
+  invertedParams.colorMode = nautiloid_color::INVERTED;
+  iris::SourceField invertedNautiloidSource;
+  const bool invertedBuilt =
+    iris::makeNautiloidIrisSource(invertedParams, &invertedNautiloidSource, &ioError);
+  bool invertedMatchesPrism = invertedBuilt && prismBuilt &&
+    invertedNautiloidSource.rgb8.size() == prismNautiloidSource.rgb8.size();
+  for (size_t i = 0; invertedMatchesPrism && i + 2u < invertedNautiloidSource.rgb8.size(); i += 3u) {
+    const bool setInterior =
+      prismNautiloidSource.rgb8[i] == 7u &&
+      prismNautiloidSource.rgb8[i + 1u] == 4u &&
+      prismNautiloidSource.rgb8[i + 2u] == 18u;
+    for (size_t channel = 0; channel < 3u; ++channel) {
+      const uint8_t expected = setInterior
+        ? prismNautiloidSource.rgb8[i + channel]
+        : uint8_t(255u - prismNautiloidSource.rgb8[i + channel]);
+      invertedMatchesPrism = invertedMatchesPrism &&
+        invertedNautiloidSource.rgb8[i + channel] == expected;
+    }
+  }
+  check("Nautiloid Inverted mode reverses Prism while preserving its dark interior",
+        invertedMatchesPrism);
 
   iris::SourceField multibrotSource;
   iris::SourceField multijuliaSource;

@@ -219,6 +219,13 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
         if (uColorMode == 0) {
           return rgb;
         }
+        if (uColorMode == 5) {
+          vec3 setInterior = vec3(7.0, 4.0, 18.0) / 255.0;
+          if (distance(rgb, setInterior) < 0.001) {
+            return rgb;
+          }
+          return vec3(1.0) - rgb;
+        }
         float value = max(rgb.r, max(rgb.g, rgb.b));
         vec3 low;
         vec3 middle;
@@ -1436,7 +1443,7 @@ struct NautiloidZoomReadout final : TransparentWidget {
   void draw(const DrawArgs& args) override {
     if (!module) return;
     const float pct = 100.f * clamp(module->fractalZoom / kNautiloidMaxFractalZoom, 0.f, 1.f);
-    const std::string text = string::f("Zoom: %.2f%%", pct);
+    const std::string text = string::f("Zoom: %.3f%%", pct);
 
     nvgFontSize(args.vg, LABEL_FONT_SIZE);
     nvgFontFaceId(args.vg, APP->window->uiFont->handle);
@@ -1444,6 +1451,34 @@ struct NautiloidZoomReadout final : TransparentWidget {
     nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
     nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
     nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y, text.c_str(), nullptr);
+  }
+};
+
+struct NautiloidPositionReadout final : TransparentWidget {
+  static constexpr float LABEL_FONT_SIZE = 10.5f;
+  static constexpr double MAX_CENTER = 2.0;
+  Nautiloid* module = nullptr;
+
+  explicit NautiloidPositionReadout(Nautiloid* module) : module(module) {}
+
+  void draw(const DrawArgs& args) override {
+    if (!module) return;
+    float xPct = 100.f * clamp(float(double(module->fractalCenterX) / MAX_CENTER), -1.f, 1.f);
+    float yPct = 100.f * clamp(float(double(module->fractalCenterY) / MAX_CENTER), -1.f, 1.f);
+    if (std::abs(xPct) < 0.0005f)
+      xPct = 0.f;
+    if (std::abs(yPct) < 0.0005f)
+      yPct = 0.f;
+    const std::string xText = string::f("X: %.3f%%", xPct);
+    const std::string yText = string::f("Y: %.3f%%", yPct);
+
+    nvgFontSize(args.vg, LABEL_FONT_SIZE);
+    nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+    nvgTextLetterSpacing(args.vg, 0.f);
+    nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+    nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+    nvgText(args.vg, 1.f, 0.25f * box.size.y, xText.c_str(), nullptr);
+    nvgText(args.vg, 1.f, 0.75f * box.size.y, yText.c_str(), nullptr);
   }
 };
 
@@ -1596,7 +1631,12 @@ struct NautiloidColorModeButton final : LeviathanIconButton {
     const float centerY = 0.5f * box.size.y;
     for (int i = 0; i < 3; ++i) {
       NVGcolor color;
-      if (mode == Nautiloid::COLOR_PRISM) {
+      if (mode == Nautiloid::COLOR_INVERTED) {
+        static const NVGcolor invertedPrism[3] = {
+          nvgRGB(167, 190, 64), nvgRGB(227, 51, 38), nvgRGB(23, 173, 53)
+        };
+        color = invertedPrism[i];
+      } else if (mode == Nautiloid::COLOR_PRISM) {
         static const NVGcolor prism[3] = {
           nvgRGB(88, 65, 191), nvgRGB(28, 204, 217), nvgRGB(232, 82, 202)
         };
@@ -1728,6 +1768,12 @@ struct NautiloidWidget final : ModuleWidget {
       };
     }
     addChild(colorModeButton);
+    auto* positionReadout = new NautiloidPositionReadout(module);
+    const math::Rect positionReadoutRectMm = rectMm(
+      "POSITION_READOUT", math::Rect(Vec(56.f, 93.4f), Vec(40.f, 9.45f)));
+    positionReadout->box.pos = mm2px(positionReadoutRectMm.pos);
+    positionReadout->box.size = mm2px(positionReadoutRectMm.size);
+    addChild(positionReadout);
     NautiloidLocationCodeDisplay* locationCodeDisplay = new NautiloidLocationCodeDisplay();
     locationCodeDisplay->module = module;
     const math::Rect locationCodeRectMm = rectMm(
