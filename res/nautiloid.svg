@@ -57,9 +57,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="2.4193418"
-     inkscape:cx="128.9607"
-     inkscape:cy="347.82187"
+     inkscape:zoom="3.421466"
+     inkscape:cx="170.10252"
+     inkscape:cy="386.23795"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -88,6 +88,20 @@
        stroke-width="47.514"
        id="inputs"
        style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1" />
+    <rect
+       x="2024.2794"
+       y="10837.734"
+       width="6324.1567"
+       height="1224.4751"
+       rx="162.28107"
+       ry="182.12364"
+       fill="#000000"
+       opacity="0.1"
+       stroke="#ffffff"
+       stroke-opacity="0.06"
+       stroke-width="27.9588"
+       id="outputs"
+       style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.5" />
   </g>
   <g
      id="waves_layer"
@@ -211,26 +225,26 @@
     <rect
        id="LOCATION_CODE_FIELD"
        x="2165"
-       y="10900"
+       y="11099.972"
        width="3600"
        height="700"
        fill="#ff0000" />
     <circle
        id="LOCATION_CODE_VALID_LIGHT"
        cx="6295"
-       cy="11250"
+       cy="11449.972"
        fill="#00ff00"
        r="160" />
     <circle
        id="COPY_LOCATION_BUTTON"
        cx="7025"
-       cy="11250"
+       cy="11449.972"
        fill="#ff0000"
        r="200" />
     <circle
        id="PASTE_LOCATION_BUTTON"
        cx="7795"
-       cy="11250"
+       cy="11449.972"
        fill="#ff0000"
        r="200" />
     <circle

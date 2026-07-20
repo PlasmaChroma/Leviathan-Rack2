@@ -11,6 +11,7 @@
   <rect width="10160" height="12850" fill="#07090d" id="panel_black" />
   <g id="glass">
     <rect x="272.957" y="8243.4932" width="9614.0859" height="2555.0833" rx="128.87534" ry="128.18788" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="47.514" id="inputs" style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1" />
+    <rect x="2024.2794" y="10837.734" width="6324.1567" height="1224.4751" rx="162.28107" ry="182.12364" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="27.9588" id="outputs" style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.5" />
   </g>
   <g id="waves_layer" style="display:inline;opacity:0.5" transform="translate(0.00337775,142.46186)">
     <g id="branding_wave_left" transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)" style="display:inline">
@@ -35,10 +36,10 @@
     <ellipse id="ZOOM_RATE_INPUT" cx="897.99994" cy="9836" rx="398" ry="405" fill="#00ff00" />
     <ellipse id="X_VELOCITY_INPUT" cx="2200" cy="9836" rx="398" ry="405" fill="#00ff00" />
     <ellipse id="Y_VELOCITY_INPUT" cx="3500" cy="9836" rx="398" ry="405" fill="#00ff00" />
-    <rect id="LOCATION_CODE_FIELD" x="2165" y="10900" width="3600" height="700" fill="#ff0000" />
-    <circle id="LOCATION_CODE_VALID_LIGHT" cx="6295" cy="11250" fill="#00ff00" r="160" />
-    <circle id="COPY_LOCATION_BUTTON" cx="7025" cy="11250" fill="#ff0000" r="200" />
-    <circle id="PASTE_LOCATION_BUTTON" cx="7795" cy="11250" fill="#ff0000" r="200" />
+    <rect id="LOCATION_CODE_FIELD" x="2165" y="11099.972" width="3600" height="700" fill="#ff0000" />
+    <circle id="LOCATION_CODE_VALID_LIGHT" cx="6295" cy="11449.972" fill="#00ff00" r="160" />
+    <circle id="COPY_LOCATION_BUTTON" cx="7025" cy="11449.972" fill="#ff0000" r="200" />
+    <circle id="PASTE_LOCATION_BUTTON" cx="7795" cy="11449.972" fill="#ff0000" r="200" />
     <circle id="IRIS_EXPANDER_LIGHT" cx="9840" cy="580" fill="#ff0000" r="180" />
     <rect id="TILE_CACHE" x="200" y="10200" width="4200" height="2590" fill="#ff0000" style="display:none" />
     <rect id="IRIS_PREVIEW" x="4740" y="10200" width="5236" height="2590" fill="#ff0000" style="display:none" />
