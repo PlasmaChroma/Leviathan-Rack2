@@ -2142,18 +2142,11 @@ float clockworkParamValue(GearKnobInvertSized* knob) {
 static constexpr bool kClockworkLiquidShimmerEnabled = true;
 static constexpr double kClockworkLiquidShimmerDurationSec = 0.70;
 
-struct MovingSliderTeethRail : widget::Widget {
+struct MovingSliderRail : widget::Widget {
 	app::SvgSlider* slider = nullptr;
 	std::shared_ptr<window::Svg> railSvg;
 	float drawWidthPx = 0.f;
 	float drawHeightPx = 0.f;
-	bool clipOpposingQuadrants = false;
-	float centerTrackLeftPx = 0.f;
-	float centerTrackRightPx = 0.f;
-	float upperProtrusionTopPx = 0.f;
-	float upperProtrusionBottomPx = 0.f;
-	float lowerProtrusionTopPx = 0.f;
-	float lowerProtrusionBottomPx = 0.f;
 
 	void draw(const DrawArgs& args) override {
 		if (!slider || !slider->handle || !railSvg || !railSvg->handle ||
@@ -2171,7 +2164,7 @@ struct MovingSliderTeethRail : widget::Widget {
 
 		// NanoVG translation is in screen pixels here. Center the artwork when
 		// the handle is centered, then apply the handle's exact vertical pixel
-		// displacement so the teeth and handle travel together at a 1:1 rate.
+		// displacement so the rail artwork and handle travel together at a 1:1 rate.
 		const float handleCenterY = 0.5f * (topHandleY + bottomHandleY);
 		const float handleOffsetY = slider->handle->box.pos.y - handleCenterY;
 		const float svgScaleX = drawWidthPx / svgSize.x;
@@ -2179,53 +2172,12 @@ struct MovingSliderTeethRail : widget::Widget {
 		const float railY = 0.5f * (box.size.y - drawHeightPx) + handleOffsetY;
 		const float railX = 0.5f * (box.size.x - drawWidthPx);
 
-		auto drawRail = [&](float clipX, float clipY, float clipWidth, float clipHeight) {
-			if (clipWidth <= 0.f || clipHeight <= 0.f) {
-				return;
-			}
-			nvgSave(args.vg);
-			nvgIntersectScissor(args.vg, clipX, clipY, clipWidth, clipHeight);
-			nvgTranslate(args.vg, railX, railY);
-			nvgScale(args.vg, svgScaleX, svgScaleY);
-			railSvg->draw(args.vg);
-			nvgRestore(args.vg);
-		};
-
-		if (clipOpposingQuadrants &&
-				centerTrackLeftPx > 0.f &&
-				centerTrackRightPx > centerTrackLeftPx &&
-				centerTrackRightPx < box.size.x &&
-				upperProtrusionTopPx >= 0.f &&
-				upperProtrusionBottomPx > upperProtrusionTopPx &&
-				lowerProtrusionTopPx > upperProtrusionBottomPx &&
-				lowerProtrusionBottomPx > lowerProtrusionTopPx &&
-				lowerProtrusionBottomPx <= box.size.y) {
-			// Draw the central housing once at full height. Splitting it into
-			// two scissored passes creates a visible horizontal raster seam.
-			drawRail(
-				centerTrackLeftPx,
-				0.f,
-				centerTrackRightPx - centerTrackLeftPx,
-				box.size.y
-			);
-			// Keep only the upper-right protrusions.
-			drawRail(
-				centerTrackRightPx,
-				upperProtrusionTopPx,
-				box.size.x - centerTrackRightPx,
-				upperProtrusionBottomPx - upperProtrusionTopPx
-			);
-			// Keep only the lower-left protrusions.
-			drawRail(
-				0.f,
-				lowerProtrusionTopPx,
-				centerTrackLeftPx,
-				lowerProtrusionBottomPx - lowerProtrusionTopPx
-			);
-		}
-		else {
-			drawRail(0.f, 0.f, box.size.x, box.size.y);
-		}
+		nvgSave(args.vg);
+		nvgIntersectScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		nvgTranslate(args.vg, railX, railY);
+		nvgScale(args.vg, svgScaleX, svgScaleY);
+		railSvg->draw(args.vg);
+		nvgRestore(args.vg);
 	}
 };
 
@@ -2634,7 +2586,7 @@ LeviathanSlider::LeviathanSlider() {
 		);
 	}
 	if (fb && handle) {
-		auto* teethRail = new MovingSliderTeethRail;
+		auto* teethRail = new MovingSliderRail;
 		teethRail->slider = this;
 		teethRail->railSvg = visual_assets::loadPluginSvgCached("res/icon/dual_teeth_rounded_dark.svg");
 		teethRail->box.pos = Vec(
@@ -2714,12 +2666,6 @@ LuminSlider::LuminSlider() {
 	constexpr float railDrawHeightPx = 190.f;
 	constexpr float railDrawWidthPx = railDrawHeightPx * railViewBoxWidth / railViewBoxHeight;
 	constexpr float railVisibleWidthPx = railDrawWidthPx;
-	constexpr float fixedHousingLeftPx = 8.3191932f;
-	constexpr float fixedHousingRightPx = 16.2477368f;
-	constexpr float upperStaticTickOuterYPx = 12.826168f;
-	constexpr float upperStaticTickInnerYPx = 45.099671f;
-	constexpr float lowerStaticTickInnerYPx = 53.168049f;
-	constexpr float lowerStaticTickOuterYPx = 85.441552f;
 
 	setBackgroundSvg(visual_assets::loadPluginSvgCached("res/icon/LuminSliderTrack.svg"));
 	setHandleSvg(visual_assets::loadPluginSvgCached("res/icon/LuminSliderHandle.svg"));
@@ -2754,30 +2700,17 @@ LuminSlider::LuminSlider() {
 		fb->addChildBottom(fixedBackgroundFb);
 	}
 	if (fb && handle) {
-		auto* teethRail = new MovingSliderTeethRail;
-		teethRail->slider = this;
-		teethRail->railSvg = visual_assets::loadPluginSvgCached("res/icon/dual_field_contact_track.svg");
-		teethRail->box.pos = Vec(
+		auto* movingRail = new MovingSliderRail;
+		movingRail->slider = this;
+		movingRail->railSvg = visual_assets::loadPluginSvgCached("res/icon/dual_field_contact_track.svg");
+		movingRail->box.pos = Vec(
 			0.5f * (anchorWidthPx - railVisibleWidthPx),
 			0.5f * (anchorHeightPx - trackHeightPx) + railClipYInTrackPx
 		);
-		teethRail->box.size = Vec(railVisibleWidthPx, railClipHeightPx);
-		teethRail->drawWidthPx = railDrawWidthPx;
-		teethRail->drawHeightPx = railDrawHeightPx;
-		teethRail->clipOpposingQuadrants = true;
-		teethRail->centerTrackLeftPx =
-			fixedHousingLeftPx - teethRail->box.pos.x;
-		teethRail->centerTrackRightPx =
-			fixedHousingRightPx - teethRail->box.pos.x;
-		teethRail->upperProtrusionTopPx =
-			upperStaticTickOuterYPx - teethRail->box.pos.y;
-		teethRail->upperProtrusionBottomPx =
-			upperStaticTickInnerYPx - teethRail->box.pos.y;
-		teethRail->lowerProtrusionTopPx =
-			lowerStaticTickInnerYPx - teethRail->box.pos.y;
-		teethRail->lowerProtrusionBottomPx =
-			lowerStaticTickOuterYPx - teethRail->box.pos.y;
-		fb->addChildBelow(teethRail, handle);
+		movingRail->box.size = Vec(railVisibleWidthPx, railClipHeightPx);
+		movingRail->drawWidthPx = railDrawWidthPx;
+		movingRail->drawHeightPx = railDrawHeightPx;
+		fb->addChildBelow(movingRail, handle);
 	}
 	setHandlePosCentered(
 		math::Vec(anchorWidthPx * 0.5f, anchorHeightPx - handleTravelInsetPx),
