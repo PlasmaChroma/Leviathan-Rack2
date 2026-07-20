@@ -62,6 +62,8 @@ Vec nautiloidFractalViewportHalfSpan(int mode) {
       return Vec(1.58f, 0.72f);
     case iris::FRACTAL_PHOENIX_JULIA:
       return Vec(1.62f, 0.74f);
+    case iris::FRACTAL_MANOWAR:
+      return Vec(1.65f, 0.95f);
     case iris::FRACTAL_BURNING_SHIP:
       return Vec(0.42f, 0.145f);
     case iris::FRACTAL_CELTIC:
@@ -781,6 +783,7 @@ json_t* Nautiloid::dataToJson() {
   json_object_set_new(root, "fractalZoom", json_real(state.zoom));
   json_object_set_new(root, "fractalCenterX", json_real(state.centerX));
   json_object_set_new(root, "fractalCenterY", json_real(state.centerY));
+  json_object_set_new(root, "fractalColorMode", json_integer(fractalColorMode));
   json_object_set_new(root, "debugFileLoggingEnabled",
                       json_boolean(debugFileLoggingEnabled.load(std::memory_order_relaxed)));
   json_object_set_new(root, "debugGpuPreviewEnabled",
@@ -797,6 +800,8 @@ void Nautiloid::dataFromJson(json_t* root) {
   state.centerX = jsonRealOr(root, "fractalCenterX", 0.0);
   state.centerY = jsonRealOr(root, "fractalCenterY", 0.0);
   setFractalState(state);
+  fractalColorMode = nautiloid_color::normalize(
+    jsonIntegerOr(root, "fractalColorMode", COLOR_PRISM));
   debugFileLoggingEnabled.store(
     jsonBoolOr(root, "debugFileLoggingEnabled", false), std::memory_order_relaxed);
   debugGpuPreviewEnabled.store(
@@ -815,6 +820,15 @@ void Nautiloid::requestFractal(int mode) {
     state.centerY = 0.0;
     setFractalState(state);
   }
+  requestRender();
+}
+
+void Nautiloid::setFractalColorMode(int mode) {
+  const int normalized = nautiloid_color::normalize(mode);
+  if (normalized == int(fractalColorMode)) return;
+  fractalColorMode = normalized;
+  // Reuse the canonical display cache, but publish a newly colored Iris source
+  // under a new generation so an attached Iris rebuilds its wavetable.
   requestRender();
 }
 
@@ -1061,6 +1075,7 @@ void Nautiloid::submitIrisRequest(const WorkerRequest& request) {
   {
     std::lock_guard<std::mutex> lock(irisRequestMutex);
     irisRequest = request;
+    irisRequest.colorMode = nautiloid_color::normalize(fractalColorMode);
     irisRequestPending = true;
   }
   irisRequestCv.notify_one();
@@ -1803,7 +1818,8 @@ void Nautiloid::irisWorkerLoop() {
         irisCompatibleMode == request.mode &&
         std::fabs(irisCompatibleZoom - request.zoom) <= 1e-5f &&
         std::fabs(irisCompatibleCenterX - request.centerX) <= 1e-12 &&
-        std::fabs(irisCompatibleCenterY - request.centerY) <= 1e-12;
+        std::fabs(irisCompatibleCenterY - request.centerY) <= 1e-12 &&
+        irisCompatibleColorMode == request.colorMode;
     }
     if (irisCompatibleCurrent) {
       if (irisExpanderSourceSlotSnapshot(nullptr)) {
@@ -1869,12 +1885,38 @@ void Nautiloid::irisWorkerLoop() {
     sourceParams.zoom = request.zoom;
     sourceParams.centerX = request.centerX;
     sourceParams.centerY = request.centerY;
+    sourceParams.colorMode = request.colorMode;
     sourceParams.generation = request.serial;
-    const bool irisOk = iris::makeNautiloidIrisSource(sourceParams, &slot.source, &irisError);
+    bool canonicalCurrent = false;
+    {
+      std::lock_guard<std::mutex> lock(snapshotMutex);
+      canonicalCurrent =
+        irisCanonicalSource.valid() &&
+        irisCanonicalSource.generatorFractalMode == request.mode &&
+        std::fabs(irisCanonicalSource.generatorFractalZoom - request.zoom) <= 1e-5f &&
+        std::fabs(irisCanonicalSource.generatorFractalCenterX - request.centerX) <= 1e-12 &&
+        std::fabs(irisCanonicalSource.generatorFractalCenterY - request.centerY) <= 1e-12;
+      if (canonicalCurrent) {
+        slot.source = irisCanonicalSource;
+      }
+    }
+    bool irisOk = canonicalCurrent;
+    if (!canonicalCurrent) {
+      iris::NautiloidFractalSourceParams canonicalParams = sourceParams;
+      canonicalParams.colorMode = nautiloid_color::PRISM;
+      irisOk = iris::makeNautiloidIrisSource(
+        canonicalParams, &slot.source, &irisError);
+      if (irisOk) {
+        std::lock_guard<std::mutex> lock(snapshotMutex);
+        irisCanonicalSource = slot.source;
+      }
+    }
     if (!irisOk) {
       nautiloid_iris_expander::releaseSourceSlotWrite(&slot);
       continue;
     }
+    nautiloid_color::applyRgb8(request.colorMode, &slot.source.rgb8);
+    iris::applyNautiloidFractalParams(&slot.source, sourceParams);
 
     if (stopRequested.load(std::memory_order_acquire)) {
       nautiloid_iris_expander::releaseSourceSlotWrite(&slot);
@@ -1889,6 +1931,7 @@ void Nautiloid::irisWorkerLoop() {
     irisCompatibleZoom = request.zoom;
     irisCompatibleCenterX = request.centerX;
     irisCompatibleCenterY = request.centerY;
+    irisCompatibleColorMode = request.colorMode;
     irisExpanderWriteSlot = slotIndex;
     nautiloid_iris_expander::releaseSourceSlotWrite(&slot);
     irisExpanderPublishedSlot.store(slotIndex, std::memory_order_release);

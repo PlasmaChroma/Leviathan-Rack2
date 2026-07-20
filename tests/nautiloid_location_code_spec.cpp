@@ -98,7 +98,7 @@ void testRoundTrips() {
     random ^= random >> 27u;
     return random * 2685821657736338717ull;
   };
-  const int modes[] = {1, 2, 3, 4, 5, 7, 8, 10, 11, 12, 13};
+  const int modes[] = {1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13};
   bool all = true;
   for (int i = 0; i < 5000; ++i) {
     nautiloid_location::State state;
@@ -136,7 +136,7 @@ void testMalformedInput() {
   check("all-zero payload rejected", !nautiloid_location::isValid(encodePayload(payload)));
   payload[0] = uint8_t(2u << 4u) | uint8_t(iris::FRACTAL_MANDELBROT);
   check("unsupported version rejected", !nautiloid_location::isValid(encodePayload(payload)));
-  payload[0] = uint8_t(1u << 4u) | 6u;
+  payload[0] = uint8_t(1u << 4u) | 15u;
   check("invalid fractal mode rejected", !nautiloid_location::isValid(encodePayload(payload)));
 }
 
@@ -162,7 +162,7 @@ void testCanonicalization() {
 }
 
 void testIrisPixelEquivalence() {
-  const int modes[] = {1, 2, 3, 4, 5, 7, 8, 10, 11, 12, 13};
+  const int modes[] = {1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13};
   bool all = true;
   for (int mode : modes) {
     nautiloid_location::State requested {mode, 1.375f, -0.3125, 0.21875};

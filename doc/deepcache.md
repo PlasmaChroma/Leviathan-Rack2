@@ -1201,6 +1201,14 @@ never mutate the shared database. RGBA is retained only while encoding/upload is
 pending or when the archive worker cannot accept either persistent or volatile
 work.
 
+Persistent GPU residency is limited to models Rack can display at all. Models
+that are hidden, disabled, or not whitelisted retain their QOI database entries
+but do not retain NanoVG images. Deepcache periodically reconciles this
+eligibility independently of search, brand, tag, and favorite filters. A model
+that becomes eligible is decoded from the hot QOI pack and uploaded; one that
+becomes unavailable releases its context-owned image on the UI thread. The cyan
+GPU-warm progress target includes only display-eligible plugin builds.
+
 Plugin fingerprints include the plugin identity, Rack panel-theme preference,
 plugin directory timestamp, and binary/manifest size plus file modification time.
 Changing the panel theme during a session is detected even while the browser is

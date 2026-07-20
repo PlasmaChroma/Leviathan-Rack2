@@ -287,6 +287,21 @@ TestResult testBrowserFilterParity() {
 	        "combined=" + std::to_string(combined) + " tagAlias=" + std::to_string(tagAliasSearch)};
 }
 
+TestResult testDisplayEligibilityIsFilterIndependent() {
+	auto records = browserRecords();
+	const bool normal = deepcache::browserModelIsDisplayEligible(records[0]);
+	const bool hidden = !deepcache::browserModelIsDisplayEligible(records[3]);
+	records[0].enabled = false;
+	const bool disabled = !deepcache::browserModelIsDisplayEligible(records[0]);
+	records[0].enabled = true;
+	records[0].whitelisted = false;
+	const bool blocked = !deepcache::browserModelIsDisplayEligible(records[0]);
+	return {"GPU eligibility uses only hidden, enabled, and whitelist state",
+	        normal && hidden && disabled && blocked,
+	        "normal=" + std::to_string(normal) + " hidden=" + std::to_string(hidden) +
+	          " disabled=" + std::to_string(disabled) + " blocked=" + std::to_string(blocked)};
+}
+
 TestResult testBrowserSortParity() {
 	const auto records = browserRecords();
 	const auto updated = deepcache::sortBrowserModelIndices(records, deepcache::BrowserSortMode::UPDATED, "");
@@ -318,6 +333,7 @@ int main() {
 		testMemoryBackendLifecycle(),
 		testWorkerPauseAndReplacement(),
 		testBrowserFilterParity(),
+		testDisplayEligibilityIsFilterIndependent(),
 		testBrowserSortParity(),
 	};
 

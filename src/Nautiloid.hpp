@@ -2,6 +2,7 @@
 
 #include "plugin.hpp"
 #include "NautiloidFractal.hpp"
+#include "NautiloidColor.hpp"
 #include "NautiloidIrisExpander.hpp"
 #include "NautiloidLocationCode.hpp"
 
@@ -27,6 +28,14 @@ struct NautiloidAtomicValue {
 };
 
 struct Nautiloid final : Module {
+  enum FractalColorMode {
+    COLOR_PRISM = nautiloid_color::PRISM,
+    COLOR_ABYSS = nautiloid_color::ABYSS,
+    COLOR_EMBER = nautiloid_color::EMBER,
+    COLOR_AMETHYST = nautiloid_color::AMETHYST,
+    FRACTAL_COLOR_MODES_LEN = nautiloid_color::MODES_LEN
+  };
+
   enum ParamId {
     SOURCE_MENU_PARAM,
     RESET_VIEW_PARAM,
@@ -60,6 +69,7 @@ struct Nautiloid final : Module {
   void dataFromJson(json_t* root) override;
 
   void requestFractal(int mode);
+  void setFractalColorMode(int mode);
   void requestRender();
   void requestRenderWithCacheCenter(double cacheCenterX, double cacheCenterY, bool forceCacheRecenter = false);
   void requestRenderWithCenteredCache();
@@ -106,6 +116,9 @@ struct Nautiloid final : Module {
   NautiloidAtomicValue<int> fractalMode {iris::FRACTAL_MANDELBROT};
   NautiloidAtomicValue<float> fractalZoom {0.f};
   NautiloidAtomicValue<double> fractalCenterX {0.0};
+  // The geometry cache stays canonical, while display and Iris-bound copies
+  // receive this palette without rerunning fractal iteration.
+  NautiloidAtomicValue<int> fractalColorMode {COLOR_PRISM};
   NautiloidAtomicValue<double> fractalCenterY {0.0};
   std::atomic<uint64_t> previewGeneration {0u};
   std::atomic<uint64_t> irisPreviewGeneration {0u};
@@ -198,6 +211,7 @@ private:
     float zoom = 0.f;
     double centerX = 0.0;
     double centerY = 0.0;
+    int colorMode = COLOR_PRISM;
     double cacheCenterX = 0.0;
     double cacheCenterY = 0.0;
     bool forceCacheRecenter = false;
@@ -262,6 +276,9 @@ private:
   double authoritativeDisplayCenterX = 0.0;
   double authoritativeDisplayCenterY = 0.0;
   iris::SourceField irisCompatibleSource;
+  // Uncolored Iris-resolution source retained so palette changes do not rerun
+  // the fractal solver. This is separate from the currently published copy.
+  iris::SourceField irisCanonicalSource;
   std::array<nautiloid_iris_expander::SourceSlot, nautiloid_iris_expander::kSourceSlotCount> irisExpanderSlots;
   std::atomic<int> irisExpanderPublishedSlot {-1};
   int irisExpanderWriteSlot = 0;
@@ -270,6 +287,7 @@ private:
   float irisCompatibleZoom = -1.f;
   double irisCompatibleCenterX = 0.0;
   double irisCompatibleCenterY = 0.0;
+  int irisCompatibleColorMode = COLOR_PRISM;
   uint64_t lastExpanderGenerationSentLeft = 0u;
   uint64_t lastExpanderGenerationSentRight = 0u;
   bool rightIrisConnectionObserved = false;

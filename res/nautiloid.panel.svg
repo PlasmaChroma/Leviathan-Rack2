@@ -36,6 +36,7 @@
     <ellipse id="ZOOM_RATE_INPUT" cx="948.02448" cy="9836" rx="398" ry="405" fill="#00ff00" />
     <ellipse id="X_VELOCITY_INPUT" cx="2250.0247" cy="9836" rx="398" ry="405" fill="#00ff00" />
     <ellipse id="Y_VELOCITY_INPUT" cx="3550.0247" cy="9836" rx="398" ry="405" fill="#00ff00" />
+    <circle id="COLOR_MODE_BUTTON" cx="4850" cy="9836" fill="#ff0000" r="200" />
     <rect id="LOCATION_CODE_FIELD" x="2165" y="11010" width="3600" height="700" fill="#ff0000" />
     <circle id="LOCATION_CODE_VALID_LIGHT" cx="6295" cy="11360" fill="#00ff00" r="160" />
     <circle id="COPY_LOCATION_BUTTON" cx="7025" cy="11360" fill="#ff0000" r="200" />

@@ -54,6 +54,7 @@ struct BrowserFilter {
 void normalizeBrowserModelRecord(BrowserModelRecord& record);
 void normalizeBrowserFilter(BrowserFilter& filter);
 
+bool browserModelIsDisplayEligible(const BrowserModelRecord& record);
 bool browserModelMatches(const BrowserModelRecord& record, const BrowserFilter& filter);
 
 // FramebufferWidget multiplies its render transform by floor(windowPixelRatio).

@@ -33,6 +33,7 @@ struct SourceField {
   float generatorFractalZoom = 0.f;
   double generatorFractalCenterX = 0.0;
   double generatorFractalCenterY = 0.0;
+  int generatorFractalColorMode = 0;
   uint64_t generatorGeneration = 0u;
 
   bool valid() const {

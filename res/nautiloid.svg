@@ -222,6 +222,12 @@
        rx="398"
        ry="405"
        fill="#00ff00" />
+    <circle
+       id="COLOR_MODE_BUTTON"
+       cx="4850"
+       cy="9836"
+       fill="#ff0000"
+       r="200" />
     <rect
        id="LOCATION_CODE_FIELD"
        x="2165"

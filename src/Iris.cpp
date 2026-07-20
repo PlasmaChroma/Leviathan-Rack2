@@ -185,6 +185,7 @@ void Iris::requestReload() {
         iris::nautiloidFractalParamsFromSource(snapshotSourceField);
       request.type = REQUEST_NAUTILOID_FRACTAL_SOURCE;
       request.nautiloidFractalMode = params.mode;
+      request.nautiloidFractalColorMode = params.colorMode;
       request.nautiloidFractalZoom = params.zoom;
       request.nautiloidFractalCenterX = params.centerX;
       request.nautiloidFractalCenterY = params.centerY;
@@ -221,6 +222,7 @@ void Iris::requestRebuild() {
         iris::nautiloidFractalParamsFromSource(snapshotSourceField);
       request.type = REQUEST_NAUTILOID_FRACTAL_SOURCE;
       request.nautiloidFractalMode = params.mode;
+      request.nautiloidFractalColorMode = params.colorMode;
       request.nautiloidFractalZoom = params.zoom;
       request.nautiloidFractalCenterX = params.centerX;
       request.nautiloidFractalCenterY = params.centerY;
@@ -344,6 +346,7 @@ void Iris::workerLoop() {
       } else if (request.type == REQUEST_NAUTILOID_FRACTAL_SOURCE) {
         iris::NautiloidFractalSourceParams params;
         params.mode = request.nautiloidFractalMode;
+        params.colorMode = request.nautiloidFractalColorMode;
         params.zoom = request.nautiloidFractalZoom;
         params.centerX = request.nautiloidFractalCenterX;
         params.centerY = request.nautiloidFractalCenterY;
@@ -620,6 +623,7 @@ void Iris::onAdd(const AddEvent& e) {
         iris::nautiloidFractalParamsFromSource(snapshotSourceField);
       request.type = REQUEST_NAUTILOID_FRACTAL_SOURCE;
       request.nautiloidFractalMode = params.mode;
+      request.nautiloidFractalColorMode = params.colorMode;
       request.nautiloidFractalZoom = params.zoom;
       request.nautiloidFractalCenterX = params.centerX;
       request.nautiloidFractalCenterY = params.centerY;
@@ -709,6 +713,8 @@ json_t* Iris::dataToJson() {
                           json_real(snapshotSourceField.generatorFractalCenterX));
       json_object_set_new(root, "nautiloidFractalCenterY",
                           json_real(snapshotSourceField.generatorFractalCenterY));
+      json_object_set_new(root, "nautiloidFractalColorMode",
+                          json_integer(snapshotSourceField.generatorFractalColorMode));
       json_object_set_new(root, "nautiloidFractalGeneration",
                           json_integer(json_int_t(snapshotSourceField.generatorGeneration)));
     }
@@ -819,6 +825,8 @@ void Iris::dataFromJson(json_t* root) {
         clamp(jsonRealOr(root, "nautiloidFractalCenterX", 0.f), -2.f, 2.f);
       snapshotSourceField.generatorFractalCenterY =
         clamp(jsonRealOr(root, "nautiloidFractalCenterY", 0.f), -2.f, 2.f);
+      snapshotSourceField.generatorFractalColorMode = nautiloid_color::normalize(
+        jsonIntegerOr(root, "nautiloidFractalColorMode", nautiloid_color::PRISM));
       json_t* generationJ = json_object_get(root, "nautiloidFractalGeneration");
       if (generationJ && json_is_integer(generationJ)) {
         const json_int_t generation = json_integer_value(generationJ);

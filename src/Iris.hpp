@@ -3,6 +3,7 @@
 #include "DebugTerminalMetrics.hpp"
 #include "IrisIO.hpp"
 #include "NautiloidIrisExpander.hpp"
+#include "NautiloidColor.hpp"
 #include "plugin.hpp"
 
 #include <array>
@@ -149,6 +150,7 @@ private:
     iris::SourceField source;
     const nautiloid_iris_expander::SourceSlot* sourceSlot = nullptr;
     int nautiloidFractalMode = iris::FRACTAL_NONE;
+    int nautiloidFractalColorMode = nautiloid_color::PRISM;
     float nautiloidFractalZoom = 0.f;
     float nautiloidFractalCenterX = 0.f;
     float nautiloidFractalCenterY = 0.f;

@@ -379,6 +379,7 @@ int main() {
   nautiloidParams.zoom = 2.25f;
   nautiloidParams.centerX = -0.18f;
   nautiloidParams.centerY = 0.07f;
+  nautiloidParams.colorMode = nautiloid_color::EMBER;
   nautiloidParams.generation = 42u;
   iris::SourceField nautiloidSource;
   check("Nautiloid Iris source helper generates canonical source",
@@ -391,14 +392,28 @@ int main() {
         std::fabs(nautiloidSource.generatorFractalZoom - nautiloidParams.zoom) < 1e-6f &&
         std::fabs(nautiloidSource.generatorFractalCenterX - nautiloidParams.centerX) < 1e-6f &&
         std::fabs(nautiloidSource.generatorFractalCenterY - nautiloidParams.centerY) < 1e-6f &&
+        nautiloidSource.generatorFractalColorMode == nautiloidParams.colorMode &&
         nautiloidSource.generatorGeneration == nautiloidParams.generation);
   iris::ImageWavetable nautiloidTable;
   check("Nautiloid Iris source converts to wavetable",
         iris::buildWavetableFromSourceField(nautiloidSource, settings, &nautiloidTable, &ioError) &&
         nautiloidTable.valid());
+  iris::NautiloidFractalSourceParams prismParams = nautiloidParams;
+  prismParams.colorMode = nautiloid_color::PRISM;
+  iris::SourceField prismNautiloidSource;
+  iris::ImageWavetable prismNautiloidTable;
+  const bool prismBuilt =
+    iris::makeNautiloidIrisSource(prismParams, &prismNautiloidSource, &ioError) &&
+    iris::buildWavetableFromSourceField(
+      prismNautiloidSource, settings, &prismNautiloidTable, &ioError);
+  check("Nautiloid color mode changes Iris source pixels",
+        prismBuilt && prismNautiloidSource.rgb8 != nautiloidSource.rgb8);
+  check("Nautiloid color mode changes the resulting wavetable",
+        prismBuilt && prismNautiloidTable.samples != nautiloidTable.samples);
 
   iris::SourceField multibrotSource;
   iris::SourceField multijuliaSource;
+  iris::SourceField manowarSource;
   check("cubic Multibrot generates a source",
         iris::makeBuiltinFractalSourceSized(
           iris::FRACTAL_MULTIBROT, 0.f, 0.0, 0.0,
@@ -409,6 +424,11 @@ int main() {
           iris::FRACTAL_MULTIJULIA, 0.f, 0.0, 0.0,
           64, 32, 1.f, 64, 32, 0, 0, &multijuliaSource, &ioError) &&
         multijuliaSource.valid());
+  check("Manowar generates a source",
+        iris::makeBuiltinFractalSourceSized(
+          iris::FRACTAL_MANOWAR, 0.f, 0.0, 0.0,
+          64, 32, 1.f, 64, 32, 0, 0, &manowarSource, &ioError) &&
+        manowarSource.valid() && manowarSource.sourceName == "Fractal: Manowar");
   const auto sourceHasVariation = [](const iris::SourceField& source) {
     for (size_t i = 1u; i < source.rgb8.size(); ++i) {
       if (source.rgb8[i] != source.rgb8[0]) return true;
@@ -417,6 +437,7 @@ int main() {
   };
   check("cubic Multibrot source has visible variation", sourceHasVariation(multibrotSource));
   check("cubic Multijulia source has visible variation", sourceHasVariation(multijuliaSource));
+  check("Manowar source has visible variation", sourceHasVariation(manowarSource));
   size_t multijuliaInteriorPixels = 0u;
   for (size_t i = 0u; i + 2u < multijuliaSource.rgb8.size(); i += 3u) {
     if (multijuliaSource.rgb8[i] == 7u &&
@@ -429,6 +450,9 @@ int main() {
         multijuliaInteriorPixels * 4u < size_t(multijuliaSource.width * multijuliaSource.height));
   check("Multibrot and Multijulia sources are distinct",
         multibrotSource.rgb8 != multijuliaSource.rgb8);
+  check("Manowar source is distinct from quadratic and cubic sets",
+        manowarSource.rgb8 != multibrotSource.rgb8 &&
+        manowarSource.rgb8 != multijuliaSource.rgb8);
 
   std::cout << "Summary: " << (checks - failures) << "/" << checks << " passed\n";
   return failures == 0 ? 0 : 1;

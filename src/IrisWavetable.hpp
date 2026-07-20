@@ -62,6 +62,7 @@ enum BuiltinFractalMode {
   FRACTAL_MULTIJULIA = 3,
   FRACTAL_JULIA = 4,
   FRACTAL_PHOENIX_JULIA = 5,
+  FRACTAL_MANOWAR = 6,
   FRACTAL_BURNING_SHIP = 7,
   FRACTAL_CELTIC = 8,
   FRACTAL_TRICORN = 10,
@@ -82,6 +83,7 @@ inline bool isBuiltinFractalMode(int mode) {
     case FRACTAL_MULTIJULIA:
     case FRACTAL_JULIA:
     case FRACTAL_PHOENIX_JULIA:
+    case FRACTAL_MANOWAR:
     case FRACTAL_BURNING_SHIP:
     case FRACTAL_CELTIC:
     case FRACTAL_TRICORN:
@@ -101,6 +103,7 @@ inline const char* builtinFractalName(int mode) {
     case FRACTAL_MULTIJULIA: return "Multijulia";
     case FRACTAL_JULIA: return "Julia Lattice";
     case FRACTAL_PHOENIX_JULIA: return "Phoenix Julia";
+    case FRACTAL_MANOWAR: return "Manowar";
     case FRACTAL_BURNING_SHIP: return "Burning Ship";
     case FRACTAL_CELTIC: return "Celtic";
     case FRACTAL_TRICORN: return "Tricorn";

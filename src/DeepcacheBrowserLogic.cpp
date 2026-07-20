@@ -52,8 +52,12 @@ void normalizeBrowserFilter(BrowserFilter& filter) {
 	filter.normalizedSearch = lowercase(filter.search);
 }
 
+bool browserModelIsDisplayEligible(const BrowserModelRecord& record) {
+	return !record.hidden && record.enabled && record.whitelisted;
+}
+
 bool browserModelMatches(const BrowserModelRecord& record, const BrowserFilter& filter) {
-	if (record.hidden || !record.enabled || !record.whitelisted)
+	if (!browserModelIsDisplayEligible(record))
 		return false;
 	if (filter.favoritesOnly && !record.favorite)
 		return false;

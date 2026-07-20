@@ -1,6 +1,7 @@
 #pragma once
 
 #include "IrisWavetable.hpp"
+#include "NautiloidColor.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -23,6 +24,7 @@ struct NautiloidFractalSourceParams {
   float zoom = 0.f;
   double centerX = 0.0;
   double centerY = 0.0;
+  int colorMode = nautiloid_color::PRISM;
   uint64_t generation = 0u;
 };
 
@@ -68,6 +70,7 @@ inline NautiloidFractalSourceParams nautiloidFractalParamsFromSource(const Sourc
   params.zoom = source.generatorFractalZoom;
   params.centerX = source.generatorFractalCenterX;
   params.centerY = source.generatorFractalCenterY;
+  params.colorMode = nautiloid_color::normalize(source.generatorFractalColorMode);
   params.generation = source.generatorGeneration;
   return params;
 }
@@ -80,6 +83,7 @@ inline void applyNautiloidFractalParams(SourceField* source, const NautiloidFrac
   source->generatorFractalZoom = params.zoom;
   source->generatorFractalCenterX = params.centerX;
   source->generatorFractalCenterY = params.centerY;
+  source->generatorFractalColorMode = nautiloid_color::normalize(params.colorMode);
   source->generatorGeneration = params.generation;
 }
 
@@ -403,6 +407,9 @@ inline bool makeBuiltinFractalSourceSized(
         ci = 0.08;
         zr = panX + double(nx) * 1.62 * zoomScale * viewScale;
         zi = panY + double(ny) * 0.74 * zoomScale * viewScale;
+      } else if (mode == FRACTAL_MANOWAR) {
+        cr = -0.50 + panX + double(nx) * 1.65 * zoomScale * viewScale;
+        ci = panY + double(ny) * 0.95 * zoomScale * viewScale;
       } else if (mode == FRACTAL_BURNING_SHIP) {
         cr = -1.76 + panX + double(nx) * 0.42 * zoomScale * viewScale;
         ci = -0.045 + panY + double(ny) * 0.145 * zoomScale * viewScale;
@@ -433,9 +440,10 @@ inline bool makeBuiltinFractalSourceSized(
           const double nextI = zi * (3.0 * zr2 - zi2) + ci;
           zr = nextR;
           zi = nextI;
-        } else if (mode == FRACTAL_PHOENIX_JULIA) {
-          const double nextR = zr2 - zi2 + cr + 0.48 * pr;
-          const double nextI = 2.0 * zr * zi + ci + 0.48 * pi;
+        } else if (mode == FRACTAL_PHOENIX_JULIA || mode == FRACTAL_MANOWAR) {
+          const double feedback = mode == FRACTAL_PHOENIX_JULIA ? 0.48 : 1.0;
+          const double nextR = zr2 - zi2 + cr + feedback * pr;
+          const double nextI = 2.0 * zr * zi + ci + feedback * pi;
           pr = zr;
           pi = zi;
           zr = nextR;
@@ -557,6 +565,7 @@ inline bool makeNautiloidIrisSource(
   }
   out->sourcePath.clear();
   out->sourceName = std::string("Nautiloid: ") + builtinFractalName(params.mode);
+  nautiloid_color::applyRgb8(params.colorMode, &out->rgb8);
   applyNautiloidFractalParams(out, params);
   return true;
 }

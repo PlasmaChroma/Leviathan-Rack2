@@ -38,6 +38,8 @@ Vec nautiloidFractalViewportHalfSpan(int mode) {
       return Vec(1.58f, 0.72f);
     case iris::FRACTAL_PHOENIX_JULIA:
       return Vec(1.62f, 0.74f);
+    case iris::FRACTAL_MANOWAR:
+      return Vec(1.65f, 0.95f);
     case iris::FRACTAL_BURNING_SHIP:
       return Vec(0.42f, 0.145f);
     case iris::FRACTAL_CELTIC:
@@ -100,12 +102,27 @@ double nautiloidClampDouble(double value, double minValue, double maxValue) {
   return std::max(minValue, std::min(value, maxValue));
 }
 
+int nautiloidColorMode(const Nautiloid* module) {
+  if (!module) return Nautiloid::COLOR_PRISM;
+  return nautiloid_color::normalize(module->fractalColorMode);
+}
+
+const char* nautiloidColorModeName(int mode) {
+  return nautiloid_color::name(mode);
+}
+
+void nautiloidApplyDisplayPalette(int mode, uint8_t r, uint8_t g, uint8_t b,
+                                  uint8_t* outR, uint8_t* outG, uint8_t* outB) {
+  nautiloid_color::applyPixel(mode, r, g, b, outR, outG, outB);
+}
+
 struct NautiloidGlPreview final : widget::OpenGlWidget {
   struct ModeProgram {
     GLuint program = 0;
     GLuint fragmentShader = 0;
     GLint uniformCenter = -1;
     GLint uniformHalfSpan = -1;
+    GLint uniformColorMode = -1;
     bool initAttempted = false;
     bool ready = false;
   };
@@ -119,6 +136,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
   float lastZoom = NAN;
   double lastCenterX = NAN;
   double lastCenterY = NAN;
+  int lastColorMode = -1;
 
   explicit NautiloidGlPreview(Nautiloid* module) : module(module) {}
 
@@ -195,6 +213,34 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
       varying vec2 vUv;
       uniform vec2 uCenter;
       uniform vec2 uHalfSpan;
+      uniform int uColorMode;
+
+      vec3 applyColorMode(vec3 rgb) {
+        if (uColorMode == 0) {
+          return rgb;
+        }
+        float value = max(rgb.r, max(rgb.g, rgb.b));
+        vec3 low;
+        vec3 middle;
+        vec3 high;
+        if (uColorMode == 1) {
+          low = vec3(2.0, 7.0, 18.0) / 255.0;
+          middle = vec3(5.0, 100.0, 172.0) / 255.0;
+          high = vec3(144.0, 247.0, 255.0) / 255.0;
+        } else if (uColorMode == 2) {
+          low = vec3(18.0, 3.0, 2.0) / 255.0;
+          middle = vec3(202.0, 42.0, 8.0) / 255.0;
+          high = vec3(255.0, 231.0, 104.0) / 255.0;
+        } else {
+          low = vec3(11.0, 3.0, 22.0) / 255.0;
+          middle = vec3(126.0, 25.0, 194.0) / 255.0;
+          high = vec3(255.0, 171.0, 246.0) / 255.0;
+        }
+        const float split = 0.52;
+        return value < split
+          ? mix(low, middle, value / split)
+          : mix(middle, high, (value - split) / (1.0 - split));
+      }
 
       vec3 hsvToRgb(float h, float s, float v) {
         h = fract(h);
@@ -275,7 +321,8 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
               break;
             }
           }
-          gl_FragColor = vec4(rootColor(z, iter, maxRootIter, NAUTILOID_MODE == 13 ? 0.18 : 0.0), 1.0);
+          gl_FragColor = vec4(applyColorMode(rootColor(
+            z, iter, maxRootIter, NAUTILOID_MODE == 13 ? 0.18 : 0.0)), 1.0);
           return;
         }
 
@@ -285,7 +332,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
         if (NAUTILOID_MODE == 1) {
           c = vec2(-0.75, 0.0) + p;
           if (mandelbrotMainInterior(c)) {
-            gl_FragColor = vec4(7.0 / 255.0, 4.0 / 255.0, 18.0 / 255.0, 1.0);
+            gl_FragColor = vec4(applyColorMode(vec3(7.0, 4.0, 18.0) / 255.0), 1.0);
             return;
           }
         } else if (NAUTILOID_MODE == 2) {
@@ -300,6 +347,8 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
         } else if (NAUTILOID_MODE == 5) {
           c = vec2(-0.42, 0.08);
           z = p;
+        } else if (NAUTILOID_MODE == 6) {
+          c = vec2(-0.50, 0.0) + p;
         } else if (NAUTILOID_MODE == 7) {
           c = vec2(-1.76, -0.045) + p;
         } else if (NAUTILOID_MODE == 8) {
@@ -324,9 +373,10 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
           if (NAUTILOID_MODE == 2 || NAUTILOID_MODE == 3) {
             z = vec2(z.x * (zr2 - 3.0 * zi2) + c.x,
                      z.y * (3.0 * zr2 - zi2) + c.y);
-          } else if (NAUTILOID_MODE == 5) {
-            vec2 nextZ = vec2(zr2 - zi2 + c.x + 0.48 * prev.x,
-                              2.0 * z.x * z.y + c.y + 0.48 * prev.y);
+          } else if (NAUTILOID_MODE == 5 || NAUTILOID_MODE == 6) {
+            float feedback = NAUTILOID_MODE == 5 ? 0.48 : 1.0;
+            vec2 nextZ = vec2(zr2 - zi2 + c.x + feedback * prev.x,
+                              2.0 * z.x * z.y + c.y + feedback * prev.y);
             prev = z;
             z = nextZ;
           } else if (NAUTILOID_MODE == 10) {
@@ -347,10 +397,10 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
           }
         }
         if (mag2 <= 16.0) {
-          gl_FragColor = vec4(7.0 / 255.0, 4.0 / 255.0, 18.0 / 255.0, 1.0);
+          gl_FragColor = vec4(applyColorMode(vec3(7.0, 4.0, 18.0) / 255.0), 1.0);
           return;
         }
-        gl_FragColor = vec4(escapeColor(iter, maxIter, mag2, minOrbit), 1.0);
+        gl_FragColor = vec4(applyColorMode(escapeColor(iter, maxIter, mag2, minOrbit)), 1.0);
       }
     )GLSL";
 
@@ -399,7 +449,9 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     }
     modeProgram.uniformCenter = glGetUniformLocation(modeProgram.program, "uCenter");
     modeProgram.uniformHalfSpan = glGetUniformLocation(modeProgram.program, "uHalfSpan");
-    modeProgram.ready = modeProgram.uniformCenter >= 0 && modeProgram.uniformHalfSpan >= 0;
+    modeProgram.uniformColorMode = glGetUniformLocation(modeProgram.program, "uColorMode");
+    modeProgram.ready = modeProgram.uniformCenter >= 0 && modeProgram.uniformHalfSpan >= 0 &&
+      modeProgram.uniformColorMode >= 0;
     if (!modeProgram.ready) {
       glDeleteProgram(modeProgram.program);
       glDeleteShader(modeProgram.fragmentShader);
@@ -430,11 +482,13 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
       if (module->fractalMode != lastMode ||
           module->fractalZoom != lastZoom ||
           module->fractalCenterX != lastCenterX ||
-          module->fractalCenterY != lastCenterY) {
+          module->fractalCenterY != lastCenterY ||
+          nautiloidColorMode(module) != lastColorMode) {
         lastMode = module->fractalMode;
         lastZoom = module->fractalZoom;
         lastCenterX = module->fractalCenterX;
         lastCenterY = module->fractalCenterY;
+        lastColorMode = nautiloidColorMode(module);
         dirty = true;
       }
     }
@@ -479,6 +533,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     glUseProgram(modeProgram.program);
     glUniform2f(modeProgram.uniformCenter, float(module->fractalCenterX), float(module->fractalCenterY));
     glUniform2f(modeProgram.uniformHalfSpan, halfSpan.x, halfSpan.y);
+    glUniform1i(modeProgram.uniformColorMode, nautiloidColorMode(module));
     glBegin(GL_TRIANGLE_STRIP);
     glTexCoord2f(0.f, 0.f);
     glVertex2f(0.f, 0.f);
@@ -504,6 +559,7 @@ struct NautiloidDisplay final : OpaqueWidget {
   std::vector<uint8_t> rgba;
   bool panActive = false;
   bool lastGpuPreviewActive = false;
+  int uploadedColorMode = -1;
   Vec lastPanLocal;
   double lastPanRequestTime = -INFINITY;
 
@@ -652,7 +708,9 @@ struct NautiloidDisplay final : OpaqueWidget {
     const uint64_t currentGeneration =
       module ? module->previewGeneration.load(std::memory_order_acquire) : 0u;
     const bool gpuPreviewActive = nautiloidGpuPreviewActive(module);
-    if ((generation != currentGeneration || gpuPreviewActive != lastGpuPreviewActive) && framebuffer) {
+    const int colorMode = nautiloidColorMode(module);
+    if ((generation != currentGeneration || gpuPreviewActive != lastGpuPreviewActive ||
+         colorMode != uploadedColorMode) && framebuffer) {
       framebuffer->setDirty();
     }
     lastGpuPreviewActive = gpuPreviewActive;
@@ -671,13 +729,14 @@ struct NautiloidDisplay final : OpaqueWidget {
 
     const uint64_t currentGeneration =
       module ? module->previewGeneration.load(std::memory_order_acquire) : 0u;
+    const int colorMode = nautiloidColorMode(module);
     if (imageContext != args.vg) {
       nvg_gfx_lifecycle::resetOwnedNvgImage(
         imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, false);
       imageContext = args.vg;
       generation = uint64_t(-1);
     }
-    if (generation != currentGeneration || imageHandle < 0 ||
+    if (generation != currentGeneration || uploadedColorMode != colorMode || imageHandle < 0 ||
         !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(args.vg, imageHandle, uploadedWidth, uploadedHeight)) {
       std::vector<uint8_t> rgb;
       int width = 0;
@@ -688,9 +747,8 @@ struct NautiloidDisplay final : OpaqueWidget {
       rgba.resize(rgb.size() / 3u * 4u);
       for (size_t i = 0; i + 2u < rgb.size(); i += 3u) {
         const size_t out = (i / 3u) * 4u;
-        rgba[out + 0u] = rgb[i + 0u];
-        rgba[out + 1u] = rgb[i + 1u];
-        rgba[out + 2u] = rgb[i + 2u];
+        nautiloidApplyDisplayPalette(colorMode, rgb[i + 0u], rgb[i + 1u], rgb[i + 2u],
+          &rgba[out + 0u], &rgba[out + 1u], &rgba[out + 2u]);
         rgba[out + 3u] = 255u;
       }
       nvg_gfx_lifecycle::resetOwnedNvgImage(
@@ -702,6 +760,7 @@ struct NautiloidDisplay final : OpaqueWidget {
         uploadedHeight = height;
       }
       generation = currentGeneration;
+      uploadedColorMode = colorMode;
     }
 
     if (imageHandle >= 0) {
@@ -1322,12 +1381,13 @@ struct NautiloidSourceButton final : TL1105 {
     ui::Menu* menu = createMenu();
     menu->box.pos = getAbsoluteOffset(Vec(0.f, box.size.y));
     menu->addChild(createMenuLabel("Fractals"));
-    const std::array<int, 11> modes = {{
+    const std::array<int, 12> modes = {{
       iris::FRACTAL_MANDELBROT,
       iris::FRACTAL_MULTIBROT,
       iris::FRACTAL_JULIA,
       iris::FRACTAL_MULTIJULIA,
       iris::FRACTAL_PHOENIX_JULIA,
+      iris::FRACTAL_MANOWAR,
       iris::FRACTAL_BURNING_SHIP,
       iris::FRACTAL_CELTIC,
       iris::FRACTAL_TRICORN,
@@ -1457,6 +1517,79 @@ struct NautiloidClipboardButton final : LeviathanIconButton {
   }
 };
 
+struct NautiloidColorModeButton final : LeviathanIconButton {
+  Nautiloid* module = nullptr;
+  ui::Tooltip* tooltip = nullptr;
+
+  ~NautiloidColorModeButton() override {
+    destroyTooltip();
+  }
+
+  void createTooltip() {
+    if (!settings::tooltips || tooltip || !APP || !APP->scene) return;
+    tooltip = new ui::Tooltip();
+    updateTooltip();
+    APP->scene->addChild(tooltip);
+  }
+
+  void destroyTooltip() {
+    if (!tooltip) return;
+    if (APP && APP->scene) APP->scene->removeChild(tooltip);
+    delete tooltip;
+    tooltip = nullptr;
+  }
+
+  void updateTooltip() {
+    if (tooltip) {
+      tooltip->text = std::string("Fractal color: ") +
+        nautiloidColorModeName(nautiloidColorMode(module)) + "\nClick to cycle";
+    }
+  }
+
+  void onEnter(const event::Enter& e) override {
+    LeviathanIconButton::onEnter(e);
+    createTooltip();
+  }
+
+  void onLeave(const event::Leave& e) override {
+    LeviathanIconButton::onLeave(e);
+    destroyTooltip();
+  }
+
+  void step() override {
+    updateTooltip();
+    LeviathanIconButton::step();
+  }
+
+  void draw(const DrawArgs& args) override {
+    LeviathanIconButton::draw(args);
+    const int mode = nautiloidColorMode(module);
+    const float radius = std::min(box.size.x, box.size.y) * 0.105f;
+    const float gap = radius * 1.55f;
+    const float centerX = 0.5f * box.size.x;
+    const float centerY = 0.5f * box.size.y;
+    for (int i = 0; i < 3; ++i) {
+      NVGcolor color;
+      if (mode == Nautiloid::COLOR_PRISM) {
+        static const NVGcolor prism[3] = {
+          nvgRGB(88, 65, 191), nvgRGB(28, 204, 217), nvgRGB(232, 82, 202)
+        };
+        color = prism[i];
+      } else {
+        const nautiloid_color::Rgb stop = nautiloid_color::stop(mode, i);
+        color = nvgRGB(uint8_t(stop.r), uint8_t(stop.g), uint8_t(stop.b));
+      }
+      nvgBeginPath(args.vg);
+      nvgCircle(args.vg, centerX + float(i - 1) * gap, centerY, radius);
+      nvgFillColor(args.vg, color);
+      nvgFill(args.vg);
+      nvgStrokeWidth(args.vg, 0.65f);
+      nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 150));
+      nvgStroke(args.vg);
+    }
+  }
+};
+
 struct NautiloidLocationValidLight final : SmallAperture<GreenApertureLight> {
   void step() override {
     if (module) {
@@ -1557,6 +1690,18 @@ struct NautiloidWidget final : ModuleWidget {
       mm2px(pointMm("X_VELOCITY_INPUT", Vec(22.f, 98.36f))), module, Nautiloid::X_VELOCITY_INPUT));
     addInput(createInputCentered<Magitek2InputJack>(
       mm2px(pointMm("Y_VELOCITY_INPUT", Vec(35.f, 98.36f))), module, Nautiloid::Y_VELOCITY_INPUT));
+    auto* colorModeButton = new NautiloidColorModeButton();
+    colorModeButton->module = module;
+    colorModeButton->box.pos = mm2px(
+      pointMm("COLOR_MODE_BUTTON", Vec(48.5f, 98.36f))).minus(
+        colorModeButton->box.size.mult(0.5f));
+    if (module) {
+      colorModeButton->buttonAction = [module]() {
+        const int next = (nautiloidColorMode(module) + 1) % Nautiloid::FRACTAL_COLOR_MODES_LEN;
+        module->setFractalColorMode(next);
+      };
+    }
+    addChild(colorModeButton);
     NautiloidLocationCodeDisplay* locationCodeDisplay = new NautiloidLocationCodeDisplay();
     locationCodeDisplay->module = module;
     const math::Rect locationCodeRectMm = rectMm(

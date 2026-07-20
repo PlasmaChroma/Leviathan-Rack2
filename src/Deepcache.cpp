@@ -90,6 +90,14 @@ std::string lowercase(std::string value) {
 	return value;
 }
 
+bool rackModelIsDisplayEligible(const plugin::Model* model) {
+	if (!model || !model->plugin || model->hidden)
+		return false;
+	const settings::ModuleInfo* info = settings::getModuleInfo(model->plugin->slug, model->slug);
+	return (!info || info->enabled) &&
+	       settings::isModuleWhitelisted(model->plugin->slug, model->slug);
+}
+
 int normalizedPreviewCacheResolutionPercent(int percent) {
 	return percent >= 150 ? 200 : 100;
 }
@@ -255,6 +263,12 @@ struct DeepcacheRasterWidget : widget::TransparentWidget {
 		rgba.reset();
 	}
 
+	void releaseImage() {
+		NVGcontext* current = APP && APP->window ? APP->window->vg : nullptr;
+		nvg_gfx_lifecycle::resetOwnedNvgImage(ownerVg, imageHandle, imageWidth, imageHeight,
+		                                         current, ownerVg == current);
+	}
+
 	void draw(const DrawArgs& args) override {
 		if (!ensureImage(args.vg))
 			return;
@@ -300,6 +314,7 @@ struct DeepcacheModelBox : widget::OpaqueWidget {
 	std::size_t cpuPixelBytes() const;
 	std::uint64_t estimatedGpuBytes() const;
 	void releaseCpuPixels();
+	void releasePersistentImage();
 	bool captureFramebuffer(std::vector<std::uint8_t>& rgba, int& width, int& height) const;
 	FramebufferWarmResult warmFramebuffer();
 	bool hasValidFramebufferImage() const;
@@ -443,6 +458,7 @@ struct DeepcacheBrowser : widget::OpaqueWidget {
 	DeepcacheModelBox* getModelBox(std::size_t index) const;
 	std::vector<deepcache::ModelDescriptor> snapshotModelDescriptors() const;
 	std::unordered_set<std::size_t> visibleModelIndices() const;
+	std::unordered_set<std::size_t> displayEligibleModelIndices() const;
 	std::size_t residentPreviewCount() const;
 	std::size_t framebufferReadyPreviewCount() const;
 	void invalidateFramebufferReadiness();
@@ -466,6 +482,9 @@ public:
 
 	void setBrowser(DeepcacheBrowser* browser) {
 		browser_ = browser;
+		displayEligibleModelIndices_ = browser_ ? browser_->displayEligibleModelIndices()
+		                                              : std::unordered_set<std::size_t>();
+		lastEligibilityCheckAt_ = system::getTime();
 		initializeArchive();
 	}
 
@@ -528,7 +547,9 @@ public:
 		std::vector<deepcache::ModelDescriptor> descriptors = browser_->snapshotModelDescriptors();
 		descriptors.erase(std::remove_if(descriptors.begin(), descriptors.end(), [this](const deepcache::ModelDescriptor& descriptor) {
 			DeepcacheModelBox* box = browser_->getModelBox(descriptor.modelIndex);
-			return box && box->state == deepcache::PreviewEntryState::FRAMEBUFFER_READY;
+			return box && (box->state == deepcache::PreviewEntryState::FRAMEBUFFER_READY ||
+			               (displayEligibleModelIndices_.count(descriptor.modelIndex) == 0 &&
+			                compressedModelIndices_.count(descriptor.modelIndex) != 0));
 		}), descriptors.end());
 		for (const deepcache::ModelDescriptor& descriptor : descriptors)
 			constructionPluginRemaining_[descriptor.pluginSlug]++;
@@ -685,6 +706,71 @@ public:
 			start();
 	}
 
+	bool isDisplayEligible(std::size_t modelIndex) const {
+		return displayEligibleModelIndices_.count(modelIndex) != 0;
+	}
+
+	void reconcileDisplayEligibility(bool force = false) {
+		if (!browser_)
+			return;
+		const double now = system::getTime();
+		if (!force && std::isfinite(lastEligibilityCheckAt_) && now - lastEligibilityCheckAt_ < 0.75)
+			return;
+		lastEligibilityCheckAt_ = now;
+		std::unordered_set<std::size_t> next = browser_->displayEligibleModelIndices();
+		if (next == displayEligibleModelIndices_)
+			return;
+
+		std::vector<std::size_t> becameEligible;
+		for (std::size_t modelIndex : next) {
+			if (displayEligibleModelIndices_.count(modelIndex) == 0)
+				becameEligible.push_back(modelIndex);
+		}
+		for (std::size_t modelIndex : displayEligibleModelIndices_) {
+			if (next.count(modelIndex) != 0)
+				continue;
+			rehydrationPendingIndices_.erase(modelIndex);
+			DeepcacheModelBox* box = browser_->getModelBox(modelIndex);
+			if (box) {
+				box->releasePersistentImage();
+				if (compressedModelIndices_.count(modelIndex) != 0 &&
+				    restoreUploadQueuedIndices_.count(modelIndex) == 0)
+					box->releaseCpuPixels();
+			}
+		}
+
+		displayEligibleModelIndices_ = std::move(next);
+		// Refresh the browser's fundamental visibility flags too. Search, brand,
+		// tag, and favorite filters remain unchanged.
+		browser_->refresh();
+		graphicsRestoreScheduled_ = false;
+		for (std::size_t modelIndex : becameEligible) {
+			DeepcacheModelBox* box = browser_->getModelBox(modelIndex);
+			if (!box || box->hasValidFramebufferImage())
+				continue;
+			box->invalidateFramebufferReadiness();
+			if (box->hasCpuPixels()) {
+				queuePersistentUpload(modelIndex);
+			}
+			else if (compressedModelIndices_.count(modelIndex) != 0) {
+				persistentModelIndices_.insert(modelIndex);
+				rehydrationPendingIndices_.insert(modelIndex);
+			}
+			else if (box->state == deepcache::PreviewEntryState::RESIDENT && box->framebuffer) {
+				queueFramebufferWarm(modelIndex, false, 0);
+			}
+			else if (archive_.state() != deepcache::DatabaseState::LOADING) {
+				requestOnDemand(modelIndex);
+			}
+		}
+		resetFramebufferPluginProgress();
+		if ((!rehydrationPendingIndices_.empty() || !persistentUploadQueue_.empty()) &&
+		    state_ == deepcache::CacheState::READY)
+			setState(deepcache::CacheState::WARMING);
+		else
+			publish();
+	}
+
 	void onGraphicsContextDestroy() {
 		if (!browser_)
 			return;
@@ -697,7 +783,11 @@ public:
 		restoreDecodeRequestedIndices_.clear();
 		restoreUploadQueuedIndices_.clear();
 		graphicsRestoreScheduled_ = false;
-		rehydrationPendingIndices_ = persistentModelIndices_;
+		rehydrationPendingIndices_.clear();
+		for (std::size_t modelIndex : persistentModelIndices_) {
+			if (isDisplayEligible(modelIndex))
+				rehydrationPendingIndices_.insert(modelIndex);
+		}
 		resetFramebufferPluginProgress();
 		if (!rehydrationPendingIndices_.empty() && state_ == deepcache::CacheState::READY)
 			setState(deepcache::CacheState::WARMING);
@@ -708,6 +798,7 @@ public:
 	void step() {
 		if (stopped_ || !browser_)
 			return;
+		reconcileDisplayEligibility();
 		bool cacheIdentityChanged = false;
 		if (settings::preferDarkPanels != lastPreferDarkPanels_) {
 			lastPreferDarkPanels_ = settings::preferDarkPanels;
@@ -877,8 +968,16 @@ public:
 							write.rgba = pixels;
 							archive_.enqueue(std::move(write));
 						}
-						result = box->ensurePersistentImage(APP && APP->window ? APP->window->vg : nullptr)
-						       ? FramebufferWarmResult::READY : FramebufferWarmResult::RETRY;
+						if (isDisplayEligible(request.first)) {
+							result = box->ensurePersistentImage(APP && APP->window ? APP->window->vg : nullptr)
+							       ? FramebufferWarmResult::READY : FramebufferWarmResult::RETRY;
+						}
+						else {
+							// The temporary framebuffer was needed to create the QOI, but an
+							// unavailable model must not retain a persistent GPU image.
+							box->releasePersistentImage();
+							result = FramebufferWarmResult::READY;
+						}
 					}
 				}
 			}
@@ -1014,7 +1113,6 @@ private:
 			fingerprintByModelIndex_[descriptor.modelIndex] = descriptor.artifactFingerprint;
 			modelIndexByCacheKey_[key] = descriptor.modelIndex;
 			modelPluginKeyByIndex_[descriptor.modelIndex] = descriptor.pluginSlug;
-			framebufferPluginModelCounts_[descriptor.pluginSlug]++;
 			wanted.push_back({key, descriptor.artifactFingerprint, descriptor.pluginSlug});
 		}
 		resetFramebufferPluginProgress();
@@ -1030,11 +1128,21 @@ private:
 			if (found != modelIndexByCacheKey_.end()) {
 				const std::size_t modelIndex = found->second;
 				compressedModelIndices_.insert(modelIndex);
+				persistentModelIndices_.insert(modelIndex);
 				DeepcacheModelBox* box = browser_->getModelBox(modelIndex);
 				// The archive commit is now the recovery source. Once the current
 				// context owns a valid image, the full RGBA allocation is redundant.
-				if (!graphicsContextLost_ && box && box->hasValidFramebufferImage())
+				if (box && !isDisplayEligible(modelIndex)) {
+					box->releasePersistentImage();
+					if (restoreUploadQueuedIndices_.count(modelIndex) == 0)
+						box->releaseCpuPixels();
+				}
+				else if (!graphicsContextLost_ && box && box->hasValidFramebufferImage()) {
 					box->releaseCpuPixels();
+				}
+				else if (box && box->hasCpuPixels()) {
+					queuePersistentUpload(modelIndex);
+				}
 			}
 			cacheKey.clear();
 			drained++;
@@ -1042,6 +1150,8 @@ private:
 	}
 
 	bool queuePersistentUpload(std::size_t modelIndex) {
+		if (!isDisplayEligible(modelIndex))
+			return false;
 		DeepcacheModelBox* box = browser_->getModelBox(modelIndex);
 		if (!box || !box->hasCpuPixels())
 			return false;
@@ -1080,6 +1190,10 @@ private:
 		}
 		std::vector<std::size_t> rebuild;
 		for (std::size_t modelIndex : ordered) {
+			if (!isDisplayEligible(modelIndex)) {
+				rehydrationPendingIndices_.erase(modelIndex);
+				continue;
+			}
 			DeepcacheModelBox* box = browser_->getModelBox(modelIndex);
 			if (!box) {
 				rebuild.push_back(modelIndex);
@@ -1139,10 +1253,15 @@ private:
 							box->clearPreview();
 						requestOnDemand(modelIndex);
 					}
-					else if (box && box->installDecodedPreview(std::move(preview))) {
+					else {
 						compressedModelIndices_.insert(modelIndex);
 						persistentModelIndices_.insert(modelIndex);
-						queuePersistentUpload(modelIndex);
+						if (!isDisplayEligible(modelIndex)) {
+							rehydrationPendingIndices_.erase(modelIndex);
+						}
+						else if (box && box->installDecodedPreview(std::move(preview))) {
+							queuePersistentUpload(modelIndex);
+						}
 					}
 				}
 			}
@@ -1168,7 +1287,16 @@ private:
 			persistentUploadQueue_.pop_front();
 			const std::size_t modelIndex = request.first;
 			DeepcacheModelBox* box = browser_->getModelBox(modelIndex);
-			if (box && box->ensurePersistentImage(APP->window->vg)) {
+			if (!isDisplayEligible(modelIndex)) {
+				finishPersistentUpload(modelIndex, box);
+				rehydrationPendingIndices_.erase(modelIndex);
+				if (box) {
+					box->releasePersistentImage();
+					if (compressedModelIndices_.count(modelIndex) != 0)
+						box->releaseCpuPixels();
+				}
+			}
+			else if (box && box->ensurePersistentImage(APP->window->vg)) {
 				const auto key = cacheKeyByModelIndex_.find(modelIndex);
 				if (key != cacheKeyByModelIndex_.end())
 					backend_.store(key->second);
@@ -1210,13 +1338,26 @@ private:
 	}
 
 	void resetFramebufferPluginProgress() {
+		framebufferPluginModelCounts_.clear();
+		for (std::size_t modelIndex : displayEligibleModelIndices_) {
+			const auto plugin = modelPluginKeyByIndex_.find(modelIndex);
+			if (plugin != modelPluginKeyByIndex_.end())
+				framebufferPluginModelCounts_[plugin->second]++;
+		}
 		framebufferPluginRemaining_ = framebufferPluginModelCounts_;
 		framebufferCountedIndices_.clear();
 		framebufferTarget_ = static_cast<int>(framebufferPluginRemaining_.size());
 		framebufferCompleted_ = 0;
+		for (std::size_t modelIndex : displayEligibleModelIndices_) {
+			DeepcacheModelBox* box = browser_ ? browser_->getModelBox(modelIndex) : nullptr;
+			if (box && box->hasValidFramebufferImage())
+				markFramebufferModelComplete(modelIndex);
+		}
 	}
 
 	void markFramebufferModelComplete(std::size_t modelIndex) {
+		if (!isDisplayEligible(modelIndex))
+			return;
 		if (!framebufferCountedIndices_.insert(modelIndex).second)
 			return;
 		const auto plugin = modelPluginKeyByIndex_.find(modelIndex);
@@ -1256,6 +1397,7 @@ private:
 	std::unordered_set<std::size_t> rehydrationPendingIndices_;
 	std::unordered_set<std::size_t> restoreDecodeRequestedIndices_;
 	std::unordered_set<std::size_t> restoreUploadQueuedIndices_;
+	std::unordered_set<std::size_t> displayEligibleModelIndices_;
 	std::deque<std::pair<std::size_t, int>> persistentUploadQueue_;
 	std::size_t pendingUploadBytes_ = 0;
 	std::unordered_map<std::string, std::size_t> modelIndexByCacheKey_;
@@ -1280,6 +1422,7 @@ private:
 	std::uint64_t graphicsGeneration_ = 0;
 	bool lastPreferDarkPanels_ = false;
 	int lastPreviewCacheResolutionPercent_ = 100;
+	double lastEligibilityCheckAt_ = -INFINITY;
 	std::shared_ptr<int> lifetimeToken_ = std::make_shared<int>(0);
 };
 
@@ -1565,6 +1708,14 @@ std::uint64_t DeepcacheModelBox::estimatedGpuBytes() const {
 void DeepcacheModelBox::releaseCpuPixels() {
 	if (rasterWidget)
 		rasterWidget->releaseCpuPixels();
+}
+
+void DeepcacheModelBox::releasePersistentImage() {
+	if (!rasterWidget)
+		return;
+	rasterWidget->releaseImage();
+	if (state == deepcache::PreviewEntryState::FRAMEBUFFER_READY)
+		state = deepcache::PreviewEntryState::RESIDENT;
 }
 
 bool DeepcacheModelBox::captureFramebuffer(std::vector<std::uint8_t>& rgba, int& width, int& height) const {
@@ -2261,6 +2412,16 @@ std::unordered_set<std::size_t> DeepcacheBrowser::visibleModelIndices() const {
 	std::unordered_set<std::size_t> indices;
 	for (DeepcacheModelBox* box : modelBoxes) {
 		if (box->isVisible())
+			indices.insert(box->modelIndex);
+	}
+	return indices;
+}
+
+std::unordered_set<std::size_t> DeepcacheBrowser::displayEligibleModelIndices() const {
+	std::unordered_set<std::size_t> indices;
+	indices.reserve(modelBoxes.size());
+	for (DeepcacheModelBox* box : modelBoxes) {
+		if (box && rackModelIsDisplayEligible(box->model))
 			indices.insert(box->modelIndex);
 	}
 	return indices;
