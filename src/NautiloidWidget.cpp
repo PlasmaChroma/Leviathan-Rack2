@@ -1,6 +1,7 @@
 #include "Nautiloid.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 #include "visual/VisualAssets.hpp"
 
 #include <nanovg_gl.h>
@@ -1381,134 +1382,41 @@ struct NautiloidZoomReadout final : TransparentWidget {
   }
 };
 
-struct NautiloidLocationCodeField final : app::LedDisplayTextField {
+struct NautiloidLocationCodeDisplay final : Widget {
   Nautiloid* module = nullptr;
-  bool manualEditActive = false;
-  bool currentTextValid = true;
-  bool internalTextUpdate = false;
-  bool observedStateValid = false;
-  Nautiloid::FractalState lastObservedState;
-
-  NautiloidLocationCodeField() {
-    multiline = false;
-    fontPath = asset::system("res/fonts/ShareTechMono-Regular.ttf");
-    color = nvgRGB(215, 245, 255);
-    bgColor = nvgRGB(5, 10, 17);
-    // Blendish adds BND_TEXT_RADIUS (4 px) on each side internally.
-    // One additional pixel leaves a 5 px visual margin while allowing the
-    // fixed 16-character location code to fit in the compact field.
-    textOffset = Vec(1.f, 0.f);
-    replaceText(nautiloid_location::encode(Nautiloid::FractalState {}));
-  }
-
-  static bool statesEqual(const Nautiloid::FractalState& a,
-                          const Nautiloid::FractalState& b) {
-    return a.mode == b.mode && a.zoom == b.zoom &&
-      a.centerX == b.centerX && a.centerY == b.centerY;
-  }
-
-  void replaceText(const std::string& next) {
-    internalTextUpdate = true;
-    text = next;
-    cursor = int(text.size());
-    selection = cursor;
-    internalTextUpdate = false;
-  }
-
-  void restoreViewportCode() {
-    if (module) {
-      const Nautiloid::FractalState state = module->fractalStateSnapshot();
-      replaceText(nautiloid_location::encode(state));
-      lastObservedState = state;
-      observedStateValid = true;
-      module->locationCodeInputValid.store(true, std::memory_order_relaxed);
-    } else {
-      replaceText(nautiloid_location::encode(Nautiloid::FractalState {}));
-    }
-    currentTextValid = true;
-    manualEditActive = false;
-  }
-
-  void onChange(const ChangeEvent& e) override {
-    (void) e;
-    if (internalTextUpdate) return;
-    manualEditActive = true;
-    if (text.size() > nautiloid_location::kEncodedLength) {
-      text.resize(nautiloid_location::kEncodedLength);
-      cursor = std::min(cursor, int(text.size()));
-      selection = std::min(selection, int(text.size()));
-    }
-    const nautiloid_location::DecodeResult decoded = nautiloid_location::decode(text);
-    if (!decoded.valid || !module) {
-      currentTextValid = decoded.valid;
-      if (module) {
-        module->locationCodeInputValid.store(false, std::memory_order_relaxed);
-      }
-      return;
-    }
-
-    std::string error;
-    if (!module->loadLocationCode(text, &error)) {
-      currentTextValid = false;
-      module->locationCodeInputValid.store(false, std::memory_order_relaxed);
-      return;
-    }
-
-    const Nautiloid::FractalState state = module->fractalStateSnapshot();
-    replaceText(nautiloid_location::encode(state));
-    lastObservedState = state;
-    observedStateValid = true;
-    currentTextValid = true;
-    manualEditActive = false;
-    module->locationCodeInputValid.store(true, std::memory_order_relaxed);
-  }
-
-  void onDeselect(const DeselectEvent& e) override {
-    if (!currentTextValid) restoreViewportCode();
-    manualEditActive = false;
-    if (module) module->locationCodeInputValid.store(true, std::memory_order_relaxed);
-    app::LedDisplayTextField::onDeselect(e);
-  }
-
-  void onSelectKey(const SelectKeyEvent& e) override {
-    if (e.action == GLFW_PRESS && e.key == GLFW_KEY_ESCAPE) {
-      restoreViewportCode();
-      app::LedDisplayTextField::onSelectKey(e);
-      return;
-    }
-    if (e.action == GLFW_PRESS &&
-        (e.key == GLFW_KEY_ENTER || e.key == GLFW_KEY_KP_ENTER)) {
-      if (currentTextValid) restoreViewportCode();
-      e.consume(this);
-      return;
-    }
-    app::LedDisplayTextField::onSelectKey(e);
-  }
-
-  void step() override {
-    app::LedDisplayTextField::step();
-    if (!module) return;
-    const Nautiloid::FractalState state = module->fractalStateSnapshot();
-    if (!observedStateValid || !statesEqual(state, lastObservedState)) {
-      lastObservedState = state;
-      observedStateValid = true;
-      if (!(manualEditActive && !currentTextValid)) {
-        replaceText(nautiloid_location::encode(state));
-        currentTextValid = true;
-        module->locationCodeInputValid.store(true, std::memory_order_relaxed);
-      }
-    }
-  }
 
   void draw(const DrawArgs& args) override {
-    app::LedDisplayTextField::draw(args);
+    nvgBeginPath(args.vg);
+    nvgRoundedRect(args.vg, 0.f, 0.f, box.size.x, box.size.y, 3.f);
+    nvgFillColor(args.vg, nvgRGB(5, 10, 17));
+    nvgFill(args.vg);
     nvgBeginPath(args.vg);
     nvgRoundedRect(args.vg, 0.75f, 0.75f, box.size.x - 1.5f, box.size.y - 1.5f, 3.f);
     nvgStrokeWidth(args.vg, 1.5f);
-    nvgStrokeColor(args.vg, currentTextValid
+    const bool valid = !module || module->locationCodeInputValid.load(std::memory_order_relaxed);
+    nvgStrokeColor(args.vg, valid
       ? nvgRGBA(64, 196, 222, 180)
       : nvgRGBA(160, 74, 118, 210));
     nvgStroke(args.vg);
+  }
+
+  void drawLayer(const DrawArgs& args, int layer) override {
+    if (layer == 1) {
+      std::shared_ptr<window::Font> font = APP->window->loadFont(
+        asset::system("res/fonts/ShareTechMono-Regular.ttf"));
+      if (font && font->handle >= 0) {
+        const std::string code = module
+          ? module->locationCodeSnapshot()
+          : nautiloid_location::encode(Nautiloid::FractalState {});
+        nvgFontFaceId(args.vg, font->handle);
+        nvgFontSize(args.vg, 12.f);
+        nvgTextLetterSpacing(args.vg, 0.f);
+        nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+        nvgFillColor(args.vg, nvgRGB(215, 245, 255));
+        nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y, code.c_str(), nullptr);
+      }
+    }
+    Widget::drawLayer(args, layer);
   }
 };
 
@@ -1530,6 +1438,7 @@ struct NautiloidWidget final : ModuleWidget {
     visual_assets::SplitPanelRenderer splitPanel(this, "res/nautiloid.panel.svg");
     const std::string& panelPath = splitPanel.panelPath();
     splitPanel.addLabels("res/nautiloid.labels.svg");
+    visual_assets::addFractalGlassOverlay(this, panelPath);
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
@@ -1611,16 +1520,48 @@ struct NautiloidWidget final : ModuleWidget {
       mm2px(pointMm("X_VELOCITY_INPUT", Vec(22.f, 98.36f))), module, Nautiloid::X_VELOCITY_INPUT));
     addInput(createInputCentered<Magitek2InputJack>(
       mm2px(pointMm("Y_VELOCITY_INPUT", Vec(35.f, 98.36f))), module, Nautiloid::Y_VELOCITY_INPUT));
-    NautiloidLocationCodeField* locationCodeField = new NautiloidLocationCodeField();
-    locationCodeField->module = module;
+    NautiloidLocationCodeDisplay* locationCodeDisplay = new NautiloidLocationCodeDisplay();
+    locationCodeDisplay->module = module;
     const math::Rect locationCodeRectMm = rectMm(
-      "LOCATION_CODE_FIELD", math::Rect(Vec(28.2f, 109.f), Vec(36.f, 7.f)));
-    locationCodeField->box.pos = mm2px(locationCodeRectMm.pos);
-    locationCodeField->box.size = mm2px(locationCodeRectMm.size);
-    addChild(locationCodeField);
+      "LOCATION_CODE_FIELD", math::Rect(Vec(30.7f, 109.f), Vec(36.f, 7.f)));
+    locationCodeDisplay->box.pos = mm2px(locationCodeRectMm.pos);
+    locationCodeDisplay->box.size = mm2px(locationCodeRectMm.size);
+    addChild(locationCodeDisplay);
     addChild(createLightCentered<NautiloidLocationValidLight>(
-      mm2px(pointMm("LOCATION_CODE_VALID_LIGHT", Vec(85.f, 112.5f))),
+      mm2px(pointMm("LOCATION_CODE_VALID_LIGHT", Vec(69.3f, 112.5f))),
       module, Nautiloid::LOCATION_CODE_VALID_LIGHT));
+    auto* copyLocationButton = new LeviathanIconButton();
+    copyLocationButton->iconSvg = visual_assets::loadPluginSvgCached("res/icon/nautiloid-copy.svg");
+    copyLocationButton->iconScale = 0.52f;
+    copyLocationButton->box.pos = mm2px(
+      pointMm("COPY_LOCATION_BUTTON", Vec(77.f, 112.5f))).minus(
+        copyLocationButton->box.size.mult(0.5f));
+    if (module) {
+      copyLocationButton->buttonAction = [module]() {
+        if (!APP || !APP->window || !APP->window->win)
+          return;
+        const std::string code = module->locationCodeSnapshot();
+        glfwSetClipboardString(APP->window->win, code.c_str());
+        module->locationCodeInputValid.store(true, std::memory_order_relaxed);
+      };
+    }
+    addChild(copyLocationButton);
+    auto* pasteLocationButton = new LeviathanIconButton();
+    pasteLocationButton->iconSvg = visual_assets::loadPluginSvgCached("res/icon/nautiloid-paste.svg");
+    pasteLocationButton->iconScale = 0.52f;
+    pasteLocationButton->box.pos = mm2px(
+      pointMm("PASTE_LOCATION_BUTTON", Vec(87.f, 112.5f))).minus(
+        pasteLocationButton->box.size.mult(0.5f));
+    if (module) {
+      pasteLocationButton->buttonAction = [module]() {
+        if (!APP || !APP->window || !APP->window->win)
+          return;
+        const char* clipboard = glfwGetClipboardString(APP->window->win);
+        const bool valid = clipboard && module->loadLocationCode(clipboard);
+        module->locationCodeInputValid.store(valid, std::memory_order_relaxed);
+      };
+    }
+    addChild(pasteLocationButton);
     addChild(createLightCentered<SmallAperture<AmberGreenVioletApertureLight>>(
       mm2px(pointMm("IRIS_EXPANDER_LIGHT", Vec(98.4f, 5.8f))), module, Nautiloid::IRIS_LINK_LIGHT));
 

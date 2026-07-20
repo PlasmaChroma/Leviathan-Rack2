@@ -72,20 +72,23 @@
      height="12850"
      fill="#07090d"
      id="panel_black" />
-  <rect
-     x="272.957"
-     y="8243.4932"
-     width="9614.0859"
-     height="2555.0833"
-     rx="128.87534"
-     ry="128.18788"
-     fill="#000000"
-     opacity="0.1"
-     stroke="#ffffff"
-     stroke-opacity="0.06"
-     stroke-width="47.514"
-     id="inputs"
-     style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1" />
+  <g
+     id="glass">
+    <rect
+       x="272.957"
+       y="8243.4932"
+       width="9614.0859"
+       height="2555.0833"
+       rx="128.87534"
+       ry="128.18788"
+       fill="#000000"
+       opacity="0.1"
+       stroke="#ffffff"
+       stroke-opacity="0.06"
+       stroke-width="47.514"
+       id="inputs"
+       style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1" />
+  </g>
   <g
      id="waves_layer"
      style="display:inline;opacity:0.5"
@@ -150,7 +153,7 @@
      style="display:none;fill:none;stroke:#5841bf;stroke-opacity:1" />
   <g
      id="components"
-     style="display:inline;opacity:0.5">
+     style="display:none;opacity:0.5">
     <rect
        id="DISPLAY"
        x="180"
@@ -207,17 +210,29 @@
        fill="#00ff00" />
     <rect
        id="LOCATION_CODE_FIELD"
-       x="3070"
+       x="2165"
        y="10900"
        width="3600"
        height="700"
        fill="#ff0000" />
     <circle
        id="LOCATION_CODE_VALID_LIGHT"
-       cx="6930"
+       cx="6295"
        cy="11250"
        fill="#00ff00"
        r="160" />
+    <circle
+       id="COPY_LOCATION_BUTTON"
+       cx="7025"
+       cy="11250"
+       fill="#ff0000"
+       r="200" />
+    <circle
+       id="PASTE_LOCATION_BUTTON"
+       cx="7795"
+       cy="11250"
+       fill="#ff0000"
+       r="200" />
     <circle
        id="IRIS_EXPANDER_LIGHT"
        cx="9840"
