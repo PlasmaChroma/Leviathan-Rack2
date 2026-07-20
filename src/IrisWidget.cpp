@@ -6,6 +6,7 @@
 #include "visual/FractalGlassOverlay.hpp"
 #include "visual/PreviewSurface.hpp"
 
+#include <array>
 #include <cctype>
 #include <cstdlib>
 #include <osdialog.h>
@@ -349,13 +350,69 @@ struct IrisScanLineOverlay final : TransparentWidget {
 };
 
 struct IrisWaveformPreview final : TransparentWidget {
+  static constexpr int GRADIENT_WIDTH = 2;
+  static constexpr int GRADIENT_HEIGHT = 256;
+
   Iris* module = nullptr;
   widget::FramebufferWidget* framebuffer = nullptr;
   uint64_t generation = uint64_t(-1);
   float cachedScan = -1.f;
   std::vector<float> waveform;
+  NVGcontext* gradientContext = nullptr;
+  int gradientImage = -1;
+  int gradientWidth = 0;
+  int gradientHeight = 0;
 
   explicit IrisWaveformPreview(Iris* module) : module(module) {}
+
+  ~IrisWaveformPreview() override {
+    if (APP && APP->window && APP->window->vg) {
+      nvg_gfx_lifecycle::resetOwnedNvgImage(
+        gradientContext, gradientImage, gradientWidth, gradientHeight, APP->window->vg, true);
+      return;
+    }
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      gradientContext, gradientImage, gradientWidth, gradientHeight, nullptr, false);
+  }
+
+  bool ensureGradientImage(NVGcontext* vg) {
+    if (!vg) return false;
+    if (gradientContext != vg) {
+      nvg_gfx_lifecycle::resetOwnedNvgImage(
+        gradientContext, gradientImage, gradientWidth, gradientHeight, vg, false);
+      gradientContext = vg;
+    }
+    if (gradientImage >= 0 && nvg_gfx_lifecycle::ownedNvgImageSizeMatches(
+          vg, gradientImage, GRADIENT_WIDTH, GRADIENT_HEIGHT)) {
+      return true;
+    }
+
+    const std::array<uint8_t, 4> positive {{28u, 204u, 217u, 245u}};
+    const std::array<uint8_t, 4> center {{178u, 212u, 246u, 238u}};
+    const std::array<uint8_t, 4> negative {{122u, 92u, 255u, 245u}};
+    std::array<uint8_t, GRADIENT_WIDTH * GRADIENT_HEIGHT * 4> pixels {};
+    for (int y = 0; y < GRADIENT_HEIGHT; ++y) {
+      const float position = float(y) / float(GRADIENT_HEIGHT - 1);
+      const bool upper = position <= 0.5f;
+      const float mix = upper ? position * 2.f : (position - 0.5f) * 2.f;
+      const std::array<uint8_t, 4>& from = upper ? positive : center;
+      const std::array<uint8_t, 4>& to = upper ? center : negative;
+      for (int x = 0; x < GRADIENT_WIDTH; ++x) {
+        const size_t base = size_t(y * GRADIENT_WIDTH + x) * 4u;
+        for (int channel = 0; channel < 4; ++channel) {
+          pixels[base + size_t(channel)] = uint8_t(std::lround(
+            float(from[size_t(channel)]) +
+            (float(to[size_t(channel)]) - float(from[size_t(channel)])) * mix));
+        }
+      }
+    }
+    gradientImage = nvgCreateImageRGBA(
+      vg, GRADIENT_WIDTH, GRADIENT_HEIGHT, 0, pixels.data());
+    if (gradientImage < 0) return false;
+    gradientWidth = GRADIENT_WIDTH;
+    gradientHeight = GRADIENT_HEIGHT;
+    return true;
+  }
 
   bool refreshWaveformIfNeeded() {
     const float scan = module ? clamp(module->displayScan.load(std::memory_order_relaxed), 0.f, 1.f) : 0.62f;
@@ -405,33 +462,15 @@ struct IrisWaveformPreview final : TransparentWidget {
         if (i == 0u) nvgMoveTo(args.vg, x, y);
         else nvgLineTo(args.vg, x, y);
       }
-      nvgSave(args.vg);
-      nvgScissor(args.vg, 0.f, 0.f, box.size.x, center);
       nvgStrokeWidth(args.vg, 1.45f);
-      const NVGcolor centerColor = nvgRGBA(178, 212, 246, 238);
-      const NVGpaint positivePaint = nvgLinearGradient(
-        args.vg, 0.f, top, 0.f, center,
-        nvgRGBA(28, 204, 217, 245), centerColor);
-      nvgStrokePaint(args.vg, positivePaint);
-      nvgStroke(args.vg);
-      nvgRestore(args.vg);
-
-      nvgBeginPath(args.vg);
-      for (size_t i = 0; i < waveform.size(); ++i) {
-        const float x = left + (right - left) * float(i) / float(waveform.size() - 1u);
-        const float y = center - clamp(waveform[i], -1.f, 1.f) * 0.5f * (bottom - top);
-        if (i == 0u) nvgMoveTo(args.vg, x, y);
-        else nvgLineTo(args.vg, x, y);
+      if (ensureGradientImage(args.vg)) {
+        const NVGpaint gradientPaint = nvgImagePattern(
+          args.vg, 0.f, top, box.size.x, bottom - top, 0.f, gradientImage, 1.f);
+        nvgStrokePaint(args.vg, gradientPaint);
+      } else {
+        nvgStrokeColor(args.vg, nvgRGBA(178, 212, 246, 238));
       }
-      nvgSave(args.vg);
-      nvgScissor(args.vg, 0.f, center, box.size.x, box.size.y - center);
-      nvgStrokeWidth(args.vg, 1.45f);
-      const NVGpaint negativePaint = nvgLinearGradient(
-        args.vg, 0.f, center, 0.f, bottom,
-        centerColor, nvgRGBA(122, 92, 255, 245));
-      nvgStrokePaint(args.vg, negativePaint);
       nvgStroke(args.vg);
-      nvgRestore(args.vg);
     }
   }
 };
