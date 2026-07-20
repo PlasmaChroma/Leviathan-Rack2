@@ -69,11 +69,12 @@ bool browserModelMatches(const BrowserModelRecord& record, const BrowserFilter& 
 	return record.normalizedSearchText.find(filter.normalizedSearch) != std::string::npos;
 }
 
-float previewRenderTransformScale(float windowPixelRatio) {
+float previewRenderTransformScale(float windowPixelRatio, float canonicalScale) {
 	if (!std::isfinite(windowPixelRatio) || windowPixelRatio <= 0.f)
 		windowPixelRatio = 1.f;
+	canonicalScale = std::isfinite(canonicalScale) && canonicalScale >= 1.5f ? 2.f : 1.f;
 	const float framebufferPixelRatio = std::max(1.f, std::floor(windowPixelRatio));
-	return 2.f / framebufferPixelRatio;
+	return canonicalScale / framebufferPixelRatio;
 }
 
 std::vector<std::size_t> sortBrowserModelIndices(const std::vector<BrowserModelRecord>& records,

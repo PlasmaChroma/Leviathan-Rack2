@@ -1394,7 +1394,10 @@ struct NautiloidLocationCodeField final : app::LedDisplayTextField {
     fontPath = asset::system("res/fonts/ShareTechMono-Regular.ttf");
     color = nvgRGB(215, 245, 255);
     bgColor = nvgRGB(5, 10, 17);
-    textOffset = Vec(5.f, 0.f);
+    // Blendish adds BND_TEXT_RADIUS (4 px) on each side internally.
+    // One additional pixel leaves a 5 px visual margin while allowing the
+    // fixed 16-character location code to fit in the compact field.
+    textOffset = Vec(1.f, 0.f);
     replaceText(nautiloid_location::encode(Nautiloid::FractalState {}));
   }
 
@@ -1611,7 +1614,7 @@ struct NautiloidWidget final : ModuleWidget {
     NautiloidLocationCodeField* locationCodeField = new NautiloidLocationCodeField();
     locationCodeField->module = module;
     const math::Rect locationCodeRectMm = rectMm(
-      "LOCATION_CODE_FIELD", math::Rect(Vec(24.5f, 109.f), Vec(49.f, 7.f)));
+      "LOCATION_CODE_FIELD", math::Rect(Vec(28.2f, 109.f), Vec(36.f, 7.f)));
     locationCodeField->box.pos = mm2px(locationCodeRectMm.pos);
     locationCodeField->box.size = mm2px(locationCodeRectMm.size);
     addChild(locationCodeField);

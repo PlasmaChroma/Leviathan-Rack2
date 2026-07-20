@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <deque>
 #include <exception>
@@ -89,7 +90,70 @@ std::string lowercase(std::string value) {
 	return value;
 }
 
-std::string pluginArtifactFingerprint(const plugin::Plugin* plugin) {
+int normalizedPreviewCacheResolutionPercent(int percent) {
+	return percent >= 150 ? 200 : 100;
+}
+
+std::once_flag gDeepcacheSettingsOnce;
+std::atomic<int> gDeepcachePreviewCacheResolutionPercent {100};
+
+std::string deepcacheSettingsDirectory() {
+	return system::join(asset::user(), "Leviathan/Deepcache");
+}
+
+void loadDeepcachePluginSettings() {
+	const std::string path = system::join(deepcacheSettingsDirectory(), "settings.json");
+	FILE* file = std::fopen(path.c_str(), "r");
+	if (!file)
+		return;
+	json_error_t error = {};
+	json_t* root = json_loadf(file, 0, &error);
+	std::fclose(file);
+	if (!root)
+		return;
+	if (json_t* value = json_object_get(root, "previewCacheResolutionPercent")) {
+		gDeepcachePreviewCacheResolutionPercent.store(
+			normalizedPreviewCacheResolutionPercent(static_cast<int>(json_integer_value(value))),
+			std::memory_order_relaxed);
+	}
+	json_decref(root);
+}
+
+int deepcachePreviewCacheResolutionPercent() {
+	std::call_once(gDeepcacheSettingsOnce, loadDeepcachePluginSettings);
+	return normalizedPreviewCacheResolutionPercent(
+		gDeepcachePreviewCacheResolutionPercent.load(std::memory_order_relaxed));
+}
+
+void saveDeepcachePluginSettings(int previewResolutionPercent) {
+	std::call_once(gDeepcacheSettingsOnce, loadDeepcachePluginSettings);
+	const int normalized = normalizedPreviewCacheResolutionPercent(previewResolutionPercent);
+	gDeepcachePreviewCacheResolutionPercent.store(normalized, std::memory_order_relaxed);
+	const std::string directory = deepcacheSettingsDirectory();
+	if (!system::createDirectories(directory) && !system::isDirectory(directory)) {
+		WARN("Leviathan Deepcache: could not create settings directory: %s", directory.c_str());
+		return;
+	}
+	const std::string path = system::join(directory, "settings.json");
+	const std::string temporary = path + ".tmp";
+	json_t* root = json_object();
+	json_object_set_new(root, "previewCacheResolutionPercent", json_integer(normalized));
+	FILE* file = std::fopen(temporary.c_str(), "w");
+	if (!file) {
+		json_decref(root);
+		WARN("Leviathan Deepcache: could not open settings file: %s", temporary.c_str());
+		return;
+	}
+	const int result = json_dumpf(root, file, JSON_INDENT(2));
+	const int closeResult = std::fclose(file);
+	json_decref(root);
+	if (result != 0 || closeResult != 0 || !system::rename(temporary, path)) {
+		std::remove(temporary.c_str());
+		WARN("Leviathan Deepcache: could not save settings file: %s", path.c_str());
+	}
+}
+
+std::string pluginArtifactFingerprint(const plugin::Plugin* plugin, int previewResolutionPercent) {
 	if (!plugin)
 		return "missing-plugin";
 	std::uint64_t hash = 1469598103934665603ull;
@@ -99,7 +163,8 @@ std::string pluginArtifactFingerprint(const plugin::Plugin* plugin) {
 			hash *= 1099511628211ull;
 		}
 	};
-	mix("deepcache-raster-schema-2");
+	mix("deepcache-raster-schema-3-variable-resolution");
+	mix(std::to_string(normalizedPreviewCacheResolutionPercent(previewResolutionPercent)));
 	mix(plugin->slug);
 	mix(plugin->version);
 	mix(plugin->path);
@@ -390,7 +455,8 @@ class PreviewCacheManager {
 public:
 	explicit PreviewCacheManager(DeepcacheModule* module)
 		: module_(module),
-		  lastPreferDarkPanels_(settings::preferDarkPanels) {
+		  lastPreferDarkPanels_(settings::preferDarkPanels),
+		  lastPreviewCacheResolutionPercent_(deepcachePreviewCacheResolutionPercent()) {
 		publish();
 	}
 
@@ -409,6 +475,21 @@ public:
 
 	std::uint64_t generation() const {
 		return activeGeneration_;
+	}
+
+	int previewCacheResolutionPercent() const {
+		return deepcachePreviewCacheResolutionPercent();
+	}
+
+	void setPreviewCacheResolutionPercent(int percent) {
+		if (!module_ || stopped_)
+			return;
+		const int normalized = normalizedPreviewCacheResolutionPercent(percent);
+		if (previewCacheResolutionPercent() == normalized)
+			return;
+		saveDeepcachePluginSettings(normalized);
+		lastPreviewCacheResolutionPercent_ = normalized;
+		onCacheIdentityChanged();
 	}
 
 	void start() {
@@ -580,7 +661,7 @@ public:
 		requestOnDemand(modelIndex);
 	}
 
-	void onPanelThemeChanged() {
+	void onCacheIdentityChanged() {
 		const bool restart = startRequested_ || activeGeneration_ != 0 || state_ == deepcache::CacheState::PLANNING ||
 		                     state_ == deepcache::CacheState::WARMING || state_ == deepcache::CacheState::PAUSED ||
 		                     state_ == deepcache::CacheState::READY;
@@ -594,7 +675,8 @@ public:
 			const plugin::Plugin* plugin = box->model->plugin;
 			auto fingerprint = pluginFingerprints.find(plugin);
 			if (fingerprint == pluginFingerprints.end())
-				fingerprint = pluginFingerprints.emplace(plugin, pluginArtifactFingerprint(plugin)).first;
+				fingerprint = pluginFingerprints.emplace(
+					plugin, pluginArtifactFingerprint(plugin, previewCacheResolutionPercent())).first;
 			fingerprintByModelIndex_[modelIndex] = fingerprint->second;
 			if (modelIndex < browser_->modelDescriptors.size())
 				browser_->modelDescriptors[modelIndex].artifactFingerprint = fingerprint->second;
@@ -626,10 +708,18 @@ public:
 	void step() {
 		if (stopped_ || !browser_)
 			return;
+		bool cacheIdentityChanged = false;
 		if (settings::preferDarkPanels != lastPreferDarkPanels_) {
 			lastPreferDarkPanels_ = settings::preferDarkPanels;
-			onPanelThemeChanged();
+			cacheIdentityChanged = true;
 		}
+		const int requestedResolution = previewCacheResolutionPercent();
+		if (requestedResolution != lastPreviewCacheResolutionPercent_) {
+			lastPreviewCacheResolutionPercent_ = requestedResolution;
+			cacheIdentityChanged = true;
+		}
+		if (cacheIdentityChanged)
+			onCacheIdentityChanged();
 		drainArchiveCommits();
 		drainArchiveDecoded();
 		publishDatabase();
@@ -1189,6 +1279,7 @@ private:
 	bool graphicsRestoreScheduled_ = false;
 	std::uint64_t graphicsGeneration_ = 0;
 	bool lastPreferDarkPanels_ = false;
+	int lastPreviewCacheResolutionPercent_ = 100;
 	std::shared_ptr<int> lifetimeToken_ = std::make_shared<int>(0);
 };
 
@@ -1613,7 +1704,8 @@ FramebufferWarmResult DeepcacheModelBox::warmFramebuffer() {
 		framebuffer->setDirty();
 		// Called only by the scene-level warm host during Rack's draw phase.
 		// render() builds the texture without compositing it into the scene.
-		const float renderScale = deepcache::previewRenderTransformScale(APP->window->pixelRatio);
+		const float canonicalScale = cacheManager && cacheManager->previewCacheResolutionPercent() == 200 ? 2.f : 1.f;
+		const float renderScale = deepcache::previewRenderTransformScale(APP->window->pixelRatio, canonicalScale);
 		framebuffer->render(math::Vec(renderScale, renderScale));
 		if (!hasValidFramebufferImage())
 			return FramebufferWarmResult::RETRY;
@@ -1911,11 +2003,13 @@ DeepcacheBrowser::DeepcacheBrowser(PreviewCacheManager* manager)
 	modelDescriptors.reserve(models.size());
 	browserRecords.reserve(models.size());
 	std::unordered_map<const plugin::Plugin*, std::string> pluginFingerprints;
+	const int previewResolutionPercent = manager ? manager->previewCacheResolutionPercent() : 100;
 	for (std::size_t index = 0; index < models.size(); ++index) {
 		plugin::Model* model = models[index].model;
 		auto fingerprint = pluginFingerprints.find(model->plugin);
 		if (fingerprint == pluginFingerprints.end())
-			fingerprint = pluginFingerprints.emplace(model->plugin, pluginArtifactFingerprint(model->plugin)).first;
+			fingerprint = pluginFingerprints.emplace(
+				model->plugin, pluginArtifactFingerprint(model->plugin, previewResolutionPercent)).first;
 		auto* modelBox = new DeepcacheModelBox(model, index, models[index].pluginModelOrder, manager);
 		modelBoxes.push_back(modelBox);
 		modelContainer->addChild(modelBox);
@@ -3004,6 +3098,22 @@ void DeepcacheWidget::appendContextMenu(ui::Menu* menu) {
 	PreviewCacheManager* manager = internal_->cacheManager;
 	const std::weak_ptr<int> lifetime = manager->lifetimeToken();
 	menu->addChild(createMenuItem("Rebuild cache", "", [manager, lifetime]() { if (!lifetime.expired()) manager->rebuild(); }));
+	menu->addChild(createSubmenuItem("Cache resolution", "", [manager, lifetime](ui::Menu* child) {
+		if (lifetime.expired()) {
+			child->addChild(createMenuLabel("Deepcache is no longer available"));
+			return;
+		}
+		for (int percent : {100, 200}) {
+			child->addChild(createCheckMenuItem(std::to_string(percent) + "%", "",
+				[manager, lifetime, percent]() {
+					return !lifetime.expired() && manager->previewCacheResolutionPercent() == percent;
+				},
+				[manager, lifetime, percent]() {
+					if (!lifetime.expired())
+						manager->setPreviewCacheResolutionPercent(percent);
+				}));
+		}
+	}));
 	menu->addChild(new ui::MenuSeparator);
 	DeepcacheModule* deepcacheModule = internal_->module;
 	menu->addChild(createSubmenuItem("UI work budget", "", [deepcacheModule, lifetime](ui::Menu* child) {

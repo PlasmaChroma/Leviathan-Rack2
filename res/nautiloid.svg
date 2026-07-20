@@ -6,7 +6,7 @@
    version="1.1"
    id="svg8"
    sodipodi:docname="nautiloid.svg"
-   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -57,21 +57,35 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="1.2096709"
-     inkscape:cx="221.54786"
-     inkscape:cy="291.40157"
-     inkscape:window-width="1862"
-     inkscape:window-height="1016"
-     inkscape:window-x="1978"
-     inkscape:window-y="27"
+     inkscape:zoom="2.4193418"
+     inkscape:cx="128.9607"
+     inkscape:cy="347.82187"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="labels"
+     inkscape:current-layer="svg8"
      showgrid="false" />
   <rect
      width="10160"
      height="12850"
      fill="#07090d"
      id="panel_black" />
+  <rect
+     x="272.957"
+     y="8243.4932"
+     width="9614.0859"
+     height="2555.0833"
+     rx="128.87534"
+     ry="128.18788"
+     fill="#000000"
+     opacity="0.1"
+     stroke="#ffffff"
+     stroke-opacity="0.06"
+     stroke-width="47.514"
+     id="inputs"
+     style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1" />
   <g
      id="waves_layer"
      style="display:inline;opacity:0.5"
@@ -136,7 +150,7 @@
      style="display:none;fill:none;stroke:#5841bf;stroke-opacity:1" />
   <g
      id="components"
-     style="display:none;opacity:0.5">
+     style="display:inline;opacity:0.5">
     <rect
        id="DISPLAY"
        x="180"
@@ -177,6 +191,33 @@
        rx="398"
        ry="405"
        fill="#00ff00" />
+    <ellipse
+       id="X_VELOCITY_INPUT"
+       cx="2200"
+       cy="9836"
+       rx="398"
+       ry="405"
+       fill="#00ff00" />
+    <ellipse
+       id="Y_VELOCITY_INPUT"
+       cx="3500"
+       cy="9836"
+       rx="398"
+       ry="405"
+       fill="#00ff00" />
+    <rect
+       id="LOCATION_CODE_FIELD"
+       x="3070"
+       y="10900"
+       width="3600"
+       height="700"
+       fill="#ff0000" />
+    <circle
+       id="LOCATION_CODE_VALID_LIGHT"
+       cx="6930"
+       cy="11250"
+       fill="#00ff00"
+       r="160" />
     <circle
        id="IRIS_EXPANDER_LIGHT"
        cx="9840"
@@ -218,11 +259,35 @@
        font-size="260"
        fill="#d9e5f7"
        id="zoom_lbl"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:middle;fill:#d9e5f7"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:middle;fill:#d9e5f7;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan6">ZOOM-V</tspan></text>
+    <text
+       x="2201.27"
+       y="10639.935"
+       text-anchor="middle"
+       font-family="DejaVu Sans, Arial, sans-serif"
+       font-size="260"
+       fill="#d9e5f7"
+       id="x_lbl"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7"><tspan
+         sodipodi:role="line"
+         id="tspan7"
+         x="2201.27"
+         y="10639.935">X-V</tspan></text>
+    <text
+       x="3500.4233"
+       y="10639.935"
+       text-anchor="middle"
+       font-family="DejaVu Sans, Arial, sans-serif"
+       font-size="260"
+       fill="#d9e5f7"
+       id="y_lbl"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7"><tspan
          sodipodi:role="line"
          id="tspan8"
-         x="896.87115"
-         y="10639.935">ZOOM CV</tspan></text>
+         x="3500.4233"
+         y="10639.935">Y-V</tspan></text>
     <text
        id="module_title"
        x="5077.354"

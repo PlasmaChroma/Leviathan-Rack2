@@ -21,10 +21,10 @@ that archive worker session instead of allowing later writes to publish offsets
 against uncertain pack contents.
 
 There are no known P0 correctness issues after this follow-up. Two P1 risks
-remain architectural rather than newly introduced bugs: canonical 2x previews
-can consume several gigabytes across a large library because compressed bytes,
-decoded RGBA, and GPU images are all retained; and arbitrary third-party widget
-construction/rendering cannot be isolated from a hard in-process hang or fault.
+remain architectural rather than newly introduced bugs: optional 200% previews
+can consume several gigabytes across a large library because compressed bytes
+and GPU images are retained; and arbitrary third-party widget construction or
+rendering cannot be isolated from a hard in-process hang or fault.
 
 The archive now has exclusive cross-process write ownership with a read-only snapshot fallback,
 browser cache misses use the budgeted executor, successful captures retire live
@@ -44,13 +44,14 @@ latency remains OS-controlled, as it is for any safely joined file worker.
 
 ## Open P1 findings
 
-### P1-A: Canonical 2x all-GPU residency still has no admission policy — mitigated
+### P1-A: Optional 200% all-GPU residency still has no admission policy — mitigated
 
-The new raster format is intentionally fixed at twice the module's logical width
-and height, independent of browser zoom and Rack UI scale. That quadruples RGBA
-pixels relative to a 1x cache. A measured library around 1,700 modules added at
-least 1.6 GB while Deepcache retained the complete QOI pack, every decoded RGBA
-buffer, and a NanoVG image for every warmed preview.
+The raster format can render at twice the module's logical width and height,
+independent of browser zoom and Rack UI scale. That optional 200% setting
+quadruples RGBA pixels relative to the default 100% cache. A measured library
+around 1,700 modules added at least 1.6 GB with 200% previews while Deepcache
+retained the complete QOI pack, every decoded RGBA buffer, and a NanoVG image
+for every warmed preview.
 
 Permanent decoded-RGBA residency is now removed for recoverable entries. The UI
 releases pixels after GPU upload and a confirmed archive commit; archive-loaded
@@ -65,9 +66,9 @@ entries, allowing the second DAW context to release RGBA and restore later
 without acquiring the database write lease.
 
 The remaining risk is the combination of a fully resident compressed pack and
-one uncompressed GPU texture for every 2x card. Measure the new steady state on
-Windows before choosing a GPU admission/LRU policy; retaining every GPU image is
-the feature that eliminates first-scroll upload latency.
+one uncompressed GPU texture for every card, especially at 200%. Measure the new
+steady state on Windows before choosing a GPU admission/LRU policy; retaining
+every GPU image is the feature that eliminates first-scroll upload latency.
 
 ### P1-B: Third-party preview code cannot be hard-failure isolated in-process
 
@@ -144,9 +145,11 @@ the manager using a stable model index rather than capturing a card pointer.
 
 ### P2-1: Cache fingerprints do not fully identify rendered plugin assets — partially resolved
 
-The cache identity is now `deepcache-raster-v3-canonical-2x`, and binary/manifest artifact
-fingerprints include file modification time (with subsecond precision where the
-platform exposes it) as well as size. Same-version development rebuilds therefore
+The stable storage key remains `deepcache-raster-v3-canonical-2x` for in-place
+replacement compatibility, while the artifact fingerprint schema now includes
+the selected 100% or 200% resolution. Binary/manifest artifact fingerprints also
+include file modification time (with subsecond precision where the platform
+exposes it) as well as size. Same-version development rebuilds therefore
 invalidate normally even when the linked binary size is unchanged.
 
 Resource-only changes can still be missed because recursively statting or hashing
@@ -223,7 +226,7 @@ shutdown or this explicit recovery request.
 The QOI encoder also rejects non-positive dimensions, overflowing pixel counts,
 and undersized RGBA input before indexing the source buffer.
 
-### P2-10: Browser drawing could bypass canonical 2x warming — resolved
+### P2-10: Browser drawing could bypass canonical warming — resolved
 
 `DeepcacheModelBox::draw()` treated any lazily created Rack framebuffer as
 `FRAMEBUFFER_READY`. Depending on whether the browser drew a card before the
@@ -408,9 +411,12 @@ the existing cache state machine reaches `ERROR` without an exception escaping.
 24. **Worker-owned persistent reset.** Rebuild can recover a fatal owner session
     without UI-thread file deletion, while read-only contenders remain unable to
     purge shared data.
-25. **Canonical 2x raster identity.** Persisted previews use the versioned
-    `deepcache-raster-v3-canonical-2x` key and compensate for Rack's framebuffer
-    pixel ratio at 100%, 150%, 200%, and 300% UI scale.
+25. **Selectable canonical raster identity.** Persisted previews compensate for
+    Rack's framebuffer pixel ratio at 100%, 150%, 200%, and 300% UI scale. The
+    default 100% or optional 200% resolution is part of the artifact fingerprint
+    and persists as a shared plugin setting rather than patch state. The stable
+    storage key is retained so changed-resolution payloads replace old records and
+    compaction can reclaim them.
 26. **Canonical warm-state enforcement.** A normal browser draw no longer marks
     a live module framebuffer as cache-ready or bypasses canonical rendering.
 27. **Reset/load race closure.** Reset interrupts pack/decode startup, orders
@@ -463,7 +469,8 @@ pixels.
   passed ten consecutive runs. Test pixels include varying alpha to exercise the
   cancelable QOI encoder's RGBA path.
 - `build/tests/deepcache_planner_spec`: 12/12 passed, including stable bulk
-  promotion and canonical render transforms at 100%, 150%, 200%, and 300% UI scale.
+  promotion and both 100% and 200% canonical render transforms at 100%, 150%,
+  200%, and 300% Rack UI scale.
 - `build/src/Deepcache.cpp.o`: compiled cleanly with the Rack SDK headers.
 - Archive test under AddressSanitizer and UndefinedBehaviorSanitizer: passed
   with leak detection disabled because LeakSanitizer is unavailable under this

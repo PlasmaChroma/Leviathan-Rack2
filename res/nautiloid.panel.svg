@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="101.6mm" height="128.5mm" viewBox="0 0 10160 12850" version="1.1" id="svg8" sodipodi:docname="nautiloid.svg" inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="101.6mm" height="128.5mm" viewBox="0 0 10160 12850" version="1.1" id="svg8" sodipodi:docname="nautiloid.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)">
   <defs id="defs8">
     <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient500" gradientUnits="userSpaceOnUse" x1="4981.3486" y1="1475.1766" x2="7254.189" y2="1486.7573" gradientTransform="matrix(0.99690805,0,0,0.99690805,-1018.8781,-888.30724)" />
     <linearGradient id="linearGradient22" inkscape:collect="always">
@@ -9,6 +9,7 @@
     <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient74" gradientUnits="userSpaceOnUse" gradientTransform="matrix(100,0,0,100,-162.33504,-50.762739)" x1="41.355316" y1="125.28868" x2="63.491417" y2="125.28868" />
   </defs>
   <rect width="10160" height="12850" fill="#07090d" id="panel_black" />
+  <rect x="272.957" y="8243.4932" width="9614.0859" height="2555.0833" rx="128.87534" ry="128.18788" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="47.514" id="inputs" style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1" />
   <g id="waves_layer" style="display:inline;opacity:0.5" transform="translate(0.00337775,142.46186)">
     <g id="branding_wave_left" transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)" style="display:inline">
       <path style="fill:#4995ec" d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713" id="path149" />
@@ -23,7 +24,7 @@
   </g>
   <rect x="180" y="943.29999" width="9800" height="6527" rx="0" fill="#030507" stroke="#5841bf" stroke-width="46" id="fractal_display" style="stroke:#1cccd9;stroke-opacity:1" />
   <rect x="501.86398" y="8371.8643" width="9156.2725" height="862.27203" rx="79.967445" fill="#111827" stroke="#1cccd9" stroke-width="37.728" opacity="0.72" id="rect4" style="display:none;fill:none;stroke:#5841bf;stroke-opacity:1" />
-  <g id="components" style="display:none;opacity:0.5">
+  <g id="components" style="display:inline;opacity:0.5">
     <rect id="DISPLAY" x="180" y="943.29999" width="9800" height="6527" fill="#ff0000" />
     <rect id="ZOOM_READOUT" x="2080" y="7570" width="6000" height="520" fill="#ff0000" />
     <rect id="ZOOM_BAR" x="499.99997" y="8370" width="9160" height="900" fill="#ff0000" />
@@ -32,8 +33,8 @@
     <ellipse id="ZOOM_RATE_INPUT" cx="897.99994" cy="9836" rx="398" ry="405" fill="#00ff00" />
     <ellipse id="X_VELOCITY_INPUT" cx="2200" cy="9836" rx="398" ry="405" fill="#00ff00" />
     <ellipse id="Y_VELOCITY_INPUT" cx="3500" cy="9836" rx="398" ry="405" fill="#00ff00" />
-    <rect id="LOCATION_CODE_FIELD" x="2450" y="10900" width="4900" height="700" fill="#ff0000" />
-    <circle id="LOCATION_CODE_VALID_LIGHT" cx="8500" cy="11250" fill="#00ff00" r="160" />
+    <rect id="LOCATION_CODE_FIELD" x="3070" y="10900" width="3600" height="700" fill="#ff0000" />
+    <circle id="LOCATION_CODE_VALID_LIGHT" cx="6930" cy="11250" fill="#00ff00" r="160" />
     <circle id="IRIS_EXPANDER_LIGHT" cx="9840" cy="580" fill="#ff0000" r="180" />
     <rect id="TILE_CACHE" x="200" y="10200" width="4200" height="2590" fill="#ff0000" style="display:none" />
     <rect id="IRIS_PREVIEW" x="4740" y="10200" width="5236" height="2590" fill="#ff0000" style="display:none" />

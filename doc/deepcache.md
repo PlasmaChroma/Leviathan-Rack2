@@ -38,9 +38,12 @@ NanoVG before cached cards are considered framebuffer-ready. Decoded RGBA is
 released after a successful upload once a committed QOI recovery source exists.
 Only a bounded handoff/upload window retains full bitmap data.
 
-Persisted previews use a canonical 2x render scale independent of browser zoom.
-They are displayed at the normal browser card dimensions, trading roughly four
-times the uncompressed pixels for sharper scaling when cards are enlarged.
+Persisted previews default to a canonical 1x render scale independent of browser
+zoom. A plugin-level **Cache resolution** option can select 200% for sharper
+scaling when cards are enlarged, at roughly four times the uncompressed pixels.
+The choice is shared by every Deepcache instance and persists in
+`<Rack user>/Leviathan/Deepcache/settings.json`; it is deliberately not patch
+state because changing it invalidates and rebuilds the shared preview database.
 
 Only one archive worker may write at a time. Other Deepcache instances load a
 validated read-only snapshot of the committed pack and index, then render only

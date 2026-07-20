@@ -80,18 +80,26 @@ TestResult testStableCacheKey() {
 }
 
 TestResult testCanonicalPreviewRenderScale() {
-	const float at100 = deepcache::previewRenderTransformScale(1.f);
-	const float at150 = deepcache::previewRenderTransformScale(1.5f);
-	const float at200 = deepcache::previewRenderTransformScale(2.f);
-	const float at300 = deepcache::previewRenderTransformScale(3.f);
+	const float oneAt100 = deepcache::previewRenderTransformScale(1.f);
+	const float oneAt150 = deepcache::previewRenderTransformScale(1.5f);
+	const float oneAt200 = deepcache::previewRenderTransformScale(2.f);
+	const float oneAt300 = deepcache::previewRenderTransformScale(3.f);
+	const float twoAt100 = deepcache::previewRenderTransformScale(1.f, 2.f);
+	const float twoAt150 = deepcache::previewRenderTransformScale(1.5f, 2.f);
+	const float twoAt200 = deepcache::previewRenderTransformScale(2.f, 2.f);
+	const float twoAt300 = deepcache::previewRenderTransformScale(3.f, 2.f);
 	const float invalid = deepcache::previewRenderTransformScale(
 		std::numeric_limits<float>::quiet_NaN());
-	const bool pass = std::abs(at100 - 2.f) < 1e-6f && std::abs(at150 - 2.f) < 1e-6f &&
-	                  std::abs(at200 - 1.f) < 1e-6f && std::abs(at300 - (2.f / 3.f)) < 1e-6f &&
-	                  std::abs(invalid - 2.f) < 1e-6f;
-	return {"preview render scale cancels Rack framebuffer pixel ratio", pass,
-	        "100/150/200/300=" + std::to_string(at100) + "/" + std::to_string(at150) + "/" +
-	            std::to_string(at200) + "/" + std::to_string(at300)};
+	const bool onePass = std::abs(oneAt100 - 1.f) < 1e-6f && std::abs(oneAt150 - 1.f) < 1e-6f &&
+	                     std::abs(oneAt200 - 0.5f) < 1e-6f && std::abs(oneAt300 - (1.f / 3.f)) < 1e-6f;
+	const bool twoPass = std::abs(twoAt100 - 2.f) < 1e-6f && std::abs(twoAt150 - 2.f) < 1e-6f &&
+	                     std::abs(twoAt200 - 1.f) < 1e-6f && std::abs(twoAt300 - (2.f / 3.f)) < 1e-6f;
+	const bool pass = onePass && twoPass && std::abs(invalid - 1.f) < 1e-6f;
+	return {"1x and 2x preview scales cancel Rack framebuffer pixel ratio", pass,
+	        "1x=" + std::to_string(oneAt100) + "/" + std::to_string(oneAt150) + "/" +
+	            std::to_string(oneAt200) + "/" + std::to_string(oneAt300) + ", 2x=" +
+	            std::to_string(twoAt100) + "/" + std::to_string(twoAt150) + "/" +
+	            std::to_string(twoAt200) + "/" + std::to_string(twoAt300)};
 }
 
 TestResult testStateTransitions() {
