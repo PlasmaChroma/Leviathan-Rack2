@@ -1204,7 +1204,8 @@ work.
 Persistent GPU residency is limited to models Rack can display at all. Models
 that are hidden, disabled, or not whitelisted retain their QOI database entries
 but do not retain NanoVG images. Deepcache periodically reconciles this
-eligibility independently of search, brand, tag, and favorite filters. A model
+eligibility with reusable byte maps, independently of search, brand, tag, and
+favorite filters. The unchanged polling path performs no allocation. A model
 that becomes eligible is decoded from the hot QOI pack and uploaded; one that
 becomes unavailable releases its context-owned image on the UI thread. The cyan
 GPU-warm progress target includes only display-eligible plugin builds.

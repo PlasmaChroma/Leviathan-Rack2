@@ -458,7 +458,7 @@ struct DeepcacheBrowser : widget::OpaqueWidget {
 	DeepcacheModelBox* getModelBox(std::size_t index) const;
 	std::vector<deepcache::ModelDescriptor> snapshotModelDescriptors() const;
 	std::unordered_set<std::size_t> visibleModelIndices() const;
-	std::unordered_set<std::size_t> displayEligibleModelIndices() const;
+	void writeDisplayEligibility(std::vector<std::uint8_t>* eligibility) const;
 	std::size_t residentPreviewCount() const;
 	std::size_t framebufferReadyPreviewCount() const;
 	void invalidateFramebufferReadiness();
@@ -482,8 +482,11 @@ public:
 
 	void setBrowser(DeepcacheBrowser* browser) {
 		browser_ = browser;
-		displayEligibleModelIndices_ = browser_ ? browser_->displayEligibleModelIndices()
-		                                              : std::unordered_set<std::size_t>();
+		if (browser_)
+			browser_->writeDisplayEligibility(&displayEligibility_);
+		else
+			displayEligibility_.clear();
+		displayEligibilityScratch_.resize(displayEligibility_.size());
 		lastEligibilityCheckAt_ = system::getTime();
 		initializeArchive();
 	}
@@ -548,7 +551,7 @@ public:
 		descriptors.erase(std::remove_if(descriptors.begin(), descriptors.end(), [this](const deepcache::ModelDescriptor& descriptor) {
 			DeepcacheModelBox* box = browser_->getModelBox(descriptor.modelIndex);
 			return box && (box->state == deepcache::PreviewEntryState::FRAMEBUFFER_READY ||
-			               (displayEligibleModelIndices_.count(descriptor.modelIndex) == 0 &&
+			               (!isDisplayEligible(descriptor.modelIndex) &&
 			                compressedModelIndices_.count(descriptor.modelIndex) != 0));
 		}), descriptors.end());
 		for (const deepcache::ModelDescriptor& descriptor : descriptors)
@@ -707,7 +710,7 @@ public:
 	}
 
 	bool isDisplayEligible(std::size_t modelIndex) const {
-		return displayEligibleModelIndices_.count(modelIndex) != 0;
+		return modelIndex < displayEligibility_.size() && displayEligibility_[modelIndex] != 0u;
 	}
 
 	void reconcileDisplayEligibility(bool force = false) {
@@ -717,17 +720,13 @@ public:
 		if (!force && std::isfinite(lastEligibilityCheckAt_) && now - lastEligibilityCheckAt_ < 0.75)
 			return;
 		lastEligibilityCheckAt_ = now;
-		std::unordered_set<std::size_t> next = browser_->displayEligibleModelIndices();
-		if (next == displayEligibleModelIndices_)
+		browser_->writeDisplayEligibility(&displayEligibilityScratch_);
+		if (displayEligibilityScratch_ == displayEligibility_)
 			return;
 
-		std::vector<std::size_t> becameEligible;
-		for (std::size_t modelIndex : next) {
-			if (displayEligibleModelIndices_.count(modelIndex) == 0)
-				becameEligible.push_back(modelIndex);
-		}
-		for (std::size_t modelIndex : displayEligibleModelIndices_) {
-			if (next.count(modelIndex) != 0)
+		const std::size_t modelCount = std::min(displayEligibility_.size(), displayEligibilityScratch_.size());
+		for (std::size_t modelIndex = 0; modelIndex < modelCount; ++modelIndex) {
+			if (displayEligibility_[modelIndex] == 0u || displayEligibilityScratch_[modelIndex] != 0u)
 				continue;
 			rehydrationPendingIndices_.erase(modelIndex);
 			DeepcacheModelBox* box = browser_->getModelBox(modelIndex);
@@ -739,12 +738,14 @@ public:
 			}
 		}
 
-		displayEligibleModelIndices_ = std::move(next);
+		displayEligibility_.swap(displayEligibilityScratch_);
 		// Refresh the browser's fundamental visibility flags too. Search, brand,
 		// tag, and favorite filters remain unchanged.
 		browser_->refresh();
 		graphicsRestoreScheduled_ = false;
-		for (std::size_t modelIndex : becameEligible) {
+		for (std::size_t modelIndex = 0; modelIndex < modelCount; ++modelIndex) {
+			if (displayEligibility_[modelIndex] == 0u || displayEligibilityScratch_[modelIndex] != 0u)
+				continue;
 			DeepcacheModelBox* box = browser_->getModelBox(modelIndex);
 			if (!box || box->hasValidFramebufferImage())
 				continue;
@@ -1339,7 +1340,9 @@ private:
 
 	void resetFramebufferPluginProgress() {
 		framebufferPluginModelCounts_.clear();
-		for (std::size_t modelIndex : displayEligibleModelIndices_) {
+		for (std::size_t modelIndex = 0; modelIndex < displayEligibility_.size(); ++modelIndex) {
+			if (!isDisplayEligible(modelIndex))
+				continue;
 			const auto plugin = modelPluginKeyByIndex_.find(modelIndex);
 			if (plugin != modelPluginKeyByIndex_.end())
 				framebufferPluginModelCounts_[plugin->second]++;
@@ -1348,7 +1351,9 @@ private:
 		framebufferCountedIndices_.clear();
 		framebufferTarget_ = static_cast<int>(framebufferPluginRemaining_.size());
 		framebufferCompleted_ = 0;
-		for (std::size_t modelIndex : displayEligibleModelIndices_) {
+		for (std::size_t modelIndex = 0; modelIndex < displayEligibility_.size(); ++modelIndex) {
+			if (!isDisplayEligible(modelIndex))
+				continue;
 			DeepcacheModelBox* box = browser_ ? browser_->getModelBox(modelIndex) : nullptr;
 			if (box && box->hasValidFramebufferImage())
 				markFramebufferModelComplete(modelIndex);
@@ -1397,7 +1402,8 @@ private:
 	std::unordered_set<std::size_t> rehydrationPendingIndices_;
 	std::unordered_set<std::size_t> restoreDecodeRequestedIndices_;
 	std::unordered_set<std::size_t> restoreUploadQueuedIndices_;
-	std::unordered_set<std::size_t> displayEligibleModelIndices_;
+	std::vector<std::uint8_t> displayEligibility_;
+	std::vector<std::uint8_t> displayEligibilityScratch_;
 	std::deque<std::pair<std::size_t, int>> persistentUploadQueue_;
 	std::size_t pendingUploadBytes_ = 0;
 	std::unordered_map<std::string, std::size_t> modelIndexByCacheKey_;
@@ -2417,14 +2423,15 @@ std::unordered_set<std::size_t> DeepcacheBrowser::visibleModelIndices() const {
 	return indices;
 }
 
-std::unordered_set<std::size_t> DeepcacheBrowser::displayEligibleModelIndices() const {
-	std::unordered_set<std::size_t> indices;
-	indices.reserve(modelBoxes.size());
-	for (DeepcacheModelBox* box : modelBoxes) {
-		if (box && rackModelIsDisplayEligible(box->model))
-			indices.insert(box->modelIndex);
+void DeepcacheBrowser::writeDisplayEligibility(std::vector<std::uint8_t>* eligibility) const {
+	if (!eligibility)
+		return;
+	if (eligibility->size() != modelBoxes.size())
+		eligibility->resize(modelBoxes.size());
+	for (std::size_t index = 0; index < modelBoxes.size(); ++index) {
+		DeepcacheModelBox* box = modelBoxes[index];
+		(*eligibility)[index] = box && rackModelIsDisplayEligible(box->model) ? 1u : 0u;
 	}
-	return indices;
 }
 
 std::size_t DeepcacheBrowser::residentPreviewCount() const {
