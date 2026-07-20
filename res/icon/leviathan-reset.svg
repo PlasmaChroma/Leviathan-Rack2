@@ -1,5 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><!-- Derived from SVG Repo reset icon, www.svgrepo.com -->
-<svg fill="#ffffff" width="800px" height="800px" viewBox="0 0 1920 1920" xmlns="http://www.w3.org/2000/svg">
-    <path d="M1411.765 177.490A903.529 903.529 0 1 1 441.703 219.870" fill="none" stroke="#ffffff" stroke-width="128"/>
-    <path d="M451.824 284.273v393.374h112.94V112.941H0v112.941h342.89Z"/>
+<?xml version="1.0" encoding="utf-8"?>
+<svg fill="none" stroke="#ffffff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" width="800px" height="800px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path d="M 18 6 A 8.485 8.485 0 1 1 6 6 M 2.7 4.8 L 8.3 3.7 L 8.4 9.1" />
 </svg>
