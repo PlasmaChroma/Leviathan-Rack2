@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented in this file.
 
+## [v2.8.0]
+- Add Iris - image wavetable oscillator
+- Deep Cache - allow configuration of zoom for raster caching
+
 ## [v2.6.2]
 - Adding Deepcache to plugin
 
