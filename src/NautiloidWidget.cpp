@@ -1732,8 +1732,6 @@ struct NautiloidWidget final : ModuleWidget {
     addChild(zoomReadout);
 
     const math::Rect zoomBarRectMm = rectMm("ZOOM_BAR", math::Rect(Vec(5.f, 79.f), Vec(91.6f, 9.f)));
-    addChild(visual_assets::createPreviewFrameEnhancementWidget(
-      zoomBarRectMm, visual_assets::PreviewFrameTint::Purple));
     widget::FramebufferWidget* zoomFb = new widget::FramebufferWidget();
     zoomFb->box.pos = mm2px(zoomBarRectMm.pos);
     zoomFb->box.size = mm2px(zoomBarRectMm.size);

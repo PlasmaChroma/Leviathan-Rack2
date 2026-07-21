@@ -6,9 +6,11 @@
 #include "visual/FractalGlassOverlay.hpp"
 #include "visual/PreviewSurface.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cstdlib>
+#include <vector>
 #include <osdialog.h>
 
 namespace {
@@ -40,6 +42,81 @@ bool isNautiloidModule(const engine::Module* neighbor) {
   return (neighbor->model == modelNautiloid) || (neighbor->model->slug == "Nautiloid");
 }
 
+struct IrisLeftShift {
+  app::ModuleWidget* widget = nullptr;
+  Vec oldPos;
+  Vec newPos;
+};
+
+bool overlapsVertically(const app::ModuleWidget* widget, float top, float bottom) {
+  constexpr float kPositionEpsilon = 0.01f;
+  const float widgetTop = widget->box.pos.y;
+  const float widgetBottom = widgetTop + widget->box.size.y;
+  return widgetBottom > top + kPositionEpsilon && widgetTop < bottom - kPositionEpsilon;
+}
+
+std::vector<IrisLeftShift> makeRoomForNautiloid(
+    app::RackWidget* rack,
+    app::ModuleWidget* irisWidget,
+    const Vec& nautPos,
+    const Vec& nautSize) {
+  constexpr float kPositionEpsilon = 0.01f;
+  const float rowTop = std::min(irisWidget->box.pos.y, nautPos.y);
+  const float rowBottom = std::max(
+    irisWidget->box.pos.y + irisWidget->box.size.y,
+    nautPos.y + nautSize.y);
+
+  std::vector<app::ModuleWidget*> candidates;
+  for (app::ModuleWidget* widget : rack->getModules()) {
+    if (!widget || widget == irisWidget ||
+        !overlapsVertically(widget, rowTop, rowBottom) ||
+        widget->box.pos.x >= irisWidget->box.pos.x - kPositionEpsilon) {
+      continue;
+    }
+    candidates.push_back(widget);
+  }
+
+  std::sort(candidates.begin(), candidates.end(), [](const app::ModuleWidget* a, const app::ModuleWidget* b) {
+    return a->box.pos.x + a->box.size.x > b->box.pos.x + b->box.size.x;
+  });
+
+  std::vector<IrisLeftShift> shifts;
+  float availableRight = nautPos.x;
+  for (app::ModuleWidget* widget : candidates) {
+    const float widgetRight = widget->box.pos.x + widget->box.size.x;
+    if (widgetRight <= availableRight + kPositionEpsilon) {
+      break;
+    }
+    IrisLeftShift shift;
+    shift.widget = widget;
+    shift.oldPos = widget->box.pos;
+    shift.newPos = Vec(availableRight - widget->box.size.x, widget->box.pos.y);
+    shifts.push_back(shift);
+    availableRight = shift.newPos.x;
+  }
+
+  // Move the farthest module first, so each destination is clear before the
+  // next member of the obstruction chain is packed against it.
+  std::vector<IrisLeftShift*> moved;
+  for (auto it = shifts.rbegin(); it != shifts.rend(); ++it) {
+    if (!rack->requestModulePos(it->widget, it->newPos)) {
+      for (auto movedIt = moved.rbegin(); movedIt != moved.rend(); ++movedIt) {
+        rack->requestModulePos((*movedIt)->widget, (*movedIt)->oldPos);
+      }
+      shifts.clear();
+      return shifts;
+    }
+    moved.push_back(&*it);
+  }
+  return shifts;
+}
+
+void restoreIrisLeftShifts(app::RackWidget* rack, const std::vector<IrisLeftShift>& shifts) {
+  for (const IrisLeftShift& shift : shifts) {
+    rack->requestModulePos(shift.widget, shift.oldPos);
+  }
+}
+
 Nautiloid* spawnNautiloidLeftOfIris(ModuleWidget* irisWidget) {
   if (!irisWidget || !irisWidget->module || !APP || !APP->scene || !APP->scene->rack || !modelNautiloid) {
     return nullptr;
@@ -63,14 +140,38 @@ Nautiloid* spawnNautiloidLeftOfIris(ModuleWidget* irisWidget) {
   app::RackWidget* rack = APP->scene->rack;
   const Vec nautPos = irisWidget->box.pos.minus(Vec(nautWidget->box.size.x, 0.f));
 
+  if (APP->history) {
+    rack->updateModuleOldPositions();
+  }
+  const std::vector<IrisLeftShift> shifts =
+    makeRoomForNautiloid(rack, irisWidget, nautPos, nautWidget->box.size);
+  if (!rack->requestModulePos(nautWidget, nautPos)) {
+    restoreIrisLeftShifts(rack, shifts);
+    delete nautWidget;
+    delete nautModule;
+    return nullptr;
+  }
+
+  history::ComplexAction* moveAction = nullptr;
+  if (APP->history) {
+    moveAction = rack->getModuleDragAction();
+  }
+
   APP->engine->addModule(nautModule);
-  rack->setModulePosForce(nautWidget, nautPos);
   rack->addModule(nautWidget);
 
   if (APP->history) {
-    history::ModuleAdd* h = new history::ModuleAdd;
+    history::ComplexAction* h = new history::ComplexAction;
     h->name = "add Nautiloid";
-    h->setModule(nautWidget);
+    if (moveAction && !moveAction->isEmpty()) {
+      h->push(moveAction);
+    }
+    else {
+      delete moveAction;
+    }
+    history::ModuleAdd* addAction = new history::ModuleAdd;
+    addAction->setModule(nautWidget);
+    h->push(addAction);
     APP->history->push(h);
   }
   return dynamic_cast<Nautiloid*>(nautModule);
