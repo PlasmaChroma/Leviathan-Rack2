@@ -225,8 +225,15 @@ void LeviathanApertureLight::drawNormalLight(NVGcontext* vg) {
 	}
 	const float cx = box.size.x * 0.5f;
 	const float cy = box.size.y * 0.5f;
+	// The cache is composited once in the normal pass to keep live LED pixels
+	// out of Rack's light layer. Build its overlapping lens details with the
+	// same screen accumulation they had before that move, so their hot center
+	// and colored edge retain the original character.
+	nvgSave(vg);
+	nvgGlobalCompositeBlendFunc(vg, NVG_ONE_MINUS_DST_COLOR, NVG_ONE);
 	drawCore(vg, cx, cy, lightCore, lightHot);
 	drawCrescent(vg, cx, cy, lightCore);
+	nvgRestore(vg);
 }
 
 void LeviathanApertureLight::drawNormalSpecular(NVGcontext* vg) {
@@ -289,10 +296,7 @@ void LeviathanApertureLight::drawBackground(const DrawArgs& args) {
 	staticBackgroundFb->draw(args);
 
 	if (!normalLightFb || !normalLightWidget) {
-		nvgSave(args.vg);
-		nvgGlobalCompositeBlendFunc(args.vg, NVG_ONE_MINUS_DST_COLOR, NVG_ONE);
 		drawNormalLight(args.vg);
-		nvgRestore(args.vg);
 	}
 	else {
 		if (!normalLightFb->box.size.equals(box.size)) {
