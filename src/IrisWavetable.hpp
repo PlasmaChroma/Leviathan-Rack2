@@ -305,6 +305,13 @@ inline void buildSourcePreviewFromSourceField(const SourceField& source, ImageWa
   const int previewHeight = kSourcePreviewHeight;
   table->sourcePreviewWidth = previewWidth;
   table->sourcePreviewHeight = previewHeight;
+  if (source.width == previewWidth && source.height == previewHeight) {
+    // Canonical Iris sources already have preview dimensions. In particular,
+    // Nautiloid publishes exactly 1024x256 RGB8, so bilinear resampling here
+    // would only reproduce the input byte-for-byte at considerable cost.
+    table->sourcePreviewRgb = source.rgb8;
+    return;
+  }
   table->sourcePreviewRgb.assign(size_t(previewWidth * previewHeight * 3), 0u);
   for (int y = 0; y < previewHeight; ++y) {
     const float sourceY = (float(y) + 0.5f) * float(source.height) / float(previewHeight) - 0.5f;
@@ -351,34 +358,44 @@ inline bool buildWavetableFromSourceField(const SourceField& source,
 
   std::vector<std::vector<float> > rows(size_t(settings.rows),
                                         std::vector<float>(size_t(settings.frameSize), 0.f));
+  const auto channelValue = [&](int px, int py) {
+    const size_t base = (size_t(py) * size_t(source.width) + size_t(px)) * 3u;
+    switch (settings.imageChannelMode) {
+      case IMAGE_CHANNEL_RED: return float(source.rgb8[base]) / 255.f;
+      case IMAGE_CHANNEL_GREEN: return float(source.rgb8[base + 1u]) / 255.f;
+      case IMAGE_CHANNEL_BLUE: return float(source.rgb8[base + 2u]) / 255.f;
+      case IMAGE_CHANNEL_ALL:
+      default:
+        return (0.299f * float(source.rgb8[base]) + 0.587f * float(source.rgb8[base + 1u]) +
+                0.114f * float(source.rgb8[base + 2u])) / 255.f;
+    }
+  };
+  const bool sourceMatchesTable =
+    source.width == settings.frameSize && source.height == settings.rows;
   for (int row = 0; row < settings.rows; ++row) {
     const int outputRow = settings.rowOrder == ROW_BOTTOM_TO_TOP ? settings.rows - 1 - row : row;
-    const float sourceY = (float(row) + 0.5f) * float(source.height) / float(settings.rows) - 0.5f;
-    const int y0 = std::max(0, std::min(int(std::floor(sourceY)), source.height - 1));
-    const int y1 = std::min(y0 + 1, source.height - 1);
-    const float fy = clamp01(sourceY - float(y0));
+    const float sourceY = sourceMatchesTable ? float(row) :
+      (float(row) + 0.5f) * float(source.height) / float(settings.rows) - 0.5f;
+    const int y0 = sourceMatchesTable ? row :
+      std::max(0, std::min(int(std::floor(sourceY)), source.height - 1));
+    const int y1 = sourceMatchesTable ? row : std::min(y0 + 1, source.height - 1);
+    const float fy = sourceMatchesTable ? 0.f : clamp01(sourceY - float(y0));
     for (int x = 0; x < settings.frameSize; ++x) {
-      const float sourceX = (float(x) + 0.5f) * float(source.width) / float(settings.frameSize) - 0.5f;
-      const int x0 = std::max(0, std::min(int(std::floor(sourceX)), source.width - 1));
-      const int x1 = std::min(x0 + 1, source.width - 1);
-      const float fx = clamp01(sourceX - float(x0));
-      const auto channelValue = [&](int px, int py) {
-        const size_t base = (size_t(py) * size_t(source.width) + size_t(px)) * 3u;
-        switch (settings.imageChannelMode) {
-          case IMAGE_CHANNEL_RED: return float(source.rgb8[base]) / 255.f;
-          case IMAGE_CHANNEL_GREEN: return float(source.rgb8[base + 1u]) / 255.f;
-          case IMAGE_CHANNEL_BLUE: return float(source.rgb8[base + 2u]) / 255.f;
-          case IMAGE_CHANNEL_ALL:
-          default:
-            return (0.299f * float(source.rgb8[base]) + 0.587f * float(source.rgb8[base + 1u]) +
-                    0.114f * float(source.rgb8[base + 2u])) / 255.f;
-        }
-      };
-      const float top =
-        channelValue(x0, y0) + (channelValue(x1, y0) - channelValue(x0, y0)) * fx;
-      const float bottom =
-        channelValue(x0, y1) + (channelValue(x1, y1) - channelValue(x0, y1)) * fx;
-      float gray = top + (bottom - top) * fy;
+      float gray = 0.f;
+      if (sourceMatchesTable) {
+        gray = channelValue(x, row);
+      } else {
+        const float sourceX =
+          (float(x) + 0.5f) * float(source.width) / float(settings.frameSize) - 0.5f;
+        const int x0 = std::max(0, std::min(int(std::floor(sourceX)), source.width - 1));
+        const int x1 = std::min(x0 + 1, source.width - 1);
+        const float fx = clamp01(sourceX - float(x0));
+        const float top =
+          channelValue(x0, y0) + (channelValue(x1, y0) - channelValue(x0, y0)) * fx;
+        const float bottom =
+          channelValue(x0, y1) + (channelValue(x1, y1) - channelValue(x0, y1)) * fx;
+        gray = top + (bottom - top) * fy;
+      }
       gray = clamp01((gray - 0.5f) * settings.contrast + 0.5f + settings.brightness);
       gray = std::pow(gray, settings.gamma);
       rows[size_t(outputRow)][size_t(x)] = (gray * 2.f - 1.f) * (settings.invert ? -1.f : 1.f);
