@@ -41,7 +41,7 @@
     <linearGradient inkscape:collect="always" xlink:href="#oceanWaveGrad" id="linearGradient10" gradientUnits="userSpaceOnUse" x1="-323.57697" y1="-103.93273" x2="723.81177" y2="943.45605" gradientTransform="matrix(-1.435811,0,0,0.69647048,8750.0001,12953.568)" />
     <linearGradient inkscape:collect="always" xlink:href="#oceanWaveGrad" id="linearGradient11" gradientUnits="userSpaceOnUse" x1="-323.57697" y1="-103.93273" x2="723.81177" y2="943.45605" gradientTransform="matrix(1.435811,0,0,0.69647048,3420,12953.568)" />
     <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient500" gradientUnits="userSpaceOnUse" x1="4840.0591" y1="1505.899" x2="7390.5151" y2="1509.8325" gradientTransform="matrix(0.99690805,0,0,0.99690805,-4074.551,-888.26714)" />
-    <linearGradient inkscape:collect="always" xlink:href="#linearGradient20" id="linearGradient1" gradientUnits="userSpaceOnUse" x1="5496.8262" y1="12956.067" x2="7087.4873" y2="12956.067" gradientTransform="matrix(1.3902179,0,0,1.3902178,-6439.6916,-5277.5504)" />
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient20" id="linearGradient1" gradientUnits="userSpaceOnUse" x1="5496.8262" y1="12956.067" x2="7087.4873" y2="12956.067" gradientTransform="matrix(1.3902179,0,0,1.3902178,-6439.6916,-5161.5595)" />
     <linearGradient id="linearGradient20" inkscape:collect="always">
       <stop style="stop-color:#795cff;stop-opacity:1" offset="0" id="stop20" />
       <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop21" />
@@ -50,7 +50,7 @@
   <g id="panel_art" style="display:inline">
     <g id="Background_Rect" style="display:inline" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
       <rect x="986.18201" y="997.229" width="4077.3096" height="12887.627" rx="0" ry="0" fill="url(#bgGrad)" id="black_background" style="display:inline;fill:url(#bgGrad);stroke-width:17.8492" sodipodi:insensitive="true" />
-      <g id="waves_layer" style="display:inline;opacity:0.5" transform="matrix(1.0032751,0,0,1.0029283,209.46053,1428.5298)">
+      <g id="waves_layer" style="display:inline;opacity:0.5" transform="matrix(1.0032751,0,0,1.0029283,209.46053,1458.9832)">
         <g id="branding_wave_left" transform="matrix(1.72,0,0,1.72,774.18594,11678.805)" style="display:inline">
           <path style="fill:#4995ec" d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713" id="path149" />
           <path style="fill:#7a5cff" d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z" id="path151" />
@@ -96,5 +96,4 @@
   <g id="screen">
     <rect style="display:inline;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:#1ccad8;stroke-width:23.3012;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1" id="wave_preview" width="3628.1987" height="1648.6146" x="217.90068" y="8613.1514" />
   </g>
-  <g id="panel_labels_reworked" inkscape:groupmode="layer" inkscape:label="Labels Reworked" style="display:none" />
 </svg>

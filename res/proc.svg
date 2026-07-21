@@ -208,7 +208,7 @@
    y1="12956.067"
    x2="7087.4873"
    y2="12956.067"
-   gradientTransform="matrix(1.3902179,0,0,1.3902178,-6439.6914,-5277.5495)" /><linearGradient
+   gradientTransform="matrix(1.3902179,0,0,1.3902178,-6439.6914,-5161.5595)" /><linearGradient
    inkscape:collect="always"
    xlink:href="#oceanWaveGrad"
    id="linearGradient10"
@@ -247,14 +247,14 @@
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
    inkscape:zoom="3.3736828"
-   inkscape:cx="-9.0405654"
-   inkscape:cy="157.54297"
+   inkscape:cx="-9.1887714"
+   inkscape:cy="394.67255"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
    inkscape:window-y="-8"
    inkscape:window-maximized="1"
-   inkscape:current-layer="svg488"
+   inkscape:current-layer="Background_Rect"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -279,7 +279,7 @@
       <g
    id="waves_layer"
    style="display:inline;opacity:0.5"
-   transform="matrix(1.0032752,0,0,1.0029283,-1170.8786,975.86517)"><g
+   transform="matrix(1.0032752,0,0,1.0029283,-1170.8786,1006.3175)"><g
      id="branding_wave_left"
      transform="matrix(1.72,0,0,1.72,2150.0189,12130.149)"
      style="display:inline">
@@ -516,7 +516,7 @@
      style="fill:url(#linearGradient67)">Proc</tspan></text><text
    id="reworked_LEVIATHAN_LOGO"
    x="2304.9004"
-   y="12482.233"
+   y="12598.224"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient1);stroke:none;stroke-width:37.1;stroke-dasharray:none"
    xml:space="preserve"
    inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>

@@ -41,7 +41,7 @@
        xlink:href="#linearGradient20"
        id="linearGradient300"
        gradientUnits="userSpaceOnUse"
-       gradientTransform="matrix(1.3902179,0,0,1.3902178,-5698.4964,-5277.5488)"
+       gradientTransform="matrix(1.3902179,0,0,1.3902178,-5698.4964,-5161.5591)"
        x1="5486.8237"
        y1="12735.478"
        x2="7088.8071"
@@ -71,8 +71,8 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      inkscape:zoom="4.8386834"
-     inkscape:cx="114.18395"
-     inkscape:cy="345.44521"
+     inkscape:cx="114.28729"
+     inkscape:cy="395.04548"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -445,7 +445,7 @@
     <text
        id="reworked_LEVIATHAN_LOGO"
        x="3046.0955"
-       y="12482.233"
+       y="12598.223"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient300);fill-rule:evenodd;stroke-width:37.088"
        xml:space="preserve"
        inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
