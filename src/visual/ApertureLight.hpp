@@ -35,18 +35,30 @@ struct LeviathanApertureLight : app::ModuleLightWidget {
 
 private:
 	struct StaticBackgroundWidget;
+	struct NormalLightWidget;
 	struct BloomWidget;
 	widget::FramebufferWidget* staticBackgroundFb = nullptr;
 	StaticBackgroundWidget* staticBackgroundWidget = nullptr;
+	widget::FramebufferWidget* normalLightFb = nullptr;
+	NormalLightWidget* normalLightWidget = nullptr;
 	widget::FramebufferWidget* bloomFb = nullptr;
 	BloomWidget* bloomWidget = nullptr;
 	float bloomCacheBleedPx = 0.f;
 	float bloomCacheGlow = -1.f;
 	NVGcolor bloomCacheColor = nvgRGBA(0, 0, 0, 0);
+	float lightBrightness = 0.f;
+	float lightGlow = 0.f;
+	float lightCore = 0.f;
+	float lightHot = 0.f;
+	float normalCacheBrightness = -1.f;
+	NVGcolor normalCacheColor = nvgRGBA(0, 0, 0, 0);
 
 	void syncStaticBackgroundCache();
+	void syncNormalLightCache();
 	void syncBloomCache();
+	void refreshLightState();
 	void drawStaticBackground(NVGcontext* vg);
+	void drawNormalLight(NVGcontext* vg);
 	void drawBloomCache(NVGcontext* vg);
 	void drawSocket(NVGcontext* vg, float cx, float cy);
 	void drawUnlitLens(NVGcontext* vg, float cx, float cy);

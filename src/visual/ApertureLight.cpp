@@ -57,6 +57,19 @@ struct LeviathanApertureLight::StaticBackgroundWidget : Widget {
 	}
 };
 
+struct LeviathanApertureLight::NormalLightWidget : Widget {
+	LeviathanApertureLight* owner = nullptr;
+
+	explicit NormalLightWidget(LeviathanApertureLight* owner) : owner(owner) {
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (owner) {
+			owner->drawNormalLight(args.vg);
+		}
+	}
+};
+
 struct LeviathanApertureLight::BloomWidget : Widget {
 	LeviathanApertureLight* owner = nullptr;
 
@@ -78,6 +91,13 @@ LeviathanApertureLight::LeviathanApertureLight() {
 	staticBackgroundFb->addChild(staticBackgroundWidget);
 	addChild(staticBackgroundFb);
 
+	normalLightFb = new widget::FramebufferWidget();
+	normalLightFb->dirtyOnSubpixelChange = false;
+	normalLightFb->hide();
+	normalLightWidget = new NormalLightWidget(this);
+	normalLightFb->addChild(normalLightWidget);
+	addChild(normalLightFb);
+
 	bloomFb = new widget::FramebufferWidget();
 	bloomFb->dirtyOnSubpixelChange = false;
 	bloomFb->hide();
@@ -94,6 +114,8 @@ LeviathanApertureLight::LeviathanApertureLight() {
 LeviathanApertureLight::~LeviathanApertureLight() {
 	staticBackgroundFb = nullptr;
 	staticBackgroundWidget = nullptr;
+	normalLightFb = nullptr;
+	normalLightWidget = nullptr;
 	bloomFb = nullptr;
 	bloomWidget = nullptr;
 }
@@ -134,6 +156,7 @@ void LeviathanApertureLight::applySize(ApertureLightSize size) {
 		break;
 	}
 	syncStaticBackgroundCache();
+	syncNormalLightCache();
 	syncBloomCache();
 }
 
@@ -177,6 +200,17 @@ void LeviathanApertureLight::syncBloomCache() {
 	invalidateBloomCache();
 }
 
+void LeviathanApertureLight::syncNormalLightCache() {
+	if (!normalLightFb || !normalLightWidget) {
+		return;
+	}
+	normalLightFb->box.pos = Vec(0.f, 0.f);
+	normalLightFb->box.size = box.size;
+	normalLightWidget->box.pos = Vec(0.f, 0.f);
+	normalLightWidget->box.size = box.size;
+	normalLightFb->setDirty();
+}
+
 void LeviathanApertureLight::drawStaticBackground(NVGcontext* vg) {
 	const float cx = box.size.x * 0.5f;
 	const float cy = box.size.y * 0.5f;
@@ -185,13 +219,58 @@ void LeviathanApertureLight::drawStaticBackground(NVGcontext* vg) {
 	drawUnlitLens(vg, cx, cy);
 }
 
+void LeviathanApertureLight::drawNormalLight(NVGcontext* vg) {
+	if (lightBrightness <= 0.001f) {
+		return;
+	}
+	const float cx = box.size.x * 0.5f;
+	const float cy = box.size.y * 0.5f;
+	drawCore(vg, cx, cy, lightCore, lightHot);
+	drawCrescent(vg, cx, cy, lightCore);
+	drawSpecular(vg, cx, cy, lightHot);
+}
+
 void LeviathanApertureLight::drawBloomCache(NVGcontext* vg) {
 	const float cx = box.size.x * 0.5f + bloomCacheBleedPx;
 	const float cy = box.size.y * 0.5f + bloomCacheBleedPx;
 	drawBloom(vg, cx, cy, bloomCacheGlow);
 }
 
+void LeviathanApertureLight::refreshLightState() {
+	lightBrightness = 0.f;
+	float colorWeight = 0.f;
+	NVGcolor mixedColor = nvgRGBAf(0.f, 0.f, 0.f, 1.f);
+	for (size_t i = 0; i < baseColors.size(); ++i) {
+		engine::Light* light = getLight(int(i));
+		const float brightness = clamp(light ? light->getBrightness() : 0.f, 0.f, 1.f);
+		lightBrightness = std::max(lightBrightness, brightness);
+		colorWeight += brightness;
+		mixedColor.r += baseColors[i].r * brightness;
+		mixedColor.g += baseColors[i].g * brightness;
+		mixedColor.b += baseColors[i].b * brightness;
+	}
+	activeColor = colorWeight > 1e-6f
+		? nvgRGBAf(mixedColor.r / colorWeight, mixedColor.g / colorWeight,
+		            mixedColor.b / colorWeight, 1.f)
+		: baseColor;
+	const aperture_light::Transfer transfer = aperture_light::transferFromBrightness(lightBrightness);
+	lightGlow = transfer.glow;
+	lightCore = transfer.core;
+	lightHot = transfer.hot;
+}
+
 void LeviathanApertureLight::drawBackground(const DrawArgs& args) {
+	refreshLightState();
+	const float colorDelta = std::fabs(activeColor.r - normalCacheColor.r) +
+	                         std::fabs(activeColor.g - normalCacheColor.g) +
+	                         std::fabs(activeColor.b - normalCacheColor.b);
+	if (std::fabs(lightBrightness - normalCacheBrightness) > 0.0005f || colorDelta > 0.001f) {
+		normalCacheBrightness = lightBrightness;
+		normalCacheColor = activeColor;
+		if (normalLightFb) {
+			normalLightFb->setDirty();
+		}
+	}
 	if (!staticBackgroundFb || !staticBackgroundWidget) {
 		drawStaticBackground(args.vg);
 		return;
@@ -200,40 +279,32 @@ void LeviathanApertureLight::drawBackground(const DrawArgs& args) {
 		syncStaticBackgroundCache();
 	}
 	staticBackgroundFb->draw(args);
+
+	if (!normalLightFb || !normalLightWidget) {
+		nvgSave(args.vg);
+		nvgGlobalCompositeBlendFunc(args.vg, NVG_ONE_MINUS_DST_COLOR, NVG_ONE);
+		drawNormalLight(args.vg);
+		nvgRestore(args.vg);
+		return;
+	}
+	if (!normalLightFb->box.size.equals(box.size)) {
+		syncNormalLightCache();
+	}
+	nvgSave(args.vg);
+	nvgGlobalCompositeBlendFunc(args.vg, NVG_ONE_MINUS_DST_COLOR, NVG_ONE);
+	normalLightFb->draw(args);
+	nvgRestore(args.vg);
 }
 
 void LeviathanApertureLight::drawLight(const DrawArgs& args) {
 	NVGcontext* vg = args.vg;
 	const float cx = box.size.x * 0.5f;
 	const float cy = box.size.y * 0.5f;
-
-	float t = 0.f;
-	float colorWeight = 0.f;
-	NVGcolor mixedColor = nvgRGBAf(0.f, 0.f, 0.f, 1.f);
-	for (size_t i = 0; i < baseColors.size(); ++i) {
-		engine::Light* light = getLight(int(i));
-		const float brightness = clamp(light ? light->getBrightness() : 0.f, 0.f, 1.f);
-		t = std::max(t, brightness);
-		colorWeight += brightness;
-		mixedColor.r += baseColors[i].r * brightness;
-		mixedColor.g += baseColors[i].g * brightness;
-		mixedColor.b += baseColors[i].b * brightness;
-	}
-	if (colorWeight > 1e-6f) {
-		activeColor = nvgRGBAf(mixedColor.r / colorWeight, mixedColor.g / colorWeight,
-		                      mixedColor.b / colorWeight, 1.f);
-	}
-	else {
-		activeColor = baseColor;
-	}
-	const aperture_light::Transfer transfer = aperture_light::transferFromBrightness(t);
-	const float glow = transfer.glow;
-	const float core = transfer.core;
-	const float hot = transfer.hot;
+	refreshLightState();
 	const float bloom = apertureBloomAmount();
 
-	if (t > 0.001f && bloom > 0.f) {
-		const float effectiveBloom = glow * bloom;
+	if (lightBrightness > 0.001f && bloom > 0.f) {
+		const float effectiveBloom = lightGlow * bloom;
 		if (bloomFb && bloomWidget) {
 			if (!bloomFb->box.size.equals(box.size.plus(Vec(2.f * bloomCacheBleedPx, 2.f * bloomCacheBleedPx)))) {
 				syncBloomCache();
@@ -254,11 +325,6 @@ void LeviathanApertureLight::drawLight(const DrawArgs& args) {
 		else {
 			drawBloom(vg, cx, cy, effectiveBloom);
 		}
-	}
-	if (t > 0.001f) {
-		drawCore(vg, cx, cy, core, hot);
-		drawCrescent(vg, cx, cy, core);
-		drawSpecular(vg, cx, cy, hot);
 	}
 }
 
