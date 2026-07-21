@@ -9,7 +9,8 @@ namespace visual_assets {
 
 class FractalGlassOverlay : public TransparentWidget {
 public:
-	FractalGlassOverlay(const std::string& panelPath, const std::string& selectionKey);
+	FractalGlassOverlay(const std::string& panelPath, const std::string& selectionKey,
+		int renderWidth, int renderHeight);
 	~FractalGlassOverlay() override;
 
 	void setFramebuffer(widget::FramebufferWidget* framebuffer);

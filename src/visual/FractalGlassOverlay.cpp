@@ -7,6 +7,7 @@
 #include <cmath>
 #include <condition_variable>
 #include <cstring>
+#include <future>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
@@ -15,11 +16,19 @@
 namespace visual_assets {
 namespace {
 
-constexpr int kRenderWidth = 384;
-constexpr int kRenderHeight = 480;
+constexpr int kReferenceRenderHeight = 480;
+constexpr int kReferenceRenderWidth = 384;
+constexpr int kReferencePanelHp = 8;
+constexpr int kMaxRenderWidth = 1024;
+constexpr size_t kMaxCachedFractalFields = 32u;
 
 std::string libraryPath() {
-	return system::join(asset::user(), "Leviathan/IntegralFlux/FractalParams.json");
+	if (isDragonKingUserFractalParamsEnabled()) {
+		return system::join(asset::user(), "Leviathan/IntegralFlux/FractalParams.json");
+	}
+	return pluginInstance
+		? asset::plugin(pluginInstance, "res/FractalParams.json")
+		: std::string();
 }
 
 bool sameParams(const iris::NautiloidFractalSourceParams& a,
@@ -56,6 +65,98 @@ struct SelectionPool {
 
 std::mutex gSelectionPoolMutex;
 std::unordered_map<std::string, SelectionPool> gSelectionPools;
+
+struct FractalRenderKey {
+	int width = 0;
+	int height = 0;
+	int mode = iris::FRACTAL_NONE;
+	uint32_t zoomBits = 0u;
+	uint64_t centerXBits = 0u;
+	uint64_t centerYBits = 0u;
+
+	bool operator==(const FractalRenderKey& other) const {
+		return width == other.width && height == other.height && mode == other.mode &&
+			zoomBits == other.zoomBits && centerXBits == other.centerXBits &&
+			centerYBits == other.centerYBits;
+	}
+};
+
+struct FractalRenderKeyHash {
+	size_t operator()(const FractalRenderKey& key) const {
+		size_t hash = size_t(1469598103934665603ull);
+		auto mix = [&](uint64_t value) {
+			hash ^= size_t(value ^ (value >> 32u));
+			hash *= size_t(1099511628211ull);
+		};
+		mix(uint64_t(uint32_t(key.width)) | (uint64_t(uint32_t(key.height)) << 32u));
+		mix(uint64_t(uint32_t(key.mode)) | (uint64_t(key.zoomBits) << 32u));
+		mix(key.centerXBits);
+		mix(key.centerYBits);
+		return hash;
+	}
+};
+
+using CachedFractalField = std::shared_ptr<const iris::SourceField>;
+using CachedFractalFuture = std::shared_future<CachedFractalField>;
+std::mutex gFractalRenderCacheMutex;
+std::unordered_map<FractalRenderKey, CachedFractalFuture, FractalRenderKeyHash>
+	gFractalRenderCache;
+
+FractalRenderKey makeFractalRenderKey(
+	const iris::NautiloidFractalSourceParams& params, int width, int height) {
+	FractalRenderKey key;
+	key.width = width;
+	key.height = height;
+	key.mode = params.mode;
+	std::memcpy(&key.zoomBits, &params.zoom, sizeof(key.zoomBits));
+	std::memcpy(&key.centerXBits, &params.centerX, sizeof(key.centerXBits));
+	std::memcpy(&key.centerYBits, &params.centerY, sizeof(key.centerYBits));
+	return key;
+}
+
+CachedFractalField renderFractalField(
+	const iris::NautiloidFractalSourceParams& params, int width, int height) {
+	std::shared_ptr<iris::SourceField> source(new iris::SourceField);
+	if (!iris::makeBuiltinFractalSourceSized(params.mode, params.zoom,
+		params.centerX, params.centerY, width, height, 1.f, source.get()) ||
+		!source->valid()) {
+		return CachedFractalField();
+	}
+	return source;
+}
+
+CachedFractalField cachedFractalField(
+	const iris::NautiloidFractalSourceParams& params, int width, int height) {
+	const FractalRenderKey key = makeFractalRenderKey(params, width, height);
+	CachedFractalFuture future;
+	std::shared_ptr<std::promise<CachedFractalField>> producer;
+	{
+		std::lock_guard<std::mutex> lock(gFractalRenderCacheMutex);
+		const auto existing = gFractalRenderCache.find(key);
+		if (existing != gFractalRenderCache.end()) {
+			future = existing->second;
+		} else {
+			if (gFractalRenderCache.size() >= kMaxCachedFractalFields) {
+				for (auto it = gFractalRenderCache.begin();
+					it != gFractalRenderCache.end() &&
+					gFractalRenderCache.size() >= kMaxCachedFractalFields;) {
+					if (it->second.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+						it = gFractalRenderCache.erase(it);
+					} else {
+						++it;
+					}
+				}
+			}
+			producer.reset(new std::promise<CachedFractalField>);
+			future = producer->get_future().share();
+			gFractalRenderCache.emplace(key, future);
+		}
+	}
+	if (producer) {
+		producer->set_value(renderFractalField(params, width, height));
+	}
+	return future.get();
+}
 
 uint64_t savedEntriesSignature(const std::vector<SavedEntry>& entries) {
 	uint64_t hash = 1469598103934665603ull;
@@ -140,6 +241,9 @@ bool selectRandomEntry(const std::string& selectionKey,
 }
 
 bool deleteEntry(size_t index) {
+	// The bundled library is installation data. Only the explicitly selected
+	// user library may be edited by Integral Flux's debug menu.
+	if (!isDragonKingUserFractalParamsEnabled()) return false;
 	json_error_t error;
 	const std::string path = libraryPath();
 	json_t* root = json_load_file(path.c_str(), 0, &error);
@@ -163,7 +267,11 @@ struct FractalGlassOverlay::Impl {
 		std::vector<panel_svg::SvgPathCommand> path;
 		iris::FractalPalette palette;
 	};
-	struct Request { iris::NautiloidFractalSourceParams params; uint64_t serial = 0u; };
+	struct Request {
+		iris::NautiloidFractalSourceParams params;
+		uint64_t serial = 0u;
+		bool cacheable = false;
+	};
 	widget::FramebufferWidget* framebuffer = nullptr;
 	std::vector<Region> regions;
 	std::vector<int> images;
@@ -195,9 +303,14 @@ struct FractalGlassOverlay::Impl {
 	bool submittedValid = false;
 	iris::NautiloidFractalSourceParams submitted;
 	std::string selectionKey;
+	int renderWidth = 2;
+	int renderHeight = kReferenceRenderHeight;
 
-	Impl(const std::string& panelPath, const std::string& requestedSelectionKey)
-		: selectionKey(requestedSelectionKey) {
+	Impl(const std::string& panelPath, const std::string& requestedSelectionKey,
+		int requestedRenderWidth, int requestedRenderHeight)
+		: selectionKey(requestedSelectionKey)
+		, renderWidth(std::max(2, requestedRenderWidth))
+		, renderHeight(std::max(2, requestedRenderHeight)) {
 		std::vector<panel_svg::SvgRectMatch> matches;
 		if (panel_svg::findRectsInGroupsWithIdSubstringMm(panelPath, "glass", &matches)) {
 			for (const auto& match : matches) {
@@ -235,10 +348,11 @@ struct FractalGlassOverlay::Impl {
 		if (worker.joinable()) worker.join();
 	}
 
-	void submit(const iris::NautiloidFractalSourceParams& params) {
+	void submit(const iris::NautiloidFractalSourceParams& params, bool cacheable) {
 		std::lock_guard<std::mutex> lock(requestMutex);
 		request.params = params;
 		request.serial = ++nextSerial;
+		request.cacheable = cacheable;
 		pending = true;
 		requestCv.notify_one();
 	}
@@ -253,21 +367,22 @@ struct FractalGlassOverlay::Impl {
 				current = request;
 				pending = false;
 			}
-			iris::SourceField source;
-			if (!iris::makeBuiltinFractalSourceSized(current.params.mode, current.params.zoom,
-				current.params.centerX, current.params.centerY, kRenderWidth, kRenderHeight, 1.f, &source) || !source.valid()) continue;
+			const CachedFractalField source = current.cacheable
+				? cachedFractalField(current.params, renderWidth, renderHeight)
+				: renderFractalField(current.params, renderWidth, renderHeight);
+			if (!source || !source->valid()) continue;
 			std::lock_guard<std::mutex> requestLock(requestMutex);
 			if (current.serial != nextSerial) continue;
 			{
 				std::lock_guard<std::mutex> resultLock(resultMutex);
 				rendered.resize(regions.size());
 				for (size_t i = 0; i < regions.size(); ++i) {
-					iris::SourceField tinted = source;
+					iris::SourceField tinted = *source;
 					iris::applyFractalPalette(&tinted, regions[i].palette);
 					rendered[i] = std::move(tinted.rgb8);
 				}
-				renderedWidth = source.width;
-				renderedHeight = source.height;
+				renderedWidth = source->width;
+				renderedHeight = source->height;
 			}
 			generation.fetch_add(1u, std::memory_order_release);
 		}
@@ -275,8 +390,9 @@ struct FractalGlassOverlay::Impl {
 };
 
 FractalGlassOverlay::FractalGlassOverlay(
-	const std::string& panelPath, const std::string& selectionKey)
-	: impl(new Impl(panelPath, selectionKey)) {}
+	const std::string& panelPath, const std::string& selectionKey,
+	int renderWidth, int renderHeight)
+	: impl(new Impl(panelPath, selectionKey, renderWidth, renderHeight)) {}
 
 FractalGlassOverlay::~FractalGlassOverlay() = default;
 
@@ -288,7 +404,8 @@ void FractalGlassOverlay::setLiveParams(const iris::NautiloidFractalSourceParams
 }
 
 bool FractalGlassOverlay::hasFallbackSelection() const {
-	return !impl->liveValid && impl->fallbackValid && impl->fallbackIndex != size_t(-1);
+	return isDragonKingUserFractalParamsEnabled() &&
+		!impl->liveValid && impl->fallbackValid && impl->fallbackIndex != size_t(-1);
 }
 
 bool FractalGlassOverlay::deleteFallbackSelection() {
@@ -317,7 +434,7 @@ void FractalGlassOverlay::step() {
 		if (!impl->submittedValid || !sameParams(impl->live, impl->submitted)) {
 			impl->submitted = impl->live;
 			impl->submittedValid = true;
-			impl->submit(impl->live);
+			impl->submit(impl->live, false);
 		}
 		impl->fallbackAttempted = false;
 	} else {
@@ -330,7 +447,7 @@ void FractalGlassOverlay::step() {
 		if (impl->fallbackValid && (!impl->submittedValid || !sameParams(impl->fallback, impl->submitted))) {
 			impl->submitted = impl->fallback;
 			impl->submittedValid = true;
-			impl->submit(impl->fallback);
+			impl->submit(impl->fallback, true);
 		}
 	}
 	impl->wasLive = impl->liveValid;
@@ -422,7 +539,13 @@ FractalGlassOverlay* addFractalGlassOverlay(ModuleWidget* parent, const std::str
 	framebuffer->box.size = parent->box.size;
 	framebuffer->dirtyOnSubpixelChange = false;
 	const std::string selectionKey = panelPath + (parent->module ? "" : "#preview");
-	auto* overlay = new FractalGlassOverlay(panelPath, selectionKey);
+	const int renderHeight = kReferenceRenderHeight;
+	const float referencePanelWidth = float(kReferencePanelHp * RACK_GRID_WIDTH);
+	const int renderWidth = clamp(int(std::round(
+		float(kReferenceRenderWidth) * parent->box.size.x / referencePanelWidth)),
+		2, kMaxRenderWidth);
+	auto* overlay = new FractalGlassOverlay(
+		panelPath, selectionKey, renderWidth, renderHeight);
 	overlay->box.size = parent->box.size;
 	overlay->setFramebuffer(framebuffer);
 	framebuffer->addChild(overlay);

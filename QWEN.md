@@ -455,9 +455,15 @@ Controlled via `res/dragonking.txt` JSON file:
   "PreviewWidgetOptions": false,
   "clockworkDragLogging": false,
   "temporalDeckLifetimeLogging": false,
-  "moduleTeardownLogging": false
+  "moduleTeardownLogging": false,
+  "UserFractalParams": false
 }
 ```
+
+`UserFractalParams` defaults to `false` when omitted. When `false`, Integral Flux
+reads its fallback fractal library from the installed `res/FractalParams.json`.
+When `true`, it reads `Leviathan/IntegralFlux/FractalParams.json` under Rack's
+user directory instead.
 
 **Runtime Checks:**
 ```cpp
@@ -466,6 +472,7 @@ isDragonKingPreviewWidgetOptionsEnabled()
 isClockworkDragDebugLoggingEnabled()
 isTemporalDeckLifetimeLoggingEnabled()
 isModuleTeardownLoggingEnabled()
+isDragonKingUserFractalParamsEnabled()
 ```
 
 ### Panel SVG Anchor System

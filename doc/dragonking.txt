@@ -6,6 +6,7 @@
   "temporalDeckLifetimeLogging": false,
   "ScopeDrawLogging": false,
   "IntegralFluxDrawLogging": false,
+  "UserFractalParams": false,
   "extraGlValidation": false,
   "moduleTeardownLogging": true
 }

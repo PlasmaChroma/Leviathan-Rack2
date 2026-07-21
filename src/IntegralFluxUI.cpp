@@ -52,8 +52,17 @@ std::string integralFluxFractalParamsRootPath() {
 	return system::join(asset::user(), "Leviathan/IntegralFlux");
 }
 
-std::string integralFluxFractalParamsPath() {
+std::string integralFluxUserFractalParamsPath() {
 	return system::join(integralFluxFractalParamsRootPath(), "FractalParams.json");
+}
+
+std::string integralFluxFractalParamsLibraryPath() {
+	if (isDragonKingUserFractalParamsEnabled()) {
+		return integralFluxUserFractalParamsPath();
+	}
+	return pluginInstance
+		? asset::plugin(pluginInstance, "res/FractalParams.json")
+		: std::string();
 }
 
 Nautiloid* leftNautiloidForIntegralFlux(const IntegralFlux* module) {
@@ -72,7 +81,7 @@ bool appendIntegralFluxFractalParamsCapture(const IntegralFlux* module) {
 	}
 	system::createDirectories(integralFluxFractalParamsRootPath());
 
-	const std::string path = integralFluxFractalParamsPath();
+	const std::string path = integralFluxUserFractalParamsPath();
 	json_error_t error;
 	json_t* root = json_load_file(path.c_str(), 0, &error);
 	if (!root || !json_is_object(root)) {
@@ -2382,7 +2391,10 @@ struct IntegralFluxWidget : ModuleWidget {
 						nautiloidGlass->deleteFallbackSelection();
 					}, !nautiloidGlass || !nautiloidGlass->hasFallbackSelection()));
 				}
-				menu->addChild(createMenuLabel(integralFluxFractalParamsPath()));
+				menu->addChild(createMenuLabel(
+					hasNautiloid
+						? std::string("Write: ") + integralFluxUserFractalParamsPath()
+						: std::string("Read: ") + integralFluxFractalParamsLibraryPath()));
 			}
 		}
 	}

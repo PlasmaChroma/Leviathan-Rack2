@@ -44,8 +44,12 @@ Vec nautiloidFractalViewportHalfSpan(int mode) {
       return Vec(0.42f, 0.145f);
     case iris::FRACTAL_CELTIC:
       return Vec(1.62f, 0.88f);
+    case iris::FRACTAL_BUFFALO:
+      return Vec(1.55f, 0.84f);
     case iris::FRACTAL_SPIDER:
       return Vec(1.56f, 0.84f);
+    case iris::FRACTAL_BARNSLEY:
+      return Vec(1.75f, 0.95f);
     case iris::FRACTAL_NOVA:
       return Vec(2.0f, 0.86f);
     case iris::FRACTAL_NEWTON:
@@ -364,8 +368,12 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
           c = vec2(-1.76, -0.045) + p;
         } else if (NAUTILOID_MODE == 8) {
           c = vec2(-0.25, 0.02) + p;
+        } else if (NAUTILOID_MODE == 9) {
+          c = vec2(-0.58, 0.0) + p;
         } else if (NAUTILOID_MODE == 11) {
           c = vec2(-0.52, 0.0) + p;
+        } else if (NAUTILOID_MODE == 14) {
+          c = p;
         } else {
           c = vec2(-0.12, 0.0) + p;
         }
@@ -375,7 +383,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
         int iter = 0;
         const int maxIter = NAUTILOID_ESCAPE_MAX_ITER;
         for (int i = 0; i < maxIter; ++i) {
-          if (NAUTILOID_MODE == 7) {
+          if (NAUTILOID_MODE == 7 || NAUTILOID_MODE == 9) {
             z = abs(z);
           }
           float zr2 = z.x * z.x;
@@ -394,10 +402,16 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
             z = vec2(zr2 - zi2 + c.x, -2.0 * z.x * z.y + c.y);
           } else if (NAUTILOID_MODE == 8) {
             z = vec2(abs(zr2 - zi2) + c.x, 2.0 * z.x * z.y + c.y);
+          } else if (NAUTILOID_MODE == 9) {
+            z = vec2(abs(zr2 - zi2) + c.x, abs(2.0 * z.x * z.y) + c.y);
           } else if (NAUTILOID_MODE == 11) {
             vec2 nextZ = vec2(zr2 - zi2 + c.x, 2.0 * z.x * z.y + c.y);
             c = 0.5 * c + nextZ;
             z = nextZ;
+          } else if (NAUTILOID_MODE == 14) {
+            float shiftedR = z.x >= 0.0 ? z.x - 1.0 : z.x + 1.0;
+            z = vec2(shiftedR * c.x - z.y * c.y,
+                     shiftedR * c.y + z.y * c.x);
           } else {
             z = vec2(zr2 - zi2 + c.x, 2.0 * z.x * z.y + c.y);
           }
@@ -1392,7 +1406,7 @@ struct NautiloidSourceButton final : TL1105 {
     ui::Menu* menu = createMenu();
     menu->box.pos = getAbsoluteOffset(Vec(0.f, box.size.y));
     menu->addChild(createMenuLabel("Fractals"));
-    const std::array<int, 12> modes = {{
+    const std::array<int, 14> modes = {{
       iris::FRACTAL_MANDELBROT,
       iris::FRACTAL_MULTIBROT,
       iris::FRACTAL_JULIA,
@@ -1401,8 +1415,10 @@ struct NautiloidSourceButton final : TL1105 {
       iris::FRACTAL_MANOWAR,
       iris::FRACTAL_BURNING_SHIP,
       iris::FRACTAL_CELTIC,
+      iris::FRACTAL_BUFFALO,
       iris::FRACTAL_TRICORN,
       iris::FRACTAL_SPIDER,
+      iris::FRACTAL_BARNSLEY,
       iris::FRACTAL_NEWTON,
       iris::FRACTAL_NOVA,
     }};

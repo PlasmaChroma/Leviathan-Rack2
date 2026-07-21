@@ -547,9 +547,14 @@ void submitTemporalDeckUiMetrics(uint32_t instanceId,
   "PreviewWidgetOptions": false,
   "clockworkDragLogging": false,
   "temporalDeckLifetimeLogging": false,
-  "moduleTeardownLogging": false
+  "moduleTeardownLogging": false,
+  "UserFractalParams": false
 }
 ```
+
+`UserFractalParams` defaults to `false` when absent. `false` selects the bundled
+`res/FractalParams.json`; `true` selects
+`Leviathan/IntegralFlux/FractalParams.json` under Rack's user directory.
 
 ### Runtime Feature Flags
 
@@ -559,6 +564,7 @@ bool isDragonKingPreviewWidgetOptionsEnabled();
 bool isClockworkDragDebugLoggingEnabled();
 bool isTemporalDeckLifetimeLoggingEnabled();
 bool isModuleTeardownLoggingEnabled();
+bool isDragonKingUserFractalParamsEnabled();
 ```
 
 ---

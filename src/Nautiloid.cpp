@@ -68,8 +68,12 @@ Vec nautiloidFractalViewportHalfSpan(int mode) {
       return Vec(0.42f, 0.145f);
     case iris::FRACTAL_CELTIC:
       return Vec(1.62f, 0.88f);
+    case iris::FRACTAL_BUFFALO:
+      return Vec(1.55f, 0.84f);
     case iris::FRACTAL_SPIDER:
       return Vec(1.56f, 0.84f);
+    case iris::FRACTAL_BARNSLEY:
+      return Vec(1.75f, 0.95f);
     case iris::FRACTAL_NOVA:
       return Vec(2.0f, 0.86f);
     case iris::FRACTAL_NEWTON:

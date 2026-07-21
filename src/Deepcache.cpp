@@ -3145,9 +3145,13 @@ DeepcacheWidget::DeepcacheWidget(DeepcacheModule* module) {
 	// MB owns and mutates the same raw Scene::browser slot. In particular, its
 	// live browser is not safe to detach/traverse as though it were Rack's stock
 	// browser. Decline installation before touching that pointer. The module can
-	// remain in the patch as an explicit standby without affecting MB.
+	// remain inert in the patch without affecting MB. Report the ownership
+	// collision consistently as a conflict regardless of module spawn order;
+	// browserStandby still records that this safe case can activate automatically
+	// after MB is removed.
 	if (rackContainsStoermelderMb(internal_->scene)) {
 		module->browserStandby.store(true, std::memory_order_relaxed);
+		module->browserOwnershipConflict.store(true, std::memory_order_relaxed);
 		module->cacheState.store(static_cast<int>(deepcache::CacheState::DISABLED), std::memory_order_relaxed);
 		return;
 	}
@@ -3204,6 +3208,7 @@ void DeepcacheWidget::step() {
 			if (rackContainsStoermelderMb(internal_->scene)) {
 				internal_->module->browserStandby.store(true, std::memory_order_relaxed);
 				internal_->module->duplicateInstance.store(false, std::memory_order_relaxed);
+				internal_->module->browserOwnershipConflict.store(true, std::memory_order_relaxed);
 				internal_->module->cacheState.store(static_cast<int>(deepcache::CacheState::DISABLED), std::memory_order_relaxed);
 			}
 			else if (claimDeepcacheScene(internal_->scene, this)) {
@@ -3212,6 +3217,7 @@ void DeepcacheWidget::step() {
 			else {
 				internal_->module->browserStandby.store(false, std::memory_order_relaxed);
 				internal_->module->duplicateInstance.store(true, std::memory_order_relaxed);
+				internal_->module->browserOwnershipConflict.store(false, std::memory_order_relaxed);
 			}
 		}
 	}
@@ -3249,7 +3255,7 @@ void DeepcacheWidget::appendContextMenu(ui::Menu* menu) {
 		return;
 	menu->addChild(new ui::MenuSeparator);
 	if (internal_->module->browserStandby.load(std::memory_order_relaxed)) {
-		menu->addChild(createMenuLabel("Standby: Stoermelder MB owns the browser"));
+		menu->addChild(createMenuLabel("Conflict: Stoermelder MB owns the browser"));
 		menu->addChild(createMenuLabel("Deepcache activates automatically when MB is removed"));
 		return;
 	}

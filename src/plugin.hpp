@@ -50,6 +50,7 @@ bool isModuleTeardownLoggingEnabled();
 bool isScopeDrawLoggingEnabled();
 bool isIntegralFluxDrawLoggingEnabled();
 bool isExtraGlValidationEnabled();
+bool isDragonKingUserFractalParamsEnabled();
 void refreshDragonKingDebugEnabled();
 
 struct ModuleTeardownTimer {

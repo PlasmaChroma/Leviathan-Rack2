@@ -98,7 +98,7 @@ void testRoundTrips() {
     random ^= random >> 27u;
     return random * 2685821657736338717ull;
   };
-  const int modes[] = {1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13};
+  const int modes[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
   bool all = true;
   for (int i = 0; i < 5000; ++i) {
     nautiloid_location::State state;
@@ -162,7 +162,7 @@ void testCanonicalization() {
 }
 
 void testIrisPixelEquivalence() {
-  const int modes[] = {1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13};
+  const int modes[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
   bool all = true;
   for (int mode : modes) {
     nautiloid_location::State requested {mode, 1.375f, -0.3125, 0.21875};

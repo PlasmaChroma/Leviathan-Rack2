@@ -416,9 +416,15 @@ inline bool makeBuiltinFractalSourceSized(
       } else if (mode == FRACTAL_CELTIC) {
         cr = -0.25 + panX + double(nx) * 1.62 * zoomScale * viewScale;
         ci = 0.02 + panY + double(ny) * 0.88 * zoomScale * viewScale;
+      } else if (mode == FRACTAL_BUFFALO) {
+        cr = -0.58 + panX + double(nx) * 1.55 * zoomScale * viewScale;
+        ci = panY + double(ny) * 0.84 * zoomScale * viewScale;
       } else if (mode == FRACTAL_SPIDER) {
         cr = -0.52 + panX + double(nx) * 1.56 * zoomScale * viewScale;
         ci = panY + double(ny) * 0.84 * zoomScale * viewScale;
+      } else if (mode == FRACTAL_BARNSLEY) {
+        cr = panX + double(nx) * 1.75 * zoomScale * viewScale;
+        ci = panY + double(ny) * 0.95 * zoomScale * viewScale;
       } else {
         cr = -0.12 + panX + double(nx) * 1.68 * zoomScale * viewScale;
         ci = panY + double(ny) * 0.90 * zoomScale * viewScale;
@@ -428,7 +434,7 @@ inline bool makeBuiltinFractalSourceSized(
       int iter = 0;
       double mag2 = 0.0;
       for (; iter < maxIter; ++iter) {
-        if (mode == FRACTAL_BURNING_SHIP) {
+        if (mode == FRACTAL_BURNING_SHIP || mode == FRACTAL_BUFFALO) {
           zr = std::fabs(zr);
           zi = std::fabs(zi);
         }
@@ -458,11 +464,22 @@ inline bool makeBuiltinFractalSourceSized(
           const double nextI = 2.0 * zr * zi + ci;
           zr = nextR;
           zi = nextI;
+        } else if (mode == FRACTAL_BUFFALO) {
+          const double nextR = std::fabs(zr2 - zi2) + cr;
+          const double nextI = std::fabs(2.0 * zr * zi) + ci;
+          zr = nextR;
+          zi = nextI;
         } else if (mode == FRACTAL_SPIDER) {
           const double nextR = zr2 - zi2 + cr;
           const double nextI = 2.0 * zr * zi + ci;
           cr = 0.5 * cr + nextR;
           ci = 0.5 * ci + nextI;
+          zr = nextR;
+          zi = nextI;
+        } else if (mode == FRACTAL_BARNSLEY) {
+          const double shiftedR = zr >= 0.0 ? zr - 1.0 : zr + 1.0;
+          const double nextR = shiftedR * cr - zi * ci;
+          const double nextI = shiftedR * ci + zi * cr;
           zr = nextR;
           zi = nextI;
         } else {

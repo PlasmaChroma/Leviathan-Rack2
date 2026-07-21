@@ -436,6 +436,8 @@ int main() {
   iris::SourceField multibrotSource;
   iris::SourceField multijuliaSource;
   iris::SourceField manowarSource;
+  iris::SourceField buffaloSource;
+  iris::SourceField barnsleySource;
   check("cubic Multibrot generates a source",
         iris::makeBuiltinFractalSourceSized(
           iris::FRACTAL_MULTIBROT, 0.f, 0.0, 0.0,
@@ -451,6 +453,16 @@ int main() {
           iris::FRACTAL_MANOWAR, 0.f, 0.0, 0.0,
           64, 32, 1.f, 64, 32, 0, 0, &manowarSource, &ioError) &&
         manowarSource.valid() && manowarSource.sourceName == "Fractal: Manowar");
+  check("Buffalo generates a source",
+        iris::makeBuiltinFractalSourceSized(
+          iris::FRACTAL_BUFFALO, 0.f, 0.0, 0.0,
+          64, 32, 1.f, 64, 32, 0, 0, &buffaloSource, &ioError) &&
+        buffaloSource.valid() && buffaloSource.sourceName == "Fractal: Buffalo");
+  check("Barnsley generates a source",
+        iris::makeBuiltinFractalSourceSized(
+          iris::FRACTAL_BARNSLEY, 0.f, 0.0, 0.0,
+          64, 32, 1.f, 64, 32, 0, 0, &barnsleySource, &ioError) &&
+        barnsleySource.valid() && barnsleySource.sourceName == "Fractal: Barnsley");
   const auto sourceHasVariation = [](const iris::SourceField& source) {
     for (size_t i = 1u; i < source.rgb8.size(); ++i) {
       if (source.rgb8[i] != source.rgb8[0]) return true;
@@ -460,6 +472,8 @@ int main() {
   check("cubic Multibrot source has visible variation", sourceHasVariation(multibrotSource));
   check("cubic Multijulia source has visible variation", sourceHasVariation(multijuliaSource));
   check("Manowar source has visible variation", sourceHasVariation(manowarSource));
+  check("Buffalo source has visible variation", sourceHasVariation(buffaloSource));
+  check("Barnsley source has visible variation", sourceHasVariation(barnsleySource));
   size_t multijuliaInteriorPixels = 0u;
   for (size_t i = 0u; i + 2u < multijuliaSource.rgb8.size(); i += 3u) {
     if (multijuliaSource.rgb8[i] == 7u &&
@@ -475,6 +489,10 @@ int main() {
   check("Manowar source is distinct from quadratic and cubic sets",
         manowarSource.rgb8 != multibrotSource.rgb8 &&
         manowarSource.rgb8 != multijuliaSource.rgb8);
+  check("Buffalo and Barnsley sources are distinct from neighboring sets",
+        buffaloSource.rgb8 != barnsleySource.rgb8 &&
+        buffaloSource.rgb8 != manowarSource.rgb8 &&
+        barnsleySource.rgb8 != multibrotSource.rgb8);
 
   std::cout << "Summary: " << (checks - failures) << "/" << checks << " passed\n";
   return failures == 0 ? 0 : 1;
