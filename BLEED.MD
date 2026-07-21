@@ -15,11 +15,12 @@ constant-color marks in context menus, and changing LEDs produce flickering
 marks.
 
 The current test keeps the socket and unlit lens in a static normal-pass
-framebuffer. The core, crescent, and specular glint use a separate small,
-dynamic framebuffer, composited once with locally scoped screen blending in the
-normal pass. Only bloom remains in Rack's screen-blended light layer. This is
-intended to restore the additive detail character without re-rasterizing static
-geometry for every changing LED and without making LEDs aware of menus.
+framebuffer. The core and crescent use a separate small, dynamic framebuffer,
+composited once with locally scoped screen blending in the normal pass. The
+upper-left specular glint is then drawn separately with the same locally scoped
+normal-pass screen blend, restoring its independent additive contribution. Only
+bloom remains in Rack's screen-blended light layer. This avoids re-rasterizing
+static geometry for every changing LED and does not make LEDs aware of menus.
 
 Reference captures:
 

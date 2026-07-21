@@ -227,6 +227,14 @@ void LeviathanApertureLight::drawNormalLight(NVGcontext* vg) {
 	const float cy = box.size.y * 0.5f;
 	drawCore(vg, cx, cy, lightCore, lightHot);
 	drawCrescent(vg, cx, cy, lightCore);
+}
+
+void LeviathanApertureLight::drawNormalSpecular(NVGcontext* vg) {
+	if (lightBrightness <= 0.001f) {
+		return;
+	}
+	const float cx = box.size.x * 0.5f;
+	const float cy = box.size.y * 0.5f;
 	drawSpecular(vg, cx, cy, lightHot);
 }
 
@@ -285,14 +293,19 @@ void LeviathanApertureLight::drawBackground(const DrawArgs& args) {
 		nvgGlobalCompositeBlendFunc(args.vg, NVG_ONE_MINUS_DST_COLOR, NVG_ONE);
 		drawNormalLight(args.vg);
 		nvgRestore(args.vg);
-		return;
 	}
-	if (!normalLightFb->box.size.equals(box.size)) {
-		syncNormalLightCache();
+	else {
+		if (!normalLightFb->box.size.equals(box.size)) {
+			syncNormalLightCache();
+		}
+		nvgSave(args.vg);
+		nvgGlobalCompositeBlendFunc(args.vg, NVG_ONE_MINUS_DST_COLOR, NVG_ONE);
+		normalLightFb->draw(args);
+		nvgRestore(args.vg);
 	}
 	nvgSave(args.vg);
 	nvgGlobalCompositeBlendFunc(args.vg, NVG_ONE_MINUS_DST_COLOR, NVG_ONE);
-	normalLightFb->draw(args);
+	drawNormalSpecular(args.vg);
 	nvgRestore(args.vg);
 }
 
@@ -492,7 +505,7 @@ void LeviathanApertureLight::drawSpecular(NVGcontext* vg, float cx, float cy, fl
 		cy - offset,
 		0.f,
 		radius,
-		nvgRGBAf(1.f, 1.f, 1.f, 0.58f * hot),
+		nvgRGBAf(1.f, 1.f, 1.f, 0.72f * hot),
 		nvgRGBAf(1.f, 1.f, 1.f, 0.f));
 	nvgBeginPath(vg);
 	nvgCircle(vg, cx - offset, cy - offset, radius);

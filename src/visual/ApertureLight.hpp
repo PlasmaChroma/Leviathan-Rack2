@@ -59,6 +59,7 @@ private:
 	void refreshLightState();
 	void drawStaticBackground(NVGcontext* vg);
 	void drawNormalLight(NVGcontext* vg);
+	void drawNormalSpecular(NVGcontext* vg);
 	void drawBloomCache(NVGcontext* vg);
 	void drawSocket(NVGcontext* vg, float cx, float cy);
 	void drawUnlitLens(NVGcontext* vg, float cx, float cy);
