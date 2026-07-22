@@ -192,13 +192,6 @@ struct WyrmEditorDock final : Widget {
 			nvgStrokeColor(args.vg, nvgRGBA(108, 89, 205, 115));
 			nvgStrokeWidth(args.vg, 1.f);
 			nvgStroke(args.vg);
-			if (APP && APP->window && APP->window->uiFont) {
-				nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-				nvgFontSize(args.vg, 9.f);
-				nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-				nvgFillColor(args.vg, nvgRGBA(151, 218, 238, 125));
-				nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y, "EDITOR EXPANDED", nullptr);
-			}
 		}
 		Widget::draw(args);
 	}
@@ -207,6 +200,7 @@ struct WyrmEditorDock final : Widget {
 struct WyrmEditorGlyphButton final : widget::OpaqueWidget {
 	std::function<void()> action;
 	std::function<bool()> enabledAction;
+	std::function<bool()> collapseGlyphAction;
 	bool collapseGlyph = false;
 
 	bool enabled() const {
@@ -224,6 +218,7 @@ struct WyrmEditorGlyphButton final : widget::OpaqueWidget {
 
 	void draw(const DrawArgs& args) override {
 		const bool active = enabled();
+		const bool collapse = collapseGlyphAction ? collapseGlyphAction() : collapseGlyph;
 		const Vec center = box.size.mult(0.5f);
 		const float radius = std::min(5.f, 0.22f * std::min(box.size.x, box.size.y));
 		nvgBeginPath(args.vg);
@@ -234,14 +229,14 @@ struct WyrmEditorGlyphButton final : widget::OpaqueWidget {
 		nvgStrokeWidth(args.vg, 1.f);
 		nvgStroke(args.vg);
 
-		const float direction = collapseGlyph ? -1.f : 1.f;
+		const float direction = collapse ? -1.f : 1.f;
 		const float innerX = 0.18f * box.size.x;
 		const float outerX = 0.36f * box.size.x;
 		const float head = std::max(2.f, 0.13f * box.size.y);
 		nvgBeginPath(args.vg);
 		for (float side : {-1.f, 1.f}) {
-			const float startX = center.x + side * (collapseGlyph ? outerX : innerX);
-			const float endX = center.x + side * (collapseGlyph ? innerX : outerX);
+			const float startX = center.x + side * (collapse ? outerX : innerX);
+			const float endX = center.x + side * (collapse ? innerX : outerX);
 			nvgMoveTo(args.vg, startX, center.y);
 			nvgLineTo(args.vg, endX, center.y);
 			nvgMoveTo(args.vg, endX - side * direction * head, center.y - head);
@@ -269,16 +264,6 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 	WyrmEditorSurface* editorSurface = nullptr;
 	std::shared_ptr<WyrmEditorOverlayLink> link;
 	std::function<void()> collapseAction;
-	WyrmEditorGlyphButton* collapseButton = nullptr;
-
-	WyrmExpandedEditorOverlay() {
-		collapseButton = new WyrmEditorGlyphButton();
-		collapseButton->collapseGlyph = true;
-		collapseButton->action = [this]() {
-			if (collapseAction) collapseAction();
-		};
-		addChild(collapseButton);
-	}
 
 	~WyrmExpandedEditorOverlay() override {
 		// The scene can tear down before the module rack. Return the sole live
@@ -310,24 +295,18 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 		}
 		const float availableWidth = std::max(1.f, sceneSize.x - 2.f * margin);
 		const float availableHeight = std::max(1.f, sceneSize.y - top - margin);
-		const float panelWidth = std::min(900.f, availableWidth);
-		const float panelHeight = std::min(328.f, availableHeight);
+		const float dockZoom = std::max(anchorDock->getAbsoluteZoom(), 1e-6f);
+		const float panelWidth = std::min(2.f * anchorDock->box.size.x * dockZoom, availableWidth);
+		const float panelHeight = std::min(anchorDock->box.size.y * dockZoom, availableHeight);
 		const Vec requiredSize(panelWidth, panelHeight);
 		if (!box.size.equals(requiredSize)) {
 			setSize(requiredSize);
-			const float chromeHeight = std::min(34.f, std::max(24.f, panelHeight * 0.15f));
-			const float padding = std::min(10.f, std::max(4.f, panelHeight * 0.04f));
-			editorSurface->setPosition(Vec(padding, chromeHeight));
-			editorSurface->setEditorSize(Vec(
-				std::max(1.f, panelWidth - 2.f * padding),
-				std::max(1.f, panelHeight - chromeHeight - padding)));
-			collapseButton->setSize(Vec(24.f, 20.f));
-			collapseButton->setPosition(Vec(std::max(0.f, panelWidth - 32.f), 7.f));
+			editorSurface->setPosition(Vec());
+			editorSurface->setEditorSize(requiredSize);
 			editorSurface->resetVisualTransitionState();
 		}
 
 		const Vec dockOrigin = anchorDock->getAbsoluteOffset(Vec());
-		const float dockZoom = std::max(anchorDock->getAbsoluteZoom(), 1e-6f);
 		const Vec dockCenter = dockOrigin.plus(anchorDock->box.size.mult(0.5f * dockZoom));
 		const float maxX = std::max(margin, sceneSize.x - margin - panelWidth);
 		const float maxY = std::max(top, sceneSize.y - margin - panelHeight);
@@ -339,33 +318,6 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 	void step() override {
 		layoutToScene();
 		widget::OpaqueWidget::step();
-	}
-
-	void draw(const DrawArgs& args) override {
-		const float radius = 10.f;
-		const NVGpaint background = nvgLinearGradient(args.vg, 0.f, 0.f, 0.f, box.size.y,
-			nvgRGBA(11, 13, 35, 252), nvgRGBA(2, 7, 21, 252));
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, 1.f, 1.f, box.size.x - 2.f, box.size.y - 2.f, radius);
-		nvgFillPaint(args.vg, background);
-		nvgFill(args.vg);
-		nvgStrokeColor(args.vg, nvgRGBA(116, 87, 224, 225));
-		nvgStrokeWidth(args.vg, 2.f);
-		nvgStroke(args.vg);
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, 10.f, 33.f);
-		nvgLineTo(args.vg, box.size.x - 10.f, 33.f);
-		nvgStrokeColor(args.vg, nvgRGBA(73, 218, 241, 130));
-		nvgStrokeWidth(args.vg, 1.f);
-		nvgStroke(args.vg);
-		if (APP && APP->window && APP->window->uiFont) {
-			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-			nvgFontSize(args.vg, 12.f);
-			nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-			nvgFillColor(args.vg, nvgRGBA(226, 244, 255, 235));
-			nvgText(args.vg, 13.f, 17.f, "WYRM // WAVEFORM", nullptr);
-		}
-		Widget::draw(args);
 	}
 
 	void onHoverKey(const event::HoverKey& e) override {
@@ -418,7 +370,6 @@ struct WyrmWidget : ModuleWidget {
 
 		math::Rect editorRectMm(Vec(6.0f, 16.0f), Vec(59.12f, 52.0f));
 		panel_svg::loadRectFromSvgMm(panelPath, "WYRM_WAVE_EDITOR", &editorRectMm);
-		Vec expandEditorPos(editorRectMm.pos.x + editorRectMm.size.x + 3.f, editorRectMm.pos.y + 3.f);
 		math::Rect freqReadoutRectMm(Vec(editorRectMm.pos.x, editorRectMm.pos.y + editorRectMm.size.y + 1.1f), Vec(editorRectMm.size.x, 3.8f));
 		Vec freqPos(17.5f, 80.0f);
 		Vec waveformSelectPos(35.56f, 75.2f);
@@ -458,7 +409,7 @@ struct WyrmWidget : ModuleWidget {
 		applyPt("WYRM_FOLD_CV_INPUT", &foldCvPos);
 		applyPt("WYRM_RAW_OUTPUT", &rawOutPos);
 		applyPt("WYRM_OUT_OUTPUT", &outPos);
-		applyPt("WYRM_EDITOR_EXPAND_BUTTON", &expandEditorPos);
+		const Vec expandEditorPos = lockPos.plus(Vec(-6.75f, 0.f));
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 		previewBuildTimer.markAnchorsDone();
 
@@ -474,8 +425,12 @@ struct WyrmWidget : ModuleWidget {
 		expandEditorButton = new WyrmEditorGlyphButton();
 		expandEditorButton->setSize(Vec(15.f, 15.f));
 		expandEditorButton->setPosition(mm2px(expandEditorPos).minus(expandEditorButton->box.size.mult(0.5f)));
-		expandEditorButton->enabledAction = [this]() { return this->module != nullptr && !isEditorExpanded(); };
-		expandEditorButton->action = [this]() { openExpandedEditor(); };
+		expandEditorButton->enabledAction = [this]() { return this->module != nullptr; };
+		expandEditorButton->collapseGlyphAction = [this]() { return isEditorExpanded(); };
+		expandEditorButton->action = [this]() {
+			if (isEditorExpanded()) closeExpandedEditor();
+			else openExpandedEditor();
+		};
 		addChild(expandEditorButton);
 		auto* freqReadout = new WyrmFrequencyReadoutWidget();
 		freqReadout->module = module;
