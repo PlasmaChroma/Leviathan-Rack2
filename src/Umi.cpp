@@ -31,7 +31,6 @@ Umi::Umi() {
 	configParam(BOUNCE_PARAM, 0.f, 1.f, 0.55f, "Bounce");
 	configParam(DRAG_PARAM, 0.f, 1.f, 0.30f, "Drag");
 	configParam(CHAOS_PARAM, 0.f, 1.f, 0.08f, "Chaos");
-	configButton(SEED_PARAM, "Advance seed");
 	configButton(CLEAR_PARAM, "Clear pearls");
 
 	configInput(DROP_INPUT, "Drop trigger");
@@ -208,9 +207,6 @@ void Umi::process(const ProcessArgs& args) {
 
 	if (dropButtonTrigger.process(params[DROP_PARAM].getValue())) spawnDrop();
 	if (dropInputTrigger.process(inputs[DROP_INPUT].getVoltage(0), 0.1f, 1.f)) spawnDrop();
-	if (seedButtonTrigger.process(params[SEED_PARAM].getValue())) {
-		resetBoard(umi::hashSeed(engine.getSeed() + 0x9e3779b9u));
-	}
 	if (clearButtonTrigger.process(params[CLEAR_PARAM].getValue())) clearBoard(false);
 	if (clearInputTrigger.process(inputs[CLEAR_INPUT].getVoltage(0), 0.1f, 1.f)) clearBoard(false);
 

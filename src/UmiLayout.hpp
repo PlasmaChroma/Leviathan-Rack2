@@ -25,7 +25,7 @@ struct Vec2 {
 
 struct Peg {
 	Vec2 pos;
-	float radius = 24.f;
+	float radius = 22.f;
 	std::uint8_t visualType = 0;
 
 	Peg() = default;
@@ -43,7 +43,7 @@ struct Segment {
 
 struct Sink {
 	Vec2 pos;
-	float radius = 46.f;
+	float radius = 56.f;
 	std::uint8_t outputIndex = 0;
 };
 

@@ -18,7 +18,7 @@ The essential relationship is:
 DROP -> visible physical path -> one visible sink -> matching output
 ```
 
-Umi should feel like a luminous undersea arcade relic rather than a casino machine or a dark mechanical maw. The visual language is cyan water, pearl, chrome, gold, coral, and restrained magenta accents. The title is simply **UMI**. Do not use franchise logos, recognizable characters, branded typography, or copied commercial machine geometry.
+Umi should feel like a luminous undersea arcade relic rather than a casino machine or a dark mechanical maw. The visual language is cyan water, pearl, chrome, gold, coral, and restrained magenta accents. The module name is **Umi**, but the panel omits a prominent title so the upper space can belong to the playfield and artwork. Do not use franchise logos, recognizable characters, branded typography, or copied commercial machine geometry.
 
 ### 1.1 V1 success case
 
@@ -108,18 +108,18 @@ These are layout-proof starting values and may move during art cleanup without c
 
 | Region | x mm | y mm | w mm | h mm |
 | --- | ---: | ---: | ---: | ---: |
-| Upper utility band | 3.0 | 7.0 | 85.4 | 17.0 |
-| Playfield aperture | 21.5 | 26.3 | 48.5 | 64.9 |
+| Upper utility band | 3.0 | 6.0 | 85.4 | 10.0 |
+| Playfield aperture | 20.5 | 20.5 | 50.4 | 75.0 |
 | Left control rail | 2.5 | 28.0 | 17.5 | 61.0 |
 | Right control rail | 71.4 | 28.0 | 17.5 | 61.0 |
 | Direct-output row | 4.0 | 96.0 | 83.4 | 14.0 |
 | Utility-output row | 6.0 | 111.0 | 79.4 | 14.0 |
 
-The 1000 x 1600 logical board is aspect-fitted and centered inside the aperture. The resulting unused horizontal margin is part of the frame, not a stretched board.
+The 1000 x 1600 logical board is aspect-fitted and centered inside the aperture. The enlarged aperture uses the former title area and extends farther toward the lower output band. The resulting unused horizontal margin is part of the frame, not a stretched board.
 
 ### 4.2 Control grouping
 
-- Upper band: `DROP` input, illuminated `DROP` button, `RATE`, `DENSITY`, and `SEED` button.
+- Upper band: `DROP` input, illuminated `DROP` button, `RATE`, and `DENSITY`. The upper-right space remains open for the artwork.
 - Left rail: `GRAV` plus CV, `BOUNCE` plus CV, and `DRAG`.
 - Right rail: `TILT` plus CV, `CHAOS` plus CV, and illuminated `CLEAR` plus input.
 - First lower row: outputs `1` through `8`, strictly left to right.
@@ -131,9 +131,8 @@ Provisional fallback centers, in panel millimeters, are:
 
 | ID | Center | ID | Center |
 | --- | ---: | --- | ---: |
-| `drop_input` | (8.0, 17.5) | `drop_param` | (23.0, 17.5) |
-| `rate_param` | (39.5, 17.5) | `density_param` | (57.0, 17.5) |
-| `seed_param` | (82.5, 17.5) |  |  |
+| `drop_input` | (8.0, 14.5) | `drop_param` | (23.0, 14.5) |
+| `rate_param` | (39.5, 14.5) | `density_param` | (57.0, 14.5) |
 | `gravity_param` | (6.5, 37.5) | `gravity_cv_input` | (16.0, 37.5) |
 | `bounce_param` | (6.5, 58.0) | `bounce_cv_input` | (16.0, 58.0) |
 | `drag_param` | (11.0, 79.0) |  |  |
@@ -153,7 +152,7 @@ playfield_rect
 
 drop_param       rate_param       density_param
 gravity_param    bounce_param     drag_param
-tilt_param       chaos_param      seed_param       clear_param
+tilt_param       chaos_param      clear_param
 
 drop_input       gravity_cv_input bounce_cv_input
 tilt_cv_input    chaos_cv_input   clear_input
@@ -180,7 +179,6 @@ enum ParamId {
     BOUNCE_PARAM,
     DRAG_PARAM,
     CHAOS_PARAM,
-    SEED_PARAM,
     CLEAR_PARAM,
     PARAMS_LEN
 };
@@ -241,14 +239,13 @@ enum LightId {
 | `BOUNCE` | 0..1, default 0.55 | Restitution 0.15..0.92 |
 | `DRAG` | 0..1, default 0.30 | Damping coefficient 0..4 s⁻¹ |
 | `CHAOS` | 0..1, default 0.08 | Seeded micro-turbulence amount |
-| `SEED` | momentary 0/1 | Advance to a new deterministic seed, rebuild, and clear |
 | `CLEAR` | momentary 0/1 | Remove all active pearls without emitting outputs |
 
 Rate mapping may use `exp2`, but it is recalculated at control rate or only when the effective value changes. Physics-step drag uses a cached coefficient or the stable approximation `1 / (1 + drag * dt)`; it must not call `exp()` per pearl.
 
 ### 5.2 CV behavior
 
-- The `DROP` button, `DROP` input, `CLEAR` button, `CLEAR` input, and `SEED` button each use their own `dsp::SchmittTrigger`, with approximately 0.1 V low and 1.0 V high thresholds for voltage inputs.
+- The `DROP` button, `DROP` input, `CLEAR` button, and `CLEAR` input each use their own `dsp::SchmittTrigger`, with approximately 0.1 V low and 1.0 V high thresholds for voltage inputs.
 - `TILT CV` is bipolar: `clamp(knob + voltage / 5, -1, 1)`.
 - `GRAV`, `BOUNCE`, and `CHAOS` CV are additive bipolar modulation in normalized space: `clamp(knob + voltage / 5, 0, 1)`.
 - Inputs are read monophonically from channel 0 in v1.
@@ -379,22 +376,23 @@ The one v1 layout is displayed as **Pearl** and built by `makePearlLayout(seed)`
 - Spawn center: `(500, 80)`.
 - Spawn horizontal spread: +/-120 units.
 - Spawned burst members receive small deterministic x and initial-velocity offsets so they do not perfectly overlap.
-- Peg row counts: `4, 5, 6, 7, 6, 7, 8, 7, 8, 7, 6`.
-- Peg row y positions: `220, 340, 460, 580, 700, 820, 940, 1060, 1180, 1300, 1400`.
-- Deterministic peg micro-offset is limited to +/-8 units and must pass layout validation.
-- Sink centers are `(90 + 117*i, 1510)`, radius 46, for `i = 0..7`.
-- Short funnel-divider capsules separate adjacent sinks.
+- The peg field is a regular staggered lattice with 11 rows alternating between 7 and 8 pegs.
+- Seven-peg rows use x positions `170 + 110*column`; eight-peg rows use `115 + 110*column`. Adjacent rows are therefore offset by exactly 55 units.
+- Row y positions are `190 + 105*row`, for rows 0-10; the final row is therefore at y 1240.
+- Every ordinary peg has radius 22 and no seed-dependent position jitter.
+- Sink centers are `(90 + 117*i, 1510)`, radius 56, for `i = 0..7`.
+- Thin funnel-divider capsules run from y 1455 to 1585 with radius 5, leaving 193 logical units between the final peg edge and divider entrance.
 - Side walls and lower funnel rails prevent ambiguous exits.
 
-The initial board should be symmetric before seeded micro-offset. It may include two side bumpers and one lower guide rail if tests show they improve sink distribution. Do not add non-triggering spectacle until all eight sinks receive a useful share of captures at neutral settings.
+The staggered grid is identical for every seed. Seed affects spawn and motion randomness, not visible board alignment. Do not add non-triggering spectacle until all eight sinks receive a useful share of captures at neutral settings.
 
 ### 7.1 Determinism
 
-Use a local, explicitly specified 32-bit generator such as xorshift32. A zero JSON seed is remapped to a documented nonzero constant. Derive independent layout and simulation seeds through fixed integer hashes so layout construction does not consume or shift the runtime chaos/spawn stream. The RNG is used only for spawn jitter, chaos, deterministic layout variation, and cosmetic pearl variation derived from IDs.
+Use a local, explicitly specified 32-bit generator such as xorshift32. A zero JSON seed is remapped to a documented nonzero constant. The fixed layout consumes no random state. The runtime RNG is used only for spawn jitter, chaos, and cosmetic pearl variation derived from IDs.
 
 With the same seed, sample rate, parameter/CV stream, and drop event stream, capture sink indices and fixed-step times must match exactly. Visual frame rate must not influence engine state.
 
-Pressing `SEED` advances the existing seed through a fixed integer hash, then resets RNG state, rebuilds the layout, clears pearls, and resets transient simulation timing. Copy/paste seed actions pass an explicit integer through the UI command queue.
+Seed changes are available from the context menu. Randomize/copy/paste actions pass an explicit integer through the UI command queue, then reset RNG state, rebuild the fixed layout, clear pearls, and reset transient simulation timing.
 
 ## 8. Audio/UI handoff
 

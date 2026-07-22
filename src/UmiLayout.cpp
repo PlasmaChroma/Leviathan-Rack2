@@ -6,27 +6,6 @@
 namespace umi {
 namespace {
 
-struct LayoutRng {
-	std::uint32_t state = 1u;
-
-	explicit LayoutRng(std::uint32_t seed)
-		: state(seed ? seed : 0x6d2b79f5u) {
-	}
-
-	std::uint32_t next() {
-		std::uint32_t x = state;
-		x ^= x << 13;
-		x ^= x >> 17;
-		x ^= x << 5;
-		state = x ? x : 0x6d2b79f5u;
-		return state;
-	}
-
-	float bipolar() {
-		return (float(next() >> 8) * (1.f / 8388607.5f)) - 1.f;
-	}
-};
-
 bool finiteVec(const Vec2& v) {
 	return std::isfinite(v.x) && std::isfinite(v.y);
 }
@@ -44,23 +23,23 @@ std::uint32_t hashSeed(std::uint32_t value) {
 }
 
 Layout makePearlLayout(std::uint32_t seed) {
+	(void) seed;
 	Layout layout;
-	LayoutRng rng(hashSeed(seed ^ 0x50454152u));
 
-	constexpr int rowCounts[] = {4, 5, 6, 7, 6, 7, 8, 7, 8, 7, 6};
-	constexpr float rowY[] = {220.f, 340.f, 460.f, 580.f, 700.f, 820.f,
-		940.f, 1060.f, 1180.f, 1300.f, 1400.f};
-	constexpr float spacing = 110.f;
+	constexpr int GRID_ROWS = 11;
+	constexpr float GRID_FIRST_Y = 190.f;
+	constexpr float GRID_X_SPACING = 110.f;
+	constexpr float GRID_Y_SPACING = 105.f;
 
-	for (int row = 0; row < 11; ++row) {
-		const int count = rowCounts[row];
-		const float firstX = 0.5f * (BOARD_W - spacing * float(count - 1));
-		for (int column = 0; column < count; ++column) {
+	for (int row = 0; row < GRID_ROWS; ++row) {
+		const int columns = (row & 1) ? 8 : 7;
+		const float firstX = 0.5f * (BOARD_W - GRID_X_SPACING * float(columns - 1));
+		for (int column = 0; column < columns; ++column) {
 			Peg& peg = layout.pegs[static_cast<std::size_t>(layout.pegCount++)];
-			peg.pos.x = firstX + spacing * float(column) + rng.bipolar() * 8.f;
-			peg.pos.y = rowY[row] + rng.bipolar() * 8.f;
-			peg.radius = (row == 3 || row == 7) && (column == 0 || column == count - 1) ? 28.f : 23.f;
-			peg.visualType = peg.radius > 24.f ? 1 : 0;
+			peg.pos.x = firstX + GRID_X_SPACING * float(column);
+			peg.pos.y = GRID_FIRST_Y + GRID_Y_SPACING * float(row);
+			peg.radius = 22.f;
+			peg.visualType = 0;
 		}
 	}
 
@@ -83,13 +62,13 @@ Layout makePearlLayout(std::uint32_t seed) {
 	for (int i = 0; i < SINK_COUNT; ++i) {
 		Sink& sink = layout.sinks[static_cast<std::size_t>(i)];
 		sink.pos = {90.f + 117.f * float(i), 1510.f};
-		sink.radius = 46.f;
+		sink.radius = 56.f;
 		sink.outputIndex = static_cast<std::uint8_t>(i);
 	}
 
 	for (int i = 0; i < SINK_COUNT - 1; ++i) {
 		const float dividerX = 148.5f + 117.f * float(i);
-		addSegment({dividerX, 1435.f}, {dividerX, 1595.f}, 8.f, 1);
+		addSegment({dividerX, 1455.f}, {dividerX, 1585.f}, 5.f, 1);
 	}
 
 	return layout;

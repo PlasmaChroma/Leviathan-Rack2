@@ -16,9 +16,45 @@ struct TestResult {
 
 TestResult testLayoutValidity() {
 	const umi::Layout layout = umi::makePearlLayout(12345u);
-	const bool pass = umi::validateLayout(layout) && layout.pegCount == 71 && layout.segmentCount == 11;
+	const bool pass = umi::validateLayout(layout) && layout.pegCount == 82 && layout.segmentCount == 11;
 	return {"Pearl layout validity", pass,
 		"pegs=" + std::to_string(layout.pegCount) + " segments=" + std::to_string(layout.segmentCount)};
+}
+
+TestResult testStaggeredGridAndBottomClearance() {
+	const umi::Layout first = umi::makePearlLayout(1u);
+	const umi::Layout second = umi::makePearlLayout(987654321u);
+	bool staggered = first.pegCount == 82 && second.pegCount == first.pegCount;
+	int index = 0;
+	for (int row = 0; row < 11 && staggered; ++row) {
+		const int columns = (row & 1) ? 8 : 7;
+		const float firstX = 0.5f * (umi::BOARD_W - 110.f * float(columns - 1));
+		for (int column = 0; column < columns; ++column, ++index) {
+			const umi::Peg& peg = first.pegs[static_cast<std::size_t>(index)];
+			const umi::Peg& otherSeedPeg = second.pegs[static_cast<std::size_t>(index)];
+			staggered = staggered && std::fabs(peg.pos.x - (firstX + 110.f * column)) < 1e-5f &&
+				std::fabs(peg.pos.y - (190.f + 105.f * row)) < 1e-5f &&
+				std::fabs(peg.pos.x - otherSeedPeg.pos.x) < 1e-5f &&
+				std::fabs(peg.pos.y - otherSeedPeg.pos.y) < 1e-5f;
+		}
+	}
+	float firstDividerY = umi::BOARD_H;
+	for (int i = 0; i < first.segmentCount; ++i) {
+		const umi::Segment& segment = first.segments[static_cast<std::size_t>(i)];
+		if (std::fabs(segment.a.x - segment.b.x) < 1e-5f && segment.a.x > 100.f && segment.a.x < 900.f) {
+			firstDividerY = std::min(firstDividerY, std::min(segment.a.y, segment.b.y));
+		}
+	}
+	float lastPegBottom = 0.f;
+	for (int i = 0; i < first.pegCount; ++i) {
+		const umi::Peg& peg = first.pegs[static_cast<std::size_t>(i)];
+		lastPegBottom = std::max(lastPegBottom, peg.pos.y + peg.radius);
+	}
+	const float clearance = firstDividerY - lastPegBottom;
+	bool generousSinks = true;
+	for (const umi::Sink& sink : first.sinks) generousSinks = generousSinks && sink.radius >= 56.f;
+	return {"Staggered grid and open sink approach", staggered && generousSinks && clearance >= 150.f,
+		"clearance=" + std::to_string(clearance) + " sinkRadius=" + std::to_string(first.sinks[0].radius)};
 }
 
 TestResult testSpawnCapacityPolicies() {
@@ -132,6 +168,7 @@ TestResult testClearAndResetAreSilent() {
 int main() {
 	const std::vector<TestResult> tests {
 		testLayoutValidity(),
+		testStaggeredGridAndBottomClearance(),
 		testSpawnCapacityPolicies(),
 		testEverySinkCapture(),
 		testDeterminism(),

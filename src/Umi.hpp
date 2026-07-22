@@ -19,7 +19,6 @@ struct Umi final : Module {
 		BOUNCE_PARAM,
 		DRAG_PARAM,
 		CHAOS_PARAM,
-		SEED_PARAM,
 		CLEAR_PARAM,
 		PARAMS_LEN
 	};
@@ -135,7 +134,6 @@ struct Umi final : Module {
 	dsp::PulseGenerator rightPulse;
 	dsp::SchmittTrigger dropButtonTrigger;
 	dsp::SchmittTrigger dropInputTrigger;
-	dsp::SchmittTrigger seedButtonTrigger;
 	dsp::SchmittTrigger clearButtonTrigger;
 	dsp::SchmittTrigger clearInputTrigger;
 	dsp::ClockDivider controlDivider;
