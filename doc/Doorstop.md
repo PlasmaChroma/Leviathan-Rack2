@@ -4,13 +4,13 @@
 
 ### Codex Implementation Specification
 
-**Status:** Approved for implementation
+**Status:** Refined and ready for implementation
 **Target:** VCV Rack 2.x / Leviathan plugin suite
 **Working model slug:** `Doorstop`
 **Proposed width:** 3 HP
 **Primary implementation language:** C++
 **DSP type:** Monophonic nonlinear physical modeling
-**Visual type:** Procedural NanoVG animation with optional cross-panel rendering
+**Visual type:** Procedural NanoVG animation with cross-panel rendering and a safe clipped fallback
 
 ---
 
@@ -46,10 +46,10 @@ The module must:
 4. Produce both visible and audible nonlinear motion.
 5. Remain useful as a rhythmic and experimental synthesis voice.
 6. Fit comfortably into a 3 HP panel.
-7. visually exceed the panel boundaries during sufficiently energetic strikes.
+7. Visually exceed the panel boundaries during sufficiently energetic strikes.
 8. Consume very little DSP CPU.
 9. Have no mandatory user-facing knob controls.
-10. feel like a physical object rather than an oscillator with an envelope.
+10. Feel like a physical object rather than an oscillator with an envelope.
 
 ## 2.2 Character goals
 
@@ -116,10 +116,10 @@ Requirements:
 * Retriggering must not reset the simulation.
 * Trigger processing should use hysteresis, preferably `dsp::SchmittTrigger`.
 
-Suggested thresholds:
+MVP thresholds:
 
-* Low/reset threshold: approximately `0.1 V`
-* Rising threshold: approximately `1.0 V`
+* Low/reset threshold: `0.1 V`
+* Rising threshold: `1.0 V`
 
 Only input channel 0 is required for the MVP.
 
@@ -165,6 +165,9 @@ Requirements:
 * Use a smooth final saturator or soft limiter.
 * Do not normalize every strike to the same level.
 * Hard strikes must remain meaningfully louder and brighter than soft strikes.
+* Keep the output at one channel with `setChannels(1)` when connected.
+* Continue advancing the physical object when OUT is disconnected; output
+  connection state must not pause audio state, decay, lights, or animation.
 
 ## 3.4 Manual strike interaction
 
@@ -187,7 +190,23 @@ Configure it as a momentary button:
 configButton(MANUAL_PARAM, "Manual strike");
 ```
 
-Create a custom transparent `ParamWidget` covering the visible interior spring region.
+Create a custom transparent `app::Switch` covering the visible interior spring region:
+
+```cpp
+struct DoorstopHitWidget : app::Switch {
+    DoorstopHitWidget() {
+        momentary = true;
+    }
+
+    void draw(const DrawArgs& args) override {
+        // Intentionally invisible. The spring widget supplies the artwork.
+    }
+};
+```
+
+`configButton()` supplies the `0` to `1` parameter range, while `app::Switch`
+supplies the required momentary press/release behavior. A bare `ParamWidget`
+must not be used because it does not implement momentary switch interaction.
 
 Requirements:
 
@@ -231,7 +250,24 @@ struct Doorstop : Module {
 };
 ```
 
-`STRIKE_LIGHT` may drive a subtle impact glow in the mounting plate. It does not require a separate conventional LED component.
+`STRIKE_LIGHT` drives a subtle impact light embedded in the mounting
+plate or positioned directly below it. The exact placement should follow the
+final panel composition. The preferred widget is an existing Leviathan
+ApertureLight, for example `SmallAperture<AmberApertureLight>` or another color
+chosen during panel tuning.
+
+The ApertureLight and the procedural animation are complementary:
+
+* `STRIKE_LIGHT` drives the physical-looking aperture lens and bloom.
+* Atomic visual telemetry drives spring position, velocity, energy, trails, and
+  any procedural impact accent.
+* The spring remains fully animated independently of the ApertureLight state.
+* The ApertureLight must not substitute for publishing physical motion.
+
+Configure the light with `configLight(STRIKE_LIGHT, "Strike")`. Drive it from a
+short strike-flash envelope using `setBrightnessSmooth()`, and expose the same
+finite, clamped envelope through `visualStrike` when the procedural renderer
+also needs an impact accent.
 
 ---
 
@@ -273,14 +309,12 @@ springVelocity = 0.f;
 
 Use a damped Duffing-style spring:
 
-[
-\ddot{x}
-========
-
+\[
+\ddot{x} =
 -\omega_0^2x
 -\beta\omega_0^2x^3
 -2\zeta\omega_0\dot{x}
-]
+\]
 
 Where:
 
@@ -289,6 +323,16 @@ Where:
 * (\omega_0) is the low-energy angular frequency.
 * (\zeta) is damping.
 * (\beta) is positive nonlinear stiffness.
+
+Use:
+
+\[
+\omega_0 = 2\pi f_0
+\]
+
+`f0` is expressed in Hz, `baseOmega` in radians per second, `dampingRatio` is
+dimensionless, and `nonlinearStiffness` is the dimensionless Duffing
+coefficient `beta`. Keep these meanings stable in code and tests.
 
 Positive nonlinear stiffness causes larger oscillations to run at a different effective frequency than small oscillations. As the spring loses energy, its behavior relaxes toward the resting frequency.
 
@@ -328,25 +372,82 @@ acceleration = -restoring - dampingForce;
 
 Semi-implicit integration is preferred over explicit Euler because it is better behaved for oscillator systems.
 
+The per-sample processing order is fixed:
+
+1. Detect and apply all strikes for the sample.
+2. Calculate primary-spring acceleration from the current state.
+3. Integrate primary velocity, then displacement.
+4. Calculate coupling and integrate each modal resonator.
+5. Process impact generators and the strike-light envelope.
+6. Form and condition the audio output.
+7. Evaluate sleep eligibility.
+8. Publish decimated visual telemetry, publishing an immediate zero snapshot
+   on a sleep transition.
+
 Do not allocate memory in `process()`.
 
 ## 6.4 Stability protection
 
 The engine must protect itself from unstable state.
 
-Required safeguards:
+Required emergency safeguards:
 
 ```cpp
 displacement = clamp(displacement, -MAX_DISPLACEMENT, MAX_DISPLACEMENT);
 springVelocity = clamp(springVelocity, -MAX_VELOCITY, MAX_VELOCITY);
 ```
 
+Use normalized limits collected in `DoorstopTuning`. Initial values should be:
+
+```cpp
+float maxDisplacement = 2.f;
+float maxVelocityInBaseOmega = 4.f; // maxVelocity = baseOmega * this value
+float energyKneeFraction = 0.75f;
+```
+
+Define normalized mechanical energy as:
+
+\[
+E = \frac{1}{2}\dot{x}^2
+  + \frac{1}{2}\omega_0^2x^2
+  + \frac{1}{4}\beta\omega_0^2x^4
+\]
+
+The hard energy ceiling is the potential energy at `maxDisplacement`. When a
+new impulse would add energy above the knee, smoothly compress only the added
+energy toward that ceiling. An opposing impulse that removes energy must not
+be compressed away. The ordinary signal path should therefore reach the hard
+state clamps only after a non-finite value or another exceptional condition.
+
+One suitable knee curve is:
+
+```cpp
+float compressEnergy(float candidate, float knee, float ceiling) {
+    if (candidate <= knee)
+        return candidate;
+    float span = ceiling - knee;
+    return knee + span * std::tanh((candidate - knee) / span);
+}
+```
+
+Apply this curve only when `candidateEnergy > currentEnergy`, and use
+`targetEnergy = max(currentEnergy, compressEnergy(candidateEnergy, ...))`.
+When the candidate impulse removes energy, accept it directly. This makes the
+phase-sensitive retrigger rule exact rather than dependent on implementation
+interpretation.
+
+After choosing the target energy, limit the candidate velocity to the kinetic
+energy available after subtracting the current spring potential. Preserve its
+sign. Keep this operation in a named helper so its phase-sensitive behavior can
+be unit tested.
+
 Additionally:
 
 * Check important state values with `std::isfinite()`.
 * Reset the complete physical state if any state becomes non-finite.
 * Prevent accumulated retriggers from creating unbounded energy.
-* Apply a smooth energy-domain saturation rather than abruptly truncating ordinary strikes.
+* Apply the smooth energy-domain saturation above rather than abruptly
+  truncating ordinary strikes.
 * Test all supported sample rates.
 
 Suggested test sample rates:
@@ -361,7 +462,29 @@ Suggested test sample rates:
 
 ## 6.5 Sleeping state
 
-When all physical and transient energy falls below a small threshold:
+Sleep eligibility begins only when all of the following remain below threshold:
+
+* Primary mechanical energy divided by its hard energy ceiling.
+* Each modal energy divided by a named per-mode reference energy.
+* Impact-noise and mounting-thump envelopes and states.
+* Strike-light envelope.
+* DC-blocked output magnitude.
+
+Suggested initial thresholds:
+
+```text
+Normalized primary and modal energy: 1e-8
+Impact and light envelopes:           1e-5
+Conditioned Rack output:              0.0001 V
+Required quiet hold time:             50 ms
+```
+
+The exact thresholds may be tightened during tuning, but they must live in
+`DoorstopTuning` and the quiet hold time must be sample-rate independent.
+Define modal energy as `0.5 * velocity^2 + 0.5 * omega^2 * position^2`; keep
+the four positive reference energies alongside the other modal tuning arrays.
+
+After the complete quiet hold interval:
 
 ```cpp
 displacement = 0.f;
@@ -371,10 +494,24 @@ acceleration = 0.f;
 
 Enter a lightweight sleeping state.
 
+On the transition to sleep:
+
+* Reset the primary, modal, impact, thump, DC-blocker, and light-envelope state.
+* Set `STRIKE_LIGHT` brightness to zero.
+* Publish zero displacement, velocity, energy, and strike telemetry immediately.
+* Set the audio output to exactly `0 V` only after the final conditioned output
+  is already below the stated threshold.
+
+While already sleeping, the engine may take an early zero-output path. It must
+not take that path while the DC blocker or any audible state still has a tail.
+
 Wake immediately when:
 
 * TRIG receives a rising edge.
 * The manual parameter receives a rising edge.
+
+A strike whose shaped strength is zero is a complete no-op. It does not wake
+the engine, excite a transient, flash the ApertureLight, or alter telemetry.
 
 The sleep transition must not produce a discontinuity or output click.
 
@@ -395,6 +532,12 @@ float shaped = 0.2f * u + 0.8f * u * u;
 
 This exact curve is tunable.
 
+`doorstop::Engine::strike()` accepts the unshaped normalized value `u`, clamps
+it to `[0, 1]`, returns immediately when it is zero, and applies this curve
+exactly once. The Rack adapter must not pre-shape the value. Consequently,
+`engine.strike(0.5f)` is exactly equivalent to an unpatched/manual `5 V`
+velocity before shaping.
+
 The shaped strike value controls:
 
 * Mechanical impulse.
@@ -407,11 +550,16 @@ The shaped strike value controls:
 
 ## 7.2 Applying the impulse
 
-Apply the strike directly to the current spring velocity:
+Form the strike as an impulse on the current spring velocity:
 
 ```cpp
 springVelocity += shaped * MAX_IMPULSE;
 ```
+
+In the implementation, calculate the candidate velocity first and pass it
+through the energy-knee helper from Section 6.4 before committing it. This
+preserves ordinary phase-sensitive addition and opposition while bounding
+abusive accumulated strikes.
 
 Do not reset:
 
@@ -444,9 +592,12 @@ If they rise during the same audio sample:
 
 ## 7.4 Zero velocity
 
-A trigger received while the patched Velocity input is at `0 V` should not produce a meaningful strike.
+A trigger received while the patched Velocity input is at `0 V` must not add
+sound or state. If the object was already moving, its pre-existing sound and
+motion continue naturally.
 
-It may remain completely silent.
+It must remain completely silent and must not wake a sleeping engine or create
+a visual/light event.
 
 Do not substitute the normalled `5 V` value when a cable is connected.
 
@@ -480,14 +631,24 @@ struct ModeState {
 
 Each mode can use a damped second-order state equation:
 
-[
-\ddot{q_i}
-==========
-
+\[
+\ddot{q_i} =
 -\omega_i^2q_i
 -2\gamma_i\dot{q_i}
 +F_i
-]
+\]
+
+Use `frequencyHz` in Hz and calculate `omega = 2 * pi * frequencyHz`. Store
+modal decay tuning as amplitude T60 in seconds rather than as an ambiguous raw
+damping constant. Convert it with:
+
+\[
+\gamma_i = \frac{\ln(1000)}{T60_i}
+\]
+
+With the equation above, this makes the free amplitude envelope approximately
+60 dB lower after `T60`. Integrate modal velocity and then position using the
+same semi-implicit ordering as the primary spring.
 
 Suggested starting frequencies:
 
@@ -576,6 +737,16 @@ Requirements:
 * The result must not sound like conventional wide vibrato.
 * Modulation should diminish naturally as displacement decays.
 
+Clamp every effective modal frequency to:
+
+```cpp
+float maximumModeFrequency = std::min(12000.f, 0.20f * sampleRate);
+effectiveFrequency = clamp(effectiveFrequency, 20.f, maximumModeFrequency);
+```
+
+This ceiling is part of the stability contract, not an audible target. The
+listed base frequencies remain far below it.
+
 ## 8.6 Continuous coupling
 
 A small amount of the primary spring acceleration may be fed into the lower modal modes:
@@ -583,6 +754,11 @@ A small amount of the primary spring acceleration may be fed into the lower moda
 ```cpp
 modeForce[i] += normalizedAcceleration * coupling[i];
 ```
+
+Calculate `normalizedAcceleration` by dividing by a named acceleration scale
+in `DoorstopTuning`, then clamp it to `[-1, 1]` before applying coupling. The
+coupling coefficient is acceleration per second squared in the normalized
+modal state and must be applied before each mode's integration step.
 
 This coupling must be subtle.
 
@@ -610,6 +786,16 @@ On strike:
 strikeEnvelope += shapedStrike;
 ```
 
+`doorstop::Impact::strike(strength)` owns all velocity-dependent transient
+updates. `doorstop::Impact::process(sampleTime)` advances existing state and does
+not take a transient `strength` argument.
+
+Retriggers accumulate `strikeEnvelope` rather than resetting it. Keep a
+separate `noiseBrightness` state in `[0, 1]`; a new strike raises it with
+`max(noiseBrightness, shapedStrike)` and it decays toward zero. This gives
+overlapping impacts an unambiguous rule: a hard new hit can brighten an
+existing click tail, while a soft new hit cannot abruptly darken one.
+
 Use a fast exponential decay.
 
 Suggested duration:
@@ -618,6 +804,12 @@ Suggested duration:
 Soft strike: 2–5 ms
 Hard strike: 5–15 ms
 ```
+
+Map the current brightness to the decay time and filter cutoff. Recalculate
+sample-rate-dependent coefficient endpoints in `onSampleRateChange()`, then
+interpolate those endpoints from the decaying brightness state. Do not run
+`std::exp()` merely to rebuild coefficients every audio sample. Clamp the
+noise-filter cutoff below `0.45 * sampleRate`.
 
 Generate noise using a lightweight local PRNG.
 
@@ -640,6 +832,10 @@ Possible implementation:
 * Or a filtered impulse derived from primary spring acceleration.
 
 The thump should be felt more than heard and must not dominate the metallic character.
+
+Retriggers add to the current thump velocity. They do not reset thump position
+or phase. Apply the same finite-state checks and energy ceiling philosophy used
+for the primary spring.
 
 ---
 
@@ -700,6 +896,20 @@ The final stage must include:
 3. Smooth saturation.
 4. Scaling to Rack audio voltage.
 
+Keep the DC blocker inside the Rack-independent engine. A suitable one-pole
+form is:
+
+```cpp
+float y = x - previousInput + dcPole * previousOutput;
+previousInput = x;
+previousOutput = y;
+```
+
+Calculate `dcPole = exp(-2 * pi * cutoffHz / sampleRate)` only when the sample
+rate or tuning changes. Start with a cutoff around `10 Hz`. Reset both history
+values only on engine reset, non-finite recovery, or the qualified sleep
+transition.
+
 Suggested output:
 
 ```cpp
@@ -716,6 +926,12 @@ float softClip(float x) {
 ```
 
 The saturator should activate mainly during extreme or repeatedly accumulated strikes.
+
+The DC blocker and any optional output filter are part of the active decay
+state. Process them before evaluating sleep. On the sample that qualifies the
+engine for sleep, publish the already-conditioned sub-threshold output, reset
+the filter state, publish zero visual/light state, and use exact `0 V` beginning
+with the following sample.
 
 ## 10.4 Level targets
 
@@ -741,6 +957,9 @@ Top:
 Upper and middle region:
     Animated vertical spring doorstop
 
+At or directly below the mounting plate:
+    Subtle ApertureLight impact indicator
+
 Lower region:
     TRIG input
     VELOCITY input
@@ -763,9 +982,9 @@ Do not rotate a rigid sprite around its base.
 
 Represent the spring using a curved centerline:
 
-[
+\[
 C(t), \quad 0 \le t \le 1
-]
+\]
 
 Where:
 
@@ -821,6 +1040,11 @@ The cap should:
 
 The mounting plate should remain static and may be part of the panel asset or a cached visual widget.
 
+The `STRIKE_LIGHT` ApertureLight should appear embedded in the mounting plate
+or directly below it, depending on which placement keeps the 3 HP composition
+most legible. Its glow indicates the instantaneous impact; the spring's
+geometry communicates continuing physical motion.
+
 ## 11.4 Visual state transfer
 
 The audio thread shall expose lightweight visual telemetry using atomics:
@@ -838,7 +1062,16 @@ Requirements:
 * The DSP thread never accesses NanoVG or widget state.
 * The UI must not lock the audio thread.
 * Values should be finite and clamped before publication.
-* `visualStrike` may decay in the DSP or UI domain.
+* The DSP-owned strike envelope drives both `STRIKE_LIGHT` and
+  `visualStrike`; the UI may smooth a local copy but must not modify DSP state.
+* Use `std::memory_order_relaxed` for these independent display values.
+* Publish at a control rate, initially once every 64 audio samples, plus
+  immediately after a strike, reset, or sleep transition. Four atomic stores
+  per audio sample are unnecessary.
+* Confirm that the chosen atomic representation is lock-free on supported
+  builds. If a supported target lacks lock-free `std::atomic<float>`, publish
+  lock-free integer bit patterns instead; never allow telemetry to introduce an
+  audio-thread mutex.
 
 ## 11.5 Motion trails
 
@@ -866,7 +1099,7 @@ std::array<float, 3> displacementHistory;
 
 At ordinary strike levels, the complete doorstop should remain inside its 3 HP panel.
 
-At high strike energies, the upper spring and rubber cap may extend beyond the panel’s left or right edge.
+At high strike energies, the upper spring and rubber cap shall extend beyond the panel’s left or right edge.
 
 Suggested maximum overflow:
 
@@ -889,6 +1122,19 @@ A normal widget draw receives a visible clip region, and Rack widgets provide co
 
 Implement two coordinated visual widgets:
 
+Both widgets must call one shared spring-geometry renderer from the same atomic
+snapshot. The interior pass clips to the module rectangle. The overflow pass
+clips to the left and right exterior rectangles and excludes the module
+rectangle. Do not maintain two independent coil implementations; matching
+geometry and complementary clipping prevent double-strokes and seams at the
+panel edge.
+
+`DoorstopWidget::step()` should read the four atomics once into a small
+UI-owned `DoorstopVisualSnapshot`. Both drawing widgets reference that cached
+snapshot for the frame. This does not require a coherent multi-atomic DSP
+transaction, but it guarantees that the interior and overflow passes never use
+different UI-frame values.
+
 ### `DoorstopSpringWidget`
 
 Owned by `DoorstopWidget`.
@@ -896,8 +1142,9 @@ Owned by `DoorstopWidget`.
 Responsibilities:
 
 * Draw all spring content that lies inside the panel.
-* Handle the interior clickable region.
-* Read visual atomics from the module.
+* Share its visible bounds with the separate `DoorstopHitWidget`; the spring
+  renderer itself remains noninteractive.
+* Read the UI-cached visual snapshot from the owner link.
 * Remain functional when overflow rendering is unavailable.
 
 ### `DoorstopOverflowWidget`
@@ -920,6 +1167,21 @@ Preferred attachment target:
 APP->scene->rack->getModuleContainer()
 ```
 
+Create the overflow widget only when all of the following are true:
+
+* `module != nullptr`.
+* `APP`, `APP->scene`, and `APP->scene->rack` exist.
+* The owning `DoorstopWidget` is attached beneath that rack's module container.
+* Visual overflow is enabled.
+
+These rules explicitly exclude module-browser previews and disconnected widget
+construction used by tests.
+
+The constructor creates only the shared lifecycle link. `DoorstopWidget::step()`
+creates the overflow after the owner is attached, hides or destroys it when the
+option is disabled, and recreates it if a valid rack context later becomes
+available. Creation and deletion remain entirely on the UI thread.
+
 The exact stacking location must be verified against:
 
 * Adjacent modules.
@@ -930,11 +1192,20 @@ The exact stacking location must be verified against:
 * Browser previews.
 * Rack zoom.
 
-The overflow should ideally render above module panels but should not obscure cables and plugs more than necessary.
+The intended z-order is above module panels and below plugs and cables. Because
+the module, plug, and cable containers are separate Rack layers, verify this
+ordering against the supported Rack version. If the module container cannot
+provide stable ordering among module children, use one plugin-managed passive
+overlay layer rather than continually removing and re-adding an overlay during
+`step()`.
 
 ## 12.3 Shared overlay utility
 
-If the expanded Wyrm editor introduces a reusable rack-space overlay system, Doorstop should reuse that infrastructure rather than creating a second incompatible overlay lifecycle.
+Wyrm already uses a shared owner/overlay link to make its expanded-editor
+lifecycle safe. Doorstop should reuse that ownership pattern and extract a
+small shared rack-space overlay utility only if doing so genuinely serves both
+features; it must not force the interactive Wyrm scene overlay and this passive
+rack overlay into an unsuitable common widget class.
 
 The shared abstraction could provide:
 
@@ -948,6 +1219,25 @@ The shared abstraction could provide:
 
 Doorstop only needs a passive, noninteractive subset of that system.
 
+At minimum, use a shared lifecycle link:
+
+```cpp
+struct DoorstopWidget;
+struct DoorstopOverflowWidget;
+
+struct DoorstopOverlayLink {
+    DoorstopWidget* owner = nullptr;
+    DoorstopOverflowWidget* overlay = nullptr;
+};
+```
+
+Both widgets hold a `std::shared_ptr<DoorstopOverlayLink>`. Each destructor
+nulls its own link member before touching the other object. The owner requests
+deletion only when the overlay still has a parent; otherwise it deletes the
+detached overlay directly. The overflow draw and step paths first copy and
+validate the link and owner. Do not rely on a raw owner pointer remaining valid
+through rack clearing, undo, or preview teardown.
+
 ## 12.4 Safety fallback
 
 The internal spring animation is mandatory.
@@ -958,6 +1248,11 @@ If rack-level rendering is temporarily unavailable, unsafe, or unsupported in a 
 * Never crash.
 * Never leave an orphaned overlay.
 * Never dereference a deleted module or module widget.
+
+The overflow widget must derive from `TransparentWidget`, have a finite box
+covering only the maximum overflow region, contain no interactive children, and
+never override input handlers with consuming behavior. This ensures adjacent
+module controls remain reachable even while the spring is drawn over them.
 
 The released implementation must still attempt cross-panel rendering during normal rack operation.
 
@@ -991,15 +1286,21 @@ Rack calls custom widget drawing every frame, while `FramebufferWidget` is inten
 
 Use the existing Leviathan visual conventions.
 
-Suggested assets:
+Use the repository's split-panel naming convention:
 
 ```text
-res/Doorstop.svg
-res/components/doorstop-base.svg
-res/components/doorstop-cap.svg
+res/doorstop.panel.svg
+res/doorstop.labels.svg
 ```
 
-However, the spring itself should be procedural.
+The spring and moving rubber cap should be procedural. The static mounting
+plate may live in the panel asset. Add SVG anchor IDs for the spring base,
+ApertureLight, manual hit region, and three ports so layout changes do not
+require scattering replacement coordinates through C++.
+
+Use the existing `visual/ApertureLight.hpp` component rather than introducing a
+Doorstop-specific LED renderer. Create it with `createLightCentered<>()` at the
+SVG anchor and bind it to `STRIKE_LIGHT`.
 
 Static panel content may include:
 
@@ -1033,6 +1334,7 @@ The audio thread owns:
 * Physical simulation.
 * Modal states.
 * Impact generators.
+* Strike-light envelope and `STRIKE_LIGHT` brightness.
 * Filters.
 * Output voltage.
 * Atomic visual telemetry writes.
@@ -1057,6 +1359,7 @@ The UI thread owns:
 * Motion history.
 * Context-menu operations.
 * Static asset loading.
+* ApertureLight widget placement and rendering.
 
 The UI thread reads but does not modify DSP state.
 
@@ -1077,6 +1380,17 @@ Persist only user-facing configuration such as:
 ```
 
 The exact JSON key should remain stable after release.
+
+Store `allowVisualOverflow` as `std::atomic<bool>` because the context-menu UI,
+widget lifecycle, and module serialization can observe it from different Rack
+contexts. Use relaxed loads and stores. `dataFromJson()` must accept only a JSON
+boolean for this key and retain the default `true` when the key is missing or
+invalid.
+
+`onReset()` restores `allowVisualOverflow` to `true`, resets both Schmitt
+triggers and the complete engine, clears the Rack light, and publishes an
+immediate zero telemetry snapshot. Loading a patch also starts the engine at
+rest before applying serialized user configuration.
 
 No random generator state needs to be serialized.
 
@@ -1107,102 +1421,151 @@ It is acceptable to preserve current displacement and velocity across a sample-r
 
 # 17. Suggested Class Structure
 
+Keep the numerical engine independent of Rack so the physical model and output
+conditioning can run in fast deterministic unit tests. `DoorstopEngine.hpp`
+must not include `rack.hpp`; the `Doorstop` module is a thin adapter for Rack
+triggers, parameters, ports, lights, serialization, and visual telemetry.
+
 ```cpp
-struct DoorstopMode {
+namespace doorstop {
+
+struct Mode {
     float position = 0.f;
     float velocity = 0.f;
 
     void reset();
     float process(
         float sampleTime,
-        float frequency,
-        float damping,
+        float frequencyHz,
+        float decayT60Seconds,
         float force
     );
 };
 
-struct DoorstopImpact {
+struct Impact {
     float noiseEnvelope = 0.f;
+    float noiseBrightness = 0.f;
     float thumpPosition = 0.f;
     float thumpVelocity = 0.f;
     uint32_t rngState = 0x12345678u;
 
     void reset();
     void strike(float strength);
-    float process(float sampleTime, float strength);
+    float process(float sampleTime);
 };
 
-struct Doorstop : Module {
+struct Frame {
+    float outputVolts = 0.f;
+    float displacement = 0.f;
+    float velocity = 0.f;
+    float energy = 0.f; // normalized to the primary hard-energy ceiling
+    float strikeLight = 0.f;
+    bool sleeping = true;
+    bool enteredSleep = false;
+};
+
+class Engine {
+public:
     static constexpr int MODE_COUNT = 4;
 
-    dsp::SchmittTrigger trigTrigger;
-    dsp::SchmittTrigger manualTrigger;
+    void reset();
+    void setSampleRate(float sampleRate);
+    void strike(float normalizedVelocity);
+    Frame process(float sampleTime);
+    bool isSleeping() const;
 
+private:
     float displacement = 0.f;
     float springVelocity = 0.f;
     float acceleration = 0.f;
-
-    std::array<DoorstopMode, MODE_COUNT> modes;
-    DoorstopImpact impact;
-
-    dsp::RCFilter dcBlocker;
-
+    std::array<Mode, MODE_COUNT> modes;
+    Impact impact;
     bool sleeping = true;
-    bool allowVisualOverflow = true;
+    // Filters, energy limiter, sleep timer, tuning, and light envelope.
+};
+
+} // namespace doorstop
+
+struct Doorstop : Module {
+    dsp::SchmittTrigger trigTrigger;
+    dsp::SchmittTrigger manualTrigger;
+    doorstop::Engine engine;
+
+    std::atomic<bool> allowVisualOverflow {true};
 
     std::atomic<float> visualDisplacement {0.f};
     std::atomic<float> visualVelocity {0.f};
     std::atomic<float> visualEnergy {0.f};
     std::atomic<float> visualStrike {0.f};
+    uint32_t telemetryDivider = 0;
 
     Doorstop();
 
     void process(const ProcessArgs& args) override;
+    void onReset(const ResetEvent& e) override;
     void onSampleRateChange(
         const SampleRateChangeEvent& e
     ) override;
 
-    void resetSimulation();
-    void applyStrike(float normalizedVelocity);
-    float processSpring(float sampleTime);
-    float processModes(float sampleTime);
-    float processOutput(float sampleTime);
-
     json_t* dataToJson() override;
     void dataFromJson(json_t* rootJ) override;
+    void publishVisualState(const doorstop::Frame& frame);
+};
+
+struct DoorstopVisualSnapshot {
+    float displacement = 0.f;
+    float velocity = 0.f;
+    float energy = 0.f;
+    float strike = 0.f;
+};
+
+struct DoorstopWidget;
+struct DoorstopOverflowWidget;
+
+struct DoorstopOverlayLink {
+    DoorstopWidget* owner = nullptr;
+    DoorstopOverflowWidget* overlay = nullptr;
+    DoorstopVisualSnapshot snapshot;
 };
 
 struct DoorstopSpringWidget : TransparentWidget {
-    Doorstop* module = nullptr;
+    std::shared_ptr<DoorstopOverlayLink> link;
 
     void draw(const DrawArgs& args) override;
 };
 
-struct DoorstopHitWidget : ParamWidget {
+struct DoorstopHitWidget : app::Switch {
+    DoorstopHitWidget() {
+        momentary = true;
+    }
     void draw(const DrawArgs& args) override;
 };
 
 struct DoorstopOverflowWidget : TransparentWidget {
-    DoorstopWidget* owner = nullptr;
+    std::shared_ptr<DoorstopOverlayLink> link;
 
     void step() override;
     void draw(const DrawArgs& args) override;
+    ~DoorstopOverflowWidget() override;
 };
 
 struct DoorstopWidget : ModuleWidget {
     DoorstopSpringWidget* springWidget = nullptr;
-    DoorstopOverflowWidget* overflowWidget = nullptr;
+    std::shared_ptr<DoorstopOverlayLink> overlayLink;
 
     DoorstopWidget(Doorstop* module);
     ~DoorstopWidget() override;
 
+    void step() override;
     void appendContextMenu(Menu* menu) override;
     void createOverflowWidget();
     void destroyOverflowWidget();
 };
 ```
 
-Exact class separation may be adjusted to match the existing Leviathan codebase.
+Small helper classes may be adjusted to match the existing Leviathan codebase,
+but the Rack-independent engine boundary, momentary `app::Switch`, atomic
+overflow option, and shared overlay ownership are requirements.
 
 ---
 
@@ -1212,10 +1575,12 @@ Exact class separation may be adjusted to match the existing Leviathan codebase.
 void Doorstop::process(const ProcessArgs& args) {
     float trigVoltage = inputs[TRIG_INPUT].getVoltage();
 
-    bool externalStrike = trigTrigger.process(trigVoltage);
+    bool externalStrike = trigTrigger.process(trigVoltage, 0.1f, 1.f);
     bool manualStrike = manualTrigger.process(
-        params[MANUAL_PARAM].getValue()
+        params[MANUAL_PARAM].getValue(), 0.f, 1.f
     );
+
+    bool appliedStrike = false;
 
     if (externalStrike) {
         float velocityVoltage =
@@ -1224,36 +1589,43 @@ void Doorstop::process(const ProcessArgs& args) {
                 : 5.f;
 
         float u = clamp(velocityVoltage / 10.f, 0.f, 1.f);
-        applyStrike(u);
+        if (u > 0.f) {
+            engine.strike(u);
+            appliedStrike = true;
+        }
     }
 
     if (manualStrike) {
-        applyStrike(0.5f);
+        engine.strike(0.5f);
+        appliedStrike = true;
     }
 
-    if (sleeping) {
-        outputs[AUDIO_OUTPUT].setVoltage(0.f);
-        return;
+    doorstop::Frame frame = engine.process(args.sampleTime);
+    outputs[AUDIO_OUTPUT].setChannels(1);
+    outputs[AUDIO_OUTPUT].setVoltage(frame.outputVolts);
+    if (frame.enteredSleep) {
+        lights[STRIKE_LIGHT].setBrightness(0.f);
+    }
+    else {
+        lights[STRIKE_LIGHT].setBrightnessSmooth(
+            clamp(frame.strikeLight, 0.f, 1.f), args.sampleTime);
     }
 
-    float body = processSpring(args.sampleTime);
-    float modal = processModes(args.sampleTime);
-    float transient = impact.process(args.sampleTime);
-
-    float signal =
-        body * BODY_GAIN
-        + modal * MODAL_GAIN
-        + transient * IMPACT_GAIN;
-
-    signal = processDcBlock(signal);
-    signal = std::tanh(signal * OUTPUT_DRIVE);
-
-    outputs[AUDIO_OUTPUT].setVoltage(signal * 5.f);
-
-    publishVisualState();
-    updateSleepState();
+    telemetryDivider = (telemetryDivider + 1u) & 63u;
+    if (appliedStrike || frame.enteredSleep || telemetryDivider == 0u)
+        publishVisualState(frame);
 }
 ```
+
+`Engine::process()` owns spring, modal, impact, output-filter, and sleep order.
+When already sleeping it returns an exact-zero frame cheaply. It must not report
+`sleeping = true` until the quiet-hold and filter-tail requirements in Section
+6.5 have been met.
+
+Rack's `SchmittTrigger` intentionally does not emit an edge when first observed
+already high. Therefore a gate that is high while a patch or module is loaded
+does not strike until it has first returned below `0.1 V` and risen again. This
+startup behavior is part of the trigger contract.
 
 ---
 
@@ -1265,16 +1637,38 @@ Example:
 
 ```cpp
 struct DoorstopTuning {
-    float baseFrequency;
+    float baseFrequencyHz;
     float dampingRatio;
     float nonlinearStiffness;
     float maxImpulse;
+    float maxDisplacement;
+    float maxVelocityInBaseOmega;
+    float energyKneeFraction;
+    float velocityScale;
+    float accelerationScale;
 
-    std::array<float, 4> modeFrequencies;
-    std::array<float, 4> modeDamping;
+    std::array<float, 4> modeFrequenciesHz;
+    std::array<float, 4> modeDecayT60Seconds;
     std::array<float, 4> modeExcitation;
     std::array<float, 4> modeOutputGain;
     std::array<float, 4> modeWarp;
+    std::array<float, 4> modeAsymmetry;
+    std::array<float, 4> modeCoupling;
+    std::array<float, 4> modeEnergyReference;
+
+    float softImpactDecaySeconds;
+    float hardImpactDecaySeconds;
+    float softImpactCutoffHz;
+    float hardImpactCutoffHz;
+    float thumpFrequencyHz;
+    float thumpDecayT60Seconds;
+    float strikeLightDecaySeconds;
+    float dcBlockerCutoffHz;
+
+    float sleepEnergyThreshold;
+    float sleepEnvelopeThreshold;
+    float sleepOutputVoltsThreshold;
+    float sleepHoldSeconds;
 
     float bodyGain;
     float impactGain;
@@ -1342,16 +1736,29 @@ Suggested tags:
 ```json
 [
   "Physical modeling",
-  "Percussion",
-  "Sound effect"
+  "Drum",
+  "Effect"
 ]
 ```
+
+These are valid Rack 2 tags and must pass the repository's
+`validate-plugin-json` target.
 
 ---
 
 # 22. Testing Requirements
 
 ## 22.1 DSP unit tests
+
+Create a Rack-independent `tests/doorstop_engine_spec.cpp` target and add it to
+`TEST_BINS_NON_RACK` and `test-fast` in the Makefile. It must exercise the
+velocity shaping helper, physical engine, impact generator, output
+conditioning, deterministic PRNG, energy limiter, and sleep state without
+loading Rack.
+
+Create a smaller Rack-linked `tests/doorstop_runtime_spec.cpp` for parameter,
+Schmitt-trigger, light, JSON, and module-adapter behavior. Add it to
+`TEST_BINS_RACK` and `test-rack`.
 
 Create tests for:
 
@@ -1370,6 +1777,8 @@ Create tests for:
 * Returning low re-arms the trigger.
 * Manual and external strikes both work.
 * Simultaneous manual and external triggers accumulate.
+* A trigger first observed high does not fire until it returns low and rises.
+* A zero-velocity external edge is a no-op and does not wake the engine.
 
 ### Retrigger behavior
 
@@ -1377,6 +1786,8 @@ Create tests for:
 * A retrigger does not reset mode state.
 * A retrigger can increase or oppose current spring velocity.
 * Rapid retriggering remains finite.
+* An energy-adding retrigger engages the smooth knee before emergency clamps.
+* An opposing retrigger is allowed to remove energy without knee interference.
 
 ### Decay behavior
 
@@ -1384,6 +1795,8 @@ Create tests for:
 * A hard strike remains active longer than a soft strike.
 * Output approaches zero without a discontinuity.
 * The sleeping state outputs exactly zero.
+* All thresholds must remain continuously satisfied for the 50 ms quiet hold.
+* The DC-blocker tail is processed before sleep and reset on the transition.
 
 ### Numerical stability
 
@@ -1392,6 +1805,7 @@ Run sustained randomized triggers at:
 ```text
 44.1 kHz
 48 kHz
+88.2 kHz
 96 kHz
 192 kHz
 ```
@@ -1403,12 +1817,24 @@ Verify:
 * No denormal-related runaway.
 * Output remains bounded.
 * Simulation eventually recovers after maximum accumulated energy.
+* Effective modal frequency never exceeds the sample-rate-dependent ceiling.
 
 ### Output
 
 * Output contains no significant DC after settling.
 * Maximum output remains within the intended voltage range.
-* Zero-velocity triggers remain silent or effectively silent.
+* Zero-velocity triggers are exactly silent.
+* The final pre-sleep voltage has magnitude no greater than `0.0001 V`.
+* Disconnecting OUT does not pause or reset the engine, light, or telemetry.
+
+### Impact and light behavior
+
+* Retriggers add to rather than reset an active impact envelope.
+* A hard retrigger may brighten an existing noise tail.
+* A soft retrigger does not abruptly darken a harder existing tail.
+* Every nonzero strike raises `STRIKE_LIGHT` and `visualStrike` from the same
+  finite DSP envelope.
+* The light and strike telemetry return exactly to zero on sleep.
 
 ## 22.2 Manual audio tests
 
@@ -1435,6 +1861,9 @@ Verify at multiple Rack zoom levels:
 * Motion settles exactly to center.
 * Cap orientation follows spring tangent.
 * Trails appear only at high motion.
+* The ApertureLight is embedded in or directly below the mounting plate.
+* Every nonzero strike illuminates the ApertureLight while continued spring
+  motion remains visible after the light fades.
 * External overflow aligns with the internal spring.
 * Overflow follows scroll and zoom.
 * Overflow follows module dragging.
@@ -1470,6 +1899,8 @@ The module is complete when all of the following are true:
 18. The module compiles on all platforms supported by the Leviathan project.
 19. The module has a valid manifest entry and is registered with the plugin.
 20. DSP and lifecycle tests pass.
+21. A mounting-plate ApertureLight responds to nonzero strikes independently
+    of the continuing procedural spring movement.
 
 ---
 
@@ -1481,15 +1912,18 @@ The module is complete when all of the following are true:
 * Create the 3 HP panel.
 * Add the three ports.
 * Add the invisible manual strike parameter.
+* Add `STRIKE_LIGHT` and the ApertureLight embedded in or directly below the
+  mounting plate.
 * Produce temporary silence at the output.
 
 ## Phase 2 — Primary physical state
 
+* Create the Rack-independent `DoorstopEngine` and fast-test target.
 * Implement trigger handling.
 * Implement velocity mapping.
 * Implement nonlinear spring integration.
 * Implement sleeping and stability protection.
-* Publish visual displacement.
+* Publish decimated visual displacement and strike telemetry.
 
 ## Phase 3 — Audible model
 
@@ -1505,7 +1939,8 @@ The module is complete when all of the following are true:
 * Implement the curved spring centerline.
 * Implement procedural coil rendering.
 * Add rubber cap and mounting plate.
-* Add strike glow and motion trails.
+* Add procedural strike accent and motion trails, coordinated with but not
+  substituted by the ApertureLight.
 * Add manual click interaction.
 
 ## Phase 5 — Cross-panel animation
