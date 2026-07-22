@@ -19,6 +19,7 @@ inline unsigned char wyrmClampU8(int v) {
 struct WyrmWaveEditor : TransparentWidget {
 	Wyrm* module = nullptr;
 	int lastIndex = -1;
+	Vec lastPointEditPos;
 	int hoveredRock = -1;
 	int draggingRock = -1;
 	int dragRockMouseMode = -1;
@@ -492,20 +493,27 @@ struct WyrmWaveEditor : TransparentWidget {
 		const int idx = indexFromX(pos.x);
 		const float targetDisplayValue = valueFromY(pos.y);
 		const float writeSlitherPhase = pointEditActive ? pointEditSlitherPhase : visualSlitherPhase;
-		auto writeDisplayValue = [&](int pointIndex) {
-			module->setWavePoint(pointIndex, targetDisplayValue - slitherOffsetForIndex(pointIndex, writeSlitherPhase));
+		auto writeDisplayValue = [&](int pointIndex, float displayValue) {
+			module->setWavePoint(pointIndex, displayValue - slitherOffsetForIndex(pointIndex, writeSlitherPhase));
 		};
 		if (lastIndex >= 0 && lastIndex != idx) {
 			const int lo = std::min(lastIndex, idx);
 			const int hi = std::max(lastIndex, idx);
+			const float dragDx = pos.x - lastPointEditPos.x;
 			for (int i = lo; i <= hi; ++i) {
-				writeDisplayValue(i);
+				const float sampleX = pointX(i, module->pointCount);
+				const float t = std::fabs(dragDx) > 1e-6f
+					? clamp((sampleX - lastPointEditPos.x) / dragDx, 0.f, 1.f)
+					: 1.f;
+				const float sampleY = lastPointEditPos.y + (pos.y - lastPointEditPos.y) * t;
+				writeDisplayValue(i, valueFromY(sampleY));
 			}
 		}
 		else {
-			writeDisplayValue(idx);
+			writeDisplayValue(idx, targetDisplayValue);
 		}
 		lastIndex = idx;
+		lastPointEditPos = pos;
 		sand->stamp(box.size, pos, 5.5f, -0.16f, 0.28f);
 	}
 
