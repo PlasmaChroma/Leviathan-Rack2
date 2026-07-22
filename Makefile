@@ -20,6 +20,7 @@ SOURCES += $(wildcard src/doom/*.c)
 # The compiled plugin and "plugin.json" are automatically added.
 RES_FILES := $(shell find res -type f ! -path 'res/icon/*')
 RES_EXCLUDES := \
+	res/Umi/panel_base@4x.png \
 	res/flux.svg \
 	res/proc.svg \
 	res/deck.svg \

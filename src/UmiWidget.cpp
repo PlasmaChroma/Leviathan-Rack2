@@ -32,10 +32,9 @@ struct UmiPanelArtWidget final : TransparentWidget {
 
 	bool ensureImage(NVGcontext* vg) {
 		if (!vg) return false;
-		const float pixelRatio = APP && APP->window ? APP->window->pixelRatio : 1.f;
-		const char* relativePath = pixelRatio > 2.1f
-			? "res/Umi/panel_base@4x.png"
-			: "res/Umi/panel_base@2x.png";
+		// Keep the initial Umi distribution lean: the 2x panel is used at every
+		// display density until a higher-resolution runtime asset is re-enabled.
+		const char* relativePath = "res/Umi/panel_base@2x.png";
 		const std::string desiredPath = asset::plugin(pluginInstance, relativePath);
 		if (ownerVg == vg && loadedPath == desiredPath && imageHandle >= 0 &&
 			imageWidth > 0 && imageHeight > 0 &&
