@@ -213,11 +213,13 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	}
 
 	Vec currentLocalMousePos() const {
-		if (!APP || !APP->scene || !APP->scene->rack) {
+		if (!APP || !APP->scene) {
 			return Vec();
 		}
-		const Vec widgetRackPos = const_cast<WyrmSandGlWidget*>(this)->getRelativeOffset(Vec(), APP->scene->rack);
-		return APP->scene->rack->getMousePos().minus(widgetRackPos);
+		auto* self = const_cast<WyrmSandGlWidget*>(this);
+		const Vec absoluteOrigin = self->getAbsoluteOffset(Vec());
+		const float absoluteZoom = std::max(self->getAbsoluteZoom(), 1e-6f);
+		return APP->scene->getMousePos().minus(absoluteOrigin).div(absoluteZoom);
 	}
 
 	static int indexFromX(float x, int count, float sizeX) {

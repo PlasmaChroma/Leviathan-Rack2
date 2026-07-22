@@ -478,11 +478,13 @@ struct WyrmWaveEditor : TransparentWidget {
 	}
 
 	Vec currentLocalMousePos() const {
-		if (!parent || !APP || !APP->scene || !APP->scene->rack) {
+		if (!APP || !APP->scene) {
 			return Vec();
 		}
-		const Vec editorRackPos = const_cast<WyrmWaveEditor*>(this)->getRelativeOffset(Vec(), APP->scene->rack);
-		return APP->scene->rack->getMousePos().minus(editorRackPos);
+		auto* self = const_cast<WyrmWaveEditor*>(this);
+		const Vec absoluteOrigin = self->getAbsoluteOffset(Vec());
+		const float absoluteZoom = std::max(self->getAbsoluteZoom(), 1e-6f);
+		return APP->scene->getMousePos().minus(absoluteOrigin).div(absoluteZoom);
 	}
 
 	void applyPointFromPos(Vec pos) {
