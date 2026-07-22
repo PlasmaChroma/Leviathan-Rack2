@@ -4,7 +4,7 @@ Doorstop::Doorstop() {
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 	configButton(MANUAL_PARAM, "Manual strike");
 	configInput(TRIG_INPUT, "Trigger");
-	configInput(VELOCITY_INPUT, "Velocity");
+	configInput(VELOCITY_INPUT, "Bipolar velocity");
 	configOutput(AUDIO_OUTPUT, "Audio");
 	configLight(STRIKE_LIGHT, "Strike");
 }
@@ -38,8 +38,10 @@ void Doorstop::process(const ProcessArgs& args) {
 		const float velocityVoltage = inputs[VELOCITY_INPUT].isConnected()
 			? inputs[VELOCITY_INPUT].getVoltage(0)
 			: 5.f;
-		const float normalizedVelocity = clamp(velocityVoltage / 10.f, 0.f, 1.f);
-		if (normalizedVelocity > 0.f) {
+		const float normalizedVelocity = std::isfinite(velocityVoltage)
+			? clamp(velocityVoltage / 10.f, -1.f, 1.f)
+			: 0.f;
+		if (normalizedVelocity != 0.f) {
 			engine.strike(normalizedVelocity);
 			appliedStrike = true;
 		}

@@ -126,20 +126,21 @@ Only input channel 0 is required for the MVP.
 ### VELOCITY
 
 **Type:** Continuous CV input sampled at the instant of a trigger
-**Expected range:** `0 V` to `10 V`
+**Expected range:** `-10 V` to `10 V`
 
 Mapping:
 
 ```cpp
-float velocityNorm = clamp(voltage / 10.f, 0.f, 1.f);
+float velocityNorm = clamp(voltage / 10.f, -1.f, 1.f);
 ```
 
 Requirements:
 
-* Negative voltages behave as `0 V`.
-* Voltages above `10 V` behave as `10 V`.
+* The voltage magnitude controls strike strength.
+* The voltage sign controls the initial direction of motion.
+* Voltages outside `-10 V` to `10 V` clamp safely.
 * `0 V` produces no meaningful strike.
-* `10 V` produces the maximum supported strike.
+* `-10 V` and `10 V` produce maximum strikes in opposite directions.
 * The value is sampled only when a strike occurs.
 * Changes in Velocity after a strike do not alter the energy already in the spring.
 
@@ -526,15 +527,19 @@ Velocity should use a curved response so soft strikes remain controllable while 
 Suggested mapping:
 
 ```cpp
-float u = clamp(velocityVoltage / 10.f, 0.f, 1.f);
+float velocity = clamp(velocityVoltage / 10.f, -1.f, 1.f);
+float direction = std::copysign(1.f, velocity);
+float u = std::fabs(velocity);
 float shaped = 0.2f * u + 0.8f * u * u;
+float signedShaped = direction * shaped;
 ```
 
 This exact curve is tunable.
 
-`doorstop::Engine::strike()` accepts the unshaped normalized value `u`, clamps
-it to `[0, 1]`, returns immediately when it is zero, and applies this curve
-exactly once. The Rack adapter must not pre-shape the value. Consequently,
+`doorstop::Engine::strike()` accepts an unshaped normalized value in `[-1, 1]`,
+shapes its absolute magnitude exactly once, and restores its sign for
+directional excitation. It returns immediately when the value is zero. The
+Rack adapter must not pre-shape the value. Consequently,
 `engine.strike(0.5f)` is exactly equivalent to an unpatched/manual `5 V`
 velocity before shaping.
 
@@ -553,7 +558,7 @@ The shaped strike value controls:
 Form the strike as an impulse on the current spring velocity:
 
 ```cpp
-springVelocity += shaped * MAX_IMPULSE;
+springVelocity += signedShaped * MAX_IMPULSE;
 ```
 
 In the implementation, calculate the candidate velocity first and pass it
@@ -569,7 +574,9 @@ Do not reset:
 * Modal amplitudes.
 * Decay state.
 
-The strike always pushes in the same nominal horizontal direction.
+Positive and negative Velocity values push in opposite horizontal directions.
+The sign also reverses modal excitation and the mounting thump, while impact
+noise brightness and the ApertureLight follow strike magnitude.
 
 This creates phase-sensitive retriggering:
 
@@ -701,7 +708,7 @@ The primary spring motion may remain audible after the brightest modes disappear
 On every strike:
 
 ```cpp
-mode[i].velocity += shapedStrike * modeGain[i];
+mode[i].velocity += direction * shapedStrike * modeGain[i];
 ```
 
 Hard strikes must excite high modes disproportionately.
@@ -711,10 +718,10 @@ For example:
 ```cpp
 float brightness = shaped * shaped;
 
-mode[0].velocity += shaped * gain0;
-mode[1].velocity += shaped * gain1;
-mode[2].velocity += lerp(shaped, brightness, 0.6f) * gain2;
-mode[3].velocity += brightness * gain3;
+mode[0].velocity += direction * shaped * gain0;
+mode[1].velocity += direction * shaped * gain1;
+mode[2].velocity += direction * lerp(shaped, brightness, 0.6f) * gain2;
+mode[3].velocity += direction * brightness * gain3;
 ```
 
 ## 8.5 Dynamic modal frequency
@@ -1595,8 +1602,8 @@ void Doorstop::process(const ProcessArgs& args) {
                 ? inputs[VELOCITY_INPUT].getVoltage()
                 : 5.f;
 
-        float u = clamp(velocityVoltage / 10.f, 0.f, 1.f);
-        if (u > 0.f) {
+        float u = clamp(velocityVoltage / 10.f, -1.f, 1.f);
+        if (u != 0.f) {
             engine.strike(u);
             appliedStrike = true;
         }
@@ -1771,11 +1778,12 @@ Create tests for:
 
 ### Velocity mapping
 
-* Negative voltage maps to zero.
+* Negative and positive voltages of equal magnitude produce equal-strength
+  strikes in opposite directions.
 * `0 V` maps to zero.
 * `5 V` maps to a medium strike.
-* `10 V` maps to maximum.
-* Voltages above `10 V` clamp safely.
+* `-10 V` and `10 V` map to maximum in opposite directions.
+* Voltages outside `-10 V` to `10 V` clamp safely.
 
 ### Trigger behavior
 
@@ -1848,13 +1856,13 @@ Verify:
 Evaluate:
 
 1. Single `1 V` Velocity strike.
-2. Single `5 V` strike.
-3. Single `10 V` strike.
+2. Single `-5 V` and `5 V` strikes.
+3. Single `-10 V` and `10 V` strikes.
 4. Repeated 8th-note triggers.
 5. Triggering near the spring’s visible resonance.
-6. Rapid random triggers.
+6. Rapid random bipolar triggers.
 7. Triggering while the spring is returning.
-8. Velocity sweeps from `0 V` to `10 V`.
+8. Velocity sweeps from `-10 V` to `10 V`.
 9. Direct monitoring and monitoring through reverb.
 10. Extreme accumulation followed by natural decay.
 
@@ -1894,10 +1902,11 @@ The module is complete when all of the following are true:
 6. Triggering applies energy rather than restarting an envelope.
 7. Repeated strikes interact with existing motion.
 8. Harder strikes create greater displacement.
-9. Harder strikes create brighter audio.
-10. Harder strikes remain audible for longer.
-11. The audio contains a mechanical impact and inharmonic metallic tail.
-12. The visible spring and audio derive from the same simulation.
+9. Negative Velocity strikes move the spring in the opposite direction.
+10. Harder strikes create brighter audio.
+11. Harder strikes remain audible for longer.
+12. The audio contains a mechanical impact and inharmonic metallic tail.
+13. The visible spring and audio derive from the same simulation.
 13. High-energy motion extends outside the panel during normal rack operation.
 14. External rendering does not interfere with adjacent-module interaction.
 15. The module returns to a stable, silent resting state.

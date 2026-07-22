@@ -72,7 +72,7 @@ public:
 	const Tuning& getTuning() const { return tuning; }
 	Tuning& getTuning() { return tuning; }
 
-	static float shapeStrike(float normalizedVelocity);
+	static float shapeMagnitude(float normalizedMagnitude);
 
 private:
 	struct Mode {

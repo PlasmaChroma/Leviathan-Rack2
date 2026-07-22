@@ -29,8 +29,8 @@ Engine::Engine() {
 	clearDynamicState();
 }
 
-float Engine::shapeStrike(float normalizedVelocity) {
-	const float u = clampf(normalizedVelocity, 0.f, 1.f);
+float Engine::shapeMagnitude(float normalizedMagnitude) {
+	const float u = clampf(normalizedMagnitude, 0.f, 1.f);
 	return 0.2f * u + 0.8f * u * u;
 }
 
@@ -134,14 +134,20 @@ float Engine::limitCandidateVelocity(float candidateVelocity) const {
 }
 
 void Engine::strike(float normalizedVelocity) {
-	const float shaped = shapeStrike(normalizedVelocity);
+	if (!std::isfinite(normalizedVelocity)) {
+		return;
+	}
+	const float clampedVelocity = clampf(normalizedVelocity, -1.f, 1.f);
+	const float direction = std::copysign(1.f, clampedVelocity);
+	const float shaped = shapeMagnitude(std::fabs(clampedVelocity));
 	if (!(shaped > 0.f) || !std::isfinite(shaped)) {
 		return;
 	}
+	const float signedShaped = direction * shaped;
 
 	sleeping = false;
 	quietTime = 0.f;
-	springVelocity = limitCandidateVelocity(springVelocity + shaped * tuning.maxImpulse);
+	springVelocity = limitCandidateVelocity(springVelocity + signedShaped * tuning.maxImpulse);
 
 	const float brightness = shaped * shaped;
 	for (int i = 0; i < MODE_COUNT; ++i) {
@@ -152,7 +158,7 @@ void Engine::strike(float normalizedVelocity) {
 		else if (i == 3) {
 			excitation = brightness;
 		}
-		modes[i].velocity += excitation * tuning.modeExcitation[i];
+		modes[i].velocity += direction * excitation * tuning.modeExcitation[i];
 		const float maxModeVelocity = tuning.modeExcitation[i] * 3.f;
 		modes[i].velocity = clampf(modes[i].velocity, -maxModeVelocity, maxModeVelocity);
 	}
@@ -160,7 +166,7 @@ void Engine::strike(float normalizedVelocity) {
 	impact.noiseEnvelope = std::min(impact.noiseEnvelope + shaped, 2.f);
 	impact.noiseBrightness = std::max(impact.noiseBrightness, shaped);
 	impact.thumpVelocity = clampf(
-		impact.thumpVelocity + shaped * 48.f,
+		impact.thumpVelocity + signedShaped * 48.f,
 		-180.f,
 		180.f);
 	strikeLightEnvelope = std::max(strikeLightEnvelope, shaped);

@@ -70,6 +70,24 @@ Result zeroVelocityIsNoOp() {
 		"sleeping=" + std::to_string(module.engine.isSleeping())};
 }
 
+Result negativeVelocityReversesStrike() {
+	Doorstop module;
+	const auto args = processArgs();
+	armTriggers(module, args);
+	module.inputs[Doorstop::VELOCITY_INPUT].channels = 1;
+	module.inputs[Doorstop::VELOCITY_INPUT].setVoltage(-5.f);
+	module.inputs[Doorstop::TRIG_INPUT].setVoltage(10.f);
+	module.process(args);
+	const float displacement = module.visualDisplacement.load(std::memory_order_relaxed);
+	const float velocity = module.visualVelocity.load(std::memory_order_relaxed);
+	const float light = module.visualStrike.load(std::memory_order_relaxed);
+	const bool pass = !module.engine.isSleeping()
+		&& displacement < 0.f && velocity < 0.f && light > 0.f;
+	return {"Negative velocity strikes in the opposite direction", pass,
+		"displacement=" + std::to_string(displacement)
+		+ " velocity=" + std::to_string(velocity)};
+}
+
 Result manualStrikeWorks() {
 	Doorstop module;
 	const auto args = processArgs();
@@ -108,6 +126,7 @@ int main() {
 	results.push_back(interfaceContract());
 	results.push_back(heldGateStrikesOnce());
 	results.push_back(zeroVelocityIsNoOp());
+	results.push_back(negativeVelocityReversesStrike());
 	results.push_back(manualStrikeWorks());
 	results.push_back(jsonRoundTripAndReset());
 

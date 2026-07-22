@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -52,27 +53,50 @@ StrikeStats renderStrike(float sampleRate, float velocity, float maxSeconds = 10
 }
 
 Result velocityCurve() {
-	const float neg = doorstop::Engine::shapeStrike(-1.f);
-	const float zero = doorstop::Engine::shapeStrike(0.f);
-	const float medium = doorstop::Engine::shapeStrike(0.5f);
-	const float maximum = doorstop::Engine::shapeStrike(1.f);
-	const float over = doorstop::Engine::shapeStrike(2.f);
+	const float neg = doorstop::Engine::shapeMagnitude(-1.f);
+	const float zero = doorstop::Engine::shapeMagnitude(0.f);
+	const float medium = doorstop::Engine::shapeMagnitude(0.5f);
+	const float maximum = doorstop::Engine::shapeMagnitude(1.f);
+	const float over = doorstop::Engine::shapeMagnitude(2.f);
 	const bool pass = neg == 0.f && zero == 0.f
 		&& std::fabs(medium - 0.3f) < 1e-6f
 		&& maximum == 1.f && over == 1.f;
-	return {"Velocity curve clamps and shapes once", pass,
+	return {"Magnitude curve clamps and shapes once", pass,
 		"neg=" + std::to_string(neg) + " mid=" + std::to_string(medium)
 		+ " max=" + std::to_string(maximum)};
 }
 
 Result zeroStrikeSleeps() {
 	doorstop::Engine engine;
+	engine.strike(std::numeric_limits<float>::quiet_NaN());
+	engine.strike(std::numeric_limits<float>::infinity());
 	engine.strike(0.f);
 	const doorstop::Frame frame = engine.process(1.f / 48000.f);
 	const bool pass = engine.isSleeping() && frame.sleeping && frame.outputVolts == 0.f
 		&& frame.displacement == 0.f && frame.strikeLight == 0.f;
 	return {"Zero strike is a complete no-op", pass,
 		"sleeping=" + std::to_string(engine.isSleeping())};
+}
+
+Result bipolarStrikeDirection() {
+	doorstop::Engine positive;
+	doorstop::Engine negative;
+	positive.strike(0.5f);
+	negative.strike(-0.5f);
+	const float dt = 1.f / 48000.f;
+	const doorstop::Frame positiveFrame = positive.process(dt);
+	const doorstop::Frame negativeFrame = negative.process(dt);
+	const bool pass = positiveFrame.displacement > 0.f
+		&& negativeFrame.displacement < 0.f
+		&& positiveFrame.velocity > 0.f
+		&& negativeFrame.velocity < 0.f
+		&& std::fabs(positiveFrame.displacement + negativeFrame.displacement) < 1e-6f
+		&& std::fabs(positiveFrame.velocity + negativeFrame.velocity) < 1e-6f
+		&& std::fabs(positiveFrame.energy - negativeFrame.energy) < 1e-6f
+		&& std::fabs(positiveFrame.strikeLight - negativeFrame.strikeLight) < 1e-6f;
+	return {"Bipolar strikes reverse motion without changing strength", pass,
+		"positive=" + std::to_string(positiveFrame.displacement)
+		+ " negative=" + std::to_string(negativeFrame.displacement)};
 }
 
 Result strikeScaling() {
@@ -126,7 +150,8 @@ Result abusiveRetriggerStability() {
 			rng ^= rng >> 17;
 			rng ^= rng << 5;
 			if ((rng & 0x1ffu) == 0u) {
-				engine.strike(float((rng >> 9) & 0xffffu) / 65535.f);
+				const float randomVelocity = 2.f * float((rng >> 9) & 0xffffu) / 65535.f - 1.f;
+				engine.strike(randomVelocity);
 			}
 			const doorstop::Frame frame = engine.process(dt);
 			peak = std::max(peak, std::fabs(frame.outputVolts));
@@ -146,6 +171,7 @@ int main() {
 	std::vector<Result> results;
 	results.push_back(velocityCurve());
 	results.push_back(zeroStrikeSleeps());
+	results.push_back(bipolarStrikeDirection());
 	results.push_back(strikeScaling());
 	results.push_back(sampleRateStability());
 	results.push_back(abusiveRetriggerStability());
