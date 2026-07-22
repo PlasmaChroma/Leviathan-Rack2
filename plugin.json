@@ -167,6 +167,17 @@
         "Visual"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Doorstop",
+      "name": "Doorstop",
+      "description": "Impulse-excited physical model of a vibrating spring doorstop.",
+      "tags": [
+        "Physical modeling",
+        "Drum",
+        "Effect"
+      ],
+      "hidden": false
     }
   ]
 }
