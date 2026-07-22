@@ -848,9 +848,40 @@ struct IrisSourceMenuButton final : TL1105 {
   }
 };
 
+struct IrisChannelPreviewAnchoredTooltip final : ui::Tooltip {
+  WeakPtr<Widget> anchor;
+
+  void step() override {
+    ui::Tooltip::step();
+    Widget* anchorWidget = anchor.get();
+    if (!anchorWidget || !APP || !APP->scene) {
+      if (parent) requestDelete();
+      return;
+    }
+
+    const float anchorZoom = std::max(anchorWidget->getAbsoluteZoom(), 1e-6f);
+    const Vec anchorOrigin = anchorWidget->getAbsoluteOffset(Vec());
+    const Vec anchorSize = anchorWidget->box.size.mult(anchorZoom);
+    const Vec sceneSize = APP->scene->box.size;
+    const float margin = 4.f;
+    float top = margin;
+    if (APP->scene->menuBar && APP->scene->menuBar->isVisible()) {
+      top = std::max(top,
+        APP->scene->menuBar->box.pos.y + APP->scene->menuBar->box.size.y + margin);
+    }
+    const float desiredX = anchorOrigin.x + anchorSize.x + 2.f;
+    const float desiredY = anchorOrigin.y + anchorSize.y + 2.f;
+    const float maxX = std::max(margin, sceneSize.x - margin - box.size.x);
+    const float maxY = std::max(top, sceneSize.y - margin - box.size.y);
+    setPosition(Vec(
+      clamp(desiredX, margin, maxX),
+      clamp(desiredY, top, maxY)));
+  }
+};
+
 struct IrisChannelPreviewButton final : TL1105 {
   Iris* module = nullptr;
-  ui::Tooltip* tooltip = nullptr;
+  WeakPtr<ui::Tooltip> tooltip;
   int pressedFrames = 0;
 
   ~IrisChannelPreviewButton() {
@@ -863,23 +894,24 @@ struct IrisChannelPreviewButton final : TL1105 {
   }
 
   void createTooltip() {
-    if (settings::tooltips && !tooltip) {
-      tooltip = new ui::Tooltip();
-      tooltip->text = tooltipText();
-      APP->scene->addChild(tooltip);
-    }
+    if (!settings::tooltips || tooltip || !APP || !APP->scene) return;
+    auto* nextTooltip = new IrisChannelPreviewAnchoredTooltip();
+    nextTooltip->text = tooltipText();
+    nextTooltip->anchor.set(this);
+    tooltip.set(nextTooltip);
+    APP->scene->addChild(nextTooltip);
   }
 
   void destroyTooltip() {
-    if (tooltip) {
-      APP->scene->removeChild(tooltip);
-      delete tooltip;
-      tooltip = nullptr;
-    }
+    ui::Tooltip* currentTooltip = tooltip.get();
+    if (!currentTooltip) return;
+    if (currentTooltip->parent) currentTooltip->parent->removeChild(currentTooltip);
+    delete currentTooltip;
+    tooltip.set(nullptr);
   }
 
   void refreshTooltip() {
-    if (tooltip) tooltip->text = tooltipText();
+    if (ui::Tooltip* currentTooltip = tooltip.get()) currentTooltip->text = tooltipText();
   }
 
   void setPressedVisual(bool pressed) {
@@ -890,6 +922,12 @@ struct IrisChannelPreviewButton final : TL1105 {
   }
 
   void onButton(const event::Button& e) override {
+    // This is a callback-only UI control, not an engine parameter. Prevent
+    // TL1105's ParamWidget path from opening an invalid parameter menu.
+    if (e.button != GLFW_MOUSE_BUTTON_LEFT) {
+      e.consume(this);
+      return;
+    }
     if (module && e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
       const bool current = module->displayChannelPreview.load(std::memory_order_relaxed);
       const bool next = !current;
@@ -919,6 +957,7 @@ struct IrisChannelPreviewButton final : TL1105 {
       if (pressedFrames == 0) setPressedVisual(false);
     }
     TL1105::step();
+    refreshTooltip();
   }
 
   void draw(const DrawArgs& args) override {
