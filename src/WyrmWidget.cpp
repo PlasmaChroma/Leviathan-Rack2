@@ -197,8 +197,67 @@ struct WyrmEditorDock final : Widget {
 	}
 };
 
-struct WyrmEditorGlyphButton final : widget::OpaqueWidget {
-	std::function<void()> action;
+template <typename BaseButton>
+struct WyrmTooltipButton : BaseButton {
+	std::function<std::string()> tooltipTextProvider;
+	WeakPtr<ui::Tooltip> tooltip;
+
+	~WyrmTooltipButton() override {
+		destroyTooltip();
+	}
+
+	std::string tooltipText() const {
+		return tooltipTextProvider ? tooltipTextProvider() : std::string();
+	}
+
+	void createTooltip() {
+		if (!settings::tooltips || tooltip || !APP || !APP->scene) return;
+		auto* nextTooltip = new ui::Tooltip();
+		nextTooltip->text = tooltipText();
+		tooltip.set(nextTooltip);
+		APP->scene->addChild(nextTooltip);
+	}
+
+	void destroyTooltip() {
+		ui::Tooltip* currentTooltip = tooltip.get();
+		if (!currentTooltip) return;
+		if (currentTooltip->parent) {
+			currentTooltip->parent->removeChild(currentTooltip);
+		}
+		delete currentTooltip;
+		tooltip.set(nullptr);
+	}
+
+	void refreshTooltip() {
+		if (ui::Tooltip* currentTooltip = tooltip.get()) {
+			currentTooltip->text = tooltipText();
+		}
+	}
+
+	void onButton(const event::Button& e) override {
+		BaseButton::onButton(e);
+		if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
+			refreshTooltip();
+		}
+	}
+
+	void onEnter(const event::Enter& e) override {
+		BaseButton::onEnter(e);
+		createTooltip();
+	}
+
+	void onLeave(const event::Leave& e) override {
+		BaseButton::onLeave(e);
+		destroyTooltip();
+	}
+
+	void step() override {
+		BaseButton::step();
+		refreshTooltip();
+	}
+};
+
+struct WyrmEditorGlyphButton final : WyrmTooltipButton<LeviathanIconButton> {
 	std::function<bool()> enabledAction;
 	std::function<bool()> collapseGlyphAction;
 	bool collapseGlyph = false;
@@ -208,31 +267,22 @@ struct WyrmEditorGlyphButton final : widget::OpaqueWidget {
 	}
 
 	void onButton(const event::Button& e) override {
-		if (enabled() && e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
-			if (action) action();
+		if (!enabled() && e.button == GLFW_MOUSE_BUTTON_LEFT) {
 			e.consume(this);
 			return;
 		}
-		widget::OpaqueWidget::onButton(e);
+		WyrmTooltipButton<LeviathanIconButton>::onButton(e);
 	}
 
 	void draw(const DrawArgs& args) override {
+		LeviathanIconButton::draw(args);
 		const bool active = enabled();
 		const bool collapse = collapseGlyphAction ? collapseGlyphAction() : collapseGlyph;
 		const Vec center = box.size.mult(0.5f);
-		const float radius = std::min(5.f, 0.22f * std::min(box.size.x, box.size.y));
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, 0.5f, 0.5f, box.size.x - 1.f, box.size.y - 1.f, radius);
-		nvgFillColor(args.vg, active ? nvgRGBA(11, 19, 46, 245) : nvgRGBA(12, 15, 24, 180));
-		nvgFill(args.vg);
-		nvgStrokeColor(args.vg, active ? nvgRGBA(112, 221, 246, 220) : nvgRGBA(82, 93, 105, 110));
-		nvgStrokeWidth(args.vg, 1.f);
-		nvgStroke(args.vg);
-
 		const float direction = collapse ? -1.f : 1.f;
-		const float innerX = 0.18f * box.size.x;
-		const float outerX = 0.36f * box.size.x;
-		const float head = std::max(2.f, 0.13f * box.size.y);
+		const float innerX = 0.13f * box.size.x;
+		const float outerX = 0.30f * box.size.x;
+		const float head = std::max(2.f, 0.11f * box.size.y);
 		nvgBeginPath(args.vg);
 		for (float side : {-1.f, 1.f}) {
 			const float startX = center.x + side * (collapse ? outerX : innerX);
@@ -460,11 +510,13 @@ struct WyrmWidget : ModuleWidget {
 		addChild(editorDock);
 		addChild(visual_assets::createPreviewFrameEnhancementWidget(editorRectMm, visual_assets::PreviewFrameTint::Purple));
 		expandEditorButton = new WyrmEditorGlyphButton();
-		expandEditorButton->setSize(Vec(15.f, 15.f));
 		expandEditorButton->setPosition(mm2px(expandEditorPos).minus(expandEditorButton->box.size.mult(0.5f)));
 		expandEditorButton->enabledAction = [this]() { return this->module != nullptr; };
 		expandEditorButton->collapseGlyphAction = [this]() { return isEditorExpanded(); };
-		expandEditorButton->action = [this]() {
+		expandEditorButton->tooltipTextProvider = [this]() {
+			return isEditorExpanded() ? "Collapse waveform editor" : "Expand waveform editor";
+		};
+		expandEditorButton->buttonAction = [this]() {
 			if (isEditorExpanded()) closeExpandedEditor();
 			else openExpandedEditor();
 		};
@@ -475,11 +527,16 @@ struct WyrmWidget : ModuleWidget {
 		freqReadout->box.size = mm2px(freqReadoutRectMm.size);
 		addChild(freqReadout);
 
-		auto* lockButton = new LeviathanIconButton();
+		auto* lockButton = new WyrmTooltipButton<LeviathanIconButton>();
 		const std::shared_ptr<window::Svg> lockClosedSvg = visual_assets::loadPluginSvgCached("res/icon/lock_closed-highlighted.svg");
 		const std::shared_ptr<window::Svg> lockOpenSvg = visual_assets::loadPluginSvgCached("res/icon/lock_open-highlighted.svg");
 		lockButton->iconProvider = [module, lockClosedSvg, lockOpenSvg]() {
 			return (module && module->editorLocked.load(std::memory_order_relaxed)) ? lockClosedSvg : lockOpenSvg;
+		};
+		lockButton->tooltipTextProvider = [module]() {
+			return (module && module->editorLocked.load(std::memory_order_relaxed))
+				? "Unlock waveform editor"
+				: "Lock waveform editor";
 		};
 		if (module) {
 			lockButton->buttonAction = [module]() {
@@ -488,8 +545,9 @@ struct WyrmWidget : ModuleWidget {
 		}
 		lockButton->box.pos = mm2px(lockPos).minus(lockButton->box.size.mult(0.5f));
 		addChild(lockButton);
-		auto* resetButton = new LeviathanResetButton();
+		auto* resetButton = new WyrmTooltipButton<LeviathanResetButton>();
 		resetButton->box.pos = mm2px(resetPos).minus(resetButton->box.size.mult(0.5f));
+		resetButton->tooltipTextProvider = []() { return "Reset waveform"; };
 		if (module) {
 			resetButton->buttonAction = [module]() { module->setFactoryShape(module->selectedShape); };
 		}
