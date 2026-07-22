@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     width="15.24mm" height="128.5mm" viewBox="0 0 1524 12850"
+     preserveAspectRatio="xMidYMid" id="doorstop-source">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#12151b"/>
+      <stop offset="0.52" stop-color="#090b10"/>
+      <stop offset="1" stop-color="#050609"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7457d8" stop-opacity="0.75"/>
+      <stop offset="0.5" stop-color="#34d9e7" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#7457d8" stop-opacity="0.75"/>
+    </linearGradient>
+    <radialGradient id="plate" cx="0.35" cy="0.25" r="0.9">
+      <stop offset="0" stop-color="#d5dbe0"/>
+      <stop offset="0.42" stop-color="#727b84"/>
+      <stop offset="1" stop-color="#242a31"/>
+    </radialGradient>
+  </defs>
+
+  <g id="panel_art" inkscape:groupmode="layer" inkscape:label="Panel artwork">
+    <rect width="1524" height="12850" fill="url(#bg)"/>
+    <rect x="42" y="35" width="1440" height="12780" rx="90"
+          fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="24"/>
+    <path d="M165 690 H1359" stroke="url(#edge)" stroke-width="34" stroke-linecap="round"/>
+    <path d="M110 8700 H1414" stroke="#35d7e4" stroke-opacity="0.28"
+          stroke-width="22" stroke-linecap="round"/>
+
+    <rect x="158" y="850" width="1208" height="6400" rx="170"
+          fill="#28303a" fill-opacity="0.13" stroke="#ffffff"
+          stroke-opacity="0.045" stroke-width="18"/>
+    <circle cx="762" cy="7200" r="395" fill="#030508" opacity="0.8"/>
+    <circle cx="762" cy="7100" r="350" fill="url(#plate)"
+            stroke="#e8f4f7" stroke-opacity="0.32" stroke-width="24"/>
+    <circle cx="762" cy="7100" r="155" fill="#171c22" stroke="#05070a" stroke-width="28"/>
+    <circle cx="762" cy="7100" r="62" fill="#080a0d"/>
+
+    <g opacity="0.35">
+      <path d="M290 9000 H1234" stroke="#7659e0" stroke-width="20"/>
+      <path d="M290 10400 H1234" stroke="#4d89d8" stroke-width="20"/>
+      <path d="M290 11800 H1234" stroke="#35d7e4" stroke-width="20"/>
+    </g>
+  </g>
+
+  <g id="components" inkscape:groupmode="layer" inkscape:label="Component anchors"
+     style="display:none">
+    <circle id="SPRING_BASE" cx="762" cy="7100" r="50"/>
+    <circle id="STRIKE_LIGHT" cx="762" cy="8050" r="80"/>
+    <rect id="MANUAL_HIT_REGION" x="110" y="930" width="1304" height="6180"/>
+    <circle id="TRIG_INPUT" cx="762" cy="9300" r="220"/>
+    <circle id="VELOCITY_INPUT" cx="762" cy="10700" r="220"/>
+    <circle id="AUDIO_OUTPUT" cx="762" cy="12100" r="220"/>
+  </g>
+
+  <g id="labels" inkscape:groupmode="layer" inkscape:label="Labels"
+     text-anchor="middle" font-family="sans-serif">
+    <g fill="none" stroke-linecap="round">
+      <path d="M338 410 H1186" stroke="#ffffff" stroke-opacity="0.13" stroke-width="18"/>
+      <path d="M338 8350 H1186" stroke="#ffffff" stroke-opacity="0.09" stroke-width="14"/>
+    </g>
+    <text x="762" y="545" fill="#e0ebf1" fill-opacity="0.88"
+          font-size="205" font-weight="600" letter-spacing="12">DOORSTOP</text>
+    <text x="762" y="8880" fill="#73cee0" fill-opacity="0.80"
+          font-size="150" font-weight="600" letter-spacing="8">TRIG</text>
+    <text x="762" y="10280" fill="#73cee0" fill-opacity="0.80"
+          font-size="150" font-weight="600" letter-spacing="8">VEL</text>
+    <text x="762" y="11680" fill="#ac80ec" fill-opacity="0.86"
+          font-size="150" font-weight="600" letter-spacing="8">OUT</text>
+    <text x="762" y="12715" fill="#ffffff" fill-opacity="0.42"
+          font-size="105" font-weight="500" letter-spacing="7">LEVIATHAN</text>
+  </g>
+</svg>

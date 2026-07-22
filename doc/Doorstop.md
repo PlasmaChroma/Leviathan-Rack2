@@ -1286,7 +1286,14 @@ Rack calls custom widget drawing every frame, while `FramebufferWidget` is inten
 
 Use the existing Leviathan visual conventions.
 
-Use the repository's split-panel naming convention:
+Keep the editable panel artwork and label layer together in the merged source:
+
+```text
+res/doorstop.svg
+```
+
+Generate the runtime assets from that source with `tools/split_svg_labels.py`,
+following the repository's split-panel naming convention:
 
 ```text
 res/doorstop.panel.svg

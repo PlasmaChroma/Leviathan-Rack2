@@ -168,34 +168,6 @@ public:
 	}
 };
 
-class DoorstopLabelsWidget final : public TransparentWidget {
-public:
-	void draw(const DrawArgs& args) override {
-		if (!APP || !APP->window || !APP->window->uiFont) {
-			return;
-		}
-		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		nvgFillColor(args.vg, nvgRGBA(224, 235, 241, 225));
-		nvgFontSize(args.vg, 7.2f);
-		nvgTextLetterSpacing(args.vg, 0.4f);
-		nvgText(args.vg, box.size.x * 0.5f, mm2px(4.8f), "DOORSTOP", nullptr);
-
-		nvgFillColor(args.vg, nvgRGBA(115, 206, 224, 205));
-		nvgFontSize(args.vg, 5.6f);
-		nvgTextLetterSpacing(args.vg, 0.2f);
-		nvgText(args.vg, box.size.x * 0.5f, mm2px(88.0f), "TRIG", nullptr);
-		nvgText(args.vg, box.size.x * 0.5f, mm2px(102.0f), "VEL", nullptr);
-		nvgFillColor(args.vg, nvgRGBA(172, 128, 236, 220));
-		nvgText(args.vg, box.size.x * 0.5f, mm2px(116.0f), "OUT", nullptr);
-
-		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 105));
-		nvgFontSize(args.vg, 4.4f);
-		nvgTextLetterSpacing(args.vg, 0.15f);
-		nvgText(args.vg, box.size.x * 0.5f, mm2px(126.5f), "LEVIATHAN", nullptr);
-	}
-};
-
 class DoorstopSpringWidget final : public TransparentWidget {
 public:
 	std::shared_ptr<DoorstopOverlayLink> link;
@@ -246,10 +218,6 @@ struct DoorstopWidget final : ModuleWidget {
 			}
 			return result;
 		};
-
-		auto* labels = new DoorstopLabelsWidget();
-		labels->box.size = box.size;
-		addChild(labels);
 
 		springWidget = new DoorstopSpringWidget();
 		springWidget->box.size = box.size;
