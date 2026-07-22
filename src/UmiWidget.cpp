@@ -308,12 +308,6 @@ struct UmiPlayfieldWidget final : Widget {
 			nvgFill(args.vg);
 		}
 
-		if (module && isDragonKingDebugEnabled()) {
-			nvgFontSize(args.vg, 10.f);
-			nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 220));
-			nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-			nvgText(args.vg, 3.f, 3.f, string::f("balls %u  seed %u", snapshot.ballCount, snapshot.seed).c_str(), nullptr);
-		}
 		nvgRestore(args.vg);
 	}
 };
