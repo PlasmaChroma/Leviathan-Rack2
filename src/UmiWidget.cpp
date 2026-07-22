@@ -7,7 +7,6 @@
 #include <cerrno>
 #include <cmath>
 #include <cstdlib>
-#include <utility>
 
 namespace {
 
@@ -92,20 +91,15 @@ struct UmiPanelArtWidget final : TransparentWidget {
 			nvgStroke(args.vg);
 		}
 
-		const float directBandY = mm2px(94.f);
 		const float utilityBandY = mm2px(109.f);
-		for (const std::pair<float, float>& band : {
-			std::make_pair(directBandY, mm2px(15.f)),
-			std::make_pair(utilityBandY, mm2px(16.5f))}) {
-			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, mm2px(2.2f), band.first,
-				box.size.x - mm2px(4.4f), band.second, mm2px(1.8f));
-			nvgFillColor(args.vg, nvgRGBA(0, 9, 42, 118));
-			nvgFill(args.vg);
-			nvgStrokeColor(args.vg, nvgRGBA(88, 221, 247, 90));
-			nvgStrokeWidth(args.vg, 0.8f);
-			nvgStroke(args.vg);
-		}
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, mm2px(2.2f), utilityBandY,
+			box.size.x - mm2px(4.4f), mm2px(16.5f), mm2px(1.8f));
+		nvgFillColor(args.vg, nvgRGBA(0, 9, 42, 118));
+		nvgFill(args.vg);
+		nvgStrokeColor(args.vg, nvgRGBA(88, 221, 247, 90));
+		nvgStrokeWidth(args.vg, 0.8f);
+		nvgStroke(args.vg);
 	}
 };
 
@@ -144,13 +138,10 @@ struct UmiLabelOverlayWidget final : TransparentWidget {
 		drawLabel(args, "CLEAR", 84.4f, 72.8f, 1.1f, labelColor);
 		drawLabel(args, "IN", 75.4f, 72.8f, 1.1f, cvColor);
 
-		for (int i = 0; i < umi::SINK_COUNT; ++i) {
-			const std::string number = std::to_string(i + 1);
-			drawLabel(args, number.c_str(), 6.f + 11.35f * float(i), 96.3f, 1.4f, nvgRGB(255, 229, 154));
-		}
-		const char* utilities[] = {"ANY", "LEFT", "RIGHT", "VEL", "POS", "ACT"};
-		for (int i = 0; i < 6; ++i) {
-			drawLabel(args, utilities[i], 9.f + 14.69f * float(i), 111.f, 1.15f, labelColor);
+		const char* outputLabels[] = {"GATES", "ANY", "LEFT", "RIGHT", "VEL", "POS", "ACT"};
+		for (int i = 0; i < 7; ++i) {
+			drawLabel(args, outputLabels[i], 8.f + 12.57f * float(i), 111.f, 1.15f,
+				i == 0 ? nvgRGB(255, 229, 154) : labelColor);
 		}
 	}
 };
@@ -232,8 +223,36 @@ struct UmiPlayfieldWidget final : Widget {
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 
 		const Transform transform = boardTransform();
+		auto strokeSideBumper = [&](bool rightSide, NVGcolor color, float strokeWidth) {
+			nvgBeginPath(args.vg);
+			bool started = false;
+			for (int i = 0; i < layout.segmentCount; ++i) {
+				const umi::Segment& segment = layout.segments[static_cast<std::size_t>(i)];
+				if (segment.material != 2 || (segment.a.x >= umi::BOARD_W * 0.5f) != rightSide) continue;
+				const Vec a = boardToLocal(segment.a);
+				const Vec b = boardToLocal(segment.b);
+				if (!started) {
+					nvgMoveTo(args.vg, a.x, a.y);
+					started = true;
+				}
+				nvgLineTo(args.vg, b.x, b.y);
+			}
+			if (!started) return;
+			nvgStrokeColor(args.vg, color);
+			nvgStrokeWidth(args.vg, strokeWidth);
+			nvgLineCap(args.vg, NVG_ROUND);
+			nvgLineJoin(args.vg, NVG_ROUND);
+			nvgStroke(args.vg);
+		};
+		const float sideWidth = std::max(1.f, 20.f * transform.scale);
+		for (int side = 0; side < 2; ++side) {
+			strokeSideBumper(side != 0, nvgRGBA(0, 10, 45, 225), sideWidth * 1.75f);
+			strokeSideBumper(side != 0, nvgRGBA(62, 226, 255, 220), sideWidth * 1.25f);
+			strokeSideBumper(side != 0, nvgRGBA(248, 210, 111, 245), sideWidth * 0.62f);
+		}
 		for (int i = 0; i < layout.segmentCount; ++i) {
 			const umi::Segment& segment = layout.segments[static_cast<std::size_t>(i)];
+			if (segment.material == 2) continue;
 			const Vec a = boardToLocal(segment.a);
 			const Vec b = boardToLocal(segment.b);
 			const float width = std::max(1.f, segment.radius * 2.f * transform.scale);
@@ -375,14 +394,10 @@ UmiWidget::UmiWidget(Umi* module) {
 	addButton(Umi::CLEAR_PARAM, Umi::CLEAR_LIGHT, "clear_param", Vec(84.4f, 79.f));
 	addInputPort(Umi::CLEAR_INPUT, "clear_input", Vec(75.4f, 79.f));
 
-	const char* sinkIds[] = {"sink_1_output", "sink_2_output", "sink_3_output", "sink_4_output",
-		"sink_5_output", "sink_6_output", "sink_7_output", "sink_8_output"};
-	for (int i = 0; i < umi::SINK_COUNT; ++i) {
-		addOutputPort(Umi::SINK1_OUTPUT + i, sinkIds[i], Vec(6.f + 11.35f * i, 102.f));
-	}
-	const char* utilityIds[] = {"any_output", "left_output", "right_output", "velocity_output", "position_output", "activity_output"};
-	for (int i = 0; i < 6; ++i) {
-		addOutputPort(Umi::ANY_OUTPUT + i, utilityIds[i], Vec(9.f + 14.69f * i, 118.f));
+	const char* outputIds[] = {"gates_output", "any_output", "left_output", "right_output",
+		"velocity_output", "position_output", "activity_output"};
+	for (int i = 0; i < 7; ++i) {
+		addOutputPort(Umi::GATES_OUTPUT + i, outputIds[i], Vec(8.f + 12.57f * i, 118.f));
 	}
 
 	addChild(createWidgetCentered<TorxScrew>(anchor("screw_tl", Vec(3.f, 3.f))));

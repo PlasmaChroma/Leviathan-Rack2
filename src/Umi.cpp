@@ -40,9 +40,7 @@ Umi::Umi() {
 	configInput(CHAOS_CV_INPUT, "Chaos CV");
 	configInput(CLEAR_INPUT, "Clear trigger");
 
-	for (int i = 0; i < umi::SINK_COUNT; ++i) {
-		configOutput(SINK1_OUTPUT + i, "Sink " + std::to_string(i + 1) + " trigger");
-	}
+	configOutput(GATES_OUTPUT, "Sink gates 1-8");
 	configOutput(ANY_OUTPUT, "Any sink trigger");
 	configOutput(LEFT_OUTPUT, "Left sinks trigger");
 	configOutput(RIGHT_OUTPUT, "Right sinks trigger");
@@ -239,9 +237,10 @@ void Umi::process(const ProcessArgs& args) {
 	}
 
 	bool anyHigh = false;
+	outputs[GATES_OUTPUT].setChannels(umi::SINK_COUNT);
 	for (int i = 0; i < umi::SINK_COUNT; ++i) {
 		const bool high = sinkPulses[static_cast<std::size_t>(i)].process(args.sampleTime);
-		outputs[SINK1_OUTPUT + i].setVoltage(high ? 10.f : 0.f);
+		outputs[GATES_OUTPUT].setVoltage(high ? 10.f : 0.f, i);
 		lights[SINK1_LIGHT + i].setBrightnessSmooth(high ? 1.f : 0.f, args.sampleTime);
 		anyHigh = anyHigh || high;
 	}

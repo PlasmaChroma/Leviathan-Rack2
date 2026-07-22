@@ -40,13 +40,10 @@
     <text x="7540" y="3130">CV</text><text x="7540" y="5180">CV</text><text x="7540" y="7280">IN</text>
   </g>
 
-  <g fill="#f8e9b0" font-family="sans-serif" font-size="150" font-weight="bold" text-anchor="middle">
-    <text x="600" y="9650">1</text><text x="1735" y="9650">2</text><text x="2870" y="9650">3</text><text x="4005" y="9650">4</text>
-    <text x="5140" y="9650">5</text><text x="6275" y="9650">6</text><text x="7410" y="9650">7</text><text x="8545" y="9650">8</text>
-  </g>
   <g fill="#dffaff" font-family="sans-serif" font-size="140" font-weight="bold" text-anchor="middle">
-    <text x="900" y="11100">ANY</text><text x="2369" y="11100">LEFT</text><text x="3838" y="11100">RIGHT</text>
-    <text x="5307" y="11100">VEL</text><text x="6776" y="11100">POS</text><text x="8245" y="11100">ACT</text>
+    <text x="800" y="11100" fill="#f8e9b0">GATES</text><text x="2057" y="11100">ANY</text>
+    <text x="3314" y="11100">LEFT</text><text x="4571" y="11100">RIGHT</text>
+    <text x="5828" y="11100">VEL</text><text x="7085" y="11100">POS</text><text x="8342" y="11100">ACT</text>
   </g>
 
   <g id="components" opacity="0">
@@ -59,13 +56,10 @@
     <circle id="tilt_param" cx="8490" cy="3750" r="180"/><circle id="tilt_cv_input" cx="7540" cy="3750" r="180"/>
     <circle id="chaos_param" cx="8490" cy="5800" r="180"/><circle id="chaos_cv_input" cx="7540" cy="5800" r="180"/>
     <circle id="clear_param" cx="8440" cy="7900" r="180"/><circle id="clear_input" cx="7540" cy="7900" r="180"/>
-    <circle id="sink_1_output" cx="600" cy="10200" r="180"/><circle id="sink_2_output" cx="1735" cy="10200" r="180"/>
-    <circle id="sink_3_output" cx="2870" cy="10200" r="180"/><circle id="sink_4_output" cx="4005" cy="10200" r="180"/>
-    <circle id="sink_5_output" cx="5140" cy="10200" r="180"/><circle id="sink_6_output" cx="6275" cy="10200" r="180"/>
-    <circle id="sink_7_output" cx="7410" cy="10200" r="180"/><circle id="sink_8_output" cx="8545" cy="10200" r="180"/>
-    <circle id="any_output" cx="900" cy="11800" r="180"/><circle id="left_output" cx="2369" cy="11800" r="180"/>
-    <circle id="right_output" cx="3838" cy="11800" r="180"/><circle id="velocity_output" cx="5307" cy="11800" r="180"/>
-    <circle id="position_output" cx="6776" cy="11800" r="180"/><circle id="activity_output" cx="8245" cy="11800" r="180"/>
+    <circle id="gates_output" cx="800" cy="11800" r="180"/><circle id="any_output" cx="2057" cy="11800" r="180"/>
+    <circle id="left_output" cx="3314" cy="11800" r="180"/><circle id="right_output" cx="4571" cy="11800" r="180"/>
+    <circle id="velocity_output" cx="5828" cy="11800" r="180"/><circle id="position_output" cx="7085" cy="11800" r="180"/>
+    <circle id="activity_output" cx="8342" cy="11800" r="180"/>
     <circle id="screw_tl" cx="300" cy="300" r="100"/><circle id="screw_tr" cx="8840" cy="300" r="100"/>
     <circle id="screw_bl" cx="300" cy="12550" r="100"/><circle id="screw_br" cx="8840" cy="12550" r="100"/>
   </g>

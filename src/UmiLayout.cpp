@@ -32,7 +32,8 @@ Layout makePearlLayout(std::uint32_t seed) {
 	constexpr float GRID_Y_SPACING = 105.f;
 
 	for (int row = 0; row < GRID_ROWS; ++row) {
-		const int columns = (row & 1) ? 8 : 7;
+		const bool expandedOddDisplayRow = row >= 2 && row <= 6 && (row % 2 == 0);
+		const int columns = expandedOddDisplayRow ? 9 : ((row & 1) ? 8 : 7);
 		const float firstX = 0.5f * (BOARD_W - GRID_X_SPACING * float(columns - 1));
 		for (int column = 0; column < columns; ++column) {
 			Peg& peg = layout.pegs[static_cast<std::size_t>(layout.pegCount++)];
@@ -63,9 +64,9 @@ Layout makePearlLayout(std::uint32_t seed) {
 	};
 	constexpr int WALL_POINT_COUNT = int(sizeof(LEFT_WALL) / sizeof(LEFT_WALL[0]));
 	for (int i = 0; i < WALL_POINT_COUNT - 1; ++i) {
-		addSegment(LEFT_WALL[i], LEFT_WALL[i + 1], 10.f, 1);
+		addSegment(LEFT_WALL[i], LEFT_WALL[i + 1], 10.f, 2);
 		addSegment({BOARD_W - LEFT_WALL[i].x, LEFT_WALL[i].y},
-			{BOARD_W - LEFT_WALL[i + 1].x, LEFT_WALL[i + 1].y}, 10.f, 1);
+			{BOARD_W - LEFT_WALL[i + 1].x, LEFT_WALL[i + 1].y}, 10.f, 2);
 	}
 
 	constexpr float SINK_FIRST_X = 205.f;

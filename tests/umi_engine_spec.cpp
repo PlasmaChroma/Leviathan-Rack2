@@ -16,7 +16,7 @@ struct TestResult {
 
 TestResult testLayoutValidity() {
 	const umi::Layout layout = umi::makePearlLayout(12345u);
-	const bool pass = umi::validateLayout(layout) && layout.pegCount == 82 && layout.segmentCount == 25;
+	const bool pass = umi::validateLayout(layout) && layout.pegCount == 88 && layout.segmentCount == 25;
 	return {"Pearl layout validity", pass,
 		"pegs=" + std::to_string(layout.pegCount) + " segments=" + std::to_string(layout.segmentCount)};
 }
@@ -24,10 +24,11 @@ TestResult testLayoutValidity() {
 TestResult testStaggeredGridAndBottomClearance() {
 	const umi::Layout first = umi::makePearlLayout(1u);
 	const umi::Layout second = umi::makePearlLayout(987654321u);
-	bool staggered = first.pegCount == 82 && second.pegCount == first.pegCount;
+	bool staggered = first.pegCount == 88 && second.pegCount == first.pegCount;
 	int index = 0;
 	for (int row = 0; row < 11 && staggered; ++row) {
-		const int columns = (row & 1) ? 8 : 7;
+		const bool expandedOddDisplayRow = row >= 2 && row <= 6 && (row % 2 == 0);
+		const int columns = expandedOddDisplayRow ? 9 : ((row & 1) ? 8 : 7);
 		const float firstX = 0.5f * (umi::BOARD_W - 110.f * float(columns - 1));
 		for (int column = 0; column < columns; ++column, ++index) {
 			const umi::Peg& peg = first.pegs[static_cast<std::size_t>(index)];

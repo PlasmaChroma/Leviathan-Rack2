@@ -28,7 +28,7 @@ At the end of v1, a user can:
 - Change the path distribution with gravity, tilt, bounce, drag, and chaos.
 - Spawn bursts of one to eight pearls.
 - See every meaningful collider and every capture.
-- Patch eight direct sink triggers plus aggregate and event-CV outputs.
+- Patch one eight-channel polyphonic sink-gate output plus aggregate and event-CV outputs.
 - Save a seed and reproduce the same result with the same settings and input event stream.
 
 ### 1.2 Explicit non-goals
@@ -43,7 +43,7 @@ V1 does not include ball-to-ball collision, editable board geometry, user layout
 | Width | 18 HP / 91.44 mm / 270 Rack px |
 | Default layout | `Pearl`, a balanced 8-sink layout derived from the earlier Maw geometry |
 | Live display | Central, tall, and visually dominant |
-| Primary outputs | All eight direct sink outputs remain mandatory |
+| Primary outputs | One polyphonic `GATES` output carries sinks 1-8 on channels 1-8 |
 | Utility outputs | `ANY`, `LEFT`, `RIGHT`, `VEL`, `POS`, and `ACT` remain mandatory |
 | CV inputs | `DROP`, `GRAV`, `BOUNCE`, `TILT`, `CHAOS`, and `CLEAR` |
 | Omitted panel CV | Rate and density CV are omitted; upstream trigger patterns already control both behaviors. Drag CV is also omitted. |
@@ -112,8 +112,7 @@ These are layout-proof starting values and may move during art cleanup without c
 | Playfield aperture | 20.5 | 20.5 | 50.4 | 75.0 |
 | Left control rail | 2.5 | 28.0 | 17.5 | 61.0 |
 | Right control rail | 71.4 | 28.0 | 17.5 | 61.0 |
-| Direct-output row | 4.0 | 96.0 | 83.4 | 14.0 |
-| Utility-output row | 6.0 | 111.0 | 79.4 | 14.0 |
+| Output row | 4.0 | 111.0 | 83.4 | 14.0 |
 
 The 1000 x 1600 logical board is aspect-fitted and centered inside the aperture. The enlarged aperture uses the former title area and extends farther toward the lower output band. The resulting unused horizontal margin is part of the frame, not a stretched board.
 
@@ -122,8 +121,7 @@ The 1000 x 1600 logical board is aspect-fitted and centered inside the aperture.
 - Upper band: `DROP` input, illuminated `DROP` button, `RATE`, and `DENSITY`. The upper-right space remains open for the artwork.
 - Left rail: `GRAV` plus CV, `BOUNCE` plus CV, and `DRAG`.
 - Right rail: `TILT` plus CV, `CHAOS` plus CV, and illuminated `CLEAR` plus input.
-- First lower row: outputs `1` through `8`, strictly left to right.
-- Second lower row: `ANY`, `LEFT`, `RIGHT`, `VEL`, `POS`, and `ACT`, strictly left to right.
+- Lower row: `GATES`, `ANY`, `LEFT`, `RIGHT`, `VEL`, `POS`, and `ACT`, strictly left to right.
 
 Use compact Leviathan production widgets. Plugs and cables must not materially cover the playfield. Four normal Rack screw widgets replace the painted slots.
 
@@ -139,8 +137,7 @@ Provisional fallback centers, in panel millimeters, are:
 | `tilt_param` | (84.9, 37.5) | `tilt_cv_input` | (75.4, 37.5) |
 | `chaos_param` | (84.9, 58.0) | `chaos_cv_input` | (75.4, 58.0) |
 | `clear_param` | (84.4, 79.0) | `clear_input` | (75.4, 79.0) |
-| `sink_1_output` .. `sink_8_output` | x = 6.0 + 11.35*i, y = 102.0 |  | i = 0..7 |
-| `any_output` .. `activity_output` | x = 9.0 + 14.69*i, y = 118.0 |  | i = 0..5 |
+| `gates_output` .. `activity_output` | x = 8.0 + 12.57*i, y = 118.0 |  | i = 0..6 |
 | `screw_tl` / `screw_tr` | (3.0, 3.0) / (88.4, 3.0) | `screw_bl` / `screw_br` | (3.0, 125.5) / (88.4, 125.5) |
 
 These centers deliberately ignore the concept image's holes. The layout-proof phase may move them, after which both SVG anchors and C++ fallbacks must be updated together.
@@ -157,9 +154,7 @@ tilt_param       chaos_param      clear_param
 drop_input       gravity_cv_input bounce_cv_input
 tilt_cv_input    chaos_cv_input   clear_input
 
-sink_1_output    sink_2_output    sink_3_output    sink_4_output
-sink_5_output    sink_6_output    sink_7_output    sink_8_output
-any_output       left_output      right_output
+gates_output     any_output       left_output      right_output
 velocity_output  position_output  activity_output
 
 screw_tl         screw_tr         screw_bl         screw_br
@@ -194,14 +189,7 @@ enum InputId {
 };
 
 enum OutputId {
-    SINK1_OUTPUT,
-    SINK2_OUTPUT,
-    SINK3_OUTPUT,
-    SINK4_OUTPUT,
-    SINK5_OUTPUT,
-    SINK6_OUTPUT,
-    SINK7_OUTPUT,
-    SINK8_OUTPUT,
+    GATES_OUTPUT,
     ANY_OUTPUT,
     LEFT_OUTPUT,
     RIGHT_OUTPUT,
@@ -255,7 +243,7 @@ When rate is off, its phase resets to zero. When enabled, phase advances sample-
 
 ### 5.3 Output behavior
 
-- Sink, `ANY`, `LEFT`, and `RIGHT` outputs emit 10 V pulses.
+- `GATES` emits 10 V pulses on eight polyphonic channels: channel 1 is sink 1 through channel 8 as sink 8. `ANY`, `LEFT`, and `RIGHT` emit monophonic 10 V pulses.
 - Default pulse length is 10 ms. Context choices are 1, 5, 10, 20, and 50 ms.
 - `LEFT` covers sinks 1-4; `RIGHT` covers sinks 5-8.
 - Overlapping captures extend/retrigger the monophonic pulse; they do not create polyphony.
@@ -376,8 +364,8 @@ The one v1 layout is displayed as **Pearl** and built by `makePearlLayout(seed)`
 - Spawn center: `(500, 80)`.
 - Spawn horizontal spread: +/-120 units.
 - Spawned burst members receive small deterministic x and initial-velocity offsets so they do not perfectly overlap.
-- The peg field is a regular staggered lattice with 11 rows alternating between 7 and 8 pegs.
-- Seven-peg rows use x positions `170 + 110*column`; eight-peg rows use `115 + 110*column`. Adjacent rows are therefore offset by exactly 55 units.
+- The peg field is a regular staggered lattice with 11 rows. Odd-numbered rows contain 7 pegs except for the broad interior rows 3, 5, and 7, which contain 9; even-numbered rows contain 8 pegs.
+- Seven-peg rows use x positions `170 + 110*column`; eight-peg rows use `115 + 110*column`; expanded nine-peg rows use `60 + 110*column`. Adjacent rows retain the 55-unit stagger, with the added outer pegs occupying the available sides of the raster shell.
 - Row y positions are `190 + 105*row`, for rows 0-10; the final row is therefore at y 1240.
 - Every ordinary peg has radius 22 and no seed-dependent position jitter.
 - Sink centers span x 205 through 795 at y 1510 with even spacing and radius 38, for `i = 0..7`. The compact rings fit within the lower opening of the raster shell.
@@ -454,7 +442,7 @@ ModuleWidget
 
 Static background and ornament layers live in `FramebufferWidget`s. The live playfield redraws continuously but uses simple precomputed paths/circles and the latest stable snapshot. Keep trails short, bounded, and disabled initially.
 
-Pearls use a bright center, cyan rim, warm reflection, and small shadow. Ordinary pegs are restrained gold/pearl pins; larger bumpers may use purple jewel accents. Rails use a navy body, cyan edge, and fine gold highlight. Sinks are numbered and visibly connected to their corresponding outputs.
+Pearls use a bright center, cyan rim, warm reflection, and small shadow. Ordinary pegs are restrained gold/pearl pins; larger bumpers may use purple jewel accents. Rails use a navy body, cyan edge, and fine gold highlight. The eight sinks remain visibly ordered left to right, matching channels 1 through 8 of `GATES`.
 
 On capture, the UI animates a brief pearl bloom, sink flash, downward conduit pulse, and output-ring flash. Runtime lighting communicates state; fish, coral, broad caustics, the character, and crest remain static.
 
