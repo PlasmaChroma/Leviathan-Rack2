@@ -230,10 +230,6 @@ struct UmiPlayfieldWidget final : Widget {
 	void draw(const DrawArgs& args) override {
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
-		nvgFillColor(args.vg, nvgRGBA(0, 19, 68, 76));
-		nvgFill(args.vg);
 
 		const Transform transform = boardTransform();
 		for (int i = 0; i < layout.segmentCount; ++i) {
