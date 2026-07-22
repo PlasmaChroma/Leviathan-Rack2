@@ -197,6 +197,38 @@ struct WyrmEditorDock final : Widget {
 	}
 };
 
+struct WyrmAnchoredTooltip final : ui::Tooltip {
+	WeakPtr<Widget> anchor;
+
+	void step() override {
+		ui::Tooltip::step();
+		Widget* anchorWidget = anchor.get();
+		if (!anchorWidget || !APP || !APP->scene) {
+			if (parent) requestDelete();
+			return;
+		}
+
+		const float anchorZoom = std::max(anchorWidget->getAbsoluteZoom(), 1e-6f);
+		const Vec anchorOrigin = anchorWidget->getAbsoluteOffset(Vec());
+		const Vec anchorSize = anchorWidget->box.size.mult(anchorZoom);
+		const Vec sceneSize = APP->scene->box.size;
+		const float margin = 4.f;
+		float top = margin;
+		if (APP->scene->menuBar && APP->scene->menuBar->isVisible()) {
+			top = std::max(top,
+				APP->scene->menuBar->box.pos.y + APP->scene->menuBar->box.size.y + margin);
+		}
+
+		const float desiredX = anchorOrigin.x + anchorSize.x + 2.f;
+		const float desiredY = anchorOrigin.y + anchorSize.y + 2.f;
+		const float maxX = std::max(margin, sceneSize.x - margin - box.size.x);
+		const float maxY = std::max(top, sceneSize.y - margin - box.size.y);
+		setPosition(Vec(
+			clamp(desiredX, margin, maxX),
+			clamp(desiredY, top, maxY)));
+	}
+};
+
 template <typename BaseButton>
 struct WyrmTooltipButton : BaseButton {
 	std::function<std::string()> tooltipTextProvider;
@@ -212,8 +244,9 @@ struct WyrmTooltipButton : BaseButton {
 
 	void createTooltip() {
 		if (!settings::tooltips || tooltip || !APP || !APP->scene) return;
-		auto* nextTooltip = new ui::Tooltip();
+		auto* nextTooltip = new WyrmAnchoredTooltip();
 		nextTooltip->text = tooltipText();
+		nextTooltip->anchor.set(this);
 		tooltip.set(nextTooltip);
 		APP->scene->addChild(nextTooltip);
 	}
@@ -235,8 +268,14 @@ struct WyrmTooltipButton : BaseButton {
 	}
 
 	void onButton(const event::Button& e) override {
+		// These are callback-only UI controls, not engine parameters. Do not let
+		// TL1105's ParamWidget path try to build a parameter context menu.
+		if (e.button != GLFW_MOUSE_BUTTON_LEFT) {
+			e.consume(this);
+			return;
+		}
 		BaseButton::onButton(e);
-		if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
+		if (e.action == GLFW_PRESS) {
 			refreshTooltip();
 		}
 	}
@@ -376,11 +415,9 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 
 		const Vec dockOrigin = anchorDock->getAbsoluteOffset(Vec());
 		const Vec dockCenter = dockOrigin.plus(anchorDock->box.size.mult(0.5f * dockZoom));
-		const float maxX = std::max(margin, sceneSize.x - margin - panelWidth);
-		const float maxY = std::max(top, sceneSize.y - margin - panelHeight);
 		setPosition(Vec(
-			clamp(dockCenter.x - 0.5f * panelWidth, margin, maxX),
-			clamp(dockCenter.y - 0.5f * panelHeight, top, maxY)));
+			dockCenter.x - 0.5f * panelWidth,
+			dockCenter.y - 0.5f * panelHeight));
 	}
 
 	void step() override {
