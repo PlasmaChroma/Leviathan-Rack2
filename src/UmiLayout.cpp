@@ -54,21 +54,33 @@ Layout makePearlLayout(std::uint32_t seed) {
 		segment.material = material;
 	};
 
-	addSegment({42.f, 100.f}, {42.f, 1575.f}, 12.f);
-	addSegment({958.f, 100.f}, {958.f, 1575.f}, 12.f);
-	addSegment({42.f, 1450.f}, {70.f, 1500.f}, 10.f, 1);
-	addSegment({958.f, 1450.f}, {930.f, 1500.f}, 10.f, 1);
+	// Follow the illustrated shell: broad and nearly vertical above, then
+	// progressively sweep inward to frame the compact sink bank below.
+	const Vec2 LEFT_WALL[] = {
+		{-12.f, 100.f}, {-12.f, 900.f}, {-5.f, 1030.f}, {10.f, 1130.f},
+		{35.f, 1220.f}, {68.f, 1300.f}, {108.f, 1370.f}, {148.f, 1430.f},
+		{172.f, 1480.f}, {188.f, 1585.f}
+	};
+	constexpr int WALL_POINT_COUNT = int(sizeof(LEFT_WALL) / sizeof(LEFT_WALL[0]));
+	for (int i = 0; i < WALL_POINT_COUNT - 1; ++i) {
+		addSegment(LEFT_WALL[i], LEFT_WALL[i + 1], 10.f, 1);
+		addSegment({BOARD_W - LEFT_WALL[i].x, LEFT_WALL[i].y},
+			{BOARD_W - LEFT_WALL[i + 1].x, LEFT_WALL[i + 1].y}, 10.f, 1);
+	}
 
+	constexpr float SINK_FIRST_X = 205.f;
+	constexpr float SINK_LAST_X = 795.f;
+	constexpr float SINK_SPACING = (SINK_LAST_X - SINK_FIRST_X) / float(SINK_COUNT - 1);
 	for (int i = 0; i < SINK_COUNT; ++i) {
 		Sink& sink = layout.sinks[static_cast<std::size_t>(i)];
-		sink.pos = {90.f + 117.f * float(i), 1510.f};
-		sink.radius = 56.f;
+		sink.pos = {SINK_FIRST_X + SINK_SPACING * float(i), 1510.f};
+		sink.radius = 38.f;
 		sink.outputIndex = static_cast<std::uint8_t>(i);
 	}
 
 	for (int i = 0; i < SINK_COUNT - 1; ++i) {
-		const float dividerX = 148.5f + 117.f * float(i);
-		addSegment({dividerX, 1455.f}, {dividerX, 1585.f}, 5.f, 1);
+		const float dividerX = SINK_FIRST_X + SINK_SPACING * (float(i) + 0.5f);
+		addSegment({dividerX, 1455.f}, {dividerX, 1585.f}, 4.f, 1);
 	}
 
 	return layout;

@@ -43,7 +43,7 @@ struct Segment {
 
 struct Sink {
 	Vec2 pos;
-	float radius = 56.f;
+	float radius = 38.f;
 	std::uint8_t outputIndex = 0;
 };
 

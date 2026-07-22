@@ -380,9 +380,9 @@ The one v1 layout is displayed as **Pearl** and built by `makePearlLayout(seed)`
 - Seven-peg rows use x positions `170 + 110*column`; eight-peg rows use `115 + 110*column`. Adjacent rows are therefore offset by exactly 55 units.
 - Row y positions are `190 + 105*row`, for rows 0-10; the final row is therefore at y 1240.
 - Every ordinary peg has radius 22 and no seed-dependent position jitter.
-- Sink centers are `(90 + 117*i, 1510)`, radius 56, for `i = 0..7`.
-- Thin funnel-divider capsules run from y 1455 to 1585 with radius 5, leaving 193 logical units between the final peg edge and divider entrance.
-- Side walls and lower funnel rails prevent ambiguous exits.
+- Sink centers span x 205 through 795 at y 1510 with even spacing and radius 38, for `i = 0..7`. The compact rings fit within the lower opening of the raster shell.
+- Thin funnel-divider capsules run from y 1455 to 1585 with radius 4, leaving 193 logical units between the final peg edge and divider entrance.
+- Mirrored capsule chains form the side walls. They sit slightly beyond the board edges through the upper field, then progressively sweep inward from roughly y 1000 to x 188/812 at the bottom, following the raster frame while preventing ambiguous exits.
 
 The staggered grid is identical for every seed. Seed affects spawn and motion randomness, not visible board alignment. Do not add non-triggering spectacle until all eight sinks receive a useful share of captures at neutral settings.
 

@@ -16,7 +16,7 @@ struct TestResult {
 
 TestResult testLayoutValidity() {
 	const umi::Layout layout = umi::makePearlLayout(12345u);
-	const bool pass = umi::validateLayout(layout) && layout.pegCount == 82 && layout.segmentCount == 11;
+	const bool pass = umi::validateLayout(layout) && layout.pegCount == 82 && layout.segmentCount == 25;
 	return {"Pearl layout validity", pass,
 		"pegs=" + std::to_string(layout.pegCount) + " segments=" + std::to_string(layout.segmentCount)};
 }
@@ -51,9 +51,11 @@ TestResult testStaggeredGridAndBottomClearance() {
 		lastPegBottom = std::max(lastPegBottom, peg.pos.y + peg.radius);
 	}
 	const float clearance = firstDividerY - lastPegBottom;
-	bool generousSinks = true;
-	for (const umi::Sink& sink : first.sinks) generousSinks = generousSinks && sink.radius >= 56.f;
-	return {"Staggered grid and open sink approach", staggered && generousSinks && clearance >= 150.f,
+	bool compactSinks = std::fabs(first.sinks.front().pos.x - 205.f) < 1e-5f &&
+		std::fabs(first.sinks.back().pos.x - 795.f) < 1e-5f;
+	for (const umi::Sink& sink : first.sinks) compactSinks = compactSinks && std::fabs(sink.radius - 38.f) < 1e-5f;
+	const bool contouredWalls = first.segments[0].a.x < 0.f && first.segments[16].b.x > 150.f;
+	return {"Staggered grid and contoured sink approach", staggered && compactSinks && contouredWalls && clearance >= 150.f,
 		"clearance=" + std::to_string(clearance) + " sinkRadius=" + std::to_string(first.sinks[0].radius)};
 }
 
