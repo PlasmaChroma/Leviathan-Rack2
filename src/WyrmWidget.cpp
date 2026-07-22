@@ -296,8 +296,11 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 		const float availableWidth = std::max(1.f, sceneSize.x - 2.f * margin);
 		const float availableHeight = std::max(1.f, sceneSize.y - top - margin);
 		const float dockZoom = std::max(anchorDock->getAbsoluteZoom(), 1e-6f);
+		const float verticalFrameOverhang = mm2px(Vec(0.f, 0.45f)).y * dockZoom;
 		const float panelWidth = std::min(2.f * anchorDock->box.size.x * dockZoom, availableWidth);
-		const float panelHeight = std::min(anchorDock->box.size.y * dockZoom, availableHeight);
+		const float panelHeight = std::min(
+			anchorDock->box.size.y * dockZoom + 2.f * verticalFrameOverhang,
+			availableHeight);
 		const Vec requiredSize(panelWidth, panelHeight);
 		if (!box.size.equals(requiredSize)) {
 			setSize(requiredSize);
@@ -318,6 +321,25 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 	void step() override {
 		layoutToScene();
 		widget::OpaqueWidget::step();
+	}
+
+	void draw(const DrawArgs& args) override {
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 255));
+		nvgFill(args.vg);
+
+		Widget::draw(args);
+
+		const float borderWidth = 2.f;
+		const float inset = 0.5f * borderWidth;
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, inset, inset,
+			std::max(0.f, box.size.x - 2.f * inset),
+			std::max(0.f, box.size.y - 2.f * inset));
+		nvgStrokeColor(args.vg, nvgRGBA(112, 78, 224, 255));
+		nvgStrokeWidth(args.vg, borderWidth);
+		nvgStroke(args.vg);
 	}
 
 	void onHoverKey(const event::HoverKey& e) override {
