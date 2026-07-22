@@ -35,6 +35,7 @@ extern Model* modelUndertow;
 extern Model* modelIris;
 extern Model* modelNautiloid;
 extern Model* modelDeepcache;
+extern Model* modelUmi;
 
 // Local semantic alias so module code can request a white tiny Befaco knob
 // without depending on another plugin's custom class declarations.

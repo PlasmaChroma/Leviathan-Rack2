@@ -155,6 +155,18 @@
         "Utility"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Umi",
+      "name": "Umi",
+      "description": "Visible pearl-physics probability sequencer with eight sink triggers and event CV.",
+      "tags": [
+        "Sequencer",
+        "Random",
+        "Clock generator",
+        "Visual"
+      ],
+      "hidden": false
     }
   ]
 }

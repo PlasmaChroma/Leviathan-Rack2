@@ -69,6 +69,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/bifurx_filter_spec \
 	build/tests/sil_repair_spec \
 	build/tests/bulkhead_geometry_spec \
+	build/tests/umi_engine_spec \
 	build/tests/aperture_light_transfer_spec \
 	build/tests/iris_wavetable_spec \
 	build/tests/nautiloid_location_code_spec \
@@ -217,6 +218,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/bifurx_filter_spec)
 	$(call run_test_bin,build/tests/sil_repair_spec)
 	$(call run_test_bin,build/tests/bulkhead_geometry_spec)
+	$(call run_test_bin,build/tests/umi_engine_spec)
 	$(call run_test_bin,build/tests/aperture_light_transfer_spec)
 	$(call run_test_bin,build/tests/iris_wavetable_spec)
 	$(call run_test_bin,build/tests/nautiloid_location_code_spec)
@@ -310,6 +312,9 @@ build/tests/sil_repair_spec: tests/sil_repair_spec.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
 build/tests/bulkhead_geometry_spec: tests/bulkhead_geometry_spec.cpp src/BulkheadGeometry.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
+
+build/tests/umi_engine_spec: tests/umi_engine_spec.cpp src/UmiEngine.cpp src/UmiLayout.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
 build/tests/aperture_light_transfer_spec: tests/aperture_light_transfer_spec.cpp src/visual/ApertureLightTransfer.hpp | build/tests
