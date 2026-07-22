@@ -262,15 +262,21 @@ struct WyrmEditorOverlayLink {
 struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 	WyrmEditorDock* anchorDock = nullptr;
 	WyrmEditorSurface* editorSurface = nullptr;
+	widget::ZoomWidget* editorZoom = nullptr;
 	std::shared_ptr<WyrmEditorOverlayLink> link;
 	std::function<void()> collapseAction;
+
+	WyrmExpandedEditorOverlay() {
+		editorZoom = new widget::ZoomWidget();
+		addChild(editorZoom);
+	}
 
 	~WyrmExpandedEditorOverlay() override {
 		// The scene can tear down before the module rack. Return the sole live
 		// editor surface to its dock if normal collapse did not run first.
 		if (editorSurface && anchorDock) {
-			if (editorSurface->parent == this) {
-				removeChild(editorSurface);
+			if (editorZoom && editorSurface->parent == editorZoom) {
+				editorZoom->removeChild(editorSurface);
 			}
 			if (!editorSurface->parent) {
 				anchorDock->addChild(editorSurface);
@@ -296,16 +302,25 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 		const float availableWidth = std::max(1.f, sceneSize.x - 2.f * margin);
 		const float availableHeight = std::max(1.f, sceneSize.y - top - margin);
 		const float dockZoom = std::max(anchorDock->getAbsoluteZoom(), 1e-6f);
-		const float verticalFrameOverhang = mm2px(Vec(0.f, 0.45f)).y * dockZoom;
+		const float desiredVerticalOverhang = mm2px(Vec(0.f, 0.45f)).y * dockZoom;
 		const float panelWidth = std::min(2.f * anchorDock->box.size.x * dockZoom, availableWidth);
-		const float panelHeight = std::min(
-			anchorDock->box.size.y * dockZoom + 2.f * verticalFrameOverhang,
-			availableHeight);
+		const float editorScreenHeight = std::min(anchorDock->box.size.y * dockZoom, availableHeight);
+		const float verticalFrameOverhang = std::min(
+			desiredVerticalOverhang,
+			0.5f * std::max(0.f, availableHeight - editorScreenHeight));
+		const float panelHeight = editorScreenHeight + 2.f * verticalFrameOverhang;
 		const Vec requiredSize(panelWidth, panelHeight);
 		if (!box.size.equals(requiredSize)) {
 			setSize(requiredSize);
+		}
+		editorZoom->setPosition(Vec(0.f, verticalFrameOverhang));
+		editorZoom->setZoom(dockZoom);
+		const Vec logicalEditorSize(
+			std::max(1.f, panelWidth / dockZoom),
+			std::max(1.f, editorScreenHeight / dockZoom));
+		if (!editorSurface->box.size.equals(logicalEditorSize)) {
 			editorSurface->setPosition(Vec());
-			editorSurface->setEditorSize(requiredSize);
+			editorSurface->setEditorSize(logicalEditorSize);
 			editorSurface->resetVisualTransitionState();
 		}
 
@@ -544,7 +559,7 @@ struct WyrmWidget : ModuleWidget {
 
 		editorDock->removeChild(editorSurface);
 		editorDock->expanded = true;
-		overlay->addChild(editorSurface);
+		overlay->editorZoom->addChild(editorSurface);
 		overlay->layoutToScene();
 		if (APP->scene->menuBar && APP->scene->hasChild(APP->scene->menuBar)) {
 			APP->scene->addChildBelow(overlay, APP->scene->menuBar);
@@ -560,8 +575,8 @@ struct WyrmWidget : ModuleWidget {
 		if (!overlay) {
 			return;
 		}
-		if (editorSurface && editorSurface->parent == overlay) {
-			overlay->removeChild(editorSurface);
+		if (editorSurface && overlay->editorZoom && editorSurface->parent == overlay->editorZoom) {
+			overlay->editorZoom->removeChild(editorSurface);
 		}
 		if (editorSurface && editorDock && !editorSurface->parent) {
 			editorDock->addChild(editorSurface);
