@@ -12,6 +12,8 @@ namespace {
 constexpr float OVERFLOW_PAD = 42.f;
 constexpr int SPRING_POINTS = 401;
 constexpr float SPRING_BASE_Y_MM = 71.f;
+constexpr float SPRING_LENGTH_MM = 49.f;
+constexpr float SPRING_TURNS = 43.f;
 
 struct DoorstopVisualSnapshot {
 	float displacement = 0.f;
@@ -60,8 +62,7 @@ struct SpringPointTemplate {
 const std::array<SpringPointTemplate, SPRING_POINTS>& springPointTemplates() {
 	static const std::array<SpringPointTemplate, SPRING_POINTS> templates = []() {
 		std::array<SpringPointTemplate, SPRING_POINTS> result {};
-		const float springLength = mm2px(57.f);
-		constexpr float turns = 50.f;
+		const float springLength = mm2px(SPRING_LENGTH_MM);
 		for (int i = 0; i < SPRING_POINTS; ++i) {
 			const float t = float(i) / float(SPRING_POINTS - 1);
 			SpringPointTemplate& point = result[i];
@@ -70,7 +71,7 @@ const std::array<SpringPointTemplate, SPRING_POINTS>& springPointTemplates() {
 			point.y = -springLength * t;
 			const float coilRadius = 4.4f + (3.15f - 4.4f) * point.bend;
 			point.coilOffset = coilRadius
-				* std::sin(2.f * float(M_PI) * turns * t);
+				* std::sin(2.f * float(M_PI) * SPRING_TURNS * t);
 		}
 		return result;
 	}();
@@ -79,7 +80,7 @@ const std::array<SpringPointTemplate, SPRING_POINTS>& springPointTemplates() {
 
 void buildSpringGeometry(SpringPathGeometry& geometry, float displacement) {
 	const float travel = visualTipTravel(displacement);
-	const float springLength = mm2px(57.f);
+	const float springLength = mm2px(SPRING_LENGTH_MM);
 	const auto& templates = springPointTemplates();
 	for (int i = 0; i < SPRING_POINTS; ++i) {
 		const SpringPointTemplate& point = templates[i];
@@ -134,7 +135,7 @@ void drawSpringBody(NVGcontext* vg, const SpringPathGeometry& geometry,
 		return;
 	}
 	const float tipX = baseX + geometry.tipTravel;
-	const float tipY = baseY - mm2px(57.f);
+	const float tipY = baseY - mm2px(SPRING_LENGTH_MM);
 	const float motion = clamp01(std::fabs(velocity));
 
 	nvgSave(vg);
@@ -279,7 +280,7 @@ struct DoorstopWidget final : ModuleWidget {
 		springWidget->link = overlayLink;
 		addChild(springWidget);
 
-		math::Rect hitRectMm(Vec(1.1f, 9.3f), Vec(13.04f, 61.8f));
+		math::Rect hitRectMm(Vec(1.1f, 17.3f), Vec(13.04f, 53.8f));
 		panel_svg::loadRectFromSvgMm(panelPath, "MANUAL_HIT_REGION", &hitRectMm);
 		auto* hit = createParam<DoorstopHitWidget>(mm2px(hitRectMm.pos), module, Doorstop::MANUAL_PARAM);
 		hit->box.size = mm2px(hitRectMm.size);
