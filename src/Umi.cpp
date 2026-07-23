@@ -111,6 +111,8 @@ void Umi::spawnDrop(float normalizedX) {
 	if (engine.spawnBurst(cachedDensity, normalizedX) > 0) {
 		dropSerial++;
 		dropFlash = 1.f;
+		renderSnapshotDivider = 0;
+		publishSnapshot();
 	}
 }
 
@@ -121,6 +123,7 @@ void Umi::clearBoard(bool resetTiming) {
 		physicsAccumulator = 0.f;
 		autoDropPhase = 0.f;
 	}
+	renderSnapshotDivider = 0;
 	clearFlash = 1.f;
 	publishSnapshot();
 }
@@ -136,6 +139,7 @@ void Umi::resetBoard(std::uint32_t newSeed) {
 	positionCv = 0.f;
 	activity = 0.f;
 	dropSerial = 0;
+	renderSnapshotDivider = 0;
 	captureSerial.fill(0u);
 	for (dsp::PulseGenerator& pulse : sinkPulses) pulse.reset();
 	anyPulse.reset();
@@ -228,7 +232,10 @@ void Umi::process(const ProcessArgs& args) {
 		}
 		const float occupancy = float(engine.getActiveCount()) / float(std::max(1, engine.getCapacity()));
 		activity = std::max(occupancy, activity * 0.98816f);
-		publishSnapshot();
+		renderSnapshotDivider = (renderSnapshotDivider + 1u) & 3u;
+		if (events.captureCount > 0 || renderSnapshotDivider == 0u) {
+			publishSnapshot();
+		}
 		physicsAccumulator -= umi::PHYSICS_DT;
 		physicsSteps++;
 	}

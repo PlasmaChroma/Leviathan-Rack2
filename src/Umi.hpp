@@ -149,6 +149,7 @@ struct Umi final : Module {
 	float positionCv = 0.f;
 	float activity = 0.f;
 	std::uint32_t dropSerial = 0;
+	std::uint8_t renderSnapshotDivider = 0;
 	float dropFlash = 0.f;
 	float clearFlash = 0.f;
 

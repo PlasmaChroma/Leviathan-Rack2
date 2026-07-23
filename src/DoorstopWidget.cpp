@@ -20,6 +20,12 @@ struct DoorstopVisualSnapshot {
 	float strike = 0.f;
 };
 
+struct SpringPathGeometry {
+	std::array<Vec, SPRING_POINTS> points {};
+	float tipTravel = 0.f;
+	float tipAngle = 0.f;
+};
+
 struct DoorstopWidget;
 struct DoorstopOverflowWidget;
 
@@ -28,6 +34,8 @@ struct DoorstopOverlayLink {
 	DoorstopOverflowWidget* overlay = nullptr;
 	DoorstopVisualSnapshot snapshot;
 	std::array<float, 3> displacementHistory {};
+	std::array<SpringPathGeometry, 4> springGeometry {};
+	bool trailGeometryValid = false;
 };
 
 float clamp01(float x) {
@@ -42,46 +50,73 @@ float bendProfile(float t) {
 	return t * t * (3.f - 2.f * t);
 }
 
-void appendSpringPath(NVGcontext* vg, float baseX, float baseY, float displacement) {
+struct SpringPointTemplate {
+	float bend = 0.f;
+	float bendDerivative = 0.f;
+	float y = 0.f;
+	float coilOffset = 0.f;
+};
+
+const std::array<SpringPointTemplate, SPRING_POINTS>& springPointTemplates() {
+	static const std::array<SpringPointTemplate, SPRING_POINTS> templates = []() {
+		std::array<SpringPointTemplate, SPRING_POINTS> result {};
+		const float springLength = mm2px(57.f);
+		constexpr float turns = 50.f;
+		for (int i = 0; i < SPRING_POINTS; ++i) {
+			const float t = float(i) / float(SPRING_POINTS - 1);
+			SpringPointTemplate& point = result[i];
+			point.bend = bendProfile(t);
+			point.bendDerivative = 6.f * t * (1.f - t);
+			point.y = -springLength * t;
+			const float coilRadius = 4.4f + (3.15f - 4.4f) * point.bend;
+			point.coilOffset = coilRadius
+				* std::sin(2.f * float(M_PI) * turns * t);
+		}
+		return result;
+	}();
+	return templates;
+}
+
+void buildSpringGeometry(SpringPathGeometry& geometry, float displacement) {
 	const float travel = visualTipTravel(displacement);
 	const float springLength = mm2px(57.f);
-	// A real doorstop is a close-wound extension spring. Keep the turns dense
-	// enough that it reads as coiled steel instead of a stretched sine wave.
-	constexpr float turns = 50.f;
-	std::array<Vec, SPRING_POINTS> points {};
-
+	const auto& templates = springPointTemplates();
 	for (int i = 0; i < SPRING_POINTS; ++i) {
-		const float t = float(i) / float(SPRING_POINTS - 1);
-		const float centerX = baseX + travel * bendProfile(t);
-		const float centerY = baseY - springLength * t;
-		const float dxdt = travel * 6.f * t * (1.f - t);
+		const SpringPointTemplate& point = templates[i];
+		const float centerX = travel * point.bend;
+		const float dxdt = travel * point.bendDerivative;
 		const float dydt = -springLength;
 		const float invLength = 1.f / std::max(std::sqrt(dxdt * dxdt + dydt * dydt), 1e-6f);
 		const Vec normal(-dydt * invLength, dxdt * invLength);
-		const float coneT = bendProfile(t);
-		const float coilRadius = 4.4f + (3.15f - 4.4f) * coneT;
-		const float coil = std::sin(2.f * float(M_PI) * turns * t);
-		points[i] = Vec(centerX, centerY).plus(normal.mult(coilRadius * coil));
+		geometry.points[i] = Vec(centerX, point.y).plus(normal.mult(point.coilOffset));
 	}
+	geometry.tipTravel = travel;
+	const float tangentT = 0.90f;
+	const float dxdt = travel * 6.f * tangentT * (1.f - tangentT);
+	geometry.tipAngle = std::atan2(-springLength, dxdt) + 0.5f * float(M_PI);
+}
 
+void appendSpringPath(NVGcontext* vg, const SpringPathGeometry& geometry,
+	float baseX, float baseY) {
 	nvgBeginPath(vg);
-	nvgMoveTo(vg, points[0].x, points[0].y);
+	nvgMoveTo(vg, baseX + geometry.points[0].x, baseY + geometry.points[0].y);
 	for (int i = 1; i < SPRING_POINTS; ++i) {
-		nvgLineTo(vg, points[i].x, points[i].y);
+		nvgLineTo(vg, baseX + geometry.points[i].x, baseY + geometry.points[i].y);
 	}
 }
 
-void drawSpringBody(NVGcontext* vg, float baseX, float baseY, float displacement,
+void drawSpringBody(NVGcontext* vg, const SpringPathGeometry& geometry,
+	float baseX, float baseY,
 	float velocity, float alpha, bool drawCap) {
 	alpha = clamp01(alpha);
-	appendSpringPath(vg, baseX + 1.3f, baseY + 1.8f, displacement);
+	appendSpringPath(vg, geometry, baseX + 1.3f, baseY + 1.8f);
 	nvgStrokeColor(vg, nvgRGBA(0, 0, 0, int(190.f * alpha)));
 	nvgStrokeWidth(vg, 4.6f);
 	nvgLineCap(vg, NVG_ROUND);
 	nvgLineJoin(vg, NVG_ROUND);
 	nvgStroke(vg);
 
-	appendSpringPath(vg, baseX, baseY, displacement);
+	appendSpringPath(vg, geometry, baseX, baseY);
 	NVGpaint metal = nvgLinearGradient(vg, baseX - 4.f, 0.f, baseX + 6.f, 0.f,
 		nvgRGBA(78, 92, 105, int(255.f * alpha)),
 		nvgRGBA(224, 238, 241, int(255.f * alpha)));
@@ -90,7 +125,7 @@ void drawSpringBody(NVGcontext* vg, float baseX, float baseY, float displacement
 	nvgLineCap(vg, NVG_ROUND);
 	nvgStroke(vg);
 
-	appendSpringPath(vg, baseX - 0.7f, baseY, displacement);
+	appendSpringPath(vg, geometry, baseX - 0.7f, baseY);
 	nvgStrokeColor(vg, nvgRGBA(206, 252, 255, int(130.f * alpha)));
 	nvgStrokeWidth(vg, 0.85f);
 	nvgStroke(vg);
@@ -98,17 +133,13 @@ void drawSpringBody(NVGcontext* vg, float baseX, float baseY, float displacement
 	if (!drawCap) {
 		return;
 	}
-	const float travel = visualTipTravel(displacement);
-	const float tipX = baseX + travel;
+	const float tipX = baseX + geometry.tipTravel;
 	const float tipY = baseY - mm2px(57.f);
-	const float tangentT = 0.90f;
-	const float dxdt = travel * 6.f * tangentT * (1.f - tangentT);
-	const float angle = std::atan2(-mm2px(57.f), dxdt) + 0.5f * float(M_PI);
 	const float motion = clamp01(std::fabs(velocity));
 
 	nvgSave(vg);
 	nvgTranslate(vg, tipX, tipY);
-	nvgRotate(vg, angle);
+	nvgRotate(vg, geometry.tipAngle);
 	if (motion > 0.55f) {
 		nvgBeginPath(vg);
 		nvgRoundedRect(vg, -5.2f - velocity * 4.f, -8.5f, 10.4f, 17.f, 4.8f);
@@ -149,15 +180,15 @@ void drawStrikeAccent(NVGcontext* vg, float baseX, float baseY, float strike) {
 void drawSpringScene(NVGcontext* vg, const DoorstopOverlayLink& link, float baseX, float baseY) {
 	const DoorstopVisualSnapshot& state = link.snapshot;
 	const float trailAmount = clamp01((state.energy - 0.10f) * 1.8f + std::fabs(state.velocity) * 0.45f);
-	if (trailAmount > 0.01f) {
+	if (trailAmount > 0.01f && link.trailGeometryValid) {
 		for (int i = 2; i >= 0; --i) {
 			const float age = float(i + 1) / 4.f;
-			drawSpringBody(vg, baseX, baseY, link.displacementHistory[i], state.velocity,
+			drawSpringBody(vg, link.springGeometry[i + 1], baseX, baseY, state.velocity,
 				trailAmount * (0.17f - age * 0.08f), false);
 		}
 	}
 	drawStrikeAccent(vg, baseX, baseY, state.strike);
-	drawSpringBody(vg, baseX, baseY, state.displacement, state.velocity, 1.f, true);
+	drawSpringBody(vg, link.springGeometry[0], baseX, baseY, state.velocity, 1.f, true);
 }
 
 class DoorstopHitWidget final : public app::Switch {
@@ -227,6 +258,7 @@ struct DoorstopWidget final : ModuleWidget {
 		setModule(module);
 		overlayLink = std::make_shared<DoorstopOverlayLink>();
 		overlayLink->owner = this;
+		buildSpringGeometry(overlayLink->springGeometry[0], 0.f);
 
 		PreviewBuildLogTimer previewBuildTimer("Doorstop", module);
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/doorstop.panel.svg");
@@ -344,6 +376,17 @@ struct DoorstopWidget final : ModuleWidget {
 			overlayLink->displacementHistory[i] = overlayLink->displacementHistory[i - 1];
 		}
 		overlayLink->displacementHistory[0] = state.displacement;
+		buildSpringGeometry(overlayLink->springGeometry[0], state.displacement);
+		const float trailAmount = clamp01(
+			(state.energy - 0.10f) * 1.8f + std::fabs(state.velocity) * 0.45f);
+		overlayLink->trailGeometryValid = trailAmount > 0.01f;
+		if (overlayLink->trailGeometryValid) {
+			for (int i = 0; i < int(overlayLink->displacementHistory.size()); ++i) {
+				buildSpringGeometry(
+					overlayLink->springGeometry[i + 1],
+					overlayLink->displacementHistory[i]);
+			}
+		}
 
 		auto* m = static_cast<Doorstop*>(module);
 		const bool enabled = m && m->allowVisualOverflow.load(std::memory_order_relaxed);

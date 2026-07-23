@@ -95,6 +95,14 @@ void Engine::updateCoefficients() {
 		clampf(tuning.waveguideFeedback, 0.01f, 0.999f),
 		1.f / float(waveguideDelaySamples));
 	modalActivityDecay = safeExpDecay(tuning.modalDriveDecaySeconds, sampleTime);
+	for (int i = 0; i < MODE_COUNT; ++i) {
+		baseModeGamma[i] = LN_1000
+			/ std::max(tuning.modeDecayT60Seconds[i], 1e-4f);
+		classicModeGamma[i] = LN_1000
+			/ std::max(
+				tuning.modeDecayT60Seconds[i] * tuning.classicModeDecayScale[i],
+				1e-4f);
+	}
 }
 
 void Engine::clearDynamicState() {
@@ -103,6 +111,7 @@ void Engine::clearDynamicState() {
 	acceleration = 0.f;
 	modalBanks = {};
 	modalActivity = {};
+	modalBankActive = {};
 	impact.noiseEnvelope = 0.f;
 	impact.noiseBrightness = 0.f;
 	impact.noiseLowpass = 0.f;
@@ -125,6 +134,7 @@ void Engine::clearDynamicState() {
 	waveguidePreviousOutput = 0.f;
 	waveguideBrightness = 0.f;
 	waveguideActivity = 0.f;
+	waveguideActive = false;
 }
 
 void Engine::reset() {
@@ -222,6 +232,7 @@ void Engine::strike(float normalizedVelocity) {
 		waveguideExcitation = clampf(waveguideExcitation + waveStrength, -2.f, 2.f);
 		waveguideBrightness = std::max(waveguideBrightness, shaped);
 		waveguideActivity = std::min(waveguideActivity + std::fabs(waveStrength), 2.f);
+		waveguideActive = true;
 	}
 
 	sleeping = false;
@@ -233,6 +244,7 @@ void Engine::strike(float normalizedVelocity) {
 	if (strikeModel <= SoundModel::CoilContact) {
 		const int bankIndex = int(strikeModel);
 		auto& modes = modalBanks[bankIndex];
+		modalBankActive[bankIndex] = true;
 		modalActivity[bankIndex] = std::max(modalActivity[bankIndex], shaped);
 		for (int i = 0; i < MODE_COUNT; ++i) {
 			float excitation = shaped;
@@ -357,6 +369,9 @@ float Engine::processCoilContact() {
 }
 
 float Engine::processDispersiveSpring() {
+	if (!waveguideActive) {
+		return 0.f;
+	}
 	int readIndex = waveguideWriteIndex - waveguideDelaySamples;
 	if (readIndex < 0) {
 		readIndex += MAX_WAVEGUIDE_DELAY;
@@ -398,6 +413,9 @@ float Engine::processModes() {
 	const float normalizedAcceleration = clampf(
 		acceleration / std::max(tuning.accelerationScale, 1.f), -1.f, 1.f);
 	for (int bankIndex = 0; bankIndex < MODAL_MODEL_COUNT; ++bankIndex) {
+		if (!modalBankActive[bankIndex]) {
+			continue;
+		}
 		const SoundModel model = static_cast<SoundModel>(bankIndex);
 		auto& modes = modalBanks[bankIndex];
 		const bool coupled = model != SoundModel::Classic;
@@ -412,16 +430,16 @@ float Engine::processModes() {
 				20.f,
 				maximumModeFrequency);
 			const float omega = 2.f * PI * frequency;
-			float decayScale = 1.f;
+			float gamma = baseModeGamma[i];
 			if (model == SoundModel::Classic) {
-				decayScale = tuning.classicModeDecayScale[i];
+				gamma = classicModeGamma[i];
 			}
-			else if (model == SoundModel::CoilContact) {
-				decayScale = lerpf(
+			else if (model == SoundModel::CoilContact
+				&& contactRingEnvelope > tuning.sleepEnvelopeThreshold) {
+				const float decayScale = lerpf(
 					1.f, tuning.contactModeDecayScale[i], contactRingEnvelope);
+				gamma = baseModeGamma[i] / std::max(decayScale, 1e-4f);
 			}
-			const float gamma = LN_1000
-				/ std::max(tuning.modeDecayT60Seconds[i] * decayScale, 1e-4f);
 			float force = normalizedAcceleration * driveActivity
 				* (coupled ? tuning.coupledMotionDrive[i] : tuning.modeCoupling[i]);
 			if (coupled) {
@@ -447,6 +465,22 @@ float Engine::processModes() {
 			output += mode.position * tuning.modeOutputGain[i] * outputScale;
 		}
 		modalActivity[bankIndex] *= modalActivityDecay;
+		if (modalActivity[bankIndex] < tuning.sleepEnvelopeThreshold) {
+			bool bankSettled = true;
+			for (int i = 0; i < MODE_COUNT; ++i) {
+				if (normalizedModeEnergy(
+					modes[i], i, tuning.modeFrequenciesHz[i])
+					>= tuning.sleepEnergyThreshold) {
+					bankSettled = false;
+					break;
+				}
+			}
+			if (bankSettled) {
+				modes = {};
+				modalActivity[bankIndex] = 0.f;
+				modalBankActive[bankIndex] = false;
+			}
+		}
 	}
 	return output;
 }
@@ -547,7 +581,8 @@ bool Engine::belowSleepThreshold(float outputVolts) const {
 }
 
 Frame Engine::process(float requestedSampleTime) {
-	if (std::isfinite(requestedSampleTime) && requestedSampleTime > 0.f) {
+	if (requestedSampleTime != sampleTime
+		&& std::isfinite(requestedSampleTime) && requestedSampleTime > 0.f) {
 		const float requestedRate = 1.f / requestedSampleTime;
 		if (std::fabs(requestedRate - sampleRate) > 1.f) {
 			setSampleRate(requestedRate);

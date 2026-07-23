@@ -145,16 +145,144 @@ struct UmiLabelOverlayWidget final : TransparentWidget {
 	}
 };
 
+struct UmiStaticPlayfieldWidget final : Widget {
+	umi::Layout layout = umi::makePearlLayout(1u);
+
+	struct Transform {
+		Vec offset;
+		float scale = 1.f;
+
+		Transform() = default;
+		Transform(Vec offsetValue, float scaleValue)
+			: offset(offsetValue), scale(scaleValue) {
+		}
+	};
+
+	Transform boardTransform() const {
+		const float scale = std::min(box.size.x / umi::BOARD_W, box.size.y / umi::BOARD_H);
+		return {box.size.minus(Vec(umi::BOARD_W * scale, umi::BOARD_H * scale)).mult(0.5f), scale};
+	}
+
+	static Vec boardToLocal(const Transform& transform, umi::Vec2 point) {
+		return transform.offset.plus(Vec(point.x * transform.scale, point.y * transform.scale));
+	}
+
+	void draw(const DrawArgs& args) override {
+		nvgSave(args.vg);
+		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		const Transform transform = boardTransform();
+
+		auto strokeSideBumper = [&](bool rightSide, NVGcolor color, float strokeWidth) {
+			nvgBeginPath(args.vg);
+			bool started = false;
+			for (int i = 0; i < layout.segmentCount; ++i) {
+				const umi::Segment& segment = layout.segments[static_cast<std::size_t>(i)];
+				if (segment.material != 2
+					|| (segment.a.x >= umi::BOARD_W * 0.5f) != rightSide) {
+					continue;
+				}
+				const Vec a = boardToLocal(transform, segment.a);
+				const Vec b = boardToLocal(transform, segment.b);
+				if (!started) {
+					nvgMoveTo(args.vg, a.x, a.y);
+					started = true;
+				}
+				nvgLineTo(args.vg, b.x, b.y);
+			}
+			if (!started) return;
+			nvgStrokeColor(args.vg, color);
+			nvgStrokeWidth(args.vg, strokeWidth);
+			nvgLineCap(args.vg, NVG_ROUND);
+			nvgLineJoin(args.vg, NVG_ROUND);
+			nvgStroke(args.vg);
+		};
+
+		const float sideWidth = std::max(1.f, 20.f * transform.scale);
+		for (int side = 0; side < 2; ++side) {
+			strokeSideBumper(side != 0, nvgRGBA(0, 10, 45, 225), sideWidth * 1.75f);
+			strokeSideBumper(side != 0, nvgRGBA(62, 226, 255, 220), sideWidth * 1.25f);
+			strokeSideBumper(side != 0, nvgRGBA(248, 210, 111, 245), sideWidth * 0.62f);
+		}
+		for (int i = 0; i < layout.segmentCount; ++i) {
+			const umi::Segment& segment = layout.segments[static_cast<std::size_t>(i)];
+			if (segment.material == 2) continue;
+			const Vec a = boardToLocal(transform, segment.a);
+			const Vec b = boardToLocal(transform, segment.b);
+			const float width = std::max(1.f, segment.radius * 2.f * transform.scale);
+			auto strokeRail = [&](NVGcolor color, float strokeWidth) {
+				nvgBeginPath(args.vg);
+				nvgMoveTo(args.vg, a.x, a.y);
+				nvgLineTo(args.vg, b.x, b.y);
+				nvgStrokeColor(args.vg, color);
+				nvgStrokeWidth(args.vg, strokeWidth);
+				nvgLineCap(args.vg, NVG_ROUND);
+				nvgStroke(args.vg);
+			};
+			strokeRail(nvgRGBA(0, 10, 45, 225), width * 1.75f);
+			strokeRail(nvgRGBA(62, 226, 255, 220), width * 1.25f);
+			strokeRail(nvgRGBA(248, 210, 111, 245), width * 0.62f);
+		}
+
+		for (int i = 0; i < layout.pegCount; ++i) {
+			const umi::Peg& peg = layout.pegs[static_cast<std::size_t>(i)];
+			const Vec center = boardToLocal(transform, peg.pos);
+			const float radius = std::max(1.2f, peg.radius * transform.scale);
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, center.x, center.y, radius * 1.45f);
+			nvgFillColor(args.vg, nvgRGBA(30, 214, 255, 48));
+			nvgFill(args.vg);
+			const NVGpaint jewel = nvgRadialGradient(args.vg,
+				center.x - radius * 0.35f, center.y - radius * 0.4f,
+				radius * 0.05f, radius,
+				nvgRGB(255, 255, 244),
+				peg.visualType ? nvgRGB(161, 40, 219) : nvgRGB(205, 143, 50));
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, center.x, center.y, radius);
+			nvgFillPaint(args.vg, jewel);
+			nvgFill(args.vg);
+			nvgStrokeColor(args.vg, nvgRGBA(255, 238, 167, 235));
+			nvgStrokeWidth(args.vg, 0.7f);
+			nvgStroke(args.vg);
+		}
+
+		for (int i = 0; i < umi::SINK_COUNT; ++i) {
+			const Vec center = boardToLocal(
+				transform, layout.sinks[static_cast<std::size_t>(i)].pos);
+			const float radius =
+				layout.sinks[static_cast<std::size_t>(i)].radius * transform.scale;
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, center.x, center.y, radius);
+			nvgFillColor(args.vg, nvgRGBA(2, 7, 24, 245));
+			nvgFill(args.vg);
+			nvgStrokeColor(args.vg, nvgRGBA(247, 205, 110, 240));
+			nvgStrokeWidth(args.vg, 1.2f);
+			nvgStroke(args.vg);
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, center.x, center.y, std::max(0.5f, radius - 2.f));
+			nvgStrokeColor(args.vg, nvgRGBA(75, 224, 255, 210));
+			nvgStrokeWidth(args.vg, 0.8f);
+			nvgStroke(args.vg);
+		}
+		nvgRestore(args.vg);
+	}
+};
+
 struct UmiPlayfieldWidget final : Widget {
 	Umi* module = nullptr;
+	widget::FramebufferWidget* staticFramebuffer = nullptr;
+	UmiStaticPlayfieldWidget* staticPlayfield = nullptr;
 	Umi::RenderSnapshot snapshot;
 	umi::Layout layout = umi::makePearlLayout(1u);
 	std::uint32_t layoutSeed = 1u;
 	std::array<std::uint32_t, umi::SINK_COUNT> seenCaptureSerial {};
 	std::array<float, umi::SINK_COUNT> sinkFlash {};
 
-	explicit UmiPlayfieldWidget(Umi* module)
-		: module(module) {
+	explicit UmiPlayfieldWidget(Umi* module,
+		widget::FramebufferWidget* staticFramebuffer,
+		UmiStaticPlayfieldWidget* staticPlayfield)
+		: module(module),
+		  staticFramebuffer(staticFramebuffer),
+		  staticPlayfield(staticPlayfield) {
 		snapshot.seed = 1u;
 	}
 
@@ -173,8 +301,7 @@ struct UmiPlayfieldWidget final : Widget {
 		return {box.size.minus(Vec(umi::BOARD_W * scale, umi::BOARD_H * scale)).mult(0.5f), scale};
 	}
 
-	Vec boardToLocal(umi::Vec2 point) const {
-		const Transform transform = boardTransform();
+	static Vec boardToLocal(const Transform& transform, umi::Vec2 point) {
 		return transform.offset.plus(Vec(point.x * transform.scale, point.y * transform.scale));
 	}
 
@@ -186,6 +313,12 @@ struct UmiPlayfieldWidget final : Widget {
 				if (snapshot.seed != layoutSeed) {
 					layout = umi::makePearlLayout(snapshot.seed);
 					layoutSeed = snapshot.seed;
+					if (staticPlayfield) {
+						staticPlayfield->layout = layout;
+					}
+					if (staticFramebuffer) {
+						staticFramebuffer->dirty = true;
+					}
 				}
 				for (int i = 0; i < umi::SINK_COUNT; ++i) {
 					const std::size_t index = static_cast<std::size_t>(i);
@@ -222,78 +355,12 @@ struct UmiPlayfieldWidget final : Widget {
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 
 		const Transform transform = boardTransform();
-		auto strokeSideBumper = [&](bool rightSide, NVGcolor color, float strokeWidth) {
-			nvgBeginPath(args.vg);
-			bool started = false;
-			for (int i = 0; i < layout.segmentCount; ++i) {
-				const umi::Segment& segment = layout.segments[static_cast<std::size_t>(i)];
-				if (segment.material != 2 || (segment.a.x >= umi::BOARD_W * 0.5f) != rightSide) continue;
-				const Vec a = boardToLocal(segment.a);
-				const Vec b = boardToLocal(segment.b);
-				if (!started) {
-					nvgMoveTo(args.vg, a.x, a.y);
-					started = true;
-				}
-				nvgLineTo(args.vg, b.x, b.y);
-			}
-			if (!started) return;
-			nvgStrokeColor(args.vg, color);
-			nvgStrokeWidth(args.vg, strokeWidth);
-			nvgLineCap(args.vg, NVG_ROUND);
-			nvgLineJoin(args.vg, NVG_ROUND);
-			nvgStroke(args.vg);
-		};
-		const float sideWidth = std::max(1.f, 20.f * transform.scale);
-		for (int side = 0; side < 2; ++side) {
-			strokeSideBumper(side != 0, nvgRGBA(0, 10, 45, 225), sideWidth * 1.75f);
-			strokeSideBumper(side != 0, nvgRGBA(62, 226, 255, 220), sideWidth * 1.25f);
-			strokeSideBumper(side != 0, nvgRGBA(248, 210, 111, 245), sideWidth * 0.62f);
-		}
-		for (int i = 0; i < layout.segmentCount; ++i) {
-			const umi::Segment& segment = layout.segments[static_cast<std::size_t>(i)];
-			if (segment.material == 2) continue;
-			const Vec a = boardToLocal(segment.a);
-			const Vec b = boardToLocal(segment.b);
-			const float width = std::max(1.f, segment.radius * 2.f * transform.scale);
-			auto strokeRail = [&](NVGcolor color, float strokeWidth) {
-				nvgBeginPath(args.vg);
-				nvgMoveTo(args.vg, a.x, a.y);
-				nvgLineTo(args.vg, b.x, b.y);
-				nvgStrokeColor(args.vg, color);
-				nvgStrokeWidth(args.vg, strokeWidth);
-				nvgLineCap(args.vg, NVG_ROUND);
-				nvgStroke(args.vg);
-			};
-			strokeRail(nvgRGBA(0, 10, 45, 225), width * 1.75f);
-			strokeRail(nvgRGBA(62, 226, 255, 220), width * 1.25f);
-			strokeRail(nvgRGBA(248, 210, 111, 245), width * 0.62f);
-		}
-
-		for (int i = 0; i < layout.pegCount; ++i) {
-			const umi::Peg& peg = layout.pegs[static_cast<std::size_t>(i)];
-			const Vec center = boardToLocal(peg.pos);
-			const float radius = std::max(1.2f, peg.radius * transform.scale);
-			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, center.x, center.y, radius * 1.45f);
-			nvgFillColor(args.vg, nvgRGBA(30, 214, 255, 48));
-			nvgFill(args.vg);
-			const NVGpaint jewel = nvgRadialGradient(args.vg,
-				center.x - radius * 0.35f, center.y - radius * 0.4f,
-				radius * 0.05f, radius,
-				nvgRGB(255, 255, 244), peg.visualType ? nvgRGB(161, 40, 219) : nvgRGB(205, 143, 50));
-			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, center.x, center.y, radius);
-			nvgFillPaint(args.vg, jewel);
-			nvgFill(args.vg);
-			nvgStrokeColor(args.vg, nvgRGBA(255, 238, 167, 235));
-			nvgStrokeWidth(args.vg, 0.7f);
-			nvgStroke(args.vg);
-		}
-
 		for (int i = 0; i < umi::SINK_COUNT; ++i) {
-			const Vec center = boardToLocal(layout.sinks[static_cast<std::size_t>(i)].pos);
+			const Vec center = boardToLocal(
+				transform, layout.sinks[static_cast<std::size_t>(i)].pos);
 			const float radius = layout.sinks[static_cast<std::size_t>(i)].radius * transform.scale;
 			const float flash = sinkFlash[static_cast<std::size_t>(i)];
+			if (flash <= 0.001f) continue;
 			nvgBeginPath(args.vg);
 			nvgCircle(args.vg, center.x, center.y, radius + flash * 3.f);
 			nvgFillColor(args.vg, nvgRGBA(2, 7, 24, 245));
@@ -310,7 +377,7 @@ struct UmiPlayfieldWidget final : Widget {
 
 		for (std::uint32_t i = 0; i < snapshot.ballCount; ++i) {
 			const Umi::BallRenderState& ball = snapshot.balls[static_cast<std::size_t>(i)];
-			const Vec center = boardToLocal(ball.pos);
+			const Vec center = boardToLocal(transform, ball.pos);
 			const float radius = std::max(1.5f, ball.radius * transform.scale);
 			const NVGpaint pearl = nvgRadialGradient(args.vg,
 				center.x - radius * 0.35f, center.y - radius * 0.35f,
@@ -349,9 +416,19 @@ UmiWidget::UmiWidget(Umi* module) {
 		playfieldMm.pos = Vec(20.5f, 20.5f);
 		playfieldMm.size = Vec(50.4f, 75.f);
 	}
-	auto* playfield = new UmiPlayfieldWidget(module);
-	playfield->box.pos = mm2px(playfieldMm.pos);
-	playfield->box.size = mm2px(playfieldMm.size);
+	auto* playfieldFramebuffer = new widget::FramebufferWidget();
+	playfieldFramebuffer->box.pos = mm2px(playfieldMm.pos);
+	playfieldFramebuffer->box.size = mm2px(playfieldMm.size);
+	playfieldFramebuffer->dirtyOnSubpixelChange = false;
+	auto* staticPlayfield = new UmiStaticPlayfieldWidget();
+	staticPlayfield->box.size = playfieldFramebuffer->box.size;
+	playfieldFramebuffer->addChild(staticPlayfield);
+	addChild(playfieldFramebuffer);
+
+	auto* playfield = new UmiPlayfieldWidget(
+		module, playfieldFramebuffer, staticPlayfield);
+	playfield->box.pos = playfieldFramebuffer->box.pos;
+	playfield->box.size = playfieldFramebuffer->box.size;
 	addChild(playfield);
 	auto* labels = new UmiLabelOverlayWidget();
 	labels->box.size = box.size;

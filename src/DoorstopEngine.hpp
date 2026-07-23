@@ -152,6 +152,7 @@ private:
 	static constexpr int MODAL_MODEL_COUNT = 3;
 	std::array<std::array<Mode, MODE_COUNT>, MODAL_MODEL_COUNT> modalBanks {};
 	std::array<float, MODAL_MODEL_COUNT> modalActivity {};
+	std::array<bool, MODAL_MODEL_COUNT> modalBankActive {};
 	Impact impact;
 
 	float strikeLightEnvelope = 0.f;
@@ -171,6 +172,7 @@ private:
 	float waveguidePreviousOutput = 0.f;
 	float waveguideBrightness = 0.f;
 	float waveguideActivity = 0.f;
+	bool waveguideActive = false;
 	bool sleeping = true;
 
 	float softNoiseDecay = 0.f;
@@ -190,6 +192,8 @@ private:
 	float waveguideBrightnessDecay = 0.f;
 	float waveguideActivityDecay = 0.f;
 	float modalActivityDecay = 0.f;
+	std::array<float, MODE_COUNT> baseModeGamma {};
+	std::array<float, MODE_COUNT> classicModeGamma {};
 
 	void updateCoefficients();
 	void clearDynamicState();
