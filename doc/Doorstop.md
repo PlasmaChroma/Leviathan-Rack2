@@ -72,7 +72,6 @@ The MVP must not include:
 * Exposed spring tuning controls.
 * Exposed decay controls.
 * Stereo output.
-* Multiple selectable doorstop models.
 * A conventional pitch input.
 * An internal trigger sequencer.
 * A large animated editor.
@@ -211,14 +210,22 @@ must not be used because it does not implement momentary switch interaction.
 
 Requirements:
 
-* Clicking the spring produces a manual strike.
-* The manual strike is equivalent to approximately `5 V` Velocity.
+* Left-clicking the spring produces a manual strike.
+* Strike strength follows the click height: the top of the hit region is
+  equivalent to `10 V`, its midpoint is approximately `5.5 V`, and the bottom
+  is a mild `1 V` strike.
+* Right-clicking anywhere in the hit region opens the ordinary module context
+  menu and must not operate or expose the invisible parameter control.
 * The interactive region remains inside the module boundary.
 * The external overflow graphic must never intercept mouse events.
 * The control should remain MIDI-mappable through Rack because it is backed by a real parameter.
 * The parameter widget draws no conventional button artwork.
+* The height-derived strength is consumed by exactly one UI-generated manual
+  edge. MIDI mapping and automation use the normal `5 V` manual strength and
+  must not inherit the location of a previous mouse click.
 
-A future enhancement may derive manual velocity from a horizontal mouse flick, but this is outside the MVP.
+A future enhancement may derive additional manual velocity from a horizontal
+mouse flick, but this is outside the MVP.
 
 ---
 
@@ -277,7 +284,8 @@ also needs an impact accent.
 The sound engine shall combine four elements:
 
 1. A nonlinear primary spring state.
-2. A bank of inharmonic damped resonators.
+2. A selected resonant structure: an inharmonic modal bank or dispersive
+   reflected-wave model.
 3. A short impact transient.
 4. A radiation and output stage.
 
@@ -553,6 +561,13 @@ The shaped strike value controls:
 * Maximum practical displacement.
 * Audible settling duration.
 
+After the normal velocity curve, apply a separate maximum-force blend based on
+the fourth power of the shaped magnitude. This should leave a normalled `5 V`
+strike nearly unchanged while giving strikes approaching `±10 V` additional
+mechanical impulse, modal excitation, and impact weight. The full-force region
+must create visibly greater travel, a stronger nonlinear pitch contour, and a
+longer settling tail rather than merely driving the final output saturator.
+
 ## 7.2 Applying the impulse
 
 Form the strike as an impulse on the current spring velocity:
@@ -660,10 +675,10 @@ same semi-implicit ordering as the primary spring.
 Suggested starting frequencies:
 
 ```text
-Mode 1: 170–220 Hz
-Mode 2: 430–560 Hz
-Mode 3: 900–1250 Hz
-Mode 4: 1800–2800 Hz
+Mode 1: 145–175 Hz
+Mode 2: 350–430 Hz
+Mode 3: 740–900 Hz
+Mode 4: 1450–1850 Hz
 ```
 
 Suggested approximate starting ratios from Mode 1:
@@ -823,8 +838,8 @@ Generate noise using a lightweight local PRNG.
 Filter the noise so velocity affects brightness:
 
 ```text
-Soft strike low-pass: approximately 2–4 kHz
-Hard strike low-pass: approximately 8–14 kHz
+Soft strike low-pass: approximately 2–3 kHz
+Hard strike low-pass: approximately 6–10 kHz
 ```
 
 Remove excessive low-frequency noise.
@@ -1024,10 +1039,14 @@ point = centerline + normal * coilRadius * std::sin(phase);
 Suggested spring characteristics:
 
 ```text
-Coil count: 14–22 visible turns
-Coil radius: taper slightly near base and cap
+Coil count: 46–54 close-wound visible turns
+Coil radius: a subtle cone, widest at the mounting base and narrowest at the cap
 Spring length: most of the upper panel
 ```
+
+The resting spring should resemble a close-wound extension spring rather than
+a stretched helix. Adjacent turns should read as densely packed steel while
+remaining individually legible at normal Rack zoom.
 
 ## 11.3 Rendering treatment
 
@@ -1389,7 +1408,8 @@ Persist only user-facing configuration such as:
 
 ```json
 {
-  "allowVisualOverflow": true
+  "allowVisualOverflow": true,
+  "soundModel": 0
 }
 ```
 
@@ -1401,10 +1421,16 @@ contexts. Use relaxed loads and stores. `dataFromJson()` must accept only a JSON
 boolean for this key and retain the default `true` when the key is missing or
 invalid.
 
-`onReset()` restores `allowVisualOverflow` to `true`, resets both Schmitt
-triggers and the complete engine, clears the Rack light, and publishes an
-immediate zero telemetry snapshot. Loading a patch also starts the engine at
-rest before applying serialized user configuration.
+Store `soundModel` as a relaxed atomic integer with stable values: `0` for
+`Classic modal`, `1` for `Coupled body`, `2` for `Coil contact`, and `3` for
+`Dispersive spring`.
+Serialization must reject values outside the implemented model range and retain
+the default classic model when the key is missing or invalid.
+
+`onReset()` restores `allowVisualOverflow` to `true` and `soundModel` to the
+classic model, resets both Schmitt triggers and the complete engine, clears the
+Rack light, and publishes an immediate zero telemetry snapshot. Loading a patch
+also starts the engine at rest before applying serialized user configuration.
 
 No random generator state needs to be serialized.
 
@@ -1506,6 +1532,7 @@ struct Doorstop : Module {
     doorstop::Engine engine;
 
     std::atomic<bool> allowVisualOverflow {true};
+    std::atomic<int> soundModel {0};
 
     std::atomic<float> visualDisplacement {0.f};
     std::atomic<float> visualVelocity {0.f};
@@ -1699,15 +1726,44 @@ Initial tuning should be considered provisional until evaluated through audio te
 
 # 20. Context Menu
 
-The MVP context menu should include only:
+The context menu should include:
 
 ```text
+Sound model
+    Classic modal
+    Coupled body
+    Coil contact
+    Dispersive spring
 Allow spring to extend over adjacent modules
 ```
 
+`Classic modal` uses the original parallel resonator topology, with restrained
+low-mode level and decay to avoid an exaggerated hollow-tube coloration.
+`Coupled body` reduces direct high-mode excitation and adds motion-driven excitation,
+neighbor-mode transfer, stronger energy-dependent dispersion, and restrained
+modal feedback into the primary spring. Switching models must preserve the
+current physical state rather than retriggering or resetting the object.
+
+`Coil contact` extends the coupled-body model. At sufficiently large bend and
+mechanical energy, adjacent virtual turns make sparse deterministic contacts.
+Each contact radiates a short metallic tick and injects energy primarily into
+the upper modes, which ring longer in this model than in `Coupled body`.
+Ordinary strikes should remain clean; maximum and accumulated strikes should
+produce an unmistakable zipper-like, phase-sensitive rattle and scattered
+high-frequency tail without becoming a continuous noise source.
+
+`Dispersive spring` replaces the audible modal bank with a fixed-size lossy
+feedback delay and a short allpass dispersion cascade. Successive reflections
+accumulate frequency-dependent phase shift, producing a clearly cascading
+`boioioing` contour rather than a static resonant chord. Strike magnitude
+controls injected wave energy and brightness. The slow nonlinear bend remains
+the shared visible physical coordinate, while impact and mounting transients
+remain common to all models.
+
 Optional debugging entries may exist in development builds but should not appear in release builds.
 
-Do not expose physical model tuning through the normal context menu in the MVP.
+Do not expose individual physical-model tuning constants through the normal
+context menu.
 
 ---
 

@@ -34,6 +34,13 @@ float Engine::shapeMagnitude(float normalizedMagnitude) {
 	return 0.2f * u + 0.8f * u * u;
 }
 
+float Engine::manualVelocityFromVerticalPosition(float normalizedYFromTop) {
+	const float topStrength = 1.f;
+	const float bottomStrength = 0.10f;
+	const float y = clampf(normalizedYFromTop, 0.f, 1.f);
+	return lerpf(topStrength, bottomStrength, y);
+}
+
 void Engine::setSampleRate(float newSampleRate) {
 	if (!std::isfinite(newSampleRate) || newSampleRate < 1000.f) {
 		return;
@@ -41,6 +48,18 @@ void Engine::setSampleRate(float newSampleRate) {
 	sampleRate = newSampleRate;
 	sampleTime = 1.f / sampleRate;
 	updateCoefficients();
+}
+
+void Engine::setSoundModel(SoundModel newModel) {
+	if (newModel >= SoundModel::Count) {
+		newModel = SoundModel::Classic;
+	}
+	if (soundModel != newModel && newModel == SoundModel::DispersiveSpring) {
+		const float inheritedMotion = springVelocity / std::max(maxVelocity, 1.f);
+		waveguideExcitation += inheritedMotion * 0.25f;
+		waveguideActivity = std::max(waveguideActivity, std::fabs(inheritedMotion) * 0.25f);
+	}
+	soundModel = newModel;
 }
 
 void Engine::updateCoefficients() {
@@ -64,6 +83,22 @@ void Engine::updateCoefficients() {
 	softNoiseAlpha = 1.f - std::exp(-2.f * PI * softCutoff * sampleTime);
 	hardNoiseAlpha = 1.f - std::exp(-2.f * PI * hardCutoff * sampleTime);
 	noiseRejectAlpha = 1.f - std::exp(-2.f * PI * 180.f * sampleTime);
+	contactDecay = safeExpDecay(tuning.contactFastDecaySeconds, sampleTime);
+	contactBodyDecay = safeExpDecay(tuning.contactBodyDecaySeconds, sampleTime);
+	contactRingDecay = safeExpDecay(tuning.contactRingDecaySeconds, sampleTime);
+	waveguideDelaySamples = std::max(16, std::min(
+		MAX_WAVEGUIDE_DELAY - 1,
+		int(sampleRate / std::max(tuning.waveguideRoundTripHz, 1.f) + 0.5f)));
+	const float waveguideMaxCutoff = 0.45f * sampleRate;
+	waveguideSoftAlpha = 1.f - std::exp(-2.f * PI
+		* std::min(tuning.waveguideSoftCutoffHz, waveguideMaxCutoff) * sampleTime);
+	waveguideHardAlpha = 1.f - std::exp(-2.f * PI
+		* std::min(tuning.waveguideHardCutoffHz, waveguideMaxCutoff) * sampleTime);
+	waveguideBrightnessDecay = safeExpDecay(
+		tuning.waveguideBrightnessDecaySeconds, sampleTime);
+	waveguideActivityDecay = std::pow(
+		clampf(tuning.waveguideFeedback, 0.01f, 0.999f),
+		1.f / float(waveguideDelaySamples));
 }
 
 void Engine::clearDynamicState() {
@@ -81,6 +116,18 @@ void Engine::clearDynamicState() {
 	quietTime = 0.f;
 	dcPreviousInput = 0.f;
 	dcPreviousOutput = 0.f;
+	contactPhase = 0.f;
+	contactSignal = 0.f;
+	contactBodySignal = 0.f;
+	contactRingEnvelope = 0.f;
+	waveguideDelay.fill(0.f);
+	waveguideAllpassState.fill(0.f);
+	waveguideWriteIndex = 0;
+	waveguideExcitation = 0.f;
+	waveguideLowpass = 0.f;
+	waveguidePreviousOutput = 0.f;
+	waveguideBrightness = 0.f;
+	waveguideActivity = 0.f;
 }
 
 void Engine::reset() {
@@ -144,10 +191,27 @@ void Engine::strike(float normalizedVelocity) {
 		return;
 	}
 	const float signedShaped = direction * shaped;
+	// Reserve a dramatic extra force region for strikes near full velocity.
+	// brightness^2 leaves ordinary and medium hits almost unchanged.
+	const float maximumForceBlend = shaped * shaped * shaped * shaped;
+	const float impulseBoost = 1.f
+		+ tuning.maximumStrikeImpulseBoost * maximumForceBlend;
+	const float modalBoost = 1.f
+		+ tuning.maximumStrikeModalBoost * maximumForceBlend;
+	const float impactBoost = 1.f
+		+ tuning.maximumStrikeImpactBoost * maximumForceBlend;
+	if (soundModel == SoundModel::DispersiveSpring) {
+		const float waveStrength = signedShaped
+			* (0.65f + 0.75f * shaped * shaped) * impulseBoost;
+		waveguideExcitation = clampf(waveguideExcitation + waveStrength, -2.f, 2.f);
+		waveguideBrightness = std::max(waveguideBrightness, shaped);
+		waveguideActivity = std::min(waveguideActivity + std::fabs(waveStrength), 2.f);
+	}
 
 	sleeping = false;
 	quietTime = 0.f;
-	springVelocity = limitCandidateVelocity(springVelocity + signedShaped * tuning.maxImpulse);
+	springVelocity = limitCandidateVelocity(
+		springVelocity + signedShaped * tuning.maxImpulse * impulseBoost);
 
 	const float brightness = shaped * shaped;
 	for (int i = 0; i < MODE_COUNT; ++i) {
@@ -158,15 +222,19 @@ void Engine::strike(float normalizedVelocity) {
 		else if (i == 3) {
 			excitation = brightness;
 		}
-		modes[i].velocity += direction * excitation * tuning.modeExcitation[i];
+		const float strikeScale = soundModel == SoundModel::DispersiveSpring
+			? 0.f
+			: (usesCoupledBody() ? tuning.coupledStrikeScale[i] : 1.f);
+		modes[i].velocity += direction * excitation * tuning.modeExcitation[i]
+			* strikeScale * modalBoost;
 		const float maxModeVelocity = tuning.modeExcitation[i] * 3.f;
 		modes[i].velocity = clampf(modes[i].velocity, -maxModeVelocity, maxModeVelocity);
 	}
 
-	impact.noiseEnvelope = std::min(impact.noiseEnvelope + shaped, 2.f);
+	impact.noiseEnvelope = std::min(impact.noiseEnvelope + shaped * impactBoost, 2.f);
 	impact.noiseBrightness = std::max(impact.noiseBrightness, shaped);
 	impact.thumpVelocity = clampf(
-		impact.thumpVelocity + signedShaped * 48.f,
+		impact.thumpVelocity + signedShaped * 48.f * impactBoost,
 		-180.f,
 		180.f);
 	strikeLightEnvelope = std::max(strikeLightEnvelope, shaped);
@@ -178,6 +246,19 @@ float Engine::processSpring() {
 		+ tuning.nonlinearStiffness * baseOmegaSq * displacement * x2;
 	const float dampingForce = 2.f * tuning.dampingRatio * baseOmega * springVelocity;
 	acceleration = -restoring - dampingForce;
+	if (usesCoupledBody()) {
+		float reaction = 0.f;
+		for (int i = 0; i < MODE_COUNT; ++i) {
+			const float omega = 2.f * PI * tuning.modeFrequenciesHz[i];
+			reaction += modes[i].position * omega * omega
+				* tuning.coupledStrikeScale[i];
+		}
+		const float reactionLimit = 0.22f * std::max(tuning.accelerationScale, 1.f);
+		acceleration += clampf(
+			-reaction * tuning.coupledSpringFeedback,
+			-reactionLimit,
+			reactionLimit);
+	}
 
 	springVelocity += acceleration * sampleTime;
 	displacement += springVelocity * sampleTime;
@@ -199,25 +280,149 @@ float Engine::processSpring() {
 		+ tuning.bodyAccelerationGain * normalizedAcceleration) * tuning.bodyDrive);
 }
 
+bool Engine::usesCoupledBody() const {
+	return soundModel == SoundModel::CoupledBody
+		|| soundModel == SoundModel::CoilContact;
+}
+
+float Engine::processCoilContact() {
+	if (soundModel == SoundModel::CoilContact) {
+		const float displacementRange = std::max(
+			tuning.maxDisplacement - tuning.contactDisplacementThreshold, 1e-4f);
+		const float compression = clampf(
+			(std::fabs(displacement) - tuning.contactDisplacementThreshold)
+				/ displacementRange,
+			0.f,
+			1.f);
+		const float energyRange = std::max(1.f - tuning.contactEnergyThreshold, 1e-4f);
+		const float energetic = clampf(
+			(normalizedPrimaryEnergy() - tuning.contactEnergyThreshold) / energyRange,
+			0.f,
+			1.f);
+		const float activity = compression * energetic;
+		const float eventRate = lerpf(
+			tuning.contactMinimumRateHz,
+			tuning.contactMaximumRateHz,
+			activity);
+		contactPhase += eventRate * activity * sampleTime;
+		if (contactPhase >= 1.f) {
+			contactPhase -= std::floor(contactPhase);
+			const float random = (float(nextRandom() & 0x00ffffffu)
+				/ float(0x00800000u)) - 1.f;
+			const float impulse = activity * (0.45f + 0.55f * std::fabs(random))
+				* (random < 0.f ? -1.f : 1.f);
+			contactSignal = clampf(contactSignal + impulse, -2.f, 2.f);
+			contactBodySignal = clampf(contactBodySignal + impulse, -2.f, 2.f);
+			contactRingEnvelope = std::max(
+				contactRingEnvelope, clampf(activity * 2.5f, 0.f, 1.f));
+			for (int i = 0; i < MODE_COUNT; ++i) {
+				modes[i].velocity += impulse * tuning.contactModeExcitation[i];
+				const float maxModeVelocity = tuning.modeExcitation[i] * 3.f;
+				modes[i].velocity = clampf(
+					modes[i].velocity, -maxModeVelocity, maxModeVelocity);
+			}
+		}
+	}
+
+	// Two unequal decays turn each collision into a short bipolar metal tick,
+	// avoiding a DC-like pulse and preserving it through the final saturation.
+	const float output = (contactSignal - contactBodySignal) * tuning.contactOutputGain;
+	contactSignal *= contactDecay;
+	contactBodySignal *= contactBodyDecay;
+	contactRingEnvelope *= contactRingDecay;
+	return output;
+}
+
+float Engine::processDispersiveSpring() {
+	int readIndex = waveguideWriteIndex - waveguideDelaySamples;
+	if (readIndex < 0) {
+		readIndex += MAX_WAVEGUIDE_DELAY;
+	}
+	const float delayed = waveguideDelay[readIndex];
+	const float brightness = clampf(waveguideBrightness, 0.f, 1.f);
+	const float lowpassAlpha = lerpf(waveguideSoftAlpha, waveguideHardAlpha, brightness);
+	waveguideLowpass += (delayed - waveguideLowpass) * lowpassAlpha;
+
+	float dispersed = waveguideLowpass;
+	for (int i = 0; i < int(waveguideAllpassState.size()); ++i) {
+		const float coefficient = clampf(tuning.waveguideAllpass[i], -0.95f, 0.95f);
+		const float output = -coefficient * dispersed + waveguideAllpassState[i];
+		waveguideAllpassState[i] = dispersed + coefficient * output;
+		dispersed = output;
+	}
+
+	const float feedback = soundModel == SoundModel::DispersiveSpring
+		? clampf(tuning.waveguideFeedback, 0.f, 0.98f)
+		: 0.72f;
+	const float writeValue = clampf(
+		waveguideExcitation - dispersed * feedback, -2.f, 2.f);
+	waveguideDelay[waveguideWriteIndex] = writeValue;
+	waveguideWriteIndex++;
+	if (waveguideWriteIndex >= MAX_WAVEGUIDE_DELAY) {
+		waveguideWriteIndex = 0;
+	}
+	waveguideExcitation = 0.f;
+	waveguideBrightness *= waveguideBrightnessDecay;
+	waveguideActivity *= waveguideActivityDecay;
+
+	const float radiation = delayed - 0.25f * waveguidePreviousOutput;
+	waveguidePreviousOutput = delayed;
+	return soundModel == SoundModel::DispersiveSpring
+		? radiation * tuning.waveguideOutputGain
+		: 0.f;
+}
+
 float Engine::processModes() {
 	float output = 0.f;
 	const float normalizedAcceleration = clampf(
 		acceleration / std::max(tuning.accelerationScale, 1.f), -1.f, 1.f);
 	for (int i = 0; i < MODE_COUNT; ++i) {
-		const float warp = 1.f + tuning.modeWarp[i] * displacement * displacement;
+		const float warpScale = usesCoupledBody()
+			? tuning.coupledWarpScale
+			: 1.f;
+		const float warp = 1.f + tuning.modeWarp[i] * warpScale * displacement * displacement;
 		const float asymmetry = 1.f + tuning.modeAsymmetry[i] * displacement;
 		const float frequency = clampf(
 			tuning.modeFrequenciesHz[i] * warp * asymmetry,
 			20.f,
 			maximumModeFrequency);
 		const float omega = 2.f * PI * frequency;
-		const float gamma = LN_1000 / std::max(tuning.modeDecayT60Seconds[i], 1e-4f);
-		const float force = normalizedAcceleration * tuning.modeCoupling[i];
+		float decayScale = 1.f;
+		if (soundModel == SoundModel::Classic) {
+			decayScale = tuning.classicModeDecayScale[i];
+		}
+		else if (soundModel == SoundModel::CoilContact) {
+			decayScale = lerpf(1.f, tuning.contactModeDecayScale[i], contactRingEnvelope);
+		}
+		const float gamma = LN_1000
+			/ std::max(tuning.modeDecayT60Seconds[i] * decayScale, 1e-4f);
+		float force = soundModel == SoundModel::DispersiveSpring
+			? 0.f
+			: normalizedAcceleration * (usesCoupledBody()
+				? tuning.coupledMotionDrive[i]
+				: tuning.modeCoupling[i]);
+		if (usesCoupledBody()) {
+			if (i > 0) {
+				const float neighborOmega = 2.f * PI * tuning.modeFrequenciesHz[i - 1];
+				force += modes[i - 1].position * omega * neighborOmega
+					* tuning.coupledNeighborAmount[i - 1];
+			}
+			if (i + 1 < MODE_COUNT) {
+				const float neighborOmega = 2.f * PI * tuning.modeFrequenciesHz[i + 1];
+				force += modes[i + 1].position * omega * neighborOmega
+					* tuning.coupledNeighborAmount[i];
+			}
+		}
 		Mode& mode = modes[i];
 		const float modeAcceleration = -omega * omega * mode.position - 2.f * gamma * mode.velocity + force;
 		mode.velocity += modeAcceleration * sampleTime;
 		mode.position += mode.velocity * sampleTime;
-		output += mode.position * tuning.modeOutputGain[i];
+		if (soundModel != SoundModel::DispersiveSpring) {
+			const float outputScale = soundModel == SoundModel::Classic
+				? tuning.classicModeOutputScale[i]
+				: 1.f;
+			output += mode.position * tuning.modeOutputGain[i] * outputScale;
+		}
 	}
 	return output;
 }
@@ -268,11 +473,21 @@ bool Engine::allFinite() const {
 		|| !std::isfinite(dcPreviousInput) || !std::isfinite(dcPreviousOutput)
 		|| !std::isfinite(impact.noiseEnvelope) || !std::isfinite(impact.noiseBrightness)
 		|| !std::isfinite(impact.noiseLowpass) || !std::isfinite(impact.noiseLowReject)
-		|| !std::isfinite(impact.thumpPosition) || !std::isfinite(impact.thumpVelocity)) {
+		|| !std::isfinite(impact.thumpPosition) || !std::isfinite(impact.thumpVelocity)
+		|| !std::isfinite(contactPhase) || !std::isfinite(contactSignal)
+		|| !std::isfinite(contactBodySignal) || !std::isfinite(contactRingEnvelope)
+		|| !std::isfinite(waveguideExcitation) || !std::isfinite(waveguideLowpass)
+		|| !std::isfinite(waveguidePreviousOutput) || !std::isfinite(waveguideBrightness)
+		|| !std::isfinite(waveguideActivity)) {
 		return false;
 	}
 	for (const Mode& mode : modes) {
 		if (!std::isfinite(mode.position) || !std::isfinite(mode.velocity)) {
+			return false;
+		}
+	}
+	for (float state : waveguideAllpassState) {
+		if (!std::isfinite(state)) {
 			return false;
 		}
 	}
@@ -291,6 +506,10 @@ bool Engine::belowSleepThreshold(float outputVolts) const {
 	return impact.noiseEnvelope < tuning.sleepEnvelopeThreshold
 		&& std::fabs(impact.thumpPosition) < tuning.sleepEnvelopeThreshold
 		&& std::fabs(impact.thumpVelocity) < tuning.sleepEnvelopeThreshold
+		&& std::fabs(contactSignal) < tuning.sleepEnvelopeThreshold
+		&& std::fabs(contactBodySignal) < tuning.sleepEnvelopeThreshold
+		&& contactRingEnvelope < tuning.sleepEnvelopeThreshold
+		&& waveguideActivity < tuning.sleepEnvelopeThreshold
 		&& strikeLightEnvelope < tuning.sleepEnvelopeThreshold
 		&& std::fabs(outputVolts) < tuning.sleepOutputVoltsThreshold;
 }
@@ -308,9 +527,12 @@ Frame Engine::process(float requestedSampleTime) {
 	}
 
 	const float body = processSpring();
+	const float contact = processCoilContact();
+	const float waveguide = processDispersiveSpring();
 	const float modal = processModes();
 	const float transient = processImpact();
-	float signal = body * tuning.bodyGain + modal * tuning.modalGain + transient * tuning.impactGain;
+	float signal = body * tuning.bodyGain + modal * tuning.modalGain
+		+ transient * tuning.impactGain + contact + waveguide;
 	signal = processDcBlocker(signal);
 	const float outputVolts = 5.f * std::tanh(signal * tuning.outputDrive);
 

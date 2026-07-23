@@ -30,6 +30,12 @@ void Doorstop::publishZeroVisualState() {
 }
 
 void Doorstop::process(const ProcessArgs& args) {
+	const int requestedModel = clamp(
+		soundModel.load(std::memory_order_relaxed),
+		int(doorstop::SoundModel::Classic),
+		int(doorstop::SoundModel::Count) - 1);
+	engine.setSoundModel(static_cast<doorstop::SoundModel>(requestedModel));
+
 	const bool externalStrike = trigTrigger.process(inputs[TRIG_INPUT].getVoltage(0), 0.1f, 1.f);
 	const bool manualStrike = manualTrigger.process(params[MANUAL_PARAM].getValue(), 0.f, 1.f);
 	bool appliedStrike = false;
@@ -47,7 +53,11 @@ void Doorstop::process(const ProcessArgs& args) {
 		}
 	}
 	if (manualStrike) {
-		engine.strike(0.5f);
+		float manualVelocity = 0.5f;
+		if (manualVelocityPending.exchange(false, std::memory_order_acquire)) {
+			manualVelocity = pendingManualVelocity.load(std::memory_order_relaxed);
+		}
+		engine.strike(clamp(manualVelocity, 0.1f, 1.f));
 		appliedStrike = true;
 	}
 
@@ -74,6 +84,9 @@ void Doorstop::onReset(const ResetEvent& e) {
 	manualTrigger.reset();
 	engine.reset();
 	allowVisualOverflow.store(true, std::memory_order_relaxed);
+	soundModel.store(int(doorstop::SoundModel::Classic), std::memory_order_relaxed);
+	pendingManualVelocity.store(0.5f, std::memory_order_relaxed);
+	manualVelocityPending.store(false, std::memory_order_relaxed);
 	telemetryDivider = 0u;
 	lights[STRIKE_LIGHT].setBrightness(0.f);
 	publishZeroVisualState();
@@ -87,6 +100,8 @@ json_t* Doorstop::dataToJson() {
 	json_t* rootJ = json_object();
 	json_object_set_new(rootJ, "allowVisualOverflow",
 		json_boolean(allowVisualOverflow.load(std::memory_order_relaxed)));
+	json_object_set_new(rootJ, "soundModel",
+		json_integer(soundModel.load(std::memory_order_relaxed)));
 	return rootJ;
 }
 
@@ -97,11 +112,23 @@ void Doorstop::dataFromJson(json_t* rootJ) {
 	lights[STRIKE_LIGHT].setBrightness(0.f);
 	publishZeroVisualState();
 	allowVisualOverflow.store(true, std::memory_order_relaxed);
+	soundModel.store(int(doorstop::SoundModel::Classic), std::memory_order_relaxed);
+	pendingManualVelocity.store(0.5f, std::memory_order_relaxed);
+	manualVelocityPending.store(false, std::memory_order_relaxed);
 	if (!rootJ) {
 		return;
 	}
 	json_t* overflowJ = json_object_get(rootJ, "allowVisualOverflow");
 	if (json_is_boolean(overflowJ)) {
 		allowVisualOverflow.store(json_boolean_value(overflowJ), std::memory_order_relaxed);
+	}
+	json_t* soundModelJ = json_object_get(rootJ, "soundModel");
+	if (json_is_integer(soundModelJ)) {
+		const json_int_t value = json_integer_value(soundModelJ);
+		if (value >= int(doorstop::SoundModel::Classic)
+			&& value < int(doorstop::SoundModel::Count)) {
+			soundModel.store(int(value), std::memory_order_relaxed);
+			engine.setSoundModel(static_cast<doorstop::SoundModel>(value));
+		}
 	}
 }

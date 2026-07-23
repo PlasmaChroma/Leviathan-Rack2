@@ -10,7 +10,7 @@
 namespace {
 
 constexpr float OVERFLOW_PAD = 42.f;
-constexpr int SPRING_POINTS = 97;
+constexpr int SPRING_POINTS = 401;
 constexpr float SPRING_BASE_Y_MM = 71.f;
 
 struct DoorstopVisualSnapshot {
@@ -45,7 +45,9 @@ float bendProfile(float t) {
 void appendSpringPath(NVGcontext* vg, float baseX, float baseY, float displacement) {
 	const float travel = visualTipTravel(displacement);
 	const float springLength = mm2px(57.f);
-	constexpr float turns = 18.f;
+	// A real doorstop is a close-wound extension spring. Keep the turns dense
+	// enough that it reads as coiled steel instead of a stretched sine wave.
+	constexpr float turns = 50.f;
 	std::array<Vec, SPRING_POINTS> points {};
 
 	for (int i = 0; i < SPRING_POINTS; ++i) {
@@ -56,9 +58,10 @@ void appendSpringPath(NVGcontext* vg, float baseX, float baseY, float displaceme
 		const float dydt = -springLength;
 		const float invLength = 1.f / std::max(std::sqrt(dxdt * dxdt + dydt * dydt), 1e-6f);
 		const Vec normal(-dydt * invLength, dxdt * invLength);
-		const float taper = 0.32f + 0.68f * std::sqrt(std::max(0.f, std::sin(float(M_PI) * t)));
+		const float coneT = bendProfile(t);
+		const float coilRadius = 4.4f + (3.15f - 4.4f) * coneT;
 		const float coil = std::sin(2.f * float(M_PI) * turns * t);
-		points[i] = Vec(centerX, centerY).plus(normal.mult(3.6f * taper * coil));
+		points[i] = Vec(centerX, centerY).plus(normal.mult(coilRadius * coil));
 	}
 
 	nvgBeginPath(vg);
@@ -159,8 +162,28 @@ void drawSpringScene(NVGcontext* vg, const DoorstopOverlayLink& link, float base
 
 class DoorstopHitWidget final : public app::Switch {
 public:
+	Doorstop* doorstopModule = nullptr;
+
 	DoorstopHitWidget() {
 		momentary = true;
+	}
+
+	void onButton(const event::Button& e) override {
+		// Only left-click belongs to the invisible strike control. In particular,
+		// leave right-click unconsumed so DoorstopWidget can open its module menu.
+		if (e.button != GLFW_MOUSE_BUTTON_LEFT) {
+			return;
+		}
+		if (doorstopModule && e.action == GLFW_PRESS) {
+			const float normalizedY = box.size.y > 0.f
+				? clamp(e.pos.y / box.size.y, 0.f, 1.f)
+				: 0.5f;
+			const float velocity = doorstop::Engine::manualVelocityFromVerticalPosition(
+				normalizedY);
+			doorstopModule->pendingManualVelocity.store(velocity, std::memory_order_relaxed);
+			doorstopModule->manualVelocityPending.store(true, std::memory_order_release);
+		}
+		app::Switch::onButton(e);
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -228,6 +251,7 @@ struct DoorstopWidget final : ModuleWidget {
 		panel_svg::loadRectFromSvgMm(panelPath, "MANUAL_HIT_REGION", &hitRectMm);
 		auto* hit = createParam<DoorstopHitWidget>(mm2px(hitRectMm.pos), module, Doorstop::MANUAL_PARAM);
 		hit->box.size = mm2px(hitRectMm.size);
+		hit->doorstopModule = module;
 		addParam(hit);
 
 		const Vec lightMm = anchorPoint("STRIKE_LIGHT", Vec(7.62f, 80.5f));
@@ -241,9 +265,6 @@ struct DoorstopWidget final : ModuleWidget {
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(velocityMm), module, Doorstop::VELOCITY_INPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outputMm), module, Doorstop::AUDIO_OUTPUT));
 
-		addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0.f)));
-		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - RACK_GRID_WIDTH,
-			RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 		previewBuildTimer.markAnchorsDone();
 	}
@@ -341,6 +362,40 @@ struct DoorstopWidget final : ModuleWidget {
 			return;
 		}
 		menu->addChild(new MenuSeparator());
+		menu->addChild(createSubmenuItem("Sound model", "", [m](Menu* modelMenu) {
+			modelMenu->addChild(createCheckMenuItem("Classic modal", "",
+				[m]() {
+					return m->soundModel.load(std::memory_order_relaxed)
+						== int(doorstop::SoundModel::Classic);
+				},
+				[m]() {
+					m->soundModel.store(int(doorstop::SoundModel::Classic), std::memory_order_relaxed);
+				}));
+			modelMenu->addChild(createCheckMenuItem("Coupled body", "",
+				[m]() {
+					return m->soundModel.load(std::memory_order_relaxed)
+						== int(doorstop::SoundModel::CoupledBody);
+				},
+				[m]() {
+					m->soundModel.store(int(doorstop::SoundModel::CoupledBody), std::memory_order_relaxed);
+				}));
+			modelMenu->addChild(createCheckMenuItem("Coil contact", "",
+				[m]() {
+					return m->soundModel.load(std::memory_order_relaxed)
+						== int(doorstop::SoundModel::CoilContact);
+				},
+				[m]() {
+					m->soundModel.store(int(doorstop::SoundModel::CoilContact), std::memory_order_relaxed);
+				}));
+			modelMenu->addChild(createCheckMenuItem("Dispersive spring", "",
+				[m]() {
+					return m->soundModel.load(std::memory_order_relaxed)
+						== int(doorstop::SoundModel::DispersiveSpring);
+				},
+				[m]() {
+					m->soundModel.store(int(doorstop::SoundModel::DispersiveSpring), std::memory_order_relaxed);
+				}));
+		}));
 		menu->addChild(createCheckMenuItem(
 			"Allow spring to extend over adjacent modules", "",
 			[m]() { return m->allowVisualOverflow.load(std::memory_order_relaxed); },

@@ -102,20 +102,52 @@ Result manualStrikeWorks() {
 		"light=" + std::to_string(light) + " visual=" + std::to_string(visual)};
 }
 
+Result manualStrikeHeightControlsVelocity() {
+	Doorstop mild;
+	Doorstop intense;
+	const auto args = processArgs();
+	armTriggers(mild, args);
+	armTriggers(intense, args);
+	mild.pendingManualVelocity.store(0.1f, std::memory_order_relaxed);
+	mild.manualVelocityPending.store(true, std::memory_order_release);
+	intense.pendingManualVelocity.store(1.f, std::memory_order_relaxed);
+	intense.manualVelocityPending.store(true, std::memory_order_release);
+	mild.params[Doorstop::MANUAL_PARAM].setValue(1.f);
+	intense.params[Doorstop::MANUAL_PARAM].setValue(1.f);
+	mild.process(args);
+	intense.process(args);
+	const float mildDisplacement = std::fabs(
+		mild.visualDisplacement.load(std::memory_order_relaxed));
+	const float intenseDisplacement = std::fabs(
+		intense.visualDisplacement.load(std::memory_order_relaxed));
+	const bool pass = intenseDisplacement > mildDisplacement * 10.f
+		&& !mild.manualVelocityPending.load(std::memory_order_relaxed)
+		&& !intense.manualVelocityPending.load(std::memory_order_relaxed);
+	return {"Manual click height controls exactly one strike velocity", pass,
+		"mild=" + std::to_string(mildDisplacement)
+			+ " intense=" + std::to_string(intenseDisplacement)};
+}
+
 Result jsonRoundTripAndReset() {
 	Doorstop source;
 	source.allowVisualOverflow.store(false, std::memory_order_relaxed);
+	source.soundModel.store(int(doorstop::SoundModel::DispersiveSpring), std::memory_order_relaxed);
 	json_t* rootJ = source.dataToJson();
 	Doorstop loaded;
 	loaded.dataFromJson(rootJ);
 	json_decref(rootJ);
-	const bool restored = !loaded.allowVisualOverflow.load(std::memory_order_relaxed);
+	const bool restored = !loaded.allowVisualOverflow.load(std::memory_order_relaxed)
+		&& loaded.soundModel.load(std::memory_order_relaxed)
+			== int(doorstop::SoundModel::DispersiveSpring)
+		&& loaded.engine.getSoundModel() == doorstop::SoundModel::DispersiveSpring;
 	Module::ResetEvent event;
 	loaded.onReset(event);
 	const bool reset = loaded.allowVisualOverflow.load(std::memory_order_relaxed)
+		&& loaded.soundModel.load(std::memory_order_relaxed)
+			== int(doorstop::SoundModel::Classic)
 		&& loaded.engine.isSleeping()
 		&& loaded.visualDisplacement.load(std::memory_order_relaxed) == 0.f;
-	return {"Overflow JSON round-trips and reset restores defaults", restored && reset,
+	return {"Configuration JSON round-trips and reset restores defaults", restored && reset,
 		"restored=" + std::to_string(restored) + " reset=" + std::to_string(reset)};
 }
 
@@ -128,6 +160,7 @@ int main() {
 	results.push_back(zeroVelocityIsNoOp());
 	results.push_back(negativeVelocityReversesStrike());
 	results.push_back(manualStrikeWorks());
+	results.push_back(manualStrikeHeightControlsVelocity());
 	results.push_back(jsonRoundTripAndReset());
 
 	int failed = 0;

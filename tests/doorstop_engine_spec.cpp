@@ -66,6 +66,20 @@ Result velocityCurve() {
 		+ " max=" + std::to_string(maximum)};
 }
 
+Result manualVerticalVelocity() {
+	const float above = doorstop::Engine::manualVelocityFromVerticalPosition(-1.f);
+	const float top = doorstop::Engine::manualVelocityFromVerticalPosition(0.f);
+	const float middle = doorstop::Engine::manualVelocityFromVerticalPosition(0.5f);
+	const float bottom = doorstop::Engine::manualVelocityFromVerticalPosition(1.f);
+	const float below = doorstop::Engine::manualVelocityFromVerticalPosition(2.f);
+	const bool pass = above == 1.f && top == 1.f
+		&& std::fabs(middle - 0.55f) < 1e-6f
+		&& std::fabs(bottom - 0.10f) < 1e-6f && below == bottom;
+	return {"Manual strike height maps top-to-bottom velocity", pass,
+		"top=" + std::to_string(top) + " middle=" + std::to_string(middle)
+			+ " bottom=" + std::to_string(bottom)};
+}
+
 Result zeroStrikeSleeps() {
 	doorstop::Engine engine;
 	engine.strike(std::numeric_limits<float>::quiet_NaN());
@@ -109,6 +123,7 @@ Result strikeScaling() {
 		&& medium.peakVolts < hard.peakVolts
 		&& soft.peakDisplacement < medium.peakDisplacement
 		&& medium.peakDisplacement < hard.peakDisplacement
+		&& hard.peakDisplacement > medium.peakDisplacement * 2.f
 		&& soft.activeSeconds < medium.activeSeconds
 		&& medium.activeSeconds < hard.activeSeconds
 		&& medium.peakVolts >= 2.0f && medium.peakVolts <= 4.6f
@@ -117,6 +132,8 @@ Result strikeScaling() {
 		"softV=" + std::to_string(soft.peakVolts)
 		+ " mediumV=" + std::to_string(medium.peakVolts)
 		+ " hardV=" + std::to_string(hard.peakVolts)
+		+ " displacement=" + std::to_string(soft.peakDisplacement) + "/"
+		+ std::to_string(medium.peakDisplacement) + "/" + std::to_string(hard.peakDisplacement)
 		+ " times=" + std::to_string(soft.activeSeconds) + "/"
 		+ std::to_string(medium.activeSeconds) + "/" + std::to_string(hard.activeSeconds)};
 }
@@ -132,6 +149,115 @@ Result sampleRateStability() {
 		detail += std::to_string(int(rate)) + "Hz=" + (ok ? "ok" : "bad") + " ";
 	}
 	return {"Single strike is finite at supported sample rates", pass, detail};
+}
+
+Result coupledModelStability() {
+	doorstop::Engine engine;
+	engine.setSampleRate(48000.f);
+	engine.setSoundModel(doorstop::SoundModel::CoupledBody);
+	engine.strike(1.f);
+	float peak = 0.f;
+	bool finite = true;
+	bool slept = false;
+	const float dt = 1.f / 48000.f;
+	for (int i = 0; i < 48000 * 10; ++i) {
+		const doorstop::Frame frame = engine.process(dt);
+		peak = std::max(peak, std::fabs(frame.outputVolts));
+		finite = finite && std::isfinite(frame.outputVolts)
+			&& std::isfinite(frame.displacement)
+			&& std::isfinite(frame.velocity);
+		if (frame.enteredSleep) {
+			slept = true;
+			break;
+		}
+	}
+	return {"Coupled body model remains finite and settles", finite && slept && peak <= 5.0001f,
+		"peak=" + std::to_string(peak) + " slept=" + std::to_string(slept)};
+}
+
+Result coilContactModel() {
+	doorstop::Engine coupled;
+	doorstop::Engine contact;
+	coupled.setSampleRate(48000.f);
+	contact.setSampleRate(48000.f);
+	coupled.setSoundModel(doorstop::SoundModel::CoupledBody);
+	contact.setSoundModel(doorstop::SoundModel::CoilContact);
+	coupled.strike(1.f);
+	contact.strike(1.f);
+	const float dt = 1.f / 48000.f;
+	float difference = 0.f;
+	bool finite = true;
+	bool slept = false;
+	for (int i = 0; i < 48000 * 10; ++i) {
+		const doorstop::Frame coupledFrame = coupled.process(dt);
+		const doorstop::Frame contactFrame = contact.process(dt);
+		if (i < 48000 * 2) {
+			difference += std::fabs(contactFrame.outputVolts - coupledFrame.outputVolts);
+		}
+		finite = finite && std::isfinite(contactFrame.outputVolts)
+			&& std::fabs(contactFrame.outputVolts) <= 5.0001f;
+		if (contactFrame.enteredSleep) {
+			slept = true;
+			break;
+		}
+	}
+	doorstop::Engine mediumCoupled;
+	doorstop::Engine mediumContact;
+	mediumCoupled.setSampleRate(48000.f);
+	mediumContact.setSampleRate(48000.f);
+	mediumCoupled.setSoundModel(doorstop::SoundModel::CoupledBody);
+	mediumContact.setSoundModel(doorstop::SoundModel::CoilContact);
+	mediumCoupled.strike(0.5f);
+	mediumContact.strike(0.5f);
+	float mediumDifference = 0.f;
+	for (int i = 0; i < 48000 * 2; ++i) {
+		mediumDifference += std::fabs(
+			mediumContact.process(dt).outputVolts
+				- mediumCoupled.process(dt).outputVolts);
+	}
+	return {"Coil contact adds bounded collision behavior and settles",
+		finite && slept && difference > 1.f && mediumDifference < 1e-4f,
+		"hardDifference=" + std::to_string(difference)
+			+ " mediumDifference=" + std::to_string(mediumDifference)
+			+ " slept=" + std::to_string(slept)};
+}
+
+Result dispersiveSpringModel() {
+	const float rates[] = {44100.f, 48000.f, 96000.f, 192000.f};
+	bool pass = true;
+	std::string detail;
+	for (float rate : rates) {
+		doorstop::Engine engine;
+		engine.setSampleRate(rate);
+		engine.setSoundModel(doorstop::SoundModel::DispersiveSpring);
+		engine.strike(1.f);
+		const float dt = 1.f / rate;
+		float delayedPeak = 0.f;
+		bool finite = true;
+		bool slept = false;
+		for (int i = 0; i < int(rate * 10.f); ++i) {
+			const int retriggerPeriod = std::max(1, int(rate * 0.073f));
+			if (i > 0 && i < int(rate * 2.f) && i % retriggerPeriod == 0) {
+				engine.strike(((i / retriggerPeriod) & 1) ? -1.f : 1.f);
+			}
+			const doorstop::Frame frame = engine.process(dt);
+			const float seconds = float(i) * dt;
+			if (seconds > 0.020f && seconds < 0.50f) {
+				delayedPeak = std::max(delayedPeak, std::fabs(frame.outputVolts));
+			}
+			finite = finite && std::isfinite(frame.outputVolts)
+				&& std::fabs(frame.outputVolts) <= 5.0001f;
+			if (frame.enteredSleep) {
+				slept = true;
+				break;
+			}
+		}
+		const bool ok = finite && slept && delayedPeak > 0.25f;
+		pass = pass && ok;
+		detail += std::to_string(int(rate)) + "HzPeak="
+			+ std::to_string(delayedPeak) + (ok ? " ok " : " bad ");
+	}
+	return {"Dispersive spring produces bounded delayed reflections and settles", pass, detail};
 }
 
 Result abusiveRetriggerStability() {
@@ -170,10 +296,14 @@ Result abusiveRetriggerStability() {
 int main() {
 	std::vector<Result> results;
 	results.push_back(velocityCurve());
+	results.push_back(manualVerticalVelocity());
 	results.push_back(zeroStrikeSleeps());
 	results.push_back(bipolarStrikeDirection());
 	results.push_back(strikeScaling());
 	results.push_back(sampleRateStability());
+	results.push_back(coupledModelStability());
+	results.push_back(coilContactModel());
+	results.push_back(dispersiveSpringModel());
 	results.push_back(abusiveRetriggerStability());
 
 	int failed = 0;
