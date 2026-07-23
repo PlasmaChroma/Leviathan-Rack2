@@ -49,10 +49,13 @@ Result heldGateStrikesOnce() {
 		module.process(args);
 	}
 	const float laterLight = module.visualStrike.load(std::memory_order_relaxed);
-	const bool pass = initialLight > 0.f && laterLight < initialLight;
+	const float breakIn = module.serializedBreakIn.load(std::memory_order_relaxed);
+	const bool pass = initialLight > 0.f && laterLight < initialLight
+		&& breakIn > 0.f;
 	return {"Held gate produces one decaying strike", pass,
 		"initialLight=" + std::to_string(initialLight)
-		+ " laterLight=" + std::to_string(laterLight)};
+		+ " laterLight=" + std::to_string(laterLight)
+		+ " breakIn=" + std::to_string(breakIn)};
 }
 
 Result zeroVelocityIsNoOp() {
@@ -132,23 +135,64 @@ Result jsonRoundTripAndReset() {
 	Doorstop source;
 	source.allowVisualOverflow.store(false, std::memory_order_relaxed);
 	source.soundModel.store(int(doorstop::SoundModel::DispersiveSpring), std::memory_order_relaxed);
+	source.serializedBreakIn.store(0.37f, std::memory_order_relaxed);
+	source.breakInLocked.store(true, std::memory_order_relaxed);
 	json_t* rootJ = source.dataToJson();
 	Doorstop loaded;
 	loaded.dataFromJson(rootJ);
 	json_decref(rootJ);
+	const auto args = processArgs();
+	loaded.process(args);
 	const bool restored = !loaded.allowVisualOverflow.load(std::memory_order_relaxed)
 		&& loaded.soundModel.load(std::memory_order_relaxed)
 			== int(doorstop::SoundModel::DispersiveSpring)
-		&& loaded.engine.getSoundModel() == doorstop::SoundModel::DispersiveSpring;
+		&& loaded.engine.getSoundModel() == doorstop::SoundModel::DispersiveSpring
+		&& std::fabs(loaded.engine.getBreakIn() - 0.37f) < 1e-6f
+		&& loaded.engine.isBreakInLocked()
+		&& loaded.breakInLocked.load(std::memory_order_relaxed);
 	Module::ResetEvent event;
 	loaded.onReset(event);
 	const bool reset = loaded.allowVisualOverflow.load(std::memory_order_relaxed)
 		&& loaded.soundModel.load(std::memory_order_relaxed)
 			== int(doorstop::SoundModel::ProbabilisticMix)
 		&& loaded.engine.isSleeping()
+		&& loaded.engine.getBreakIn() == 0.f
+		&& !loaded.engine.isBreakInLocked()
+		&& loaded.serializedBreakIn.load(std::memory_order_relaxed) == 0.f
+		&& !loaded.breakInLocked.load(std::memory_order_relaxed)
 		&& loaded.visualDisplacement.load(std::memory_order_relaxed) == 0.f;
 	return {"Configuration JSON round-trips and reset restores defaults", restored && reset,
 		"restored=" + std::to_string(restored) + " reset=" + std::to_string(reset)};
+}
+
+Result oldPatchAndRestoreCommand() {
+	Doorstop module;
+	json_t* oldPatchJ = json_object();
+	module.dataFromJson(oldPatchJ);
+	json_decref(oldPatchJ);
+	const auto args = processArgs();
+	module.process(args);
+	const bool oldPatchFresh = module.engine.getBreakIn() == 0.f
+		&& !module.engine.isBreakInLocked();
+
+	module.pendingBreakIn.store(0.65f, std::memory_order_relaxed);
+	module.serializedBreakIn.store(0.65f, std::memory_order_relaxed);
+	module.breakInLocked.store(true, std::memory_order_relaxed);
+	module.breakInStatePending.store(true, std::memory_order_release);
+	module.process(args);
+	module.restoreSpringRequested.store(true, std::memory_order_release);
+	module.process(args);
+	const bool restored = module.engine.getBreakIn() == 0.f
+		&& module.engine.isBreakInLocked()
+		&& module.serializedBreakIn.load(std::memory_order_relaxed) == 0.f;
+
+	module.engine.strike(1.f);
+	const bool remainsFreshWhileLocked = module.engine.getBreakIn() == 0.f;
+	return {"Old patches default fresh and restore commands preserve the lock",
+		oldPatchFresh && restored && remainsFreshWhileLocked,
+		"oldPatch=" + std::to_string(oldPatchFresh)
+			+ " restored=" + std::to_string(restored)
+			+ " lockedFresh=" + std::to_string(remainsFreshWhileLocked)};
 }
 
 } // namespace
@@ -162,6 +206,7 @@ int main() {
 	results.push_back(manualStrikeWorks());
 	results.push_back(manualStrikeHeightControlsVelocity());
 	results.push_back(jsonRoundTripAndReset());
+	results.push_back(oldPatchAndRestoreCommand());
 
 	int failed = 0;
 	std::cout << "Doorstop Runtime Spec\n";

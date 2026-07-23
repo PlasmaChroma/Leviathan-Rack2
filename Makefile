@@ -374,5 +374,5 @@ build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/PanelSvgUti
 build/tests/crownstep_persistence_spec: tests/crownstep_persistence_spec.cpp $(CROWNSTEP_MODULE_SOURCES) | build/tests build/tests/panel_svg_utils_spec
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
 
-build/tests/doorstop_runtime_spec: tests/doorstop_runtime_spec.cpp src/Doorstop.cpp src/DoorstopEngine.cpp | build/tests build/tests/panel_svg_utils_spec
+build/tests/doorstop_runtime_spec: tests/doorstop_runtime_spec.cpp src/Doorstop.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp | build/tests build/tests/panel_svg_utils_spec
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@

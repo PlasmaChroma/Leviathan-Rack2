@@ -10,6 +10,14 @@ namespace {
 
 constexpr float PI = 3.14159265358979323846f;
 constexpr float LN_1000 = 6.907755278982137f;
+constexpr float FULL_BREAK_IN_DOSE = 1000.f;
+constexpr float BREAK_IN_EXPONENT = 1.8f;
+constexpr std::array<float, MODE_COUNT> MODE_WEAR_FREQUENCY_SCALE {{
+	0.96f, 0.94f, 0.92f, 0.90f
+}};
+constexpr std::array<float, MODE_COUNT> MODE_WEAR_DECAY_SCALE {{
+	1.25f, 1.22f, 1.18f, 1.12f
+}};
 
 float clampf(float value, float low, float high) {
 	return std::max(low, std::min(value, high));
@@ -51,6 +59,22 @@ void Engine::setSampleRate(float newSampleRate) {
 	updateCoefficients();
 }
 
+void Engine::setBreakIn(float amount) {
+	if (!std::isfinite(amount)) {
+		return;
+	}
+	const float clamped = clampf(amount, 0.f, 1.f);
+	if (clamped == breakIn) {
+		return;
+	}
+	breakIn = clamped;
+	updateWearCoefficients();
+}
+
+void Engine::setBreakInLocked(bool locked) {
+	breakInLocked = locked;
+}
+
 void Engine::setSoundModel(SoundModel newModel) {
 	if (newModel >= SoundModel::Count) {
 		newModel = SoundModel::ProbabilisticMix;
@@ -59,16 +83,15 @@ void Engine::setSoundModel(SoundModel newModel) {
 }
 
 void Engine::updateCoefficients() {
-	baseOmega = 2.f * PI * std::max(tuning.baseFrequencyHz, 0.1f);
-	baseOmegaSq = baseOmega * baseOmega;
-	springDamping = 2.f * tuning.dampingRatio * baseOmega;
+	updateSampleRateCoefficients();
+	updateWearCoefficients();
+}
+
+void Engine::updateSampleRateCoefficients() {
 	const float thumpOmega = 2.f * PI * tuning.thumpFrequencyHz;
 	thumpOmegaSq = thumpOmega * thumpOmega;
-	maxVelocity = baseOmega * std::max(tuning.maxVelocityInBaseOmega, 0.1f);
 	const float maximumModeFrequency = std::min(12000.f, 0.20f * sampleRate);
 	maximumModeOmega = 2.f * PI * maximumModeFrequency;
-	energyCeiling = std::max(springPotential(std::max(tuning.maxDisplacement, 0.1f)), 1e-4f);
-	energyKnee = clampf(tuning.energyKneeFraction, 0.f, 0.99f) * energyCeiling;
 
 	softNoiseDecay = safeExpDecay(tuning.softImpactDecaySeconds, sampleTime);
 	hardNoiseDecay = safeExpDecay(tuning.hardImpactDecaySeconds, sampleTime);
@@ -101,16 +124,54 @@ void Engine::updateCoefficients() {
 		1.f / float(waveguideDelaySamples));
 	modalActivityDecay = safeExpDecay(tuning.modalDriveDecaySeconds, sampleTime);
 	for (int i = 0; i < MODE_COUNT; ++i) {
-		baseModeOmega[i] = 2.f * PI * tuning.modeFrequenciesHz[i];
 		const float referenceVelocity = std::max(tuning.modeExcitation[i], 1.f);
 		modeEnergyScale[i] = 2.f / (referenceVelocity * referenceVelocity);
+	}
+}
+
+void Engine::updateWearCoefficients() {
+	const float w = breakIn * breakIn * (3.f - 2.f * breakIn);
+	effectiveTuning.baseFrequencyHz =
+		tuning.baseFrequencyHz * lerpf(1.f, 0.84f, w);
+	effectiveTuning.dampingRatio =
+		tuning.dampingRatio * lerpf(1.f, 0.65f, w);
+	effectiveTuning.nonlinearStiffness =
+		tuning.nonlinearStiffness * lerpf(1.f, 0.72f, w);
+	effectiveTuning.maxDisplacement =
+		tuning.maxDisplacement * lerpf(1.f, 1.15f, w);
+
+	baseOmega = 2.f * PI * std::max(effectiveTuning.baseFrequencyHz, 0.1f);
+	baseOmegaSq = baseOmega * baseOmega;
+	springDamping = 2.f * effectiveTuning.dampingRatio * baseOmega;
+	maxVelocity = baseOmega * std::max(tuning.maxVelocityInBaseOmega, 0.1f);
+	for (int i = 0; i < MODE_COUNT; ++i) {
+		effectiveTuning.modeFrequenciesHz[i] =
+			tuning.modeFrequenciesHz[i] * lerpf(1.f, MODE_WEAR_FREQUENCY_SCALE[i], w);
+		effectiveTuning.modeDecayT60Seconds[i] =
+			tuning.modeDecayT60Seconds[i] * lerpf(1.f, MODE_WEAR_DECAY_SCALE[i], w);
+		baseModeOmega[i] = 2.f * PI * effectiveTuning.modeFrequenciesHz[i];
 		baseModeGamma[i] = LN_1000
-			/ std::max(tuning.modeDecayT60Seconds[i], 1e-4f);
+			/ std::max(effectiveTuning.modeDecayT60Seconds[i], 1e-4f);
 		classicModeGamma[i] = LN_1000
 			/ std::max(
-				tuning.modeDecayT60Seconds[i] * tuning.classicModeDecayScale[i],
+				effectiveTuning.modeDecayT60Seconds[i] * tuning.classicModeDecayScale[i],
 				1e-4f);
 	}
+	updateEnergyCoefficients();
+}
+
+void Engine::updateEnergyCoefficients() {
+	energyCeiling = std::max(
+		springPotential(std::max(effectiveTuning.maxDisplacement, 0.1f)),
+		1e-4f);
+	energyKnee = clampf(tuning.energyKneeFraction, 0.f, 0.99f) * energyCeiling;
+}
+
+void Engine::accumulateBreakIn(float dose) {
+	if (breakInLocked || !(dose > 0.f) || !std::isfinite(dose) || breakIn >= 1.f) {
+		return;
+	}
+	setBreakIn(breakIn + dose);
 }
 
 void Engine::clearDynamicState() {
@@ -146,6 +207,11 @@ void Engine::clearDynamicState() {
 }
 
 void Engine::reset() {
+	breakInLocked = false;
+	restoreFactoryFresh();
+}
+
+void Engine::resetMotion() {
 	clearDynamicState();
 	impact.rngState = 0x12345678u;
 	modelRngState = 0x6d2b79f5u;
@@ -153,15 +219,20 @@ void Engine::reset() {
 	sleeping = true;
 }
 
+void Engine::restoreFactoryFresh() {
+	breakIn = 0.f;
+	updateWearCoefficients();
+	resetMotion();
+}
+
 void Engine::recoverFromNonFinite() {
-	clearDynamicState();
-	sleeping = true;
+	resetMotion();
 }
 
 float Engine::springPotential(float x) const {
 	const float x2 = x * x;
 	return 0.5f * baseOmegaSq * x2
-		+ 0.25f * tuning.nonlinearStiffness * baseOmegaSq * x2 * x2;
+		+ 0.25f * effectiveTuning.nonlinearStiffness * baseOmegaSq * x2 * x2;
 }
 
 float Engine::primaryEnergy() const {
@@ -220,6 +291,7 @@ void Engine::strike(float normalizedVelocity) {
 	if (!(shaped > 0.f) || !std::isfinite(shaped)) {
 		return;
 	}
+	accumulateBreakIn(std::pow(shaped, BREAK_IN_EXPONENT) / FULL_BREAK_IN_DOSE);
 	const float signedShaped = direction * shaped;
 	const SoundModel strikeModel = chooseStrikeModel();
 	lastStrikeModel = strikeModel;
@@ -283,7 +355,7 @@ void Engine::strike(float normalizedVelocity) {
 float Engine::processSpring() {
 	const float x2 = displacement * displacement;
 	const float restoring = baseOmegaSq * displacement
-		+ tuning.nonlinearStiffness * baseOmegaSq * displacement * x2;
+		+ effectiveTuning.nonlinearStiffness * baseOmegaSq * displacement * x2;
 	const float dampingForce = springDamping * springVelocity;
 	acceleration = -restoring - dampingForce;
 	float reaction = 0.f;
@@ -310,12 +382,12 @@ float Engine::processSpring() {
 	springVelocity += acceleration * sampleTime;
 	displacement += springVelocity * sampleTime;
 
-	if (displacement > tuning.maxDisplacement) {
-		displacement = tuning.maxDisplacement;
+	if (displacement > effectiveTuning.maxDisplacement) {
+		displacement = effectiveTuning.maxDisplacement;
 		if (springVelocity > 0.f) springVelocity = 0.f;
 	}
-	else if (displacement < -tuning.maxDisplacement) {
-		displacement = -tuning.maxDisplacement;
+	else if (displacement < -effectiveTuning.maxDisplacement) {
+		displacement = -effectiveTuning.maxDisplacement;
 		if (springVelocity < 0.f) springVelocity = 0.f;
 	}
 	springVelocity = clampf(springVelocity, -maxVelocity, maxVelocity);
@@ -331,7 +403,8 @@ float Engine::processCoilContact() {
 	const int contactBankIndex = int(SoundModel::CoilContact);
 	if (modalActivity[contactBankIndex] > 1e-5f) {
 		const float displacementRange = std::max(
-			tuning.maxDisplacement - tuning.contactDisplacementThreshold, 1e-4f);
+			effectiveTuning.maxDisplacement - tuning.contactDisplacementThreshold,
+			1e-4f);
 		const float compression = clampf(
 			(std::fabs(displacement) - tuning.contactDisplacementThreshold)
 				/ displacementRange,

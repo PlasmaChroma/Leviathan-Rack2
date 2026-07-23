@@ -25,6 +25,10 @@ struct StrikeStats {
 	bool finite = true;
 };
 
+bool closeEnough(float actual, float expected, float tolerance = 1e-6f) {
+	return std::fabs(actual - expected) <= tolerance;
+}
+
 StrikeStats renderStrike(float sampleRate, float velocity, float maxSeconds = 10.f) {
 	doorstop::Engine engine;
 	engine.setSampleRate(sampleRate);
@@ -79,6 +83,117 @@ Result manualVerticalVelocity() {
 	return {"Manual strike height maps top-to-bottom velocity", pass,
 		"top=" + std::to_string(top) + " middle=" + std::to_string(middle)
 			+ " bottom=" + std::to_string(bottom)};
+}
+
+Result breakInProgression() {
+	doorstop::Engine full;
+	const bool fresh = full.getBreakIn() == 0.f
+		&& !full.isBreakInLocked();
+	full.strike(0.f);
+	full.strike(std::numeric_limits<float>::quiet_NaN());
+	full.strike(std::numeric_limits<float>::infinity());
+	const bool invalidIgnored = full.getBreakIn() == 0.f;
+	for (int i = 0; i < 1000; ++i) {
+		full.strike((i & 1) ? -1.f : 1.f);
+	}
+	const bool reachedFull = closeEnough(full.getBreakIn(), 1.f, 2e-5f);
+	full.strike(1.f);
+	const bool capped = full.getBreakIn() == 1.f;
+
+	doorstop::Engine positive;
+	doorstop::Engine negative;
+	positive.strike(0.5f);
+	negative.strike(-0.5f);
+	const float expectedMedium = std::pow(
+		doorstop::Engine::shapeMagnitude(0.5f), 1.8f) / 1000.f;
+	const bool magnitudeSymmetric =
+		closeEnough(positive.getBreakIn(), expectedMedium, 1e-8f)
+		&& closeEnough(negative.getBreakIn(), expectedMedium, 1e-8f);
+	const float beforeRateChange = positive.getBreakIn();
+	positive.setSampleRate(96000.f);
+	for (int i = 0; i < 100; ++i) {
+		positive.process(1.f / 96000.f);
+	}
+	const bool timeIndependent = positive.getBreakIn() == beforeRateChange;
+
+	const bool pass = fresh && invalidIgnored && reachedFull && capped
+		&& magnitudeSymmetric && timeIndependent;
+	return {"Break-in dose is deterministic, symmetric, capped, and event-driven",
+		pass,
+		"full=" + std::to_string(full.getBreakIn())
+			+ " medium=" + std::to_string(positive.getBreakIn())
+			+ " expected=" + std::to_string(expectedMedium)};
+}
+
+Result breakInControlsAndResetSemantics() {
+	doorstop::Engine engine;
+	engine.setBreakIn(0.4f);
+	engine.setBreakInLocked(true);
+	engine.strike(1.f);
+	const bool locked = closeEnough(engine.getBreakIn(), 0.4f)
+		&& engine.isBreakInLocked();
+
+	engine.resetMotion();
+	const bool motionResetPreserved = engine.isSleeping()
+		&& closeEnough(engine.getBreakIn(), 0.4f)
+		&& engine.isBreakInLocked();
+
+	engine.setBreakIn(2.f);
+	const bool explicitSetWhileLocked = engine.getBreakIn() == 1.f;
+	engine.setBreakIn(std::numeric_limits<float>::quiet_NaN());
+	const bool invalidSetIgnored = engine.getBreakIn() == 1.f;
+	engine.restoreFactoryFresh();
+	const bool restoredButLocked = engine.getBreakIn() == 0.f
+		&& engine.isBreakInLocked() && engine.isSleeping();
+
+	engine.setBreakIn(0.6f);
+	engine.reset();
+	const bool fullReset = engine.getBreakIn() == 0.f
+		&& !engine.isBreakInLocked() && engine.isSleeping();
+
+	const bool pass = locked && motionResetPreserved && explicitSetWhileLocked
+		&& invalidSetIgnored && restoredButLocked && fullReset;
+	return {"Lock, motion reset, factory restoration, and full reset are distinct",
+		pass,
+		"locked=" + std::to_string(locked)
+			+ " motionReset=" + std::to_string(motionResetPreserved)
+			+ " restored=" + std::to_string(restoredButLocked)
+			+ " reset=" + std::to_string(fullReset)};
+}
+
+Result breakInEffectiveEndpoints() {
+	doorstop::Engine engine;
+	const doorstop::Tuning factory = engine.getTuning();
+	const doorstop::EffectiveTuning fresh = engine.getEffectiveTuning();
+	engine.setBreakIn(1.f);
+	const doorstop::EffectiveTuning worn = engine.getEffectiveTuning();
+
+	bool pass = closeEnough(fresh.baseFrequencyHz, factory.baseFrequencyHz)
+		&& closeEnough(fresh.dampingRatio, factory.dampingRatio)
+		&& closeEnough(fresh.nonlinearStiffness, factory.nonlinearStiffness)
+		&& closeEnough(fresh.maxDisplacement, factory.maxDisplacement)
+		&& closeEnough(worn.baseFrequencyHz, factory.baseFrequencyHz * 0.84f)
+		&& closeEnough(worn.dampingRatio, factory.dampingRatio * 0.65f)
+		&& closeEnough(worn.nonlinearStiffness, factory.nonlinearStiffness * 0.72f)
+		&& closeEnough(worn.maxDisplacement, factory.maxDisplacement * 1.15f);
+	const float frequencyScales[] = {0.96f, 0.94f, 0.92f, 0.90f};
+	const float decayScales[] = {1.25f, 1.22f, 1.18f, 1.12f};
+	for (int i = 0; i < doorstop::MODE_COUNT; ++i) {
+		pass = pass
+			&& closeEnough(fresh.modeFrequenciesHz[i], factory.modeFrequenciesHz[i])
+			&& closeEnough(fresh.modeDecayT60Seconds[i], factory.modeDecayT60Seconds[i])
+			&& closeEnough(
+				worn.modeFrequenciesHz[i],
+				factory.modeFrequenciesHz[i] * frequencyScales[i])
+			&& closeEnough(
+				worn.modeDecayT60Seconds[i],
+				factory.modeDecayT60Seconds[i] * decayScales[i]);
+	}
+	return {"Fresh and fully broken-in coefficients match documented endpoints",
+		pass,
+		"frequency=" + std::to_string(worn.baseFrequencyHz)
+			+ " damping=" + std::to_string(worn.dampingRatio)
+			+ " displacement=" + std::to_string(worn.maxDisplacement)};
 }
 
 Result zeroStrikeSleeps() {
@@ -313,7 +428,8 @@ Result abusiveRetriggerStability() {
 			peak = std::max(peak, std::fabs(frame.outputVolts));
 			pass = pass && std::isfinite(frame.outputVolts)
 				&& std::isfinite(frame.displacement)
-				&& std::fabs(frame.displacement) <= engine.getTuning().maxDisplacement + 1e-5f
+				&& std::fabs(frame.displacement)
+					<= engine.getEffectiveTuning().maxDisplacement + 1e-5f
 				&& peak <= 5.0001f;
 		}
 		detail += std::to_string(int(rate)) + "HzPeak=" + std::to_string(peak) + " ";
@@ -327,6 +443,9 @@ int main() {
 	std::vector<Result> results;
 	results.push_back(velocityCurve());
 	results.push_back(manualVerticalVelocity());
+	results.push_back(breakInProgression());
+	results.push_back(breakInControlsAndResetSemantics());
+	results.push_back(breakInEffectiveEndpoints());
 	results.push_back(zeroStrikeSleeps());
 	results.push_back(bipolarStrikeDirection());
 	results.push_back(strikeScaling());

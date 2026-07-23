@@ -448,6 +448,27 @@ struct DoorstopWidget final : ModuleWidget {
 					m->soundModel.store(int(doorstop::SoundModel::DispersiveSpring), std::memory_order_relaxed);
 				}));
 		}));
+		const int breakInPercent = int(std::round(
+			clamp01(m->serializedBreakIn.load(std::memory_order_relaxed)) * 100.f));
+		menu->addChild(new MenuSeparator());
+		menu->addChild(createMenuLabel(
+			string::f("Break-in: %d%%", breakInPercent)));
+		menu->addChild(createCheckMenuItem(
+			"Lock break-in", "",
+			[m]() {
+				return m->breakInLocked.load(std::memory_order_relaxed);
+			},
+			[m]() {
+				const bool locked =
+					!m->breakInLocked.load(std::memory_order_relaxed);
+				m->breakInLocked.store(locked, std::memory_order_relaxed);
+			}));
+		menu->addChild(createMenuItem(
+			"Restore factory-fresh spring", "",
+			[m]() {
+				m->restoreSpringRequested.store(true, std::memory_order_release);
+			}));
+		menu->addChild(new MenuSeparator());
 		menu->addChild(createCheckMenuItem(
 			"Allow spring to extend over adjacent modules", "",
 			[m]() { return m->allowVisualOverflow.load(std::memory_order_relaxed); },

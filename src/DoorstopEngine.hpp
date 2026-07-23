@@ -85,6 +85,15 @@ struct Tuning {
 	float sleepHoldSeconds = 0.050f;
 };
 
+struct EffectiveTuning {
+	float baseFrequencyHz = 16.f;
+	float dampingRatio = 0.020f;
+	float nonlinearStiffness = 1.4f;
+	float maxDisplacement = 2.f;
+	std::array<float, MODE_COUNT> modeFrequenciesHz {};
+	std::array<float, MODE_COUNT> modeDecayT60Seconds {};
+};
+
 struct Frame {
 	float outputVolts = 0.f;
 	float displacement = 0.f;
@@ -100,8 +109,12 @@ public:
 	Engine();
 
 	void reset();
+	void resetMotion();
+	void restoreFactoryFresh();
 	void setSampleRate(float newSampleRate);
 	void setSoundModel(SoundModel newModel);
+	void setBreakIn(float amount);
+	void setBreakInLocked(bool locked);
 	void strike(float normalizedVelocity);
 	Frame process(float sampleTime);
 
@@ -109,8 +122,11 @@ public:
 	float getSampleRate() const { return sampleRate; }
 	SoundModel getSoundModel() const { return soundModel; }
 	SoundModel getLastStrikeModel() const { return lastStrikeModel; }
+	float getBreakIn() const { return breakIn; }
+	bool isBreakInLocked() const { return breakInLocked; }
 	const Tuning& getTuning() const { return tuning; }
 	Tuning& getTuning() { return tuning; }
+	const EffectiveTuning& getEffectiveTuning() const { return effectiveTuning; }
 
 	static float shapeMagnitude(float normalizedMagnitude);
 	static float manualVelocityFromVerticalPosition(float normalizedYFromTop);
@@ -134,6 +150,9 @@ private:
 	};
 
 	Tuning tuning;
+	EffectiveTuning effectiveTuning;
+	float breakIn = 0.f;
+	bool breakInLocked = false;
 	SoundModel soundModel = SoundModel::ProbabilisticMix;
 	SoundModel lastStrikeModel = SoundModel::Classic;
 	std::uint32_t modelRngState = 0x6d2b79f5u;
@@ -200,6 +219,10 @@ private:
 	std::array<float, MODE_COUNT> classicModeGamma {};
 
 	void updateCoefficients();
+	void updateSampleRateCoefficients();
+	void updateWearCoefficients();
+	void updateEnergyCoefficients();
+	void accumulateBreakIn(float dose);
 	void clearDynamicState();
 	void recoverFromNonFinite();
 	float springPotential(float x) const;

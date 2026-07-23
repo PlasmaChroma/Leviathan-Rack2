@@ -34,6 +34,11 @@ struct Doorstop final : Module {
 
 	std::atomic<bool> allowVisualOverflow {true};
 	std::atomic<int> soundModel {int(doorstop::SoundModel::ProbabilisticMix)};
+	std::atomic<bool> breakInLocked {false};
+	std::atomic<bool> restoreSpringRequested {false};
+	std::atomic<float> serializedBreakIn {0.f};
+	std::atomic<float> pendingBreakIn {0.f};
+	std::atomic<bool> breakInStatePending {false};
 	std::atomic<float> pendingManualVelocity {0.5f};
 	std::atomic<bool> manualVelocityPending {false};
 	std::atomic<float> visualDisplacement {0.f};
