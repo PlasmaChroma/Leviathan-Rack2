@@ -12,6 +12,7 @@ enum class SoundModel : std::uint8_t {
 	CoupledBody,
 	CoilContact,
 	DispersiveSpring,
+	ProbabilisticMix,
 	Count
 };
 
@@ -58,6 +59,7 @@ struct Tuning {
 	float waveguideBrightnessDecaySeconds = 0.30f;
 	float waveguideOutputGain = 0.18f;
 	std::array<float, 3> waveguideAllpass {{0.38f, 0.57f, 0.71f}};
+	float modalDriveDecaySeconds = 0.40f;
 
 	float accelerationScale = 24000.f;
 	float bodyVelocityGain = 0.24f;
@@ -106,6 +108,7 @@ public:
 	bool isSleeping() const { return sleeping; }
 	float getSampleRate() const { return sampleRate; }
 	SoundModel getSoundModel() const { return soundModel; }
+	SoundModel getLastStrikeModel() const { return lastStrikeModel; }
 	const Tuning& getTuning() const { return tuning; }
 	Tuning& getTuning() { return tuning; }
 
@@ -131,7 +134,9 @@ private:
 	};
 
 	Tuning tuning;
-	SoundModel soundModel = SoundModel::Classic;
+	SoundModel soundModel = SoundModel::ProbabilisticMix;
+	SoundModel lastStrikeModel = SoundModel::Classic;
+	std::uint32_t modelRngState = 0x6d2b79f5u;
 	float sampleRate = 44100.f;
 	float sampleTime = 1.f / 44100.f;
 	float baseOmega = 0.f;
@@ -144,7 +149,9 @@ private:
 	float displacement = 0.f;
 	float springVelocity = 0.f;
 	float acceleration = 0.f;
-	std::array<Mode, MODE_COUNT> modes {};
+	static constexpr int MODAL_MODEL_COUNT = 3;
+	std::array<std::array<Mode, MODE_COUNT>, MODAL_MODEL_COUNT> modalBanks {};
+	std::array<float, MODAL_MODEL_COUNT> modalActivity {};
 	Impact impact;
 
 	float strikeLightEnvelope = 0.f;
@@ -182,6 +189,7 @@ private:
 	float waveguideHardAlpha = 0.f;
 	float waveguideBrightnessDecay = 0.f;
 	float waveguideActivityDecay = 0.f;
+	float modalActivityDecay = 0.f;
 
 	void updateCoefficients();
 	void clearDynamicState();
@@ -189,7 +197,7 @@ private:
 	float springPotential(float x) const;
 	float primaryEnergy() const;
 	float normalizedPrimaryEnergy() const;
-	float normalizedModeEnergy(int index, float frequencyHz) const;
+	float normalizedModeEnergy(const Mode& mode, int index, float frequencyHz) const;
 	float limitCandidateVelocity(float candidateVelocity) const;
 	float processSpring();
 	float processCoilContact();
@@ -199,7 +207,8 @@ private:
 	float processDcBlocker(float input);
 	bool allFinite() const;
 	bool belowSleepThreshold(float outputVolts) const;
-	bool usesCoupledBody() const;
+	SoundModel chooseStrikeModel();
+	std::uint32_t nextModelRandom();
 	std::uint32_t nextRandom();
 };
 

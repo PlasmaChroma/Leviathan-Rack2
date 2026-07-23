@@ -84,7 +84,7 @@ void Doorstop::onReset(const ResetEvent& e) {
 	manualTrigger.reset();
 	engine.reset();
 	allowVisualOverflow.store(true, std::memory_order_relaxed);
-	soundModel.store(int(doorstop::SoundModel::Classic), std::memory_order_relaxed);
+	soundModel.store(int(doorstop::SoundModel::ProbabilisticMix), std::memory_order_relaxed);
 	pendingManualVelocity.store(0.5f, std::memory_order_relaxed);
 	manualVelocityPending.store(false, std::memory_order_relaxed);
 	telemetryDivider = 0u;
@@ -112,7 +112,7 @@ void Doorstop::dataFromJson(json_t* rootJ) {
 	lights[STRIKE_LIGHT].setBrightness(0.f);
 	publishZeroVisualState();
 	allowVisualOverflow.store(true, std::memory_order_relaxed);
-	soundModel.store(int(doorstop::SoundModel::Classic), std::memory_order_relaxed);
+	soundModel.store(int(doorstop::SoundModel::ProbabilisticMix), std::memory_order_relaxed);
 	pendingManualVelocity.store(0.5f, std::memory_order_relaxed);
 	manualVelocityPending.store(false, std::memory_order_relaxed);
 	if (!rootJ) {

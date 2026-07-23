@@ -28,6 +28,7 @@ struct StrikeStats {
 StrikeStats renderStrike(float sampleRate, float velocity, float maxSeconds = 10.f) {
 	doorstop::Engine engine;
 	engine.setSampleRate(sampleRate);
+	engine.setSoundModel(doorstop::SoundModel::Classic);
 	engine.strike(velocity);
 	StrikeStats stats;
 	const float dt = 1.f / sampleRate;
@@ -260,6 +261,35 @@ Result dispersiveSpringModel() {
 	return {"Dispersive spring produces bounded delayed reflections and settles", pass, detail};
 }
 
+Result probabilisticMixModel() {
+	doorstop::Engine engine;
+	engine.setSampleRate(48000.f);
+	engine.setSoundModel(doorstop::SoundModel::ProbabilisticMix);
+	std::array<bool, 4> seen {{false, false, false, false}};
+	bool finite = true;
+	const float dt = 1.f / 48000.f;
+	for (int strike = 0; strike < 64; ++strike) {
+		engine.strike((strike & 1) ? -0.5f : 0.5f);
+		const int selected = int(engine.getLastStrikeModel());
+		if (selected >= 0 && selected < int(seen.size())) {
+			seen[selected] = true;
+		}
+		for (int i = 0; i < 256; ++i) {
+			const doorstop::Frame frame = engine.process(dt);
+			finite = finite && std::isfinite(frame.outputVolts)
+				&& std::fabs(frame.outputVolts) <= 5.0001f;
+		}
+	}
+	const bool selectedAll = std::all_of(seen.begin(), seen.end(), [](bool value) {
+		return value;
+	});
+	return {"Probabilistic mix selects all four bounded excitation models",
+		engine.getSoundModel() == doorstop::SoundModel::ProbabilisticMix
+			&& selectedAll && finite,
+		"seen=" + std::to_string(seen[0]) + std::to_string(seen[1])
+			+ std::to_string(seen[2]) + std::to_string(seen[3])};
+}
+
 Result abusiveRetriggerStability() {
 	const float rates[] = {44100.f, 96000.f, 192000.f};
 	bool pass = true;
@@ -304,6 +334,7 @@ int main() {
 	results.push_back(coupledModelStability());
 	results.push_back(coilContactModel());
 	results.push_back(dispersiveSpringModel());
+	results.push_back(probabilisticMixModel());
 	results.push_back(abusiveRetriggerStability());
 
 	int failed = 0;

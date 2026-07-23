@@ -363,6 +363,15 @@ struct DoorstopWidget final : ModuleWidget {
 		}
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createSubmenuItem("Sound model", "", [m](Menu* modelMenu) {
+			modelMenu->addChild(createCheckMenuItem("Probabilistic mix", "",
+				[m]() {
+					return m->soundModel.load(std::memory_order_relaxed)
+						== int(doorstop::SoundModel::ProbabilisticMix);
+				},
+				[m]() {
+					m->soundModel.store(int(doorstop::SoundModel::ProbabilisticMix), std::memory_order_relaxed);
+				}));
+			modelMenu->addChild(new MenuSeparator());
 			modelMenu->addChild(createCheckMenuItem("Classic modal", "",
 				[m]() {
 					return m->soundModel.load(std::memory_order_relaxed)

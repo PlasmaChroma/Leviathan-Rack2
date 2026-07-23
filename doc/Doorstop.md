@@ -1409,7 +1409,7 @@ Persist only user-facing configuration such as:
 ```json
 {
   "allowVisualOverflow": true,
-  "soundModel": 0
+  "soundModel": 4
 }
 ```
 
@@ -1422,13 +1422,13 @@ boolean for this key and retain the default `true` when the key is missing or
 invalid.
 
 Store `soundModel` as a relaxed atomic integer with stable values: `0` for
-`Classic modal`, `1` for `Coupled body`, `2` for `Coil contact`, and `3` for
-`Dispersive spring`.
+`Classic modal`, `1` for `Coupled body`, `2` for `Coil contact`, `3` for
+`Dispersive spring`, and `4` for `Probabilistic mix`.
 Serialization must reject values outside the implemented model range and retain
-the default classic model when the key is missing or invalid.
+the default probabilistic model when the key is missing or invalid.
 
-`onReset()` restores `allowVisualOverflow` to `true` and `soundModel` to the
-classic model, resets both Schmitt triggers and the complete engine, clears the
+`onReset()` restores `allowVisualOverflow` to `true` and `soundModel` to
+`Probabilistic mix`, resets both Schmitt triggers and the complete engine, clears the
 Rack light, and publishes an immediate zero telemetry snapshot. Loading a patch
 also starts the engine at rest before applying serialized user configuration.
 
@@ -1532,7 +1532,7 @@ struct Doorstop : Module {
     doorstop::Engine engine;
 
     std::atomic<bool> allowVisualOverflow {true};
-    std::atomic<int> soundModel {0};
+    std::atomic<int> soundModel {4};
 
     std::atomic<float> visualDisplacement {0.f};
     std::atomic<float> visualVelocity {0.f};
@@ -1730,6 +1730,7 @@ The context menu should include:
 
 ```text
 Sound model
+    Probabilistic mix
     Classic modal
     Coupled body
     Coil contact
@@ -1759,6 +1760,14 @@ accumulate frequency-dependent phase shift, producing a clearly cascading
 controls injected wave energy and brightness. The slow nonlinear bend remains
 the shared visible physical coordinate, while impact and mounting transients
 remain common to all models.
+
+`Probabilistic mix` is the default. Each nonzero hit chooses one of the four
+excitation models with equal probability using a dedicated deterministic PRNG.
+All hits act on the same primary displacement and velocity. Model-specific
+modal banks and the dispersive waveguide retain independent tails, so a newly
+chosen hit layers into pending oscillations rather than cutting them off or
+reinterpreting their state. Repeated selection of the same model remains
+possible. Model-selection randomness must not consume the impact-noise PRNG.
 
 Optional debugging entries may exist in development builds but should not appear in release builds.
 

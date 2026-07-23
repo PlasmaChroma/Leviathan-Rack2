@@ -144,7 +144,7 @@ Result jsonRoundTripAndReset() {
 	loaded.onReset(event);
 	const bool reset = loaded.allowVisualOverflow.load(std::memory_order_relaxed)
 		&& loaded.soundModel.load(std::memory_order_relaxed)
-			== int(doorstop::SoundModel::Classic)
+			== int(doorstop::SoundModel::ProbabilisticMix)
 		&& loaded.engine.isSleeping()
 		&& loaded.visualDisplacement.load(std::memory_order_relaxed) == 0.f;
 	return {"Configuration JSON round-trips and reset restores defaults", restored && reset,
