@@ -1,5 +1,5 @@
 #include "DoorstopEngine.hpp"
-#include "FastMath.hpp"
+#include "MathHelpers.hpp"
 
 #include <algorithm>
 #include <cmath>

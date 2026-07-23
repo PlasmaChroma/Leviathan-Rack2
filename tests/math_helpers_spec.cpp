@@ -1,4 +1,4 @@
-#include "../src/FastMath.hpp"
+#include "../src/MathHelpers.hpp"
 
 #include <algorithm>
 #include <cmath>

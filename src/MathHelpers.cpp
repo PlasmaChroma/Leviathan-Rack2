@@ -1,4 +1,4 @@
-#include "FastMath.hpp"
+#include "MathHelpers.hpp"
 
 namespace levi_math {
 namespace {
