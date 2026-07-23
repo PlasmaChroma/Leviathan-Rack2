@@ -4,9 +4,12 @@ Doorstop::Doorstop() {
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 	configButton(MANUAL_PARAM, "Manual strike");
 	configInput(TRIG_INPUT, "Trigger");
-	configInput(VELOCITY_INPUT, "Bipolar velocity");
+	configInput(VELOCITY_INPUT, "Bipolar velocity (bipolar +/-10V)");
 	configOutput(AUDIO_OUTPUT, "Audio");
 	configLight(STRIKE_LIGHT, "Strike");
+
+	const float initialSampleRate = (APP && APP->engine) ? APP->engine->getSampleRate() : 44100.f;
+	engine.setSampleRate(initialSampleRate);
 }
 
 void Doorstop::publishVisualState(const doorstop::Frame& frame) {
@@ -119,6 +122,7 @@ void Doorstop::onSampleRateChange(const SampleRateChangeEvent& e) {
 
 json_t* Doorstop::dataToJson() {
 	json_t* rootJ = json_object();
+	json_object_set_new(rootJ, "schema", json_integer(1));
 	json_object_set_new(rootJ, "allowVisualOverflow",
 		json_boolean(allowVisualOverflow.load(std::memory_order_relaxed)));
 	json_object_set_new(rootJ, "soundModel",
@@ -135,41 +139,56 @@ void Doorstop::dataFromJson(json_t* rootJ) {
 	manualTrigger.reset();
 	lights[STRIKE_LIGHT].setBrightness(0.f);
 	publishZeroVisualState();
-	allowVisualOverflow.store(true, std::memory_order_relaxed);
-	soundModel.store(int(doorstop::SoundModel::ProbabilisticMix), std::memory_order_relaxed);
-	breakInLocked.store(false, std::memory_order_relaxed);
-	restoreSpringRequested.store(false, std::memory_order_relaxed);
-	serializedBreakIn.store(0.f, std::memory_order_relaxed);
-	pendingBreakIn.store(0.f, std::memory_order_relaxed);
-	pendingManualVelocity.store(0.5f, std::memory_order_relaxed);
-	manualVelocityPending.store(false, std::memory_order_relaxed);
+
+	int schema = 0;
+	(void) schema;
+	bool loadedOverflow = true;
+	int loadedModel = int(doorstop::SoundModel::ProbabilisticMix);
+	float loadedBreakIn = 0.f;
+	bool loadedLocked = false;
+
 	if (rootJ) {
+		json_t* schemaJ = json_object_get(rootJ, "schema");
+		if (json_is_integer(schemaJ)) {
+			schema = json_integer_value(schemaJ);
+		}
+
 		json_t* overflowJ = json_object_get(rootJ, "allowVisualOverflow");
 		if (json_is_boolean(overflowJ)) {
-			allowVisualOverflow.store(json_boolean_value(overflowJ), std::memory_order_relaxed);
+			loadedOverflow = json_boolean_value(overflowJ);
 		}
+
 		json_t* soundModelJ = json_object_get(rootJ, "soundModel");
 		if (json_is_integer(soundModelJ)) {
 			const json_int_t value = json_integer_value(soundModelJ);
 			if (value >= int(doorstop::SoundModel::Classic)
 				&& value < int(doorstop::SoundModel::Count)) {
-				soundModel.store(int(value), std::memory_order_relaxed);
+				loadedModel = int(value);
 			}
 		}
+
 		json_t* breakInJ = json_object_get(rootJ, "breakIn");
 		if (json_is_number(breakInJ)) {
 			const double value = json_number_value(breakInJ);
 			if (std::isfinite(value)) {
-				const float restored = clamp(static_cast<float>(value), 0.f, 1.f);
-				pendingBreakIn.store(restored, std::memory_order_relaxed);
-				serializedBreakIn.store(restored, std::memory_order_relaxed);
+				loadedBreakIn = clamp(static_cast<float>(value), 0.f, 1.f);
 			}
 		}
+
 		json_t* lockedJ = json_object_get(rootJ, "breakInLocked");
 		if (json_is_boolean(lockedJ)) {
-			breakInLocked.store(
-				json_boolean_value(lockedJ), std::memory_order_relaxed);
+			loadedLocked = json_boolean_value(lockedJ);
 		}
 	}
+
+	allowVisualOverflow.store(loadedOverflow, std::memory_order_relaxed);
+	soundModel.store(loadedModel, std::memory_order_relaxed);
+	breakInLocked.store(loadedLocked, std::memory_order_relaxed);
+	restoreSpringRequested.store(false, std::memory_order_relaxed);
+	serializedBreakIn.store(loadedBreakIn, std::memory_order_relaxed);
+	pendingBreakIn.store(loadedBreakIn, std::memory_order_relaxed);
+	pendingManualVelocity.store(0.5f, std::memory_order_relaxed);
+	manualVelocityPending.store(false, std::memory_order_relaxed);
+
 	breakInStatePending.store(true, std::memory_order_release);
 }

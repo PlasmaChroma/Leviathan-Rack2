@@ -9,7 +9,11 @@ constexpr float PULSE_LENGTHS[] = {0.001f, 0.005f, 0.010f, 0.020f, 0.050f};
 constexpr int PULSE_LENGTH_COUNT = int(sizeof(PULSE_LENGTHS) / sizeof(PULSE_LENGTHS[0]));
 
 float normalizedCv(Input& input) {
-	return input.isConnected() ? input.getVoltage(0) / 5.f : 0.f;
+	if (!input.isConnected()) {
+		return 0.f;
+	}
+	const float voltage = input.getVoltage(0);
+	return std::isfinite(voltage) ? voltage / 5.f : 0.f;
 }
 
 int clampMaxBalls(int value) {
@@ -34,10 +38,10 @@ Umi::Umi() {
 	configButton(CLEAR_PARAM, "Clear pearls");
 
 	configInput(DROP_INPUT, "Drop trigger");
-	configInput(GRAVITY_CV_INPUT, "Gravity CV");
-	configInput(TILT_CV_INPUT, "Tilt CV");
-	configInput(BOUNCE_CV_INPUT, "Bounce CV");
-	configInput(CHAOS_CV_INPUT, "Chaos CV");
+	configInput(GRAVITY_CV_INPUT, "Gravity CV (0-5V)");
+	configInput(TILT_CV_INPUT, "Tilt CV (0-5V)");
+	configInput(BOUNCE_CV_INPUT, "Bounce CV (0-5V)");
+	configInput(CHAOS_CV_INPUT, "Chaos CV (0-5V)");
 	configInput(CLEAR_INPUT, "Clear trigger");
 
 	configOutput(GATES_OUTPUT, "Sink gates 1-8");
@@ -279,6 +283,17 @@ json_t* Umi::dataToJson() {
 
 void Umi::dataFromJson(json_t* rootJ) {
 	if (!rootJ || !json_is_object(rootJ)) return;
+
+	int schema = 0;
+	if (json_t* schemaJ = json_object_get(rootJ, "schema")) {
+		if (json_is_integer(schemaJ)) {
+			schema = int(json_integer_value(schemaJ));
+		}
+	}
+	if (schema > 1) {
+		return;
+	}
+
 	std::uint32_t loadedSeed = 1u;
 	if (json_t* valueJ = json_object_get(rootJ, "seed")) {
 		if (json_is_integer(valueJ)) loadedSeed = std::uint32_t(json_integer_value(valueJ));

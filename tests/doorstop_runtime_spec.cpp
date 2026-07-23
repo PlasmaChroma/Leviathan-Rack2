@@ -195,6 +195,56 @@ Result oldPatchAndRestoreCommand() {
 			+ " lockedFresh=" + std::to_string(remainsFreshWhileLocked)};
 }
 
+Result malformedBreakInJsonIsSafe() {
+	const auto args = processArgs();
+
+	Doorstop aboveRange;
+	json_t* aboveJ = json_object();
+	json_object_set_new(aboveJ, "breakIn", json_real(4.5));
+	aboveRange.dataFromJson(aboveJ);
+	json_decref(aboveJ);
+	aboveRange.process(args);
+	const bool clampedHigh = aboveRange.engine.getBreakIn() == 1.f
+		&& !aboveRange.engine.isBreakInLocked();
+
+	Doorstop belowRange;
+	json_t* belowJ = json_object();
+	json_object_set_new(belowJ, "breakIn", json_real(-2.0));
+	json_object_set_new(belowJ, "breakInLocked", json_true());
+	belowRange.dataFromJson(belowJ);
+	json_decref(belowJ);
+	belowRange.process(args);
+	const bool clampedLow = belowRange.engine.getBreakIn() == 0.f
+		&& belowRange.engine.isBreakInLocked();
+
+	Doorstop wrongTypes;
+	json_t* wrongJ = json_object();
+	json_object_set_new(wrongJ, "breakIn", json_string("old"));
+	json_object_set_new(wrongJ, "breakInLocked", json_integer(1));
+	wrongTypes.dataFromJson(wrongJ);
+	json_decref(wrongJ);
+	wrongTypes.process(args);
+	const bool wrongTypesDefault = wrongTypes.engine.getBreakIn() == 0.f
+		&& !wrongTypes.engine.isBreakInLocked();
+
+	Doorstop nullRoot;
+	nullRoot.engine.setBreakIn(0.8f);
+	nullRoot.engine.setBreakInLocked(true);
+	nullRoot.dataFromJson(nullptr);
+	nullRoot.process(args);
+	const bool nullDefaults = nullRoot.engine.getBreakIn() == 0.f
+		&& !nullRoot.engine.isBreakInLocked();
+
+	const bool pass = clampedHigh && clampedLow
+		&& wrongTypesDefault && nullDefaults;
+	return {"Malformed and out-of-range break-in JSON restores safe defaults",
+		pass,
+		"high=" + std::to_string(clampedHigh)
+			+ " low=" + std::to_string(clampedLow)
+			+ " types=" + std::to_string(wrongTypesDefault)
+			+ " null=" + std::to_string(nullDefaults)};
+}
+
 } // namespace
 
 int main() {
@@ -207,6 +257,7 @@ int main() {
 	results.push_back(manualStrikeHeightControlsVelocity());
 	results.push_back(jsonRoundTripAndReset());
 	results.push_back(oldPatchAndRestoreCommand());
+	results.push_back(malformedBreakInJsonIsSafe());
 
 	int failed = 0;
 	std::cout << "Doorstop Runtime Spec\n";

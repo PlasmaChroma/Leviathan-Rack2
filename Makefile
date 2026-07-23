@@ -200,7 +200,8 @@ CROWNSTEP_MODULE_SOURCES := \
 	src/Crownstep.cpp \
 	src/CrownstepModule.cpp \
 	src/CrownstepPlayback.cpp \
-	src/CrownstepSerialization.cpp
+	src/CrownstepSerialization.cpp \
+	src/DebugTerminalTransport.cpp
 
 .PHONY: test test-fast test-rack test-build test-build-fast test-build-rack test-odr
 test-build: $(TEST_BINS)

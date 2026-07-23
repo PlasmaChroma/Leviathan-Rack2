@@ -267,6 +267,82 @@ Result sampleRateStability() {
 	return {"Single strike is finite at supported sample rates", pass, detail};
 }
 
+Result fullyBrokenInStability() {
+	const float rates[] = {44100.f, 48000.f, 88200.f, 96000.f, 192000.f};
+	bool pass = true;
+	std::string detail;
+	for (float rate : rates) {
+		doorstop::Engine engine;
+		engine.setSampleRate(rate);
+		engine.setSoundModel(doorstop::SoundModel::Classic);
+		engine.setBreakIn(1.f);
+		engine.setBreakInLocked(true);
+		engine.strike(1.f);
+		const float dt = 1.f / rate;
+		const int samples = int(rate * 14.f);
+		float peakVolts = 0.f;
+		float peakDisplacement = 0.f;
+		bool finite = true;
+		bool slept = false;
+		for (int i = 0; i < samples; ++i) {
+			const doorstop::Frame frame = engine.process(dt);
+			peakVolts = std::max(peakVolts, std::fabs(frame.outputVolts));
+			peakDisplacement = std::max(
+				peakDisplacement, std::fabs(frame.displacement));
+			finite = finite
+				&& std::isfinite(frame.outputVolts)
+				&& std::isfinite(frame.displacement)
+				&& std::isfinite(frame.velocity)
+				&& std::isfinite(frame.energy)
+				&& std::fabs(frame.outputVolts) <= 5.0001f
+				&& std::fabs(frame.displacement)
+					<= engine.getEffectiveTuning().maxDisplacement + 1e-5f;
+			if (frame.enteredSleep) {
+				slept = true;
+				break;
+			}
+		}
+		const bool ok = finite && slept
+			&& engine.getBreakIn() == 1.f
+			&& engine.isBreakInLocked();
+		pass = pass && ok;
+		detail += std::to_string(int(rate)) + "Hz="
+			+ (ok ? "ok" : "bad")
+			+ "(V=" + std::to_string(peakVolts)
+			+ ",x=" + std::to_string(peakDisplacement) + ") ";
+	}
+	return {"Fully broken-in spring is finite, bounded, and settles at every sample rate",
+		pass, detail};
+}
+
+Result nonFiniteRecoveryPreservesBreakIn() {
+	doorstop::Engine engine;
+	engine.setSampleRate(48000.f);
+	engine.setBreakIn(0.63f);
+	engine.setBreakInLocked(true);
+	const float originalBodyDrive = engine.getTuning().bodyDrive;
+	engine.getTuning().bodyDrive = std::numeric_limits<float>::quiet_NaN();
+	engine.strike(1.f);
+	const doorstop::Frame recoveredFrame = engine.process(1.f / 48000.f);
+	const bool recovered = engine.isSleeping()
+		&& recoveredFrame.sleeping
+		&& recoveredFrame.outputVolts == 0.f
+		&& closeEnough(engine.getBreakIn(), 0.63f)
+		&& engine.isBreakInLocked();
+
+	engine.getTuning().bodyDrive = originalBodyDrive;
+	engine.strike(1.f);
+	const doorstop::Frame healthyFrame = engine.process(1.f / 48000.f);
+	const bool usableAfterRecovery = !engine.isSleeping()
+		&& std::isfinite(healthyFrame.outputVolts)
+		&& closeEnough(engine.getBreakIn(), 0.63f);
+	return {"Non-finite recovery clears motion but preserves condition and lock",
+		recovered && usableAfterRecovery,
+		"recovered=" + std::to_string(recovered)
+			+ " reusable=" + std::to_string(usableAfterRecovery)
+			+ " breakIn=" + std::to_string(engine.getBreakIn())};
+}
+
 Result coupledModelStability() {
 	doorstop::Engine engine;
 	engine.setSampleRate(48000.f);
@@ -450,6 +526,8 @@ int main() {
 	results.push_back(bipolarStrikeDirection());
 	results.push_back(strikeScaling());
 	results.push_back(sampleRateStability());
+	results.push_back(fullyBrokenInStability());
+	results.push_back(nonFiniteRecoveryPreservesBreakIn());
 	results.push_back(coupledModelStability());
 	results.push_back(coilContactModel());
 	results.push_back(dispersiveSpringModel());

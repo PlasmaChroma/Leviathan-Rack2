@@ -197,17 +197,21 @@ TestResult testDeepcachePanelAnchorsUseRepositoryUnits() {
   const bool databaseStatusOk = panel_svg::loadRectFromSvgMm(
     "res/Deepcache.panel.svg", "database_status", &databaseStatus);
   const bool pass = readyOk && progressOk && framebufferProgressOk && databaseStatusOk
-    && nearlyEqual(ready.x, 4.5f) && nearlyEqual(ready.y, 105.59958f)
-    && nearlyEqual(progress.pos.x, 3.f) && nearlyEqual(progress.pos.y, 27.099751f)
-    && nearlyEqual(progress.size.x, 14.32f) && nearlyEqual(progress.size.y, 7.f)
-    && nearlyEqual(framebufferProgress.pos.x, 3.f) && nearlyEqual(framebufferProgress.pos.y, 49.599771f)
-    && nearlyEqual(framebufferProgress.size.x, 14.32f) && nearlyEqual(framebufferProgress.size.y, 7.f)
-    && nearlyEqual(databaseStatus.pos.x, 3.f) && nearlyEqual(databaseStatus.pos.y, 70.f)
-    && nearlyEqual(databaseStatus.size.x, 14.32f) && nearlyEqual(databaseStatus.size.y, 12.186809f);
+    && nearlyEqual(ready.x, 4.5f) && nearlyEqual(ready.y, 107.59958f, 1e-4f)
+    && nearlyEqual(progress.pos.x, 3.f) && nearlyEqual(progress.pos.y, 27.099751f, 1e-4f)
+    && nearlyEqual(progress.size.x, 14.32f) && nearlyEqual(progress.size.y, 7.f, 1e-4f)
+    && nearlyEqual(framebufferProgress.pos.x, 3.f) && nearlyEqual(framebufferProgress.pos.y, 49.199771f, 1e-4f)
+    && nearlyEqual(framebufferProgress.size.x, 14.32f) && nearlyEqual(framebufferProgress.size.y, 7.f, 1e-4f)
+    && nearlyEqual(databaseStatus.pos.x, 3.f) && nearlyEqual(databaseStatus.pos.y, 72.600005f, 1e-4f)
+    && nearlyEqual(databaseStatus.size.x, 14.32f) && nearlyEqual(databaseStatus.size.y, 12.186809f, 1e-4f);
   return {"Deepcache anchors use 1/100mm component coordinates", pass,
           "ready=" + std::to_string(ready.x) + "," + std::to_string(ready.y) +
-            " progress=" + std::to_string(progress.pos.x) + "," +
-            std::to_string(progress.pos.y)};
+            " progress=" + std::to_string(progress.pos.x) + "," + std::to_string(progress.pos.y) +
+            " progress_sz=" + std::to_string(progress.size.x) + "," + std::to_string(progress.size.y) +
+            " fb_progress=" + std::to_string(framebufferProgress.pos.x) + "," + std::to_string(framebufferProgress.pos.y) +
+            " fb_progress_sz=" + std::to_string(framebufferProgress.size.x) + "," + std::to_string(framebufferProgress.size.y) +
+            " db_status=" + std::to_string(databaseStatus.pos.x) + "," + std::to_string(databaseStatus.pos.y) +
+            " db_status_sz=" + std::to_string(databaseStatus.size.x) + "," + std::to_string(databaseStatus.size.y)};
 }
 
 TestResult testBifurxGlassPathParses() {

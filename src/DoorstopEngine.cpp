@@ -667,13 +667,7 @@ bool Engine::belowSleepThreshold(float outputVolts) const {
 }
 
 Frame Engine::process(float requestedSampleTime) {
-	if (requestedSampleTime != sampleTime
-		&& std::isfinite(requestedSampleTime) && requestedSampleTime > 0.f) {
-		const float requestedRate = 1.f / requestedSampleTime;
-		if (std::fabs(requestedRate - sampleRate) > 1.f) {
-			setSampleRate(requestedRate);
-		}
-	}
+	(void) requestedSampleTime;
 
 	if (sleeping) {
 		return {};

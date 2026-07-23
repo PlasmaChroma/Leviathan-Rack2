@@ -19,6 +19,10 @@ void ModuleTeardownTimer::begin(int moduleId) {
 ModuleTeardownTimer::~ModuleTeardownTimer() {
 }
 
+bool isDragonKingDebugEnabled() {
+	return false;
+}
+
 namespace {
 
 using crownstep::Move;
