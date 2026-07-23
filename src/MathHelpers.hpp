@@ -1,5 +1,6 @@
 #pragma once
 
+#include "FastMath.hpp"
 #include "plugin.hpp"
 
 #include <cmath>
@@ -10,12 +11,10 @@ inline float clamp01(float x) {
 	return clamp(x, 0.f, 1.f);
 }
 
+// Compatibility alias: existing callers retain the established rational curve.
+// New DSP should choose tanhLegacy() or tanhAudio() explicitly.
 inline float fastTanh(float x) {
-	const float x2 = x * x;
-	if (x2 < 9.f) {
-		return x * (27.f + x2) / (27.f + 9.f * x2);
-	}
-	return (x > 0.f) ? 1.f : -1.f;
+	return tanhLegacy(x);
 }
 
 inline float softClip(float x) {

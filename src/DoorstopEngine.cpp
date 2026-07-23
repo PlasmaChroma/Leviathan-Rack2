@@ -1,4 +1,5 @@
 #include "DoorstopEngine.hpp"
+#include "FastMath.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -60,8 +61,12 @@ void Engine::setSoundModel(SoundModel newModel) {
 void Engine::updateCoefficients() {
 	baseOmega = 2.f * PI * std::max(tuning.baseFrequencyHz, 0.1f);
 	baseOmegaSq = baseOmega * baseOmega;
+	springDamping = 2.f * tuning.dampingRatio * baseOmega;
+	const float thumpOmega = 2.f * PI * tuning.thumpFrequencyHz;
+	thumpOmegaSq = thumpOmega * thumpOmega;
 	maxVelocity = baseOmega * std::max(tuning.maxVelocityInBaseOmega, 0.1f);
-	maximumModeFrequency = std::min(12000.f, 0.20f * sampleRate);
+	const float maximumModeFrequency = std::min(12000.f, 0.20f * sampleRate);
+	maximumModeOmega = 2.f * PI * maximumModeFrequency;
 	energyCeiling = std::max(springPotential(std::max(tuning.maxDisplacement, 0.1f)), 1e-4f);
 	energyKnee = clampf(tuning.energyKneeFraction, 0.f, 0.99f) * energyCeiling;
 
@@ -96,6 +101,9 @@ void Engine::updateCoefficients() {
 		1.f / float(waveguideDelaySamples));
 	modalActivityDecay = safeExpDecay(tuning.modalDriveDecaySeconds, sampleTime);
 	for (int i = 0; i < MODE_COUNT; ++i) {
+		baseModeOmega[i] = 2.f * PI * tuning.modeFrequenciesHz[i];
+		const float referenceVelocity = std::max(tuning.modeExcitation[i], 1.f);
+		modeEnergyScale[i] = 2.f / (referenceVelocity * referenceVelocity);
 		baseModeGamma[i] = LN_1000
 			/ std::max(tuning.modeDecayT60Seconds[i], 1e-4f);
 		classicModeGamma[i] = LN_1000
@@ -164,13 +172,11 @@ float Engine::normalizedPrimaryEnergy() const {
 	return primaryEnergy() / std::max(energyCeiling, 1e-6f);
 }
 
-float Engine::normalizedModeEnergy(const Mode& mode, int index, float frequencyHz) const {
-	const float omega = 2.f * PI * frequencyHz;
+float Engine::normalizedModeEnergy(const Mode& mode, int index) const {
+	const float omega = baseModeOmega[index];
 	const float energy = 0.5f * mode.velocity * mode.velocity
 		+ 0.5f * omega * omega * mode.position * mode.position;
-	const float referenceVelocity = std::max(tuning.modeExcitation[index], 1.f);
-	const float referenceEnergy = 0.5f * referenceVelocity * referenceVelocity;
-	return energy / referenceEnergy;
+	return energy * modeEnergyScale[index];
 }
 
 std::uint32_t Engine::nextModelRandom() {
@@ -278,14 +284,17 @@ float Engine::processSpring() {
 	const float x2 = displacement * displacement;
 	const float restoring = baseOmegaSq * displacement
 		+ tuning.nonlinearStiffness * baseOmegaSq * displacement * x2;
-	const float dampingForce = 2.f * tuning.dampingRatio * baseOmega * springVelocity;
+	const float dampingForce = springDamping * springVelocity;
 	acceleration = -restoring - dampingForce;
 	float reaction = 0.f;
 	for (int bankIndex = int(SoundModel::CoupledBody);
 		bankIndex <= int(SoundModel::CoilContact); ++bankIndex) {
+		if (!modalBankActive[bankIndex]) {
+			continue;
+		}
 		const auto& modes = modalBanks[bankIndex];
 		for (int i = 0; i < MODE_COUNT; ++i) {
-			const float omega = 2.f * PI * tuning.modeFrequenciesHz[i];
+			const float omega = baseModeOmega[i];
 			reaction += modes[i].position * omega * omega
 				* tuning.coupledStrikeScale[i];
 		}
@@ -314,7 +323,7 @@ float Engine::processSpring() {
 	const float normalizedVelocity = springVelocity / std::max(maxVelocity, 1.f);
 	const float normalizedAcceleration = clampf(
 		acceleration / std::max(tuning.accelerationScale, 1.f), -1.f, 1.f);
-	return std::tanh((tuning.bodyVelocityGain * normalizedVelocity
+	return levi_math::tanhAudio((tuning.bodyVelocityGain * normalizedVelocity
 		+ tuning.bodyAccelerationGain * normalizedAcceleration) * tuning.bodyDrive);
 }
 
@@ -425,11 +434,10 @@ float Engine::processModes() {
 			const float warp = 1.f
 				+ tuning.modeWarp[i] * warpScale * displacement * displacement;
 			const float asymmetry = 1.f + tuning.modeAsymmetry[i] * displacement;
-			const float frequency = clampf(
-				tuning.modeFrequenciesHz[i] * warp * asymmetry,
-				20.f,
-				maximumModeFrequency);
-			const float omega = 2.f * PI * frequency;
+			const float omega = clampf(
+				baseModeOmega[i] * warp * asymmetry,
+				2.f * PI * 20.f,
+				maximumModeOmega);
 			float gamma = baseModeGamma[i];
 			if (model == SoundModel::Classic) {
 				gamma = classicModeGamma[i];
@@ -444,12 +452,12 @@ float Engine::processModes() {
 				* (coupled ? tuning.coupledMotionDrive[i] : tuning.modeCoupling[i]);
 			if (coupled) {
 				if (i > 0) {
-					const float neighborOmega = 2.f * PI * tuning.modeFrequenciesHz[i - 1];
+					const float neighborOmega = baseModeOmega[i - 1];
 					force += modes[i - 1].position * omega * neighborOmega
 						* tuning.coupledNeighborAmount[i - 1];
 				}
 				if (i + 1 < MODE_COUNT) {
-					const float neighborOmega = 2.f * PI * tuning.modeFrequenciesHz[i + 1];
+					const float neighborOmega = baseModeOmega[i + 1];
 					force += modes[i + 1].position * omega * neighborOmega
 						* tuning.coupledNeighborAmount[i];
 				}
@@ -468,8 +476,7 @@ float Engine::processModes() {
 		if (modalActivity[bankIndex] < tuning.sleepEnvelopeThreshold) {
 			bool bankSettled = true;
 			for (int i = 0; i < MODE_COUNT; ++i) {
-				if (normalizedModeEnergy(
-					modes[i], i, tuning.modeFrequenciesHz[i])
+				if (normalizedModeEnergy(modes[i], i)
 					>= tuning.sleepEnergyThreshold) {
 					bankSettled = false;
 					break;
@@ -507,8 +514,7 @@ float Engine::processImpact() {
 	impact.noiseEnvelope *= envelopeDecay;
 	impact.noiseBrightness *= brightnessDecay;
 
-	const float thumpOmega = 2.f * PI * tuning.thumpFrequencyHz;
-	const float thumpAcceleration = -thumpOmega * thumpOmega * impact.thumpPosition
+	const float thumpAcceleration = -thumpOmegaSq * impact.thumpPosition
 		- 2.f * thumpDecayGamma * impact.thumpVelocity;
 	impact.thumpVelocity += thumpAcceleration * sampleTime;
 	impact.thumpPosition += impact.thumpVelocity * sampleTime;
@@ -543,6 +549,9 @@ bool Engine::allFinite() const {
 		if (!std::isfinite(modalActivity[bankIndex])) {
 			return false;
 		}
+		if (!modalBankActive[bankIndex]) {
+			continue;
+		}
 		for (const Mode& mode : modalBanks[bankIndex]) {
 			if (!std::isfinite(mode.position) || !std::isfinite(mode.velocity)) {
 				return false;
@@ -561,9 +570,13 @@ bool Engine::belowSleepThreshold(float outputVolts) const {
 	if (normalizedPrimaryEnergy() >= tuning.sleepEnergyThreshold) {
 		return false;
 	}
-	for (const auto& bank : modalBanks) {
+	for (int bankIndex = 0; bankIndex < MODAL_MODEL_COUNT; ++bankIndex) {
+		if (!modalBankActive[bankIndex]) {
+			continue;
+		}
+		const auto& bank = modalBanks[bankIndex];
 		for (int i = 0; i < MODE_COUNT; ++i) {
-			if (normalizedModeEnergy(bank[i], i, tuning.modeFrequenciesHz[i])
+			if (normalizedModeEnergy(bank[i], i)
 				>= tuning.sleepEnergyThreshold) {
 				return false;
 			}
@@ -601,7 +614,7 @@ Frame Engine::process(float requestedSampleTime) {
 	float signal = body * tuning.bodyGain + modal * tuning.modalGain
 		+ transient * tuning.impactGain + contact + waveguide;
 	signal = processDcBlocker(signal);
-	const float outputVolts = 5.f * std::tanh(signal * tuning.outputDrive);
+	const float outputVolts = 5.f * levi_math::tanhAudio(signal * tuning.outputDrive);
 
 	if (!allFinite() || !std::isfinite(outputVolts)) {
 		recoverFromNonFinite();

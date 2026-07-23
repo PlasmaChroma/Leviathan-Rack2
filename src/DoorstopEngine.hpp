@@ -141,7 +141,9 @@ private:
 	float sampleTime = 1.f / 44100.f;
 	float baseOmega = 0.f;
 	float baseOmegaSq = 0.f;
-	float maximumModeFrequency = 8820.f;
+	float springDamping = 0.f;
+	float thumpOmegaSq = 0.f;
+	float maximumModeOmega = 2.f * 3.14159265358979323846f * 8820.f;
 	float energyCeiling = 1.f;
 	float energyKnee = 0.75f;
 	float maxVelocity = 1.f;
@@ -192,6 +194,8 @@ private:
 	float waveguideBrightnessDecay = 0.f;
 	float waveguideActivityDecay = 0.f;
 	float modalActivityDecay = 0.f;
+	std::array<float, MODE_COUNT> baseModeOmega {};
+	std::array<float, MODE_COUNT> modeEnergyScale {};
 	std::array<float, MODE_COUNT> baseModeGamma {};
 	std::array<float, MODE_COUNT> classicModeGamma {};
 
@@ -201,7 +205,7 @@ private:
 	float springPotential(float x) const;
 	float primaryEnergy() const;
 	float normalizedPrimaryEnergy() const;
-	float normalizedModeEnergy(const Mode& mode, int index, float frequencyHz) const;
+	float normalizedModeEnergy(const Mode& mode, int index) const;
 	float limitCandidateVelocity(float candidateVelocity) const;
 	float processSpring();
 	float processCoilContact();
