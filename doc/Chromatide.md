@@ -2,28 +2,28 @@
 
 ## Implementation Specification
 
-**Working module name:** Chromatide
-**Plugin:** Leviathan
-**Target:** VCV Rack 2
-**Language:** C++17
-**Primary consumer:** Iris
-**Source category:** Editable raster image source
-**Canonical raster:** 1024 × 256 RGB8
-**Persistence:** QOI-compressed image embedded in patch JSON
+**Working module name:** Chromatide  
+**Plugin:** Leviathan  
+**Target:** VCV Rack 2  
+**Language:** C++17  
+**Primary consumer:** Iris  
+**Source category:** Editable raster image source  
+**Canonical raster:** 1024 × 256 RGB8 (`iris::kCanonicalSourceWidth` × `iris::kCanonicalSourceHeight`)  
+**Persistence:** QOI-compressed image embedded in patch JSON as Base64  
 
 ---
 
 ## 1. Purpose
 
-Chromatide is a compact bitmap-painting module that allows users to create image data directly inside VCV Rack and transmit that data to Iris.
+Chromatide is a compact bitmap-painting module that allows users to create raster image data directly inside VCV Rack and transmit that data to Iris in real time.
 
 Chromatide complements Nautiloid:
 
-* **Nautiloid** is a reconstructible procedural source. Iris can restore its image from fractal type, coordinates, zoom, and rendering parameters.
-* **Chromatide** is an authoritative raster source. The painted pixels are the source data and must be serialized losslessly.
-* **Iris image loading** remains the final common path. Once Chromatide’s raster enters Iris, it should be handled like decoded PNG image data.
+* **Nautiloid** is a reconstructible procedural fractal source. Iris can restore its image from fractal type, coordinates, zoom, and rendering parameters.
+* **Chromatide** is an authoritative raster painting source. The painted pixels are the source data and are serialized losslessly.
+* **Iris image loading** remains the final common path. Once Chromatide’s raster payload enters Iris, it is handled identically to decoded PNG or external image data (`iris::SOURCE_EXPANDER_IMAGE`).
 
-Chromatide must own its canvas independently of Iris. Saving, duplicating, or removing modules must not create hidden ownership dependencies between them.
+Chromatide owns its canvas independently of Iris. Saving, duplicating, or removing modules does not create hidden ownership dependencies between them.
 
 ---
 
@@ -31,152 +31,143 @@ Chromatide must own its canvas independently of Iris. Saving, duplicating, or re
 
 ### 2.1 Canonical backing raster
 
-Chromatide stores one authoritative bitmap:
+Chromatide stores one authoritative bitmap matching Iris’s canonical source dimensions:
 
 ```cpp
-static constexpr int CHROMATIDE_WIDTH = 1024;
-static constexpr int CHROMATIDE_HEIGHT = 256;
-static constexpr int CHROMATIDE_CHANNELS = 3;
+#include "IrisSourceField.hpp"
+
+static constexpr int CHROMATIDE_WIDTH = iris::kCanonicalSourceWidth;    // 1024
+static constexpr int CHROMATIDE_HEIGHT = iris::kCanonicalSourceHeight;  // 256
+static constexpr int CHROMATIDE_CHANNELS = iris::kCanonicalSourceChannels; // 3
 ```
 
 The runtime format is interleaved RGB8:
 
 ```text
-RGBRGBRGB...
+R0 G0 B0  R1 G1 B1  R2 G2 B2 ...
 ```
 
-The uncompressed image requires:
+The uncompressed image buffer requires exactly:
 
 ```text
 1024 × 256 × 3 = 786,432 bytes
 ```
 
-The backing raster must remain at this exact resolution throughout editing, serialization, and transfer to Iris.
-
-Chromatide must not maintain a lower-resolution editable document and upscale it before transmission.
+The backing raster remains at this exact resolution throughout editing, serialization, and transfer to Iris. Chromatide does not maintain a lower-resolution editable document or upscale on transmission.
 
 ### 2.2 Compact canvas geometry
 
-The compact canvas must use the same visible dimensions as Nautiloid’s fractal preview widget.
+The compact canvas UI uses the visible dimensions of Nautiloid’s fractal preview widget.
 
-Do not independently approximate or manually duplicate those dimensions. Reuse or centralize the relevant Nautiloid geometry constants where practical.
+In the panel layout, this is loaded from the SVG panel anchor `"DISPLAY"` via `panel_svg::loadRectFromSvgMm` with standard fallback:
 
-The compact view intentionally has a different aspect ratio from the underlying 4:1 raster. It is therefore a transformed viewport rather than a literal one-screen-pixel-per-image-pixel display.
+```cpp
+// Nautiloid display geometry fallback (in mm)
+const math::Rect displayRectMm(Vec(1.8f, 6.5f), Vec(98.0f, 65.27f));
+```
 
-### 2.3 Fixed transform
+The compact viewport has an aspect ratio of approximately 1.50:1 (3:2), whereas the canonical raster has a 4:1 aspect ratio (1024 × 256). The viewport is therefore a transformed display rather than a literal 1:1 pixel grid.
 
-All interaction passes through a fixed transform:
+### 2.3 Fixed coordinate transform
+
+All user interaction passes through a static bidirectional transform:
 
 ```text
-Widget-local screen coordinates
+Widget-local screen coordinates (x_local, y_local)
             ↓
-Normalized canvas coordinates
+Normalized canvas coordinates (u, v) ∈ [0.0, 1.0]
             ↓
-1024 × 256 raster coordinates
+Canonical raster coordinates (X, Y) ∈ [0, 1023] × [0, 255]
 ```
 
 Normalized coordinates are defined as:
 
 ```cpp
-u = localX / viewportWidth;
-v = localY / viewportHeight;
+u = clamp(localX / viewportWidth, 0.0f, 1.0f);
+v = clamp(localY / viewportHeight, 0.0f, 1.0f);
 ```
 
 Raster coordinates are:
 
 ```cpp
-rasterX = u * 1024.0f;
-rasterY = v * 256.0f;
+rasterX = u * static_cast<float>(CHROMATIDE_WIDTH - 1);
+rasterY = v * static_cast<float>(CHROMATIDE_HEIGHT - 1);
+
+int x = clamp(static_cast<int>(std::round(rasterX)), 0, CHROMATIDE_WIDTH - 1);
+int y = clamp(static_cast<int>(std::round(rasterY)), 0, CHROMATIDE_HEIGHT - 1);
 ```
-
-Coordinates must be clamped before integer conversion:
-
-```cpp
-x = clamp(static_cast<int>(rasterX), 0, 1023);
-y = clamp(static_cast<int>(rasterY), 0, 255);
-```
-
-The transform is static for a given view and should be calculated once when the view geometry is established.
 
 ### 2.4 Canonical visual interpretation
 
-The compact Nautiloid-sized viewport is Chromatide’s canonical visual presentation.
+The Nautiloid-sized viewport is Chromatide’s canonical visual presentation.
 
-A brush that appears circular in the viewport will generally occupy an ellipse in the 1024 × 256 raster. This is intentional. When the raster is rendered through the same viewport transform, the brush appears circular to the user.
+A brush stroke that appears circular in the viewport occupies an ellipse in the 1024 × 256 raster buffer. This is intentional. When rendered back through the viewport transform, the brush appears circular to the user. No attempt should be made to force isotropic circularity in the raw 4:1 raster storage.
 
-No attempt should be made to preserve circular geometry when viewing the raw 4:1 raster independently.
+### 2.5 Expanded editor overlay
 
-### 2.5 Expanded editor
+Chromatide provides an expanded editor overlay matching the overlay architecture used by Wyrm (`WyrmExpandedEditorOverlay` in `WyrmWidget.cpp`):
 
-Chromatide must provide an expanded editor overlay similar in behavior to the expanded Wyrm editor.
-
-The expanded editor:
-
-* Uses the same perceptual aspect ratio as the compact Chromatide canvas.
-* Displays a larger rendering of the same backing raster.
-* Shares the exact same canvas object.
-* Does not copy, resample, encode, decode, or transfer pixels when opened.
-* Provides more physical drawing area and larger controls.
-* Closes without modifying the underlying image beyond edits explicitly made by the user.
-
-The compact and expanded views are two interfaces over one document.
+* Uses the same perceptual aspect ratio (1.50:1) as the compact canvas.
+* Displays a larger rendering of the backing raster.
+* Shares the exact same `ChromatideCanvas` document object via reference or shared state.
+* Does not copy, resample, encode, decode, or allocate new raster buffers when opened.
+* Reparents the editor drawing surface (`ChromatideEditorSurface`) to `APP->scene` below `APP->scene->menuBar` when expanded, and returns it to the module widget container when closed.
+* Closes safely without modifying the image beyond edits explicitly made by the user.
 
 ---
 
 ## 3. MVP Feature Set
 
-Chromatide’s initial implementation must include:
+Chromatide’s initial implementation includes:
 
-1. Circular paint brush
-2. Adjustable brush size
-3. Adjustable brush opacity
-4. Foreground color selection through a compact palette
-5. Eraser
-6. Eyedropper
-7. Undo
-8. Redo
-9. Clear canvas
-10. Expanded editor
-11. Lossless patch persistence
-12. Raster transmission to Iris
-13. Automatic publication after committed edits
-
-The MVP does not require layers, selections, geometric shape tools, text, animation, pressure sensitivity, arbitrary resolution, or image-file export.
+1. Circular paint brush with viewport-isotropic mapping
+2. Adjustable brush size (1 to 128 raster pixels)
+3. Adjustable brush opacity (0.0 to 1.0)
+4. Foreground color selection through a compact 8-color swatch palette
+5. Eraser tool (paints using configured background color)
+6. Eyedropper tool (samples raster RGB at pointer position)
+7. Non-destructive Undo / Redo history stack
+8. Clear canvas operation
+9. Expanded editor overlay
+10. Lossless patch persistence via QOI compression + Base64 encoding in patch JSON
+11. Real-time raster transmission to Iris via `nautiloid_iris_expander::SourceSlot`
+12. Automatic publication of committed edit transactions to Iris
 
 ---
 
-## 4. Suggested Source Layout
+## 4. Source Layout
 
-Use the repository’s existing conventions where they differ, but keep the document model separate from UI rendering.
-
-Recommended files:
+Chromatide source files reside directly in `src/`, adhering to the project's flat layout:
 
 ```text
 src/
-    Chromatide.cpp
-    Chromatide.hpp
-    ChromatideWidget.cpp
-    ChromatideCanvas.cpp
-    ChromatideCanvas.hpp
-    ChromatideExpandedEditor.cpp
-    ChromatideExpandedEditor.hpp
+    Chromatide.hpp                 // Module model definition, param/input/output/light IDs
+    Chromatide.cpp                 // Engine logic, process(), serialization, publication
+    ChromatideCanvas.hpp           // Document model, pixel access, dirty rect, undo history
+    ChromatideCanvas.cpp           // Brush blending, stroke rasterization, QOI/Base64 codec
+    ChromatideWidget.cpp           // Compact module UI, NanoVG renderer, controls, context menu
+    ChromatideExpandedEditor.hpp   // Expanded overlay container & overlay link declarations
+    ChromatideExpandedEditor.cpp   // Expanded editor overlay UI implementation
 ```
 
-Shared image-source functionality may belong in existing Iris/Nautiloid infrastructure:
+Existing infrastructure used directly:
 
 ```text
-src/image/
-    ImageSourcePayload.hpp
-    RasterImagePayload.hpp
+src/
+    IrisSourceField.hpp            // iris::SourceField, canonical dimensions
+    IrisWavetable.hpp              // iris::SourceKind (iris::SOURCE_EXPANDER_IMAGE)
+    NautiloidIrisExpander.hpp      // nautiloid_iris_expander::SourceSlot ring-buffer
+    third_party/qoi.h              // QOI encoder & decoder
+    plugin.hpp                     // Plugin instance and model exports
 ```
 
-Register the model using the normal Leviathan plugin structure:
+Module registration in `src/plugin.hpp` and `src/plugin.cpp`:
 
 ```cpp
 extern Model* modelChromatide;
 ```
 
-Suggested plugin slug:
+Plugin slug:
 
 ```text
 Chromatide
@@ -186,452 +177,351 @@ Chromatide
 
 ## 5. Canvas Document Model
 
-Create a document object owned by the module:
+### 5.1 Structure and ownership
+
+`ChromatideCanvas` is owned directly by the `Chromatide` module instance (`src/Chromatide.hpp`):
 
 ```cpp
+#pragma once
+
+#include "IrisSourceField.hpp"
+#include <array>
+#include <vector>
+#include <cstdint>
+#include <cstddef>
+
 class ChromatideCanvas {
 public:
-    static constexpr int WIDTH = 1024;
-    static constexpr int HEIGHT = 256;
-    static constexpr int CHANNELS = 3;
+    static constexpr int WIDTH = iris::kCanonicalSourceWidth;   // 1024
+    static constexpr int HEIGHT = iris::kCanonicalSourceHeight; // 256
+    static constexpr int CHANNELS = iris::kCanonicalSourceChannels; // 3
+    static constexpr size_t BUFFER_SIZE = static_cast<size_t>(WIDTH * HEIGHT * CHANNELS); // 786,432
 
-    std::array<uint8_t, WIDTH * HEIGHT * CHANNELS> pixels {};
+    std::array<uint8_t, BUFFER_SIZE> pixels {};
     uint64_t revision = 0;
 
-    void clear(const Rgb8& color);
-    Rgb8 sample(int x, int y) const;
-    void setPixel(int x, int y, const Rgb8& color);
+    void clear(uint8_t r, uint8_t g, uint8_t b);
+    void sample(int x, int y, uint8_t& r, uint8_t& g, uint8_t& b) const;
+    void setPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b);
+    
+    inline static size_t pixelOffset(int x, int y) {
+        return (static_cast<size_t>(y) * static_cast<size_t>(WIDTH) + static_cast<size_t>(x)) * static_cast<size_t>(CHANNELS);
+    }
 };
 ```
 
-The module owns this object. Widget and expanded-editor objects receive non-owning or appropriately lifetime-safe references to it.
+The `Chromatide` module owns the canvas object. Widget and expanded-editor objects receive references to it.
 
-The canvas must not be owned only by the widget because:
+The canvas must not be owned solely by the UI widget because:
 
-* Patch serialization belongs to the module.
-* The document must survive UI reconstruction.
-* Iris transmission should not depend on an active UI object.
-* Headless or non-rendering Rack states must remain valid.
+* Patch serialization (`dataToJson` / `dataFromJson`) is executed on the module model.
+* The document model must survive UI reconstruction (e.g. when zooming out or hiding module UI).
+* Iris transmission occurs asynchronously from UI lifecycle.
+* Headless and command-line execution modes remain fully valid.
 
-### 5.1 Pixel indexing
+### 5.2 Default Canvas State
 
-Use a single helper for indexing:
-
-```cpp
-inline size_t pixelOffset(int x, int y) {
-    return static_cast<size_t>((y * WIDTH + x) * CHANNELS);
-}
-```
-
-All coordinates must be validated or clamped before indexing.
-
-### 5.2 Initial canvas
-
-Default new modules to an opaque black canvas:
+New module instances initialize with an opaque black canvas:
 
 ```text
-RGB = 0, 0, 0
+RGB = (0, 0, 0)
 ```
 
-The background color should initially be black and should also serve as the eraser color.
+The background color defaults to black `(0, 0, 0)` and serves as the default target color for the eraser.
 
 ---
 
-## 6. Brush Model
+## 6. Brush Engine and Rasterization
 
 ### 6.1 Brush state
 
 ```cpp
+struct ChromatideColor {
+    uint8_t r = 255;
+    uint8_t g = 255;
+    uint8_t b = 255;
+};
+
+enum class ChromatideTool {
+    Brush = 0,
+    Eraser = 1,
+    Eyedropper = 2
+};
+
 struct ChromatideBrushState {
-    float size = 24.0f;
-    float opacity = 1.0f;
-    Rgb8 foreground {255, 255, 255};
-    Rgb8 background {0, 0, 0};
-
-    enum class Tool {
-        Brush,
-        Eraser,
-        Eyedropper
-    };
-
-    Tool tool = Tool::Brush;
+    float size = 24.0f;       // Native vertical diameter in raster pixels (1.0 to 128.0)
+    float opacity = 1.0f;    // Blend opacity (0.0 to 1.0)
+    ChromatideColor foreground {255, 255, 255};
+    ChromatideColor background {0, 0, 0};
+    ChromatideTool tool = ChromatideTool::Brush;
 };
 ```
 
-Brush size is measured against the 256-pixel raster height.
-
-A size of `24` means the brush’s native vertical diameter is approximately 24 raster pixels.
-
-Suggested range:
-
-```text
-1–128 pixels
-```
-
-The control may use a nonlinear response so the smaller brush sizes receive greater precision.
-
-### 6.2 View-circular brush geometry
+### 6.2 Viewport-Isotropic Elliptical Raster Stamp Math
 
 Let:
 
 ```text
-A = viewportWidth / viewportHeight
+W = viewportWidth (e.g. 98.0 mm)
+H = viewportHeight (e.g. 65.27 mm)
+A = W / H (Viewport aspect ratio ≈ 1.50)
 ```
 
-For a brush with vertical raster diameter `D`, the horizontal raster diameter required to appear circular in the viewport is:
+To render a stamp that appears circular in viewport coordinates with vertical raster diameter $D$:
 
 ```text
-horizontalDiameter = D × 4 / A
-verticalDiameter   = D
+Vertical raster radius:   Ry = D / 2.0f
+Horizontal raster radius: Rx = (D / 2.0f) * (4.0f / A)
 ```
 
-This relationship is static for each viewport aspect ratio.
+For a target point $(X, Y)$ in raster coordinates relative to stamp center $(X_c, Y_c)$:
 
-The compact and expanded views must use the same aspect ratio, allowing the same native brush geometry to be used in both.
+```text
+dx = (X - Xc) / Rx
+dy = (Y - Yc) / Ry
+normalizedDistanceSquared = dx * dx + dy * dy
+```
 
-### 6.3 Alpha semantics
+If $\text{normalizedDistanceSquared} \le 1.0$, the point lies within the stamp boundary.
 
-Chromatide stores RGB only. Brush opacity is a compositing operation and must not introduce a persistent alpha channel.
+### 6.3 Antialiased Edge Falloff
 
-For each affected channel:
+To produce smooth antialiased stroke edges, calculate edge coverage across a 1.0-raster-pixel transition boundary:
 
 ```cpp
-float a = brushOpacity * coverage;
-dst = round(dst + a * (src - dst));
+float distanceInPixels = std::sqrt(dx * dx * Rx * Rx + dy * dy * Ry * Ry);
+float maxRadius = std::max(Rx, Ry);
+float edgeStart = std::max(0.0f, maxRadius - 0.5f);
+float edgeEnd = maxRadius + 0.5f;
+
+float coverage = 1.0f - clamp((distanceInPixels - edgeStart) / (edgeEnd - edgeStart), 0.0f, 1.0f);
+coverage = coverage * coverage * (3.0f - 2.0f * coverage); // Smoothstep
 ```
 
-Clamp the result to `0–255`.
+### 6.4 Alpha Compositing Semantics
 
-The MVP should perform this blend directly in byte-oriented sRGB space. Do not introduce implicit gamma conversion unless the entire Iris image pipeline later standardizes on linear-light processing.
+Chromatide stores 24-bit RGB canvas data. Brush opacity is an inline compositing operation:
 
-### 6.4 Eraser semantics
+```cpp
+float alpha = brushOpacity * coverage;
 
-The eraser paints using `background`, applying the same brush size, edge coverage, and opacity behavior as the standard brush.
-
-It does not erase into transparency.
-
-### 6.5 Brush edge
-
-The brush must have an antialiased perimeter.
-
-Hardness may be fixed for the MVP. The interior should have full coverage and the outermost raster edge should transition smoothly over approximately one raster pixel.
-
-A future hardness parameter may expand this behavior without changing the saved canvas format.
-
-### 6.6 Stroke interpolation
-
-Mouse events alone are not guaranteed to arrive densely enough to create continuous strokes.
-
-Interpolate brush stamps between the previous and current pointer positions in normalized canvas space.
-
-Suggested spacing:
-
-```text
-20% of the visible brush diameter
+for (int c = 0; c < 3; ++c) {
+    uint8_t srcColor = (tool == ChromatideTool::Eraser) ? bg[c] : fg[c];
+    uint8_t dstColor = pixels[offset + c];
+    float blended = static_cast<float>(dstColor) + alpha * (static_cast<float>(srcColor) - static_cast<float>(dstColor));
+    pixels[offset + c] = static_cast<uint8_t>(clamp(std::round(blended), 0.0f, 255.0f));
+}
 ```
 
-Apply a minimum spacing sufficient to avoid excessive repeated stamps for very small brushes.
+### 6.5 Stroke Interpolation
 
-Interpolation must occur before conversion to raster coordinates. This prevents horizontal movement from producing disproportionately dense stamping solely because the raster contains four times as many horizontal pixels.
+Mouse pointer events from Rack UI do not arrive densely enough for continuous strokes during fast cursor moves.
+
+Interpolate brush stamps along a straight line between previous position $(u_{prev}, v_{prev})$ and current position $(u_{curr}, v_{curr})$ in normalized canvas coordinates $[0, 1] \times [0, 1]$.
+
+Stamp step distance:
+
+```cpp
+float viewportBrushDiameter = brushSize / static_cast<float>(CHROMATIDE_HEIGHT);
+float stepSizeNorm = 0.20f * viewportBrushDiameter; // 20% of brush diameter
+stepSizeNorm = std::max(stepSizeNorm, 0.001f);       // Minimum step threshold
+
+float distanceNorm = std::hypot(uCurr - uPrev, (vCurr - vPrev) / A);
+int numSteps = static_cast<int>(std::ceil(distanceNorm / stepSizeNorm));
+
+for (int i = 1; i <= numSteps; ++i) {
+    float t = static_cast<float>(i) / static_cast<float>(numSteps);
+    float u = uPrev + t * (uCurr - uPrev);
+    float v = vPrev + t * (vCurr - vPrev);
+    stampAtNormalized(u, v, brushState);
+}
+```
 
 ---
 
 ## 7. Editing Transactions
 
-A committed edit consists of one of:
+An edit transaction represents one discrete undoable operation:
 
-* One complete brush stroke
-* One complete eraser stroke
+* A completed brush stroke (Pointer down $\rightarrow$ move $\rightarrow$ up)
+* A completed eraser stroke
 * Clear canvas
-* Undo
-* Redo
-* A future whole-canvas operation
+* Palette apply / modify (if affecting canvas)
+* Undo / Redo execution
 
-During a stroke:
+During an active stroke:
 
 ```text
-Pointer down  → begin transaction
-Pointer move  → modify canvas and update preview
-Pointer up    → commit transaction and publish revision
+Pointer down  → Begin transaction; snapshot canvas dirty bounds
+Pointer move  → Apply stamp, expand dirty rectangle, update preview texture
+Pointer up    → Commit transaction, push undo record, increment revision, publish to Iris
 ```
 
-Do not publish a new Iris payload for every brush stamp.
-
-### 7.1 Revision behavior
-
-Increment `canvas.revision` after each committed image mutation:
+Increment `canvas.revision` on every committed edit:
 
 ```cpp
 canvas.revision++;
 ```
 
-This includes undo, redo, clear, and completed brush or eraser strokes.
-
-Eyedropper actions do not modify pixels and must not increment the revision.
-
 ---
 
-## 8. Undo and Redo
+## 8. Undo and Redo Architecture
 
-Undo and redo are required for the MVP.
-
-Use bounded image-delta records rather than serializing undo history.
-
-Recommended record:
+Undo and redo use dirty-bounded image delta records to minimize memory consumption.
 
 ```cpp
+struct RectI {
+    int minX = 0;
+    int minY = 0;
+    int maxX = 0;
+    int maxY = 0;
+
+    int width() const { return maxX - minX + 1; }
+    int height() const { return maxY - minY + 1; }
+    bool valid() const { return maxX >= minX && maxY >= minY; }
+};
+
 struct ChromatideUndoRecord {
     RectI bounds;
-    std::vector<uint8_t> before;
-    std::vector<uint8_t> after;
+    std::vector<uint8_t> beforeRgb;
+    std::vector<uint8_t> afterRgb;
+    
+    size_t memoryUsage() const {
+        return beforeRgb.size() + afterRgb.size() + sizeof(*this);
+    }
 };
 ```
 
-A straightforward implementation may:
+### Undo Lifecycle
 
-1. Copy the complete 786,432-byte canvas at stroke start into a temporary scratch buffer.
-2. Track the dirty bounds during the stroke.
-3. At stroke completion, extract only the dirty rectangle from the before and after images.
-4. Store those two cropped regions in the undo record.
-5. Discard the complete temporary copy.
+1. **Stroke Start:** Capture initial bounding box of active edits and clone the initial area.
+2. **Stroke Update:** Update dirty bounding box `RectI dirtyBounds`.
+3. **Stroke End:** Extract cropped `beforeRgb` and `afterRgb` regions corresponding to `dirtyBounds`.
+4. **Push:** Push `ChromatideUndoRecord` onto `undoStack`. Clear `redoStack`.
+5. **Memory Budget:** If total memory consumed by `undoStack` exceeds 32 MiB, pop the oldest records from the bottom of `undoStack`.
 
-This keeps implementation complexity low while preventing every history entry from permanently consuming a full-canvas allocation.
-
-Use either:
-
-* A fixed maximum number of records, such as 64, or
-* A memory budget, such as 32 MiB
-
-A memory budget is preferred. Drop the oldest undo records when the budget is exceeded.
-
-Starting a new committed edit after an undo must clear the redo stack.
-
-Undo history is runtime-only and must not be written into patch JSON.
+Undo history is runtime-only and excluded from patch JSON serialization.
 
 ---
 
 ## 9. Palette and Color Selection
 
-### 9.1 Compact palette
+### 9.1 Compact Palette
 
-Provide a compact palette of eight foreground swatches.
+Chromatide includes an 8-color swatch palette with default sRGB values:
 
-Suggested defaults:
+| Swatch | Name   | Hex | RGB |
+| :--- | :--- | :--- | :--- |
+| 0 | Black | `#000000` | (0, 0, 0) |
+| 1 | White | `#FFFFFF` | (255, 255, 255) |
+| 2 | Red | `#FF3B30` | (255, 59, 48) |
+| 3 | Orange | `#FF9500` | (255, 149, 0) |
+| 4 | Yellow | `#FFCC00` | (255, 204, 0) |
+| 5 | Green | `#34C759` | (52, 199, 89) |
+| 6 | Cyan | `#5AC8FA` | (90, 200, 250) |
+| 7 | Purple | `#AF52DE` | (175, 82, 222) |
 
-```text
-Black
-White
-Red
-Orange
-Yellow
-Green
-Cyan
-Purple
-```
+Clicking a swatch selects it as the active `foreground` color. The UI highlights the active swatch with a Leviathan cyan outline ring.
 
-Clicking a swatch selects it as the foreground color.
+### 9.2 Eyedropper Tool
 
-Clearly indicate the active swatch with a border, glow, inset, or other Leviathan-consistent selection state.
-
-### 9.2 Eyedropper
-
-The eyedropper samples the backing raster at the pointer position and sets the foreground color.
-
-Sampling must use the actual raster pixel, not a filtered preview color.
-
-After one successful sample, the tool may either:
-
-* Remain in eyedropper mode, or
-* Return to the previous brush tool
-
-For the MVP, return automatically to the brush tool after sampling. This makes the eyedropper behave as a momentary utility.
-
-### 9.3 Palette persistence
-
-Serialize the eight palette colors so future custom-palette editing can be added without changing the patch schema.
-
-The MVP may ship with fixed palette editing behavior, but the serialized representation should already support arbitrary RGB values.
-
-Also serialize:
-
-* Selected palette index
-* Foreground color
-* Background color
+Clicking the Eyedropper tool enters momentary sample mode. Clicking anywhere on the canvas samples the exact RGB raster byte at that position, updates `foreground` color and active palette swatch (if matching), and automatically reverts tool selection to `Brush`.
 
 ---
 
-## 10. Compact Module UI
+## 10. Module UI and Widget Layout
 
-The panel should include:
+The compact panel is structured as follows:
 
-### Canvas area
+1. **Top Display Section:**
+   * Custom `ChromatideDisplay` widget placed in the `DISPLAY` SVG anchor rect (`98.0mm × 65.27mm`).
+   * Renders the 1024 × 256 raster preview via NanoVG texture.
+   * Displays circular brush outline cursor on hover.
+   * Handles pointer press, drag, release, and hover events.
 
-* Exact visible dimensions of Nautiloid’s fractal preview widget
-* Full-canvas transformed preview
-* Brush cursor when hovered
-* Direct mouse painting
-* Expanded-editor button
+2. **Tool Bar Controls:**
+   * Tool selection buttons: `Brush`, `Eraser`, `Eyedropper`.
+   * Action buttons: `Undo`, `Redo`, `Clear`.
+   * `Expand Editor` glyph button (opens expanded editor overlay).
 
-### Tool controls
+3. **Sliders / Knobs:**
+   * `Size`: Brush size parameter (1 to 128 pixels, nonlinear response).
+   * `Opacity`: Brush opacity parameter (0.0 to 1.0).
 
-* Brush
-* Eraser
-* Eyedropper
-* Undo
-* Redo
-* Clear
+4. **Color Swatch Palette:**
+   * 8 interactive color swatches arranged horizontally below the display.
 
-### Continuous controls
-
-* Brush size
-* Brush opacity
-
-### Color controls
-
-* Eight palette swatches
-* Active foreground indication
-* Background/eraser color indication where space permits
-
-### Destructive action behavior
-
-Clear should not happen accidentally.
-
-Use one of:
-
-* A context-menu confirmation
-* Modifier-click
-* A short two-stage armed state
-* Existing Leviathan destructive-action conventions
-
-Clear must create one undoable transaction.
+5. **Clear Confirmation Protection:**
+   * Accidental clicks on `Clear` require double-click confirmation or context-menu invocation to prevent loss of artwork. `Clear` produces one standard undoable record.
 
 ---
 
 ## 11. Expanded Editor Overlay
 
-Follow the existing expanded Wyrm editor architecture where applicable.
-
-The overlay should:
-
-* Render above neighboring modules.
-* Remain associated with the owning Chromatide module.
-* Close automatically if the module or module widget is destroyed.
-* Avoid retaining dangling pointers.
-* Share the same `ChromatideCanvas`.
-* Share tool and brush state with the compact view.
-* Use the same viewport aspect ratio as the compact canvas.
-* Show the entire composition rather than changing to a raw 4:1 interpretation.
-
-The expanded editor may provide larger versions of the compact controls.
-
-Opening the editor must not:
-
-* Copy the raster
-* Convert it through QOI
-* Resample it
-* Create a second authoritative canvas
-* Increment the canvas revision
-* Publish a new image to Iris
-
-Closing it must likewise be a UI-only operation.
-
-Only committed edits made within the expanded editor affect revision state.
-
----
-
-## 12. Preview Rendering
-
-### 12.1 Persistent image texture
-
-Maintain:
-
-* The authoritative RGB8 canvas
-* A persistent RGBA staging buffer
-* A persistent NanoVG image handle or equivalent Rack-compatible texture
-
-The texture should be scaled by the renderer into the compact or expanded viewport.
-
-The authoritative raster must not be resized on the CPU for every frame.
-
-### 12.2 Dirty tracking
-
-Track modified raster bounds:
+Following `WyrmWidget.cpp` (`WyrmExpandedEditorOverlay`):
 
 ```cpp
-struct DirtyRect {
-    int minX;
-    int minY;
-    int maxX;
-    int maxY;
-    bool valid;
+struct ChromatideOverlayLink {
+    ChromatideWidget* owner = nullptr;
+    ChromatideExpandedEditorOverlay* overlay = nullptr;
 };
 ```
 
-Every brush stamp expands the dirty rectangle.
+When the user clicks the `Expand Editor` button:
 
-Collapse multiple pointer events into at most one preview texture refresh per UI frame.
+1. Create `ChromatideExpandedEditorOverlay` instance.
+2. Reparent `ChromatideEditorSurface` from compact `editorDock` to `overlay->editorZoom`.
+3. Add `overlay` to `APP->scene` below `APP->scene->menuBar`.
+4. Layout overlay to cover expanded screen region while maintaining 1.50:1 aspect ratio.
+5. On close (or module deletion), reparent `ChromatideEditorSurface` back to `editorDock` and delete `overlay`.
 
-Even if the NanoVG implementation requires uploading the full texture, limit RGB-to-RGBA conversion to the dirty rectangle where practical.
-
-A full RGBA texture is:
-
-```text
-1024 × 256 × 4 = 1 MiB
-```
-
-A full upload at UI frame frequency may be acceptable, but the code should not issue multiple full uploads within one frame.
-
-### 12.3 Filtering
-
-Use smooth filtering for the committed canvas so gradients and antialiased strokes survive downscaling.
-
-Render the brush cursor separately in viewport space so it remains sharp and clearly circular.
-
-Do not bake the cursor into the canvas texture.
-
-### 12.4 Texture lifetime
-
-Create and destroy graphics resources according to Rack/NanoVG context lifetime.
-
-Do not serialize texture handles or hold them in the module’s JSON state.
-
-The module’s image data must remain valid even when no widget or graphics context exists.
+No pixel data copy or texture duplicate occurs during expand / collapse.
 
 ---
 
-## 13. Patch Serialization
+## 12. Preview Texture Management and Dirty Tracking
 
-Chromatide must embed its authoritative canvas in the patch.
+### 12.1 NanoVG Texture Staging
 
-Use the same QOI and base64 utilities already used by Iris where possible.
-
-### 13.1 Save path
-
-```text
-RGB8 canvas
-    ↓
-QOI encode
-    ↓
-Base64 encode
-    ↓
-Patch JSON string
+```cpp
+struct ChromatidePreviewRenderer {
+    int nvgImageHandle = -1;
+    NVGcontext* lastNvgContext = nullptr;
+    std::vector<uint8_t> rgbaBuffer; // 1024 * 256 * 4 = 1,048,576 bytes
+    RectI dirtyRect;
+    bool needsTextureUpload = false;
+};
 ```
 
-### 13.2 Load path
+### 12.2 Dirty Bounds and Conversion
 
-```text
-Patch JSON string
-    ↓
-Base64 decode
-    ↓
-QOI decode
-    ↓
-Validate
-    ↓
-RGB8 canvas
+During painting, stamps expand `dirtyRect`. Prior to rendering each frame in `draw()`:
+
+```cpp
+void updateStagingBuffer(const ChromatideCanvas& canvas, const RectI& dirty) {
+    if (!dirty.valid()) return;
+    for (int y = dirty.minY; y <= dirty.maxY; ++y) {
+        for (int x = dirty.minX; x <= dirty.maxX; ++x) {
+            size_t srcOff = ChromatideCanvas::pixelOffset(x, y);
+            size_t dstOff = (static_cast<size_t>(y) * CHROMATIDE_WIDTH + static_cast<size_t>(x)) * 4u;
+            rgbaBuffer[dstOff + 0] = canvas.pixels[srcOff + 0];
+            rgbaBuffer[dstOff + 1] = canvas.pixels[srcOff + 1];
+            rgbaBuffer[dstOff + 2] = canvas.pixels[srcOff + 2];
+            rgbaBuffer[dstOff + 3] = 255;
+        }
+    }
+}
 ```
 
-### 13.3 Suggested JSON structure
+Upload texture to NanoVG at most once per UI frame using `nvgUpdateImage` or `nvgCreateImageRGBA`. Recreate `nvgImageHandle` automatically whenever `vg` context changes.
+
+---
+
+## 13. Patch Serialization (QOI + Base64)
+
+### 13.1 Serialization Format
+
+`dataToJson` encodes the 786,432-byte RGB8 canvas buffer using QOI (`src/third_party/qoi.h`) and standard Base64 encoding into patch JSON:
 
 ```json
 {
@@ -641,449 +531,242 @@ RGB8 canvas
     "width": 1024,
     "height": 256,
     "channels": 3,
-    "data": "<base64>"
+    "data": "cW9pZgAAA4AAAAEAAAMB..."
   },
   "brush": {
     "size": 24.0,
     "opacity": 1.0,
-    "tool": "brush",
+    "tool": 0,
     "foreground": [255, 255, 255],
     "background": [0, 0, 0]
   },
   "palette": [
     [0, 0, 0],
     [255, 255, 255],
-    [255, 64, 64],
-    [255, 144, 48],
-    [255, 224, 64],
-    [64, 220, 96],
-    [48, 224, 255],
-    [144, 72, 255]
+    [255, 59, 48],
+    [255, 149, 0],
+    [255, 204, 0],
+    [52, 199, 89],
+    [90, 200, 250],
+    [175, 82, 222]
   ],
   "selectedPaletteIndex": 1
 }
 ```
 
-QOI already carries some image metadata, but explicit JSON dimensions provide schema validation and clearer future migration.
+### 13.2 Save / Load Implementation
 
-### 13.4 Validation
+```cpp
+json_t* Chromatide::dataToJson() {
+    json_t* root = json_object();
+    json_object_set_new(root, "chromatideVersion", json_integer(1));
 
-Reject decoded data unless all of the following are true:
+    // 1. QOI encode canvas RGB8 pixels
+    qoi_desc desc {};
+    desc.width = ChromatideCanvas::WIDTH;
+    desc.height = ChromatideCanvas::HEIGHT;
+    desc.channels = ChromatideCanvas::CHANNELS;
+    desc.colorspace = QOI_SRGB;
 
-* Width is 1024
-* Height is 256
-* Channels are RGB-compatible
-* Decoded byte count is exactly 786,432 after normalization
-* QOI decoding succeeds without overrun or truncation
+    int outLen = 0;
+    void* qoiData = qoi_encode(canvas.pixels.data(), &desc, &outLen);
+    
+    if (qoiData && outLen > 0) {
+        // 2. Base64 encode QOI payload
+        std::string b64Str = base64Encode(static_cast<const uint8_t*>(qoiData), size_t(outLen));
+        std::free(qoiData);
 
-If decoding fails:
+        json_t* canvasJ = json_object();
+        json_object_set_new(canvasJ, "encoding", json_string("qoi-base64"));
+        json_object_set_new(canvasJ, "width", json_integer(ChromatideCanvas::WIDTH));
+        json_object_set_new(canvasJ, "height", json_integer(ChromatideCanvas::HEIGHT));
+        json_object_set_new(canvasJ, "channels", json_integer(ChromatideCanvas::CHANNELS));
+        json_object_set_new(canvasJ, "data", json_string(b64Str.c_str()));
+        json_object_set_new(root, "canvas", canvasJ);
+    }
+    
+    // Serialize brush & palette settings...
+    return root;
+}
+```
 
-1. Reset to a black canvas.
-2. Preserve stable module operation.
-3. Log a concise warning.
-4. Do not access partially decoded data.
+### 13.3 Deserialization Validation
 
-### 13.5 Serialization exclusions
+During `dataFromJson`:
 
-Do not serialize:
-
-* Undo history
-* Redo history
-* Expanded-editor open state
-* Texture handles
-* RGBA preview buffers
-* Dirty rectangles
-* Temporary stroke snapshots
-* Iris publication snapshots
+1. Decode Base64 string to byte vector.
+2. Validate QOI header magic (`"qoif"`), `width == 1024`, `height == 256`, `channels == 3`.
+3. Decode QOI bytes via `qoi_decode`.
+4. Validate decoded length equals exactly 786,432 bytes.
+5. If any validation fails, reset canvas to opaque black, log warning via `WARN("Chromatide: patch canvas decode failed")`, and maintain stable execution.
 
 ---
 
-## 14. Iris Integration
+## 14. Iris Integration & Real-Time Publication
 
-### 14.1 Source semantics
+### 14.1 Inter-Module Expander Protocol
 
-Chromatide must use the raster-image path inside Iris.
+Chromatide connects to Iris as a left expander (`leftExpander.module`).
 
-Do not represent Chromatide as a procedural or reconstructible source.
-
-Once accepted by Iris, Chromatide data should enter the same canonical processing stage as decoded PNG data.
-
-Conceptually:
-
-```text
-Chromatide RGB8 raster
-         ↓
-Existing Iris raster ingestion
-         ↓
-Existing image-to-wavetable conversion
-```
-
-### 14.2 No resampling at the boundary
-
-Chromatide already produces the required 1024 × 256 raster.
-
-Iris must not resample this payload merely because it came from another module.
-
-Validate the dimensions and pass the pixel data directly into the existing canonical raster path.
-
-### 14.3 Source type
-
-Extend the existing image-source metadata only as much as necessary.
-
-Suggested distinction:
+It publishes its canvas payload using Iris's existing multi-slot expander mechanism defined in `src/NautiloidIrisExpander.hpp` and `src/IrisSourceField.hpp`:
 
 ```cpp
-enum class IrisImageSourceKind {
-    EmbeddedRaster,
-    ExternalRaster,
-    NautiloidFractal
-};
+#include "NautiloidIrisExpander.hpp"
+#include "IrisSourceField.hpp"
+#include "IrisWavetable.hpp"
 ```
 
-Chromatide publishes:
-
-```text
-ExternalRaster
-```
-
-The internal raster processing should not require a Chromatide-specific conversion branch.
-
-### 14.4 Payload
-
-Adapt this shape to the existing Nautiloid/Iris transport:
+Chromatide module manages an array of 3 expander source slots:
 
 ```cpp
-struct RasterImagePayload {
-    uint32_t width = 1024;
-    uint32_t height = 256;
-    uint32_t channels = 3;
-
-    uint64_t revision = 0;
-    uint64_t contentHash = 0;
-
-    std::shared_ptr<const std::vector<uint8_t>> pixels;
-};
+std::array<nautiloid_iris_expander::SourceSlot, nautiloid_iris_expander::kSourceSlotCount> irisExpanderSlots;
+std::atomic<int> irisExpanderWriteSlot {0};
+std::atomic<int> irisExpanderPublishedSlot {-1};
+std::atomic<uint64_t> irisPreviewGeneration {1u};
 ```
 
-The payload should be immutable after publication.
+### 14.2 Publication Workflow
 
-A content hash is recommended for redundant-transfer detection and debugging but is not mandatory if the existing transport already provides source and revision identity.
+When a stroke ends, or clear / undo / redo occurs:
 
-### 14.5 Publication timing
+```cpp
+void Chromatide::publishToIris() {
+    uint64_t nextGen = ++irisPreviewGeneration;
+    
+    // 1. Find an idle slot in irisExpanderSlots
+    int slotIdx = (irisExpanderWriteSlot.load() + 1) % nautiloid_iris_expander::kSourceSlotCount;
+    nautiloid_iris_expander::SourceSlot* slot = &irisExpanderSlots[slotIdx];
 
-Publish the complete raster:
+    if (!nautiloid_iris_expander::claimSourceSlotForWrite(slot)) return;
 
-* After a brush or eraser stroke ends
-* After clear
-* After undo
-* After redo
-* After successful patch restoration
-* When a new Iris connection or source relationship is established
-* When Iris explicitly requests the current source state, if supported
+    // 2. Populate iris::SourceField
+    slot->source.width = iris::kCanonicalSourceWidth;   // 1024
+    slot->source.height = iris::kCanonicalSourceHeight; // 256
+    slot->source.channels = iris::kCanonicalSourceChannels; // 3
+    slot->source.bitDepth = iris::kCanonicalSourceBitDepth; // 8
+    slot->source.rgb8.assign(canvas.pixels.begin(), canvas.pixels.end());
+    slot->source.sourceName = "Chromatide Canvas";
+    slot->source.sourcePath = "";
+    slot->source.originalWidth = iris::kCanonicalSourceWidth;
+    slot->source.originalHeight = iris::kCanonicalSourceHeight;
+    slot->source.originalChannels = iris::kCanonicalSourceChannels;
+    slot->source.generatorKind = iris::SOURCE_GENERATOR_NONE;
 
-Do not publish once per brush stamp.
+    slot->generation.store(nextGen, std::memory_order_release);
+    nautiloid_iris_expander::releaseSourceSlotWrite(slot);
+    irisExpanderPublishedSlot.store(slotIdx, std::memory_order_release);
 
-### 14.6 Thread safety
+    // 3. Notify right-attached Iris module
+    Module* right = rightExpander.module;
+    if (right && (right->model == modelIris || right->model->slug == "Iris")) {
+        if (right->leftExpander.module == this) {
+            if (auto* iris = dynamic_cast<Iris*>(right)) {
+                iris->requestExpanderSource(slot, nextGen);
+            }
+        }
+    }
+}
+```
 
-Do not allow Iris or an audio-thread callback to read from the mutable canvas while the UI is modifying it.
+### 14.3 Source Kind Alignment
 
-At commit time, create or update an immutable publication snapshot and atomically expose it through the existing transport.
-
-Do not:
-
-* Allocate large image buffers in `process()`
-* QOI encode in `process()`
-* Copy 786 KiB every audio sample or engine frame
-* Pass mutable raw pointers across module lifetimes
-
-The existing Nautiloid/Iris source mechanism should remain the transport authority. Extend it with a raster payload rather than creating an unrelated second communication system.
-
-### 14.7 Iris persistence behavior
-
-Iris may continue embedding its received raster through its existing image-embedding mechanism.
-
-This deliberately permits both modules to retain their own compressed copy:
-
-* Chromatide owns the editable original.
-* Iris owns a self-contained snapshot of its active raster source.
-
-This duplication is acceptable for the MVP because it gives both modules stable independent patch behavior.
-
-If Chromatide is later removed, Iris should retain its embedded snapshot.
-
-If Chromatide reconnects or republishes a newer revision, Iris should update from the authoritative Chromatide source.
+Iris receives the payload as `iris::SOURCE_EXPANDER_IMAGE` (defined in `src/IrisWavetable.hpp`), which routes directly into Iris's existing image-to-wavetable rendering pipeline without requiring code alterations inside Iris's core synthesis engine.
 
 ---
 
-## 15. Module Duplication and Ownership
+## 15. Module Duplication and Independence
 
-Duplicating Chromatide must create an independent copy of:
+Duplicating a Chromatide module creates a completely independent copy of:
 
-* Canvas pixels
-* Palette
-* Brush settings
-* Background and foreground colors
+* Canvas RGB pixels
+* Brush parameters (size, opacity, tool)
+* Color palette and background/foreground selection
+* Revision counter
 
-Editing one duplicate must not alter the other.
-
-No static global image buffers may be used for module-instance document state.
-
-Shared immutable publication snapshots are allowed only when their lifetime and copy-on-write behavior cannot couple edits between module instances.
+No global static canvas buffers or shared mutable pointers are used.
 
 ---
 
 ## 16. Context Menu
 
-Recommended context-menu actions:
+Chromatide provides standard right-click context menu options:
 
-```text
-Reset canvas to black
-Reset palette
-Copy image data
-Paste image data
-Re-publish image to Iris
-```
-
-Only include copy/paste if a compatible existing Iris image encoding can be reused cleanly.
-
-Context-menu reset actions must participate in undo where reasonable.
-
-A future import action may allow PNG or QOI images to become editable Chromatide canvases, but file import is not required for the initial implementation.
+* **Reset Canvas to Black** (undoable)
+* **Reset Palette to Defaults**
+* **Re-publish Canvas to Iris** (forces immediate expander payload sync)
 
 ---
 
-## 17. Performance Requirements
+## 17. Performance Constraints
 
-Chromatide is primarily a UI module and must have negligible effect on Rack’s audio engine.
+Chromatide is designed to run with zero audio-thread impact:
 
-Required constraints:
-
-* No per-pixel heap allocations during painting.
-* No QOI encoding during painting.
-* No full raster publication during every pointer movement.
-* No large allocation or image conversion in `process()`.
-* At most one preview texture refresh per UI frame.
-* Preallocate RGB and RGBA canvas buffers.
-* Reuse brush and undo scratch storage where practical.
-* Use normalized-coordinate stroke interpolation.
-* Avoid general-purpose resize operations for the compact preview.
-* Let GPU/NanoVG scaling perform the static viewport transform.
-
-Optional optimization after profiling:
-
-* Cached brush masks by integer size
-* Partial OpenGL sub-image uploads
-* Compact preview cache
-* SIMD RGB-to-RGBA conversion
-* Background-thread QOI encoding during explicit patch save, provided Rack serialization requirements and object lifetimes permit it safely
-
-Do not add those optimizations before establishing a correct baseline unless equivalent utilities already exist.
+* **Zero allocations in `process()`:** Audio `process()` method contains only basic gate/CV checks or remains empty.
+* **No per-stamp heap allocation:** Canvas editing reuses preallocated pixel arrays and scratch buffers.
+* **Rate-limited UI uploads:** Preview texture updates occur at most once per UI frame (`draw()`).
+* **No QOI encoding during painting:** Encoding is performed exclusively on patch save (`dataToJson()`).
 
 ---
 
-## 18. Error Handling
+## 18. Error Handling & Edge Cases
 
-Chromatide must remain operational under malformed state.
+Chromatide remains robust against malformed input:
 
-Handle:
-
-* Missing canvas JSON
-* Invalid base64
-* Invalid QOI
-* Wrong image dimensions
-* Unsupported channel count
-* Truncated image data
-* Overlay owner destruction
-* Iris removal during publication
-* Module deletion while expanded
-* Graphics-context recreation
-
-Failure should result in a safe black canvas or disconnected source state, never undefined memory access.
+* **Patch corruption:** Bad Base64 or corrupted QOI data defaults gracefully to an opaque black canvas with a log error via `WARN()`.
+* **Disconnection:** Disconnecting or deleting attached Iris modules does not crash or stall Chromatide.
+* **Overlay safety:** Closing the patch or deleting the module widget while the expanded editor overlay is active safely closes the overlay link without memory leaks or dangling pointer accesses.
 
 ---
 
 ## 19. Non-Goals for MVP
 
-The first implementation does not include:
-
-* Layers
-* Selection tools
-* Move/transform tools
-* Text
-* Lines, rectangles, or shape primitives
-* Fill bucket
-* Gradients
-* Smudge or blur
-* Arbitrary brush images
-* Softness/hardness control
-* Arbitrary canvas dimensions
-* Zoom and pan
-* Animation
-* Frame sequences
-* CV-controlled painting
-* Continuous audio-rate image streaming
-* PNG export
-* External file watching
-* Alpha-channel storage
-* Procedural reconstruction metadata
-
-The architecture should not prevent these later, but none should delay the core module.
+* Layers or selection masks
+* Shape tools (lines, rectangles, ellipses, text)
+* Bucket fill, gradients, or blur filters
+* Hardness / softness brush curves
+* CV control over brush position or painting
+* Audio-rate image streaming
 
 ---
 
-## 20. Implementation Phases
+## 20. Implementation Plan
 
-### Phase 1 — Canvas foundation
+### Phase 1 — Canvas & Codec
+* Implement `ChromatideCanvas` with $1024 \times 256$ RGB8 storage in `src/ChromatideCanvas.hpp` / `.cpp`.
+* Implement QOI + Base64 patch save/load functions in `src/ChromatideCanvas.cpp`.
 
-Implement:
+### Phase 2 — Module & Iris Transport
+* Implement `Chromatide` module model in `src/Chromatide.hpp` / `.cpp`.
+* Implement `publishToIris()` using `nautiloid_iris_expander::SourceSlot` and `iris::SOURCE_EXPANDER_IMAGE`.
 
-* `ChromatideCanvas`
-* 1024 × 256 RGB8 storage
-* Pixel access
-* Clear operation
-* Revision counter
-* Unit tests for indexing and bounds
+### Phase 3 — Compact UI & Painting Engine
+* Implement `ChromatideWidget` in `src/ChromatideWidget.cpp`.
+* Implement viewport coordinate transform, isotropic elliptical brush stamp math, antialiased edge falloff, and mouse event handling.
 
-### Phase 2 — Compact rendering
+### Phase 4 — Undo/Redo & Palette Controls
+* Implement dirty-bounded `ChromatideUndoRecord` stack with 32 MiB memory cap.
+* Add compact 8-swatch palette, tool selection buttons, size/opacity controls, and clear confirmation.
 
-Implement:
+### Phase 5 — Expanded Editor Overlay
+* Implement `ChromatideExpandedEditorOverlay` in `src/ChromatideExpandedEditor.hpp` / `.cpp`.
+* Implement non-allocating surface reparenting between compact dock and scene overlay.
 
-* Nautiloid-sized viewport
-* Fixed transform
-* Persistent texture
-* Full-canvas preview
-* Dirty tracking
-* Hover cursor
-
-### Phase 3 — Painting
-
-Implement:
-
-* Brush
-* Eraser
-* Brush size
-* Opacity
-* Stroke interpolation
-* Antialiased elliptical raster stamps
-* Eyedropper
-
-### Phase 4 — History and controls
-
-Implement:
-
-* Undo
-* Redo
-* Clear
-* Palette
-* Tool state
-* Destructive-action protection
-
-### Phase 5 — Persistence
-
-Implement:
-
-* QOI encode/decode
-* Base64 patch storage
-* Versioned JSON
-* Validation and corruption fallback
-* Bit-exact round-trip tests
-
-### Phase 6 — Expanded editor
-
-Implement:
-
-* Overlay lifecycle
-* Shared canvas
-* Shared brush state
-* Same viewport aspect ratio
-* Safe closure on module deletion
-
-### Phase 7 — Iris integration
-
-Implement:
-
-* External raster payload
-* Revision publication
-* Immutable snapshots
-* Initial connection publication
-* Iris ingestion through existing raster path
-* No boundary resampling
-* Snapshot retention when Chromatide is removed
-
-### Phase 8 — Polish and profiling
-
-Validate:
-
-* Rendering responsiveness
-* Patch size
-* Memory use
-* Undo budget
-* UI consistency
-* Multiple Chromatide/Iris instances
-* Module duplication
-* Overlay safety
+### Phase 6 — Verification & Polish
+* Verify bit-identical QOI round-trip serialization.
+* Verify real-time transmission to Iris.
+* Verify independent operation of duplicated Chromatide modules.
 
 ---
 
-## 21. Required Tests
+## 21. Required Verification Tests
 
-### Canvas and transform
-
-1. Top-left viewport coordinate maps to raster `(0, 0)`.
-2. Bottom-right viewport coordinate clamps to `(1023, 255)`.
-3. Center maps consistently in compact and expanded views.
-4. A displayed circular brush remains circular in both views.
-5. Raster brush geometry reflects the expected fixed ellipse.
-
-### Painting
-
-1. A 100% opaque stroke exactly replaces destination channels.
-2. A 50% opaque stroke blends deterministically.
-3. Fast strokes contain no visible gaps.
-4. Eraser blends toward the configured background color.
-5. Eyedropper samples exact raster values.
-6. Brush painting cannot write outside the canvas buffer.
-
-### Undo and redo
-
-1. One stroke is undone exactly.
-2. Redo restores exact bytes.
-3. Clear is undoable.
-4. New edits after undo clear redo history.
-5. History correctly handles edge-crossing brush stamps.
-6. History memory remains bounded.
-
-### Persistence
-
-1. Save/load produces a bit-identical RGB buffer.
-2. Empty and flat-color canvases restore correctly.
-3. High-entropy canvases restore correctly.
-4. Invalid base64 falls back safely.
-5. Invalid QOI falls back safely.
-6. Wrong dimensions are rejected.
-7. Palette and brush settings round-trip correctly.
-8. Undo history is not restored.
-
-### Expanded editor
-
-1. Opening does not change canvas bytes or revision.
-2. Closing does not change canvas bytes or revision.
-3. Compact and expanded edits modify the same backing canvas.
-4. Deleting the module closes the overlay safely.
-5. Reopening displays all prior edits.
-
-### Iris integration
-
-1. Chromatide transfers exactly 1024 × 256 RGB8 data.
-2. Iris receives byte-identical pixels.
-3. No resize occurs during transfer.
-4. Iris updates after stroke completion.
-5. Iris does not update for every brush stamp.
-6. Undo and redo publish new revisions.
-7. Iris retains its embedded snapshot after Chromatide removal.
-8. Reconnected Chromatide can republish its authoritative canvas.
-9. Nautiloid’s fractal reconstruction behavior remains unchanged.
-10. Multiple Iris consumers can receive the same committed image safely.
+1. **Transform Test:** Top-left viewport coordinate maps to raster $(0, 0)$; bottom-right maps to $(1023, 255)$.
+2. **Isotropy Test:** A brush painted in the viewport appears circular on screen and generates an ellipse with axis ratio $4 / A$ in the raster buffer.
+3. **Stroke Continuity Test:** Fast pointer movement generates smooth continuous strokes without gaps via normalized interpolation.
+4. **Undo/Redo Test:** Undo restores exact pre-stroke raster bytes; new edits clear the redo stack; undo history memory remains bounded $\le 32$ MiB.
+5. **Persistence Test:** Patch save and reload restores exact bit-identical RGB canvas data via QOI + Base64.
+6. **Iris Integration Test:** Editing Chromatide canvas publishes updated `iris::SourceField` to attached Iris module without audio glitches or image resampling.
+7. **Overlay Safety Test:** Closing or deleting Chromatide module while expanded editor is open closes overlay cleanly without dangling pointers.
 
 ---
 
@@ -1091,66 +774,10 @@ Validate:
 
 Chromatide is complete for MVP when:
 
-* A user can paint fluidly in the Nautiloid-sized canvas.
-* The brush appears circular despite the native 4:1 raster.
-* The native backing image remains exactly 1024 × 256 RGB8.
-* Compact and expanded editors operate on the same pixel buffer.
-* Brush size and opacity behave consistently in both views.
-* Palette, eraser, eyedropper, undo, redo, and clear work correctly.
-* The canvas survives patch save/load losslessly through QOI.
-* Chromatide can supply the image to Iris without resampling.
-* Iris treats the received data through its existing raster-image pipeline.
-* Nautiloid remains a distinct procedural source with reconstructible metadata.
-* No image editing or serialization work disrupts Rack’s audio thread.
-* Removing Chromatide does not destroy Iris’s embedded raster snapshot.
-* Duplicated Chromatide modules remain fully independent.
-
----
-
-## 23. Future Extension Points
-
-The architecture should leave room for:
-
-* Editable custom palette colors
-* PNG/QOI import
-* PNG/QOI export
-* Fill tool
-* Line and shape tools
-* Softness and hardness
-* Gradient tool
-* Horizontal or vertical symmetry
-* Tiling modes
-* Noise and procedural brushes
-* Selection and transform tools
-* Image history browser
-* CV-controlled color or brush parameters
-* Throttled live-performance publication
-* Alternate canonical view modes
-* Direct visual comparison with Iris’s interpreted wavetable
-* Shared image-source protocol for additional Leviathan visual generators
-
-These should build on the authoritative raster and normalized-coordinate architecture rather than replacing it.
-
----
-
-## 24. Final Architectural Summary
-
-Chromatide is an editable, lossless raster source.
-
-```text
-Compact or expanded painting viewport
-                ↓
-Fixed normalized coordinate transform
-                ↓
-Authoritative 1024 × 256 RGB8 canvas
-        ↙                       ↘
-QOI patch serialization     Immutable raster publication
-                                    ↓
-                                  Iris
-                                    ↓
-                     Existing raster-to-wavetable path
-```
-
-The visible canvas is intentionally not a literal representation of the raster’s 4:1 geometry. Because the transform is fixed, it can be treated as a stable part of the instrument rather than as a recurring image-resize problem.
-
-Chromatide owns the artwork. Iris consumes and may snapshot it. Nautiloid remains the special procedural source whose semantic parameters can reconstruct its image.
+* Users can paint fluidly on the compact Nautiloid-sized viewport with circular brush rendering.
+* The underlying backing raster is authoritative, lossless, and stored at $1024 \times 256$ RGB8 (`iris::kCanonicalSourceWidth` × `iris::kCanonicalSourceHeight`).
+* Edits transmit automatically to Iris as `iris::SOURCE_EXPANDER_IMAGE` via lock-free `nautiloid_iris_expander::SourceSlot`.
+* Patch save/load serializes the image losslessly via QOI + Base64 in patch JSON.
+* Compact and expanded editors operate on the same document without memory duplication.
+* Module duplication maintains 100% canvas independence between instances.
+* Audio engine performance remains completely unaffected by canvas painting.
