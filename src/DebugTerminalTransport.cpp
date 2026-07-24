@@ -639,4 +639,43 @@ void submitIrisMetrics(uint32_t instanceId,
   submitBaselineMetrics("Iris", instanceId, processUs, stepUs, drawUs);
 }
 
+void submitDoorstopMetrics(uint32_t instanceId,
+                           TimingRangeUs processUs,
+                           TimingRangeUs stepUs,
+                           TimingRangeUs drawUs,
+                           TimingRangeUs geometryIdleUs,
+                           TimingRangeUs geometryTrailUs,
+                           TimingRangeUs panelIdleUs,
+                           TimingRangeUs panelTrailUs,
+                           TimingRangeUs overflowIdleUs,
+                           TimingRangeUs overflowTrailUs,
+                           bool trailsActive) {
+  submitUiMetricSchema("Doorstop",
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"geometry_idle_us\",\"label\":\"Geo I (us)\"},{\"key\":\"geometry_trail_us\",\"label\":\"Geo T (us)\"},{\"key\":\"panel_idle_us\",\"label\":\"Panel I (us)\"},{\"key\":\"panel_trail_us\",\"label\":\"Panel T (us)\"},{\"key\":\"overflow_idle_us\",\"label\":\"Over I (us)\"},{\"key\":\"overflow_trail_us\",\"label\":\"Over T (us)\"},{\"key\":\"trails_active\",\"label\":\"Trails\"}]");
+  char dataBuf[640];
+  std::snprintf(dataBuf, sizeof(dataBuf), "{");
+  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "geometry_idle_us", geometryIdleUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "geometry_trail_us", geometryTrailUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "panel_idle_us", panelIdleUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "panel_trail_us", panelTrailUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "overflow_idle_us", overflowIdleUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "overflow_trail_us", overflowTrailUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",\"trails_active\":%d}",
+                trailsActive ? 1 : 0);
+  transport().submit("Doorstop", instanceId, "ui", "metric", dataBuf, system::getTime());
+}
+
 } // namespace debug_terminal

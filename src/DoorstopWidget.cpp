@@ -28,6 +28,15 @@ struct SpringPathGeometry {
 	float tipAngle = 0.f;
 };
 
+struct DoorstopRenderMetrics {
+	debug_terminal::UiTimingRangeAccumulator geometryIdleUs;
+	debug_terminal::UiTimingRangeAccumulator geometryTrailUs;
+	debug_terminal::UiTimingRangeAccumulator panelIdleUs;
+	debug_terminal::UiTimingRangeAccumulator panelTrailUs;
+	debug_terminal::UiTimingRangeAccumulator overflowIdleUs;
+	debug_terminal::UiTimingRangeAccumulator overflowTrailUs;
+};
+
 struct DoorstopWidget;
 struct DoorstopOverflowWidget;
 
@@ -38,6 +47,7 @@ struct DoorstopOverlayLink {
 	std::array<float, 3> displacementHistory {};
 	std::array<SpringPathGeometry, 4> springGeometry {};
 	bool trailGeometryValid = false;
+	DoorstopRenderMetrics debugRenderMetrics;
 };
 
 float clamp01(float x) {
@@ -231,10 +241,18 @@ public:
 		if (!link) {
 			return;
 		}
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const auto sceneStart = debug_terminal::debugTimerStart(measurePerf);
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 		drawSpringScene(args.vg, *link, box.size.x * 0.5f, mm2px(SPRING_BASE_Y_MM));
 		nvgRestore(args.vg);
+		if (measurePerf) {
+			auto& range = link->trailGeometryValid
+				? link->debugRenderMetrics.panelTrailUs
+				: link->debugRenderMetrics.panelIdleUs;
+			range.add(debug_terminal::elapsedUsSince(sceneStart));
+		}
 	}
 
 	void drawLayer(const DrawArgs& args, int layer) override {
@@ -260,6 +278,7 @@ struct DoorstopOverflowWidget final : TransparentWidget {
 };
 
 struct DoorstopWidget final : ModuleWidget {
+	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
 	std::shared_ptr<DoorstopOverlayLink> overlayLink;
 	DoorstopSpringWidget* springWidget = nullptr;
 
@@ -369,8 +388,13 @@ struct DoorstopWidget final : ModuleWidget {
 	}
 
 	void step() override {
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
 		ModuleWidget::step();
 		if (!overlayLink) {
+			if (measurePerf) {
+				debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
+			}
 			return;
 		}
 		DoorstopVisualSnapshot state;
@@ -385,16 +409,23 @@ struct DoorstopWidget final : ModuleWidget {
 			overlayLink->displacementHistory[i] = overlayLink->displacementHistory[i - 1];
 		}
 		overlayLink->displacementHistory[0] = state.displacement;
+		const bool trailsActive = clamp01(
+			(state.energy - 0.10f) * 1.8f + std::fabs(state.velocity) * 0.45f) > 0.01f;
+		const auto geometryStart = debug_terminal::debugTimerStart(measurePerf);
 		buildSpringGeometry(overlayLink->springGeometry[0], state.displacement);
-		const float trailAmount = clamp01(
-			(state.energy - 0.10f) * 1.8f + std::fabs(state.velocity) * 0.45f);
-		overlayLink->trailGeometryValid = trailAmount > 0.01f;
+		overlayLink->trailGeometryValid = trailsActive;
 		if (overlayLink->trailGeometryValid) {
 			for (int i = 0; i < int(overlayLink->displacementHistory.size()); ++i) {
 				buildSpringGeometry(
 					overlayLink->springGeometry[i + 1],
 					overlayLink->displacementHistory[i]);
 			}
+		}
+		if (measurePerf) {
+			auto& range = trailsActive
+				? overlayLink->debugRenderMetrics.geometryTrailUs
+				: overlayLink->debugRenderMetrics.geometryIdleUs;
+			range.add(debug_terminal::elapsedUsSince(geometryStart));
 		}
 
 		auto* m = static_cast<Doorstop*>(module);
@@ -404,6 +435,40 @@ struct DoorstopWidget final : ModuleWidget {
 		}
 		else if (!overlayLink->overlay) {
 			createOverflowWidget();
+		}
+		if (measurePerf) {
+			debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
+		}
+	}
+
+	void draw(const DrawArgs& args) override {
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const auto drawStart = debug_terminal::debugTimerStart(measurePerf);
+		ModuleWidget::draw(args);
+		auto* doorstop = static_cast<Doorstop*>(module);
+		if (!doorstop) {
+			return;
+		}
+
+		if (measurePerf) {
+			debug_terminal::drawDebugInstanceId(args.vg, box.size, doorstop->debugMetrics.instanceId);
+			debugWidgetMetrics.recordDraw(debug_terminal::elapsedUsSince(drawStart));
+
+			const double nowSec = system::getTime();
+			if (debug_terminal::baselineSubmitDue("Doorstop", doorstop->debugMetrics.instanceId, nowSec)) {
+				debug_terminal::submitDoorstopMetrics(
+					doorstop->debugMetrics.instanceId,
+					doorstop->debugMetrics.consumeProcessRange(),
+					debugWidgetMetrics.consumeStepRange(),
+					debugWidgetMetrics.consumeDrawRange(),
+					overlayLink->debugRenderMetrics.geometryIdleUs.consume(),
+					overlayLink->debugRenderMetrics.geometryTrailUs.consume(),
+					overlayLink->debugRenderMetrics.panelIdleUs.consume(),
+					overlayLink->debugRenderMetrics.panelTrailUs.consume(),
+					overlayLink->debugRenderMetrics.overflowIdleUs.consume(),
+					overlayLink->debugRenderMetrics.overflowTrailUs.consume(),
+					overlayLink->trailGeometryValid);
+			}
 		}
 	}
 
@@ -504,6 +569,8 @@ void DoorstopOverflowWidget::draw(const DrawArgs& args) {
 	if (!link || !link->owner) {
 		return;
 	}
+	const bool measurePerf = isDragonKingDebugEnabled();
+	const auto sceneStart = debug_terminal::debugTimerStart(measurePerf);
 	const float moduleWidth = link->owner->box.size.x;
 	const float baseX = OVERFLOW_PAD + 0.5f * moduleWidth;
 	const float baseY = mm2px(SPRING_BASE_Y_MM);
@@ -517,6 +584,12 @@ void DoorstopOverflowWidget::draw(const DrawArgs& args) {
 	nvgScissor(args.vg, OVERFLOW_PAD + moduleWidth, 0.f, OVERFLOW_PAD, box.size.y);
 	drawSpringScene(args.vg, *link, baseX, baseY);
 	nvgRestore(args.vg);
+	if (measurePerf) {
+		auto& range = link->trailGeometryValid
+			? link->debugRenderMetrics.overflowTrailUs
+			: link->debugRenderMetrics.overflowIdleUs;
+		range.add(debug_terminal::elapsedUsSince(sceneStart));
+	}
 }
 
 void DoorstopOverflowWidget::drawLayer(const DrawArgs& args, int layer) {

@@ -1,6 +1,13 @@
 #include "Doorstop.hpp"
 
+namespace {
+
+std::atomic<std::uint32_t> gDoorstopDebugInstanceCounter {1u};
+
+} // namespace
+
 Doorstop::Doorstop() {
+	debugMetrics.assignInstanceId(gDoorstopDebugInstanceCounter);
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 	configButton(MANUAL_PARAM, "Manual strike");
 	configInput(TRIG_INPUT, "Trigger");
@@ -34,6 +41,8 @@ void Doorstop::publishZeroVisualState() {
 }
 
 void Doorstop::process(const ProcessArgs& args) {
+	const bool measurePerf = isDragonKingDebugEnabled();
+	const auto processStart = debug_terminal::debugTimerStart(measurePerf);
 	bool persistentStateChanged = false;
 	if (breakInStatePending.exchange(false, std::memory_order_acquire)) {
 		engine.resetMotion();
@@ -93,6 +102,9 @@ void Doorstop::process(const ProcessArgs& args) {
 	}
 	if (persistentStateChanged || appliedStrike) {
 		serializedBreakIn.store(engine.getBreakIn(), std::memory_order_relaxed);
+	}
+	if (measurePerf) {
+		debugMetrics.recordProcess(debug_terminal::elapsedNsSince(processStart));
 	}
 }
 

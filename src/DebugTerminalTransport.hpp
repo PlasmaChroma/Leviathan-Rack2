@@ -149,6 +149,18 @@ void submitIrisMetrics(uint32_t instanceId,
                        TimingRangeUs stepUs,
                        TimingRangeUs drawUs);
 
+void submitDoorstopMetrics(uint32_t instanceId,
+                           TimingRangeUs processUs,
+                           TimingRangeUs stepUs,
+                           TimingRangeUs drawUs,
+                           TimingRangeUs geometryIdleUs,
+                           TimingRangeUs geometryTrailUs,
+                           TimingRangeUs panelIdleUs,
+                           TimingRangeUs panelTrailUs,
+                           TimingRangeUs overflowIdleUs,
+                           TimingRangeUs overflowTrailUs,
+                           bool trailsActive);
+
 void submitCrownstepAiMetrics(uint32_t instanceId, int aiThinkMs);
 
 void submitBaselineMetrics(const char* moduleName,

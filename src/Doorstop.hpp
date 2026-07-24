@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DebugTerminalMetrics.hpp"
 #include "DoorstopEngine.hpp"
 #include "plugin.hpp"
 
@@ -46,6 +47,7 @@ struct Doorstop final : Module {
 	std::atomic<float> visualEnergy {0.f};
 	std::atomic<float> visualStrike {0.f};
 	std::uint32_t telemetryDivider = 0u;
+	debug_terminal::BaselineModuleMetrics debugMetrics;
 
 	Doorstop();
 
