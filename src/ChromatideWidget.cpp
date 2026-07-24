@@ -9,9 +9,63 @@ struct ChromatideToolButton final : widget::OpaqueWidget {
     Chromatide* module = nullptr;
     ChromatideTool tool;
     std::string label;
+    bool iconOnly = false;
 
-    ChromatideToolButton(Chromatide* module, ChromatideTool tool, const std::string& label)
-        : module(module), tool(tool), label(label) {}
+    ChromatideToolButton(
+        Chromatide* module,
+        ChromatideTool tool,
+        const std::string& label,
+        bool iconOnly = false)
+        : module(module), tool(tool), label(label), iconOnly(iconOnly) {}
+
+    void drawBrushIcon(NVGcontext* vg, NVGcolor color) {
+        const float scale = std::min(box.size.x, box.size.y) / 22.f;
+        nvgSave(vg);
+        nvgTranslate(vg, 0.5f * (box.size.x - 22.f * scale), 0.5f * (box.size.y - 22.f * scale));
+        nvgScale(vg, scale, scale);
+
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, 7.2f, 15.2f);
+        nvgLineTo(vg, 16.8f, 5.6f);
+        nvgStrokeColor(vg, color);
+        nvgStrokeWidth(vg, 3.2f);
+        nvgLineCap(vg, NVG_ROUND);
+        nvgStroke(vg);
+
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, 7.8f, 13.8f);
+        nvgBezierTo(vg, 7.2f, 17.6f, 5.2f, 18.7f, 2.9f, 18.2f);
+        nvgBezierTo(vg, 4.0f, 16.8f, 3.6f, 14.5f, 7.8f, 13.8f);
+        nvgFillColor(vg, color);
+        nvgFill(vg);
+        nvgRestore(vg);
+    }
+
+    void drawEraserIcon(NVGcontext* vg, NVGcolor color) {
+        const float scale = std::min(box.size.x, box.size.y) / 22.f;
+        nvgSave(vg);
+        nvgTranslate(vg, 0.5f * (box.size.x - 22.f * scale), 0.5f * (box.size.y - 22.f * scale));
+        nvgScale(vg, scale, scale);
+
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, 5.0f, 14.0f);
+        nvgLineTo(vg, 12.7f, 6.3f);
+        nvgLineTo(vg, 18.1f, 11.7f);
+        nvgLineTo(vg, 10.4f, 19.4f);
+        nvgLineTo(vg, 7.2f, 19.4f);
+        nvgLineTo(vg, 3.0f, 15.2f);
+        nvgClosePath(vg);
+        nvgFillColor(vg, color);
+        nvgFill(vg);
+
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, 10.6f, 8.4f);
+        nvgLineTo(vg, 16.0f, 13.8f);
+        nvgStrokeColor(vg, nvgRGBA(7, 11, 18, 150));
+        nvgStrokeWidth(vg, 1.2f);
+        nvgStroke(vg);
+        nvgRestore(vg);
+    }
 
     void draw(const DrawArgs& args) override {
         bool active = (module && module->brushState.tool == tool);
@@ -29,11 +83,20 @@ struct ChromatideToolButton final : widget::OpaqueWidget {
         nvgStrokeWidth(args.vg, active ? 1.5f : 1.0f);
         nvgStroke(args.vg);
 
-        if (APP && APP->window && APP->window->uiFont) {
-            nvgFontSize(args.vg, 10.0f);
+        const NVGcolor contentColor = active
+            ? nvgRGBA(255, 255, 255, 255)
+            : nvgRGBA(180, 190, 205, 220);
+        if (iconOnly && tool == ChromatideTool::Brush) {
+            drawBrushIcon(args.vg, contentColor);
+        }
+        else if (iconOnly && tool == ChromatideTool::Eraser) {
+            drawEraserIcon(args.vg, contentColor);
+        }
+        else if (APP && APP->window && APP->window->uiFont) {
+            nvgFontSize(args.vg, 8.5f);
             nvgFontFaceId(args.vg, APP->window->uiFont->handle);
             nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-            nvgFillColor(args.vg, active ? nvgRGBA(255, 255, 255, 255) : nvgRGBA(180, 190, 205, 220));
+            nvgFillColor(args.vg, contentColor);
             nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.5f, label.c_str(), nullptr);
         }
         OpaqueWidget::draw(args);
@@ -68,7 +131,7 @@ struct ChromatideActionButton final : widget::OpaqueWidget {
         nvgStroke(args.vg);
 
         if (APP && APP->window && APP->window->uiFont) {
-            nvgFontSize(args.vg, 10.0f);
+            nvgFontSize(args.vg, 8.5f);
             nvgFontFaceId(args.vg, APP->window->uiFont->handle);
             nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
             nvgFillColor(args.vg, nvgRGBA(180, 190, 205, 220));
@@ -84,6 +147,23 @@ struct ChromatideActionButton final : widget::OpaqueWidget {
             return;
         }
         OpaqueWidget::onButton(e);
+    }
+};
+
+struct ChromatideControlLabel final : widget::TransparentWidget {
+    std::string text;
+
+    explicit ChromatideControlLabel(const std::string& text) : text(text) {}
+
+    void draw(const DrawArgs& args) override {
+        if (APP && APP->window && APP->window->uiFont) {
+            nvgFontSize(args.vg, 8.5f);
+            nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+            nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+            nvgFillColor(args.vg, nvgRGBA(180, 190, 205, 210));
+            nvgText(args.vg, box.size.x * 0.5f, box.size.y * 0.5f, text.c_str(), nullptr);
+        }
+        TransparentWidget::draw(args);
     }
 };
 
@@ -313,58 +393,68 @@ ChromatideWidget::ChromatideWidget(Chromatide* module) {
     editorOverlayLink = std::make_shared<ChromatideEditorOverlayLink>();
     editorOverlayLink->owner = this;
 
-    float marginX = 14.0f;
+    float marginX = 10.0f;
     float contentW = box.size.x - 2.0f * marginX;
 
-    // Row 1: Tool Selector & Action Buttons (y = 282 px)
-    float toolRowY = editorDock->box.pos.y + editorDock->box.size.y + 12.0f;
+    // Compact toolbar directly beneath the canvas. Brush and Eraser use icons;
+    // the remaining selectors keep short text labels in a single aligned row.
+    float toolRowY = editorDock->box.pos.y + editorDock->box.size.y + 6.0f;
     float btnH = 22.0f;
+    float gap = 4.0f;
+    float x = marginX;
 
-    // Tool Buttons: Brush, Eraser, Dropper
-    float toolBtnW = 44.0f;
-    auto* brushBtn = new ChromatideToolButton(module, ChromatideTool::Brush, "BRUSH");
-    brushBtn->box = Rect(Vec(marginX, toolRowY), Vec(toolBtnW, btnH));
+    auto* brushBtn = new ChromatideToolButton(module, ChromatideTool::Brush, "", true);
+    brushBtn->box = Rect(Vec(x, toolRowY), Vec(22.0f, btnH));
     addChild(brushBtn);
+    x += 22.0f + gap;
 
-    auto* eraserBtn = new ChromatideToolButton(module, ChromatideTool::Eraser, "ERASER");
-    eraserBtn->box = Rect(Vec(marginX + toolBtnW + 4.0f, toolRowY), Vec(toolBtnW, btnH));
+    auto* eraserBtn = new ChromatideToolButton(module, ChromatideTool::Eraser, "", true);
+    eraserBtn->box = Rect(Vec(x, toolRowY), Vec(22.0f, btnH));
     addChild(eraserBtn);
+    x += 22.0f + gap;
 
-    auto* dropBtn = new ChromatideToolButton(module, ChromatideTool::Eyedropper, "DROPPER");
-    dropBtn->box = Rect(Vec(marginX + (toolBtnW + 4.0f) * 2, toolRowY), Vec(toolBtnW + 4.0f, btnH));
+    auto* dropBtn = new ChromatideToolButton(module, ChromatideTool::Eyedropper, "PICK");
+    dropBtn->box = Rect(Vec(x, toolRowY), Vec(48.0f, btnH));
     addChild(dropBtn);
-
-    // Action Buttons: Undo, Redo, Clear, Expand
-    float actBtnW = 40.0f;
-    float actStartX = box.size.x - marginX - 4.0f * (actBtnW + 4.0f) + 4.0f;
+    x += 48.0f + gap;
 
     auto* undoBtn = new ChromatideActionButton("UNDO", [module]() { if (module) module->undo(); });
-    undoBtn->box = Rect(Vec(actStartX, toolRowY), Vec(actBtnW, btnH));
+    undoBtn->box = Rect(Vec(x, toolRowY), Vec(36.0f, btnH));
     addChild(undoBtn);
+    x += 36.0f + gap;
 
     auto* redoBtn = new ChromatideActionButton("REDO", [module]() { if (module) module->redo(); });
-    redoBtn->box = Rect(Vec(actStartX + actBtnW + 4.0f, toolRowY), Vec(actBtnW, btnH));
+    redoBtn->box = Rect(Vec(x, toolRowY), Vec(36.0f, btnH));
     addChild(redoBtn);
+    x += 36.0f + gap;
 
     auto* clearBtn = new ChromatideActionButton("CLEAR", [module]() { if (module) module->clearCanvas(); });
-    clearBtn->box = Rect(Vec(actStartX + (actBtnW + 4.0f) * 2, toolRowY), Vec(actBtnW, btnH));
+    clearBtn->box = Rect(Vec(x, toolRowY), Vec(40.0f, btnH));
     addChild(clearBtn);
+    x += 40.0f + gap;
 
     auto* expandBtn = new ChromatideActionButton("EXPAND", [this]() { openExpandedEditor(); });
-    expandBtn->box = Rect(Vec(actStartX + (actBtnW + 4.0f) * 3, toolRowY), Vec(actBtnW + 4.0f, btnH));
+    expandBtn->box = Rect(Vec(x, toolRowY), Vec(48.0f, btnH));
     addChild(expandBtn);
 
-    // Row 2: 8 Color Swatch Palette (y = 314 px)
+    // Row 2: palette.
     float palRowY = toolRowY + btnH + 10.0f;
     float palH = 20.0f;
     auto* paletteWidget = new ChromatidePaletteWidget(module);
     paletteWidget->box = Rect(Vec(marginX, palRowY), Vec(contentW, palH));
     addChild(paletteWidget);
 
-    // Row 3: Size & Opacity Knobs (y = 350 px)
+    // Row 3: labeled brush controls.
     float knobRowY = palRowY + palH + 28.0f;
     float knobLeftX = box.size.x * 0.30f;
     float knobRightX = box.size.x * 0.70f;
+
+    auto* sizeLabel = new ChromatideControlLabel("SIZE");
+    sizeLabel->box = Rect(Vec(knobLeftX - 34.0f, knobRowY - 25.0f), Vec(68.0f, 12.0f));
+    addChild(sizeLabel);
+    auto* opacityLabel = new ChromatideControlLabel("OPACITY");
+    opacityLabel->box = Rect(Vec(knobRightX - 34.0f, knobRowY - 25.0f), Vec(68.0f, 12.0f));
+    addChild(opacityLabel);
 
     addParam(createParamCentered<BefacoTinyKnobWhite>(Vec(knobLeftX, knobRowY), module, Chromatide::BRUSH_SIZE_PARAM));
     addParam(createParamCentered<BefacoTinyKnobWhite>(Vec(knobRightX, knobRowY), module, Chromatide::BRUSH_OPACITY_PARAM));
