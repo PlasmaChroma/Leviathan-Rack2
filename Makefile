@@ -78,7 +78,8 @@ TEST_BINS_NON_RACK := \
 	build/tests/nautiloid_location_code_spec \
 	build/tests/wave_preview_simplification_spec \
 	build/tests/deepcache_planner_spec \
-	build/tests/deepcache_archive_spec
+	build/tests/deepcache_archive_spec \
+	build/tests/chromatide_spec
 
 
 TEST_BINS_RACK := \
@@ -360,6 +361,9 @@ build/tests/deepcache_planner_spec: tests/deepcache_planner_spec.cpp src/Deepcac
 
 build/tests/deepcache_archive_spec: tests/deepcache_archive_spec.cpp src/DeepcacheArchive.cpp src/DeepcacheArchive.hpp src/DeepcacheQoi.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/deepcache_archive_spec.cpp src/DeepcacheArchive.cpp src/DeepcacheQoi.cpp -o $@
+
+build/tests/chromatide_spec: tests/chromatide_spec.cpp src/ChromatideCanvas.cpp src/Chromatide.cpp src/IrisSourceField.cpp src/DeepcacheQoi.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chromatide_spec.cpp src/ChromatideCanvas.cpp src/Chromatide.cpp src/IrisSourceField.cpp src/DeepcacheQoi.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=$(RACK_DIR) -o $@
 
 build/tests/bifurx_runtime_spec: tests/bifurx_runtime_spec.cpp src/Bifurx.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp | build/tests
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra -Wno-subobject-linkage $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@

@@ -178,6 +178,17 @@
         "Effect"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Chromatide",
+      "name": "Chromatide",
+      "description": "Bitmap painting source for Iris.",
+      "tags": [
+        "Visual",
+        "Expander"
+      ],
+      "hidden": false
     }
   ]
 }
+
