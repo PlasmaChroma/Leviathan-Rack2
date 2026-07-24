@@ -5,7 +5,11 @@
 
 #include <array>
 #include <cmath>
+#include <ctime>
+#include <fstream>
+#include <iomanip>
 #include <memory>
+#include <sstream>
 
 namespace {
 
@@ -64,6 +68,12 @@ struct DoorstopOverlayLink {
 	std::array<SpringPathGeometry, 4> springGeometry {};
 	bool trailGeometryValid = false;
 	DoorstopRenderMetrics debugRenderMetrics;
+	float lastGeometryUs = 0.f;
+	float lastPanelDrawUs = 0.f;
+	float lastOverflowDrawUs = 0.f;
+	std::uint64_t geometrySequence = 0u;
+	std::uint64_t panelDrawSequence = 0u;
+	std::uint64_t overflowDrawSequence = 0u;
 };
 
 float clamp01(float x) {
@@ -336,19 +346,16 @@ public:
 		drawSpringScene(args.vg, *link, box.size.x * 0.5f, mm2px(SPRING_BASE_Y_MM));
 		nvgRestore(args.vg);
 		if (measurePerf) {
+			const float elapsedUs = debug_terminal::elapsedUsSince(sceneStart);
 			auto& range = link->trailGeometryValid
 				? link->debugRenderMetrics.panelTrailUs
 				: link->debugRenderMetrics.panelIdleUs;
-			range.add(debug_terminal::elapsedUsSince(sceneStart));
+			range.add(elapsedUs);
+			link->lastPanelDrawUs = elapsedUs;
+			++link->panelDrawSequence;
 		}
 	}
 
-	void drawLayer(const DrawArgs& args, int layer) override {
-		if (layer == 1) {
-			draw(args);
-		}
-		TransparentWidget::drawLayer(args, layer);
-	}
 };
 
 struct DoorstopOverflowWidget final : TransparentWidget {
@@ -362,13 +369,137 @@ struct DoorstopOverflowWidget final : TransparentWidget {
 
 	void step() override;
 	void draw(const DrawArgs& args) override;
-	void drawLayer(const DrawArgs& args, int layer) override;
 };
 
 struct DoorstopWidget final : ModuleWidget {
+	struct RenderingLog {
+		std::ofstream file;
+		std::string path;
+		bool active = false;
+		std::uint64_t row = 0u;
+		double startedAtSec = 0.0;
+		double previousRowAtSec = 0.0;
+	};
+
 	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
 	std::shared_ptr<DoorstopOverlayLink> overlayLink;
 	DoorstopSpringWidget* springWidget = nullptr;
+	RenderingLog renderingLog;
+	float lastStepUs = 0.f;
+	std::uint64_t stepSequence = 0u;
+
+	static std::string renderingLogRootPath() {
+		return system::join(asset::user(), "Leviathan/Doorstop");
+	}
+
+	static std::string renderingLogDateTimeStamp() {
+		std::time_t now = std::time(nullptr);
+		std::tm localTime {};
+#if defined(_WIN32)
+		localtime_s(&localTime, &now);
+#else
+		localtime_r(&now, &localTime);
+#endif
+		std::ostringstream stamp;
+		stamp << std::put_time(&localTime, "%Y%m%d_%H%M%S");
+		return stamp.str();
+	}
+
+	void startRenderingLog(Doorstop* m) {
+		if (!m || renderingLog.active || !isDragonKingDebugEnabled()) {
+			return;
+		}
+		const std::string root = renderingLogRootPath();
+		if (!system::createDirectories(root) && !system::isDirectory(root)) {
+			WARN("Doorstop failed to create rendering log directory: %s", root.c_str());
+			return;
+		}
+		static std::uint32_t openSequence = 0u;
+		renderingLog.path = system::join(
+			root,
+			"rendering_" + std::to_string(m->debugMetrics.instanceId) + "_"
+				+ renderingLogDateTimeStamp() + "_" + std::to_string(openSequence++) + ".csv");
+		renderingLog.file.open(renderingLog.path.c_str(), std::ios::out | std::ios::trunc);
+		if (!renderingLog.file.is_open()) {
+			WARN("Doorstop failed to open rendering log CSV: %s", renderingLog.path.c_str());
+			renderingLog.path.clear();
+			return;
+		}
+		renderingLog.file << std::fixed << std::setprecision(6);
+		renderingLog.file
+			<< "row,elapsed_sec,frame_interval_ms,module_id,instance_id,"
+			<< "step_sequence,geometry_sequence,panel_draw_sequence,overflow_draw_sequence,"
+			<< "displacement,velocity,energy,strike,tip_travel_px,trail_amount,trails_active,"
+			<< "history_1,history_2,history_3,"
+			<< "sound_model,last_strike_model,break_in,"
+			<< "overflow_allowed,overflow_present,panel_width_px,panel_height_px,"
+			<< "step_us,geometry_us,panel_draw_us,overflow_draw_us,module_draw_us\n";
+		renderingLog.active = true;
+		renderingLog.row = 0u;
+		renderingLog.startedAtSec = system::getTime();
+		renderingLog.previousRowAtSec = renderingLog.startedAtSec;
+		INFO("Doorstop started rendering log: %s", renderingLog.path.c_str());
+	}
+
+	void stopRenderingLog() {
+		if (renderingLog.file.is_open()) {
+			renderingLog.file.flush();
+			renderingLog.file.close();
+		}
+		if (renderingLog.active) {
+			INFO("Doorstop stopped rendering log: %s", renderingLog.path.c_str());
+		}
+		renderingLog.active = false;
+		renderingLog.row = 0u;
+		renderingLog.startedAtSec = 0.0;
+		renderingLog.previousRowAtSec = 0.0;
+	}
+
+	void writeRenderingLogRow(Doorstop* m, float moduleDrawUs) {
+		if (!m || !overlayLink || !renderingLog.active || !renderingLog.file.is_open()) {
+			return;
+		}
+		const double nowSec = system::getTime();
+		const DoorstopVisualSnapshot& state = overlayLink->snapshot;
+		const float trailAmount = clamp01(
+			(state.energy - 0.10f) * 1.8f + std::fabs(state.velocity) * 0.45f);
+		renderingLog.file
+			<< renderingLog.row++ << ","
+			<< (nowSec - renderingLog.startedAtSec) << ","
+			<< ((nowSec - renderingLog.previousRowAtSec) * 1000.0) << ","
+			<< m->id << ","
+			<< m->debugMetrics.instanceId << ","
+			<< stepSequence << ","
+			<< overlayLink->geometrySequence << ","
+			<< overlayLink->panelDrawSequence << ","
+			<< overlayLink->overflowDrawSequence << ","
+			<< state.displacement << ","
+			<< state.velocity << ","
+			<< state.energy << ","
+			<< state.strike << ","
+			<< overlayLink->springGeometry[0].tipTravel << ","
+			<< trailAmount << ","
+			<< (overlayLink->trailGeometryValid ? 1 : 0) << ","
+			<< overlayLink->displacementHistory[0] << ","
+			<< overlayLink->displacementHistory[1] << ","
+			<< overlayLink->displacementHistory[2] << ","
+			<< m->soundModel.load(std::memory_order_relaxed) << ","
+			<< m->visualLastStrikeModel.load(std::memory_order_relaxed) << ","
+			<< m->serializedBreakIn.load(std::memory_order_relaxed) << ","
+			<< (m->allowVisualOverflow.load(std::memory_order_relaxed) ? 1 : 0) << ","
+			<< (overlayLink->overlay ? 1 : 0) << ","
+			<< box.size.x << ","
+			<< box.size.y << ","
+			<< lastStepUs << ","
+			<< overlayLink->lastGeometryUs << ","
+			<< overlayLink->lastPanelDrawUs << ","
+			<< overlayLink->lastOverflowDrawUs << ","
+			<< moduleDrawUs << "\n";
+		renderingLog.previousRowAtSec = nowSec;
+		if ((renderingLog.row % 60u) == 0u) {
+			renderingLog.file.flush();
+		}
+	}
 
 	explicit DoorstopWidget(Doorstop* module) {
 		setModule(module);
@@ -418,6 +549,7 @@ struct DoorstopWidget final : ModuleWidget {
 	}
 
 	~DoorstopWidget() override {
+		stopRenderingLog();
 		if (!overlayLink) {
 			return;
 		}
@@ -479,9 +611,14 @@ struct DoorstopWidget final : ModuleWidget {
 		const bool measurePerf = isDragonKingDebugEnabled();
 		const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
 		ModuleWidget::step();
+		if (renderingLog.active && !measurePerf) {
+			stopRenderingLog();
+		}
 		if (!overlayLink) {
 			if (measurePerf) {
-				debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
+				lastStepUs = debug_terminal::elapsedUsSince(stepStart);
+				debugWidgetMetrics.recordStep(lastStepUs);
+				++stepSequence;
 			}
 			return;
 		}
@@ -510,10 +647,13 @@ struct DoorstopWidget final : ModuleWidget {
 			}
 		}
 		if (measurePerf) {
+			const float geometryUs = debug_terminal::elapsedUsSince(geometryStart);
 			auto& range = trailsActive
 				? overlayLink->debugRenderMetrics.geometryTrailUs
 				: overlayLink->debugRenderMetrics.geometryIdleUs;
-			range.add(debug_terminal::elapsedUsSince(geometryStart));
+			range.add(geometryUs);
+			overlayLink->lastGeometryUs = geometryUs;
+			++overlayLink->geometrySequence;
 		}
 
 		auto* m = static_cast<Doorstop*>(module);
@@ -525,7 +665,9 @@ struct DoorstopWidget final : ModuleWidget {
 			createOverflowWidget();
 		}
 		if (measurePerf) {
-			debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
+			lastStepUs = debug_terminal::elapsedUsSince(stepStart);
+			debugWidgetMetrics.recordStep(lastStepUs);
+			++stepSequence;
 		}
 	}
 
@@ -540,7 +682,9 @@ struct DoorstopWidget final : ModuleWidget {
 
 		if (measurePerf) {
 			debug_terminal::drawDebugInstanceId(args.vg, box.size, doorstop->debugMetrics.instanceId);
-			debugWidgetMetrics.recordDraw(debug_terminal::elapsedUsSince(drawStart));
+			const float moduleDrawUs = debug_terminal::elapsedUsSince(drawStart);
+			debugWidgetMetrics.recordDraw(moduleDrawUs);
+			writeRenderingLogRow(doorstop, moduleDrawUs);
 
 			const double nowSec = system::getTime();
 			if (debug_terminal::baselineSubmitDue("Doorstop", doorstop->debugMetrics.instanceId, nowSec)) {
@@ -640,6 +784,25 @@ struct DoorstopWidget final : ModuleWidget {
 				if (enabled) createOverflowWidget();
 				else destroyOverflowWidget();
 			}));
+		if (isDragonKingDebugEnabled()) {
+			menu->addChild(new MenuSeparator());
+			menu->addChild(createCheckMenuItem(
+				"Rendering log (CSV)", "",
+				[this]() { return renderingLog.active; },
+				[this, m]() {
+					if (renderingLog.active) {
+						stopRenderingLog();
+					}
+					else {
+						startRenderingLog(m);
+					}
+				}));
+			if (!renderingLog.path.empty()) {
+				menu->addChild(createMenuLabel(
+					std::string(renderingLog.active ? "Writing: " : "Last log: ")
+						+ renderingLog.path));
+			}
+		}
 	}
 };
 
@@ -675,18 +838,14 @@ void DoorstopOverflowWidget::draw(const DrawArgs& args) {
 		{SpringPathClipSide::Right, OVERFLOW_PAD + moduleWidth});
 	nvgRestore(args.vg);
 	if (measurePerf) {
+		const float elapsedUs = debug_terminal::elapsedUsSince(sceneStart);
 		auto& range = link->trailGeometryValid
 			? link->debugRenderMetrics.overflowTrailUs
 			: link->debugRenderMetrics.overflowIdleUs;
-		range.add(debug_terminal::elapsedUsSince(sceneStart));
+		range.add(elapsedUs);
+		link->lastOverflowDrawUs = elapsedUs;
+		++link->overflowDrawSequence;
 	}
-}
-
-void DoorstopOverflowWidget::drawLayer(const DrawArgs& args, int layer) {
-	if (layer == 1) {
-		draw(args);
-	}
-	TransparentWidget::drawLayer(args, layer);
 }
 
 } // namespace

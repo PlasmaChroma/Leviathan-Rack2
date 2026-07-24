@@ -103,6 +103,10 @@ void Doorstop::process(const ProcessArgs& args) {
 	if (persistentStateChanged || appliedStrike) {
 		serializedBreakIn.store(engine.getBreakIn(), std::memory_order_relaxed);
 	}
+	if (appliedStrike) {
+		visualLastStrikeModel.store(
+			int(engine.getLastStrikeModel()), std::memory_order_relaxed);
+	}
 	if (measurePerf) {
 		debugMetrics.recordProcess(debug_terminal::elapsedNsSince(processStart));
 	}
@@ -123,6 +127,8 @@ void Doorstop::onReset(const ResetEvent& e) {
 	breakInStatePending.store(false, std::memory_order_relaxed);
 	pendingManualVelocity.store(0.5f, std::memory_order_relaxed);
 	manualVelocityPending.store(false, std::memory_order_relaxed);
+	visualLastStrikeModel.store(
+		int(doorstop::SoundModel::Classic), std::memory_order_relaxed);
 	telemetryDivider = 0u;
 	lights[STRIKE_LIGHT].setBrightness(0.f);
 	publishZeroVisualState();
@@ -201,6 +207,8 @@ void Doorstop::dataFromJson(json_t* rootJ) {
 	pendingBreakIn.store(loadedBreakIn, std::memory_order_relaxed);
 	pendingManualVelocity.store(0.5f, std::memory_order_relaxed);
 	manualVelocityPending.store(false, std::memory_order_relaxed);
+	visualLastStrikeModel.store(
+		int(doorstop::SoundModel::Classic), std::memory_order_relaxed);
 
 	breakInStatePending.store(true, std::memory_order_release);
 }
