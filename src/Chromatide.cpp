@@ -19,7 +19,20 @@ void Chromatide::process(const ProcessArgs& args) {
     brushState.opacity = params[BRUSH_OPACITY_PARAM].getValue();
     int toolIdx = static_cast<int>(params[TOOL_PARAM].getValue());
     brushState.tool = static_cast<ChromatideTool>(clampVal(toolIdx, 0, 2));
+
+    uint64_t currentRev = canvas.revision;
+    uint64_t lastPub = lastPublishedCanvasRevision.load(std::memory_order_relaxed);
+    if (currentRev != lastPub || forceIrisSync) {
+        forceIrisSync = false;
+        publishToIris();
+    }
 }
+
+void Chromatide::onExpanderChange(const ExpanderChangeEvent& e) {
+    Module::onExpanderChange(e);
+    forceIrisSync = true;
+}
+
 
 void Chromatide::beginStroke(float u, float v) {
     if (brushState.tool == ChromatideTool::Eyedropper) {
@@ -174,8 +187,9 @@ void Chromatide::publishToIris() {
             irisModule->requestExpanderSource(slot, nextGen);
         }
     }
-
+    lastPublishedCanvasRevision.store(canvas.revision, std::memory_order_release);
 }
+
 
 json_t* Chromatide::dataToJson() {
     json_t* root = json_object();

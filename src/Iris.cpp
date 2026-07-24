@@ -20,9 +20,12 @@ constexpr float kTableCrossfadeSeconds = 0.03f;
 bool hasLeftNautiloid(const Iris* module) {
   if (!module) return false;
   const engine::Module* left = module->leftExpander.module;
-  return left && left->model &&
-    ((left->model == modelNautiloid) || left->model->slug == "Nautiloid");
+  if (!left || !left->model) return false;
+  const std::string& slug = left->model->slug;
+  return (left->model == modelNautiloid || slug == "Nautiloid" ||
+          left->model == modelChromatide || slug == "Chromatide");
 }
+
 
 float acCoupledLinFm(float x, Iris::Voice* voice, float sampleTime) {
   const float hpCoeff = clamp(1.f - 2.f * float(M_PI) * kLinHpCutoffHz * sampleTime, 0.f, 1.f);

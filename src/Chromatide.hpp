@@ -59,10 +59,14 @@ struct Chromatide : Module {
     std::atomic<int> irisExpanderWriteSlot {0};
     std::atomic<int> irisExpanderPublishedSlot {-1};
     std::atomic<uint64_t> irisPreviewGeneration {1u};
+    std::atomic<uint64_t> lastPublishedCanvasRevision {0u};
+    bool forceIrisSync = true;
 
     Chromatide();
 
     void process(const ProcessArgs& args) override;
+    void onExpanderChange(const ExpanderChangeEvent& e) override;
+
 
     void beginStroke(float u, float v);
     void updateStroke(float u, float v);
