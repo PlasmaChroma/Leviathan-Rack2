@@ -3,6 +3,8 @@
 #include "visual/ApertureLight.hpp"
 #include "visual/VisualAssets.hpp"
 
+#include <widget/FramebufferWidget.hpp>
+
 #include <array>
 #include <cmath>
 #include <ctime>
@@ -18,6 +20,7 @@ constexpr int SPRING_POINTS = 257;
 constexpr float SPRING_BASE_Y_MM = 71.f;
 constexpr float SPRING_LENGTH_MM = 49.f;
 constexpr float SPRING_TURNS = 43.f;
+constexpr std::uint32_t PANEL_CACHE_STABLE_FRAMES = 3u;
 
 struct DoorstopVisualSnapshot {
 	float displacement = 0.f;
@@ -74,6 +77,8 @@ struct DoorstopOverlayLink {
 	std::uint64_t geometrySequence = 0u;
 	std::uint64_t panelDrawSequence = 0u;
 	std::uint64_t overflowDrawSequence = 0u;
+	bool overflowLeftVisible = false;
+	bool overflowRightVisible = false;
 };
 
 float clamp01(float x) {
@@ -131,6 +136,78 @@ void buildSpringGeometry(SpringPathGeometry& geometry, float displacement) {
 	const float tangentT = 0.90f;
 	const float dxdt = travel * 6.f * tangentT * (1.f - tangentT);
 	geometry.tipAngle = std::atan2(-springLength, dxdt) + 0.5f * float(M_PI);
+}
+
+struct HorizontalBounds {
+	float minimum = INFINITY;
+	float maximum = -INFINITY;
+
+	void include(float x, float radius = 0.f) {
+		minimum = std::min(minimum, x - radius);
+		maximum = std::max(maximum, x + radius);
+	}
+};
+
+void includePathBounds(
+	HorizontalBounds& bounds,
+	const SpringPathGeometry& geometry,
+	float xOffset,
+	float strokeRadius) {
+	for (const Vec& point : geometry.points) {
+		bounds.include(point.x + xOffset, strokeRadius);
+	}
+}
+
+void includeRotatedRectBounds(
+	HorizontalBounds& bounds,
+	float originX,
+	float angle,
+	float centerX,
+	float halfWidth,
+	float halfHeight,
+	float extraRadius = 0.f) {
+	const float cosine = std::cos(angle);
+	const float sine = std::sin(angle);
+	const float rotatedCenterX = originX + cosine * centerX;
+	const float extentX = std::fabs(cosine) * halfWidth
+		+ std::fabs(sine) * halfHeight + extraRadius;
+	bounds.include(rotatedCenterX, extentX);
+}
+
+void updateOverflowVisibility(DoorstopOverlayLink& link, float panelWidth) {
+	HorizontalBounds bounds;
+
+	// The current spring is stroked three times with distinct offsets.
+	includePathBounds(bounds, link.springGeometry[0], 1.3f, 2.3f);
+	includePathBounds(bounds, link.springGeometry[0], 0.f, 1.55f);
+	includePathBounds(bounds, link.springGeometry[0], -0.7f, 0.425f);
+
+	if (link.trailGeometryValid) {
+		for (int i = 1; i < int(link.springGeometry.size()); ++i) {
+			includePathBounds(bounds, link.springGeometry[i], 0.f, 1.6f);
+		}
+	}
+
+	const DoorstopVisualSnapshot& state = link.snapshot;
+	const SpringPathGeometry& current = link.springGeometry[0];
+	includeRotatedRectBounds(
+		bounds, current.tipTravel, current.tipAngle, 0.f, 5.4f, 8.5f, 0.625f);
+	if (std::fabs(state.velocity) > 0.55f) {
+		includeRotatedRectBounds(
+			bounds,
+			current.tipTravel,
+			current.tipAngle,
+			-state.velocity * 4.f,
+			5.2f,
+			8.5f);
+	}
+	if (state.strike > 0.002f) {
+		bounds.include(0.f, 15.f + clamp01(state.strike) * 10.f);
+	}
+
+	const float halfPanelWidth = 0.5f * panelWidth;
+	link.overflowLeftVisible = bounds.minimum < -halfPanelWidth;
+	link.overflowRightVisible = bounds.maximum > halfPanelWidth;
 }
 
 void appendFullSpringPath(NVGcontext* vg, const SpringPathGeometry& geometry,
@@ -369,6 +446,8 @@ struct DoorstopOverflowWidget final : TransparentWidget {
 
 	void step() override;
 	void draw(const DrawArgs& args) override;
+	void drawLayer(const DrawArgs& args, int layer) override;
+	void drawOverflowScene(const DrawArgs& args);
 };
 
 struct DoorstopWidget final : ModuleWidget {
@@ -383,10 +462,12 @@ struct DoorstopWidget final : ModuleWidget {
 
 	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
 	std::shared_ptr<DoorstopOverlayLink> overlayLink;
+	widget::FramebufferWidget* springFramebuffer = nullptr;
 	DoorstopSpringWidget* springWidget = nullptr;
 	RenderingLog renderingLog;
 	float lastStepUs = 0.f;
 	std::uint64_t stepSequence = 0u;
+	std::uint32_t panelStableFrames = 0u;
 
 	static std::string renderingLogRootPath() {
 		return system::join(asset::user(), "Leviathan/Doorstop");
@@ -429,6 +510,8 @@ struct DoorstopWidget final : ModuleWidget {
 		renderingLog.file
 			<< "row,elapsed_sec,frame_interval_ms,module_id,instance_id,"
 			<< "step_sequence,geometry_sequence,panel_draw_sequence,overflow_draw_sequence,"
+			<< "panel_framebuffer_bypassed,panel_stable_frames,"
+			<< "overflow_left_visible,overflow_right_visible,"
 			<< "displacement,velocity,energy,strike,tip_travel_px,trail_amount,trails_active,"
 			<< "history_1,history_2,history_3,"
 			<< "sound_model,last_strike_model,break_in,"
@@ -473,6 +556,10 @@ struct DoorstopWidget final : ModuleWidget {
 			<< overlayLink->geometrySequence << ","
 			<< overlayLink->panelDrawSequence << ","
 			<< overlayLink->overflowDrawSequence << ","
+			<< (springFramebuffer && springFramebuffer->bypassed ? 1 : 0) << ","
+			<< panelStableFrames << ","
+			<< (overlayLink->overflowLeftVisible ? 1 : 0) << ","
+			<< (overlayLink->overflowRightVisible ? 1 : 0) << ","
 			<< state.displacement << ","
 			<< state.velocity << ","
 			<< state.energy << ","
@@ -521,10 +608,14 @@ struct DoorstopWidget final : ModuleWidget {
 			return result;
 		};
 
+		springFramebuffer = new widget::FramebufferWidget();
+		springFramebuffer->box.size = box.size;
+		springFramebuffer->bypassed = true;
 		springWidget = new DoorstopSpringWidget();
 		springWidget->box.size = box.size;
 		springWidget->link = overlayLink;
-		addChild(springWidget);
+		springFramebuffer->addChild(springWidget);
+		addChild(springFramebuffer);
 
 		math::Rect hitRectMm(Vec(1.1f, 17.3f), Vec(13.04f, 53.8f));
 		panel_svg::loadRectFromSvgMm(panelPath, "MANUAL_HIT_REGION", &hitRectMm);
@@ -629,6 +720,9 @@ struct DoorstopWidget final : ModuleWidget {
 			state.energy = m->visualEnergy.load(std::memory_order_relaxed);
 			state.strike = m->visualStrike.load(std::memory_order_relaxed);
 		}
+		const DoorstopVisualSnapshot previousState = overlayLink->snapshot;
+		const std::array<float, 3> previousHistory = overlayLink->displacementHistory;
+		const bool previousTrailsActive = overlayLink->trailGeometryValid;
 		overlayLink->snapshot = state;
 		for (int i = int(overlayLink->displacementHistory.size()) - 1; i > 0; --i) {
 			overlayLink->displacementHistory[i] = overlayLink->displacementHistory[i - 1];
@@ -654,6 +748,31 @@ struct DoorstopWidget final : ModuleWidget {
 			range.add(geometryUs);
 			overlayLink->lastGeometryUs = geometryUs;
 			++overlayLink->geometrySequence;
+		}
+		updateOverflowVisibility(*overlayLink, box.size.x);
+
+		const bool visualStateChanged =
+			state.displacement != previousState.displacement
+			|| state.velocity != previousState.velocity
+			|| state.energy != previousState.energy
+			|| state.strike != previousState.strike
+			|| trailsActive != previousTrailsActive
+			|| (trailsActive && overlayLink->displacementHistory != previousHistory);
+		if (springFramebuffer) {
+			if (visualStateChanged) {
+				panelStableFrames = 0u;
+				springFramebuffer->bypassed = true;
+				springFramebuffer->setDirty();
+			}
+			else {
+				panelStableFrames = std::min(
+					panelStableFrames + 1u, PANEL_CACHE_STABLE_FRAMES);
+				if (panelStableFrames >= PANEL_CACHE_STABLE_FRAMES
+					&& springFramebuffer->bypassed) {
+					springFramebuffer->bypassed = false;
+					springFramebuffer->setDirty();
+				}
+			}
 		}
 
 		auto* m = static_cast<Doorstop*>(module);
@@ -817,7 +936,23 @@ void DoorstopOverflowWidget::step() {
 }
 
 void DoorstopOverflowWidget::draw(const DrawArgs& args) {
+	(void) args;
+}
+
+void DoorstopOverflowWidget::drawLayer(const DrawArgs& args, int layer) {
+	if (layer == 1) {
+		drawOverflowScene(args);
+	}
+	TransparentWidget::drawLayer(args, layer);
+}
+
+void DoorstopOverflowWidget::drawOverflowScene(const DrawArgs& args) {
 	if (!link || !link->owner) {
+		return;
+	}
+	const bool drawLeft = link->overflowLeftVisible;
+	const bool drawRight = link->overflowRightVisible;
+	if (!drawLeft && !drawRight) {
 		return;
 	}
 	const bool measurePerf = isDragonKingDebugEnabled();
@@ -826,17 +961,21 @@ void DoorstopOverflowWidget::draw(const DrawArgs& args) {
 	const float baseX = OVERFLOW_PAD + 0.5f * moduleWidth;
 	const float baseY = mm2px(SPRING_BASE_Y_MM);
 
-	nvgSave(args.vg);
-	nvgScissor(args.vg, 0.f, 0.f, OVERFLOW_PAD, box.size.y);
-	drawSpringScene(args.vg, *link, baseX, baseY,
-		{SpringPathClipSide::Left, OVERFLOW_PAD});
-	nvgRestore(args.vg);
+	if (drawLeft) {
+		nvgSave(args.vg);
+		nvgScissor(args.vg, 0.f, 0.f, OVERFLOW_PAD, box.size.y);
+		drawSpringScene(args.vg, *link, baseX, baseY,
+			{SpringPathClipSide::Left, OVERFLOW_PAD});
+		nvgRestore(args.vg);
+	}
 
-	nvgSave(args.vg);
-	nvgScissor(args.vg, OVERFLOW_PAD + moduleWidth, 0.f, OVERFLOW_PAD, box.size.y);
-	drawSpringScene(args.vg, *link, baseX, baseY,
-		{SpringPathClipSide::Right, OVERFLOW_PAD + moduleWidth});
-	nvgRestore(args.vg);
+	if (drawRight) {
+		nvgSave(args.vg);
+		nvgScissor(args.vg, OVERFLOW_PAD + moduleWidth, 0.f, OVERFLOW_PAD, box.size.y);
+		drawSpringScene(args.vg, *link, baseX, baseY,
+			{SpringPathClipSide::Right, OVERFLOW_PAD + moduleWidth});
+		nvgRestore(args.vg);
+	}
 	if (measurePerf) {
 		const float elapsedUs = debug_terminal::elapsedUsSince(sceneStart);
 		auto& range = link->trailGeometryValid
