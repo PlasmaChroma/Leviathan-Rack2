@@ -2,13 +2,13 @@
 
 #include "plugin.hpp"
 #include "ChromatideCanvas.hpp"
-#include "NautiloidIrisExpander.hpp"
 #include "Iris.hpp"
 
 #include <vector>
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <memory>
 
 struct Chromatide : Module {
     enum ParamId {
@@ -55,12 +55,13 @@ struct Chromatide : Module {
     float prevStrokeU = 0.0f;
     float prevStrokeV = 0.0f;
 
-    std::array<nautiloid_iris_expander::SourceSlot, nautiloid_iris_expander::kSourceSlotCount> irisExpanderSlots;
-    std::atomic<int> irisExpanderWriteSlot {0};
-    std::atomic<int> irisExpanderPublishedSlot {-1};
-    std::atomic<uint64_t> irisPreviewGeneration {1u};
-    std::atomic<uint64_t> lastPublishedCanvasRevision {0u};
-    bool forceIrisSync = true;
+    // Published canvas snapshots are immutable and shared with Iris's worker.
+    // Use the C++17 atomic shared_ptr free functions to exchange this between
+    // the UI/state thread and Rack's engine thread.
+    std::shared_ptr<const iris::SourceField> irisPublishedSource;
+    std::atomic<uint64_t> irisPreviewGeneration {0u};
+    std::atomic<bool> forceIrisSync {true};
+    uint64_t lastExpanderGenerationSent = 0u;
 
     Chromatide();
 
@@ -80,6 +81,7 @@ struct Chromatide : Module {
 
     void selectPaletteColor(int index);
 
+    void syncBrushFromParams();
     void publishToIris();
 
     json_t* dataToJson() override;

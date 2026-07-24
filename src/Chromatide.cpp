@@ -11,30 +11,35 @@ Chromatide::Chromatide() {
     configParam(REDO_PARAM, 0.0f, 1.0f, 0.0f, "Redo");
 
     brushState.foreground = palette[selectedPaletteIndex];
+    publishToIris();
 }
 
 void Chromatide::process(const ProcessArgs& args) {
     (void)args;
-    brushState.size = params[BRUSH_SIZE_PARAM].getValue();
-    brushState.opacity = params[BRUSH_OPACITY_PARAM].getValue();
-    int toolIdx = static_cast<int>(params[TOOL_PARAM].getValue());
-    brushState.tool = static_cast<ChromatideTool>(clampVal(toolIdx, 0, 2));
+    const uint64_t generation = irisPreviewGeneration.load(std::memory_order_acquire);
+    const bool force = forceIrisSync.exchange(false, std::memory_order_acq_rel);
+    if (generation == 0u || (!force && generation == lastExpanderGenerationSent)) return;
 
-    uint64_t currentRev = canvas.revision;
-    uint64_t lastPub = lastPublishedCanvasRevision.load(std::memory_order_relaxed);
-    if (currentRev != lastPub || forceIrisSync) {
-        forceIrisSync = false;
-        publishToIris();
+    std::shared_ptr<const iris::SourceField> source =
+        std::atomic_load_explicit(&irisPublishedSource, std::memory_order_acquire);
+    if (!source) return;
+
+    Module* right = rightExpander.module;
+    if (right && right->model == modelIris && right->leftExpander.module == this) {
+        Iris* irisModule = static_cast<Iris*>(right);
+        irisModule->requestOwnedExpanderSource(std::move(source), generation);
+        lastExpanderGenerationSent = generation;
     }
 }
 
 void Chromatide::onExpanderChange(const ExpanderChangeEvent& e) {
     Module::onExpanderChange(e);
-    forceIrisSync = true;
+    forceIrisSync.store(true, std::memory_order_release);
 }
 
 
 void Chromatide::beginStroke(float u, float v) {
+    syncBrushFromParams();
     if (brushState.tool == ChromatideTool::Eyedropper) {
         float rx = 0.0f, ry = 0.0f;
         canvas.normalizedToRaster(u, v, rx, ry);
@@ -155,39 +160,31 @@ void Chromatide::selectPaletteColor(int index) {
     brushState.foreground = palette[index];
 }
 
+void Chromatide::syncBrushFromParams() {
+    brushState.size = params[BRUSH_SIZE_PARAM].getValue();
+    brushState.opacity = params[BRUSH_OPACITY_PARAM].getValue();
+    const int toolIdx = static_cast<int>(params[TOOL_PARAM].getValue());
+    brushState.tool = static_cast<ChromatideTool>(clampVal(toolIdx, 0, 2));
+}
+
 void Chromatide::publishToIris() {
-    uint64_t nextGen = ++irisPreviewGeneration;
+    auto source = std::make_shared<iris::SourceField>();
+    source->width = iris::kCanonicalSourceWidth;
+    source->height = iris::kCanonicalSourceHeight;
+    source->channels = iris::kCanonicalSourceChannels;
+    source->bitDepth = iris::kCanonicalSourceBitDepth;
+    source->rgb8.assign(canvas.pixels.begin(), canvas.pixels.end());
+    source->sourceName = "Chromatide Canvas";
+    source->sourcePath.clear();
+    source->originalWidth = iris::kCanonicalSourceWidth;
+    source->originalHeight = iris::kCanonicalSourceHeight;
+    source->originalChannels = iris::kCanonicalSourceChannels;
+    source->generatorKind = iris::SOURCE_GENERATOR_NONE;
 
-    int slotIdx = (irisExpanderWriteSlot.load(std::memory_order_relaxed) + 1) % nautiloid_iris_expander::kSourceSlotCount;
-    nautiloid_iris_expander::SourceSlot* slot = &irisExpanderSlots[slotIdx];
-
-    if (!nautiloid_iris_expander::claimSourceSlotForWrite(slot)) return;
-
-    slot->source.width = iris::kCanonicalSourceWidth;
-    slot->source.height = iris::kCanonicalSourceHeight;
-    slot->source.channels = iris::kCanonicalSourceChannels;
-    slot->source.bitDepth = iris::kCanonicalSourceBitDepth;
-    slot->source.rgb8.assign(canvas.pixels.begin(), canvas.pixels.end());
-    slot->source.sourceName = "Chromatide Canvas";
-    slot->source.sourcePath = "";
-    slot->source.originalWidth = iris::kCanonicalSourceWidth;
-    slot->source.originalHeight = iris::kCanonicalSourceHeight;
-    slot->source.originalChannels = iris::kCanonicalSourceChannels;
-    slot->source.generatorKind = iris::SOURCE_GENERATOR_NONE;
-
-    slot->generation.store(nextGen, std::memory_order_release);
-    nautiloid_iris_expander::releaseSourceSlotWrite(slot);
-    irisExpanderPublishedSlot.store(slotIdx, std::memory_order_release);
-    irisExpanderWriteSlot.store(slotIdx, std::memory_order_release);
-
-    Module* right = rightExpander.module;
-    if (right && right->model && (right->model == modelIris || right->model->slug == "Iris")) {
-        if (right->leftExpander.module == this) {
-            Iris* irisModule = static_cast<Iris*>(right);
-            irisModule->requestExpanderSource(slot, nextGen);
-        }
-    }
-    lastPublishedCanvasRevision.store(canvas.revision, std::memory_order_release);
+    std::shared_ptr<const iris::SourceField> immutableSource = std::move(source);
+    std::atomic_store_explicit(
+        &irisPublishedSource, std::move(immutableSource), std::memory_order_release);
+    irisPreviewGeneration.fetch_add(1u, std::memory_order_release);
 }
 
 
@@ -301,5 +298,5 @@ void Chromatide::dataFromJson(json_t* root) {
         selectedPaletteIndex = clampVal(static_cast<int>(json_integer_value(selPalJ)), 0, static_cast<int>(palette.size() - 1));
         brushState.foreground = palette[selectedPaletteIndex];
     }
+    publishToIris();
 }
-

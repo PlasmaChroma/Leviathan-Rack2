@@ -176,6 +176,9 @@ Vec ChromatideEditorSurface::currentLocalMousePos() const {
 }
 
 void ChromatideEditorSurface::draw(const DrawArgs& args) {
+    if (module) {
+        module->syncBrushFromParams();
+    }
     updateTextureBuffer();
 
     if (imageContext != args.vg) {
@@ -200,14 +203,8 @@ void ChromatideEditorSurface::draw(const DrawArgs& args) {
         nvgFill(args.vg);
     }
 
-    // Viewport frame border
-    nvgBeginPath(args.vg);
-    nvgRect(args.vg, 0, 0, box.size.x, box.size.y);
-    nvgStrokeColor(args.vg, nvgRGBA(28, 204, 217, 180));
-    nvgStrokeWidth(args.vg, 1.5f);
-    nvgStroke(args.vg);
-
     // Hover brush outline cursor
+
     Vec localMouse = currentLocalMousePos();
     bool mouseInBounds = (localMouse.x >= 0.0f && localMouse.x <= box.size.x && localMouse.y >= 0.0f && localMouse.y <= box.size.y);
 

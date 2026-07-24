@@ -9,6 +9,8 @@
 #include <array>
 #include <atomic>
 #include <condition_variable>
+#include <cstdint>
+#include <memory>
 #include <mutex>
 #include <thread>
 
@@ -101,6 +103,8 @@ struct Iris final : Module {
 
   void requestImageLoad(const std::string& path);
   void requestExpanderSource(const nautiloid_iris_expander::SourceSlot* sourceSlot, uint64_t generation);
+  void requestOwnedExpanderSource(
+    std::shared_ptr<const iris::SourceField> source, uint64_t generation);
   void requestReload();
   void clearToDefault();
   void requestRebuild();
@@ -148,6 +152,7 @@ private:
     std::string path;
     iris::ConversionSettings settings;
     iris::SourceField source;
+    std::shared_ptr<const iris::SourceField> ownedSource;
     const nautiloid_iris_expander::SourceSlot* sourceSlot = nullptr;
     int nautiloidFractalMode = iris::FRACTAL_NONE;
     int nautiloidFractalColorMode = nautiloid_color::PRISM;
@@ -198,7 +203,7 @@ private:
   bool embedSource = true;
   int currentSourceKind = iris::SOURCE_IMAGE;
   std::atomic<uint64_t> lastExpanderSourceGeneration {0u};
-  std::atomic<const nautiloid_iris_expander::SourceSlot*> lastExpanderSourceSlotSeen {nullptr};
+  std::atomic<uintptr_t> lastExpanderSourceIdentity {0u};
   dsp::ClockDivider lightDivider;
   float phaseTracerPublishTimer = 0.f;
 };

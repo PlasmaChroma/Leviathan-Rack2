@@ -158,8 +158,9 @@ void Iris::requestExpanderSource(const nautiloid_iris_expander::SourceSlot* sour
   if (!hasLeftNautiloid(this)) return;
   restoredImageSourceMode.store(false, std::memory_order_release);
   if (!nautiloid_iris_expander::acquireSourceSlot(sourceSlot, generation)) return;
+  const uintptr_t sourceIdentity = reinterpret_cast<uintptr_t>(sourceSlot);
   if (generation == lastExpanderSourceGeneration.load(std::memory_order_acquire) &&
-      sourceSlot == lastExpanderSourceSlotSeen.load(std::memory_order_acquire)) {
+      sourceIdentity == lastExpanderSourceIdentity.load(std::memory_order_acquire)) {
     std::lock_guard<std::mutex> lock(snapshotMutex);
     if (currentSourceKind == iris::SOURCE_EXPANDER_IMAGE ||
         currentSourceKind == iris::SOURCE_NAUTILOID_FRACTAL) {
@@ -168,10 +169,33 @@ void Iris::requestExpanderSource(const nautiloid_iris_expander::SourceSlot* sour
     }
   }
   lastExpanderSourceGeneration.store(generation, std::memory_order_release);
-  lastExpanderSourceSlotSeen.store(sourceSlot, std::memory_order_release);
+  lastExpanderSourceIdentity.store(sourceIdentity, std::memory_order_release);
   WorkerRequest request;
   request.type = REQUEST_EXPANDER_SOURCE;
   request.sourceSlot = sourceSlot;
+  request.sourceGeneration = generation;
+  request.settings = conversionSettings;
+  submitRequest(request);
+}
+
+void Iris::requestOwnedExpanderSource(
+    std::shared_ptr<const iris::SourceField> source, uint64_t generation) {
+  if (!hasLeftNautiloid(this) || !source || !source->valid() || generation == 0u) return;
+  restoredImageSourceMode.store(false, std::memory_order_release);
+  const uintptr_t sourceIdentity = reinterpret_cast<uintptr_t>(source.get());
+  if (generation == lastExpanderSourceGeneration.load(std::memory_order_acquire) &&
+      sourceIdentity == lastExpanderSourceIdentity.load(std::memory_order_acquire)) {
+    std::lock_guard<std::mutex> lock(snapshotMutex);
+    if (currentSourceKind == iris::SOURCE_EXPANDER_IMAGE ||
+        currentSourceKind == iris::SOURCE_NAUTILOID_FRACTAL) {
+      return;
+    }
+  }
+  lastExpanderSourceGeneration.store(generation, std::memory_order_release);
+  lastExpanderSourceIdentity.store(sourceIdentity, std::memory_order_release);
+  WorkerRequest request;
+  request.type = REQUEST_EXPANDER_SOURCE;
+  request.ownedSource = std::move(source);
   request.sourceGeneration = generation;
   request.settings = conversionSettings;
   submitRequest(request);
@@ -330,11 +354,17 @@ void Iris::workerLoop() {
         ok = iris::buildWavetableFromSourceField(request.source, request.settings, buildTable, &error);
         result.preserveExistingSource = true;
       } else if (request.type == REQUEST_EXPANDER_SOURCE) {
-        if (request.sourceSlot &&
-            request.sourceSlot->generation.load(std::memory_order_acquire) == request.sourceGeneration &&
-            request.sourceSlot->source.valid()) {
-          ok = iris::buildWavetableFromSourceField(request.sourceSlot->source, request.settings, buildTable, &error);
-          result.source = request.sourceSlot->source;
+        const iris::SourceField* source = nullptr;
+        if (request.ownedSource && request.ownedSource->valid()) {
+          source = request.ownedSource.get();
+        } else if (request.sourceSlot &&
+                   request.sourceSlot->generation.load(std::memory_order_acquire) == request.sourceGeneration &&
+                   request.sourceSlot->source.valid()) {
+          source = &request.sourceSlot->source;
+        }
+        if (source) {
+          ok = iris::buildWavetableFromSourceField(*source, request.settings, buildTable, &error);
+          result.source = *source;
           result.source.sourcePath.clear();
           if (result.source.sourceName.empty()) {
             result.source.sourceName = "Nautiloid";
@@ -604,7 +634,7 @@ void Iris::process(const ProcessArgs& args) {
     const bool nautiloidReady =
       nautiloidConnected && usingNautiloidSource &&
       lastExpanderSourceGeneration.load(std::memory_order_acquire) != 0u &&
-      lastExpanderSourceSlotSeen.load(std::memory_order_acquire) != nullptr;
+      lastExpanderSourceIdentity.load(std::memory_order_acquire) != 0u;
     lights[NAUTILOID_LINK_LIGHT].setBrightness(nautiloidConnected && !nautiloidReady ? 1.f : 0.f);
     lights[NAUTILOID_READY_LIGHT].setBrightness(nautiloidReady ? 1.f : 0.f);
   }

@@ -6,6 +6,7 @@
 
 Model* modelIris = nullptr;
 void Iris::requestExpanderSource(const nautiloid_iris_expander::SourceSlot*, uint64_t) {}
+void Iris::requestOwnedExpanderSource(std::shared_ptr<const iris::SourceField>, uint64_t) {}
 
 static void testTransforms() {
     float rx = 0.0f, ry = 0.0f;
@@ -141,6 +142,33 @@ static void testModuleJsonRoundTrip() {
     std::cout << "[PASS] testModuleJsonRoundTrip" << std::endl;
 }
 
+static void testPublishedSnapshotOwnership() {
+    Chromatide module;
+    const uint64_t initialGeneration =
+        module.irisPreviewGeneration.load(std::memory_order_acquire);
+    std::shared_ptr<const iris::SourceField> initial =
+        std::atomic_load_explicit(&module.irisPublishedSource, std::memory_order_acquire);
+    assert(initial);
+    assert(initial->valid());
+
+    const size_t offset = ChromatideCanvas::pixelOffset(10, 20);
+    const uint8_t initialRed = initial->rgb8[offset];
+    module.canvas.setPixel(10, 20, static_cast<uint8_t>(initialRed + 1u), 2u, 3u);
+
+    // The worker-facing snapshot remains immutable until publication.
+    assert(initial->rgb8[offset] == initialRed);
+    module.publishToIris();
+
+    std::shared_ptr<const iris::SourceField> published =
+        std::atomic_load_explicit(&module.irisPublishedSource, std::memory_order_acquire);
+    assert(published);
+    assert(published.get() != initial.get());
+    assert(published->rgb8[offset] == static_cast<uint8_t>(initialRed + 1u));
+    assert(initial->rgb8[offset] == initialRed);
+    assert(module.irisPreviewGeneration.load(std::memory_order_acquire) == initialGeneration + 1u);
+    std::cout << "[PASS] testPublishedSnapshotOwnership" << std::endl;
+}
+
 int main() {
     std::cout << "Running Chromatide Spec tests..." << std::endl;
     testTransforms();
@@ -149,7 +177,7 @@ int main() {
     testStampAndUndo();
     testModuleAndMemoryCap();
     testModuleJsonRoundTrip();
+    testPublishedSnapshotOwnership();
     std::cout << "All Chromatide Spec tests passed successfully!" << std::endl;
     return 0;
 }
-

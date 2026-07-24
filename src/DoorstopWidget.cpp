@@ -236,6 +236,13 @@ public:
 		drawSpringScene(args.vg, *link, box.size.x * 0.5f, mm2px(SPRING_BASE_Y_MM));
 		nvgRestore(args.vg);
 	}
+
+	void drawLayer(const DrawArgs& args, int layer) override {
+		if (layer == 1) {
+			draw(args);
+		}
+		TransparentWidget::drawLayer(args, layer);
+	}
 };
 
 struct DoorstopOverflowWidget final : TransparentWidget {
@@ -249,6 +256,7 @@ struct DoorstopOverflowWidget final : TransparentWidget {
 
 	void step() override;
 	void draw(const DrawArgs& args) override;
+	void drawLayer(const DrawArgs& args, int layer) override;
 };
 
 struct DoorstopWidget final : ModuleWidget {
@@ -509,6 +517,13 @@ void DoorstopOverflowWidget::draw(const DrawArgs& args) {
 	nvgScissor(args.vg, OVERFLOW_PAD + moduleWidth, 0.f, OVERFLOW_PAD, box.size.y);
 	drawSpringScene(args.vg, *link, baseX, baseY);
 	nvgRestore(args.vg);
+}
+
+void DoorstopOverflowWidget::drawLayer(const DrawArgs& args, int layer) {
+	if (layer == 1) {
+		draw(args);
+	}
+	TransparentWidget::drawLayer(args, layer);
 }
 
 } // namespace
