@@ -10,7 +10,7 @@
 namespace {
 
 constexpr float OVERFLOW_PAD = 42.f;
-constexpr int SPRING_POINTS = 401;
+constexpr int SPRING_POINTS = 257;
 constexpr float SPRING_BASE_Y_MM = 71.f;
 constexpr float SPRING_LENGTH_MM = 49.f;
 constexpr float SPRING_TURNS = 43.f;
@@ -26,6 +26,22 @@ struct SpringPathGeometry {
 	std::array<Vec, SPRING_POINTS> points {};
 	float tipTravel = 0.f;
 	float tipAngle = 0.f;
+};
+
+enum class SpringPathClipSide {
+	None,
+	Left,
+	Right
+};
+
+struct SpringPathClip {
+	SpringPathClipSide side = SpringPathClipSide::None;
+	float boundaryX = 0.f;
+
+	SpringPathClip() = default;
+	SpringPathClip(SpringPathClipSide side, float boundaryX)
+		: side(side), boundaryX(boundaryX) {
+	}
 };
 
 struct DoorstopRenderMetrics {
@@ -107,7 +123,7 @@ void buildSpringGeometry(SpringPathGeometry& geometry, float displacement) {
 	geometry.tipAngle = std::atan2(-springLength, dxdt) + 0.5f * float(M_PI);
 }
 
-void appendSpringPath(NVGcontext* vg, const SpringPathGeometry& geometry,
+void appendFullSpringPath(NVGcontext* vg, const SpringPathGeometry& geometry,
 	float baseX, float baseY) {
 	nvgBeginPath(vg);
 	nvgMoveTo(vg, baseX + geometry.points[0].x, baseY + geometry.points[0].y);
@@ -116,18 +132,75 @@ void appendSpringPath(NVGcontext* vg, const SpringPathGeometry& geometry,
 	}
 }
 
+bool pointInsideClip(float x, const SpringPathClip& clip) {
+	if (clip.side == SpringPathClipSide::Left) {
+		return x <= clip.boundaryX;
+	}
+	if (clip.side == SpringPathClipSide::Right) {
+		return x >= clip.boundaryX;
+	}
+	return true;
+}
+
+void appendClippedSpringPath(NVGcontext* vg, const SpringPathGeometry& geometry,
+	float baseX, float baseY, const SpringPathClip& clip) {
+	if (clip.side == SpringPathClipSide::None) {
+		appendFullSpringPath(vg, geometry, baseX, baseY);
+		return;
+	}
+
+	nvgBeginPath(vg);
+	bool pathOpen = false;
+	for (int i = 1; i < SPRING_POINTS; ++i) {
+		const Vec a = geometry.points[i - 1].plus(Vec(baseX, baseY));
+		const Vec b = geometry.points[i].plus(Vec(baseX, baseY));
+		const bool aInside = pointInsideClip(a.x, clip);
+		const bool bInside = pointInsideClip(b.x, clip);
+		if (aInside && bInside) {
+			if (!pathOpen) {
+				nvgMoveTo(vg, a.x, a.y);
+			}
+			nvgLineTo(vg, b.x, b.y);
+			pathOpen = true;
+			continue;
+		}
+		if (aInside == bInside) {
+			pathOpen = false;
+			continue;
+		}
+
+		const float dx = b.x - a.x;
+		const float t = std::fabs(dx) > 1e-6f
+			? clamp((clip.boundaryX - a.x) / dx, 0.f, 1.f)
+			: 0.f;
+		const Vec crossing = a.plus(b.minus(a).mult(t));
+		if (aInside) {
+			if (!pathOpen) {
+				nvgMoveTo(vg, a.x, a.y);
+			}
+			nvgLineTo(vg, crossing.x, crossing.y);
+			pathOpen = false;
+		}
+		else {
+			nvgMoveTo(vg, crossing.x, crossing.y);
+			nvgLineTo(vg, b.x, b.y);
+			pathOpen = true;
+		}
+	}
+}
+
 void drawSpringBody(NVGcontext* vg, const SpringPathGeometry& geometry,
 	float baseX, float baseY,
-	float velocity, float alpha, bool drawCap) {
+	float velocity, float alpha, bool drawCap, const SpringPathClip& clip = {}) {
 	alpha = clamp01(alpha);
-	appendSpringPath(vg, geometry, baseX + 1.3f, baseY + 1.8f);
+	appendClippedSpringPath(vg, geometry, baseX + 1.3f, baseY + 1.8f, clip);
 	nvgStrokeColor(vg, nvgRGBA(0, 0, 0, int(190.f * alpha)));
 	nvgStrokeWidth(vg, 4.6f);
 	nvgLineCap(vg, NVG_ROUND);
 	nvgLineJoin(vg, NVG_ROUND);
 	nvgStroke(vg);
 
-	appendSpringPath(vg, geometry, baseX, baseY);
+	appendClippedSpringPath(vg, geometry, baseX, baseY, clip);
 	NVGpaint metal = nvgLinearGradient(vg, baseX - 4.f, 0.f, baseX + 6.f, 0.f,
 		nvgRGBA(78, 92, 105, int(255.f * alpha)),
 		nvgRGBA(224, 238, 241, int(255.f * alpha)));
@@ -136,7 +209,7 @@ void drawSpringBody(NVGcontext* vg, const SpringPathGeometry& geometry,
 	nvgLineCap(vg, NVG_ROUND);
 	nvgStroke(vg);
 
-	appendSpringPath(vg, geometry, baseX - 0.7f, baseY);
+	appendClippedSpringPath(vg, geometry, baseX - 0.7f, baseY, clip);
 	nvgStrokeColor(vg, nvgRGBA(206, 252, 255, int(130.f * alpha)));
 	nvgStrokeWidth(vg, 0.85f);
 	nvgStroke(vg);
@@ -174,6 +247,20 @@ void drawSpringBody(NVGcontext* vg, const SpringPathGeometry& geometry,
 	nvgRestore(vg);
 }
 
+void drawSpringTrail(NVGcontext* vg, const SpringPathGeometry& geometry,
+	float baseX, float baseY, float alpha, const SpringPathClip& clip = {}) {
+	alpha = clamp01(alpha);
+	appendClippedSpringPath(vg, geometry, baseX, baseY, clip);
+	const NVGpaint trailMetal = nvgLinearGradient(vg, baseX - 4.f, 0.f, baseX + 6.f, 0.f,
+		nvgRGBA(72, 86, 102, int(220.f * alpha)),
+		nvgRGBA(213, 239, 245, int(245.f * alpha)));
+	nvgStrokePaint(vg, trailMetal);
+	nvgStrokeWidth(vg, 3.2f);
+	nvgLineCap(vg, NVG_ROUND);
+	nvgLineJoin(vg, NVG_ROUND);
+	nvgStroke(vg);
+}
+
 void drawStrikeAccent(NVGcontext* vg, float baseX, float baseY, float strike) {
 	strike = clamp01(strike);
 	if (strike <= 0.002f) {
@@ -188,18 +275,19 @@ void drawStrikeAccent(NVGcontext* vg, float baseX, float baseY, float strike) {
 	nvgFill(vg);
 }
 
-void drawSpringScene(NVGcontext* vg, const DoorstopOverlayLink& link, float baseX, float baseY) {
+void drawSpringScene(NVGcontext* vg, const DoorstopOverlayLink& link,
+	float baseX, float baseY, const SpringPathClip& clip = {}) {
 	const DoorstopVisualSnapshot& state = link.snapshot;
 	const float trailAmount = clamp01((state.energy - 0.10f) * 1.8f + std::fabs(state.velocity) * 0.45f);
 	if (trailAmount > 0.01f && link.trailGeometryValid) {
 		for (int i = 2; i >= 0; --i) {
 			const float age = float(i + 1) / 4.f;
-			drawSpringBody(vg, link.springGeometry[i + 1], baseX, baseY, state.velocity,
-				trailAmount * (0.17f - age * 0.08f), false);
+			drawSpringTrail(vg, link.springGeometry[i + 1], baseX, baseY,
+				trailAmount * (0.17f - age * 0.08f), clip);
 		}
 	}
 	drawStrikeAccent(vg, baseX, baseY, state.strike);
-	drawSpringBody(vg, link.springGeometry[0], baseX, baseY, state.velocity, 1.f, true);
+	drawSpringBody(vg, link.springGeometry[0], baseX, baseY, state.velocity, 1.f, true, clip);
 }
 
 class DoorstopHitWidget final : public app::Switch {
@@ -544,7 +632,7 @@ struct DoorstopWidget final : ModuleWidget {
 			}));
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createCheckMenuItem(
-			"Allow spring to extend over adjacent modules", "",
+			"Extend spring beyond panel", "",
 			[m]() { return m->allowVisualOverflow.load(std::memory_order_relaxed); },
 			[this, m]() {
 				const bool enabled = !m->allowVisualOverflow.load(std::memory_order_relaxed);
@@ -577,12 +665,14 @@ void DoorstopOverflowWidget::draw(const DrawArgs& args) {
 
 	nvgSave(args.vg);
 	nvgScissor(args.vg, 0.f, 0.f, OVERFLOW_PAD, box.size.y);
-	drawSpringScene(args.vg, *link, baseX, baseY);
+	drawSpringScene(args.vg, *link, baseX, baseY,
+		{SpringPathClipSide::Left, OVERFLOW_PAD});
 	nvgRestore(args.vg);
 
 	nvgSave(args.vg);
 	nvgScissor(args.vg, OVERFLOW_PAD + moduleWidth, 0.f, OVERFLOW_PAD, box.size.y);
-	drawSpringScene(args.vg, *link, baseX, baseY);
+	drawSpringScene(args.vg, *link, baseX, baseY,
+		{SpringPathClipSide::Right, OVERFLOW_PAD + moduleWidth});
 	nvgRestore(args.vg);
 	if (measurePerf) {
 		auto& range = link->trailGeometryValid
