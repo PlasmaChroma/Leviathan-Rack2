@@ -478,7 +478,35 @@ Result probabilisticMixModel() {
 		engine.getSoundModel() == doorstop::SoundModel::ProbabilisticMix
 			&& selectedAll && finite,
 		"seen=" + std::to_string(seen[0]) + std::to_string(seen[1])
-			+ std::to_string(seen[2]) + std::to_string(seen[3])};
+				+ std::to_string(seen[2]) + std::to_string(seen[3])};
+}
+
+Result probabilisticMixDistribution() {
+	doorstop::Engine engine;
+	engine.setSoundModel(doorstop::SoundModel::ProbabilisticMix);
+	std::array<int, 4> counts {{0, 0, 0, 0}};
+	constexpr int strikeCount = 100000;
+	for (int strike = 0; strike < strikeCount; ++strike) {
+		engine.strike(0.5f);
+		const int selected = int(engine.getLastStrikeModel());
+		if (selected >= 0 && selected < int(counts.size())) {
+			counts[selected]++;
+		}
+	}
+	const std::array<float, 4> expected {{0.19f, 0.27f, 0.27f, 0.27f}};
+	bool withinTolerance = true;
+	std::string detail;
+	for (int i = 0; i < int(counts.size()); ++i) {
+		const float observed = float(counts[i]) / float(strikeCount);
+		withinTolerance = withinTolerance
+			&& std::fabs(observed - expected[i]) < 0.01f;
+		if (!detail.empty()) {
+			detail += " ";
+		}
+		detail += std::to_string(i) + "=" + std::to_string(observed);
+	}
+	return {"Probabilistic mix follows the 19/27/27/27 weighting",
+		withinTolerance, detail};
 }
 
 Result abusiveRetriggerStability() {
@@ -532,6 +560,7 @@ int main() {
 	results.push_back(coilContactModel());
 	results.push_back(dispersiveSpringModel());
 	results.push_back(probabilisticMixModel());
+	results.push_back(probabilisticMixDistribution());
 	results.push_back(abusiveRetriggerStability());
 
 	int failed = 0;

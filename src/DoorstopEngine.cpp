@@ -263,7 +263,21 @@ SoundModel Engine::chooseStrikeModel() {
 	if (soundModel != SoundModel::ProbabilisticMix) {
 		return soundModel;
 	}
-	return static_cast<SoundModel>(nextModelRandom() % 4u);
+	// Map the full 32-bit random range into percentage buckets. Classic is
+	// intentionally less common, with its former six percentage points shared
+	// equally by the other three models.
+	const std::uint32_t bucket = std::uint32_t(
+		(std::uint64_t(nextModelRandom()) * 100u) >> 32);
+	if (bucket < 19u) {
+		return SoundModel::Classic;
+	}
+	if (bucket < 46u) {
+		return SoundModel::CoupledBody;
+	}
+	if (bucket < 73u) {
+		return SoundModel::CoilContact;
+	}
+	return SoundModel::DispersiveSpring;
 }
 
 float Engine::limitCandidateVelocity(float candidateVelocity) const {
