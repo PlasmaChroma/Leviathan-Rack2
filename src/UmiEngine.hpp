@@ -76,8 +76,11 @@ private:
 	int findFreeSlot() const;
 	int findOldestSlot() const;
 	void deactivate(int slot);
+	bool spawnPositionClear(Vec2 pos, float radius, int ignoredSlot) const;
+	bool findBurstSpawnPosition(float preferredX, int ignoredSlot, Vec2* position) const;
 	void collideBallWithPeg(Ball& ball, const Peg& peg, float restitution, int colliderIndex);
 	void collideBallWithSegment(Ball& ball, const Segment& segment, float restitution, int colliderIndex);
+	void collideBalls(Ball& first, Ball& second, float restitution);
 };
 
 } // namespace umi

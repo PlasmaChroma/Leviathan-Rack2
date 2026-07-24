@@ -76,6 +76,65 @@ TestResult testSpawnCapacityPolicies() {
 		" replaced=" + std::to_string(replaced)};
 }
 
+TestResult testBurstSpawnSeparation() {
+	umi::Engine engine;
+	engine.setCapacity(64);
+	int spawned = 0;
+	for (int burst = 0; burst < 8; ++burst) {
+		spawned += engine.spawnBurst(8, (burst & 1) ? 1.f : 0.f);
+	}
+	bool separated = spawned == 64 && engine.getActiveCount() == 64;
+	float minimumGap = 1.0e9f;
+	const auto& balls = engine.getBalls();
+	for (int first = 0; first < engine.getCapacity(); ++first) {
+		if (!balls[static_cast<std::size_t>(first)].active) continue;
+		const umi::Ball& a = balls[static_cast<std::size_t>(first)];
+		separated = separated && a.pos.x >= 70.f && a.pos.x <= 930.f;
+		for (int second = first + 1; second < engine.getCapacity(); ++second) {
+			if (!balls[static_cast<std::size_t>(second)].active) continue;
+			const umi::Ball& b = balls[static_cast<std::size_t>(second)];
+			const float dx = b.pos.x - a.pos.x;
+			const float dy = b.pos.y - a.pos.y;
+			const float distance = std::sqrt(dx * dx + dy * dy);
+			minimumGap = std::min(minimumGap, distance - (a.radius + b.radius));
+			separated = separated && distance >= a.radius + b.radius;
+		}
+	}
+	return {"Burst spawning avoids pre-overlapping pearls", separated,
+		"spawned=" + std::to_string(spawned) + " minimumGap=" + std::to_string(minimumGap)};
+}
+
+TestResult testPearlInteraction() {
+	umi::Engine engine;
+	engine.setCapacity(2);
+	const bool spawned =
+		engine.spawnAt({480.f, 50.f}, {100.f, 0.f})
+		&& engine.spawnAt({515.f, 50.f}, {-100.f, 0.f});
+	umi::PhysicsParams params;
+	params.gravity = 0.f;
+	params.drag = 0.f;
+	params.chaos = 0.f;
+	params.restitution = 1.f;
+	engine.step(params);
+
+	const auto& balls = engine.getBalls();
+	const umi::Ball& first = balls[0];
+	const umi::Ball& second = balls[1];
+	const float dx = second.pos.x - first.pos.x;
+	const float dy = second.pos.y - first.pos.y;
+	const float distance = std::sqrt(dx * dx + dy * dy);
+	const float momentumX = first.vel.x + second.vel.x;
+	const bool pass = spawned
+		&& first.active && second.active
+		&& distance >= first.radius + second.radius - 1e-4f
+		&& first.vel.x < 0.f && second.vel.x > 0.f
+		&& std::fabs(momentumX) < 1e-4f;
+	return {"Pearls separate and exchange equal-mass impulse", pass,
+		"distance=" + std::to_string(distance)
+			+ " velocities=" + std::to_string(first.vel.x)
+			+ "/" + std::to_string(second.vel.x)};
+}
+
 TestResult testEverySinkCapture() {
 	umi::PhysicsParams params;
 	params.gravity = 0.f;
@@ -173,6 +232,8 @@ int main() {
 		testLayoutValidity(),
 		testStaggeredGridAndBottomClearance(),
 		testSpawnCapacityPolicies(),
+		testBurstSpawnSeparation(),
+		testPearlInteraction(),
 		testEverySinkCapture(),
 		testDeterminism(),
 		testLongRunStability(),

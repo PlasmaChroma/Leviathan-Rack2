@@ -10,6 +10,10 @@ namespace {
 constexpr float MAX_SPEED = 2400.f;
 constexpr float MAX_SPEED_SQ = MAX_SPEED * MAX_SPEED;
 constexpr float TANGENTIAL_RETENTION = 0.985f;
+constexpr float SPAWN_MIN_X = 70.f;
+constexpr float SPAWN_MAX_X = 930.f;
+constexpr float SPAWN_SPACING = 40.f;
+constexpr std::array<float, 3> SPAWN_ROWS {{80.f, 40.f, 120.f}};
 
 Vec2 add(Vec2 a, Vec2 b) {
 	return {a.x + b.x, a.y + b.y};
@@ -42,6 +46,24 @@ Vec2 deterministicNormal(std::uint32_t ballId, int colliderIndex) {
 		case 1: return {-1.f, 0.f};
 		case 2: return {0.f, 1.f};
 		default: return {0.f, -1.f};
+	}
+}
+
+Vec2 deterministicPairNormal(std::uint32_t firstId, std::uint32_t secondId) {
+	const std::uint32_t low = std::min(firstId, secondId);
+	const std::uint32_t high = std::max(firstId, secondId);
+	const std::uint32_t selector = hashSeed(
+		low * 0x9e3779b9u ^ high * 0x85ebca6bu) & 7u;
+	constexpr float DIAGONAL = 0.7071067811865475f;
+	switch (selector) {
+		case 0: return {1.f, 0.f};
+		case 1: return {DIAGONAL, DIAGONAL};
+		case 2: return {0.f, 1.f};
+		case 3: return {-DIAGONAL, DIAGONAL};
+		case 4: return {-1.f, 0.f};
+		case 5: return {-DIAGONAL, -DIAGONAL};
+		case 6: return {0.f, -1.f};
+		default: return {DIAGONAL, -DIAGONAL};
 	}
 }
 
@@ -135,6 +157,61 @@ int Engine::findOldestSlot() const {
 	return oldestSlot;
 }
 
+bool Engine::spawnPositionClear(Vec2 pos, float radius, int ignoredSlot) const {
+	for (int slot = 0; slot < capacity; ++slot) {
+		if (slot == ignoredSlot) {
+			continue;
+		}
+		const Ball& ball = balls[static_cast<std::size_t>(slot)];
+		if (!ball.active) {
+			continue;
+		}
+		const float minimumDistance = radius + ball.radius + 2.f;
+		if (lengthSquared(sub(pos, ball.pos)) < minimumDistance * minimumDistance) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool Engine::findBurstSpawnPosition(
+	float preferredX,
+	int ignoredSlot,
+	Vec2* position) const {
+	if (!position) {
+		return false;
+	}
+	constexpr int LANE_COUNT =
+		int((SPAWN_MAX_X - SPAWN_MIN_X) / SPAWN_SPACING) + 1;
+	const float radius = Ball {}.radius;
+	for (float y : SPAWN_ROWS) {
+		int nearestLane = int(std::round((preferredX - SPAWN_MIN_X) / SPAWN_SPACING));
+		nearestLane = std::max(0, std::min(LANE_COUNT - 1, nearestLane));
+		for (int laneDistance = 0; laneDistance < LANE_COUNT; ++laneDistance) {
+			const int candidates[] = {
+				nearestLane + laneDistance,
+				nearestLane - laneDistance
+			};
+			const int candidateCount = laneDistance == 0 ? 1 : 2;
+			for (int candidateIndex = 0; candidateIndex < candidateCount; ++candidateIndex) {
+				const int lane = candidates[candidateIndex];
+				if (lane < 0 || lane >= LANE_COUNT) {
+					continue;
+				}
+				const Vec2 candidate {
+					SPAWN_MIN_X + float(lane) * SPAWN_SPACING,
+					y
+				};
+				if (spawnPositionClear(candidate, radius, ignoredSlot)) {
+					*position = candidate;
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
 void Engine::deactivate(int slot) {
 	Ball& ball = balls[static_cast<std::size_t>(slot)];
 	if (!ball.active) {
@@ -173,13 +250,20 @@ int Engine::spawnBurst(int density, float normalizedX) {
 	const float baseX = normalizedX >= 0.f
 		? 100.f + std::max(0.f, std::min(1.f, normalizedX)) * 800.f
 		: layout.spawnCenter.x + rng.bipolar() * layout.spawnSpread.x;
+	const float firstPreferredX = baseX - 0.5f * float(count - 1) * SPAWN_SPACING;
 	int spawned = 0;
 	for (int i = 0; i < count; ++i) {
 		const float centered = float(i) - 0.5f * float(count - 1);
-		const Vec2 pos {
-			std::max(70.f, std::min(930.f, baseX + centered * 7.f + rng.bipolar() * 3.f)),
-			layout.spawnCenter.y - std::fabs(centered) * 2.f
-		};
+		const int ignoredSlot = activeCount >= capacity && replaceOldest
+			? findOldestSlot()
+			: -1;
+		Vec2 pos;
+		if (!findBurstSpawnPosition(
+			firstPreferredX + float(i) * SPAWN_SPACING,
+			ignoredSlot,
+			&pos)) {
+			continue;
+		}
 		const Vec2 velocity {rng.bipolar() * 28.f + centered * 2.f, rng.uniform() * 18.f};
 		if (spawnAt(pos, velocity)) {
 			spawned++;
@@ -223,6 +307,39 @@ void Engine::collideBallWithSegment(Ball& ball, const Segment& segment, float re
 	const Vec2 closest = add(segment.a, mul(axis, t));
 	const Peg capsulePoint {closest, segment.radius, 0};
 	collideBallWithPeg(ball, capsulePoint, restitution, colliderIndex);
+}
+
+void Engine::collideBalls(Ball& first, Ball& second, float restitution) {
+	Vec2 delta = sub(second.pos, first.pos);
+	const float minimumDistance = first.radius + second.radius;
+	const float distanceSq = lengthSquared(delta);
+	if (distanceSq >= minimumDistance * minimumDistance) {
+		return;
+	}
+
+	float distance = 0.f;
+	Vec2 normal;
+	if (distanceSq > 1.0e-10f) {
+		distance = std::sqrt(distanceSq);
+		normal = mul(delta, 1.f / distance);
+	}
+	else {
+		normal = deterministicPairNormal(first.id, second.id);
+	}
+
+	const Vec2 correction = mul(normal, 0.5f * (minimumDistance - distance));
+	first.pos = sub(first.pos, correction);
+	second.pos = add(second.pos, correction);
+
+	const float relativeNormalVelocity = dot(sub(second.vel, first.vel), normal);
+	if (relativeNormalVelocity >= 0.f) {
+		return;
+	}
+	const float impulseMagnitude =
+		-0.5f * (1.f + restitution) * relativeNormalVelocity;
+	const Vec2 impulse = mul(normal, impulseMagnitude);
+	first.vel = sub(first.vel, impulse);
+	second.vel = add(second.vel, impulse);
 }
 
 StepEvents Engine::step(const PhysicsParams& params, float dt) {
@@ -294,6 +411,19 @@ StepEvents Engine::step(const PhysicsParams& params, float dt) {
 		const bool escaped = ball.pos.x < -300.f || ball.pos.x > 1300.f || ball.pos.y < -300.f || ball.pos.y > 1900.f;
 		if (invalid || escaped || ball.age > 12.f || ball.lowSpeedTime > 5.f) {
 			deactivate(slot);
+		}
+	}
+
+	for (int firstSlot = 0; firstSlot < capacity; ++firstSlot) {
+		Ball& first = balls[static_cast<std::size_t>(firstSlot)];
+		if (!first.active) {
+			continue;
+		}
+		for (int secondSlot = firstSlot + 1; secondSlot < capacity; ++secondSlot) {
+			Ball& second = balls[static_cast<std::size_t>(secondSlot)];
+			if (second.active) {
+				collideBalls(first, second, restitution);
+			}
 		}
 	}
 	return events;
