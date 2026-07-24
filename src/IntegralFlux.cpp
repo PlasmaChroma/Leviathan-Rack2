@@ -1,80 +1,68 @@
-#include "plugin.hpp"
+#include "IntegralFlux.hpp"
 #include "DebugTerminalTransport.hpp"
-#include "PanelSvgUtils.hpp"
+#include "MathHelpers.hpp"
 #include <dsp/minblep.hpp>
 #include <array>
-#include <cstdio>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <limits>
-#include <unordered_map>
 
 namespace {
 std::atomic<uint32_t> gIntegralFluxDebugInstanceCounter {1u};
-constexpr double kIntegralFluxDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
-std::unordered_map<uint32_t, double> gIntegralFluxDebugTerminalLastSubmitSec;
 }
 
-struct IntegralFlux : Module {
-	// Panel/control IDs are intentionally ordered to match panel layout and existing patches.
-	enum ParamId {
-		ATTENUATE_1_PARAM,
-		CYCLE_1_PARAM,
-		CYCLE_4_PARAM,
-		RISE_1_PARAM,
-		RISE_4_PARAM,
-		ATTENUATE_2_PARAM,
-		FALL_1_PARAM,
-		FALL_4_PARAM,
-		ATTENUATE_3_PARAM,
-		LIN_LOG_1_PARAM,
-		LIN_LOG_4_PARAM,
-		ATTENUATE_4_PARAM,
-		PARAMS_LEN
-	};
-	enum InputId {
-		INPUT_1_INPUT,
-		INPUT_1_TRIG_INPUT,
-		INPUT_2_INPUT,
-		INPUT_3_INPUT,
-		INPUT_4_TRIG_INPUT,
-		INPUT_4_INPUT,
-		CH1_RISE_CV_INPUT,
-		CH4_RISE_CV_INPUT,
-		CH1_BOTH_CV_INPUT,
-		CH4_BOTH_CV_INPUT,
-		CH1_FALL_CV_INPUT,
-		CH4_FALL_CV_INPUT,
-		CH1_CYCLE_CV_INPUT,
-		CH4_CYCLE_CV_INPUT,
-		INPUTS_LEN
-	};
-	enum OutputId {
-		OUT_1_OUTPUT,
-		OUT_2_OUTPUT,
-		OUT_3_OUTPUT,
-		OUT_4_OUTPUT,
-		EOR_1_OUTPUT,
-		CH_1_UNITY_OUTPUT,
-		OR_OUT_OUTPUT,
-		SUM_OUT_OUTPUT,
-		INV_OUT_OUTPUT,
-		CH_4_UNITY_OUTPUT,
-		EOC_4_OUTPUT,
-		OUTPUTS_LEN
-	};
-	enum LightId {
-		CYCLE_1_LED_LIGHT,
-		CYCLE_4_LED_LIGHT,
-		EOR_CH_1_LIGHT,
-		LIGHT_UNITY_1_LIGHT,
-		LIGHT_UNITY_4_LIGHT,
-		EOC_CH_4_LIGHT,
-		OR_LED_LIGHT,
-		INV_LED_LIGHT,
-		LIGHTS_LEN
-	};
+float IntegralFlux::shapeSignedForMode(float shapeSigned, bool rising, FunctionShapeMode mode) {
+	if (mode == FUNCTION_SHAPE_SHARK_FIN) {
+		return rising ? -shapeSigned : shapeSigned;
+	}
+	return shapeSigned;
+}
 
+float IntegralFlux::slopeWarp(float x, float s) {
+	x = clamp(x, 0.f, 1.f);
+	float u = std::fabs(s);
+	if (u < 1e-6f) {
+		return 1.f;
+	}
+	float k = WARP_K_MAX * u;
+	float x2 = x * x;
+	if (s < 0.f) {
+		return 1.f / (1.f + k * x2);
+	}
+	return 1.f + k * x2;
+}
+
+float IntegralFlux::slopeWarpScale(float s) {
+	if (std::fabs(s) < 1e-6f) {
+		return 1.f;
+	}
+	float sum = 0.f;
+	for (int i = 0; i < WARP_SCALE_SAMPLES; ++i) {
+		float xi = (i + 0.5f) / float(WARP_SCALE_SAMPLES);
+		sum += 1.f / slopeWarp(xi, s);
+	}
+	return sum / float(WARP_SCALE_SAMPLES);
+}
+
+float IntegralFlux::slopeWarpForMode(float outputNorm, float shapeSigned, bool rising, FunctionShapeMode mode) {
+	return slopeWarp(outputNorm, shapeSignedForMode(shapeSigned, rising, mode));
+}
+
+float IntegralFlux::slopeWarpScaleForMode(float shapeSigned, bool rising, FunctionShapeMode mode) {
+	return slopeWarpScale(shapeSignedForMode(shapeSigned, rising, mode));
+}
+
+IntegralFlux::FunctionShapeMode IntegralFlux::functionShapeModeFromParam(float value) {
+	return value >= 0.5f ? FUNCTION_SHAPE_MATHS : FUNCTION_SHAPE_SHARK_FIN;
+}
+
+IntegralFlux::FunctionShapeMode IntegralFlux::functionShapeModeFromStoredInt(int value) {
+	return value == FUNCTION_SHAPE_SHARK_FIN ? FUNCTION_SHAPE_SHARK_FIN : FUNCTION_SHAPE_MATHS;
+}
+
+struct IntegralFluxImpl : IntegralFlux {
+	ModuleTeardownTimer teardownTimer {"IntegralFlux"};
 	enum OuterPhase {
 		// IDLE: no active function cycle unless cycle mode is engaged.
 		// RISE/FALL: function-generator mode integrates toward 10V then 0V.
@@ -105,7 +93,9 @@ struct IntegralFlux : Module {
 		// Cached warp compensation for the current shape setting.
 		bool warpScaleValid = false;
 		float cachedShapeSigned = 0.f;
-		float cachedWarpScale = 1.f;
+		int cachedShapeMode = FUNCTION_SHAPE_MATHS;
+		float cachedRiseWarpScale = 1.f;
+		float cachedFallWarpScale = 1.f;
 		// Stage-time cache avoids recomputing expensive mapping every sample when unchanged.
 		bool stageTimeValid = false;
 		float cachedRiseKnob = 0.f;
@@ -134,6 +124,7 @@ struct IntegralFlux : Module {
 		int riseParam;
 		int fallParam;
 		int shapeParam;
+		int shapeModeParam;
 		int riseCvInput;
 		int fallCvInput;
 		int bothCvInput;
@@ -161,6 +152,7 @@ struct IntegralFlux : Module {
 		std::atomic<float> riseTime {0.01f};
 		std::atomic<float> fallTime {0.01f};
 		std::atomic<float> curveSigned {0.f};
+		std::atomic<int> shapeMode {FUNCTION_SHAPE_MATHS};
 		std::atomic<float> dotXNorm {0.f};
 		std::atomic<float> dotYNorm {0.f};
 		std::atomic<uint8_t> dotVisible {0};
@@ -176,6 +168,7 @@ struct IntegralFlux : Module {
 		float lastRiseSent = 0.01f;
 		float lastFallSent = 0.01f;
 		float lastCurveSent = 0.f;
+		int lastShapeMode = FUNCTION_SHAPE_MATHS;
 		bool sentOnce = false;
 	};
 	PreviewSharedState previewCh1;
@@ -186,12 +179,21 @@ struct IntegralFlux : Module {
 	std::atomic<bool> bandlimitedSignalOutputs {true};
 	std::atomic<uint64_t> perfAudioSampledCount {0};
 	std::atomic<uint64_t> perfAudioProcessNs {0};
+	std::atomic<uint64_t> perfAudioProcessMinNs {std::numeric_limits<uint64_t>::max()};
+	std::atomic<uint64_t> perfAudioProcessMaxNs {0};
 	std::atomic<float> perfUiRenderMs {0.f};
+	std::array<std::atomic<uint64_t>, 2> debugCurvePointsReducedTotal {};
+	std::array<std::atomic<uint64_t>, 2> debugCurveReductionSamples {};
+	std::array<std::atomic<uint64_t>, 2> debugTracerExtraPointsReducedTotal {};
+	std::array<std::atomic<uint64_t>, 2> debugTracerReductionSamples {};
 	uint32_t debugInstanceId = 0u;
 	int timingUpdateDiv = 1;
 	int timingUpdateCounter = 0;
 	std::atomic<int> requestedTimingUpdateDiv {1};
 	std::atomic<bool> timingInterpolate {true};
+	std::atomic<bool> previewTracerEnabled {true};
+	std::atomic<int> previewTracerCacheMode {WAVE_PREVIEW_TRACER_CURVE_CACHE};
+	std::atomic<int> previewRenderMode {0};
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
 	float previewDotPublishTimer = 0.f;
@@ -225,6 +227,90 @@ struct IntegralFlux : Module {
 	static constexpr float BOTH_V0_V = 4.15514297f;
 	static constexpr float BOTH_NEUTRAL_V = -0.05f;
 	static constexpr float BOTH_TIME_SCALE_MAX = 64.f;
+
+	static size_t previewDebugChannelIndex(int channel) {
+		return channel == 4 ? 1u : 0u;
+	}
+
+	void recordCurvePointReduction(int channel, size_t inputPointCount, size_t outputPointCount) override {
+		if (!isDragonKingDebugEnabled()) {
+			return;
+		}
+		const size_t index = previewDebugChannelIndex(channel);
+		debugCurvePointsReducedTotal[index].fetch_add(inputPointCount - std::min(inputPointCount, outputPointCount),
+		                                              std::memory_order_relaxed);
+		debugCurveReductionSamples[index].fetch_add(1u, std::memory_order_relaxed);
+	}
+
+	void recordTracerExtraPointReduction(int channel, const WavePreviewTracerCaptureStats& stats) override {
+		if (!isDragonKingDebugEnabled() || !stats.captured) {
+			return;
+		}
+		const size_t index = previewDebugChannelIndex(channel);
+		debugTracerExtraPointsReducedTotal[index].fetch_add(
+			stats.simplifiedPointCount - std::min(stats.simplifiedPointCount, stats.compactedPointCount),
+			std::memory_order_relaxed);
+		debugTracerReductionSamples[index].fetch_add(1u, std::memory_order_relaxed);
+	}
+
+	std::atomic<bool>& bandlimitedGateOutputsControl() override {
+		return bandlimitedGateOutputs;
+	}
+
+	std::atomic<bool>& bandlimitedSignalOutputsControl() override {
+		return bandlimitedSignalOutputs;
+	}
+
+	std::atomic<bool>& timingInterpolateControl() override {
+		return timingInterpolate;
+	}
+
+	std::atomic<bool>& previewTracerEnabledControl() override {
+		return previewTracerEnabled;
+	}
+
+	std::atomic<int>& requestedTimingUpdateDivControl() override {
+		return requestedTimingUpdateDiv;
+	}
+
+	std::atomic<int>& previewTracerCacheModeControl() override {
+		return previewTracerCacheMode;
+	}
+
+	std::atomic<int>& previewRenderModeControl() override {
+		return previewRenderMode;
+	}
+
+	void setPerfUiRenderMs(float value) override {
+		perfUiRenderMs.store(std::max(0.f, value), std::memory_order_relaxed);
+	}
+
+	uint32_t debugInstanceIdForUi() const override {
+		return debugInstanceId;
+	}
+
+	void resetAudioPerfSumsForUi() override {
+		perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
+		perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
+	}
+
+	debug_terminal::TimingRangeUs consumeAudioProcessTimingForUi() override {
+		return debug_terminal::consumeAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs);
+	}
+
+	float consumeCurveReductionAverageForUi(int channel) override {
+		const size_t index = previewDebugChannelIndex(channel);
+		const uint64_t totalValue = debugCurvePointsReducedTotal[index].exchange(0u, std::memory_order_acq_rel);
+		const uint64_t sampleCount = debugCurveReductionSamples[index].exchange(0u, std::memory_order_acq_rel);
+		return sampleCount > 0u ? float(double(totalValue) / double(sampleCount)) : 0.f;
+	}
+
+	float consumeTracerReductionAverageForUi(int channel) override {
+		const size_t index = previewDebugChannelIndex(channel);
+		const uint64_t totalValue = debugTracerExtraPointsReducedTotal[index].exchange(0u, std::memory_order_acq_rel);
+		const uint64_t sampleCount = debugTracerReductionSamples[index].exchange(0u, std::memory_order_acq_rel);
+		return sampleCount > 0u ? float(double(totalValue) / double(sampleCount)) : 0.f;
+	}
 	// Hardware-like FG ceilings.
 	static constexpr float OUTER_MAX_CYCLE_HZ = 1000.f;
 	static constexpr float OUTER_MAX_TRIGGER_HZ = 2000.f;
@@ -235,16 +321,22 @@ struct IntegralFlux : Module {
 	static constexpr float PREVIEW_INTERACTIVE_HOLD = 0.25f;
 	static constexpr float PREVIEW_DOT_PUBLISH_INTERVAL = 1.f / 120.f;
 	static constexpr int KNOB_CURVE_LUT_SIZE = 4096;
+	static constexpr float SHARK_FIN_LINEAR_SHAPE = 0.5f;
 	std::array<float, KNOB_CURVE_LUT_SIZE> knobCurveLut {};
+	float cachedInjectSampleTime = -1.f;
+	float cachedInjectAlphaBase = 0.f;
 
 	static float attenuverterGain(float knob01) {
 		// Noon = 0, CCW = negative, CW = positive.
 		return clamp(knob01, 0.f, 1.f) * 2.f - 1.f;
 	}
 
-	static float softClamp8(float v) {
-		// Smoothly approaches +/-8V while staying linear near zero.
-		return 8.0f * std::tanh(v / 8.0f);
+	float injectAlphaBaseForSampleTime(float sampleTime) {
+		if (std::fabs(sampleTime - cachedInjectSampleTime) > 1e-12f) {
+			cachedInjectSampleTime = sampleTime;
+			cachedInjectAlphaBase = OUTER_INJECT_GAIN * clamp(1.f - std::exp(-sampleTime / OUTER_INJECT_TAU), 0.f, 1.f);
+		}
+		return cachedInjectAlphaBase;
 	}
 
 	static float bothHzFromCv(float v) {
@@ -254,7 +346,7 @@ struct IntegralFlux : Module {
 	}
 
 	static float bothTimeScaleFromCv(float v) {
-		float vs = softClamp8(v);
+		float vs = levi_math::softLimit(v, 8.f);
 		float f = bothHzFromCv(vs);
 		// Neutral reference is constant for the life of the module, compute once.
 		static const float neutralHz = bothHzFromCv(BOTH_NEUTRAL_V);
@@ -273,15 +365,28 @@ struct IntegralFlux : Module {
 		}
 	}
 
-	static float shapeSignedFromKnob(float shape01) {
+	static float shapeSignedFromKnob(float shape01, float linearShape) {
 		shape01 = clamp(shape01, 0.f, 1.f);
-		if (shape01 < LINEAR_SHAPE) {
-			return (shape01 - LINEAR_SHAPE) / LINEAR_SHAPE;
+		linearShape = clamp(linearShape, 1e-4f, 1.f - 1e-4f);
+		if (shape01 < linearShape) {
+			return (shape01 - linearShape) / linearShape;
 		}
-		if (shape01 > LINEAR_SHAPE) {
-			return (shape01 - LINEAR_SHAPE) / (1.f - LINEAR_SHAPE);
+		if (shape01 > linearShape) {
+			return (shape01 - linearShape) / (1.f - linearShape);
 		}
 		return 0.f;
+	}
+
+	static float shapeSignedFromKnobForMode(float shape01, FunctionShapeMode mode) {
+		return shapeSignedFromKnob(shape01, mode == FUNCTION_SHAPE_SHARK_FIN ? SHARK_FIN_LINEAR_SHAPE : LINEAR_SHAPE);
+	}
+
+	static FunctionShapeMode functionShapeModeFromParam(float value) {
+		return value >= 0.5f ? FUNCTION_SHAPE_MATHS : FUNCTION_SHAPE_SHARK_FIN;
+	}
+
+	static FunctionShapeMode functionShapeModeFromStoredInt(int value) {
+		return value == FUNCTION_SHAPE_SHARK_FIN ? FUNCTION_SHAPE_SHARK_FIN : FUNCTION_SHAPE_MATHS;
 	}
 
 	static float slopeWarp(float x, float s) {
@@ -316,6 +421,21 @@ struct IntegralFlux : Module {
 		return sum / float(WARP_SCALE_SAMPLES);
 	}
 
+	static float shapeSignedForMode(float shapeSigned, bool rising, FunctionShapeMode mode) {
+		if (mode == FUNCTION_SHAPE_SHARK_FIN) {
+			return rising ? -shapeSigned : shapeSigned;
+		}
+		return shapeSigned;
+	}
+
+	static float slopeWarpForMode(float outputNorm, float shapeSigned, bool rising, FunctionShapeMode mode) {
+		return slopeWarp(outputNorm, shapeSignedForMode(shapeSigned, rising, mode));
+	}
+
+	static float slopeWarpScaleForMode(float shapeSigned, bool rising, FunctionShapeMode mode) {
+		return slopeWarpScale(shapeSignedForMode(shapeSigned, rising, mode));
+	}
+
 	static float segmentPhaseFromOutputNorm(float outputNorm, float shapeSigned, bool rising) {
 		outputNorm = clamp(outputNorm, 0.f, 1.f);
 		if (std::fabs(shapeSigned) < 1e-6f) {
@@ -334,6 +454,14 @@ struct IntegralFlux : Module {
 		return clamp(partialIntegral / totalIntegral, 0.f, 1.f);
 	}
 
+	static float segmentPhaseFromOutputNormForMode(float outputNorm, float shapeSigned, bool rising, FunctionShapeMode mode) {
+		outputNorm = clamp(outputNorm, 0.f, 1.f);
+		if (mode == FUNCTION_SHAPE_MATHS) {
+			return segmentPhaseFromOutputNorm(outputNorm, shapeSigned, rising);
+		}
+		return segmentPhaseFromOutputNorm(outputNorm, shapeSignedForMode(shapeSigned, rising, mode), rising);
+	}
+
 	static float computeSegPhase(float out, float startOut, float invSpan) {
 		if (std::fabs(invSpan) < 1e-9f) {
 			return 1.f;
@@ -348,7 +476,9 @@ struct IntegralFlux : Module {
 		float riseTime,
 		float fallTime,
 		float shapeSigned,
-		float warpScale,
+		FunctionShapeMode shapeMode,
+		float riseWarpScale,
+		float fallWarpScale,
 		float dt
 	) {
 		// Shared "core limiter" path when the outer channel is acting as a slew on input signal.
@@ -386,10 +516,13 @@ struct IntegralFlux : Module {
 
 		float stageTime = (delta > 0.f) ? riseTime : fallTime;
 		stageTime = std::max(stageTime, 1e-6f);
+		const bool rising = delta > 0.f;
 		float range = OUTER_V_MAX - OUTER_V_MIN;
-		float x = computeSegPhase(out, ch.slewStartOut, ch.slewInvSpan);
+		float outputNorm = clamp((out - OUTER_V_MIN) / std::max(range, 1e-6f), 0.f, 1.f);
+		float scale = rising ? riseWarpScale : fallWarpScale;
+		float warp = slopeWarpForMode(outputNorm, shapeSigned, rising, shapeMode);
 		float dp = clamp(dt / stageTime, 0.f, 0.5f);
-		float step = dp * slopeWarp(x, shapeSigned) * warpScale * range;
+		float step = dp * warp * scale * range;
 
 		float prevOut = out;
 		out += (delta > 0.f) ? step : -step;
@@ -466,7 +599,7 @@ struct IntegralFlux : Module {
 		ch4.stageTimeValid = false;
 	}
 
-	void requestTimingUpdateDiv(int div) {
+	void requestTimingUpdateDiv(int div) override {
 		requestedTimingUpdateDiv.store(std::max(1, div), std::memory_order_relaxed);
 	}
 
@@ -510,11 +643,13 @@ struct IntegralFlux : Module {
 		}
 	}
 
-	void publishPreviewState(PreviewSharedState& shared, float riseTime, float fallTime, float curveSigned, bool interactiveRecent) {
+	void publishPreviewState(PreviewSharedState& shared, float riseTime, float fallTime, float curveSigned,
+		FunctionShapeMode shapeMode, bool interactiveRecent) {
 		// Batched atomic publish: UI only rebuilds when version increments.
 		shared.riseTime.store(riseTime, std::memory_order_relaxed);
 		shared.fallTime.store(fallTime, std::memory_order_relaxed);
 		shared.curveSigned.store(curveSigned, std::memory_order_relaxed);
+		shared.shapeMode.store(int(shapeMode), std::memory_order_relaxed);
 		shared.interactiveRecent.store(interactiveRecent ? uint8_t(1) : uint8_t(0), std::memory_order_relaxed);
 		shared.version.fetch_add(1, std::memory_order_relaxed);
 	}
@@ -542,17 +677,20 @@ struct IntegralFlux : Module {
 		float riseTime,
 		float fallTime,
 		float curveSigned,
+		FunctionShapeMode shapeMode,
 		float dt
 	) {
 		// Preview refresh runs slower than audio and only pushes updates when meaningful.
 		bool knobChanged = std::fabs(riseKnob - state.lastRiseKnob) > PARAM_CACHE_EPS
 			|| std::fabs(fallKnob - state.lastFallKnob) > PARAM_CACHE_EPS
 			|| std::fabs(curveKnob - state.lastCurveKnob) > PARAM_CACHE_EPS;
+		bool modeChanged = int(shapeMode) != state.lastShapeMode;
 		state.lastRiseKnob = riseKnob;
 		state.lastFallKnob = fallKnob;
 		state.lastCurveKnob = curveKnob;
+		state.lastShapeMode = int(shapeMode);
 
-		if (knobChanged) {
+		if (knobChanged || modeChanged) {
 			state.interactiveHold = PREVIEW_INTERACTIVE_HOLD;
 			// Push an immediate preview refresh on manual interaction.
 			state.timer = PREVIEW_INTERACTIVE_INTERVAL;
@@ -563,13 +701,13 @@ struct IntegralFlux : Module {
 		state.timer += dt;
 
 		float interval = (state.interactiveHold > 0.f) ? PREVIEW_INTERACTIVE_INTERVAL : PREVIEW_CV_INTERVAL;
-		bool changed = knobChanged || !state.sentOnce || previewChangedMeaningfully(
+		bool changed = knobChanged || modeChanged || !state.sentOnce || previewChangedMeaningfully(
 			riseTime, state.lastRiseSent,
 			fallTime, state.lastFallSent,
 			curveSigned, state.lastCurveSent
 		);
 		if (changed && state.timer >= interval) {
-			publishPreviewState(shared, riseTime, fallTime, curveSigned, state.interactiveHold > 0.f);
+			publishPreviewState(shared, riseTime, fallTime, curveSigned, shapeMode, state.interactiveHold > 0.f);
 			state.lastRiseSent = riseTime;
 			state.lastFallSent = fallTime;
 			state.lastCurveSent = curveSigned;
@@ -581,11 +719,12 @@ struct IntegralFlux : Module {
 	}
 
 	void getPreviewState(int channel, float& riseTime, float& fallTime, float& curveSigned, float& dotXNorm,
-		float& dotYNorm, bool& dotVisible, bool& interactiveRecent, uint32_t& version) const {
+		float& dotYNorm, bool& dotVisible, FunctionShapeMode& shapeMode, bool& interactiveRecent, uint32_t& version) const override {
 		const PreviewSharedState& shared = (channel == 4) ? previewCh4 : previewCh1;
 		riseTime = shared.riseTime.load(std::memory_order_relaxed);
 		fallTime = shared.fallTime.load(std::memory_order_relaxed);
 		curveSigned = shared.curveSigned.load(std::memory_order_relaxed);
+		shapeMode = functionShapeModeFromStoredInt(shared.shapeMode.load(std::memory_order_relaxed));
 		dotXNorm = shared.dotXNorm.load(std::memory_order_relaxed);
 		dotYNorm = shared.dotYNorm.load(std::memory_order_relaxed);
 		dotVisible = shared.dotVisible.load(std::memory_order_relaxed) != 0;
@@ -593,16 +732,17 @@ struct IntegralFlux : Module {
 		version = shared.version.load(std::memory_order_relaxed);
 	}
 
-	float computeShapeTimeScale(float shape, float logScaleLog2, float expScaleLog2) const {
+	float computeShapeTimeScale(float shape, FunctionShapeMode mode, float logScaleLog2, float expScaleLog2) const {
 		// Shape knob (log/lin/exp) contributes a multiplicative time factor.
 		// We interpolate in log2 domain so scaling stays perceptually smooth.
 		shape = clamp(shape, 0.f, 1.f);
-		if (shape < LINEAR_SHAPE) {
-			float t = shape / LINEAR_SHAPE;
+		const float linearShape = mode == FUNCTION_SHAPE_SHARK_FIN ? SHARK_FIN_LINEAR_SHAPE : LINEAR_SHAPE;
+		if (shape < linearShape) {
+			float t = shape / linearShape;
 			return rack::dsp::exp2_taylor5((1.f - t) * logScaleLog2);
 		}
-		if (shape > LINEAR_SHAPE) {
-			float t = (shape - LINEAR_SHAPE) / (1.f - LINEAR_SHAPE);
+		if (shape > linearShape) {
+			float t = (shape - linearShape) / (1.f - linearShape);
 			return rack::dsp::exp2_taylor5(t * expScaleLog2);
 		}
 		return 1.f;
@@ -629,7 +769,7 @@ struct IntegralFlux : Module {
 
 		// Rise/Fall CV applies in log-time domain:
 		// +V -> longer (slower), -V -> shorter (faster).
-		float stageCvSoft = softClamp8(stageCv);
+		float stageCvSoft = levi_math::softLimit(stageCv, 8.f);
 		float stageOct = clamp(stageCvSoft * STAGE_CV_OCT_PER_V, -CV_OCT_CLAMP, CV_OCT_CLAMP);
 		t *= rack::dsp::exp2_taylor5(stageOct);
 
@@ -693,22 +833,25 @@ struct IntegralFlux : Module {
 		float riseKnob = params[cfg.riseParam].getValue();
 		float fallKnob = params[cfg.fallParam].getValue();
 		float shape = params[cfg.shapeParam].getValue();
+		FunctionShapeMode shapeMode = functionShapeModeFromParam(params[cfg.shapeModeParam].getValue());
 		float riseCv = inputs[cfg.riseCvInput].getVoltage();
 		float fallCv = inputs[cfg.fallCvInput].getVoltage();
 		float bothCv = inputs[cfg.bothCvInput].getVoltage();
 		bool shapeKnobChanged = std::fabs(shape - ch.cachedShape) > PARAM_CACHE_EPS;
+		bool shapeModeChanged = int(shapeMode) != ch.cachedShapeMode;
 		if (!ch.stageTimeValid || timingTick) {
 			// Recompute times only when a relevant source changed.
 			bool stageTimeDirty = !ch.stageTimeValid
 				|| std::fabs(riseKnob - ch.cachedRiseKnob) > PARAM_CACHE_EPS
 				|| std::fabs(fallKnob - ch.cachedFallKnob) > PARAM_CACHE_EPS
 				|| std::fabs(shape - ch.cachedShape) > PARAM_CACHE_EPS
+				|| shapeModeChanged
 				|| std::fabs(riseCv - ch.cachedRiseCv) > CV_CACHE_EPS
 				|| std::fabs(fallCv - ch.cachedFallCv) > CV_CACHE_EPS
 				|| std::fabs(bothCv - ch.cachedBothCv) > CV_CACHE_EPS;
 			if (stageTimeDirty) {
 				float bothScale = bothTimeScaleFromCv(bothCv);
-				float shapeTimeScale = computeShapeTimeScale(shape, cfg.logShapeTimeScaleLog2, cfg.expShapeTimeScaleLog2);
+				float shapeTimeScale = computeShapeTimeScale(shape, shapeMode, cfg.logShapeTimeScaleLog2, cfg.expShapeTimeScaleLog2);
 				ch.cachedRiseTime = computeStageTime(
 					riseKnob,
 					riseCv,
@@ -773,7 +916,7 @@ struct IntegralFlux : Module {
 			// One-shot/triggered FG segments use trigger-domain ceiling when not cycling.
 			enforceOuterSpeedLimit(riseTime, fallTime, 1.f / std::max(OUTER_MAX_TRIGGER_HZ, 1.f));
 		}
-		float shapeSigned = shapeSignedFromKnob(shape);
+		float shapeSigned = shapeSignedFromKnobForMode(shape, shapeMode);
 		bool previewStatePublished = updatePreviewChannel(
 			previewShared,
 			previewUpdateState,
@@ -783,22 +926,28 @@ struct IntegralFlux : Module {
 			riseTime,
 			fallTime,
 			shapeSigned,
+			shapeMode,
 			dt
 		);
-		if (!ch.warpScaleValid || std::fabs(shapeSigned - ch.cachedShapeSigned) > 1e-4f) {
+		if (!ch.warpScaleValid
+			|| std::fabs(shapeSigned - ch.cachedShapeSigned) > 1e-4f
+			|| shapeModeChanged) {
 			// Curve normalization changes only when shape changes.
 			ch.cachedShapeSigned = shapeSigned;
-			ch.cachedWarpScale = slopeWarpScale(shapeSigned);
+			ch.cachedShapeMode = int(shapeMode);
+			ch.cachedRiseWarpScale = slopeWarpScaleForMode(shapeSigned, true, shapeMode);
+			ch.cachedFallWarpScale = slopeWarpScaleForMode(shapeSigned, false, shapeMode);
 			ch.warpScaleValid = true;
 		}
-		if (shapeKnobChanged && ch.phase != OUTER_IDLE) {
+		if ((shapeKnobChanged || shapeModeChanged) && ch.phase != OUTER_IDLE) {
 			// Re-anchor phase to current output whenever curve changes so the tracer
 			// location is invalidated/recomputed against the updated curve shape.
 			float range = std::max(OUTER_V_MAX - OUTER_V_MIN, 1e-6f);
 			float x = clamp((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
-			ch.phasePos = segmentPhaseFromOutputNorm(x, shapeSigned, ch.phase == OUTER_RISE);
+			ch.phasePos = segmentPhaseFromOutputNormForMode(x, shapeSigned, ch.phase == OUTER_RISE, shapeMode);
 		}
-		float scale = ch.cachedWarpScale;
+		float riseScale = ch.cachedRiseWarpScale;
+		float fallScale = ch.cachedFallWarpScale;
 
 		bool signalPatched = inputs[cfg.signalInput].isConnected();
 		float signalIn = signalPatched ? inputs[cfg.signalInput].getVoltage() : 0.f;
@@ -835,7 +984,7 @@ struct IntegralFlux : Module {
 			float injectAlpha = 0.f;
 			if (signalPatched) {
 				// Map patched input into the same normalized domain as the internal integrator state.
-				float inSoft = softClamp8(signalIn);
+				float inSoft = levi_math::softLimit(signalIn, 8.f);
 				xIn = clamp((inSoft - OUTER_V_MIN) / range, 0.f, 1.f);
 				injectAlpha = injectAlphaBase;
 			}
@@ -845,7 +994,7 @@ struct IntegralFlux : Module {
 				ch.phasePos += dpPhase;
 				float x = clamp((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
 				float dp = clamp(dt / riseTime, 0.f, 0.5f);
-				x += dp * slopeWarp(x, s) * scale;
+				x += dp * slopeWarpForMode(x, s, true, shapeMode) * riseScale;
 				if (injectAlpha > 0.f) {
 					// Hardware-like perturbation: gently pull active FG state toward input.
 					x += injectAlpha * (xIn - x);
@@ -873,7 +1022,7 @@ struct IntegralFlux : Module {
 				ch.phasePos += dpPhase;
 				float x = clamp((ch.out - OUTER_V_MIN) / range, 0.f, 1.f);
 				float dp = clamp(dt / fallTime, 0.f, 0.5f);
-				x -= dp * slopeWarp(x, s) * scale;
+				x -= dp * slopeWarpForMode(x, s, false, shapeMode) * fallScale;
 				if (injectAlpha > 0.f) {
 					x += injectAlpha * (xIn - x);
 				}
@@ -905,7 +1054,9 @@ struct IntegralFlux : Module {
 				riseTime,
 				fallTime,
 				shapeSigned,
-				scale,
+				shapeMode,
+				riseScale,
+				fallScale,
 				dt
 			);
 			ch.out = slewStep.out;
@@ -930,22 +1081,24 @@ struct IntegralFlux : Module {
 		return result;
 	}
 
-	IntegralFlux() {
+	IntegralFluxImpl() {
 		initKnobCurveLut();
 		debugInstanceId = gIntegralFluxDebugInstanceCounter.fetch_add(1u, std::memory_order_relaxed);
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configParam(ATTENUATE_1_PARAM, 0.f, 1.f, 0.5f, "CH1 attenuverter");
-		configParam(CYCLE_1_PARAM, 0.f, 1.f, 0.f, "CH1 cycle");
-		configParam(CYCLE_4_PARAM, 0.f, 1.f, 0.f, "CH4 cycle");
-		configParam(RISE_1_PARAM, 0.f, 1.f, 0.f, "CH1 rise");
-		configParam(RISE_4_PARAM, 0.f, 1.f, 0.f, "CH4 rise");
-		configParam(ATTENUATE_2_PARAM, 0.f, 1.f, 0.5f, "CH2 attenuverter");
-		configParam(FALL_1_PARAM, 0.f, 1.f, 0.f, "CH1 fall");
-		configParam(FALL_4_PARAM, 0.f, 1.f, 0.f, "CH4 fall");
-		configParam(ATTENUATE_3_PARAM, 0.f, 1.f, 0.5f, "CH3 attenuverter");
-		configParam(LIN_LOG_1_PARAM, 0.f, 1.f, 0.f, "CH1 shape");
-		configParam(LIN_LOG_4_PARAM, 0.f, 1.f, 0.f, "CH4 shape");
-		configParam(ATTENUATE_4_PARAM, 0.f, 1.f, 0.5f, "CH4 attenuverter");
+		configParam(ATTENUATE_1_PARAM, 0.f, 1.f, 0.5f, "CH1 attenuverter", "%", 0.f, 200.f, -100.f);
+		configParam(CYCLE_1_PARAM, 0.f, 1.f, 0.f, "CH1 loop");
+		configParam(CYCLE_4_PARAM, 0.f, 1.f, 0.f, "CH4 loop");
+		configParam(RISE_1_PARAM, 0.f, 1.f, 0.f, "CH1 rise", "%", 0.f, 100.f, 0.f);
+		configParam(RISE_4_PARAM, 0.f, 1.f, 0.f, "CH4 rise", "%", 0.f, 100.f, 0.f);
+		configParam(ATTENUATE_2_PARAM, 0.f, 1.f, 0.5f, "CH2 attenuverter", "%", 0.f, 200.f, -100.f);
+		configParam(FALL_1_PARAM, 0.f, 1.f, 0.f, "CH1 fall", "%", 0.f, 100.f, 0.f);
+		configParam(FALL_4_PARAM, 0.f, 1.f, 0.f, "CH4 fall", "%", 0.f, 100.f, 0.f);
+		configParam(ATTENUATE_3_PARAM, 0.f, 1.f, 0.5f, "CH3 attenuverter", "%", 0.f, 200.f, -100.f);
+		configParam(LIN_LOG_1_PARAM, 0.f, 1.f, 0.f, "CH1 shape", "%", 0.f, 100.f, 0.f);
+		configParam(LIN_LOG_4_PARAM, 0.f, 1.f, 0.f, "CH4 shape", "%", 0.f, 100.f, 0.f);
+		configParam(ATTENUATE_4_PARAM, 0.f, 1.f, 0.5f, "CH4 attenuverter", "%", 0.f, 200.f, -100.f);
+		configSwitch(SHAPE_MODE_1_PARAM, 0.f, 1.f, 1.f, "CH1 function shape mode", {"Shark Fin", "Mirror"});
+		configSwitch(SHAPE_MODE_4_PARAM, 0.f, 1.f, 1.f, "CH4 function shape mode", {"Shark Fin", "Mirror"});
 		configInput(INPUT_1_INPUT, "CH1 signal");
 		configInput(INPUT_1_TRIG_INPUT, "CH1 trigger");
 		configInput(INPUT_2_INPUT, "CH2 signal");
@@ -958,8 +1111,8 @@ struct IntegralFlux : Module {
 		configInput(CH4_BOTH_CV_INPUT, "CH4 both");
 		configInput(CH1_FALL_CV_INPUT, "CH1 fall");
 		configInput(CH4_FALL_CV_INPUT, "CH4 fall");
-		configInput(CH1_CYCLE_CV_INPUT, "CH1 cycle");
-		configInput(CH4_CYCLE_CV_INPUT, "CH4 cycle");
+		configInput(CH1_CYCLE_CV_INPUT, "CH1 loop");
+		configInput(CH4_CYCLE_CV_INPUT, "CH4 loop");
 		configOutput(OUT_1_OUTPUT, "CH1 variable");
 		configOutput(OUT_2_OUTPUT, "CH2 variable");
 		configOutput(OUT_3_OUTPUT, "CH3 variable");
@@ -973,6 +1126,10 @@ struct IntegralFlux : Module {
 		configOutput(EOC_4_OUTPUT, "CH4 end of cycle");
 	}
 
+	~IntegralFluxImpl() override {
+		teardownTimer.begin(id);
+	}
+
 	json_t* dataToJson() override {
 		json_t* rootJ = json_object();
 		json_object_set_new(rootJ, "ch1CycleLatched", json_boolean(ch1.cycleLatched));
@@ -981,6 +1138,9 @@ struct IntegralFlux : Module {
 		json_object_set_new(rootJ, "bandlimitedSignalOutputs", json_boolean(bandlimitedSignalOutputs.load(std::memory_order_relaxed)));
 		json_object_set_new(rootJ, "timingUpdateDiv", json_integer(requestedTimingUpdateDiv.load(std::memory_order_relaxed)));
 		json_object_set_new(rootJ, "timingInterpolate", json_boolean(timingInterpolate.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "previewTracerEnabled", json_boolean(previewTracerEnabled.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "previewTracerCacheMode", json_integer(previewTracerCacheMode.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "previewRenderMode", json_integer(previewRenderMode.load(std::memory_order_relaxed)));
 		return rootJ;
 	}
 
@@ -1014,6 +1174,27 @@ struct IntegralFlux : Module {
 		if (timingInterpJ) {
 			timingInterpolate.store(json_boolean_value(timingInterpJ), std::memory_order_relaxed);
 		}
+
+		json_t* previewTracerJ = json_object_get(rootJ, "previewTracerEnabled");
+		if (previewTracerJ) {
+			previewTracerEnabled.store(json_boolean_value(previewTracerJ), std::memory_order_relaxed);
+		}
+
+		json_t* previewTracerModeJ = json_object_get(rootJ, "previewTracerCacheMode");
+		if (previewTracerModeJ) {
+			const int mode = int(json_integer_value(previewTracerModeJ));
+			previewTracerCacheMode.store(mode == WAVE_PREVIEW_TRACER_CURVE_CACHE ? WAVE_PREVIEW_TRACER_CURVE_CACHE : WAVE_PREVIEW_TRACER_FRAME_CACHE,
+			                             std::memory_order_relaxed);
+		}
+
+		json_t* previewRenderModeJ = json_object_get(rootJ, "previewRenderMode");
+		if (previewRenderModeJ) {
+			previewRenderMode.store(json_integer_value(previewRenderModeJ) == 1 ? 1 : 0, std::memory_order_relaxed);
+		}
+		if (!isDragonKingPreviewWidgetOptionsEnabled()) {
+			previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed);
+			previewRenderMode.store(0, std::memory_order_relaxed);
+		}
 	}
 
 	void process(const ProcessArgs& args) override {
@@ -1023,7 +1204,7 @@ struct IntegralFlux : Module {
 		const bool bandlimitedSignalEnabled = bandlimitedSignalOutputs.load(std::memory_order_relaxed);
 		const bool bandlimitedGateEnabled = bandlimitedGateOutputs.load(std::memory_order_relaxed);
 		const bool timingInterpolateEnabled = timingInterpolate.load(std::memory_order_relaxed);
-		const float injectAlphaBase = OUTER_INJECT_GAIN * clamp(1.f - std::exp(-args.sampleTime / OUTER_INJECT_TAU), 0.f, 1.f);
+		const float injectAlphaBase = injectAlphaBaseForSampleTime(args.sampleTime);
 		applyRequestedTimingUpdateDiv();
 		// Static config structs remove repeated branching and keep CH1/CH4 path unified.
 		static const OuterChannelConfig ch1Cfg {
@@ -1033,6 +1214,7 @@ struct IntegralFlux : Module {
 			RISE_1_PARAM,
 			FALL_1_PARAM,
 			LIN_LOG_1_PARAM,
+			SHAPE_MODE_1_PARAM,
 			CH1_RISE_CV_INPUT,
 			CH1_FALL_CV_INPUT,
 			CH1_BOTH_CV_INPUT,
@@ -1048,6 +1230,7 @@ struct IntegralFlux : Module {
 			RISE_4_PARAM,
 			FALL_4_PARAM,
 			LIN_LOG_4_PARAM,
+			SHAPE_MODE_4_PARAM,
 			CH4_RISE_CV_INPUT,
 			CH4_FALL_CV_INPUT,
 			CH4_BOTH_CV_INPUT,
@@ -1185,578 +1368,36 @@ struct IntegralFlux : Module {
 				PerfClock::now() - perfStart).count();
 			perfAudioProcessNs.fetch_add(elapsedNs, std::memory_order_relaxed);
 			perfAudioSampledCount.fetch_add(1u, std::memory_order_relaxed);
+			debug_terminal::recordAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs, elapsedNs);
 		}
 	}
 };
+
 
 namespace {
-
-struct IMBigPushButton : CKD6 {
-	int* mode = NULL;
-	TransformWidget *tw;
-	IMBigPushButton() {
-		setSizeRatio(0.9f);
+struct IntegralFluxModel : plugin::Model {
+	engine::Module* createModule() override {
+		engine::Module* m = new IntegralFluxImpl;
+		m->model = this;
+		return m;
 	}
-	void setSizeRatio(float ratio) {
-		// Scale only the SVG child so hit area follows the visible button.
-		sw->box.size = sw->box.size.mult(ratio);
-		fb->removeChild(sw);
-		tw = new TransformWidget();
-		tw->addChild(sw);
-		tw->scale(Vec(ratio, ratio));
-		tw->box.size = sw->box.size;
-		fb->addChild(tw);
-		box.size = sw->box.size;
-		shadow->box.size = sw->box.size;
-	}
-};
 
-// Create a bigger basic button
-struct BigTL1105 : TL1105 {
-    BigTL1105() {
-        // Dialed back to ~85% of previous size for a tighter click area.
-        box.size = mm2px(Vec(9.5, 9.5));
-    }
-};
-
-struct BananutBlack : app::SvgPort {
-	BananutBlack() {
-		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
+	app::ModuleWidget* createModuleWidget(engine::Module* m) override {
+		IntegralFlux* flux = nullptr;
+		if (m) {
+			assert(m->model == this);
+			flux = dynamic_cast<IntegralFlux*>(m);
+		}
+		app::ModuleWidget* mw = createIntegralFluxWidget(flux);
+		assert(mw->module == m);
+		mw->setModel(this);
+		return mw;
 	}
 };
-
-struct WavePreviewWidget : Widget {
-	// Preview boxes are small; this density materially lowers per-frame NanoVG work
-	// while remaining visually smooth at current panel scale.
-	static constexpr int POINT_COUNT = 128;
-	static constexpr int PREVIEW_LUT_SIZE = 512;
-	static constexpr float CENTER_LINE_WIDTH = 1.0f;
-	static constexpr float WAVE_LINE_WIDTH = 1.4f;
-	static constexpr float WAVE_EDGE_PAD = 1.0f;
-	static constexpr float DOT_RADIUS = 2.1f;
-	static constexpr float DOT_SHOW_MAX_HZ = 2.0f;
-	static constexpr float DOT_HIDE_MIN_HZ = 2.4f;
-	static constexpr float LABEL_FONT_SIZE = 11.5f;
-	int channel = 1;
-	IntegralFlux* modulePtr = nullptr;
-	std::array<Vec, POINT_COUNT> points {};
-	uint32_t lastVersion = 0;
-	bool pointsValid = false;
-	float lastFreqHz = 100.f;
-	float dotXNorm = 0.f;
-	float dotYNorm = 0.f;
-	bool dotVisible = false;
-
-	WavePreviewWidget(IntegralFlux* module, int channel) {
-		modulePtr = module;
-		this->channel = channel;
-	}
-
-	static void buildSegmentLut(std::array<float, PREVIEW_LUT_SIZE>& lut, float curveSigned, bool rising) {
-		// Build once per preview update. Midpoint integration reduces visual artifacts at extreme curve asymmetry.
-		float scale = IntegralFlux::slopeWarpScale(curveSigned);
-		float dp = 1.f / float(PREVIEW_LUT_SIZE - 1);
-		float x = rising ? 0.f : 1.f;
-		lut[0] = x;
-		for (int i = 1; i < PREVIEW_LUT_SIZE; ++i) {
-			float k1 = IntegralFlux::slopeWarp(x, curveSigned) * scale;
-			float xMid = rising ? (x + 0.5f * dp * k1) : (x - 0.5f * dp * k1);
-			xMid = clamp(xMid, 0.f, 1.f);
-			float k2 = IntegralFlux::slopeWarp(xMid, curveSigned) * scale;
-			x += rising ? (dp * k2) : (-dp * k2);
-			x = clamp(x, 0.f, 1.f);
-			lut[i] = x;
-		}
-		lut.front() = rising ? 0.f : 1.f;
-		lut.back() = rising ? 1.f : 0.f;
-	}
-
-	static float sampleSegmentLut(const std::array<float, PREVIEW_LUT_SIZE>& lut, float t) {
-		t = clamp(t, 0.f, 1.f);
-		float idx = t * float(PREVIEW_LUT_SIZE - 1);
-		int i0 = int(idx);
-		int i1 = std::min(i0 + 1, PREVIEW_LUT_SIZE - 1);
-		float f = idx - float(i0);
-		return lut[i0] + (lut[i1] - lut[i0]) * f;
-	}
-
-	void rebuildPoints(float riseTime, float fallTime, float curveSigned, bool interactiveRecent) {
-		float w = std::max(box.size.x, 1.f);
-		float h = std::max(box.size.y, 1.f);
-		float drawPad = 0.5f * WAVE_LINE_WIDTH + WAVE_EDGE_PAD;
-		float left = drawPad;
-		float top = drawPad;
-		float right = std::max(left + 1.f, w - drawPad);
-		float bottom = std::max(top + 1.f, h - drawPad);
-		float drawW = right - left;
-		float drawH = bottom - top;
-		// The preview always shows exactly one full rise+fall cycle across widget width.
-		float totalTime = std::max(riseTime + fallTime, 1e-6f);
-		float riseRatio = riseTime / totalTime;
-		float peakX = left + riseRatio * drawW;
-		float riseWidth = std::max(peakX - left, 1e-4f);
-		float fallWidth = std::max(right - peakX, 1e-4f);
-		// Reserved hook if we later render interactive-state emphasis.
-		(void) interactiveRecent;
-		std::array<float, PREVIEW_LUT_SIZE> riseLut {};
-		std::array<float, PREVIEW_LUT_SIZE> fallLut {};
-		buildSegmentLut(riseLut, curveSigned, true);
-		buildSegmentLut(fallLut, curveSigned, false);
-
-		for (int i = 0; i < POINT_COUNT; ++i) {
-			float xNorm = float(i) / float(POINT_COUNT - 1);
-			float x = left + xNorm * drawW;
-			float y = -1.f;
-			if (x <= peakX) {
-				float t = (x - left) / riseWidth;
-				float v = sampleSegmentLut(riseLut, t);
-				y = -1.f + 2.f * v;
-			}
-			else {
-				float t = (x - peakX) / fallWidth;
-				float v = sampleSegmentLut(fallLut, t);
-				y = -1.f + 2.f * v;
-			}
-			float py = top + (0.5f - 0.5f * y) * drawH;
-			py = clamp(py, top, bottom);
-			points[i] = Vec(x, py);
-		}
-
-		// Preserve full crest height under extreme rise/fall asymmetry by pinning
-		// both vertices that bracket the true peak location.
-		float peakIndexF = riseRatio * float(POINT_COUNT - 1);
-		int peakIndex0 = std::max(0, std::min(POINT_COUNT - 1, int(std::floor(peakIndexF))));
-		int peakIndex1 = std::max(0, std::min(POINT_COUNT - 1, int(std::ceil(peakIndexF))));
-		float peakPx0 = left + (float(peakIndex0) / float(POINT_COUNT - 1)) * drawW;
-		float peakPx1 = left + (float(peakIndex1) / float(POINT_COUNT - 1)) * drawW;
-		points[peakIndex0] = Vec(peakPx0, top);
-		points[peakIndex1] = Vec(peakPx1, top);
-		points.front() = Vec(left, bottom);
-		points.back() = Vec(right, bottom);
-		pointsValid = true;
-	}
-
-	void step() override {
-		Widget::step();
-		if (!modulePtr) {
-			if (!pointsValid) {
-				rebuildPoints(0.01f, 0.01f, 0.f, false);
-			}
-			return;
-		}
-		float riseTime = 0.01f;
-		float fallTime = 0.01f;
-		float curveSigned = 0.f;
-		float previewDotXNorm = 0.f;
-		float previewDotYNorm = 0.f;
-		bool previewDotVisible = false;
-		bool interactiveRecent = false;
-		uint32_t version = 0;
-		modulePtr->getPreviewState(channel, riseTime, fallTime, curveSigned, previewDotXNorm, previewDotYNorm,
-			previewDotVisible, interactiveRecent, version);
-		dotXNorm = previewDotXNorm;
-		dotYNorm = previewDotYNorm;
-		// Displayed frequency reflects the currently effective cycle period.
-		lastFreqHz = 1.f / std::max(riseTime + fallTime, 1e-6f);
-		// Always hide when FG is inactive; frequency hysteresis only applies while active.
-		if (!previewDotVisible) {
-			dotVisible = false;
-		}
-		else if (lastFreqHz >= DOT_HIDE_MIN_HZ) {
-			dotVisible = false;
-		}
-		else if (lastFreqHz <= DOT_SHOW_MAX_HZ) {
-			dotVisible = true;
-		}
-		if (!pointsValid || version != lastVersion) {
-			rebuildPoints(riseTime, fallTime, curveSigned, interactiveRecent);
-			lastVersion = version;
-		}
-	}
-
-	void draw(const DrawArgs& args) override {
-		nvgSave(args.vg);
-		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
-
-		if (pointsValid) {
-			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, points[0].x, points[0].y);
-			for (int i = 1; i < POINT_COUNT; ++i) {
-				nvgLineTo(args.vg, points[i].x, points[i].y);
-			}
-			nvgStrokeColor(args.vg, nvgRGBA(230, 230, 220, 255));
-			nvgStrokeWidth(args.vg, WAVE_LINE_WIDTH);
-			nvgLineCap(args.vg, NVG_BUTT);
-			nvgLineJoin(args.vg, NVG_ROUND);
-			nvgStroke(args.vg);
-		}
-		if (pointsValid && dotVisible) {
-			float w = std::max(box.size.x, 1.f);
-			float h = std::max(box.size.y, 1.f);
-			float drawPad = 0.5f * WAVE_LINE_WIDTH + WAVE_EDGE_PAD;
-			float left = drawPad;
-			float top = drawPad;
-			float right = std::max(left + 1.f, w - drawPad);
-			float bottom = std::max(top + 1.f, h - drawPad);
-			float drawW = right - left;
-			float drawH = bottom - top;
-			float targetX = left + clamp(dotXNorm, 0.f, 1.f) * drawW;
-			float targetY = top + (1.f - clamp(dotYNorm, 0.f, 1.f)) * drawH;
-			// Keep the marker on the drawn curve, but use continuous interpolation
-			// across neighboring points to avoid visible stepping at slow rates.
-			int i0 = 0;
-			for (int i = 1; i < POINT_COUNT; ++i) {
-				if (points[i].x >= targetX) {
-					i0 = i - 1;
-					break;
-				}
-				i0 = i - 1;
-			}
-			int i1 = std::min(i0 + 1, POINT_COUNT - 1);
-			float x0 = points[i0].x;
-			float x1 = points[i1].x;
-			float x = targetX;
-			float y = points[i0].y;
-			if (i1 != i0 && x1 > x0) {
-				float t = clamp((targetX - x0) / (x1 - x0), 0.f, 1.f);
-				y = points[i0].y + (points[i1].y - points[i0].y) * t;
-			}
-			float blendToCurve = 0.9f;
-			y = y * blendToCurve + targetY * (1.f - blendToCurve);
-			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, x, y, DOT_RADIUS);
-			nvgFillColor(args.vg, nvgRGBA(255, 232, 72, 255));
-			nvgFill(args.vg);
-			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, x, y, DOT_RADIUS + 0.55f);
-			nvgStrokeWidth(args.vg, 0.9f);
-			nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 220));
-			nvgStroke(args.vg);
-		}
-
-		nvgResetScissor(args.vg);
-		nvgRestore(args.vg);
-
-		char freqText[32];
-		if (lastFreqHz < 1.f) {
-			std::snprintf(freqText, sizeof(freqText), "%4.0f mHz", lastFreqHz * 1000.f);
-		}
-		else if (lastFreqHz >= 1000.f) {
-			std::snprintf(freqText, sizeof(freqText), "%4.2f kHz", lastFreqHz / 1000.f);
-		}
-		else {
-			std::snprintf(freqText, sizeof(freqText), "%5.1f Hz", lastFreqHz);
-		}
-		nvgFontSize(args.vg, LABEL_FONT_SIZE);
-		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
-		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
-		// Keep label outside preview box to avoid occluding waveform.
-		nvgText(args.vg, box.size.x * 0.5f, box.size.y + 1.5f, freqText, nullptr);
-	}
-};
-
-static math::Rect insetRectMm(math::Rect rect, float insetMm) {
-	rect.pos.x += insetMm;
-	rect.pos.y += insetMm;
-	rect.size.x = std::max(0.f, rect.size.x - 2.f * insetMm);
-	rect.size.y = std::max(0.f, rect.size.y - 2.f * insetMm);
-	return rect;
-}
-
-struct IntegralFluxWidget : ModuleWidget {
-	float uiStepMsEma = 0.f;
-	float uiDrawMsEma = 0.f;
-
-	void step() override {
-		using PerfClock = std::chrono::steady_clock;
-		const PerfClock::time_point stepStart = PerfClock::now();
-		ModuleWidget::step();
-		const float stepMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-			PerfClock::now() - stepStart).count()) * 1e-6f;
-		uiStepMsEma = (uiStepMsEma > 0.f) ? (uiStepMsEma + (stepMs - uiStepMsEma) * 0.18f) : stepMs;
-	}
-
-	IntegralFluxWidget(IntegralFlux* module) {
-		setModule(module);
-		PreviewBuildLogTimer previewBuildTimer("IntegralFlux", module);
-		const std::string panelPath = asset::plugin(pluginInstance, "res/flux.svg");
-		setPanel(createPanel(panelPath));
-		previewBuildTimer.markPanelDone();
-
-        // use Rogan1PSBlue for the rise/fall knobs
-        // use LargeLight<RedLight> for the cycle and EOR LEDs
-        // use Rogan1PSWhite for the attenuverter knobs
-        // use TL1105 for the cycle buttons
-        // Davies1900hWhiteKnob
-
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-
-		Vec cycle1ButtonPos(31.875f, 20.938f);
-		Vec cycle4ButtonPos(69.552f, 20.938f);
-		Vec rise1KnobPos(33.755f, 36.293f);
-		Vec rise4KnobPos(67.638f, 36.293f);
-		Vec fall1KnobPos(42.007f, 53.079f);
-		Vec fall4KnobPos(59.185f, 53.079f);
-		Vec linLog1KnobPos(13.975f, 50.526f);
-		Vec linLog4KnobPos(91.716f, 50.526f);
-		Vec attenuate1KnobPos(25.494f, 86.446f);
-		Vec attenuate2KnobPos(42.542f, 86.446f);
-		Vec attenuate3KnobPos(59.585f, 86.446f);
-		Vec attenuate4KnobPos(75.931f, 86.446f);
-		Vec input1Pos(9.947f, 15.354f);
-		Vec input1TrigPos(20.911f, 15.354f);
-		Vec input4TrigPos(80.217f, 15.354f);
-		Vec input4Pos(91.181f, 15.354f);
-		Vec ch1CycleCvPos(40.049f, 20.838f);
-		Vec ch4CycleCvPos(61.179f, 20.838f);
-		Vec ch1RiseCvPos(21.683f, 36.416f);
-		Vec ch4RiseCvPos(79.81f, 36.216f);
-		Vec ch1BothCvPos(26.633f, 50.27f);
-		Vec ch4BothCvPos(74.56f, 50.07f);
-		Vec ch1FallCvPos(32.704f, 63.263f);
-		Vec ch4FallCvPos(69.189f, 63.263f);
-		Vec input2Pos(42.543f, 76.377f);
-		Vec input3Pos(59.585f, 76.377f);
-		Vec eor1OutputPos(10.037f, 96.946f);
-		Vec out1OutputPos(25.295f, 96.915f);
-		Vec out2OutputPos(42.343f, 96.915f);
-		Vec out3OutputPos(59.486f, 96.915f);
-		Vec out4OutputPos(75.832f, 96.915f);
-		Vec eoc4OutputPos(91.281f, 96.915f);
-		Vec ch1UnityOutputPos(10.047f, 110.682f);
-		Vec orOutputPos(33.652f, 110.882f);
-		Vec sumOutputPos(50.714f, 110.882f);
-		Vec invOutputPos(67.975f, 110.882f);
-		Vec ch4UnityOutputPos(91.281f, 110.682f);
-		Vec cycle1LightPos(31.875f, 14.855f);
-		Vec cycle4LightPos(69.353f, 14.855f);
-		Vec eor1LightPos(16.537f, 96.76f);
-		Vec eoc4LightPos(84.603f, 96.716f);
-		Vec unity1LightPos(16.547f, 110.499f);
-		Vec unity4LightPos(84.731f, 110.599f);
-		Vec orLightPos(42.374f, 110.758f);
-		Vec invLightPos(59.554f, 110.758f);
-
-		auto applyPointOverride = [&](const char* elementId, Vec* outPos) {
-			Vec pointMm;
-			if (panel_svg::loadPointFromSvgMm(panelPath, elementId, &pointMm)) {
-				*outPos = pointMm;
-			}
-		};
-
-		applyPointOverride("CYCLE_1", &cycle1ButtonPos);
-		applyPointOverride("CYCLE_4", &cycle4ButtonPos);
-		applyPointOverride("RISE_1", &rise1KnobPos);
-		applyPointOverride("RISE_4", &rise4KnobPos);
-		applyPointOverride("FALL_1", &fall1KnobPos);
-		applyPointOverride("FALL_4", &fall4KnobPos);
-		applyPointOverride("LIN_LOG_1", &linLog1KnobPos);
-		applyPointOverride("LIN_LOG_4", &linLog4KnobPos);
-		applyPointOverride("ATTENUATE_1", &attenuate1KnobPos);
-		applyPointOverride("ATTENUATE_2", &attenuate2KnobPos);
-		applyPointOverride("ATTENUATE_3", &attenuate3KnobPos);
-		applyPointOverride("ATTENUATE_4", &attenuate4KnobPos);
-		applyPointOverride("INPUT_1", &input1Pos);
-		applyPointOverride("INPUT_1_TRIG", &input1TrigPos);
-		applyPointOverride("INPUT_4_TRIG", &input4TrigPos);
-		applyPointOverride("INPUT_4", &input4Pos);
-		applyPointOverride("CH1_CYCLE_CV", &ch1CycleCvPos);
-		applyPointOverride("CH4_CYCLE_CV", &ch4CycleCvPos);
-		applyPointOverride("CH1_RISE_CV", &ch1RiseCvPos);
-		applyPointOverride("CH4_RISE_CV", &ch4RiseCvPos);
-		applyPointOverride("CH1_BOTH_CV", &ch1BothCvPos);
-		applyPointOverride("CH4_BOTH_CV", &ch4BothCvPos);
-		applyPointOverride("CH1_FALL_CV", &ch1FallCvPos);
-		applyPointOverride("CH4_FALL_CV", &ch4FallCvPos);
-		applyPointOverride("INPUT_2", &input2Pos);
-		applyPointOverride("INPUT_3", &input3Pos);
-			applyPointOverride("EOR_1", &eor1OutputPos);
-			applyPointOverride("OUT_1", &out1OutputPos);
-			applyPointOverride("OUT_2", &out2OutputPos);
-			applyPointOverride("OUT_3", &out3OutputPos);
-			applyPointOverride("OUT_4", &out4OutputPos);
-			applyPointOverride("EOC_4", &eoc4OutputPos);
-			applyPointOverride("CH_1_Unity", &ch1UnityOutputPos);
-			applyPointOverride("OR_OUT", &orOutputPos);
-			applyPointOverride("SUM_OUT", &sumOutputPos);
-			applyPointOverride("INV_OUT", &invOutputPos);
-			applyPointOverride("CH_4_Unity", &ch4UnityOutputPos);
-			applyPointOverride("CYCLE_1_LED", &cycle1LightPos);
-			applyPointOverride("CYCLE_4_LED", &cycle4LightPos);
-			applyPointOverride("EoR_CH_1", &eor1LightPos);
-			applyPointOverride("EoC_CH_4", &eoc4LightPos);
-			applyPointOverride("Light_Unity_1", &unity1LightPos);
-			applyPointOverride("Light_Unity_4", &unity4LightPos);
-			applyPointOverride("OR_LED", &orLightPos);
-			applyPointOverride("INV_LED", &invLightPos);
-		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
-		previewBuildTimer.markAnchorsDone();
-
-		addParam(createParamCentered<IMBigPushButton>(mm2px(cycle1ButtonPos), module, IntegralFlux::CYCLE_1_PARAM));
-		addParam(createParamCentered<IMBigPushButton>(mm2px(cycle4ButtonPos), module, IntegralFlux::CYCLE_4_PARAM));
-
-        addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(rise1KnobPos), module, IntegralFlux::RISE_1_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(rise4KnobPos), module, IntegralFlux::RISE_4_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(fall1KnobPos), module, IntegralFlux::FALL_1_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(fall4KnobPos), module, IntegralFlux::FALL_4_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(linLog1KnobPos), module, IntegralFlux::LIN_LOG_1_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(linLog4KnobPos), module, IntegralFlux::LIN_LOG_4_PARAM));
-		{
-			WavePreviewWidget* ch1Preview = new WavePreviewWidget(module, 1);
-			math::Rect previewRectMm;
-			if (panel_svg::loadRectFromSvgMm(panelPath, "CH1_PREVIEW", &previewRectMm)) {
-				previewRectMm = insetRectMm(previewRectMm, 0.2f);
-				ch1Preview->box.pos = mm2px(previewRectMm.pos);
-				ch1Preview->box.size = mm2px(previewRectMm.size);
-			}
-			else {
-				ch1Preview->box.pos = mm2px(Vec(3.75998355f, 68.96602539f));
-				ch1Preview->box.size = mm2px(Vec(20.78393382f, 11.24561948f));
-			}
-			addChild(ch1Preview);
-		}
-		{
-			WavePreviewWidget* ch4Preview = new WavePreviewWidget(module, 4);
-			math::Rect previewRectMm;
-			if (panel_svg::loadRectFromSvgMm(panelPath, "CH4_PREVIEW", &previewRectMm)) {
-				previewRectMm = insetRectMm(previewRectMm, 0.2f);
-				ch4Preview->box.pos = mm2px(previewRectMm.pos);
-				ch4Preview->box.size = mm2px(previewRectMm.size);
-			}
-			else {
-				ch4Preview->box.pos = mm2px(Vec(77.52500000f, 68.96600100f));
-				ch4Preview->box.size = mm2px(Vec(20.78393300f, 11.24562000f));
-			}
-			addChild(ch4Preview);
-		}
-
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(attenuate1KnobPos), module, IntegralFlux::ATTENUATE_1_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(attenuate2KnobPos), module, IntegralFlux::ATTENUATE_2_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(attenuate3KnobPos), module, IntegralFlux::ATTENUATE_3_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(attenuate4KnobPos), module, IntegralFlux::ATTENUATE_4_PARAM));
-
-		addInput(createInputCentered<PJ301MPort>(mm2px(input1Pos), module, IntegralFlux::INPUT_1_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(input1TrigPos), module, IntegralFlux::INPUT_1_TRIG_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(input4TrigPos), module, IntegralFlux::INPUT_4_TRIG_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(input4Pos), module, IntegralFlux::INPUT_4_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(ch1CycleCvPos), module, IntegralFlux::CH1_CYCLE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(ch4CycleCvPos), module, IntegralFlux::CH4_CYCLE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(ch1RiseCvPos), module, IntegralFlux::CH1_RISE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(ch4RiseCvPos), module, IntegralFlux::CH4_RISE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(ch1BothCvPos), module, IntegralFlux::CH1_BOTH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(ch4BothCvPos), module, IntegralFlux::CH4_BOTH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(ch1FallCvPos), module, IntegralFlux::CH1_FALL_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(ch4FallCvPos), module, IntegralFlux::CH4_FALL_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(input2Pos), module, IntegralFlux::INPUT_2_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(input3Pos), module, IntegralFlux::INPUT_3_INPUT));
-
-		addOutput(createOutputCentered<BananutBlack>(mm2px(eor1OutputPos), module, IntegralFlux::EOR_1_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(out1OutputPos), module, IntegralFlux::OUT_1_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(out2OutputPos), module, IntegralFlux::OUT_2_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(out3OutputPos), module, IntegralFlux::OUT_3_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(out4OutputPos), module, IntegralFlux::OUT_4_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(eoc4OutputPos), module, IntegralFlux::EOC_4_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(ch1UnityOutputPos), module, IntegralFlux::CH_1_UNITY_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(orOutputPos), module, IntegralFlux::OR_OUT_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(sumOutputPos), module, IntegralFlux::SUM_OUT_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(invOutputPos), module, IntegralFlux::INV_OUT_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(ch4UnityOutputPos), module, IntegralFlux::CH_4_UNITY_OUTPUT));
-
-		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(cycle1LightPos), module, IntegralFlux::CYCLE_1_LED_LIGHT));
-		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(cycle4LightPos), module, IntegralFlux::CYCLE_4_LED_LIGHT));
-		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(eor1LightPos), module, IntegralFlux::EOR_CH_1_LIGHT));
-		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(eoc4LightPos), module, IntegralFlux::EOC_CH_4_LIGHT));
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(unity1LightPos), module, IntegralFlux::LIGHT_UNITY_1_LIGHT));
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(unity4LightPos), module, IntegralFlux::LIGHT_UNITY_4_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(orLightPos), module, IntegralFlux::OR_LED_LIGHT));
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(invLightPos), module, IntegralFlux::INV_LED_LIGHT));
-	}
-
-	void draw(const DrawArgs& args) override {
-		using PerfClock = std::chrono::steady_clock;
-		const PerfClock::time_point perfStart = PerfClock::now();
-		ModuleWidget::draw(args);
-		IntegralFlux* flux = dynamic_cast<IntegralFlux*>(module);
-		if (!flux) {
-			return;
-		}
-		const float drawMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-			PerfClock::now() - perfStart).count()) * 1e-6f;
-		uiDrawMsEma = (uiDrawMsEma > 0.f) ? (uiDrawMsEma + (drawMs - uiDrawMsEma) * 0.18f) : drawMs;
-		const float uiMs = std::max(0.f, uiStepMsEma) + std::max(0.f, uiDrawMsEma);
-		flux->perfUiRenderMs.store(std::max(0.f, uiMs), std::memory_order_relaxed);
-
-		if (isDragonKingDebugEnabled()) {
-			double nowSec = system::getTime();
-			double& lastSubmitSec = gIntegralFluxDebugTerminalLastSubmitSec[flux->debugInstanceId];
-			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kIntegralFluxDebugTerminalSubmitIntervalSec) {
-				lastSubmitSec = nowSec;
-				const uint64_t audioSampledCount = flux->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
-				const uint64_t audioProcessNs = flux->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
-				const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
-				debug_terminal::submitIntegralFluxMetrics(flux->debugInstanceId, uiMs, audioUs);
-			}
-			if (APP && APP->window && APP->window->uiFont) {
-				char debugIdLabel[32];
-				std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", flux->debugInstanceId);
-				const float x = box.size.x - mm2px(0.9f);
-				const float y = mm2px(2.5f);
-				nvgSave(args.vg);
-				nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-				nvgFontSize(args.vg, 6.8f);
-				nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-				nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 210));
-				nvgText(args.vg, x + 0.45f, y + 0.45f, debugIdLabel, nullptr);
-				nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 230));
-				nvgText(args.vg, x, y, debugIdLabel, nullptr);
-				nvgRestore(args.vg);
-			}
-		}
-	}
-
-	void appendContextMenu(Menu* menu) override {
-		IntegralFlux* maths = dynamic_cast<IntegralFlux*>(module);
-		assert(menu);
-
-		menu->addChild(new MenuSeparator());
-		if (maths) {
-			menu->addChild(createMenuLabel("Performance"));
-			menu->addChild(createCheckMenuItem("Bandlimited EOR/EOC", "",
-				[=]() { return maths->bandlimitedGateOutputs.load(std::memory_order_relaxed); },
-				[=]() { maths->bandlimitedGateOutputs.store(!maths->bandlimitedGateOutputs.load(std::memory_order_relaxed), std::memory_order_relaxed); }
-			));
-			menu->addChild(createCheckMenuItem("Bandlimited CH1/CH4 Signal Outputs", "",
-				[=]() { return maths->bandlimitedSignalOutputs.load(std::memory_order_relaxed); },
-				[=]() { maths->bandlimitedSignalOutputs.store(!maths->bandlimitedSignalOutputs.load(std::memory_order_relaxed), std::memory_order_relaxed); }
-			));
-			menu->addChild(createMenuLabel("Rate Control"));
-			menu->addChild(createCheckMenuItem("Interpolate Timing Updates", "",
-				[=]() { return maths->timingInterpolate.load(std::memory_order_relaxed); },
-				[=]() { maths->timingInterpolate.store(!maths->timingInterpolate.load(std::memory_order_relaxed), std::memory_order_relaxed); }
-			));
-			menu->addChild(createSubmenuItem("Timing Update Rate", "",
-				[=](Menu* submenu) {
-					auto addDivItem = [=](int div, std::string label) {
-						submenu->addChild(createCheckMenuItem(label, "",
-							[=]() { return maths->requestedTimingUpdateDiv.load(std::memory_order_relaxed) == div; },
-							[=]() { maths->requestTimingUpdateDiv(div); }
-						));
-					};
-					addDivItem(1, "Audio rate (/1)");
-					addDivItem(4, "Control rate (/4)");
-					addDivItem(8, "Control rate (/8)");
-					addDivItem(16, "Control rate (/16)");
-					addDivItem(32, "Control rate (/32)");
-				}
-			));
-		}
-	}
-};
-
 } // namespace
 
-Model* modelIntegralFlux = createModel<IntegralFlux, IntegralFluxWidget>("IntegralFlux");
+Model* modelIntegralFlux = []() {
+	plugin::Model* model = new IntegralFluxModel;
+	model->slug = "IntegralFlux";
+	return model;
+}();

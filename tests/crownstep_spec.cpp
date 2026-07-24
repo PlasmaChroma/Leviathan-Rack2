@@ -514,6 +514,37 @@ TestResult testOthelloWinnerByDiscCount() {
           "winner=" + std::to_string(winner)};
 }
 
+TestResult testGameDifficultyDepthLadders() {
+  bool pass = crownstep::othelloSearchDepthForDifficulty(0) == 1 &&
+              crownstep::othelloSearchDepthForDifficulty(1) == 2 &&
+              crownstep::othelloSearchDepthForDifficulty(2) == 4 &&
+              crownstep::othelloSearchDepthForDifficulty(3) == 6 &&
+              crownstep::othelloSearchDepthForDifficulty(4) == 7 &&
+              crownstep::searchDepthForDifficulty(4) == 5 &&
+              crownstep::chessSearchDepthForDifficulty(4) == 5 &&
+              crownstep::DIFFICULTY_NAMES.size() == 5;
+  return {"Nightmare difficulty raises every game search ceiling", pass,
+          "depths=" + std::to_string(crownstep::othelloSearchDepthForDifficulty(0)) + "/" +
+              std::to_string(crownstep::othelloSearchDepthForDifficulty(1)) + "/" +
+              std::to_string(crownstep::othelloSearchDepthForDifficulty(2)) + "/" +
+              std::to_string(crownstep::othelloSearchDepthForDifficulty(3)) + "/" +
+              std::to_string(crownstep::othelloSearchDepthForDifficulty(4))};
+}
+
+TestResult testOthelloEvaluationProtectsCorners() {
+  BoardState cornerBoard {};
+  cornerBoard.fill(0);
+  cornerBoard[size_t(crownstep::othelloCoordToIndex(0, 0))] = AI_SIDE;
+  BoardState xSquareBoard {};
+  xSquareBoard.fill(0);
+  xSquareBoard[size_t(crownstep::othelloCoordToIndex(1, 1))] = AI_SIDE;
+  int cornerScore = crownstep::othelloPositionalScore(cornerBoard);
+  int xSquareScore = crownstep::othelloPositionalScore(xSquareBoard);
+  bool pass = cornerScore > xSquareScore;
+  return {"Othello evaluation values a corner above its X-square", pass,
+          "corner=" + std::to_string(cornerScore) + " xSquare=" + std::to_string(xSquareScore)};
+}
+
 } // namespace
 
 int main() {
@@ -540,6 +571,8 @@ int main() {
   tests.push_back(testOthelloInitialBoardAndMoves());
   tests.push_back(testOthelloMoveFlipsBracketedDiscs());
   tests.push_back(testOthelloWinnerByDiscCount());
+  tests.push_back(testGameDifficultyDepthLadders());
+  tests.push_back(testOthelloEvaluationProtectsCorners());
 
   int failed = 0;
   std::cout << "Crownstep Spec\n";

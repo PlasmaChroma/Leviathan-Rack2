@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   version="1.1"
+   width="28"
+   height="28"
+   viewBox="0 0 28 28"
+   id="svg30"
+   sodipodi:docname="torx.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview30"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="3.709154"
+     inkscape:cx="-136.68885"
+     inkscape:cy="7.1444863"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg30"
+     showgrid="false" />
+  <defs
+     id="defs9">
+    <linearGradient
+       id="linearGradient1"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#989898;stop-opacity:0.79891306;"
+         offset="0.83203125"
+         id="stop9" />
+      <stop
+         style="stop-color:#262626;stop-opacity:1;"
+         offset="1"
+         id="stop2" />
+    </linearGradient>
+    <!-- Torx recess fill: deep inset metallic look -->
+    <radialGradient
+       id="torxRecessFill"
+       cx="0.16079138"
+       cy="-0.094575875"
+       r="8.75542"
+       gradientTransform="matrix(0.48565194,0.83056861,-0.73486395,0.42969129,0.00711382,-0.19120787)"
+       fx="0.16079138"
+       fy="-0.094575875"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         stop-color="#484848"
+         id="stop1"
+         style="stop-color:#1e1e1e;stop-opacity:1;" />
+      <stop
+         offset="1"
+         stop-color="#1a1a1a"
+         id="stop3"
+         style="stop-color:#383838;stop-opacity:1;" />
+    </radialGradient>
+    <!-- Torx shadow gradient for depth illusion (light from upper-left) -->
+    <radialGradient
+       id="torxShadow"
+       cx="55%"
+       cy="60%"
+       r="55%">
+      <stop
+         offset="0%"
+         stop-color="#000000"
+         stop-opacity="0.0"
+         id="stop4" />
+      <stop
+         offset="0.69999999"
+         stop-color="#000000"
+         stop-opacity="0.25"
+         id="stop5"
+         style="stop-color:#7f7f7f;stop-opacity:0.25;" />
+      <stop
+         offset="1"
+         stop-color="#000000"
+         stop-opacity="0.5"
+         id="stop6"
+         style="stop-color:#000000;stop-opacity:0.5;" />
+    </radialGradient>
+    <!-- Outer ring metallic gradient -->
+    <!-- Specular highlight for torx recess (upper-left glint) -->
+    <radialGradient
+       id="torxSpecular"
+       cx="0.13495092"
+       cy="-0.2547355"
+       r="6.7349387"
+       gradientTransform="scale(0.9621341,1.0393562)"
+       fx="0.13495092"
+       fy="-0.2547355"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         stop-color="#ffffff"
+         stop-opacity="0.18"
+         id="stop7"
+         style="stop-color:#161616;stop-opacity:1;" />
+      <stop
+         offset="1"
+         stop-color="#ffffff"
+         stop-opacity="0"
+         id="stop8"
+         style="stop-color:#373737;stop-opacity:1;" />
+    </radialGradient>
+    <!-- Torx hexalobular profile path -->
+    <!-- 6 lobes with rounded tips, concave valleys, cubic Bezier construction -->
+    <!-- Parameters: R_outer=7.0, R_inner=3.5, tip_handle=0.50, valley_handle=0.32 -->
+    <path
+       id="torxShape"
+       d="M -1.750,-3.031           C -0.780,-3.591 -3.500,-7.000 0.000,-7.000           C 3.500,-7.000 0.780,-3.591 1.750,-3.031           C 2.720,-2.471 4.312,-6.531 6.062,-3.500           C 7.812,-0.469 3.500,-1.120 3.500,-0.000           C 3.500,1.120 7.812,0.469 6.062,3.500           C 4.312,6.531 2.720,2.471 1.750,3.031           C 0.780,3.591 3.500,7.000 0.000,7.000           C -3.500,7.000 -0.780,3.591 -1.750,3.031           C -2.720,2.471 -4.312,6.531 -6.062,3.500           C -7.812,0.469 -3.500,1.120 -3.500,0.000           C -3.500,-1.120 -7.812,-0.469 -6.062,-3.500           C -4.312,-6.531 -2.720,-2.471 -1.750,-3.031 Z" />
+    <radialGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient1"
+       id="radialGradient9"
+       cx="14"
+       cy="14"
+       fx="14"
+       fy="14"
+       r="9.6000002"
+       gradientUnits="userSpaceOnUse" />
+  </defs>
+  <!-- Outer ring border -->
+  <circle
+     cx="14"
+     cy="14"
+     r="9.8000002"
+     fill="none"
+     stroke="#3a3a3a"
+     stroke-width="1"
+     stroke-opacity="1"
+     id="circle13"
+     style="display:inline;stroke-dasharray:none" />
+  <!-- Outer ring fill with metallic gradient -->
+  <circle
+     fill="none"
+     stroke="#4e4e4e"
+     stroke-width="0.6"
+     stroke-opacity="0.8"
+     id="circle14"
+     style="display:inline;fill:url(#radialGradient9);fill-opacity:1"
+     r="9.3000002"
+     cy="14"
+     cx="14" />
+  <!-- Torx recess: 6-lobe hexalobular profile -->
+  <!-- Centered at (14,14) via translate, layers build depth illusion -->
+  <g
+     transform="translate(14,14)"
+     id="torxGroup">
+    <!-- Layer 1: Main fill -->
+    <path
+       d="M -1.75,-3.031 C -0.78,-3.591 -3.5,-7 0,-7 c 3.5,0 0.78,3.409 1.75,3.969 0.97,0.56 2.562,-3.5 4.312,-0.469 C 7.812,-0.469 3.5,-1.12 3.5,0 3.5,1.12 7.812,0.469 6.062,3.5 4.312,6.531 2.72,2.471 1.75,3.031 0.78,3.591 3.5,7 0,7 -3.5,7 -0.78,3.591 -1.75,3.031 -2.72,2.471 -4.312,6.531 -6.062,3.5 -7.812,0.469 -3.5,1.12 -3.5,0 c 0,-1.12 -4.312,-0.469 -2.562,-3.5 1.75,-3.031 3.342,1.029 4.312,0.469 z"
+       fill="url(#torxRecessFill)"
+       stroke="none"
+       id="torxMainFill"
+       style="display:inline;fill:url(#torxRecessFill)" />
+    <!-- Layer 2: Dark edge stroke for crisp definition -->
+    <path
+       d="M -1.75,-3.031 C -0.78,-3.591 -3.5,-7 0,-7 c 3.5,0 0.78,3.409 1.75,3.969 0.97,0.56 2.562,-3.5 4.312,-0.469 C 7.812,-0.469 3.5,-1.12 3.5,0 3.5,1.12 7.812,0.469 6.062,3.5 4.312,6.531 2.72,2.471 1.75,3.031 0.78,3.591 3.5,7 0,7 -3.5,7 -0.78,3.591 -1.75,3.031 -2.72,2.471 -4.312,6.531 -6.062,3.5 -7.812,0.469 -3.5,1.12 -3.5,0 c 0,-1.12 -4.312,-0.469 -2.562,-3.5 1.75,-3.031 3.342,1.029 4.312,0.469 z"
+       fill="none"
+       stroke="#111111"
+       stroke-width="0.4"
+       stroke-opacity="0.7"
+       id="torxEdgeStroke"
+       style="display:inline" />
+    <!-- Layer 3: Shadow overlay (lower-right darkening for 3D depth) -->
+    <path
+       d="M -1.750,-3.031           C -0.780,-3.591 -3.500,-7.000 0.000,-7.000           C 3.500,-7.000 0.780,-3.591 1.750,-3.031           C 2.720,-2.471 4.312,-6.531 6.062,-3.500           C 7.812,-0.469 3.500,-1.120 3.500,-0.000           C 3.500,1.120 7.812,0.469 6.062,3.500           C 4.312,6.531 2.720,2.471 1.750,3.031           C 0.780,3.591 3.500,7.000 0.000,7.000           C -3.500,7.000 -0.780,3.591 -1.750,3.031           C -2.720,2.471 -4.312,6.531 -6.062,3.500           C -7.812,0.469 -3.500,1.120 -3.500,0.000           C -3.500,-1.120 -7.812,-0.469 -6.062,-3.500           C -4.312,-6.531 -2.720,-2.471 -1.750,-3.031 Z"
+       fill="url(#torxShadow)"
+       stroke="none"
+       id="torxShadowOverlay" />
+    <!-- Layer 4: Specular highlight (upper-left glint) -->
+    <path
+       d="M -1.75,-3.031 C -0.78,-3.591 -3.5,-7 0,-7 c 3.5,0 0.78,3.409 1.75,3.969 0.97,0.56 2.562,-3.5 4.312,-0.469 C 7.812,-0.469 3.5,-1.12 3.5,0 3.5,1.12 7.812,0.469 6.062,3.5 4.312,6.531 2.72,2.471 1.75,3.031 0.78,3.591 3.5,7 0,7 -3.5,7 -0.78,3.591 -1.75,3.031 -2.72,2.471 -4.312,6.531 -6.062,3.5 -7.812,0.469 -3.5,1.12 -3.5,0 c 0,-1.12 -4.312,-0.469 -2.562,-3.5 1.75,-3.031 3.342,1.029 4.312,0.469 z"
+       fill="url(#torxSpecular)"
+       stroke="none"
+       id="torxSpecularOverlay"
+       style="display:none;fill:url(#torxSpecular)" />
+    <!-- Center post (security torx detail, raised cylinder) -->
+    <circle
+       cx="0"
+       cy="0"
+       r="1.4"
+       fill="#4a4a4a"
+       stroke="#333333"
+       stroke-width="0.3"
+       id="centerPost"
+       style="display:none" />
+    <!-- Center post specular highlight -->
+    <circle
+       cx="-0.30000001"
+       cy="-0.30000001"
+       r="0.60000002"
+       fill="#666666"
+       fill-opacity="0.4"
+       stroke="none"
+       id="centerPostHighlight"
+       style="display:none" />
+  </g>
+</svg>

@@ -1,0 +1,44 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="20.32mm" height="128.5mm" viewBox="0 0 2032 12850" version="1.1" id="svg16" sodipodi:docname="Deepcache.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)">
+  <defs id="defs5">
+    <linearGradient id="linearGradient16" inkscape:collect="always">
+      <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop16" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop17" />
+    </linearGradient>
+    <linearGradient id="linearGradient14" inkscape:collect="always">
+      <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop14" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop15" />
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#090d16" id="stop1" />
+      <stop offset="0.55" stop-color="#111a29" id="stop2" />
+      <stop offset="1" stop-color="#080b13" id="stop3" />
+    </linearGradient>
+    <linearGradient id="trace" x1="1.8468709" y1="41.992205" x2="11.685836" y2="41.992205" gradientTransform="matrix(1.5004763,0,0,0.66645503,0,-14.899916)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#21d7df" id="stop4" />
+      <stop offset="1" stop-color="#8d62ff" id="stop5" />
+    </linearGradient>
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient14" id="linearGradient15" x1="3.4660004" y1="3.9960867" x2="17.086756" y2="3.9960867" gradientUnits="userSpaceOnUse" />
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient16" id="linearGradient17" x1="1.2018647" y1="8.3479995" x2="19.134012" y2="8.3479995" gradientUnits="userSpaceOnUse" />
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient20" id="linearGradient1" gradientUnits="userSpaceOnUse" x1="5496.8262" y1="12956.067" x2="7087.4873" y2="12956.067" gradientTransform="matrix(0.01390218,0,0,0.01390218,-77.301789,-51.195959)" />
+    <linearGradient id="linearGradient20" inkscape:collect="always">
+      <stop style="stop-color:#795cff;stop-opacity:1" offset="0" id="stop20" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop21" />
+    </linearGradient>
+  </defs>
+  <g inkscape:label="panel" transform="scale(100)" id="g15">
+    <rect width="20.32" height="128.5" fill="url(#panel)" id="rect5" x="0" y="0" />
+    <rect x="0.44999999" y="0.44999999" width="19.42" height="127.6" rx="1.2" fill="none" stroke="#31425e" stroke-width="0.35" id="rect6" style="display:none" />
+    <path d="m 3,15.100084 c 4,-5.9999991 10,6 14.3,-1 m -14.3,4 c 4,-6 10,6 14.3,-1" fill="none" stroke="url(#trace)" stroke-width="0.55" opacity="0.82" id="path6" style="stroke:#7a5cff;fill:none;stroke-opacity:1;fill-opacity:1;opacity:1" />
+  </g>
+  <g inkscape:label="components" opacity="0" id="g16" style="display:none;opacity:1">
+    <rect id="progress" x="300" y="2709.9751" width="1432" height="700" />
+    <rect id="progress_count" x="300" y="3429.9751" width="1432" height="450" />
+    <rect id="framebuffer_progress" x="300" y="4919.9771" width="1432" height="700" />
+    <rect id="database_status" x="300" y="7260.0005" width="1432" height="1218.6809" style="stroke-width:1.36927" />
+    <circle id="planning_light" cx="450" cy="9359.958" r="50" />
+    <circle id="warming_light" cx="450" cy="10059.958" r="50" />
+    <circle id="ready_light" cx="450" cy="10759.958" r="50" />
+    <circle id="error_light" cx="450" cy="11459.958" r="50" />
+  </g>
+</svg>

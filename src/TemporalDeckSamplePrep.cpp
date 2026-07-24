@@ -43,6 +43,24 @@ void resampleSampleChannel(const std::vector<float> &src, float sourceRate, floa
   }
 }
 
+void buildPreparedPreview(PreparedSampleData *prepared) {
+  if (!prepared || prepared->frames <= 0 || prepared->left.empty()) {
+    return;
+  }
+  prepared->preview.reset(uint32_t(std::max(1, prepared->frames)));
+  prepared->sampleAbsolutePeakVolts = 0.f;
+  const int frames = std::min(prepared->frames, int(prepared->left.size()));
+  for (int i = 0; i < frames; ++i) {
+    const float l = prepared->left[i];
+    const float r = (prepared->monoStorage || prepared->right.empty()) ? l : prepared->right[std::min(i, int(prepared->right.size()) - 1)];
+    prepared->sampleAbsolutePeakVolts = std::max(prepared->sampleAbsolutePeakVolts, std::fabs(l));
+    prepared->sampleAbsolutePeakVolts = std::max(prepared->sampleAbsolutePeakVolts, std::fabs(r));
+    prepared->preview.pushMonoSample(0.5f * (l + r));
+  }
+  prepared->preview.finalizePartialBin();
+  prepared->previewValid = true;
+}
+
 } // namespace
 
 int chooseSampleBufferMode(const DecodedSampleFile &sample) {
@@ -107,8 +125,32 @@ bool buildPreparedSample(const DecodedSampleFile &decodedSample, float targetSam
 
   prepared.frames = std::min(outFrames, int(prepared.left.size()));
   prepared.valid = prepared.frames > 0;
+  if (prepared.valid) {
+    buildPreparedPreview(&prepared);
+  }
   *outPrepared = std::move(prepared);
   return outPrepared->valid;
+}
+
+bool buildPreparedEmptyBuffer(float targetSampleRate, int bufferMode, PreparedSampleData *outPrepared) {
+  if (!outPrepared || targetSampleRate <= 1.f) {
+    return false;
+  }
+  PreparedSampleData prepared;
+  prepared.bufferMode = clamp(bufferMode, TemporalDeckEngine::BUFFER_DURATION_10S,
+                              TemporalDeckEngine::BUFFER_DURATION_COUNT - 1);
+  prepared.sampleRate = targetSampleRate;
+  prepared.monoStorage = temporaldeck_modes::isMonoBufferMode(prepared.bufferMode);
+  const int size = std::max(1, int(std::round(
+    targetSampleRate * temporaldeck_modes::realBufferSecondsForMode(prepared.bufferMode))));
+  prepared.left.assign(size_t(size), 0.f);
+  if (!prepared.monoStorage) {
+    prepared.right.assign(size_t(size), 0.f);
+  }
+  prepared.frames = 0;
+  prepared.valid = true;
+  *outPrepared = std::move(prepared);
+  return true;
 }
 
 } // namespace temporaldeck

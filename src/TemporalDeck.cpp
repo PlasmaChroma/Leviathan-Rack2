@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <ctime>
 #include <fstream>
 #include <iomanip>
 #include <limits>
@@ -96,9 +97,14 @@ using temporaldeck::PlatterInputSnapshot;
 using temporaldeck::PlatterInputState;
 static std::atomic<uint32_t> gTemporalDeckDebugInstanceCounter {1u};
 
-// Push scope payload faster so TD.Scope tracks live output motion more tightly.
-static constexpr float kExpanderPublishRateHz = 120.f;
+// Match TD.Scope's current practical update ceiling so the audio thread does
+// not spend time preparing preview payloads faster than the UI can consume.
+static constexpr float kExpanderPublishRateHz = 90.f;
 static constexpr float kExpanderPublishIntervalSec = 1.f / kExpanderPublishRateHz;
+static constexpr float kExpanderPublishRateHzLiveIdle = 60.f;
+static constexpr float kExpanderPublishIntervalSecLiveIdle = 1.f / kExpanderPublishRateHzLiveIdle;
+static constexpr float kExpanderPublishRateHzFrozenLive = 20.f;
+static constexpr float kExpanderPublishIntervalSecFrozenLive = 1.f / kExpanderPublishRateHzFrozenLive;
 static constexpr float kScopeHalfWindowMs = 900.f;
 static constexpr float kScopeHalfWindowSeconds = kScopeHalfWindowMs * 0.001f;
 static constexpr float kScopeDragNominalTurnScale = 1.00f;
@@ -108,6 +114,148 @@ static constexpr float kScopeLiveNearNowTargetBoostExtra = 2.4f;
 static constexpr int kScopeEvaluationBudgetPerPublish = 16384;
 static constexpr int kScopeLagFpShift = 10;
 static constexpr int64_t kScopeLagFpOne = int64_t(1) << kScopeLagFpShift;
+static std::mutex gTemporalDeckLifetimeLogMutex;
+
+static double elapsedMs(std::chrono::steady_clock::time_point start, std::chrono::steady_clock::time_point end) {
+  return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() * 1e-3;
+}
+
+static std::string csvString(const std::string &s) {
+  std::string out;
+  out.reserve(s.size() + 2);
+  out.push_back('"');
+  for (char c : s) {
+    if (c == '"') {
+      out.push_back('"');
+    }
+    out.push_back(c);
+  }
+  out.push_back('"');
+  return out;
+}
+
+static void appendTemporalDeckLifetimeShutdownLog(uint32_t debugInstanceId,
+                                                  const std::string &samplePath,
+                                                  bool sampleLoaded,
+                                                  int sampleFrames,
+                                                  int bufferSize,
+                                                  size_t engineSampleBytes,
+                                                  size_t lifecycleDecodedBytes,
+                                                  size_t lifecyclePreparedBytes,
+                                                  bool decodedAvailable,
+                                                  bool buildInProgressBeforeStop,
+                                                  double stopWorkerMs,
+                                                  double implResetMs,
+                                                  double totalMs) {
+  if (!isTemporalDeckLifetimeLoggingEnabled()) {
+    return;
+  }
+  const std::string dir = system::join(asset::user(), "Leviathan/TemporalDeck/Lifetime");
+  system::createDirectories(dir);
+  const std::string path = system::join(dir, "shutdown.csv");
+
+  std::lock_guard<std::mutex> lock(gTemporalDeckLifetimeLogMutex);
+  std::ifstream existing(path);
+  const bool writeHeader = !existing.good();
+  existing.close();
+
+  std::ofstream out(path, std::ios::app);
+  if (!out.is_open()) {
+    WARN("TemporalDeck: failed to open lifetime shutdown log: %s", path.c_str());
+    return;
+  }
+  if (writeHeader) {
+    out << "unix_time_sec,module_debug_id,sample_path,sample_loaded,sample_frames,buffer_size,"
+        << "engine_sample_bytes,lifecycle_decoded_bytes,lifecycle_prepared_bytes,decoded_available,"
+        << "build_in_progress_before_stop,stop_worker_ms,impl_reset_ms,total_ms\n";
+  }
+  out << std::time(nullptr) << ','
+      << debugInstanceId << ','
+      << csvString(samplePath) << ','
+      << (sampleLoaded ? 1 : 0) << ','
+      << sampleFrames << ','
+      << bufferSize << ','
+      << engineSampleBytes << ','
+      << lifecycleDecodedBytes << ','
+      << lifecyclePreparedBytes << ','
+      << (decodedAvailable ? 1 : 0) << ','
+      << (buildInProgressBeforeStop ? 1 : 0) << ','
+      << std::fixed << std::setprecision(3)
+      << stopWorkerMs << ','
+      << implResetMs << ','
+      << totalMs << '\n';
+}
+
+static void appendTemporalDeckLifetimeLoadingLog(uint32_t debugInstanceId,
+                                                 const char *eventName,
+                                                 const std::string &samplePath,
+                                                 uint64_t requestSerial,
+                                                 int requestType,
+                                                 float sampleRate,
+                                                 int bufferMode,
+                                                 int sourceFrames,
+                                                 int sourceChannels,
+                                                 int preparedFrames,
+                                                 size_t engineSampleBytes,
+                                                 size_t lifecycleDecodedBytes,
+                                                 size_t lifecyclePreparedBytes,
+                                                 bool decodedAvailable,
+                                                 bool buildInProgress,
+                                                 double workerDecodeMs,
+                                                 double workerPrepMs,
+                                                 double workerTotalMs,
+                                                 double processResetMs,
+                                                 double processInstallMs,
+                                                 double processTotalMs,
+                                                 const char *note = "") {
+  if (!isTemporalDeckLifetimeLoggingEnabled()) {
+    return;
+  }
+  const std::string dir = system::join(asset::user(), "Leviathan/TemporalDeck/Lifetime");
+  system::createDirectories(dir);
+  const std::string path = system::join(dir, "loading.csv");
+
+  std::lock_guard<std::mutex> lock(gTemporalDeckLifetimeLogMutex);
+  std::ifstream existing(path);
+  const bool writeHeader = !existing.good();
+  existing.close();
+
+  std::ofstream out(path, std::ios::app);
+  if (!out.is_open()) {
+    WARN("TemporalDeck: failed to open lifetime loading log: %s", path.c_str());
+    return;
+  }
+  if (writeHeader) {
+    out << "unix_time_sec,module_debug_id,event,sample_path,request_serial,request_type,sample_rate,buffer_mode,"
+        << "source_frames,source_channels,prepared_frames,engine_sample_bytes,lifecycle_decoded_bytes,"
+        << "lifecycle_prepared_bytes,decoded_available,build_in_progress,worker_decode_ms,worker_prep_ms,"
+        << "worker_total_ms,process_reset_ms,process_install_ms,process_total_ms,note\n";
+  }
+  out << std::time(nullptr) << ','
+      << debugInstanceId << ','
+      << csvString(eventName ? eventName : "") << ','
+      << csvString(samplePath) << ','
+      << requestSerial << ','
+      << requestType << ','
+      << std::fixed << std::setprecision(3)
+      << sampleRate << ','
+      << bufferMode << ','
+      << sourceFrames << ','
+      << sourceChannels << ','
+      << preparedFrames << ','
+      << engineSampleBytes << ','
+      << lifecycleDecodedBytes << ','
+      << lifecyclePreparedBytes << ','
+      << (decodedAvailable ? 1 : 0) << ','
+      << (buildInProgress ? 1 : 0) << ','
+      << workerDecodeMs << ','
+      << workerPrepMs << ','
+      << workerTotalMs << ','
+      << processResetMs << ','
+      << processInstallMs << ','
+      << processTotalMs << ','
+      << csvString(note ? note : "") << '\n';
+}
 
 struct ScopeInteractionRequest {
   bool valid = false;
@@ -228,6 +376,7 @@ struct ScopeWindowParams {
   int scopeStride = 1;
   int64_t scopeStartLagFp = 0;
   float scopeStartLagSamples = 0.f;
+  float scopeVisibleStartLagSamples = 0.f;
   int64_t binSpanLagFp = 1;
   float binSpanSamples = 1.f;
   double newestPos = 0.0;
@@ -290,8 +439,8 @@ static float readScopeChannelAtLagSamples(const TemporalDeckEngine &engine, doub
     double wrappedPos = engine.buffer.wrapPosition(pos);
     idx = engine.buffer.wrapIndex(int(std::lround(wrappedPos)));
   }
-  float left = engine.buffer.left[size_t(idx)];
-  float right = engine.buffer.rightSample(idx);
+  float left = sampleMode ? engine.sampleLeftAt(idx) : engine.buffer.left[size_t(idx)];
+  float right = sampleMode ? engine.sampleRightAt(idx) : engine.buffer.rightSample(idx);
   return reduceScopeChannelValue(left, right, channelMode);
 }
 
@@ -307,14 +456,15 @@ static bool computeScopeWindowParams(const TemporalDeckEngine &engine, bool samp
   out->sampleRate = sampleRate;
   out->lagSamples = lagSamples;
   out->accessibleLagSamples = accessibleLagSamples;
-  out->binCount = temporaldeck_expander::SCOPE_BIN_COUNT;
+  out->binCount =
+    sampleMode ? temporaldeck_expander::SAMPLE_SCOPE_BIN_COUNT : temporaldeck_expander::LIVE_SCOPE_BIN_COUNT;
   if (out->binCount == 0u || engine.buffer.size <= 0) {
     return false;
   }
 
   float sr = std::max(sampleRate, 1.f);
   float halfWindowSamples = sr * kScopeHalfWindowSeconds;
-  float totalWindowSamples = std::max(1.f, 2.f * halfWindowSamples);
+  float totalWindowSamples = std::max(1.f, 2.f * halfWindowSamples * (sampleMode ? 3.f : 1.f));
   int64_t totalWindowLagFp =
     std::max<int64_t>(kScopeLagFpOne, int64_t(std::llround(double(totalWindowSamples) * double(kScopeLagFpOne))));
   out->binSpanLagFp = std::max<int64_t>(1, totalWindowLagFp / int64_t(out->binCount));
@@ -323,8 +473,8 @@ static bool computeScopeWindowParams(const TemporalDeckEngine &engine, bool samp
   int effectiveEvalBudget = kScopeEvaluationBudgetPerPublish;
   out->scopeStride = std::max(1, int(std::ceil(double(totalWindowSamplesInt) / double(effectiveEvalBudget))));
 
-  float forwardWindowSamples = halfWindowSamples;
-  float backwardWindowSamples = halfWindowSamples;
+  float forwardWindowSamples = sampleMode ? 3.f * halfWindowSamples : halfWindowSamples;
+  float backwardWindowSamples = forwardWindowSamples;
   if (!sampleMode) {
     // Live mode: when near NOW, keep full 1.8s window but bias it backward
     // so the read-head can move toward the bottom of the scope.
@@ -340,6 +490,7 @@ static bool computeScopeWindowParams(const TemporalDeckEngine &engine, bool samp
     out->scopeStartLagFp = ((out->scopeStartLagFp + out->binSpanLagFp - 1) / out->binSpanLagFp) * out->binSpanLagFp;
   }
   out->scopeStartLagSamples = float(double(out->scopeStartLagFp) / double(kScopeLagFpOne));
+  out->scopeVisibleStartLagSamples = sampleMode ? (lagSamples + halfWindowSamples) : out->scopeStartLagSamples;
 
   out->newestPos = sampleMode ? double(std::max(0.f, accessibleLagSamples))
                               : (liveNewestAbsolutePosOverride >= 0.0
@@ -472,11 +623,12 @@ static uint32_t buildScopeWindowBins(const TemporalDeckEngine &engine, const Sco
   return validCount > 0u ? params.binCount : 0u;
 }
 
-static bool canReuseScopeWindowCache(const ScopeWindowParams &current, const ScopeWindowCache &cache) {
+static bool canReuseScopeWindowCache(const ScopeWindowParams &current, const ScopeWindowCache &cache,
+                                     bool allowLiveReuse) {
   if (!cache.valid || cache.scopeBinCount == 0u) {
     return false;
   }
-  if (!current.sampleMode) {
+  if (!current.sampleMode && !allowLiveReuse) {
     return false;
   }
   const ScopeWindowParams &prev = cache.params;
@@ -495,14 +647,14 @@ static bool canReuseScopeWindowCache(const ScopeWindowParams &current, const Sco
 
 static uint32_t buildScopeWindowBinsWithCache(
   const TemporalDeckEngine &engine, const ScopeWindowParams &params, ScopeChannelMode channelMode, ScopeWindowCache *cache,
-  std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> *binsOut) {
+  std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> *binsOut, bool allowLiveReuse = false) {
   if (!binsOut) {
     return 0u;
   }
 
   uint32_t scopeBinCount = 0u;
   bool reused = false;
-  if (cache && canReuseScopeWindowCache(params, *cache)) {
+  if (cache && canReuseScopeWindowCache(params, *cache, allowLiveReuse)) {
     const ScopeWindowParams &prev = cache->params;
     int64_t newestDeltaFp = int64_t(std::llround((params.newestPos - prev.newestPos) * double(kScopeLagFpOne)));
     int64_t shiftLagFp = (prev.scopeStartLagFp - params.scopeStartLagFp) + newestDeltaFp;
@@ -767,6 +919,8 @@ struct TemporalDeck::Impl {
   std::atomic<float> uiSampleRate{44100.f};
   std::atomic<uint64_t> perfAudioSampledCount{0u};
   std::atomic<uint64_t> perfAudioProcessNs{0u};
+  std::atomic<uint64_t> perfAudioProcessMinNs{std::numeric_limits<uint64_t>::max()};
+  std::atomic<uint64_t> perfAudioProcessMaxNs{0u};
   uint32_t debugInstanceId = 0u;
   std::atomic<float> uiDrawCostUs{0.f};
   std::atomic<float> uiScopePreviewCostUs{0.f};
@@ -830,6 +984,7 @@ struct TemporalDeck::Impl {
   std::atomic<uint32_t> scopeDragTraceQueueWrite{0u};
   std::atomic<uint32_t> scopeDragTraceQueueRead{0u};
   std::atomic<uint32_t> scopeDragTraceDropped{0u};
+  bool pendingSampleStateApplyDeferralLogged = false;
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
   std::atomic<int> bufferDurationMode{TemporalDeck::BUFFER_DURATION_10S};
   int externalGatePosMode = TemporalDeck::EXTERNAL_GATE_POS_GLIDE;
@@ -949,8 +1104,58 @@ TemporalDeck::TemporalDeck() : impl(new Impl()) {
 }
 
 TemporalDeck::~TemporalDeck() {
-  if (impl) {
-    impl->sampleLifecycle.stopWorker();
+  teardownTimer.begin(id);
+  if (!impl) {
+    return;
+  }
+
+  const bool lifetimeLogging = isTemporalDeckLifetimeLoggingEnabled();
+  const auto shutdownStart = std::chrono::steady_clock::now();
+  uint32_t debugInstanceId = 0u;
+  std::string samplePath;
+  bool sampleLoaded = false;
+  int sampleFrames = 0;
+  int bufferSize = 0;
+  size_t engineSampleBytes = 0u;
+  size_t lifecycleDecodedBytes = 0u;
+  size_t lifecyclePreparedBytes = 0u;
+  bool decodedAvailable = false;
+  bool buildInProgressBeforeStop = false;
+
+  if (lifetimeLogging) {
+    debugInstanceId = impl->debugInstanceId;
+    impl->sampleLifecycle.sampleJsonSnapshot(&samplePath);
+    sampleLoaded = impl->engine.sampleLoaded;
+    sampleFrames = impl->engine.sampleFrames;
+    bufferSize = impl->engine.buffer.size;
+    engineSampleBytes = (impl->engine.buffer.left.capacity() + impl->engine.buffer.right.capacity()) * sizeof(float);
+    impl->sampleLifecycle.sampleMemorySnapshot(&lifecycleDecodedBytes, &lifecyclePreparedBytes);
+    decodedAvailable = impl->sampleLifecycle.decodedSampleAvailable();
+    buildInProgressBeforeStop = impl->sampleLifecycle.sampleBuildInProgress();
+  }
+
+  const auto stopStart = std::chrono::steady_clock::now();
+  impl->sampleLifecycle.stopWorker();
+  const auto stopEnd = std::chrono::steady_clock::now();
+
+  const auto resetStart = std::chrono::steady_clock::now();
+  impl.reset();
+  const auto resetEnd = std::chrono::steady_clock::now();
+
+  if (lifetimeLogging) {
+    appendTemporalDeckLifetimeShutdownLog(debugInstanceId,
+                                          samplePath,
+                                          sampleLoaded,
+                                          sampleFrames,
+                                          bufferSize,
+                                          engineSampleBytes,
+                                          lifecycleDecodedBytes,
+                                          lifecyclePreparedBytes,
+                                          decodedAvailable,
+                                          buildInProgressBeforeStop,
+                                          elapsedMs(stopStart, stopEnd),
+                                          elapsedMs(resetStart, resetEnd),
+                                          elapsedMs(shutdownStart, resetEnd));
   }
 }
 
@@ -1023,8 +1228,8 @@ void TemporalDeck::applySampleRateChange(float sampleRate) {
 }
 
 void TemporalDeck::onSampleRateChange() {
-  // Reconfiguration is applied on the audio thread from process() to avoid
-  // cross-thread buffer reallocations.
+  // process() publishes a POD runtime-build request. The sample worker creates
+  // complete storage; audio only swaps it into the engine when ready.
 }
 
 json_t *TemporalDeck::dataToJson() {
@@ -1164,24 +1369,40 @@ void TemporalDeck::process(const ProcessArgs &args) {
   const auto processStart = perfTimingEnabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 
   if (impl->sampleLifecycle.consumeAllocationFallbackPending()) {
-    impl->sampleLifecycle.clearDecodedAndPreparedState();
+    impl->sampleLifecycle.requestClearDecodedAndPreparedStateFromAudio();
     impl->sampleModeEnabled.store(false, std::memory_order_relaxed);
     impl->bufferDurationMode.store(BUFFER_DURATION_10S, std::memory_order_relaxed);
     impl->sampleLifecycle.setPendingSampleStateApply();
   }
 
-  PreparedSampleData prepared;
-  if (impl->sampleLifecycle.consumePendingPreparedSample(&prepared)) {
+  bool installedPreparedSampleThisFrame = false;
+  if (PreparedSampleData *preparedPtr = impl->sampleLifecycle.consumePendingPreparedSample()) {
+    PreparedSampleData &prepared = *preparedPtr;
+    std::string samplePath;
+    size_t lifecycleDecodedBytes = 0u;
+    size_t lifecyclePreparedBytes = 0u;
+    if (isTemporalDeckLifetimeLoggingEnabled()) {
+      impl->sampleLifecycle.sampleJsonSnapshot(&samplePath);
+      impl->sampleLifecycle.sampleMemorySnapshot(&lifecycleDecodedBytes, &lifecyclePreparedBytes);
+    }
+    const auto processInstallStart = std::chrono::steady_clock::now();
     impl->cachedSampleRate = prepared.sampleRate;
     impl->bufferDurationMode.store(prepared.bufferMode, std::memory_order_relaxed);
     impl->engine.bufferDurationMode = prepared.bufferMode;
+    const auto resetStart = std::chrono::steady_clock::now();
     impl->engine.reset(prepared.sampleRate, false);
+    const auto resetEnd = std::chrono::steady_clock::now();
     impl->engine.sampleModeEnabled = impl->sampleModeEnabled.load(std::memory_order_relaxed);
     impl->engine.sampleLoopEnabled = impl->sampleLoopEnabled.load(std::memory_order_relaxed);
     impl->engine.externalGatePosMode = impl->externalGatePosMode;
+    const auto installStart = std::chrono::steady_clock::now();
     impl->engine.installPreparedSample(std::move(prepared.left), std::move(prepared.right), prepared.frames,
-                                       prepared.truncated, prepared.monoStorage);
-    impl->sampleModeEnabled.store(true, std::memory_order_relaxed);
+                                       prepared.truncated, prepared.monoStorage, &prepared.preview,
+                                       prepared.sampleAbsolutePeakVolts, prepared.previewValid);
+    const auto installEnd = std::chrono::steady_clock::now();
+    installedPreparedSampleThisFrame = true;
+    impl->pendingSampleStateApplyDeferralLogged = false;
+    impl->sampleModeEnabled.store(impl->engine.sampleLoaded, std::memory_order_relaxed);
     if (impl->pendingLegacySampleFreezeOnPreparedInstall) {
       impl->transportControl.freezeLatched = true;
       impl->transportControl.freezeLatchedByButton = false;
@@ -1192,22 +1413,113 @@ void TemporalDeck::process(const ProcessArgs &args) {
     if (paramQuantities[BUFFER_PARAM]) {
       paramQuantities[BUFFER_PARAM]->displayMultiplier = float(impl->engine.sampleFrames) / std::max(prepared.sampleRate, 1.f);
     }
+    appendTemporalDeckLifetimeLoadingLog(impl->debugInstanceId,
+                                         "process_install_prepared",
+                                         samplePath,
+                                         prepared.buildSerial,
+                                         prepared.buildRequestType,
+                                         prepared.sampleRate,
+                                         prepared.bufferMode,
+                                         prepared.sourceFrames,
+                                         prepared.sourceChannels,
+                                         prepared.frames,
+                                         (impl->engine.buffer.left.capacity() + impl->engine.buffer.right.capacity()) * sizeof(float),
+                                         lifecycleDecodedBytes,
+                                         lifecyclePreparedBytes,
+                                         impl->sampleLifecycle.decodedSampleAvailable(),
+                                         impl->sampleLifecycle.sampleBuildInProgress(),
+                                         prepared.workerDecodeMs,
+                                         prepared.workerPrepMs,
+                                         prepared.workerTotalMs,
+                                         elapsedMs(resetStart, resetEnd),
+                                         elapsedMs(installStart, installEnd),
+                                         elapsedMs(processInstallStart, std::chrono::steady_clock::now()));
+    impl->sampleLifecycle.retirePreparedSampleFromAudio(preparedPtr);
   }
 
   int requestedBufferMode = clamp(impl->bufferDurationMode.load(std::memory_order_relaxed), 0, BUFFER_DURATION_COUNT - 1);
   bool bufferModeChanged = requestedBufferMode != impl->engine.bufferDurationMode;
   bool sampleStateApplyRequested = impl->sampleLifecycle.consumePendingSampleStateApply();
+  if (installedPreparedSampleThisFrame) {
+    sampleStateApplyRequested = false;
+  }
   bool sampleRateChanged = args.sampleRate != impl->cachedSampleRate;
   bool decodedAvailable = impl->sampleLifecycle.decodedSampleAvailable();
+  bool sampleBuildInProgress = impl->sampleLifecycle.sampleBuildInProgress();
+  bool shouldApplyWithoutDecoded = !decodedAvailable && (bufferModeChanged || sampleRateChanged || sampleStateApplyRequested);
+  if (shouldApplyWithoutDecoded && sampleBuildInProgress) {
+    if (isTemporalDeckLifetimeLoggingEnabled() && !impl->pendingSampleStateApplyDeferralLogged) {
+      std::string samplePath;
+      size_t lifecycleDecodedBytes = 0u;
+      size_t lifecyclePreparedBytes = 0u;
+      impl->sampleLifecycle.sampleJsonSnapshot(&samplePath);
+      impl->sampleLifecycle.sampleMemorySnapshot(&lifecycleDecodedBytes, &lifecyclePreparedBytes);
+      appendTemporalDeckLifetimeLoadingLog(impl->debugInstanceId,
+                                           "defer_sample_state_apply",
+                                           samplePath,
+                                           0u,
+                                           0,
+                                           args.sampleRate,
+                                           requestedBufferMode,
+                                           0,
+                                           0,
+                                           0,
+                                           (impl->engine.buffer.left.capacity() + impl->engine.buffer.right.capacity()) * sizeof(float),
+                                           lifecycleDecodedBytes,
+                                           lifecyclePreparedBytes,
+                                           decodedAvailable,
+                                           sampleBuildInProgress,
+                                           0.0,
+                                           0.0,
+                                           0.0,
+                                           0.0,
+                                           0.0,
+                                           0.0,
+                                           "sample worker active; deferring restored live-buffer allocation");
+      impl->pendingSampleStateApplyDeferralLogged = true;
+    }
+    impl->sampleLifecycle.setPendingSampleStateApply();
+    bufferModeChanged = false;
+    sampleRateChanged = false;
+    sampleStateApplyRequested = false;
+    shouldApplyWithoutDecoded = false;
+  }
   bool shouldRebuildLoadedSample = decodedAvailable && (bufferModeChanged || sampleRateChanged || sampleStateApplyRequested);
-  if (!decodedAvailable && (bufferModeChanged || sampleRateChanged || sampleStateApplyRequested)) {
-    applySampleRateChange(args.sampleRate);
-  } else if (shouldRebuildLoadedSample && !impl->sampleLifecycle.sampleBuildInProgress()) {
+  if (shouldApplyWithoutDecoded) {
+    temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest request;
+    request.type = temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest::BUILD_EMPTY_BUFFER;
+    request.targetSampleRate = args.sampleRate;
+    request.requestedBufferMode = requestedBufferMode;
+    impl->sampleLifecycle.requestAsyncRuntimeBuild(
+      request.type, request.targetSampleRate, request.requestedBufferMode);
+  } else if (shouldRebuildLoadedSample && !sampleBuildInProgress) {
     temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest request;
     request.type = temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest::REBUILD_FROM_DECODED;
     request.targetSampleRate = args.sampleRate;
     request.requestedBufferMode = requestedBufferMode;
-    impl->sampleLifecycle.requestAsyncSampleBuild(request);
+    uint64_t requestSerial = impl->sampleLifecycle.requestAsyncRuntimeBuild(
+      request.type, request.targetSampleRate, request.requestedBufferMode);
+    appendTemporalDeckLifetimeLoadingLog(impl->debugInstanceId,
+                                         "request_rebuild_from_decoded",
+                                         impl->sampleLifecycle.samplePath(),
+                                         requestSerial,
+                                         request.type,
+                                         request.targetSampleRate,
+                                         request.requestedBufferMode,
+                                         0,
+                                         0,
+                                         0,
+                                         (impl->engine.buffer.left.capacity() + impl->engine.buffer.right.capacity()) * sizeof(float),
+                                         0u,
+                                         0u,
+                                         decodedAvailable,
+                                         true,
+                                         0.0,
+                                         0.0,
+                                         0.0,
+                                         0.0,
+                                         0.0,
+                                         0.0);
   }
 
   if (impl->pendingLiveToSampleConvert.exchange(false, std::memory_order_relaxed)) {
@@ -1712,15 +2024,22 @@ void TemporalDeck::process(const ProcessArgs &args) {
   if (expanderConnected) {
     impl->expanderRequestedScopeFormat = requestedScopeFormat;
     bool wantStereoScope = requestedScopeFormat == temporaldeck_expander::SCOPE_FORMAT_STEREO;
+    const bool scopeInteractionActive =
+      platterInput.platterMotionActive || platterInput.scopeLagDragActive || impl->expanderLagDragWasActive;
+    const bool frozenLiveScopeIdle = freezeActive && !frame.sampleMode && !scopeInteractionActive;
+    const bool liveScopeIdle = !freezeActive && !frame.sampleMode && !scopeInteractionActive;
+    const float expanderPublishIntervalSec =
+      frozenLiveScopeIdle ? kExpanderPublishIntervalSecFrozenLive
+                          : (liveScopeIdle ? kExpanderPublishIntervalSecLiveIdle : kExpanderPublishIntervalSec);
 
     bool justConnected = !impl->expanderWasConnected;
     bool generationChanged = impl->engine.bufferGeneration != impl->expanderLastPublishedGeneration;
     impl->expanderPublishTimerSec += args.sampleTime;
-    bool timerElapsed = impl->expanderPublishTimerSec >= kExpanderPublishIntervalSec;
+    bool timerElapsed = impl->expanderPublishTimerSec >= expanderPublishIntervalSec;
     bool shouldPublish = justConnected || generationChanged || timerElapsed;
     if (shouldPublish) {
       if (timerElapsed) {
-        impl->expanderPublishTimerSec = std::fmod(impl->expanderPublishTimerSec, kExpanderPublishIntervalSec);
+        impl->expanderPublishTimerSec = std::fmod(impl->expanderPublishTimerSec, expanderPublishIntervalSec);
       } else {
         impl->expanderPublishTimerSec = 0.f;
       }
@@ -1743,41 +2062,49 @@ void TemporalDeck::process(const ProcessArgs &args) {
         std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> scopeBins;
         std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> scopeBinsRight;
         float scopeStartLagSamples = 0.f;
+        float scopeVisibleStartLagSamples = 0.f;
         float scopeBinSpanSamples = 1.f;
         float scopeNewestPosSamples = 0.f;
         uint32_t scopeBinCount = 0u;
         ScopeWindowParams scopeParams;
-        auto scopePreviewMeasureStart = std::chrono::steady_clock::now();
+        auto scopePreviewMeasureStart =
+          perfTimingEnabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
         bool haveScopeParams = computeScopeWindowParams(
           impl->engine, frame.sampleMode, impl->sampleLoopEnabled.load(std::memory_order_relaxed), impl->cachedSampleRate,
           scopeLagForPreview, float(frame.accessibleLag), scopeLiveNewestAbsolutePosOverride, &scopeParams);
         if (haveScopeParams) {
           ScopeChannelMode leftMode = wantStereoScope ? SCOPE_CHANNEL_LEFT : SCOPE_CHANNEL_MID;
-          uint32_t leftCount =
-            buildScopeWindowBinsWithCache(impl->engine, scopeParams, leftMode, &impl->expanderScopeCacheMono, &scopeBins);
+          const bool allowFrozenLiveScopeCacheReuse = freezeActive && !frame.sampleMode && !scopeInteractionActive;
+          uint32_t leftCount = buildScopeWindowBinsWithCache(impl->engine, scopeParams, leftMode,
+                                                             &impl->expanderScopeCacheMono, &scopeBins,
+                                                             allowFrozenLiveScopeCacheReuse);
           uint32_t rightCount = 0u;
           if (wantStereoScope) {
-            rightCount = buildScopeWindowBinsWithCache(
-              impl->engine, scopeParams, SCOPE_CHANNEL_RIGHT, &impl->expanderScopeCacheRight, &scopeBinsRight);
+            rightCount = buildScopeWindowBinsWithCache(impl->engine, scopeParams, SCOPE_CHANNEL_RIGHT,
+                                                       &impl->expanderScopeCacheRight, &scopeBinsRight,
+                                                       allowFrozenLiveScopeCacheReuse);
             scopeBinCount = (leftCount > 0u && rightCount > 0u) ? std::min(leftCount, rightCount) : 0u;
           } else {
             impl->expanderScopeCacheRight.valid = false;
             scopeBinCount = leftCount;
           }
           scopeStartLagSamples = scopeParams.scopeStartLagSamples;
+          scopeVisibleStartLagSamples = scopeParams.scopeVisibleStartLagSamples;
           scopeBinSpanSamples = scopeParams.binSpanSamples;
           scopeNewestPosSamples = float(scopeParams.newestPos);
         } else {
           impl->expanderScopeCacheMono.valid = false;
           impl->expanderScopeCacheRight.valid = false;
         }
-        auto scopePreviewMeasureEnd = std::chrono::steady_clock::now();
-        float scopePreviewMeasureUs =
-          float(std::chrono::duration_cast<std::chrono::microseconds>(scopePreviewMeasureEnd - scopePreviewMeasureStart).count());
-        float previousMeasureUs = impl->uiScopePreviewCostUs.load(std::memory_order_relaxed);
-        float smoothedMeasureUs =
-          (previousMeasureUs > 0.f) ? (previousMeasureUs + (scopePreviewMeasureUs - previousMeasureUs) * 0.25f) : scopePreviewMeasureUs;
-        impl->uiScopePreviewCostUs.store(smoothedMeasureUs, std::memory_order_relaxed);
+        if (perfTimingEnabled) {
+          auto scopePreviewMeasureEnd = std::chrono::steady_clock::now();
+          float scopePreviewMeasureUs =
+            float(std::chrono::duration_cast<std::chrono::microseconds>(scopePreviewMeasureEnd - scopePreviewMeasureStart).count());
+          float previousMeasureUs = impl->uiScopePreviewCostUs.load(std::memory_order_relaxed);
+          float smoothedMeasureUs =
+            (previousMeasureUs > 0.f) ? (previousMeasureUs + (scopePreviewMeasureUs - previousMeasureUs) * 0.25f) : scopePreviewMeasureUs;
+          impl->uiScopePreviewCostUs.store(smoothedMeasureUs, std::memory_order_relaxed);
+        }
         impl->uiScopePreviewStride.store(haveScopeParams ? std::max(0, scopeParams.scopeStride) : 0, std::memory_order_relaxed);
         impl->uiScopePreviewMetricValid.store(haveScopeParams, std::memory_order_relaxed);
         uint32_t flags = 0;
@@ -1835,6 +2162,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
           float(frame.sampleProgress), sampleAbsolutePeakVolts, combinedSensitivity,
           uint32_t(std::max(0, impl->engine.buffer.size)),
           uint32_t(std::max(0, impl->engine.buffer.filled)), kScopeHalfWindowMs, scopeStartLagSamples,
+          scopeVisibleStartLagSamples,
           scopeBinSpanSamples, scopeNewestPosSamples, scopeBinCount, scopeBins.data(),
           wantStereoScope ? scopeBinsRight.data() : nullptr);
         right->leftExpander.messageFlipRequested = true;
@@ -1888,11 +2216,16 @@ void TemporalDeck::process(const ProcessArgs &args) {
       uint64_t(std::max<int64_t>(0, std::chrono::duration_cast<std::chrono::nanoseconds>(processEnd - processStart).count()));
     impl->perfAudioProcessNs.fetch_add(elapsedNs, std::memory_order_relaxed);
     impl->perfAudioSampledCount.fetch_add(1u, std::memory_order_relaxed);
+    debug_terminal::recordAudioProcessTiming(impl->perfAudioProcessMinNs, impl->perfAudioProcessMaxNs, elapsedNs);
   }
 }
 
 void TemporalDeck::setPlatterScratch(bool touched, float lagSamples, float velocitySamples, int holdSamples) {
   impl->platterInput.setScratch(touched, lagSamples, velocitySamples, holdSamples);
+}
+
+void TemporalDeck::setPlatterTouchHold(bool touched, float lagSamples) {
+  impl->platterInput.setTouchHold(touched, lagSamples);
 }
 
 void TemporalDeck::setPlatterMotionFreshSamples(int motionFreshSamples) {
@@ -1919,13 +2252,10 @@ float TemporalDeck::getUiSampleRate() const {
   return impl->uiSampleRate.load(std::memory_order_relaxed);
 }
 
-float TemporalDeck::consumeAudioProcessUs() {
-  const uint64_t sampleCount = impl->perfAudioSampledCount.exchange(0u, std::memory_order_acq_rel);
-  const uint64_t processNs = impl->perfAudioProcessNs.exchange(0u, std::memory_order_acq_rel);
-  if (sampleCount == 0u || processNs == 0u) {
-    return 0.f;
-  }
-  return float(double(processNs) / double(sampleCount) * 0.001);
+debug_terminal::TimingRangeUs TemporalDeck::consumeAudioProcessUs() {
+  impl->perfAudioSampledCount.exchange(0u, std::memory_order_acq_rel);
+  impl->perfAudioProcessNs.exchange(0u, std::memory_order_acq_rel);
+  return debug_terminal::consumeAudioProcessTiming(impl->perfAudioProcessMinNs, impl->perfAudioProcessMaxNs);
 }
 
 float TemporalDeck::getUiScopePreviewCostUs() const {
@@ -2037,7 +2367,29 @@ bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *erro
   request.path = path;
   request.targetSampleRate = std::max(impl->cachedSampleRate, 1.f);
   request.requestedBufferMode = impl->bufferDurationMode.load(std::memory_order_relaxed);
-  impl->sampleLifecycle.requestAsyncSampleBuild(request);
+  impl->pendingSampleStateApplyDeferralLogged = false;
+  uint64_t requestSerial = impl->sampleLifecycle.requestAsyncSampleBuild(request);
+  appendTemporalDeckLifetimeLoadingLog(impl->debugInstanceId,
+                                       "request_load_path",
+                                       path,
+                                       requestSerial,
+                                       request.type,
+                                       request.targetSampleRate,
+                                       request.requestedBufferMode,
+                                       0,
+                                       0,
+                                       0,
+                                       (impl->engine.buffer.left.capacity() + impl->engine.buffer.right.capacity()) * sizeof(float),
+                                       0u,
+                                       0u,
+                                       impl->sampleLifecycle.decodedSampleAvailable(),
+                                       true,
+                                       0.0,
+                                       0.0,
+                                       0.0,
+                                       0.0,
+                                       0.0,
+                                       0.0);
   return true;
 }
 
@@ -2085,7 +2437,15 @@ bool TemporalDeck::saveLoadedSampleToPath(const std::string &path, std::string *
   }
   int frames = impl->engine.sampleFrames;
   int channels = impl->engine.buffer.monoStorage ? 1 : 2;
-  if (!writeStereoOrMonoWav16(path, impl->engine.buffer.left, impl->engine.buffer.right, frames, channels,
+  std::vector<float> left(size_t(frames), 0.f);
+  std::vector<float> right(channels == 2 ? size_t(frames) : 0u);
+  for (int i = 0; i < frames; ++i) {
+    left[size_t(i)] = impl->engine.sampleLeftAt(i);
+    if (channels == 2) {
+      right[size_t(i)] = impl->engine.sampleRightAt(i);
+    }
+  }
+  if (!writeStereoOrMonoWav16(path, left, right, frames, channels,
                               impl->engine.sampleRate, temporaldeck::bufferVoltageToSampleFile(1.f), errorOut)) {
     return false;
   }

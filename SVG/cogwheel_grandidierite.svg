@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="288" height="288" viewBox="0 0 288 288" version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <g id="cogwheelGrandidierite">
+    <polygon
+       id="outerTeeth"
+       points="282.763,105.518 247.901,148.536 278.881,194.430 225.391,208.742 223.479,264.080 171.793,244.218 137.719,287.863 107.578,241.414 54.358,256.696 57.276,201.401 5.237,182.482 40.099,139.464 9.119,93.570 62.609,79.258 64.521,23.920 116.207,43.782 150.281,0.137 180.422,46.586 233.642,31.304 230.724,86.599"
+       style="fill:#b99143" />
+    <circle
+       id="outerBody"
+       cx="144"
+       cy="144"
+       r="104"
+       style="fill:#b99143" />
+    <circle
+       id="innerRecess"
+       cx="144"
+       cy="144"
+       r="66"
+       style="fill:#6a4a1f" />
+    <circle
+       id="axleCutout"
+       cx="144"
+       cy="144"
+       r="24"
+       style="fill:#2b1b08" />
+    <g id="grandidieriteCore" style="display:inline">
+      <circle cx="144" cy="144" r="44" style="fill:#176c72;stroke:#073136;stroke-width:6" />
+      <polygon points="144.0,128.4 122.0,106.0 144.0,100.0 166.0,106.0" style="fill:#58b3ab;stroke:#0b4247;stroke-width:1.6" />
+      <polygon points="158.2,135.8 166.0,106.0 182.0,122.0" style="fill:#2f8f93;stroke:#0b4247;stroke-width:1.6" />
+      <polygon points="155.8,151.8 158.2,135.8 182.0,122.0 188.0,144.0" style="fill:#1f777f;stroke:#0b4247;stroke-width:1.6" />
+      <polygon points="155.8,151.8 188.0,144.0 182.0,166.0 166.0,182.1" style="fill:#115861;stroke:#0b4247;stroke-width:1.6" />
+      <polygon points="144.0,158.6 155.8,151.8 166.0,182.1 144.0,188.0" style="fill:#176f78;stroke:#0b4247;stroke-width:1.6" />
+      <polygon points="131.4,151.8 144.0,158.6 144.0,188.0 122.0,182.1" style="fill:#0e4850;stroke:#0b4247;stroke-width:1.6" />
+      <polygon points="131.4,151.8 122.0,182.1 105.8,166.0 100.0,144.0" style="fill:#145c66;stroke:#0b4247;stroke-width:1.6" />
+      <polygon points="129.4,135.8 131.4,151.8 100.0,144.0 105.8,122.0" style="fill:#1a727b;stroke:#0b4247;stroke-width:1.6" />
+      <polygon points="129.4,135.8 105.8,122.0 122.0,106.0 144.0,128.4" style="fill:#38a0a0;stroke:#0b4247;stroke-width:1.6" />
+      <polygon points="129.4,135.8 144.0,128.4 158.2,135.8 155.8,151.8 144.0,158.6 131.4,151.8" style="fill:#247f88;stroke:#0b4247;stroke-width:1.8" />
+      <polygon points="122.0,106.0 129.4,135.8 144.0,128.4" style="fill:#8ed1ca;stroke:#0b4247;stroke-width:1.4" />
+      <polygon points="144.0,128.4 166.0,106.0 158.2,135.8" style="fill:#4eb6b7;stroke:#0b4247;stroke-width:1.4" />
+      <path d="M117.6,112.6 C125.2,104.2 134.2,100.0 144.0,100.0" style="fill:none;stroke:#d7fff5;stroke-width:2.4;stroke-linecap:round;opacity:0.72" />
+    </g>
+  </g>
+</svg>

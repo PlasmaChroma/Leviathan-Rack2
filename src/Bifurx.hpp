@@ -1,6 +1,7 @@
 #pragma once
 
 #include "plugin.hpp"
+#include "MathHelpers.hpp"
 #include "PanelSvgUtils.hpp"
 
 #include <algorithm>
@@ -13,6 +14,7 @@
 #include <exception>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -80,7 +82,7 @@ constexpr float kVoctSmoothingTauSeconds = 0.0025f;
 constexpr float kVoctDeadbandVolts = 0.001f;
 constexpr float kTitoCoeffRelativeUpdateThreshold = 2.5e-4f;
 constexpr float kTitoCoeffAbsoluteUpdateThresholdHz = 0.002f;
-constexpr float kDisplayDbfsSpan = 30.f;
+constexpr float kDisplayDbfsSpan = 48.f;
 constexpr float kDisplayTopDbfsFloor = -36.f;
 constexpr float kDisplayTopDbfsCeiling = 0.f;
 constexpr float kDisplayTopDynamicCeilingDbfs = kOverlayDbfsCeiling;
@@ -91,11 +93,6 @@ constexpr float kPeakMarkerOutlineExtraRadius = 0.4f;
 constexpr float kPeakMarkerOutlineStrokeWidth = 0.8f;
 constexpr float kPeakMarkerEdgePadding = 0.4f;
 constexpr float kPeakMarkerBottomLanePadding = 0.f;
-
-// Utility functions
-inline float clamp01(float v) {
-	return clamp(v, 0.f, 1.f);
-}
 
 inline float fastExp2(float x) {
 	return rack::dsp::exp2_taylor5(clamp(x, -24.f, 24.f));
@@ -124,28 +121,15 @@ inline float amplitudeRatioDb(float numerator, float denominator) {
 std::string bifurxUserRootPath();
 
 inline float shapedSpan(float value) {
-	return std::pow(clamp01(value), 1.45f);
+	return std::pow(levi_math::clamp01(value), 1.45f);
 }
 
 float levelDriveGain(float knob);
-float smoothstep01(float x);
 float levelInputGain(float knob);
 float levelDriveAmount(float knob);
 float levelOutputClipWet(float knob);
 float applyLevelInputStage(float in, float levelKnob);
 float applyLevelOutputStage(float modeOut, float levelKnob, bool softLimitingEnabled = true);
-
-inline float fastTanh(float x) {
-	const float x2 = x * x;
-	if (x2 < 9.f) {
-		return x * (27.f + x2) / (27.f + 9.f * x2);
-	}
-	return (x > 0.f) ? 1.f : -1.f;
-}
-
-inline float softClip(float x) {
-	return fastTanh(x);
-}
 
 inline float sanitizeFinite(float x, float fallback = 0.f) {
 	return std::isfinite(x) ? x : fallback;
@@ -527,8 +511,6 @@ std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float 
 float previewModelResponseDb(const BifurxPreviewModel& model, float hz);
 
 constexpr float kPreviewProbeLevelKnob = 0.5f;
-constexpr float kPreviewProbeImpulseAmplitude = 0.01f;
-constexpr int kPreviewProbeBurstLength = 64;
 
 float previewProbeStimulusSample(const BifurxPreviewState& state, int sampleIndex);
 
@@ -549,7 +531,7 @@ SvfOutputs processProbeStage(
 	bool highResonanceSelfOscEnabled
 );
 
-void simulatePreviewProbeImpulseResponse(
+void simulatePreviewProbeResponse(
 	const BifurxPreviewState& state,
 	float* inputBuffer,
 	float* outputBuffer,
@@ -557,11 +539,14 @@ void simulatePreviewProbeImpulseResponse(
 );
 
 struct Bifurx : Module {
+	ModuleTeardownTimer teardownTimer {"Bifurx"};
 	enum ColorScheme {
 		SCHEME_DEFAULT = 0,
 		SCHEME_CLASSIC,
 		SCHEME_MONOCHROME,
 		SCHEME_FIRE,
+		SCHEME_RETRO_AMBER,
+		SCHEME_RETRO_GREEN,
 		SCHEME_LEN
 	};
 	enum ParamId {
@@ -718,6 +703,8 @@ struct Bifurx : Module {
 	std::atomic<bool> perfDebugLogging {false};
 	std::atomic<uint64_t> perfAudioSampledCount{0};
 	std::atomic<uint64_t> perfAudioProcessNs{0};
+	std::atomic<uint64_t> perfAudioProcessRangeMinNs{std::numeric_limits<uint64_t>::max()};
+	std::atomic<uint64_t> perfAudioProcessRangeMaxNs{0};
 	std::atomic<uint64_t> perfAudioControlsNs{0};
 	std::atomic<uint64_t> perfAudioCoreNs{0};
 	std::atomic<uint64_t> perfAudioPreviewNs{0};
@@ -732,6 +719,7 @@ struct Bifurx : Module {
 	double createdUnixTimeSec = 0.0;
 
 	Bifurx();
+	~Bifurx() override;
 	void resetCircuitStates();
 	json_t* dataToJson() override;
 	void dataFromJson(json_t* root) override;

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="46" height="46" viewBox="0 0 46 46" version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ringStroke" x1="7" y1="6" x2="39" y2="40" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8299d8"/>
+      <stop offset="0.42" stop-color="#6247b7"/>
+      <stop offset="0.72" stop-color="#a181ff"/>
+      <stop offset="1" stop-color="#2e255f"/>
+    </linearGradient>
+    <linearGradient id="darkWell" x1="12" y1="9" x2="34" y2="38" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1d2327"/>
+      <stop offset="0.55" stop-color="#090b0f"/>
+      <stop offset="1" stop-color="#020309"/>
+    </linearGradient>
+    <filter id="softBlue" x="-0.4" y="-0.4" width="1.8" height="1.8">
+      <feGaussianBlur stdDeviation="0.75"/>
+    </filter>
+  </defs>
+
+  <g stroke-linecap="round" fill="none">
+    <path d="M 4.8 29.0 A 19.9 19.9 0 0 1 41.2 17.0" stroke="#060812" stroke-width="1.8"/>
+    <path d="M 4.8 29.0 A 19.9 19.9 0 0 1 41.2 17.0" stroke="url(#ringStroke)" stroke-width="0.58" opacity="0.84"/>
+    <path d="M 7.2 28.3 A 17.4 17.4 0 0 1 38.8 17.7" stroke="#080912" stroke-width="0.72"/>
+    <path d="M 8.5 27.8 A 16.0 16.0 0 0 0 37.5 18.2" stroke="#8065ed" stroke-width="0.34" opacity="0.52"/>
+    <path d="M 9.9 29.1 A 14.9 14.9 0 0 1 36.1 16.9" stroke="#080d16" stroke-width="0.62"/>
+  </g>
+
+  <g stroke="#8ba5e8" stroke-width="0.48" stroke-linecap="round" opacity="0.74">
+    <path d="M23 2.8v2.2"/>
+    <path d="M23 41.0v2.2"/>
+    <path d="M2.8 23h2.2"/>
+    <path d="M41.0 23h2.2"/>
+    <path d="M8.1 8.1l2.1 2.1"/>
+    <path d="M37.9 8.1l-2.1 2.1"/>
+    <path d="M8.1 37.9l2.1-2.1"/>
+    <path d="M37.9 37.9l-2.1-2.1"/>
+  </g>
+  <g stroke="#6551c8" stroke-width="0.32" stroke-linecap="round" opacity="0.46">
+    <path d="M15.2 4.8l0.65 1.55"/>
+    <path d="M30.8 4.8l-0.65 1.55"/>
+    <path d="M4.8 15.2l1.55 0.65"/>
+    <path d="M41.2 15.2l-1.55 0.65"/>
+    <path d="M4.8 30.8l1.55-0.65"/>
+    <path d="M41.2 30.8l-1.55-0.65"/>
+    <path d="M15.2 41.2l0.65-1.55"/>
+    <path d="M30.8 41.2l-0.65-1.55"/>
+  </g>
+
+  <circle cx="23" cy="23" r="15.05" fill="#02030a" opacity="0.78"/>
+  <circle cx="23" cy="23" r="14.55" fill="url(#darkWell)" stroke="#030409" stroke-width="1.2"/>
+  <circle cx="23" cy="23" r="13.45" fill="none" stroke="#161e2a" stroke-width="0.42"/>
+  <path d="M10.55 29.15 A 13.95 13.95 0 0 0 35.45 29.15" stroke="#010209" stroke-width="0.92" fill="none" opacity="0.9"/>
+  <circle cx="34.55" cy="8.35" r="0.72" fill="#dbe5ff" filter="url(#softBlue)"/>
+  <circle cx="34.55" cy="8.35" r="0.28" fill="#ffffff"/>
+  <circle cx="39.15" cy="13.75" r="0.62" fill="#9d79ff" filter="url(#softBlue)"/>
+</svg>

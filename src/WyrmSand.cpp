@@ -162,7 +162,7 @@ void WyrmSand::stamp(Vec size, Vec pos, float radiusPx, float depthDelta, float 
 			const float dx = cx - pos.x;
 			const float dy = cy - pos.y;
 			const float dist = std::sqrt(dx * dx + dy * dy);
-			const float falloff = smoother01(1.f - dist * invRadius);
+			const float falloff = levi_math::smoothstep01(1.f - dist * invRadius);
 			if (falloff <= 0.f) {
 				continue;
 			}
@@ -218,9 +218,9 @@ void WyrmSand::disturbSegment(Vec size, Vec a, Vec b, float troughStrength, floa
 			const Vec nearest = a.plus(ab.mult(along));
 			const float signedSide = (p.x - nearest.x) * normal.x + (p.y - nearest.y) * normal.y;
 			const float absSide = std::fabs(signedSide);
-			const float trough = smoother01(1.f - absSide / bodyRadiusPx);
-			const float ridge = smoother01(1.f - std::fabs(absSide - ridgeOffsetPx) / 2.4f);
-			const float e = smoother01(1.f - absSide / effectRadiusPx);
+			const float trough = levi_math::smoothstep01(1.f - absSide / bodyRadiusPx);
+			const float ridge = levi_math::smoothstep01(1.f - std::fabs(absSide - ridgeOffsetPx) / 2.4f);
+			const float e = levi_math::smoothstep01(1.f - absSide / effectRadiusPx);
 			if (trough <= 0.f && ridge <= 0.f && e <= 0.f) {
 				continue;
 			}

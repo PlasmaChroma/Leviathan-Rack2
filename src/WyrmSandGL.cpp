@@ -14,6 +14,10 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	int textureW = 0;
 	int textureH = 0;
 	uint64_t uploadedRevision = 0;
+	GLuint waveColumnTexture = 0;
+	int waveColumnTextureW = 0;
+	int waveColumnTextureH = 0;
+	int waveColumnTextureCount = -1;
 	double lastUiPhaseUpdateSec = -1.0;
 	GLuint bodyShaderProgram = 0;
 	GLint bodyShaderSoftnessLoc = -1;
@@ -40,6 +44,13 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		uploadedRevision = 0;
 	}
 
+	void resetWaveColumnTextureState() {
+		waveColumnTexture = 0;
+		waveColumnTextureW = 0;
+		waveColumnTextureH = 0;
+		waveColumnTextureCount = -1;
+	}
+
 	void resetBodyShaderState() {
 		bodyShaderProgram = 0;
 		bodyShaderSoftnessLoc = -1;
@@ -57,6 +68,9 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	void validateGlResourcesForCurrentContext() {
 		if (texture != 0 && !glIsTexture(texture)) {
 			resetTextureState();
+		}
+		if (waveColumnTexture != 0 && !glIsTexture(waveColumnTexture)) {
+			resetWaveColumnTextureState();
 		}
 		if (bodyShaderReady && (bodyShaderProgram == 0 || !glIsProgram(bodyShaderProgram))) {
 			resetBodyShaderState();
@@ -194,16 +208,18 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		lastUiPhaseUpdateSec = nowSec;
 		float phase = module->uiSlitherPhase.load(std::memory_order_relaxed);
 		const float speedFactor = module->displaySlitherSpeedFactor.load(std::memory_order_relaxed);
-		phase = wrap01(phase + 0.65f * speedFactor * elapsed);
+		phase = levi_math::wrap01(phase + 0.65f * speedFactor * elapsed);
 		module->uiSlitherPhase.store(phase, std::memory_order_relaxed);
 	}
 
 	Vec currentLocalMousePos() const {
-		if (!APP || !APP->scene || !APP->scene->rack) {
+		if (!APP || !APP->scene) {
 			return Vec();
 		}
-		const Vec widgetRackPos = const_cast<WyrmSandGlWidget*>(this)->getRelativeOffset(Vec(), APP->scene->rack);
-		return APP->scene->rack->getMousePos().minus(widgetRackPos);
+		auto* self = const_cast<WyrmSandGlWidget*>(this);
+		const Vec absoluteOrigin = self->getAbsoluteOffset(Vec());
+		const float absoluteZoom = std::max(self->getAbsoluteZoom(), 1e-6f);
+		return APP->scene->getMousePos().minus(absoluteOrigin).div(absoluteZoom);
 	}
 
 	static int indexFromX(float x, int count, float sizeX) {
@@ -223,8 +239,103 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		*phaseClearance = (size.x > 1.f) ? (pixelClearance / std::max(1.f, size.x - 4.4f)) : 0.f;
 	}
 
+	static NVGcolor mixColor(NVGcolor a, NVGcolor b, float t) {
+		t = levi_math::clamp01(t);
+		return nvgRGBAf(
+			a.r + (b.r - a.r) * t,
+			a.g + (b.g - a.g) * t,
+			a.b + (b.b - a.b) * t,
+			a.a + (b.a - a.a) * t
+		);
+	}
+
+	static void compositeOver(const NVGcolor& src, float* dst) {
+		const float outA = src.a + dst[3] * (1.f - src.a);
+		if (outA <= 1e-6f) {
+			dst[0] = dst[1] = dst[2] = dst[3] = 0.f;
+			return;
+		}
+		const float outR = src.r * src.a + dst[0] * dst[3] * (1.f - src.a);
+		const float outG = src.g * src.a + dst[1] * dst[3] * (1.f - src.a);
+		const float outB = src.b * src.a + dst[2] * dst[3] * (1.f - src.a);
+		dst[0] = outR / outA;
+		dst[1] = outG / outA;
+		dst[2] = outB / outA;
+		dst[3] = outA;
+	}
+
+	void ensureWaveColumnTexture(Vec size, int count) {
+		const int w = std::max(1, int(std::ceil(size.x)));
+		const int h = std::max(1, int(std::ceil(size.y)));
+		count = std::max(1, count);
+		if (waveColumnTexture != 0 &&
+			waveColumnTextureW == w &&
+			waveColumnTextureH == h &&
+			waveColumnTextureCount == count) {
+			return;
+		}
+
+		const float inset = 2.2f;
+		const float drawWidth = std::max(1.f, size.x - 2.f * inset);
+		const float dx = drawWidth / float(count);
+		const float graphColumnWidth = std::min(2.0f, dx);
+		const float midY = 0.5f * size.y;
+		const NVGcolor posNear = nvgRGBA(28, 204, 217, 46);
+		const NVGcolor posFar = nvgRGBA(42, 228, 255, 152);
+		const NVGcolor negNear = nvgRGBA(115, 72, 224, 50);
+		const NVGcolor negFar = nvgRGBA(150, 92, 255, 162);
+		const NVGcolor posShade = nvgRGBA(0, 56, 72, 132);
+		const NVGcolor negShade = nvgRGBA(40, 24, 112, 92);
+		std::vector<unsigned char> pixels(size_t(w) * size_t(h) * 4u, 0u);
+
+		for (int py = 0; py < h; ++py) {
+			const float y = std::min(size.y, float(py) + 0.5f);
+			const bool positive = y < midY;
+			const float t = positive
+				? levi_math::clamp01((midY - y) / std::max(midY, 1.f))
+				: levi_math::clamp01((y - midY) / std::max(size.y - midY, 1.f));
+			const NVGcolor base = positive ? mixColor(posNear, posFar, t) : mixColor(negNear, negFar, t);
+			for (int px = 0; px < w; ++px) {
+				const float x = std::min(size.x, float(px) + 0.5f);
+				const float columnF = (x - inset) / std::max(dx, 1e-6f);
+				const int column = int(std::floor(columnF));
+				if (column < 0 || column >= count) {
+					continue;
+				}
+				const float centerX = inset + (float(column) + 0.5f) * dx;
+				if (std::fabs(x - centerX) > 0.5f * graphColumnWidth) {
+					continue;
+				}
+
+				float out[4] = {0.f, 0.f, 0.f, 0.f};
+				compositeOver(base, out);
+				if ((column & 1) != 0) {
+					compositeOver(positive ? posShade : negShade, out);
+				}
+				const size_t offset = (size_t(py) * size_t(w) + size_t(px)) * 4u;
+				pixels[offset + 0u] = uint8_t(clamp(int(std::lround(out[0] * 255.f)), 0, 255));
+				pixels[offset + 1u] = uint8_t(clamp(int(std::lround(out[1] * 255.f)), 0, 255));
+				pixels[offset + 2u] = uint8_t(clamp(int(std::lround(out[2] * 255.f)), 0, 255));
+				pixels[offset + 3u] = uint8_t(clamp(int(std::lround(out[3] * 255.f)), 0, 255));
+			}
+		}
+
+		if (waveColumnTexture == 0) {
+			glGenTextures(1, &waveColumnTexture);
+		}
+		glBindTexture(GL_TEXTURE_2D, waveColumnTexture);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+		waveColumnTextureW = w;
+		waveColumnTextureH = h;
+		waveColumnTextureCount = count;
+	}
+
 	static float displayWaveValueAtIndex(Wyrm* module, int index, Vec size) {
-		const float amount = clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
+		const float amount = levi_math::clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
 		const float travelPhase = module->uiSlitherPhase.load(std::memory_order_relaxed);
 		const float phase = (float(index) + 0.5f) / float(std::max(1, module->pointCount));
 		float clearance = 0.f;
@@ -237,7 +348,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	}
 
 	static Vec bodyPointForPhase(Wyrm* module, const std::array<float, kWyrmPointCountMax>& points, float phase, Vec size) {
-		const float amount = clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
+		const float amount = levi_math::clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
 		const float travelPhase = module->uiSlitherPhase.load(std::memory_order_relaxed);
 		const float raw = catmullPeriodic(points, module->pointCount, phase);
 		float clearance = 0.f;
@@ -259,10 +370,14 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		const float inset = 2.2f;
 		const float drawWidth = std::max(1.f, size.x - 2.f * inset);
 		const float dx = drawWidth / float(std::max(1, count));
-		const float graphColumnWidth = std::min(2.0f, dx);
 		const float midY = 0.5f * size.y;
-		const NVGcolor c = nvgRGBA(34, 27, 70, 196);
-		glColor4f(c.r, c.g, c.b, c.a);
+		ensureWaveColumnTexture(size, count);
+		if (waveColumnTexture == 0) {
+			return;
+		}
+		glBindTexture(GL_TEXTURE_2D, waveColumnTexture);
+		glEnable(GL_TEXTURE_2D);
+		glColor4f(1.f, 1.f, 1.f, 1.f);
 		glBegin(GL_QUADS);
 		for (int i = 0; i < count; ++i) {
 			const float v = displayWaveValueAtIndex(module, i, size);
@@ -270,14 +385,23 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 			const float x = inset + (float(i) + 0.5f) * dx;
 			const float yTop = std::min(midY, y);
 			const float yBottom = std::max(midY, y);
-			const float x0 = x - 0.5f * graphColumnWidth;
-			const float x1 = x + 0.5f * graphColumnWidth;
+			const float x0 = std::max(0.f, x - 0.5f * dx);
+			const float x1 = std::min(size.x, x + 0.5f * dx);
+			const float u0 = x0 / std::max(size.x, 1.f);
+			const float u1 = x1 / std::max(size.x, 1.f);
+			const float v0 = yTop / std::max(size.y, 1.f);
+			const float v1 = yBottom / std::max(size.y, 1.f);
+			glTexCoord2f(u0, v0);
 			glVertex2f(x0, yTop);
+			glTexCoord2f(u1, v0);
 			glVertex2f(x1, yTop);
+			glTexCoord2f(u1, v1);
 			glVertex2f(x1, yBottom);
+			glTexCoord2f(u0, v1);
 			glVertex2f(x0, yBottom);
 		}
 		glEnd();
+		glDisable(GL_TEXTURE_2D);
 	}
 
 	void drawHoverGuidesGl(Vec size) {
@@ -527,7 +651,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		}
 		const uint32_t waveVersion = module->waveVersion.load(std::memory_order_acquire);
 		const int rockStateIndex = module->activeRockStateIndex.load(std::memory_order_acquire);
-		const float slitherAmount = clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
+		const float slitherAmount = levi_math::clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
 		const float slitherPhase = module->uiSlitherPhase.load(std::memory_order_relaxed);
 		const bool cacheValid =
 			cachedBodySamplesValid &&
@@ -666,6 +790,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		// reclaimed by the editor/context owner.
 		resetBodyRenderTargetState();
 		resetBodyShaderState();
+		resetWaveColumnTextureState();
 		resetTextureState();
 	}
 
@@ -687,10 +812,13 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 
 	void drawFramebuffer() override {
 		using PerfClock = std::chrono::steady_clock;
-		const PerfClock::time_point perfStart = PerfClock::now();
+		const bool measurePerf = module && isDragonKingDebugEnabled();
+		const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 		Vec fbSize = getFramebufferSize();
 		glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
-		validateGlResourcesForCurrentContext();
+		if (isExtraGlValidationEnabled()) {
+			validateGlResourcesForCurrentContext();
+		}
 		glClearColor(0.f, 0.f, 0.f, 0.f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
@@ -861,9 +989,11 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		glPopMatrix();
 		glMatrixMode(GL_MODELVIEW);
 
-		const float sandGlUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-			PerfClock::now() - perfStart).count()) * 0.001f;
-		module->perfSandGlUs.store(sandGlUs, std::memory_order_relaxed);
+		if (measurePerf) {
+			const float sandGlUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - perfStart).count()) * 0.001f;
+			module->perfSandGlUs.store(sandGlUs, std::memory_order_relaxed);
+		}
 	}
 };
 

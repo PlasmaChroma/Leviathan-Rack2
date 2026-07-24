@@ -9,8 +9,10 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 struct TDScope;
 
@@ -20,7 +22,6 @@ extern std::atomic<uint32_t> gTDScopeDebugInstanceCounter;
 constexpr float kScopeDisplayVerticalSupersampleMax = 2.f;
 
 float computeScopeDisplayVerticalSupersample(float rackZoom);
-PanelBorder *findPanelBorder(Widget *widget);
 bool isTemporalDeckModule(const engine::Module *neighbor);
 Widget *createDisplay(TDScope *module, math::Rect scopeRectMm);
 Widget *createInput(TDScope *module, math::Rect scopeRectMm);
@@ -29,6 +30,8 @@ Widget *createGlDisplay(TDScope *module, math::Rect scopeRectMm);
 } // namespace tdscope
 
 struct TDScope final : Module {
+  ModuleTeardownTimer teardownTimer {"TDScope"};
+
   enum LightId { LINK_LIGHT, PREVIEW_LIGHT, LIGHTS_LEN };
   enum ScopeRangeMode { SCOPE_RANGE_5V = 0, SCOPE_RANGE_10V, SCOPE_RANGE_2V5, SCOPE_RANGE_AUTO, SCOPE_RANGE_COUNT };
   enum ScopeChannelMode { SCOPE_CHANNEL_MONO = 0, SCOPE_CHANNEL_STEREO, SCOPE_CHANNEL_COUNT };
@@ -42,13 +45,16 @@ struct TDScope final : Module {
     DEBUG_RENDER_STANDARD = 0,
     DEBUG_RENDER_TAIL_RASTER,
     DEBUG_RENDER_OPENGL,
-    DEBUG_RENDER_COUNT
+    DEBUG_RENDER_OPENGL_SHDR = 7,
+    DEBUG_RENDER_COUNT = 8
   };
   enum ColorScheme {
     COLOR_SCHEME_DEFAULT = 0,
     COLOR_SCHEME_CLASSIC,
     COLOR_SCHEME_MONOCHROME,
     COLOR_SCHEME_FIRE,
+    COLOR_SCHEME_AMBER,
+    COLOR_SCHEME_GREEN_PHOSPHOR,
     COLOR_SCHEME_COUNT
   };
 
@@ -70,6 +76,8 @@ struct TDScope final : Module {
   std::atomic<float> uiDebugModuleUiStepUsEma {0.f};
   std::atomic<float> uiDebugScopeDensityPct {100.f};
   std::atomic<int> uiDebugScopeDensityRows {0};
+  std::atomic<uint64_t> perfAudioProcessMinNs {std::numeric_limits<uint64_t>::max()};
+  std::atomic<uint64_t> perfAudioProcessMaxNs {0};
   uint32_t debugInstanceId = 0u;
   double uiDebugTerminalLastSubmitSec = -1.0;
   float uiPublishTimerSec = 0.f;
@@ -85,7 +93,7 @@ struct TDScope final : Module {
   float scopeColorBrightness = 0.5f;
   std::atomic<bool> debugUseGlShaderRenderer {true};
   std::atomic<bool> debugFramebufferCacheEnabled {true};
-  std::atomic<int> debugRenderMode {DEBUG_RENDER_OPENGL};
+  std::atomic<int> debugRenderMode {DEBUG_RENDER_OPENGL_SHDR};
   std::atomic<int> debugUiPublishRateMode {DEBUG_UI_PUBLISH_90HZ};
   float requestPublishTimerSec = 0.f;
   uint64_t requestSeq = 0u;
@@ -105,8 +113,11 @@ struct TDScope final : Module {
   static constexpr float kUiPublishIntervalSec = 1.f / 90.f;
   static constexpr float kRequestPublishIntervalSec = 1.f / 30.f;
   static constexpr float kRequestPublishIntervalDragSec = 1.f / 120.f;
-  static constexpr float kLinkDropGraceSec = 1.f / 45.f;
-  static constexpr float kPreviewDropGraceSec = 1.f / 45.f;
+  // Temporal Deck can intentionally throttle expander preview publishes as low
+  // as 20 Hz in frozen live idle. Keep link/preview validity latched long
+  // enough to cover that cadence plus modest scheduling jitter.
+  static constexpr float kLinkDropGraceSec = 0.125f;
+  static constexpr float kPreviewDropGraceSec = 0.125f;
 
   static int normalizeColorSchemeIndex(int raw) {
     // Preserve older patch values by mapping legacy scheme ids.
@@ -145,6 +156,10 @@ struct TDScope final : Module {
     uiSnapshots[1] = temporaldeck_expander::HostToDisplay();
   }
 
+  ~TDScope() override {
+    teardownTimer.begin(id);
+  }
+
   float scopeDisplayFullScaleVolts() const {
     const int rangeMode = scopeDisplayRangeMode.load(std::memory_order_relaxed);
     switch (rangeMode) {
@@ -178,11 +193,17 @@ struct TDScope final : Module {
   }
 
   bool useGeometryHistoryRenderMode() const {
-    return debugRenderMode.load(std::memory_order_relaxed) == DEBUG_RENDER_OPENGL;
+    int mode = debugRenderMode.load(std::memory_order_relaxed);
+    return mode == DEBUG_RENDER_OPENGL || mode == DEBUG_RENDER_OPENGL_SHDR;
   }
 
   bool useOpenGlGeometryRenderMode() const {
-    return debugRenderMode.load(std::memory_order_relaxed) == DEBUG_RENDER_OPENGL;
+    int mode = debugRenderMode.load(std::memory_order_relaxed);
+    return mode == DEBUG_RENDER_OPENGL || mode == DEBUG_RENDER_OPENGL_SHDR;
+  }
+
+  bool useOpenGlShaderRenderMode() const {
+    return debugRenderMode.load(std::memory_order_relaxed) == DEBUG_RENDER_OPENGL_SHDR;
   }
 
   float scopeColorBrightnessClamped() const {
@@ -225,7 +246,7 @@ struct TDScope final : Module {
     json_object_set_new(root, "scopeColorScheme", json_integer(scopeColorScheme.load(std::memory_order_relaxed)));
     json_object_set_new(root, "scopeColorSchemeVersion", json_integer(2));
     json_object_set_new(root, "scopeColorBrightness", json_real(scopeColorBrightness));
-    json_object_set_new(root, "debugUseGlShaderRenderer", json_boolean(debugUseGlShaderRenderer.load(std::memory_order_relaxed)));
+    json_object_set_new(root, "debugUseGlShaderRenderer", json_boolean(useOpenGlShaderRenderMode()));
     json_object_set_new(root, "debugFramebufferCacheEnabled", json_boolean(debugFramebufferCacheEnabled.load(std::memory_order_relaxed)));
     json_object_set_new(root, "debugRenderMode", json_integer(debugRenderMode.load(std::memory_order_relaxed)));
     json_object_set_new(root, "debugUiPublishRateMode", json_integer(debugUiPublishRateMode.load(std::memory_order_relaxed)));
@@ -263,9 +284,10 @@ struct TDScope final : Module {
     if (brightnessJ) {
       scopeColorBrightness = clamp(float(json_number_value(brightnessJ)), 0.f, 1.f);
     }
+    bool legacyShaderRenderer = true;
     json_t *glShaderRendererJ = json_object_get(root, "debugUseGlShaderRenderer");
     if (glShaderRendererJ) {
-      debugUseGlShaderRenderer = json_boolean_value(glShaderRendererJ);
+      legacyShaderRenderer = json_boolean_value(glShaderRendererJ);
     }
     json_t *framebufferCacheJ = json_object_get(root, "debugFramebufferCacheEnabled");
     if (framebufferCacheJ) {
@@ -282,12 +304,21 @@ struct TDScope final : Module {
         case 3: debugRenderMode = DEBUG_RENDER_STANDARD; break;
         case 4: debugRenderMode = DEBUG_RENDER_TAIL_RASTER; break;
         case 5: debugRenderMode = DEBUG_RENDER_OPENGL; break;
-        case 6: debugRenderMode = DEBUG_RENDER_OPENGL; break;
+        case 6: debugRenderMode = DEBUG_RENDER_OPENGL_SHDR; break;
+        case 7: debugRenderMode = DEBUG_RENDER_OPENGL_SHDR; break;
         default:
-          debugRenderMode = clamp(rawRenderMode, DEBUG_RENDER_STANDARD, DEBUG_RENDER_COUNT - 1);
+          debugRenderMode =
+            (rawRenderMode >= DEBUG_RENDER_STANDARD && rawRenderMode <= DEBUG_RENDER_OPENGL_SHDR)
+              ? rawRenderMode
+              : DEBUG_RENDER_STANDARD;
           break;
       }
       loadedRenderMode = true;
+      // Legacy serialized mode `2` represented OpenGL with a separate shader
+      // boolean flag; preserve that intent when present.
+      if (rawRenderMode == 2 && glShaderRendererJ) {
+        debugRenderMode = legacyShaderRenderer ? DEBUG_RENDER_OPENGL_SHDR : DEBUG_RENDER_OPENGL;
+      }
     }
     if (!loadedRenderMode) {
       bool legacyTailRaster = false;
@@ -311,7 +342,7 @@ struct TDScope final : Module {
         legacyGlGeometry = json_boolean_value(glGeometryJ);
       }
       if (legacyGlGeometry) {
-        debugRenderMode = DEBUG_RENDER_OPENGL;
+        debugRenderMode = legacyShaderRenderer ? DEBUG_RENDER_OPENGL_SHDR : DEBUG_RENDER_OPENGL;
       } else if (legacyGeometryHistory) {
         debugRenderMode = DEBUG_RENDER_STANDARD;
       } else if (legacyTailRasterGpuShift) {
@@ -322,6 +353,7 @@ struct TDScope final : Module {
         debugRenderMode = DEBUG_RENDER_STANDARD;
       }
     }
+    debugUseGlShaderRenderer.store(useOpenGlShaderRenderMode(), std::memory_order_relaxed);
     json_t *publishRateJ = json_object_get(root, "debugUiPublishRateMode");
     if (publishRateJ) {
       debugUiPublishRateMode =
@@ -379,6 +411,8 @@ struct TDScope final : Module {
   }
 
   void process(const ProcessArgs &args) override {
+    const bool measurePerf = isDragonKingDebugEnabled();
+    const auto processStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
     bool validMessage = false;
     bool previewValidNow = false;
     const temporaldeck_expander::HostToDisplay *latestMsg = nullptr;
@@ -421,7 +455,9 @@ struct TDScope final : Module {
 
     Module *left = leftExpander.module;
     bool hasTemporalDeckNeighbor = tdscope::isTemporalDeckModule(left);
-    bool linkActive = hasTemporalDeckNeighbor && staleFrames < 2048 && invalidMessageTimerSec <= kLinkDropGraceSec;
+    const int staleFrameLimit =
+      std::max(2048, int(std::ceil(std::max(args.sampleRate, 1.f) * kLinkDropGraceSec)));
+    bool linkActive = hasTemporalDeckNeighbor && staleFrames < staleFrameLimit && invalidMessageTimerSec <= kLinkDropGraceSec;
     bool previewVisible = invalidPreviewTimerSec <= kPreviewDropGraceSec;
     uiLinkActive.store(linkActive, std::memory_order_relaxed);
     uiPreviewValid.store(linkActive && previewVisible, std::memory_order_relaxed);
@@ -536,5 +572,10 @@ struct TDScope final : Module {
     bool ready = linkActive && previewVisible;
     lights[LINK_LIGHT].setBrightness(linkActive && !ready ? 1.f : 0.f);
     lights[PREVIEW_LIGHT].setBrightness(ready ? 1.f : 0.f);
+    if (measurePerf) {
+      const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now() - processStart).count());
+      debug_terminal::recordAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs, elapsedNs);
+    }
   }
 };

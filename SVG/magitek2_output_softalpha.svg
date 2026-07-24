@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <defs>
+
+    <!-- Raster-only / Rack-forbidden SVG effects: gaussian-blur filters, masks, turbulence, blend modes. Bake to PNG before Rack. -->
+    <filter id="rfBlurTiny" x="-60%" y="-60%" width="220%" height="220%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="0.45"/>
+    </filter>
+    <filter id="rfBlurSoft" x="-70%" y="-70%" width="240%" height="240%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="1.05"/>
+    </filter>
+    <filter id="rfBlurWide" x="-95%" y="-95%" width="290%" height="290%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="2.35"/>
+    </filter>
+    <filter id="rfGoldBloom" x="-75%" y="-75%" width="250%" height="250%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="0.55" result="soft"/>
+      <feGaussianBlur stdDeviation="1.35" result="wide"/>
+      <feMerge>
+        <feMergeNode in="wide"/>
+        <feMergeNode in="soft"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="rfRingGrain" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.82" numOctaves="3" seed="31" result="noise"/>
+      <feColorMatrix in="noise" type="matrix" values="0 0 0 0 1.0  0 0 0 0 0.80  0 0 0 0 0.42  0 0 0 0.18 0" result="grainColor"/>
+      <feComposite in="grainColor" in2="SourceGraphic" operator="in"/>
+    </filter>
+    <mask id="rfOuterRingMask" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect x="0" y="0" width="64" height="64" fill="black"/>
+      <circle cx="32" cy="32" r="28.9" fill="white"/>
+      <circle cx="32" cy="32" r="13.1" fill="black"/>
+    </mask>
+
+    <filter id="rfCyanBloom" x="-90%" y="-90%" width="280%" height="280%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="0.45" result="pin"/>
+      <feGaussianBlur stdDeviation="1.05" result="soft"/>
+      <feGaussianBlur stdDeviation="2.30" result="wide"/>
+      <feMerge>
+        <feMergeNode in="wide"/>
+        <feMergeNode in="soft"/>
+        <feMergeNode in="pin"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+
+    <radialGradient id="softOuterAlphaOutput" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#03060a" stop-opacity="0.94"/>
+      <stop offset="84%" stop-color="#03060a" stop-opacity="0.94"/>
+      <stop offset="91%" stop-color="#03060a" stop-opacity="0.74"/>
+      <stop offset="96%" stop-color="#03060a" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#03060a" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="outerMetal" cx="50%" cy="42%" r="58%">
+      <stop offset="0%" stop-color="#243746"/>
+      <stop offset="42%" stop-color="#0b1219"/>
+      <stop offset="74%" stop-color="#04070b"/>
+      <stop offset="100%" stop-color="#121c25"/>
+    </radialGradient>
+    <radialGradient id="innerVoid" cx="50%" cy="45%" r="58%">
+      <stop offset="0%" stop-color="#000000"/>
+      <stop offset="70%" stop-color="#010203"/>
+      <stop offset="100%" stop-color="#07131a"/>
+    </radialGradient>
+    <linearGradient id="cyanEdge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8fffff"/>
+      <stop offset="33%" stop-color="#12e7ff"/>
+      <stop offset="70%" stop-color="#00aecd"/>
+      <stop offset="100%" stop-color="#017a94"/>
+    </linearGradient>
+    <linearGradient id="goldEdge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fff0b4"/>
+      <stop offset="45%" stop-color="#f3c35c"/>
+      <stop offset="100%" stop-color="#8b5c1f"/>
+    </linearGradient>
+    <linearGradient id="steelHi" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#cceeff" stop-opacity="0.78"/>
+      <stop offset="30%" stop-color="#5d8298" stop-opacity="0.46"/>
+      <stop offset="100%" stop-color="#010407" stop-opacity="0.35"/>
+    </linearGradient>
+
+
+    <!-- SVG-to-PNG softalpha perimeter: fades the entire rendered jack into transparency at the last ~2px. -->
+    <radialGradient id="edgeFeatherAlphaOutput" gradientUnits="userSpaceOnUse" cx="32" cy="32" r="31.6">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="91%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="95%" stop-color="#ffffff" stop-opacity="0.82"/>
+      <stop offset="98.5%" stop-color="#ffffff" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <mask id="edgeFeatherMaskOutput" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x="-2" y="-2" width="68" height="68">
+      <rect x="-2" y="-2" width="68" height="68" fill="#000000"/>
+      <circle cx="32" cy="32" r="31.6" fill="url(#edgeFeatherAlphaOutput)"/>
+    </mask>
+  </defs>
+
+  <g id="softalpha-export-feather" mask="url(#edgeFeatherMaskOutput)">
+
+
+  <g id="rack-forbidden-v2-backdrop">
+    <circle cx="32" cy="32" r="29.2" fill="#000000" opacity="0.38" filter="url(#rfBlurSoft)"/>
+    <circle cx="32" cy="32" r="16.2" fill="none" stroke="#00eaff" stroke-width="1.3" opacity="0.12" filter="url(#rfCyanBloom)"/>
+  </g>
+
+
+  <!-- dark halo / outside socket body; outer edge is alpha-feathered for cleaner SVG-to-PNG rasterization -->
+  <circle cx="32" cy="32" r="30.85" fill="url(#softOuterAlphaOutput)"/>
+  <circle cx="32" cy="32" r="28.9" fill="url(#outerMetal)" opacity="0.88"/>
+  <circle cx="32" cy="32" r="27.0" fill="none" stroke="#0a1a26" stroke-width="2.8" opacity="0.95"/>
+  <circle cx="32" cy="32" r="25.0" fill="none" stroke="#395163" stroke-width="0.85" opacity="0.42"/>
+  <circle cx="32" cy="32" r="23.1" fill="none" stroke="#05080c" stroke-width="3.2" opacity="0.95"/>
+
+  <!-- outer gold side ornament arcs -->
+  <path d="M 6.5 42.0 A 28.7 28.7 0 0 1 9.1 19.6" fill="none" stroke="#b48435" stroke-width="0.8" stroke-linecap="round" opacity="0.82"/>
+  <path d="M 57.5 42.0 A 28.7 28.7 0 0 0 54.9 19.6" fill="none" stroke="#b48435" stroke-width="0.8" stroke-linecap="round" opacity="0.82"/>
+  <path d="M 4.6 31.9 L 6.6 29.8 L 8.8 31.8 L 6.7 34.0 Z" fill="url(#goldEdge)" opacity="0.92"/>
+  <path d="M 59.4 31.9 L 57.4 29.8 L 55.2 31.8 L 57.3 34.0 Z" fill="url(#goldEdge)" opacity="0.92"/>
+
+  <!-- beveled ring stack -->
+  <circle cx="32" cy="32" r="21.6" fill="none" stroke="#0f202b" stroke-width="3.4"/>
+  <circle cx="32" cy="32" r="21.6" fill="none" stroke="url(#steelHi)" stroke-width="1.35" opacity="0.78"/>
+  <circle cx="32" cy="32" r="19.2" fill="none" stroke="#020408" stroke-width="3.4"/>
+  <circle cx="32" cy="32" r="18.0" fill="none" stroke="#183644" stroke-width="1.15" opacity="0.95"/>
+
+  <!-- segmented warm-gold inner track -->
+  <path d="M 22.0 14.9 A 19.0 19.0 0 0 1 42.0 14.9" fill="none" stroke="#271b08" stroke-width="3.0" stroke-linecap="round" opacity="0.95"/>
+  <path d="M 46.3 20.3 A 19.0 19.0 0 0 1 46.3 43.7" fill="none" stroke="#271b08" stroke-width="3.0" stroke-linecap="round" opacity="0.95"/>
+  <path d="M 42.0 49.1 A 19.0 19.0 0 0 1 22.0 49.1" fill="none" stroke="#271b08" stroke-width="3.0" stroke-linecap="round" opacity="0.95"/>
+  <path d="M 17.7 43.7 A 19.0 19.0 0 0 1 17.7 20.3" fill="none" stroke="#271b08" stroke-width="3.0" stroke-linecap="round" opacity="0.95"/>
+
+  <path d="M 22.4 15.3 A 18.55 18.55 0 0 1 41.6 15.3" fill="none" stroke="url(#goldEdge)" stroke-width="1.85" stroke-linecap="round"/>
+  <path d="M 45.9 20.9 A 18.55 18.55 0 0 1 45.9 43.1" fill="none" stroke="url(#goldEdge)" stroke-width="1.85" stroke-linecap="round"/>
+  <path d="M 41.6 48.7 A 18.55 18.55 0 0 1 22.4 48.7" fill="none" stroke="url(#goldEdge)" stroke-width="1.85" stroke-linecap="round"/>
+  <path d="M 18.1 43.1 A 18.55 18.55 0 0 1 18.1 20.9" fill="none" stroke="url(#goldEdge)" stroke-width="1.85" stroke-linecap="round"/>
+
+  <!-- cyan luminous main jack rim: layered strokes instead of SVG filters/blur -->
+  <circle cx="32" cy="32" r="15.1" fill="none" stroke="#00d8ff" stroke-width="5.1" opacity="0.16"/>
+  <circle cx="32" cy="32" r="15.1" fill="none" stroke="#00e4ff" stroke-width="3.4" opacity="0.24"/>
+  <circle cx="32" cy="32" r="15.1" fill="none" stroke="url(#cyanEdge)" stroke-width="2.35"/>
+  <circle cx="32" cy="32" r="15.1" fill="none" stroke="#baffff" stroke-width="0.55" opacity="0.76"/>
+
+  <!-- radial cyan spokes/lugs -->
+  <g stroke-linecap="round">
+    <path d="M 21.4 21.4 L 16.4 16.4" stroke="#00191f" stroke-width="4.2"/>
+    <path d="M 42.6 21.4 L 47.6 16.4" stroke="#00191f" stroke-width="4.2"/>
+    <path d="M 47.2 32.0 L 54.0 32.0" stroke="#00191f" stroke-width="4.2"/>
+    <path d="M 42.6 42.6 L 47.6 47.6" stroke="#00191f" stroke-width="4.2"/>
+    <path d="M 21.4 42.6 L 16.4 47.6" stroke="#00191f" stroke-width="4.2"/>
+    <path d="M 16.8 32.0 L 10.0 32.0" stroke="#00191f" stroke-width="4.2"/>
+
+    <path d="M 21.4 21.4 L 16.4 16.4" stroke="#00e4ff" stroke-width="3.2" opacity="0.30"/>
+    <path d="M 42.6 21.4 L 47.6 16.4" stroke="#00e4ff" stroke-width="3.2" opacity="0.30"/>
+    <path d="M 47.2 32.0 L 54.0 32.0" stroke="#00e4ff" stroke-width="3.2" opacity="0.30"/>
+    <path d="M 42.6 42.6 L 47.6 47.6" stroke="#00e4ff" stroke-width="3.2" opacity="0.30"/>
+    <path d="M 21.4 42.6 L 16.4 47.6" stroke="#00e4ff" stroke-width="3.2" opacity="0.30"/>
+    <path d="M 16.8 32.0 L 10.0 32.0" stroke="#00e4ff" stroke-width="3.2" opacity="0.30"/>
+
+    <path d="M 21.4 21.4 L 16.4 16.4" stroke="url(#cyanEdge)" stroke-width="2.0"/>
+    <path d="M 42.6 21.4 L 47.6 16.4" stroke="url(#cyanEdge)" stroke-width="2.0"/>
+    <path d="M 47.2 32.0 L 54.0 32.0" stroke="url(#cyanEdge)" stroke-width="2.0"/>
+    <path d="M 42.6 42.6 L 47.6 47.6" stroke="url(#cyanEdge)" stroke-width="2.0"/>
+    <path d="M 21.4 42.6 L 16.4 47.6" stroke="url(#cyanEdge)" stroke-width="2.0"/>
+    <path d="M 16.8 32.0 L 10.0 32.0" stroke="url(#cyanEdge)" stroke-width="2.0"/>
+
+    <path d="M 22.0 22.0 L 18.6 18.6" stroke="#c8ffff" stroke-width="0.6" opacity="0.9"/>
+    <path d="M 42.0 22.0 L 45.4 18.6" stroke="#c8ffff" stroke-width="0.6" opacity="0.9"/>
+    <path d="M 48.0 32.0 L 52.0 32.0" stroke="#c8ffff" stroke-width="0.6" opacity="0.9"/>
+    <path d="M 42.0 42.0 L 45.4 45.4" stroke="#c8ffff" stroke-width="0.6" opacity="0.9"/>
+    <path d="M 22.0 42.0 L 18.6 45.4" stroke="#c8ffff" stroke-width="0.6" opacity="0.9"/>
+    <path d="M 16.0 32.0 L 12.0 32.0" stroke="#c8ffff" stroke-width="0.6" opacity="0.9"/>
+  </g>
+
+  <!-- socket void and rim edge -->
+  <circle cx="32" cy="32" r="12.9" fill="#000000" opacity="0.9"/>
+  <circle cx="32" cy="32" r="12.0" fill="url(#innerVoid)"/>
+  <circle cx="32" cy="32" r="12.3" fill="none" stroke="#000000" stroke-width="1.0" opacity="0.9"/>
+  <path d="M 21.6 25.7 A 12.8 12.8 0 0 1 42.4 25.7" fill="none" stroke="#6ddcff" stroke-width="0.7" stroke-linecap="round" opacity="0.62"/>
+  <path d="M 22.4 39.0 A 12.8 12.8 0 0 0 41.6 39.0" fill="none" stroke="#022f3b" stroke-width="0.8" stroke-linecap="round" opacity="0.68"/>
+
+  <!-- tiny specular flakes, kept as vector shapes -->
+  <circle cx="11.7" cy="17.0" r="0.55" fill="#ffe0a0" opacity="0.82"/>
+  <circle cx="51.5" cy="15.6" r="0.45" fill="#c9f8ff" opacity="0.52"/>
+  <circle cx="17.4" cy="52.8" r="0.42" fill="#c9f8ff" opacity="0.36"/>
+  <path d="M 29.3 7.5 A 25.2 25.2 0 0 1 35.5 7.5" fill="none" stroke="#203a4b" stroke-width="0.7" stroke-linecap="round" opacity="0.75"/>
+  <path d="M 25.8 57.2 A 25.2 25.2 0 0 0 38.2 57.2" fill="none" stroke="#0b151d" stroke-width="1.1" stroke-linecap="round" opacity="0.85"/>
+
+  <g id="rack-forbidden-v2-polish" pointer-events="none">
+    <rect x="0" y="0" width="64" height="64" fill="#8bf8ff" mask="url(#rfOuterRingMask)" filter="url(#rfRingGrain)" opacity="0.055" style="mix-blend-mode:screen"/>
+    <circle cx="32" cy="32" r="15.1" fill="none" stroke="#00f0ff" stroke-width="2.45" opacity="0.20" filter="url(#rfCyanBloom)"/>
+    <circle cx="32" cy="32" r="15.1" fill="none" stroke="#d8ffff" stroke-width="0.60" opacity="0.46" filter="url(#rfBlurTiny)"/>
+    <circle cx="32" cy="32" r="12.95" fill="none" stroke="#00090b" stroke-width="1.55" opacity="0.62" filter="url(#rfBlurTiny)"/>
+    <g stroke-linecap="round" filter="url(#rfCyanBloom)" opacity="0.20">
+      <path d="M 21.4 21.4 L 16.2 16.2" stroke="#00f0ff" stroke-width="2.6"/>
+      <path d="M 42.6 21.4 L 47.8 16.2" stroke="#00f0ff" stroke-width="2.6"/>
+      <path d="M 21.4 42.6 L 16.2 47.8" stroke="#00f0ff" stroke-width="2.6"/>
+      <path d="M 42.6 42.6 L 47.8 47.8" stroke="#00f0ff" stroke-width="2.6"/>
+      <path d="M 15.8 32.0 L 8.8 32.0" stroke="#00f0ff" stroke-width="2.4"/>
+      <path d="M 48.2 32.0 L 55.2 32.0" stroke="#00f0ff" stroke-width="2.4"/>
+    </g>
+    <path d="M 22.8 15.1 A 18.4 18.4 0 0 1 41.2 15.1" fill="none" stroke="#fff1b8" stroke-width="0.55" stroke-linecap="round" opacity="0.48" filter="url(#rfGoldBloom)"/>
+    <path d="M 41.0 48.8 A 18.4 18.4 0 0 1 23.0 48.8" fill="none" stroke="#ffd26b" stroke-width="0.46" stroke-linecap="round" opacity="0.36" filter="url(#rfGoldBloom)"/>
+    <circle cx="47.75" cy="14.55" r="0.32" fill="#dfffff" opacity="0.48"/>
+  </g>
+  </g>
+</svg>

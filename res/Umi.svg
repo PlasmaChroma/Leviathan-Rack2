@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="91.44mm" height="128.5mm" viewBox="0 0 9144 12850">
+  <defs>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07396f"/>
+      <stop offset="0.5" stop-color="#061b4a"/>
+      <stop offset="1" stop-color="#030927"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#23d8ef"/>
+      <stop offset="0.35" stop-color="#0789c9"/>
+      <stop offset="1" stop-color="#03153f"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff2ad"/>
+      <stop offset="0.45" stop-color="#dcae45"/>
+      <stop offset="1" stop-color="#7c3e17"/>
+    </linearGradient>
+  </defs>
+  <rect width="9144" height="12850" fill="url(#panel)"/>
+  <rect x="90" y="90" width="8964" height="12670" rx="230" fill="none" stroke="#cfefff" stroke-width="42"/>
+  <rect x="145" y="145" width="8854" height="12560" rx="190" fill="none" stroke="url(#gold)" stroke-width="30"/>
+
+  <path d="M550 2550 C1300 2250 1550 1850 2150 1500" fill="none" stroke="#32cbe8" stroke-opacity="0.35" stroke-width="70"/>
+  <path d="M8590 2550 C7840 2250 7590 1850 6990 1500" fill="none" stroke="#32cbe8" stroke-opacity="0.35" stroke-width="70"/>
+  <path d="M550 9000 C1300 9300 1550 9700 2150 10000" fill="none" stroke="#b95cff" stroke-opacity="0.25" stroke-width="70"/>
+  <path d="M8590 9000 C7840 9300 7590 9700 6990 10000" fill="none" stroke="#b95cff" stroke-opacity="0.25" stroke-width="70"/>
+
+  <rect x="2050" y="2050" width="5040" height="7500" rx="360" fill="url(#water)" stroke="url(#gold)" stroke-width="70"/>
+  <rect x="2150" y="2150" width="4840" height="7300" rx="290" fill="none" stroke="#8ff5ff" stroke-opacity="0.6" stroke-width="30"/>
+
+  <g fill="#e9fbff" font-family="sans-serif" font-size="150" font-weight="bold" text-anchor="middle">
+    <text x="800" y="900">DROP</text><text x="2300" y="900">DROP</text>
+    <text x="3950" y="900">RATE</text><text x="5700" y="900">DENS</text>
+    <text x="900" y="3130">GRAV</text><text x="900" y="5180">BOUNCE</text><text x="1100" y="7280">DRAG</text>
+    <text x="8440" y="3130">TILT</text><text x="8440" y="5180">CHAOS</text><text x="8440" y="7280">CLEAR</text>
+  </g>
+  <g fill="#8eeeff" font-family="sans-serif" font-size="125" text-anchor="middle">
+    <text x="1600" y="3130">CV</text><text x="1600" y="5180">CV</text>
+    <text x="7540" y="3130">CV</text><text x="7540" y="5180">CV</text><text x="7540" y="7280">IN</text>
+  </g>
+
+  <g fill="#dffaff" font-family="sans-serif" font-size="140" font-weight="bold" text-anchor="middle">
+    <text x="800" y="11100" fill="#f8e9b0">GATES</text><text x="2057" y="11100">ANY</text>
+    <text x="3314" y="11100">LEFT</text><text x="4571" y="11100">RIGHT</text>
+    <text x="5828" y="11100">VEL</text><text x="7085" y="11100">POS</text><text x="8342" y="11100">ACT</text>
+  </g>
+
+  <g id="components" opacity="0">
+    <rect id="playfield_rect" x="2050" y="2050" width="5040" height="7500"/>
+    <circle id="drop_input" cx="800" cy="1450" r="180"/><circle id="drop_param" cx="2300" cy="1450" r="180"/>
+    <circle id="rate_param" cx="3950" cy="1450" r="180"/><circle id="density_param" cx="5700" cy="1450" r="180"/>
+    <circle id="gravity_param" cx="650" cy="3750" r="180"/><circle id="gravity_cv_input" cx="1600" cy="3750" r="180"/>
+    <circle id="bounce_param" cx="650" cy="5800" r="180"/><circle id="bounce_cv_input" cx="1600" cy="5800" r="180"/>
+    <circle id="drag_param" cx="1100" cy="7900" r="180"/>
+    <circle id="tilt_param" cx="8490" cy="3750" r="180"/><circle id="tilt_cv_input" cx="7540" cy="3750" r="180"/>
+    <circle id="chaos_param" cx="8490" cy="5800" r="180"/><circle id="chaos_cv_input" cx="7540" cy="5800" r="180"/>
+    <circle id="clear_param" cx="8440" cy="7900" r="180"/><circle id="clear_input" cx="7540" cy="7900" r="180"/>
+    <circle id="gates_output" cx="800" cy="11800" r="180"/><circle id="any_output" cx="2057" cy="11800" r="180"/>
+    <circle id="left_output" cx="3314" cy="11800" r="180"/><circle id="right_output" cx="4571" cy="11800" r="180"/>
+    <circle id="velocity_output" cx="5828" cy="11800" r="180"/><circle id="position_output" cx="7085" cy="11800" r="180"/>
+    <circle id="activity_output" cx="8342" cy="11800" r="180"/>
+    <circle id="screw_tl" cx="300" cy="300" r="100"/><circle id="screw_tr" cx="8840" cy="300" r="100"/>
+    <circle id="screw_bl" cx="300" cy="12550" r="100"/><circle id="screw_br" cx="8840" cy="12550" r="100"/>
+  </g>
+</svg>

@@ -1,8 +1,11 @@
 #include "TemporalDeck.hpp"
 #include "DebugTerminalTransport.hpp"
+#include "TemporalDeckEngine.hpp"
 #include "TemporalDeckMenuUtils.hpp"
 #include "PanelSvgUtils.hpp"
 #include "NvgGraphicsLifecycle.hpp"
+#include "visual/VisualAssets.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 
 #include <algorithm>
 #include <array>
@@ -10,6 +13,7 @@
 #include <chrono>
 #include <cctype>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
@@ -33,7 +37,7 @@ static bool startExpandedVinylDownloadAsync(std::string *errorOut);
 static void pumpExpandedVinylDownloadNotifications();
 static std::string temporalDeckUserRootPath();
 static bool isTDScopeModule(const engine::Module *neighbor);
-static constexpr double kDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+static constexpr double kDebugTerminalSubmitIntervalSec = debug_terminal::kTimingRangeSubmitIntervalSec;
 static std::unordered_map<uint32_t, double> gDebugTerminalLastSubmitSec;
 struct TemporalDeckWidget;
 
@@ -69,6 +73,264 @@ struct TemporalDeckTonearmWidget : Widget {
   float platterRadiusPx = mm2px(Vec(29.5f, 0.f)).x;
 
   void draw(const DrawArgs &args) override;
+};
+
+struct TemporalDeckArcWidget : TransparentWidget {
+  TemporalDeck *module = nullptr;
+  Vec centerPx = mm2px(Vec(50.8f, 72.f));
+  float radiusPx = mm2px(Vec(33.0f, 0.f)).x;
+
+  static NVGcolor blendColor(NVGcolor a, NVGcolor b, float t) {
+    t = clamp(t, 0.f, 1.f);
+    NVGcolor out;
+    out.r = crossfade(a.r, b.r, t);
+    out.g = crossfade(a.g, b.g, t);
+    out.b = crossfade(a.b, b.b, t);
+    out.a = crossfade(a.a, b.a, t);
+    return out;
+  }
+
+  void drawArcBand(const DrawArgs &args, float a0, float a1, float radius, float width, NVGcolor color) const {
+    if (a1 <= a0 || width <= 0.f) {
+      return;
+    }
+    const float halfWidth = 0.5f * width;
+    nvgBeginPath(args.vg);
+    nvgArc(args.vg, centerPx.x, centerPx.y, radius + halfWidth, a0, a1, NVG_CW);
+    nvgArc(args.vg, centerPx.x, centerPx.y, radius - halfWidth, a1, a0, NVG_CCW);
+    nvgClosePath(args.vg);
+    nvgFillColor(args.vg, color);
+    nvgFill(args.vg);
+  }
+
+  void strokeArc(const DrawArgs &args, float a0, float a1, float radius, float width, NVGcolor color) const {
+    if (a1 <= a0 || width <= 0.f) {
+      return;
+    }
+    nvgBeginPath(args.vg);
+    nvgArc(args.vg, centerPx.x, centerPx.y, radius, a0, a1, NVG_CW);
+    nvgStrokeColor(args.vg, color);
+    nvgStrokeWidth(args.vg, width);
+    nvgLineCap(args.vg, NVG_BUTT);
+    nvgStroke(args.vg);
+  }
+
+  void drawSegmentSurface(const DrawArgs &args, float a0, float a1, float radius, float width, NVGcolor fill,
+                          NVGcolor highlight, float glow) const {
+    if (a1 <= a0) {
+      return;
+    }
+
+    const float halfWidth = 0.5f * width;
+    nvgBeginPath(args.vg);
+    nvgArc(args.vg, centerPx.x, centerPx.y, radius + halfWidth, a0, a1, NVG_CW);
+    nvgArc(args.vg, centerPx.x, centerPx.y, radius - halfWidth, a1, a0, NVG_CCW);
+    nvgClosePath(args.vg);
+    NVGpaint paint = nvgLinearGradient(args.vg,
+                                       centerPx.x + std::cos(a0) * radius,
+                                       centerPx.y + std::sin(a0) * radius,
+                                       centerPx.x + std::cos(a1) * radius,
+                                       centerPx.y + std::sin(a1) * radius,
+                                       fill,
+                                       highlight);
+    nvgFillPaint(args.vg, paint);
+    nvgFill(args.vg);
+
+    strokeArc(args, a0, a1, radius + halfWidth * 0.82f, std::max(0.22f, width * 0.075f), nvgRGBA(0, 1, 7, 166));
+    strokeArc(args, a0, a1, radius - halfWidth * 0.50f, std::max(0.30f, width * 0.11f), highlight);
+    if (glow > 0.001f) {
+      NVGcolor glowColor = highlight;
+      glowColor.a *= glow;
+      strokeArc(args, a0, a1, radius, width + 3.2f, glowColor);
+    }
+  }
+
+  void drawSegmentBand(const DrawArgs &args, float a0, float a1, float radius, float width, NVGcolor fill,
+                       NVGcolor highlight, float glow) const {
+    if (a1 <= a0) {
+      return;
+    }
+    drawArcBand(args, a0, a1, radius, width + 1.0f, nvgRGBA(0, 0, 4, 226));
+    drawSegmentSurface(args, a0, a1, radius, width, fill, highlight, glow);
+  }
+
+  void drawEndCapPiece(const DrawArgs &args, float angle, float radius, float width) const {
+    const Vec dir(std::cos(angle), std::sin(angle));
+    const float halfWidth = 0.5f * width;
+    const float capHalfSpan = halfWidth + 0.9f;
+    const Vec outer = centerPx.plus(dir.mult(radius + capHalfSpan));
+    const Vec inner = centerPx.plus(dir.mult(radius - capHalfSpan));
+    const Vec midOuter = centerPx.plus(dir.mult(radius + capHalfSpan * 0.82f));
+    const Vec midInner = centerPx.plus(dir.mult(radius - capHalfSpan * 0.82f));
+
+    nvgBeginPath(args.vg);
+    nvgMoveTo(args.vg, outer.x, outer.y);
+    nvgLineTo(args.vg, inner.x, inner.y);
+    nvgStrokeColor(args.vg, nvgRGBA(0, 1, 8, 224));
+    nvgStrokeWidth(args.vg, std::max(0.70f, width * 0.18f));
+    nvgLineCap(args.vg, NVG_BUTT);
+    nvgStroke(args.vg);
+
+    nvgBeginPath(args.vg);
+    nvgMoveTo(args.vg, midOuter.x, midOuter.y);
+    nvgLineTo(args.vg, midInner.x, midInner.y);
+    nvgStrokeColor(args.vg, nvgRGBA(155, 170, 190, 58));
+    nvgStrokeWidth(args.vg, std::max(0.24f, width * 0.052f));
+    nvgLineCap(args.vg, NVG_BUTT);
+    nvgStroke(args.vg);
+
+    nvgBeginPath(args.vg);
+    nvgMoveTo(args.vg, centerPx.x + dir.x * (radius - halfWidth * 0.74f), centerPx.y + dir.y * (radius - halfWidth * 0.74f));
+    nvgLineTo(args.vg, centerPx.x + dir.x * (radius - halfWidth * 0.18f), centerPx.y + dir.y * (radius - halfWidth * 0.18f));
+    nvgStrokeColor(args.vg, nvgRGBA(226, 238, 255, 34));
+    nvgStrokeWidth(args.vg, std::max(0.18f, width * 0.035f));
+    nvgLineCap(args.vg, NVG_BUTT);
+    nvgStroke(args.vg);
+  }
+
+  void draw(const DrawArgs &args) override {
+    if (radiusPx <= 1.f) {
+      return;
+    }
+
+    const float startAngle = -float(M_PI);
+    const float endAngle = 0.f;
+    const float total = endAngle - startAngle;
+    const float segmentWidth = std::max(4.2f, radiusPx * 0.095f);
+    const float segmentRadius = radiusPx;
+    const float gap = std::max(0.010f, total * 0.0048f);
+    const float centerStep = total / float(TemporalDeck::kArcLightCount - 1);
+    const float segmentSweep = std::max(0.001f, centerStep - gap);
+    const float limitStripSweep = segmentSweep * 0.34f;
+    const float borderStartAngle = startAngle - 0.5f * centerStep;
+    const float borderEndAngle = endAngle + 0.5f * centerStep;
+    const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
+    const float bloomLow = bloomRaw + 2.2f * bloomRaw * (1.f - bloomRaw);
+    const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
+    const float bloom = bloomLow * (1.0f + 1.1f * bloomRamp * bloomRamp);
+
+    const NVGcolor unlitCore = nvgRGBA(140, 99, 250, 216);
+    const NVGcolor unlitHot = nvgRGBA(0xc0, 0x7b, 0xff, 168);
+    const NVGcolor litCore = nvgRGBA(26, 249, 252, 236);
+    const NVGcolor litHot = nvgRGBA(122, 252, 255, 188);
+    const NVGcolor limitCore = nvgRGBA(220, 32, 24, 238);
+    const NVGcolor limitHot = nvgRGBA(255, 114, 74, 230);
+
+    std::array<float, TemporalDeck::kArcLightCount> redByIndex{};
+    const bool sampleDisplay = module && module->isSampleModeEnabled() && module->hasLoadedSample();
+    float limitBrightness = 0.f;
+    if (module) {
+      for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
+        redByIndex[i] = clamp(module->lights[TemporalDeck::ARC_MAX_LIGHT_START + i].getBrightness(), 0.f, 1.f);
+        limitBrightness = std::max(limitBrightness, redByIndex[i]);
+      }
+    } else {
+      redByIndex[TemporalDeck::kArcLightCount - 5] = 0.78f;
+      limitBrightness = redByIndex[TemporalDeck::kArcLightCount - 5];
+    }
+    const float bufferNorm = module ? clamp(module->params[TemporalDeck::BUFFER_PARAM].getValue(), 0.f, 1.f) : 0.74f;
+    const float maxLagSamples =
+      module ? std::max(1.f, module->getUiSampleRate() *
+                               temporaldeck_modes::usableBufferSecondsForMode(module->getBufferDurationMode()))
+             : 1.f;
+    const float accessibleLag = module ? std::max(0.f, float(module->getUiAccessibleLagSamples())) : bufferNorm;
+    const float liveNorm = module ? clamp(float(module->getUiLagSamples()) / maxLagSamples, 0.f, bufferNorm) : 0.58f;
+    const float sampleNorm = module ? clamp(float(module->getUiSampleProgress()) * bufferNorm, 0.f, bufferNorm) : liveNorm;
+    const float valueNorm = sampleDisplay ? sampleNorm : liveNorm;
+    const float valueSegmentUnits = clamp(valueNorm * float(TemporalDeck::kArcLightCount), 0.f,
+                                          float(TemporalDeck::kArcLightCount));
+    const float sampleNewest =
+      module ? std::max(1.f, float(module->getUiSampleDurationSeconds() * module->getUiSampleRate()) - 1.f) : 1.f;
+    const float limitRatio = sampleDisplay ? clamp(accessibleLag / sampleNewest, 0.f, 1.f)
+                                          : clamp(accessibleLag / maxLagSamples, 0.f, 1.f);
+    const float limitLightIndex = (sampleDisplay ? (1.f - limitRatio) : limitRatio) *
+                                  float(TemporalDeck::kArcLightCount - 1);
+    const float limitTravelStart = borderStartAngle + 0.5f * limitStripSweep;
+    const float limitTravelEnd = borderEndAngle - 0.5f * limitStripSweep;
+    const float limitPosition = limitLightIndex / float(TemporalDeck::kArcLightCount - 1);
+    const float limitAngle = crossfade(limitTravelEnd, limitTravelStart, limitPosition);
+
+    auto valueForLightIndex = [&](int i) {
+      const int valueOrder = sampleDisplay ? (TemporalDeck::kArcLightCount - 1 - i) : i;
+      return clamp(valueSegmentUnits - float(valueOrder), 0.f, 1.f);
+    };
+
+    nvgSave(args.vg);
+
+    if (bloom > 0.001f) {
+      auto bloomColor = [&](NVGcolor color) {
+        color.a *= bloom;
+        return color;
+      };
+      const NVGcolor inactiveOuterGlow = bloomColor(nvgRGBA(126, 70, 230, 30));
+      const NVGcolor activeOuterGlow = bloomColor(nvgRGBA(0, 210, 255, 34));
+      const NVGcolor inactiveMidGlow = bloomColor(nvgRGBA(154, 84, 245, 50));
+      const NVGcolor activeMidGlow = bloomColor(nvgRGBA(0, 225, 255, 58));
+      const NVGcolor inactiveInnerGlow = bloomColor(nvgRGBA(192, 123, 255, 72));
+      const NVGcolor activeInnerGlow = bloomColor(nvgRGBA(30, 245, 255, 88));
+      const NVGcolor limitOuterGlow = bloomColor(nvgRGBA(220, 32, 24, 44));
+      const NVGcolor limitMidGlow = bloomColor(nvgRGBA(255, 82, 42, 68));
+      const NVGcolor limitInnerGlow = bloomColor(nvgRGBA(255, 126, 74, 84));
+      for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
+        const int visualIndex = TemporalDeck::kArcLightCount - 1 - i;
+        const float segmentCenter = startAngle + centerStep * float(visualIndex);
+        const float a0 = segmentCenter - 0.5f * segmentSweep;
+        const float a1 = segmentCenter + 0.5f * segmentSweep;
+        const float yellow = valueForLightIndex(i);
+        NVGcolor outerGlow = blendColor(inactiveOuterGlow, activeOuterGlow, yellow);
+        NVGcolor midGlow = blendColor(inactiveMidGlow, activeMidGlow, yellow);
+        NVGcolor innerGlow = blendColor(inactiveInnerGlow, activeInnerGlow, yellow);
+        strokeArc(args, a0, a1, segmentRadius, segmentWidth + 6.8f, outerGlow);
+        strokeArc(args, a0, a1, segmentRadius, segmentWidth + 4.2f, midGlow);
+        strokeArc(args, a0, a1, segmentRadius, segmentWidth + 2.0f, innerGlow);
+      }
+      if (limitBrightness > 0.001f) {
+        const float glowA0 = limitAngle - 0.5f * limitStripSweep;
+        const float glowA1 = limitAngle + 0.5f * limitStripSweep;
+        strokeArc(args, glowA0, glowA1, segmentRadius, segmentWidth + 6.8f, limitOuterGlow);
+        strokeArc(args, glowA0, glowA1, segmentRadius, segmentWidth + 4.2f, limitMidGlow);
+        strokeArc(args, glowA0, glowA1, segmentRadius, segmentWidth + 2.0f, limitInnerGlow);
+      }
+    }
+
+    const float backWidth = segmentWidth + 1.8f;
+    drawArcBand(args, borderStartAngle, borderEndAngle, segmentRadius, backWidth, nvgRGBA(0, 0, 4, 246));
+    strokeArc(args, borderStartAngle, borderEndAngle, segmentRadius + segmentWidth * 0.72f, std::max(0.75f, segmentWidth * 0.15f),
+              nvgRGBA(126, 194, 225, 62));
+    strokeArc(args, borderStartAngle, borderEndAngle, segmentRadius - segmentWidth * 0.70f, std::max(0.42f, segmentWidth * 0.09f),
+              nvgRGBA(185, 218, 240, 44));
+    strokeArc(args, borderStartAngle, borderEndAngle, segmentRadius - segmentWidth * 0.98f, std::max(0.60f, segmentWidth * 0.12f),
+              nvgRGBA(0, 1, 8, 196));
+
+    for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
+      const int visualIndex = TemporalDeck::kArcLightCount - 1 - i;
+      const float segmentCenter = startAngle + centerStep * float(visualIndex);
+      const float a0 = segmentCenter - 0.5f * segmentSweep;
+      const float a1 = segmentCenter + 0.5f * segmentSweep;
+      const float yellow = valueForLightIndex(i);
+      NVGcolor core = blendColor(unlitCore, litCore, yellow);
+      NVGcolor hot = blendColor(unlitHot, litHot, yellow);
+      const float segmentGlow = bloom * clamp(yellow * 0.36f, 0.f, 0.58f);
+      drawSegmentBand(args, a0, a1, segmentRadius, segmentWidth, core, hot, segmentGlow);
+    }
+    if (limitBrightness > 0.001f) {
+      const int limitIndex = clamp(int(std::round(limitLightIndex)), 0, TemporalDeck::kArcLightCount - 1);
+      const float yellow = valueForLightIndex(limitIndex);
+      const NVGcolor core = blendColor(blendColor(unlitCore, litCore, yellow), limitCore, limitBrightness);
+      const NVGcolor hot = blendColor(blendColor(unlitHot, litHot, yellow), limitHot, limitBrightness);
+      const float stripA0 = limitAngle - 0.5f * limitStripSweep;
+      const float stripA1 = limitAngle + 0.5f * limitStripSweep;
+      const float limitGlow = bloom * clamp(limitBrightness * 0.36f, 0.f, 0.58f);
+      drawSegmentSurface(args, stripA0, stripA1, segmentRadius, segmentWidth, core, hot, limitGlow);
+    }
+
+    drawEndCapPiece(args, borderStartAngle, segmentRadius, segmentWidth);
+    drawEndCapPiece(args, borderEndAngle, segmentRadius, segmentWidth);
+    strokeArc(args, borderStartAngle, borderEndAngle, segmentRadius - segmentWidth * 0.18f, std::max(0.35f, segmentWidth * 0.055f),
+              nvgRGBA(155, 170, 190, 42));
+
+    nvgRestore(args.vg);
+  }
 };
 
 static void drawTemporalDeckStepTriangle(const Widget::DrawArgs &args, const Vec &size, bool pointRight) {
@@ -188,7 +450,7 @@ static bool loadPlatterAnchor(Vec &centerPx, float &radiusPx) {
   Vec centerMm;
   float radiusMm = 0.f;
   if (!panel_svg::loadCircleFromSvg(
-          asset::plugin(pluginInstance, "res/deck.svg"), "PLATTER_AREA", &centerMm, &radiusMm, 1.f)) {
+          asset::plugin(pluginInstance, "res/deck.panel.svg"), "PLATTER_AREA", &centerMm, &radiusMm, 1.f)) {
     return false;
   }
   centerPx = mm2px(centerMm);
@@ -656,24 +918,40 @@ static std::string vinylExpansionBaseUrl() {
   const char *branch = isDragonKingDebugEnabled() ? "test" : "main";
   return std::string("https://raw.githubusercontent.com/PlasmaChroma/Leviathan-Assets/") + branch + "/Vinyl";
 }
-static std::atomic<int> gExpandedVinylSyncDepth {0};
-static std::atomic<bool> gExpandedVinylDownloadRunning {false};
-static std::atomic<bool> gExpandedVinylDownloadResultPending {false};
-static std::mutex gExpandedVinylDownloadResultMutex;
-static std::string gExpandedVinylDownloadResultError;
-static std::atomic<int> gExpandedVinylDownloadCurrentIndex {0};
-static std::atomic<int> gExpandedVinylDownloadTotalFiles {0};
-static std::atomic<uint64_t> gExpandedVinylSyncNonceSeq {0};
-static std::atomic<uint64_t> gExpandedVinylLoadSalt {0};
-static std::mutex gExpandedVinylDownloadThreadMutex;
-static std::thread gExpandedVinylDownloadThread;
-static std::atomic<bool> gExpandedVinylDownloadThreadFinished {false};
+struct ExpandedVinylDownloadState {
+  std::atomic<int> syncDepth {0};
+  std::atomic<bool> running {false};
+  std::atomic<bool> resultPending {false};
+  std::mutex resultMutex;
+  std::string resultError;
+  std::atomic<int> currentIndex {0};
+  std::atomic<int> totalFiles {0};
+  std::atomic<uint64_t> syncNonceSeq {0};
+  std::atomic<uint64_t> loadSalt {0};
+  std::mutex threadMutex;
+  std::thread thread;
+  std::atomic<bool> threadFinished {false};
+};
+
+static ExpandedVinylDownloadState &expandedVinylDownloadState() {
+  // The worker can still be inside Rack's blocking network download API while
+  // the process is closing, so this state is intentionally process-lifetime.
+  static ExpandedVinylDownloadState *state = new ExpandedVinylDownloadState();
+  return *state;
+}
 
 struct ScopedExpandedVinylDownloadThreadCleanup {
   ~ScopedExpandedVinylDownloadThreadCleanup() {
-    std::lock_guard<std::mutex> lock(gExpandedVinylDownloadThreadMutex);
-    if (gExpandedVinylDownloadThread.joinable()) {
-      gExpandedVinylDownloadThread.join();
+    ExpandedVinylDownloadState &state = expandedVinylDownloadState();
+    std::lock_guard<std::mutex> lock(state.threadMutex);
+    if (!state.thread.joinable()) {
+      return;
+    }
+    if (state.threadFinished.load(std::memory_order_acquire)) {
+      state.thread.join();
+    } else {
+      WARN("TemporalDeck: Vinyl expansion sync still running during shutdown; detaching worker");
+      state.thread.detach();
     }
   }
 };
@@ -681,16 +959,17 @@ struct ScopedExpandedVinylDownloadThreadCleanup {
 static ScopedExpandedVinylDownloadThreadCleanup gScopedExpandedVinylDownloadThreadCleanup;
 
 static bool isExpandedVinylSyncActive() {
-  return gExpandedVinylSyncDepth.load(std::memory_order_relaxed) > 0;
+  return expandedVinylDownloadState().syncDepth.load(std::memory_order_relaxed) > 0;
 }
 
 static bool isExpandedVinylDownloadRunning() {
-  return gExpandedVinylDownloadRunning.load(std::memory_order_relaxed);
+  return expandedVinylDownloadState().running.load(std::memory_order_relaxed);
 }
 
 static std::string expandedVinylSyncLabel() {
-  int current = gExpandedVinylDownloadCurrentIndex.load(std::memory_order_relaxed);
-  int total = gExpandedVinylDownloadTotalFiles.load(std::memory_order_relaxed);
+  ExpandedVinylDownloadState &state = expandedVinylDownloadState();
+  int current = state.currentIndex.load(std::memory_order_relaxed);
+  int total = state.totalFiles.load(std::memory_order_relaxed);
   if (current > 0 && total > 0) {
     current = std::min(current, total);
     return string::f("SYNC (%d/%d)", current, total);
@@ -699,14 +978,15 @@ static std::string expandedVinylSyncLabel() {
 }
 
 static void finalizeExpandedVinylDownloadThreadIfFinished() {
-  if (!gExpandedVinylDownloadThreadFinished.load(std::memory_order_acquire)) {
+  ExpandedVinylDownloadState &state = expandedVinylDownloadState();
+  if (!state.threadFinished.load(std::memory_order_acquire)) {
     return;
   }
-  std::lock_guard<std::mutex> lock(gExpandedVinylDownloadThreadMutex);
-  if (gExpandedVinylDownloadThread.joinable()) {
-    gExpandedVinylDownloadThread.join();
+  std::lock_guard<std::mutex> lock(state.threadMutex);
+  if (state.thread.joinable()) {
+    state.thread.join();
   }
-  gExpandedVinylDownloadThreadFinished.store(false, std::memory_order_release);
+  state.threadFinished.store(false, std::memory_order_release);
 }
 
 static std::string builtInVinylInventoryPath() { return asset::plugin(pluginInstance, "res/Vinyl/inventory.json"); }
@@ -1515,7 +1795,7 @@ static std::string expandedArtLoadPath(const std::string &absolutePath) {
   if (!entry) {
     return absolutePath;
   }
-  uint64_t salt = gExpandedVinylLoadSalt.load(std::memory_order_relaxed);
+  uint64_t salt = expandedVinylDownloadState().loadSalt.load(std::memory_order_relaxed);
   if (salt == 0) {
     return absolutePath;
   }
@@ -1760,14 +2040,15 @@ static bool loadVinylDownloadPlan(const std::string &inventoryPath, VinylDownloa
 
 static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCountOut) {
   struct ScopedExpandedVinylSync {
-    ScopedExpandedVinylSync() { gExpandedVinylSyncDepth.fetch_add(1, std::memory_order_relaxed); }
-    ~ScopedExpandedVinylSync() { gExpandedVinylSyncDepth.fetch_sub(1, std::memory_order_relaxed); }
+    ScopedExpandedVinylSync() { expandedVinylDownloadState().syncDepth.fetch_add(1, std::memory_order_relaxed); }
+    ~ScopedExpandedVinylSync() { expandedVinylDownloadState().syncDepth.fetch_sub(1, std::memory_order_relaxed); }
   } scopedExpandedVinylSync;
 
+  ExpandedVinylDownloadState &state = expandedVinylDownloadState();
   const std::string finalRoot = expandedVinylRootPath();
   const std::string tempRoot = finalRoot + ".tmp";
   long long syncMs = (long long)std::llround(system::getUnixTime() * 1000.0);
-  uint64_t syncSeq = gExpandedVinylSyncNonceSeq.fetch_add(1, std::memory_order_relaxed);
+  uint64_t syncSeq = state.syncNonceSeq.fetch_add(1, std::memory_order_relaxed);
   const std::string cacheBuster = string::f("tdcb=%lld_%llu", syncMs, (unsigned long long)syncSeq);
   system::removeRecursively(tempRoot);
   if (!system::createDirectories(tempRoot)) {
@@ -1830,8 +2111,8 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
   }
 
   int totalFilesToDownload = int(missingFiles.size() + staleFiles.size());
-  gExpandedVinylDownloadTotalFiles.store(totalFilesToDownload, std::memory_order_relaxed);
-  gExpandedVinylDownloadCurrentIndex.store(0, std::memory_order_relaxed);
+  state.totalFiles.store(totalFilesToDownload, std::memory_order_relaxed);
+  state.currentIndex.store(0, std::memory_order_relaxed);
   int currentFetchIndex = 0;
 
   auto downloadQueued = [&](const std::vector<const VinylDownloadPlan::FileItem *> &queue) -> bool {
@@ -1839,7 +2120,7 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
       if (!item) {
         continue;
       }
-      gExpandedVinylDownloadCurrentIndex.store(++currentFetchIndex, std::memory_order_relaxed);
+      state.currentIndex.store(++currentFetchIndex, std::memory_order_relaxed);
       std::string encodedFile = network::encodeUrl(item->file);
       std::string fileUrl = baseUrl + "/" + encodedFile + "?" + cacheBuster;
       std::string filePath = system::join(tempRoot, item->file);
@@ -1858,7 +2139,7 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
     return false;
   }
   // All files fetched; keep plain SYNC while finalizing install.
-  gExpandedVinylDownloadCurrentIndex.store(0, std::memory_order_relaxed);
+  state.currentIndex.store(0, std::memory_order_relaxed);
 
   system::removeRecursively(finalRoot);
   if (!system::rename(tempRoot, finalRoot)) {
@@ -1875,46 +2156,48 @@ static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCount
   if (fileCountOut) {
     *fileCountOut = int(plan.files.size());
   }
-  gExpandedVinylLoadSalt.fetch_add(1, std::memory_order_relaxed);
+  state.loadSalt.fetch_add(1, std::memory_order_relaxed);
   invalidateVinylInventoryCache();
   return true;
 }
 
 static bool startExpandedVinylDownloadAsync(std::string *errorOut) {
   finalizeExpandedVinylDownloadThreadIfFinished();
+  ExpandedVinylDownloadState &state = expandedVinylDownloadState();
   bool expected = false;
-  if (!gExpandedVinylDownloadRunning.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
+  if (!state.running.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
     if (errorOut) {
       *errorOut = "Vinyl expansion sync already in progress";
     }
     return false;
   }
-  gExpandedVinylDownloadResultPending.store(false, std::memory_order_relaxed);
-  gExpandedVinylDownloadCurrentIndex.store(0, std::memory_order_relaxed);
-  gExpandedVinylDownloadTotalFiles.store(0, std::memory_order_relaxed);
+  state.resultPending.store(false, std::memory_order_relaxed);
+  state.currentIndex.store(0, std::memory_order_relaxed);
+  state.totalFiles.store(0, std::memory_order_relaxed);
   {
-    std::lock_guard<std::mutex> lock(gExpandedVinylDownloadResultMutex);
-    gExpandedVinylDownloadResultError.clear();
+    std::lock_guard<std::mutex> lock(state.resultMutex);
+    state.resultError.clear();
   }
   {
-    std::lock_guard<std::mutex> lock(gExpandedVinylDownloadThreadMutex);
-    if (gExpandedVinylDownloadThread.joinable()) {
-      gExpandedVinylDownloadThread.join();
+    std::lock_guard<std::mutex> lock(state.threadMutex);
+    if (state.thread.joinable()) {
+      state.thread.join();
     }
-    gExpandedVinylDownloadThreadFinished.store(false, std::memory_order_release);
-    gExpandedVinylDownloadThread = std::thread([]() {
+    state.threadFinished.store(false, std::memory_order_release);
+    state.thread = std::thread([]() {
+      ExpandedVinylDownloadState &threadState = expandedVinylDownloadState();
       std::string error;
       int fileCount = 0;
       bool ok = downloadExpandedVinylInventory(&error, &fileCount);
       {
-        std::lock_guard<std::mutex> lock(gExpandedVinylDownloadResultMutex);
-        gExpandedVinylDownloadResultError = ok ? "" : (error.empty() ? "Failed to download Vinyl expansion" : error);
+        std::lock_guard<std::mutex> lock(threadState.resultMutex);
+        threadState.resultError = ok ? "" : (error.empty() ? "Failed to download Vinyl expansion" : error);
       }
-      gExpandedVinylDownloadCurrentIndex.store(0, std::memory_order_relaxed);
-      gExpandedVinylDownloadTotalFiles.store(0, std::memory_order_relaxed);
-      gExpandedVinylDownloadRunning.store(false, std::memory_order_relaxed);
-      gExpandedVinylDownloadResultPending.store(true, std::memory_order_relaxed);
-      gExpandedVinylDownloadThreadFinished.store(true, std::memory_order_release);
+      threadState.currentIndex.store(0, std::memory_order_relaxed);
+      threadState.totalFiles.store(0, std::memory_order_relaxed);
+      threadState.running.store(false, std::memory_order_relaxed);
+      threadState.resultPending.store(true, std::memory_order_relaxed);
+      threadState.threadFinished.store(true, std::memory_order_release);
     });
   }
   return true;
@@ -1922,14 +2205,15 @@ static bool startExpandedVinylDownloadAsync(std::string *errorOut) {
 
 static void pumpExpandedVinylDownloadNotifications() {
   finalizeExpandedVinylDownloadThreadIfFinished();
-  if (!gExpandedVinylDownloadResultPending.exchange(false, std::memory_order_relaxed)) {
+  ExpandedVinylDownloadState &state = expandedVinylDownloadState();
+  if (!state.resultPending.exchange(false, std::memory_order_relaxed)) {
     return;
   }
   std::string error;
   {
-    std::lock_guard<std::mutex> lock(gExpandedVinylDownloadResultMutex);
-    error = gExpandedVinylDownloadResultError;
-    gExpandedVinylDownloadResultError.clear();
+    std::lock_guard<std::mutex> lock(state.resultMutex);
+    error = state.resultError;
+    state.resultError.clear();
   }
   if (!error.empty()) {
     WARN("TemporalDeck: Vinyl library sync failed: %s", error.c_str());
@@ -2197,6 +2481,17 @@ static std::string lowercaseExtension(const std::string &path) {
 static bool isSupportedPlatterArtPath(const std::string &path) {
   std::string ext = lowercaseExtension(path);
   return ext == ".svg" || ext == ".png" || ext == ".jpg" || ext == ".jpeg";
+}
+
+static bool isSupportedSampleDropPath(const std::string &path) {
+  std::string ext = lowercaseExtension(path);
+  return ext == ".wav" || ext == ".wave" || ext == ".flac" || ext == ".mp3";
+}
+
+static void playDropErrorCue() {
+  // Non-modal cue for unsupported drop payloads.
+  std::fputc('\a', stderr);
+  std::fflush(stderr);
 }
 
 static float platterDimmingOverlayAlphaForMode(int mode) {
@@ -2977,7 +3272,7 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
       if (std::fabs(filteredGestureVelocity) < 1.f) {
         filteredGestureVelocity = 0.f;
       }
-      module->setPlatterScratch(true, localLagSamples, filteredGestureVelocity);
+      module->setPlatterTouchHold(true, localLagSamples);
       module->setPlatterMotionFreshSamples(0);
       logTraceEvent("SCRATCH_SETTLE", local, mouseDelta, 0.f, deltaAngle, 0.f, float(module->getUiLagSamples()),
                     localLagSamples, filteredGestureVelocity);
@@ -2994,7 +3289,7 @@ void TemporalDeckPlatterWidget::updateScratchFromLocal(Vec local, Vec mouseDelta
       if (std::fabs(filteredGestureVelocity) < 1.f) {
         filteredGestureVelocity = 0.f;
       }
-      module->setPlatterScratch(true, localLagSamples, filteredGestureVelocity);
+      module->setPlatterTouchHold(true, localLagSamples);
       module->setPlatterMotionFreshSamples(0);
       logTraceEvent("SCRATCH_SETTLE", local, mouseDelta, 0.f, 0.f, 0.f, float(module->getUiLagSamples()),
                     localLagSamples, filteredGestureVelocity);
@@ -3214,10 +3509,6 @@ void TemporalDeckPlatterWidget::onDragEnd(const event::DragEnd &e) {
   }
 }
 
-struct BananutBlack : app::SvgPort {
-  BananutBlack() { setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg"))); }
-};
-
 static PanelBorder *findPanelBorder(Widget *widget) {
   if (!widget) {
     return nullptr;
@@ -3250,8 +3541,8 @@ struct TemporalDeckWidget : ModuleWidget {
   ScopeDragTraceRecorder scopeDragTraceRecorder;
   float uiStepUsEma = 0.f;
   float uiDrawUsEma = 0.f;
-  static constexpr float kTopBarYmm = 9.522227f;
-  static constexpr float kTopBarRightEndMm = 97.413935f;
+  debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
+  debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
 
   void spawnTDScopeRight();
   void startScopeDragTraceCapture();
@@ -3262,17 +3553,19 @@ struct TemporalDeckWidget : ModuleWidget {
   TemporalDeckWidget(TemporalDeck *module) {
     setModule(module);
     PreviewBuildLogTimer previewBuildTimer("TemporalDeck", module);
-    const std::string panelPath = asset::plugin(pluginInstance, "res/deck.svg");
-    setPanel(createPanel(panelPath));
+    visual_assets::SplitPanelRenderer splitPanel(this, "res/deck.panel.svg");
+    const std::string& panelPath = splitPanel.panelPath();
+    splitPanel.addLabels("res/deck.labels.svg");
+    visual_assets::addFractalGlassOverlay(this, panelPath);
     previewBuildTimer.markPanelDone();
     if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
       panelBorder = findPanelBorder(svgPanel->fb);
     }
 
-    addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-    addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-    addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-    addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+    addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0)));
+    addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+    addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+    addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
     auto applyPointOverride = [&](const char *elementId, Vec *outPos) {
       Vec pointMm;
@@ -3330,40 +3623,48 @@ struct TemporalDeckWidget : ModuleWidget {
     previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
     previewBuildTimer.markAnchorsDone();
 
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(bufferKnobMm), module, TemporalDeck::BUFFER_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(rateKnobMm), module, TemporalDeck::RATE_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(mixKnobMm), module, TemporalDeck::MIX_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(feedbackKnobMm), module, TemporalDeck::FEEDBACK_PARAM));
-    addParam(createParamCentered<RoundBlackKnob>(mm2px(sensitivityKnobMm), module,
-                                                 TemporalDeck::SCRATCH_SENSITIVITY_PARAM));
-    addParam(createParamCentered<LEDButton>(mm2px(freezeButtonMm), module, TemporalDeck::FREEZE_PARAM));
-    addParam(createParamCentered<LEDButton>(mm2px(reverseButtonMm), module, TemporalDeck::REVERSE_PARAM));
-    addParam(createParamCentered<LEDButton>(mm2px(slipButtonMm), module, TemporalDeck::SLIP_PARAM));
+    addParam(createParamCentered<Eclipse2Knob>(mm2px(bufferKnobMm), module, TemporalDeck::BUFFER_PARAM));
+    {
+      Eclipse2Knob* rateKnob = createParamCentered<Eclipse2Knob>(mm2px(rateKnobMm), module, TemporalDeck::RATE_PARAM);
+      rateKnob->setProgressRingBipolar(true);
+      addParam(rateKnob);
+    }
+    addParam(createParamCentered<Eclipse2Knob>(mm2px(mixKnobMm), module, TemporalDeck::MIX_PARAM));
+    addParam(createParamCentered<Eclipse2Knob>(mm2px(feedbackKnobMm), module, TemporalDeck::FEEDBACK_PARAM));
+    {
+      Eclipse2Knob* sensitivityKnob = createParamCentered<Eclipse2Knob>(mm2px(sensitivityKnobMm), module,
+                                                                     TemporalDeck::SCRATCH_SENSITIVITY_PARAM);
+      sensitivityKnob->setProgressRingBipolar(true);
+      addParam(sensitivityKnob);
+    }
+    addParam(createParamCentered<SmallGoldButton>(mm2px(freezeButtonMm), module, TemporalDeck::FREEZE_PARAM));
+    addParam(createParamCentered<SmallGoldButton>(mm2px(reverseButtonMm), module, TemporalDeck::REVERSE_PARAM));
 
-    addInput(createInputCentered<PJ301MPort>(mm2px(positionCvMm), module, TemporalDeck::POSITION_CV_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(rateCvMm), module, TemporalDeck::RATE_CV_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(inputLMm), module, TemporalDeck::INPUT_L_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(inputRMm), module, TemporalDeck::INPUT_R_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(scratchGateMm), module, TemporalDeck::SCRATCH_GATE_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(freezeGateMm), module, TemporalDeck::FREEZE_GATE_INPUT));
-    addInput(createInputCentered<PJ301MPort>(mm2px(reverseCvMm), module, TemporalDeck::REVERSE_CV_INPUT));
+    addInput(createInputCentered<Magitek2InputJack>(mm2px(positionCvMm), module, TemporalDeck::POSITION_CV_INPUT));
+    addInput(createInputCentered<Magitek2InputJack>(mm2px(rateCvMm), module, TemporalDeck::RATE_CV_INPUT));
+    addInput(createInputCentered<Magitek2InputJack>(mm2px(inputLMm), module, TemporalDeck::INPUT_L_INPUT));
+    addInput(createInputCentered<Magitek2InputJack>(mm2px(inputRMm), module, TemporalDeck::INPUT_R_INPUT));
+    addInput(createInputCentered<Magitek2InputJack>(mm2px(scratchGateMm), module, TemporalDeck::SCRATCH_GATE_INPUT));
+    addInput(createInputCentered<Magitek2InputJack>(mm2px(freezeGateMm), module, TemporalDeck::FREEZE_GATE_INPUT));
+    addInput(createInputCentered<Magitek2InputJack>(mm2px(reverseCvMm), module, TemporalDeck::REVERSE_CV_INPUT));
 
-    addOutput(createOutputCentered<BananutBlack>(mm2px(outputLMm), module, TemporalDeck::OUTPUT_L_OUTPUT));
-    addOutput(createOutputCentered<BananutBlack>(mm2px(sGateOutMm), module, TemporalDeck::S_GATE_O_OUTPUT));
-    addOutput(createOutputCentered<BananutBlack>(mm2px(outputRMm), module, TemporalDeck::OUTPUT_R_OUTPUT));
-    addOutput(createOutputCentered<BananutBlack>(mm2px(sPosOutMm), module, TemporalDeck::S_POS_O_OUTPUT));
+    addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outputLMm), module, TemporalDeck::OUTPUT_L_OUTPUT));
+    addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(sGateOutMm), module, TemporalDeck::S_GATE_O_OUTPUT));
+    addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outputRMm), module, TemporalDeck::OUTPUT_R_OUTPUT));
+    addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(sPosOutMm), module, TemporalDeck::S_POS_O_OUTPUT));
 
-    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(freezeLightMm), module, TemporalDeck::FREEZE_LIGHT));
-    addChild(createLightCentered<MediumLight<RedLight>>(mm2px(reverseLightMm), module, TemporalDeck::REVERSE_LIGHT));
-    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(slipLightMm.plus(Vec(-2.4f, 0.f))), module,
-                                                       TemporalDeck::SLIP_SLOW_LIGHT));
-    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(slipLightMm), module, TemporalDeck::SLIP_LIGHT));
-    addChild(createLightCentered<SmallLight<RedLight>>(mm2px(slipLightMm.plus(Vec(2.4f, 0.f))), module,
-                                                       TemporalDeck::SLIP_FAST_LIGHT));
-    addChild(
-      createLightCentered<SmallLight<YellowLight>>(mm2px(expanderLightMm), module, TemporalDeck::EXPANDER_LINK_LIGHT));
-    addChild(
-      createLightCentered<SmallLight<GreenLight>>(mm2px(expanderLightMm), module, TemporalDeck::EXPANDER_READY_LIGHT));
+    addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(freezeLightMm), module,
+                                                                 TemporalDeck::FREEZE_LIGHT));
+    addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(reverseLightMm), module,
+                                                                 TemporalDeck::REVERSE_LIGHT));
+    addChild(createLightCentered<TinyAperture<RedApertureLight>>(mm2px(slipLightMm.plus(Vec(-2.4f, 0.f))), module,
+                                                                TemporalDeck::SLIP_SLOW_LIGHT));
+    addChild(createLightCentered<TinyAperture<RedApertureLight>>(mm2px(slipLightMm), module,
+                                                                TemporalDeck::SLIP_LIGHT));
+    addChild(createLightCentered<TinyAperture<RedApertureLight>>(mm2px(slipLightMm.plus(Vec(2.4f, 0.f))), module,
+                                                                TemporalDeck::SLIP_FAST_LIGHT));
+    addChild(createLightCentered<SmallAperture<AmberGreenApertureLight>>(
+      mm2px(expanderLightMm), module, TemporalDeck::EXPANDER_LINK_LIGHT));
 
     auto *bufferMode = new TemporalDeckBufferModeWidget;
     bufferMode->module = module;
@@ -3386,13 +3687,13 @@ struct TemporalDeckWidget : ModuleWidget {
     applyPointOverride("CARTRIDGE_CYCLE", &cartridgeCycleMm);
 
     float arcRadius = platterRadius + mm2px(Vec(3.5f, 0.f)).x;
-    for (int i = 0; i < TemporalDeck::kArcLightCount; ++i) {
-      float t = float(i) / float(TemporalDeck::kArcLightCount - 1);
-      float angle = -float(M_PI) * t;
-      Vec ledPos = platterCenter.plus(Vec(std::cos(angle), std::sin(angle)).mult(arcRadius));
-      addChild(createLightCentered<MediumLight<RedLight>>(ledPos, module, TemporalDeck::ARC_MAX_LIGHT_START + i));
-      addChild(createLightCentered<MediumLight<YellowLight>>(ledPos, module, TemporalDeck::ARC_LIGHT_START + i));
-    }
+    auto *arcWidget = new TemporalDeckArcWidget;
+    arcWidget->module = module;
+    arcWidget->centerPx = platterCenter;
+    arcWidget->radiusPx = arcRadius;
+    arcWidget->box.pos = Vec(0.f, 0.f);
+    arcWidget->box.size = box.size;
+    addChild(arcWidget);
 
     auto display = new TemporalDeckDisplayWidget();
     display->module = module;
@@ -3418,7 +3719,8 @@ struct TemporalDeckWidget : ModuleWidget {
     tonearm->box.size = box.size;
     addChild(tonearm);
 
-    // Add after platter/tonearm so this control is visible on top.
+    // Add after platter/tonearm so controls inside the platter hit area remain interactive.
+    addParam(createParamCentered<SmallGoldButton>(mm2px(slipButtonMm), module, TemporalDeck::SLIP_PARAM));
     addParam(createParamCentered<LEDButton>(mm2px(cartridgeCycleMm), module, TemporalDeck::CARTRIDGE_CYCLE_PARAM));
 
     Vec scopeSpawnPosMm = platterAnchorMm.plus(Vec(platterAnchorRadiusMm + 3.5f, 0.f));
@@ -3435,38 +3737,26 @@ struct TemporalDeckWidget : ModuleWidget {
   }
 
   void draw(const DrawArgs &args) override {
-    auto drawStart = std::chrono::steady_clock::now();
+    const bool measurePerf = isDragonKingDebugEnabled();
+    auto drawStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
     auto publishUiDrawMetric = [&](TemporalDeck *deckModule) {
-      if (!deckModule) {
+      if (!deckModule || !measurePerf) {
         return;
       }
       auto drawEnd = std::chrono::steady_clock::now();
       float drawUs =
         std::chrono::duration_cast<std::chrono::duration<float, std::micro>>(drawEnd - drawStart).count();
       uiDrawUsEma = (uiDrawUsEma > 0.f) ? (uiDrawUsEma + (drawUs - uiDrawUsEma) * 0.18f) : drawUs;
+      uiDrawUsRange.add(drawUs);
       deckModule->setUiDrawCostUs(drawUs);
     };
 
     TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
-    bool linkedToScope = deckModule && isTDScopeModule(deckModule->rightExpander.module);
+    const bool linkedToScope = deckModule && isTDScopeModule(deckModule->rightExpander.module);
     if (linkedToScope) {
       DrawArgs adjusted = args;
       adjusted.clipBox.size.x += mm2px(0.3f);
       ModuleWidget::draw(adjusted);
-
-      // Bridge the top purple divider to the right panel edge when docked.
-      float y = mm2px(kTopBarYmm);
-      float x0 = mm2px(kTopBarRightEndMm);
-      float x1 = box.size.x;
-      if (x1 > x0 + 0.1f) {
-        nvgBeginPath(args.vg);
-        nvgMoveTo(args.vg, x0, y);
-        nvgLineTo(args.vg, x1, y);
-        nvgStrokeColor(args.vg, nvgRGBA(87, 64, 191, 255)); // #5740bf
-        nvgStrokeWidth(args.vg, mm2px(0.50f));
-        nvgLineCap(args.vg, NVG_ROUND);
-        nvgStroke(args.vg);
-      }
     } else {
       ModuleWidget::draw(args);
     }
@@ -3478,10 +3768,10 @@ struct TemporalDeckWidget : ModuleWidget {
         double &lastSubmitSec = gDebugTerminalLastSubmitSec[debugId];
         if (lastSubmitSec < 0.0 || (nowSec - lastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
           lastSubmitSec = nowSec;
-          const float uiTotalMs = (uiStepUsEma + uiDrawUsEma) * 0.001f;
           debug_terminal::submitTemporalDeckUiMetrics(deckModule->getDebugInstanceId(),
-                                                      uiTotalMs,
                                                       deckModule->consumeAudioProcessUs(),
+                                                      uiStepUsRange.consume(),
+                                                      uiDrawUsRange.consume(),
                                                       deckModule->getUiScopePreviewCostUs(),
                                                       deckModule->getUiScopePreviewStride(),
                                                       metricValid);
@@ -3506,7 +3796,8 @@ struct TemporalDeckWidget : ModuleWidget {
   }
 
   void step() override {
-    auto stepStart = std::chrono::steady_clock::now();
+    const bool measurePerf = isDragonKingDebugEnabled();
+    auto stepStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
     TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
     if (deckModule) {
       syncScopeDragTraceCaptureState();
@@ -3526,12 +3817,59 @@ struct TemporalDeckWidget : ModuleWidget {
       }
     }
     ModuleWidget::step();
-    float stepUs = std::chrono::duration_cast<std::chrono::duration<float, std::micro>>(
-                     std::chrono::steady_clock::now() - stepStart).count();
-    uiStepUsEma = (uiStepUsEma > 0.f) ? (uiStepUsEma + (stepUs - uiStepUsEma) * 0.18f) : stepUs;
+    if (measurePerf) {
+      float stepUs = std::chrono::duration_cast<std::chrono::duration<float, std::micro>>(
+                       std::chrono::steady_clock::now() - stepStart).count();
+      uiStepUsEma = (uiStepUsEma > 0.f) ? (uiStepUsEma + (stepUs - uiStepUsEma) * 0.18f) : stepUs;
+      uiStepUsRange.add(stepUs);
+    }
   }
 
   ~TemporalDeckWidget() override { stopScopeDragTraceCapture(); }
+
+  void onPathDrop(const event::PathDrop &e) override {
+    TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
+    if (!deckModule) {
+      ModuleWidget::onPathDrop(e);
+      return;
+    }
+
+    std::string selectedPath;
+    bool sawDirectory = false;
+    for (const std::string &path : e.paths) {
+      if (system::isDirectory(path)) {
+        sawDirectory = true;
+        continue;
+      }
+      if (system::isFile(path) && isSupportedSampleDropPath(path)) {
+        selectedPath = path;
+        break;
+      }
+    }
+
+    if (!selectedPath.empty()) {
+      std::string error;
+      if (!deckModule->loadSampleFromPath(selectedPath, &error)) {
+        playDropErrorCue();
+      }
+      e.consume(this);
+      return;
+    }
+
+    if (sawDirectory) {
+      playDropErrorCue();
+      e.consume(this);
+      return;
+    }
+
+    if (!e.paths.empty()) {
+      playDropErrorCue();
+      e.consume(this);
+      return;
+    }
+
+    ModuleWidget::onPathDrop(e);
+  }
 
   void appendContextMenu(Menu *menu) override {
     TemporalDeck *module = dynamic_cast<TemporalDeck *>(this->module);

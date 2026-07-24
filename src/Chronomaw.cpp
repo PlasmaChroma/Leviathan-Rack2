@@ -139,6 +139,10 @@ Chronomaw::Chronomaw() {
 	}
 }
 
+Chronomaw::~Chronomaw() {
+	teardownTimer.begin(id);
+}
+
 void Chronomaw::onReset() {
 	state = chronomaw::ModuleState();
 	engine.reset();

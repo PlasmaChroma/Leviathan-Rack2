@@ -1,19 +1,25 @@
 #include "Wyrm.hpp"
 #include "WyrmSand.hpp"
 #include "DebugTerminalTransport.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 
 #include <chrono>
 #include <unordered_map>
 #include <vector>
 
 namespace {
-constexpr double kWyrmDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+constexpr double kWyrmDebugTerminalSubmitIntervalSec = debug_terminal::kTimingRangeSubmitIntervalSec;
 std::unordered_map<uint32_t, double> gWyrmDebugTerminalLastSubmitSec;
+
+inline unsigned char wyrmClampU8(int v) {
+	return (unsigned char) clamp(v, 0, 255);
+}
 }
 
 struct WyrmWaveEditor : TransparentWidget {
 	Wyrm* module = nullptr;
 	int lastIndex = -1;
+	Vec lastPointEditPos;
 	int hoveredRock = -1;
 	int draggingRock = -1;
 	int dragRockMouseMode = -1;
@@ -29,6 +35,7 @@ struct WyrmWaveEditor : TransparentWidget {
 	bool lastMouseInside = false;
 	int lastHoverColumn = -2;
 	int lastHoverRock = -2;
+	float lastHoverGuideY = -1.f;
 	uint32_t lastWaveVersion = 0;
 	int lastPointCount = -1;
 	int lastRockStateIndex = -1;
@@ -38,8 +45,12 @@ struct WyrmWaveEditor : TransparentWidget {
 	int lastSandDetail = -1;
 	int lastSandPersistence = -1;
 	bool lastEditorLocked = false;
+	bool tracerDotVisible = false;
+	float lastTracerPhase = -1.f;
 	float lastEditorDrawUs = 0.f;
 	float lastStepUsEma = 0.f;
+	debug_terminal::UiTimingRangeAccumulator stepUsRange;
+	debug_terminal::UiTimingRangeAccumulator drawUsRange;
 	float lastSandUpdateUs = 0.f;
 	float lastSandDrawUs = 0.f;
 	int lastBodySampleCount = 0;
@@ -62,10 +73,30 @@ struct WyrmWaveEditor : TransparentWidget {
 	Vec cachedBodySize = Vec(-1.f, -1.f);
 	float cachedBodySlitherPhase = -1.f;
 	float cachedBodySlitherAmount = -1.f;
+	NVGcontext* waveMaterialContext = nullptr;
+	int waveMaterialImage = -1;
+	int waveMaterialW = 0;
+	int waveMaterialH = 0;
+	int waveMaterialCount = -1;
+	int waveMaterialUploadedW = 0;
+	int waveMaterialUploadedH = 0;
+	bool waveMaterialDirty = true;
+	std::vector<unsigned char> waveMaterialPixels;
 
 	explicit WyrmWaveEditor(Wyrm* m, std::shared_ptr<WyrmSand> sandState) {
 		module = m;
 		sand = sandState ? sandState : std::make_shared<WyrmSand>();
+	}
+
+	~WyrmWaveEditor() override {
+		nvg_gfx_lifecycle::resetOwnedNvgImage(
+			waveMaterialContext,
+			waveMaterialImage,
+			waveMaterialUploadedW,
+			waveMaterialUploadedH,
+			nullptr,
+			false
+		);
 	}
 
 	bool sandEnabled() const {
@@ -104,7 +135,7 @@ struct WyrmWaveEditor : TransparentWidget {
 
 	float phaseFromX(float x) const {
 		if (box.size.x <= 1.f) return 0.f;
-		return wrap01(clamp((x - pointEdgeInset()) / std::max(pointDrawWidth(), 1e-6f), 0.f, 0.9999f));
+		return levi_math::wrap01(clamp((x - pointEdgeInset()) / std::max(pointDrawWidth(), 1e-6f), 0.f, 0.9999f));
 	}
 
 	float yFromValue(float value) const {
@@ -185,14 +216,14 @@ struct WyrmWaveEditor : TransparentWidget {
 		lastVisualUpdateSec = nowSec;
 		if (!module) return;
 		const float speedFactor = module->displaySlitherSpeedFactor.load(std::memory_order_relaxed);
-		visualSlitherPhase = wrap01(visualSlitherPhase + 0.65f * speedFactor * elapsed);
+		visualSlitherPhase = levi_math::wrap01(visualSlitherPhase + 0.65f * speedFactor * elapsed);
 	}
 
 	float effectiveSlitherAmount() const {
 		if (!module) {
 			return 0.f;
 		}
-		return clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
+		return levi_math::clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
 	}
 
 	float slitherOffsetForIndex(int index) const {
@@ -256,6 +287,138 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 	}
 
+	static NVGcolor mixColor(NVGcolor a, NVGcolor b, float t) {
+		t = levi_math::clamp01(t);
+		return nvgRGBAf(
+			a.r + (b.r - a.r) * t,
+			a.g + (b.g - a.g) * t,
+			a.b + (b.b - a.b) * t,
+			a.a + (b.a - a.a) * t
+		);
+	}
+
+	static void compositeOver(const NVGcolor& src, float* dst) {
+		const float outA = src.a + dst[3] * (1.f - src.a);
+		if (outA <= 1e-6f) {
+			dst[0] = dst[1] = dst[2] = dst[3] = 0.f;
+			return;
+		}
+		const float outR = src.r * src.a + dst[0] * dst[3] * (1.f - src.a);
+		const float outG = src.g * src.a + dst[1] * dst[3] * (1.f - src.a);
+		const float outB = src.b * src.a + dst[2] * dst[3] * (1.f - src.a);
+		dst[0] = outR / outA;
+		dst[1] = outG / outA;
+		dst[2] = outB / outA;
+		dst[3] = outA;
+	}
+
+	void rebuildWaveMaterialPixels(int count) {
+		const int w = std::max(1, int(std::ceil(box.size.x)));
+		const int h = std::max(1, int(std::ceil(box.size.y)));
+		count = std::max(1, count);
+		waveMaterialW = w;
+		waveMaterialH = h;
+		waveMaterialCount = count;
+		waveMaterialDirty = true;
+		waveMaterialPixels.assign(size_t(w) * size_t(h) * 4u, 0u);
+
+		const float inset = pointEdgeInset();
+		const float drawWidth = std::max(1.f, box.size.x - 2.f * inset);
+		const float dx = drawWidth / float(count);
+		const float midY = 0.5f * box.size.y;
+		const NVGcolor posNear = nvgRGBA(28, 204, 217, 46);
+		const NVGcolor posFar = nvgRGBA(42, 228, 255, 152);
+		const NVGcolor negNear = nvgRGBA(115, 72, 224, 50);
+		const NVGcolor negFar = nvgRGBA(150, 92, 255, 162);
+		const NVGcolor posShade = nvgRGBA(0, 56, 72, 132);
+		const NVGcolor negShade = nvgRGBA(40, 24, 112, 92);
+
+		for (int py = 0; py < h; ++py) {
+			const float y = std::min(box.size.y, float(py) + 0.5f);
+			const bool positive = y < midY;
+			const float t = positive
+				? levi_math::clamp01((midY - y) / std::max(midY, 1.f))
+				: levi_math::clamp01((y - midY) / std::max(box.size.y - midY, 1.f));
+			const NVGcolor base = positive ? mixColor(posNear, posFar, t) : mixColor(negNear, negFar, t);
+			for (int px = 0; px < w; ++px) {
+				const float x = std::min(box.size.x, float(px) + 0.5f);
+				const float columnF = (x - inset) / std::max(dx, 1e-6f);
+				const int column = int(std::floor(columnF));
+				float out[4] = {0.f, 0.f, 0.f, 0.f};
+				compositeOver(base, out);
+				if (column >= 0 && column < count && (column & 1) != 0) {
+					compositeOver(positive ? posShade : negShade, out);
+				}
+				const size_t offset = (size_t(py) * size_t(w) + size_t(px)) * 4u;
+				waveMaterialPixels[offset + 0u] = wyrmClampU8(int(std::lround(out[0] * out[3] * 255.f)));
+				waveMaterialPixels[offset + 1u] = wyrmClampU8(int(std::lround(out[1] * out[3] * 255.f)));
+				waveMaterialPixels[offset + 2u] = wyrmClampU8(int(std::lround(out[2] * out[3] * 255.f)));
+				waveMaterialPixels[offset + 3u] = wyrmClampU8(int(std::lround(out[3] * 255.f)));
+			}
+		}
+	}
+
+	int ensureWaveMaterialImage(NVGcontext* vg, int count) {
+		if (!vg || box.size.x <= 1.f || box.size.y <= 1.f || count <= 0) {
+			return -1;
+		}
+		const int targetW = std::max(1, int(std::ceil(box.size.x)));
+		const int targetH = std::max(1, int(std::ceil(box.size.y)));
+		if (waveMaterialW != targetW || waveMaterialH != targetH || waveMaterialCount != count || waveMaterialPixels.empty()) {
+			rebuildWaveMaterialPixels(count);
+		}
+		if (waveMaterialContext != vg) {
+			nvg_gfx_lifecycle::resetOwnedNvgImage(
+				waveMaterialContext,
+				waveMaterialImage,
+				waveMaterialUploadedW,
+				waveMaterialUploadedH,
+				vg,
+				false
+			);
+			waveMaterialContext = vg;
+		}
+		if (waveMaterialImage >= 0 &&
+			!nvg_gfx_lifecycle::ownedNvgImageSizeMatches(vg, waveMaterialImage, waveMaterialUploadedW, waveMaterialUploadedH)) {
+			nvg_gfx_lifecycle::resetOwnedNvgImage(
+				waveMaterialContext,
+				waveMaterialImage,
+				waveMaterialUploadedW,
+				waveMaterialUploadedH,
+				vg,
+				true
+			);
+			waveMaterialContext = vg;
+		}
+		if (waveMaterialImage < 0) {
+			waveMaterialImage = nvgCreateImageRGBA(vg, waveMaterialW, waveMaterialH, NVG_IMAGE_PREMULTIPLIED, waveMaterialPixels.data());
+			waveMaterialContext = vg;
+			waveMaterialUploadedW = waveMaterialW;
+			waveMaterialUploadedH = waveMaterialH;
+			waveMaterialDirty = false;
+		}
+		else if (waveMaterialUploadedW != waveMaterialW || waveMaterialUploadedH != waveMaterialH) {
+			nvg_gfx_lifecycle::resetOwnedNvgImage(
+				waveMaterialContext,
+				waveMaterialImage,
+				waveMaterialUploadedW,
+				waveMaterialUploadedH,
+				vg,
+				true
+			);
+			waveMaterialImage = nvgCreateImageRGBA(vg, waveMaterialW, waveMaterialH, NVG_IMAGE_PREMULTIPLIED, waveMaterialPixels.data());
+			waveMaterialContext = vg;
+			waveMaterialUploadedW = waveMaterialW;
+			waveMaterialUploadedH = waveMaterialH;
+			waveMaterialDirty = false;
+		}
+		else if (waveMaterialDirty) {
+			nvgUpdateImage(vg, waveMaterialImage, waveMaterialPixels.data());
+			waveMaterialDirty = false;
+		}
+		return waveMaterialImage;
+	}
+
 	int rockIndexAt(Vec pos) const {
 		if (!module) return -1;
 		for (int i = module->rockCount - 1; i >= 0; --i) {
@@ -279,7 +442,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		const float phase = phaseFromX(adjusted.x);
 		const float value = valueFromY(adjusted.y);
 		auto shortestPhaseDelta = [](float from, float to) {
-			float d = wrap01(to) - wrap01(from);
+			float d = levi_math::wrap01(to) - levi_math::wrap01(from);
 			if (d > 0.5f) d -= 1.f;
 			if (d < -0.5f) d += 1.f;
 			return d;
@@ -297,7 +460,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		WyrmRock prevStepRock = previousRock;
 		for (int s = 1; s <= steps; ++s) {
 			const float t = float(s) / float(steps);
-			rock.phase = wrap01(previousRock.phase + dPhase * t);
+			rock.phase = levi_math::wrap01(previousRock.phase + dPhase * t);
 			rock.value = clamp(previousRock.value + dValue * t, -1.f, 1.f);
 			module->rebuildRockBoundaryCache(rockIndex);
 			if (dragRockMouseMode == ROCK_MOUSE_DRAGS) {
@@ -316,11 +479,13 @@ struct WyrmWaveEditor : TransparentWidget {
 	}
 
 	Vec currentLocalMousePos() const {
-		if (!parent || !APP || !APP->scene || !APP->scene->rack) {
+		if (!APP || !APP->scene) {
 			return Vec();
 		}
-		const Vec editorRackPos = const_cast<WyrmWaveEditor*>(this)->getRelativeOffset(Vec(), APP->scene->rack);
-		return APP->scene->rack->getMousePos().minus(editorRackPos);
+		auto* self = const_cast<WyrmWaveEditor*>(this);
+		const Vec absoluteOrigin = self->getAbsoluteOffset(Vec());
+		const float absoluteZoom = std::max(self->getAbsoluteZoom(), 1e-6f);
+		return APP->scene->getMousePos().minus(absoluteOrigin).div(absoluteZoom);
 	}
 
 	void applyPointFromPos(Vec pos) {
@@ -328,20 +493,27 @@ struct WyrmWaveEditor : TransparentWidget {
 		const int idx = indexFromX(pos.x);
 		const float targetDisplayValue = valueFromY(pos.y);
 		const float writeSlitherPhase = pointEditActive ? pointEditSlitherPhase : visualSlitherPhase;
-		auto writeDisplayValue = [&](int pointIndex) {
-			module->setWavePoint(pointIndex, targetDisplayValue - slitherOffsetForIndex(pointIndex, writeSlitherPhase));
+		auto writeDisplayValue = [&](int pointIndex, float displayValue) {
+			module->setWavePoint(pointIndex, displayValue - slitherOffsetForIndex(pointIndex, writeSlitherPhase));
 		};
 		if (lastIndex >= 0 && lastIndex != idx) {
 			const int lo = std::min(lastIndex, idx);
 			const int hi = std::max(lastIndex, idx);
+			const float dragDx = pos.x - lastPointEditPos.x;
 			for (int i = lo; i <= hi; ++i) {
-				writeDisplayValue(i);
+				const float sampleX = pointX(i, module->pointCount);
+				const float t = std::fabs(dragDx) > 1e-6f
+					? clamp((sampleX - lastPointEditPos.x) / dragDx, 0.f, 1.f)
+					: 1.f;
+				const float sampleY = lastPointEditPos.y + (pos.y - lastPointEditPos.y) * t;
+				writeDisplayValue(i, valueFromY(sampleY));
 			}
 		}
 		else {
-			writeDisplayValue(idx);
+			writeDisplayValue(idx, targetDisplayValue);
 		}
 		lastIndex = idx;
+		lastPointEditPos = pos;
 		sand->stamp(box.size, pos, 5.5f, -0.16f, 0.28f);
 	}
 
@@ -420,7 +592,8 @@ struct WyrmWaveEditor : TransparentWidget {
 
 	void step() override {
 		using PerfClock = std::chrono::steady_clock;
-		const PerfClock::time_point stepStart = PerfClock::now();
+		const bool measurePerf = module && isDragonKingDebugEnabled();
+		const PerfClock::time_point stepStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 		TransparentWidget::step();
 		const double nowSec = system::getTime();
 		advanceVisualSlitherPhase(nowSec);
@@ -462,11 +635,32 @@ struct WyrmWaveEditor : TransparentWidget {
 			dirty = true;
 		}
 
+		bool tracerDotVisibleNow = tracerDotVisible;
+		const bool lfoModeNow = module->lfoMode.load(std::memory_order_relaxed);
+		const float tracerFrequencyNow = module->displayPhaseFrequencyHz.load(std::memory_order_relaxed);
+		if (!lfoModeNow || !std::isfinite(tracerFrequencyNow) || tracerFrequencyNow >= 2.4f) {
+			tracerDotVisibleNow = false;
+		}
+		else if (tracerFrequencyNow > 0.f && tracerFrequencyNow <= 2.f) {
+			tracerDotVisibleNow = true;
+		}
+		const float tracerPhaseNow = levi_math::wrap01(module->displayPhase.load(std::memory_order_relaxed));
+		if (tracerDotVisibleNow != tracerDotVisible
+			|| (tracerDotVisibleNow && std::fabs(tracerPhaseNow - lastTracerPhase) > 1e-5f)) {
+			dirty = true;
+		}
+		tracerDotVisible = tracerDotVisibleNow;
+		lastTracerPhase = tracerPhaseNow;
+
 		const Vec mouseLocal = currentLocalMousePos();
 		const bool mouseInside = (mouseLocal.x >= 0.f && mouseLocal.x <= box.size.x && mouseLocal.y >= 0.f && mouseLocal.y <= box.size.y);
 		const int hoverColumnNow = mouseInside ? indexFromX(mouseLocal.x) : -1;
 		const int hoverRockNow = (draggingRock >= 0) ? draggingRock : (mouseInside ? rockIndexAt(mouseLocal) : -1);
-		if (mouseInside != lastMouseInside || hoverColumnNow != lastHoverColumn || hoverRockNow != lastHoverRock) {
+		const float hoverGuideYNow = mouseInside ? clamp(mouseLocal.y, 0.f, box.size.y) : -1.f;
+		if (mouseInside != lastMouseInside
+			|| hoverColumnNow != lastHoverColumn
+			|| hoverRockNow != lastHoverRock
+			|| std::fabs(hoverGuideYNow - lastHoverGuideY) > 0.25f) {
 			dirty = true;
 		}
 
@@ -492,31 +686,31 @@ struct WyrmWaveEditor : TransparentWidget {
 		lastMouseInside = mouseInside;
 		lastHoverColumn = hoverColumnNow;
 		lastHoverRock = hoverRockNow;
+		lastHoverGuideY = hoverGuideYNow;
 
 		if (dirty) {
 			framebuffer->setDirty();
 		}
 
-		if (isDragonKingDebugEnabled()) {
+		if (measurePerf) {
 			uint32_t debugId = module->debugInstanceId;
 			double& lastSubmitSec = gWyrmDebugTerminalLastSubmitSec[debugId];
 				if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kWyrmDebugTerminalSubmitIntervalSec) {
-					const uint64_t audioSampledCount = module->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
-					const uint64_t audioProcessNs = module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
+					module->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
+					module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
 					const uint64_t bodySampleCacheHits = module->perfBodySampleCacheHits.exchange(0, std::memory_order_acq_rel);
 					const uint64_t bodySampleCacheMisses = module->perfBodySampleCacheMisses.exchange(0, std::memory_order_acq_rel);
-					const float audioUs = (audioSampledCount > 0u) ? float(double(audioProcessNs) / double(audioSampledCount) * 0.001) : 0.f;
 					const float sandGlUs = module->perfSandGlUs.load(std::memory_order_relaxed);
-					const float totalUiUs = lastStepUsEma + lastEditorDrawUs + sandGlUs;
 					lastSubmitSec = nowSec;
 					debug_terminal::submitWyrmMetrics(
-					debugId,
-					totalUiUs * 0.001f,
-					lastEditorDrawUs,
-					lastSandUpdateUs,
-					lastSandDrawUs,
+						debugId,
+						debug_terminal::consumeAudioProcessTiming(module->perfAudioProcessMinNs, module->perfAudioProcessMaxNs),
+						stepUsRange.consume(),
+						drawUsRange.consume(),
+						lastEditorDrawUs,
+						lastSandUpdateUs,
+						lastSandDrawUs,
 						sandGlUs,
-						audioUs,
 						module->perfChannels.load(std::memory_order_relaxed),
 						lastBodySampleCount,
 						bodySampleCacheHits,
@@ -524,9 +718,12 @@ struct WyrmWaveEditor : TransparentWidget {
 					);
 				}
 			}
-		const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-			PerfClock::now() - stepStart).count()) * 0.001f;
-		lastStepUsEma = (lastStepUsEma > 0.f) ? (lastStepUsEma + (stepUs - lastStepUsEma) * 0.18f) : stepUs;
+		if (measurePerf) {
+			const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - stepStart).count()) * 0.001f;
+			lastStepUsEma = (lastStepUsEma > 0.f) ? (lastStepUsEma + (stepUs - lastStepUsEma) * 0.18f) : stepUs;
+			stepUsRange.add(stepUs);
+		}
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -552,13 +749,6 @@ struct WyrmWaveEditor : TransparentWidget {
 				PerfClock::now() - sandDrawStart).count()) * 0.001f;
 		}
 
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, 0.f, 0.5f * box.size.y);
-		nvgLineTo(args.vg, box.size.x, 0.5f * box.size.y);
-		nvgStrokeWidth(args.vg, 1.f);
-		nvgStrokeColor(args.vg, nvgRGBA(240, 180, 42, 120));
-			nvgStroke(args.vg);
-
 			const bool hasModule = (module != nullptr);
 			const uint32_t drawWaveVersion = hasModule ? module->waveVersion.load(std::memory_order_acquire) : 0u;
 			const int drawRockStateIndex = hasModule ? module->activeRockStateIndex.load(std::memory_order_acquire) : -1;
@@ -569,36 +759,6 @@ struct WyrmWaveEditor : TransparentWidget {
 			const int count = hasModule ? module->pointCount : kWyrmPointCountDefault;
 			const float dx = pointStep(count);
 			const float graphColumnWidth = std::min(2.0f, dx);
-			if (hasModule) {
-				const bool displayCacheValid =
-					cachedDisplayWaveValid &&
-					cachedDisplayWaveCount == count &&
-					cachedDisplayWaveVersion == drawWaveVersion &&
-					cachedDisplayRockStateIndex == drawRockStateIndex &&
-					std::fabs(cachedDisplaySize.x - box.size.x) <= 1e-4f &&
-					std::fabs(cachedDisplaySize.y - box.size.y) <= 1e-4f &&
-					std::fabs(cachedDisplaySlitherPhase - drawSlitherPhase) <= 1e-6f &&
-					std::fabs(cachedDisplaySlitherAmount - drawSlitherAmount) <= 1e-6f;
-				if (!displayCacheValid) {
-					for (int i = 0; i < count; ++i) {
-						cachedDisplayWaveValues[i] = displayWavePoint(i);
-					}
-					cachedDisplayWaveCount = count;
-					cachedDisplayWaveVersion = drawWaveVersion;
-					cachedDisplayRockStateIndex = drawRockStateIndex;
-					cachedDisplaySize = box.size;
-					cachedDisplaySlitherPhase = drawSlitherPhase;
-					cachedDisplaySlitherAmount = drawSlitherAmount;
-					cachedDisplayWaveValid = true;
-				}
-			}
-			auto waveValueAt = [&](int i) {
-				if (hasModule) {
-					return cachedDisplayWaveValues[i];
-				}
-				const float phase = (float(i) + 0.5f) / float(std::max(count, 1));
-				return std::sin(2.f * float(M_PI) * phase);
-			};
 		std::array<float, kWyrmPointCountMax> bodyPoints {};
 		if (hasModule) {
 			for (int i = 0; i < module->pointCount; ++i) {
@@ -632,8 +792,6 @@ struct WyrmWaveEditor : TransparentWidget {
 		Vec mouseLocal = currentLocalMousePos();
 		const bool mouseInside = (mouseLocal.x >= 0.f && mouseLocal.x <= box.size.x && mouseLocal.y >= 0.f && mouseLocal.y <= box.size.y);
 		const int hoveredColumn = mouseInside ? indexFromX(mouseLocal.x) : -1;
-		float hoveredColumnCenterX = 0.f;
-		bool hoveredColumnCenterValid = false;
 		hoveredRock = (draggingRock >= 0) ? draggingRock : (mouseInside ? rockIndexAt(mouseLocal) : -1);
 		const bool drawHoverNanoVG = !module || module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG;
 		if (hasModule && mouseInside && drawHoverNanoVG) {
@@ -649,8 +807,6 @@ struct WyrmWaveEditor : TransparentWidget {
 			nvgFill(args.vg);
 
 			const float guideX = 0.5f * (x0 + x1);
-			hoveredColumnCenterX = guideX;
-			hoveredColumnCenterValid = true;
 			nvgBeginPath(args.vg);
 			nvgRect(args.vg, guideX - 0.5f * graphColumnWidth, 0.f, graphColumnWidth, box.size.y);
 			nvgFillColor(args.vg, nvgRGBA(28, 204, 217, 238));
@@ -665,46 +821,9 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 
 		const float midY = 0.5f * box.size.y;
-			auto xAt = [&](int i) {
-				return pointX(i, count);
-			};
 			const int bodySampleCount = std::max(count, hasModule ? std::min(768, std::max(128, module->pointCount * 4)) : count);
-			const bool drawBodyNanoVG = !module || module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG;
-			const bool drawWaveColumns = (!sandEnabled()) && (!module || module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG);
-			if (drawWaveColumns) {
-			nvgBeginPath(args.vg);
-			for (int i = 0; i < count; ++i) {
-				const float y = (0.5f - 0.5f * waveValueAt(i)) * box.size.y;
-				const bool hotColumn = (i == hoveredColumn);
-				float x = xAt(i);
-				if (hotColumn && hoveredColumnCenterValid) {
-					x = hoveredColumnCenterX;
-				}
-				const float yTop = std::min(midY, y);
-				const float yBottom = std::max(midY, y);
-				if (!hotColumn) {
-					nvgRect(args.vg, x - 0.5f * graphColumnWidth, yTop, graphColumnWidth, std::max(1e-4f, yBottom - yTop));
-				}
-			}
-			nvgFillColor(args.vg, nvgRGBA(34, 27, 70, 196));
-			nvgFill(args.vg);
-
-			if (hoveredColumn >= 0 && hoveredColumn < count) {
-				nvgBeginPath(args.vg);
-				const float y = (0.5f - 0.5f * waveValueAt(hoveredColumn)) * box.size.y;
-				float x = xAt(hoveredColumn);
-				if (hoveredColumnCenterValid) {
-					x = hoveredColumnCenterX;
-				}
-				const float yTop = std::min(midY, y);
-				const float yBottom = std::max(midY, y);
-				nvgRect(args.vg, x - 0.5f * graphColumnWidth, yTop, graphColumnWidth, std::max(1e-4f, yBottom - yTop));
-				nvgFillColor(args.vg, nvgRGBA(28, 204, 217, 238));
-				nvgFill(args.vg);
-				}
-			}
-
 			const int cachedBodySamples = clamp(bodySampleCount, 0, kBodySamplesMax);
+			const bool drawBodyNanoVG = !module || module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG;
 			if (drawBodyNanoVG) {
 				const bool bodyCacheValid =
 					hasModule &&
@@ -736,6 +855,171 @@ struct WyrmWaveEditor : TransparentWidget {
 					cachedBodyPathValid = hasModule;
 				}
 			}
+
+			const bool drawWaveArea = (!sandEnabled()) && drawBodyNanoVG && cachedBodySamples >= 2;
+			const int waveMaterialImageHandle = drawWaveArea ? ensureWaveMaterialImage(args.vg, count) : -1;
+			const bool useWaveMaterialImage = waveMaterialImageHandle >= 0;
+			auto emitPolarityFill = [&](bool positive) {
+				if (!drawWaveArea) {
+					return;
+				}
+				auto inside = [&](const Vec& p) {
+					return positive ? (p.y < midY - 1e-4f) : (p.y > midY + 1e-4f);
+				};
+				auto zeroCrossing = [&](const Vec& a, const Vec& b) {
+					const float dy = b.y - a.y;
+					const float t = (std::fabs(dy) > 1e-6f) ? clamp((midY - a.y) / dy, 0.f, 1.f) : 0.f;
+					return Vec(a.x + (b.x - a.x) * t, midY);
+				};
+				bool open = false;
+				auto beginAt = [&](const Vec& p) {
+					nvgMoveTo(args.vg, p.x, midY);
+					nvgLineTo(args.vg, p.x, p.y);
+					open = true;
+				};
+				auto closeAt = [&](const Vec& p) {
+					nvgLineTo(args.vg, p.x, p.y);
+					nvgLineTo(args.vg, p.x, midY);
+					nvgClosePath(args.vg);
+					open = false;
+				};
+
+				nvgBeginPath(args.vg);
+				for (int i = 0; i < cachedBodySamples - 1; ++i) {
+					const Vec p0 = cachedBodyPathPoints[i];
+					const Vec p1 = cachedBodyPathPoints[i + 1];
+					const bool in0 = inside(p0);
+					const bool in1 = inside(p1);
+					if (in0 && !open) {
+						beginAt(p0);
+					}
+					if (in0 && in1) {
+						nvgLineTo(args.vg, p1.x, p1.y);
+					}
+					else if (in0 && !in1) {
+						closeAt(zeroCrossing(p0, p1));
+					}
+					else if (!in0 && in1) {
+						const Vec cross = zeroCrossing(p0, p1);
+						beginAt(cross);
+						nvgLineTo(args.vg, p1.x, p1.y);
+					}
+				}
+				if (open) {
+					closeAt(cachedBodyPathPoints[cachedBodySamples - 1]);
+				}
+				if (useWaveMaterialImage) {
+					const NVGpaint material = nvgImagePattern(args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, waveMaterialImageHandle, 1.f);
+					nvgFillPaint(args.vg, material);
+				}
+				else {
+					const NVGpaint gradient = positive
+						? nvgLinearGradient(args.vg, 0.f, midY, 0.f, 0.f, nvgRGBA(28, 204, 217, 46), nvgRGBA(42, 228, 255, 152))
+						: nvgLinearGradient(args.vg, 0.f, midY, 0.f, box.size.y, nvgRGBA(115, 72, 224, 50), nvgRGBA(150, 92, 255, 162));
+					nvgFillPaint(args.vg, gradient);
+				}
+				nvgFill(args.vg);
+			};
+			emitPolarityFill(true);
+			emitPolarityFill(false);
+
+			auto emitAlternatingPolarityShade = [&](bool positive) {
+				if (!drawWaveArea || useWaveMaterialImage || count <= 0) {
+					return;
+				}
+				auto inside = [&](const Vec& p) {
+					return positive ? (p.y < midY - 1e-4f) : (p.y > midY + 1e-4f);
+				};
+				auto zeroCrossing = [&](const Vec& a, const Vec& b) {
+					const float dy = b.y - a.y;
+					const float t = (std::fabs(dy) > 1e-6f) ? clamp((midY - a.y) / dy, 0.f, 1.f) : 0.f;
+					return Vec(a.x + (b.x - a.x) * t, midY);
+				};
+				auto sampleBodyPointAtX = [&](float x) {
+					const float phase = clamp((x - pointEdgeInset()) / std::max(pointDrawWidth(), 1e-6f), 0.f, 1.f);
+					const float sampleIndex = phase * float(cachedBodySamples) - 0.5f;
+					if (sampleIndex <= 0.f) {
+						return Vec(x, cachedBodyPathPoints[0].y);
+					}
+					if (sampleIndex >= float(cachedBodySamples - 1)) {
+						return Vec(x, cachedBodyPathPoints[cachedBodySamples - 1].y);
+					}
+					const int i0 = clamp(int(std::floor(sampleIndex)), 0, cachedBodySamples - 2);
+					const float t = sampleIndex - float(i0);
+					const float y = cachedBodyPathPoints[i0].y + (cachedBodyPathPoints[i0 + 1].y - cachedBodyPathPoints[i0].y) * t;
+					return Vec(x, y);
+				};
+				bool open = false;
+				auto beginAt = [&](const Vec& p) {
+					nvgMoveTo(args.vg, p.x, midY);
+					nvgLineTo(args.vg, p.x, p.y);
+					open = true;
+				};
+				auto closeAt = [&](const Vec& p) {
+					nvgLineTo(args.vg, p.x, p.y);
+					nvgLineTo(args.vg, p.x, midY);
+					nvgClosePath(args.vg);
+					open = false;
+				};
+
+				std::vector<Vec> columnPoints;
+				columnPoints.reserve(16);
+				nvgBeginPath(args.vg);
+				int sampleCursor = 0;
+				for (int column = 1; column < count; column += 2) {
+					const float x0 = pointEdgeInset() + float(column) * dx;
+					const float x1 = std::min(pointEdgeInset() + float(column + 1) * dx, pointEdgeInset() + pointDrawWidth());
+					columnPoints.clear();
+					columnPoints.push_back(sampleBodyPointAtX(x0));
+					while (sampleCursor < cachedBodySamples && cachedBodyPathPoints[sampleCursor].x <= x0) {
+						++sampleCursor;
+					}
+					for (int sample = sampleCursor; sample < cachedBodySamples; ++sample) {
+						const Vec p = cachedBodyPathPoints[sample];
+						if (p.x >= x1) {
+							break;
+						}
+						columnPoints.push_back(p);
+					}
+					columnPoints.push_back(sampleBodyPointAtX(x1));
+
+					open = false;
+					for (size_t i = 0; i + 1 < columnPoints.size(); ++i) {
+						const Vec p0 = columnPoints[i];
+						const Vec p1 = columnPoints[i + 1];
+						const bool in0 = inside(p0);
+						const bool in1 = inside(p1);
+						if (in0 && !open) {
+							beginAt(p0);
+						}
+						if (in0 && in1) {
+							nvgLineTo(args.vg, p1.x, p1.y);
+						}
+						else if (in0 && !in1) {
+							closeAt(zeroCrossing(p0, p1));
+						}
+						else if (!in0 && in1) {
+							const Vec cross = zeroCrossing(p0, p1);
+							beginAt(cross);
+							nvgLineTo(args.vg, p1.x, p1.y);
+						}
+					}
+					if (open) {
+						closeAt(columnPoints.back());
+					}
+				}
+				nvgFillColor(args.vg, positive ? nvgRGBA(0, 56, 72, 132) : nvgRGBA(40, 24, 112, 92));
+				nvgFill(args.vg);
+			};
+			emitAlternatingPolarityShade(true);
+			emitAlternatingPolarityShade(false);
+
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, 0.f, midY);
+			nvgLineTo(args.vg, box.size.x, midY);
+			nvgStrokeWidth(args.vg, 1.f);
+			nvgStrokeColor(args.vg, nvgRGBA(240, 180, 42, 150));
+			nvgStroke(args.vg);
 
 			auto emitRoundedBodyPath = [&]() {
 				const float roundCosThreshold = -0.25f;
@@ -873,6 +1157,23 @@ struct WyrmWaveEditor : TransparentWidget {
 				nvgText(args.vg, labelX, labelY, modeText, nullptr);
 			}
 		}
+
+		if (hasModule && tracerDotVisible) {
+			const float phase = levi_math::wrap01(module->displayPhase.load(std::memory_order_relaxed));
+			const float x = pointEdgeInset() + phase * pointDrawWidth();
+			const float y = yFromValue(bodyWaveValueAtPhase(phase));
+			constexpr float dotRadius = 2.8f;
+
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, x, y, dotRadius);
+			nvgFillColor(args.vg, nvgRGBA(148, 255, 64, 255));
+			nvgFill(args.vg);
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, x, y, dotRadius + 0.7f);
+			nvgStrokeWidth(args.vg, 1.15f);
+			nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 235));
+			nvgStroke(args.vg);
+		}
 		nvgResetScissor(args.vg);
 		nvgRestore(args.vg);
 
@@ -883,6 +1184,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			lastSandUpdateUs = sandUpdateUs;
 			lastSandDrawUs = sandDrawUs;
 			lastBodySampleCount = bodySampleCount;
+			drawUsRange.add(editorDrawUs + module->perfSandGlUs.load(std::memory_order_relaxed));
 		}
 	}
 };

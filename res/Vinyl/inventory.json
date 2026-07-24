@@ -34,23 +34,23 @@
   ],
   "signed": {
     "algorithm": "fnv1a64-keyed-v1",
-    "generatedUnix": 1775310502,
+    "generatedUnix": 1782412083,
     "keyId": "f2f64a74e0dd68c5",
-    "signature": "d4fb016417590f72",
+    "signature": "d0425167992b8a2f",
     "files": [
       {
         "id": "temporal_deck",
         "file": "TemporalDeck.png",
         "menuId": 1,
-        "size": 537560,
-        "hash": "5ac733ac8ee72d32"
+        "size": 336576,
+        "hash": "9df81078a0080c49"
       },
       {
         "id": "blank",
         "file": "Blank.png",
         "menuId": 2,
-        "size": 268693,
-        "hash": "4f74d11669369e1e"
+        "size": 204724,
+        "hash": "b3f9f216994fcd72"
       },
       {
         "id": "static_svg",

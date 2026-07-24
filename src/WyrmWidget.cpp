@@ -1,14 +1,12 @@
 #include "Wyrm.hpp"
 #include "WyrmSand.hpp"
 #include "PanelSvgUtils.hpp"
+#include "visual/VisualAssets.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 
+#include <algorithm>
 #include <cstdio>
-
-struct BananutBlack : app::SvgPort {
-	BananutBlack() {
-		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
-	}
-};
+#include <functional>
 
 void drawWyrmStepTriangle(const Widget::DrawArgs& args, const Vec& size, bool pointRight) {
 	const float cx = 0.5f * size.x;
@@ -96,142 +94,6 @@ struct WyrmPointCountMenuItem : MenuItem {
 	}
 };
 
-struct WyrmEditorIconButton : TransparentWidget {
-	enum Kind {
-		LOCK,
-		RESET
-	};
-
-	Wyrm* module = nullptr;
-	Kind kind = LOCK;
-	bool hovered = false;
-	std::shared_ptr<window::Svg> resetNormalSvg;
-	std::shared_ptr<window::Svg> resetHighlightedSvg;
-
-	WyrmEditorIconButton(Wyrm* module, Kind kind) {
-		this->module = module;
-		this->kind = kind;
-		if (kind == RESET) {
-			resetNormalSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/reset-normal.svg"));
-			resetHighlightedSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/reset-highlighted.svg"));
-		}
-	}
-
-	void step() override {
-		hovered = false;
-		if (parent && APP && APP->scene && APP->scene->rack) {
-			const Vec local = APP->scene->rack->getMousePos().minus(parent->box.pos).minus(box.pos);
-			hovered = (local.x >= 0.f && local.x <= box.size.x && local.y >= 0.f && local.y <= box.size.y);
-		}
-		TransparentWidget::step();
-	}
-
-	void onHover(const event::Hover& e) override {
-		hovered = true;
-		TransparentWidget::onHover(e);
-	}
-
-	void onLeave(const event::Leave& e) override {
-		hovered = false;
-		TransparentWidget::onLeave(e);
-	}
-
-	void onButton(const event::Button& e) override {
-		if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) {
-			TransparentWidget::onButton(e);
-			return;
-		}
-		if (kind == LOCK) {
-			module->editorLocked.store(!module->editorLocked.load(std::memory_order_relaxed), std::memory_order_relaxed);
-		}
-		else {
-			module->setFactoryShape(module->selectedShape);
-		}
-		e.consume(this);
-	}
-
-	void drawLockIcon(const DrawArgs& args, NVGcolor color) {
-		const float w = box.size.x;
-		const float h = box.size.y;
-		const float cx = 0.5f * w;
-		const float bodyW = 0.54f * w;
-		const float bodyH = 0.32f * h;
-		const float bodyX = cx - 0.5f * bodyW;
-		const float bodyY = 0.51f * h;
-		const float bodyR = 0.06f * w;
-		const float shackleW = 0.34f * w;
-		const float shackleTop = 0.19f * h;
-		const float shackleY = bodyY + 0.03f * h;
-		const bool locked = module && module->editorLocked.load(std::memory_order_relaxed);
-
-		nvgStrokeWidth(args.vg, 2.3f);
-		nvgStrokeColor(args.vg, color);
-		nvgLineCap(args.vg, NVG_ROUND);
-		nvgLineJoin(args.vg, NVG_ROUND);
-
-		nvgBeginPath(args.vg);
-		if (locked) {
-			nvgMoveTo(args.vg, cx - 0.5f * shackleW, shackleY);
-			nvgLineTo(args.vg, cx - 0.5f * shackleW, shackleTop + 0.18f * h);
-			nvgQuadTo(args.vg, cx, shackleTop, cx + 0.5f * shackleW, shackleTop + 0.18f * h);
-			nvgLineTo(args.vg, cx + 0.5f * shackleW, shackleY);
-		}
-		else {
-			const float detachedY = shackleY - 0.22f * h;
-			nvgMoveTo(args.vg, cx - 0.5f * shackleW, shackleY);
-			nvgLineTo(args.vg, cx - 0.5f * shackleW, shackleTop + 0.02f * h);
-			nvgQuadTo(args.vg, cx, shackleTop - 0.16f * h, cx + 0.5f * shackleW, shackleTop + 0.02f * h);
-			nvgLineTo(args.vg, cx + 0.5f * shackleW, detachedY);
-		}
-		nvgStroke(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, bodyX, bodyY, bodyW, bodyH, bodyR);
-		nvgFillColor(args.vg, color);
-		nvgFill(args.vg);
-
-		NVGcolor cutout = nvgRGBA(14, 14, 14, 255);
-		nvgBeginPath(args.vg);
-		nvgCircle(args.vg, cx, bodyY + 0.40f * bodyH, 0.054f * w);
-		nvgFillColor(args.vg, cutout);
-		nvgFill(args.vg);
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, cx - 0.024f * w, bodyY + 0.40f * bodyH, 0.048f * w, 0.22f * bodyH, 0.9f);
-		nvgFillColor(args.vg, cutout);
-		nvgFill(args.vg);
-	}
-
-	void drawResetIcon(const DrawArgs& args) {
-		std::shared_ptr<window::Svg> svg = hovered ? resetHighlightedSvg : resetNormalSvg;
-		if (!svg) {
-			return;
-		}
-		const Vec svgSize = svg->getSize();
-		if (svgSize.x <= 1.f || svgSize.y <= 1.f) {
-			return;
-		}
-		const float targetSize = 0.72f * std::min(box.size.x, box.size.y);
-		const float scale = targetSize / std::max(svgSize.x, svgSize.y);
-		nvgSave(args.vg);
-		nvgTranslate(args.vg, 0.5f * box.size.x, 0.5f * box.size.y);
-		nvgScale(args.vg, scale, scale);
-		nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
-		svg->draw(args.vg);
-		nvgRestore(args.vg);
-	}
-
-	void draw(const DrawArgs& args) override {
-		const int level = hovered ? 218 : 118;
-		NVGcolor color = nvgRGBA(level, level, level, 255);
-		if (kind == LOCK) {
-			drawLockIcon(args, color);
-		}
-		else {
-			drawResetIcon(args);
-		}
-	}
-};
-
 struct WyrmFrequencyReadoutWidget final : Widget {
 	Wyrm* module = nullptr;
 
@@ -276,28 +138,352 @@ struct WyrmFrequencyReadoutWidget final : Widget {
 	}
 };
 
+struct WyrmEditorSurface final : Widget {
+	Wyrm* module = nullptr;
+	std::shared_ptr<WyrmSand> sandState;
+	Widget* sandGlWidget = nullptr;
+	widget::FramebufferWidget* editorFramebuffer = nullptr;
+	TransparentWidget* waveEditor = nullptr;
+
+	explicit WyrmEditorSurface(Wyrm* m) : module(m) {
+		sandState = std::make_shared<WyrmSand>();
+		sandGlWidget = createWyrmSandGlWidget(module, sandState);
+		addChild(sandGlWidget);
+		waveEditor = createWyrmWaveEditor(module, sandState);
+		editorFramebuffer = new widget::FramebufferWidget();
+		editorFramebuffer->dirtyOnSubpixelChange = false;
+		editorFramebuffer->addChild(waveEditor);
+		addChild(editorFramebuffer);
+	}
+
+	void setEditorSize(Vec size) {
+		size.x = std::max(1.f, size.x);
+		size.y = std::max(1.f, size.y);
+		setSize(size);
+		sandGlWidget->setPosition(Vec());
+		sandGlWidget->setSize(size);
+		editorFramebuffer->setPosition(Vec());
+		editorFramebuffer->setSize(size);
+		waveEditor->setPosition(Vec());
+		waveEditor->setSize(size);
+		editorFramebuffer->setDirty();
+	}
+
+	void resetVisualTransitionState() {
+		if (sandState) {
+			sandState->resetHistory();
+		}
+		if (editorFramebuffer) {
+			editorFramebuffer->setDirty();
+		}
+	}
+};
+
+struct WyrmEditorDock final : Widget {
+	bool expanded = false;
+
+	void draw(const DrawArgs& args) override {
+		if (expanded) {
+			const float radius = std::min(7.f, 0.08f * box.size.y);
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, 0.f, 0.f, box.size.x, box.size.y, radius);
+			nvgFillColor(args.vg, nvgRGBA(4, 8, 22, 205));
+			nvgFill(args.vg);
+			nvgStrokeColor(args.vg, nvgRGBA(108, 89, 205, 115));
+			nvgStrokeWidth(args.vg, 1.f);
+			nvgStroke(args.vg);
+		}
+		Widget::draw(args);
+	}
+};
+
+struct WyrmAnchoredTooltip final : ui::Tooltip {
+	WeakPtr<Widget> anchor;
+
+	void step() override {
+		ui::Tooltip::step();
+		Widget* anchorWidget = anchor.get();
+		if (!anchorWidget || !APP || !APP->scene) {
+			if (parent) requestDelete();
+			return;
+		}
+
+		const float anchorZoom = std::max(anchorWidget->getAbsoluteZoom(), 1e-6f);
+		const Vec anchorOrigin = anchorWidget->getAbsoluteOffset(Vec());
+		const Vec anchorSize = anchorWidget->box.size.mult(anchorZoom);
+		const Vec sceneSize = APP->scene->box.size;
+		const float margin = 4.f;
+		float top = margin;
+		if (APP->scene->menuBar && APP->scene->menuBar->isVisible()) {
+			top = std::max(top,
+				APP->scene->menuBar->box.pos.y + APP->scene->menuBar->box.size.y + margin);
+		}
+
+		const float desiredX = anchorOrigin.x + anchorSize.x + 2.f;
+		const float desiredY = anchorOrigin.y + anchorSize.y + 2.f;
+		const float maxX = std::max(margin, sceneSize.x - margin - box.size.x);
+		const float maxY = std::max(top, sceneSize.y - margin - box.size.y);
+		setPosition(Vec(
+			clamp(desiredX, margin, maxX),
+			clamp(desiredY, top, maxY)));
+	}
+};
+
+template <typename BaseButton>
+struct WyrmTooltipButton : BaseButton {
+	std::function<std::string()> tooltipTextProvider;
+	WeakPtr<ui::Tooltip> tooltip;
+
+	~WyrmTooltipButton() override {
+		destroyTooltip();
+	}
+
+	std::string tooltipText() const {
+		return tooltipTextProvider ? tooltipTextProvider() : std::string();
+	}
+
+	void createTooltip() {
+		if (!settings::tooltips || tooltip || !APP || !APP->scene) return;
+		auto* nextTooltip = new WyrmAnchoredTooltip();
+		nextTooltip->text = tooltipText();
+		nextTooltip->anchor.set(this);
+		tooltip.set(nextTooltip);
+		APP->scene->addChild(nextTooltip);
+	}
+
+	void destroyTooltip() {
+		ui::Tooltip* currentTooltip = tooltip.get();
+		if (!currentTooltip) return;
+		if (currentTooltip->parent) {
+			currentTooltip->parent->removeChild(currentTooltip);
+		}
+		delete currentTooltip;
+		tooltip.set(nullptr);
+	}
+
+	void refreshTooltip() {
+		if (ui::Tooltip* currentTooltip = tooltip.get()) {
+			currentTooltip->text = tooltipText();
+		}
+	}
+
+	void onButton(const event::Button& e) override {
+		// These are callback-only UI controls, not engine parameters. Do not let
+		// TL1105's ParamWidget path try to build a parameter context menu.
+		if (e.button != GLFW_MOUSE_BUTTON_LEFT) {
+			e.consume(this);
+			return;
+		}
+		BaseButton::onButton(e);
+		if (e.action == GLFW_PRESS) {
+			refreshTooltip();
+		}
+	}
+
+	void onEnter(const event::Enter& e) override {
+		BaseButton::onEnter(e);
+		createTooltip();
+	}
+
+	void onLeave(const event::Leave& e) override {
+		BaseButton::onLeave(e);
+		destroyTooltip();
+	}
+
+	void step() override {
+		BaseButton::step();
+		refreshTooltip();
+	}
+};
+
+struct WyrmEditorGlyphButton final : WyrmTooltipButton<LeviathanIconButton> {
+	std::function<bool()> enabledAction;
+	std::function<bool()> collapseGlyphAction;
+	bool collapseGlyph = false;
+
+	bool enabled() const {
+		return !enabledAction || enabledAction();
+	}
+
+	void onButton(const event::Button& e) override {
+		if (!enabled() && e.button == GLFW_MOUSE_BUTTON_LEFT) {
+			e.consume(this);
+			return;
+		}
+		WyrmTooltipButton<LeviathanIconButton>::onButton(e);
+	}
+
+	void draw(const DrawArgs& args) override {
+		LeviathanIconButton::draw(args);
+		const bool active = enabled();
+		const bool collapse = collapseGlyphAction ? collapseGlyphAction() : collapseGlyph;
+		const Vec center = box.size.mult(0.5f);
+		const float direction = collapse ? -1.f : 1.f;
+		const float innerX = 0.13f * box.size.x;
+		const float outerX = 0.30f * box.size.x;
+		const float head = std::max(2.f, 0.11f * box.size.y);
+		nvgBeginPath(args.vg);
+		for (float side : {-1.f, 1.f}) {
+			const float startX = center.x + side * (collapse ? outerX : innerX);
+			const float endX = center.x + side * (collapse ? innerX : outerX);
+			nvgMoveTo(args.vg, startX, center.y);
+			nvgLineTo(args.vg, endX, center.y);
+			nvgMoveTo(args.vg, endX - side * direction * head, center.y - head);
+			nvgLineTo(args.vg, endX, center.y);
+			nvgLineTo(args.vg, endX - side * direction * head, center.y + head);
+		}
+		nvgStrokeColor(args.vg, active ? nvgRGBA(231, 247, 255, 245) : nvgRGBA(130, 137, 145, 150));
+		nvgStrokeWidth(args.vg, 1.4f);
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgLineJoin(args.vg, NVG_ROUND);
+		nvgStroke(args.vg);
+	}
+};
+
+struct WyrmWidget;
+struct WyrmExpandedEditorOverlay;
+
+struct WyrmEditorOverlayLink {
+	WyrmWidget* owner = nullptr;
+	WyrmExpandedEditorOverlay* overlay = nullptr;
+};
+
+struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
+	WyrmEditorDock* anchorDock = nullptr;
+	WyrmEditorSurface* editorSurface = nullptr;
+	widget::ZoomWidget* editorZoom = nullptr;
+	std::shared_ptr<WyrmEditorOverlayLink> link;
+	std::function<void()> collapseAction;
+
+	WyrmExpandedEditorOverlay() {
+		editorZoom = new widget::ZoomWidget();
+		addChild(editorZoom);
+	}
+
+	~WyrmExpandedEditorOverlay() override {
+		// The scene can tear down before the module rack. Return the sole live
+		// editor surface to its dock if normal collapse did not run first.
+		if (editorSurface && anchorDock) {
+			if (editorZoom && editorSurface->parent == editorZoom) {
+				editorZoom->removeChild(editorSurface);
+			}
+			if (!editorSurface->parent) {
+				anchorDock->addChild(editorSurface);
+				editorSurface->setPosition(Vec());
+				editorSurface->setEditorSize(anchorDock->box.size);
+				editorSurface->resetVisualTransitionState();
+			}
+			anchorDock->expanded = false;
+		}
+		if (link && link->overlay == this) {
+			link->overlay = nullptr;
+		}
+	}
+
+	void layoutToScene() {
+		if (!APP || !APP->scene || !anchorDock || !editorSurface) return;
+		const Vec sceneSize = APP->scene->box.size;
+		const float margin = 12.f;
+		float top = margin;
+		if (APP->scene->menuBar && APP->scene->menuBar->isVisible()) {
+			top = std::max(top, APP->scene->menuBar->box.pos.y + APP->scene->menuBar->box.size.y + 6.f);
+		}
+		const float availableWidth = std::max(1.f, sceneSize.x - 2.f * margin);
+		const float availableHeight = std::max(1.f, sceneSize.y - top - margin);
+		const float dockZoom = std::max(anchorDock->getAbsoluteZoom(), 1e-6f);
+		const float desiredVerticalOverhang = mm2px(Vec(0.f, 0.45f)).y * dockZoom;
+		const float panelWidth = std::min(2.f * anchorDock->box.size.x * dockZoom, availableWidth);
+		const float editorScreenHeight = std::min(anchorDock->box.size.y * dockZoom, availableHeight);
+		const float verticalFrameOverhang = std::min(
+			desiredVerticalOverhang,
+			0.5f * std::max(0.f, availableHeight - editorScreenHeight));
+		const float panelHeight = editorScreenHeight + 2.f * verticalFrameOverhang;
+		const Vec requiredSize(panelWidth, panelHeight);
+		if (!box.size.equals(requiredSize)) {
+			setSize(requiredSize);
+		}
+		editorZoom->setPosition(Vec(0.f, verticalFrameOverhang));
+		editorZoom->setZoom(dockZoom);
+		const Vec logicalEditorSize(
+			std::max(1.f, panelWidth / dockZoom),
+			std::max(1.f, editorScreenHeight / dockZoom));
+		if (!editorSurface->box.size.equals(logicalEditorSize)) {
+			editorSurface->setPosition(Vec());
+			editorSurface->setEditorSize(logicalEditorSize);
+			editorSurface->resetVisualTransitionState();
+		}
+
+		const Vec dockOrigin = anchorDock->getAbsoluteOffset(Vec());
+		const Vec dockCenter = dockOrigin.plus(anchorDock->box.size.mult(0.5f * dockZoom));
+		setPosition(Vec(
+			dockCenter.x - 0.5f * panelWidth,
+			dockCenter.y - 0.5f * panelHeight));
+	}
+
+	void step() override {
+		layoutToScene();
+		widget::OpaqueWidget::step();
+	}
+
+	void draw(const DrawArgs& args) override {
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 255));
+		nvgFill(args.vg);
+
+		Widget::draw(args);
+
+		const float borderWidth = 2.f;
+		const float inset = 0.5f * borderWidth;
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, inset, inset,
+			std::max(0.f, box.size.x - 2.f * inset),
+			std::max(0.f, box.size.y - 2.f * inset));
+		nvgStrokeColor(args.vg, nvgRGBA(112, 78, 224, 255));
+		nvgStrokeWidth(args.vg, borderWidth);
+		nvgStroke(args.vg);
+	}
+
+	void onHoverKey(const event::HoverKey& e) override {
+		if (e.action == GLFW_PRESS && e.key == GLFW_KEY_ESCAPE && collapseAction) {
+			collapseAction();
+			e.consume(this);
+			return;
+		}
+		widget::OpaqueWidget::onHoverKey(e);
+	}
+};
+
 struct WyrmWidget : ModuleWidget {
 	std::shared_ptr<window::Svg> ageSigilSvg;
 	bool ageSigilUnlocked = false;
+	WyrmEditorDock* editorDock = nullptr;
+	WyrmEditorSurface* editorSurface = nullptr;
+	WyrmEditorGlyphButton* expandEditorButton = nullptr;
+	std::shared_ptr<WyrmEditorOverlayLink> editorOverlayLink;
 
 	explicit WyrmWidget(Wyrm* module) {
 		setModule(module);
+		editorOverlayLink = std::make_shared<WyrmEditorOverlayLink>();
+		editorOverlayLink->owner = this;
 		PreviewBuildLogTimer previewBuildTimer("Wyrm", module);
-		const std::string panelPath = asset::plugin(pluginInstance, "res/wyrm.svg");
-		setPanel(createPanel(panelPath));
+		visual_assets::SplitPanelRenderer splitPanel(this, "res/wyrm.panel.svg");
+		const std::string& panelPath = splitPanel.panelPath();
+		splitPanel.addLabels("res/wyrm.labels.svg");
+		visual_assets::addFractalGlassOverlay(this, panelPath);
 		previewBuildTimer.markPanelDone();
 		try {
-			ageSigilSvg = Svg::load(asset::plugin(pluginInstance, "res/Vahdrim'Keth.svg"));
+			ageSigilSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/Vahdrim'Keth.svg"));
 		}
 		catch (const std::exception& e) {
 			WARN("Wyrm: failed to load age sigil SVG: %s", e.what());
 			ageSigilSvg.reset();
 		}
 
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 		auto applyPt = [&](const char* id, Vec* pos) {
 			Vec p;
@@ -307,7 +493,7 @@ struct WyrmWidget : ModuleWidget {
 		};
 
 		math::Rect editorRectMm(Vec(6.0f, 16.0f), Vec(59.12f, 52.0f));
-		panel_svg::loadRectFromSvgMm(panelPath, "WYRm_WAVE_EDITOR", &editorRectMm);
+		panel_svg::loadRectFromSvgMm(panelPath, "WYRM_WAVE_EDITOR", &editorRectMm);
 		math::Rect freqReadoutRectMm(Vec(editorRectMm.pos.x, editorRectMm.pos.y + editorRectMm.size.y + 1.1f), Vec(editorRectMm.size.x, 3.8f));
 		Vec freqPos(17.5f, 80.0f);
 		Vec waveformSelectPos(35.56f, 75.2f);
@@ -347,36 +533,62 @@ struct WyrmWidget : ModuleWidget {
 		applyPt("WYRM_FOLD_CV_INPUT", &foldCvPos);
 		applyPt("WYRM_RAW_OUTPUT", &rawOutPos);
 		applyPt("WYRM_OUT_OUTPUT", &outPos);
+		const Vec expandEditorPos = lockPos.plus(Vec(-6.75f, 0.f));
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 		previewBuildTimer.markAnchorsDone();
 
-		std::shared_ptr<WyrmSand> sandState = std::make_shared<WyrmSand>();
-		auto* sandGl = createWyrmSandGlWidget(module, sandState);
-		sandGl->box.pos = mm2px(editorRectMm.pos);
-		sandGl->box.size = mm2px(editorRectMm.size);
-		addChild(sandGl);
-		auto* editor = createWyrmWaveEditor(module, sandState);
-		auto* editorFb = new widget::FramebufferWidget();
-		editorFb->box.pos = mm2px(editorRectMm.pos);
-		editorFb->box.size = mm2px(editorRectMm.size);
-		editorFb->dirtyOnSubpixelChange = false;
-		editor->box.size = editorFb->box.size;
-		editorFb->addChild(editor);
-		addChild(editorFb);
+		editorDock = new WyrmEditorDock();
+		editorDock->setPosition(mm2px(editorRectMm.pos));
+		editorDock->setSize(mm2px(editorRectMm.size));
+		editorSurface = new WyrmEditorSurface(module);
+		editorSurface->setPosition(Vec());
+		editorSurface->setEditorSize(editorDock->box.size);
+		editorDock->addChild(editorSurface);
+		addChild(editorDock);
+		addChild(visual_assets::createPreviewFrameEnhancementWidget(editorRectMm, visual_assets::PreviewFrameTint::Purple));
+		expandEditorButton = new WyrmEditorGlyphButton();
+		expandEditorButton->setPosition(mm2px(expandEditorPos).minus(expandEditorButton->box.size.mult(0.5f)));
+		expandEditorButton->enabledAction = [this]() { return this->module != nullptr; };
+		expandEditorButton->collapseGlyphAction = [this]() { return isEditorExpanded(); };
+		expandEditorButton->tooltipTextProvider = [this]() {
+			return isEditorExpanded() ? "Collapse waveform editor" : "Expand waveform editor";
+		};
+		expandEditorButton->buttonAction = [this]() {
+			if (isEditorExpanded()) closeExpandedEditor();
+			else openExpandedEditor();
+		};
+		addChild(expandEditorButton);
 		auto* freqReadout = new WyrmFrequencyReadoutWidget();
 		freqReadout->module = module;
 		freqReadout->box.pos = mm2px(freqReadoutRectMm.pos);
 		freqReadout->box.size = mm2px(freqReadoutRectMm.size);
 		addChild(freqReadout);
 
-		auto addEditorIconButton = [&](WyrmEditorIconButton::Kind kind, Vec posMm) {
-			auto* button = new WyrmEditorIconButton(module, kind);
-			button->box.size = mm2px(Vec(5.2f, 5.2f));
-			button->box.pos = mm2px(posMm).minus(button->box.size.mult(0.5f));
-			addChild(button);
+		auto* lockButton = new WyrmTooltipButton<LeviathanIconButton>();
+		const std::shared_ptr<window::Svg> lockClosedSvg = visual_assets::loadPluginSvgCached("res/icon/lock_closed-highlighted.svg");
+		const std::shared_ptr<window::Svg> lockOpenSvg = visual_assets::loadPluginSvgCached("res/icon/lock_open-highlighted.svg");
+		lockButton->iconProvider = [module, lockClosedSvg, lockOpenSvg]() {
+			return (module && module->editorLocked.load(std::memory_order_relaxed)) ? lockClosedSvg : lockOpenSvg;
 		};
-		addEditorIconButton(WyrmEditorIconButton::LOCK, lockPos);
-		addEditorIconButton(WyrmEditorIconButton::RESET, resetPos);
+		lockButton->tooltipTextProvider = [module]() {
+			return (module && module->editorLocked.load(std::memory_order_relaxed))
+				? "Unlock waveform editor"
+				: "Lock waveform editor";
+		};
+		if (module) {
+			lockButton->buttonAction = [module]() {
+				module->editorLocked.store(!module->editorLocked.load(std::memory_order_relaxed), std::memory_order_relaxed);
+			};
+		}
+		lockButton->box.pos = mm2px(lockPos).minus(lockButton->box.size.mult(0.5f));
+		addChild(lockButton);
+		auto* resetButton = new WyrmTooltipButton<LeviathanResetButton>();
+		resetButton->box.pos = mm2px(resetPos).minus(resetButton->box.size.mult(0.5f));
+		resetButton->tooltipTextProvider = []() { return "Reset waveform"; };
+		if (module) {
+			resetButton->buttonAction = [module]() { module->setFactoryShape(module->selectedShape); };
+		}
+		addChild(resetButton);
 		auto* waveLeft = createParamCentered<WyrmWaveLeftButton>(mm2px(waveformSelectPos.plus(Vec(-2.5f, 0.f))), module, Wyrm::WAVE_LEFT_PARAM);
 		waveLeft->module = module;
 		addParam(waveLeft);
@@ -384,28 +596,102 @@ struct WyrmWidget : ModuleWidget {
 		waveRight->module = module;
 		addParam(waveRight);
 
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(freqPos), module, Wyrm::FREQ_PARAM));
-		addParam(createParamCentered<BefacoTinyKnobWhite>(mm2px(finePos), module, Wyrm::FINE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(fmAttenPos), module, Wyrm::FM_ATTEN_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(foldPos), module, Wyrm::FOLD_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(slitherPos), module, Wyrm::SLITHER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(slitherSpeedPos), module, Wyrm::SLITHER_SPEED_PARAM));
+		addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(freqPos), module, Wyrm::FREQ_PARAM));
+		addParam(createParamCentered<BipolarTinyClockworkGearKnob>(mm2px(finePos), module, Wyrm::FINE_PARAM));
+		{
+			Eclipse2Knob* fmAttenKnob = createParamCentered<Eclipse2Knob>(mm2px(fmAttenPos), module, Wyrm::FM_ATTEN_PARAM);
+			fmAttenKnob->setProgressRingBipolar(true);
+			addParam(fmAttenKnob);
+		}
+		addParam(createParamCentered<Eclipse2Knob>(mm2px(foldPos), module, Wyrm::FOLD_PARAM));
+		addParam(createParamCentered<Eclipse2Knob>(mm2px(slitherPos), module, Wyrm::SLITHER_PARAM));
+		addParam(createParamCentered<Eclipse2Knob>(mm2px(slitherSpeedPos), module, Wyrm::SLITHER_SPEED_PARAM));
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(voctPos), module, Wyrm::VOCT_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(fmPos), module, Wyrm::FM_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(syncPos), module, Wyrm::SYNC_INPUT));
-		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
-			mm2px(syncModePos), module, Wyrm::SYNC_MODE_PARAM, Wyrm::SYNC_MODE_LIGHT
-		));
-		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
-			mm2px(lfoModePos), module, Wyrm::LFO_MODE_PARAM, Wyrm::LFO_MODE_LIGHT
-		));
-		addInput(createInputCentered<PJ301MPort>(mm2px(foldCvPos), module, Wyrm::FOLD_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(slitherCvPos), module, Wyrm::SLITHER_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(slitherSpeedCvPos), module, Wyrm::SLITHER_SPEED_CV_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(voctPos), module, Wyrm::VOCT_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(fmPos), module, Wyrm::FM_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(syncPos), module, Wyrm::SYNC_INPUT));
+		auto addModeToggle = [&](int paramId, int lightId, Vec posMm) {
+			auto* button = createLightParamCentered<SmallGoldApertureButton>(mm2px(posMm), module, paramId, lightId);
+			static_cast<SmallGoldApertureLight*>(button->getLight())->setBaseColor(nvgRGB(255, 118, 24));
+			addParam(button);
+		};
+		addModeToggle(Wyrm::SYNC_MODE_PARAM, Wyrm::SYNC_MODE_LIGHT, syncModePos);
+		addModeToggle(Wyrm::LFO_MODE_PARAM, Wyrm::LFO_MODE_LIGHT, lfoModePos);
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(foldCvPos), module, Wyrm::FOLD_CV_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(slitherCvPos), module, Wyrm::SLITHER_CV_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(slitherSpeedCvPos), module, Wyrm::SLITHER_SPEED_CV_INPUT));
 
-		addOutput(createOutputCentered<BananutBlack>(mm2px(rawOutPos), module, Wyrm::RAW_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(outPos), module, Wyrm::OUT_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(rawOutPos), module, Wyrm::RAW_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outPos), module, Wyrm::OUT_OUTPUT));
+	}
+
+	~WyrmWidget() override {
+		closeExpandedEditor();
+		if (editorOverlayLink) {
+			editorOverlayLink->owner = nullptr;
+		}
+	}
+
+	bool isEditorExpanded() const {
+		return editorOverlayLink && editorOverlayLink->overlay;
+	}
+
+	void openExpandedEditor() {
+		if (isEditorExpanded() || !module || !APP || !APP->scene || !editorDock || !editorSurface) {
+			return;
+		}
+		auto* overlay = new WyrmExpandedEditorOverlay();
+		overlay->anchorDock = editorDock;
+		overlay->editorSurface = editorSurface;
+		overlay->link = editorOverlayLink;
+		const std::shared_ptr<WyrmEditorOverlayLink> link = editorOverlayLink;
+		overlay->collapseAction = [link]() {
+			if (link && link->owner) {
+				link->owner->closeExpandedEditor();
+			}
+		};
+		editorOverlayLink->overlay = overlay;
+
+		editorDock->removeChild(editorSurface);
+		editorDock->expanded = true;
+		overlay->editorZoom->addChild(editorSurface);
+		overlay->layoutToScene();
+		if (APP->scene->menuBar && APP->scene->hasChild(APP->scene->menuBar)) {
+			APP->scene->addChildBelow(overlay, APP->scene->menuBar);
+		}
+		else {
+			APP->scene->addChild(overlay);
+		}
+		editorSurface->resetVisualTransitionState();
+	}
+
+	void closeExpandedEditor() {
+		WyrmExpandedEditorOverlay* overlay = editorOverlayLink ? editorOverlayLink->overlay : nullptr;
+		if (!overlay) {
+			return;
+		}
+		if (editorSurface && overlay->editorZoom && editorSurface->parent == overlay->editorZoom) {
+			overlay->editorZoom->removeChild(editorSurface);
+		}
+		if (editorSurface && editorDock && !editorSurface->parent) {
+			editorDock->addChild(editorSurface);
+			editorSurface->setPosition(Vec());
+			editorSurface->setEditorSize(editorDock->box.size);
+			editorSurface->resetVisualTransitionState();
+		}
+		if (editorDock) {
+			editorDock->expanded = false;
+		}
+		overlay->anchorDock = nullptr;
+		overlay->editorSurface = nullptr;
+		overlay->collapseAction = nullptr;
+		editorOverlayLink->overlay = nullptr;
+		if (overlay->parent) {
+			overlay->requestDelete();
+		}
+		else {
+			delete overlay;
+		}
 	}
 
 	void step() override {
@@ -507,6 +793,12 @@ struct WyrmWidget : ModuleWidget {
 		};
 
 		menu->addChild(new MenuSeparator());
+		menu->addChild(createMenuItem(
+			isEditorExpanded() ? "Collapse Waveform Editor" : "Expand Waveform Editor", "",
+			[this]() {
+				if (isEditorExpanded()) closeExpandedEditor();
+				else openExpandedEditor();
+			}));
 		menu->addChild(createCheckMenuItem("Lock Wave Editor", "",
 			[=]() { return module->editorLocked.load(std::memory_order_relaxed); },
 			[=]() { module->editorLocked.store(!module->editorLocked.load(std::memory_order_relaxed), std::memory_order_relaxed); }

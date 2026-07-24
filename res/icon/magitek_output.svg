@@ -1,0 +1,605 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 500 500"
+   width="100%"
+   height="100%"
+   version="1.1"
+   id="svg17"
+   sodipodi:docname="magitek_output.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="2.3499999"
+     inkscape:cx="304.04256"
+     inkscape:cy="267.02128"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg17" />
+  <defs
+     id="defs9">
+    <filter
+       id="dark-shadow"
+       x="0"
+       y="0"
+       width="1"
+       height="1">
+      <feDropShadow
+         dx="0"
+         dy="4"
+         stdDeviation="12"
+         flood-color="#000000"
+         flood-opacity="0.8" />
+    </filter>
+    <linearGradient
+       id="gold-metallic"
+       x1="78.562113"
+       y1="41.814048"
+       x2="459.53455"
+       y2="422.78649"
+       gradientTransform="scale(0.92920107,1.0761933)"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0.60311335"
+         stop-color="#ffffff"
+         stop-opacity="0.6"
+         id="stop3"
+         style="stop-color:#bfc8d1;stop-opacity:1;" />
+      <stop
+         offset="0.748115"
+         stop-color="#ffffff"
+         stop-opacity="0.6"
+         id="stop1"
+         style="stop-color:#4b5660;stop-opacity:1;" />
+      <stop
+         offset="0.99293512"
+         stop-color="#e5c158"
+         id="stop2"
+         style="stop-color:#425667;stop-opacity:1;" />
+    </linearGradient>
+    <linearGradient
+       id="inner-bevel"
+       x1="0%"
+       y1="100%"
+       x2="100%"
+       y2="0%">
+      <stop
+         offset="0%"
+         stop-color="#3a2802"
+         id="stop6" />
+      <stop
+         offset="70%"
+         stop-color="#ffd966"
+         id="stop7" />
+      <stop
+         offset="100%"
+         stop-color="#ffffff"
+         id="stop8" />
+    </linearGradient>
+    <linearGradient
+       id="solder-pad-metal"
+       x1="0%"
+       y1="100%"
+       x2="100%"
+       y2="0%">
+      <stop
+         offset="0%"
+         stop-color="#6f7680"
+         id="stop-solder-1" />
+      <stop
+         offset="38%"
+         stop-color="#d7dde4"
+         id="stop-solder-2" />
+      <stop
+         offset="66%"
+         stop-color="#f8fbff"
+         id="stop-solder-3" />
+      <stop
+         offset="100%"
+         stop-color="#8b929c"
+         id="stop-solder-4" />
+    </linearGradient>
+    <linearGradient
+       id="copper-wire"
+       x1="221"
+       y1="136"
+       x2="278"
+       y2="92"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0%"
+         stop-color="#6a2e12"
+         id="stop-copper-1" />
+      <stop
+         offset="28%"
+         stop-color="#e07b2d"
+         id="stop-copper-2" />
+      <stop
+         offset="54%"
+         stop-color="#ffd08a"
+         id="stop-copper-3" />
+      <stop
+         offset="78%"
+         stop-color="#b64e19"
+         id="stop-copper-4" />
+      <stop
+         offset="100%"
+         stop-color="#4a1b0b"
+         id="stop-copper-5" />
+    </linearGradient>
+    <filter
+       id="neon-glow"
+       x="-0.13047619"
+       y="-0.13047619"
+       width="1.2609524"
+       height="1.2609524">
+      <feGaussianBlur
+         stdDeviation="6"
+         result="blur"
+         id="feGaussianBlur8" />
+      <feMerge
+         id="feMerge9">
+        <feMergeNode
+           in="blur"
+           id="feMergeNode8" />
+        <feMergeNode
+           in="SourceGraphic"
+           id="feMergeNode9" />
+      </feMerge>
+    </filter>
+    <radialGradient
+       xlink:href="#gold-metallic"
+       id="radialGradient17"
+       cx="250"
+       cy="250"
+       fx="250"
+       fy="250"
+       r="177"
+       gradientTransform="matrix(1.0745863,-0.00800914,0.00928325,1.1584786,-20.967403,-37.617367)"
+       gradientUnits="userSpaceOnUse" />
+    <clipPath
+       id="outer-nut-clip"
+       clipPathUnits="userSpaceOnUse">
+      <polygon
+         points="450.918,134 450.918,366 250,482 49.082,366 49.082,134 250,18"
+         id="polygon1" />
+    </clipPath>
+  </defs>
+  <polygon
+     points="450.918,134 450.918,366 250,482 49.082,366 49.082,134 250,18"
+     fill="url(#gold-metallic)"
+     id="polygon10"
+     style="display:inline;opacity:1;fill:url(#radialGradient17)" />
+  <g
+     id="weathered-gold-nut"
+     clip-path="url(#outer-nut-clip)"
+     style="display:none">
+    <polygon
+       points="450.918,366 250,482 49.082,366 49.082,134 250,18 450.918,134 "
+       fill="none"
+       stroke="#05070a"
+       stroke-width="13"
+       stroke-opacity="0.34"
+       id="polygon2" />
+    <path
+       d="m 92,154 c 50,-28 95,-41 153,-45"
+       fill="none"
+       stroke="#dce7f0"
+       stroke-width="7"
+       stroke-linecap="round"
+       stroke-opacity="0.24"
+       id="path2" />
+    <path
+       d="m 314,94 c 49,14 82.38298,50.10638 120.38298,95.10638"
+       fill="none"
+       stroke="#95a5b3"
+       stroke-width="8"
+       stroke-linecap="round"
+       stroke-opacity="0.2"
+       id="path3"
+       sodipodi:nodetypes="cc" />
+    <path
+       d="M 448,318 C 421,377 368,423 300,446"
+       fill="none"
+       stroke="#090d12"
+       stroke-width="10"
+       stroke-linecap="round"
+       stroke-opacity="0.24"
+       id="path4" />
+    <path
+       d="m 70,306 c 23,65 75,115 144,142"
+       fill="none"
+       stroke="#0d1218"
+       stroke-width="11"
+       stroke-linecap="round"
+       stroke-opacity="0.22"
+       id="path5" />
+    <ellipse
+       cx="151"
+       cy="165"
+       rx="42"
+       ry="18"
+       fill="#1d2730"
+       fill-opacity="0.22"
+       transform="rotate(-18,151,165)"
+       id="ellipse5" />
+    <ellipse
+       cx="374"
+       cy="168"
+       rx="50"
+       ry="20"
+       fill="#070b10"
+       fill-opacity="0.18"
+       transform="rotate(31,374,168)"
+       id="ellipse6" />
+    <ellipse
+       cx="385"
+       cy="360"
+       rx="54"
+       ry="21"
+       fill="#2f3a42"
+       fill-opacity="0.2"
+       transform="rotate(-36,385,360)"
+       id="ellipse7" />
+    <ellipse
+       cx="129"
+       cy="349"
+       rx="50"
+       ry="19"
+       fill="#06090d"
+       fill-opacity="0.19"
+       transform="rotate(42,129,349)"
+       id="ellipse8" />
+    <g
+       id="nut-scratches"
+       fill="none"
+       stroke-linecap="round"
+       stroke-width="4">
+      <path
+         d="m 112,197 76,-23"
+         stroke="#d4e0ea"
+         stroke-opacity="0.28"
+         id="path8" />
+      <path
+         d="m 330,126 84,51"
+         stroke="#b4c0cb"
+         stroke-opacity="0.22"
+         id="path9" />
+      <path
+         d="M 420,292 350,395"
+         stroke="#9aa7b2"
+         stroke-opacity="0.18"
+         id="path10" />
+      <path
+         d="m 91,295 68,108"
+         stroke="#9aa7b2"
+         stroke-opacity="0.18"
+         id="path11" />
+      <path
+         d="m 155,129 59,-10"
+         stroke="#05070a"
+         stroke-opacity="0.26"
+         id="path12" />
+      <path
+         d="m 296,434 61,-31"
+         stroke="#05070a"
+         stroke-opacity="0.3"
+         id="path13" />
+    </g>
+  </g>
+  <circle
+     cx="250"
+     cy="250"
+     r="160"
+     fill="#0d0d0d"
+     stroke="#553a05"
+     stroke-width="4"
+     id="circle11"
+     style="display:inline;stroke:none;stroke-opacity:1;fill:#000000;fill-opacity:1" />
+  <circle
+     cx="250"
+     cy="250"
+     r="125"
+     fill="#000000"
+     id="circle13"
+     style="display:inline" />
+  <g
+     id="copper-wire-coil-foreground"
+     fill="none"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     style="display:inline"
+     transform="matrix(1.1942377,0,0,1.1942377,-48.559425,-48.559425)">
+    <g
+       id="copper-wire-coil-foreground-shadows"
+       stroke="#250b04"
+       stroke-width="9"
+       opacity="0.5">
+      <circle
+         cx="250"
+         cy="250"
+         r="121.5"
+         id="copper-wire-shadow-loop-outer" />
+      <circle
+         cx="250"
+         cy="250"
+         r="112.5"
+         id="copper-wire-shadow-loop-mid" />
+      <circle
+         cx="250"
+         cy="250"
+         r="103.5"
+         id="copper-wire-shadow-loop-inner" />
+      <path
+         d="m 250,128 v 18"
+         id="copper-wire-shadow-bridge-01" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(30,250,250)"
+         id="copper-wire-shadow-bridge-02" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(60,250,250)"
+         id="copper-wire-shadow-bridge-03" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(90,250,250)"
+         id="copper-wire-shadow-bridge-04" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(120,250,250)"
+         id="copper-wire-shadow-bridge-05" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(150,250,250)"
+         id="copper-wire-shadow-bridge-06" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(180,250,250)"
+         id="copper-wire-shadow-bridge-07" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-150,250,250)"
+         id="copper-wire-shadow-bridge-08" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-120,250,250)"
+         id="copper-wire-shadow-bridge-09" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-90,250,250)"
+         id="copper-wire-shadow-bridge-10" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-60,250,250)"
+         id="copper-wire-shadow-bridge-11" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-30,250,250)"
+         id="copper-wire-shadow-bridge-12" />
+    </g>
+    <g
+       id="copper-wire-coil-foreground-wraps"
+       stroke="#d56a25"
+       stroke-width="6.2"
+       opacity="0.98">
+      <circle
+         cx="250"
+         cy="250"
+         r="121.5"
+         id="copper-wire-wrap-loop-outer" />
+      <circle
+         cx="250"
+         cy="250"
+         r="112.5"
+         id="copper-wire-wrap-loop-mid" />
+      <circle
+         cx="250"
+         cy="250"
+         r="103.5"
+         id="copper-wire-wrap-loop-inner" />
+      <path
+         d="m 250,128 v 18"
+         id="copper-wire-wrap-bridge-01" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(30,250,250)"
+         id="copper-wire-wrap-bridge-02" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(60,250,250)"
+         id="copper-wire-wrap-bridge-03" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(90,250,250)"
+         id="copper-wire-wrap-bridge-04" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(120,250,250)"
+         id="copper-wire-wrap-bridge-05" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(150,250,250)"
+         id="copper-wire-wrap-bridge-06" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(180,250,250)"
+         id="copper-wire-wrap-bridge-07" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-150,250,250)"
+         id="copper-wire-wrap-bridge-08" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-120,250,250)"
+         id="copper-wire-wrap-bridge-09" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-90,250,250)"
+         id="copper-wire-wrap-bridge-10" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-60,250,250)"
+         id="copper-wire-wrap-bridge-11" />
+      <path
+         d="m 250,128 v 18"
+         transform="rotate(-30,250,250)"
+         id="copper-wire-wrap-bridge-12" />
+    </g>
+    <g
+       id="copper-wire-coil-foreground-highlights"
+       stroke="#ffe6b7"
+       stroke-width="1.5"
+       opacity="0.86">
+      <path
+         d="m 164,164 a 121.5,121.5 0 0 1 86,-35.5"
+         id="copper-wire-highlight-outer" />
+      <path
+         d="m 170,170 a 112.5,112.5 0 0 1 80,-32.5"
+         id="copper-wire-highlight-mid" />
+      <path
+         d="m 177,177 a 103.5,103.5 0 0 1 73,-30.5"
+         id="copper-wire-highlight-inner" />
+    </g>
+  </g>
+  <g
+     id="space-tech-detail"
+     style="display:inline">
+    <g
+       id="contact-pads"
+       fill="none"
+       stroke="#000000"
+       stroke-width="42"
+       stroke-linecap="round"
+       opacity="0.9"
+       style="display:inline;opacity:1;mix-blend-mode:normal;fill:none;stroke:#000000;stroke-width:42;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1">
+      <path
+         d="M 250,137 V 76"
+         id="contact-pad-top"
+         style="stroke-width:42;stroke-linecap:round;stroke-dasharray:none" />
+      <path
+         d="M 250,137 V 76"
+         transform="rotate(60,250,250)"
+         id="contact-pad-upper-right"
+         style="stroke-width:42;stroke-linecap:round;stroke-dasharray:none" />
+      <path
+         d="M 250,137 V 76"
+         transform="rotate(120,250,250)"
+         id="contact-pad-lower-right"
+         style="stroke-width:42;stroke-linecap:round;stroke-dasharray:none" />
+      <path
+         d="M 250,137 V 76"
+         transform="rotate(180,250,250)"
+         id="contact-pad-bottom"
+         style="stroke-width:42;stroke-linecap:round;stroke-dasharray:none" />
+      <path
+         d="M 250,137 V 76"
+         transform="rotate(-120,250,250)"
+         id="contact-pad-lower-left"
+         style="stroke-width:42;stroke-linecap:round;stroke-dasharray:none" />
+      <path
+         d="M 250,137 V 76"
+         transform="rotate(-60,250,250)"
+         id="contact-pad-upper-left"
+         style="stroke-width:42;stroke-linecap:round;stroke-dasharray:none" />
+    </g>
+    <g
+       id="cyan-conduits"
+       stroke="#00e5ff"
+       stroke-linecap="round"
+       fill="none"
+       opacity="0.78"
+       style="display:inline;opacity:1;stroke-width:16;stroke-linecap:round;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:none;stroke-dashoffset:0;paint-order:normal">
+      <path
+         d="M 250,137 V 76"
+         stroke-width="3.5"
+         id="path14"
+         style="stroke-width:16;stroke-linecap:round;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:none;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,137 V 76"
+         stroke-width="3.5"
+         transform="rotate(60,250,250)"
+         id="path15"
+         style="stroke-width:16;stroke-linecap:round;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:none;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,137 V 76"
+         stroke-width="3.5"
+         transform="rotate(120,250,250)"
+         id="path6"
+         style="stroke-width:16;stroke-linecap:round;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:none;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,137 V 76"
+         stroke-width="3.5"
+         transform="rotate(180,250,250)"
+         id="path16"
+         style="stroke-width:16;stroke-linecap:round;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:none;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,137 V 76"
+         stroke-width="3.5"
+         transform="rotate(-120,250,250)"
+         id="path17"
+         style="stroke-width:16;stroke-linecap:round;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:none;stroke-dashoffset:0;paint-order:normal" />
+      <path
+         d="M 250,137 V 76"
+         stroke-width="3.5"
+         transform="rotate(-60,250,250)"
+         id="path18"
+         style="stroke-width:16;stroke-linecap:round;stroke-linejoin:bevel;stroke-miterlimit:3;stroke-dasharray:none;stroke-dashoffset:0;paint-order:normal" />
+    </g>
+  </g>
+  <circle
+     cx="250"
+     cy="250"
+     r="105"
+     fill="none"
+     stroke="#0099ab"
+     stroke-width="26"
+     filter="url(#neon-glow)"
+     opacity="0.6"
+     id="circle14"
+     style="display:inline" />
+  <circle
+     cx="250"
+     cy="250"
+     r="105"
+     fill="none"
+     stroke="#00e5ff"
+     stroke-width="16"
+     id="circle15"
+     style="display:inline" />
+  <circle
+     cx="250"
+     cy="250"
+     r="115"
+     fill="none"
+     stroke="#000000"
+     stroke-width="4"
+     opacity="0.5"
+     id="circle16"
+     style="display:inline" />
+  <circle
+     cx="250"
+     cy="250"
+     r="95"
+     fill="none"
+     stroke="#000000"
+     stroke-width="3"
+     opacity="0.4"
+     id="circle17"
+     style="display:inline" />
+</svg>

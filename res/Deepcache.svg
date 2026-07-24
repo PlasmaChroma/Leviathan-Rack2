@@ -1,0 +1,354 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="20.32mm"
+   height="128.5mm"
+   viewBox="0 0 2032 12850"
+   version="1.1"
+   id="svg16"
+   sodipodi:docname="Deepcache.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview16"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     showgrid="false"
+     inkscape:zoom="3.421466"
+     inkscape:cx="-49.101759"
+     inkscape:cy="158.55777"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg16" />
+  <defs
+     id="defs5">
+    <linearGradient
+       id="linearGradient16"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#7a5cff;stop-opacity:1;"
+         offset="0"
+         id="stop16" />
+      <stop
+         style="stop-color:#1cccd9;stop-opacity:1;"
+         offset="1"
+         id="stop17" />
+    </linearGradient>
+    <linearGradient
+       id="linearGradient14"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#7a5cff;stop-opacity:1;"
+         offset="0"
+         id="stop14" />
+      <stop
+         style="stop-color:#1cccd9;stop-opacity:1;"
+         offset="1"
+         id="stop15" />
+    </linearGradient>
+    <linearGradient
+       id="panel"
+       x1="0"
+       y1="0"
+       x2="0"
+       y2="1">
+      <stop
+         offset="0"
+         stop-color="#090d16"
+         id="stop1" />
+      <stop
+         offset="0.55"
+         stop-color="#111a29"
+         id="stop2" />
+      <stop
+         offset="1"
+         stop-color="#080b13"
+         id="stop3" />
+    </linearGradient>
+    <linearGradient
+       id="trace"
+       x1="1.8468709"
+       y1="41.992205"
+       x2="11.685836"
+       y2="41.992205"
+       gradientTransform="matrix(1.5004763,0,0,0.66645503,0,-14.899916)"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         stop-color="#21d7df"
+         id="stop4" />
+      <stop
+         offset="1"
+         stop-color="#8d62ff"
+         id="stop5" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient14"
+       id="linearGradient15"
+       x1="3.4660004"
+       y1="3.9960867"
+       x2="17.086756"
+       y2="3.9960867"
+       gradientUnits="userSpaceOnUse" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient16"
+       id="linearGradient17"
+       x1="1.2018647"
+       y1="8.3479995"
+       x2="19.134012"
+       y2="8.3479995"
+       gradientUnits="userSpaceOnUse" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient20"
+       id="linearGradient1"
+       gradientUnits="userSpaceOnUse"
+       x1="5496.8262"
+       y1="12956.067"
+       x2="7087.4873"
+       y2="12956.067"
+       gradientTransform="matrix(0.01390218,0,0,0.01390218,-77.301789,-51.195959)" />
+    <linearGradient
+       id="linearGradient20"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#795cff;stop-opacity:1"
+         offset="0"
+         id="stop20" />
+      <stop
+         style="stop-color:#1cccd9;stop-opacity:1;"
+         offset="1"
+         id="stop21" />
+    </linearGradient>
+  </defs>
+  <g
+     inkscape:label="panel"
+     transform="scale(100)"
+     id="g15">
+    <rect
+       width="20.32"
+       height="128.5"
+       fill="url(#panel)"
+       id="rect5"
+       x="0"
+       y="0" />
+    <rect
+       x="0.44999999"
+       y="0.44999999"
+       width="19.42"
+       height="127.6"
+       rx="1.2"
+       fill="none"
+       stroke="#31425e"
+       stroke-width="0.35"
+       id="rect6"
+       style="display:none" />
+    <path
+       d="m 3,15.100084 c 4,-5.9999991 10,6 14.3,-1 m -14.3,4 c 4,-6 10,6 14.3,-1"
+       fill="none"
+       stroke="url(#trace)"
+       stroke-width="0.55"
+       opacity="0.82"
+       id="path6"
+       style="stroke:#7a5cff;fill:none;stroke-opacity:1;fill-opacity:1;opacity:1" />
+  </g>
+  <g
+     inkscape:label="components"
+     opacity="0"
+     id="g16"
+     style="display:none;opacity:1">
+    <rect
+       id="progress"
+       x="300"
+       y="2709.9751"
+       width="1432"
+       height="700" />
+    <rect
+       id="progress_count"
+       x="300"
+       y="3429.9751"
+       width="1432"
+       height="450" />
+    <rect
+       id="framebuffer_progress"
+       x="300"
+       y="4919.9771"
+       width="1432"
+       height="700" />
+    <rect
+       id="database_status"
+       x="300"
+       y="7260.0005"
+       width="1432"
+       height="1218.6809"
+       style="stroke-width:1.36927" />
+    <circle
+       id="planning_light"
+       cx="450"
+       cy="9359.958"
+       r="50" />
+    <circle
+       id="warming_light"
+       cx="450"
+       cy="10059.958"
+       r="50" />
+    <circle
+       id="ready_light"
+       cx="450"
+       cy="10759.958"
+       r="50" />
+    <circle
+       id="error_light"
+       cx="450"
+       cy="11459.958"
+       r="50" />
+  </g>
+  <g
+     id="labels"
+     transform="scale(100)">
+    <g
+       id="title"
+       style="stroke:none;stroke-opacity:1">
+      <text
+         x="10.159965"
+         y="5.8481731"
+         fill="#e8f9ff"
+         font-family="sans-serif"
+         font-size="3.1px"
+         font-weight="700"
+         text-anchor="middle"
+         id="text6"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.29167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:middle;fill:url(#linearGradient15);fill-opacity:1;font-variation-settings:'wght' 700;stroke:none;stroke-opacity:1"><tspan
+           sodipodi:role="line"
+           id="tspan17">Deep</tspan></text>
+      <text
+         x="10.16"
+         y="10.200081"
+         fill="#8b68ff"
+         font-family="sans-serif"
+         font-size="3.1px"
+         font-weight="700"
+         text-anchor="middle"
+         id="text7"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.29167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=700';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:middle;fill:url(#linearGradient17);fill-opacity:1;font-variation-settings:'wght' 700;stroke:none;stroke-opacity:1"><tspan
+           sodipodi:role="line"
+           id="tspan18">Cache</tspan></text>
+      <text
+         id="reworked_LEVIATHAN_LOGO"
+         x="10.144129"
+         y="126.40186"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.29167px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient1);stroke:none;stroke-width:0.371;stroke-dasharray:none;stroke-opacity:1"
+         xml:space="preserve"
+         inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
+    </g>
+    <text
+       x="10.16"
+       y="25.099775"
+       fill="#a98cff"
+       font-family="sans-serif"
+       font-size="1.25px"
+       letter-spacing="0.18"
+       text-anchor="middle"
+       id="text8"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;letter-spacing:0.18;text-anchor:middle;fill:#a98cff;stroke:none;stroke-opacity:1"><tspan
+         sodipodi:role="line"
+         id="tspan22">BUILDS</tspan></text>
+    <text
+       x="10.16"
+       y="47.199776"
+       fill="#70dce7"
+       font-family="sans-serif"
+       font-size="1.25px"
+       letter-spacing="0.18"
+       text-anchor="middle"
+       id="text9"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;letter-spacing:0.18;text-anchor:middle;fill:#70dce7;stroke:none;stroke-opacity:1"><tspan
+         sodipodi:role="line"
+         id="tspan23"
+         x="10.25"
+         y="47.199776">RASTERS</tspan></text>
+    <defs
+       id="defs1">
+      <text
+         x="10.16"
+         y="67.599777"
+         fill="#889bb3"
+         font-family="sans-serif"
+         font-size="1.05px"
+         letter-spacing="0.14"
+         text-anchor="middle"
+         id="text10"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;stroke:none;stroke-opacity:1;fill:#ffffff;fill-opacity:1">DATABASE</text>
+    </defs>
+    <g
+       id="database_icon"
+       fill="none"
+       stroke="#ffffff"
+       stroke-width="0.55"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       transform="translate(0,2.6000033)">
+      <ellipse
+         cx="10.16"
+         cy="61.799999"
+         rx="4"
+         ry="1.4"
+         id="ellipse1" />
+      <path
+         d="m 6.16,61.8 v 5.6 c 0,0.773 1.791,1.4 4,1.4 2.209,0 4,-0.627 4,-1.4 v -5.6"
+         id="path1" />
+      <path
+         d="m 6.16,64.6 c 0,0.773 1.791,1.4 4,1.4 2.209,0 4,-0.627 4,-1.4"
+         id="path2" />
+      <path
+         d="m 6.16,67.4 c 0,0.773 1.791,1.4 4,1.4 2.209,0 4,-0.627 4,-1.4"
+         id="path3" />
+    </g>
+    <g
+       fill="#73869c"
+       font-family="sans-serif"
+       font-size="1.05px"
+       text-anchor="middle"
+       id="led_labels">
+      <text
+         x="11.75"
+         y="94.599564"
+         id="text11"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;fill:#ffffff;fill-opacity:1;stroke:none;stroke-opacity:1"><tspan
+           sodipodi:role="line"
+           id="tspan1"
+           x="11.75"
+           y="94.599564">PLAN</tspan></text>
+      <text
+         x="11.75"
+         y="101.59956"
+         id="text12"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1;stroke:none;stroke-opacity:1">WARM</text>
+      <text
+         x="11.75"
+         y="108.59959"
+         font-size="0.95px"
+         id="text13"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1;stroke:none;stroke-opacity:1">READY</text>
+      <text
+         x="11.75"
+         y="115.59959"
+         id="text14"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1;stroke:none;stroke-opacity:1">ERR</text>
+    </g>
+  </g>
+</svg>

@@ -18,10 +18,10 @@
       "name": "Integral Flux",
       "description": "Dual slope generator, variable curve slew, attenuverters, signal mixing, full audio-rate fidelity.",
       "tags": [
-        "Function Generator",
+        "Function generator",
         "Logic",
-        "Slew Limiter",
-        "Envelope Follower",
+        "Slew limiter",
+        "Envelope follower",
         "Dual"
       ]
     },
@@ -30,9 +30,9 @@
       "name": "Proc",
       "description": "Generator, slew limiter, and envelope follower.",
       "tags": [
-        "Function Generator",
-        "Slew Limiter",
-        "Envelope Follower"
+        "Function generator",
+        "Slew limiter",
+        "Envelope follower"
       ]
     },
     {
@@ -50,10 +50,39 @@
       "name": "TD.Scope",
       "description": "Expander: Waveform display for Temporal Deck.",
       "tags": [
-        "Visualizer",
+        "Visual",
         "Expander"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Undertow",
+      "name": "Undertow",
+      "description": "Compact analog-style oscillator with sine, morphing shape, and sub-octave outputs.",
+      "tags": [
+        "Oscillator"
+      ],
+      "hidden": false
+    },
+    {
+      "slug": "Iris",
+      "name": "Iris",
+      "description": "Polyphonic image-to-wavetable oscillator with smooth table scanning.",
+      "tags": [
+        "Oscillator",
+        "Visual"
+      ],
+      "hidden": false
+    },
+    {
+      "slug": "Nautiloid",
+      "name": "Nautiloid",
+      "description": "Fractal exploration display for image-source workflows.",
+      "tags": [
+        "Visual",
+        "Expander"
+      ],
+      "hidden": true
     },
     {
       "slug": "Crownstep",
@@ -71,7 +100,7 @@
       "tags": [
         "Filter",
         "Distortion",
-        "Visualizer"
+        "Visual"
       ],
       "hidden": false
     },
@@ -103,11 +132,11 @@
       "description": "Rack-native eight-output clock and modulation engine with direct visual editing.",
       "tags": [
         "Clock generator",
-        "Function Generator",
+        "Function generator",
         "Sequencer",
         "Random"
       ],
-      "hidden": false
+      "hidden": true
     },
     {
       "slug": "Bulkhead",
@@ -116,7 +145,50 @@
       "tags": [
         "Reverb"
       ],
+      "hidden": true
+    },
+    {
+      "slug": "Deepcache",
+      "name": "Deep Cache",
+      "description": "Preloads module-browser previews for faster browsing.",
+      "tags": [
+        "Utility"
+      ],
+      "hidden": false
+    },
+    {
+      "slug": "Umi",
+      "name": "Umi",
+      "description": "Visible pearl-physics probability sequencer with eight sink triggers and event CV.",
+      "tags": [
+        "Sequencer",
+        "Random",
+        "Clock generator",
+        "Visual"
+      ],
+      "hidden": false
+    },
+    {
+      "slug": "Doorstop",
+      "name": "Doorstop",
+      "description": "Impulse-excited physical model of a vibrating spring doorstop.",
+      "tags": [
+        "Physical modeling",
+        "Drum",
+        "Effect"
+      ],
+      "hidden": false
+    },
+    {
+      "slug": "Chromatide",
+      "name": "Chromatide",
+      "description": "Bitmap painting source for Iris.",
+      "tags": [
+        "Visual",
+        "Expander"
+      ],
       "hidden": false
     }
   ]
 }
+

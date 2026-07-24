@@ -16,7 +16,22 @@ bool isDragonKingDebugEnabled() {
 	return false;
 }
 
+bool isModuleTeardownLoggingEnabled() {
+	return false;
+}
+
 void refreshDragonKingDebugEnabled() {
+}
+
+ModuleTeardownTimer::ModuleTeardownTimer(const char* moduleName)
+	: moduleName(moduleName) {
+}
+
+void ModuleTeardownTimer::begin(int moduleId) {
+	this->moduleId = moduleId;
+}
+
+ModuleTeardownTimer::~ModuleTeardownTimer() {
 }
 
 #include "../src/Bifurx.cpp"
@@ -701,6 +716,38 @@ TestResult testDisplayOnlyColorSchemeJsonRoundTripAndPassThrough() {
   };
 }
 
+TestResult testBrowserPreviewUsesSquareWaveFft() {
+  BifurxSpectrumBase display;
+  display.initializeStaticPreviewStateIfNeeded();
+
+  float overlayMin = kOverlayDbfsCeiling;
+  float overlayMax = kOverlayDbfsFloor;
+  bool finite = true;
+  for (int i = 0; i < kCurvePointCount; ++i) {
+    const float value = display.state.overlayOutputDbfs[i];
+    finite = finite && std::isfinite(value);
+    overlayMin = std::min(overlayMin, value);
+    overlayMax = std::max(overlayMax, value);
+  }
+
+  const BifurxPreviewState& preview = display.state.previewState;
+  const bool configured = preview.mode == 0 &&
+    std::fabs(preview.spanParamNorm - 0.33f) < 1e-4f &&
+    preview.freqA > 780.f && preview.freqA < 850.f &&
+    preview.freqB > 2400.f && preview.freqB < 2600.f;
+  const bool squareAlternates = previewProbeStimulusSample(preview, 0) > 0.f &&
+    previewProbeStimulusSample(preview, 200) < 0.f;
+  const bool hasSpectrum = display.state.hasOverlay && (overlayMax - overlayMin) > 12.f;
+
+  return {
+    "Browser preview FFT uses 144 Hz square into default-span Low + Low",
+    configured && squareAlternates && finite && hasSpectrum,
+    "cutoffsHz=(" + std::to_string(preview.freqA) + "," + std::to_string(preview.freqB) +
+      ") rangeDb=" + std::to_string(overlayMax - overlayMin) +
+      " topDbfs=" + std::to_string(display.state.displayTopDbfs)
+  };
+}
+
 }  // namespace
 
 int main() {
@@ -716,6 +763,7 @@ int main() {
     testRuntimeSelfOscSoftOnsetRamp(),
     testRuntimeSelfOscHighResBounded(),
     testDisplayOnlyColorSchemeJsonRoundTripAndPassThrough(),
+    testBrowserPreviewUsesSquareWaveFft(),
   };
 
   int fails = 0;

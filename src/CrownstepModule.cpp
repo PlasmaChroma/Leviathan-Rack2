@@ -1,5 +1,7 @@
 #include "CrownstepShared.hpp"
+#include "DebugTerminalTransport.hpp"
 #include <random>
+#include <unordered_map>
 
 namespace {
 
@@ -8,7 +10,40 @@ struct ChessSearchStats {
 	uint64_t evals = 0;
 	uint64_t legalMoveGenerations = 0;
 	uint64_t cutoffs = 0;
+	uint64_t transpositionHits = 0;
 };
+
+enum ChessTranspositionBound {
+	CHESS_TT_EXACT,
+	CHESS_TT_LOWER,
+	CHESS_TT_UPPER
+};
+
+struct ChessTranspositionEntry {
+	int depth = 0;
+	int score = 0;
+	ChessTranspositionBound bound = CHESS_TT_EXACT;
+};
+
+using ChessTranspositionTable = std::unordered_map<uint64_t, ChessTranspositionEntry>;
+
+uint64_t chessSearchPositionKey(const BoardState& board, const ChessState& state, int sideToMove) {
+	uint64_t hash = 1469598103934665603ull;
+	for (int piece : board) {
+		hash ^= uint64_t(uint32_t(piece + 8));
+		hash *= 1099511628211ull;
+	}
+	const uint64_t stateBits =
+		uint64_t(sideToMove == HUMAN_SIDE) |
+		(uint64_t(state.whiteCanCastleKingSide) << 1) |
+		(uint64_t(state.whiteCanCastleQueenSide) << 2) |
+		(uint64_t(state.blackCanCastleKingSide) << 3) |
+		(uint64_t(state.blackCanCastleQueenSide) << 4) |
+		(uint64_t(state.enPassantTargetIndex + 1) << 5);
+	hash ^= stateBits;
+	hash *= 1099511628211ull;
+	return hash;
+}
 
 int sideAwareScoreForSide(int scoreFromNegativePerspective, int maximizingSide) {
 	return (maximizingSide == AI_SIDE) ? scoreFromNegativePerspective : -scoreFromNegativePerspective;
@@ -90,7 +125,8 @@ int chessSearchForSide(
 	int depth,
 	int alpha,
 	int beta,
-	ChessSearchStats* stats
+	ChessSearchStats* stats,
+	ChessTranspositionTable* transpositions
 ) {
 	if (stats) {
 		stats->nodes++;
@@ -98,6 +134,29 @@ int chessSearchForSide(
 	if (depth <= 0) {
 		int eval = chessEvaluateForSide(board, state, maximizingSide, stats);
 		return (sideToMove == maximizingSide) ? eval : -eval;
+	}
+	const int originalAlpha = alpha;
+	const int originalBeta = beta;
+	const uint64_t positionKey = chessSearchPositionKey(board, state, sideToMove);
+	if (transpositions) {
+		auto cached = transpositions->find(positionKey);
+		if (cached != transpositions->end() && cached->second.depth >= depth) {
+			if (stats) {
+				stats->transpositionHits++;
+			}
+			if (cached->second.bound == CHESS_TT_EXACT) {
+				return cached->second.score;
+			}
+			if (cached->second.bound == CHESS_TT_LOWER) {
+				alpha = std::max(alpha, cached->second.score);
+			}
+			else {
+				beta = std::min(beta, cached->second.score);
+			}
+			if (alpha >= beta) {
+				return cached->second.score;
+			}
+		}
 	}
 	if (stats) {
 		stats->legalMoveGenerations++;
@@ -112,7 +171,8 @@ int chessSearchForSide(
 	for (const Move& move : moves) {
 		ChessState nextState;
 		BoardState nextBoard = crownstep::chessApplyMoveToBoard(board, move, state, &nextState);
-		int value = -chessSearchForSide(nextBoard, nextState, -sideToMove, maximizingSide, depth - 1, -beta, -alpha, stats);
+		int value = -chessSearchForSide(
+			nextBoard, nextState, -sideToMove, maximizingSide, depth - 1, -beta, -alpha, stats, transpositions);
 		best = std::max(best, value);
 		alpha = std::max(alpha, value);
 		if (alpha >= beta) {
@@ -121,6 +181,15 @@ int chessSearchForSide(
 			}
 			break;
 		}
+	}
+	if (transpositions && transpositions->size() < 65536u) {
+		ChessTranspositionEntry entry;
+		entry.depth = depth;
+		entry.score = best;
+		entry.bound = (best <= originalAlpha)
+			? CHESS_TT_UPPER
+			: ((best >= originalBeta) ? CHESS_TT_LOWER : CHESS_TT_EXACT);
+		(*transpositions)[positionKey] = entry;
 	}
 	return best;
 }
@@ -139,6 +208,8 @@ Move chooseChessMoveForSide(const BoardState& board, int difficulty, const Chess
 	int bestScore = std::numeric_limits<int>::min();
 	int alpha = std::numeric_limits<int>::min() / 2;
 	const int beta = std::numeric_limits<int>::max() / 2;
+	ChessTranspositionTable transpositions;
+	transpositions.reserve(65536u);
 	for (int i = 0; i < int(moves.size()); ++i) {
 		ChessState nextState;
 		BoardState nextBoard = crownstep::chessApplyMoveToBoard(board, moves[size_t(i)], state, &nextState);
@@ -150,7 +221,8 @@ Move chooseChessMoveForSide(const BoardState& board, int difficulty, const Chess
 			depth - 1,
 			-beta,
 			-alpha,
-			stats
+			stats,
+			&transpositions
 		);
 		if (score > bestScore || (score == bestScore && moves[size_t(i)].isCapture && !moves[size_t(bestIndex)].isCapture)) {
 			bestScore = score;
@@ -180,6 +252,7 @@ int othelloSearchForSide(const BoardState& board, int sideToMove, int maximizing
 		return -othelloSearchForSide(board, -sideToMove, maximizingSide, depth - 1, -beta, -alpha);
 	}
 
+	crownstep::othelloSortMovesForSearch(&moves, sideToMove);
 	int best = std::numeric_limits<int>::min();
 	for (const Move& move : moves) {
 		BoardState nextBoard = crownstep::othelloApplyMoveToBoard(board, move, sideToMove);
@@ -198,9 +271,12 @@ Move chooseOthelloMoveForSide(const BoardState& board, int difficulty, int aiSid
 	if (moves.empty()) {
 		return Move();
 	}
+	crownstep::othelloSortMovesForSearch(&moves, aiSide);
 	int depth = crownstep::othelloSearchDepthForDifficulty(difficulty);
 	int bestIndex = 0;
 	int bestScore = std::numeric_limits<int>::min();
+	int alpha = std::numeric_limits<int>::min() / 2;
+	const int beta = std::numeric_limits<int>::max() / 2;
 	for (int i = 0; i < int(moves.size()); ++i) {
 		BoardState nextBoard = crownstep::othelloApplyMoveToBoard(board, moves[size_t(i)], aiSide);
 		int score = -othelloSearchForSide(
@@ -208,13 +284,13 @@ Move chooseOthelloMoveForSide(const BoardState& board, int difficulty, int aiSid
 			-aiSide,
 			aiSide,
 			depth - 1,
-			std::numeric_limits<int>::min() / 2,
-			std::numeric_limits<int>::max() / 2
+			-beta,
+			-alpha
 		);
-		int flipBonus = int(moves[size_t(i)].captured.size());
-		if (score > bestScore || (score == bestScore && flipBonus > int(moves[size_t(bestIndex)].captured.size()))) {
+		if (score > bestScore) {
 			bestScore = score;
 			bestIndex = i;
+			alpha = std::max(alpha, bestScore);
 		}
 	}
 	return moves[size_t(bestIndex)];
@@ -252,9 +328,11 @@ Crownstep::Crownstep() {
 	startAiWorker();
 	randomizeBoardValueLayout();
 	setGameMode(GAME_MODE_CHECKERS, true);
+	publishPlaybackSnapshot();
 }
 
 Crownstep::~Crownstep() {
+	teardownTimer.begin(id);
 	stopAiWorker();
 }
 
@@ -921,6 +999,7 @@ void Crownstep::appendDebugRandomMoves(int count) {
 			sequenceTrimRight += 1;
 		}
 	}
+	publishPlaybackSnapshot();
 }
 
 void Crownstep::startNewGame() {
@@ -931,6 +1010,7 @@ void Crownstep::startNewGame() {
 		history.clear();
 		moveHistory.clear();
 	}
+	publishPlaybackSnapshot();
 	highlightedDestinations.clear();
 	opponentHighlightedDestinations.clear();
 	selectedSquare = -1;
@@ -1186,6 +1266,7 @@ void Crownstep::commitMove(const Move& move, int moverSide) {
 			sequenceTrimRight += 1;
 		}
 	}
+	publishPlaybackSnapshot();
 	if (currentSequenceCap() == 1) {
 		eocActivityPulseRequests.fetch_add(1, std::memory_order_relaxed);
 	}
@@ -1241,6 +1322,8 @@ void Crownstep::serviceAiTurnFromUiThread() {
 		if (readyMove.originIndex >= 0 && readyMove.destinationIndex >= 0) {
 			commitMove(readyMove, aiSide());
 			lastAiThinkMs = std::max(0, readyThinkMs);
+			const uint32_t debugInstanceId = (id >= 0) ? uint32_t(id) : 0u;
+			debug_terminal::submitCrownstepAiMetrics(debugInstanceId, lastAiThinkMs);
 		}
 		else if (isOthelloMode()) {
 			advanceForcedPassesIfNeeded();

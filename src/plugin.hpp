@@ -31,14 +31,41 @@ extern Model* modelWyrm;
 extern Model* modelSil;
 extern Model* modelChronomaw;
 extern Model* modelBulkhead;
+extern Model* modelUndertow;
+extern Model* modelIris;
+extern Model* modelNautiloid;
+extern Model* modelDeepcache;
+extern Model* modelUmi;
+extern Model* modelDoorstop;
+extern Model* modelChromatide;
 
 // Local semantic alias so module code can request a white tiny Befaco knob
 // without depending on another plugin's custom class declarations.
 struct BefacoTinyKnobWhite : BefacoTinyKnob {};
 
-// Runtime feature flag: enabled when `res/dragonking.txt` exists.
+// Runtime feature flags loaded from `res/dragonking.txt`.
 bool isDragonKingDebugEnabled();
+bool isDragonKingPreviewWidgetOptionsEnabled();
+bool isCrownstepAddMoveEnabled();
+bool isClockworkDragDebugLoggingEnabled();
+bool isTemporalDeckLifetimeLoggingEnabled();
+bool isModuleTeardownLoggingEnabled();
+bool isScopeDrawLoggingEnabled();
+bool isIntegralFluxDrawLoggingEnabled();
+bool isExtraGlValidationEnabled();
+bool isDragonKingUserFractalParamsEnabled();
 void refreshDragonKingDebugEnabled();
+
+struct ModuleTeardownTimer {
+	const char* moduleName = nullptr;
+	int moduleId = -1;
+	bool active = false;
+	std::chrono::steady_clock::time_point startedAt;
+
+	explicit ModuleTeardownTimer(const char* moduleName);
+	~ModuleTeardownTimer();
+	void begin(int moduleId);
+};
 
 struct PreviewBuildLogTimer {
 	const char* moduleName = nullptr;

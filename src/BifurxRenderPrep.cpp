@@ -85,7 +85,7 @@ void prepareOverlayTargetsFromSpectra(
 	const float amplitudeScaleSq = amplitudeScale * amplitudeScale;
 	for (int bin = 0; bin < kFftBinCount; ++bin) {
 		const float binHz = (float(bin) * sampleRate) / float(kFftSize);
-		const float subsonicWeight = clamp01((binHz - kOverlaySubsonicCutHz) / (kOverlaySubsonicFadeHz - kOverlaySubsonicCutHz));
+		const float subsonicWeight = levi_math::clamp01((binHz - kOverlaySubsonicCutHz) / (kOverlaySubsonicFadeHz - kOverlaySubsonicCutHz));
 		const float weightedPowerScale = subsonicWeight * subsonicWeight * amplitudeScaleSq;
 		binOutputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftOutputFreq, bin);
 		if (moduleResponseEnabled) {
@@ -154,7 +154,8 @@ void prepareCurveSnapshot(const BifurxUiRenderRequest& request, BifurxUiRenderSn
 	if (!snapshot) {
 		return;
 	}
-	const auto prepStart = std::chrono::steady_clock::now();
+	const bool measurePrep = isDragonKingDebugEnabled();
+	const auto prepStart = measurePrep ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
 	snapshot->displayId = request.displayId;
 	snapshot->requestSeq = request.requestSeq;
 	snapshot->previewSeq = request.previewSeq;
@@ -182,8 +183,8 @@ void prepareCurveSnapshot(const BifurxUiRenderRequest& request, BifurxUiRenderSn
 			}
 		}
 		snapshot->hasCurveTarget = true;
-		snapshot->curvePrepUs = float(std::chrono::duration_cast<std::chrono::microseconds>(
-			std::chrono::steady_clock::now() - prepStart).count());
+		snapshot->curvePrepUs = measurePrep ? float(std::chrono::duration_cast<std::chrono::microseconds>(
+			std::chrono::steady_clock::now() - prepStart).count()) : 0.f;
 	}
 	else {
 		snapshot->curvePrepUs = 0.f;
@@ -193,7 +194,7 @@ void prepareCurveSnapshot(const BifurxUiRenderRequest& request, BifurxUiRenderSn
 		return;
 	}
 
-	const auto overlayPrepStart = std::chrono::steady_clock::now();
+	const auto overlayPrepStart = measurePrep ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
 	thread_local WorkerOverlayScratch scratch;
 	const bool displayOnlyMode = isBifurxDisplayOnlyMode(request.previewState.mode);
 	for (int i = 0; i < kFftSize; ++i) {
@@ -229,8 +230,8 @@ void prepareCurveSnapshot(const BifurxUiRenderRequest& request, BifurxUiRenderSn
 		&snapshot->displayTopTargetDbfs
 	);
 	snapshot->hasOverlayTarget = true;
-	snapshot->overlayPrepUs = float(std::chrono::duration_cast<std::chrono::microseconds>(
-		std::chrono::steady_clock::now() - overlayPrepStart).count());
+	snapshot->overlayPrepUs = measurePrep ? float(std::chrono::duration_cast<std::chrono::microseconds>(
+		std::chrono::steady_clock::now() - overlayPrepStart).count()) : 0.f;
 }
 
 } // namespace bifurx

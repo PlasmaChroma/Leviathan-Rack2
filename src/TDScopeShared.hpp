@@ -55,8 +55,9 @@ inline ScopeWindowLagSpan computeScopeWindowLagSpan(const temporaldeck_expander:
   span.windowBottomLag = msg.lagSamples - span.forwardWindowSamples;
   if (msg.scopeBinCount > 0u && std::isfinite(msg.scopeStartLagSamples) && std::isfinite(msg.scopeBinSpanSamples) &&
       msg.scopeBinSpanSamples > 0.f) {
-    span.windowTopLag = msg.scopeStartLagSamples;
-    span.windowBottomLag = msg.scopeStartLagSamples - span.totalWindowSamples;
+    span.windowTopLag =
+      std::isfinite(msg.scopeVisibleStartLagSamples) ? msg.scopeVisibleStartLagSamples : msg.scopeStartLagSamples;
+    span.windowBottomLag = span.windowTopLag - span.totalWindowSamples;
     if (!sampleMode) {
       span.backwardWindowSamples = span.windowTopLag - msg.lagSamples;
       span.forwardWindowSamples = msg.lagSamples - span.windowBottomLag;
@@ -139,8 +140,11 @@ inline float computeLagDragVelocity(float previousLagSamples, float currentLagSa
 inline std::pair<float, float> computeScopePeakStatsFromBins(const temporaldeck_expander::ScopeBin* leftScopeBins,
                                                              const temporaldeck_expander::ScopeBin* rightScopeBins,
                                                              uint32_t scopeBinCount,
-                                                             bool renderStereo) {
-  std::vector<float> peaks;
+                                                             bool renderStereo,
+                                                             std::vector<float>* scratchPeaks = nullptr) {
+  std::vector<float> localPeaks;
+  std::vector<float>& peaks = scratchPeaks ? *scratchPeaks : localPeaks;
+  peaks.clear();
   peaks.reserve(renderStereo ? scopeBinCount * 2u : scopeBinCount);
   for (uint32_t i = 0; i < scopeBinCount; ++i) {
     const temporaldeck_expander::ScopeBin& bin = leftScopeBins[i];
@@ -195,20 +199,21 @@ inline float updateScopeAutoScale(ScopeAutoScaleState* state,
       p99Volts = windowPeakVolts;
     }
     const float truePeakVolts = windowPeakVolts;
+    const float stablePeakVolts = std::max(p99Volts, truePeakVolts * 0.72f);
 
     if (modeChanged || !std::isfinite(state->livePeakHoldVolts)) {
-      state->livePeakHoldVolts = truePeakVolts;
+      state->livePeakHoldVolts = stablePeakVolts;
       state->livePeakHoldFrames = 0;
-    } else if (truePeakVolts > state->livePeakHoldVolts) {
-      state->livePeakHoldVolts = truePeakVolts;
-      state->livePeakHoldFrames = 36; // ~600ms @ 60Hz
+    } else if (stablePeakVolts > state->livePeakHoldVolts) {
+      state->livePeakHoldVolts += (stablePeakVolts - state->livePeakHoldVolts) * 0.55f;
+      state->livePeakHoldFrames = 14; // ~230ms @ 60Hz
     } else if (state->livePeakHoldFrames > 0) {
       state->livePeakHoldFrames--;
     } else {
-      state->livePeakHoldVolts += (truePeakVolts - state->livePeakHoldVolts) * 0.015f;
+      state->livePeakHoldVolts += (stablePeakVolts - state->livePeakHoldVolts) * 0.006f;
     }
 
-    float targetFullScaleVolts = std::max(p99Volts * 1.10f, state->livePeakHoldVolts * 1.02f);
+    float targetFullScaleVolts = std::max(p99Volts * 1.08f, state->livePeakHoldVolts * 1.015f);
     targetFullScaleVolts = clamp(targetFullScaleVolts, 0.25f, temporaldeck_expander::kPreviewQuantizeVolts);
 
     if (!modeChanged) {
@@ -225,10 +230,10 @@ inline float updateScopeAutoScale(ScopeAutoScaleState* state,
     } else {
       const float delta = targetFullScaleVolts - state->displayFullScaleVolts;
       if (std::fabs(delta) > 0.01f) {
-        const float kAutoScaleAttackAlpha = 0.08f;
-        const float kAutoScaleReleaseAlpha = 0.008f;
-        const float kAutoScaleAttackAlphaDrag = 0.033f;
-        const float kAutoScaleReleaseAlphaDrag = 0.0033f;
+        const float kAutoScaleAttackAlpha = 0.045f;
+        const float kAutoScaleReleaseAlpha = 0.0045f;
+        const float kAutoScaleAttackAlphaDrag = 0.020f;
+        const float kAutoScaleReleaseAlphaDrag = 0.0020f;
         const float alpha = delta > 0.f
                               ? (dragActive ? kAutoScaleAttackAlphaDrag : kAutoScaleAttackAlpha)
                               : (dragActive ? kAutoScaleReleaseAlphaDrag : kAutoScaleReleaseAlpha);

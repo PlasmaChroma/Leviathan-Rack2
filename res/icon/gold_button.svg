@@ -1,0 +1,505 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="64"
+   height="64"
+   viewBox="0 0 64 64"
+   version="1.1"
+   id="svg315"
+   sodipodi:docname="gold_button.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs315">
+    <linearGradient
+       id="linearGradient2"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#b2965a;stop-opacity:1;"
+         offset="0.83789062"
+         id="stop3" />
+      <stop
+         style="stop-color:#000000;stop-opacity:1;"
+         offset="1"
+         id="stop4" />
+    </linearGradient>
+    <linearGradient
+       id="linearGradient1"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#d8b66e;stop-opacity:1;"
+         offset="0.82421035"
+         id="stop1" />
+      <stop
+         style="stop-color:#000000;stop-opacity:1;"
+         offset="1"
+         id="stop2" />
+    </linearGradient>
+    <radialGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient1"
+       id="radialGradient2"
+       cx="31.999996"
+       cy="31.700001"
+       fx="31.999994"
+       fy="31.700001"
+       r="28.15"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(1.1328115,-4.6003685e-4,4.5440143e-4,1.1189387,-4.2643667,-3.7556347)" />
+    <radialGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient2"
+       id="radialGradient4"
+       cx="32"
+       cy="31.700001"
+       fx="32"
+       fy="31.700001"
+       r="28.15"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(1.1328115,-4.6003752e-4,4.5440376e-4,1.1189387,-4.2643704,-3.7556346)" />
+  </defs>
+  <sodipodi:namedview
+     id="namedview315"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="16"
+     inkscape:cx="21.0625"
+     inkscape:cy="32.46875"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg315"
+     showgrid="false" />
+  <circle
+     cx="32"
+     cy="32"
+     r="29.4"
+     fill="#111013"
+     id="outer-black"
+     style="display:inline;stroke-width:1;stroke-dasharray:none;stroke:none;stroke-opacity:1;opacity:0.66;fill:#000000;fill-opacity:1" />
+  <circle
+     cx="32"
+     cy="31.7"
+     r="28.15"
+     fill="#2a2117"
+     id="circle4"
+     style="fill:url(#radialGradient2);stroke:url(#radialGradient4);stroke-width:3;stroke-dasharray:none" />
+  <circle
+     cx="32"
+     cy="32"
+     r="26.85"
+     fill="#b88c47"
+     id="circle7"
+     style="display:inline" />
+  <path
+     d="M 32 32 L 58.900 32.000 A 26.900 26.900 0 0 1 58.753 34.812 Z"
+     fill="#d5b26a"
+     id="path7" />
+  <path
+     d="M 32 32 L 58.753 34.812 A 26.900 26.900 0 0 1 58.312 37.593 Z"
+     fill="#cda65e"
+     id="path8" />
+  <path
+     d="M 32 32 L 58.312 37.593 A 26.900 26.900 0 0 1 57.583 40.313 Z"
+     fill="#bf954d"
+     id="path9" />
+  <path
+     d="M 32 32 L 57.583 40.313 A 26.900 26.900 0 0 1 56.574 42.941 Z"
+     fill="#b18743"
+     id="path10" />
+  <path
+     d="M 32 32 L 56.574 42.941 A 26.900 26.900 0 0 1 55.296 45.450 Z"
+     fill="#a37d3d"
+     id="path11" />
+  <path
+     d="M 32 32 L 55.296 45.450 A 26.900 26.900 0 0 1 53.763 47.811 Z"
+     fill="#987439"
+     id="path12" />
+  <path
+     d="M 32 32 L 53.763 47.811 A 26.900 26.900 0 0 1 51.991 50.000 Z"
+     fill="#906d36"
+     id="path13" />
+  <path
+     d="M 32 32 L 51.991 50.000 A 26.900 26.900 0 0 1 50.000 51.991 Z"
+     fill="#8c6a34"
+     id="path14" />
+  <path
+     d="M 32 32 L 50.000 51.991 A 26.900 26.900 0 0 1 47.811 53.763 Z"
+     fill="#8c6a34"
+     id="path15" />
+  <path
+     d="M 32 32 L 47.811 53.763 A 26.900 26.900 0 0 1 45.450 55.296 Z"
+     fill="#916e36"
+     id="path16" />
+  <path
+     d="M 32 32 L 45.450 55.296 A 26.900 26.900 0 0 1 42.941 56.574 Z"
+     fill="#9a7439"
+     id="path17" />
+  <path
+     d="M 32 32 L 42.941 56.574 A 26.900 26.900 0 0 1 40.313 57.583 Z"
+     fill="#a47d3d"
+     id="path18" />
+  <path
+     d="M 32 32 L 40.313 57.583 A 26.900 26.900 0 0 1 37.593 58.312 Z"
+     fill="#ae8541"
+     id="path19" />
+  <path
+     d="M 32 32 L 37.593 58.312 A 26.900 26.900 0 0 1 34.812 58.753 Z"
+     fill="#b68c45"
+     id="path20" />
+  <path
+     d="M 32 32 L 34.812 58.753 A 26.900 26.900 0 0 1 32.000 58.900 Z"
+     fill="#bd924a"
+     id="path21" />
+  <path
+     d="M 32 32 L 32.000 58.900 A 26.900 26.900 0 0 1 29.188 58.753 Z"
+     fill="#be944c"
+     id="path22" />
+  <path
+     d="M 32 32 L 29.188 58.753 A 26.900 26.900 0 0 1 26.407 58.312 Z"
+     fill="#bb9048"
+     id="path23" />
+  <path
+     d="M 32 32 L 26.407 58.312 A 26.900 26.900 0 0 1 23.687 57.583 Z"
+     fill="#b48a44"
+     id="path24" />
+  <path
+     d="M 32 32 L 23.687 57.583 A 26.900 26.900 0 0 1 21.059 56.574 Z"
+     fill="#ac8441"
+     id="path25" />
+  <path
+     d="M 32 32 L 21.059 56.574 A 26.900 26.900 0 0 1 18.550 55.296 Z"
+     fill="#a47e3e"
+     id="path26" />
+  <path
+     d="M 32 32 L 18.550 55.296 A 26.900 26.900 0 0 1 16.189 53.763 Z"
+     fill="#9d773b"
+     id="path27" />
+  <path
+     d="M 32 32 L 16.189 53.763 A 26.900 26.900 0 0 1 14.000 51.991 Z"
+     fill="#99743a"
+     id="path28" />
+  <path
+     d="M 32 32 L 14.000 51.991 A 26.900 26.900 0 0 1 12.009 50.000 Z"
+     fill="#98743a"
+     id="path29" />
+  <path
+     d="M 32 32 L 12.009 50.000 A 26.900 26.900 0 0 1 10.237 47.811 Z"
+     fill="#9c773b"
+     id="path30" />
+  <path
+     d="M 32 32 L 10.237 47.811 A 26.900 26.900 0 0 1 8.704 45.450 Z"
+     fill="#a47d3d"
+     id="path31" />
+  <path
+     d="M 32 32 L 8.704 45.450 A 26.900 26.900 0 0 1 7.426 42.941 Z"
+     fill="#ae8641"
+     id="path32" />
+  <path
+     d="M 32 32 L 7.426 42.941 A 26.900 26.900 0 0 1 6.417 40.313 Z"
+     fill="#ba9049"
+     id="path33" />
+  <path
+     d="M 32 32 L 6.417 40.313 A 26.900 26.900 0 0 1 5.688 37.593 Z"
+     fill="#c7a159"
+     id="path34" />
+  <path
+     d="M 32 32 L 5.688 37.593 A 26.900 26.900 0 0 1 5.247 34.812 Z"
+     fill="#d2ae66"
+     id="path35" />
+  <path
+     d="M 32 32 L 5.247 34.812 A 26.900 26.900 0 0 1 5.100 32.000 Z"
+     fill="#d7b46c"
+     id="path36" />
+  <path
+     d="M 32 32 L 5.100 32.000 A 26.900 26.900 0 0 1 5.247 29.188 Z"
+     fill="#d6b36b"
+     id="path37" />
+  <path
+     d="M 32 32 L 5.247 29.188 A 26.900 26.900 0 0 1 5.688 26.407 Z"
+     fill="#ceaa62"
+     id="path38" />
+  <path
+     d="M 32 32 L 5.688 26.407 A 26.900 26.900 0 0 1 6.417 23.687 Z"
+     fill="#c29a52"
+     id="path39" />
+  <path
+     d="M 32 32 L 6.417 23.687 A 26.900 26.900 0 0 1 7.426 21.059 Z"
+     fill="#b58b45"
+     id="path40" />
+  <path
+     d="M 32 32 L 7.426 21.059 A 26.900 26.900 0 0 1 8.704 18.550 Z"
+     fill="#a9823f"
+     id="path41" />
+  <path
+     d="M 32 32 L 8.704 18.550 A 26.900 26.900 0 0 1 10.237 16.189 Z"
+     fill="#9e783b"
+     id="path42" />
+  <path
+     d="M 32 32 L 10.237 16.189 A 26.900 26.900 0 0 1 12.009 14.000 Z"
+     fill="#977338"
+     id="path43" />
+  <path
+     d="M 32 32 L 12.009 14.000 A 26.900 26.900 0 0 1 14.000 12.009 Z"
+     fill="#947038"
+     id="path44" />
+  <path
+     d="M 32 32 L 14.000 12.009 A 26.900 26.900 0 0 1 16.189 10.237 Z"
+     fill="#957138"
+     id="path45" />
+  <path
+     d="M 32 32 L 16.189 10.237 A 26.900 26.900 0 0 1 18.550 8.704 Z"
+     fill="#9c763b"
+     id="path46" />
+  <path
+     d="M 32 32 L 18.550 8.704 A 26.900 26.900 0 0 1 21.059 7.426 Z"
+     fill="#a67e3f"
+     id="path47" />
+  <path
+     d="M 32 32 L 21.059 7.426 A 26.900 26.900 0 0 1 23.687 6.417 Z"
+     fill="#b48944"
+     id="path48" />
+  <path
+     d="M 32 32 L 23.687 6.417 A 26.900 26.900 0 0 1 26.407 5.688 Z"
+     fill="#c59e56"
+     id="path49" />
+  <path
+     d="M 32 32 L 26.407 5.688 A 26.900 26.900 0 0 1 29.188 5.247 Z"
+     fill="#d8b66e"
+     id="path50" />
+  <path
+     d="M 32 32 L 29.188 5.247 A 26.900 26.900 0 0 1 32.000 5.100 Z"
+     fill="#e4c57d"
+     id="path51" />
+  <path
+     d="M 32 32 L 32.000 5.100 A 26.900 26.900 0 0 1 34.812 5.247 Z"
+     fill="#e6c880"
+     id="path52" />
+  <path
+     d="M 32 32 L 34.812 5.247 A 26.900 26.900 0 0 1 37.593 5.688 Z"
+     fill="#ddbd75"
+     id="path53" />
+  <path
+     d="M 32 32 L 37.593 5.688 A 26.900 26.900 0 0 1 40.313 6.417 Z"
+     fill="#ceaa62"
+     id="path54" />
+  <path
+     d="M 32 32 L 40.313 6.417 A 26.900 26.900 0 0 1 42.941 7.426 Z"
+     fill="#be944c"
+     id="path55" />
+  <path
+     d="M 32 32 L 42.941 7.426 A 26.900 26.900 0 0 1 45.450 8.704 Z"
+     fill="#b18843"
+     id="path56" />
+  <path
+     d="M 32 32 L 45.450 8.704 A 26.900 26.900 0 0 1 47.811 10.237 Z"
+     fill="#a8803f"
+     id="path57" />
+  <path
+     d="M 32 32 L 47.811 10.237 A 26.900 26.900 0 0 1 50.000 12.009 Z"
+     fill="#a27c3e"
+     id="path58" />
+  <path
+     d="M 32 32 L 50.000 12.009 A 26.900 26.900 0 0 1 51.991 14.000 Z"
+     fill="#a17a3c"
+     id="path59" />
+  <path
+     d="M 32 32 L 51.991 14.000 A 26.900 26.900 0 0 1 53.763 16.189 Z"
+     fill="#a47d3e"
+     id="path60" />
+  <path
+     d="M 32 32 L 53.763 16.189 A 26.900 26.900 0 0 1 55.296 18.550 Z"
+     fill="#aa8241"
+     id="path61" />
+  <path
+     d="M 32 32 L 55.296 18.550 A 26.900 26.900 0 0 1 56.574 21.059 Z"
+     fill="#b48a43"
+     id="path62" />
+  <path
+     d="M 32 32 L 56.574 21.059 A 26.900 26.900 0 0 1 57.583 23.687 Z"
+     fill="#bf964e"
+     id="path63" />
+  <path
+     d="M 32 32 L 57.583 23.687 A 26.900 26.900 0 0 1 58.312 26.407 Z"
+     fill="#cba65e"
+     id="path64" />
+  <path
+     d="M 32 32 L 58.312 26.407 A 26.900 26.900 0 0 1 58.753 29.188 Z"
+     fill="#d4b169"
+     id="path65" />
+  <path
+     d="M 32 32 L 58.753 29.188 A 26.900 26.900 0 0 1 58.900 32.000 Z"
+     fill="#d8b66e"
+     id="path66" />
+  <circle
+     cx="32"
+     cy="32"
+     r="2.600"
+     fill="none"
+     stroke="#f6d990"
+     stroke-width="0.073"
+     opacity="0.098"
+     id="circle246" />
+  <circle
+     cx="32"
+     cy="32"
+     r="4.280"
+     fill="none"
+     stroke="#f6d990"
+     stroke-width="0.084"
+     opacity="0.121"
+     id="circle250" />
+  <circle
+     cx="32"
+     cy="32"
+     r="5.960"
+     fill="none"
+     stroke="#f6d990"
+     stroke-width="0.055"
+     opacity="0.122"
+     id="circle254" />
+  <circle
+     cx="32"
+     cy="32"
+     r="7.640"
+     fill="none"
+     stroke="#f6d990"
+     stroke-width="0.086"
+     opacity="0.098"
+     id="circle258" />
+  <circle
+     cx="32"
+     cy="32"
+     r="9.320"
+     fill="none"
+     stroke="#f6d990"
+     stroke-width="0.070"
+     opacity="0.074"
+     id="circle262" />
+  <circle
+     cx="32"
+     cy="32"
+     r="11.000"
+     fill="none"
+     stroke="#f6d990"
+     stroke-width="0.063"
+     opacity="0.073"
+     id="circle266" />
+  <circle
+     cx="32"
+     cy="32"
+     r="12.680"
+     fill="none"
+     stroke="#f6d990"
+     stroke-width="0.089"
+     opacity="0.096"
+     id="circle270" />
+  <circle
+     cx="32"
+     cy="32"
+     r="14.360"
+     fill="none"
+     stroke="#f6d990"
+     stroke-width="0.057"
+     opacity="0.120"
+     id="circle274" />
+  <circle
+     cx="32"
+     cy="32"
+     r="16.040"
+     fill="none"
+     stroke="#f6d990"
+     stroke-width="0.078"
+     opacity="0.122"
+     id="circle278" />
+  <circle
+     cx="32"
+     cy="32"
+     r="17.720"
+     fill="none"
+     stroke="#f6d990"
+     stroke-width="0.080"
+     opacity="0.100"
+     id="circle282" />
+  <circle
+     cx="32"
+     cy="32"
+     r="19.400"
+     fill="none"
+     stroke="#f6d990"
+     stroke-width="0.056"
+     opacity="0.075"
+     id="circle286" />
+  <circle
+     cx="32"
+     cy="32"
+     r="21.080"
+     fill="none"
+     stroke="#f6d990"
+     stroke-width="0.089"
+     opacity="0.072"
+     id="circle290" />
+  <circle
+     cx="32"
+     cy="32"
+     r="22.760"
+     fill="none"
+     stroke="#f6d990"
+     stroke-width="0.064"
+     opacity="0.094"
+     id="circle294" />
+  <circle
+     cx="32"
+     cy="32"
+     r="24.440"
+     fill="none"
+     stroke="#f6d990"
+     stroke-width="0.068"
+     opacity="0.119"
+     id="circle298" />
+  <circle
+     cx="32"
+     cy="32"
+     r="20.2"
+     fill="#fff1ba"
+     opacity="0.035"
+     id="circle305" />
+  <circle
+     cx="32"
+     cy="32"
+     r="14.4"
+     fill="#6b4b22"
+     opacity="0.045"
+     id="circle306" />
+  <circle
+     cx="32"
+     cy="32"
+     r="8.1"
+     fill="#fff5c9"
+     opacity="0.055"
+     id="circle307" />
+  <circle
+     cx="32"
+     cy="32"
+     r="2.0"
+     fill="#4d3418"
+     opacity="0.20"
+     id="circle308" />
+  <circle
+     cx="32"
+     cy="32"
+     r="1.15"
+     fill="#f1d184"
+     opacity="0.42"
+     id="circle309" />
+</svg>

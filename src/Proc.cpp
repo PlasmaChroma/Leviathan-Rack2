@@ -1,13 +1,40 @@
 #include "plugin.hpp"
+#include "DebugTerminalMetrics.hpp"
+#include "MathHelpers.hpp"
 #include "PanelSvgUtils.hpp"
+#include "visual/VisualAssets.hpp"
+#include "visual/FractalGlassOverlay.hpp"
+#include "visual/PreviewSurface.hpp"
+#include "WavePreviewTracer.hpp"
 #include <dsp/minblep.hpp>
 #include <array>
 #include <cstdio>
 #include <atomic>
-#include <limits>
+#include <cmath>
+#include <vector>
 
+namespace {
+std::atomic<uint32_t> gProcDebugInstanceCounter {1u};
+
+struct ProcPercentQuantity final : ParamQuantity {
+	float getDisplayValue() override {
+		return getValue() * 100.f;
+	}
+
+	void setDisplayValue(float displayValue) override {
+		setValue(displayValue / 100.f);
+	}
+
+	std::string getDisplayValueString() override {
+		char buf[32];
+		std::snprintf(buf, sizeof(buf), "%.1f", getDisplayValue());
+		return buf;
+	}
+};
+}
 
 struct Proc : Module {
+	ModuleTeardownTimer teardownTimer {"Proc"};
 	// Panel/control IDs are intentionally ordered to match panel layout and existing patches.
 	enum ParamId {
 		CYCLE_PARAM,
@@ -157,6 +184,9 @@ struct Proc : Module {
 	int timingUpdateCounter = 0;
 	std::atomic<int> requestedTimingUpdateDiv {1};
 	std::atomic<bool> timingInterpolate {true};
+	std::atomic<bool> previewTracerEnabled {true};
+	std::atomic<int> previewTracerCacheMode {WAVE_PREVIEW_TRACER_CURVE_CACHE};
+	debug_terminal::BaselineModuleMetrics debugMetrics;
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
 	float previewDotPublishTimer = 0.f;
@@ -206,11 +236,6 @@ struct Proc : Module {
 	static constexpr int KNOB_CURVE_LUT_SIZE = 4096;
 	std::array<float, KNOB_CURVE_LUT_SIZE> knobCurveLut {};
 
-	static float softClamp8(float v) {
-		// Smoothly approaches +/-8V while staying linear near zero.
-		return 8.0f * std::tanh(v / 8.0f);
-	}
-
 	static float bothHzFromCv(float v) {
 		float x = BOTH_K_OCT_PER_V * (v - BOTH_V0_V);
 		float r = rack::dsp::exp2_taylor5(x);
@@ -218,7 +243,7 @@ struct Proc : Module {
 	}
 
 	static float bothTimeScaleFromCv(float v) {
-		float vs = softClamp8(v);
+		float vs = levi_math::softLimit(v, 8.f);
 		float f = bothHzFromCv(vs);
 		// Neutral reference is constant for the life of the module, compute once.
 		static const float neutralHz = bothHzFromCv(BOTH_NEUTRAL_V);
@@ -598,7 +623,7 @@ struct Proc : Module {
 
 		// Rise/Fall CV applies in log-time domain:
 		// +V -> longer (slower), -V -> shorter (faster).
-		float stageCvSoft = softClamp8(stageCv);
+		float stageCvSoft = levi_math::softLimit(stageCv, 8.f);
 		float stageOct = clamp(stageCvSoft * STAGE_CV_OCT_PER_V, -CV_OCT_CLAMP, CV_OCT_CLAMP);
 		t *= rack::dsp::exp2_taylor5(stageOct);
 
@@ -899,12 +924,13 @@ struct Proc : Module {
 	}
 
 	Proc() {
+		debugMetrics.assignInstanceId(gProcDebugInstanceCounter);
 		initKnobCurveLut();
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configParam(CYCLE_PARAM, 0.f, 1.f, 0.f, "Cycle");
-		configParam(RISE_PARAM, 0.f, 1.f, 0.f, "Rise");
-		configParam(FALL_PARAM, 0.f, 1.f, 0.f, "Fall");
-		configParam(SHAPE_PARAM, 0.f, 1.f, 0.f, "Shape");
+		configParam<ProcPercentQuantity>(RISE_PARAM, 0.f, 1.f, 0.f, "Surge", "%");
+		configParam<ProcPercentQuantity>(FALL_PARAM, 0.f, 1.f, 0.f, "Sink", "%");
+		configParam<ProcPercentQuantity>(SHAPE_PARAM, 0.f, 1.f, 0.f, "Curve", "%");
 		configParam(AMP_PARAM, 0.f, 10.f, DEFAULT_FUNCTION_AMP, "Function amplitude", " V");
 		configInput(SIGNAL_INPUT, "Signal");
 		configInput(TRIGGER_INPUT, "Trigger");
@@ -918,6 +944,10 @@ struct Proc : Module {
 		configOutput(NEG_OUTPUT, "Negative");
 	}
 
+	~Proc() override {
+		teardownTimer.begin(id);
+	}
+
 	json_t* dataToJson() override {
 		json_t* rootJ = json_object();
 		json_object_set_new(rootJ, "cycleLatched", json_boolean(channel.cycleLatched));
@@ -925,6 +955,8 @@ struct Proc : Module {
 		json_object_set_new(rootJ, "bandlimitedSignalOutputs", json_boolean(bandlimitedSignalOutputs.load(std::memory_order_relaxed)));
 		json_object_set_new(rootJ, "timingUpdateDiv", json_integer(requestedTimingUpdateDiv.load(std::memory_order_relaxed)));
 		json_object_set_new(rootJ, "timingInterpolate", json_boolean(timingInterpolate.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "previewTracerEnabled", json_boolean(previewTracerEnabled.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "previewTracerCacheMode", json_integer(previewTracerCacheMode.load(std::memory_order_relaxed)));
 		return rootJ;
 	}
 
@@ -957,9 +989,26 @@ struct Proc : Module {
 		if (timingInterpJ) {
 			timingInterpolate.store(json_boolean_value(timingInterpJ), std::memory_order_relaxed);
 		}
+
+		json_t* previewTracerJ = json_object_get(rootJ, "previewTracerEnabled");
+		if (previewTracerJ) {
+			previewTracerEnabled.store(json_boolean_value(previewTracerJ), std::memory_order_relaxed);
+		}
+
+		json_t* previewTracerModeJ = json_object_get(rootJ, "previewTracerCacheMode");
+		if (previewTracerModeJ) {
+			const int mode = int(json_integer_value(previewTracerModeJ));
+			previewTracerCacheMode.store(mode == WAVE_PREVIEW_TRACER_CURVE_CACHE ? WAVE_PREVIEW_TRACER_CURVE_CACHE : WAVE_PREVIEW_TRACER_FRAME_CACHE,
+			                             std::memory_order_relaxed);
+		}
+		if (!isDragonKingPreviewWidgetOptionsEnabled()) {
+			previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed);
+		}
 	}
 
 	void process(const ProcessArgs& args) override {
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const auto processStart = debug_terminal::debugTimerStart(measurePerf);
 		applyRequestedTimingUpdateDiv();
 		static const ChannelConfig channelConfig {
 			CYCLE_PARAM,
@@ -1066,43 +1115,21 @@ struct Proc : Module {
 			lights[MAIN_LIGHT].setBrightness(clamp(std::fabs(outRendered) / FG_V_MAX, 0.f, 1.f));
 			lights[NEG_LIGHT].setBrightness(clamp(std::fabs(negOut) / FG_V_MAX, 0.f, 1.f));
 		}
+		if (measurePerf) {
+			debugMetrics.recordProcess(debug_terminal::elapsedNsSince(processStart));
+		}
 	}
 };
 
 namespace {
 
-struct IMBigPushButton : CKD6 {
-	int* mode = NULL;
-	TransformWidget *tw;
-	IMBigPushButton() {
-		setSizeRatio(0.9f);
-	}
-	void setSizeRatio(float ratio) {
-		// Scale only the SVG child so hit area follows the visible button.
-		sw->box.size = sw->box.size.mult(ratio);
-		fb->removeChild(sw);
-		tw = new TransformWidget();
-		tw->addChild(sw);
-		tw->scale(Vec(ratio, ratio));
-		tw->box.size = sw->box.size;
-		fb->addChild(tw);
-		box.size = sw->box.size;
-		shadow->box.size = sw->box.size;
-	}
-};
-
-// Create a bigger basic button
-struct BigTL1105 : TL1105 {
-    BigTL1105() {
-        // Dialed back to ~85% of previous size for a tighter click area.
-        box.size = mm2px(Vec(9.5, 9.5));
-    }
-};
-
-struct BananutBlack : app::SvgPort {
-	BananutBlack() {
-		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
-	}
+struct ProcPreviewEdgeInteraction {
+	bool riseHovered = false;
+	bool fallHovered = false;
+	bool curveHovered = false;
+	bool riseDragging = false;
+	bool fallDragging = false;
+	bool curveDragging = false;
 };
 
 struct WavePreviewWidget : Widget {
@@ -1116,15 +1143,27 @@ struct WavePreviewWidget : Widget {
 	static constexpr float DOT_SHOW_MAX_HZ = 2.0f;
 	static constexpr float DOT_HIDE_MIN_HZ = 2.4f;
 	static constexpr float LABEL_FONT_SIZE = 11.5f;
+	static constexpr int TRAIL_FRAME_COUNT = 6;
+	static constexpr float TRAIL_FADE_SEC = 0.333f;
+		static constexpr float TRAIL_MIN_CAPTURE_INTERVAL_SEC = 1.f / 24.f;
+		static constexpr float TRAIL_LINE_WIDTH = 1.15f;
+		static constexpr int TRAIL_DRAW_STRIDE = 2;
+		static constexpr int TRAIL_CAPTURE_STRIDE = 1;
 	std::array<Vec, POINT_COUNT> points {};
+	WavePreviewTracer<POINT_COUNT, TRAIL_FRAME_COUNT> curveTracer;
+	WavePreviewBufferedTracer<POINT_COUNT> frameTracer;
+	Proc* modulePtr = nullptr;
+	ProcPreviewEdgeInteraction* edgeInteraction = nullptr;
 	uint32_t lastVersion = 0;
 	bool pointsValid = false;
+	int peakPointIndex = POINT_COUNT / 2;
 	float lastFreqHz = 100.f;
 	float dotXNorm = 0.f;
 	float dotYNorm = 0.f;
 	bool dotVisible = false;
 
-	WavePreviewWidget() = default;
+	explicit WavePreviewWidget(Proc* module) : modulePtr(module) {
+	}
 
 	static void buildSegmentLut(std::array<float, PREVIEW_LUT_SIZE>& lut, float curveSigned, bool rising) {
 		// Build once per preview update. Midpoint integration reduces visual artifacts at extreme curve asymmetry.
@@ -1152,6 +1191,109 @@ struct WavePreviewWidget : Widget {
 		int i1 = std::min(i0 + 1, PREVIEW_LUT_SIZE - 1);
 		float f = idx - float(i0);
 		return lut[i0] + (lut[i1] - lut[i0]) * f;
+	}
+
+	int highlightedEdge() const {
+		if (!edgeInteraction) {
+			return 0;
+		}
+		if (edgeInteraction->curveDragging) {
+			return 3;
+		}
+		if (edgeInteraction->riseDragging) {
+			return 1;
+		}
+		if (edgeInteraction->fallDragging) {
+			return 2;
+		}
+		if (edgeInteraction->curveHovered) {
+			return 3;
+		}
+		if (edgeInteraction->riseHovered) {
+			return 1;
+		}
+		if (edgeInteraction->fallHovered) {
+			return 2;
+		}
+		return 0;
+	}
+
+	static NVGcolor waveformColor() {
+		return nvgRGBA(230, 230, 220, 255);
+	}
+
+	NVGcolor activeEdgeColor(int edge) const {
+		const NVGcolor purple = nvgRGB(0x86, 0x5c, 0xff);
+		const NVGcolor cyan = nvgRGB(0x00, 0xc6, 0xe4);
+		if (!modulePtr) {
+			return purple;
+		}
+
+		const int paramId = edge == 1 ? Proc::RISE_PARAM : Proc::FALL_PARAM;
+		const float amount = clamp(modulePtr->params[paramId].getValue(), 0.f, 1.f);
+		return nvgRGBAf(
+			purple.r + (cyan.r - purple.r) * amount,
+			purple.g + (cyan.g - purple.g) * amount,
+			purple.b + (cyan.b - purple.b) * amount,
+			1.f);
+	}
+
+	NVGcolor activeCurveColor() const {
+		const NVGcolor orange = nvgRGB(0xdc, 0x5e, 0x1e);
+		const NVGcolor yellow = nvgRGB(0xff, 0xb8, 0x00);
+		if (!modulePtr) {
+			return orange;
+		}
+
+		const float amount = clamp(modulePtr->params[Proc::SHAPE_PARAM].getValue(), 0.f, 1.f);
+		return nvgRGBAf(
+			orange.r + (yellow.r - orange.r) * amount,
+			orange.g + (yellow.g - orange.g) * amount,
+			orange.b + (yellow.b - orange.b) * amount,
+			1.f);
+	}
+
+	void drawWaveSegment(const DrawArgs& args, int start, int end, NVGcolor color) {
+		if (!pointsValid) {
+			return;
+		}
+		start = clamp(start, 0, POINT_COUNT - 1);
+		end = clamp(end, 0, POINT_COUNT - 1);
+		const int count = end - start + 1;
+		if (count < 2) {
+			return;
+		}
+		NVGcontext* vg = args.vg;
+		nvgBeginPath(vg);
+		wave_preview::simplifyPath(points.data() + start, count, 1, 0.02f, [vg](const Vec& pt, bool isMove) {
+			if (isMove) {
+				nvgMoveTo(vg, pt.x, pt.y);
+			}
+			else {
+				nvgLineTo(vg, pt.x, pt.y);
+			}
+		});
+		nvgStrokeColor(vg, color);
+		nvgStrokeWidth(vg, WAVE_LINE_WIDTH);
+		nvgLineCap(vg, NVG_BUTT);
+		nvgLineJoin(vg, NVG_ROUND);
+		nvgStroke(vg);
+	}
+
+	void drawWaveform(const DrawArgs& args) {
+		const int edge = highlightedEdge();
+		if (edge == 0) {
+			drawWaveSegment(args, 0, POINT_COUNT - 1, waveformColor());
+			return;
+		}
+		if (edge == 3) {
+			drawWaveSegment(args, 0, POINT_COUNT - 1, activeCurveColor());
+			return;
+		}
+		const int peakIndex = clamp(peakPointIndex, 1, POINT_COUNT - 2);
+		const NVGcolor highlightColor = activeEdgeColor(edge);
+		drawWaveSegment(args, 0, peakIndex, edge == 1 ? highlightColor : waveformColor());
+		drawWaveSegment(args, peakIndex, POINT_COUNT - 1, edge == 2 ? highlightColor : waveformColor());
 	}
 
 	void rebuildPoints(float riseTime, float fallTime, float curveSigned, bool interactiveRecent) {
@@ -1196,24 +1338,19 @@ struct WavePreviewWidget : Widget {
 			points[i] = Vec(x, py);
 		}
 
-		// Preserve full crest height under extreme rise/fall asymmetry by pinning
-		// both vertices that bracket the true peak location.
-		float peakIndexF = riseRatio * float(POINT_COUNT - 1);
-		int peakIndex0 = std::max(0, std::min(POINT_COUNT - 1, int(std::floor(peakIndexF))));
-		int peakIndex1 = std::max(0, std::min(POINT_COUNT - 1, int(std::ceil(peakIndexF))));
-		float peakPx0 = left + (float(peakIndex0) / float(POINT_COUNT - 1)) * drawW;
-		float peakPx1 = left + (float(peakIndex1) / float(POINT_COUNT - 1)) * drawW;
-		points[peakIndex0] = Vec(peakPx0, top);
-		points[peakIndex1] = Vec(peakPx1, top);
-		points.front() = Vec(left, bottom);
-		points.back() = Vec(right, bottom);
+			// Preserve full crest height without flattening the apex into a
+			// two-point plateau when the true peak falls between sample columns.
+			float peakIndexF = riseRatio * float(POINT_COUNT - 1);
+			int peakIndex = std::max(1, std::min(POINT_COUNT - 2, int(std::round(peakIndexF))));
+			peakPointIndex = peakIndex;
+			points[peakIndex] = Vec(peakX, top);
+			points.front() = Vec(left, bottom);
+			points.back() = Vec(right, bottom);
 		pointsValid = true;
 	}
 
 	void step() override {
 		Widget::step();
-		ModuleWidget* moduleWidget = getAncestorOfType<ModuleWidget>();
-		Proc* modulePtr = moduleWidget ? moduleWidget->getModule<Proc>() : nullptr;
 		if (!modulePtr) {
 			if (!pointsValid) {
 				rebuildPoints(0.01f, 0.01f, 0.f, false);
@@ -1243,7 +1380,35 @@ struct WavePreviewWidget : Widget {
 		} else if (lastFreqHz <= DOT_SHOW_MAX_HZ) {
 			dotVisible = true;
 		}
+		const double nowSec = system::getTime();
+		const bool tracerEnabled = modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
+		const int tracerMode = modulePtr->previewTracerCacheMode.load(std::memory_order_relaxed);
+		if (!tracerEnabled) {
+			curveTracer.clear();
+			frameTracer.clear();
+		}
+		else if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+			curveTracer.expire(nowSec, TRAIL_FADE_SEC);
+			frameTracer.clear();
+		}
+		else {
+			curveTracer.clear();
+		}
 		if (!pointsValid || version != lastVersion) {
+			if (tracerEnabled && pointsValid) {
+				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+					curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC, TRAIL_CAPTURE_STRIDE);
+				}
+				else {
+					WavePreviewBufferedTracerStyle style;
+					style.color = nvgRGBA(255, 190, 80, 255);
+					style.fadeSec = TRAIL_FADE_SEC;
+					style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
+					style.maxAlpha = 118.f;
+					style.drawStride = TRAIL_CAPTURE_STRIDE;
+					frameTracer.capture(points, nowSec, box.size, style);
+				}
+			}
 			rebuildPoints(riseTime, fallTime, curveSigned, interactiveRecent);
 			lastVersion = version;
 		}
@@ -1252,18 +1417,34 @@ struct WavePreviewWidget : Widget {
 	void draw(const DrawArgs& args) override {
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
-
 		if (pointsValid) {
-			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, points[0].x, points[0].y);
-			for (int i = 1; i < POINT_COUNT; ++i) {
-				nvgLineTo(args.vg, points[i].x, points[i].y);
+			ModuleWidget* moduleWidget = getAncestorOfType<ModuleWidget>();
+			Proc* modulePtr = moduleWidget ? moduleWidget->getModule<Proc>() : nullptr;
+			const double nowSec = system::getTime();
+			const bool tracerEnabled = modulePtr && modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
+			if (tracerEnabled) {
+				const int tracerMode = modulePtr->previewTracerCacheMode.load(std::memory_order_relaxed);
+				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+					WavePreviewTracerStyle style;
+					style.color = nvgRGBA(255, 190, 80, 255);
+					style.lineWidth = TRAIL_LINE_WIDTH;
+					style.fadeSec = TRAIL_FADE_SEC;
+					style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
+					style.maxAlpha = 118.f;
+					style.drawStride = TRAIL_DRAW_STRIDE;
+					curveTracer.draw(args.vg, nowSec, style);
+				}
+				else {
+					WavePreviewBufferedTracerStyle style;
+					style.color = nvgRGBA(255, 190, 80, 255);
+					style.fadeSec = TRAIL_FADE_SEC;
+					style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
+					style.maxAlpha = 118.f;
+					style.drawStride = TRAIL_DRAW_STRIDE;
+					frameTracer.draw(args.vg, nowSec, box.size, style);
+				}
 			}
-			nvgStrokeColor(args.vg, nvgRGBA(230, 230, 220, 255));
-			nvgStrokeWidth(args.vg, WAVE_LINE_WIDTH);
-			nvgLineCap(args.vg, NVG_BUTT);
-			nvgLineJoin(args.vg, NVG_ROUND);
-			nvgStroke(args.vg);
+			drawWaveform(args);
 		}
 		if (pointsValid && dotVisible) {
 			float w = std::max(box.size.x, 1.f);
@@ -1361,22 +1542,243 @@ struct AmpVoltageReadoutWidget : Widget {
 		nvgFontSize(args.vg, 10.0f);
 		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
-		nvgText(args.vg, box.size.x * 0.5f, 0.f, ampText, nullptr);
+		nvgText(args.vg, box.size.x * 0.5f, 0.75f, ampText, nullptr);
+	}
+};
+
+struct ProcCurveHalo2Knob : LeviathanHaloKnob2 {
+	ProcPreviewEdgeInteraction* previewInteraction = nullptr;
+
+	ProcCurveHalo2Knob() : LeviathanHaloKnob2(LeviathanHaloKnob2::brightOrangeConfig()) {
+	}
+
+	void setPreviewInteraction(ProcPreviewEdgeInteraction* interaction) {
+		previewInteraction = interaction;
+	}
+
+	void onEnter(const event::Enter& e) override {
+		if (previewInteraction) {
+			previewInteraction->curveHovered = true;
+		}
+		LeviathanHaloKnob2::onEnter(e);
+	}
+
+	void onLeave(const event::Leave& e) override {
+		if (previewInteraction) {
+			previewInteraction->curveHovered = false;
+		}
+		LeviathanHaloKnob2::onLeave(e);
+	}
+
+	void onDragStart(const event::DragStart& e) override {
+		if (previewInteraction) {
+			previewInteraction->curveDragging = true;
+		}
+		LeviathanHaloKnob2::onDragStart(e);
+	}
+
+	void onDragEnd(const event::DragEnd& e) override {
+		if (previewInteraction) {
+			previewInteraction->curveDragging = false;
+		}
+		LeviathanHaloKnob2::onDragEnd(e);
+	}
+};
+
+struct ProcLinearPointOverlay : TransparentWidget {
+	Vec centerPx;
+
+	static constexpr float LINEAR_SHAPE_VALUE = Proc::LINEAR_SHAPE;
+	static constexpr float SHARK_FIN_LINEAR_SHAPE_VALUE = 0.5f;
+	static constexpr float BASE_ANGLE_DEG = 120.f;
+	static constexpr float SWEEP_ANGLE_DEG = 300.f;
+	static constexpr float LINE_RADIUS_MM = 8.6f;
+	static constexpr float LABEL_RADIUS_MM = 10.9f;
+	static constexpr float LABEL_TANGENT_OFFSET_MM = 0.85f;
+	static constexpr float LABEL_Y_OFFSET_MM = 0.32f;
+	static constexpr float LABEL_TOP_Y_OFFSET_MM = 0.18f;
+	static constexpr float LABEL_MIRROR_X_OFFSET_MM = 0.38f;
+	static constexpr float LABEL_MIRROR_Y_OFFSET_MM = -0.28f;
+	static constexpr float LINE_WIDTH_MM = 0.5f;
+	static constexpr float TRIANGLE_GLYPH_WIDTH_MM = 4.1f;
+	static constexpr float TRIANGLE_GLYPH_HEIGHT_MM = 2.35f;
+	static constexpr float TRIANGLE_GLYPH_LINE_WIDTH_MM = 0.42f;
+
+	explicit ProcLinearPointOverlay(Vec centerPx)
+		: centerPx(centerPx) {
+		box.pos = Vec(0.f, 0.f);
+	}
+
+	void draw(const DrawArgs& args) override {
+		const float angle = (BASE_ANGLE_DEG + SWEEP_ANGLE_DEG * LINEAR_SHAPE_VALUE) * (float(M_PI) / 180.f);
+		const Vec dir(std::cos(angle), std::sin(angle));
+		const Vec tangent(-dir.y, dir.x);
+		const float lineRadius = mm2px(Vec(LINE_RADIUS_MM, 0.f)).x;
+		const float labelRadius = mm2px(Vec(LABEL_RADIUS_MM, 0.f)).x;
+		const float tangentOffset = mm2px(Vec(LABEL_TANGENT_OFFSET_MM, 0.f)).x
+			* clamp(std::fabs(LINEAR_SHAPE_VALUE - SHARK_FIN_LINEAR_SHAPE_VALUE)
+				/ std::max(SHARK_FIN_LINEAR_SHAPE_VALUE - LINEAR_SHAPE_VALUE, 1e-4f), 0.f, 1.f);
+		const float topBlend = clamp((LINEAR_SHAPE_VALUE - LINEAR_SHAPE_VALUE)
+			/ std::max(SHARK_FIN_LINEAR_SHAPE_VALUE - LINEAR_SHAPE_VALUE, 1e-4f), 0.f, 1.f);
+		const float labelYOffset = mm2px(Vec(0.f, LABEL_Y_OFFSET_MM + LABEL_TOP_Y_OFFSET_MM * topBlend)).y;
+		const Vec mirrorOffset = mm2px(Vec(
+			LABEL_MIRROR_X_OFFSET_MM * (1.f - topBlend),
+			LABEL_MIRROR_Y_OFFSET_MM * (1.f - topBlend)));
+		const float lineWidth = mm2px(Vec(LINE_WIDTH_MM, 0.f)).x;
+		const float triangleWidth = mm2px(Vec(TRIANGLE_GLYPH_WIDTH_MM, 0.f)).x;
+		const float triangleHeight = mm2px(Vec(0.f, TRIANGLE_GLYPH_HEIGHT_MM)).y;
+		const float triangleLineWidth = mm2px(Vec(TRIANGLE_GLYPH_LINE_WIDTH_MM, 0.f)).x;
+		const Vec lineEnd = centerPx.plus(dir.mult(lineRadius));
+		const Vec labelPos = centerPx.plus(dir.mult(labelRadius)).plus(tangent.mult(tangentOffset)).plus(Vec(0.f, labelYOffset)).plus(mirrorOffset);
+		const Vec triangleLeft(labelPos.x - 0.5f * triangleWidth, labelPos.y + 0.5f * triangleHeight);
+		const Vec trianglePeak(labelPos.x, labelPos.y - 0.5f * triangleHeight);
+		const Vec triangleRight(labelPos.x + 0.5f * triangleWidth, labelPos.y + 0.5f * triangleHeight);
+
+		nvgSave(args.vg);
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, centerPx.x, centerPx.y);
+		nvgLineTo(args.vg, lineEnd.x, lineEnd.y);
+		nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 255));
+		nvgStrokeWidth(args.vg, lineWidth);
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgStroke(args.vg);
+
+		nvgLineCap(args.vg, NVG_ROUND);
+		nvgLineJoin(args.vg, NVG_ROUND);
+		nvgStrokeWidth(args.vg, triangleLineWidth);
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, triangleLeft.x, triangleLeft.y);
+		nvgLineTo(args.vg, trianglePeak.x, trianglePeak.y);
+		nvgLineTo(args.vg, triangleRight.x, triangleRight.y);
+		NVGpaint triangleGradient = nvgLinearGradient(
+			args.vg,
+			triangleLeft.x,
+			triangleLeft.y,
+			triangleRight.x,
+			triangleRight.y,
+			nvgRGBA(255, 184, 0, 255),
+			nvgRGBA(220, 94, 30, 255));
+		nvgStrokePaint(args.vg, triangleGradient);
+		nvgStroke(args.vg);
+		nvgRestore(args.vg);
+	}
+};
+
+struct ProcEdgeHalo2Knob : LeviathanHaloKnob2 {
+	enum PreviewEdge {
+		PREVIEW_EDGE_RISE,
+		PREVIEW_EDGE_FALL
+	};
+
+	ProcPreviewEdgeInteraction* previewInteraction = nullptr;
+	PreviewEdge previewEdge = PREVIEW_EDGE_RISE;
+
+	void setPreviewInteraction(ProcPreviewEdgeInteraction* interaction, PreviewEdge edge) {
+		previewInteraction = interaction;
+		previewEdge = edge;
+	}
+
+	void setHovered(bool hovered) {
+		if (!previewInteraction) {
+			return;
+		}
+		if (previewEdge == PREVIEW_EDGE_RISE) {
+			previewInteraction->riseHovered = hovered;
+		}
+		else {
+			previewInteraction->fallHovered = hovered;
+		}
+	}
+
+	void setDragging(bool dragging) {
+		if (!previewInteraction) {
+			return;
+		}
+		if (previewEdge == PREVIEW_EDGE_RISE) {
+			previewInteraction->riseDragging = dragging;
+		}
+		else {
+			previewInteraction->fallDragging = dragging;
+		}
+	}
+
+	void onEnter(const event::Enter& e) override {
+		setHovered(true);
+		LeviathanHaloKnob2::onEnter(e);
+	}
+
+	void onLeave(const event::Leave& e) override {
+		setHovered(false);
+		LeviathanHaloKnob2::onLeave(e);
+	}
+
+	void onDragStart(const event::DragStart& e) override {
+		setDragging(true);
+		LeviathanHaloKnob2::onDragStart(e);
+	}
+
+	void onDragEnd(const event::DragEnd& e) override {
+		setDragging(false);
+		LeviathanHaloKnob2::onDragEnd(e);
 	}
 };
 
 struct ProcWidget : ModuleWidget {
+	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
+	ProcPreviewEdgeInteraction previewEdgeInteraction;
+
+	void step() override {
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
+		ModuleWidget::step();
+		if (measurePerf) {
+			debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
+		}
+	}
+
+	void draw(const DrawArgs& args) override {
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const auto drawStart = debug_terminal::debugTimerStart(measurePerf);
+		ModuleWidget::draw(args);
+		Proc* proc = static_cast<Proc*>(module);
+		if (!proc) {
+			return;
+		}
+
+		if (isDragonKingDebugEnabled()) {
+			debug_terminal::drawDebugInstanceId(args.vg, box.size, proc->debugMetrics.instanceId);
+		}
+
+		if (measurePerf) {
+			debugWidgetMetrics.recordDraw(debug_terminal::elapsedUsSince(drawStart));
+		}
+
+		if (measurePerf) {
+			const double nowSec = system::getTime();
+			if (debug_terminal::baselineSubmitDue("Proc", proc->debugMetrics.instanceId, nowSec)) {
+				debug_terminal::submitBaselineMetrics(
+					"Proc",
+					proc->debugMetrics.instanceId,
+					proc->debugMetrics.consumeProcessRange(),
+					debugWidgetMetrics.consumeStepRange(),
+					debugWidgetMetrics.consumeDrawRange()
+				);
+			}
+		}
+	}
+
 	ProcWidget(Proc* module) {
 		setModule(module);
 		PreviewBuildLogTimer previewBuildTimer("Proc", module);
-		const std::string panelPath = asset::plugin(pluginInstance, "res/proc.svg");
-		setPanel(createPanel(panelPath));
+		visual_assets::SplitPanelRenderer splitPanel(this, "res/proc.panel.svg");
+		const std::string& panelBasePath = splitPanel.panelPath();
+		splitPanel.addLabels("res/proc.labels.svg");
+		visual_assets::addFractalGlassOverlay(this, panelBasePath);
 		previewBuildTimer.markPanelDone();
 
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-		//addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-		//addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0)));
+		//addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 		Vec cyclePos(33.075f, 20.138f);
 		Vec risePos(32.907f, 36.293f);
@@ -1401,7 +1803,7 @@ struct ProcWidget : ModuleWidget {
 
 		auto applyPointOverride = [&](const char* elementId, Vec* outPosMm) {
 			Vec pointMm;
-			if (panel_svg::loadPointFromSvgMm(panelPath, elementId, &pointMm)) {
+			if (panel_svg::loadPointFromSvgMm(panelBasePath, elementId, &pointMm)) {
 				*outPosMm = pointMm;
 			}
 		};
@@ -1427,11 +1829,35 @@ struct ProcWidget : ModuleWidget {
 		applyPointOverride("MAIN_LIGHT", &outLightPos);
 		applyPointOverride("NEG_LIGHT", &negLightPos);
 
-		addParam(createParamCentered<IMBigPushButton>(mm2px(cyclePos), module, Proc::CYCLE_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(risePos), module, Proc::RISE_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(fallPos), module, Proc::FALL_PARAM));
-		addParam(createParamCentered<Davies1900hWhiteKnob>(mm2px(shapePos), module, Proc::SHAPE_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(ampPos), module, Proc::AMP_PARAM));
+		{
+			widget::FramebufferWidget* linearPointFb = new widget::FramebufferWidget();
+			const Vec centerPx = mm2px(shapePos);
+			linearPointFb->box.size = mm2px(Vec(27.f, 27.f));
+			linearPointFb->box.pos = centerPx.minus(linearPointFb->box.size.mult(0.5f));
+			linearPointFb->dirtyOnSubpixelChange = false;
+			ProcLinearPointOverlay* linearPoint = new ProcLinearPointOverlay(centerPx.minus(linearPointFb->box.pos));
+			linearPoint->box.size = linearPointFb->box.size;
+			linearPointFb->addChild(linearPoint);
+			addChild(linearPointFb);
+		}
+
+		addParam(createParamCentered<LoopGoldButton>(mm2px(cyclePos), module, Proc::CYCLE_PARAM));
+		{
+			ProcEdgeHalo2Knob* riseKnob = createParamCentered<ProcEdgeHalo2Knob>(mm2px(risePos), module, Proc::RISE_PARAM);
+			riseKnob->setPreviewInteraction(&previewEdgeInteraction, ProcEdgeHalo2Knob::PREVIEW_EDGE_RISE);
+			addParam(riseKnob);
+		}
+		{
+			ProcEdgeHalo2Knob* fallKnob = createParamCentered<ProcEdgeHalo2Knob>(mm2px(fallPos), module, Proc::FALL_PARAM);
+			fallKnob->setPreviewInteraction(&previewEdgeInteraction, ProcEdgeHalo2Knob::PREVIEW_EDGE_FALL);
+			addParam(fallKnob);
+		}
+		{
+			ProcCurveHalo2Knob* curveKnob = createParamCentered<ProcCurveHalo2Knob>(mm2px(shapePos), module, Proc::SHAPE_PARAM);
+			curveKnob->setPreviewInteraction(&previewEdgeInteraction);
+			addParam(curveKnob);
+		}
+		addParam(createParamCentered<TinyClockworkGearKnob>(mm2px(ampPos), module, Proc::AMP_PARAM));
 		{
 			AmpVoltageReadoutWidget* ampReadout = new AmpVoltageReadoutWidget();
 			ampReadout->module = module;
@@ -1441,41 +1867,49 @@ struct ProcWidget : ModuleWidget {
 			addChild(ampReadout);
 		}
 		{
-			WavePreviewWidget* previewWidget = new WavePreviewWidget();
+			WavePreviewWidget* previewWidget = new WavePreviewWidget(module);
+			previewWidget->edgeInteraction = &previewEdgeInteraction;
 			math::Rect previewRectMm;
-			if (panel_svg::loadRectFromSvgMm(panelPath, "CH1_PREVIEW", &previewRectMm)) {
+			if (panel_svg::loadRectFromSvgMm(panelBasePath, "CH1_PREVIEW", &previewRectMm)) {
 				// Keep the legacy SVG id until proc.svg is cleaned up as well.
+				addChild(visual_assets::createPreviewFrameEnhancementWidget(previewRectMm));
 				previewRectMm = insetRectMm(previewRectMm, 0.2f);
 				previewWidget->box.pos = mm2px(previewRectMm.pos);
 				previewWidget->box.size = mm2px(previewRectMm.size);
 			}
 			else {
-				previewWidget->box.pos = mm2px(Vec(3.75998355f, 68.96602539f));
-				previewWidget->box.size = mm2px(Vec(20.78393382f, 11.24561948f));
+				math::Rect previewFallbackMm(Vec(3.75998355f, 68.96602539f), Vec(20.78393382f, 11.24561948f));
+				addChild(visual_assets::createPreviewFrameEnhancementWidget(previewFallbackMm));
+				previewFallbackMm = insetRectMm(previewFallbackMm, 0.2f);
+				previewWidget->box.pos = mm2px(previewFallbackMm.pos);
+				previewWidget->box.size = mm2px(previewFallbackMm.size);
 			}
+			widget::FramebufferWidget* previewSurface = preview_surface::createCachedOpaqueGrid(previewWidget->box.size);
+			previewSurface->box.pos = previewWidget->box.pos;
+			addChild(previewSurface);
 			addChild(previewWidget);
 		}
-		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
+		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelBasePath));
 		previewBuildTimer.markAnchorsDone();
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(signalInPos), module, Proc::SIGNAL_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(trigInPos), module, Proc::TRIGGER_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(haltInPos), module, Proc::HALT_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(riseCvInPos), module, Proc::RISE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(bothCvInPos), module, Proc::BOTH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(fallCvInPos), module, Proc::FALL_CV_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(signalInPos), module, Proc::SIGNAL_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(trigInPos), module, Proc::TRIGGER_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(haltInPos), module, Proc::HALT_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(riseCvInPos), module, Proc::RISE_CV_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(bothCvInPos), module, Proc::BOTH_CV_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(fallCvInPos), module, Proc::FALL_CV_INPUT));
 
-		addOutput(createOutputCentered<BananutBlack>(mm2px(eorOutPos), module, Proc::EOR_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(eocOutPos), module, Proc::EOC_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(outPos), module, Proc::MAIN_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(negOutPos), module, Proc::NEG_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(eorOutPos), module, Proc::EOR_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(eocOutPos), module, Proc::EOC_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outPos), module, Proc::MAIN_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(negOutPos), module, Proc::NEG_OUTPUT));
 
-		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(cycleLightPos), module, Proc::CYCLE_LIGHT));
+		addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(cycleLightPos), module, Proc::CYCLE_LIGHT));
 
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(eorLightPos), module, Proc::EOR_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(eocLightPos), module, Proc::EOC_LIGHT));
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(outLightPos), module, Proc::MAIN_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(negLightPos), module, Proc::NEG_LIGHT));
+		addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(eorLightPos), module, Proc::EOR_LIGHT));
+		addChild(createLightCentered<SmallAperture<MagentaApertureLight>>(mm2px(eocLightPos), module, Proc::EOC_LIGHT));
+		addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(outLightPos), module, Proc::MAIN_LIGHT));
+		addChild(createLightCentered<SmallAperture<MagentaApertureLight>>(mm2px(negLightPos), module, Proc::NEG_LIGHT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
@@ -1493,6 +1927,25 @@ struct ProcWidget : ModuleWidget {
 				[=]() { return proc->bandlimitedSignalOutputs.load(std::memory_order_relaxed); },
 				[=]() { proc->bandlimitedSignalOutputs.store(!proc->bandlimitedSignalOutputs.load(std::memory_order_relaxed), std::memory_order_relaxed); }
 			));
+			menu->addChild(createMenuLabel("Preview Visual"));
+			menu->addChild(createCheckMenuItem("Preview Tracer", "",
+				[=]() { return proc->previewTracerEnabled.load(std::memory_order_relaxed); },
+				[=]() { proc->previewTracerEnabled.store(!proc->previewTracerEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }
+			));
+			if (isDragonKingPreviewWidgetOptionsEnabled()) {
+				menu->addChild(createSubmenuItem("Tracer Quality", "",
+					[=](Menu* submenu) {
+						submenu->addChild(createCheckMenuItem("Curve cache", "",
+							[=]() { return proc->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_CURVE_CACHE; },
+							[=]() { proc->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed); }
+						));
+						submenu->addChild(createCheckMenuItem("Frame cache", "",
+							[=]() { return proc->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_FRAME_CACHE; },
+							[=]() { proc->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE, std::memory_order_relaxed); }
+						));
+					}
+				));
+			}
 			menu->addChild(createMenuLabel("Rate Control"));
 			menu->addChild(createCheckMenuItem("Interpolate Timing Updates", "",
 				[=]() { return proc->timingInterpolate.load(std::memory_order_relaxed); },

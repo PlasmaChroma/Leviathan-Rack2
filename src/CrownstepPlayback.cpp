@@ -28,6 +28,27 @@ static ActiveRange computeActiveRange(const Crownstep* module, int historySize, 
 	return r;
 }
 
+static ActiveRange computeSnapshotActiveRange(const Crownstep::PlaybackSnapshot& snapshot, int sequenceCap) {
+	ActiveRange r;
+	const int historySize = int(snapshot.history.size());
+	if (historySize <= 0) {
+		return r;
+	}
+	if (snapshot.rangeTrimEnabled) {
+		const int leftTrim = clamp(snapshot.trimLeft, 0, historySize - 1);
+		const int maxRightTrim = std::max(0, historySize - leftTrim - 1);
+		const int rightTrim = clamp(snapshot.trimRight, 0, maxRightTrim);
+		r.start = leftTrim;
+		r.endExclusive = historySize - rightTrim;
+		r.length = std::max(1, r.endExclusive - r.start);
+		return r;
+	}
+	r.length = crownstep::activeLength(historySize, sequenceCap);
+	r.start = crownstep::activeStartIndex(historySize, sequenceCap);
+	r.endExclusive = r.start + r.length;
+	return r;
+}
+
 static float pitchForSequenceIndexLocked(Crownstep* module, int sequenceIndex) {
 	if (!module || sequenceIndex < 0) {
 		return 0.f;
@@ -53,6 +74,70 @@ static float pitchForSequenceIndexLocked(Crownstep* module, int sequenceIndex) {
 
 	return 0.f;
 }
+
+static float pitchForSnapshotIndex(Crownstep* module, const Crownstep::PlaybackSnapshot& snapshot, int sequenceIndex) {
+	if (!module || sequenceIndex < 0) {
+		return 0.f;
+	}
+	if (sequenceIndex < int(snapshot.moveHistory.size())) {
+		const Move& move = snapshot.moveHistory[size_t(sequenceIndex)];
+		float boardValueIndex = module->boardValueIndexForMove(move);
+		if (module->melodicBiasEnabled && sequenceIndex > 0) {
+			const Move& previousMove = snapshot.moveHistory[size_t(sequenceIndex - 1)];
+			boardValueIndex = module->applyMelodicBiasToBoardValueIndex(
+				module->boardValueIndexForMove(previousMove), boardValueIndex, move);
+		}
+		return module->mapPitchFromBoardValueIndex(boardValueIndex, move.isKing);
+	}
+	if (sequenceIndex < int(snapshot.history.size())) {
+		return snapshot.history[size_t(sequenceIndex)].pitch;
+	}
+	return 0.f;
+}
+}
+
+void Crownstep::publishPlaybackSnapshot() {
+	std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
+	const int published = playbackSnapshotPublished.load(std::memory_order_acquire);
+	const int reader = playbackSnapshotReader.load(std::memory_order_acquire);
+	int target = 0;
+	for (int i = 0; i < 3; ++i) {
+		if (i != published && i != reader) {
+			target = i;
+			break;
+		}
+	}
+	PlaybackSnapshot& snapshot = playbackSnapshots[size_t(target)];
+	snapshot.history = history;
+	snapshot.moveHistory = moveHistory;
+	snapshot.rangeTrimEnabled = sequenceRangeTrimEnabled;
+	snapshot.trimLeft = sequenceTrimLeft;
+	snapshot.trimRight = sequenceTrimRight;
+	playbackSnapshotPublished.store(target, std::memory_order_release);
+}
+
+const Crownstep::PlaybackSnapshot& Crownstep::acquirePlaybackSnapshot(int* slotOut) const {
+	int slot = 0;
+	for (;;) {
+		slot = playbackSnapshotPublished.load(std::memory_order_acquire);
+		playbackSnapshotReader.store(slot, std::memory_order_release);
+		// A publisher never writes the published slot. Once the same slot is
+		// observed after announcing the reader hazard, it is immutable until
+		// releasePlaybackSnapshot().
+		if (playbackSnapshotPublished.load(std::memory_order_acquire) == slot) {
+			break;
+		}
+		playbackSnapshotReader.store(-1, std::memory_order_release);
+	}
+	if (slotOut) {
+		*slotOut = slot;
+	}
+	return playbackSnapshots[size_t(slot)];
+}
+
+void Crownstep::releasePlaybackSnapshot(int slot) const {
+	int expected = slot;
+	playbackSnapshotReader.compare_exchange_strong(expected, -1, std::memory_order_release, std::memory_order_relaxed);
 }
 
 int Crownstep::activeLength() {
@@ -87,6 +172,7 @@ void Crownstep::setActiveRangeTrimWindow(int startInclusive, int endExclusive) {
 	sequenceRangeTrimEnabled = true;
 	sequenceTrimLeft = start;
 	sequenceTrimRight = std::max(0, historySize - end);
+	publishPlaybackSnapshot();
 }
 
 void Crownstep::clearActiveRangeTrimWindow() {
@@ -94,6 +180,7 @@ void Crownstep::clearActiveRangeTrimWindow() {
 	sequenceRangeTrimEnabled = false;
 	sequenceTrimLeft = 0;
 	sequenceTrimRight = 0;
+	publishPlaybackSnapshot();
 }
 
 float Crownstep::pitchForSequenceIndex(int sequenceIndex) {
@@ -102,26 +189,34 @@ float Crownstep::pitchForSequenceIndex(int sequenceIndex) {
 }
 
 void Crownstep::refreshHeldPitchForCurrentStep() {
-	std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
-	int historySize = int(history.size());
+	heldPitchRefreshRequested.store(true, std::memory_order_release);
+}
+
+void Crownstep::applyHeldPitchRefreshFromSnapshot() {
+	int snapshotSlot = -1;
+	const PlaybackSnapshot& snapshot = acquirePlaybackSnapshot(&snapshotSlot);
 	int sequenceCap = currentSequenceCap();
-	const ActiveRange range = computeActiveRange(this, historySize, sequenceCap);
+	const ActiveRange range = computeSnapshotActiveRange(snapshot, sequenceCap);
 	int length = range.length;
 	if (length <= 0) {
 		heldPitch = NO_SEQUENCE_PITCH_VOLTS;
+		releasePlaybackSnapshot(snapshotSlot);
 		return;
 	}
 	if (displayedStep <= 0) {
+		releasePlaybackSnapshot(snapshotSlot);
 		return;
 	}
 	int shownStep = clamp(displayedStep, 1, length);
 	int sequenceIndex = range.start + (shownStep - 1);
-	heldPitch = pitchForSequenceIndexLocked(this, sequenceIndex);
+	heldPitch = pitchForSnapshotIndex(this, snapshot, sequenceIndex);
+	releasePlaybackSnapshot(snapshotSlot);
 }
 
 void Crownstep::emitStepAtClockEdge() {
-	std::lock_guard<std::recursive_mutex> lock(sequenceMutex);
-	const ActiveRange range = computeActiveRange(this, int(history.size()), currentSequenceCap());
+	int snapshotSlot = -1;
+	const PlaybackSnapshot& snapshot = acquirePlaybackSnapshot(&snapshotSlot);
+	const ActiveRange range = computeSnapshotActiveRange(snapshot, currentSequenceCap());
 	int length = range.length;
 	if (length <= 0) {
 		displayedStep = 0;
@@ -131,14 +226,15 @@ void Crownstep::emitStepAtClockEdge() {
 		modOutputVolts = 0.f;
 		playhead = 0;
 		eocGateHigh = false;
+		releasePlaybackSnapshot(snapshotSlot);
 		return;
 	}
 
 	playhead = clamp(playhead, 0, std::max(length - 1, 0));
 	displayedStep = playhead + 1;
 	int sequenceIndex = range.start + playhead;
-	const Step& step = history[size_t(sequenceIndex)];
-	heldPitch = pitchForSequenceIndexLocked(this, sequenceIndex);
+	const Step& step = snapshot.history[size_t(sequenceIndex)];
+	heldPitch = pitchForSnapshotIndex(this, snapshot, sequenceIndex);
 	heldAccent = step.accent;
 	heldMod = step.mod * 10.f;
 	modOutputVolts = heldMod;
@@ -150,6 +246,7 @@ void Crownstep::emitStepAtClockEdge() {
 			eocGateHigh = true;
 		}
 	}
+	releasePlaybackSnapshot(snapshotSlot);
 }
 
 void Crownstep::process(const ProcessArgs& args) {
@@ -199,6 +296,9 @@ void Crownstep::process(const ProcessArgs& args) {
 		cachedRootSemitoneLinear = effectiveRootLinear;
 		cachedPitchRangeParam = effectivePitchRangeParam;
 		refreshHeldPitchForCurrentStep();
+	}
+	if (heldPitchRefreshRequested.exchange(false, std::memory_order_acq_rel)) {
+		applyHeldPitchRefreshFromSnapshot();
 	}
 
 	int requestedActivityPulses = eocActivityPulseRequests.exchange(0, std::memory_order_relaxed);

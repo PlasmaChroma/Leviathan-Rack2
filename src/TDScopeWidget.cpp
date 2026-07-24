@@ -1,10 +1,23 @@
 #include "TDScope.hpp"
+#include "visual/VisualAssets.hpp"
 
 #include <chrono>
 #include <cstdio>
 
 namespace {
-constexpr double kDebugTerminalSubmitIntervalSec = 1.0 / 8.0;
+constexpr double kDebugTerminalSubmitIntervalSec = debug_terminal::kTimingRangeSubmitIntervalSec;
+
+PanelBorder *findPanelBorder(Widget *widget) {
+  if (!widget) {
+    return nullptr;
+  }
+  for (Widget *child : widget->children) {
+    if (auto *border = dynamic_cast<PanelBorder *>(child)) {
+      return border;
+    }
+  }
+  return nullptr;
+}
 
 struct TDScopeBrightnessQuantity final : Quantity {
   TDScope *module = nullptr;
@@ -61,27 +74,77 @@ const char *debugRenderModeLabel(const TDScope *scopeModule) {
     case TDScope::DEBUG_RENDER_TAIL_RASTER:
       return "RASTER";
     case TDScope::DEBUG_RENDER_OPENGL:
-      return scopeModule->debugUseGlShaderRenderer.load(std::memory_order_relaxed) ? "GL SHDR" : "GL";
+      return "GL";
+    case TDScope::DEBUG_RENDER_OPENGL_SHDR:
+      return "GL SHDR";
     default:
       return "STD";
   }
 }
+
+struct FittedSvgWidget final : TransparentWidget {
+  std::shared_ptr<window::Svg> svg;
+
+  void setSvg(std::shared_ptr<window::Svg> svg) {
+    this->svg = svg;
+  }
+
+  void draw(const DrawArgs &args) override {
+    if (!svg || !svg->handle || box.size.x <= 0.f || box.size.y <= 0.f) {
+      return;
+    }
+    const Vec svgSize = svg->getSize();
+    if (svgSize.x <= 0.f || svgSize.y <= 0.f) {
+      return;
+    }
+
+    nvgSave(args.vg);
+    nvgScale(args.vg, box.size.x / svgSize.x, box.size.y / svgSize.y);
+    svg->draw(args.vg);
+    nvgRestore(args.vg);
+  }
+};
+
+struct UnpairedStatusWidget final : TransparentWidget {
+  void draw(const DrawArgs &args) override {
+    if (!APP || !APP->window || !APP->window->uiFont) {
+      return;
+    }
+
+    const float centerX = box.size.x * 0.5f;
+    const float bottomY = box.size.y - 7.f;
+    const float lineGap = 9.f;
+
+    nvgSave(args.vg);
+    nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+    nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+
+    nvgFontSize(args.vg, 12.f);
+    nvgFillColor(args.vg, nvgRGBA(150, 176, 190, 220));
+    nvgText(args.vg, centerX, bottomY - 2.f * lineGap, "Attach to", nullptr);
+
+    nvgFontSize(args.vg, 14.f);
+    nvgFillColor(args.vg, nvgRGBA(224, 238, 244, 236));
+    nvgText(args.vg, centerX, bottomY - lineGap + 2.f, "Temporal Deck", nullptr);
+    nvgRestore(args.vg);
+  }
+};
 }
 
 struct TDScopeWidget : ModuleWidget {
   PanelBorder *panelBorder = nullptr;
   Widget *glDisplay = nullptr;
+  Widget *standardDisplay = nullptr;
+  Widget *input = nullptr;
+  Widget *unpairedDragon = nullptr;
+  Widget *unpairedStatus = nullptr;
   math::Rect scopeRectPx;
-  static constexpr float kTopBarYmm = 9.522227f;
-  static constexpr float kTopBarLeftStartMm = 2.2491839f;
+  debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
+  debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
 
-  bool shouldRenderDockBridge() const {
+  bool isPairedToTemporalDeck() const {
     TDScope *scopeModule = static_cast<TDScope *>(module);
-    if (!scopeModule) {
-      return false;
-    }
-    return tdscope::isTemporalDeckModule(scopeModule->leftExpander.module) ||
-           scopeModule->uiLinkActive.load(std::memory_order_relaxed);
+    return scopeModule && tdscope::isTemporalDeckModule(scopeModule->leftExpander.module);
   }
 
   TDScopeWidget(TDScope *module) {
@@ -91,7 +154,7 @@ struct TDScopeWidget : ModuleWidget {
     setPanel(createPanel(panelPath));
     previewBuildTimer.markPanelDone();
     if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
-      panelBorder = tdscope::findPanelBorder(svgPanel->fb);
+      panelBorder = findPanelBorder(svgPanel->fb);
     }
 
     math::Rect scopeRectMm;
@@ -104,27 +167,73 @@ struct TDScopeWidget : ModuleWidget {
     previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
     previewBuildTimer.markAnchorsDone();
 
+    const bool initialPairedToDeck = isPairedToTemporalDeck();
+
     glDisplay = tdscope::createGlDisplay(module, scopeRectMm);
-    glDisplay->setVisible(module && module->useOpenGlGeometryRenderMode());
+    glDisplay->setVisible(initialPairedToDeck && module && module->useOpenGlGeometryRenderMode());
     addChild(glDisplay);
 
-    addChild(tdscope::createDisplay(module, scopeRectMm));
-    addChild(tdscope::createInput(module, scopeRectMm));
+    standardDisplay = tdscope::createDisplay(module, scopeRectMm);
+    standardDisplay->setVisible(initialPairedToDeck);
+    addChild(standardDisplay);
+    addChild(visual_assets::createPreviewFrameEnhancementWidget(scopeRectMm));
+    input = tdscope::createInput(module, scopeRectMm);
+    input->setVisible(initialPairedToDeck);
+    addChild(input);
 
-    addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(Vec(3.2f, 5.8f)), module, TDScope::LINK_LIGHT));
-    addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(Vec(3.2f, 5.8f)), module, TDScope::PREVIEW_LIGHT));
+    math::Rect dragonRectMm;
+    if (!panel_svg::loadRectFromSvgMm(panelPath, "DRAGON_RENDER_AREA", &dragonRectMm)) {
+      dragonRectMm.pos = Vec(1.72215f, 25.0f);
+      dragonRectMm.size = Vec(37.3422f, 76.2759f);
+    }
+    auto *dragon = new FittedSvgWidget;
+    dragon->setSvg(visual_assets::loadPluginSvgCached("res/icon/Leviathan_Optimized.svg"));
+    auto *dragonFb = new widget::FramebufferWidget;
+    dragonFb->box.pos = mm2px(dragonRectMm.pos);
+    dragonFb->box.size = mm2px(dragonRectMm.size);
+    dragonFb->dirtyOnSubpixelChange = false;
+    dragon->box.size = dragonFb->box.size;
+    dragonFb->addChild(dragon);
+    dragonFb->setVisible(!initialPairedToDeck);
+    unpairedDragon = dragonFb;
+    addChild(unpairedDragon);
+
+    auto *status = new UnpairedStatusWidget;
+    status->box.pos = mm2px(scopeRectMm.pos);
+    status->box.size = mm2px(scopeRectMm.size);
+    status->setVisible(!initialPairedToDeck);
+    unpairedStatus = status;
+    addChild(unpairedStatus);
+
+    addChild(createLightCentered<SmallAperture<AmberGreenApertureLight>>(
+      mm2px(Vec(3.2f, 5.8f)), module, TDScope::LINK_LIGHT));
   }
 
   void step() override {
     using PerfClock = std::chrono::steady_clock;
-    const PerfClock::time_point stepStart = PerfClock::now();
-    bool linkedToDeck = shouldRenderDockBridge();
+    const bool measurePerf = isDragonKingDebugEnabled();
+    const PerfClock::time_point stepStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
+    bool pairedToDeck = isPairedToTemporalDeck();
     TDScope *scopeModule = static_cast<TDScope *>(module);
     if (glDisplay) {
-      glDisplay->setVisible(scopeModule && scopeModule->useOpenGlGeometryRenderMode());
+      glDisplay->setVisible(pairedToDeck && scopeModule && scopeModule->useOpenGlGeometryRenderMode());
     }
-    const float borderGrowPx = linkedToDeck ? 3.f : 0.f;
-    if (panelBorder && (panelBorder->box.pos.x != -borderGrowPx || panelBorder->box.size.x != (box.size.x + borderGrowPx))) {
+    if (standardDisplay) {
+      standardDisplay->setVisible(pairedToDeck);
+    }
+    if (input) {
+      input->setVisible(pairedToDeck);
+    }
+    if (unpairedDragon) {
+      unpairedDragon->setVisible(!pairedToDeck);
+    }
+    if (unpairedStatus) {
+      unpairedStatus->setVisible(!pairedToDeck);
+    }
+    const float borderGrowPx = pairedToDeck ? 3.f : 0.f;
+    if (panelBorder &&
+        (panelBorder->box.pos.x != -borderGrowPx ||
+         panelBorder->box.size.x != (box.size.x + borderGrowPx))) {
       panelBorder->box.pos.x = -borderGrowPx;
       panelBorder->box.size.x = box.size.x + borderGrowPx;
       if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
@@ -132,38 +241,26 @@ struct TDScopeWidget : ModuleWidget {
       }
     }
     ModuleWidget::step();
-    if (scopeModule) {
+    if (scopeModule && measurePerf) {
       const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                    PerfClock::now() - stepStart).count()) *
                            0.001f;
       const float prevStepUs = scopeModule->uiDebugModuleUiStepUsEma.load(std::memory_order_relaxed);
       const float emaStepUs = (prevStepUs > 0.f) ? (prevStepUs + (stepUs - prevStepUs) * 0.18f) : stepUs;
       scopeModule->uiDebugModuleUiStepUsEma.store(std::max(0.f, emaStepUs), std::memory_order_relaxed);
+      uiStepUsRange.add(stepUs);
     }
   }
 
   void draw(const DrawArgs &args) override {
     using PerfClock = std::chrono::steady_clock;
-    const PerfClock::time_point moduleDrawStart = PerfClock::now();
-    bool linkedToDeck = shouldRenderDockBridge();
-    if (linkedToDeck) {
+    const bool measurePerf = isDragonKingDebugEnabled();
+    const PerfClock::time_point moduleDrawStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
+    if (isPairedToTemporalDeck()) {
       DrawArgs adjusted = args;
       adjusted.clipBox.pos.x -= mm2px(0.3f);
       adjusted.clipBox.size.x += mm2px(0.3f);
       ModuleWidget::draw(adjusted);
-
-      float y = mm2px(kTopBarYmm);
-      float x0 = 0.f;
-      float x1 = mm2px(kTopBarLeftStartMm);
-      if (x1 > x0 + 0.1f) {
-        nvgBeginPath(args.vg);
-        nvgMoveTo(args.vg, x0, y);
-        nvgLineTo(args.vg, x1, y);
-        nvgStrokeColor(args.vg, nvgRGBA(87, 64, 191, 255));
-        nvgStrokeWidth(args.vg, mm2px(0.50f));
-        nvgLineCap(args.vg, NVG_ROUND);
-        nvgStroke(args.vg);
-      }
     } else {
       ModuleWidget::draw(args);
     }
@@ -184,13 +281,14 @@ struct TDScopeWidget : ModuleWidget {
       nvgRestore(args.vg);
     }
 
-    if (scopeModule) {
+    if (scopeModule && measurePerf) {
       const float drawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                    PerfClock::now() - moduleDrawStart).count()) *
                            0.001f;
       const float prevUs = scopeModule->uiDebugModuleUiDrawUsEma.load(std::memory_order_relaxed);
       const float emaUs = (prevUs > 0.f) ? (prevUs + (drawUs - prevUs) * 0.18f) : drawUs;
       scopeModule->uiDebugModuleUiDrawUsEma.store(std::max(0.f, emaUs), std::memory_order_relaxed);
+      uiDrawUsRange.add(drawUs);
     }
 
     if (scopeModule && isDragonKingDebugEnabled()) {
@@ -198,8 +296,6 @@ struct TDScopeWidget : ModuleWidget {
       if (scopeModule->uiDebugTerminalLastSubmitSec < 0.0 ||
           (nowSec - scopeModule->uiDebugTerminalLastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
         scopeModule->uiDebugTerminalLastSubmitSec = nowSec;
-        float uiDrawUsEma = scopeModule->uiDebugModuleUiDrawUsEma.load(std::memory_order_relaxed);
-        float uiStepUsEma = scopeModule->uiDebugModuleUiStepUsEma.load(std::memory_order_relaxed);
         float densityPct = scopeModule->uiDebugScopeDensityPct.load(std::memory_order_relaxed);
         int densityRows = scopeModule->uiDebugScopeDensityRows.load(std::memory_order_relaxed);
         float rackZoom = scopeModule->uiDebugScopeRackZoom.load(std::memory_order_relaxed);
@@ -208,7 +304,10 @@ struct TDScopeWidget : ModuleWidget {
         uint64_t drawSeq = scopeModule->uiDebugScopeDrawSeq.load(std::memory_order_relaxed);
         uint64_t drawCalls = scopeModule->uiDebugScopeDrawCalls.load(std::memory_order_relaxed);
         debug_terminal::submitTDScopeUiMetrics(scopeModule->debugInstanceId,
-                                               (uiStepUsEma + uiDrawUsEma) * 0.001f,
+                                               debug_terminal::consumeAudioProcessTiming(scopeModule->perfAudioProcessMinNs,
+                                                                                         scopeModule->perfAudioProcessMaxNs),
+                                               uiStepUsRange.consume(),
+                                               uiDrawUsRange.consume(),
                                                densityRows,
                                                densityPct,
                                                rackZoom,
@@ -292,6 +391,13 @@ struct TDScopeWidget : ModuleWidget {
       submenu->addChild(createCheckMenuItem(
         "Fire (Red/Yellow)", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_FIRE; },
         [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_FIRE; }));
+      submenu->addChild(createCheckMenuItem(
+        "Retro Amber", "", [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_AMBER; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_AMBER; }));
+      submenu->addChild(createCheckMenuItem(
+        "Retro Green", "",
+        [=]() { return scopeModule->scopeColorScheme == TDScope::COLOR_SCHEME_GREEN_PHOSPHOR; },
+        [=]() { scopeModule->scopeColorScheme = TDScope::COLOR_SCHEME_GREEN_PHOSPHOR; }));
     }));
     addBrightnessSlider(menu);
 
@@ -321,23 +427,15 @@ struct TDScopeWidget : ModuleWidget {
           [=]() { scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_TAIL_RASTER; }));
         submenu->addChild(createCheckMenuItem(
           "OpenGL", "",
-          [=]() {
-            return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL &&
-                   !scopeModule->debugUseGlShaderRenderer.load(std::memory_order_relaxed);
-          },
+          [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL; },
           [=]() {
             scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
-            scopeModule->debugUseGlShaderRenderer.store(false, std::memory_order_relaxed);
           }));
         submenu->addChild(createCheckMenuItem(
           "OpenGL SHDR", "",
+          [=]() { return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL_SHDR; },
           [=]() {
-            return scopeModule->debugRenderMode == TDScope::DEBUG_RENDER_OPENGL &&
-                   scopeModule->debugUseGlShaderRenderer.load(std::memory_order_relaxed);
-          },
-          [=]() {
-            scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL;
-            scopeModule->debugUseGlShaderRenderer.store(true, std::memory_order_relaxed);
+            scopeModule->debugRenderMode = TDScope::DEBUG_RENDER_OPENGL_SHDR;
           }));
       }));
     }

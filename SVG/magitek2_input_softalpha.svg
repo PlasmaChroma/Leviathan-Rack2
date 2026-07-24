@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <defs>
+    <!-- Rack/NanoSVG-friendly: gradients + paths only; no filters or masks. -->
+    <radialGradient id="softEdge" gradientUnits="userSpaceOnUse" cx="32" cy="32" r="31.6">
+      <stop offset="0%" stop-color="#010102" stop-opacity="0.55"/>
+      <stop offset="82%" stop-color="#010102" stop-opacity="0.48"/>
+      <stop offset="92%" stop-color="#010102" stop-opacity="0.24"/>
+      <stop offset="98%" stop-color="#010102" stop-opacity="0.07"/>
+      <stop offset="100%" stop-color="#010102" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="outerShell" cx="48%" cy="35%" r="63%">
+      <stop offset="0%" stop-color="#e4f7ff" stop-opacity="0.95"/>
+      <stop offset="18%" stop-color="#526f8c" stop-opacity="0.90"/>
+      <stop offset="42%" stop-color="#17202e" stop-opacity="0.98"/>
+      <stop offset="75%" stop-color="#030408"/>
+      <stop offset="100%" stop-color="#22252b"/>
+    </radialGradient>
+    <linearGradient id="steelStroke" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f6feff"/>
+      <stop offset="24%" stop-color="#60788f"/>
+      <stop offset="56%" stop-color="#05070d"/>
+      <stop offset="100%" stop-color="#dceeff"/>
+    </linearGradient>
+    <linearGradient id="goldTrack" x1="0.08" y1="0" x2="0.92" y2="1">
+      <stop offset="0%" stop-color="#fff3a8"/>
+      <stop offset="32%" stop-color="#dbac4d"/>
+      <stop offset="63%" stop-color="#6e3e12"/>
+      <stop offset="100%" stop-color="#f5ca69"/>
+    </linearGradient>
+    <linearGradient id="violetGlow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fff0ff"/>
+      <stop offset="35%" stop-color="#c790ff"/>
+      <stop offset="70%" stop-color="#7c38ff"/>
+      <stop offset="100%" stop-color="#23006f"/>
+    </linearGradient>
+    <radialGradient id="socketDepth" cx="50%" cy="50%" r="54%">
+      <stop offset="0%" stop-color="#000000"/>
+      <stop offset="68%" stop-color="#010102"/>
+      <stop offset="88%" stop-color="#06020a"/>
+      <stop offset="100%" stop-color="#1d0d2c"/>
+    </radialGradient>
+    <radialGradient id="violetSmoke" cx="50%" cy="50%" r="52%">
+      <stop offset="0%" stop-color="#1a0626" stop-opacity="0"/>
+      <stop offset="54%" stop-color="#6b2bff" stop-opacity="0.10"/>
+      <stop offset="76%" stop-color="#a36aff" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#050307" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <g id="gemini-magitek-synthesis-jack">
+    <!-- transparent feather that survives SVG-to-PNG conversion without requiring masks -->
+    <circle cx="32" cy="32" r="31.45" fill="url(#softEdge)"/>
+
+    <!-- Gemini-style readable bezel, Magitek-style asymmetric shell -->
+    <circle cx="32" cy="32" r="29.15" fill="url(#outerShell)" opacity="0.93"/>
+    <circle cx="32" cy="32" r="29.15" fill="none" stroke="#030408" stroke-width="2.05" opacity="0.92"/>
+    <circle cx="32" cy="32" r="27.75" fill="none" stroke="url(#steelStroke)" stroke-width="0.95" opacity="0.48"/>
+    <circle cx="32" cy="32" r="26.45" fill="none" stroke="#000000" stroke-width="2.15" opacity="0.86"/>
+    <circle cx="32" cy="32" r="25.35" fill="none" stroke="#172133" stroke-width="0.75" opacity="0.84"/>
+    <circle cx="32" cy="32" r="24.35" fill="none" stroke="#39404a" stroke-width="0.42" opacity="0.30"/>
+
+    <!-- brushed outer glints -->
+    <path d="M 11.954 11.954 A 28.350 28.350 0 0 1 45.310 6.968" fill="none" stroke="#e9fbff" stroke-width="0.70" stroke-linecap="round" opacity="0.46"/>
+    <path d="M 15.254 10.566 A 27.200 27.200 0 0 1 50.200 11.786" fill="none" stroke="#ffffff" stroke-width="0.52" stroke-linecap="round" opacity="0.34"/>
+    <path d="M 4.937 22.150 A 28.800 28.800 0 0 1 9.938 13.488" fill="none" stroke="#d69b47" stroke-width="0.92" stroke-linecap="round" opacity="0.34"/>
+    <path d="M 58.853 22.754 A 28.400 28.400 0 0 1 59.432 39.350" fill="none" stroke="#d9ecff" stroke-width="0.64" stroke-linecap="round" opacity="0.34"/>
+    <path d="M 56.807 44.099 A 27.600 27.600 0 0 1 48.610 54.042" fill="none" stroke="#d59a42" stroke-width="0.74" stroke-linecap="round" opacity="0.27"/>
+    <path d="M 31.000 60.633 A 28.650 28.650 0 0 1 13.584 53.947" fill="none" stroke="#e1f3ff" stroke-width="0.58" stroke-linecap="round" opacity="0.24"/>
+    <path d="M 10.566 48.746 A 27.200 27.200 0 0 1 5.300 37.190" fill="none" stroke="#c78e3b" stroke-width="0.67" stroke-linecap="round" opacity="0.25"/>
+    <path d="M 44.277 5.672 A 29.050 29.050 0 0 1 57.158 17.475" fill="none" stroke="#f4d287" stroke-width="0.72" stroke-linecap="round" opacity="0.23"/>
+    <path d="M 23.125 7.615 A 25.950 25.950 0 0 1 42.555 8.293" fill="none" stroke="#bedcff" stroke-width="0.45" stroke-linecap="round" opacity="0.32"/>
+    <path d="M 22.790 55.993 A 25.700 25.700 0 0 1 10.205 45.619" fill="none" stroke="#29364c" stroke-width="0.66" stroke-linecap="round" opacity="0.50"/>
+
+    <!-- gold technology track: cleaner Gemini circle with Magitek breaks and grain -->
+    <circle cx="32" cy="32" r="21.35" fill="none" stroke="#050307" stroke-width="4.25" opacity="0.92"/>
+    <circle cx="32" cy="32" r="21.35" fill="none" stroke="url(#goldTrack)" stroke-width="2.25" opacity="0.98"/>
+    <circle cx="32" cy="32" r="22.75" fill="none" stroke="#100a04" stroke-width="0.55" opacity="0.86"/>
+    <circle cx="32" cy="32" r="19.85" fill="none" stroke="#241503" stroke-width="0.58" opacity="0.72"/>
+    <path d="M 28.741 10.816 A 21.433 21.433 0 0 1 30.363 10.630" fill="none" stroke="#fff0aa" stroke-width="0.32" stroke-linecap="round" opacity="0.68"/>
+    <path d="M 29.116 11.178 A 21.020 21.020 0 0 1 30.691 11.020" fill="none" stroke="#f5c45f" stroke-width="0.50" stroke-linecap="round" opacity="0.52"/>
+    <path d="M 36.155 11.435 A 20.980 20.980 0 0 1 37.056 11.638" fill="none" stroke="#f5c45f" stroke-width="0.32" stroke-linecap="round" opacity="0.34"/>
+    <path d="M 42.224 13.116 A 21.474 21.474 0 0 1 42.964 13.536" fill="none" stroke="#764718" stroke-width="0.37" stroke-linecap="round" opacity="0.61"/>
+    <path d="M 15.209 18.191 A 21.739 21.739 0 0 1 16.559 16.697" fill="none" stroke="#f5c45f" stroke-width="0.45" stroke-linecap="round" opacity="0.35"/>
+    <path d="M 46.770 18.038 A 20.325 20.325 0 0 1 48.016 19.487" fill="none" stroke="#f5c45f" stroke-width="0.39" stroke-linecap="round" opacity="0.51"/>
+    <path d="M 44.730 13.993 A 22.052 22.052 0 0 1 45.958 14.927" fill="none" stroke="#f5c45f" stroke-width="0.51" stroke-linecap="round" opacity="0.50"/>
+    <path d="M 15.348 18.501 A 21.436 21.436 0 0 1 16.378 17.322" fill="none" stroke="#764718" stroke-width="0.40" stroke-linecap="round" opacity="0.51"/>
+    <path d="M 50.808 40.114 A 20.484 20.484 0 0 1 50.468 40.862" fill="none" stroke="#c8872e" stroke-width="0.48" stroke-linecap="round" opacity="0.45"/>
+    <path d="M 53.435 32.734 A 21.448 21.448 0 0 1 53.312 34.408" fill="none" stroke="#f5c45f" stroke-width="0.31" stroke-linecap="round" opacity="0.44"/>
+    <path d="M 53.608 32.976 A 21.630 21.630 0 0 1 53.485 34.505" fill="none" stroke="#764718" stroke-width="0.33" stroke-linecap="round" opacity="0.62"/>
+    <path d="M 52.386 34.547 A 20.544 20.544 0 0 1 52.168 35.917" fill="none" stroke="#764718" stroke-width="0.39" stroke-linecap="round" opacity="0.39"/>
+    <path d="M 51.207 39.281 A 20.541 20.541 0 0 1 50.544 40.835" fill="none" stroke="#c8872e" stroke-width="0.30" stroke-linecap="round" opacity="0.33"/>
+    <path d="M 53.302 30.246 A 21.374 21.374 0 0 1 53.367 31.453" fill="none" stroke="#764718" stroke-width="0.29" stroke-linecap="round" opacity="0.45"/>
+    <path d="M 53.494 32.058 A 21.494 21.494 0 0 1 53.447 33.422" fill="none" stroke="#f5c45f" stroke-width="0.50" stroke-linecap="round" opacity="0.66"/>
+    <path d="M 52.287 27.280 A 20.828 20.828 0 0 1 52.637 29.184" fill="none" stroke="#f5c45f" stroke-width="0.33" stroke-linecap="round" opacity="0.65"/>
+    <path d="M 34.056 53.543 A 21.641 21.641 0 0 1 32.939 53.621" fill="none" stroke="#f5c45f" stroke-width="0.37" stroke-linecap="round" opacity="0.61"/>
+    <path d="M 20.304 48.632 A 20.332 20.332 0 0 1 19.480 48.020" fill="none" stroke="#f5c45f" stroke-width="0.37" stroke-linecap="round" opacity="0.33"/>
+    <path d="M 24.399 52.393 A 21.764 21.764 0 0 1 22.707 51.680" fill="none" stroke="#f5c45f" stroke-width="0.45" stroke-linecap="round" opacity="0.60"/>
+    <path d="M 20.012 49.007 A 20.807 20.807 0 0 1 18.921 48.183" fill="none" stroke="#764718" stroke-width="0.46" stroke-linecap="round" opacity="0.64"/>
+    <path d="M 29.226 53.669 A 21.846 21.846 0 0 1 28.077 53.491" fill="none" stroke="#764718" stroke-width="0.35" stroke-linecap="round" opacity="0.57"/>
+    <path d="M 27.872 52.192 A 20.610 20.610 0 0 1 26.812 51.946" fill="none" stroke="#fff0aa" stroke-width="0.46" stroke-linecap="round" opacity="0.37"/>
+    <path d="M 13.098 40.145 A 20.582 20.582 0 0 1 12.634 38.972" fill="none" stroke="#fff0aa" stroke-width="0.39" stroke-linecap="round" opacity="0.52"/>
+    <path d="M 16.365 47.511 A 22.024 22.024 0 0 1 14.996 45.997" fill="none" stroke="#764718" stroke-width="0.48" stroke-linecap="round" opacity="0.48"/>
+    <path d="M 31.422 52.490 A 20.498 20.498 0 0 1 30.188 52.418" fill="none" stroke="#c8872e" stroke-width="0.42" stroke-linecap="round" opacity="0.55"/>
+    <path d="M 47.866 17.714 A 21.350 21.350 0 0 1 51.189 22.641" fill="none" stroke="#050307" stroke-width="2.75" stroke-linecap="round" opacity="0.90"/>
+    <path d="M 47.866 46.286 A 21.350 21.350 0 0 1 43.628 49.906" fill="none" stroke="#050307" stroke-width="2.45" stroke-linecap="round" opacity="0.80"/>
+    <path d="M 17.714 47.866 A 21.350 21.350 0 0 1 13.699 42.996" fill="none" stroke="#050307" stroke-width="2.55" stroke-linecap="round" opacity="0.86"/>
+    <path d="M 15.408 18.564 A 21.350 21.350 0 0 1 18.564 15.408" fill="none" stroke="#050307" stroke-width="2.35" stroke-linecap="round" opacity="0.78"/>
+
+    <!-- restrained compass ticks, borrowed from Gemini but with Magitek violet signal marks -->
+    <path d="M 32.000 8.250 L 32.000 4.850" fill="none" stroke="#5d31ff" stroke-width="1.20" stroke-linecap="round" opacity="0.82"/>
+    <path d="M 32.000 55.750 L 32.000 59.150" fill="none" stroke="#4b22ff" stroke-width="1.05" stroke-linecap="round" opacity="0.70"/>
+    <path d="M 56.250 32.000 L 59.050 32.000" fill="none" stroke="#1a1112" stroke-width="1.25" stroke-linecap="round" opacity="0.82"/>
+    <path d="M 7.750 32.000 L 4.950 32.000" fill="none" stroke="#1a1112" stroke-width="1.25" stroke-linecap="round" opacity="0.82"/>
+    <circle cx="10.55" cy="32" r="1.02" fill="#161013" opacity="0.96"/>
+    <circle cx="10.55" cy="32" r="0.48" fill="#f2c77b" opacity="0.70"/>
+    <circle cx="53.45" cy="32" r="1.02" fill="#161013" opacity="0.96"/>
+    <circle cx="53.45" cy="32" r="0.48" fill="#f2c77b" opacity="0.70"/>
+    <circle cx="48.35" cy="23.85" r="0.78" fill="#e7bd77" opacity="0.52"/>
+    <circle cx="15.55" cy="23.90" r="0.70" fill="#876641" opacity="0.38"/>
+
+    <!-- inner socket: dark well with visible purple luminous jack ring -->
+    <circle cx="32" cy="32" r="18.55" fill="#0b0610"/>
+    <circle cx="32" cy="32" r="18.55" fill="url(#socketDepth)"/>
+    <circle cx="32" cy="32" r="18.95" fill="url(#violetSmoke)" opacity="0.95"/>
+    <circle cx="32" cy="32" r="16.15" fill="none" stroke="#7830ff" stroke-width="5.90" opacity="0.15"/>
+    <circle cx="32" cy="32" r="15.88" fill="none" stroke="#a66cff" stroke-width="4.05" opacity="0.30"/>
+    <circle cx="32" cy="32" r="15.70" fill="none" stroke="url(#violetGlow)" stroke-width="2.58" opacity="1.00"/>
+    <circle cx="32" cy="32" r="15.70" fill="none" stroke="#f9dcff" stroke-width="0.62" opacity="0.72"/>
+    <path d="M 21.495 20.333 A 15.700 15.700 0 0 1 43.102 20.898" fill="none" stroke="#fff7ff" stroke-width="0.74" stroke-linecap="round" opacity="0.48"/>
+    <path d="M 46.557 37.881 A 15.700 15.700 0 0 1 31.726 47.698" fill="none" stroke="#5c24ff" stroke-width="0.92" stroke-linecap="round" opacity="0.66"/>
+    <path d="M 23.879 46.650 A 16.750 16.750 0 0 1 15.616 28.517" fill="none" stroke="#2e0b91" stroke-width="0.76" stroke-linecap="round" opacity="0.72"/>
+    <path d="M 27.024 18.327 A 14.550 14.550 0 0 1 37.451 18.509" fill="none" stroke="#e4b6ff" stroke-width="0.50" stroke-linecap="round" opacity="0.38"/>
+
+    <!-- central void and bevel lip -->
+    <circle cx="32" cy="32" r="13.25" fill="#000000" opacity="0.99"/>
+    <circle cx="32" cy="32" r="12.05" fill="url(#socketDepth)"/>
+    <circle cx="32" cy="32" r="13.18" fill="none" stroke="#030005" stroke-width="1.22" opacity="0.92"/>
+    <path d="M 22.772 22.772 A 13.050 13.050 0 0 1 42.284 23.966" fill="none" stroke="#16091f" stroke-width="1.05" stroke-linecap="round" opacity="0.90"/>
+    <path d="M 29.838 44.261 A 12.450 12.450 0 0 1 19.920 35.012" fill="none" stroke="#000000" stroke-width="0.90" stroke-linecap="round" opacity="0.84"/>
+  </g>
+</svg>

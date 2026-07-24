@@ -1,10 +1,12 @@
 #pragma once
 
 #include "plugin.hpp"
+#include "MathHelpers.hpp"
 
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <limits>
 #include <memory>
 
 constexpr int kWyrmPointCountDefault = 128;
@@ -68,29 +70,6 @@ constexpr float kWyrmSlitherMaxOffset = 0.42f;
 constexpr float kWyrmRockClearance = 0.012f;
 constexpr float kWyrmRockValueScale = 0.5f;
 
-inline float clamp01(float x) {
-	return clamp(x, 0.f, 1.f);
-}
-
-inline float wrap01(float x) {
-	return x - std::floor(x);
-}
-
-inline float wrap01Fast(float x) {
-	if (x >= 1.f) {
-		x -= 1.f;
-	}
-	else if (x < 0.f) {
-		x += 1.f;
-	}
-	return x;
-}
-
-inline float smoother01(float x) {
-	x = clamp01(x);
-	return x * x * (3.f - 2.f * x);
-}
-
 inline float hashUnit(uint32_t seed) {
 	seed ^= seed >> 16;
 	seed *= 0x7feb352du;
@@ -100,22 +79,10 @@ inline float hashUnit(uint32_t seed) {
 	return float(seed & 0x00ffffffu) / float(0x01000000u);
 }
 
-inline float fastTanh(float x) {
-	const float x2 = x * x;
-	if (x2 < 9.f) {
-		return x * (27.f + x2) / (27.f + 9.f * x2);
-	}
-	return (x > 0.f) ? 1.f : -1.f;
-}
-
-inline float softClip(float x) {
-	return fastTanh(x);
-}
-
 inline float wyrmBaseFrequencyFromKnob(float knobNorm, bool lfoMode) {
 	const float minFreq = lfoMode ? kWyrmLfoMinHz : kWyrmAudioMinHz;
 	const float maxFreq = lfoMode ? kWyrmLfoMaxHz : kWyrmAudioMaxHz;
-	return minFreq * std::pow(maxFreq / minFreq, clamp01(knobNorm));
+	return minFreq * std::pow(maxFreq / minFreq, levi_math::clamp01(knobNorm));
 }
 
 inline float wyrmKnobValueForFrequency(float hz, bool lfoMode) {
@@ -136,7 +103,7 @@ inline float foldWave(float x, float amount) {
 
 inline float catmullPeriodic(const std::array<float, kWyrmPointCountMax>& points, int pointCount, float phase) {
 	const int count = clamp(pointCount, 2, kWyrmPointCountMax);
-	const float p = wrap01(phase) * float(count);
+	const float p = levi_math::wrap01(phase) * float(count);
 	const int i1 = int(std::floor(p)) % count;
 	const int i0 = (i1 + count - 1) % count;
 	const int i2 = (i1 + 1) % count;
@@ -165,7 +132,7 @@ inline float catmullPeriodic(const std::array<float, kWyrmPointCountMax>& points
 
 inline float slitherOffset(float phase, float travelPhase, float amount) {
 	const float shapedAmount = amount * amount;
-	return kWyrmSlitherMaxOffset * shapedAmount * std::sin(2.f * float(M_PI) * (wrap01(phase) - wrap01(travelPhase)));
+	return kWyrmSlitherMaxOffset * shapedAmount * std::sin(2.f * float(M_PI) * (levi_math::wrap01(phase) - levi_math::wrap01(travelPhase)));
 }
 
 inline float slitherSpeedFactor(float speedKnob) {
@@ -178,7 +145,7 @@ inline float slitherSpeedFactor(float speedKnob) {
 		}
 		return t;
 	}();
-	const float k = clamp01(speedKnob) * float(lut.size() - 1u);
+	const float k = levi_math::clamp01(speedKnob) * float(lut.size() - 1u);
 	const int i0 = clamp(int(std::floor(k)), 0, int(lut.size() - 1u));
 	const int i1 = std::min(i0 + 1, int(lut.size() - 1u));
 	const float t = k - float(i0);
@@ -225,6 +192,7 @@ struct WyrmRockStateSnapshot {
 };
 
 struct Wyrm : Module {
+	ModuleTeardownTimer teardownTimer {"Wyrm"};
 	enum ParamId {
 		FREQ_PARAM,
 		FINE_PARAM,
@@ -263,6 +231,9 @@ struct Wyrm : Module {
 	std::atomic<uint32_t> waveVersion {1};
 	uint32_t appliedWaveVersion = 0;
 	std::atomic<float> displayFrequencyHz {0.f};
+	// Rate-limited channel-one state for the low-frequency waveform tracer.
+	std::atomic<float> displayPhase {0.f};
+	std::atomic<float> displayPhaseFrequencyHz {0.f};
 	std::atomic<float> displaySlitherPhase {0.f};
 	std::atomic<float> uiSlitherPhase {0.f};
 	std::atomic<float> displaySlitherAmount {0.f};
@@ -292,6 +263,8 @@ struct Wyrm : Module {
 	dsp::ClockDivider perfMeasureDivider;
 	std::atomic<uint64_t> perfAudioSampledCount {0};
 	std::atomic<uint64_t> perfAudioProcessNs {0};
+	std::atomic<uint64_t> perfAudioProcessMinNs {std::numeric_limits<uint64_t>::max()};
+	std::atomic<uint64_t> perfAudioProcessMaxNs {0};
 	std::atomic<int> perfChannels {1};
 	std::atomic<bool> perfFmConnected {false};
 	std::atomic<bool> perfFoldActive {false};
@@ -301,10 +274,12 @@ struct Wyrm : Module {
 	std::atomic<float> perfSandGlUs {0.f};
 	std::atomic<uint64_t> perfBodySampleCacheHits {0};
 	std::atomic<uint64_t> perfBodySampleCacheMisses {0};
+	float phaseTracerPublishTimer = 0.f;
 	uint32_t debugInstanceId = 0;
 	double createdUnixTimeSec = 0.0;
 
 	Wyrm();
+	~Wyrm() override;
 
 	void placeRock(int index);
 	void setRockCount(int count);

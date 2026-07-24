@@ -32,6 +32,7 @@ static constexpr int kDefaultPort = 8765;
 static constexpr int kReconnectIntervalMs = 1000;
 static constexpr int kPublishIntervalMs = 125;
 static constexpr double kSnapshotStaleSec = 2.0;
+static constexpr double kSchemaSubmitIntervalSec = 5.0;
 
 struct Snapshot {
   std::string module;
@@ -107,7 +108,7 @@ public:
     snap.ts = ts;
 
     std::lock_guard<std::mutex> lock(mutex_);
-    snapshots_[makeKey(snap.module, snap.instance, snap.stream)] = snap;
+    snapshots_[makeKey(snap.module, snap.instance, snap.stream, snap.kind)] = snap;
   }
 
 private:
@@ -126,8 +127,11 @@ private:
 #endif
   std::chrono::steady_clock::time_point lastConnectAttempt_;
 
-  static std::string makeKey(const std::string &module, const std::string &instance, const std::string &stream) {
-    return module + "|" + instance + "|" + stream;
+  static std::string makeKey(const std::string &module,
+                             const std::string &instance,
+                             const std::string &stream,
+                             const std::string &kind) {
+    return module + "|" + instance + "|" + stream + "|" + kind;
   }
 
   void startWorker() { worker_ = std::thread([this]() { workerLoop(); }); }
@@ -331,10 +335,52 @@ static Transport &transport() {
   return *gTransport;
 }
 
+static bool shouldSubmitSchema(const char *module, const char *stream) {
+  static std::mutex schemaMutex;
+  static std::unordered_map<std::string, double> lastSubmitSec;
+  const double nowSec = system::getTime();
+  const std::string key = std::string(module ? module : "") + "|" + (stream ? stream : "");
+
+  std::lock_guard<std::mutex> lock(schemaMutex);
+  double &last = lastSubmitSec[key];
+  if (last > 0.0 && (nowSec - last) < kSchemaSubmitIntervalSec) {
+    return false;
+  }
+  last = nowSec;
+  return true;
+}
+
+static void submitUiMetricSchema(const char *module, const char *columnsJson) {
+  if (!shouldSubmitSchema(module, "ui")) {
+    return;
+  }
+  char dataBuf[1024];
+  std::snprintf(dataBuf,
+                sizeof(dataBuf),
+                "{\"schema\":1,\"target_kind\":\"metric\",\"columns\":%s}",
+                columnsJson ? columnsJson : "[]");
+  transport().submit(module, 0u, "ui", "schema", dataBuf, system::getTime());
+}
+
+static void appendRange(char *buf, size_t size, const char *key, TimingRangeUs range) {
+  const size_t len = std::strlen(buf);
+  if (len >= size) {
+    return;
+  }
+  std::snprintf(buf + len,
+                size - len,
+                "\"%s\":\"%.2f-%.2f\"",
+                key ? key : "",
+                std::max(0.f, range.min),
+                std::max(0.f, range.max));
+}
+
 } // namespace
 
 void submitTDScopeUiMetrics(uint32_t instanceId,
-                            float uiMs,
+                            TimingRangeUs processUs,
+                            TimingRangeUs stepUs,
+                            TimingRangeUs drawUs,
                             int rows,
                             float densityPct,
                             float zoom,
@@ -342,11 +388,24 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
                             uint64_t publishSeq,
                             uint64_t drawSeq,
                             uint64_t drawCalls) {
+  submitUiMetricSchema("TDScope",
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"rows\",\"label\":\"Rows\"},{\"key\":\"density_pct\",\"label\":\"Density%\"},{\"key\":\"zoom\",\"label\":\"Zoom\"},{\"key\":\"thickness\",\"label\":\"Thickness\"},{\"key\":\"publish_seq\",\"label\":\"Publish\"},{\"key\":\"draw_seq\",\"label\":\"Draw Seq\"},{\"key\":\"draw_calls\",\"label\":\"Calls\"}]");
   char dataBuf[320];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"rows\":%d,\"density_pct\":%.2f,\"zoom\":%.4f,\"thickness\":%.4f,\"publish_seq\":%llu,\"draw_seq\":%llu,\"draw_calls\":%llu}",
-                std::max(0.f, uiMs),
+                "{");
+  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",\"rows\":%d,\"density_pct\":%.2f,\"zoom\":%.4f,\"thickness\":%.4f,\"publish_seq\":%llu,\"draw_seq\":%llu,\"draw_calls\":%llu}",
                 std::max(0, rows),
                 std::max(0.f, densityPct),
                 std::max(0.f, zoom),
@@ -359,17 +418,30 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
 }
 
 void submitTemporalDeckUiMetrics(uint32_t instanceId,
-                                 float uiMs,
-                                 float audioUs,
+                                 TimingRangeUs processUs,
+                                 TimingRangeUs stepUs,
+                                 TimingRangeUs drawUs,
                                  float scopePreviewUs,
                                  int scopeStride,
                                  bool scopeMetricValid) {
+  submitUiMetricSchema("TemporalDeck",
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"scope_preview_us\",\"label\":\"Scope (us)\"},{\"key\":\"scope_stride\",\"label\":\"Stride\"},{\"key\":\"scope_metric_valid\",\"label\":\"Scope OK\"}]");
   char dataBuf[320];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"audio_us\":%.3f,\"scope_preview_us\":%.4f,\"scope_stride\":%d,\"scope_metric_valid\":%d}",
-                std::max(0.f, uiMs),
-                std::max(0.f, audioUs),
+                "{");
+  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",\"scope_preview_us\":%.4f,\"scope_stride\":%d,\"scope_metric_valid\":%d}",
                 std::max(0.f, scopePreviewUs),
                 std::max(0, scopeStride),
                 scopeMetricValid ? 1 : 0);
@@ -377,28 +449,53 @@ void submitTemporalDeckUiMetrics(uint32_t instanceId,
   transport().submit("TemporalDeck", instanceId, "ui", "metric", dataBuf, ts);
 }
 
+void submitCrownstepAiMetrics(uint32_t instanceId, int aiThinkMs) {
+  if (shouldSubmitSchema("Crownstep", "ai")) {
+    transport().submit(
+      "Crownstep",
+      0u,
+      "ai",
+      "schema",
+      "{\"schema\":1,\"target_kind\":\"metric\",\"columns\":[{\"key\":\"ai_ms\",\"label\":\"AI (ms)\"}]}",
+      system::getTime());
+  }
+
+  char dataBuf[64];
+  std::snprintf(dataBuf, sizeof(dataBuf), "{\"ai_ms\":%d}", std::max(0, aiThinkMs));
+  transport().submit("Crownstep", instanceId, "ai", "metric", dataBuf, system::getTime());
+}
+
 void submitBifurxUiMetrics(uint32_t instanceId,
-                           float uiMs,
-                           float uiDrawMs,
-                           float uiSyncMs,
-                           float uiLocalPrepMs,
+                           TimingRangeUs processUs,
+                           TimingRangeUs stepUs,
+                           TimingRangeUs drawUs,
+                           float uiLocalPrepUs,
                            bool renderOpengl,
-                           float audioUs,
                            float curvePrepUs,
                            float overlayPrepUs,
                            int visualWorkerMode,
                            float visualWorkerAgeMs,
                            float visualWorkerQueueMs) {
+  submitUiMetricSchema("Bifurx",
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"ui_local_prep_us\",\"label\":\"Prep (us)\"},{\"key\":\"opengl\",\"label\":\"GL\"},{\"key\":\"vw_mode\",\"label\":\"VW\"},{\"key\":\"vw_age_ms\",\"label\":\"VW age (ms)\"},{\"key\":\"vw_queue_ms\",\"label\":\"VW q (ms)\"},{\"key\":\"curve_prep_us\",\"label\":\"Curve (us)\"},{\"key\":\"overlay_prep_us\",\"label\":\"Overlay (us)\"}]");
   char dataBuf[512];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"ui_draw_ms\":%.4f,\"ui_sync_ms\":%.4f,\"ui_local_prep_ms\":%.4f,\"opengl\":%d,\"audio_us\":%.3f,\"curve_prep_us\":%.3f,\"overlay_prep_us\":%.3f,\"vw_mode\":%d,\"vw_age_ms\":%.3f,\"vw_queue_ms\":%.3f}",
-                std::max(0.f, uiMs),
-                std::max(0.f, uiDrawMs),
-                std::max(0.f, uiSyncMs),
-                std::max(0.f, uiLocalPrepMs),
+                "{");
+  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",\"ui_local_prep_us\":%.3f,\"opengl\":%d,\"curve_prep_us\":%.3f,\"overlay_prep_us\":%.3f,\"vw_mode\":%d,\"vw_age_ms\":%.3f,\"vw_queue_ms\":%.3f}",
+                std::max(0.f, uiLocalPrepUs),
                 renderOpengl ? 1 : 0,
-                std::max(0.f, audioUs),
                 std::max(0.f, curvePrepUs),
                 std::max(0.f, overlayPrepUs),
                 visualWorkerMode,
@@ -409,26 +506,39 @@ void submitBifurxUiMetrics(uint32_t instanceId,
 }
 
 void submitWyrmMetrics(uint32_t instanceId,
-                       float uiMs,
+                       TimingRangeUs processUs,
+                       TimingRangeUs stepUs,
+                       TimingRangeUs drawUs,
                        float editorDrawUs,
                        float sandUpdateUs,
                        float sandDrawUs,
                        float sandGlUs,
-                       float audioUs,
                        int channels,
                        int bodySamples,
                        uint64_t bodySampleCacheHits,
                        uint64_t bodySampleCacheMisses) {
+  submitUiMetricSchema("Wyrm",
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"ed_us\",\"label\":\"Ed (us)\"},{\"key\":\"sand_up_us\",\"label\":\"SUp (us)\"},{\"key\":\"sand_dr_us\",\"label\":\"SDr (us)\"},{\"key\":\"sand_gl_us\",\"label\":\"SGL (us)\"},{\"key\":\"ch\",\"label\":\"Ch\"},{\"key\":\"body\",\"label\":\"Body\"},{\"key\":\"body_cache_hit\",\"label\":\"BHit\"},{\"key\":\"body_cache_miss\",\"label\":\"BMiss\"}]");
   char dataBuf[512];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"ed_us\":%.3f,\"sand_up_us\":%.3f,\"sand_dr_us\":%.3f,\"sand_gl_us\":%.3f,\"audio_us\":%.3f,\"ch\":%d,\"body\":%d,\"body_cache_hit\":%llu,\"body_cache_miss\":%llu}",
-                std::max(0.f, uiMs),
+                "{");
+  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",\"ed_us\":%.3f,\"sand_up_us\":%.3f,\"sand_dr_us\":%.3f,\"sand_gl_us\":%.3f,\"ch\":%d,\"body\":%d,\"body_cache_hit\":%llu,\"body_cache_miss\":%llu}",
                 std::max(0.f, editorDrawUs),
                 std::max(0.f, sandUpdateUs),
                 std::max(0.f, sandDrawUs),
                 std::max(0.f, sandGlUs),
-                std::max(0.f, audioUs),
                 std::max(0, channels),
                 std::max(0, bodySamples),
                 static_cast<unsigned long long>(bodySampleCacheHits),
@@ -438,16 +548,134 @@ void submitWyrmMetrics(uint32_t instanceId,
 }
 
 void submitIntegralFluxMetrics(uint32_t instanceId,
-                               float uiMs,
-                               float audioUs) {
-  char dataBuf[192];
+                               TimingRangeUs processUs,
+                               TimingRangeUs stepUs,
+                               TimingRangeUs drawUs,
+                               TimingRangeUs apertureUs,
+                               float gearUs,
+                               float eclipseUs,
+                               float linearPointUs,
+                               float shapeGlyphUs,
+                               float ch1CurvePointsReducedAvg,
+                               float ch1TracerExtraPointsReducedAvg) {
+  submitUiMetricSchema("IntegralFlux",
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"aperture_us\",\"label\":\"Aperture (us)\"},{\"key\":\"gear_us\",\"label\":\"Halo2 (us)\"},{\"key\":\"eclipse_us\",\"label\":\"E2 (us)\"},{\"key\":\"linear_point_us\",\"label\":\"LinPt (us)\"},{\"key\":\"shape_glyph_us\",\"label\":\"Glyph (us)\"},{\"key\":\"ch1_curve_reduced_avg\",\"label\":\"C1 Red\"},{\"key\":\"ch1_tracer_extra_reduced_avg\",\"label\":\"C1 Tr+\"}]");
+  char dataBuf[640];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
-                "{\"ui_ms\":%.4f,\"audio_us\":%.3f}",
-                std::max(0.f, uiMs),
-                std::max(0.f, audioUs));
+                "{");
+  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "aperture_us", apertureUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",\"gear_us\":%.3f,\"eclipse_us\":%.3f,\"linear_point_us\":%.3f,\"shape_glyph_us\":%.3f,\"ch1_curve_reduced_avg\":%.3f,\"ch1_tracer_extra_reduced_avg\":%.3f}",
+                std::max(0.f, gearUs),
+                std::max(0.f, eclipseUs),
+                std::max(0.f, linearPointUs),
+                std::max(0.f, shapeGlyphUs),
+                std::max(0.f, ch1CurvePointsReducedAvg),
+                std::max(0.f, ch1TracerExtraPointsReducedAvg));
   double ts = system::getTime();
   transport().submit("IntegralFlux", instanceId, "ui", "metric", dataBuf, ts);
+}
+
+void submitBaselineMetrics(const char* moduleName,
+                           uint32_t instanceId,
+                           TimingRangeUs processUs,
+                           TimingRangeUs stepUs,
+                           TimingRangeUs drawUs) {
+  const char* safeModuleName = moduleName ? moduleName : "";
+  submitUiMetricSchema(safeModuleName,
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"}]");
+  char dataBuf[160];
+  std::snprintf(dataBuf,
+                sizeof(dataBuf),
+                "{");
+  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                "}");
+  double ts = system::getTime();
+  transport().submit(safeModuleName, instanceId, "ui", "metric", dataBuf, ts);
+}
+
+void submitProcMetrics(uint32_t instanceId,
+                       TimingRangeUs processUs,
+                       TimingRangeUs stepUs,
+                       TimingRangeUs drawUs) {
+  submitBaselineMetrics("Proc", instanceId, processUs, stepUs, drawUs);
+}
+
+void submitUndertowMetrics(uint32_t instanceId,
+                           TimingRangeUs processUs,
+                           TimingRangeUs stepUs,
+                           TimingRangeUs drawUs) {
+  submitBaselineMetrics("Undertow", instanceId, processUs, stepUs, drawUs);
+}
+
+void submitIrisMetrics(uint32_t instanceId,
+                       TimingRangeUs processUs,
+                       TimingRangeUs stepUs,
+                       TimingRangeUs drawUs) {
+  submitBaselineMetrics("Iris", instanceId, processUs, stepUs, drawUs);
+}
+
+void submitDoorstopMetrics(uint32_t instanceId,
+                           TimingRangeUs processUs,
+                           TimingRangeUs stepUs,
+                           TimingRangeUs drawUs,
+                           TimingRangeUs geometryIdleUs,
+                           TimingRangeUs geometryTrailUs,
+                           TimingRangeUs panelIdleUs,
+                           TimingRangeUs panelTrailUs,
+                           TimingRangeUs overflowIdleUs,
+                           TimingRangeUs overflowTrailUs,
+                           bool trailsActive) {
+  submitUiMetricSchema("Doorstop",
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"geometry_idle_us\",\"label\":\"Geo I (us)\"},{\"key\":\"geometry_trail_us\",\"label\":\"Geo T (us)\"},{\"key\":\"panel_idle_us\",\"label\":\"Panel I (us)\"},{\"key\":\"panel_trail_us\",\"label\":\"Panel T (us)\"},{\"key\":\"overflow_idle_us\",\"label\":\"Over I (us)\"},{\"key\":\"overflow_trail_us\",\"label\":\"Over T (us)\"},{\"key\":\"trails_active\",\"label\":\"Trails\"}]");
+  char dataBuf[640];
+  std::snprintf(dataBuf, sizeof(dataBuf), "{");
+  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "geometry_idle_us", geometryIdleUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "geometry_trail_us", geometryTrailUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "panel_idle_us", panelIdleUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "panel_trail_us", panelTrailUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "overflow_idle_us", overflowIdleUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "overflow_trail_us", overflowTrailUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",\"trails_active\":%d}",
+                trailsActive ? 1 : 0);
+  transport().submit("Doorstop", instanceId, "ui", "metric", dataBuf, system::getTime());
 }
 
 } // namespace debug_terminal

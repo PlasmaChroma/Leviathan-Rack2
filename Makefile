@@ -12,15 +12,48 @@ LDFLAGS +=
 
 # Add .cpp files to the build
 SOURCES += $(wildcard src/*.cpp)
+SOURCES += $(wildcard src/visual/*.cpp)
+SOURCES += $(wildcard src/doom/*.c)
+
 
 # Add files to the ZIP package when running `make dist`
 # The compiled plugin and "plugin.json" are automatically added.
-DISTRIBUTABLES += res
+RES_FILES := $(shell find res -type f ! -path 'res/icon/*')
+RES_EXCLUDES := \
+	res/Umi/panel_base@4x.png \
+	res/flux.svg \
+	res/proc.svg \
+	res/deck.svg \
+	res/undertow.svg \
+	res/bifurx.svg \
+	res/Deepcache.svg \
+	$(shell find res/panels-source -type f 2>/dev/null)
+
+DISTRIBUTABLES += res/icon
+DISTRIBUTABLES += $(filter-out $(RES_EXCLUDES),$(RES_FILES))
 DISTRIBUTABLES += $(wildcard LICENSE*)
 DISTRIBUTABLES += $(wildcard presets)
 
 # Include the Rack plugin Makefile framework
 include $(RACK_DIR)/plugin.mk
+
+# Rack SDK 2.5 adds this Clang-only option globally. GCC emits a note for it
+# on every translation unit, so remove it after the SDK has assembled FLAGS.
+FLAGS := $(filter-out -Wno-vla-extension,$(FLAGS))
+
+# Chocolate Doom is vendored C89-era code. Keep the normal warning policy for
+# Leviathan, while suppressing only its documented legacy warning classes.
+DOOM_LEGACY_WARN_FLAGS := \
+	-Wno-sign-compare \
+	-Wno-implicit-fallthrough \
+	-Wno-unused-but-set-parameter \
+	-Wno-missing-field-initializers \
+	-Wno-dangling-pointer \
+	-Wno-stringop-truncation \
+	-Wno-enum-conversion \
+	-Wno-absolute-value
+
+build/src/doom/%.c.o: CFLAGS += $(DOOM_LEGACY_WARN_FLAGS)
 
 TEST_BINS_NON_RACK := \
 	build/tests/temporaldeck_platter_spec_harness \
@@ -33,14 +66,32 @@ TEST_BINS_NON_RACK := \
 	build/tests/temporaldeck_sample_prep_spec \
 	build/tests/temporaldeck_virtual_integration_spec \
 	build/tests/crownstep_spec \
+	build/tests/undertow_shape_spec \
+	build/tests/math_helpers_spec \
+	build/tests/doorstop_engine_spec \
 	build/tests/bifurx_filter_spec \
 	build/tests/sil_repair_spec \
-	build/tests/bulkhead_geometry_spec
+	build/tests/bulkhead_geometry_spec \
+	build/tests/umi_engine_spec \
+	build/tests/aperture_light_transfer_spec \
+	build/tests/iris_wavetable_spec \
+	build/tests/nautiloid_location_code_spec \
+	build/tests/wave_preview_simplification_spec \
+	build/tests/deepcache_planner_spec \
+	build/tests/deepcache_archive_spec \
+	build/tests/chromatide_spec
+
 
 TEST_BINS_RACK := \
 	build/tests/bifurx_runtime_spec \
 	build/tests/panel_svg_utils_spec \
-	build/tests/crownstep_persistence_spec
+	build/tests/crownstep_persistence_spec \
+	build/tests/doorstop_runtime_spec
+
+RUN_CHRONOMAW_WIP_TESTS ?= 0
+ifeq ($(RUN_CHRONOMAW_WIP_TESTS),1)
+TEST_BINS_RACK += build/tests/chronomaw_serialization_spec
+endif
 
 TEST_BINS := $(TEST_BINS_NON_RACK) $(TEST_BINS_RACK)
 
@@ -48,9 +99,12 @@ RACK_TEST_WARN_FLAGS := -Wno-unused-parameter
 RACK_TEST_OPT_FLAGS := -O1
 CXX_MACHINE := $(shell $(CXX) -dumpmachine 2>/dev/null)
 
-.PHONY: generate-panel-anchor-atlas
+.PHONY: generate-panel-anchor-atlas validate-plugin-json
 generate-panel-anchor-atlas:
 	python3 tools/generate_panel_anchor_atlas.py
+
+validate-plugin-json:
+	python3 tools/validate_plugin_json_tags.py plugin.json
 
 ifneq (,$(findstring mingw,$(CXX_MACHINE)))
 LDFLAGS += -lws2_32
@@ -147,7 +201,8 @@ CROWNSTEP_MODULE_SOURCES := \
 	src/Crownstep.cpp \
 	src/CrownstepModule.cpp \
 	src/CrownstepPlayback.cpp \
-	src/CrownstepSerialization.cpp
+	src/CrownstepSerialization.cpp \
+	src/DebugTerminalTransport.cpp
 
 .PHONY: test test-fast test-rack test-build test-build-fast test-build-rack test-odr
 test-build: $(TEST_BINS)
@@ -165,15 +220,30 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/temporaldeck_sample_prep_spec)
 	$(call run_test_bin,build/tests/temporaldeck_virtual_integration_spec)
 	$(call run_test_bin,build/tests/crownstep_spec)
+	$(call run_test_bin,build/tests/undertow_shape_spec)
+	$(call run_test_bin,build/tests/math_helpers_spec)
+	$(call run_test_bin,build/tests/doorstop_engine_spec)
 	$(call run_test_bin,build/tests/bifurx_filter_spec)
 	$(call run_test_bin,build/tests/sil_repair_spec)
 	$(call run_test_bin,build/tests/bulkhead_geometry_spec)
+	$(call run_test_bin,build/tests/umi_engine_spec)
+	$(call run_test_bin,build/tests/aperture_light_transfer_spec)
+	$(call run_test_bin,build/tests/iris_wavetable_spec)
+	$(call run_test_bin,build/tests/nautiloid_location_code_spec)
+	$(call run_test_bin,build/tests/wave_preview_simplification_spec)
+	$(call run_test_bin,build/tests/deepcache_planner_spec)
+	$(call run_test_bin,build/tests/deepcache_archive_spec)
 
 test-rack: test-build-rack
 	$(call run_rack_test_bin,build/tests/bifurx_runtime_spec)
+ifeq ($(RUN_CHRONOMAW_WIP_TESTS),1)
 	$(call run_rack_test_bin,build/tests/chronomaw_serialization_spec)
+else
+	@echo "[SKIP] chronomaw_serialization_spec (Chronomaw WIP; set RUN_CHRONOMAW_WIP_TESTS=1 to run)"
+endif
 	$(call run_rack_test_bin,build/tests/panel_svg_utils_spec)
 	$(call run_rack_test_bin,build/tests/crownstep_persistence_spec)
+	$(call run_rack_test_bin,build/tests/doorstop_runtime_spec)
 
 test:
 	@fast_rc=0; \
@@ -253,14 +323,47 @@ build/tests/sil_repair_spec: tests/sil_repair_spec.cpp | build/tests
 build/tests/bulkhead_geometry_spec: tests/bulkhead_geometry_spec.cpp src/BulkheadGeometry.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
+build/tests/umi_engine_spec: tests/umi_engine_spec.cpp src/UmiEngine.cpp src/UmiLayout.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
+
+build/tests/aperture_light_transfer_spec: tests/aperture_light_transfer_spec.cpp src/visual/ApertureLightTransfer.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $< -o $@
+
+build/tests/iris_wavetable_spec: tests/iris_wavetable_spec.cpp src/IrisWavetable.hpp src/IrisIO.cpp src/IrisIO.hpp src/IrisSourceField.cpp src/IrisSourceField.hpp | build/tests
+	$(CXX) -std=c++11 -O3 -Wall -Wextra -I$(RACK_DIR)/dep/include tests/iris_wavetable_spec.cpp src/IrisIO.cpp src/IrisSourceField.cpp -o $@
+
+build/tests/nautiloid_location_code_spec: tests/nautiloid_location_code_spec.cpp src/NautiloidLocationCode.cpp src/NautiloidLocationCode.hpp src/NautiloidFractal.hpp | build/tests
+	$(CXX) -std=c++17 -O3 -Wall -Wextra tests/nautiloid_location_code_spec.cpp src/NautiloidLocationCode.cpp -o $@
+
 build/tests/temporaldeck_virtual_integration_spec: tests/temporaldeck_virtual_integration_spec.cpp src/TemporalDeckPlatterInput.cpp src/TemporalDeckTransportControl.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
 build/tests/crownstep_spec: tests/crownstep_spec.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
+build/tests/undertow_shape_spec: tests/undertow_shape_spec.cpp src/UndertowShape.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/undertow_shape_spec.cpp -o $@
+
+build/tests/math_helpers_spec: tests/math_helpers_spec.cpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/math_helpers_spec.cpp src/MathHelpers.cpp -o $@
+
+build/tests/doorstop_engine_spec: tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
+
 build/tests/bifurx_filter_spec: tests/bifurx_filter_spec.cpp tests/bifurx_filter_test_model.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $< -o $@
+
+build/tests/wave_preview_simplification_spec: tests/wave_preview_simplification_spec.cpp src/WavePreviewSimplifier.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/wave_preview_simplification_spec.cpp -o $@
+
+build/tests/deepcache_planner_spec: tests/deepcache_planner_spec.cpp src/DeepcachePlanner.cpp src/DeepcachePlanner.hpp src/DeepcacheBrowserLogic.cpp src/DeepcacheBrowserLogic.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread tests/deepcache_planner_spec.cpp src/DeepcachePlanner.cpp src/DeepcacheBrowserLogic.cpp -o $@
+
+build/tests/deepcache_archive_spec: tests/deepcache_archive_spec.cpp src/DeepcacheArchive.cpp src/DeepcacheArchive.hpp src/DeepcacheQoi.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/deepcache_archive_spec.cpp src/DeepcacheArchive.cpp src/DeepcacheQoi.cpp -o $@
+
+build/tests/chromatide_spec: tests/chromatide_spec.cpp src/ChromatideCanvas.cpp src/Chromatide.cpp src/IrisSourceField.cpp src/DeepcacheQoi.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chromatide_spec.cpp src/ChromatideCanvas.cpp src/Chromatide.cpp src/IrisSourceField.cpp src/DeepcacheQoi.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=$(RACK_DIR) -o $@
 
 build/tests/bifurx_runtime_spec: tests/bifurx_runtime_spec.cpp src/Bifurx.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp | build/tests
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra -Wno-subobject-linkage $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
@@ -270,8 +373,11 @@ build/tests/chronomaw_serialization_spec: tests/chronomaw_serialization_spec.cpp
 
 # Rack-linked tests are heavy C++ translation units under MSYS/MinGW. Chain
 # them to avoid concurrent peak-memory spikes when users invoke `make -jN`.
-build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp | build/tests build/tests/bifurx_runtime_spec build/tests/chronomaw_serialization_spec
+build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp | build/tests build/tests/bifurx_runtime_spec
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
 
 build/tests/crownstep_persistence_spec: tests/crownstep_persistence_spec.cpp $(CROWNSTEP_MODULE_SOURCES) | build/tests build/tests/panel_svg_utils_spec
+	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
+
+build/tests/doorstop_runtime_spec: tests/doorstop_runtime_spec.cpp src/Doorstop.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp | build/tests build/tests/panel_svg_utils_spec
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@

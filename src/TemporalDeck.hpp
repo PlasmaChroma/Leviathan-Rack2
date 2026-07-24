@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DebugTerminalTransport.hpp"
 #include "TemporalDeckTest.hpp"
 #include "plugin.hpp"
 #include <cstdint>
@@ -133,6 +134,7 @@ struct TemporalDeck final : Module {
   void applyBufferDurationMode(int mode);
 
   void setPlatterScratch(bool touched, float lagSamples, float velocitySamples, int holdSamples = 0);
+  void setPlatterTouchHold(bool touched, float lagSamples);
   void setPlatterMotionFreshSamples(int motionFreshSamples);
   void addPlatterWheelDelta(float delta, int holdSamples);
   void triggerQuickSlipReturn();
@@ -140,7 +142,7 @@ struct TemporalDeck final : Module {
   double getUiLagSamples() const;
   double getUiAccessibleLagSamples() const;
   float getUiSampleRate() const;
-  float consumeAudioProcessUs();
+  debug_terminal::TimingRangeUs consumeAudioProcessUs();
   uint32_t getDebugInstanceId() const;
   float getUiDrawCostUs() const;
   void setUiDrawCostUs(float costUs);
@@ -235,5 +237,6 @@ private:
   void applySampleRateChange(float sampleRate);
 
   struct Impl;
+  ModuleTeardownTimer teardownTimer {"TemporalDeck"};
   std::unique_ptr<Impl> impl;
 };

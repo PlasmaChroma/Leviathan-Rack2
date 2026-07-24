@@ -1,6 +1,9 @@
 #include "CrownstepShared.hpp"
+#include "MathHelpers.hpp"
 #include "PanelSvgUtils.hpp"
 #include "NvgGraphicsLifecycle.hpp"
+#include "visual/VisualAssets.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 
 #define NANOSVGRAST_IMPLEMENTATION
 #include <nanosvgrast.h>
@@ -125,12 +128,6 @@ inline NVGcolor highlightGlowColor(int highlightMode, int alpha) {
 	const HighlightPalette palette = highlightPaletteForMode(highlightMode);
 	return nvgRGBA(palette.glowR, palette.glowG, palette.glowB, alpha);
 }
-
-struct BananutBlack : app::SvgPort {
-	BananutBlack() {
-		setSvg(Svg::load(asset::plugin(pluginInstance, "res/BananutBlack.svg")));
-	}
-};
 
 std::shared_ptr<Image> crownstepWoodBoardTileImage() {
 	if (!APP || !APP->window) {
@@ -475,7 +472,7 @@ ChessPieceAtlasCache& chessPieceAtlasCache() {
 	if (!cache.initialized) {
 		cache.initialized = true;
 		try {
-			cache.svg = Svg::load(asset::plugin(pluginInstance, "res/chess.svg"));
+			cache.svg = Svg::load(asset::plugin(pluginInstance, "res/icon/chess.svg"));
 		}
 		catch (...) {
 			cache.svg.reset();
@@ -818,10 +815,6 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 			outsideDist[idx] = d;
 		}
 	}
-	auto smoothstep01 = [](float t) {
-		t = clamp(t, 0.f, 1.f);
-		return t * t * (3.f - 2.f * t);
-	};
 	// Distance windows in raster pixels. Bias toward a slightly broader bright band
 	// so the contour reads bold without needing a washed-out high alpha.
 	const float bandInPx = 2.0f;
@@ -839,11 +832,11 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 			continue;
 		}
 		float d = outsideDist[i];
-		float bandEnter = smoothstep01((d - bandInPx) / 1.6f);
-		float bandExit = smoothstep01((bandOutPx - d) / 1.6f);
+		float bandEnter = levi_math::smoothstep01((d - bandInPx) / 1.6f);
+		float bandExit = levi_math::smoothstep01((bandOutPx - d) / 1.6f);
 		float bandA = clamp(bandEnter * bandExit, 0.f, 1.f);
-		float shellEnter = smoothstep01((d - shellInPx) / 1.8f);
-		float shellExit = smoothstep01((shellOutPx - d) / 1.8f);
+		float shellEnter = levi_math::smoothstep01((d - shellInPx) / 1.8f);
+		float shellExit = levi_math::smoothstep01((shellOutPx - d) / 1.8f);
 		float shellA = clamp(shellEnter * shellExit, 0.f, 1.f);
 		for (int colorIndex = 0; colorIndex < HIGHLIGHT_COLOR_COUNT; ++colorIndex) {
 			const HighlightPalette palette = HIGHLIGHT_PALETTES[size_t(colorIndex)];
@@ -3845,48 +3838,20 @@ struct CrownstepDifficultyItem final : MenuItem {
 	}
 };
 
-struct CrownstepAiThinkMsWidget final : TransparentWidget {
-	Crownstep* module = nullptr;
-
-	explicit CrownstepAiThinkMsWidget(Crownstep* crownstepModule) {
-		module = crownstepModule;
-	}
-
-	void draw(const DrawArgs& args) override {
-		if (!module || !args.vg) {
-			return;
-		}
-
-		char text[64];
-		std::snprintf(text, sizeof(text), "AI: %dms", std::max(0, module->lastAiThinkMs));
-
-		nvgFontSize(args.vg, 10.0f);
-		nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-		nvgFillColor(args.vg, nvgRGBA(16, 16, 16, 168));
-		nvgText(args.vg, 0.45f, box.size.y * 0.52f + 0.45f, text, nullptr);
-		nvgFillColor(args.vg, nvgRGBA(245, 221, 88, 236));
-		nvgText(args.vg, 0.f, box.size.y * 0.52f, text, nullptr);
-	}
-};
-
 struct CrownstepWidget final : ModuleWidget {
 	explicit CrownstepWidget(Crownstep* module) {
 		setModule(module);
 		PreviewBuildLogTimer previewBuildTimer("Crownstep", module);
-		const std::string panelPath = asset::plugin(pluginInstance, "res/crownstep.svg");
-		try {
-			setPanel(createPanel(panelPath));
-		}
-		catch (const std::exception& e) {
-			WARN("Crownstep panel load failed (%s), using fallback: %s", panelPath.c_str(), e.what());
-			setPanel(createPanel(asset::plugin(pluginInstance, "res/proc.svg")));
-		}
+		visual_assets::SplitPanelRenderer splitPanel(this, "res/crownstep.panel.svg");
+		const std::string& panelPath = splitPanel.panelPath();
+		splitPanel.addLabels("res/crownstep.labels.svg");
+		visual_assets::addFractalGlassOverlay(this, panelPath);
 		previewBuildTimer.markPanelDone();
 
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-			addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-			addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+			addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+			addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 			math::Rect boardRectMm;
 			if (!panel_svg::loadRectFromSvgMm(panelPath, "BOARD_AREA", &boardRectMm)) {
@@ -3912,7 +3877,6 @@ struct CrownstepWidget final : ModuleWidget {
 
 			Vec newGamePos(43.f, 114.0f);
 		Vec debugAddMovesPos(5.08f, 5.08f);
-		Vec aiThinkMsPos(debugAddMovesPos.x + 4.2f, debugAddMovesPos.y);
 		Vec clockPos(12.f, 108.0f);
 		Vec resetPos(28.f, 108.0f);
 		Vec transposePos(12.f, 121.0f);
@@ -3964,27 +3928,23 @@ struct CrownstepWidget final : ModuleWidget {
 
 			// SEQ_LENGTH_PARAM is intentionally soft-deprecated from GUI.
 			// Runtime sequence length is controlled by the ribbon widget trim interactions.
-			addParam(createParamCentered<LEDButton>(mm2px(newGamePos), module, Crownstep::NEW_GAME_PARAM));
-			if (isDragonKingDebugEnabled()) {
+			addParam(createParamCentered<SmallGoldButton>(mm2px(newGamePos), module, Crownstep::NEW_GAME_PARAM));
+			if (isCrownstepAddMoveEnabled()) {
 				addParam(createParamCentered<LEDButton>(mm2px(debugAddMovesPos), module, Crownstep::DEBUG_ADD_MOVES_PARAM));
-				CrownstepAiThinkMsWidget* aiThinkMsWidget = new CrownstepAiThinkMsWidget(module);
-				aiThinkMsWidget->box.pos = mm2px(Vec(aiThinkMsPos.x + 2.7f, aiThinkMsPos.y - 1.2f));
-				aiThinkMsWidget->box.size = mm2px(Vec(17.0f, 4.0f));
-				addChild(aiThinkMsWidget);
 			}
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(clockPos), module, Crownstep::CLOCK_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(resetPos), module, Crownstep::RESET_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(transposePos), module, Crownstep::TRANSPOSE_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(rootCvPos), module, Crownstep::ROOT_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(clockPos), module, Crownstep::CLOCK_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(resetPos), module, Crownstep::RESET_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(transposePos), module, Crownstep::TRANSPOSE_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(rootCvPos), module, Crownstep::ROOT_INPUT));
 
-		addOutput(createOutputCentered<BananutBlack>(mm2px(pitchPos), module, Crownstep::PITCH_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(accentPos), module, Crownstep::ACCENT_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(modPos), module, Crownstep::MOD_OUTPUT));
-		addOutput(createOutputCentered<BananutBlack>(mm2px(eocPos), module, Crownstep::EOC_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(pitchPos), module, Crownstep::PITCH_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(accentPos), module, Crownstep::ACCENT_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(modPos), module, Crownstep::MOD_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(eocPos), module, Crownstep::EOC_OUTPUT));
 
-		addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(humanLightPos), module, Crownstep::HUMAN_TURN_LIGHT));
-		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(aiLightPos), module, Crownstep::AI_TURN_LIGHT));
+		addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(humanLightPos), module, Crownstep::HUMAN_TURN_LIGHT));
+		addChild(createLightCentered<SmallAperture<BlueApertureLight>>(mm2px(aiLightPos), module, Crownstep::AI_TURN_LIGHT));
 	}
 
 	void step() override {

@@ -39,7 +39,7 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
 
 - We have a debug terminal seen in tools/debug_terminal/server.py that allows us to get small debug data packets over a socket to be viewed outside of rack.  This type of debug should be gated by isDragonKingDebugEnabled.
 
-- For modules that are released, the safe pattern is to append to the lists of controls and parameters, so that modules in existing user Racks do not experience enum re-ordering and breakage.  Current modules that are released include: Integral Flux, Proc, and Temporal Deck.
+- For modules that are released, the safe pattern is to append to the lists of controls and parameters, so that modules in existing user Racks do not experience enum re-ordering and breakage.  Current modules that are released include: Integral Flux, Proc, Temporal Deck, TD.Scope, and Undertow.
 
 ## Testing Note
 
@@ -53,9 +53,9 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
 
 # Release Compatibility Note
 
-- `Integral Flux`, `Proc`, and `Temporal Deck` are released modules.
+- `Integral Flux`, `Proc`, `Temporal Deck`, `TD.Scope`, and `Undertow` are released modules.
 - Changes to those modules must be made with backward compatibility in mind, especially:
   - patch/state serialization
   - parameter/input/output/light IDs and ordering
   - user-visible behavior that existing patches may rely on
-- `Crownstep` and `TD.Scope` are still unreleased, so compatibility constraints there are looser unless explicitly stated otherwise.
+- `Crownstep`, `Bifurx`, `Wyrm`, `Sil`, `Chronomaw`, and `Bulkhead` are still unreleased, so compatibility constraints there are looser unless explicitly stated otherwise.

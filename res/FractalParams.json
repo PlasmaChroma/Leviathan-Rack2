@@ -1,0 +1,24 @@
+{
+  "entries": [
+    {
+      "capturedAtUnix": 1784600678,
+      "fractal": {
+        "centerX": -0.59177123629296458,
+        "centerY": -0.99883848219151572,
+        "mode": 9,
+        "modeName": "Buffalo",
+        "zoom": 1.3199664354324341
+      },
+      "fractalSourceVersion": 1,
+      "renderTarget": {
+        "coordinateSpace": "IntegralFlux module-local",
+        "height": 480,
+        "palette": "glass-region-fill-color",
+        "viewportScale": 1.0,
+        "width": 384
+      },
+      "source": "Nautiloid"
+    }
+  ],
+  "schemaVersion": 1
+}

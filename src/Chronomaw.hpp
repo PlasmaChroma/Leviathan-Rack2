@@ -5,6 +5,7 @@
 #include <atomic>
 
 struct Chronomaw : Module {
+	ModuleTeardownTimer teardownTimer {"Chronomaw"};
 	static constexpr int kTimelineHistorySize = 360;
 	static constexpr int kTimelineFutureSize = 360;
 	static constexpr float kTimelineCaptureIntervalSec = 1.f / 60.f;
@@ -88,6 +89,7 @@ struct Chronomaw : Module {
 	dsp::SchmittTrigger saveBankEdge;
 
 	Chronomaw();
+	~Chronomaw() override;
 
 	void process(const ProcessArgs& args) override;
 	void onReset() override;

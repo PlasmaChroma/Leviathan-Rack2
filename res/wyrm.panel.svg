@@ -1,0 +1,102 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.2" width="71.120003mm" height="128.5mm" viewBox="0 0 7112.0004 12850" preserveAspectRatio="xMidYMid" fill-rule="evenodd" stroke-width="28.222" stroke-linejoin="round" xml:space="preserve" id="svg488" sodipodi:docname="wyrm.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)" inkscape:label="Wave Art">
+  <defs id="defs1">
+    <linearGradient id="linearGradient22" inkscape:collect="always">
+      <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop22" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop23" />
+    </linearGradient>
+    <linearGradient id="linearGradient20" inkscape:collect="always">
+      <stop style="stop-color:#795cff;stop-opacity:1;" offset="0" id="stop20" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop21" />
+    </linearGradient>
+    <linearGradient id="linearGradient16" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1ccad8" stop-opacity="0.65" id="stop15" style="stop-color:#1ccad8;stop-opacity:1;" />
+      <stop offset="1" stop-color="#7a5cff" stop-opacity="0.65" id="stop16" style="stop-color:#7a5cff;stop-opacity:1;" />
+    </linearGradient>
+    <linearGradient id="linearGradient14" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1ccad8" stop-opacity="0.65" id="stop13" style="stop-color:#1ccad8;stop-opacity:1;" />
+      <stop offset="1" stop-color="#7a5cff" stop-opacity="0.65" id="stop14" style="stop-color:#7a5cff;stop-opacity:1;" />
+    </linearGradient>
+    <linearGradient id="linearGradient12" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1ccad8" stop-opacity="0.65" id="stop11" style="stop-color:#6140bf;stop-opacity:1;" />
+      <stop offset="1" stop-color="#7a5cff" stop-opacity="0.65" id="stop12" />
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="1108.8855" y1="886.8808" x2="1108.8855" y2="12348.43" gradientTransform="matrix(0.62254167,0,0,1.1244228,295.85457,0)" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0b0d10" id="stop1" />
+      <stop offset="50%" stop-color="#10141a" id="stop2" />
+      <stop offset="100%" stop-color="#07080a" id="stop3" />
+    </linearGradient>
+    <linearGradient id="panelSheen" x1="1258.4897" y1="999.76398" x2="1258.4897" y2="12199.481" gradientTransform="scale(0.88692179,1.1274951)" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.1" id="stop4" />
+      <stop offset="15%" stop-color="#ffffff" stop-opacity="0.02" id="stop5" />
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.0" id="stop6" />
+      <stop offset="85%" stop-color="#ffffff" stop-opacity="0.02" id="stop7" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.1" id="stop8" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1ccad8" stop-opacity="0.65" id="stop9" />
+      <stop offset="100%" stop-color="#7a5cff" stop-opacity="0.65" id="stop10" />
+    </linearGradient>
+    <linearGradient id="oceanWaveGrad" x1="0" y1="0" x2="1" y2="1" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="#55dbff" id="stop_wave_1" />
+      <stop offset="55%" stop-color="#1496df" id="stop_wave_2" />
+      <stop offset="100%" stop-color="#182682" id="stop_wave_3" />
+    </linearGradient>
+    <linearGradient inkscape:collect="always" xlink:href="#oceanWaveGrad" id="linearGradient10" gradientUnits="userSpaceOnUse" x1="-323.57697" y1="-103.93273" x2="723.81177" y2="943.45605" gradientTransform="matrix(-1.435811,0,0,0.69647048,8750.0001,12953.568)" />
+    <linearGradient inkscape:collect="always" xlink:href="#oceanWaveGrad" id="linearGradient11" gradientUnits="userSpaceOnUse" x1="-323.57697" y1="-103.93273" x2="723.81177" y2="943.45605" gradientTransform="matrix(1.435811,0,0,0.69647048,3420,12953.568)" />
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient500" gradientUnits="userSpaceOnUse" x1="5355.9189" y1="1516.2338" x2="6904.7725" y2="1512.3004" gradientTransform="matrix(0.99690805,0,0,0.99690805,-2554.7836,-888.26714)" />
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient20" id="linearGradient300" gradientUnits="userSpaceOnUse" gradientTransform="matrix(1.3902179,0,0,1.3902178,-5190.496,-5161.5586)" x1="5486.8237" y1="12735.478" x2="7088.8071" y2="12738.298" spreadMethod="pad" />
+  </defs>
+  <g id="panel_art" style="display:inline">
+    <g id="Background_Rect" style="display:inline" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
+      <rect x="986.18201" y="997.229" width="7135.2925" height="12887.627" rx="0" ry="0" fill="url(#bgGrad)" id="black_background" style="display:inline;fill:url(#bgGrad);stroke-width:23.6122" sodipodi:insensitive="true" />
+      <g id="waves_layer" style="display:inline;opacity:0.5" transform="matrix(1.0032752,0,0,1.0029283,-542.80623,1140.1067)">
+        <g id="branding_wave_left" transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)" style="display:inline">
+          <path style="fill:#4995ec" d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713" id="path149" />
+          <path style="fill:#7a5cff" d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z" id="path151" />
+          <path style="fill:#1cccd9" d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z" id="path155" />
+        </g>
+        <g id="branding_wave_right" transform="matrix(-1.72,0,0,1.72,7743.0744,11996.75)" style="display:inline">
+          <path style="fill:#4995ec" d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713" id="path158" />
+          <path style="fill:#7a5cff" d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z" id="path160" />
+          <path style="fill:#1cccd9" d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z" id="path164" />
+        </g>
+      </g>
+      <rect x="1096.182" y="1107.229" width="9973.2734" height="12667.627" rx="210" ry="210" fill="none" stroke="#ffffff" stroke-opacity="0.1" stroke-width="60" id="gray_outline" style="display:none;stroke:#3c3f42;stroke-opacity:1" />
+      <path d="M 1397.1228,1952.2443 H 7648.7534" stroke="url(#accentGrad)" stroke-width="40.8777" stroke-linecap="round" opacity="0.55" fill="none" id="top_horizontal_line" style="display:none;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" />
+    </g>
+    <rect x="4588.1016" y="10720.973" width="2447.1992" height="1438.8242" rx="200.48636" ry="171.8649" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="45.117" id="outputs" style="display:none;opacity:1;fill:#000000;fill-opacity:1;stroke:none;stroke-width:46.3885;stroke-dasharray:none" inkscape:label="Out_Under_Black" />
+    <g id="glass">
+      <path d="M 235.34972,7794.9995 H 6845.0537 C 6963.6807,7794.9995 7022.9942,7851.3046 7022.9942,7963.9149 V 10619.182 Q 7022.9942,10749.182 6892.9942,10749.182 H 4745.5181 Q 4615.5181,10749.182 4615.5181,10879.182 V 12005.859 Q 4615.5181,12135.859 4485.5181,12135.859 H 235.34972 C 116.72271,12135.859 57.409203,12079.554 57.409203,11966.944 V 7963.9149 C 57.409203,7851.3046 116.72271,7794.9995 235.34972,7794.9995 Z" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="43.3423" id="frame_left" style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" inkscape:label="inputs" sodipodi:nodetypes="sccccccccccscccs" />
+      <rect x="4641.5" y="10775.2" width="2368.228" height="1339.5333" rx="172.54369" ry="158.23055" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="41.308" id="outputs-3" style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.501961;stroke:none;stroke-opacity:0.33" inkscape:label="outputs" />
+    </g>
+    <path d="m 1812.5205,9954.4275 1059.159,0.311" stroke="url(#accentGrad)" stroke-width="40.8409" stroke-linecap="round" opacity="0.55" fill="none" id="sync_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
+    <path d="m 814.12214,8620.0078 2745.60146,0.4012" stroke="url(#accentGrad)" stroke-width="40.7513" stroke-linecap="round" opacity="0.55" fill="none" id="freq_purple_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
+    <path d="m 705.17435,11287.268 1059.15905,0.311" stroke="url(#accentGrad)" stroke-width="40.8409" stroke-linecap="round" opacity="0.55" fill="none" id="slither_amp_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
+    <path d="m 2853.2391,11284.637 1059.1003,0.538" stroke="url(#accentGrad)" stroke-width="40.8998" stroke-linecap="round" opacity="0.55" fill="none" id="slither_speed_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
+    <path d="m 5222.5176,8493.414 -2.2633,1293.6516" stroke="url(#accentGrad)" stroke-width="40.7513" stroke-linecap="round" opacity="0.55" fill="none" id="FM_purple_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
+    <path d="m 6434.5391,8474.0757 -2.2633,1293.6516" stroke="url(#accentGrad)" stroke-width="40.7513" stroke-linecap="round" opacity="0.55" fill="none" id="fold_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
+  </g>
+  <g id="wyrm_components" inkscape:label="wyrm_components" style="display:none">
+    <circle id="WYRM_FREQ_PARAM" cx="814.55664" cy="8622.5996" r="260" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_FINE_PARAM" cx="2225.269" cy="8622.5996" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_FM_ATTEN_PARAM" cx="5218.3877" cy="8486.3018" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_FOLD_PARAM" cx="6428.4404" cy="8464.7998" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_LOCK_BUTTON" cx="6392" cy="7572" r="160" style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_RESET_BUTTON" cx="6822" cy="7572" r="160" style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_WAVEFORM_SELECT" cx="622" cy="7575" r="160" style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_SLITHER_PARAM" cx="709.98511" cy="11280" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_SLITHER_SPEED_PARAM" cx="2860" cy="11280" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_SLITHER_CV_INPUT" cx="1800" cy="11280" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_SLITHER_SPEED_CV_INPUT" cx="3950.0149" cy="11280" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_VOCT_INPUT" cx="3565.9817" cy="8628.1416" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_FM_INPUT" cx="5215.4648" cy="9795.4688" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_SYNC_INPUT" cx="1800" cy="9954.583" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_SYNC_MODE_PARAM" cx="2875" cy="9954.583" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_LFO_MODE_PARAM" cx="4045.2324" cy="9954.583" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_FOLD_CV_INPUT" cx="6429.5" cy="9805.0596" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_RAW_OUTPUT" cx="5218.3877" cy="11260" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_OUT_OUTPUT" cx="6432.8408" cy="11260" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+  </g>
+  <rect id="WYRM_WAVE_EDITOR" x="78.404099" y="952.07806" width="6950.8921" height="6331.0181" style="display:inline;fill:none;stroke:#5841bf;stroke-width:40.3259;stroke-dasharray:none;stroke-opacity:1" />
+</svg>

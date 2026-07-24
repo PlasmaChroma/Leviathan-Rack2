@@ -1,6 +1,7 @@
 #include "../src/PanelSvgUtils.hpp"
 #include "../src/PanelAnchorAtlas.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
@@ -86,6 +87,54 @@ TestResult testPointParsesRectCenter() {
             " y=" + std::to_string(point.y)};
 }
 
+TestResult testFindsRectsByIdSubstring() {
+  const std::string path = makeTempSvgPath("panel_svg_rect_substring");
+  const std::string svg = R"SVG(<svg xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="baseGradient">
+        <stop offset="0" style="stop-color:#5740bf;stop-opacity:1"/>
+        <stop offset="1" style="stop-color:#5740bf;stop-opacity:0"/>
+      </linearGradient>
+      <linearGradient id="derivedGradient" xlink:href="#baseGradient"/>
+    </defs>
+    <rect id="FRAME_LEFT" x="10" y="20" width="30" height="40"/>
+    <g transform="matrix(1,0,0,1,-50,-75)">
+      <rect
+        x="150"
+        y="275"
+        width="840"
+        height="930"
+        id="frame_left_ENHANCE"
+        style="fill:url(#derivedGradient)" />
+    </g>
+  </svg>)SVG";
+  if (!writeTextFile(path, svg)) {
+    return {"Rect substring finder", false, "failed to write temp SVG"};
+  }
+
+  std::vector<panel_svg::SvgRectMatch> matches;
+  bool ok = panel_svg::findRectsWithIdSubstringMm(path, "ENHANCE", &matches);
+  bool pass = ok
+    && matches.size() == 1u
+    && matches[0].id == "frame_left_ENHANCE"
+    && nearlyEqual(matches[0].rect.pos.x, 1.0f)
+    && nearlyEqual(matches[0].rect.pos.y, 2.0f)
+    && nearlyEqual(matches[0].rect.size.x, 8.4f)
+    && nearlyEqual(matches[0].rect.size.y, 9.3f)
+    && matches[0].hasFillColor
+    && nearlyEqual(matches[0].fillColor.r, 0x57 / 255.f, 1e-5f)
+    && nearlyEqual(matches[0].fillColor.g, 0x40 / 255.f, 1e-5f)
+    && nearlyEqual(matches[0].fillColor.b, 0xbf / 255.f, 1e-5f);
+  return {"Rect substring finder returns matching rect geometry", pass,
+          "ok=" + std::to_string(ok ? 1 : 0) +
+            " count=" + std::to_string(matches.size()) +
+            " color=" + (matches.empty() ? std::string("n/a") :
+              (std::to_string(matches[0].hasFillColor ? 1 : 0) + "," +
+               std::to_string(matches[0].fillColor.r) + "," +
+               std::to_string(matches[0].fillColor.g) + "," +
+               std::to_string(matches[0].fillColor.b)))};
+}
+
 TestResult testCircleParsesWithExplicitScale() {
   const std::string path = makeTempSvgPath("panel_svg_circle_scaled");
   const std::string svg =
@@ -136,6 +185,54 @@ TestResult testGeneratedAtlasFindsRealPanelAnchor() {
             " cy=" + std::to_string(anchor.cy)};
 }
 
+TestResult testDeepcachePanelAnchorsUseRepositoryUnits() {
+  Vec ready;
+  math::Rect progress;
+  math::Rect framebufferProgress;
+  math::Rect databaseStatus;
+  const bool readyOk = panel_svg::loadPointFromSvgMm("res/Deepcache.panel.svg", "ready_light", &ready);
+  const bool progressOk = panel_svg::loadRectFromSvgMm("res/Deepcache.panel.svg", "progress", &progress);
+  const bool framebufferProgressOk = panel_svg::loadRectFromSvgMm(
+    "res/Deepcache.panel.svg", "framebuffer_progress", &framebufferProgress);
+  const bool databaseStatusOk = panel_svg::loadRectFromSvgMm(
+    "res/Deepcache.panel.svg", "database_status", &databaseStatus);
+  const bool pass = readyOk && progressOk && framebufferProgressOk && databaseStatusOk
+    && nearlyEqual(ready.x, 4.5f) && nearlyEqual(ready.y, 107.59958f, 1e-4f)
+    && nearlyEqual(progress.pos.x, 3.f) && nearlyEqual(progress.pos.y, 27.099751f, 1e-4f)
+    && nearlyEqual(progress.size.x, 14.32f) && nearlyEqual(progress.size.y, 7.f, 1e-4f)
+    && nearlyEqual(framebufferProgress.pos.x, 3.f) && nearlyEqual(framebufferProgress.pos.y, 49.199771f, 1e-4f)
+    && nearlyEqual(framebufferProgress.size.x, 14.32f) && nearlyEqual(framebufferProgress.size.y, 7.f, 1e-4f)
+    && nearlyEqual(databaseStatus.pos.x, 3.f) && nearlyEqual(databaseStatus.pos.y, 72.600005f, 1e-4f)
+    && nearlyEqual(databaseStatus.size.x, 14.32f) && nearlyEqual(databaseStatus.size.y, 12.186809f, 1e-4f);
+  return {"Deepcache anchors use 1/100mm component coordinates", pass,
+          "ready=" + std::to_string(ready.x) + "," + std::to_string(ready.y) +
+            " progress=" + std::to_string(progress.pos.x) + "," + std::to_string(progress.pos.y) +
+            " progress_sz=" + std::to_string(progress.size.x) + "," + std::to_string(progress.size.y) +
+            " fb_progress=" + std::to_string(framebufferProgress.pos.x) + "," + std::to_string(framebufferProgress.pos.y) +
+            " fb_progress_sz=" + std::to_string(framebufferProgress.size.x) + "," + std::to_string(framebufferProgress.size.y) +
+            " db_status=" + std::to_string(databaseStatus.pos.x) + "," + std::to_string(databaseStatus.pos.y) +
+            " db_status_sz=" + std::to_string(databaseStatus.size.x) + "," + std::to_string(databaseStatus.size.y)};
+}
+
+TestResult testBifurxGlassPathParses() {
+  std::vector<panel_svg::SvgPathMatch> matches;
+  bool ok = panel_svg::findPathsInGroupsWithIdSubstringMm("res/bifurx.panel.svg", "glass", &matches);
+  const auto input = std::find_if(matches.begin(), matches.end(), [](const panel_svg::SvgPathMatch& match) {
+    return match.id == "inputs";
+  });
+  const bool hasRoundedCurve = input != matches.end() && std::any_of(
+    input->commands.begin(), input->commands.end(), [](const panel_svg::SvgPathCommand& command) {
+      return command.type == panel_svg::SvgPathCommand::QuadTo ||
+             command.type == panel_svg::SvgPathCommand::BezierTo;
+    });
+  const bool pass = ok && input != matches.end() && !input->commands.empty() && hasRoundedCurve;
+  return {"Bifurx inputs path is available to the glass renderer", pass,
+          "ok=" + std::to_string(ok ? 1 : 0) +
+            " count=" + std::to_string(matches.size()) +
+            " inputs=" + std::to_string(input != matches.end() ? 1 : 0) +
+            " rounded=" + std::to_string(hasRoundedCurve ? 1 : 0)};
+}
+
 } // namespace
 
 int main() {
@@ -143,9 +240,12 @@ int main() {
   tests.push_back(testRectParsesInMillimeters());
   tests.push_back(testPointParsesCircleCenter());
   tests.push_back(testPointParsesRectCenter());
+  tests.push_back(testFindsRectsByIdSubstring());
   tests.push_back(testCircleParsesWithExplicitScale());
   tests.push_back(testMissingElementFailsGracefully());
   tests.push_back(testGeneratedAtlasFindsRealPanelAnchor());
+  tests.push_back(testDeepcachePanelAnchorsUseRepositoryUnits());
+  tests.push_back(testBifurxGlassPathParses());
 
   int failed = 0;
   std::cout << "Panel SVG Utils Spec\n";

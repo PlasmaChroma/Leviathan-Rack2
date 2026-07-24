@@ -1,17 +1,5 @@
 # Ideas
 
-## Temporal Deck
-- Maybe try to tune specifically to how a record would work
-3/18/2026
-- Consider adding RIAA curve compensation as audio quality thing
-- Also BLEP
-- Make POS react to +/-10V both as offsets (both are backwards)
-- Physical modelling?  Add cart options
-- Sensitivity Knob for mouse interaction
-
-## "Proc" Module (complete-ish)
-- Using what we learned with Integral Flux, create Make Noise Function
-
 ## Unknown Title - Fractal CVs
 - Creates CV & Gate outputs based on a clock input and a fractal seed
 - Maybe use mandlebrot set as the first implementation (X&Y could be CV markers)
@@ -28,9 +16,16 @@
 - Also LUFS display?
 - Could have a tail that progressively lights up with level
 
-## Bifurx - Filter module based on Xaoc Belgrad
+## Unknown Title
+- Pachinko Machine that triggers multiple gate/pulses
+- Uses at least a clock input, or has it's own tempo
 
-## Oscillator
-- Arbitrary waveform input similar to Operator from abletone
-- Set of presets that makes sense, user can customize any of them
-- FM to let the user create complex chains of oscillators (build up like Operator does)
+## Unknown Title
+- Module that spawns a dragon that fucks with controls
+
+## UI Elements
+- Add a gear effect that works similar to the ClockWork Knob
+- Glow the Vahdrim Keth rune when mousing over haloknob2
+
+## Make Noise Dual Oscillator?
+- Probably very hard to implement without the actual module in hand

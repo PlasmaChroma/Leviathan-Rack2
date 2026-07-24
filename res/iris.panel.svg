@@ -1,0 +1,70 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="60.96mm" height="128.5mm" viewBox="0 0 6096 12850" version="1.1" id="svg18" sodipodi:docname="iris.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)">
+  <defs id="defs18">
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient500" gradientUnits="userSpaceOnUse" x1="5743.77" y1="1469.6917" x2="6524.6782" y2="1481.2723" gradientTransform="matrix(0.99690805,0,0,0.99690805,-3064.9011,-888.31151)" />
+    <linearGradient id="linearGradient22" inkscape:collect="always">
+      <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop22" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop23" />
+    </linearGradient>
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient20" id="linearGradient300" gradientUnits="userSpaceOnUse" gradientTransform="matrix(1.3902179,0,0,1.3902178,-5698.4964,-5161.5591)" x1="5486.8237" y1="12735.478" x2="7088.8071" y2="12738.298" spreadMethod="pad" />
+    <linearGradient id="linearGradient20" inkscape:collect="always">
+      <stop style="stop-color:#795cff;stop-opacity:1;" offset="0" id="stop20" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop21" />
+    </linearGradient>
+  </defs>
+  <rect width="6096" height="12850" fill="#090b0f" id="rect1" x="0" y="0" style="display:inline" />
+  <g id="waves_layer" style="display:inline;opacity:0.5" transform="translate(-2031.9966,142.46203)">
+    <g id="branding_wave_left" transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)" style="display:inline">
+      <path style="fill:#4995ec" d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713" id="path149" />
+      <path style="fill:#7a5cff" d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z" id="path151" />
+      <path style="fill:#1cccd9" d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z" id="path155" />
+    </g>
+    <g id="branding_wave_right" transform="matrix(-1.72,0,0,1.72,7743.0744,11996.75)" style="display:inline">
+      <path style="fill:#4995ec" d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713" id="path158" />
+      <path style="fill:#7a5cff" d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z" id="path160" />
+      <path style="fill:#1cccd9" d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z" id="path164" />
+    </g>
+  </g>
+  <g id="iris_section_fields" style="display:inline">
+    <g id="glass">
+      <path d="m 235,6968.0032 h 5626 c 119,0 179,60 179,180 V 10414 c 0,120 -60,180 -179,180 H 3490 c -80,0 -120,40 -120,120 v 1306 c 0,80 -40,120 -120,120 H 235 c -119,0 -179,-60 -179,-180 V 7148.0032 c 0,-120 60,-180 179,-180 z" id="iris_input_field" style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
+      <rect x="3400" y="10630" width="2632" height="1510" rx="117.93464" ry="126" id="iris_output_field" style="display:inline;opacity:0.35;fill:#1cccd9;fill-opacity:0.58;stroke:none;stroke-width:0.967464" />
+    </g>
+    <rect x="76" y="900" width="5944" height="5408" rx="126" ry="126" id="iris_preview_field" style="display:none;opacity:0.22;fill:#5740bf;fill-opacity:1;stroke:none" />
+    <path d="M 1126.72,7760.0522 H 3358.8802" id="iris_freq_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:37.8809;stroke-linecap:round;stroke-opacity:1" />
+    <path d="M 2957.0742,9527.9561 H 5534.926" id="iris_scan_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:39.0504;stroke-linecap:round;stroke-opacity:1" />
+    <path d="M 668.00081,11195.878 H 1790.0008" id="iris_fm_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
+    <path d="m 4704,7793.5083 h 545.2969" id="iris_soft_sync_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
+  </g>
+  <g id="components" style="display:inline">
+    <circle id="IRIS_COARSE_PARAM" cx="870.79999" cy="7760" r="520" />
+    <circle id="IRIS_FINE_PARAM" cx="2274.4182" cy="7770.936" r="330" />
+    <circle id="IRIS_SCAN_PARAM" cx="5268.6743" cy="9527.7002" r="520" />
+    <circle id="IRIS_FM_ATTEN_PARAM" cx="1769.6008" cy="11178.575" r="330" />
+    <circle id="IRIS_LFO_MODE_PARAM" cx="2802.9001" cy="11178.575" r="240" />
+    <circle id="IRIS_SCAN_ATTEN_PARAM" cx="3905.7871" cy="9533.3535" r="330" />
+    <circle id="IRIS_COARSE_STEP_MODE_PARAM" cx="1889.9816" cy="9527.0713" r="240" />
+    <circle id="IRIS_SMOOTHING_MENU_BUTTON" cx="346" cy="6710" r="113" />
+    <circle id="IRIS_SOURCE_MENU_BUTTON" cx="860" cy="6710" r="113" />
+    <circle id="IRIS_CHANNEL_PREVIEW_BUTTON" cx="5750" cy="6710" r="113" />
+    <g id="channel_selector">
+      <circle id="IRIS_IMAGE_CHANNEL_BUTTON" cx="760.00012" cy="9622.5781" r="138.11113" style="stroke-width:1.22224" />
+      <circle id="IRIS_IMAGE_CHANNEL_ALL_LIGHT" cx="360.00009" cy="9252.5781" r="97.777786" style="stroke-width:1.22224" />
+      <circle id="IRIS_IMAGE_CHANNEL_RED_LIGHT" cx="1160.0001" cy="9252.5781" r="97.777786" style="stroke-width:1.22224" />
+      <circle id="IRIS_IMAGE_CHANNEL_GREEN_LIGHT" cx="1160.0001" cy="9992.5781" r="97.777786" style="stroke-width:1.22224" />
+      <circle id="IRIS_IMAGE_CHANNEL_BLUE_LIGHT" cx="360.00009" cy="9992.5781" r="97.777786" style="stroke-width:1.22224" />
+    </g>
+    <circle id="IRIS_V_OCT_INPUT" cx="3418.0366" cy="7792.7285" r="260" />
+    <circle id="IRIS_SOFT_SYNC_MODE_PARAM" cx="4463.6665" cy="7793.5059" r="240" />
+    <circle id="IRIS_FM_INPUT" cx="509.39999" cy="11196.27" r="260" />
+    <circle id="IRIS_SCAN_INPUT" cx="2802.9001" cy="9527.0713" r="260" />
+    <circle id="IRIS_SYNC_INPUT" cx="5509.2969" cy="7793.5059" r="260" />
+    <circle id="IRIS_OUT_OUTPUT" cx="4151" cy="11178.575" r="260" />
+    <circle id="IRIS_INV_OUTPUT" cx="5291" cy="11178.575" r="260" />
+    <circle id="NAUTILOID_EXPANDER_LIGHT" cx="320" cy="580" r="180" style="display:none" />
+  </g>
+  <rect id="IRIS_DISPLAY" x="96.52713" y="931.90002" width="5902.9458" height="3447.2776" rx="0" style="display:inline;stroke:#5841bf;stroke-width:23.3;stroke-dasharray:none;stroke-opacity:1" />
+  <g id="screen">
+    <rect id="IRIS_WAVE_PREVIEW" x="97.029732" y="4479.6802" width="5901.9414" height="1958.9949" rx="0" style="display:inline;stroke:#1ccad8;stroke-width:24.3052;stroke-dasharray:none;stroke-opacity:1" />
+  </g>
+</svg>
