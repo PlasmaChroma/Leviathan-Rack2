@@ -1857,7 +1857,7 @@ struct ProcWidget : ModuleWidget {
 			curveKnob->setPreviewInteraction(&previewEdgeInteraction);
 			addParam(curveKnob);
 		}
-		addParam(createParamCentered<TinyClockworkGearKnob>(mm2px(ampPos), module, Proc::AMP_PARAM));
+		addParam(createParamCentered<DarkTinyClockworkGearKnob>(mm2px(ampPos), module, Proc::AMP_PARAM));
 		{
 			AmpVoltageReadoutWidget* ampReadout = new AmpVoltageReadoutWidget();
 			ampReadout->module = module;
