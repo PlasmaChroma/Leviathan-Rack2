@@ -3416,6 +3416,64 @@ void SmallGoldApertureButton::onDragEnd(const event::DragEnd& e) {
 	if (drawActive) {
 		const float activeStartAngle = bipolar ? centerArcAngle : startAngle;
 		const float activeEndAngle = activeAngle;
+
+		const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
+		if (bloomRaw > 0.001f) {
+			const float bloomLow = bloomRaw + 2.0f * bloomRaw * (1.f - bloomRaw);
+			const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
+			const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
+
+			// Soft outer bloom pass (tightened radius)
+			NVGcolor outerBloomStart = activeColorStart;
+			outerBloomStart.a = clamp(outerBloomStart.a * 0.22f * bloom, 0.f, 255.f);
+			NVGcolor outerBloomEnd = activeColorEnd;
+			outerBloomEnd.a = clamp(outerBloomEnd.a * 0.22f * bloom, 0.f, 255.f);
+
+			NVGpaint outerBloomPaint = nvgLinearGradient(args.vg,
+				center.x - ringRadius, center.y,
+				center.x + ringRadius, center.y,
+				outerBloomStart,
+				outerBloomEnd);
+
+			nvgBeginPath(args.vg);
+			nvgArc(args.vg,
+				center.x,
+				center.y,
+				ringRadius,
+				std::min(activeStartAngle, activeEndAngle),
+				std::max(activeStartAngle, activeEndAngle),
+				NVG_CW);
+			nvgStrokePaint(args.vg, outerBloomPaint);
+			nvgStrokeWidth(args.vg, activeRingWidth * 1.6f);
+			nvgLineCap(args.vg, NVG_ROUND);
+			nvgStroke(args.vg);
+
+			// Tighter inner bloom pass (tightened radius)
+			NVGcolor innerBloomStart = activeColorStart;
+			innerBloomStart.a = clamp(innerBloomStart.a * 0.38f * bloom, 0.f, 255.f);
+			NVGcolor innerBloomEnd = activeColorEnd;
+			innerBloomEnd.a = clamp(innerBloomEnd.a * 0.38f * bloom, 0.f, 255.f);
+
+			NVGpaint innerBloomPaint = nvgLinearGradient(args.vg,
+				center.x - ringRadius, center.y,
+				center.x + ringRadius, center.y,
+				innerBloomStart,
+				innerBloomEnd);
+
+			nvgBeginPath(args.vg);
+			nvgArc(args.vg,
+				center.x,
+				center.y,
+				ringRadius,
+				std::min(activeStartAngle, activeEndAngle),
+				std::max(activeStartAngle, activeEndAngle),
+				NVG_CW);
+			nvgStrokePaint(args.vg, innerBloomPaint);
+			nvgStrokeWidth(args.vg, activeRingWidth * 1.25f);
+			nvgLineCap(args.vg, NVG_ROUND);
+			nvgStroke(args.vg);
+		}
+
 		nvgBeginPath(args.vg);
 		nvgArc(args.vg,
 			center.x,
@@ -3555,6 +3613,13 @@ void GearKnobInvertSized::draw(const DrawArgs& args) {
 
 void GearKnobInvertSized::step() {
 	app::SvgKnob::step();
+	const float bloomAmount = settings::haloBrightness;
+	if (std::fabs(bloomAmount - lastBloomAmount) > 1e-4f) {
+		lastBloomAmount = bloomAmount;
+		if (fb) {
+			fb->setDirty();
+		}
+	}
 	if (kClockworkLiquidShimmerEnabled && activeRing && fb && system::getTime() < activeRing->liquidShimmerUntil) {
 		fb->setDirty();
 	}

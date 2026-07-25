@@ -288,6 +288,7 @@ struct GearKnobInvertSized : app::SvgKnob {
 	widget::SvgWidget* cachedSvgSw = nullptr;
 	int dragMoveFrame = 0;
 	uint64_t dragLogGestureId = 0;
+	float lastBloomAmount = -1.f;
 
 	GearKnobInvertSized();
 	void draw(const DrawArgs& args) override;
