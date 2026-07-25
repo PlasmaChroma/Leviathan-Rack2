@@ -19,15 +19,15 @@
        gradientTransform="rotate(-139.9,27.988028,27.994051)">
       <stop
          offset="0"
-         style="stop-color:#4c4335;stop-opacity:1"
+         style="stop-color:#5d5241;stop-opacity:1"
          id="stop1" />
       <stop
          offset="0.55"
-         style="stop-color:#665842;stop-opacity:1"
+         style="stop-color:#7d6d53;stop-opacity:1"
          id="stop2" />
       <stop
          offset="1"
-         style="stop-color:#332d24;stop-opacity:1"
+         style="stop-color:#443b2f;stop-opacity:1"
          id="stop3" />
     </linearGradient>
     <linearGradient
