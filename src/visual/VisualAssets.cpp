@@ -3407,7 +3407,7 @@ void SmallGoldApertureButton::onDragEnd(const event::DragEnd& e) {
 
 	nvgBeginPath(args.vg);
 	nvgArc(args.vg, center.x, center.y, ringRadius, startAngle, endAngle, NVG_CW);
-	nvgStrokeColor(args.vg, nvgRGBA(2, 1, 1, 230));
+	nvgStrokeColor(args.vg, inactiveTrackColor);
 	nvgStrokeWidth(args.vg, ringWidth);
 	nvgLineCap(args.vg, NVG_ROUND);
 	nvgStroke(args.vg);
@@ -3427,9 +3427,8 @@ void SmallGoldApertureButton::onDragEnd(const event::DragEnd& e) {
 		NVGpaint activePaint = nvgLinearGradient(args.vg,
 			center.x - ringRadius, center.y,
 			center.x + ringRadius, center.y,
-			// Eclipse-orange option: nvgRGBA(240, 138, 36, 248), nvgRGBA(255, 210, 154, 255)
-			nvgRGBA(255, 218, 42, 248),
-			nvgRGBA(255, 250, 205, 255));
+			activeColorStart,
+			activeColorEnd);
 		nvgStrokePaint(args.vg, activePaint);
 		nvgStrokeWidth(args.vg, activeRingWidth);
 		nvgLineCap(args.vg, NVG_ROUND);
@@ -3443,12 +3442,13 @@ void SmallGoldApertureButton::onDragEnd(const event::DragEnd& e) {
 				const float phase = float(std::fmod(now * 1.35, 1.0));
 				const float sweepX = ringRadius * 2.4f;
 				const float shimmerStartX = center.x - ringRadius * 1.2f + sweepX * phase;
+				NVGcolor endShimmer = shimmerColorEndBase;
+				endShimmer.a *= fade;
 				NVGpaint shimmerPaint = nvgLinearGradient(args.vg,
 					shimmerStartX, center.y - ringRadius,
 					shimmerStartX + ringRadius * 0.55f, center.y + ringRadius,
-					// Eclipse-orange option: nvgRGBA(255, 215, 163, 0), nvgRGBA(255, 230, 190, alpha)
-					nvgRGBA(255, 255, 220, 0),
-					nvgRGBA(255, 255, 250, (unsigned char) std::round(118.f * fade)));
+					shimmerColorStart,
+					endShimmer);
 				nvgBeginPath(args.vg);
 				nvgArc(args.vg,
 					center.x,
@@ -3467,8 +3467,7 @@ void SmallGoldApertureButton::onDragEnd(const event::DragEnd& e) {
 
 	nvgBeginPath(args.vg);
 	nvgArc(args.vg, center.x, center.y, ringRadius - 0.5f * ringWidth, startAngle, endAngle, NVG_CW);
-	// Eclipse-orange option: nvgRGBA(255, 210, 154, 76)
-	nvgStrokeColor(args.vg, nvgRGBA(255, 244, 154, 80));
+	nvgStrokeColor(args.vg, innerLineColor);
 	if (innerLineWidthSourcePx > 0.f) {
 		nvgStrokeWidth(args.vg, innerLineWidthSourcePx * assetScale);
 		nvgStroke(args.vg);
@@ -3688,6 +3687,51 @@ TinyClockworkGearKnob::TinyClockworkGearKnob() {
 }
 
 BipolarTinyClockworkGearKnob::BipolarTinyClockworkGearKnob() {
+	if (activeRing) {
+		activeRing->bipolar = true;
+		activeRing->centerNorm = 0.5f;
+		activeRing->valueNorm = normalizedParamValue();
+	}
+	if (fb) {
+		fb->setDirty();
+	}
+}
+
+DarkTinyClockworkGearKnob::DarkTinyClockworkGearKnob() {
+	minAngle = -0.8 * M_PI;
+	maxAngle = 0.8 * M_PI;
+	setCachedSvg(visual_assets::loadPluginSvgCached("res/icon/gear_knob_tiny_dark.svg"));
+	if (shadowLayer) {
+		shadowLayer->box.size = box.size;
+		shadowLayer->minAngle = minAngle;
+		shadowLayer->maxAngle = maxAngle;
+		shadowLayer->valueNorm = normalizedParamValue();
+	}
+	if (activeRing) {
+		activeRing->box.size = box.size;
+		activeRing->minAngle = minAngle;
+		activeRing->maxAngle = maxAngle;
+		activeRing->valueNorm = normalizedParamValue();
+		activeRing->centerPx = 12.f;
+		activeRing->sourceDiameterPx = 24.f;
+		activeRing->sourceViewBoxPx = 56.f;
+		activeRing->ringRadiusSourcePx = 16.4f;
+		activeRing->ringWidthSourcePx = 8.0f;
+		activeRing->activeRingWidthSourcePx = 5.8f;
+		activeRing->innerLineWidthSourcePx = 0.75f;
+		activeRing->activeColorStart = nvgRGBA(26, 249, 252, 248);
+		activeRing->activeColorEnd = nvgRGBA(160, 252, 255, 255);
+		activeRing->inactiveTrackColor = nvgRGBA(14, 10, 25, 230);
+		activeRing->innerLineColor = nvgRGBA(140, 99, 250, 110);
+		activeRing->shimmerColorStart = nvgRGBA(180, 255, 255, 0);
+		activeRing->shimmerColorEndBase = nvgRGBA(220, 255, 255, 130);
+	}
+	if (fb) {
+		fb->setDirty();
+	}
+}
+
+BipolarDarkTinyClockworkGearKnob::BipolarDarkTinyClockworkGearKnob() {
 	if (activeRing) {
 		activeRing->bipolar = true;
 		activeRing->centerNorm = 0.5f;

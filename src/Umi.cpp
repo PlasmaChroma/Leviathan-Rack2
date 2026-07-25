@@ -53,6 +53,7 @@ Umi::Umi() {
 	configOutput(ACT_OUTPUT, "Activity CV");
 
 	controlDivider.setDivision(32);
+	lightDivider.setDivision(16);
 	engine.setCapacity(32);
 	updateCachedControls();
 	publishSnapshot();
@@ -80,12 +81,15 @@ float Umi::currentPulseLengthSeconds() const {
 
 void Umi::updateCachedControls() {
 	const float rate = clamp(params[RATE_PARAM].getValue(), 0.f, 1.f);
-	if (rate < 0.02f) {
-		cachedRateHz = 0.f;
-	}
-	else {
-		const float normalized = (rate - 0.02f) / 0.98f;
-		cachedRateHz = 0.05f * std::exp2(normalized * std::log2(400.f));
+	if (rate != cachedRateParam) {
+		cachedRateParam = rate;
+		if (rate < 0.02f) {
+			cachedRateHz = 0.f;
+		}
+		else {
+			const float normalized = (rate - 0.02f) / 0.98f;
+			cachedRateHz = 0.05f * std::exp2(normalized * std::log2(400.f));
+		}
 	}
 	cachedDensity = clamp(int(std::lround(params[DENSITY_PARAM].getValue())), 1, 8);
 
@@ -235,9 +239,16 @@ void Umi::process(const ProcessArgs& args) {
 			handleCapture(events.captures[static_cast<std::size_t>(i)]);
 		}
 		const float occupancy = float(engine.getActiveCount()) / float(std::max(1, engine.getCapacity()));
+		const float previousActivity = activity;
 		activity = std::max(occupancy, activity * 0.98816f);
+		if (activity < 1.0e-4f) {
+			activity = 0.f;
+		}
 		renderSnapshotDivider = (renderSnapshotDivider + 1u) & 3u;
-		if (events.captureCount > 0 || renderSnapshotDivider == 0u) {
+		const bool visuallyActive = engine.getActiveCount() > 0 || activity > 0.f;
+		const bool activityJustStopped = previousActivity > 0.f && activity == 0.f;
+		if (events.captureCount > 0 || activityJustStopped ||
+			(visuallyActive && renderSnapshotDivider == 0u)) {
 			publishSnapshot();
 		}
 		physicsAccumulator -= umi::PHYSICS_DT;
@@ -252,7 +263,6 @@ void Umi::process(const ProcessArgs& args) {
 	for (int i = 0; i < umi::SINK_COUNT; ++i) {
 		const bool high = sinkPulses[static_cast<std::size_t>(i)].process(args.sampleTime);
 		outputs[GATES_OUTPUT].setVoltage(high ? 10.f : 0.f, i);
-		lights[SINK1_LIGHT + i].setBrightnessSmooth(high ? 1.f : 0.f, args.sampleTime);
 		anyHigh = anyHigh || high;
 	}
 	const bool anyPulseHigh = anyPulse.process(args.sampleTime);
@@ -265,9 +275,16 @@ void Umi::process(const ProcessArgs& args) {
 
 	dropFlash = std::max(0.f, dropFlash - args.sampleTime * 7.f);
 	clearFlash = std::max(0.f, clearFlash - args.sampleTime * 7.f);
-	lights[DROP_LIGHT].setBrightnessSmooth(dropFlash, args.sampleTime);
-	lights[CLEAR_LIGHT].setBrightnessSmooth(clearFlash, args.sampleTime);
-	lights[ANY_LIGHT].setBrightnessSmooth((anyPulseHigh || anyHigh) ? 1.f : 0.f, args.sampleTime);
+	if (lightDivider.process()) {
+		const float lightTime = args.sampleTime * 16.f;
+		for (int i = 0; i < umi::SINK_COUNT; ++i) {
+			const bool high = sinkPulses[static_cast<std::size_t>(i)].isHigh();
+			lights[SINK1_LIGHT + i].setBrightnessSmooth(high ? 1.f : 0.f, lightTime);
+		}
+		lights[DROP_LIGHT].setBrightnessSmooth(dropFlash, lightTime);
+		lights[CLEAR_LIGHT].setBrightnessSmooth(clearFlash, lightTime);
+		lights[ANY_LIGHT].setBrightnessSmooth((anyPulseHigh || anyHigh) ? 1.f : 0.f, lightTime);
+	}
 }
 
 json_t* Umi::dataToJson() {

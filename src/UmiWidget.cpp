@@ -432,7 +432,11 @@ UmiWidget::UmiWidget(Umi* module) {
 	addChild(playfield);
 	auto* labels = new UmiLabelOverlayWidget();
 	labels->box.size = box.size;
-	addChild(labels);
+	auto* labelFramebuffer = new widget::FramebufferWidget();
+	labelFramebuffer->box.size = box.size;
+	labelFramebuffer->dirtyOnSubpixelChange = false;
+	labelFramebuffer->addChild(labels);
+	addChild(labelFramebuffer);
 
 	auto anchor = [&](const char* id, Vec fallbackMm) {
 		Vec point;

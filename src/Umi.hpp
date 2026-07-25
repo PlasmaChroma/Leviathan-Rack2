@@ -130,6 +130,7 @@ struct Umi final : Module {
 	dsp::SchmittTrigger clearButtonTrigger;
 	dsp::SchmittTrigger clearInputTrigger;
 	dsp::ClockDivider controlDivider;
+	dsp::ClockDivider lightDivider;
 
 	SpscQueue<RenderSnapshot, 3> renderSnapshots;
 	SpscQueue<UiCommand, 16> uiCommands;
@@ -141,6 +142,7 @@ struct Umi final : Module {
 
 	float physicsAccumulator = 0.f;
 	float autoDropPhase = 0.f;
+	float cachedRateParam = -1.f;
 	float cachedRateHz = 0.f;
 	int cachedDensity = 1;
 	int appliedMaxBalls = 32;

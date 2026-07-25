@@ -135,6 +135,71 @@ TestResult testPearlInteraction() {
 			+ "/" + std::to_string(second.vel.x)};
 }
 
+TestResult testStaticColliderCoverage() {
+	umi::Engine engine;
+	engine.setCapacity(1);
+	umi::PhysicsParams params;
+	params.gravity = 0.f;
+	params.restitution = 0.5f;
+	params.drag = 0.f;
+	params.chaos = 0.f;
+	const umi::Layout& layout = engine.getLayout();
+	int tested = 0;
+	std::string failedCollider;
+
+	auto displacedFrom = [&](umi::Vec2 probe) {
+		engine.clear();
+		if (!engine.spawnAt(probe)) {
+			return false;
+		}
+		const umi::StepEvents events = engine.step(params);
+		if (events.captureCount > 0) {
+			return true;
+		}
+		for (const umi::Ball& ball : engine.getBalls()) {
+			if (!ball.active) {
+				continue;
+			}
+			const float dx = ball.pos.x - probe.x;
+			const float dy = ball.pos.y - probe.y;
+			return dx * dx + dy * dy > 1.0e-4f;
+		}
+		return false;
+	};
+
+	bool pass = true;
+	for (int i = 0; i < layout.pegCount; ++i) {
+		if (!displacedFrom(layout.pegs[static_cast<std::size_t>(i)].pos)) {
+			pass = false;
+			if (failedCollider.empty()) failedCollider = "peg " + std::to_string(i);
+		}
+		tested++;
+	}
+	for (int i = 0; i < layout.segmentCount; ++i) {
+		const umi::Segment& segment = layout.segments[static_cast<std::size_t>(i)];
+		umi::Vec2 probe {
+			0.5f * (segment.a.x + segment.b.x),
+			0.5f * (segment.a.y + segment.b.y)
+		};
+		for (const umi::Sink& sink : layout.sinks) {
+			const float dx = probe.x - sink.pos.x;
+			const float dy = probe.y - sink.pos.y;
+			if (dx * dx + dy * dy <= sink.radius * sink.radius) {
+				probe = segment.a;
+				break;
+			}
+		}
+		if (!displacedFrom(probe)) {
+			pass = false;
+			if (failedCollider.empty()) failedCollider = "segment " + std::to_string(i);
+		}
+		tested++;
+	}
+	return {"Static collider broad-phase coverage", pass,
+		"colliders=" + std::to_string(tested)
+			+ (failedCollider.empty() ? "" : " firstFailure=" + failedCollider)};
+}
+
 TestResult testEverySinkCapture() {
 	umi::PhysicsParams params;
 	params.gravity = 0.f;
@@ -234,6 +299,7 @@ int main() {
 		testSpawnCapacityPolicies(),
 		testBurstSpawnSeparation(),
 		testPearlInteraction(),
+		testStaticColliderCoverage(),
 		testEverySinkCapture(),
 		testDeterminism(),
 		testLongRunStability(),

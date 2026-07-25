@@ -14,6 +14,11 @@ constexpr float SPAWN_MIN_X = 70.f;
 constexpr float SPAWN_MAX_X = 930.f;
 constexpr float SPAWN_SPACING = 40.f;
 constexpr std::array<float, 3> SPAWN_ROWS {{80.f, 40.f, 120.f}};
+constexpr float COLLIDER_GRID_MIN_X = -320.f;
+constexpr float COLLIDER_GRID_MAX_X = 1320.f;
+constexpr float COLLIDER_GRID_MIN_Y = -320.f;
+constexpr float COLLIDER_GRID_MAX_Y = 1920.f;
+constexpr float MAX_BALL_RADIUS = 18.f;
 
 Vec2 add(Vec2 a, Vec2 b) {
 	return {a.x + b.x, a.y + b.y};
@@ -108,6 +113,7 @@ Engine::Engine() {
 void Engine::reset(std::uint32_t newSeed) {
 	seed = newSeed ? newSeed : 0x6d2b79f5u;
 	layout = makePearlLayout(seed);
+	rebuildColliderGrid();
 	rng.reset(hashSeed(seed ^ 0x53494d55u));
 	nextBallId = 1u;
 	clear();
@@ -219,6 +225,87 @@ void Engine::deactivate(int slot) {
 	}
 	ball.active = false;
 	activeCount--;
+}
+
+int Engine::colliderCellIndex(Vec2 pos) const {
+	const float normalizedX = (pos.x - COLLIDER_GRID_MIN_X)
+		/ (COLLIDER_GRID_MAX_X - COLLIDER_GRID_MIN_X);
+	const float normalizedY = (pos.y - COLLIDER_GRID_MIN_Y)
+		/ (COLLIDER_GRID_MAX_Y - COLLIDER_GRID_MIN_Y);
+	const int column = std::max(0, std::min(
+		COLLIDER_GRID_COLUMNS - 1,
+		int(normalizedX * float(COLLIDER_GRID_COLUMNS))));
+	const int row = std::max(0, std::min(
+		COLLIDER_GRID_ROWS - 1,
+		int(normalizedY * float(COLLIDER_GRID_ROWS))));
+	return row * COLLIDER_GRID_COLUMNS + column;
+}
+
+void Engine::rebuildColliderGrid() {
+	colliderGrid = {};
+	colliderGridValid = true;
+
+	const float cellWidth =
+		(COLLIDER_GRID_MAX_X - COLLIDER_GRID_MIN_X) / float(COLLIDER_GRID_COLUMNS);
+	const float cellHeight =
+		(COLLIDER_GRID_MAX_Y - COLLIDER_GRID_MIN_Y) / float(COLLIDER_GRID_ROWS);
+	auto cellColumn = [&](float x) {
+		return std::max(0, std::min(COLLIDER_GRID_COLUMNS - 1,
+			int((x - COLLIDER_GRID_MIN_X) / cellWidth)));
+	};
+	auto cellRow = [&](float y) {
+		return std::max(0, std::min(COLLIDER_GRID_ROWS - 1,
+			int((y - COLLIDER_GRID_MIN_Y) / cellHeight)));
+	};
+
+	for (int pegIndex = 0; pegIndex < layout.pegCount; ++pegIndex) {
+		const Peg& peg = layout.pegs[static_cast<std::size_t>(pegIndex)];
+		const float reach = peg.radius + MAX_BALL_RADIUS;
+		const int firstColumn = cellColumn(peg.pos.x - reach);
+		const int lastColumn = cellColumn(peg.pos.x + reach);
+		const int firstRow = cellRow(peg.pos.y - reach);
+		const int lastRow = cellRow(peg.pos.y + reach);
+		for (int row = firstRow; row <= lastRow; ++row) {
+			for (int column = firstColumn; column <= lastColumn; ++column) {
+				ColliderCell& cell = colliderGrid[static_cast<std::size_t>(
+					row * COLLIDER_GRID_COLUMNS + column)];
+				if (cell.pegCount >= MAX_COLLIDERS_PER_CELL) {
+					colliderGridValid = false;
+					continue;
+				}
+				cell.pegIndices[static_cast<std::size_t>(cell.pegCount++)] =
+					static_cast<std::uint8_t>(pegIndex);
+			}
+		}
+	}
+
+	for (int segmentIndex = 0; segmentIndex < layout.segmentCount; ++segmentIndex) {
+		const Segment& segment = layout.segments[static_cast<std::size_t>(segmentIndex)];
+		const float reach = segment.radius + MAX_BALL_RADIUS;
+		const int firstColumn = cellColumn(std::min(segment.a.x, segment.b.x) - reach);
+		const int lastColumn = cellColumn(std::max(segment.a.x, segment.b.x) + reach);
+		const int firstRow = cellRow(std::min(segment.a.y, segment.b.y) - reach);
+		const int lastRow = cellRow(std::max(segment.a.y, segment.b.y) + reach);
+		for (int row = firstRow; row <= lastRow; ++row) {
+			for (int column = firstColumn; column <= lastColumn; ++column) {
+				ColliderCell& cell = colliderGrid[static_cast<std::size_t>(
+					row * COLLIDER_GRID_COLUMNS + column)];
+				if (cell.segmentCount >= MAX_COLLIDERS_PER_CELL) {
+					colliderGridValid = false;
+					continue;
+				}
+				cell.segmentIndices[static_cast<std::size_t>(cell.segmentCount++)] =
+					static_cast<std::uint8_t>(segmentIndex);
+			}
+		}
+	}
+
+	sinkMinY = std::numeric_limits<float>::max();
+	sinkMaxY = std::numeric_limits<float>::lowest();
+	for (const Sink& sink : layout.sinks) {
+		sinkMinY = std::min(sinkMinY, sink.pos.y - sink.radius);
+		sinkMaxY = std::max(sinkMaxY, sink.pos.y + sink.radius);
+	}
 }
 
 bool Engine::spawnAt(Vec2 pos, Vec2 velocity) {
@@ -344,6 +431,9 @@ void Engine::collideBalls(Ball& first, Ball& second, float restitution) {
 
 StepEvents Engine::step(const PhysicsParams& params, float dt) {
 	StepEvents events;
+	if (activeCount == 0) {
+		return events;
+	}
 	const float safeDt = std::max(0.f, std::min(0.05f, dt));
 	const float gravity = std::max(0.f, std::min(4000.f, params.gravity));
 	const float tilt = std::max(-1.f, std::min(1.f, params.tilt));
@@ -366,27 +456,53 @@ StepEvents Engine::step(const PhysicsParams& params, float dt) {
 			ball.vel = mul(ball.vel, MAX_SPEED / std::sqrt(speedSqBeforeClamp));
 		}
 		ball.pos = add(ball.pos, mul(ball.vel, safeDt));
-
-		for (int i = 0; i < layout.segmentCount; ++i) {
-			collideBallWithSegment(ball, layout.segments[static_cast<std::size_t>(i)], restitution, MAX_PEGS + i);
+		if (!finiteVec(ball.pos) || !finiteVec(ball.vel)) {
+			deactivate(slot);
+			continue;
 		}
-		for (int i = 0; i < layout.pegCount; ++i) {
-			collideBallWithPeg(ball, layout.pegs[static_cast<std::size_t>(i)], restitution, i);
+
+		if (colliderGridValid) {
+			const ColliderCell& cell =
+				colliderGrid[static_cast<std::size_t>(colliderCellIndex(ball.pos))];
+			for (int candidate = 0; candidate < cell.segmentCount; ++candidate) {
+				const int i = cell.segmentIndices[static_cast<std::size_t>(candidate)];
+				collideBallWithSegment(ball,
+					layout.segments[static_cast<std::size_t>(i)],
+					restitution, MAX_PEGS + i);
+			}
+			for (int candidate = 0; candidate < cell.pegCount; ++candidate) {
+				const int i = cell.pegIndices[static_cast<std::size_t>(candidate)];
+				collideBallWithPeg(ball,
+					layout.pegs[static_cast<std::size_t>(i)],
+					restitution, i);
+			}
+		}
+		else {
+			for (int i = 0; i < layout.segmentCount; ++i) {
+				collideBallWithSegment(ball, layout.segments[static_cast<std::size_t>(i)], restitution, MAX_PEGS + i);
+			}
+			for (int i = 0; i < layout.pegCount; ++i) {
+				collideBallWithPeg(ball, layout.pegs[static_cast<std::size_t>(i)], restitution, i);
+			}
 		}
 
 		bool captured = false;
-		for (int sinkIndex = 0; sinkIndex < SINK_COUNT; ++sinkIndex) {
-			const Sink& sink = layout.sinks[static_cast<std::size_t>(sinkIndex)];
-			if (!sweptPointHitsCircle(previousPos, ball.pos, sink.pos, sink.radius)) {
-				continue;
+		const float sweptMinY = std::min(previousPos.y, ball.pos.y);
+		const float sweptMaxY = std::max(previousPos.y, ball.pos.y);
+		if (sweptMaxY >= sinkMinY && sweptMinY <= sinkMaxY) {
+			for (int sinkIndex = 0; sinkIndex < SINK_COUNT; ++sinkIndex) {
+				const Sink& sink = layout.sinks[static_cast<std::size_t>(sinkIndex)];
+				if (!sweptPointHitsCircle(previousPos, ball.pos, sink.pos, sink.radius)) {
+					continue;
+				}
+				CaptureEvent& event = events.captures[static_cast<std::size_t>(events.captureCount++)];
+				event.ballId = ball.id;
+				event.sinkIndex = static_cast<std::uint8_t>(sinkIndex);
+				event.speed = std::sqrt(lengthSquared(ball.vel));
+				deactivate(slot);
+				captured = true;
+				break;
 			}
-			CaptureEvent& event = events.captures[static_cast<std::size_t>(events.captureCount++)];
-			event.ballId = ball.id;
-			event.sinkIndex = static_cast<std::uint8_t>(sinkIndex);
-			event.speed = std::sqrt(lengthSquared(ball.vel));
-			deactivate(slot);
-			captured = true;
-			break;
 		}
 		if (captured) {
 			continue;
@@ -422,6 +538,11 @@ StepEvents Engine::step(const PhysicsParams& params, float dt) {
 		for (int secondSlot = firstSlot + 1; secondSlot < capacity; ++secondSlot) {
 			Ball& second = balls[static_cast<std::size_t>(secondSlot)];
 			if (second.active) {
+				const float minimumDistance = first.radius + second.radius;
+				if (std::abs(second.pos.x - first.pos.x) >= minimumDistance ||
+					std::abs(second.pos.y - first.pos.y) >= minimumDistance) {
+					continue;
+				}
 				collideBalls(first, second, restitution);
 			}
 		}

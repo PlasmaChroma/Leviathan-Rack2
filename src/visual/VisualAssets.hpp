@@ -259,6 +259,13 @@ struct GearKnobInvertSized : app::SvgKnob {
 		float centerNorm = 0.5f;
 		double liquidShimmerUntil = 0.0;
 
+		NVGcolor activeColorStart = nvgRGBA(255, 218, 42, 248);
+		NVGcolor activeColorEnd = nvgRGBA(255, 250, 205, 255);
+		NVGcolor inactiveTrackColor = nvgRGBA(2, 1, 1, 230);
+		NVGcolor innerLineColor = nvgRGBA(255, 244, 154, 80);
+		NVGcolor shimmerColorStart = nvgRGBA(255, 255, 220, 0);
+		NVGcolor shimmerColorEndBase = nvgRGBA(255, 255, 250, 118);
+
 		void draw(const DrawArgs& args) override;
 	};
 
@@ -300,6 +307,14 @@ struct TinyClockworkGearKnob : GearKnobInvertSized {
 
 struct BipolarTinyClockworkGearKnob : TinyClockworkGearKnob {
 	BipolarTinyClockworkGearKnob();
+};
+
+struct DarkTinyClockworkGearKnob : GearKnobInvertSized {
+	DarkTinyClockworkGearKnob();
+};
+
+struct BipolarDarkTinyClockworkGearKnob : DarkTinyClockworkGearKnob {
+	BipolarDarkTinyClockworkGearKnob();
 };
 
 struct EclipseKnob : app::SvgKnob {
