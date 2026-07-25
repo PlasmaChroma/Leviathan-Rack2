@@ -3721,8 +3721,8 @@ DarkTinyClockworkGearKnob::DarkTinyClockworkGearKnob() {
 		activeRing->innerLineWidthSourcePx = 0.75f;
 		activeRing->activeColorStart = nvgRGBA(26, 249, 252, 248);
 		activeRing->activeColorEnd = nvgRGBA(160, 252, 255, 255);
-		activeRing->inactiveTrackColor = nvgRGBA(14, 10, 25, 230);
-		activeRing->innerLineColor = nvgRGBA(140, 99, 250, 110);
+		activeRing->inactiveTrackColor = nvgRGBA(31, 25, 44, 255);
+		activeRing->innerLineColor = nvgRGBA(62, 50, 88, 160);
 		activeRing->shimmerColorStart = nvgRGBA(180, 255, 255, 0);
 		activeRing->shimmerColorEndBase = nvgRGBA(220, 255, 255, 130);
 	}
