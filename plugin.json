@@ -174,8 +174,7 @@
       "description": "Impulse-excited physical model of a vibrating spring doorstop.",
       "tags": [
         "Physical modeling",
-        "Drum",
-        "Effect"
+        "Drum"
       ],
       "hidden": false
     },

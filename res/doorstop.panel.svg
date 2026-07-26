@@ -1,61 +1,54 @@
 <?xml version='1.0' encoding='utf-8'?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="15.24mm" height="128.5mm" viewBox="0 0 1524 12850" preserveAspectRatio="xMidYMid" id="doorstop-source">
-  <defs>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="15.24mm" height="128.5mm" viewBox="0 0 1524 12850" preserveAspectRatio="xMidYMid" id="doorstop-source" version="1.1" sodipodi:docname="doorstop.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)">
+  <defs id="defs13">
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#12151b" />
-      <stop offset="0.52" stop-color="#090b10" />
-      <stop offset="1" stop-color="#050609" />
+      <stop offset="0" stop-color="#12151b" id="stop1" />
+      <stop offset="0.52" stop-color="#090b10" id="stop2" />
+      <stop offset="1" stop-color="#050609" id="stop3" />
     </linearGradient>
     <linearGradient id="edge" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#7457d8" stop-opacity="0.75" />
-      <stop offset="0.5" stop-color="#34d9e7" stop-opacity="0.95" />
-      <stop offset="1" stop-color="#7457d8" stop-opacity="0.75" />
+      <stop offset="0" stop-color="#7457d8" stop-opacity="0.75" id="stop4" />
+      <stop offset="0.5" stop-color="#34d9e7" stop-opacity="0.95" id="stop5" />
+      <stop offset="1" stop-color="#7457d8" stop-opacity="0.75" id="stop6" />
     </linearGradient>
-    <radialGradient id="plate" cx="0.35" cy="0.25" r="0.9">
-      <stop offset="0" stop-color="#e5edf1" />
-      <stop offset="0.32" stop-color="#8b959d" />
-      <stop offset="0.72" stop-color="#343b43" />
-      <stop offset="1" stop-color="#11151a" />
+    <radialGradient id="plate" cx="653.4" cy="6919" r="651.59998" fx="653.4" fy="6919" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e5edf1" id="stop7" />
+      <stop offset="0.32" stop-color="#8b959d" id="stop8" />
+      <stop offset="0.72" stop-color="#343b43" id="stop9" />
+      <stop offset="1" stop-color="#11151a" id="stop10" />
     </radialGradient>
-    <linearGradient id="chamberEdge" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#7a5cff" stop-opacity="0.82" />
-      <stop offset="0.58" stop-color="#3d58ba" stop-opacity="0.38" />
-      <stop offset="1" stop-color="#1cccd9" stop-opacity="0.70" />
+    <linearGradient id="chamberEdge" x1="219.8595" y1="404.7312" x2="219.8595" y2="3384.052" gradientTransform="matrix(0.44623004,0,0,1.9808507,-0.83912212,888.01173)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7a5cff" stop-opacity="0.82" id="stop11" style="stop-color:#7a5cff;stop-opacity:1;" />
+      <stop offset="1" stop-color="#1cccd9" stop-opacity="0.70" id="stop13" style="stop-color:#1cccd9;stop-opacity:1;" />
+    </linearGradient>
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient67" gradientUnits="userSpaceOnUse" gradientTransform="matrix(0.99690805,0,0,0.99690805,-5344.8155,-883.02065)" x1="5793.2271" y1="1480.5731" x2="6451.4136" y2="1483.1567" />
+    <linearGradient id="linearGradient22" inkscape:collect="always">
+      <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop22" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop23" />
     </linearGradient>
   </defs>
-  <g id="panel_art" inkscape:groupmode="layer" inkscape:label="Panel artwork">
-    <rect width="1524" height="12850" fill="url(#bg)" />
-    <rect x="38" y="28" width="1448" height="12794" rx="92" fill="none" stroke="#69727d" stroke-opacity="0.46" stroke-width="24" />
-    <rect x="72" y="74" width="1380" height="650" rx="82" fill="#05070b" stroke="#ffffff" stroke-opacity="0.055" stroke-width="16" />
-    <path d="M130 730 H1394" stroke="url(#edge)" stroke-width="32" stroke-linecap="round" />
-    <circle cx="164" cy="174" r="58" fill="#102b38" stroke="#1cccd9" stroke-opacity="0.72" stroke-width="18" />
-    <path d="M164 112 L190 174 L164 236 L138 174 Z" fill="#7a5cff" fill-opacity="0.75" stroke="#8ff7ff" stroke-width="10" />
-
-    <rect x="110" y="920" width="1304" height="6660" rx="170" fill="#05070a" stroke="url(#chamberEdge)" stroke-width="24" />
-    <rect x="146" y="956" width="1232" height="6588" rx="144" fill="none" stroke="#ffffff" stroke-opacity="0.055" stroke-width="14" />
-    <path d="M198 1280 H1326 M198 2240 H1326 M198 3200 H1326 M198 4160 H1326 M198 5120 H1326 M198 6080 H1326"
-          stroke="#6f7f92" stroke-opacity="0.085" stroke-width="12" />
-    <path d="M762 1040 V7420" stroke="#1cccd9" stroke-opacity="0.055" stroke-width="12" />
-    <circle cx="762" cy="7200" r="420" fill="#020305" opacity="0.9" />
-    <circle cx="762" cy="7100" r="350" fill="url(#plate)" stroke="#e8f4f7" stroke-opacity="0.32" stroke-width="24" />
-    <circle cx="762" cy="7100" r="155" fill="#171c22" stroke="#05070a" stroke-width="28" />
-    <circle cx="762" cy="7100" r="62" fill="#080a0d" />
-
+  <g id="panel_art" inkscape:label="Panel artwork">
+    <rect width="1524" height="12850" fill="url(#bg)" id="rect13" x="0" y="0" />
     <g id="glass" inkscape:label="glass">
-      <rect id="inputs" x="110" y="8440" width="1304" height="2750" rx="150"
-            fill="#5740bf" fill-opacity="0.52" stroke="#b8a7ff" stroke-opacity="0.16" stroke-width="20" />
-      <rect id="outputs" x="110" y="11270" width="1304" height="1210" rx="150"
-            fill="#1cccd9" fill-opacity="0.50" stroke="#a8fbff" stroke-opacity="0.18" stroke-width="20" />
+      <rect id="inputs" x="110" y="8080" width="1304" height="2750" rx="150" fill="#5740bf" fill-opacity="0.52" stroke="#b8a7ff" stroke-opacity="0.16" stroke-width="20" />
+      <rect id="outputs" x="110" y="10910" width="1304" height="1210" rx="150" fill="#1cccd9" fill-opacity="0.5" stroke="#a8fbff" stroke-opacity="0.18" stroke-width="20" />
     </g>
-    <path d="M206 9850 H1318" stroke="#9c84ff" stroke-opacity="0.25" stroke-width="14" />
-    <rect x="82" y="12530" width="1360" height="264" rx="70" fill="#030407" stroke="#ffffff" stroke-opacity="0.05" stroke-width="12" />
+    <rect x="82" y="12530" width="1360" height="264" rx="70" fill="#030407" stroke="#ffffff" stroke-opacity="0.05" stroke-width="12" id="rect21" />
+    <g id="mount_plate" style="display:inline" transform="translate(0,-650.03707)">
+      <rect x="109.28201" y="1700.3191" width="1305.436" height="5880.3989" rx="170.18721" fill="#05070a" stroke="url(#chamberEdge)" stroke-width="22.564" id="rect16" style="display:inline;stroke:url(#chamberEdge);fill:none" />
+      <rect x="145.32166" y="1732.105" width="1233.3567" height="5816.8271" rx="144.15857" fill="none" stroke="#ffffff" stroke-opacity="0.055" stroke-width="13.1623" id="rect17" style="display:inline" />
+      <circle cx="762" cy="7200" r="420" fill="#020305" opacity="0.9" id="circle18" />
+      <circle cx="762" cy="7100" r="350" fill="url(#plate)" stroke="#e8f4f7" stroke-opacity="0.32" stroke-width="24" id="circle19" style="fill:url(#plate)" />
+      <circle cx="762" cy="7100" r="155" fill="#171c22" stroke="#05070a" stroke-width="28" id="circle20" />
+      <circle cx="762" cy="7100" r="62" fill="#080a0d" id="circle21" />
+    </g>
   </g>
-  <g id="components" inkscape:groupmode="layer" inkscape:label="Component anchors" style="display:none">
-    <circle id="SPRING_BASE" cx="762" cy="7100" r="50" />
-    <rect id="ENERGY_METER" x="220" y="7930" width="1084" height="240" />
-    <rect id="MANUAL_HIT_REGION" x="110" y="1730" width="1304" height="5380" />
-    <circle id="TRIG_INPUT" cx="762" cy="9300" r="220" />
-    <circle id="VELOCITY_INPUT" cx="762" cy="10700" r="220" />
-    <circle id="AUDIO_OUTPUT" cx="762" cy="12100" r="220" />
+  <g id="components" inkscape:label="Component anchors" style="display:none">
+    <circle id="SPRING_BASE" cx="762" cy="6449.9629" r="50" />
+    <rect id="ENERGY_METER" x="70.000008" y="7220" width="1384" height="306.42072" style="fill:#b06161;fill-opacity:1;stroke-width:1.2769" />
+    <rect id="MANUAL_HIT_REGION" x="110" y="1041.0212" width="1304" height="5883.064" />
+    <circle id="TRIG_INPUT" cx="762" cy="8544.9893" r="220" />
+    <circle id="VELOCITY_INPUT" cx="762" cy="9944.9893" r="220" />
+    <circle id="AUDIO_OUTPUT" cx="762" cy="11330" r="220" />
   </g>
 </svg>

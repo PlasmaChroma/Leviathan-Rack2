@@ -29,71 +29,6 @@ struct DoorstopVisualSnapshot {
 	float strike = 0.f;
 };
 
-struct DoorstopClassicLabelsWidget final : TransparentWidget {
-	std::shared_ptr<window::Svg> brandSvg;
-
-	DoorstopClassicLabelsWidget() {
-		brandSvg = visual_assets::loadPluginSvgCached("res/icon/Brand_Logo.svg");
-	}
-
-	void drawText(const DrawArgs& args, const char* text, Vec posMm,
-		float sizeMm, NVGcolor color, float tracking = 0.f) {
-		if (!APP || !APP->window || !APP->window->uiFont) return;
-		const Vec pos = mm2px(posMm);
-		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgFontSize(args.vg, mm2px(sizeMm));
-		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		nvgTextLetterSpacing(args.vg, tracking);
-		nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 210));
-		nvgText(args.vg, pos.x + 0.8f, pos.y + 0.8f, text, nullptr);
-		nvgFillColor(args.vg, color);
-		nvgText(args.vg, pos.x, pos.y, text, nullptr);
-	}
-
-	void draw(const DrawArgs& args) override {
-		if (!APP || !APP->window || !APP->window->uiFont) return;
-		const Vec titlePos = mm2px(Vec(7.62f, 2.6f));
-		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgFontSize(args.vg, mm2px(2.35f));
-		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		nvgFontBlur(args.vg, 0.f);
-		nvgTextLetterSpacing(args.vg, -0.15f);
-		nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 230));
-		nvgText(args.vg, titlePos.x + 0.9f, titlePos.y + 0.9f, "Doorstop", nullptr);
-		const NVGpaint titlePaint = nvgLinearGradient(args.vg,
-			mm2px(1.2f), titlePos.y, mm2px(14.f), titlePos.y,
-			nvgRGB(164, 98, 255), nvgRGB(28, 204, 217));
-		nvgFillPaint(args.vg, titlePaint);
-		nvgText(args.vg, titlePos.x, titlePos.y, "Doorstop", nullptr);
-
-		drawText(args, "PHYSICAL SPRING RESONATOR", Vec(7.62f, 5.8f),
-			0.62f, nvgRGBA(226, 235, 241, 205), 0.25f);
-		drawText(args, "ENERGY", Vec(7.62f, 78.25f),
-			0.72f, nvgRGBA(204, 225, 238, 190), 0.35f);
-		drawText(args, "TRIG", Vec(7.62f, 87.9f),
-			1.05f, nvgRGB(224, 238, 246), 0.45f);
-		drawText(args, "VEL", Vec(7.62f, 101.9f),
-			1.05f, nvgRGB(224, 238, 246), 0.45f);
-		drawText(args, "OUT", Vec(7.62f, 115.9f),
-			1.05f, nvgRGB(225, 246, 247), 0.45f);
-		drawText(args, "D1", Vec(14.2f, 1.0f),
-			0.48f, nvgRGBA(215, 229, 238, 150), 0.15f);
-
-		if (brandSvg) {
-			const Vec natural = brandSvg->getSize();
-			if (natural.x > 0.f && natural.y > 0.f) {
-				const Vec brandPos = mm2px(Vec(0.87f, 124.65f));
-				const Vec brandSize = mm2px(Vec(13.5f, 3.68f));
-				nvgSave(args.vg);
-				nvgTranslate(args.vg, brandPos.x, brandPos.y);
-				nvgScale(args.vg, brandSize.x / natural.x, brandSize.y / natural.y);
-				brandSvg->draw(args.vg);
-				nvgRestore(args.vg);
-			}
-		}
-	}
-};
-
 struct SpringPathGeometry {
 	std::array<Vec, SPRING_POINTS> points {};
 	float tipTravel = 0.f;
@@ -131,6 +66,7 @@ struct DoorstopOverflowWidget;
 struct DoorstopOverlayLink {
 	DoorstopWidget* owner = nullptr;
 	DoorstopOverflowWidget* overlay = nullptr;
+	Vec springBase;
 	DoorstopVisualSnapshot snapshot;
 	std::array<float, 3> displacementHistory {};
 	std::array<SpringPathGeometry, 4> springGeometry {};
@@ -270,9 +206,8 @@ void updateOverflowVisibility(DoorstopOverlayLink& link, float panelWidth) {
 		bounds.include(0.f, 15.f + clamp01(state.strike) * 10.f);
 	}
 
-	const float halfPanelWidth = 0.5f * panelWidth;
-	link.overflowLeftVisible = bounds.minimum < -halfPanelWidth;
-	link.overflowRightVisible = bounds.maximum > halfPanelWidth;
+	link.overflowLeftVisible = bounds.minimum < -link.springBase.x;
+	link.overflowRightVisible = bounds.maximum > panelWidth - link.springBase.x;
 }
 
 void appendFullSpringPath(NVGcontext* vg, const SpringPathGeometry& geometry,
@@ -421,8 +356,8 @@ void drawStrikeAccent(NVGcontext* vg, float baseX, float baseY, float strike) {
 	nvgBeginPath(vg);
 	nvgCircle(vg, baseX, baseY, 15.f + strike * 10.f);
 	NVGpaint glow = nvgRadialGradient(vg, baseX, baseY, 2.f, 23.f,
-		nvgRGBA(255, 190, 76, int(100.f * strike)),
-		nvgRGBA(91, 49, 198, 0));
+		nvgRGBA(164, 98, 255, int(100.f * strike)),
+		nvgRGBA(28, 204, 217, 0));
 	nvgFillPaint(vg, glow);
 	nvgFill(vg);
 }
@@ -473,6 +408,27 @@ void drawEnergyMeter(NVGcontext* vg, const math::Rect& bounds, float energy) {
 			fillPos.x, fillPos.y, fillPos.x + fillSize.x, fillPos.y,
 			nvgRGB(122, 92, 255), nvgRGB(28, 204, 217));
 		nvgFillPaint(vg, fill);
+		nvgFill(vg);
+		nvgRestore(vg);
+	}
+	else if (fillWidth > 0.f && fillSize.y > 0.f) {
+		// Once the remaining energy is narrower than a useful filled pixel,
+		// preserve its long tail as a tiny glow whose opacity reaches zero
+		// continuously. This avoids presenting a fixed minimum bar width.
+		const float tailAlpha = std::sqrt(clamp01(fillWidth / 0.5f));
+		const float glowRadius = std::min(2.75f, 0.5f * fillSize.y);
+		const Vec glowCenter(
+			fillPos.x + 0.75f,
+			fillPos.y + 0.5f * fillSize.y);
+		nvgSave(vg);
+		nvgIntersectScissor(vg, fillPos.x, fillPos.y, fillSize.x, fillSize.y);
+		nvgBeginPath(vg);
+		nvgCircle(vg, glowCenter.x, glowCenter.y, glowRadius);
+		const NVGpaint tailGlow = nvgRadialGradient(vg,
+			glowCenter.x, glowCenter.y, 0.f, glowRadius,
+			nvgRGBA(122, 92, 255, int(110.f * tailAlpha)),
+			nvgRGBA(28, 204, 217, 0));
+		nvgFillPaint(vg, tailGlow);
 		nvgFill(vg);
 		nvgRestore(vg);
 	}
@@ -532,7 +488,7 @@ public:
 		const auto sceneStart = debug_terminal::debugTimerStart(measurePerf);
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
-		drawSpringScene(args.vg, *link, box.size.x * 0.5f, mm2px(SPRING_BASE_Y_MM));
+		drawSpringScene(args.vg, *link, link->springBase.x, link->springBase.y);
 		drawEnergyMeter(args.vg, energyMeterRect, link->snapshot.energy);
 		nvgRestore(args.vg);
 		if (measurePerf) {
@@ -711,6 +667,7 @@ struct DoorstopWidget final : ModuleWidget {
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/doorstop.panel.svg");
 		const std::string& panelPath = splitPanel.panelPath();
 		visual_assets::addFractalGlassOverlay(this, panelPath);
+		splitPanel.addLabels("res/doorstop.labels.svg");
 		previewBuildTimer.markPanelDone();
 
 		auto anchorPoint = [&](const char* id, const Vec& fallbackMm) {
@@ -720,6 +677,9 @@ struct DoorstopWidget final : ModuleWidget {
 			}
 			return result;
 		};
+
+		overlayLink->springBase = mm2px(
+			anchorPoint("SPRING_BASE", Vec(7.62f, SPRING_BASE_Y_MM)));
 
 		math::Rect energyMeterMm(Vec(2.2f, 79.3f), Vec(10.84f, 2.4f));
 		panel_svg::loadRectFromSvgMm(panelPath, "ENERGY_METER", &energyMeterMm);
@@ -747,14 +707,6 @@ struct DoorstopWidget final : ModuleWidget {
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(trigMm), module, Doorstop::TRIG_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(velocityMm), module, Doorstop::VELOCITY_INPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outputMm), module, Doorstop::AUDIO_OUTPUT));
-
-		auto* labelsFramebuffer = new widget::FramebufferWidget();
-		labelsFramebuffer->box.size = box.size;
-		labelsFramebuffer->dirtyOnSubpixelChange = false;
-		auto* labels = new DoorstopClassicLabelsWidget();
-		labels->box.size = box.size;
-		labelsFramebuffer->addChild(labels);
-		addChild(labelsFramebuffer);
 
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 		previewBuildTimer.markAnchorsDone();
@@ -1079,8 +1031,8 @@ void DoorstopOverflowWidget::drawOverflowScene(const DrawArgs& args) {
 	const bool measurePerf = isDragonKingDebugEnabled();
 	const auto sceneStart = debug_terminal::debugTimerStart(measurePerf);
 	const float moduleWidth = link->owner->box.size.x;
-	const float baseX = OVERFLOW_PAD + 0.5f * moduleWidth;
-	const float baseY = mm2px(SPRING_BASE_Y_MM);
+	const float baseX = OVERFLOW_PAD + link->springBase.x;
+	const float baseY = link->springBase.y;
 
 	if (drawLeft) {
 		nvgSave(args.vg);
