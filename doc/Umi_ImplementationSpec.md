@@ -10,7 +10,7 @@
 
 ## 1. Product contract
 
-Umi is an 18 HP kinetic probability sequencer. A trigger releases one or more visible pearls into a deterministic, fixed-step pachinko board. The pearls collide with visible pegs and rails, then enter one of eight sinks. Each capture emits a corresponding 10 V trigger and updates derived event CV.
+Umi is a 24 HP kinetic probability sequencer. A trigger releases one or more visible pearls into a deterministic, fixed-step pachinko board. The pearls collide with visible pegs and rails, then enter one of eight sinks. Each capture emits a corresponding 10 V trigger and updates derived event CV.
 
 The essential relationship is:
 
@@ -40,7 +40,7 @@ V1 does not include ball-to-ball collision, editable board geometry, user layout
 | Question | Umi v1 decision |
 | --- | --- |
 | Name | `Umi` for title, module name, C++ type prefix, and Rack slug |
-| Width | 18 HP / 91.44 mm / 270 Rack px |
+| Width | 24 HP / 121.92 mm / 360 Rack px |
 | Default layout | `Pearl`, a balanced 8-sink layout derived from the earlier Maw geometry |
 | Live display | Central, tall, and visually dominant |
 | Primary outputs | One polyphonic `GATES` output carries sinks 1-8 on channels 1-8 |
@@ -100,7 +100,7 @@ Before release, the original concept source should either live outside the distr
 
 ## 4. Panel and component contract
 
-`res/Umi.svg` is a 91.44 x 128.5 mm structural panel. A hidden `components` layer is the source of truth for component placement. `UmiWidget` loads those anchors through `PanelSvgUtils` and retains matching C++ fallback coordinates.
+`res/Umi.svg` is a 121.92 x 128.5 mm structural panel. The original 18 HP raster composition remains centered, with 3 HP input and output rails added on the left and right. A hidden `components` layer is the source of truth for component placement. `UmiWidget` loads those anchors through `PanelSvgUtils` and retains matching C++ fallback coordinates.
 
 ### 4.1 Initial regions
 
@@ -518,7 +518,7 @@ Suggested browser description:
 
 ### Phase 1: layout proof
 
-- Create `res/Umi.svg` at 18 HP with every required component anchor and fallback coordinate.
+- Create `res/Umi.svg` at 24 HP with every required component anchor and fallback coordinate.
 - Use a plain marine-blue placeholder panel.
 - Place every real control, input, output, and screw.
 - Verify labels and cable clearance at 75%, 100%, 125%, and 150% Rack zoom.
@@ -549,7 +549,7 @@ Exit condition: visual cause and electrical effect remain unambiguous under dens
 
 ### Phase 5: production art
 
-- Clean and extend the source art into layered 18 HP assets.
+- Keep the source artwork centered at 18 HP and extend the structural panel to 24 HP with dedicated side rails.
 - Integrate cached background/frame/overlay layers using shared NanoVG lifecycle helpers.
 - Tune labels, glow, and contrast around real widget positions.
 
