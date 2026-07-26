@@ -78,6 +78,10 @@ struct Tuning {
 	float thumpDecayT60Seconds = 0.11f;
 	float strikeLightDecaySeconds = 0.075f;
 	float dcBlockerCutoffHz = 10.f;
+	float antiThumpCutoffHz = 35.f;
+	float antiThumpDecayT60Seconds = 0.65f;
+	float antiThumpOnsetShaped = 0.30f;
+	float antiThumpFullShaped = 0.75f;
 
 	float sleepEnergyThreshold = 1e-8f;
 	float sleepEnvelopeThreshold = 1e-5f;
@@ -180,6 +184,9 @@ private:
 	float quietTime = 0.f;
 	float dcPreviousInput = 0.f;
 	float dcPreviousOutput = 0.f;
+	float antiThumpEnvelope = 0.f;
+	std::array<float, 2> antiThumpPreviousInput {};
+	std::array<float, 2> antiThumpPreviousOutput {};
 	float contactPhase = 0.f;
 	float contactSignal = 0.f;
 	float contactBodySignal = 0.f;
@@ -202,6 +209,8 @@ private:
 	float thumpDecayGamma = 0.f;
 	float lightDecay = 0.f;
 	float dcPole = 0.f;
+	float antiThumpPole = 0.f;
+	float antiThumpDecay = 0.f;
 	float softNoiseAlpha = 0.f;
 	float hardNoiseAlpha = 0.f;
 	float noiseRejectAlpha = 0.f;
@@ -235,6 +244,7 @@ private:
 	float processDispersiveSpring();
 	float processModes();
 	float processImpact();
+	float processAntiThump(float input);
 	float processDcBlocker(float input);
 	bool allFinite() const;
 	bool belowSleepThreshold(float outputVolts) const;

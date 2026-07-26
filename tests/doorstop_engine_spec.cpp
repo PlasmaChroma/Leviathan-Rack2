@@ -57,6 +57,91 @@ StrikeStats renderStrike(float sampleRate, float velocity, float maxSeconds = 10
 	return stats;
 }
 
+float worstRetriggerSubBassPeak(float antiThumpCutoffHz, float velocity) {
+	constexpr float sampleRate = 48000.f;
+	constexpr float dt = 1.f / sampleRate;
+	constexpr float analysisCutoffHz = 60.f;
+	const float analysisAlpha = 1.f - std::exp(
+		-2.f * 3.14159265358979323846f * analysisCutoffHz * dt);
+	float worstPeak = 0.f;
+
+	// Sweep two periods of the 16 Hz spring cycle. Keeping only the body
+	// path makes this a focused guard against the sub-bass excursion rather
+	// than a test of the intentionally bright modal and impact components.
+	for (int delaySamples = 0; delaySamples <= 6000; delaySamples += 64) {
+		doorstop::Engine engine;
+		engine.setSoundModel(doorstop::SoundModel::Classic);
+		auto& tuning = engine.getTuning();
+		tuning.antiThumpCutoffHz = antiThumpCutoffHz;
+		tuning.bodyGain = 0.72f;
+		tuning.modalGain = 0.f;
+		tuning.impactGain = 0.f;
+		tuning.outputDrive = 0.25f;
+		engine.setSampleRate(sampleRate);
+		engine.strike(velocity);
+		for (int i = 0; i < delaySamples; ++i) {
+			engine.process(dt);
+		}
+		engine.strike(velocity);
+
+		float lowpass = 0.f;
+		for (int i = 0; i < 6000; ++i) {
+			const float sample = engine.process(dt).outputVolts;
+			lowpass += (sample - lowpass) * analysisAlpha;
+			worstPeak = std::max(worstPeak, std::fabs(lowpass));
+		}
+	}
+	return worstPeak;
+}
+
+float bodyStrikePeak(float antiThumpCutoffHz, float velocity) {
+	constexpr float sampleRate = 48000.f;
+	constexpr float dt = 1.f / sampleRate;
+	doorstop::Engine engine;
+	engine.setSoundModel(doorstop::SoundModel::Classic);
+	auto& tuning = engine.getTuning();
+	tuning.antiThumpCutoffHz = antiThumpCutoffHz;
+	tuning.bodyGain = 0.72f;
+	tuning.modalGain = 0.f;
+	tuning.impactGain = 0.f;
+	tuning.outputDrive = 0.25f;
+	engine.setSampleRate(sampleRate);
+	engine.strike(velocity);
+	float peak = 0.f;
+	for (int i = 0; i < 12000; ++i) {
+		peak = std::max(peak, std::fabs(engine.process(dt).outputVolts));
+	}
+	return peak;
+}
+
+Result retriggerSubBassIsLimited() {
+	doorstop::Engine defaults;
+	const float guardedPeak10V = worstRetriggerSubBassPeak(
+		defaults.getTuning().antiThumpCutoffHz, 1.f);
+	const float legacyPeak10V = worstRetriggerSubBassPeak(0.1f, 1.f);
+	const float guardedPeak8V = worstRetriggerSubBassPeak(
+		defaults.getTuning().antiThumpCutoffHz, 0.8f);
+	const float legacyPeak8V = worstRetriggerSubBassPeak(0.1f, 0.8f);
+	const float defaultHitPeak = bodyStrikePeak(
+		defaults.getTuning().antiThumpCutoffHz, 0.5f);
+	const float legacyDefaultHitPeak = bodyStrikePeak(0.1f, 0.5f);
+	const float defaultHitChange = std::fabs(defaultHitPeak - legacyDefaultHitPeak)
+		/ std::max(legacyDefaultHitPeak, 1e-6f);
+	const bool pass = closeEnough(defaults.getTuning().dcBlockerCutoffHz, 10.f)
+		&& closeEnough(defaults.getTuning().antiThumpCutoffHz, 35.f)
+		&& closeEnough(defaults.getTuning().antiThumpOnsetShaped, 0.30f)
+		&& closeEnough(defaults.getTuning().antiThumpFullShaped, 0.75f)
+		&& guardedPeak10V < legacyPeak10V * 0.75f
+		&& guardedPeak8V < legacyPeak8V * 0.75f
+		&& defaultHitChange < 0.01f;
+	return {"Velocity-aware anti-thump limits hard retriggers only", pass,
+		"10V=" + std::to_string(guardedPeak10V)
+			+ "/" + std::to_string(legacyPeak10V)
+			+ " 8V=" + std::to_string(guardedPeak8V)
+			+ "/" + std::to_string(legacyPeak8V)
+			+ " defaultChange=" + std::to_string(defaultHitChange)};
+}
+
 Result velocityCurve() {
 	const float neg = doorstop::Engine::shapeMagnitude(-1.f);
 	const float zero = doorstop::Engine::shapeMagnitude(0.f);
@@ -553,6 +638,7 @@ int main() {
 	results.push_back(zeroStrikeSleeps());
 	results.push_back(bipolarStrikeDirection());
 	results.push_back(strikeScaling());
+	results.push_back(retriggerSubBassIsLimited());
 	results.push_back(sampleRateStability());
 	results.push_back(fullyBrokenInStability());
 	results.push_back(nonFiniteRecoveryPreservesBreakIn());

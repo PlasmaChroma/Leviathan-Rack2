@@ -32,7 +32,7 @@
   <g fill="#e9fbff" font-family="sans-serif" font-size="150" font-weight="bold" text-anchor="middle">
     <text x="800" y="900">DROP</text><text x="2300" y="900">DROP</text>
     <text x="3950" y="900">RATE</text><text x="5700" y="900">DENS</text>
-    <text x="900" y="3130">GRAV</text><text x="900" y="5180">BOUNCE</text><text x="1100" y="7280">DRAG</text>
+    <text x="800" y="2130">DRAG</text><text x="900" y="3130">GRAV</text><text x="900" y="5180">BOUNCE</text>
     <text x="8440" y="3130">TILT</text><text x="8440" y="5180">CHAOS</text><text x="8440" y="7280">CLEAR</text>
   </g>
   <g fill="#8eeeff" font-family="sans-serif" font-size="125" text-anchor="middle">
@@ -52,7 +52,7 @@
     <circle id="rate_param" cx="3950" cy="1450" r="180"/><circle id="density_param" cx="5700" cy="1450" r="180"/>
     <circle id="gravity_param" cx="650" cy="3750" r="180"/><circle id="gravity_cv_input" cx="1600" cy="3750" r="180"/>
     <circle id="bounce_param" cx="650" cy="5800" r="180"/><circle id="bounce_cv_input" cx="1600" cy="5800" r="180"/>
-    <circle id="drag_param" cx="1100" cy="7900" r="180"/>
+    <circle id="drag_param" cx="800" cy="2650" r="180"/>
     <circle id="tilt_param" cx="8490" cy="3750" r="180"/><circle id="tilt_cv_input" cx="7540" cy="3750" r="180"/>
     <circle id="chaos_param" cx="8490" cy="5800" r="180"/><circle id="chaos_cv_input" cx="7540" cy="5800" r="180"/>
     <circle id="clear_param" cx="8440" cy="7900" r="180"/><circle id="clear_input" cx="7540" cy="7900" r="180"/>
@@ -60,7 +60,5 @@
     <circle id="left_output" cx="3314" cy="11800" r="180"/><circle id="right_output" cx="4571" cy="11800" r="180"/>
     <circle id="velocity_output" cx="5828" cy="11800" r="180"/><circle id="position_output" cx="7085" cy="11800" r="180"/>
     <circle id="activity_output" cx="8342" cy="11800" r="180"/>
-    <circle id="screw_tl" cx="300" cy="300" r="100"/><circle id="screw_tr" cx="8840" cy="300" r="100"/>
-    <circle id="screw_bl" cx="300" cy="12550" r="100"/><circle id="screw_br" cx="8840" cy="12550" r="100"/>
   </g>
 </svg>

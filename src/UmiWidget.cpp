@@ -68,28 +68,6 @@ struct UmiPanelArtWidget final : TransparentWidget {
 		nvgFillPaint(args.vg, imagePaint);
 		nvgFill(args.vg);
 
-		const float sideWidth = box.size.x * (84.f / 1080.f);
-		const NVGpaint leftRail = nvgLinearGradient(args.vg, 0.f, 0.f, sideWidth, 0.f,
-			nvgRGBA(1, 10, 48, 245), nvgRGBA(12, 124, 185, 155));
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, 0.f, 0.f, sideWidth, box.size.y);
-		nvgFillPaint(args.vg, leftRail);
-		nvgFill(args.vg);
-		const NVGpaint rightRail = nvgLinearGradient(args.vg, box.size.x - sideWidth, 0.f, box.size.x, 0.f,
-			nvgRGBA(12, 124, 185, 155), nvgRGBA(1, 10, 48, 245));
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, box.size.x - sideWidth, 0.f, sideWidth, box.size.y);
-		nvgFillPaint(args.vg, rightRail);
-		nvgFill(args.vg);
-		for (float x : {sideWidth, box.size.x - sideWidth}) {
-			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, x, 0.f);
-			nvgLineTo(args.vg, x, box.size.y);
-			nvgStrokeColor(args.vg, nvgRGBA(244, 204, 111, 185));
-			nvgStrokeWidth(args.vg, 1.f);
-			nvgStroke(args.vg);
-		}
-
 		const float utilityBandY = mm2px(109.f);
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, mm2px(2.2f), utilityBandY,
@@ -129,7 +107,7 @@ struct UmiLabelOverlayWidget final : TransparentWidget {
 		drawLabel(args, "CV", 16.f, 31.3f, 1.1f, cvColor);
 		drawLabel(args, "BOUNCE", 6.5f, 51.8f, 1.05f, labelColor);
 		drawLabel(args, "CV", 16.f, 51.8f, 1.1f, cvColor);
-		drawLabel(args, "DRAG", 11.f, 72.8f, 1.25f, labelColor);
+		drawLabel(args, "DRAG", 8.f, 21.3f, 1.25f, labelColor);
 		drawLabel(args, "TILT", 84.9f, 31.3f, 1.25f, labelColor);
 		drawLabel(args, "CV", 75.4f, 31.3f, 1.1f, cvColor);
 		drawLabel(args, "CHAOS", 84.9f, 51.8f, 1.1f, labelColor);
@@ -444,8 +422,8 @@ UmiWidget::UmiWidget(Umi* module) {
 		return mm2px(point);
 	};
 	auto addKnob = [&](int paramId, const char* id, Vec fallbackMm, bool bipolar = false) {
-		if (bipolar) addParam(createParamCentered<BipolarTinyClockworkGearKnob>(anchor(id, fallbackMm), module, paramId));
-		else addParam(createParamCentered<TinyClockworkGearKnob>(anchor(id, fallbackMm), module, paramId));
+		if (bipolar) addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(anchor(id, fallbackMm), module, paramId));
+		else addParam(createParamCentered<DarkTinyClockworkGearKnob>(anchor(id, fallbackMm), module, paramId));
 	};
 	auto addButton = [&](int paramId, int lightId, const char* id, Vec fallbackMm) {
 		addParam(createLightParamCentered<SmallGoldApertureButton>(anchor(id, fallbackMm), module, paramId, lightId));
@@ -465,7 +443,7 @@ UmiWidget::UmiWidget(Umi* module) {
 	addInputPort(Umi::GRAVITY_CV_INPUT, "gravity_cv_input", Vec(16.f, 37.5f));
 	addKnob(Umi::BOUNCE_PARAM, "bounce_param", Vec(6.5f, 58.f));
 	addInputPort(Umi::BOUNCE_CV_INPUT, "bounce_cv_input", Vec(16.f, 58.f));
-	addKnob(Umi::DRAG_PARAM, "drag_param", Vec(11.f, 79.f));
+	addKnob(Umi::DRAG_PARAM, "drag_param", Vec(8.f, 26.5f));
 
 	addKnob(Umi::TILT_PARAM, "tilt_param", Vec(84.9f, 37.5f), true);
 	addInputPort(Umi::TILT_CV_INPUT, "tilt_cv_input", Vec(75.4f, 37.5f));
@@ -480,10 +458,6 @@ UmiWidget::UmiWidget(Umi* module) {
 		addOutputPort(Umi::GATES_OUTPUT + i, outputIds[i], Vec(8.f + 12.57f * i, 118.f));
 	}
 
-	addChild(createWidgetCentered<TorxScrew>(anchor("screw_tl", Vec(3.f, 3.f))));
-	addChild(createWidgetCentered<TorxScrew>(anchor("screw_tr", Vec(88.4f, 3.f))));
-	addChild(createWidgetCentered<TorxScrew>(anchor("screw_bl", Vec(3.f, 125.5f))));
-	addChild(createWidgetCentered<TorxScrew>(anchor("screw_br", Vec(88.4f, 125.5f))));
 	previewBuildTimer.markAnchorsDone();
 }
 
