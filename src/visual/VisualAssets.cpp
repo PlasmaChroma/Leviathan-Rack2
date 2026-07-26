@@ -300,10 +300,11 @@ int loadRasterMipmapHandle(NVGcontext* vg, std::shared_ptr<window::Image> lifecy
 
 struct AspectFitRasterImageWidget : TransparentWidget {
 	std::string path;
+	bool flipHorizontal = false;
 	float opacity = 1.f;
 
-	AspectFitRasterImageWidget(std::string path, float opacity)
-		: path(std::move(path)), opacity(opacity) {
+	AspectFitRasterImageWidget(std::string path, bool flipHorizontal, float opacity)
+		: path(std::move(path)), flipHorizontal(flipHorizontal), opacity(opacity) {
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -336,11 +337,17 @@ struct AspectFitRasterImageWidget : TransparentWidget {
 		}
 		const float x = 0.5f * (box.size.x - drawW);
 		const float y = 0.5f * (box.size.y - drawH);
+		nvgSave(args.vg);
+		if (flipHorizontal) {
+			nvgTranslate(args.vg, box.size.x, 0.f);
+			nvgScale(args.vg, -1.f, 1.f);
+		}
 		NVGpaint paint = nvgImagePattern(args.vg, x, y, drawW, drawH, 0.f, imageHandle, clamp(opacity, 0.f, 1.f));
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, x, y, drawW, drawH);
 		nvgFillPaint(args.vg, paint);
 		nvgFill(args.vg);
+		nvgRestore(args.vg);
 	}
 };
 
@@ -1400,6 +1407,18 @@ Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, PreviewFrameTint 
 
 Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, NVGcolor highlightColor) {
 	return createPreviewFrameEnhancementWidgetWithColors(rectMm, highlightColor, nvgRGBAf(highlightColor.r, highlightColor.g, highlightColor.b, 42.f / 255.f));
+}
+
+Widget* createAspectFitRasterImageWidget(
+	const char* imageAssetPath,
+	math::Rect rectMm,
+	bool flipHorizontal,
+	float opacity) {
+	AspectFitRasterImageWidget* image = new AspectFitRasterImageWidget(
+		imageAssetPath ? imageAssetPath : "", flipHorizontal, opacity);
+	image->box.pos = mm2px(rectMm.pos);
+	image->box.size = mm2px(rectMm.size);
+	return image;
 }
 
 Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSizePx) {

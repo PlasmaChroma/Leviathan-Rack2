@@ -3556,6 +3556,19 @@ struct TemporalDeckWidget : ModuleWidget {
     visual_assets::SplitPanelRenderer splitPanel(this, "res/deck.panel.svg");
     const std::string& panelPath = splitPanel.panelPath();
     splitPanel.addLabels("res/deck.labels.svg");
+    constexpr const char* brandingWaveAsset = "res/icon/PerfectWave_Tiny.png";
+    math::Rect brandingWaveLeftMm;
+    if (panel_svg::loadRectFromSvgMm(
+          panelPath, "BRANDING_WAVE_LEFT_RASTER", &brandingWaveLeftMm)) {
+      addChild(visual_assets::createAspectFitRasterImageWidget(
+          brandingWaveAsset, brandingWaveLeftMm, false, 1.f));
+    }
+    math::Rect brandingWaveRightMm;
+    if (panel_svg::loadRectFromSvgMm(
+          panelPath, "BRANDING_WAVE_RIGHT_RASTER", &brandingWaveRightMm)) {
+      addChild(visual_assets::createAspectFitRasterImageWidget(
+          brandingWaveAsset, brandingWaveRightMm, true, 1.f));
+    }
     visual_assets::addFractalGlassOverlay(this, panelPath);
     previewBuildTimer.markPanelDone();
     if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {

@@ -35,7 +35,7 @@
     <path d="m 57.599239,100.22351 0.01805,14.12015" stroke="url(#accentGrad)" stroke-width="0.350551" stroke-linecap="round" opacity="0.55" fill="none" id="freeze_connector" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
     <path d="m 44.377488,112.91436 -11.20528,0.0439" stroke="url(#accentGrad)" stroke-width="0.350551" stroke-linecap="round" opacity="0.55" fill="none" id="gate_and_pos_connector" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
     <path d="m 45.182363,101.281 -11.20528,0.0439" stroke="url(#accentGrad)" stroke-width="0.350551" stroke-linecap="round" opacity="0.55" fill="none" id="rev_and_rev" style="display:inline;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1;opacity:1" sodipodi:nodetypes="cc" />
-    <g id="waves_layer" style="display:inline;opacity:0.5" transform="matrix(0.01000001,0,0,0.01,-1.7562905e-5,1.4246172)">
+    <g id="waves_layer" style="display:none;opacity:0.5" transform="matrix(0.01000001,0,0,0.01,-1.7562905e-5,1.4246172)">
       <g id="branding_wave_left" transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)" style="display:inline">
         <path style="fill:#4995ec" d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713" id="path149" />
         <path style="fill:#7a5cff" d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z" id="path151" />
@@ -74,6 +74,8 @@
     <circle cx="82.995834" cy="113.26942" id="S_POS_O" r="4.1500001" style="display:inline;fill:#0000ff;fill-opacity:1;stroke:none" />
     <circle cx="92.279999" cy="66.561996" id="CARTRIDGE_CYCLE" r="1.9" style="display:inline;fill:#ff9900;fill-opacity:1;stroke:none" />
     <circle cx="98.5" cy="34.900002" id="TD_SCOPE_SPAWN" r="1.9" style="display:inline;fill:#ff9900;fill-opacity:1;stroke:none" />
+    <rect x="24.16917" y="125.16265" width="8.52133" height="3.33735" id="BRANDING_WAVE_LEFT_RASTER" />
+    <rect x="68.90981" y="125.16265" width="8.52133" height="3.33735" id="BRANDING_WAVE_RIGHT_RASTER" />
   </g>
   <g id="custom_anchors" style="display:inline;fill:#807955;fill-opacity:1;stroke:none;stroke-opacity:1">
     <circle cx="50.799999" cy="53.971752" fill="none" id="PLATTER_AREA" r="37.031235" stroke="#ffffff" stroke-width="0.251045" style="display:none;fill:#807955;fill-opacity:1;stroke:none;stroke-opacity:1" />

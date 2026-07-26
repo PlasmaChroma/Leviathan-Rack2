@@ -250,7 +250,7 @@
        sodipodi:nodetypes="cc" />
     <g
        id="waves_layer"
-       style="display:inline;opacity:0.5"
+       style="display:none;opacity:0.5"
        transform="matrix(0.01000001,0,0,0.01,-1.7562905e-5,1.4246172)">
       <g
          id="branding_wave_left"
@@ -440,6 +440,18 @@
        id="TD_SCOPE_SPAWN"
        r="1.9"
        style="display:inline;fill:#ff9900;fill-opacity:1;stroke:none" />
+    <rect
+       x="24.16917"
+       y="125.16265"
+       width="8.52133"
+       height="3.33735"
+       id="BRANDING_WAVE_LEFT_RASTER" />
+    <rect
+       x="68.90981"
+       y="125.16265"
+       width="8.52133"
+       height="3.33735"
+       id="BRANDING_WAVE_RIGHT_RASTER" />
   </g>
   <g
      id="custom_anchors"

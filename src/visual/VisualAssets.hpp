@@ -23,6 +23,11 @@ enum class PreviewFrameTint {
 Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm);
 Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, PreviewFrameTint tint);
 Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, NVGcolor highlightColor);
+Widget* createAspectFitRasterImageWidget(
+	const char* imageAssetPath,
+	math::Rect rectMm,
+	bool flipHorizontal = false,
+	float opacity = 1.f);
 Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSizePx);
 Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float oversample = 2.0f);
 

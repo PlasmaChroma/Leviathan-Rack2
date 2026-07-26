@@ -214,6 +214,27 @@ TestResult testDeepcachePanelAnchorsUseRepositoryUnits() {
             " db_status_sz=" + std::to_string(databaseStatus.size.x) + "," + std::to_string(databaseStatus.size.y)};
 }
 
+TestResult testTemporalDeckBrandingRasterAnchors() {
+  math::Rect left;
+  math::Rect right;
+  const bool leftOk = panel_svg::loadRectFromSvgMm(
+    "res/deck.panel.svg", "BRANDING_WAVE_LEFT_RASTER", &left);
+  const bool rightOk = panel_svg::loadRectFromSvgMm(
+    "res/deck.panel.svg", "BRANDING_WAVE_RIGHT_RASTER", &right);
+  const bool pass = leftOk && rightOk
+    && nearlyEqual(left.pos.x, 24.16917f, 1e-4f)
+    && nearlyEqual(right.pos.x, 68.90981f, 1e-4f)
+    && nearlyEqual(left.pos.y, right.pos.y, 1e-4f)
+    && nearlyEqual(left.size.x, right.size.x, 1e-4f)
+    && nearlyEqual(left.size.y, right.size.y, 1e-4f)
+    && nearlyEqual(left.pos.y + left.size.y, 128.5f, 1e-4f)
+    && nearlyEqual(right.pos.y + right.size.y, 128.5f, 1e-4f);
+  return {"Temporal Deck branding raster anchors are paired", pass,
+          "left=" + std::to_string(left.pos.x) + "," + std::to_string(left.pos.y) +
+            " right=" + std::to_string(right.pos.x) + "," + std::to_string(right.pos.y) +
+            " size=" + std::to_string(left.size.x) + "," + std::to_string(left.size.y)};
+}
+
 TestResult testBifurxGlassPathParses() {
   std::vector<panel_svg::SvgPathMatch> matches;
   bool ok = panel_svg::findPathsInGroupsWithIdSubstringMm("res/bifurx.panel.svg", "glass", &matches);
@@ -245,6 +266,7 @@ int main() {
   tests.push_back(testMissingElementFailsGracefully());
   tests.push_back(testGeneratedAtlasFindsRealPanelAnchor());
   tests.push_back(testDeepcachePanelAnchorsUseRepositoryUnits());
+  tests.push_back(testTemporalDeckBrandingRasterAnchors());
   tests.push_back(testBifurxGlassPathParses());
 
   int failed = 0;
