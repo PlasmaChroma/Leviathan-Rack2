@@ -13,7 +13,6 @@ Doorstop::Doorstop() {
 	configInput(TRIG_INPUT, "Trigger");
 	configInput(VELOCITY_INPUT, "Bipolar velocity (bipolar +/-10V)");
 	configOutput(AUDIO_OUTPUT, "Audio");
-	configLight(STRIKE_LIGHT, "Strike");
 
 	const float initialSampleRate = (APP && APP->engine) ? APP->engine->getSampleRate() : 44100.f;
 	engine.setSampleRate(initialSampleRate);
@@ -89,12 +88,6 @@ void Doorstop::process(const ProcessArgs& args) {
 	const doorstop::Frame frame = engine.process(args.sampleTime);
 	outputs[AUDIO_OUTPUT].setChannels(1);
 	outputs[AUDIO_OUTPUT].setVoltage(frame.outputVolts);
-	if (frame.enteredSleep) {
-		lights[STRIKE_LIGHT].setBrightness(0.f);
-	}
-	else {
-		lights[STRIKE_LIGHT].setBrightnessSmooth(clamp(frame.strikeLight, 0.f, 1.f), args.sampleTime);
-	}
 
 	telemetryDivider = (telemetryDivider + 1u) & 63u;
 	if (appliedStrike || frame.enteredSleep || telemetryDivider == 0u) {
@@ -130,7 +123,6 @@ void Doorstop::onReset(const ResetEvent& e) {
 	visualLastStrikeModel.store(
 		int(doorstop::SoundModel::Classic), std::memory_order_relaxed);
 	telemetryDivider = 0u;
-	lights[STRIKE_LIGHT].setBrightness(0.f);
 	publishZeroVisualState();
 }
 
@@ -155,7 +147,6 @@ json_t* Doorstop::dataToJson() {
 void Doorstop::dataFromJson(json_t* rootJ) {
 	trigTrigger.reset();
 	manualTrigger.reset();
-	lights[STRIKE_LIGHT].setBrightness(0.f);
 	publishZeroVisualState();
 
 	int schema = 0;

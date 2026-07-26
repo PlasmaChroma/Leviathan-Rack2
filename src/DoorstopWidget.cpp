@@ -1,6 +1,5 @@
 #include "Doorstop.hpp"
 #include "PanelSvgUtils.hpp"
-#include "visual/ApertureLight.hpp"
 #include "visual/VisualAssets.hpp"
 
 #include <widget/FramebufferWidget.hpp>
@@ -377,6 +376,52 @@ void drawSpringScene(NVGcontext* vg, const DoorstopOverlayLink& link,
 	drawSpringBody(vg, link.springGeometry[0], baseX, baseY, state.velocity, 1.f, true, clip);
 }
 
+void drawEnergyMeter(NVGcontext* vg, const math::Rect& bounds, float energy) {
+	energy = clamp01(energy);
+	// Preserve the engine's physical 0..1 energy scale while expanding the
+	// visually useful low end. The endpoints remain exact: silence is empty
+	// and the configured energy ceiling fills the meter.
+	constexpr float displayCurve = 63.f;
+	const float displayEnergy =
+		std::log1p(displayCurve * energy) / std::log1p(displayCurve);
+	const float radius = std::min(0.5f * bounds.size.y, 2.5f);
+	nvgBeginPath(vg);
+	nvgRoundedRect(vg, bounds.pos.x, bounds.pos.y, bounds.size.x, bounds.size.y, radius);
+	nvgFillColor(vg, nvgRGB(7, 10, 15));
+	nvgFill(vg);
+	nvgStrokeWidth(vg, 1.f);
+	nvgStrokeColor(vg, nvgRGBA(174, 132, 255, 96));
+	nvgStroke(vg);
+
+	const float inset = 1.25f;
+	const Vec fillPos = bounds.pos.plus(Vec(inset, inset));
+	const Vec fillSize = bounds.size.minus(Vec(2.f * inset, 2.f * inset));
+	const float fillWidth = std::max(0.f, fillSize.x * displayEnergy);
+	if (fillWidth > 0.5f && fillSize.y > 0.f) {
+		nvgSave(vg);
+		nvgIntersectScissor(vg, fillPos.x, fillPos.y, fillWidth, fillSize.y);
+		nvgBeginPath(vg);
+		nvgRoundedRect(vg, fillPos.x, fillPos.y, fillSize.x, fillSize.y,
+			std::max(0.f, 0.5f * fillSize.y));
+		const NVGpaint fill = nvgLinearGradient(vg,
+			fillPos.x, fillPos.y, fillPos.x + fillSize.x, fillPos.y,
+			nvgRGB(122, 92, 255), nvgRGB(28, 204, 217));
+		nvgFillPaint(vg, fill);
+		nvgFill(vg);
+		nvgRestore(vg);
+	}
+
+	for (int tick = 1; tick < 4; ++tick) {
+		const float x = bounds.pos.x + bounds.size.x * (float(tick) * 0.25f);
+		nvgBeginPath(vg);
+		nvgMoveTo(vg, x, bounds.pos.y + 1.f);
+		nvgLineTo(vg, x, bounds.pos.y + bounds.size.y - 1.f);
+		nvgStrokeWidth(vg, 0.75f);
+		nvgStrokeColor(vg, nvgRGBA(230, 240, 248, 70));
+		nvgStroke(vg);
+	}
+}
+
 class DoorstopHitWidget final : public app::Switch {
 public:
 	Doorstop* doorstopModule = nullptr;
@@ -411,6 +456,7 @@ public:
 class DoorstopSpringWidget final : public TransparentWidget {
 public:
 	std::shared_ptr<DoorstopOverlayLink> link;
+	math::Rect energyMeterRect;
 
 	void draw(const DrawArgs& args) override {
 		if (!link) {
@@ -421,6 +467,7 @@ public:
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 		drawSpringScene(args.vg, *link, box.size.x * 0.5f, mm2px(SPRING_BASE_Y_MM));
+		drawEnergyMeter(args.vg, energyMeterRect, link->snapshot.energy);
 		nvgRestore(args.vg);
 		if (measurePerf) {
 			const float elapsedUs = debug_terminal::elapsedUsSince(sceneStart);
@@ -608,12 +655,16 @@ struct DoorstopWidget final : ModuleWidget {
 			return result;
 		};
 
+		math::Rect energyMeterMm(Vec(2.2f, 79.3f), Vec(10.84f, 2.4f));
+		panel_svg::loadRectFromSvgMm(panelPath, "ENERGY_METER", &energyMeterMm);
 		springFramebuffer = new widget::FramebufferWidget();
 		springFramebuffer->box.size = box.size;
 		springFramebuffer->bypassed = true;
 		springWidget = new DoorstopSpringWidget();
 		springWidget->box.size = box.size;
 		springWidget->link = overlayLink;
+		springWidget->energyMeterRect =
+			math::Rect(mm2px(energyMeterMm.pos), mm2px(energyMeterMm.size));
 		springFramebuffer->addChild(springWidget);
 		addChild(springFramebuffer);
 
@@ -623,10 +674,6 @@ struct DoorstopWidget final : ModuleWidget {
 		hit->box.size = mm2px(hitRectMm.size);
 		hit->doorstopModule = module;
 		addParam(hit);
-
-		const Vec lightMm = anchorPoint("STRIKE_LIGHT", Vec(7.62f, 80.5f));
-		addChild(createLightCentered<SmallAperture<AmberApertureLight>>(
-			mm2px(lightMm), module, Doorstop::STRIKE_LIGHT));
 
 		const Vec trigMm = anchorPoint("TRIG_INPUT", Vec(7.62f, 93.f));
 		const Vec velocityMm = anchorPoint("VELOCITY_INPUT", Vec(7.62f, 107.f));

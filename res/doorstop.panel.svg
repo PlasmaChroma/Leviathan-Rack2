@@ -35,7 +35,7 @@
   </g>
   <g id="components" inkscape:groupmode="layer" inkscape:label="Component anchors" style="display:none">
     <circle id="SPRING_BASE" cx="762" cy="7100" r="50" />
-    <circle id="STRIKE_LIGHT" cx="762" cy="8050" r="80" />
+    <rect id="ENERGY_METER" x="220" y="7930" width="1084" height="240" />
     <rect id="MANUAL_HIT_REGION" x="110" y="1730" width="1304" height="5380" />
     <circle id="TRIG_INPUT" cx="762" cy="9300" r="220" />
     <circle id="VELOCITY_INPUT" cx="762" cy="10700" r="220" />

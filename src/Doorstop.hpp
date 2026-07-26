@@ -25,7 +25,6 @@ struct Doorstop final : Module {
 	};
 
 	enum LightId {
-		STRIKE_LIGHT,
 		LIGHTS_LEN
 	};
 
