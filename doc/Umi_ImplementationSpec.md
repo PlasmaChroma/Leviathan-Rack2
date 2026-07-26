@@ -75,7 +75,7 @@ The runtime package is:
 
 ```text
 res/Umi.svg
-res/Umi/panel_base@2x.png
+res/Umi/panel_base_2x.png
 res/Umi/panel_base@4x.png
 res/Umi/panel_ornament_overlay@2x.png
 res/Umi/panel_ornament_overlay@4x.png
