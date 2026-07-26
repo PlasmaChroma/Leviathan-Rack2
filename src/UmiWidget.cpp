@@ -11,7 +11,7 @@
 namespace {
 
 constexpr float UMI_RASTER_WIDTH_MM = 91.44f;
-constexpr float UMI_SIDE_RAIL_WIDTH_MM = 15.24f;
+constexpr float UMI_SIDE_RAIL_WIDTH_MM = 30.48f;
 
 bool loadAnchorPointMm(const std::string& panelPath, const char* id, Vec* outMm, Vec fallbackMm) {
 	if (panel_svg::loadPointFromSvgMm(panelPath, id, outMm)) return true;
@@ -94,28 +94,26 @@ struct UmiLabelOverlayWidget final : TransparentWidget {
 		constexpr float centerOffset = UMI_SIDE_RAIL_WIDTH_MM;
 		const NVGcolor labelColor = nvgRGB(224, 251, 255);
 		const NVGcolor cvColor = nvgRGB(119, 235, 255);
-		drawLabel(args, "DROP", 23.f + centerOffset, 9.f, 1.25f, labelColor);
 		drawLabel(args, "RATE", 39.5f + centerOffset, 9.f, 1.25f, labelColor);
 		drawLabel(args, "DENS", 57.f + centerOffset, 9.f, 1.25f, labelColor);
 		drawLabel(args, "DRAG", 8.f + centerOffset, 21.3f, 1.25f, labelColor);
-		drawLabel(args, "GRAV", 6.5f + centerOffset, 31.3f, 1.25f, labelColor);
-		drawLabel(args, "BOUNCE", 6.5f + centerOffset, 51.8f, 1.05f, labelColor);
-		drawLabel(args, "TILT", 84.9f + centerOffset, 31.3f, 1.25f, labelColor);
-		drawLabel(args, "CHAOS", 84.9f + centerOffset, 51.8f, 1.1f, labelColor);
-		drawLabel(args, "CLEAR", 84.4f + centerOffset, 72.8f, 1.1f, labelColor);
 
-		const char* inputLabels[] = {"DROP", "GRAV", "BOUNCE", "TILT", "CHAOS", "CLEAR"};
+		const char* inputLabels[] = {"TRIG", "CV", "CV", "CV", "CV", "IN"};
+		const char* controlLabels[] = {"DROP", "GRAV", "BOUNCE", "TILT", "CHAOS", "CLEAR"};
 		const float inputCentersY[] = {15.f, 34.f, 53.f, 72.f, 91.f, 110.f};
 		for (int i = 0; i < 6; ++i) {
 			drawLabel(args, inputLabels[i], 7.62f, inputCentersY[i] - 6.1f,
-				i == 2 ? 0.92f : 1.05f, cvColor);
+				1.02f, cvColor);
+			drawLabel(args, controlLabels[i], 22.86f, inputCentersY[i] - 6.1f,
+				i == 2 ? 0.92f : 1.05f, labelColor);
 		}
 
 		const char* outputLabels[] = {"GATES", "ANY", "LEFT", "RIGHT", "VEL", "POS", "ACT"};
 		for (int i = 0; i < 7; ++i) {
 			const float centerY = 14.f + 17.f * float(i);
-			drawLabel(args, outputLabels[i], 114.3f, centerY - 6.1f, 1.02f,
-				i == 0 ? nvgRGB(255, 229, 154) : labelColor);
+			drawLabel(args, outputLabels[i], 132.4f, centerY, 1.02f,
+				i == 0 ? nvgRGB(255, 229, 154) : labelColor,
+				NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 		}
 	}
 };
@@ -433,16 +431,9 @@ UmiWidget::UmiWidget(Umi* module) {
 	};
 
 	constexpr float centerOffset = UMI_SIDE_RAIL_WIDTH_MM;
-	addButton(Umi::DROP_PARAM, Umi::DROP_LIGHT, "drop_param", Vec(23.f + centerOffset, 14.5f));
 	addKnob(Umi::RATE_PARAM, "rate_param", Vec(39.5f + centerOffset, 14.5f));
 	addKnob(Umi::DENSITY_PARAM, "density_param", Vec(57.f + centerOffset, 14.5f));
-	addKnob(Umi::GRAVITY_PARAM, "gravity_param", Vec(6.5f + centerOffset, 37.5f));
-	addKnob(Umi::BOUNCE_PARAM, "bounce_param", Vec(6.5f + centerOffset, 58.f));
 	addKnob(Umi::DRAG_PARAM, "drag_param", Vec(8.f + centerOffset, 26.5f));
-
-	addKnob(Umi::TILT_PARAM, "tilt_param", Vec(84.9f + centerOffset, 37.5f), true);
-	addKnob(Umi::CHAOS_PARAM, "chaos_param", Vec(84.9f + centerOffset, 58.f));
-	addButton(Umi::CLEAR_PARAM, Umi::CLEAR_LIGHT, "clear_param", Vec(84.4f + centerOffset, 79.f));
 
 	const char* inputIds[] = {"drop_input", "gravity_cv_input", "bounce_cv_input",
 		"tilt_cv_input", "chaos_cv_input", "clear_input"};
@@ -453,12 +444,18 @@ UmiWidget::UmiWidget(Umi* module) {
 	for (int i = 0; i < 6; ++i) {
 		addInputPort(inputIdsByRail[i], inputIds[i], Vec(7.62f, inputCentersY[i]));
 	}
+	addButton(Umi::DROP_PARAM, Umi::DROP_LIGHT, "drop_param", Vec(22.86f, inputCentersY[0]));
+	addKnob(Umi::GRAVITY_PARAM, "gravity_param", Vec(22.86f, inputCentersY[1]));
+	addKnob(Umi::BOUNCE_PARAM, "bounce_param", Vec(22.86f, inputCentersY[2]));
+	addKnob(Umi::TILT_PARAM, "tilt_param", Vec(22.86f, inputCentersY[3]), true);
+	addKnob(Umi::CHAOS_PARAM, "chaos_param", Vec(22.86f, inputCentersY[4]));
+	addButton(Umi::CLEAR_PARAM, Umi::CLEAR_LIGHT, "clear_param", Vec(22.86f, inputCentersY[5]));
 
 	const char* outputIds[] = {"gates_output", "any_output", "left_output", "right_output",
 		"velocity_output", "position_output", "activity_output"};
 	for (int i = 0; i < 7; ++i) {
 		addOutputPort(Umi::GATES_OUTPUT + i, outputIds[i],
-			Vec(114.3f, 14.f + 17.f * float(i)));
+			Vec(144.78f, 14.f + 17.f * float(i)));
 	}
 
 	previewBuildTimer.markAnchorsDone();
