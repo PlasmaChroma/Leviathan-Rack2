@@ -1,5 +1,6 @@
 #include "Doorstop.hpp"
 #include "PanelSvgUtils.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 #include "visual/VisualAssets.hpp"
 
 #include <widget/FramebufferWidget.hpp>
@@ -26,6 +27,71 @@ struct DoorstopVisualSnapshot {
 	float velocity = 0.f;
 	float energy = 0.f;
 	float strike = 0.f;
+};
+
+struct DoorstopClassicLabelsWidget final : TransparentWidget {
+	std::shared_ptr<window::Svg> brandSvg;
+
+	DoorstopClassicLabelsWidget() {
+		brandSvg = visual_assets::loadPluginSvgCached("res/icon/Brand_Logo.svg");
+	}
+
+	void drawText(const DrawArgs& args, const char* text, Vec posMm,
+		float sizeMm, NVGcolor color, float tracking = 0.f) {
+		if (!APP || !APP->window || !APP->window->uiFont) return;
+		const Vec pos = mm2px(posMm);
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFontSize(args.vg, mm2px(sizeMm));
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		nvgTextLetterSpacing(args.vg, tracking);
+		nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 210));
+		nvgText(args.vg, pos.x + 0.8f, pos.y + 0.8f, text, nullptr);
+		nvgFillColor(args.vg, color);
+		nvgText(args.vg, pos.x, pos.y, text, nullptr);
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (!APP || !APP->window || !APP->window->uiFont) return;
+		const Vec titlePos = mm2px(Vec(7.62f, 2.6f));
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFontSize(args.vg, mm2px(2.35f));
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		nvgFontBlur(args.vg, 0.f);
+		nvgTextLetterSpacing(args.vg, -0.15f);
+		nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 230));
+		nvgText(args.vg, titlePos.x + 0.9f, titlePos.y + 0.9f, "Doorstop", nullptr);
+		const NVGpaint titlePaint = nvgLinearGradient(args.vg,
+			mm2px(1.2f), titlePos.y, mm2px(14.f), titlePos.y,
+			nvgRGB(164, 98, 255), nvgRGB(28, 204, 217));
+		nvgFillPaint(args.vg, titlePaint);
+		nvgText(args.vg, titlePos.x, titlePos.y, "Doorstop", nullptr);
+
+		drawText(args, "PHYSICAL SPRING RESONATOR", Vec(7.62f, 5.8f),
+			0.62f, nvgRGBA(226, 235, 241, 205), 0.25f);
+		drawText(args, "ENERGY", Vec(7.62f, 78.25f),
+			0.72f, nvgRGBA(204, 225, 238, 190), 0.35f);
+		drawText(args, "TRIG", Vec(7.62f, 87.9f),
+			1.05f, nvgRGB(224, 238, 246), 0.45f);
+		drawText(args, "VEL", Vec(7.62f, 101.9f),
+			1.05f, nvgRGB(224, 238, 246), 0.45f);
+		drawText(args, "OUT", Vec(7.62f, 115.9f),
+			1.05f, nvgRGB(225, 246, 247), 0.45f);
+		drawText(args, "D1", Vec(14.2f, 1.0f),
+			0.48f, nvgRGBA(215, 229, 238, 150), 0.15f);
+
+		if (brandSvg) {
+			const Vec natural = brandSvg->getSize();
+			if (natural.x > 0.f && natural.y > 0.f) {
+				const Vec brandPos = mm2px(Vec(0.87f, 124.65f));
+				const Vec brandSize = mm2px(Vec(13.5f, 3.68f));
+				nvgSave(args.vg);
+				nvgTranslate(args.vg, brandPos.x, brandPos.y);
+				nvgScale(args.vg, brandSize.x / natural.x, brandSize.y / natural.y);
+				brandSvg->draw(args.vg);
+				nvgRestore(args.vg);
+			}
+		}
+	}
 };
 
 struct SpringPathGeometry {
@@ -644,7 +710,7 @@ struct DoorstopWidget final : ModuleWidget {
 		PreviewBuildLogTimer previewBuildTimer("Doorstop", module);
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/doorstop.panel.svg");
 		const std::string& panelPath = splitPanel.panelPath();
-		splitPanel.addLabels("res/doorstop.labels.svg");
+		visual_assets::addFractalGlassOverlay(this, panelPath);
 		previewBuildTimer.markPanelDone();
 
 		auto anchorPoint = [&](const char* id, const Vec& fallbackMm) {
@@ -681,6 +747,14 @@ struct DoorstopWidget final : ModuleWidget {
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(trigMm), module, Doorstop::TRIG_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(velocityMm), module, Doorstop::VELOCITY_INPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(outputMm), module, Doorstop::AUDIO_OUTPUT));
+
+		auto* labelsFramebuffer = new widget::FramebufferWidget();
+		labelsFramebuffer->box.size = box.size;
+		labelsFramebuffer->dirtyOnSubpixelChange = false;
+		auto* labels = new DoorstopClassicLabelsWidget();
+		labels->box.size = box.size;
+		labelsFramebuffer->addChild(labels);
+		addChild(labelsFramebuffer);
 
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 		previewBuildTimer.markAnchorsDone();

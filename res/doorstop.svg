@@ -15,34 +15,52 @@
       <stop offset="1" stop-color="#7457d8" stop-opacity="0.75"/>
     </linearGradient>
     <radialGradient id="plate" cx="0.35" cy="0.25" r="0.9">
-      <stop offset="0" stop-color="#d5dbe0"/>
-      <stop offset="0.42" stop-color="#727b84"/>
-      <stop offset="1" stop-color="#242a31"/>
+      <stop offset="0" stop-color="#e5edf1"/>
+      <stop offset="0.32" stop-color="#8b959d"/>
+      <stop offset="0.72" stop-color="#343b43"/>
+      <stop offset="1" stop-color="#11151a"/>
     </radialGradient>
+    <linearGradient id="chamberEdge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7a5cff" stop-opacity="0.82"/>
+      <stop offset="0.58" stop-color="#3d58ba" stop-opacity="0.38"/>
+      <stop offset="1" stop-color="#1cccd9" stop-opacity="0.70"/>
+    </linearGradient>
   </defs>
 
   <g id="panel_art" inkscape:groupmode="layer" inkscape:label="Panel artwork">
     <rect width="1524" height="12850" fill="url(#bg)"/>
-    <rect x="42" y="35" width="1440" height="12780" rx="90"
-          fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="24"/>
-    <path d="M165 690 H1359" stroke="url(#edge)" stroke-width="34" stroke-linecap="round"/>
-    <path d="M110 8700 H1414" stroke="#35d7e4" stroke-opacity="0.28"
-          stroke-width="22" stroke-linecap="round"/>
+    <rect x="38" y="28" width="1448" height="12794" rx="92"
+          fill="none" stroke="#69727d" stroke-opacity="0.46" stroke-width="24"/>
+    <rect x="72" y="74" width="1380" height="650" rx="82"
+          fill="#05070b" stroke="#ffffff" stroke-opacity="0.055" stroke-width="16"/>
+    <path d="M130 730 H1394" stroke="url(#edge)" stroke-width="32" stroke-linecap="round"/>
+    <circle cx="164" cy="174" r="58" fill="#102b38" stroke="#1cccd9"
+            stroke-opacity="0.72" stroke-width="18"/>
+    <path d="M164 112 L190 174 L164 236 L138 174 Z"
+          fill="#7a5cff" fill-opacity="0.75" stroke="#8ff7ff" stroke-width="10"/>
 
-    <rect x="158" y="850" width="1208" height="6400" rx="170"
-          fill="#28303a" fill-opacity="0.13" stroke="#ffffff"
-          stroke-opacity="0.045" stroke-width="18"/>
-    <circle cx="762" cy="7200" r="395" fill="#030508" opacity="0.8"/>
+    <rect x="110" y="920" width="1304" height="6660" rx="170"
+          fill="#05070a" stroke="url(#chamberEdge)" stroke-width="24"/>
+    <rect x="146" y="956" width="1232" height="6588" rx="144"
+          fill="none" stroke="#ffffff" stroke-opacity="0.055" stroke-width="14"/>
+    <path d="M198 1280 H1326 M198 2240 H1326 M198 3200 H1326 M198 4160 H1326 M198 5120 H1326 M198 6080 H1326"
+          stroke="#6f7f92" stroke-opacity="0.085" stroke-width="12"/>
+    <path d="M762 1040 V7420" stroke="#1cccd9" stroke-opacity="0.055" stroke-width="12"/>
+    <circle cx="762" cy="7200" r="420" fill="#020305" opacity="0.9"/>
     <circle cx="762" cy="7100" r="350" fill="url(#plate)"
             stroke="#e8f4f7" stroke-opacity="0.32" stroke-width="24"/>
     <circle cx="762" cy="7100" r="155" fill="#171c22" stroke="#05070a" stroke-width="28"/>
     <circle cx="762" cy="7100" r="62" fill="#080a0d"/>
 
-    <g opacity="0.35">
-      <path d="M290 9000 H1234" stroke="#7659e0" stroke-width="20"/>
-      <path d="M290 10400 H1234" stroke="#4d89d8" stroke-width="20"/>
-      <path d="M290 11800 H1234" stroke="#35d7e4" stroke-width="20"/>
+    <g id="glass" inkscape:label="glass">
+      <rect id="inputs" x="110" y="8440" width="1304" height="2750" rx="150"
+            fill="#5740bf" fill-opacity="0.52" stroke="#b8a7ff" stroke-opacity="0.16" stroke-width="20"/>
+      <rect id="outputs" x="110" y="11270" width="1304" height="1210" rx="150"
+            fill="#1cccd9" fill-opacity="0.50" stroke="#a8fbff" stroke-opacity="0.18" stroke-width="20"/>
     </g>
+    <path d="M206 9850 H1318" stroke="#9c84ff" stroke-opacity="0.25" stroke-width="14"/>
+    <rect x="82" y="12530" width="1360" height="264" rx="70"
+          fill="#030407" stroke="#ffffff" stroke-opacity="0.05" stroke-width="12"/>
   </g>
 
   <g id="components" inkscape:groupmode="layer" inkscape:label="Component anchors"
@@ -57,19 +75,14 @@
 
   <g id="labels" inkscape:groupmode="layer" inkscape:label="Labels"
      text-anchor="middle" font-family="sans-serif">
-    <g fill="none" stroke-linecap="round">
-      <path d="M338 410 H1186" stroke="#ffffff" stroke-opacity="0.13" stroke-width="18"/>
-      <path d="M338 8350 H1186" stroke="#ffffff" stroke-opacity="0.09" stroke-width="14"/>
-    </g>
-    <text x="762" y="545" fill="#e0ebf1" fill-opacity="0.88"
-          font-size="205" font-weight="600" letter-spacing="12">DOORSTOP</text>
-    <text x="762" y="8880" fill="#73cee0" fill-opacity="0.80"
-          font-size="150" font-weight="600" letter-spacing="8">TRIG</text>
-    <text x="762" y="10280" fill="#73cee0" fill-opacity="0.80"
-          font-size="150" font-weight="600" letter-spacing="8">VEL</text>
-    <text x="762" y="11680" fill="#ac80ec" fill-opacity="0.86"
-          font-size="150" font-weight="600" letter-spacing="8">OUT</text>
-    <text x="762" y="12715" fill="#ffffff" fill-opacity="0.42"
-          font-size="105" font-weight="500" letter-spacing="7">LEVIATHAN</text>
+    <text x="762" y="320" fill="#9b6dff"
+          font-size="235" font-weight="600" letter-spacing="-4">Doorstop</text>
+    <text x="762" y="600" fill="#e2ebf1" fill-opacity="0.82"
+          font-size="62" font-weight="600" letter-spacing="18">PHYSICAL SPRING RESONATOR</text>
+    <text x="762" y="7825" fill="#d7e7ef" fill-opacity="0.78"
+          font-size="72" font-weight="600" letter-spacing="18">ENERGY</text>
+    <text x="762" y="8790" fill="#e0eef6" font-size="105" font-weight="600" letter-spacing="18">TRIG</text>
+    <text x="762" y="10190" fill="#e0eef6" font-size="105" font-weight="600" letter-spacing="18">VEL</text>
+    <text x="762" y="11590" fill="#e1f6f7" font-size="105" font-weight="600" letter-spacing="18">OUT</text>
   </g>
 </svg>
