@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg xmlns="http://www.w3.org/2000/svg"
-     width="152.4mm" height="128.5mm" viewBox="0 0 15240 12850">
+     width="137.16mm" height="128.5mm" viewBox="0 0 13716 12850">
   <defs>
     <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#06142f"/>
@@ -22,15 +22,15 @@
     </linearGradient>
   </defs>
 
-  <rect width="15240" height="12850" fill="url(#panel)"/>
-  <rect x="90" y="90" width="15060" height="12670" rx="230"
+  <rect width="13716" height="12850" fill="url(#panel)"/>
+  <rect x="90" y="90" width="13536" height="12670" rx="230"
         fill="none" stroke="#cfefff" stroke-opacity="0.56" stroke-width="42"/>
-  <rect x="145" y="145" width="14950" height="12560" rx="190"
+  <rect x="145" y="145" width="13426" height="12560" rx="190"
         fill="none" stroke="url(#gold)" stroke-opacity="0.70" stroke-width="30"/>
 
   <rect x="190" y="260" width="2668" height="12330" rx="190"
         fill="url(#inputRail)" stroke="#8e77ff" stroke-opacity="0.62" stroke-width="28"/>
-  <rect x="12382" y="260" width="2668" height="12330" rx="190"
+  <rect x="12382" y="260" width="1144" height="12330" rx="190"
         fill="url(#outputRail)" stroke="#52e8f5" stroke-opacity="0.62" stroke-width="28"/>
   <path d="M3048 180 V12670" stroke="#d7bc68" stroke-opacity="0.72" stroke-width="26"/>
   <path d="M12192 180 V12670" stroke="#67e7f4" stroke-opacity="0.62" stroke-width="26"/>
@@ -59,12 +59,12 @@
     <circle id="chaos_param" cx="2286" cy="9100" r="180"/>
     <circle id="clear_param" cx="2286" cy="11000" r="180"/>
 
-    <circle id="gates_output" cx="14478" cy="1400" r="220"/>
-    <circle id="any_output" cx="14478" cy="3100" r="220"/>
-    <circle id="left_output" cx="14478" cy="4800" r="220"/>
-    <circle id="right_output" cx="14478" cy="6500" r="220"/>
-    <circle id="velocity_output" cx="14478" cy="8200" r="220"/>
-    <circle id="position_output" cx="14478" cy="9900" r="220"/>
-    <circle id="activity_output" cx="14478" cy="11600" r="220"/>
+    <circle id="gates_output" cx="12954" cy="1400" r="220"/>
+    <circle id="any_output" cx="12954" cy="3100" r="220"/>
+    <circle id="left_output" cx="12954" cy="4800" r="220"/>
+    <circle id="right_output" cx="12954" cy="6500" r="220"/>
+    <circle id="velocity_output" cx="12954" cy="8200" r="220"/>
+    <circle id="position_output" cx="12954" cy="9900" r="220"/>
+    <circle id="activity_output" cx="12954" cy="11600" r="220"/>
   </g>
 </svg>

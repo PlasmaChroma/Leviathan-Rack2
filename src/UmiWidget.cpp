@@ -11,7 +11,7 @@
 namespace {
 
 constexpr float UMI_RASTER_WIDTH_MM = 91.44f;
-constexpr float UMI_SIDE_RAIL_WIDTH_MM = 30.48f;
+constexpr float UMI_LEFT_RAIL_WIDTH_MM = 30.48f;
 
 bool loadAnchorPointMm(const std::string& panelPath, const char* id, Vec* outMm, Vec fallbackMm) {
 	if (panel_svg::loadPointFromSvgMm(panelPath, id, outMm)) return true;
@@ -65,7 +65,7 @@ struct UmiPanelArtWidget final : TransparentWidget {
 	void draw(const DrawArgs& args) override {
 		if (!ensureImage(args.vg)) return;
 		const float rasterWidth = mm2px(UMI_RASTER_WIDTH_MM);
-		const float rasterX = 0.5f * (box.size.x - rasterWidth);
+		const float rasterX = mm2px(UMI_LEFT_RAIL_WIDTH_MM);
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, rasterX, 0.f, rasterWidth, box.size.y);
 		const NVGpaint imagePaint = nvgImagePattern(
@@ -91,7 +91,7 @@ struct UmiLabelOverlayWidget final : TransparentWidget {
 	}
 
 	void draw(const DrawArgs& args) override {
-		constexpr float centerOffset = UMI_SIDE_RAIL_WIDTH_MM;
+		constexpr float centerOffset = UMI_LEFT_RAIL_WIDTH_MM;
 		const NVGcolor labelColor = nvgRGB(224, 251, 255);
 		const NVGcolor cvColor = nvgRGB(119, 235, 255);
 		drawLabel(args, "RATE", 39.5f + centerOffset, 9.f, 1.25f, labelColor);
@@ -111,9 +111,8 @@ struct UmiLabelOverlayWidget final : TransparentWidget {
 		const char* outputLabels[] = {"GATES", "ANY", "LEFT", "RIGHT", "VEL", "POS", "ACT"};
 		for (int i = 0; i < 7; ++i) {
 			const float centerY = 14.f + 17.f * float(i);
-			drawLabel(args, outputLabels[i], 132.4f, centerY, 1.02f,
-				i == 0 ? nvgRGB(255, 229, 154) : labelColor,
-				NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+			drawLabel(args, outputLabels[i], 129.54f, centerY - 6.1f, 1.02f,
+				i == 0 ? nvgRGB(255, 229, 154) : labelColor);
 		}
 	}
 };
@@ -386,7 +385,7 @@ UmiWidget::UmiWidget(Umi* module) {
 
 	math::Rect playfieldMm;
 	if (!panel_svg::loadRectFromSvgMm(panelPath, "playfield_rect", &playfieldMm)) {
-		playfieldMm.pos = Vec(20.5f + UMI_SIDE_RAIL_WIDTH_MM, 20.5f);
+		playfieldMm.pos = Vec(20.5f + UMI_LEFT_RAIL_WIDTH_MM, 20.5f);
 		playfieldMm.size = Vec(50.4f, 75.f);
 	}
 	auto* playfieldFramebuffer = new widget::FramebufferWidget();
@@ -430,7 +429,7 @@ UmiWidget::UmiWidget(Umi* module) {
 		addOutput(createOutputCentered<Magitek2OutputJack>(anchor(id, fallbackMm), module, outputId));
 	};
 
-	constexpr float centerOffset = UMI_SIDE_RAIL_WIDTH_MM;
+	constexpr float centerOffset = UMI_LEFT_RAIL_WIDTH_MM;
 	addKnob(Umi::RATE_PARAM, "rate_param", Vec(39.5f + centerOffset, 14.5f));
 	addKnob(Umi::DENSITY_PARAM, "density_param", Vec(57.f + centerOffset, 14.5f));
 	addKnob(Umi::DRAG_PARAM, "drag_param", Vec(8.f + centerOffset, 26.5f));
@@ -455,7 +454,7 @@ UmiWidget::UmiWidget(Umi* module) {
 		"velocity_output", "position_output", "activity_output"};
 	for (int i = 0; i < 7; ++i) {
 		addOutputPort(Umi::GATES_OUTPUT + i, outputIds[i],
-			Vec(144.78f, 14.f + 17.f * float(i)));
+			Vec(129.54f, 14.f + 17.f * float(i)));
 	}
 
 	previewBuildTimer.markAnchorsDone();

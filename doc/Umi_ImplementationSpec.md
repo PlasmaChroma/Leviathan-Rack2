@@ -10,7 +10,7 @@
 
 ## 1. Product contract
 
-Umi is a 30 HP kinetic probability sequencer. A trigger releases one or more visible pearls into a deterministic, fixed-step pachinko board. The pearls collide with visible pegs and rails, then enter one of eight sinks. Each capture emits a corresponding 10 V trigger and updates derived event CV.
+Umi is a 27 HP kinetic probability sequencer. A trigger releases one or more visible pearls into a deterministic, fixed-step pachinko board. The pearls collide with visible pegs and rails, then enter one of eight sinks. Each capture emits a corresponding 10 V trigger and updates derived event CV.
 
 The essential relationship is:
 
@@ -40,7 +40,7 @@ V1 does not include ball-to-ball collision, editable board geometry, user layout
 | Question | Umi v1 decision |
 | --- | --- |
 | Name | `Umi` for title, module name, C++ type prefix, and Rack slug |
-| Width | 30 HP / 152.4 mm / 450 Rack px |
+| Width | 27 HP / 137.16 mm / 405 Rack px |
 | Default layout | `Pearl`, a balanced 8-sink layout derived from the earlier Maw geometry |
 | Live display | Central, tall, and visually dominant |
 | Primary outputs | One polyphonic `GATES` output carries sinks 1-8 on channels 1-8 |
@@ -100,7 +100,7 @@ Before release, the original concept source should either live outside the distr
 
 ## 4. Panel and component contract
 
-`res/Umi.svg` is a 152.4 x 128.5 mm structural panel. The original 18 HP raster composition remains centered, with 6 HP control rails added on the left and right. The left rail pairs each input with its associated knob or button; the right rail keeps the outputs against the outer edge with labels inboard. A hidden `components` layer is the source of truth for component placement. `UmiWidget` loads those anchors through `PanelSvgUtils` and retains matching C++ fallback coordinates.
+`res/Umi.svg` is a 137.16 x 128.5 mm (27 HP) structural panel. The original 18 HP raster composition follows a 6 HP left control rail, and the original compact 3 HP output rail remains on the right. The left rail pairs each input with its associated knob or button; the right rail vertically stacks the outputs with labels above each jack. A hidden `components` layer is the source of truth for component placement. `UmiWidget` loads those anchors through `PanelSvgUtils` and retains matching C++ fallback coordinates.
 
 ### 4.1 Initial regions
 
@@ -518,7 +518,7 @@ Suggested browser description:
 
 ### Phase 1: layout proof
 
-- Create `res/Umi.svg` at 30 HP with every required component anchor and fallback coordinate.
+- Create `res/Umi.svg` at 27 HP with every required component anchor and fallback coordinate.
 - Use a plain marine-blue placeholder panel.
 - Place every real control, input, output, and screw.
 - Verify labels and cable clearance at 75%, 100%, 125%, and 150% Rack zoom.
@@ -549,7 +549,7 @@ Exit condition: visual cause and electrical effect remain unambiguous under dens
 
 ### Phase 5: production art
 
-- Keep the source artwork centered at 18 HP and extend the structural panel to 30 HP with two-column side rails.
+- Keep the 18 HP source artwork unchanged between a 6 HP two-column input/control rail and the compact 3 HP output rail.
 - Integrate cached background/frame/overlay layers using shared NanoVG lifecycle helpers.
 - Tune labels, glow, and contrast around real widget positions.
 
