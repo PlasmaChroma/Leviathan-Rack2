@@ -1421,6 +1421,52 @@ Widget* createAspectFitRasterImageWidget(
 	return image;
 }
 
+int addMirroredPanelRasterImages(
+	Widget* parent,
+	const std::string& panelPath,
+	const char* imageAssetPath,
+	const char* leftAnchorId,
+	const char* rightAnchorId,
+	float opacity) {
+	if (!parent || panelPath.empty() || !imageAssetPath || imageAssetPath[0] == '\0') {
+		return 0;
+	}
+	const float clampedOpacity = clamp(opacity, 0.f, 1.f);
+	int added = 0;
+	auto addAtAnchor = [&](const char* anchorId, bool flipHorizontal) {
+		if (!anchorId || anchorId[0] == '\0') {
+			return;
+		}
+		math::Rect rectMm;
+		if (!panel_svg::loadRectFromSvgMm(panelPath, anchorId, &rectMm) ||
+			rectMm.size.x <= 0.f || rectMm.size.y <= 0.f) {
+			return;
+		}
+		parent->addChild(createAspectFitRasterImageWidget(
+			imageAssetPath, rectMm, flipHorizontal, clampedOpacity));
+		++added;
+	};
+	addAtAnchor(leftAnchorId, false);
+	if (!leftAnchorId || !rightAnchorId ||
+		std::string(leftAnchorId) != std::string(rightAnchorId)) {
+		addAtAnchor(rightAnchorId, true);
+	}
+	return added;
+}
+
+int addPerfectWavePanelBranding(
+	Widget* parent,
+	const std::string& panelPath,
+	float opacity) {
+	return addMirroredPanelRasterImages(
+		parent,
+		panelPath,
+		"res/icon/PerfectWave_Tiny.png",
+		"BRANDING_WAVE_LEFT_RASTER",
+		"BRANDING_WAVE_RIGHT_RASTER",
+		opacity);
+}
+
 Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSizePx) {
 	if (svgPath.empty() || panelSizePx.x <= 0.f || panelSizePx.y <= 0.f) {
 		Widget* empty = new Widget();
@@ -1502,6 +1548,10 @@ const std::string& SplitPanelRenderer::panelPath() const {
 
 Widget* SplitPanelRenderer::panelSurfaceEffectWidget() const {
 	return panelSurfaceEffect_;
+}
+
+int SplitPanelRenderer::addPerfectWaveBranding(float opacity) {
+	return visual_assets::addPerfectWavePanelBranding(parent_, panelPath_, opacity);
 }
 
 SplitPanelRenderer::~SplitPanelRenderer() {

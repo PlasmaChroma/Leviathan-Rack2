@@ -28,6 +28,22 @@ Widget* createAspectFitRasterImageWidget(
 	math::Rect rectMm,
 	bool flipHorizontal = false,
 	float opacity = 1.f);
+// Installs normal-left and horizontally mirrored-right raster images at SVG
+// rect anchors. Either anchor may be omitted for one-sided art. Returns the
+// number of images installed, allowing callers and tooling to verify rollout.
+int addMirroredPanelRasterImages(
+	Widget* parent,
+	const std::string& panelPath,
+	const char* imageAssetPath,
+	const char* leftAnchorId,
+	const char* rightAnchorId,
+	float opacity = 1.f);
+// Standard Leviathan panel branding convention. Panels opt in with
+// BRANDING_WAVE_LEFT_RASTER and/or BRANDING_WAVE_RIGHT_RASTER rect anchors.
+int addPerfectWavePanelBranding(
+	Widget* parent,
+	const std::string& panelPath,
+	float opacity = 1.f);
 Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSizePx);
 Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float oversample = 2.0f);
 
@@ -43,6 +59,7 @@ public:
 	~SplitPanelRenderer();
 	const std::string& panelPath() const;
 	Widget* panelSurfaceEffectWidget() const;
+	int addPerfectWaveBranding(float opacity = 1.f);
 	// Labels are inserted when this scoped renderer is destroyed, after the
 	// module constructor has added its controls and dynamic visual layers.
 	void addLabels(const char* labelsAssetPath);
