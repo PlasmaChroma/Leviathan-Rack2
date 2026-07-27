@@ -1,8 +1,51 @@
 #include "Doorstop.hpp"
 
+#include <string>
+
 namespace {
 
 std::atomic<std::uint32_t> gDoorstopDebugInstanceCounter {1u};
+
+const char* engineModeName(doorstop::EngineMode mode) {
+	return mode == doorstop::EngineMode::Legacy ? "legacy" : "referenceV1";
+}
+
+const char* soundModelName(doorstop::SoundModel model) {
+	switch (model) {
+		case doorstop::SoundModel::Classic: return "classic";
+		case doorstop::SoundModel::CoupledBody: return "coupledBody";
+		case doorstop::SoundModel::CoilContact: return "coilContact";
+		case doorstop::SoundModel::DispersiveSpring: return "dispersiveSpring";
+		case doorstop::SoundModel::ProbabilisticMix: return "probabilisticMix";
+		default: return "probabilisticMix";
+	}
+}
+
+bool parseEngineMode(json_t* value, doorstop::EngineMode* mode) {
+	if (!json_is_string(value) || !mode) return false;
+	const std::string name = json_string_value(value);
+	if (name == "referenceV1") {
+		*mode = doorstop::EngineMode::ReferenceV1;
+		return true;
+	}
+	if (name == "legacy") {
+		*mode = doorstop::EngineMode::Legacy;
+		return true;
+	}
+	return false;
+}
+
+bool parseSoundModel(json_t* value, doorstop::SoundModel* model) {
+	if (!json_is_string(value) || !model) return false;
+	const std::string name = json_string_value(value);
+	if (name == "classic") *model = doorstop::SoundModel::Classic;
+	else if (name == "coupledBody") *model = doorstop::SoundModel::CoupledBody;
+	else if (name == "coilContact") *model = doorstop::SoundModel::CoilContact;
+	else if (name == "dispersiveSpring") *model = doorstop::SoundModel::DispersiveSpring;
+	else if (name == "probabilisticMix") *model = doorstop::SoundModel::ProbabilisticMix;
+	else return false;
+	return true;
+}
 
 } // namespace
 
@@ -14,12 +57,17 @@ Doorstop::Doorstop() {
 	configInput(VELOCITY_INPUT, "Bipolar velocity (bipolar +/-10V)");
 	configOutput(AUDIO_OUTPUT, "Audio");
 
+	std::uint32_t initialSeed = random::u32();
+	if (!initialSeed) initialSeed = 1u;
+	specimenSeed.store(initialSeed, std::memory_order_relaxed);
+	pendingSpecimenSeed.store(initialSeed, std::memory_order_relaxed);
+	engine.setSpecimenSeed(initialSeed);
 	const float initialSampleRate = (APP && APP->engine) ? APP->engine->getSampleRate() : 44100.f;
 	engine.setSampleRate(initialSampleRate);
 }
 
 void Doorstop::publishVisualState(const doorstop::Frame& frame) {
-	const float maximumDisplacement = engine.getEffectiveTuning().maxDisplacement;
+	const float maximumDisplacement = engine.getVisualMaximumDisplacement();
 	const float displacement = std::isfinite(frame.displacement)
 		? clamp(frame.displacement, -maximumDisplacement, maximumDisplacement)
 		: 0.f;
@@ -43,9 +91,23 @@ void Doorstop::process(const ProcessArgs& args) {
 	const bool measurePerf = isDragonKingDebugEnabled();
 	const auto processStart = debug_terminal::debugTimerStart(measurePerf);
 	bool persistentStateChanged = false;
+	if (specimenStatePending.exchange(false, std::memory_order_acquire)) {
+		const std::uint32_t loadedSeed =
+			pendingSpecimenSeed.load(std::memory_order_relaxed);
+		engine.setSpecimenSeed(loadedSeed);
+		specimenSeed.store(engine.getSpecimenSeed(), std::memory_order_relaxed);
+	}
 	if (breakInStatePending.exchange(false, std::memory_order_acquire)) {
 		engine.resetMotion();
 		engine.setBreakIn(pendingBreakIn.load(std::memory_order_relaxed));
+		persistentStateChanged = true;
+	}
+	if (newSpecimenRequested.exchange(false, std::memory_order_acq_rel)) {
+		const std::uint32_t requestedSeed =
+			pendingSpecimenSeed.load(std::memory_order_relaxed);
+		engine.setSpecimenSeed(requestedSeed);
+		specimenSeed.store(engine.getSpecimenSeed(), std::memory_order_relaxed);
+		engine.restoreFactoryFresh();
 		persistentStateChanged = true;
 	}
 	engine.setBreakInLocked(breakInLocked.load(std::memory_order_relaxed));
@@ -54,6 +116,11 @@ void Doorstop::process(const ProcessArgs& args) {
 		persistentStateChanged = true;
 	}
 
+	const int requestedEngineMode = clamp(
+		engineMode.load(std::memory_order_acquire),
+		int(doorstop::EngineMode::ReferenceV1),
+		int(doorstop::EngineMode::Count) - 1);
+	engine.setEngineMode(static_cast<doorstop::EngineMode>(requestedEngineMode));
 	const int requestedModel = clamp(
 		soundModel.load(std::memory_order_relaxed),
 		int(doorstop::SoundModel::Classic),
@@ -112,7 +179,11 @@ void Doorstop::onReset(const ResetEvent& e) {
 	manualTrigger.reset();
 	engine.reset();
 	allowVisualOverflow.store(true, std::memory_order_relaxed);
+	engineMode.store(int(doorstop::EngineMode::ReferenceV1), std::memory_order_relaxed);
 	soundModel.store(int(doorstop::SoundModel::ProbabilisticMix), std::memory_order_relaxed);
+	specimenStatePending.store(false, std::memory_order_relaxed);
+	newSpecimenRequested.store(false, std::memory_order_relaxed);
+	pendingSpecimenSeed.store(specimenSeed.load(std::memory_order_relaxed), std::memory_order_relaxed);
 	breakInLocked.store(false, std::memory_order_relaxed);
 	restoreSpringRequested.store(false, std::memory_order_relaxed);
 	serializedBreakIn.store(0.f, std::memory_order_relaxed);
@@ -132,11 +203,24 @@ void Doorstop::onSampleRateChange(const SampleRateChangeEvent& e) {
 
 json_t* Doorstop::dataToJson() {
 	json_t* rootJ = json_object();
-	json_object_set_new(rootJ, "schema", json_integer(1));
+	json_object_set_new(rootJ, "schema", json_integer(2));
 	json_object_set_new(rootJ, "allowVisualOverflow",
 		json_boolean(allowVisualOverflow.load(std::memory_order_relaxed)));
+	const auto savedMode = static_cast<doorstop::EngineMode>(clamp(
+		engineMode.load(std::memory_order_relaxed),
+		int(doorstop::EngineMode::ReferenceV1),
+		int(doorstop::EngineMode::Count) - 1));
+	json_object_set_new(rootJ, "engineMode", json_string(engineModeName(savedMode)));
+	const auto savedModel = static_cast<doorstop::SoundModel>(clamp(
+		soundModel.load(std::memory_order_relaxed),
+		int(doorstop::SoundModel::Classic),
+		int(doorstop::SoundModel::Count) - 1));
+	json_object_set_new(rootJ, "legacySoundModel",
+		json_string(soundModelName(savedModel)));
 	json_object_set_new(rootJ, "soundModel",
-		json_integer(soundModel.load(std::memory_order_relaxed)));
+		json_integer(int(savedModel)));
+	json_object_set_new(rootJ, "specimenSeed",
+		json_integer(specimenSeed.load(std::memory_order_relaxed)));
 	json_object_set_new(rootJ, "breakIn",
 		json_real(serializedBreakIn.load(std::memory_order_relaxed)));
 	json_object_set_new(rootJ, "breakInLocked",
@@ -149,19 +233,14 @@ void Doorstop::dataFromJson(json_t* rootJ) {
 	manualTrigger.reset();
 	publishZeroVisualState();
 
-	int schema = 0;
-	(void) schema;
 	bool loadedOverflow = true;
+	doorstop::EngineMode loadedEngineMode = doorstop::EngineMode::Legacy;
 	int loadedModel = int(doorstop::SoundModel::ProbabilisticMix);
 	float loadedBreakIn = 0.f;
 	bool loadedLocked = false;
+	std::uint32_t loadedSeed = specimenSeed.load(std::memory_order_relaxed);
 
 	if (rootJ) {
-		json_t* schemaJ = json_object_get(rootJ, "schema");
-		if (json_is_integer(schemaJ)) {
-			schema = json_integer_value(schemaJ);
-		}
-
 		json_t* overflowJ = json_object_get(rootJ, "allowVisualOverflow");
 		if (json_is_boolean(overflowJ)) {
 			loadedOverflow = json_boolean_value(overflowJ);
@@ -173,6 +252,21 @@ void Doorstop::dataFromJson(json_t* rootJ) {
 			if (value >= int(doorstop::SoundModel::Classic)
 				&& value < int(doorstop::SoundModel::Count)) {
 				loadedModel = int(value);
+			}
+		}
+		doorstop::EngineMode parsedMode;
+		if (parseEngineMode(json_object_get(rootJ, "engineMode"), &parsedMode)) {
+			loadedEngineMode = parsedMode;
+		}
+		doorstop::SoundModel parsedModel;
+		if (parseSoundModel(json_object_get(rootJ, "legacySoundModel"), &parsedModel)) {
+			loadedModel = int(parsedModel);
+		}
+		json_t* seedJ = json_object_get(rootJ, "specimenSeed");
+		if (json_is_integer(seedJ)) {
+			const json_int_t value = json_integer_value(seedJ);
+			if (value > 0 && std::uint64_t(value) <= 0xffffffffull) {
+				loadedSeed = std::uint32_t(value);
 			}
 		}
 
@@ -191,7 +285,12 @@ void Doorstop::dataFromJson(json_t* rootJ) {
 	}
 
 	allowVisualOverflow.store(loadedOverflow, std::memory_order_relaxed);
+	engineMode.store(int(loadedEngineMode), std::memory_order_relaxed);
 	soundModel.store(loadedModel, std::memory_order_relaxed);
+	specimenSeed.store(loadedSeed, std::memory_order_relaxed);
+	pendingSpecimenSeed.store(loadedSeed, std::memory_order_relaxed);
+	specimenStatePending.store(true, std::memory_order_release);
+	newSpecimenRequested.store(false, std::memory_order_relaxed);
 	breakInLocked.store(loadedLocked, std::memory_order_relaxed);
 	restoreSpringRequested.store(false, std::memory_order_relaxed);
 	serializedBreakIn.store(loadedBreakIn, std::memory_order_relaxed);

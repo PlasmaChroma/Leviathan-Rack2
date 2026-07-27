@@ -1,7 +1,7 @@
 #pragma once
 
 #include "DebugTerminalMetrics.hpp"
-#include "DoorstopEngine.hpp"
+#include "DoorstopEngineRouter.hpp"
 #include "plugin.hpp"
 
 #include <atomic>
@@ -30,10 +30,15 @@ struct Doorstop final : Module {
 
 	dsp::SchmittTrigger trigTrigger;
 	dsp::SchmittTrigger manualTrigger;
-	doorstop::Engine engine;
+	doorstop::DoorstopEngineRouter engine;
 
 	std::atomic<bool> allowVisualOverflow {true};
+	std::atomic<int> engineMode {int(doorstop::EngineMode::ReferenceV1)};
 	std::atomic<int> soundModel {int(doorstop::SoundModel::ProbabilisticMix)};
+	std::atomic<std::uint32_t> specimenSeed {1u};
+	std::atomic<std::uint32_t> pendingSpecimenSeed {1u};
+	std::atomic<bool> specimenStatePending {false};
+	std::atomic<bool> newSpecimenRequested {false};
 	std::atomic<bool> breakInLocked {false};
 	std::atomic<bool> restoreSpringRequested {false};
 	std::atomic<float> serializedBreakIn {0.f};

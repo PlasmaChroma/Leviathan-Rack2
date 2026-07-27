@@ -69,6 +69,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/undertow_shape_spec \
 	build/tests/math_helpers_spec \
 	build/tests/doorstop_engine_spec \
+	build/tests/doorstop_reference_engine_spec \
 	build/tests/bifurx_filter_spec \
 	build/tests/sil_repair_spec \
 	build/tests/bulkhead_geometry_spec \
@@ -223,6 +224,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/undertow_shape_spec)
 	$(call run_test_bin,build/tests/math_helpers_spec)
 	$(call run_test_bin,build/tests/doorstop_engine_spec)
+	$(call run_test_bin,build/tests/doorstop_reference_engine_spec)
 	$(call run_test_bin,build/tests/bifurx_filter_spec)
 	$(call run_test_bin,build/tests/sil_repair_spec)
 	$(call run_test_bin,build/tests/bulkhead_geometry_spec)
@@ -350,6 +352,9 @@ build/tests/math_helpers_spec: tests/math_helpers_spec.cpp src/MathHelpers.cpp s
 build/tests/doorstop_engine_spec: tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
 
+build/tests/doorstop_reference_engine_spec: tests/doorstop_reference_engine_spec.cpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/DoorstopEngineRouter.cpp src/DoorstopEngineRouter.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_reference_engine_spec.cpp src/ReferenceSpringEngine.cpp src/DoorstopEngineRouter.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
+
 build/tests/bifurx_filter_spec: tests/bifurx_filter_spec.cpp tests/bifurx_filter_test_model.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $< -o $@
 
@@ -379,5 +384,5 @@ build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/PanelSvgUti
 build/tests/crownstep_persistence_spec: tests/crownstep_persistence_spec.cpp $(CROWNSTEP_MODULE_SOURCES) | build/tests build/tests/panel_svg_utils_spec
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
 
-build/tests/doorstop_runtime_spec: tests/doorstop_runtime_spec.cpp src/Doorstop.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp | build/tests build/tests/panel_svg_utils_spec
+build/tests/doorstop_runtime_spec: tests/doorstop_runtime_spec.cpp src/Doorstop.cpp src/DoorstopEngine.cpp src/DoorstopEngineRouter.cpp src/ReferenceSpringEngine.cpp src/MathHelpers.cpp | build/tests build/tests/panel_svg_utils_spec
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@

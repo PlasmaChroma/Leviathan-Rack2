@@ -583,7 +583,7 @@ struct DoorstopWidget final : ModuleWidget {
 			<< "overflow_left_visible,overflow_right_visible,"
 			<< "displacement,velocity,energy,strike,tip_travel_px,trail_amount,trails_active,"
 			<< "history_1,history_2,history_3,"
-			<< "sound_model,last_strike_model,break_in,"
+			<< "engine_mode,sound_model,last_strike_model,break_in,"
 			<< "overflow_allowed,overflow_present,panel_width_px,panel_height_px,"
 			<< "step_us,geometry_us,panel_draw_us,overflow_draw_us,module_draw_us\n";
 		renderingLog.active = true;
@@ -639,6 +639,7 @@ struct DoorstopWidget final : ModuleWidget {
 			<< overlayLink->displacementHistory[0] << ","
 			<< overlayLink->displacementHistory[1] << ","
 			<< overlayLink->displacementHistory[2] << ","
+			<< m->engineMode.load(std::memory_order_relaxed) << ","
 			<< m->soundModel.load(std::memory_order_relaxed) << ","
 			<< m->visualLastStrikeModel.load(std::memory_order_relaxed) << ","
 			<< m->serializedBreakIn.load(std::memory_order_relaxed) << ","
@@ -905,47 +906,43 @@ struct DoorstopWidget final : ModuleWidget {
 			return;
 		}
 		menu->addChild(new MenuSeparator());
-		menu->addChild(createSubmenuItem("Sound model", "", [m](Menu* modelMenu) {
-			modelMenu->addChild(createCheckMenuItem("Probabilistic mix", "",
+		menu->addChild(createSubmenuItem("Sound engine", "", [m](Menu* engineMenu) {
+			engineMenu->addChild(createCheckMenuItem("Reference physical model", "",
 				[m]() {
-					return m->soundModel.load(std::memory_order_relaxed)
-						== int(doorstop::SoundModel::ProbabilisticMix);
+					return m->engineMode.load(std::memory_order_relaxed)
+						== int(doorstop::EngineMode::ReferenceV1);
 				},
 				[m]() {
-					m->soundModel.store(int(doorstop::SoundModel::ProbabilisticMix), std::memory_order_relaxed);
+					m->engineMode.store(
+						int(doorstop::EngineMode::ReferenceV1),
+						std::memory_order_release);
 				}));
-			modelMenu->addChild(new MenuSeparator());
-			modelMenu->addChild(createCheckMenuItem("Classic modal", "",
-				[m]() {
-					return m->soundModel.load(std::memory_order_relaxed)
-						== int(doorstop::SoundModel::Classic);
-				},
-				[m]() {
-					m->soundModel.store(int(doorstop::SoundModel::Classic), std::memory_order_relaxed);
-				}));
-			modelMenu->addChild(createCheckMenuItem("Coupled body", "",
-				[m]() {
-					return m->soundModel.load(std::memory_order_relaxed)
-						== int(doorstop::SoundModel::CoupledBody);
-				},
-				[m]() {
-					m->soundModel.store(int(doorstop::SoundModel::CoupledBody), std::memory_order_relaxed);
-				}));
-			modelMenu->addChild(createCheckMenuItem("Coil contact", "",
-				[m]() {
-					return m->soundModel.load(std::memory_order_relaxed)
-						== int(doorstop::SoundModel::CoilContact);
-				},
-				[m]() {
-					m->soundModel.store(int(doorstop::SoundModel::CoilContact), std::memory_order_relaxed);
-				}));
-			modelMenu->addChild(createCheckMenuItem("Dispersive spring", "",
-				[m]() {
-					return m->soundModel.load(std::memory_order_relaxed)
-						== int(doorstop::SoundModel::DispersiveSpring);
-				},
-				[m]() {
-					m->soundModel.store(int(doorstop::SoundModel::DispersiveSpring), std::memory_order_relaxed);
+			engineMenu->addChild(createSubmenuItem("Legacy models", "",
+				[m](Menu* modelMenu) {
+					auto addLegacyModel = [m, modelMenu](
+						const char* label, doorstop::SoundModel model) {
+						modelMenu->addChild(createCheckMenuItem(label, "",
+							[m, model]() {
+								return m->engineMode.load(std::memory_order_relaxed)
+										== int(doorstop::EngineMode::Legacy)
+									&& m->soundModel.load(std::memory_order_relaxed)
+										== int(model);
+							},
+							[m, model]() {
+								m->soundModel.store(int(model), std::memory_order_relaxed);
+								m->engineMode.store(
+									int(doorstop::EngineMode::Legacy),
+									std::memory_order_release);
+							}));
+					};
+					addLegacyModel(
+						"Probabilistic mix", doorstop::SoundModel::ProbabilisticMix);
+					modelMenu->addChild(new MenuSeparator());
+					addLegacyModel("Classic modal", doorstop::SoundModel::Classic);
+					addLegacyModel("Coupled body", doorstop::SoundModel::CoupledBody);
+					addLegacyModel("Coil contact", doorstop::SoundModel::CoilContact);
+					addLegacyModel(
+						"Dispersive spring", doorstop::SoundModel::DispersiveSpring);
 				}));
 		}));
 		const int breakInPercent = int(std::round(
@@ -967,6 +964,14 @@ struct DoorstopWidget final : ModuleWidget {
 			"Restore factory-fresh spring", "",
 			[m]() {
 				m->restoreSpringRequested.store(true, std::memory_order_release);
+			}));
+		menu->addChild(createMenuItem(
+			"Generate new specimen", "",
+			[m]() {
+				std::uint32_t seed = random::u32();
+				if (!seed) seed = 1u;
+				m->pendingSpecimenSeed.store(seed, std::memory_order_relaxed);
+				m->newSpecimenRequested.store(true, std::memory_order_release);
 			}));
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createCheckMenuItem(

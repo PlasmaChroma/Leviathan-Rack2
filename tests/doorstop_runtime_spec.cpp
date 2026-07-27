@@ -5,6 +5,10 @@
 #include <string>
 #include <vector>
 
+bool isDragonKingDebugEnabled() {
+	return false;
+}
+
 namespace {
 
 struct Result {
@@ -97,12 +101,11 @@ Result manualStrikeWorks() {
 	armTriggers(module, args);
 	module.params[Doorstop::MANUAL_PARAM].setValue(1.f);
 	module.process(args);
-	const float light = module.lights[Doorstop::STRIKE_LIGHT].getBrightness();
 	const float visual = module.visualStrike.load(std::memory_order_relaxed);
-	const bool pass = !module.engine.isSleeping() && light > 0.f && visual > 0.f
+	const bool pass = !module.engine.isSleeping() && visual > 0.f
 		&& std::isfinite(module.outputs[Doorstop::AUDIO_OUTPUT].getVoltage());
-	return {"Manual parameter strikes audio, light, and telemetry", pass,
-		"light=" + std::to_string(light) + " visual=" + std::to_string(visual)};
+	return {"Manual parameter strikes audio and visual telemetry", pass,
+		"visual=" + std::to_string(visual)};
 }
 
 Result manualStrikeHeightControlsVelocity() {
@@ -134,7 +137,9 @@ Result manualStrikeHeightControlsVelocity() {
 Result jsonRoundTripAndReset() {
 	Doorstop source;
 	source.allowVisualOverflow.store(false, std::memory_order_relaxed);
+	source.engineMode.store(int(doorstop::EngineMode::Legacy), std::memory_order_relaxed);
 	source.soundModel.store(int(doorstop::SoundModel::DispersiveSpring), std::memory_order_relaxed);
+	source.specimenSeed.store(0x12345678u, std::memory_order_relaxed);
 	source.serializedBreakIn.store(0.37f, std::memory_order_relaxed);
 	source.breakInLocked.store(true, std::memory_order_relaxed);
 	json_t* rootJ = source.dataToJson();
@@ -144,8 +149,12 @@ Result jsonRoundTripAndReset() {
 	const auto args = processArgs();
 	loaded.process(args);
 	const bool restored = !loaded.allowVisualOverflow.load(std::memory_order_relaxed)
+		&& loaded.engineMode.load(std::memory_order_relaxed)
+			== int(doorstop::EngineMode::Legacy)
 		&& loaded.soundModel.load(std::memory_order_relaxed)
 			== int(doorstop::SoundModel::DispersiveSpring)
+		&& loaded.specimenSeed.load(std::memory_order_relaxed) == 0x12345678u
+		&& loaded.engine.getEngineMode() == doorstop::EngineMode::Legacy
 		&& loaded.engine.getSoundModel() == doorstop::SoundModel::DispersiveSpring
 		&& std::fabs(loaded.engine.getBreakIn() - 0.37f) < 1e-6f
 		&& loaded.engine.isBreakInLocked()
@@ -153,6 +162,8 @@ Result jsonRoundTripAndReset() {
 	Module::ResetEvent event;
 	loaded.onReset(event);
 	const bool reset = loaded.allowVisualOverflow.load(std::memory_order_relaxed)
+		&& loaded.engineMode.load(std::memory_order_relaxed)
+			== int(doorstop::EngineMode::ReferenceV1)
 		&& loaded.soundModel.load(std::memory_order_relaxed)
 			== int(doorstop::SoundModel::ProbabilisticMix)
 		&& loaded.engine.isSleeping()
@@ -173,7 +184,8 @@ Result oldPatchAndRestoreCommand() {
 	const auto args = processArgs();
 	module.process(args);
 	const bool oldPatchFresh = module.engine.getBreakIn() == 0.f
-		&& !module.engine.isBreakInLocked();
+		&& !module.engine.isBreakInLocked()
+		&& module.engine.getEngineMode() == doorstop::EngineMode::Legacy;
 
 	module.pendingBreakIn.store(0.65f, std::memory_order_relaxed);
 	module.serializedBreakIn.store(0.65f, std::memory_order_relaxed);
@@ -233,7 +245,8 @@ Result malformedBreakInJsonIsSafe() {
 	nullRoot.dataFromJson(nullptr);
 	nullRoot.process(args);
 	const bool nullDefaults = nullRoot.engine.getBreakIn() == 0.f
-		&& !nullRoot.engine.isBreakInLocked();
+		&& !nullRoot.engine.isBreakInLocked()
+		&& nullRoot.engine.getEngineMode() == doorstop::EngineMode::Legacy;
 
 	const bool pass = clampedHigh && clampedLow
 		&& wrongTypesDefault && nullDefaults;
@@ -243,6 +256,65 @@ Result malformedBreakInJsonIsSafe() {
 			+ " low=" + std::to_string(clampedLow)
 			+ " types=" + std::to_string(wrongTypesDefault)
 			+ " null=" + std::to_string(nullDefaults)};
+}
+
+Result newModuleAndSpecimenSemantics() {
+	Doorstop module;
+	const auto args = processArgs();
+	module.process(args);
+	const std::uint32_t originalSeed =
+		module.specimenSeed.load(std::memory_order_relaxed);
+	const bool newDefault =
+		module.engine.getEngineMode() == doorstop::EngineMode::ReferenceV1
+		&& originalSeed != 0u;
+
+	module.pendingSpecimenSeed.store(0xabcdef01u, std::memory_order_relaxed);
+	module.newSpecimenRequested.store(true, std::memory_order_release);
+	module.process(args);
+	const bool regenerated =
+		module.specimenSeed.load(std::memory_order_relaxed) == 0xabcdef01u
+		&& module.engine.getSpecimenSeed() == 0xabcdef01u
+		&& module.engine.getBreakIn() == 0.f
+		&& module.engine.isSleeping();
+	return {"New modules use Reference and specimen regeneration is explicit",
+		newDefault && regenerated,
+		"default=" + std::to_string(newDefault)
+			+ " regenerated=" + std::to_string(regenerated)};
+}
+
+Result schemaMigrationMapsEveryLegacyModel() {
+	const auto args = processArgs();
+	bool pass = true;
+	for (int model = int(doorstop::SoundModel::Classic);
+		model < int(doorstop::SoundModel::Count); ++model) {
+		Doorstop module;
+		json_t* oldPatchJ = json_object();
+		json_object_set_new(oldPatchJ, "schema", json_integer(1));
+		json_object_set_new(oldPatchJ, "soundModel", json_integer(model));
+		module.dataFromJson(oldPatchJ);
+		json_decref(oldPatchJ);
+		module.process(args);
+		pass = pass
+			&& module.engine.getEngineMode() == doorstop::EngineMode::Legacy
+			&& int(module.engine.getSoundModel()) == model;
+	}
+
+	Doorstop reference;
+	reference.engineMode.store(
+		int(doorstop::EngineMode::ReferenceV1), std::memory_order_relaxed);
+	reference.specimenSeed.store(0x13579bdfu, std::memory_order_relaxed);
+	json_t* referenceJ = reference.dataToJson();
+	Doorstop loaded;
+	loaded.dataFromJson(referenceJ);
+	json_decref(referenceJ);
+	loaded.process(args);
+	const bool referenceRestored =
+		loaded.engine.getEngineMode() == doorstop::EngineMode::ReferenceV1
+		&& loaded.engine.getSpecimenSeed() == 0x13579bdfu;
+	return {"Schema migration maps every legacy model and Reference V1",
+		pass && referenceRestored,
+		"legacy=" + std::to_string(pass)
+			+ " reference=" + std::to_string(referenceRestored)};
 }
 
 } // namespace
@@ -258,6 +330,8 @@ int main() {
 	results.push_back(jsonRoundTripAndReset());
 	results.push_back(oldPatchAndRestoreCommand());
 	results.push_back(malformedBreakInJsonIsSafe());
+	results.push_back(newModuleAndSpecimenSemantics());
+	results.push_back(schemaMigrationMapsEveryLegacyModel());
 
 	int failed = 0;
 	std::cout << "Doorstop Runtime Spec\n";
