@@ -669,6 +669,7 @@ struct DoorstopWidget final : ModuleWidget {
 		visual_assets::addFractalGlassOverlay(
 			this, panelPath, splitPanel.panelSurfaceEffectWidget());
 		splitPanel.addLabels("res/doorstop.labels.svg");
+		splitPanel.addPerfectWaveSoloBranding();
 		previewBuildTimer.markPanelDone();
 
 		auto anchorPoint = [&](const char* id, const Vec& fallbackMm) {

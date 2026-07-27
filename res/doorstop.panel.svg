@@ -17,7 +17,7 @@
       <stop offset="0.72" stop-color="#343b43" id="stop9" />
       <stop offset="1" stop-color="#11151a" id="stop10" />
     </radialGradient>
-    <linearGradient id="chamberEdge" x1="219.8595" y1="404.7312" x2="219.8595" y2="3384.052" gradientTransform="matrix(0.44623004,0,0,1.9808507,-0.83912212,888.01173)" gradientUnits="userSpaceOnUse">
+    <linearGradient id="chamberEdge" x1="219.8595" y1="404.7312" x2="219.8595" y2="3384.052" gradientTransform="matrix(0.44623004,0,0,1.9808507,-0.83912212,888.01173)" gradientUnits="userSpaceOnUse" xlink:href="#linearGradient22">
       <stop offset="0" stop-color="#7a5cff" stop-opacity="0.82" id="stop11" style="stop-color:#7a5cff;stop-opacity:1;" />
       <stop offset="1" stop-color="#1cccd9" stop-opacity="0.70" id="stop13" style="stop-color:#1cccd9;stop-opacity:1;" />
     </linearGradient>
@@ -30,10 +30,10 @@
   <g id="panel_art" inkscape:label="Panel artwork">
     <rect width="1524" height="12850" fill="url(#bg)" id="rect13" x="0" y="0" />
     <g id="glass" inkscape:label="glass">
-      <rect id="inputs" x="110" y="8080" width="1304" height="2750" rx="150" fill="#5740bf" fill-opacity="0.52" stroke="#b8a7ff" stroke-opacity="0.16" stroke-width="20" />
-      <rect id="outputs" x="110" y="10910" width="1304" height="1210" rx="150" fill="#1cccd9" fill-opacity="0.5" stroke="#a8fbff" stroke-opacity="0.18" stroke-width="20" />
+      <rect id="inputs" x="110" y="8080" width="1304" height="2750" rx="150" fill="#5740bf" fill-opacity="0.52" stroke="#b8a7ff" stroke-opacity="0.16" stroke-width="20" style="stroke:#5740bf;stroke-opacity:1;opacity:0.33" />
+      <rect id="outputs" x="110" y="10910" width="1304" height="1210" rx="150" fill="#1cccd9" fill-opacity="0.5" stroke="#a8fbff" stroke-opacity="0.18" stroke-width="20" style="stroke:#1cccd9;stroke-opacity:0.50196081;opacity:0.33" />
     </g>
-    <rect x="82" y="12530" width="1360" height="264" rx="70" fill="#030407" stroke="#ffffff" stroke-opacity="0.05" stroke-width="12" id="rect21" />
+    <rect x="82" y="12530" width="1360" height="264" rx="70" fill="#030407" stroke="#ffffff" stroke-opacity="0.05" stroke-width="12" id="rect21" style="display:none" />
     <g id="mount_plate" style="display:inline" transform="translate(0,-650.03707)">
       <rect x="109.28201" y="1700.3191" width="1305.436" height="5880.3989" rx="170.18721" fill="#05070a" stroke="url(#chamberEdge)" stroke-width="22.564" id="rect16" style="display:inline;stroke:url(#chamberEdge);fill:none" />
       <rect x="145.32166" y="1732.105" width="1233.3567" height="5816.8271" rx="144.15857" fill="none" stroke="#ffffff" stroke-opacity="0.055" stroke-width="13.1623" id="rect17" style="display:inline" />
@@ -50,5 +50,6 @@
     <circle id="TRIG_INPUT" cx="762" cy="8544.9893" r="220" />
     <circle id="VELOCITY_INPUT" cx="762" cy="9944.9893" r="220" />
     <circle id="AUDIO_OUTPUT" cx="762" cy="11330" r="220" />
+    <rect id="BRANDING_WAVE_SOLO_RASTER" x="108.626" y="12338.190" width="1306.748" height="511.810" />
   </g>
 </svg>

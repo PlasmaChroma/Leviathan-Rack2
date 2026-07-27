@@ -23,15 +23,16 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="2.4193418"
-     inkscape:cx="-102.09389"
-     inkscape:cy="233.74126"
+     inkscape:zoom="6.842932"
+     inkscape:cx="19.874522"
+     inkscape:cy="204.80987"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="doorstop-source" />
+     inkscape:current-layer="doorstop-source"
+     showgrid="false" />
   <defs
      id="defs13">
     <linearGradient
@@ -107,7 +108,8 @@
        x2="219.8595"
        y2="3384.052"
        gradientTransform="matrix(0.44623004,0,0,1.9808507,-0.83912212,888.01173)"
-       gradientUnits="userSpaceOnUse">
+       gradientUnits="userSpaceOnUse"
+       xlink:href="#linearGradient22">
       <stop
          offset="0"
          stop-color="#7a5cff"
@@ -168,7 +170,8 @@
          fill-opacity="0.52"
          stroke="#b8a7ff"
          stroke-opacity="0.16"
-         stroke-width="20" />
+         stroke-width="20"
+         style="stroke:#5740bf;stroke-opacity:1;opacity:0.33" />
       <rect
          id="outputs"
          x="110"
@@ -180,7 +183,8 @@
          fill-opacity="0.5"
          stroke="#a8fbff"
          stroke-opacity="0.18"
-         stroke-width="20" />
+         stroke-width="20"
+         style="stroke:#1cccd9;stroke-opacity:0.50196081;opacity:0.33" />
     </g>
     <rect
        x="82"
@@ -192,7 +196,8 @@
        stroke="#ffffff"
        stroke-opacity="0.05"
        stroke-width="12"
-       id="rect21" />
+       id="rect21"
+       style="display:none" />
     <g
        id="mount_plate"
        style="display:inline"
@@ -290,6 +295,12 @@
        cx="762"
        cy="11330"
        r="220" />
+    <rect
+       id="BRANDING_WAVE_SOLO_RASTER"
+       x="108.626"
+       y="12338.190"
+       width="1306.748"
+       height="511.810" />
   </g>
   <g
      id="labels"

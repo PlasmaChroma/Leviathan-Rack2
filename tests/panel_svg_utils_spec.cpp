@@ -266,6 +266,36 @@ TestResult testDeepcachePanelAnchorsUseRepositoryUnits() {
             " logoHidden=" + std::to_string(logoHidden ? 1 : 0)};
 }
 
+TestResult testDoorstopSoloBrandingFitsThreeHp() {
+  math::Rect panelWave;
+  math::Rect sourceWave;
+  math::Rect excludedWave;
+  const bool panelOk = panel_svg::loadRectFromSvgMm(
+    "res/doorstop.panel.svg", "BRANDING_WAVE_SOLO_RASTER", &panelWave);
+  const bool sourceOk = panel_svg::loadRectFromSvgMm(
+    "res/doorstop.svg", "BRANDING_WAVE_SOLO_RASTER", &sourceWave);
+  const bool pairedWavesExcluded =
+    !panel_svg::loadRectFromSvgMm(
+      "res/doorstop.panel.svg", "BRANDING_WAVE_LEFT_RASTER", &excludedWave)
+    && !panel_svg::loadRectFromSvgMm(
+      "res/doorstop.panel.svg", "BRANDING_WAVE_RIGHT_RASTER", &excludedWave);
+  const bool pass = panelOk && sourceOk && pairedWavesExcluded
+    && nearlyEqual(panelWave.pos.x, 1.08626f, 1e-4f)
+    && nearlyEqual(panelWave.pos.x + panelWave.size.x * 0.5f, 7.62f, 1e-4f)
+    && nearlyEqual(panelWave.pos.y + panelWave.size.y, 128.5f, 1e-4f)
+    && nearlyEqual(panelWave.size.x, 13.06748f, 1e-4f)
+    && nearlyEqual(panelWave.size.y, 5.11810f, 1e-4f)
+    && nearlyEqual(sourceWave.pos.x, panelWave.pos.x, 1e-4f)
+    && nearlyEqual(sourceWave.pos.y, panelWave.pos.y, 1e-4f)
+    && nearlyEqual(sourceWave.size.x, panelWave.size.x, 1e-4f)
+    && nearlyEqual(sourceWave.size.y, panelWave.size.y, 1e-4f);
+  return {"Doorstop solo branding fits centered within three HP", pass,
+          "solo=" + std::to_string(panelWave.pos.x) + "," +
+            std::to_string(panelWave.pos.y) +
+            " solo_sz=" + std::to_string(panelWave.size.x) + "," +
+            std::to_string(panelWave.size.y)};
+}
+
 TestResult testTemporalDeckBrandingRasterAnchors() {
   math::Rect left;
   math::Rect right;
@@ -413,6 +443,7 @@ int main() {
   tests.push_back(testMissingElementFailsGracefully());
   tests.push_back(testGeneratedAtlasFindsRealPanelAnchor());
   tests.push_back(testDeepcachePanelAnchorsUseRepositoryUnits());
+  tests.push_back(testDoorstopSoloBrandingFitsThreeHp());
   tests.push_back(testTemporalDeckBrandingRasterAnchors());
   tests.push_back(testPerfectWaveBrandingDeploymentContract());
   tests.push_back(testBifurxGlassPathParses());

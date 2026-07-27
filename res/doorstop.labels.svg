@@ -84,7 +84,8 @@
        x2="219.8595"
        y2="3384.052"
        gradientTransform="matrix(0.44623004,0,0,1.9808507,-0.83912212,888.01173)"
-       gradientUnits="userSpaceOnUse">
+       gradientUnits="userSpaceOnUse"
+       xlink:href="#linearGradient22">
       <stop
          offset="0"
          stop-color="#7a5cff"
