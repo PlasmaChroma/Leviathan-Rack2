@@ -27,6 +27,7 @@ private:
 };
 
 FractalGlassOverlay* addFractalGlassOverlay(
-	ModuleWidget* parent, const std::string& panelPath);
+	ModuleWidget* parent, const std::string& panelPath,
+	Widget* upperSibling = nullptr);
 
 } // namespace visual_assets

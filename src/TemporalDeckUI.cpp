@@ -3569,7 +3569,8 @@ struct TemporalDeckWidget : ModuleWidget {
       addChild(visual_assets::createAspectFitRasterImageWidget(
           brandingWaveAsset, brandingWaveRightMm, true, 1.f));
     }
-    visual_assets::addFractalGlassOverlay(this, panelPath);
+    visual_assets::addFractalGlassOverlay(
+      this, panelPath, splitPanel.panelSurfaceEffectWidget());
     previewBuildTimer.markPanelDone();
     if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
       panelBorder = findPanelBorder(svgPanel->fb);

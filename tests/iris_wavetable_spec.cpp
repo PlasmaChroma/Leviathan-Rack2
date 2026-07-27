@@ -36,6 +36,24 @@ std::vector<uint8_t> solid(int width, int height, uint8_t value) {
 } // namespace
 
 int main() {
+  iris::SourceField neutralPaletteSource;
+  neutralPaletteSource.width = 3;
+  neutralPaletteSource.height = 1;
+  neutralPaletteSource.rgb8 = {
+    16u, 16u, 16u,
+    64u, 64u, 64u,
+    192u, 192u, 192u
+  };
+  iris::SourceField contrastPaletteSource = neutralPaletteSource;
+  iris::FractalPalette neutralPalette;
+  iris::FractalPalette contrastPalette;
+  contrastPalette.contrast = 1.35f;
+  iris::applyFractalPalette(&neutralPaletteSource, neutralPalette);
+  iris::applyFractalPalette(&contrastPaletteSource, contrastPalette);
+  check("fractal palette contrast spreads shadows and highlights",
+        contrastPaletteSource.rgb8[0] < neutralPaletteSource.rgb8[0] &&
+        contrastPaletteSource.rgb8[6] > neutralPaletteSource.rgb8[6]);
+
   iris::ConversionSettings settings;
   settings.frameSize = 8;
   settings.rows = 2;

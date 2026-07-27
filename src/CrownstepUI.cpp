@@ -3845,7 +3845,8 @@ struct CrownstepWidget final : ModuleWidget {
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/crownstep.panel.svg");
 		const std::string& panelPath = splitPanel.panelPath();
 		splitPanel.addLabels("res/crownstep.labels.svg");
-		visual_assets::addFractalGlassOverlay(this, panelPath);
+		visual_assets::addFractalGlassOverlay(
+			this, panelPath, splitPanel.panelSurfaceEffectWidget());
 		previewBuildTimer.markPanelDone();
 
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0)));

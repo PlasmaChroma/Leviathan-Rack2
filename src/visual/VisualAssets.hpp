@@ -34,6 +34,7 @@ Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float over
 // Installs the standard static layers for modules with split panel and label SVGs.
 class SplitPanelRenderer final {
 	ModuleWidget* parent_ = nullptr;
+	Widget* panelSurfaceEffect_ = nullptr;
 	std::string panelPath_;
 	std::string labelsAssetPath_;
 
@@ -41,6 +42,7 @@ public:
 	SplitPanelRenderer(ModuleWidget* parent, const char* panelAssetPath);
 	~SplitPanelRenderer();
 	const std::string& panelPath() const;
+	Widget* panelSurfaceEffectWidget() const;
 	// Labels are inserted when this scoped renderer is destroyed, after the
 	// module constructor has added its controls and dynamic visual layers.
 	void addLabels(const char* labelsAssetPath);

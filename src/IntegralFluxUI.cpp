@@ -1816,7 +1816,8 @@ struct IntegralFluxWidget : ModuleWidget {
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/flux.panel.svg");
 		const std::string& panelBasePath = splitPanel.panelPath();
 		splitPanel.addLabels("res/flux.labels.svg");
-		nautiloidGlass = visual_assets::addFractalGlassOverlay(this, panelBasePath);
+		nautiloidGlass = visual_assets::addFractalGlassOverlay(
+			this, panelBasePath, splitPanel.panelSurfaceEffectWidget());
 		{
 			math::Rect dragonRectMm;
 			if (!panel_svg::loadRectFromSvgMm(panelBasePath, "DRAGON_RENDER_AREA", &dragonRectMm)) {

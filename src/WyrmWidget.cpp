@@ -470,7 +470,8 @@ struct WyrmWidget : ModuleWidget {
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/wyrm.panel.svg");
 		const std::string& panelPath = splitPanel.panelPath();
 		splitPanel.addLabels("res/wyrm.labels.svg");
-		visual_assets::addFractalGlassOverlay(this, panelPath);
+		visual_assets::addFractalGlassOverlay(
+			this, panelPath, splitPanel.panelSurfaceEffectWidget());
 		previewBuildTimer.markPanelDone();
 		try {
 			ageSigilSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/Vahdrim'Keth.svg"));

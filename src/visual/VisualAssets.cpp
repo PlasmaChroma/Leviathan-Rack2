@@ -1492,11 +1492,16 @@ SplitPanelRenderer::SplitPanelRenderer(ModuleWidget* parent, const char* panelAs
 	}
 	panelPath_ = asset::plugin(pluginInstance, panelAssetPath);
 	parent_->setPanel(createPanel(panelPath_));
-	parent_->addChild(createPanelSurfaceEffectWidget(panelPath_, parent_->box.size));
+	panelSurfaceEffect_ = createPanelSurfaceEffectWidget(panelPath_, parent_->box.size);
+	parent_->addChild(panelSurfaceEffect_);
 }
 
 const std::string& SplitPanelRenderer::panelPath() const {
 	return panelPath_;
+}
+
+Widget* SplitPanelRenderer::panelSurfaceEffectWidget() const {
+	return panelSurfaceEffect_;
 }
 
 SplitPanelRenderer::~SplitPanelRenderer() {

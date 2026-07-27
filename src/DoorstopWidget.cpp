@@ -666,7 +666,8 @@ struct DoorstopWidget final : ModuleWidget {
 		PreviewBuildLogTimer previewBuildTimer("Doorstop", module);
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/doorstop.panel.svg");
 		const std::string& panelPath = splitPanel.panelPath();
-		visual_assets::addFractalGlassOverlay(this, panelPath);
+		visual_assets::addFractalGlassOverlay(
+			this, panelPath, splitPanel.panelSurfaceEffectWidget());
 		splitPanel.addLabels("res/doorstop.labels.svg");
 		previewBuildTimer.markPanelDone();
 

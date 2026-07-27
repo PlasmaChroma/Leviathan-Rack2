@@ -1690,7 +1690,8 @@ struct NautiloidWidget final : ModuleWidget {
     visual_assets::SplitPanelRenderer splitPanel(this, "res/nautiloid.panel.svg");
     const std::string& panelPath = splitPanel.panelPath();
     splitPanel.addLabels("res/nautiloid.labels.svg");
-    visual_assets::addFractalGlassOverlay(this, panelPath);
+    visual_assets::addFractalGlassOverlay(
+      this, panelPath, splitPanel.panelSurfaceEffectWidget());
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
