@@ -1055,6 +1055,7 @@ struct IrisWidget final : ModuleWidget {
     visual_assets::SplitPanelRenderer splitPanel(this, "res/iris.panel.svg");
     const std::string& panelPath = splitPanel.panelPath();
     splitPanel.addLabels("res/iris.labels.svg");
+    splitPanel.addPerfectWaveBranding();
     visual_assets::addFractalGlassOverlay(
       this, panelPath, splitPanel.panelSurfaceEffectWidget());
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));

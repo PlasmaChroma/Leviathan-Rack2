@@ -470,6 +470,7 @@ struct WyrmWidget : ModuleWidget {
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/wyrm.panel.svg");
 		const std::string& panelPath = splitPanel.panelPath();
 		splitPanel.addLabels("res/wyrm.labels.svg");
+		splitPanel.addPerfectWaveBranding();
 		visual_assets::addFractalGlassOverlay(
 			this, panelPath, splitPanel.panelSurfaceEffectWidget());
 		previewBuildTimer.markPanelDone();

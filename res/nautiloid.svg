@@ -105,7 +105,7 @@
   </g>
   <g
      id="waves_layer"
-     style="display:inline;opacity:0.5"
+     style="display:none;opacity:0.5"
      transform="translate(0.00337775,142.46186)">
     <g
        id="branding_wave_left"
@@ -378,5 +378,9 @@
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;fill:url(#linearGradient74);stroke:none;stroke-width:75"
          x="3963.6721"
          y="12732.525">Leviathan</tspan></text>
+  </g>
+  <g id="perfect_wave_raster_anchors" style="display:none">
+    <rect id="BRANDING_WAVE_LEFT_RASTER" x="2189.610" y="12338.190" width="1306.748" height="511.810" />
+    <rect id="BRANDING_WAVE_RIGHT_RASTER" x="6663.674" y="12338.190" width="1306.748" height="511.810" />
   </g>
 </svg>

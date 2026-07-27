@@ -152,6 +152,7 @@ struct TDScopeWidget : ModuleWidget {
     PreviewBuildLogTimer previewBuildTimer("TDScope", module);
     const std::string panelPath = asset::plugin(pluginInstance, "res/tdscope.svg");
     setPanel(createPanel(panelPath));
+    visual_assets::addPerfectWavePanelBranding(this, panelPath);
     previewBuildTimer.markPanelDone();
     if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
       panelBorder = findPanelBorder(svgPanel->fb);

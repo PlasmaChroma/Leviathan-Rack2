@@ -17,6 +17,7 @@ FNV64_PRIME = 1099511628211
 
 TAG_RE = re.compile(r"<(rect|circle|ellipse)\b[^>]*\bid\s*=\s*\"([^\"]+)\"[^>]*>", re.IGNORECASE)
 ATTR_RE = re.compile(r"\b([A-Za-z_:][-A-Za-z0-9_:.]*)\s*=\s*\"([^\"]+)\"")
+SVG_TAG_RE = re.compile(r"<svg\b[^>]*>", re.IGNORECASE)
 
 
 def fnv1a64(data: bytes) -> int:
@@ -39,6 +40,7 @@ class SvgRecord:
     path: str
     size: int
     fnv64: int
+    unit_to_mm_scale: float
 
 
 @dataclass(frozen=True)
@@ -75,10 +77,37 @@ def cpp_float(v: float) -> str:
     return text
 
 
+def parse_svg_user_unit_to_mm_scale(text: str) -> float:
+    match = SVG_TAG_RE.search(text)
+    if not match:
+        return 0.01
+    attrs = {m.group(1).lower(): m.group(2) for m in ATTR_RE.finditer(match.group(0))}
+    view_box_text = attrs.get("viewbox", "")
+    width_text = attrs.get("width", "")
+    try:
+        view_box = [float(value) for value in re.split(r"[\s,]+", view_box_text.strip())]
+    except ValueError:
+        return 0.01
+    width_match = re.fullmatch(
+        r"\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*mm\s*",
+        width_text,
+        re.IGNORECASE,
+    )
+    if len(view_box) < 4 or view_box[2] <= 0.0 or not width_match:
+        return 0.01
+    width_mm = float(width_match.group(1))
+    return width_mm / view_box[2] if width_mm > 0.0 else 0.01
+
+
 def scan_svg(path: pathlib.Path, rel_path: str, svg_index: int) -> tuple[SvgRecord, list[AnchorRecord]]:
     data = path.read_bytes()
     text = data.decode("utf-8", errors="ignore")
-    svg_record = SvgRecord(rel_path, len(data), fnv1a64(data))
+    svg_record = SvgRecord(
+        rel_path,
+        len(data),
+        fnv1a64(data),
+        parse_svg_user_unit_to_mm_scale(text),
+    )
     anchors: list[AnchorRecord] = []
 
     for match in TAG_RE.finditer(text):
@@ -151,11 +180,14 @@ def generate(repo_root: pathlib.Path, output: pathlib.Path) -> None:
         f.write("constexpr uint32_t kAnchorHasRadius = 1u << 2;\n")
         f.write("constexpr uint64_t kFnv64Offset = 14695981039346656037ull;\n")
         f.write("constexpr uint64_t kFnv64Prime = 1099511628211ull;\n\n")
-        f.write("struct SvgAtlasRecord { const char* path; uint64_t size; uint64_t fnv64; };\n")
+        f.write("struct SvgAtlasRecord { const char* path; uint64_t size; uint64_t fnv64; float unitToMmScale; };\n")
         f.write("struct AnchorAtlasRecord { uint16_t svgIndex; const char* id; uint32_t flags; float cx; float cy; float x; float y; float width; float height; float radius; };\n\n")
         f.write("static const SvgAtlasRecord kSvgAtlas[] = {\n")
         for rec in svg_records:
-            f.write(f"\t{{{cpp_string(rec.path)}, {rec.size}ull, 0x{rec.fnv64:016x}ull}},\n")
+            f.write(
+                f"\t{{{cpp_string(rec.path)}, {rec.size}ull, "
+                f"0x{rec.fnv64:016x}ull, {cpp_float(rec.unit_to_mm_scale)}}},\n"
+            )
         f.write("};\n\n")
         f.write("static const AnchorAtlasRecord kAnchorAtlas[] = {\n")
         for rec in anchors:
@@ -280,6 +312,7 @@ bool lookupPanelAnchor(const std::string& svgPath, const std::string& elementId,
 	out->hasCenter = (rec.flags & kAnchorHasCenter) != 0u;
 	out->hasRect = (rec.flags & kAnchorHasRect) != 0u;
 	out->hasRadius = (rec.flags & kAnchorHasRadius) != 0u;
+	out->unitToMmScale = kSvgAtlas[indexPos].unitToMmScale;
 	out->cx = rec.cx;
 	out->cy = rec.cy;
 	out->x = rec.x;

@@ -263,6 +263,7 @@ struct UndertowWidget final : ModuleWidget {
     visual_assets::SplitPanelRenderer splitPanel(this, "res/undertow.panel.svg");
     const std::string& panelPath = splitPanel.panelPath();
     splitPanel.addLabels("res/undertow.labels.svg");
+    splitPanel.addPerfectWaveBranding();
     visual_assets::addFractalGlassOverlay(
       this, panelPath, splitPanel.panelSurfaceEffectWidget());
     addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0.f)));

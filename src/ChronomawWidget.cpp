@@ -1540,6 +1540,7 @@ ChronomawWidget::ChronomawWidget(Chronomaw* module) {
 	PreviewBuildLogTimer previewBuildTimer("Chronomaw", module);
 	const std::string panelPath = asset::plugin(pluginInstance, "res/chronomaw.svg");
 	setPanel(createPanel(panelPath));
+	visual_assets::addPerfectWavePanelBranding(this, panelPath);
 	previewBuildTimer.markPanelDone();
 
 	addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0)));

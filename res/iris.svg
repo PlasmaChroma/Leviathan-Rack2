@@ -90,7 +90,7 @@
      style="display:inline" />
   <g
      id="waves_layer"
-     style="display:inline;opacity:0.5"
+     style="display:none;opacity:0.5"
      transform="translate(-2031.9966,142.46203)">
     <g
        id="branding_wave_left"
@@ -449,5 +449,9 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient300);fill-rule:evenodd;stroke-width:37.088"
        xml:space="preserve"
        inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
+  </g>
+  <g id="perfect_wave_raster_anchors" style="display:none">
+    <rect id="BRANDING_WAVE_LEFT_RASTER" x="157.610" y="12338.190" width="1306.748" height="511.810" />
+    <rect id="BRANDING_WAVE_RIGHT_RASTER" x="4631.674" y="12338.190" width="1306.748" height="511.810" />
   </g>
 </svg>

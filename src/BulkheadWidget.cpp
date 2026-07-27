@@ -453,6 +453,7 @@ BulkheadWidget::BulkheadWidget(Bulkhead* module) {
 	PreviewBuildLogTimer previewBuildTimer("Bulkhead", module);
 	const std::string panelPath = asset::plugin(pluginInstance, "res/bulkhead.svg");
 	setPanel(createPanel(panelPath));
+	visual_assets::addPerfectWavePanelBranding(this, panelPath);
 	previewBuildTimer.markPanelDone();
 	previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 

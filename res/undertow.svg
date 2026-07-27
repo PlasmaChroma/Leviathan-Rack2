@@ -278,7 +278,7 @@
    sodipodi:insensitive="true" />
       <g
    id="waves_layer"
-   style="display:inline;opacity:0.5"
+   style="display:none;opacity:0.5"
    transform="matrix(1.0032751,0,0,1.0029283,209.46053,1458.9832)"><g
      id="branding_wave_left"
      transform="matrix(1.72,0,0,1.72,774.18594,11678.805)"
@@ -674,4 +674,7 @@
      id="tspan3"
      x="2009.761"
      y="5385.1001">OCT</tspan></text></g>
+<g id="perfect_wave_raster_anchors" style="display:none">
+  <rect id="BRANDING_WAVE_LEFT_RASTER" x="0" y="12338.190" width="1306.748" height="511.810" />
+</g>
 </svg>

@@ -245,6 +245,91 @@ TestResult testTemporalDeckBrandingRasterAnchors() {
               ? std::string("missing") : std::to_string(branding->bounds.size.y))};
 }
 
+TestResult testPerfectWaveBrandingDeploymentContract() {
+  struct PanelContract {
+    const char* path;
+    float widthMm;
+    bool hasLeft;
+    bool hasRight;
+  };
+  const PanelContract panels[] = {
+    {"res/deck.panel.svg", 101.6f, true, true},
+    {"res/deck.svg", 101.6f, true, true},
+    {"res/bifurx.panel.svg", 71.12f, true, true},
+    {"res/bifurx.svg", 71.12f, true, true},
+    {"res/crownstep.panel.svg", 91.44f, true, true},
+    {"res/crownstep.svg", 91.44f, true, true},
+    {"res/wyrm.panel.svg", 71.12f, true, true},
+    {"res/wyrm.svg", 71.12f, true, true},
+    {"res/proc.panel.svg", 40.64f, true, false},
+    {"res/proc.svg", 40.64f, true, false},
+    {"res/iris.panel.svg", 60.96f, true, true},
+    {"res/iris.svg", 60.96f, true, true},
+    {"res/nautiloid.panel.svg", 101.6f, true, true},
+    {"res/nautiloid.svg", 101.6f, true, true},
+    {"res/undertow.panel.svg", 40.64f, true, false},
+    {"res/undertow.svg", 40.64f, true, false},
+    {"res/bulkhead.svg", 81.28f, true, true},
+    {"res/chronomaw.svg", 203.2f, true, true},
+    {"res/sil.svg", 101.6f, true, true},
+    {"res/tdscope.svg", 40.64f, true, false},
+  };
+
+  bool pass = true;
+  int anchorCount = 0;
+  std::string firstFailure;
+  for (const PanelContract& panel : panels) {
+    math::Rect left;
+    math::Rect right;
+    const bool leftOk = panel_svg::loadRectFromSvgMm(
+      panel.path, "BRANDING_WAVE_LEFT_RASTER", &left);
+    const bool rightOk = panel_svg::loadRectFromSvgMm(
+      panel.path, "BRANDING_WAVE_RIGHT_RASTER", &right);
+    bool panelPass = leftOk == panel.hasLeft && rightOk == panel.hasRight;
+    auto validAnchor = [&](const math::Rect& rect) {
+      return nearlyEqual(rect.size.x, 13.06748f, 1e-4f)
+        && nearlyEqual(rect.size.y, 5.11810f, 1e-4f)
+        && nearlyEqual(rect.pos.y + rect.size.y, 128.5f, 1e-4f)
+        && rect.pos.x >= -1e-4f
+        && rect.pos.x + rect.size.x <= panel.widthMm + 1e-4f;
+    };
+    if (leftOk) {
+      panelPass = panelPass && validAnchor(left);
+      anchorCount++;
+    }
+    if (rightOk) {
+      panelPass = panelPass && validAnchor(right);
+      anchorCount++;
+    }
+    if (leftOk && rightOk) {
+      panelPass = panelPass
+        && nearlyEqual(
+          left.pos.x + right.pos.x + left.size.x,
+          panel.widthMm,
+          5e-4f);
+    }
+    if (!panelPass && firstFailure.empty()) {
+      firstFailure = panel.path;
+    }
+    pass = pass && panelPass;
+  }
+
+  math::Rect excluded;
+  const bool fluxPanelExcluded = !panel_svg::loadRectFromSvgMm(
+    "res/flux.panel.svg", "BRANDING_WAVE_LEFT_RASTER", &excluded);
+  const bool fluxSourceExcluded = !panel_svg::loadRectFromSvgMm(
+    "res/flux.svg", "BRANDING_WAVE_LEFT_RASTER", &excluded);
+  pass = pass && fluxPanelExcluded && fluxSourceExcluded;
+
+  return {"Perfect Wave branding deployment contract", pass,
+          "panels=" + std::to_string(sizeof(panels) / sizeof(panels[0])) +
+            " anchors=" + std::to_string(anchorCount) +
+            " fluxExcluded=" + std::to_string(
+              fluxPanelExcluded && fluxSourceExcluded ? 1 : 0) +
+            (firstFailure.empty() ? std::string() :
+              " firstFailure=" + firstFailure)};
+}
+
 TestResult testBifurxGlassPathParses() {
   std::vector<panel_svg::SvgPathMatch> matches;
   bool ok = panel_svg::findPathsInGroupsWithIdSubstringMm("res/bifurx.panel.svg", "glass", &matches);
@@ -277,6 +362,7 @@ int main() {
   tests.push_back(testGeneratedAtlasFindsRealPanelAnchor());
   tests.push_back(testDeepcachePanelAnchorsUseRepositoryUnits());
   tests.push_back(testTemporalDeckBrandingRasterAnchors());
+  tests.push_back(testPerfectWaveBrandingDeploymentContract());
   tests.push_back(testBifurxGlassPathParses());
 
   int failed = 0;

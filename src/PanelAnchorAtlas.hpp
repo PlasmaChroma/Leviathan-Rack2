@@ -11,6 +11,7 @@ struct PanelAnchorLookupResult {
 	bool hasCenter = false;
 	bool hasRect = false;
 	bool hasRadius = false;
+	float unitToMmScale = 0.01f;
 	float cx = 0.f;
 	float cy = 0.f;
 	float x = 0.f;
