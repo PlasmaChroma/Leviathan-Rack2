@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -32,6 +33,20 @@ bool writeTextFile(const std::string& path, const std::string& text) {
   }
   out << text;
   return out.good();
+}
+
+bool readTextFile(const std::string& path, std::string* out) {
+  if (!out) {
+    return false;
+  }
+  std::ifstream in(path.c_str(), std::ios::in);
+  if (!in.good()) {
+    return false;
+  }
+  out->assign(
+    std::istreambuf_iterator<char>(in),
+    std::istreambuf_iterator<char>());
+  return in.good() || in.eof();
 }
 
 bool nearlyEqual(float a, float b, float eps = 1e-6f) {
@@ -190,28 +205,65 @@ TestResult testDeepcachePanelAnchorsUseRepositoryUnits() {
   math::Rect progress;
   math::Rect framebufferProgress;
   math::Rect databaseStatus;
+  math::Rect soloWave;
+  math::Rect sourceSoloWave;
+  math::Rect excludedWave;
   const bool readyOk = panel_svg::loadPointFromSvgMm("res/Deepcache.panel.svg", "ready_light", &ready);
   const bool progressOk = panel_svg::loadRectFromSvgMm("res/Deepcache.panel.svg", "progress", &progress);
   const bool framebufferProgressOk = panel_svg::loadRectFromSvgMm(
     "res/Deepcache.panel.svg", "framebuffer_progress", &framebufferProgress);
   const bool databaseStatusOk = panel_svg::loadRectFromSvgMm(
     "res/Deepcache.panel.svg", "database_status", &databaseStatus);
+  const bool soloWaveOk = panel_svg::loadRectFromSvgMm(
+    "res/Deepcache.panel.svg", "BRANDING_WAVE_SOLO_RASTER", &soloWave);
+  const bool sourceSoloWaveOk = panel_svg::loadRectFromSvgMm(
+    "res/Deepcache.svg", "BRANDING_WAVE_SOLO_RASTER", &sourceSoloWave);
+  const bool pairedWavesExcluded =
+    !panel_svg::loadRectFromSvgMm(
+      "res/Deepcache.panel.svg", "BRANDING_WAVE_LEFT_RASTER", &excludedWave)
+    && !panel_svg::loadRectFromSvgMm(
+      "res/Deepcache.panel.svg", "BRANDING_WAVE_RIGHT_RASTER", &excludedWave);
+  std::string labelsText;
+  const bool labelsOk = readTextFile("res/Deepcache.labels.svg", &labelsText);
+  const size_t logoPos = labelsText.find("id=\"reworked_LEVIATHAN_LOGO\"");
+  const size_t logoEnd = logoPos == std::string::npos
+    ? std::string::npos : labelsText.find("/>", logoPos);
+  const size_t logoHiddenPos = logoPos == std::string::npos
+    ? std::string::npos : labelsText.find("display:none", logoPos);
+  const bool logoHidden = labelsOk
+    && logoPos != std::string::npos
+    && logoEnd != std::string::npos
+    && logoHiddenPos != std::string::npos
+    && logoHiddenPos < logoEnd;
   const bool pass = readyOk && progressOk && framebufferProgressOk && databaseStatusOk
+    && soloWaveOk && sourceSoloWaveOk && pairedWavesExcluded && logoHidden
     && nearlyEqual(ready.x, 4.5f) && nearlyEqual(ready.y, 107.59958f, 1e-4f)
     && nearlyEqual(progress.pos.x, 3.f) && nearlyEqual(progress.pos.y, 27.099751f, 1e-4f)
     && nearlyEqual(progress.size.x, 14.32f) && nearlyEqual(progress.size.y, 7.f, 1e-4f)
     && nearlyEqual(framebufferProgress.pos.x, 3.f) && nearlyEqual(framebufferProgress.pos.y, 49.199771f, 1e-4f)
     && nearlyEqual(framebufferProgress.size.x, 14.32f) && nearlyEqual(framebufferProgress.size.y, 7.f, 1e-4f)
     && nearlyEqual(databaseStatus.pos.x, 3.f) && nearlyEqual(databaseStatus.pos.y, 72.600005f, 1e-4f)
-    && nearlyEqual(databaseStatus.size.x, 14.32f) && nearlyEqual(databaseStatus.size.y, 12.186809f, 1e-4f);
-  return {"Deepcache anchors use 1/100mm component coordinates", pass,
+    && nearlyEqual(databaseStatus.size.x, 14.32f) && nearlyEqual(databaseStatus.size.y, 12.186809f, 1e-4f)
+    && nearlyEqual(soloWave.pos.x, 3.62626f, 1e-4f)
+    && nearlyEqual(soloWave.pos.x + soloWave.size.x * 0.5f, 10.16f, 1e-4f)
+    && nearlyEqual(soloWave.pos.y + soloWave.size.y, 128.5f, 1e-4f)
+    && nearlyEqual(soloWave.size.x, 13.06748f, 1e-4f)
+    && nearlyEqual(soloWave.size.y, 5.11810f, 1e-4f)
+    && nearlyEqual(sourceSoloWave.pos.x, soloWave.pos.x, 1e-4f)
+    && nearlyEqual(sourceSoloWave.pos.y, soloWave.pos.y, 1e-4f)
+    && nearlyEqual(sourceSoloWave.size.x, soloWave.size.x, 1e-4f)
+    && nearlyEqual(sourceSoloWave.size.y, soloWave.size.y, 1e-4f);
+  return {"Deepcache anchors and solo branding use repository units", pass,
           "ready=" + std::to_string(ready.x) + "," + std::to_string(ready.y) +
             " progress=" + std::to_string(progress.pos.x) + "," + std::to_string(progress.pos.y) +
             " progress_sz=" + std::to_string(progress.size.x) + "," + std::to_string(progress.size.y) +
             " fb_progress=" + std::to_string(framebufferProgress.pos.x) + "," + std::to_string(framebufferProgress.pos.y) +
             " fb_progress_sz=" + std::to_string(framebufferProgress.size.x) + "," + std::to_string(framebufferProgress.size.y) +
             " db_status=" + std::to_string(databaseStatus.pos.x) + "," + std::to_string(databaseStatus.pos.y) +
-            " db_status_sz=" + std::to_string(databaseStatus.size.x) + "," + std::to_string(databaseStatus.size.y)};
+            " db_status_sz=" + std::to_string(databaseStatus.size.x) + "," + std::to_string(databaseStatus.size.y) +
+            " solo=" + std::to_string(soloWave.pos.x) + "," + std::to_string(soloWave.pos.y) +
+            " solo_sz=" + std::to_string(soloWave.size.x) + "," + std::to_string(soloWave.size.y) +
+            " logoHidden=" + std::to_string(logoHidden ? 1 : 0)};
 }
 
 TestResult testTemporalDeckBrandingRasterAnchors() {

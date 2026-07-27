@@ -44,6 +44,12 @@ int addPerfectWavePanelBranding(
 	Widget* parent,
 	const std::string& panelPath,
 	float opacity = 1.f);
+// Standard centered single-mark convention for narrow or intentionally solo
+// layouts. Panels opt in with a BRANDING_WAVE_SOLO_RASTER rect anchor.
+int addPerfectWaveSoloPanelBranding(
+	Widget* parent,
+	const std::string& panelPath,
+	float opacity = 1.f);
 Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSizePx);
 Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float oversample = 2.0f);
 
@@ -60,6 +66,7 @@ public:
 	const std::string& panelPath() const;
 	Widget* panelSurfaceEffectWidget() const;
 	int addPerfectWaveBranding(float opacity = 1.f);
+	int addPerfectWaveSoloBranding(float opacity = 1.f);
 	// Labels are inserted when this scoped renderer is destroyed, after the
 	// module constructor has added its controls and dynamic visual layers.
 	void addLabels(const char* labelsAssetPath);

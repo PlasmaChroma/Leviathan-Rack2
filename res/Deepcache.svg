@@ -251,7 +251,7 @@
          id="reworked_LEVIATHAN_LOGO"
          x="10.144129"
          y="126.40186"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.29167px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient1);stroke:none;stroke-width:0.371;stroke-dasharray:none;stroke-opacity:1"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.29167px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:none;fill:url(#linearGradient1);stroke:none;stroke-width:0.371;stroke-dasharray:none;stroke-opacity:1"
          xml:space="preserve"
          inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
     </g>
@@ -350,5 +350,8 @@
          id="text14"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1;stroke:none;stroke-opacity:1">ERR</text>
     </g>
+  </g>
+  <g id="perfect_wave_raster_anchors" style="display:none">
+    <rect id="BRANDING_WAVE_SOLO_RASTER" x="362.626" y="12338.190" width="1306.748" height="511.810" />
   </g>
 </svg>

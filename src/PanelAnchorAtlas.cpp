@@ -24,9 +24,9 @@ struct SvgAtlasRecord { const char* path; uint64_t size; uint64_t fnv64; float u
 struct AnchorAtlasRecord { uint16_t svgIndex; const char* id; uint32_t flags; float cx; float cy; float x; float y; float width; float height; float radius; };
 
 static const SvgAtlasRecord kSvgAtlas[] = {
-	{"res/Deepcache.labels.svg", 49552ull, 0xe52486ab856f2969ull, 0.01f},
-	{"res/Deepcache.panel.svg", 3715ull, 0x385be6650246be39ull, 0.01f},
-	{"res/Deepcache.svg", 12529ull, 0xe962117110860cedull, 0.01f},
+	{"res/Deepcache.labels.svg", 49539ull, 0xb5bc7cb4c431dcb4ull, 0.01f},
+	{"res/Deepcache.panel.svg", 3820ull, 0x256f412fffa90c7aull, 0.01f},
+	{"res/Deepcache.svg", 12698ull, 0xe9b7713b585e8934ull, 0.01f},
 	{"res/Umi.svg", 3415ull, 0x64dcf6291222a1bdull, 0.01f},
 	{"res/bifurx.labels.svg", 48991ull, 0x726b4415a74a6cd6ull, 0.00999999986f},
 	{"res/bifurx.panel.svg", 18526ull, 0x278379c4ae3e7543ull, 0.00999999986f},
@@ -77,6 +77,7 @@ static const AnchorAtlasRecord kAnchorAtlas[] = {
 	{1, "warming_light", 5u, 450.f, 10059.958f, 0.f, 0.f, 0.f, 0.f, 50.f},
 	{1, "ready_light", 5u, 450.f, 10759.958f, 0.f, 0.f, 0.f, 0.f, 50.f},
 	{1, "error_light", 5u, 450.f, 11459.958f, 0.f, 0.f, 0.f, 0.f, 50.f},
+	{1, "BRANDING_WAVE_SOLO_RASTER", 3u, 1016.f, 12594.095f, 362.626f, 12338.19f, 1306.748f, 511.81f, 0.f},
 	{2, "rect5", 3u, 10.16f, 64.25f, 0.f, 0.f, 20.32f, 128.5f, 0.f},
 	{2, "rect6", 3u, 10.16f, 64.25f, 0.44999999f, 0.44999999f, 19.42f, 127.6f, 0.f},
 	{2, "progress", 3u, 1016.f, 3059.9751f, 300.f, 2709.9751f, 1432.f, 700.f, 0.f},
@@ -88,6 +89,7 @@ static const AnchorAtlasRecord kAnchorAtlas[] = {
 	{2, "ready_light", 5u, 450.f, 10759.958f, 0.f, 0.f, 0.f, 0.f, 50.f},
 	{2, "error_light", 5u, 450.f, 11459.958f, 0.f, 0.f, 0.f, 0.f, 50.f},
 	{2, "ellipse1", 1u, 10.16f, 61.799999f, 0.f, 0.f, 0.f, 0.f, 0.f},
+	{2, "BRANDING_WAVE_SOLO_RASTER", 3u, 1016.f, 12594.095f, 362.626f, 12338.19f, 1306.748f, 511.81f, 0.f},
 	{3, "playfield_rect", 3u, 7618.f, 5800.f, 5098.f, 2050.f, 5040.f, 7500.f, 0.f},
 	{3, "rate_param", 5u, 6998.f, 1450.f, 0.f, 0.f, 0.f, 0.f, 180.f},
 	{3, "density_param", 5u, 8748.f, 1450.f, 0.f, 0.f, 0.f, 0.f, 180.f},

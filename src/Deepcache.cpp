@@ -3090,6 +3090,7 @@ DeepcacheWidget::DeepcacheWidget(DeepcacheModule* module) {
 	visual_assets::SplitPanelRenderer splitPanel(this, "res/Deepcache.panel.svg");
 	const std::string& panelPath = splitPanel.panelPath();
 	splitPanel.addLabels("res/Deepcache.labels.svg");
+	splitPanel.addPerfectWaveSoloBranding();
 
 	math::Vec planningMm(4.5f, 91.59958f);
 	math::Vec warmingMm(4.5f, 98.59958f);

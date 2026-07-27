@@ -40,5 +40,6 @@
     <circle id="warming_light" cx="450" cy="10059.958" r="50" />
     <circle id="ready_light" cx="450" cy="10759.958" r="50" />
     <circle id="error_light" cx="450" cy="11459.958" r="50" />
+    <rect id="BRANDING_WAVE_SOLO_RASTER" x="362.626" y="12338.190" width="1306.748" height="511.810" />
   </g>
 </svg>

@@ -1467,6 +1467,19 @@ int addPerfectWavePanelBranding(
 		opacity);
 }
 
+int addPerfectWaveSoloPanelBranding(
+	Widget* parent,
+	const std::string& panelPath,
+	float opacity) {
+	return addMirroredPanelRasterImages(
+		parent,
+		panelPath,
+		"res/icon/PerfectWave_Tiny.png",
+		"BRANDING_WAVE_SOLO_RASTER",
+		nullptr,
+		opacity);
+}
+
 Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSizePx) {
 	if (svgPath.empty() || panelSizePx.x <= 0.f || panelSizePx.y <= 0.f) {
 		Widget* empty = new Widget();
@@ -1552,6 +1565,10 @@ Widget* SplitPanelRenderer::panelSurfaceEffectWidget() const {
 
 int SplitPanelRenderer::addPerfectWaveBranding(float opacity) {
 	return visual_assets::addPerfectWavePanelBranding(parent_, panelPath_, opacity);
+}
+
+int SplitPanelRenderer::addPerfectWaveSoloBranding(float opacity) {
+	return visual_assets::addPerfectWaveSoloPanelBranding(parent_, panelPath_, opacity);
 }
 
 SplitPanelRenderer::~SplitPanelRenderer() {
