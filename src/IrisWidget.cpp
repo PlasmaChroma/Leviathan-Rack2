@@ -1162,7 +1162,7 @@ struct IrisWidget final : ModuleWidget {
 
     addParam(createParamCentered<LeviathanHaloKnob2>(
       mm2px(anchor("IRIS_COARSE_PARAM", Vec(13.5f, 54.f))), module, Iris::COARSE_PARAM));
-    addParam(createParamCentered<BipolarTinyClockworkGearKnob>(
+    addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(
       mm2px(anchor("IRIS_FINE_PARAM", Vec(30.48f, 54.f))), module, Iris::FINE_PARAM));
     addParam(createParamCentered<LeviathanHaloKnob2>(
       mm2px(anchor("IRIS_SCAN_PARAM", Vec(47.46f, 54.f))), module, Iris::SCAN_PARAM));

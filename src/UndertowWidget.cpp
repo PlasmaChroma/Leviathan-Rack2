@@ -289,7 +289,7 @@ struct UndertowWidget final : ModuleWidget {
     auto addTinyKnob = [&](int paramId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;
       loadAnchorPointMm(panelPath, anchorId, &posMm, fallbackMm);
-      addParam(createParamCentered<TinyClockworkGearKnob>(mm2px(posMm), module, paramId));
+      addParam(createParamCentered<DarkTinyClockworkGearKnob>(mm2px(posMm), module, paramId));
     };
     auto addModeToggle = [&](int paramId, int lightId, const char* anchorId, const Vec& fallbackMm) {
       Vec posMm;

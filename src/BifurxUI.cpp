@@ -831,7 +831,7 @@ struct BifurxWidget final : ModuleWidget {
 			addParam(balanceKnob);
 		}
 		addParam(createParamCentered<Eclipse2Knob>(mm2px(sP), module, Bifurx::SPAN_PARAM)); addParam(createLightParamCentered<LuminSlider>(mm2px(faP), module, Bifurx::FM_AMT_PARAM, Bifurx::FM_AMT_POS_LIGHT));
-		addParam(createLightParamCentered<LuminSlider>(mm2px(saP), module, Bifurx::SPAN_CV_ATTEN_PARAM, Bifurx::SPAN_CV_ATTEN_POS_LIGHT)); addParam(createParamCentered<BipolarTinyClockworkGearKnob>(mm2px(tP), module, Bifurx::TITO_PARAM));
+		addParam(createLightParamCentered<LuminSlider>(mm2px(saP), module, Bifurx::SPAN_CV_ATTEN_PARAM, Bifurx::SPAN_CV_ATTEN_POS_LIGHT)); addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(tP), module, Bifurx::TITO_PARAM));
 		addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(tP.plus(Vec(-7.0f, 0.f))), module, Bifurx::TITO_SM_LIGHT));
 		addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(tP.plus(Vec(7.0f, 0.f))), module, Bifurx::TITO_XM_LIGHT));
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(iP), module, Bifurx::IN_INPUT)); addInput(createInputCentered<Magitek2InputJack>(mm2px(vP), module, Bifurx::VOCT_INPUT)); addInput(createInputCentered<Magitek2InputJack>(mm2px(fmP), module, Bifurx::FM_INPUT));

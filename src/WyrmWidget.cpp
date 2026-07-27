@@ -599,7 +599,7 @@ struct WyrmWidget : ModuleWidget {
 		addParam(waveRight);
 
 		addParam(createParamCentered<LeviathanHaloKnob2>(mm2px(freqPos), module, Wyrm::FREQ_PARAM));
-		addParam(createParamCentered<BipolarTinyClockworkGearKnob>(mm2px(finePos), module, Wyrm::FINE_PARAM));
+		addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(finePos), module, Wyrm::FINE_PARAM));
 		{
 			Eclipse2Knob* fmAttenKnob = createParamCentered<Eclipse2Knob>(mm2px(fmAttenPos), module, Wyrm::FM_ATTEN_PARAM);
 			fmAttenKnob->setProgressRingBipolar(true);
