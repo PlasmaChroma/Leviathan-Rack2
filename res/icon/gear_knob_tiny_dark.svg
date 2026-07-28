@@ -5,8 +5,31 @@
    viewBox="0 0 46 46"
    version="1.1"
    id="gearSmallDark"
+   sodipodi:docname="gear_knob_tiny_dark.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="48.958333"
+     inkscape:cx="11.989787"
+     inkscape:cy="12"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="gearSmallDark" />
   <defs
      id="defs5">
     <linearGradient
@@ -89,11 +112,11 @@
        cx="28"
        cy="28"
        r="8.6000004"
-       style="display:inline;fill:url(#gearSmallHubDark)" />
+       style="display:none;fill:url(#gearSmallHubDark)" />
     <path
        id="gearTinyPointer"
-       d="m 26.029285,27.904395 c 0.312662,-3.600000 0.995866,-6.800000 1.770715,-10.000000 h 0.400000 c 0.774849,3.200000 1.458053,6.400000 1.770715,10.000000 -1.1559,0.615848 -2.78553,0.615848 -3.94143,0 z"
-       style="fill:#ff7512;stroke:#c45200;stroke-width:0.35;stroke-linejoin:round;stroke-opacity:0.85" />
+       d="m 26.024697,27.933874 c 0.31339,-3.406367 0.998185,-6.434251 1.774837,-9.462133 h 0.400932 c 0.776652,3.027882 1.461447,6.055766 1.774837,9.462133 -1.158591,0.582725 -2.792015,0.582725 -3.950606,0 z"
+       style="fill:#ff7512;stroke:#c45200;stroke-width:0.340853;stroke-linejoin:round;stroke-opacity:0.85" />
     <circle
        id="gearSmallCenter"
        cx="28"

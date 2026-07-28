@@ -2230,9 +2230,6 @@ float clockworkParamValue(GearKnobInvertSized* knob) {
 	return pq ? pq->getValue() : NAN;
 }
 
-static constexpr bool kClockworkLiquidShimmerEnabled = true;
-static constexpr double kClockworkLiquidShimmerDurationSec = 0.70;
-
 struct MovingSliderRail : widget::Widget {
 	app::SvgSlider* slider = nullptr;
 	std::shared_ptr<window::Svg> railSvg;
@@ -3583,35 +3580,6 @@ void SmallGoldApertureButton::onDragEnd(const event::DragEnd& e) {
 		nvgLineCap(args.vg, NVG_ROUND);
 		nvgStroke(args.vg);
 
-		if (kClockworkLiquidShimmerEnabled) {
-			const double now = system::getTime();
-			const double remaining = liquidShimmerUntil - now;
-			if (remaining > 0.0) {
-				const float fade = clamp(float(remaining / kClockworkLiquidShimmerDurationSec), 0.f, 1.f);
-				const float phase = float(std::fmod(now * 1.35, 1.0));
-				const float sweepX = ringRadius * 2.4f;
-				const float shimmerStartX = center.x - ringRadius * 1.2f + sweepX * phase;
-				NVGcolor endShimmer = shimmerColorEndBase;
-				endShimmer.a *= fade;
-				NVGpaint shimmerPaint = nvgLinearGradient(args.vg,
-					shimmerStartX, center.y - ringRadius,
-					shimmerStartX + ringRadius * 0.55f, center.y + ringRadius,
-					shimmerColorStart,
-					endShimmer);
-				nvgBeginPath(args.vg);
-				nvgArc(args.vg,
-					center.x,
-					center.y,
-					ringRadius,
-					std::min(activeStartAngle, activeEndAngle),
-					std::max(activeStartAngle, activeEndAngle),
-					NVG_CW);
-				nvgStrokePaint(args.vg, shimmerPaint);
-				nvgStrokeWidth(args.vg, std::max(1.f, activeRingWidth * 0.55f));
-				nvgLineCap(args.vg, NVG_ROUND);
-				nvgStroke(args.vg);
-			}
-		}
 	}
 
 	nvgBeginPath(args.vg);
@@ -3711,9 +3679,6 @@ void GearKnobInvertSized::step() {
 			fb->setDirty();
 		}
 	}
-	if (kClockworkLiquidShimmerEnabled && activeRing && fb && system::getTime() < activeRing->liquidShimmerUntil) {
-		fb->setDirty();
-	}
 }
 
 void GearKnobInvertSized::onChange(const ChangeEvent& e) {
@@ -3724,9 +3689,6 @@ void GearKnobInvertSized::onChange(const ChangeEvent& e) {
 	}
 	if (activeRing) {
 		activeRing->valueNorm = valueNorm;
-		if (kClockworkLiquidShimmerEnabled) {
-			activeRing->liquidShimmerUntil = system::getTime() + kClockworkLiquidShimmerDurationSec;
-		}
 	}
 	if (fb) {
 		fb->setDirty();
@@ -3879,8 +3841,6 @@ DarkTinyClockworkGearKnob::DarkTinyClockworkGearKnob() {
 		activeRing->activeColorEnd = nvgRGBA(255, 210, 154, 255);
 		activeRing->inactiveTrackColor = nvgRGBA(18, 12, 6, 240);
 		activeRing->innerLineColor = nvgRGBA(255, 210, 154, 76);
-		activeRing->shimmerColorStart = nvgRGBA(255, 215, 163, 0);
-		activeRing->shimmerColorEndBase = nvgRGBA(255, 230, 190, 118);
 	}
 	if (fb) {
 		fb->setDirty();
