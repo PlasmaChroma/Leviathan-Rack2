@@ -21,7 +21,7 @@ constexpr int kReferenceRenderWidth = 384;
 constexpr int kReferencePanelHp = 8;
 constexpr int kMaxRenderWidth = 1024;
 constexpr size_t kMaxCachedFractalFields = 32u;
-constexpr float kFractalGlassOpacity = 0.44f;
+constexpr float kFractalGlassOpacity = 0.22f;
 constexpr float kFractalGlassContrast = 1.35f;
 
 std::string libraryPath() {
@@ -310,7 +310,8 @@ struct FractalGlassOverlay::Impl {
 	int renderHeight = kReferenceRenderHeight;
 
 	Impl(const std::string& panelPath, const std::string& requestedSelectionKey,
-		int requestedRenderWidth, int requestedRenderHeight)
+		int requestedRenderWidth, int requestedRenderHeight,
+		bool synchronousFallback)
 		: selectionKey(requestedSelectionKey)
 		, renderWidth(std::max(2, requestedRenderWidth))
 		, renderHeight(std::max(2, requestedRenderHeight)) {
@@ -342,6 +343,17 @@ struct FractalGlassOverlay::Impl {
 			}
 		}
 		images.assign(regions.size(), -1);
+		if (synchronousFallback && !regions.empty()) {
+			fallbackValid = selectRandomEntry(
+				selectionKey, &fallback, &fallbackIndex);
+			fallbackAttempted = true;
+			if (fallbackValid) {
+				submitted = fallback;
+				submittedValid = true;
+				publishRendered(cachedFractalField(
+					fallback, renderWidth, renderHeight));
+			}
+		}
 		worker = std::thread([this]() { loop(); });
 	}
 
@@ -360,6 +372,22 @@ struct FractalGlassOverlay::Impl {
 		requestCv.notify_one();
 	}
 
+	void publishRendered(const CachedFractalField& source) {
+		if (!source || !source->valid()) return;
+		{
+			std::lock_guard<std::mutex> resultLock(resultMutex);
+			rendered.resize(regions.size());
+			for (size_t i = 0; i < regions.size(); ++i) {
+				iris::SourceField tinted = *source;
+				iris::applyFractalPalette(&tinted, regions[i].palette);
+				rendered[i] = std::move(tinted.rgb8);
+			}
+			renderedWidth = source->width;
+			renderedHeight = source->height;
+		}
+		generation.fetch_add(1u, std::memory_order_release);
+	}
+
 	void loop() {
 		while (true) {
 			Request current;
@@ -376,26 +404,16 @@ struct FractalGlassOverlay::Impl {
 			if (!source || !source->valid()) continue;
 			std::lock_guard<std::mutex> requestLock(requestMutex);
 			if (current.serial != nextSerial) continue;
-			{
-				std::lock_guard<std::mutex> resultLock(resultMutex);
-				rendered.resize(regions.size());
-				for (size_t i = 0; i < regions.size(); ++i) {
-					iris::SourceField tinted = *source;
-					iris::applyFractalPalette(&tinted, regions[i].palette);
-					rendered[i] = std::move(tinted.rgb8);
-				}
-				renderedWidth = source->width;
-				renderedHeight = source->height;
-			}
-			generation.fetch_add(1u, std::memory_order_release);
+			publishRendered(source);
 		}
 	}
 };
 
 FractalGlassOverlay::FractalGlassOverlay(
 	const std::string& panelPath, const std::string& selectionKey,
-	int renderWidth, int renderHeight)
-	: impl(new Impl(panelPath, selectionKey, renderWidth, renderHeight)) {}
+	int renderWidth, int renderHeight, bool synchronousFallback)
+	: impl(new Impl(panelPath, selectionKey, renderWidth, renderHeight,
+		synchronousFallback)) {}
 
 FractalGlassOverlay::~FractalGlassOverlay() = default;
 
@@ -404,6 +422,14 @@ void FractalGlassOverlay::setFramebuffer(widget::FramebufferWidget* framebuffer)
 void FractalGlassOverlay::setLiveParams(const iris::NautiloidFractalSourceParams* params) {
 	impl->liveValid = params != nullptr;
 	if (params) impl->live = *params;
+}
+
+bool FractalGlassOverlay::isReadyForCapture() const {
+	if (impl->regions.empty()) return true;
+	if (!impl->liveValid && impl->fallbackAttempted && !impl->fallbackValid) {
+		return true;
+	}
+	return impl->generation.load(std::memory_order_acquire) > 0u;
 }
 
 bool FractalGlassOverlay::hasFallbackSelection() const {
@@ -550,8 +576,9 @@ FractalGlassOverlay* addFractalGlassOverlay(
 	const int renderWidth = clamp(int(std::round(
 		float(kReferenceRenderWidth) * parent->box.size.x / referencePanelWidth)),
 		2, kMaxRenderWidth);
+	const bool modulePreview = parent->module == nullptr;
 	auto* overlay = new FractalGlassOverlay(
-		panelPath, selectionKey, renderWidth, renderHeight);
+		panelPath, selectionKey, renderWidth, renderHeight, modulePreview);
 	overlay->box.size = parent->box.size;
 	overlay->setFramebuffer(framebuffer);
 	framebuffer->addChild(overlay);

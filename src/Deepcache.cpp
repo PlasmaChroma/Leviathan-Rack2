@@ -5,6 +5,7 @@
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/ApertureLight.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 #include "visual/VisualAssets.hpp"
 
 #include <app/ModuleWidget.hpp>
@@ -59,9 +60,26 @@ struct DeepcacheWarmRenderHost;
 
 enum class FramebufferWarmResult {
 	READY,
+	PENDING_ASSET,
 	RETRY,
 	FAILED
 };
+
+bool fractalOverlaysReadyForCapture(widget::Widget* root) {
+	if (!root) return true;
+	std::deque<widget::Widget*> queue;
+	queue.push_back(root);
+	while (!queue.empty()) {
+		widget::Widget* current = queue.front();
+		queue.pop_front();
+		if (auto* overlay =
+				dynamic_cast<visual_assets::FractalGlassOverlay*>(current)) {
+			if (!overlay->isReadyForCapture()) return false;
+		}
+		for (widget::Widget* child : current->children) queue.push_back(child);
+	}
+	return true;
+}
 
 void releaseFramebuffers(widget::Widget* root) {
 	if (!root)
@@ -984,7 +1002,11 @@ public:
 			}
 			const double durationMs = (system::getTime() - startedAt) * 1000.0;
 			processedThisFrame++;
-			if (result == FramebufferWarmResult::RETRY && request.second < 3) {
+			const int retryLimit =
+				result == FramebufferWarmResult::PENDING_ASSET ? 120 : 3;
+			if ((result == FramebufferWarmResult::RETRY ||
+					result == FramebufferWarmResult::PENDING_ASSET) &&
+				request.second < retryLimit) {
 				request.second++;
 				framebufferWarmQueue_.push_back(request);
 			}
@@ -1846,6 +1868,15 @@ FramebufferWarmResult DeepcacheModelBox::warmFramebuffer() {
 		return FramebufferWarmResult::FAILED;
 	if (!APP || !APP->window || !APP->window->vg || !APP->window->fbVg)
 		return FramebufferWarmResult::RETRY;
+	if (moduleWidget) {
+		// Fractal glass is produced off-thread. Re-step the preview tree while
+		// warming and do not persist a framebuffer until every overlay has
+		// published its pixels (or reported that no fallback exists).
+		moduleWidget->step();
+		if (!fractalOverlaysReadyForCapture(moduleWidget)) {
+			return FramebufferWarmResult::PENDING_ASSET;
+		}
+	}
 	try {
 		// Rack can lazily render this framebuffer while the browser is open, in
 		// which case its resolution follows the current browser transform. Always
