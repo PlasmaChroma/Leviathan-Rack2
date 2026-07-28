@@ -3835,7 +3835,7 @@ DarkTinyClockworkGearKnob::DarkTinyClockworkGearKnob() {
 		activeRing->sourceViewBoxPx = 56.f;
 		activeRing->ringRadiusSourcePx = 16.4f;
 		activeRing->ringWidthSourcePx = 8.0f;
-		activeRing->activeRingWidthSourcePx = 5.8f;
+		activeRing->activeRingWidthSourcePx = 5.0f;
 		activeRing->innerLineWidthSourcePx = 0.0f;
 		activeRing->activeColorStart = nvgRGBA(240, 138, 36, 248);
 		activeRing->activeColorEnd = nvgRGBA(255, 210, 154, 255);
