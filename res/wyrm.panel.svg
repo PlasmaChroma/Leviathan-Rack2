@@ -82,8 +82,9 @@
     <circle id="WYRM_FINE_PARAM" cx="2225.269" cy="8622.5996" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_FM_ATTEN_PARAM" cx="5218.3877" cy="8486.3018" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_FOLD_PARAM" cx="6428.4404" cy="8464.7998" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
-    <circle id="WYRM_LOCK_BUTTON" cx="6392" cy="7572" r="160" style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
-    <circle id="WYRM_RESET_BUTTON" cx="6822" cy="7572" r="160" style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_LOCK_BUTTON" cx="6269.5" cy="7572" r="160" style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_EDITOR_EXPAND_BUTTON" cx="5717" cy="7572" r="160" style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_RESET_BUTTON" cx="6822" cy="7572" r="160" style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_WAVEFORM_SELECT" cx="622" cy="7575" r="160" style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_SLITHER_PARAM" cx="709.98511" cy="11280" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_SLITHER_SPEED_PARAM" cx="2860" cy="11280" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />

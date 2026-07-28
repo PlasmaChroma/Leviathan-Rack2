@@ -535,7 +535,8 @@ struct WyrmWidget : ModuleWidget {
 		applyPt("WYRM_FOLD_CV_INPUT", &foldCvPos);
 		applyPt("WYRM_RAW_OUTPUT", &rawOutPos);
 		applyPt("WYRM_OUT_OUTPUT", &outPos);
-		const Vec expandEditorPos = lockPos.plus(Vec(-6.75f, 0.f));
+		Vec expandEditorPos = lockPos.plus(Vec(-6.75f, 0.f));
+		applyPt("WYRM_EDITOR_EXPAND_BUTTON", &expandEditorPos);
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 		previewBuildTimer.markAnchorsDone();
 

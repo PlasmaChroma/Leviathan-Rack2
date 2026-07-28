@@ -247,9 +247,9 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="2.8284272"
-   inkscape:cx="85.383142"
-   inkscape:cy="367.87229"
+   inkscape:zoom="8.0000002"
+   inkscape:cx="210.99999"
+   inkscape:cy="310.68749"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
@@ -470,16 +470,22 @@
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
    id="WYRM_LOCK_BUTTON"
-   cx="6392"
+   cx="6269.5"
    cy="7572"
    r="160"
-   style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+   style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle
+   id="WYRM_EDITOR_EXPAND_BUTTON"
+   cx="5717"
+   cy="7572"
+   r="160"
+   style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
    id="WYRM_RESET_BUTTON"
    cx="6822"
    cy="7572"
    r="160"
-   style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+   style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
    id="WYRM_WAVEFORM_SELECT"
    cx="622"
@@ -745,8 +751,20 @@
    width="6950.8921"
    height="6331.0181"
    style="display:inline;fill:none;stroke:#5841bf;stroke-width:40.3259;stroke-dasharray:none;stroke-opacity:1" />
-<g id="perfect_wave_raster_anchors" style="display:none">
-  <rect id="BRANDING_WAVE_LEFT_RASTER" x="665.610" y="12338.190" width="1306.748" height="511.810" />
-  <rect id="BRANDING_WAVE_RIGHT_RASTER" x="5139.674" y="12338.190" width="1306.748" height="511.810" />
+<g
+   id="perfect_wave_raster_anchors"
+   style="display:none">
+  <rect
+   id="BRANDING_WAVE_LEFT_RASTER"
+   x="665.610"
+   y="12338.190"
+   width="1306.748"
+   height="511.810" />
+  <rect
+   id="BRANDING_WAVE_RIGHT_RASTER"
+   x="5139.674"
+   y="12338.190"
+   width="1306.748"
+   height="511.810" />
 </g>
 </svg>
