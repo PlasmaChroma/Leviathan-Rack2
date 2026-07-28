@@ -28,19 +28,27 @@ Result referenceCrossingsAndSettles() {
 	float highBandActivity = 0.f;
 	float previous = 0.f;
 	float lowpass = 0.f;
+	float upperBandLowpass = 0.f;
 	double analyzedEnergy = 0.0;
 	double sub180Energy = 0.0;
+	double upperBandEnergy = 0.0;
 	const float lowpassAlpha = 1.f - std::exp(
 		-2.f * 3.14159265358979323846f * 180.f * dt);
-	for (int i = 0; i < 48000 * 10; ++i) {
+	const float upperBandLowpassAlpha = 1.f - std::exp(
+		-2.f * 3.14159265358979323846f * 1200.f * dt);
+	for (int i = 0; i < 48000 * 20; ++i) {
 		const doorstop::Frame frame = engine.process(dt);
 		peak = std::max(peak, std::fabs(frame.outputVolts));
 		highBandActivity += std::fabs(frame.outputVolts - previous);
 		previous = frame.outputVolts;
 		lowpass += (frame.outputVolts - lowpass) * lowpassAlpha;
+		upperBandLowpass +=
+			(frame.outputVolts - upperBandLowpass) * upperBandLowpassAlpha;
 		if (i >= int(0.050f * 48000.f) && i < int(2.f * 48000.f)) {
 			analyzedEnergy += double(frame.outputVolts) * double(frame.outputVolts);
 			sub180Energy += double(lowpass) * double(lowpass);
+			const double upper = double(frame.outputVolts - upperBandLowpass);
+			upperBandEnergy += upper * upper;
 		}
 		finite = finite
 			&& std::isfinite(frame.outputVolts)
@@ -54,14 +62,24 @@ Result referenceCrossingsAndSettles() {
 	}
 	const std::uint64_t crossings = engine.getDiagnostics().crossingCount;
 	const float sub180Ratio = float(sub180Energy / std::max(analyzedEnergy, 1e-12));
+	const float upperBandRatio = float(
+		upperBandEnergy / std::max(analyzedEnergy, 1e-12));
+	// The perceptual fundamental belongs near 375 Hz; the 22 Hz bend conducts
+	// the gesture but must not become an audible subsonic throb.
+	const bool balancedLowBody = sub180Ratio < 0.18f;
+	// The reference contains a persistent 1.2--3 kHz body, but the upper modes
+	// must remain well below the lower metallic resonances.
+	const bool controlledUpperBody =
+		upperBandRatio > 0.08f && upperBandRatio < 0.55f;
 	const bool pass = finite && slept && peak > 0.1f
 		&& highBandActivity > 10.f && crossings >= 8u
-		&& sub180Ratio < 0.35f;
-	return {"Reference engine articulates returning crossings and settles", pass,
+		&& balancedLowBody && controlledUpperBody;
+	return {"Reference engine balances low body and upper activity, articulates crossings, and settles", pass,
 		"peak=" + std::to_string(peak)
 			+ " activity=" + std::to_string(highBandActivity)
 			+ " crossings=" + std::to_string(crossings)
 			+ " sub180Ratio=" + std::to_string(sub180Ratio)
+			+ " upperBandRatio=" + std::to_string(upperBandRatio)
 			+ " slept=" + std::to_string(slept)};
 }
 
@@ -78,7 +96,10 @@ Result supportedSampleRatesRemainFinite() {
 		bool finite = true;
 		bool slept = false;
 		float peak = 0.f;
-		for (int i = 0; i < int(rate * 10.f); ++i) {
+		// The measured reference body is intentionally long-lived. Allow enough
+		// time for the longest 8 s T60 mode to cross the conservative sleep
+		// threshold after the second strike.
+		for (int i = 0; i < int(rate * 20.f); ++i) {
 			if (i == int(rate * 0.31f)) engine.strike(-0.8f);
 			const doorstop::Frame frame = engine.process(dt);
 			peak = std::max(peak, std::fabs(frame.outputVolts));

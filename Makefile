@@ -100,12 +100,25 @@ RACK_TEST_WARN_FLAGS := -Wno-unused-parameter
 RACK_TEST_OPT_FLAGS := -O1
 CXX_MACHINE := $(shell $(CXX) -dumpmachine 2>/dev/null)
 
-.PHONY: generate-panel-anchor-atlas validate-plugin-json
+.PHONY: generate-panel-anchor-atlas validate-plugin-json doorstop-reference-grid
 generate-panel-anchor-atlas:
 	python3 tools/generate_panel_anchor_atlas.py
 
 validate-plugin-json:
 	python3 tools/validate_plugin_json_tags.py plugin.json
+
+build/tools/doorstop_reference_render: tools/doorstop_reference_render.cpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build
+	mkdir -p build/tools
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tools/doorstop_reference_render.cpp src/ReferenceSpringEngine.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
+
+doorstop-reference-grid: build/tools/doorstop_reference_render
+	mkdir -p build/doorstop-reference-renders
+	@for velocity in 0.5 0.75 1.0; do \
+		for seed in 77 305419896 3735928559; do \
+			name=build/doorstop-reference-renders/reference-v$${velocity}-seed$${seed}.wav; \
+			build/tools/doorstop_reference_render $$name --velocity $$velocity --seed $$seed; \
+		done; \
+	done
 
 ifneq (,$(findstring mingw,$(CXX_MACHINE)))
 LDFLAGS += -lws2_32

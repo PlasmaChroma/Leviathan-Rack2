@@ -8,19 +8,22 @@ namespace doorstop {
 namespace {
 
 constexpr std::array<float, REFERENCE_MODE_COUNT> BASE_FREQUENCIES {{
-	245.f, 318.f, 405.f, 545.f, 730.f, 980.f, 1370.f, 2050.f
+	375.f, 586.f, 773.f, 1289.f, 1580.f, 2508.f, 3380.f, 4680.f
 }};
 constexpr std::array<float, REFERENCE_MODE_COUNT> BASE_DECAYS {{
-	1.35f, 1.18f, 1.02f, 0.78f, 0.58f, 0.42f, 0.27f, 0.16f
+	8.4f, 8.4f, 7.9f, 7.9f, 6.8f, 5.8f, 4.2f, 3.15f
 }};
 constexpr std::array<float, REFERENCE_MODE_COUNT> BASE_IMPACT {{
-	180.f, 210.f, 245.f, 285.f, 330.f, 390.f, 470.f, 560.f
+	235.f, 270.f, 285.f, 310.f, 275.f, 245.f, 155.f, 90.f
 }};
 constexpr std::array<float, REFERENCE_MODE_COUNT> BASE_CROSSING {{
-	75.f, -62.f, 58.f, -48.f, 40.f, -33.f, 25.f, -18.f
+	18.f, -14.f, 11.f, -8.f, 6.f, -4.f, 2.5f, -1.5f
 }};
 constexpr std::array<float, REFERENCE_MODE_COUNT> BASE_OUTPUT {{
-	1.00f, 0.88f, 0.76f, 0.62f, 0.49f, 0.37f, 0.25f, 0.16f
+	1.07f, 0.95f, 0.95f, 2.15f, 2.35f, 3.58f, 4.30f, 7.40f
+}};
+constexpr std::array<float, REFERENCE_MODE_COUNT> BASE_WARP_DEPTH {{
+	0.008f, 0.020f, 0.038f, 0.070f, 0.060f, 0.040f, 0.025f, 0.015f
 }};
 
 float clampf(float value, float low, float high) {
@@ -96,8 +99,11 @@ float ReferenceSpringEngine::specimenUnit(std::uint32_t propertyTag) const {
 }
 
 void ReferenceSpringEngine::updateCoefficients() {
-	radiationAttack = safeDecay(0.0008f, sampleTime);
-	radiationRelease = safeDecay(0.0030f, sampleTime);
+	// The audible lobes are radiation windows over continuously stored modal
+	// energy. Fast but rounded edges preserve articulation without manufacturing
+	// a new broadband attack at every center crossing.
+	radiationAttack = safeDecay(0.0016f, sampleTime);
+	radiationRelease = safeDecay(0.0065f, sampleTime);
 	energySmoothing = safeDecay(0.004f, sampleTime);
 	impactSoftDecay = safeDecay(0.003f, sampleTime);
 	impactHardDecay = safeDecay(0.012f, sampleTime);
@@ -105,7 +111,7 @@ void ReferenceSpringEngine::updateCoefficients() {
 	strikeLightDecay = safeDecay(0.075f, sampleTime);
 	const float maxCutoff = 0.45f * sampleRate;
 	impactSoftAlpha = 1.f - std::exp(-2.f * PI * std::min(2400.f, maxCutoff) * sampleTime);
-	impactHardAlpha = 1.f - std::exp(-2.f * PI * std::min(8500.f, maxCutoff) * sampleTime);
+	impactHardAlpha = 1.f - std::exp(-2.f * PI * std::min(6200.f, maxCutoff) * sampleTime);
 	impactRejectAlpha = 1.f - std::exp(-2.f * PI * 180.f * sampleTime);
 	flexLowpassAlpha = 1.f - std::exp(-2.f * PI * 120.f * sampleTime);
 	dcPole = std::exp(-2.f * PI * 10.f * sampleTime);
@@ -114,19 +120,30 @@ void ReferenceSpringEngine::updateCoefficients() {
 
 void ReferenceSpringEngine::updateWearAndSpecimen() {
 	const float wear = breakIn * breakIn * (3.f - 2.f * breakIn);
-	baseFrequencyHz = 16.f * lerpf(1.f, 0.84f, wear);
-	dampingRatio = 0.020f * lerpf(1.f, 0.65f, wear);
-	nonlinearStiffness = 1.4f * lerpf(1.f, 0.72f, wear);
+	// The physical bend is the conductor of the audible boing. Its roughly
+	// 22 Hz full cycle exposes the modal body at both center crossings, matching
+	// the reference's 45--47 Hz audible lobe train.
+	baseFrequencyHz = 23.f * lerpf(1.f, 0.84f, wear);
+	// Preserve the macroscopic swing long enough for the audible body to form a
+	// sequence of distinct boings instead of collapsing into one short impact.
+	dampingRatio = 0.012f * lerpf(1.f, 0.65f, wear);
+	nonlinearStiffness = 0.55f * lerpf(1.f, 0.72f, wear);
 	maximumDisplacement = 2.f * lerpf(1.f, 1.15f, wear);
 	baseOmega = 2.f * PI * baseFrequencyHz;
 	baseOmegaSq = baseOmega * baseOmega;
 	springDamping = 2.f * dampingRatio * baseOmega;
 	maximumVelocity = 4.f * baseOmega;
 	energyCeiling = std::max(springPotential(maximumDisplacement), 1e-4f);
-	pulseExponent = 2.4f * (1.f + 0.08f * specimenUnit(0x800u));
-	radiationAsymmetry = 0.08f * specimenUnit(0x801u);
+	// A nonzero floor is essential: the recording's metallic ridges remain
+	// audible between lobes. Curvature varies by specimen without an expensive
+	// per-sample pow().
+	radiationCurvature = clampf(
+		0.55f + 0.10f * specimenUnit(0x800u), 0.4f, 0.7f);
+	radiationFloor = clampf(
+		0.24f + 0.025f * specimenUnit(0x801u), 0.20f, 0.28f);
+	radiationAsymmetry = 0.07f * specimenUnit(0x802u);
 
-	const float mountFrequency = 96.f * (1.f + 0.06f * specimenUnit(0x100u));
+	const float mountFrequency = 82.f * (1.f + 0.06f * specimenUnit(0x100u));
 	const float mountOmega = 2.f * PI * mountFrequency;
 	mountOmegaSq = mountOmega * mountOmega;
 	mountGamma = LN_1000 / 0.11f;
@@ -148,6 +165,8 @@ void ReferenceSpringEngine::updateWearAndSpecimen() {
 			* (1.f + 0.10f * specimenUnit(0x600u + tag));
 		directionTilt[i] = specimenUnit(0x700u + tag)
 			* lerpf(0.03f, 0.10f, float(i) / float(REFERENCE_MODE_COUNT - 1));
+		frequencyWarpDepth[i] = BASE_WARP_DEPTH[i]
+			* (1.f + 0.15f * specimenUnit(0x900u + tag));
 		modeVelocityLimit[i] = std::max(impactExcitation[i] * 3.f, 300.f);
 	}
 }
@@ -322,10 +341,11 @@ bool ReferenceSpringEngine::processFlexAndCrossing() {
 }
 
 void ReferenceSpringEngine::exciteCrossing(float normalizedSpeed) {
-	const float flexEnergy = clampf(normalizedFlexEnergy(), 0.f, 1.f);
 	const float available = clampf(1.f - normalizedModalEnergy(), 0.f, 1.f);
-	const float strength = std::pow(normalizedSpeed, 1.8f)
-		* std::sqrt(flexEnergy) * available;
+	// Crossing excitation is reinforcement, not the source of each lobe. The
+	// modal body is filled by the strike and persists on its own; this restrained
+	// transfer merely keeps the slow and fast structures perceptually coupled.
+	const float strength = 0.22f * normalizedSpeed * available;
 	for (int i = 0; i < REFERENCE_MODE_COUNT; ++i) {
 		const float directional = 1.f + lastDirection * directionTilt[i];
 		modes[i].velocity += crossingExcitation[i] * strength * directional;
@@ -336,9 +356,11 @@ void ReferenceSpringEngine::exciteCrossing(float normalizedSpeed) {
 
 float ReferenceSpringEngine::processModes() {
 	const float energy = clampf(smoothedEnergy, 0.f, 1.f);
-	const float pitchWarp = 1.f + 0.18f * std::pow(energy, 0.62f);
 	float output = 0.f;
 	for (int i = 0; i < REFERENCE_MODE_COUNT; ++i) {
+		// Measured ridges settle by different amounts. A small mode-specific
+		// warp avoids the synthetic global pitch dive of the previous model.
+		const float pitchWarp = 1.f + frequencyWarpDepth[i] * energy;
 		const float frequency = std::min(
 			restingFrequencyHz[i] * pitchWarp,
 			0.18f * sampleRate);
@@ -376,7 +398,7 @@ float ReferenceSpringEngine::processMount() {
 		- 2.f * mountGamma * mountVelocity;
 	mountVelocity += mountAcceleration * sampleTime;
 	mountPosition += mountVelocity * sampleTime;
-	return mountPosition * 0.28f;
+	return mountPosition * 0.36f;
 }
 
 float ReferenceSpringEngine::processFlexAudio() {
@@ -438,25 +460,36 @@ Frame ReferenceSpringEngine::process(float requestedSampleTime) {
 	const float flexEnergy = clampf(normalizedFlexEnergy(), 0.f, 1.f);
 	smoothedEnergy = energySmoothing * smoothedEnergy
 		+ (1.f - energySmoothing) * flexEnergy;
-	const float articulationVelocity = clampf(
-		std::fabs(springVelocity) / 150.f, 0.f, 1.f);
-	const float targetPulse = std::pow(articulationVelocity, pulseExponent);
+	// Radiation follows bend phase more than absolute swing magnitude. Using a
+	// phase-normalized velocity keeps later windows distinct instead of making
+	// their peaks collapse with the macroscopic oscillator's energy.
+	const float phaseVelocity = std::fabs(springVelocity);
+	const float phaseDisplacement =
+		baseOmega * std::fabs(displacement);
+	const float articulationVelocity = phaseVelocity
+		/ std::max(phaseVelocity + phaseDisplacement, 1e-6f);
+	const float phasePulse = articulationVelocity
+		* lerpf(1.f, articulationVelocity, radiationCurvature);
+	const float targetPulse = phasePulse * (0.72f + 0.28f * flexEnergy);
 	const float smoothing = targetPulse > radiationEnvelope
 		? radiationAttack : radiationRelease;
 	radiationEnvelope = smoothing * radiationEnvelope
 		+ (1.f - smoothing) * targetPulse;
 	const float directionalRadiation = 1.f + lastDirection * radiationAsymmetry;
-	const float radiationGate = (0.08f + 0.92f * radiationEnvelope)
+	const float radiationGate = (radiationFloor
+		+ (1.f - radiationFloor) * radiationEnvelope)
 		* directionalRadiation;
 
 	const float modal = processModes();
 	const float impact = processImpact();
 	const float mount = processMount();
 	const float flex = processFlexAudio();
-	float signal = impact * 0.62f + mount * 0.40f + flex * 0.35f
-		+ modal * radiationGate * 1.15f;
+	float signal = impact * 0.50f + mount * 0.20f + flex * 0.15f
+		+ modal * radiationGate * 2.25f;
 	signal = processDcBlocker(signal);
-	const float outputVolts = 5.f * levi_math::tanhAudio(signal * 4.5f);
+	// Keep the safety saturation from turning the strengthened lower modes
+	// into a synthetic spray of upper harmonics.
+	const float outputVolts = 5.f * levi_math::tanhAudio(signal * 2.2f);
 	strikeLightEnvelope *= strikeLightDecay;
 
 	diagnostics.radiationGate = radiationGate;

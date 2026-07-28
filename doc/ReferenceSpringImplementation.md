@@ -347,11 +347,11 @@ These are starting regions for fitting, not acceptance values:
 
 | Parameter | Initial value or range |
 | --- | ---: |
-| Resting flex frequency | 16 Hz |
+| Resting flex frequency | 23 Hz |
 | Worn flex frequency scale | 0.84 |
-| Fresh damping ratio | 0.020 |
+| Fresh damping ratio | 0.012 |
 | Worn damping scale | 0.65 |
-| Nonlinear stiffness | 1.4 |
+| Nonlinear stiffness | 0.55 |
 | Maximum displacement | 2.0 internal units |
 
 The flex oscillator drives animation, radiation timing, pitch warp, retrigger
@@ -423,26 +423,33 @@ the exact threshold values.
 
 ## 9. Motion articulation
 
-Normalize velocity using the flex oscillator's current safe maximum:
+Normalize velocity by bend phase rather than absolute swing amplitude:
 
 ```cpp
-float v = clamp(abs(flex.velocity) / maximumVelocity, 0.f, 1.f);
-float targetPulse = pow(v, pulseExponent);
+float phaseVelocity = abs(flex.velocity);
+float phaseDisplacement = omega0 * abs(flex.displacement);
+float v = phaseVelocity
+    / max(phaseVelocity + phaseDisplacement, epsilon);
+float phasePulse = v * lerp(1.f, v, radiationCurvature);
+float targetPulse =
+    phasePulse * (0.72f + 0.28f * normalizedFlexEnergy);
 ```
 
 Start with:
 
 ```text
-pulseExponent:       2.4
-radiationFloor:      0.08
-radiationDepth:      0.92
-pulse attack:        0.8 ms
-pulse release:       3.0 ms
+radiationCurvature:  0.55
+radiationFloor:      0.24
+radiationDepth:      0.76
+pulse attack:        1.6 ms
+pulse release:       6.5 ms
 ```
 
 Smooth `targetPulse` with separate one-pole attack and release coefficients.
 The smoothing suppresses sample-level gain roughness while preserving distinct
-half-cycle lobes.
+half-cycle lobes. Phase normalization is important: later windows remain
+distinct as the bend shrinks, while the persistent modal bank—not an
+artificial sequence of new impacts—sets the long decay.
 
 Direction is the sign of flex velocity at the most recent valid crossing. If
 no crossing has occurred, use strike direction. Direction may influence:
@@ -467,19 +474,21 @@ constexpr int REFERENCE_MODE_COUNT = 8;
 
 constexpr std::array<float, REFERENCE_MODE_COUNT>
 REFERENCE_REST_FREQUENCIES_HZ {{
-    245.f,
-    318.f,
-    405.f,
-    545.f,
-    730.f,
-    980.f,
-    1370.f,
-    2050.f
+    375.f,
+    586.f,
+    773.f,
+    1289.f,
+    1580.f,
+    2508.f,
+    3380.f,
+    4680.f
 }};
 ```
 
-These are bootstrap values. They must ultimately be replaced or adjusted by
-the reproducible fitting loop. Do not expose them as UI parameters.
+The first six values follow the stable peaks measured in the isolated 81458
+recording. The last two supply restrained upper structure and must remain
+subordinate so the body does not become tinny. Do not expose these as UI
+parameters.
 
 Each mode stores position and velocity. Use a bounded semi-implicit update or
 another fixed-cost resonator formulation demonstrated stable by the
@@ -487,56 +496,55 @@ sample-rate tests. Clamp effective frequency below `0.18 * sampleRate`.
 
 ### 10.2 Decay and gain
 
-Initial decay regions:
+Current T60 values:
 
 ```text
-245–405 Hz:    0.9–1.5 s T60
-545–980 Hz:    0.35–0.9 s T60
-1370–2050 Hz:  0.12–0.45 s T60
+375, 586 Hz:          8.4 s
+773, 1289 Hz:         7.9 s
+1580, 2508 Hz:        6.8, 5.8 s
+3380, 4680 Hz:        4.2, 3.15 s
 ```
 
-Initial impact and output gains should broadly fall with frequency, but the
-hard-strike brightness curve may increase upper-mode excitation.
+Output gains compensate for oscillator displacement falling with frequency,
+then taper the last two modes. Strike brightness may still increase upper-mode
+excitation, but upper energy remains bounded and is checked independently.
 
 All mode state persists between radiation lobes. Crossing articulation adds to
 the existing state; it never clears or recreates a mode.
 
-### 10.3 Shared pitch descent
+### 10.3 Mode-dependent pitch descent
 
 ```cpp
-float pitchWarp =
-    1.f
-    + highEnergyPitchRise
-        * pow(normalizedFlexEnergy, pitchWarpExponent);
-
 float effectiveFrequency =
     restingFrequency
     * specimenFrequencyScale
-    * pitchWarp
-    * individualDynamicWarp;
+    * (1.f + modeWarpDepth[i] * smoothedFlexEnergy);
 ```
 
-Starting region:
+Current warp depths:
 
 ```text
-highEnergyPitchRise:    0.12–0.22
-pitchWarpExponent:      0.45–0.80
-individualDynamicWarp:  within ±1.5%
+375 Hz:       0.8%
+586 Hz:       2.0%
+773 Hz:       3.8%
+1289 Hz:      7.0%
+1580 Hz:      6.0%
+2508 Hz:      4.0%
+3380 Hz:      2.5%
+4680 Hz:      1.5%
 ```
 
-The shared component must dominate. All important modes should audibly descend
-together as flex energy decays. Warp is computed from a smoothed energy value
-and must not introduce discontinuities on retrigger.
+The measured ridges do not share one large coherent chirp. The 375 Hz anchor
+stays nearly fixed while upper modes settle by different amounts. Warp is
+computed from a smoothed energy value and must not introduce discontinuities
+on retrigger.
 
 ### 10.4 Crossing excitation and energy bound
 
 For a crossing with normalized speed \(v\):
 
 ```cpp
-float rawStrength =
-    crossingGain
-    * pow(v, crossingExponent)
-    * sqrt(clamp(normalizedFlexEnergy, 0.f, 1.f));
+float rawStrength = 0.22f * v;
 ```
 
 Compute current normalized modal energy and a soft remaining-capacity term:
@@ -551,15 +559,11 @@ float crossingStrength = rawStrength * available;
 Then apply fixed, specimen-adjusted, signed per-mode coupling coefficients.
 Mode velocities and total modal energy must remain bounded after the update.
 
-Starting values:
-
-```text
-crossingExponent:    1.5–2.5
-modalEnergyCeiling:  calibrated so repeated full strikes remain below limiter
-```
-
-The crossing must not reset modal phase. Direction changes the coupling vector
-slightly; it does not simply invert every mode.
+Crossing coefficients are approximately one order of magnitude below the
+initial impact coefficients. The crossing must not reset modal phase.
+Direction changes the coupling vector slightly; it does not simply invert
+every mode. This path is weak reinforcement; radiation gating supplies the
+audible lobes.
 
 ## 11. Impact, mount, flex, and optional texture paths
 
@@ -585,7 +589,7 @@ lesson to hard retriggers.
 
 The flex path may contain normalized velocity and acceleration, but it must be
 high-passed and mixed faintly. It exists to retain tactile motion and
-retrigger weight, not to make 16 Hz the perceived pitch.
+retrigger weight, not to make 23 Hz the perceived pitch.
 
 ### 11.4 Dispersive texture
 
@@ -632,7 +636,7 @@ Reference V1 may vary:
 | Modal T60 | ±12% |
 | Directional radiation | ±10% |
 | Mount frequency | ±6% |
-| Pulse exponent | ±8% |
+| Radiation curvature and floor | approximately ±10% |
 | Upper-mode gain/brightness | ±12% |
 
 Variation is applied when the seed or break-in changes, not per sample.
@@ -834,7 +838,7 @@ audio-thread logging.
 * Lobe amplitude decays over time in the absence of retriggering.
 * Modal energy never exceeds its configured ceiling.
 * Radiation floor preserves modal continuity between lobes.
-* Shared pitch warp decreases as flex energy decreases.
+* Mode-dependent pitch warp decreases as flex energy decreases.
 * Directional alternation remains inside configured bounds.
 * Same seed and commands produce identical output.
 * Different seeds produce different but bounded output.
@@ -956,7 +960,7 @@ Reference V1 is complete when:
    lobes after the initial impact.
 6. The body remains continuous between lobes and does not phase-reset.
 7. Repeated crossings and retriggers cannot create unbounded modal energy.
-8. Shared pitch descent, directional asymmetry, and specimen variation remain
+8. Mode-dependent pitch descent, directional asymmetry, and specimen variation remain
    bounded and stable.
 9. Every supported sample rate remains finite, within ±5 V, and eventually
    sleeps.

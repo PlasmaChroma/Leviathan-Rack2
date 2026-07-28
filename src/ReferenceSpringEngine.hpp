@@ -67,7 +67,8 @@ private:
 	float springDamping = 0.f;
 	float maximumVelocity = 1.f;
 	float energyCeiling = 1.f;
-	float pulseExponent = 2.4f;
+	float radiationCurvature = 0.5f;
+	float radiationFloor = 0.3f;
 	float radiationAsymmetry = 0.f;
 
 	float displacement = 0.f;
@@ -86,6 +87,7 @@ private:
 	std::array<float, REFERENCE_MODE_COUNT> crossingExcitation {};
 	std::array<float, REFERENCE_MODE_COUNT> outputGain {};
 	std::array<float, REFERENCE_MODE_COUNT> directionTilt {};
+	std::array<float, REFERENCE_MODE_COUNT> frequencyWarpDepth {};
 	std::array<float, REFERENCE_MODE_COUNT> modeVelocityLimit {};
 
 	float radiationEnvelope = 0.f;
