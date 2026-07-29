@@ -99,7 +99,6 @@ private:
 	float mountPosition = 0.f;
 	float mountVelocity = 0.f;
 	float strikeLightEnvelope = 0.f;
-	float flexLowpass = 0.f;
 	float dcPreviousInput = 0.f;
 	float dcPreviousOutput = 0.f;
 	float quietTime = 0.f;
@@ -117,7 +116,6 @@ private:
 	float mountOmegaSq = 0.f;
 	float mountGamma = 0.f;
 	float strikeLightDecay = 0.f;
-	float flexLowpassAlpha = 0.f;
 	float dcPole = 0.f;
 
 	ReferenceDiagnostics diagnostics;

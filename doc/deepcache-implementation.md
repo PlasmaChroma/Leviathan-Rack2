@@ -8,10 +8,13 @@ The binary index is intentionally small and fast to validate; it records each
 cache key, artifact fingerprint, pack offset and length, image dimensions, and
 payload checksum.
 
-Startup performs one sequential read of the complete pack. QOI decoding runs on
-the archive worker, while NanoVG image creation remains on Rack's draw thread.
-Decoded RGBA and compressed pack data remain resident so browser scrolling does
-not cause disk reads and graphics-context recreation does not require disk I/O.
+Startup validates the bounded index before accessing the pack. Index files are
+limited to 64 MB; each referenced offset, encoded length, decoded size, and image
+dimension is validated against the physical pack before use. The archive worker
+reads and decodes one indexed QOI span at a time, so multi-gigabyte databases do
+not require equivalent startup RAM. NanoVG image creation remains on Rack's draw
+thread. Graphics-context recreation requests bounded per-entry re-decodes from
+disk rather than retaining the complete compressed pack in memory.
 
 Normal updates append instead of rewriting the pack. Compaction is requested
 automatically only after at least 64 MB is reclaimable and dead space reaches

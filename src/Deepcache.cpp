@@ -833,6 +833,15 @@ public:
 		drainArchiveCommits();
 		drainArchiveDecoded();
 		publishDatabase();
+		if (archive_.state() == deepcache::DatabaseState::ERROR) {
+			startRequested_ = false;
+			if (activeGeneration_ != 0)
+				worker_.cancel(activeGeneration_);
+			activeGeneration_ = 0;
+			if (state_ != deepcache::CacheState::ERROR)
+				setState(deepcache::CacheState::ERROR);
+			return;
+		}
 		if (startRequested_ && archiveReadyForPlanning()) {
 			startRequested_ = false;
 			start();
@@ -1115,6 +1124,7 @@ private:
 	bool archiveReadyForPlanning() const {
 		const deepcache::DatabaseState databaseState = archive_.state();
 		return databaseState != deepcache::DatabaseState::LOADING &&
+		       databaseState != deepcache::DatabaseState::ERROR &&
 		       !archive_.hasPendingDecoded() && persistentUploadQueue_.empty();
 	}
 
@@ -1755,7 +1765,7 @@ bool DeepcacheModelBox::captureFramebuffer(std::vector<std::uint8_t>& rgba, int&
 	const math::Vec size = framebuffer->getFramebufferSize();
 	width = static_cast<int>(std::round(size.x));
 	height = static_cast<int>(std::round(size.y));
-	if (width <= 0 || height <= 0 || width > 8192 || height > 8192 ||
+	if (width <= 0 || height <= 0 || width > 16384 || height > 16384 ||
 	    static_cast<std::uint64_t>(width) * height * 4ull > 128ull * 1024ull * 1024ull)
 		return false;
 	rgba.resize(static_cast<std::size_t>(width) * height * 4u);
@@ -3344,7 +3354,7 @@ void DeepcacheWidget::appendContextMenu(ui::Menu* menu) {
 		child->addChild(createMenuLabel("Resident records: " + std::to_string(manager->residentRecordCount())));
 		child->addChild(createMenuLabel("Resident previews: " + std::to_string(manager->residentPreviewCount())));
 		child->addChild(createMenuLabel("Framebuffer-ready: " + std::to_string(manager->framebufferReadyPreviewCount())));
-		child->addChild(createMenuLabel(string::f("Hot QOI: %.1f MB", manager->hotQoiBytes() / (1024.0 * 1024.0))));
+		child->addChild(createMenuLabel(string::f("Volatile QOI: %.1f MB", manager->hotQoiBytes() / (1024.0 * 1024.0))));
 		child->addChild(createMenuLabel(string::f("Retained RGBA: %.1f MB", manager->retainedRgbaBytes() / (1024.0 * 1024.0))));
 		child->addChild(createMenuLabel(string::f("Pending upload RGBA: %.1f MB", manager->pendingUploadBytes() / (1024.0 * 1024.0))));
 		child->addChild(createMenuLabel(string::f("Estimated GPU RGBA: %.1f MB", manager->estimatedGpuBytes() / (1024.0 * 1024.0))));

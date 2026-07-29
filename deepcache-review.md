@@ -56,17 +56,17 @@ for every warmed preview.
 Permanent decoded-RGBA residency is now removed for recoverable entries. The UI
 releases pixels after GPU upload and a confirmed archive commit; archive-loaded
 entries release them immediately after upload. Startup handoff plus pending UI
-uploads are bounded, and the Cache statistics menu reports hot QOI, retained
+uploads are bounded, and the Cache statistics menu reports volatile QOI, retained
 RGBA, pending upload RGBA, and estimated GPU RGBA separately. On graphics-context
-recreation, the worker re-decodes from the hot pack without disk I/O, prioritizes
+recreation, the worker re-decodes bounded indexed spans from disk, prioritizes
 visible cards, tags results by context generation, uploads them, and releases the
 temporary pixels again. Read-only DAW workers service the same re-decode requests.
 Missing previews rendered by a read-only worker are encoded into volatile QOI
 entries, allowing the second DAW context to release RGBA and restore later
 without acquiring the database write lease.
 
-The remaining risk is the combination of a fully resident compressed pack and
-one uncompressed GPU texture for every card, especially at 200%. Measure the new
+The remaining risk is one uncompressed GPU texture for every card, especially
+at 200%. Measure the new
 steady state on Windows before choosing a GPU admission/LRU policy; retaining
 every GPU image is the feature that eliminates first-scroll upload latency.
 
@@ -189,20 +189,30 @@ Inactive widgets perform a throttled ownership check once per second. A survivin
 duplicate automatically claims the scene after the active owner is removed. The
 same path promotes an MB-standby Deepcache after Stoermelder MB is removed.
 
-### P2-7: Full-pack residency has no memory ceiling or admission policy — partially resolved
+### P2-7: Full-pack residency needs an admission policy — resolved
 
-Loading the entire compressed pack is an explicit latency choice, but the 2x
-raster experiment makes the total-residency problem severe enough to track as
-open P1-A above. In particular,
-`readPackFile()` sizes a vector from the complete file length
-([DeepcacheArchive.cpp](src/DeepcacheArchive.cpp#L268)). The worker now catches
-allocation exceptions and reports an archive error, yet a very large valid pack
-can still cause severe process memory pressure or an OS-level kill before C++
-recovery. Both the archive decoded queue and UI upload handoff are now bounded;
+The archive no longer mirrors the complete pack in RAM. Startup validates the
+bounded index, filters it to the current Rack model set, validates every indexed
+span against the physical pack size, and reads/decompresses one bounded entry at
+a time on the archive worker. Graphics-context restoration re-reads only the
+requested indexed entry. Compaction likewise copies bounded indexed spans rather
+than materializing a second complete pack in memory. Total database size is
+therefore limited by disk capacity and 64-bit offsets rather than an equivalent
+startup allocation or a fixed 512 MB ceiling.
+
+A missing, malformed, or unreachable owner-side archive is reset as a disposable
+cache and rebuilt. An unavailable/fatally errored archive applies backpressure
+instead of allowing the UI to retain a whole library of uncommittable previews.
+
+The manager also treats database `ERROR` as a construction circuit breaker;
+`Rebuild cache` remains the recovery route and resumes planning after the worker
+successfully resets to `EMPTY`.
+
+Both the archive decoded queue and UI upload handoff remain bounded, and
 installed recoverable cards release RGBA rather than retaining it for context
-recovery. Cache statistics expose the remaining QOI, RGBA, pending-upload, and
-estimated GPU components. A very large valid compressed pack itself still has
-no admission ceiling.
+recovery. Cache statistics expose on-disk database size, volatile QOI, RGBA,
+pending-upload, and estimated GPU components. The remaining memory-policy risk
+is the open all-GPU residency issue in P1-A.
 
 ### P2-8: Framebuffer capture uses synchronous GPU readback on the UI thread
 
@@ -447,7 +457,7 @@ the existing cache state machine reaches `ERROR` without an exception escaping.
 | Malformed QOI or dimension mismatch | Entry rejected; no pixels reach NanoVG. |
 | Interrupted index replace with usable `.bak` | Backup index is accepted; missing newest writes rebuild. |
 | Interrupted compaction with marker/backups | Old authoritative pair is restored before load. |
-| Read, append, index, or compaction I/O failure | Archive worker enters `ERROR`, stops accepting persistence work, retains the write lease, and waits for explicit Rebuild/reset or joined teardown. In-memory browser operation can continue. |
+| Read, append, index, or compaction I/O failure | Archive worker enters `ERROR`, stops accepting persistence and new preview construction, retains the write lease, and waits for explicit Rebuild/reset or joined teardown. Existing installed rasters remain usable. |
 | Unexpected archive-worker exception | Converted to database error code 5; the owner waits for reset or shutdown rather than terminating the process. |
 
 The database remains a disposable performance cache. Recovery intentionally

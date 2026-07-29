@@ -28,12 +28,19 @@ Result referenceCrossingsAndSettles() {
 	float highBandActivity = 0.f;
 	float previous = 0.f;
 	float lowpass = 0.f;
+	float macroUpperLowpass = 0.f;
+	float macroLowerLowpass = 0.f;
 	float upperBandLowpass = 0.f;
 	double analyzedEnergy = 0.0;
 	double sub180Energy = 0.0;
+	double macroBendEnergy = 0.0;
 	double upperBandEnergy = 0.0;
 	const float lowpassAlpha = 1.f - std::exp(
 		-2.f * 3.14159265358979323846f * 180.f * dt);
+	const float macroUpperAlpha = 1.f - std::exp(
+		-2.f * 3.14159265358979323846f * 55.f * dt);
+	const float macroLowerAlpha = 1.f - std::exp(
+		-2.f * 3.14159265358979323846f * 12.f * dt);
 	const float upperBandLowpassAlpha = 1.f - std::exp(
 		-2.f * 3.14159265358979323846f * 1200.f * dt);
 	for (int i = 0; i < 48000 * 20; ++i) {
@@ -42,11 +49,18 @@ Result referenceCrossingsAndSettles() {
 		highBandActivity += std::fabs(frame.outputVolts - previous);
 		previous = frame.outputVolts;
 		lowpass += (frame.outputVolts - lowpass) * lowpassAlpha;
+		macroUpperLowpass +=
+			(frame.outputVolts - macroUpperLowpass) * macroUpperAlpha;
+		macroLowerLowpass +=
+			(frame.outputVolts - macroLowerLowpass) * macroLowerAlpha;
 		upperBandLowpass +=
 			(frame.outputVolts - upperBandLowpass) * upperBandLowpassAlpha;
 		if (i >= int(0.050f * 48000.f) && i < int(2.f * 48000.f)) {
 			analyzedEnergy += double(frame.outputVolts) * double(frame.outputVolts);
 			sub180Energy += double(lowpass) * double(lowpass);
+			const double macroBend =
+				double(macroUpperLowpass - macroLowerLowpass);
+			macroBendEnergy += macroBend * macroBend;
 			const double upper = double(frame.outputVolts - upperBandLowpass);
 			upperBandEnergy += upper * upper;
 		}
@@ -62,11 +76,17 @@ Result referenceCrossingsAndSettles() {
 	}
 	const std::uint64_t crossings = engine.getDiagnostics().crossingCount;
 	const float sub180Ratio = float(sub180Energy / std::max(analyzedEnergy, 1e-12));
+	const float macroBendRatio = float(
+		macroBendEnergy / std::max(analyzedEnergy, 1e-12));
 	const float upperBandRatio = float(
 		upperBandEnergy / std::max(analyzedEnergy, 1e-12));
-	// The perceptual fundamental belongs near 375 Hz; the 22 Hz bend conducts
-	// the gesture but must not become an audible subsonic throb.
-	const bool balancedLowBody = sub180Ratio < 0.18f;
+	// The perceptual fundamental remains near 375 Hz, but the approximately
+	// 21 Hz physical bend is now intentionally present in the audio. Bound both
+	// its focused 12--55 Hz energy and the broader low body so regressions cannot
+	// silently filter it away or let it overwhelm the metallic resonances.
+	const bool balancedLowBody =
+		macroBendRatio > 0.01f && macroBendRatio < 0.20f
+		&& sub180Ratio > 0.04f && sub180Ratio < 0.30f;
 	// The reference contains a persistent 1.2--3 kHz body, but the upper modes
 	// must remain well below the lower metallic resonances.
 	const bool controlledUpperBody =
@@ -79,6 +99,7 @@ Result referenceCrossingsAndSettles() {
 			+ " activity=" + std::to_string(highBandActivity)
 			+ " crossings=" + std::to_string(crossings)
 			+ " sub180Ratio=" + std::to_string(sub180Ratio)
+			+ " macroBendRatio=" + std::to_string(macroBendRatio)
 			+ " upperBandRatio=" + std::to_string(upperBandRatio)
 			+ " slept=" + std::to_string(slept)};
 }

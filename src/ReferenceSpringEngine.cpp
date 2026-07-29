@@ -113,21 +113,22 @@ void ReferenceSpringEngine::updateCoefficients() {
 	impactSoftAlpha = 1.f - std::exp(-2.f * PI * std::min(2400.f, maxCutoff) * sampleTime);
 	impactHardAlpha = 1.f - std::exp(-2.f * PI * std::min(6200.f, maxCutoff) * sampleTime);
 	impactRejectAlpha = 1.f - std::exp(-2.f * PI * 180.f * sampleTime);
-	flexLowpassAlpha = 1.f - std::exp(-2.f * PI * 120.f * sampleTime);
-	dcPole = std::exp(-2.f * PI * 10.f * sampleTime);
+	// Preserve the macro bend in the audio path. The blocker remains only as a
+	// slow safety stage for numerical DC rather than a bass-shaping filter.
+	dcPole = std::exp(-2.f * PI * 5.f * sampleTime);
 	updateWearAndSpecimen();
 }
 
 void ReferenceSpringEngine::updateWearAndSpecimen() {
 	const float wear = breakIn * breakIn * (3.f - 2.f * breakIn);
-	// The physical bend is the conductor of the audible boing. Its roughly
-	// 22 Hz full cycle exposes the modal body at both center crossings, matching
-	// the reference's 45--47 Hz audible lobe train.
-	baseFrequencyHz = 23.f * lerpf(1.f, 0.84f, wear);
+	// The physical bend is the conductor of the audible boing. Its 21 Hz resting
+	// cycle hardens upward on a strong strike and exposes the modal body at both
+	// center crossings, approaching the reference's 45--47 Hz early lobe train.
+	baseFrequencyHz = 21.f * lerpf(1.f, 0.88f, wear);
 	// Preserve the macroscopic swing long enough for the audible body to form a
 	// sequence of distinct boings instead of collapsing into one short impact.
-	dampingRatio = 0.012f * lerpf(1.f, 0.65f, wear);
-	nonlinearStiffness = 0.55f * lerpf(1.f, 0.72f, wear);
+	dampingRatio = 0.010f * lerpf(1.f, 0.72f, wear);
+	nonlinearStiffness = 0.32f * lerpf(1.f, 0.78f, wear);
 	maximumDisplacement = 2.f * lerpf(1.f, 1.15f, wear);
 	baseOmega = 2.f * PI * baseFrequencyHz;
 	baseOmegaSq = baseOmega * baseOmega;
@@ -214,7 +215,6 @@ void ReferenceSpringEngine::clearDynamicState() {
 	mountPosition = 0.f;
 	mountVelocity = 0.f;
 	strikeLightEnvelope = 0.f;
-	flexLowpass = 0.f;
 	dcPreviousInput = 0.f;
 	dcPreviousOutput = 0.f;
 	quietTime = 0.f;
@@ -404,9 +404,10 @@ float ReferenceSpringEngine::processMount() {
 float ReferenceSpringEngine::processFlexAudio() {
 	const float normalizedVelocity = springVelocity / std::max(maximumVelocity, 1.f);
 	const float normalizedAcceleration = clampf(acceleration / 24000.f, -1.f, 1.f);
-	const float raw = 0.08f * normalizedVelocity + 0.04f * normalizedAcceleration;
-	flexLowpass += (raw - flexLowpass) * flexLowpassAlpha;
-	return raw - flexLowpass;
+	// Velocity supplies the weight of the whole spring moving while acceleration
+	// adds the harder edge at each turn. Do not high-pass this signal: the
+	// physical bend is an intentional audible part of the model.
+	return 0.12f * normalizedVelocity + 0.055f * normalizedAcceleration;
 }
 
 float ReferenceSpringEngine::processDcBlocker(float input) {
@@ -423,8 +424,7 @@ bool ReferenceSpringEngine::allFinite() const {
 		|| !std::isfinite(impactBrightness) || !std::isfinite(impactLowpass)
 		|| !std::isfinite(impactLowReject) || !std::isfinite(mountPosition)
 		|| !std::isfinite(mountVelocity) || !std::isfinite(strikeLightEnvelope)
-		|| !std::isfinite(flexLowpass) || !std::isfinite(dcPreviousInput)
-		|| !std::isfinite(dcPreviousOutput)) {
+		|| !std::isfinite(dcPreviousInput) || !std::isfinite(dcPreviousOutput)) {
 		return false;
 	}
 	for (const Mode& mode : modes) {
@@ -484,8 +484,8 @@ Frame ReferenceSpringEngine::process(float requestedSampleTime) {
 	const float impact = processImpact();
 	const float mount = processMount();
 	const float flex = processFlexAudio();
-	float signal = impact * 0.50f + mount * 0.20f + flex * 0.15f
-		+ modal * radiationGate * 2.25f;
+	float signal = impact * 0.45f + mount * 0.16f + flex * 0.50f
+		+ modal * radiationGate * 1.90f;
 	signal = processDcBlocker(signal);
 	// Keep the safety saturation from turning the strengthened lower modes
 	// into a synthetic spray of upper harmonics.
