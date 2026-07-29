@@ -1,102 +1,707 @@
-# Research brief for a VCV Rack puffer saturator limiter
+# Puffy v1 Implementation Specification
 
-## What sonible’s puffer:fish publicly tells you
+> Status: implementation handoff for an unreleased module.
+>
+> Module name and Rack slug: `Puffy`.
+>
+> Authority: this document replaces the earlier research brief. Where a
+> recommendation from that brief conflicts with this document, this document
+> defines the Puffy v1 contract.
 
-From the public product page and manual, **puffer:fish is first and foremost a saturation plug-in with a character-driven UI**, not a public-facing limiter. Sonible describes it as a free saturation plug-in with **three “characters”** that react visually as you drive the effect harder, and the manual exposes a very small control set: **Puffiness** for the saturation amount, **Deflate** for output level compensation after the effect, **Character** for mode selection, plus bypass and settings. The three modes are described as **Tinyfin** for gentle warmth/cohesion, **Spikeskin** for harder-edged distortion, and **Twitchgill** for more input-reactive, chaotic behavior. Public docs describe the sound goals and UI behavior, but they do **not** disclose exact transfer functions, oversampling strategy, or limiter math. citeturn1view0turn3view0
+## 1. Product contract
 
-That matters for your VCV Rack project, because it means a “comparable” module should be understood as **comparable in interaction design and personality**, not as a literal DSP clone. The public information is enough to infer a design language: a small number of controls, three tonal modes, aggressive visual feedback, and a mascot whose body language tracks the sound. It is **not** enough to reverse-engineer sonible’s internal algorithm with confidence. citeturn1view0turn3view0
+Puffy is a 12 HP stereo saturation and peak-control module with a responsive
+puffer-fish interface. It is a character effect that can safely finish a stereo
+Rack signal, not an automatic mastering suite and not a clone of sonible's
+`puffer:fish`.
 
-There is one more useful clue in sonible’s own docs: puffer:fish lists **OpenGL 3.2+** as a GPU requirement, and its settings page explicitly says **OpenGL can cause rendering issues on certain hardware** and can be disabled. That strongly suggests the UI is graphically ambitious enough to justify hardware-accelerated rendering, while also reminding you that flashy visuals create compatibility risk. For a Rack module, that makes the visual ambition feasible, but it also argues for a conservative fallback path. citeturn1view0turn3view0
+The essential relationship is:
 
-## What the saturation DSP should actually do
+```text
+PUFF + input dynamics -> audible character -> readable fish reaction
+```
 
-If the Rack module is meant to feel like “the cute fish that makes the master louder and hairier,” the DSP core should stay simple at the control layer and sophisticated under the hood. The right public mental model is **mode-dependent nonlinear waveshaping plus output compensation**. That aligns closely with sonible’s own control language: “Puffiness” increases harmonics and density, while “Deflate” compensates for level increase after saturation. citeturn3view0
+The front panel stays deliberately small:
 
-The central technical issue is aliasing. VCV Rack’s own DSP documentation says anti-aliasing is generally required for **waveshaping, distortion, and saturation**, and identifies the general solution as **running the nonlinearity at a higher internal sample rate, low-pass filtering, and decimating back down**. Independent academic work from Aalto/Edinburgh likewise notes that soft-clipping algorithms are major sources of aliasing and that dedicated anti-aliasing strategies such as oversampling and antiderivative-based methods materially reduce those artifacts. citeturn8view0turn10search4turn10search13
+- three original Leviathan character modes;
+- one primary `PUFF` control;
+- one `DEFLATE` output attenuation control;
+- one `PUFF CV` input and attenuverter;
+- stereo input and output.
 
-For that reason, the cleanest architecture for a VCV module like this is:
+Oversampling, automatic gain compensation, and limiter quality are context-menu
+settings. The fish is a useful meter as well as a mascot: inflation communicates
+effective drive, motion communicates input dynamics, and blush communicates
+limiter gain reduction.
 
-**input trim → oversampled nonlinear stage → optional tone correction / DC block → output trim → limiter stage**
+### 1.1 V1 success case
 
-That order is not arbitrary. The true-peak and limiter literature consistently treats nonlinear, fast, or overshoot-inducing stages as things the limiter should catch **afterward**, not before. The AES streaming recommendations also note that filtering can itself create overshoot, so if you do include a DC blocker or any tonal post-filter, it should be accounted for **before** the final peak-control stage. citeturn23view0turn11search4turn12view1
+At the end of v1, a user can:
 
-A three-mode design inspired by puffer:fish makes excellent sense:
+- patch a mono or stereo signal and obtain a stable stereo output;
+- move continuously from an effectively clean signal to obvious saturation;
+- select a warm, aggressive, or input-reactive character;
+- modulate `PUFF` over its complete range with 0-10 V CV;
+- reduce the processed output by up to 12 dB with `DEFLATE`;
+- choose low-latency sample-peak safety or a 2 ms true-peak mastering limiter;
+- compare characters without large accidental loudness jumps when Auto Deflate
+  is enabled;
+- understand drive, dynamics, and limiting by looking at the fish;
+- save and restore all user choices without persisting transient DSP state.
 
-**Tinyfin** should be a mostly symmetrical, soft-knee saturator whose job is to add density and perceived loudness without shouting about itself. A normalized soft clipper in the tanh/arctan family is a practical fit here, because it gives smooth onset and predictable control. The manual’s language for Tinyfin is explicitly about warmth, body, cohesion, and a musical, controlled increase in harmonics. citeturn3view0
+### 1.2 Explicit non-goals
 
-**Spikeskin** should be the “harder knee, faster harmonic stack” mode. Sonible describes it as edgy, aggressive, transient-sharpening distortion rather than merely warm saturation, so this is the place for a steeper transfer curve and a stronger drive-to-output-gain relationship. This mode is where higher oversampling is most justified, because sharper nonlinearities are more prone to objectionable aliasing. citeturn3view0turn8view0turn10search4
+V1 does not include compression, multiband processing, loudness targeting,
+side-chain input, wet/dry mix, attack/release controls, user transfer curves,
+polyphonic voices, OpenGL, a 3D model, or a claim of bit-identical true-peak
+compliance with a particular commercial meter.
 
-**Twitchgill** is the most interesting one, because sonible’s own description says it **reacts dynamically to the input signal** and becomes more unstable as it is pushed. That points toward a slightly stateful design rather than a purely static transfer curve. A good Rack interpretation would be an asymmetrical or envelope-modulated waveshaper whose shape shifts with recent signal level, crest factor, or transient energy. If you do that, you should budget for a **DC blocker**, because asymmetrical processing can introduce DC bias; FabFilter’s documentation explicitly notes that asymmetrical waveform processing or saturation can create DC offset and that filtering it out prevents unnecessary asymmetrical limiting downstream. citeturn3view0turn20view0turn20view1
+Puffy does not use sonible's mode names, artwork, layout, transfer functions, or
+trade dress. Its art and mode identities must be original.
 
-A smart implementation detail is to make **output loudness honesty optional**. Sonible’s “Deflate” is explicitly there because saturation raises level. Your Rack version should offer both a manual output/ceiling control and an optional gain-compensation mode for fair A/B comparison. FabFilter calls this “Unity Gain” and recommends it because loudness increases make almost anything seem better at first listen. citeturn3view0turn20view0
+## 2. Decisions resolved from the research
 
-## How to combine saturation and limiter without wrecking the stereo image
+| Question | Puffy v1 decision |
+| --- | --- |
+| Product role | Stereo character saturator with final peak control |
+| Width | 12 HP / 60.96 mm / 180 Rack px |
+| Characters | `BLOOM`, `SPINE`, and `FRENZY` |
+| Default character | `BLOOM` |
+| Default amount | `PUFF = 0.25` |
+| Stereo I/O | Separate L/R jacks; mono normalization while active |
+| Polyphony | Channel 0 only; no polyphonic voice bank in v1 |
+| Saturation oversampling | 4x default; 2x and 8x menu choices |
+| Limiter | Fully stereo-linked |
+| Default limiter | `LIVE`: zero-lookahead sample-peak safety |
+| Master limiter | 2 ms lookahead, 4x reconstructed-peak detector, -1 dBFS reference ceiling |
+| Level compensation | Static, mode-aware Auto Deflate; enabled by default |
+| Visual renderer | Original 2D/pseudo-3D NanoVG artwork; no OpenGL |
+| Audio/UI handoff | Atomic scalar snapshot at control rate |
+| Persisted state | Rack params plus menu settings only |
 
-Your instinct to fuse a saturator and limiter into one end-of-chain module is good. In practice, that makes the device much closer to a **stereo finishing box** than to a simple distortion effect. The limiter should not replace the saturator; it should **govern the consequences** of the saturator. EBU, AES, and FabFilter all stress the same general point: fast nonlinear or limiting processes can produce **inter-sample or true peaks**, meaning the reconstructed analog waveform can exceed the sample peaks you see in the digital signal. Oversampling, true-peak metering, and lookahead exist precisely because naïve sample-peak limiting is not enough. citeturn13view0turn23view0turn11search4turn12view1
+The research supports oversampled nonlinear processing, DC protection after
+asymmetric processing, a limiter after all nonlinear/filtering stages, and a
+graphics fallback that does not depend on OpenGL. The exact algorithms below are
+Leviathan design decisions, not reverse-engineered commercial behavior.
 
-For an end-of-chain Rack module, a very sensible limiter split is:
+## 3. Panel and interaction contract
 
-- a **sample-peak “instant safety” stage** for low-latency use, and  
-- an optional **lookahead / true-peak ceiling stage** for mastering-style use. citeturn21view0turn11search4turn23view0
+### 3.1 Panel regions
 
-That split respects two different use cases. A live patch or feedback-sensitive modular graph may not want much latency, while a final stereo output processor absolutely benefits from lookahead and true-peak protection. Signalsmith’s limiter walkthrough makes the underlying engineering point cleanly: a lookahead limiter works by generating a smooth gain envelope and **delaying the program signal** so the gain reduction can arrive slightly ahead of the peaks. SSL’s limiter guide and FabFilter’s manual both describe the same principle: lookahead catches peaks by introducing internal latency and giving the algorithm time to respond cleanly. citeturn21view0turn11search20turn12view1
+`res/Puffy.svg` is a 60.96 x 128.5 mm structural panel. A hidden `components`
+layer is the source of truth for anchors, loaded through `PanelSvgUtils`, with
+matching C++ fallback coordinates.
 
-For stereo handling, the public limiter literature gives a very useful design pattern. FabFilter explains that on stereo programs, it is often best to keep the **release stage strongly linked** to avoid image drift, while allowing the **fast transient stage** to be less than 100% linked so a one-sided click or spike does not unnecessarily pull down the whole stereo image. That is an excellent blueprint for your fish module: keep the image stable, but do not overreact to every tiny left-only or right-only transient. citeturn12view2turn12view3
+| Region | x mm | y mm | w mm | h mm |
+| --- | ---: | ---: | ---: | ---: |
+| Character selector | 4.0 | 7.0 | 52.96 | 11.0 |
+| Fish viewport | 4.0 | 20.0 | 52.96 | 48.0 |
+| Main controls | 4.0 | 70.0 | 52.96 | 29.0 |
+| Jack field | 3.0 | 101.0 | 54.96 | 24.0 |
 
-So the recommended signal topology is:
+The art pass may move individual centers without changing the DSP contract.
+Keep jacks below the fish so normal cabling does not hide the primary meter.
 
-**stereo input → drive stage → mode-specific saturator → DC blocker if needed → linked stereo limiter → output ceiling / makeup**
+### 3.2 Required SVG anchor IDs
 
-With that topology, your front panel can stay charmingly simple even though the internal machine is doing real work. A minimal but serious control set would be **Character**, **Amount**, **Ceiling/Deflate**, and a **CV input with attenuverter** for Amount. Attack, release, link percentage, oversampling factor, and true-peak mode can live in the context menu or be auto-tuned by Character. That lets the module preserve puffer:fish-like immediacy while still functioning as a genuine stereo finisher. citeturn3view0turn12view1turn12view2turn23view0
+```text
+fish_rect
 
-## How this fits into VCV Rack technically
+character_param
+puff_param
+deflate_param
+puff_cv_amount_param
 
-At the Rack level, this is a very comfortable module to build. VCV’s development tutorial and API guide lay out the basic structure clearly: modules expose **params, inputs, outputs, and lights**, and then do actual audio work inside `process()`. For an effect module like this, bypass routing is also worth implementing so that when the user bypasses the module, left and right pass straight through. Rack explicitly supports that with `configBypass(LEFT_INPUT, LEFT_OUTPUT)` and `configBypass(RIGHT_INPUT, RIGHT_OUTPUT)`. citeturn0search1turn17view0
+input_l
+input_r
+puff_cv_input
+output_l
+output_r
 
-For stereo I/O, there are two Rack-friendly approaches. One is the obvious UI-first version: separate **L input, R input, L output, R output** jacks. The other is polyphonic handling under the hood. Rack’s voltage and polyphony standards recommend treating the channel count of a primary input as the number of active engines and copying monophonic modulation inputs across those engines with `getPolyVoltage(c)`. The API guide also shows how to process polyphonic signals one channel at a time or in **SIMD groups of four** using `simd::float_4`, and specifically notes that SIMD can help with stereo and quad processing too. That means you can present the module as a stereo processor while still writing the engine so it scales naturally to polyphonic or grouped processing. citeturn16view0turn15view0turn14search13
+limit_light
 
-A practical compromise is this: **expose dedicated L/R jacks**, but if only the left input is connected and it carries two channels, treat it as a stereo poly cable. That is not mandated by Rack, but it harmonizes nicely with Rack’s polyphony conventions and modern user expectations. The main point is that the DSP core should already be channel-agnostic, because Rack’s own guidance strongly encourages modules to behave gracefully with poly inputs and to support up to sixteen channels where appropriate. citeturn16view0turn15view0
+screw_tl
+screw_tr
+screw_bl
+screw_br
+```
 
-Rack’s own voltage guidance is also relevant to your CV story. Audio outputs are typically around **±5 V**, while modulation sources are commonly **0–10 V unipolar** or **±5 V bipolar**. That makes a straightforward control scheme easy: let the Amount knob define the base saturation, and let a CV jack with attenuverter apply either positive-only or bipolar modulation over it. For a performance-oriented module, 0–10 V can map cleanly from “no puff” to “full puff,” while bipolar CV can be allowed to push the mode between tamer and nastier internal operating regions. citeturn16view0
+### 3.3 Controls
 
-There are also two Rack-specific safety details worth keeping. First, VCV advises developers not to use crude hard clamping as a generic fallback and instead to avoid pathological outputs intelligently. Second, if a process can ever produce NaNs or infinities, the module should zero those out before they escape. Those are small details, but they matter in high-drive nonlinear code, especially once oversampling and asymmetry enter the room. citeturn16view0
+| Label | Type | Range/default | Meaning |
+| --- | --- | --- | --- |
+| `CHARACTER` | 3-position snapped switch | 0..2, default 0 | `BLOOM`, `SPINE`, `FRENZY` |
+| `PUFF` | large knob | 0..1, default 0.25 | Base saturation amount |
+| `DEFLATE` | knob | 0..1, default 0 | 0 to 12 dB of post-effect attenuation |
+| `PUFF CV` | attenuverter | -1..1, default 0 | Depth and polarity of amount CV |
 
-## How to make the puffer character feel alive without turning the module into a GPU disaster
+The effective amount is:
 
-The mascot concept is not fluff; it is part of the product identity. Sonible explicitly sells puffer:fish on the idea that the characters **react visually as you push the saturation**, and that is almost certainly why the plug-in reads as memorable instead of just being “yet another saturator.” citeturn1view0
+```text
+amountTarget = clamp(PUFF + PUFF_CV_AMOUNT * PUFF_CV / 10 V, 0, 1)
+```
 
-In Rack, the important distinction is between **audio-reactive motion** and **idle life**. Audio-reactive motion should communicate state: body inflation, cheek puff, spine extension, eye size, or mouth compression can all map to some smoothed combination of **Amount**, input level, harmonic intensity, or limiter gain reduction. Idle life should not depend on the audio at all: blinks, small glances, tiny breathing loops, and occasional micro-fidgets make the fish feel alert instead of dead. This is exactly aligned with your instinct that the eye blink / glance can be trivial and not tied to signal analysis.
+Thus +10 V with the attenuverter fully clockwise spans the full normalized
+range. Bipolar +/-5 V modulation spans half the range in either direction.
+Smooth `amountTarget` with a 1 ms one-pole filter. Character changes use a 10 ms
+equal-power crossfade between old and new character outputs.
 
-Technically, Rack gives you several viable UI layers. The API guide explains that ordinary widget drawing happens every frame, and that **complex widgets can become expensive**, so cached drawing through a `FramebufferWidget` is recommended when you do not need to redraw continuously. The same guide also shows how to mark that framebuffer dirty only when needed. Separately, Rack’s API includes an `OpenGlWidget` that can draw into a framebuffer with OpenGL, specifically by overriding `drawFramebuffer()`. So yes: **true 3D or pseudo-3D rendering is possible**. citeturn15view0turn6search2turn6search7
+`DEFLATE` maps linearly in dB:
 
-But the engineering answer is more nuanced than “full 3D is possible, therefore do full 3D.” Sonible’s own puffer:fish manual literally includes a setting to disable OpenGL because it can cause rendering issues on some systems. Rack’s migration guide also warns that OpenGL-tied resources such as fonts and images should not be cached across window lifetimes because the window and GL context can be recreated. Taken together, those sources strongly suggest a layered strategy: **ship a robust 2D or pseudo-3D mascot first**, then only escalate to real 3D if the payoff is clearly worth the maintenance and compatibility cost. citeturn3view0turn17view0
+```text
+manualDeflateDb = -12 dB * DEFLATE
+```
 
-In practice, the sweet spot is probably one of these two:
+It is an output attenuation, not a limiter threshold and not a makeup-gain
+control. Puffy never adds post-saturation gain through this control.
 
-A **rigged 2D fish** built from vector or mesh-deformed parts, with body scale, fin bend, eye blink, outline squash, and subtle shading shifts. This is the lowest-risk route and will still look lively if animated well.
+### 3.4 Ports and normalization
 
-A **pre-rendered pseudo-3D fish** with a small number of angle states and morph targets, crossfaded or switched according to inflation and expression. This often delivers 80% of the charm of real 3D at a fraction of the implementation cost.
+| Port | Contract |
+| --- | --- |
+| `IN L` | Left audio input and primary mono input |
+| `IN R` | Right audio input; normalized from `IN L` |
+| `PUFF CV` | Monophonic amount modulation |
+| `OUT L` | Left processed output |
+| `OUT R` | Right processed output |
 
-For animation scheduling, you do not need to redraw everything at audio rate. Rack’s DSP utilities include a `ClockDivider` for “every N process calls” timing, and the namespace includes a smoothed `VuMeter2`. That means you can update your analysis and visual state at a lower control rate, smooth it, and only mark the framebuffer dirty when something visible changes. If you want parts of the mascot to glow independently of room brightness, Rack also supports drawing on the self-illuminating layer via `drawLayer()`. citeturn9view2turn9view3turn15view0turn17view0
+If only `IN L` is connected, copy it to both channels. If only `IN R` is
+connected, copy it to both channels. If neither is connected, process zero.
+Read channel 0 only and always emit one output channel per jack.
 
-## What I would actually build
+Register direct Rack bypass routes:
 
-If the goal is a module people will really use—not just admire once and forget—I would build it as a **stereo end-of-chain saturator/limiter with a character-first UI and mastering-safe defaults**.
+```cpp
+configBypass(INPUT_L, OUTPUT_L);
+configBypass(INPUT_R, OUTPUT_R);
+```
 
-The first release should center on three user-facing behaviors directly inspired by puffer:fish: a gentle “glue” mode, an aggressive “bite” mode, and a dynamic “chaos” mode. Public sonible materials already frame those tonal buckets clearly, and they map beautifully onto three internally distinct nonlinear strategies. citeturn1view0turn3view0
+Rack bypass is literal jack-to-jack routing; active-mode mono normalization is
+not promised while the module is bypassed.
 
-The front panel should stay sparse: **Character**, **Amount**, **Ceiling/Deflate**, an **Amount CV jack** with attenuverter, and stereo I/O. Add a little gain-reduction or “panic blush” indicator when the limiter is working. If you want one extra control, make it **Link** or **Tone**, but only if testing proves it solves a real need. Puffer:fish’s public design works precisely because it does not bury the user in knobs. citeturn3view0
+## 4. Stable Rack API
 
-Internally, I would default to **4x oversampling** for the nonlinear stage, because VCV’s DSP notes treat oversampling/decimation as the standard general anti-aliasing path for nonlinear processing, and FabFilter’s limiter documentation repeatedly points to 4x oversampling as a strong practical baseline for controlling aliasing and inter-sample behavior. For the nastiest mode, I would allow **8x** in the context menu. If CPU becomes an issue, ADAA-style antialiasing becomes a legitimate second-phase optimization. citeturn8view0turn12view1turn10search13
+Puffy is unreleased, so v1 IDs can be established cleanly. After release, IDs
+must only be appended.
 
-For the limiter, I would ship two operating styles behind the same cute face: an **Eco** mode with minimal latency and simple sample-peak safety, and a **Master** mode with lookahead and optional true-peak control. EBU and AES both make clear that true-peak limiting and oversampled measurement are the right tools when the goal is preventing reconstruction overshoots, especially at the very end of a chain. citeturn13view0turn23view0turn11search4
+```cpp
+enum ParamId {
+    CHARACTER_PARAM,
+    PUFF_PARAM,
+    DEFLATE_PARAM,
+    PUFF_CV_AMOUNT_PARAM,
+    PARAMS_LEN
+};
 
-If you want a musically sensible factory default for the Master mode, the public standards and manuals point to a very reasonable cluster: moderate lookahead, linked stereo release, partially linked transient handling, and a conservative ceiling. EBU production guidance uses **−1 dBTP** as its recommended maximum true-peak level in production, while AES notes that downstream codecs and SRC can push needed headroom even lower in some delivery chains. For Rack users not targeting broadcast delivery, the exact ceiling can remain a creative choice, but making **true-peak-safe behavior easy** is still a strong product decision. citeturn13view0turn23view0
+enum InputId {
+    INPUT_L,
+    INPUT_R,
+    PUFF_CV_INPUT,
+    INPUTS_LEN
+};
 
-And for the fish itself: I would not overcomplicate the first version. Make it breathe. Make it blink. Make it puff based on a smoothed blend of **Amount**, post-drive level, and limiter gain reduction. Let Spikeskin show more spines as the limiter starts shaving peaks. Let Twitchgill’s eyes dart a little when the input turns unstable. Give Tinyfin the calm, smug little face of a fish that knows the mix is now 7% more expensive. The public sonible concept proves that users respond to personality when it is tied to audible consequence. The trick is not the mascot alone. The trick is that the mascot becomes a readable meter. citeturn1view0turn3view0turn15view0
+enum OutputId {
+    OUTPUT_L,
+    OUTPUT_R,
+    OUTPUTS_LEN
+};
 
-## Bottom line
+enum LightId {
+    LIMIT_LIGHT,
+    LIGHTS_LEN
+};
+```
 
-The strongest version of this idea is **not** “copy puffer:fish into Rack.” It is: **build a Rack-native stereo finishing module that borrows puffer:fish’s emotional design language, then deepens it with a serious anti-aliased saturation core and a genuinely useful limiter stage**. Public information supports the mascot-driven, three-character saturation concept very well, but it does not reveal sonible’s internal DSP, so you are free to make the Rack version more purpose-built for modular end-of-chain use. citeturn1view0turn3view0
+Use `configSwitch()` for `CHARACTER_PARAM`, including the three display labels.
+Use dB display scaling or a custom `ParamQuantity` so `DEFLATE` displays 0 to
+-12 dB rather than an unexplained normalized value.
 
-If I were choosing the engineering priorities, I would rank them this way: **sound first, aliasing control second, stereo image preservation third, animation fourth, true 3D last**. Rack’s APIs absolutely let you do the visuals, but the sources point to a clear truth: nonlinear audio quality and peak handling determine whether the module becomes a toy or a keeper, while the fish decides whether it becomes beloved. citeturn8view0turn15view0turn6search2turn3view0
+## 5. DSP reference and signal flow
+
+Puffy treats nominal Rack audio full scale as:
+
+```cpp
+constexpr float kReferenceVolts = 5.f; // +/-5 V == 0 dBFS reference
+```
+
+This is an internal calibration convention, not a claim that Rack cables have a
+hard digital full scale.
+
+The authoritative signal order is:
+
+```text
+input safety
+-> amount smoothing
+-> oversample
+-> selected character
+-> decimate
+-> 5 Hz DC blocker
+-> Auto Deflate
+-> manual DEFLATE
+-> selected stereo limiter
+-> finite/output guard
+```
+
+The limiter must see the final post-filter, post-attenuation stream. Do not put
+tone correction, a DC blocker, or output gain after it.
+
+### 5.1 Input safety
+
+- Replace a non-finite input sample with zero and reset the affected channel's
+  character/filter history before processing the next valid sample.
+- Clamp the value entering the oversampler to +/-20 V. This is an internal
+  numerical guard, not the audible peak-control mechanism.
+- Never allocate, lock, log, or perform file I/O in `process()`.
+
+Normalize each oversampled input sample with:
+
+```text
+x = inputVolts / 5 V
+```
+
+Character functions operate in normalized space and return normalized values.
+
+### 5.2 Oversampling
+
+Use Rack's fixed-size FIR helpers for both stereo channels. `FACTOR` below
+denotes three compile-time-specialized banks, not a runtime template argument:
+
+```cpp
+dsp::Upsampler<FACTOR, 8>
+dsp::Decimator<FACTOR, 8>
+```
+
+The context-menu factors are 2x, 4x, and 8x, with 4x as the default. Maintain
+preallocated filter banks for all supported factors or otherwise guarantee that
+changing the factor cannot allocate on the audio thread.
+
+The selected character runs at the oversampled rate. The dynamic detectors that
+control `FRENZY` run once per base-rate sample and hold their control values
+across the generated subsamples.
+
+Changing oversampling factor is a rare configuration event. Fade the processed
+output to zero over 5 ms, reset the old and new resampler/DC/limiter state at the
+zero crossing, then fade back over 5 ms. Do not hot-swap FIR histories.
+
+### 5.3 Character A: BLOOM
+
+`BLOOM` is smooth, symmetrical, and predominantly odd-harmonic. It should add
+density without changing stereo balance or creating a DC offset.
+
+For amount `a`:
+
+```text
+drive = 1 + 4*a^2
+s = tanhAudio(drive*x) / tanhAudio(drive)
+y = lerp(x, s, a)
+```
+
+Use `levi_math::tanhAudio()`, not `tanhLegacy()`, so the reference curve is
+accurate and shared with the repository's tested math helper.
+
+### 5.4 Character B: SPINE
+
+`SPINE` has a firmer knee, stronger upper harmonics, and more obvious transient
+edge. It remains deterministic and symmetrical.
+
+```text
+drive = 1 + 9*a^2
+z = drive*x
+
+if abs(z) < 1:
+    s = z * (1.5 - 0.5*z^2)
+else:
+    s = sign(z)
+
+y = lerp(x, s, a)
+```
+
+The piecewise curve is continuous with zero slope at +/-1. Do not evaluate the
+cubic outside that interval. Oversampling is mandatory for this mode.
+
+### 5.5 Character C: FRENZY
+
+`FRENZY` is asymmetrical and input-reactive, but it is not random. Repeated
+renders from identical input and state must be identical.
+
+At base rate, measure a stereo-linked normalized peak envelope `fast` and RMS
+envelope `slow`:
+
+```text
+p = max(abs(inL), abs(inR)) / 5 V
+fast: 1 ms attack, 45 ms release
+slowSq: 180 ms one-pole average of p^2
+transient = clamp((fast / max(sqrt(slowSq), 1e-4) - 1) / 2, 0, 1)
+```
+
+For each oversampled channel:
+
+```text
+drive = 1 + 6*a^2 * (0.65 + 0.55*fast + 0.35*transient)
+bias = 0.12*a * (0.25 + 0.75*fast)
+zero = tanhAudio(drive*bias)
+positiveNorm = max(tanhAudio(drive*(1 + bias)) - zero, 1e-4)
+s = (tanhAudio(drive*(x + bias)) - zero) / positiveNorm
+s = clamp(s, -1.25, 1.25)
+y = lerp(x, s, a)
+```
+
+The shared detector prevents channel-independent drive motion from pulling the
+stereo image around. The asymmetry intentionally permits a small DC component;
+the common post-character DC blocker removes it.
+
+### 5.6 DC blocker
+
+Run an independent first-order 5 Hz high-pass/DC blocker on L and R after
+decimation for every character. Recalculate its coefficient in
+`onSampleRateChange()`. Applying it uniformly keeps mode changes structurally
+consistent and catches filter/startup residue as well as `FRENZY` bias.
+
+### 5.7 Auto Deflate
+
+Auto Deflate is static, mode-aware gain compensation. It does not follow the
+audio envelope and therefore must not pump.
+
+```text
+BLOOM:  autoDeflateDb = -2.5*a
+SPINE:  autoDeflateDb = -4.0*a
+FRENZY: autoDeflateDb = -3.0*a
+```
+
+When Auto Deflate is disabled, `autoDeflateDb` is zero. During a character
+crossfade, apply the old compensation to the old character output and the new
+compensation to the new character output before the equal-power crossfade. Do
+not interpolate compensation dB separately. Outside a crossfade, total
+pre-limiter gain is:
+
+```text
+outputGain = dbToLinear(autoDeflateDb + manualDeflateDb)
+```
+
+These constants are tuning constants, not user state. They may be adjusted
+before v1 release only if the level-matching acceptance test in section 11
+demonstrates a systematic mismatch.
+
+## 6. Limiter contract
+
+Both limiter modes are fully stereo-linked: derive one gain from the larger L/R
+peak and apply that exact gain to both channels. Puffy prioritizes image
+stability over partial transient unlinking in v1.
+
+### 6.1 LIVE mode
+
+`LIVE` is the default and adds no lookahead buffer.
+
+```text
+ceiling = 5.0 V
+peak = max(abs(L), abs(R))
+desiredGain = min(1, ceiling / max(peak, epsilon))
+```
+
+Gain attack is immediate. Gain release is a one-pole 50 ms return to unity.
+Apply `min(currentGain, desiredGain)` on the current sample so no sample exceeds
+the ceiling. A final linked guard may correct floating-point residue above the
+ceiling.
+
+`LIVE` is a sample-peak safety limiter. The UI and manual must not call it a
+true-peak limiter.
+
+### 6.2 MASTER mode
+
+`MASTER` is an optional finishing mode:
+
+| Property | Value |
+| --- | ---: |
+| Ceiling | `5 V * 10^(-1/20)` = approximately 4.456 V |
+| Program delay | 2.0 ms, rounded to nearest sample |
+| Detector oversampling | 4x |
+| Detector FIR quality | 8 |
+| Gain attack | Immediate from lookahead demand |
+| Gain release | 80 ms one-pole |
+| Stereo link | 100% |
+
+Use `dsp::Upsampler<4, 8>` on the post-Deflate detector signal. The detector peak
+is the maximum absolute reconstructed sample across L and R. Maintain the
+maximum over the program-delay horizon with a fixed-capacity monotonic queue,
+not `std::deque`.
+
+All delay and queue storage is fixed capacity and supports at least 4096 base
+rate samples. At ordinary Rack sample rates this is comfortably larger than the
+2 ms requirement. Clamp the configured delay to storage capacity if an unusual
+sample rate exceeds it.
+
+Delay the program signal by the same rounded sample count. Compute gain demand
+from the lookahead maximum, apply the linked envelope to the delayed program,
+then apply a final linked sample guard at the same ceiling. The detector and
+program rings reset on sample-rate change, reset, limiter-mode change, and
+non-finite input recovery.
+
+The acceptance target is true-peak-safe behavior under the test suite, not
+certification against every possible external reconstruction filter.
+
+### 6.3 Limiter-mode changes
+
+Changing limiter mode changes latency. Use the same 5 ms fade-down/reset/5 ms
+fade-up transition used for oversampling changes. Do not crossfade delayed and
+undelayed streams because that creates comb filtering.
+
+Puffy does not report or compensate latency to the Rack graph. The manual must
+state that `MASTER` delays the output by approximately 2 ms plus fixed
+resampling-filter latency.
+
+## 7. Visual contract
+
+### 7.1 Rendering approach
+
+Use an original rigged 2D or pseudo-3D puffer fish drawn with NanoVG and cached
+raster/vector parts. Do not require `OpenGlWidget`. Static panel and viewport
+decoration remains in the panel SVG or a cached `FramebufferWidget`; only the
+fish and its small local effects redraw continuously.
+
+The widget must work when `module == nullptr` for the module browser and Deep
+Cache preview. Preview state is calm, deterministic, and requires no engine
+thread or DSP object.
+
+### 7.2 Audio-to-visual snapshot
+
+At approximately 240 Hz, the audio thread publishes atomic scalar targets:
+
+```cpp
+struct PuffyVisualState {
+    float effectiveAmount;   // 0..1
+    float inputActivity;     // smoothed 0..1
+    float transientActivity; // smoothed 0..1
+    float gainReduction;     // 0..1, 1 at >= 6 dB GR
+    int character;           // 0..2
+};
+```
+
+Atomics may be individual relaxed scalars plus a sequence counter. The UI must
+never read mutable DSP structs directly.
+
+Compute `inputActivity` from a stereo-linked absolute peak follower with 5 ms
+attack and 120 ms release, normalized so 5 V maps to 1. Compute
+`transientActivity` from the `FRENZY` detector formula even when another
+character is selected. Compute `gainReduction` as:
+
+```text
+gainReduction = clamp((-20*log10(max(limiterGain, 1e-6))) / 6 dB, 0, 1)
+```
+
+The UI smooths visual values independently of audio control:
+
+```text
+inflation = clamp(0.65*amount + 0.25*inputActivity + 0.10*gainReduction, 0, 1)
+```
+
+Character-specific motion:
+
+- `BLOOM`: round body inflation, slow breathing, relaxed fin movement.
+- `SPINE`: spine extension follows amount; jaw/outline tension follows
+  transients.
+- `FRENZY`: asymmetric squash and eye direction follow transient activity; no
+  random audio behavior is implied.
+- all modes: blush or warning tint follows limiter gain reduction.
+
+The separate `LIMIT_LIGHT` follows the same gain-reduction target and reaches
+full brightness at 6 dB reduction.
+
+### 7.3 Idle animation
+
+Blinking, glances, and micro-breathing are cosmetic widget-local animation.
+They:
+
+- do not depend on or alter audio RNG;
+- do not need to reproduce across patch loads;
+- stop advancing when the widget is not visible;
+- use bounded update rates and never dirty the whole panel framebuffer.
+
+Target 30 visual updates per second when visible. Drawing at the Rack frame rate
+is acceptable, but expensive geometry/state preparation should run only when a
+target or idle-animation phase materially changes.
+
+## 8. Architecture and files
+
+Keep Rack integration, DSP, and rendering separable:
+
+```text
+src/Puffy.hpp              module declaration, enums, persisted settings
+src/PuffyEngine.hpp        allocation-free character and limiter kernels
+src/PuffyEngine.cpp
+src/Puffy.cpp              Rack configuration, process(), JSON
+src/PuffyWidget.cpp        panel, controls, menu, fish widget
+res/Puffy.svg
+tests/puffy_engine_spec.cpp
+```
+
+Reuse `MathHelpers.hpp` and `PanelSvgUtils`. If Puffy and Sil can genuinely
+share a tested true-peak detector/limiter kernel without changing Sil's sound,
+extract that kernel into a neutral helper in a separate, reviewable change.
+Puffy v1 must not silently alter Sil while being implemented.
+
+Register:
+
+- `extern Model* modelPuffy;` in `src/plugin.hpp`;
+- `p->addModel(modelPuffy);` in `src/plugin.cpp`;
+- a `plugin.json` entry with slug/name `Puffy`, description
+  `Character stereo saturator with animated peak control.`, and tags
+  `Distortion`, `Dynamics`, and `Visual`.
+
+## 9. Lifecycle and realtime requirements
+
+- Constructors configure fixed storage and safe defaults.
+- `onSampleRateChange()` recalculates smoothing, detector, DC-blocker, delay,
+  and release coefficients and resets dependent histories.
+- `onReset()` resets DSP histories and restores menu settings to their defaults;
+  Rack parameters follow normal Rack reset behavior.
+- `process()` is bounded, allocation-free, wait-free, and exception-free.
+- Context-menu callbacks publish requested enum/boolean changes atomically.
+  The audio thread owns the actual state transition.
+- Output must remain finite for finite or non-finite input. A non-finite sample
+  also resets the shared `FRENZY` detectors and linked limiter, not only the
+  affected channel history.
+- Silence must settle to numerical silence; denormal protection may use state
+  zeroing below a small threshold.
+
+Only the currently selected character runs normally. During a character
+crossfade, the old and new character run in parallel for at most 10 ms.
+
+## 10. Persistence
+
+Rack automatically persists the four parameters. Custom JSON schema:
+
+```json
+{
+  "schemaVersion": 1,
+  "oversampling": 4,
+  "limiterMode": "live",
+  "autoDeflate": true
+}
+```
+
+Validation rules:
+
+- missing or invalid `oversampling` -> 4;
+- accepted oversampling values -> 2, 4, 8 only;
+- missing or invalid `limiterMode` -> `live`;
+- missing or non-boolean `autoDeflate` -> true;
+- ignore unknown fields for forward compatibility.
+
+Do not persist envelopes, resampler histories, limiter buffers, crossfade
+position, meters, blink timing, or fish pose. Loading a patch begins with reset
+DSP state and fades the processed stream in over 5 ms.
+
+Context menu:
+
+```text
+Auto Deflate                     [check]
+
+Oversampling
+  2x
+  4x                             [default]
+  8x
+
+Limiter
+  Live — zero lookahead          [default]
+  Master — 2 ms / true peak
+```
+
+Menu labels must expose the latency distinction. Do not hide `MASTER` latency
+behind a generic `High quality` label.
+
+## 11. Verification and acceptance tests
+
+### 11.1 Transfer functions
+
+- `amount = 0`, Auto Deflate off, and `DEFLATE = 0` produces unity gain within
+  0.05 dB at 1 kHz below limiter threshold.
+- Every character is finite and continuous across its piecewise boundaries.
+- `BLOOM` and `SPINE` are odd within floating-point tolerance.
+- `FRENZY` produces zero output for zero input after state settles.
+- All characters become audibly and measurably more nonlinear as amount rises.
+- With Auto Deflate enabled, the gated RMS of each character on the shared pink
+  noise fixture stays within 1.5 dB of its amount-zero RMS at amounts 0.25,
+  0.50, 0.75, and 1.00. Run below limiter engagement and exclude the first
+  500 ms. If one static compensation curve cannot pass without making normal
+  program material sound obviously quieter, record the exception and tune
+  against the common fixture rather than adding an envelope follower.
+
+### 11.2 Aliasing and spectrum
+
+- Test 997 Hz and near-Nyquist sine sweeps at 44.1, 48, 96, and 192 kHz.
+- At the default 4x setting, aliased energy for a representative high-drive
+  `SPINE` test is at least 12 dB below the same transfer curve run without
+  oversampling.
+- 8x must not perform worse than 4x by more than 1 dB in the same measurement.
+- For a symmetrical steady sine, the mean output over a one-second window
+  beginning 500 ms after onset stays below -70 dB relative to a 5 V reference
+  in every character.
+
+### 11.3 Stereo behavior
+
+- Identical L/R input produces identical L/R output within floating-point
+  tolerance.
+- A peak on either side applies exactly the same limiter gain to both sides.
+- `FRENZY` detector motion is shared; equal input does not create image drift.
+- Mono normalization works from either input jack while active.
+
+### 11.4 Limiter behavior
+
+- `LIVE` never emits a sample above 5.0 V magnitude after tolerance.
+- `MASTER` never emits a sample above its 4.456 V sample guard.
+- Offline 4x reconstruction of the standard test set remains at or below the
+  `MASTER` ceiling plus 0.1 dB.
+- A single-sample impulse, alternating Nyquist-adjacent waveform, sine burst,
+  and highly asymmetric `FRENZY` output are all included.
+- Gain returns monotonically toward unity after the peak and does not overshoot.
+- Limiter gain is bit-identical between L and R.
+
+### 11.5 State and transitions
+
+- JSON round-trips all three custom fields.
+- Malformed, missing, and future-valued fields fall back safely.
+- Sample-rate changes at 44.1/48/96/192 kHz produce correct delay lengths and no
+  stale-buffer output.
+- Character changes complete in 10 ms without a discontinuity.
+- Limiter/oversampling changes perform the specified fade-reset-fade transition.
+- Reset and patch load emit no stale audio or gain-reduction state.
+
+### 11.6 Realtime and UI
+
+- A test allocator records zero allocations from repeated `process()` calls,
+  including limiter activity and character crossfades.
+- Thread sanitization finds no UI/audio data race in snapshot or setting changes.
+- Browser preview construction with `module == nullptr` is deterministic and
+  does not access audio state.
+- On the project reference machine, a release build must process 10 seconds of
+  48 kHz stereo audio in less than 1 second at 4x/`MASTER`; 8x must remain at
+  least 5x realtime.
+- Hidden/offscreen fish animation does no continuing expensive preparation.
+
+## 12. Implementation order
+
+1. Build and test the standalone engine: oversampling, three characters, DC
+   blocker, Auto Deflate, and both limiter modes.
+2. Add the Rack module shell, stable IDs, normalization, bypass, lifecycle, and
+   JSON.
+3. Add the structural SVG and anchored controls.
+4. Add the atomic visual snapshot and a simple procedural fish meter.
+5. Replace placeholder fish geometry with final original art without changing
+   the DSP or persistence contracts.
+6. Run audio, transition, preview, and performance acceptance tests before
+   making the module visible in `plugin.json`.
+
+## 13. V1 release gate
+
+Puffy is ready to unhide only when:
+
+- all three modes are sonically distinct at matched level;
+- the default 4x path meets the aliasing target;
+- `LIVE` and `MASTER` satisfy their separately named peak guarantees;
+- context changes and patch loading are click-safe;
+- stereo linking and mono normalization are verified;
+- the fish remains useful at 100% Rack zoom and inexpensive when idle;
+- no borrowed commercial names, artwork, or layout remain.
+
+The v1 priority order is sound, stability, stereo integrity, readable animation,
+and visual polish. True 3D remains outside the release path.
