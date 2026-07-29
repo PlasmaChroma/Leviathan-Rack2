@@ -4,6 +4,7 @@
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
+#include <iosfwd>
 #include <mutex>
 #include <memory>
 #include <string>
@@ -133,9 +134,11 @@ private:
 	bool compactArchive();
 	bool resetArchive();
 	bool shouldCompactArchive() const;
-	bool getPackFileSize(std::uint64_t& size) const;
 	bool readPackRange(std::uint64_t offset, std::uint64_t length,
 	                   std::vector<std::uint8_t>& bytes) const;
+	bool readPackRange(std::istream& input, std::uint64_t offset,
+	                   std::uint64_t length, std::vector<std::uint8_t>& bytes,
+	                   std::uint64_t& nextOffset) const;
 	bool loadIndex(const std::string& path);
 	bool saveIndexAtomically();
 	bool canceled() const { return stopping_.load(std::memory_order_relaxed); }

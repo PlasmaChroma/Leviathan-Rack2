@@ -585,6 +585,83 @@ int main() {
 	}
 	removeDirectory(wideDirectory);
 
+	// Startup reads small append-only holes sequentially. A superseded middle
+	// record must be skipped without disturbing either neighboring live QOI.
+	const std::string fragmentedDirectory = directory + "-fragmented";
+	removeDirectory(fragmentedDirectory);
+	makeDirectory(fragmentedDirectory);
+	const std::vector<std::uint8_t> gapPixelsA = pixels(13, 9, 51);
+	const std::vector<std::uint8_t> gapPixelsB = pixels(13, 9, 52);
+	const std::vector<std::uint8_t> gapPixelsB2 = pixels(13, 9, 53);
+	const std::vector<std::uint8_t> gapPixelsC = pixels(13, 9, 54);
+	const std::vector<deepcache::ArchiveWantedEntry> fragmentedWanted = {
+		{"gap-a", "fp-a", "plugin-gap"},
+		{"gap-b", "fp-b", "plugin-gap"},
+		{"gap-c", "fp-c", "plugin-gap"}
+	};
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(fragmentedDirectory, fragmentedWanted);
+		const std::vector<std::pair<std::string, const std::vector<std::uint8_t>*>> initial = {
+			{"gap-a", &gapPixelsA}, {"gap-b", &gapPixelsB}, {"gap-c", &gapPixelsC}
+		};
+		for (const auto& item : initial) {
+			deepcache::PreviewWrite write;
+			write.cacheKey = item.first;
+			write.fingerprint = item.first == "gap-a" ? "fp-a" :
+			                    item.first == "gap-b" ? "fp-b" : "fp-c";
+			write.width = 13;
+			write.height = 9;
+			write.rgba =
+				std::make_shared<const std::vector<std::uint8_t>>(*item.second);
+			if (!waitUntil([&]() { return worker.enqueue(write); })) {
+				std::cerr << "[FAIL] fragmented archive write queue stalled\n";
+				return 1;
+			}
+		}
+		if (!waitUntil([&]() { return worker.readyCount() == 3; })) {
+			std::cerr << "[FAIL] fragmented archive was not populated\n";
+			return 1;
+		}
+		const std::uint64_t beforeReplacement = worker.packBytes();
+		deepcache::PreviewWrite replacement;
+		replacement.cacheKey = "gap-b";
+		replacement.fingerprint = "fp-b";
+		replacement.width = 13;
+		replacement.height = 9;
+		replacement.rgba =
+			std::make_shared<const std::vector<std::uint8_t>>(gapPixelsB2);
+		if (!worker.enqueue(std::move(replacement)) ||
+		    !waitUntil([&]() { return worker.packBytes() > beforeReplacement; })) {
+			std::cerr << "[FAIL] fragmented archive replacement was not appended\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(fragmentedDirectory, fragmentedWanted);
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] fragmented archive reload did not finish\n";
+			return 1;
+		}
+		bool restoredA = false;
+		bool restoredB = false;
+		bool restoredC = false;
+		deepcache::DecodedPreview preview;
+		while (worker.tryPopDecoded(preview)) {
+			restoredA = restoredA || (preview.cacheKey == "gap-a" && preview.rgba == gapPixelsA);
+			restoredB = restoredB || (preview.cacheKey == "gap-b" && preview.rgba == gapPixelsB2);
+			restoredC = restoredC || (preview.cacheKey == "gap-c" && preview.rgba == gapPixelsC);
+		}
+		worker.shutdown();
+		if (!restoredA || !restoredB || !restoredC) {
+			std::cerr << "[FAIL] sequential gap read disturbed a live preview\n";
+			return 1;
+		}
+	}
+	removeDirectory(fragmentedDirectory);
+
 	// A live panel-theme rebuild changes the fingerprint without changing the
 	// model cache key. The replacement must persist under the new fingerprint.
 	const std::string themeDirectory = directory + "-theme";
