@@ -71,6 +71,7 @@ public:
 	bool enqueue(PreviewWrite write);
 	void discardPendingWrites();
 	bool canAcceptWrite() const;
+	bool canAcceptWrite(std::size_t byteCount) const;
 	bool tryPopDecoded(DecodedPreview& preview);
 	bool hasPendingDecoded() const;
 	// Re-decodes an already validated entry from its bounded on-disk pack span.

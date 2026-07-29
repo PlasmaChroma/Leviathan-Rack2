@@ -287,7 +287,7 @@ void DeepcacheArchiveWorker::start(const std::string& directory, std::vector<Arc
 bool DeepcacheArchiveWorker::enqueue(PreviewWrite write) {
 	if (!started_ || canceled() || fatalError_.load(std::memory_order_relaxed) ||
 	    !write.rgba || write.rgba->empty() ||
-	    write.rgba->size() > 128u * 1024u * 1024u)
+	    write.rgba->size() > kMaxDecodedPreviewBytes)
 		return false;
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
@@ -298,16 +298,18 @@ bool DeepcacheArchiveWorker::enqueue(PreviewWrite write) {
 		const std::size_t byteCount = write.rgba->size();
 		if (leaseUnavailable_.load(std::memory_order_relaxed)) {
 			if (volatileWrites_.size() >= kMaxWriteQueueEntries ||
-			    byteCount > kMaxWriteQueueBytes - std::min(
-			        queuedVolatileWriteBytes_, kMaxWriteQueueBytes))
+			    (!volatileWrites_.empty() &&
+			     byteCount > kMaxWriteQueueBytes - std::min(
+			         queuedVolatileWriteBytes_, kMaxWriteQueueBytes)))
 				return false;
 			queuedVolatileWriteBytes_ += byteCount;
 			volatileWrites_.push_back(std::move(write));
 		}
 		else {
 			if (writes_.size() >= kMaxWriteQueueEntries ||
-			    byteCount > kMaxWriteQueueBytes - std::min(
-			        queuedWriteBytes_, kMaxWriteQueueBytes))
+			    (!writes_.empty() &&
+			     byteCount > kMaxWriteQueueBytes - std::min(
+			         queuedWriteBytes_, kMaxWriteQueueBytes)))
 				return false;
 			queuedWriteBytes_ += byteCount;
 			writes_.push_back(std::move(write));
@@ -326,13 +328,24 @@ void DeepcacheArchiveWorker::discardPendingWrites() {
 }
 
 bool DeepcacheArchiveWorker::canAcceptWrite() const {
-	if (!started_ || canceled() || fatalError_.load(std::memory_order_relaxed))
+	return canAcceptWrite(1);
+}
+
+bool DeepcacheArchiveWorker::canAcceptWrite(std::size_t byteCount) const {
+	if (!started_ || byteCount == 0 || byteCount > kMaxDecodedPreviewBytes ||
+	    canceled() || fatalError_.load(std::memory_order_relaxed))
 		return false;
 	std::lock_guard<std::mutex> lock(mutex_);
-	if (leaseUnavailable_.load(std::memory_order_relaxed))
+	if (leaseUnavailable_.load(std::memory_order_relaxed)) {
 		return volatileWrites_.size() < kMaxWriteQueueEntries &&
-		       queuedVolatileWriteBytes_ < kMaxWriteQueueBytes;
-	return writes_.size() < kMaxWriteQueueEntries && queuedWriteBytes_ < kMaxWriteQueueBytes;
+		       (volatileWrites_.empty() ||
+		        byteCount <= kMaxWriteQueueBytes - std::min(
+		            queuedVolatileWriteBytes_, kMaxWriteQueueBytes));
+	}
+	return writes_.size() < kMaxWriteQueueEntries &&
+	       (writes_.empty() ||
+	        byteCount <= kMaxWriteQueueBytes - std::min(
+	            queuedWriteBytes_, kMaxWriteQueueBytes));
 }
 
 bool DeepcacheArchiveWorker::tryPopDecoded(DecodedPreview& preview) {

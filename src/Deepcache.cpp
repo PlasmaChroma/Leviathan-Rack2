@@ -625,6 +625,7 @@ public:
 		restoreDecodeRequestedIndices_.clear();
 		restoreUploadQueuedIndices_.clear();
 		persistentUploadQueue_.clear();
+		archiveWriteRetryQueue_.clear();
 		pendingUploadBytes_ = 0;
 		graphicsContextLost_ = false;
 		graphicsRestoreScheduled_ = false;
@@ -658,6 +659,7 @@ public:
 		state_ = deepcache::CacheState::STOPPING;
 		publish();
 		worker_.shutdown();
+		archiveWriteRetryQueue_.clear();
 		archive_.shutdown();
 		activeGeneration_ = 0;
 		browser_ = nullptr;
@@ -953,9 +955,11 @@ public:
 	}
 
 	void warmFramebuffers() {
+		drainArchiveWriteRetries();
 		scheduleGraphicsRestore();
 		uploadPersistentImages();
-		if (stopped_ || !browser_ || framebufferWarmQueue_.empty()) {
+		if (stopped_ || !browser_ || !archiveWriteRetryQueue_.empty() ||
+		    framebufferWarmQueue_.empty()) {
 			finishIfComplete();
 			return;
 		}
@@ -963,7 +967,7 @@ public:
 		const double budgetMs = std::max(0.5, module_->uiBudgetMicros.load(std::memory_order_relaxed) / 1000.0);
 		int processedThisFrame = 0;
 		while (processedThisFrame < 4 && !framebufferWarmQueue_.empty()) {
-			if (!archive_.canAcceptWrite())
+			if (!archiveWriteRetryQueue_.empty() || !archive_.canAcceptWrite())
 				break;
 			if (processedThisFrame > 0 && (system::getTime() - frameStart) * 1000.0 >= budgetMs)
 				break;
@@ -994,7 +998,7 @@ public:
 							write.width = width;
 							write.height = height;
 							write.rgba = pixels;
-							archive_.enqueue(std::move(write));
+							submitArchiveWrite(std::move(write));
 						}
 						if (isDisplayEligible(request.first)) {
 							result = box->ensurePersistentImage(APP && APP->window ? APP->window->vg : nullptr)
@@ -1075,7 +1079,8 @@ private:
 	void finishIfComplete() {
 		if (state_ != deepcache::CacheState::WARMING || constructionCompleted_ < constructionTarget_ ||
 		    worker_.pendingRequestCount(activeGeneration_) != 0 || completed_ < total_ ||
-		    !warmTrackedGeneration_.empty() || !rehydrationPendingIndices_.empty())
+		    !warmTrackedGeneration_.empty() || !rehydrationPendingIndices_.empty() ||
+		    !archiveWriteRetryQueue_.empty())
 			return;
 		if (isDragonKingDebugEnabled()) {
 			const double elapsedMs = (system::getTime() - warmingStartedAt_) * 1000.0;
@@ -1125,7 +1130,31 @@ private:
 		const deepcache::DatabaseState databaseState = archive_.state();
 		return databaseState != deepcache::DatabaseState::LOADING &&
 		       databaseState != deepcache::DatabaseState::ERROR &&
-		       !archive_.hasPendingDecoded() && persistentUploadQueue_.empty();
+		       !archive_.hasPendingDecoded() && persistentUploadQueue_.empty() &&
+		       archiveWriteRetryQueue_.empty();
+	}
+
+	bool submitArchiveWrite(deepcache::PreviewWrite write) {
+		const std::size_t byteCount = write.rgba ? write.rgba->size() : 0;
+		if (archive_.canAcceptWrite(byteCount) && archive_.enqueue(write))
+			return true;
+		// Warming stops while this queue is nonempty, so it remains bounded to
+		// the one captured raster that lost admission to a concurrently changing
+		// archive queue or worker state.
+		archiveWriteRetryQueue_.push_back(std::move(write));
+		return false;
+	}
+
+	void drainArchiveWriteRetries() {
+		int submitted = 0;
+		while (!archiveWriteRetryQueue_.empty() && submitted < 16) {
+			const deepcache::PreviewWrite& write = archiveWriteRetryQueue_.front();
+			const std::size_t byteCount = write.rgba ? write.rgba->size() : 0;
+			if (!archive_.canAcceptWrite(byteCount) || !archive_.enqueue(write))
+				break;
+			archiveWriteRetryQueue_.pop_front();
+			submitted++;
+		}
 	}
 
 	void initializeArchive() {
@@ -1437,6 +1466,7 @@ private:
 	std::vector<std::uint8_t> displayEligibility_;
 	std::vector<std::uint8_t> displayEligibilityScratch_;
 	std::deque<std::pair<std::size_t, int>> persistentUploadQueue_;
+	std::deque<deepcache::PreviewWrite> archiveWriteRetryQueue_;
 	std::size_t pendingUploadBytes_ = 0;
 	std::unordered_map<std::string, std::size_t> modelIndexByCacheKey_;
 	std::unordered_map<std::size_t, std::string> cacheKeyByModelIndex_;

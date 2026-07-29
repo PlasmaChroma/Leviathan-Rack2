@@ -501,6 +501,26 @@ int main() {
 		}
 	}
 
+	// Candidate-size admission allows one bounded preview above the aggregate
+	// queue threshold when empty, but rejects anything above the single-preview
+	// ceiling. The UI retains a bounded retry if admission later changes.
+	const std::string admissionDirectory = directory + "-admission";
+	removeDirectory(admissionDirectory);
+	makeDirectory(admissionDirectory);
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(admissionDirectory, {{"admission-model", "fp-admission", "plugin-admission"}});
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; }) ||
+		    !worker.canAcceptWrite(1) ||
+		    !worker.canAcceptWrite(64u * 1024u * 1024u + 1u) ||
+		    worker.canAcceptWrite(128u * 1024u * 1024u + 1u)) {
+			std::cerr << "[FAIL] archive candidate-size admission was inconsistent\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	removeDirectory(admissionDirectory);
+
 	// A sparse pack larger than the former 512 MB ceiling must be handled through
 	// its indexed span without allocating or reading the whole file. Its invalid
 	// payload is discarded and the owning worker can accept a normal replacement.
@@ -623,7 +643,8 @@ int main() {
 			std::cerr << "[FAIL] fragmented archive was not populated\n";
 			return 1;
 		}
-		const std::uint64_t beforeReplacement = worker.packBytes();
+		std::string committedKey;
+		while (worker.tryPopCommitted(committedKey)) {}
 		deepcache::PreviewWrite replacement;
 		replacement.cacheKey = "gap-b";
 		replacement.fingerprint = "fp-b";
@@ -632,7 +653,13 @@ int main() {
 		replacement.rgba =
 			std::make_shared<const std::vector<std::uint8_t>>(gapPixelsB2);
 		if (!worker.enqueue(std::move(replacement)) ||
-		    !waitUntil([&]() { return worker.packBytes() > beforeReplacement; })) {
+		    !waitUntil([&]() {
+			    while (worker.tryPopCommitted(committedKey)) {
+				    if (committedKey == "gap-b")
+					    return true;
+			    }
+			    return false;
+		    })) {
 			std::cerr << "[FAIL] fragmented archive replacement was not appended\n";
 			return 1;
 		}
