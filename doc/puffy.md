@@ -7,7 +7,9 @@
 > Authority: this document replaces the earlier research brief and incorporates
 > the review findings and architectural confirmations from `puffy-s5-notes.md`
 > and `puffy-s5-confirmation.md`. Where recommendations conflict, this document
-> defines the definitive Puffy v1 contract.
+> defines the definitive Puffy v1 contract. `puffy_char_sheet.png` is the
+> visual character reference described in section 7.1; it does not override the
+> audio, interaction, lifecycle, or release requirements in this document.
 
 ## 1. Product contract
 
@@ -440,20 +442,6 @@ true-peak limiter.
 | Gain release | 80 ms one-pole |
 | Stereo link | 100% |
 
-### 6.2 MASTER mode
-
-`MASTER` is an optional finishing mode:
-
-| Property | Value |
-| --- | ---: |
-| Ceiling | `5 V * 10^(-1/20)` = approximately 4.456 V |
-| Program delay | 2.0 ms, rounded to nearest sample |
-| Detector oversampling | 4x |
-| Detector FIR quality | 8 |
-| Gain attack | Immediate from lookahead demand |
-| Gain release | 80 ms one-pole |
-| Stereo link | 100% |
-
 Use `dsp::Upsampler<4, 8>` on the post-Auto Deflate detector signal. The detector peak
 is the maximum absolute reconstructed sample across L and R. Maintain the
 maximum over the program-delay horizon with a fixed-capacity monotonic queue,
@@ -504,6 +492,42 @@ Use an original rigged 2D or pseudo-3D puffer fish drawn with NanoVG and cached
 raster/vector parts. Do not require `OpenGlWidget`. Static panel and viewport
 decoration remains in the panel SVG or a cached `FramebufferWidget` (using a neutral shared cache helper where appropriate); only the
 fish and its small local effects redraw continuously.
+
+`doc/puffy_char_sheet.png` is the canonical visual reference for Puffy's v1
+identity. The module and character remain named `Puffy`; the word `PUFFER` in
+the reference sheet is descriptive character-sheet copy and is not a module,
+slug, or branding change. Preserve these recognizable traits:
+
+- a warm golden-yellow, softly glossy, nearly spherical body;
+- short rounded spikes that read as friendly rather than dangerous;
+- small ribbed side fins;
+- large eye whites with independently movable pupils and eyelids;
+- a small expressive mouth and restrained coral blush;
+- a cheerful, curious, playful personality with a mischievous edge;
+- distinct deflated, normal, and fully puffed silhouettes.
+
+The approximate reference palette is:
+
+```text
+body highlight       #FFD44D
+body gold            #FFB81C
+soft highlight       #FFEBA6
+cream highlight      #FFF3D1
+blush                #FF8A80
+eyes / dark detail   #1A1A1A
+```
+
+Treat the palette as an art-direction starting point rather than a requirement
+to reproduce exact raster pixels. At all inflation levels, the body must read
+as one sculpted spherical volume, not as a central body plus oversized cheek
+masses.
+
+The character sheet is a flattened reference image, not a runtime sprite atlas
+or a shippable viewport texture. Reconstruct or author body stages, spikes,
+fins, eyes, pupils, eyelids, mouth shapes, highlights, and blush as independent
+original layers. Do not crop expressions or views directly from the sheet into
+the module. This keeps animation clean at Rack scale and preserves an editable
+source for the final art.
 
 The widget must work when `module == nullptr` for the module browser and Deep
 Cache preview. Preview state is calm, deterministic, and requires no engine
@@ -596,7 +620,9 @@ Register:
 - `p->addModel(modelPuffy);` in `src/plugin.cpp`;
 - a `plugin.json` entry with slug/name `Puffy`, description
   `Character stereo saturator with animated peak control.`, and tags
-  `Distortion`, `Dynamics`, and `Visual`.
+  `Distortion`, `Dynamics`, and `Visual`. Keep this entry `"hidden": true`
+  through the MVP and remove or disable the hidden flag only after section 13
+  passes.
 
 ## 9. Lifecycle and realtime requirements
 
@@ -731,18 +757,115 @@ behind a generic `High quality` label.
   48 kHz stereo audio in less than 1 second at 4x/`MASTER`; 8x (measured at worst-case: `8x saturation oversampling + MASTER limiter + active stereo audio + visual snapshot publication`) must remain at least 5x realtime.
 - Hidden/offscreen fish animation does no continuing expensive preparation.
 
-## 12. Implementation order
+## 12. Implementation milestones
 
-1. Build and test the standalone engine: oversampling, three characters, DC
-   blocker, Auto Deflate, and both limiter modes.
-2. Add the Rack module shell, stable IDs, normalization, bypass, lifecycle, and
-   JSON.
-3. Add the structural SVG and anchored controls.
-4. Add the atomic visual snapshot and a simple procedural fish meter.
-5. Replace placeholder fish geometry with final original art without changing
-   the DSP or persistence contracts.
-6. Run audio, transition, preview, and performance acceptance tests before
-   making the module visible in `plugin.json`.
+### 12.1 MVP purpose and boundary
+
+The implementation MVP is a hidden, testable vertical slice. Its purpose is to
+validate Puffy's permanent module API, stereo signal flow, three character
+identities, and audio-to-character handoff before the more expensive limiter,
+configuration-transition, and final-art work begins.
+
+The MVP is not a reduced v1 product definition. Register it normally, but keep
+its `plugin.json` entry hidden and do not publish it. Deferred items remain
+required by sections 1-11 and the v1 release gate in section 13. Avoid temporary
+public parameter, port, light, JSON, or file-layout contracts that would later
+require migration.
+
+### 12.2 MVP required scope
+
+The first runnable module includes:
+
+- the final `ParamId`, `InputId`, `OutputId`, and `LightId` ordering from section
+  4, configured with the specified names, ranges, defaults, display behavior,
+  and bypass routes;
+- active-mode stereo normalization, channel-0 input handling, finite guards,
+  the +/-20 V internal clamp, and one output channel per jack;
+- 1 ms `PUFF` smoothing and the 10 ms equal-power character crossfade;
+- all three final character transfer functions and the one continuously updated
+  stereo-linked `PuffyDynamicsDetector`;
+- a fixed 4x saturation path for the MVP, using the final Rack FIR types, plus
+  the common 5 Hz DC blocker;
+- static mode-aware Auto Deflate enabled by default;
+- the final fully linked `LIVE` limiter and post-limiter manual `DEFLATE`;
+- reset and sample-rate lifecycle behavior for all implemented DSP state;
+- the final atomic `PuffyVisualState` publication boundary;
+- `res/Puffy.svg` with all required component anchors and a functional 12 HP
+  control layout;
+- a renderer-neutral `PuffyPose` and `PuffyCharacterController` boundary;
+- a simple, original, layered NanoVG front-view Puffy informed by
+  `puffy_char_sheet.png`, with at least body inflation, independent pupils and
+  eyelids, fins, mouth, spikes, and gain-reduction blush;
+- deterministic `module == nullptr` browser and Deep Cache preview behavior;
+- focused engine tests for transfer functions, stereo linking, normalization,
+  finite recovery, DC settling, `LIVE` limiting, `DEFLATE`, and the MVP's
+  character transition.
+
+The MVP panel may use restrained structural styling and the fish renderer may
+use simplified vector geometry. It must nevertheless be recognizably Puffy;
+a generic circle or unrelated placeholder mascot is not sufficient.
+
+### 12.3 Explicit MVP deferrals
+
+The following work is deferred from the first vertical slice, not removed from
+v1:
+
+- selectable 2x and 8x saturation banks;
+- the `MASTER` lookahead true-peak limiter;
+- the structural Transition Coordinator used for oversampling and limiter-mode
+  changes;
+- user-facing oversampling and limiter context-menu choices;
+- final persistence of selectable oversampling and limiter modes;
+- full autonomous-life scheduling, mode-personality polish, animation
+  preferences, and final sprite or pseudo-3D art;
+- exhaustive aliasing, reconstructed-peak, concurrency, and release-performance
+  qualification.
+
+During the MVP, 4x and `LIVE` are fixed implementation constants. Auto Deflate
+may be exposed as its final context-menu checkbox once JSON support is added.
+If custom JSON is implemented in the MVP, it must use the final schema and
+validation rules in section 10; unsupported menu choices must not be presented
+as functional.
+
+### 12.4 MVP acceptance gate
+
+The MVP milestone is complete when:
+
+- `tests/puffy_engine_spec.cpp` passes under `test-fast` or as a focused test
+  binary;
+- amount zero, Auto Deflate off, and zero `DEFLATE` are unity within the section
+  11 tolerance below limiter engagement;
+- every character is finite, continuous, sonically distinct, and becomes more
+  nonlinear as `PUFF` rises;
+- mono-from-either-side and stereo operation are correct;
+- `FRENZY` and limiter control remain stereo-linked;
+- `LIVE` never emits a finite sample beyond its 5 V ceiling tolerance;
+- `DEFLATE` produces the exact requested post-limiter attenuation;
+- rapid character changes, reset, sample-rate changes, silence, and non-finite
+  input produce no stale or non-finite output;
+- repeated engine processing performs no allocation;
+- the module widget constructs with and without a module instance;
+- the visual snapshot drives inflation and blush without UI access to mutable
+  DSP state;
+- Puffy remains recognizable at 100% Rack zoom.
+
+In the Windows/WSL development environment, focused engine and `test-fast`
+results are authoritative for this milestone; full plugin linking remains a
+Windows/MSYS2 validation step as described by the repository build policy.
+
+### 12.5 V1 completion after the MVP
+
+After the MVP gate:
+
+1. Add preallocated 2x and 8x banks, the `MASTER` limiter, and their focused
+   tests.
+2. Add the single Transition Coordinator, context menus, final JSON behavior,
+   and concurrent-change stress tests.
+3. Tune Auto Deflate and aliasing against the shared fixtures.
+4. Complete autonomous animation and replace simplified geometry with final
+   original layered art without changing the pose or DSP contracts.
+5. Run the full section 11 acceptance suite and section 13 release gate before
+   making Puffy visible in `plugin.json`.
 
 ## 13. V1 release gate
 
