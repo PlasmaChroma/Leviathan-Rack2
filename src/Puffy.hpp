@@ -43,6 +43,7 @@ struct Puffy final : Module {
 
 	ModuleTeardownTimer teardownTimer {"Puffy"};
 	puffy::Engine engine;
+	std::atomic<bool> autoDeflateEnabled {true};
 	std::atomic<std::uint32_t> visualSequence {0u};
 	std::atomic<float> visualEffectiveAmount {0.f};
 	std::atomic<float> visualInputActivity {0.f};
@@ -59,6 +60,8 @@ struct Puffy final : Module {
 	void process(const ProcessArgs& args) override;
 	void onReset(const ResetEvent& event) override;
 	void onSampleRateChange(const SampleRateChangeEvent& event) override;
+	json_t* dataToJson() override;
+	void dataFromJson(json_t* root) override;
 	bool readVisualState(PuffyVisualState* state) const;
 
 private:

@@ -86,6 +86,7 @@ void Engine::setSampleRate(float requestedSampleRate) {
 		? std::max(requestedSampleRate, kMinimumSampleRate)
 		: 48000.f;
 	amountCoefficient = onePoleCoefficient(0.001f, sampleRate);
+	autoDeflateCoefficient = onePoleCoefficient(0.010f, sampleRate);
 	detectorAttackCoefficient = onePoleCoefficient(0.001f, sampleRate);
 	detectorReleaseCoefficient = onePoleCoefficient(0.045f, sampleRate);
 	detectorSlowCoefficient = onePoleCoefficient(0.180f, sampleRate);
@@ -114,6 +115,8 @@ void Engine::reset() {
 	secondaryPath.dcRight.coefficient = dcCoefficient;
 	resetSharedControlState();
 	amount = 0.f;
+	autoDeflateMix = 1.f;
+	autoDeflateStateInitialized = false;
 	cachedManualDeflate = -1.f;
 	cachedManualGain = 1.f;
 	currentCharacter = Character::Bloom;
@@ -239,7 +242,7 @@ float Engine::processPath(
 	float* oversampledLeft,
 	float* oversampledRight,
 	float currentAmount,
-	bool autoDeflate,
+	float autoDeflateAmount,
 	bool left) {
 	std::array<float, kOversampleFactor> shaped {};
 	float* input = left ? oversampledLeft : oversampledRight;
@@ -251,9 +254,8 @@ float Engine::processPath(
 		? path.decimatorLeft.process(shaped.data())
 		: path.decimatorRight.process(shaped.data());
 	output = left ? path.dcLeft.process(output) : path.dcRight.process(output);
-	if (autoDeflate) {
-		output *= updateAutoGain(character, currentAmount);
-	}
+	const float compensationGain = updateAutoGain(character, currentAmount);
+	output *= 1.f + (compensationGain - 1.f) * clamp01(autoDeflateAmount);
 	return output;
 }
 
@@ -300,6 +302,15 @@ Frame Engine::process(
 
 	const float safeTarget = std::isfinite(amountTarget) ? clamp01(amountTarget) : 0.f;
 	amount += (safeTarget - amount) * amountCoefficient;
+	const float autoDeflateTarget = autoDeflate ? 1.f : 0.f;
+	if (!autoDeflateStateInitialized) {
+		autoDeflateMix = autoDeflateTarget;
+		autoDeflateStateInitialized = true;
+	}
+	else {
+		autoDeflateMix +=
+			(autoDeflateTarget - autoDeflateMix) * autoDeflateCoefficient;
+	}
 	const Character requestedCharacter = clampCharacter(character);
 	beginCharacterTransition(requestedCharacter);
 
@@ -313,16 +324,16 @@ Frame Engine::process(
 	if (transitionActive) {
 		const float oldLeft = processPath(
 			primaryPath, transitionFrom, oversampledLeft.data(),
-			oversampledRight.data(), amount, autoDeflate, true);
+			oversampledRight.data(), amount, autoDeflateMix, true);
 		const float oldRight = processPath(
 			primaryPath, transitionFrom, oversampledLeft.data(),
-			oversampledRight.data(), amount, autoDeflate, false);
+			oversampledRight.data(), amount, autoDeflateMix, false);
 		const float newLeft = processPath(
 			secondaryPath, transitionTo, oversampledLeft.data(),
-			oversampledRight.data(), amount, autoDeflate, true);
+			oversampledRight.data(), amount, autoDeflateMix, true);
 		const float newRight = processPath(
 			secondaryPath, transitionTo, oversampledLeft.data(),
-			oversampledRight.data(), amount, autoDeflate, false);
+			oversampledRight.data(), amount, autoDeflateMix, false);
 		const float t = clamp01(
 			float(transitionSample) / float(std::max(transitionLength - 1, 1)));
 		const float oldGain = std::sqrt(1.f - t);
@@ -339,10 +350,10 @@ Frame Engine::process(
 	else {
 		normalizedLeft = processPath(
 			primaryPath, currentCharacter, oversampledLeft.data(),
-			oversampledRight.data(), amount, autoDeflate, true);
+			oversampledRight.data(), amount, autoDeflateMix, true);
 		normalizedRight = processPath(
 			primaryPath, currentCharacter, oversampledLeft.data(),
-			oversampledRight.data(), amount, autoDeflate, false);
+			oversampledRight.data(), amount, autoDeflateMix, false);
 	}
 
 	float outputLeft = normalizedLeft * kReferenceVolts;

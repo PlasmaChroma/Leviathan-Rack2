@@ -79,6 +79,9 @@ private:
 	float sampleRate = 48000.f;
 	float amount = 0.f;
 	float amountCoefficient = 1.f;
+	float autoDeflateCoefficient = 1.f;
+	float autoDeflateMix = 1.f;
+	bool autoDeflateStateInitialized = false;
 	float detectorAttackCoefficient = 1.f;
 	float detectorReleaseCoefficient = 1.f;
 	float detectorSlowCoefficient = 1.f;
@@ -116,7 +119,7 @@ private:
 		float* oversampledLeft,
 		float* oversampledRight,
 		float currentAmount,
-		bool autoDeflate,
+		float autoDeflateAmount,
 		bool left);
 };
 

@@ -107,7 +107,7 @@ void Puffy::process(const ProcessArgs& args) {
 		right,
 		amountTarget,
 		character,
-		true,
+		autoDeflateEnabled.load(std::memory_order_relaxed),
 		params[DEFLATE_PARAM].getValue());
 
 	outputs[OUTPUT_L].setChannels(1);
@@ -126,6 +126,7 @@ void Puffy::process(const ProcessArgs& args) {
 void Puffy::onReset(const ResetEvent& event) {
 	(void) event;
 	engine.reset();
+	autoDeflateEnabled.store(true, std::memory_order_relaxed);
 	visualDivider = 0u;
 	lastGainReduction = 0.f;
 	puffy::Frame frame;
@@ -139,4 +140,32 @@ void Puffy::onSampleRateChange(const SampleRateChangeEvent& event) {
 		std::uint32_t(1u),
 		std::uint32_t(std::lround(event.sampleRate / 240.f)));
 	visualDivider = 0u;
+}
+
+json_t* Puffy::dataToJson() {
+	json_t* root = json_object();
+	json_object_set_new(root, "schemaVersion", json_integer(1));
+	json_object_set_new(root, "oversampling", json_integer(4));
+	json_object_set_new(root, "limiterMode", json_string("live"));
+	json_object_set_new(
+		root,
+		"autoDeflate",
+		json_boolean(autoDeflateEnabled.load(std::memory_order_relaxed)));
+	return root;
+}
+
+void Puffy::dataFromJson(json_t* root) {
+	bool loadedAutoDeflate = true;
+	if (root) {
+		json_t* autoDeflate = json_object_get(root, "autoDeflate");
+		if (json_is_boolean(autoDeflate)) {
+			loadedAutoDeflate = json_boolean_value(autoDeflate);
+		}
+	}
+	autoDeflateEnabled.store(loadedAutoDeflate, std::memory_order_relaxed);
+	engine.reset();
+	visualDivider = 0u;
+	lastGainReduction = 0.f;
+	puffy::Frame frame;
+	publishVisualState(frame);
 }

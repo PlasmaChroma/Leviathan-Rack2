@@ -51,7 +51,7 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	addParam(createParamCentered<DarkTinyClockworkGearKnob>(
 		anchor("character_param", Vec(30.48f, 14.f)),
 		module, Puffy::CHARACTER_PARAM));
-	addParam(createParamCentered<ClockworkGearKnob>(
+	addParam(createParamCentered<LeviathanHaloKnob2>(
 		anchor("puff_param", Vec(18.f, 83.5f)),
 		module, Puffy::PUFF_PARAM));
 	addParam(createParamCentered<DarkTinyClockworkGearKnob>(
@@ -90,6 +90,28 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	addChild(createWidgetCentered<ScrewSilver>(
 		anchor("screw_br", Vec(57.96f, 125.5f))));
 	previewTimer.markAnchorsDone();
+}
+
+void PuffyWidget::appendContextMenu(Menu* menu) {
+	ModuleWidget::appendContextMenu(menu);
+	auto* puffyModule = dynamic_cast<Puffy*>(module);
+	if (!puffyModule) {
+		return;
+	}
+	menu->addChild(new MenuSeparator());
+	menu->addChild(createCheckMenuItem(
+		"Auto Deflate",
+		"",
+		[puffyModule]() {
+			return puffyModule->autoDeflateEnabled.load(
+				std::memory_order_relaxed);
+		},
+		[puffyModule]() {
+			const bool enabled = puffyModule->autoDeflateEnabled.load(
+				std::memory_order_relaxed);
+			puffyModule->autoDeflateEnabled.store(
+				!enabled, std::memory_order_relaxed);
+		}));
 }
 
 Model* modelPuffy = createModel<Puffy, PuffyWidget>("Puffy");
