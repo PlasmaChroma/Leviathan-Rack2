@@ -43,15 +43,6 @@
   <text x="3048" y="1230" text-anchor="middle"
         font-family="DejaVu Sans, sans-serif" font-size="150"
         fill="#ffe6a0">CHARACTER</text>
-  <text x="1270" y="1640" text-anchor="middle"
-        font-family="DejaVu Sans, sans-serif" font-size="125"
-        fill="#ffd44d">BLOOM</text>
-  <text x="3048" y="1880" text-anchor="middle"
-        font-family="DejaVu Sans, sans-serif" font-size="125"
-        fill="#ffd44d">SPINE</text>
-  <text x="4826" y="1640" text-anchor="middle"
-        font-family="DejaVu Sans, sans-serif" font-size="125"
-        fill="#ffd44d">FRENZY</text>
 
   <path d="M420 7000 H5676" stroke="#9a5b20" stroke-opacity="0.65" stroke-width="22"/>
   <text x="1800" y="7370" text-anchor="middle"
@@ -88,6 +79,7 @@
     <rect id="fish_rect" x="400" y="2000" width="5296" height="4800"/>
 
     <circle id="character_param" cx="3048" cy="1400" r="180"/>
+    <circle id="character_readout" cx="4450" cy="1400" r="10"/>
     <circle id="puff_param" cx="1800" cy="8350" r="300"/>
     <circle id="deflate_param" cx="4400" cy="8350" r="200"/>
     <circle id="puff_cv_amount_param" cx="3048" cy="9600" r="180"/>
@@ -99,10 +91,5 @@
     <circle id="output_r" cx="5196" cy="12100" r="220"/>
 
     <circle id="limit_light" cx="5400" cy="7250" r="100"/>
-
-    <circle id="screw_tl" cx="300" cy="300" r="120"/>
-    <circle id="screw_tr" cx="5796" cy="300" r="120"/>
-    <circle id="screw_bl" cx="300" cy="12550" r="120"/>
-    <circle id="screw_br" cx="5796" cy="12550" r="120"/>
   </g>
 </svg>

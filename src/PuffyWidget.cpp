@@ -7,6 +7,41 @@
 
 namespace {
 
+struct PuffyCharacterReadout final : TransparentWidget {
+	static constexpr float FONT_SIZE = 11.5f;
+	Puffy* module = nullptr;
+
+	explicit PuffyCharacterReadout(Puffy* module) : module(module) {
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (!APP || !APP->window || !APP->window->uiFont) {
+			return;
+		}
+		const int character = module
+			? clamp(
+				int(std::lround(
+					module->params[Puffy::CHARACTER_PARAM].getValue())),
+				0, 2)
+			: int(puffy::Character::Bloom);
+		static const char* const labels[] = {
+			"BLOOM",
+			"SPINE",
+			"FRENZY"
+		};
+		nvgFontSize(args.vg, FONT_SIZE);
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		nvgText(
+			args.vg,
+			0.5f * box.size.x,
+			0.5f * box.size.y,
+			labels[character],
+			nullptr);
+	}
+};
+
 bool loadPoint(
 	const std::string& panelPath,
 	const char* id,
@@ -53,6 +88,12 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 		module, Puffy::CHARACTER_PARAM);
 	characterButton->momentary = false;
 	addParam(characterButton);
+	auto* characterReadout = new PuffyCharacterReadout(module);
+	characterReadout->box.size = mm2px(Vec(20.f, 5.f));
+	characterReadout->box.pos =
+		anchor("character_readout", Vec(44.5f, 14.f))
+			.minus(characterReadout->box.size.mult(0.5f));
+	addChild(characterReadout);
 	addParam(createParamCentered<LeviathanHaloKnob2>(
 		anchor("puff_param", Vec(18.f, 83.5f)),
 		module, Puffy::PUFF_PARAM));
@@ -85,14 +126,15 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 		anchor("limit_light", Vec(54.f, 72.5f)),
 		module, Puffy::LIMIT_LIGHT));
 
-	addChild(createWidgetCentered<ScrewSilver>(
-		anchor("screw_tl", Vec(3.f, 3.f))));
-	addChild(createWidgetCentered<ScrewSilver>(
-		anchor("screw_tr", Vec(57.96f, 3.f))));
-	addChild(createWidgetCentered<ScrewSilver>(
-		anchor("screw_bl", Vec(3.f, 125.5f))));
-	addChild(createWidgetCentered<ScrewSilver>(
-		anchor("screw_br", Vec(57.96f, 125.5f))));
+	addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0.f)));
+	addChild(createWidget<ScrewSilver>(
+		Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0.f)));
+	addChild(createWidget<ScrewSilver>(
+		Vec(RACK_GRID_WIDTH, box.size.y - RACK_GRID_WIDTH)));
+	addChild(createWidget<ScrewSilver>(
+		Vec(
+			box.size.x - 2.f * RACK_GRID_WIDTH,
+			box.size.y - RACK_GRID_WIDTH)));
 	previewTimer.markAnchorsDone();
 }
 
