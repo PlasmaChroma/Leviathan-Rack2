@@ -47,7 +47,8 @@ void PuffyFishWidget::drawFin(
 	Vec center,
 	float bodyRadius,
 	bool left,
-	float angle) const {
+	float angle,
+	float sizeScale) const {
 	nvgSave(vg);
 	const float side = left ? -1.f : 1.f;
 	const Vec root(
@@ -56,20 +57,21 @@ void PuffyFishWidget::drawFin(
 	nvgTranslate(vg, root.x, root.y);
 	nvgRotate(vg, angle);
 	nvgScale(vg, side, 1.f);
-	const float length = bodyRadius * 0.68f;
-	const float height = bodyRadius * 0.52f;
+	const float clampedSizeScale = clamp(sizeScale, 0.75f, 1.f);
+	const float length = bodyRadius * 0.68f * clampedSizeScale;
+	const float height = bodyRadius * 0.52f * clampedSizeScale;
 	nvgBeginPath(vg);
 	nvgMoveTo(vg, 0.f, -height * 0.18f);
 	nvgBezierTo(
 		vg, length * 0.24f, -height * 0.42f,
-		length * 0.68f, -height * 0.58f,
-		length * 0.91f, -height * 0.45f);
+		length * 0.62f, -height * 0.66f,
+		length * 0.82f, -height * 0.58f);
 	nvgBezierTo(
-		vg, length * 1.08f, -height * 0.30f,
-		length * 1.08f, height * 0.30f,
-		length * 0.91f, height * 0.45f);
+		vg, length * 1.16f, -height * 0.48f,
+		length * 1.16f, height * 0.48f,
+		length * 0.82f, height * 0.58f);
 	nvgBezierTo(
-		vg, length * 0.68f, height * 0.58f,
+		vg, length * 0.62f, height * 0.66f,
 		length * 0.24f, height * 0.42f,
 		0.f, height * 0.18f);
 	nvgClosePath(vg);
@@ -82,13 +84,13 @@ void PuffyFishWidget::drawFin(
 	nvgStrokeWidth(vg, 0.8f);
 	nvgStroke(vg);
 	for (int i = -2; i <= 2; ++i) {
-		const float targetY = height * 0.18f * float(i);
+		const float targetY = height * 0.22f * float(i);
 		nvgBeginPath(vg);
 		nvgMoveTo(vg, length * 0.06f, height * 0.025f * float(i));
 		nvgBezierTo(
 			vg, length * 0.34f, targetY * 0.42f,
-			length * 0.68f, targetY * 0.82f,
-			length * 0.94f, targetY);
+			length * 0.66f, targetY * 0.82f,
+			length * 0.98f, targetY);
 		nvgStrokeColor(vg, nvgRGBA(196, 116, 3, 150));
 		nvgStrokeWidth(vg, 0.65f);
 		nvgStroke(vg);
@@ -204,27 +206,44 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 	const float minimum = std::min(width, height);
 	const Vec center(
 		width * 0.5f,
-		height * 0.53f + pose.verticalOffset * minimum);
+		height * 0.5f + pose.verticalOffset * minimum);
+	const float inflation = clamp01(pose.inflation);
+	const float radius = minimum * (0.255f + 0.110f * inflation);
+	const float radiusX = radius * (0.88f + 0.12f * inflation)
+		* (1.f + pose.squashX);
+	const float radiusY = radius * (0.93f + 0.07f * inflation)
+		* (1.f + pose.squashY);
+	const float finSizeScale = 1.f - 0.20f * inflation;
 
 	nvgSave(args.vg);
 	nvgScissor(args.vg, 0.f, 0.f, width, height);
 
 	nvgBeginPath(args.vg);
 	nvgEllipse(
-		args.vg, center.x, center.y + minimum * 0.29f,
-		minimum * 0.25f, minimum * 0.045f);
-	nvgFillColor(args.vg, nvgRGBA(5, 6, 15, 100));
+		args.vg,
+		center.x,
+		center.y + radiusY * 1.23f,
+		radiusX * (0.88f + 0.08f * inflation),
+		radiusY * (0.145f + 0.025f * inflation));
+	nvgFillColor(
+		args.vg,
+		nvgRGBA(5, 6, 15, int(82.f + 30.f * inflation)));
 	nvgFill(args.vg);
 
-	const float inflation = clamp01(pose.inflation);
-	const float radius = minimum * (0.255f + 0.082f * inflation);
-	const float radiusX = radius * (0.88f + 0.12f * inflation)
-		* (1.f + pose.squashX);
-	const float radiusY = radius * (0.93f + 0.07f * inflation)
-		* (1.f + pose.squashY);
-
-	drawFin(args.vg, center, radiusX, true, pose.leftFinAngle);
-	drawFin(args.vg, center, radiusX, false, pose.rightFinAngle);
+	drawFin(
+		args.vg,
+		center,
+		radiusX,
+		true,
+		pose.leftFinAngle,
+		finSizeScale);
+	drawFin(
+		args.vg,
+		center,
+		radiusX,
+		false,
+		pose.rightFinAngle,
+		finSizeScale);
 
 	if (!drawBodyRaster(args.vg, center, radiusX, radiusY)) {
 		nvgBeginPath(args.vg);
@@ -267,7 +286,7 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 		nvgFill(args.vg);
 	}
 
-	const float mouthY = center.y + radiusY * 0.24f;
+	const float mouthY = center.y + radiusY * 0.30f;
 	const float mouthWidth = minimum
 		* (0.057f + 0.018f * pose.mouthSmile);
 	const float mouthHeight = minimum
