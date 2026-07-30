@@ -183,7 +183,7 @@ struct IntegralFluxLogoWidget final : TransparentWidget {
 		if (!image || image->handle < 0) {
 			return;
 		}
-		int imageHandle = visual_assets::loadPluginRasterMipmapHandle(args.vg, image, imagePath);
+		int imageHandle = visual_assets::loadRasterMipmapHandle(args.vg, image, imagePath);
 		if (imageHandle < 0) {
 			imageHandle = image->handle;
 		}

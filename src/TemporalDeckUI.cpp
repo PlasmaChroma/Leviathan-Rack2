@@ -13,7 +13,6 @@
 #include <chrono>
 #include <cctype>
 #include <cstdint>
-#include <cstring>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -30,7 +29,6 @@
 #include <vector>
 
 #include <osdialog.h>
-#include <stb_image.h>
 
 static bool isExpandedVinylSyncActive();
 static bool isExpandedVinylDownloadRunning();
@@ -2570,237 +2568,6 @@ static bool drawPlatterImageHandle(const Widget::DrawArgs &args, int imageHandle
   return true;
 }
 
-static uint32_t readPngUint32(const unsigned char *p) {
-  return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | uint32_t(p[3]);
-}
-
-static unsigned char pngPaethPredictor(unsigned char left, unsigned char up, unsigned char upperLeft) {
-  int p = int(left) + int(up) - int(upperLeft);
-  int pa = std::abs(p - int(left));
-  int pb = std::abs(p - int(up));
-  int pc = std::abs(p - int(upperLeft));
-  return pa <= pb && pa <= pc ? left : (pb <= pc ? up : upperLeft);
-}
-
-static int createLowBitIndexedPngMipmapImage(NVGcontext *vg, const std::string &path) {
-  std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
-  if (!in) {
-    return -1;
-  }
-  in.seekg(0, std::ios::end);
-  std::streamoff fileSize = in.tellg();
-  constexpr std::streamoff kMaxPngBytes = 256 * 1024 * 1024;
-  if (fileSize < 29 || fileSize > kMaxPngBytes) {
-    return -1;
-  }
-  in.seekg(0, std::ios::beg);
-  std::vector<unsigned char> encoded(static_cast<size_t>(fileSize));
-  in.read(reinterpret_cast<char*>(encoded.data()), fileSize);
-  if (!in) {
-    return -1;
-  }
-
-  static const unsigned char kPngSignature[8] = {0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a};
-  if (!std::equal(kPngSignature, kPngSignature + 8, encoded.begin()) ||
-      readPngUint32(encoded.data() + 8) != 13 ||
-      std::memcmp(encoded.data() + 12, "IHDR", 4) != 0) {
-    return -1;
-  }
-
-  uint32_t width = readPngUint32(encoded.data() + 16);
-  uint32_t height = readPngUint32(encoded.data() + 20);
-  unsigned int bitDepth = encoded[24];
-  unsigned int colorType = encoded[25];
-  unsigned int compression = encoded[26];
-  unsigned int filterMethod = encoded[27];
-  unsigned int interlace = encoded[28];
-  constexpr uint64_t kMaxPixels = 64ull * 1024ull * 1024ull;
-  if (colorType != 3 || (bitDepth != 1 && bitDepth != 2 && bitDepth != 4) ||
-      compression != 0 || filterMethod != 0 || interlace != 0 ||
-      width == 0 || height == 0 || uint64_t(width) * uint64_t(height) > kMaxPixels) {
-    return -1;
-  }
-
-  std::vector<unsigned char> palette;
-  std::vector<unsigned char> alpha;
-  std::vector<unsigned char> compressed;
-  size_t offset = 8;
-  while (offset + 12 <= encoded.size()) {
-    uint32_t chunkSize = readPngUint32(encoded.data() + offset);
-    if (uint64_t(offset) + 12ull + uint64_t(chunkSize) > encoded.size()) {
-      return -1;
-    }
-    const unsigned char *chunkType = encoded.data() + offset + 4;
-    const unsigned char *chunkData = encoded.data() + offset + 8;
-    if (std::memcmp(chunkType, "PLTE", 4) == 0) {
-      if (chunkSize == 0 || chunkSize > 256 * 3 || chunkSize % 3 != 0) {
-        return -1;
-      }
-      palette.assign(chunkData, chunkData + chunkSize);
-    } else if (std::memcmp(chunkType, "tRNS", 4) == 0) {
-      if (chunkSize > 256) {
-        return -1;
-      }
-      alpha.assign(chunkData, chunkData + chunkSize);
-    } else if (std::memcmp(chunkType, "IDAT", 4) == 0) {
-      if (compressed.size() + uint64_t(chunkSize) > uint64_t(kMaxPngBytes)) {
-        return -1;
-      }
-      compressed.insert(compressed.end(), chunkData, chunkData + chunkSize);
-    } else if (std::memcmp(chunkType, "IEND", 4) == 0) {
-      break;
-    }
-    offset += size_t(chunkSize) + 12;
-  }
-  if (palette.empty() || compressed.empty()) {
-    return -1;
-  }
-
-  size_t rowBytes = (size_t(width) * bitDepth + 7) / 8;
-  size_t filteredSize = (rowBytes + 1) * size_t(height);
-  if (filteredSize > size_t(std::numeric_limits<int>::max()) ||
-      compressed.size() > size_t(std::numeric_limits<int>::max())) {
-    return -1;
-  }
-  std::vector<unsigned char> filtered(filteredSize);
-  int decodedBytes = stbi_zlib_decode_buffer(
-    reinterpret_cast<char*>(filtered.data()), int(filtered.size()),
-    reinterpret_cast<const char*>(compressed.data()), int(compressed.size()));
-  if (decodedBytes != int(filtered.size())) {
-    return -1;
-  }
-
-  std::vector<unsigned char> unpacked(rowBytes * size_t(height));
-  for (uint32_t y = 0; y < height; ++y) {
-    const unsigned char *source = filtered.data() + size_t(y) * (rowBytes + 1);
-    unsigned int rowFilter = *source++;
-    if (rowFilter > 4) {
-      return -1;
-    }
-    unsigned char *row = unpacked.data() + size_t(y) * rowBytes;
-    const unsigned char *prior = y > 0 ? row - rowBytes : nullptr;
-    for (size_t x = 0; x < rowBytes; ++x) {
-      unsigned char left = x > 0 ? row[x - 1] : 0;
-      unsigned char up = prior ? prior[x] : 0;
-      unsigned char upperLeft = prior && x > 0 ? prior[x - 1] : 0;
-      switch (rowFilter) {
-      case 0:
-        row[x] = source[x];
-        break;
-      case 1:
-        row[x] = source[x] + left;
-        break;
-      case 2:
-        row[x] = source[x] + up;
-        break;
-      case 3:
-        row[x] = source[x] +
-          ((static_cast<unsigned int>(left) + static_cast<unsigned int>(up)) >> 1);
-        break;
-      case 4:
-        row[x] = source[x] + pngPaethPredictor(left, up, upperLeft);
-        break;
-      }
-    }
-  }
-
-  size_t paletteEntries = palette.size() / 3;
-  unsigned int indexMask = (1u << bitDepth) - 1u;
-  std::vector<unsigned char> rgba(size_t(width) * size_t(height) * 4);
-  for (uint32_t y = 0; y < height; ++y) {
-    const unsigned char *row = unpacked.data() + size_t(y) * rowBytes;
-    for (uint32_t x = 0; x < width; ++x) {
-      size_t bitOffset = size_t(x) * bitDepth;
-      unsigned int shift = 8u - bitDepth - unsigned(bitOffset & 7u);
-      unsigned int index = (row[bitOffset >> 3] >> shift) & indexMask;
-      if (index >= paletteEntries) {
-        return -1;
-      }
-      size_t destination = (size_t(y) * width + x) * 4;
-      rgba[destination] = palette[index * 3];
-      rgba[destination + 1] = palette[index * 3 + 1];
-      rgba[destination + 2] = palette[index * 3 + 2];
-      rgba[destination + 3] = index < alpha.size() ? alpha[index] : 255;
-    }
-  }
-
-  return nvgCreateImageRGBA(vg, int(width), int(height), NVG_IMAGE_GENERATE_MIPMAPS, rgba.data());
-}
-
-static int loadPlatterMipmapImageHandle(NVGcontext *vg, const std::string &path,
-                                        std::shared_ptr<window::Image> lifecycleImage) {
-  struct MipmapCache {
-    struct Entry {
-      NVGcontext *vg = nullptr;
-      int handle = -1;
-      int lifecycleHandle = -1;
-      std::weak_ptr<window::Image> lifecycleImage;
-      uint64_t lastUse = 0;
-    };
-    std::unordered_map<std::string, Entry> entries;
-    uint64_t useCounter = 0;
-    NVGcontext *activeVg = nullptr;
-  };
-  static MipmapCache cache;
-  constexpr size_t kMaxMipmapImageCacheEntries = 16;
-
-  if (!vg || path.empty() || !lifecycleImage || lifecycleImage->handle < 0) {
-    return -1;
-  }
-  if (nvg_gfx_lifecycle::clearCacheOnContextSwitch(
-        vg, cache.activeVg, reinterpret_cast<unsigned long long*>(&cache.useCounter))) {
-    // Do not cross-delete image handles from a previous NanoVG context.
-    // Drop stale cache entries and rebuild lazily for this context.
-    cache.entries.clear();
-  }
-
-  auto it = cache.entries.find(path);
-  if (it != cache.entries.end()) {
-    std::shared_ptr<window::Image> cachedLifecycleImage = it->second.lifecycleImage.lock();
-    if (it->second.vg == vg && it->second.handle >= 0 &&
-        it->second.lifecycleHandle == lifecycleImage->handle && cachedLifecycleImage == lifecycleImage) {
-      it->second.lastUse = ++cache.useCounter;
-      return it->second.handle;
-    }
-    if (it->second.vg == vg && it->second.handle >= 0 && cachedLifecycleImage) {
-      nvgDeleteImage(vg, it->second.handle);
-    }
-    cache.entries.erase(it);
-  }
-
-  int handle = createLowBitIndexedPngMipmapImage(vg, path);
-  if (handle < 0) {
-    handle = nvgCreateImage(vg, path.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
-  }
-  if (handle < 0) {
-    return -1;
-  }
-
-  MipmapCache::Entry entry;
-  entry.vg = vg;
-  entry.handle = handle;
-  entry.lifecycleHandle = lifecycleImage->handle;
-  entry.lifecycleImage = lifecycleImage;
-  entry.lastUse = ++cache.useCounter;
-  cache.entries[path] = entry;
-
-  if (cache.entries.size() > kMaxMipmapImageCacheEntries) {
-    auto evictIt = cache.entries.begin();
-    for (auto iter = cache.entries.begin(); iter != cache.entries.end(); ++iter) {
-      if (iter->second.lastUse < evictIt->second.lastUse) {
-        evictIt = iter;
-      }
-    }
-    std::shared_ptr<window::Image> evictLifecycleImage = evictIt->second.lifecycleImage.lock();
-    if (evictIt->second.vg == vg && evictIt->second.handle >= 0 && evictLifecycleImage) {
-      nvgDeleteImage(vg, evictIt->second.handle);
-    }
-    cache.entries.erase(evictIt);
-  }
-
-  return handle;
-}
-
 static bool drawPlatterImagePath(const Widget::DrawArgs &args, const std::string &path, Vec center,
                                  float platterRadiusPx, float rotation) {
   if (path.empty()) {
@@ -2810,7 +2577,7 @@ static bool drawPlatterImagePath(const Widget::DrawArgs &args, const std::string
   if (!image) {
     return false;
   }
-  int mipmapHandle = loadPlatterMipmapImageHandle(args.vg, path, image);
+  int mipmapHandle = visual_assets::loadRasterMipmapHandle(args.vg, image, path);
   if (mipmapHandle >= 0 && drawPlatterImageHandle(args, mipmapHandle, center, platterRadiusPx, rotation)) {
     return true;
   }
