@@ -3072,7 +3072,11 @@ SmallGoldButton::SmallGoldButton(float buttonSizePx) {
 void SmallGoldButton::step() {
 	app::Switch::step();
 	engine::ParamQuantity* pq = getParamQuantity();
-	const float target = (pq && pq->getValue() > 0.5f) ? 1.f : 0.f;
+	const bool pointerHeld =
+		APP && APP->event && APP->event->getDraggedWidget() == this;
+	const float target = momentary
+		? ((pq && pq->getValue() > 0.5f) ? 1.f : 0.f)
+		: (pointerHeld ? 1.f : 0.f);
 	pressAmount += (target - pressAmount) * (target > pressAmount ? 0.38f : 0.46f);
 	if (std::fabs(target - pressAmount) < 0.001f) {
 		pressAmount = target;

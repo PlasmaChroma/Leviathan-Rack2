@@ -68,19 +68,19 @@
         fill="#ff8a80">LIMIT</text>
 
   <path d="M420 10020 H5676" stroke="#9a5b20" stroke-opacity="0.65" stroke-width="22"/>
-  <text x="900" y="10290" text-anchor="middle"
-        font-family="DejaVu Sans, sans-serif" font-size="120"
-        fill="#ffdfa0">IN L</text>
-  <text x="2500" y="10290" text-anchor="middle"
-        font-family="DejaVu Sans, sans-serif" font-size="120"
-        fill="#ffdfa0">IN R</text>
   <text x="4300" y="10290" text-anchor="middle"
         font-family="DejaVu Sans, sans-serif" font-size="120"
         fill="#ffdfa0">PUFF CV</text>
-  <text x="1800" y="11610" text-anchor="middle"
+  <text x="900" y="11610" text-anchor="middle"
+        font-family="DejaVu Sans, sans-serif" font-size="120"
+        fill="#ffdfa0">IN L</text>
+  <text x="2332" y="11610" text-anchor="middle"
+        font-family="DejaVu Sans, sans-serif" font-size="120"
+        fill="#ffdfa0">IN R</text>
+  <text x="3764" y="11610" text-anchor="middle"
         font-family="DejaVu Sans, sans-serif" font-size="120"
         fill="#ffdfa0">OUT L</text>
-  <text x="4300" y="11610" text-anchor="middle"
+  <text x="5196" y="11610" text-anchor="middle"
         font-family="DejaVu Sans, sans-serif" font-size="120"
         fill="#ffdfa0">OUT R</text>
 
@@ -92,11 +92,11 @@
     <circle id="deflate_param" cx="4400" cy="8350" r="200"/>
     <circle id="puff_cv_amount_param" cx="3048" cy="9600" r="180"/>
 
-    <circle id="input_l" cx="900" cy="10800" r="220"/>
-    <circle id="input_r" cx="2500" cy="10800" r="220"/>
+    <circle id="input_l" cx="900" cy="12100" r="220"/>
+    <circle id="input_r" cx="2332" cy="12100" r="220"/>
     <circle id="puff_cv_input" cx="4300" cy="10800" r="220"/>
-    <circle id="output_l" cx="1800" cy="12100" r="220"/>
-    <circle id="output_r" cx="4300" cy="12100" r="220"/>
+    <circle id="output_l" cx="3764" cy="12100" r="220"/>
+    <circle id="output_r" cx="5196" cy="12100" r="220"/>
 
     <circle id="limit_light" cx="5400" cy="7250" r="100"/>
 

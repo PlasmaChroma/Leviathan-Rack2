@@ -48,33 +48,37 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	fish->box.size = mm2px(fishRectMm.size);
 	addChild(fish);
 
-	addParam(createParamCentered<DarkTinyClockworkGearKnob>(
+	auto* characterButton = createParamCentered<SmallGoldButton>(
 		anchor("character_param", Vec(30.48f, 14.f)),
-		module, Puffy::CHARACTER_PARAM));
+		module, Puffy::CHARACTER_PARAM);
+	characterButton->momentary = false;
+	addParam(characterButton);
 	addParam(createParamCentered<LeviathanHaloKnob2>(
 		anchor("puff_param", Vec(18.f, 83.5f)),
 		module, Puffy::PUFF_PARAM));
-	addParam(createParamCentered<DarkTinyClockworkGearKnob>(
+	addParam(createParamCentered<Eclipse2Knob>(
 		anchor("deflate_param", Vec(44.f, 83.5f)),
 		module, Puffy::DEFLATE_PARAM));
-	addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(
+	auto* puffCvAmountKnob = createParamCentered<Eclipse2Knob>(
 		anchor("puff_cv_amount_param", Vec(30.48f, 96.f)),
-		module, Puffy::PUFF_CV_AMOUNT_PARAM));
+		module, Puffy::PUFF_CV_AMOUNT_PARAM);
+	puffCvAmountKnob->setProgressRingBipolar(true);
+	addParam(puffCvAmountKnob);
 
 	addInput(createInputCentered<Magitek2InputJack>(
-		anchor("input_l", Vec(9.f, 108.f)),
+		anchor("input_l", Vec(9.f, 121.f)),
 		module, Puffy::INPUT_L));
 	addInput(createInputCentered<Magitek2InputJack>(
-		anchor("input_r", Vec(25.f, 108.f)),
+		anchor("input_r", Vec(23.32f, 121.f)),
 		module, Puffy::INPUT_R));
 	addInput(createInputCentered<Magitek2InputJack>(
 		anchor("puff_cv_input", Vec(43.f, 108.f)),
 		module, Puffy::PUFF_CV_INPUT));
 	addOutput(createOutputCentered<Magitek2OutputJack>(
-		anchor("output_l", Vec(18.f, 121.f)),
+		anchor("output_l", Vec(37.64f, 121.f)),
 		module, Puffy::OUTPUT_L));
 	addOutput(createOutputCentered<Magitek2OutputJack>(
-		anchor("output_r", Vec(43.f, 121.f)),
+		anchor("output_r", Vec(51.96f, 121.f)),
 		module, Puffy::OUTPUT_R));
 
 	addChild(createLightCentered<SmallAperture<RedApertureLight>>(
