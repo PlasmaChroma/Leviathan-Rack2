@@ -58,6 +58,18 @@ public:
 		const DynamicsState& dynamics);
 
 private:
+	struct CharacterCoefficients {
+		Character character = Character::Bloom;
+		float amount = 0.f;
+		float drive = 1.f;
+		float bias = 0.f;
+		float zero = 0.f;
+		float positiveNorm = 1.f;
+		float negativeNorm = 1.f;
+		float negativeScale = 1.f;
+		float normalization = 1.f;
+	};
+
 	struct DcBlocker {
 		float x1 = 0.f;
 		float y1 = 0.f;
@@ -103,22 +115,28 @@ private:
 	Character currentCharacter = Character::Bloom;
 	Character transitionFrom = Character::Bloom;
 	Character transitionTo = Character::Bloom;
+	Character pendingCharacter = Character::Bloom;
 	int transitionSample = 0;
 	int transitionLength = 1;
 	bool transitionActive = false;
+	bool pendingCharacterActive = false;
 
 	void resetSharedControlState();
 	void resetChannel(bool left);
 	void beginCharacterTransition(Character requested);
+	static CharacterCoefficients prepareCharacter(
+		Character character,
+		float amount,
+		const DynamicsState& dynamics);
+	static float applyCharacter(float input, const CharacterCoefficients& coefficients);
 	float updateFollower(float current, float target, float attack, float release) const;
 	float updateAutoGain(Character character, float currentAmount) const;
 	float manualGain(float normalizedDeflate);
 	float processPath(
 		PathState& path,
-		Character character,
+		const CharacterCoefficients& coefficients,
 		float* oversampledLeft,
 		float* oversampledRight,
-		float currentAmount,
 		float autoDeflateAmount,
 		bool left);
 };

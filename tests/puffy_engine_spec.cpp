@@ -239,6 +239,58 @@ Result recoveryAndSilence() {
 	};
 }
 
+Result characterTransitionsAreTransparentAndRetargetable() {
+	puffy::Engine reference;
+	puffy::Engine switched;
+	reference.setSampleRate(48000.f);
+	switched.setSampleRate(48000.f);
+	float maximumDelta = 0.f;
+	int finalCharacter = 0;
+	for (int i = 0; i < 4000; ++i) {
+		const float phase = 2.f * kPi * 997.f * float(i) / 48000.f;
+		const float input = std::sin(phase);
+		int requestedCharacter = 0;
+		if (i >= 1000 && i < 1050) {
+			requestedCharacter = 1;
+		}
+		else if (i >= 1050 && i < 1100) {
+			requestedCharacter = 2;
+		}
+		const puffy::Frame referenceFrame = reference.process(
+			input, input, 0.f, 0, false, 0.f);
+		const puffy::Frame switchedFrame = switched.process(
+			input, input, 0.f, requestedCharacter, false, 0.f);
+		maximumDelta = std::max(
+			maximumDelta,
+			std::max(
+				std::fabs(switchedFrame.left - referenceFrame.left),
+				std::fabs(switchedFrame.right - referenceFrame.right)));
+		finalCharacter = switchedFrame.character;
+	}
+
+	puffy::Engine queued;
+	queued.setSampleRate(48000.f);
+	for (int i = 0; i < 2000; ++i) {
+		int requestedCharacter = i < 500 ? 0 : (i < 550 ? 1 : 2);
+		const float phase = 2.f * kPi * 431.f * float(i) / 48000.f;
+		const puffy::Frame frame = queued.process(
+			2.f * std::sin(phase),
+			2.f * std::sin(phase),
+			0.75f,
+			requestedCharacter,
+			true,
+			0.f);
+		finalCharacter = frame.character;
+	}
+
+	return {
+		"Character transitions stay unity at zero Puff and rapid retargets complete",
+		maximumDelta <= 2e-6f && finalCharacter == int(puffy::Character::Frenzy),
+		"unityDelta=" + std::to_string(maximumDelta)
+			+ " finalCharacter=" + std::to_string(finalCharacter)
+	};
+}
+
 Result nonlinearGrowth() {
 	bool pass = true;
 	std::string detail;
@@ -300,6 +352,7 @@ int main() {
 		linkedLimiter(),
 		manualDeflateIsExact(),
 		recoveryAndSilence(),
+		characterTransitionsAreTransparentAndRetargetable(),
 		nonlinearGrowth(),
 		realtimePathDoesNotAllocate()
 	};

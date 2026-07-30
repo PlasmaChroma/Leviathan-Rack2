@@ -94,7 +94,7 @@ void Engine::setSampleRate(float requestedSampleRate) {
 	activityReleaseCoefficient = onePoleCoefficient(0.120f, sampleRate);
 	limiterReleaseCoefficient = onePoleCoefficient(0.050f, sampleRate);
 	dcCoefficient = std::exp(-2.f * kPi * 5.f / sampleRate);
-	transitionLength = std::max(1, int(std::lround(0.010f * sampleRate)));
+	transitionLength = std::max(1, int(std::lround(0.005f * sampleRate)));
 	reset();
 }
 
@@ -122,8 +122,10 @@ void Engine::reset() {
 	currentCharacter = Character::Bloom;
 	transitionFrom = Character::Bloom;
 	transitionTo = Character::Bloom;
+	pendingCharacter = Character::Bloom;
 	transitionSample = 0;
 	transitionActive = false;
+	pendingCharacterActive = false;
 }
 
 void Engine::resetChannel(bool left) {
@@ -155,15 +157,22 @@ float Engine::updateFollower(
 void Engine::beginCharacterTransition(Character requested) {
 	if (transitionActive) {
 		if (requested == transitionTo) {
+			pendingCharacterActive = false;
 			return;
 		}
-		if (transitionSample * 2 >= transitionLength) {
-			primaryPath = secondaryPath;
-			currentCharacter = transitionTo;
+		if (requested == transitionFrom) {
+			std::swap(primaryPath, secondaryPath);
+			std::swap(transitionFrom, transitionTo);
+			transitionSample = std::max(0, transitionLength - transitionSample);
+			pendingCharacterActive = false;
+			return;
 		}
-		transitionActive = false;
+		pendingCharacter = requested;
+		pendingCharacterActive = true;
+		return;
 	}
 	if (requested == currentCharacter) {
+		pendingCharacterActive = false;
 		return;
 	}
 	transitionFrom = currentCharacter;
@@ -173,16 +182,56 @@ void Engine::beginCharacterTransition(Character requested) {
 	transitionActive = true;
 }
 
-float Engine::processCharacter(
+Engine::CharacterCoefficients Engine::prepareCharacter(
 	Character character,
-	float input,
 	float amount,
 	const DynamicsState& dynamicsState) {
-	const float a = clamp01(amount);
+	CharacterCoefficients coefficients;
+	coefficients.character = character;
+	coefficients.amount = clamp01(amount);
+	const float a = coefficients.amount;
 	switch (character) {
+		case Character::Spine:
+			coefficients.drive = 1.f + 9.f * a * a;
+			break;
+		case Character::Frenzy: {
+			const float fastControl = clamp01(dynamicsState.fast);
+			const float transient = clamp01(dynamicsState.transient);
+			coefficients.drive = 1.f + 6.f * a * a
+				* (0.65f + 0.55f * fastControl + 0.35f * transient);
+			coefficients.bias = 0.12f * a * (0.25f + 0.75f * fastControl);
+			coefficients.zero = levi_math::tanhAudio(
+				coefficients.drive * coefficients.bias);
+			coefficients.positiveNorm = std::max(
+				levi_math::tanhAudio(
+					coefficients.drive * (1.f + coefficients.bias))
+					- coefficients.zero,
+				1e-4f);
+			coefficients.negativeNorm = std::max(
+				coefficients.zero
+					- levi_math::tanhAudio(
+						coefficients.drive * (-1.f + coefficients.bias)),
+				1e-4f);
+			coefficients.negativeScale = 1.f + 0.10f * a * fastControl;
+			break;
+		}
+		case Character::Bloom:
+		default:
+			coefficients.drive = 1.f + 4.f * a * a;
+			coefficients.normalization = std::max(
+				levi_math::tanhAudio(coefficients.drive), 1e-6f);
+			break;
+	}
+	return coefficients;
+}
+
+float Engine::applyCharacter(
+	float input,
+	const CharacterCoefficients& coefficients) {
+	const float a = coefficients.amount;
+	switch (coefficients.character) {
 		case Character::Spine: {
-			const float drive = 1.f + 9.f * a * a;
-			const float z = drive * input;
+			const float z = coefficients.drive * input;
 			float saturated = 0.f;
 			if (std::fabs(z) < 1.f) {
 				saturated = z * (1.5f - 0.5f * z * z);
@@ -193,33 +242,38 @@ float Engine::processCharacter(
 			return input + (saturated - input) * a;
 		}
 		case Character::Frenzy: {
-			const float fastControl = clamp01(dynamicsState.fast);
-			const float transient = clamp01(dynamicsState.transient);
-			const float drive = 1.f + 6.f * a * a
-				* (0.65f + 0.55f * fastControl + 0.35f * transient);
-			const float bias = 0.12f * a * (0.25f + 0.75f * fastControl);
-			const float zero = levi_math::tanhAudio(drive * bias);
-			const float positiveNorm = std::max(
-				levi_math::tanhAudio(drive * (1.f + bias)) - zero, 1e-4f);
-			const float negativeNorm = std::max(
-				zero - levi_math::tanhAudio(drive * (-1.f + bias)), 1e-4f);
-			const float raw = levi_math::tanhAudio(drive * (input + bias)) - zero;
-			float saturated = raw >= 0.f ? raw / positiveNorm : raw / negativeNorm;
+			const float raw = levi_math::tanhAudio(
+				coefficients.drive * (input + coefficients.bias))
+				- coefficients.zero;
+			float saturated = raw >= 0.f
+				? raw / coefficients.positiveNorm
+				: raw / coefficients.negativeNorm;
 			if (saturated < 0.f) {
-				saturated *= 1.f + 0.10f * a * fastControl;
+				saturated *= coefficients.negativeScale;
 			}
 			saturated = std::max(-1.25f, std::min(saturated, 1.25f));
 			return input + (saturated - input) * a;
 		}
 		case Character::Bloom:
 		default: {
-			const float drive = 1.f + 4.f * a * a;
-			const float normalization = std::max(levi_math::tanhAudio(drive), 1e-6f);
-			const float saturated = levi_math::tanhAudio(drive * input) / normalization;
+			const float saturated =
+				levi_math::tanhAudio(coefficients.drive * input)
+				/ coefficients.normalization;
 			return input + (saturated - input) * a;
 		}
 	}
 }
+
+float Engine::processCharacter(
+	Character character,
+	float input,
+	float amount,
+	const DynamicsState& dynamicsState) {
+	return applyCharacter(
+		input,
+		prepareCharacter(character, amount, dynamicsState));
+}
+
 
 float Engine::updateAutoGain(Character character, float currentAmount) const {
 	const float exponent = autoDeflateDb(character, currentAmount)
@@ -238,23 +292,23 @@ float Engine::manualGain(float normalizedDeflate) {
 
 float Engine::processPath(
 	PathState& path,
-	Character character,
+	const CharacterCoefficients& coefficients,
 	float* oversampledLeft,
 	float* oversampledRight,
-	float currentAmount,
 	float autoDeflateAmount,
 	bool left) {
 	std::array<float, kOversampleFactor> shaped {};
 	float* input = left ? oversampledLeft : oversampledRight;
 	for (int i = 0; i < kOversampleFactor; ++i) {
 		shaped[static_cast<std::size_t>(i)] =
-			processCharacter(character, input[i], currentAmount, dynamics);
+			applyCharacter(input[i], coefficients);
 	}
 	float output = left
 		? path.decimatorLeft.process(shaped.data())
 		: path.decimatorRight.process(shaped.data());
 	output = left ? path.dcLeft.process(output) : path.dcRight.process(output);
-	const float compensationGain = updateAutoGain(character, currentAmount);
+	const float compensationGain = updateAutoGain(
+		coefficients.character, coefficients.amount);
 	output *= 1.f + (compensationGain - 1.f) * clamp01(autoDeflateAmount);
 	return output;
 }
@@ -322,22 +376,26 @@ Frame Engine::process(
 	float normalizedLeft = 0.f;
 	float normalizedRight = 0.f;
 	if (transitionActive) {
+		const CharacterCoefficients oldCoefficients =
+			prepareCharacter(transitionFrom, amount, dynamics);
+		const CharacterCoefficients newCoefficients =
+			prepareCharacter(transitionTo, amount, dynamics);
 		const float oldLeft = processPath(
-			primaryPath, transitionFrom, oversampledLeft.data(),
-			oversampledRight.data(), amount, autoDeflateMix, true);
+			primaryPath, oldCoefficients, oversampledLeft.data(),
+			oversampledRight.data(), autoDeflateMix, true);
 		const float oldRight = processPath(
-			primaryPath, transitionFrom, oversampledLeft.data(),
-			oversampledRight.data(), amount, autoDeflateMix, false);
+			primaryPath, oldCoefficients, oversampledLeft.data(),
+			oversampledRight.data(), autoDeflateMix, false);
 		const float newLeft = processPath(
-			secondaryPath, transitionTo, oversampledLeft.data(),
-			oversampledRight.data(), amount, autoDeflateMix, true);
+			secondaryPath, newCoefficients, oversampledLeft.data(),
+			oversampledRight.data(), autoDeflateMix, true);
 		const float newRight = processPath(
-			secondaryPath, transitionTo, oversampledLeft.data(),
-			oversampledRight.data(), amount, autoDeflateMix, false);
+			secondaryPath, newCoefficients, oversampledLeft.data(),
+			oversampledRight.data(), autoDeflateMix, false);
 		const float t = clamp01(
 			float(transitionSample) / float(std::max(transitionLength - 1, 1)));
-		const float oldGain = std::sqrt(1.f - t);
-		const float newGain = std::sqrt(t);
+		const float oldGain = 1.f - t;
+		const float newGain = t;
 		normalizedLeft = oldLeft * oldGain + newLeft * newGain;
 		normalizedRight = oldRight * oldGain + newRight * newGain;
 		transitionSample++;
@@ -345,15 +403,22 @@ Frame Engine::process(
 			primaryPath = secondaryPath;
 			currentCharacter = transitionTo;
 			transitionActive = false;
+			if (pendingCharacterActive) {
+				const Character queuedCharacter = pendingCharacter;
+				pendingCharacterActive = false;
+				beginCharacterTransition(queuedCharacter);
+			}
 		}
 	}
 	else {
+		const CharacterCoefficients coefficients =
+			prepareCharacter(currentCharacter, amount, dynamics);
 		normalizedLeft = processPath(
-			primaryPath, currentCharacter, oversampledLeft.data(),
-			oversampledRight.data(), amount, autoDeflateMix, true);
+			primaryPath, coefficients, oversampledLeft.data(),
+			oversampledRight.data(), autoDeflateMix, true);
 		normalizedRight = processPath(
-			primaryPath, currentCharacter, oversampledLeft.data(),
-			oversampledRight.data(), amount, autoDeflateMix, false);
+			primaryPath, coefficients, oversampledLeft.data(),
+			oversampledRight.data(), autoDeflateMix, false);
 	}
 
 	float outputLeft = normalizedLeft * kReferenceVolts;
