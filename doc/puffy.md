@@ -4,9 +4,10 @@
 >
 > Module name and Rack slug: `Puffy`.
 >
-> Authority: this document replaces the earlier research brief. Where a
-> recommendation from that brief conflicts with this document, this document
-> defines the Puffy v1 contract.
+> Authority: this document replaces the earlier research brief and incorporates
+> the review findings and architectural confirmations from `puffy-s5-notes.md`
+> and `puffy-s5-confirmation.md`. Where recommendations conflict, this document
+> defines the definitive Puffy v1 contract.
 
 ## 1. Product contract
 
@@ -42,7 +43,7 @@ At the end of v1, a user can:
 - move continuously from an effectively clean signal to obvious saturation;
 - select a warm, aggressive, or input-reactive character;
 - modulate `PUFF` over its complete range with 0-10 V CV;
-- reduce the processed output by up to 12 dB with `DEFLATE`;
+- reduce the processed output by up to 12 dB with post-limiter `DEFLATE` output trim;
 - choose low-latency sample-peak safety or a 2 ms true-peak mastering limiter;
 - compare characters without large accidental loudness jumps when Auto Deflate
   is enabled;
@@ -152,8 +153,7 @@ equal-power crossfade between old and new character outputs.
 manualDeflateDb = -12 dB * DEFLATE
 ```
 
-It is an output attenuation, not a limiter threshold and not a makeup-gain
-control. Puffy never adds post-saturation gain through this control.
+It is a post-limiter output volume trim of 0 to -12 dB, not a limiter threshold and not a makeup-gain control. Placing it after the limiter guarantees a literal output level trim without altering limiter threshold, gain reduction, or visual metering response. Puffy never adds post-saturation gain through this control.
 
 ### 3.4 Ports and normalization
 
@@ -231,19 +231,19 @@ The authoritative signal order is:
 
 ```text
 input safety
+-> dynamics detector update (shared stereo instance)
 -> amount smoothing
 -> oversample
 -> selected character
 -> decimate
 -> 5 Hz DC blocker
--> Auto Deflate
--> manual DEFLATE
+-> Auto Deflate (pre-limiter character compensation)
 -> selected stereo limiter
+-> manual DEFLATE (post-limiter output volume trim)
 -> finite/output guard
 ```
 
-The limiter must see the final post-filter, post-attenuation stream. Do not put
-tone correction, a DC blocker, or output gain after it.
+The limiter must see the post-filter, post-Auto Deflate stream. Manual `DEFLATE` follows the limiter as a literal final volume trim. Do not put tone correction, Auto Deflate, or a DC blocker after the limiter.
 
 ### 5.1 Input safety
 
@@ -324,31 +324,51 @@ cubic outside that interval. Oversampling is mandatory for this mode.
 `FRENZY` is asymmetrical and input-reactive, but it is not random. Repeated
 renders from identical input and state must be identical.
 
-At base rate, measure a stereo-linked normalized peak envelope `fast` and RMS
-envelope `slow`:
+Puffy owns **exactly one** continuously updated, stereo-linked dynamics detector instance:
+
+```cpp
+struct PuffyDynamicsDetector {
+    float fast;       // 1 ms attack, 45 ms release
+    float slowSq;     // 180 ms one-pole average of p^2
+    float transient;  // clamp((fast / max(sqrt(slowSq), 1e-4) - 1) / 2, 0, 1)
+};
+```
+
+This detector updates at base rate for every sample regardless of the active character mode. `FRENZY` reads it when active, and the visual telemetry snapshot reads it in every character mode.
+
+At base rate:
 
 ```text
 p = max(abs(inL), abs(inR)) / 5 V
 fast: 1 ms attack, 45 ms release
 slowSq: 180 ms one-pole average of p^2
 transient = clamp((fast / max(sqrt(slowSq), 1e-4) - 1) / 2, 0, 1)
+fastControl = clamp(fast, 0, 1)
 ```
 
-For each oversampled channel:
+For each oversampled channel, calculate dual-branch normalized asymmetry:
 
 ```text
-drive = 1 + 6*a^2 * (0.65 + 0.55*fast + 0.35*transient)
-bias = 0.12*a * (0.25 + 0.75*fast)
-zero = tanhAudio(drive*bias)
-positiveNorm = max(tanhAudio(drive*(1 + bias)) - zero, 1e-4)
-s = (tanhAudio(drive*(x + bias)) - zero) / positiveNorm
+drive = 1 + 6*a^2 * (0.65 + 0.55*fastControl + 0.35*transient)
+bias = 0.12*a * (0.25 + 0.75*fastControl)
+zero = tanhAudio(drive * bias)
+
+positiveNorm = max(tanhAudio(drive * (1 + bias)) - zero, 1e-4)
+negativeNorm = max(zero - tanhAudio(drive * (-1 + bias)), 1e-4)
+
+raw = tanhAudio(drive * (x + bias)) - zero
+
+s = (raw >= 0) ? (raw / positiveNorm) : (raw / negativeNorm)
+
+negativeScale = 1 + 0.10 * a * fastControl
+if (s < 0):
+    s = s * negativeScale
+
 s = clamp(s, -1.25, 1.25)
 y = lerp(x, s, a)
 ```
 
-The shared detector prevents channel-independent drive motion from pulling the
-stereo image around. The asymmetry intentionally permits a small DC component;
-the common post-character DC blocker removes it.
+The dual-branch normalization anchors both positive (+1) and negative (-1) excursions smoothly while preserving input-reactive asymmetry without unconstrained negative hard-clipping. The shared detector prevents channel-independent drive motion from pulling the stereo image around. The asymmetry intentionally permits a small DC component; the common post-character DC blocker removes it.
 
 ### 5.6 DC blocker
 
@@ -359,7 +379,7 @@ consistent and catches filter/startup residue as well as `FRENZY` bias.
 
 ### 5.7 Auto Deflate
 
-Auto Deflate is static, mode-aware gain compensation. It does not follow the
+Auto Deflate is static, mode-aware pre-limiter gain compensation. It does not follow the
 audio envelope and therefore must not pump.
 
 ```text
@@ -372,15 +392,15 @@ When Auto Deflate is disabled, `autoDeflateDb` is zero. During a character
 crossfade, apply the old compensation to the old character output and the new
 compensation to the new character output before the equal-power crossfade. Do
 not interpolate compensation dB separately. Outside a crossfade, total
-pre-limiter gain is:
+pre-limiter gain compensation is:
 
 ```text
-outputGain = dbToLinear(autoDeflateDb + manualDeflateDb)
+preLimiterGain = dbToLinear(autoDeflateDb)
 ```
 
 These constants are tuning constants, not user state. They may be adjusted
 before v1 release only if the level-matching acceptance test in section 11
-demonstrates a systematic mismatch.
+demonstrates a systematic mismatch. Manual `DEFLATE` output trim (`manualDeflateDb`) is applied separately after the limiter.
 
 ## 6. Limiter contract
 
@@ -420,15 +440,29 @@ true-peak limiter.
 | Gain release | 80 ms one-pole |
 | Stereo link | 100% |
 
-Use `dsp::Upsampler<4, 8>` on the post-Deflate detector signal. The detector peak
+### 6.2 MASTER mode
+
+`MASTER` is an optional finishing mode:
+
+| Property | Value |
+| --- | ---: |
+| Ceiling | `5 V * 10^(-1/20)` = approximately 4.456 V |
+| Program delay | 2.0 ms, rounded to nearest sample |
+| Detector oversampling | 4x |
+| Detector FIR quality | 8 |
+| Gain attack | Immediate from lookahead demand |
+| Gain release | 80 ms one-pole |
+| Stereo link | 100% |
+
+Use `dsp::Upsampler<4, 8>` on the post-Auto Deflate detector signal. The detector peak
 is the maximum absolute reconstructed sample across L and R. Maintain the
 maximum over the program-delay horizon with a fixed-capacity monotonic queue,
 not `std::deque`.
 
 All delay and queue storage is fixed capacity and supports at least 4096 base
-rate samples. At ordinary Rack sample rates this is comfortably larger than the
-2 ms requirement. Clamp the configured delay to storage capacity if an unusual
-sample rate exceeds it.
+rate samples (~21 ms of headroom at 192 kHz). This capacity is intentionally over-provisioned
+to ensure stability across high sample rates and must not be reduced. Clamp the configured
+delay to storage capacity if an unusual sample rate exceeds it.
 
 Delay the program signal by the same rounded sample count. Compute gain demand
 from the lookahead maximum, apply the linked envelope to the delayed program,
@@ -439,11 +473,24 @@ non-finite input recovery.
 The acceptance target is true-peak-safe behavior under the test suite, not
 certification against every possible external reconstruction filter.
 
-### 6.3 Limiter-mode changes
+### 6.3 Transition coordinator
 
-Changing limiter mode changes latency. Use the same 5 ms fade-down/reset/5 ms
-fade-up transition used for oversampling changes. Do not crossfade delayed and
-undelayed streams because that creates comb filtering.
+Puffy uses a single **Transition Coordinator** to resolve concurrent configuration changes cleanly.
+
+Precedence rule:
+```text
+Structural Transition (oversampling / limiter mode) > Character Crossfade (10 ms)
+```
+
+1. **Normal character change**: Performs a 10 ms equal-power crossfade between old and new character outputs.
+2. **Structural change (oversampling or limiter mode)**: Initiates a 5 ms output fade-down to zero.
+3. **Concurrent requests**:
+   - If a character change is requested during an ongoing structural fade-down, record only the target character without starting a parallel character crossfade.
+   - If a structural change is requested during an active 10 ms character crossfade, the structural fade immediately overrides and takes control.
+4. **Zero crossing**: At zero output, commit the requested oversampling factor, limiter mode, and target character simultaneously. Perform a single atomic reset of DSP histories (resamplers, DC blockers, limiter buffers).
+5. **Fade up**: Fade output back up over 5 ms.
+
+This single transactional coordinator guarantees click-free context changes, prevents overlapping mini-state-machines, and eliminates stale lookahead samples.
 
 Puffy does not report or compensate latency to the Rack graph. The manual must
 state that `MASTER` delays the output by approximately 2 ms plus fixed
@@ -455,7 +502,7 @@ resampling-filter latency.
 
 Use an original rigged 2D or pseudo-3D puffer fish drawn with NanoVG and cached
 raster/vector parts. Do not require `OpenGlWidget`. Static panel and viewport
-decoration remains in the panel SVG or a cached `FramebufferWidget`; only the
+decoration remains in the panel SVG or a cached `FramebufferWidget` (using a neutral shared cache helper where appropriate); only the
 fish and its small local effects redraw continuously.
 
 The widget must work when `module == nullptr` for the module browser and Deep
@@ -481,8 +528,7 @@ never read mutable DSP structs directly.
 
 Compute `inputActivity` from a stereo-linked absolute peak follower with 5 ms
 attack and 120 ms release, normalized so 5 V maps to 1. Compute
-`transientActivity` from the `FRENZY` detector formula even when another
-character is selected. Compute `gainReduction` as:
+`transientActivity` directly from the single continuous `PuffyDynamicsDetector` instance in every character mode. Compute `gainReduction` as:
 
 ```text
 gainReduction = clamp((-20*log10(max(limiterGain, 1e-6))) / 6 dB, 0, 1)
@@ -525,16 +571,21 @@ target or idle-animation phase materially changes.
 Keep Rack integration, DSP, and rendering separable:
 
 ```text
-src/Puffy.hpp              module declaration, enums, persisted settings
-src/PuffyEngine.hpp        allocation-free character and limiter kernels
+src/Puffy.hpp                      module declaration, enums, persisted settings
+src/PuffyEngine.hpp                allocation-free character, detector, and limiter kernels
 src/PuffyEngine.cpp
-src/Puffy.cpp              Rack configuration, process(), JSON
-src/PuffyWidget.cpp        panel, controls, menu, fish widget
+src/Puffy.cpp                      Rack configuration, process(), JSON
+src/PuffyWidget.hpp                panel construction, controls, menu
+src/PuffyWidget.cpp
+src/PuffyFishWidget.hpp            NanoVG fish viewport, visibility & frame-rate handling
+src/PuffyFishWidget.cpp
+src/PuffyCharacterController.hpp   pose calculation, spring physics, idle scheduler
+src/PuffyCharacterController.cpp
 res/Puffy.svg
 tests/puffy_engine_spec.cpp
 ```
 
-Reuse `MathHelpers.hpp` and `PanelSvgUtils`. If Puffy and Sil can genuinely
+Reuse `MathHelpers.hpp` and `PanelSvgUtils`. Use a neutral shared framebuffer caching helper if available without cross-module coupling. If Puffy and Sil can genuinely
 share a tested true-peak detector/limiter kernel without changing Sil's sound,
 extract that kernel into a neutral helper in a separate, reviewable change.
 Puffy v1 must not silently alter Sil while being implemented.
@@ -556,9 +607,9 @@ Register:
   Rack parameters follow normal Rack reset behavior.
 - `process()` is bounded, allocation-free, wait-free, and exception-free.
 - Context-menu callbacks publish requested enum/boolean changes atomically.
-  The audio thread owns the actual state transition.
+  The audio thread owns the actual state transition via the Transition Coordinator.
 - Output must remain finite for finite or non-finite input. A non-finite sample
-  also resets the shared `FRENZY` detectors and linked limiter, not only the
+  also resets the shared `PuffyDynamicsDetector` and linked limiter, not only the
   affected channel history.
 - Silence must settle to numerical silence; denormal protection may use state
   zeroing below a small threshold.
@@ -618,6 +669,8 @@ behind a generic `High quality` label.
 - Every character is finite and continuous across its piecewise boundaries.
 - `BLOOM` and `SPINE` are odd within floating-point tolerance.
 - `FRENZY` produces zero output for zero input after state settles.
+- `FRENZY` negative excursion bounds and dual-branch normalization pass a test grid across amount (0.25, 0.50, 0.75, 1.00), fast (0.0, 0.5, 1.0), and transient (0.0, 1.0) without unconstrained negative hard-clipping.
+- `DEFLATE` operates as a literal post-limiter output volume trim, reducing output level by the exact linear dB amount both above and below limiter engagement.
 - All characters become audibly and measurably more nonlinear as amount rises.
 - With Auto Deflate enabled, the gated RMS of each character on the shared pink
   noise fixture stays within 1.5 dB of its amount-zero RMS at amounts 0.25,
@@ -642,7 +695,7 @@ behind a generic `High quality` label.
 - Identical L/R input produces identical L/R output within floating-point
   tolerance.
 - A peak on either side applies exactly the same limiter gain to both sides.
-- `FRENZY` detector motion is shared; equal input does not create image drift.
+- `FRENZY` dynamics detector motion is shared; equal input does not create image drift.
 - Mono normalization works from either input jack while active.
 
 ### 11.4 Limiter behavior
@@ -664,6 +717,7 @@ behind a generic `High quality` label.
   stale-buffer output.
 - Character changes complete in 10 ms without a discontinuity.
 - Limiter/oversampling changes perform the specified fade-reset-fade transition.
+- Stress test: rapid concurrent changes to character, oversampling, and limiter mode are safely managed by the Transition Coordinator without clicks, dropouts, or stale lookahead samples.
 - Reset and patch load emit no stale audio or gain-reduction state.
 
 ### 11.6 Realtime and UI
@@ -674,8 +728,7 @@ behind a generic `High quality` label.
 - Browser preview construction with `module == nullptr` is deterministic and
   does not access audio state.
 - On the project reference machine, a release build must process 10 seconds of
-  48 kHz stereo audio in less than 1 second at 4x/`MASTER`; 8x must remain at
-  least 5x realtime.
+  48 kHz stereo audio in less than 1 second at 4x/`MASTER`; 8x (measured at worst-case: `8x saturation oversampling + MASTER limiter + active stereo audio + visual snapshot publication`) must remain at least 5x realtime.
 - Hidden/offscreen fish animation does no continuing expensive preparation.
 
 ## 12. Implementation order

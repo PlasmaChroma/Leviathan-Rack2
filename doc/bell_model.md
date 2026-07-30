@@ -505,7 +505,7 @@ make doorstop-variant-evaluate
 
 This builds the standalone renderer with
 `DOORSTOP_REFERENCE_ANALYSIS`; ordinary engine and test builds do not contain
-the variant selector or its hot-path branch. It renders four analysis probes:
+the variant selector or its hot-path branch. It renders these analysis probes:
 
 | Variant | Purpose |
 | --- | --- |
@@ -514,8 +514,10 @@ the variant selector or its hot-path branch. It renders four analysis probes:
 | `modes-only` | The present radiated modal bank without the other audible components |
 | `spring-forward` | No junction coupling, shorter/darker modal anchors, reduced modal mix, and a stronger dispersive path |
 | `spring-refined` | Spring-forward with darker, longer distributed feedback and a narrow squared radiation window protecting the repeated boing |
+| `rack-v2` | The exact production Dark Refined V2 profile and mix |
+| `boing-refined` | Analysis-only V2 follow-up with rounder radiation windows, stronger energy-correlated modal settling, a fractional distributed-delay sweep, and less initial snap |
 
-`tools/compare_doorstop_variants.py` scores all four populations and writes
+`tools/compare_doorstop_variants.py` scores all available populations and writes
 same-seed, same-velocity listening groups under
 `build/doorstop-variant-analysis/listening`. Files within a group are exactly
 RMS-matched over 50 ms–2.5 s, with the common level reduced when necessary to
@@ -571,3 +573,38 @@ modulation depth, 48–60 lobes, and a 41–45 Hz early pulse rate. A standalone
 the WSL development environment. This is directional standalone-engine data;
 the authoritative plugin/runtime measurement remains the Windows/MSYS2 Rack
 build.
+
+## 15. Boing-refined follow-up
+
+The first Rack V2 audition retained the repeated amplitude lobes but could
+still read as repeated **twang** rather than the familiar **boioioing**. The
+distinction exposed a limitation in the original automated target: lobe count,
+pulse rate, and modulation depth describe the amplitude motion, but do not
+establish that the resonant carrier itself moves in pitch.
+
+`boing-refined` is therefore kept as an analysis-only candidate rather than
+silently changing Rack V2. Relative to the production V2 path, it:
+
+* replaces the squared radiation pulse with
+  `envelope * (0.35 + 0.65 * envelope)`, retaining a strong center while
+  giving each window a rounder shoulder;
+* multiplies the existing mode-specific, energy-correlated frequency warp by
+  2.4, so modal ridges audibly settle downward without imposing one identical
+  global glide;
+* shortens the distributed texture delay by up to 5.5% at high bend energy,
+  returning toward its resting length as energy decays; two adjacent delay
+  taps and linear interpolation avoid integer-tap zipper noise; and
+* reduces the initial impact contribution from 0.54 to 0.43.
+
+The implementation adds no per-sample transcendental operations. The
+fractional texture read costs one additional buffer read and one interpolation
+only in this analysis candidate; the modal change is one extra multiply per
+mode.
+
+Across the standard 48-render population, `boing-refined` measured a
+0.51–0.55 modulation depth, 46–59 lobes, and a 41–45 Hz early pulse rate, all
+inside the corpus corridors. Its T20 range increased from Rack V2's
+0.83–1.29 seconds to 1.01–1.30 seconds. Ridge count and median Q remain much
+higher than the recordings, so this experiment tests more credible pitch
+motion and pulse shape; it does not yet resolve the modal-density/material
+discrepancy.
