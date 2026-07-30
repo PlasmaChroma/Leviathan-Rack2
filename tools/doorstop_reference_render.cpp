@@ -34,9 +34,12 @@ doorstop::ReferenceAnalysisVariant parseVariant(const std::string& text) {
 	if (text == "spring-refined") {
 		return doorstop::ReferenceAnalysisVariant::SpringRefined;
 	}
+	if (text == "boing-refined") {
+		return doorstop::ReferenceAnalysisVariant::BoingRefined;
+	}
 	throw std::runtime_error(
 		"variant must be current, spring-only, modes-only, spring-forward, "
-		"or spring-refined");
+		"spring-refined, or boing-refined");
 }
 #endif
 
@@ -127,7 +130,7 @@ void usage(const char* executable) {
 		<< "  --discard-output    process without writing a WAV (benchmarking)\n"
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
 		<< "  --variant NAME      current, spring-only, modes-only, spring-forward,\n"
-		<< "                      spring-refined, or rack-v2\n"
+		<< "                      spring-refined, rack-v2, or boing-refined\n"
 #endif
 		;
 }
@@ -190,10 +193,14 @@ int main(int argc, char** argv) {
 			}
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
 			else if (option == "--variant") {
-				if (std::string(value) == "rack-v2") {
+				const std::string variantName(value);
+				if (variantName == "rack-v2"
+					|| variantName == "boing-refined") {
 					profile =
 						doorstop::ReferenceSpringProfile::DarkRefinedV2;
-					variant = doorstop::ReferenceAnalysisVariant::Current;
+					variant = variantName == "boing-refined"
+						? doorstop::ReferenceAnalysisVariant::BoingRefined
+						: doorstop::ReferenceAnalysisVariant::Current;
 				}
 				else {
 					variant = parseVariant(value);

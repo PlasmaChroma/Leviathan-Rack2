@@ -608,3 +608,16 @@ inside the corpus corridors. Its T20 range increased from Rack V2's
 higher than the recordings, so this experiment tests more credible pitch
 motion and pulse shape; it does not yet resolve the modal-density/material
 discrepancy.
+
+The durable, level-matched audition is regenerated with:
+
+```sh
+make doorstop-boing-audition
+```
+
+The large 48-render populations remain disposable under `build/`. The selected
+dark, balanced, and bright listening fixtures, playlist, measurements, and
+README are written to
+`Samples/Doorstop/Auditions/reference-v2-vs-boing-refined/`, alongside but
+separate from the original acoustic recordings. This directory is outside the
+normal build-clean scope.

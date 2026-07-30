@@ -100,7 +100,7 @@ RACK_TEST_WARN_FLAGS := -Wno-unused-parameter
 RACK_TEST_OPT_FLAGS := -O1
 CXX_MACHINE := $(shell $(CXX) -dumpmachine 2>/dev/null)
 
-.PHONY: generate-panel-anchor-atlas validate-plugin-json doorstop-reference-grid doorstop-corpus-audit doorstop-reference-evaluate doorstop-variant-grid doorstop-variant-evaluate
+.PHONY: generate-panel-anchor-atlas validate-plugin-json doorstop-reference-grid doorstop-corpus-audit doorstop-reference-evaluate doorstop-variant-grid doorstop-variant-evaluate doorstop-boing-audition
 generate-panel-anchor-atlas:
 	python3 tools/generate_panel_anchor_atlas.py
 
@@ -113,7 +113,8 @@ build/tools/doorstop_reference_render: tools/doorstop_reference_render.cpp src/R
 
 DOORSTOP_REFERENCE_VELOCITIES ?= 0.5 0.75 1.0
 DOORSTOP_REFERENCE_SEEDS ?= 1 77 7331 65537 104729 999983 2654435761 305419896 610839776 195948557 271828183 314159265 3735928559 324508639 4277009102 4294967291
-DOORSTOP_REFERENCE_VARIANTS ?= current spring-only modes-only spring-forward spring-refined rack-v2
+DOORSTOP_REFERENCE_VARIANTS ?= current spring-only modes-only spring-forward spring-refined rack-v2 boing-refined
+DOORSTOP_BOING_AUDITION_DIR ?= Samples/Doorstop/Auditions/reference-v2-vs-boing-refined
 
 doorstop-reference-grid: build/tools/doorstop_reference_render
 	mkdir -p build/doorstop-reference-renders
@@ -146,6 +147,15 @@ doorstop-variant-grid: build/tools/doorstop_reference_render
 
 doorstop-variant-evaluate: doorstop-variant-grid
 	python3 tools/compare_doorstop_variants.py
+
+# Keep the large population renders disposable, but preserve the compact,
+# level-matched listening decision outside build/ so normal cleans do not
+# erase it.
+doorstop-boing-audition: build/tools/doorstop_reference_render
+	$(MAKE) DOORSTOP_REFERENCE_VARIANTS="current rack-v2 boing-refined" doorstop-variant-grid
+	python3 tools/compare_doorstop_variants.py \
+		--variants current rack-v2 boing-refined \
+		--output-dir $(DOORSTOP_BOING_AUDITION_DIR)
 
 ifneq (,$(findstring mingw,$(CXX_MACHINE)))
 LDFLAGS += -lws2_32

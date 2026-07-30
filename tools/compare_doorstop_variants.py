@@ -227,10 +227,11 @@ def package_listening_set(
     lines.extend(
         [
             "",
-            "For refinement listening, compare current, spring-forward, then",
-            "spring-refined. Spring-only and modes-only remain diagnostic stems.",
-            "The refined candidate deliberately protects the repeated boing",
-            "contrast even when that is not favored by averaged spectrum alone.",
+            "For the current refinement decision, compare rack-v2 with",
+            "boing-refined. The latter trades some of V2's narrow modulation",
+            "depth for rounder radiation windows and correlated downward pitch",
+            "motion. Other entries remain historical candidates or diagnostic",
+            "stems when their render directories are present.",
             "",
         ]
     )
@@ -335,11 +336,25 @@ def main() -> int:
         type=Path,
         default=Path("build/doorstop-variant-analysis"),
     )
+    parser.add_argument(
+        "--variants",
+        nargs="+",
+        help="optional explicit variant directory names to compare and package",
+    )
     args = parser.parse_args()
 
-    variant_dirs = sorted(
-        path for path in args.variant_root.iterdir() if path.is_dir()
-    )
+    if args.variants:
+        variant_dirs = [args.variant_root / name for name in args.variants]
+        missing = [path for path in variant_dirs if not path.is_dir()]
+        if missing:
+            parser.error(
+                "missing variant directories: "
+                + ", ".join(str(path) for path in missing)
+            )
+    else:
+        variant_dirs = sorted(
+            path for path in args.variant_root.iterdir() if path.is_dir()
+        )
     if not variant_dirs:
         parser.error(f"no variant directories found in {args.variant_root}")
 

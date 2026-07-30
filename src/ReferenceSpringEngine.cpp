@@ -90,7 +90,16 @@ bool ReferenceSpringEngine::usesRefinedBody() const {
 		return true;
 	}
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
-	return analysisVariant == ReferenceAnalysisVariant::SpringRefined;
+	return analysisVariant == ReferenceAnalysisVariant::SpringRefined
+		|| analysisVariant == ReferenceAnalysisVariant::BoingRefined;
+#else
+	return false;
+#endif
+}
+
+bool ReferenceSpringEngine::usesBoingRefinement() const {
+#if defined(DOORSTOP_REFERENCE_ANALYSIS)
+	return analysisVariant == ReferenceAnalysisVariant::BoingRefined;
 #else
 	return false;
 #endif
@@ -107,7 +116,8 @@ bool ReferenceSpringEngine::usesJunctionCoupling() const {
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
 	return analysisVariant != ReferenceAnalysisVariant::SpringOnly
 		&& analysisVariant != ReferenceAnalysisVariant::SpringForward
-		&& analysisVariant != ReferenceAnalysisVariant::SpringRefined;
+		&& analysisVariant != ReferenceAnalysisVariant::SpringRefined
+		&& analysisVariant != ReferenceAnalysisVariant::BoingRefined;
 #else
 	return true;
 #endif
@@ -569,7 +579,12 @@ float ReferenceSpringEngine::processModes() {
 	for (int i = 0; i < REFERENCE_MODE_COUNT; ++i) {
 		// Measured ridges settle by different amounts. A small mode-specific
 		// warp avoids the synthetic global pitch dive of the previous model.
-		const float pitchWarp = 1.f + frequencyWarpDepth[i] * energy;
+		// The boing candidate keeps the existing correlated energy warp but
+		// makes its downward settling audible. This is still one multiply per
+		// mode, with no new per-sample transcendental work.
+		const float warpScale = usesBoingRefinement() ? 2.4f : 1.f;
+		const float pitchWarp =
+			1.f + frequencyWarpDepth[i] * energy * warpScale;
 		const float frequency = std::min(
 			restingFrequencyHz[i] * pitchWarp,
 			0.18f * sampleRate);
@@ -639,11 +654,34 @@ float ReferenceSpringEngine::processDispersiveTexture() {
 	const float drive = textureDriveLowpass * textureDriveEnvelope
 		* (0.16f + 0.20f * brightness);
 
-	int readIndex = textureWriteIndex - textureDelaySamples;
-	if (readIndex < 0) {
-		readIndex += MAX_TEXTURE_DELAY;
+	float delayed = 0.f;
+	if (usesBoingRefinement()) {
+		// A small energy-correlated delay sweep lets the distributed texture
+		// settle downward with the modes. Linear interpolation avoids the
+		// zipper noise of jumping between integer delay taps.
+		const float energy = clampf(smoothedEnergy, 0.f, 1.f);
+		const float sweptDelay = std::max(
+			16.f, float(textureDelaySamples) * (1.f - 0.055f * energy));
+		const int delayWhole = int(sweptDelay);
+		const float delayFraction = sweptDelay - float(delayWhole);
+		int newerIndex = textureWriteIndex - delayWhole;
+		if (newerIndex < 0) {
+			newerIndex += MAX_TEXTURE_DELAY;
+		}
+		int olderIndex = newerIndex - 1;
+		if (olderIndex < 0) {
+			olderIndex += MAX_TEXTURE_DELAY;
+		}
+		delayed = lerpf(
+			textureDelay[newerIndex], textureDelay[olderIndex], delayFraction);
 	}
-	const float delayed = textureDelay[readIndex];
+	else {
+		int readIndex = textureWriteIndex - textureDelaySamples;
+		if (readIndex < 0) {
+			readIndex += MAX_TEXTURE_DELAY;
+		}
+		delayed = textureDelay[readIndex];
+	}
 	textureFeedbackLowpass +=
 		(delayed - textureFeedbackLowpass) * driveAlpha;
 
@@ -797,6 +835,18 @@ Frame ReferenceSpringEngine::process(float requestedSampleTime) {
 				+ 0.965f * refinedPulse) * directionalRadiation;
 			signal = impact * 0.54f + mount * 0.16f + flex * 0.30f
 				+ (modal * 0.78f + texture * 1.62f) * refinedGate;
+			break;
+		}
+		case ReferenceAnalysisVariant::BoingRefined: {
+			// Broader shoulders keep each bidirectional radiation window from
+			// chopping a stable carrier into a sequence of metallic twangs.
+			// Pitch motion is supplied inside the modal and texture stages.
+			const float roundedPulse = radiationEnvelope
+				* (0.35f + 0.65f * radiationEnvelope);
+			const float roundedGate = (0.045f
+				+ 0.955f * roundedPulse) * directionalRadiation;
+			signal = impact * 0.43f + mount * 0.16f + flex * 0.30f
+				+ (modal * 0.78f + texture * 1.62f) * roundedGate;
 			break;
 		}
 		case ReferenceAnalysisVariant::Current:

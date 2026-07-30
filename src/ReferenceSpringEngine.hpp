@@ -20,7 +20,8 @@ enum class ReferenceAnalysisVariant : std::uint8_t {
 	SpringOnly,
 	ModesOnly,
 	SpringForward,
-	SpringRefined
+	SpringRefined,
+	BoingRefined
 };
 #endif
 
@@ -187,6 +188,7 @@ private:
 	float normalizedModalEnergy() const;
 	float specimenUnit(std::uint32_t propertyTag) const;
 	bool usesRefinedBody() const;
+	bool usesBoingRefinement() const;
 	bool usesDarkV2Bias() const;
 	bool usesJunctionCoupling() const;
 	std::uint32_t nextNoiseRandom();
