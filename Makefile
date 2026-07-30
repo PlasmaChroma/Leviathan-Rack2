@@ -68,6 +68,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/crownstep_spec \
 	build/tests/undertow_shape_spec \
 	build/tests/math_helpers_spec \
+	build/tests/puffy_engine_spec \
 	build/tests/doorstop_engine_spec \
 	build/tests/doorstop_reference_engine_spec \
 	build/tests/bifurx_filter_spec \
@@ -273,6 +274,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/crownstep_spec)
 	$(call run_test_bin,build/tests/undertow_shape_spec)
 	$(call run_test_bin,build/tests/math_helpers_spec)
+	$(call run_test_bin,build/tests/puffy_engine_spec)
 	$(call run_test_bin,build/tests/doorstop_engine_spec)
 	$(call run_test_bin,build/tests/doorstop_reference_engine_spec)
 	$(call run_test_bin,build/tests/bifurx_filter_spec)
@@ -398,6 +400,9 @@ build/tests/undertow_shape_spec: tests/undertow_shape_spec.cpp src/UndertowShape
 
 build/tests/math_helpers_spec: tests/math_helpers_spec.cpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/math_helpers_spec.cpp src/MathHelpers.cpp -o $@
+
+build/tests/puffy_engine_spec: tests/puffy_engine_spec.cpp src/PuffyEngine.cpp src/PuffyEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/puffy_engine_spec.cpp src/PuffyEngine.cpp src/MathHelpers.cpp -o $@
 
 build/tests/doorstop_engine_spec: tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@

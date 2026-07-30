@@ -38,6 +38,7 @@ extern Model* modelDeepcache;
 extern Model* modelUmi;
 extern Model* modelDoorstop;
 extern Model* modelChromatide;
+extern Model* modelPuffy;
 
 // Local semantic alias so module code can request a white tiny Befaco knob
 // without depending on another plugin's custom class declarations.

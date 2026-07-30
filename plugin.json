@@ -187,7 +187,17 @@
         "Expander"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Puffy",
+      "name": "Puffy",
+      "description": "Character stereo saturator with animated peak control.",
+      "tags": [
+        "Distortion",
+        "Dynamics",
+        "Visual"
+      ],
+      "hidden": false
     }
   ]
 }
-

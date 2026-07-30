@@ -1,0 +1,321 @@
+#include "../src/PuffyEngine.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <iostream>
+#include <limits>
+#include <new>
+#include <string>
+#include <vector>
+
+namespace {
+bool gTrackAllocations = false;
+std::size_t gAllocationCount = 0;
+}
+
+void* operator new(std::size_t size) {
+	if (gTrackAllocations) {
+		gAllocationCount++;
+	}
+	if (void* memory = std::malloc(size)) {
+		return memory;
+	}
+	throw std::bad_alloc();
+}
+
+void* operator new[](std::size_t size) {
+	return ::operator new(size);
+}
+
+void operator delete(void* memory) noexcept {
+	std::free(memory);
+}
+
+void operator delete[](void* memory) noexcept {
+	std::free(memory);
+}
+
+void operator delete(void* memory, std::size_t) noexcept {
+	std::free(memory);
+}
+
+void operator delete[](void* memory, std::size_t) noexcept {
+	std::free(memory);
+}
+
+namespace {
+
+constexpr float kPi = 3.14159265358979323846f;
+
+struct Result {
+	std::string name;
+	bool pass = false;
+	std::string detail;
+};
+
+bool near(float actual, float expected, float tolerance) {
+	return std::fabs(actual - expected) <= tolerance;
+}
+
+Result characterCurves() {
+	puffy::DynamicsState dynamics;
+	dynamics.fast = 0.7f;
+	dynamics.transient = 0.4f;
+	bool finite = true;
+	bool bloomOdd = true;
+	bool spineOdd = true;
+	bool frenzyBounded = true;
+	float previousSpine = -10.f;
+	bool spineMonotonic = true;
+	for (int ai = 0; ai <= 20; ++ai) {
+		const float amount = float(ai) / 20.f;
+		for (int xi = -400; xi <= 400; ++xi) {
+			const float input = float(xi) / 100.f;
+			const float bloom = puffy::Engine::processCharacter(
+				puffy::Character::Bloom, input, amount, dynamics);
+			const float bloomNegative = puffy::Engine::processCharacter(
+				puffy::Character::Bloom, -input, amount, dynamics);
+			const float spine = puffy::Engine::processCharacter(
+				puffy::Character::Spine, input, amount, dynamics);
+			const float spineNegative = puffy::Engine::processCharacter(
+				puffy::Character::Spine, -input, amount, dynamics);
+			const float frenzy = puffy::Engine::processCharacter(
+				puffy::Character::Frenzy, input, amount, dynamics);
+			finite = finite && std::isfinite(bloom) && std::isfinite(spine)
+				&& std::isfinite(frenzy);
+			bloomOdd = bloomOdd && near(bloom, -bloomNegative, 2e-6f);
+			spineOdd = spineOdd && near(spine, -spineNegative, 2e-6f);
+			frenzyBounded = frenzyBounded
+				&& frenzy >= std::min(input, -1.25f) - 1e-5f
+				&& frenzy <= std::max(input, 1.25f) + 1e-5f;
+			if (ai == 20) {
+				spineMonotonic = spineMonotonic && spine >= previousSpine - 1e-6f;
+				previousSpine = spine;
+			}
+		}
+	}
+	const float edgeBelow = puffy::Engine::processCharacter(
+		puffy::Character::Spine, 0.1f - 1e-6f, 1.f, dynamics);
+	const float edgeAbove = puffy::Engine::processCharacter(
+		puffy::Character::Spine, 0.1f + 1e-6f, 1.f, dynamics);
+	const bool continuous = std::fabs(edgeAbove - edgeBelow) < 1e-4f;
+	return {
+		"Character curves are finite, bounded, symmetric where required, and continuous",
+		finite && bloomOdd && spineOdd && frenzyBounded && spineMonotonic && continuous,
+		"finite=" + std::to_string(finite)
+			+ " bloomOdd=" + std::to_string(bloomOdd)
+			+ " spineOdd=" + std::to_string(spineOdd)
+			+ " spineMonotonic=" + std::to_string(spineMonotonic)
+			+ " edgeDelta=" + std::to_string(std::fabs(edgeAbove - edgeBelow))
+	};
+}
+
+struct ToneStats {
+	double inputSq = 0.0;
+	double outputSq = 0.0;
+	float peakLeft = 0.f;
+	float peakRight = 0.f;
+	float maxStereoDelta = 0.f;
+	bool finite = true;
+};
+
+ToneStats renderTone(
+	puffy::Engine& engine,
+	float seconds,
+	float amplitude,
+	float frequency,
+	float amount,
+	int character,
+	bool autoDeflate,
+	float manualDeflate,
+	bool identicalStereo = true) {
+	const float sampleRate = engine.getSampleRate();
+	const int samples = int(seconds * sampleRate);
+	const int skip = int(0.1f * sampleRate);
+	ToneStats stats;
+	for (int i = 0; i < samples; ++i) {
+		const float phase = 2.f * kPi * frequency * float(i) / sampleRate;
+		const float left = amplitude * std::sin(phase);
+		const float right = identicalStereo ? left : amplitude * 0.5f * std::cos(phase);
+		const puffy::Frame frame = engine.process(
+			left, right, amount, character, autoDeflate, manualDeflate);
+		stats.finite = stats.finite && std::isfinite(frame.left)
+			&& std::isfinite(frame.right);
+		stats.peakLeft = std::max(stats.peakLeft, std::fabs(frame.left));
+		stats.peakRight = std::max(stats.peakRight, std::fabs(frame.right));
+		stats.maxStereoDelta =
+			std::max(stats.maxStereoDelta, std::fabs(frame.left - frame.right));
+		if (i >= skip) {
+			stats.inputSq += double(left) * double(left);
+			stats.outputSq += double(frame.left) * double(frame.left);
+		}
+	}
+	return stats;
+}
+
+Result unityAndStereo() {
+	puffy::Engine engine;
+	engine.setSampleRate(48000.f);
+	const ToneStats stats = renderTone(
+		engine, 0.5f, 1.f, 1000.f, 0.f, 0, false, 0.f);
+	const float ratio = float(std::sqrt(stats.outputSq / stats.inputSq));
+	const float db = 20.f * std::log10(std::max(ratio, 1e-9f));
+	return {
+		"Amount zero is unity and identical stereo remains identical",
+		stats.finite && std::fabs(db) <= 0.05f && stats.maxStereoDelta <= 1e-6f,
+		"gainDb=" + std::to_string(db)
+			+ " stereoDelta=" + std::to_string(stats.maxStereoDelta)
+	};
+}
+
+Result linkedLimiter() {
+	puffy::Engine engine;
+	engine.setSampleRate(48000.f);
+	float maximum = 0.f;
+	float ratioError = 0.f;
+	for (int i = 0; i < 48000; ++i) {
+		const float phase = 2.f * kPi * 997.f * float(i) / 48000.f;
+		const float left = 18.f * std::sin(phase);
+		const float right = 4.5f * std::sin(phase);
+		const puffy::Frame frame = engine.process(left, right, 0.f, 0, false, 0.f);
+		maximum = std::max(maximum, std::max(std::fabs(frame.left), std::fabs(frame.right)));
+		if (i > 1000 && std::fabs(frame.left) > 1e-4f) {
+			ratioError = std::max(
+				ratioError, std::fabs(frame.right / frame.left - 0.25f));
+		}
+	}
+	return {
+		"LIVE limiter holds 5 V and applies one linked stereo gain",
+		maximum <= 5.00001f && ratioError < 2e-4f,
+		"peak=" + std::to_string(maximum)
+			+ " ratioError=" + std::to_string(ratioError)
+	};
+}
+
+Result manualDeflateIsExact() {
+	puffy::Engine dry;
+	puffy::Engine trimmed;
+	dry.setSampleRate(48000.f);
+	trimmed.setSampleRate(48000.f);
+	const ToneStats dryStats = renderTone(
+		dry, 0.5f, 1.f, 431.f, 0.5f, 0, false, 0.f);
+	const ToneStats trimStats = renderTone(
+		trimmed, 0.5f, 1.f, 431.f, 0.5f, 0, false, 0.5f);
+	const float ratio = float(std::sqrt(trimStats.outputSq / dryStats.outputSq));
+	const float expected = std::pow(10.f, -6.f / 20.f);
+	return {
+		"DEFLATE is an exact post-limiter dB trim",
+		near(ratio, expected, 2e-5f),
+		"ratio=" + std::to_string(ratio)
+			+ " expected=" + std::to_string(expected)
+	};
+}
+
+Result recoveryAndSilence() {
+	puffy::Engine engine;
+	engine.setSampleRate(96000.f);
+	for (int i = 0; i < 2000; ++i) {
+		engine.process(8.f, -6.f, 1.f, 2, true, 0.f);
+	}
+	const puffy::Frame invalid = engine.process(
+		std::numeric_limits<float>::quiet_NaN(),
+		std::numeric_limits<float>::infinity(),
+		1.f, 2, true, 0.f);
+	bool finite = std::isfinite(invalid.left) && std::isfinite(invalid.right);
+	float tail = 0.f;
+	for (int i = 0; i < 192000; ++i) {
+		const int character = (i / 137) % 3;
+		const puffy::Frame frame = engine.process(0.f, 0.f, 0.75f, character, true, 0.f);
+		finite = finite && std::isfinite(frame.left) && std::isfinite(frame.right);
+		if (i > 96000) {
+			tail = std::max(tail, std::max(std::fabs(frame.left), std::fabs(frame.right)));
+		}
+	}
+	return {
+		"Non-finite recovery and rapid character changes settle to silence",
+		finite && tail < 1e-6f,
+		"finite=" + std::to_string(finite) + " tail=" + std::to_string(tail)
+	};
+}
+
+Result nonlinearGrowth() {
+	bool pass = true;
+	std::string detail;
+	for (int character = 0; character < 3; ++character) {
+		puffy::Engine low;
+		puffy::Engine high;
+		low.setSampleRate(48000.f);
+		high.setSampleRate(48000.f);
+		const ToneStats lowStats = renderTone(
+			low, 0.5f, 3.5f, 997.f, 0.2f, character, false, 0.f);
+		const ToneStats highStats = renderTone(
+			high, 0.5f, 3.5f, 997.f, 1.f, character, false, 0.f);
+		const float lowGain = float(std::sqrt(lowStats.outputSq / lowStats.inputSq));
+		const float highGain = float(std::sqrt(highStats.outputSq / highStats.inputSq));
+		pass = pass && std::fabs(highGain - 1.f) > std::fabs(lowGain - 1.f) + 0.01f;
+		detail += " c" + std::to_string(character)
+			+ "=" + std::to_string(lowGain) + "/" + std::to_string(highGain);
+	}
+	return {
+		"Every character becomes measurably more nonlinear as PUFF rises",
+		pass,
+		detail
+	};
+}
+
+Result realtimePathDoesNotAllocate() {
+	puffy::Engine engine;
+	engine.setSampleRate(192000.f);
+	gAllocationCount = 0;
+	gTrackAllocations = true;
+	float peak = 0.f;
+	for (int i = 0; i < 30000; ++i) {
+		const float phase = 2.f * kPi * 997.f * float(i) / 192000.f;
+		const puffy::Frame frame = engine.process(
+			7.f * std::sin(phase),
+			5.f * std::cos(phase),
+			float(i % 1000) / 999.f,
+			(i / 333) % 3,
+			(i & 1) != 0,
+			float(i % 101) / 100.f);
+		peak = std::max(peak, std::max(std::fabs(frame.left), std::fabs(frame.right)));
+	}
+	gTrackAllocations = false;
+	const std::size_t allocations = gAllocationCount;
+	return {
+		"Realtime engine path performs no dynamic allocation",
+		allocations == 0 && std::isfinite(peak),
+		"allocations=" + std::to_string(allocations)
+			+ " peak=" + std::to_string(peak)
+	};
+}
+
+} // namespace
+
+int main() {
+	const std::vector<Result> results = {
+		characterCurves(),
+		unityAndStereo(),
+		linkedLimiter(),
+		manualDeflateIsExact(),
+		recoveryAndSilence(),
+		nonlinearGrowth(),
+		realtimePathDoesNotAllocate()
+	};
+	int failures = 0;
+	for (const Result& result : results) {
+		std::cout << (result.pass ? "[PASS] " : "[FAIL] ") << result.name;
+		if (!result.detail.empty()) {
+			std::cout << " :: " << result.detail;
+		}
+		std::cout << '\n';
+		if (!result.pass) {
+			failures++;
+		}
+	}
+	std::cout << "[SUMMARY] puffy_engine_spec: "
+		<< (results.size() - std::size_t(failures)) << "/" << results.size()
+		<< " passed\n";
+	return failures == 0 ? 0 : 1;
+}
