@@ -705,3 +705,522 @@ Puffy is ready to unhide only when:
 
 The v1 priority order is sound, stability, stereo integrity, readable animation,
 and visual polish. True 3D remains outside the release path.
+
+# Appendix A. Puffy character animation and future 3D integration
+
+> Status: visual architecture guidance and post-v1 development path.
+>
+> This appendix does not alter the normative v1 contract above. In particular,
+> v1 continues to require an original NanoVG/pseudo-3D renderer and does not
+> require OpenGL or a 3D asset. The purpose of this appendix is to ensure that
+> the v1 character controller can later drive a true 3D Puffy without coupling
+> audio processing to a particular renderer.
+
+## A.1 Character principle
+
+Puffy should not behave like a meter wearing a fish costume. He should behave
+like a small creature whose physical and emotional state is influenced by the
+module.
+
+The visual system therefore combines three independent sources of motion:
+
+1. **Control state** communicates the user's selected `PUFF` amount and
+   character mode.
+2. **Audio state** communicates actual signal activity, transients, and limiter
+   gain reduction.
+3. **Autonomous life** provides blinking, breathing, gaze shifts, and small fin
+   movements even when the signal is silent.
+
+No one source should completely control the pose. In particular, waveform
+polarity and sample-by-sample audio values must never drive visible geometry
+directly. Puffy communicates the recent behavior of the processor, not the
+individual waveform.
+
+A conventional limiter light remains the precise engineering indicator. Puffy
+is a readable character meter and an emotional summary, not a calibrated
+replacement for numeric metering.
+
+## A.2 Renderer-independent architecture
+
+Keep the character simulation independent from both the audio engine and the
+visual backend:
+
+```text
+Puffy module DSP
+  -> atomic PuffyVisualState snapshot
+      -> PuffyCharacterController
+          -> PuffyPose
+              -> NanoVG/Pseudo-3D renderer       [v1]
+              -> OpenGL 3D renderer              [future]
+              -> static/browser preview renderer
+```
+
+Suggested responsibilities:
+
+```text
+PuffyCharacterController
+  - smooths visual targets;
+  - runs spring motion;
+  - schedules blinks, glances, and fin twitches;
+  - interprets DSP state as mood;
+  - emits a renderer-neutral PuffyPose.
+
+PuffyPose
+  - inflation;
+  - body squash/stretch;
+  - spine extension;
+  - vertical drift and body rotation;
+  - left/right pupil direction;
+  - independent eyelid closure;
+  - mouth expression;
+  - fin angles;
+  - blush/warning intensity.
+
+Renderer
+  - converts PuffyPose into NanoVG parts, sprites, or mesh transforms;
+  - owns graphics resources;
+  - performs no audio analysis;
+  - does not mutate DSP state.
+```
+
+A possible renderer-neutral pose structure is:
+
+```cpp
+struct PuffyPose {
+    float inflation = 0.f;        // 0..1
+    float squashX = 0.f;          // small signed normalized offset
+    float squashY = 0.f;
+    float bodyYaw = 0.f;          // radians, intentionally subtle
+    float bodyPitch = 0.f;
+    float verticalOffset = 0.f;   // normalized local viewport units
+
+    float gazeX = 0.f;            // -1..1
+    float gazeY = 0.f;            // -1..1
+    float leftBlink = 0.f;        // 0 open, 1 closed
+    float rightBlink = 0.f;
+
+    float mouthSmile = 0.f;       // 0..1
+    float mouthTension = 0.f;     // 0..1
+    float leftFinAngle = 0.f;
+    float rightFinAngle = 0.f;
+    float spineExtension = 0.f;   // 0..1
+    float blush = 0.f;            // 0..1
+};
+```
+
+The v1 implementation may contain fewer pose channels, but its controller and
+renderer boundary should allow fields to be added without touching the DSP
+kernels or persistence schema.
+
+## A.3 Audio-to-character interpretation
+
+The existing `PuffyVisualState` remains the v1 audio/UI contract. The character
+controller reads its values and derives slower visual states.
+
+The baseline inflation should primarily reflect the control setting, while
+actual signal activity adds only a smaller dynamic contribution:
+
+```text
+inflationTarget = clamp(
+    0.65 * effectiveAmount
+  + 0.25 * inputActivity
+  + 0.10 * gainReduction,
+  0,
+  1)
+```
+
+Do not assign the target directly to the rendered pose. Use a damped spring so
+Puffy swells, overshoots slightly, and settles like a pressurized soft body:
+
+```cpp
+velocity += (target - value) * stiffness * dt;
+velocity *= std::exp(-damping * dt);
+value += velocity * dt;
+```
+
+The exact constants are visual tuning values, but the system should satisfy the
+following behavior:
+
+- a slow knob movement appears smooth and deliberate;
+- a fast increase produces a small, friendly overshoot;
+- audio motion is visible but does not make Puffy vibrate;
+- silence returns Puffy toward the amount-defined baseline, not necessarily to
+  the fully deflated state;
+- limiter activity produces a readable secondary reaction without obscuring the
+  amount indication.
+
+Suggested semantic mappings:
+
+| Signal or control | Character interpretation |
+| --- | --- |
+| `effectiveAmount` | baseline inflation and mode-specific body treatment |
+| `inputActivity` | subtle breathing amplitude and buoyant body motion |
+| `transientActivity` | brief fin flick, jaw tension, or squash impulse |
+| `gainReduction` | blush/warning tint and a small bracing expression |
+| `character` | motion vocabulary and resting personality |
+
+A future snapshot may add a smoothed stereo-bias scalar if testing shows value:
+
+```cpp
+float stereoBias; // -1 left-heavy, +1 right-heavy
+```
+
+This would allow a subtle gaze bias toward the more active channel. It is not
+required for v1 and must not destabilize or visually exaggerate the stereo
+image.
+
+## A.4 Mode-specific personality
+
+The three DSP characters should share one recognizable Puffy but differ in
+motion language.
+
+### A.4.1 BLOOM
+
+- Roundest silhouette.
+- Slow, relaxed breathing.
+- Soft fin motion.
+- Gentle inflation overshoot.
+- Open, content expression.
+- Limiting appears as warm blush before concern.
+
+### A.4.2 SPINE
+
+- Spines extend more strongly with amount.
+- Transients produce a small, quick body tension.
+- Fins move less, making the body feel firmer.
+- Eyes become slightly more focused at high drive.
+- Heavy limiting produces a braced expression rather than panic.
+
+### A.4.3 FRENZY
+
+- Slight asymmetric squash and recovery on strong transients.
+- Faster gaze changes, but never continuous jitter.
+- More energetic fin flicks.
+- Occasional excited expression at high activity.
+- The renderer may introduce a very small lateral wobble, but visual randomness
+  must never imply randomness in the DSP algorithm.
+
+Mode changes should crossfade or interpolate personality settings over roughly
+150-300 ms even though the audio characters crossfade in 10 ms. A slower visual
+transition reads as a change of temperament rather than a graphics discontinuity.
+
+## A.5 Autonomous life system
+
+Puffy should continue to appear alert when no signal is present. Autonomous
+motion is cosmetic, widget-local, and independent from audio RNG.
+
+Recommended idle behaviors:
+
+| Behavior | Typical interval | Notes |
+| --- | ---: | --- |
+| Blink | 2.5-7.0 s | Fast close, short hold, softer reopen |
+| Double blink | 10-15% of blink events | Second blink follows quickly |
+| Gaze change | 1.5-5.0 s | Hold targets long enough to feel intentional |
+| Fin twitch | 4-12 s | Low amplitude and occasionally asymmetric |
+| Breathing | 3-5 s cycle | Very small change around baseline inflation |
+| Vertical drift | continuous | Less than about one rendered pixel at normal zoom |
+| Expression event | rare | Avoid constant smiling/frowning changes |
+
+Use a small widget-local PRNG seeded from the module instance or widget address.
+This prevents several Puffy modules from blinking in perfect synchronization.
+The seed and event schedule do not need to persist across patch loads.
+
+Idle events should be scheduled as state transitions rather than generated by
+stacking unrelated sine waves. A useful gaze sequence is:
+
+```text
+choose target
+-> quick eye saccade
+-> damped settle
+-> hold
+-> optional tiny corrective movement
+-> choose next target
+```
+
+The eyes are the highest-value animation feature. Small, well-timed pupil and
+eyelid movement will contribute more life than large body motion.
+
+Puffy may occasionally glance toward the `PUFF` control after it changes, or
+toward the limiter indicator during sustained gain reduction. Avoid continuous
+mouse tracking; it is distracting and can become uncanny.
+
+## A.6 Update rate and visibility
+
+Target 30 character simulation and redraw updates per second while Puffy is
+visible. The character controller may accumulate real GUI delta time and step at
+a bounded fixed interval.
+
+Requirements:
+
+- Do not run expensive geometry preparation at the audio sample rate.
+- Stop autonomous event advancement while the widget is not visible.
+- Do not dirty the entire panel framebuffer for local fish motion.
+- Keep static viewport decoration in the SVG or a separate cached framebuffer.
+- Clamp unusually large GUI `dt` values after a stall so springs and event timers
+  cannot explode.
+- Browser and Deep Cache previews remain deterministic and do not start an idle
+  scheduler.
+
+A context-menu animation preference is recommended when the character system is
+mature:
+
+```text
+Puffy animation
+  Full
+  Reduced
+  Audio reactive only
+  Static
+```
+
+Suggested behavior:
+
+- `Full`: all audio and autonomous animation.
+- `Reduced`: inflation, blinking, and gentle breathing only.
+- `Audio reactive only`: no autonomous gaze or fin events.
+- `Static`: pose reflects the current amount/character but does not animate.
+
+This setting is optional for v1. If added, it is a visual preference and must not
+alter audio or require different DSP state.
+
+## A.7 V1 pseudo-3D implementation path
+
+The v1 NanoVG renderer can approximate the future 3D character using layered,
+independently transformed art:
+
+```text
+back spines
+body shadow
+body base
+body highlight and texture
+side fins
+mouth
+eye whites
+irises/pupils
+upper eyelids
+front spines and highlights
+blush/limiter overlay
+```
+
+The body should be authored in multiple compatible shapes or deformation
+anchors so inflation is sculpted rather than implemented as uniform scaling.
+Uniform scaling would incorrectly enlarge Puffy's eyes, mouth, fins, and spikes
+and could reintroduce the oversized cheek masses deliberately removed from the
+character design.
+
+Recommended v1 approaches, in increasing complexity:
+
+1. Interpolate between deflated, normal, and fully puffed body contours.
+2. Use a small set of pre-rendered body stages and crossfade adjacent stages.
+3. Use a mesh-like 2D cage to deform a textured raster body.
+4. Combine body-stage sprites with independent vector eyes, pupils, lids, fins,
+   mouth, and local highlights.
+
+Option 4 is likely the best quality/performance compromise. Blender can render
+16-32 inflation stages from a fixed camera and lighting setup. The runtime then
+interpolates between adjacent stages while keeping the expressive face and fins
+independent.
+
+The sprite sequence must be treated as an original source asset, not as the
+module's only editable master. Preserve the Blender model, material setup,
+camera, lights, and export script in the project art source.
+
+## A.8 Future true-3D renderer
+
+After v1 is stable, Puffy may gain a true 3D renderer implemented as an optional
+replacement for the pseudo-3D viewport. This is a post-v1 enhancement and must
+not block the initial release.
+
+### A.8.1 Mesh budget
+
+A small purpose-built asset is sufficient:
+
+- body and spikes: approximately 1,500-3,000 triangles;
+- separate eyes and pupils;
+- separate fins;
+- simple mouth or a few mouth morph targets;
+- one compact texture atlas or simple procedural materials;
+- one soft key light, ambient contribution, and a subtle floor shadow.
+
+The exact budget is less important than keeping draw calls and state changes
+small. Puffy occupies a limited viewport and does not need film-production
+geometry.
+
+### A.8.2 Sculpted inflation morph
+
+Author at least two body forms with identical topology:
+
+1. resting/normal Puffy;
+2. fully inflated Puffy.
+
+Store the inflated form as per-vertex position and normal deltas. The vertex
+shader or CPU deformation interpolates using the pose inflation value:
+
+```glsl
+vec3 position = basePosition + inflation * inflatedPositionDelta;
+vec3 normal = normalize(baseNormal + inflation * inflatedNormalDelta);
+```
+
+Inflation must be a sculpted morph, not uniform object scale. The inflated form
+should:
+
+- round and enlarge the body;
+- spread and slightly rotate the spines;
+- push the fins outward;
+- preserve the designed eye scale;
+- keep cheek volume integrated into the spherical body;
+- retain a readable mouth at every interpolation point.
+
+Additional small morphs may represent body squash, mouth tension, smile, and
+blink shapes. Pupils and fins are better handled as independent transforms.
+
+### A.8.3 OpenGL integration boundary
+
+A future implementation may use Rack's `OpenGlWidget`, but it must preserve the
+same controller and pose contracts used by the v1 renderer.
+
+Suggested future file boundaries:
+
+```text
+src/PuffyCharacterController.hpp
+src/PuffyCharacterController.cpp
+src/PuffyPose.hpp
+src/PuffyFishWidget.hpp             common widget interface
+src/PuffyFishNanoVG.cpp             v1 renderer
+src/PuffyFishOpenGL.cpp             optional future renderer
+res/puffy/puffy.meshbin
+res/puffy/puffy_albedo.png
+```
+
+The OpenGL widget owns all GPU resources. The module and DSP engine must not
+include OpenGL headers or know which renderer is active.
+
+Use a conservative rendering path compatible with Rack's supported graphics
+environment:
+
+- one compact vertex/index buffer;
+- one small texture atlas;
+- simple vertex and fragment shaders;
+- minimal draw calls and state changes;
+- no compute shaders;
+- no deferred renderer;
+- no postprocessing chain;
+- explicit restoration of any graphics state changed by the widget.
+
+The renderer should update at approximately 30 FPS and may use framebuffer
+caching with explicit invalidation rather than redrawing at the monitor refresh
+rate.
+
+### A.8.4 Fallbacks
+
+The 3D source project should also export a deterministic static render matching
+the module camera. This supports:
+
+- module browser previews;
+- Deep Cache previews;
+- systems where the 3D renderer cannot initialize;
+- reduced/static animation modes;
+- documentation and promotional art.
+
+Failure to initialize optional 3D resources must silently fall back to the
+NanoVG or static renderer without changing the audio path.
+
+## A.9 Threading and realtime boundary
+
+The audio thread remains limited to publishing the existing control-rate scalar
+snapshot. It must never perform:
+
+- character simulation;
+- random event scheduling;
+- mesh deformation;
+- graphics calls;
+- resource loading;
+- locking or allocation.
+
+The UI reads the atomic snapshot using relaxed atomics and, if needed, a sequence
+counter to avoid torn multi-field observations. The UI then performs all
+smoothing and character interpretation independently.
+
+A future expanded snapshot should remain a tiny plain-data structure. Do not
+publish mutable DSP objects, detector classes, limiter buffers, or pointers to
+engine state.
+
+## A.10 Character-controller pseudocode
+
+```cpp
+void PuffyCharacterController::update(
+    float dt,
+    const PuffyVisualState& visual,
+    PuffyPose& pose) {
+
+    dt = clamp(dt, 0.f, 1.f / 15.f);
+
+    updateIdleScheduler(dt);
+
+    const float baseInflation = clamp(
+        0.65f * visual.effectiveAmount
+      + 0.25f * visual.inputActivity
+      + 0.10f * visual.gainReduction,
+        0.f,
+        1.f);
+
+    const float breathing = idleBreath() *
+        lerp(0.004f, 0.012f, visual.inputActivity);
+
+    inflationSpring.setTarget(clamp(baseInflation + breathing, 0.f, 1.f));
+    pose.inflation = inflationSpring.update(dt);
+
+    const float transientImpulse = transientEdgeDetector.update(
+        visual.transientActivity);
+
+    updateModePersonality(dt, visual.character, transientImpulse, pose);
+    updateGaze(dt, visual, pose);
+    updateBlink(dt, pose);
+    updateFins(dt, visual, transientImpulse, pose);
+
+    pose.blush = gainReductionSmoother.process(
+        dt,
+        visual.gainReduction);
+}
+```
+
+This pseudocode is descriptive rather than normative. The important boundary is
+that `update()` consumes a snapshot and emits a pose without touching audio or
+renderer state.
+
+## A.11 Visual acceptance criteria
+
+The character implementation is successful when:
+
+- Puffy remains recognizable and appealing at 100% Rack zoom;
+- his body reads as spherical rather than cheek-heavy at all inflation stages;
+- turning `PUFF` produces a smooth, sculpted increase in volume;
+- actual audio adds life without causing visible chatter;
+- limiting is apparent from expression or blush before the user reads the light;
+- blinks and glances feel irregular but intentional;
+- several Puffy modules do not animate in lockstep;
+- silent patches still show a calm, alert character;
+- autonomous behavior never suggests that DSP output is random;
+- the user can understand drive and limiting without relying solely on Puffy;
+- hidden widgets consume no continuing expensive animation work;
+- the browser preview is calm, deterministic, and independent of engine state;
+- animation can be reduced or disabled if it becomes distracting;
+- a future renderer can replace the v1 renderer without modifying the saturation
+  or limiter engine.
+
+## A.12 Recommended development progression
+
+1. Implement the renderer-neutral `PuffyPose` and character controller.
+2. Test blinking, gaze, breathing, and inflation using simple circles and pupils.
+3. Connect the controller to the v1 `PuffyVisualState` snapshot.
+4. Build the layered NanoVG or hybrid sprite renderer required for v1.
+5. Tune animation with multiple module instances and real end-of-chain material.
+6. Ship v1 only after the visual and realtime acceptance tests pass.
+7. Preserve the final character in a compact Blender source project.
+8. Prototype the inflated morph and simple OpenGL renderer after v1.
+9. Compare the 3D renderer against the v1 renderer for GPU cost, legibility, and
+   charm before making it the default.
+
+The desired result is not merely an animated saturator. Puffy should feel like a
+small synthetic organism living at the end of the signal chain: breathing in the
+program material, swelling with drive, bracing gently against peaks, and
+remaining quietly attentive when the music stops.

@@ -1,10 +1,10 @@
 # Doorstop Reference “Bell” Model
 
-This document preserves the **current Doorstop reference model** as implemented
-by `doorstop::ReferenceSpringEngine` in `src/ReferenceSpringEngine.*`. It is a
-code-oriented reference for reimplementing the sound in another module. The
-implementation is the source of truth where this note and older planning
-documents differ.
+This document preserves the Doorstop reference model **at the start of the
+low-mid body rework**, as implemented by `doorstop::ReferenceSpringEngine` at
+that point. It is a code-oriented snapshot for reimplementing that sound in
+another module. The constants below intentionally remain the pre-rework
+values, even as the live engine evolves.
 
 The name “bell model” is descriptive rather than literal: it is a nonlinear,
 slow flex oscillator that controls the radiation of an inharmonic metallic
@@ -453,3 +453,71 @@ distinct seeds, bounded output at 44.1–192 kHz, qualified crossings, eventual
 sleep, and a controlled balance between macro low body and upper metallic
 activity. `tools/doorstop_reference_render.cpp` is the standalone deterministic
 renderer for listening and analysis.
+
+## 13. Corpus and stochastic validation
+
+A port should be evaluated as a *population of specimens*, not tuned until one
+seed reproduces one recording. The stable specimen seed deliberately moves
+frequencies, decay, excitation, radiation, and spectral balance. Individual
+renders may therefore occupy different parts of the physical reference range.
+
+`tools/audit_doorstop_corpus.py` automates the comparison:
+
+```sh
+# Measure the reviewed real recordings only.
+make doorstop-corpus-audit
+
+# Render the standard velocity/seed population and compare it with the corpus.
+make doorstop-reference-evaluate
+```
+
+The audit uses the reviewed onsets in
+`tools/doorstop_reference_manifest.json`. It measures exact 0–30, 30–100,
+100–300, and 300–1000 ms regions in addition to whole-hit features, peak
+density/Q, spectral flatness, pulse rate, and T20. Quality flags identify
+recordings that merit listening review but do not silently exclude them.
+
+To prevent recordings with many repeated strikes from dominating, the audit
+first takes the median feature value within each recording. It then defines
+the descriptive physical corridor as the 10th through 90th percentiles across
+those per-recording medians. A model batch is judged along three independent
+axes:
+
+* **Containment:** fraction of seed renders inside the physical corridor.
+* **Coverage:** fraction of the physical corridor spanned by the model's
+  10th-to-90th percentile range.
+* **Median bias:** displacement of the model median, measured in corridor
+  widths.
+
+Perfect containment is not the objective; some unusual specimens are useful.
+The important failure modes are a population that is systematically displaced,
+too narrow to express the recorded families, or broad only because it produces
+implausible outliers. The standard evaluation grid currently uses 16 fixed
+seeds at strike velocities 0.5, 0.75, and 1.0 (48 renders), which is large
+enough for directional tuning. Increase `DOORSTOP_REFERENCE_SEEDS` when
+estimating final distribution tails.
+
+For architectural listening experiments:
+
+```sh
+make doorstop-variant-evaluate
+```
+
+This builds the standalone renderer with
+`DOORSTOP_REFERENCE_ANALYSIS`; ordinary engine and test builds do not contain
+the variant selector or its hot-path branch. It renders four analysis probes:
+
+| Variant | Purpose |
+| --- | --- |
+| `current` | Bit-identical baseline from the production compilation path |
+| `spring-only` | Impact, mount, flex, and dispersive texture without modal output or junction coupling |
+| `modes-only` | The present radiated modal bank without the other audible components |
+| `spring-forward` | No junction coupling, shorter/darker modal anchors, reduced modal mix, and a stronger dispersive path |
+
+`tools/compare_doorstop_variants.py` scores all four populations and writes
+same-seed, same-velocity listening groups under
+`build/doorstop-variant-analysis/listening`. Files within a group are exactly
+RMS-matched over 50 ms–2.5 s, with the common level reduced when necessary to
+keep peaks at or below 0.95. The objective score is deliberately only a
+screening order; a listening decision is still required before promoting any
+candidate to a real engine version.
