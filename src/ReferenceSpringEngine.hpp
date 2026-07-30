@@ -7,17 +7,38 @@
 
 namespace doorstop {
 
-constexpr int REFERENCE_MODE_COUNT = 8;
+constexpr int REFERENCE_MODE_COUNT = 12;
+
+enum class ReferenceSpringProfile : std::uint8_t {
+	ReferenceV1 = 0,
+	DarkRefinedV2
+};
+
+#if defined(DOORSTOP_REFERENCE_ANALYSIS)
+enum class ReferenceAnalysisVariant : std::uint8_t {
+	Current = 0,
+	SpringOnly,
+	ModesOnly,
+	SpringForward,
+	SpringRefined
+};
+#endif
 
 struct ReferenceDiagnostics {
 	std::uint64_t crossingCount = 0;
 	float radiationGate = 0.f;
 	float normalizedModalEnergy = 0.f;
+	float dispersiveTexture = 0.f;
+	float junctionForce = 0.f;
+	float junctionRelativeDisplacement = 0.f;
+	float junctionModalDisplacement = 0.f;
 };
 
 class ReferenceSpringEngine {
 public:
-	ReferenceSpringEngine();
+	explicit ReferenceSpringEngine(
+		ReferenceSpringProfile profile =
+			ReferenceSpringProfile::ReferenceV1);
 
 	void reset();
 	void resetMotion();
@@ -26,6 +47,9 @@ public:
 	void setBreakIn(float amount);
 	void setBreakInLocked(bool locked);
 	void setSpecimenSeed(std::uint32_t seed);
+#if defined(DOORSTOP_REFERENCE_ANALYSIS)
+	void setAnalysisVariant(ReferenceAnalysisVariant variant);
+#endif
 	void strike(float normalizedVelocity);
 	Frame process(float requestedSampleTime);
 
@@ -33,12 +57,14 @@ public:
 	float getBreakIn() const { return breakIn; }
 	bool isBreakInLocked() const { return breakInLocked; }
 	std::uint32_t getSpecimenSeed() const { return specimenSeed; }
+	ReferenceSpringProfile getProfile() const { return profile; }
 	float getMaximumDisplacement() const { return maximumDisplacement; }
 	const ReferenceDiagnostics& getDiagnostics() const { return diagnostics; }
 
 private:
 	static constexpr float PI = 3.14159265358979323846f;
 	static constexpr float LN_1000 = 6.907755278982137f;
+	static constexpr int MAX_TEXTURE_DELAY = 8192;
 
 	struct Mode {
 		float position = 0.f;
@@ -55,8 +81,13 @@ private:
 	float sampleTime = 1.f / 44100.f;
 	float breakIn = 0.f;
 	bool breakInLocked = false;
+	const ReferenceSpringProfile profile;
 	std::uint32_t specimenSeed = 1u;
 	std::uint32_t noiseState = 1u;
+#if defined(DOORSTOP_REFERENCE_ANALYSIS)
+	ReferenceAnalysisVariant analysisVariant =
+		ReferenceAnalysisVariant::Current;
+#endif
 
 	float baseFrequencyHz = 16.f;
 	float dampingRatio = 0.020f;
@@ -70,6 +101,12 @@ private:
 	float radiationCurvature = 0.5f;
 	float radiationFloor = 0.3f;
 	float radiationAsymmetry = 0.f;
+	float junctionLinearStiffness = 0.f;
+	float junctionCubicStiffness = 0.f;
+	float junctionDamping = 0.f;
+	float junctionForce = 0.f;
+	float junctionRelativeDisplacement = 0.f;
+	float junctionModalDisplacement = 0.f;
 
 	float displacement = 0.f;
 	float springVelocity = 0.f;
@@ -98,6 +135,19 @@ private:
 	float impactLowReject = 0.f;
 	float mountPosition = 0.f;
 	float mountVelocity = 0.f;
+	std::array<float, 2> flexHighpassLowpass {};
+	std::array<float, MAX_TEXTURE_DELAY> textureDelay {};
+	std::array<float, 3> textureAllpassState {};
+	int textureWriteIndex = 0;
+	int textureDelaySamples = 1024;
+	float textureDriveEnvelope = 0.f;
+	float textureBrightness = 0.f;
+	float textureDriveLowpass = 0.f;
+	float textureFeedbackLowpass = 0.f;
+	float texturePreviousOutput = 0.f;
+	float textureLowReject = 0.f;
+	float textureActivity = 0.f;
+	bool textureActive = false;
 	float strikeLightEnvelope = 0.f;
 	float dcPreviousInput = 0.f;
 	float dcPreviousOutput = 0.f;
@@ -115,6 +165,14 @@ private:
 	float impactRejectAlpha = 0.f;
 	float mountOmegaSq = 0.f;
 	float mountGamma = 0.f;
+	float flexHighpassAlpha = 0.f;
+	float textureDriveDecay = 0.f;
+	float textureBrightnessDecay = 0.f;
+	float textureSoftAlpha = 0.f;
+	float textureHardAlpha = 0.f;
+	float textureRejectAlpha = 0.f;
+	float textureActivityDecay = 0.f;
+	float textureFeedbackGain = 0.74f;
 	float strikeLightDecay = 0.f;
 	float dcPole = 0.f;
 
@@ -128,13 +186,18 @@ private:
 	float normalizedFlexEnergy() const;
 	float normalizedModalEnergy() const;
 	float specimenUnit(std::uint32_t propertyTag) const;
+	bool usesRefinedBody() const;
+	bool usesDarkV2Bias() const;
+	bool usesJunctionCoupling() const;
 	std::uint32_t nextNoiseRandom();
+	float updateJunctionCouplingForce();
 	bool processFlexAndCrossing();
 	void exciteCrossing(float normalizedSpeed);
 	float processModes();
 	float processImpact();
 	float processMount();
 	float processFlexAudio();
+	float processDispersiveTexture();
 	float processDcBlocker(float input);
 	bool allFinite() const;
 	bool belowSleepThreshold(float outputVolts) const;

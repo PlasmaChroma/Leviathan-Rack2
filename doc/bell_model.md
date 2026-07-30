@@ -513,6 +513,7 @@ the variant selector or its hot-path branch. It renders four analysis probes:
 | `spring-only` | Impact, mount, flex, and dispersive texture without modal output or junction coupling |
 | `modes-only` | The present radiated modal bank without the other audible components |
 | `spring-forward` | No junction coupling, shorter/darker modal anchors, reduced modal mix, and a stronger dispersive path |
+| `spring-refined` | Spring-forward with darker, longer distributed feedback and a narrow squared radiation window protecting the repeated boing |
 
 `tools/compare_doorstop_variants.py` scores all four populations and writes
 same-seed, same-velocity listening groups under
@@ -521,3 +522,52 @@ RMS-matched over 50 ms–2.5 s, with the common level reduced when necessary to
 keep peaks at or below 0.95. The objective score is deliberately only a
 screening order; a listening decision is still required before promoting any
 candidate to a real engine version.
+
+The audit additionally measures lobe count, early pulse rate, and normalized
+boing modulation depth. These motion features are protected constraints:
+spectral-envelope improvement does not compensate for flattening the iconic
+double-sided crossing rhythm into an ordinary decaying metallic hit.
+
+## 14. Rack Reference V2 candidate
+
+The successful dark/refined experiment is available in Rack as
+`Reference V2`, selected from:
+
+```text
+Sound engine
+  Dark spring physical model (Reference V2)
+  Reference physical model (V1)
+  Legacy models
+```
+
+V2 is a production `ReferenceSpringProfile`, not an analysis switch. It:
+
+* biases the correlated specimen-brightness trait toward the dark steel family
+  while retaining deterministic seed variation;
+* uses the shorter and quieter modal-anchor policy from `spring-forward`;
+* lowers and extends the dispersive feedback body;
+* gates the complete radiating body with the squared macro crossing envelope,
+  protecting the repeated boing contrast;
+* removes the junction-coupling loop; and
+* applies bounded makeup inside the final safety saturator to restore a useful
+  modular output level after demoting the modes.
+
+`EngineMode` preserves the original numeric values and appends V2:
+
+```cpp
+ReferenceV1 = 0
+Legacy      = 1
+ReferenceV2 = 2
+```
+
+Patches serialize V2 as `"referenceV2"`. V1 remains the new-module and reset
+default until the Rack audition promotes V2. Both reference engines share the
+canonical seed, break-in amount, and lock state, and the router uses the same
+15 ms equal-power transition policy between any pair of engines.
+
+The standard offline `rack-v2` population measured a 0.63–0.67 boing
+modulation depth, 48–60 lobes, and a 41–45 Hz early pulse rate. A standalone
+600-second, 8 Hz retrigger benchmark measured V2 about 9–10% faster than V1 in
+the WSL development environment. This is directional standalone-engine data;
+the authoritative plugin/runtime measurement remains the Windows/MSYS2 Rack
+build.

@@ -10,6 +10,7 @@ namespace doorstop {
 enum class EngineMode : std::uint8_t {
 	ReferenceV1 = 0,
 	Legacy,
+	ReferenceV2,
 	Count
 };
 
@@ -42,10 +43,17 @@ public:
 	const Engine& getLegacyEngine() const { return legacy; }
 	ReferenceSpringEngine& getReferenceEngine() { return reference; }
 	const ReferenceSpringEngine& getReferenceEngine() const { return reference; }
+	ReferenceSpringEngine& getReferenceV2Engine() { return referenceV2; }
+	const ReferenceSpringEngine& getReferenceV2Engine() const {
+		return referenceV2;
+	}
 
 private:
 	Engine legacy;
 	ReferenceSpringEngine reference;
+	ReferenceSpringEngine referenceV2 {
+		ReferenceSpringProfile::DarkRefinedV2
+	};
 	EngineMode selectedMode = EngineMode::ReferenceV1;
 	SoundModel selectedLegacyModel = SoundModel::ProbabilisticMix;
 	float sampleRate = 44100.f;
@@ -54,6 +62,8 @@ private:
 	std::uint32_t specimenSeed = 1u;
 
 	bool transitionActive = false;
+	bool transitionQueued = false;
+	EngineMode queuedMode = EngineMode::ReferenceV1;
 	EngineMode transitionOutgoing = EngineMode::Legacy;
 	EngineMode transitionDestination = EngineMode::ReferenceV1;
 	float transitionProgress = 1.f;
@@ -62,6 +72,9 @@ private:
 	void applyConditionTo(EngineMode mode);
 	void resetEngineMotion(EngineMode mode);
 	Frame processEngine(EngineMode mode, float sampleTime);
+	ReferenceSpringEngine& referenceEngine(EngineMode mode);
+	const ReferenceSpringEngine& referenceEngine(EngineMode mode) const;
+	bool engineSleeping(EngineMode mode) const;
 };
 
 } // namespace doorstop

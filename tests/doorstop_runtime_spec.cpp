@@ -311,10 +311,26 @@ Result schemaMigrationMapsEveryLegacyModel() {
 	const bool referenceRestored =
 		loaded.engine.getEngineMode() == doorstop::EngineMode::ReferenceV1
 		&& loaded.engine.getSpecimenSeed() == 0x13579bdfu;
-	return {"Schema migration maps every legacy model and Reference V1",
-		pass && referenceRestored,
+
+	Doorstop referenceV2;
+	referenceV2.engineMode.store(
+		int(doorstop::EngineMode::ReferenceV2), std::memory_order_relaxed);
+	referenceV2.specimenSeed.store(0x2468ace0u, std::memory_order_relaxed);
+	json_t* referenceV2J = referenceV2.dataToJson();
+	Doorstop loadedV2;
+	loadedV2.dataFromJson(referenceV2J);
+	json_decref(referenceV2J);
+	loadedV2.process(args);
+	const bool referenceV2Restored =
+		loadedV2.engine.getEngineMode() == doorstop::EngineMode::ReferenceV2
+		&& loadedV2.engine.getSpecimenSeed() == 0x2468ace0u
+		&& loadedV2.engine.getReferenceV2Engine().getProfile()
+			== doorstop::ReferenceSpringProfile::DarkRefinedV2;
+	return {"Schema migration maps legacy models and both Reference engines",
+		pass && referenceRestored && referenceV2Restored,
 		"legacy=" + std::to_string(pass)
-			+ " reference=" + std::to_string(referenceRestored)};
+			+ " referenceV1=" + std::to_string(referenceRestored)
+			+ " referenceV2=" + std::to_string(referenceV2Restored)};
 }
 
 } // namespace

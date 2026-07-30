@@ -7,7 +7,12 @@ namespace {
 std::atomic<std::uint32_t> gDoorstopDebugInstanceCounter {1u};
 
 const char* engineModeName(doorstop::EngineMode mode) {
-	return mode == doorstop::EngineMode::Legacy ? "legacy" : "referenceV1";
+	switch (mode) {
+		case doorstop::EngineMode::ReferenceV1: return "referenceV1";
+		case doorstop::EngineMode::ReferenceV2: return "referenceV2";
+		case doorstop::EngineMode::Legacy: return "legacy";
+		default: return "referenceV1";
+	}
 }
 
 const char* soundModelName(doorstop::SoundModel model) {
@@ -30,6 +35,10 @@ bool parseEngineMode(json_t* value, doorstop::EngineMode* mode) {
 	}
 	if (name == "legacy") {
 		*mode = doorstop::EngineMode::Legacy;
+		return true;
+	}
+	if (name == "referenceV2") {
+		*mode = doorstop::EngineMode::ReferenceV2;
 		return true;
 	}
 	return false;

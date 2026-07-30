@@ -17,6 +17,29 @@ struct Strike {
 	float velocity = 0.75f;
 };
 
+#if defined(DOORSTOP_REFERENCE_ANALYSIS)
+doorstop::ReferenceAnalysisVariant parseVariant(const std::string& text) {
+	if (text == "current") {
+		return doorstop::ReferenceAnalysisVariant::Current;
+	}
+	if (text == "spring-only") {
+		return doorstop::ReferenceAnalysisVariant::SpringOnly;
+	}
+	if (text == "modes-only") {
+		return doorstop::ReferenceAnalysisVariant::ModesOnly;
+	}
+	if (text == "spring-forward") {
+		return doorstop::ReferenceAnalysisVariant::SpringForward;
+	}
+	if (text == "spring-refined") {
+		return doorstop::ReferenceAnalysisVariant::SpringRefined;
+	}
+	throw std::runtime_error(
+		"variant must be current, spring-only, modes-only, spring-forward, "
+		"or spring-refined");
+}
+#endif
+
 void writeU16(std::ostream& out, std::uint16_t value) {
 	const char bytes[] = {
 		char(value & 0xffu),
@@ -96,9 +119,17 @@ void usage(const char* executable) {
 		<< "  --sample-rate HZ    default 48000\n"
 		<< "  --duration SECONDS  default 6\n"
 		<< "  --velocity VALUE    default 0.75, strike at 0.05 s\n"
+		<< "  --retrigger-hz HZ   repeatedly strike at this rate\n"
 		<< "  --strike TIME:VALUE repeatable, replaces the default strike\n"
 		<< "  --seed INTEGER      default 305419896 (0x12345678)\n"
-		<< "  --break-in VALUE    default 0, range [0, 1]\n";
+		<< "  --break-in VALUE    default 0, range [0, 1]\n"
+		<< "  --quiet             suppress the render summary\n"
+		<< "  --discard-output    process without writing a WAV (benchmarking)\n"
+#if defined(DOORSTOP_REFERENCE_ANALYSIS)
+		<< "  --variant NAME      current, spring-only, modes-only, spring-forward,\n"
+		<< "                      spring-refined, or rack-v2\n"
+#endif
+		;
 }
 
 } // namespace
@@ -113,11 +144,28 @@ int main(int argc, char** argv) {
 		int sampleRate = 48000;
 		float duration = 6.f;
 		float defaultVelocity = 0.75f;
+		float retriggerHz = 0.f;
 		float breakIn = 0.f;
+		bool quiet = false;
+		bool discardOutput = false;
 		std::uint32_t seed = 0x12345678u;
+		doorstop::ReferenceSpringProfile profile =
+			doorstop::ReferenceSpringProfile::ReferenceV1;
+#if defined(DOORSTOP_REFERENCE_ANALYSIS)
+		doorstop::ReferenceAnalysisVariant variant =
+			doorstop::ReferenceAnalysisVariant::Current;
+#endif
 		std::vector<Strike> strikes;
 		for (int i = 2; i < argc; ++i) {
 			const std::string option = argv[i];
+			if (option == "--quiet") {
+				quiet = true;
+				continue;
+			}
+			if (option == "--discard-output") {
+				discardOutput = true;
+				continue;
+			}
 			if (i + 1 >= argc) {
 				throw std::runtime_error("missing value for " + option);
 			}
@@ -131,12 +179,27 @@ int main(int argc, char** argv) {
 			else if (option == "--velocity") {
 				defaultVelocity = parseFloat(value, option.c_str());
 			}
+			else if (option == "--retrigger-hz") {
+				retriggerHz = parseFloat(value, option.c_str());
+			}
 			else if (option == "--seed") {
 				seed = parseSeed(value);
 			}
 			else if (option == "--break-in") {
 				breakIn = parseFloat(value, option.c_str());
 			}
+#if defined(DOORSTOP_REFERENCE_ANALYSIS)
+			else if (option == "--variant") {
+				if (std::string(value) == "rack-v2") {
+					profile =
+						doorstop::ReferenceSpringProfile::DarkRefinedV2;
+					variant = doorstop::ReferenceAnalysisVariant::Current;
+				}
+				else {
+					variant = parseVariant(value);
+				}
+			}
+#endif
 			else if (option == "--strike") {
 				strikes.push_back(parseStrike(value));
 			}
@@ -144,22 +207,36 @@ int main(int argc, char** argv) {
 				throw std::runtime_error("unknown option: " + option);
 			}
 		}
-		if (sampleRate < 1000 || duration <= 0.f || breakIn < 0.f
+		if (sampleRate < 1000 || duration <= 0.f || retriggerHz < 0.f
+			|| breakIn < 0.f
 			|| breakIn > 1.f || defaultVelocity < -1.f
 			|| defaultVelocity > 1.f) {
 			throw std::runtime_error("render option is out of range");
+		}
+		if (strikes.empty() && retriggerHz > 0.f) {
+			const float interval = 1.f / retriggerHz;
+			for (float time = 0.05f; time < duration; time += interval) {
+				strikes.push_back({time, defaultVelocity});
+			}
 		}
 		if (strikes.empty()) strikes.push_back({0.05f, defaultVelocity});
 		std::sort(strikes.begin(), strikes.end(),
 			[](const Strike& a, const Strike& b) { return a.time < b.time; });
 
-		doorstop::ReferenceSpringEngine engine;
+		doorstop::ReferenceSpringEngine engine(profile);
+#if defined(DOORSTOP_REFERENCE_ANALYSIS)
+		engine.setAnalysisVariant(variant);
+#endif
 		engine.setSampleRate(float(sampleRate));
 		engine.setSpecimenSeed(seed);
 		engine.setBreakIn(breakIn);
 		const std::size_t sampleCount =
 			std::size_t(duration * float(sampleRate));
-		std::vector<float> samples(sampleCount, 0.f);
+		std::vector<float> samples;
+		if (!discardOutput) {
+			samples.resize(sampleCount, 0.f);
+		}
+		volatile float outputChecksum = 0.f;
 		std::size_t nextStrike = 0;
 		for (std::size_t i = 0; i < sampleCount; ++i) {
 			const float time = float(i) / float(sampleRate);
@@ -168,14 +245,22 @@ int main(int argc, char** argv) {
 				engine.strike(strikes[nextStrike].velocity);
 				++nextStrike;
 			}
-			samples[i] = engine.process(1.f / float(sampleRate)).outputVolts / 5.f;
+			const float output =
+				engine.process(1.f / float(sampleRate)).outputVolts / 5.f;
+			if (discardOutput) outputChecksum += output;
+			else samples[i] = output;
 		}
-		writeFloatWav(outputPath, sampleRate, samples);
-		std::cout << outputPath << " rate=" << sampleRate
-			<< " duration=" << duration
-			<< " seed=" << seed
-			<< " breakIn=" << breakIn
-			<< " strikes=" << strikes.size() << "\n";
+		if (!discardOutput) {
+			writeFloatWav(outputPath, sampleRate, samples);
+		}
+		if (!quiet) {
+			std::cout << outputPath << " rate=" << sampleRate
+				<< " duration=" << duration
+				<< " seed=" << seed
+				<< " breakIn=" << breakIn
+				<< " strikes=" << strikes.size()
+				<< " checksum=" << outputChecksum << "\n";
+		}
 		return 0;
 	}
 	catch (const std::exception& error) {

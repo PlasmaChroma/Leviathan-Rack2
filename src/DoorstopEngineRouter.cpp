@@ -17,6 +17,7 @@ EngineMode sanitizeMode(EngineMode mode) {
 DoorstopEngineRouter::DoorstopEngineRouter() {
 	setSampleRate(sampleRate);
 	applyConditionTo(EngineMode::ReferenceV1);
+	applyConditionTo(EngineMode::ReferenceV2);
 	applyConditionTo(EngineMode::Legacy);
 }
 
@@ -27,7 +28,18 @@ void DoorstopEngineRouter::setSampleRate(float newSampleRate) {
 	sampleRate = newSampleRate;
 	legacy.setSampleRate(sampleRate);
 	reference.setSampleRate(sampleRate);
+	referenceV2.setSampleRate(sampleRate);
 	transitionStep = 1.f / std::max(1.f, 0.015f * sampleRate);
+}
+
+ReferenceSpringEngine& DoorstopEngineRouter::referenceEngine(
+	EngineMode mode) {
+	return mode == EngineMode::ReferenceV2 ? referenceV2 : reference;
+}
+
+const ReferenceSpringEngine& DoorstopEngineRouter::referenceEngine(
+	EngineMode mode) const {
+	return mode == EngineMode::ReferenceV2 ? referenceV2 : reference;
 }
 
 void DoorstopEngineRouter::applyConditionTo(EngineMode mode) {
@@ -37,15 +49,16 @@ void DoorstopEngineRouter::applyConditionTo(EngineMode mode) {
 		legacy.setBreakInLocked(breakInLocked);
 	}
 	else {
-		reference.setBreakIn(breakIn);
-		reference.setBreakInLocked(breakInLocked);
-		reference.setSpecimenSeed(specimenSeed);
+		ReferenceSpringEngine& destination = referenceEngine(mode);
+		destination.setBreakIn(breakIn);
+		destination.setBreakInLocked(breakInLocked);
+		destination.setSpecimenSeed(specimenSeed);
 	}
 }
 
 void DoorstopEngineRouter::resetEngineMotion(EngineMode mode) {
 	if (mode == EngineMode::Legacy) legacy.resetMotion();
-	else reference.resetMotion();
+	else referenceEngine(mode).resetMotion();
 }
 
 void DoorstopEngineRouter::setEngineMode(EngineMode newMode) {
@@ -56,14 +69,22 @@ void DoorstopEngineRouter::setEngineMode(EngineMode newMode) {
 	if (transitionActive) {
 		if (newMode == transitionDestination) {
 			selectedMode = newMode;
+			transitionQueued = false;
 			return;
 		}
 		if (newMode == transitionOutgoing) {
 			std::swap(transitionOutgoing, transitionDestination);
 			transitionProgress = 1.f - transitionProgress;
 			selectedMode = newMode;
+			transitionQueued = false;
 			return;
 		}
+		// A third engine cannot join an equal-power two-engine fade without
+		// creating an abrupt drop or temporarily tripling CPU. Queue it and
+		// begin the second fade as soon as the current pair completes.
+		queuedMode = newMode;
+		transitionQueued = true;
+		return;
 	}
 
 	transitionOutgoing = selectedMode;
@@ -90,17 +111,20 @@ void DoorstopEngineRouter::setBreakIn(float amount) {
 	breakIn = std::max(0.f, std::min(amount, 1.f));
 	legacy.setBreakIn(breakIn);
 	reference.setBreakIn(breakIn);
+	referenceV2.setBreakIn(breakIn);
 }
 
 void DoorstopEngineRouter::setBreakInLocked(bool locked) {
 	breakInLocked = locked;
 	legacy.setBreakInLocked(locked);
 	reference.setBreakInLocked(locked);
+	referenceV2.setBreakInLocked(locked);
 }
 
 void DoorstopEngineRouter::setSpecimenSeed(std::uint32_t seed) {
 	specimenSeed = seed ? seed : 1u;
 	reference.setSpecimenSeed(specimenSeed);
+	referenceV2.setSpecimenSeed(specimenSeed);
 }
 
 void DoorstopEngineRouter::strike(float normalizedVelocity) {
@@ -109,11 +133,15 @@ void DoorstopEngineRouter::strike(float normalizedVelocity) {
 		legacy.strike(normalizedVelocity);
 		breakIn = legacy.getBreakIn();
 		reference.setBreakIn(breakIn);
+		referenceV2.setBreakIn(breakIn);
 	}
 	else {
-		reference.strike(normalizedVelocity);
-		breakIn = reference.getBreakIn();
+		ReferenceSpringEngine& selected = referenceEngine(selectedMode);
+		selected.strike(normalizedVelocity);
+		breakIn = selected.getBreakIn();
 		legacy.setBreakIn(breakIn);
+		reference.setBreakIn(breakIn);
+		referenceV2.setBreakIn(breakIn);
 	}
 }
 
@@ -121,7 +149,7 @@ Frame DoorstopEngineRouter::processEngine(EngineMode mode, float requestedSample
 	if (mode == EngineMode::Legacy) {
 		return legacy.process(requestedSampleTime);
 	}
-	return reference.process(requestedSampleTime);
+	return referenceEngine(mode).process(requestedSampleTime);
 }
 
 Frame DoorstopEngineRouter::process(float requestedSampleTime) {
@@ -146,6 +174,11 @@ Frame DoorstopEngineRouter::process(float requestedSampleTime) {
 		transitionActive = false;
 		transitionProgress = 1.f;
 		result.enteredSleep = result.sleeping;
+		if (transitionQueued) {
+			const EngineMode queued = queuedMode;
+			transitionQueued = false;
+			setEngineMode(queued);
+		}
 	}
 	return result;
 }
@@ -153,7 +186,9 @@ Frame DoorstopEngineRouter::process(float requestedSampleTime) {
 void DoorstopEngineRouter::resetMotion() {
 	legacy.resetMotion();
 	reference.resetMotion();
+	referenceV2.resetMotion();
 	transitionActive = false;
+	transitionQueued = false;
 	transitionProgress = 1.f;
 }
 
@@ -161,6 +196,7 @@ void DoorstopEngineRouter::restoreFactoryFresh() {
 	breakIn = 0.f;
 	legacy.restoreFactoryFresh();
 	reference.restoreFactoryFresh();
+	referenceV2.restoreFactoryFresh();
 	setBreakInLocked(breakInLocked);
 	resetMotion();
 }
@@ -174,15 +210,22 @@ void DoorstopEngineRouter::reset() {
 	legacy.setSoundModel(selectedLegacyModel);
 	reference.reset();
 	reference.setSpecimenSeed(specimenSeed);
+	referenceV2.reset();
+	referenceV2.setSpecimenSeed(specimenSeed);
 	resetMotion();
+}
+
+bool DoorstopEngineRouter::engineSleeping(EngineMode mode) const {
+	return mode == EngineMode::Legacy
+		? legacy.isSleeping() : referenceEngine(mode).isSleeping();
 }
 
 bool DoorstopEngineRouter::isSleeping() const {
 	if (transitionActive) {
-		return legacy.isSleeping() && reference.isSleeping();
+		return engineSleeping(transitionOutgoing)
+			&& engineSleeping(transitionDestination);
 	}
-	return selectedMode == EngineMode::Legacy
-		? legacy.isSleeping() : reference.isSleeping();
+	return engineSleeping(selectedMode);
 }
 
 SoundModel DoorstopEngineRouter::getLastStrikeModel() const {
@@ -193,7 +236,7 @@ SoundModel DoorstopEngineRouter::getLastStrikeModel() const {
 float DoorstopEngineRouter::getVisualMaximumDisplacement() const {
 	return selectedMode == EngineMode::Legacy
 		? legacy.getEffectiveTuning().maxDisplacement
-		: reference.getMaximumDisplacement();
+		: referenceEngine(selectedMode).getMaximumDisplacement();
 }
 
 } // namespace doorstop

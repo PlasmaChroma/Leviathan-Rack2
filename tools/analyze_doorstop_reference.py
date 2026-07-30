@@ -37,6 +37,8 @@ TARGET_RATE = 48_000
 MAX_HIT_SECONDS = 3.5
 MODEL_PATTERN = re.compile(r"reference-v(?P<velocity>[\d.]+)-seed(?P<seed>\d+)")
 BANDS = (
+    ("macro_20_70", 20.0, 70.0),
+    ("low_body_70_180", 70.0, 180.0),
     ("sub_180", 20.0, 180.0),
     ("body_180_500", 180.0, 500.0),
     ("metal_500_1200", 500.0, 1200.0),
@@ -58,6 +60,8 @@ class HitFeatures:
     early_centroid_hz: float
     tail_centroid_hz: float
     centroid_descent_hz: float
+    macro_20_70: float
+    low_body_70_180: float
     sub_180: float
     body_180_500: float
     metal_500_1200: float
@@ -267,6 +271,8 @@ def model_hits(paths: Iterable[Path]) -> list[HitFeatures]:
 SUMMARY_FIELDS = (
     "spectral_centroid_hz",
     "centroid_descent_hz",
+    "macro_20_70",
+    "low_body_70_180",
     "sub_180",
     "body_180_500",
     "metal_500_1200",
@@ -327,6 +333,8 @@ def write_report(
     labels = {
         "spectral_centroid_hz": "Spectral centroid (Hz)",
         "centroid_descent_hz": "Early-to-tail centroid descent (Hz)",
+        "macro_20_70": "Macro energy 20–70 Hz",
+        "low_body_70_180": "Low-body energy 70–180 Hz",
         "sub_180": "Energy below 180 Hz",
         "body_180_500": "Energy 180–500 Hz",
         "metal_500_1200": "Energy 500–1200 Hz",
@@ -361,14 +369,16 @@ def write_report(
             "",
             "## Per-recording medians",
             "",
-            "| Recording | Centroid (Hz) | <180 | 180–500 | 500–1200 | 1.2–3k | Pulse Hz |",
-            "|---|---:|---:|---:|---:|---:|---:|",
+            "| Recording | Centroid (Hz) | 20–70 | 70–180 | 180–500 | 500–1200 | 1.2–3k | Pulse Hz |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for source, values in source_values.items():
         lines.append(
             f"| {source} | {values['spectral_centroid_hz']:.4g} | "
-            f"{values['sub_180']:.3f} | {values['body_180_500']:.3f} | "
+            f"{values['macro_20_70']:.3f} | "
+            f"{values['low_body_70_180']:.3f} | "
+            f"{values['body_180_500']:.3f} | "
             f"{values['metal_500_1200']:.3f} | "
             f"{values['upper_1200_3000']:.3f} | "
             f"{values['pulse_rate_hz']:.3g} |"

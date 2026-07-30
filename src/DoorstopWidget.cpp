@@ -907,7 +907,19 @@ struct DoorstopWidget final : ModuleWidget {
 		}
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createSubmenuItem("Sound engine", "", [m](Menu* engineMenu) {
-			engineMenu->addChild(createCheckMenuItem("Reference physical model", "",
+			engineMenu->addChild(createCheckMenuItem(
+				"Dark spring physical model (Reference V2)", "",
+				[m]() {
+					return m->engineMode.load(std::memory_order_relaxed)
+						== int(doorstop::EngineMode::ReferenceV2);
+				},
+				[m]() {
+					m->engineMode.store(
+						int(doorstop::EngineMode::ReferenceV2),
+						std::memory_order_release);
+				}));
+			engineMenu->addChild(createCheckMenuItem(
+				"Reference physical model (V1)", "",
 				[m]() {
 					return m->engineMode.load(std::memory_order_relaxed)
 						== int(doorstop::EngineMode::ReferenceV1);
