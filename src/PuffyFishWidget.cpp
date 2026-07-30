@@ -1,11 +1,11 @@
 #include "PuffyFishWidget.hpp"
 
+#include "visual/VisualAssets.hpp"
+
 #include <algorithm>
 #include <cmath>
 
 namespace {
-
-constexpr float kPi = 3.14159265358979323846f;
 
 float clamp01(float value) {
 	return std::max(0.f, std::min(value, 1.f));
@@ -51,23 +51,27 @@ void PuffyFishWidget::drawFin(
 	nvgSave(vg);
 	const float side = left ? -1.f : 1.f;
 	const Vec root(
-		center.x + side * bodyRadius * 0.83f,
-		center.y + bodyRadius * 0.10f);
+		center.x + side * bodyRadius * 0.84f,
+		center.y - bodyRadius * 0.03f);
 	nvgTranslate(vg, root.x, root.y);
-	nvgRotate(vg, side * angle);
+	nvgRotate(vg, angle);
 	nvgScale(vg, side, 1.f);
-	const float length = bodyRadius * 0.45f;
-	const float height = bodyRadius * 0.37f;
+	const float length = bodyRadius * 0.68f;
+	const float height = bodyRadius * 0.52f;
 	nvgBeginPath(vg);
-	nvgMoveTo(vg, 0.f, -height * 0.34f);
+	nvgMoveTo(vg, 0.f, -height * 0.18f);
 	nvgBezierTo(
-		vg, length * 0.38f, -height * 0.72f,
-		length * 0.92f, -height * 0.48f,
-		length, 0.f);
+		vg, length * 0.24f, -height * 0.42f,
+		length * 0.68f, -height * 0.58f,
+		length * 0.91f, -height * 0.45f);
 	nvgBezierTo(
-		vg, length * 0.82f, height * 0.54f,
-		length * 0.30f, height * 0.58f,
-		0.f, height * 0.28f);
+		vg, length * 1.08f, -height * 0.30f,
+		length * 1.08f, height * 0.30f,
+		length * 0.91f, height * 0.45f);
+	nvgBezierTo(
+		vg, length * 0.68f, height * 0.58f,
+		length * 0.24f, height * 0.42f,
+		0.f, height * 0.18f);
 	nvgClosePath(vg);
 	const NVGpaint fill = nvgLinearGradient(
 		vg, 0.f, -height, length, height,
@@ -77,19 +81,61 @@ void PuffyFishWidget::drawFin(
 	nvgStrokeColor(vg, nvgRGBA(148, 85, 4, 190));
 	nvgStrokeWidth(vg, 0.8f);
 	nvgStroke(vg);
-	for (int i = 1; i <= 3; ++i) {
-		const float y = height * (-0.28f + 0.15f * float(i));
+	for (int i = -2; i <= 2; ++i) {
+		const float targetY = height * 0.18f * float(i);
 		nvgBeginPath(vg);
-		nvgMoveTo(vg, length * 0.08f, y);
+		nvgMoveTo(vg, length * 0.06f, height * 0.025f * float(i));
 		nvgBezierTo(
-			vg, length * 0.38f, y * 1.4f,
-			length * 0.72f, y * 0.8f,
-			length * 0.91f, 0.f);
+			vg, length * 0.34f, targetY * 0.42f,
+			length * 0.68f, targetY * 0.82f,
+			length * 0.94f, targetY);
 		nvgStrokeColor(vg, nvgRGBA(196, 116, 3, 150));
 		nvgStrokeWidth(vg, 0.65f);
 		nvgStroke(vg);
 	}
 	nvgRestore(vg);
+}
+
+bool PuffyFishWidget::drawBodyRaster(
+	NVGcontext* vg,
+	Vec center,
+	float radiusX,
+	float radiusY) const {
+	if (!vg || !APP || !APP->window || radiusX <= 0.f || radiusY <= 0.f) {
+		return false;
+	}
+	const std::string fullPath =
+		asset::plugin(pluginInstance, "res/icon/Puffy_Body_NS.png");
+	std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
+	if (!image || image->handle < 0) {
+		return false;
+	}
+	int imageHandle =
+		visual_assets::loadRasterMipmapHandle(vg, image, fullPath);
+	if (imageHandle < 0) {
+		imageHandle = image->handle;
+	}
+	int imageWidth = 0;
+	int imageHeight = 0;
+	nvgImageSize(vg, imageHandle, &imageWidth, &imageHeight);
+	if (imageWidth <= 0 || imageHeight <= 0) {
+		return false;
+	}
+
+	// The spherical body occupies about 80% of the transparent source canvas.
+	// This includes the baked spikes while matching the old procedural radius.
+	constexpr float rasterExtentScale = 1.25f;
+	const float drawWidth = 2.f * radiusX * rasterExtentScale;
+	const float drawHeight = 2.f * radiusY * rasterExtentScale;
+	const float x = center.x - 0.5f * drawWidth;
+	const float y = center.y - 0.5f * drawHeight;
+	const NVGpaint paint = nvgImagePattern(
+		vg, x, y, drawWidth, drawHeight, 0.f, imageHandle, 1.f);
+	nvgBeginPath(vg);
+	nvgRect(vg, x, y, drawWidth, drawHeight);
+	nvgFillPaint(vg, paint);
+	nvgFill(vg);
+	return true;
 }
 
 void PuffyFishWidget::drawEye(
@@ -180,66 +226,22 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 	drawFin(args.vg, center, radiusX, true, pose.leftFinAngle);
 	drawFin(args.vg, center, radiusX, false, pose.rightFinAngle);
 
-	const int spineCount = 24;
-	for (int i = 0; i < spineCount; ++i) {
-		const float angle = 2.f * kPi * float(i) / float(spineCount);
-		const float cosine = std::cos(angle);
-		const float sine = std::sin(angle);
-		const Vec root(
-			center.x + cosine * radiusX * 0.91f,
-			center.y + sine * radiusY * 0.91f);
-		const float length =
-			minimum * (0.028f + 0.022f * pose.spineExtension)
-			* (0.86f + 0.14f * std::sin(float(i) * 2.17f));
-		const float halfWidth = minimum * 0.012f;
-		const Vec tangent(-sine * halfWidth, cosine * halfWidth);
-		const Vec tip(root.x + cosine * length, root.y + sine * length);
+	if (!drawBodyRaster(args.vg, center, radiusX, radiusY)) {
 		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, root.x + tangent.x, root.y + tangent.y);
-		nvgQuadTo(
-			args.vg, tip.x + tangent.x * 0.18f,
-			tip.y + tangent.y * 0.18f,
-			tip.x, tip.y);
-		nvgQuadTo(
-			args.vg, tip.x - tangent.x * 0.18f,
-			tip.y - tangent.y * 0.18f,
-			root.x - tangent.x, root.y - tangent.y);
-		nvgClosePath(args.vg);
-		nvgFillColor(args.vg, nvgRGB(255, 187, 22));
+		nvgEllipse(args.vg, center.x, center.y, radiusX, radiusY);
+		const NVGpaint body = nvgRadialGradient(
+			args.vg,
+			center.x - radiusX * 0.32f,
+			center.y - radiusY * 0.38f,
+			radius * 0.08f,
+			radius * 1.18f,
+			nvgRGB(255, 244, 174),
+			nvgRGB(255, 174, 12));
+		nvgFillPaint(args.vg, body);
 		nvgFill(args.vg);
-		nvgStrokeColor(args.vg, nvgRGBA(151, 88, 2, 180));
-		nvgStrokeWidth(args.vg, 0.55f);
+		nvgStrokeColor(args.vg, nvgRGBA(145, 80, 1, 220));
+		nvgStrokeWidth(args.vg, 1.f);
 		nvgStroke(args.vg);
-	}
-
-	nvgBeginPath(args.vg);
-	nvgEllipse(args.vg, center.x, center.y, radiusX, radiusY);
-	const NVGpaint body = nvgRadialGradient(
-		args.vg,
-		center.x - radiusX * 0.32f,
-		center.y - radiusY * 0.38f,
-		radius * 0.08f,
-		radius * 1.18f,
-		nvgRGB(255, 244, 174),
-		nvgRGB(255, 174, 12));
-	nvgFillPaint(args.vg, body);
-	nvgFill(args.vg);
-	nvgStrokeColor(args.vg, nvgRGBA(145, 80, 1, 220));
-	nvgStrokeWidth(args.vg, 1.f);
-	nvgStroke(args.vg);
-
-	for (int i = 0; i < 17; ++i) {
-		const float angle = float(i) * 2.39996323f;
-		const float radial = 0.25f + 0.62f * float((i * 37) % 17) / 16.f;
-		const float x = center.x + std::cos(angle) * radiusX * radial;
-		const float y = center.y + std::sin(angle) * radiusY * radial;
-		if (y < center.y - radiusY * 0.36f) {
-			continue;
-		}
-		nvgBeginPath(args.vg);
-		nvgCircle(args.vg, x, y, minimum * (0.006f + 0.002f * (i % 3)));
-		nvgFillColor(args.vg, nvgRGBA(255, 235, 139, 135));
-		nvgFill(args.vg);
 	}
 
 	const float eyeRadius = minimum * 0.105f;

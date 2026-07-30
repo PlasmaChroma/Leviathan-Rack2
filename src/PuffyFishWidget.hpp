@@ -16,6 +16,11 @@ struct PuffyFishWidget final : TransparentWidget {
 	void draw(const DrawArgs& args) override;
 
 private:
+	bool drawBodyRaster(
+		NVGcontext* vg,
+		Vec center,
+		float radiusX,
+		float radiusY) const;
 	void drawFin(
 		NVGcontext* vg,
 		Vec center,
