@@ -11,6 +11,40 @@ float clamp01(float value) {
 	return std::max(0.f, std::min(value, 1.f));
 }
 
+struct PuffyRasterAsset {
+	int handle = -1;
+	int width = 0;
+	int height = 0;
+
+	explicit operator bool() const {
+		return handle >= 0 && width > 0 && height > 0;
+	}
+};
+
+PuffyRasterAsset resolveRasterAsset(
+	NVGcontext* vg,
+	const char* relativePath) {
+	PuffyRasterAsset raster;
+	if (!vg || !relativePath || !APP || !APP->window) {
+		return raster;
+	}
+	const std::string fullPath = asset::plugin(pluginInstance, relativePath);
+	std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
+	if (!image || image->handle < 0) {
+		return raster;
+	}
+	raster.handle =
+		visual_assets::loadRasterMipmapHandle(vg, image, fullPath);
+	if (raster.handle < 0) {
+		raster.handle = image->handle;
+	}
+	nvgImageSize(vg, raster.handle, &raster.width, &raster.height);
+	if (raster.width <= 0 || raster.height <= 0) {
+		raster = {};
+	}
+	return raster;
+}
+
 } // namespace
 
 PuffyFishWidget::PuffyFishWidget(Puffy* module)
@@ -48,25 +82,12 @@ void PuffyFishWidget::drawFin(
 	float bodyRadius,
 	bool left,
 	float angle,
-	float sizeScale) const {
-	if (!vg || !APP || !APP->window || bodyRadius <= 0.f) {
-		return;
-	}
-	const std::string fullPath =
-		asset::plugin(pluginInstance, "res/icon/Puffy_Fin_NS.png");
-	std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
-	if (!image || image->handle < 0) {
-		return;
-	}
-	int imageHandle =
-		visual_assets::loadRasterMipmapHandle(vg, image, fullPath);
-	if (imageHandle < 0) {
-		imageHandle = image->handle;
-	}
-	int imageWidth = 0;
-	int imageHeight = 0;
-	nvgImageSize(vg, imageHandle, &imageWidth, &imageHeight);
-	if (imageWidth <= 0 || imageHeight <= 0) {
+	float sizeScale,
+	int imageHandle,
+	int imageWidth,
+	int imageHeight) const {
+	if (!vg || bodyRadius <= 0.f
+		|| imageHandle < 0 || imageWidth <= 0 || imageHeight <= 0) {
 		return;
 	}
 
@@ -99,24 +120,12 @@ bool PuffyFishWidget::drawBodyRaster(
 	Vec center,
 	float radiusX,
 	float radiusY) const {
-	if (!vg || !APP || !APP->window || radiusX <= 0.f || radiusY <= 0.f) {
+	if (!vg || radiusX <= 0.f || radiusY <= 0.f) {
 		return false;
 	}
-	const std::string fullPath =
-		asset::plugin(pluginInstance, "res/icon/Puffy_Body_NS.png");
-	std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
-	if (!image || image->handle < 0) {
-		return false;
-	}
-	int imageHandle =
-		visual_assets::loadRasterMipmapHandle(vg, image, fullPath);
-	if (imageHandle < 0) {
-		imageHandle = image->handle;
-	}
-	int imageWidth = 0;
-	int imageHeight = 0;
-	nvgImageSize(vg, imageHandle, &imageWidth, &imageHeight);
-	if (imageWidth <= 0 || imageHeight <= 0) {
+	const PuffyRasterAsset body = resolveRasterAsset(
+		vg, "res/icon/Puffy_Body_NS.png");
+	if (!body) {
 		return false;
 	}
 
@@ -128,7 +137,7 @@ bool PuffyFishWidget::drawBodyRaster(
 	const float x = center.x - 0.5f * drawWidth;
 	const float y = center.y - 0.5f * drawHeight;
 	const NVGpaint paint = nvgImagePattern(
-		vg, x, y, drawWidth, drawHeight, 0.f, imageHandle, 1.f);
+		vg, x, y, drawWidth, drawHeight, 0.f, body.handle, 1.f);
 	nvgBeginPath(vg);
 	nvgRect(vg, x, y, drawWidth, drawHeight);
 	nvgFillPaint(vg, paint);
@@ -251,6 +260,8 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 	// Keep the cast shadow grounded near the bottom of the scene. Inflation
 	// changes its footprint, but the fish's motion and radius do not move it.
 	const Vec shadowCenter(width * 0.5f, height * 0.92f);
+	const PuffyRasterAsset fin = resolveRasterAsset(
+		args.vg, "res/icon/Puffy_Fin_NS.png");
 
 	nvgSave(args.vg);
 	nvgScissor(args.vg, 0.f, 0.f, width, height);
@@ -273,14 +284,20 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 		radiusX,
 		true,
 		pose.leftFinAngle,
-		finSizeScale);
+		finSizeScale,
+		fin.handle,
+		fin.width,
+		fin.height);
 	drawFin(
 		args.vg,
 		center,
 		radiusX,
 		false,
 		pose.rightFinAngle,
-		finSizeScale);
+		finSizeScale,
+		fin.handle,
+		fin.width,
+		fin.height);
 
 	if (!drawBodyRaster(args.vg, center, radiusX, radiusY)) {
 		nvgBeginPath(args.vg);

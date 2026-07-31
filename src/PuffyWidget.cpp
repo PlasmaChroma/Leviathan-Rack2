@@ -76,6 +76,42 @@ bool loadPoint(
 
 } // namespace
 
+void PuffyWidget::step() {
+	const bool measurePerf = isDragonKingDebugEnabled();
+	const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
+	ModuleWidget::step();
+	if (measurePerf) {
+		debugWidgetMetrics.recordStep(
+			debug_terminal::elapsedUsSince(stepStart));
+	}
+}
+
+void PuffyWidget::draw(const DrawArgs& args) {
+	const bool measurePerf = isDragonKingDebugEnabled();
+	const auto drawStart = debug_terminal::debugTimerStart(measurePerf);
+	ModuleWidget::draw(args);
+	auto* puffyModule = static_cast<Puffy*>(module);
+	if (!puffyModule) {
+		return;
+	}
+	if (measurePerf) {
+		debug_terminal::drawDebugInstanceId(
+			args.vg, box.size, puffyModule->debugMetrics.instanceId);
+		debugWidgetMetrics.recordDraw(
+			debug_terminal::elapsedUsSince(drawStart));
+		const double nowSec = system::getTime();
+		if (debug_terminal::baselineSubmitDue(
+				"Puffy", puffyModule->debugMetrics.instanceId, nowSec)) {
+			debug_terminal::submitBaselineMetrics(
+				"Puffy",
+				puffyModule->debugMetrics.instanceId,
+				puffyModule->debugMetrics.consumeProcessRange(),
+				debugWidgetMetrics.consumeStepRange(),
+				debugWidgetMetrics.consumeDrawRange());
+		}
+	}
+}
+
 PuffyWidget::PuffyWidget(Puffy* module) {
 	setModule(module);
 	PreviewBuildLogTimer previewTimer("Puffy", module);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DebugTerminalMetrics.hpp"
 #include "plugin.hpp"
 #include "PuffyEngine.hpp"
 
@@ -53,6 +54,7 @@ struct Puffy final : Module {
 	std::uint32_t visualDivider = 0u;
 	std::uint32_t visualDivision = 200u;
 	float lastGainReduction = 0.f;
+	debug_terminal::BaselineModuleMetrics debugMetrics;
 
 	Puffy();
 	~Puffy() override;

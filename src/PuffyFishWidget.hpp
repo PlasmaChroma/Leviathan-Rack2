@@ -27,7 +27,10 @@ private:
 		float bodyRadius,
 		bool left,
 		float angle,
-		float sizeScale) const;
+		float sizeScale,
+		int imageHandle,
+		int imageWidth,
+		int imageHeight) const;
 	void drawEye(
 		NVGcontext* vg,
 		Vec center,

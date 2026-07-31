@@ -3,7 +3,14 @@
 #include <algorithm>
 #include <cmath>
 
+namespace {
+
+std::atomic<std::uint32_t> gPuffyDebugInstanceCounter {1u};
+
+} // namespace
+
 Puffy::Puffy() {
+	debugMetrics.assignInstanceId(gPuffyDebugInstanceCounter);
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 	configSwitch(
 		CHARACTER_PARAM, 0.f, 2.f, 0.f, "Character",
@@ -75,6 +82,8 @@ bool Puffy::readVisualState(PuffyVisualState* state) const {
 }
 
 void Puffy::process(const ProcessArgs& args) {
+	const bool measurePerf = isDragonKingDebugEnabled();
+	const auto processStart = debug_terminal::debugTimerStart(measurePerf);
 	const bool leftConnected = inputs[INPUT_L].isConnected();
 	const bool rightConnected = inputs[INPUT_R].isConnected();
 	float left = 0.f;
@@ -121,6 +130,10 @@ void Puffy::process(const ProcessArgs& args) {
 		publishVisualState(frame);
 	}
 	lights[LIMIT_LIGHT].setSmoothBrightness(lastGainReduction, args.sampleTime);
+	if (measurePerf) {
+		debugMetrics.recordProcess(
+			debug_terminal::elapsedNsSince(processStart));
+	}
 }
 
 void Puffy::onReset(const ResetEvent& event) {
