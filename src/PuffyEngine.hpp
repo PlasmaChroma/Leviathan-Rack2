@@ -65,8 +65,9 @@ private:
 		Character character = Character::Bloom;
 		float amount = 0.f;
 		float drive = 1.f;
-		float fifthMix = 0.f;
-		float skew = 0.f;
+		float foldCycles = 1.f;
+		float foldGain = 1.f;
+		float phaseSkew = 0.f;
 		float normalization = 1.f;
 	};
 

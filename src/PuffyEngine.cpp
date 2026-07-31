@@ -237,12 +237,13 @@ Engine::CharacterCoefficients Engine::prepareCharacter(
 		case Character::Frenzy: {
 			const float fastControl = clamp01(dynamicsState.fast);
 			const float transient = clamp01(dynamicsState.transient);
-			// A broad T3 response is always visible. Activity moves the blend
-			// toward T5, while a zero/end-point anchored even term adds skew.
-			coefficients.fifthMix = clamp01(
-				0.35f + 0.30f * fastControl + 0.20f * transient);
-			coefficients.skew =
-				0.18f + 0.22f * fastControl + 0.18f * transient;
+			// Puff sweeps continuously from one to four complete sine-fold
+			// cycles while contracting their vertical span. Dynamics bends the
+			// phase asymmetrically without moving the origin or end anchors.
+			coefficients.foldCycles = 1.f + 3.f * a;
+			coefficients.foldGain = 1.f / (1.f + 0.9f * a);
+			coefficients.phaseSkew =
+				0.12f + 0.18f * fastControl + 0.12f * transient;
 			break;
 		}
 		case Character::Bloom:
@@ -279,13 +280,10 @@ float Engine::applyCharacter(
 		case Character::Frenzy: {
 			const float z = std::max(-1.f, std::min(input, 1.f));
 			const float z2 = z * z;
-			const float t3 = z * (4.f * z2 - 3.f);
-			const float t5 = z * (16.f * z2 * z2 - 20.f * z2 + 5.f);
-			const float oddPolynomial =
-				t3 + (t5 - t3) * coefficients.fifthMix;
-			const float anchoredSkew = coefficients.skew * z2 * (1.f - z2);
-			float saturated = oddPolynomial + anchoredSkew;
-			saturated = std::max(-1.25f, std::min(saturated, 1.25f));
+			const float warped = z
+				+ coefficients.phaseSkew * z2 * (1.f - z2);
+			const float saturated = coefficients.foldGain * std::sin(
+				kPi * coefficients.foldCycles * warped);
 			return input + (saturated - input) * a;
 		}
 		case Character::Bloom:

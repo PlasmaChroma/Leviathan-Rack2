@@ -350,30 +350,25 @@ transient = clamp((fast / max(sqrt(slowSq), 1e-4) - 1) / 2, 0, 1)
 fastControl = clamp(fast, 0, 1)
 ```
 
-For each oversampled channel, calculate the third- and fifth-order Chebyshev
-polynomials over the bounded nominal input domain:
+For each oversampled channel, calculate a sinusoidal fold over the bounded
+nominal input domain:
 
 ```text
 z = clamp(x, -1, 1)
 z2 = z*z
-T3 = z * (4*z2 - 3)
-T5 = z * (16*z2*z2 - 20*z2 + 5)
-
-fifthMix = clamp(0.35 + 0.30*fastControl + 0.20*transient, 0, 1)
-skew = 0.18 + 0.22*fastControl + 0.18*transient
-
-oddPolynomial = lerp(T3, T5, fifthMix)
-anchoredSkew = skew * z2 * (1 - z2)
-s = oddPolynomial + anchoredSkew
-
-s = clamp(s, -1.25, 1.25)
+foldCycles = 1 + 3*a
+foldGain = 1 / (1 + 0.9*a)
+phaseSkew = 0.12 + 0.18*fastControl + 0.12*transient
+warped = z + phaseSkew*z2*(1 - z2)
+s = foldGain * sin(pi*foldCycles*warped)
 y = lerp(x, s, a)
 ```
 
-The static T3/T5 blend gives `FRENZY` several broad lobes even at silence.
-Activity shifts weight toward the fifth-order response, adding two more turning
-points. The even skew term is zero at the origin and +/-1 endpoints, preserving
-those anchors while making the interior lobes asymmetrical. The shared detector
+`PUFF` continuously raises the fold from one to four complete cycles while the
+fold gain contracts from 1 to about 0.526, so the curve gains lobes and pulls
+toward its center as inflation rises. The phase-warp term is zero at the origin
+and +/-1 endpoints, preserving those anchors while making the interior lobes
+input-reactive and asymmetrical. The shared detector
 prevents channel-independent motion from pulling the stereo image around. The
 asymmetry intentionally permits a small DC component; the common post-character
 DC blocker removes it.

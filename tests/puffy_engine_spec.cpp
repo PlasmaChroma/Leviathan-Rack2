@@ -125,16 +125,18 @@ Result characterCurves() {
 	};
 }
 
-Result frenzyPolynomialLobes() {
-	const auto countTurningPoints = [](const puffy::DynamicsState& dynamics) {
+Result frenzySinusoidalFold() {
+	const auto measure = [](float amount, const puffy::DynamicsState& dynamics) {
 		float previous = puffy::Engine::processCharacter(
-			puffy::Character::Frenzy, -1.f, 1.f, dynamics);
+			puffy::Character::Frenzy, -1.f, amount, dynamics);
 		float previousSlope = 0.f;
 		int turningPoints = 0;
+		float peak = std::fabs(previous);
 		for (int i = 1; i <= 800; ++i) {
 			const float input = -1.f + 2.f * float(i) / 800.f;
 			const float output = puffy::Engine::processCharacter(
-				puffy::Character::Frenzy, input, 1.f, dynamics);
+				puffy::Character::Frenzy, input, amount, dynamics);
+			peak = std::max(peak, std::fabs(output));
 			const float slope = output - previous;
 			if (std::fabs(slope) > 1e-7f) {
 				if (previousSlope * slope < 0.f) {
@@ -144,15 +146,15 @@ Result frenzyPolynomialLobes() {
 			}
 			previous = output;
 		}
-		return turningPoints;
+		return std::make_pair(turningPoints, peak);
 	};
 
 	puffy::DynamicsState idle;
 	puffy::DynamicsState active;
 	active.fast = 1.f;
 	active.transient = 1.f;
-	const int idleTurns = countTurningPoints(idle);
-	const int activeTurns = countTurningPoints(active);
+	const auto lowPuff = measure(0.5f, active);
+	const auto highPuff = measure(1.f, active);
 	const float idleZero = puffy::Engine::processCharacter(
 		puffy::Character::Frenzy, 0.f, 1.f, idle);
 	const float activeZero = puffy::Engine::processCharacter(
@@ -162,13 +164,15 @@ Result frenzyPolynomialLobes() {
 	const float activeNegative = puffy::Engine::processCharacter(
 		puffy::Character::Frenzy, -0.8f, 1.f, active);
 	return {
-		"FRENZY has broad input-reactive polynomial lobes with anchored zero",
-		idleTurns >= 2 && activeTurns >= 4
+		"FRENZY adds contracted sinusoidal-fold lobes as PUFF rises",
+		lowPuff.first >= 4 && highPuff.first >= lowPuff.first + 2
+			&& highPuff.second < 0.54f
 			&& near(idleZero, 0.f, 1e-7f)
 			&& near(activeZero, 0.f, 1e-7f)
-			&& std::fabs(activePositive + activeNegative) > 0.1f,
-		"turns=" + std::to_string(idleTurns)
-			+ "/" + std::to_string(activeTurns)
+			&& std::fabs(activePositive + activeNegative) > 0.05f,
+		"turns=" + std::to_string(lowPuff.first)
+			+ "/" + std::to_string(highPuff.first)
+			+ " highPeak=" + std::to_string(highPuff.second)
 			+ " activePair=" + std::to_string(activeNegative)
 			+ "/" + std::to_string(activePositive)
 	};
@@ -484,7 +488,7 @@ Result realtimePathDoesNotAllocate() {
 int main() {
 	const std::vector<Result> results = {
 		characterCurves(),
-		frenzyPolynomialLobes(),
+		frenzySinusoidalFold(),
 		riptideFractalAnchors(),
 		unityAndStereo(),
 		linkedLimiter(),
