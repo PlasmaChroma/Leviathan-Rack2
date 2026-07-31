@@ -3488,6 +3488,11 @@ struct TemporalDeckWidget : ModuleWidget {
     splitPanel.addPerfectWaveBranding();
     visual_assets::addFractalGlassOverlay(
       this, panelPath, splitPanel.panelSurfaceEffectWidget());
+    math::Rect leviathanLogoRectMm(Vec(36.96500f, 118.64859f), Vec(27.66963f, 10.35141f));
+    panel_svg::loadRectFromSvgMm(
+      panelPath, "BRANDING_LEVIATHAN_LOGO_RASTER", &leviathanLogoRectMm);
+    addChild(visual_assets::createAspectFitRasterImageWidget(
+      "res/icon/Leviathan_Logo_S2.png", leviathanLogoRectMm));
     previewBuildTimer.markPanelDone();
     if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
       panelBorder = findPanelBorder(svgPanel->fb);
