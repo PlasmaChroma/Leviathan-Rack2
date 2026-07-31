@@ -1380,8 +1380,9 @@ SplitPanelRenderer::SplitPanelRenderer(ModuleWidget* parent, const char* panelAs
 		return;
 	}
 	panelPath_ = asset::plugin(pluginInstance, panelAssetPath);
-	previewProgressionPhase_ =
-		parent_->module ? -1.f : random::uniform();
+	// Browser previews and live modules should share the same crystal color
+	// state instead of assigning every preview a random progression phase.
+	previewProgressionPhase_ = -1.f;
 	parent_->setPanel(createPanel(panelPath_));
 	panelSurfaceEffect_ = createPanelSurfaceEffectWidget(
 		panelPath_, parent_->box.size, previewProgressionPhase_);

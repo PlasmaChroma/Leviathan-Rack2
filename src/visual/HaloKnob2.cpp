@@ -3,6 +3,56 @@
 #include <algorithm>
 #include <cmath>
 
+namespace {
+
+NVGcolor blendHaloColor(NVGcolor a, NVGcolor b, float t) {
+	t = clamp(t, 0.f, 1.f);
+	NVGcolor out;
+	out.r = crossfade(a.r, b.r, t);
+	out.g = crossfade(a.g, b.g, t);
+	out.b = crossfade(a.b, b.b, t);
+	out.a = crossfade(a.a, b.a, t);
+	return out;
+}
+
+// Halo bloom/reflection "segments" have no gaps. Adjacent segments with the
+// same color can therefore be emitted as one arc without changing the image.
+// Only the segment under the value cursor needs its own blended color.
+template <typename DrawArc>
+void drawCoalescedHaloSegments(
+	float startAngle,
+	float endAngle,
+	float activeAngle,
+	NVGcolor activeColor,
+	NVGcolor inactiveColor,
+	DrawArc&& drawArc) {
+	constexpr int segmentCount = 16;
+	const float step = (endAngle - startAngle) / float(segmentCount);
+	const float position = clamp((activeAngle - startAngle) / std::max(step, 1e-6f), 0.f, float(segmentCount));
+	const int completedSegments = std::min(segmentCount, int(position));
+	const float completedEnd = startAngle + step * float(completedSegments);
+
+	if (completedSegments > 0) {
+		drawArc(startAngle, completedEnd, activeColor);
+	}
+
+	float inactiveStart = completedEnd;
+	if (completedSegments < segmentCount) {
+		const float partial = position - float(completedSegments);
+		if (partial > 0.f) {
+			const float partialEnd = completedEnd + step;
+			drawArc(completedEnd, partialEnd, blendHaloColor(inactiveColor, activeColor, partial));
+			inactiveStart = partialEnd;
+		}
+	}
+
+	if (inactiveStart < endAngle) {
+		drawArc(inactiveStart, endAngle, inactiveColor);
+	}
+}
+
+} // namespace
+
 void LeviathanHaloKnob2::GlowArcWidget::draw(const DrawArgs& args) {
 	const float diameterPx = std::min(box.size.x, box.size.y);
 	if (diameterPx <= 1.f) return;
@@ -36,33 +86,11 @@ void LeviathanHaloKnob2::GlowArcWidget::draw(const DrawArgs& args) {
 		nvgStroke(args.vg);
 	};
 
-	auto blendColor = [](NVGcolor a, NVGcolor b, float t) {
-		t = clamp(t, 0.f, 1.f);
-		NVGcolor out;
-		out.r = crossfade(a.r, b.r, t);
-		out.g = crossfade(a.g, b.g, t);
-		out.b = crossfade(a.b, b.b, t);
-		out.a = crossfade(a.a, b.a, t);
-		return out;
-	};
-
 	auto drawSegmentedGlow = [&](float widthPx, NVGcolor cyan, NVGcolor purple) {
-		const int segmentCount = 16;
-		const float total = endAngle - startAngle;
-		const float step = total / float(segmentCount);
-		for (int i = 0; i < segmentCount; ++i) {
-			const float s0 = startAngle + step * float(i);
-			const float s1 = startAngle + step * float(i + 1);
-			NVGcolor color = purple;
-			if (activeAngle >= s1) {
-				color = cyan;
-			}
-			else if (activeAngle > s0) {
-				const float segmentProgress = (activeAngle - s0) / std::max(1e-6f, s1 - s0);
-				color = blendColor(purple, cyan, segmentProgress);
-			}
-			drawGlowStroke(s0, s1, mainRadius, widthPx, color);
-		}
+		drawCoalescedHaloSegments(startAngle, endAngle, activeAngle, cyan, purple,
+			[&](float a0, float a1, NVGcolor color) {
+				drawGlowStroke(a0, a1, mainRadius, widthPx, color);
+			});
 	};
 
 	if (foreground) {
@@ -182,15 +210,6 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 		const NVGcolor litHot = config.activeHighlightColor;
 		const NVGcolor unlitCore = config.inactiveColor;
 		const NVGcolor unlitHot = config.inactiveHighlightColor;
-		auto blendColor = [](NVGcolor a, NVGcolor b, float t) {
-			t = clamp(t, 0.f, 1.f);
-			NVGcolor out;
-			out.r = crossfade(a.r, b.r, t);
-			out.g = crossfade(a.g, b.g, t);
-			out.b = crossfade(a.b, b.b, t);
-			out.a = crossfade(a.a, b.a, t);
-			return out;
-		};
 		for (int i = 0; i < segmentCount; ++i) {
 			const float s0 = aStart + step * float(i) + 0.5f * gap;
 			const float s1 = aStart + step * float(i + 1) - 0.5f * gap;
@@ -207,38 +226,17 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 					s1,
 					segmentRadius,
 					segmentWidth,
-					blendColor(unlitCore, litCore, segmentProgress),
-					blendColor(unlitHot, litHot, segmentProgress));
+					blendHaloColor(unlitCore, litCore, segmentProgress),
+					blendHaloColor(unlitHot, litHot, segmentProgress));
 			}
 		}
 	};
 
 	auto drawSegmentedReflection = [&](float radiusPx, float widthPx, NVGcolor cyan, NVGcolor purple) {
-		const int segmentCount = 16;
-		const float total = endAngle - startAngle;
-		const float step = total / float(segmentCount);
-		auto blendColor = [](NVGcolor a, NVGcolor b, float t) {
-			t = clamp(t, 0.f, 1.f);
-			NVGcolor out;
-			out.r = crossfade(a.r, b.r, t);
-			out.g = crossfade(a.g, b.g, t);
-			out.b = crossfade(a.b, b.b, t);
-			out.a = crossfade(a.a, b.a, t);
-			return out;
-		};
-		for (int i = 0; i < segmentCount; ++i) {
-			const float s0 = startAngle + step * float(i);
-			const float s1 = startAngle + step * float(i + 1);
-			NVGcolor color = purple;
-			if (activeAngle >= s1) {
-				color = cyan;
-			}
-			else if (activeAngle > s0) {
-				const float segmentProgress = (activeAngle - s0) / std::max(1e-6f, s1 - s0);
-				color = blendColor(purple, cyan, segmentProgress);
-			}
-			drawPartialGuideArc(s0, s1, radiusPx, widthPx, color);
-		}
+		drawCoalescedHaloSegments(startAngle, endAngle, activeAngle, cyan, purple,
+			[&](float a0, float a1, NVGcolor color) {
+				drawPartialGuideArc(a0, a1, radiusPx, widthPx, color);
+			});
 	};
 
 	auto drawTerminator = [&](float angle, float direction) {
@@ -317,33 +315,11 @@ void LeviathanHaloKnob2::CapReflectionWidget::draw(const DrawArgs& args) {
 		nvgStroke(args.vg);
 	};
 
-	auto blendColor = [](NVGcolor a, NVGcolor b, float t) {
-		t = clamp(t, 0.f, 1.f);
-		NVGcolor out;
-		out.r = crossfade(a.r, b.r, t);
-		out.g = crossfade(a.g, b.g, t);
-		out.b = crossfade(a.b, b.b, t);
-		out.a = crossfade(a.a, b.a, t);
-		return out;
-	};
-
 	auto strokeSegmentedReflection = [&](float radiusPx, float widthPx, NVGcolor cyan, NVGcolor purple) {
-		const int segmentCount = 16;
-		const float total = endAngle - startAngle;
-		const float step = total / float(segmentCount);
-		for (int i = 0; i < segmentCount; ++i) {
-			const float s0 = startAngle + step * float(i);
-			const float s1 = startAngle + step * float(i + 1);
-			NVGcolor color = purple;
-			if (activeAngle >= s1) {
-				color = cyan;
-			}
-			else if (activeAngle > s0) {
-				const float segmentProgress = (activeAngle - s0) / std::max(1e-6f, s1 - s0);
-				color = blendColor(purple, cyan, segmentProgress);
-			}
-			strokeArc(s0, s1, radiusPx, widthPx, color);
-		}
+		drawCoalescedHaloSegments(startAngle, endAngle, activeAngle, cyan, purple,
+			[&](float a0, float a1, NVGcolor color) {
+				strokeArc(a0, a1, radiusPx, widthPx, color);
+			});
 	};
 
 	nvgSave(args.vg);
@@ -547,4 +523,3 @@ float LeviathanHaloKnob2::normalizedParamValue() {
 	if (range <= 1e-6f) return 0.5f;
 	return clamp((pq->getValue() - minValue) / range, 0.f, 1.f);
 }
-
