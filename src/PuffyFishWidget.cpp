@@ -214,6 +214,9 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 	const float radiusY = radius * (0.93f + 0.07f * inflation)
 		* (1.f + pose.squashY);
 	const float finSizeScale = 1.f - 0.20f * inflation;
+	// Keep the cast shadow grounded near the bottom of the scene. Inflation
+	// changes its footprint, but the fish's motion and radius do not move it.
+	const Vec shadowCenter(width * 0.5f, height * 0.92f);
 
 	nvgSave(args.vg);
 	nvgScissor(args.vg, 0.f, 0.f, width, height);
@@ -221,8 +224,8 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 	nvgBeginPath(args.vg);
 	nvgEllipse(
 		args.vg,
-		center.x,
-		center.y + radiusY * 1.23f,
+		shadowCenter.x,
+		shadowCenter.y,
 		radiusX * (0.88f + 0.08f * inflation),
 		radiusY * (0.145f + 0.025f * inflation));
 	nvgFillColor(

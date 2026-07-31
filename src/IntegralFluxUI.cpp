@@ -213,6 +213,7 @@ struct IntegralFluxLogoWidget final : TransparentWidget {
 
 struct IntegralFluxLogoCrystalButton final : OpaqueWidget {
 	ui::Tooltip* tooltip = nullptr;
+	float previewProgressionPhase = -1.f;
 
 	~IntegralFluxLogoCrystalButton() {
 		destroyTooltip();
@@ -256,6 +257,8 @@ struct IntegralFluxLogoCrystalButton final : OpaqueWidget {
 	}
 
 	void draw(const DrawArgs& args) override {
+		visual_assets::ScopedPanelGlassPreviewProgression previewProgression(
+			previewProgressionPhase);
 		if (!visual_assets::isPanelGlassColorCycleEnabled()) {
 			return;
 		}
@@ -1847,6 +1850,8 @@ struct IntegralFluxWidget : ModuleWidget {
 
 			IntegralFluxLogoCrystalButton* crystalButton =
 				new IntegralFluxLogoCrystalButton();
+			crystalButton->previewProgressionPhase =
+				splitPanel.previewProgressionPhase();
 			crystalButton->box.pos = mm2px(Vec(48.96f, 125.30f));
 			crystalButton->box.size = mm2px(Vec(5.0f, 2.5f));
 			addChild(crystalButton);

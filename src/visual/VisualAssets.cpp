@@ -37,8 +37,69 @@ struct PanelGlassTintState {
 };
 
 PanelGlassTintState gPanelGlassTint;
+std::vector<PanelGlassTintState> gPanelGlassPreviewStateStack;
+
+void applyPanelGlassProgression(double cycleTime) {
+	cycleTime = std::fmod(std::max(0.0, cycleTime), 180.0);
+	float amount = 0.f;
+	NVGcolor tintColor = nvgRGBf(1.f, 0.22f, 1.f);
+	NVGcolor washColor = nvgRGBA(255, 0, 255, 0);
+	NVGcolor glowColor = nvgRGB(0x1c, 0xcc, 0xd9);
+	NVGcolor strokeColor = nvgRGB(0x2a, 0xab, 0xef);
+
+	if (cycleTime < 60.0) {
+		float t = float(cycleTime / 60.0);
+		amount = 0.28f * t;
+		washColor = nvgRGBA(255, 0, 255, int(std::round(32.f * t)));
+	}
+	else if (cycleTime < 120.0) {
+		float t = float((cycleTime - 60.0) / 60.0);
+		amount = 0.28f;
+		tintColor = nvgRGBf(
+			1.f + (0.95f - 1.f) * t,
+			0.22f + (0.05f - 0.22f) * t,
+			1.f + (0.15f - 1.f) * t);
+		washColor = nvgRGBA(
+			int(std::round(255.f + (242.f - 255.f) * t)),
+			int(std::round(12.f * t)),
+			int(std::round(255.f + (38.f - 255.f) * t)),
+			32);
+		glowColor = nvgRGB(
+			28 + int(227.f * t),
+			204 - int(174.f * t),
+			217 - int(151.f * t));
+		strokeColor = nvgRGB(
+			42 + int(162.f * t),
+			171 - int(171.f * t),
+			239 - int(205.f * t));
+	}
+	else {
+		float t = float((cycleTime - 120.0) / 60.0);
+		amount = 0.28f * (1.f - t);
+		tintColor = nvgRGBf(0.95f, 0.05f, 0.15f);
+		washColor = nvgRGBA(
+			242, 12, 38, int(std::round(32.f * (1.f - t))));
+		glowColor = nvgRGB(
+			255 - int(227.f * t),
+			30 + int(174.f * t),
+			66 + int(151.f * t));
+		strokeColor = nvgRGB(
+			204 - int(162.f * t),
+			int(171.f * t),
+			34 + int(205.f * t));
+	}
+
+	gPanelGlassTint.currentAmount = amount;
+	gPanelGlassTint.currentTintColor = tintColor;
+	gPanelGlassTint.currentWashColor = washColor;
+	gPanelGlassTint.currentCrystalGlowColor = glowColor;
+	gPanelGlassTint.currentCrystalStrokeColor = strokeColor;
+}
 
 void updatePanelGlassTint() {
+	if (!gPanelGlassPreviewStateStack.empty()) {
+		return;
+	}
 	double now = system::getTime();
 	if (gPanelGlassTint.lastUpdateSec <= 0.0) {
 		gPanelGlassTint.lastUpdateSec = now;
@@ -57,91 +118,8 @@ void updatePanelGlassTint() {
 	// Only update once per second
 	if (gPanelGlassTint.accumulatedTimeSec - gPanelGlassTint.lastColorUpdateAccumSec >= 1.0) {
 		gPanelGlassTint.lastColorUpdateAccumSec = std::floor(gPanelGlassTint.accumulatedTimeSec);
-
-		double cycleTime = std::fmod(gPanelGlassTint.accumulatedTimeSec, 180.0);
-		float amount = 0.f;
-		NVGcolor tintColor = nvgRGBf(1.f, 0.22f, 1.f);
-		NVGcolor washColor = nvgRGBA(255, 0, 255, 0);
-		NVGcolor glowColor = nvgRGB(0x1c, 0xcc, 0xd9);
-		NVGcolor strokeColor = nvgRGB(0x2a, 0xab, 0xef);
-
-		if (cycleTime < 60.0) {
-			float t = float(cycleTime / 60.0);
-			amount = 0.28f * t;
-			tintColor = nvgRGBf(1.f, 0.22f, 1.f);
-			washColor = nvgRGBA(255, 0, 255, int(std::round(32.f * t)));
-			glowColor = nvgRGB(0x1c, 0xcc, 0xd9);
-			strokeColor = nvgRGB(0x2a, 0xab, 0xef);
-		} else if (cycleTime < 120.0) {
-			float t = float((cycleTime - 60.0) / 60.0);
-			amount = 0.28f;
-			// Interpolate from Magenta (1.f, 0.22f, 1.f) to Crimson (0.95f, 0.05f, 0.15f)
-			tintColor = nvgRGBf(
-				1.f + (0.95f - 1.f) * t,
-				0.22f + (0.05f - 0.22f) * t,
-				1.f + (0.15f - 1.f) * t
-			);
-			// Interpolate wash from Magenta (255, 0, 255) to Crimson (242, 12, 38)
-			washColor = nvgRGBA(
-				int(std::round(255.f + (242.f - 255.f) * t)),
-				int(std::round(0.f + (12.f - 0.f) * t)),
-				int(std::round(255.f + (38.f - 255.f) * t)),
-				32
-			);
-			// Interpolate crystal glow from Cyan (28, 204, 217) to Ruby Red (255, 30, 66)
-			glowColor = nvgRGB(
-				28 + int(227.f * t),
-				204 - int(174.f * t),
-				217 - int(151.f * t)
-			);
-			// Interpolate crystal stroke from Cyan-Blue (42, 171, 239) to Crimson-Red (204, 0, 34)
-			strokeColor = nvgRGB(
-				42 + int(162.f * t),
-				171 - int(171.f * t),
-				239 - int(205.f * t)
-			);
-		} else {
-			float t = float((cycleTime - 120.0) / 60.0);
-			amount = 0.28f * (1.f - t);
-			tintColor = nvgRGBf(0.95f, 0.05f, 0.15f);
-			washColor = nvgRGBA(242, 12, 38, int(std::round(32.f * (1.f - t))));
-			// Interpolate crystal glow back from Ruby Red (255, 30, 66) to Cyan (28, 204, 217)
-			glowColor = nvgRGB(
-				255 - int(227.f * t),
-				30 + int(174.f * t),
-				66 + int(151.f * t)
-			);
-			// Interpolate crystal stroke back from Crimson-Red (204, 0, 34) to Cyan-Blue (42, 171, 239)
-			strokeColor = nvgRGB(
-				204 - int(162.f * t),
-				0 + int(171.f * t),
-				34 + int(205.f * t)
-			);
-		}
-
-		bool changed = (std::fabs(amount - gPanelGlassTint.currentAmount) > 1e-4f)
-			|| (std::fabs(tintColor.r - gPanelGlassTint.currentTintColor.r) > 1e-4f)
-			|| (std::fabs(tintColor.g - gPanelGlassTint.currentTintColor.g) > 1e-4f)
-			|| (std::fabs(tintColor.b - gPanelGlassTint.currentTintColor.b) > 1e-4f)
-			|| (washColor.r != gPanelGlassTint.currentWashColor.r)
-			|| (washColor.g != gPanelGlassTint.currentWashColor.g)
-			|| (washColor.b != gPanelGlassTint.currentWashColor.b)
-			|| (washColor.a != gPanelGlassTint.currentWashColor.a)
-			|| (glowColor.r != gPanelGlassTint.currentCrystalGlowColor.r)
-			|| (glowColor.g != gPanelGlassTint.currentCrystalGlowColor.g)
-			|| (glowColor.b != gPanelGlassTint.currentCrystalGlowColor.b)
-			|| (strokeColor.r != gPanelGlassTint.currentCrystalStrokeColor.r)
-			|| (strokeColor.g != gPanelGlassTint.currentCrystalStrokeColor.g)
-			|| (strokeColor.b != gPanelGlassTint.currentCrystalStrokeColor.b);
-
-		if (changed) {
-			gPanelGlassTint.currentAmount = amount;
-			gPanelGlassTint.currentTintColor = tintColor;
-			gPanelGlassTint.currentWashColor = washColor;
-			gPanelGlassTint.currentCrystalGlowColor = glowColor;
-			gPanelGlassTint.currentCrystalStrokeColor = strokeColor;
-			++gPanelGlassTint.generation;
-		}
+		applyPanelGlassProgression(gPanelGlassTint.accumulatedTimeSec);
+		++gPanelGlassTint.generation;
 	}
 }
 
@@ -295,6 +273,7 @@ struct PreviewFrameEnhancementWidget : TransparentWidget {
 struct PanelSurfaceEffectWidget : TransparentWidget {
 	widget::FramebufferWidget* framebuffer = nullptr;
 	uint64_t tintGeneration = 0u;
+	float previewProgressionPhase = -1.f;
 
 	struct GlassRectArt {
 		math::Rect rectPx;
@@ -969,6 +948,8 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 	}
 
 	void draw(const DrawArgs& args) override {
+		ScopedPanelGlassPreviewProgression previewProgression(
+			previewProgressionPhase);
 		for (const MetalRectArt& metal : metalRects) {
 			drawMetalRect(args, metal);
 		}
@@ -1110,6 +1091,31 @@ NVGcolor panelGlassCrystalStrokeColor() {
 
 float panelGlassCyclePhase() {
 	return float(std::fmod(gPanelGlassTint.lastColorUpdateAccumSec, 180.0) / 180.0);
+}
+
+ScopedPanelGlassPreviewProgression::ScopedPanelGlassPreviewProgression(
+	float normalizedPhase) {
+	if (!gPanelGlassTint.enabled
+		|| !std::isfinite(normalizedPhase)
+		|| normalizedPhase < 0.f) {
+		return;
+	}
+	gPanelGlassPreviewStateStack.push_back(gPanelGlassTint);
+	active = true;
+	const float phase = std::max(0.f, std::min(normalizedPhase, 1.f));
+	gPanelGlassTint.accumulatedTimeSec = 180.0 * double(phase);
+	gPanelGlassTint.lastColorUpdateAccumSec =
+		std::floor(gPanelGlassTint.accumulatedTimeSec);
+	applyPanelGlassProgression(gPanelGlassTint.accumulatedTimeSec);
+	++gPanelGlassTint.generation;
+}
+
+ScopedPanelGlassPreviewProgression::~ScopedPanelGlassPreviewProgression() {
+	if (!active || gPanelGlassPreviewStateStack.empty()) {
+		return;
+	}
+	gPanelGlassTint = gPanelGlassPreviewStateStack.back();
+	gPanelGlassPreviewStateStack.pop_back();
 }
 
 void saveSettings() {
@@ -1300,7 +1306,10 @@ Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, NVGcolor highligh
 	return createPreviewFrameEnhancementWidgetWithColors(rectMm, highlightColor, nvgRGBAf(highlightColor.r, highlightColor.g, highlightColor.b, 42.f / 255.f));
 }
 
-Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSizePx) {
+Widget* createPanelSurfaceEffectWidget(
+	const std::string& svgPath,
+	Vec panelSizePx,
+	float previewProgressionPhase) {
 	if (svgPath.empty() || panelSizePx.x <= 0.f || panelSizePx.y <= 0.f) {
 		Widget* empty = new Widget();
 		empty->box.size = panelSizePx;
@@ -1320,6 +1329,7 @@ Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSize
 	PanelSurfaceEffectWidget* effect = new PanelSurfaceEffectWidget();
 	effect->framebuffer = fb;
 	effect->tintGeneration = gPanelGlassTint.generation;
+	effect->previewProgressionPhase = previewProgressionPhase;
 	effect->box.size = panelSizePx;
 	effect->metalRects = it->second.metalRects;
 	effect->glassRects = it->second.glassRects;
@@ -1370,8 +1380,11 @@ SplitPanelRenderer::SplitPanelRenderer(ModuleWidget* parent, const char* panelAs
 		return;
 	}
 	panelPath_ = asset::plugin(pluginInstance, panelAssetPath);
+	previewProgressionPhase_ =
+		parent_->module ? -1.f : random::uniform();
 	parent_->setPanel(createPanel(panelPath_));
-	panelSurfaceEffect_ = createPanelSurfaceEffectWidget(panelPath_, parent_->box.size);
+	panelSurfaceEffect_ = createPanelSurfaceEffectWidget(
+		panelPath_, parent_->box.size, previewProgressionPhase_);
 	parent_->addChild(panelSurfaceEffect_);
 }
 
@@ -1381,6 +1394,10 @@ const std::string& SplitPanelRenderer::panelPath() const {
 
 Widget* SplitPanelRenderer::panelSurfaceEffectWidget() const {
 	return panelSurfaceEffect_;
+}
+
+float SplitPanelRenderer::previewProgressionPhase() const {
+	return previewProgressionPhase_;
 }
 
 int SplitPanelRenderer::addPerfectWaveBranding(float opacity) {

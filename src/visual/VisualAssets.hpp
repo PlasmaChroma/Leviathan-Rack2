@@ -52,7 +52,10 @@ int addPerfectWaveSoloPanelBranding(
 	Widget* parent,
 	const std::string& panelPath,
 	float opacity = 1.f);
-Widget* createPanelSurfaceEffectWidget(const std::string& svgPath, Vec panelSizePx);
+Widget* createPanelSurfaceEffectWidget(
+	const std::string& svgPath,
+	Vec panelSizePx,
+	float previewProgressionPhase = -1.f);
 Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float oversample = 2.0f);
 
 // Installs the standard static layers for modules with split panel and label SVGs.
@@ -61,12 +64,14 @@ class SplitPanelRenderer final {
 	Widget* panelSurfaceEffect_ = nullptr;
 	std::string panelPath_;
 	std::string labelsAssetPath_;
+	float previewProgressionPhase_ = -1.f;
 
 public:
 	SplitPanelRenderer(ModuleWidget* parent, const char* panelAssetPath);
 	~SplitPanelRenderer();
 	const std::string& panelPath() const;
 	Widget* panelSurfaceEffectWidget() const;
+	float previewProgressionPhase() const;
 	int addPerfectWaveBranding(float opacity = 1.f);
 	int addPerfectWaveSoloBranding(float opacity = 1.f);
 	// Labels are inserted when this scoped renderer is destroyed, after the
@@ -80,6 +85,21 @@ float panelGlassTintAmount();
 NVGcolor panelGlassCrystalGlowColor();
 NVGcolor panelGlassCrystalStrokeColor();
 float panelGlassCyclePhase();
+
+class ScopedPanelGlassPreviewProgression {
+public:
+	explicit ScopedPanelGlassPreviewProgression(float normalizedPhase);
+	~ScopedPanelGlassPreviewProgression();
+
+	ScopedPanelGlassPreviewProgression(
+		const ScopedPanelGlassPreviewProgression&) = delete;
+	ScopedPanelGlassPreviewProgression& operator=(
+		const ScopedPanelGlassPreviewProgression&) = delete;
+
+private:
+	bool active = false;
+};
+
 void loadSettings();
 void saveSettings();
 void resetPanelGlassColorCycle();
