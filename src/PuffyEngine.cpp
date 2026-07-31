@@ -122,6 +122,8 @@ void Engine::setSampleRate(float requestedSampleRate) {
 void Engine::resetSharedControlState() {
 	dynamics = {};
 	inputActivity = 0.f;
+	positiveInputActivity = 0.f;
+	negativeInputActivity = 0.f;
 	limiterGain = 1.f;
 }
 
@@ -367,6 +369,10 @@ Frame Engine::process(
 	inputRight = std::max(-20.f, std::min(inputRight, 20.f));
 	const float normalizedPeak =
 		std::max(std::fabs(inputLeft), std::fabs(inputRight)) / kReferenceVolts;
+	const float normalizedPositive =
+		std::max(0.f, std::max(inputLeft, inputRight)) / kReferenceVolts;
+	const float normalizedNegative =
+		std::max(0.f, std::max(-inputLeft, -inputRight)) / kReferenceVolts;
 	dynamics.fast = updateFollower(
 		dynamics.fast,
 		normalizedPeak,
@@ -380,6 +386,16 @@ Frame Engine::process(
 	inputActivity = updateFollower(
 		inputActivity,
 		clamp01(normalizedPeak),
+		activityAttackCoefficient,
+		activityReleaseCoefficient);
+	positiveInputActivity = updateFollower(
+		positiveInputActivity,
+		std::min(normalizedPositive, 1.25f),
+		activityAttackCoefficient,
+		activityReleaseCoefficient);
+	negativeInputActivity = updateFollower(
+		negativeInputActivity,
+		std::min(normalizedNegative, 1.25f),
 		activityAttackCoefficient,
 		activityReleaseCoefficient);
 
@@ -483,6 +499,10 @@ Frame Engine::process(
 	frame.right = outputRight;
 	frame.effectiveAmount = amount;
 	frame.inputActivity = clamp01(inputActivity);
+	frame.positiveInputActivity =
+		std::max(0.f, std::min(positiveInputActivity, 1.25f));
+	frame.negativeInputActivity =
+		std::max(0.f, std::min(negativeInputActivity, 1.25f));
 	frame.transientActivity = clamp01(dynamics.transient);
 	frame.limiterGain = clamp01(limiterGain);
 	frame.character = int(transitionActive ? transitionTo : currentCharacter);

@@ -29,6 +29,8 @@ struct Frame {
 	float right = 0.f;
 	float effectiveAmount = 0.f;
 	float inputActivity = 0.f;
+	float positiveInputActivity = 0.f;
+	float negativeInputActivity = 0.f;
 	float transientActivity = 0.f;
 	float limiterGain = 1.f;
 	int character = 0;
@@ -103,6 +105,8 @@ private:
 	float limiterReleaseCoefficient = 1.f;
 	float dcCoefficient = 0.f;
 	float inputActivity = 0.f;
+	float positiveInputActivity = 0.f;
+	float negativeInputActivity = 0.f;
 	float limiterGain = 1.f;
 	float cachedManualDeflate = -1.f;
 	float cachedManualGain = 1.f;

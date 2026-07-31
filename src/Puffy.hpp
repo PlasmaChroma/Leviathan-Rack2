@@ -10,6 +10,8 @@
 struct PuffyVisualState {
 	float effectiveAmount = 0.f;
 	float inputActivity = 0.f;
+	float positiveInputActivity = 0.f;
+	float negativeInputActivity = 0.f;
 	float transientActivity = 0.f;
 	float gainReduction = 0.f;
 	int character = 0;
@@ -48,6 +50,8 @@ struct Puffy final : Module {
 	std::atomic<std::uint32_t> visualSequence {0u};
 	std::atomic<float> visualEffectiveAmount {0.f};
 	std::atomic<float> visualInputActivity {0.f};
+	std::atomic<float> visualPositiveInputActivity {0.f};
+	std::atomic<float> visualNegativeInputActivity {0.f};
 	std::atomic<float> visualTransientActivity {0.f};
 	std::atomic<float> visualGainReduction {0.f};
 	std::atomic<int> visualCharacter {0};

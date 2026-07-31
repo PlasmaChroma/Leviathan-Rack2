@@ -1,5 +1,6 @@
 #include "PuffyFishWidget.hpp"
 
+#include "PuffyVisualPalette.hpp"
 #include "visual/VisualAssets.hpp"
 
 #include <algorithm>
@@ -17,39 +18,6 @@ NVGcolor multiplyColor(NVGcolor color, NVGcolor tint) {
 		color.g * tint.g,
 		color.b * tint.b,
 		color.a * tint.a);
-}
-
-NVGcolor puffyTint(const float* weights) {
-	// These are image multipliers, not replacement flat colors. The neutral
-	// raster retains its baked highlights and shadows under the tint.
-	const NVGcolor colors[4] = {
-		nvgRGB(167, 220, 121),
-		nvgRGB(255, 212, 77),
-		nvgRGB(255, 138, 128),
-		nvgRGB(105, 181, 255)
-	};
-	float red = 0.f;
-	float green = 0.f;
-	float blue = 0.f;
-	float alpha = 0.f;
-	float total = 0.f;
-	for (int i = 0; i < 4; ++i) {
-		const float weight = weights ? clamp01(weights[i]) : (i == 0 ? 1.f : 0.f);
-		red += colors[i].r * weight;
-		green += colors[i].g * weight;
-		blue += colors[i].b * weight;
-		alpha += colors[i].a * weight;
-		total += weight;
-	}
-	if (total <= 1e-6f) {
-		return colors[0];
-	}
-	const float inverseTotal = 1.f / total;
-	return nvgRGBAf(
-		red * inverseTotal,
-		green * inverseTotal,
-		blue * inverseTotal,
-		alpha * inverseTotal);
 }
 
 struct PuffyRasterAsset {
@@ -304,7 +272,8 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 	const float radiusY = radius * (0.93f + 0.07f * inflation)
 		* (1.f + pose.squashY);
 	const float finSizeScale = 1.f - 0.20f * inflation;
-	const NVGcolor bodyTint = puffyTint(pose.characterTintWeights);
+	const NVGcolor bodyTint = puffy_visual::weightedCharacterTint(
+		pose.characterTintWeights);
 	// Keep the cast shadow grounded near the bottom of the scene. Inflation
 	// changes its footprint, but the fish's motion and radius do not move it.
 	const Vec shadowCenter(width * 0.5f, height * 0.92f);

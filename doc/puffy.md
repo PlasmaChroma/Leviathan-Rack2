@@ -99,6 +99,7 @@ matching C++ fallback coordinates.
 | --- | ---: | ---: | ---: | ---: |
 | Character selector | 4.0 | 7.0 | 52.96 | 11.0 |
 | Fish viewport | 4.0 | 20.0 | 52.96 | 48.0 |
+| Transfer preview | 4.5 | 67.0 | 51.96 | 10.5 |
 | Main controls | 4.0 | 70.0 | 52.96 | 29.0 |
 | Jack field | 3.0 | 101.0 | 54.96 | 24.0 |
 
@@ -109,6 +110,7 @@ Keep jacks below the fish so normal cabling does not hide the primary meter.
 
 ```text
 fish_rect
+transfer_preview_rect
 
 character_param
 puff_param
@@ -567,6 +569,8 @@ At approximately 240 Hz, the audio thread publishes atomic scalar targets:
 struct PuffyVisualState {
     float effectiveAmount;   // 0..1
     float inputActivity;     // smoothed 0..1
+    float positiveInputActivity; // smoothed 0..1.25
+    float negativeInputActivity; // smoothed 0..1.25
     float transientActivity; // smoothed 0..1
     float gainReduction;     // 0..1, 1 at >= 6 dB GR
     int character;           // 0..3
@@ -577,7 +581,10 @@ Atomics may be individual relaxed scalars plus a sequence counter. The UI must
 never read mutable DSP structs directly.
 
 Compute `inputActivity` from a stereo-linked absolute peak follower with 5 ms
-attack and 120 ms release, normalized so 5 V maps to 1. Compute
+attack and 120 ms release, normalized so 5 V maps to 1. Compute the positive
+and negative fields with separate followers over the greatest excursion of
+either stereo channel in each polarity; retain headroom to 1.25 for the preview.
+Compute
 `transientActivity` directly from the single continuous `PuffyDynamicsDetector` instance in every character mode. Compute `gainReduction` as:
 
 ```text
@@ -608,7 +615,24 @@ intermediate mode colors.
 The separate `LIMIT_LIGHT` follows the same gain-reduction target and reaches
 full brightness at 6 dB reduction.
 
-### 7.3 Idle animation
+### 7.3 Transfer-function preview
+
+The preview plots normalized input voltage on X and the active character's
+processed output on Y. Both axes span +/-6.25 V, with zero at the center and
+small ticks at +/-5 V. The curve is sampled directly from
+`Engine::processCharacter`, so the display follows the same saturation law as
+the audio path.
+
+Behind the curve, full-height center-out fills show the most recent positive
+and negative stereo-linked input excursions. These use the separate 5 ms
+attack / 120 ms release followers rather than waveform history, keeping the
+display readable as an input-range indicator.
+
+Cache the opaque grid and transfer-curve layers. Rebuild the curve only when
+its size, character, amount, or a character-relevant dynamics value changes;
+draw only the inexpensive activity fill and boundaries each frame.
+
+### 7.4 Idle animation
 
 Blinking, glances, and micro-breathing are cosmetic widget-local animation.
 They:

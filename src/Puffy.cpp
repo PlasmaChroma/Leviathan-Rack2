@@ -44,6 +44,10 @@ void Puffy::publishVisualState(const puffy::Frame& frame) {
 	visualSequence.fetch_add(1u, std::memory_order_acq_rel);
 	visualEffectiveAmount.store(frame.effectiveAmount, std::memory_order_relaxed);
 	visualInputActivity.store(frame.inputActivity, std::memory_order_relaxed);
+	visualPositiveInputActivity.store(
+		frame.positiveInputActivity, std::memory_order_relaxed);
+	visualNegativeInputActivity.store(
+		frame.negativeInputActivity, std::memory_order_relaxed);
 	visualTransientActivity.store(frame.transientActivity, std::memory_order_relaxed);
 	visualGainReduction.store(gainReduction, std::memory_order_relaxed);
 	visualCharacter.store(frame.character, std::memory_order_relaxed);
@@ -66,6 +70,10 @@ bool Puffy::readVisualState(PuffyVisualState* state) const {
 			visualEffectiveAmount.load(std::memory_order_relaxed);
 		snapshot.inputActivity =
 			visualInputActivity.load(std::memory_order_relaxed);
+		snapshot.positiveInputActivity =
+			visualPositiveInputActivity.load(std::memory_order_relaxed);
+		snapshot.negativeInputActivity =
+			visualNegativeInputActivity.load(std::memory_order_relaxed);
 		snapshot.transientActivity =
 			visualTransientActivity.load(std::memory_order_relaxed);
 		snapshot.gainReduction =

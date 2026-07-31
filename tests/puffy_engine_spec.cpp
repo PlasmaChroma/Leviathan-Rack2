@@ -359,6 +359,22 @@ Result nonlinearGrowth() {
 	};
 }
 
+Result bipolarInputActivityTracksStereoExcursions() {
+	puffy::Engine engine;
+	engine.setSampleRate(48000.f);
+	puffy::Frame frame;
+	for (int i = 0; i < 48000; ++i) {
+		frame = engine.process(2.5f, -4.f, 0.f, 0, false, 0.f);
+	}
+	return {
+		"Preview activity independently tracks positive and negative stereo excursions",
+		near(frame.positiveInputActivity, 0.5f, 2e-3f)
+			&& near(frame.negativeInputActivity, 0.8f, 2e-3f),
+		"positive=" + std::to_string(frame.positiveInputActivity)
+			+ " negative=" + std::to_string(frame.negativeInputActivity)
+	};
+}
+
 Result realtimePathDoesNotAllocate() {
 	puffy::Engine engine;
 	engine.setSampleRate(192000.f);
@@ -398,6 +414,7 @@ int main() {
 		recoveryAndSilence(),
 		characterTransitionsAreTransparentAndRetargetable(),
 		nonlinearGrowth(),
+		bipolarInputActivityTracksStereoExcursions(),
 		realtimePathDoesNotAllocate()
 	};
 	int failures = 0;

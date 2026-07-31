@@ -207,6 +207,13 @@
        width="5968.4448"
        height="5409.4658"
        style="fill:#425f34;fill-opacity:1;stroke-width:1.12704" />
+    <rect
+       id="transfer_preview_rect"
+       x="450"
+       y="6700"
+       width="5196"
+       height="1050"
+       style="fill:#425f34;fill-opacity:1;stroke-width:1.12704" />
     <circle
        id="character_param"
        cx="3113.6169"

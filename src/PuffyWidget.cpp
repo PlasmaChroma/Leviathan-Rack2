@@ -2,7 +2,9 @@
 
 #include "PanelSvgUtils.hpp"
 #include "PuffyFishWidget.hpp"
+#include "PuffyTransferPreviewWidget.hpp"
 #include "visual/ApertureLight.hpp"
+#include "visual/PreviewSurface.hpp"
 #include "visual/VisualAssets.hpp"
 
 namespace {
@@ -148,6 +150,30 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	fish->box.pos = mm2px(fishRectMm.pos);
 	fish->box.size = mm2px(fishRectMm.size);
 	addChild(fish);
+
+	math::Rect transferPreviewRectMm;
+	if (!panel_svg::loadRectFromSvgMm(
+		panelPath, "transfer_preview_rect", &transferPreviewRectMm)) {
+		transferPreviewRectMm.pos = Vec(4.5f, 67.f);
+		transferPreviewRectMm.size = Vec(51.96f, 10.5f);
+	}
+	addChild(visual_assets::createPreviewFrameEnhancementWidget(
+		transferPreviewRectMm, nvgRGBA(255, 190, 80, 118)));
+	const float previewInsetMm = 0.2f;
+	transferPreviewRectMm.pos = transferPreviewRectMm.pos.plus(
+		Vec(previewInsetMm));
+	transferPreviewRectMm.size = transferPreviewRectMm.size.minus(
+		Vec(2.f * previewInsetMm));
+	const Vec transferPreviewPos = mm2px(transferPreviewRectMm.pos);
+	const Vec transferPreviewSize = mm2px(transferPreviewRectMm.size);
+	auto* transferSurface = preview_surface::createCachedOpaqueGrid(
+		transferPreviewSize);
+	transferSurface->box.pos = transferPreviewPos;
+	addChild(transferSurface);
+	auto* transferPreview = new PuffyTransferPreviewWidget(module);
+	transferPreview->box.pos = transferPreviewPos;
+	transferPreview->box.size = transferPreviewSize;
+	addChild(transferPreview);
 
 	auto* characterButton = createParamCentered<SmallGoldButton>(
 		anchor("character_param", Vec(30.48f, 14.f)),
