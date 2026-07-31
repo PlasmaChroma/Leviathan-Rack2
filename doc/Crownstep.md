@@ -140,6 +140,7 @@ Let’s crystallize this into a **Codex-ready implementation spec**—tight, bui
 
 * 1V/oct
 * Quantized to selected scale
+* New modules default to bipolar output over a 24-semitone span (-12 to +12 semitones before root and transpose offsets)
 
 ### 6.2 GATE OUT
 

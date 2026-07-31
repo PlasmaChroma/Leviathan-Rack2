@@ -201,6 +201,19 @@ TestResult testCrownstepStateJsonRoundTrip() {
             " historyOk=" + std::to_string(historyOk ? 1 : 0)};
 }
 
+TestResult testNewModulePitchDefaults() {
+	Crownstep module;
+	const float span = crownstep::pitchRangeSemitoneSpan(
+		module.params[Crownstep::RANGE_PARAM].getValue(), module.boardCellCount());
+	const bool pass = module.pitchBipolarEnabled && nearlyEqual(span, 24.f, 1e-5f);
+	return {
+		"New Crownstep modules default to bipolar 24-semitone pitch",
+		pass,
+		"bipolar=" + std::to_string(module.pitchBipolarEnabled ? 1 : 0)
+			+ " span=" + std::to_string(span)
+	};
+}
+
 TestResult testDiagonalLayoutModesAreDistinct() {
   bool pass = true;
   std::string detail;
@@ -341,6 +354,7 @@ TestResult testPlaybackSnapshotDoesNotWaitForSequenceMutex() {
 int main() {
   std::vector<TestResult> tests;
   tests.push_back(testCrownstepStateJsonRoundTrip());
+  tests.push_back(testNewModulePitchDefaults());
   tests.push_back(testRootCvUsesOneVoltPerOctaveSemitoneQuantization());
   tests.push_back(testDiagonalLayoutModesAreDistinct());
   tests.push_back(testPlaybackSnapshotDoesNotWaitForSequenceMutex());

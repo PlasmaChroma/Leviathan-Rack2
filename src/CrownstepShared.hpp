@@ -181,7 +181,7 @@ struct Crownstep : Module {
 	uint64_t lastAiSearchLegalMoveGenerations = 0;
 	uint64_t lastAiSearchCutoffs = 0;
 	bool quantizationEnabled = true;
-	bool pitchBipolarEnabled = false;
+	bool pitchBipolarEnabled = true;
 	bool melodicBiasEnabled = false;
 	int pitchInterpretationMode = 0;
 	int boardValueLayoutMode = 0;
