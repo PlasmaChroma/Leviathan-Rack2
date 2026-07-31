@@ -192,6 +192,9 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	addParam(createParamCentered<Eclipse2Knob>(
 		anchor("deflate_param", Vec(44.f, 83.5f)),
 		module, Puffy::DEFLATE_PARAM));
+	addParam(createParamCentered<Eclipse2Knob>(
+		anchor("mix_param", Vec(51.96f, 97.5f)),
+		module, Puffy::MIX_PARAM));
 	auto* puffCvAmountKnob = createParamCentered<Eclipse2Knob>(
 		anchor("puff_cv_amount_param", Vec(30.48f, 96.f)),
 		module, Puffy::PUFF_CV_AMOUNT_PARAM);

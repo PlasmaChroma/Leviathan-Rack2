@@ -28,6 +28,7 @@ struct Frame {
 	float left = 0.f;
 	float right = 0.f;
 	float effectiveAmount = 0.f;
+	float wetMix = 1.f;
 	float inputActivity = 0.f;
 	float positiveInputActivity = 0.f;
 	float negativeInputActivity = 0.f;
@@ -48,7 +49,8 @@ public:
 		float amountTarget,
 		int character,
 		bool autoDeflate,
-		float manualDeflate);
+		float manualDeflate,
+		float wetTarget = 1.f);
 
 	float getSampleRate() const {
 		return sampleRate;
@@ -91,6 +93,7 @@ private:
 
 	float sampleRate = 48000.f;
 	float amount = 0.f;
+	float wetMix = 1.f;
 	float amountCoefficient = 1.f;
 	float autoDeflateCoefficient = 1.f;
 	float autoDeflateMix = 1.f;
@@ -141,6 +144,7 @@ private:
 		float* oversampledLeft,
 		float* oversampledRight,
 		float autoDeflateAmount,
+		float wetAmount,
 		bool left);
 };
 

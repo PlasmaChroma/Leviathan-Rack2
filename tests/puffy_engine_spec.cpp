@@ -166,7 +166,7 @@ Result frenzySinusoidalFold() {
 	return {
 		"FRENZY adds contracted sinusoidal-fold lobes as PUFF rises",
 		lowPuff.first >= 4 && highPuff.first >= lowPuff.first + 2
-			&& highPuff.second < 0.54f
+			&& highPuff.second > 0.65f && highPuff.second < 0.68f
 			&& near(idleZero, 0.f, 1e-7f)
 			&& near(activeZero, 0.f, 1e-7f)
 			&& std::fabs(activePositive + activeNegative) > 0.05f,
@@ -242,7 +242,8 @@ ToneStats renderTone(
 	int character,
 	bool autoDeflate,
 	float manualDeflate,
-	bool identicalStereo = true) {
+	bool identicalStereo = true,
+	float wetMix = 1.f) {
 	const float sampleRate = engine.getSampleRate();
 	const int samples = int(seconds * sampleRate);
 	const int skip = int(0.1f * sampleRate);
@@ -252,7 +253,7 @@ ToneStats renderTone(
 		const float left = amplitude * std::sin(phase);
 		const float right = identicalStereo ? left : amplitude * 0.5f * std::cos(phase);
 		const puffy::Frame frame = engine.process(
-			left, right, amount, character, autoDeflate, manualDeflate);
+			left, right, amount, character, autoDeflate, manualDeflate, wetMix);
 		stats.finite = stats.finite && std::isfinite(frame.left)
 			&& std::isfinite(frame.right);
 		stats.peakLeft = std::max(stats.peakLeft, std::fabs(frame.left));
@@ -322,6 +323,29 @@ Result manualDeflateIsExact() {
 		near(ratio, expected, 2e-5f),
 		"ratio=" + std::to_string(ratio)
 			+ " expected=" + std::to_string(expected)
+	};
+}
+
+Result wetDryMixEndpoints() {
+	puffy::Engine dry;
+	puffy::Engine wet;
+	dry.setSampleRate(48000.f);
+	wet.setSampleRate(48000.f);
+	const ToneStats dryStats = renderTone(
+		dry, 0.5f, 1.f, 431.f, 1.f, int(puffy::Character::Frenzy),
+		true, 0.f, true, 0.f);
+	const ToneStats wetStats = renderTone(
+		wet, 0.5f, 1.f, 431.f, 1.f, int(puffy::Character::Frenzy),
+		true, 0.f, true, 1.f);
+	const float dryRatio = float(std::sqrt(dryStats.outputSq / dryStats.inputSq));
+	const float wetRatio = float(std::sqrt(wetStats.outputSq / wetStats.inputSq));
+	const float dryDb = 20.f * std::log10(std::max(dryRatio, 1e-9f));
+	return {
+		"MIX endpoints retain latency-matched dry and fully processed wet signals",
+		dryStats.finite && wetStats.finite && std::fabs(dryDb) <= 0.05f
+			&& std::fabs(wetRatio - dryRatio) > 0.05f,
+		"dryDb=" + std::to_string(dryDb)
+			+ " wetRatio=" + std::to_string(wetRatio)
 	};
 }
 
@@ -493,6 +517,7 @@ int main() {
 		unityAndStereo(),
 		linkedLimiter(),
 		manualDeflateIsExact(),
+		wetDryMixEndpoints(),
 		recoveryAndSilence(),
 		characterTransitionsAreTransparentAndRetargetable(),
 		nonlinearGrowth(),

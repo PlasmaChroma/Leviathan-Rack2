@@ -152,6 +152,7 @@ void Engine::reset() {
 	secondaryPath.dcRight.coefficient = dcCoefficient;
 	resetSharedControlState();
 	amount = 0.f;
+	wetMix = 1.f;
 	autoDeflateMix = 1.f;
 	autoDeflateStateInitialized = false;
 	cachedManualDeflate = -1.f;
@@ -241,7 +242,7 @@ Engine::CharacterCoefficients Engine::prepareCharacter(
 			// cycles while contracting their vertical span. Dynamics bends the
 			// phase asymmetrically without moving the origin or end anchors.
 			coefficients.foldCycles = 1.f + 3.f * a;
-			coefficients.foldGain = 1.f / (1.f + 0.9f * a);
+			coefficients.foldGain = 1.f / (1.f + 0.5f * a);
 			coefficients.phaseSkew =
 				0.12f + 0.18f * fastControl + 0.12f * transient;
 			break;
@@ -328,12 +329,14 @@ float Engine::processPath(
 	float* oversampledLeft,
 	float* oversampledRight,
 	float autoDeflateAmount,
+	float wetAmount,
 	bool left) {
 	std::array<float, kOversampleFactor> shaped {};
 	float* input = left ? oversampledLeft : oversampledRight;
 	for (int i = 0; i < kOversampleFactor; ++i) {
+		const float wet = applyCharacter(input[i], coefficients);
 		shaped[static_cast<std::size_t>(i)] =
-			applyCharacter(input[i], coefficients);
+			input[i] + (wet - input[i]) * wetAmount;
 	}
 	float output = left
 		? path.decimatorLeft.process(shaped.data())
@@ -341,7 +344,8 @@ float Engine::processPath(
 	output = left ? path.dcLeft.process(output) : path.dcRight.process(output);
 	const float compensationGain = updateAutoGain(
 		coefficients.character, coefficients.amount);
-	output *= 1.f + (compensationGain - 1.f) * clamp01(autoDeflateAmount);
+	output *= 1.f + (compensationGain - 1.f)
+		* clamp01(autoDeflateAmount) * wetAmount;
 	return output;
 }
 
@@ -351,7 +355,8 @@ Frame Engine::process(
 	float amountTarget,
 	int character,
 	bool autoDeflate,
-	float manualDeflate) {
+	float manualDeflate,
+	float wetTarget) {
 	const bool invalidLeft = !std::isfinite(inputLeft);
 	const bool invalidRight = !std::isfinite(inputRight);
 	if (invalidLeft) {
@@ -402,6 +407,8 @@ Frame Engine::process(
 
 	const float safeTarget = std::isfinite(amountTarget) ? clamp01(amountTarget) : 0.f;
 	amount += (safeTarget - amount) * amountCoefficient;
+	const float safeWetTarget = std::isfinite(wetTarget) ? clamp01(wetTarget) : 1.f;
+	wetMix += (safeWetTarget - wetMix) * amountCoefficient;
 	const float autoDeflateTarget = autoDeflate ? 1.f : 0.f;
 	if (!autoDeflateStateInitialized) {
 		autoDeflateMix = autoDeflateTarget;
@@ -428,16 +435,16 @@ Frame Engine::process(
 			prepareCharacter(transitionTo, amount, dynamics);
 		const float oldLeft = processPath(
 			primaryPath, oldCoefficients, oversampledLeft.data(),
-			oversampledRight.data(), autoDeflateMix, true);
+			oversampledRight.data(), autoDeflateMix, wetMix, true);
 		const float oldRight = processPath(
 			primaryPath, oldCoefficients, oversampledLeft.data(),
-			oversampledRight.data(), autoDeflateMix, false);
+			oversampledRight.data(), autoDeflateMix, wetMix, false);
 		const float newLeft = processPath(
 			secondaryPath, newCoefficients, oversampledLeft.data(),
-			oversampledRight.data(), autoDeflateMix, true);
+			oversampledRight.data(), autoDeflateMix, wetMix, true);
 		const float newRight = processPath(
 			secondaryPath, newCoefficients, oversampledLeft.data(),
-			oversampledRight.data(), autoDeflateMix, false);
+			oversampledRight.data(), autoDeflateMix, wetMix, false);
 		const float t = clamp01(
 			float(transitionSample) / float(std::max(transitionLength - 1, 1)));
 		const float oldGain = 1.f - t;
@@ -461,10 +468,10 @@ Frame Engine::process(
 			prepareCharacter(currentCharacter, amount, dynamics);
 		normalizedLeft = processPath(
 			primaryPath, coefficients, oversampledLeft.data(),
-			oversampledRight.data(), autoDeflateMix, true);
+			oversampledRight.data(), autoDeflateMix, wetMix, true);
 		normalizedRight = processPath(
 			primaryPath, coefficients, oversampledLeft.data(),
-			oversampledRight.data(), autoDeflateMix, false);
+			oversampledRight.data(), autoDeflateMix, wetMix, false);
 	}
 
 	float outputLeft = normalizedLeft * kReferenceVolts;
@@ -499,6 +506,7 @@ Frame Engine::process(
 	frame.left = outputLeft;
 	frame.right = outputRight;
 	frame.effectiveAmount = amount;
+	frame.wetMix = wetMix;
 	frame.inputActivity = clamp01(inputActivity);
 	frame.positiveInputActivity =
 		std::max(0.f, std::min(positiveInputActivity, 1.25f));

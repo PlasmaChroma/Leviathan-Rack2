@@ -22,7 +22,7 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      inkscape:zoom="2.4193418"
-     inkscape:cx="35.34019"
+     inkscape:cx="35.546858"
      inkscape:cy="292.64158"
      inkscape:window-width="1920"
      inkscape:window-height="1043"
@@ -133,13 +133,21 @@
      fill="#ffe7a5"
      id="text13">PUFF</text>
   <text
-     x="5193.3511"
+     x="3761.3511"
      y="10273.795"
      text-anchor="middle"
      font-family="'DejaVu Sans', sans-serif"
      font-size="155px"
      fill="#ffe7a5"
      id="text14">DEFLATE</text>
+  <text
+     x="5196"
+     y="10273.795"
+     text-anchor="middle"
+     font-family="'DejaVu Sans', sans-serif"
+     font-size="155px"
+     fill="#ffe7a5"
+     id="mix_label">MIX</text>
   <text
      x="2654.2979"
      y="9176.7139"
@@ -208,13 +216,13 @@
        style="fill:#425f34;fill-opacity:1;stroke-width:1.31808" />
     <circle
        id="character_param"
-       cx="1637.234"
+       cx="900"
        cy="9962.7402"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="character_readout"
-       cx="3179.2344"
+       cx="2332"
        cy="9962.7402"
        r="150"
        style="fill:#425f34;fill-opacity:1;stroke-width:15" />
@@ -226,7 +234,13 @@
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="deflate_param"
-       cx="5193.3511"
+       cx="3761.3511"
+       cy="9752.8252"
+       r="200"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="mix_param"
+       cx="5196"
        cy="9752.8252"
        r="200"
        style="fill:#425f34;fill-opacity:1" />

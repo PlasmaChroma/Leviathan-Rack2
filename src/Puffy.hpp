@@ -9,6 +9,7 @@
 
 struct PuffyVisualState {
 	float effectiveAmount = 0.f;
+	float wetMix = 1.f;
 	float inputActivity = 0.f;
 	float positiveInputActivity = 0.f;
 	float negativeInputActivity = 0.f;
@@ -23,6 +24,7 @@ struct Puffy final : Module {
 		PUFF_PARAM,
 		DEFLATE_PARAM,
 		PUFF_CV_AMOUNT_PARAM,
+		MIX_PARAM,
 		PARAMS_LEN
 	};
 
@@ -49,6 +51,7 @@ struct Puffy final : Module {
 	std::atomic<bool> autoDeflateEnabled {true};
 	std::atomic<std::uint32_t> visualSequence {0u};
 	std::atomic<float> visualEffectiveAmount {0.f};
+	std::atomic<float> visualWetMix {1.f};
 	std::atomic<float> visualInputActivity {0.f};
 	std::atomic<float> visualPositiveInputActivity {0.f};
 	std::atomic<float> visualNegativeInputActivity {0.f};

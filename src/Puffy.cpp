@@ -20,6 +20,7 @@ Puffy::Puffy() {
 	configParam(
 		PUFF_CV_AMOUNT_PARAM, -1.f, 1.f, 0.f,
 		"Puff CV amount", "%", 0.f, 100.f);
+	configParam(MIX_PARAM, 0.f, 1.f, 1.f, "Mix", "%", 0.f, 100.f);
 
 	configInput(INPUT_L, "Left audio");
 	configInput(INPUT_R, "Right audio");
@@ -43,6 +44,7 @@ void Puffy::publishVisualState(const puffy::Frame& frame) {
 			1.f));
 	visualSequence.fetch_add(1u, std::memory_order_acq_rel);
 	visualEffectiveAmount.store(frame.effectiveAmount, std::memory_order_relaxed);
+	visualWetMix.store(frame.wetMix, std::memory_order_relaxed);
 	visualInputActivity.store(frame.inputActivity, std::memory_order_relaxed);
 	visualPositiveInputActivity.store(
 		frame.positiveInputActivity, std::memory_order_relaxed);
@@ -68,6 +70,7 @@ bool Puffy::readVisualState(PuffyVisualState* state) const {
 		PuffyVisualState snapshot;
 		snapshot.effectiveAmount =
 			visualEffectiveAmount.load(std::memory_order_relaxed);
+		snapshot.wetMix = visualWetMix.load(std::memory_order_relaxed);
 		snapshot.inputActivity =
 			visualInputActivity.load(std::memory_order_relaxed);
 		snapshot.positiveInputActivity =
@@ -125,7 +128,8 @@ void Puffy::process(const ProcessArgs& args) {
 		amountTarget,
 		character,
 		autoDeflateEnabled.load(std::memory_order_relaxed),
-		params[DEFLATE_PARAM].getValue());
+		params[DEFLATE_PARAM].getValue(),
+		params[MIX_PARAM].getValue());
 
 	outputs[OUTPUT_L].setChannels(1);
 	outputs[OUTPUT_R].setChannels(1);

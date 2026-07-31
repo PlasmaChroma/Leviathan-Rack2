@@ -29,6 +29,7 @@ The front panel stays deliberately small:
 - four original Leviathan character modes;
 - one primary `PUFF` control;
 - one `DEFLATE` output attenuation control;
+- one `MIX` wet/dry control;
 - one `PUFF CV` input and attenuverter;
 - stereo input and output.
 
@@ -46,6 +47,7 @@ At the end of v1, a user can:
 - select a warm, aggressive, or input-reactive character;
 - modulate `PUFF` over its complete range with 0-10 V CV;
 - reduce the processed output by up to 12 dB with post-limiter `DEFLATE` output trim;
+- blend continuously between latency-matched dry and fully processed audio;
 - choose low-latency sample-peak safety or a 2 ms true-peak mastering limiter;
 - compare characters without large accidental loudness jumps when Auto Deflate
   is enabled;
@@ -55,7 +57,7 @@ At the end of v1, a user can:
 ### 1.2 Explicit non-goals
 
 V1 does not include compression, multiband processing, loudness targeting,
-side-chain input, wet/dry mix, attack/release controls, user transfer curves,
+side-chain input, attack/release controls, user transfer curves,
 polyphonic voices, OpenGL, a 3D model, or a claim of bit-identical true-peak
 compliance with a particular commercial meter.
 
@@ -116,6 +118,7 @@ character_param
 puff_param
 deflate_param
 puff_cv_amount_param
+mix_param
 
 input_l
 input_r
@@ -139,6 +142,7 @@ screw_br
 | `PUFF` | large knob | 0..1, default 0.25 | Base saturation amount |
 | `DEFLATE` | knob | 0..1, default 0 | 0 to 12 dB of post-effect attenuation |
 | `PUFF CV` | attenuverter | -1..1, default 0 | Depth and polarity of amount CV |
+| `MIX` | knob | 0..1, default 1 | Latency-matched dry to fully processed wet blend |
 
 The effective amount is:
 
@@ -158,6 +162,12 @@ manualDeflateDb = -12 dB * DEFLATE
 ```
 
 It is a post-limiter output volume trim of 0 to -12 dB, not a limiter threshold and not a makeup-gain control. Placing it after the limiter guarantees a literal output level trim without altering limiter threshold, gain reduction, or visual metering response. Puffy never adds post-saturation gain through this control.
+
+`MIX` blends the oversampled dry and selected-character signals before the DC
+blocker, Auto Deflate, and linked limiter. Auto Deflate compensation scales with
+the wet proportion. At 0%, the latency-matched dry signal still passes through
+Puffy's safety limiter and final `DEFLATE` trim; at 100%, the character path is
+fully wet.
 
 ### 3.4 Ports and normalization
 
@@ -194,6 +204,7 @@ enum ParamId {
     PUFF_PARAM,
     DEFLATE_PARAM,
     PUFF_CV_AMOUNT_PARAM,
+    MIX_PARAM,
     PARAMS_LEN
 };
 
@@ -239,6 +250,7 @@ input safety
 -> amount smoothing
 -> oversample
 -> selected character
+-> MIX (latency-matched oversampled dry/wet blend)
 -> decimate
 -> 5 Hz DC blocker
 -> Auto Deflate (pre-limiter character compensation)
@@ -357,7 +369,7 @@ nominal input domain:
 z = clamp(x, -1, 1)
 z2 = z*z
 foldCycles = 1 + 3*a
-foldGain = 1 / (1 + 0.9*a)
+foldGain = 1 / (1 + 0.5*a)
 phaseSkew = 0.12 + 0.18*fastControl + 0.12*transient
 warped = z + phaseSkew*z2*(1 - z2)
 s = foldGain * sin(pi*foldCycles*warped)
@@ -365,7 +377,7 @@ y = lerp(x, s, a)
 ```
 
 `PUFF` continuously raises the fold from one to four complete cycles while the
-fold gain contracts from 1 to about 0.526, so the curve gains lobes and pulls
+fold gain contracts from 1 to about 0.667, so the curve gains lobes and pulls
 toward its center as inflation rises. The phase-warp term is zero at the origin
 and +/-1 endpoints, preserving those anchors while making the interior lobes
 input-reactive and asymmetrical. The shared detector
