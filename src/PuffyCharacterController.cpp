@@ -43,6 +43,11 @@ void PuffyCharacterController::reset(const PuffyVisualState& visual) {
 	idleTime = 0.f;
 	nextBlinkTime = 3.2f;
 	blinkPhase = -1.f;
+	gazeX = 0.f;
+	gazeTargetX = 0.f;
+	gazeStateTime = 1.2f;
+	gazeGlancing = false;
+	gazeSequence = 0;
 	lastCharacter = visual.character;
 }
 
@@ -102,9 +107,29 @@ bool PuffyCharacterController::update(
 	pose->squashY = -pose->squashX * 0.65f;
 	pose->verticalOffset =
 		std::sin(idleTime * (2.f * kPi / 5.4f)) * 0.008f;
-	pose->gazeX = frenzyBlend
-		* (0.35f + 0.25f * visual.transientActivity);
-	pose->gazeY = -0.08f * spineBlend;
+	// Doom-style gaze: rest near center, snap decisively to one side, hold
+	// briefly, then return. Vary the cadence while alternating directions.
+	gazeStateTime -= dt;
+	if (gazeStateTime <= 0.f) {
+		if (gazeGlancing) {
+			gazeGlancing = false;
+			gazeTargetX = 0.f;
+			gazeStateTime = 2.20f + 0.55f * float(gazeSequence % 4);
+		}
+		else {
+			gazeGlancing = true;
+			const float direction = (gazeSequence & 1) ? 1.f : -1.f;
+			gazeTargetX = direction
+				* (0.60f + 0.06f * float(gazeSequence % 3));
+			gazeStateTime =
+				0.75f + 0.18f * float((gazeSequence + 1) % 3);
+			gazeSequence++;
+		}
+	}
+	gazeX = approach(
+		gazeX, gazeTargetX, gazeGlancing ? 18.f : 11.f, dt);
+	pose->gazeX = gazeX;
+	pose->gazeY = 0.f;
 	pose->leftBlink = blink;
 	pose->rightBlink = blink;
 	pose->mouthSmile = clamp01(0.75f - 0.35f * spineBlend

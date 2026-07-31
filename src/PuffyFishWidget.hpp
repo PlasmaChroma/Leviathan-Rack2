@@ -34,5 +34,6 @@ private:
 		float radius,
 		float gazeX,
 		float gazeY,
-		float blink) const;
+		float blink,
+		NVGcolor eyelidColor) const;
 };

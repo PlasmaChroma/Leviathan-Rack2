@@ -1,95 +1,284 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg xmlns="http://www.w3.org/2000/svg"
-     width="60.96mm" height="128.5mm" viewBox="0 0 6096 12850">
-  <defs>
-    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#24140b"/>
-      <stop offset="0.48" stop-color="#100b13"/>
-      <stop offset="1" stop-color="#050711"/>
+<svg
+   width="60.96mm"
+   height="128.5mm"
+   viewBox="0 0 6096 12850"
+   version="1.1"
+   id="svg21"
+   sodipodi:docname="Puffy.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview21"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="2.4193418"
+     inkscape:cx="35.546859"
+     inkscape:cy="193.64771"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg21" />
+  <defs
+     id="defs8">
+    <linearGradient
+       id="panel"
+       x1="0"
+       y1="0"
+       x2="0"
+       y2="1">
+      <stop
+         offset="0"
+         stop-color="#24140b"
+         id="stop1" />
+      <stop
+         offset="0.48"
+         stop-color="#100b13"
+         id="stop2" />
+      <stop
+         offset="1"
+         stop-color="#050711"
+         id="stop3" />
     </linearGradient>
-    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#fff3b1"/>
-      <stop offset="0.42" stop-color="#ffd44d"/>
-      <stop offset="1" stop-color="#ff9f08"/>
+    <linearGradient
+       id="gold"
+       x1="0"
+       y1="0"
+       x2="1"
+       y2="1">
+      <stop
+         offset="0"
+         stop-color="#fff3b1"
+         id="stop4" />
+      <stop
+         offset="0.42"
+         stop-color="#ffd44d"
+         id="stop5" />
+      <stop
+         offset="1"
+         stop-color="#ff9f08"
+         id="stop6" />
     </linearGradient>
-    <linearGradient id="viewport" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#162339"/>
-      <stop offset="1" stop-color="#060a15"/>
+    <linearGradient
+       id="viewport"
+       x1="0"
+       y1="0"
+       x2="1"
+       y2="1">
+      <stop
+         offset="0"
+         stop-color="#1f192c"
+         id="stop7" />
+      <stop
+         offset="1"
+         stop-color="#0f0d17"
+         id="stop8" />
     </linearGradient>
   </defs>
-
-  <rect width="6096" height="12850" fill="url(#panel)"/>
-  <rect x="95" y="95" width="5906" height="12660" rx="210"
-        fill="none" stroke="#ffe49a" stroke-opacity="0.64" stroke-width="30"/>
-  <rect x="145" y="145" width="5806" height="12560" rx="170"
-        fill="none" stroke="#8c4b16" stroke-opacity="0.75" stroke-width="20"/>
-
-  <text x="3048" y="620" text-anchor="middle"
-        font-family="DejaVu Sans, sans-serif" font-size="420" font-weight="bold"
-        fill="#ffd44d">PUFFY</text>
-  <text x="3048" y="940" text-anchor="middle"
-        font-family="DejaVu Sans, sans-serif" font-size="125"
-        fill="#ffe8a7">STEREO CHARACTER</text>
-
-  <rect x="400" y="2000" width="5296" height="4800" rx="300"
-        fill="url(#viewport)" stroke="#ffd44d" stroke-opacity="0.74"
-        stroke-width="28"/>
-  <rect x="455" y="2055" width="5186" height="4690" rx="255"
-        fill="none" stroke="#ff8a80" stroke-opacity="0.18" stroke-width="18"/>
-  <circle cx="1180" cy="2780" r="10" fill="#ffeaa8" opacity="0.35"/>
-  <circle cx="4900" cy="3180" r="14" fill="#ffeaa8" opacity="0.28"/>
-  <circle cx="5200" cy="5730" r="9" fill="#ffeaa8" opacity="0.24"/>
-
-  <text x="3048" y="1230" text-anchor="middle"
-        font-family="DejaVu Sans, sans-serif" font-size="150"
-        fill="#ffe6a0">CHARACTER</text>
-
-  <path d="M420 7000 H5676" stroke="#9a5b20" stroke-opacity="0.65" stroke-width="22"/>
-  <text x="1800" y="7370" text-anchor="middle"
-        font-family="DejaVu Sans, sans-serif" font-size="155"
-        fill="#ffe7a5">PUFF</text>
-  <text x="4400" y="7370" text-anchor="middle"
-        font-family="DejaVu Sans, sans-serif" font-size="155"
-        fill="#ffe7a5">DEFLATE</text>
-  <text x="3048" y="9180" text-anchor="middle"
-        font-family="DejaVu Sans, sans-serif" font-size="125"
-        fill="#ffd779">PUFF CV AMOUNT</text>
-  <text x="5470" y="7160" text-anchor="middle"
-        font-family="DejaVu Sans, sans-serif" font-size="105"
-        fill="#ff8a80">LIMIT</text>
-
-  <path d="M420 10020 H5676" stroke="#9a5b20" stroke-opacity="0.65" stroke-width="22"/>
-  <text x="4300" y="10290" text-anchor="middle"
-        font-family="DejaVu Sans, sans-serif" font-size="120"
-        fill="#ffdfa0">PUFF CV</text>
-  <text x="900" y="11610" text-anchor="middle"
-        font-family="DejaVu Sans, sans-serif" font-size="120"
-        fill="#ffdfa0">IN L</text>
-  <text x="2332" y="11610" text-anchor="middle"
-        font-family="DejaVu Sans, sans-serif" font-size="120"
-        fill="#ffdfa0">IN R</text>
-  <text x="3764" y="11610" text-anchor="middle"
-        font-family="DejaVu Sans, sans-serif" font-size="120"
-        fill="#ffdfa0">OUT L</text>
-  <text x="5196" y="11610" text-anchor="middle"
-        font-family="DejaVu Sans, sans-serif" font-size="120"
-        fill="#ffdfa0">OUT R</text>
-
-  <g id="components" opacity="0">
-    <rect id="fish_rect" x="400" y="2000" width="5296" height="4800"/>
-
-    <circle id="character_param" cx="3048" cy="1400" r="180"/>
-    <circle id="character_readout" cx="4450" cy="1400" r="10"/>
-    <circle id="puff_param" cx="1800" cy="8350" r="300"/>
-    <circle id="deflate_param" cx="4400" cy="8350" r="200"/>
-    <circle id="puff_cv_amount_param" cx="3048" cy="9600" r="180"/>
-
-    <circle id="input_l" cx="900" cy="12100" r="220"/>
-    <circle id="input_r" cx="2332" cy="12100" r="220"/>
-    <circle id="puff_cv_input" cx="4300" cy="10800" r="220"/>
-    <circle id="output_l" cx="3764" cy="12100" r="220"/>
-    <circle id="output_r" cx="5196" cy="12100" r="220"/>
-
-    <circle id="limit_light" cx="5400" cy="7250" r="100"/>
+  <rect
+     width="6096"
+     height="12850"
+     fill="url(#panel)"
+     id="rect8"
+     style="display:inline;fill:#000000;fill-opacity:1"
+     x="0"
+     y="0" />
+  <text
+     x="3048"
+     y="620"
+     text-anchor="middle"
+     font-family="DejaVu Sans, sans-serif"
+     font-size="420"
+     font-weight="bold"
+     fill="#ffd44d"
+     id="text10">PUFFY</text>
+  <text
+     x="3048"
+     y="940"
+     text-anchor="middle"
+     font-family="DejaVu Sans, sans-serif"
+     font-size="125"
+     fill="#ffe8a7"
+     id="text11">STEREO CHARACTER</text>
+  <rect
+     x="63.777615"
+     y="1551.7778"
+     width="5968.4448"
+     height="5409.4658"
+     rx="338.09161"
+     fill="url(#viewport)"
+     stroke="#ffd44d"
+     stroke-opacity="0.74"
+     stroke-width="31.5555"
+     id="puffy_border"
+     style="display:inline;fill:#1f192c;fill-opacity:1" />
+  <text
+     x="3048"
+     y="1230"
+     text-anchor="middle"
+     font-family="DejaVu Sans, sans-serif"
+     font-size="150"
+     fill="#ffe6a0"
+     id="text12">CHARACTER</text>
+  <text
+     x="1111.0212"
+     y="8584.4219"
+     text-anchor="middle"
+     font-family="'DejaVu Sans', sans-serif"
+     font-size="155px"
+     fill="#ffe7a5"
+     id="text13">PUFF</text>
+  <text
+     x="4050.0425"
+     y="10083.774"
+     text-anchor="middle"
+     font-family="'DejaVu Sans', sans-serif"
+     font-size="155px"
+     fill="#ffe7a5"
+     id="text14">DEFLATE</text>
+  <text
+     x="1090.4255"
+     y="9792.8242"
+     text-anchor="middle"
+     font-family="'DejaVu Sans', sans-serif"
+     font-size="125px"
+     fill="#ffd779"
+     id="text15">PUFF CV AMOUNT</text>
+  <text
+     x="5186.9058"
+     y="10496.556"
+     text-anchor="middle"
+     font-family="'DejaVu Sans', sans-serif"
+     font-size="105px"
+     fill="#ff8a80"
+     id="text16">LIMIT</text>
+  <text
+     x="2342.4255"
+     y="9791.0039"
+     text-anchor="middle"
+     font-family="'DejaVu Sans', sans-serif"
+     font-size="120px"
+     fill="#ffdfa0"
+     id="text17">PUFF CV</text>
+  <text
+     x="900"
+     y="11610"
+     text-anchor="middle"
+     font-family="DejaVu Sans, sans-serif"
+     font-size="120"
+     fill="#ffdfa0"
+     id="text18">IN L</text>
+  <text
+     x="2332"
+     y="11610"
+     text-anchor="middle"
+     font-family="DejaVu Sans, sans-serif"
+     font-size="120"
+     fill="#ffdfa0"
+     id="text19">IN R</text>
+  <text
+     x="3764"
+     y="11610"
+     text-anchor="middle"
+     font-family="DejaVu Sans, sans-serif"
+     font-size="120"
+     fill="#ffdfa0"
+     id="text20">OUT L</text>
+  <text
+     x="5196"
+     y="11610"
+     text-anchor="middle"
+     font-family="DejaVu Sans, sans-serif"
+     font-size="120"
+     fill="#ffdfa0"
+     id="text21">OUT R</text>
+  <g
+     id="components"
+     opacity="0"
+     style="display:none;opacity:1">
+    <rect
+       id="fish_rect"
+       x="63.777615"
+       y="1551.7778"
+       width="5968.4448"
+       height="5409.4658"
+       style="fill:#425f34;fill-opacity:1;stroke-width:1.12704" />
+    <circle
+       id="character_param"
+       cx="3113.6169"
+       cy="7939.8301"
+       r="180"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="character_readout"
+       cx="4655.6172"
+       cy="7939.8301"
+       r="150"
+       style="fill:#425f34;fill-opacity:1;stroke-width:15" />
+    <circle
+       id="puff_param"
+       cx="1111.0212"
+       cy="7934.4253"
+       r="300"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="deflate_param"
+       cx="4050.0425"
+       cy="9432.6807"
+       r="200"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="puff_cv_amount_param"
+       cx="1090.4255"
+       cy="9282.8506"
+       r="180"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="input_l"
+       cx="900"
+       cy="11010"
+       r="220"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="input_r"
+       cx="2332"
+       cy="11010"
+       r="220"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="puff_cv_input"
+       cx="2342.4255"
+       cy="9282.8506"
+       r="220"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="output_l"
+       cx="3764"
+       cy="11010"
+       r="220"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="output_r"
+       cx="5196"
+       cy="11010"
+       r="220"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="limit_light"
+       cx="5192.2124"
+       cy="10246.511"
+       r="100"
+       style="fill:#425f34;fill-opacity:1" />
   </g>
 </svg>

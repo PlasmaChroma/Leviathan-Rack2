@@ -18,6 +18,11 @@ private:
 	float idleTime = 0.f;
 	float nextBlinkTime = 3.2f;
 	float blinkPhase = -1.f;
+	float gazeX = 0.f;
+	float gazeTargetX = 0.f;
+	float gazeStateTime = 1.2f;
+	bool gazeGlancing = false;
+	int gazeSequence = 0;
 	int lastCharacter = 0;
 
 	static float approach(float current, float target, float rate, float dt);

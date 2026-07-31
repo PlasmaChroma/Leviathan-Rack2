@@ -49,6 +49,27 @@ void PuffyFishWidget::drawFin(
 	bool left,
 	float angle,
 	float sizeScale) const {
+	if (!vg || !APP || !APP->window || bodyRadius <= 0.f) {
+		return;
+	}
+	const std::string fullPath =
+		asset::plugin(pluginInstance, "res/icon/Puffy_Fin_NS.png");
+	std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
+	if (!image || image->handle < 0) {
+		return;
+	}
+	int imageHandle =
+		visual_assets::loadRasterMipmapHandle(vg, image, fullPath);
+	if (imageHandle < 0) {
+		imageHandle = image->handle;
+	}
+	int imageWidth = 0;
+	int imageHeight = 0;
+	nvgImageSize(vg, imageHandle, &imageWidth, &imageHeight);
+	if (imageWidth <= 0 || imageHeight <= 0) {
+		return;
+	}
+
 	nvgSave(vg);
 	const float side = left ? -1.f : 1.f;
 	const Vec root(
@@ -56,45 +77,20 @@ void PuffyFishWidget::drawFin(
 		center.y - bodyRadius * 0.03f);
 	nvgTranslate(vg, root.x, root.y);
 	nvgRotate(vg, angle);
+	// The source points right. Mirror its local X axis for the left fin.
 	nvgScale(vg, side, 1.f);
 	const float clampedSizeScale = clamp(sizeScale, 0.75f, 1.f);
-	const float length = bodyRadius * 0.68f * clampedSizeScale;
-	const float height = bodyRadius * 0.52f * clampedSizeScale;
+	const float drawWidth = bodyRadius * 0.78f * clampedSizeScale;
+	const float drawHeight =
+		drawWidth * float(imageHeight) / float(imageWidth);
+	const float x = 0.f;
+	const float y = -0.5f * drawHeight;
+	const NVGpaint paint = nvgImagePattern(
+		vg, x, y, drawWidth, drawHeight, 0.f, imageHandle, 1.f);
 	nvgBeginPath(vg);
-	nvgMoveTo(vg, 0.f, -height * 0.18f);
-	nvgBezierTo(
-		vg, length * 0.24f, -height * 0.42f,
-		length * 0.62f, -height * 0.66f,
-		length * 0.82f, -height * 0.58f);
-	nvgBezierTo(
-		vg, length * 1.16f, -height * 0.48f,
-		length * 1.16f, height * 0.48f,
-		length * 0.82f, height * 0.58f);
-	nvgBezierTo(
-		vg, length * 0.62f, height * 0.66f,
-		length * 0.24f, height * 0.42f,
-		0.f, height * 0.18f);
-	nvgClosePath(vg);
-	const NVGpaint fill = nvgLinearGradient(
-		vg, 0.f, -height, length, height,
-		nvgRGB(255, 224, 99), nvgRGB(255, 166, 8));
-	nvgFillPaint(vg, fill);
+	nvgRect(vg, x, y, drawWidth, drawHeight);
+	nvgFillPaint(vg, paint);
 	nvgFill(vg);
-	nvgStrokeColor(vg, nvgRGBA(148, 85, 4, 190));
-	nvgStrokeWidth(vg, 0.8f);
-	nvgStroke(vg);
-	for (int i = -2; i <= 2; ++i) {
-		const float targetY = height * 0.22f * float(i);
-		nvgBeginPath(vg);
-		nvgMoveTo(vg, length * 0.06f, height * 0.025f * float(i));
-		nvgBezierTo(
-			vg, length * 0.34f, targetY * 0.42f,
-			length * 0.66f, targetY * 0.82f,
-			length * 0.98f, targetY);
-		nvgStrokeColor(vg, nvgRGBA(196, 116, 3, 150));
-		nvgStrokeWidth(vg, 0.65f);
-		nvgStroke(vg);
-	}
 	nvgRestore(vg);
 }
 
@@ -146,15 +142,14 @@ void PuffyFishWidget::drawEye(
 	float radius,
 	float gazeX,
 	float gazeY,
-	float blink) const {
-	const float open = std::max(0.04f, 1.f - clamp01(blink));
-	nvgSave(vg);
-	nvgTranslate(vg, center.x, center.y);
-	nvgScale(vg, 0.86f, open);
+	float blink,
+	NVGcolor eyelidColor) const {
+	const float closed = clamp01(blink);
+	const float radiusX = radius * 0.86f;
 	nvgBeginPath(vg);
-	nvgCircle(vg, 0.f, 0.f, radius);
+	nvgEllipse(vg, center.x, center.y, radiusX, radius);
 	const NVGpaint white = nvgRadialGradient(
-		vg, -radius * 0.28f, -radius * 0.34f,
+		vg, center.x - radius * 0.28f, center.y - radius * 0.34f,
 		radius * 0.08f, radius,
 		nvgRGB(255, 255, 239), nvgRGB(255, 226, 147));
 	nvgFillPaint(vg, white);
@@ -162,39 +157,78 @@ void PuffyFishWidget::drawEye(
 	nvgStrokeColor(vg, nvgRGBA(121, 73, 8, 210));
 	nvgStrokeWidth(vg, 0.8f);
 	nvgStroke(vg);
-	nvgRestore(vg);
 
-	if (open > 0.18f) {
-		const Vec pupil(
-			center.x + clamp(gazeX, -1.f, 1.f) * radius * 0.23f,
-			center.y + clamp(gazeY, -1.f, 1.f) * radius * 0.18f);
+	const Vec pupil(
+		center.x + clamp(gazeX, -1.f, 1.f) * radius * 0.23f,
+		center.y + clamp(gazeY, -1.f, 1.f) * radius * 0.18f);
+	nvgBeginPath(vg);
+	nvgCircle(vg, pupil.x, pupil.y, radius * 0.49f);
+	const NVGpaint iris = nvgRadialGradient(
+		vg, pupil.x - radius * 0.12f, pupil.y - radius * 0.15f,
+		radius * 0.06f, radius * 0.50f,
+		nvgRGB(255, 194, 27), nvgRGB(28, 25, 22));
+	nvgFillPaint(vg, iris);
+	nvgFill(vg);
+	nvgBeginPath(vg);
+	nvgCircle(vg, pupil.x, pupil.y, radius * 0.25f);
+	nvgFillColor(vg, nvgRGB(22, 22, 22));
+	nvgFill(vg);
+	nvgBeginPath(vg);
+	nvgCircle(
+		vg, pupil.x - radius * 0.15f, pupil.y - radius * 0.19f,
+		radius * 0.10f);
+	nvgFillColor(vg, nvgRGBA(255, 255, 255, 245));
+	nvgFill(vg);
+
+	if (closed > 0.001f) {
+		const float edgeY = radius * (1.f - closed);
+		const float edgeX = radiusX
+			* std::sqrt(std::max(0.f, 1.f - edgeY * edgeY / (radius * radius)));
+		const float edgeBulge = radius * 0.055f * closed;
+
+		// Upper lid: follow the eye's outer arc, then return along the
+		// descending lid edge.
 		nvgBeginPath(vg);
-		nvgCircle(vg, pupil.x, pupil.y, radius * 0.49f);
-		const NVGpaint iris = nvgRadialGradient(
-			vg, pupil.x - radius * 0.12f, pupil.y - radius * 0.15f,
-			radius * 0.06f, radius * 0.50f,
-			nvgRGB(255, 194, 27), nvgRGB(28, 25, 22));
-		nvgFillPaint(vg, iris);
-		nvgFill(vg);
-		nvgBeginPath(vg);
-		nvgCircle(vg, pupil.x, pupil.y, radius * 0.25f);
-		nvgFillColor(vg, nvgRGB(22, 22, 22));
-		nvgFill(vg);
-		nvgBeginPath(vg);
-		nvgCircle(
-			vg, pupil.x - radius * 0.15f, pupil.y - radius * 0.19f,
-			radius * 0.10f);
-		nvgFillColor(vg, nvgRGBA(255, 255, 255, 245));
-		nvgFill(vg);
-	}
-	if (open < 0.16f) {
-		nvgBeginPath(vg);
-		nvgMoveTo(vg, center.x - radius * 0.72f, center.y);
+		nvgMoveTo(vg, center.x - edgeX, center.y - edgeY);
 		nvgQuadTo(
-			vg, center.x, center.y + radius * 0.22f,
-			center.x + radius * 0.72f, center.y);
-		nvgStrokeColor(vg, nvgRGBA(116, 69, 5, 230));
-		nvgStrokeWidth(vg, 1.1f);
+			vg, center.x, center.y - 2.f * radius + edgeY,
+			center.x + edgeX, center.y - edgeY);
+		nvgQuadTo(
+			vg, center.x, center.y - edgeY + edgeBulge,
+			center.x - edgeX, center.y - edgeY);
+		nvgClosePath(vg);
+		nvgFillColor(vg, eyelidColor);
+		nvgFill(vg);
+
+		// Lower lid mirrors the upper one and meets it at full closure.
+		nvgBeginPath(vg);
+		nvgMoveTo(vg, center.x + edgeX, center.y + edgeY);
+		nvgQuadTo(
+			vg, center.x, center.y + 2.f * radius - edgeY,
+			center.x - edgeX, center.y + edgeY);
+		nvgQuadTo(
+			vg, center.x, center.y + edgeY + edgeBulge,
+			center.x + edgeX, center.y + edgeY);
+		nvgClosePath(vg);
+		nvgFillColor(vg, eyelidColor);
+		nvgFill(vg);
+
+		const NVGcolor creaseColor = nvgRGBA(141, 131, 110, 210);
+		nvgBeginPath(vg);
+		nvgMoveTo(vg, center.x - edgeX, center.y - edgeY);
+		nvgQuadTo(
+			vg, center.x, center.y - edgeY + edgeBulge,
+			center.x + edgeX, center.y - edgeY);
+		nvgStrokeColor(vg, creaseColor);
+		nvgStrokeWidth(vg, 0.7f);
+		nvgStroke(vg);
+		nvgBeginPath(vg);
+		nvgMoveTo(vg, center.x - edgeX, center.y + edgeY);
+		nvgQuadTo(
+			vg, center.x, center.y + edgeY + edgeBulge,
+			center.x + edgeX, center.y + edgeY);
+		nvgStrokeColor(vg, creaseColor);
+		nvgStrokeWidth(vg, 0.7f);
 		nvgStroke(vg);
 	}
 }
@@ -269,12 +303,15 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 	const float eyeRadius = minimum * 0.105f;
 	const float eyeY = center.y - radiusY * 0.23f;
 	const float eyeSpacing = eyeRadius * 0.79f;
+	// Kept explicit so the future body color-filter pass can provide the
+	// filtered body tone to the eyelids.
+	const NVGcolor eyelidColor = nvgRGB(232, 223, 202);
 	drawEye(
 		args.vg, Vec(center.x - eyeSpacing, eyeY), eyeRadius,
-		pose.gazeX, pose.gazeY, pose.leftBlink);
+		pose.gazeX, pose.gazeY, pose.leftBlink, eyelidColor);
 	drawEye(
 		args.vg, Vec(center.x + eyeSpacing, eyeY), eyeRadius,
-		pose.gazeX, pose.gazeY, pose.rightBlink);
+		pose.gazeX, pose.gazeY, pose.rightBlink, eyelidColor);
 
 	const float blush = clamp01(pose.blush);
 	if (blush > 0.001f) {

@@ -7,6 +7,26 @@
 
 namespace {
 
+struct PuffyViewportGradient final : TransparentWidget {
+	void draw(const DrawArgs& args) override {
+		const float inset = mm2px(0.16f);
+		const float width = std::max(0.f, box.size.x - 2.f * inset);
+		const float height = std::max(0.f, box.size.y - 2.f * inset);
+		const float radius = std::max(0.f, mm2px(3.f) - inset);
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, inset, inset, width, height, radius);
+		nvgFillPaint(args.vg, nvgLinearGradient(
+			args.vg,
+			inset,
+			inset,
+			inset + width,
+			inset + height,
+			nvgRGB(31, 25, 44),
+			nvgRGB(15, 13, 23)));
+		nvgFill(args.vg);
+	}
+};
+
 struct PuffyCharacterReadout final : TransparentWidget {
 	static constexpr float FONT_SIZE = 11.5f;
 	Puffy* module = nullptr;
@@ -78,6 +98,15 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 		fishRectMm.pos = Vec(4.f, 20.f);
 		fishRectMm.size = Vec(52.96f, 48.f);
 	}
+	auto* viewportFramebuffer = new widget::FramebufferWidget();
+	viewportFramebuffer->box.pos = mm2px(fishRectMm.pos);
+	viewportFramebuffer->box.size = mm2px(fishRectMm.size);
+	viewportFramebuffer->dirtyOnSubpixelChange = false;
+	auto* viewportGradient = new PuffyViewportGradient();
+	viewportGradient->box.size = viewportFramebuffer->box.size;
+	viewportFramebuffer->addChild(viewportGradient);
+	addChild(viewportFramebuffer);
+
 	auto* fish = new PuffyFishWidget(module);
 	fish->box.pos = mm2px(fishRectMm.pos);
 	fish->box.size = mm2px(fishRectMm.size);
