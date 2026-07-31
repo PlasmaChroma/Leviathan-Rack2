@@ -350,29 +350,33 @@ transient = clamp((fast / max(sqrt(slowSq), 1e-4) - 1) / 2, 0, 1)
 fastControl = clamp(fast, 0, 1)
 ```
 
-For each oversampled channel, calculate dual-branch normalized asymmetry:
+For each oversampled channel, calculate the third- and fifth-order Chebyshev
+polynomials over the bounded nominal input domain:
 
 ```text
-drive = 1 + 6*a^2 * (0.65 + 0.55*fastControl + 0.35*transient)
-bias = 0.12*a * (0.25 + 0.75*fastControl)
-zero = tanhAudio(drive * bias)
+z = clamp(x, -1, 1)
+z2 = z*z
+T3 = z * (4*z2 - 3)
+T5 = z * (16*z2*z2 - 20*z2 + 5)
 
-positiveNorm = max(tanhAudio(drive * (1 + bias)) - zero, 1e-4)
-negativeNorm = max(zero - tanhAudio(drive * (-1 + bias)), 1e-4)
+fifthMix = clamp(0.35 + 0.30*fastControl + 0.20*transient, 0, 1)
+skew = 0.18 + 0.22*fastControl + 0.18*transient
 
-raw = tanhAudio(drive * (x + bias)) - zero
-
-s = (raw >= 0) ? (raw / positiveNorm) : (raw / negativeNorm)
-
-negativeScale = 1 + 0.10 * a * fastControl
-if (s < 0):
-    s = s * negativeScale
+oddPolynomial = lerp(T3, T5, fifthMix)
+anchoredSkew = skew * z2 * (1 - z2)
+s = oddPolynomial + anchoredSkew
 
 s = clamp(s, -1.25, 1.25)
 y = lerp(x, s, a)
 ```
 
-The dual-branch normalization anchors both positive (+1) and negative (-1) excursions smoothly while preserving input-reactive asymmetry without unconstrained negative hard-clipping. The shared detector prevents channel-independent drive motion from pulling the stereo image around. The asymmetry intentionally permits a small DC component; the common post-character DC blocker removes it.
+The static T3/T5 blend gives `FRENZY` several broad lobes even at silence.
+Activity shifts weight toward the fifth-order response, adding two more turning
+points. The even skew term is zero at the origin and +/-1 endpoints, preserving
+those anchors while making the interior lobes asymmetrical. The shared detector
+prevents channel-independent motion from pulling the stereo image around. The
+asymmetry intentionally permits a small DC component; the common post-character
+DC blocker removes it.
 
 ### 5.6 Character D: RIPTIDE
 
@@ -383,7 +387,8 @@ transfer function.
 
 ```text
 drive = 1 + 1.5*a^2
-m = min(abs(drive*x), 1)
+u = abs(drive*x)
+m = min(u, 1)
 
 tent(v) = 1 - abs(2*v - 1)
 level1 = tent(m)
@@ -392,11 +397,22 @@ level3 = tent(level2)
 coastline = 0.52*level1 + 0.30*level2 + 0.18*level3
 
 s = sign(x) * (m + (1 - m)*0.48*coastline)
+
+if u > 1:
+    outerPhase = clamp((u - 1) / 1.5, 0, 1)
+    outer1 = tent(outerPhase)
+    outer2 = tent(outer1)
+    outer3 = tent(outer2)
+    outerCoastline = 0.52*outer1 + 0.30*outer2 + 0.18*outer3
+    s = sign(x) * (1 - 0.42*outerCoastline)
+
 y = lerp(x, s, a)
 ```
 
 The nested corners introduce harmonics at successively finer scales while
-remaining continuous, odd, and bounded to +/-1 at full wet. Oversampling is
+remaining continuous, odd, and bounded to +/-1 at full wet. The outer crest
+replaces the former flat high-level plateau with another self-similar set of
+folds that rejoins full scale at +/-5 V under maximum drive. Oversampling is
 mandatory for this mode.
 
 ### 5.7 DC blocker
@@ -618,15 +634,17 @@ full brightness at 6 dB reduction.
 ### 7.3 Transfer-function preview
 
 The preview plots normalized input voltage on X and the active character's
-processed output on Y. Both axes span +/-6.25 V, with zero at the center and
-small ticks at +/-5 V. The curve is sampled directly from
-`Engine::processCharacter`, so the display follows the same saturation law as
-the audio path.
+processed output on Y. Both axes span +/-5 V, with zero at the center, so the
+standard modular range uses the full display width. The curve is sampled
+directly from `Engine::processCharacter`, so the display follows the same
+saturation law as the audio path.
 
 Behind the curve, full-height center-out fills show the most recent positive
 and negative stereo-linked input excursions. These use the separate 5 ms
 attack / 120 ms release followers rather than waveform history, keeping the
 display readable as an input-range indicator.
+Activity beyond +/-5 V clamps at the corresponding edge and increases a narrow
+edge highlight, using the followers' retained headroom up to +/-6.25 V.
 
 Cache the opaque grid and transfer-curve layers. Rebuild the curve only when
 its size, character, amount, or a character-relevant dynamics value changes;
@@ -751,9 +769,11 @@ behind a generic `High quality` label.
 - Every character is finite and continuous across its piecewise boundaries.
 - `BLOOM` and `SPINE` are odd within floating-point tolerance.
 - `FRENZY` produces zero output for zero input after state settles.
-- `FRENZY` negative excursion bounds and dual-branch normalization pass a test grid across amount (0.25, 0.50, 0.75, 1.00), fast (0.0, 0.5, 1.0), and transient (0.0, 1.0) without unconstrained negative hard-clipping.
-- `RIPTIDE` is odd, continuous, bounded, and retains its pinned multi-scale
-  tent-curve landmarks.
+- `FRENZY` stays bounded and zero-anchored across amount (0.25, 0.50, 0.75,
+  1.00), fast (0.0, 0.5, 1.0), and transient (0.0, 1.0). Its idle curve has
+  at least two slope reversals and its fully active curve has at least four.
+- `RIPTIDE` is odd, continuous, bounded, retains its pinned inner multi-scale
+  tent-curve landmarks, and reaches its pinned outer valley and crest.
 - `DEFLATE` operates as a literal post-limiter output volume trim, reducing output level by the exact linear dB amount both above and below limiter engagement.
 - All characters become audibly and measurably more nonlinear as amount rises.
 - With Auto Deflate enabled, the gated RMS of each character on the shared pink

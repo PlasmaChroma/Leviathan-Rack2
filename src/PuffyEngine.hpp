@@ -65,11 +65,8 @@ private:
 		Character character = Character::Bloom;
 		float amount = 0.f;
 		float drive = 1.f;
-		float bias = 0.f;
-		float zero = 0.f;
-		float positiveNorm = 1.f;
-		float negativeNorm = 1.f;
-		float negativeScale = 1.f;
+		float fifthMix = 0.f;
+		float skew = 0.f;
 		float normalization = 1.f;
 	};
 

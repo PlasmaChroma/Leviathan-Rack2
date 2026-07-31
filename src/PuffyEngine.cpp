@@ -51,14 +51,28 @@ float fractalShape(float input) {
 	// A finite self-similar tent construction: each level adds corners at
 	// twice the previous spatial frequency. This follows Roar Fractal's
 	// published high-harmonic intent without copying a proprietary curve.
-	const float magnitude = std::min(std::fabs(input), 1.f);
-	const float level1 = tent(magnitude);
+	const float magnitude = std::fabs(input);
+	const float innerMagnitude = std::min(magnitude, 1.f);
+	const float level1 = tent(innerMagnitude);
 	const float level2 = tent(level1);
 	const float level3 = tent(level2);
 	const float coastline =
 		0.52f * level1 + 0.30f * level2 + 0.18f * level3;
-	const float shaped =
-		magnitude + (1.f - magnitude) * 0.48f * coastline;
+	float shaped = innerMagnitude
+		+ (1.f - innerMagnitude) * 0.48f * coastline;
+
+	// At full Puff the driven +/-5 V range extends from magnitude 1 to 2.5.
+	// Use that former plateau for another finite self-similar crest. It joins
+	// the inner curve at 1, returns to 1 at the outer edge, and stays bounded.
+	if (magnitude > 1.f) {
+		const float outerPhase = clamp01((magnitude - 1.f) * (2.f / 3.f));
+		const float outer1 = tent(outerPhase);
+		const float outer2 = tent(outer1);
+		const float outer3 = tent(outer2);
+		const float outerCoastline =
+			0.52f * outer1 + 0.30f * outer2 + 0.18f * outer3;
+		shaped = 1.f - 0.42f * outerCoastline;
+	}
 	return std::copysign(std::min(shaped, 1.f), input);
 }
 
@@ -223,22 +237,12 @@ Engine::CharacterCoefficients Engine::prepareCharacter(
 		case Character::Frenzy: {
 			const float fastControl = clamp01(dynamicsState.fast);
 			const float transient = clamp01(dynamicsState.transient);
-			coefficients.drive = 1.f + 6.f * a * a
-				* (0.65f + 0.55f * fastControl + 0.35f * transient);
-			coefficients.bias = 0.12f * a * (0.25f + 0.75f * fastControl);
-			coefficients.zero = levi_math::tanhAudio(
-				coefficients.drive * coefficients.bias);
-			coefficients.positiveNorm = std::max(
-				levi_math::tanhAudio(
-					coefficients.drive * (1.f + coefficients.bias))
-					- coefficients.zero,
-				1e-4f);
-			coefficients.negativeNorm = std::max(
-				coefficients.zero
-					- levi_math::tanhAudio(
-						coefficients.drive * (-1.f + coefficients.bias)),
-				1e-4f);
-			coefficients.negativeScale = 1.f + 0.10f * a * fastControl;
+			// A broad T3 response is always visible. Activity moves the blend
+			// toward T5, while a zero/end-point anchored even term adds skew.
+			coefficients.fifthMix = clamp01(
+				0.35f + 0.30f * fastControl + 0.20f * transient);
+			coefficients.skew =
+				0.18f + 0.22f * fastControl + 0.18f * transient;
 			break;
 		}
 		case Character::Bloom:
@@ -273,15 +277,14 @@ float Engine::applyCharacter(
 			return input + (saturated - input) * a;
 		}
 		case Character::Frenzy: {
-			const float raw = levi_math::tanhAudio(
-				coefficients.drive * (input + coefficients.bias))
-				- coefficients.zero;
-			float saturated = raw >= 0.f
-				? raw / coefficients.positiveNorm
-				: raw / coefficients.negativeNorm;
-			if (saturated < 0.f) {
-				saturated *= coefficients.negativeScale;
-			}
+			const float z = std::max(-1.f, std::min(input, 1.f));
+			const float z2 = z * z;
+			const float t3 = z * (4.f * z2 - 3.f);
+			const float t5 = z * (16.f * z2 * z2 - 20.f * z2 + 5.f);
+			const float oddPolynomial =
+				t3 + (t5 - t3) * coefficients.fifthMix;
+			const float anchoredSkew = coefficients.skew * z2 * (1.f - z2);
+			float saturated = oddPolynomial + anchoredSkew;
 			saturated = std::max(-1.25f, std::min(saturated, 1.25f));
 			return input + (saturated - input) * a;
 		}

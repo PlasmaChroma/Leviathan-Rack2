@@ -126,14 +126,14 @@
      style="display:inline;fill:#1f192c;fill-opacity:1" />
   <text
      x="1111.0212"
-     y="9054.3965"
+     y="9324.3965"
      text-anchor="middle"
      font-family="'DejaVu Sans', sans-serif"
      font-size="155px"
      fill="#ffe7a5"
      id="text13">PUFF</text>
   <text
-     x="4050.0425"
+     x="5193.3511"
      y="10273.795"
      text-anchor="middle"
      font-family="'DejaVu Sans', sans-serif"
@@ -141,24 +141,16 @@
      fill="#ffe7a5"
      id="text14">DEFLATE</text>
   <text
-     x="1090.4255"
-     y="10262.799"
+     x="2654.2979"
+     y="9176.7139"
      text-anchor="middle"
      font-family="'DejaVu Sans', sans-serif"
      font-size="125px"
      fill="#ffd779"
      id="text15">PUFF CV AMOUNT</text>
   <text
-     x="5186.9058"
-     y="10496.556"
-     text-anchor="middle"
-     font-family="'DejaVu Sans', sans-serif"
-     font-size="105px"
-     fill="#ff8a80"
-     id="text16">LIMIT</text>
-  <text
-     x="2342.4255"
-     y="10260.979"
+     x="3906.2979"
+     y="9174.8936"
      text-anchor="middle"
      font-family="'DejaVu Sans', sans-serif"
      font-size="120px"
@@ -209,39 +201,39 @@
        style="fill:#425f34;fill-opacity:1;stroke-width:1.12704" />
     <rect
        id="transfer_preview_rect"
-       x="450"
-       y="6700"
-       width="5196"
-       height="1050"
-       style="fill:#425f34;fill-opacity:1;stroke-width:1.12704" />
+       x="75.000031"
+       y="6500"
+       width="5946"
+       height="1134.8716"
+       style="fill:#425f34;fill-opacity:1;stroke-width:1.25346" />
     <circle
        id="character_param"
-       cx="3113.6169"
-       cy="8409.8047"
+       cx="1637.234"
+       cy="9962.7402"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="character_readout"
-       cx="4655.6172"
-       cy="8409.8047"
+       cx="3179.2344"
+       cy="9962.7402"
        r="150"
        style="fill:#425f34;fill-opacity:1;stroke-width:15" />
     <circle
        id="puff_param"
        cx="1111.0212"
-       cy="8404.4004"
+       cy="8674.4004"
        r="300"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="deflate_param"
-       cx="4050.0425"
+       cx="5193.3511"
        cy="9752.8252"
        r="200"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="puff_cv_amount_param"
-       cx="1090.4255"
-       cy="9752.8252"
+       cx="2654.2979"
+       cy="8666.7402"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle
@@ -258,8 +250,8 @@
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="puff_cv_input"
-       cx="2342.4255"
-       cy="9752.8252"
+       cx="3906.2979"
+       cy="8666.7402"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
     <circle
@@ -276,8 +268,8 @@
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="limit_light"
-       cx="5192.2124"
-       cy="10246.511"
+       cx="4480"
+       cy="11012.043"
        r="100"
        style="fill:#425f34;fill-opacity:1" />
   </g>

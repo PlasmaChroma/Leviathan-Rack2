@@ -123,6 +123,10 @@ void PuffyTransferPreviewWidget::draw(const DrawArgs& args) {
 		-clamp(visual.negativeInputActivity, 0.f, DOMAIN));
 	const float positiveX = inputToX(
 		clamp(visual.positiveInputActivity, 0.f, DOMAIN));
+	const float negativeOverrange = clamp(
+		(visual.negativeInputActivity - DOMAIN) / 0.25f, 0.f, 1.f);
+	const float positiveOverrange = clamp(
+		(visual.positiveInputActivity - DOMAIN) / 0.25f, 0.f, 1.f);
 	const NVGcolor tint = puffy_visual::characterTint(
 		clamp(visual.character, 0, 3));
 
@@ -143,6 +147,25 @@ void PuffyTransferPreviewWidget::draw(const DrawArgs& args) {
 	nvgStrokeWidth(args.vg, 0.8f);
 	nvgStroke(args.vg);
 
+	// The activity telemetry retains 25% headroom beyond the visible +/-5 V
+	// domain. Convert that otherwise-clipped range into compact edge flashes.
+	if (negativeOverrange > 0.f) {
+		nvgBeginPath(args.vg);
+		const float stripWidth = 1.f + 2.f * negativeOverrange;
+		nvgRect(args.vg, 0.f, 0.f, stripWidth, height);
+		nvgFillColor(args.vg, withAlpha(
+			tint, 0.30f + 0.55f * negativeOverrange));
+		nvgFill(args.vg);
+	}
+	if (positiveOverrange > 0.f) {
+		nvgBeginPath(args.vg);
+		const float stripWidth = 1.f + 2.f * positiveOverrange;
+		nvgRect(args.vg, width - stripWidth, 0.f, stripWidth, height);
+		nvgFillColor(args.vg, withAlpha(
+			tint, 0.30f + 0.55f * positiveOverrange));
+		nvgFill(args.vg);
+	}
+
 	nvgBeginPath(args.vg);
 	nvgMoveTo(args.vg, centerX, 0.f);
 	nvgLineTo(args.vg, centerX, height);
@@ -150,18 +173,6 @@ void PuffyTransferPreviewWidget::draw(const DrawArgs& args) {
 	nvgLineTo(args.vg, width, centerY);
 	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 58));
 	nvgStrokeWidth(args.vg, 0.65f);
-	nvgStroke(args.vg);
-
-	// +/-5 V ticks inside the +/-6.25 V plot domain.
-	const float negativeFiveX = inputToX(-1.f);
-	const float positiveFiveX = inputToX(1.f);
-	nvgBeginPath(args.vg);
-	nvgMoveTo(args.vg, negativeFiveX, centerY - 2.f);
-	nvgLineTo(args.vg, negativeFiveX, centerY + 2.f);
-	nvgMoveTo(args.vg, positiveFiveX, centerY - 2.f);
-	nvgLineTo(args.vg, positiveFiveX, centerY + 2.f);
-	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 80));
-	nvgStrokeWidth(args.vg, 0.7f);
 	nvgStroke(args.vg);
 
 	nvgResetScissor(args.vg);

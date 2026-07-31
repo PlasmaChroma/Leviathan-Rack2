@@ -125,6 +125,55 @@ Result characterCurves() {
 	};
 }
 
+Result frenzyPolynomialLobes() {
+	const auto countTurningPoints = [](const puffy::DynamicsState& dynamics) {
+		float previous = puffy::Engine::processCharacter(
+			puffy::Character::Frenzy, -1.f, 1.f, dynamics);
+		float previousSlope = 0.f;
+		int turningPoints = 0;
+		for (int i = 1; i <= 800; ++i) {
+			const float input = -1.f + 2.f * float(i) / 800.f;
+			const float output = puffy::Engine::processCharacter(
+				puffy::Character::Frenzy, input, 1.f, dynamics);
+			const float slope = output - previous;
+			if (std::fabs(slope) > 1e-7f) {
+				if (previousSlope * slope < 0.f) {
+					turningPoints++;
+				}
+				previousSlope = slope;
+			}
+			previous = output;
+		}
+		return turningPoints;
+	};
+
+	puffy::DynamicsState idle;
+	puffy::DynamicsState active;
+	active.fast = 1.f;
+	active.transient = 1.f;
+	const int idleTurns = countTurningPoints(idle);
+	const int activeTurns = countTurningPoints(active);
+	const float idleZero = puffy::Engine::processCharacter(
+		puffy::Character::Frenzy, 0.f, 1.f, idle);
+	const float activeZero = puffy::Engine::processCharacter(
+		puffy::Character::Frenzy, 0.f, 1.f, active);
+	const float activePositive = puffy::Engine::processCharacter(
+		puffy::Character::Frenzy, 0.8f, 1.f, active);
+	const float activeNegative = puffy::Engine::processCharacter(
+		puffy::Character::Frenzy, -0.8f, 1.f, active);
+	return {
+		"FRENZY has broad input-reactive polynomial lobes with anchored zero",
+		idleTurns >= 2 && activeTurns >= 4
+			&& near(idleZero, 0.f, 1e-7f)
+			&& near(activeZero, 0.f, 1e-7f)
+			&& std::fabs(activePositive + activeNegative) > 0.1f,
+		"turns=" + std::to_string(idleTurns)
+			+ "/" + std::to_string(activeTurns)
+			+ " activePair=" + std::to_string(activeNegative)
+			+ "/" + std::to_string(activePositive)
+	};
+}
+
 Result riptideFractalAnchors() {
 	puffy::DynamicsState dynamics;
 	// At full amount RIPTIDE drives the shaper by 2.5, so these inputs land
@@ -137,16 +186,37 @@ Result riptideFractalAnchors() {
 		puffy::Character::Riptide, 0.20f, 1.f, dynamics);
 	const float threeQuarter = puffy::Engine::processCharacter(
 		puffy::Character::Riptide, 0.30f, 1.f, dynamics);
+	const float outerJoin = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 0.40f, 1.f, dynamics);
+	const float outerNotch = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 0.625f, 1.f, dynamics);
+	const float outerRebound = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 0.70f, 1.f, dynamics);
+	const float outerCrest = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 1.f, 1.f, dynamics);
+	const float joinBelow = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 0.40f - 1e-6f, 1.f, dynamics);
+	const float joinAbove = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 0.40f + 1e-6f, 1.f, dynamics);
 	return {
-		"RIPTIDE retains its multi-scale fractal transfer landmarks",
+		"RIPTIDE retains inner landmarks and adds a continuous outer fractal crest",
 		near(eighth, 0.3182f, 1e-5f)
 			&& near(quarter, 0.4516f, 1e-5f)
 			&& near(half, 0.6248f, 1e-5f)
-			&& near(threeQuarter, 0.8172f, 1e-5f),
+			&& near(threeQuarter, 0.8172f, 1e-5f)
+			&& near(outerJoin, 1.f, 1e-6f)
+			&& near(outerNotch, 0.6976f, 1e-5f)
+			&& near(outerRebound, 0.7816f, 1e-5f)
+			&& near(outerCrest, 1.f, 1e-6f)
+			&& std::fabs(joinAbove - joinBelow) < 1e-4f,
 		"anchors=" + std::to_string(eighth)
 			+ "/" + std::to_string(quarter)
 			+ "/" + std::to_string(half)
 			+ "/" + std::to_string(threeQuarter)
+			+ " outer=" + std::to_string(outerJoin)
+			+ "/" + std::to_string(outerNotch)
+			+ "/" + std::to_string(outerRebound)
+			+ "/" + std::to_string(outerCrest)
 	};
 }
 
@@ -337,23 +407,30 @@ Result characterTransitionsAreTransparentAndRetargetable() {
 Result nonlinearGrowth() {
 	bool pass = true;
 	std::string detail;
+	puffy::DynamicsState dynamics;
+	dynamics.fast = 0.7f;
+	dynamics.transient = 0.4f;
 	for (int character = 0; character < 4; ++character) {
-		puffy::Engine low;
-		puffy::Engine high;
-		low.setSampleRate(48000.f);
-		high.setSampleRate(48000.f);
-		const ToneStats lowStats = renderTone(
-			low, 0.5f, 3.5f, 997.f, 0.2f, character, false, 0.f);
-		const ToneStats highStats = renderTone(
-			high, 0.5f, 3.5f, 997.f, 1.f, character, false, 0.f);
-		const float lowGain = float(std::sqrt(lowStats.outputSq / lowStats.inputSq));
-		const float highGain = float(std::sqrt(highStats.outputSq / highStats.inputSq));
-		pass = pass && std::fabs(highGain - 1.f) > std::fabs(lowGain - 1.f) + 0.01f;
+		float lowDeviation = 0.f;
+		float highDeviation = 0.f;
+		for (int i = -200; i <= 200; ++i) {
+			const float input = float(i) / 200.f;
+			const float low = puffy::Engine::processCharacter(
+				static_cast<puffy::Character>(character), input, 0.2f, dynamics);
+			const float high = puffy::Engine::processCharacter(
+				static_cast<puffy::Character>(character), input, 1.f, dynamics);
+			lowDeviation += std::fabs(low - input);
+			highDeviation += std::fabs(high - input);
+		}
+		lowDeviation /= 401.f;
+		highDeviation /= 401.f;
+		pass = pass && highDeviation > lowDeviation + 0.01f;
 		detail += " c" + std::to_string(character)
-			+ "=" + std::to_string(lowGain) + "/" + std::to_string(highGain);
+			+ "=" + std::to_string(lowDeviation)
+			+ "/" + std::to_string(highDeviation);
 	}
 	return {
-		"Every character becomes measurably more nonlinear as PUFF rises",
+		"Every character's transfer deviates further from unity as PUFF rises",
 		pass,
 		detail
 	};
@@ -407,6 +484,7 @@ Result realtimePathDoesNotAllocate() {
 int main() {
 	const std::vector<Result> results = {
 		characterCurves(),
+		frenzyPolynomialLobes(),
 		riptideFractalAnchors(),
 		unityAndStereo(),
 		linkedLimiter(),

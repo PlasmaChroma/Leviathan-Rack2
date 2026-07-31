@@ -6,7 +6,8 @@
 
 struct PuffyTransferPreviewWidget final : TransparentWidget {
 	static constexpr int POINT_COUNT = 129;
-	static constexpr float DOMAIN = 1.25f;
+	// Normalized audio domain: +/-1 is +/-5 V.
+	static constexpr float DOMAIN = 1.f;
 
 	Puffy* module = nullptr;
 	PuffyVisualState visual;
