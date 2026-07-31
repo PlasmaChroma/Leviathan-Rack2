@@ -20,7 +20,8 @@ private:
 		NVGcontext* vg,
 		Vec center,
 		float radiusX,
-		float radiusY) const;
+		float radiusY,
+		NVGcolor tint) const;
 	void drawFin(
 		NVGcontext* vg,
 		Vec center,
@@ -30,7 +31,8 @@ private:
 		float sizeScale,
 		int imageHandle,
 		int imageWidth,
-		int imageHeight) const;
+		int imageHeight,
+		NVGcolor tint) const;
 	void drawEye(
 		NVGcontext* vg,
 		Vec center,

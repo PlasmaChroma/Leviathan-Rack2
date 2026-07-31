@@ -1,6 +1,7 @@
 #pragma once
 
 struct PuffyPose {
+	float characterBlend = 0.f;
 	float inflation = 0.f;
 	float squashX = 0.f;
 	float squashY = 0.f;

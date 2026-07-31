@@ -101,6 +101,7 @@ bool PuffyCharacterController::update(
 	const float spineBlend = clamp01(1.f - std::fabs(personality - 1.f));
 	const float breath = std::sin(idleTime * (2.f * kPi / 4.2f))
 		* (0.003f + 0.006f * visual.inputActivity);
+	pose->characterBlend = personality;
 	pose->inflation = clamp01(inflation + breath);
 	pose->squashX =
 		frenzyBlend * (0.035f * visual.transientActivity + 0.025f * transientRise);

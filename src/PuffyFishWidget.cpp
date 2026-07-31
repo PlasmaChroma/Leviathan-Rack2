@@ -11,6 +11,36 @@ float clamp01(float value) {
 	return std::max(0.f, std::min(value, 1.f));
 }
 
+NVGcolor mixColor(NVGcolor from, NVGcolor to, float amount) {
+	const float t = clamp01(amount);
+	return nvgRGBAf(
+		from.r + (to.r - from.r) * t,
+		from.g + (to.g - from.g) * t,
+		from.b + (to.b - from.b) * t,
+		from.a + (to.a - from.a) * t);
+}
+
+NVGcolor multiplyColor(NVGcolor color, NVGcolor tint) {
+	return nvgRGBAf(
+		color.r * tint.r,
+		color.g * tint.g,
+		color.b * tint.b,
+		color.a * tint.a);
+}
+
+NVGcolor puffyTint(float characterBlend) {
+	// These are image multipliers, not replacement flat colors. The neutral
+	// raster retains its baked highlights and shadows under the tint.
+	const NVGcolor bloom = nvgRGB(167, 220, 121);
+	const NVGcolor spine = nvgRGB(255, 212, 77);
+	const NVGcolor frenzy = nvgRGB(255, 138, 128);
+	const float character = std::max(0.f, std::min(characterBlend, 2.f));
+	if (character <= 1.f) {
+		return mixColor(bloom, spine, character);
+	}
+	return mixColor(spine, frenzy, character - 1.f);
+}
+
 struct PuffyRasterAsset {
 	int handle = -1;
 	int width = 0;
@@ -85,7 +115,8 @@ void PuffyFishWidget::drawFin(
 	float sizeScale,
 	int imageHandle,
 	int imageWidth,
-	int imageHeight) const {
+	int imageHeight,
+	NVGcolor tint) const {
 	if (!vg || bodyRadius <= 0.f
 		|| imageHandle < 0 || imageWidth <= 0 || imageHeight <= 0) {
 		return;
@@ -106,8 +137,10 @@ void PuffyFishWidget::drawFin(
 		drawWidth * float(imageHeight) / float(imageWidth);
 	const float x = 0.f;
 	const float y = -0.5f * drawHeight;
-	const NVGpaint paint = nvgImagePattern(
+	NVGpaint paint = nvgImagePattern(
 		vg, x, y, drawWidth, drawHeight, 0.f, imageHandle, 1.f);
+	paint.innerColor = tint;
+	paint.outerColor = tint;
 	nvgBeginPath(vg);
 	nvgRect(vg, x, y, drawWidth, drawHeight);
 	nvgFillPaint(vg, paint);
@@ -119,7 +152,8 @@ bool PuffyFishWidget::drawBodyRaster(
 	NVGcontext* vg,
 	Vec center,
 	float radiusX,
-	float radiusY) const {
+	float radiusY,
+	NVGcolor tint) const {
 	if (!vg || radiusX <= 0.f || radiusY <= 0.f) {
 		return false;
 	}
@@ -136,8 +170,10 @@ bool PuffyFishWidget::drawBodyRaster(
 	const float drawHeight = 2.f * radiusY * rasterExtentScale;
 	const float x = center.x - 0.5f * drawWidth;
 	const float y = center.y - 0.5f * drawHeight;
-	const NVGpaint paint = nvgImagePattern(
+	NVGpaint paint = nvgImagePattern(
 		vg, x, y, drawWidth, drawHeight, 0.f, body.handle, 1.f);
+	paint.innerColor = tint;
+	paint.outerColor = tint;
 	nvgBeginPath(vg);
 	nvgRect(vg, x, y, drawWidth, drawHeight);
 	nvgFillPaint(vg, paint);
@@ -257,6 +293,7 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 	const float radiusY = radius * (0.93f + 0.07f * inflation)
 		* (1.f + pose.squashY);
 	const float finSizeScale = 1.f - 0.20f * inflation;
+	const NVGcolor bodyTint = puffyTint(pose.characterBlend);
 	// Keep the cast shadow grounded near the bottom of the scene. Inflation
 	// changes its footprint, but the fish's motion and radius do not move it.
 	const Vec shadowCenter(width * 0.5f, height * 0.92f);
@@ -287,7 +324,8 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 		finSizeScale,
 		fin.handle,
 		fin.width,
-		fin.height);
+		fin.height,
+		bodyTint);
 	drawFin(
 		args.vg,
 		center,
@@ -297,19 +335,25 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 		finSizeScale,
 		fin.handle,
 		fin.width,
-		fin.height);
+		fin.height,
+		bodyTint);
 
-	if (!drawBodyRaster(args.vg, center, radiusX, radiusY)) {
+	if (!drawBodyRaster(args.vg, center, radiusX, radiusY, bodyTint)) {
 		nvgBeginPath(args.vg);
 		nvgEllipse(args.vg, center.x, center.y, radiusX, radiusY);
+		const NVGcolor fallbackShadow = nvgRGBAf(
+			bodyTint.r * 0.60f,
+			bodyTint.g * 0.60f,
+			bodyTint.b * 0.60f,
+			bodyTint.a);
 		const NVGpaint body = nvgRadialGradient(
 			args.vg,
 			center.x - radiusX * 0.32f,
 			center.y - radiusY * 0.38f,
 			radius * 0.08f,
 			radius * 1.18f,
-			nvgRGB(255, 244, 174),
-			nvgRGB(255, 174, 12));
+			bodyTint,
+			fallbackShadow);
 		nvgFillPaint(args.vg, body);
 		nvgFill(args.vg);
 		nvgStrokeColor(args.vg, nvgRGBA(145, 80, 1, 220));
@@ -320,9 +364,8 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 	const float eyeRadius = minimum * 0.105f;
 	const float eyeY = center.y - radiusY * 0.23f;
 	const float eyeSpacing = eyeRadius * 0.79f;
-	// Kept explicit so the future body color-filter pass can provide the
-	// filtered body tone to the eyelids.
-	const NVGcolor eyelidColor = nvgRGB(232, 223, 202);
+	const NVGcolor eyelidColor = multiplyColor(
+		nvgRGB(232, 223, 202), bodyTint);
 	drawEye(
 		args.vg, Vec(center.x - eyeSpacing, eyeY), eyeRadius,
 		pose.gazeX, pose.gazeY, pose.leftBlink, eyelidColor);
