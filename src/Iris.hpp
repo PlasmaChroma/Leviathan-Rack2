@@ -121,6 +121,8 @@ struct Iris final : Module {
 
   iris::ConversionSettings conversionSettings;
   std::atomic<float> displayScan {0.f};
+  std::array<std::atomic<float>, 16> displayPolyScans;
+  std::atomic<int> displayPolyChannelCount {1};
   std::atomic<float> displayFrequencyHz {0.f};
   // Rate-limited channel-one state for the low-frequency waveform tracer.
   std::atomic<float> displayPhase {0.f};

@@ -1,5 +1,6 @@
 #include "../src/IrisWavetable.hpp"
 #include "../src/IrisIO.hpp"
+#include "../src/IrisPolyphony.hpp"
 #include "../src/NautiloidFractal.hpp"
 
 #define QOI_IMPLEMENTATION
@@ -36,6 +37,18 @@ std::vector<uint8_t> solid(int width, int height, uint8_t value) {
 } // namespace
 
 int main() {
+  check("Iris output polyphony follows the larger V/Oct or Scan channel count",
+        iris::outputChannelCount(1, 6) == 6 &&
+        iris::outputChannelCount(8, 3) == 8 &&
+        iris::outputChannelCount(0, 0) == 1 &&
+        iris::outputChannelCount(16, 16) == 16);
+  check("Extra Scan-driven voices reuse V/Oct channel zero",
+        iris::vOctSourceChannel(0, 2) == 0 &&
+        iris::vOctSourceChannel(1, 2) == 1 &&
+        iris::vOctSourceChannel(2, 2) == 0 &&
+        iris::vOctSourceChannel(5, 1) == 0 &&
+        iris::vOctSourceChannel(3, 0) == 0);
+
   iris::SourceField neutralPaletteSource;
   neutralPaletteSource.width = 3;
   neutralPaletteSource.height = 1;

@@ -1,4 +1,5 @@
 #include "Iris.hpp"
+#include "IrisPolyphony.hpp"
 #include "Nautiloid.hpp"
 #include "NautiloidFractal.hpp"
 
@@ -71,6 +72,9 @@ bool jsonBoolOr(json_t* root, const char* key, bool fallback) {
 
 Iris::Iris() {
   debugMetrics.assignInstanceId(gIrisDebugInstanceCounter);
+  for (size_t channel = 0; channel < displayPolyScans.size(); ++channel) {
+    displayPolyScans[channel].store(0.f, std::memory_order_relaxed);
+  }
   config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
   configParam<IrisFreqQuantity>(
     COARSE_PARAM, 0.f, 1.f, irisKnobValueForFrequency(dsp::FREQ_C4), "Frequency");
@@ -519,7 +523,9 @@ void Iris::process(const ProcessArgs& args) {
     fadeFromTableIndex >= 0 && fadeFromTableIndex < int(tableBuffers.size())
       ? &tableBuffers[size_t(fadeFromTableIndex)] : nullptr;
   const float tableMix = fadeFromTable ? clamp(tableCrossfade, 0.f, 1.f) : 1.f;
-  const int channels = std::max(1, std::min(inputs[V_OCT_INPUT].getChannels(), 16));
+  const int vOctChannels = inputs[V_OCT_INPUT].getChannels();
+  const int scanChannels = inputs[SCAN_INPUT].getChannels();
+  const int channels = iris::outputChannelCount(vOctChannels, scanChannels);
   outputs[OUT_OUTPUT].setChannels(channels);
   outputs[Q_OUTPUT].setChannels(channels);
   const float coarseParam = params[COARSE_PARAM].getValue();
@@ -546,7 +552,8 @@ void Iris::process(const ProcessArgs& args) {
   float waveDisplay = 0.f;
   float phaseFrequencyDisplay = 0.f;
   for (int channel = 0; channel < channels; ++channel) {
-    const float vOctInput = inputs[V_OCT_INPUT].getPolyVoltage(channel);
+    const int vOctChannel = iris::vOctSourceChannel(channel, vOctChannels);
+    const float vOctInput = inputs[V_OCT_INPUT].getVoltage(vOctChannel);
     const float mainPitch = coarsePitch + fine + (std::isfinite(vOctInput) ? vOctInput : 0.f);
     const float basePitch = clamp(mainPitch, -24.f, 16.f);
     const float baseFrequency =
@@ -563,6 +570,7 @@ void Iris::process(const ProcessArgs& args) {
     const float scanInput = inputs[SCAN_INPUT].getPolyVoltage(channel);
     float scan = scanKnob + (std::isfinite(scanInput) ? scanInput : 0.f) * 0.1f * scanAtten;
     scan = clamp(scan, 0.f, 1.f);
+    displayPolyScans[size_t(channel)].store(scan, std::memory_order_relaxed);
     if (channel == 0) scanDisplay = scan;
     const float syncInput = inputs[SYNC_INPUT].getPolyVoltage(channel);
     Voice& voice = voices[size_t(channel)];
@@ -592,6 +600,7 @@ void Iris::process(const ProcessArgs& args) {
       phaseFrequencyDisplay = std::isfinite(frequency) ? frequency : 0.f;
     }
   }
+  displayPolyChannelCount.store(channels, std::memory_order_release);
   if (fadeFromTable) {
     tableCrossfade = std::min(
       1.f, tableCrossfade + std::max(args.sampleTime, 0.f) / kTableCrossfadeSeconds);

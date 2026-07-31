@@ -437,16 +437,36 @@ struct IrisScanLineOverlay final : TransparentWidget {
   explicit IrisScanLineOverlay(Iris* module) : module(module) {}
 
   void draw(const DrawArgs& args) override {
-    const float scan = module ? clamp(module->displayScan.load(std::memory_order_relaxed), 0.f, 1.f) : 0.62f;
     const float scanTop = std::min(kIrisDisplayVerticalInset, box.size.y * 0.5f);
     const float scanBottom = std::max(scanTop, box.size.y - kIrisDisplayVerticalInset);
-    const float scanY = scanTop + scan * (scanBottom - scanTop);
-    nvgBeginPath(args.vg);
-    nvgMoveTo(args.vg, 0.f, scanY);
-    nvgLineTo(args.vg, box.size.x, scanY);
-    nvgStrokeWidth(args.vg, 1.2f);
-    nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 220));
-    nvgStroke(args.vg);
+    const int channels = module
+      ? clamp(module->displayPolyChannelCount.load(std::memory_order_acquire), 1, 16)
+      : 1;
+
+    // Draw later voices first so the primary channel remains the clearest
+    // reference when two or more voices share the same scan position.
+    for (int channel = channels - 1; channel >= 0; --channel) {
+      const float scan = module
+        ? clamp(
+          channel == 0
+            ? module->displayScan.load(std::memory_order_relaxed)
+            : module->displayPolyScans[size_t(channel)].load(std::memory_order_relaxed),
+          0.f, 1.f)
+        : 0.62f;
+      const float scanY = scanTop + scan * (scanBottom - scanTop);
+      nvgBeginPath(args.vg);
+      nvgMoveTo(args.vg, 0.f, scanY);
+      nvgLineTo(args.vg, box.size.x, scanY);
+      if (channel == 0) {
+        nvgStrokeWidth(args.vg, 1.2f);
+        nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 220));
+      }
+      else {
+        nvgStrokeWidth(args.vg, 0.9f);
+        nvgStrokeColor(args.vg, nvgRGBA(185, 225, 255, 112));
+      }
+      nvgStroke(args.vg);
+    }
   }
 };
 

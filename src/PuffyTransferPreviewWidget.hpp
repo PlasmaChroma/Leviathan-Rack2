@@ -16,7 +16,6 @@ struct PuffyTransferPreviewWidget final : TransparentWidget {
 	TransparentWidget* curveLayer = nullptr;
 	bool pointsValid = false;
 	float lastAmount = -1.f;
-	float lastWetMix = -1.f;
 	float lastFast = -1.f;
 	float lastTransient = -1.f;
 	int lastCharacter = -1;

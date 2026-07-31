@@ -61,18 +61,15 @@ void PuffyTransferPreviewWidget::rebuildPoints() {
 	const puffy::Character character = static_cast<puffy::Character>(
 		clamp(visual.character, 0, 3));
 	const float amount = clamp(visual.effectiveAmount, 0.f, 1.f);
-	const float wetMix = clamp(visual.wetMix, 0.f, 1.f);
 	for (int i = 0; i < POINT_COUNT; ++i) {
 		const float normalized = float(i) / float(POINT_COUNT - 1);
 		const float input = -DOMAIN + 2.f * DOMAIN * normalized;
-		const float wetOutput = puffy::Engine::processCharacter(
+		const float output = puffy::Engine::processCharacter(
 			character, input, amount, dynamics);
-		const float output = input + (wetOutput - input) * wetMix;
 		points[size_t(i)] = Vec(inputToX(input), outputToY(output));
 	}
 	pointsValid = true;
 	lastAmount = amount;
-	lastWetMix = wetMix;
 	lastFast = dynamics.fast;
 	lastTransient = dynamics.transient;
 	lastCharacter = int(character);
@@ -107,7 +104,6 @@ void PuffyTransferPreviewWidget::step() {
 		|| sizeChanged
 		|| character != lastCharacter
 		|| std::fabs(visual.effectiveAmount - lastAmount) > 0.001f
-		|| std::fabs(visual.wetMix - lastWetMix) > 0.001f
 		|| (frenzyReactive
 			&& (std::fabs(visual.inputActivity - lastFast) > 0.01f
 				|| std::fabs(visual.transientActivity - lastTransient) > 0.01f));
