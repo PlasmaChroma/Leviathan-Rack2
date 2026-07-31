@@ -66,6 +66,8 @@ Result characterCurves() {
 	bool bloomOdd = true;
 	bool spineOdd = true;
 	bool frenzyBounded = true;
+	bool riptideOdd = true;
+	bool riptideBounded = true;
 	float previousSpine = -10.f;
 	bool spineMonotonic = true;
 	for (int ai = 0; ai <= 20; ++ai) {
@@ -82,13 +84,22 @@ Result characterCurves() {
 				puffy::Character::Spine, -input, amount, dynamics);
 			const float frenzy = puffy::Engine::processCharacter(
 				puffy::Character::Frenzy, input, amount, dynamics);
+			const float riptide = puffy::Engine::processCharacter(
+				puffy::Character::Riptide, input, amount, dynamics);
+			const float riptideNegative = puffy::Engine::processCharacter(
+				puffy::Character::Riptide, -input, amount, dynamics);
 			finite = finite && std::isfinite(bloom) && std::isfinite(spine)
-				&& std::isfinite(frenzy);
+				&& std::isfinite(frenzy) && std::isfinite(riptide);
 			bloomOdd = bloomOdd && near(bloom, -bloomNegative, 2e-6f);
 			spineOdd = spineOdd && near(spine, -spineNegative, 2e-6f);
+			riptideOdd = riptideOdd
+				&& near(riptide, -riptideNegative, 2e-6f);
 			frenzyBounded = frenzyBounded
 				&& frenzy >= std::min(input, -1.25f) - 1e-5f
 				&& frenzy <= std::max(input, 1.25f) + 1e-5f;
+			riptideBounded = riptideBounded
+				&& riptide >= std::min(input, -1.f) - 1e-5f
+				&& riptide <= std::max(input, 1.f) + 1e-5f;
 			if (ai == 20) {
 				spineMonotonic = spineMonotonic && spine >= previousSpine - 1e-6f;
 				previousSpine = spine;
@@ -102,12 +113,40 @@ Result characterCurves() {
 	const bool continuous = std::fabs(edgeAbove - edgeBelow) < 1e-4f;
 	return {
 		"Character curves are finite, bounded, symmetric where required, and continuous",
-		finite && bloomOdd && spineOdd && frenzyBounded && spineMonotonic && continuous,
+		finite && bloomOdd && spineOdd && frenzyBounded
+			&& riptideOdd && riptideBounded && spineMonotonic && continuous,
 		"finite=" + std::to_string(finite)
 			+ " bloomOdd=" + std::to_string(bloomOdd)
 			+ " spineOdd=" + std::to_string(spineOdd)
+			+ " riptideOdd=" + std::to_string(riptideOdd)
+			+ " riptideBounded=" + std::to_string(riptideBounded)
 			+ " spineMonotonic=" + std::to_string(spineMonotonic)
 			+ " edgeDelta=" + std::to_string(std::fabs(edgeAbove - edgeBelow))
+	};
+}
+
+Result riptideFractalAnchors() {
+	puffy::DynamicsState dynamics;
+	// At full amount RIPTIDE drives the shaper by 2.5, so these inputs land
+	// exactly on four successive tent-curve landmarks.
+	const float eighth = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 0.05f, 1.f, dynamics);
+	const float quarter = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 0.10f, 1.f, dynamics);
+	const float half = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 0.20f, 1.f, dynamics);
+	const float threeQuarter = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 0.30f, 1.f, dynamics);
+	return {
+		"RIPTIDE retains its multi-scale fractal transfer landmarks",
+		near(eighth, 0.3182f, 1e-5f)
+			&& near(quarter, 0.4516f, 1e-5f)
+			&& near(half, 0.6248f, 1e-5f)
+			&& near(threeQuarter, 0.8172f, 1e-5f),
+		"anchors=" + std::to_string(eighth)
+			+ "/" + std::to_string(quarter)
+			+ "/" + std::to_string(half)
+			+ "/" + std::to_string(threeQuarter)
 	};
 }
 
@@ -225,7 +264,7 @@ Result recoveryAndSilence() {
 	bool finite = std::isfinite(invalid.left) && std::isfinite(invalid.right);
 	float tail = 0.f;
 	for (int i = 0; i < 192000; ++i) {
-		const int character = (i / 137) % 3;
+		const int character = (i / 137) % 4;
 		const puffy::Frame frame = engine.process(0.f, 0.f, 0.75f, character, true, 0.f);
 		finite = finite && std::isfinite(frame.left) && std::isfinite(frame.right);
 		if (i > 96000) {
@@ -256,6 +295,9 @@ Result characterTransitionsAreTransparentAndRetargetable() {
 		else if (i >= 1050 && i < 1100) {
 			requestedCharacter = 2;
 		}
+		else if (i >= 1100 && i < 1150) {
+			requestedCharacter = 3;
+		}
 		const puffy::Frame referenceFrame = reference.process(
 			input, input, 0.f, 0, false, 0.f);
 		const puffy::Frame switchedFrame = switched.process(
@@ -271,7 +313,8 @@ Result characterTransitionsAreTransparentAndRetargetable() {
 	puffy::Engine queued;
 	queued.setSampleRate(48000.f);
 	for (int i = 0; i < 2000; ++i) {
-		int requestedCharacter = i < 500 ? 0 : (i < 550 ? 1 : 2);
+		int requestedCharacter =
+			i < 500 ? 0 : (i < 550 ? 1 : (i < 600 ? 2 : 3));
 		const float phase = 2.f * kPi * 431.f * float(i) / 48000.f;
 		const puffy::Frame frame = queued.process(
 			2.f * std::sin(phase),
@@ -285,7 +328,7 @@ Result characterTransitionsAreTransparentAndRetargetable() {
 
 	return {
 		"Character transitions stay unity at zero Puff and rapid retargets complete",
-		maximumDelta <= 2e-6f && finalCharacter == int(puffy::Character::Frenzy),
+		maximumDelta <= 2e-6f && finalCharacter == int(puffy::Character::Riptide),
 		"unityDelta=" + std::to_string(maximumDelta)
 			+ " finalCharacter=" + std::to_string(finalCharacter)
 	};
@@ -294,7 +337,7 @@ Result characterTransitionsAreTransparentAndRetargetable() {
 Result nonlinearGrowth() {
 	bool pass = true;
 	std::string detail;
-	for (int character = 0; character < 3; ++character) {
+	for (int character = 0; character < 4; ++character) {
 		puffy::Engine low;
 		puffy::Engine high;
 		low.setSampleRate(48000.f);
@@ -328,7 +371,7 @@ Result realtimePathDoesNotAllocate() {
 			7.f * std::sin(phase),
 			5.f * std::cos(phase),
 			float(i % 1000) / 999.f,
-			(i / 333) % 3,
+			(i / 333) % 4,
 			(i & 1) != 0,
 			float(i % 101) / 100.f);
 		peak = std::max(peak, std::max(std::fabs(frame.left), std::fabs(frame.right)));
@@ -348,6 +391,7 @@ Result realtimePathDoesNotAllocate() {
 int main() {
 	const std::vector<Result> results = {
 		characterCurves(),
+		riptideFractalAnchors(),
 		unityAndStereo(),
 		linkedLimiter(),
 		manualDeflateIsExact(),

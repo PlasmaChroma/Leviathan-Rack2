@@ -38,7 +38,11 @@ void PuffyCharacterController::reset(const PuffyVisualState& visual) {
 		+ 0.25f * visual.inputActivity
 		+ 0.10f * visual.gainReduction);
 	inflationVelocity = 0.f;
-	personality = float(std::max(0, std::min(visual.character, 2)));
+	const int character = std::max(0, std::min(visual.character, 3));
+	personality = float(character);
+	for (int i = 0; i < 4; ++i) {
+		characterTintWeights[i] = i == character ? 1.f : 0.f;
+	}
 	transientMemory = visual.transientActivity;
 	idleTime = 0.f;
 	nextBlinkTime = 3.2f;
@@ -69,8 +73,16 @@ bool PuffyCharacterController::update(
 	inflation += inflationVelocity * dt;
 	inflation = clamp01(inflation);
 
-	const int character = std::max(0, std::min(visual.character, 2));
+	const int character = std::max(0, std::min(visual.character, 3));
 	personality = approach(personality, float(character), 5.f, dt);
+	for (int i = 0; i < 4; ++i) {
+		characterTintWeights[i] = approach(
+			characterTintWeights[i],
+			i == character ? 1.f : 0.f,
+			5.f,
+			dt);
+		pose->characterTintWeights[i] = characterTintWeights[i];
+	}
 	const float transientRise =
 		std::max(0.f, visual.transientActivity - transientMemory);
 	transientMemory = approach(
@@ -101,7 +113,6 @@ bool PuffyCharacterController::update(
 	const float spineBlend = clamp01(1.f - std::fabs(personality - 1.f));
 	const float breath = std::sin(idleTime * (2.f * kPi / 4.2f))
 		* (0.003f + 0.006f * visual.inputActivity);
-	pose->characterBlend = personality;
 	pose->inflation = clamp01(inflation + breath);
 	pose->squashX =
 		frenzyBlend * (0.035f * visual.transientActivity + 0.025f * transientRise);

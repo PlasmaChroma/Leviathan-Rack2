@@ -11,15 +11,6 @@ float clamp01(float value) {
 	return std::max(0.f, std::min(value, 1.f));
 }
 
-NVGcolor mixColor(NVGcolor from, NVGcolor to, float amount) {
-	const float t = clamp01(amount);
-	return nvgRGBAf(
-		from.r + (to.r - from.r) * t,
-		from.g + (to.g - from.g) * t,
-		from.b + (to.b - from.b) * t,
-		from.a + (to.a - from.a) * t);
-}
-
 NVGcolor multiplyColor(NVGcolor color, NVGcolor tint) {
 	return nvgRGBAf(
 		color.r * tint.r,
@@ -28,17 +19,37 @@ NVGcolor multiplyColor(NVGcolor color, NVGcolor tint) {
 		color.a * tint.a);
 }
 
-NVGcolor puffyTint(float characterBlend) {
+NVGcolor puffyTint(const float* weights) {
 	// These are image multipliers, not replacement flat colors. The neutral
 	// raster retains its baked highlights and shadows under the tint.
-	const NVGcolor bloom = nvgRGB(167, 220, 121);
-	const NVGcolor spine = nvgRGB(255, 212, 77);
-	const NVGcolor frenzy = nvgRGB(255, 138, 128);
-	const float character = std::max(0.f, std::min(characterBlend, 2.f));
-	if (character <= 1.f) {
-		return mixColor(bloom, spine, character);
+	const NVGcolor colors[4] = {
+		nvgRGB(167, 220, 121),
+		nvgRGB(255, 212, 77),
+		nvgRGB(255, 138, 128),
+		nvgRGB(105, 181, 255)
+	};
+	float red = 0.f;
+	float green = 0.f;
+	float blue = 0.f;
+	float alpha = 0.f;
+	float total = 0.f;
+	for (int i = 0; i < 4; ++i) {
+		const float weight = weights ? clamp01(weights[i]) : (i == 0 ? 1.f : 0.f);
+		red += colors[i].r * weight;
+		green += colors[i].g * weight;
+		blue += colors[i].b * weight;
+		alpha += colors[i].a * weight;
+		total += weight;
 	}
-	return mixColor(spine, frenzy, character - 1.f);
+	if (total <= 1e-6f) {
+		return colors[0];
+	}
+	const float inverseTotal = 1.f / total;
+	return nvgRGBAf(
+		red * inverseTotal,
+		green * inverseTotal,
+		blue * inverseTotal,
+		alpha * inverseTotal);
 }
 
 struct PuffyRasterAsset {
@@ -293,7 +304,7 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 	const float radiusY = radius * (0.93f + 0.07f * inflation)
 		* (1.f + pose.squashY);
 	const float finSizeScale = 1.f - 0.20f * inflation;
-	const NVGcolor bodyTint = puffyTint(pose.characterBlend);
+	const NVGcolor bodyTint = puffyTint(pose.characterTintWeights);
 	// Keep the cast shadow grounded near the bottom of the scene. Inflation
 	// changes its footprint, but the fish's motion and radius do not move it.
 	const Vec shadowCenter(width * 0.5f, height * 0.92f);

@@ -14,6 +14,7 @@ private:
 	float inflation = 0.f;
 	float inflationVelocity = 0.f;
 	float personality = 0.f;
+	float characterTintWeights[4] = {1.f, 0.f, 0.f, 0.f};
 	float transientMemory = 0.f;
 	float idleTime = 0.f;
 	float nextBlinkTime = 3.2f;

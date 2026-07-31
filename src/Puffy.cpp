@@ -13,8 +13,8 @@ Puffy::Puffy() {
 	debugMetrics.assignInstanceId(gPuffyDebugInstanceCounter);
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 	configSwitch(
-		CHARACTER_PARAM, 0.f, 2.f, 0.f, "Character",
-		{"BLOOM", "SPINE", "FRENZY"});
+		CHARACTER_PARAM, 0.f, 3.f, 0.f, "Character",
+		{"BLOOM", "SPINE", "FRENZY", "RIPTIDE"});
 	configParam(PUFF_PARAM, 0.f, 1.f, 0.25f, "Puff", "%", 0.f, 100.f);
 	configParam(DEFLATE_PARAM, 0.f, 1.f, 0.f, "Deflate", " dB", 0.f, -12.f);
 	configParam(
@@ -110,7 +110,7 @@ void Puffy::process(const ProcessArgs& args) {
 		0.f,
 		1.f);
 	const int character = clamp(
-		int(std::lround(params[CHARACTER_PARAM].getValue())), 0, 2);
+		int(std::lround(params[CHARACTER_PARAM].getValue())), 0, 3);
 	const puffy::Frame frame = engine.process(
 		left,
 		right,

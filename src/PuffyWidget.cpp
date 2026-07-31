@@ -42,12 +42,13 @@ struct PuffyCharacterReadout final : TransparentWidget {
 			? clamp(
 				int(std::lround(
 					module->params[Puffy::CHARACTER_PARAM].getValue())),
-				0, 2)
+				0, 3)
 			: int(puffy::Character::Bloom);
 		static const char* const labels[] = {
 			"BLOOM",
 			"SPINE",
-			"FRENZY"
+			"FRENZY",
+			"RIPTIDE"
 		};
 		nvgFontSize(args.vg, FONT_SIZE);
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);

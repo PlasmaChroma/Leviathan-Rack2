@@ -14,7 +14,8 @@ constexpr int kOversampleQuality = 8;
 enum class Character {
 	Bloom = 0,
 	Spine = 1,
-	Frenzy = 2
+	Frenzy = 2,
+	Riptide = 3
 };
 
 struct DynamicsState {

@@ -37,16 +37,37 @@ Character clampCharacter(int character) {
 	if (character <= int(Character::Bloom)) {
 		return Character::Bloom;
 	}
-	if (character >= int(Character::Frenzy)) {
-		return Character::Frenzy;
+	if (character >= int(Character::Riptide)) {
+		return Character::Riptide;
 	}
 	return static_cast<Character>(character);
+}
+
+float tent(float value) {
+	return 1.f - std::fabs(2.f * value - 1.f);
+}
+
+float fractalShape(float input) {
+	// A finite self-similar tent construction: each level adds corners at
+	// twice the previous spatial frequency. This follows Roar Fractal's
+	// published high-harmonic intent without copying a proprietary curve.
+	const float magnitude = std::min(std::fabs(input), 1.f);
+	const float level1 = tent(magnitude);
+	const float level2 = tent(level1);
+	const float level3 = tent(level2);
+	const float coastline =
+		0.52f * level1 + 0.30f * level2 + 0.18f * level3;
+	const float shaped =
+		magnitude + (1.f - magnitude) * 0.48f * coastline;
+	return std::copysign(std::min(shaped, 1.f), input);
 }
 
 float autoDeflateDb(Character character, float amount) {
 	switch (character) {
 		case Character::Spine:
 			return -4.f * amount;
+		case Character::Riptide:
+			return -3.5f * amount;
 		case Character::Frenzy:
 			return -3.f * amount;
 		case Character::Bloom:
@@ -194,6 +215,9 @@ Engine::CharacterCoefficients Engine::prepareCharacter(
 		case Character::Spine:
 			coefficients.drive = 1.f + 9.f * a * a;
 			break;
+		case Character::Riptide:
+			coefficients.drive = 1.f + 1.5f * a * a;
+			break;
 		case Character::Frenzy: {
 			const float fastControl = clamp01(dynamicsState.fast);
 			const float transient = clamp01(dynamicsState.transient);
@@ -239,6 +263,11 @@ float Engine::applyCharacter(
 			else {
 				saturated = std::copysign(1.f, z);
 			}
+			return input + (saturated - input) * a;
+		}
+		case Character::Riptide: {
+			const float saturated =
+				fractalShape(coefficients.drive * input);
 			return input + (saturated - input) * a;
 		}
 		case Character::Frenzy: {
