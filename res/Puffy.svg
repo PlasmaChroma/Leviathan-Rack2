@@ -22,14 +22,15 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      inkscape:zoom="2.4193418"
-     inkscape:cx="35.546859"
-     inkscape:cy="193.64771"
+     inkscape:cx="35.546858"
+     inkscape:cy="292.84824"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="svg21" />
+     inkscape:current-layer="svg21"
+     showgrid="false" />
   <defs
      id="defs8">
     <linearGradient
@@ -113,7 +114,7 @@
      id="text11">STEREO CHARACTER</text>
   <rect
      x="63.777615"
-     y="1551.7778"
+     y="1051.7778"
      width="5968.4448"
      height="5409.4658"
      rx="338.09161"
@@ -124,16 +125,8 @@
      id="puffy_border"
      style="display:inline;fill:#1f192c;fill-opacity:1" />
   <text
-     x="3048"
-     y="1230"
-     text-anchor="middle"
-     font-family="DejaVu Sans, sans-serif"
-     font-size="150"
-     fill="#ffe6a0"
-     id="text12">CHARACTER</text>
-  <text
      x="1111.0212"
-     y="8584.4219"
+     y="9054.3965"
      text-anchor="middle"
      font-family="'DejaVu Sans', sans-serif"
      font-size="155px"
@@ -141,7 +134,7 @@
      id="text13">PUFF</text>
   <text
      x="4050.0425"
-     y="10083.774"
+     y="10273.795"
      text-anchor="middle"
      font-family="'DejaVu Sans', sans-serif"
      font-size="155px"
@@ -149,7 +142,7 @@
      id="text14">DEFLATE</text>
   <text
      x="1090.4255"
-     y="9792.8242"
+     y="10262.799"
      text-anchor="middle"
      font-family="'DejaVu Sans', sans-serif"
      font-size="125px"
@@ -165,7 +158,7 @@
      id="text16">LIMIT</text>
   <text
      x="2342.4255"
-     y="9791.0039"
+     y="10260.979"
      text-anchor="middle"
      font-family="'DejaVu Sans', sans-serif"
      font-size="120px"
@@ -206,42 +199,42 @@
   <g
      id="components"
      opacity="0"
-     style="display:none;opacity:1">
+     style="display:inline;opacity:1">
     <rect
        id="fish_rect"
        x="63.777615"
-       y="1551.7778"
+       y="1051.7778"
        width="5968.4448"
        height="5409.4658"
        style="fill:#425f34;fill-opacity:1;stroke-width:1.12704" />
     <circle
        id="character_param"
        cx="3113.6169"
-       cy="7939.8301"
+       cy="8409.8047"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="character_readout"
        cx="4655.6172"
-       cy="7939.8301"
+       cy="8409.8047"
        r="150"
        style="fill:#425f34;fill-opacity:1;stroke-width:15" />
     <circle
        id="puff_param"
        cx="1111.0212"
-       cy="7934.4253"
+       cy="8404.4004"
        r="300"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="deflate_param"
        cx="4050.0425"
-       cy="9432.6807"
+       cy="9752.8252"
        r="200"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="puff_cv_amount_param"
        cx="1090.4255"
-       cy="9282.8506"
+       cy="9752.8252"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle
@@ -259,7 +252,7 @@
     <circle
        id="puff_cv_input"
        cx="2342.4255"
-       cy="9282.8506"
+       cy="9752.8252"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
     <circle
