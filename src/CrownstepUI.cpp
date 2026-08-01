@@ -1,4 +1,5 @@
 #include "CrownstepShared.hpp"
+#include "CrownstepSettingsOverlay.hpp"
 #include "MathHelpers.hpp"
 #include "PanelSvgUtils.hpp"
 #include "NvgGraphicsLifecycle.hpp"
@@ -41,61 +42,6 @@ constexpr HighlightPalette HIGHLIGHT_PALETTES[HIGHLIGHT_COLOR_COUNT] = {
 	{112u, 72u, 184u, 198u, 150u, 255u, 184u, 132u, 255u},
 	{26u, 178u, 214u, 110u, 232u, 255u, 96u, 222u, 248u},
 	{40u, 168u, 104u, 98u, 235u, 154u, 88u, 240u, 154u},
-};
-
-struct CrownstepRangeMenuQuantity final : Quantity {
-	Crownstep* module = nullptr;
-
-	explicit CrownstepRangeMenuQuantity(Crownstep* module) : module(module) {}
-
-	void setValue(float value) override {
-		if (!module) {
-			return;
-		}
-		module->params[Crownstep::RANGE_PARAM].setValue(clamp(value, 0.f, 1.f));
-		module->refreshHeldPitchForCurrentStep();
-	}
-
-	float getValue() override {
-		return module ? module->params[Crownstep::RANGE_PARAM].getValue() : crownstep::PITCH_RANGE_PARAM_DEFAULT;
-	}
-
-	float getDefaultValue() override {
-		return crownstep::PITCH_RANGE_PARAM_DEFAULT;
-	}
-
-	float getMinValue() override {
-		return 0.f;
-	}
-
-	float getMaxValue() override {
-		return 1.f;
-	}
-
-	std::string getLabel() override {
-		return "Range";
-	}
-
-	std::string getUnit() override {
-		return "st";
-	}
-
-	float getDisplayValue() override {
-		const int cellCount = module ? module->boardCellCount() : crownstep::BOARD_SIZE;
-		return crownstep::pitchRangeSemitoneSpan(getValue(), cellCount);
-	}
-
-	void setDisplayValue(float displayValue) override {
-		if (!module) {
-			return;
-		}
-		const float denominator = std::max(1.f, float(std::max(0, module->boardCellCount() - 1)));
-		setValue(crownstep::pitchRangeParamFromMultiplier(displayValue / denominator));
-	}
-
-	std::string getDisplayValueString() override {
-		return string::f("%.1f", getDisplayValue());
-	}
 };
 
 inline int highlightPaletteIndexForMode(int highlightMode) {
@@ -3821,24 +3767,10 @@ struct CrownRibbonWidget final : OpaqueWidget {
 
 constexpr int CrownRibbonWidget::PRESET_CAP_VALUES[CrownRibbonWidget::PRESET_COUNT];
 
-struct CrownstepDifficultyItem final : MenuItem {
-	Crownstep* module = nullptr;
-	int difficulty = 0;
-
-	void onAction(const event::Action& e) override {
-		if (module) {
-			module->aiDifficulty = difficulty;
-		}
-		MenuItem::onAction(e);
-	}
-
-	void step() override {
-		rightText = (module && module->aiDifficulty == difficulty) ? "✓" : "";
-		MenuItem::step();
-	}
-};
-
 struct CrownstepWidget final : ModuleWidget {
+	CrownstepSettingsOverlay* settingsOverlay = nullptr;
+	CrownstepSettingsOpenButton* settingsButton = nullptr;
+
 	explicit CrownstepWidget(Crownstep* module) {
 		setModule(module);
 		PreviewBuildLogTimer previewBuildTimer("Crownstep", module);
@@ -3877,7 +3809,7 @@ struct CrownstepWidget final : ModuleWidget {
 				);
 			}
 
-			Vec newGamePos(43.f, 114.0f);
+			Vec settingsPos(43.f, 114.0f);
 		Vec debugAddMovesPos(5.08f, 5.08f);
 		Vec clockPos(12.f, 108.0f);
 		Vec resetPos(28.f, 108.0f);
@@ -3904,7 +3836,7 @@ struct CrownstepWidget final : ModuleWidget {
 				*outPos = pointMm;
 			}
 		};
-			applyPointOverride("NEW_GAME_PARAM", &newGamePos);
+			applyPointOverrideFallback("SETTINGS_BUTTON", "NEW_GAME_PARAM", &settingsPos);
 		applyPointOverride("CLOCK_INPUT", &clockPos);
 		applyPointOverride("RESET_INPUT", &resetPos);
 		applyPointOverride("TRANSPOSE_INPUT", &transposePos);
@@ -3930,7 +3862,14 @@ struct CrownstepWidget final : ModuleWidget {
 
 			// SEQ_LENGTH_PARAM is intentionally soft-deprecated from GUI.
 			// Runtime sequence length is controlled by the ribbon widget trim interactions.
-			addParam(createParamCentered<SmallGoldButton>(mm2px(newGamePos), module, Crownstep::NEW_GAME_PARAM));
+			settingsButton = new CrownstepSettingsOpenButton();
+			settingsButton->box.size = Vec(28.f, 24.f);
+			settingsButton->box.pos = mm2px(settingsPos).minus(settingsButton->box.size.mult(0.5f));
+			settingsButton->enabled = module != nullptr;
+			settingsButton->openAction = [this]() {
+				openSettings();
+			};
+			addChild(settingsButton);
 			if (isCrownstepAddMoveEnabled()) {
 				addParam(createParamCentered<LEDButton>(mm2px(debugAddMovesPos), module, Crownstep::DEBUG_ADD_MOVES_PARAM));
 			}
@@ -3947,6 +3886,30 @@ struct CrownstepWidget final : ModuleWidget {
 
 		addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(humanLightPos), module, Crownstep::HUMAN_TURN_LIGHT));
 		addChild(createLightCentered<SmallAperture<BlueApertureLight>>(mm2px(aiLightPos), module, Crownstep::AI_TURN_LIGHT));
+
+		settingsOverlay = new CrownstepSettingsOverlay(module);
+		settingsOverlay->box.pos = Vec();
+		settingsOverlay->box.size = box.size;
+		settingsOverlay->closeAction = [this]() {
+			closeSettings();
+		};
+		addChild(settingsOverlay);
+	}
+
+	void openSettings() {
+		if (settingsOverlay) {
+			settingsOverlay->open();
+		}
+	}
+
+	void closeSettings() {
+		if (!settingsOverlay) {
+			return;
+		}
+		settingsOverlay->visible = false;
+		if (APP && APP->event && APP->event->getSelectedWidget() == settingsOverlay) {
+			APP->event->setSelectedWidget(nullptr);
+		}
 	}
 
 	void step() override {
@@ -3959,280 +3922,9 @@ struct CrownstepWidget final : ModuleWidget {
 
 	void appendContextMenu(Menu* menu) override {
 		ModuleWidget::appendContextMenu(menu);
-		Crownstep* module = dynamic_cast<Crownstep*>(this->module);
 		menu->addChild(new MenuSeparator());
-		MenuLabel* gameLabel = new MenuLabel();
-		gameLabel->text = "Game";
-		menu->addChild(gameLabel);
-		menu->addChild(createSubmenuItem("Mode", "", [=](Menu* gameMenu) {
-			for (int i = 0; i < int(GAME_MODE_NAMES.size()); ++i) {
-				gameMenu->addChild(createCheckMenuItem(
-					GAME_MODE_NAMES[size_t(i)],
-					"",
-					[=]() {
-						return module && module->gameMode == i;
-					},
-					[=]() {
-						if (module) {
-							module->setGameMode(i, true);
-						}
-					}
-				));
-			}
-		}));
-		menu->addChild(createSubmenuItem("Player", "", [=](Menu* playerMenu) {
-			for (int i = 0; i < int(PLAYER_MODE_NAMES.size()); ++i) {
-				playerMenu->addChild(createCheckMenuItem(
-					PLAYER_MODE_NAMES[size_t(i)],
-					"",
-					[=]() {
-						return module && module->playerMode == i;
-					},
-					[=]() {
-						if (module) {
-							module->cancelAiTurnWork();
-							module->playerMode = i;
-							module->startNewGame();
-						}
-					}
-				));
-			}
-		}));
-		menu->addChild(createSubmenuItem("AI Difficulty", "", [=](Menu* difficultyMenu) {
-			for (int i = 0; i < int(DIFFICULTY_NAMES.size()); ++i) {
-				CrownstepDifficultyItem* item = new CrownstepDifficultyItem();
-				item->text = DIFFICULTY_NAMES[size_t(i)];
-				item->module = module;
-				item->difficulty = i;
-				difficultyMenu->addChild(item);
-			}
-		}));
-		menu->addChild(createSubmenuItem("Highlight", "", [=](Menu* highlightMenu) {
-			for (int i = 0; i < int(HIGHLIGHT_MODE_NAMES.size()); ++i) {
-				highlightMenu->addChild(createCheckMenuItem(
-					HIGHLIGHT_MODE_NAMES[size_t(i)],
-					"",
-					[=]() {
-						return module && module->highlightMode == i;
-					},
-					[=]() {
-						if (module) {
-							module->highlightMode = i;
-						}
-					}
-				));
-			}
-		}));
-		if (!module || !module->isOthelloMode()) {
-			menu->addChild(createSubmenuItem("Board Texture", "", [=](Menu* textureMenu) {
-				for (int i = 0; i < int(BOARD_TEXTURE_NAMES.size()); ++i) {
-					textureMenu->addChild(createCheckMenuItem(
-						BOARD_TEXTURE_NAMES[size_t(i)],
-						"",
-						[=]() {
-							return module && module->boardTextureMode == i;
-						},
-						[=]() {
-							if (module) {
-								module->boardTextureMode = i;
-							}
-						}
-					));
-				}
-			}));
-		}
-		menu->addChild(new MenuSeparator());
-		MenuLabel* quantizerLabel = new MenuLabel();
-		quantizerLabel->text = "Quantizer";
-		menu->addChild(quantizerLabel);
-		menu->addChild(createCheckMenuItem(
-			"Enable Quantization",
-			"",
-			[=]() {
-				return module && module->quantizationEnabled;
-			},
-			[=]() {
-				if (module) {
-					module->quantizationEnabled = !module->quantizationEnabled;
-				}
-			}
-		));
-		menu->addChild(createSubmenuItem("Scale", "", [=](Menu* scaleMenu) {
-			for (int i = 0; i < int(SCALES.size()); ++i) {
-				scaleMenu->addChild(createCheckMenuItem(
-					SCALES[size_t(i)].name,
-					"",
-					[=]() {
-						return module && clamp(int(std::round(module->params[Crownstep::SCALE_PARAM].getValue())), 0,
-							int(SCALES.size()) - 1) == i;
-					},
-					[=]() {
-						if (module) {
-							module->params[Crownstep::SCALE_PARAM].setValue(float(i));
-						}
-					}
-				));
-			}
-		}));
-		menu->addChild(createSubmenuItem("Key", "", [=](Menu* keyMenu) {
-			for (int i = 0; i < int(KEY_NAMES.size()); ++i) {
-				keyMenu->addChild(createCheckMenuItem(
-					KEY_NAMES[size_t(i)],
-					"",
-					[=]() {
-						return module && clamp(int(std::round(module->params[Crownstep::ROOT_PARAM].getValue())), 0, 11) == i;
-					},
-					[=]() {
-						if (module) {
-							module->params[Crownstep::ROOT_PARAM].setValue(float(i));
-						}
-					}
-				));
-			}
-		}));
-		menu->addChild(new MenuSeparator());
-		MenuLabel* pitchLabel = new MenuLabel();
-		pitchLabel->text = "Pitch";
-		menu->addChild(pitchLabel);
-		auto* rangeSlider = new ui::Slider();
-		rangeSlider->box.size = Vec(180.f, 24.f);
-		rangeSlider->quantity = new CrownstepRangeMenuQuantity(module);
-		menu->addChild(rangeSlider);
-		menu->addChild(createCheckMenuItem(
-			"Show Cell Pitch Values",
-			"",
-			[=]() {
-				return module && module->showCellPitchOverlay;
-			},
-			[=]() {
-				if (module) {
-					module->showCellPitchOverlay = !module->showCellPitchOverlay;
-				}
-			}
-		));
-		menu->addChild(createCheckMenuItem(
-			"Bipolar",
-			"",
-			[=]() {
-				return module && module->pitchBipolarEnabled;
-			},
-			[=]() {
-				if (module) {
-					module->pitchBipolarEnabled = !module->pitchBipolarEnabled;
-				}
-			}
-		));
-		menu->addChild(createCheckMenuItem(
-			"Smooth Melody",
-			"",
-			[=]() {
-				return module && module->melodicBiasEnabled;
-			},
-			[=]() {
-				if (module) {
-					module->melodicBiasEnabled = !module->melodicBiasEnabled;
-					module->refreshHeldPitchForCurrentStep();
-				}
-			}
-		));
-		menu->addChild(createSubmenuItem("Board Layout", "", [=](Menu* valueLayoutMenu) {
-			MenuLabel* currentLayoutLabel = new MenuLabel();
-			currentLayoutLabel->text = module
-				? std::string("Current: ") + BOARD_VALUE_LAYOUT_NAMES[size_t(clamp(
-					module->boardValueLayoutMode,
-					0,
-					int(BOARD_VALUE_LAYOUT_NAMES.size()) - 1
-				))] + (module->boardValueLayoutInverted ? " (Inverted)" : "")
-				: "Current: Center-Out";
-			valueLayoutMenu->addChild(currentLayoutLabel);
-			valueLayoutMenu->addChild(new MenuSeparator());
-			valueLayoutMenu->addChild(createCheckMenuItem(
-				"Inverted",
-				"",
-				[=]() {
-					return module && module->boardValueLayoutInverted;
-				},
-				[=]() {
-					if (module) {
-						module->boardValueLayoutInverted = !module->boardValueLayoutInverted;
-						module->refreshHeldPitchForCurrentStep();
-					}
-				}
-			));
-			valueLayoutMenu->addChild(new MenuSeparator());
-			valueLayoutMenu->addChild(createCheckMenuItem(
-				BOARD_VALUE_LAYOUT_NAMES[0],
-				"",
-				[=]() {
-					return module && module->boardValueLayoutMode == 0;
-				},
-				[=]() {
-					if (module) {
-						module->boardValueLayoutMode = 0;
-						module->refreshHeldPitchForCurrentStep();
-					}
-				}
-			));
-			valueLayoutMenu->addChild(createSubmenuItem("Linear", "", [=](Menu* linearMenu) {
-				for (int i : {1, 2, 3}) {
-					linearMenu->addChild(createCheckMenuItem(
-						BOARD_VALUE_LAYOUT_NAMES[size_t(i)],
-						"",
-						[=]() {
-							return module && module->boardValueLayoutMode == i;
-						},
-						[=]() {
-							if (module) {
-								module->boardValueLayoutMode = i;
-								module->refreshHeldPitchForCurrentStep();
-							}
-						}
-					));
-				}
-			}));
-			valueLayoutMenu->addChild(createSubmenuItem("Serpentine", "", [=](Menu* serpentineMenu) {
-				for (int i : {4, 5, 6}) {
-					serpentineMenu->addChild(createCheckMenuItem(
-						BOARD_VALUE_LAYOUT_NAMES[size_t(i)],
-						"",
-						[=]() {
-							return module && module->boardValueLayoutMode == i;
-						},
-						[=]() {
-							if (module) {
-								module->boardValueLayoutMode = i;
-								module->refreshHeldPitchForCurrentStep();
-							}
-						}
-					));
-				}
-			}));
-			valueLayoutMenu->addChild(createMenuItem(
-				"Randomize",
-				"",
-				[=]() {
-					if (module) {
-						module->boardValueLayoutMode = crownstep::BOARD_VALUE_LAYOUT_RANDOM;
-						module->randomizeBoardValueLayout();
-					}
-				}
-			));
-		}));
-		menu->addChild(createSubmenuItem("Source", "", [=](Menu* interpretationMenu) {
-			for (int i = 0; i < int(PITCH_INTERPRETATION_NAMES.size()); ++i) {
-				interpretationMenu->addChild(createCheckMenuItem(
-					PITCH_INTERPRETATION_NAMES[size_t(i)],
-					"",
-					[=]() {
-						return module && module->pitchInterpretationMode == i;
-					},
-					[=]() {
-						if (module) {
-							module->pitchInterpretationMode = i;
-						}
-					}
-				));
-			}
+		menu->addChild(createMenuItem("Open Crownstep Settings…", "", [this]() {
+			openSettings();
 		}));
 	}
 };

@@ -280,6 +280,7 @@ struct Crownstep : Module {
 	bool dispatchAiRequestIfIdle();
 
 	void setGameMode(int mode, bool startFreshGame);
+	void applyGameSetupAndStartNewGame(int requestedGameMode, int requestedPlayerMode);
 
 	void resetMoveAnimation();
 	void beginMoveAnimation(const Move& move, const BoardState& beforeBoard, int moverSide);
