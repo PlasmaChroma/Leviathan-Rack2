@@ -17,15 +17,16 @@
   <rect x="1180" y="860" width="6784" height="2880" rx="130" fill="none" stroke="#1fc6d5" stroke-opacity=".32" stroke-width="16"/>
   <g fill="#f3f4ff" font-family="Rubik" text-anchor="middle">
     <text x="4572" y="520" font-size="360" font-weight="700" letter-spacing="70">MANDELWAKE</text>
-    <g font-size="282.222" font-weight="400" fill="#c9c9df"><text x="800" y="3980">MAP</text><text x="2400" y="3980">CENTER X</text><text x="4200" y="3980">CENTER Y</text><text x="6000" y="3980">ZOOM</text><text x="7800" y="3980">ITER</text></g>
+    <g font-size="282.222" font-weight="400" fill="#c9c9df"><text x="800" y="5200">MAP</text><text x="2400" y="5200">CENTER X</text><text x="4200" y="5200">CENTER Y</text><text x="6000" y="5200">ZOOM</text><text x="7800" y="5200">ITER</text></g>
   </g>
   <g inkscape:groupmode="layer" inkscape:label="components" id="components" opacity="0">
     <rect id="MANDELWAKE_DISPLAY" x="1172" y="850" width="6800" height="2900" rx="120"/>
     <rect id="BRANDING_WAVE_LEFT_RASTER" x="120" y="170" width="780" height="520"/><rect id="BRANDING_WAVE_RIGHT_RASTER" x="8244" y="170" width="780" height="520"/>
-    <circle id="MAP_PARAM" cx="800" cy="4750" r="20"/><circle id="CENTER_X_PARAM" cx="2400" cy="4750" r="20"/><circle id="CENTER_Y_PARAM" cx="4200" cy="4750" r="20"/><circle id="ZOOM_PARAM" cx="6000" cy="4750" r="20"/><circle id="ITERATIONS_PARAM" cx="7800" cy="4750" r="20"/>
-    <circle id="MUTATION_PARAM" cx="1700" cy="6300" r="20"/><circle id="SMOOTH_PARAM" cx="3600" cy="6300" r="20"/><circle id="RATE_PARAM" cx="5500" cy="6300" r="20"/><circle id="DENSITY_PARAM" cx="7400" cy="6300" r="20"/>
-    <circle id="X_AMOUNT_PARAM" cx="1700" cy="7850" r="20"/><circle id="Y_AMOUNT_PARAM" cx="3600" cy="7850" r="20"/><circle id="ZOOM_AMOUNT_PARAM" cx="5500" cy="7850" r="20"/><circle id="MUTATE_AMOUNT_PARAM" cx="7400" cy="7850" r="20"/>
-    <circle id="RESEED_PARAM" cx="3900" cy="8750" r="20"/><circle id="SEED_LOCK_PARAM" cx="5400" cy="8750" r="20"/>
+    <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="2936.034" y="11843.102" width="3271.933" height="1224.054"/>
+    <circle id="MAP_PARAM" cx="800" cy="4500" r="20"/><circle id="CENTER_X_PARAM" cx="2400" cy="4500" r="20"/><circle id="CENTER_Y_PARAM" cx="4200" cy="4500" r="20"/><circle id="ZOOM_PARAM" cx="6000" cy="4500" r="20"/><circle id="ITERATIONS_PARAM" cx="7800" cy="4500" r="20"/>
+    <circle id="MUTATION_PARAM" cx="1700" cy="6150" r="20"/><circle id="SMOOTH_PARAM" cx="3600" cy="6150" r="20"/><circle id="RATE_PARAM" cx="5500" cy="6150" r="20"/><circle id="DENSITY_PARAM" cx="7400" cy="6150" r="20"/>
+    <circle id="X_AMOUNT_PARAM" cx="1700" cy="7750" r="20"/><circle id="Y_AMOUNT_PARAM" cx="3600" cy="7750" r="20"/><circle id="ZOOM_AMOUNT_PARAM" cx="5500" cy="7750" r="20"/><circle id="MUTATE_AMOUNT_PARAM" cx="7400" cy="7750" r="20"/>
+    <circle id="RESEED_PARAM" cx="3900" cy="9600" r="20"/><circle id="SEED_LOCK_PARAM" cx="5400" cy="9600" r="20"/>
     <circle id="CLOCK_INPUT" cx="800" cy="9600" r="20"/><circle id="RESET_INPUT" cx="2000" cy="9600" r="20"/><circle id="X_INPUT" cx="800" cy="10530" r="20"/><circle id="Y_INPUT" cx="2000" cy="10530" r="20"/><circle id="ZOOM_INPUT" cx="800" cy="11460" r="20"/><circle id="MUTATE_INPUT" cx="2000" cy="11460" r="20"/><circle id="SMOOTH_INPUT" cx="800" cy="12390" r="20"/><circle id="RATE_INPUT" cx="2000" cy="12390" r="20"/>
     <circle id="X_OUTPUT" cx="7140" cy="9600" r="20"/><circle id="Y_OUTPUT" cx="8340" cy="9600" r="20"/><circle id="RADIUS_OUTPUT" cx="7140" cy="10530" r="20"/><circle id="PHASE_OUTPUT" cx="8340" cy="10530" r="20"/><circle id="GATE_OUTPUT" cx="7140" cy="11460" r="20"/><circle id="ESCAPE_OUTPUT" cx="8340" cy="11460" r="20"/><circle id="STEP_OUTPUT" cx="7140" cy="12390" r="20"/>
   </g>
