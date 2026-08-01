@@ -1,0 +1,27 @@
+Solid spec — deterministic fixed-point core, clean audio/UI separation, Chronomaw/Bifurx-consistent architecture. Here's where I'd push back or tighten things up.
+
+## Actual gaps/inconsistencies
+
+**DENSITY has no input port.** The parameter table says DENSITY takes "0–10 V additive through a unipolar amount control," but the Input Specification table only lists 8 inputs (CLOCK, RESET, X, Y, ZOOM, MUTATE, SMOOTH, RATE) — DENSITY isn't among them. Either the port budget needs a 9th input (breaking the "eight inputs / seven outputs" panel layout), or DENSITY CV should be dropped from the parameter table for v1. This needs to be resolved before panel layout is finalized, since it changes the HP budget.
+
+**ZOOM's actual effect on the recurrence is never defined.** The doc specifies ZOOM's range (0–12 octaves, V/oct CV) and its role in the panel hierarchy ("major control"), but never states what it *does* to `x' `/`y'`. For a step-advanced state machine (not a rendered explorer), "zoom" can't mean camera zoom in the traditional fractal-viewer sense — there's no continuous image being panned. The two plausible readings are:
+- ZOOM scales the effective amplitude of MUTATION and/or CENTER CV, i.e., it controls how large a step the orbit takes through c-space per clock — "zooming" into finer perturbations at low settings, wider excursions at high settings.
+- ZOOM scales a coordinate transform applied to the *orbit state itself* before output/feature-extraction, effectively rescaling X/Y/RADIUS sensitivity.
+
+These produce very different musical behavior (one changes CV *content*, the other changes CV *sensitivity*), and the acceptance criteria/golden vectors can't be written until this is pinned down. I'd resolve this before the "Architecture lock" phase, not defer it into implementation.
+
+**RATE's upper bound (200 Hz) conflicts with the stated design philosophy.** The executive summary explicitly frames Mandelwake as "a musical state machine rather than a continuously rendered fractal explorer" and defers "audio-rate fractal oscillator output" to a future release. But at 200 Hz internal clock, orbit steps happen well into audio-rate territory, and since the fixed-point recurrence has no anti-aliasing or band-limiting (it's explicitly not treated as an oscillator), a fast RATE setting will produce raw, unfiltered stepped/aliased output on X/Y/RADIUS. That's not wrong, but it's worth either (a) capping RATE around 40–50 Hz to stay unambiguously in LFO/clock territory, or (b) keeping 200 Hz but explicitly documenting in the context menu / manual that high rates produce audio-rate stepping with no anti-aliasing guarantee, so it doesn't read as an accidental scope violation of the "defer audio-rate oscillator" decision.
+
+## Fixed-point core: mostly right, one thing to spell out
+
+The Q4.28 recurrence and the ±4 pre-multiplication clamp are sound for preventing 64-bit overflow — `x`,`y` capped near `4·2^28 ≈ 1.07×10^9` squares to about `1.15×10^18`, comfortably inside `int64`. But the escape test `x'² + y'² > 4S²` needs `4S²` computed as an explicit `int64_t` constant (`4 × 2^56 = 2^58`), since it overflows `int32`. Worth adding this as an explicit implementation note next to the formula rather than leaving it implicit — it's exactly the kind of thing that silently truncates on a careless port.
+
+Also, the doc reuses "4" for two different things — the pre-multiplication component clamp (±4 in real units) and the escape threshold (`4S²`, representing `|z|² > 4`, i.e., `|z| > 2`). They're related but not the same bound, and a reader skimming could conflate them. A short clarifying sentence ("the component clamp is a safety margin beyond the mathematical escape radius, not the escape threshold itself") would remove the ambiguity.
+
+## Smaller refinements worth considering
+
+- **RADIUS output range utilization**: since interior/non-escaping orbits typically stay well under `|z|=2`, most patches will see RADIUS hovering in a narrow low-voltage band rather than spanning the full 0–10 V. A context-menu option for a log or power-curve RADIUS response (in addition to linear) would make the output more usable as a modulation source without changing the deterministic core.
+- **Output scaling constants aren't stated explicitly**: X/Y are "±5 V, normalized real/imaginary coordinate," but the exact scale factor (presumably `2.5 V` per unit of `z`, given the ~±2 bounded range) isn't written down. Since golden-vector reproducibility is a stated goal, I'd pin this down alongside the ZOOM semantics rather than leaving it to implementation-time judgment.
+- **Periodicity checklist item**: with MUTATION at 0, a fully deterministic fixed-point map risks settling into short attracting cycles for interior `c` values, which would make GATE/STEP patterns monotonous. The default MUTATION (0.015) mitigates this, but I'd add an explicit test-plan item verifying orbits don't degenerate into short repeating cycles at default settings over a reasonable step horizon — this is a real risk that's specific to *exact* fixed-point determinism (floating point's numerical noise would have accidentally avoided this problem).
+
+Everything else — the Chronomaw/Bifurx architectural alignment, the snapshot/lock-free publication pattern, the render-timing checklist, and the phased delivery plan — looks well thought through and consistent with your existing plugin conventions.
