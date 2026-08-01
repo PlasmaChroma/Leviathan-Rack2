@@ -25,7 +25,7 @@
   </g>
   <g inkscape:groupmode="layer" inkscape:label="components" id="components" opacity="0">
     <rect id="MANDELWAKE_DISPLAY" x="1172" y="850" width="6800" height="2900" rx="120"/>
-    <rect id="BRANDING_WAVE_LEFT_RASTER" x="120" y="170" width="780" height="520"/><rect id="BRANDING_WAVE_RIGHT_RASTER" x="8244" y="170" width="780" height="520"/>
+    <rect id="BRANDING_WAVE_LEFT_RASTER" x="1681.644" y="12338.190" width="1306.748" height="511.810"/><rect id="BRANDING_WAVE_RIGHT_RASTER" x="6155.708" y="12338.190" width="1306.748" height="511.810"/>
     <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="2936.034" y="11843.102" width="3271.933" height="1224.054"/>
     <circle id="MAP_PARAM" cx="800" cy="4500" r="20"/><circle id="CENTER_X_PARAM" cx="2400" cy="4500" r="20"/><circle id="CENTER_Y_PARAM" cx="4200" cy="4500" r="20"/><circle id="ZOOM_PARAM" cx="6000" cy="4500" r="20"/><circle id="ITERATIONS_PARAM" cx="7800" cy="4500" r="20"/>
     <circle id="MUTATION_PARAM" cx="1700" cy="6150" r="20"/><circle id="SMOOTH_PARAM" cx="3600" cy="6150" r="20"/><circle id="RATE_PARAM" cx="5500" cy="6150" r="20"/><circle id="DENSITY_PARAM" cx="7400" cy="6150" r="20"/>

@@ -306,6 +306,11 @@ MandelwakeWidget::MandelwakeWidget(Mandelwake* module) {
 		"res/icon/Leviathan_Logo_S2.png", leviathanLogoRectMm));
 	previewBuildTimer.markPanelDone();
 
+	addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
+	addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0.f)));
+	addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+	addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+
 	math::Rect displayMm(Vec(11.72f, 8.5f), Vec(68.f, 29.f));
 	panel_svg::loadRectFromSvgMm(panelPath, "MANDELWAKE_DISPLAY", &displayMm);
 	widget::FramebufferWidget* framebuffer = new widget::FramebufferWidget();
