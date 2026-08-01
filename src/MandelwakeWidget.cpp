@@ -43,12 +43,21 @@ mandelwake::VisualSnapshot makeHeroSnapshot() {
 }
 
 struct MandelwakePanelLabels final : TransparentWidget {
+	std::shared_ptr<window::Font> rubik;
+
+	MandelwakePanelLabels() {
+		if (APP && APP->window) {
+			rubik = APP->window->loadFont(asset::plugin(pluginInstance, "fonts/Rubik-VariableFont_wght.ttf"));
+		}
+	}
+
 	void label(const DrawArgs& args, const char* text, float xMm, float yMm,
 		float sizeMm, NVGcolor color) {
 		if (!APP || !APP->window || !APP->window->uiFont) return;
 		const Vec position = mm2px(Vec(xMm, yMm));
-		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFontFaceId(args.vg, rubik && rubik->handle >= 0 ? rubik->handle : APP->window->uiFont->handle);
 		nvgFontSize(args.vg, mm2px(sizeMm));
+		nvgTextLetterSpacing(args.vg, 0.f);
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 		nvgFillColor(args.vg, color);
 		nvgText(args.vg, position.x, position.y, text, nullptr);
@@ -58,24 +67,25 @@ struct MandelwakePanelLabels final : TransparentWidget {
 		const NVGcolor control = nvgRGB(211, 211, 232);
 		const NVGcolor input = nvgRGB(139, 221, 255);
 		const NVGcolor output = nvgRGB(255, 221, 144);
-		label(args, "MANDELWAKE", 45.72f, 5.3f, 2.15f, nvgRGB(244, 244, 255));
+		constexpr float labelSize = 2.82222f;
+		label(args, "MANDELWAKE", 45.72f, 5.3f, 3.35f, nvgRGB(244, 244, 255));
 		const char* row1[] = {"MAP", "CENTER X", "CENTER Y", "ZOOM", "ITER"};
 		const float row1x[] = {8.f, 24.f, 42.f, 60.f, 78.f};
-		for (int i = 0; i < 5; ++i) label(args, row1[i], row1x[i], 44.f, 1.1f, control);
+		for (int i = 0; i < 5; ++i) label(args, row1[i], row1x[i], 39.8f, labelSize, control);
 		const char* row2[] = {"MUTATION", "SMOOTH", "RATE", "DENSITY"};
 		const char* row3[] = {"X AMT", "Y AMT", "ZOOM AMT", "MUTATE AMT"};
 		const float rowX[] = {17.f, 36.f, 55.f, 74.f};
 		for (int i = 0; i < 4; ++i) {
-			label(args, row2[i], rowX[i], 56.3f, 0.95f, control);
-			label(args, row3[i], rowX[i], 69.4f, 0.9f, control);
+			label(args, row2[i], rowX[i], 54.5f, labelSize, control);
+			label(args, row3[i], rowX[i], 70.8f, labelSize, control);
 		}
-		label(args, "RESEED", 39.f, 81.2f, 0.95f, control);
-		label(args, "SEED LOCK", 52.5f, 81.2f, 0.95f, control);
+		label(args, "RESEED", 30.f, 87.5f, labelSize, control);
+		label(args, "SEED LOCK", 66.f, 87.5f, labelSize, control);
 		const char* inputs[] = {"CLOCK", "RESET", "X CV", "Y CV", "ZOOM", "MUTATE", "SMOOTH", "RATE"};
 		const char* outputs[] = {"X", "Y", "RADIUS", "PHASE", "GATE", "ESCAPE", "STEP"};
-		for (int i = 0; i < 8; ++i) label(args, inputs[i], i & 1 ? 20.f : 8.f, 91.5f + 9.3f * (i / 2), 0.82f, input);
-		for (int i = 0; i < 7; ++i) label(args, outputs[i], i & 1 ? 83.4f : 71.4f, 91.5f + 9.3f * (i / 2), 0.82f, output);
-		label(args, "LEVIATHAN", 45.72f, 126.2f, 0.78f, nvgRGB(116, 110, 157));
+		for (int i = 0; i < 8; ++i) label(args, inputs[i], i & 1 ? 20.f : 8.f, 91.4f + 9.3f * (i / 2), labelSize, input);
+		for (int i = 0; i < 7; ++i) label(args, outputs[i], i & 1 ? 83.4f : 71.4f, 91.4f + 9.3f * (i / 2), labelSize, output);
+		label(args, "LEVIATHAN", 45.72f, 126.2f, 2.1f, nvgRGB(116, 110, 157));
 	}
 };
 
@@ -284,7 +294,7 @@ MandelwakeWidget::MandelwakeWidget(Mandelwake* module) {
 	visual_assets::addFractalGlassOverlay(this, panelPath, splitPanel.panelSurfaceEffectWidget());
 	previewBuildTimer.markPanelDone();
 
-	math::Rect displayMm(Vec(11.72f, 8.5f), Vec(68.f, 34.f));
+	math::Rect displayMm(Vec(11.72f, 8.5f), Vec(68.f, 29.f));
 	panel_svg::loadRectFromSvgMm(panelPath, "MANDELWAKE_DISPLAY", &displayMm);
 	widget::FramebufferWidget* framebuffer = new widget::FramebufferWidget();
 	framebuffer->box.pos = mm2px(displayMm.pos);
@@ -316,27 +326,27 @@ MandelwakeWidget::MandelwakeWidget(Mandelwake* module) {
 		else addParam(createParamCentered<Eclipse2Knob>(pos, module, paramId));
 	};
 
-	addParam(createParamCentered<CKSSThree>(mm2px(anchorMm("MAP_PARAM", Vec(8.f, 49.f))), module, Mandelwake::MAP_PARAM));
-	addMainKnob(Mandelwake::CENTER_X_PARAM, "CENTER_X_PARAM", Vec(24.f, 49.f), false);
-	addMainKnob(Mandelwake::CENTER_Y_PARAM, "CENTER_Y_PARAM", Vec(42.f, 49.f), false);
-	addMainKnob(Mandelwake::ZOOM_PARAM, "ZOOM_PARAM", Vec(60.f, 49.f), true);
-	addMainKnob(Mandelwake::ITERATIONS_PARAM, "ITERATIONS_PARAM", Vec(78.f, 49.f), false);
-	addMainKnob(Mandelwake::MUTATION_PARAM, "MUTATION_PARAM", Vec(17.f, 61.5f), false);
-	addMainKnob(Mandelwake::SMOOTH_PARAM, "SMOOTH_PARAM", Vec(36.f, 61.5f), false);
-	addMainKnob(Mandelwake::RATE_PARAM, "RATE_PARAM", Vec(55.f, 61.5f), false);
-	addMainKnob(Mandelwake::DENSITY_PARAM, "DENSITY_PARAM", Vec(74.f, 61.5f), false);
+	addParam(createParamCentered<CKSSThree>(mm2px(anchorMm("MAP_PARAM", Vec(8.f, 47.5f))), module, Mandelwake::MAP_PARAM));
+	addMainKnob(Mandelwake::CENTER_X_PARAM, "CENTER_X_PARAM", Vec(24.f, 47.5f), false);
+	addMainKnob(Mandelwake::CENTER_Y_PARAM, "CENTER_Y_PARAM", Vec(42.f, 47.5f), false);
+	addMainKnob(Mandelwake::ZOOM_PARAM, "ZOOM_PARAM", Vec(60.f, 47.5f), true);
+	addMainKnob(Mandelwake::ITERATIONS_PARAM, "ITERATIONS_PARAM", Vec(78.f, 47.5f), false);
+	addMainKnob(Mandelwake::MUTATION_PARAM, "MUTATION_PARAM", Vec(17.f, 63.f), false);
+	addMainKnob(Mandelwake::SMOOTH_PARAM, "SMOOTH_PARAM", Vec(36.f, 63.f), false);
+	addMainKnob(Mandelwake::RATE_PARAM, "RATE_PARAM", Vec(55.f, 63.f), false);
+	addMainKnob(Mandelwake::DENSITY_PARAM, "DENSITY_PARAM", Vec(74.f, 63.f), false);
 
 	const int amountParams[] = {Mandelwake::X_AMOUNT_PARAM, Mandelwake::Y_AMOUNT_PARAM, Mandelwake::ZOOM_AMOUNT_PARAM, Mandelwake::MUTATE_AMOUNT_PARAM};
 	const char* amountIds[] = {"X_AMOUNT_PARAM", "Y_AMOUNT_PARAM", "ZOOM_AMOUNT_PARAM", "MUTATE_AMOUNT_PARAM"};
 	const float amountX[] = {17.f, 36.f, 55.f, 74.f};
 	for (int i = 0; i < 4; ++i) {
 		auto* knob = createParamCentered<BipolarDarkTinyClockworkGearKnob>(
-			mm2px(anchorMm(amountIds[i], Vec(amountX[i], 73.5f))), module, amountParams[i]);
+			mm2px(anchorMm(amountIds[i], Vec(amountX[i], 78.5f))), module, amountParams[i]);
 		addParam(knob);
 	}
-	addParam(createParamCentered<SmallGoldButton>(mm2px(anchorMm("RESEED_PARAM", Vec(39.f, 84.5f))), module, Mandelwake::RESEED_PARAM));
+	addParam(createParamCentered<SmallGoldButton>(mm2px(anchorMm("RESEED_PARAM", Vec(39.f, 87.5f))), module, Mandelwake::RESEED_PARAM));
 	auto* seedLock = createLightParamCentered<SmallGoldApertureButton>(
-		mm2px(anchorMm("SEED_LOCK_PARAM", Vec(52.5f, 84.5f))), module,
+		mm2px(anchorMm("SEED_LOCK_PARAM", Vec(54.f, 87.5f))), module,
 		Mandelwake::SEED_LOCK_PARAM, Mandelwake::SEED_LOCK_LIGHT);
 	addParam(seedLock);
 
