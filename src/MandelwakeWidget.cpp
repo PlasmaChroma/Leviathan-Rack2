@@ -82,17 +82,17 @@ struct MandelwakePanelLabels final : TransparentWidget {
 		label(args, "ZOOM", 14.f, 100.5f, labelSize, input);
 		label(args, "MUTATE", 40.f, 100.5f, labelSize, input);
 		label(args, "RESEED", 56.f, 84.5f, labelSize, control);
-		label(args, "SEED LOCK", 56.f, 100.5f, labelSize, control);
+		label(args, "LOCK", 56.f, 100.5f, labelSize, control);
 		const char* directInputs[] = {"CLOCK", "RESET", "SMOOTH", "RATE"};
 		const float directInputX[] = {8.f, 22.f, 36.f, 50.f};
 		for (int i = 0; i < 4; ++i) label(args, directInputs[i], directInputX[i], 116.5f, labelSize, input);
-		label(args, "X", 67.f, 84.5f, labelSize, output);
-		label(args, "Y", 77.f, 84.5f, labelSize, output);
-		label(args, "RADIUS", 87.f, 84.5f, labelSize, output);
-		label(args, "PHASE", 67.f, 100.5f, labelSize, output);
-		label(args, "GATE", 77.f, 100.5f, labelSize, output);
-		label(args, "ESCAPE", 87.f, 100.5f, labelSize, output);
-		label(args, "STEP", 87.f, 116.5f, labelSize, output);
+		label(args, "X", 64.5f, 84.5f, labelSize, output);
+		label(args, "Y", 75.5f, 84.5f, labelSize, output);
+		label(args, "RADIUS", 86.5f, 84.5f, labelSize, output);
+		label(args, "PHASE", 64.5f, 100.5f, labelSize, output);
+		label(args, "GATE", 75.5f, 100.5f, labelSize, output);
+		label(args, "ESCAPE", 86.5f, 100.5f, labelSize, output);
+		label(args, "STEP", 75.5f, 116.5f, labelSize, output);
 	}
 };
 
@@ -377,8 +377,8 @@ MandelwakeWidget::MandelwakeWidget(Mandelwake* module) {
 		Vec(8.f, 110.f), Vec(22.f, 110.f), Vec(20.f, 78.f), Vec(46.f, 78.f),
 		Vec(20.f, 94.f), Vec(46.f, 94.f), Vec(36.f, 110.f), Vec(50.f, 110.f)};
 	const Vec outputPositions[] = {
-		Vec(67.f, 78.f), Vec(77.f, 78.f), Vec(87.f, 78.f), Vec(67.f, 94.f),
-		Vec(77.f, 94.f), Vec(87.f, 94.f), Vec(87.f, 110.f)};
+		Vec(64.5f, 78.f), Vec(75.5f, 78.f), Vec(86.5f, 78.f), Vec(64.5f, 94.f),
+		Vec(75.5f, 94.f), Vec(86.5f, 94.f), Vec(75.5f, 110.f)};
 	for (int i = 0; i < 8; ++i) {
 		addInput(createInputCentered<Magitek2InputJack>(
 			mm2px(anchorMm(inputAnchors[i], inputPositions[i])), module, inputIds[i]));
