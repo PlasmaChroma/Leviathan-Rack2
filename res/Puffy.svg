@@ -196,6 +196,14 @@
      font-size="120"
      fill="#ffdfa0"
      id="text21">OUT R</text>
+  <text
+     x="3048"
+     y="10410"
+     text-anchor="middle"
+     font-family="DejaVu Sans, sans-serif"
+     font-size="105"
+     fill="#ffdfa0"
+     id="character_link_label">LINK</text>
   <g
      id="components"
      opacity="0"
@@ -222,10 +230,22 @@
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="character_readout"
-       cx="2332"
-       cy="9962.7402"
+	   cx="1616"
+	   cy="9550"
        r="150"
        style="fill:#425f34;fill-opacity:1;stroke-width:15" />
+    <circle
+       id="positive_character_param"
+       cx="2332"
+       cy="9962.7402"
+       r="180"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="character_link_param"
+       cx="3048"
+       cy="9962.7402"
+       r="180"
+       style="fill:#425f34;fill-opacity:1" />
     <circle
        id="puff_param"
        cx="1111.0212"

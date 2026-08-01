@@ -81,18 +81,18 @@ struct MandelwakePanelLabels final : TransparentWidget {
 		label(args, "Y CV", 40.f, 84.5f, labelSize, input);
 		label(args, "ZOOM", 14.f, 100.5f, labelSize, input);
 		label(args, "MUTATE", 40.f, 100.5f, labelSize, input);
-		label(args, "RESEED", 56.f, 84.5f, labelSize, control);
-		label(args, "LOCK", 56.f, 100.5f, labelSize, control);
+		label(args, "RESEED", 6.f, 36.5f, labelSize, control);
+		label(args, "LOCK", 85.44f, 36.5f, labelSize, control);
 		const char* directInputs[] = {"CLOCK", "RESET", "SMOOTH", "RATE"};
 		const float directInputX[] = {8.f, 22.f, 36.f, 50.f};
 		for (int i = 0; i < 4; ++i) label(args, directInputs[i], directInputX[i], 116.5f, labelSize, input);
-		label(args, "X", 64.5f, 84.5f, labelSize, output);
-		label(args, "Y", 75.5f, 84.5f, labelSize, output);
-		label(args, "RADIUS", 86.5f, 84.5f, labelSize, output);
-		label(args, "PHASE", 64.5f, 100.5f, labelSize, output);
-		label(args, "GATE", 75.5f, 100.5f, labelSize, output);
-		label(args, "ESCAPE", 86.5f, 100.5f, labelSize, output);
-		label(args, "STEP", 75.5f, 116.5f, labelSize, output);
+		label(args, "X", 62.f, 84.5f, labelSize, output);
+		label(args, "Y", 73.f, 84.5f, labelSize, output);
+		label(args, "RADIUS", 84.f, 84.5f, labelSize, output);
+		label(args, "PHASE", 65.5f, 100.5f, labelSize, output);
+		label(args, "GATE", 82.f, 100.5f, labelSize, output);
+		label(args, "ESCAPE", 65.5f, 116.5f, labelSize, output);
+		label(args, "STEP", 82.f, 116.5f, labelSize, output);
 	}
 };
 
@@ -361,9 +361,9 @@ MandelwakeWidget::MandelwakeWidget(Mandelwake* module) {
 			mm2px(anchorMm(amountIds[i], amountPositions[i])), module, amountParams[i]);
 		addParam(knob);
 	}
-	addParam(createParamCentered<SmallGoldButton>(mm2px(anchorMm("RESEED_PARAM", Vec(56.f, 78.f))), module, Mandelwake::RESEED_PARAM));
+	addParam(createParamCentered<SmallGoldButton>(mm2px(anchorMm("RESEED_PARAM", Vec(6.f, 30.5f))), module, Mandelwake::RESEED_PARAM));
 	auto* seedLock = createLightParamCentered<SmallGoldApertureButton>(
-		mm2px(anchorMm("SEED_LOCK_PARAM", Vec(56.f, 94.f))), module,
+		mm2px(anchorMm("SEED_LOCK_PARAM", Vec(85.44f, 30.5f))), module,
 		Mandelwake::SEED_LOCK_PARAM, Mandelwake::SEED_LOCK_LIGHT);
 	addParam(seedLock);
 
@@ -377,8 +377,8 @@ MandelwakeWidget::MandelwakeWidget(Mandelwake* module) {
 		Vec(8.f, 110.f), Vec(22.f, 110.f), Vec(20.f, 78.f), Vec(46.f, 78.f),
 		Vec(20.f, 94.f), Vec(46.f, 94.f), Vec(36.f, 110.f), Vec(50.f, 110.f)};
 	const Vec outputPositions[] = {
-		Vec(64.5f, 78.f), Vec(75.5f, 78.f), Vec(86.5f, 78.f), Vec(64.5f, 94.f),
-		Vec(75.5f, 94.f), Vec(86.5f, 94.f), Vec(75.5f, 110.f)};
+		Vec(62.f, 78.f), Vec(73.f, 78.f), Vec(84.f, 78.f), Vec(65.5f, 94.f),
+		Vec(82.f, 94.f), Vec(65.5f, 110.f), Vec(82.f, 110.f)};
 	for (int i = 0; i < 8; ++i) {
 		addInput(createInputCentered<Magitek2InputJack>(
 			mm2px(anchorMm(inputAnchors[i], inputPositions[i])), module, inputIds[i]));

@@ -18,7 +18,8 @@ struct PuffyTransferPreviewWidget final : TransparentWidget {
 	float lastAmount = -1.f;
 	float lastFast = -1.f;
 	float lastTransient = -1.f;
-	int lastCharacter = -1;
+	int lastNegativeCharacter = -1;
+	int lastPositiveCharacter = -1;
 	Vec lastCurveSize;
 
 	explicit PuffyTransferPreviewWidget(Puffy* module);

@@ -1,7 +1,8 @@
 #pragma once
 
 struct PuffyPose {
-	float characterTintWeights[4] = {1.f, 0.f, 0.f, 0.f};
+	float negativeCharacterTintWeights[4] = {1.f, 0.f, 0.f, 0.f};
+	float positiveCharacterTintWeights[4] = {1.f, 0.f, 0.f, 0.f};
 	float inflation = 0.f;
 	float squashX = 0.f;
 	float squashY = 0.f;

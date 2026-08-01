@@ -34,7 +34,8 @@ struct Frame {
 	float negativeInputActivity = 0.f;
 	float transientActivity = 0.f;
 	float limiterGain = 1.f;
-	int character = 0;
+	int negativeCharacter = 0;
+	int positiveCharacter = 0;
 };
 
 class Engine {
@@ -47,10 +48,23 @@ public:
 		float inputLeft,
 		float inputRight,
 		float amountTarget,
-		int character,
+		int negativeCharacter,
+		int positiveCharacter,
 		bool autoDeflate,
 		float manualDeflate,
 		float wetTarget = 1.f);
+	Frame process(
+		float inputLeft,
+		float inputRight,
+		float amountTarget,
+		int character,
+		bool autoDeflate,
+		float manualDeflate,
+		float wetTarget = 1.f) {
+		return process(
+			inputLeft, inputRight, amountTarget, character, character,
+			autoDeflate, manualDeflate, wetTarget);
+	}
 
 	float getSampleRate() const {
 		return sampleRate;
@@ -118,10 +132,23 @@ private:
 	PathState primaryPath;
 	PathState secondaryPath;
 
-	Character currentCharacter = Character::Bloom;
-	Character transitionFrom = Character::Bloom;
-	Character transitionTo = Character::Bloom;
-	Character pendingCharacter = Character::Bloom;
+	struct CharacterPair {
+		Character negative = Character::Bloom;
+		Character positive = Character::Bloom;
+		CharacterPair() = default;
+		CharacterPair(Character negative, Character positive)
+			: negative(negative), positive(positive) {
+		}
+
+		bool operator==(const CharacterPair& other) const {
+			return negative == other.negative && positive == other.positive;
+		}
+	};
+
+	CharacterPair currentCharacters;
+	CharacterPair transitionFrom;
+	CharacterPair transitionTo;
+	CharacterPair pendingCharacters;
 	int transitionSample = 0;
 	int transitionLength = 1;
 	bool transitionActive = false;
@@ -129,7 +156,7 @@ private:
 
 	void resetSharedControlState();
 	void resetChannel(bool left);
-	void beginCharacterTransition(Character requested);
+	void beginCharacterTransition(CharacterPair requested);
 	static CharacterCoefficients prepareCharacter(
 		Character character,
 		float amount,
@@ -140,7 +167,8 @@ private:
 	float manualGain(float normalizedDeflate);
 	float processPath(
 		PathState& path,
-		const CharacterCoefficients& coefficients,
+		const CharacterCoefficients& negativeCoefficients,
+		const CharacterCoefficients& positiveCoefficients,
 		float* oversampledLeft,
 		float* oversampledRight,
 		float autoDeflateAmount,

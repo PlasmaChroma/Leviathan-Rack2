@@ -15,7 +15,9 @@ struct PuffyVisualState {
 	float negativeInputActivity = 0.f;
 	float transientActivity = 0.f;
 	float gainReduction = 0.f;
-	int character = 0;
+	int negativeCharacter = 0;
+	int positiveCharacter = 0;
+	bool charactersLinked = true;
 };
 
 struct Puffy final : Module {
@@ -25,6 +27,8 @@ struct Puffy final : Module {
 		DEFLATE_PARAM,
 		PUFF_CV_AMOUNT_PARAM,
 		MIX_PARAM,
+		POSITIVE_CHARACTER_PARAM,
+		CHARACTER_LINK_PARAM,
 		PARAMS_LEN
 	};
 
@@ -43,6 +47,7 @@ struct Puffy final : Module {
 
 	enum LightId {
 		LIMIT_LIGHT,
+		CHARACTER_LINK_LIGHT,
 		LIGHTS_LEN
 	};
 
@@ -57,7 +62,9 @@ struct Puffy final : Module {
 	std::atomic<float> visualNegativeInputActivity {0.f};
 	std::atomic<float> visualTransientActivity {0.f};
 	std::atomic<float> visualGainReduction {0.f};
-	std::atomic<int> visualCharacter {0};
+	std::atomic<int> visualNegativeCharacter {0};
+	std::atomic<int> visualPositiveCharacter {0};
+	std::atomic<bool> visualCharactersLinked {true};
 	std::uint32_t visualDivider = 0u;
 	std::uint32_t visualDivision = 200u;
 	float lastGainReduction = 0.f;
@@ -72,6 +79,7 @@ struct Puffy final : Module {
 	json_t* dataToJson() override;
 	void dataFromJson(json_t* root) override;
 	bool readVisualState(PuffyVisualState* state) const;
+	void synchronizeCharacterSelectionFromUi(bool negativeIsSource);
 
 private:
 	void publishVisualState(const puffy::Frame& frame);

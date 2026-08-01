@@ -24,11 +24,13 @@
     <path d="M-900 7420 C1810 6750 3050 7280 4930 7140 S8050 6500 10000 7530"/>
   </g>
   <g id="SIGNAL_FIELDS" stroke="#ffffff" stroke-width="24" stroke-opacity=".06">
-    <rect x="220" y="7150" width="4930" height="3100" rx="180"
+    <rect x="220" y="3930" width="8704" height="3100" rx="180"
+      style="opacity:0.33;fill:#5740bf;fill-opacity:1"/>
+    <rect x="220" y="7150" width="5380" height="3100" rx="180"
       style="opacity:0.33;fill:#5740bf;fill-opacity:1"/>
     <rect x="220" y="10350" width="5380" height="1470" rx="180"
       style="opacity:0.33;fill:#5740bf;fill-opacity:1"/>
-    <rect x="6040" y="7150" width="2880" height="4670" rx="180"
+    <rect x="5800" y="7150" width="3120" height="4670" rx="180"
       style="opacity:0.33;fill:#1cccd9;fill-opacity:0.5"/>
   </g>
   <g id="CV_PAIR_LINKS" fill="none" stroke="#7a5cff" stroke-opacity=".72" stroke-width="45" stroke-linecap="round">
@@ -55,8 +57,8 @@
     <circle id="Y_AMOUNT_PARAM" cx="3400" cy="7800" r="20"/>
     <circle id="ZOOM_AMOUNT_PARAM" cx="800" cy="9400" r="20"/>
     <circle id="MUTATE_AMOUNT_PARAM" cx="3400" cy="9400" r="20"/>
-    <circle id="RESEED_PARAM" cx="5600" cy="7800" r="20"/>
-    <circle id="SEED_LOCK_PARAM" cx="5600" cy="9400" r="20"/>
+    <circle id="RESEED_PARAM" cx="600" cy="3050" r="20"/>
+    <circle id="SEED_LOCK_PARAM" cx="8544" cy="3050" r="20"/>
     <circle id="CLOCK_INPUT" cx="800" cy="11000" r="20"/>
     <circle id="RESET_INPUT" cx="2200" cy="11000" r="20"/>
     <circle id="X_INPUT" cx="2000" cy="7800" r="20"/>
@@ -65,12 +67,12 @@
     <circle id="MUTATE_INPUT" cx="4600" cy="9400" r="20"/>
     <circle id="SMOOTH_INPUT" cx="3600" cy="11000" r="20"/>
     <circle id="RATE_INPUT" cx="5000" cy="11000" r="20"/>
-    <circle id="X_OUTPUT" cx="6450" cy="7800" r="20"/>
-    <circle id="Y_OUTPUT" cx="7550" cy="7800" r="20"/>
-    <circle id="RADIUS_OUTPUT" cx="8650" cy="7800" r="20"/>
-    <circle id="PHASE_OUTPUT" cx="6450" cy="9400" r="20"/>
-    <circle id="GATE_OUTPUT" cx="7550" cy="9400" r="20"/>
-    <circle id="ESCAPE_OUTPUT" cx="8650" cy="9400" r="20"/>
-    <circle id="STEP_OUTPUT" cx="7550" cy="11000" r="20"/>
+    <circle id="X_OUTPUT" cx="6200" cy="7800" r="20"/>
+    <circle id="Y_OUTPUT" cx="7300" cy="7800" r="20"/>
+    <circle id="RADIUS_OUTPUT" cx="8400" cy="7800" r="20"/>
+    <circle id="PHASE_OUTPUT" cx="6550" cy="9400" r="20"/>
+    <circle id="GATE_OUTPUT" cx="8200" cy="9400" r="20"/>
+    <circle id="ESCAPE_OUTPUT" cx="6550" cy="11000" r="20"/>
+    <circle id="STEP_OUTPUT" cx="8200" cy="11000" r="20"/>
   </g>
 </svg>

@@ -35,7 +35,8 @@ PuffyTransferPreviewWidget::PuffyTransferPreviewWidget(Puffy* module)
 	visual.effectiveAmount = 0.25f;
 	visual.positiveInputActivity = 0.35f;
 	visual.negativeInputActivity = 0.35f;
-	visual.character = int(puffy::Character::Bloom);
+	visual.negativeCharacter = int(puffy::Character::Bloom);
+	visual.positiveCharacter = int(puffy::Character::Bloom);
 
 	curveFramebuffer = new widget::FramebufferWidget();
 	curveFramebuffer->dirtyOnSubpixelChange = false;
@@ -58,21 +59,27 @@ void PuffyTransferPreviewWidget::rebuildPoints() {
 	puffy::DynamicsState dynamics;
 	dynamics.fast = clamp(visual.inputActivity, 0.f, 1.f);
 	dynamics.transient = clamp(visual.transientActivity, 0.f, 1.f);
-	const puffy::Character character = static_cast<puffy::Character>(
-		clamp(visual.character, 0, 3));
+	const puffy::Character negativeCharacter = static_cast<puffy::Character>(
+		clamp(visual.negativeCharacter, 0, 3));
+	const puffy::Character positiveCharacter = static_cast<puffy::Character>(
+		clamp(visual.positiveCharacter, 0, 3));
 	const float amount = clamp(visual.effectiveAmount, 0.f, 1.f);
 	for (int i = 0; i < POINT_COUNT; ++i) {
 		const float normalized = float(i) / float(POINT_COUNT - 1);
 		const float input = -DOMAIN + 2.f * DOMAIN * normalized;
 		const float output = puffy::Engine::processCharacter(
-			character, input, amount, dynamics);
+			input < 0.f ? negativeCharacter : positiveCharacter,
+			input,
+			amount,
+			dynamics);
 		points[size_t(i)] = Vec(inputToX(input), outputToY(output));
 	}
 	pointsValid = true;
 	lastAmount = amount;
 	lastFast = dynamics.fast;
 	lastTransient = dynamics.transient;
-	lastCharacter = int(character);
+	lastNegativeCharacter = int(negativeCharacter);
+	lastPositiveCharacter = int(positiveCharacter);
 	lastCurveSize = box.size;
 	if (curveFramebuffer) {
 		curveFramebuffer->setDirty();
@@ -94,15 +101,19 @@ void PuffyTransferPreviewWidget::step() {
 		curveLayer->box.size = box.size;
 	}
 
-	const int character = clamp(visual.character, 0, 3);
-	const bool frenzyReactive = character == int(puffy::Character::Frenzy);
+	const int negativeCharacter = clamp(visual.negativeCharacter, 0, 3);
+	const int positiveCharacter = clamp(visual.positiveCharacter, 0, 3);
+	const bool frenzyReactive =
+		negativeCharacter == int(puffy::Character::Frenzy)
+		|| positiveCharacter == int(puffy::Character::Frenzy);
 	const bool sizeChanged =
 		std::fabs(lastCurveSize.x - box.size.x) > 0.25f
 		|| std::fabs(lastCurveSize.y - box.size.y) > 0.25f;
 	const bool curveChanged =
 		!pointsValid
 		|| sizeChanged
-		|| character != lastCharacter
+		|| negativeCharacter != lastNegativeCharacter
+		|| positiveCharacter != lastPositiveCharacter
 		|| std::fabs(visual.effectiveAmount - lastAmount) > 0.001f
 		|| (frenzyReactive
 			&& (std::fabs(visual.inputActivity - lastFast) > 0.01f
@@ -131,23 +142,32 @@ void PuffyTransferPreviewWidget::draw(const DrawArgs& args) {
 		(visual.negativeInputActivity - DOMAIN) / 0.25f, 0.f, 1.f);
 	const float positiveOverrange = clamp(
 		(visual.positiveInputActivity - DOMAIN) / 0.25f, 0.f, 1.f);
-	const NVGcolor tint = puffy_visual::characterTint(
-		clamp(visual.character, 0, 3));
+	const NVGcolor negativeTint = puffy_visual::characterTint(
+		clamp(visual.negativeCharacter, 0, 3));
+	const NVGcolor positiveTint = puffy_visual::characterTint(
+		clamp(visual.positiveCharacter, 0, 3));
 
 	nvgSave(args.vg);
 	nvgScissor(args.vg, 0.f, 0.f, width, height);
 	nvgBeginPath(args.vg);
 	nvgRect(args.vg, negativeX, 0.f, centerX - negativeX, height);
+	nvgFillColor(args.vg, withAlpha(negativeTint, 0.13f));
+	nvgFill(args.vg);
+	nvgBeginPath(args.vg);
 	nvgRect(args.vg, centerX, 0.f, positiveX - centerX, height);
-	nvgFillColor(args.vg, withAlpha(tint, 0.13f));
+	nvgFillColor(args.vg, withAlpha(positiveTint, 0.13f));
 	nvgFill(args.vg);
 
 	nvgBeginPath(args.vg);
 	nvgMoveTo(args.vg, negativeX, 0.f);
 	nvgLineTo(args.vg, negativeX, height);
+	nvgStrokeColor(args.vg, withAlpha(negativeTint, 0.38f));
+	nvgStrokeWidth(args.vg, 0.8f);
+	nvgStroke(args.vg);
+	nvgBeginPath(args.vg);
 	nvgMoveTo(args.vg, positiveX, 0.f);
 	nvgLineTo(args.vg, positiveX, height);
-	nvgStrokeColor(args.vg, withAlpha(tint, 0.38f));
+	nvgStrokeColor(args.vg, withAlpha(positiveTint, 0.38f));
 	nvgStrokeWidth(args.vg, 0.8f);
 	nvgStroke(args.vg);
 
@@ -158,7 +178,7 @@ void PuffyTransferPreviewWidget::draw(const DrawArgs& args) {
 		const float stripWidth = 1.f + 2.f * negativeOverrange;
 		nvgRect(args.vg, 0.f, 0.f, stripWidth, height);
 		nvgFillColor(args.vg, withAlpha(
-			tint, 0.30f + 0.55f * negativeOverrange));
+			negativeTint, 0.30f + 0.55f * negativeOverrange));
 		nvgFill(args.vg);
 	}
 	if (positiveOverrange > 0.f) {
@@ -166,7 +186,7 @@ void PuffyTransferPreviewWidget::draw(const DrawArgs& args) {
 		const float stripWidth = 1.f + 2.f * positiveOverrange;
 		nvgRect(args.vg, width - stripWidth, 0.f, stripWidth, height);
 		nvgFillColor(args.vg, withAlpha(
-			tint, 0.30f + 0.55f * positiveOverrange));
+			positiveTint, 0.30f + 0.55f * positiveOverrange));
 		nvgFill(args.vg);
 	}
 
@@ -190,8 +210,10 @@ void PuffyTransferPreviewWidget::drawCurve(const DrawArgs& args) const {
 	if (!pointsValid || box.size.x <= 1.f || box.size.y <= 1.f) {
 		return;
 	}
-	const NVGcolor tint = puffy_visual::characterTint(
-		clamp(visual.character, 0, 3));
+	const NVGcolor negativeTint = puffy_visual::characterTint(
+		clamp(visual.negativeCharacter, 0, 3));
+	const NVGcolor positiveTint = puffy_visual::characterTint(
+		clamp(visual.positiveCharacter, 0, 3));
 
 	nvgSave(args.vg);
 	nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
@@ -211,7 +233,18 @@ void PuffyTransferPreviewWidget::drawCurve(const DrawArgs& args) const {
 			nvgLineTo(args.vg, points[size_t(i)].x, points[size_t(i)].y);
 		}
 	}
-	nvgStrokeColor(args.vg, withAlpha(tint, 0.94f));
+	NVGcolor negativeCurveTint = negativeTint;
+	NVGcolor positiveCurveTint = positiveTint;
+	negativeCurveTint.a = 0.94f;
+	positiveCurveTint.a = 0.94f;
+	nvgStrokePaint(args.vg, nvgLinearGradient(
+		args.vg,
+		0.f,
+		0.f,
+		box.size.x,
+		0.f,
+		negativeCurveTint,
+		positiveCurveTint));
 	nvgStrokeWidth(args.vg, 1.35f);
 	nvgLineCap(args.vg, NVG_ROUND);
 	nvgLineJoin(args.vg, NVG_ROUND);

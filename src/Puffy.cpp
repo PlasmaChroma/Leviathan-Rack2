@@ -21,6 +21,12 @@ Puffy::Puffy() {
 		PUFF_CV_AMOUNT_PARAM, -1.f, 1.f, 0.f,
 		"Puff CV amount", "%", 0.f, 100.f);
 	configParam(MIX_PARAM, 0.f, 1.f, 1.f, "Mix", "%", 0.f, 100.f);
+	configSwitch(
+		POSITIVE_CHARACTER_PARAM, 0.f, 3.f, 0.f, "Positive character",
+		{"BLOOM", "SPINE", "FRENZY", "RIPTIDE"});
+	configSwitch(
+		CHARACTER_LINK_PARAM, 0.f, 1.f, 1.f, "Link polarity characters",
+		{"Unlinked", "Linked"});
 
 	configInput(INPUT_L, "Left audio");
 	configInput(INPUT_R, "Right audio");
@@ -28,6 +34,7 @@ Puffy::Puffy() {
 	configOutput(OUTPUT_L, "Left audio");
 	configOutput(OUTPUT_R, "Right audio");
 	configLight(LIMIT_LIGHT, "Limiter gain reduction");
+	configLight(CHARACTER_LINK_LIGHT, "Polarity character link");
 	configBypass(INPUT_L, OUTPUT_L);
 	configBypass(INPUT_R, OUTPUT_R);
 }
@@ -52,7 +59,13 @@ void Puffy::publishVisualState(const puffy::Frame& frame) {
 		frame.negativeInputActivity, std::memory_order_relaxed);
 	visualTransientActivity.store(frame.transientActivity, std::memory_order_relaxed);
 	visualGainReduction.store(gainReduction, std::memory_order_relaxed);
-	visualCharacter.store(frame.character, std::memory_order_relaxed);
+	visualNegativeCharacter.store(
+		frame.negativeCharacter, std::memory_order_relaxed);
+	visualPositiveCharacter.store(
+		frame.positiveCharacter, std::memory_order_relaxed);
+	visualCharactersLinked.store(
+		params[CHARACTER_LINK_PARAM].getValue() > 0.5f,
+		std::memory_order_relaxed);
 	visualSequence.fetch_add(1u, std::memory_order_release);
 	lastGainReduction = gainReduction;
 }
@@ -81,7 +94,12 @@ bool Puffy::readVisualState(PuffyVisualState* state) const {
 			visualTransientActivity.load(std::memory_order_relaxed);
 		snapshot.gainReduction =
 			visualGainReduction.load(std::memory_order_relaxed);
-		snapshot.character = visualCharacter.load(std::memory_order_relaxed);
+		snapshot.negativeCharacter =
+			visualNegativeCharacter.load(std::memory_order_relaxed);
+		snapshot.positiveCharacter =
+			visualPositiveCharacter.load(std::memory_order_relaxed);
+		snapshot.charactersLinked =
+			visualCharactersLinked.load(std::memory_order_relaxed);
 		const std::uint32_t after =
 			visualSequence.load(std::memory_order_acquire);
 		if (before == after && !(after & 1u)) {
@@ -90,6 +108,19 @@ bool Puffy::readVisualState(PuffyVisualState* state) const {
 		}
 	}
 	return false;
+}
+
+void Puffy::synchronizeCharacterSelectionFromUi(bool negativeIsSource) {
+	if (params[CHARACTER_LINK_PARAM].getValue() <= 0.5f) {
+		return;
+	}
+	const int sourceId = negativeIsSource
+		? CHARACTER_PARAM
+		: POSITIVE_CHARACTER_PARAM;
+	const int destinationId = negativeIsSource
+		? POSITIVE_CHARACTER_PARAM
+		: CHARACTER_PARAM;
+	params[destinationId].setValue(params[sourceId].getValue());
 }
 
 void Puffy::process(const ProcessArgs& args) {
@@ -120,13 +151,29 @@ void Puffy::process(const ProcessArgs& args) {
 			+ params[PUFF_CV_AMOUNT_PARAM].getValue() * puffCv / 10.f,
 		0.f,
 		1.f);
-	const int character = clamp(
+	const int negativeCharacter = clamp(
 		int(std::lround(params[CHARACTER_PARAM].getValue())), 0, 3);
+	const bool charactersLinked =
+		params[CHARACTER_LINK_PARAM].getValue() > 0.5f;
+	if (charactersLinked
+		&& params[POSITIVE_CHARACTER_PARAM].getValue()
+			!= params[CHARACTER_PARAM].getValue()) {
+		params[POSITIVE_CHARACTER_PARAM].setValue(
+			params[CHARACTER_PARAM].getValue());
+	}
+	const int positiveCharacter = charactersLinked
+		? negativeCharacter
+		: clamp(
+			int(std::lround(
+				params[POSITIVE_CHARACTER_PARAM].getValue())),
+			0,
+			3);
 	const puffy::Frame frame = engine.process(
 		left,
 		right,
 		amountTarget,
-		character,
+		negativeCharacter,
+		positiveCharacter,
 		autoDeflateEnabled.load(std::memory_order_relaxed),
 		params[DEFLATE_PARAM].getValue(),
 		params[MIX_PARAM].getValue());
@@ -142,6 +189,7 @@ void Puffy::process(const ProcessArgs& args) {
 		publishVisualState(frame);
 	}
 	lights[LIMIT_LIGHT].setSmoothBrightness(lastGainReduction, args.sampleTime);
+	lights[CHARACTER_LINK_LIGHT].setBrightness(charactersLinked ? 1.f : 0.f);
 	if (measurePerf) {
 		debugMetrics.recordProcess(
 			debug_terminal::elapsedNsSince(processStart));
@@ -152,11 +200,15 @@ void Puffy::onReset(const ResetEvent& event) {
 	(void) event;
 	engine.reset();
 	autoDeflateEnabled.store(true, std::memory_order_relaxed);
+	params[CHARACTER_LINK_PARAM].setValue(1.f);
+	params[POSITIVE_CHARACTER_PARAM].setValue(
+		params[CHARACTER_PARAM].getValue());
 	visualDivider = 0u;
 	lastGainReduction = 0.f;
 	puffy::Frame frame;
 	publishVisualState(frame);
 	lights[LIMIT_LIGHT].setBrightness(0.f);
+	lights[CHARACTER_LINK_LIGHT].setBrightness(1.f);
 }
 
 void Puffy::onSampleRateChange(const SampleRateChangeEvent& event) {
@@ -188,6 +240,10 @@ void Puffy::dataFromJson(json_t* root) {
 		}
 	}
 	autoDeflateEnabled.store(loadedAutoDeflate, std::memory_order_relaxed);
+	if (params[CHARACTER_LINK_PARAM].getValue() > 0.5f) {
+		params[POSITIVE_CHARACTER_PARAM].setValue(
+			params[CHARACTER_PARAM].getValue());
+	}
 	engine.reset();
 	visualDivider = 0u;
 	lastGainReduction = 0.f;

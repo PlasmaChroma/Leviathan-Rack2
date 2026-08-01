@@ -157,10 +157,10 @@ void Engine::reset() {
 	autoDeflateStateInitialized = false;
 	cachedManualDeflate = -1.f;
 	cachedManualGain = 1.f;
-	currentCharacter = Character::Bloom;
-	transitionFrom = Character::Bloom;
-	transitionTo = Character::Bloom;
-	pendingCharacter = Character::Bloom;
+	currentCharacters = {};
+	transitionFrom = {};
+	transitionTo = {};
+	pendingCharacters = {};
 	transitionSample = 0;
 	transitionActive = false;
 	pendingCharacterActive = false;
@@ -192,7 +192,7 @@ float Engine::updateFollower(
 	return current + (target - current) * coefficient;
 }
 
-void Engine::beginCharacterTransition(Character requested) {
+void Engine::beginCharacterTransition(CharacterPair requested) {
 	if (transitionActive) {
 		if (requested == transitionTo) {
 			pendingCharacterActive = false;
@@ -205,15 +205,15 @@ void Engine::beginCharacterTransition(Character requested) {
 			pendingCharacterActive = false;
 			return;
 		}
-		pendingCharacter = requested;
+		pendingCharacters = requested;
 		pendingCharacterActive = true;
 		return;
 	}
-	if (requested == currentCharacter) {
+	if (requested == currentCharacters) {
 		pendingCharacterActive = false;
 		return;
 	}
-	transitionFrom = currentCharacter;
+	transitionFrom = currentCharacters;
 	transitionTo = requested;
 	secondaryPath = primaryPath;
 	transitionSample = 0;
@@ -325,7 +325,8 @@ float Engine::manualGain(float normalizedDeflate) {
 
 float Engine::processPath(
 	PathState& path,
-	const CharacterCoefficients& coefficients,
+	const CharacterCoefficients& negativeCoefficients,
+	const CharacterCoefficients& positiveCoefficients,
 	float* oversampledLeft,
 	float* oversampledRight,
 	float autoDeflateAmount,
@@ -334,6 +335,9 @@ float Engine::processPath(
 	std::array<float, kOversampleFactor> shaped {};
 	float* input = left ? oversampledLeft : oversampledRight;
 	for (int i = 0; i < kOversampleFactor; ++i) {
+		const CharacterCoefficients& coefficients = input[i] < 0.f
+			? negativeCoefficients
+			: positiveCoefficients;
 		const float wet = applyCharacter(input[i], coefficients);
 		shaped[static_cast<std::size_t>(i)] =
 			input[i] + (wet - input[i]) * wetAmount;
@@ -342,8 +346,14 @@ float Engine::processPath(
 		? path.decimatorLeft.process(shaped.data())
 		: path.decimatorRight.process(shaped.data());
 	output = left ? path.dcLeft.process(output) : path.dcRight.process(output);
-	const float compensationGain = updateAutoGain(
-		coefficients.character, coefficients.amount);
+	// Keep compensation constant across both polarities. Polarity-dependent
+	// gain would create a second, unintended asymmetric transfer function.
+	const float negativeDb = autoDeflateDb(
+		negativeCoefficients.character, negativeCoefficients.amount);
+	const float positiveDb = autoDeflateDb(
+		positiveCoefficients.character, positiveCoefficients.amount);
+	const float compensationGain = fastNegativeExp(
+		0.5f * (negativeDb + positiveDb) * 0.1151292546497023f);
 	output *= 1.f + (compensationGain - 1.f)
 		* clamp01(autoDeflateAmount) * wetAmount;
 	return output;
@@ -353,7 +363,8 @@ Frame Engine::process(
 	float inputLeft,
 	float inputRight,
 	float amountTarget,
-	int character,
+	int negativeCharacter,
+	int positiveCharacter,
 	bool autoDeflate,
 	float manualDeflate,
 	float wetTarget) {
@@ -418,8 +429,11 @@ Frame Engine::process(
 		autoDeflateMix +=
 			(autoDeflateTarget - autoDeflateMix) * autoDeflateCoefficient;
 	}
-	const Character requestedCharacter = clampCharacter(character);
-	beginCharacterTransition(requestedCharacter);
+	const CharacterPair requestedCharacters {
+		clampCharacter(negativeCharacter),
+		clampCharacter(positiveCharacter)
+	};
+	beginCharacterTransition(requestedCharacters);
 
 	std::array<float, kOversampleFactor> oversampledLeft {};
 	std::array<float, kOversampleFactor> oversampledRight {};
@@ -429,21 +443,29 @@ Frame Engine::process(
 	float normalizedLeft = 0.f;
 	float normalizedRight = 0.f;
 	if (transitionActive) {
-		const CharacterCoefficients oldCoefficients =
-			prepareCharacter(transitionFrom, amount, dynamics);
-		const CharacterCoefficients newCoefficients =
-			prepareCharacter(transitionTo, amount, dynamics);
+		const CharacterCoefficients oldNegativeCoefficients =
+			prepareCharacter(transitionFrom.negative, amount, dynamics);
+		const CharacterCoefficients oldPositiveCoefficients =
+			prepareCharacter(transitionFrom.positive, amount, dynamics);
+		const CharacterCoefficients newNegativeCoefficients =
+			prepareCharacter(transitionTo.negative, amount, dynamics);
+		const CharacterCoefficients newPositiveCoefficients =
+			prepareCharacter(transitionTo.positive, amount, dynamics);
 		const float oldLeft = processPath(
-			primaryPath, oldCoefficients, oversampledLeft.data(),
+			primaryPath, oldNegativeCoefficients, oldPositiveCoefficients,
+			oversampledLeft.data(),
 			oversampledRight.data(), autoDeflateMix, wetMix, true);
 		const float oldRight = processPath(
-			primaryPath, oldCoefficients, oversampledLeft.data(),
+			primaryPath, oldNegativeCoefficients, oldPositiveCoefficients,
+			oversampledLeft.data(),
 			oversampledRight.data(), autoDeflateMix, wetMix, false);
 		const float newLeft = processPath(
-			secondaryPath, newCoefficients, oversampledLeft.data(),
+			secondaryPath, newNegativeCoefficients, newPositiveCoefficients,
+			oversampledLeft.data(),
 			oversampledRight.data(), autoDeflateMix, wetMix, true);
 		const float newRight = processPath(
-			secondaryPath, newCoefficients, oversampledLeft.data(),
+			secondaryPath, newNegativeCoefficients, newPositiveCoefficients,
+			oversampledLeft.data(),
 			oversampledRight.data(), autoDeflateMix, wetMix, false);
 		const float t = clamp01(
 			float(transitionSample) / float(std::max(transitionLength - 1, 1)));
@@ -454,23 +476,27 @@ Frame Engine::process(
 		transitionSample++;
 		if (transitionSample >= transitionLength) {
 			primaryPath = secondaryPath;
-			currentCharacter = transitionTo;
+			currentCharacters = transitionTo;
 			transitionActive = false;
 			if (pendingCharacterActive) {
-				const Character queuedCharacter = pendingCharacter;
+				const CharacterPair queuedCharacters = pendingCharacters;
 				pendingCharacterActive = false;
-				beginCharacterTransition(queuedCharacter);
+				beginCharacterTransition(queuedCharacters);
 			}
 		}
 	}
 	else {
-		const CharacterCoefficients coefficients =
-			prepareCharacter(currentCharacter, amount, dynamics);
+		const CharacterCoefficients negativeCoefficients =
+			prepareCharacter(currentCharacters.negative, amount, dynamics);
+		const CharacterCoefficients positiveCoefficients =
+			prepareCharacter(currentCharacters.positive, amount, dynamics);
 		normalizedLeft = processPath(
-			primaryPath, coefficients, oversampledLeft.data(),
+			primaryPath, negativeCoefficients, positiveCoefficients,
+			oversampledLeft.data(),
 			oversampledRight.data(), autoDeflateMix, wetMix, true);
 		normalizedRight = processPath(
-			primaryPath, coefficients, oversampledLeft.data(),
+			primaryPath, negativeCoefficients, positiveCoefficients,
+			oversampledLeft.data(),
 			oversampledRight.data(), autoDeflateMix, wetMix, false);
 	}
 
@@ -514,7 +540,10 @@ Frame Engine::process(
 		std::max(0.f, std::min(negativeInputActivity, 1.25f));
 	frame.transientActivity = clamp01(dynamics.transient);
 	frame.limiterGain = clamp01(limiterGain);
-	frame.character = int(transitionActive ? transitionTo : currentCharacter);
+	const CharacterPair displayedCharacters =
+		transitionActive ? transitionTo : currentCharacters;
+	frame.negativeCharacter = int(displayedCharacters.negative);
+	frame.positiveCharacter = int(displayedCharacters.positive);
 	return frame;
 }
 

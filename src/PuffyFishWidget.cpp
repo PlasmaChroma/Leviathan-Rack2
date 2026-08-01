@@ -20,6 +20,15 @@ NVGcolor multiplyColor(NVGcolor color, NVGcolor tint) {
 		color.a * tint.a);
 }
 
+NVGcolor mixColor(NVGcolor a, NVGcolor b, float amount) {
+	const float t = clamp01(amount);
+	return nvgRGBAf(
+		a.r + (b.r - a.r) * t,
+		a.g + (b.g - a.g) * t,
+		a.b + (b.b - a.b) * t,
+		a.a + (b.a - a.a) * t);
+}
+
 struct PuffyRasterAsset {
 	int handle = -1;
 	int width = 0;
@@ -59,7 +68,8 @@ PuffyRasterAsset resolveRasterAsset(
 PuffyFishWidget::PuffyFishWidget(Puffy* module)
 	: module(module) {
 	visual.effectiveAmount = 0.25f;
-	visual.character = 0;
+	visual.negativeCharacter = 0;
+	visual.positiveCharacter = 0;
 	controller.reset(visual);
 	controller.update(0.f, visual, &pose);
 }
@@ -132,7 +142,8 @@ bool PuffyFishWidget::drawBodyRaster(
 	Vec center,
 	float radiusX,
 	float radiusY,
-	NVGcolor tint) const {
+	NVGcolor negativeTint,
+	NVGcolor positiveTint) const {
 	if (!vg || radiusX <= 0.f || radiusY <= 0.f) {
 		return false;
 	}
@@ -149,14 +160,28 @@ bool PuffyFishWidget::drawBodyRaster(
 	const float drawHeight = 2.f * radiusY * rasterExtentScale;
 	const float x = center.x - 0.5f * drawWidth;
 	const float y = center.y - 0.5f * drawHeight;
-	NVGpaint paint = nvgImagePattern(
-		vg, x, y, drawWidth, drawHeight, 0.f, body.handle, 1.f);
-	paint.innerColor = tint;
-	paint.outerColor = tint;
-	nvgBeginPath(vg);
-	nvgRect(vg, x, y, drawWidth, drawHeight);
-	nvgFillPaint(vg, paint);
-	nvgFill(vg);
+	// NanoVG image paints expose a uniform tint, so use a small strip ramp to
+	// give Puffy a genuine polarity gradient without allocating another image.
+	constexpr int kTintStrips = 12;
+	for (int i = 0; i < kTintStrips; ++i) {
+		const float t0 = float(i) / float(kTintStrips);
+		const float t1 = float(i + 1) / float(kTintStrips);
+		const float stripX = x + drawWidth * t0;
+		const float stripWidth = drawWidth * (t1 - t0) + 0.5f;
+		const NVGcolor tint = mixColor(
+			negativeTint, positiveTint, 0.5f * (t0 + t1));
+		NVGpaint paint = nvgImagePattern(
+			vg, x, y, drawWidth, drawHeight, 0.f, body.handle, 1.f);
+		paint.innerColor = tint;
+		paint.outerColor = tint;
+		nvgSave(vg);
+		nvgScissor(vg, stripX, y, stripWidth, drawHeight);
+		nvgBeginPath(vg);
+		nvgRect(vg, x, y, drawWidth, drawHeight);
+		nvgFillPaint(vg, paint);
+		nvgFill(vg);
+		nvgRestore(vg);
+	}
 	return true;
 }
 
@@ -272,8 +297,11 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 	const float radiusY = radius * (0.93f + 0.07f * inflation)
 		* (1.f + pose.squashY);
 	const float finSizeScale = 1.f - 0.20f * inflation;
-	const NVGcolor bodyTint = puffy_visual::weightedCharacterTint(
-		pose.characterTintWeights);
+	const NVGcolor negativeBodyTint = puffy_visual::weightedCharacterTint(
+		pose.negativeCharacterTintWeights);
+	const NVGcolor positiveBodyTint = puffy_visual::weightedCharacterTint(
+		pose.positiveCharacterTintWeights);
+	const NVGcolor bodyTint = mixColor(negativeBodyTint, positiveBodyTint, 0.5f);
 	// Keep the cast shadow grounded near the bottom of the scene. Inflation
 	// changes its footprint, but the fish's motion and radius do not move it.
 	const Vec shadowCenter(width * 0.5f, height * 0.92f);
@@ -305,7 +333,7 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 		fin.handle,
 		fin.width,
 		fin.height,
-		bodyTint);
+		negativeBodyTint);
 	drawFin(
 		args.vg,
 		center,
@@ -316,24 +344,25 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 		fin.handle,
 		fin.width,
 		fin.height,
-		bodyTint);
+		positiveBodyTint);
 
-	if (!drawBodyRaster(args.vg, center, radiusX, radiusY, bodyTint)) {
+	if (!drawBodyRaster(
+		args.vg,
+		center,
+		radiusX,
+		radiusY,
+		negativeBodyTint,
+		positiveBodyTint)) {
 		nvgBeginPath(args.vg);
 		nvgEllipse(args.vg, center.x, center.y, radiusX, radiusY);
-		const NVGcolor fallbackShadow = nvgRGBAf(
-			bodyTint.r * 0.60f,
-			bodyTint.g * 0.60f,
-			bodyTint.b * 0.60f,
-			bodyTint.a);
-		const NVGpaint body = nvgRadialGradient(
+		const NVGpaint body = nvgLinearGradient(
 			args.vg,
-			center.x - radiusX * 0.32f,
-			center.y - radiusY * 0.38f,
-			radius * 0.08f,
-			radius * 1.18f,
-			bodyTint,
-			fallbackShadow);
+			center.x - radiusX,
+			center.y,
+			center.x + radiusX,
+			center.y,
+			negativeBodyTint,
+			positiveBodyTint);
 		nvgFillPaint(args.vg, body);
 		nvgFill(args.vg);
 		nvgStrokeColor(args.vg, nvgRGBA(145, 80, 1, 220));

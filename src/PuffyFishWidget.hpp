@@ -21,7 +21,8 @@ private:
 		Vec center,
 		float radiusX,
 		float radiusY,
-		NVGcolor tint) const;
+		NVGcolor negativeTint,
+		NVGcolor positiveTint) const;
 	void drawFin(
 		NVGcontext* vg,
 		Vec center,

@@ -14,7 +14,8 @@ private:
 	float inflation = 0.f;
 	float inflationVelocity = 0.f;
 	float personality = 0.f;
-	float characterTintWeights[4] = {1.f, 0.f, 0.f, 0.f};
+	float negativeCharacterTintWeights[4] = {1.f, 0.f, 0.f, 0.f};
+	float positiveCharacterTintWeights[4] = {1.f, 0.f, 0.f, 0.f};
 	float transientMemory = 0.f;
 	float idleTime = 0.f;
 	float nextBlinkTime = 3.2f;
@@ -24,7 +25,6 @@ private:
 	float gazeStateTime = 1.2f;
 	bool gazeGlancing = false;
 	int gazeSequence = 0;
-	int lastCharacter = 0;
 
 	static float approach(float current, float target, float rate, float dt);
 	static float clamp01(float value);

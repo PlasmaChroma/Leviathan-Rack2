@@ -38,10 +38,14 @@ void PuffyCharacterController::reset(const PuffyVisualState& visual) {
 		+ 0.25f * visual.inputActivity
 		+ 0.10f * visual.gainReduction);
 	inflationVelocity = 0.f;
-	const int character = std::max(0, std::min(visual.character, 3));
-	personality = float(character);
+	const int negativeCharacter =
+		std::max(0, std::min(visual.negativeCharacter, 3));
+	const int positiveCharacter =
+		std::max(0, std::min(visual.positiveCharacter, 3));
+	personality = 0.5f * float(negativeCharacter + positiveCharacter);
 	for (int i = 0; i < 4; ++i) {
-		characterTintWeights[i] = i == character ? 1.f : 0.f;
+		negativeCharacterTintWeights[i] = i == negativeCharacter ? 1.f : 0.f;
+		positiveCharacterTintWeights[i] = i == positiveCharacter ? 1.f : 0.f;
 	}
 	transientMemory = visual.transientActivity;
 	idleTime = 0.f;
@@ -52,7 +56,6 @@ void PuffyCharacterController::reset(const PuffyVisualState& visual) {
 	gazeStateTime = 1.2f;
 	gazeGlancing = false;
 	gazeSequence = 0;
-	lastCharacter = visual.character;
 }
 
 bool PuffyCharacterController::update(
@@ -73,15 +76,30 @@ bool PuffyCharacterController::update(
 	inflation += inflationVelocity * dt;
 	inflation = clamp01(inflation);
 
-	const int character = std::max(0, std::min(visual.character, 3));
-	personality = approach(personality, float(character), 5.f, dt);
+	const int negativeCharacter =
+		std::max(0, std::min(visual.negativeCharacter, 3));
+	const int positiveCharacter =
+		std::max(0, std::min(visual.positiveCharacter, 3));
+	personality = approach(
+		personality,
+		0.5f * float(negativeCharacter + positiveCharacter),
+		5.f,
+		dt);
 	for (int i = 0; i < 4; ++i) {
-		characterTintWeights[i] = approach(
-			characterTintWeights[i],
-			i == character ? 1.f : 0.f,
+		negativeCharacterTintWeights[i] = approach(
+			negativeCharacterTintWeights[i],
+			i == negativeCharacter ? 1.f : 0.f,
 			5.f,
 			dt);
-		pose->characterTintWeights[i] = characterTintWeights[i];
+		positiveCharacterTintWeights[i] = approach(
+			positiveCharacterTintWeights[i],
+			i == positiveCharacter ? 1.f : 0.f,
+			5.f,
+			dt);
+		pose->negativeCharacterTintWeights[i] =
+			negativeCharacterTintWeights[i];
+		pose->positiveCharacterTintWeights[i] =
+			positiveCharacterTintWeights[i];
 	}
 	const float transientRise =
 		std::max(0.f, visual.transientActivity - transientMemory);
@@ -158,6 +176,5 @@ bool PuffyCharacterController::update(
 		0.30f + 0.55f * visual.effectiveAmount * spineBlend
 		+ 0.18f * visual.effectiveAmount);
 	pose->blush = approach(pose->blush, visual.gainReduction, 8.f, dt);
-	lastCharacter = character;
 	return true;
 }

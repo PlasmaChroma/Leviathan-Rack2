@@ -405,7 +405,7 @@ Result characterTransitionsAreTransparentAndRetargetable() {
 			std::max(
 				std::fabs(switchedFrame.left - referenceFrame.left),
 				std::fabs(switchedFrame.right - referenceFrame.right)));
-		finalCharacter = switchedFrame.character;
+		finalCharacter = switchedFrame.negativeCharacter;
 	}
 
 	puffy::Engine queued;
@@ -421,7 +421,7 @@ Result characterTransitionsAreTransparentAndRetargetable() {
 			requestedCharacter,
 			true,
 			0.f);
-		finalCharacter = frame.character;
+		finalCharacter = frame.negativeCharacter;
 	}
 
 	return {
@@ -464,6 +464,45 @@ Result nonlinearGrowth() {
 	};
 }
 
+Result splitCharactersCreateContinuousAsymmetry() {
+	puffy::DynamicsState dynamics;
+	const float negativeZero = puffy::Engine::processCharacter(
+		puffy::Character::Spine, -0.f, 1.f, dynamics);
+	const float positiveZero = puffy::Engine::processCharacter(
+		puffy::Character::Bloom, 0.f, 1.f, dynamics);
+
+	puffy::Engine linked;
+	puffy::Engine split;
+	linked.setSampleRate(48000.f);
+	split.setSampleRate(48000.f);
+	float splitDelta = 0.f;
+	for (int i = 0; i < 48000; ++i) {
+		const float phase = 2.f * kPi * 101.f * float(i) / 48000.f;
+		const float input = 2.f * std::sin(phase);
+		const puffy::Frame linkedFrame = linked.process(
+			input, input, 1.f,
+			int(puffy::Character::Bloom), int(puffy::Character::Bloom),
+			false, 0.f);
+		const puffy::Frame splitFrame = split.process(
+			input, input, 1.f,
+			int(puffy::Character::Spine), int(puffy::Character::Bloom),
+			false, 0.f);
+		if (i >= 24000) {
+			splitDelta = std::max(
+				splitDelta,
+				std::fabs(splitFrame.left - linkedFrame.left));
+		}
+	}
+	return {
+		"Split characters meet at zero and produce a distinct asymmetric transfer",
+		near(negativeZero, positiveZero, 1e-7f)
+			&& splitDelta > 0.05f,
+		"zero=" + std::to_string(negativeZero)
+			+ "/" + std::to_string(positiveZero)
+			+ " splitDelta=" + std::to_string(splitDelta)
+	};
+}
+
 Result bipolarInputActivityTracksStereoExcursions() {
 	puffy::Engine engine;
 	engine.setSampleRate(48000.f);
@@ -493,6 +532,7 @@ Result realtimePathDoesNotAllocate() {
 			5.f * std::cos(phase),
 			float(i % 1000) / 999.f,
 			(i / 333) % 4,
+			(i / 271 + 1) % 4,
 			(i & 1) != 0,
 			float(i % 101) / 100.f);
 		peak = std::max(peak, std::max(std::fabs(frame.left), std::fabs(frame.right)));
@@ -521,6 +561,7 @@ int main() {
 		recoveryAndSilence(),
 		characterTransitionsAreTransparentAndRetargetable(),
 		nonlinearGrowth(),
+		splitCharactersCreateContinuousAsymmetry(),
 		bipolarInputActivityTracksStereoExcursions(),
 		realtimePathDoesNotAllocate()
 	};
