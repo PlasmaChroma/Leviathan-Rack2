@@ -209,6 +209,13 @@
      opacity="0"
      style="display:inline;opacity:1">
     <rect
+       id="BRANDING_LEVIATHAN_LOGO_RASTER"
+       x="1412.0335"
+       y="11843.102"
+       width="3271.933"
+       height="1224.054"
+       style="display:none" />
+    <rect
        id="fish_rect"
        x="63.777615"
        y="1051.7778"

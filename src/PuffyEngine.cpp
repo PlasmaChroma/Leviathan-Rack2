@@ -43,37 +43,30 @@ Character clampCharacter(int character) {
 	return static_cast<Character>(character);
 }
 
-float tent(float value) {
-	return 1.f - std::fabs(2.f * value - 1.f);
-}
-
 float fractalShape(float input) {
-	// A finite self-similar tent construction: each level adds corners at
-	// twice the previous spatial frequency. This follows Roar Fractal's
-	// published high-harmonic intent without copying a proprietary curve.
-	const float magnitude = std::fabs(input);
-	const float innerMagnitude = std::min(magnitude, 1.f);
-	const float level1 = tent(innerMagnitude);
-	const float level2 = tent(level1);
-	const float level3 = tent(level2);
-	const float coastline =
-		0.52f * level1 + 0.30f * level2 + 0.18f * level3;
-	float shaped = innerMagnitude
-		+ (1.f - innerMagnitude) * 0.48f * coastline;
+	// Five dyadic levels sampled from an original hand-fitted fold curve. The
+	// equal spacing makes the hot path one lookup and one linear interpolation;
+	// mirroring the positive half below preserves exact odd symmetry.
+	static constexpr std::array<float, 33> kFoldResponse {{
+		0.0000f, 0.2135f, 0.2691f, 0.2240f, 0.2986f, 0.4132f,
+		0.5851f, 0.5660f, 0.4583f, 0.4193f, 0.4931f, 0.5556f,
+		0.4583f, 0.3220f, 0.2552f, 0.3142f, 0.3750f, 0.3186f,
+		0.2170f, 0.2240f, 0.3958f, 0.5122f, 0.5243f, 0.4748f,
+		0.5556f, 0.7378f, 0.8837f, 0.8733f, 0.8333f, 0.8602f,
+		0.9427f, 1.0000f, 1.0000f,
+	}};
 
-	// At full Puff the driven +/-5 V range extends from magnitude 1 to 2.5.
-	// Use that former plateau for another finite self-similar crest. It joins
-	// the inner curve at 1, returns to 1 at the outer edge, and stays bounded.
-	if (magnitude > 1.f) {
-		const float outerPhase = clamp01((magnitude - 1.f) * (2.f / 3.f));
-		const float outer1 = tent(outerPhase);
-		const float outer2 = tent(outer1);
-		const float outer3 = tent(outer2);
-		const float outerCoastline =
-			0.52f * outer1 + 0.30f * outer2 + 0.18f * outer3;
-		shaped = 1.f - 0.42f * outerCoastline;
+	const float magnitude = std::fabs(input);
+	if (magnitude >= 1.f) {
+		return std::copysign(1.f, input);
 	}
-	return std::copysign(std::min(shaped, 1.f), input);
+
+	const float tablePosition = magnitude * 32.f;
+	const int index = static_cast<int>(tablePosition);
+	const float fraction = tablePosition - float(index);
+	const float shaped = kFoldResponse[index]
+		+ (kFoldResponse[index + 1] - kFoldResponse[index]) * fraction;
+	return std::copysign(shaped, input);
 }
 
 float autoDeflateDb(Character character, float amount) {

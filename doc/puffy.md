@@ -387,40 +387,29 @@ DC blocker removes it.
 
 ### 5.6 Character D: RIPTIDE
 
-`RIPTIDE` is a bounded, symmetrical fractal waveshaper inspired by Roar's
-published high-harmonic Fractal character. It is an original finite
-self-similar tent construction, not a bit-identical copy of Roar's proprietary
-transfer function.
+`RIPTIDE` is a bounded, symmetrical fractal waveshaper inspired by the visual
+topology of multi-scale fold curves. It uses an original, hand-fitted response,
+not a bit-identical copy of another device's transfer function.
 
 ```text
 drive = 1 + 1.5*a^2
 u = abs(drive*x)
-m = min(u, 1)
 
-tent(v) = 1 - abs(2*v - 1)
-level1 = tent(m)
-level2 = tent(level1)
-level3 = tent(level2)
-coastline = 0.52*level1 + 0.30*level2 + 0.18*level3
-
-s = sign(x) * (m + (1 - m)*0.48*coastline)
-
-if u > 1:
-    outerPhase = clamp((u - 1) / 1.5, 0, 1)
-    outer1 = tent(outerPhase)
-    outer2 = tent(outer1)
-    outer3 = tent(outer2)
-    outerCoastline = 0.52*outer1 + 0.30*outer2 + 0.18*outer3
-    s = sign(x) * (1 - 0.42*outerCoastline)
+if u < 1:
+    p = 32*u
+    i = floor(p)
+    s = sign(x) * lerp(fold[i], fold[i + 1], fract(p))
+else:
+    s = sign(x)
 
 y = lerp(x, s, a)
 ```
 
-The nested corners introduce harmonics at successively finer scales while
-remaining continuous, odd, and bounded to +/-1 at full wet. The outer crest
-replaces the former flat high-level plateau with another self-similar set of
-folds that rejoins full scale at +/-5 V under maximum drive. Oversampling is
-mandatory for this mode.
+The 33-point positive-half response encodes five dyadic levels and is linearly
+interpolated before being mirrored below zero. Its folds alternate above and
+below the underlying ramp, with a steep first rise that makes low-level input
+more active. It remains continuous, exactly odd, bounded to +/-1 at full wet,
+and joins flat outer rails. Oversampling is mandatory for this mode.
 
 ### 5.7 DC blocker
 
@@ -779,8 +768,8 @@ behind a generic `High quality` label.
 - `FRENZY` stays bounded and zero-anchored across amount (0.25, 0.50, 0.75,
   1.00), fast (0.0, 0.5, 1.0), and transient (0.0, 1.0). Its idle curve has
   at least two slope reversals and its fully active curve has at least four.
-- `RIPTIDE` is odd, continuous, bounded, retains its pinned inner multi-scale
-  tent-curve landmarks, and reaches its pinned outer valley and crest.
+- `RIPTIDE` is odd, continuous, bounded, has a steep near-zero rise, repeated
+  multi-scale slope reversals, and continuous flat outer rails.
 - `DEFLATE` operates as a literal post-limiter output volume trim, reducing output level by the exact linear dB amount both above and below limiter engagement.
 - All characters become audibly and measurably more nonlinear as amount rises.
 - With Auto Deflate enabled, the gated RMS of each character on the shared pink

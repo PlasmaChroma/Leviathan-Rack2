@@ -166,6 +166,16 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	const std::string panelPath =
 		asset::plugin(pluginInstance, "res/Puffy.svg");
 	setPanel(createPanel(panelPath));
+	math::Rect leviathanLogoRectMm(
+		Vec(14.120335f, 118.43102f),
+		Vec(32.71933f, 12.24054f));
+	panel_svg::loadRectFromSvgMm(
+		panelPath,
+		"BRANDING_LEVIATHAN_LOGO_RASTER",
+		&leviathanLogoRectMm);
+	addChild(visual_assets::createAspectFitRasterImageWidget(
+		"res/icon/Leviathan_Logo_S2.png",
+		leviathanLogoRectMm));
 	previewTimer.markPanelDone();
 	previewTimer.setAtlasStatus(
 		panel_svg::getAtlasStatusLabelForSvg(panelPath));

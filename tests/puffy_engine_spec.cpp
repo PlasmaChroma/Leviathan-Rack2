@@ -223,47 +223,64 @@ Result frenzySinusoidalFold() {
 
 Result riptideFractalAnchors() {
 	puffy::DynamicsState dynamics;
-	// At full amount RIPTIDE drives the shaper by 2.5, so these inputs land
-	// exactly on four successive tent-curve landmarks.
-	const float eighth = puffy::Engine::processCharacter(
-		puffy::Character::Riptide, 0.05f, 1.f, dynamics);
-	const float quarter = puffy::Engine::processCharacter(
-		puffy::Character::Riptide, 0.10f, 1.f, dynamics);
-	const float half = puffy::Engine::processCharacter(
-		puffy::Character::Riptide, 0.20f, 1.f, dynamics);
-	const float threeQuarter = puffy::Engine::processCharacter(
-		puffy::Character::Riptide, 0.30f, 1.f, dynamics);
-	const float outerJoin = puffy::Engine::processCharacter(
-		puffy::Character::Riptide, 0.40f, 1.f, dynamics);
-	const float outerNotch = puffy::Engine::processCharacter(
-		puffy::Character::Riptide, 0.625f, 1.f, dynamics);
+	int slopeReversals = 0;
+	float previous = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 0.f, 1.f, dynamics);
+	float previousDelta = 0.f;
+	for (int i = 1; i <= 32; ++i) {
+		const float current = puffy::Engine::processCharacter(
+			puffy::Character::Riptide, float(i) / 80.f, 1.f, dynamics);
+		const float delta = current - previous;
+		if (std::fabs(delta) > 1e-6f) {
+			if (previousDelta * delta < 0.f) {
+				++slopeReversals;
+			}
+			previousDelta = delta;
+		}
+		previous = current;
+	}
+
+	// At full amount RIPTIDE drives the shaper by 2.5. These inputs therefore
+	// pin successive landmarks in the five-level dyadic response.
+	const float nearZeroRise = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 0.0125f, 1.f, dynamics);
+	const float firstNotch = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 0.0375f, 1.f, dynamics);
+	const float firstCrest = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 0.075f, 1.f, dynamics);
+	const float centralTrench = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 0.2375f, 1.f, dynamics);
 	const float outerRebound = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 0.3375f, 1.f, dynamics);
+	const float rail = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 0.40f, 1.f, dynamics);
+	const float beyondRail = puffy::Engine::processCharacter(
 		puffy::Character::Riptide, 0.70f, 1.f, dynamics);
-	const float outerCrest = puffy::Engine::processCharacter(
-		puffy::Character::Riptide, 1.f, 1.f, dynamics);
 	const float joinBelow = puffy::Engine::processCharacter(
 		puffy::Character::Riptide, 0.40f - 1e-6f, 1.f, dynamics);
 	const float joinAbove = puffy::Engine::processCharacter(
 		puffy::Character::Riptide, 0.40f + 1e-6f, 1.f, dynamics);
 	return {
-		"RIPTIDE retains inner landmarks and adds a continuous outer fractal crest",
-		near(eighth, 0.3182f, 1e-5f)
-			&& near(quarter, 0.4516f, 1e-5f)
-			&& near(half, 0.6248f, 1e-5f)
-			&& near(threeQuarter, 0.8172f, 1e-5f)
-			&& near(outerJoin, 1.f, 1e-6f)
-			&& near(outerNotch, 0.6976f, 1e-5f)
-			&& near(outerRebound, 0.7816f, 1e-5f)
-			&& near(outerCrest, 1.f, 1e-6f)
+		"RIPTIDE follows the pinned multi-scale folds and joins its outer rail continuously",
+		near(nearZeroRise, 0.2135f, 1e-5f)
+			&& near(firstNotch, 0.2240f, 1e-5f)
+			&& near(firstCrest, 0.5851f, 1e-5f)
+			&& near(centralTrench, 0.2240f, 1e-5f)
+			&& near(outerRebound, 0.8733f, 1e-5f)
+			&& near(rail, 1.f, 1e-6f)
+			&& near(beyondRail, 1.f, 1e-6f)
+			&& firstCrest > firstNotch
+			&& outerRebound > centralTrench
+			&& slopeReversals >= 10
 			&& std::fabs(joinAbove - joinBelow) < 1e-4f,
-		"anchors=" + std::to_string(eighth)
-			+ "/" + std::to_string(quarter)
-			+ "/" + std::to_string(half)
-			+ "/" + std::to_string(threeQuarter)
-			+ " outer=" + std::to_string(outerJoin)
-			+ "/" + std::to_string(outerNotch)
+		"anchors=" + std::to_string(nearZeroRise)
+			+ "/" + std::to_string(firstNotch)
+			+ "/" + std::to_string(firstCrest)
+			+ "/" + std::to_string(centralTrench)
 			+ "/" + std::to_string(outerRebound)
-			+ "/" + std::to_string(outerCrest)
+			+ " rail=" + std::to_string(rail)
+			+ "/" + std::to_string(beyondRail)
+			+ " reversals=" + std::to_string(slopeReversals)
 	};
 }
 
