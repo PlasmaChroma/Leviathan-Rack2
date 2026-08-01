@@ -13,6 +13,10 @@
     <path d="M-900 6100 C1650 5400 2800 6250 4700 5900 S7800 5200 10000 6200"/>
     <path d="M-900 7000 C1800 6350 3100 7000 5000 6900 S8100 6200 10000 7100"/>
   </g>
+  <g id="CV_PAIR_LINKS" fill="none" stroke="#7a5cff" stroke-opacity=".72" stroke-width="45" stroke-linecap="round">
+    <path d="M1200 7800 H1600"/><path d="M3800 7800 H4200"/>
+    <path d="M1200 9400 H1600"/><path d="M3800 9400 H4200"/>
+  </g>
   <rect x="1110" y="780" width="6924" height="3040" rx="180" fill="#02040a" stroke="#6752af" stroke-width="32"/>
   <rect x="1180" y="860" width="6784" height="2880" rx="130" fill="none" stroke="#1fc6d5" stroke-opacity=".32" stroke-width="16"/>
   <g fill="#f3f4ff" font-family="Rubik" text-anchor="middle">
@@ -25,9 +29,9 @@
     <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="2936.034" y="11843.102" width="3271.933" height="1224.054"/>
     <circle id="MAP_PARAM" cx="800" cy="4500" r="20"/><circle id="CENTER_X_PARAM" cx="2400" cy="4500" r="20"/><circle id="CENTER_Y_PARAM" cx="4200" cy="4500" r="20"/><circle id="ZOOM_PARAM" cx="6000" cy="4500" r="20"/><circle id="ITERATIONS_PARAM" cx="7800" cy="4500" r="20"/>
     <circle id="MUTATION_PARAM" cx="1700" cy="6150" r="20"/><circle id="SMOOTH_PARAM" cx="3600" cy="6150" r="20"/><circle id="RATE_PARAM" cx="5500" cy="6150" r="20"/><circle id="DENSITY_PARAM" cx="7400" cy="6150" r="20"/>
-    <circle id="X_AMOUNT_PARAM" cx="1700" cy="7750" r="20"/><circle id="Y_AMOUNT_PARAM" cx="3600" cy="7750" r="20"/><circle id="ZOOM_AMOUNT_PARAM" cx="5500" cy="7750" r="20"/><circle id="MUTATE_AMOUNT_PARAM" cx="7400" cy="7750" r="20"/>
-    <circle id="RESEED_PARAM" cx="3900" cy="9600" r="20"/><circle id="SEED_LOCK_PARAM" cx="5400" cy="9600" r="20"/>
-    <circle id="CLOCK_INPUT" cx="800" cy="9600" r="20"/><circle id="RESET_INPUT" cx="2000" cy="9600" r="20"/><circle id="X_INPUT" cx="800" cy="10530" r="20"/><circle id="Y_INPUT" cx="2000" cy="10530" r="20"/><circle id="ZOOM_INPUT" cx="800" cy="11460" r="20"/><circle id="MUTATE_INPUT" cx="2000" cy="11460" r="20"/><circle id="SMOOTH_INPUT" cx="800" cy="12390" r="20"/><circle id="RATE_INPUT" cx="2000" cy="12390" r="20"/>
-    <circle id="X_OUTPUT" cx="7140" cy="9600" r="20"/><circle id="Y_OUTPUT" cx="8340" cy="9600" r="20"/><circle id="RADIUS_OUTPUT" cx="7140" cy="10530" r="20"/><circle id="PHASE_OUTPUT" cx="8340" cy="10530" r="20"/><circle id="GATE_OUTPUT" cx="7140" cy="11460" r="20"/><circle id="ESCAPE_OUTPUT" cx="8340" cy="11460" r="20"/><circle id="STEP_OUTPUT" cx="7140" cy="12390" r="20"/>
+    <circle id="X_AMOUNT_PARAM" cx="800" cy="7800" r="20"/><circle id="Y_AMOUNT_PARAM" cx="3400" cy="7800" r="20"/><circle id="ZOOM_AMOUNT_PARAM" cx="800" cy="9400" r="20"/><circle id="MUTATE_AMOUNT_PARAM" cx="3400" cy="9400" r="20"/>
+    <circle id="RESEED_PARAM" cx="5600" cy="7800" r="20"/><circle id="SEED_LOCK_PARAM" cx="5600" cy="9400" r="20"/>
+    <circle id="CLOCK_INPUT" cx="800" cy="11000" r="20"/><circle id="RESET_INPUT" cx="2200" cy="11000" r="20"/><circle id="X_INPUT" cx="2000" cy="7800" r="20"/><circle id="Y_INPUT" cx="4600" cy="7800" r="20"/><circle id="ZOOM_INPUT" cx="2000" cy="9400" r="20"/><circle id="MUTATE_INPUT" cx="4600" cy="9400" r="20"/><circle id="SMOOTH_INPUT" cx="3600" cy="11000" r="20"/><circle id="RATE_INPUT" cx="5000" cy="11000" r="20"/>
+    <circle id="X_OUTPUT" cx="6700" cy="7800" r="20"/><circle id="Y_OUTPUT" cx="7700" cy="7800" r="20"/><circle id="RADIUS_OUTPUT" cx="8700" cy="7800" r="20"/><circle id="PHASE_OUTPUT" cx="6700" cy="9400" r="20"/><circle id="GATE_OUTPUT" cx="7700" cy="9400" r="20"/><circle id="ESCAPE_OUTPUT" cx="8700" cy="9400" r="20"/><circle id="STEP_OUTPUT" cx="8700" cy="11000" r="20"/>
   </g>
 </svg>

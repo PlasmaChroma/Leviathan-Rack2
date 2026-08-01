@@ -7,21 +7,18 @@
       <text x="6000" y="5200">ZOOM</text><text x="7800" y="5200">ITER</text>
       <text x="1700" y="6880">MUTATION</text><text x="3600" y="6880">SMOOTH</text>
       <text x="5500" y="6880">RATE</text><text x="7400" y="6880">DENSITY</text>
-      <text x="1700" y="8450">X AMT</text><text x="3600" y="8450">Y AMT</text>
-      <text x="5500" y="8450">ZOOM AMT</text><text x="7400" y="8450">MUTATE AMT</text>
-      <text x="3900" y="10220">RESEED</text><text x="5400" y="10220">SEED LOCK</text>
+      <text x="5600" y="8450">RESEED</text><text x="5600" y="10050">SEED LOCK</text>
     </g>
     <g font-size="282.222" font-weight="400" fill="#a8dcff">
-      <text x="800" y="9140">CLOCK</text><text x="2000" y="9140">RESET</text>
-      <text x="800" y="10070">X CV</text><text x="2000" y="10070">Y CV</text>
-      <text x="800" y="11000">ZOOM</text><text x="2000" y="11000">MUTATE</text>
-      <text x="800" y="11930">SMOOTH</text><text x="2000" y="11930">RATE</text>
+      <text x="1400" y="8450">X CV</text><text x="4000" y="8450">Y CV</text>
+      <text x="1400" y="10050">ZOOM</text><text x="4000" y="10050">MUTATE</text>
+      <text x="800" y="11650">CLOCK</text><text x="2200" y="11650">RESET</text>
+      <text x="3600" y="11650">SMOOTH</text><text x="5000" y="11650">RATE</text>
     </g>
     <g font-size="282.222" font-weight="400" fill="#ffe09a">
-      <text x="7140" y="9140">X</text><text x="8340" y="9140">Y</text>
-      <text x="7140" y="10070">RADIUS</text><text x="8340" y="10070">PHASE</text>
-      <text x="7140" y="11000">GATE</text><text x="8340" y="11000">ESCAPE</text>
-      <text x="7140" y="11930">STEP</text>
+      <text x="6700" y="8450">X</text><text x="7700" y="8450">Y</text><text x="8700" y="8450">RADIUS</text>
+      <text x="6700" y="10050">PHASE</text><text x="7700" y="10050">GATE</text><text x="8700" y="10050">ESCAPE</text>
+      <text x="8700" y="11650">STEP</text>
     </g>
   </g>
 </svg>

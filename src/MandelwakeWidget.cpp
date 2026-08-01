@@ -73,18 +73,26 @@ struct MandelwakePanelLabels final : TransparentWidget {
 		const float row1x[] = {8.f, 24.f, 42.f, 60.f, 78.f};
 		for (int i = 0; i < 5; ++i) label(args, row1[i], row1x[i], 52.f, labelSize, control);
 		const char* row2[] = {"MUTATION", "SMOOTH", "RATE", "DENSITY"};
-		const char* row3[] = {"X AMT", "Y AMT", "ZOOM AMT", "MUTATE AMT"};
 		const float rowX[] = {17.f, 36.f, 55.f, 74.f};
 		for (int i = 0; i < 4; ++i) {
 			label(args, row2[i], rowX[i], 68.8f, labelSize, control);
-			label(args, row3[i], rowX[i], 84.5f, labelSize, control);
 		}
-		label(args, "RESEED", 39.f, 102.2f, labelSize, control);
-		label(args, "SEED LOCK", 54.f, 102.2f, labelSize, control);
-		const char* inputs[] = {"CLOCK", "RESET", "X CV", "Y CV", "ZOOM", "MUTATE", "SMOOTH", "RATE"};
-		const char* outputs[] = {"X", "Y", "RADIUS", "PHASE", "GATE", "ESCAPE", "STEP"};
-		for (int i = 0; i < 8; ++i) label(args, inputs[i], i & 1 ? 20.f : 8.f, 91.4f + 9.3f * (i / 2), labelSize, input);
-		for (int i = 0; i < 7; ++i) label(args, outputs[i], i & 1 ? 83.4f : 71.4f, 91.4f + 9.3f * (i / 2), labelSize, output);
+		label(args, "X CV", 14.f, 84.5f, labelSize, input);
+		label(args, "Y CV", 40.f, 84.5f, labelSize, input);
+		label(args, "ZOOM", 14.f, 100.5f, labelSize, input);
+		label(args, "MUTATE", 40.f, 100.5f, labelSize, input);
+		label(args, "RESEED", 56.f, 84.5f, labelSize, control);
+		label(args, "SEED LOCK", 56.f, 100.5f, labelSize, control);
+		const char* directInputs[] = {"CLOCK", "RESET", "SMOOTH", "RATE"};
+		const float directInputX[] = {8.f, 22.f, 36.f, 50.f};
+		for (int i = 0; i < 4; ++i) label(args, directInputs[i], directInputX[i], 116.5f, labelSize, input);
+		label(args, "X", 67.f, 84.5f, labelSize, output);
+		label(args, "Y", 77.f, 84.5f, labelSize, output);
+		label(args, "RADIUS", 87.f, 84.5f, labelSize, output);
+		label(args, "PHASE", 67.f, 100.5f, labelSize, output);
+		label(args, "GATE", 77.f, 100.5f, labelSize, output);
+		label(args, "ESCAPE", 87.f, 100.5f, labelSize, output);
+		label(args, "STEP", 87.f, 116.5f, labelSize, output);
 	}
 };
 
@@ -342,15 +350,15 @@ MandelwakeWidget::MandelwakeWidget(Mandelwake* module) {
 
 	const int amountParams[] = {Mandelwake::X_AMOUNT_PARAM, Mandelwake::Y_AMOUNT_PARAM, Mandelwake::ZOOM_AMOUNT_PARAM, Mandelwake::MUTATE_AMOUNT_PARAM};
 	const char* amountIds[] = {"X_AMOUNT_PARAM", "Y_AMOUNT_PARAM", "ZOOM_AMOUNT_PARAM", "MUTATE_AMOUNT_PARAM"};
-	const float amountX[] = {17.f, 36.f, 55.f, 74.f};
+	const Vec amountPositions[] = {Vec(8.f, 78.f), Vec(34.f, 78.f), Vec(8.f, 94.f), Vec(34.f, 94.f)};
 	for (int i = 0; i < 4; ++i) {
 		auto* knob = createParamCentered<BipolarDarkTinyClockworkGearKnob>(
-			mm2px(anchorMm(amountIds[i], Vec(amountX[i], 77.5f))), module, amountParams[i]);
+			mm2px(anchorMm(amountIds[i], amountPositions[i])), module, amountParams[i]);
 		addParam(knob);
 	}
-	addParam(createParamCentered<SmallGoldButton>(mm2px(anchorMm("RESEED_PARAM", Vec(39.f, 96.f))), module, Mandelwake::RESEED_PARAM));
+	addParam(createParamCentered<SmallGoldButton>(mm2px(anchorMm("RESEED_PARAM", Vec(56.f, 78.f))), module, Mandelwake::RESEED_PARAM));
 	auto* seedLock = createLightParamCentered<SmallGoldApertureButton>(
-		mm2px(anchorMm("SEED_LOCK_PARAM", Vec(54.f, 96.f))), module,
+		mm2px(anchorMm("SEED_LOCK_PARAM", Vec(56.f, 94.f))), module,
 		Mandelwake::SEED_LOCK_PARAM, Mandelwake::SEED_LOCK_LIGHT);
 	addParam(seedLock);
 
@@ -360,13 +368,19 @@ MandelwakeWidget::MandelwakeWidget(Mandelwake* module) {
 	const int outputIds[] = {Mandelwake::X_OUTPUT, Mandelwake::Y_OUTPUT, Mandelwake::RADIUS_OUTPUT, Mandelwake::PHASE_OUTPUT,
 		Mandelwake::GATE_OUTPUT, Mandelwake::ESCAPE_OUTPUT, Mandelwake::STEP_OUTPUT};
 	const char* outputAnchors[] = {"X_OUTPUT", "Y_OUTPUT", "RADIUS_OUTPUT", "PHASE_OUTPUT", "GATE_OUTPUT", "ESCAPE_OUTPUT", "STEP_OUTPUT"};
+	const Vec inputPositions[] = {
+		Vec(8.f, 110.f), Vec(22.f, 110.f), Vec(20.f, 78.f), Vec(46.f, 78.f),
+		Vec(20.f, 94.f), Vec(46.f, 94.f), Vec(36.f, 110.f), Vec(50.f, 110.f)};
+	const Vec outputPositions[] = {
+		Vec(67.f, 78.f), Vec(77.f, 78.f), Vec(87.f, 78.f), Vec(67.f, 94.f),
+		Vec(77.f, 94.f), Vec(87.f, 94.f), Vec(87.f, 110.f)};
 	for (int i = 0; i < 8; ++i) {
-		const Vec fallback(i & 1 ? 20.f : 8.f, 96.f + 9.3f * (i / 2));
-		addInput(createInputCentered<Magitek2InputJack>(mm2px(anchorMm(inputAnchors[i], fallback)), module, inputIds[i]));
+		addInput(createInputCentered<Magitek2InputJack>(
+			mm2px(anchorMm(inputAnchors[i], inputPositions[i])), module, inputIds[i]));
 	}
 	for (int i = 0; i < 7; ++i) {
-		const Vec fallback(i & 1 ? 83.4f : 71.4f, 96.f + 9.3f * (i / 2));
-		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(anchorMm(outputAnchors[i], fallback)), module, outputIds[i]));
+		addOutput(createOutputCentered<Magitek2OutputJack>(
+			mm2px(anchorMm(outputAnchors[i], outputPositions[i])), module, outputIds[i]));
 	}
 	previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 	previewBuildTimer.markAnchorsDone();
