@@ -13,8 +13,8 @@ Puffy::Puffy() {
 	debugMetrics.assignInstanceId(gPuffyDebugInstanceCounter);
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 	configSwitch(
-		CHARACTER_PARAM, 0.f, 3.f, 0.f, "Character",
-		{"BLOOM", "SPINE", "FRENZY", "RIPTIDE"});
+		CHARACTER_PARAM, 0.f, 4.f, 0.f, "Negative character",
+		{"BLOOM", "SPINE", "FRENZY", "RIPTIDE", "VOID"});
 	configParam(PUFF_PARAM, 0.f, 1.f, 0.25f, "Puff", "%", 0.f, 100.f);
 	configParam(DEFLATE_PARAM, 0.f, 1.f, 0.f, "Deflate", " dB", 0.f, -12.f);
 	configParam(
@@ -22,8 +22,8 @@ Puffy::Puffy() {
 		"Puff CV amount", "%", 0.f, 100.f);
 	configParam(MIX_PARAM, 0.f, 1.f, 1.f, "Mix", "%", 0.f, 100.f);
 	configSwitch(
-		POSITIVE_CHARACTER_PARAM, 0.f, 3.f, 0.f, "Positive character",
-		{"BLOOM", "SPINE", "FRENZY", "RIPTIDE"});
+		POSITIVE_CHARACTER_PARAM, 0.f, 4.f, 0.f, "Positive character",
+		{"BLOOM", "SPINE", "FRENZY", "RIPTIDE", "VOID"});
 	configSwitch(
 		CHARACTER_LINK_PARAM, 0.f, 1.f, 1.f, "Link polarity characters",
 		{"Unlinked", "Linked"});
@@ -152,7 +152,9 @@ void Puffy::process(const ProcessArgs& args) {
 		0.f,
 		1.f);
 	const int negativeCharacter = clamp(
-		int(std::lround(params[CHARACTER_PARAM].getValue())), 0, 3);
+		int(std::lround(params[CHARACTER_PARAM].getValue())),
+		0,
+		int(puffy::Character::Void));
 	const bool charactersLinked =
 		params[CHARACTER_LINK_PARAM].getValue() > 0.5f;
 	if (charactersLinked
@@ -167,7 +169,7 @@ void Puffy::process(const ProcessArgs& args) {
 			int(std::lround(
 				params[POSITIVE_CHARACTER_PARAM].getValue())),
 			0,
-			3);
+			int(puffy::Character::Void));
 	const puffy::Frame frame = engine.process(
 		left,
 		right,

@@ -60,9 +60,9 @@ void PuffyTransferPreviewWidget::rebuildPoints() {
 	dynamics.fast = clamp(visual.inputActivity, 0.f, 1.f);
 	dynamics.transient = clamp(visual.transientActivity, 0.f, 1.f);
 	const puffy::Character negativeCharacter = static_cast<puffy::Character>(
-		clamp(visual.negativeCharacter, 0, 3));
+		clamp(visual.negativeCharacter, 0, puffy::kCharacterCount - 1));
 	const puffy::Character positiveCharacter = static_cast<puffy::Character>(
-		clamp(visual.positiveCharacter, 0, 3));
+		clamp(visual.positiveCharacter, 0, puffy::kCharacterCount - 1));
 	const float amount = clamp(visual.effectiveAmount, 0.f, 1.f);
 	for (int i = 0; i < POINT_COUNT; ++i) {
 		const float normalized = float(i) / float(POINT_COUNT - 1);
@@ -101,8 +101,10 @@ void PuffyTransferPreviewWidget::step() {
 		curveLayer->box.size = box.size;
 	}
 
-	const int negativeCharacter = clamp(visual.negativeCharacter, 0, 3);
-	const int positiveCharacter = clamp(visual.positiveCharacter, 0, 3);
+	const int negativeCharacter = clamp(
+		visual.negativeCharacter, 0, puffy::kCharacterCount - 1);
+	const int positiveCharacter = clamp(
+		visual.positiveCharacter, 0, puffy::kCharacterCount - 1);
 	const bool frenzyReactive =
 		negativeCharacter == int(puffy::Character::Frenzy)
 		|| positiveCharacter == int(puffy::Character::Frenzy);
@@ -143,9 +145,9 @@ void PuffyTransferPreviewWidget::draw(const DrawArgs& args) {
 	const float positiveOverrange = clamp(
 		(visual.positiveInputActivity - DOMAIN) / 0.25f, 0.f, 1.f);
 	const NVGcolor negativeTint = puffy_visual::characterTint(
-		clamp(visual.negativeCharacter, 0, 3));
+		clamp(visual.negativeCharacter, 0, puffy::kCharacterCount - 1));
 	const NVGcolor positiveTint = puffy_visual::characterTint(
-		clamp(visual.positiveCharacter, 0, 3));
+		clamp(visual.positiveCharacter, 0, puffy::kCharacterCount - 1));
 
 	nvgSave(args.vg);
 	nvgScissor(args.vg, 0.f, 0.f, width, height);
@@ -211,9 +213,9 @@ void PuffyTransferPreviewWidget::drawCurve(const DrawArgs& args) const {
 		return;
 	}
 	const NVGcolor negativeTint = puffy_visual::characterTint(
-		clamp(visual.negativeCharacter, 0, 3));
+		clamp(visual.negativeCharacter, 0, puffy::kCharacterCount - 1));
 	const NVGcolor positiveTint = puffy_visual::characterTint(
-		clamp(visual.positiveCharacter, 0, 3));
+		clamp(visual.positiveCharacter, 0, puffy::kCharacterCount - 1));
 
 	nvgSave(args.vg);
 	nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);

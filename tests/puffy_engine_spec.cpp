@@ -68,6 +68,7 @@ Result characterCurves() {
 	bool frenzyBounded = true;
 	bool riptideOdd = true;
 	bool riptideBounded = true;
+	bool voidOdd = true;
 	float previousSpine = -10.f;
 	bool spineMonotonic = true;
 	for (int ai = 0; ai <= 20; ++ai) {
@@ -88,12 +89,18 @@ Result characterCurves() {
 				puffy::Character::Riptide, input, amount, dynamics);
 			const float riptideNegative = puffy::Engine::processCharacter(
 				puffy::Character::Riptide, -input, amount, dynamics);
+			const float voidOutput = puffy::Engine::processCharacter(
+				puffy::Character::Void, input, amount, dynamics);
+			const float voidNegative = puffy::Engine::processCharacter(
+				puffy::Character::Void, -input, amount, dynamics);
 			finite = finite && std::isfinite(bloom) && std::isfinite(spine)
-				&& std::isfinite(frenzy) && std::isfinite(riptide);
+				&& std::isfinite(frenzy) && std::isfinite(riptide)
+				&& std::isfinite(voidOutput);
 			bloomOdd = bloomOdd && near(bloom, -bloomNegative, 2e-6f);
 			spineOdd = spineOdd && near(spine, -spineNegative, 2e-6f);
 			riptideOdd = riptideOdd
 				&& near(riptide, -riptideNegative, 2e-6f);
+			voidOdd = voidOdd && near(voidOutput, -voidNegative, 2e-6f);
 			frenzyBounded = frenzyBounded
 				&& frenzy >= std::min(input, -1.25f) - 1e-5f
 				&& frenzy <= std::max(input, 1.25f) + 1e-5f;
@@ -114,14 +121,50 @@ Result characterCurves() {
 	return {
 		"Character curves are finite, bounded, symmetric where required, and continuous",
 		finite && bloomOdd && spineOdd && frenzyBounded
-			&& riptideOdd && riptideBounded && spineMonotonic && continuous,
+			&& riptideOdd && riptideBounded && voidOdd
+			&& spineMonotonic && continuous,
 		"finite=" + std::to_string(finite)
 			+ " bloomOdd=" + std::to_string(bloomOdd)
 			+ " spineOdd=" + std::to_string(spineOdd)
 			+ " riptideOdd=" + std::to_string(riptideOdd)
+			+ " voidOdd=" + std::to_string(voidOdd)
 			+ " riptideBounded=" + std::to_string(riptideBounded)
 			+ " spineMonotonic=" + std::to_string(spineMonotonic)
 			+ " edgeDelta=" + std::to_string(std::fabs(edgeAbove - edgeBelow))
+	};
+}
+
+Result voidOpensSmoothDeadZone() {
+	puffy::DynamicsState dynamics;
+	const float unity = puffy::Engine::processCharacter(
+		puffy::Character::Void, 0.2f, 0.f, dynamics);
+	const float inside = puffy::Engine::processCharacter(
+		puffy::Character::Void, 0.29f, 1.f, dynamics);
+	const float boundary = puffy::Engine::processCharacter(
+		puffy::Character::Void, 0.30f, 1.f, dynamics);
+	const float justOutside = puffy::Engine::processCharacter(
+		puffy::Character::Void, 0.301f, 1.f, dynamics);
+	const float middle = puffy::Engine::processCharacter(
+		puffy::Character::Void, 0.50f, 1.f, dynamics);
+	const float rail = puffy::Engine::processCharacter(
+		puffy::Character::Void, 1.f, 1.f, dynamics);
+	const float negativeMiddle = puffy::Engine::processCharacter(
+		puffy::Character::Void, -0.50f, 1.f, dynamics);
+	return {
+		"VOID opens a continuous soft dead zone and reconnects at the rail",
+		near(unity, 0.2f, 1e-7f)
+			&& near(inside, 0.f, 1e-7f)
+			&& near(boundary, 0.f, 1e-7f)
+			&& justOutside > 0.f && justOutside < 1e-4f
+			&& middle > 0.15f && middle < 0.25f
+			&& near(rail, 1.f, 1e-7f)
+			&& near(middle, -negativeMiddle, 1e-7f),
+		"unity=" + std::to_string(unity)
+			+ " deadZone=" + std::to_string(inside)
+			+ "/" + std::to_string(boundary)
+			+ " outside=" + std::to_string(justOutside)
+			+ " middle=" + std::to_string(middle)
+			+ " rail=" + std::to_string(rail)
 	};
 }
 
@@ -362,7 +405,7 @@ Result recoveryAndSilence() {
 	bool finite = std::isfinite(invalid.left) && std::isfinite(invalid.right);
 	float tail = 0.f;
 	for (int i = 0; i < 192000; ++i) {
-		const int character = (i / 137) % 4;
+		const int character = (i / 137) % puffy::kCharacterCount;
 		const puffy::Frame frame = engine.process(0.f, 0.f, 0.75f, character, true, 0.f);
 		finite = finite && std::isfinite(frame.left) && std::isfinite(frame.right);
 		if (i > 96000) {
@@ -411,8 +454,9 @@ Result characterTransitionsAreTransparentAndRetargetable() {
 	puffy::Engine queued;
 	queued.setSampleRate(48000.f);
 	for (int i = 0; i < 2000; ++i) {
-		int requestedCharacter =
-			i < 500 ? 0 : (i < 550 ? 1 : (i < 600 ? 2 : 3));
+		int requestedCharacter = i < 500
+			? 0
+			: (i < 550 ? 1 : (i < 600 ? 2 : (i < 650 ? 3 : 4)));
 		const float phase = 2.f * kPi * 431.f * float(i) / 48000.f;
 		const puffy::Frame frame = queued.process(
 			2.f * std::sin(phase),
@@ -426,7 +470,7 @@ Result characterTransitionsAreTransparentAndRetargetable() {
 
 	return {
 		"Character transitions stay unity at zero Puff and rapid retargets complete",
-		maximumDelta <= 2e-6f && finalCharacter == int(puffy::Character::Riptide),
+		maximumDelta <= 2e-6f && finalCharacter == int(puffy::Character::Void),
 		"unityDelta=" + std::to_string(maximumDelta)
 			+ " finalCharacter=" + std::to_string(finalCharacter)
 	};
@@ -438,7 +482,7 @@ Result nonlinearGrowth() {
 	puffy::DynamicsState dynamics;
 	dynamics.fast = 0.7f;
 	dynamics.transient = 0.4f;
-	for (int character = 0; character < 4; ++character) {
+	for (int character = 0; character < puffy::kCharacterCount; ++character) {
 		float lowDeviation = 0.f;
 		float highDeviation = 0.f;
 		for (int i = -200; i <= 200; ++i) {
@@ -467,7 +511,7 @@ Result nonlinearGrowth() {
 Result splitCharactersCreateContinuousAsymmetry() {
 	puffy::DynamicsState dynamics;
 	const float negativeZero = puffy::Engine::processCharacter(
-		puffy::Character::Spine, -0.f, 1.f, dynamics);
+		puffy::Character::Void, -0.f, 1.f, dynamics);
 	const float positiveZero = puffy::Engine::processCharacter(
 		puffy::Character::Bloom, 0.f, 1.f, dynamics);
 
@@ -485,7 +529,7 @@ Result splitCharactersCreateContinuousAsymmetry() {
 			false, 0.f);
 		const puffy::Frame splitFrame = split.process(
 			input, input, 1.f,
-			int(puffy::Character::Spine), int(puffy::Character::Bloom),
+			int(puffy::Character::Void), int(puffy::Character::Bloom),
 			false, 0.f);
 		if (i >= 24000) {
 			splitDelta = std::max(
@@ -531,8 +575,8 @@ Result realtimePathDoesNotAllocate() {
 			7.f * std::sin(phase),
 			5.f * std::cos(phase),
 			float(i % 1000) / 999.f,
-			(i / 333) % 4,
-			(i / 271 + 1) % 4,
+			(i / 333) % puffy::kCharacterCount,
+			(i / 271 + 1) % puffy::kCharacterCount,
 			(i & 1) != 0,
 			float(i % 101) / 100.f);
 		peak = std::max(peak, std::max(std::fabs(frame.left), std::fabs(frame.right)));
@@ -552,6 +596,7 @@ Result realtimePathDoesNotAllocate() {
 int main() {
 	const std::vector<Result> results = {
 		characterCurves(),
+		voidOpensSmoothDeadZone(),
 		frenzySinusoidalFold(),
 		riptideFractalAnchors(),
 		unityAndStereo(),

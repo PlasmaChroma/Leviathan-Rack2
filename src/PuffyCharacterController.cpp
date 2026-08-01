@@ -39,11 +39,13 @@ void PuffyCharacterController::reset(const PuffyVisualState& visual) {
 		+ 0.10f * visual.gainReduction);
 	inflationVelocity = 0.f;
 	const int negativeCharacter =
-		std::max(0, std::min(visual.negativeCharacter, 3));
+		std::max(0, std::min(
+			visual.negativeCharacter, puffy::kCharacterCount - 1));
 	const int positiveCharacter =
-		std::max(0, std::min(visual.positiveCharacter, 3));
+		std::max(0, std::min(
+			visual.positiveCharacter, puffy::kCharacterCount - 1));
 	personality = 0.5f * float(negativeCharacter + positiveCharacter);
-	for (int i = 0; i < 4; ++i) {
+	for (int i = 0; i < puffy::kCharacterCount; ++i) {
 		negativeCharacterTintWeights[i] = i == negativeCharacter ? 1.f : 0.f;
 		positiveCharacterTintWeights[i] = i == positiveCharacter ? 1.f : 0.f;
 	}
@@ -77,15 +79,17 @@ bool PuffyCharacterController::update(
 	inflation = clamp01(inflation);
 
 	const int negativeCharacter =
-		std::max(0, std::min(visual.negativeCharacter, 3));
+		std::max(0, std::min(
+			visual.negativeCharacter, puffy::kCharacterCount - 1));
 	const int positiveCharacter =
-		std::max(0, std::min(visual.positiveCharacter, 3));
+		std::max(0, std::min(
+			visual.positiveCharacter, puffy::kCharacterCount - 1));
 	personality = approach(
 		personality,
 		0.5f * float(negativeCharacter + positiveCharacter),
 		5.f,
 		dt);
-	for (int i = 0; i < 4; ++i) {
+	for (int i = 0; i < puffy::kCharacterCount; ++i) {
 		negativeCharacterTintWeights[i] = approach(
 			negativeCharacterTintWeights[i],
 			i == negativeCharacter ? 1.f : 0.f,

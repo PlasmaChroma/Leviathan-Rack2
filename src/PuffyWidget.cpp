@@ -43,17 +43,22 @@ struct PuffyCharacterReadout final : TransparentWidget {
 		}
 		const int negativeCharacter = module
 			? clamp(int(std::lround(
-				module->params[Puffy::CHARACTER_PARAM].getValue())), 0, 3)
+				module->params[Puffy::CHARACTER_PARAM].getValue())),
+				0,
+				int(puffy::Character::Void))
 			: int(puffy::Character::Bloom);
 		const int positiveCharacter = module
 			? clamp(int(std::lround(
-				module->params[Puffy::POSITIVE_CHARACTER_PARAM].getValue())), 0, 3)
+				module->params[Puffy::POSITIVE_CHARACTER_PARAM].getValue())),
+				0,
+				int(puffy::Character::Void))
 			: int(puffy::Character::Bloom);
 		static const char* const labels[] = {
 			"BLOOM",
 			"SPINE",
 			"FRENZY",
-			"RIPTIDE"
+			"RIPTIDE",
+			"VOID"
 		};
 		nvgFontSize(args.vg, FONT_SIZE);
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);

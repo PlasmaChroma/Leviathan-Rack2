@@ -37,8 +37,8 @@ Character clampCharacter(int character) {
 	if (character <= int(Character::Bloom)) {
 		return Character::Bloom;
 	}
-	if (character >= int(Character::Riptide)) {
-		return Character::Riptide;
+	if (character >= int(Character::Void)) {
+		return Character::Void;
 	}
 	return static_cast<Character>(character);
 }
@@ -78,6 +78,10 @@ float fractalShape(float input) {
 
 float autoDeflateDb(Character character, float amount) {
 	switch (character) {
+		case Character::Void:
+			// VOID already removes energy around the zero crossing. Additional
+			// automatic attenuation would make it collapse in linked mode.
+			return 0.f;
 		case Character::Spine:
 			return -4.f * amount;
 		case Character::Riptide:
@@ -229,6 +233,13 @@ Engine::CharacterCoefficients Engine::prepareCharacter(
 	coefficients.amount = clamp01(amount);
 	const float a = coefficients.amount;
 	switch (character) {
+		case Character::Void:
+			// At full Puff, open a 30%-of-reference dead zone. Squaring the
+			// control keeps the first half of the knob nuanced.
+			coefficients.voidThreshold = 0.30f * a * a;
+			coefficients.voidInverseSpan =
+				1.f / std::max(1.f - coefficients.voidThreshold, 1e-6f);
+			break;
 		case Character::Spine:
 			coefficients.drive = 1.f + 9.f * a * a;
 			break;
@@ -262,6 +273,18 @@ float Engine::applyCharacter(
 	const CharacterCoefficients& coefficients) {
 	const float a = coefficients.amount;
 	switch (coefficients.character) {
+		case Character::Void: {
+			const float magnitude = std::fabs(input);
+			const float kneePosition = clamp01(
+				(magnitude - coefficients.voidThreshold)
+				* coefficients.voidInverseSpan);
+			// Smoothstep gives the dead-zone boundary and outer ceiling zero
+			// slope, avoiding threshold clicks while retaining a visible void.
+			const float knee = kneePosition * kneePosition
+				* (3.f - 2.f * kneePosition);
+			const float excavated = std::copysign(knee, input);
+			return input + (excavated - input) * a;
+		}
 		case Character::Spine: {
 			const float z = coefficients.drive * input;
 			float saturated = 0.f;

@@ -15,8 +15,11 @@ enum class Character {
 	Bloom = 0,
 	Spine = 1,
 	Frenzy = 2,
-	Riptide = 3
+	Riptide = 3,
+	Void = 4
 };
+
+constexpr int kCharacterCount = int(Character::Void) + 1;
 
 struct DynamicsState {
 	float fast = 0.f;
@@ -85,6 +88,8 @@ private:
 		float foldGain = 1.f;
 		float phaseSkew = 0.f;
 		float normalization = 1.f;
+		float voidThreshold = 0.f;
+		float voidInverseSpan = 1.f;
 	};
 
 	struct DcBlocker {
