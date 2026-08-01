@@ -116,6 +116,18 @@
       "hidden": false
     },
     {
+      "slug": "Mandelwake",
+      "name": "Mandelwake",
+      "description": "Deterministic polyphonic fractal orbit sequencer with the Abyssal Wake display.",
+      "tags": [
+        "Random",
+        "Clock generator",
+        "Polyphonic",
+        "Visual"
+      ],
+      "hidden": false
+    },
+    {
       "slug": "Sil",
       "name": "Sil",
       "description": "Automatic mastering module.",

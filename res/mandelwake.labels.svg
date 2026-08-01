@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="91.44mm" height="128.5mm" viewBox="0 0 9144 12850">
+  <g fill="#f3f4ff" font-family="sans-serif" text-anchor="middle">
+    <text x="4572" y="520" font-size="360" font-weight="700" letter-spacing="70">MANDELWAKE</text>
+    <g font-size="190" fill="#c9c9df" letter-spacing="18">
+      <text x="800" y="4400">MAP</text><text x="2400" y="4400">CENTER X</text><text x="4200" y="4400">CENTER Y</text>
+      <text x="6000" y="4400">ZOOM</text><text x="7800" y="4400">ITER</text>
+      <text x="1700" y="5630">MUTATION</text><text x="3600" y="5630">SMOOTH</text>
+      <text x="5500" y="5630">RATE</text><text x="7400" y="5630">DENSITY</text>
+      <text x="1700" y="6940">X AMT</text><text x="3600" y="6940">Y AMT</text>
+      <text x="5500" y="6940">ZOOM AMT</text><text x="7400" y="6940">MUTATE AMT</text>
+      <text x="3900" y="8140">RESEED</text><text x="5250" y="8140">SEED LOCK</text>
+    </g>
+    <g font-size="165" fill="#a8dcff">
+      <text x="800" y="9140">CLOCK</text><text x="2000" y="9140">RESET</text>
+      <text x="800" y="10070">X CV</text><text x="2000" y="10070">Y CV</text>
+      <text x="800" y="11000">ZOOM</text><text x="2000" y="11000">MUTATE</text>
+      <text x="800" y="11930">SMOOTH</text><text x="2000" y="11930">RATE</text>
+    </g>
+    <g font-size="165" fill="#ffe09a">
+      <text x="7140" y="9140">X</text><text x="8340" y="9140">Y</text>
+      <text x="7140" y="10070">RADIUS</text><text x="8340" y="10070">PHASE</text>
+      <text x="7140" y="11000">GATE</text><text x="8340" y="11000">ESCAPE</text>
+      <text x="7140" y="11930">STEP</text>
+    </g>
+    <text x="4572" y="12620" font-size="150" fill="#7c75a7" letter-spacing="28">LEVIATHAN</text>
+  </g>
+</svg>

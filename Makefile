@@ -55,6 +55,11 @@ DOOM_LEGACY_WARN_FLAGS := \
 
 build/src/doom/%.c.o: CFLAGS += $(DOOM_LEGACY_WARN_FLAGS)
 
+# Mandelwake's patch identity depends on exact float-to-fixed adapter rounding.
+# Keep global audio optimizations elsewhere, but do not let fast-math rewrite
+# its deterministic boundary calculations.
+build/src/Mandelwake.cpp.o build/src/MandelwakeEngine.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
+
 TEST_BINS_NON_RACK := \
 	build/tests/temporaldeck_platter_spec_harness \
 	build/tests/temporaldeck_arc_lights_spec \
@@ -66,6 +71,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/temporaldeck_sample_prep_spec \
 	build/tests/temporaldeck_virtual_integration_spec \
 	build/tests/crownstep_spec \
+	build/tests/mandelwake_engine_spec \
 	build/tests/undertow_shape_spec \
 	build/tests/math_helpers_spec \
 	build/tests/puffy_engine_spec \
@@ -101,9 +107,15 @@ RACK_TEST_WARN_FLAGS := -Wno-unused-parameter
 RACK_TEST_OPT_FLAGS := -O1
 CXX_MACHINE := $(shell $(CXX) -dumpmachine 2>/dev/null)
 
-.PHONY: generate-panel-anchor-atlas validate-plugin-json doorstop-reference-grid doorstop-corpus-audit doorstop-reference-evaluate doorstop-variant-grid doorstop-variant-evaluate doorstop-boing-audition
+.PHONY: generate-panel-anchor-atlas generate-mandelwake-tables check-mandelwake-tables validate-plugin-json doorstop-reference-grid doorstop-corpus-audit doorstop-reference-evaluate doorstop-variant-grid doorstop-variant-evaluate doorstop-boing-audition
 generate-panel-anchor-atlas:
 	python3 tools/generate_panel_anchor_atlas.py
+
+generate-mandelwake-tables:
+	python3 tools/generate_mandelwake_tables.py
+
+check-mandelwake-tables:
+	python3 tools/generate_mandelwake_tables.py --check
 
 validate-plugin-json:
 	python3 tools/validate_plugin_json_tags.py plugin.json
@@ -262,6 +274,7 @@ test-build-fast: $(TEST_BINS_NON_RACK)
 test-build-rack: $(TEST_BINS_RACK)
 
 test-fast: test-build-fast
+	python3 tools/generate_mandelwake_tables.py --check
 	$(call run_test_bin,build/tests/temporaldeck_platter_spec_harness)
 	$(call run_test_bin,build/tests/temporaldeck_arc_lights_spec)
 	$(call run_test_bin,build/tests/temporaldeck_engine_spec)
@@ -272,6 +285,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/temporaldeck_sample_prep_spec)
 	$(call run_test_bin,build/tests/temporaldeck_virtual_integration_spec)
 	$(call run_test_bin,build/tests/crownstep_spec)
+	$(call run_test_bin,build/tests/mandelwake_engine_spec)
 	$(call run_test_bin,build/tests/undertow_shape_spec)
 	$(call run_test_bin,build/tests/math_helpers_spec)
 	$(call run_test_bin,build/tests/puffy_engine_spec)
@@ -394,6 +408,9 @@ build/tests/temporaldeck_virtual_integration_spec: tests/temporaldeck_virtual_in
 
 build/tests/crownstep_spec: tests/crownstep_spec.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
+
+build/tests/mandelwake_engine_spec: tests/mandelwake_engine_spec.cpp src/MandelwakeEngine.cpp src/MandelwakeEngine.hpp src/MandelwakeFixedPoint.hpp src/MandelwakeTables.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/mandelwake_engine_spec.cpp src/MandelwakeEngine.cpp -o $@
 
 build/tests/undertow_shape_spec: tests/undertow_shape_spec.cpp src/UndertowShape.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/undertow_shape_spec.cpp -o $@
