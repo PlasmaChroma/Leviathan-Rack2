@@ -286,9 +286,11 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	addParam(createParamCentered<LeviathanHaloKnob2>(
 		anchor("puff_param", Vec(18.f, 83.5f)),
 		module, Puffy::PUFF_PARAM));
-	addParam(createParamCentered<Eclipse2Knob>(
-		anchor("deflate_param", Vec(44.f, 83.5f)),
-		module, Puffy::DEFLATE_PARAM));
+	auto* sensitivityKnob = createParamCentered<Eclipse2Knob>(
+		anchor("sensitivity_param", Vec(44.f, 83.5f)),
+		module, Puffy::SENSITIVITY_PARAM);
+	sensitivityKnob->setProgressRingBipolar(true);
+	addParam(sensitivityKnob);
 	addParam(createParamCentered<Eclipse2Knob>(
 		anchor("mix_param", Vec(51.96f, 97.5f)),
 		module, Puffy::MIX_PARAM));

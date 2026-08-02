@@ -152,8 +152,9 @@ void Engine::reset() {
 	wetMix = 1.f;
 	autoDeflateMix = 1.f;
 	autoDeflateStateInitialized = false;
-	cachedManualDeflate = -1.f;
-	cachedManualGain = 1.f;
+	projectedInputGain = 1.f;
+	cachedSensitivity = -2.f;
+	cachedSensitivityTargetGain = 1.f;
 	currentCharacters = {};
 	transitionFrom = {};
 	transitionTo = {};
@@ -367,13 +368,24 @@ float Engine::updateAutoGain(Character character, float currentAmount) const {
 	return fastNegativeExp(exponent);
 }
 
-float Engine::manualGain(float normalizedDeflate) {
-	const float clamped = clamp01(normalizedDeflate);
-	if (clamped != cachedManualDeflate) {
-		cachedManualDeflate = clamped;
-		cachedManualGain = std::pow(10.f, -12.f * clamped / 20.f);
+float Engine::sensitivityTargetGain(float bipolarSensitivity) {
+	const float clamped = std::max(-1.f, std::min(bipolarSensitivity, 1.f));
+	if (clamped != cachedSensitivity) {
+		cachedSensitivity = clamped;
+		// 2^s over [-1, 1], evaluated only when the target changes. This
+		// fifth-order expansion avoids a transcendental in automated hot paths
+		// while remaining perceptually exact across the one-octave range.
+		constexpr float kLn2 = 0.6931471805599453f;
+		const float x = clamped * kLn2;
+		const float x2 = x * x;
+		const float x3 = x2 * x;
+		const float x4 = x2 * x2;
+		const float x5 = x4 * x;
+		cachedSensitivityTargetGain = 1.f + x + 0.5f * x2
+			+ (1.f / 6.f) * x3 + (1.f / 24.f) * x4
+			+ (1.f / 120.f) * x5;
 	}
-	return cachedManualGain;
+	return cachedSensitivityTargetGain;
 }
 
 float Engine::processPath(
@@ -419,7 +431,7 @@ Frame Engine::process(
 	int negativeCharacter,
 	int positiveCharacter,
 	bool autoDeflate,
-	float manualDeflate,
+	float sensitivity,
 	float wetTarget) {
 	const bool invalidLeft = !std::isfinite(inputLeft);
 	const bool invalidRight = !std::isfinite(inputRight);
@@ -437,12 +449,23 @@ Frame Engine::process(
 
 	inputLeft = std::max(-20.f, std::min(inputLeft, 20.f));
 	inputRight = std::max(-20.f, std::min(inputRight, 20.f));
+	const float safeSensitivity = std::isfinite(sensitivity)
+		? sensitivity
+		: 0.f;
+	const float projectionTargetGain = sensitivityTargetGain(safeSensitivity);
+	projectedInputGain +=
+		(projectionTargetGain - projectedInputGain) * amountCoefficient;
+	const float projectedLeft = inputLeft * projectedInputGain;
+	const float projectedRight = inputRight * projectedInputGain;
 	const float normalizedPeak =
-		std::max(std::fabs(inputLeft), std::fabs(inputRight)) / kReferenceVolts;
+		std::max(std::fabs(projectedLeft), std::fabs(projectedRight))
+			/ kReferenceVolts;
 	const float normalizedPositive =
-		std::max(0.f, std::max(inputLeft, inputRight)) / kReferenceVolts;
+		std::max(0.f, std::max(projectedLeft, projectedRight))
+			/ kReferenceVolts;
 	const float normalizedNegative =
-		std::max(0.f, std::max(-inputLeft, -inputRight)) / kReferenceVolts;
+		std::max(0.f, std::max(-projectedLeft, -projectedRight))
+			/ kReferenceVolts;
 	dynamics.fast = updateFollower(
 		dynamics.fast,
 		normalizedPeak,
@@ -490,8 +513,8 @@ Frame Engine::process(
 
 	std::array<float, kOversampleFactor> oversampledLeft {};
 	std::array<float, kOversampleFactor> oversampledRight {};
-	upsamplerLeft.process(inputLeft / kReferenceVolts, oversampledLeft.data());
-	upsamplerRight.process(inputRight / kReferenceVolts, oversampledRight.data());
+	upsamplerLeft.process(projectedLeft / kReferenceVolts, oversampledLeft.data());
+	upsamplerRight.process(projectedRight / kReferenceVolts, oversampledRight.data());
 
 	float normalizedLeft = 0.f;
 	float normalizedRight = 0.f;
@@ -552,7 +575,6 @@ Frame Engine::process(
 			oversampledLeft.data(),
 			oversampledRight.data(), autoDeflateMix, wetMix, false);
 	}
-
 	float outputLeft = normalizedLeft * kReferenceVolts;
 	float outputRight = normalizedRight * kReferenceVolts;
 	const float peak = std::max(std::fabs(outputLeft), std::fabs(outputRight));
@@ -572,9 +594,6 @@ Frame Engine::process(
 		limiterGain *= guard;
 	}
 
-	const float outputGain = manualGain(manualDeflate);
-	outputLeft *= outputGain;
-	outputRight *= outputGain;
 	if (!std::isfinite(outputLeft) || !std::isfinite(outputRight)) {
 		outputLeft = 0.f;
 		outputRight = 0.f;

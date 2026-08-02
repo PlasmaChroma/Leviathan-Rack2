@@ -16,7 +16,9 @@ Puffy::Puffy() {
 		CHARACTER_PARAM, 0.f, 4.f, 0.f, "Negative character",
 		{"BLOOM", "SPINE", "FRENZY", "RIPTIDE", "VOID"});
 	configParam(PUFF_PARAM, 0.f, 1.f, 0.25f, "Puff", "%", 0.f, 100.f);
-	configParam(DEFLATE_PARAM, 0.f, 1.f, 0.f, "Deflate", " dB", 0.f, -12.f);
+	configParam(
+		SENSITIVITY_PARAM, -1.f, 1.f, 0.f,
+		"Sensitivity", " dB", 0.f, 6.0205999f);
 	configParam(
 		PUFF_CV_AMOUNT_PARAM, -1.f, 1.f, 0.f,
 		"Puff CV amount", "%", 0.f, 100.f);
@@ -177,7 +179,7 @@ void Puffy::process(const ProcessArgs& args) {
 		negativeCharacter,
 		positiveCharacter,
 		autoDeflateEnabled.load(std::memory_order_relaxed),
-		params[DEFLATE_PARAM].getValue(),
+		params[SENSITIVITY_PARAM].getValue(),
 		params[MIX_PARAM].getValue());
 
 	outputs[OUTPUT_L].setChannels(1);

@@ -28,7 +28,7 @@ The front panel stays deliberately small:
 
 - five original Leviathan character modes;
 - one primary `PUFF` control;
-- one `DEFLATE` output attenuation control;
+- one bipolar `SENSITIVITY` input-projection control;
 - one `MIX` wet/dry control;
 - one `PUFF CV` input and attenuverter;
 - stereo input and output.
@@ -46,7 +46,7 @@ At the end of v1, a user can:
 - move continuously from an effectively clean signal to obvious saturation;
 - select a warm, aggressive, input-reactive, fractal, or stepped character;
 - modulate `PUFF` over its complete range with 0-10 V CV;
-- reduce the processed output by up to 12 dB with post-limiter `DEFLATE` output trim;
+- reduce or increase waveshaper projection by one octave with `SENSITIVITY`;
 - blend continuously between latency-matched dry and fully processed audio;
 - choose low-latency sample-peak safety or a 2 ms true-peak mastering limiter;
 - compare characters without large accidental loudness jumps when Auto Deflate
@@ -118,7 +118,7 @@ character_param
 negative_character_readout
 positive_character_readout
 puff_param
-deflate_param
+sensitivity_param
 puff_cv_amount_param
 mix_param
 
@@ -142,7 +142,7 @@ screw_br
 | --- | --- | --- | --- |
 | `CHARACTER` | 5-position snapped switch | 0..4, default 0 | `BLOOM`, `SPINE`, `FRENZY`, `RIPTIDE`, `VOID` |
 | `PUFF` | large knob | 0..1, default 0.25 | Base saturation amount |
-| `DEFLATE` | knob | 0..1, default 0 | 0 to 12 dB of post-effect attenuation |
+| `SENSITIVITY` | bipolar knob | -1..1, default 0 | 0.5x to 2x waveshaper input projection |
 | `PUFF CV` | attenuverter | -1..1, default 0 | Depth and polarity of amount CV |
 | `MIX` | knob | 0..1, default 1 | Latency-matched dry to fully processed wet blend |
 
@@ -157,18 +157,22 @@ range. Bipolar +/-5 V modulation spans half the range in either direction.
 Smooth `amountTarget` with a 1 ms one-pole filter. Character changes use a 10 ms
 equal-power crossfade between old and new character outputs.
 
-`DEFLATE` maps linearly in dB:
+`SENSITIVITY` maps exponentially across one octave:
 
 ```text
-manualDeflateDb = -12 dB * DEFLATE
+projectionGain = 2 ^ SENSITIVITY
 ```
 
-It is a post-limiter output volume trim of 0 to -12 dB, not a limiter threshold and not a makeup-gain control. Placing it after the limiter guarantees a literal output level trim without altering limiter threshold, gain reduction, or visual metering response. Puffy never adds post-saturation gain through this control.
+The input is multiplied by `projectionGain` before oversampling. This is genuine
+pre-waveshaper gain: it changes both how far the signal travels along the
+transfer function and the level reaching the output limiter. The control is
+smoothed. Activity telemetry uses the projected input so the transfer preview
+shows the signal moving farther or less far along its X axis.
 
 `MIX` blends the oversampled dry and selected-character signals before the DC
 blocker, Auto Deflate, and linked limiter. Auto Deflate compensation scales with
 the wet proportion. At 0%, the latency-matched dry signal still passes through
-Puffy's safety limiter and final `DEFLATE` trim; at 100%, the character path is
+Puffy's safety limiter; at 100%, the character path is
 fully wet.
 
 ### 3.4 Ports and normalization
@@ -204,7 +208,7 @@ must only be appended.
 enum ParamId {
     CHARACTER_PARAM,
     PUFF_PARAM,
-    DEFLATE_PARAM,
+    SENSITIVITY_PARAM,
     PUFF_CV_AMOUNT_PARAM,
     MIX_PARAM,
     PARAMS_LEN
@@ -230,8 +234,8 @@ enum LightId {
 ```
 
 Use `configSwitch()` for `CHARACTER_PARAM`, including the five display labels.
-Use dB display scaling or a custom `ParamQuantity` so `DEFLATE` displays 0 to
--12 dB rather than an unexplained normalized value.
+Use bipolar dB display scaling so `SENSITIVITY` displays approximately
+-6.02 to +6.02 dB with unity at the center detent.
 
 ## 5. DSP reference and signal flow
 
@@ -248,6 +252,7 @@ The authoritative signal order is:
 
 ```text
 input safety
+-> SENSITIVITY projection
 -> dynamics detector update (shared stereo instance)
 -> amount smoothing
 -> oversample
@@ -257,11 +262,12 @@ input safety
 -> 5 Hz DC blocker
 -> Auto Deflate (pre-limiter character compensation)
 -> selected stereo limiter
--> manual DEFLATE (post-limiter output volume trim)
 -> finite/output guard
 ```
 
-The limiter must see the post-filter, post-Auto Deflate stream. Manual `DEFLATE` follows the limiter as a literal final volume trim. Do not put tone correction, Auto Deflate, or a DC blocker after the limiter.
+The limiter must see the sensitivity-scaled, post-filter, post-Auto Deflate
+stream. Do not put tone correction, Auto Deflate, or a DC blocker after the
+limiter.
 
 ### 5.1 Input safety
 
@@ -489,7 +495,8 @@ preLimiterGain = dbToLinear(autoDeflateDb)
 
 These constants are tuning constants, not user state. They may be adjusted
 before v1 release only if the level-matching acceptance test in section 11
-demonstrates a systematic mismatch. Manual `DEFLATE` output trim (`manualDeflateDb`) is applied separately after the limiter.
+demonstrates a systematic mismatch. User `SENSITIVITY` is independent of this
+static character-level compensation.
 
 ## 6. Limiter contract
 
@@ -806,7 +813,7 @@ behind a generic `High quality` label.
 
 ### 11.1 Transfer functions
 
-- `amount = 0`, Auto Deflate off, and `DEFLATE = 0` produces unity gain within
+- `amount = 0`, Auto Deflate off, and `SENSITIVITY = 0` produces unity gain within
   0.05 dB at 1 kHz below limiter threshold.
 - Every character is finite and bounded. `BLOOM`, `SPINE`, and `RIPTIDE` remain
   continuous; `VOID` intentionally introduces quantizer discontinuities.
@@ -819,7 +826,8 @@ behind a generic `High quality` label.
   multi-scale slope reversals, and continuous flat outer rails.
 - `VOID` is odd and bounded, remains unity at zero amount, develops a
   zero-centered tread, and reaches 0.125-wide magnitude steps at full amount.
-- `DEFLATE` operates as a literal post-limiter output volume trim, reducing output level by the exact linear dB amount both above and below limiter engagement.
+- `SENSITIVITY` moves input activity and clean-path gain monotonically from
+  0.5x through 1x to 2x across the preview X axis.
 - All characters become audibly and measurably more nonlinear as amount rises.
 - With Auto Deflate enabled, the gated RMS of each character on the shared pink
   noise fixture stays within 1.5 dB of its amount-zero RMS at amounts 0.25,
@@ -910,7 +918,7 @@ The first runnable module includes:
 - a fixed 4x saturation path for the MVP, using the final Rack FIR types, plus
   the common 5 Hz DC blocker;
 - static mode-aware Auto Deflate enabled by default;
-- the final fully linked `LIVE` limiter and post-limiter manual `DEFLATE`;
+- the final fully linked `LIVE` limiter and bipolar `SENSITIVITY` projection;
 - reset and sample-rate lifecycle behavior for all implemented DSP state;
 - the final atomic `PuffyVisualState` publication boundary;
 - `res/Puffy.svg` with all required component anchors and a functional 12 HP
@@ -921,7 +929,7 @@ The first runnable module includes:
   eyelids, fins, mouth, spikes, and gain-reduction blush;
 - deterministic `module == nullptr` browser and Deep Cache preview behavior;
 - focused engine tests for transfer functions, stereo linking, normalization,
-  finite recovery, DC settling, `LIVE` limiting, `DEFLATE`, and the MVP's
+  finite recovery, DC settling, `LIVE` limiting, `SENSITIVITY`, and the MVP's
   character transition.
 
 The MVP panel may use restrained structural styling and the fish renderer may
@@ -956,14 +964,14 @@ The MVP milestone is complete when:
 
 - `tests/puffy_engine_spec.cpp` passes under `test-fast` or as a focused test
   binary;
-- amount zero, Auto Deflate off, and zero `DEFLATE` are unity within the section
+- amount zero, Auto Deflate off, and centered `SENSITIVITY` are unity within the section
   11 tolerance below limiter engagement;
 - every character is finite, continuous, sonically distinct, and becomes more
   nonlinear as `PUFF` rises;
 - mono-from-either-side and stereo operation are correct;
 - `FRENZY` and limiter control remain stereo-linked;
 - `LIVE` never emits a finite sample beyond its 5 V ceiling tolerance;
-- `DEFLATE` produces the exact requested post-limiter attenuation;
+- `SENSITIVITY` scales X-axis projection and pre-shaper level from 0.5x to 2x;
 - rapid character changes, reset, sample-rate changes, silence, and non-finite
   input produce no stale or non-finite output;
 - repeated engine processing performs no allocation;

@@ -54,7 +54,7 @@ public:
 		int negativeCharacter,
 		int positiveCharacter,
 		bool autoDeflate,
-		float manualDeflate,
+		float sensitivity,
 		float wetTarget = 1.f);
 	Frame process(
 		float inputLeft,
@@ -62,11 +62,11 @@ public:
 		float amountTarget,
 		int character,
 		bool autoDeflate,
-		float manualDeflate,
+		float sensitivity,
 		float wetTarget = 1.f) {
 		return process(
 			inputLeft, inputRight, amountTarget, character, character,
-			autoDeflate, manualDeflate, wetTarget);
+			autoDeflate, sensitivity, wetTarget);
 	}
 
 	float getSampleRate() const {
@@ -132,8 +132,9 @@ private:
 	float positiveInputActivity = 0.f;
 	float negativeInputActivity = 0.f;
 	float limiterGain = 1.f;
-	float cachedManualDeflate = -1.f;
-	float cachedManualGain = 1.f;
+	float projectedInputGain = 1.f;
+	float cachedSensitivity = -2.f;
+	float cachedSensitivityTargetGain = 1.f;
 	DynamicsState dynamics;
 
 	rack::dsp::Upsampler<kOversampleFactor, kOversampleQuality> upsamplerLeft;
@@ -173,7 +174,7 @@ private:
 	static float applyCharacter(float input, const CharacterCoefficients& coefficients);
 	float updateFollower(float current, float target, float attack, float release) const;
 	float updateAutoGain(Character character, float currentAmount) const;
-	float manualGain(float normalizedDeflate);
+	float sensitivityTargetGain(float bipolarSensitivity);
 	float processPath(
 		PathState& path,
 		const CharacterCoefficients& negativeCoefficients,

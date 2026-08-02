@@ -356,8 +356,10 @@ Result riptideFractalAnchors() {
 struct ToneStats {
 	double inputSq = 0.0;
 	double outputSq = 0.0;
+	double errorSq = 0.0;
 	float peakLeft = 0.f;
 	float peakRight = 0.f;
+	float peakPositiveActivity = 0.f;
 	float maxStereoDelta = 0.f;
 	bool finite = true;
 };
@@ -370,7 +372,7 @@ ToneStats renderTone(
 	float amount,
 	int character,
 	bool autoDeflate,
-	float manualDeflate,
+	float sensitivity,
 	bool identicalStereo = true,
 	float wetMix = 1.f) {
 	const float sampleRate = engine.getSampleRate();
@@ -382,16 +384,20 @@ ToneStats renderTone(
 		const float left = amplitude * std::sin(phase);
 		const float right = identicalStereo ? left : amplitude * 0.5f * std::cos(phase);
 		const puffy::Frame frame = engine.process(
-			left, right, amount, character, autoDeflate, manualDeflate, wetMix);
+			left, right, amount, character, autoDeflate, sensitivity, wetMix);
 		stats.finite = stats.finite && std::isfinite(frame.left)
 			&& std::isfinite(frame.right);
 		stats.peakLeft = std::max(stats.peakLeft, std::fabs(frame.left));
 		stats.peakRight = std::max(stats.peakRight, std::fabs(frame.right));
+		stats.peakPositiveActivity = std::max(
+			stats.peakPositiveActivity, frame.positiveInputActivity);
 		stats.maxStereoDelta =
 			std::max(stats.maxStereoDelta, std::fabs(frame.left - frame.right));
 		if (i >= skip) {
 			stats.inputSq += double(left) * double(left);
 			stats.outputSq += double(frame.left) * double(frame.left);
+			const double error = double(frame.left) - double(left);
+			stats.errorSq += error * error;
 		}
 	}
 	return stats;
@@ -436,22 +442,64 @@ Result linkedLimiter() {
 	};
 }
 
-Result manualDeflateIsExact() {
-	puffy::Engine dry;
-	puffy::Engine trimmed;
-	dry.setSampleRate(48000.f);
-	trimmed.setSampleRate(48000.f);
-	const ToneStats dryStats = renderTone(
-		dry, 0.5f, 1.f, 431.f, 0.5f, 0, false, 0.f);
-	const ToneStats trimStats = renderTone(
-		trimmed, 0.5f, 1.f, 431.f, 0.5f, 0, false, 0.5f);
-	const float ratio = float(std::sqrt(trimStats.outputSq / dryStats.outputSq));
-	const float expected = std::pow(10.f, -6.f / 20.f);
+Result sensitivityChangesInputProjectionAndLevel() {
+	puffy::Engine low;
+	puffy::Engine center;
+	puffy::Engine high;
+	puffy::Engine lowUnity;
+	puffy::Engine highUnity;
+	low.setSampleRate(48000.f);
+	center.setSampleRate(48000.f);
+	high.setSampleRate(48000.f);
+	lowUnity.setSampleRate(48000.f);
+	highUnity.setSampleRate(48000.f);
+	const ToneStats lowStats = renderTone(
+		low, 0.5f, 2.f, 431.f, 1.f, int(puffy::Character::Bloom),
+		false, -1.f);
+	const ToneStats centerStats = renderTone(
+		center, 0.5f, 2.f, 431.f, 1.f, int(puffy::Character::Bloom),
+		false, 0.f);
+	const ToneStats highStats = renderTone(
+		high, 0.5f, 2.f, 431.f, 1.f, int(puffy::Character::Bloom),
+		false, 1.f);
+	const ToneStats lowUnityStats = renderTone(
+		lowUnity, 0.5f, 1.f, 431.f, 0.f, int(puffy::Character::Bloom),
+		false, -1.f);
+	const ToneStats highUnityStats = renderTone(
+		highUnity, 0.5f, 1.f, 431.f, 0.f, int(puffy::Character::Bloom),
+		false, 1.f);
+	const float lowError = float(std::sqrt(lowStats.errorSq / lowStats.inputSq));
+	const float centerError = float(
+		std::sqrt(centerStats.errorSq / centerStats.inputSq));
+	const float highError = float(std::sqrt(highStats.errorSq / highStats.inputSq));
+	const float lowCleanRatio = float(
+		std::sqrt(lowUnityStats.outputSq / lowUnityStats.inputSq));
+	const float highCleanRatio = float(
+		std::sqrt(highUnityStats.outputSq / highUnityStats.inputSq));
 	return {
-		"DEFLATE is an exact post-limiter dB trim",
-		near(ratio, expected, 2e-5f),
-		"ratio=" + std::to_string(ratio)
-			+ " expected=" + std::to_string(expected)
+		"SENSITIVITY changes waveshaper projection and pre-shaper level",
+		lowStats.finite && centerStats.finite && highStats.finite
+			&& lowStats.peakPositiveActivity < centerStats.peakPositiveActivity
+			&& centerStats.peakPositiveActivity < highStats.peakPositiveActivity
+			&& near(
+				2.f * lowStats.peakPositiveActivity,
+				centerStats.peakPositiveActivity,
+				0.002f)
+			&& near(
+				2.f * centerStats.peakPositiveActivity,
+				highStats.peakPositiveActivity,
+				0.002f)
+			&& highError != centerError && centerError != lowError
+			&& near(lowCleanRatio, 0.5f, 0.002f)
+			&& near(highCleanRatio, 2.f, 0.002f),
+		"projection=" + std::to_string(lowStats.peakPositiveActivity)
+			+ "/" + std::to_string(centerStats.peakPositiveActivity)
+			+ "/" + std::to_string(highStats.peakPositiveActivity)
+			+ " error=" + std::to_string(lowError)
+			+ "/" + std::to_string(centerError)
+			+ "/" + std::to_string(highError)
+			+ " cleanGain=" + std::to_string(lowCleanRatio)
+			+ "/" + std::to_string(highCleanRatio)
 	};
 }
 
@@ -687,7 +735,7 @@ int main() {
 		riptideFractalAnchors(),
 		unityAndStereo(),
 		linkedLimiter(),
-		manualDeflateIsExact(),
+		sensitivityChangesInputProjectionAndLevel(),
 		wetDryMixEndpoints(),
 		recoveryAndSilence(),
 		characterTransitionsAreTransparentAndRetargetable(),
