@@ -13,7 +13,6 @@ public:
 private:
 	float inflation = 0.f;
 	float inflationVelocity = 0.f;
-	float personality = 0.f;
 	float negativeCharacterTintWeights[puffy::kCharacterCount] = {
 		1.f, 0.f, 0.f, 0.f, 0.f};
 	float positiveCharacterTintWeights[puffy::kCharacterCount] = {

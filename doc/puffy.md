@@ -656,17 +656,13 @@ The UI smooths visual values independently of audio control:
 inflation = clamp(0.65*amount + 0.25*inputActivity + 0.10*gainReduction, 0, 1)
 ```
 
-Character-specific motion:
+Shared motion and character color:
 
-- `BLOOM`: round body inflation, slow breathing, relaxed fin movement.
-- `SPINE`: spine extension follows amount; jaw/outline tension follows
-  transients.
 - all characters: large transient rises trigger the same short body/fin twitch;
   the reaction is visual only and never changes the DSP transfer function.
-- `FRENZY`: faster idle fin cadence and eye direction retain its personality;
-  no character-specific transient twitch or random audio behavior is implied.
-- `RIPTIDE`: blue body tint; shared gaze and blink behavior remains unchanged.
-- `VOID`: dark violet tint; restrained motion and posterized highlight bands.
+- all characters share identical breathing, gaze, blink, squint, mouth, fin,
+  twitch, and spine-motion behavior.
+- character identity is retained through the negative/positive body colors.
 - all modes: blush or warning tint follows limiter gain reduction.
 
 Tint transitions use five independent one-hot weights rather than interpolating
@@ -1180,46 +1176,29 @@ motion language.
 
 ### A.4.1 BLOOM
 
-- Roundest silhouette.
-- Slow, relaxed breathing.
-- Soft fin motion.
-- Gentle inflation overshoot.
-- Open, content expression.
-- Limiting appears as warm blush before concern.
+- Uses the shared Puffy motion language; its color remains character-specific.
 
 ### A.4.2 SPINE
 
-- Spines extend more strongly with amount.
-- Transients produce a small, quick body tension.
-- Fins move less, making the body feel firmer.
-- Eyes become slightly more focused at high drive.
-- Heavy limiting produces a braced expression rather than panic.
+- Uses the shared Puffy motion language; its color remains character-specific.
 
 ### A.4.3 FRENZY
 
-- Uses the same strong-transient twitch envelope as every other character.
-- Faster gaze changes, but never continuous jitter.
-- More energetic fin flicks.
-- Occasional excited expression at high activity.
-- The renderer may introduce a very small lateral wobble, but visual randomness
-  must never imply randomness in the DSP algorithm.
+- Uses the shared Puffy motion language; its color remains character-specific.
 
 ### A.4.4 RIPTIDE
 
 - Blue body tint.
-- Shared gaze and blink behavior.
-- The self-similar audio curve does not imply random visual motion.
+- Uses the shared Puffy motion language.
 
 ### A.4.5 VOID
 
 - Dark violet body tint with slightly posterized highlight bands.
-- Motion becomes more deliberate as `PUFF` rises, echoing the stepped response.
-- Do not quantize the fish animation itself; discontinuous visual motion would
-  read as a rendering fault rather than character feedback.
+- Uses the shared Puffy motion language; do not quantize its animation.
 
-Mode changes should crossfade or interpolate personality settings over roughly
-150-300 ms even though the audio characters crossfade in 10 ms. A slower visual
-transition reads as a change of temperament rather than a graphics discontinuity.
+Mode colors should crossfade over roughly 150-300 ms even though the audio
+characters crossfade in 10 ms. The slower visual transition keeps color changes
+organic without introducing character-specific motion.
 
 ## A.5 Autonomous life system
 

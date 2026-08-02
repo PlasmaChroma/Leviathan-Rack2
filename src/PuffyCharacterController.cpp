@@ -44,7 +44,6 @@ void PuffyCharacterController::reset(const PuffyVisualState& visual) {
 	const int positiveCharacter =
 		std::max(0, std::min(
 			visual.positiveCharacter, puffy::kCharacterCount - 1));
-	personality = 0.5f * float(negativeCharacter + positiveCharacter);
 	for (int i = 0; i < puffy::kCharacterCount; ++i) {
 		negativeCharacterTintWeights[i] = i == negativeCharacter ? 1.f : 0.f;
 		positiveCharacterTintWeights[i] = i == positiveCharacter ? 1.f : 0.f;
@@ -89,11 +88,6 @@ bool PuffyCharacterController::update(
 	const int positiveCharacter =
 		std::max(0, std::min(
 			visual.positiveCharacter, puffy::kCharacterCount - 1));
-	personality = approach(
-		personality,
-		0.5f * float(negativeCharacter + positiveCharacter),
-		5.f,
-		dt);
 	for (int i = 0; i < puffy::kCharacterCount; ++i) {
 		negativeCharacterTintWeights[i] = approach(
 			negativeCharacterTintWeights[i],
@@ -179,8 +173,6 @@ bool PuffyCharacterController::update(
 		}
 	}
 
-	const float frenzyBlend = clamp01(personality - 1.f);
-	const float spineBlend = clamp01(1.f - std::fabs(personality - 1.f));
 	const float breath = std::sin(idleTime * (2.f * kPi / 4.2f))
 		* (0.003f + 0.006f * visual.inputActivity);
 	pose->inflation = clamp01(inflation + breath);
@@ -215,19 +207,15 @@ bool PuffyCharacterController::update(
 	pose->leftBlink = blink;
 	pose->rightBlink = blink;
 	pose->squint = std::max(squint, 0.16f * std::fabs(twitch));
-	pose->mouthSmile = clamp01(0.75f - 0.35f * spineBlend
-		+ 0.15f * frenzyBlend);
-	pose->mouthTension = clamp01(
-		0.55f * spineBlend * visual.transientActivity
-		+ 0.35f * visual.gainReduction);
-	const float finFlutter = std::sin(idleTime * (3.1f + 2.2f * frenzyBlend));
+	pose->mouthSmile = 0.75f;
+	pose->mouthTension = clamp01(0.35f * visual.gainReduction);
+	const float finFlutter = std::sin(idleTime * 3.1f);
 	pose->leftFinAngle =
 		-0.12f - 0.10f * finFlutter - 0.18f * twitch;
 	pose->rightFinAngle =
 		0.12f + 0.10f * finFlutter + 0.18f * twitch;
 	pose->spineExtension = clamp01(
-		0.30f + 0.55f * visual.effectiveAmount * spineBlend
-		+ 0.18f * visual.effectiveAmount);
+		0.30f + 0.18f * visual.effectiveAmount);
 	pose->blush = approach(pose->blush, visual.gainReduction, 8.f, dt);
 	return true;
 }

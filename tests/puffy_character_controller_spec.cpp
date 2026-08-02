@@ -44,6 +44,53 @@ Result sharedTransientTwitch() {
 	};
 }
 
+Result characterMotionIsUniform() {
+	PuffyPose reference;
+	float maximumDifference = 0.f;
+	for (int character = 0; character < puffy::kCharacterCount; ++character) {
+		PuffyVisualState visual;
+		visual.effectiveAmount = 0.72f;
+		visual.inputActivity = 0.38f;
+		visual.transientActivity = 0.24f;
+		visual.gainReduction = 0.31f;
+		visual.negativeCharacter = character;
+		visual.positiveCharacter = character;
+		PuffyCharacterController controller;
+		controller.reset(visual);
+		PuffyPose pose;
+		for (int i = 0; i < 360; ++i) {
+			controller.update(1.f / 60.f, visual, &pose);
+		}
+		if (character == 0) {
+			reference = pose;
+			continue;
+		}
+		const float current[] = {
+			pose.inflation, pose.squashX, pose.squashY, pose.verticalOffset,
+			pose.gazeX, pose.gazeY, pose.leftBlink, pose.rightBlink, pose.squint,
+			pose.mouthSmile, pose.mouthTension, pose.leftFinAngle,
+			pose.rightFinAngle, pose.spineExtension, pose.blush,
+		};
+		const float expected[] = {
+			reference.inflation, reference.squashX, reference.squashY,
+			reference.verticalOffset, reference.gazeX, reference.gazeY,
+			reference.leftBlink, reference.rightBlink, reference.squint,
+			reference.mouthSmile, reference.mouthTension,
+			reference.leftFinAngle, reference.rightFinAngle,
+			reference.spineExtension, reference.blush,
+		};
+		for (size_t i = 0; i < sizeof(current) / sizeof(current[0]); ++i) {
+			maximumDifference = std::max(
+				maximumDifference, std::fabs(current[i] - expected[i]));
+		}
+	}
+	return {
+		"All characters share one motion language while colors remain independent",
+		maximumDifference < 1e-7f,
+		"maximumMotionDifference=" + std::to_string(maximumDifference)
+	};
+}
+
 Result twitchThresholdAndDecay() {
 	PuffyVisualState visual;
 	PuffyCharacterController controller;
@@ -102,6 +149,7 @@ Result squintRemainsDistinctFromBlink() {
 int main() {
 	const Result results[] = {
 		sharedTransientTwitch(),
+		characterMotionIsUniform(),
 		twitchThresholdAndDecay(),
 		squintRemainsDistinctFromBlink(),
 	};
