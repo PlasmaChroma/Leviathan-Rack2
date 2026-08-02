@@ -62,11 +62,11 @@ struct PuffyCharacterReadout final : TransparentWidget {
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 		nvgTextAlign(
 			args.vg,
-			(negativePart ? NVG_ALIGN_LEFT : NVG_ALIGN_RIGHT) | NVG_ALIGN_MIDDLE);
+			NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 		nvgFillColor(args.vg, puffy_visual::characterTint(character));
 		nvgText(
 			args.vg,
-			negativePart ? 0.f : box.size.x,
+			0.5f * box.size.x,
 			0.5f * box.size.y,
 			(std::string(negativePart ? "− " : "+ ") + labels[character]).c_str(),
 			nullptr);
@@ -82,8 +82,31 @@ struct PuffyCharacterButton final : SmallGoldButton {
 	}
 
 	void onDragStart(const event::DragStart& e) override {
+		const bool advancingLinkedPositive = module
+			&& !negativeIsSource
+			&& module->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f;
+		int linkedNextCharacter = int(puffy::Character::Bloom);
+		if (advancingLinkedPositive) {
+			// The audio thread keeps the positive parameter synchronized from the
+			// authoritative negative parameter while linked. Derive the intended
+			// click result before the base switch changes the positive parameter,
+			// so that synchronization cannot erase the click between those steps.
+			const int linkedCharacter = clamp(
+				int(std::lround(
+					module->params[Puffy::CHARACTER_PARAM].getValue())),
+				int(puffy::Character::Bloom),
+				int(puffy::Character::Void));
+			linkedNextCharacter = linkedCharacter >= int(puffy::Character::Void)
+				? int(puffy::Character::Bloom)
+				: linkedCharacter + 1;
+		}
 		SmallGoldButton::onDragStart(e);
-		if (module) {
+		if (advancingLinkedPositive) {
+			module->params[Puffy::CHARACTER_PARAM].setValue(linkedNextCharacter);
+			module->params[Puffy::POSITIVE_CHARACTER_PARAM].setValue(
+				linkedNextCharacter);
+		}
+		else if (module) {
 			module->synchronizeCharacterSelectionFromUi(negativeIsSource);
 		}
 	}

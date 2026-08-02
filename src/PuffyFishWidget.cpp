@@ -333,7 +333,6 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 		pose.negativeCharacterTintWeights);
 	const NVGcolor positiveBodyTint = puffy_visual::weightedCharacterTint(
 		pose.positiveCharacterTintWeights);
-	const NVGcolor bodyTint = mixColor(negativeBodyTint, positiveBodyTint, 0.5f);
 	// Keep the cast shadow grounded near the bottom of the scene. Inflation
 	// changes its footprint, but the fish's motion and radius do not move it.
 	const Vec shadowCenter(width * 0.5f, height * 0.92f);
@@ -402,32 +401,35 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 		nvgStroke(args.vg);
 	}
 
-	const float eyeRadius = minimum * 0.105f;
-	const float eyeY = center.y - radiusY * 0.23f;
-	const float eyeSpacing = eyeRadius * 0.79f;
-	const NVGcolor eyelidColor = multiplyColor(
-		nvgRGB(232, 223, 202), bodyTint);
-	drawEye(
-		args.vg, Vec(center.x - eyeSpacing, eyeY), eyeRadius,
-		pose.gazeX, pose.gazeY,
-		std::max(pose.leftBlink, pose.squint), eyelidColor);
-	drawEye(
-		args.vg, Vec(center.x + eyeSpacing, eyeY), eyeRadius,
-		pose.gazeX, pose.gazeY,
-		std::max(pose.rightBlink, pose.squint), eyelidColor);
-
 	const float blush = clamp01(pose.blush);
 	if (blush > 0.001f) {
 		nvgBeginPath(args.vg);
 		nvgEllipse(
-			args.vg, center.x - radiusX * 0.57f, center.y + radiusY * 0.10f,
+			args.vg, center.x - radiusX * 0.57f, center.y + radiusY * 0.20f,
 			radiusX * 0.16f, radiusY * 0.09f);
 		nvgEllipse(
-			args.vg, center.x + radiusX * 0.57f, center.y + radiusY * 0.10f,
+			args.vg, center.x + radiusX * 0.57f, center.y + radiusY * 0.20f,
 			radiusX * 0.16f, radiusY * 0.09f);
 		nvgFillColor(args.vg, nvgRGBA(255, 93, 91, int(150.f * blush)));
 		nvgFill(args.vg);
 	}
+
+	const float eyeRadius = minimum * 0.105f;
+	const float eyeY = center.y - radiusY * 0.23f;
+	const float eyeSpacing = eyeRadius * 0.79f;
+	const NVGcolor eyelidMaterialTint = nvgRGB(232, 223, 202);
+	const NVGcolor leftEyelidColor = multiplyColor(
+		eyelidMaterialTint, negativeBodyTint);
+	const NVGcolor rightEyelidColor = multiplyColor(
+		eyelidMaterialTint, positiveBodyTint);
+	drawEye(
+		args.vg, Vec(center.x - eyeSpacing, eyeY), eyeRadius,
+		pose.gazeX, pose.gazeY,
+		std::max(pose.leftBlink, pose.squint), leftEyelidColor);
+	drawEye(
+		args.vg, Vec(center.x + eyeSpacing, eyeY), eyeRadius,
+		pose.gazeX, pose.gazeY,
+		std::max(pose.rightBlink, pose.squint), rightEyelidColor);
 
 	const float mouthY = center.y + radiusY * 0.30f;
 	const float mouthWidth = minimum
