@@ -386,6 +386,8 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 					* (1.0 - smoothstep(0.928 - gapEdge, 0.928, segmentLocal));
 				float haloMix = clamp(uValue * 16.0 - segmentIndex, 0.0, 1.0);
 				float activeMix = clamp((uValue * 16.0 - segmentIndex - 0.072) / 0.856, 0.0, 1.0);
+				float cursorIndex = floor(clamp(uValue * 16.0 - 0.0001, 0.0, 15.9999));
+				float cursorSegment = (1.0 - step(0.5, abs(segmentIndex - cursorIndex))) * step(0.0001, uValue);
 				vec4 core = mix(uLed[2], uLed[0], activeMix);
 				vec4 hot = mix(uLed[3], uLed[1], activeMix);
 				vec4 valueColor = mix(core, hot, clamp((segmentLocal - 0.072) / 0.856, 0.0, 1.0));
@@ -425,10 +427,52 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 				}
 				overLayer(accum, vec4(0.0, 0.0, 0.016, 0.67), arcMask * band(radius, dipRadius + 0.46 * scale, max(0.15, 0.22 * scale)));
 
+				float segmentBody = arcMask * segmentMask * band(radius, segmentRadius, segmentWidth);
+				// A small gap-limited spill makes energized segments illuminate their
+				// housing without turning the whole ring into a continuous glow band.
+				vec4 localSpillColor = vec4(mix(uLed[1].rgb, uLed[0].rgb, 0.42), 0.16);
+				overLayer(accum, localSpillColor,
+					arcMask * segmentMask * band(radius, segmentRadius, segmentWidth + 2.35 * scale)
+					* activeMix * uBloomAmount);
+
 				overLayer(accum, vec4(0.0, 0.0, 0.016, 0.86), arcMask * segmentMask * band(radius, segmentRadius, segmentWidth + 0.48 * scale));
-				overLayer(accum, valueColor, arcMask * segmentMask * band(radius, segmentRadius, segmentWidth));
+				overLayer(accum, valueColor, segmentBody);
+
+				// Glass bevel: darken both radial and angular edges while leaving the
+				// center of each LED optically clear.
+				float radialLocal = clamp((radius - (segmentRadius - 0.5 * segmentWidth)) / segmentWidth, 0.0, 1.0);
+				float radialEdgeDistance = min(radialLocal, 1.0 - radialLocal);
+				float angularLocal = clamp((segmentLocal - 0.072) / 0.856, 0.0, 1.0);
+				float angularEdgeDistance = min(angularLocal, 1.0 - angularLocal);
+				float glassEdge = 1.0 - smoothstep(0.025, 0.19, min(radialEdgeDistance, angularEdgeDistance));
+				overLayer(accum, vec4(0.0, 0.008, 0.025, 0.34), segmentBody * glassEdge);
+
+				// Concentrated emissive core. Active LEDs gain depth and intensity,
+				// while inactive glass receives only a restrained internal reflection.
+				float coreBand = arcMask * segmentMask
+					* band(radius, segmentRadius - segmentWidth * 0.08, segmentWidth * 0.38);
+				vec4 emissiveCore = vec4(mix(core.rgb, hot.rgb, 0.72), mix(0.055, 0.30, activeMix));
+				overLayer(accum, emissiveCore, coreBand);
+
+				// Fixed panel-space light produces a polished glass glint. Polynomial
+				// shaping avoids pow() in this fragment path.
+				vec2 radialDirection = p / max(radius, 0.001);
+				float lightFacing = clamp(dot(radialDirection, vec2(-0.55, -0.835)) * 0.5 + 0.5, 0.0, 1.0);
+				float specular = lightFacing * lightFacing;
+				specular *= specular;
+				float glassGlint = specular * mix(0.32, 1.0, activeMix);
+				overLayer(accum, vec4(0.80, 0.96, 1.0, 0.19), segmentBody * glassGlint);
+
+				// Retain the original fine rim strokes over the glass treatment.
 				overLayer(accum, vec4(0.0, 0.004, 0.027, 0.67), arcMask * segmentMask * band(radius, segmentRadius + segmentWidth * 0.42, max(0.13, segmentWidth * 0.09)));
 				overLayer(accum, hot, arcMask * segmentMask * band(radius, segmentRadius - segmentWidth * 0.26, max(0.16, segmentWidth * 0.12)));
+
+				// The value boundary reads as a charged cursor segment without any
+				// time-driven animation, so the completed image remains idle-cacheable.
+				vec4 cursorColor = vec4(mix(uLed[0].rgb, uLed[1].rgb, 0.74), 0.34);
+				overLayer(accum, cursorColor, coreBand * cursorSegment);
+				overLayer(accum, vec4(0.88, 0.99, 1.0, 0.22),
+					segmentBody * cursorSegment * (1.0 - smoothstep(0.10, 0.30, radialEdgeDistance)));
 
 				float terminator = (1.0 - smoothstep(0.0, 0.055, along))
 					+ smoothstep(sweep - 0.055, sweep, along);
