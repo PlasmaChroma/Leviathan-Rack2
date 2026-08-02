@@ -577,12 +577,10 @@ struct LeviathanHaloKnob2 : app::Knob {
 
 	struct HaloGlSurface;
 	HaloGlSurface* glSurface = nullptr;
-	widget::FramebufferWidget* capReflectionFb = nullptr;
 	EclipseKnob::SvgLayer* backLayer = nullptr;
 	EclipseKnob::SvgLayer* centerLayer = nullptr;
 	std::shared_ptr<window::Svg> centerNormalSvg;
 	std::shared_ptr<window::Svg> centerLitSvg;
-	CapReflectionWidget* capReflection = nullptr;
 	Config config;
 	float lastBloomAmount = -1.f;
 	bool hovered = false;

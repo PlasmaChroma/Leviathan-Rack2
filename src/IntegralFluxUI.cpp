@@ -2358,7 +2358,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		menu->addChild(new MenuSeparator());
 		if (maths) {
 			menu->addChild(createMenuLabel("Performance"));
-			menu->addChild(createCheckMenuItem("Force Halo LEDs + Cap to NanoVG", "",
+			menu->addChild(createCheckMenuItem("Force Halo Dynamic Surface to NanoVG", "",
 				[=]() { return forceHaloNanoVg; },
 				[=]() {
 					forceHaloNanoVg = !forceHaloNanoVg;

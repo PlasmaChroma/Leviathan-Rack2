@@ -79,18 +79,6 @@ struct HaloNanoVgFallbackWidget final : TransparentWidget {
 	}
 };
 
-struct HaloTimedFramebuffer final : widget::FramebufferWidget {
-	void drawFramebuffer() override {
-		const bool measure = isDragonKingDebugEnabled();
-		const auto start = measure ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
-		widget::FramebufferWidget::drawFramebuffer();
-		if (!measure) return;
-		const uint64_t elapsed = haloElapsedNs(start);
-		gHaloKnob2DrawMetrics.capReflectionFramebufferNs += elapsed;
-		++gHaloKnob2DrawMetrics.capReflectionFramebufferDraws;
-	}
-};
-
 NVGcolor blendHaloColor(NVGcolor a, NVGcolor b, float t) {
 	t = clamp(t, 0.f, 1.f);
 	return nvgRGBAf(
@@ -314,6 +302,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 	GlowArcWidget* fallbackBackgroundGlow = nullptr;
 	LightArcWidget* fallbackLightArc = nullptr;
 	GlowArcWidget* fallbackForegroundGlow = nullptr;
+	CapReflectionWidget* fallbackCapReflection = nullptr;
 	float valueNorm = 0.5f;
 	float bloomAmount = 0.f;
 	bool centerLit = false;
@@ -328,6 +317,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 	GLint uniformBloomAmount = -1;
 	GLint uniformLed = -1;
 	GLint uniformBloom = -1;
+	GLint uniformCapReflection = -1;
 	GLint uniformCapAtlas = -1;
 	GLint uniformCenterLit = -1;
 	GLint uniformCapRotation = -1;
@@ -364,6 +354,11 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		// OpenGlWidget bypasses its framebuffer in browser previews and after a
 		// shader failure. Keep the original SVG cap in that NanoVG-only subtree.
 		fallbackRoot->addChild(fallbackCenterLayer);
+
+		fallbackCapReflection = new CapReflectionWidget();
+		fallbackCapReflection->box.size = Vec(46.f, 46.f);
+		fallbackCapReflection->config = config.bloom;
+		fallbackRoot->addChild(fallbackCapReflection);
 	}
 
 	~HaloGlSurface() override {
@@ -388,6 +383,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		program = vertexShader = fragmentShader = vbo = capTexture = 0;
 		initAttempted = false;
 		uniformLogicalSize = uniformValue = uniformBloomAmount = uniformLed = uniformBloom = -1;
+		uniformCapReflection = -1;
 		uniformCapAtlas = uniformCenterLit = uniformCapRotation = -1;
 	}
 
@@ -411,6 +407,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		if (fallbackBackgroundGlow) fallbackBackgroundGlow->valueNorm = value;
 		if (fallbackLightArc) fallbackLightArc->valueNorm = value;
 		if (fallbackForegroundGlow) fallbackForegroundGlow->valueNorm = value;
+		if (fallbackCapReflection) fallbackCapReflection->valueNorm = value;
 		if (std::fabs(value - valueNorm) <= 1e-6f && std::fabs(bloom - bloomAmount) <= 1e-4f) return;
 		valueNorm = value;
 		bloomAmount = bloom;
@@ -487,6 +484,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 			uniform float uBloomAmount;
 			uniform vec4 uLed[4];
 			uniform vec4 uBloom[17];
+			uniform vec4 uCapReflection[4];
 			uniform sampler2D uCapAtlas;
 			uniform float uCenterLit;
 			uniform vec2 uCapRotation;
@@ -653,6 +651,18 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 				vec4 capColor = texture2D(uCapAtlas, vec2(atlasOffset + 0.5 * capUv.x, capUv.y));
 				overPremultipliedLayer(accum, capColor, capBounds);
 
+				// Cap glass reflection remains above the rotated cap. Match the NanoVG
+				// fallback's coalesced 16-step active/inactive color transition.
+				if (uBloomAmount > 0.001 && along <= sweep) {
+					float rimRadius = diameter * (14.62 / 46.0);
+					vec4 capReflectionOuter = mix(uCapReflection[1], uCapReflection[0], haloMix);
+					vec4 capReflectionInner = mix(uCapReflection[3], uCapReflection[2], haloMix);
+					overLayer(accum, capReflectionOuter,
+						arcMask * band(radius, rimRadius, max(0.30, 0.42 * scale)) * uBloomAmount);
+					overLayer(accum, capReflectionInner,
+						arcMask * band(radius, rimRadius - 0.34 * scale, max(0.12, 0.17 * scale)) * uBloomAmount);
+				}
+
 				// Rack framebuffer images are tagged NVG_IMAGE_PREMULTIPLIED.
 				gl_FragColor = accum;
 			}
@@ -693,11 +703,12 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		uniformBloomAmount = glGetUniformLocation(program, "uBloomAmount");
 		uniformLed = glGetUniformLocation(program, "uLed[0]");
 		uniformBloom = glGetUniformLocation(program, "uBloom[0]");
+		uniformCapReflection = glGetUniformLocation(program, "uCapReflection[0]");
 		uniformCapAtlas = glGetUniformLocation(program, "uCapAtlas");
 		uniformCenterLit = glGetUniformLocation(program, "uCenterLit");
 		uniformCapRotation = glGetUniformLocation(program, "uCapRotation");
 		if (uniformLogicalSize < 0 || uniformValue < 0 || uniformBloomAmount < 0
-			|| uniformLed < 0 || uniformBloom < 0 || uniformCapAtlas < 0
+			|| uniformLed < 0 || uniformBloom < 0 || uniformCapReflection < 0 || uniformCapAtlas < 0
 			|| uniformCenterLit < 0 || uniformCapRotation < 0) {
 			WARN("HaloKnob2 shader uniform lookup failed");
 			releaseGlResources(true);
@@ -810,6 +821,12 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 			config.bloom.guideMidColor,
 			config.bloom.guideInnerColor,
 		};
+		const NVGcolor capReflectionColors[] = {
+			config.bloom.capReflectionOuterActiveColor,
+			config.bloom.capReflectionOuterInactiveColor,
+			config.bloom.capReflectionInnerActiveColor,
+			config.bloom.capReflectionInnerInactiveColor,
+		};
 
 		glUseProgram(program);
 		glUniform2f(uniformLogicalSize, w, h);
@@ -817,6 +834,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		glUniform1f(uniformBloomAmount, bloomAmount);
 		uploadHaloColorArray(uniformLed, ledColors, 4);
 		uploadHaloColorArray(uniformBloom, bloomColors, 17);
+		uploadHaloColorArray(uniformCapReflection, capReflectionColors, 4);
 		glUniform1f(uniformCenterLit, centerLit ? 1.f : 0.f);
 		const float capAngle = crossfade(-0.83f * float(M_PI), 0.83f * float(M_PI), valueNorm);
 		glUniform2f(uniformCapRotation, std::cos(capAngle), std::sin(capAngle));
@@ -942,17 +960,6 @@ LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {
 	glSurface->setVisualState(normalizedParamValue(), haloBloomAmount(lastBloomAmount));
 	addChild(glSurface);
 
-	capReflection = new CapReflectionWidget();
-	capReflection->box.size = box.size;
-	capReflection->minAngle = minAngle;
-	capReflection->maxAngle = maxAngle;
-	capReflection->valueNorm = normalizedParamValue();
-	capReflection->config = this->config.bloom;
-	capReflectionFb = new HaloTimedFramebuffer();
-	capReflectionFb->box.size = box.size;
-	capReflectionFb->dirtyOnSubpixelChange = false;
-	capReflectionFb->addChild(capReflection);
-	addChild(capReflectionFb);
 }
 
 void LeviathanHaloKnob2::updateCenterSvg() {
@@ -972,7 +979,6 @@ void LeviathanHaloKnob2::step() {
 	if (std::fabs(bloom - lastBloomAmount) > 1e-4f) {
 		lastBloomAmount = bloom;
 		if (glSurface) glSurface->setVisualState(normalizedParamValue(), haloBloomAmount(bloom));
-		if (capReflectionFb) capReflectionFb->setDirty();
 	}
 }
 
@@ -1004,14 +1010,11 @@ void LeviathanHaloKnob2::onChange(const ChangeEvent& e) {
 	app::Knob::onChange(e);
 	const float value = normalizedParamValue();
 	if (centerLayer) centerLayer->valueNorm = value;
-	if (capReflection) capReflection->valueNorm = value;
 	if (glSurface) glSurface->setVisualState(value, haloBloomAmount(lastBloomAmount));
-	if (capReflectionFb) capReflectionFb->setDirty();
 }
 
 bool LeviathanHaloKnob2::isVisualDirty() const {
 	return (glSurface && glSurface->dirty)
-		|| (capReflectionFb && capReflectionFb->dirty)
 		|| (backLayer && backLayer->cachedSvgFb && backLayer->cachedSvgFb->dirty);
 }
 
