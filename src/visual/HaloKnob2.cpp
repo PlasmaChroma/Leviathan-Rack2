@@ -3,13 +3,93 @@
 #include "../GlLifecycleUtils.hpp"
 
 #include <nanovg_gl.h>
+#include <nanosvgrast.h>
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <vector>
 
 namespace {
+
+thread_local visual_assets::HaloKnob2DrawMetrics gHaloKnob2DrawMetrics;
+
+constexpr int kHaloCapRasterScale = 4;
+
+struct HaloCapRasterAtlas {
+	int width = 0;
+	int height = 0;
+	std::vector<unsigned char> rgba;
+};
+
+std::shared_ptr<HaloCapRasterAtlas> getHaloCapRasterAtlas(
+	const std::shared_ptr<window::Svg>& normalSvg,
+	const std::shared_ptr<window::Svg>& litSvg) {
+	static std::weak_ptr<HaloCapRasterAtlas> cachedAtlas;
+	if (std::shared_ptr<HaloCapRasterAtlas> atlas = cachedAtlas.lock()) {
+		return atlas;
+	}
+	if (!normalSvg || !normalSvg->handle || !litSvg || !litSvg->handle) {
+		return nullptr;
+	}
+	const int imageWidth = std::max(1, int(std::ceil(std::max(
+		normalSvg->handle->width, litSvg->handle->width) * kHaloCapRasterScale)));
+	const int imageHeight = std::max(1, int(std::ceil(std::max(
+		normalSvg->handle->height, litSvg->handle->height) * kHaloCapRasterScale)));
+	std::shared_ptr<HaloCapRasterAtlas> atlas = std::make_shared<HaloCapRasterAtlas>();
+	atlas->width = imageWidth * 2;
+	atlas->height = imageHeight;
+	atlas->rgba.assign(size_t(atlas->width) * size_t(atlas->height) * 4u, 0u);
+
+	NSVGrasterizer* rasterizer = nsvgCreateRasterizer();
+	if (!rasterizer) return nullptr;
+	const int stride = atlas->width * 4;
+	nsvgRasterize(rasterizer, normalSvg->handle, 0.f, 0.f, float(kHaloCapRasterScale),
+		atlas->rgba.data(), imageWidth, imageHeight, stride);
+	nsvgRasterize(rasterizer, litSvg->handle, 0.f, 0.f, float(kHaloCapRasterScale),
+		atlas->rgba.data() + size_t(imageWidth) * 4u, imageWidth, imageHeight, stride);
+	nsvgDeleteRasterizer(rasterizer);
+	// Premultiply before filtering/mipmap generation so transparent SVG edges do
+	// not acquire dark fringes while rotating between texels.
+	for (size_t i = 0, count = size_t(atlas->width) * size_t(atlas->height); i < count; ++i) {
+		const unsigned int alpha = atlas->rgba[i * 4u + 3u];
+		atlas->rgba[i * 4u + 0u] = static_cast<unsigned char>((unsigned(atlas->rgba[i * 4u + 0u]) * alpha + 127u) / 255u);
+		atlas->rgba[i * 4u + 1u] = static_cast<unsigned char>((unsigned(atlas->rgba[i * 4u + 1u]) * alpha + 127u) / 255u);
+		atlas->rgba[i * 4u + 2u] = static_cast<unsigned char>((unsigned(atlas->rgba[i * 4u + 2u]) * alpha + 127u) / 255u);
+	}
+	cachedAtlas = atlas;
+	return atlas;
+}
+
+uint64_t haloElapsedNs(std::chrono::steady_clock::time_point start) {
+	return uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+		std::chrono::steady_clock::now() - start).count());
+}
+
+struct HaloNanoVgFallbackWidget final : TransparentWidget {
+	void draw(const DrawArgs& args) override {
+		const bool measure = isDragonKingDebugEnabled();
+		const auto start = measure ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
+		Widget::draw(args);
+		if (measure) {
+			gHaloKnob2DrawMetrics.nanoVgSurfaceDrawNs += haloElapsedNs(start);
+			++gHaloKnob2DrawMetrics.nanoVgSurfaceDraws;
+		}
+	}
+};
+
+struct HaloTimedFramebuffer final : widget::FramebufferWidget {
+	void drawFramebuffer() override {
+		const bool measure = isDragonKingDebugEnabled();
+		const auto start = measure ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
+		widget::FramebufferWidget::drawFramebuffer();
+		if (!measure) return;
+		const uint64_t elapsed = haloElapsedNs(start);
+		gHaloKnob2DrawMetrics.capReflectionFramebufferNs += elapsed;
+		++gHaloKnob2DrawMetrics.capReflectionFramebufferDraws;
+	}
+};
 
 NVGcolor blendHaloColor(NVGcolor a, NVGcolor b, float t) {
 	t = clamp(t, 0.f, 1.f);
@@ -69,6 +149,18 @@ void uploadHaloColorArray(GLint location, const NVGcolor* colors, size_t count) 
 }
 
 } // namespace
+
+namespace visual_assets {
+
+void resetHaloKnob2DrawMetrics() {
+	gHaloKnob2DrawMetrics = {};
+}
+
+HaloKnob2DrawMetrics getHaloKnob2DrawMetrics() {
+	return gHaloKnob2DrawMetrics;
+}
+
+} // namespace visual_assets
 
 void LeviathanHaloKnob2::GlowArcWidget::draw(const DrawArgs& args) {
 	const float diameterPx = std::min(box.size.x, box.size.y);
@@ -218,41 +310,60 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 
 struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 	Config config;
+	std::shared_ptr<HaloCapRasterAtlas> capAtlas;
 	GlowArcWidget* fallbackBackgroundGlow = nullptr;
 	LightArcWidget* fallbackLightArc = nullptr;
 	GlowArcWidget* fallbackForegroundGlow = nullptr;
 	float valueNorm = 0.5f;
 	float bloomAmount = 0.f;
+	bool centerLit = false;
 	GLuint program = 0;
 	GLuint vertexShader = 0;
 	GLuint fragmentShader = 0;
 	GLuint vbo = 0;
+	GLuint capTexture = 0;
 	bool initAttempted = false;
 	GLint uniformLogicalSize = -1;
 	GLint uniformValue = -1;
 	GLint uniformBloomAmount = -1;
 	GLint uniformLed = -1;
 	GLint uniformBloom = -1;
+	GLint uniformCapAtlas = -1;
+	GLint uniformCenterLit = -1;
+	GLint uniformCapRotation = -1;
 	bool shaderFailed = false;
 	bool forceNanoVg = false;
 
-	explicit HaloGlSurface(Config config) : config(config) {
+	explicit HaloGlSurface(
+		Config config,
+		const std::shared_ptr<window::Svg>& centerNormalSvg,
+		const std::shared_ptr<window::Svg>& centerLitSvg,
+		EclipseKnob::SvgLayer* fallbackCenterLayer)
+		: config(config), capAtlas(getHaloCapRasterAtlas(centerNormalSvg, centerLitSvg)) {
+		HaloNanoVgFallbackWidget* fallbackRoot = new HaloNanoVgFallbackWidget();
+		fallbackRoot->box.size = Vec(46.f, 46.f);
+		addChild(fallbackRoot);
+
 		fallbackBackgroundGlow = new GlowArcWidget();
 		fallbackBackgroundGlow->box.size = Vec(46.f, 46.f);
 		fallbackBackgroundGlow->config = config.bloom;
-		addChild(fallbackBackgroundGlow);
+		fallbackRoot->addChild(fallbackBackgroundGlow);
 
 		fallbackLightArc = new LightArcWidget();
 		fallbackLightArc->box.size = Vec(46.f, 46.f);
 		fallbackLightArc->config = config.ledArc;
 		fallbackLightArc->bloomConfig = config.bloom;
-		addChild(fallbackLightArc);
+		fallbackRoot->addChild(fallbackLightArc);
 
 		fallbackForegroundGlow = new GlowArcWidget();
 		fallbackForegroundGlow->box.size = Vec(46.f, 46.f);
 		fallbackForegroundGlow->foreground = true;
 		fallbackForegroundGlow->config = config.bloom;
-		addChild(fallbackForegroundGlow);
+		fallbackRoot->addChild(fallbackForegroundGlow);
+
+		// OpenGlWidget bypasses its framebuffer in browser previews and after a
+		// shader failure. Keep the original SVG cap in that NanoVG-only subtree.
+		fallbackRoot->addChild(fallbackCenterLayer);
 	}
 
 	~HaloGlSurface() override {
@@ -268,14 +379,16 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 
 	void releaseGlResources(bool deleteObjects) {
 		if (deleteObjects) {
+			if (capTexture) glDeleteTextures(1, &capTexture);
 			if (vbo) glDeleteBuffers(1, &vbo);
 			if (program) glDeleteProgram(program);
 			if (vertexShader) glDeleteShader(vertexShader);
 			if (fragmentShader) glDeleteShader(fragmentShader);
 		}
-		program = vertexShader = fragmentShader = vbo = 0;
+		program = vertexShader = fragmentShader = vbo = capTexture = 0;
 		initAttempted = false;
 		uniformLogicalSize = uniformValue = uniformBloomAmount = uniformLed = uniformBloom = -1;
+		uniformCapAtlas = uniformCenterLit = uniformCapRotation = -1;
 	}
 
 	void step() override {
@@ -304,6 +417,33 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		setDirty();
 	}
 
+	void setCenterLit(bool lit) {
+		if (centerLit == lit) return;
+		centerLit = lit;
+		if (!bypassed) setDirty();
+	}
+
+	bool ensureCapTextureReady() {
+		if (capTexture) return true;
+		if (!capAtlas || capAtlas->width <= 0 || capAtlas->height <= 0 || capAtlas->rgba.empty()) {
+			WARN("HaloKnob2 cap raster atlas unavailable");
+			return false;
+		}
+		glGenTextures(1, &capTexture);
+		if (!capTexture) return false;
+		glBindTexture(GL_TEXTURE_2D, capTexture);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, capAtlas->width, capAtlas->height,
+			0, GL_RGBA, GL_UNSIGNED_BYTE, capAtlas->rgba.data());
+		glGenerateMipmap(GL_TEXTURE_2D);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		return true;
+	}
+
 	static GLuint compileShader(GLenum type, const char* source) {
 		GLuint shader = glCreateShader(type);
 		if (!shader) return 0;
@@ -323,7 +463,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 	}
 
 	bool ensureShaderReady() {
-		if (initAttempted) return program && vbo;
+		if (initAttempted) return program && vbo && capTexture;
 		initAttempted = true;
 
 		static const char* vertexSource = R"GLSL(
@@ -347,6 +487,9 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 			uniform float uBloomAmount;
 			uniform vec4 uLed[4];
 			uniform vec4 uBloom[17];
+			uniform sampler2D uCapAtlas;
+			uniform float uCenterLit;
+			uniform vec2 uCapRotation;
 
 			const float PI = 3.14159265358979323846;
 			const float TAU = 6.28318530717958647692;
@@ -356,6 +499,12 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 				// accum.rgb is premultiplied. Match NanoVG source-over draw order:
 				// each newly submitted layer is placed in front of prior layers.
 				accum.rgb = color.rgb * alpha + accum.rgb * (1.0 - alpha);
+				accum.a = alpha + accum.a * (1.0 - alpha);
+			}
+
+			void overPremultipliedLayer(inout vec4 accum, vec4 color, float coverage) {
+				float alpha = clamp(color.a * coverage, 0.0, 1.0);
+				accum.rgb = color.rgb * coverage + accum.rgb * (1.0 - alpha);
 				accum.a = alpha + accum.a * (1.0 - alpha);
 			}
 
@@ -492,6 +641,18 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 					overLayer(accum, foregroundInner, arcMask * band(radius, mainRadius, max(1.2, 1.6 * scale)) * uBloomAmount);
 				}
 
+				// The source SVG is rasterized once into a normal/lit atlas. Rotate its
+				// sampling coordinates instead of rebuilding a final-orientation FBO.
+				vec2 capLocal = vec2(
+					uCapRotation.x * p.x + uCapRotation.y * p.y,
+					-uCapRotation.y * p.x + uCapRotation.x * p.y);
+				vec2 capUv = capLocal / diameter + vec2(0.5);
+				float capBounds = step(0.0, capUv.x) * step(capUv.x, 1.0)
+					* step(0.0, capUv.y) * step(capUv.y, 1.0);
+				float atlasOffset = 0.5 * step(0.5, uCenterLit);
+				vec4 capColor = texture2D(uCapAtlas, vec2(atlasOffset + 0.5 * capUv.x, capUv.y));
+				overPremultipliedLayer(accum, capColor, capBounds);
+
 				// Rack framebuffer images are tagged NVG_IMAGE_PREMULTIPLIED.
 				gl_FragColor = accum;
 			}
@@ -532,7 +693,12 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		uniformBloomAmount = glGetUniformLocation(program, "uBloomAmount");
 		uniformLed = glGetUniformLocation(program, "uLed[0]");
 		uniformBloom = glGetUniformLocation(program, "uBloom[0]");
-		if (uniformLogicalSize < 0 || uniformValue < 0 || uniformBloomAmount < 0 || uniformLed < 0 || uniformBloom < 0) {
+		uniformCapAtlas = glGetUniformLocation(program, "uCapAtlas");
+		uniformCenterLit = glGetUniformLocation(program, "uCenterLit");
+		uniformCapRotation = glGetUniformLocation(program, "uCapRotation");
+		if (uniformLogicalSize < 0 || uniformValue < 0 || uniformBloomAmount < 0
+			|| uniformLed < 0 || uniformBloom < 0 || uniformCapAtlas < 0
+			|| uniformCenterLit < 0 || uniformCapRotation < 0) {
 			WARN("HaloKnob2 shader uniform lookup failed");
 			releaseGlResources(true);
 			initAttempted = true;
@@ -544,9 +710,14 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 			initAttempted = true;
 			return false;
 		}
+		if (!ensureCapTextureReady()) {
+			releaseGlResources(true);
+			initAttempted = true;
+			return false;
+		}
 		shaderFailed = false;
 		bypassed = forceNanoVg;
-		return vbo != 0;
+		return vbo != 0 && capTexture != 0;
 	}
 
 	void drawFixedFallback(float w, float h) {
@@ -571,6 +742,8 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 	}
 
 	void drawFramebuffer() override {
+		const bool measure = isDragonKingDebugEnabled();
+		const auto profileStart = measure ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
 		Vec framebufferSize = getFramebufferSize();
 		glViewport(0, 0, std::max(1, int(std::lround(framebufferSize.x))), std::max(1, int(std::lround(framebufferSize.y))));
 		glClearColor(0.f, 0.f, 0.f, 0.f);
@@ -588,8 +761,11 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		glEnable(GL_BLEND);
 		glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-		if (isExtraGlValidationEnabled() && program && vbo && !gl_lifecycle::isValidProgramBufferPair(program, vbo)) {
-			releaseGlResources(false);
+		if (isExtraGlValidationEnabled() && program && vbo) {
+			if (!gl_lifecycle::isValidProgramBufferPair(program, vbo)
+				|| (capTexture && !gl_lifecycle::areValidTextures({capTexture}))) {
+				releaseGlResources(false);
+			}
 		}
 		if (!ensureShaderReady()) {
 			// Browser/module previews bypass nested framebuffers automatically and
@@ -598,6 +774,10 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 			shaderFailed = true;
 			drawFixedFallback(w, h);
 			glDisable(GL_BLEND);
+			if (measure) {
+				gHaloKnob2DrawMetrics.glSurfaceFramebufferNs += haloElapsedNs(profileStart);
+				++gHaloKnob2DrawMetrics.glSurfaceFramebufferDraws;
+			}
 			return;
 		}
 		// The fragment shader has already composited all layers and emits a
@@ -637,6 +817,12 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		glUniform1f(uniformBloomAmount, bloomAmount);
 		uploadHaloColorArray(uniformLed, ledColors, 4);
 		uploadHaloColorArray(uniformBloom, bloomColors, 17);
+		glUniform1f(uniformCenterLit, centerLit ? 1.f : 0.f);
+		const float capAngle = crossfade(-0.83f * float(M_PI), 0.83f * float(M_PI), valueNorm);
+		glUniform2f(uniformCapRotation, std::cos(capAngle), std::sin(capAngle));
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, capTexture);
+		glUniform1i(uniformCapAtlas, 0);
 		const std::array<GLfloat, 8> vertices {{0.f, 0.f, w, 0.f, 0.f, h, w, h}};
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices.data(), GL_DYNAMIC_DRAW);
@@ -645,8 +831,13 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 		glDisableVertexAttribArray(0);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glBindTexture(GL_TEXTURE_2D, 0);
 		glUseProgram(0);
 		glDisable(GL_BLEND);
+		if (measure) {
+			gHaloKnob2DrawMetrics.glSurfaceFramebufferNs += haloElapsedNs(profileStart);
+			++gHaloKnob2DrawMetrics.glSurfaceFramebufferDraws;
+		}
 	}
 };
 
@@ -729,12 +920,6 @@ LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {
 	backLayer->rotateWithValue = false;
 	addChild(backLayer);
 
-	glSurface = new HaloGlSurface(this->config);
-	glSurface->box.size = box.size;
-	glSurface->dirtyOnSubpixelChange = false;
-	glSurface->setVisualState(normalizedParamValue(), haloBloomAmount(lastBloomAmount));
-	addChild(glSurface);
-
 	centerLayer = new EclipseKnob::SvgLayer();
 	centerLayer->setSvg(centerNormalSvg);
 	centerLayer->box.size = box.size;
@@ -742,16 +927,20 @@ LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {
 	centerLayer->maxAngle = maxAngle;
 	centerLayer->valueNorm = normalizedParamValue();
 	centerLayer->rotateWithValue = true;
-	// Cache the final rotated cap rather than transforming a framebuffer image.
-	// Transformed FramebufferWidgets can be clipped or skipped at particular
-	// module positions. Nesting is intentional here: while centerFb renders,
-	// SvgLayer's inner cache is bypassed and the SVG is rasterized once at its
-	// final orientation. Idle frames still composite only centerFb's image.
-	centerFb = new widget::FramebufferWidget();
-	centerFb->box.size = box.size;
-	centerFb->dirtyOnSubpixelChange = false;
-	centerFb->addChild(centerLayer);
-	addChild(centerFb);
+	if (centerLayer->cachedSvgFb) {
+		// The fallback is correctness-first and must not transform a nested
+		// framebuffer, which was the source of position-dependent missing caps.
+		centerLayer->cachedSvgFb->bypassed = true;
+	}
+
+	// The normal module path samples a one-time SVG raster atlas and performs
+	// cap rotation in the same fixed-position GL quad as the LED arc. The SVG
+	// layer is owned by HaloGlSurface only for browser/shader-failure bypass.
+	glSurface = new HaloGlSurface(this->config, centerNormalSvg, centerLitSvg, centerLayer);
+	glSurface->box.size = box.size;
+	glSurface->dirtyOnSubpixelChange = false;
+	glSurface->setVisualState(normalizedParamValue(), haloBloomAmount(lastBloomAmount));
+	addChild(glSurface);
 
 	capReflection = new CapReflectionWidget();
 	capReflection->box.size = box.size;
@@ -759,7 +948,7 @@ LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {
 	capReflection->maxAngle = maxAngle;
 	capReflection->valueNorm = normalizedParamValue();
 	capReflection->config = this->config.bloom;
-	capReflectionFb = new widget::FramebufferWidget();
+	capReflectionFb = new HaloTimedFramebuffer();
 	capReflectionFb->box.size = box.size;
 	capReflectionFb->dirtyOnSubpixelChange = false;
 	capReflectionFb->addChild(capReflection);
@@ -774,7 +963,7 @@ void LeviathanHaloKnob2::updateCenterSvg() {
 		centerLayer->setSvg(centerLit ? centerLitSvg : centerNormalSvg);
 		centerLayer->box.size = box.size;
 	}
-	if (centerFb) centerFb->setDirty();
+	if (glSurface) glSurface->setCenterLit(centerLit);
 }
 
 void LeviathanHaloKnob2::step() {
@@ -815,7 +1004,6 @@ void LeviathanHaloKnob2::onChange(const ChangeEvent& e) {
 	app::Knob::onChange(e);
 	const float value = normalizedParamValue();
 	if (centerLayer) centerLayer->valueNorm = value;
-	if (centerFb) centerFb->setDirty();
 	if (capReflection) capReflection->valueNorm = value;
 	if (glSurface) glSurface->setVisualState(value, haloBloomAmount(lastBloomAmount));
 	if (capReflectionFb) capReflectionFb->setDirty();
@@ -824,8 +1012,7 @@ void LeviathanHaloKnob2::onChange(const ChangeEvent& e) {
 bool LeviathanHaloKnob2::isVisualDirty() const {
 	return (glSurface && glSurface->dirty)
 		|| (capReflectionFb && capReflectionFb->dirty)
-		|| (backLayer && backLayer->cachedSvgFb && backLayer->cachedSvgFb->dirty)
-		|| (centerFb && centerFb->dirty);
+		|| (backLayer && backLayer->cachedSvgFb && backLayer->cachedSvgFb->dirty);
 }
 
 void LeviathanHaloKnob2::setForceNanoVgLedRenderer(bool force) {

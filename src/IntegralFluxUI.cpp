@@ -1658,6 +1658,15 @@ struct IntegralFluxWidget : ModuleWidget {
 		uint32_t haloDirtyDrawCount = 0u;
 		uint32_t haloActiveDrawCount = 0u;
 		uint32_t haloDraggingDrawCount = 0u;
+		int haloNanoVgForced = 0;
+		float haloGlSurfaceFramebufferUs = 0.f;
+		float haloNanoVgSurfaceDrawUs = 0.f;
+		float haloCenterFramebufferUs = 0.f;
+		float haloCapReflectionFramebufferUs = 0.f;
+		uint32_t haloGlSurfaceFramebufferDraws = 0u;
+		uint32_t haloNanoVgSurfaceDraws = 0u;
+		uint32_t haloCenterFramebufferDraws = 0u;
+		uint32_t haloCapReflectionFramebufferDraws = 0u;
 		float uiStepEmaUs = 0.f;
 		float uiDrawEmaUs = 0.f;
 	};
@@ -1724,6 +1733,10 @@ struct IntegralFluxWidget : ModuleWidget {
 			<< "plasma_switch_image_fallbacks,plasma_switch_context_resets,preview_dirty_requests,"
 			<< "preview_point_rebuilds,preview_tracer_captures,linear_point_dirty_requests,"
 			<< "shape_glyph_dirty_requests,halo_dirty_draw_count,halo_active_draw_count,halo_dragging_draw_count,"
+			<< "halo_nanovg_forced,halo_gl_surface_framebuffer_us,halo_nanovg_surface_draw_us,"
+			<< "halo_center_framebuffer_us,halo_cap_reflection_framebuffer_us,"
+			<< "halo_gl_surface_framebuffer_draws,halo_nanovg_surface_draws,halo_center_framebuffer_draws,"
+			<< "halo_cap_reflection_framebuffer_draws,"
 			<< "ui_step_ema_us,ui_draw_ema_us\n";
 	}
 
@@ -1772,6 +1785,15 @@ struct IntegralFluxWidget : ModuleWidget {
 			<< row.haloDirtyDrawCount << ','
 			<< row.haloActiveDrawCount << ','
 			<< row.haloDraggingDrawCount << ','
+			<< row.haloNanoVgForced << ','
+			<< row.haloGlSurfaceFramebufferUs << ','
+			<< row.haloNanoVgSurfaceDrawUs << ','
+			<< row.haloCenterFramebufferUs << ','
+			<< row.haloCapReflectionFramebufferUs << ','
+			<< row.haloGlSurfaceFramebufferDraws << ','
+			<< row.haloNanoVgSurfaceDraws << ','
+			<< row.haloCenterFramebufferDraws << ','
+			<< row.haloCapReflectionFramebufferDraws << ','
 			<< row.uiStepEmaUs << ','
 			<< row.uiDrawEmaUs << '\n';
 		if ((row.row & 31u) == 0u) {
@@ -2179,6 +2201,7 @@ struct IntegralFluxWidget : ModuleWidget {
 			gIntegralFluxHaloDraggingDrawCountThisFrame = 0u;
 			resetPlasmaSwitchDrawMetrics();
 			visual_assets::resetEclipseShadowDrawMetrics();
+			visual_assets::resetHaloKnob2DrawMetrics();
 		}
 		DrawLogRow logRow;
 		const PerfClock::time_point totalStart = logDraw ? PerfClock::now() : PerfClock::time_point();
@@ -2309,6 +2332,16 @@ struct IntegralFluxWidget : ModuleWidget {
 			logRow.haloDirtyDrawCount = gIntegralFluxHaloDirtyDrawCountThisFrame;
 			logRow.haloActiveDrawCount = gIntegralFluxHaloActiveDrawCountThisFrame;
 			logRow.haloDraggingDrawCount = gIntegralFluxHaloDraggingDrawCountThisFrame;
+			logRow.haloNanoVgForced = forceHaloNanoVg ? 1 : 0;
+			const visual_assets::HaloKnob2DrawMetrics haloMetrics = visual_assets::getHaloKnob2DrawMetrics();
+			logRow.haloGlSurfaceFramebufferUs = float(haloMetrics.glSurfaceFramebufferNs) * 1e-3f;
+			logRow.haloNanoVgSurfaceDrawUs = float(haloMetrics.nanoVgSurfaceDrawNs) * 1e-3f;
+			logRow.haloCenterFramebufferUs = float(haloMetrics.centerFramebufferNs) * 1e-3f;
+			logRow.haloCapReflectionFramebufferUs = float(haloMetrics.capReflectionFramebufferNs) * 1e-3f;
+			logRow.haloGlSurfaceFramebufferDraws = haloMetrics.glSurfaceFramebufferDraws;
+			logRow.haloNanoVgSurfaceDraws = haloMetrics.nanoVgSurfaceDraws;
+			logRow.haloCenterFramebufferDraws = haloMetrics.centerFramebufferDraws;
+			logRow.haloCapReflectionFramebufferDraws = haloMetrics.capReflectionFramebufferDraws;
 			logRow.uiStepEmaUs = uiStepMsEma * 1000.f;
 			logRow.uiDrawEmaUs = uiDrawMsEma * 1000.f;
 			writeDrawLogRow(logRow);
@@ -2325,7 +2358,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		menu->addChild(new MenuSeparator());
 		if (maths) {
 			menu->addChild(createMenuLabel("Performance"));
-			menu->addChild(createCheckMenuItem("Force Halo LEDs to NanoVG", "",
+			menu->addChild(createCheckMenuItem("Force Halo LEDs + Cap to NanoVG", "",
 				[=]() { return forceHaloNanoVg; },
 				[=]() {
 					forceHaloNanoVg = !forceHaloNanoVg;

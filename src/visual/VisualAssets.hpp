@@ -108,6 +108,20 @@ void resetEclipseShadowDrawMetrics();
 uint64_t eclipseShadowDrawNs();
 uint64_t eclipseShadowDrawCount();
 
+struct HaloKnob2DrawMetrics {
+	uint64_t glSurfaceFramebufferNs = 0u;
+	uint64_t nanoVgSurfaceDrawNs = 0u;
+	uint64_t centerFramebufferNs = 0u;
+	uint64_t capReflectionFramebufferNs = 0u;
+	uint32_t glSurfaceFramebufferDraws = 0u;
+	uint32_t nanoVgSurfaceDraws = 0u;
+	uint32_t centerFramebufferDraws = 0u;
+	uint32_t capReflectionFramebufferDraws = 0u;
+};
+
+void resetHaloKnob2DrawMetrics();
+HaloKnob2DrawMetrics getHaloKnob2DrawMetrics();
+
 } // namespace visual_assets
 
 struct MagitekInputJack : app::SvgPort {
@@ -564,7 +578,6 @@ struct LeviathanHaloKnob2 : app::Knob {
 	struct HaloGlSurface;
 	HaloGlSurface* glSurface = nullptr;
 	widget::FramebufferWidget* capReflectionFb = nullptr;
-	widget::FramebufferWidget* centerFb = nullptr;
 	EclipseKnob::SvgLayer* backLayer = nullptr;
 	EclipseKnob::SvgLayer* centerLayer = nullptr;
 	std::shared_ptr<window::Svg> centerNormalSvg;

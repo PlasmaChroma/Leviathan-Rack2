@@ -6,7 +6,6 @@
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
 
-#define NANOSVGRAST_IMPLEMENTATION
 #include <nanosvgrast.h>
 #include <cmath>
 
