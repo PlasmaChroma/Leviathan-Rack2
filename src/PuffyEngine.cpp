@@ -250,8 +250,31 @@ Engine::CharacterCoefficients Engine::prepareCharacter(
 			coefficients.foldGain = 1.f / (1.f + 0.5f * a);
 			coefficients.phaseSkew =
 				0.12f + 0.18f * fastControl + 0.12f * transient;
-			coefficients.polarityBias = 0.30f * a;
-			coefficients.polarityEdgeBias = 0.75f * a;
+			// At half PUFF the fold endpoint is the worst-case rail peak, so a
+			// 0.398 edge slope leaves it at 0.999. Near full PUFF, smoothly restore
+			// the original +/-0.75 edge anchors while independently easing the
+			// interior bias slopes for the phase-skewed positive and negative lobes.
+			const float phaseNorm = clamp01(
+				(coefficients.phaseSkew - 0.12f) * (1.f / 0.30f));
+			const float phaseNorm2 = phaseNorm * phaseNorm;
+			const float positiveFullSlope = 0.156554f
+				+ 0.155948f * phaseNorm
+				- 0.024272f * phaseNorm2
+				+ 0.003163f * phaseNorm2 * phaseNorm;
+			const float negativeFullSlope = 0.014334f
+				- 0.201015f * phaseNorm
+				- 0.033261f * phaseNorm2
+				+ 0.001676f * phaseNorm2 * phaseNorm;
+			const float edgeOpen = clamp01(2.f * a - 1.f);
+			const float edgeOpen2 = edgeOpen * edgeOpen;
+			const float edgeOpen4 = edgeOpen2 * edgeOpen2;
+			const float edgeOpen8 = edgeOpen4 * edgeOpen4;
+			coefficients.positivePolarityBias = a * (
+				0.30f + (positiveFullSlope - 0.30f) * edgeOpen8);
+			coefficients.negativePolarityBias = a * (
+				0.30f + (negativeFullSlope - 0.30f) * edgeOpen8);
+			coefficients.polarityEdgeBias = a * (
+				0.398f + (0.75f - 0.398f) * edgeOpen8);
 			break;
 		}
 		case Character::Bloom:
@@ -308,8 +331,11 @@ float Engine::applyCharacter(
 				+ coefficients.phaseSkew * z2 * (1.f - z2);
 			const float folded = coefficients.foldGain * std::sin(
 				kPi * coefficients.foldCycles * warped);
+			const float polarityBias = z >= 0.f
+				? coefficients.positivePolarityBias
+				: coefficients.negativePolarityBias;
 			const float biased = folded
-				+ coefficients.polarityBias * z * (1.f - z2)
+				+ polarityBias * z * (1.f - z2)
 				+ coefficients.polarityEdgeBias * z * std::fabs(z);
 			const float saturated = std::max(-1.f, std::min(biased, 1.f));
 			return input + (saturated - input) * a;

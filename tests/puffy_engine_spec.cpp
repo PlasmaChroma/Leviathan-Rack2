@@ -173,27 +173,37 @@ Result voidBecomesSteppedQuantizer() {
 }
 
 Result frenzySinusoidalFold() {
+	struct FoldMeasure {
+		int turningPoints = 0;
+		float positivePeak = 0.f;
+		float negativePeak = 0.f;
+		int railSamples = 0;
+	};
 	const auto measure = [](float amount, const puffy::DynamicsState& dynamics) {
+		FoldMeasure result;
 		float previous = puffy::Engine::processCharacter(
 			puffy::Character::Frenzy, -1.f, amount, dynamics);
 		float previousSlope = 0.f;
-		int turningPoints = 0;
-		float peak = std::fabs(previous);
+		result.negativePeak = std::max(result.negativePeak, -previous);
 		for (int i = 1; i <= 800; ++i) {
 			const float input = -1.f + 2.f * float(i) / 800.f;
 			const float output = puffy::Engine::processCharacter(
 				puffy::Character::Frenzy, input, amount, dynamics);
-			peak = std::max(peak, std::fabs(output));
+			result.positivePeak = std::max(result.positivePeak, output);
+			result.negativePeak = std::max(result.negativePeak, -output);
+			if (i < 800 && std::fabs(output) >= 0.9999f) {
+				result.railSamples++;
+			}
 			const float slope = output - previous;
 			if (std::fabs(slope) > 1e-7f) {
 				if (previousSlope * slope < 0.f) {
-					turningPoints++;
+					result.turningPoints++;
 				}
 				previousSlope = slope;
 			}
 			previous = output;
 		}
-		return std::make_pair(turningPoints, peak);
+		return result;
 	};
 
 	puffy::DynamicsState idle;
@@ -202,6 +212,7 @@ Result frenzySinusoidalFold() {
 	active.transient = 1.f;
 	const auto lowPuff = measure(0.5f, active);
 	const auto highPuff = measure(1.f, active);
+	const auto highPuffIdle = measure(1.f, idle);
 	const float idleZero = puffy::Engine::processCharacter(
 		puffy::Character::Frenzy, 0.f, 1.f, idle);
 	const float activeZero = puffy::Engine::processCharacter(
@@ -216,6 +227,7 @@ Result frenzySinusoidalFold() {
 		puffy::Character::Frenzy, 1.f, 1.f, active);
 	double positiveMean = 0.0;
 	double negativeMean = 0.0;
+	int clampSamples = 0;
 	for (int i = 1; i <= 400; ++i) {
 		const float input = float(i) / 400.f;
 		positiveMean += puffy::Engine::processCharacter(
@@ -225,20 +237,50 @@ Result frenzySinusoidalFold() {
 	}
 	positiveMean /= 400.0;
 	negativeMean /= 400.0;
+	for (int amountIndex = 1; amountIndex <= 20; ++amountIndex) {
+		const float amount = float(amountIndex) / 20.f;
+		for (int dynamicsIndex = 0; dynamicsIndex < 4; ++dynamicsIndex) {
+			puffy::DynamicsState sweepDynamics;
+			sweepDynamics.fast = (dynamicsIndex & 1) ? 1.f : 0.f;
+			sweepDynamics.transient = (dynamicsIndex & 2) ? 1.f : 0.f;
+			for (int inputIndex = -999; inputIndex <= 999; ++inputIndex) {
+				const float input = float(inputIndex) / 1000.f;
+				const float output = puffy::Engine::processCharacter(
+					puffy::Character::Frenzy, input, amount, sweepDynamics);
+				const float clampedTarget = std::copysign(1.f, input);
+				const float clampedOutput = input + (clampedTarget - input) * amount;
+				if (output == clampedOutput) {
+					clampSamples++;
+				}
+			}
+		}
+	}
 	return {
-		"FRENZY adds outward-biased sinusoidal-fold lobes as PUFF rises",
-		lowPuff.first >= 4 && highPuff.first >= lowPuff.first + 2
-			&& near(highPuff.second, 1.f, 1e-6f)
+		"FRENZY bias slopes let lobe extrema kiss the rails without saturating",
+		lowPuff.turningPoints >= 4
+			&& highPuff.turningPoints >= lowPuff.turningPoints + 2
+			&& highPuff.positivePeak > 0.997f && highPuff.positivePeak < 0.9995f
+			&& highPuff.negativePeak > 0.997f && highPuff.negativePeak < 0.9995f
+			&& highPuffIdle.positivePeak > 0.997f && highPuffIdle.positivePeak < 0.9995f
+			&& highPuffIdle.negativePeak > 0.997f && highPuffIdle.negativePeak < 0.9995f
+			&& highPuff.railSamples == 0 && highPuffIdle.railSamples == 0
+			&& clampSamples == 0
 			&& near(idleZero, 0.f, 1e-7f)
 			&& near(activeZero, 0.f, 1e-7f)
 			&& near(negativeEdge, -0.75f, 1e-5f)
 			&& near(positiveEdge, 0.75f, 1e-5f)
 			&& positiveMean > 0.25
-			&& negativeMean < -0.29
+			&& negativeMean < -0.20
 			&& std::fabs(activePositive + activeNegative) > 0.05f,
-		"turns=" + std::to_string(lowPuff.first)
-			+ "/" + std::to_string(highPuff.first)
-			+ " highPeak=" + std::to_string(highPuff.second)
+		"turns=" + std::to_string(lowPuff.turningPoints)
+			+ "/" + std::to_string(highPuff.turningPoints)
+			+ " activePeaks=" + std::to_string(highPuff.negativePeak)
+			+ "/" + std::to_string(highPuff.positivePeak)
+			+ " idlePeaks=" + std::to_string(highPuffIdle.negativePeak)
+			+ "/" + std::to_string(highPuffIdle.positivePeak)
+			+ " railSamples=" + std::to_string(highPuff.railSamples)
+			+ "/" + std::to_string(highPuffIdle.railSamples)
+			+ " clampSamples=" + std::to_string(clampSamples)
 			+ " activePair=" + std::to_string(activeNegative)
 			+ "/" + std::to_string(activePositive)
 			+ " edges=" + std::to_string(negativeEdge)

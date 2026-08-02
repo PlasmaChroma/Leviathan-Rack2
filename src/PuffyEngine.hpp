@@ -87,7 +87,8 @@ private:
 		float foldCycles = 1.f;
 		float foldGain = 1.f;
 		float phaseSkew = 0.f;
-		float polarityBias = 0.f;
+		float positivePolarityBias = 0.f;
+		float negativePolarityBias = 0.f;
 		float polarityEdgeBias = 0.f;
 		float normalization = 1.f;
 		float voidStepSize = 1.f;
