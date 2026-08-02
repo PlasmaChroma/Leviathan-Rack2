@@ -8,8 +8,33 @@
 
 namespace {
 
+constexpr float kPi = 3.14159265358979323846f;
+
 float clamp01(float value) {
 	return std::max(0.f, std::min(value, 1.f));
+}
+
+void appendEllipseArc(
+	NVGcontext* vg,
+	Vec center,
+	float radiusX,
+	float radiusY,
+	float startAngle,
+	float endAngle) {
+	const float handle = (4.f / 3.f)
+		* std::tan(0.25f * (endAngle - startAngle));
+	const float startCos = std::cos(startAngle);
+	const float startSin = std::sin(startAngle);
+	const float endCos = std::cos(endAngle);
+	const float endSin = std::sin(endAngle);
+	nvgBezierTo(
+		vg,
+		center.x + radiusX * (startCos - handle * startSin),
+		center.y + radiusY * (startSin + handle * startCos),
+		center.x + radiusX * (endCos + handle * endSin),
+		center.y + radiusY * (endSin - handle * endCos),
+		center.x + radiusX * endCos,
+		center.y + radiusY * endSin);
 }
 
 NVGcolor multiplyColor(NVGcolor color, NVGcolor tint) {
@@ -234,14 +259,19 @@ void PuffyFishWidget::drawEye(
 		const float edgeX = radiusX
 			* std::sqrt(std::max(0.f, 1.f - edgeY * edgeY / (radius * radius)));
 		const float edgeBulge = radius * 0.055f * closed;
+		const float edgeAngle = std::asin(clamp(edgeY / radius, 0.f, 1.f));
 
-		// Upper lid: follow the eye's outer arc, then return along the
-		// descending lid edge.
+		// Two explicit cubic segments follow each outer ellipse arc accurately.
+		// Keeping every point in eye coordinates avoids transform-state seams
+		// between the outer arc and the inner lid edge.
 		nvgBeginPath(vg);
 		nvgMoveTo(vg, center.x - edgeX, center.y - edgeY);
-		nvgQuadTo(
-			vg, center.x, center.y - 2.f * radius + edgeY,
-			center.x + edgeX, center.y - edgeY);
+		appendEllipseArc(
+			vg, center, radiusX, radius,
+			kPi + edgeAngle, 1.5f * kPi);
+		appendEllipseArc(
+			vg, center, radiusX, radius,
+			1.5f * kPi, 2.f * kPi - edgeAngle);
 		nvgQuadTo(
 			vg, center.x, center.y - edgeY + edgeBulge,
 			center.x - edgeX, center.y - edgeY);
@@ -249,14 +279,16 @@ void PuffyFishWidget::drawEye(
 		nvgFillColor(vg, eyelidColor);
 		nvgFill(vg);
 
-		// Lower lid mirrors the upper one and meets it at full closure.
 		nvgBeginPath(vg);
 		nvgMoveTo(vg, center.x + edgeX, center.y + edgeY);
+		appendEllipseArc(
+			vg, center, radiusX, radius,
+			edgeAngle, 0.5f * kPi);
+		appendEllipseArc(
+			vg, center, radiusX, radius,
+			0.5f * kPi, kPi - edgeAngle);
 		nvgQuadTo(
-			vg, center.x, center.y + 2.f * radius - edgeY,
-			center.x - edgeX, center.y + edgeY);
-		nvgQuadTo(
-			vg, center.x, center.y + edgeY + edgeBulge,
+			vg, center.x, center.y + edgeY - edgeBulge,
 			center.x + edgeX, center.y + edgeY);
 		nvgClosePath(vg);
 		nvgFillColor(vg, eyelidColor);
@@ -274,7 +306,7 @@ void PuffyFishWidget::drawEye(
 		nvgBeginPath(vg);
 		nvgMoveTo(vg, center.x - edgeX, center.y + edgeY);
 		nvgQuadTo(
-			vg, center.x, center.y + edgeY + edgeBulge,
+			vg, center.x, center.y + edgeY - edgeBulge,
 			center.x + edgeX, center.y + edgeY);
 		nvgStrokeColor(vg, creaseColor);
 		nvgStrokeWidth(vg, 0.7f);
@@ -377,10 +409,12 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 		nvgRGB(232, 223, 202), bodyTint);
 	drawEye(
 		args.vg, Vec(center.x - eyeSpacing, eyeY), eyeRadius,
-		pose.gazeX, pose.gazeY, pose.leftBlink, eyelidColor);
+		pose.gazeX, pose.gazeY,
+		std::max(pose.leftBlink, pose.squint), eyelidColor);
 	drawEye(
 		args.vg, Vec(center.x + eyeSpacing, eyeY), eyeRadius,
-		pose.gazeX, pose.gazeY, pose.rightBlink, eyelidColor);
+		pose.gazeX, pose.gazeY,
+		std::max(pose.rightBlink, pose.squint), eyelidColor);
 
 	const float blush = clamp01(pose.blush);
 	if (blush > 0.001f) {

@@ -50,9 +50,14 @@ void PuffyCharacterController::reset(const PuffyVisualState& visual) {
 		positiveCharacterTintWeights[i] = i == positiveCharacter ? 1.f : 0.f;
 	}
 	transientMemory = visual.transientActivity;
+	twitchPhase = -1.f;
+	twitchStrength = 0.f;
+	twitchCooldown = 0.f;
 	idleTime = 0.f;
 	nextBlinkTime = 3.2f;
 	blinkPhase = -1.f;
+	nextSquintTime = 5.4f;
+	squintPhase = -1.f;
 	gazeX = 0.f;
 	gazeTargetX = 0.f;
 	gazeStateTime = 1.2f;
@@ -109,8 +114,30 @@ bool PuffyCharacterController::update(
 		std::max(0.f, visual.transientActivity - transientMemory);
 	transientMemory = approach(
 		transientMemory, visual.transientActivity, 14.f, dt);
+	twitchCooldown = std::max(0.f, twitchCooldown - dt);
+	if (twitchCooldown <= 0.f
+		&& visual.transientActivity >= 0.55f
+		&& transientRise >= 0.12f) {
+		twitchPhase = 0.f;
+		twitchStrength = clamp01(
+			(visual.transientActivity - 0.45f) * (1.f / 0.55f));
+		twitchCooldown = 0.18f;
+	}
+	float twitch = 0.f;
+	if (twitchPhase >= 0.f) {
+		twitchPhase += dt;
+		const float phase = twitchPhase / 0.24f;
+		if (phase < 1.f) {
+			const float decay = (1.f - phase) * (1.f - phase);
+			twitch = twitchStrength * std::sin(2.f * kPi * phase) * decay;
+		}
+		else {
+			twitchPhase = -1.f;
+			twitchStrength = 0.f;
+		}
+	}
 
-	if (blinkPhase < 0.f && idleTime >= nextBlinkTime) {
+	if (blinkPhase < 0.f && squintPhase < 0.f && idleTime >= nextBlinkTime) {
 		blinkPhase = 0.f;
 		nextBlinkTime += 4.1f;
 	}
@@ -130,17 +157,38 @@ bool PuffyCharacterController::update(
 			blinkPhase = -1.f;
 		}
 	}
+	if (squintPhase < 0.f && blinkPhase < 0.f && idleTime >= nextSquintTime) {
+		squintPhase = 0.f;
+		nextSquintTime += 7.7f;
+	}
+	float squint = 0.f;
+	if (squintPhase >= 0.f) {
+		squintPhase += dt;
+		if (squintPhase < 0.16f) {
+			squint = 0.42f * smoothstep(squintPhase / 0.16f);
+		}
+		else if (squintPhase < 0.50f) {
+			squint = 0.42f;
+		}
+		else if (squintPhase < 0.90f) {
+			squint = 0.42f
+				* (1.f - smoothstep((squintPhase - 0.50f) / 0.40f));
+		}
+		else {
+			squintPhase = -1.f;
+		}
+	}
 
 	const float frenzyBlend = clamp01(personality - 1.f);
 	const float spineBlend = clamp01(1.f - std::fabs(personality - 1.f));
 	const float breath = std::sin(idleTime * (2.f * kPi / 4.2f))
 		* (0.003f + 0.006f * visual.inputActivity);
 	pose->inflation = clamp01(inflation + breath);
-	pose->squashX =
-		frenzyBlend * (0.035f * visual.transientActivity + 0.025f * transientRise);
+	pose->squashX = 0.045f * twitch;
 	pose->squashY = -pose->squashX * 0.65f;
 	pose->verticalOffset =
-		std::sin(idleTime * (2.f * kPi / 5.4f)) * 0.008f;
+		std::sin(idleTime * (2.f * kPi / 5.4f)) * 0.008f
+		- 0.022f * twitch;
 	// Doom-style gaze: rest near center, snap decisively to one side, hold
 	// briefly, then return. Vary the cadence while alternating directions.
 	gazeStateTime -= dt;
@@ -166,6 +214,7 @@ bool PuffyCharacterController::update(
 	pose->gazeY = 0.f;
 	pose->leftBlink = blink;
 	pose->rightBlink = blink;
+	pose->squint = std::max(squint, 0.16f * std::fabs(twitch));
 	pose->mouthSmile = clamp01(0.75f - 0.35f * spineBlend
 		+ 0.15f * frenzyBlend);
 	pose->mouthTension = clamp01(
@@ -173,9 +222,9 @@ bool PuffyCharacterController::update(
 		+ 0.35f * visual.gainReduction);
 	const float finFlutter = std::sin(idleTime * (3.1f + 2.2f * frenzyBlend));
 	pose->leftFinAngle =
-		-0.12f - 0.10f * finFlutter - 0.16f * transientRise;
+		-0.12f - 0.10f * finFlutter - 0.18f * twitch;
 	pose->rightFinAngle =
-		0.12f + 0.10f * finFlutter + 0.16f * transientRise;
+		0.12f + 0.10f * finFlutter + 0.18f * twitch;
 	pose->spineExtension = clamp01(
 		0.30f + 0.55f * visual.effectiveAmount * spineBlend
 		+ 0.18f * visual.effectiveAmount);

@@ -72,8 +72,8 @@ float fractalShape(float input) {
 float autoDeflateDb(Character character, float amount) {
 	switch (character) {
 		case Character::Void:
-			// VOID already removes energy around the zero crossing. Additional
-			// automatic attenuation would make it collapse in linked mode.
+			// VOID's magnitude quantizer only removes level. Additional automatic
+			// attenuation would make it collapse in linked mode.
 			return 0.f;
 		case Character::Spine:
 			return -4.f * amount;
@@ -227,11 +227,12 @@ Engine::CharacterCoefficients Engine::prepareCharacter(
 	const float a = coefficients.amount;
 	switch (character) {
 		case Character::Void:
-			// At full Puff, open a 30%-of-reference dead zone. Squaring the
-			// control keeps the first half of the knob nuanced.
-			coefficients.voidThreshold = 0.30f * a * a;
-			coefficients.voidInverseSpan =
-				1.f / std::max(1.f - coefficients.voidThreshold, 1e-6f);
+			// Grow from imperceptibly fine quantization to eight positive treads.
+			// Squaring PUFF keeps the first half detailed and the upper half bold.
+			coefficients.voidStepSize = 0.125f * a * a;
+			coefficients.voidInverseStepSize = 1.f / std::max(
+				coefficients.voidStepSize, 1e-9f);
+			coefficients.voidOutputGain = 1.f + 0.50f * a * a;
 			break;
 		case Character::Spine:
 			coefficients.drive = 1.f + 9.f * a * a;
@@ -249,6 +250,8 @@ Engine::CharacterCoefficients Engine::prepareCharacter(
 			coefficients.foldGain = 1.f / (1.f + 0.5f * a);
 			coefficients.phaseSkew =
 				0.12f + 0.18f * fastControl + 0.12f * transient;
+			coefficients.polarityBias = 0.30f * a;
+			coefficients.polarityEdgeBias = 0.75f * a;
 			break;
 		}
 		case Character::Bloom:
@@ -267,16 +270,20 @@ float Engine::applyCharacter(
 	const float a = coefficients.amount;
 	switch (coefficients.character) {
 		case Character::Void: {
+			if (!(a > 0.f)) {
+				return input;
+			}
 			const float magnitude = std::fabs(input);
-			const float kneePosition = clamp01(
-				(magnitude - coefficients.voidThreshold)
-				* coefficients.voidInverseSpan);
-			// Smoothstep gives the dead-zone boundary and outer ceiling zero
-			// slope, avoiding threshold clicks while retaining a visible void.
-			const float knee = kneePosition * kneePosition
-				* (3.f - 2.f * kneePosition);
-			const float excavated = std::copysign(knee, input);
-			return input + (excavated - input) * a;
+			float steppedMagnitude = 1.f;
+			if (magnitude < 1.f) {
+				const int stepIndex = static_cast<int>(
+					magnitude * coefficients.voidInverseStepSize);
+				steppedMagnitude = float(stepIndex) * coefficients.voidStepSize;
+			}
+			steppedMagnitude = std::min(
+				steppedMagnitude * coefficients.voidOutputGain, 1.f);
+			const float stepped = std::copysign(steppedMagnitude, input);
+			return input + (stepped - input) * a;
 		}
 		case Character::Spine: {
 			const float z = coefficients.drive * input;
@@ -299,8 +306,12 @@ float Engine::applyCharacter(
 			const float z2 = z * z;
 			const float warped = z
 				+ coefficients.phaseSkew * z2 * (1.f - z2);
-			const float saturated = coefficients.foldGain * std::sin(
+			const float folded = coefficients.foldGain * std::sin(
 				kPi * coefficients.foldCycles * warped);
+			const float biased = folded
+				+ coefficients.polarityBias * z * (1.f - z2)
+				+ coefficients.polarityEdgeBias * z * std::fabs(z);
+			const float saturated = std::max(-1.f, std::min(biased, 1.f));
 			return input + (saturated - input) * a;
 		}
 		case Character::Bloom:

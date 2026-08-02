@@ -19,9 +19,14 @@ private:
 	float positiveCharacterTintWeights[puffy::kCharacterCount] = {
 		1.f, 0.f, 0.f, 0.f, 0.f};
 	float transientMemory = 0.f;
+	float twitchPhase = -1.f;
+	float twitchStrength = 0.f;
+	float twitchCooldown = 0.f;
 	float idleTime = 0.f;
 	float nextBlinkTime = 3.2f;
 	float blinkPhase = -1.f;
+	float nextSquintTime = 5.4f;
+	float squintPhase = -1.f;
 	float gazeX = 0.f;
 	float gazeTargetX = 0.f;
 	float gazeStateTime = 1.2f;

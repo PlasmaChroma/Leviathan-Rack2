@@ -119,7 +119,7 @@ Result characterCurves() {
 		puffy::Character::Spine, 0.1f + 1e-6f, 1.f, dynamics);
 	const bool continuous = std::fabs(edgeAbove - edgeBelow) < 1e-4f;
 	return {
-		"Character curves are finite, bounded, symmetric where required, and continuous",
+		"Character curves are finite, bounded, symmetric where required, and smooth modes remain continuous",
 		finite && bloomOdd && spineOdd && frenzyBounded
 			&& riptideOdd && riptideBounded && voidOdd
 			&& spineMonotonic && continuous,
@@ -134,36 +134,40 @@ Result characterCurves() {
 	};
 }
 
-Result voidOpensSmoothDeadZone() {
+Result voidBecomesSteppedQuantizer() {
 	puffy::DynamicsState dynamics;
 	const float unity = puffy::Engine::processCharacter(
-		puffy::Character::Void, 0.2f, 0.f, dynamics);
-	const float inside = puffy::Engine::processCharacter(
-		puffy::Character::Void, 0.29f, 1.f, dynamics);
-	const float boundary = puffy::Engine::processCharacter(
-		puffy::Character::Void, 0.30f, 1.f, dynamics);
-	const float justOutside = puffy::Engine::processCharacter(
-		puffy::Character::Void, 0.301f, 1.f, dynamics);
-	const float middle = puffy::Engine::processCharacter(
-		puffy::Character::Void, 0.50f, 1.f, dynamics);
+		puffy::Character::Void, 0.23f, 0.f, dynamics);
+	const float deadZone = puffy::Engine::processCharacter(
+		puffy::Character::Void, 0.12f, 1.f, dynamics);
+	const float firstTreadStart = puffy::Engine::processCharacter(
+		puffy::Character::Void, 0.13f, 1.f, dynamics);
+	const float firstTreadEnd = puffy::Engine::processCharacter(
+		puffy::Character::Void, 0.249f, 1.f, dynamics);
+	const float secondTread = puffy::Engine::processCharacter(
+		puffy::Character::Void, 0.251f, 1.f, dynamics);
+	const float halfPuff = puffy::Engine::processCharacter(
+		puffy::Character::Void, 0.37f, 0.5f, dynamics);
 	const float rail = puffy::Engine::processCharacter(
 		puffy::Character::Void, 1.f, 1.f, dynamics);
-	const float negativeMiddle = puffy::Engine::processCharacter(
-		puffy::Character::Void, -0.50f, 1.f, dynamics);
+	const float negativeSecondTread = puffy::Engine::processCharacter(
+		puffy::Character::Void, -0.251f, 1.f, dynamics);
 	return {
-		"VOID opens a continuous soft dead zone and reconnects at the rail",
-		near(unity, 0.2f, 1e-7f)
-			&& near(inside, 0.f, 1e-7f)
-			&& near(boundary, 0.f, 1e-7f)
-			&& justOutside > 0.f && justOutside < 1e-4f
-			&& middle > 0.15f && middle < 0.25f
+		"VOID widens and lifts zero-centered magnitude-quantizer treads",
+		near(unity, 0.23f, 1e-7f)
+			&& near(deadZone, 0.f, 1e-7f)
+			&& near(firstTreadStart, 0.1875f, 1e-6f)
+			&& near(firstTreadEnd, 0.1875f, 1e-6f)
+			&& near(secondTread, 0.375f, 1e-6f)
+			&& near(halfPuff, 0.378359375f, 1e-6f)
 			&& near(rail, 1.f, 1e-7f)
-			&& near(middle, -negativeMiddle, 1e-7f),
+			&& near(secondTread, -negativeSecondTread, 1e-7f),
 		"unity=" + std::to_string(unity)
-			+ " deadZone=" + std::to_string(inside)
-			+ "/" + std::to_string(boundary)
-			+ " outside=" + std::to_string(justOutside)
-			+ " middle=" + std::to_string(middle)
+			+ " deadZone=" + std::to_string(deadZone)
+			+ " tread1=" + std::to_string(firstTreadStart)
+			+ "/" + std::to_string(firstTreadEnd)
+			+ " tread2=" + std::to_string(secondTread)
+			+ " half=" + std::to_string(halfPuff)
 			+ " rail=" + std::to_string(rail)
 	};
 }
@@ -206,18 +210,41 @@ Result frenzySinusoidalFold() {
 		puffy::Character::Frenzy, 0.8f, 1.f, active);
 	const float activeNegative = puffy::Engine::processCharacter(
 		puffy::Character::Frenzy, -0.8f, 1.f, active);
+	const float negativeEdge = puffy::Engine::processCharacter(
+		puffy::Character::Frenzy, -1.f, 1.f, active);
+	const float positiveEdge = puffy::Engine::processCharacter(
+		puffy::Character::Frenzy, 1.f, 1.f, active);
+	double positiveMean = 0.0;
+	double negativeMean = 0.0;
+	for (int i = 1; i <= 400; ++i) {
+		const float input = float(i) / 400.f;
+		positiveMean += puffy::Engine::processCharacter(
+			puffy::Character::Frenzy, input, 1.f, active);
+		negativeMean += puffy::Engine::processCharacter(
+			puffy::Character::Frenzy, -input, 1.f, active);
+	}
+	positiveMean /= 400.0;
+	negativeMean /= 400.0;
 	return {
-		"FRENZY adds contracted sinusoidal-fold lobes as PUFF rises",
+		"FRENZY adds outward-biased sinusoidal-fold lobes as PUFF rises",
 		lowPuff.first >= 4 && highPuff.first >= lowPuff.first + 2
-			&& highPuff.second > 0.65f && highPuff.second < 0.68f
+			&& near(highPuff.second, 1.f, 1e-6f)
 			&& near(idleZero, 0.f, 1e-7f)
 			&& near(activeZero, 0.f, 1e-7f)
+			&& near(negativeEdge, -0.75f, 1e-5f)
+			&& near(positiveEdge, 0.75f, 1e-5f)
+			&& positiveMean > 0.25
+			&& negativeMean < -0.29
 			&& std::fabs(activePositive + activeNegative) > 0.05f,
 		"turns=" + std::to_string(lowPuff.first)
 			+ "/" + std::to_string(highPuff.first)
 			+ " highPeak=" + std::to_string(highPuff.second)
 			+ " activePair=" + std::to_string(activeNegative)
 			+ "/" + std::to_string(activePositive)
+			+ " edges=" + std::to_string(negativeEdge)
+			+ "/" + std::to_string(positiveEdge)
+			+ " means=" + std::to_string(negativeMean)
+			+ "/" + std::to_string(positiveMean)
 	};
 }
 
@@ -613,7 +640,7 @@ Result realtimePathDoesNotAllocate() {
 int main() {
 	const std::vector<Result> results = {
 		characterCurves(),
-		voidOpensSmoothDeadZone(),
+		voidBecomesSteppedQuantizer(),
 		frenzySinusoidalFold(),
 		riptideFractalAnchors(),
 		unityAndStereo(),

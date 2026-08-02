@@ -87,9 +87,12 @@ private:
 		float foldCycles = 1.f;
 		float foldGain = 1.f;
 		float phaseSkew = 0.f;
+		float polarityBias = 0.f;
+		float polarityEdgeBias = 0.f;
 		float normalization = 1.f;
-		float voidThreshold = 0.f;
-		float voidInverseSpan = 1.f;
+		float voidStepSize = 1.f;
+		float voidInverseStepSize = 1.f;
+		float voidOutputGain = 1.f;
 	};
 
 	struct DcBlocker {

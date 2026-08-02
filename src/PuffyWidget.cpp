@@ -33,23 +33,21 @@ struct PuffyViewportGradient final : TransparentWidget {
 struct PuffyCharacterReadout final : TransparentWidget {
 	static constexpr float FONT_SIZE = 8.8f;
 	Puffy* module = nullptr;
+	bool negativePart = true;
 
-	explicit PuffyCharacterReadout(Puffy* module) : module(module) {
+	PuffyCharacterReadout(Puffy* module, bool negativePart)
+		: module(module), negativePart(negativePart) {
 	}
 
 	void draw(const DrawArgs& args) override {
 		if (!APP || !APP->window || !APP->window->uiFont) {
 			return;
 		}
-		const int negativeCharacter = module
+		const int character = module
 			? clamp(int(std::lround(
-				module->params[Puffy::CHARACTER_PARAM].getValue())),
-				0,
-				int(puffy::Character::Void))
-			: int(puffy::Character::Bloom);
-		const int positiveCharacter = module
-			? clamp(int(std::lround(
-				module->params[Puffy::POSITIVE_CHARACTER_PARAM].getValue())),
+				module->params[negativePart
+					? Puffy::CHARACTER_PARAM
+					: Puffy::POSITIVE_CHARACTER_PARAM].getValue())),
 				0,
 				int(puffy::Character::Void))
 			: int(puffy::Character::Bloom);
@@ -62,21 +60,15 @@ struct PuffyCharacterReadout final : TransparentWidget {
 		};
 		nvgFontSize(args.vg, FONT_SIZE);
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-		nvgFillColor(args.vg, puffy_visual::characterTint(negativeCharacter));
+		nvgTextAlign(
+			args.vg,
+			(negativePart ? NVG_ALIGN_LEFT : NVG_ALIGN_RIGHT) | NVG_ALIGN_MIDDLE);
+		nvgFillColor(args.vg, puffy_visual::characterTint(character));
 		nvgText(
 			args.vg,
-			0.f,
+			negativePart ? 0.f : box.size.x,
 			0.5f * box.size.y,
-			(std::string("− ") + labels[negativeCharacter]).c_str(),
-			nullptr);
-		nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-		nvgFillColor(args.vg, puffy_visual::characterTint(positiveCharacter));
-		nvgText(
-			args.vg,
-			box.size.x,
-			0.5f * box.size.y,
-			(std::string("+ ") + labels[positiveCharacter]).c_str(),
+			(std::string(negativePart ? "− " : "+ ") + labels[character]).c_str(),
 			nullptr);
 	}
 };
@@ -250,12 +242,18 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 			Puffy::CHARACTER_LINK_LIGHT);
 	characterLinkButton->module = module;
 	addParam(characterLinkButton);
-	auto* characterReadout = new PuffyCharacterReadout(module);
-	characterReadout->box.size = mm2px(Vec(25.f, 4.f));
-	characterReadout->box.pos =
-		anchor("character_readout", Vec(16.16f, 95.5f))
-			.minus(characterReadout->box.size.mult(0.5f));
-	addChild(characterReadout);
+	auto* negativeCharacterReadout = new PuffyCharacterReadout(module, true);
+	negativeCharacterReadout->box.size = mm2px(Vec(12.5f, 4.f));
+	negativeCharacterReadout->box.pos =
+		anchor("negative_character_readout", Vec(9.91f, 95.5f))
+			.minus(negativeCharacterReadout->box.size.mult(0.5f));
+	addChild(negativeCharacterReadout);
+	auto* positiveCharacterReadout = new PuffyCharacterReadout(module, false);
+	positiveCharacterReadout->box.size = mm2px(Vec(12.5f, 4.f));
+	positiveCharacterReadout->box.pos =
+		anchor("positive_character_readout", Vec(22.41f, 95.5f))
+			.minus(positiveCharacterReadout->box.size.mult(0.5f));
+	addChild(positiveCharacterReadout);
 	addParam(createParamCentered<LeviathanHaloKnob2>(
 		anchor("puff_param", Vec(18.f, 83.5f)),
 		module, Puffy::PUFF_PARAM));
@@ -291,12 +289,12 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 		anchor("limit_light", Vec(54.f, 72.5f)),
 		module, Puffy::LIMIT_LIGHT));
 
-	addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0.f)));
-	addChild(createWidget<ScrewSilver>(
+	addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
+	addChild(createWidget<CyanOrbScrew>(
 		Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0.f)));
-	addChild(createWidget<ScrewSilver>(
+	addChild(createWidget<CyanOrbScrew>(
 		Vec(RACK_GRID_WIDTH, box.size.y - RACK_GRID_WIDTH)));
-	addChild(createWidget<ScrewSilver>(
+	addChild(createWidget<CyanOrbScrew>(
 		Vec(
 			box.size.x - 2.f * RACK_GRID_WIDTH,
 			box.size.y - RACK_GRID_WIDTH)));

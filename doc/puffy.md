@@ -26,7 +26,7 @@ PUFF + input dynamics -> audible character -> readable fish reaction
 
 The front panel stays deliberately small:
 
-- four original Leviathan character modes;
+- five original Leviathan character modes;
 - one primary `PUFF` control;
 - one `DEFLATE` output attenuation control;
 - one `MIX` wet/dry control;
@@ -44,7 +44,7 @@ At the end of v1, a user can:
 
 - patch a mono or stereo signal and obtain a stable stereo output;
 - move continuously from an effectively clean signal to obvious saturation;
-- select a warm, aggressive, or input-reactive character;
+- select a warm, aggressive, input-reactive, fractal, or stepped character;
 - modulate `PUFF` over its complete range with 0-10 V CV;
 - reduce the processed output by up to 12 dB with post-limiter `DEFLATE` output trim;
 - blend continuously between latency-matched dry and fully processed audio;
@@ -70,7 +70,7 @@ trade dress. Its art and mode identities must be original.
 | --- | --- |
 | Product role | Stereo character saturator with final peak control |
 | Width | 12 HP / 60.96 mm / 180 Rack px |
-| Characters | `BLOOM`, `SPINE`, `FRENZY`, and `RIPTIDE` |
+| Characters | `BLOOM`, `SPINE`, `FRENZY`, `RIPTIDE`, and `VOID` |
 | Default character | `BLOOM` |
 | Default amount | `PUFF = 0.25` |
 | Stereo I/O | Separate L/R jacks; mono normalization while active |
@@ -115,6 +115,8 @@ fish_rect
 transfer_preview_rect
 
 character_param
+negative_character_readout
+positive_character_readout
 puff_param
 deflate_param
 puff_cv_amount_param
@@ -138,7 +140,7 @@ screw_br
 
 | Label | Type | Range/default | Meaning |
 | --- | --- | --- | --- |
-| `CHARACTER` | 4-position snapped switch | 0..3, default 0 | `BLOOM`, `SPINE`, `FRENZY`, `RIPTIDE` |
+| `CHARACTER` | 5-position snapped switch | 0..4, default 0 | `BLOOM`, `SPINE`, `FRENZY`, `RIPTIDE`, `VOID` |
 | `PUFF` | large knob | 0..1, default 0.25 | Base saturation amount |
 | `DEFLATE` | knob | 0..1, default 0 | 0 to 12 dB of post-effect attenuation |
 | `PUFF CV` | attenuverter | -1..1, default 0 | Depth and polarity of amount CV |
@@ -227,7 +229,7 @@ enum LightId {
 };
 ```
 
-Use `configSwitch()` for `CHARACTER_PARAM`, including the four display labels.
+Use `configSwitch()` for `CHARACTER_PARAM`, including the five display labels.
 Use dB display scaling or a custom `ParamQuantity` so `DEFLATE` displays 0 to
 -12 dB rather than an unexplained normalized value.
 
@@ -371,8 +373,13 @@ z2 = z*z
 foldCycles = 1 + 3*a
 foldGain = 1 / (1 + 0.5*a)
 phaseSkew = 0.12 + 0.18*fastControl + 0.12*transient
+polarityBias = 0.30*a
+polarityEdgeBias = 0.75*a
 warped = z + phaseSkew*z2*(1 - z2)
-s = foldGain * sin(pi*foldCycles*warped)
+folded = foldGain * sin(pi*foldCycles*warped)
+s = clamp(folded
+          + polarityBias*z*(1 - z2)
+          + polarityEdgeBias*z*abs(z), -1, 1)
 y = lerp(x, s, a)
 ```
 
@@ -382,8 +389,12 @@ toward its center as inflation rises. The phase-warp term is zero at the origin
 and +/-1 endpoints, preserving those anchors while making the interior lobes
 input-reactive and asymmetrical. The shared detector
 prevents channel-independent motion from pulling the stereo image around. The
-asymmetry intentionally permits a small DC component; the common post-character
-DC blocker removes it.
+interior polarity-bias term smoothly raises positive-side lobes and lowers
+negative-side lobes without moving zero. The edge-weighted `z*abs(z)` term
+becomes dominant toward +/-1, pulling the graph's outer response toward the
+corresponding polarity extreme while leaving the central folds recognizable.
+The phase asymmetry intentionally permits a small DC component; the common
+post-character DC blocker removes it.
 
 ### 5.6 Character D: RIPTIDE
 
@@ -411,14 +422,49 @@ below the underlying ramp, with a steep first rise that makes low-level input
 more active. It remains continuous, exactly odd, bounded to +/-1 at full wet,
 and joins flat outer rails. Oversampling is mandatory for this mode.
 
-### 5.7 DC blocker
+### 5.7 Character E: VOID
+
+`VOID` is a symmetrical magnitude quantizer. Unlike a sample-rate crusher, it
+does not discard samples; it turns the transfer curve into progressively wider
+horizontal treads as `PUFF` rises.
+
+```text
+step = 0.125*a^2
+gain = 1 + 0.50*a^2
+m = abs(x)
+
+if a == 0:
+    s = x
+else if m >= 1:
+    s = sign(x)
+else:
+    q = floor(m / step) * step
+    s = sign(x) * min(q*gain, 1)
+
+y = lerp(x, s, a)
+```
+
+Magnitude flooring keeps every tread at or below the incoming magnitude before
+the next vertical transition. It also creates a zero-centered tread naturally:
+at maximum `PUFF`, normalized magnitudes below `0.125`—0.625 V at the module
+input—map to zero. The eight positive intervals keep the maximum-PUFF staircase
+tighter than VOID's initial five-interval design. Squaring the control-law width
+preserves fine resolution through the
+first half of the knob; the final mix makes the treads progressively flatter as
+the quantized response takes over. A simultaneous gain ramp reaches 1.5x at
+maximum `PUFF`, lifting the nonzero treads away from a simple rounded-down
+linear transfer and driving the upper treads into the rail. Clamp the fully wet
+response to +/-1 outside the nominal range. Oversampling is mandatory because
+the stair transitions are intentionally discontinuous.
+
+### 5.8 DC blocker
 
 Run an independent first-order 5 Hz high-pass/DC blocker on L and R after
 decimation for every character. Recalculate its coefficient in
 `onSampleRateChange()`. Applying it uniformly keeps mode changes structurally
 consistent and catches filter/startup residue as well as `FRENZY` bias.
 
-### 5.8 Auto Deflate
+### 5.9 Auto Deflate
 
 Auto Deflate is static, mode-aware pre-limiter gain compensation. It does not follow the
 audio envelope and therefore must not pump.
@@ -428,6 +474,7 @@ BLOOM:  autoDeflateDb = -2.5*a
 SPINE:  autoDeflateDb = -4.0*a
 FRENZY: autoDeflateDb = -3.0*a
 RIPTIDE: autoDeflateDb = -3.5*a
+VOID:    autoDeflateDb = 0
 ```
 
 When Auto Deflate is disabled, `autoDeflateDb` is zero. During a character
@@ -585,7 +632,7 @@ struct PuffyVisualState {
     float negativeInputActivity; // smoothed 0..1.25
     float transientActivity; // smoothed 0..1
     float gainReduction;     // 0..1, 1 at >= 6 dB GR
-    int character;           // 0..3
+    int character;           // 0..4
 };
 ```
 
@@ -614,14 +661,17 @@ Character-specific motion:
 - `BLOOM`: round body inflation, slow breathing, relaxed fin movement.
 - `SPINE`: spine extension follows amount; jaw/outline tension follows
   transients.
-- `FRENZY`: asymmetric squash and eye direction follow transient activity; no
-  random audio behavior is implied.
+- all characters: large transient rises trigger the same short body/fin twitch;
+  the reaction is visual only and never changes the DSP transfer function.
+- `FRENZY`: faster idle fin cadence and eye direction retain its personality;
+  no character-specific transient twitch or random audio behavior is implied.
 - `RIPTIDE`: blue body tint; shared gaze and blink behavior remains unchanged.
+- `VOID`: dark violet tint; restrained motion and posterized highlight bands.
 - all modes: blush or warning tint follows limiter gain reduction.
 
-Tint transitions use four independent one-hot weights rather than interpolating
-the numeric character index. This makes the selector wrap from `RIPTIDE` to
-`BLOOM` crossfade directly from blue to green without passing through the
+Tint transitions use five independent one-hot weights rather than interpolating
+the numeric character index. This makes the selector wrap from `VOID` to
+`BLOOM` crossfade directly from violet to green without passing through the
 intermediate mode colors.
 
 The separate `LIMIT_LIGHT` follows the same gain-reduction target and reaches
@@ -715,7 +765,7 @@ crossfade, the old and new character run in parallel for at most 10 ms.
 
 ## 10. Persistence
 
-Rack automatically persists the four parameters. Custom JSON schema:
+Rack automatically persists the seven parameters. Custom JSON schema:
 
 ```json
 {
@@ -762,7 +812,8 @@ behind a generic `High quality` label.
 
 - `amount = 0`, Auto Deflate off, and `DEFLATE = 0` produces unity gain within
   0.05 dB at 1 kHz below limiter threshold.
-- Every character is finite and continuous across its piecewise boundaries.
+- Every character is finite and bounded. `BLOOM`, `SPINE`, and `RIPTIDE` remain
+  continuous; `VOID` intentionally introduces quantizer discontinuities.
 - `BLOOM` and `SPINE` are odd within floating-point tolerance.
 - `FRENZY` produces zero output for zero input after state settles.
 - `FRENZY` stays bounded and zero-anchored across amount (0.25, 0.50, 0.75,
@@ -770,6 +821,8 @@ behind a generic `High quality` label.
   at least two slope reversals and its fully active curve has at least four.
 - `RIPTIDE` is odd, continuous, bounded, has a steep near-zero rise, repeated
   multi-scale slope reversals, and continuous flat outer rails.
+- `VOID` is odd and bounded, remains unity at zero amount, develops a
+  zero-centered tread, and reaches 0.125-wide magnitude steps at full amount.
 - `DEFLATE` operates as a literal post-limiter output volume trim, reducing output level by the exact linear dB amount both above and below limiter engagement.
 - All characters become audibly and measurably more nonlinear as amount rises.
 - With Auto Deflate enabled, the gated RMS of each character on the shared pink
@@ -836,7 +889,7 @@ behind a generic `High quality` label.
 ### 12.1 MVP purpose and boundary
 
 The implementation MVP is a hidden, testable vertical slice. Its purpose is to
-validate Puffy's permanent module API, stereo signal flow, four character
+validate Puffy's permanent module API, stereo signal flow, five character
 identities, and audio-to-character handoff before the more expensive limiter,
 configuration-transition, and final-art work begins.
 
@@ -856,7 +909,7 @@ The first runnable module includes:
 - active-mode stereo normalization, channel-0 input handling, finite guards,
   the +/-20 V internal clamp, and one output channel per jack;
 - 1 ms `PUFF` smoothing and the 10 ms equal-power character crossfade;
-- all four final character transfer functions and the one continuously updated
+- all five final character transfer functions and the one continuously updated
   stereo-linked `PuffyDynamicsDetector`;
 - a fixed 4x saturation path for the MVP, using the final Rack FIR types, plus
   the common 5 Hz DC blocker;
@@ -945,7 +998,7 @@ After the MVP gate:
 
 Puffy is ready to unhide only when:
 
-- all four modes are sonically distinct at matched level;
+- all five modes are sonically distinct at matched level;
 - the default 4x path meets the aliasing target;
 - `LIVE` and `MASTER` satisfy their separately named peak guarantees;
 - context changes and patch loading are click-safe;
@@ -1048,6 +1101,7 @@ struct PuffyPose {
     float gazeY = 0.f;            // -1..1
     float leftBlink = 0.f;        // 0 open, 1 closed
     float rightBlink = 0.f;
+    float squint = 0.f;           // 0 open, capped below full blink
 
     float mouthSmile = 0.f;       // 0..1
     float mouthTension = 0.f;     // 0..1
@@ -1105,7 +1159,7 @@ Suggested semantic mappings:
 | --- | --- |
 | `effectiveAmount` | baseline inflation and mode-specific body treatment |
 | `inputActivity` | subtle breathing amplitude and buoyant body motion |
-| `transientActivity` | brief fin flick, jaw tension, or squash impulse |
+| `transientActivity` | shared brief body bump, fin flick, and subtle reactive squint |
 | `gainReduction` | blush/warning tint and a small bracing expression |
 | `character` | motion vocabulary and resting personality |
 
@@ -1121,7 +1175,7 @@ image.
 
 ## A.4 Mode-specific personality
 
-The four DSP characters should share one recognizable Puffy but differ in
+The five DSP characters should share one recognizable Puffy but differ in
 motion language.
 
 ### A.4.1 BLOOM
@@ -1143,7 +1197,7 @@ motion language.
 
 ### A.4.3 FRENZY
 
-- Slight asymmetric squash and recovery on strong transients.
+- Uses the same strong-transient twitch envelope as every other character.
 - Faster gaze changes, but never continuous jitter.
 - More energetic fin flicks.
 - Occasional excited expression at high activity.
@@ -1155,6 +1209,13 @@ motion language.
 - Blue body tint.
 - Shared gaze and blink behavior.
 - The self-similar audio curve does not imply random visual motion.
+
+### A.4.5 VOID
+
+- Dark violet body tint with slightly posterized highlight bands.
+- Motion becomes more deliberate as `PUFF` rises, echoing the stepped response.
+- Do not quantize the fish animation itself; discontinuous visual motion would
+  read as a rendering fault rather than character feedback.
 
 Mode changes should crossfade or interpolate personality settings over roughly
 150-300 ms even though the audio characters crossfade in 10 ms. A slower visual
@@ -1171,6 +1232,7 @@ Recommended idle behaviors:
 | --- | ---: | --- |
 | Blink | 2.5-7.0 s | Fast close, short hold, softer reopen |
 | Double blink | 10-15% of blink events | Second blink follows quickly |
+| Squint | 5-13 s | About 0.9 s; partial closure only and never substitutes for a full blink |
 | Gaze change | 1.5-5.0 s | Hold targets long enough to feel intentional |
 | Fin twitch | 4-12 s | Low amplitude and occasionally asymmetric |
 | Breathing | 3-5 s cycle | Very small change around baseline inflation |
@@ -1194,7 +1256,9 @@ choose target
 ```
 
 The eyes are the highest-value animation feature. Small, well-timed pupil and
-eyelid movement will contribute more life than large body motion.
+eyelid movement will contribute more life than large body motion. A squint is a
+separate action with a maximum closure of about 0.42; a blink continues to reach
+1.0 and overrides any simultaneous squint in the renderer.
 
 Puffy may occasionally glance toward the `PUFF` control after it changes, or
 toward the limiter indicator during sustained gain reduction. Avoid continuous

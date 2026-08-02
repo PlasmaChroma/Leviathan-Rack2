@@ -6,7 +6,7 @@
    version="1.1"
    id="svg21"
    sodipodi:docname="Puffy.svg"
-   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
@@ -21,13 +21,13 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="2.4193418"
-     inkscape:cx="35.546858"
-     inkscape:cy="292.64158"
-     inkscape:window-width="1920"
-     inkscape:window-height="1043"
-     inkscape:window-x="3840"
-     inkscape:window-y="0"
+     inkscape:zoom="3.421466"
+     inkscape:cx="54.07039"
+     inkscape:cy="344.73527"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
      inkscape:window-maximized="1"
      inkscape:current-layer="svg21"
      showgrid="false" />
@@ -125,45 +125,29 @@
      id="puffy_border"
      style="display:inline;fill:#1f192c;fill-opacity:1" />
   <text
-     x="1111.0212"
-     y="9324.3965"
+     x="2145.0024"
+     y="10119.73"
      text-anchor="middle"
      font-family="'DejaVu Sans', sans-serif"
      font-size="155px"
      fill="#ffe7a5"
      id="text13">PUFF</text>
   <text
-     x="3761.3511"
-     y="10273.795"
+     x="4364.5283"
+     y="10120.828"
      text-anchor="middle"
      font-family="'DejaVu Sans', sans-serif"
      font-size="155px"
      fill="#ffe7a5"
      id="text14">DEFLATE</text>
   <text
-     x="5196"
-     y="10273.795"
+     x="5567.1855"
+     y="10120.828"
      text-anchor="middle"
      font-family="'DejaVu Sans', sans-serif"
      font-size="155px"
      fill="#ffe7a5"
      id="mix_label">MIX</text>
-  <text
-     x="2654.2979"
-     y="9176.7139"
-     text-anchor="middle"
-     font-family="'DejaVu Sans', sans-serif"
-     font-size="125px"
-     fill="#ffd779"
-     id="text15">PUFF CV AMOUNT</text>
-  <text
-     x="3906.2979"
-     y="9174.8936"
-     text-anchor="middle"
-     font-family="'DejaVu Sans', sans-serif"
-     font-size="120px"
-     fill="#ffdfa0"
-     id="text17">PUFF CV</text>
   <text
      x="900"
      y="11610"
@@ -198,10 +182,10 @@
      id="text21">OUT R</text>
   <text
      x="3048"
-     y="10410"
+     y="8764.4727"
      text-anchor="middle"
-     font-family="DejaVu Sans, sans-serif"
-     font-size="105"
+     font-family="'DejaVu Sans', sans-serif"
+     font-size="105px"
      fill="#ffdfa0"
      id="character_link_label">LINK</text>
   <g
@@ -210,9 +194,9 @@
      style="display:inline;opacity:1">
     <rect
        id="BRANDING_LEVIATHAN_LOGO_RASTER"
-       x="1412.0335"
+       x="1412.0334"
        y="11843.102"
-       width="3271.933"
+       width="3271.9331"
        height="1224.054"
        style="display:none" />
     <rect
@@ -227,54 +211,60 @@
        x="75.000031"
        y="6500"
        width="5946"
-       height="1254.9"
-       style="fill:#425f34;fill-opacity:1;stroke-width:1.31808" />
+       height="1454.9"
+       style="fill:#425f34;fill-opacity:1;stroke-width:1.41922" />
     <circle
        id="character_param"
-       cx="900"
-       cy="9962.7402"
+       cx="335"
+       cy="8247.2002"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle
-       id="character_readout"
-	   cx="1616"
-	   cy="9550"
+       id="negative_character_readout"
+       cx="1651.5"
+       cy="8247.2002"
+       r="150"
+       style="fill:#425f34;fill-opacity:1;stroke-width:15" />
+    <circle
+       id="positive_character_readout"
+       cx="4444.5"
+       cy="8247.2002"
        r="150"
        style="fill:#425f34;fill-opacity:1;stroke-width:15" />
     <circle
        id="positive_character_param"
-       cx="2332"
-       cy="9962.7402"
+       cx="5781"
+       cy="8247.2002"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="character_link_param"
        cx="3048"
-       cy="9962.7402"
+       cy="8247.2002"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="puff_param"
-       cx="1111.0212"
-       cy="8674.4004"
+       cx="820.40002"
+       cy="9485.2002"
        r="300"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="deflate_param"
-       cx="3761.3511"
-       cy="9752.8252"
+       cx="4386.4868"
+       cy="9485.2002"
        r="200"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="mix_param"
-       cx="5196"
-       cy="9752.8252"
+       cx="5567.1855"
+       cy="9485.2002"
        r="200"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="puff_cv_amount_param"
-       cx="2654.2979"
-       cy="8666.7402"
+       cx="2148.1055"
+       cy="9485.2002"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle
@@ -291,8 +281,8 @@
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="puff_cv_input"
-       cx="3906.2979"
-       cy="8666.7402"
+       cx="3185.7876"
+       cy="9485.2002"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
     <circle
