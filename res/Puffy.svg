@@ -9,6 +9,7 @@
    inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
   <sodipodi:namedview
@@ -21,9 +22,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="3.421466"
-     inkscape:cx="54.07039"
-     inkscape:cy="344.73527"
+     inkscape:zoom="4.8386836"
+     inkscape:cx="109.32726"
+     inkscape:cy="305.14498"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -86,6 +87,28 @@
          stop-color="#0f0d17"
          id="stop8" />
     </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient22"
+       id="linearGradient500"
+       gradientUnits="userSpaceOnUse"
+       x1="5355.9189"
+       y1="1516.2338"
+       x2="6904.7725"
+       y2="1512.3004"
+       gradientTransform="matrix(0.99690805,0,0,0.99690805,-3063.3137,-867.14524)" />
+    <linearGradient
+       id="linearGradient22"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#7a5cff;stop-opacity:1;"
+         offset="0"
+         id="stop22" />
+      <stop
+         style="stop-color:#1cccd9;stop-opacity:1;"
+         offset="1"
+         id="stop23" />
+    </linearGradient>
   </defs>
   <rect
      width="6096"
@@ -94,100 +117,120 @@
      id="rect8"
      style="display:inline;fill:#000000;fill-opacity:1"
      x="0"
-     y="0" />
-  <text
-     x="3048"
-     y="620"
-     text-anchor="middle"
-     font-family="DejaVu Sans, sans-serif"
-     font-size="420"
-     font-weight="bold"
-     fill="#ffd44d"
-     id="text10">PUFFY</text>
-  <text
-     x="3048"
-     y="940"
-     text-anchor="middle"
-     font-family="DejaVu Sans, sans-serif"
-     font-size="125"
-     fill="#ffe8a7"
-     id="text11">STEREO CHARACTER</text>
+     y="0"
+     sodipodi:insensitive="true" />
   <rect
      x="63.777615"
-     y="1051.7778"
+     y="911.76904"
      width="5968.4448"
      height="5409.4658"
-     rx="338.09161"
-     fill="url(#viewport)"
-     stroke="#ffd44d"
-     stroke-opacity="0.74"
-     stroke-width="31.5555"
+     rx="0"
+     fill="#000000"
+     stroke="#1ccad8"
+     stroke-opacity="1"
+     stroke-width="24.338"
      id="puffy_border"
-     style="display:inline;fill:#1f192c;fill-opacity:1" />
-  <text
-     x="2145.0024"
-     y="10119.73"
-     text-anchor="middle"
-     font-family="'DejaVu Sans', sans-serif"
-     font-size="155px"
-     fill="#ffe7a5"
-     id="text13">PUFF</text>
-  <text
-     x="4364.5283"
-     y="10120.828"
-     text-anchor="middle"
-     font-family="'DejaVu Sans', sans-serif"
-     font-size="155px"
-     fill="#ffe7a5"
-     id="text14">DEFLATE</text>
-  <text
-     x="5567.1855"
-     y="10120.828"
-     text-anchor="middle"
-     font-family="'DejaVu Sans', sans-serif"
-     font-size="155px"
-     fill="#ffe7a5"
-     id="mix_label">MIX</text>
-  <text
-     x="900"
-     y="11610"
-     text-anchor="middle"
-     font-family="DejaVu Sans, sans-serif"
-     font-size="120"
-     fill="#ffdfa0"
-     id="text18">IN L</text>
-  <text
-     x="2332"
-     y="11610"
-     text-anchor="middle"
-     font-family="DejaVu Sans, sans-serif"
-     font-size="120"
-     fill="#ffdfa0"
-     id="text19">IN R</text>
-  <text
-     x="3764"
-     y="11610"
-     text-anchor="middle"
-     font-family="DejaVu Sans, sans-serif"
-     font-size="120"
-     fill="#ffdfa0"
-     id="text20">OUT L</text>
-  <text
-     x="5196"
-     y="11610"
-     text-anchor="middle"
-     font-family="DejaVu Sans, sans-serif"
-     font-size="120"
-     fill="#ffdfa0"
-     id="text21">OUT R</text>
-  <text
-     x="3048"
-     y="8764.4727"
-     text-anchor="middle"
-     font-family="'DejaVu Sans', sans-serif"
-     font-size="105px"
-     fill="#ffdfa0"
-     id="character_link_label">LINK</text>
+     style="display:none;fill:#000000;fill-opacity:1;stroke:#1ccad8;stroke-width:24.338;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1" />
+  <rect
+     x="75.509567"
+     y="6380.4795"
+     width="5967.4419"
+     height="1573.8412"
+     rx="0"
+     fill="#000000"
+     stroke="#1ccad8"
+     stroke-opacity="1"
+     stroke-width="24.338"
+     id="transfer_preview_border"
+     style="display:none;fill:#000000;fill-opacity:1;stroke:#1ccad8;stroke-width:25.3589;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1" />
+  <g
+     id="labels">
+    <text
+       x="2145.0024"
+       y="10119.73"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="155px"
+       fill="#ffe7a5"
+       id="text13">PUFF</text>
+    <text
+       x="4364.5283"
+       y="10120.828"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="155px"
+       fill="#ffe7a5"
+       id="text14">DEFLATE</text>
+    <text
+       x="5567.1855"
+       y="10120.828"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="155px"
+       fill="#ffe7a5"
+       id="mix_label">MIX</text>
+    <text
+       x="630"
+       y="11610"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="120px"
+       fill="#ffdfa0"
+       id="text18">IN L</text>
+    <text
+       x="2062"
+       y="11610"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="120px"
+       fill="#ffdfa0"
+       id="text19">IN R</text>
+    <text
+       x="4204"
+       y="11610"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="120px"
+       fill="#ffdfa0"
+       id="text20">OUT L</text>
+    <text
+       x="5636"
+       y="11610"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="120px"
+       fill="#ffdfa0"
+       id="text21">OUT R</text>
+    <text
+       x="3048"
+       y="8824.4727"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="105px"
+       fill="#ffdfa0"
+       id="character_link_label">LINK</text>
+    <text
+       id="reworked_module_title_text"
+       x="3032.9185"
+       y="468.40002"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient500);stroke-width:28.1347"
+       xml:space="preserve"><tspan
+         sodipodi:role="line"
+         id="tspan3"
+         style="fill:url(#linearGradient500)"
+         x="3032.9185"
+         y="468.40002">Puffy</tspan></text>
+    <text
+       id="reworked_module_description"
+       x="3044.825"
+       y="813.54999"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+       xml:space="preserve"><tspan
+         sodipodi:role="line"
+         id="tspan2"
+         x="3044.825"
+         y="813.54999">saturator</tspan></text>
+  </g>
   <g
      id="components"
      opacity="0"
@@ -199,48 +242,34 @@
        width="3271.9331"
        height="1224.054"
        style="display:none" />
-    <rect
-       id="fish_rect"
-       x="63.777615"
-       y="1051.7778"
-       width="5968.4448"
-       height="5409.4658"
-       style="fill:#425f34;fill-opacity:1;stroke-width:1.12704" />
-    <rect
-       id="transfer_preview_rect"
-       x="75.000031"
-       y="6500"
-       width="5946"
-       height="1454.9"
-       style="fill:#425f34;fill-opacity:1;stroke-width:1.41922" />
     <circle
        id="character_param"
        cx="335"
-       cy="8247.2002"
+       cy="8307.2002"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="negative_character_readout"
        cx="1651.5"
-       cy="8247.2002"
+       cy="8307.2002"
        r="150"
        style="fill:#425f34;fill-opacity:1;stroke-width:15" />
     <circle
        id="positive_character_readout"
        cx="4444.5"
-       cy="8247.2002"
+       cy="8307.2002"
        r="150"
        style="fill:#425f34;fill-opacity:1;stroke-width:15" />
     <circle
        id="positive_character_param"
        cx="5781"
-       cy="8247.2002"
+       cy="8307.2002"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="character_link_param"
        cx="3048"
-       cy="8247.2002"
+       cy="8307.2002"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle
@@ -269,13 +298,13 @@
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="input_l"
-       cx="900"
+       cx="630"
        cy="11010"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="input_r"
-       cx="2332"
+       cx="2062"
        cy="11010"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
@@ -287,21 +316,35 @@
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="output_l"
-       cx="3764"
+       cx="4204"
        cy="11010"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="output_r"
-       cx="5196"
+       cx="5636"
        cy="11010"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="limit_light"
-       cx="4480"
+       cx="4920"
        cy="11012.043"
        r="100"
        style="fill:#425f34;fill-opacity:1" />
   </g>
+  <rect
+     id="fish_rect"
+     x="63.777615"
+     y="946.45001"
+     width="5968.4448"
+     height="5409.4658"
+     style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:29.9;stroke-dasharray:none;stroke-opacity:1" />
+  <rect
+     id="transfer_preview_rect"
+     x="63.806179"
+     y="6410.4502"
+     width="5968.3877"
+     height="1573.8778"
+     style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:29.9;stroke-dasharray:none;stroke-opacity:1" />
 </svg>

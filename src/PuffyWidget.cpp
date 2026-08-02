@@ -15,9 +15,8 @@ struct PuffyViewportGradient final : TransparentWidget {
 		const float inset = mm2px(0.16f);
 		const float width = std::max(0.f, box.size.x - 2.f * inset);
 		const float height = std::max(0.f, box.size.y - 2.f * inset);
-		const float radius = std::max(0.f, mm2px(3.f) - inset);
 		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, inset, inset, width, height, radius);
+		nvgRect(args.vg, inset, inset, width, height);
 		nvgFillPaint(args.vg, nvgLinearGradient(
 			args.vg,
 			inset,
@@ -207,9 +206,16 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 		fishRectMm.pos = Vec(4.f, 20.f);
 		fishRectMm.size = Vec(52.96f, 48.f);
 	}
+	addChild(visual_assets::createPreviewFrameEnhancementWidget(fishRectMm));
+	const float viewportInsetMm = 0.2f;
+	math::Rect fishContentRectMm = fishRectMm;
+	fishContentRectMm.pos = fishContentRectMm.pos.plus(
+		Vec(viewportInsetMm));
+	fishContentRectMm.size = fishContentRectMm.size.minus(
+		Vec(2.f * viewportInsetMm));
 	auto* viewportFramebuffer = new widget::FramebufferWidget();
-	viewportFramebuffer->box.pos = mm2px(fishRectMm.pos);
-	viewportFramebuffer->box.size = mm2px(fishRectMm.size);
+	viewportFramebuffer->box.pos = mm2px(fishContentRectMm.pos);
+	viewportFramebuffer->box.size = mm2px(fishContentRectMm.size);
 	viewportFramebuffer->dirtyOnSubpixelChange = false;
 	auto* viewportGradient = new PuffyViewportGradient();
 	viewportGradient->box.size = viewportFramebuffer->box.size;
@@ -217,8 +223,8 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	addChild(viewportFramebuffer);
 
 	auto* fish = new PuffyFishWidget(module);
-	fish->box.pos = mm2px(fishRectMm.pos);
-	fish->box.size = mm2px(fishRectMm.size);
+	fish->box.pos = mm2px(fishContentRectMm.pos);
+	fish->box.size = mm2px(fishContentRectMm.size);
 	addChild(fish);
 
 	math::Rect transferPreviewRectMm;
@@ -228,7 +234,7 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 		transferPreviewRectMm.size = Vec(51.96f, 10.5f);
 	}
 	addChild(visual_assets::createPreviewFrameEnhancementWidget(
-		transferPreviewRectMm, nvgRGBA(255, 190, 80, 118)));
+		transferPreviewRectMm));
 	const float previewInsetMm = 0.2f;
 	transferPreviewRectMm.pos = transferPreviewRectMm.pos.plus(
 		Vec(previewInsetMm));
