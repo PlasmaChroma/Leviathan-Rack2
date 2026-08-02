@@ -1249,7 +1249,7 @@ struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
 			hovered = false;
 			updateCenterSvg();
 			destroyTooltip();
-			app::SvgKnob::onLeave(e);
+			app::Knob::onLeave(e);
 			return;
 		}
 		LeviathanHaloKnob2::onLeave(e);
@@ -1276,7 +1276,7 @@ struct IntegralFluxHalo2Knob : LeviathanHaloKnob2 {
 
 	void draw(const DrawArgs& args) override {
 		if (isDragonKingDebugEnabled()) {
-			if (fb && fb->dirty) {
+			if (isVisualDirty()) {
 				++gIntegralFluxHaloDirtyDrawCountThisFrame;
 			}
 			if (hovered || dragging || tooltipHovered || tooltipDragging) {
@@ -1596,6 +1596,8 @@ struct IntegralFluxTimedApertureLight : TBase {
 };
 
 struct IntegralFluxWidget : ModuleWidget {
+	std::vector<IntegralFluxHalo2Knob*> haloKnobs;
+	bool forceHaloNanoVg = false;
 	float uiStepMsEma = 0.f;
 	float uiDrawMsEma = 0.f;
 	float gearDrawUsEma = 0.f;
@@ -2025,6 +2027,8 @@ struct IntegralFluxWidget : ModuleWidget {
 			knob->setPreviewInteraction(interaction, edge);
 			knob->setCentralTooltip(&centralTooltipState, channel, tooltipLabel, paramId);
 			knob->setSuppressRackTooltip(true);
+			knob->setForceNanoVgLedRenderer(forceHaloNanoVg);
+			haloKnobs.push_back(knob);
 			addParam(knob);
 		};
 		auto addCurveKnob = [&](Vec posMm, int paramId, IntegralFluxPreviewEdgeInteraction* interaction, int channel) {
@@ -2032,6 +2036,8 @@ struct IntegralFluxWidget : ModuleWidget {
 			knob->setPreviewInteraction(interaction, IntegralFluxHalo2Knob::PREVIEW_CURVE);
 			knob->setCentralTooltip(&centralTooltipState, channel, "Curve", paramId);
 			knob->setSuppressRackTooltip(true);
+			knob->setForceNanoVgLedRenderer(forceHaloNanoVg);
+			haloKnobs.push_back(knob);
 			addParam(knob);
 		};
 		addEdgeKnob(rise1KnobPos, IntegralFlux::RISE_1_PARAM, &ch1EdgeInteraction, IntegralFluxHalo2Knob::PREVIEW_EDGE_RISE, 1, "Surge");
@@ -2319,6 +2325,15 @@ struct IntegralFluxWidget : ModuleWidget {
 		menu->addChild(new MenuSeparator());
 		if (maths) {
 			menu->addChild(createMenuLabel("Performance"));
+			menu->addChild(createCheckMenuItem("Force Halo LEDs to NanoVG", "",
+				[=]() { return forceHaloNanoVg; },
+				[=]() {
+					forceHaloNanoVg = !forceHaloNanoVg;
+					for (IntegralFluxHalo2Knob* knob : haloKnobs) {
+						if (knob) knob->setForceNanoVgLedRenderer(forceHaloNanoVg);
+					}
+				}
+			));
 			menu->addChild(createCheckMenuItem("Bandlimited EOR/EOC", "",
 				[=]() { return maths->bandlimitedGateOutputsControl().load(std::memory_order_relaxed); },
 				[=]() { maths->bandlimitedGateOutputsControl().store(!maths->bandlimitedGateOutputsControl().load(std::memory_order_relaxed), std::memory_order_relaxed); }

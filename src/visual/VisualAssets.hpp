@@ -495,7 +495,7 @@ struct LeviathanHaloKnob : app::SvgKnob {
 	float normalizedParamValue();
 };
 
-struct LeviathanHaloKnob2 : app::SvgKnob {
+struct LeviathanHaloKnob2 : app::Knob {
 	struct LedArcConfig {
 		NVGcolor activeColor = nvgRGBA(26, 249, 252, 236);
 		NVGcolor activeHighlightColor = nvgRGBA(122, 252, 255, 188);
@@ -552,42 +552,45 @@ struct LeviathanHaloKnob2 : app::SvgKnob {
 		void draw(const DrawArgs& args) override;
 	};
 
-		struct CapReflectionWidget : TransparentWidget {
-			float minAngle = -0.83f * M_PI;
-			float maxAngle = 0.83f * M_PI;
-			float valueNorm = 0.5f;
-			BloomConfig config;
+	struct CapReflectionWidget : TransparentWidget {
+		float minAngle = -0.83f * M_PI;
+		float maxAngle = 0.83f * M_PI;
+		float valueNorm = 0.5f;
+		BloomConfig config;
 
-			void draw(const DrawArgs& args) override;
-		};
-
-		GlowArcWidget* glowArc = nullptr;
-		GlowArcWidget* foregroundGlowArc = nullptr;
-		EclipseKnob::SvgLayer* backLayer = nullptr;
-		EclipseKnob::SvgLayer* centerLayer = nullptr;
-		std::shared_ptr<window::Svg> centerNormalSvg;
-		std::shared_ptr<window::Svg> centerLitSvg;
-		LightArcWidget* lightArc = nullptr;
-		CapReflectionWidget* capReflection = nullptr;
-		Config config;
-		float lastBloomAmount = -1.f;
-		bool hovered = false;
-		bool dragging = false;
-		bool centerLit = false;
-
-		LeviathanHaloKnob2();
-		explicit LeviathanHaloKnob2(Config config);
-		void step() override;
-		void onChange(const ChangeEvent& e) override;
-		void onEnter(const event::Enter& e) override;
-		void onLeave(const event::Leave& e) override;
-		void onDragStart(const event::DragStart& e) override;
-		void onDragEnd(const event::DragEnd& e) override;
-
-		static Config brightOrangeConfig();
-		float normalizedParamValue();
-		void updateCenterSvg();
+		void draw(const DrawArgs& args) override;
 	};
+
+	struct HaloGlSurface;
+	HaloGlSurface* glSurface = nullptr;
+	widget::FramebufferWidget* capReflectionFb = nullptr;
+	widget::FramebufferWidget* centerFb = nullptr;
+	EclipseKnob::SvgLayer* backLayer = nullptr;
+	EclipseKnob::SvgLayer* centerLayer = nullptr;
+	std::shared_ptr<window::Svg> centerNormalSvg;
+	std::shared_ptr<window::Svg> centerLitSvg;
+	CapReflectionWidget* capReflection = nullptr;
+	Config config;
+	float lastBloomAmount = -1.f;
+	bool hovered = false;
+	bool dragging = false;
+	bool centerLit = false;
+
+	LeviathanHaloKnob2();
+	explicit LeviathanHaloKnob2(Config config);
+	void step() override;
+	void onChange(const ChangeEvent& e) override;
+	void onEnter(const event::Enter& e) override;
+	void onLeave(const event::Leave& e) override;
+	void onDragStart(const event::DragStart& e) override;
+	void onDragEnd(const event::DragEnd& e) override;
+
+	static Config brightOrangeConfig();
+	bool isVisualDirty() const;
+	float normalizedParamValue();
+	void setForceNanoVgLedRenderer(bool force);
+	void updateCenterSvg();
+};
 
 struct ClockworkGearKnob : GearKnobInvertSized {
 	struct CogwheelWidget : TransparentWidget {

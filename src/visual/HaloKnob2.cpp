@@ -1,23 +1,32 @@
 #include "VisualAssets.hpp"
 
+#include "../GlLifecycleUtils.hpp"
+
+#include <nanovg_gl.h>
+
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <vector>
 
 namespace {
 
 NVGcolor blendHaloColor(NVGcolor a, NVGcolor b, float t) {
 	t = clamp(t, 0.f, 1.f);
-	NVGcolor out;
-	out.r = crossfade(a.r, b.r, t);
-	out.g = crossfade(a.g, b.g, t);
-	out.b = crossfade(a.b, b.b, t);
-	out.a = crossfade(a.a, b.a, t);
-	return out;
+	return nvgRGBAf(
+		crossfade(a.r, b.r, t),
+		crossfade(a.g, b.g, t),
+		crossfade(a.b, b.b, t),
+		crossfade(a.a, b.a, t));
 }
 
-// Halo bloom/reflection "segments" have no gaps. Adjacent segments with the
-// same color can therefore be emitted as one arc without changing the image.
-// Only the segment under the value cursor needs its own blended color.
+float haloBloomAmount(float raw) {
+	raw = clamp(raw, 0.f, 1.5f);
+	const float low = raw + 2.8f * raw * (1.f - raw);
+	const float ramp = clamp((raw - 0.50f) / 0.50f, 0.f, 1.f);
+	return std::max(0.f, low * (1.f + 1.40f * ramp * ramp));
+}
+
 template <typename DrawArc>
 void drawCoalescedHaloSegments(
 	float startAngle,
@@ -31,11 +40,9 @@ void drawCoalescedHaloSegments(
 	const float position = clamp((activeAngle - startAngle) / std::max(step, 1e-6f), 0.f, float(segmentCount));
 	const int completedSegments = std::min(segmentCount, int(position));
 	const float completedEnd = startAngle + step * float(completedSegments);
-
 	if (completedSegments > 0) {
 		drawArc(startAngle, completedEnd, activeColor);
 	}
-
 	float inactiveStart = completedEnd;
 	if (completedSegments < segmentCount) {
 		const float partial = position - float(completedSegments);
@@ -45,10 +52,20 @@ void drawCoalescedHaloSegments(
 			inactiveStart = partialEnd;
 		}
 	}
-
 	if (inactiveStart < endAngle) {
 		drawArc(inactiveStart, endAngle, inactiveColor);
 	}
+}
+
+void uploadHaloColorArray(GLint location, const NVGcolor* colors, size_t count) {
+	std::array<GLfloat, 4 * 19> values {};
+	for (size_t i = 0; i < count; ++i) {
+		values[i * 4 + 0] = colors[i].r;
+		values[i * 4 + 1] = colors[i].g;
+		values[i * 4 + 2] = colors[i].b;
+		values[i * 4 + 3] = colors[i].a;
+	}
+	glUniform4fv(location, GLsizei(count), values.data());
 }
 
 } // namespace
@@ -56,60 +73,44 @@ void drawCoalescedHaloSegments(
 void LeviathanHaloKnob2::GlowArcWidget::draw(const DrawArgs& args) {
 	const float diameterPx = std::min(box.size.x, box.size.y);
 	if (diameterPx <= 1.f) return;
-
 	const Vec center = box.size.mult(0.5f);
 	const float scale = diameterPx / 46.f;
 	const float mainRadius = diameterPx * (18.15f / 46.f);
 	const float startAngle = -0.5f * M_PI + minAngle;
 	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
 	const float endAngle = -0.5f * M_PI + maxAngle;
-	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
-	const float bloomLow = bloomRaw + 2.8f * bloomRaw * (1.f - bloomRaw);
-	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
-	const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
+	const float bloom = haloBloomAmount(settings::haloBrightness);
 	if (bloom <= 0.001f) return;
-
-	auto bloomColor = [&](NVGcolor color) {
-		color.a *= bloom;
-		return color;
-	};
-
-	nvgSave(args.vg);
-
-	auto drawGlowStroke = [&](float a0, float a1, float radiusPx, float widthPx, NVGcolor color) {
+	auto bloomColor = [bloom](NVGcolor color) { color.a *= bloom; return color; };
+	auto drawStroke = [&](float a0, float a1, float width, NVGcolor color) {
 		if (a1 <= a0) return;
 		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, radiusPx, a0, a1, NVG_CW);
+		nvgArc(args.vg, center.x, center.y, mainRadius, a0, a1, NVG_CW);
 		nvgStrokeColor(args.vg, color);
-		nvgStrokeWidth(args.vg, widthPx);
+		nvgStrokeWidth(args.vg, width);
 		nvgLineCap(args.vg, NVG_BUTT);
 		nvgStroke(args.vg);
 	};
-
-	auto drawSegmentedGlow = [&](float widthPx, NVGcolor cyan, NVGcolor purple) {
-		drawCoalescedHaloSegments(startAngle, endAngle, activeAngle, cyan, purple,
-			[&](float a0, float a1, NVGcolor color) {
-				drawGlowStroke(a0, a1, mainRadius, widthPx, color);
-			});
+	auto drawSegmented = [&](float width, NVGcolor active, NVGcolor inactive) {
+		drawCoalescedHaloSegments(startAngle, endAngle, activeAngle, active, inactive,
+			[&](float a0, float a1, NVGcolor color) { drawStroke(a0, a1, width, color); });
 	};
-
+	nvgSave(args.vg);
 	if (foreground) {
-		drawSegmentedGlow(std::max(2.2f, 2.7f * scale), bloomColor(config.foregroundOuterActiveColor), bloomColor(config.foregroundOuterInactiveColor));
-		drawSegmentedGlow(std::max(1.2f, 1.6f * scale), bloomColor(config.foregroundInnerActiveColor), bloomColor(config.foregroundInnerInactiveColor));
+		drawSegmented(std::max(2.2f, 2.7f * scale), bloomColor(config.foregroundOuterActiveColor), bloomColor(config.foregroundOuterInactiveColor));
+		drawSegmented(std::max(1.2f, 1.6f * scale), bloomColor(config.foregroundInnerActiveColor), bloomColor(config.foregroundInnerInactiveColor));
 	}
 	else {
-		drawSegmentedGlow(std::max(5.8f, 6.4f * scale), bloomColor(config.backgroundOuterActiveColor), bloomColor(config.backgroundOuterInactiveColor));
-		drawSegmentedGlow(std::max(3.8f, 4.6f * scale), bloomColor(config.backgroundMidActiveColor), bloomColor(config.backgroundMidInactiveColor));
-		drawSegmentedGlow(std::max(2.4f, 3.0f * scale), bloomColor(config.backgroundInnerActiveColor), bloomColor(config.backgroundInnerInactiveColor));
+		drawSegmented(std::max(5.8f, 6.4f * scale), bloomColor(config.backgroundOuterActiveColor), bloomColor(config.backgroundOuterInactiveColor));
+		drawSegmented(std::max(3.8f, 4.6f * scale), bloomColor(config.backgroundMidActiveColor), bloomColor(config.backgroundMidInactiveColor));
+		drawSegmented(std::max(2.4f, 3.0f * scale), bloomColor(config.backgroundInnerActiveColor), bloomColor(config.backgroundInnerInactiveColor));
 	}
-
 	nvgRestore(args.vg);
 }
 
 void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 	const float diameterPx = std::min(box.size.x, box.size.y);
 	if (diameterPx <= 1.f) return;
-
 	const Vec center = box.size.mult(0.5f);
 	const float scale = diameterPx / 46.f;
 	const float startAngle = -0.5f * M_PI + minAngle;
@@ -121,190 +122,502 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 	const float segmentRadius = mainRadius - 0.5f * (segmentWidth - mainWidth);
 	const float guideRadius = diameterPx * (20.70f / 46.f);
 	const float guideWidth = std::max(0.28f, diameterPx * (0.42f / 46.f));
-	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
-	const float bloomLow = bloomRaw + 2.8f * bloomRaw * (1.f - bloomRaw);
-	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
-	const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
+	const float bloom = haloBloomAmount(settings::haloBrightness);
+	auto bloomColor = [bloom](NVGcolor color) { color.a *= bloom; return color; };
 
-	auto bloomColor = [&](NVGcolor color) {
-		color.a *= bloom;
-		return color;
-	};
-
-	nvgSave(args.vg);
-
-	auto drawArcBand = [&](float a0, float a1, float radiusPx, float widthPx, NVGcolor color) {
+	auto drawArcBand = [&](float a0, float a1, float radius, float width, NVGcolor color) {
 		if (a1 <= a0) return;
-		const float halfWidthPx = 0.5f * widthPx;
+		const float halfWidth = 0.5f * width;
 		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, radiusPx + halfWidthPx, a0, a1, NVG_CW);
-		nvgArc(args.vg, center.x, center.y, radiusPx - halfWidthPx, a1, a0, NVG_CCW);
+		nvgArc(args.vg, center.x, center.y, radius + halfWidth, a0, a1, NVG_CW);
+		nvgArc(args.vg, center.x, center.y, radius - halfWidth, a1, a0, NVG_CCW);
 		nvgClosePath(args.vg);
 		nvgFillColor(args.vg, color);
 		nvgFill(args.vg);
 	};
-
-	auto drawGuideArc = [&](float radiusPx, float widthPx, NVGcolor color) {
+	auto drawStroke = [&](float a0, float a1, float radius, float width, NVGcolor color) {
+		if (a1 <= a0) return;
 		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, radiusPx, startAngle, endAngle, NVG_CW);
+		nvgArc(args.vg, center.x, center.y, radius, a0, a1, NVG_CW);
 		nvgStrokeColor(args.vg, color);
-		nvgStrokeWidth(args.vg, widthPx);
+		nvgStrokeWidth(args.vg, width);
 		nvgLineCap(args.vg, NVG_BUTT);
 		nvgStroke(args.vg);
 	};
-
-	auto drawPartialGuideArc = [&](float a0, float a1, float radiusPx, float widthPx, NVGcolor color) {
+	auto drawSegmentBand = [&](float a0, float a1, NVGcolor fill, NVGcolor highlight) {
 		if (a1 <= a0) return;
+		const float halfWidth = 0.5f * segmentWidth;
+		drawArcBand(a0, a1, segmentRadius, segmentWidth + 0.48f * scale, nvgRGBA(0, 0, 4, 218));
 		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, radiusPx, a0, a1, NVG_CW);
-		nvgStrokeColor(args.vg, color);
-		nvgStrokeWidth(args.vg, widthPx);
-		nvgLineCap(args.vg, NVG_BUTT);
-		nvgStroke(args.vg);
-	};
-
-	auto drawSegmentBand = [&](float a0, float a1, float radiusPx, float widthPx, NVGcolor fill, NVGcolor innerHighlight) {
-		if (a1 <= a0) return;
-		const float halfWidthPx = 0.5f * widthPx;
-
-		drawArcBand(a0, a1, radiusPx, widthPx + 0.48f * scale, nvgRGBA(0, 0, 4, 218));
-
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, radiusPx + halfWidthPx, a0, a1, NVG_CW);
-		nvgArc(args.vg, center.x, center.y, radiusPx - halfWidthPx, a1, a0, NVG_CCW);
+		nvgArc(args.vg, center.x, center.y, segmentRadius + halfWidth, a0, a1, NVG_CW);
+		nvgArc(args.vg, center.x, center.y, segmentRadius - halfWidth, a1, a0, NVG_CCW);
 		nvgClosePath(args.vg);
-
-		NVGpaint segmentPaint = nvgLinearGradient(args.vg,
-			center.x + std::cos(a0) * radiusPx,
-			center.y + std::sin(a0) * radiusPx,
-			center.x + std::cos(a1) * radiusPx,
-			center.y + std::sin(a1) * radiusPx,
-			fill,
-			innerHighlight);
-		nvgFillPaint(args.vg, segmentPaint);
+		nvgFillPaint(args.vg, nvgLinearGradient(args.vg,
+			center.x + std::cos(a0) * segmentRadius, center.y + std::sin(a0) * segmentRadius,
+			center.x + std::cos(a1) * segmentRadius, center.y + std::sin(a1) * segmentRadius,
+			fill, highlight));
 		nvgFill(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, radiusPx + halfWidthPx * 0.84f, a0, a1, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(0, 1, 7, 172));
-		nvgStrokeWidth(args.vg, std::max(0.13f, widthPx * 0.09f));
-		nvgLineCap(args.vg, NVG_BUTT);
-		nvgStroke(args.vg);
-
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, radiusPx - halfWidthPx * 0.52f, a0, a1, NVG_CW);
-		nvgStrokeColor(args.vg, innerHighlight);
-		nvgStrokeWidth(args.vg, std::max(0.16f, widthPx * 0.12f));
-		nvgLineCap(args.vg, NVG_BUTT);
-		nvgStroke(args.vg);
+		drawStroke(a0, a1, segmentRadius + halfWidth * 0.84f,
+			std::max(0.13f, segmentWidth * 0.09f), nvgRGBA(0, 1, 7, 172));
+		drawStroke(a0, a1, segmentRadius - halfWidth * 0.52f,
+			std::max(0.16f, segmentWidth * 0.12f), highlight);
 	};
-
-	auto drawSegmentedValueArc = [&]() {
-		const int segmentCount = 16;
-		const float aStart = startAngle;
-		const float aEnd = endAngle;
-		const float total = aEnd - aStart;
+	auto drawValueSegments = [&]() {
+		constexpr int count = 16;
+		const float total = endAngle - startAngle;
 		const float gap = std::max(0.010f, total * 0.009f);
-		const float step = total / float(segmentCount);
-		const NVGcolor litCore = config.activeColor;
-		const NVGcolor litHot = config.activeHighlightColor;
-		const NVGcolor unlitCore = config.inactiveColor;
-		const NVGcolor unlitHot = config.inactiveHighlightColor;
-		for (int i = 0; i < segmentCount; ++i) {
-			const float s0 = aStart + step * float(i) + 0.5f * gap;
-			const float s1 = aStart + step * float(i + 1) - 0.5f * gap;
-			if (activeAngle <= s0) {
-				drawSegmentBand(s0, s1, segmentRadius, segmentWidth, unlitCore, unlitHot);
-			}
-			else if (activeAngle >= s1) {
-				drawSegmentBand(s0, s1, segmentRadius, segmentWidth, litCore, litHot);
-			}
-			else {
-				const float segmentProgress = (activeAngle - s0) / std::max(1e-6f, s1 - s0);
-				drawSegmentBand(
-					s0,
-					s1,
-					segmentRadius,
-					segmentWidth,
-					blendHaloColor(unlitCore, litCore, segmentProgress),
-					blendHaloColor(unlitHot, litHot, segmentProgress));
-			}
+		const float step = total / float(count);
+		for (int i = 0; i < count; ++i) {
+			const float a0 = startAngle + step * float(i) + 0.5f * gap;
+			const float a1 = startAngle + step * float(i + 1) - 0.5f * gap;
+			float mix = 0.f;
+			if (activeAngle >= a1) mix = 1.f;
+			else if (activeAngle > a0) mix = (activeAngle - a0) / std::max(a1 - a0, 1e-6f);
+			drawSegmentBand(a0, a1,
+				blendHaloColor(config.inactiveColor, config.activeColor, mix),
+				blendHaloColor(config.inactiveHighlightColor, config.activeHighlightColor, mix));
 		}
 	};
-
-	auto drawSegmentedReflection = [&](float radiusPx, float widthPx, NVGcolor cyan, NVGcolor purple) {
-		drawCoalescedHaloSegments(startAngle, endAngle, activeAngle, cyan, purple,
-			[&](float a0, float a1, NVGcolor color) {
-				drawPartialGuideArc(a0, a1, radiusPx, widthPx, color);
-			});
+	auto drawReflection = [&](float radius, float width, NVGcolor active, NVGcolor inactive) {
+		drawCoalescedHaloSegments(startAngle, endAngle, activeAngle, active, inactive,
+			[&](float a0, float a1, NVGcolor color) { drawStroke(a0, a1, radius, width, color); });
 	};
-
 	auto drawTerminator = [&](float angle, float direction) {
 		const float terminatorSweep = 0.055f;
 		const float a0 = angle + std::min(0.f, direction) * terminatorSweep;
 		const float a1 = angle + std::max(0.f, direction) * terminatorSweep;
 		drawArcBand(a0, a1, segmentRadius, segmentWidth + 1.15f * scale, nvgRGBA(0, 1, 8, 230));
-		nvgBeginPath(args.vg);
-		nvgArc(args.vg, center.x, center.y, segmentRadius - segmentWidth * 0.30f, a0, a1, NVG_CW);
-		nvgStrokeColor(args.vg, nvgRGBA(155, 170, 190, 48));
-		nvgStrokeWidth(args.vg, std::max(0.16f, 0.22f * scale));
-		nvgLineCap(args.vg, NVG_BUTT);
-		nvgStroke(args.vg);
+		drawStroke(a0, a1, segmentRadius - segmentWidth * 0.30f,
+			std::max(0.16f, 0.22f * scale), nvgRGBA(155, 170, 190, 48));
 	};
 
+	nvgSave(args.vg);
 	const float dipRadius = mainRadius - mainWidth * 1.03f - 0.46f * scale;
 	drawArcBand(startAngle, endAngle, mainRadius, mainWidth + 0.92f * scale, nvgRGBA(0, 0, 4, 248));
 	drawArcBand(startAngle, endAngle, dipRadius, std::max(0.55f, 0.82f * scale), nvgRGBA(0, 1, 8, 216));
-	drawGuideArc(guideRadius, guideWidth, bloomConfig.guideOuterColor);
-	drawGuideArc(guideRadius - 0.20f * scale, std::max(0.18f, 0.24f * scale), bloomConfig.guideMidColor);
-	drawGuideArc(mainRadius - mainWidth * 0.78f, std::max(0.16f, 0.20f * scale), bloomConfig.guideInnerColor);
+	drawStroke(startAngle, endAngle, guideRadius, guideWidth, bloomConfig.guideOuterColor);
+	drawStroke(startAngle, endAngle, guideRadius - 0.20f * scale, std::max(0.18f, 0.24f * scale), bloomConfig.guideMidColor);
+	drawStroke(startAngle, endAngle, mainRadius - mainWidth * 0.78f, std::max(0.16f, 0.20f * scale), bloomConfig.guideInnerColor);
 	if (bloom > 0.001f) {
-		drawSegmentedReflection(dipRadius - 0.18f * scale, std::max(0.28f, 0.38f * scale), bloomColor(bloomConfig.reflectionOuterActiveColor), bloomColor(bloomConfig.reflectionOuterInactiveColor));
-		drawSegmentedReflection(dipRadius - 0.52f * scale, std::max(0.12f, 0.17f * scale), bloomColor(bloomConfig.reflectionInnerActiveColor), bloomColor(bloomConfig.reflectionInnerInactiveColor));
+		drawReflection(dipRadius - 0.18f * scale, std::max(0.28f, 0.38f * scale), bloomColor(bloomConfig.reflectionOuterActiveColor), bloomColor(bloomConfig.reflectionOuterInactiveColor));
+		drawReflection(dipRadius - 0.52f * scale, std::max(0.12f, 0.17f * scale), bloomColor(bloomConfig.reflectionInnerActiveColor), bloomColor(bloomConfig.reflectionInnerInactiveColor));
 	}
-	drawGuideArc(dipRadius + 0.46f * scale, std::max(0.15f, 0.22f * scale), nvgRGBA(0, 0, 4, 172));
-
-	drawSegmentedValueArc();
+	drawStroke(startAngle, endAngle, dipRadius + 0.46f * scale, std::max(0.15f, 0.22f * scale), nvgRGBA(0, 0, 4, 172));
+	drawValueSegments();
 	drawTerminator(startAngle, 1.f);
 	drawTerminator(endAngle, -1.f);
-
-	NVGpaint capShadow = nvgRadialGradient(
-		args.vg,
-		center.x,
-		center.y + diameterPx * 0.045f,
-		diameterPx * (11.0f / 46.f),
-		diameterPx * (16.2f / 46.f),
-		nvgRGBA(0, 0, 0, 0),
-		nvgRGBA(0, 0, 0, 76));
+	NVGpaint capShadow = nvgRadialGradient(args.vg, center.x, center.y + diameterPx * 0.045f,
+		diameterPx * (11.0f / 46.f), diameterPx * (16.2f / 46.f),
+		nvgRGBA(0, 0, 0, 0), nvgRGBA(0, 0, 0, 76));
 	nvgBeginPath(args.vg);
 	nvgCircle(args.vg, center.x, center.y, diameterPx * (16.8f / 46.f));
 	nvgFillPaint(args.vg, capShadow);
 	nvgFill(args.vg);
-
 	nvgRestore(args.vg);
 }
+
+struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
+	Config config;
+	GlowArcWidget* fallbackBackgroundGlow = nullptr;
+	LightArcWidget* fallbackLightArc = nullptr;
+	GlowArcWidget* fallbackForegroundGlow = nullptr;
+	float valueNorm = 0.5f;
+	float bloomAmount = 0.f;
+	GLuint program = 0;
+	GLuint vertexShader = 0;
+	GLuint fragmentShader = 0;
+	GLuint vbo = 0;
+	bool initAttempted = false;
+	GLint uniformLogicalSize = -1;
+	GLint uniformValue = -1;
+	GLint uniformBloomAmount = -1;
+	GLint uniformLed = -1;
+	GLint uniformBloom = -1;
+	bool shaderFailed = false;
+	bool forceNanoVg = false;
+
+	explicit HaloGlSurface(Config config) : config(config) {
+		fallbackBackgroundGlow = new GlowArcWidget();
+		fallbackBackgroundGlow->box.size = Vec(46.f, 46.f);
+		fallbackBackgroundGlow->config = config.bloom;
+		addChild(fallbackBackgroundGlow);
+
+		fallbackLightArc = new LightArcWidget();
+		fallbackLightArc->box.size = Vec(46.f, 46.f);
+		fallbackLightArc->config = config.ledArc;
+		fallbackLightArc->bloomConfig = config.bloom;
+		addChild(fallbackLightArc);
+
+		fallbackForegroundGlow = new GlowArcWidget();
+		fallbackForegroundGlow->box.size = Vec(46.f, 46.f);
+		fallbackForegroundGlow->foreground = true;
+		fallbackForegroundGlow->config = config.bloom;
+		addChild(fallbackForegroundGlow);
+	}
+
+	~HaloGlSurface() override {
+		releaseGlResources(false);
+	}
+
+	void onContextDestroy(const ContextDestroyEvent& e) override {
+		OpenGlWidget::onContextDestroy(e);
+		releaseGlResources(true);
+		shaderFailed = false;
+		bypassed = forceNanoVg;
+	}
+
+	void releaseGlResources(bool deleteObjects) {
+		if (deleteObjects) {
+			if (vbo) glDeleteBuffers(1, &vbo);
+			if (program) glDeleteProgram(program);
+			if (vertexShader) glDeleteShader(vertexShader);
+			if (fragmentShader) glDeleteShader(fragmentShader);
+		}
+		program = vertexShader = fragmentShader = vbo = 0;
+		initAttempted = false;
+		uniformLogicalSize = uniformValue = uniformBloomAmount = uniformLed = uniformBloom = -1;
+	}
+
+	void step() override {
+		// OpenGlWidget::step() dirties every frame. Halo surfaces are explicitly
+		// invalidated so their framebuffer remains a single idle composite.
+		bypassed = forceNanoVg || shaderFailed;
+		FramebufferWidget::step();
+	}
+
+	void setForceNanoVg(bool force) {
+		if (forceNanoVg == force) return;
+		forceNanoVg = force;
+		bypassed = forceNanoVg || shaderFailed;
+		if (!bypassed) setDirty();
+	}
+
+	void setVisualState(float value, float bloom) {
+		value = clamp(value, 0.f, 1.f);
+		bloom = std::max(0.f, bloom);
+		if (fallbackBackgroundGlow) fallbackBackgroundGlow->valueNorm = value;
+		if (fallbackLightArc) fallbackLightArc->valueNorm = value;
+		if (fallbackForegroundGlow) fallbackForegroundGlow->valueNorm = value;
+		if (std::fabs(value - valueNorm) <= 1e-6f && std::fabs(bloom - bloomAmount) <= 1e-4f) return;
+		valueNorm = value;
+		bloomAmount = bloom;
+		setDirty();
+	}
+
+	static GLuint compileShader(GLenum type, const char* source) {
+		GLuint shader = glCreateShader(type);
+		if (!shader) return 0;
+		glShaderSource(shader, 1, &source, nullptr);
+		glCompileShader(shader);
+		GLint ok = GL_FALSE;
+		glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
+		if (ok == GL_TRUE) return shader;
+		GLint logLength = 0;
+		glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLength);
+		std::vector<char> log(size_t(std::max(logLength, 1)));
+		GLsizei written = 0;
+		glGetShaderInfoLog(shader, GLsizei(log.size()), &written, log.data());
+		WARN("HaloKnob2 shader compile failed (type=%u): %s", unsigned(type), log.data());
+		glDeleteShader(shader);
+		return 0;
+	}
+
+	bool ensureShaderReady() {
+		if (initAttempted) return program && vbo;
+		initAttempted = true;
+
+		static const char* vertexSource = R"GLSL(
+			#version 120
+			attribute vec2 aPos;
+			uniform vec2 uLogicalSize;
+			varying vec2 vPos;
+			void main() {
+				vec2 ndc = vec2((aPos.x / uLogicalSize.x) * 2.0 - 1.0,
+					1.0 - (aPos.y / uLogicalSize.y) * 2.0);
+				gl_Position = vec4(ndc, 0.0, 1.0);
+				vPos = aPos;
+			}
+		)GLSL";
+
+		static const char* fragmentSource = R"GLSL(
+			#version 120
+			varying vec2 vPos;
+			uniform vec2 uLogicalSize;
+			uniform float uValue;
+			uniform float uBloomAmount;
+			uniform vec4 uLed[4];
+			uniform vec4 uBloom[17];
+
+			const float PI = 3.14159265358979323846;
+			const float TAU = 6.28318530717958647692;
+
+			void overLayer(inout vec4 accum, vec4 color, float coverage) {
+				float alpha = clamp(color.a * coverage, 0.0, 1.0);
+				// accum.rgb is premultiplied. Match NanoVG source-over draw order:
+				// each newly submitted layer is placed in front of prior layers.
+				accum.rgb = color.rgb * alpha + accum.rgb * (1.0 - alpha);
+				accum.a = alpha + accum.a * (1.0 - alpha);
+			}
+
+			float band(float radius, float centerRadius, float width) {
+				float d = abs(radius - centerRadius);
+				float aa = max(fwidth(radius), 0.18);
+				return 1.0 - smoothstep(0.5 * width - aa, 0.5 * width + aa, d);
+			}
+
+			void main() {
+				float diameter = min(uLogicalSize.x, uLogicalSize.y);
+				float scale = diameter / 46.0;
+				vec2 p = vPos - 0.5 * uLogicalSize;
+				float radius = length(p);
+				float theta = atan(p.y, p.x);
+				float start = -0.5 * PI - 0.83 * PI;
+				float sweep = 1.66 * PI;
+				float along = mod(theta - start + TAU, TAU);
+				float angularAa = max(fwidth(along), 0.0015);
+				float arcMask = smoothstep(0.0, angularAa, along)
+					* (1.0 - smoothstep(sweep - angularAa, sweep, along));
+
+				float segmentPos = clamp(along / sweep * 16.0, 0.0, 15.9999);
+				float segmentIndex = floor(segmentPos);
+				float segmentLocal = fract(segmentPos);
+				float gapEdge = max(fwidth(segmentLocal), 0.012);
+				float segmentMask = smoothstep(0.072, 0.072 + gapEdge, segmentLocal)
+					* (1.0 - smoothstep(0.928 - gapEdge, 0.928, segmentLocal));
+				float haloMix = clamp(uValue * 16.0 - segmentIndex, 0.0, 1.0);
+				float activeMix = clamp((uValue * 16.0 - segmentIndex - 0.072) / 0.856, 0.0, 1.0);
+				vec4 core = mix(uLed[2], uLed[0], activeMix);
+				vec4 hot = mix(uLed[3], uLed[1], activeMix);
+				vec4 valueColor = mix(core, hot, clamp((segmentLocal - 0.072) / 0.856, 0.0, 1.0));
+
+				vec4 accum = vec4(0.0);
+				float mainRadius = diameter * (18.15 / 46.0);
+				float mainWidth = max(1.35, diameter * (1.85 / 46.0));
+				float segmentWidth = mainWidth + 0.95 * scale;
+				float segmentRadius = mainRadius - 0.5 * (segmentWidth - mainWidth);
+				float dipRadius = mainRadius - mainWidth * 1.03 - 0.46 * scale;
+				float guideRadius = diameter * (20.70 / 46.0);
+				vec4 activeGlow;
+				vec4 inactiveGlow;
+
+				if (uBloomAmount > 0.001 && along <= sweep) {
+					activeGlow = mix(uBloom[1], uBloom[0], haloMix);
+					inactiveGlow = mix(uBloom[3], uBloom[2], haloMix);
+					vec4 innerGlow = mix(uBloom[5], uBloom[4], haloMix);
+					// These are deliberately finite-width bands. The NanoVG original
+					// used three overlapping strokes rather than a Gaussian blur.
+					overLayer(accum, activeGlow, arcMask * band(radius, mainRadius, max(5.8, 6.4 * scale)) * uBloomAmount);
+					overLayer(accum, inactiveGlow, arcMask * band(radius, mainRadius, max(3.8, 4.6 * scale)) * uBloomAmount);
+					overLayer(accum, innerGlow, arcMask * band(radius, mainRadius, max(2.4, 3.0 * scale)) * uBloomAmount);
+				}
+
+				overLayer(accum, vec4(0.0, 0.0, 0.016, 0.97), arcMask * band(radius, mainRadius, mainWidth + 0.92 * scale));
+				overLayer(accum, vec4(0.0, 0.004, 0.031, 0.85), arcMask * band(radius, dipRadius, max(0.55, 0.82 * scale)));
+				overLayer(accum, uBloom[14], arcMask * band(radius, guideRadius, max(0.28, 0.42 * scale)));
+				overLayer(accum, uBloom[15], arcMask * band(radius, guideRadius - 0.20 * scale, max(0.18, 0.24 * scale)));
+				overLayer(accum, uBloom[16], arcMask * band(radius, mainRadius - mainWidth * 0.78, max(0.16, 0.20 * scale)));
+
+				if (uBloomAmount > 0.001 && along <= sweep) {
+					vec4 reflectionOuter = mix(uBloom[11], uBloom[10], haloMix);
+					vec4 reflectionInner = mix(uBloom[13], uBloom[12], haloMix);
+					overLayer(accum, reflectionOuter, arcMask * band(radius, dipRadius - 0.18 * scale, max(0.28, 0.38 * scale)) * uBloomAmount);
+					overLayer(accum, reflectionInner, arcMask * band(radius, dipRadius - 0.52 * scale, max(0.12, 0.17 * scale)) * uBloomAmount);
+				}
+				overLayer(accum, vec4(0.0, 0.0, 0.016, 0.67), arcMask * band(radius, dipRadius + 0.46 * scale, max(0.15, 0.22 * scale)));
+
+				overLayer(accum, vec4(0.0, 0.0, 0.016, 0.86), arcMask * segmentMask * band(radius, segmentRadius, segmentWidth + 0.48 * scale));
+				overLayer(accum, valueColor, arcMask * segmentMask * band(radius, segmentRadius, segmentWidth));
+				overLayer(accum, vec4(0.0, 0.004, 0.027, 0.67), arcMask * segmentMask * band(radius, segmentRadius + segmentWidth * 0.42, max(0.13, segmentWidth * 0.09)));
+				overLayer(accum, hot, arcMask * segmentMask * band(radius, segmentRadius - segmentWidth * 0.26, max(0.16, segmentWidth * 0.12)));
+
+				float terminator = (1.0 - smoothstep(0.0, 0.055, along))
+					+ smoothstep(sweep - 0.055, sweep, along);
+				overLayer(accum, vec4(0.0, 0.004, 0.031, 0.90), clamp(terminator, 0.0, 1.0) * arcMask * band(radius, segmentRadius, segmentWidth + 1.15 * scale));
+				overLayer(accum, vec4(0.608, 0.667, 0.745, 0.188), clamp(terminator, 0.0, 1.0) * arcMask
+					* band(radius, segmentRadius - segmentWidth * 0.30, max(0.16, 0.22 * scale)));
+
+				float shadowRadius = diameter * (16.8 / 46.0);
+				float shadow = smoothstep(diameter * (11.0 / 46.0), diameter * (16.2 / 46.0), length(p - vec2(0.0, diameter * 0.045)))
+					* (1.0 - smoothstep(shadowRadius - 0.35, shadowRadius + 0.35, radius));
+				overLayer(accum, vec4(0.0, 0.0, 0.0, 0.30), shadow);
+
+				if (uBloomAmount > 0.001 && along <= sweep) {
+					vec4 foregroundOuter = mix(uBloom[7], uBloom[6], haloMix);
+					vec4 foregroundInner = mix(uBloom[9], uBloom[8], haloMix);
+					overLayer(accum, foregroundOuter, arcMask * band(radius, mainRadius, max(2.2, 2.7 * scale)) * uBloomAmount);
+					overLayer(accum, foregroundInner, arcMask * band(radius, mainRadius, max(1.2, 1.6 * scale)) * uBloomAmount);
+				}
+
+				// Rack framebuffer images are tagged NVG_IMAGE_PREMULTIPLIED.
+				gl_FragColor = accum;
+			}
+		)GLSL";
+
+		vertexShader = compileShader(GL_VERTEX_SHADER, vertexSource);
+		fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
+		if (!vertexShader || !fragmentShader) {
+			releaseGlResources(true);
+			initAttempted = true;
+			return false;
+		}
+		program = glCreateProgram();
+		if (!program) {
+			releaseGlResources(true);
+			initAttempted = true;
+			return false;
+		}
+		glAttachShader(program, vertexShader);
+		glAttachShader(program, fragmentShader);
+		glBindAttribLocation(program, 0, "aPos");
+		glLinkProgram(program);
+		GLint linked = GL_FALSE;
+		glGetProgramiv(program, GL_LINK_STATUS, &linked);
+		if (linked != GL_TRUE) {
+			GLint logLength = 0;
+			glGetProgramiv(program, GL_INFO_LOG_LENGTH, &logLength);
+			std::vector<char> log(size_t(std::max(logLength, 1)));
+			GLsizei written = 0;
+			glGetProgramInfoLog(program, GLsizei(log.size()), &written, log.data());
+			WARN("HaloKnob2 shader link failed: %s", log.data());
+			releaseGlResources(true);
+			initAttempted = true;
+			return false;
+		}
+		uniformLogicalSize = glGetUniformLocation(program, "uLogicalSize");
+		uniformValue = glGetUniformLocation(program, "uValue");
+		uniformBloomAmount = glGetUniformLocation(program, "uBloomAmount");
+		uniformLed = glGetUniformLocation(program, "uLed[0]");
+		uniformBloom = glGetUniformLocation(program, "uBloom[0]");
+		if (uniformLogicalSize < 0 || uniformValue < 0 || uniformBloomAmount < 0 || uniformLed < 0 || uniformBloom < 0) {
+			WARN("HaloKnob2 shader uniform lookup failed");
+			releaseGlResources(true);
+			initAttempted = true;
+			return false;
+		}
+		glGenBuffers(1, &vbo);
+		if (!vbo) {
+			releaseGlResources(true);
+			initAttempted = true;
+			return false;
+		}
+		shaderFailed = false;
+		bypassed = forceNanoVg;
+		return vbo != 0;
+	}
+
+	void drawFixedFallback(float w, float h) {
+		const float cx = 0.5f * w;
+		const float cy = 0.5f * h;
+		const float radius = std::min(w, h) * (18.15f / 46.f);
+		const float start = -0.5f * float(M_PI) - 0.83f * float(M_PI);
+		const float sweep = 1.66f * float(M_PI);
+		glDisable(GL_TEXTURE_2D);
+		glLineWidth(2.f);
+		glBegin(GL_LINES);
+		for (int i = 0; i < 16; ++i) {
+			const float a0 = start + sweep * (float(i) + 0.08f) / 16.f;
+			const float a1 = start + sweep * (float(i) + 0.92f) / 16.f;
+			const float mix = clamp(valueNorm * 16.f - float(i), 0.f, 1.f);
+			const NVGcolor color = blendHaloColor(config.ledArc.inactiveColor, config.ledArc.activeColor, mix);
+			glColor4f(color.r, color.g, color.b, color.a);
+			glVertex2f(cx + std::cos(a0) * radius, cy + std::sin(a0) * radius);
+			glVertex2f(cx + std::cos(a1) * radius, cy + std::sin(a1) * radius);
+		}
+		glEnd();
+	}
+
+	void drawFramebuffer() override {
+		Vec framebufferSize = getFramebufferSize();
+		glViewport(0, 0, std::max(1, int(std::lround(framebufferSize.x))), std::max(1, int(std::lround(framebufferSize.y))));
+		glClearColor(0.f, 0.f, 0.f, 0.f);
+		glClear(GL_COLOR_BUFFER_BIT);
+		const float w = std::max(box.size.x, 1.f);
+		const float h = std::max(box.size.y, 1.f);
+		glMatrixMode(GL_PROJECTION);
+		glLoadIdentity();
+		glOrtho(0.0, w, h, 0.0, -1.0, 1.0);
+		glMatrixMode(GL_MODELVIEW);
+		glLoadIdentity();
+		glDisable(GL_DEPTH_TEST);
+		glDisable(GL_CULL_FACE);
+		glDisable(GL_SCISSOR_TEST);
+		glEnable(GL_BLEND);
+		glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+		if (isExtraGlValidationEnabled() && program && vbo && !gl_lifecycle::isValidProgramBufferPair(program, vbo)) {
+			releaseGlResources(false);
+		}
+		if (!ensureShaderReady()) {
+			// Browser/module previews bypass nested framebuffers automatically and
+			// draw our NanoVG children. Do the same permanently for this context if
+			// GLSL initialization fails, after this one-frame fixed-GL fallback.
+			shaderFailed = true;
+			drawFixedFallback(w, h);
+			glDisable(GL_BLEND);
+			return;
+		}
+		// The fragment shader has already composited all layers and emits a
+		// premultiplied result, so blending it over the transparent FBO would
+		// apply alpha a second time.
+		glDisable(GL_BLEND);
+
+		const NVGcolor ledColors[] = {
+			config.ledArc.activeColor,
+			config.ledArc.activeHighlightColor,
+			config.ledArc.inactiveColor,
+			config.ledArc.inactiveHighlightColor,
+		};
+		const NVGcolor bloomColors[] = {
+			config.bloom.backgroundOuterActiveColor,
+			config.bloom.backgroundOuterInactiveColor,
+			config.bloom.backgroundMidActiveColor,
+			config.bloom.backgroundMidInactiveColor,
+			config.bloom.backgroundInnerActiveColor,
+			config.bloom.backgroundInnerInactiveColor,
+			config.bloom.foregroundOuterActiveColor,
+			config.bloom.foregroundOuterInactiveColor,
+			config.bloom.foregroundInnerActiveColor,
+			config.bloom.foregroundInnerInactiveColor,
+			config.bloom.reflectionOuterActiveColor,
+			config.bloom.reflectionOuterInactiveColor,
+			config.bloom.reflectionInnerActiveColor,
+			config.bloom.reflectionInnerInactiveColor,
+			config.bloom.guideOuterColor,
+			config.bloom.guideMidColor,
+			config.bloom.guideInnerColor,
+		};
+
+		glUseProgram(program);
+		glUniform2f(uniformLogicalSize, w, h);
+		glUniform1f(uniformValue, valueNorm);
+		glUniform1f(uniformBloomAmount, bloomAmount);
+		uploadHaloColorArray(uniformLed, ledColors, 4);
+		uploadHaloColorArray(uniformBloom, bloomColors, 17);
+		const std::array<GLfloat, 8> vertices {{0.f, 0.f, w, 0.f, 0.f, h, w, h}};
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices.data(), GL_DYNAMIC_DRAW);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), nullptr);
+		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+		glDisableVertexAttribArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glUseProgram(0);
+		glDisable(GL_BLEND);
+	}
+};
 
 void LeviathanHaloKnob2::CapReflectionWidget::draw(const DrawArgs& args) {
 	const float diameterPx = std::min(box.size.x, box.size.y);
 	if (diameterPx <= 1.f) return;
-
 	const Vec center = box.size.mult(0.5f);
 	const float scale = diameterPx / 46.f;
 	const float rimRadius = diameterPx * (14.62f / 46.f);
 	const float startAngle = -0.5f * M_PI + minAngle;
 	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
 	const float endAngle = -0.5f * M_PI + maxAngle;
-	const float bloomRaw = clamp(settings::haloBrightness, 0.f, 1.5f);
-	const float bloomLow = bloomRaw + 2.8f * bloomRaw * (1.f - bloomRaw);
-	const float bloomRamp = clamp((bloomRaw - 0.50f) / 0.50f, 0.f, 1.f);
-	const float bloom = bloomLow * (1.0f + 1.40f * bloomRamp * bloomRamp);
+	const float bloom = haloBloomAmount(settings::haloBrightness);
 	if (bloom <= 0.001f) return;
-
-	auto bloomColor = [&](NVGcolor color) {
-		color.a *= bloom;
-		return color;
-	};
-
+	auto bloomColor = [bloom](NVGcolor color) { color.a *= bloom; return color; };
 	auto strokeArc = [&](float a0, float a1, float radiusPx, float widthPx, NVGcolor color) {
 		if (a1 <= a0) return;
 		nvgBeginPath(args.vg);
@@ -314,24 +627,17 @@ void LeviathanHaloKnob2::CapReflectionWidget::draw(const DrawArgs& args) {
 		nvgLineCap(args.vg, NVG_BUTT);
 		nvgStroke(args.vg);
 	};
-
-	auto strokeSegmentedReflection = [&](float radiusPx, float widthPx, NVGcolor cyan, NVGcolor purple) {
-		drawCoalescedHaloSegments(startAngle, endAngle, activeAngle, cyan, purple,
-			[&](float a0, float a1, NVGcolor color) {
-				strokeArc(a0, a1, radiusPx, widthPx, color);
-			});
-	};
-
 	nvgSave(args.vg);
-
-	strokeSegmentedReflection(rimRadius, std::max(0.30f, 0.42f * scale), bloomColor(config.capReflectionOuterActiveColor), bloomColor(config.capReflectionOuterInactiveColor));
-	strokeSegmentedReflection(rimRadius - 0.34f * scale, std::max(0.12f, 0.17f * scale), bloomColor(config.capReflectionInnerActiveColor), bloomColor(config.capReflectionInnerInactiveColor));
-
+	drawCoalescedHaloSegments(startAngle, endAngle, activeAngle,
+		bloomColor(config.capReflectionOuterActiveColor), bloomColor(config.capReflectionOuterInactiveColor),
+		[&](float a0, float a1, NVGcolor color) { strokeArc(a0, a1, rimRadius, std::max(0.30f, 0.42f * scale), color); });
+	drawCoalescedHaloSegments(startAngle, endAngle, activeAngle,
+		bloomColor(config.capReflectionInnerActiveColor), bloomColor(config.capReflectionInnerInactiveColor),
+		[&](float a0, float a1, NVGcolor color) { strokeArc(a0, a1, rimRadius - 0.34f * scale, std::max(0.12f, 0.17f * scale), color); });
 	nvgRestore(args.vg);
 }
 
-LeviathanHaloKnob2::LeviathanHaloKnob2() : LeviathanHaloKnob2(Config()) {
-}
+LeviathanHaloKnob2::LeviathanHaloKnob2() : LeviathanHaloKnob2(Config()) {}
 
 LeviathanHaloKnob2::Config LeviathanHaloKnob2::brightOrangeConfig() {
 	Config config;
@@ -366,57 +672,24 @@ LeviathanHaloKnob2::Config LeviathanHaloKnob2::brightOrangeConfig() {
 LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {
 	minAngle = -0.83 * M_PI;
 	maxAngle = 0.83 * M_PI;
+	box.size = Vec(46.f, 46.f);
+	lastBloomAmount = settings::haloBrightness;
 
-	std::shared_ptr<window::Svg> backSvg = visual_assets::loadPluginSvgCached("res/icon/HaloKnob2Back.svg");
+	const std::shared_ptr<window::Svg> backSvg = visual_assets::loadPluginSvgCached("res/icon/HaloKnob2Back.svg");
 	centerNormalSvg = visual_assets::loadPluginSvgCached("res/icon/HaloKnobCenter.svg");
 	centerLitSvg = visual_assets::loadPluginSvgCached("res/icon/HaloKnobCenterLit.svg");
-	app::SvgKnob::setSvg(backSvg);
-	box.size = Vec(46.f, 46.f);
-	if (fb) {
-		fb->box.size = box.size;
-	}
-	if (sw) {
-		sw->hide();
-	}
-	if (shadow) {
-		shadow->opacity = 0.f;
-	}
-	lastBloomAmount = settings::haloBrightness;
 
 	backLayer = new EclipseKnob::SvgLayer();
 	backLayer->setSvg(backSvg);
 	backLayer->box.size = box.size;
-	backLayer->minAngle = minAngle;
-	backLayer->maxAngle = maxAngle;
-	backLayer->valueNorm = normalizedParamValue();
 	backLayer->rotateWithValue = false;
-	fb->addChild(backLayer);
+	addChild(backLayer);
 
-	glowArc = new GlowArcWidget();
-	glowArc->box.size = box.size;
-	glowArc->minAngle = minAngle;
-	glowArc->maxAngle = maxAngle;
-	glowArc->valueNorm = normalizedParamValue();
-	glowArc->config = this->config.bloom;
-	fb->addChild(glowArc);
-
-	lightArc = new LightArcWidget();
-	lightArc->box.size = box.size;
-	lightArc->minAngle = minAngle;
-	lightArc->maxAngle = maxAngle;
-	lightArc->valueNorm = normalizedParamValue();
-	lightArc->config = this->config.ledArc;
-	lightArc->bloomConfig = this->config.bloom;
-	fb->addChild(lightArc);
-
-	foregroundGlowArc = new GlowArcWidget();
-	foregroundGlowArc->box.size = box.size;
-	foregroundGlowArc->minAngle = minAngle;
-	foregroundGlowArc->maxAngle = maxAngle;
-	foregroundGlowArc->valueNorm = normalizedParamValue();
-	foregroundGlowArc->foreground = true;
-	foregroundGlowArc->config = this->config.bloom;
-	fb->addChild(foregroundGlowArc);
+	glSurface = new HaloGlSurface(this->config);
+	glSurface->box.size = box.size;
+	glSurface->dirtyOnSubpixelChange = false;
+	glSurface->setVisualState(normalizedParamValue(), haloBloomAmount(lastBloomAmount));
+	addChild(glSurface);
 
 	centerLayer = new EclipseKnob::SvgLayer();
 	centerLayer->setSvg(centerNormalSvg);
@@ -425,7 +698,16 @@ LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {
 	centerLayer->maxAngle = maxAngle;
 	centerLayer->valueNorm = normalizedParamValue();
 	centerLayer->rotateWithValue = true;
-	fb->addChild(centerLayer);
+	// Cache the final rotated cap rather than transforming a framebuffer image.
+	// Transformed FramebufferWidgets can be clipped or skipped at particular
+	// module positions. Nesting is intentional here: while centerFb renders,
+	// SvgLayer's inner cache is bypassed and the SVG is rasterized once at its
+	// final orientation. Idle frames still composite only centerFb's image.
+	centerFb = new widget::FramebufferWidget();
+	centerFb->box.size = box.size;
+	centerFb->dirtyOnSubpixelChange = false;
+	centerFb->addChild(centerLayer);
+	addChild(centerFb);
 
 	capReflection = new CapReflectionWidget();
 	capReflection->box.size = box.size;
@@ -433,93 +715,84 @@ LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {
 	capReflection->maxAngle = maxAngle;
 	capReflection->valueNorm = normalizedParamValue();
 	capReflection->config = this->config.bloom;
-	fb->addChild(capReflection);
-
+	capReflectionFb = new widget::FramebufferWidget();
+	capReflectionFb->box.size = box.size;
+	capReflectionFb->dirtyOnSubpixelChange = false;
+	capReflectionFb->addChild(capReflection);
+	addChild(capReflectionFb);
 }
 
 void LeviathanHaloKnob2::updateCenterSvg() {
 	const bool shouldLight = hovered || dragging;
-	if (centerLit == shouldLight) {
-		return;
-	}
+	if (centerLit == shouldLight) return;
 	centerLit = shouldLight;
 	if (centerLayer) {
 		centerLayer->setSvg(centerLit ? centerLitSvg : centerNormalSvg);
 		centerLayer->box.size = box.size;
-		centerLayer->valueNorm = normalizedParamValue();
 	}
-	if (fb) {
-		fb->setDirty();
-	}
+	if (centerFb) centerFb->setDirty();
 }
 
 void LeviathanHaloKnob2::step() {
-	app::SvgKnob::step();
-	const float bloomAmount = settings::haloBrightness;
-	if (std::fabs(bloomAmount - lastBloomAmount) > 1e-4f) {
-		lastBloomAmount = bloomAmount;
-		if (fb) {
-			fb->setDirty();
-		}
+	app::Knob::step();
+	const float bloom = settings::haloBrightness;
+	if (std::fabs(bloom - lastBloomAmount) > 1e-4f) {
+		lastBloomAmount = bloom;
+		if (glSurface) glSurface->setVisualState(normalizedParamValue(), haloBloomAmount(bloom));
+		if (capReflectionFb) capReflectionFb->setDirty();
 	}
 }
 
 void LeviathanHaloKnob2::onEnter(const event::Enter& e) {
 	hovered = true;
 	updateCenterSvg();
-	app::SvgKnob::onEnter(e);
+	app::Knob::onEnter(e);
 }
 
 void LeviathanHaloKnob2::onLeave(const event::Leave& e) {
 	hovered = false;
 	updateCenterSvg();
-	app::SvgKnob::onLeave(e);
+	app::Knob::onLeave(e);
 }
 
 void LeviathanHaloKnob2::onDragStart(const event::DragStart& e) {
 	dragging = true;
 	updateCenterSvg();
-	app::SvgKnob::onDragStart(e);
+	app::Knob::onDragStart(e);
 }
 
 void LeviathanHaloKnob2::onDragEnd(const event::DragEnd& e) {
 	dragging = false;
 	updateCenterSvg();
-	app::SvgKnob::onDragEnd(e);
+	app::Knob::onDragEnd(e);
 }
 
 void LeviathanHaloKnob2::onChange(const ChangeEvent& e) {
-	app::SvgKnob::onChange(e);
-	const float valueNorm = normalizedParamValue();
-	if (backLayer) {
-		backLayer->valueNorm = valueNorm;
-	}
-	if (centerLayer) {
-		centerLayer->valueNorm = valueNorm;
-	}
-	if (capReflection) {
-		capReflection->valueNorm = valueNorm;
-	}
-	if (glowArc) {
-		glowArc->valueNorm = valueNorm;
-	}
-	if (foregroundGlowArc) {
-		foregroundGlowArc->valueNorm = valueNorm;
-	}
-	if (lightArc) {
-		lightArc->valueNorm = valueNorm;
-	}
-	if (fb) {
-		fb->setDirty();
-	}
+	app::Knob::onChange(e);
+	const float value = normalizedParamValue();
+	if (centerLayer) centerLayer->valueNorm = value;
+	if (centerFb) centerFb->setDirty();
+	if (capReflection) capReflection->valueNorm = value;
+	if (glSurface) glSurface->setVisualState(value, haloBloomAmount(lastBloomAmount));
+	if (capReflectionFb) capReflectionFb->setDirty();
+}
+
+bool LeviathanHaloKnob2::isVisualDirty() const {
+	return (glSurface && glSurface->dirty)
+		|| (capReflectionFb && capReflectionFb->dirty)
+		|| (backLayer && backLayer->cachedSvgFb && backLayer->cachedSvgFb->dirty)
+		|| (centerFb && centerFb->dirty);
+}
+
+void LeviathanHaloKnob2::setForceNanoVgLedRenderer(bool force) {
+	if (glSurface) glSurface->setForceNanoVg(force);
 }
 
 float LeviathanHaloKnob2::normalizedParamValue() {
 	engine::ParamQuantity* pq = getParamQuantity();
 	if (!pq) return 0.5f;
 	const float minValue = pq->getMinValue();
-	const float maxValue = pq->getMaxValue();
-	const float range = maxValue - minValue;
+	const float range = pq->getMaxValue() - minValue;
 	if (range <= 1e-6f) return 0.5f;
 	return clamp((pq->getValue() - minValue) / range, 0.f, 1.f);
 }
