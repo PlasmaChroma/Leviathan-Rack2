@@ -6,7 +6,7 @@
    version="1.1"
    id="svg21"
    sodipodi:docname="Puffy.svg"
-   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -23,12 +23,12 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      inkscape:zoom="2.4193418"
-     inkscape:cx="-0.41333556"
+     inkscape:cx="-0.62000334"
      inkscape:cy="379.64871"
-     inkscape:window-width="2560"
-     inkscape:window-height="1377"
-     inkscape:window-x="-8"
-     inkscape:window-y="-8"
+     inkscape:window-width="1862"
+     inkscape:window-height="1016"
+     inkscape:window-x="1978"
+     inkscape:window-y="27"
      inkscape:window-maximized="1"
      inkscape:current-layer="svg21"
      showgrid="false" />
@@ -149,13 +149,13 @@
     <g
        id="glass">
       <path
-         d="M 235,8900 H 5861 C 5980,8900 6040,8960 6040,9080 V 10420 C 6040,10540 5980,10600 5861,10600 H 3490 C 3410,10600 3370,10640 3370,10720 V 12020 C 3370,12100 3330,12140 3250,12140 H 235 C 116,12140 56,12080 56,11960 V 9080 C 56,8960 116,8900 235,8900 Z"
+         d="M 235,8700 H 5861 C 5980,8700 6040,8760 6040,8880 V 10420 C 6040,10540 5980,10600 5861,10600 H 3138 C 3058,10600 3018,10640 3018,10720 V 12020 C 3018,12100 2978,12140 2898,12140 H 235 C 116,12140 56,12080 56,11960 V 8880 C 56,8760 116,8700 235,8700 Z"
          id="puffy_input_field"
          style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
       <rect
-         x="3400"
+         x="3048"
          y="10630"
-         width="2632"
+         width="2992"
          height="1510"
          rx="118"
          ry="126"
@@ -205,7 +205,7 @@
          x="5537.2314"
          y="10220.828">WET</tspan></text>
     <text
-       x="899.96002"
+       x="762"
        y="11793.589"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
@@ -214,7 +214,7 @@
        id="text18"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">IN L</text>
     <text
-       x="2395.624"
+       x="2286"
        y="11793.589"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
@@ -223,7 +223,7 @@
        id="text19"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">IN R</text>
     <text
-       x="3954.4802"
+       x="3810"
        y="11793.589"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
@@ -232,7 +232,7 @@
        id="text20"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">OUT L</text>
     <text
-       x="5459.4575"
+       x="5334"
        y="11793.589"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
@@ -240,17 +240,6 @@
        fill="#ffdfa0"
        id="text21"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">OUT R</text>
-    <text
-       x="3048"
-       y="8824.4727"
-       text-anchor="middle"
-       font-family="'DejaVu Sans', sans-serif"
-       font-size="105px"
-       fill="#ffdfa0"
-       id="character_link_label"
-       style="-inkscape-font-specification:'Rubik, @wght=400';font-family:Rubik;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-size:282.222px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1"><tspan
-         sodipodi:role="line"
-         id="tspan7">LINK</tspan></text>
     <text
        id="reworked_module_title_text"
        x="3032.9185"
@@ -340,13 +329,13 @@
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="input_l"
-       cx="899.96002"
+       cx="762"
        cy="11193.589"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="input_r"
-       cx="2401.9741"
+       cx="2286"
        cy="11193.589"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
@@ -358,20 +347,20 @@
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="output_l"
-       cx="3959.9834"
+       cx="3810"
        cy="11193.589"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="output_r"
-       cx="5461.9976"
+       cx="5334"
        cy="11193.589"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="limit_light"
-       cx="4710.9907"
-       cy="11195.632"
+       cx="4572"
+       cy="11193.589"
        r="100"
        style="fill:#425f34;fill-opacity:1" />
   </g>

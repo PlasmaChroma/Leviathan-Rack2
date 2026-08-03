@@ -58,17 +58,31 @@ struct PuffyCharacterReadout final : TransparentWidget {
 			"RIPTIDE",
 			"VOID"
 		};
+		const bool charactersLinked = module
+			&& module->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f;
+		std::string text;
+		NVGcolor textColor;
+		if (charactersLinked) {
+			text = negativePart ? labels[character] : "LINKED";
+			textColor = negativePart
+				? puffy_visual::characterTint(character)
+				: nvgRGB(255, 255, 255);
+		}
+		else {
+			text = std::string(negativePart ? "− " : "+ ") + labels[character];
+			textColor = puffy_visual::characterTint(character);
+		}
 		nvgFontSize(args.vg, FONT_SIZE);
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 		nvgTextAlign(
 			args.vg,
 			NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		nvgFillColor(args.vg, puffy_visual::characterTint(character));
+		nvgFillColor(args.vg, textColor);
 		nvgText(
 			args.vg,
 			0.5f * box.size.x,
 			0.5f * box.size.y,
-			(std::string(negativePart ? "− " : "+ ") + labels[character]).c_str(),
+			text.c_str(),
 			nullptr);
 	}
 };
@@ -305,23 +319,23 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	addParam(puffCvAmountKnob);
 
 	addInput(createInputCentered<Magitek2InputJack>(
-		anchor("input_l", Vec(9.f, 121.f)),
+		anchor("input_l", Vec(7.62f, 111.93589f)),
 		module, Puffy::INPUT_L));
 	addInput(createInputCentered<Magitek2InputJack>(
-		anchor("input_r", Vec(23.32f, 121.f)),
+		anchor("input_r", Vec(22.86f, 111.93589f)),
 		module, Puffy::INPUT_R));
 	addInput(createInputCentered<Magitek2InputJack>(
 		anchor("puff_cv_input", Vec(43.f, 108.f)),
 		module, Puffy::PUFF_CV_INPUT));
 	addOutput(createOutputCentered<Magitek2OutputJack>(
-		anchor("output_l", Vec(37.64f, 121.f)),
+		anchor("output_l", Vec(38.10f, 111.93589f)),
 		module, Puffy::OUTPUT_L));
 	addOutput(createOutputCentered<Magitek2OutputJack>(
-		anchor("output_r", Vec(51.96f, 121.f)),
+		anchor("output_r", Vec(53.34f, 111.93589f)),
 		module, Puffy::OUTPUT_R));
 
 	addChild(createLightCentered<SmallAperture<RedApertureLight>>(
-		anchor("limit_light", Vec(54.f, 72.5f)),
+		anchor("limit_light", Vec(45.72f, 111.93589f)),
 		module, Puffy::LIMIT_LIGHT));
 
 	addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
