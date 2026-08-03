@@ -1,0 +1,53 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="60.96mm" height="128.5mm" viewBox="0 0 6096 12850" version="1.1" id="svg21" sodipodi:docname="Puffy.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)">
+  <defs id="defs8">
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#24140b" id="stop1" />
+      <stop offset="0.48" stop-color="#100b13" id="stop2" />
+      <stop offset="1" stop-color="#050711" id="stop3" />
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff3b1" id="stop4" />
+      <stop offset="0.42" stop-color="#ffd44d" id="stop5" />
+      <stop offset="1" stop-color="#ff9f08" id="stop6" />
+    </linearGradient>
+    <linearGradient id="viewport" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1f192c" id="stop7" />
+      <stop offset="1" stop-color="#0f0d17" id="stop8" />
+    </linearGradient>
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient500" gradientUnits="userSpaceOnUse" x1="5355.9189" y1="1516.2338" x2="6904.7725" y2="1512.3004" gradientTransform="matrix(0.99690805,0,0,0.99690805,-3063.3137,-867.14524)" />
+    <linearGradient id="linearGradient22" inkscape:collect="always">
+      <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop22" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop23" />
+    </linearGradient>
+  </defs>
+  <rect width="6096" height="12850" fill="url(#panel)" id="rect8" style="display:inline;fill:#000000;fill-opacity:1" x="0" y="0" sodipodi:insensitive="true" />
+  <rect x="63.777615" y="911.76904" width="5968.4448" height="5409.4658" rx="0" fill="#000000" stroke="#1ccad8" stroke-opacity="1" stroke-width="24.338" id="puffy_border" style="display:none;fill:#000000;fill-opacity:1;stroke:#1ccad8;stroke-width:24.338;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1" />
+  <rect x="75.509567" y="6380.4795" width="5967.4419" height="1573.8412" rx="0" fill="#000000" stroke="#1ccad8" stroke-opacity="1" stroke-width="24.338" id="transfer_preview_border" style="display:none;fill:#000000;fill-opacity:1;stroke:#1ccad8;stroke-width:25.3589;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1" />
+  <g id="puffy_section_fields" style="display:inline">
+    <g id="glass">
+      <path d="M 235,8900 H 5861 C 5980,8900 6040,8960 6040,9080 V 10070 C 6040,10190 5980,10250 5861,10250 H 3490 C 3410,10250 3370,10290 3370,10370 V 12020 C 3370,12100 3330,12140 3250,12140 H 235 C 116,12140 56,12080 56,11960 V 9080 C 56,8960 116,8900 235,8900 Z" id="puffy_input_field" style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
+      <rect x="3400" y="10280" width="2632" height="1860" rx="118" ry="126" id="puffy_output_field" style="display:inline;opacity:0.35;fill:#1cccd9;fill-opacity:0.58;stroke:none" />
+    </g>
+  </g>
+  <g id="components" opacity="0" style="display:inline;opacity:1">
+    <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="1412.0334" y="11843.102" width="3271.9331" height="1224.054" style="display:none" />
+    <circle id="character_param" cx="335" cy="8307.2002" r="180" style="fill:#425f34;fill-opacity:1" />
+    <circle id="negative_character_readout" cx="1651.5" cy="8307.2002" r="150" style="fill:#425f34;fill-opacity:1;stroke-width:15" />
+    <circle id="positive_character_readout" cx="4444.5" cy="8307.2002" r="150" style="fill:#425f34;fill-opacity:1;stroke-width:15" />
+    <circle id="positive_character_param" cx="5781" cy="8307.2002" r="180" style="fill:#425f34;fill-opacity:1" />
+    <circle id="character_link_param" cx="3048" cy="8307.2002" r="180" style="fill:#425f34;fill-opacity:1" />
+    <circle id="puff_param" cx="820.40002" cy="9485.2002" r="300" style="fill:#425f34;fill-opacity:1" />
+    <circle id="sensitivity_param" cx="4386.4868" cy="9485.2002" r="200" style="fill:#425f34;fill-opacity:1" />
+    <circle id="mix_param" cx="5567.1855" cy="9485.2002" r="200" style="fill:#425f34;fill-opacity:1" />
+    <circle id="puff_cv_amount_param" cx="2148.1055" cy="9485.2002" r="180" style="fill:#425f34;fill-opacity:1" />
+    <circle id="input_l" cx="779.95996" cy="11010" r="220" style="fill:#425f34;fill-opacity:1" />
+    <circle id="input_r" cx="2281.9741" cy="11010" r="220" style="fill:#425f34;fill-opacity:1" />
+    <circle id="puff_cv_input" cx="3185.7876" cy="9485.2002" r="220" style="fill:#425f34;fill-opacity:1" />
+    <circle id="output_l" cx="3783.9883" cy="11010" r="220" style="fill:#425f34;fill-opacity:1" />
+    <circle id="output_r" cx="5286.0024" cy="11010" r="220" style="fill:#425f34;fill-opacity:1" />
+    <circle id="limit_light" cx="4534.9956" cy="11012.043" r="100" style="fill:#425f34;fill-opacity:1" />
+  </g>
+  <rect id="fish_rect" x="63.777615" y="946.45001" width="5968.4448" height="5409.4658" style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:29.9;stroke-dasharray:none;stroke-opacity:1" />
+  <rect id="transfer_preview_rect" x="63.806179" y="6410.4502" width="5968.3877" height="1573.8778" style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:29.9;stroke-dasharray:none;stroke-opacity:1" />
+</svg>

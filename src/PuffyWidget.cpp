@@ -5,6 +5,7 @@
 #include "PuffyTransferPreviewWidget.hpp"
 #include "PuffyVisualPalette.hpp"
 #include "visual/ApertureLight.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 #include "visual/PreviewSurface.hpp"
 #include "visual/VisualAssets.hpp"
 
@@ -177,9 +178,12 @@ void PuffyWidget::draw(const DrawArgs& args) {
 PuffyWidget::PuffyWidget(Puffy* module) {
 	setModule(module);
 	PreviewBuildLogTimer previewTimer("Puffy", module);
-	const std::string panelPath =
-		asset::plugin(pluginInstance, "res/Puffy.svg");
-	setPanel(createPanel(panelPath));
+	visual_assets::SplitPanelRenderer splitPanel(
+		this, "res/Puffy.panel.svg");
+	const std::string& panelPath = splitPanel.panelPath();
+	splitPanel.addLabels("res/Puffy.labels.svg");
+	visual_assets::addFractalGlassOverlay(
+		this, panelPath, splitPanel.panelSurfaceEffectWidget());
 	math::Rect leviathanLogoRectMm(
 		Vec(14.120335f, 118.43102f),
 		Vec(32.71933f, 12.24054f));

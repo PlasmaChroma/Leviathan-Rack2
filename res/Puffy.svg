@@ -22,9 +22,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="3.421466"
-     inkscape:cx="74.529456"
-     inkscape:cy="329.82938"
+     inkscape:zoom="2.4193418"
+     inkscape:cx="-0.41333556"
+     inkscape:cy="379.64871"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -175,9 +175,7 @@
        id="text13"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1"><tspan
          sodipodi:role="line"
-         id="tspan6"
-         x="1994.9666"
-         y="10399.721">└──── PUFF ────┘</tspan></text>
+         id="tspan8">━━━━ PUFF ━━━━</tspan></text>
     <text
        x="4364.5283"
        y="10120.828"
@@ -246,7 +244,7 @@
        id="character_link_label"
        style="-inkscape-font-specification:'Rubik, @wght=400';font-family:Rubik;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-size:282.222px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1"><tspan
          sodipodi:role="line"
-         id="tspan5">LINKED</tspan></text>
+         id="tspan7">LINK</tspan></text>
     <text
        id="reworked_module_title_text"
        x="3032.9185"
