@@ -275,32 +275,32 @@
        style="display:none" />
     <circle
        id="character_param"
-       cx="335"
-       cy="8307.2002"
+       cx="355"
+       cy="8327.2002"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="negative_character_readout"
        cx="1651.5"
-       cy="8307.2002"
+       cy="8327.2002"
        r="150"
        style="fill:#425f34;fill-opacity:1;stroke-width:15" />
     <circle
        id="positive_character_readout"
        cx="4444.5"
-       cy="8307.2002"
+       cy="8327.2002"
        r="150"
        style="fill:#425f34;fill-opacity:1;stroke-width:15" />
     <circle
        id="positive_character_param"
-       cx="5781"
-       cy="8307.2002"
+       cx="5761"
+       cy="8327.2002"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="character_link_param"
        cx="3048"
-       cy="8307.2002"
+       cy="8327.2002"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle

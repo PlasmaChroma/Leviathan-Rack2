@@ -32,11 +32,11 @@
   </g>
   <g id="components" opacity="0" style="display:inline;opacity:1">
     <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="1412.0334" y="11843.102" width="3271.9331" height="1224.054" style="display:none" />
-    <circle id="character_param" cx="335" cy="8307.2002" r="180" style="fill:#425f34;fill-opacity:1" />
-    <circle id="negative_character_readout" cx="1651.5" cy="8307.2002" r="150" style="fill:#425f34;fill-opacity:1;stroke-width:15" />
-    <circle id="positive_character_readout" cx="4444.5" cy="8307.2002" r="150" style="fill:#425f34;fill-opacity:1;stroke-width:15" />
-    <circle id="positive_character_param" cx="5781" cy="8307.2002" r="180" style="fill:#425f34;fill-opacity:1" />
-    <circle id="character_link_param" cx="3048" cy="8307.2002" r="180" style="fill:#425f34;fill-opacity:1" />
+    <circle id="character_param" cx="355" cy="8327.2002" r="180" style="fill:#425f34;fill-opacity:1" />
+    <circle id="negative_character_readout" cx="1651.5" cy="8327.2002" r="150" style="fill:#425f34;fill-opacity:1;stroke-width:15" />
+    <circle id="positive_character_readout" cx="4444.5" cy="8327.2002" r="150" style="fill:#425f34;fill-opacity:1;stroke-width:15" />
+    <circle id="positive_character_param" cx="5761" cy="8327.2002" r="180" style="fill:#425f34;fill-opacity:1" />
+    <circle id="character_link_param" cx="3048" cy="8327.2002" r="180" style="fill:#425f34;fill-opacity:1" />
     <circle id="puff_param" cx="820.40002" cy="9585.2002" r="300" style="fill:#425f34;fill-opacity:1" />
     <circle id="sensitivity_param" cx="4356.5327" cy="9585.2002" r="200" style="fill:#425f34;fill-opacity:1" />
     <circle id="mix_param" cx="5537.2314" cy="9585.2002" r="200" style="fill:#425f34;fill-opacity:1" />

@@ -139,28 +139,52 @@ Result voidBecomesSteppedQuantizer() {
 	const float unity = puffy::Engine::processCharacter(
 		puffy::Character::Void, 0.23f, 0.f, dynamics);
 	const float deadZone = puffy::Engine::processCharacter(
-		puffy::Character::Void, 0.12f, 1.f, dynamics);
+		puffy::Character::Void, 0.049f, 1.f, dynamics);
 	const float firstTreadStart = puffy::Engine::processCharacter(
-		puffy::Character::Void, 0.13f, 1.f, dynamics);
+		puffy::Character::Void, 0.051f, 1.f, dynamics);
 	const float firstTreadEnd = puffy::Engine::processCharacter(
-		puffy::Character::Void, 0.249f, 1.f, dynamics);
+		puffy::Character::Void, 0.099f, 1.f, dynamics);
 	const float secondTread = puffy::Engine::processCharacter(
-		puffy::Character::Void, 0.251f, 1.f, dynamics);
+		puffy::Character::Void, 0.101f, 1.f, dynamics);
 	const float halfPuff = puffy::Engine::processCharacter(
 		puffy::Character::Void, 0.37f, 0.5f, dynamics);
 	const float rail = puffy::Engine::processCharacter(
 		puffy::Character::Void, 1.f, 1.f, dynamics);
+	const float riptideRateRail = puffy::Engine::processCharacter(
+		puffy::Character::Void, 0.40f, 1.f, dynamics);
+	const float beforeRiptideRateRail = puffy::Engine::processCharacter(
+		puffy::Character::Void, 0.40f - 1e-6f, 1.f, dynamics);
+	bool railTracksRiptide = true;
+	for (int amountIndex = 1; amountIndex <= 4; ++amountIndex) {
+		const float amount = 0.25f * float(amountIndex);
+		const float amountSq = amount * amount;
+		const float threshold = 1.f / (1.f + 1.5f * amountSq);
+		const float expectedRail = threshold + (1.f - threshold) * amount;
+		const float atRail = puffy::Engine::processCharacter(
+			puffy::Character::Void, threshold, amount, dynamics);
+		const float beforeRail = puffy::Engine::processCharacter(
+			puffy::Character::Void,
+			threshold - 0.0625f * amountSq * threshold,
+			amount,
+			dynamics);
+		railTracksRiptide = railTracksRiptide
+			&& near(atRail, expectedRail, 1e-6f)
+			&& beforeRail < atRail;
+	}
 	const float negativeSecondTread = puffy::Engine::processCharacter(
-		puffy::Character::Void, -0.251f, 1.f, dynamics);
+		puffy::Character::Void, -0.101f, 1.f, dynamics);
 	return {
-		"VOID widens and lifts zero-centered magnitude-quantizer treads",
+		"VOID widens its quantizer treads and moves its rail inward at RIPTIDE's rate",
 		near(unity, 0.23f, 1e-7f)
 			&& near(deadZone, 0.f, 1e-7f)
-			&& near(firstTreadStart, 0.1875f, 1e-6f)
-			&& near(firstTreadEnd, 0.1875f, 1e-6f)
-			&& near(secondTread, 0.375f, 1e-6f)
-			&& near(halfPuff, 0.378359375f, 1e-6f)
+			&& near(firstTreadStart, 0.125f, 1e-6f)
+			&& near(firstTreadEnd, 0.125f, 1e-6f)
+			&& near(secondTread, 0.25f, 1e-6f)
+			&& near(halfPuff, 0.435f, 1e-6f)
 			&& near(rail, 1.f, 1e-7f)
+			&& near(riptideRateRail, 1.f, 1e-7f)
+			&& beforeRiptideRateRail < 1.f
+			&& railTracksRiptide
 			&& near(secondTread, -negativeSecondTread, 1e-7f),
 		"unity=" + std::to_string(unity)
 			+ " deadZone=" + std::to_string(deadZone)
@@ -168,7 +192,8 @@ Result voidBecomesSteppedQuantizer() {
 			+ "/" + std::to_string(firstTreadEnd)
 			+ " tread2=" + std::to_string(secondTread)
 			+ " half=" + std::to_string(halfPuff)
-			+ " rail=" + std::to_string(rail)
+			+ " rail=" + std::to_string(beforeRiptideRateRail)
+			+ "/" + std::to_string(riptideRateRail)
 	};
 }
 

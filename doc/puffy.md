@@ -436,13 +436,14 @@ does not discard samples; it turns the transfer curve into progressively wider
 horizontal treads as `PUFF` rises.
 
 ```text
-step = 0.125*a^2
-gain = 1 + 0.50*a^2
+gain = 1 + 1.5*a^2
+railThreshold = 1/gain
+step = 0.125*a^2*railThreshold
 m = abs(x)
 
 if a == 0:
     s = x
-else if m >= 1:
+else if m >= railThreshold:
     s = sign(x)
 else:
     q = floor(m / step) * step
@@ -453,16 +454,19 @@ y = lerp(x, s, a)
 
 Magnitude flooring keeps every tread at or below the incoming magnitude before
 the next vertical transition. It also creates a zero-centered tread naturally:
-at maximum `PUFF`, normalized magnitudes below `0.125`—0.625 V at the module
-input—map to zero. The eight positive intervals keep the maximum-PUFF staircase
-tighter than VOID's initial five-interval design. Squaring the control-law width
-preserves fine resolution through the
+at maximum `PUFF`, normalized magnitudes below `0.05`—0.25 V at the module
+input—map to zero. Scaling the tread width by the moving rail threshold preserves
+eight positive intervals before saturation at maximum `PUFF`, rather than
+letting the inward-moving rail collapse the upper half of the staircase.
+Squaring the control-law width preserves fine resolution through the
 first half of the knob; the final mix makes the treads progressively flatter as
-the quantized response takes over. A simultaneous gain ramp reaches 1.5x at
+the quantized response takes over. A simultaneous gain ramp reaches 2.5x at
 maximum `PUFF`, lifting the nonzero treads away from a simple rounded-down
-linear transfer and driving the upper treads into the rail. Clamp the fully wet
-response to +/-1 outside the nominal range. Oversampling is mandatory because
-the stair transitions are intentionally discontinuous.
+linear transfer and driving the upper treads into the rail. The final rail
+threshold follows RIPTIDE's `1/(1 + 1.5*a^2)` drive law, reaching normalized
+`+/-0.4` at maximum `PUFF`. Clamp the fully wet response to +/-1 outside that
+moving boundary. Oversampling is mandatory because the stair transitions are
+intentionally discontinuous.
 
 ### 5.8 DC blocker
 

@@ -94,6 +94,7 @@ private:
 		float voidStepSize = 1.f;
 		float voidInverseStepSize = 1.f;
 		float voidOutputGain = 1.f;
+		float voidRailThreshold = 1.f;
 	};
 
 	struct DcBlocker {

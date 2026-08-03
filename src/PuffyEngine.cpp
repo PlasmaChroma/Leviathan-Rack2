@@ -229,11 +229,16 @@ Engine::CharacterCoefficients Engine::prepareCharacter(
 	switch (character) {
 		case Character::Void:
 			// Grow from imperceptibly fine quantization to eight positive treads.
-			// Squaring PUFF keeps the first half detailed and the upper half bold.
-			coefficients.voidStepSize = 0.125f * a * a;
+			// Squaring PUFF keeps the first half detailed. Move the final rail
+			// inward with the same drive law as RIPTIDE, and contract the input
+			// tread width with it so eight steps remain before the rail at full PUFF.
+			coefficients.voidOutputGain = 1.f + 1.5f * a * a;
+			coefficients.voidRailThreshold =
+				1.f / coefficients.voidOutputGain;
+			coefficients.voidStepSize =
+				0.125f * a * a * coefficients.voidRailThreshold;
 			coefficients.voidInverseStepSize = 1.f / std::max(
 				coefficients.voidStepSize, 1e-9f);
-			coefficients.voidOutputGain = 1.f + 0.50f * a * a;
 			break;
 		case Character::Spine:
 			coefficients.drive = 1.f + 9.f * a * a;
@@ -299,7 +304,7 @@ float Engine::applyCharacter(
 			}
 			const float magnitude = std::fabs(input);
 			float steppedMagnitude = 1.f;
-			if (magnitude < 1.f) {
+			if (magnitude < coefficients.voidRailThreshold) {
 				const int stepIndex = static_cast<int>(
 					magnitude * coefficients.voidInverseStepSize);
 				steppedMagnitude = float(stepIndex) * coefficients.voidStepSize;
