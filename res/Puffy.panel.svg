@@ -26,8 +26,8 @@
   <rect x="75.509567" y="6380.4795" width="5967.4419" height="1573.8412" rx="0" fill="#000000" stroke="#1ccad8" stroke-opacity="1" stroke-width="24.338" id="transfer_preview_border" style="display:none;fill:#000000;fill-opacity:1;stroke:#1ccad8;stroke-width:25.3589;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1" />
   <g id="puffy_section_fields" style="display:inline">
     <g id="glass">
-      <path d="M 235,8900 H 5861 C 5980,8900 6040,8960 6040,9080 V 10070 C 6040,10190 5980,10250 5861,10250 H 3490 C 3410,10250 3370,10290 3370,10370 V 12020 C 3370,12100 3330,12140 3250,12140 H 235 C 116,12140 56,12080 56,11960 V 9080 C 56,8960 116,8900 235,8900 Z" id="puffy_input_field" style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
-      <rect x="3400" y="10280" width="2632" height="1860" rx="118" ry="126" id="puffy_output_field" style="display:inline;opacity:0.35;fill:#1cccd9;fill-opacity:0.58;stroke:none" />
+      <path d="M 235,8900 H 5861 C 5980,8900 6040,8960 6040,9080 V 10420 C 6040,10540 5980,10600 5861,10600 H 3490 C 3410,10600 3370,10640 3370,10720 V 12020 C 3370,12100 3330,12140 3250,12140 H 235 C 116,12140 56,12080 56,11960 V 9080 C 56,8960 116,8900 235,8900 Z" id="puffy_input_field" style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
+      <rect x="3400" y="10630" width="2632" height="1510" rx="118" ry="126" id="puffy_output_field" style="display:inline;opacity:0.35;fill:#1cccd9;fill-opacity:0.58;stroke:none" />
     </g>
   </g>
   <g id="components" opacity="0" style="display:inline;opacity:1">
@@ -37,16 +37,16 @@
     <circle id="positive_character_readout" cx="4444.5" cy="8307.2002" r="150" style="fill:#425f34;fill-opacity:1;stroke-width:15" />
     <circle id="positive_character_param" cx="5781" cy="8307.2002" r="180" style="fill:#425f34;fill-opacity:1" />
     <circle id="character_link_param" cx="3048" cy="8307.2002" r="180" style="fill:#425f34;fill-opacity:1" />
-    <circle id="puff_param" cx="820.40002" cy="9485.2002" r="300" style="fill:#425f34;fill-opacity:1" />
-    <circle id="sensitivity_param" cx="4386.4868" cy="9485.2002" r="200" style="fill:#425f34;fill-opacity:1" />
-    <circle id="mix_param" cx="5567.1855" cy="9485.2002" r="200" style="fill:#425f34;fill-opacity:1" />
-    <circle id="puff_cv_amount_param" cx="2148.1055" cy="9485.2002" r="180" style="fill:#425f34;fill-opacity:1" />
-    <circle id="input_l" cx="779.95996" cy="11010" r="220" style="fill:#425f34;fill-opacity:1" />
-    <circle id="input_r" cx="2281.9741" cy="11010" r="220" style="fill:#425f34;fill-opacity:1" />
-    <circle id="puff_cv_input" cx="3185.7876" cy="9485.2002" r="220" style="fill:#425f34;fill-opacity:1" />
-    <circle id="output_l" cx="3783.9883" cy="11010" r="220" style="fill:#425f34;fill-opacity:1" />
-    <circle id="output_r" cx="5286.0024" cy="11010" r="220" style="fill:#425f34;fill-opacity:1" />
-    <circle id="limit_light" cx="4534.9956" cy="11012.043" r="100" style="fill:#425f34;fill-opacity:1" />
+    <circle id="puff_param" cx="820.40002" cy="9585.2002" r="300" style="fill:#425f34;fill-opacity:1" />
+    <circle id="sensitivity_param" cx="4356.5327" cy="9585.2002" r="200" style="fill:#425f34;fill-opacity:1" />
+    <circle id="mix_param" cx="5537.2314" cy="9585.2002" r="200" style="fill:#425f34;fill-opacity:1" />
+    <circle id="puff_cv_amount_param" cx="2148.1055" cy="9585.2002" r="180" style="fill:#425f34;fill-opacity:1" />
+    <circle id="input_l" cx="899.96002" cy="11193.589" r="220" style="fill:#425f34;fill-opacity:1" />
+    <circle id="input_r" cx="2401.9741" cy="11193.589" r="220" style="fill:#425f34;fill-opacity:1" />
+    <circle id="puff_cv_input" cx="3185.7876" cy="9585.2002" r="220" style="fill:#425f34;fill-opacity:1" />
+    <circle id="output_l" cx="3959.9834" cy="11193.589" r="220" style="fill:#425f34;fill-opacity:1" />
+    <circle id="output_r" cx="5461.9976" cy="11193.589" r="220" style="fill:#425f34;fill-opacity:1" />
+    <circle id="limit_light" cx="4710.9907" cy="11195.632" r="100" style="fill:#425f34;fill-opacity:1" />
   </g>
   <rect id="fish_rect" x="63.777615" y="946.45001" width="5968.4448" height="5409.4658" style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:29.9;stroke-dasharray:none;stroke-opacity:1" />
   <rect id="transfer_preview_rect" x="63.806179" y="6410.4502" width="5968.3877" height="1573.8778" style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:29.9;stroke-dasharray:none;stroke-opacity:1" />

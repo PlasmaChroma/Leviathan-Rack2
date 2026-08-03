@@ -149,14 +149,14 @@
     <g
        id="glass">
       <path
-         d="M 235,8900 H 5861 C 5980,8900 6040,8960 6040,9080 V 10070 C 6040,10190 5980,10250 5861,10250 H 3490 C 3410,10250 3370,10290 3370,10370 V 12020 C 3370,12100 3330,12140 3250,12140 H 235 C 116,12140 56,12080 56,11960 V 9080 C 56,8960 116,8900 235,8900 Z"
+         d="M 235,8900 H 5861 C 5980,8900 6040,8960 6040,9080 V 10420 C 6040,10540 5980,10600 5861,10600 H 3490 C 3410,10600 3370,10640 3370,10720 V 12020 C 3370,12100 3330,12140 3250,12140 H 235 C 116,12140 56,12080 56,11960 V 9080 C 56,8960 116,8900 235,8900 Z"
          id="puffy_input_field"
          style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
       <rect
          x="3400"
-         y="10280"
+         y="10630"
          width="2632"
-         height="1860"
+         height="1510"
          rx="118"
          ry="126"
          id="puffy_output_field"
@@ -167,7 +167,7 @@
      id="labels">
     <text
        x="1994.9664"
-       y="10399.721"
+       y="10499.721"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
        font-size="155px"
@@ -175,32 +175,38 @@
        id="text13"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1"><tspan
          sodipodi:role="line"
-         id="tspan8">━━━━ PUFF ━━━━</tspan></text>
+         id="tspan8"
+         x="1994.9666"
+         y="10499.721">━━━━ PUFF ━━━━</tspan></text>
     <text
-       x="4364.5283"
-       y="10120.828"
+       x="4334.5742"
+       y="10220.828"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
        font-size="155px"
        fill="#ffe7a5"
        id="text14"
-       style="-inkscape-font-specification:'Rubik, @wght=400';font-family:Rubik;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-size:282.222px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1"><tspan
          sodipodi:role="line"
-         id="tspan4">SENS</tspan></text>
+         id="tspan4"
+         x="4334.5742"
+         y="10220.828">SENS</tspan></text>
     <text
-       x="5567.1855"
-       y="10120.828"
+       x="5537.2314"
+       y="10220.828"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
        font-size="155px"
        fill="#ffe7a5"
        id="mix_label"
-       style="-inkscape-font-specification:'Rubik, @wght=400';font-family:Rubik;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-size:282.222px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1"><tspan
          sodipodi:role="line"
-         id="tspan1">WET</tspan></text>
+         id="tspan1"
+         x="5537.2314"
+         y="10220.828">WET</tspan></text>
     <text
-       x="779.95996"
-       y="11610"
+       x="899.96002"
+       y="11793.589"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
        font-size="120px"
@@ -208,8 +214,8 @@
        id="text18"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">IN L</text>
     <text
-       x="2275.624"
-       y="11610"
+       x="2395.624"
+       y="11793.589"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
        font-size="120px"
@@ -217,8 +223,8 @@
        id="text19"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">IN R</text>
     <text
-       x="3778.4851"
-       y="11610"
+       x="3954.4802"
+       y="11793.589"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
        font-size="120px"
@@ -226,8 +232,8 @@
        id="text20"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">OUT L</text>
     <text
-       x="5283.4624"
-       y="11610"
+       x="5459.4575"
+       y="11793.589"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
        font-size="120px"
@@ -311,61 +317,61 @@
     <circle
        id="puff_param"
        cx="820.40002"
-       cy="9485.2002"
+       cy="9585.2002"
        r="300"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="sensitivity_param"
-       cx="4386.4868"
-       cy="9485.2002"
+       cx="4356.5327"
+       cy="9585.2002"
        r="200"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="mix_param"
-       cx="5567.1855"
-       cy="9485.2002"
+       cx="5537.2314"
+       cy="9585.2002"
        r="200"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="puff_cv_amount_param"
        cx="2148.1055"
-       cy="9485.2002"
+       cy="9585.2002"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="input_l"
-       cx="779.95996"
-       cy="11010"
+       cx="899.96002"
+       cy="11193.589"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="input_r"
-       cx="2281.9741"
-       cy="11010"
+       cx="2401.9741"
+       cy="11193.589"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="puff_cv_input"
        cx="3185.7876"
-       cy="9485.2002"
+       cy="9585.2002"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="output_l"
-       cx="3783.9883"
-       cy="11010"
+       cx="3959.9834"
+       cy="11193.589"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="output_r"
-       cx="5286.0024"
-       cy="11010"
+       cx="5461.9976"
+       cy="11193.589"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="limit_light"
-       cx="4534.9956"
-       cy="11012.043"
+       cx="4710.9907"
+       cy="11195.632"
        r="100"
        style="fill:#425f34;fill-opacity:1" />
   </g>
