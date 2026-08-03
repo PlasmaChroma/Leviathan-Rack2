@@ -269,6 +269,19 @@ uint32_t swarmRngState;
 
 `reset()` restores `swarmRngState` from `swarmInitialSeed`.
 
+`setSwarmSeed()` must sanitize and store the seed, restore `swarmRngState`, and
+clear the interpolation history:
+
+```cpp
+swarmPreviousFast = 0.f;
+swarmCurrentFast = 0.f;
+swarmSlow = 0.f;
+```
+
+`reset()` must clear those three history values as well. Reseeding must make the
+very next generated frame deterministic; it must not retain chaos history from
+the prior seed. Neither operation resets unrelated Puffy DSP state.
+
 For tests, identical seeds and identical inputs must produce identical output.
 
 For runtime modules, `Puffy` should provide a process-local unique nonzero seed during construction, derived from a static atomic counter and a simple integer hash. Seed creation occurs outside the audio thread.
@@ -309,9 +322,10 @@ For each required base-rate SWARM frame:
 
 1. Move `swarmCurrentFast` to `swarmPreviousFast`.
 2. Generate one new signed random target into `swarmCurrentFast`.
-3. Update `swarmSlow` toward `swarmCurrentFast` using a one-pole filter.
-4. Linearly interpolate both the fast and slow values across the four oversampled lanes.
-5. Blend slow and fast chaos using an amount-dependent coefficient prepared outside the per-lane kernel.
+3. Copy `swarmSlow` into a local `previousSlow` before modifying it.
+4. Update `swarmSlow` toward `swarmCurrentFast` using a one-pole filter.
+5. Linearly interpolate both the fast and slow values across the four oversampled lanes.
+6. Blend slow and fast chaos using an amount-dependent coefficient prepared outside the per-lane kernel.
 
 Recommended slow time constant:
 
@@ -322,11 +336,18 @@ Recommended slow time constant:
 Recommended lane interpolation:
 
 ```cpp
-t = float(i + 1) / float(kOversampleFactor);
+static constexpr float laneT[kOversampleFactor] = {
+    0.25f, 0.50f, 0.75f, 1.f
+};
+
+t = laneT[i];
 fastLane = lerp(previousFast, currentFast, t);
 slowLane = lerp(previousSlow, currentSlow, t);
 chaosLane = lerp(slowLane, fastLane, fastMix);
 ```
+
+Use compile-time lane fractions (or an equivalent unrolled form) so frame
+preparation does not introduce a division into the audio hot path.
 
 `fastMix` is prepared from the current amount:
 
@@ -543,13 +564,23 @@ Use `kCharacterCount` for wrap logic.
 
 ### 9.2 Palette
 
-Append a distinct pale bioluminescent cyan-green tint:
+Append white as the SWARM identity color:
 
 ```cpp
-nvgRGB(151, 235, 224)
+nvgRGB(255, 255, 255)
 ```
 
-The exact RGB value may receive a small art-direction adjustment, but it must remain visually distinct from:
+The final art pass may move this slightly off-white, for example toward a very
+subtle warm or cool neutral, but it must still read immediately as white rather
+than gray, cyan, green, or another saturated character color.
+
+Use the same SWARM color consistently for:
+
+- Puffy's negative and positive body tint contributions;
+- the corresponding transfer-preview center line and point cloud;
+- the `SWARM` character readout text.
+
+Do not introduce a separate cyan-green SWARM accent. White must remain visually distinct from:
 
 - BLOOM green;
 - SPINE gold;
@@ -604,7 +635,8 @@ The cloud should remain stable for a given:
 
 - widget size;
 - character pair;
-- quantized amount.
+- quantized amount;
+- any quantized FRENZY dynamics values relevant to the opposite polarity.
 
 A stable display is acceptable and preferred over continuous shimmer.
 
@@ -635,6 +667,10 @@ For each SWARM column:
 
 Draw all cloud circles in one NanoVG path and fill once per tint where practical. Do not add per-point shadows, gradients, strokes, blur, or glow.
 
+Use the SWARM palette color for both its cloud and its central transfer line.
+When only one polarity is SWARM, the opposite half retains its own character
+color.
+
 The existing 129-point central line may remain.
 
 ### 10.4 Redraw Policy
@@ -652,9 +688,11 @@ For SWARM, quantize the visual amount to 64 bins:
 
 ```cpp
 visualAmountBin = clamp(int(amount * 63.f + 0.5f), 0, 63);
+representativeAmount = float(visualAmountBin) / 63.f;
 ```
 
-Use the bin center or normalized bin value for the representative cloud.
+Use `representativeAmount` for the SWARM cloud and for the cached central curve.
+This keeps the cloud centered on the line that is actually displayed.
 
 Throttle SWARM-related framebuffer rebuilds to a maximum of:
 
@@ -663,6 +701,13 @@ Throttle SWARM-related framebuffer rebuilds to a maximum of:
 ```
 
 This cap applies during rapid knob movement or audio-rate CV activity visible to the UI. It does not alter audio.
+
+When either polarity is SWARM, the 20 Hz cap applies to the entire cached curve
+framebuffer, not only to cloud generation. Coalesce amount changes and any
+FRENZY dynamics changes on the opposite polarity into the next permitted
+rebuild. This avoids an uncapped non-SWARM half continuously dirtying the same
+framebuffer behind a nominally throttled SWARM cloud. When neither polarity is
+SWARM, retain the existing redraw behavior.
 
 The uncached activity fill, axes, and overrange flashes may continue to draw normally.
 
@@ -722,7 +767,15 @@ Do not respond to UI cost by moving visualization work onto the audio thread.
 
 ### `src/PuffyVisualPalette.hpp`
 
-- Append the SWARM tint.
+- Append the white or near-white SWARM tint and use it as the shared source for
+  body tinting, preview geometry, and readout text.
+
+### `src/PuffyPose.hpp` and `src/PuffyCharacterController.hpp`
+
+- Keep tint-weight storage sized by `puffy::kCharacterCount`.
+- Replace the five-value tint-weight initializers with `{1.f}` so BLOOM remains
+  the default and every appended character is zero-initialized without encoding
+  the old character count.
 
 ### `src/PuffyTransferPreviewWidget.hpp`
 
@@ -741,7 +794,7 @@ Do not respond to UI cost by moving visualization work onto the audio thread.
 
 ### `src/PuffyCharacterController.*`
 
-No behavioral changes expected.
+No behavioral changes expected beyond the initializer cleanup above.
 
 The existing tests iterate over `kCharacterCount`, so adding SWARM may expose assumptions that every character has identical motion. Preserve those invariants.
 
@@ -751,13 +804,25 @@ Extend existing tests and add SWARM-specific cases.
 
 ### Documentation
 
-Add this specification under:
-
-```text
-doc/puffy-swarm-spec.md
-```
+Treat `doc/puffy-swarm-implementation-spec.md` as the canonical SWARM handoff.
 
 Update `doc/puffy.md` where it states that Puffy has exactly five characters or uses `0..4` character ranges.
+
+### 11.1 Recommended Implementation Sequence
+
+1. **Character plumbing and kernel:** append the enum value, replace upper-bound
+   sentinels, add palette/readout support, implement the deterministic helper
+   kernel, and land kernel-invariant tests.
+2. **Engine integration and tuning:** add seeding and shared frame generation,
+   route one frame through stereo and transition paths, add full-engine tests,
+   then tune SWARM and Auto Deflate against the listening and performance gates.
+3. **Cached preview and documentation:** add the deterministic point cloud,
+   mixed-mode rebuild throttling, render-performance checks, and the six-character
+   updates to `doc/puffy.md`.
+
+Each stage should build and pass the existing Puffy suites before the next stage
+begins. Sonic tuning belongs after deterministic engine integration, not in the
+preview implementation.
 
 ---
 
@@ -813,6 +878,11 @@ With identical input and controls:
 - same-seed engines must produce sample-identical outputs;
 - different-seed engines must diverge after SWARM becomes active;
 - all three must remain finite and bounded.
+
+After advancing an engine, call `setSwarmSeed()` again with the original seed
+and verify that its next SWARM sequence matches a freshly seeded engine. Repeat
+the check through `reset()`. These checks cover the fast and slow interpolation
+history as well as the integer PRNG state.
 
 ### 12.5 Stereo Stability
 
@@ -919,6 +989,8 @@ Required:
 
 - Stable SWARM preview causes zero framebuffer rebuilds after state settles.
 - SWARM framebuffer rebuild rate never exceeds 20 Hz.
+- Mixed SWARM/FRENZY preview rebuilds remain capped at 20 Hz for the shared
+  framebuffer while SWARM is selected on either polarity.
 - The cloud contains no more than 195 points in the initial implementation.
 - Cloud points are batched into one or a small number of NanoVG fill calls.
 - No blur, shadow, per-point gradient, texture upload, or new image load occurs during redraw.
@@ -978,9 +1050,12 @@ The mode should be rejected or retuned if it sounds primarily like:
 - [ ] All character clamps use the new count.
 - [ ] Both switches expose `SWARM`.
 - [ ] Linked cycling wraps correctly.
-- [ ] Palette color added.
+- [ ] White or near-white palette color is used by Puffy, preview, and readout text.
+- [ ] Tint-weight initializers no longer encode a five-character array.
 - [ ] Seedable xorshift state added.
+- [ ] Reseeding and reset clear all SWARM interpolation history.
 - [ ] One chaos frame generated per required base-rate sample.
+- [ ] Slow interpolation captures `previousSlow` before the one-pole update.
 - [ ] Chaos frame shared across stereo and transition paths.
 - [ ] No random work occurs when SWARM is not contributing.
 - [ ] SWARM kernel contains no transcendental math or division.
@@ -989,6 +1064,7 @@ The mode should be rejected or retuned if it sounds primarily like:
 - [ ] Representative cached cloud implemented.
 - [ ] Stable preview does not continuously redraw.
 - [ ] SWARM redraw capped at 20 Hz.
+- [ ] Mixed SWARM/FRENZY redraws obey the shared-framebuffer cap.
 - [ ] No fish particle system added.
 - [ ] Engine tests extended.
 - [ ] No-allocation test passes.
