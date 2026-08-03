@@ -154,8 +154,9 @@ amountTarget = clamp(PUFF + PUFF_CV_AMOUNT * PUFF_CV / 10 V, 0, 1)
 
 Thus +10 V with the attenuverter fully clockwise spans the full normalized
 range. Bipolar +/-5 V modulation spans half the range in either direction.
-Smooth `amountTarget` with a 1 ms one-pole filter. Character changes use a 10 ms
-equal-power crossfade between old and new character outputs.
+Smooth `amountTarget` with a 1 ms one-pole filter. Character changes use a 5 ms
+linear crossfade between old and new character outputs. The linear law preserves
+unity when both paths are identical or strongly correlated.
 
 `SENSITIVITY` maps exponentially across one octave:
 
@@ -485,7 +486,7 @@ VOID:    autoDeflateDb = 0
 
 When Auto Deflate is disabled, `autoDeflateDb` is zero. During a character
 crossfade, apply the old compensation to the old character output and the new
-compensation to the new character output before the equal-power crossfade. Do
+compensation to the new character output before the linear crossfade. Do
 not interpolate compensation dB separately. Outside a crossfade, total
 pre-limiter gain compensation is:
 
@@ -561,14 +562,14 @@ Puffy uses a single **Transition Coordinator** to resolve concurrent configurati
 
 Precedence rule:
 ```text
-Structural Transition (oversampling / limiter mode) > Character Crossfade (10 ms)
+Structural Transition (oversampling / limiter mode) > Character Crossfade (5 ms)
 ```
 
-1. **Normal character change**: Performs a 10 ms equal-power crossfade between old and new character outputs.
+1. **Normal character change**: Performs a 5 ms linear crossfade between old and new character outputs.
 2. **Structural change (oversampling or limiter mode)**: Initiates a 5 ms output fade-down to zero.
 3. **Concurrent requests**:
    - If a character change is requested during an ongoing structural fade-down, record only the target character without starting a parallel character crossfade.
-   - If a structural change is requested during an active 10 ms character crossfade, the structural fade immediately overrides and takes control.
+   - If a structural change is requested during an active 5 ms character crossfade, the structural fade immediately overrides and takes control.
 4. **Zero crossing**: At zero output, commit the requested oversampling factor, limiter mode, and target character simultaneously. Perform a single atomic reset of DSP histories (resamplers, DC blockers, limiter buffers).
 5. **Fade up**: Fade output back up over 5 ms.
 
@@ -764,7 +765,7 @@ Register:
   zeroing below a small threshold.
 
 Only the currently selected character runs normally. During a character
-crossfade, the old and new character run in parallel for at most 10 ms.
+crossfade, the old and new character run in parallel for at most 5 ms.
 
 ## 10. Persistence
 
@@ -872,7 +873,7 @@ behind a generic `High quality` label.
 - Malformed, missing, and future-valued fields fall back safely.
 - Sample-rate changes at 44.1/48/96/192 kHz produce correct delay lengths and no
   stale-buffer output.
-- Character changes complete in 10 ms without a discontinuity.
+- Character changes complete in 5 ms without a discontinuity.
 - Limiter/oversampling changes perform the specified fade-reset-fade transition.
 - Stress test: rapid concurrent changes to character, oversampling, and limiter mode are safely managed by the Transition Coordinator without clicks, dropouts, or stale lookahead samples.
 - Reset and patch load emit no stale audio or gain-reduction state.
@@ -912,7 +913,7 @@ The first runnable module includes:
   and bypass routes;
 - active-mode stereo normalization, channel-0 input handling, finite guards,
   the +/-20 V internal clamp, and one output channel per jack;
-- 1 ms `PUFF` smoothing and the 10 ms equal-power character crossfade;
+- 1 ms `PUFF` smoothing and the 5 ms linear character crossfade;
 - all five final character transfer functions and the one continuously updated
   stereo-linked `PuffyDynamicsDetector`;
 - a fixed 4x saturation path for the MVP, using the final Rack FIR types, plus
@@ -1205,7 +1206,7 @@ motion language.
 - Uses the shared Puffy motion language; do not quantize its animation.
 
 Mode colors should crossfade over roughly 150-300 ms even though the audio
-characters crossfade in 10 ms. The slower visual transition keeps color changes
+characters crossfade in 5 ms. The slower visual transition keeps color changes
 organic without introducing character-specific motion.
 
 ## A.5 Autonomous life system

@@ -361,13 +361,6 @@ float Engine::processCharacter(
 		prepareCharacter(character, amount, dynamicsState));
 }
 
-
-float Engine::updateAutoGain(Character character, float currentAmount) const {
-	const float exponent = autoDeflateDb(character, currentAmount)
-		* 0.1151292546497023f;
-	return fastNegativeExp(exponent);
-}
-
 float Engine::sensitivityTargetGain(float bipolarSensitivity) {
 	const float clamped = std::max(-1.f, std::min(bipolarSensitivity, 1.f));
 	if (clamped != cachedSensitivity) {

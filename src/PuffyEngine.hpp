@@ -173,7 +173,6 @@ private:
 		const DynamicsState& dynamics);
 	static float applyCharacter(float input, const CharacterCoefficients& coefficients);
 	float updateFollower(float current, float target, float attack, float release) const;
-	float updateAutoGain(Character character, float currentAmount) const;
 	float sensitivityTargetGain(float bipolarSensitivity);
 	float processPath(
 		PathState& path,
