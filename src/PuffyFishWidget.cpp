@@ -214,6 +214,7 @@ void PuffyFishWidget::drawEye(
 	NVGcontext* vg,
 	Vec center,
 	float radius,
+	int imageHandle,
 	float gazeX,
 	float gazeY,
 	float blink,
@@ -222,15 +223,32 @@ void PuffyFishWidget::drawEye(
 	const float radiusX = radius * 0.86f;
 	nvgBeginPath(vg);
 	nvgEllipse(vg, center.x, center.y, radiusX, radius);
-	const NVGpaint white = nvgRadialGradient(
-		vg, center.x - radius * 0.28f, center.y - radius * 0.34f,
-		radius * 0.08f, radius,
-		nvgRGB(255, 255, 239), nvgRGB(255, 226, 147));
-	nvgFillPaint(vg, white);
-	nvgFill(vg);
-	nvgStrokeColor(vg, nvgRGBA(121, 73, 8, 210));
-	nvgStrokeWidth(vg, 0.8f);
-	nvgStroke(vg);
+	if (imageHandle >= 0) {
+		// The source is circular. Mapping its square canvas directly onto the
+		// current eye bounds supplies the intentional horizontal stretch.
+		const NVGpaint eyeball = nvgImagePattern(
+			vg,
+			center.x - radiusX,
+			center.y - radius,
+			2.f * radiusX,
+			2.f * radius,
+			0.f,
+			imageHandle,
+			1.f);
+		nvgFillPaint(vg, eyeball);
+		nvgFill(vg);
+	}
+	else {
+		const NVGpaint white = nvgRadialGradient(
+			vg, center.x - radius * 0.28f, center.y - radius * 0.34f,
+			radius * 0.08f, radius,
+			nvgRGB(255, 255, 239), nvgRGB(255, 226, 147));
+		nvgFillPaint(vg, white);
+		nvgFill(vg);
+		nvgStrokeColor(vg, nvgRGBA(121, 73, 8, 210));
+		nvgStrokeWidth(vg, 0.8f);
+		nvgStroke(vg);
+	}
 
 	const Vec pupil(
 		center.x + clamp(gazeX, -1.f, 1.f) * radius * 0.23f,
@@ -417,17 +435,19 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 	const float eyeRadius = minimum * 0.105f;
 	const float eyeY = center.y - radiusY * 0.23f;
 	const float eyeSpacing = eyeRadius * 0.79f;
+	const PuffyRasterAsset eyeball = resolveRasterAsset(
+		args.vg, "res/icon/Puffy_Eyeball.png");
 	const NVGcolor eyelidMaterialTint = nvgRGB(232, 223, 202);
 	const NVGcolor leftEyelidColor = multiplyColor(
 		eyelidMaterialTint, negativeBodyTint);
 	const NVGcolor rightEyelidColor = multiplyColor(
 		eyelidMaterialTint, positiveBodyTint);
 	drawEye(
-		args.vg, Vec(center.x - eyeSpacing, eyeY), eyeRadius,
+		args.vg, Vec(center.x - eyeSpacing, eyeY), eyeRadius, eyeball.handle,
 		pose.gazeX, pose.gazeY,
 		std::max(pose.leftBlink, pose.squint), leftEyelidColor);
 	drawEye(
-		args.vg, Vec(center.x + eyeSpacing, eyeY), eyeRadius,
+		args.vg, Vec(center.x + eyeSpacing, eyeY), eyeRadius, eyeball.handle,
 		pose.gazeX, pose.gazeY,
 		std::max(pose.rightBlink, pose.squint), rightEyelidColor);
 
