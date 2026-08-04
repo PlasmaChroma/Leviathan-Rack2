@@ -37,6 +37,10 @@ struct Frame {
 	float inputActivity = 0.f;
 	float positiveInputActivity = 0.f;
 	float negativeInputActivity = 0.f;
+	float leftPositiveInputActivity = 0.f;
+	float leftNegativeInputActivity = 0.f;
+	float rightPositiveInputActivity = 0.f;
+	float rightNegativeInputActivity = 0.f;
 	float transientActivity = 0.f;
 	float limiterGain = 1.f;
 	int negativeCharacter = 0;
@@ -58,7 +62,8 @@ public:
 		int positiveCharacter,
 		bool autoDeflate,
 		float sensitivity,
-		float wetTarget = 1.f);
+		float wetTarget = 1.f,
+		bool trackStereoActivity = false);
 	Frame process(
 		float inputLeft,
 		float inputRight,
@@ -66,10 +71,11 @@ public:
 		int character,
 		bool autoDeflate,
 		float sensitivity,
-		float wetTarget = 1.f) {
+		float wetTarget = 1.f,
+		bool trackStereoActivity = false) {
 		return process(
 			inputLeft, inputRight, amountTarget, character, character,
-			autoDeflate, sensitivity, wetTarget);
+			autoDeflate, sensitivity, wetTarget, trackStereoActivity);
 	}
 
 	float getSampleRate() const {
@@ -88,7 +94,7 @@ private:
 		Character character = Character::Bloom;
 		float amount = 0.f;
 		float drive = 1.f;
-		float foldCycles = 1.f;
+		float foldPhaseCycles = 0.5f;
 		float foldGain = 1.f;
 		float phaseSkew = 0.f;
 		float positivePolarityBias = 0.f;
@@ -103,6 +109,7 @@ private:
 		float swarmScatter = 0.f;
 		float swarmRailAttraction = 0.f;
 		float swarmFastMix = 0.f;
+		float swarmOutputGain = 1.f;
 	};
 
 	struct SwarmFrame {
@@ -144,6 +151,10 @@ private:
 	float inputActivity = 0.f;
 	float positiveInputActivity = 0.f;
 	float negativeInputActivity = 0.f;
+	float leftPositiveInputActivity = 0.f;
+	float leftNegativeInputActivity = 0.f;
+	float rightPositiveInputActivity = 0.f;
+	float rightNegativeInputActivity = 0.f;
 	float limiterGain = 1.f;
 	float projectedInputGain = 1.f;
 	float cachedSensitivity = -2.f;

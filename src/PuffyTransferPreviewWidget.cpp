@@ -174,7 +174,7 @@ void PuffyTransferPreviewWidget::step() {
 	const double now = system::getTime();
 	const bool swarmRebuildAllowed = !swarmActive
 		|| lastSwarmRebuildTime < 0.0
-		|| now - lastSwarmRebuildTime >= 0.05;
+		|| now - lastSwarmRebuildTime >= (1.0 / 30.0);
 	if (curveChanged && swarmRebuildAllowed) {
 		rebuildPoints();
 	}
@@ -191,14 +191,6 @@ void PuffyTransferPreviewWidget::draw(const DrawArgs& args) {
 	}
 	const float centerX = 0.5f * width;
 	const float centerY = 0.5f * height;
-	const float negativeX = inputToX(
-		-clamp(visual.negativeInputActivity, 0.f, DOMAIN));
-	const float positiveX = inputToX(
-		clamp(visual.positiveInputActivity, 0.f, DOMAIN));
-	const float negativeOverrange = clamp(
-		(visual.negativeInputActivity - DOMAIN) / 0.25f, 0.f, 1.f);
-	const float positiveOverrange = clamp(
-		(visual.positiveInputActivity - DOMAIN) / 0.25f, 0.f, 1.f);
 	const NVGcolor negativeTint = puffy_visual::characterTint(
 		clamp(visual.negativeCharacter, 0, puffy::kCharacterCount - 1));
 	const NVGcolor positiveTint = puffy_visual::characterTint(
@@ -206,45 +198,76 @@ void PuffyTransferPreviewWidget::draw(const DrawArgs& args) {
 
 	nvgSave(args.vg);
 	nvgScissor(args.vg, 0.f, 0.f, width, height);
-	nvgBeginPath(args.vg);
-	nvgRect(args.vg, negativeX, 0.f, centerX - negativeX, height);
-	nvgFillColor(args.vg, withAlpha(negativeTint, 0.13f));
-	nvgFill(args.vg);
-	nvgBeginPath(args.vg);
-	nvgRect(args.vg, centerX, 0.f, positiveX - centerX, height);
-	nvgFillColor(args.vg, withAlpha(positiveTint, 0.13f));
-	nvgFill(args.vg);
-
-	nvgBeginPath(args.vg);
-	nvgMoveTo(args.vg, negativeX, 0.f);
-	nvgLineTo(args.vg, negativeX, height);
-	nvgStrokeColor(args.vg, withAlpha(negativeTint, 0.38f));
-	nvgStrokeWidth(args.vg, 0.8f);
-	nvgStroke(args.vg);
-	nvgBeginPath(args.vg);
-	nvgMoveTo(args.vg, positiveX, 0.f);
-	nvgLineTo(args.vg, positiveX, height);
-	nvgStrokeColor(args.vg, withAlpha(positiveTint, 0.38f));
-	nvgStrokeWidth(args.vg, 0.8f);
-	nvgStroke(args.vg);
-
-	// The activity telemetry retains 25% headroom beyond the visible +/-5 V
-	// domain. Convert that otherwise-clipped range into compact edge flashes.
-	if (negativeOverrange > 0.f) {
+	const auto drawActivityLane = [&](float negativeActivity,
+		float positiveActivity, float laneY, float laneHeight) {
+		const float negativeX = inputToX(
+			-clamp(negativeActivity, 0.f, DOMAIN));
+		const float positiveX = inputToX(
+			clamp(positiveActivity, 0.f, DOMAIN));
 		nvgBeginPath(args.vg);
-		const float stripWidth = 1.f + 2.f * negativeOverrange;
-		nvgRect(args.vg, 0.f, 0.f, stripWidth, height);
-		nvgFillColor(args.vg, withAlpha(
-			negativeTint, 0.30f + 0.55f * negativeOverrange));
+		nvgRect(args.vg, negativeX, laneY, centerX - negativeX, laneHeight);
+		nvgFillColor(args.vg, withAlpha(negativeTint, 0.13f));
 		nvgFill(args.vg);
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, centerX, laneY, positiveX - centerX, laneHeight);
+		nvgFillColor(args.vg, withAlpha(positiveTint, 0.13f));
+		nvgFill(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, negativeX, laneY);
+		nvgLineTo(args.vg, negativeX, laneY + laneHeight);
+		nvgStrokeColor(args.vg, withAlpha(negativeTint, 0.38f));
+		nvgStrokeWidth(args.vg, 0.8f);
+		nvgStroke(args.vg);
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, positiveX, laneY);
+		nvgLineTo(args.vg, positiveX, laneY + laneHeight);
+		nvgStrokeColor(args.vg, withAlpha(positiveTint, 0.38f));
+		nvgStrokeWidth(args.vg, 0.8f);
+		nvgStroke(args.vg);
+
+		// Each lane retains 25% headroom beyond the visible +/-5 V domain.
+		const float negativeOverrange = clamp(
+			(negativeActivity - DOMAIN) / 0.25f, 0.f, 1.f);
+		const float positiveOverrange = clamp(
+			(positiveActivity - DOMAIN) / 0.25f, 0.f, 1.f);
+		if (negativeOverrange > 0.f) {
+			const float stripWidth = 1.f + 2.f * negativeOverrange;
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, 0.f, laneY, stripWidth, laneHeight);
+			nvgFillColor(args.vg, withAlpha(
+				negativeTint, 0.30f + 0.55f * negativeOverrange));
+			nvgFill(args.vg);
+		}
+		if (positiveOverrange > 0.f) {
+			const float stripWidth = 1.f + 2.f * positiveOverrange;
+			nvgBeginPath(args.vg);
+			nvgRect(
+				args.vg, width - stripWidth, laneY, stripWidth, laneHeight);
+			nvgFillColor(args.vg, withAlpha(
+				positiveTint, 0.30f + 0.55f * positiveOverrange));
+			nvgFill(args.vg);
+		}
+	};
+
+	if (visual.stereoInputsConnected) {
+		drawActivityLane(
+			visual.leftNegativeInputActivity,
+			visual.leftPositiveInputActivity,
+			0.f,
+			centerY);
+		drawActivityLane(
+			visual.rightNegativeInputActivity,
+			visual.rightPositiveInputActivity,
+			centerY,
+			height - centerY);
 	}
-	if (positiveOverrange > 0.f) {
-		nvgBeginPath(args.vg);
-		const float stripWidth = 1.f + 2.f * positiveOverrange;
-		nvgRect(args.vg, width - stripWidth, 0.f, stripWidth, height);
-		nvgFillColor(args.vg, withAlpha(
-			positiveTint, 0.30f + 0.55f * positiveOverrange));
-		nvgFill(args.vg);
+	else {
+		drawActivityLane(
+			visual.negativeInputActivity,
+			visual.positiveInputActivity,
+			0.f,
+			height);
 	}
 
 	nvgBeginPath(args.vg);

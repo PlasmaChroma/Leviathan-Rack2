@@ -60,7 +60,9 @@ Puffy::~Puffy() {
 	teardownTimer.begin(id);
 }
 
-void Puffy::publishVisualState(const puffy::Frame& frame) {
+void Puffy::publishVisualState(
+	const puffy::Frame& frame,
+	bool stereoInputsConnected) {
 	const float gainReduction = std::max(
 		0.f,
 		std::min(
@@ -74,6 +76,14 @@ void Puffy::publishVisualState(const puffy::Frame& frame) {
 		frame.positiveInputActivity, std::memory_order_relaxed);
 	visualNegativeInputActivity.store(
 		frame.negativeInputActivity, std::memory_order_relaxed);
+	visualLeftPositiveInputActivity.store(
+		frame.leftPositiveInputActivity, std::memory_order_relaxed);
+	visualLeftNegativeInputActivity.store(
+		frame.leftNegativeInputActivity, std::memory_order_relaxed);
+	visualRightPositiveInputActivity.store(
+		frame.rightPositiveInputActivity, std::memory_order_relaxed);
+	visualRightNegativeInputActivity.store(
+		frame.rightNegativeInputActivity, std::memory_order_relaxed);
 	visualTransientActivity.store(frame.transientActivity, std::memory_order_relaxed);
 	visualGainReduction.store(gainReduction, std::memory_order_relaxed);
 	visualNegativeCharacter.store(
@@ -83,6 +93,8 @@ void Puffy::publishVisualState(const puffy::Frame& frame) {
 	visualCharactersLinked.store(
 		params[CHARACTER_LINK_PARAM].getValue() > 0.5f,
 		std::memory_order_relaxed);
+	visualStereoInputsConnected.store(
+		stereoInputsConnected, std::memory_order_relaxed);
 	visualSequence.fetch_add(1u, std::memory_order_release);
 	lastGainReduction = gainReduction;
 }
@@ -107,6 +119,14 @@ bool Puffy::readVisualState(PuffyVisualState* state) const {
 			visualPositiveInputActivity.load(std::memory_order_relaxed);
 		snapshot.negativeInputActivity =
 			visualNegativeInputActivity.load(std::memory_order_relaxed);
+		snapshot.leftPositiveInputActivity =
+			visualLeftPositiveInputActivity.load(std::memory_order_relaxed);
+		snapshot.leftNegativeInputActivity =
+			visualLeftNegativeInputActivity.load(std::memory_order_relaxed);
+		snapshot.rightPositiveInputActivity =
+			visualRightPositiveInputActivity.load(std::memory_order_relaxed);
+		snapshot.rightNegativeInputActivity =
+			visualRightNegativeInputActivity.load(std::memory_order_relaxed);
 		snapshot.transientActivity =
 			visualTransientActivity.load(std::memory_order_relaxed);
 		snapshot.gainReduction =
@@ -117,6 +137,8 @@ bool Puffy::readVisualState(PuffyVisualState* state) const {
 			visualPositiveCharacter.load(std::memory_order_relaxed);
 		snapshot.charactersLinked =
 			visualCharactersLinked.load(std::memory_order_relaxed);
+		snapshot.stereoInputsConnected =
+			visualStereoInputsConnected.load(std::memory_order_relaxed);
 		const std::uint32_t after =
 			visualSequence.load(std::memory_order_acquire);
 		if (before == after && !(after & 1u)) {
@@ -195,7 +217,8 @@ void Puffy::process(const ProcessArgs& args) {
 		positiveCharacter,
 		autoDeflateEnabled.load(std::memory_order_relaxed),
 		params[SENSITIVITY_PARAM].getValue(),
-		params[MIX_PARAM].getValue());
+		params[MIX_PARAM].getValue(),
+		leftConnected && rightConnected);
 
 	outputs[OUTPUT_L].setChannels(1);
 	outputs[OUTPUT_R].setChannels(1);
@@ -205,7 +228,7 @@ void Puffy::process(const ProcessArgs& args) {
 	visualDivider++;
 	if (visualDivider >= visualDivision) {
 		visualDivider = 0u;
-		publishVisualState(frame);
+		publishVisualState(frame, leftConnected && rightConnected);
 	}
 	lights[LIMIT_LIGHT].setSmoothBrightness(lastGainReduction, args.sampleTime);
 	lights[CHARACTER_LINK_LIGHT].setBrightness(charactersLinked ? 1.f : 0.f);
@@ -218,14 +241,14 @@ void Puffy::process(const ProcessArgs& args) {
 void Puffy::onReset(const ResetEvent& event) {
 	(void) event;
 	engine.reset();
-	autoDeflateEnabled.store(true, std::memory_order_relaxed);
+	autoDeflateEnabled.store(false, std::memory_order_relaxed);
 	params[CHARACTER_LINK_PARAM].setValue(1.f);
 	params[POSITIVE_CHARACTER_PARAM].setValue(
 		params[CHARACTER_PARAM].getValue());
 	visualDivider = 0u;
 	lastGainReduction = 0.f;
 	puffy::Frame frame;
-	publishVisualState(frame);
+	publishVisualState(frame, false);
 	lights[LIMIT_LIGHT].setBrightness(0.f);
 	lights[CHARACTER_LINK_LIGHT].setBrightness(1.f);
 }
@@ -267,5 +290,5 @@ void Puffy::dataFromJson(json_t* root) {
 	visualDivider = 0u;
 	lastGainReduction = 0.f;
 	puffy::Frame frame;
-	publishVisualState(frame);
+	publishVisualState(frame, false);
 }

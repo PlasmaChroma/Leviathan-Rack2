@@ -203,6 +203,8 @@ The SWARM hot path must use only:
 - `fabs`;
 - `min` / `max`;
 - `copysign` or equivalent sign selection;
+- the shared `tanhAudio()` lookup table with linear interpolation;
+- bounded float-to-integer conversion for lookup indexing;
 - integer XOR and bit shifts for PRNG generation.
 
 The SWARM per-lane kernel must not call:
@@ -389,6 +391,7 @@ float swarmDrive = 1.f;
 float swarmScatter = 0.f;
 float swarmRailAttraction = 0.f;
 float swarmFastMix = 0.f;
+float swarmOutputGain = 1.f;
 ```
 
 Prepare them once per base-rate path configuration:
@@ -396,10 +399,11 @@ Prepare them once per base-rate path configuration:
 ```cpp
 const float a2 = a * a;
 
-swarmDrive = 1.f + 5.f * a2;
+swarmDrive = 1.f + 4.f * a2;
 swarmScatter = 0.05f * a + 0.55f * a2;
 swarmRailAttraction = 0.65f * a2;
 swarmFastMix = a2;
+swarmOutputGain = 1.f / max(tanhAudio(swarmDrive), 1e-6f);
 ```
 
 These are initial tuning constants, not immutable doctrine. They may be adjusted during listening tests, but the following structural relationships must remain:
@@ -449,16 +453,17 @@ case Character::Swarm: {
         std::max(0.35f, 1.f + coefficients.swarmScatter * chaos);
     const float z = coefficients.swarmDrive * localDriveScale * input;
 
-    float saturated;
-    if (std::fabs(z) < 1.f) {
-        saturated = z * (1.5f - 0.5f * z * z);
-    }
-    else {
-        saturated = std::copysign(1.f, z);
-    }
+    float saturated = tanhAudio(z) * coefficients.swarmOutputGain;
+    saturated = std::max(-1.f, std::min(saturated, 1.f));
+    const bool reachedRailRegion = std::fabs(z) >= 1.f;
+
+    const float randomUnit = 0.5f + 0.5f * chaos;
+    const float railScatter = reachedRailRegion
+        ? 0.24f * coefficients.swarmScatter * (1.f - randomUnit)
+        : 0.f;
+    saturated *= 1.f - railScatter;
 
     const float magnitude = std::min(std::fabs(saturated), 1.f);
-    const float randomUnit = 0.5f + 0.5f * chaos;
     const float attraction =
         coefficients.swarmRailAttraction
         * magnitude * magnitude
@@ -474,12 +479,28 @@ case Character::Swarm: {
 
 ### 7.2 Behavioral Interpretation
 
-The kernel has two stochastic mechanisms:
+The underlying deterministic contour is BLOOM's normalized smooth tanh curve.
+SWARM then layers two stochastic mechanisms around that centerline:
 
 1. **Drive scatter** changes the instantaneous knee and how quickly a sample approaches clipping.
 2. **Rail attraction** probabilistically gathers already-active samples toward the appropriate rail.
 
 The `magnitude²` weighting prevents low-level material from being dragged aggressively toward the rail.
+
+Once the local drive reaches the rail region, retain a small inward-facing rail scatter so
+all chaos realizations do not collapse onto the exact same `+/-1` value. The
+initial implementation uses:
+
+```cpp
+railScatter = reachedRailRegion
+    * 0.24f * coefficients.swarmScatter * (1.f - randomUnit);
+saturated *= 1.f - railScatter;
+```
+
+Apply rail attraction after this inset. This keeps the result bounded, odd for
+matching chaos, and concentrated near its polarity rail while allowing the
+particulate distribution and preview cloud to continue through the clipped
+region.
 
 The final amount interpolation preserves Puffy’s established control behavior and guarantees exact identity when `amount == 0`.
 
@@ -697,12 +718,12 @@ This keeps the cloud centered on the line that is actually displayed.
 Throttle SWARM-related framebuffer rebuilds to a maximum of:
 
 ```text
-20 Hz
+30 Hz
 ```
 
 This cap applies during rapid knob movement or audio-rate CV activity visible to the UI. It does not alter audio.
 
-When either polarity is SWARM, the 20 Hz cap applies to the entire cached curve
+When either polarity is SWARM, the 30 Hz cap applies to the entire cached curve
 framebuffer, not only to cloud generation. Coalesce amount changes and any
 FRENZY dynamics changes on the opposite polarity into the next permitted
 rebuild. This avoids an uncapped non-SWARM half continuously dirtying the same
@@ -719,7 +740,7 @@ If the point cloud causes measurable UI cost, simplify in this order:
 2. Reduce columns from 65 to 49.
 3. Draw tiny axis-aligned rectangles instead of circles.
 4. Remove the central SWARM line only if the cloud remains readable.
-5. Reduce SWARM rebuild rate from 20 Hz to 12 Hz.
+5. Reduce SWARM rebuild rate from 30 Hz to 20 Hz, then 12 Hz if necessary.
 
 Do not respond to UI cost by moving visualization work onto the audio thread.
 
@@ -789,7 +810,7 @@ Do not respond to UI cost by moving visualization work onto the audio thread.
 - Add deterministic visual hash.
 - Build the representative cloud only for SWARM polarities.
 - Retain framebuffer caching.
-- Add amount quantization and 20 Hz SWARM rebuild cap.
+- Add amount quantization and 30 Hz SWARM rebuild cap.
 - Batch point drawing.
 
 ### `src/PuffyCharacterController.*`
@@ -988,8 +1009,8 @@ Do not reduce oversampling specifically for SWARM unless a separate design decis
 Required:
 
 - Stable SWARM preview causes zero framebuffer rebuilds after state settles.
-- SWARM framebuffer rebuild rate never exceeds 20 Hz.
-- Mixed SWARM/FRENZY preview rebuilds remain capped at 20 Hz for the shared
+- SWARM framebuffer rebuild rate never exceeds 30 Hz.
+- Mixed SWARM/FRENZY preview rebuilds remain capped at 30 Hz for the shared
   framebuffer while SWARM is selected on either polarity.
 - The cloud contains no more than 195 points in the initial implementation.
 - Cloud points are batched into one or a small number of NanoVG fill calls.
@@ -1063,7 +1084,7 @@ The mode should be rejected or retuned if it sounds primarily like:
 - [ ] Auto Deflate case added.
 - [ ] Representative cached cloud implemented.
 - [ ] Stable preview does not continuously redraw.
-- [ ] SWARM redraw capped at 20 Hz.
+- [ ] SWARM redraw capped at 30 Hz.
 - [ ] Mixed SWARM/FRENZY redraws obey the shared-framebuffer cap.
 - [ ] No fish particle system added.
 - [ ] Engine tests extended.

@@ -186,8 +186,8 @@ Result swarmChaosInfluence() {
 		}
 		return high - low;
 	};
-	const float lowSpread = spreadAt(0.25f, 0.25f);
-	const float highSpread = spreadAt(1.f, 0.25f);
+	const float lowSpread = spreadAt(0.25f, 0.45f);
+	const float highSpread = spreadAt(1.f, 0.45f);
 	const float silentSpread = spreadAt(1.f, 0.f);
 	return {
 		"SWARM chaos gains influence with PUFF without creating a noise floor",
@@ -235,6 +235,32 @@ Result swarmRailAttraction() {
 			+ std::to_string(mediumMean) + "/"
 			+ std::to_string(highMean)
 			+ " symmetric=" + std::to_string(symmetric)
+	};
+}
+
+Result swarmCenterlineFollowsBloom() {
+	puffy::DynamicsState dynamics;
+	double bloomDistance = 0.0;
+	double spineDistance = 0.0;
+	for (int ai = 1; ai <= 20; ++ai) {
+		const float amount = float(ai) / 20.f;
+		for (int xi = -100; xi <= 100; ++xi) {
+			const float input = float(xi) / 100.f;
+			const float swarm = puffy::Engine::processCharacter(
+				puffy::Character::Swarm, input, amount, dynamics, 0.f);
+			const float bloom = puffy::Engine::processCharacter(
+				puffy::Character::Bloom, input, amount, dynamics);
+			const float spine = puffy::Engine::processCharacter(
+				puffy::Character::Spine, input, amount, dynamics);
+			bloomDistance += std::fabs(double(swarm - bloom));
+			spineDistance += std::fabs(double(swarm - spine));
+		}
+	}
+	return {
+		"SWARM's deterministic centerline follows BLOOM more closely than SPINE",
+		bloomDistance < spineDistance,
+		"distance bloom=" + std::to_string(bloomDistance)
+			+ " spine=" + std::to_string(spineDistance)
 	};
 }
 
@@ -868,14 +894,22 @@ Result bipolarInputActivityTracksStereoExcursions() {
 	engine.setSampleRate(48000.f);
 	puffy::Frame frame;
 	for (int i = 0; i < 48000; ++i) {
-		frame = engine.process(2.5f, -4.f, 0.f, 0, false, 0.f);
+		frame = engine.process(2.5f, -4.f, 0.f, 0, false, 0.f, 1.f, true);
 	}
 	return {
-		"Preview activity independently tracks positive and negative stereo excursions",
+		"Preview activity tracks combined and per-channel polarity excursions",
 		near(frame.positiveInputActivity, 0.5f, 2e-3f)
-			&& near(frame.negativeInputActivity, 0.8f, 2e-3f),
+			&& near(frame.negativeInputActivity, 0.8f, 2e-3f)
+			&& near(frame.leftPositiveInputActivity, 0.5f, 2e-3f)
+			&& near(frame.leftNegativeInputActivity, 0.f, 2e-3f)
+			&& near(frame.rightPositiveInputActivity, 0.f, 2e-3f)
+			&& near(frame.rightNegativeInputActivity, 0.8f, 2e-3f),
 		"positive=" + std::to_string(frame.positiveInputActivity)
 			+ " negative=" + std::to_string(frame.negativeInputActivity)
+			+ " left=" + std::to_string(frame.leftNegativeInputActivity)
+			+ "/" + std::to_string(frame.leftPositiveInputActivity)
+			+ " right=" + std::to_string(frame.rightNegativeInputActivity)
+			+ "/" + std::to_string(frame.rightPositiveInputActivity)
 	};
 }
 
@@ -915,6 +949,7 @@ int main() {
 		swarmKernelInvariants(),
 		swarmChaosInfluence(),
 		swarmRailAttraction(),
+		swarmCenterlineFollowsBloom(),
 		swarmSeedingAndStereo(),
 		voidBecomesSteppedQuantizer(),
 		frenzySinusoidalFold(),

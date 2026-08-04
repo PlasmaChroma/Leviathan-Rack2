@@ -13,11 +13,16 @@ struct PuffyVisualState {
 	float inputActivity = 0.f;
 	float positiveInputActivity = 0.f;
 	float negativeInputActivity = 0.f;
+	float leftPositiveInputActivity = 0.f;
+	float leftNegativeInputActivity = 0.f;
+	float rightPositiveInputActivity = 0.f;
+	float rightNegativeInputActivity = 0.f;
 	float transientActivity = 0.f;
 	float gainReduction = 0.f;
 	int negativeCharacter = 0;
 	int positiveCharacter = 0;
 	bool charactersLinked = true;
+	bool stereoInputsConnected = false;
 };
 
 struct Puffy final : Module {
@@ -53,18 +58,23 @@ struct Puffy final : Module {
 
 	ModuleTeardownTimer teardownTimer {"Puffy"};
 	puffy::Engine engine;
-	std::atomic<bool> autoDeflateEnabled {true};
+	std::atomic<bool> autoDeflateEnabled {false};
 	std::atomic<std::uint32_t> visualSequence {0u};
 	std::atomic<float> visualEffectiveAmount {0.f};
 	std::atomic<float> visualWetMix {1.f};
 	std::atomic<float> visualInputActivity {0.f};
 	std::atomic<float> visualPositiveInputActivity {0.f};
 	std::atomic<float> visualNegativeInputActivity {0.f};
+	std::atomic<float> visualLeftPositiveInputActivity {0.f};
+	std::atomic<float> visualLeftNegativeInputActivity {0.f};
+	std::atomic<float> visualRightPositiveInputActivity {0.f};
+	std::atomic<float> visualRightNegativeInputActivity {0.f};
 	std::atomic<float> visualTransientActivity {0.f};
 	std::atomic<float> visualGainReduction {0.f};
 	std::atomic<int> visualNegativeCharacter {0};
 	std::atomic<int> visualPositiveCharacter {0};
 	std::atomic<bool> visualCharactersLinked {true};
+	std::atomic<bool> visualStereoInputsConnected {false};
 	std::uint32_t visualDivider = 0u;
 	std::uint32_t visualDivision = 200u;
 	float lastGainReduction = 0.f;
@@ -82,7 +92,7 @@ struct Puffy final : Module {
 	void synchronizeCharacterSelectionFromUi(bool negativeIsSource);
 
 private:
-	void publishVisualState(const puffy::Frame& frame);
+	void publishVisualState(const puffy::Frame& frame, bool stereoInputsConnected);
 };
 
 struct PuffyWidget;

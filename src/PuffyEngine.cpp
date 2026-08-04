@@ -146,6 +146,10 @@ void Engine::resetSharedControlState() {
 	inputActivity = 0.f;
 	positiveInputActivity = 0.f;
 	negativeInputActivity = 0.f;
+	leftPositiveInputActivity = 0.f;
+	leftNegativeInputActivity = 0.f;
+	rightPositiveInputActivity = 0.f;
+	rightNegativeInputActivity = 0.f;
 	limiterGain = 1.f;
 }
 
@@ -244,10 +248,13 @@ Engine::CharacterCoefficients Engine::prepareCharacter(
 	switch (character) {
 		case Character::Swarm: {
 			const float a2 = a * a;
-			coefficients.swarmDrive = 1.f + 5.f * a2;
+			// SWARM's population moves around BLOOM's smooth underlying contour.
+			coefficients.swarmDrive = 1.f + 4.f * a2;
 			coefficients.swarmScatter = 0.05f * a + 0.55f * a2;
 			coefficients.swarmRailAttraction = 0.65f * a2;
 			coefficients.swarmFastMix = a2;
+			coefficients.swarmOutputGain = 1.f / std::max(
+				levi_math::tanhAudio(coefficients.swarmDrive), 1e-6f);
 			break;
 		}
 		case Character::Void:
@@ -275,7 +282,7 @@ Engine::CharacterCoefficients Engine::prepareCharacter(
 			// Puff sweeps continuously from one to four complete sine-fold
 			// cycles while contracting their vertical span. Dynamics bends the
 			// phase asymmetrically without moving the origin or end anchors.
-			coefficients.foldCycles = 1.f + 3.f * a;
+			coefficients.foldPhaseCycles = 0.5f * (1.f + 3.f * a);
 			coefficients.foldGain = 1.f / (1.f + 0.5f * a);
 			coefficients.phaseSkew =
 				0.12f + 0.18f * fastControl + 0.12f * transient;
@@ -327,15 +334,19 @@ float Engine::applyCharacter(
 			const float localDriveScale = std::max(
 				0.35f, 1.f + coefficients.swarmScatter * chaos);
 			const float z = coefficients.swarmDrive * localDriveScale * input;
-			float saturated;
-			if (std::fabs(z) < 1.f) {
-				saturated = z * (1.5f - 0.5f * z * z);
-			}
-			else {
-				saturated = std::copysign(1.f, z);
-			}
-			const float magnitude = std::min(std::fabs(saturated), 1.f);
+			float saturated = levi_math::tanhAudio(z)
+				* coefficients.swarmOutputGain;
+			saturated = std::max(-1.f, std::min(saturated, 1.f));
+			const float railScatterGate = std::fabs(z) >= 1.f ? 1.f : 0.f;
 			const float randomUnit = 0.5f + 0.5f * chaos;
+			// Hard clipping would otherwise collapse every sufficiently loud chaos
+			// realization onto the same point. Keep a small inward-facing scatter
+			// at the rail: it remains bounded and signal-dependent, but the cloud
+			// continues after the transfer has reached +/-1.
+			const float railScatter = railScatterGate
+				* 0.24f * coefficients.swarmScatter * (1.f - randomUnit);
+			saturated *= 1.f - railScatter;
+			const float magnitude = std::min(std::fabs(saturated), 1.f);
 			const float attraction = coefficients.swarmRailAttraction
 				* magnitude * magnitude * randomUnit;
 			const float rail = std::copysign(1.f, input);
@@ -380,8 +391,9 @@ float Engine::applyCharacter(
 			const float z2 = z * z;
 			const float warped = z
 				+ coefficients.phaseSkew * z2 * (1.f - z2);
-			const float folded = coefficients.foldGain * std::sin(
-				kPi * coefficients.foldCycles * warped);
+			const float folded = coefficients.foldGain
+				* levi_math::sinCyclesAudioBounded(
+					coefficients.foldPhaseCycles * warped);
 			const float polarityBias = z >= 0.f
 				? coefficients.positivePolarityBias
 				: coefficients.negativePolarityBias;
@@ -501,7 +513,8 @@ Frame Engine::process(
 	int positiveCharacter,
 	bool autoDeflate,
 	float sensitivity,
-	float wetTarget) {
+	float wetTarget,
+	bool trackStereoActivity) {
 	const bool invalidLeft = !std::isfinite(inputLeft);
 	const bool invalidRight = !std::isfinite(inputRight);
 	if (invalidLeft) {
@@ -560,6 +573,42 @@ Frame Engine::process(
 		std::min(normalizedNegative, 1.25f),
 		activityAttackCoefficient,
 		activityReleaseCoefficient);
+	if (trackStereoActivity) {
+		const float normalizedLeftPositive = std::max(0.f, projectedLeft)
+			/ kReferenceVolts;
+		const float normalizedLeftNegative = std::max(0.f, -projectedLeft)
+			/ kReferenceVolts;
+		const float normalizedRightPositive = std::max(0.f, projectedRight)
+			/ kReferenceVolts;
+		const float normalizedRightNegative = std::max(0.f, -projectedRight)
+			/ kReferenceVolts;
+		leftPositiveInputActivity = updateFollower(
+			leftPositiveInputActivity,
+			std::min(normalizedLeftPositive, 1.25f),
+			activityAttackCoefficient,
+			activityReleaseCoefficient);
+		leftNegativeInputActivity = updateFollower(
+			leftNegativeInputActivity,
+			std::min(normalizedLeftNegative, 1.25f),
+			activityAttackCoefficient,
+			activityReleaseCoefficient);
+		rightPositiveInputActivity = updateFollower(
+			rightPositiveInputActivity,
+			std::min(normalizedRightPositive, 1.25f),
+			activityAttackCoefficient,
+			activityReleaseCoefficient);
+		rightNegativeInputActivity = updateFollower(
+			rightNegativeInputActivity,
+			std::min(normalizedRightNegative, 1.25f),
+			activityAttackCoefficient,
+			activityReleaseCoefficient);
+	}
+	else {
+		leftPositiveInputActivity = 0.f;
+		leftNegativeInputActivity = 0.f;
+		rightPositiveInputActivity = 0.f;
+		rightNegativeInputActivity = 0.f;
+	}
 
 	const float safeTarget = std::isfinite(amountTarget) ? clamp01(amountTarget) : 0.f;
 	amount += (safeTarget - amount) * amountCoefficient;
@@ -604,11 +653,15 @@ Frame Engine::process(
 		const CharacterCoefficients oldNegativeCoefficients =
 			prepareCharacter(transitionFrom.negative, amount, dynamics);
 		const CharacterCoefficients oldPositiveCoefficients =
-			prepareCharacter(transitionFrom.positive, amount, dynamics);
+			transitionFrom.positive == transitionFrom.negative
+				? oldNegativeCoefficients
+				: prepareCharacter(transitionFrom.positive, amount, dynamics);
 		const CharacterCoefficients newNegativeCoefficients =
 			prepareCharacter(transitionTo.negative, amount, dynamics);
 		const CharacterCoefficients newPositiveCoefficients =
-			prepareCharacter(transitionTo.positive, amount, dynamics);
+			transitionTo.positive == transitionTo.negative
+				? newNegativeCoefficients
+				: prepareCharacter(transitionTo.positive, amount, dynamics);
 		const float oldLeft = processPath(
 			primaryPath, oldNegativeCoefficients, oldPositiveCoefficients,
 			oversampledLeft.data(),
@@ -647,7 +700,9 @@ Frame Engine::process(
 		const CharacterCoefficients negativeCoefficients =
 			prepareCharacter(currentCharacters.negative, amount, dynamics);
 		const CharacterCoefficients positiveCoefficients =
-			prepareCharacter(currentCharacters.positive, amount, dynamics);
+			currentCharacters.positive == currentCharacters.negative
+				? negativeCoefficients
+				: prepareCharacter(currentCharacters.positive, amount, dynamics);
 		normalizedLeft = processPath(
 			primaryPath, negativeCoefficients, positiveCoefficients,
 			oversampledLeft.data(),
@@ -692,6 +747,14 @@ Frame Engine::process(
 		std::max(0.f, std::min(positiveInputActivity, 1.25f));
 	frame.negativeInputActivity =
 		std::max(0.f, std::min(negativeInputActivity, 1.25f));
+	frame.leftPositiveInputActivity =
+		std::max(0.f, std::min(leftPositiveInputActivity, 1.25f));
+	frame.leftNegativeInputActivity =
+		std::max(0.f, std::min(leftNegativeInputActivity, 1.25f));
+	frame.rightPositiveInputActivity =
+		std::max(0.f, std::min(rightPositiveInputActivity, 1.25f));
+	frame.rightNegativeInputActivity =
+		std::max(0.f, std::min(rightNegativeInputActivity, 1.25f));
 	frame.transientActivity = clamp01(dynamics.transient);
 	frame.limiterGain = clamp01(limiterGain);
 	const CharacterPair displayedCharacters =

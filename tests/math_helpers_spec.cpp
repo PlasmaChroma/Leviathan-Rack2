@@ -68,7 +68,32 @@ int main() {
 		tableAddress % 64u == 0u,
 		"shared audio tanh table is cache-line aligned");
 
+	float maximumSineError = 0.f;
+	float maximumSineOddError = 0.f;
+	constexpr float kTwoPi = 6.28318530717958647692f;
+	for (int i = 0; i <= sampleCount; ++i) {
+		const float cycles = -2.f + 4.f * float(i) / float(sampleCount);
+		const float approximation = levi_math::sinCyclesAudioBounded(cycles);
+		maximumSineError = std::max(
+			maximumSineError,
+			std::fabs(approximation - std::sin(kTwoPi * cycles)));
+		maximumSineOddError = std::max(
+			maximumSineOddError,
+			std::fabs(
+				approximation + levi_math::sinCyclesAudioBounded(-cycles)));
+	}
+	failures += !check(
+		maximumSineError < 1.7e-6f && maximumSineOddError < 2e-6f,
+		"audio sine LUT stays accurate and odd across FRENZY's phase range");
+	const std::uintptr_t sineTableAddress = reinterpret_cast<std::uintptr_t>(
+		levi_math::detail::audioSineLut.data());
+	failures += !check(
+		sineTableAddress % 64u == 0u,
+		"shared audio sine table is cache-line aligned");
+
 	std::cout << "max audio tanh error: " << maximumError << "\n";
-	std::cout << "Summary: " << (5 - failures) << "/5 passed\n";
+	std::cout << "max audio sine error: " << maximumSineError << "\n";
+	std::cout << "max audio sine odd error: " << maximumSineOddError << "\n";
+	std::cout << "Summary: " << (7 - failures) << "/7 passed\n";
 	return failures == 0 ? 0 : 1;
 }
