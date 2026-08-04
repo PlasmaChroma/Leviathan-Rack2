@@ -187,12 +187,21 @@ bool PuffyFishWidget::drawBodyRaster(
 	const float y = center.y - 0.5f * drawHeight;
 	// NanoVG image paints expose a uniform tint, so use a small strip ramp to
 	// give Puffy a genuine polarity gradient without allocating another image.
+	// Scissor edges feather in framebuffer pixels. Keep their overlap at least
+	// one pixel wide after the current Rack zoom transform, or gaps appear
+	// between strips when the module is zoomed out.
+	float transform[6] {};
+	nvgCurrentTransform(vg, transform);
+	const float screenScaleX = std::sqrt(
+		transform[0] * transform[0] + transform[1] * transform[1]);
+	const float stripOverlap = std::max(
+		0.5f, 1.25f / std::max(screenScaleX, 0.01f));
 	constexpr int kTintStrips = 12;
 	for (int i = 0; i < kTintStrips; ++i) {
 		const float t0 = float(i) / float(kTintStrips);
 		const float t1 = float(i + 1) / float(kTintStrips);
 		const float stripX = x + drawWidth * t0;
-		const float stripWidth = drawWidth * (t1 - t0) + 0.5f;
+		const float stripWidth = drawWidth * (t1 - t0) + stripOverlap;
 		const NVGcolor tint = mixColor(
 			negativeTint, positiveTint, 0.5f * (t0 + t1));
 		NVGpaint paint = nvgImagePattern(
