@@ -3,10 +3,8 @@
 #include "PuffyEngine.hpp"
 
 struct PuffyPose {
-	float negativeCharacterTintWeights[puffy::kCharacterCount] = {
-		1.f, 0.f, 0.f, 0.f, 0.f};
-	float positiveCharacterTintWeights[puffy::kCharacterCount] = {
-		1.f, 0.f, 0.f, 0.f, 0.f};
+	float negativeCharacterTintWeights[puffy::kCharacterCount] = {1.f};
+	float positiveCharacterTintWeights[puffy::kCharacterCount] = {1.f};
 	float inflation = 0.f;
 	float squashX = 0.f;
 	float squashY = 0.f;

@@ -26,7 +26,7 @@ PUFF + input dynamics -> audible character -> readable fish reaction
 
 The front panel stays deliberately small:
 
-- five original Leviathan character modes;
+- six original Leviathan character modes;
 - one primary `PUFF` control;
 - one bipolar `SENSITIVITY` input-projection control;
 - one `MIX` wet/dry control;
@@ -44,7 +44,8 @@ At the end of v1, a user can:
 
 - patch a mono or stereo signal and obtain a stable stereo output;
 - move continuously from an effectively clean signal to obvious saturation;
-- select a warm, aggressive, input-reactive, fractal, or stepped character;
+- select a warm, aggressive, input-reactive, fractal, stepped, or stochastic
+  character;
 - modulate `PUFF` over its complete range with 0-10 V CV;
 - reduce or increase waveshaper projection by one octave with `SENSITIVITY`;
 - blend continuously between latency-matched dry and fully processed audio;
@@ -70,7 +71,7 @@ trade dress. Its art and mode identities must be original.
 | --- | --- |
 | Product role | Stereo character saturator with final peak control |
 | Width | 12 HP / 60.96 mm / 180 Rack px |
-| Characters | `BLOOM`, `SPINE`, `FRENZY`, `RIPTIDE`, and `VOID` |
+| Characters | `BLOOM`, `SPINE`, `FRENZY`, `RIPTIDE`, `VOID`, and `SWARM` |
 | Default character | `BLOOM` |
 | Default amount | `PUFF = 0.25` |
 | Stereo I/O | Separate L/R jacks; mono normalization while active |
@@ -140,7 +141,7 @@ screw_br
 
 | Label | Type | Range/default | Meaning |
 | --- | --- | --- | --- |
-| `CHARACTER` | 5-position snapped switch | 0..4, default 0 | `BLOOM`, `SPINE`, `FRENZY`, `RIPTIDE`, `VOID` |
+| `CHARACTER` | 6-position snapped switch | 0..5, default 0 | `BLOOM`, `SPINE`, `FRENZY`, `RIPTIDE`, `VOID`, `SWARM` |
 | `PUFF` | large knob | 0..1, default 0.25 | Base saturation amount |
 | `SENSITIVITY` | bipolar knob | -1..1, default 0 | 0.5x to 2x waveshaper input projection |
 | `PUFF CV` | attenuverter | -1..1, default 0 | Depth and polarity of amount CV |
@@ -234,7 +235,7 @@ enum LightId {
 };
 ```
 
-Use `configSwitch()` for `CHARACTER_PARAM`, including the five display labels.
+Use `configSwitch()` for `CHARACTER_PARAM`, including the six display labels.
 Use bipolar dB display scaling so `SENSITIVITY` displays approximately
 -6.02 to +6.02 dB with unity at the center detent.
 
@@ -644,7 +645,7 @@ struct PuffyVisualState {
     float negativeInputActivity; // smoothed 0..1.25
     float transientActivity; // smoothed 0..1
     float gainReduction;     // 0..1, 1 at >= 6 dB GR
-    int character;           // 0..4
+    int character;           // 0..5
 };
 ```
 
@@ -677,9 +678,9 @@ Shared motion and character color:
 - character identity is retained through the negative/positive body colors.
 - all modes: blush or warning tint follows limiter gain reduction.
 
-Tint transitions use five independent one-hot weights rather than interpolating
-the numeric character index. This makes the selector wrap from `VOID` to
-`BLOOM` crossfade directly from violet to green without passing through the
+Tint transitions use six independent one-hot weights rather than interpolating
+the numeric character index. This makes the selector wrap from `SWARM` to
+`BLOOM` crossfade directly from white to green without passing through the
 intermediate mode colors.
 
 The separate `LIMIT_LIGHT` follows the same gain-reduction target and reaches
@@ -898,7 +899,7 @@ behind a generic `High quality` label.
 ### 12.1 MVP purpose and boundary
 
 The implementation MVP is a hidden, testable vertical slice. Its purpose is to
-validate Puffy's permanent module API, stereo signal flow, five character
+validate Puffy's permanent module API, stereo signal flow, six character
 identities, and audio-to-character handoff before the more expensive limiter,
 configuration-transition, and final-art work begins.
 
@@ -918,7 +919,7 @@ The first runnable module includes:
 - active-mode stereo normalization, channel-0 input handling, finite guards,
   the +/-20 V internal clamp, and one output channel per jack;
 - 1 ms `PUFF` smoothing and the 5 ms linear character crossfade;
-- all five final character transfer functions and the one continuously updated
+- all six final character transfer functions and the one continuously updated
   stereo-linked `PuffyDynamicsDetector`;
 - a fixed 4x saturation path for the MVP, using the final Rack FIR types, plus
   the common 5 Hz DC blocker;
@@ -1007,7 +1008,7 @@ After the MVP gate:
 
 Puffy is ready to unhide only when:
 
-- all five modes are sonically distinct at matched level;
+- all six modes are sonically distinct at matched level;
 - the default 4x path meets the aliasing target;
 - `LIVE` and `MASTER` satisfy their separately named peak guarantees;
 - context changes and patch loading are click-safe;
@@ -1184,7 +1185,7 @@ image.
 
 ## A.4 Mode-specific personality
 
-The five DSP characters should share one recognizable Puffy but differ in
+The six DSP characters should share one recognizable Puffy but differ in
 motion language.
 
 ### A.4.1 BLOOM
@@ -1208,6 +1209,13 @@ motion language.
 
 - Dark violet body tint with slightly posterized highlight bands.
 - Uses the shared Puffy motion language; do not quantize its animation.
+
+### A.4.6 SWARM
+
+- White body tint and a deterministic particulate transfer preview.
+- Uses the shared Puffy motion language; no mode-specific fish particles.
+- Its stochastic DSP behavior is defined by
+  `doc/puffy-swarm-implementation-spec.md`.
 
 Mode colors should crossfade over roughly 150-300 ms even though the audio
 characters crossfade in 5 ms. The slower visual transition keeps color changes

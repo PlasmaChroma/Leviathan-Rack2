@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 namespace puffy {
 
@@ -16,10 +17,11 @@ enum class Character {
 	Spine = 1,
 	Frenzy = 2,
 	Riptide = 3,
-	Void = 4
+	Void = 4,
+	Swarm = 5
 };
 
-constexpr int kCharacterCount = int(Character::Void) + 1;
+constexpr int kCharacterCount = int(Character::Swarm) + 1;
 
 struct DynamicsState {
 	float fast = 0.f;
@@ -46,6 +48,7 @@ public:
 	Engine();
 
 	void setSampleRate(float sampleRate);
+	void setSwarmSeed(std::uint32_t seed);
 	void reset();
 	Frame process(
 		float inputLeft,
@@ -77,7 +80,8 @@ public:
 		Character character,
 		float input,
 		float amount,
-		const DynamicsState& dynamics);
+		const DynamicsState& dynamics,
+		float swarmChaos = 0.f);
 
 private:
 	struct CharacterCoefficients {
@@ -95,6 +99,14 @@ private:
 		float voidInverseStepSize = 1.f;
 		float voidOutputGain = 1.f;
 		float voidRailThreshold = 1.f;
+		float swarmDrive = 1.f;
+		float swarmScatter = 0.f;
+		float swarmRailAttraction = 0.f;
+		float swarmFastMix = 0.f;
+	};
+
+	struct SwarmFrame {
+		float lanes[kOversampleFactor] {};
 	};
 
 	struct DcBlocker {
@@ -137,6 +149,12 @@ private:
 	float cachedSensitivity = -2.f;
 	float cachedSensitivityTargetGain = 1.f;
 	DynamicsState dynamics;
+	std::uint32_t swarmInitialSeed = 0x6d2b79f5u;
+	std::uint32_t swarmRngState = 0x6d2b79f5u;
+	float swarmPreviousFast = 0.f;
+	float swarmCurrentFast = 0.f;
+	float swarmSlow = 0.f;
+	float swarmSlowCoefficient = 1.f;
 
 	rack::dsp::Upsampler<kOversampleFactor, kOversampleQuality> upsamplerLeft;
 	rack::dsp::Upsampler<kOversampleFactor, kOversampleQuality> upsamplerRight;
@@ -172,7 +190,11 @@ private:
 		Character character,
 		float amount,
 		const DynamicsState& dynamics);
-	static float applyCharacter(float input, const CharacterCoefficients& coefficients);
+	static float applyCharacter(
+		float input,
+		const CharacterCoefficients& coefficients,
+		float swarmChaos);
+	SwarmFrame prepareSwarmFrame(float fastMix);
 	float updateFollower(float current, float target, float attack, float release) const;
 	float sensitivityTargetGain(float bipolarSensitivity);
 	float processPath(
@@ -183,6 +205,7 @@ private:
 		float* oversampledRight,
 		float autoDeflateAmount,
 		float wetAmount,
+		const SwarmFrame& swarmFrame,
 		bool left);
 };
 

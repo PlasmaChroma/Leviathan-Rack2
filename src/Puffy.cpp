@@ -6,15 +6,29 @@
 namespace {
 
 std::atomic<std::uint32_t> gPuffyDebugInstanceCounter {1u};
+std::atomic<std::uint32_t> gPuffySwarmInstanceCounter {1u};
+
+std::uint32_t makePuffySwarmSeed() {
+	std::uint32_t value = gPuffySwarmInstanceCounter.fetch_add(
+		1u, std::memory_order_relaxed);
+	value ^= value >> 16;
+	value *= 0x7feb352du;
+	value ^= value >> 15;
+	value *= 0x846ca68bu;
+	value ^= value >> 16;
+	return value != 0u ? value : 0x6d2b79f5u;
+}
 
 } // namespace
 
 Puffy::Puffy() {
 	debugMetrics.assignInstanceId(gPuffyDebugInstanceCounter);
+	engine.setSwarmSeed(makePuffySwarmSeed());
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 	configSwitch(
-		CHARACTER_PARAM, 0.f, 4.f, 0.f, "Negative character",
-		{"BLOOM", "SPINE", "FRENZY", "RIPTIDE", "VOID"});
+		CHARACTER_PARAM, 0.f, float(puffy::kCharacterCount - 1), 0.f,
+		"Negative character",
+		{"BLOOM", "SPINE", "FRENZY", "RIPTIDE", "VOID", "SWARM"});
 	configParam(PUFF_PARAM, 0.f, 1.f, 0.25f, "Puff", "%", 0.f, 100.f);
 	configParam(
 		SENSITIVITY_PARAM, -1.f, 1.f, 0.f,
@@ -24,8 +38,9 @@ Puffy::Puffy() {
 		"Puff CV amount", "%", 0.f, 100.f);
 	configParam(MIX_PARAM, 0.f, 1.f, 1.f, "Mix", "%", 0.f, 100.f);
 	configSwitch(
-		POSITIVE_CHARACTER_PARAM, 0.f, 4.f, 0.f, "Positive character",
-		{"BLOOM", "SPINE", "FRENZY", "RIPTIDE", "VOID"});
+		POSITIVE_CHARACTER_PARAM, 0.f, float(puffy::kCharacterCount - 1), 0.f,
+		"Positive character",
+		{"BLOOM", "SPINE", "FRENZY", "RIPTIDE", "VOID", "SWARM"});
 	configSwitch(
 		CHARACTER_LINK_PARAM, 0.f, 1.f, 1.f, "Link polarity characters",
 		{"Unlinked", "Linked"});
@@ -156,7 +171,7 @@ void Puffy::process(const ProcessArgs& args) {
 	const int negativeCharacter = clamp(
 		int(std::lround(params[CHARACTER_PARAM].getValue())),
 		0,
-		int(puffy::Character::Void));
+		puffy::kCharacterCount - 1);
 	const bool charactersLinked =
 		params[CHARACTER_LINK_PARAM].getValue() > 0.5f;
 	if (charactersLinked
@@ -171,7 +186,7 @@ void Puffy::process(const ProcessArgs& args) {
 			int(std::lround(
 				params[POSITIVE_CHARACTER_PARAM].getValue())),
 			0,
-			int(puffy::Character::Void));
+			puffy::kCharacterCount - 1);
 	const puffy::Frame frame = engine.process(
 		left,
 		right,

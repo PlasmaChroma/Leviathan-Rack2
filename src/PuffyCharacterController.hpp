@@ -13,10 +13,8 @@ public:
 private:
 	float inflation = 0.f;
 	float inflationVelocity = 0.f;
-	float negativeCharacterTintWeights[puffy::kCharacterCount] = {
-		1.f, 0.f, 0.f, 0.f, 0.f};
-	float positiveCharacterTintWeights[puffy::kCharacterCount] = {
-		1.f, 0.f, 0.f, 0.f, 0.f};
+	float negativeCharacterTintWeights[puffy::kCharacterCount] = {1.f};
+	float positiveCharacterTintWeights[puffy::kCharacterCount] = {1.f};
 	float transientMemory = 0.f;
 	float twitchPhase = -1.f;
 	float twitchStrength = 0.f;

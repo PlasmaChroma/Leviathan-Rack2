@@ -37,8 +37,8 @@ Character clampCharacter(int character) {
 	if (character <= int(Character::Bloom)) {
 		return Character::Bloom;
 	}
-	if (character >= int(Character::Void)) {
-		return Character::Void;
+	if (character >= kCharacterCount - 1) {
+		return static_cast<Character>(kCharacterCount - 1);
 	}
 	return static_cast<Character>(character);
 }
@@ -75,6 +75,8 @@ float autoDeflateDb(Character character, float amount) {
 			// VOID's magnitude quantizer only removes level. Additional automatic
 			// attenuation would make it collapse in linked mode.
 			return 0.f;
+		case Character::Swarm:
+			return -3.f * amount;
 		case Character::Spine:
 			return -4.f * amount;
 		case Character::Riptide:
@@ -126,8 +128,17 @@ void Engine::setSampleRate(float requestedSampleRate) {
 	activityReleaseCoefficient = onePoleCoefficient(0.120f, sampleRate);
 	limiterReleaseCoefficient = onePoleCoefficient(0.050f, sampleRate);
 	dcCoefficient = std::exp(-2.f * kPi * 5.f / sampleRate);
+	swarmSlowCoefficient = onePoleCoefficient(0.003f, sampleRate);
 	transitionLength = std::max(1, int(std::lround(0.005f * sampleRate)));
 	reset();
+}
+
+void Engine::setSwarmSeed(std::uint32_t seed) {
+	swarmInitialSeed = seed != 0u ? seed : 0x6d2b79f5u;
+	swarmRngState = swarmInitialSeed;
+	swarmPreviousFast = 0.f;
+	swarmCurrentFast = 0.f;
+	swarmSlow = 0.f;
 }
 
 void Engine::resetSharedControlState() {
@@ -162,6 +173,10 @@ void Engine::reset() {
 	transitionSample = 0;
 	transitionActive = false;
 	pendingCharacterActive = false;
+	swarmRngState = swarmInitialSeed;
+	swarmPreviousFast = 0.f;
+	swarmCurrentFast = 0.f;
+	swarmSlow = 0.f;
 }
 
 void Engine::resetChannel(bool left) {
@@ -227,6 +242,14 @@ Engine::CharacterCoefficients Engine::prepareCharacter(
 	coefficients.amount = clamp01(amount);
 	const float a = coefficients.amount;
 	switch (character) {
+		case Character::Swarm: {
+			const float a2 = a * a;
+			coefficients.swarmDrive = 1.f + 5.f * a2;
+			coefficients.swarmScatter = 0.05f * a + 0.55f * a2;
+			coefficients.swarmRailAttraction = 0.65f * a2;
+			coefficients.swarmFastMix = a2;
+			break;
+		}
 		case Character::Void:
 			// Grow from imperceptibly fine quantization to eight positive treads.
 			// Squaring PUFF keeps the first half detailed. Move the final rail
@@ -295,9 +318,31 @@ Engine::CharacterCoefficients Engine::prepareCharacter(
 
 float Engine::applyCharacter(
 	float input,
-	const CharacterCoefficients& coefficients) {
+	const CharacterCoefficients& coefficients,
+	float swarmChaos) {
 	const float a = coefficients.amount;
 	switch (coefficients.character) {
+		case Character::Swarm: {
+			const float chaos = std::max(-1.f, std::min(swarmChaos, 1.f));
+			const float localDriveScale = std::max(
+				0.35f, 1.f + coefficients.swarmScatter * chaos);
+			const float z = coefficients.swarmDrive * localDriveScale * input;
+			float saturated;
+			if (std::fabs(z) < 1.f) {
+				saturated = z * (1.5f - 0.5f * z * z);
+			}
+			else {
+				saturated = std::copysign(1.f, z);
+			}
+			const float magnitude = std::min(std::fabs(saturated), 1.f);
+			const float randomUnit = 0.5f + 0.5f * chaos;
+			const float attraction = coefficients.swarmRailAttraction
+				* magnitude * magnitude * randomUnit;
+			const float rail = std::copysign(1.f, input);
+			saturated += (rail - saturated) * attraction;
+			saturated = std::max(-1.f, std::min(saturated, 1.f));
+			return input + (saturated - input) * a;
+		}
 		case Character::Void: {
 			if (!(a > 0.f)) {
 				return input;
@@ -360,10 +405,35 @@ float Engine::processCharacter(
 	Character character,
 	float input,
 	float amount,
-	const DynamicsState& dynamicsState) {
+	const DynamicsState& dynamicsState,
+	float swarmChaos) {
 	return applyCharacter(
 		input,
-		prepareCharacter(character, amount, dynamicsState));
+		prepareCharacter(character, amount, dynamicsState),
+		swarmChaos);
+}
+
+Engine::SwarmFrame Engine::prepareSwarmFrame(float fastMix) {
+	SwarmFrame frame;
+	swarmPreviousFast = swarmCurrentFast;
+	swarmRngState ^= swarmRngState << 13;
+	swarmRngState ^= swarmRngState >> 17;
+	swarmRngState ^= swarmRngState << 5;
+	const std::uint32_t bits = swarmRngState >> 8;
+	swarmCurrentFast = float(bits) * (2.f / 16777216.f) - 1.f;
+	const float previousSlow = swarmSlow;
+	swarmSlow += (swarmCurrentFast - swarmSlow) * swarmSlowCoefficient;
+	static constexpr float laneT[kOversampleFactor] = {
+		0.25f, 0.50f, 0.75f, 1.f
+	};
+	for (int i = 0; i < kOversampleFactor; ++i) {
+		const float t = laneT[i];
+		const float fast = swarmPreviousFast
+			+ (swarmCurrentFast - swarmPreviousFast) * t;
+		const float slow = previousSlow + (swarmSlow - previousSlow) * t;
+		frame.lanes[i] = slow + (fast - slow) * fastMix;
+	}
+	return frame;
 }
 
 float Engine::sensitivityTargetGain(float bipolarSensitivity) {
@@ -394,6 +464,7 @@ float Engine::processPath(
 	float* oversampledRight,
 	float autoDeflateAmount,
 	float wetAmount,
+	const SwarmFrame& swarmFrame,
 	bool left) {
 	std::array<float, kOversampleFactor> shaped {};
 	float* input = left ? oversampledLeft : oversampledRight;
@@ -401,7 +472,7 @@ float Engine::processPath(
 		const CharacterCoefficients& coefficients = input[i] < 0.f
 			? negativeCoefficients
 			: positiveCoefficients;
-		const float wet = applyCharacter(input[i], coefficients);
+		const float wet = applyCharacter(input[i], coefficients, swarmFrame.lanes[i]);
 		shaped[static_cast<std::size_t>(i)] =
 			input[i] + (wet - input[i]) * wetAmount;
 	}
@@ -508,6 +579,19 @@ Frame Engine::process(
 		clampCharacter(positiveCharacter)
 	};
 	beginCharacterTransition(requestedCharacters);
+	const auto pairUsesSwarm = [](const CharacterPair& pair) {
+		return pair.negative == Character::Swarm
+			|| pair.positive == Character::Swarm;
+	};
+	const bool swarmContributing = transitionActive
+		? pairUsesSwarm(transitionFrom) || pairUsesSwarm(transitionTo)
+		: pairUsesSwarm(currentCharacters);
+	SwarmFrame swarmFrame;
+	if (swarmContributing) {
+		const CharacterCoefficients swarmCoefficients = prepareCharacter(
+			Character::Swarm, amount, dynamics);
+		swarmFrame = prepareSwarmFrame(swarmCoefficients.swarmFastMix);
+	}
 
 	std::array<float, kOversampleFactor> oversampledLeft {};
 	std::array<float, kOversampleFactor> oversampledRight {};
@@ -528,19 +612,19 @@ Frame Engine::process(
 		const float oldLeft = processPath(
 			primaryPath, oldNegativeCoefficients, oldPositiveCoefficients,
 			oversampledLeft.data(),
-			oversampledRight.data(), autoDeflateMix, wetMix, true);
+			oversampledRight.data(), autoDeflateMix, wetMix, swarmFrame, true);
 		const float oldRight = processPath(
 			primaryPath, oldNegativeCoefficients, oldPositiveCoefficients,
 			oversampledLeft.data(),
-			oversampledRight.data(), autoDeflateMix, wetMix, false);
+			oversampledRight.data(), autoDeflateMix, wetMix, swarmFrame, false);
 		const float newLeft = processPath(
 			secondaryPath, newNegativeCoefficients, newPositiveCoefficients,
 			oversampledLeft.data(),
-			oversampledRight.data(), autoDeflateMix, wetMix, true);
+			oversampledRight.data(), autoDeflateMix, wetMix, swarmFrame, true);
 		const float newRight = processPath(
 			secondaryPath, newNegativeCoefficients, newPositiveCoefficients,
 			oversampledLeft.data(),
-			oversampledRight.data(), autoDeflateMix, wetMix, false);
+			oversampledRight.data(), autoDeflateMix, wetMix, swarmFrame, false);
 		const float t = clamp01(
 			float(transitionSample) / float(std::max(transitionLength - 1, 1)));
 		const float oldGain = 1.f - t;
@@ -567,11 +651,11 @@ Frame Engine::process(
 		normalizedLeft = processPath(
 			primaryPath, negativeCoefficients, positiveCoefficients,
 			oversampledLeft.data(),
-			oversampledRight.data(), autoDeflateMix, wetMix, true);
+			oversampledRight.data(), autoDeflateMix, wetMix, swarmFrame, true);
 		normalizedRight = processPath(
 			primaryPath, negativeCoefficients, positiveCoefficients,
 			oversampledLeft.data(),
-			oversampledRight.data(), autoDeflateMix, wetMix, false);
+			oversampledRight.data(), autoDeflateMix, wetMix, swarmFrame, false);
 	}
 	float outputLeft = normalizedLeft * kReferenceVolts;
 	float outputRight = normalizedRight * kReferenceVolts;

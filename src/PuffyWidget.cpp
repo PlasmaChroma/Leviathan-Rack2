@@ -49,14 +49,15 @@ struct PuffyCharacterReadout final : TransparentWidget {
 					? Puffy::CHARACTER_PARAM
 					: Puffy::POSITIVE_CHARACTER_PARAM].getValue())),
 				0,
-				int(puffy::Character::Void))
+				puffy::kCharacterCount - 1)
 			: int(puffy::Character::Bloom);
 		static const char* const labels[] = {
 			"BLOOM",
 			"SPINE",
 			"FRENZY",
 			"RIPTIDE",
-			"VOID"
+			"VOID",
+			"SWARM"
 		};
 		const bool charactersLinked = module
 			&& module->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f;
@@ -109,8 +110,8 @@ struct PuffyCharacterButton final : SmallGoldButton {
 				int(std::lround(
 					module->params[Puffy::CHARACTER_PARAM].getValue())),
 				int(puffy::Character::Bloom),
-				int(puffy::Character::Void));
-			linkedNextCharacter = linkedCharacter >= int(puffy::Character::Void)
+				puffy::kCharacterCount - 1);
+			linkedNextCharacter = linkedCharacter >= puffy::kCharacterCount - 1
 				? int(puffy::Character::Bloom)
 				: linkedCharacter + 1;
 		}

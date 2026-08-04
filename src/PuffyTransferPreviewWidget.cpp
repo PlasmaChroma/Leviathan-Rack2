@@ -28,6 +28,24 @@ NVGcolor withAlpha(NVGcolor color, float alpha) {
 	return color;
 }
 
+std::uint32_t visualSwarmHash(std::uint32_t value) {
+	value ^= value >> 16;
+	value *= 0x7feb352du;
+	value ^= value >> 15;
+	value *= 0x846ca68bu;
+	value ^= value >> 16;
+	return value;
+}
+
+float visualSwarmChaos(int pointIndex, int laneIndex, bool positive) {
+	const std::uint32_t key = 0x51f15eadu
+		^ std::uint32_t(pointIndex) * 0x9e3779b9u
+		^ std::uint32_t(laneIndex + 1) * 0x85ebca6bu
+		^ (positive ? 0xc2b2ae35u : 0x27d4eb2fu);
+	const std::uint32_t bits = visualSwarmHash(key) >> 8;
+	return float(bits) * (2.f / 16777216.f) - 1.f;
+}
+
 } // namespace
 
 PuffyTransferPreviewWidget::PuffyTransferPreviewWidget(Puffy* module)
@@ -63,7 +81,11 @@ void PuffyTransferPreviewWidget::rebuildPoints() {
 		clamp(visual.negativeCharacter, 0, puffy::kCharacterCount - 1));
 	const puffy::Character positiveCharacter = static_cast<puffy::Character>(
 		clamp(visual.positiveCharacter, 0, puffy::kCharacterCount - 1));
-	const float amount = clamp(visual.effectiveAmount, 0.f, 1.f);
+	const bool hasSwarm = negativeCharacter == puffy::Character::Swarm
+		|| positiveCharacter == puffy::Character::Swarm;
+	const float rawAmount = clamp(visual.effectiveAmount, 0.f, 1.f);
+	const int amountBin = clamp(int(rawAmount * 63.f + 0.5f), 0, 63);
+	const float amount = hasSwarm ? float(amountBin) / 63.f : rawAmount;
 	for (int i = 0; i < POINT_COUNT; ++i) {
 		const float normalized = float(i) / float(POINT_COUNT - 1);
 		const float input = -DOMAIN + 2.f * DOMAIN * normalized;
@@ -74,13 +96,35 @@ void PuffyTransferPreviewWidget::rebuildPoints() {
 			dynamics);
 		points[size_t(i)] = Vec(inputToX(input), outputToY(output));
 	}
+	swarmPointCount = 0;
+	for (int column = 0; column < SWARM_COLUMN_COUNT; ++column) {
+		const float normalized = float(column) / float(SWARM_COLUMN_COUNT - 1);
+		const float input = -DOMAIN + 2.f * DOMAIN * normalized;
+		const bool positive = input >= 0.f;
+		const puffy::Character character = positive
+			? positiveCharacter : negativeCharacter;
+		if (character != puffy::Character::Swarm) {
+			continue;
+		}
+		for (int lane = 0; lane < SWARM_SAMPLES_PER_COLUMN; ++lane) {
+			const float output = puffy::Engine::processCharacter(
+				character, input, amount, dynamics,
+				visualSwarmChaos(column, lane, positive));
+			swarmPoints[size_t(swarmPointCount++)] = Vec(
+				inputToX(input), outputToY(output));
+		}
+	}
 	pointsValid = true;
 	lastAmount = amount;
+	lastAmountBin = amountBin;
 	lastFast = dynamics.fast;
 	lastTransient = dynamics.transient;
 	lastNegativeCharacter = int(negativeCharacter);
 	lastPositiveCharacter = int(positiveCharacter);
 	lastCurveSize = box.size;
+	if (hasSwarm) {
+		lastSwarmRebuildTime = system::getTime();
+	}
 	if (curveFramebuffer) {
 		curveFramebuffer->setDirty();
 	}
@@ -108,6 +152,11 @@ void PuffyTransferPreviewWidget::step() {
 	const bool frenzyReactive =
 		negativeCharacter == int(puffy::Character::Frenzy)
 		|| positiveCharacter == int(puffy::Character::Frenzy);
+	const bool swarmActive =
+		negativeCharacter == int(puffy::Character::Swarm)
+		|| positiveCharacter == int(puffy::Character::Swarm);
+	const int amountBin = clamp(
+		int(clamp(visual.effectiveAmount, 0.f, 1.f) * 63.f + 0.5f), 0, 63);
 	const bool sizeChanged =
 		std::fabs(lastCurveSize.x - box.size.x) > 0.25f
 		|| std::fabs(lastCurveSize.y - box.size.y) > 0.25f;
@@ -116,11 +165,17 @@ void PuffyTransferPreviewWidget::step() {
 		|| sizeChanged
 		|| negativeCharacter != lastNegativeCharacter
 		|| positiveCharacter != lastPositiveCharacter
-		|| std::fabs(visual.effectiveAmount - lastAmount) > 0.001f
+		|| (swarmActive
+			? amountBin != lastAmountBin
+			: std::fabs(visual.effectiveAmount - lastAmount) > 0.001f)
 		|| (frenzyReactive
 			&& (std::fabs(visual.inputActivity - lastFast) > 0.01f
 				|| std::fabs(visual.transientActivity - lastTransient) > 0.01f));
-	if (curveChanged) {
+	const double now = system::getTime();
+	const bool swarmRebuildAllowed = !swarmActive
+		|| lastSwarmRebuildTime < 0.0
+		|| now - lastSwarmRebuildTime >= 0.05;
+	if (curveChanged && swarmRebuildAllowed) {
 		rebuildPoints();
 	}
 
@@ -237,8 +292,10 @@ void PuffyTransferPreviewWidget::drawCurve(const DrawArgs& args) const {
 	}
 	NVGcolor negativeCurveTint = negativeTint;
 	NVGcolor positiveCurveTint = positiveTint;
-	negativeCurveTint.a = 0.94f;
-	positiveCurveTint.a = 0.94f;
+	negativeCurveTint.a = visual.negativeCharacter == int(puffy::Character::Swarm)
+		? 0.56f : 0.94f;
+	positiveCurveTint.a = visual.positiveCharacter == int(puffy::Character::Swarm)
+		? 0.56f : 0.94f;
 	nvgStrokePaint(args.vg, nvgLinearGradient(
 		args.vg,
 		0.f,
@@ -251,6 +308,17 @@ void PuffyTransferPreviewWidget::drawCurve(const DrawArgs& args) const {
 	nvgLineCap(args.vg, NVG_ROUND);
 	nvgLineJoin(args.vg, NVG_ROUND);
 	nvgStroke(args.vg);
+
+	if (swarmPointCount > 0) {
+		nvgBeginPath(args.vg);
+		for (int i = 0; i < swarmPointCount; ++i) {
+			const Vec& point = swarmPoints[size_t(i)];
+			nvgCircle(args.vg, point.x, point.y, 0.55f);
+		}
+		nvgFillColor(args.vg, withAlpha(
+			puffy_visual::characterTint(int(puffy::Character::Swarm)), 0.36f));
+		nvgFill(args.vg);
+	}
 
 	nvgResetScissor(args.vg);
 	nvgRestore(args.vg);

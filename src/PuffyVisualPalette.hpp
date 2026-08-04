@@ -10,7 +10,8 @@ inline NVGcolor characterTint(int character) {
 		nvgRGB(255, 212, 77),
 		nvgRGB(255, 138, 128),
 		nvgRGB(105, 181, 255),
-		nvgRGB(185, 133, 255)
+		nvgRGB(185, 133, 255),
+		nvgRGB(255, 255, 255)
 	};
 	return colors[clamp(character, 0, puffy::kCharacterCount - 1)];
 }

@@ -134,6 +134,163 @@ Result characterCurves() {
 	};
 }
 
+Result swarmKernelInvariants() {
+	puffy::DynamicsState dynamics;
+	bool finite = true;
+	bool identity = true;
+	bool silent = true;
+	bool odd = true;
+	bool bounded = true;
+	for (int ai = 0; ai <= 20; ++ai) {
+		const float amount = float(ai) / 20.f;
+		for (int xi = -160; xi <= 160; ++xi) {
+			const float input = float(xi) / 40.f;
+			for (int ci = -20; ci <= 20; ++ci) {
+				const float chaos = float(ci) / 20.f;
+				const float output = puffy::Engine::processCharacter(
+					puffy::Character::Swarm, input, amount, dynamics, chaos);
+				const float negative = puffy::Engine::processCharacter(
+					puffy::Character::Swarm, -input, amount, dynamics, chaos);
+				finite = finite && std::isfinite(output);
+				identity = identity && (ai != 0 || output == input);
+				silent = silent && (input != 0.f || output == 0.f);
+				odd = odd && near(output, -negative, 2e-6f);
+				bounded = bounded
+					&& output >= std::min(input, -1.f) - 1e-6f
+					&& output <= std::max(input, 1.f) + 1e-6f;
+			}
+		}
+	}
+	return {
+		"SWARM kernel preserves identity, silence, odd symmetry, and bounds",
+		finite && identity && silent && odd && bounded,
+		"finite=" + std::to_string(finite)
+			+ " identity=" + std::to_string(identity)
+			+ " silent=" + std::to_string(silent)
+			+ " odd=" + std::to_string(odd)
+			+ " bounded=" + std::to_string(bounded)
+	};
+}
+
+Result swarmChaosInfluence() {
+	puffy::DynamicsState dynamics;
+	auto spreadAt = [&](float amount, float input) {
+		float low = std::numeric_limits<float>::max();
+		float high = -std::numeric_limits<float>::max();
+		for (int i = -32; i <= 32; ++i) {
+			const float output = puffy::Engine::processCharacter(
+				puffy::Character::Swarm, input, amount, dynamics,
+				float(i) / 32.f);
+			low = std::min(low, output);
+			high = std::max(high, output);
+		}
+		return high - low;
+	};
+	const float lowSpread = spreadAt(0.25f, 0.25f);
+	const float highSpread = spreadAt(1.f, 0.25f);
+	const float silentSpread = spreadAt(1.f, 0.f);
+	return {
+		"SWARM chaos gains influence with PUFF without creating a noise floor",
+		highSpread > lowSpread && highSpread > 0.05f && silentSpread == 0.f,
+		"spread=" + std::to_string(lowSpread) + "/"
+			+ std::to_string(highSpread)
+			+ " silent=" + std::to_string(silentSpread)
+	};
+}
+
+Result swarmRailAttraction() {
+	puffy::DynamicsState dynamics;
+	std::uint32_t state = 0x31415926u;
+	float lowMean = 0.f;
+	float mediumMean = 0.f;
+	float highMean = 0.f;
+	bool symmetric = true;
+	constexpr int sampleCount = 4096;
+	for (int i = 0; i < sampleCount; ++i) {
+		state ^= state << 13;
+		state ^= state >> 17;
+		state ^= state << 5;
+		const float chaos = float(state >> 8) * (2.f / 16777216.f) - 1.f;
+		const float low = puffy::Engine::processCharacter(
+			puffy::Character::Swarm, 0.45f, 0.2f, dynamics, chaos);
+		const float medium = puffy::Engine::processCharacter(
+			puffy::Character::Swarm, 0.45f, 0.6f, dynamics, chaos);
+		const float high = puffy::Engine::processCharacter(
+			puffy::Character::Swarm, 0.45f, 1.f, dynamics, chaos);
+		const float negative = puffy::Engine::processCharacter(
+			puffy::Character::Swarm, -0.45f, 1.f, dynamics, chaos);
+		lowMean += std::fabs(low);
+		mediumMean += std::fabs(medium);
+		highMean += std::fabs(high);
+		symmetric = symmetric && near(high, -negative, 2e-6f);
+	}
+	lowMean /= float(sampleCount);
+	mediumMean /= float(sampleCount);
+	highMean /= float(sampleCount);
+	return {
+		"SWARM density increasingly attracts active samples toward both rails",
+		lowMean < mediumMean && mediumMean < highMean
+			&& highMean - lowMean > 0.15f && symmetric,
+		"mean=" + std::to_string(lowMean) + "/"
+			+ std::to_string(mediumMean) + "/"
+			+ std::to_string(highMean)
+			+ " symmetric=" + std::to_string(symmetric)
+	};
+}
+
+Result swarmSeedingAndStereo() {
+	puffy::Engine first;
+	puffy::Engine second;
+	puffy::Engine different;
+	first.setSwarmSeed(0x12345678u);
+	second.setSwarmSeed(0x12345678u);
+	different.setSwarmSeed(0x87654321u);
+	bool identical = true;
+	bool diverged = false;
+	bool stereo = true;
+	for (int i = 0; i < 2000; ++i) {
+		const float input = 2.25f * std::sin(2.f * kPi * 431.f * float(i) / 48000.f);
+		const puffy::Frame a = first.process(
+			input, input, 0.8f, int(puffy::Character::Swarm), false, 0.f);
+		const puffy::Frame b = second.process(
+			input, input, 0.8f, int(puffy::Character::Swarm), false, 0.f);
+		const puffy::Frame c = different.process(
+			input, input, 0.8f, int(puffy::Character::Swarm), false, 0.f);
+		identical = identical && a.left == b.left && a.right == b.right;
+		diverged = diverged || std::fabs(a.left - c.left) > 1e-6f;
+		stereo = stereo && std::fabs(a.left - a.right) <= 1e-6f;
+	}
+	first.setSwarmSeed(0x12345678u);
+	second.setSwarmSeed(0x12345678u);
+	bool replayed = true;
+	for (int i = 0; i < 1000; ++i) {
+		const float input = 1.75f * std::sin(2.f * kPi * 673.f * float(i) / 48000.f);
+		const puffy::Frame a = first.process(
+			input, input, 0.7f, int(puffy::Character::Swarm), false, 0.f);
+		const puffy::Frame b = second.process(
+			input, input, 0.7f, int(puffy::Character::Swarm), false, 0.f);
+		replayed = replayed && a.left == b.left && a.right == b.right;
+	}
+	first.reset();
+	second.reset();
+	for (int i = 0; i < 1000; ++i) {
+		const float input = 1.25f * std::sin(2.f * kPi * 739.f * float(i) / 48000.f);
+		const puffy::Frame a = first.process(
+			input, input, 0.6f, int(puffy::Character::Swarm), false, 0.f);
+		const puffy::Frame b = second.process(
+			input, input, 0.6f, int(puffy::Character::Swarm), false, 0.f);
+		replayed = replayed && a.left == b.left && a.right == b.right;
+	}
+	return {
+		"SWARM seeding is deterministic and shared stereo remains identical",
+		identical && diverged && stereo && replayed,
+		"identical=" + std::to_string(identical)
+			+ " diverged=" + std::to_string(diverged)
+			+ " stereo=" + std::to_string(stereo)
+			+ " replayed=" + std::to_string(replayed)
+	};
+}
+
 Result voidBecomesSteppedQuantizer() {
 	puffy::DynamicsState dynamics;
 	const float unity = puffy::Engine::processCharacter(
@@ -755,6 +912,10 @@ Result realtimePathDoesNotAllocate() {
 int main() {
 	const std::vector<Result> results = {
 		characterCurves(),
+		swarmKernelInvariants(),
+		swarmChaosInfluence(),
+		swarmRailAttraction(),
+		swarmSeedingAndStereo(),
 		voidBecomesSteppedQuantizer(),
 		frenzySinusoidalFold(),
 		riptideFractalAnchors(),
