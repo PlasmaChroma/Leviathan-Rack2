@@ -533,6 +533,12 @@ Result riptideFractalAnchors() {
 		puffy::Character::Riptide, 0.40f, 1.f, dynamics);
 	const float beyondRail = puffy::Engine::processCharacter(
 		puffy::Character::Riptide, 0.70f, 1.f, dynamics);
+	const float firstRailNotch = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 0.45f, 1.f, dynamics);
+	const float firstRailReturn = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, 0.50f, 1.f, dynamics);
+	const float negativeRailNotch = puffy::Engine::processCharacter(
+		puffy::Character::Riptide, -0.45f, 1.f, dynamics);
 	const float joinBelow = puffy::Engine::processCharacter(
 		puffy::Character::Riptide, 0.40f - 1e-6f, 1.f, dynamics);
 	const float joinAbove = puffy::Engine::processCharacter(
@@ -546,6 +552,9 @@ Result riptideFractalAnchors() {
 			&& near(outerRebound, 0.8733f, 1e-5f)
 			&& near(rail, 1.f, 1e-6f)
 			&& near(beyondRail, 1.f, 1e-6f)
+			&& near(firstRailNotch, 0.94f, 1e-6f)
+			&& near(firstRailReturn, 1.f, 1e-6f)
+			&& near(negativeRailNotch, -firstRailNotch, 1e-6f)
 			&& firstCrest > firstNotch
 			&& outerRebound > centralTrench
 			&& slopeReversals >= 10
@@ -557,6 +566,8 @@ Result riptideFractalAnchors() {
 			+ "/" + std::to_string(outerRebound)
 			+ " rail=" + std::to_string(rail)
 			+ "/" + std::to_string(beyondRail)
+			+ " teeth=" + std::to_string(firstRailNotch)
+			+ "/" + std::to_string(firstRailReturn)
 			+ " reversals=" + std::to_string(slopeReversals)
 	};
 }

@@ -424,7 +424,9 @@ if u < 1:
     i = floor(p)
     s = sign(x) * lerp(fold[i], fold[i + 1], fract(p))
 else:
-    s = sign(x)
+    d = u - 1
+    tooth = triangle(fract(4*d))
+    s = sign(x) * (1 - 0.06*a^2*tooth)
 
 y = lerp(x, s, a)
 ```
@@ -432,8 +434,11 @@ y = lerp(x, s, a)
 The 33-point positive-half response encodes five dyadic levels and is linearly
 interpolated before being mirrored below zero. Its folds alternate above and
 below the underlying ramp, with a steep first rise that makes low-level input
-more active. It remains continuous, exactly odd, bounded to +/-1 at full wet,
-and joins flat outer rails. Oversampling is mandatory for this mode.
+more active. Beyond the saturation boundary, a deterministic triangular pattern
+adds small inward notches while repeatedly returning to the rail. At full
+`PUFF`, six 6%-deep teeth continue along each polarity within the normalized
+input domain. The curve remains continuous, exactly odd, and bounded to +/-1 at
+full wet. Oversampling is mandatory for this mode.
 
 ### 5.7 Character E: VOID
 

@@ -382,8 +382,22 @@ float Engine::applyCharacter(
 			return input + (saturated - input) * a;
 		}
 		case Character::Riptide: {
-			const float saturated =
-				fractalShape(coefficients.drive * input);
+			const float driven = coefficients.drive * input;
+			float saturated = fractalShape(driven);
+			const float railDistance = std::fabs(driven) - 1.f;
+			if (railDistance > 0.f) {
+				// Continue RIPTIDE's folded topology onto the saturated rail with
+				// small, deterministic inward teeth. At full PUFF the visible input
+				// domain contains six teeth per polarity, returning exactly to the
+				// rail between each notch and at the +/-1 input endpoints.
+				const float toothPhase = std::min(railDistance, 8.f) * 4.f;
+				const float toothFraction = toothPhase
+					- float(static_cast<int>(toothPhase));
+				const float inwardTooth =
+					1.f - std::fabs(2.f * toothFraction - 1.f);
+				const float toothDepth = 0.06f * a * a * inwardTooth;
+				saturated *= 1.f - toothDepth;
+			}
 			return input + (saturated - input) * a;
 		}
 		case Character::Frenzy: {
