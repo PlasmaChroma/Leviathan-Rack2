@@ -1123,7 +1123,7 @@ struct NautiloidZoomSlider final : ui::Slider {
   Vec lastDrawSize;
 
   NautiloidZoomSlider() {
-    handleSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/LeviathanSliderHandle.svg"));
+    handleSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/LuminSliderHandle.svg"));
     handleLight = new NautiloidZoomHandleLight;
     handleLightNaturalSize = handleLight->box.size;
     if (handleLight->fb) {
