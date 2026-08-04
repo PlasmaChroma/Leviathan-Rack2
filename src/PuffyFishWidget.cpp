@@ -214,7 +214,7 @@ void PuffyFishWidget::drawEye(
 	NVGcontext* vg,
 	Vec center,
 	float radius,
-	int imageHandle,
+	int eyeballImageHandle,
 	float gazeX,
 	float gazeY,
 	float blink,
@@ -223,7 +223,7 @@ void PuffyFishWidget::drawEye(
 	const float radiusX = radius * 0.86f;
 	nvgBeginPath(vg);
 	nvgEllipse(vg, center.x, center.y, radiusX, radius);
-	if (imageHandle >= 0) {
+	if (eyeballImageHandle >= 0) {
 		// The source is circular. Mapping its square canvas directly onto the
 		// current eye bounds supplies the intentional horizontal stretch.
 		const NVGpaint eyeball = nvgImagePattern(
@@ -233,7 +233,7 @@ void PuffyFishWidget::drawEye(
 			2.f * radiusX,
 			2.f * radius,
 			0.f,
-			imageHandle,
+			eyeballImageHandle,
 			1.f);
 		nvgFillPaint(vg, eyeball);
 		nvgFill(vg);
@@ -443,11 +443,13 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 	const NVGcolor rightEyelidColor = multiplyColor(
 		eyelidMaterialTint, positiveBodyTint);
 	drawEye(
-		args.vg, Vec(center.x - eyeSpacing, eyeY), eyeRadius, eyeball.handle,
+		args.vg, Vec(center.x - eyeSpacing, eyeY), eyeRadius,
+		eyeball.handle,
 		pose.gazeX, pose.gazeY,
 		std::max(pose.leftBlink, pose.squint), leftEyelidColor);
 	drawEye(
-		args.vg, Vec(center.x + eyeSpacing, eyeY), eyeRadius, eyeball.handle,
+		args.vg, Vec(center.x + eyeSpacing, eyeY), eyeRadius,
+		eyeball.handle,
 		pose.gazeX, pose.gazeY,
 		std::max(pose.rightBlink, pose.squint), rightEyelidColor);
 

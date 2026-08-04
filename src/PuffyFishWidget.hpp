@@ -38,7 +38,7 @@ private:
 		NVGcontext* vg,
 		Vec center,
 		float radius,
-		int imageHandle,
+		int eyeballImageHandle,
 		float gazeX,
 		float gazeY,
 		float blink,
