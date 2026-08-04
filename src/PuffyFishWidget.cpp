@@ -341,7 +341,7 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 		width * 0.5f,
 		height * 0.5f + pose.verticalOffset * minimum);
 	const float inflation = clamp01(pose.inflation);
-	const float radius = minimum * (0.255f + 0.110f * inflation);
+	const float radius = minimum * (0.255f + 0.130f * inflation);
 	const float radiusX = radius * (0.88f + 0.12f * inflation)
 		* (1.f + pose.squashX);
 	const float radiusY = radius * (0.93f + 0.07f * inflation)
@@ -353,7 +353,7 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 		pose.positiveCharacterTintWeights);
 	// Keep the cast shadow grounded near the bottom of the scene. Inflation
 	// changes its footprint, but the fish's motion and radius do not move it.
-	const Vec shadowCenter(width * 0.5f, height * 0.92f);
+	const Vec shadowCenter(width * 0.5f, height * 0.93f);
 	const PuffyRasterAsset fin = resolveRasterAsset(
 		args.vg, "res/icon/Puffy_Fin_NS.png");
 

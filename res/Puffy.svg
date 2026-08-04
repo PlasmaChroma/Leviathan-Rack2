@@ -23,8 +23,8 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      inkscape:zoom="2.4193418"
-     inkscape:cx="-0.62000334"
-     inkscape:cy="379.64871"
+     inkscape:cx="106.02057"
+     inkscape:cy="341.62184"
      inkscape:window-width="1862"
      inkscape:window-height="1016"
      inkscape:window-x="1978"
@@ -180,7 +180,7 @@
          y="10499.721">━━━━ PUFF ━━━━</tspan></text>
     <text
        x="4334.5742"
-       y="10220.828"
+       y="10330.878"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
        font-size="155px"
@@ -190,10 +190,10 @@
          sodipodi:role="line"
          id="tspan4"
          x="4334.5742"
-         y="10220.828">SENS</tspan></text>
+         y="10330.878">SENS</tspan></text>
     <text
        x="5537.2314"
-       y="10220.828"
+       y="10330.878"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
        font-size="155px"
@@ -203,10 +203,10 @@
          sodipodi:role="line"
          id="tspan1"
          x="5537.2314"
-         y="10220.828">WET</tspan></text>
+         y="10330.878">WET</tspan></text>
     <text
        x="762"
-       y="11793.589"
+       y="11903.639"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
        font-size="120px"
@@ -215,7 +215,7 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">IN L</text>
     <text
        x="2286"
-       y="11793.589"
+       y="11903.639"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
        font-size="120px"
@@ -224,7 +224,7 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">IN R</text>
     <text
        x="3810"
-       y="11793.589"
+       y="11903.639"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
        font-size="120px"
@@ -233,7 +233,7 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">OUT L</text>
     <text
        x="5334"
-       y="11793.589"
+       y="11903.639"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
        font-size="120px"
