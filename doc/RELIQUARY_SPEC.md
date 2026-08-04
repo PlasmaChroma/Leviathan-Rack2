@@ -86,6 +86,10 @@ A stable Rack polyphonic channel assigned to one logical instrument instance. Mu
 
 The current relationship among logical lane, logical instrument, BRR identity, source number, and active physical S-DSP voice.
 
+### 4.9 Solo monitor
+
+An audio-domain feature distinct from CV mute/solo. When a logical lane is selected for monitoring, the emulator's real audio contribution for the physical voice currently bound to that lane is routed to a dedicated stereo output, isolated from the rest of the mix. This is a listening aid for identifying and naming instruments; it does not affect PITCH/GATE/TRIG/ENV/LEVEL CV outputs.
+
 ---
 
 ## 5. User experience
@@ -130,8 +134,12 @@ Panel width is provisional. The design should target approximately 16–20 HP, s
 
 - **L** — emulated left audio output.
 - **R** — emulated right audio output.
+- **SOLO L** — isolated audio output for the currently monitored logical lane's left channel. Silent when no lane is monitored.
+- **SOLO R** — isolated audio output for the currently monitored logical lane's right channel. Silent when no lane is monitored.
 
 Audio outputs shall be Rack-standard bipolar audio voltage and shall preserve the emulator's stereo mix.
+
+The solo outputs carry the emulator's actual rendered audio for the monitored lane's currently bound physical voice, not a synthesized approximation. Only one lane may be monitored at a time in the first release. If the monitored lane's physical-voice binding changes mid-note (per §11.3), the solo output shall continue to follow the same logical lane without introducing an audible discontinuity, consistent with the module's logical-lane stability principle.
 
 ### 6.2 Polyphonic CV outputs
 
@@ -238,12 +246,15 @@ The first release should support at least:
 - Rename logical instrument.
 - Move or swap lane assignment.
 - Pin assignment.
-- Mute or solo logical instrument.
+- Mute or solo logical instrument (CV domain: suppresses or isolates PITCH/GATE/TRIG/ENV/LEVEL output for the lane).
+- Monitor logical instrument (audio domain: routes the lane's real SPC audio to SOLO L/R for identification by ear; see §4.9 and §6.1).
 - Mark identity as tonal, percussion, noise, or effect.
 - Set pitch-root calibration.
 - Reset mapping for current track.
 
 Later versions may add merge, split, collection-wide propagation, and learn-next-event operations.
+
+CV mute/solo and audio monitoring are independent controls. Monitoring a lane for audio has no effect on its CV outputs, and CV mute/solo has no effect on what is heard on SOLO L/R.
 
 ---
 
@@ -321,6 +332,10 @@ public:
     virtual void renderNative(int16_t* interleavedStereo,
                               size_t nativeFrames) = 0;
 
+    virtual void renderIsolatedVoice(uint8_t physicalVoice,
+                                     int16_t* interleavedStereo,
+                                     size_t nativeFrames) = 0;
+
     virtual std::array<PhysicalVoiceSnapshot, 8>
         voiceSnapshots() const = 0;
 
@@ -341,8 +356,17 @@ The initial runtime should adapt a mature existing SPC core rather than begin wi
 - Read-only audio RAM access.
 - Physical voice-state snapshots.
 - Timestamped observation of relevant DSP register writes or equivalent effective events.
+- Per-voice isolated audio rendering, either via direct access to each voice's pre-summation buffer, or via a render mode that sums only a specified voice into the mix.
 
 The exact runtime dependency remains a pre-implementation gate because technical fit, modification effort, license obligations, and single-package distribution must all be resolved. The interface above shall remain stable regardless of the selected core.
+
+### 9.1.1 Isolated voice rendering
+
+`ISpcRuntime::renderIsolatedVoice()` shall render the audio contribution of a single physical voice independently of the main stereo mix.
+
+Implementations should prefer exposing each voice's pre-summation buffer from the existing render pass, at no additional rendering cost, where the underlying core supports it. If unavailable, implementations may render a second internal pass with all other voices masked at mix time, without altering persisted register or driver state, so that CPU and driver execution are identical to the primary render.
+
+The exact strategy is an implementation detail behind this interface and is a criterion to evaluate during the Phase 0 runtime selection spike (§9.1), since it determines cost and availability up front rather than being retrofittable later.
 
 ### 9.2 Runtime event stream
 
@@ -741,6 +765,7 @@ These are initial engineering budgets, subject to measurement on representative 
 - One active SPC runtime plus one staged runtime only during transitions.
 - Mapping/event overhead should be small relative to emulation and resampling.
 - The module should remain practical in normal multi-module patches on supported Rack systems.
+- The one-active-runtime budget assumes no lane is being monitored. While a lane is monitored via SOLO L/R, one additional isolated-voice render call per audio block is permitted as a bounded, opt-in cost; it shall not be paid when no lane is monitored.
 
 ### 20.2 Loading
 
@@ -837,13 +862,14 @@ Defined in the separate UnRAR specification, including solid archives, RAR gener
 - Pitch-root calibration.
 - Collection-aware lane preference.
 - Mapping reset and import/export sidecar if desired.
+- Single-lane audio solo/monitor (SOLO L/R); a second isolated render pass is an acceptable fallback if the selected core lacks pre-summation buffer access.
 
 ### Phase 5 — advanced analysis
 
 - Fast pre-indexing.
 - Role heuristics.
 - Effective pitch modulation.
-- Per-voice audio stems.
+- Per-voice audio stems for simultaneous multi-lane recording or export, extending the single-lane Phase 4 monitor.
 - Additional lane banks or expander.
 
 ---
