@@ -185,6 +185,25 @@ bool PuffyFishWidget::drawBodyRaster(
 	const float drawHeight = 2.f * radiusY * rasterExtentScale;
 	const float x = center.x - 0.5f * drawWidth;
 	const float y = center.y - 0.5f * drawHeight;
+
+	// When negative and positive tints are essentially identical, draw in a single call.
+	const float tintDelta = std::fabs(negativeTint.r - positiveTint.r)
+		+ std::fabs(negativeTint.g - positiveTint.g)
+		+ std::fabs(negativeTint.b - positiveTint.b)
+		+ std::fabs(negativeTint.a - positiveTint.a);
+	if (tintDelta < 0.005f) {
+		const NVGcolor tint = mixColor(negativeTint, positiveTint, 0.5f);
+		NVGpaint paint = nvgImagePattern(
+			vg, x, y, drawWidth, drawHeight, 0.f, body.handle, 1.f);
+		paint.innerColor = tint;
+		paint.outerColor = tint;
+		nvgBeginPath(vg);
+		nvgRect(vg, x, y, drawWidth, drawHeight);
+		nvgFillPaint(vg, paint);
+		nvgFill(vg);
+		return true;
+	}
+
 	// NanoVG image paints expose a uniform tint, so use a small strip ramp to
 	// give Puffy a genuine polarity gradient without allocating another image.
 	// Scissor edges feather in framebuffer pixels. Keep their overlap at least
@@ -201,7 +220,9 @@ bool PuffyFishWidget::drawBodyRaster(
 		const float t0 = float(i) / float(kTintStrips);
 		const float t1 = float(i + 1) / float(kTintStrips);
 		const float stripX = x + drawWidth * t0;
-		const float stripWidth = drawWidth * (t1 - t0) + stripOverlap;
+		const float stripWidth = std::min(
+			drawWidth * (t1 - t0) + stripOverlap,
+			x + drawWidth - stripX);
 		const NVGcolor tint = mixColor(
 			negativeTint, positiveTint, 0.5f * (t0 + t1));
 		NVGpaint paint = nvgImagePattern(
@@ -211,7 +232,7 @@ bool PuffyFishWidget::drawBodyRaster(
 		nvgSave(vg);
 		nvgScissor(vg, stripX, y, stripWidth, drawHeight);
 		nvgBeginPath(vg);
-		nvgRect(vg, x, y, drawWidth, drawHeight);
+		nvgRect(vg, stripX, y, stripWidth, drawHeight);
 		nvgFillPaint(vg, paint);
 		nvgFill(vg);
 		nvgRestore(vg);

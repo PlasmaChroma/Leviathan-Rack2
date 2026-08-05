@@ -336,10 +336,10 @@ void PuffyTransferPreviewWidget::drawCurve(const DrawArgs& args) const {
 		nvgBeginPath(args.vg);
 		for (int i = 0; i < swarmPointCount; ++i) {
 			const Vec& point = swarmPoints[size_t(i)];
-			nvgCircle(args.vg, point.x, point.y, 0.55f);
+			nvgRect(args.vg, point.x - 0.55f, point.y - 0.55f, 1.1f, 1.1f);
 		}
 		nvgFillColor(args.vg, withAlpha(
-			puffy_visual::characterTint(int(puffy::Character::Swarm)), 0.36f));
+			puffy_visual::characterTint(int(puffy::Character::Swarm)), 0.44f));
 		nvgFill(args.vg);
 	}
 

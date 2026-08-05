@@ -45,7 +45,7 @@ def generate_text() -> str:
     q30_scale = 1 << 30
 
     zoom = [
-        round_half_away_positive(math.exp2(-index / 256.0) * q28_scale)
+        round_half_away_positive((2.0 ** (-index / 256.0)) * q28_scale)
         for index in range(3073)
     ]
 
@@ -53,7 +53,7 @@ def generate_text() -> str:
     rate_max_index = 1445
     rate = []
     for index in range(rate_min_index, rate_max_index + 1):
-        hz = max(0.05, min(200.0, 4.0 * math.exp2(index / 256.0)))
+        hz = max(0.05, min(200.0, 4.0 * (2.0 ** (index / 256.0))))
         rate.append(round_half_away_positive(hz * 1_000_000.0))
 
     phase = [
