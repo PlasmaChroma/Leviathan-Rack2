@@ -11,6 +11,15 @@
 
 namespace {
 
+static const char* const kPuffyCharacterLabels[puffy::kCharacterCount] = {
+	"BLOOM",
+	"SPINE",
+	"FRENZY",
+	"RIPTIDE",
+	"VOID",
+	"SWARM"
+};
+
 struct PuffyViewportGradient final : TransparentWidget {
 	void draw(const DrawArgs& args) override {
 		const float inset = mm2px(0.16f);
@@ -51,26 +60,19 @@ struct PuffyCharacterReadout final : TransparentWidget {
 				0,
 				puffy::kCharacterCount - 1)
 			: int(puffy::Character::Bloom);
-		static const char* const labels[] = {
-			"BLOOM",
-			"SPINE",
-			"FRENZY",
-			"RIPTIDE",
-			"VOID",
-			"SWARM"
-		};
 		const bool charactersLinked = module
 			&& module->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f;
 		std::string text;
 		NVGcolor textColor;
 		if (charactersLinked) {
-			text = negativePart ? labels[character] : "LINKED";
+			text = negativePart ? kPuffyCharacterLabels[character] : "LINKED";
 			textColor = negativePart
 				? puffy_visual::characterTint(character)
 				: nvgRGB(255, 255, 255);
 		}
 		else {
-			text = std::string(negativePart ? "− " : "+ ") + labels[character];
+			text = std::string(negativePart ? "− " : "+ ")
+				+ kPuffyCharacterLabels[character];
 			textColor = puffy_visual::characterTint(character);
 		}
 		nvgFontSize(args.vg, FONT_SIZE);
@@ -85,6 +87,109 @@ struct PuffyCharacterReadout final : TransparentWidget {
 			0.5f * box.size.y,
 			text.c_str(),
 			nullptr);
+	}
+};
+
+struct PuffyCharacterMenuItem final : MenuItem {
+	Puffy* module = nullptr;
+	bool negativePart = true;
+	int character = int(puffy::Character::Bloom);
+
+	void onAction(const event::Action& e) override {
+		if (module) {
+			const int paramId = negativePart
+				? Puffy::CHARACTER_PARAM
+				: Puffy::POSITIVE_CHARACTER_PARAM;
+			module->params[paramId].setValue(float(character));
+			module->synchronizeCharacterSelectionFromUi(negativePart);
+		}
+		MenuItem::onAction(e);
+	}
+
+	void step() override {
+		if (module) {
+			const int paramId = negativePart
+				? Puffy::CHARACTER_PARAM
+				: Puffy::POSITIVE_CHARACTER_PARAM;
+			rightText = int(std::lround(module->params[paramId].getValue()))
+				== character ? "✓" : "";
+		}
+		MenuItem::step();
+	}
+
+	void draw(const DrawArgs& args) override {
+		const std::string label = text;
+		text.clear();
+		MenuItem::draw(args);
+		text = label;
+		if (!APP || !APP->window || !APP->window->uiFont) {
+			return;
+		}
+		// Draw the label ourselves so it inherits the character color, while the
+		// base MenuItem still supplies Rack's hover and checkmark behavior.
+		nvgFontSize(args.vg, 14.f);
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+		nvgFillColor(args.vg, puffy_visual::characterTint(character));
+		nvgText(args.vg, 10.f, 0.5f * box.size.y, label.c_str(), nullptr);
+	}
+};
+
+struct PuffyCharacterMenuButton final : TransparentWidget {
+	Puffy* module = nullptr;
+	bool negativePart = true;
+
+	void onButton(const event::Button& e) override {
+		if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT
+			|| e.action != GLFW_PRESS) {
+			TransparentWidget::onButton(e);
+			return;
+		}
+		ui::Menu* menu = createMenu();
+		menu->box.pos = getAbsoluteOffset(Vec(0.f, box.size.y));
+		menu->addChild(createMenuLabel(
+			negativePart ? "Negative Character" : "Positive Character"));
+		for (int character = 0; character < puffy::kCharacterCount; ++character) {
+			auto* item = new PuffyCharacterMenuItem();
+			item->module = module;
+			item->negativePart = negativePart;
+			item->character = character;
+			item->text = kPuffyCharacterLabels[character];
+			menu->addChild(item);
+		}
+		e.consume(this);
+	}
+
+	void draw(const DrawArgs& args) override {
+		const int paramId = negativePart
+			? Puffy::CHARACTER_PARAM
+			: Puffy::POSITIVE_CHARACTER_PARAM;
+		const int character = module
+			? clamp(int(std::lround(module->params[paramId].getValue())),
+				0, puffy::kCharacterCount - 1)
+			: int(puffy::Character::Bloom);
+		const NVGcolor tint = puffy_visual::characterTint(character);
+		NVGcolor borderTint = tint;
+		borderTint.a = 0.82f;
+		const float radius = 0.5f * box.size.y;
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, 0.f, 0.f, box.size.x, box.size.y, radius);
+		nvgFillColor(args.vg, nvgRGBA(8, 7, 13, 218));
+		nvgFill(args.vg);
+		nvgStrokeColor(args.vg, borderTint);
+		nvgStrokeWidth(args.vg, 0.85f);
+		nvgStroke(args.vg);
+		if (!APP || !APP->window || !APP->window->uiFont) {
+			return;
+		}
+		nvgFontSize(args.vg, 8.8f);
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		nvgFillColor(args.vg, tint);
+		const std::string label = std::string(kPuffyCharacterLabels[character])
+			+ "  ▾";
+		nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y,
+			label.c_str(), nullptr);
 	}
 };
 
@@ -245,6 +350,25 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	fish->box.pos = mm2px(fishContentRectMm.pos);
 	fish->box.size = mm2px(fishContentRectMm.size);
 	addChild(fish);
+
+	const Vec characterMenuSize = mm2px(Vec(13.5f, 4.5f));
+	const Vec characterMenuInset = mm2px(Vec(0.6f, 0.6f));
+	auto* negativeCharacterMenu = new PuffyCharacterMenuButton();
+	negativeCharacterMenu->module = module;
+	negativeCharacterMenu->negativePart = true;
+	negativeCharacterMenu->box.size = characterMenuSize;
+	negativeCharacterMenu->box.pos = fish->box.pos.plus(Vec(
+		characterMenuInset.x,
+		fish->box.size.y - characterMenuSize.y - characterMenuInset.y));
+	addChild(negativeCharacterMenu);
+	auto* positiveCharacterMenu = new PuffyCharacterMenuButton();
+	positiveCharacterMenu->module = module;
+	positiveCharacterMenu->negativePart = false;
+	positiveCharacterMenu->box.size = characterMenuSize;
+	positiveCharacterMenu->box.pos = fish->box.pos.plus(Vec(
+		fish->box.size.x - characterMenuSize.x - characterMenuInset.x,
+		fish->box.size.y - characterMenuSize.y - characterMenuInset.y));
+	addChild(positiveCharacterMenu);
 
 	math::Rect transferPreviewRectMm;
 	if (!panel_svg::loadRectFromSvgMm(

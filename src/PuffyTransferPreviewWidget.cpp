@@ -206,11 +206,11 @@ void PuffyTransferPreviewWidget::draw(const DrawArgs& args) {
 			clamp(positiveActivity, 0.f, DOMAIN));
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, negativeX, laneY, centerX - negativeX, laneHeight);
-		nvgFillColor(args.vg, withAlpha(negativeTint, 0.13f));
+		nvgFillColor(args.vg, withAlpha(negativeTint, 0.18f));
 		nvgFill(args.vg);
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, centerX, laneY, positiveX - centerX, laneHeight);
-		nvgFillColor(args.vg, withAlpha(positiveTint, 0.13f));
+		nvgFillColor(args.vg, withAlpha(positiveTint, 0.18f));
 		nvgFill(args.vg);
 
 		nvgBeginPath(args.vg);
