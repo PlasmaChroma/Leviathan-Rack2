@@ -372,16 +372,10 @@ struct PuffyPolarityLinkButton final : ParamWidget {
 			? (puffyModule->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f)
 			: (getParamQuantity() ? getParamQuantity()->getValue() > 0.5f : true);
 
-		const int character = puffyModule
-			? clamp(int(std::lround(puffyModule->params[Puffy::CHARACTER_PARAM].getValue())),
-				0, puffy::kCharacterCount - 1)
-			: int(puffy::Character::Bloom);
-		const NVGcolor activeTint = puffy_visual::characterTint(character);
-
 		// Icon color selection
 		NVGcolor iconColor;
 		if (isLinked) {
-			iconColor = isHovered ? nvgRGB(255, 255, 255) : activeTint;
+			iconColor = isHovered ? nvgRGB(255, 255, 255) : nvgRGB(150, 150, 165);
 		}
 		else {
 			iconColor = isHovered ? nvgRGB(245, 245, 255) : nvgRGBA(140, 140, 160, 160);
@@ -406,23 +400,8 @@ struct PuffyPolarityLinkButton final : ParamWidget {
 			const Vec c1(-offsetX, -offsetY); // Bottom-left link
 			const Vec c2(offsetX, offsetY);   // Top-right link (offset perpendicularly)
 
-			// Direct chain highlight halo on mouseover when linked
-			if (isHovered) {
-				NVGcolor halo = activeTint;
-				halo.a = 0.45f;
-				nvgStrokeColor(args.vg, halo);
-				nvgStrokeWidth(args.vg, outlineW + 2.0f);
-
-				nvgBeginPath(args.vg);
-				nvgRoundedRect(args.vg, c1.x - linkW * 0.5f, c1.y - linkH * 0.5f, linkW, linkH, linkR);
-				nvgStroke(args.vg);
-
-				nvgBeginPath(args.vg);
-				nvgRoundedRect(args.vg, c2.x - linkW * 0.5f, c2.y - linkH * 0.5f, linkW, linkH, linkR);
-				nvgStroke(args.vg);
-			}
-
-			// 1. Link 1 (Bottom-left link) - 3D outline + core
+			// Draw Link 1 first, then Link 2 over it. The overlap outline is an
+			// intentional depth cue at the lower crossover.
 			nvgBeginPath(args.vg);
 			nvgRoundedRect(args.vg, c1.x - linkW * 0.5f, c1.y - linkH * 0.5f, linkW, linkH, linkR);
 			nvgStrokeColor(args.vg, outlineColor);
@@ -435,7 +414,6 @@ struct PuffyPolarityLinkButton final : ParamWidget {
 			nvgStrokeWidth(args.vg, strokeW);
 			nvgStroke(args.vg);
 
-			// 2. Link 2 (Top-right link) - 3D outline (occludes Link 1 at bottom crossover) + core
 			nvgBeginPath(args.vg);
 			nvgRoundedRect(args.vg, c2.x - linkW * 0.5f, c2.y - linkH * 0.5f, linkW, linkH, linkR);
 			nvgStrokeColor(args.vg, outlineColor);
@@ -448,9 +426,13 @@ struct PuffyPolarityLinkButton final : ParamWidget {
 			nvgStrokeWidth(args.vg, strokeW);
 			nvgStroke(args.vg);
 
-			// 3. Link 1 Top-Right Strand (weaves OVER Link 2 at top overlap) - 3D outline + core
+			// At the opposite crossover, locally bring Link 1 back over Link 2.
+			// Rounded, short ends join the existing loop without forming a bar
+			// across its open center.
+			const float overpassStartX = c1.x + linkW * 0.5f - linkR - 0.65f;
+			nvgLineCap(args.vg, NVG_ROUND);
 			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, c1.x, c1.y - linkH * 0.5f);
+			nvgMoveTo(args.vg, overpassStartX, c1.y - linkH * 0.5f);
 			nvgLineTo(args.vg, c1.x + linkW * 0.5f - linkR, c1.y - linkH * 0.5f);
 			nvgArcTo(args.vg, c1.x + linkW * 0.5f, c1.y - linkH * 0.5f, c1.x + linkW * 0.5f, c1.y, linkR);
 			nvgStrokeColor(args.vg, outlineColor);
@@ -458,7 +440,7 @@ struct PuffyPolarityLinkButton final : ParamWidget {
 			nvgStroke(args.vg);
 
 			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, c1.x, c1.y - linkH * 0.5f);
+			nvgMoveTo(args.vg, overpassStartX, c1.y - linkH * 0.5f);
 			nvgLineTo(args.vg, c1.x + linkW * 0.5f - linkR, c1.y - linkH * 0.5f);
 			nvgArcTo(args.vg, c1.x + linkW * 0.5f, c1.y - linkH * 0.5f, c1.x + linkW * 0.5f, c1.y, linkR);
 			nvgStrokeColor(args.vg, iconColor);
@@ -471,21 +453,6 @@ struct PuffyPolarityLinkButton final : ParamWidget {
 
 			const Vec c1(-offsetX, -offsetY);
 			const Vec c2(offsetX, offsetY);
-
-			// Direct chain highlight halo on mouseover when unlinked
-			if (isHovered) {
-				NVGcolor halo = nvgRGBA(255, 255, 255, 110);
-				nvgStrokeColor(args.vg, halo);
-				nvgStrokeWidth(args.vg, outlineW + 2.0f);
-
-				nvgBeginPath(args.vg);
-				nvgRoundedRect(args.vg, c1.x - linkW * 0.5f, c1.y - linkH * 0.5f, linkW, linkH, linkR);
-				nvgStroke(args.vg);
-
-				nvgBeginPath(args.vg);
-				nvgRoundedRect(args.vg, c2.x - linkW * 0.5f, c2.y - linkH * 0.5f, linkW, linkH, linkR);
-				nvgStroke(args.vg);
-			}
 
 			// Link 1 (separated) - 3D outline + core
 			nvgBeginPath(args.vg);
