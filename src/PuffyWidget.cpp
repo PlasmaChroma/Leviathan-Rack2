@@ -135,20 +135,46 @@ struct PuffyCharacterMenuItem final : MenuItem {
 	}
 };
 
-struct PuffyCharacterMenuButton final : TransparentWidget {
+struct PuffyCharacterMenuButton final : OpaqueWidget {
 	Puffy* module = nullptr;
 	bool negativePart = true;
+	bool isHovered = false;
+
+	void step() override {
+		OpaqueWidget::step();
+		if (module && !negativePart) {
+			const bool linked = module->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f;
+			visible = !linked;
+			if (linked) {
+				isHovered = false;
+			}
+		}
+	}
+
+	void onEnter(const event::Enter& e) override {
+		isHovered = true;
+		OpaqueWidget::onEnter(e);
+	}
+
+	void onLeave(const event::Leave& e) override {
+		isHovered = false;
+		OpaqueWidget::onLeave(e);
+	}
 
 	void onButton(const event::Button& e) override {
 		if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT
 			|| e.action != GLFW_PRESS) {
-			TransparentWidget::onButton(e);
+			OpaqueWidget::onButton(e);
 			return;
 		}
+		const bool charactersLinked = module
+			&& module->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f;
 		ui::Menu* menu = createMenu();
 		menu->box.pos = getAbsoluteOffset(Vec(0.f, box.size.y));
 		menu->addChild(createMenuLabel(
-			negativePart ? "Negative Character" : "Positive Character"));
+			charactersLinked
+				? "Both Polarities"
+				: (negativePart ? "Negative Character" : "Positive Character")));
 		for (int character = 0; character < puffy::kCharacterCount; ++character) {
 			auto* item = new PuffyCharacterMenuItem();
 			item->module = module;
@@ -170,14 +196,24 @@ struct PuffyCharacterMenuButton final : TransparentWidget {
 			: int(puffy::Character::Bloom);
 		const NVGcolor tint = puffy_visual::characterTint(character);
 		NVGcolor borderTint = tint;
-		borderTint.a = 0.82f;
+		float strokeWidth = 0.85f;
+		NVGcolor fillColor = nvgRGBA(8, 7, 13, 218);
+		if (isHovered) {
+			borderTint.a = 1.0f;
+			strokeWidth = 1.35f;
+			fillColor = nvgRGBA(24, 20, 36, 240);
+		}
+		else {
+			borderTint.a = 0.82f;
+			strokeWidth = 0.85f;
+		}
 		const float radius = 0.5f * box.size.y;
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, 0.f, 0.f, box.size.x, box.size.y, radius);
-		nvgFillColor(args.vg, nvgRGBA(8, 7, 13, 218));
+		nvgFillColor(args.vg, fillColor);
 		nvgFill(args.vg);
 		nvgStrokeColor(args.vg, borderTint);
-		nvgStrokeWidth(args.vg, 0.85f);
+		nvgStrokeWidth(args.vg, strokeWidth);
 		nvgStroke(args.vg);
 		if (!APP || !APP->window || !APP->window->uiFont) {
 			return;
@@ -246,6 +282,165 @@ struct PuffyCharacterLinkButton final : SmallGoldApertureButton {
 			// Relinking always makes the left/negative character authoritative.
 			module->synchronizeCharacterSelectionFromUi(true);
 		}
+	}
+};
+
+struct PuffyPolarityLinkButton final : ParamWidget {
+	bool isHovered = false;
+	ui::Tooltip* tooltip = nullptr;
+
+	PuffyPolarityLinkButton() {
+		box.size = Vec(14.f, 14.f);
+	}
+
+	~PuffyPolarityLinkButton() override {
+		destroyTooltip();
+	}
+
+	std::string getTooltipString() {
+		auto* puffyModule = dynamic_cast<Puffy*>(module);
+		const bool isLinked = puffyModule
+			? (puffyModule->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f)
+			: (getParamQuantity() ? getParamQuantity()->getValue() > 0.5f : true);
+		return isLinked ? "Unlink Polarity" : "Link Polarity";
+	}
+
+	void createTooltip() {
+		if (!settings::tooltips || tooltip || !APP || !APP->scene) {
+			return;
+		}
+		tooltip = new ui::Tooltip();
+		tooltip->text = getTooltipString();
+		APP->scene->addChild(tooltip);
+	}
+
+	void destroyTooltip() {
+		if (tooltip) {
+			if (tooltip->parent) {
+				tooltip->parent->removeChild(tooltip);
+			}
+			delete tooltip;
+			tooltip = nullptr;
+		}
+	}
+
+	void refreshTooltip() {
+		if (tooltip) {
+			tooltip->text = getTooltipString();
+		}
+	}
+
+	void onEnter(const event::Enter& e) override {
+		isHovered = true;
+		createTooltip();
+		event::Enter eCopy = e;
+		OpaqueWidget::onEnter(eCopy);
+	}
+
+	void onLeave(const event::Leave& e) override {
+		isHovered = false;
+		destroyTooltip();
+		event::Leave eCopy = e;
+		OpaqueWidget::onLeave(eCopy);
+	}
+
+	void onButton(const event::Button& e) override {
+		if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
+			auto* puffyModule = dynamic_cast<Puffy*>(module);
+			if (puffyModule) {
+				const float curVal = puffyModule->params[Puffy::CHARACTER_LINK_PARAM].getValue();
+				const float newVal = (curVal > 0.5f) ? 0.f : 1.f;
+				puffyModule->params[Puffy::CHARACTER_LINK_PARAM].setValue(newVal);
+				if (newVal > 0.5f) {
+					puffyModule->synchronizeCharacterSelectionFromUi(true);
+				}
+			}
+			else if (getParamQuantity()) {
+				const float curVal = getParamQuantity()->getValue();
+				getParamQuantity()->setValue(curVal > 0.5f ? 0.f : 1.f);
+			}
+			refreshTooltip();
+			e.consume(this);
+			return;
+		}
+		ParamWidget::onButton(e);
+	}
+
+	void draw(const DrawArgs& args) override {
+		auto* puffyModule = dynamic_cast<Puffy*>(module);
+		const bool isLinked = puffyModule
+			? (puffyModule->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f)
+			: (getParamQuantity() ? getParamQuantity()->getValue() > 0.5f : true);
+
+		const int character = puffyModule
+			? clamp(int(std::lround(puffyModule->params[Puffy::CHARACTER_PARAM].getValue())),
+				0, puffy::kCharacterCount - 1)
+			: int(puffy::Character::Bloom);
+		const NVGcolor activeTint = puffy_visual::characterTint(character);
+
+		// Background pill/box
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, 0.f, 0.f, box.size.x, box.size.y, 3.f);
+		if (isHovered) {
+			nvgFillColor(args.vg, nvgRGBA(35, 30, 50, 230));
+			nvgStrokeColor(args.vg, isLinked ? activeTint : nvgRGBA(255, 255, 255, 180));
+			nvgStrokeWidth(args.vg, 1.2f);
+		}
+		else {
+			nvgFillColor(args.vg, nvgRGBA(8, 7, 13, 200));
+			NVGcolor borderTint = isLinked ? activeTint : nvgRGBA(140, 140, 160, 100);
+			borderTint.a = isLinked ? 0.8f : 0.4f;
+			nvgStrokeColor(args.vg, borderTint);
+			nvgStrokeWidth(args.vg, 0.85f);
+		}
+		nvgFill(args.vg);
+		nvgStroke(args.vg);
+
+		// Icon color
+		NVGcolor iconColor;
+		if (isHovered) {
+			iconColor = isLinked ? activeTint : nvgRGB(255, 255, 255);
+		}
+		else {
+			iconColor = isLinked ? activeTint : nvgRGBA(180, 180, 200, 180);
+		}
+
+		// Draw chain icon (interlocked when linked, separated when unlinked)
+		nvgSave(args.vg);
+		nvgTranslate(args.vg, box.size.x * 0.5f, box.size.y * 0.5f);
+		nvgRotate(args.vg, -M_PI / 4.f);
+
+		const float strokeW = 1.25f;
+		const float linkW = 5.2f;
+		const float linkH = 3.0f;
+		const float linkR = 1.5f;
+		const float offset = isLinked ? 1.5f : 3.4f;
+
+		// Left / Bottom link loop
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, -offset - linkW * 0.5f, -linkH * 0.5f, linkW, linkH, linkR);
+		nvgStrokeColor(args.vg, iconColor);
+		nvgStrokeWidth(args.vg, strokeW);
+		nvgStroke(args.vg);
+
+		// Right / Top link loop
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, offset - linkW * 0.5f, -linkH * 0.5f, linkW, linkH, linkR);
+		nvgStrokeColor(args.vg, iconColor);
+		nvgStrokeWidth(args.vg, strokeW);
+		nvgStroke(args.vg);
+
+		if (isLinked) {
+			// Center interlocking bridge bar
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, -1.0f, 0.f);
+			nvgLineTo(args.vg, 1.0f, 0.f);
+			nvgStrokeColor(args.vg, iconColor);
+			nvgStrokeWidth(args.vg, strokeW);
+			nvgStroke(args.vg);
+		}
+
+		nvgRestore(args.vg);
 	}
 };
 
@@ -365,6 +560,15 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 		characterMenuInset.x,
 		fish->box.size.y - characterMenuSize.y - characterMenuInset.y));
 	addChild(negativeCharacterMenu);
+
+	auto* polarityLinkIcon = createParam<PuffyPolarityLinkButton>(
+		Vec(
+			negativeCharacterMenu->box.pos.x,
+			negativeCharacterMenu->box.pos.y - 14.f - 3.f),
+		module,
+		Puffy::CHARACTER_LINK_PARAM);
+	addParam(polarityLinkIcon);
+
 	auto* positiveCharacterMenu = new PuffyCharacterMenuButton();
 	positiveCharacterMenu->module = module;
 	positiveCharacterMenu->negativePart = false;
