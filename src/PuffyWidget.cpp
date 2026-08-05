@@ -31,7 +31,7 @@ struct PuffyViewportGradient final : TransparentWidget {
 };
 
 struct PuffyCharacterReadout final : TransparentWidget {
-	static constexpr float FONT_SIZE = 11.f;
+	static constexpr float FONT_SIZE = 12.f;
 	Puffy* module = nullptr;
 	bool negativePart = true;
 
