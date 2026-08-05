@@ -88,7 +88,8 @@ TEST_BINS_NON_RACK := \
 	build/tests/wave_preview_simplification_spec \
 	build/tests/deepcache_planner_spec \
 	build/tests/deepcache_archive_spec \
-	build/tests/chromatide_spec
+	build/tests/chromatide_spec \
+	build/tests/longplayer_stream_spec
 
 
 TEST_BINS_RACK := \
@@ -303,6 +304,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/wave_preview_simplification_spec)
 	$(call run_test_bin,build/tests/deepcache_planner_spec)
 	$(call run_test_bin,build/tests/deepcache_archive_spec)
+	$(call run_test_bin,build/tests/longplayer_stream_spec)
 
 test-rack: test-build-rack
 	$(call run_rack_test_bin,build/tests/bifurx_runtime_spec)
@@ -425,6 +427,9 @@ build/tests/puffy_engine_spec: tests/puffy_engine_spec.cpp src/PuffyEngine.cpp s
 
 build/tests/puffy_character_controller_spec: tests/puffy_character_controller_spec.cpp src/PuffyCharacterController.cpp src/PuffyCharacterController.hpp src/PuffyPose.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/puffy_character_controller_spec.cpp src/PuffyCharacterController.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=$(RACK_DIR) -o $@
+
+build/tests/longplayer_stream_spec: tests/longplayer_stream_spec.cpp src/LongplayerStream.cpp src/LongplayerStream.hpp src/codec.cpp src/codec.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/longplayer_stream_spec.cpp src/LongplayerStream.cpp src/codec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=$(RACK_DIR) -pthread -o $@
 
 build/tests/doorstop_engine_spec: tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
