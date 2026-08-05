@@ -486,10 +486,14 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	viewportFramebuffer->addChild(viewportGradient);
 	addChild(viewportFramebuffer);
 
+	auto* fishFramebuffer = new widget::FramebufferWidget();
+	fishFramebuffer->box.pos = mm2px(fishContentRectMm.pos);
+	fishFramebuffer->box.size = mm2px(fishContentRectMm.size);
+	fishFramebuffer->dirtyOnSubpixelChange = false;
 	auto* fish = new PuffyFishWidget(module);
-	fish->box.pos = mm2px(fishContentRectMm.pos);
-	fish->box.size = mm2px(fishContentRectMm.size);
-	addChild(fish);
+	fish->box.size = fishFramebuffer->box.size;
+	fishFramebuffer->addChild(fish);
+	addChild(fishFramebuffer);
 
 	const Vec characterMenuSize = mm2px(Vec(13.5f, 4.5f));
 	const Vec characterMenuInset = mm2px(Vec(0.6f, 0.6f));
@@ -497,9 +501,10 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	negativeCharacterMenu->module = module;
 	negativeCharacterMenu->negativePart = true;
 	negativeCharacterMenu->box.size = characterMenuSize;
-	negativeCharacterMenu->box.pos = fish->box.pos.plus(Vec(
+	negativeCharacterMenu->box.pos = fishFramebuffer->box.pos.plus(Vec(
 		characterMenuInset.x,
-		fish->box.size.y - characterMenuSize.y - characterMenuInset.y));
+		fishFramebuffer->box.size.y
+			- characterMenuSize.y - characterMenuInset.y));
 	addChild(negativeCharacterMenu);
 
 	auto* polarityLinkIcon = createParam<PuffyPolarityLinkButton>(
@@ -514,9 +519,11 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	positiveCharacterMenu->module = module;
 	positiveCharacterMenu->negativePart = false;
 	positiveCharacterMenu->box.size = characterMenuSize;
-	positiveCharacterMenu->box.pos = fish->box.pos.plus(Vec(
-		fish->box.size.x - characterMenuSize.x - characterMenuInset.x,
-		fish->box.size.y - characterMenuSize.y - characterMenuInset.y));
+	positiveCharacterMenu->box.pos = fishFramebuffer->box.pos.plus(Vec(
+		fishFramebuffer->box.size.x
+			- characterMenuSize.x - characterMenuInset.x,
+		fishFramebuffer->box.size.y
+			- characterMenuSize.y - characterMenuInset.y));
 	addChild(positiveCharacterMenu);
 
 	math::Rect transferPreviewRectMm;

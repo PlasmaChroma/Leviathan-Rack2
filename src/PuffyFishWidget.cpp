@@ -116,7 +116,12 @@ void PuffyFishWidget::step() {
 	if (updateAccumulator >= updateInterval) {
 		const float dt = std::min(updateAccumulator, 1.f / 15.f);
 		updateAccumulator = 0.f;
-		controller.update(dt, visual, &pose);
+		if (controller.update(dt, visual, &pose)) {
+			if (auto* framebuffer =
+				dynamic_cast<widget::FramebufferWidget*>(parent)) {
+				framebuffer->setDirty();
+			}
+		}
 	}
 }
 

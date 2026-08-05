@@ -122,9 +122,7 @@ void PuffyTransferPreviewWidget::rebuildPoints() {
 	lastNegativeCharacter = int(negativeCharacter);
 	lastPositiveCharacter = int(positiveCharacter);
 	lastCurveSize = box.size;
-	if (hasSwarm) {
-		lastSwarmRebuildTime = system::getTime();
-	}
+	lastCurveRebuildTime = system::getTime();
 	if (curveFramebuffer) {
 		curveFramebuffer->setDirty();
 	}
@@ -171,11 +169,10 @@ void PuffyTransferPreviewWidget::step() {
 		|| (frenzyReactive
 			&& (std::fabs(visual.inputActivity - lastFast) > 0.01f
 				|| std::fabs(visual.transientActivity - lastTransient) > 0.01f));
-	const double now = system::getTime();
-	const bool swarmRebuildAllowed = !swarmActive
-		|| lastSwarmRebuildTime < 0.0
-		|| now - lastSwarmRebuildTime >= (1.0 / 30.0);
-	if (curveChanged && swarmRebuildAllowed) {
+	const bool curveRebuildAllowed = curveChanged
+		&& (lastCurveRebuildTime < 0.0
+			|| system::getTime() - lastCurveRebuildTime >= (1.0 / 30.0));
+	if (curveRebuildAllowed) {
 		rebuildPoints();
 	}
 

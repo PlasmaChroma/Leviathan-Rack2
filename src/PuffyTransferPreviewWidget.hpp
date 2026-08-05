@@ -28,7 +28,7 @@ struct PuffyTransferPreviewWidget final : TransparentWidget {
 	int lastNegativeCharacter = -1;
 	int lastPositiveCharacter = -1;
 	Vec lastCurveSize;
-	double lastSwarmRebuildTime = -1.0;
+	double lastCurveRebuildTime = -1.0;
 
 	explicit PuffyTransferPreviewWidget(Puffy* module);
 
