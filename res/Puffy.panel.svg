@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="60.96mm" height="128.5mm" viewBox="0 0 6096 12850" version="1.1" id="svg21" sodipodi:docname="Puffy.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="60.96mm" height="128.5mm" viewBox="0 0 6096 12850" version="1.1" id="svg21" sodipodi:docname="Puffy.svg" inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)">
   <defs id="defs8">
     <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#24140b" id="stop1" />
@@ -32,11 +32,6 @@
   </g>
   <g id="components" opacity="0" style="display:inline;opacity:1">
     <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="1412.0334" y="11843.102" width="3271.9331" height="1224.054" style="display:none" />
-    <circle id="character_param" cx="355" cy="8447.2002" r="180" style="fill:#425f34;fill-opacity:1" />
-    <circle id="negative_character_readout" cx="1651.5" cy="8447.2002" r="150" style="fill:#425f34;fill-opacity:1;stroke-width:15" />
-    <circle id="positive_character_readout" cx="4444.5" cy="8447.2002" r="150" style="fill:#425f34;fill-opacity:1;stroke-width:15" />
-    <circle id="positive_character_param" cx="5761" cy="8447.2002" r="180" style="fill:#425f34;fill-opacity:1" />
-    <circle id="character_link_param" cx="3048" cy="8447.2002" r="180" style="fill:#425f34;fill-opacity:1" />
     <circle id="puff_param" cx="820.40002" cy="9585.2002" r="300" style="fill:#425f34;fill-opacity:1" />
     <circle id="sensitivity_param" cx="4356.5327" cy="9585.2002" r="200" style="fill:#425f34;fill-opacity:1" />
     <circle id="mix_param" cx="5537.2314" cy="9585.2002" r="200" style="fill:#425f34;fill-opacity:1" />
@@ -49,5 +44,5 @@
     <circle id="limit_light" cx="4572" cy="11193.589" r="100" style="fill:#425f34;fill-opacity:1" />
   </g>
   <rect id="fish_rect" x="73.699944" y="946.40009" width="5948.5" height="5391.3892" style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:29.8001;stroke-dasharray:none;stroke-opacity:1" />
-  <rect id="transfer_preview_rect" x="74.351295" y="6410.9512" width="5947.3975" height="1687.1532" style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:30.9028;stroke-dasharray:none;stroke-opacity:1" />
+  <rect id="transfer_preview_rect" x="76.940689" y="6413.54" width="5942.2183" height="2302.0186" style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:36.0816;stroke-dasharray:none;stroke-opacity:1" />
 </svg>

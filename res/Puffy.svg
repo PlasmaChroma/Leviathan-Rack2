@@ -6,7 +6,7 @@
    version="1.1"
    id="svg21"
    sodipodi:docname="Puffy.svg"
-   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -23,12 +23,12 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      inkscape:zoom="3.421466"
-     inkscape:cx="109.60214"
-     inkscape:cy="186.32364"
-     inkscape:window-width="2560"
-     inkscape:window-height="1377"
-     inkscape:window-x="-8"
-     inkscape:window-y="-8"
+     inkscape:cx="109.45601"
+     inkscape:cy="256.17674"
+     inkscape:window-width="1862"
+     inkscape:window-height="1016"
+     inkscape:window-x="58"
+     inkscape:window-y="27"
      inkscape:window-maximized="1"
      inkscape:current-layer="svg21"
      showgrid="false" />
@@ -274,36 +274,6 @@
        height="1224.054"
        style="display:none" />
     <circle
-       id="character_param"
-       cx="355"
-       cy="8447.2002"
-       r="180"
-       style="fill:#425f34;fill-opacity:1" />
-    <circle
-       id="negative_character_readout"
-       cx="1651.5"
-       cy="8447.2002"
-       r="150"
-       style="fill:#425f34;fill-opacity:1;stroke-width:15" />
-    <circle
-       id="positive_character_readout"
-       cx="4444.5"
-       cy="8447.2002"
-       r="150"
-       style="fill:#425f34;fill-opacity:1;stroke-width:15" />
-    <circle
-       id="positive_character_param"
-       cx="5761"
-       cy="8447.2002"
-       r="180"
-       style="fill:#425f34;fill-opacity:1" />
-    <circle
-       id="character_link_param"
-       cx="3048"
-       cy="8447.2002"
-       r="180"
-       style="fill:#425f34;fill-opacity:1" />
-    <circle
        id="puff_param"
        cx="820.40002"
        cy="9585.2002"
@@ -373,9 +343,9 @@
      style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:29.8001;stroke-dasharray:none;stroke-opacity:1" />
   <rect
      id="transfer_preview_rect"
-     x="74.351295"
-     y="6410.9512"
-     width="5947.3975"
-     height="1687.1532"
-     style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:30.9028;stroke-dasharray:none;stroke-opacity:1" />
+     x="76.940689"
+     y="6413.54"
+     width="5942.2183"
+     height="2302.0186"
+     style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:36.0816;stroke-dasharray:none;stroke-opacity:1" />
 </svg>
