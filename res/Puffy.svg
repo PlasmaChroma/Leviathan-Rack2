@@ -6,7 +6,7 @@
    version="1.1"
    id="svg21"
    sodipodi:docname="Puffy.svg"
-   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -22,13 +22,13 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="2.4193418"
-     inkscape:cx="106.02057"
-     inkscape:cy="341.62184"
-     inkscape:window-width="1862"
-     inkscape:window-height="1016"
-     inkscape:window-x="1978"
-     inkscape:window-y="27"
+     inkscape:zoom="3.421466"
+     inkscape:cx="109.60214"
+     inkscape:cy="186.32364"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
      inkscape:window-maximized="1"
      inkscape:current-layer="svg21"
      showgrid="false" />
@@ -149,7 +149,7 @@
     <g
        id="glass">
       <path
-         d="M 235,8700 H 5861 C 5980,8700 6040,8760 6040,8880 V 10420 C 6040,10540 5980,10600 5861,10600 H 3138 C 3058,10600 3018,10640 3018,10720 V 12020 C 3018,12100 2978,12140 2898,12140 H 235 C 116,12140 56,12080 56,11960 V 8880 C 56,8760 116,8700 235,8700 Z"
+         d="M 235,8800 H 5861 C 5980,8800 6040,8860 6040,8980 V 10420 C 6040,10540 5980,10600 5861,10600 H 3138 C 3058,10600 3018,10640 3018,10720 V 12020 C 3018,12100 2978,12140 2898,12140 H 235 C 116,12140 56,12080 56,11960 V 8980 C 56,8860 116,8800 235,8800 Z"
          id="puffy_input_field"
          style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
       <rect
@@ -276,31 +276,31 @@
     <circle
        id="character_param"
        cx="355"
-       cy="8327.2002"
+       cy="8447.2002"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="negative_character_readout"
        cx="1651.5"
-       cy="8327.2002"
+       cy="8447.2002"
        r="150"
        style="fill:#425f34;fill-opacity:1;stroke-width:15" />
     <circle
        id="positive_character_readout"
        cx="4444.5"
-       cy="8327.2002"
+       cy="8447.2002"
        r="150"
        style="fill:#425f34;fill-opacity:1;stroke-width:15" />
     <circle
        id="positive_character_param"
        cx="5761"
-       cy="8327.2002"
+       cy="8447.2002"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="character_link_param"
        cx="3048"
-       cy="8327.2002"
+       cy="8447.2002"
        r="180"
        style="fill:#425f34;fill-opacity:1" />
     <circle
@@ -366,16 +366,16 @@
   </g>
   <rect
      id="fish_rect"
-     x="63.777615"
-     y="946.45001"
-     width="5968.4448"
-     height="5409.4658"
-     style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:29.9;stroke-dasharray:none;stroke-opacity:1" />
+     x="73.699944"
+     y="946.40009"
+     width="5948.5"
+     height="5391.3892"
+     style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:29.8001;stroke-dasharray:none;stroke-opacity:1" />
   <rect
      id="transfer_preview_rect"
-     x="63.806179"
-     y="6410.4502"
-     width="5968.3877"
-     height="1573.8778"
-     style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:29.9;stroke-dasharray:none;stroke-opacity:1" />
+     x="74.351295"
+     y="6410.9512"
+     width="5947.3975"
+     height="1687.1532"
+     style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:30.9028;stroke-dasharray:none;stroke-opacity:1" />
 </svg>

@@ -70,9 +70,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="4.8386834"
-     inkscape:cx="114.28729"
-     inkscape:cy="395.04548"
+     inkscape:zoom="3.4214658"
+     inkscape:cx="71.899008"
+     inkscape:cy="142.19052"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -303,7 +303,7 @@
   <rect
      id="IRIS_DISPLAY"
      x="96.52713"
-     y="931.90002"
+     y="941.95001"
      width="5902.9458"
      height="3447.2776"
      rx="0"
@@ -450,8 +450,20 @@
        xml:space="preserve"
        inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
   </g>
-  <g id="perfect_wave_raster_anchors" style="display:none">
-    <rect id="BRANDING_WAVE_LEFT_RASTER" x="157.610" y="12338.190" width="1306.748" height="511.810" />
-    <rect id="BRANDING_WAVE_RIGHT_RASTER" x="4631.674" y="12338.190" width="1306.748" height="511.810" />
+  <g
+     id="perfect_wave_raster_anchors"
+     style="display:none">
+    <rect
+       id="BRANDING_WAVE_LEFT_RASTER"
+       x="157.610"
+       y="12338.190"
+       width="1306.748"
+       height="511.810" />
+    <rect
+       id="BRANDING_WAVE_RIGHT_RASTER"
+       x="4631.674"
+       y="12338.190"
+       width="1306.748"
+       height="511.810" />
   </g>
 </svg>

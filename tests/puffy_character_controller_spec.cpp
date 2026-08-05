@@ -144,6 +144,98 @@ Result squintRemainsDistinctFromBlink() {
 	};
 }
 
+Result energySurgeCreatesExcitedMotion() {
+	PuffyVisualState visual;
+	PuffyCharacterController controller;
+	controller.reset(visual);
+	PuffyPose pose;
+	for (int i = 0; i < 60; ++i) {
+		controller.update(1.f / 60.f, visual, &pose);
+	}
+	visual.inputActivity = 0.72f;
+	controller.update(1.f / 60.f, visual, &pose);
+	const float triggered = pose.excitement;
+	float verticalRange = 0.f;
+	float minimumOffset = pose.verticalOffset;
+	float maximumOffset = pose.verticalOffset;
+	float finRange = 0.f;
+	float minimumFin = pose.leftFinAngle;
+	float maximumFin = pose.leftFinAngle;
+	for (int i = 0; i < 30; ++i) {
+		controller.update(1.f / 60.f, visual, &pose);
+		minimumOffset = std::min(minimumOffset, pose.verticalOffset);
+		maximumOffset = std::max(maximumOffset, pose.verticalOffset);
+		minimumFin = std::min(minimumFin, pose.leftFinAngle);
+		maximumFin = std::max(maximumFin, pose.leftFinAngle);
+	}
+	verticalRange = maximumOffset - minimumOffset;
+	finRange = maximumFin - minimumFin;
+	return {
+		"A sudden energy rise makes Puffy bob and flap excitedly",
+		triggered >= 0.55f && verticalRange > 0.025f && finRange > 0.20f,
+		"excitement=" + std::to_string(triggered)
+			+ " bobRange=" + std::to_string(verticalRange)
+			+ " finRange=" + std::to_string(finRange)
+	};
+}
+
+Result steadyEnergyDoesNotExcite() {
+	PuffyVisualState visual;
+	visual.inputActivity = 0.65f;
+	PuffyCharacterController controller;
+	controller.reset(visual);
+	PuffyPose pose;
+	float maximumExcitement = 0.f;
+	for (int i = 0; i < 240; ++i) {
+		controller.update(1.f / 60.f, visual, &pose);
+		maximumExcitement = std::max(maximumExcitement, pose.excitement);
+	}
+	return {
+		"A steady loud passage does not repeatedly excite Puffy",
+		maximumExcitement < 1e-7f,
+		"maximumExcitement=" + std::to_string(maximumExcitement)
+	};
+}
+
+Result sustainedSurgeDoesNotRetrigger() {
+	PuffyVisualState visual;
+	PuffyCharacterController controller;
+	controller.reset(visual);
+	PuffyPose pose;
+	visual.inputActivity = 0.72f;
+	controller.update(1.f / 60.f, visual, &pose);
+	const float triggered = pose.excitement;
+	for (int i = 0; i < 240; ++i) {
+		controller.update(1.f / 60.f, visual, &pose);
+	}
+	return {
+		"One sustained energy rise creates only one excitement event",
+		triggered > 0.f && pose.excitement < 1e-7f,
+		"triggered=" + std::to_string(triggered)
+			+ " tail=" + std::to_string(pose.excitement)
+	};
+}
+
+Result excitementDecays() {
+	PuffyVisualState visual;
+	PuffyCharacterController controller;
+	controller.reset(visual);
+	PuffyPose pose;
+	visual.inputActivity = 0.8f;
+	controller.update(1.f / 60.f, visual, &pose);
+	const float triggered = pose.excitement;
+	for (int i = 0; i < 150; ++i) {
+		visual.inputActivity = 0.f;
+		controller.update(1.f / 60.f, visual, &pose);
+	}
+	return {
+		"Excitement returns fully to rest",
+		triggered > 0.f && pose.excitement < 1e-7f,
+		"triggered=" + std::to_string(triggered)
+			+ " tail=" + std::to_string(pose.excitement)
+	};
+}
+
 } // namespace
 
 int main() {
@@ -152,6 +244,10 @@ int main() {
 		characterMotionIsUniform(),
 		twitchThresholdAndDecay(),
 		squintRemainsDistinctFromBlink(),
+		energySurgeCreatesExcitedMotion(),
+		steadyEnergyDoesNotExcite(),
+		sustainedSurgeDoesNotRetrigger(),
+		excitementDecays(),
 	};
 	int failures = 0;
 	for (const Result& result : results) {

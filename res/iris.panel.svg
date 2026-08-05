@@ -63,7 +63,7 @@
     <circle id="IRIS_INV_OUTPUT" cx="5291" cy="11178.575" r="260" />
     <circle id="NAUTILOID_EXPANDER_LIGHT" cx="320" cy="580" r="180" style="display:none" />
   </g>
-  <rect id="IRIS_DISPLAY" x="96.52713" y="931.90002" width="5902.9458" height="3447.2776" rx="0" style="display:inline;stroke:#5841bf;stroke-width:23.3;stroke-dasharray:none;stroke-opacity:1" />
+  <rect id="IRIS_DISPLAY" x="96.52713" y="941.95001" width="5902.9458" height="3447.2776" rx="0" style="display:inline;stroke:#5841bf;stroke-width:23.3;stroke-dasharray:none;stroke-opacity:1" />
   <g id="screen">
     <rect id="IRIS_WAVE_PREVIEW" x="97.029732" y="4479.6802" width="5901.9414" height="1958.9949" rx="0" style="display:inline;stroke:#1ccad8;stroke-width:24.3052;stroke-dasharray:none;stroke-opacity:1" />
   </g>

@@ -24,8 +24,8 @@ struct PuffyViewportGradient final : TransparentWidget {
 			inset,
 			inset + width,
 			inset + height,
-			nvgRGB(31, 25, 44),
-			nvgRGB(15, 13, 23)));
+			nvgRGB(38, 31, 53),
+			nvgRGB(21, 18, 31)));
 		nvgFill(args.vg);
 	}
 };

@@ -52,6 +52,12 @@ void PuffyCharacterController::reset(const PuffyVisualState& visual) {
 	twitchPhase = -1.f;
 	twitchStrength = 0.f;
 	twitchCooldown = 0.f;
+	energyBaseline = clamp01(visual.inputActivity);
+	excitement = 0.f;
+	excitementHold = 0.f;
+	excitementCooldown = 0.f;
+	excitementPhase = 0.f;
+	energySurgeArmed = true;
 	idleTime = 0.f;
 	nextBlinkTime = 3.2f;
 	blinkPhase = -1.f;
@@ -131,6 +137,44 @@ bool PuffyCharacterController::update(
 		}
 	}
 
+	// Compare the current input energy with a deliberately slow memory of the
+	// recent section. Requiring both an absolute and a relative jump keeps
+	// ordinary transients and fluctuations in an already-loud passage from
+	// repeatedly exciting Puffy, while allowing a new entrance after silence.
+	const float energy = clamp01(visual.inputActivity);
+	const float energyRise = energy - energyBaseline;
+	const float relativeRise = energyRise / std::max(energyBaseline, 0.08f);
+	excitementCooldown = std::max(0.f, excitementCooldown - dt);
+	if (!energySurgeArmed
+		&& (energy < 0.12f || energyRise < 0.06f)) {
+		energySurgeArmed = true;
+	}
+	if (energySurgeArmed
+		&& excitementCooldown <= 0.f
+		&& energy >= 0.20f
+		&& energyRise >= 0.13f
+		&& relativeRise >= 0.55f) {
+		const float strength = clamp01(
+			0.55f + (energyRise - 0.13f) * 1.5f);
+		excitement = std::max(excitement, strength);
+		excitementHold = 0.32f;
+		excitementCooldown = 1.45f;
+		energySurgeArmed = false;
+	}
+	const float baselineRate = energy > energyBaseline ? 0.55f : 0.80f;
+	energyBaseline = approach(energyBaseline, energy, baselineRate, dt);
+	if (excitementHold > 0.f) {
+		excitementHold = std::max(0.f, excitementHold - dt);
+	}
+	else {
+		excitement = std::max(0.f, excitement - dt / 1.15f);
+	}
+	excitementPhase += dt * (8.5f + 3.f * excitement);
+	if (excitementPhase >= 2.f * kPi) {
+		excitementPhase -= 2.f * kPi;
+	}
+	const float excitedWave = std::sin(excitementPhase);
+
 	if (blinkPhase < 0.f && squintPhase < 0.f && idleTime >= nextBlinkTime) {
 		blinkPhase = 0.f;
 		nextBlinkTime += 4.1f;
@@ -180,7 +224,8 @@ bool PuffyCharacterController::update(
 	pose->squashY = -pose->squashX * 0.65f;
 	pose->verticalOffset =
 		std::sin(idleTime * (2.f * kPi / 5.4f)) * 0.008f
-		- 0.022f * twitch;
+		- 0.022f * twitch
+		+ 0.026f * excitement * excitedWave;
 	// Doom-style gaze: rest near center, snap decisively to one side, hold
 	// briefly, then return. Vary the cadence while alternating directions.
 	gazeStateTime -= dt;
@@ -207,15 +252,19 @@ bool PuffyCharacterController::update(
 	pose->leftBlink = blink;
 	pose->rightBlink = blink;
 	pose->squint = std::max(squint, 0.16f * std::fabs(twitch));
-	pose->mouthSmile = 0.75f;
+	pose->mouthSmile = 0.75f + 0.20f * excitement;
 	pose->mouthTension = clamp01(0.35f * visual.gainReduction);
 	const float finFlutter = std::sin(idleTime * 3.1f);
+	const float excitedFinFlutter = excitement * excitedWave;
 	pose->leftFinAngle =
-		-0.12f - 0.10f * finFlutter - 0.18f * twitch;
+		-0.12f - 0.10f * finFlutter - 0.18f * twitch
+		- 0.24f * excitedFinFlutter;
 	pose->rightFinAngle =
-		0.12f + 0.10f * finFlutter + 0.18f * twitch;
+		0.12f + 0.10f * finFlutter + 0.18f * twitch
+		+ 0.24f * excitedFinFlutter;
 	pose->spineExtension = clamp01(
 		0.30f + 0.18f * visual.effectiveAmount);
 	pose->blush = approach(pose->blush, visual.gainReduction, 8.f, dt);
+	pose->excitement = excitement;
 	return true;
 }

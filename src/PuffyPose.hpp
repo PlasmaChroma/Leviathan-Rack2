@@ -20,4 +20,5 @@ struct PuffyPose {
 	float rightFinAngle = 0.f;
 	float spineExtension = 0.f;
 	float blush = 0.f;
+	float excitement = 0.f;
 };

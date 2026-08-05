@@ -378,7 +378,7 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 		radiusY * (0.145f + 0.025f * inflation));
 	nvgFillColor(
 		args.vg,
-		nvgRGBA(5, 6, 15, int(82.f + 30.f * inflation)));
+		nvgRGBA(2, 3, 9, int(104.f + 34.f * inflation)));
 	nvgFill(args.vg);
 
 	drawFin(

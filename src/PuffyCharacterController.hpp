@@ -19,6 +19,12 @@ private:
 	float twitchPhase = -1.f;
 	float twitchStrength = 0.f;
 	float twitchCooldown = 0.f;
+	float energyBaseline = 0.f;
+	float excitement = 0.f;
+	float excitementHold = 0.f;
+	float excitementCooldown = 0.f;
+	float excitementPhase = 0.f;
+	bool energySurgeArmed = true;
 	float idleTime = 0.f;
 	float nextBlinkTime = 3.2f;
 	float blinkPhase = -1.f;
