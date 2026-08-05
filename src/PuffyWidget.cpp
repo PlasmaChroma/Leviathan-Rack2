@@ -182,18 +182,18 @@ struct PuffyCharacterMenuButton final : TransparentWidget {
 		if (!APP || !APP->window || !APP->window->uiFont) {
 			return;
 		}
-		nvgFontSize(args.vg, 8.8f);
+		nvgFontSize(args.vg, 8.5f);
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		const float arrowAreaWidth = 12.f;
-		const float labelAreaWidth = std::max(1.f, box.size.x - arrowAreaWidth);
+		const float leftPadding = 4.5f;
+		const float arrowAreaWidth = 8.f;
+		const float labelCenterX = leftPadding + 0.5f * std::max(1.f, box.size.x - leftPadding - arrowAreaWidth);
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 		nvgFillColor(args.vg, tint);
-		nvgText(args.vg, 0.5f * labelAreaWidth, 0.5f * box.size.y,
+		nvgText(args.vg, labelCenterX, 0.5f * box.size.y,
 			kPuffyCharacterLabels[character], nullptr);
-		// Keep the disclosure arrow fixed instead of letting character-name
-		// width move it horizontally.
+		// Keep the disclosure arrow fixed near the right edge inside the pill.
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		nvgText(args.vg, box.size.x - 6.f, 0.5f * box.size.y, "▾", nullptr);
+		nvgText(args.vg, box.size.x - 4.5f, 0.5f * box.size.y, "▾", nullptr);
 	}
 };
 
