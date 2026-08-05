@@ -394,11 +394,12 @@ struct PuffyPolarityLinkButton final : ParamWidget {
 		const NVGcolor outlineColor = nvgRGBA(6, 5, 12, 245);
 
 		if (isLinked) {
-			const float offsetX = 1.8f;
+			const float offsetX1 = 2.2f; // Bottom-left link shifted slightly more left
+			const float offsetX2 = 1.8f;
 			const float offsetY = 0.5f;
 
-			const Vec c1(-offsetX, -offsetY); // Bottom-left link
-			const Vec c2(offsetX, offsetY);   // Top-right link (offset perpendicularly)
+			const Vec c1(-offsetX1, -offsetY); // Bottom-left link
+			const Vec c2(offsetX2, offsetY);   // Top-right link (offset perpendicularly)
 
 			// Draw Link 1 first, then Link 2 over it. The overlap outline is an
 			// intentional depth cue at the lower crossover.
@@ -427,22 +428,24 @@ struct PuffyPolarityLinkButton final : ParamWidget {
 			nvgStroke(args.vg);
 
 			// At the opposite crossover, locally bring Link 1 back over Link 2.
-			// Rounded, short ends join the existing loop without forming a bar
-			// across its open center.
-			const float overpassStartX = c1.x + linkW * 0.5f - linkR - 0.65f;
-			nvgLineCap(args.vg, NVG_ROUND);
+			// Dark outline uses NVG_BUTT line caps so it stays hidden under Link 1's
+			// grey core without creating dark line cuts across the top strand.
+			nvgLineCap(args.vg, NVG_BUTT);
 			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, overpassStartX, c1.y - linkH * 0.5f);
+			nvgMoveTo(args.vg, c1.x - 0.2f, c1.y - linkH * 0.5f);
 			nvgLineTo(args.vg, c1.x + linkW * 0.5f - linkR, c1.y - linkH * 0.5f);
 			nvgArcTo(args.vg, c1.x + linkW * 0.5f, c1.y - linkH * 0.5f, c1.x + linkW * 0.5f, c1.y, linkR);
+			nvgLineTo(args.vg, c1.x + linkW * 0.5f, c1.y + 0.2f);
 			nvgStrokeColor(args.vg, outlineColor);
 			nvgStrokeWidth(args.vg, outlineW);
 			nvgStroke(args.vg);
 
+			nvgLineCap(args.vg, NVG_ROUND);
 			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, overpassStartX, c1.y - linkH * 0.5f);
+			nvgMoveTo(args.vg, c1.x - 0.6f, c1.y - linkH * 0.5f);
 			nvgLineTo(args.vg, c1.x + linkW * 0.5f - linkR, c1.y - linkH * 0.5f);
 			nvgArcTo(args.vg, c1.x + linkW * 0.5f, c1.y - linkH * 0.5f, c1.x + linkW * 0.5f, c1.y, linkR);
+			nvgLineTo(args.vg, c1.x + linkW * 0.5f, c1.y + 0.5f);
 			nvgStrokeColor(args.vg, iconColor);
 			nvgStrokeWidth(args.vg, strokeW);
 			nvgStroke(args.vg);
