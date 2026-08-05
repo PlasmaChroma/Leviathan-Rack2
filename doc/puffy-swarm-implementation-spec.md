@@ -455,12 +455,12 @@ case Character::Swarm: {
 
     float saturated = tanhAudio(z) * coefficients.swarmOutputGain;
     saturated = std::max(-1.f, std::min(saturated, 1.f));
-    const bool reachedRailRegion = std::fabs(z) >= 1.f;
+    const float railScatterGate = smoothstep01(
+        (std::fabs(z) - 1.f) * 2.f);
 
     const float randomUnit = 0.5f + 0.5f * chaos;
-    const float railScatter = reachedRailRegion
-        ? 0.24f * coefficients.swarmScatter * (1.f - randomUnit)
-        : 0.f;
+    const float railScatter = railScatterGate
+        * 0.24f * coefficients.swarmScatter * (1.f - randomUnit);
     saturated *= 1.f - railScatter;
 
     const float magnitude = std::min(std::fabs(saturated), 1.f);
@@ -487,12 +487,14 @@ SWARM then layers two stochastic mechanisms around that centerline:
 
 The `magnitude²` weighting prevents low-level material from being dragged aggressively toward the rail.
 
-Once the local drive reaches the rail region, retain a small inward-facing rail scatter so
-all chaos realizations do not collapse onto the exact same `+/-1` value. The
-initial implementation uses:
+Once the local drive reaches the rail region, ease in a small inward-facing rail
+scatter so all chaos realizations do not collapse onto the exact same `+/-1`
+value. The transition spans `1 < |z| < 1.5`, avoiding a discontinuity in both
+the audio transfer and the representative preview centerline:
 
 ```cpp
-railScatter = reachedRailRegion
+railScatterGate = smoothstep01((abs(z) - 1) * 2);
+railScatter = railScatterGate
     * 0.24f * coefficients.swarmScatter * (1.f - randomUnit);
 saturated *= 1.f - railScatter;
 ```

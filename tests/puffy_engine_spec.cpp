@@ -172,6 +172,45 @@ Result swarmKernelInvariants() {
 	};
 }
 
+Result swarmRailTransitionIsContinuous() {
+	puffy::DynamicsState dynamics;
+	float maximumDelta = 0.f;
+	bool continuous = true;
+	constexpr float inputEpsilon = 1e-5f;
+	for (int ai = 1; ai <= 20; ++ai) {
+		const float amount = float(ai) / 20.f;
+		const float amount2 = amount * amount;
+		const float drive = 1.f + 4.f * amount2;
+		const float scatter = 0.05f * amount + 0.55f * amount2;
+		for (int ci = -20; ci <= 20; ++ci) {
+			const float chaos = float(ci) / 20.f;
+			const float localDriveScale = std::max(
+				0.35f, 1.f + scatter * chaos);
+			const float railInput = 1.f / (drive * localDriveScale);
+			const float below = puffy::Engine::processCharacter(
+				puffy::Character::Swarm,
+				railInput - inputEpsilon,
+				amount,
+				dynamics,
+				chaos);
+			const float above = puffy::Engine::processCharacter(
+				puffy::Character::Swarm,
+				railInput + inputEpsilon,
+				amount,
+				dynamics,
+				chaos);
+			const float delta = std::fabs(above - below);
+			maximumDelta = std::max(maximumDelta, delta);
+			continuous = continuous && delta < 1e-3f;
+		}
+	}
+	return {
+		"SWARM rail scatter enters continuously across its moving threshold",
+		continuous,
+		"maximumDelta=" + std::to_string(maximumDelta)
+	};
+}
+
 Result swarmChaosInfluence() {
 	puffy::DynamicsState dynamics;
 	auto spreadAt = [&](float amount, float input) {
@@ -958,6 +997,7 @@ int main() {
 	const std::vector<Result> results = {
 		characterCurves(),
 		swarmKernelInvariants(),
+		swarmRailTransitionIsContinuous(),
 		swarmChaosInfluence(),
 		swarmRailAttraction(),
 		swarmCenterlineFollowsBloom(),

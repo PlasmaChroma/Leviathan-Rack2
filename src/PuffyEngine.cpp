@@ -337,7 +337,11 @@ float Engine::applyCharacter(
 			float saturated = levi_math::tanhAudio(z)
 				* coefficients.swarmOutputGain;
 			saturated = std::max(-1.f, std::min(saturated, 1.f));
-			const float railScatterGate = std::fabs(z) >= 1.f ? 1.f : 0.f;
+			// Ease rail scatter in after the local drive enters the rail region.
+			// A hard gate here creates a discontinuity in both the audio transfer
+			// and the representative center line at |z| == 1.
+			const float railScatterGate = levi_math::smoothstep01(
+				(std::fabs(z) - 1.f) * 2.f);
 			const float randomUnit = 0.5f + 0.5f * chaos;
 			// Hard clipping would otherwise collapse every sufficiently loud chaos
 			// realization onto the same point. Keep a small inward-facing scatter

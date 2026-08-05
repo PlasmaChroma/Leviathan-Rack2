@@ -290,7 +290,7 @@ struct PuffyPolarityLinkButton final : ParamWidget {
 	ui::Tooltip* tooltip = nullptr;
 
 	PuffyPolarityLinkButton() {
-		box.size = Vec(14.f, 14.f);
+		box.size = Vec(16.f, 16.f);
 	}
 
 	~PuffyPolarityLinkButton() override {
@@ -378,63 +378,130 @@ struct PuffyPolarityLinkButton final : ParamWidget {
 			: int(puffy::Character::Bloom);
 		const NVGcolor activeTint = puffy_visual::characterTint(character);
 
-		// Background pill/box
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, 0.f, 0.f, box.size.x, box.size.y, 3.f);
+		// Subtle hover background highlight without a hard border box
 		if (isHovered) {
-			nvgFillColor(args.vg, nvgRGBA(35, 30, 50, 230));
-			nvgStrokeColor(args.vg, isLinked ? activeTint : nvgRGBA(255, 255, 255, 180));
-			nvgStrokeWidth(args.vg, 1.2f);
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, 0.f, 0.f, box.size.x, box.size.y, 4.f);
+			NVGcolor hoverGlow = isLinked ? activeTint : nvgRGB(255, 255, 255);
+			hoverGlow.a = 0.18f;
+			nvgFillColor(args.vg, hoverGlow);
+			nvgFill(args.vg);
 		}
-		else {
-			nvgFillColor(args.vg, nvgRGBA(8, 7, 13, 200));
-			NVGcolor borderTint = isLinked ? activeTint : nvgRGBA(140, 140, 160, 100);
-			borderTint.a = isLinked ? 0.8f : 0.4f;
-			nvgStrokeColor(args.vg, borderTint);
-			nvgStrokeWidth(args.vg, 0.85f);
-		}
-		nvgFill(args.vg);
-		nvgStroke(args.vg);
 
-		// Icon color
+		// Icon color selection
 		NVGcolor iconColor;
-		if (isHovered) {
-			iconColor = isLinked ? activeTint : nvgRGB(255, 255, 255);
+		if (isLinked) {
+			iconColor = isHovered ? nvgRGB(255, 255, 255) : activeTint;
 		}
 		else {
-			iconColor = isLinked ? activeTint : nvgRGBA(180, 180, 200, 180);
+			iconColor = isHovered ? nvgRGB(240, 240, 250) : nvgRGBA(140, 140, 160, 160);
 		}
 
-		// Draw chain icon (interlocked when linked, separated when unlinked)
+		// Draw larger chain icon with realistic physical proportions & 3D weave outlines
 		nvgSave(args.vg);
 		nvgTranslate(args.vg, box.size.x * 0.5f, box.size.y * 0.5f);
 		nvgRotate(args.vg, -M_PI / 4.f);
 
-		const float strokeW = 1.25f;
-		const float linkW = 5.2f;
-		const float linkH = 3.0f;
-		const float linkR = 1.5f;
-		const float offset = isLinked ? 1.5f : 3.4f;
-
-		// Left / Bottom link loop
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, -offset - linkW * 0.5f, -linkH * 0.5f, linkW, linkH, linkR);
-		nvgStrokeColor(args.vg, iconColor);
-		nvgStrokeWidth(args.vg, strokeW);
-		nvgStroke(args.vg);
-
-		// Right / Top link loop
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, offset - linkW * 0.5f, -linkH * 0.5f, linkW, linkH, linkR);
-		nvgStrokeColor(args.vg, iconColor);
-		nvgStrokeWidth(args.vg, strokeW);
-		nvgStroke(args.vg);
+		const float strokeW = 1.1f;
+		const float outlineW = strokeW + 1.6f;
+		const float linkW = 7.6f;
+		const float linkH = 4.6f;
+		const float linkR = 2.0f;
+		const NVGcolor outlineColor = nvgRGBA(6, 5, 12, 245);
 
 		if (isLinked) {
-			// Center interlocking bridge bar
+			const float offsetX = 1.8f;
+			const float offsetY = 0.5f;
+
+			const Vec c1(-offsetX, -offsetY); // Bottom-left link
+			const Vec c2(offsetX, offsetY);   // Top-right link (offset perpendicularly)
+
+			// Glow halo on hover when linked
+			if (isHovered) {
+				NVGcolor halo = activeTint;
+				halo.a = 0.35f;
+				nvgStrokeColor(args.vg, halo);
+				nvgStrokeWidth(args.vg, outlineW + 1.4f);
+
+				nvgBeginPath(args.vg);
+				nvgRoundedRect(args.vg, c1.x - linkW * 0.5f, c1.y - linkH * 0.5f, linkW, linkH, linkR);
+				nvgStroke(args.vg);
+
+				nvgBeginPath(args.vg);
+				nvgRoundedRect(args.vg, c2.x - linkW * 0.5f, c2.y - linkH * 0.5f, linkW, linkH, linkR);
+				nvgStroke(args.vg);
+			}
+
+			// 1. Link 1 (Bottom-left link) - 3D outline + core
 			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, -1.0f, 0.f);
-			nvgLineTo(args.vg, 1.0f, 0.f);
+			nvgRoundedRect(args.vg, c1.x - linkW * 0.5f, c1.y - linkH * 0.5f, linkW, linkH, linkR);
+			nvgStrokeColor(args.vg, outlineColor);
+			nvgStrokeWidth(args.vg, outlineW);
+			nvgStroke(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, c1.x - linkW * 0.5f, c1.y - linkH * 0.5f, linkW, linkH, linkR);
+			nvgStrokeColor(args.vg, iconColor);
+			nvgStrokeWidth(args.vg, strokeW);
+			nvgStroke(args.vg);
+
+			// 2. Link 2 (Top-right link) - 3D outline (occludes Link 1 at bottom crossover) + core
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, c2.x - linkW * 0.5f, c2.y - linkH * 0.5f, linkW, linkH, linkR);
+			nvgStrokeColor(args.vg, outlineColor);
+			nvgStrokeWidth(args.vg, outlineW);
+			nvgStroke(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, c2.x - linkW * 0.5f, c2.y - linkH * 0.5f, linkW, linkH, linkR);
+			nvgStrokeColor(args.vg, iconColor);
+			nvgStrokeWidth(args.vg, strokeW);
+			nvgStroke(args.vg);
+
+			// 3. Link 1 Top Strand (weaves OVER Link 2) - 3D outline (occludes Link 2 at top crossover) + core
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, c1.x - linkW * 0.5f + linkR, c1.y - linkH * 0.5f);
+			nvgLineTo(args.vg, c1.x + linkW * 0.5f - linkR, c1.y - linkH * 0.5f);
+			nvgStrokeColor(args.vg, outlineColor);
+			nvgStrokeWidth(args.vg, outlineW);
+			nvgStroke(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, c1.x - linkW * 0.5f + linkR, c1.y - linkH * 0.5f);
+			nvgLineTo(args.vg, c1.x + linkW * 0.5f - linkR, c1.y - linkH * 0.5f);
+			nvgStrokeColor(args.vg, iconColor);
+			nvgStrokeWidth(args.vg, strokeW);
+			nvgStroke(args.vg);
+		}
+		else {
+			const float offsetX = 4.8f;
+			const float offsetY = 0.8f;
+
+			const Vec c1(-offsetX, -offsetY);
+			const Vec c2(offsetX, offsetY);
+
+			// Link 1 (separated) - 3D outline + core
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, c1.x - linkW * 0.5f, c1.y - linkH * 0.5f, linkW, linkH, linkR);
+			nvgStrokeColor(args.vg, outlineColor);
+			nvgStrokeWidth(args.vg, outlineW);
+			nvgStroke(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, c1.x - linkW * 0.5f, c1.y - linkH * 0.5f, linkW, linkH, linkR);
+			nvgStrokeColor(args.vg, iconColor);
+			nvgStrokeWidth(args.vg, strokeW);
+			nvgStroke(args.vg);
+
+			// Link 2 (separated) - 3D outline + core
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, c2.x - linkW * 0.5f, c2.y - linkH * 0.5f, linkW, linkH, linkR);
+			nvgStrokeColor(args.vg, outlineColor);
+			nvgStrokeWidth(args.vg, outlineW);
+			nvgStroke(args.vg);
+
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, c2.x - linkW * 0.5f, c2.y - linkH * 0.5f, linkW, linkH, linkR);
 			nvgStrokeColor(args.vg, iconColor);
 			nvgStrokeWidth(args.vg, strokeW);
 			nvgStroke(args.vg);
