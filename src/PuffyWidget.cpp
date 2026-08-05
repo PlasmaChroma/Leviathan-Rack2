@@ -378,23 +378,13 @@ struct PuffyPolarityLinkButton final : ParamWidget {
 			: int(puffy::Character::Bloom);
 		const NVGcolor activeTint = puffy_visual::characterTint(character);
 
-		// Subtle hover background highlight without a hard border box
-		if (isHovered) {
-			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, 0.f, 0.f, box.size.x, box.size.y, 4.f);
-			NVGcolor hoverGlow = isLinked ? activeTint : nvgRGB(255, 255, 255);
-			hoverGlow.a = 0.18f;
-			nvgFillColor(args.vg, hoverGlow);
-			nvgFill(args.vg);
-		}
-
 		// Icon color selection
 		NVGcolor iconColor;
 		if (isLinked) {
 			iconColor = isHovered ? nvgRGB(255, 255, 255) : activeTint;
 		}
 		else {
-			iconColor = isHovered ? nvgRGB(240, 240, 250) : nvgRGBA(140, 140, 160, 160);
+			iconColor = isHovered ? nvgRGB(245, 245, 255) : nvgRGBA(140, 140, 160, 160);
 		}
 
 		// Draw larger chain icon with realistic physical proportions & 3D weave outlines
@@ -416,12 +406,12 @@ struct PuffyPolarityLinkButton final : ParamWidget {
 			const Vec c1(-offsetX, -offsetY); // Bottom-left link
 			const Vec c2(offsetX, offsetY);   // Top-right link (offset perpendicularly)
 
-			// Glow halo on hover when linked
+			// Direct chain highlight halo on mouseover when linked
 			if (isHovered) {
 				NVGcolor halo = activeTint;
-				halo.a = 0.35f;
+				halo.a = 0.45f;
 				nvgStrokeColor(args.vg, halo);
-				nvgStrokeWidth(args.vg, outlineW + 1.4f);
+				nvgStrokeWidth(args.vg, outlineW + 2.0f);
 
 				nvgBeginPath(args.vg);
 				nvgRoundedRect(args.vg, c1.x - linkW * 0.5f, c1.y - linkH * 0.5f, linkW, linkH, linkR);
@@ -458,17 +448,19 @@ struct PuffyPolarityLinkButton final : ParamWidget {
 			nvgStrokeWidth(args.vg, strokeW);
 			nvgStroke(args.vg);
 
-			// 3. Link 1 Top Strand (weaves OVER Link 2) - 3D outline (occludes Link 2 at top crossover) + core
+			// 3. Link 1 Top-Right Strand (weaves OVER Link 2 at top overlap) - 3D outline + core
 			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, c1.x - linkW * 0.5f + linkR, c1.y - linkH * 0.5f);
+			nvgMoveTo(args.vg, c1.x, c1.y - linkH * 0.5f);
 			nvgLineTo(args.vg, c1.x + linkW * 0.5f - linkR, c1.y - linkH * 0.5f);
+			nvgArcTo(args.vg, c1.x + linkW * 0.5f, c1.y - linkH * 0.5f, c1.x + linkW * 0.5f, c1.y, linkR);
 			nvgStrokeColor(args.vg, outlineColor);
 			nvgStrokeWidth(args.vg, outlineW);
 			nvgStroke(args.vg);
 
 			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, c1.x - linkW * 0.5f + linkR, c1.y - linkH * 0.5f);
+			nvgMoveTo(args.vg, c1.x, c1.y - linkH * 0.5f);
 			nvgLineTo(args.vg, c1.x + linkW * 0.5f - linkR, c1.y - linkH * 0.5f);
+			nvgArcTo(args.vg, c1.x + linkW * 0.5f, c1.y - linkH * 0.5f, c1.x + linkW * 0.5f, c1.y, linkR);
 			nvgStrokeColor(args.vg, iconColor);
 			nvgStrokeWidth(args.vg, strokeW);
 			nvgStroke(args.vg);
@@ -479,6 +471,21 @@ struct PuffyPolarityLinkButton final : ParamWidget {
 
 			const Vec c1(-offsetX, -offsetY);
 			const Vec c2(offsetX, offsetY);
+
+			// Direct chain highlight halo on mouseover when unlinked
+			if (isHovered) {
+				NVGcolor halo = nvgRGBA(255, 255, 255, 110);
+				nvgStrokeColor(args.vg, halo);
+				nvgStrokeWidth(args.vg, outlineW + 2.0f);
+
+				nvgBeginPath(args.vg);
+				nvgRoundedRect(args.vg, c1.x - linkW * 0.5f, c1.y - linkH * 0.5f, linkW, linkH, linkR);
+				nvgStroke(args.vg);
+
+				nvgBeginPath(args.vg);
+				nvgRoundedRect(args.vg, c2.x - linkW * 0.5f, c2.y - linkH * 0.5f, linkW, linkH, linkR);
+				nvgStroke(args.vg);
+			}
 
 			// Link 1 (separated) - 3D outline + core
 			nvgBeginPath(args.vg);
