@@ -184,12 +184,16 @@ struct PuffyCharacterMenuButton final : TransparentWidget {
 		}
 		nvgFontSize(args.vg, 8.8f);
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		const float arrowAreaWidth = 12.f;
+		const float labelAreaWidth = std::max(1.f, box.size.x - arrowAreaWidth);
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 		nvgFillColor(args.vg, tint);
-		const std::string label = std::string(kPuffyCharacterLabels[character])
-			+ "  ▾";
-		nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y,
-			label.c_str(), nullptr);
+		nvgText(args.vg, 0.5f * labelAreaWidth, 0.5f * box.size.y,
+			kPuffyCharacterLabels[character], nullptr);
+		// Keep the disclosure arrow fixed instead of letting character-name
+		// width move it horizontally.
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		nvgText(args.vg, box.size.x - 6.f, 0.5f * box.size.y, "▾", nullptr);
 	}
 };
 
