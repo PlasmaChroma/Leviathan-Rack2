@@ -39,57 +39,6 @@ struct PuffyViewportGradient final : TransparentWidget {
 	}
 };
 
-struct PuffyCharacterReadout final : TransparentWidget {
-	static constexpr float FONT_SIZE = 12.f;
-	Puffy* module = nullptr;
-	bool negativePart = true;
-
-	PuffyCharacterReadout(Puffy* module, bool negativePart)
-		: module(module), negativePart(negativePart) {
-	}
-
-	void draw(const DrawArgs& args) override {
-		if (!APP || !APP->window || !APP->window->uiFont) {
-			return;
-		}
-		const int character = module
-			? clamp(int(std::lround(
-				module->params[negativePart
-					? Puffy::CHARACTER_PARAM
-					: Puffy::POSITIVE_CHARACTER_PARAM].getValue())),
-				0,
-				puffy::kCharacterCount - 1)
-			: int(puffy::Character::Bloom);
-		const bool charactersLinked = module
-			&& module->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f;
-		std::string text;
-		NVGcolor textColor;
-		if (charactersLinked) {
-			text = negativePart ? kPuffyCharacterLabels[character] : "LINKED";
-			textColor = negativePart
-				? puffy_visual::characterTint(character)
-				: nvgRGB(255, 255, 255);
-		}
-		else {
-			text = std::string(negativePart ? "− " : "+ ")
-				+ kPuffyCharacterLabels[character];
-			textColor = puffy_visual::characterTint(character);
-		}
-		nvgFontSize(args.vg, FONT_SIZE);
-		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-		nvgTextAlign(
-			args.vg,
-			NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		nvgFillColor(args.vg, textColor);
-		nvgText(
-			args.vg,
-			0.5f * box.size.x,
-			0.5f * box.size.y,
-			text.c_str(),
-			nullptr);
-	}
-};
-
 struct PuffyCharacterMenuItem final : MenuItem {
 	Puffy* module = nullptr;
 	bool negativePart = true;
@@ -230,58 +179,6 @@ struct PuffyCharacterMenuButton final : OpaqueWidget {
 		// Keep the disclosure arrow fixed near the right edge inside the pill.
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 		nvgText(args.vg, box.size.x - 4.5f, 0.5f * box.size.y, "▾", nullptr);
-	}
-};
-
-struct PuffyCharacterButton final : SmallGoldButton {
-	Puffy* module = nullptr;
-	bool negativeIsSource = true;
-
-	PuffyCharacterButton() {
-		momentary = false;
-	}
-
-	void onDragStart(const event::DragStart& e) override {
-		const bool advancingLinkedPositive = module
-			&& !negativeIsSource
-			&& module->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f;
-		int linkedNextCharacter = int(puffy::Character::Bloom);
-		if (advancingLinkedPositive) {
-			// The audio thread keeps the positive parameter synchronized from the
-			// authoritative negative parameter while linked. Derive the intended
-			// click result before the base switch changes the positive parameter,
-			// so that synchronization cannot erase the click between those steps.
-			const int linkedCharacter = clamp(
-				int(std::lround(
-					module->params[Puffy::CHARACTER_PARAM].getValue())),
-				int(puffy::Character::Bloom),
-				puffy::kCharacterCount - 1);
-			linkedNextCharacter = linkedCharacter >= puffy::kCharacterCount - 1
-				? int(puffy::Character::Bloom)
-				: linkedCharacter + 1;
-		}
-		SmallGoldButton::onDragStart(e);
-		if (advancingLinkedPositive) {
-			module->params[Puffy::CHARACTER_PARAM].setValue(linkedNextCharacter);
-			module->params[Puffy::POSITIVE_CHARACTER_PARAM].setValue(
-				linkedNextCharacter);
-		}
-		else if (module) {
-			module->synchronizeCharacterSelectionFromUi(negativeIsSource);
-		}
-	}
-};
-
-struct PuffyCharacterLinkButton final : SmallGoldApertureButton {
-	Puffy* module = nullptr;
-
-	void onDragStart(const event::DragStart& e) override {
-		SmallGoldApertureButton::onDragStart(e);
-		if (module
-			&& module->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f) {
-			// Relinking always makes the left/negative character authoritative.
-			module->synchronizeCharacterSelectionFromUi(true);
-		}
 	}
 };
 
@@ -646,38 +543,6 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	transferPreview->box.size = transferPreviewSize;
 	addChild(transferPreview);
 
-	auto* characterButton = createParamCentered<PuffyCharacterButton>(
-		anchor("character_param", Vec(30.48f, 14.f)),
-		module, Puffy::CHARACTER_PARAM);
-	characterButton->module = module;
-	characterButton->negativeIsSource = true;
-	addParam(characterButton);
-	auto* positiveCharacterButton = createParamCentered<PuffyCharacterButton>(
-		anchor("positive_character_param", Vec(23.32f, 99.63f)),
-		module, Puffy::POSITIVE_CHARACTER_PARAM);
-	positiveCharacterButton->module = module;
-	positiveCharacterButton->negativeIsSource = false;
-	addParam(positiveCharacterButton);
-	auto* characterLinkButton =
-		createLightParamCentered<PuffyCharacterLinkButton>(
-			anchor("character_link_param", Vec(30.48f, 99.63f)),
-			module,
-			Puffy::CHARACTER_LINK_PARAM,
-			Puffy::CHARACTER_LINK_LIGHT);
-	characterLinkButton->module = module;
-	addParam(characterLinkButton);
-	auto* negativeCharacterReadout = new PuffyCharacterReadout(module, true);
-	negativeCharacterReadout->box.size = mm2px(Vec(12.5f, 4.f));
-	negativeCharacterReadout->box.pos =
-		anchor("negative_character_readout", Vec(9.91f, 95.5f))
-			.minus(negativeCharacterReadout->box.size.mult(0.5f));
-	addChild(negativeCharacterReadout);
-	auto* positiveCharacterReadout = new PuffyCharacterReadout(module, false);
-	positiveCharacterReadout->box.size = mm2px(Vec(12.5f, 4.f));
-	positiveCharacterReadout->box.pos =
-		anchor("positive_character_readout", Vec(22.41f, 95.5f))
-			.minus(positiveCharacterReadout->box.size.mult(0.5f));
-	addChild(positiveCharacterReadout);
 	addParam(createParamCentered<LeviathanHaloKnob2>(
 		anchor("puff_param", Vec(18.f, 83.5f)),
 		module, Puffy::PUFF_PARAM));
