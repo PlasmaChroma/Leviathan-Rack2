@@ -102,16 +102,6 @@ struct PuffyCharacterMenuButton final : ParamWidget {
 	void step() override {
 		ParamWidget::step();
 		Puffy* puffyModule = getPuffyModule();
-		if (puffyModule && negativePart) {
-			const bool linked = puffyModule
-				->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f;
-			if (engine::ParamQuantity* quantity = getParamQuantity()) {
-				const char* name = linked ? "Both polarities" : "Negative character";
-				if (quantity->name != name) {
-					quantity->name = name;
-				}
-			}
-		}
 		if (puffyModule && !negativePart) {
 			const bool linked = puffyModule->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f;
 			visible = !linked;

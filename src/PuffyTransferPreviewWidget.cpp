@@ -47,6 +47,47 @@ float visualSwarmChaos(int pointIndex, int laneIndex, bool positive) {
 	return float(bits) * (2.f / 16777216.f) - 1.f;
 }
 
+struct CurveSampleInput {
+	float input;
+	bool discontinuity;
+
+	CurveSampleInput(float input, bool discontinuity)
+		: input(input), discontinuity(discontinuity) {
+	}
+};
+
+void appendVoidDiscontinuities(
+	std::vector<CurveSampleInput>& samples,
+	bool negative,
+	float amount) {
+	if (!(amount > 0.f)) {
+		return;
+	}
+	const float amountSquared = amount * amount;
+	const float railThreshold = 1.f / (1.f + 1.5f * amountSquared);
+	const float stepSize = 0.125f * amountSquared * railThreshold;
+	if (!(stepSize > 0.f)) {
+		return;
+	}
+	const int internalBoundaryCount = std::max(
+		0, int(std::ceil(railThreshold / stepSize)) - 1);
+	const float boundaryTolerance = std::max(
+		1e-6f, railThreshold * 1e-6f);
+	// Below this scale the individual jumps are subpixel. Keep the ordinary
+	// sampled curve rather than feeding thousands of invisible vertices to NVG.
+	static constexpr int kMaximumVisibleBoundaries = 256;
+	if (internalBoundaryCount > kMaximumVisibleBoundaries) {
+		return;
+	}
+	for (int step = 1; step <= internalBoundaryCount; ++step) {
+		const float magnitude = float(step) * stepSize;
+		if (magnitude < railThreshold - boundaryTolerance) {
+			samples.push_back({negative ? -magnitude : magnitude, true});
+		}
+	}
+	samples.push_back({negative ? -railThreshold : railThreshold, true});
+}
+
 } // namespace
 
 PuffyTransferPreviewWidget::PuffyTransferPreviewWidget(Puffy* module)
@@ -94,15 +135,60 @@ void PuffyTransferPreviewWidget::rebuildPoints() {
 	const float rawAmount = clamp(visual.effectiveAmount, 0.f, 1.f);
 	const int amountBin = clamp(int(rawAmount * 63.f + 0.5f), 0, 63);
 	const float amount = hasSwarm ? float(amountBin) / 63.f : rawAmount;
+	std::vector<CurveSampleInput> curveSamples;
+	curveSamples.reserve(POINT_COUNT + 2 * 257);
 	for (int i = 0; i < POINT_COUNT; ++i) {
 		const float normalized = float(i) / float(POINT_COUNT - 1);
 		const float input = -DOMAIN + 2.f * DOMAIN * normalized;
-		const float output = puffy::Engine::processCharacter(
-			input < 0.f ? negativeCharacter : positiveCharacter,
-			input,
-			amount,
-			dynamics);
-		points[size_t(i)] = Vec(inputToX(input), outputToY(output));
+		curveSamples.push_back({input, false});
+	}
+	if (negativeCharacter == puffy::Character::Void) {
+		appendVoidDiscontinuities(curveSamples, true, amount);
+	}
+	if (positiveCharacter == puffy::Character::Void) {
+		appendVoidDiscontinuities(curveSamples, false, amount);
+	}
+	std::sort(
+		curveSamples.begin(), curveSamples.end(),
+		[](const CurveSampleInput& a, const CurveSampleInput& b) {
+			if (a.input != b.input) {
+				return a.input < b.input;
+			}
+			return a.discontinuity && !b.discontinuity;
+		});
+	curvePoints.clear();
+	curvePoints.reserve(curveSamples.size() * 2);
+	float lastDiscontinuity = -2.f * DOMAIN;
+	for (const CurveSampleInput& sample : curveSamples) {
+		if (!sample.discontinuity
+			&& std::fabs(sample.input - lastDiscontinuity) < 1e-7f) {
+			continue;
+		}
+		const puffy::Character character = sample.input < 0.f
+			? negativeCharacter
+			: positiveCharacter;
+		if (sample.discontinuity) {
+			// A single nextafter() is not always enough to cross the effective
+			// integer boundary after VOID's reciprocal/multiply rounding. Probe a
+			// subpixel distance on each side, but draw both limits at the exact edge.
+			const float boundaryProbe = std::max(
+				1e-6f, std::fabs(sample.input) * 1e-6f);
+			const float before = sample.input - boundaryProbe;
+			const float after = sample.input + boundaryProbe;
+			const float beforeOutput = puffy::Engine::processCharacter(
+				character, before, amount, dynamics);
+			const float afterOutput = puffy::Engine::processCharacter(
+				character, after, amount, dynamics);
+			const float x = inputToX(sample.input);
+			curvePoints.emplace_back(x, outputToY(beforeOutput));
+			curvePoints.emplace_back(x, outputToY(afterOutput));
+			lastDiscontinuity = sample.input;
+		}
+		else {
+			const float output = puffy::Engine::processCharacter(
+				character, sample.input, amount, dynamics);
+			curvePoints.emplace_back(inputToX(sample.input), outputToY(output));
+		}
 	}
 	swarmPointCount = 0;
 	for (int column = 0; column < SWARM_COLUMN_COUNT; ++column) {
@@ -318,12 +404,12 @@ void PuffyTransferPreviewWidget::drawCurve(const DrawArgs& args) const {
 	nvgStroke(args.vg);
 
 	nvgBeginPath(args.vg);
-	for (int i = 0; i < POINT_COUNT; ++i) {
+	for (std::size_t i = 0; i < curvePoints.size(); ++i) {
 		if (i == 0) {
-			nvgMoveTo(args.vg, points[size_t(i)].x, points[size_t(i)].y);
+			nvgMoveTo(args.vg, curvePoints[i].x, curvePoints[i].y);
 		}
 		else {
-			nvgLineTo(args.vg, points[size_t(i)].x, points[size_t(i)].y);
+			nvgLineTo(args.vg, curvePoints[i].x, curvePoints[i].y);
 		}
 	}
 	NVGcolor negativeCurveTint = negativeTint;

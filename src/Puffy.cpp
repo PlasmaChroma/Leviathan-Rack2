@@ -27,7 +27,7 @@ Puffy::Puffy() {
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 	configSwitch(
 		CHARACTER_PARAM, 0.f, float(puffy::kCharacterCount - 1), 0.f,
-		"Negative character",
+		"Character (negative/linked)",
 		{"BLOOM", "SPINE", "FRENZY", "RIPTIDE", "VOID", "SWARM", "TEETH"});
 	configParam(PUFF_PARAM, 0.f, 1.f, 0.25f, "Puff", "%", 0.f, 100.f);
 	configParam(
@@ -39,7 +39,7 @@ Puffy::Puffy() {
 	configParam(MIX_PARAM, 0.f, 1.f, 1.f, "Mix", "%", 0.f, 100.f);
 	configSwitch(
 		POSITIVE_CHARACTER_PARAM, 0.f, float(puffy::kCharacterCount - 1), 0.f,
-		"Positive character",
+		"Character (positive)",
 		{"BLOOM", "SPINE", "FRENZY", "RIPTIDE", "VOID", "SWARM", "TEETH"});
 	configSwitch(
 		CHARACTER_LINK_PARAM, 0.f, 1.f, 1.f, "Link polarity characters",

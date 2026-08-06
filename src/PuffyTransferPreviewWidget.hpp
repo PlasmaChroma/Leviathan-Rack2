@@ -3,6 +3,7 @@
 #include "Puffy.hpp"
 
 #include <array>
+#include <vector>
 
 struct PuffyTransferPreviewWidget final : TransparentWidget {
 	static constexpr int POINT_COUNT = 129;
@@ -15,7 +16,7 @@ struct PuffyTransferPreviewWidget final : TransparentWidget {
 
 	Puffy* module = nullptr;
 	PuffyVisualState visual;
-	std::array<Vec, POINT_COUNT> points {};
+	std::vector<Vec> curvePoints;
 	std::array<Vec, SWARM_POINT_COUNT> swarmPoints {};
 	int swarmPointCount = 0;
 	widget::FramebufferWidget* curveFramebuffer = nullptr;
