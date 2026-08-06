@@ -1466,7 +1466,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
           }
         }
       }
-    } else if (stream && !stream->loading()) {
+    } else if (stream && !stream->ready() && !stream->loading()) {
       impl->longPlayInstallPending.store(false, std::memory_order_release);
     }
   }
