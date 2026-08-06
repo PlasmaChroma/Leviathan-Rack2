@@ -27,6 +27,10 @@ inline float realBufferSecondsForMode(int index) {
     return 61.f; // 1m stereo mode with guard second
   case 5:
     return 121.f; // 2m stereo mode with guard second
+  case 6:
+    // LongPlay audio lives in its own bounded block cache. Retain only a small
+    // guard buffer for the existing live/sample engine infrastructure.
+    return 1.f;
   default:
     return 11.f;
   }
@@ -332,6 +336,9 @@ struct LiveScopeEnvelopeBlock {
 };
 
 struct TemporalDeckEngine {
+  using StreamReadFrameFn = bool (*)(void *, uint64_t, float *, float *);
+  using StreamSetDesiredFrameFn = void (*)(void *, uint64_t, bool);
+  using StreamIsFrameResidentFn = bool (*)(void *, uint64_t);
   static constexpr float kScratchGateThreshold = 1.f;
   static constexpr float kFreezeGateThreshold = 1.f;
   static constexpr float kQuickSlipMaxReturnTime = 1.0f;
@@ -480,6 +487,7 @@ struct TemporalDeckEngine {
     BUFFER_DURATION_10MIN_MONO,
     BUFFER_DURATION_1MIN_STEREO,
     BUFFER_DURATION_2MIN_STEREO,
+    BUFFER_DURATION_LONGPLAY_DISK,
     BUFFER_DURATION_COUNT
   };
   enum ScratchInterpolationMode {
@@ -555,6 +563,20 @@ struct TemporalDeckEngine {
   bool sampleTransportPlaying = false;
   bool sampleTruncated = false;
   int sampleFrames = 0;
+  bool diskBackedSample = false;
+  void *streamContext = nullptr;
+  StreamReadFrameFn streamReadFrame = nullptr;
+  StreamSetDesiredFrameFn streamSetDesiredFrame = nullptr;
+  StreamIsFrameResidentFn streamIsFrameResident = nullptr;
+  mutable float lastStreamLeft = 0.f;
+  mutable float lastStreamRight = 0.f;
+  mutable int lastStreamLogicalIndex = -1;
+  bool streamedSeekPending = false;
+  double streamedSeekTarget = 0.0;
+  int streamedSeekCrossfadeRemaining = 0;
+  int streamedSeekCrossfadeLength = 1;
+  float streamedSeekCrossfadeFromLeft = 0.f;
+  float streamedSeekCrossfadeFromRight = 0.f;
   // Physical buffer index corresponding to logical sample frame 0. Loaded
   // files use zero; live captures retain their circular-buffer storage and
   // set this to the oldest captured frame so conversion stays allocation-free.
@@ -686,11 +708,112 @@ struct TemporalDeckEngine {
   }
 
   float sampleLeftAt(int logicalIndex) const {
+    if (diskBackedSample) {
+      float left = lastStreamLeft;
+      float right = lastStreamRight;
+      readStreamedSampleFrame(logicalIndex, &left, &right);
+      return left;
+    }
     return buffer.left[size_t(samplePhysicalIndex(logicalIndex))];
   }
 
   float sampleRightAt(int logicalIndex) const {
+    if (diskBackedSample) {
+      float left = lastStreamLeft;
+      float right = lastStreamRight;
+      readStreamedSampleFrame(logicalIndex, &left, &right);
+      return right;
+    }
     return buffer.rightSample(samplePhysicalIndex(logicalIndex));
+  }
+
+  bool readStreamedSampleFrame(int logicalIndex, float *left, float *right) const {
+    if (!diskBackedSample || !streamReadFrame || !streamContext || sampleFrames <= 0) {
+      return false;
+    }
+    const int bounded = clampSampleIndex(logicalIndex, sampleFrames - 1);
+    if (bounded == lastStreamLogicalIndex) {
+      if (left) *left = lastStreamLeft;
+      if (right) *right = lastStreamRight;
+      return true;
+    }
+    float nextLeft = 0.f;
+    float nextRight = 0.f;
+    if (!streamReadFrame(streamContext, uint64_t(bounded), &nextLeft, &nextRight)) {
+      if (left) *left = lastStreamLeft;
+      if (right) *right = lastStreamRight;
+      return false;
+    }
+    lastStreamLeft = nextLeft;
+    lastStreamRight = nextRight;
+    lastStreamLogicalIndex = bounded;
+    if (left) *left = nextLeft;
+    if (right) *right = nextRight;
+    return true;
+  }
+
+  void requestStreamWindow() {
+    if (diskBackedSample && streamSetDesiredFrame && streamContext && sampleFrames > 0) {
+      const double desired = streamedSeekPending ? streamedSeekTarget : readHead;
+      const uint64_t frame = uint64_t(clampd(std::round(desired), 0.0, double(sampleFrames - 1)));
+      streamSetDesiredFrame(streamContext, frame, sampleLoopEnabled);
+    }
+  }
+
+  void requestSampleSeekTarget(double targetFrame) {
+    targetFrame = clampd(targetFrame, 0.0, std::max(0.0, double(sampleFrames - 1)));
+    if (diskBackedSample && streamIsFrameResident && streamContext &&
+        !streamIsFrameResident(streamContext, uint64_t(std::round(targetFrame)))) {
+      streamedSeekPending = true;
+      streamedSeekTarget = targetFrame;
+      if (streamSetDesiredFrame) {
+        streamSetDesiredFrame(streamContext, uint64_t(std::round(targetFrame)), sampleLoopEnabled);
+      }
+      return;
+    }
+    completeSampleSeek(targetFrame, diskBackedSample);
+  }
+
+  void servicePendingStreamSeek() {
+    if (!streamedSeekPending || !streamIsFrameResident || !streamContext) {
+      return;
+    }
+    const uint64_t target = uint64_t(std::round(streamedSeekTarget));
+    if (streamSetDesiredFrame) {
+      streamSetDesiredFrame(streamContext, target, sampleLoopEnabled);
+    }
+    if (streamIsFrameResident(streamContext, target)) {
+      completeSampleSeek(streamedSeekTarget, true);
+    }
+  }
+
+  void completeSampleSeek(double targetFrame, bool crossfadeStream) {
+    samplePlayhead = targetFrame;
+    readHead = targetFrame;
+    scratchLagSamples = 0.0;
+    scratchLagTargetSamples = 0.0;
+    nowCatchActive = false;
+    cancelSlipReturnState();
+    streamedSeekPending = false;
+    if (crossfadeStream) {
+      streamedSeekCrossfadeFromLeft = prevWetL;
+      streamedSeekCrossfadeFromRight = prevWetR;
+      streamedSeekCrossfadeLength = std::max(1, int(std::round(sampleRate * 0.005f)));
+      streamedSeekCrossfadeRemaining = streamedSeekCrossfadeLength;
+      lastStreamLogicalIndex = -1;
+    }
+  }
+
+  std::pair<float, float> applyStreamedSeekCrossfade(std::pair<float, float> wet) {
+    if (streamedSeekCrossfadeRemaining <= 0) {
+      return wet;
+    }
+    const float t = 1.f - float(streamedSeekCrossfadeRemaining) /
+      float(std::max(streamedSeekCrossfadeLength, 1));
+    wet.first = crossfade(streamedSeekCrossfadeFromLeft, wet.first, t);
+    wet.second = crossfade(streamedSeekCrossfadeFromRight, wet.second, t);
+    --streamedSeekCrossfadeRemaining;
+    return wet;
   }
 
   void bumpBufferGeneration() {
@@ -830,6 +953,17 @@ struct TemporalDeckEngine {
     sampleTransportPlaying = false;
     sampleTruncated = false;
     sampleFrames = 0;
+    diskBackedSample = false;
+    streamContext = nullptr;
+    streamReadFrame = nullptr;
+    streamSetDesiredFrame = nullptr;
+    streamIsFrameResident = nullptr;
+    lastStreamLeft = 0.f;
+    lastStreamRight = 0.f;
+    lastStreamLogicalIndex = -1;
+    streamedSeekPending = false;
+    streamedSeekTarget = 0.0;
+    streamedSeekCrossfadeRemaining = 0;
     sampleStartIndex = 0;
     sampleAbsolutePeakVolts = 0.f;
     samplePlayhead = 0.f;
@@ -1629,8 +1763,24 @@ struct TemporalDeckEngine {
       return wrapped;
     };
     auto physicalIndex = [&](int idx) { return buffer.wrapIndex(sampleStartIndex + wrappedIndex(idx)); };
-    auto leftAt = [&](int idx) { return leftData[physicalIndex(idx)]; };
-    auto rightAt = [&](int idx) { return rightData[physicalIndex(idx)]; };
+    auto leftAt = [&](int idx) {
+      if (diskBackedSample) {
+        float left = lastStreamLeft;
+        float right = lastStreamRight;
+        readStreamedSampleFrame(wrappedIndex(idx), &left, &right);
+        return left;
+      }
+      return leftData[physicalIndex(idx)];
+    };
+    auto rightAt = [&](int idx) {
+      if (diskBackedSample) {
+        float left = lastStreamLeft;
+        float right = lastStreamRight;
+        readStreamedSampleFrame(wrappedIndex(idx), &left, &right);
+        return right;
+      }
+      return rightData[physicalIndex(idx)];
+    };
 
     // Exact/near-exact sample-center reads are common in transport playback.
     // Skip interpolation math when the phase is effectively integral.
@@ -1643,7 +1793,7 @@ struct TemporalDeckEngine {
       float accL = 0.f;
       float accR = 0.f;
       const TemporalDeckBuffer::SincKernel &kernel = TemporalDeckBuffer::sincKernelForFraction(t);
-      bool interior = sampleStartIndex == 0 && !loopActive && (i1 - (TemporalDeckBuffer::kSincRadius - 1) >= 0) &&
+      bool interior = !diskBackedSample && sampleStartIndex == 0 && !loopActive && (i1 - (TemporalDeckBuffer::kSincRadius - 1) >= 0) &&
                       (i1 + TemporalDeckBuffer::kSincRadius <= readMaxIndex);
       if (interior) {
         for (int tap = 0; tap < TemporalDeckBuffer::kSincTapCount; ++tap) {
@@ -1668,7 +1818,7 @@ struct TemporalDeckEngine {
 
     if (interpolationMode == SCRATCH_INTERP_LAGRANGE6) {
       auto w = TemporalDeckBuffer::lagrange6Weights(t);
-      bool interior = sampleStartIndex == 0 && !loopActive && (i1 >= 2) && (i1 + 3 <= readMaxIndex);
+      bool interior = !diskBackedSample && sampleStartIndex == 0 && !loopActive && (i1 >= 2) && (i1 + 3 <= readMaxIndex);
       if (interior) {
         int i0 = i1 - 2;
         int iA = i1 - 1;
@@ -1688,7 +1838,7 @@ struct TemporalDeckEngine {
       return {outL, outR};
     }
 
-    bool interior = sampleStartIndex == 0 && !loopActive && (i1 >= 1) && (i1 + 2 <= readMaxIndex);
+    bool interior = !diskBackedSample && sampleStartIndex == 0 && !loopActive && (i1 >= 1) && (i1 + 2 <= readMaxIndex);
     if (interior) {
       int i0 = i1 - 1;
       int i2 = i1 + 1;
@@ -1786,6 +1936,38 @@ struct TemporalDeckEngine {
     } else {
       rebuildPreviewFromCurrentSample();
     }
+    bumpBufferGeneration();
+  }
+
+  void installStreamedSample(void *context, StreamReadFrameFn readFrame,
+                             StreamSetDesiredFrameFn setDesiredFrame,
+                             StreamIsFrameResidentFn isFrameResident, int frames,
+                             float absolutePeakVolts) {
+    diskBackedSample = context && readFrame && frames > 0;
+    streamContext = context;
+    streamReadFrame = readFrame;
+    streamSetDesiredFrame = setDesiredFrame;
+    streamIsFrameResident = isFrameResident;
+    lastStreamLeft = 0.f;
+    lastStreamRight = 0.f;
+    lastStreamLogicalIndex = -1;
+    streamedSeekPending = false;
+    streamedSeekCrossfadeRemaining = 0;
+    sampleLoaded = diskBackedSample;
+    sampleModeEnabled = sampleLoaded || sampleModeEnabled;
+    sampleTransportPlaying = sampleLoaded;
+    sampleTruncated = false;
+    sampleFrames = std::max(0, frames);
+    sampleStartIndex = 0;
+    samplePlayhead = 0.0;
+    readHead = 0.0;
+    timelineHead = 0.0;
+    sampleAbsolutePeakVolts = std::max(0.f, absolutePeakVolts);
+    buffer.filled = std::min(buffer.size, sampleFrames);
+    buffer.writeHead = buffer.wrapIndex(buffer.filled);
+    resetPreviewAccumulator(uint32_t(std::max(1, sampleFrames)));
+    resetLiveScopeEnvelope();
+    requestStreamWindow();
     bumpBufferGeneration();
   }
 
@@ -2250,6 +2432,7 @@ struct TemporalDeckEngine {
       float readDeltaForTone = float(readHead - prevReadHead);
       float motionAmount = clamp(float((std::fabs(readDeltaForTone) - 1.0) / 3.0), 0.f, 1.f);
       wet = applyCartridgeCharacter(wet, motionAmount, false);
+      wet = applyStreamedSeekCrossfade(wet);
 
       scratchFlipTransientEnv *= 0.92f;
       if (scratchFlipTransientEnv < 1e-4f) {
@@ -2311,6 +2494,7 @@ struct TemporalDeckEngine {
 
       std::pair<float, float> wet = buffer.readCubic(readHead);
       wet = applyCartridgeCharacter(wet, 0.f, false);
+      wet = applyStreamedSeekCrossfade(wet);
 
       scratchFlipTransientEnv *= 0.92f;
       if (scratchFlipTransientEnv < 1e-4f) {
@@ -2843,6 +3027,7 @@ struct TemporalDeckEngine {
       wet = buffer.readCubic(readHead);
     }
     wet = applyCartridgeCharacter(wet, motionAmount, scratchReadPath);
+    wet = applyStreamedSeekCrossfade(wet);
     if (slipReadPath) {
       float slipSpeedNorm =
         clamp(slipCatchVelocity / std::max(sampleRate * std::max(slipCatchMaxExtraRatio(), 0.1f), 1.f), 0.f, 1.f);

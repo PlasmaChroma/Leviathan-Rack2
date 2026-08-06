@@ -3,6 +3,7 @@
 #include "TemporalDeckEngine.hpp"
 #include "TemporalDeckExpanderProtocol.hpp"
 #include "TemporalDeckFrameInput.hpp"
+#include "LongPlayStreamEngine.hpp"
 #include "TemporalDeckPlatterInput.hpp"
 #include "TemporalDeckSampleLifecycle.hpp"
 #include "TemporalDeckTransportControl.hpp"
@@ -18,6 +19,7 @@
 #include <fstream>
 #include <iomanip>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <new>
 #include <string>
@@ -50,6 +52,7 @@ constexpr int TemporalDeck::BUFFER_DURATION_10M_STEREO;
 constexpr int TemporalDeck::BUFFER_DURATION_10M_MONO;
 constexpr int TemporalDeck::BUFFER_DURATION_1M_STEREO;
 constexpr int TemporalDeck::BUFFER_DURATION_2M_STEREO;
+constexpr int TemporalDeck::BUFFER_DURATION_LONGPLAY_DISK;
 constexpr int TemporalDeck::BUFFER_DURATION_COUNT;
 
 constexpr int TemporalDeck::EXTERNAL_GATE_POS_GLIDE;
@@ -96,6 +99,57 @@ using temporaldeck::PreparedSampleData;
 using temporaldeck::PlatterInputSnapshot;
 using temporaldeck::PlatterInputState;
 static std::atomic<uint32_t> gTemporalDeckDebugInstanceCounter {1u};
+
+struct LongPlayBridge {
+  temporaldeck::LongPlayStreamEngine *stream = nullptr;
+  double sourceFramesPerOutputFrame = 1.0;
+
+  static bool readFrame(void *context, uint64_t outputFrame, float *left, float *right) {
+    LongPlayBridge *bridge = static_cast<LongPlayBridge *>(context);
+    if (!bridge || !bridge->stream) {
+      return false;
+    }
+    const double sourcePosition = double(outputFrame) * bridge->sourceFramesPerOutputFrame;
+    const uint64_t sourceFrame0 = uint64_t(std::floor(std::max(0.0, sourcePosition)));
+    const uint64_t sourceFrame1 = std::min(
+      sourceFrame0 + 1u, std::max<uint64_t>(1u, bridge->stream->totalFrames()) - 1u);
+    float l0 = 0.f;
+    float r0 = 0.f;
+    float l1 = 0.f;
+    float r1 = 0.f;
+    if (!bridge->stream->readFrame(sourceFrame0, &l0, &r0) ||
+        !bridge->stream->readFrame(sourceFrame1, &l1, &r1)) {
+      return false;
+    }
+    const float fraction = float(sourcePosition - double(sourceFrame0));
+    if (left) *left = crossfade(l0, l1, fraction) * temporaldeck::kSampleFileVoltageScale;
+    if (right) *right = crossfade(r0, r1, fraction) * temporaldeck::kSampleFileVoltageScale;
+    return true;
+  }
+
+  static void setDesiredFrame(void *context, uint64_t outputFrame, bool loop) {
+    LongPlayBridge *bridge = static_cast<LongPlayBridge *>(context);
+    if (!bridge || !bridge->stream) {
+      return;
+    }
+    const uint64_t sourceFrame = uint64_t(
+      std::floor(double(outputFrame) * bridge->sourceFramesPerOutputFrame));
+    bridge->stream->setDesiredFrame(sourceFrame, loop);
+  }
+
+  static bool isFrameResident(void *context, uint64_t outputFrame) {
+    LongPlayBridge *bridge = static_cast<LongPlayBridge *>(context);
+    if (!bridge || !bridge->stream) {
+      return false;
+    }
+    const double sourcePosition = double(outputFrame) * bridge->sourceFramesPerOutputFrame;
+    const uint64_t sourceFrame0 = uint64_t(std::floor(std::max(0.0, sourcePosition)));
+    const uint64_t sourceFrame1 = std::min(
+      sourceFrame0 + 1u, std::max<uint64_t>(1u, bridge->stream->totalFrames()) - 1u);
+    return bridge->stream->isFrameResident(sourceFrame0) &&
+      bridge->stream->isFrameResident(sourceFrame1);
+  }
+};
 
 // Match TD.Scope's current practical update ceiling so the audio thread does
 // not spend time preparing preview payloads faster than the UI can consume.
@@ -904,6 +958,11 @@ struct TemporalDeck::Impl {
   float cachedSampleRate = 0.f;
   temporaldeck_transport::TransportControlState transportControl;
   temporaldeck_lifecycle::TemporalDeckSampleLifecycle sampleLifecycle;
+  std::unique_ptr<temporaldeck::LongPlayStreamEngine> longPlayOwner;
+  std::atomic<temporaldeck::LongPlayStreamEngine *> longPlayStream{nullptr};
+  LongPlayBridge longPlayBridge;
+  std::atomic<bool> longPlayInstallPending{false};
+  uint64_t installedLongPlayGeneration = 0u;
   std::atomic<bool> sampleModeEnabled{false};
   std::atomic<bool> sampleLoopEnabled{false};
   PlatterInputState platterInput;
@@ -1375,6 +1434,50 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->sampleLifecycle.setPendingSampleStateApply();
   }
 
+  if (impl->longPlayInstallPending.load(std::memory_order_acquire)) {
+    temporaldeck::LongPlayStreamEngine *stream =
+      impl->longPlayStream.load(std::memory_order_acquire);
+    const int maximumGuardFrames = std::max(1, int(std::ceil(args.sampleRate * 1.1f)));
+    if (stream && stream->ready() && !impl->sampleLifecycle.sampleBuildInProgress()) {
+      if (impl->engine.buffer.size <= maximumGuardFrames) {
+        const uint64_t generation = stream->generation();
+        if (generation != impl->installedLongPlayGeneration) {
+          const double sourceRate = std::max<double>(stream->sampleRate(), 1.0);
+          const double outputRate = std::max<double>(args.sampleRate, 1.0);
+          const double logicalFrames = double(stream->totalFrames()) * outputRate / sourceRate;
+          const int installedFrames = int(std::max(
+            1.0, std::min(logicalFrames, double(std::numeric_limits<int>::max()))));
+          impl->longPlayBridge.stream = stream;
+          impl->longPlayBridge.sourceFramesPerOutputFrame = sourceRate / outputRate;
+          impl->engine.bufferDurationMode = BUFFER_DURATION_LONGPLAY_DISK;
+          impl->engine.installStreamedSample(
+            &impl->longPlayBridge, &LongPlayBridge::readFrame,
+            &LongPlayBridge::setDesiredFrame, &LongPlayBridge::isFrameResident,
+            installedFrames,
+            stream->absolutePeak() * temporaldeck::kSampleFileVoltageScale);
+          impl->bufferDurationMode.store(
+            BUFFER_DURATION_LONGPLAY_DISK, std::memory_order_relaxed);
+          impl->sampleModeEnabled.store(true, std::memory_order_relaxed);
+          impl->installedLongPlayGeneration = generation;
+          impl->longPlayInstallPending.store(false, std::memory_order_release);
+          if (paramQuantities[BUFFER_PARAM]) {
+            paramQuantities[BUFFER_PARAM]->displayMultiplier =
+              float(double(installedFrames) / outputRate);
+          }
+        }
+      }
+    } else if (stream && !stream->loading()) {
+      impl->longPlayInstallPending.store(false, std::memory_order_release);
+    }
+  }
+  if (temporaldeck::LongPlayStreamEngine *stream =
+        impl->longPlayStream.load(std::memory_order_acquire)) {
+    if (impl->engine.diskBackedSample && stream->isOverviewReady()) {
+      impl->engine.sampleAbsolutePeakVolts =
+        stream->absolutePeak() * temporaldeck::kSampleFileVoltageScale;
+    }
+  }
+
   bool installedPreparedSampleThisFrame = false;
   if (PreparedSampleData *preparedPtr = impl->sampleLifecycle.consumePendingPreparedSample()) {
     PreparedSampleData &prepared = *preparedPtr;
@@ -1444,6 +1547,29 @@ void TemporalDeck::process(const ProcessArgs &args) {
     sampleStateApplyRequested = false;
   }
   bool sampleRateChanged = args.sampleRate != impl->cachedSampleRate;
+  if (sampleRateChanged && impl->engine.diskBackedSample) {
+    temporaldeck::LongPlayStreamEngine *stream =
+      impl->longPlayStream.load(std::memory_order_acquire);
+    if (stream && stream->ready()) {
+      const bool loopEnabled = impl->sampleLoopEnabled.load(std::memory_order_relaxed);
+      const double sourceRate = std::max<double>(stream->sampleRate(), 1.0);
+      const double outputRate = std::max<double>(args.sampleRate, 1.0);
+      const int installedFrames = int(std::max(1.0, std::min(
+        double(stream->totalFrames()) * outputRate / sourceRate,
+        double(std::numeric_limits<int>::max()))));
+      impl->cachedSampleRate = args.sampleRate;
+      impl->longPlayBridge.sourceFramesPerOutputFrame = sourceRate / outputRate;
+      impl->engine.reset(args.sampleRate, false);
+      impl->engine.bufferDurationMode = BUFFER_DURATION_LONGPLAY_DISK;
+      impl->engine.sampleLoopEnabled = loopEnabled;
+      impl->engine.installStreamedSample(
+        &impl->longPlayBridge, &LongPlayBridge::readFrame,
+        &LongPlayBridge::setDesiredFrame, &LongPlayBridge::isFrameResident,
+        installedFrames, stream->absolutePeak() * temporaldeck::kSampleFileVoltageScale);
+      impl->engine.sampleModeEnabled = true;
+      sampleRateChanged = false;
+    }
+  }
   bool decodedAvailable = impl->sampleLifecycle.decodedSampleAvailable();
   bool sampleBuildInProgress = impl->sampleLifecycle.sampleBuildInProgress();
   bool shouldApplyWithoutDecoded = !decodedAvailable && (bufferModeChanged || sampleRateChanged || sampleStateApplyRequested);
@@ -1613,6 +1739,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->engine, impl->appliedSampleSeekRevision, pendingSeekRevision, pendingSeekNorm, bufferKnob);
   impl->appliedLiveSeekRevision = temporaldeck_transport::applyPendingLiveSeekArc(
     impl->engine, impl->appliedLiveSeekRevision, pendingLiveSeekRevision, pendingLiveSeekArcNorm, bufferKnob);
+  impl->engine.requestStreamWindow();
+  impl->engine.servicePendingStreamSeek();
 
   auto enqueueScopeTraceEvent = [&](const ScopeDragTraceEvent &event) {
     uint32_t write = impl->scopeDragTraceQueueWrite.load(std::memory_order_relaxed);
@@ -1931,6 +2059,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
     temporaldeck_frameinput::buildFrameInput(frameSignals, controls, platterInput);
 
   auto frame = impl->engine.process(frameInput);
+  impl->engine.requestStreamWindow();
 
   if (scopeDragTraceEnabled) {
     bool scopeActive = haveLagDragRequest && lagDragRequestActive;
@@ -2338,6 +2467,11 @@ void TemporalDeck::stopSampleTransport() {
 }
 
 void TemporalDeck::clearLoadedSample() {
+  if (temporaldeck::LongPlayStreamEngine *stream =
+        impl->longPlayStream.load(std::memory_order_acquire)) {
+    stream->clear();
+  }
+  impl->longPlayInstallPending.store(false, std::memory_order_release);
   impl->sampleLifecycle.clearDecodedAndPreparedState();
   temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest cancelRequest;
   cancelRequest.type = temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest::NONE;
@@ -2353,7 +2487,36 @@ void TemporalDeck::clearLoadedSample() {
 }
 
 bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *errorOut) {
-  (void)errorOut;
+  temporaldeck::LongPlayFileInfo longPlayInfo;
+  std::string probeError;
+  const bool probed = temporaldeck::probeLongPlayFile(path, &longPlayInfo, &probeError);
+  const bool useLongPlay = probed && longPlayInfo.sampleRate > 0u &&
+    double(longPlayInfo.totalFrames) / double(longPlayInfo.sampleRate) > 600.0;
+  if (useLongPlay) {
+    if (!impl->longPlayOwner) {
+      impl->longPlayOwner.reset(new temporaldeck::LongPlayStreamEngine());
+      impl->longPlayStream.store(impl->longPlayOwner.get(), std::memory_order_release);
+    }
+    impl->sampleLifecycle.clearDecodedAndPreparedState();
+    impl->sampleLifecycle.setSampleSavedPath(path);
+    temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest guardRequest;
+    guardRequest.type = temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest::BUILD_EMPTY_BUFFER;
+    guardRequest.targetSampleRate = std::max(impl->cachedSampleRate, 1.f);
+    guardRequest.requestedBufferMode = BUFFER_DURATION_LONGPLAY_DISK;
+    impl->sampleLifecycle.requestAsyncSampleBuild(guardRequest);
+    impl->longPlayOwner->requestLoad(path);
+    impl->longPlayInstallPending.store(true, std::memory_order_release);
+    impl->installedLongPlayGeneration = impl->longPlayOwner->generation();
+    return true;
+  }
+  if (!probed && errorOut) {
+    *errorOut = probeError;
+  }
+  if (temporaldeck::LongPlayStreamEngine *stream =
+        impl->longPlayStream.load(std::memory_order_acquire)) {
+    stream->clear();
+  }
+  impl->longPlayInstallPending.store(false, std::memory_order_release);
   bool wasFreezeLatched = impl->transportControl.freezeLatched;
   bool wasFreezeLatchedByButton = impl->transportControl.freezeLatchedByButton;
   impl->transportControl.freezeLatched = wasFreezeLatched;
@@ -2432,6 +2595,12 @@ bool TemporalDeck::saveLoadedSampleToPath(const std::string &path, std::string *
   if (!impl->engine.sampleLoaded || impl->engine.sampleFrames <= 0) {
     if (errorOut) {
       *errorOut = "No sample is loaded";
+    }
+    return false;
+  }
+  if (impl->engine.diskBackedSample) {
+    if (errorOut) {
+      *errorOut = "LongPlay samples remain disk-backed and cannot be exported as a RAM capture";
     }
     return false;
   }
@@ -2707,6 +2876,8 @@ const char *TemporalDeck::bufferDurationLabelFor(int index) {
     return "10 min stereo";
   case BUFFER_DURATION_10M_MONO:
     return "10 min mono";
+  case BUFFER_DURATION_LONGPLAY_DISK:
+    return "LongPlay (Disk 1h+)";
   case BUFFER_DURATION_10S:
   default:
     return "10 s";

@@ -90,12 +90,7 @@ uint32_t applyPendingSampleSeek(temporaldeck::TemporalDeckEngine &engine, uint32
     double sampleWindowEndPos = sampleEndPos * double(std::max(0.f, std::min(bufferKnob, 1.f)));
     // Arc seek maps to full sample time and then clamps to active window end.
     double targetFrame = clampd(double(seekNorm) * sampleEndPos, 0.0, sampleWindowEndPos);
-    engine.samplePlayhead = targetFrame;
-    engine.readHead = targetFrame;
-    engine.scratchLagSamples = 0.0;
-    engine.scratchLagTargetSamples = 0.0;
-    engine.nowCatchActive = false;
-    engine.cancelSlipReturnState();
+    engine.requestSampleSeekTarget(targetFrame);
   }
 
   return pendingRevision;

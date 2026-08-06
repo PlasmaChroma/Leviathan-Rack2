@@ -4056,7 +4056,9 @@ struct TemporalDeckWidget : ModuleWidget {
             double mib = bytes / (1024.0 * 1024.0);
             return string::f("%s (~%.0f MiB @ %.1fk)", label.c_str(), mib, sr / 1000.f);
           };
-          std::array<int, TemporalDeck::BUFFER_DURATION_COUNT> menuOrder = {
+          // Disk-backed LongPlay is selected automatically for loaded files;
+          // it is not a live-recording buffer allocation choice.
+          std::array<int, 6> menuOrder = {
             TemporalDeck::BUFFER_DURATION_10S,       TemporalDeck::BUFFER_DURATION_20S,
             TemporalDeck::BUFFER_DURATION_1M_STEREO, TemporalDeck::BUFFER_DURATION_2M_STEREO,
             TemporalDeck::BUFFER_DURATION_10M_STEREO, TemporalDeck::BUFFER_DURATION_10M_MONO};
