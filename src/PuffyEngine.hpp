@@ -141,7 +141,15 @@ private:
 	float wetMix = 1.f;
 	float amountCoefficient = 1.f;
 	float autoDeflateCoefficient = 1.f;
+	float autoDeflateEnergyCoefficient = 1.f;
+	float autoDeflateAttackCoefficient = 1.f;
+	float autoDeflateReleaseCoefficient = 1.f;
 	float autoDeflateMix = 1.f;
+	float autoDeflateInputSq = 0.f;
+	float autoDeflateOutputSq = 0.f;
+	float autoDeflateGain = 1.f;
+	float autoDeflateTargetGain = 1.f;
+	int autoDeflateControlCounter = 0;
 	bool autoDeflateStateInitialized = false;
 	float detectorAttackCoefficient = 1.f;
 	float detectorReleaseCoefficient = 1.f;
@@ -216,7 +224,6 @@ private:
 		const CharacterCoefficients& positiveCoefficients,
 		float* oversampledLeft,
 		float* oversampledRight,
-		float autoDeflateAmount,
 		float wetAmount,
 		const SwarmFrame& swarmFrame,
 		bool left);

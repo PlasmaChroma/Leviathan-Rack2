@@ -23,16 +23,6 @@ float onePoleCoefficient(float seconds, float sampleRate) {
 	return 1.f - std::exp(-1.f / (seconds * sampleRate));
 }
 
-float fastNegativeExp(float x) {
-	// Puffy's Auto Deflate exponent is bounded to approximately [-0.47, 0].
-	const float x2 = x * x;
-	const float x3 = x2 * x;
-	const float x4 = x2 * x2;
-	const float x5 = x4 * x;
-	return 1.f + x + 0.5f * x2 + (1.f / 6.f) * x3
-		+ (1.f / 24.f) * x4 + (1.f / 120.f) * x5;
-}
-
 Character clampCharacter(int character) {
 	if (character <= int(Character::Bloom)) {
 		return Character::Bloom;
@@ -69,27 +59,6 @@ float fractalShape(float input) {
 	return std::copysign(shaped, input);
 }
 
-float autoDeflateDb(Character character, float amount) {
-	switch (character) {
-		case Character::Void:
-			// VOID's magnitude quantizer only removes level. Additional automatic
-			// attenuation would make it collapse in linked mode.
-			return 0.f;
-		case Character::Swarm:
-			return -3.f * amount;
-		case Character::Spine:
-			return -4.f * amount;
-		case Character::Riptide:
-			return -3.5f * amount;
-		case Character::Frenzy:
-		case Character::Teeth:
-			return -3.f * amount;
-		case Character::Bloom:
-		default:
-			return -2.5f * amount;
-	}
-}
-
 } // namespace
 
 Engine::Engine() {
@@ -122,6 +91,9 @@ void Engine::setSampleRate(float requestedSampleRate) {
 		: 48000.f;
 	amountCoefficient = onePoleCoefficient(0.001f, sampleRate);
 	autoDeflateCoefficient = onePoleCoefficient(0.010f, sampleRate);
+	autoDeflateEnergyCoefficient = onePoleCoefficient(0.250f, sampleRate);
+	autoDeflateAttackCoefficient = onePoleCoefficient(0.150f, sampleRate);
+	autoDeflateReleaseCoefficient = onePoleCoefficient(2.f, sampleRate);
 	detectorAttackCoefficient = onePoleCoefficient(0.001f, sampleRate);
 	detectorReleaseCoefficient = onePoleCoefficient(0.045f, sampleRate);
 	detectorSlowCoefficient = onePoleCoefficient(0.180f, sampleRate);
@@ -152,6 +124,11 @@ void Engine::resetSharedControlState() {
 	rightPositiveInputActivity = 0.f;
 	rightNegativeInputActivity = 0.f;
 	limiterGain = 1.f;
+	autoDeflateInputSq = 0.f;
+	autoDeflateOutputSq = 0.f;
+	autoDeflateGain = 1.f;
+	autoDeflateTargetGain = 1.f;
+	autoDeflateControlCounter = 0;
 }
 
 void Engine::reset() {
@@ -516,7 +493,6 @@ float Engine::processPath(
 	const CharacterCoefficients& positiveCoefficients,
 	float* oversampledLeft,
 	float* oversampledRight,
-	float autoDeflateAmount,
 	float wetAmount,
 	const SwarmFrame& swarmFrame,
 	bool left) {
@@ -534,16 +510,6 @@ float Engine::processPath(
 		? path.decimatorLeft.process(shaped.data())
 		: path.decimatorRight.process(shaped.data());
 	output = left ? path.dcLeft.process(output) : path.dcRight.process(output);
-	// Keep compensation constant across both polarities. Polarity-dependent
-	// gain would create a second, unintended asymmetric transfer function.
-	const float negativeDb = autoDeflateDb(
-		negativeCoefficients.character, negativeCoefficients.amount);
-	const float positiveDb = autoDeflateDb(
-		positiveCoefficients.character, positiveCoefficients.amount);
-	const float compensationGain = fastNegativeExp(
-		0.5f * (negativeDb + positiveDb) * 0.1151292546497023f);
-	output *= 1.f + (compensationGain - 1.f)
-		* clamp01(autoDeflateAmount) * wetAmount;
 	return output;
 }
 
@@ -707,19 +673,19 @@ Frame Engine::process(
 		const float oldLeft = processPath(
 			primaryPath, oldNegativeCoefficients, oldPositiveCoefficients,
 			oversampledLeft.data(),
-			oversampledRight.data(), autoDeflateMix, wetMix, swarmFrame, true);
+			oversampledRight.data(), wetMix, swarmFrame, true);
 		const float oldRight = processPath(
 			primaryPath, oldNegativeCoefficients, oldPositiveCoefficients,
 			oversampledLeft.data(),
-			oversampledRight.data(), autoDeflateMix, wetMix, swarmFrame, false);
+			oversampledRight.data(), wetMix, swarmFrame, false);
 		const float newLeft = processPath(
 			secondaryPath, newNegativeCoefficients, newPositiveCoefficients,
 			oversampledLeft.data(),
-			oversampledRight.data(), autoDeflateMix, wetMix, swarmFrame, true);
+			oversampledRight.data(), wetMix, swarmFrame, true);
 		const float newRight = processPath(
 			secondaryPath, newNegativeCoefficients, newPositiveCoefficients,
 			oversampledLeft.data(),
-			oversampledRight.data(), autoDeflateMix, wetMix, swarmFrame, false);
+			oversampledRight.data(), wetMix, swarmFrame, false);
 		const float t = clamp01(
 			float(transitionSample) / float(std::max(transitionLength - 1, 1)));
 		const float oldGain = 1.f - t;
@@ -748,12 +714,48 @@ Frame Engine::process(
 		normalizedLeft = processPath(
 			primaryPath, negativeCoefficients, positiveCoefficients,
 			oversampledLeft.data(),
-			oversampledRight.data(), autoDeflateMix, wetMix, swarmFrame, true);
+			oversampledRight.data(), wetMix, swarmFrame, true);
 		normalizedRight = processPath(
 			primaryPath, negativeCoefficients, positiveCoefficients,
 			oversampledLeft.data(),
-			oversampledRight.data(), autoDeflateMix, wetMix, swarmFrame, false);
+			oversampledRight.data(), wetMix, swarmFrame, false);
 	}
+
+	// AUTO compares the linked-stereo energy entering and leaving Puffy. It can
+	// only turn down, so energy-removing characters such as VOID are never
+	// boosted. The ratio is refreshed at control rate; silence and strong
+	// transients retain the previous target instead of steering the gain loop.
+	const float normalizedInputLeft = projectedLeft / kReferenceVolts;
+	const float normalizedInputRight = projectedRight / kReferenceVolts;
+	const float inputSq = 0.5f * (
+		normalizedInputLeft * normalizedInputLeft
+		+ normalizedInputRight * normalizedInputRight);
+	const float outputSq = 0.5f * (
+		normalizedLeft * normalizedLeft + normalizedRight * normalizedRight);
+	autoDeflateInputSq += (inputSq - autoDeflateInputSq)
+		* autoDeflateEnergyCoefficient;
+	autoDeflateOutputSq += (outputSq - autoDeflateOutputSq)
+		* autoDeflateEnergyCoefficient;
+	if (++autoDeflateControlCounter >= 32) {
+		autoDeflateControlCounter = 0;
+		constexpr float kSilenceGateSq = 1e-6f;
+		if (autoDeflateInputSq > kSilenceGateSq && dynamics.transient < 0.35f) {
+			const float ratioSq = autoDeflateInputSq
+				/ std::max(autoDeflateOutputSq, kSilenceGateSq);
+			autoDeflateTargetGain = ratioSq < 1.f
+				? std::max(0.125f, std::sqrt(ratioSq))
+				: 1.f;
+		}
+	}
+	const float autoDeflateSlew = autoDeflateTargetGain < autoDeflateGain
+		? autoDeflateAttackCoefficient
+		: autoDeflateReleaseCoefficient;
+	autoDeflateGain += (autoDeflateTargetGain - autoDeflateGain)
+		* autoDeflateSlew;
+	const float appliedAutoGain = 1.f + (autoDeflateGain - 1.f)
+		* autoDeflateMix;
+	normalizedLeft *= appliedAutoGain;
+	normalizedRight *= appliedAutoGain;
 	float outputLeft = normalizedLeft * kReferenceVolts;
 	float outputRight = normalizedRight * kReferenceVolts;
 	const float peak = std::max(std::fabs(outputLeft), std::fabs(outputRight));

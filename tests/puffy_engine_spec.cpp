@@ -649,10 +649,11 @@ ToneStats renderTone(
 	bool autoDeflate,
 	float sensitivity,
 	bool identicalStereo = true,
-	float wetMix = 1.f) {
+	float wetMix = 1.f,
+	float settleSeconds = 0.1f) {
 	const float sampleRate = engine.getSampleRate();
 	const int samples = int(seconds * sampleRate);
-	const int skip = int(0.1f * sampleRate);
+	const int skip = int(settleSeconds * sampleRate);
 	ToneStats stats;
 	for (int i = 0; i < samples; ++i) {
 		const float phase = 2.f * kPi * frequency * float(i) / sampleRate;
@@ -690,6 +691,62 @@ Result unityAndStereo() {
 		stats.finite && std::fabs(db) <= 0.05f && stats.maxStereoDelta <= 1e-6f,
 		"gainDb=" + std::to_string(db)
 			+ " stereoDelta=" + std::to_string(stats.maxStereoDelta)
+	};
+}
+
+Result dynamicAutoDeflateTracksProgramEnergy() {
+	puffy::Engine dryReference;
+	puffy::Engine adaptive;
+	puffy::Engine voidReference;
+	puffy::Engine voidAdaptive;
+	puffy::Engine partialAdaptive;
+	for (puffy::Engine* engine : {
+		&dryReference, &adaptive, &voidReference, &voidAdaptive,
+		&partialAdaptive}) {
+		engine->setSampleRate(48000.f);
+	}
+	const ToneStats spineWithoutAuto = renderTone(
+		dryReference, 4.f, 1.f, 431.f, 1.f,
+		int(puffy::Character::Spine), false, 0.f, true, 1.f, 2.f);
+	const ToneStats spineWithAuto = renderTone(
+		adaptive, 4.f, 1.f, 431.f, 1.f,
+		int(puffy::Character::Spine), true, 0.f, true, 1.f, 2.f);
+	const ToneStats voidWithoutAuto = renderTone(
+		voidReference, 4.f, 1.f, 431.f, 1.f,
+		int(puffy::Character::Void), false, 0.f, true, 1.f, 2.f);
+	const ToneStats voidWithAuto = renderTone(
+		voidAdaptive, 4.f, 1.f, 431.f, 1.f,
+		int(puffy::Character::Void), true, 0.f, true, 1.f, 2.f);
+	const ToneStats partialWithAuto = renderTone(
+		partialAdaptive, 4.f, 1.f, 431.f, 1.f,
+		int(puffy::Character::Spine), true, 0.f, true, 0.5f, 2.f);
+	const float spineRawRatio = float(std::sqrt(
+		spineWithoutAuto.outputSq / spineWithoutAuto.inputSq));
+	const float spineAutoRatio = float(std::sqrt(
+		spineWithAuto.outputSq / spineWithAuto.inputSq));
+	const float voidRawRatio = float(std::sqrt(
+		voidWithoutAuto.outputSq / voidWithoutAuto.inputSq));
+	const float voidAutoRatio = float(std::sqrt(
+		voidWithAuto.outputSq / voidWithAuto.inputSq));
+	const float partialAutoRatio = float(std::sqrt(
+		partialWithAuto.outputSq / partialWithAuto.inputSq));
+	return {
+		"AUTO dynamically matches program energy with downward-only linked gain",
+		spineWithoutAuto.finite && spineWithAuto.finite
+			&& voidWithoutAuto.finite && voidWithAuto.finite
+			&& spineRawRatio > 1.2f
+			&& spineAutoRatio < spineRawRatio - 0.15f
+			&& spineAutoRatio > 0.95f && spineAutoRatio < 1.10f
+			&& voidAutoRatio <= voidRawRatio + 1e-5f
+			&& partialAutoRatio > 0.95f && partialAutoRatio < 1.10f
+			&& spineWithAuto.maxStereoDelta <= 1e-6f,
+		"spine=" + std::to_string(spineRawRatio)
+			+ "/" + std::to_string(spineAutoRatio)
+			+ " void=" + std::to_string(voidRawRatio)
+			+ "/" + std::to_string(voidAutoRatio)
+			+ " partial=" + std::to_string(partialAutoRatio)
+			+ " stereoDelta="
+			+ std::to_string(spineWithAuto.maxStereoDelta)
 	};
 }
 
@@ -1023,6 +1080,7 @@ int main() {
 		frenzySinusoidalFold(),
 		riptideFractalAnchors(),
 		unityAndStereo(),
+		dynamicAutoDeflateTracksProgramEnergy(),
 		linkedLimiter(),
 		sensitivityChangesInputProjectionAndLevel(),
 		wetDryMixEndpoints(),
