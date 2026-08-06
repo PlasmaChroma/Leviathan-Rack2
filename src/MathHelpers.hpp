@@ -69,6 +69,23 @@ inline float sinCyclesAudioBounded(float cycles) {
 			* fraction;
 }
 
+// Triangle wave for a phase expressed in complete cycles. Like the bounded
+// sine helper above, Puffy guarantees cycles in [-2, 2], so wrapping needs no
+// floor(), fmod(), division, lookup, or transcendental math. The wave crosses
+// zero with a positive slope at each whole cycle.
+inline float triangleCyclesAudioBounded(float cycles) {
+	const float shifted = cycles + 2.f;
+	const int wholeCycles = int(shifted);
+	const float wrapped = shifted - float(wholeCycles);
+	if (wrapped < 0.25f) {
+		return 4.f * wrapped;
+	}
+	if (wrapped < 0.75f) {
+		return 2.f - 4.f * wrapped;
+	}
+	return 4.f * wrapped - 4.f;
+}
+
 // Compatibility alias: existing callers retain the established rational curve.
 // New DSP should choose tanhLegacy() or tanhAudio() explicitly.
 inline float fastTanh(float x) {

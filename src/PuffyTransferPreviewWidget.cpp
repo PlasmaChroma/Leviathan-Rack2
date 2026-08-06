@@ -157,7 +157,9 @@ void PuffyTransferPreviewWidget::step() {
 		visual.positiveCharacter, 0, puffy::kCharacterCount - 1);
 	const bool frenzyReactive =
 		negativeCharacter == int(puffy::Character::Frenzy)
-		|| positiveCharacter == int(puffy::Character::Frenzy);
+		|| positiveCharacter == int(puffy::Character::Frenzy)
+		|| negativeCharacter == int(puffy::Character::Teeth)
+		|| positiveCharacter == int(puffy::Character::Teeth);
 	const bool swarmActive =
 		negativeCharacter == int(puffy::Character::Swarm)
 		|| positiveCharacter == int(puffy::Character::Swarm);

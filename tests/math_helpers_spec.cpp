@@ -91,9 +91,32 @@ int main() {
 		sineTableAddress % 64u == 0u,
 		"shared audio sine table is cache-line aligned");
 
+	const bool triangleAnchors =
+		levi_math::triangleCyclesAudioBounded(-2.f) == 0.f
+		&& levi_math::triangleCyclesAudioBounded(-1.75f) == 1.f
+		&& levi_math::triangleCyclesAudioBounded(-1.5f) == 0.f
+		&& levi_math::triangleCyclesAudioBounded(-1.25f) == -1.f
+		&& levi_math::triangleCyclesAudioBounded(0.f) == 0.f
+		&& levi_math::triangleCyclesAudioBounded(0.25f) == 1.f
+		&& levi_math::triangleCyclesAudioBounded(0.5f) == 0.f
+		&& levi_math::triangleCyclesAudioBounded(0.75f) == -1.f
+		&& levi_math::triangleCyclesAudioBounded(2.f) == 0.f;
+	bool triangleOddAndBounded = true;
+	for (int i = 0; i <= sampleCount; ++i) {
+		const float cycles = -2.f + 4.f * float(i) / float(sampleCount);
+		const float triangle = levi_math::triangleCyclesAudioBounded(cycles);
+		triangleOddAndBounded = triangleOddAndBounded
+			&& std::fabs(triangle) <= 1.f
+			&& std::fabs(
+				triangle + levi_math::triangleCyclesAudioBounded(-cycles)) < 2e-6f;
+	}
+	failures += !check(
+		triangleAnchors && triangleOddAndBounded,
+		"bounded triangle carrier has exact corners, odd symmetry, and unit bounds");
+
 	std::cout << "max audio tanh error: " << maximumError << "\n";
 	std::cout << "max audio sine error: " << maximumSineError << "\n";
 	std::cout << "max audio sine odd error: " << maximumSineOddError << "\n";
-	std::cout << "Summary: " << (7 - failures) << "/7 passed\n";
+	std::cout << "Summary: " << (8 - failures) << "/8 passed\n";
 	return failures == 0 ? 0 : 1;
 }

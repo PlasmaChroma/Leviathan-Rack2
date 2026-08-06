@@ -28,7 +28,7 @@ Puffy::Puffy() {
 	configSwitch(
 		CHARACTER_PARAM, 0.f, float(puffy::kCharacterCount - 1), 0.f,
 		"Negative character",
-		{"BLOOM", "SPINE", "FRENZY", "RIPTIDE", "VOID", "SWARM"});
+		{"BLOOM", "SPINE", "FRENZY", "RIPTIDE", "VOID", "SWARM", "TEETH"});
 	configParam(PUFF_PARAM, 0.f, 1.f, 0.25f, "Puff", "%", 0.f, 100.f);
 	configParam(
 		SENSITIVITY_PARAM, -1.f, 1.f, 0.f,
@@ -40,7 +40,7 @@ Puffy::Puffy() {
 	configSwitch(
 		POSITIVE_CHARACTER_PARAM, 0.f, float(puffy::kCharacterCount - 1), 0.f,
 		"Positive character",
-		{"BLOOM", "SPINE", "FRENZY", "RIPTIDE", "VOID", "SWARM"});
+		{"BLOOM", "SPINE", "FRENZY", "RIPTIDE", "VOID", "SWARM", "TEETH"});
 	configSwitch(
 		CHARACTER_LINK_PARAM, 0.f, 1.f, 1.f, "Link polarity characters",
 		{"Unlinked", "Linked"});

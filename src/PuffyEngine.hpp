@@ -18,10 +18,11 @@ enum class Character {
 	Frenzy = 2,
 	Riptide = 3,
 	Void = 4,
-	Swarm = 5
+	Swarm = 5,
+	Teeth = 6
 };
 
-constexpr int kCharacterCount = int(Character::Swarm) + 1;
+constexpr int kCharacterCount = int(Character::Teeth) + 1;
 
 struct DynamicsState {
 	float fast = 0.f;

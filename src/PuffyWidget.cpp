@@ -23,7 +23,8 @@ static const char* const kPuffyCharacterLabels[puffy::kCharacterCount] = {
 	"FRENZY",
 	"RIPTIDE",
 	"VOID",
-	"SWARM"
+	"SWARM",
+	"TEETH"
 };
 
 struct PuffyViewportGradient final : TransparentWidget {

@@ -66,6 +66,7 @@ Result characterCurves() {
 	bool bloomOdd = true;
 	bool spineOdd = true;
 	bool frenzyBounded = true;
+	bool teethBounded = true;
 	bool riptideOdd = true;
 	bool riptideBounded = true;
 	bool voidOdd = true;
@@ -85,6 +86,8 @@ Result characterCurves() {
 				puffy::Character::Spine, -input, amount, dynamics);
 			const float frenzy = puffy::Engine::processCharacter(
 				puffy::Character::Frenzy, input, amount, dynamics);
+			const float teeth = puffy::Engine::processCharacter(
+				puffy::Character::Teeth, input, amount, dynamics);
 			const float riptide = puffy::Engine::processCharacter(
 				puffy::Character::Riptide, input, amount, dynamics);
 			const float riptideNegative = puffy::Engine::processCharacter(
@@ -94,7 +97,8 @@ Result characterCurves() {
 			const float voidNegative = puffy::Engine::processCharacter(
 				puffy::Character::Void, -input, amount, dynamics);
 			finite = finite && std::isfinite(bloom) && std::isfinite(spine)
-				&& std::isfinite(frenzy) && std::isfinite(riptide)
+				&& std::isfinite(frenzy) && std::isfinite(teeth)
+				&& std::isfinite(riptide)
 				&& std::isfinite(voidOutput);
 			bloomOdd = bloomOdd && near(bloom, -bloomNegative, 2e-6f);
 			spineOdd = spineOdd && near(spine, -spineNegative, 2e-6f);
@@ -104,6 +108,9 @@ Result characterCurves() {
 			frenzyBounded = frenzyBounded
 				&& frenzy >= std::min(input, -1.25f) - 1e-5f
 				&& frenzy <= std::max(input, 1.25f) + 1e-5f;
+			teethBounded = teethBounded
+				&& teeth >= std::min(input, -1.f) - 1e-5f
+				&& teeth <= std::max(input, 1.f) + 1e-5f;
 			riptideBounded = riptideBounded
 				&& riptide >= std::min(input, -1.f) - 1e-5f
 				&& riptide <= std::max(input, 1.f) + 1e-5f;
@@ -120,7 +127,7 @@ Result characterCurves() {
 	const bool continuous = std::fabs(edgeAbove - edgeBelow) < 1e-4f;
 	return {
 		"Character curves are finite, bounded, symmetric where required, and smooth modes remain continuous",
-		finite && bloomOdd && spineOdd && frenzyBounded
+		finite && bloomOdd && spineOdd && frenzyBounded && teethBounded
 			&& riptideOdd && riptideBounded && voidOdd
 			&& spineMonotonic && continuous,
 		"finite=" + std::to_string(finite)
@@ -128,6 +135,7 @@ Result characterCurves() {
 			+ " spineOdd=" + std::to_string(spineOdd)
 			+ " riptideOdd=" + std::to_string(riptideOdd)
 			+ " voidOdd=" + std::to_string(voidOdd)
+			+ " teethBounded=" + std::to_string(teethBounded)
 			+ " riptideBounded=" + std::to_string(riptideBounded)
 			+ " spineMonotonic=" + std::to_string(spineMonotonic)
 			+ " edgeDelta=" + std::to_string(std::fabs(edgeAbove - edgeBelow))

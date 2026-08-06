@@ -82,6 +82,7 @@ float autoDeflateDb(Character character, float amount) {
 		case Character::Riptide:
 			return -3.5f * amount;
 		case Character::Frenzy:
+		case Character::Teeth:
 			return -3.f * amount;
 		case Character::Bloom:
 		default:
@@ -281,7 +282,8 @@ Engine::CharacterCoefficients Engine::prepareCharacter(
 		case Character::Riptide:
 			coefficients.drive = 1.f + 1.5f * a * a;
 			break;
-		case Character::Frenzy: {
+		case Character::Frenzy:
+		case Character::Teeth: {
 			const float fastControl = clamp01(dynamicsState.fast);
 			const float transient = clamp01(dynamicsState.transient);
 			// Puff sweeps continuously from one to four complete sine-fold
@@ -416,6 +418,23 @@ float Engine::applyCharacter(
 				+ coefficients.phaseSkew * z2 * (1.f - z2);
 			const float folded = coefficients.foldGain
 				* levi_math::sinCyclesAudioBounded(
+					coefficients.foldPhaseCycles * warped);
+			const float polarityBias = z >= 0.f
+				? coefficients.positivePolarityBias
+				: coefficients.negativePolarityBias;
+			const float biased = folded
+				+ polarityBias * z * (1.f - z2)
+				+ coefficients.polarityEdgeBias * z * std::fabs(z);
+			const float saturated = std::max(-1.f, std::min(biased, 1.f));
+			return input + (saturated - input) * a;
+		}
+		case Character::Teeth: {
+			const float z = std::max(-1.f, std::min(input, 1.f));
+			const float z2 = z * z;
+			const float warped = z
+				+ coefficients.phaseSkew * z2 * (1.f - z2);
+			const float folded = coefficients.foldGain
+				* levi_math::triangleCyclesAudioBounded(
 					coefficients.foldPhaseCycles * warped);
 			const float polarityBias = z >= 0.f
 				? coefficients.positivePolarityBias
