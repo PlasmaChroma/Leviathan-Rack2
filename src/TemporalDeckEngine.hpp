@@ -1692,6 +1692,16 @@ struct TemporalDeckEngine {
     return clampd(pos, 0.0, std::max(0.0, newestPos));
   }
 
+  // Position normalizer that is safe for both live circular buffers and
+  // disk-backed samples.  In sample mode the tiny guard buffer must NOT
+  // be used for wrapping because its size is far smaller than sampleFrames.
+  double wrapReadPosition(double pos, double newestPos) const {
+    if (sampleModeEnabled && sampleLoaded) {
+      return normalizeSamplePosition(pos, newestPos);
+    }
+    return buffer.wrapPosition(pos);
+  }
+
   double normalizeSampleLag(double lag, double newestPos) const {
     if (isSampleLoopActive()) {
       return wrapd(lag, sampleLoopLength(newestPos));
@@ -2063,7 +2073,7 @@ struct TemporalDeckEngine {
       readHead = normalizeSamplePosition(candidate, newestPos);
     } else {
       candidate = std::max(newestPos - std::max(limit, 0.0), std::min(candidate, newestPos));
-      readHead = buffer.wrapPosition(candidate);
+      readHead = wrapReadPosition(candidate, newestPos);
     }
     scratchLagSamples = clampLag(currentLagFromNewest(newestPos), limit);
 
@@ -2077,7 +2087,7 @@ struct TemporalDeckEngine {
         scratchMotionVelocity = 0.f;
         scratchWheelVelocityBurst = 0.f;
         double targetRead = newestPos - scratchLagSamples;
-        readHead = isSampleLoopActive() ? normalizeSamplePosition(targetRead, newestPos) : buffer.wrapPosition(targetRead);
+        readHead = wrapReadPosition(targetRead, newestPos);
       }
     }
 
@@ -2088,7 +2098,7 @@ struct TemporalDeckEngine {
       scratchHandVelocity = 0.f;
       scratchMotionVelocity = 0.f;
       scratchWheelVelocityBurst = 0.f;
-      readHead = newestPos;
+      readHead = wrapReadPosition(newestPos, newestPos);
     }
   }
 
@@ -2113,8 +2123,7 @@ struct TemporalDeckEngine {
       }
 
       scratchLagSamples = lagEstimate;
-      readHead = isSampleLoopActive() ? normalizeSamplePosition(newestPos - lagEstimate, newestPos)
-                                      : buffer.wrapPosition(newestPos - lagEstimate);
+      readHead = wrapReadPosition(newestPos - lagEstimate, newestPos);
       return;
     }
 
@@ -2162,8 +2171,7 @@ struct TemporalDeckEngine {
     }
 
     scratchLagSamples = lagEstimate;
-    readHead = isSampleLoopActive() ? normalizeSamplePosition(newestPos - lagEstimate, newestPos)
-                                    : buffer.wrapPosition(newestPos - lagEstimate);
+    readHead = wrapReadPosition(newestPos - lagEstimate, newestPos);
   }
 
   void integrateScratch3Touch(float dt, double limit, double newestPos, double prevReadHead,
@@ -2216,7 +2224,7 @@ struct TemporalDeckEngine {
     lagEstimate = clampLag(lagEstimate, limit);
     scratch3LagVelocity = lagVelocity;
     scratchLagSamples = lagEstimate;
-    readHead = buffer.wrapPosition(newestPos - scratchLagSamples);
+    readHead = wrapReadPosition(newestPos - scratchLagSamples, newestPos);
 
     if (scratchLagTargetSamples <= nowSnapThresholdSamples && scratchLagSamples <= nowSnapThresholdSamples &&
         scratch3LagVelocity <= 0.f) {
@@ -2579,7 +2587,7 @@ struct TemporalDeckEngine {
         scratchLagTargetSamples = targetLag;
         scratch3LagVelocity = 0.f;
         double targetRead = newestPos - targetLag;
-        readHead = isSampleLoopActive() ? normalizeSamplePosition(targetRead, newestPos) : buffer.wrapPosition(targetRead);
+        readHead = wrapReadPosition(targetRead, newestPos);
       }
     }
     externalCvGateHigh = scratchGateHigh;
@@ -2774,9 +2782,7 @@ struct TemporalDeckEngine {
           // gesture path instead.
           double targetLag = clampLag(platterLagTarget, limit);
           if (!platterTouchHoldLatched || hasFreshPlatterGesture) {
-            platterTouchHoldReadHead =
-              isSampleLoopActive() ? normalizeSamplePosition(newestPos - targetLag, newestPos)
-                                   : buffer.wrapPosition(newestPos - targetLag);
+            platterTouchHoldReadHead = wrapReadPosition(newestPos - targetLag, newestPos);
             platterTouchHoldLatched = true;
           }
           readHead = platterTouchHoldReadHead;
