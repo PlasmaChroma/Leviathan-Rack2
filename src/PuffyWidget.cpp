@@ -91,15 +91,29 @@ struct PuffyCharacterMenuItem final : MenuItem {
 	}
 };
 
-struct PuffyCharacterMenuButton final : OpaqueWidget {
-	Puffy* module = nullptr;
+struct PuffyCharacterMenuButton final : ParamWidget {
 	bool negativePart = true;
 	bool isHovered = false;
 
+	Puffy* getPuffyModule() const {
+		return dynamic_cast<Puffy*>(module);
+	}
+
 	void step() override {
-		OpaqueWidget::step();
-		if (module && !negativePart) {
-			const bool linked = module->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f;
+		ParamWidget::step();
+		Puffy* puffyModule = getPuffyModule();
+		if (puffyModule && negativePart) {
+			const bool linked = puffyModule
+				->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f;
+			if (engine::ParamQuantity* quantity = getParamQuantity()) {
+				const char* name = linked ? "Both polarities" : "Negative character";
+				if (quantity->name != name) {
+					quantity->name = name;
+				}
+			}
+		}
+		if (puffyModule && !negativePart) {
+			const bool linked = puffyModule->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f;
 			visible = !linked;
 			if (linked) {
 				isHovered = false;
@@ -109,22 +123,23 @@ struct PuffyCharacterMenuButton final : OpaqueWidget {
 
 	void onEnter(const event::Enter& e) override {
 		isHovered = true;
-		OpaqueWidget::onEnter(e);
+		ParamWidget::onEnter(e);
 	}
 
 	void onLeave(const event::Leave& e) override {
 		isHovered = false;
-		OpaqueWidget::onLeave(e);
+		ParamWidget::onLeave(e);
 	}
 
 	void onButton(const event::Button& e) override {
-		if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT
+		Puffy* puffyModule = getPuffyModule();
+		if (!puffyModule || e.button != GLFW_MOUSE_BUTTON_LEFT
 			|| e.action != GLFW_PRESS) {
-			OpaqueWidget::onButton(e);
+			ParamWidget::onButton(e);
 			return;
 		}
-		const bool charactersLinked = module
-			&& module->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f;
+		const bool charactersLinked = puffyModule
+			->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f;
 		ui::Menu* menu = createMenu();
 		menu->box.pos = getAbsoluteOffset(Vec(0.f, box.size.y));
 		menu->addChild(createMenuLabel(
@@ -133,7 +148,7 @@ struct PuffyCharacterMenuButton final : OpaqueWidget {
 				: (negativePart ? "Negative Character" : "Positive Character")));
 		for (int character = 0; character < puffy::kCharacterCount; ++character) {
 			auto* item = new PuffyCharacterMenuItem();
-			item->module = module;
+			item->module = puffyModule;
 			item->negativePart = negativePart;
 			item->character = character;
 			item->text = kPuffyCharacterLabels[character];
@@ -143,11 +158,12 @@ struct PuffyCharacterMenuButton final : OpaqueWidget {
 	}
 
 	void draw(const DrawArgs& args) override {
+		Puffy* puffyModule = getPuffyModule();
 		const int paramId = negativePart
 			? Puffy::CHARACTER_PARAM
 			: Puffy::POSITIVE_CHARACTER_PARAM;
-		const int character = module
-			? clamp(int(std::lround(module->params[paramId].getValue())),
+		const int character = puffyModule
+			? clamp(int(std::lround(puffyModule->params[paramId].getValue())),
 				0, puffy::kCharacterCount - 1)
 			: int(puffy::Character::Bloom);
 		const NVGcolor tint = puffy_visual::characterTint(character);
@@ -642,14 +658,14 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 
 	const Vec characterMenuSize = mm2px(Vec(13.5f, 4.5f));
 	const Vec characterMenuInset = mm2px(Vec(0.6f, 0.6f));
-	auto* negativeCharacterMenu = new PuffyCharacterMenuButton();
-	negativeCharacterMenu->module = module;
+	auto* negativeCharacterMenu = createParam<PuffyCharacterMenuButton>(
+		Vec(), module, Puffy::CHARACTER_PARAM);
 	negativeCharacterMenu->negativePart = true;
 	negativeCharacterMenu->box.size = characterMenuSize;
 	negativeCharacterMenu->box.pos = fish->box.pos.plus(Vec(
 		characterMenuInset.x,
 		fish->box.size.y - characterMenuSize.y - characterMenuInset.y));
-	addChild(negativeCharacterMenu);
+	addParam(negativeCharacterMenu);
 
 	auto* polarityLinkIcon = createParam<PuffyPolarityLinkButton>(
 		Vec(
@@ -659,14 +675,14 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 		Puffy::CHARACTER_LINK_PARAM);
 	addParam(polarityLinkIcon);
 
-	auto* positiveCharacterMenu = new PuffyCharacterMenuButton();
-	positiveCharacterMenu->module = module;
+	auto* positiveCharacterMenu = createParam<PuffyCharacterMenuButton>(
+		Vec(), module, Puffy::POSITIVE_CHARACTER_PARAM);
 	positiveCharacterMenu->negativePart = false;
 	positiveCharacterMenu->box.size = characterMenuSize;
 	positiveCharacterMenu->box.pos = fish->box.pos.plus(Vec(
 		fish->box.size.x - characterMenuSize.x - characterMenuInset.x,
 		fish->box.size.y - characterMenuSize.y - characterMenuInset.y));
-	addChild(positiveCharacterMenu);
+	addParam(positiveCharacterMenu);
 
 	math::Rect transferPreviewRectMm;
 	if (!panel_svg::loadRectFromSvgMm(
