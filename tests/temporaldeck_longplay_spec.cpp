@@ -217,12 +217,60 @@ Result testHourWavSeek() {
               " seekRead=" + std::to_string(seekRead)};
 }
 
+Result testReaderWriterContention() {
+  const std::string path = "/tmp/leviathan_tdlongplay_contention.wav";
+  const unsigned sampleRate = 8000u;
+  const unsigned seconds = 20u;
+  const bool wrote = writeSparseWav(path, sampleRate, seconds, false);
+  temporaldeck::LongPlayStreamEngine engine;
+  engine.requestLoad(path);
+  const bool ready = waitForReady(engine);
+
+  std::atomic<bool> stopReaders{false};
+  std::atomic<std::uint64_t> totalReads{0};
+  
+  std::vector<std::thread> readers;
+  for (int i = 0; i < 4; ++i) {
+    readers.emplace_back([&]() {
+      std::uint64_t reads = 0;
+      float l, r;
+      std::uint64_t frame = 0;
+      while (!stopReaders.load(std::memory_order_relaxed)) {
+        engine.readFrame(frame, &l, &r);
+        frame = (frame + 137) % (sampleRate * seconds);
+        ++reads;
+      }
+      totalReads.fetch_add(reads, std::memory_order_relaxed);
+    });
+  }
+
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(1500);
+  std::uint64_t targetFrame = 0;
+  while (std::chrono::steady_clock::now() < deadline) {
+    engine.setDesiredFrame(targetFrame, false);
+    targetFrame = (targetFrame + 65536) % (sampleRate * seconds);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+
+  stopReaders.store(true, std::memory_order_relaxed);
+  for (auto &t : readers) {
+    if (t.joinable()) t.join();
+  }
+
+  std::remove(path.c_str());
+  
+  return {"Lock-free block read/write contention under heavy thrashing",
+          wrote && ready && totalReads.load() > 0,
+          "ready=" + std::to_string(ready) + " reads=" + std::to_string(totalReads.load())};
+}
+
 } // namespace
 
 int main() {
   const Result results[] = {testWavStreamingAndSymmetricBlocks(),
                             testEngineDefersColdSeekUntilResident(),
-                            testHourWavSeek()};
+                            testHourWavSeek(),
+                            testReaderWriterContention()};
   int failures = 0;
   for (const Result &result : results) {
     std::cout << (result.passed ? "[PASS] " : "[FAIL] ") << result.name

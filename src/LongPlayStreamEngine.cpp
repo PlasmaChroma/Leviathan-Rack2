@@ -394,7 +394,15 @@ bool LongPlayStreamEngine::readStereoInterleaved(std::uint64_t startFrame, std::
 }
 
 bool LongPlayStreamEngine::isFrameResident(std::uint64_t frame) const {
-  return readFrame(frame, nullptr, nullptr);
+  const std::uint64_t blockNumber = frame / kBlockFrames;
+  const Block &block = blocks[std::size_t(blockNumber % kBlockCount)];
+  const std::uint64_t sequence = block.sequence.load(std::memory_order_acquire);
+  if (sequence & 1u) {
+    return false;
+  }
+  const std::uint64_t start = block.startFrame;
+  const std::uint32_t count = block.validFrames;
+  return frame >= start && (frame - start) < count;
 }
 
 bool LongPlayStreamEngine::ready() const {

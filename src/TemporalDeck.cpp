@@ -2061,6 +2061,12 @@ void TemporalDeck::process(const ProcessArgs &args) {
   auto frame = impl->engine.process(frameInput);
   impl->engine.requestStreamWindow();
 
+  if (impl->engine.diskBackedSample) {
+    if (temporaldeck::LongPlayStreamEngine *stream = impl->longPlayStream.load(std::memory_order_relaxed)) {
+      impl->engine.sampleAbsolutePeakVolts = stream->absolutePeak();
+    }
+  }
+
   if (scopeDragTraceEnabled) {
     bool scopeActive = haveLagDragRequest && lagDragRequestActive;
     if (!scopeActive) {

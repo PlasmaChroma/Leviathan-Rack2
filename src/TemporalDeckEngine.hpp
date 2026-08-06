@@ -686,7 +686,7 @@ struct TemporalDeckEngine {
   void rebuildPreviewFromCurrentSample() {
     resetPreviewAccumulator(uint32_t(std::max(1, sampleFrames)));
     sampleAbsolutePeakVolts = 0.f;
-    if (!sampleLoaded || sampleFrames <= 0 || buffer.size <= 0) {
+    if (!sampleLoaded || sampleFrames <= 0 || buffer.size <= 0 || diskBackedSample) {
       return;
     }
     for (int i = 0; i < sampleFrames; ++i) {
