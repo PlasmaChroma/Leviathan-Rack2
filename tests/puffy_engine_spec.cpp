@@ -370,6 +370,10 @@ Result voidBecomesSteppedQuantizer() {
 		puffy::Character::Void, 0.101f, 1.f, dynamics);
 	const float halfPuff = puffy::Engine::processCharacter(
 		puffy::Character::Void, 0.37f, 0.5f, dynamics);
+	const float halfPuffTreadStart = puffy::Engine::processCharacter(
+		puffy::Character::Void, 0.365f, 0.5f, dynamics);
+	const float halfPuffTreadEnd = puffy::Engine::processCharacter(
+		puffy::Character::Void, 0.369f, 0.5f, dynamics);
 	const float rail = puffy::Engine::processCharacter(
 		puffy::Character::Void, 1.f, 1.f, dynamics);
 	const float riptideRateRail = puffy::Engine::processCharacter(
@@ -381,7 +385,9 @@ Result voidBecomesSteppedQuantizer() {
 		const float amount = 0.25f * float(amountIndex);
 		const float amountSq = amount * amount;
 		const float threshold = 1.f / (1.f + 1.5f * amountSq);
-		const float expectedRail = threshold + (1.f - threshold) * amount;
+		const float stepMix =
+			1.f - (1.f - amount) * (1.f - amount) * (1.f - amount);
+		const float expectedRail = threshold + (1.f - threshold) * stepMix;
 		const float atRail = puffy::Engine::processCharacter(
 			puffy::Character::Void, threshold, amount, dynamics);
 		const float beforeRail = puffy::Engine::processCharacter(
@@ -402,7 +408,8 @@ Result voidBecomesSteppedQuantizer() {
 			&& near(firstTreadStart, 0.125f, 1e-6f)
 			&& near(firstTreadEnd, 0.125f, 1e-6f)
 			&& near(secondTread, 0.25f, 1e-6f)
-			&& near(halfPuff, 0.435f, 1e-6f)
+			&& near(halfPuff, 0.48375f, 1e-6f)
+			&& near(halfPuffTreadEnd - halfPuffTreadStart, 0.0005f, 1e-6f)
 			&& near(rail, 1.f, 1e-7f)
 			&& near(riptideRateRail, 1.f, 1e-7f)
 			&& beforeRiptideRateRail < 1.f
@@ -414,6 +421,8 @@ Result voidBecomesSteppedQuantizer() {
 			+ "/" + std::to_string(firstTreadEnd)
 			+ " tread2=" + std::to_string(secondTread)
 			+ " half=" + std::to_string(halfPuff)
+			+ " halfTreadSlope="
+			+ std::to_string(halfPuffTreadEnd - halfPuffTreadStart)
 			+ " rail=" + std::to_string(beforeRiptideRateRail)
 			+ "/" + std::to_string(riptideRateRail)
 	};

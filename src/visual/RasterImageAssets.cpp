@@ -236,6 +236,34 @@ struct AspectFitRasterImageWidget : TransparentWidget {
 
 } // namespace
 
+bool decodeRasterRgba8(
+	const std::string& fullPath,
+	std::vector<std::uint8_t>* rgba,
+	int* width,
+	int* height) {
+	if (!rgba || !width || !height || fullPath.empty()) {
+		return false;
+	}
+	int decodedWidth = 0;
+	int decodedHeight = 0;
+	int sourceChannels = 0;
+	stbi_uc* decoded = stbi_load(
+		fullPath.c_str(), &decodedWidth, &decodedHeight, &sourceChannels, 4);
+	if (!decoded || decodedWidth <= 0 || decodedHeight <= 0) {
+		if (decoded) {
+			stbi_image_free(decoded);
+		}
+		return false;
+	}
+	const size_t byteCount =
+		size_t(decodedWidth) * size_t(decodedHeight) * size_t(4);
+	rgba->assign(decoded, decoded + byteCount);
+	stbi_image_free(decoded);
+	*width = decodedWidth;
+	*height = decodedHeight;
+	return true;
+}
+
 int loadRasterMipmapHandle(
 	NVGcontext* vg,
 	std::shared_ptr<window::Image> lifecycleImage,

@@ -4,7 +4,9 @@
 #include "ApertureLight.hpp"
 #include "PlasmaSwitch.hpp"
 
+#include <cstdint>
 #include <functional>
+#include <vector>
 
 namespace visual_assets {
 
@@ -15,6 +17,11 @@ int loadRasterMipmapHandle(
 	NVGcontext* vg,
 	std::shared_ptr<window::Image> lifecycleImage,
 	const std::string& fullPath);
+bool decodeRasterRgba8(
+	const std::string& fullPath,
+	std::vector<std::uint8_t>* rgba,
+	int* width,
+	int* height);
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm);
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor);
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm, NVGcolor baseColor, NVGcolor shadowBaseColor);

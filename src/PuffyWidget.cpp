@@ -1,6 +1,7 @@
 #include "PuffyWidget.hpp"
 
 #include "PanelSvgUtils.hpp"
+#include "PuffyDrawDiagnostics.hpp"
 #include "PuffyFishWidget.hpp"
 #include "PuffyTransferPreviewWidget.hpp"
 #include "PuffyVisualPalette.hpp"
@@ -8,6 +9,11 @@
 #include "visual/FractalGlassOverlay.hpp"
 #include "visual/PreviewSurface.hpp"
 #include "visual/VisualAssets.hpp"
+
+#include <chrono>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
 
 namespace {
 
@@ -399,6 +405,80 @@ bool loadPoint(
 
 } // namespace
 
+std::string PuffyWidget::drawLogRootPath() {
+	return system::join(asset::user(), "Leviathan/Puffy");
+}
+
+std::string PuffyWidget::drawLogDateTimeStamp() {
+	std::time_t now = std::time(nullptr);
+	std::tm tm {};
+#if defined(_WIN32)
+	localtime_s(&tm, &now);
+#else
+	localtime_r(&now, &tm);
+#endif
+	std::ostringstream out;
+	out << std::put_time(&tm, "%Y%m%d_%H%M%S");
+	return out.str();
+}
+
+void PuffyWidget::stopDrawLog() {
+	if (drawLogFile.is_open()) {
+		drawLogFile.close();
+	}
+	drawLogPath.clear();
+	drawLogActive = false;
+	drawLogRowCounter = 0u;
+	consumePuffyDrawMetrics();
+}
+
+void PuffyWidget::syncDrawLog(bool enabled, std::uint32_t instanceId) {
+	if (!enabled) {
+		if (drawLogActive) {
+			stopDrawLog();
+		}
+		return;
+	}
+	if (drawLogActive && drawLogFile.is_open()) {
+		return;
+	}
+	const std::string root = drawLogRootPath();
+	if (!system::createDirectories(root) && !system::isDirectory(root)) {
+		WARN("Puffy failed to create draw log directory: %s", root.c_str());
+		return;
+	}
+	static std::uint32_t openSequence = 0u;
+	drawLogPath = system::join(
+		root,
+		"puffy_draw_" + std::to_string(instanceId) + "_"
+			+ drawLogDateTimeStamp() + "_"
+			+ std::to_string(openSequence++) + ".csv");
+	drawLogFile.open(drawLogPath.c_str(), std::ios::out | std::ios::trunc);
+	if (!drawLogFile.is_open()) {
+		WARN("Puffy failed to open draw log CSV: %s", drawLogPath.c_str());
+		drawLogPath.clear();
+		return;
+	}
+	drawLogActive = true;
+	drawLogRowCounter = 0u;
+	consumePuffyDrawMetrics();
+	drawLogFile << std::fixed << std::setprecision(3);
+	drawLogFile
+		<< "row,module_id,instance_id,time_sec,last_frame_us,total_draw_us,module_widget_draw_us,"
+		<< "fish_draw_us,fish_other_us,body_ensure_us,body_recolor_us,body_upload_us,body_draw_us,"
+		<< "body_transition_draw_us,body_transition_atlas_prewarm_us,"
+		<< "fin_draw_us,eye_draw_us,transfer_draw_us,transfer_curve_draw_us,transfer_curve_rebuild_us,"
+		<< "body_cache_hits,body_recolors,body_image_creates,body_image_updates,body_context_resets,"
+		<< "body_fallback_draws,body_transition_draws,body_transition_atlas_creates,body_transition_atlas_resets,"
+		<< "body_transition_atlas_prewarms,"
+		<< "transfer_curve_rebuilds,negative_character,positive_character,"
+		<< "effective_amount,input_activity,gain_reduction\n";
+}
+
+PuffyWidget::~PuffyWidget() {
+	stopDrawLog();
+}
+
 void PuffyWidget::step() {
 	const bool measurePerf = isDragonKingDebugEnabled();
 	const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
@@ -410,10 +490,21 @@ void PuffyWidget::step() {
 }
 
 void PuffyWidget::draw(const DrawArgs& args) {
+	using PerfClock = std::chrono::steady_clock;
+	auto* puffyModule = static_cast<Puffy*>(module);
+	const bool logDraw = puffyModule
+		&& isDragonKingDebugEnabled()
+		&& isPuffyDrawLoggingEnabled();
+	const std::uint32_t instanceId = puffyModule
+		? puffyModule->debugMetrics.instanceId : 0u;
+	syncDrawLog(logDraw, instanceId);
+	const PerfClock::time_point totalStart = logDraw
+		? PerfClock::now() : PerfClock::time_point();
 	const bool measurePerf = isDragonKingDebugEnabled();
 	const auto drawStart = debug_terminal::debugTimerStart(measurePerf);
 	ModuleWidget::draw(args);
-	auto* puffyModule = static_cast<Puffy*>(module);
+	const PerfClock::time_point afterModuleDraw = logDraw
+		? PerfClock::now() : PerfClock::time_point();
 	if (!puffyModule) {
 		return;
 	}
@@ -431,6 +522,63 @@ void PuffyWidget::draw(const DrawArgs& args) {
 				puffyModule->debugMetrics.consumeProcessRange(),
 				debugWidgetMetrics.consumeStepRange(),
 				debugWidgetMetrics.consumeDrawRange());
+		}
+	}
+	if (logDraw && drawLogActive && drawLogFile.is_open()) {
+		const PuffyDrawMetrics metrics = consumePuffyDrawMetrics();
+		PuffyVisualState visual;
+		puffyModule->readVisualState(&visual);
+		const float fishMeasuredUs = float(
+			metrics.bodyEnsureNs
+			+ metrics.bodyDrawNs
+			+ metrics.bodyTransitionDrawNs
+			+ metrics.bodyTransitionAtlasPrewarmNs
+			+ metrics.finDrawNs
+			+ metrics.eyeDrawNs) * 1e-3f;
+		const float fishDrawUs = float(metrics.fishDrawNs) * 1e-3f;
+		const double lastFrameSec = APP && APP->window
+			? APP->window->getLastFrameDuration() : 0.0;
+		drawLogFile
+			<< drawLogRowCounter << ','
+			<< puffyModule->id << ','
+			<< instanceId << ','
+			<< system::getTime() << ','
+			<< lastFrameSec * 1e6 << ','
+			<< float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - totalStart).count()) * 1e-3f << ','
+			<< float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				afterModuleDraw - totalStart).count()) * 1e-3f << ','
+			<< fishDrawUs << ','
+			<< std::max(0.f, fishDrawUs - fishMeasuredUs) << ','
+			<< float(metrics.bodyEnsureNs) * 1e-3f << ','
+			<< float(metrics.bodyRecolorNs) * 1e-3f << ','
+			<< float(metrics.bodyUploadNs) * 1e-3f << ','
+			<< float(metrics.bodyDrawNs) * 1e-3f << ','
+			<< float(metrics.bodyTransitionDrawNs) * 1e-3f << ','
+			<< float(metrics.bodyTransitionAtlasPrewarmNs) * 1e-3f << ','
+			<< float(metrics.finDrawNs) * 1e-3f << ','
+			<< float(metrics.eyeDrawNs) * 1e-3f << ','
+			<< float(metrics.transferDrawNs) * 1e-3f << ','
+			<< float(metrics.transferCurveDrawNs) * 1e-3f << ','
+			<< float(metrics.transferCurveRebuildNs) * 1e-3f << ','
+			<< metrics.bodyCacheHits << ','
+			<< metrics.bodyRecolors << ','
+			<< metrics.bodyImageCreates << ','
+			<< metrics.bodyImageUpdates << ','
+			<< metrics.bodyContextResets << ','
+			<< metrics.bodyFallbackDraws << ','
+			<< metrics.bodyTransitionDraws << ','
+			<< metrics.bodyTransitionAtlasCreates << ','
+			<< metrics.bodyTransitionAtlasResets << ','
+			<< metrics.bodyTransitionAtlasPrewarms << ','
+			<< metrics.transferCurveRebuilds << ','
+			<< visual.negativeCharacter << ','
+			<< visual.positiveCharacter << ','
+			<< visual.effectiveAmount << ','
+			<< visual.inputActivity << ','
+			<< visual.gainReduction << '\n';
+		if ((drawLogRowCounter++ & 31u) == 0u) {
+			drawLogFile.flush();
 		}
 	}
 }
@@ -486,14 +634,10 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	viewportFramebuffer->addChild(viewportGradient);
 	addChild(viewportFramebuffer);
 
-	auto* fishFramebuffer = new widget::FramebufferWidget();
-	fishFramebuffer->box.pos = mm2px(fishContentRectMm.pos);
-	fishFramebuffer->box.size = mm2px(fishContentRectMm.size);
-	fishFramebuffer->dirtyOnSubpixelChange = false;
 	auto* fish = new PuffyFishWidget(module);
-	fish->box.size = fishFramebuffer->box.size;
-	fishFramebuffer->addChild(fish);
-	addChild(fishFramebuffer);
+	fish->box.pos = mm2px(fishContentRectMm.pos);
+	fish->box.size = mm2px(fishContentRectMm.size);
+	addChild(fish);
 
 	const Vec characterMenuSize = mm2px(Vec(13.5f, 4.5f));
 	const Vec characterMenuInset = mm2px(Vec(0.6f, 0.6f));
@@ -501,10 +645,9 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	negativeCharacterMenu->module = module;
 	negativeCharacterMenu->negativePart = true;
 	negativeCharacterMenu->box.size = characterMenuSize;
-	negativeCharacterMenu->box.pos = fishFramebuffer->box.pos.plus(Vec(
+	negativeCharacterMenu->box.pos = fish->box.pos.plus(Vec(
 		characterMenuInset.x,
-		fishFramebuffer->box.size.y
-			- characterMenuSize.y - characterMenuInset.y));
+		fish->box.size.y - characterMenuSize.y - characterMenuInset.y));
 	addChild(negativeCharacterMenu);
 
 	auto* polarityLinkIcon = createParam<PuffyPolarityLinkButton>(
@@ -519,11 +662,9 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	positiveCharacterMenu->module = module;
 	positiveCharacterMenu->negativePart = false;
 	positiveCharacterMenu->box.size = characterMenuSize;
-	positiveCharacterMenu->box.pos = fishFramebuffer->box.pos.plus(Vec(
-		fishFramebuffer->box.size.x
-			- characterMenuSize.x - characterMenuInset.x,
-		fishFramebuffer->box.size.y
-			- characterMenuSize.y - characterMenuInset.y));
+	positiveCharacterMenu->box.pos = fish->box.pos.plus(Vec(
+		fish->box.size.x - characterMenuSize.x - characterMenuInset.x,
+		fish->box.size.y - characterMenuSize.y - characterMenuInset.y));
 	addChild(positiveCharacterMenu);
 
 	math::Rect transferPreviewRectMm;

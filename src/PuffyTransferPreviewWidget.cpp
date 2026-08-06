@@ -1,5 +1,6 @@
 #include "PuffyTransferPreviewWidget.hpp"
 
+#include "PuffyDrawDiagnostics.hpp"
 #include "PuffyVisualPalette.hpp"
 
 #include <algorithm>
@@ -74,6 +75,13 @@ float PuffyTransferPreviewWidget::outputToY(float output) const {
 }
 
 void PuffyTransferPreviewWidget::rebuildPoints() {
+	const bool measureDraw = isPuffyDrawMeasurementEnabled();
+	PuffyDrawMetrics& metrics = puffyDrawMetricsForUiThread();
+	PuffyScopedDrawTimer rebuildTimer(
+		metrics.transferCurveRebuildNs, measureDraw);
+	if (measureDraw) {
+		++metrics.transferCurveRebuilds;
+	}
 	puffy::DynamicsState dynamics;
 	dynamics.fast = clamp(visual.inputActivity, 0.f, 1.f);
 	dynamics.transient = clamp(visual.transientActivity, 0.f, 1.f);
@@ -180,6 +188,9 @@ void PuffyTransferPreviewWidget::step() {
 }
 
 void PuffyTransferPreviewWidget::draw(const DrawArgs& args) {
+	PuffyDrawMetrics& metrics = puffyDrawMetricsForUiThread();
+	PuffyScopedDrawTimer drawTimer(
+		metrics.transferDrawNs, isPuffyDrawMeasurementEnabled());
 	const float width = box.size.x;
 	const float height = box.size.y;
 	if (width <= 1.f || height <= 1.f) {
@@ -284,6 +295,9 @@ void PuffyTransferPreviewWidget::draw(const DrawArgs& args) {
 }
 
 void PuffyTransferPreviewWidget::drawCurve(const DrawArgs& args) const {
+	PuffyDrawMetrics& metrics = puffyDrawMetricsForUiThread();
+	PuffyScopedDrawTimer drawTimer(
+		metrics.transferCurveDrawNs, isPuffyDrawMeasurementEnabled());
 	if (!pointsValid || box.size.x <= 1.f || box.size.y <= 1.f) {
 		return;
 	}

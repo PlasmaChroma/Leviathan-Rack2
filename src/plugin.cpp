@@ -18,6 +18,7 @@ static std::atomic<bool> gTemporalDeckLifetimeLoggingEnabled{false};
 static std::atomic<bool> gModuleTeardownLoggingEnabled{false};
 static std::atomic<bool> gScopeDrawLoggingEnabled{false};
 static std::atomic<bool> gIntegralFluxDrawLoggingEnabled{false};
+static std::atomic<bool> gPuffyDrawLoggingEnabled{false};
 static std::atomic<bool> gExtraGlValidationEnabled{false};
 static std::atomic<bool> gUserFractalParamsEnabled{false};
 static std::mutex gModuleTeardownLogMutex;
@@ -31,6 +32,7 @@ void refreshDragonKingDebugEnabled() {
 	gModuleTeardownLoggingEnabled.store(false, std::memory_order_relaxed);
 	gScopeDrawLoggingEnabled.store(false, std::memory_order_relaxed);
 	gIntegralFluxDrawLoggingEnabled.store(false, std::memory_order_relaxed);
+	gPuffyDrawLoggingEnabled.store(false, std::memory_order_relaxed);
 	gExtraGlValidationEnabled.store(false, std::memory_order_relaxed);
 	gUserFractalParamsEnabled.store(false, std::memory_order_relaxed);
 	if (!pluginInstance) {
@@ -56,6 +58,7 @@ void refreshDragonKingDebugEnabled() {
 		json_t* moduleTeardownLoggingJ = json_object_get(root, "moduleTeardownLogging");
 		json_t* scopeDrawLoggingJ = json_object_get(root, "ScopeDrawLogging");
 		json_t* integralFluxDrawLoggingJ = json_object_get(root, "IntegralFluxDrawLogging");
+		json_t* puffyDrawLoggingJ = json_object_get(root, "PuffyDrawLogging");
 		json_t* extraGlValidationJ = json_object_get(root, "extraGlValidation");
 		json_t* userFractalParamsJ = json_object_get(root, "UserFractalParams");
 		if (!extraGlValidationJ) {
@@ -69,6 +72,7 @@ void refreshDragonKingDebugEnabled() {
 		gModuleTeardownLoggingEnabled.store(json_boolean_value(moduleTeardownLoggingJ), std::memory_order_relaxed);
 		gScopeDrawLoggingEnabled.store(json_boolean_value(scopeDrawLoggingJ), std::memory_order_relaxed);
 		gIntegralFluxDrawLoggingEnabled.store(json_boolean_value(integralFluxDrawLoggingJ), std::memory_order_relaxed);
+		gPuffyDrawLoggingEnabled.store(json_boolean_value(puffyDrawLoggingJ), std::memory_order_relaxed);
 		gExtraGlValidationEnabled.store(json_boolean_value(extraGlValidationJ), std::memory_order_relaxed);
 		gUserFractalParamsEnabled.store(json_boolean_value(userFractalParamsJ), std::memory_order_relaxed);
 	}
@@ -105,6 +109,10 @@ bool isScopeDrawLoggingEnabled() {
 
 bool isIntegralFluxDrawLoggingEnabled() {
 	return gIntegralFluxDrawLoggingEnabled.load(std::memory_order_relaxed);
+}
+
+bool isPuffyDrawLoggingEnabled() {
+	return gPuffyDrawLoggingEnabled.load(std::memory_order_relaxed);
 }
 
 bool isExtraGlValidationEnabled() {

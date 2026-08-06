@@ -103,6 +103,7 @@ private:
 		float normalization = 1.f;
 		float voidStepSize = 1.f;
 		float voidInverseStepSize = 1.f;
+		float voidStepMix = 0.f;
 		float voidOutputGain = 1.f;
 		float voidRailThreshold = 1.f;
 		float swarmDrive = 1.f;

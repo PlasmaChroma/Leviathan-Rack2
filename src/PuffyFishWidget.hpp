@@ -9,6 +9,8 @@ struct PuffyFishWidget final : TransparentWidget {
 	PuffyPose pose;
 	PuffyVisualState visual;
 	float updateAccumulator = 0.f;
+	int bodyStableDraws = 0;
+	bool transitionAtlasReady = false;
 
 	explicit PuffyFishWidget(Puffy* module);
 
@@ -16,13 +18,23 @@ struct PuffyFishWidget final : TransparentWidget {
 	void draw(const DrawArgs& args) override;
 
 private:
+	bool bodyTintIsSettled(
+		NVGcolor negativeTint,
+		NVGcolor positiveTint) const;
+	bool drawTransitionBodyRaster(
+		NVGcontext* vg,
+		Vec center,
+		float radiusX,
+		float radiusY,
+		NVGcolor negativeTint,
+		NVGcolor positiveTint);
 	bool drawBodyRaster(
 		NVGcontext* vg,
 		Vec center,
 		float radiusX,
 		float radiusY,
 		NVGcolor negativeTint,
-		NVGcolor positiveTint) const;
+		NVGcolor positiveTint);
 	void drawFin(
 		NVGcontext* vg,
 		Vec center,

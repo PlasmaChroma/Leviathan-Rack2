@@ -55,6 +55,7 @@ bool isTemporalDeckLifetimeLoggingEnabled();
 bool isModuleTeardownLoggingEnabled();
 bool isScopeDrawLoggingEnabled();
 bool isIntegralFluxDrawLoggingEnabled();
+bool isPuffyDrawLoggingEnabled();
 bool isExtraGlValidationEnabled();
 bool isDragonKingUserFractalParamsEnabled();
 void refreshDragonKingDebugEnabled();

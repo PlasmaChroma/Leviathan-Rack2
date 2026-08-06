@@ -262,6 +262,11 @@ Engine::CharacterCoefficients Engine::prepareCharacter(
 			// Squaring PUFF keeps the first half detailed. Move the final rail
 			// inward with the same drive law as RIPTIDE, and contract the input
 			// tread width with it so eight steps remain before the rail at full PUFF.
+			// Bring the stepped signal forward faster than the tread width grows so
+			// intermediate PUFF settings retain visibly flat, square-wave-like
+			// plateaus instead of leaning strongly with the dry input.
+			coefficients.voidStepMix =
+				1.f - (1.f - a) * (1.f - a) * (1.f - a);
 			coefficients.voidOutputGain = 1.f + 1.5f * a * a;
 			coefficients.voidRailThreshold =
 				1.f / coefficients.voidOutputGain;
@@ -372,7 +377,7 @@ float Engine::applyCharacter(
 			steppedMagnitude = std::min(
 				steppedMagnitude * coefficients.voidOutputGain, 1.f);
 			const float stepped = std::copysign(steppedMagnitude, input);
-			return input + (stepped - input) * a;
+			return input + (stepped - input) * coefficients.voidStepMix;
 		}
 		case Character::Spine: {
 			const float z = coefficients.drive * input;
