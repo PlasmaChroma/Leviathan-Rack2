@@ -440,15 +440,6 @@ std::string LongPlayStreamEngine::error() const {
   return loadError;
 }
 
-std::vector<PeakPair> LongPlayStreamEngine::overviewPyramid() const {
-  std::lock_guard<std::mutex> lock(metadataMutex);
-  return overviewPyramidData;
-}
-
-bool LongPlayStreamEngine::isOverviewReady() const {
-  return overviewReady.load(std::memory_order_acquire);
-}
-
 std::size_t LongPlayStreamEngine::allocatedAudioBytes() const {
   std::size_t bytes = 0u;
   for (const Block &block : blocks) {
@@ -470,23 +461,13 @@ void LongPlayStreamEngine::invalidateBlocks() {
     }
     block.startFrame = 0u;
     block.validFrames = 0u;
+    block.peak = 0.f;
     block.sequence.fetch_add(1u, std::memory_order_release);
   }
 }
 
 void LongPlayStreamEngine::workerLoop() {
   Decoder decoder;
-  std::vector<PeakPair> pendingPyramid(kOverviewPyramidSize);
-  std::vector<float> overviewBuffer(kBlockFrames * 2u);
-  std::uint64_t overviewSerial = 0u;
-  std::size_t overviewBin = 0u;
-  std::uint64_t overviewCursor = 0u;
-  float overviewMinLeft = 1.f;
-  float overviewMaxLeft = -1.f;
-  float overviewMinRight = 1.f;
-  float overviewMaxRight = -1.f;
-  float overviewAbsolutePeak = 0.f;
-  bool overviewBinHasData = false;
   while (true) {
     std::string pathToLoad;
     std::uint64_t serial = 0u;
@@ -506,7 +487,6 @@ void LongPlayStreamEngine::workerLoop() {
 
     if (serial != 0u) {
       streamReady.store(false, std::memory_order_release);
-      overviewReady.store(false, std::memory_order_release);
       invalidateBlocks();
       decoder.close();
       std::string openError;
@@ -517,22 +497,12 @@ void LongPlayStreamEngine::workerLoop() {
         loadedPath = opened ? pathToLoad : std::string();
         loadedDisplayName = opened ? system::getFilename(pathToLoad) : std::string();
         loadError = pathToLoad.empty() ? std::string() : openError;
-        overviewPyramidData.assign(kOverviewPyramidSize, PeakPair());
       }
-      overviewReady.store(false, std::memory_order_release);
       publishedFrames.store(opened ? decoder.totalFrames : 0u, std::memory_order_release);
       publishedSampleRate.store(opened ? decoder.sampleRate : 0u, std::memory_order_release);
       publishedChannels.store(opened ? decoder.channels : 0u, std::memory_order_release);
       publishedAbsolutePeak.store(0.f, std::memory_order_release);
       desiredFrame.store(0u, std::memory_order_relaxed);
-      pendingPyramid.assign(kOverviewPyramidSize, PeakPair());
-      overviewSerial = opened ? serial : 0u;
-      overviewBin = 0u;
-      overviewCursor = 0u;
-      overviewMinLeft = overviewMinRight = 1.f;
-      overviewMaxLeft = overviewMaxRight = -1.f;
-      overviewAbsolutePeak = 0.f;
-      overviewBinHasData = false;
       publishedGeneration.fetch_add(1u, std::memory_order_acq_rel);
       streamReady.store(opened, std::memory_order_release);
       loadInProgress.store(false, std::memory_order_release);
@@ -609,67 +579,30 @@ void LongPlayStreamEngine::workerLoop() {
       }
       destination->validFrames = 0u;
       const std::uint32_t decoded = decoder.readStereo(wantedStart, kBlockFrames, destination->stereo.data());
+      
+      float blockPeak = 0.f;
+      for (std::size_t i = 0; i < std::size_t(decoded) * 2u; ++i) {
+        blockPeak = std::max(blockPeak, std::fabs(destination->stereo[i]));
+      }
+      destination->peak = blockPeak;
+
       destination->startFrame = wantedStart;
       destination->validFrames = decoded;
       destination->sequence.fetch_add(1u, std::memory_order_release);
       filledOne = decoded > 0u;
       break;
     }
-    if (!filledOne && overviewSerial == 0u) {
+    if (!filledOne) {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
-    // Build one bounded overview chunk per worker pass, after servicing the
-    // hot cache. Long files therefore become playable immediately while the
-    // exact full-file peak cache completes progressively in the background.
-    if (overviewSerial != 0u && overviewBin < kOverviewPyramidSize &&
-        !requestSuperseded(overviewSerial)) {
-      const std::uint64_t total = decoder.totalFrames;
-      const double framesPerBin = double(total) / double(kOverviewPyramidSize);
-      const std::uint64_t binStart = std::uint64_t(double(overviewBin) * framesPerBin);
-      const std::uint64_t binEnd = std::min(
-        total, std::uint64_t(double(overviewBin + 1u) * framesPerBin));
-      overviewCursor = std::max(overviewCursor, binStart);
-      const std::uint32_t count = std::uint32_t(std::min<std::uint64_t>(
-        kBlockFrames, binEnd > overviewCursor ? binEnd - overviewCursor : 0u));
-      const std::uint32_t readCount = count > 0u
-        ? decoder.readStereo(overviewCursor, count, overviewBuffer.data())
-        : 0u;
-      for (std::uint32_t i = 0; i < readCount; ++i) {
-        const float left = overviewBuffer[i * 2u];
-        const float right = overviewBuffer[i * 2u + 1u];
-        overviewMinLeft = std::min(overviewMinLeft, left);
-        overviewMaxLeft = std::max(overviewMaxLeft, left);
-        overviewMinRight = std::min(overviewMinRight, right);
-        overviewMaxRight = std::max(overviewMaxRight, right);
-        overviewAbsolutePeak = std::max(overviewAbsolutePeak, std::fabs(left));
-        overviewAbsolutePeak = std::max(overviewAbsolutePeak, std::fabs(right));
-        overviewBinHasData = true;
-      }
-      overviewCursor += readCount;
-      if (count == 0u || readCount < count || overviewCursor >= binEnd) {
-        if (!overviewBinHasData) {
-          overviewMinLeft = overviewMaxLeft = overviewMinRight = overviewMaxRight = 0.f;
-        }
-        pendingPyramid[overviewBin] = {
-          overviewMinLeft, overviewMaxLeft, overviewMinRight, overviewMaxRight};
-        ++overviewBin;
-        overviewMinLeft = overviewMinRight = 1.f;
-        overviewMaxLeft = overviewMaxRight = -1.f;
-        overviewBinHasData = false;
-        if (overviewBin < kOverviewPyramidSize) {
-          overviewCursor = std::uint64_t(double(overviewBin) * framesPerBin);
-        } else {
-          {
-            std::lock_guard<std::mutex> lock(metadataMutex);
-            overviewPyramidData = pendingPyramid;
-          }
-          publishedAbsolutePeak.store(overviewAbsolutePeak, std::memory_order_release);
-          overviewReady.store(true, std::memory_order_release);
-          overviewSerial = 0u;
-        }
+    float currentPeak = 0.f;
+    for (const Block &block : blocks) {
+      if (block.validFrames > 0u) {
+        currentPeak = std::max(currentPeak, block.peak);
       }
     }
+    publishedAbsolutePeak.store(currentPeak, std::memory_order_release);
   }
   streamReady.store(false, std::memory_order_release);
   invalidateBlocks();

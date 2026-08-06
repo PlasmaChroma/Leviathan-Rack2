@@ -1472,7 +1472,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   }
   if (temporaldeck::LongPlayStreamEngine *stream =
         impl->longPlayStream.load(std::memory_order_acquire)) {
-    if (impl->engine.diskBackedSample && stream->isOverviewReady()) {
+    if (impl->engine.diskBackedSample && stream->ready()) {
       impl->engine.sampleAbsolutePeakVolts =
         stream->absolutePeak() * temporaldeck::kSampleFileVoltageScale;
     }

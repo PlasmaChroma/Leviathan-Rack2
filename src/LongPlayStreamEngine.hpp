@@ -11,17 +11,6 @@
 
 namespace temporaldeck {
 
-struct PeakPair {
-  float minLeft;
-  float maxLeft;
-  float minRight;
-  float maxRight;
-
-  PeakPair() : minLeft(0.f), maxLeft(0.f), minRight(0.f), maxRight(0.f) {}
-  PeakPair(float minLeft, float maxLeft, float minRight, float maxRight)
-      : minLeft(minLeft), maxLeft(maxLeft), minRight(minRight), maxRight(maxRight) {}
-};
-
 struct LongPlayFileInfo {
   std::uint64_t totalFrames = 0u;
   std::uint32_t sampleRate = 0u;
@@ -35,7 +24,6 @@ class LongPlayStreamEngine {
 public:
   static constexpr std::uint32_t kBlockFrames = 65536u;
   static constexpr int kBlockCount = 32;
-  static constexpr std::size_t kOverviewPyramidSize = 4096u;
 
   LongPlayStreamEngine();
   ~LongPlayStreamEngine();
@@ -58,8 +46,6 @@ public:
   std::string displayName() const;
   std::string error() const;
 
-  std::vector<PeakPair> overviewPyramid() const;
-  bool isOverviewReady() const;
   std::size_t allocatedAudioBytes() const;
 
 private:
@@ -69,6 +55,7 @@ private:
     mutable std::atomic<std::uint32_t> readers{0u};
     std::uint64_t startFrame = 0u;
     std::uint32_t validFrames = 0u;
+    float peak = 0.f;
 
     Block();
   };
@@ -89,8 +76,6 @@ private:
   std::string loadedPath;
   std::string loadedDisplayName;
   std::string loadError;
-  std::vector<PeakPair> overviewPyramidData;
-  std::atomic<bool> overviewReady{false};
 
   std::atomic<bool> streamReady{false};
   std::atomic<bool> loadInProgress{false};

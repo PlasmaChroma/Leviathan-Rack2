@@ -29,20 +29,20 @@
 | §2.3 | Bi-directional 50/50 pre-fetching | ✅ Implemented | Worker loop emits priority sequence `0, +1, -1, +2, -2, …, +15, -16` centered on `desiredFrame`. Edge-fill logic for non-looping files. |
 | §2.4 | Graceful large seek handling | ✅ Implemented | `requestSampleSeekTarget` defers cold seeks; `servicePendingStreamSeek` polls residency; `completeSampleSeek` arms 5 ms crossfade. |
 | §2.5 | Zero audio-thread allocations or locks | ✅ Implemented | Audio thread reads via `readFrame` (atomic sequence validation + reader counter). No mutex or allocation on the audio path. |
-| §2.6 | Scope overview peak cache | ✅ Implemented | 4,096 `PeakPair` bins built progressively by worker. `isOverviewReady()` / `overviewPyramid()` exposed. |
+| §2.6 | Scope dynamic range tracking | ✅ Implemented | Peak amplitude tracked across resident blocks for localized scaling. |
 | §4.1 | Block structure with sequence/readers atomics | ✅ Implemented | [`Block`](file:///home/Levi.Kendall/dev/Leviathan-Rack2/src/LongPlayStreamEngine.hpp#L67-L74) matches spec. Named `stereo` instead of `stereoData` — cosmetic only. |
 | §4.2 | Symmetric 50/50 RAM window centered on playhead | ✅ Implemented | Priority schedule covers 16 forward + 16 backward blocks. |
 | §5.1 | Intra-window seek: 0 ms | ✅ Implemented | `requestSampleSeekTarget` calls `completeSampleSeek` directly when frame is resident. |
 | §5.2 | Extra-window seek: continuous playback + crossfade snap | ⚠️ Partially | Playback continues from current RAM (spec §5.3 goal). Crossfade on snap works. But: no explicit spin-down audio behavior described in §2.4 was implemented — the deck just keeps playing current position until the block arrives. This is arguably *better* than §2.4's mention of "record stop / spin-down" behavior, but deviates from the spec letter. |
-| §6.1 | 64 KB peak overview pyramid (4096 bins) | ✅ Implemented | Progressive build, correct bin count and data size. |
-| §6.2 | Scope rendering pipeline (macro from pyramid, micro from hot blocks) | ⚠️ Not wired | `TDScope` rendering code is not modified in this branch. Overview data is *available* but no scope consumer reads it yet. |
+| §6.1 | Resident Hot-Block Scaling | ✅ Implemented | absolutePeak() scans resident blocks for localized dynamic range. |
+| §6.2 | Scope rendering pipeline | ⚠️ Not wired | `TDScope` rendering code is not modified in this branch to use the localized peak. |
 | §7.1 | `BUFFER_DURATION_LONGPLAY_DISK` enum | ✅ Implemented | Added to both [`TemporalDeck.hpp`](file:///home/Levi.Kendall/dev/Leviathan-Rack2/src/TemporalDeck.hpp) and [`TemporalDeckEngine.hpp`](file:///home/Levi.Kendall/dev/Leviathan-Rack2/src/TemporalDeckEngine.hpp). |
 | §7.2.1 | `LongPlayStreamEngine` class | ✅ Implemented | New standalone class rather than extending `longplayer::Stream`. Handles WAV/FLAC/MP3. |
 | §7.2.2 | Engine interpolation integration | ✅ Implemented | All three interpolation modes updated with `diskBackedSample` paths. |
 | §7.2.3 | `TemporalDeckSampleLifecycle` integration | ❌ Not modified | Spec called for lifecycle file changes. Instead, integration is inlined in [`TemporalDeck.cpp`](file:///home/Levi.Kendall/dev/Leviathan-Rack2/src/TemporalDeck.cpp) via `LongPlayBridge` and process-loop wiring. Functionally equivalent but architectural deviation. |
 | §8 | Test suite in `temporaldeck_longplay_spec.cpp` | ⚠️ Partial | 4 of 5 specified test categories present. Missing: explicit reader/writer contention stress test (§8.1). |
 | §9 Phase 1 | Stream engine adaptation | ✅ Complete | |
-| §9 Phase 2 | Overview peak generation | ✅ Complete | |
+| §9 Phase 2 | Dynamic Range Tracking | ✅ Complete | |
 | §9 Phase 3 | Engine state machine & interpolation | ✅ Complete | |
 | §9 Phase 4 | Seamless seek protocol | ✅ Complete | |
 | §9 Phase 5 | UI & Scope integration | ⚠️ Partial | UI excludes LongPlay from buffer menu (correct). Scope not wired. |
@@ -57,7 +57,7 @@
 **Strengths:**
 - Clean separation from existing codebase. Self-contained 679-line implementation with its own decoder, worker thread, and public API.
 - Correct lock-free reader protocol: sequence-based validation with reader count drain before writes.
-- Progressive overview pyramid avoids blocking playback startup on long files.
+
 - Edge-fill logic intelligently repurposes unused slots when near file boundaries.
 - Multi-format support (WAV 8/16/24/32-bit PCM + 32-bit float, FLAC, MP3) with seek tables for MP3.
 
@@ -118,13 +118,13 @@
 | §8.2 Bi-Directional Pre-Fetch Correctness | ✅ | `testWavStreamingAndSymmetricBlocks` |
 | §8.3 Seamless Seek Transition | ✅ | `testEngineDefersColdSeekUntilResident` |
 | §8.4 Memory Boundary Verification | ✅ | `testWavStreamingAndSymmetricBlocks` (checks `allocatedAudioBytes`) |
-| §8.5 Scope Peak Pyramid Accuracy | ✅ | `testStereoOverviewPreservesIndependentPeaks` + `testHourWavSeekAndOverviewPyramid` |
+
 
 > [!NOTE]
 > The missing concurrency test (§8.1) is the most important gap. The lock-free protocol is the most subtle part of the implementation and would benefit from a multi-threaded stress test with concurrent readers and writers racing on blocks.
 
 **Test quality notes:**
-- The 1-hour WAV test (`testHourWavSeekAndOverviewPyramid`) uses a sparse 8 kHz file (≈57 MB on disk). This is a realistic duration stress test.
+- The 1-hour WAV test (`testHourWavSeek`) uses a sparse 8 kHz file (≈57 MB on disk). This is a realistic duration stress test.
 - `testEngineDefersColdSeekUntilResident` uses a `StreamStub` to test the engine's seek deferral/completion state machine without needing real disk I/O. Well-designed unit test.
 - Test fixture cleanup (`std::remove`) is present for all temp files.
 
@@ -165,8 +165,8 @@
 ### Medium Priority
 
 > [!IMPORTANT]
-> **M1 — Wire TDScope to overview pyramid (§6.2)**  
-> The overview data is generated but no scope consumer reads it. Phase 5 from the roadmap is incomplete.
+> **M1 — Wire TDScope to resident block scaling (§6.2)**  
+> The dynamic range peak is tracked but no scope consumer uses it yet. Phase 5 from the roadmap is incomplete.
 
 > [!IMPORTANT]
 > **M2 — `isFrameResident` could be lighter**  
@@ -216,7 +216,7 @@
 
 ## Verdict
 
-The implementation delivers the core architecture described in the spec: a bounded-memory disk-backed streaming engine with lock-free block reads, 50/50 symmetric pre-fetching, seamless seek with crossfade, and a progressive overview peak pyramid. The audio thread remains allocation-free and lock-free.
+The implementation delivers the core architecture described in the spec: a bounded-memory disk-backed streaming engine with lock-free block reads, 50/50 symmetric pre-fetching, seamless seek with crossfade, and dynamic peak tracking across resident RAM blocks. The audio thread remains allocation-free and lock-free.
 
 Key gaps are the missing TDScope wiring (Phase 5) and the reader/writer concurrency test (§8.1). The `rebuildPreviewFromCurrentSample` path is a latent hazard for disk-backed samples that should be guarded before wider testing.
 

@@ -121,17 +121,6 @@ bool waitForReady(temporaldeck::LongPlayStreamEngine &engine,
   return false;
 }
 
-bool waitForOverview(temporaldeck::LongPlayStreamEngine &engine,
-                     int timeoutMs = 10000) {
-  const auto deadline = std::chrono::steady_clock::now() +
-                         std::chrono::milliseconds(timeoutMs);
-  while (std::chrono::steady_clock::now() < deadline) {
-    if (engine.isOverviewReady())
-      return true;
-    std::this_thread::sleep_for(std::chrono::milliseconds(2));
-  }
-  return false;
-}
 
 bool waitForFrame(temporaldeck::LongPlayStreamEngine &engine,
                   std::uint64_t frame, float *left, float *right,
@@ -180,28 +169,6 @@ Result testWavStreamingAndSymmetricBlocks() {
               " bytes=" + std::to_string(engine.allocatedAudioBytes())};
 }
 
-Result testStereoOverviewPreservesIndependentPeaks() {
-  const std::string path = "/tmp/leviathan_tdlongplay_stereo.wav";
-  const bool wrote = writeStereoPeakWav(path);
-  temporaldeck::LongPlayStreamEngine engine;
-  engine.requestLoad(path);
-  const bool ready = waitForReady(engine);
-  const bool overviewReady = waitForOverview(engine);
-  const auto overview = engine.overviewPyramid();
-  bool found = false;
-  for (const auto &peak : overview) {
-    if (peak.maxLeft > 0.7f && peak.minRight < -0.7f) {
-      found = true;
-      break;
-    }
-  }
-  std::remove(path.c_str());
-  return {"Overview preserves independent stereo extrema",
-          wrote && ready && overviewReady && found && engine.absolutePeak() > 0.7f,
-          "ready=" + std::to_string(ready) + " overview=" + std::to_string(overviewReady) +
-              " stereoPeak=" + std::to_string(found)};
-}
-
 Result testEngineDefersColdSeekUntilResident() {
   temporaldeck::TemporalDeckEngine engine;
   engine.buffer.reset(48000.f, 1.f, false);
@@ -224,7 +191,7 @@ Result testEngineDefersColdSeekUntilResident() {
               " completed=" + std::to_string(completed)};
 }
 
-Result testHourWavSeekAndOverviewPyramid() {
+Result testHourWavSeek() {
   const std::string path = "/tmp/leviathan_tdlongplay_hour.wav";
   const unsigned sampleRate = 8000u;
   const unsigned seconds = 3600u; // 1 Hour
@@ -232,35 +199,30 @@ Result testHourWavSeekAndOverviewPyramid() {
   temporaldeck::LongPlayStreamEngine engine;
   engine.requestLoad(path);
   const bool ready = waitForReady(engine);
-  const bool overviewReady = waitForOverview(engine, 20000);
+
 
   const std::uint64_t target = std::uint64_t(sampleRate) * 55u * 60u;
   float left = 1.f, right = 1.f;
   const bool seekRead = ready && waitForFrame(engine, target, &left, &right);
 
-  const auto pyramid = engine.overviewPyramid();
-  const bool pyramidValid = overviewReady &&
-                            pyramid.size() == temporaldeck::LongPlayStreamEngine::kOverviewPyramidSize;
 
   const double duration = engine.sampleRate() > 0u
                               ? double(engine.totalFrames()) / engine.sampleRate()
                               : 0.0;
 
   std::remove(path.c_str());
-  return {"One-Hour WAV seeks through 32-block hot RAM window with Peak Overview Pyramid",
-          wrote && ready && seekRead && pyramidValid && std::fabs(duration - 3600.0) < 1e-5,
+  return {"One-Hour WAV seeks through 32-block hot RAM window",
+          wrote && ready && seekRead && std::fabs(duration - 3600.0) < 1e-5,
           "duration=" + std::to_string(duration) +
-              " seekRead=" + std::to_string(seekRead) +
-              " pyramidSize=" + std::to_string(pyramid.size())};
+              " seekRead=" + std::to_string(seekRead)};
 }
 
 } // namespace
 
 int main() {
   const Result results[] = {testWavStreamingAndSymmetricBlocks(),
-                            testStereoOverviewPreservesIndependentPeaks(),
                             testEngineDefersColdSeekUntilResident(),
-                            testHourWavSeekAndOverviewPyramid()};
+                            testHourWavSeek()};
   int failures = 0;
   for (const Result &result : results) {
     std::cout << (result.passed ? "[PASS] " : "[FAIL] ") << result.name

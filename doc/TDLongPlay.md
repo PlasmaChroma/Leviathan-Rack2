@@ -28,7 +28,7 @@ This specification details **TDLongPlay**: a hybrid, disk-backed streaming and h
 3. **Bi-Directional Pre-fetching:** Dynamically cache audio both **ahead** (forward playback) and **behind** (reverse playback / backspinning / scratch repeats) the active playhead.
 4. **Graceful Large Seek Handling:** Allow instant jumps across the entire timeline. If a seek target falls outside the current Hot Window, tolerate a brief physical "record stop / spin-down" audio fade while disk reads catch up, minimizing dropouts and re-accelerating smoothly back into scratch/playback.
 5. **Zero Audio-Thread Allocations or Locks:** The audio processing loop (`TemporalDeck::process`) must remain 100% lock-free, reading exclusively from pre-allocated atomic sequence-validated RAM blocks.
-6. **Seamless Scope Visualization:** Integrate a downsampled overview peak cache so `TDScope` can display full 1-hour macro waveforms instantly without hitting physical media during render cycles.
+6. **Seamless Scope Visualization:** Render directly from the hot RAM blocks. Dynamic range auto-scaling uses the peaks of the resident blocks rather than a full-file calculation, providing an auto-adapting view of the current local timeline context without background file scanning overhead.
 
 ---
 
@@ -156,19 +156,17 @@ When a position change request occurs (via CV position input, scope click, or UI
 
 ---
 
-## 6. Waveform Peak Overview Integration (`TDScope`)
+## 6. Scope Integration (`TDScope`) & Dynamic Range
 
-To allow instant, full-timeline visualization on `TDScope` for 1-hour files without loading 345 million sample frames into memory or reading physical disk on every frame render:
+To support visualization on `TDScope` without full-file RAM allocation or continuous disk access during render cycles:
 
-### 6.1 Micropeak / Overview Pyramid Cache
-During file load, the background worker builds a compact **Waveform Overview Pyramid**:
-- **Resolution:** 4,096 min/max peak pairs across the entire file duration.
-- **Data Size:** $4,096 \text{ points} \times 2 \text{ ch} \times 2 \text{ (min/max)} \times 4 \text{ bytes} \approx 64 \text{ KB}$.
-- **Lifecycle:** Stored directly in `PreparedSampleData` alongside metadata.
+### 6.1 Resident Hot-Block Scaling
+Instead of computing the absolute dynamic range across a 1+ hour file, the engine scans only the **resident 32 RAM blocks** ($\approx 43.7 \text{ seconds}$) to determine the current dynamic peak.
+- As the playhead moves, the dynamic range scaling dynamically "breathes" to fit the loudest section within the current 43-second hot window.
+- This provides the performer with optimal waveform resolution for the immediate scratch area, rather than squashing local details if a louder peak occurs an hour away.
 
 ### 6.2 Scope Rendering Pipeline
-- **Macro Overview (Zoom Out):** Rendered directly from the 64 KB Overview Pyramid.
-- **Micro View (Zoom In / Near Playhead):** Rendered directly from the hot RAM blocks.
+- **Data Source:** Rendered directly from the hot RAM blocks.
 - **Disk Access during Scope Draw:** Strictly **0 bytes**.
 
 ---
@@ -195,7 +193,6 @@ enum BufferDurationMode {
 1. **`src/LongPlayStreamEngine.hpp / .cpp`** (Extends `longplayer::Stream`):
    - Handles multi-format decoder instances (`dr_flac`, `dr_mp3`, PCM WAV).
    - Manages background thread requests, seek requests, and bi-directional block decoding into `LongPlayBlock` structures.
-   - Generates the 64 KB Peak Overview Pyramid on load.
 2. **`src/TemporalDeckEngine.hpp / .cpp`**:
    - Implements the continuous buffer playback and seamless micro-crossfade position snap transition.
    - Reads samples from `LongPlayBlock` using existing sub-sample interpolators (`SCRATCH_INTERP_CUBIC`, `SCRATCH_INTERP_LAGRANGE6`, `SCRATCH_INTERP_SINC`).
@@ -213,15 +210,14 @@ To ensure reliability, real-time safety, and regression prevention, test coverag
 2. **Bi-Directional Pre-Fetch Correctness:** Verify proper block loading for forward, reverse, and rapid scratch reversal states.
 3. **Seamless Seek Transition:** Validate smooth micro-crossfade position transitions during extra-window seeks.
 4. **Memory Boundary Verification:** Ensure total allocation stays below 32 MB for long duration files (1 to 3 hours).
-5. **Scope Peak Pyramid Accuracy:** Confirm overview peak data matches raw sample bounds across test files.
 
 ---
 
 ## 9. Implementation Roadmap
 
 - [ ] **Phase 1: Stream Engine Adaptation** – Adapt `LongplayerStream` into a bi-directional block pre-fetcher with a 50/50 symmetric RAM window.
-- [ ] **Phase 2: Overview Peak Generation** – Implement lightweight 64 KB peak pyramid calculation during file open.
+- [ ] **Phase 2: Dynamic Range Tracking** – Track peak amplitude across resident blocks for localized scaling.
 - [ ] **Phase 3: Engine State Machine & Interpolation Integration** – Add `BUFFER_DURATION_LONGPLAY_DISK` to `TemporalDeckEngine` and wire lock-free block reads to cubic/sinc interpolators.
 - [ ] **Phase 4: Seamless Seek Protocol** – Implement continuous RAM buffer playback and micro-crossfade position snaps on cold seeks.
-- [ ] **Phase 5: UI & Scope Integration** – Wire `TDScope` to render macro peaks from pyramid data and micro peaks from hot RAM blocks.
+- [ ] **Phase 5: UI & Scope Integration** – Wire `TDScope` to render and scale directly from the hot RAM blocks.
 - [ ] **Phase 6: Verification Suite** – Add comprehensive unit tests in `tests/temporaldeck_longplay_spec.cpp`.
