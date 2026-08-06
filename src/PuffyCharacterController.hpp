@@ -30,6 +30,7 @@ private:
 	float blinkPhase = -1.f;
 	float nextSquintTime = 5.4f;
 	float squintPhase = -1.f;
+	float polarityDominance = 0.f;
 	float gazeX = 0.f;
 	float gazeTargetX = 0.f;
 	float gazeStateTime = 1.2f;

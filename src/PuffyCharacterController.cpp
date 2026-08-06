@@ -63,6 +63,7 @@ void PuffyCharacterController::reset(const PuffyVisualState& visual) {
 	blinkPhase = -1.f;
 	nextSquintTime = 5.4f;
 	squintPhase = -1.f;
+	polarityDominance = 0.f;
 	gazeX = 0.f;
 	gazeTargetX = 0.f;
 	gazeStateTime = 1.2f;
@@ -249,9 +250,40 @@ bool PuffyCharacterController::update(
 		gazeX, gazeTargetX, gazeGlancing ? 18.f : 11.f, dt);
 	pose->gazeX = gazeX;
 	pose->gazeY = 0.f;
-	pose->leftBlink = blink;
-	pose->rightBlink = blink;
-	pose->squint = std::max(squint, 0.16f * std::fabs(twitch));
+	// A sustained polarity imbalance protects the dominant side's eye while
+	// leaving the under-represented side free to blink and squint. Two-to-one
+	// begins the expression and six-to-one completes it; meaningful activity is
+	// required so detector residue near silence cannot leave Puffy winking.
+	const float positiveActivity = std::max(0.f, visual.positiveInputActivity);
+	const float negativeActivity = std::max(0.f, visual.negativeInputActivity);
+	const float polarityTotal = positiveActivity + negativeActivity;
+	float dominanceTarget = 0.f;
+	if (polarityTotal >= 0.10f) {
+		const float signedImbalance =
+			(positiveActivity - negativeActivity) / polarityTotal;
+		constexpr float kTwoToOneImbalance = 1.f / 3.f;
+		constexpr float kSixToOneImbalance = 5.f / 7.f;
+		const float dominanceStrength = smoothstep(
+			(std::fabs(signedImbalance) - kTwoToOneImbalance)
+				/ (kSixToOneImbalance - kTwoToOneImbalance));
+		dominanceTarget = std::copysign(dominanceStrength, signedImbalance);
+	}
+	const bool strengtheningSameSide =
+		dominanceTarget * polarityDominance >= 0.f
+		&& std::fabs(dominanceTarget) > std::fabs(polarityDominance);
+	polarityDominance = approach(
+		polarityDominance,
+		dominanceTarget,
+		strengtheningSameSide ? 5.f : 2.5f,
+		dt);
+	const float leftClosure = 1.f - std::max(0.f, -polarityDominance);
+	const float rightClosure = 1.f - std::max(0.f, polarityDominance);
+	const float combinedSquint = std::max(squint, 0.16f * std::fabs(twitch));
+	pose->leftBlink = blink * leftClosure;
+	pose->rightBlink = blink * rightClosure;
+	pose->squint = combinedSquint;
+	pose->leftSquint = combinedSquint * leftClosure;
+	pose->rightSquint = combinedSquint * rightClosure;
 	pose->mouthSmile = 0.75f + 0.20f * excitement;
 	pose->mouthTension = clamp01(0.35f * visual.gainReduction);
 	const float finFlutter = std::sin(idleTime * 3.1f);

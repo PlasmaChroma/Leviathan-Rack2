@@ -567,12 +567,12 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 			args.vg, Vec(center.x - eyeSpacing, eyeY), eyeRadius,
 			eyeball.handle,
 			pose.gazeX, pose.gazeY,
-			std::max(pose.leftBlink, pose.squint), leftEyelidColor);
+			std::max(pose.leftBlink, pose.leftSquint), leftEyelidColor);
 		drawEye(
 			args.vg, Vec(center.x + eyeSpacing, eyeY), eyeRadius,
 			eyeball.handle,
 			pose.gazeX, pose.gazeY,
-			std::max(pose.rightBlink, pose.squint), rightEyelidColor);
+			std::max(pose.rightBlink, pose.rightSquint), rightEyelidColor);
 	}
 
 	const float mouthY = center.y + radiusY * 0.30f;

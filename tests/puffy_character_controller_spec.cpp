@@ -144,6 +144,56 @@ Result squintRemainsDistinctFromBlink() {
 	};
 }
 
+Result polarityDominanceScalesEyeClosure() {
+	struct EyeClosure {
+		float leftBlink = 0.f;
+		float rightBlink = 0.f;
+		float leftSquint = 0.f;
+		float rightSquint = 0.f;
+	};
+	const auto measure = [](float positive, float negative) {
+		PuffyVisualState visual;
+		visual.inputActivity = std::max(positive, negative);
+		visual.positiveInputActivity = positive;
+		visual.negativeInputActivity = negative;
+		PuffyCharacterController controller;
+		controller.reset(visual);
+		PuffyPose pose;
+		EyeClosure result;
+		for (int i = 0; i < 400; ++i) {
+			controller.update(1.f / 60.f, visual, &pose);
+			result.leftBlink = std::max(result.leftBlink, pose.leftBlink);
+			result.rightBlink = std::max(result.rightBlink, pose.rightBlink);
+			result.leftSquint = std::max(result.leftSquint, pose.leftSquint);
+			result.rightSquint = std::max(result.rightSquint, pose.rightSquint);
+		}
+		return result;
+	};
+	const EyeClosure balanced = measure(0.5f, 0.5f);
+	const EyeClosure positive = measure(1.f, 0.05f);
+	const EyeClosure negative = measure(0.05f, 1.f);
+	const EyeClosure moderate = measure(0.8f, 0.2f);
+	return {
+		"Polarity dominance progressively protects only the over-represented eye",
+		balanced.leftBlink > 0.99f && balanced.rightBlink > 0.99f
+			&& std::fabs(balanced.leftBlink - balanced.rightBlink) < 1e-6f
+			&& positive.leftBlink > 0.99f && positive.rightBlink < 0.02f
+			&& positive.leftSquint > 0.40f && positive.rightSquint < 0.02f
+			&& negative.rightBlink > 0.99f && negative.leftBlink < 0.02f
+			&& negative.rightSquint > 0.40f && negative.leftSquint < 0.02f
+			&& moderate.rightBlink > 0.10f && moderate.rightBlink < 0.40f
+			&& moderate.leftBlink > 0.99f,
+		"balanced=" + std::to_string(balanced.leftBlink)
+			+ "/" + std::to_string(balanced.rightBlink)
+			+ " positive=" + std::to_string(positive.leftBlink)
+			+ "/" + std::to_string(positive.rightBlink)
+			+ " negative=" + std::to_string(negative.leftBlink)
+			+ "/" + std::to_string(negative.rightBlink)
+			+ " moderate=" + std::to_string(moderate.leftBlink)
+			+ "/" + std::to_string(moderate.rightBlink)
+	};
+}
+
 Result energySurgeCreatesExcitedMotion() {
 	PuffyVisualState visual;
 	PuffyCharacterController controller;
@@ -244,6 +294,7 @@ int main() {
 		characterMotionIsUniform(),
 		twitchThresholdAndDecay(),
 		squintRemainsDistinctFromBlink(),
+		polarityDominanceScalesEyeClosure(),
 		energySurgeCreatesExcitedMotion(),
 		steadyEnergyDoesNotExcite(),
 		sustainedSurgeDoesNotRetrigger(),
