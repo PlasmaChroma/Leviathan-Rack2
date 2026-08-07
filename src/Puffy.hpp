@@ -60,6 +60,10 @@ struct Puffy final : Module {
 	puffy::Engine engine;
 	std::atomic<bool> autoDeflateEnabled {false};
 	std::atomic<bool> roamingEnabled {false};
+	// UI acknowledgement that the rack-level roaming avatar is attached.
+	// Keep this separate from the persisted preference so the panel fish never
+	// disappears merely because the overlay could not yet be created.
+	std::atomic<bool> roamingAvatarActive {false};
 	std::atomic<float> roamingTargetX {0.f};
 	std::atomic<float> roamingTargetY {0.f};
 	std::atomic<std::uint32_t> visualSequence {0u};

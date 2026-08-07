@@ -9,7 +9,8 @@
 struct PuffyRoamingOverlay;
 
 struct PuffyWidget final : ModuleWidget {
-	PuffyRoamingOverlay* roamingOverlay = nullptr;
+	WeakPtr<PuffyRoamingOverlay> roamingOverlay;
+	unsigned int roamingAttachStableFrames = 0u;
 	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
 	std::ofstream drawLogFile;
 	std::string drawLogPath;

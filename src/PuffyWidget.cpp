@@ -499,7 +499,7 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 		TransparentWidget::step();
 		if (!module || !APP || !APP->scene || !APP->scene->rack) return;
 		
-		Vec mousePos = APP->scene->rack->getMousePos();
+		Vec mousePos = APP->scene->getMousePos();
 		Vec center = box.pos.plus(box.size.mult(0.5f));
 		Vec toMouse = mousePos.minus(center);
 		float distToMouse = toMouse.norm();
@@ -545,14 +545,18 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 
 PuffyWidget::~PuffyWidget() {
 	stopDrawLog();
+	if (auto* puffyModule = dynamic_cast<Puffy*>(module)) {
+		puffyModule->roamingAvatarActive.store(false, std::memory_order_release);
+	}
 	if (roamingOverlay) {
-		if (roamingOverlay->parent) {
-			roamingOverlay->requestDelete();
+		PuffyRoamingOverlay* overlay = roamingOverlay.get();
+		if (overlay->parent) {
+			overlay->requestDelete();
 		}
 		else {
-			delete roamingOverlay;
+			delete overlay;
 		}
-		roamingOverlay = nullptr;
+		roamingOverlay.set(nullptr);
 	}
 }
 
@@ -563,28 +567,65 @@ void PuffyWidget::step() {
 	
 	auto* puffyModule = dynamic_cast<Puffy*>(module);
 	
-	bool validRackContext = puffyModule && APP && APP->scene && APP->scene->rack 
-		&& parent == APP->scene->rack->getModuleContainer();
+	auto* scene = APP ? APP->scene : nullptr;
+	auto* rack = scene ? scene->rack : nullptr;
+	// During patch restoration Rack can temporarily wrap/reparent module
+	// widgets. Requiring the immediate parent to be moduleContainer made the
+	// roaming overlay creation a one-shot failure on some load paths.
+	bool validRackContext = puffyModule && scene && rack && isDescendantOf(rack);
 
 	if (validRackContext) {
 		bool wantsRoaming = puffyModule->roamingEnabled.load(std::memory_order_relaxed);
 		if (wantsRoaming && !roamingOverlay) {
-			auto* rack = APP->scene->rack;
-			auto* cableContainer = rack->getCableContainer();
-			if (cableContainer && rack->hasChild(cableContainer)) {
-				roamingOverlay = new PuffyRoamingOverlay(puffyModule);
-				Vec offset = getRelativeOffset(Vec(), rack);
-				roamingOverlay->anchorPos = offset.plus(Vec(box.size.x * 0.5f, box.size.y * 0.5f));
-				roamingOverlay->box.pos = roamingOverlay->anchorPos.minus(roamingOverlay->box.size.mult(0.5f));
-				rack->addChildAbove(roamingOverlay, cableContainer);
+			puffyModule->roamingAvatarActive.store(
+				false, std::memory_order_release);
+			// Patch restoration can discard scene children installed during its
+			// first traversal. Wait until this widget has remained attached for a
+			// couple of complete UI frames, then install the avatar at scene level.
+			if (++roamingAttachStableFrames >= 3u) {
+				auto* overlay = new PuffyRoamingOverlay(puffyModule);
+				Vec offset = getRelativeOffset(Vec(), scene);
+				overlay->anchorPos = offset.plus(Vec(box.size.x * 0.5f, box.size.y * 0.5f));
+				overlay->box.pos = overlay->anchorPos.minus(overlay->box.size.mult(0.5f));
+				// Scene-level placement keeps Puffy in front of module-local UI and
+				// rack overlays, while still leaving Rack's menu bar unobstructed.
+				if (scene->menuBar && scene->hasChild(scene->menuBar)) {
+					scene->addChildBelow(overlay, scene->menuBar);
+				}
+				else {
+					scene->addChild(overlay);
+				}
+				roamingOverlay.set(overlay);
+				puffyModule->roamingTargetX.store(
+					overlay->anchorPos.x, std::memory_order_relaxed);
+				puffyModule->roamingTargetY.store(
+					overlay->anchorPos.y, std::memory_order_relaxed);
+				puffyModule->roamingAvatarActive.store(
+					true, std::memory_order_release);
 			}
-		} else if (!wantsRoaming && roamingOverlay) {
-			if (roamingOverlay->parent) {
-				roamingOverlay->requestDelete();
+		}
+		else if (wantsRoaming && roamingOverlay) {
+			roamingAttachStableFrames = 3u;
+			PuffyRoamingOverlay* overlay = roamingOverlay.get();
+			overlay->anchorPos = getRelativeOffset(Vec(), scene).plus(
+				Vec(box.size.x * 0.5f, box.size.y * 0.5f));
+		}
+		else if (!wantsRoaming && roamingOverlay) {
+			roamingAttachStableFrames = 0u;
+			puffyModule->roamingAvatarActive.store(
+				false, std::memory_order_release);
+			PuffyRoamingOverlay* overlay = roamingOverlay.get();
+			if (overlay->parent) {
+				overlay->requestDelete();
 			} else {
-				delete roamingOverlay;
+				delete overlay;
 			}
-			roamingOverlay = nullptr;
+			roamingOverlay.set(nullptr);
+		}
+		else if (!wantsRoaming) {
+			roamingAttachStableFrames = 0u;
+			puffyModule->roamingAvatarActive.store(
+				false, std::memory_order_release);
 		}
 	}
 	
