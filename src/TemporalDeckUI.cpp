@@ -3534,6 +3534,18 @@ struct TemporalDeckLongPlayStatusLight : TBase {
   }
 };
 
+struct TemporalDeckLongPlayCacheLight : SmallApertureLight {
+  TemporalDeckLongPlayCacheLight() {
+    baseColor = nvgRGB(193, 72, 255);
+    activeColor = baseColor;
+    baseColors.clear();
+    addBaseColor(baseColor);
+    addBaseColor(nvgRGB(42, 246, 255));
+    invalidateStaticBackgroundCache();
+    invalidateBloomCache();
+  }
+};
+
 struct TemporalDeckWidget : ModuleWidget {
   struct ScopeDragTraceRecorder {
     bool active = false;
@@ -3719,20 +3731,12 @@ struct TemporalDeckWidget : ModuleWidget {
     // as the loop icon when the SVG does not provide explicit component anchors.
     const Vec longPlayStatusCenter = display->sampleLoopIconCenter().plus(Vec(0.f, 12.0f));
     const float panelPixelsPerMm = mm2px(Vec(1.f, 0.f)).x;
-    const Vec diskFallbackPx = longPlayStatusCenter.plus(Vec(-6.4f, 0.f));
-    const Vec ramFallbackPx = longPlayStatusCenter.plus(Vec(3.4f, 0.f));
-    Vec longPlayDiskActivityMm(diskFallbackPx.x / panelPixelsPerMm,
-                               diskFallbackPx.y / panelPixelsPerMm);
-    Vec longPlayRamReadyMm(ramFallbackPx.x / panelPixelsPerMm,
-                           ramFallbackPx.y / panelPixelsPerMm);
-    applyPointOverride("LONGPLAY_DISK_ACTIVITY_LIGHT", &longPlayDiskActivityMm);
-    applyPointOverride("LONGPLAY_RAM_READY_LIGHT", &longPlayRamReadyMm);
-    addChild(createLightCentered<TemporalDeckLongPlayStatusLight<SmallAperture<VioletApertureLight>>>(
-      mm2px(longPlayDiskActivityMm), module,
+    Vec longPlayCacheStatusMm(longPlayStatusCenter.x / panelPixelsPerMm,
+                              longPlayStatusCenter.y / panelPixelsPerMm);
+    applyPointOverride("LONGPLAY_CACHE_STATUS_LIGHT", &longPlayCacheStatusMm);
+    addChild(createLightCentered<TemporalDeckLongPlayStatusLight<TemporalDeckLongPlayCacheLight>>(
+      mm2px(longPlayCacheStatusMm), module,
       TemporalDeck::LONGPLAY_DISK_ACTIVITY_LIGHT));
-    addChild(createLightCentered<TemporalDeckLongPlayStatusLight<SmallAperture<TealApertureLight>>>(
-      mm2px(longPlayRamReadyMm), module,
-      TemporalDeck::LONGPLAY_RAM_READY_LIGHT));
 
     auto platter = new TemporalDeckPlatterWidget();
     platter->module = module;

@@ -1194,8 +1194,8 @@ TemporalDeck::TemporalDeck() : impl(new Impl()) {
   configOutput(S_GATE_O_OUTPUT, "Scratch gate");
   configOutput(OUTPUT_R_OUTPUT, "Right audio");
   configOutput(S_POS_O_OUTPUT, "Scratch position");
-  configLight(LONGPLAY_DISK_ACTIVITY_LIGHT, "LongPlay disk access");
-  configLight(LONGPLAY_RAM_READY_LIGHT, "LongPlay RAM window ready");
+  configLight(LONGPLAY_DISK_ACTIVITY_LIGHT, "LongPlay cache reading (purple)");
+  configLight(LONGPLAY_RAM_READY_LIGHT, "LongPlay cache ready (cyan)");
   if (paramQuantities[BUFFER_PARAM]) {
     int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
     paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(mode);
@@ -2179,10 +2179,10 @@ void TemporalDeck::process(const ProcessArgs &args) {
       }
       impl->longPlayDiskActivityLightSeconds =
         std::max(0.f, impl->longPlayDiskActivityLightSeconds - args.sampleTime);
-      lights[LONGPLAY_DISK_ACTIVITY_LIGHT].setBrightness(
-        impl->longPlayDiskActivityLightSeconds > 0.f ? 1.f : 0.f);
+      const bool cacheReading = impl->longPlayDiskActivityLightSeconds > 0.f;
+      lights[LONGPLAY_DISK_ACTIVITY_LIGHT].setBrightness(cacheReading ? 1.f : 0.f);
       lights[LONGPLAY_RAM_READY_LIGHT].setBrightness(
-        stream->requestedWindowReady() ? 1.f : 0.f);
+        !cacheReading && stream->requestedWindowReady() ? 1.f : 0.f);
     }
   } else {
     impl->longPlayDiskActivityLightSeconds = 0.f;
