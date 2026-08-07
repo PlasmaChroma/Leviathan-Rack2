@@ -43,6 +43,7 @@ struct TemporalDeckWidget;
 
 struct TemporalDeckDisplayWidget : Widget {
   TemporalDeck *module = nullptr;
+  ui::Tooltip *loopTooltip = nullptr;
   Vec centerMm = mm2px(Vec(50.8f, 72.f));
   float platterRadiusPx = mm2px(Vec(29.5f, 0.f)).x;
   bool arcScrubbing = false;
@@ -52,9 +53,15 @@ struct TemporalDeckDisplayWidget : Widget {
   Vec currentPanelMousePos() const;
   Vec sampleLoopIconCenter() const;
   bool isWithinSampleLoopIcon(Vec panelPos) const;
+  void createLoopTooltip();
+  void destroyLoopTooltip();
 
+  ~TemporalDeckDisplayWidget() override;
+  void step() override;
   void draw(const DrawArgs &args) override;
   void onButton(const event::Button &e) override;
+  void onHover(const event::Hover &e) override;
+  void onLeave(const event::Leave &e) override;
   void onDragStart(const event::DragStart &e) override;
   void onDragMove(const event::DragMove &e) override;
   void onDragEnd(const event::DragEnd &e) override;
@@ -2672,6 +2679,47 @@ bool TemporalDeckDisplayWidget::isWithinSampleLoopIcon(Vec panelPos) const {
   return std::fabs(panelPos.x - c.x) <= 7.2f * kLoopIconScale && std::fabs(panelPos.y - c.y) <= 4.8f * kLoopIconScale;
 }
 
+TemporalDeckDisplayWidget::~TemporalDeckDisplayWidget() {
+  destroyLoopTooltip();
+}
+
+void TemporalDeckDisplayWidget::createLoopTooltip() {
+  if (!settings::tooltips || loopTooltip || !module || !APP || !APP->scene) {
+    return;
+  }
+  loopTooltip = new ui::Tooltip();
+  loopTooltip->text = std::string("Sample loop: ") +
+    (module->isSampleLoopEnabled() ? "On" : "Off") +
+    "\nClick to toggle looping";
+  APP->scene->addChild(loopTooltip);
+}
+
+void TemporalDeckDisplayWidget::destroyLoopTooltip() {
+  if (!loopTooltip) {
+    return;
+  }
+  if (loopTooltip->parent) {
+    loopTooltip->parent->removeChild(loopTooltip);
+  }
+  delete loopTooltip;
+  loopTooltip = nullptr;
+}
+
+void TemporalDeckDisplayWidget::step() {
+  Widget::step();
+  // The LongPlay LEDs overlap this full-panel display widget in the event
+  // hierarchy. Moving onto an LED can therefore bypass our normal onLeave()
+  // while Rack creates the LED's own tooltip. Poll the actual pointer while
+  // our tooltip exists so two tooltips can never remain layered.
+  if (loopTooltip) {
+    const bool stillOverActiveLoopControl = module && module->isSampleModeEnabled() &&
+      module->hasLoadedSample() && isWithinSampleLoopIcon(currentPanelMousePos());
+    if (!stillOverActiveLoopControl) {
+      destroyLoopTooltip();
+    }
+  }
+}
+
 void TemporalDeckDisplayWidget::draw(const DrawArgs &args) {
   double accessibleLag = module ? std::max(1.0, module->getUiAccessibleLagSamples()) : 1.0;
   double lag = module ? std::max(0.0, std::min(module->getUiLagSamples(), accessibleLag)) : 0.0;
@@ -2754,6 +2802,8 @@ void TemporalDeckDisplayWidget::onButton(const event::Button &e) {
     if (e.action == GLFW_PRESS && module && module->isSampleModeEnabled() && module->hasLoadedSample() &&
         isWithinSampleLoopIcon(e.pos)) {
       module->setSampleLoopEnabled(!module->isSampleLoopEnabled());
+      destroyLoopTooltip();
+      createLoopTooltip();
       e.consume(this);
       return;
     }
@@ -2770,6 +2820,22 @@ void TemporalDeckDisplayWidget::onButton(const event::Button &e) {
     }
   }
   Widget::onButton(e);
+}
+
+void TemporalDeckDisplayWidget::onHover(const event::Hover &e) {
+  const bool overActiveLoopControl = module && module->isSampleModeEnabled() &&
+    module->hasLoadedSample() && isWithinSampleLoopIcon(e.pos);
+  if (overActiveLoopControl) {
+    createLoopTooltip();
+  } else {
+    destroyLoopTooltip();
+  }
+  Widget::onHover(e);
+}
+
+void TemporalDeckDisplayWidget::onLeave(const event::Leave &e) {
+  destroyLoopTooltip();
+  Widget::onLeave(e);
 }
 
 void TemporalDeckDisplayWidget::onDragStart(const event::DragStart &e) {
@@ -3457,6 +3523,17 @@ static bool isTDScopeModule(const engine::Module *neighbor) {
   return (neighbor->model == modelTDScope) || (neighbor->model->slug == "TDScope");
 }
 
+template <typename TBase>
+struct TemporalDeckLongPlayStatusLight : TBase {
+  void step() override {
+    TBase::step();
+    TemporalDeck *deck = dynamic_cast<TemporalDeck *>(this->module);
+    this->visible = deck &&
+      deck->getBufferDurationMode() == TemporalDeck::BUFFER_DURATION_LONGPLAY_DISK &&
+      deck->isSampleModeEnabled() && deck->hasLoadedSample();
+  }
+};
+
 struct TemporalDeckWidget : ModuleWidget {
   struct ScopeDragTraceRecorder {
     bool active = false;
@@ -3637,6 +3714,25 @@ struct TemporalDeckWidget : ModuleWidget {
     display->platterRadiusPx = platterRadius;
     display->box.size = box.size;
     addChild(display);
+
+    // LongPlay-only cache telemetry, positioned from the same runtime geometry
+    // as the loop icon when the SVG does not provide explicit component anchors.
+    const Vec longPlayStatusCenter = display->sampleLoopIconCenter().plus(Vec(0.f, 12.0f));
+    const float panelPixelsPerMm = mm2px(Vec(1.f, 0.f)).x;
+    const Vec diskFallbackPx = longPlayStatusCenter.plus(Vec(-6.4f, 0.f));
+    const Vec ramFallbackPx = longPlayStatusCenter.plus(Vec(3.4f, 0.f));
+    Vec longPlayDiskActivityMm(diskFallbackPx.x / panelPixelsPerMm,
+                               diskFallbackPx.y / panelPixelsPerMm);
+    Vec longPlayRamReadyMm(ramFallbackPx.x / panelPixelsPerMm,
+                           ramFallbackPx.y / panelPixelsPerMm);
+    applyPointOverride("LONGPLAY_DISK_ACTIVITY_LIGHT", &longPlayDiskActivityMm);
+    applyPointOverride("LONGPLAY_RAM_READY_LIGHT", &longPlayRamReadyMm);
+    addChild(createLightCentered<TemporalDeckLongPlayStatusLight<SmallAperture<VioletApertureLight>>>(
+      mm2px(longPlayDiskActivityMm), module,
+      TemporalDeck::LONGPLAY_DISK_ACTIVITY_LIGHT));
+    addChild(createLightCentered<TemporalDeckLongPlayStatusLight<SmallAperture<TealApertureLight>>>(
+      mm2px(longPlayRamReadyMm), module,
+      TemporalDeck::LONGPLAY_RAM_READY_LIGHT));
 
     auto platter = new TemporalDeckPlatterWidget();
     platter->module = module;

@@ -109,7 +109,11 @@ struct TemporalDeck final : Module {
     EXPANDER_READY_LIGHT,
     ARC_LIGHT_START,
     ARC_MAX_LIGHT_START = ARC_LIGHT_START + kArcLightCount,
-    LIGHTS_LEN = ARC_MAX_LIGHT_START + kArcLightCount
+    LEGACY_LIGHTS_LEN = ARC_MAX_LIGHT_START + kArcLightCount,
+    // Temporal Deck is released: new lights must remain appended.
+    LONGPLAY_DISK_ACTIVITY_LIGHT = LEGACY_LIGHTS_LEN,
+    LONGPLAY_RAM_READY_LIGHT,
+    LIGHTS_LEN
   };
 
   TemporalDeck();

@@ -134,6 +134,22 @@ TestResult testLongPlayRuntimeModeCannotLeakIntoRamPreparation() {
             " expected=" + std::to_string(expectedFrames)};
 }
 
+TestResult testLongPlayEmptyPreparationBuildsSmallGuard() {
+  PreparedSampleData prepared;
+  const float sampleRate = 48000.f;
+  const bool ok = temporaldeck::buildPreparedEmptyBuffer(
+    sampleRate, TemporalDeckEngine::BUFFER_DURATION_LONGPLAY_DISK, &prepared);
+  const int expectedFrames = int(std::round(sampleRate *
+    temporaldeck_modes::realBufferSecondsForMode(TemporalDeckEngine::BUFFER_DURATION_LONGPLAY_DISK)));
+  const bool pass = ok && prepared.valid &&
+    prepared.bufferMode == TemporalDeckEngine::BUFFER_DURATION_LONGPLAY_DISK &&
+    int(prepared.left.size()) == expectedFrames && int(prepared.right.size()) == expectedFrames;
+  return {"LongPlay empty preparation retains its one-second stream guard", pass,
+          "mode=" + std::to_string(prepared.bufferMode) +
+            " frames=" + std::to_string(prepared.left.size()) +
+            " expected=" + std::to_string(expectedFrames)};
+}
+
 } // namespace
 
 int main() {
@@ -145,6 +161,7 @@ int main() {
   tests.push_back(testFileBufferScalingIsInvertible());
   tests.push_back(testBuildPreparedEmptyLiveBuffer());
   tests.push_back(testLongPlayRuntimeModeCannotLeakIntoRamPreparation());
+  tests.push_back(testLongPlayEmptyPreparationBuildsSmallGuard());
 
   int failed = 0;
   std::cout << "TemporalDeck Sample Prep Spec\n";

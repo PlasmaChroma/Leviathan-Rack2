@@ -998,7 +998,10 @@ struct TemporalDeck::Impl {
   LongPlayBridge longPlayBridge;
   std::atomic<bool> longPlayInstallPending{false};
   bool longPlayStartupHold = false;
+  bool longPlayScopeSeekHold = false;
   uint64_t installedLongPlayGeneration = 0u;
+  uint64_t observedLongPlayDiskActivitySequence = 0u;
+  float longPlayDiskActivityLightSeconds = 0.f;
   std::atomic<bool> sampleModeEnabled{false};
   std::atomic<bool> sampleLoopEnabled{false};
   PlatterInputState platterInput;
@@ -1191,6 +1194,8 @@ TemporalDeck::TemporalDeck() : impl(new Impl()) {
   configOutput(S_GATE_O_OUTPUT, "Scratch gate");
   configOutput(OUTPUT_R_OUTPUT, "Right audio");
   configOutput(S_POS_O_OUTPUT, "Scratch position");
+  configLight(LONGPLAY_DISK_ACTIVITY_LIGHT, "LongPlay disk access");
+  configLight(LONGPLAY_RAM_READY_LIGHT, "LongPlay RAM window ready");
   if (paramQuantities[BUFFER_PARAM]) {
     int mode = clamp(impl->bufferDurationMode.load(), 0, BUFFER_DURATION_COUNT - 1);
     paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(mode);
@@ -1531,6 +1536,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
     } else if (stream && !stream->ready() && !stream->loading()) {
       impl->longPlayInstallPending.store(false, std::memory_order_release);
       impl->longPlayStartupHold = false;
+      impl->longPlayScopeSeekHold = false;
     }
   }
   if (temporaldeck::LongPlayStreamEngine *stream =
@@ -1806,6 +1812,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
   impl->appliedLiveSeekRevision = temporaldeck_transport::applyPendingLiveSeekArc(
     impl->engine, impl->appliedLiveSeekRevision, pendingLiveSeekRevision, pendingLiveSeekArcNorm, bufferKnob);
   impl->engine.requestStreamWindow();
+  if (impl->engine.streamedSeekPending) {
+    impl->longPlayScopeSeekHold = true;
+  }
   impl->engine.servicePendingStreamSeek();
 
   auto enqueueScopeTraceEvent = [&](const ScopeDragTraceEvent &event) {
@@ -2138,11 +2147,42 @@ void TemporalDeck::process(const ProcessArgs &args) {
   auto frame = impl->engine.process(frameInput);
   impl->engine.requestStreamWindow();
 
+  if (impl->engine.streamedSeekPending) {
+    impl->longPlayScopeSeekHold = true;
+  }
+  if (impl->longPlayScopeSeekHold && !impl->engine.streamedSeekPending &&
+      impl->engine.diskBackedSample) {
+    const double scopeRadiusFrames =
+      double(std::max(args.sampleRate, 1.f)) * double(kScopeHalfWindowSeconds * 3.f);
+    if (impl->engine.isStreamedScopeWindowResident(
+          impl->engine.readHead, scopeRadiusFrames,
+          impl->sampleLoopEnabled.load(std::memory_order_relaxed))) {
+      impl->longPlayScopeSeekHold = false;
+      impl->expanderScopeCacheMono.valid = false;
+      impl->expanderScopeCacheRight.valid = false;
+    }
+  }
+
   if (impl->engine.diskBackedSample) {
     if (temporaldeck::LongPlayStreamEngine *stream = impl->longPlayStream.load(std::memory_order_relaxed)) {
       impl->engine.sampleAbsolutePeakVolts =
         stream->absolutePeak() * temporaldeck::kSampleFileVoltageScale;
+      const uint64_t diskActivitySequence = stream->diskActivitySequence();
+      if (diskActivitySequence != impl->observedLongPlayDiskActivitySequence) {
+        impl->observedLongPlayDiskActivitySequence = diskActivitySequence;
+        impl->longPlayDiskActivityLightSeconds = 0.075f;
+      }
+      impl->longPlayDiskActivityLightSeconds =
+        std::max(0.f, impl->longPlayDiskActivityLightSeconds - args.sampleTime);
+      lights[LONGPLAY_DISK_ACTIVITY_LIGHT].setBrightness(
+        impl->longPlayDiskActivityLightSeconds > 0.f ? 1.f : 0.f);
+      lights[LONGPLAY_RAM_READY_LIGHT].setBrightness(
+        stream->requestedWindowReady() ? 1.f : 0.f);
     }
+  } else {
+    impl->longPlayDiskActivityLightSeconds = 0.f;
+    lights[LONGPLAY_DISK_ACTIVITY_LIGHT].setBrightness(0.f);
+    lights[LONGPLAY_RAM_READY_LIGHT].setBrightness(0.f);
   }
 
   if (scopeDragTraceEnabled) {
@@ -2288,7 +2328,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
         // live buffer as a valid scope: TD.Scope should remain in its waiting
         // state and then receive the installed sample generation immediately.
         const bool samplePreviewNotReady =
-          impl->longPlayInstallPending.load(std::memory_order_acquire) || impl->longPlayStartupHold;
+          impl->longPlayInstallPending.load(std::memory_order_acquire) ||
+          impl->longPlayStartupHold || impl->longPlayScopeSeekHold;
         bool haveScopeParams = !samplePreviewNotReady && computeScopeWindowParams(
           impl->engine, frame.sampleMode, impl->sampleLoopEnabled.load(std::memory_order_relaxed), impl->cachedSampleRate,
           scopeLagForPreview, float(frame.accessibleLag), scopeLiveNewestAbsolutePosOverride, &scopeParams);
@@ -2564,6 +2605,7 @@ void TemporalDeck::clearLoadedSample() {
   }
   impl->longPlayInstallPending.store(false, std::memory_order_release);
   impl->longPlayStartupHold = false;
+  impl->longPlayScopeSeekHold = false;
   impl->sampleLifecycle.clearDecodedAndPreparedState();
   temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest cancelRequest;
   cancelRequest.type = temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest::NONE;
@@ -2614,6 +2656,7 @@ bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *erro
     // internal and releases only after the replacement's audio/scope window
     // is resident.
     impl->longPlayStartupHold = true;
+    impl->longPlayScopeSeekHold = false;
     impl->installedLongPlayGeneration = impl->longPlayOwner->generation();
     return true;
   }
@@ -2626,6 +2669,7 @@ bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *erro
   }
   impl->longPlayInstallPending.store(false, std::memory_order_release);
   impl->longPlayStartupHold = false;
+  impl->longPlayScopeSeekHold = false;
   const int ramBufferMode = temporaldeck_modes::sanitizeRamBufferMode(
     impl->lastRamBufferDurationMode, BUFFER_DURATION_10S);
   impl->bufferDurationMode.store(ramBufferMode, std::memory_order_relaxed);

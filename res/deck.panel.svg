@@ -61,6 +61,8 @@
     <circle cx="57.499905" cy="95.300003" id="FREEZE_LIGHT" r="1.45" style="fill:#ff00ff;fill-opacity:1" />
     <circle cx="45.599949" cy="95.300003" id="REVERSE_LIGHT" r="1.45" style="fill:#ff00ff;fill-opacity:1" />
     <circle cx="17.700226" cy="82.399651" id="SLIP_LIGHT" r="1.45" style="fill:#ff00ff;fill-opacity:1" />
+    <circle cx="95.707497" cy="24.415501" id="LONGPLAY_DISK_ACTIVITY_LIGHT" r="1.45" style="fill:#c148ff;fill-opacity:1" />
+    <circle cx="99.026398" cy="24.415501" id="LONGPLAY_RAM_READY_LIGHT" r="1.45" style="fill:#2af6ff;fill-opacity:1" />
     <circle cx="45.665001" cy="112.89996" id="POSITION_CV" r="4.1500001" style="fill:#00ff00;fill-opacity:1" />
     <circle cx="20.905001" cy="112.89996" id="RATE_CV" r="4.1500001" style="fill:#00ff00;fill-opacity:1" />
     <circle cx="8.4780197" cy="112.89996" id="INPUT_R" r="4.1500001" style="fill:#00ff00;fill-opacity:1" />
@@ -74,9 +76,9 @@
     <circle cx="82.995834" cy="113.26942" id="S_POS_O" r="4.1500001" style="display:inline;fill:#0000ff;fill-opacity:1;stroke:none" />
     <circle cx="92.279999" cy="66.561996" id="CARTRIDGE_CYCLE" r="1.9" style="display:inline;fill:#ff9900;fill-opacity:1;stroke:none" />
     <circle cx="98.5" cy="34.900002" id="TD_SCOPE_SPAWN" r="1.9" style="display:inline;fill:#ff9900;fill-opacity:1;stroke:none" />
-    <rect x="21.89610" y="123.38190" width="13.06748" height="5.11810" id="BRANDING_WAVE_LEFT_RASTER" />
-    <rect x="66.63674" y="123.38190" width="13.06748" height="5.11810" id="BRANDING_WAVE_RIGHT_RASTER" />
-    <rect x="34.44015" y="118.43102" width="32.71933" height="12.24054" id="BRANDING_LEVIATHAN_LOGO_RASTER" />
+    <rect x="21.896099" y="123.3819" width="13.06748" height="5.1181002" id="BRANDING_WAVE_LEFT_RASTER" />
+    <rect x="66.636742" y="123.3819" width="13.06748" height="5.1181002" id="BRANDING_WAVE_RIGHT_RASTER" />
+    <rect x="34.440151" y="118.43102" width="32.71933" height="12.24054" id="BRANDING_LEVIATHAN_LOGO_RASTER" />
   </g>
   <g id="custom_anchors" style="display:inline;fill:#807955;fill-opacity:1;stroke:none;stroke-opacity:1">
     <circle cx="50.799999" cy="53.971752" fill="none" id="PLATTER_AREA" r="37.031235" stroke="#ffffff" stroke-width="0.251045" style="display:none;fill:#807955;fill-opacity:1;stroke:none;stroke-opacity:1" />

@@ -45,6 +45,8 @@ public:
   std::uint32_t channels() const;
   std::uint64_t generation() const;
   std::uint64_t residencyGeneration() const;
+  std::uint64_t diskActivitySequence() const;
+  bool requestedWindowReady() const;
   float absolutePeak() const;
   std::string path() const;
   std::string displayName() const;
@@ -88,6 +90,8 @@ private:
   std::atomic<std::uint32_t> publishedChannels{0u};
   std::atomic<std::uint64_t> publishedGeneration{0u};
   std::atomic<std::uint64_t> publishedResidencyGeneration{0u};
+  std::atomic<std::uint64_t> publishedDiskActivitySequence{0u};
+  std::atomic<bool> publishedRequestedWindowReady{false};
   std::atomic<float> publishedAbsolutePeak{0.f};
   std::atomic<std::uint64_t> desiredFrame{0u};
   std::atomic<bool> desiredLoop{false};

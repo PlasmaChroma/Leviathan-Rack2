@@ -93,7 +93,7 @@ struct LongPlayBlock {
 ### 4.2 Symmetric 50/50 Bi-Directional Buffer Policy
 To guarantee instant responsiveness whenever the user engages platter scratching, backspinning, or cue repeats, the Hot Window RAM cache maintains a **symmetric 50/50 split** centered on the active playhead/scratch anchor:
 
-- **Forward Window (50%):** 16 blocks ($\approx 21.8 \text{ seconds}$) ahead of the playhead for linear forward playback and forward scrubbing.
+- **Forward Window (50%):** 16 blocks ($\approx 21.8 \text{ seconds}$) including the playhead block and extending ahead for linear playback and forward scrubbing.
 - **Backward Window (50%):** 16 blocks ($\approx 21.8 \text{ seconds}$) behind the playhead for instant backspins, reverse motion, and phrase repeats.
 
 ```

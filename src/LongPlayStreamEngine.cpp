@@ -460,6 +460,14 @@ std::uint64_t LongPlayStreamEngine::residencyGeneration() const {
   return publishedResidencyGeneration.load(std::memory_order_acquire);
 }
 
+std::uint64_t LongPlayStreamEngine::diskActivitySequence() const {
+  return publishedDiskActivitySequence.load(std::memory_order_acquire);
+}
+
+bool LongPlayStreamEngine::requestedWindowReady() const {
+  return publishedRequestedWindowReady.load(std::memory_order_acquire);
+}
+
 float LongPlayStreamEngine::absolutePeak() const {
   return publishedAbsolutePeak.load(std::memory_order_acquire);
 }
@@ -493,6 +501,7 @@ bool LongPlayStreamEngine::requestSuperseded(std::uint64_t serial) const {
 }
 
 void LongPlayStreamEngine::invalidateBlocks() {
+  publishedRequestedWindowReady.store(false, std::memory_order_release);
   for (Block &block : blocks) {
     block.sequence.fetch_add(1u, std::memory_order_acq_rel);
     while (block.readers.load(std::memory_order_acquire) != 0u) {
@@ -585,10 +594,12 @@ void LongPlayStreamEngine::workerLoop() {
       requestedLoop ? requestedLoopStart : 0u,
       std::min(requestedFrame, targetLimitExclusive - 1u));
 
-    // 50/50 Symmetric Window around target center: 16 blocks backward, 16 blocks forward
+    // 50/50 symmetric window around the target block.
     const int64_t centerBlockIndex = int64_t(target / kBlockFrames);
-    
-    // Priority loading sequence: 0 (center), +1, -1, +2, -2, ..., +15, -16
+
+    // Always fill nearest to the read head first: center, +1, -1, +2, -2,
+    // and progressively outward. The final negative block balances the center
+    // block so an even-sized cache remains exactly 50/50 forward/backward.
     std::array<std::uint64_t, kBlockCount> wantedStarts{};
     std::size_t wantedCount = 0;
     const int64_t totalBlocks = int64_t((decoder.totalFrames + kBlockFrames - 1u) / kBlockFrames);
@@ -614,20 +625,20 @@ void LongPlayStreamEngine::workerLoop() {
       wantedStarts[wantedCount++] = startFrame;
     };
     
-    for (int step = 0; step < 16; ++step) {
-      // Sixteen blocks on each side of the anchor boundary. The center block
-      // belongs to the forward half.
-      int offsets[2] = {step, -step - 1};
-      for (int offset : offsets) {
-        appendWantedBlock(centerBlockIndex + offset);
-      }
+    const int halfBlockCount = kBlockCount / 2;
+    appendWantedBlock(centerBlockIndex);
+    for (int distance = 1; distance < halfBlockCount; ++distance) {
+      appendWantedBlock(centerBlockIndex + distance);
+      appendWantedBlock(centerBlockIndex - distance);
     }
+    appendWantedBlock(centerBlockIndex - halfBlockCount);
 
     // At non-looping file edges, replace unavailable backward/forward blocks
-    // with blocks on the usable side so the cache still uses all 32 slots.
+    // with blocks on the usable side so the cache still uses every slot.
     if (!requestedLoop && wantedCount < kBlockCount) {
       const int64_t first = std::max<int64_t>(
-        0, std::min<int64_t>(centerBlockIndex - 16, std::max<int64_t>(0, totalBlocks - kBlockCount)));
+        0, std::min<int64_t>(centerBlockIndex - halfBlockCount,
+                             std::max<int64_t>(0, totalBlocks - kBlockCount)));
       const int64_t end = std::min<int64_t>(totalBlocks, first + kBlockCount);
       for (int64_t blockIndex = first; blockIndex < end; ++blockIndex) {
         appendWantedBlock(blockIndex);
@@ -635,6 +646,7 @@ void LongPlayStreamEngine::workerLoop() {
     }
 
     bool filledOne = false;
+    bool missingWantedBlock = false;
     for (std::size_t w = 0; w < wantedCount; ++w) {
       const std::uint64_t wantedStart = wantedStarts[w];
       const std::uint64_t blockNumber = wantedStart / kBlockFrames;
@@ -644,6 +656,8 @@ void LongPlayStreamEngine::workerLoop() {
       if (present) {
         continue;
       }
+      missingWantedBlock = true;
+      publishedRequestedWindowReady.store(false, std::memory_order_release);
 
       destination->sequence.fetch_add(1u, std::memory_order_acq_rel);
       while (destination->readers.load(std::memory_order_acquire) != 0u) {
@@ -651,6 +665,7 @@ void LongPlayStreamEngine::workerLoop() {
       }
       destination->validFrames = 0u;
       const std::uint32_t decoded = decoder.readStereo(wantedStart, kBlockFrames, destination->stereo.data());
+      publishedDiskActivitySequence.fetch_add(1u, std::memory_order_release);
       
       float blockPeak = 0.f;
       for (std::size_t i = 0; i < std::size_t(decoded) * 2u; ++i) {
@@ -664,6 +679,9 @@ void LongPlayStreamEngine::workerLoop() {
       publishedResidencyGeneration.fetch_add(1u, std::memory_order_release);
       filledOne = decoded > 0u;
       break;
+    }
+    if (!missingWantedBlock && wantedCount > 0u) {
+      publishedRequestedWindowReady.store(true, std::memory_order_release);
     }
     if (!filledOne) {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));

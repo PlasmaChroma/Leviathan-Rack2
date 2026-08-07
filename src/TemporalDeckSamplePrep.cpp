@@ -136,7 +136,11 @@ bool buildPreparedEmptyBuffer(float targetSampleRate, int bufferMode, PreparedSa
     return false;
   }
   PreparedSampleData prepared;
-  prepared.bufferMode = temporaldeck_modes::sanitizeRamBufferMode(bufferMode);
+  // LongPlay deliberately uses this path to build its one-second engine guard.
+  // Only decoded RAM samples must sanitize the runtime-only LongPlay mode.
+  prepared.bufferMode = bufferMode == TemporalDeckEngine::BUFFER_DURATION_LONGPLAY_DISK
+    ? bufferMode
+    : temporaldeck_modes::sanitizeRamBufferMode(bufferMode);
   prepared.sampleRate = targetSampleRate;
   prepared.monoStorage = temporaldeck_modes::isMonoBufferMode(prepared.bufferMode);
   const int size = std::max(1, int(std::round(

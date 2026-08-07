@@ -179,11 +179,12 @@ Result testWavStreamingAndSymmetricBlocks() {
     std::this_thread::sleep_for(std::chrono::milliseconds(2));
   }
   const bool symmetric = engine.isFrameResident(behind) && engine.isFrameResident(ahead);
+  const bool expectedCacheSize = temporaldeck::LongPlayStreamEngine::kBlockCount == 32;
   const bool boundedMemory = engine.allocatedAudioBytes() <= 32u * 1024u * 1024u;
 
   std::remove(path.c_str());
   return {"LongPlayStreamEngine streams WAV and populates 50/50 RAM blocks",
-          wrote && ready && read0 && validImpulse && symmetric && boundedMemory,
+          wrote && ready && read0 && validImpulse && symmetric && expectedCacheSize && boundedMemory,
           "wrote=" + std::to_string(wrote) + " ready=" + std::to_string(ready) +
               " read0=" + std::to_string(read0) +
               " sample=" + std::to_string(left) +
@@ -207,17 +208,22 @@ Result testLoopPrefetchUsesActiveWindowEnd() {
   const std::uint64_t physicalHistoryFrame = std::uint64_t(sampleRate) * seconds - 1u;
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
   while (std::chrono::steady_clock::now() < deadline &&
-         !engine.isFrameResident(activeHistoryFrame)) {
+         (!engine.isFrameResident(activeHistoryFrame) || !engine.requestedWindowReady())) {
     std::this_thread::sleep_for(std::chrono::milliseconds(2));
   }
   const bool activeHistoryResident = engine.isFrameResident(activeHistoryFrame);
   const bool physicalHistoryNotSubstituted = !engine.isFrameResident(physicalHistoryFrame);
+  const bool windowReady = engine.requestedWindowReady();
+  const bool diskActivityObserved = engine.diskActivitySequence() > 0u;
   std::remove(path.c_str());
   return {"Loop prefetch wraps at the active Buffer window rather than physical EOF",
-          wrote && ready && activeHistoryResident && physicalHistoryNotSubstituted,
+          wrote && ready && activeHistoryResident && physicalHistoryNotSubstituted &&
+            windowReady && diskActivityObserved,
           "ready=" + std::to_string(ready) +
               " activeHistoryResident=" + std::to_string(activeHistoryResident) +
-              " physicalHistoryNotSubstituted=" + std::to_string(physicalHistoryNotSubstituted)};
+              " physicalHistoryNotSubstituted=" + std::to_string(physicalHistoryNotSubstituted) +
+              " windowReady=" + std::to_string(windowReady) +
+              " diskActivity=" + std::to_string(diskActivityObserved)};
 }
 
 Result testEngineDefersColdSeekUntilResident() {
