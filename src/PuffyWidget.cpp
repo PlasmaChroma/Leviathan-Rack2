@@ -607,8 +607,14 @@ void PuffyWidget::step() {
 		else if (wantsRoaming && roamingOverlay) {
 			roamingAttachStableFrames = 3u;
 			PuffyRoamingOverlay* overlay = roamingOverlay.get();
-			overlay->anchorPos = getRelativeOffset(Vec(), scene).plus(
+			const Vec nextAnchor = getRelativeOffset(Vec(), scene).plus(
 				Vec(box.size.x * 0.5f, box.size.y * 0.5f));
+			// Rack zooming and panning move the module abruptly in scene space.
+			// Carry the avatar by the same delta so the bungee does not mistake
+			// camera movement for a huge roaming displacement and launch Puffy.
+			overlay->box.pos = overlay->box.pos.plus(
+				nextAnchor.minus(overlay->anchorPos));
+			overlay->anchorPos = nextAnchor;
 		}
 		else if (!wantsRoaming && roamingOverlay) {
 			roamingAttachStableFrames = 0u;
