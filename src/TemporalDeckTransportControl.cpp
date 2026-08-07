@@ -69,6 +69,22 @@ void applyFreezeGateEdge(TransportControlState &state, bool freezeGateHigh) {
   }
 }
 
+bool consumeFreezeNegativeReset(TransportControlState &state, bool connected, float voltage) {
+  if (!connected) {
+    state.freezeNegativeResetArmed = true;
+    return false;
+  }
+  if (voltage >= -0.5f) {
+    state.freezeNegativeResetArmed = true;
+    return false;
+  }
+  if (voltage <= -1.f && state.freezeNegativeResetArmed) {
+    state.freezeNegativeResetArmed = false;
+    return true;
+  }
+  return false;
+}
+
 void applyAutoFreezeRequest(TransportControlState &state, bool autoFreezeRequested, bool freezeGateHigh) {
   if (autoFreezeRequested && !state.freezeLatched && !freezeGateHigh) {
     state.freezeLatched = true;

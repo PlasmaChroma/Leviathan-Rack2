@@ -12,6 +12,7 @@ struct TransportControlState {
   bool reverseLatched = false;
   bool slipLatched = false;
   bool prevFreezeGateHigh = false;
+  bool freezeNegativeResetArmed = true;
   int slipReturnMode = 1; // normal
 };
 
@@ -29,6 +30,8 @@ TransportButtonResult applyTransportButtonEvents(TransportControlState &state, c
                                                  bool sampleModeEnabled, bool sampleLoaded);
 
 void applyFreezeGateEdge(TransportControlState &state, bool freezeGateHigh);
+
+bool consumeFreezeNegativeReset(TransportControlState &state, bool connected, float voltage);
 
 void applyAutoFreezeRequest(TransportControlState &state, bool autoFreezeRequested, bool freezeGateHigh);
 

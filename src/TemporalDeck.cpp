@@ -1188,7 +1188,7 @@ TemporalDeck::TemporalDeck() : impl(new Impl()) {
   configInput(INPUT_L_INPUT, "Left audio");
   configInput(INPUT_R_INPUT, "Right audio");
   configInput(SCRATCH_GATE_INPUT, "Scratch gate");
-  configInput(FREEZE_GATE_INPUT, "Freeze gate");
+  configInput(FREEZE_GATE_INPUT, "Freeze gate; cross below -1 V to reset position");
   configInput(REVERSE_CV_INPUT, "Reverse gate");
   configOutput(OUTPUT_L_OUTPUT, "Left audio");
   configOutput(S_GATE_O_OUTPUT, "Scratch gate");
@@ -1735,6 +1735,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
   bool freezeCvConnected = inputs[FREEZE_GATE_INPUT].isConnected();
   bool freezeCvHigh = inputs[FREEZE_GATE_INPUT].getVoltage() >= TemporalDeckEngine::kFreezeGateThreshold;
   bool freezeCvPressed = impl->freezeCvTrigger.process(inputs[FREEZE_GATE_INPUT].getVoltage());
+  bool freezeNegativeResetRequested = temporaldeck_transport::consumeFreezeNegativeReset(
+    impl->transportControl, freezeCvConnected, inputs[FREEZE_GATE_INPUT].getVoltage());
   bool freezeGateModeActive = (impl->freezeCvMode == FREEZE_CV_MODE_GATE) && freezeCvConnected;
   transportButtons.freezePressed = freezeGateModeActive ? false : freezeButtonPressed;
   if (!freezeGateModeActive && freezeCvConnected && freezeCvPressed) {
@@ -1811,6 +1813,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
     impl->engine, impl->appliedSampleSeekRevision, pendingSeekRevision, pendingSeekNorm, bufferKnob);
   impl->appliedLiveSeekRevision = temporaldeck_transport::applyPendingLiveSeekArc(
     impl->engine, impl->appliedLiveSeekRevision, pendingLiveSeekRevision, pendingLiveSeekArcNorm, bufferKnob);
+  if (freezeNegativeResetRequested) {
+    impl->engine.resetReadPositionToSampleStartOrLiveNow();
+  }
   impl->engine.requestStreamWindow();
   if (impl->engine.streamedSeekPending) {
     impl->longPlayScopeSeekHold = true;

@@ -853,6 +853,23 @@ struct TemporalDeckEngine {
     completeSampleSeek(targetFrame, diskBackedSample);
   }
 
+  void resetReadPositionToSampleStartOrLiveNow() {
+    if (sampleModeEnabled && sampleLoaded && sampleFrames > 0) {
+      requestSampleSeekTarget(0.0);
+      return;
+    }
+    const double newestPos = newestReadablePos();
+    readHead = buffer.size > 0 ? buffer.wrapPosition(newestPos) : 0.0;
+    scratchLagSamples = 0.0;
+    scratchLagTargetSamples = 0.0;
+    liveManualScratchAnchorNewestPos = newestPos;
+    scratchHandVelocity = 0.f;
+    scratchMotionVelocity = 0.f;
+    scratch3LagVelocity = 0.f;
+    nowCatchActive = false;
+    cancelSlipReturnState();
+  }
+
   bool deferColdStreamMovement(double previousFrame) {
     if (!diskBackedSample || !streamIsFrameResident || !streamContext || sampleFrames <= 0) {
       return false;
