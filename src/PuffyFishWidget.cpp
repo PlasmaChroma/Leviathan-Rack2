@@ -87,8 +87,8 @@ PuffyRasterAsset resolveRasterAsset(
 
 } // namespace
 
-PuffyFishWidget::PuffyFishWidget(Puffy* module)
-	: module(module) {
+PuffyFishWidget::PuffyFishWidget(Puffy* module, bool roamingAvatar)
+	: module(module), roamingAvatar(roamingAvatar) {
 	visual.effectiveAmount = 0.25f;
 	visual.negativeCharacter = 0;
 	visual.positiveCharacter = 0;
@@ -430,6 +430,38 @@ void PuffyFishWidget::drawEye(
 }
 
 void PuffyFishWidget::draw(const DrawArgs& args) {
+	if (module && !roamingAvatar
+		&& module->roamingEnabled.load(std::memory_order_relaxed)) {
+		const float width = box.size.x;
+		const float height = box.size.y;
+		const Vec center(width * 0.5f, height * 0.5f);
+		
+		Vec target(
+			module->roamingTargetX.load(std::memory_order_relaxed),
+			module->roamingTargetY.load(std::memory_order_relaxed)
+		);
+		Vec myRackPos = APP && APP->scene && APP->scene->rack ? getRelativeOffset(Vec(), APP->scene->rack) : Vec();
+		Vec myCenter = myRackPos.plus(center);
+		float angle = std::atan2(target.y - myCenter.y, target.x - myCenter.x);
+		
+		nvgSave(args.vg);
+		nvgTranslate(args.vg, center.x, center.y);
+		nvgRotate(args.vg, angle);
+		
+		// Draw compass needle
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, 15.f, 0.f);
+		nvgLineTo(args.vg, -10.f, -8.f);
+		nvgLineTo(args.vg, -5.f, 0.f);
+		nvgLineTo(args.vg, -10.f, 8.f);
+		nvgClosePath(args.vg);
+		nvgFillColor(args.vg, nvgRGB(255, 100, 80));
+		nvgFill(args.vg);
+		
+		nvgRestore(args.vg);
+		return;
+	}
+
 	const bool measureDraw = isPuffyDrawMeasurementEnabled();
 	PuffyDrawMetrics& metrics = puffyDrawMetricsForUiThread();
 	PuffyScopedDrawTimer fishTimer(metrics.fishDrawNs, measureDraw);

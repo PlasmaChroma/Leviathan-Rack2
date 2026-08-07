@@ -270,18 +270,28 @@ json_t* Puffy::dataToJson() {
 		root,
 		"autoDeflate",
 		json_boolean(autoDeflateEnabled.load(std::memory_order_relaxed)));
+	json_object_set_new(
+		root,
+		"roamingEnabled",
+		json_boolean(roamingEnabled.load(std::memory_order_relaxed)));
 	return root;
 }
 
 void Puffy::dataFromJson(json_t* root) {
 	bool loadedAutoDeflate = true;
+	bool loadedRoaming = false;
 	if (root) {
 		json_t* autoDeflate = json_object_get(root, "autoDeflate");
 		if (json_is_boolean(autoDeflate)) {
 			loadedAutoDeflate = json_boolean_value(autoDeflate);
 		}
+		json_t* roaming = json_object_get(root, "roamingEnabled");
+		if (json_is_boolean(roaming)) {
+			loadedRoaming = json_boolean_value(roaming);
+		}
 	}
 	autoDeflateEnabled.store(loadedAutoDeflate, std::memory_order_relaxed);
+	roamingEnabled.store(loadedRoaming, std::memory_order_relaxed);
 	if (params[CHARACTER_LINK_PARAM].getValue() > 0.5f) {
 		params[POSITIVE_CHARACTER_PARAM].setValue(
 			params[CHARACTER_PARAM].getValue());

@@ -6,7 +6,10 @@
 #include <fstream>
 #include <string>
 
+struct PuffyRoamingOverlay;
+
 struct PuffyWidget final : ModuleWidget {
+	PuffyRoamingOverlay* roamingOverlay = nullptr;
 	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
 	std::ofstream drawLogFile;
 	std::string drawLogPath;

@@ -482,14 +482,107 @@ void PuffyWidget::syncDrawLog(bool enabled, std::uint32_t instanceId) {
 		<< "effective_amount,input_activity,gain_reduction\n";
 }
 
+struct PuffyRoamingOverlay final : TransparentWidget {
+	Puffy* module = nullptr;
+	PuffyFishWidget* fishWidget = nullptr;
+	Vec velocity{0.f, 0.f};
+	Vec anchorPos{0.f, 0.f};
+
+	explicit PuffyRoamingOverlay(Puffy* module) : module(module) {
+		box.size = Vec(80.f, 80.f);
+		fishWidget = new PuffyFishWidget(module, true);
+		fishWidget->box.size = box.size;
+		addChild(fishWidget);
+	}
+
+	void step() override {
+		TransparentWidget::step();
+		if (!module || !APP || !APP->scene || !APP->scene->rack) return;
+		
+		Vec mousePos = APP->scene->rack->getMousePos();
+		Vec center = box.pos.plus(box.size.mult(0.5f));
+		Vec toMouse = mousePos.minus(center);
+		float distToMouse = toMouse.norm();
+
+		Vec acceleration{0.f, 0.f};
+
+		// 1. Flee mouse
+		float fleeRadius = 250.f;
+		if (distToMouse < fleeRadius && distToMouse > 0.001f) {
+			float force = (1.f - distToMouse / fleeRadius) * 2000.f;
+			acceleration = acceleration.plus(toMouse.normalize().mult(-force));
+		}
+
+		// 2. Wander
+		float time = system::getTime();
+		acceleration.x += std::sin(time * 2.1f) * 150.f;
+		acceleration.y += std::cos(time * 1.7f) * 150.f;
+
+		// 3. Bungee
+		Vec toAnchor = anchorPos.minus(center);
+		float distToAnchor = toAnchor.norm();
+		float maxDist = 400.f;
+		if (distToAnchor > maxDist) {
+			float force = (distToAnchor - maxDist) * 10.f;
+			acceleration = acceleration.plus(toAnchor.normalize().mult(force));
+		}
+
+		float dt = APP->window ? APP->window->getLastFrameDuration() : 1.f/60.f;
+		if (dt > 0.1f) dt = 0.1f;
+		
+		velocity = velocity.plus(acceleration.mult(dt));
+		velocity = velocity.mult(std::pow(0.05f, dt));
+		
+		box.pos = box.pos.plus(velocity.mult(dt));
+		
+		module->roamingTargetX.store(center.x, std::memory_order_relaxed);
+		module->roamingTargetY.store(center.y, std::memory_order_relaxed);
+	}
+};
+
 PuffyWidget::~PuffyWidget() {
 	stopDrawLog();
+	if (roamingOverlay) {
+		if (roamingOverlay->parent) {
+			roamingOverlay->requestDelete();
+		}
+		else {
+			delete roamingOverlay;
+		}
+		roamingOverlay = nullptr;
+	}
 }
 
 void PuffyWidget::step() {
 	const bool measurePerf = isDragonKingDebugEnabled();
 	const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
 	ModuleWidget::step();
+	
+	auto* puffyModule = dynamic_cast<Puffy*>(module);
+	if (puffyModule && APP && APP->scene && APP->scene->rack) {
+		bool wantsRoaming = puffyModule->roamingEnabled.load(std::memory_order_relaxed);
+		if (wantsRoaming && !roamingOverlay) {
+			auto* rack = APP->scene->rack;
+			roamingOverlay = new PuffyRoamingOverlay(puffyModule);
+			Vec offset = getRelativeOffset(Vec(), rack);
+			roamingOverlay->anchorPos = offset.plus(Vec(box.size.x * 0.5f, box.size.y * 0.5f));
+			roamingOverlay->box.pos = roamingOverlay->anchorPos.minus(roamingOverlay->box.size.mult(0.5f));
+			auto* cableContainer = rack->getCableContainer();
+			if (cableContainer) {
+				rack->addChildAbove(roamingOverlay, cableContainer);
+			} else {
+				rack->addChild(roamingOverlay);
+			}
+		} else if (!wantsRoaming && roamingOverlay) {
+			if (roamingOverlay->parent) {
+				roamingOverlay->requestDelete();
+			} else {
+				delete roamingOverlay;
+			}
+			roamingOverlay = nullptr;
+		}
+	}
+	
 	if (measurePerf) {
 		debugWidgetMetrics.recordStep(
 			debug_terminal::elapsedUsSince(stepStart));
@@ -765,6 +858,20 @@ void PuffyWidget::appendContextMenu(Menu* menu) {
 			const bool enabled = puffyModule->autoDeflateEnabled.load(
 				std::memory_order_relaxed);
 			puffyModule->autoDeflateEnabled.store(
+				!enabled, std::memory_order_relaxed);
+		}));
+
+	menu->addChild(createCheckMenuItem(
+		"Roaming Mode",
+		"",
+		[puffyModule]() {
+			return puffyModule->roamingEnabled.load(
+				std::memory_order_relaxed);
+		},
+		[puffyModule]() {
+			const bool enabled = puffyModule->roamingEnabled.load(
+				std::memory_order_relaxed);
+			puffyModule->roamingEnabled.store(
 				!enabled, std::memory_order_relaxed);
 		}));
 }

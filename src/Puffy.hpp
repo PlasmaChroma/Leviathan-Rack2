@@ -59,6 +59,9 @@ struct Puffy final : Module {
 	ModuleTeardownTimer teardownTimer {"Puffy"};
 	puffy::Engine engine;
 	std::atomic<bool> autoDeflateEnabled {false};
+	std::atomic<bool> roamingEnabled {false};
+	std::atomic<float> roamingTargetX {0.f};
+	std::atomic<float> roamingTargetY {0.f};
 	std::atomic<std::uint32_t> visualSequence {0u};
 	std::atomic<float> visualEffectiveAmount {0.f};
 	std::atomic<float> visualWetMix {1.f};
