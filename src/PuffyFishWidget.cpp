@@ -440,9 +440,8 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 			module->roamingTargetX.load(std::memory_order_relaxed),
 			module->roamingTargetY.load(std::memory_order_relaxed)
 		);
-		Vec myScenePos = APP && APP->scene
-			? getRelativeOffset(Vec(), APP->scene) : Vec();
-		Vec myCenter = myScenePos.plus(center);
+		Vec myCenter = APP && APP->scene
+			? getRelativeOffset(center, APP->scene) : center;
 		float angle = std::atan2(target.y - myCenter.y, target.x - myCenter.x);
 		
 		nvgSave(args.vg);

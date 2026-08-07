@@ -483,16 +483,31 @@ void PuffyWidget::syncDrawLog(bool enabled, std::uint32_t instanceId) {
 }
 
 struct PuffyRoamingOverlay final : TransparentWidget {
+	static constexpr float kBaseSize = 80.f;
 	Puffy* module = nullptr;
 	PuffyFishWidget* fishWidget = nullptr;
 	Vec velocity{0.f, 0.f};
 	Vec anchorPos{0.f, 0.f};
 
 	explicit PuffyRoamingOverlay(Puffy* module) : module(module) {
-		box.size = Vec(80.f, 80.f);
+		box.size = Vec(kBaseSize, kBaseSize);
 		fishWidget = new PuffyFishWidget(module, true);
 		fishWidget->box.size = box.size;
 		addChild(fishWidget);
+	}
+
+	void setRackZoom(float zoom) {
+		zoom = std::isfinite(zoom) ? clamp(zoom, 0.05f, 8.f) : 1.f;
+		const Vec nextSize(kBaseSize * zoom, kBaseSize * zoom);
+		if (nextSize == box.size) {
+			return;
+		}
+		const Vec center = box.pos.plus(box.size.mult(0.5f));
+		box.size = nextSize;
+		box.pos = center.minus(box.size.mult(0.5f));
+		if (fishWidget) {
+			fishWidget->box.size = box.size;
+		}
 	}
 
 	void step() override {
@@ -584,8 +599,9 @@ void PuffyWidget::step() {
 			// couple of complete UI frames, then install the avatar at scene level.
 			if (++roamingAttachStableFrames >= 3u) {
 				auto* overlay = new PuffyRoamingOverlay(puffyModule);
-				Vec offset = getRelativeOffset(Vec(), scene);
-				overlay->anchorPos = offset.plus(Vec(box.size.x * 0.5f, box.size.y * 0.5f));
+				overlay->setRackZoom(getRelativeZoom(scene));
+				overlay->anchorPos = getRelativeOffset(
+					box.size.mult(0.5f), scene);
 				overlay->box.pos = overlay->anchorPos.minus(overlay->box.size.mult(0.5f));
 				// Scene-level placement keeps Puffy in front of module-local UI and
 				// rack overlays, while still leaving Rack's menu bar unobstructed.
@@ -607,8 +623,9 @@ void PuffyWidget::step() {
 		else if (wantsRoaming && roamingOverlay) {
 			roamingAttachStableFrames = 3u;
 			PuffyRoamingOverlay* overlay = roamingOverlay.get();
-			const Vec nextAnchor = getRelativeOffset(Vec(), scene).plus(
-				Vec(box.size.x * 0.5f, box.size.y * 0.5f));
+			overlay->setRackZoom(getRelativeZoom(scene));
+			const Vec nextAnchor = getRelativeOffset(
+				box.size.mult(0.5f), scene);
 			// Rack zooming and panning move the module abruptly in scene space.
 			// Carry the avatar by the same delta so the bungee does not mistake
 			// camera movement for a huge roaming displacement and launch Puffy.
