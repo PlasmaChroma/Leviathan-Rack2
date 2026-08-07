@@ -1,9 +1,12 @@
 # TemporalDeck LongPlay (TDLongPlay) Implementation Specification
 
 **Date:** 2026-08-06  
-**Status:** Proposed Technical Specification  
+**Status:** Implemented on `TDLongPlay`; hardening required before merge
 **Target Module:** `TemporalDeck` / `Longplayer` Ecosystem  
 **Target File:** `doc/TDLongPlay.md`
+
+> Current correctness, compatibility, performance work, and merge gates are
+> tracked in [`TDLongPlay-Hardening.md`](TDLongPlay-Hardening.md).
 
 ---
 

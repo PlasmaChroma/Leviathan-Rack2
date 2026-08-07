@@ -127,14 +127,21 @@ struct LongPlayBridge {
     return true;
   }
 
-  static void setDesiredFrame(void *context, uint64_t outputFrame, bool loop) {
+  static void setDesiredFrame(void *context, uint64_t outputFrame, bool loop,
+                              uint64_t loopStartOutputFrame,
+                              uint64_t loopEndOutputFrameExclusive) {
     LongPlayBridge *bridge = static_cast<LongPlayBridge *>(context);
     if (!bridge || !bridge->stream) {
       return;
     }
     const uint64_t sourceFrame = uint64_t(
       std::floor(double(outputFrame) * bridge->sourceFramesPerOutputFrame));
-    bridge->stream->setDesiredFrame(sourceFrame, loop);
+    const uint64_t loopStartSourceFrame = uint64_t(
+      std::floor(double(loopStartOutputFrame) * bridge->sourceFramesPerOutputFrame));
+    const uint64_t loopEndSourceFrameExclusive = uint64_t(
+      std::ceil(double(loopEndOutputFrameExclusive) * bridge->sourceFramesPerOutputFrame));
+    bridge->stream->setDesiredWindow(sourceFrame, loop, loopStartSourceFrame,
+                                     loopEndSourceFrameExclusive);
   }
 
   static bool isFrameResident(void *context, uint64_t outputFrame) {
@@ -442,6 +449,7 @@ struct ScopeWindowCache {
   bool valid = false;
   ScopeWindowParams params;
   uint32_t scopeBinCount = 0u;
+  uint64_t streamResidencyGeneration = 0u;
   std::array<temporaldeck_expander::ScopeBin, temporaldeck_expander::SCOPE_BIN_COUNT> bins;
 };
 
@@ -694,16 +702,19 @@ static uint32_t buildScopeWindowBins(const TemporalDeckEngine &engine, const Sco
 }
 
 static bool canReuseScopeWindowCache(const ScopeWindowParams &current, const ScopeWindowCache &cache,
-                                     bool allowLiveReuse, bool diskBackedSample) {
+                                     bool allowLiveReuse, bool diskBackedSample,
+                                     uint64_t streamResidencyGeneration) {
   if (!cache.valid || cache.scopeBinCount == 0u) {
     return false;
   }
   if (!current.sampleMode && !allowLiveReuse) {
     return false;
   }
-  // Stream residency changes without a buffer generation change. Rebuild so
-  // bins that were empty during cache warm-up acquire their real samples.
-  if (current.sampleMode && diskBackedSample) {
+  // Rebuild only when the worker actually publishes different residency.
+  // Between block publications, streamed scope windows can use the same
+  // shift-and-edge cache as resident samples.
+  if (current.sampleMode && diskBackedSample &&
+      cache.streamResidencyGeneration != streamResidencyGeneration) {
     return false;
   }
   const ScopeWindowParams &prev = cache.params;
@@ -729,7 +740,9 @@ static uint32_t buildScopeWindowBinsWithCache(
 
   uint32_t scopeBinCount = 0u;
   bool reused = false;
-  if (cache && canReuseScopeWindowCache(params, *cache, allowLiveReuse, engine.diskBackedSample)) {
+  if (cache && canReuseScopeWindowCache(params, *cache, allowLiveReuse,
+                                        engine.diskBackedSample,
+                                        engine.streamResidencyGeneration)) {
     const ScopeWindowParams &prev = cache->params;
     int64_t newestDeltaFp = int64_t(std::llround((params.newestPos - prev.newestPos) * double(kScopeLagFpOne)));
     int64_t shiftLagFp = (prev.scopeStartLagFp - params.scopeStartLagFp) + newestDeltaFp;
@@ -771,6 +784,7 @@ static uint32_t buildScopeWindowBinsWithCache(
     cache->valid = scopeBinCount > 0u;
     cache->params = params;
     cache->scopeBinCount = scopeBinCount;
+    cache->streamResidencyGeneration = engine.streamResidencyGeneration;
     if (scopeBinCount > 0u) {
       cache->bins = *binsOut;
     }
@@ -1068,6 +1082,7 @@ struct TemporalDeck::Impl {
   bool pendingSampleStateApplyDeferralLogged = false;
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
   std::atomic<int> bufferDurationMode{TemporalDeck::BUFFER_DURATION_10S};
+  int lastRamBufferDurationMode = TemporalDeck::BUFFER_DURATION_10S;
   int externalGatePosMode = TemporalDeck::EXTERNAL_GATE_POS_GLIDE;
   int freezeCvMode = TemporalDeck::FREEZE_CV_MODE_GATE;
   int reverseCvMode = TemporalDeck::REVERSE_CV_MODE_GATE;
@@ -1246,6 +1261,10 @@ float TemporalDeck::scratchSensitivity() {
 
 void TemporalDeck::applyBufferDurationMode(int mode) {
   int clamped = clamp(mode, 0, BUFFER_DURATION_COUNT - 1);
+  if (!temporaldeck_modes::isRamBufferMode(clamped)) {
+    return;
+  }
+  impl->lastRamBufferDurationMode = clamped;
   impl->bufferDurationMode.store(clamped);
   if (paramQuantities[BUFFER_PARAM]) {
     paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(clamped);
@@ -1329,6 +1348,7 @@ json_t *TemporalDeck::dataToJson() {
   json_object_set_new(root, "slipReturnMode", json_integer(impl->transportControl.slipReturnMode));
   json_object_set_new(root, "cartridgeCharacter", json_integer(impl->cartridgeCharacter));
   json_object_set_new(root, "bufferDurationMode", json_integer(impl->bufferDurationMode.load()));
+  json_object_set_new(root, "lastRamBufferDurationMode", json_integer(impl->lastRamBufferDurationMode));
   json_object_set_new(root, "sampleModeEnabled", json_boolean(sampleModeEnabled));
   json_object_set_new(root, "sampleLoopEnabled", json_boolean(impl->sampleLoopEnabled.load(std::memory_order_relaxed)));
   json_object_set_new(root, "platterArtMode", json_integer(impl->platterArtMode));
@@ -1358,6 +1378,7 @@ void TemporalDeck::dataFromJson(json_t *root) {
   json_t *slipReturnModeJ = json_object_get(root, "slipReturnMode");
   json_t *cartridgeJ = json_object_get(root, "cartridgeCharacter");
   json_t *bufferDurationJ = json_object_get(root, "bufferDurationMode");
+  json_t *lastRamBufferDurationJ = json_object_get(root, "lastRamBufferDurationMode");
   json_t *sampleModeEnabledJ = json_object_get(root, "sampleModeEnabled");
   json_t *sampleLoopEnabledJ = json_object_get(root, "sampleLoopEnabled");
   json_t *sampleAutoPlayOnLoadJ = json_object_get(root, "sampleAutoPlayOnLoad");
@@ -1401,7 +1422,15 @@ void TemporalDeck::dataFromJson(json_t *root) {
     impl->cartridgeCharacter = clamp((int)json_integer_value(cartridgeJ), 0, CARTRIDGE_COUNT - 1);
   }
   if (bufferDurationJ) {
-    impl->bufferDurationMode.store(clamp((int)json_integer_value(bufferDurationJ), 0, BUFFER_DURATION_COUNT - 1));
+    int restoredMode = clamp((int)json_integer_value(bufferDurationJ), 0, BUFFER_DURATION_COUNT - 1);
+    impl->bufferDurationMode.store(restoredMode);
+    if (temporaldeck_modes::isRamBufferMode(restoredMode)) {
+      impl->lastRamBufferDurationMode = restoredMode;
+    }
+  }
+  if (lastRamBufferDurationJ) {
+    impl->lastRamBufferDurationMode = temporaldeck_modes::sanitizeRamBufferMode(
+      int(json_integer_value(lastRamBufferDurationJ)), impl->lastRamBufferDurationMode);
   }
   if (sampleModeEnabledJ) {
     impl->sampleModeEnabled.store(json_boolean_value(sampleModeEnabledJ), std::memory_order_relaxed);
@@ -1486,6 +1515,13 @@ void TemporalDeck::process(const ProcessArgs &args) {
           impl->sampleModeEnabled.store(true, std::memory_order_relaxed);
           impl->installedLongPlayGeneration = generation;
           impl->longPlayInstallPending.store(false, std::memory_order_release);
+          if (impl->pendingLegacySampleFreezeOnPreparedInstall) {
+            impl->transportControl.freezeLatched = true;
+            impl->transportControl.freezeLatchedByButton = false;
+            impl->engine.sampleTransportPlaying = false;
+            impl->uiSampleTransportPlaying.store(false, std::memory_order_relaxed);
+            impl->pendingLegacySampleFreezeOnPreparedInstall = false;
+          }
           if (paramQuantities[BUFFER_PARAM]) {
             paramQuantities[BUFFER_PARAM]->displayMultiplier =
               float(double(installedFrames) / outputRate);
@@ -1494,6 +1530,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
       }
     } else if (stream && !stream->ready() && !stream->loading()) {
       impl->longPlayInstallPending.store(false, std::memory_order_release);
+      impl->longPlayStartupHold = false;
     }
   }
   if (temporaldeck::LongPlayStreamEngine *stream =
@@ -1501,6 +1538,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
     if (impl->engine.diskBackedSample && stream->ready()) {
       impl->engine.sampleAbsolutePeakVolts =
         stream->absolutePeak() * temporaldeck::kSampleFileVoltageScale;
+      impl->engine.streamResidencyGeneration = stream->residencyGeneration();
     }
   }
 
@@ -1762,6 +1800,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
   uint32_t pendingLiveSeekRevision = impl->pendingLiveSeekRevision.load(std::memory_order_relaxed);
   float pendingLiveSeekArcNorm = impl->pendingLiveSeekArcNormalized.load(std::memory_order_relaxed);
   float bufferKnob = params[BUFFER_PARAM].getValue();
+  impl->engine.updateStreamActiveWindow(bufferKnob);
   impl->appliedSampleSeekRevision = temporaldeck_transport::applyPendingSampleSeek(
     impl->engine, impl->appliedSampleSeekRevision, pendingSeekRevision, pendingSeekNorm, bufferKnob);
   impl->appliedLiveSeekRevision = temporaldeck_transport::applyPendingLiveSeekArc(
@@ -2101,7 +2140,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
 
   if (impl->engine.diskBackedSample) {
     if (temporaldeck::LongPlayStreamEngine *stream = impl->longPlayStream.load(std::memory_order_relaxed)) {
-      impl->engine.sampleAbsolutePeakVolts = stream->absolutePeak();
+      impl->engine.sampleAbsolutePeakVolts =
+        stream->absolutePeak() * temporaldeck::kSampleFileVoltageScale;
     }
   }
 
@@ -2532,6 +2572,7 @@ void TemporalDeck::clearLoadedSample() {
   impl->sampleLifecycle.requestAsyncSampleBuild(cancelRequest);
   impl->sampleModeEnabled.store(false, std::memory_order_relaxed);
   impl->bufferDurationMode.store(BUFFER_DURATION_10S);
+  impl->lastRamBufferDurationMode = BUFFER_DURATION_10S;
   if (paramQuantities[BUFFER_PARAM]) {
     paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(BUFFER_DURATION_10S);
   }
@@ -2539,6 +2580,17 @@ void TemporalDeck::clearLoadedSample() {
 }
 
 bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *errorOut) {
+  // Released load behavior preserves Freeze, while a newly loaded source
+  // starts without inherited Reverse or Slip state. Apply this before storage
+  // selection so RAM and LongPlay loads cannot diverge.
+  const bool wasFreezeLatched = impl->transportControl.freezeLatched;
+  const bool wasFreezeLatchedByButton = impl->transportControl.freezeLatchedByButton;
+  impl->transportControl.freezeLatched = wasFreezeLatched;
+  impl->transportControl.freezeLatchedByButton =
+    wasFreezeLatched ? wasFreezeLatchedByButton : false;
+  impl->transportControl.reverseLatched = false;
+  impl->transportControl.slipLatched = false;
+
   temporaldeck::LongPlayFileInfo longPlayInfo;
   std::string probeError;
   const bool probed = temporaldeck::probeLongPlayFile(path, &longPlayInfo, &probeError);
@@ -2558,7 +2610,10 @@ bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *erro
     impl->sampleLifecycle.requestAsyncSampleBuild(guardRequest);
     impl->longPlayOwner->requestLoad(path);
     impl->longPlayInstallPending.store(true, std::memory_order_release);
-    impl->longPlayStartupHold = false;
+    // Hold the current source before its cache is invalidated. The hold stays
+    // internal and releases only after the replacement's audio/scope window
+    // is resident.
+    impl->longPlayStartupHold = true;
     impl->installedLongPlayGeneration = impl->longPlayOwner->generation();
     return true;
   }
@@ -2571,19 +2626,17 @@ bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *erro
   }
   impl->longPlayInstallPending.store(false, std::memory_order_release);
   impl->longPlayStartupHold = false;
-  bool wasFreezeLatched = impl->transportControl.freezeLatched;
-  bool wasFreezeLatchedByButton = impl->transportControl.freezeLatchedByButton;
-  impl->transportControl.freezeLatched = wasFreezeLatched;
-  impl->transportControl.freezeLatchedByButton = impl->transportControl.freezeLatched ? wasFreezeLatchedByButton : false;
-  impl->transportControl.reverseLatched = false;
-  impl->transportControl.slipLatched = false;
-  impl->pendingLegacySampleFreezeOnPreparedInstall = false;
-
+  const int ramBufferMode = temporaldeck_modes::sanitizeRamBufferMode(
+    impl->lastRamBufferDurationMode, BUFFER_DURATION_10S);
+  impl->bufferDurationMode.store(ramBufferMode, std::memory_order_relaxed);
+  if (paramQuantities[BUFFER_PARAM]) {
+    paramQuantities[BUFFER_PARAM]->displayMultiplier = usableBufferSecondsForMode(ramBufferMode);
+  }
   temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest request;
   request.type = temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest::LOAD_PATH;
   request.path = path;
   request.targetSampleRate = std::max(impl->cachedSampleRate, 1.f);
-  request.requestedBufferMode = impl->bufferDurationMode.load(std::memory_order_relaxed);
+  request.requestedBufferMode = ramBufferMode;
   impl->pendingSampleStateApplyDeferralLogged = false;
   uint64_t requestSerial = impl->sampleLifecycle.requestAsyncSampleBuild(request);
   appendTemporalDeckLifetimeLoadingLog(impl->debugInstanceId,

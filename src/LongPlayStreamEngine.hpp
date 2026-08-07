@@ -31,6 +31,9 @@ public:
   void requestLoad(const std::string &path);
   void clear();
   void setDesiredFrame(std::uint64_t frame, bool loop);
+  void setDesiredWindow(std::uint64_t frame, bool loop,
+                        std::uint64_t loopStartFrame,
+                        std::uint64_t loopEndFrameExclusive);
   bool readFrame(std::uint64_t frame, float *left, float *right) const;
   bool readStereoInterleaved(std::uint64_t startFrame, std::uint32_t count, float *out) const;
   bool isFrameResident(std::uint64_t frame) const;
@@ -41,6 +44,7 @@ public:
   std::uint32_t sampleRate() const;
   std::uint32_t channels() const;
   std::uint64_t generation() const;
+  std::uint64_t residencyGeneration() const;
   float absolutePeak() const;
   std::string path() const;
   std::string displayName() const;
@@ -83,9 +87,13 @@ private:
   std::atomic<std::uint32_t> publishedSampleRate{0u};
   std::atomic<std::uint32_t> publishedChannels{0u};
   std::atomic<std::uint64_t> publishedGeneration{0u};
+  std::atomic<std::uint64_t> publishedResidencyGeneration{0u};
   std::atomic<float> publishedAbsolutePeak{0.f};
   std::atomic<std::uint64_t> desiredFrame{0u};
   std::atomic<bool> desiredLoop{false};
+  std::atomic<std::uint64_t> desiredLoopStartFrame{0u};
+  std::atomic<std::uint64_t> desiredLoopEndFrameExclusive{0u};
+  std::atomic<std::uint64_t> desiredWindowSequence{0u};
 
   bool requestSuperseded(std::uint64_t serial) const;
 };

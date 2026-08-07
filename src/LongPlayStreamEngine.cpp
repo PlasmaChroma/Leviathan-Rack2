@@ -39,7 +39,9 @@ float decodeWavSample(const unsigned char *source, std::uint16_t bitsPerSample, 
   case 16:
     return float(std::int16_t(readLe16(source))) * (1.f / 32768.f);
   case 24:
-    return float(signExtend24(readLe32(source) & 0x00ffffffu)) * (1.f / 8388608.f);
+    return float(signExtend24(std::uint32_t(source[0]) |
+                              (std::uint32_t(source[1]) << 8) |
+                              (std::uint32_t(source[2]) << 16))) * (1.f / 8388608.f);
   case 32:
     return float(std::int32_t(readLe32(source))) * (1.f / 2147483648.f);
   default:
@@ -135,6 +137,14 @@ struct Decoder {
           *error = "Only PCM and 32-bit float WAV files are supported";
           return false;
         }
+        const bool validPcmBits = tag == 1u &&
+          (wavBitsPerSample == 8u || wavBitsPerSample == 16u ||
+           wavBitsPerSample == 24u || wavBitsPerSample == 32u);
+        const bool validFloatBits = tag == 3u && wavBitsPerSample == 32u;
+        if (!validPcmBits && !validFloatBits) {
+          *error = "WAV sample format is unsupported";
+          return false;
+        }
         foundFormat = true;
       } else if (std::memcmp(chunk, "data", 4) == 0) {
         wavDataOffset = std::uint64_t(payload);
@@ -149,7 +159,7 @@ struct Decoder {
       return false;
     }
     const std::uint32_t bytesPerSample = (wavBitsPerSample + 7u) / 8u;
-    if (bytesPerSample == 0u || wavBlockAlign < channels * bytesPerSample) {
+    if (bytesPerSample == 0u || wavBlockAlign != channels * bytesPerSample) {
       *error = "WAV block alignment is invalid";
       return false;
     }
@@ -348,8 +358,18 @@ void LongPlayStreamEngine::requestLoad(const std::string &pathValue) {
 void LongPlayStreamEngine::clear() { requestLoad(std::string()); }
 
 void LongPlayStreamEngine::setDesiredFrame(std::uint64_t frame, bool loop) {
+  setDesiredWindow(frame, loop, 0u, totalFrames());
+}
+
+void LongPlayStreamEngine::setDesiredWindow(std::uint64_t frame, bool loop,
+                                            std::uint64_t loopStartFrame,
+                                            std::uint64_t loopEndFrameExclusive) {
+  desiredWindowSequence.fetch_add(1u, std::memory_order_acq_rel);
   desiredFrame.store(frame, std::memory_order_relaxed);
   desiredLoop.store(loop, std::memory_order_relaxed);
+  desiredLoopStartFrame.store(loopStartFrame, std::memory_order_relaxed);
+  desiredLoopEndFrameExclusive.store(loopEndFrameExclusive, std::memory_order_relaxed);
+  desiredWindowSequence.fetch_add(1u, std::memory_order_release);
 }
 
 bool LongPlayStreamEngine::readFrame(std::uint64_t frame, float *left, float *right) const {
@@ -400,9 +420,16 @@ bool LongPlayStreamEngine::isFrameResident(std::uint64_t frame) const {
   if (sequence & 1u) {
     return false;
   }
+  block.readers.fetch_add(1u, std::memory_order_acq_rel);
+  if (sequence != block.sequence.load(std::memory_order_acquire)) {
+    block.readers.fetch_sub(1u, std::memory_order_release);
+    return false;
+  }
   const std::uint64_t start = block.startFrame;
   const std::uint32_t count = block.validFrames;
-  return frame >= start && (frame - start) < count;
+  const bool resident = frame >= start && (frame - start) < count;
+  block.readers.fetch_sub(1u, std::memory_order_release);
+  return resident;
 }
 
 bool LongPlayStreamEngine::ready() const {
@@ -427,6 +454,10 @@ std::uint32_t LongPlayStreamEngine::channels() const {
 
 std::uint64_t LongPlayStreamEngine::generation() const {
   return publishedGeneration.load(std::memory_order_acquire);
+}
+
+std::uint64_t LongPlayStreamEngine::residencyGeneration() const {
+  return publishedResidencyGeneration.load(std::memory_order_acquire);
 }
 
 float LongPlayStreamEngine::absolutePeak() const {
@@ -472,6 +503,7 @@ void LongPlayStreamEngine::invalidateBlocks() {
     block.peak = 0.f;
     block.sequence.fetch_add(1u, std::memory_order_release);
   }
+  publishedResidencyGeneration.fetch_add(1u, std::memory_order_release);
 }
 
 void LongPlayStreamEngine::workerLoop() {
@@ -523,21 +555,53 @@ void LongPlayStreamEngine::workerLoop() {
       continue;
     }
 
+    std::uint64_t requestSequence0 = 0u;
+    std::uint64_t requestSequence1 = 0u;
+    std::uint64_t requestedFrame = 0u;
+    std::uint64_t requestedLoopStart = 0u;
+    std::uint64_t requestedLoopEndExclusive = 0u;
+    bool requestedLoop = false;
+    do {
+      requestSequence0 = desiredWindowSequence.load(std::memory_order_acquire);
+      if (requestSequence0 & 1u) {
+        std::this_thread::yield();
+        continue;
+      }
+      requestedFrame = desiredFrame.load(std::memory_order_relaxed);
+      requestedLoop = desiredLoop.load(std::memory_order_relaxed);
+      requestedLoopStart = desiredLoopStartFrame.load(std::memory_order_relaxed);
+      requestedLoopEndExclusive = desiredLoopEndFrameExclusive.load(std::memory_order_relaxed);
+      requestSequence1 = desiredWindowSequence.load(std::memory_order_acquire);
+    } while (requestSequence0 != requestSequence1 || (requestSequence1 & 1u));
+
+    requestedLoopStart = std::min(requestedLoopStart, decoder.totalFrames - 1u);
+    if (requestedLoopEndExclusive == 0u) {
+      requestedLoopEndExclusive = decoder.totalFrames;
+    }
+    requestedLoopEndExclusive = std::max(
+      requestedLoopStart + 1u, std::min(requestedLoopEndExclusive, decoder.totalFrames));
+    const std::uint64_t targetLimitExclusive = requestedLoop ? requestedLoopEndExclusive : decoder.totalFrames;
+    const std::uint64_t target = std::max(
+      requestedLoop ? requestedLoopStart : 0u,
+      std::min(requestedFrame, targetLimitExclusive - 1u));
+
     // 50/50 Symmetric Window around target center: 16 blocks backward, 16 blocks forward
-    const std::uint64_t target = std::min(desiredFrame.load(std::memory_order_relaxed), decoder.totalFrames - 1u);
     const int64_t centerBlockIndex = int64_t(target / kBlockFrames);
     
     // Priority loading sequence: 0 (center), +1, -1, +2, -2, ..., +15, -16
     std::array<std::uint64_t, kBlockCount> wantedStarts{};
     std::size_t wantedCount = 0;
-    const int64_t totalBlocks = int64_t(
-      (decoder.totalFrames + kBlockFrames - 1u) / kBlockFrames);
+    const int64_t totalBlocks = int64_t((decoder.totalFrames + kBlockFrames - 1u) / kBlockFrames);
+    const int64_t firstLoopBlock = int64_t(requestedLoopStart / kBlockFrames);
+    const int64_t lastLoopBlock = int64_t((requestedLoopEndExclusive - 1u) / kBlockFrames);
+    const int64_t loopBlockCount = std::max<int64_t>(1, lastLoopBlock - firstLoopBlock + 1);
     auto appendWantedBlock = [&](int64_t blockIndex) {
       if (wantedCount >= kBlockCount || totalBlocks <= 0) {
         return;
       }
-      if (desiredLoop.load(std::memory_order_relaxed)) {
-        blockIndex = (blockIndex % totalBlocks + totalBlocks) % totalBlocks;
+      if (requestedLoop) {
+        blockIndex = firstLoopBlock +
+          ((blockIndex - firstLoopBlock) % loopBlockCount + loopBlockCount) % loopBlockCount;
       } else if (blockIndex < 0 || blockIndex >= totalBlocks) {
         return;
       }
@@ -561,7 +625,7 @@ void LongPlayStreamEngine::workerLoop() {
 
     // At non-looping file edges, replace unavailable backward/forward blocks
     // with blocks on the usable side so the cache still uses all 32 slots.
-    if (!desiredLoop.load(std::memory_order_relaxed) && wantedCount < kBlockCount) {
+    if (!requestedLoop && wantedCount < kBlockCount) {
       const int64_t first = std::max<int64_t>(
         0, std::min<int64_t>(centerBlockIndex - 16, std::max<int64_t>(0, totalBlocks - kBlockCount)));
       const int64_t end = std::min<int64_t>(totalBlocks, first + kBlockCount);
@@ -597,6 +661,7 @@ void LongPlayStreamEngine::workerLoop() {
       destination->startFrame = wantedStart;
       destination->validFrames = decoded;
       destination->sequence.fetch_add(1u, std::memory_order_release);
+      publishedResidencyGeneration.fetch_add(1u, std::memory_order_release);
       filledOne = decoded > 0u;
       break;
     }

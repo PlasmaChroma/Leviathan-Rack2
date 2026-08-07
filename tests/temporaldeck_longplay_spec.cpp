@@ -29,7 +29,8 @@ struct StreamStub {
     return true;
   }
 
-  static void desire(void *context, std::uint64_t frame, bool) {
+  static void desire(void *context, std::uint64_t frame, bool,
+                     std::uint64_t, std::uint64_t) {
     static_cast<StreamStub *>(context)->desired = frame;
   }
 
@@ -43,6 +44,13 @@ void writeLe16(std::ofstream &output, unsigned value) {
   const unsigned char bytes[] = {static_cast<unsigned char>(value),
                                  static_cast<unsigned char>(value >> 8)};
   output.write(reinterpret_cast<const char *>(bytes), sizeof(bytes));
+}
+
+void writeLe24(std::ofstream &output, int value) {
+  const unsigned bits = unsigned(value) & 0x00ffffffu;
+  output.put(char(bits & 0xffu));
+  output.put(char((bits >> 8) & 0xffu));
+  output.put(char((bits >> 16) & 0xffu));
 }
 
 void writeLe32(std::ofstream &output, unsigned value) {
@@ -104,6 +112,20 @@ bool writeStereoPeakWav(const std::string &path) {
   writeLe16(output, 40960u); // -0.75 right
   output.seekp(std::streamoff(44u + dataBytes - 1u));
   output.put('\0');
+  return bool(output);
+}
+
+bool writeStereo24BitWav(const std::string &path) {
+  const unsigned dataBytes = 12u;
+  std::ofstream output(path.c_str(), std::ios::binary | std::ios::trunc);
+  if (!output) return false;
+  output.write("RIFF", 4); writeLe32(output, 36u + dataBytes);
+  output.write("WAVEfmt ", 8); writeLe32(output, 16u);
+  writeLe16(output, 1u); writeLe16(output, 2u); writeLe32(output, 8000u);
+  writeLe32(output, 48000u); writeLe16(output, 6u); writeLe16(output, 24u);
+  output.write("data", 4); writeLe32(output, dataBytes);
+  writeLe24(output, 0x400000); writeLe24(output, -0x400000);
+  writeLe24(output, 0); writeLe24(output, 0);
   return bool(output);
 }
 
@@ -169,6 +191,35 @@ Result testWavStreamingAndSymmetricBlocks() {
               " bytes=" + std::to_string(engine.allocatedAudioBytes())};
 }
 
+Result testLoopPrefetchUsesActiveWindowEnd() {
+  const std::string path = "/tmp/leviathan_tdlongplay_active_loop.wav";
+  const unsigned sampleRate = 8000u;
+  const unsigned seconds = 300u;
+  const bool wrote = writeSparseWav(path, sampleRate, seconds, false);
+  temporaldeck::LongPlayStreamEngine engine;
+  engine.requestLoad(path);
+  const bool ready = waitForReady(engine);
+
+  const std::uint64_t blockFrames = temporaldeck::LongPlayStreamEngine::kBlockFrames;
+  const std::uint64_t activeEndExclusive = 10u * blockFrames;
+  engine.setDesiredWindow(0u, true, 0u, activeEndExclusive);
+  const std::uint64_t activeHistoryFrame = activeEndExclusive - 1u;
+  const std::uint64_t physicalHistoryFrame = std::uint64_t(sampleRate) * seconds - 1u;
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+  while (std::chrono::steady_clock::now() < deadline &&
+         !engine.isFrameResident(activeHistoryFrame)) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  const bool activeHistoryResident = engine.isFrameResident(activeHistoryFrame);
+  const bool physicalHistoryNotSubstituted = !engine.isFrameResident(physicalHistoryFrame);
+  std::remove(path.c_str());
+  return {"Loop prefetch wraps at the active Buffer window rather than physical EOF",
+          wrote && ready && activeHistoryResident && physicalHistoryNotSubstituted,
+          "ready=" + std::to_string(ready) +
+              " activeHistoryResident=" + std::to_string(activeHistoryResident) +
+              " physicalHistoryNotSubstituted=" + std::to_string(physicalHistoryNotSubstituted)};
+}
+
 Result testEngineDefersColdSeekUntilResident() {
   temporaldeck::TemporalDeckEngine engine;
   engine.buffer.reset(48000.f, 1.f, false);
@@ -189,6 +240,27 @@ Result testEngineDefersColdSeekUntilResident() {
           deferred && completed,
           "deferred=" + std::to_string(deferred) +
               " completed=" + std::to_string(completed)};
+}
+
+Result testEngineDefersColdScratchMovement() {
+  temporaldeck::TemporalDeckEngine engine;
+  engine.buffer.reset(48000.f, 1.f, false);
+  engine.sampleRate = 48000.f;
+  StreamStub stub;
+  engine.installStreamedSample(&stub, &StreamStub::read, &StreamStub::desire,
+                               &StreamStub::resident, 1000, 5.f);
+  engine.readHead = 800.0;
+  engine.samplePlayhead = 800.0;
+  const bool deferred = engine.deferColdStreamMovement(100.0);
+  const bool held = deferred && engine.streamedSeekPending && engine.readHead == 100.0 &&
+                    engine.samplePlayhead == 100.0 && stub.desired == 800u;
+  stub.targetResident = true;
+  engine.servicePendingStreamSeek();
+  const bool handedOff = !engine.streamedSeekPending && engine.readHead == 800.0 &&
+                         engine.streamedSeekCrossfadeRemaining > 0;
+  return {"Cold scratch movement holds then crossfades to resident audio",
+          held && handedOff,
+          "held=" + std::to_string(held) + " handedOff=" + std::to_string(handedOff)};
 }
 
 Result testScopeProbeDoesNotChangePlaybackFallback() {
@@ -246,10 +318,11 @@ Result testLoopingStartupWaitsForWrappedScopeHistory() {
   engine.installStreamedSample(&stub, &StreamStub::read, &StreamStub::desire,
                                &StreamStub::resident, 1000, 5.f);
   engine.readHead = 0.0;
+  engine.updateStreamActiveWindow(0.9f);
   const bool centerResident = engine.isStreamedFrameResident(engine.readHead);
-  const bool wrappedHistoryCold = !engine.isStreamedScopeWindowResident(0.0, 300.0, true);
+  const bool wrappedHistoryCold = !engine.isStreamedScopeWindowResident(0.0, 100.0, true);
   stub.targetResident = true;
-  const bool fullWindowResident = engine.isStreamedScopeWindowResident(0.0, 300.0, true);
+  const bool fullWindowResident = engine.isStreamedScopeWindowResident(0.0, 100.0, true);
   return {"Looping startup waits for scope history wrapped behind frame zero",
           centerResident && wrappedHistoryCold && fullWindowResident,
           "centerResident=" + std::to_string(centerResident) +
@@ -303,6 +376,7 @@ Result testReaderWriterContention() {
       std::uint64_t frame = 0;
       while (!stopReaders.load(std::memory_order_relaxed)) {
         engine.readFrame(frame, &l, &r);
+        engine.isFrameResident(frame);
         frame = (frame + 137) % (sampleRate * seconds);
         ++reads;
       }
@@ -330,16 +404,72 @@ Result testReaderWriterContention() {
           "ready=" + std::to_string(ready) + " reads=" + std::to_string(totalReads.load())};
 }
 
+Result testWav24BitDecodesExactlyThreeBytes() {
+  const std::string path = "/tmp/leviathan_tdlongplay_24bit.wav";
+  const bool wrote = writeStereo24BitWav(path);
+  temporaldeck::LongPlayStreamEngine engine;
+  engine.requestLoad(path);
+  const bool ready = waitForReady(engine);
+  float left = 0.f, right = 0.f;
+  bool read = false;
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (std::chrono::steady_clock::now() < deadline && !(read = engine.readFrame(0u, &left, &right))) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  std::remove(path.c_str());
+  return {"24-bit WAV samples decode from their three-byte fields",
+          wrote && ready && read && std::fabs(left - 0.5f) < 1e-6f &&
+            std::fabs(right + 0.5f) < 1e-6f,
+          "left=" + std::to_string(left) + " right=" + std::to_string(right)};
+}
+
+Result testStreamPeakUsesNormalizedAmplitudeContract() {
+  const std::string path = "/tmp/leviathan_tdlongplay_peak.wav";
+  const bool wrote = writeStereoPeakWav(path);
+  temporaldeck::LongPlayStreamEngine engine;
+  engine.requestLoad(path);
+  const bool ready = waitForReady(engine);
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (std::chrono::steady_clock::now() < deadline && engine.absolutePeak() < 0.74f) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  const float normalizedPeak = engine.absolutePeak();
+  std::remove(path.c_str());
+  return {"Stream peak API reports normalized file amplitude",
+          wrote && ready && std::fabs(normalizedPeak - 0.75f) < 1e-5f,
+          "normalizedPeak=" + std::to_string(normalizedPeak)};
+}
+
+Result testLoopSeamUsesActiveSampleWindowForMotionDelta() {
+  temporaldeck::TemporalDeckEngine engine;
+  engine.buffer.reset(48000.f, 1.f, false);
+  engine.sampleModeEnabled = true;
+  engine.sampleLoaded = true;
+  engine.sampleLoopEnabled = true;
+  engine.sampleFrames = 100000;
+  const double activeEnd = 9999.0;
+  const double forward = engine.readHeadDelta(0.0, activeEnd, activeEnd);
+  const double reverse = engine.readHeadDelta(activeEnd, 0.0, activeEnd);
+  return {"Loop seam motion delta uses the active sample window",
+          std::fabs(forward - 1.0) < 1e-9 && std::fabs(reverse + 1.0) < 1e-9,
+          "forward=" + std::to_string(forward) + " reverse=" + std::to_string(reverse)};
+}
+
 } // namespace
 
 int main() {
   const Result results[] = {testWavStreamingAndSymmetricBlocks(),
+                            testLoopPrefetchUsesActiveWindowEnd(),
                             testEngineDefersColdSeekUntilResident(),
+                            testEngineDefersColdScratchMovement(),
                             testScopeProbeDoesNotChangePlaybackFallback(),
                             testStartupReadinessHoldReleasesAtResidentFrame(),
                             testLoopingStartupWaitsForWrappedScopeHistory(),
                             testHourWavSeek(),
-                            testReaderWriterContention()};
+                            testReaderWriterContention(),
+                            testWav24BitDecodesExactlyThreeBytes(),
+                            testStreamPeakUsesNormalizedAmplitudeContract(),
+                            testLoopSeamUsesActiveSampleWindowForMotionDelta()};
   int failures = 0;
   for (const Result &result : results) {
     std::cout << (result.passed ? "[PASS] " : "[FAIL] ") << result.name

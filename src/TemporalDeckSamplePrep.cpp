@@ -81,8 +81,7 @@ bool buildPreparedSample(const DecodedSampleFile &decodedSample, float targetSam
     return false;
   }
 
-  prepared.bufferMode = clamp(bufferMode, TemporalDeckEngine::BUFFER_DURATION_10S,
-                              TemporalDeckEngine::BUFFER_DURATION_COUNT - 1);
+  prepared.bufferMode = temporaldeck_modes::sanitizeRamBufferMode(bufferMode);
   prepared.sampleRate = targetSampleRate;
   prepared.monoStorage = temporaldeck_modes::isMonoBufferMode(prepared.bufferMode);
 
@@ -137,8 +136,7 @@ bool buildPreparedEmptyBuffer(float targetSampleRate, int bufferMode, PreparedSa
     return false;
   }
   PreparedSampleData prepared;
-  prepared.bufferMode = clamp(bufferMode, TemporalDeckEngine::BUFFER_DURATION_10S,
-                              TemporalDeckEngine::BUFFER_DURATION_COUNT - 1);
+  prepared.bufferMode = temporaldeck_modes::sanitizeRamBufferMode(bufferMode);
   prepared.sampleRate = targetSampleRate;
   prepared.monoStorage = temporaldeck_modes::isMonoBufferMode(prepared.bufferMode);
   const int size = std::max(1, int(std::round(
