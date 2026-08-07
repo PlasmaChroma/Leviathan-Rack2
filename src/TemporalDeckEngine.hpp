@@ -752,6 +752,55 @@ struct TemporalDeckEngine {
     return true;
   }
 
+  // Scope extraction probes a sparse set of frames and must not disturb the
+  // sequential playback fallback cache. A non-resident frame is missing scope
+  // data, not a valid repetition of the last audible sample.
+  bool readStreamedScopeFrame(int logicalIndex, float *left, float *right) const {
+    if (!diskBackedSample || !streamReadFrame || !streamContext || sampleFrames <= 0) {
+      return false;
+    }
+    const int bounded = clampSampleIndex(logicalIndex, sampleFrames - 1);
+    return streamReadFrame(streamContext, uint64_t(bounded), left, right);
+  }
+
+  bool isStreamedFrameResident(double logicalFrame) const {
+    if (!diskBackedSample || !streamIsFrameResident || !streamContext || sampleFrames <= 0) {
+      return false;
+    }
+    const uint64_t frame = uint64_t(clampd(std::round(logicalFrame), 0.0, double(sampleFrames - 1)));
+    return streamIsFrameResident(streamContext, frame);
+  }
+
+  bool isStreamedScopeWindowResident(double centerFrame, double radiusFrames, bool loop) const {
+    if (!diskBackedSample || !streamIsFrameResident || !streamContext || sampleFrames <= 0) {
+      return false;
+    }
+    const double endFrame = double(sampleFrames - 1);
+    const double length = double(sampleFrames);
+    const double boundedRadius = std::max(0.0, radiusFrames);
+    // Probe more densely than the stream block size at every supported sample
+    // rate. This runs only during startup and prevents a partially resident
+    // loop-wrap window from being exposed to TD.Scope.
+    const double probeStep = std::max(1.0, double(std::max(sampleRate, 1.f)) * 0.25);
+    const int probeCount = std::max(1, int(std::ceil((2.0 * boundedRadius) / probeStep)));
+    for (int i = 0; i <= probeCount; ++i) {
+      double frame = centerFrame - boundedRadius +
+        (2.0 * boundedRadius) * (double(i) / double(probeCount));
+      if (loop && length > 0.0) {
+        frame = std::fmod(frame, length);
+        if (frame < 0.0) {
+          frame += length;
+        }
+      } else {
+        frame = clampd(frame, 0.0, endFrame);
+      }
+      if (!isStreamedFrameResident(frame)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   void requestStreamWindow() {
     if (diskBackedSample && streamSetDesiredFrame && streamContext && sampleFrames > 0) {
       const double desired = streamedSeekPending ? streamedSeekTarget : readHead;
@@ -2823,7 +2872,7 @@ struct TemporalDeckEngine {
           }
           float gestureDirection = 0.f;
           if (hasFreshPlatterGesture) {
-            float lagDeltaSinceLastGesture = platterLagTarget - float(lastPlatterLagTarget);
+            float lagDeltaSinceLastGesture = lagErrorToTarget(platterLagTarget, lastPlatterLagTarget, newestPos);
             if (std::fabs(lagDeltaSinceLastGesture) > 1e-4f) {
               // Lag increasing means moving farther from NOW (backward read);
               // lag decreasing means moving toward NOW (forward read).

@@ -465,10 +465,14 @@ static float reduceScopeChannelValue(float left, float right, ScopeChannelMode c
   }
 }
 
-static float readScopeChannelAtLagSamples(const TemporalDeckEngine &engine, double newestPos, bool sampleMode,
-                                          bool sampleLoopEnabled, double lagSamples, ScopeChannelMode channelMode) {
+static bool readScopeChannelAtLagSamples(const TemporalDeckEngine &engine, double newestPos, bool sampleMode,
+                                         bool sampleLoopEnabled, double lagSamples, ScopeChannelMode channelMode,
+                                         float *valueOut) {
+  if (!valueOut) {
+    return false;
+  }
   if (engine.buffer.size <= 0) {
-    return 0.f;
+    return false;
   }
   double pos = newestPos - lagSamples;
   int idx = 0;
@@ -493,9 +497,18 @@ static float readScopeChannelAtLagSamples(const TemporalDeckEngine &engine, doub
     double wrappedPos = engine.buffer.wrapPosition(pos);
     idx = engine.buffer.wrapIndex(int(std::lround(wrappedPos)));
   }
-  float left = sampleMode ? engine.sampleLeftAt(idx) : engine.buffer.left[size_t(idx)];
-  float right = sampleMode ? engine.sampleRightAt(idx) : engine.buffer.rightSample(idx);
-  return reduceScopeChannelValue(left, right, channelMode);
+  float left = 0.f;
+  float right = 0.f;
+  if (sampleMode && engine.diskBackedSample) {
+    if (!engine.readStreamedScopeFrame(idx, &left, &right)) {
+      return false;
+    }
+  } else {
+    left = sampleMode ? engine.sampleLeftAt(idx) : engine.buffer.left[size_t(idx)];
+    right = sampleMode ? engine.sampleRightAt(idx) : engine.buffer.rightSample(idx);
+  }
+  *valueOut = reduceScopeChannelValue(left, right, channelMode);
+  return true;
 }
 
 static bool computeScopeWindowParams(const TemporalDeckEngine &engine, bool sampleMode, bool sampleLoopEnabled,
@@ -620,8 +633,11 @@ static bool evaluateScopeBinAtIndex(const TemporalDeckEngine &engine, const Scop
       float right = engine.buffer.rightSample(idx);
       mono = reduceScopeChannelValue(left, right, channelMode);
     } else {
-      mono =
-        readScopeChannelAtLagSamples(engine, params.newestPos, params.sampleMode, params.sampleLoopEnabled, double(lag), channelMode);
+      if (!readScopeChannelAtLagSamples(engine, params.newestPos, params.sampleMode,
+                                        params.sampleLoopEnabled, double(lag), channelMode, &mono)) {
+        lastAccumulatedLag = lag;
+        return;
+      }
     }
     if (!hasData) {
       minMono = mono;
@@ -678,11 +694,16 @@ static uint32_t buildScopeWindowBins(const TemporalDeckEngine &engine, const Sco
 }
 
 static bool canReuseScopeWindowCache(const ScopeWindowParams &current, const ScopeWindowCache &cache,
-                                     bool allowLiveReuse) {
+                                     bool allowLiveReuse, bool diskBackedSample) {
   if (!cache.valid || cache.scopeBinCount == 0u) {
     return false;
   }
   if (!current.sampleMode && !allowLiveReuse) {
+    return false;
+  }
+  // Stream residency changes without a buffer generation change. Rebuild so
+  // bins that were empty during cache warm-up acquire their real samples.
+  if (current.sampleMode && diskBackedSample) {
     return false;
   }
   const ScopeWindowParams &prev = cache.params;
@@ -708,7 +729,7 @@ static uint32_t buildScopeWindowBinsWithCache(
 
   uint32_t scopeBinCount = 0u;
   bool reused = false;
-  if (cache && canReuseScopeWindowCache(params, *cache, allowLiveReuse)) {
+  if (cache && canReuseScopeWindowCache(params, *cache, allowLiveReuse, engine.diskBackedSample)) {
     const ScopeWindowParams &prev = cache->params;
     int64_t newestDeltaFp = int64_t(std::llround((params.newestPos - prev.newestPos) * double(kScopeLagFpOne)));
     int64_t shiftLagFp = (prev.scopeStartLagFp - params.scopeStartLagFp) + newestDeltaFp;
@@ -962,6 +983,7 @@ struct TemporalDeck::Impl {
   std::atomic<temporaldeck::LongPlayStreamEngine *> longPlayStream{nullptr};
   LongPlayBridge longPlayBridge;
   std::atomic<bool> longPlayInstallPending{false};
+  bool longPlayStartupHold = false;
   uint64_t installedLongPlayGeneration = 0u;
   std::atomic<bool> sampleModeEnabled{false};
   std::atomic<bool> sampleLoopEnabled{false};
@@ -1455,6 +1477,10 @@ void TemporalDeck::process(const ProcessArgs &args) {
             &LongPlayBridge::setDesiredFrame, &LongPlayBridge::isFrameResident,
             installedFrames,
             stream->absolutePeak() * temporaldeck::kSampleFileVoltageScale);
+          // File-open readiness precedes the first decoded cache block. Hold
+          // the restored transport at its initial frame until audio and scope
+          // can both observe the same resident source data.
+          impl->longPlayStartupHold = true;
           impl->bufferDurationMode.store(
             BUFFER_DURATION_LONGPLAY_DISK, std::memory_order_relaxed);
           impl->sampleModeEnabled.store(true, std::memory_order_relaxed);
@@ -1566,6 +1592,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
         &impl->longPlayBridge, &LongPlayBridge::readFrame,
         &LongPlayBridge::setDesiredFrame, &LongPlayBridge::isFrameResident,
         installedFrames, stream->absolutePeak() * temporaldeck::kSampleFileVoltageScale);
+      impl->longPlayStartupHold = true;
       impl->engine.sampleModeEnabled = true;
       sampleRateChanged = false;
     }
@@ -1859,7 +1886,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
       impl->expanderLagDragRequestSeen = true;
       impl->expanderLagDragLastRequestSeq = lagDragRequestSeq;
       float maxLag = std::max(0.f, float(impl->uiAccessibleLagSamples.load(std::memory_order_relaxed)));
-      float lagTarget = clamp(lagDragRequestSamples, 0.f, maxLag);
+      float lagTarget = float(impl->engine.clampLag(lagDragRequestSamples, maxLag));
       bool dragJustStarted = lagDragRequestActive && !impl->expanderLagDragWasActive;
       bool scopeRequestStationary = lagDragRequestStationaryHold;
       bool scopeLiveReverseTargetCompensated = false;
@@ -1880,15 +1907,15 @@ void TemporalDeck::process(const ProcessArgs &args) {
           if (!std::isfinite(currentLag) || currentLag < 0.f) {
             currentLag = float(impl->engine.currentLagFromNewest(impl->engine.newestReadablePos()));
           }
-          impl->expanderLagDragAnchorLagSamples = clamp(currentLag, 0.f, maxLag);
+          impl->expanderLagDragAnchorLagSamples = float(impl->engine.clampLag(currentLag, maxLag));
         }
         float scopeDragTravelSamples = platter_interaction::samplesPerRevolution(
                                          std::max(args.sampleRate, 1.f), TemporalDeck::kNominalPlatterRpm) *
                                        kScopeDragNominalTurnScale * scratchSensitivity() *
                                        TemporalDeck::kMouseScratchTravelScale;
         scopeDragTravelSamples = std::max(scopeDragTravelSamples, 1.f);
-        lagTarget = clamp(impl->expanderLagDragAnchorLagSamples + lagDragRequestNormalizedOffset * scopeDragTravelSamples,
-                          0.f, maxLag);
+        lagTarget = float(impl->engine.clampLag(impl->expanderLagDragAnchorLagSamples + lagDragRequestNormalizedOffset * scopeDragTravelSamples,
+                          maxLag));
         lagDragRequestVelocity = clamp(lagDragRequestNormalizedVelocity * scopeDragTravelSamples,
                                        -std::max(args.sampleRate * 3.0f, 1.0f),
                                        std::max(args.sampleRate * 3.0f, 1.0f));
@@ -1902,7 +1929,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
           const float depthT = clamp(referenceLag / nearNowWindowSamples, 0.f, 1.f);
           const float nearNowT = 1.f - depthT;
           const float targetBoost = kScopeLiveNearNowTargetBoostBase +
-                                    nearNowT * nearNowT * kScopeLiveNearNowTargetBoostExtra;
+                                     nearNowT * nearNowT * kScopeLiveNearNowTargetBoostExtra;
           const float assistDt = requestDtSec > 0.f ? requestDtSec : args.sampleTime;
           const float assistVelocity = sampleRate * targetBoost;
           lagTarget = clamp(lagTarget - assistVelocity * assistDt, 0.f, maxLag);
@@ -1921,9 +1948,9 @@ void TemporalDeck::process(const ProcessArgs &args) {
         }
         if (scopeRequestStationary && impl->expanderLagDragWasActive) {
           if (impl->expanderLagDragHoldAnchorActive) {
-            lagTarget = clamp(impl->expanderLagDragHoldAnchorSamples, 0.f, maxLag);
+            lagTarget = float(impl->engine.clampLag(impl->expanderLagDragHoldAnchorSamples, maxLag));
           } else if (!impl->expanderLagDragLastStationaryHold && std::isfinite(impl->expanderLagDragLastLagSamples)) {
-            lagTarget = clamp(impl->expanderLagDragLastLagSamples, 0.f, maxLag);
+            lagTarget = float(impl->engine.clampLag(impl->expanderLagDragLastLagSamples, maxLag));
           }
         }
       }
@@ -1965,7 +1992,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
           // WARNING: Keep derived velocity in the same convention as
           // incoming scope velocity before blending.
           // positive velocity => toward NOW (decreasing lag).
-          float derivedVelocity = (impl->expanderLagDragLastLagSamples - lagTarget) / dtSec;
+          float derivedVelocity = impl->engine.lagErrorToTarget(impl->expanderLagDragLastLagSamples, lagTarget, maxLag) / dtSec;
           if (scopeLiveReverseTargetCompensated) {
             derivedVelocity += std::max(args.sampleRate, 1.f);
           }
@@ -2034,13 +2061,24 @@ void TemporalDeck::process(const ProcessArgs &args) {
   }
   PlatterInputSnapshot platterInput = impl->platterInput.consumeForFrame();
 
+  if (impl->longPlayStartupHold) {
+    impl->engine.requestStreamWindow();
+    const double scopeRadiusFrames =
+      double(std::max(args.sampleRate, 1.f)) * double(kScopeHalfWindowSeconds * 3.f);
+    if (impl->engine.isStreamedScopeWindowResident(
+          impl->engine.readHead, scopeRadiusFrames,
+          impl->sampleLoopEnabled.load(std::memory_order_relaxed))) {
+      impl->longPlayStartupHold = false;
+    }
+  }
+
   temporaldeck_frameinput::FrameInputControls controls;
   controls.dt = args.sampleTime;
   controls.bufferKnob = params[BUFFER_PARAM].getValue();
   controls.rateKnob = params[RATE_PARAM].getValue();
   controls.mixKnob = params[MIX_PARAM].getValue();
   controls.feedbackKnob = params[FEEDBACK_PARAM].getValue();
-  controls.freezeButton = impl->transportControl.freezeLatched;
+  controls.freezeButton = impl->transportControl.freezeLatched || impl->longPlayStartupHold;
   controls.reverseButton = impl->transportControl.reverseLatched;
   controls.slipButton = impl->transportControl.slipLatched && !impl->transportControl.reverseLatched;
 
@@ -2204,7 +2242,14 @@ void TemporalDeck::process(const ProcessArgs &args) {
         ScopeWindowParams scopeParams;
         auto scopePreviewMeasureStart =
           perfTimingEnabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
-        bool haveScopeParams = computeScopeWindowParams(
+        // A restored LongPlay stream is installed asynchronously. Until that
+        // install completes, frame.sampleMode is necessarily false even though
+        // the saved patch expects sample mode. Do not publish the temporary
+        // live buffer as a valid scope: TD.Scope should remain in its waiting
+        // state and then receive the installed sample generation immediately.
+        const bool samplePreviewNotReady =
+          impl->longPlayInstallPending.load(std::memory_order_acquire) || impl->longPlayStartupHold;
+        bool haveScopeParams = !samplePreviewNotReady && computeScopeWindowParams(
           impl->engine, frame.sampleMode, impl->sampleLoopEnabled.load(std::memory_order_relaxed), impl->cachedSampleRate,
           scopeLagForPreview, float(frame.accessibleLag), scopeLiveNewestAbsolutePosOverride, &scopeParams);
         if (haveScopeParams) {
@@ -2478,6 +2523,7 @@ void TemporalDeck::clearLoadedSample() {
     stream->clear();
   }
   impl->longPlayInstallPending.store(false, std::memory_order_release);
+  impl->longPlayStartupHold = false;
   impl->sampleLifecycle.clearDecodedAndPreparedState();
   temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest cancelRequest;
   cancelRequest.type = temporaldeck_lifecycle::TemporalDeckSampleLifecycle::AsyncSampleBuildRequest::NONE;
@@ -2512,6 +2558,7 @@ bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *erro
     impl->sampleLifecycle.requestAsyncSampleBuild(guardRequest);
     impl->longPlayOwner->requestLoad(path);
     impl->longPlayInstallPending.store(true, std::memory_order_release);
+    impl->longPlayStartupHold = false;
     impl->installedLongPlayGeneration = impl->longPlayOwner->generation();
     return true;
   }
@@ -2523,6 +2570,7 @@ bool TemporalDeck::loadSampleFromPath(const std::string &path, std::string *erro
     stream->clear();
   }
   impl->longPlayInstallPending.store(false, std::memory_order_release);
+  impl->longPlayStartupHold = false;
   bool wasFreezeLatched = impl->transportControl.freezeLatched;
   bool wasFreezeLatchedByButton = impl->transportControl.freezeLatchedByButton;
   impl->transportControl.freezeLatched = wasFreezeLatched;

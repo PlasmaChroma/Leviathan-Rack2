@@ -191,6 +191,72 @@ Result testEngineDefersColdSeekUntilResident() {
               " completed=" + std::to_string(completed)};
 }
 
+Result testScopeProbeDoesNotChangePlaybackFallback() {
+  temporaldeck::TemporalDeckEngine engine;
+  engine.buffer.reset(48000.f, 1.f, false);
+  engine.sampleRate = 48000.f;
+  StreamStub stub;
+  engine.installStreamedSample(&stub, &StreamStub::read, &StreamStub::desire,
+                               &StreamStub::resident, 1000, 5.f);
+
+  float playbackLeft = 0.f;
+  float playbackRight = 0.f;
+  const bool playbackRead = engine.readStreamedSampleFrame(100, &playbackLeft, &playbackRight);
+  float scopeLeft = 0.f;
+  float scopeRight = 0.f;
+  const bool coldScopeRead = engine.readStreamedScopeFrame(800, &scopeLeft, &scopeRight);
+
+  // A subsequent cold playback read should still fall back to frame 100, not
+  // to a scope probe or a fabricated zero-valued scope bin.
+  float fallbackLeft = 0.f;
+  float fallbackRight = 0.f;
+  const bool coldPlaybackRead = engine.readStreamedSampleFrame(801, &fallbackLeft, &fallbackRight);
+  const bool fallbackPreserved = std::fabs(fallbackLeft - playbackLeft) < 1e-6f &&
+                                 std::fabs(fallbackRight - playbackRight) < 1e-6f;
+  return {"Cold TD.Scope probes do not alter streamed playback fallback",
+          playbackRead && !coldScopeRead && !coldPlaybackRead && fallbackPreserved,
+          "playbackRead=" + std::to_string(playbackRead) +
+              " coldScopeRead=" + std::to_string(coldScopeRead) +
+              " fallbackPreserved=" + std::to_string(fallbackPreserved)};
+}
+
+Result testStartupReadinessHoldReleasesAtResidentFrame() {
+  temporaldeck::TemporalDeckEngine engine;
+  engine.buffer.reset(48000.f, 1.f, false);
+  engine.sampleRate = 48000.f;
+  StreamStub stub;
+  engine.installStreamedSample(&stub, &StreamStub::read, &StreamStub::desire,
+                               &StreamStub::resident, 1000, 5.f);
+  engine.readHead = 800.0;
+  engine.requestStreamWindow();
+  const bool heldWhileCold = !engine.isStreamedFrameResident(engine.readHead) && stub.desired == 800u;
+  stub.targetResident = true;
+  const bool releasedWhenResident = engine.isStreamedFrameResident(engine.readHead);
+  return {"Long-play startup hold releases only at its resident playback frame",
+          heldWhileCold && releasedWhenResident,
+          "heldWhileCold=" + std::to_string(heldWhileCold) +
+              " releasedWhenResident=" + std::to_string(releasedWhenResident)};
+}
+
+Result testLoopingStartupWaitsForWrappedScopeHistory() {
+  temporaldeck::TemporalDeckEngine engine;
+  engine.buffer.reset(48000.f, 1.f, false);
+  engine.sampleRate = 48000.f;
+  StreamStub stub;
+  engine.installStreamedSample(&stub, &StreamStub::read, &StreamStub::desire,
+                               &StreamStub::resident, 1000, 5.f);
+  engine.readHead = 0.0;
+  const bool centerResident = engine.isStreamedFrameResident(engine.readHead);
+  const bool wrappedHistoryCold = !engine.isStreamedScopeWindowResident(0.0, 300.0, true);
+  stub.targetResident = true;
+  const bool fullWindowResident = engine.isStreamedScopeWindowResident(0.0, 300.0, true);
+  return {"Looping startup waits for scope history wrapped behind frame zero",
+          centerResident && wrappedHistoryCold && fullWindowResident,
+          "centerResident=" + std::to_string(centerResident) +
+              " wrappedHistoryCold=" + std::to_string(wrappedHistoryCold) +
+              " fullWindowResident=" + std::to_string(fullWindowResident)};
+}
+
 Result testHourWavSeek() {
   const std::string path = "/tmp/leviathan_tdlongplay_hour.wav";
   const unsigned sampleRate = 8000u;
@@ -269,6 +335,9 @@ Result testReaderWriterContention() {
 int main() {
   const Result results[] = {testWavStreamingAndSymmetricBlocks(),
                             testEngineDefersColdSeekUntilResident(),
+                            testScopeProbeDoesNotChangePlaybackFallback(),
+                            testStartupReadinessHoldReleasesAtResidentFrame(),
+                            testLoopingStartupWaitsForWrappedScopeHistory(),
                             testHourWavSeek(),
                             testReaderWriterContention()};
   int failures = 0;
