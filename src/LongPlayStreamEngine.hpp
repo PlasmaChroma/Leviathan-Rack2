@@ -55,6 +55,7 @@ public:
   std::size_t allocatedAudioBytes() const;
 
 private:
+  static constexpr int kCacheWays = 2;
   struct Block {
     std::vector<float> stereo;
     std::atomic<std::uint64_t> sequence{0u};
@@ -69,7 +70,11 @@ private:
   void workerLoop();
   void invalidateBlocks();
 
-  std::array<Block, kBlockCount> blocks;
+  // Two ways prevent a wrapped loop window from making blocks at opposite
+  // ends of the file evict each other when their block numbers have the same
+  // cache-set remainder. kBlockCount remains the number of frames blocks in
+  // the requested resident window.
+  std::array<Block, kBlockCount * kCacheWays> blocks;
   std::thread worker;
   mutable std::mutex requestMutex;
   std::condition_variable requestCv;

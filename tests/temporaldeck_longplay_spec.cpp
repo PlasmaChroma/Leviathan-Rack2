@@ -226,6 +226,42 @@ Result testLoopPrefetchUsesActiveWindowEnd() {
               " diskActivity=" + std::to_string(diskActivityObserved)};
 }
 
+Result testWrappedLoopWindowDoesNotThrashCacheSet() {
+  const std::string path = "/tmp/leviathan_tdlongplay_wrapped_collision.wav";
+  const unsigned sampleRate = temporaldeck::LongPlayStreamEngine::kBlockFrames;
+  const unsigned blockCount = 35u;
+  const bool wrote = writeSparseWav(path, sampleRate, blockCount, false);
+  temporaldeck::LongPlayStreamEngine engine;
+  engine.requestLoad(path);
+  const bool ready = waitForReady(engine);
+
+  engine.setDesiredWindow(0u, true, 0u,
+                          std::uint64_t(blockCount) * sampleRate);
+  const auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::seconds(10);
+  while (std::chrono::steady_clock::now() < deadline &&
+         !engine.requestedWindowReady()) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  const bool windowReady = engine.requestedWindowReady();
+  const std::uint64_t activityAtReady = engine.diskActivitySequence();
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  const bool activityStopped =
+      engine.diskActivitySequence() == activityAtReady;
+  const bool wrappedFrameResident = engine.isFrameResident(
+      std::uint64_t(blockCount) * sampleRate - 1u);
+
+  std::remove(path.c_str());
+  return {"Wrapped loop window settles when file-end blocks share cache sets",
+          wrote && ready && windowReady && activityStopped &&
+              wrappedFrameResident,
+          "ready=" + std::to_string(ready) +
+              " windowReady=" + std::to_string(windowReady) +
+              " activityStopped=" + std::to_string(activityStopped) +
+              " wrappedFrameResident=" +
+              std::to_string(wrappedFrameResident)};
+}
+
 Result testEngineDefersColdSeekUntilResident() {
   temporaldeck::TemporalDeckEngine engine;
   engine.buffer.reset(48000.f, 1.f, false);
@@ -466,6 +502,7 @@ Result testLoopSeamUsesActiveSampleWindowForMotionDelta() {
 int main() {
   const Result results[] = {testWavStreamingAndSymmetricBlocks(),
                             testLoopPrefetchUsesActiveWindowEnd(),
+                            testWrappedLoopWindowDoesNotThrashCacheSet(),
                             testEngineDefersColdSeekUntilResident(),
                             testEngineDefersColdScratchMovement(),
                             testScopeProbeDoesNotChangePlaybackFallback(),

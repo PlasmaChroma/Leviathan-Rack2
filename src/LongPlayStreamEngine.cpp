@@ -374,28 +374,31 @@ void LongPlayStreamEngine::setDesiredWindow(std::uint64_t frame, bool loop,
 
 bool LongPlayStreamEngine::readFrame(std::uint64_t frame, float *left, float *right) const {
   const std::uint64_t blockNumber = frame / kBlockFrames;
-  const Block &block = blocks[std::size_t(blockNumber % kBlockCount)];
-  const std::uint64_t sequence = block.sequence.load(std::memory_order_acquire);
-  if (sequence & 1u) {
-    return false;
-  }
-  block.readers.fetch_add(1u, std::memory_order_acq_rel);
-  if (sequence != block.sequence.load(std::memory_order_acquire)) {
+  const std::size_t set = std::size_t(blockNumber % kBlockCount);
+  for (int way = 0; way < kCacheWays; ++way) {
+    const Block &block = blocks[set * kCacheWays + std::size_t(way)];
+    const std::uint64_t sequence = block.sequence.load(std::memory_order_acquire);
+    if (sequence & 1u) {
+      continue;
+    }
+    block.readers.fetch_add(1u, std::memory_order_acq_rel);
+    if (sequence != block.sequence.load(std::memory_order_acquire)) {
+      block.readers.fetch_sub(1u, std::memory_order_release);
+      continue;
+    }
+    const std::uint64_t start = block.startFrame;
+    const std::uint32_t count = block.validFrames;
+    if (frame >= start && frame - start < count) {
+      const std::size_t index = std::size_t(frame - start) * 2u;
+      if (left)
+        *left = block.stereo[index];
+      if (right)
+        *right = block.stereo[index + 1u];
+      block.readers.fetch_sub(1u, std::memory_order_release);
+      return true;
+    }
     block.readers.fetch_sub(1u, std::memory_order_release);
-    return false;
   }
-  const std::uint64_t start = block.startFrame;
-  const std::uint32_t count = block.validFrames;
-  if (frame >= start && frame - start < count) {
-    const std::size_t index = std::size_t(frame - start) * 2u;
-    if (left)
-      *left = block.stereo[index];
-    if (right)
-      *right = block.stereo[index + 1u];
-    block.readers.fetch_sub(1u, std::memory_order_release);
-    return true;
-  }
-  block.readers.fetch_sub(1u, std::memory_order_release);
   return false;
 }
 
@@ -415,21 +418,27 @@ bool LongPlayStreamEngine::readStereoInterleaved(std::uint64_t startFrame, std::
 
 bool LongPlayStreamEngine::isFrameResident(std::uint64_t frame) const {
   const std::uint64_t blockNumber = frame / kBlockFrames;
-  const Block &block = blocks[std::size_t(blockNumber % kBlockCount)];
-  const std::uint64_t sequence = block.sequence.load(std::memory_order_acquire);
-  if (sequence & 1u) {
-    return false;
-  }
-  block.readers.fetch_add(1u, std::memory_order_acq_rel);
-  if (sequence != block.sequence.load(std::memory_order_acquire)) {
+  const std::size_t set = std::size_t(blockNumber % kBlockCount);
+  for (int way = 0; way < kCacheWays; ++way) {
+    const Block &block = blocks[set * kCacheWays + std::size_t(way)];
+    const std::uint64_t sequence = block.sequence.load(std::memory_order_acquire);
+    if (sequence & 1u) {
+      continue;
+    }
+    block.readers.fetch_add(1u, std::memory_order_acq_rel);
+    if (sequence != block.sequence.load(std::memory_order_acquire)) {
+      block.readers.fetch_sub(1u, std::memory_order_release);
+      continue;
+    }
+    const std::uint64_t start = block.startFrame;
+    const std::uint32_t count = block.validFrames;
+    const bool resident = frame >= start && (frame - start) < count;
     block.readers.fetch_sub(1u, std::memory_order_release);
-    return false;
+    if (resident) {
+      return true;
+    }
   }
-  const std::uint64_t start = block.startFrame;
-  const std::uint32_t count = block.validFrames;
-  const bool resident = frame >= start && (frame - start) < count;
-  block.readers.fetch_sub(1u, std::memory_order_release);
-  return resident;
+  return false;
 }
 
 bool LongPlayStreamEngine::ready() const {
@@ -650,11 +659,43 @@ void LongPlayStreamEngine::workerLoop() {
     for (std::size_t w = 0; w < wantedCount; ++w) {
       const std::uint64_t wantedStart = wantedStarts[w];
       const std::uint64_t blockNumber = wantedStart / kBlockFrames;
-      Block *destination = &blocks[std::size_t(blockNumber % kBlockCount)];
-      const std::uint64_t sequence = destination->sequence.load(std::memory_order_acquire);
-      const bool present = !(sequence & 1u) && destination->validFrames > 0u && destination->startFrame == wantedStart;
+      const std::size_t set = std::size_t(blockNumber % kBlockCount);
+      Block *destination = nullptr;
+      bool present = false;
+      for (int way = 0; way < kCacheWays; ++way) {
+        Block &candidate = blocks[set * kCacheWays + std::size_t(way)];
+        const std::uint64_t sequence = candidate.sequence.load(std::memory_order_acquire);
+        if (!(sequence & 1u) && candidate.validFrames > 0u &&
+            candidate.startFrame == wantedStart) {
+          present = true;
+          break;
+        }
+        if (!destination && !(sequence & 1u) && candidate.validFrames == 0u) {
+          destination = &candidate;
+        }
+      }
       if (present) {
         continue;
+      }
+      if (!destination) {
+        for (int way = 0; way < kCacheWays && !destination; ++way) {
+          Block &candidate = blocks[set * kCacheWays + std::size_t(way)];
+          bool stillWanted = false;
+          for (std::size_t i = 0; i < wantedCount; ++i) {
+            if (candidate.validFrames > 0u && candidate.startFrame == wantedStarts[i]) {
+              stillWanted = true;
+              break;
+            }
+          }
+          if (!stillWanted) {
+            destination = &candidate;
+          }
+        }
+      }
+      // A 32-block circular window can occupy at most two entries in each
+      // modulo-32 set. This fallback is defensive for a future window policy.
+      if (!destination) {
+        destination = &blocks[set * kCacheWays];
       }
       missingWantedBlock = true;
       publishedRequestedWindowReady.store(false, std::memory_order_release);
