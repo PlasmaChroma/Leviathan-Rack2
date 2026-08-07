@@ -509,12 +509,15 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 		// 1. Flee mouse
 		float fleeRadius = 250.f;
 		if (distToMouse < fleeRadius && distToMouse > 0.001f) {
-			float force = (1.f - distToMouse / fleeRadius) * 2000.f;
+			// Use a quadratic falloff: gentle push at the edges, strong darting when very close
+			float normalizedDist = 1.f - (distToMouse / fleeRadius);
+			float force = normalizedDist * normalizedDist * 1500.f;
 			acceleration = acceleration.plus(toMouse.normalize().mult(-force));
 		}
 
 		// 2. Wander
-		float time = system::getTime();
+		// Offset the time using the module's ID so multiple puffies don't swim in sync
+		float time = system::getTime() + module->id * 12.34f;
 		acceleration.x += std::sin(time * 2.1f) * 150.f;
 		acceleration.y += std::cos(time * 1.7f) * 150.f;
 
@@ -559,19 +562,21 @@ void PuffyWidget::step() {
 	ModuleWidget::step();
 	
 	auto* puffyModule = dynamic_cast<Puffy*>(module);
-	if (puffyModule && APP && APP->scene && APP->scene->rack) {
+	
+	bool validRackContext = puffyModule && APP && APP->scene && APP->scene->rack 
+		&& parent == APP->scene->rack->getModuleContainer();
+
+	if (validRackContext) {
 		bool wantsRoaming = puffyModule->roamingEnabled.load(std::memory_order_relaxed);
 		if (wantsRoaming && !roamingOverlay) {
 			auto* rack = APP->scene->rack;
-			roamingOverlay = new PuffyRoamingOverlay(puffyModule);
-			Vec offset = getRelativeOffset(Vec(), rack);
-			roamingOverlay->anchorPos = offset.plus(Vec(box.size.x * 0.5f, box.size.y * 0.5f));
-			roamingOverlay->box.pos = roamingOverlay->anchorPos.minus(roamingOverlay->box.size.mult(0.5f));
 			auto* cableContainer = rack->getCableContainer();
-			if (cableContainer) {
+			if (cableContainer && rack->hasChild(cableContainer)) {
+				roamingOverlay = new PuffyRoamingOverlay(puffyModule);
+				Vec offset = getRelativeOffset(Vec(), rack);
+				roamingOverlay->anchorPos = offset.plus(Vec(box.size.x * 0.5f, box.size.y * 0.5f));
+				roamingOverlay->box.pos = roamingOverlay->anchorPos.minus(roamingOverlay->box.size.mult(0.5f));
 				rack->addChildAbove(roamingOverlay, cableContainer);
-			} else {
-				rack->addChild(roamingOverlay);
 			}
 		} else if (!wantsRoaming && roamingOverlay) {
 			if (roamingOverlay->parent) {
