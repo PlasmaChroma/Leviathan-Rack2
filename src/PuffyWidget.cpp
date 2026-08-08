@@ -596,7 +596,7 @@ void PuffyWidget::syncDrawLog(bool enabled, std::uint32_t instanceId) {
 
 struct PuffyRoamingOverlay final : TransparentWidget {
 	static constexpr float kBaseSize = 80.f;
-	static constexpr float kBaseShadowPad = 8.f;
+	static constexpr float kBaseShadowPad = 16.f;
 	Puffy* module = nullptr;
 	PuffyFishWidget* fishWidget = nullptr;
 	Vec velocity{0.f, 0.f};
@@ -605,8 +605,14 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 	explicit PuffyRoamingOverlay(Puffy* module) : module(module) {
 		box.size = Vec(kBaseSize + kBaseShadowPad, kBaseSize + kBaseShadowPad);
 		fishWidget = new PuffyFishWidget(module, true);
-		fishWidget->box.size = Vec(kBaseSize, kBaseSize);
+		fishWidget->box.size = box.size;
 		addChild(fishWidget);
+	}
+
+	float rackZoom() const {
+		return fishWidget
+			? fishWidget->box.size.x / (kBaseSize + kBaseShadowPad)
+			: 1.f;
 	}
 
 	Vec avatarCenter() const {
@@ -625,7 +631,7 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 		const Vec center = avatarCenter();
 		box.size = nextSize;
 		if (fishWidget) {
-			fishWidget->box.size = Vec(kBaseSize * zoom, kBaseSize * zoom);
+			fishWidget->box.size = box.size;
 		}
 		box.pos = center.minus(fishWidget->box.pos).minus(
 			fishWidget->box.size.mult(0.5f));
@@ -669,8 +675,7 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 		float distToAnchor = toAnchor.norm();
 		const float rangeSetting = clamp(
 			module->params[Puffy::ROAMING_RANGE_PARAM].getValue(), 0.f, 1.f);
-		const float rackZoom = fishWidget
-			? fishWidget->box.size.x / kBaseSize : 1.f;
+		const float rackZoom = this->rackZoom();
 		float maxDist = crossfade(90.f, 900.f, rangeSetting) * rackZoom;
 		module->roamingDistance.store(
 			distToAnchor / std::max(rackZoom, 0.05f),
@@ -760,14 +765,22 @@ void PuffyWidget::step() {
 		else if (wantsRoaming && roamingOverlay) {
 			roamingAttachStableFrames = 3u;
 			PuffyRoamingOverlay* overlay = roamingOverlay.get();
-			overlay->setRackZoom(getRelativeZoom(scene));
+			const float oldZoom = std::max(overlay->rackZoom(), 0.05f);
+			const float nextZoom = clamp(
+				getRelativeZoom(scene), 0.05f, 8.f);
+			const Vec logicalOffset = overlay->avatarCenter()
+				.minus(overlay->anchorPos).div(oldZoom);
+			overlay->setRackZoom(nextZoom);
 			const Vec nextAnchor = getRelativeOffset(
 				box.size.mult(0.5f), scene);
-			// Rack zooming and panning move the module abruptly in scene space.
-			// Carry the avatar by the same delta so the bungee does not mistake
-			// camera movement for a huge roaming displacement and launch Puffy.
+			// Preserve roaming state in Rack-space units. Scaling only the range
+			// boundary made zoom changes alter the normalized displacement and
+			// briefly kick the bungee.
+			const Vec nextCenter = nextAnchor.plus(
+				logicalOffset.mult(nextZoom));
 			overlay->box.pos = overlay->box.pos.plus(
-				nextAnchor.minus(overlay->anchorPos));
+				nextCenter.minus(overlay->avatarCenter()));
+			overlay->velocity = overlay->velocity.mult(nextZoom / oldZoom);
 			overlay->anchorPos = nextAnchor;
 		}
 		else if (!wantsRoaming && roamingOverlay) {

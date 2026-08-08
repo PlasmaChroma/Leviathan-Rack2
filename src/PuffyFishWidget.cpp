@@ -433,7 +433,8 @@ void PuffyFishWidget::drawRoamingDropShadow(NVGcontext* vg) {
 	if (!vg || !roamingAvatar) {
 		return;
 	}
-	const float minimum = std::min(box.size.x, box.size.y);
+	const float canvasMinimum = std::min(box.size.x, box.size.y);
+	const float minimum = canvasMinimum * (80.f / 96.f);
 	const float inflation = clamp01(pose.inflation);
 	const Vec center(
 		box.size.x * 0.5f + minimum * 0.045f,
@@ -505,7 +506,11 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 	TransparentWidget::draw(args);
 	const float width = box.size.x;
 	const float height = box.size.y;
-	const float minimum = std::min(width, height);
+	const float canvasMinimum = std::min(width, height);
+	// The roaming canvas includes transparent safety padding for fully puffed
+	// fins and the silhouette shadow. Preserve the original 80px design scale.
+	const float minimum = roamingAvatar
+		? canvasMinimum * (80.f / 96.f) : canvasMinimum;
 	const Vec center(
 		width * 0.5f,
 		height * 0.5f + pose.verticalOffset * minimum);
