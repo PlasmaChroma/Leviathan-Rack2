@@ -603,8 +603,20 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 	PuffyFishWidget* fishWidget = nullptr;
 	Vec velocity{0.f, 0.f};
 	Vec anchorPos{0.f, 0.f};
+	Vec curiosityDrift{0.f, 0.f};
+	Vec curiosityTarget{0.f, 0.f};
+	float curiosityTimer = 0.f;
+	float quietTime = 0.f;
+	std::uint32_t rngState = 1u;
 
 	explicit PuffyRoamingOverlay(Puffy* module) : module(module) {
+		const std::uint64_t moduleId = module && module->id >= 0
+			? std::uint64_t(module->id) : 1u;
+		rngState = std::uint32_t(moduleId) ^ std::uint32_t(moduleId >> 32)
+			^ 0x9e3779b9u;
+		if (rngState == 0u) {
+			rngState = 1u;
+		}
 		box.size = Vec(kBaseSize + kBaseShadowPad, kBaseSize + kBaseShadowPad);
 		fishWidget = new PuffyFishWidget(module, true);
 		fishWidget->box.size = box.size;
@@ -615,6 +627,13 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 		return fishWidget
 			? fishWidget->box.size.x / (kBaseSize + kBaseShadowPad)
 			: 1.f;
+	}
+
+	float nextRandom01() {
+		rngState ^= rngState << 13;
+		rngState ^= rngState >> 17;
+		rngState ^= rngState << 5;
+		return float(rngState & 0x00ffffffu) / float(0x01000000u);
 	}
 
 	Vec avatarCenter() const {
@@ -652,13 +671,15 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 		
 		Vec mousePos = APP->scene->getMousePos();
 		Vec center = avatarCenter();
+		float dt = APP->window ? APP->window->getLastFrameDuration() : 1.f/60.f;
+		if (dt > 0.1f) dt = 0.1f;
 		Vec toMouse = mousePos.minus(center);
 		float distToMouse = toMouse.norm();
 
 		Vec acceleration{0.f, 0.f};
 
 		// 1. Flee mouse
-		float fleeRadius = 250.f;
+		float fleeRadius = 340.f;
 		if (distToMouse < fleeRadius && distToMouse > 0.001f) {
 			// Use a quadratic falloff: gentle push at the edges, strong darting when very close
 			float normalizedDist = 1.f - (distToMouse / fleeRadius);
@@ -679,17 +700,62 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 			module->params[Puffy::ROAMING_RANGE_PARAM].getValue(), 0.f, 1.f);
 		const float rackZoom = this->rackZoom();
 		float maxDist = crossfade(90.f, 900.f, rangeSetting) * rackZoom;
+		const float distanceRatio = clamp(
+			distToAnchor / std::max(maxDist, 1.f), 0.f, 1.f);
 		module->roamingDistance.store(
 			distToAnchor / std::max(rackZoom, 0.05f),
 			std::memory_order_relaxed);
-		if (distToAnchor > maxDist) {
-			float force = (distToAnchor - maxDist) * 10.f;
-			acceleration = acceleration.plus(toAnchor.normalize().mult(force));
+
+		// Periodically choose a new, smoothly approached curiosity vector.
+		// This breaks the stable equilibria formed by the procedural wander,
+		// damping, and bungee without introducing visible direction snaps.
+		const float speed = velocity.norm();
+		if (speed < 12.f * rackZoom) {
+			quietTime += dt;
+		}
+		else {
+			quietTime = std::max(0.f, quietTime - 0.5f * dt);
+		}
+		curiosityTimer -= dt;
+		if (curiosityTimer <= 0.f) {
+			curiosityTimer = 1.5f + 2.5f * nextRandom01();
+			const float angle = 2.f * float(M_PI) * nextRandom01();
+			float strength = 70.f + 90.f * nextRandom01();
+			if (quietTime > 2.f) {
+				strength *= 1.65f;
+				curiosityTimer *= 0.7f;
+				quietTime = 0.f;
+			}
+			curiosityTarget = Vec(std::cos(angle), std::sin(angle)).mult(strength);
+			if (distToAnchor > 0.001f) {
+				const float outerBias = clamp(
+					(distanceRatio - 0.60f) / 0.40f, 0.f, 1.f);
+				curiosityTarget = curiosityTarget.mult(1.f - 0.55f * outerBias)
+					.plus(toAnchor.normalize().mult(
+						strength * 0.55f * outerBias));
+			}
+		}
+		const float curiosityApproach = 1.f - std::exp(-1.35f * dt);
+		curiosityDrift = curiosityDrift.plus(
+			curiosityTarget.minus(curiosityDrift).mult(curiosityApproach));
+		acceleration = acceleration.plus(curiosityDrift);
+
+		if (distToAnchor > 0.001f) {
+			const Vec inward = toAnchor.normalize();
+			// Begin with an almost imperceptible bias in the middle of the
+			// roaming area, then increasingly favor homeward travel toward the
+			// boundary. This prevents wander/damping equilibria from camping at
+			// maximum range while retaining free motion near the module.
+			const float softBias = clamp(
+				(distanceRatio - 0.35f) / 0.65f, 0.f, 1.f);
+			const float softForce = 240.f * softBias * softBias;
+			acceleration = acceleration.plus(inward.mult(softForce));
+			if (distToAnchor > maxDist) {
+				const float boundaryForce = (distToAnchor - maxDist) * 10.f;
+				acceleration = acceleration.plus(inward.mult(boundaryForce));
+			}
 		}
 
-		float dt = APP->window ? APP->window->getLastFrameDuration() : 1.f/60.f;
-		if (dt > 0.1f) dt = 0.1f;
-		
 		velocity = velocity.plus(acceleration.mult(dt));
 		velocity = velocity.mult(std::pow(0.05f, dt));
 		
