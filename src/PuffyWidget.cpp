@@ -11,6 +11,7 @@
 #include "visual/VisualAssets.hpp"
 
 #include <chrono>
+#include <array>
 #include <ctime>
 #include <iomanip>
 #include <sstream>
@@ -603,10 +604,16 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 	PuffyFishWidget* fishWidget = nullptr;
 	Vec velocity{0.f, 0.f};
 	Vec anchorPos{0.f, 0.f};
-	Vec curiosityDrift{0.f, 0.f};
-	Vec curiosityTarget{0.f, 0.f};
-	float curiosityTimer = 0.f;
-	float quietTime = 0.f;
+	std::array<double, 25> cellLastVisited {};
+	Vec explorationTargetNormalized{0.f, 0.f};
+	float explorationTimeRemaining = 0.f;
+	float plannerAccumulator = 0.f;
+	float bestTargetDistance = INFINITY;
+	float noTargetProgressTime = 0.f;
+	float lastRangeSetting = -1.f;
+	float rangeStableTimer = 0.f;
+	bool explorationTargetActive = false;
+	bool rangeResetPending = false;
 	std::uint32_t rngState = 1u;
 
 	explicit PuffyRoamingOverlay(Puffy* module) : module(module) {
@@ -634,6 +641,86 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 		rngState ^= rngState >> 17;
 		rngState ^= rngState << 5;
 		return float(rngState & 0x00ffffffu) / float(0x01000000u);
+	}
+
+	int explorationCell(Vec normalizedPosition) const {
+		const float radius = normalizedPosition.norm();
+		if (radius < 0.18f) {
+			return 0;
+		}
+		const int ring = clamp(int((radius - 0.18f) / 0.22f), 0, 2);
+		float angle = std::atan2(normalizedPosition.y, normalizedPosition.x);
+		if (angle < 0.f) {
+			angle += 2.f * float(M_PI);
+		}
+		const int sector = clamp(
+			int(angle * (8.f / (2.f * float(M_PI)))), 0, 7);
+		return 1 + ring * 8 + sector;
+	}
+
+	Vec explorationCellCenter(int cell) const {
+		if (cell <= 0) {
+			return Vec();
+		}
+		const int index = cell - 1;
+		const int ring = index / 8;
+		const int sector = index % 8;
+		const float radius = 0.29f + 0.22f * float(ring);
+		const float angle = (float(sector) + 0.5f)
+			* (2.f * float(M_PI) / 8.f);
+		return Vec(std::cos(angle), std::sin(angle)).mult(radius);
+	}
+
+	void selectExplorationTarget(
+		Vec currentNormalized,
+		Vec cursorNormalized,
+		double now) {
+		int bestCell = 0;
+		float bestScore = -INFINITY;
+		for (int cell = 0; cell < int(cellLastVisited.size()); ++cell) {
+			const Vec candidate = explorationCellCenter(cell);
+			const double visited = cellLastVisited[size_t(cell)];
+			float score = visited <= 0.0
+				? 125.f
+				: std::min(float(now - visited), 90.f) * 1.45f;
+			score -= candidate.minus(currentNormalized).norm() * 18.f;
+			const float cursorDistance = candidate.minus(cursorNormalized).norm();
+			if (cursorDistance < 0.38f) {
+				score -= (0.38f - cursorDistance) * 85.f;
+			}
+			if (candidate.norm() > 0.72f) {
+				score -= 4.f;
+			}
+			score += nextRandom01() * 9.f;
+			if (score > bestScore) {
+				bestScore = score;
+				bestCell = cell;
+			}
+		}
+
+		if (bestCell == 0) {
+			const float angle = 2.f * float(M_PI) * nextRandom01();
+			const float radius = 0.04f + 0.10f * nextRandom01();
+			explorationTargetNormalized = Vec(
+				std::cos(angle), std::sin(angle)).mult(radius);
+		}
+		else {
+			const int index = bestCell - 1;
+			const int ring = index / 8;
+			const int sector = index % 8;
+			const float radius = 0.19f + 0.22f * float(ring)
+				+ 0.20f * nextRandom01();
+			const float sectorWidth = 2.f * float(M_PI) / 8.f;
+			const float angle = (float(sector) + 0.15f
+				+ 0.70f * nextRandom01()) * sectorWidth;
+			explorationTargetNormalized = Vec(
+				std::cos(angle), std::sin(angle)).mult(
+					std::min(radius, 0.84f));
+		}
+		explorationTargetActive = true;
+		explorationTimeRemaining = 3.5f + 3.5f * nextRandom01();
+		bestTargetDistance = INFINITY;
+		noTargetProgressTime = 0.f;
 	}
 
 	Vec avatarCenter() const {
@@ -690,8 +777,8 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 		// 2. Wander
 		// Offset the time using the module's ID so multiple puffies don't swim in sync
 		float time = system::getTime() + module->id * 12.34f;
-		acceleration.x += std::sin(time * 2.1f) * 150.f;
-		acceleration.y += std::cos(time * 1.7f) * 150.f;
+		acceleration.x += std::sin(time * 2.1f) * 90.f;
+		acceleration.y += std::cos(time * 1.7f) * 90.f;
 
 		// 3. Bungee
 		Vec toAnchor = anchorPos.minus(center);
@@ -706,39 +793,75 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 			distToAnchor / std::max(rackZoom, 0.05f),
 			std::memory_order_relaxed);
 
-		// Periodically choose a new, smoothly approached curiosity vector.
-		// This breaks the stable equilibria formed by the procedural wander,
-		// damping, and bungee without introducing visible direction snaps.
-		const float speed = velocity.norm();
-		if (speed < 12.f * rackZoom) {
-			quietTime += dt;
+		// Normalize navigation against the user-selected range. The visitation
+		// map therefore survives zoom changes without remapping scene pixels.
+		const Vec currentNormalized = center.minus(anchorPos).div(
+			std::max(maxDist, 1.f));
+		const Vec cursorNormalized = mousePos.minus(anchorPos).div(
+			std::max(maxDist, 1.f));
+		const double now = system::getTime();
+
+		// Debounce range edits. The active target scales continuously during a
+		// drag; once stable, history resets so newly exposed space is unexplored.
+		if (lastRangeSetting < 0.f) {
+			lastRangeSetting = rangeSetting;
 		}
-		else {
-			quietTime = std::max(0.f, quietTime - 0.5f * dt);
+		else if (std::fabs(rangeSetting - lastRangeSetting) > 0.003f) {
+			lastRangeSetting = rangeSetting;
+			rangeStableTimer = 0.25f;
+			rangeResetPending = true;
 		}
-		curiosityTimer -= dt;
-		if (curiosityTimer <= 0.f) {
-			curiosityTimer = 1.5f + 2.5f * nextRandom01();
-			const float angle = 2.f * float(M_PI) * nextRandom01();
-			float strength = 70.f + 90.f * nextRandom01();
-			if (quietTime > 2.f) {
-				strength *= 1.65f;
-				curiosityTimer *= 0.7f;
-				quietTime = 0.f;
-			}
-			curiosityTarget = Vec(std::cos(angle), std::sin(angle)).mult(strength);
-			if (distToAnchor > 0.001f) {
-				const float outerBias = clamp(
-					(distanceRatio - 0.60f) / 0.40f, 0.f, 1.f);
-				curiosityTarget = curiosityTarget.mult(1.f - 0.55f * outerBias)
-					.plus(toAnchor.normalize().mult(
-						strength * 0.55f * outerBias));
+		if (rangeResetPending) {
+			rangeStableTimer -= dt;
+			if (rangeStableTimer <= 0.f) {
+				cellLastVisited.fill(0.0);
+				explorationTargetActive = false;
+				rangeResetPending = false;
 			}
 		}
-		const float curiosityApproach = 1.f - std::exp(-1.35f * dt);
-		curiosityDrift = curiosityDrift.plus(
-			curiosityTarget.minus(curiosityDrift).mult(curiosityApproach));
-		acceleration = acceleration.plus(curiosityDrift);
+
+		// Planner bookkeeping runs at only 10 Hz. Steady-frame steering below is
+		// O(1); the 25-cell scan occurs only when choosing a new destination.
+		plannerAccumulator += dt;
+		if (plannerAccumulator >= 0.1f) {
+			plannerAccumulator = std::fmod(plannerAccumulator, 0.1f);
+			cellLastVisited[size_t(explorationCell(currentNormalized))] = now;
+		}
+
+		explorationTimeRemaining -= dt;
+		if (!explorationTargetActive && !rangeResetPending
+			&& distanceRatio < 0.96f) {
+			selectExplorationTarget(currentNormalized, cursorNormalized, now);
+		}
+		if (explorationTargetActive) {
+			const Vec targetScene = anchorPos.plus(
+				explorationTargetNormalized.mult(maxDist));
+			const Vec toTarget = targetScene.minus(center);
+			const float targetDistance = toTarget.norm();
+			if (targetDistance + 5.f * rackZoom < bestTargetDistance) {
+				bestTargetDistance = targetDistance;
+				noTargetProgressTime = 0.f;
+			}
+			else {
+				noTargetProgressTime += dt;
+			}
+			const float reachedDistance = std::max(
+				22.f * rackZoom, 0.055f * maxDist);
+			if (targetDistance < reachedDistance
+				|| explorationTimeRemaining <= 0.f
+				|| noTargetProgressTime > 2.4f) {
+				explorationTargetActive = false;
+			}
+			else if (distanceRatio < 1.05f && targetDistance > 0.001f) {
+				float steeringForce = 155.f
+					+ 145.f * explorationTargetNormalized.norm();
+				if (noTargetProgressTime > 1.4f) {
+					steeringForce *= 1.18f;
+				}
+				acceleration = acceleration.plus(
+					toTarget.normalize().mult(steeringForce));
+			}
+		}
 
 		if (distToAnchor > 0.001f) {
 			const Vec inward = toAnchor.normalize();
