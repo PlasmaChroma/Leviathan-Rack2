@@ -24,6 +24,8 @@ private:
 	float excitementHold = 0.f;
 	float excitementCooldown = 0.f;
 	float excitementPhase = 0.f;
+	float finFlutterPhase = 0.f;
+	float movementFinActivity = 0.f;
 	bool energySurgeArmed = true;
 	float idleTime = 0.f;
 	float nextBlinkTime = 3.2f;

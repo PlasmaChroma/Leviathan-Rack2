@@ -888,6 +888,11 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 				acceleration = acceleration.plus(inward.mult(boundaryForce));
 			}
 		}
+		// Reuse the already-computed force magnitude as a cheap visual control.
+		// Ignore gentle cruising forces, then ramp toward the fast flap rate.
+		module->roamingMovementAcceleration.store(
+			clamp((acceleration.norm() - 90.f) / 850.f, 0.f, 1.f),
+			std::memory_order_relaxed);
 
 		velocity = velocity.plus(acceleration.mult(dt));
 		velocity = velocity.mult(std::pow(0.05f, dt));

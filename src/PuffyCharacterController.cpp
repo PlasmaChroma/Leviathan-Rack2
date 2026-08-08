@@ -57,6 +57,8 @@ void PuffyCharacterController::reset(const PuffyVisualState& visual) {
 	excitementHold = 0.f;
 	excitementCooldown = 0.f;
 	excitementPhase = 0.f;
+	finFlutterPhase = 0.f;
+	movementFinActivity = 0.f;
 	energySurgeArmed = true;
 	idleTime = 0.f;
 	nextBlinkTime = 3.2f;
@@ -314,7 +316,18 @@ bool PuffyCharacterController::update(
 	pose->mouthSmile = 0.75f + 0.20f * excitement;
 	pose->mouthTension = clamp01(0.35f * visual.gainReduction);
 	pose->mouthClosure = mouthClosure;
-	const float finFlutter = std::sin(idleTime * 3.1f);
+	const float movementTarget = clamp01(visual.movementAcceleration);
+	const bool movementRising = movementTarget > movementFinActivity;
+	movementFinActivity = approach(
+		movementFinActivity,
+		movementTarget,
+		movementRising ? 4.5f : 1.6f,
+		dt);
+	finFlutterPhase += dt * (3.1f + 7.5f * movementFinActivity);
+	if (finFlutterPhase >= 2.f * kPi) {
+		finFlutterPhase -= 2.f * kPi;
+	}
+	const float finFlutter = std::sin(finFlutterPhase);
 	const float excitedFinFlutter = excitement * excitedWave;
 	pose->leftFinAngle =
 		-0.12f - 0.10f * finFlutter - 0.18f * twitch

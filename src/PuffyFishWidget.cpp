@@ -110,6 +110,11 @@ void PuffyFishWidget::step() {
 	}
 	PuffyVisualState snapshot;
 	if (module->readVisualState(&snapshot)) {
+		if (roamingAvatar) {
+			snapshot.movementAcceleration =
+				module->roamingMovementAcceleration.load(
+					std::memory_order_relaxed);
+		}
 		visual = snapshot;
 	}
 	const float frameTime = APP && APP->window

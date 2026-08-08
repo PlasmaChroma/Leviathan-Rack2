@@ -23,6 +23,7 @@ struct PuffyVisualState {
 	int positiveCharacter = 0;
 	bool charactersLinked = true;
 	bool stereoInputsConnected = false;
+	float movementAcceleration = 0.f;
 };
 
 struct Puffy final : Module {
@@ -68,6 +69,7 @@ struct Puffy final : Module {
 	std::atomic<float> roamingTargetX {0.f};
 	std::atomic<float> roamingTargetY {0.f};
 	std::atomic<float> roamingDistance {0.f};
+	std::atomic<float> roamingMovementAcceleration {0.f};
 	std::atomic<std::uint32_t> visualSequence {0u};
 	std::atomic<float> visualEffectiveAmount {0.f};
 	std::atomic<float> visualWetMix {1.f};
