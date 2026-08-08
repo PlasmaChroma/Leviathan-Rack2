@@ -935,20 +935,6 @@ void PuffyWidget::appendContextMenu(Menu* menu) {
 	}
 	menu->addChild(new MenuSeparator());
 	menu->addChild(createCheckMenuItem(
-		"Auto Deflate",
-		"",
-		[puffyModule]() {
-			return puffyModule->autoDeflateEnabled.load(
-				std::memory_order_relaxed);
-		},
-		[puffyModule]() {
-			const bool enabled = puffyModule->autoDeflateEnabled.load(
-				std::memory_order_relaxed);
-			puffyModule->autoDeflateEnabled.store(
-				!enabled, std::memory_order_relaxed);
-		}));
-
-	menu->addChild(createCheckMenuItem(
 		"Roaming Mode",
 		"",
 		[puffyModule]() {
@@ -959,6 +945,20 @@ void PuffyWidget::appendContextMenu(Menu* menu) {
 			const bool enabled = puffyModule->roamingEnabled.load(
 				std::memory_order_relaxed);
 			puffyModule->roamingEnabled.store(
+				!enabled, std::memory_order_relaxed);
+		}));
+
+	menu->addChild(createCheckMenuItem(
+		"Auto Deflate",
+		"",
+		[puffyModule]() {
+			return puffyModule->autoDeflateEnabled.load(
+				std::memory_order_relaxed);
+		},
+		[puffyModule]() {
+			const bool enabled = puffyModule->autoDeflateEnabled.load(
+				std::memory_order_relaxed);
+			puffyModule->autoDeflateEnabled.store(
 				!enabled, std::memory_order_relaxed);
 		}));
 }
