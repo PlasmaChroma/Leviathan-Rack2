@@ -44,6 +44,9 @@ Puffy::Puffy() {
 	configSwitch(
 		CHARACTER_LINK_PARAM, 0.f, 1.f, 1.f, "Link polarity characters",
 		{"Unlinked", "Linked"});
+	configParam(
+		ROAMING_RANGE_PARAM, 0.f, 1.f, 310.f / 810.f,
+		"Roaming range", "%", 0.f, 100.f);
 
 	configInput(INPUT_L, "Left audio");
 	configInput(INPUT_R, "Right audio");

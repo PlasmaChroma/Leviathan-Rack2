@@ -34,6 +34,7 @@ struct Puffy final : Module {
 		MIX_PARAM,
 		POSITIVE_CHARACTER_PARAM,
 		CHARACTER_LINK_PARAM,
+		ROAMING_RANGE_PARAM,
 		PARAMS_LEN
 	};
 
@@ -66,6 +67,7 @@ struct Puffy final : Module {
 	std::atomic<bool> roamingAvatarActive {false};
 	std::atomic<float> roamingTargetX {0.f};
 	std::atomic<float> roamingTargetY {0.f};
+	std::atomic<float> roamingDistance {0.f};
 	std::atomic<std::uint32_t> visualSequence {0u};
 	std::atomic<float> visualEffectiveAmount {0.f};
 	std::atomic<float> visualWetMix {1.f};

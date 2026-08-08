@@ -46,6 +46,118 @@ struct PuffyViewportGradient final : TransparentWidget {
 	}
 };
 
+struct PuffyRoamingRangeBar final : ParamWidget {
+	bool dragging = false;
+
+	Puffy* getPuffyModule() const {
+		return dynamic_cast<Puffy*>(module);
+	}
+
+	Vec localMousePos() {
+		if (!APP || !APP->scene) {
+			return Vec();
+		}
+		return APP->scene->getMousePos().minus(getAbsoluteOffset(Vec()))
+			.div(std::max(getAbsoluteZoom(), 1e-4f));
+	}
+
+	void setFromX(float x) {
+		const float inset = 2.f;
+		const float usable = std::max(box.size.x - 2.f * inset, 1.f);
+		const float value = clamp((x - inset) / usable, 0.f, 1.f);
+		if (ParamQuantity* quantity = getParamQuantity()) {
+			quantity->setValue(value);
+		}
+	}
+
+	void step() override {
+		ParamWidget::step();
+		Puffy* puffyModule = getPuffyModule();
+		visible = puffyModule && puffyModule->roamingEnabled.load(
+			std::memory_order_relaxed);
+	}
+
+	void onButton(const event::Button& e) override {
+		if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
+			if (e.action == GLFW_PRESS) {
+				dragging = true;
+				setFromX(e.pos.x);
+				e.consume(this);
+				return;
+			}
+			if (e.action == GLFW_RELEASE && dragging) {
+				dragging = false;
+				e.consume(this);
+				return;
+			}
+		}
+		ParamWidget::onButton(e);
+	}
+
+	void onDragMove(const event::DragMove& e) override {
+		if (dragging && e.button == GLFW_MOUSE_BUTTON_LEFT) {
+			setFromX(localMousePos().x);
+			e.consume(this);
+			return;
+		}
+		ParamWidget::onDragMove(e);
+	}
+
+	void onDragEnd(const event::DragEnd& e) override {
+		dragging = false;
+		ParamWidget::onDragEnd(e);
+	}
+
+	void draw(const DrawArgs& args) override {
+		Puffy* puffyModule = getPuffyModule();
+		const float setting = getParamQuantity()
+			? clamp(getParamQuantity()->getValue(), 0.f, 1.f) : 310.f / 810.f;
+		const float actual = puffyModule
+			? clamp((puffyModule->roamingDistance.load(std::memory_order_relaxed)
+				- 90.f) / 810.f, 0.f, 1.f)
+			: 0.f;
+		const float inset = 2.f;
+		const float trackY = 1.f;
+		const float trackHeight = 5.f;
+		const float trackWidth = std::max(box.size.x - 2.f * inset, 1.f);
+
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, inset, trackY, trackWidth, trackHeight, 2.f);
+		nvgFillColor(args.vg, nvgRGBA(5, 4, 11, 225));
+		nvgFill(args.vg);
+
+		nvgSave(args.vg);
+		nvgScissor(args.vg, inset, trackY, trackWidth * setting, trackHeight);
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, inset, trackY, trackWidth, trackHeight, 2.f);
+		nvgFillColor(args.vg, nvgRGBA(155, 72, 224, 215));
+		nvgFill(args.vg);
+		nvgRestore(args.vg);
+
+		nvgSave(args.vg);
+		nvgScissor(args.vg, inset, trackY, trackWidth * actual, trackHeight);
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, inset, trackY, trackWidth, trackHeight, 2.f);
+		nvgFillColor(args.vg, nvgRGBA(35, 222, 235, 165));
+		nvgFill(args.vg);
+		nvgRestore(args.vg);
+
+		const float markerX = inset + trackWidth * setting;
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, markerX - 0.65f, trackY - 1.f, 1.3f, trackHeight + 2.f);
+		nvgFillColor(args.vg, nvgRGBA(226, 177, 255, 245));
+		nvgFill(args.vg);
+
+		if (APP && APP->window && APP->window->uiFont) {
+			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+			nvgFontSize(args.vg, 8.f);
+			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
+			nvgFillColor(args.vg, nvgRGBA(215, 207, 229, 220));
+			nvgText(args.vg, box.size.x * 0.5f, 8.f, "RANGE", nullptr);
+		}
+	}
+};
+
 struct PuffyCharacterMenuItem final : MenuItem {
 	Puffy* module = nullptr;
 	bool negativePart = true;
@@ -555,7 +667,14 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 		// 3. Bungee
 		Vec toAnchor = anchorPos.minus(center);
 		float distToAnchor = toAnchor.norm();
-		float maxDist = 400.f;
+		const float rangeSetting = clamp(
+			module->params[Puffy::ROAMING_RANGE_PARAM].getValue(), 0.f, 1.f);
+		const float rackZoom = fishWidget
+			? fishWidget->box.size.x / kBaseSize : 1.f;
+		float maxDist = crossfade(90.f, 900.f, rangeSetting) * rackZoom;
+		module->roamingDistance.store(
+			distToAnchor / std::max(rackZoom, 0.05f),
+			std::memory_order_relaxed);
 		if (distToAnchor > maxDist) {
 			float force = (distToAnchor - maxDist) * 10.f;
 			acceleration = acceleration.plus(toAnchor.normalize().mult(force));
@@ -825,6 +944,13 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	fish->box.pos = mm2px(fishContentRectMm.pos);
 	fish->box.size = mm2px(fishContentRectMm.size);
 	addChild(fish);
+
+	auto* roamingRange = createParam<PuffyRoamingRangeBar>(
+		Vec(), module, Puffy::ROAMING_RANGE_PARAM);
+	roamingRange->box.size = Vec(fish->box.size.x * 0.68f, 18.f);
+	roamingRange->box.pos = fish->box.pos.plus(Vec(
+		fish->box.size.x * 0.16f, 5.f));
+	addParam(roamingRange);
 
 	const Vec characterMenuSize = mm2px(Vec(13.5f, 4.5f));
 	const Vec characterMenuInset = mm2px(Vec(0.6f, 0.6f));
