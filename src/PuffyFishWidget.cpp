@@ -440,7 +440,7 @@ void PuffyFishWidget::drawRoamingDropShadow(NVGcontext* vg) {
 	const Vec center(
 		box.size.x * 0.5f + minimum * 0.045f,
 		box.size.y * 0.5f + minimum * (0.055f + pose.verticalOffset));
-	const float radius = minimum * (0.255f + 0.130f * inflation);
+	const float radius = minimum * (0.235f + 0.150f * inflation);
 	const float radiusX = radius * (0.88f + 0.12f * inflation)
 		* (1.f + pose.squashX);
 	const float radiusY = radius * (0.93f + 0.07f * inflation)
@@ -516,7 +516,7 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 		width * 0.5f,
 		height * 0.5f + pose.verticalOffset * minimum);
 	const float inflation = clamp01(pose.inflation);
-	const float radius = minimum * (0.255f + 0.130f * inflation);
+	const float radius = minimum * (0.235f + 0.150f * inflation);
 	const float radiusX = radius * (0.88f + 0.12f * inflation)
 		* (1.f + pose.squashX);
 	const float radiusY = radius * (0.93f + 0.07f * inflation)

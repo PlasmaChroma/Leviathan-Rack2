@@ -606,6 +606,7 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 	Vec anchorPos{0.f, 0.f};
 	std::array<double, 25> cellLastVisited {};
 	Vec explorationTargetNormalized{0.f, 0.f};
+	Vec explorationSteering{0.f, 0.f};
 	float explorationTimeRemaining = 0.f;
 	float plannerAccumulator = 0.f;
 	float bestTargetDistance = INFINITY;
@@ -833,6 +834,7 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 			&& distanceRatio < 0.96f) {
 			selectExplorationTarget(currentNormalized, cursorNormalized, now);
 		}
+		Vec desiredExplorationSteering{0.f, 0.f};
 		if (explorationTargetActive) {
 			const Vec targetScene = anchorPos.plus(
 				explorationTargetNormalized.mult(maxDist));
@@ -858,10 +860,18 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 				if (noTargetProgressTime > 1.4f) {
 					steeringForce *= 1.18f;
 				}
-				acceleration = acceleration.plus(
-					toTarget.normalize().mult(steeringForce));
+				desiredExplorationSteering =
+					toTarget.normalize().mult(steeringForce);
 			}
 		}
+		// Destination selection may rotate the desired force sharply. Smooth the
+		// steering vector itself so Puffy curves toward a new region instead of
+		// visibly changing course at the selection boundary.
+		const float steeringApproach = 1.f - std::exp(-2.2f * dt);
+		explorationSteering = explorationSteering.plus(
+			desiredExplorationSteering.minus(explorationSteering)
+				.mult(steeringApproach));
+		acceleration = acceleration.plus(explorationSteering);
 
 		if (distToAnchor > 0.001f) {
 			const Vec inward = toAnchor.normalize();
