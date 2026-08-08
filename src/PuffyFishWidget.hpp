@@ -17,6 +17,7 @@ struct PuffyFishWidget final : TransparentWidget {
 
 	void step() override;
 	void draw(const DrawArgs& args) override;
+	void drawRoamingDropShadow(NVGcontext* vg);
 
 private:
 	bool bodyTintIsSettled(

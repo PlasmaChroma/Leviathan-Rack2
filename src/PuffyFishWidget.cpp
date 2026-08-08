@@ -429,6 +429,43 @@ void PuffyFishWidget::drawEye(
 	}
 }
 
+void PuffyFishWidget::drawRoamingDropShadow(NVGcontext* vg) {
+	if (!vg || !roamingAvatar) {
+		return;
+	}
+	const float minimum = std::min(box.size.x, box.size.y);
+	const float inflation = clamp01(pose.inflation);
+	const Vec center(
+		box.size.x * 0.5f + minimum * 0.045f,
+		box.size.y * 0.5f + minimum * (0.055f + pose.verticalOffset));
+	const float radius = minimum * (0.255f + 0.130f * inflation);
+	const float radiusX = radius * (0.88f + 0.12f * inflation)
+		* (1.f + pose.squashX);
+	const float radiusY = radius * (0.93f + 0.07f * inflation)
+		* (1.f + pose.squashY);
+	const float finSizeScale = 1.f - 0.20f * inflation;
+	const PuffyRasterAsset fin = resolveRasterAsset(
+		vg, "res/icon/Puffy_Fin_NS.png");
+	const NVGcolor shadow = nvgRGBA(0, 0, 3, 215);
+
+	nvgSave(vg);
+	nvgGlobalAlpha(vg, 0.30f);
+	drawFin(
+		vg, center, radiusX, true, pose.leftFinAngle, finSizeScale,
+		fin.handle, fin.width, fin.height, shadow);
+	drawFin(
+		vg, center, radiusX, false, pose.rightFinAngle, finSizeScale,
+		fin.handle, fin.width, fin.height, shadow);
+	if (!drawTransitionBodyRaster(
+		vg, center, radiusX, radiusY, shadow, shadow)) {
+		nvgBeginPath(vg);
+		nvgEllipse(vg, center.x, center.y, radiusX, radiusY);
+		nvgFillColor(vg, shadow);
+		nvgFill(vg);
+	}
+	nvgRestore(vg);
+}
+
 void PuffyFishWidget::draw(const DrawArgs& args) {
 	if (module && !roamingAvatar
 		&& module->roamingAvatarActive.load(std::memory_order_acquire)) {
@@ -492,17 +529,19 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 	nvgSave(args.vg);
 	nvgScissor(args.vg, 0.f, 0.f, width, height);
 
-	nvgBeginPath(args.vg);
-	nvgEllipse(
-		args.vg,
-		shadowCenter.x,
-		shadowCenter.y,
-		radiusX * (0.88f + 0.08f * inflation),
-		radiusY * (0.145f + 0.025f * inflation));
-	nvgFillColor(
-		args.vg,
-		nvgRGBA(2, 3, 9, int(104.f + 34.f * inflation)));
-	nvgFill(args.vg);
+	if (!roamingAvatar) {
+		nvgBeginPath(args.vg);
+		nvgEllipse(
+			args.vg,
+			shadowCenter.x,
+			shadowCenter.y,
+			radiusX * (0.88f + 0.08f * inflation),
+			radiusY * (0.145f + 0.025f * inflation));
+		nvgFillColor(
+			args.vg,
+			nvgRGBA(2, 3, 9, int(104.f + 34.f * inflation)));
+		nvgFill(args.vg);
+	}
 
 	{
 		PuffyScopedDrawTimer finTimer(metrics.finDrawNs, measureDraw);

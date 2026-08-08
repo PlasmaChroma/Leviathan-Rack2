@@ -484,30 +484,46 @@ void PuffyWidget::syncDrawLog(bool enabled, std::uint32_t instanceId) {
 
 struct PuffyRoamingOverlay final : TransparentWidget {
 	static constexpr float kBaseSize = 80.f;
+	static constexpr float kBaseShadowPad = 8.f;
 	Puffy* module = nullptr;
 	PuffyFishWidget* fishWidget = nullptr;
 	Vec velocity{0.f, 0.f};
 	Vec anchorPos{0.f, 0.f};
 
 	explicit PuffyRoamingOverlay(Puffy* module) : module(module) {
-		box.size = Vec(kBaseSize, kBaseSize);
+		box.size = Vec(kBaseSize + kBaseShadowPad, kBaseSize + kBaseShadowPad);
 		fishWidget = new PuffyFishWidget(module, true);
-		fishWidget->box.size = box.size;
+		fishWidget->box.size = Vec(kBaseSize, kBaseSize);
 		addChild(fishWidget);
+	}
+
+	Vec avatarCenter() const {
+		return box.pos.plus(fishWidget->box.pos).plus(
+			fishWidget->box.size.mult(0.5f));
 	}
 
 	void setRackZoom(float zoom) {
 		zoom = std::isfinite(zoom) ? clamp(zoom, 0.05f, 8.f) : 1.f;
-		const Vec nextSize(kBaseSize * zoom, kBaseSize * zoom);
+		const Vec nextSize(
+			(kBaseSize + kBaseShadowPad) * zoom,
+			(kBaseSize + kBaseShadowPad) * zoom);
 		if (nextSize == box.size) {
 			return;
 		}
-		const Vec center = box.pos.plus(box.size.mult(0.5f));
+		const Vec center = avatarCenter();
 		box.size = nextSize;
-		box.pos = center.minus(box.size.mult(0.5f));
 		if (fishWidget) {
-			fishWidget->box.size = box.size;
+			fishWidget->box.size = Vec(kBaseSize * zoom, kBaseSize * zoom);
 		}
+		box.pos = center.minus(fishWidget->box.pos).minus(
+			fishWidget->box.size.mult(0.5f));
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (fishWidget) {
+			fishWidget->drawRoamingDropShadow(args.vg);
+		}
+		TransparentWidget::draw(args);
 	}
 
 	void step() override {
@@ -515,7 +531,7 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 		if (!module || !APP || !APP->scene || !APP->scene->rack) return;
 		
 		Vec mousePos = APP->scene->getMousePos();
-		Vec center = box.pos.plus(box.size.mult(0.5f));
+		Vec center = avatarCenter();
 		Vec toMouse = mousePos.minus(center);
 		float distToMouse = toMouse.norm();
 
@@ -602,7 +618,9 @@ void PuffyWidget::step() {
 				overlay->setRackZoom(getRelativeZoom(scene));
 				overlay->anchorPos = getRelativeOffset(
 					box.size.mult(0.5f), scene);
-				overlay->box.pos = overlay->anchorPos.minus(overlay->box.size.mult(0.5f));
+				overlay->box.pos = overlay->anchorPos
+					.minus(overlay->fishWidget->box.pos)
+					.minus(overlay->fishWidget->box.size.mult(0.5f));
 				// Scene-level placement keeps Puffy in front of module-local UI and
 				// rack overlays, while still leaving Rack's menu bar unobstructed.
 				if (scene->menuBar && scene->hasChild(scene->menuBar)) {
