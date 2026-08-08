@@ -653,11 +653,15 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 	}
 
 	const float mouthY = center.y + radiusY * 0.30f;
+	const float mouthClosure = clamp01(pose.mouthClosure);
 	const float mouthWidth = minimum
-		* (0.057f + 0.018f * pose.mouthSmile);
-	const float mouthHeight = minimum
+		* (0.057f + 0.018f * pose.mouthSmile)
+		* (1.f - 0.05f * mouthClosure);
+	const float openMouthHeight = minimum
 		* (0.030f + 0.015f * pose.mouthSmile
 			- 0.012f * pose.mouthTension);
+	const float mouthHeight = openMouthHeight
+		* (1.f - 0.92f * mouthClosure);
 	nvgBeginPath(args.vg);
 	nvgMoveTo(args.vg, center.x - mouthWidth, mouthY);
 	nvgBezierTo(
@@ -676,12 +680,16 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 	nvgStrokeColor(args.vg, nvgRGBA(104, 46, 12, 230));
 	nvgStrokeWidth(args.vg, 0.7f);
 	nvgStroke(args.vg);
-	nvgBeginPath(args.vg);
-	nvgEllipse(
-		args.vg, center.x, mouthY + mouthHeight * 0.45f,
-		mouthWidth * 0.48f, mouthHeight * 0.24f);
-	nvgFillColor(args.vg, nvgRGB(255, 113, 96));
-	nvgFill(args.vg);
+	if (mouthClosure < 0.98f) {
+		nvgBeginPath(args.vg);
+		nvgEllipse(
+			args.vg, center.x, mouthY + mouthHeight * 0.45f,
+			mouthWidth * 0.48f, mouthHeight * 0.24f);
+		nvgFillColor(
+			args.vg,
+			nvgRGBA(255, 113, 96, int(255.f * (1.f - mouthClosure))));
+		nvgFill(args.vg);
+	}
 
 	nvgResetScissor(args.vg);
 	nvgRestore(args.vg);

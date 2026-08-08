@@ -18,6 +18,7 @@ struct PuffyPose {
 	float rightSquint = 0.f;
 	float mouthSmile = 0.f;
 	float mouthTension = 0.f;
+	float mouthClosure = 0.f;
 	float leftFinAngle = 0.f;
 	float rightFinAngle = 0.f;
 	float spineExtension = 0.f;

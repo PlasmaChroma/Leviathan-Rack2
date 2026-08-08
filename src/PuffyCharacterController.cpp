@@ -63,6 +63,9 @@ void PuffyCharacterController::reset(const PuffyVisualState& visual) {
 	blinkPhase = -1.f;
 	nextSquintTime = 5.4f;
 	squintPhase = -1.f;
+	nextMouthCloseTime = 7.6f;
+	mouthClosePhase = -1.f;
+	mouthCloseSequence = 0;
 	polarityDominance = 0.f;
 	gazeX = 0.f;
 	gazeTargetX = 0.f;
@@ -218,6 +221,30 @@ bool PuffyCharacterController::update(
 		}
 	}
 
+	if (mouthClosePhase < 0.f && idleTime >= nextMouthCloseTime) {
+		mouthClosePhase = 0.f;
+		nextMouthCloseTime +=
+			8.7f + 1.3f * float(mouthCloseSequence % 3);
+		mouthCloseSequence++;
+	}
+	float mouthClosure = 0.f;
+	if (mouthClosePhase >= 0.f) {
+		mouthClosePhase += dt;
+		if (mouthClosePhase < 0.22f) {
+			mouthClosure = smoothstep(mouthClosePhase / 0.22f);
+		}
+		else if (mouthClosePhase < 0.42f) {
+			mouthClosure = 1.f;
+		}
+		else if (mouthClosePhase < 0.76f) {
+			mouthClosure = 1.f
+				- smoothstep((mouthClosePhase - 0.42f) / 0.34f);
+		}
+		else {
+			mouthClosePhase = -1.f;
+		}
+	}
+
 	const float breath = std::sin(idleTime * (2.f * kPi / 4.2f))
 		* (0.003f + 0.006f * visual.inputActivity);
 	pose->inflation = clamp01(inflation + breath);
@@ -286,6 +313,7 @@ bool PuffyCharacterController::update(
 	pose->rightSquint = combinedSquint * rightClosure;
 	pose->mouthSmile = 0.75f + 0.20f * excitement;
 	pose->mouthTension = clamp01(0.35f * visual.gainReduction);
+	pose->mouthClosure = mouthClosure;
 	const float finFlutter = std::sin(idleTime * 3.1f);
 	const float excitedFinFlutter = excitement * excitedWave;
 	pose->leftFinAngle =

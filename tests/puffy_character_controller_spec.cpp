@@ -68,14 +68,14 @@ Result characterMotionIsUniform() {
 		const float current[] = {
 			pose.inflation, pose.squashX, pose.squashY, pose.verticalOffset,
 			pose.gazeX, pose.gazeY, pose.leftBlink, pose.rightBlink, pose.squint,
-			pose.mouthSmile, pose.mouthTension, pose.leftFinAngle,
+			pose.mouthSmile, pose.mouthTension, pose.mouthClosure, pose.leftFinAngle,
 			pose.rightFinAngle, pose.spineExtension, pose.blush,
 		};
 		const float expected[] = {
 			reference.inflation, reference.squashX, reference.squashY,
 			reference.verticalOffset, reference.gazeX, reference.gazeY,
 			reference.leftBlink, reference.rightBlink, reference.squint,
-			reference.mouthSmile, reference.mouthTension,
+			reference.mouthSmile, reference.mouthTension, reference.mouthClosure,
 			reference.leftFinAngle, reference.rightFinAngle,
 			reference.spineExtension, reference.blush,
 		};
@@ -141,6 +141,31 @@ Result squintRemainsDistinctFromBlink() {
 		"squint=" + std::to_string(maximumSquint)
 			+ " blink=" + std::to_string(maximumBlink)
 			+ " sustainedFrames=" + std::to_string(sustainedSquintFrames)
+	};
+}
+
+Result mouthClosesInfrequentlyAndReturnsToRest() {
+	PuffyVisualState visual;
+	PuffyCharacterController controller;
+	controller.reset(visual);
+	PuffyPose pose;
+	float earlyMaximum = 0.f;
+	for (int i = 0; i < 360; ++i) {
+		controller.update(1.f / 60.f, visual, &pose);
+		earlyMaximum = std::max(earlyMaximum, pose.mouthClosure);
+	}
+	float sequenceMaximum = 0.f;
+	for (int i = 0; i < 180; ++i) {
+		controller.update(1.f / 60.f, visual, &pose);
+		sequenceMaximum = std::max(sequenceMaximum, pose.mouthClosure);
+	}
+	return {
+		"Mouth rests open, closes occasionally, then reopens",
+		earlyMaximum < 1e-7f && sequenceMaximum > 0.99f
+			&& pose.mouthClosure < 1e-7f,
+		"early=" + std::to_string(earlyMaximum)
+			+ " closed=" + std::to_string(sequenceMaximum)
+			+ " tail=" + std::to_string(pose.mouthClosure)
 	};
 }
 
@@ -294,6 +319,7 @@ int main() {
 		characterMotionIsUniform(),
 		twitchThresholdAndDecay(),
 		squintRemainsDistinctFromBlink(),
+		mouthClosesInfrequentlyAndReturnsToRest(),
 		polarityDominanceScalesEyeClosure(),
 		energySurgeCreatesExcitedMotion(),
 		steadyEnergyDoesNotExcite(),
