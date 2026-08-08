@@ -96,7 +96,8 @@ PuffyTransferPreviewWidget::PuffyTransferPreviewWidget(Puffy* module)
 	visual.positiveInputActivity = 0.35f;
 	visual.negativeInputActivity = 0.35f;
 	visual.negativeCharacter = int(puffy::Character::Bloom);
-	visual.positiveCharacter = int(puffy::Character::Bloom);
+	visual.positiveCharacter = int(puffy::Character::Spine);
+	visual.charactersLinked = false;
 
 	curveFramebuffer = new widget::FramebufferWidget();
 	curveFramebuffer->dirtyOnSubpixelChange = false;

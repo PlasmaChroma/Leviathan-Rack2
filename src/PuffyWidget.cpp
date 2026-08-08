@@ -152,7 +152,7 @@ struct PuffyRoamingRangeBar final : ParamWidget {
 			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 			nvgFontSize(args.vg, 8.f);
 			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
-			nvgFillColor(args.vg, nvgRGBA(215, 207, 229, 220));
+			nvgFillColor(args.vg, nvgRGB(255, 255, 255));
 			nvgText(args.vg, box.size.x * 0.5f, 8.f, "RANGE", nullptr);
 		}
 	}
@@ -267,7 +267,9 @@ struct PuffyCharacterMenuButton final : ParamWidget {
 		const int character = puffyModule
 			? clamp(int(std::lround(puffyModule->params[paramId].getValue())),
 				0, puffy::kCharacterCount - 1)
-			: int(puffy::Character::Bloom);
+			: int(negativePart
+				? puffy::Character::Bloom
+				: puffy::Character::Spine);
 		const NVGcolor tint = puffy_visual::characterTint(character);
 		NVGcolor borderTint = tint;
 		float strokeWidth = 0.85f;
@@ -960,9 +962,9 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 
 	auto* roamingRange = createParam<PuffyRoamingRangeBar>(
 		Vec(), module, Puffy::ROAMING_RANGE_PARAM);
-	roamingRange->box.size = Vec(fish->box.size.x * 0.68f, 18.f);
+	roamingRange->box.size = Vec(fish->box.size.x * 0.84f, 18.f);
 	roamingRange->box.pos = fish->box.pos.plus(Vec(
-		fish->box.size.x * 0.16f, 5.f));
+		fish->box.size.x * 0.08f, 5.f));
 	addParam(roamingRange);
 
 	const Vec characterMenuSize = mm2px(Vec(13.5f, 4.5f));

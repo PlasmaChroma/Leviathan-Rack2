@@ -90,8 +90,9 @@ PuffyRasterAsset resolveRasterAsset(
 PuffyFishWidget::PuffyFishWidget(Puffy* module, bool roamingAvatar)
 	: module(module), roamingAvatar(roamingAvatar) {
 	visual.effectiveAmount = 0.25f;
-	visual.negativeCharacter = 0;
-	visual.positiveCharacter = 0;
+	visual.negativeCharacter = int(puffy::Character::Bloom);
+	visual.positiveCharacter = int(puffy::Character::Spine);
+	visual.charactersLinked = false;
 	if (module) {
 		PuffyVisualState snapshot;
 		if (module->readVisualState(&snapshot)) {
