@@ -35,9 +35,15 @@ struct SharedCache {
 	int sourceWidth = 0;
 	int sourceHeight = 0;
 	bool sourceLoaded = false;
+	std::vector<std::uint8_t> pointerSourcePixels;
+	int pointerSourceWidth = 0;
+	int pointerSourceHeight = 0;
+	bool pointerSourceLoaded = false;
 	CachedImage transitionAtlas;
 	std::array<CachedImage, puffy::kCharacterCount * puffy::kCharacterCount>
 		finalBodies {};
+	std::array<CachedImage, puffy::kCharacterCount * puffy::kCharacterCount>
+		finalPointers {};
 };
 
 SharedCache& cache() {
@@ -57,6 +63,18 @@ bool ensureSourcePixels(SharedCache& shared) {
 	return shared.sourceLoaded;
 }
 
+bool ensurePointerSourcePixels(SharedCache& shared) {
+	if (shared.pointerSourceLoaded) {
+		return true;
+	}
+	shared.pointerSourceLoaded = visual_assets::decodeRasterRgba8(
+		asset::plugin(pluginInstance, "res/icon/arrow-33p-crop-32c.png"),
+		&shared.pointerSourcePixels,
+		&shared.pointerSourceWidth,
+		&shared.pointerSourceHeight);
+	return shared.pointerSourceLoaded;
+}
+
 bool selectContext(SharedCache& shared, NVGcontext* vg) {
 	if (shared.activeVg == vg) {
 		return false;
@@ -65,6 +83,9 @@ bool selectContext(SharedCache& shared, NVGcontext* vg) {
 	shared.activeVg = vg;
 	shared.transitionAtlas = {};
 	for (CachedImage& image : shared.finalBodies) {
+		image = {};
+	}
+	for (CachedImage& image : shared.finalPointers) {
 		image = {};
 	}
 	return reset;
@@ -178,6 +199,104 @@ ImageAccess ensureFinalBody(
 	cached.handle = handle;
 	cached.width = shared.sourceWidth;
 	cached.height = shared.sourceHeight;
+	result.handle = handle;
+	result.width = cached.width;
+	result.height = cached.height;
+	result.created = true;
+	result.recolored = true;
+	return result;
+}
+
+ImageAccess ensureFinalPointer(
+	NVGcontext* vg,
+	int negativeCharacter,
+	int positiveCharacter) {
+	ImageAccess result;
+	if (!vg) {
+		return result;
+	}
+	SharedCache& shared = cache();
+	std::lock_guard<std::mutex> lock(shared.mutex);
+	result.contextReset = selectContext(shared, vg);
+	if (!ensurePointerSourcePixels(shared)) {
+		return result;
+	}
+	negativeCharacter = clamp(
+		negativeCharacter, 0, puffy::kCharacterCount - 1);
+	positiveCharacter = clamp(
+		positiveCharacter, 0, puffy::kCharacterCount - 1);
+	CachedImage& cached = shared.finalPointers[size_t(
+		negativeCharacter * puffy::kCharacterCount + positiveCharacter)];
+	if (cached.state == ResourceState::Ready && !imageIsValid(vg, cached)) {
+		invalidateCurrentImage(vg, cached);
+	}
+	if (imageIsValid(vg, cached)) {
+		result.handle = cached.handle;
+		result.width = cached.width;
+		result.height = cached.height;
+		result.cacheHit = true;
+		return result;
+	}
+	if (cached.state == ResourceState::Building) {
+		return result;
+	}
+	cached.state = ResourceState::Building;
+
+	const auto recolorStart = std::chrono::steady_clock::now();
+	const NVGcolor negativeTint =
+		puffy_visual::characterTint(negativeCharacter);
+	const NVGcolor positiveTint =
+		puffy_visual::characterTint(positiveCharacter);
+	const std::array<std::uint8_t, 6> tint {{
+		colorByte(negativeTint.r), colorByte(negativeTint.g),
+		colorByte(negativeTint.b), colorByte(positiveTint.r),
+		colorByte(positiveTint.g), colorByte(positiveTint.b)
+	}};
+	std::vector<std::uint8_t> pixels(shared.pointerSourcePixels.size());
+	const int denominator = std::max(shared.pointerSourceWidth - 1, 1);
+	std::vector<std::array<std::uint8_t, 3>> columnTints(
+		size_t(shared.pointerSourceWidth));
+	for (int x = 0; x < shared.pointerSourceWidth; ++x) {
+		for (int channel = 0; channel < 3; ++channel) {
+			columnTints[size_t(x)][size_t(channel)] = std::uint8_t(
+				(int(tint[size_t(channel)]) * (denominator - x)
+					+ int(tint[size_t(channel + 3)]) * x
+					+ denominator / 2) / denominator);
+		}
+	}
+	for (int y = 0; y < shared.pointerSourceHeight; ++y) {
+		for (int x = 0; x < shared.pointerSourceWidth; ++x) {
+			const size_t pixel =
+				(size_t(y) * size_t(shared.pointerSourceWidth) + size_t(x)) * 4u;
+			for (int channel = 0; channel < 3; ++channel) {
+				pixels[pixel + size_t(channel)] = std::uint8_t(
+					(int(shared.pointerSourcePixels[pixel + size_t(channel)])
+						* int(columnTints[size_t(x)][size_t(channel)]) + 127) / 255);
+			}
+			pixels[pixel + 3u] = shared.pointerSourcePixels[pixel + 3u];
+		}
+	}
+	result.recolorNs = std::uint64_t(
+		std::chrono::duration_cast<std::chrono::nanoseconds>(
+			std::chrono::steady_clock::now() - recolorStart).count());
+	const auto uploadStart = std::chrono::steady_clock::now();
+	const int handle = nvgCreateImageRGBA(
+		vg,
+		shared.pointerSourceWidth,
+		shared.pointerSourceHeight,
+		NVG_IMAGE_GENERATE_MIPMAPS,
+		pixels.data());
+	result.uploadNs = std::uint64_t(
+		std::chrono::duration_cast<std::chrono::nanoseconds>(
+			std::chrono::steady_clock::now() - uploadStart).count());
+	if (handle < 0) {
+		cached = {};
+		return result;
+	}
+	cached.state = ResourceState::Ready;
+	cached.handle = handle;
+	cached.width = shared.pointerSourceWidth;
+	cached.height = shared.pointerSourceHeight;
 	result.handle = handle;
 	result.width = cached.width;
 	result.height = cached.height;

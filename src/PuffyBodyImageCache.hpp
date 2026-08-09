@@ -24,6 +24,10 @@ ImageAccess ensureFinalBody(
 	NVGcontext* vg,
 	int negativeCharacter,
 	int positiveCharacter);
+ImageAccess ensureFinalPointer(
+	NVGcontext* vg,
+	int negativeCharacter,
+	int positiveCharacter);
 ImageAccess ensureTransitionAtlas(NVGcontext* vg);
 
 } // namespace puffy_body_cache

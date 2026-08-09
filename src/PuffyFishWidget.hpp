@@ -14,6 +14,11 @@ struct PuffyFishWidget final : TransparentWidget {
 	bool roamingAvatar = false;
 	widget::FramebufferWidget* compassFramebuffer = nullptr;
 	Widget* compassRasterWidget = nullptr;
+	int pointerNegativeCharacter = -1;
+	int pointerPositiveCharacter = -1;
+	int previousPointerNegativeCharacter = -1;
+	int previousPointerPositiveCharacter = -1;
+	float pointerTintTransition = 1.f;
 
 	explicit PuffyFishWidget(Puffy* module, bool roamingAvatar = false);
 

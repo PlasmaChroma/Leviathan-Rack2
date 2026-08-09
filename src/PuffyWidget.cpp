@@ -271,7 +271,9 @@ struct PuffyRoamingRangeBar final : ParamWidget {
 			isHovered
 				? nvgRGBA(80, 247, 255, 255)
 				: nvgRGBA(252, 240, 255, 255),
-			nvgRGBA(91, 26, 174, 255));
+			isHovered
+				? nvgRGBA(4, 104, 156, 255)
+				: nvgRGBA(91, 26, 174, 255));
 		nvgBeginPath(args.vg);
 		nvgCircle(args.vg, selectorX, selectorY, selectorRadius);
 		nvgFillPaint(args.vg, selectorPaint);
@@ -871,7 +873,7 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 			fishWidget->box.size.mult(0.5f));
 	}
 
-	void publishSpatialPosition() {
+	void publishSpatialPosition(bool publishDirection = true) {
 		if (!module) {
 			return;
 		}
@@ -882,18 +884,20 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 		}
 		module->roamingTargetX.store(center.x, std::memory_order_relaxed);
 		module->roamingTargetY.store(center.y, std::memory_order_relaxed);
-		Vec compassCenter = anchorPos;
-		if (PuffyFishWidget* compass = compassWidget.get()) {
-			compassCenter = APP && APP->scene
-				? compass->getRelativeOffset(
-					compass->compassCenter(), APP->scene)
-				: compass->compassCenter();
+		if (publishDirection) {
+			Vec compassCenter = anchorPos;
+			if (PuffyFishWidget* compass = compassWidget.get()) {
+				compassCenter = APP && APP->scene
+					? compass->getRelativeOffset(
+						compass->compassCenter(), APP->scene)
+					: compass->compassCenter();
+			}
+			module->roamingDirectionAngle.store(
+				std::atan2(
+					center.y - compassCenter.y,
+					center.x - compassCenter.x),
+				std::memory_order_release);
 		}
-		module->roamingDirectionAngle.store(
-			std::atan2(
-				center.y - compassCenter.y,
-				center.x - compassCenter.x),
-			std::memory_order_release);
 	}
 
 	void setRackZoom(float zoom) {
@@ -1070,7 +1074,9 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 		velocity = velocity.mult(std::pow(0.05f, dt));
 		
 		box.pos = box.pos.plus(velocity.mult(dt));
-		publishSpatialPosition();
+		// Position follows movement immediately. Direction is published once by
+		// PuffyWidget after all Rack zoom geometry is coherent for the frame.
+		publishSpatialPosition(false);
 	}
 };
 

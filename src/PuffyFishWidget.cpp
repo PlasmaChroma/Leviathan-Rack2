@@ -132,6 +132,10 @@ PuffyFishWidget::PuffyFishWidget(Puffy* module, bool roamingAvatar)
 	}
 	controller.reset(visual);
 	controller.update(0.f, visual, &pose);
+	pointerNegativeCharacter = visual.negativeCharacter;
+	pointerPositiveCharacter = visual.positiveCharacter;
+	previousPointerNegativeCharacter = pointerNegativeCharacter;
+	previousPointerPositiveCharacter = pointerPositiveCharacter;
 	if (!roamingAvatar) {
 		compassFramebuffer = new widget::FramebufferWidget();
 		compassFramebuffer->dirtyOnSubpixelChange = false;
@@ -175,6 +179,22 @@ void PuffyFishWidget::step() {
 	const float frameTime = APP && APP->window
 		? clamp(float(APP->window->getLastFrameDuration()), 0.f, 0.1f)
 		: 1.f / 60.f;
+	if (!roamingAvatar) {
+		const int nextNegative = clamp(
+			visual.negativeCharacter, 0, puffy::kCharacterCount - 1);
+		const int nextPositive = clamp(
+			visual.positiveCharacter, 0, puffy::kCharacterCount - 1);
+		if (nextNegative != pointerNegativeCharacter
+			|| nextPositive != pointerPositiveCharacter) {
+			previousPointerNegativeCharacter = pointerNegativeCharacter;
+			previousPointerPositiveCharacter = pointerPositiveCharacter;
+			pointerNegativeCharacter = nextNegative;
+			pointerPositiveCharacter = nextPositive;
+			pointerTintTransition = 0.f;
+		}
+		pointerTintTransition = std::min(
+			1.f, pointerTintTransition + frameTime / 0.22f);
+	}
 	updateAccumulator += frameTime;
 	constexpr float updateInterval = 1.f / 30.f;
 	if (updateAccumulator >= updateInterval) {
@@ -594,21 +614,66 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 		
 		const float angle = module->roamingDirectionAngle.load(
 			std::memory_order_acquire);
+		const puffy_body_cache::ImageAccess pointer =
+			puffy_body_cache::ensureFinalPointer(
+				args.vg,
+				pointerNegativeCharacter,
+				pointerPositiveCharacter);
 		
 		TransparentWidget::draw(args);
 		nvgSave(args.vg);
 		nvgTranslate(args.vg, center.x, center.y);
-		nvgRotate(args.vg, angle);
-		
-		// Draw compass needle
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, 15.f, 0.f);
-		nvgLineTo(args.vg, -10.f, -8.f);
-		nvgLineTo(args.vg, -5.f, 0.f);
-		nvgLineTo(args.vg, -10.f, 8.f);
-		nvgClosePath(args.vg);
-		nvgFillColor(args.vg, nvgRGB(255, 100, 80));
-		nvgFill(args.vg);
+		if (pointer) {
+			// The raster points upward. Rotate its -Y axis onto the published
+			// +X compass direction and place its visual joint at the compass hub.
+			nvgRotate(args.vg, angle + 0.5f * kPi);
+			const float drawHeight = std::min(box.size.x, box.size.y) * 0.24f;
+			const float drawWidth = drawHeight
+				* float(pointer.width) / float(pointer.height);
+			const float x = -0.5f * drawWidth;
+			const float y = -0.60f * drawHeight;
+			const auto drawPointer = [&](int handle, float opacity) {
+				if (handle < 0 || opacity <= 0.001f) {
+					return;
+				}
+				const NVGpaint paint = nvgImagePattern(
+					args.vg, x, y, drawWidth, drawHeight,
+					0.f, handle, clamp01(opacity));
+				nvgBeginPath(args.vg);
+				nvgRect(args.vg, x, y, drawWidth, drawHeight);
+				nvgFillPaint(args.vg, paint);
+				nvgFill(args.vg);
+			};
+			if (pointerTintTransition < 1.f) {
+				const puffy_body_cache::ImageAccess previous =
+					puffy_body_cache::ensureFinalPointer(
+						args.vg,
+						previousPointerNegativeCharacter,
+						previousPointerPositiveCharacter);
+				drawPointer(previous.handle, 1.f - pointerTintTransition);
+			}
+			drawPointer(pointer.handle, pointerTintTransition);
+		}
+		else {
+			const PuffyRasterAsset fallback = resolveRasterAsset(
+				args.vg, "res/icon/arrow-33p-crop-32c.png");
+			if (fallback) {
+				nvgRotate(args.vg, angle + 0.5f * kPi);
+				const float drawHeight =
+					std::min(box.size.x, box.size.y) * 0.24f;
+				const float drawWidth = drawHeight
+					* float(fallback.width) / float(fallback.height);
+				const float x = -0.5f * drawWidth;
+				const float y = -0.60f * drawHeight;
+				const NVGpaint paint = nvgImagePattern(
+					args.vg, x, y, drawWidth, drawHeight,
+					0.f, fallback.handle, 1.f);
+				nvgBeginPath(args.vg);
+				nvgRect(args.vg, x, y, drawWidth, drawHeight);
+				nvgFillPaint(args.vg, paint);
+				nvgFill(args.vg);
+			}
+		}
 		
 		nvgRestore(args.vg);
 		return;
