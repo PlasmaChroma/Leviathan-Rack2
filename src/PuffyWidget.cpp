@@ -600,6 +600,9 @@ void PuffyWidget::syncDrawLog(bool enabled, std::uint32_t instanceId) {
 struct PuffyRoamingOverlay final : TransparentWidget {
 	static constexpr float kBaseSize = 80.f;
 	static constexpr float kBaseShadowPad = 16.f;
+	static constexpr float kMaximumRackZoom = 8.f;
+	static constexpr float kStableCanvasSize =
+		(kBaseSize + kBaseShadowPad) * kMaximumRackZoom;
 	Puffy* module = nullptr;
 	PuffyFishWidget* fishWidget = nullptr;
 	Vec velocity{0.f, 0.f};
@@ -625,9 +628,11 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 		if (rngState == 0u) {
 			rngState = 1u;
 		}
-		box.size = Vec(kBaseSize + kBaseShadowPad, kBaseSize + kBaseShadowPad);
+		box.size = Vec(kStableCanvasSize, kStableCanvasSize);
 		fishWidget = new PuffyFishWidget(module, true);
-		fishWidget->box.size = box.size;
+		fishWidget->box.size = Vec(
+			kBaseSize + kBaseShadowPad, kBaseSize + kBaseShadowPad);
+		fishWidget->box.pos = box.size.minus(fishWidget->box.size).mult(0.5f);
 		addChild(fishWidget);
 	}
 
@@ -742,17 +747,18 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 	}
 
 	void setRackZoom(float zoom) {
-		zoom = std::isfinite(zoom) ? clamp(zoom, 0.05f, 8.f) : 1.f;
+		zoom = std::isfinite(zoom)
+			? clamp(zoom, 0.05f, kMaximumRackZoom) : 1.f;
 		const Vec nextSize(
 			(kBaseSize + kBaseShadowPad) * zoom,
 			(kBaseSize + kBaseShadowPad) * zoom);
-		if (nextSize == box.size) {
+		if (nextSize == fishWidget->box.size) {
 			return;
 		}
 		const Vec center = avatarCenter();
-		box.size = nextSize;
 		if (fishWidget) {
-			fishWidget->box.size = box.size;
+			fishWidget->box.size = nextSize;
+			fishWidget->box.pos = box.size.minus(nextSize).mult(0.5f);
 		}
 		box.pos = center.minus(fishWidget->box.pos).minus(
 			fishWidget->box.size.mult(0.5f));
@@ -760,7 +766,11 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 
 	void draw(const DrawArgs& args) override {
 		if (fishWidget) {
+			nvgSave(args.vg);
+			nvgTranslate(
+				args.vg, fishWidget->box.pos.x, fishWidget->box.pos.y);
 			fishWidget->drawRoamingDropShadow(args.vg);
+			nvgRestore(args.vg);
 		}
 		TransparentWidget::draw(args);
 	}
