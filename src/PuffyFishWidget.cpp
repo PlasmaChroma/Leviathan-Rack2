@@ -102,10 +102,11 @@ struct PuffyCompassRasterWidget final : TransparentWidget {
 			handle = image->handle;
 		}
 		constexpr float aspect = 317.f / 315.f;
-		const float drawHeight = std::min(box.size.x, box.size.y) * 0.60f;
+		const float minimum = std::min(box.size.x, box.size.y);
+		const float drawHeight = minimum * 0.68f;
 		const float drawWidth = drawHeight * aspect;
 		const float x = 0.5f * (box.size.x - drawWidth);
-		const float y = 0.5f * (box.size.y - drawHeight);
+		const float y = 0.5f * (box.size.y - drawHeight) + minimum * 0.06f;
 		const NVGpaint paint = nvgImagePattern(
 			args.vg, x, y, drawWidth, drawHeight, 0.f, handle, 1.f);
 		nvgBeginPath(args.vg);
@@ -181,6 +182,22 @@ void PuffyFishWidget::step() {
 		updateAccumulator = 0.f;
 		controller.update(dt, visual, &pose);
 	}
+}
+
+Vec PuffyFishWidget::visibleBodyCenter() const {
+	const float canvasMinimum = std::min(box.size.x, box.size.y);
+	const float minimum = roamingAvatar
+		? canvasMinimum * (80.f / 96.f) : canvasMinimum;
+	return Vec(
+		box.size.x * 0.5f,
+		box.size.y * 0.5f + pose.verticalOffset * minimum);
+}
+
+Vec PuffyFishWidget::compassCenter() const {
+	const float minimum = std::min(box.size.x, box.size.y);
+	return Vec(
+		box.size.x * 0.5f,
+		box.size.y * 0.5f + minimum * 0.06f);
 }
 
 void PuffyFishWidget::drawFin(
@@ -573,9 +590,7 @@ void PuffyFishWidget::drawRoamingDropShadow(NVGcontext* vg) {
 void PuffyFishWidget::draw(const DrawArgs& args) {
 	if (module && !roamingAvatar
 		&& module->roamingAvatarActive.load(std::memory_order_acquire)) {
-		const float width = box.size.x;
-		const float height = box.size.y;
-		const Vec center(width * 0.5f, height * 0.5f);
+		const Vec center = compassCenter();
 		
 		const float angle = module->roamingDirectionAngle.load(
 			std::memory_order_acquire);

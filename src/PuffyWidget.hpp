@@ -7,9 +7,11 @@
 #include <string>
 
 struct PuffyRoamingOverlay;
+struct PuffyFishWidget;
 
 struct PuffyWidget final : ModuleWidget {
 	WeakPtr<PuffyRoamingOverlay> roamingOverlay;
+	WeakPtr<PuffyFishWidget> panelFishWidget;
 	unsigned int roamingAttachStableFrames = 0u;
 	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
 	std::ofstream drawLogFile;

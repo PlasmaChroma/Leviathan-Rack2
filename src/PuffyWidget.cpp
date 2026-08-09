@@ -79,13 +79,14 @@ struct PuffyRangeTooltip final : ui::Tooltip {
 
 struct PuffyRoamingRangeBar final : ParamWidget {
 	static constexpr float kAssetAspect = 726.f / 76.f;
-	static constexpr float kTrackLeftFraction = 92.f / 726.f;
-	static constexpr float kTrackRightFraction = 634.f / 726.f;
 	static constexpr float kTrackTopFraction = 17.f / 76.f;
 	static constexpr float kTrackBottomFraction = 59.f / 76.f;
+	static constexpr float kFillLeftFraction = 97.f / 726.f;
+	static constexpr float kFillRightFraction = 629.f / 726.f;
 	static constexpr float kSelectorLeftFraction = 113.f / 726.f;
 	static constexpr float kSelectorRightFraction = 613.f / 726.f;
 	bool dragging = false;
+	bool isHovered = false;
 	PuffyRangeTooltip* rangeTooltip = nullptr;
 
 	~PuffyRoamingRangeBar() override {
@@ -144,12 +145,14 @@ struct PuffyRoamingRangeBar final : ParamWidget {
 	}
 
 	void onEnter(const event::Enter& e) override {
+		isHovered = true;
 		createRangeTooltip();
 		event::Enter copy = e;
 		OpaqueWidget::onEnter(copy);
 	}
 
 	void onLeave(const event::Leave& e) override {
+		isHovered = false;
 		destroyRangeTooltip();
 		event::Leave copy = e;
 		OpaqueWidget::onLeave(copy);
@@ -215,18 +218,18 @@ struct PuffyRoamingRangeBar final : ParamWidget {
 			nvgFill(args.vg);
 		}
 
-		const float trackLeft = assetWidth * kTrackLeftFraction;
-		const float trackRight = assetWidth * kTrackRightFraction;
 		const float trackY = assetHeight * kTrackTopFraction;
 		const float trackHeight = assetHeight
 			* (kTrackBottomFraction - kTrackTopFraction);
-		const float trackWidth = std::max(trackRight - trackLeft, 1.f);
+		const float fillLeft = assetWidth * kFillLeftFraction;
+		const float fillRight = assetWidth * kFillRightFraction;
+		const float fillWidth = std::max(fillRight - fillLeft, 1.f);
 		const float selectorLeft = assetWidth * kSelectorLeftFraction;
 		const float selectorRight = assetWidth * kSelectorRightFraction;
 		const float selectorX = crossfade(
 			selectorLeft, selectorRight, setting);
 		const auto drawFillTo = [&](float endpoint, NVGcolor color) {
-			const float width = clamp(endpoint - trackLeft, 0.f, trackWidth);
+			const float width = clamp(endpoint - fillLeft, 0.f, fillWidth);
 			if (width <= 0.01f) {
 				return;
 			}
@@ -234,10 +237,10 @@ struct PuffyRoamingRangeBar final : ParamWidget {
 			// fill rectangle. This keeps the source asset's left-cap curvature
 			// constant even near the minimum setting.
 			nvgSave(args.vg);
-			nvgScissor(args.vg, trackLeft, trackY, width, trackHeight);
+			nvgScissor(args.vg, fillLeft, trackY, width, trackHeight);
 			nvgBeginPath(args.vg);
 			nvgRoundedRect(
-				args.vg, trackLeft, trackY, trackWidth, trackHeight,
+				args.vg, fillLeft, trackY, fillWidth, trackHeight,
 				0.5f * trackHeight);
 			nvgFillColor(args.vg, color);
 			nvgFill(args.vg);
@@ -247,7 +250,7 @@ struct PuffyRoamingRangeBar final : ParamWidget {
 		// the clipped vertical edge while remaining centered on the true value.
 		drawFillTo(selectorX, nvgRGBA(155, 72, 224, 190));
 		drawFillTo(
-			trackLeft + trackWidth * actual,
+			fillLeft + fillWidth * actual,
 			nvgRGBA(35, 222, 235, 145));
 
 		const float selectorY = trackY + 0.5f * trackHeight;
@@ -265,7 +268,9 @@ struct PuffyRoamingRangeBar final : ParamWidget {
 			selectorY - selectorRadius * 0.38f,
 			selectorRadius * 0.08f,
 			selectorRadius,
-			nvgRGBA(252, 240, 255, 255),
+			isHovered
+				? nvgRGBA(80, 247, 255, 255)
+				: nvgRGBA(252, 240, 255, 255),
 			nvgRGBA(91, 26, 174, 255));
 		nvgBeginPath(args.vg);
 		nvgCircle(args.vg, selectorX, selectorY, selectorRadius);
@@ -733,6 +738,7 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 		(kBaseSize + kBaseShadowPad) * kMaximumRackZoom;
 	Puffy* module = nullptr;
 	PuffyFishWidget* fishWidget = nullptr;
+	WeakPtr<PuffyFishWidget> compassWidget;
 	Vec velocity{0.f, 0.f};
 	Vec anchorPos{0.f, 0.f};
 	std::array<double, 25> cellLastVisited {};
@@ -748,7 +754,10 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 	bool rangeResetPending = false;
 	std::uint32_t rngState = 1u;
 
-	explicit PuffyRoamingOverlay(Puffy* module) : module(module) {
+	explicit PuffyRoamingOverlay(
+		Puffy* module,
+		PuffyFishWidget* compassWidget)
+		: module(module), compassWidget(compassWidget) {
 		const std::uint64_t moduleId = module && module->id >= 0
 			? std::uint64_t(module->id) : 1u;
 		rngState = std::uint32_t(moduleId) ^ std::uint32_t(moduleId >> 32)
@@ -866,11 +875,24 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 		if (!module) {
 			return;
 		}
-		const Vec center = avatarCenter();
+		Vec center = avatarCenter();
+		if (fishWidget) {
+			center = box.pos.plus(fishWidget->box.pos).plus(
+				fishWidget->visibleBodyCenter());
+		}
 		module->roamingTargetX.store(center.x, std::memory_order_relaxed);
 		module->roamingTargetY.store(center.y, std::memory_order_relaxed);
+		Vec compassCenter = anchorPos;
+		if (PuffyFishWidget* compass = compassWidget.get()) {
+			compassCenter = APP && APP->scene
+				? compass->getRelativeOffset(
+					compass->compassCenter(), APP->scene)
+				: compass->compassCenter();
+		}
 		module->roamingDirectionAngle.store(
-			std::atan2(center.y - anchorPos.y, center.x - anchorPos.x),
+			std::atan2(
+				center.y - compassCenter.y,
+				center.x - compassCenter.x),
 			std::memory_order_release);
 	}
 
@@ -1092,7 +1114,8 @@ void PuffyWidget::step() {
 			// first traversal. Wait until this widget has remained attached for a
 			// couple of complete UI frames, then install the avatar at scene level.
 			if (++roamingAttachStableFrames >= 3u) {
-				auto* overlay = new PuffyRoamingOverlay(puffyModule);
+				auto* overlay = new PuffyRoamingOverlay(
+					puffyModule, panelFishWidget.get());
 				overlay->setRackZoom(getRelativeZoom(scene));
 				overlay->anchorPos = getRelativeOffset(
 					box.size.mult(0.5f), scene);
@@ -1306,6 +1329,7 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	addChild(viewportFramebuffer);
 
 	auto* fish = new PuffyFishWidget(module);
+	panelFishWidget.set(fish);
 	fish->box.pos = mm2px(fishContentRectMm.pos);
 	fish->box.size = mm2px(fishContentRectMm.size);
 	addChild(fish);

@@ -20,6 +20,8 @@ struct PuffyFishWidget final : TransparentWidget {
 	void step() override;
 	void draw(const DrawArgs& args) override;
 	void drawRoamingDropShadow(NVGcontext* vg);
+	Vec visibleBodyCenter() const;
+	Vec compassCenter() const;
 
 private:
 	bool bodyTintIsSettled(
