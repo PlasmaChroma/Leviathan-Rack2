@@ -6,7 +6,7 @@
    version="1.1"
    id="svg21"
    sodipodi:docname="Puffy.svg"
-   inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -23,12 +23,12 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      inkscape:zoom="3.421466"
-     inkscape:cx="109.45601"
-     inkscape:cy="256.17674"
-     inkscape:window-width="1862"
-     inkscape:window-height="1016"
-     inkscape:window-x="58"
-     inkscape:window-y="27"
+     inkscape:cx="109.60214"
+     inkscape:cy="349.7039"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
      inkscape:window-maximized="1"
      inkscape:current-layer="svg21"
      showgrid="false" />
@@ -179,7 +179,7 @@
          x="1994.9666"
          y="10499.721">━━━━ PUFF ━━━━</tspan></text>
     <text
-       x="4334.5742"
+       x="4274.5742"
        y="10330.878"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
@@ -189,10 +189,10 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1"><tspan
          sodipodi:role="line"
          id="tspan4"
-         x="4334.5742"
+         x="4274.5742"
          y="10330.878">SENS</tspan></text>
     <text
-       x="5537.2314"
+       x="5477.2314"
        y="10330.878"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
@@ -202,7 +202,7 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1"><tspan
          sodipodi:role="line"
          id="tspan1"
-         x="5537.2314"
+         x="5477.2314"
          y="10330.878">WET</tspan></text>
     <text
        x="762"
@@ -281,13 +281,13 @@
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="sensitivity_param"
-       cx="4356.5327"
+       cx="4296.5327"
        cy="9585.2002"
        r="200"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="mix_param"
-       cx="5537.2314"
+       cx="5477.2314"
        cy="9585.2002"
        r="200"
        style="fill:#425f34;fill-opacity:1" />
@@ -311,7 +311,7 @@
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="puff_cv_input"
-       cx="3185.7876"
+       cx="3212.3191"
        cy="9585.2002"
        r="220"
        style="fill:#425f34;fill-opacity:1" />

@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="60.96mm" height="128.5mm" viewBox="0 0 6096 12850" version="1.1" id="svg21" sodipodi:docname="Puffy.svg" inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="60.96mm" height="128.5mm" viewBox="0 0 6096 12850" version="1.1" id="svg21" sodipodi:docname="Puffy.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)">
   <defs id="defs8">
     <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#24140b" id="stop1" />
@@ -33,12 +33,12 @@
   <g id="components" opacity="0" style="display:inline;opacity:1">
     <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="1412.0334" y="11843.102" width="3271.9331" height="1224.054" style="display:none" />
     <circle id="puff_param" cx="820.40002" cy="9585.2002" r="300" style="fill:#425f34;fill-opacity:1" />
-    <circle id="sensitivity_param" cx="4356.5327" cy="9585.2002" r="200" style="fill:#425f34;fill-opacity:1" />
-    <circle id="mix_param" cx="5537.2314" cy="9585.2002" r="200" style="fill:#425f34;fill-opacity:1" />
+    <circle id="sensitivity_param" cx="4296.5327" cy="9585.2002" r="200" style="fill:#425f34;fill-opacity:1" />
+    <circle id="mix_param" cx="5477.2314" cy="9585.2002" r="200" style="fill:#425f34;fill-opacity:1" />
     <circle id="puff_cv_amount_param" cx="2148.1055" cy="9585.2002" r="180" style="fill:#425f34;fill-opacity:1" />
     <circle id="input_l" cx="762" cy="11193.589" r="220" style="fill:#425f34;fill-opacity:1" />
     <circle id="input_r" cx="2286" cy="11193.589" r="220" style="fill:#425f34;fill-opacity:1" />
-    <circle id="puff_cv_input" cx="3185.7876" cy="9585.2002" r="220" style="fill:#425f34;fill-opacity:1" />
+    <circle id="puff_cv_input" cx="3212.3191" cy="9585.2002" r="220" style="fill:#425f34;fill-opacity:1" />
     <circle id="output_l" cx="3810" cy="11193.589" r="220" style="fill:#425f34;fill-opacity:1" />
     <circle id="output_r" cx="5334" cy="11193.589" r="220" style="fill:#425f34;fill-opacity:1" />
     <circle id="limit_light" cx="4572" cy="11193.589" r="100" style="fill:#425f34;fill-opacity:1" />
