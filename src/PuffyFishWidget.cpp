@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <unordered_map>
 
 namespace {
 
@@ -68,6 +69,25 @@ PuffyRasterAsset resolveRasterAsset(
 	if (!vg || !relativePath || !APP || !APP->window) {
 		return raster;
 	}
+	struct CachedRaster {
+		std::shared_ptr<window::Image> lifecycleImage;
+		PuffyRasterAsset raster;
+	};
+	struct RasterCache {
+		NVGcontext* activeVg = nullptr;
+		std::unordered_map<std::string, CachedRaster> entries;
+	};
+	static RasterCache cache;
+	if (cache.activeVg != vg) {
+		// Handles belong to their NanoVG context. Retaining only the source path
+		// across a switch lets Rack rebuild the lifecycle image safely on demand.
+		cache.activeVg = vg;
+		cache.entries.clear();
+	}
+	const auto cached = cache.entries.find(relativePath);
+	if (cached != cache.entries.end()) {
+		return cached->second.raster;
+	}
 	const std::string fullPath = asset::plugin(pluginInstance, relativePath);
 	std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
 	if (!image || image->handle < 0) {
@@ -81,6 +101,10 @@ PuffyRasterAsset resolveRasterAsset(
 	nvgImageSize(vg, raster.handle, &raster.width, &raster.height);
 	if (raster.width <= 0 || raster.height <= 0) {
 		raster = {};
+	}
+	if (raster) {
+		cache.entries.emplace(
+			relativePath, CachedRaster {image, raster});
 	}
 	return raster;
 }

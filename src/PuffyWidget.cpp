@@ -1172,6 +1172,14 @@ void PuffyWidget::step() {
 	ModuleWidget::step();
 	
 	auto* puffyModule = dynamic_cast<Puffy*>(module);
+	if (puffyModule
+		&& puffyModule->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f
+		&& puffyModule->params[Puffy::POSITIVE_CHARACTER_PARAM].getValue()
+			!= puffyModule->params[Puffy::CHARACTER_PARAM].getValue()) {
+		// Keep the cosmetic positive selector synchronized from the UI thread.
+		// DSP already derives the positive character directly while linked.
+		puffyModule->synchronizeCharacterSelectionFromUi(true);
+	}
 	
 	auto* scene = APP ? APP->scene : nullptr;
 	auto* rack = scene ? scene->rack : nullptr;

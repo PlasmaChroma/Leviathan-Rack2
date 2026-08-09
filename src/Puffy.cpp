@@ -199,12 +199,6 @@ void Puffy::process(const ProcessArgs& args) {
 		puffy::kCharacterCount - 1);
 	const bool charactersLinked =
 		params[CHARACTER_LINK_PARAM].getValue() > 0.5f;
-	if (charactersLinked
-		&& params[POSITIVE_CHARACTER_PARAM].getValue()
-			!= params[CHARACTER_PARAM].getValue()) {
-		params[POSITIVE_CHARACTER_PARAM].setValue(
-			params[CHARACTER_PARAM].getValue());
-	}
 	const int positiveCharacter = charactersLinked
 		? negativeCharacter
 		: clamp(
@@ -281,7 +275,7 @@ json_t* Puffy::dataToJson() {
 }
 
 void Puffy::dataFromJson(json_t* root) {
-	bool loadedAutoDeflate = true;
+	bool loadedAutoDeflate = false;
 	bool loadedRoaming = false;
 	if (root) {
 		json_t* autoDeflate = json_object_get(root, "autoDeflate");
