@@ -12,6 +12,8 @@ struct PuffyFishWidget final : TransparentWidget {
 	int bodyStableDraws = 0;
 	bool transitionAtlasReady = false;
 	bool roamingAvatar = false;
+	widget::FramebufferWidget* compassFramebuffer = nullptr;
+	Widget* compassRasterWidget = nullptr;
 
 	explicit PuffyFishWidget(Puffy* module, bool roamingAvatar = false);
 
@@ -30,6 +32,11 @@ private:
 		float radiusY,
 		NVGcolor negativeTint,
 		NVGcolor positiveTint);
+	bool drawBodyShadowRaster(
+		NVGcontext* vg,
+		Vec center,
+		float radiusX,
+		float radiusY);
 	bool drawBodyRaster(
 		NVGcontext* vg,
 		Vec center,

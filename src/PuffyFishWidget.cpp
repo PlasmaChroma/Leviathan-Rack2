@@ -85,6 +85,36 @@ PuffyRasterAsset resolveRasterAsset(
 	return raster;
 }
 
+struct PuffyCompassRasterWidget final : TransparentWidget {
+	void draw(const DrawArgs& args) override {
+		if (!APP || !APP->window || box.size.x <= 1.f || box.size.y <= 1.f) {
+			return;
+		}
+		const std::string fullPath = asset::plugin(
+			pluginInstance, "res/icon/Compass-33p-crop.png");
+		std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
+		if (!image || image->handle < 0) {
+			return;
+		}
+		int handle = visual_assets::loadRasterMipmapHandle(
+			args.vg, image, fullPath);
+		if (handle < 0) {
+			handle = image->handle;
+		}
+		constexpr float aspect = 317.f / 315.f;
+		const float drawHeight = std::min(box.size.x, box.size.y) * 0.60f;
+		const float drawWidth = drawHeight * aspect;
+		const float x = 0.5f * (box.size.x - drawWidth);
+		const float y = 0.5f * (box.size.y - drawHeight);
+		const NVGpaint paint = nvgImagePattern(
+			args.vg, x, y, drawWidth, drawHeight, 0.f, handle, 1.f);
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, x, y, drawWidth, drawHeight);
+		nvgFillPaint(args.vg, paint);
+		nvgFill(args.vg);
+	}
+};
+
 } // namespace
 
 PuffyFishWidget::PuffyFishWidget(Puffy* module, bool roamingAvatar)
@@ -101,10 +131,34 @@ PuffyFishWidget::PuffyFishWidget(Puffy* module, bool roamingAvatar)
 	}
 	controller.reset(visual);
 	controller.update(0.f, visual, &pose);
+	if (!roamingAvatar) {
+		compassFramebuffer = new widget::FramebufferWidget();
+		compassFramebuffer->dirtyOnSubpixelChange = false;
+		compassRasterWidget = new PuffyCompassRasterWidget();
+		compassFramebuffer->addChild(compassRasterWidget);
+		compassFramebuffer->hide();
+		addChild(compassFramebuffer);
+	}
 }
 
 void PuffyFishWidget::step() {
 	TransparentWidget::step();
+	if (compassFramebuffer && compassRasterWidget) {
+		const bool sizeChanged = compassFramebuffer->box.size != box.size;
+		if (sizeChanged) {
+			compassFramebuffer->box.size = box.size;
+			compassRasterWidget->box.size = box.size;
+			compassFramebuffer->setDirty();
+		}
+		const bool compassVisible = module
+			&& module->roamingAvatarActive.load(std::memory_order_acquire);
+		if (compassFramebuffer->visible != compassVisible) {
+			compassFramebuffer->setVisible(compassVisible);
+			if (compassVisible) {
+				compassFramebuffer->setDirty();
+			}
+		}
+	}
 	if (!module || !isVisible()) {
 		return;
 	}
@@ -232,6 +286,50 @@ bool PuffyFishWidget::drawTransitionBodyRaster(
 	drawAtlasPanel(1, negativeTint);
 	drawAtlasPanel(2, positiveTint);
 	nvgRestore(vg);
+	return true;
+}
+
+bool PuffyFishWidget::drawBodyShadowRaster(
+	NVGcontext* vg,
+	Vec center,
+	float radiusX,
+	float radiusY) {
+	if (!vg || radiusX <= 0.f || radiusY <= 0.f) {
+		return false;
+	}
+	const puffy_body_cache::ImageAccess atlas =
+		puffy_body_cache::ensureTransitionAtlas(vg);
+	if (!atlas) {
+		return false;
+	}
+	transitionAtlasReady = true;
+	if (isPuffyDrawMeasurementEnabled()) {
+		PuffyDrawMetrics& metrics = puffyDrawMetricsForUiThread();
+		metrics.bodyTransitionAtlasCreates += atlas.created ? 1u : 0u;
+		metrics.bodyTransitionAtlasResets += atlas.contextReset ? 1u : 0u;
+	}
+
+	// Panel zero is the cached black alpha knockout. Drawing it directly gives
+	// the complete spiky silhouette in one pass; the two weighted character
+	// panels used for colored transitions are unnecessary for a shadow.
+	constexpr float rasterExtentScale = 1.25f;
+	const float drawWidth = 2.f * radiusX * rasterExtentScale;
+	const float drawHeight = 2.f * radiusY * rasterExtentScale;
+	const float x = center.x - 0.5f * drawWidth;
+	const float y = center.y - 0.5f * drawHeight;
+	const NVGpaint paint = nvgImagePattern(
+		vg,
+		x,
+		y,
+		3.f * drawWidth,
+		drawHeight,
+		0.f,
+		atlas.handle,
+		1.f);
+	nvgBeginPath(vg);
+	nvgRect(vg, x, y, drawWidth, drawHeight);
+	nvgFillPaint(vg, paint);
+	nvgFill(vg);
 	return true;
 }
 
@@ -443,7 +541,7 @@ void PuffyFishWidget::drawRoamingDropShadow(NVGcontext* vg) {
 	const float minimum = canvasMinimum * (80.f / 96.f);
 	const float inflation = clamp01(pose.inflation);
 	const Vec center(
-		box.size.x * 0.5f + minimum * 0.045f,
+		box.size.x * 0.5f + minimum * 0.0125f,
 		box.size.y * 0.5f + minimum * (0.055f + pose.verticalOffset));
 	const float radius = minimum * (0.235f + 0.150f * inflation);
 	const float radiusX = radius * (0.88f + 0.12f * inflation)
@@ -463,8 +561,7 @@ void PuffyFishWidget::drawRoamingDropShadow(NVGcontext* vg) {
 	drawFin(
 		vg, center, radiusX, false, pose.rightFinAngle, finSizeScale,
 		fin.handle, fin.width, fin.height, shadow);
-	if (!drawTransitionBodyRaster(
-		vg, center, radiusX, radiusY, shadow, shadow)) {
+	if (!drawBodyShadowRaster(vg, center, radiusX, radiusY)) {
 		nvgBeginPath(vg);
 		nvgEllipse(vg, center.x, center.y, radiusX, radiusY);
 		nvgFillColor(vg, shadow);
@@ -483,6 +580,7 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 		const float angle = module->roamingDirectionAngle.load(
 			std::memory_order_acquire);
 		
+		TransparentWidget::draw(args);
 		nvgSave(args.vg);
 		nvgTranslate(args.vg, center.x, center.y);
 		nvgRotate(args.vg, angle);
