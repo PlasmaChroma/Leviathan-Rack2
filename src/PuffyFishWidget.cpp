@@ -627,7 +627,7 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 			// The raster points upward. Rotate its -Y axis onto the published
 			// +X compass direction and place its visual joint at the compass hub.
 			nvgRotate(args.vg, angle + 0.5f * kPi);
-			const float drawHeight = std::min(box.size.x, box.size.y) * 0.24f;
+			const float drawHeight = std::min(box.size.x, box.size.y) * 0.26f;
 			const float drawWidth = drawHeight
 				* float(pointer.width) / float(pointer.height);
 			const float x = -0.5f * drawWidth;
@@ -660,7 +660,7 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 			if (fallback) {
 				nvgRotate(args.vg, angle + 0.5f * kPi);
 				const float drawHeight =
-					std::min(box.size.x, box.size.y) * 0.24f;
+					std::min(box.size.x, box.size.y) * 0.26f;
 				const float drawWidth = drawHeight
 					* float(fallback.width) / float(fallback.height);
 				const float x = -0.5f * drawWidth;
