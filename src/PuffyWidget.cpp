@@ -729,6 +729,18 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 			fishWidget->box.size.mult(0.5f));
 	}
 
+	void publishSpatialPosition() {
+		if (!module) {
+			return;
+		}
+		const Vec center = avatarCenter();
+		module->roamingTargetX.store(center.x, std::memory_order_relaxed);
+		module->roamingTargetY.store(center.y, std::memory_order_relaxed);
+		module->roamingDirectionAngle.store(
+			std::atan2(center.y - anchorPos.y, center.x - anchorPos.x),
+			std::memory_order_release);
+	}
+
 	void setRackZoom(float zoom) {
 		zoom = std::isfinite(zoom) ? clamp(zoom, 0.05f, 8.f) : 1.f;
 		const Vec nextSize(
@@ -898,9 +910,7 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 		velocity = velocity.mult(std::pow(0.05f, dt));
 		
 		box.pos = box.pos.plus(velocity.mult(dt));
-		
-		module->roamingTargetX.store(center.x, std::memory_order_relaxed);
-		module->roamingTargetY.store(center.y, std::memory_order_relaxed);
+		publishSpatialPosition();
 	}
 };
 
@@ -960,10 +970,7 @@ void PuffyWidget::step() {
 					scene->addChild(overlay);
 				}
 				roamingOverlay.set(overlay);
-				puffyModule->roamingTargetX.store(
-					overlay->anchorPos.x, std::memory_order_relaxed);
-				puffyModule->roamingTargetY.store(
-					overlay->anchorPos.y, std::memory_order_relaxed);
+				overlay->publishSpatialPosition();
 				puffyModule->roamingAvatarActive.store(
 					true, std::memory_order_release);
 			}
@@ -988,6 +995,7 @@ void PuffyWidget::step() {
 				nextCenter.minus(overlay->avatarCenter()));
 			overlay->velocity = overlay->velocity.mult(nextZoom / oldZoom);
 			overlay->anchorPos = nextAnchor;
+			overlay->publishSpatialPosition();
 		}
 		else if (!wantsRoaming && roamingOverlay) {
 			roamingAttachStableFrames = 0u;

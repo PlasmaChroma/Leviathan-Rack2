@@ -480,13 +480,8 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 		const float height = box.size.y;
 		const Vec center(width * 0.5f, height * 0.5f);
 		
-		Vec target(
-			module->roamingTargetX.load(std::memory_order_relaxed),
-			module->roamingTargetY.load(std::memory_order_relaxed)
-		);
-		Vec myCenter = APP && APP->scene
-			? getRelativeOffset(center, APP->scene) : center;
-		float angle = std::atan2(target.y - myCenter.y, target.x - myCenter.x);
+		const float angle = module->roamingDirectionAngle.load(
+			std::memory_order_acquire);
 		
 		nvgSave(args.vg);
 		nvgTranslate(args.vg, center.x, center.y);

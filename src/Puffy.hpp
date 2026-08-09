@@ -68,6 +68,7 @@ struct Puffy final : Module {
 	std::atomic<bool> roamingAvatarActive {false};
 	std::atomic<float> roamingTargetX {0.f};
 	std::atomic<float> roamingTargetY {0.f};
+	std::atomic<float> roamingDirectionAngle {0.f};
 	std::atomic<float> roamingDistance {0.f};
 	std::atomic<float> roamingMovementAcceleration {0.f};
 	std::atomic<std::uint32_t> visualSequence {0u};
