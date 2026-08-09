@@ -10,11 +10,13 @@
 #include "visual/PreviewSurface.hpp"
 #include "visual/VisualAssets.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <array>
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <vector>
 
 namespace {
 
@@ -756,6 +758,13 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 	bool rangeResetPending = false;
 	std::uint32_t rngState = 1u;
 
+	static std::vector<PuffyRoamingOverlay*>& activeOverlays() {
+		// Roaming overlays are created, stepped, and destroyed on Rack's UI
+		// thread, so this registry needs no locking or audio-thread traffic.
+		static std::vector<PuffyRoamingOverlay*> overlays;
+		return overlays;
+	}
+
 	explicit PuffyRoamingOverlay(
 		Puffy* module,
 		PuffyFishWidget* compassWidget)
@@ -773,6 +782,14 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 			kBaseSize + kBaseShadowPad, kBaseSize + kBaseShadowPad);
 		fishWidget->box.pos = box.size.minus(fishWidget->box.size).mult(0.5f);
 		addChild(fishWidget);
+		activeOverlays().push_back(this);
+	}
+
+	~PuffyRoamingOverlay() override {
+		auto& overlays = activeOverlays();
+		overlays.erase(
+			std::remove(overlays.begin(), overlays.end(), this),
+			overlays.end());
 	}
 
 	float rackZoom() const {
@@ -950,6 +967,58 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 			float force = normalizedDist * normalizedDist * 1500.f;
 			acceleration = acceleration.plus(toMouse.normalize().mult(-force));
 		}
+
+		// Nearby roaming Puffies gently separate. The influence scales with the
+		// rendered bodies, fades smoothly to zero, and is capped so a crowd cannot
+		// overpower cursor avoidance or launch an avatar across the rack.
+		Vec separationAcceleration{0.f, 0.f};
+		const float ownRadius = 0.5f * kBaseSize * rackZoom();
+		for (PuffyRoamingOverlay* other : activeOverlays()) {
+			if (!other || other == this || !other->module
+				|| !other->module->roamingEnabled.load(std::memory_order_relaxed)) {
+				continue;
+			}
+			Vec away = center.minus(other->avatarCenter());
+			float distance = away.norm();
+			const float otherRadius =
+				0.5f * kBaseSize * other->rackZoom();
+			const float influenceRadius =
+				1.65f * (ownRadius + otherRadius);
+			if (distance >= influenceRadius) {
+				continue;
+			}
+			if (distance <= 0.001f) {
+				// Give a perfectly overlapping pair stable opposite directions.
+				const std::uint64_t ownId = module && module->id >= 0
+					? std::uint64_t(module->id) : 0u;
+				const std::uint64_t otherId = other->module->id >= 0
+					? std::uint64_t(other->module->id) : 0u;
+				const std::uint64_t low = std::min(ownId, otherId);
+				const std::uint64_t high = std::max(ownId, otherId);
+				const float angle = float((low * 1103515245u + high * 12345u)
+					& 0xffffu) * (2.f * float(M_PI) / 65536.f);
+				away = Vec(std::cos(angle), std::sin(angle));
+				if (ownId > otherId) {
+					away = away.mult(-1.f);
+				}
+				distance = 0.f;
+			}
+			else {
+				away = away.div(distance);
+			}
+			const float proximity = clamp(
+				1.f - distance / std::max(influenceRadius, 1.f), 0.f, 1.f);
+			const float smoothProximity =
+				proximity * proximity * (3.f - 2.f * proximity);
+			separationAcceleration = separationAcceleration.plus(
+				away.mult(440.f * smoothProximity));
+		}
+		const float separationMagnitude = separationAcceleration.norm();
+		if (separationMagnitude > 520.f) {
+			separationAcceleration = separationAcceleration.mult(
+				520.f / separationMagnitude);
+		}
+		acceleration = acceleration.plus(separationAcceleration);
 
 		// 2. Wander
 		// Offset the time using the module's ID so multiple puffies don't swim in sync
