@@ -47,8 +47,50 @@ struct PuffyViewportGradient final : TransparentWidget {
 	}
 };
 
+struct PuffyRangeTooltip final : ui::Tooltip {
+	WeakPtr<Widget> anchor;
+	float selectorLeftFraction = 0.f;
+	float selectorRightFraction = 1.f;
+
+	void step() override {
+		Widget* widget = anchor.get();
+		auto* paramWidget = dynamic_cast<ParamWidget*>(widget);
+		if (paramWidget && paramWidget->getParamQuantity()) {
+			const float value = clamp(
+				paramWidget->getParamQuantity()->getValue(), 0.f, 1.f);
+			text = "Range " + std::to_string(int(std::lround(value * 100.f)))
+				+ "%";
+		}
+		ui::Tooltip::step();
+		if (!widget) {
+			return;
+		}
+		auto* param = dynamic_cast<ParamWidget*>(widget);
+		const float value = param && param->getParamQuantity()
+			? clamp(param->getParamQuantity()->getValue(), 0.f, 1.f) : 0.f;
+		const float selectorX = widget->box.size.x * crossfade(
+			selectorLeftFraction, selectorRightFraction, value);
+		const Vec selectorScene = widget->getAbsoluteOffset(Vec(selectorX, 0.f));
+		box.pos = Vec(
+			selectorScene.x - 0.5f * box.size.x,
+			selectorScene.y - box.size.y - 3.f);
+	}
+};
+
 struct PuffyRoamingRangeBar final : ParamWidget {
+	static constexpr float kAssetAspect = 726.f / 76.f;
+	static constexpr float kTrackLeftFraction = 92.f / 726.f;
+	static constexpr float kTrackRightFraction = 634.f / 726.f;
+	static constexpr float kTrackTopFraction = 17.f / 76.f;
+	static constexpr float kTrackBottomFraction = 59.f / 76.f;
+	static constexpr float kSelectorLeftFraction = 113.f / 726.f;
+	static constexpr float kSelectorRightFraction = 613.f / 726.f;
 	bool dragging = false;
+	PuffyRangeTooltip* rangeTooltip = nullptr;
+
+	~PuffyRoamingRangeBar() override {
+		destroyRangeTooltip();
+	}
 
 	Puffy* getPuffyModule() const {
 		return dynamic_cast<Puffy*>(module);
@@ -63,9 +105,10 @@ struct PuffyRoamingRangeBar final : ParamWidget {
 	}
 
 	void setFromX(float x) {
-		const float inset = 2.f;
-		const float usable = std::max(box.size.x - 2.f * inset, 1.f);
-		const float value = clamp((x - inset) / usable, 0.f, 1.f);
+		const float selectorLeft = box.size.x * kSelectorLeftFraction;
+		const float selectorRight = box.size.x * kSelectorRightFraction;
+		const float usable = std::max(selectorRight - selectorLeft, 1.f);
+		const float value = clamp((x - selectorLeft) / usable, 0.f, 1.f);
 		if (ParamQuantity* quantity = getParamQuantity()) {
 			quantity->setValue(value);
 		}
@@ -76,6 +119,40 @@ struct PuffyRoamingRangeBar final : ParamWidget {
 		Puffy* puffyModule = getPuffyModule();
 		visible = puffyModule && puffyModule->roamingEnabled.load(
 			std::memory_order_relaxed);
+	}
+
+	void createRangeTooltip() {
+		if (!settings::tooltips || rangeTooltip || !APP || !APP->scene) {
+			return;
+		}
+		rangeTooltip = new PuffyRangeTooltip();
+		rangeTooltip->anchor = this;
+		rangeTooltip->selectorLeftFraction = kSelectorLeftFraction;
+		rangeTooltip->selectorRightFraction = kSelectorRightFraction;
+		APP->scene->addChild(rangeTooltip);
+	}
+
+	void destroyRangeTooltip() {
+		if (!rangeTooltip) {
+			return;
+		}
+		if (rangeTooltip->parent) {
+			rangeTooltip->parent->removeChild(rangeTooltip);
+		}
+		delete rangeTooltip;
+		rangeTooltip = nullptr;
+	}
+
+	void onEnter(const event::Enter& e) override {
+		createRangeTooltip();
+		event::Enter copy = e;
+		OpaqueWidget::onEnter(copy);
+	}
+
+	void onLeave(const event::Leave& e) override {
+		destroyRangeTooltip();
+		event::Leave copy = e;
+		OpaqueWidget::onLeave(copy);
 	}
 
 	void onButton(const event::Button& e) override {
@@ -117,44 +194,95 @@ struct PuffyRoamingRangeBar final : ParamWidget {
 			? clamp((puffyModule->roamingDistance.load(std::memory_order_relaxed)
 				- 90.f) / 810.f, 0.f, 1.f)
 			: 0.f;
-		const float inset = 2.f;
-		const float trackY = 1.f;
-		const float trackHeight = 5.f;
-		const float trackWidth = std::max(box.size.x - 2.f * inset, 1.f);
+		const float assetWidth = box.size.x;
+		const float assetHeight = assetWidth / kAssetAspect;
+		const std::string fullPath = asset::plugin(
+			pluginInstance, "res/icon/NeonBar.png");
+		std::shared_ptr<window::Image> image = APP && APP->window
+			? APP->window->loadImage(fullPath) : nullptr;
+		if (image && image->handle >= 0) {
+			int handle = visual_assets::loadRasterMipmapHandle(
+				args.vg, image, fullPath);
+			if (handle < 0) {
+				handle = image->handle;
+			}
+			NVGpaint assetPaint = nvgImagePattern(
+				args.vg, 0.f, 0.f, assetWidth, assetHeight,
+				0.f, handle, 1.f);
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, 0.f, 0.f, assetWidth, assetHeight);
+			nvgFillPaint(args.vg, assetPaint);
+			nvgFill(args.vg);
+		}
 
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, inset, trackY, trackWidth, trackHeight, 2.f);
-		nvgFillColor(args.vg, nvgRGBA(5, 4, 11, 225));
-		nvgFill(args.vg);
+		const float trackLeft = assetWidth * kTrackLeftFraction;
+		const float trackRight = assetWidth * kTrackRightFraction;
+		const float trackY = assetHeight * kTrackTopFraction;
+		const float trackHeight = assetHeight
+			* (kTrackBottomFraction - kTrackTopFraction);
+		const float trackWidth = std::max(trackRight - trackLeft, 1.f);
+		const float selectorLeft = assetWidth * kSelectorLeftFraction;
+		const float selectorRight = assetWidth * kSelectorRightFraction;
+		const float selectorX = crossfade(
+			selectorLeft, selectorRight, setting);
+		const auto drawFillTo = [&](float endpoint, NVGcolor color) {
+			const float width = clamp(endpoint - trackLeft, 0.f, trackWidth);
+			if (width <= 0.01f) {
+				return;
+			}
+			// Clip a complete trough-shaped capsule instead of rounding a short
+			// fill rectangle. This keeps the source asset's left-cap curvature
+			// constant even near the minimum setting.
+			nvgSave(args.vg);
+			nvgScissor(args.vg, trackLeft, trackY, width, trackHeight);
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(
+				args.vg, trackLeft, trackY, trackWidth, trackHeight,
+				0.5f * trackHeight);
+			nvgFillColor(args.vg, color);
+			nvgFill(args.vg);
+			nvgRestore(args.vg);
+		};
+		// The setting fill terminates at the sphere's midline. The sphere hides
+		// the clipped vertical edge while remaining centered on the true value.
+		drawFillTo(selectorX, nvgRGBA(155, 72, 224, 190));
+		drawFillTo(
+			trackLeft + trackWidth * actual,
+			nvgRGBA(35, 222, 235, 145));
 
-		nvgSave(args.vg);
-		nvgScissor(args.vg, inset, trackY, trackWidth * setting, trackHeight);
+		const float selectorY = trackY + 0.5f * trackHeight;
+		const float selectorRadius = 0.46f * trackHeight;
+		// The setting handle is deliberately spherical rather than a flat
+		// cutoff marker. Its center can reach both curved trough endpoints while
+		// the surrounding raster supplies the ornamental min/max framing.
 		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, inset, trackY, trackWidth, trackHeight, 2.f);
-		nvgFillColor(args.vg, nvgRGBA(155, 72, 224, 215));
+		nvgCircle(args.vg, selectorX, selectorY, selectorRadius * 1.35f);
+		nvgFillColor(args.vg, nvgRGBA(66, 224, 255, 45));
 		nvgFill(args.vg);
-		nvgRestore(args.vg);
-
-		nvgSave(args.vg);
-		nvgScissor(args.vg, inset, trackY, trackWidth * actual, trackHeight);
+		const NVGpaint selectorPaint = nvgRadialGradient(
+			args.vg,
+			selectorX - selectorRadius * 0.32f,
+			selectorY - selectorRadius * 0.38f,
+			selectorRadius * 0.08f,
+			selectorRadius,
+			nvgRGBA(252, 240, 255, 255),
+			nvgRGBA(91, 26, 174, 255));
 		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, inset, trackY, trackWidth, trackHeight, 2.f);
-		nvgFillColor(args.vg, nvgRGBA(35, 222, 235, 165));
+		nvgCircle(args.vg, selectorX, selectorY, selectorRadius);
+		nvgFillPaint(args.vg, selectorPaint);
 		nvgFill(args.vg);
-		nvgRestore(args.vg);
-
-		const float markerX = inset + trackWidth * setting;
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, markerX - 0.65f, trackY - 1.f, 1.3f, trackHeight + 2.f);
-		nvgFillColor(args.vg, nvgRGBA(226, 177, 255, 245));
-		nvgFill(args.vg);
+		nvgStrokeColor(args.vg, nvgRGBA(94, 231, 255, 235));
+		nvgStrokeWidth(args.vg, 0.75f);
+		nvgStroke(args.vg);
 
 		if (APP && APP->window && APP->window->uiFont) {
 			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 			nvgFontSize(args.vg, 8.f);
 			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
 			nvgFillColor(args.vg, nvgRGB(255, 255, 255));
-			nvgText(args.vg, box.size.x * 0.5f, 8.f, "RANGE", nullptr);
+			nvgText(
+				args.vg, box.size.x * 0.5f, assetHeight + 1.f,
+				"RANGE", nullptr);
 		}
 	}
 };
@@ -1184,9 +1312,9 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 
 	auto* roamingRange = createParam<PuffyRoamingRangeBar>(
 		Vec(), module, Puffy::ROAMING_RANGE_PARAM);
-	roamingRange->box.size = Vec(fish->box.size.x * 0.84f, 18.f);
+	roamingRange->box.size = Vec(fish->box.size.x * 0.84f, 28.f);
 	roamingRange->box.pos = fish->box.pos.plus(Vec(
-		fish->box.size.x * 0.08f, 5.f));
+		fish->box.size.x * 0.08f, 1.f));
 	addParam(roamingRange);
 
 	const Vec characterMenuSize = mm2px(Vec(13.5f, 4.5f));
