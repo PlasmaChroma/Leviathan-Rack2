@@ -1151,11 +1151,22 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 
 PuffyWidget::~PuffyWidget() {
 	stopDrawLog();
+	retireRoamingOverlay();
+}
+
+void PuffyWidget::retireRoamingOverlay() {
 	if (auto* puffyModule = dynamic_cast<Puffy*>(module)) {
 		puffyModule->roamingAvatarActive.store(false, std::memory_order_release);
+		puffyModule->roamingDistance.store(0.f, std::memory_order_relaxed);
 	}
 	if (roamingOverlay) {
 		PuffyRoamingOverlay* overlay = roamingOverlay.get();
+		// The overlay lives at scene level rather than below this ModuleWidget.
+		// Quarantine it immediately so a retired DAW editor scene cannot keep
+		// publishing state through a surviving module pointer.
+		overlay->module = nullptr;
+		overlay->compassWidget.set(nullptr);
+		overlay->setVisible(false);
 		if (overlay->parent) {
 			overlay->requestDelete();
 		}
@@ -1164,6 +1175,14 @@ PuffyWidget::~PuffyWidget() {
 		}
 		roamingOverlay.set(nullptr);
 	}
+	roamingAttachStableFrames = 0u;
+}
+
+void PuffyWidget::onContextDestroy(const ContextDestroyEvent& e) {
+	// Rack's DAW build may retain ModuleWidgets while replacing the editor
+	// scene. A scene-level roaming overlay must never cross that boundary.
+	retireRoamingOverlay();
+	ModuleWidget::onContextDestroy(e);
 }
 
 void PuffyWidget::step() {
@@ -1187,6 +1206,15 @@ void PuffyWidget::step() {
 	// widgets. Requiring the immediate parent to be moduleContainer made the
 	// roaming overlay creation a one-shot failure on some load paths.
 	bool validRackContext = puffyModule && scene && rack && isDescendantOf(rack);
+
+	if (roamingOverlay) {
+		PuffyRoamingOverlay* overlay = roamingOverlay.get();
+		const bool belongsToCurrentScene = scene && overlay && overlay->parent
+			&& overlay->isDescendantOf(scene);
+		if (!belongsToCurrentScene) {
+			retireRoamingOverlay();
+		}
+	}
 
 	if (validRackContext) {
 		bool wantsRoaming = puffyModule->roamingEnabled.load(std::memory_order_relaxed);
@@ -1242,16 +1270,7 @@ void PuffyWidget::step() {
 			overlay->publishSpatialPosition();
 		}
 		else if (!wantsRoaming && roamingOverlay) {
-			roamingAttachStableFrames = 0u;
-			puffyModule->roamingAvatarActive.store(
-				false, std::memory_order_release);
-			PuffyRoamingOverlay* overlay = roamingOverlay.get();
-			if (overlay->parent) {
-				overlay->requestDelete();
-			} else {
-				delete overlay;
-			}
-			roamingOverlay.set(nullptr);
+			retireRoamingOverlay();
 		}
 		else if (!wantsRoaming) {
 			roamingAttachStableFrames = 0u;

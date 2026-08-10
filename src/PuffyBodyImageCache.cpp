@@ -98,9 +98,10 @@ bool imageIsValid(NVGcontext* vg, const CachedImage& image) {
 }
 
 void invalidateCurrentImage(NVGcontext* vg, CachedImage& image) {
-	if (vg && image.handle >= 0) {
-		nvgDeleteImage(vg, image.handle);
-	}
+	(void) vg;
+	// A failed validation can mean that the host recreated NanoVG while reusing
+	// its address. The numeric handle may already name somebody else's image in
+	// the new context, so deleting it here would corrupt unrelated UI textures.
 	image = {};
 }
 
@@ -388,6 +389,21 @@ void onContextDestroy(NVGcontext* vg) {
 		return;
 	}
 	shared.activeVg = nullptr;
+	shared.transitionAtlas = {};
+	for (CachedImage& image : shared.finalBodies) {
+		image = {};
+	}
+	for (CachedImage& image : shared.finalPointers) {
+		image = {};
+	}
+}
+
+void onContextCreate(NVGcontext* vg) {
+	SharedCache& shared = cache();
+	std::lock_guard<std::mutex> lock(shared.mutex);
+	// Treat the event as a new generation even when the allocator reused the
+	// same NVGcontext address.
+	shared.activeVg = vg;
 	shared.transitionAtlas = {};
 	for (CachedImage& image : shared.finalBodies) {
 		image = {};

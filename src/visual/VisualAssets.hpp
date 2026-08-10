@@ -17,6 +17,8 @@ int loadRasterMipmapHandle(
 	NVGcontext* vg,
 	std::shared_ptr<window::Image> lifecycleImage,
 	const std::string& fullPath);
+void onRasterContextDestroy(NVGcontext* vg);
+void onRasterContextCreate(NVGcontext* vg);
 bool decodeRasterRgba8(
 	const std::string& fullPath,
 	std::vector<std::uint8_t>* rgba,

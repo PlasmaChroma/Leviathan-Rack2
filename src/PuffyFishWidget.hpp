@@ -22,6 +22,7 @@ struct PuffyFishWidget final : TransparentWidget {
 
 	explicit PuffyFishWidget(Puffy* module, bool roamingAvatar = false);
 
+	void onContextCreate(const ContextCreateEvent& e) override;
 	void onContextDestroy(const ContextDestroyEvent& e) override;
 	void step() override;
 	void draw(const DrawArgs& args) override;

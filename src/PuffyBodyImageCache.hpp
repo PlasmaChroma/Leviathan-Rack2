@@ -34,5 +34,6 @@ ImageAccess ensureTransitionAtlas(NVGcontext* vg);
 // are abandoned rather than deleted because the context owns their storage and
 // is about to release it as a unit.
 void onContextDestroy(NVGcontext* vg);
+void onContextCreate(NVGcontext* vg);
 
 } // namespace puffy_body_cache

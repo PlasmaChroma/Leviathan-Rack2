@@ -3,6 +3,7 @@
 #include "PuffyBodyImageCache.hpp"
 #include "PuffyDrawDiagnostics.hpp"
 #include "PuffyVisualPalette.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 #include "visual/VisualAssets.hpp"
 
 #include <algorithm>
@@ -84,6 +85,12 @@ void invalidatePuffyRasterCache(NVGcontext* vg) {
 	cache.entries.clear();
 }
 
+void resetPuffyRasterCache(NVGcontext* vg) {
+	PuffyRasterCache& cache = puffyRasterCache();
+	cache.activeVg = vg;
+	cache.entries.clear();
+}
+
 PuffyRasterAsset resolveRasterAsset(
 	NVGcontext* vg,
 	const char* relativePath) {
@@ -104,7 +111,10 @@ PuffyRasterAsset resolveRasterAsset(
 		// destructor runs from __cxa_finalize while the plugin is unloading,
 		// potentially after Rack has torn down the image's NanoVG context.
 		// Rack/widget owners keep the lifecycle image alive during normal use.
-		if (cached->second.lifecycleImage.lock()) {
+		if (cached->second.lifecycleImage.lock() &&
+			nvg_gfx_lifecycle::ownedNvgImageSizeMatches(
+				vg, cached->second.raster.handle,
+				cached->second.raster.width, cached->second.raster.height)) {
 			return cached->second.raster;
 		}
 		cache.entries.erase(cached);
@@ -196,7 +206,22 @@ void PuffyFishWidget::onContextDestroy(const ContextDestroyEvent& e) {
 	// No nvgDeleteImage() call is needed: context destruction owns that cleanup.
 	puffy_body_cache::onContextDestroy(e.vg);
 	invalidatePuffyRasterCache(e.vg);
+	visual_assets::onRasterContextDestroy(e.vg);
 	TransparentWidget::onContextDestroy(e);
+}
+
+void PuffyFishWidget::onContextCreate(const ContextCreateEvent& e) {
+	// Widget state survives editor/context recreation in Rack's DAW host. Force
+	// every readiness decision and framebuffer-backed compass layer to rebuild.
+	bodyStableDraws = 0;
+	transitionAtlasReady = false;
+	puffy_body_cache::onContextCreate(e.vg);
+	resetPuffyRasterCache(e.vg);
+	visual_assets::onRasterContextCreate(e.vg);
+	if (compassFramebuffer) {
+		compassFramebuffer->setDirty();
+	}
+	TransparentWidget::onContextCreate(e);
 }
 
 void PuffyFishWidget::step() {

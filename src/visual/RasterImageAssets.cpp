@@ -234,6 +234,26 @@ struct AspectFitRasterImageWidget : TransparentWidget {
 	}
 };
 
+struct RasterMipmapEntry {
+	NVGcontext* vg = nullptr;
+	int handle = -1;
+	int lifecycleHandle = -1;
+	int width = 0;
+	int height = 0;
+	std::weak_ptr<window::Image> lifecycleImage;
+};
+
+struct RasterMipmapCache {
+	std::unordered_map<std::string, RasterMipmapEntry> entries;
+	NVGcontext* activeVg = nullptr;
+	unsigned long long useCounter = 0ull;
+};
+
+RasterMipmapCache& rasterMipmapCache() {
+	static RasterMipmapCache cache;
+	return cache;
+}
+
 } // namespace
 
 bool decodeRasterRgba8(
@@ -269,18 +289,7 @@ int loadRasterMipmapHandle(
 	std::shared_ptr<window::Image> lifecycleImage,
 	const std::string& fullPath
 ) {
-	struct Entry {
-		NVGcontext* vg = nullptr;
-		int handle = -1;
-		int lifecycleHandle = -1;
-		std::weak_ptr<window::Image> lifecycleImage;
-	};
-	struct Cache {
-		std::unordered_map<std::string, Entry> entries;
-		NVGcontext* activeVg = nullptr;
-		unsigned long long useCounter = 0ull;
-	};
-	static Cache cache;
+	RasterMipmapCache& cache = rasterMipmapCache();
 
 	if (!vg || fullPath.empty() || !lifecycleImage || lifecycleImage->handle < 0) {
 		return -1;
@@ -292,13 +301,15 @@ int loadRasterMipmapHandle(
 	auto it = cache.entries.find(fullPath);
 	if (it != cache.entries.end()) {
 		std::shared_ptr<window::Image> cachedLifecycleImage = it->second.lifecycleImage.lock();
+		const bool dimensionsMatch = nvg_gfx_lifecycle::ownedNvgImageSizeMatches(
+			vg, it->second.handle, it->second.width, it->second.height);
 		if (it->second.vg == vg && it->second.handle >= 0 &&
-			it->second.lifecycleHandle == lifecycleImage->handle && cachedLifecycleImage == lifecycleImage) {
+			it->second.lifecycleHandle == lifecycleImage->handle &&
+			cachedLifecycleImage == lifecycleImage && dimensionsMatch) {
 			return it->second.handle;
 		}
-		if (it->second.vg == vg && it->second.handle >= 0 && cachedLifecycleImage) {
-			nvgDeleteImage(vg, it->second.handle);
-		}
+		// Do not delete a rejected numeric handle: after host context recreation
+		// it may have been reassigned to a different image.
 		cache.entries.erase(it);
 	}
 
@@ -310,13 +321,36 @@ int loadRasterMipmapHandle(
 		return -1;
 	}
 
-	Entry entry;
+	RasterMipmapEntry entry;
 	entry.vg = vg;
 	entry.handle = handle;
 	entry.lifecycleHandle = lifecycleImage->handle;
+	nvgImageSize(vg, handle, &entry.width, &entry.height);
+	if (entry.width <= 0 || entry.height <= 0) {
+		return -1;
+	}
 	entry.lifecycleImage = lifecycleImage;
 	cache.entries[fullPath] = entry;
 	return handle;
+}
+
+void onRasterContextCreate(NVGcontext* vg) {
+	RasterMipmapCache& cache = rasterMipmapCache();
+	// ContextCreateEvent is authoritative even if the host reused the same
+	// NVGcontext address and never exposed an observable pointer transition.
+	cache.entries.clear();
+	cache.activeVg = vg;
+	cache.useCounter = 0ull;
+}
+
+void onRasterContextDestroy(NVGcontext* vg) {
+	RasterMipmapCache& cache = rasterMipmapCache();
+	if (cache.activeVg != vg) return;
+	// Context destruction releases the textures. Forget the numeric handles so
+	// an allocator-reused NVGcontext address cannot make them appear current.
+	cache.entries.clear();
+	cache.activeVg = nullptr;
+	cache.useCounter = 0ull;
 }
 
 Widget* createAspectFitRasterImageWidget(

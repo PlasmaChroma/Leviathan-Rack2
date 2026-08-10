@@ -21,6 +21,7 @@ struct PuffyWidget final : ModuleWidget {
 
 	explicit PuffyWidget(Puffy* module);
 	~PuffyWidget() override;
+	void onContextDestroy(const ContextDestroyEvent& e) override;
 	void step() override;
 	void draw(const DrawArgs& args) override;
 	void appendContextMenu(Menu* menu) override;
@@ -30,4 +31,5 @@ private:
 	static std::string drawLogDateTimeStamp();
 	void stopDrawLog();
 	void syncDrawLog(bool enabled, std::uint32_t instanceId);
+	void retireRoamingOverlay();
 };
