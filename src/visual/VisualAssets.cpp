@@ -1273,11 +1273,15 @@ Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm) {
 	return createPreviewFrameEnhancementWidget(rectMm, PreviewFrameTint::Cyan);
 }
 
+float previewFrameOutsideMarginMm() {
+	return 0.45f;
+}
+
 static Widget* createPreviewFrameEnhancementWidgetWithColors(math::Rect rectMm, NVGcolor highlightColor, NVGcolor edgeHighlightColor) {
 	if (rectMm.size.x <= 0.f || rectMm.size.y <= 0.f) {
 		return new Widget();
 	}
-	const float marginMm = 0.45f;
+	const float marginMm = previewFrameOutsideMarginMm();
 	widget::FramebufferWidget* fb = new widget::FramebufferWidget();
 	fb->dirtyOnSubpixelChange = false;
 	fb->box.pos = mm2px(rectMm.pos.minus(Vec(marginMm, marginMm)));

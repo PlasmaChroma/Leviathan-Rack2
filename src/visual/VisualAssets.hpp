@@ -32,6 +32,7 @@ enum class PreviewFrameTint {
 Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm);
 Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, PreviewFrameTint tint);
 Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, NVGcolor highlightColor);
+float previewFrameOutsideMarginMm();
 Widget* createAspectFitRasterImageWidget(
 	const char* imageAssetPath,
 	math::Rect rectMm,

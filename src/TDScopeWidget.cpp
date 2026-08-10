@@ -105,6 +105,18 @@ struct FittedSvgWidget final : TransparentWidget {
   }
 };
 
+struct TDScopeLogoClipWidget final : Widget {
+  float visibleTop = 0.f;
+
+  void draw(const DrawArgs &args) override {
+    const float top = clamp(visibleTop, 0.f, box.size.y);
+    nvgSave(args.vg);
+    nvgIntersectScissor(args.vg, 0.f, top, box.size.x, box.size.y - top);
+    Widget::draw(args);
+    nvgRestore(args.vg);
+  }
+};
+
 struct UnpairedStatusWidget final : TransparentWidget {
   void draw(const DrawArgs &args) override {
     if (!APP || !APP->window || !APP->window->uiFont) {
@@ -153,15 +165,10 @@ struct TDScopeWidget : ModuleWidget {
     const std::string panelPath = asset::plugin(pluginInstance, "res/tdscope.svg");
     setPanel(createPanel(panelPath));
     previewBuildTimer.markPanelDone();
+    Widget *logoParent = this;
     if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
-      // Bake the logo into the panel framebuffer so both NanoVG and OpenGL
-      // waveform paths, including their transparent edge widgets, are always
-      // composited above it.
-      visual_assets::addCompactLeviathanLogoBranding(svgPanel->fb, panelPath);
+      logoParent = svgPanel->fb;
       panelBorder = findPanelBorder(svgPanel->fb);
-    }
-    else {
-      visual_assets::addCompactLeviathanLogoBranding(this, panelPath);
     }
 
     math::Rect scopeRectMm;
@@ -171,6 +178,15 @@ struct TDScopeWidget : ModuleWidget {
     }
     scopeRectPx.pos = mm2px(scopeRectMm.pos);
     scopeRectPx.size = mm2px(scopeRectMm.size);
+    // Preserve the shared logo placement but discard the portion that would
+    // enter the scope. Keeping this layer in the panel framebuffer also places
+    // it beneath both the NanoVG and OpenGL waveform paths.
+    auto *logoClip = new TDScopeLogoClipWidget;
+    logoClip->box.size = box.size;
+    logoClip->visibleTop = scopeRectPx.pos.y + scopeRectPx.size.y
+      + mm2px(Vec(visual_assets::previewFrameOutsideMarginMm(), 0.f)).x;
+    visual_assets::addCompactLeviathanLogoBranding(logoClip, panelPath);
+    logoParent->addChild(logoClip);
     previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
     previewBuildTimer.markAnchorsDone();
 
