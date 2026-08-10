@@ -146,7 +146,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
 
   ~NautiloidGlPreview() override {
     if (module) {
-      module->debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
+      module->setGpuPreviewAvailable(false, false);
     }
     releaseGlResources(false);
   }
@@ -155,7 +155,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     OpenGlWidget::onContextDestroy(e);
     releaseGlResources(true);
     if (module) {
-      module->debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
+      module->setGpuPreviewAvailable(false, false);
     }
   }
 
@@ -496,7 +496,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
       currentModeReady = modePrograms[size_t(module->fractalMode)].ready;
     }
     if (module) {
-      module->debugGpuPreviewAvailable.store(effectiveActive && currentModeReady, std::memory_order_relaxed);
+      module->setGpuPreviewAvailable(effectiveActive && currentModeReady);
     }
     bool dirty = false;
     if (effectiveActive != lastEffectiveActive) {
@@ -531,12 +531,12 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     const int mode = module ? int(module->fractalMode) : iris::FRACTAL_NONE;
     if (!nautiloidGpuPreviewEnabled(module) || !ensureShaderReady(mode)) {
       if (module) {
-        module->debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
+        module->setGpuPreviewAvailable(false);
       }
       return;
     }
     if (module) {
-      module->debugGpuPreviewAvailable.store(true, std::memory_order_relaxed);
+      module->setGpuPreviewAvailable(true);
     }
 
     ModeProgram& modeProgram = modePrograms[size_t(mode)];
@@ -1870,7 +1870,7 @@ struct NautiloidWidget final : ModuleWidget {
       [naut]() {
         const bool current = naut->debugGpuPreviewEnabled.load(std::memory_order_relaxed);
         naut->debugGpuPreviewEnabled.store(!current, std::memory_order_relaxed);
-        naut->debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
+        naut->setGpuPreviewAvailable(false);
       }));
     menu->addChild(createMenuLabel(nautiloidDebugLogPath()));
   }
