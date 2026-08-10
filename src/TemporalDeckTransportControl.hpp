@@ -13,6 +13,7 @@ struct TransportControlState {
   bool slipLatched = false;
   bool prevFreezeGateHigh = false;
   bool freezeNegativeResetArmed = true;
+  bool freezeNegativeHoldActive = false;
   int slipReturnMode = 1; // normal
 };
 

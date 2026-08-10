@@ -72,14 +72,17 @@ void applyFreezeGateEdge(TransportControlState &state, bool freezeGateHigh) {
 bool consumeFreezeNegativeReset(TransportControlState &state, bool connected, float voltage) {
   if (!connected) {
     state.freezeNegativeResetArmed = true;
+    state.freezeNegativeHoldActive = false;
     return false;
   }
   if (voltage >= -0.5f) {
     state.freezeNegativeResetArmed = true;
+    state.freezeNegativeHoldActive = false;
     return false;
   }
   if (voltage <= -1.f && state.freezeNegativeResetArmed) {
     state.freezeNegativeResetArmed = false;
+    state.freezeNegativeHoldActive = true;
     return true;
   }
   return false;

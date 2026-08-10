@@ -48,7 +48,6 @@ static const SvgAtlasRecord kSvgAtlas[] = {
 	{"res/iris.labels.svg", 60306ull, 0x5ed8e99ec357be34ull, 0.01f},
 	{"res/iris.panel.svg", 8472ull, 0x864ce9bca5cc747dull, 0.01f},
 	{"res/iris.svg", 18910ull, 0x3ec163446c63a6b2ull, 0.01f},
-	{"res/Longplayer.svg", 1565ull, 0xdcb7f49b3b18de02ull, 0.01f},
 	{"res/mandelwake.labels.svg", 1554ull, 0x01db6826b93e5f4aull, 0.01f},
 	{"res/mandelwake.panel.svg", 4733ull, 0x9bc54e8161afb1deull, 0.01f},
 	{"res/mandelwake.svg", 4504ull, 0xe0a4640e972d5275ull, 0.01f},

@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-06  
 **Status:** Implemented on `TDLongPlay`; hardening required before merge
-**Target Module:** `TemporalDeck` / `Longplayer` Ecosystem  
+**Target Module:** `TemporalDeck`
 **Target File:** `doc/TDLongPlay.md`
 
 > Current correctness, compatibility, performance work, and merge gates are
@@ -20,7 +20,7 @@ At 48 kHz / 32-bit floating point stereo:
 
 Keeping full hour-long audio files uncompressed in contiguous RAM is unviable in modular DAW environments where multiple deck instances may co-exist. However, scratching, bi-directional scrubbing, high-speed reverse playback, and instant CV/UI seeking are core requirements of `TemporalDeck`.
 
-This specification details **TDLongPlay**: a hybrid, disk-backed streaming and hot-window RAM caching architecture for `TemporalDeck`. Inspired by the block streaming engine in `LongplayerStream`, TDLongPlay expands sample support to **60+ minutes** while maintaining real-time lock-free scratching and high-fidelity interpolation, with a bounded RAM footprint of **$\le$ 32 MB**.
+This specification details **TDLongPlay**: a hybrid, disk-backed streaming and hot-window RAM caching architecture for `TemporalDeck`. TDLongPlay expands sample support to **60+ minutes** while maintaining real-time lock-free scratching and high-fidelity interpolation, with a bounded RAM footprint of **$\le$ 32 MB**.
 
 ---
 
@@ -218,7 +218,7 @@ To ensure reliability, real-time safety, and regression prevention, test coverag
 
 ## 9. Implementation Roadmap
 
-- [ ] **Phase 1: Stream Engine Adaptation** – Adapt `LongplayerStream` into a bi-directional block pre-fetcher with a 50/50 symmetric RAM window.
+- [ ] **Phase 1: Stream Engine Adaptation** – Implement a bi-directional block pre-fetcher with a 50/50 symmetric RAM window.
 - [ ] **Phase 2: Dynamic Range Tracking** – Track peak amplitude across resident blocks for localized scaling.
 - [ ] **Phase 3: Engine State Machine & Interpolation Integration** – Add `BUFFER_DURATION_LONGPLAY_DISK` to `TemporalDeckEngine` and wire lock-free block reads to cubic/sinc interpolators.
 - [ ] **Phase 4: Seamless Seek Protocol** – Implement continuous RAM buffer playback and micro-crossfade position snaps on cold seeks.

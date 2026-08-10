@@ -409,6 +409,6 @@ TDLongPlay is ready to merge only when all of the following are true:
 - Reordering released parameter/input/output/light enums.
 - Persisting the playhead position unless separately specified.
 - Making audio startup wait for TD.Scope or the graphics thread.
-- Replacing the existing Longplayer module.
+- Reintroducing a separate standalone long-file player module.
 - Adding full-file waveform analysis unless bounded scope extraction proves insufficient after measurement.
 - General cleanup unrelated to the LongPlay integration.

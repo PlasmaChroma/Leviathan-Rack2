@@ -210,15 +210,6 @@
         "Visual"
       ],
       "hidden": false
-    },
-    {
-      "slug": "Longplayer",
-      "name": "Longplayer",
-      "description": "Bounded-memory streaming sample player for long WAV, FLAC, and MP3 files.",
-      "tags": [
-        "Sampler"
-      ],
-      "hidden": false
     }
   ]
 }

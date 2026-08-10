@@ -2131,7 +2131,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
   controls.rateKnob = params[RATE_PARAM].getValue();
   controls.mixKnob = params[MIX_PARAM].getValue();
   controls.feedbackKnob = params[FEEDBACK_PARAM].getValue();
-  controls.freezeButton = impl->transportControl.freezeLatched || impl->longPlayStartupHold;
+  controls.freezeButton = impl->transportControl.freezeLatched ||
+    impl->transportControl.freezeNegativeHoldActive || impl->longPlayStartupHold;
   controls.reverseButton = impl->transportControl.reverseLatched;
   controls.slipButton = impl->transportControl.slipLatched && !impl->transportControl.reverseLatched;
 
@@ -2265,7 +2266,8 @@ void TemporalDeck::process(const ProcessArgs &args) {
   temporaldeck_transport::applyAutoFreezeRequest(impl->transportControl, frame.autoFreezeRequested, freezeGateHigh);
 
   writeFrameOutputs(*this, frame);
-  bool freezeActive = impl->transportControl.freezeLatched || freezeGateHigh;
+  bool freezeActive = impl->transportControl.freezeLatched ||
+    impl->transportControl.freezeNegativeHoldActive || freezeGateHigh;
   updateTransportModeLights(*this, freezeActive, impl->transportControl.reverseLatched, impl->transportControl.slipLatched,
                             impl->transportControl.slipReturnMode);
   impl->uiPlatterAngle.store(frame.platterAngle, std::memory_order_relaxed);

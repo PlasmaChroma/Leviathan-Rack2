@@ -429,9 +429,13 @@ TestResult testNegativeFreezeResetGestureAndTargets() {
   TransportControlState state;
   const bool idle = !temporaldeck_transport::consumeFreezeNegativeReset(state, true, 0.f);
   const bool firstCrossing = temporaldeck_transport::consumeFreezeNegativeReset(state, true, -1.1f);
-  const bool heldDoesNotRepeat = !temporaldeck_transport::consumeFreezeNegativeReset(state, true, -2.f);
-  const bool partialRiseDoesNotRearm = !temporaldeck_transport::consumeFreezeNegativeReset(state, true, -0.75f);
+  const bool firstCrossingHoldsFreeze = state.freezeNegativeHoldActive;
+  const bool heldDoesNotRepeat = !temporaldeck_transport::consumeFreezeNegativeReset(state, true, -2.f) &&
+                                 state.freezeNegativeHoldActive;
+  const bool partialRiseDoesNotRearm = !temporaldeck_transport::consumeFreezeNegativeReset(state, true, -0.75f) &&
+                                       state.freezeNegativeHoldActive;
   const bool rearmRise = !temporaldeck_transport::consumeFreezeNegativeReset(state, true, -0.4f);
+  const bool rearmRiseReleasesFreeze = !state.freezeNegativeHoldActive;
   const bool secondCrossing = temporaldeck_transport::consumeFreezeNegativeReset(state, true, -1.f);
 
   VirtualRig sampleRig;
@@ -450,9 +454,10 @@ TestResult testNegativeFreezeResetGestureAndTargets() {
   const bool liveReset = std::fabs(liveRig.engine.readHead - expectedNow) < 1e-9 &&
                          liveRig.engine.scratchLagSamples == 0.0;
 
-  const bool pass = idle && firstCrossing && heldDoesNotRepeat && partialRiseDoesNotRearm &&
-                    rearmRise && secondCrossing && sampleReset && liveReset;
-  return {"Negative Freeze crossing resets sample start or live NOW once per gesture", pass,
+  const bool pass = idle && firstCrossing && firstCrossingHoldsFreeze && heldDoesNotRepeat &&
+                    partialRiseDoesNotRearm && rearmRise && rearmRiseReleasesFreeze &&
+                    secondCrossing && sampleReset && liveReset;
+  return {"Negative Freeze crossing resets once and holds Freeze until return threshold", pass,
           "crossings=" + std::to_string(int(firstCrossing)) + "/" +
             std::to_string(int(secondCrossing)) + " sample=" +
             std::to_string(int(sampleReset)) + " live=" + std::to_string(int(liveReset))};
