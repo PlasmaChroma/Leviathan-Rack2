@@ -190,6 +190,16 @@ struct AspectFitRasterImageWidget : TransparentWidget {
 		: path(std::move(path)), flipHorizontal(flipHorizontal), opacity(opacity) {
 	}
 
+	void onContextCreate(const ContextCreateEvent& e) override {
+		onRasterContextCreate(e.vg);
+		TransparentWidget::onContextCreate(e);
+	}
+
+	void onContextDestroy(const ContextDestroyEvent& e) override {
+		onRasterContextDestroy(e.vg);
+		TransparentWidget::onContextDestroy(e);
+	}
+
 	void draw(const DrawArgs& args) override {
 		if (path.empty() || box.size.x <= 1.f || box.size.y <= 1.f) {
 			return;

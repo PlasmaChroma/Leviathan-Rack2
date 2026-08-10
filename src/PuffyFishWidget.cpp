@@ -206,7 +206,6 @@ void PuffyFishWidget::onContextDestroy(const ContextDestroyEvent& e) {
 	// No nvgDeleteImage() call is needed: context destruction owns that cleanup.
 	puffy_body_cache::onContextDestroy(e.vg);
 	invalidatePuffyRasterCache(e.vg);
-	visual_assets::onRasterContextDestroy(e.vg);
 	TransparentWidget::onContextDestroy(e);
 }
 
@@ -217,7 +216,6 @@ void PuffyFishWidget::onContextCreate(const ContextCreateEvent& e) {
 	transitionAtlasReady = false;
 	puffy_body_cache::onContextCreate(e.vg);
 	resetPuffyRasterCache(e.vg);
-	visual_assets::onRasterContextCreate(e.vg);
 	if (compassFramebuffer) {
 		compassFramebuffer->setDirty();
 	}

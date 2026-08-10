@@ -95,6 +95,16 @@ struct PuffyRoamingRangeBar final : ParamWidget {
 		destroyRangeTooltip();
 	}
 
+	void onContextCreate(const ContextCreateEvent& e) override {
+		visual_assets::onRasterContextCreate(e.vg);
+		ParamWidget::onContextCreate(e);
+	}
+
+	void onContextDestroy(const ContextDestroyEvent& e) override {
+		visual_assets::onRasterContextDestroy(e.vg);
+		ParamWidget::onContextDestroy(e);
+	}
+
 	Puffy* getPuffyModule() const {
 		return dynamic_cast<Puffy*>(module);
 	}

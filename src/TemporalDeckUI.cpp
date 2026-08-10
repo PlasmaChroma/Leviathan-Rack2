@@ -57,6 +57,8 @@ struct TemporalDeckDisplayWidget : Widget {
   void destroyLoopTooltip();
 
   ~TemporalDeckDisplayWidget() override;
+  void onContextCreate(const ContextCreateEvent &e) override;
+  void onContextDestroy(const ContextDestroyEvent &e) override;
   void step() override;
   void draw(const DrawArgs &args) override;
   void onButton(const event::Button &e) override;
@@ -66,6 +68,16 @@ struct TemporalDeckDisplayWidget : Widget {
   void onDragMove(const event::DragMove &e) override;
   void onDragEnd(const event::DragEnd &e) override;
 };
+
+void TemporalDeckDisplayWidget::onContextCreate(const ContextCreateEvent &e) {
+  visual_assets::onRasterContextCreate(e.vg);
+  Widget::onContextCreate(e);
+}
+
+void TemporalDeckDisplayWidget::onContextDestroy(const ContextDestroyEvent &e) {
+  visual_assets::onRasterContextDestroy(e.vg);
+  Widget::onContextDestroy(e);
+}
 
 struct TemporalDeckBufferModeWidget : Widget {
   TemporalDeck *module = nullptr;

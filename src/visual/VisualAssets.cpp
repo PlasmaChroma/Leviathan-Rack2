@@ -1507,6 +1507,16 @@ struct OrbScrewRasterLayer : TransparentWidget {
 		: path(std::move(path)) {
 	}
 
+	void onContextCreate(const ContextCreateEvent& e) override {
+		visual_assets::onRasterContextCreate(e.vg);
+		TransparentWidget::onContextCreate(e);
+	}
+
+	void onContextDestroy(const ContextDestroyEvent& e) override {
+		visual_assets::onRasterContextDestroy(e.vg);
+		TransparentWidget::onContextDestroy(e);
+	}
+
 	void draw(const DrawArgs& args) override {
 		if (path.empty() || imageSizePx <= 0.f || box.size.x <= 0.f || box.size.y <= 0.f) {
 			return;
@@ -1728,52 +1738,14 @@ struct MagitekRasterImage : TransparentWidget {
 		: path(std::move(path)) {
 	}
 
-	int loadMipmapHandle(NVGcontext* vg, std::shared_ptr<window::Image> lifecycleImage, const std::string& fullPath) {
-		struct Entry {
-			NVGcontext* vg = nullptr;
-			int handle = -1;
-			int lifecycleHandle = -1;
-			std::weak_ptr<window::Image> lifecycleImage;
-		};
-		struct Cache {
-			std::unordered_map<std::string, Entry> entries;
-			NVGcontext* activeVg = nullptr;
-			unsigned long long useCounter = 0ull;
-		};
-		static Cache cache;
+	void onContextCreate(const ContextCreateEvent& e) override {
+		visual_assets::onRasterContextCreate(e.vg);
+		TransparentWidget::onContextCreate(e);
+	}
 
-		if (!vg || fullPath.empty() || !lifecycleImage || lifecycleImage->handle < 0) {
-			return -1;
-		}
-		if (nvg_gfx_lifecycle::clearCacheOnContextSwitch(vg, cache.activeVg, &cache.useCounter)) {
-			cache.entries.clear();
-		}
-
-		auto it = cache.entries.find(fullPath);
-		if (it != cache.entries.end()) {
-			std::shared_ptr<window::Image> cachedLifecycleImage = it->second.lifecycleImage.lock();
-			if (it->second.vg == vg && it->second.handle >= 0 &&
-				it->second.lifecycleHandle == lifecycleImage->handle && cachedLifecycleImage == lifecycleImage) {
-				return it->second.handle;
-			}
-			if (it->second.vg == vg && it->second.handle >= 0 && cachedLifecycleImage) {
-				nvgDeleteImage(vg, it->second.handle);
-			}
-			cache.entries.erase(it);
-		}
-
-		int handle = nvgCreateImage(vg, fullPath.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
-		if (handle < 0) {
-			return -1;
-		}
-
-		Entry entry;
-		entry.vg = vg;
-		entry.handle = handle;
-		entry.lifecycleHandle = lifecycleImage->handle;
-		entry.lifecycleImage = lifecycleImage;
-		cache.entries[fullPath] = entry;
-		return handle;
+	void onContextDestroy(const ContextDestroyEvent& e) override {
+		visual_assets::onRasterContextDestroy(e.vg);
+		TransparentWidget::onContextDestroy(e);
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -1785,7 +1757,7 @@ struct MagitekRasterImage : TransparentWidget {
 		if (!image || image->handle < 0) {
 			return;
 		}
-		int imageHandle = loadMipmapHandle(args.vg, image, fullPath);
+		int imageHandle = visual_assets::loadRasterMipmapHandle(args.vg, image, fullPath);
 		if (imageHandle < 0) {
 			imageHandle = image->handle;
 		}
