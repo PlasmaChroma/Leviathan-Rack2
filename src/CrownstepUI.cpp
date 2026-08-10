@@ -278,7 +278,7 @@ struct ChessPieceAtlasCache {
 		rasterRingBandImageHandle.fill(-1);
 		rasterRingShellImageHandle.fill(-1);
 	}
-	std::shared_ptr<Svg> svg;
+	std::weak_ptr<Svg> svg;
 	bool initialized = false;
 	bool available = false;
 	NVGcontext* rasterImageVg = nullptr;
@@ -357,12 +357,14 @@ bool svgShapeIdMatchesPiece(const char* shapeId, const char* pieceId) {
 		&& shapeIdText[pieceIdText.size()] == '-';
 }
 
-void buildChessPieceAtlasBounds(ChessPieceAtlasCache* cache) {
-	if (!cache || !cache->svg || !cache->svg->handle) {
+void buildChessPieceAtlasBounds(
+	ChessPieceAtlasCache* cache,
+	const std::shared_ptr<Svg>& svg) {
+	if (!cache || !svg || !svg->handle) {
 		return;
 	}
 
-	NSVGimage* image = cache->svg->handle;
+	NSVGimage* image = svg->handle;
 	for (NSVGshape* shape = image->shapes; shape; shape = shape->next) {
 		if (!(shape->flags & NSVG_FLAGS_VISIBLE)) {
 			continue;
@@ -417,18 +419,59 @@ ChessPieceAtlasCache& chessPieceAtlasCache() {
 	if (!cache.initialized) {
 		cache.initialized = true;
 		try {
-			cache.svg = Svg::load(asset::plugin(pluginInstance, "res/icon/chess.svg"));
+			std::shared_ptr<Svg> svg = Svg::load(
+				asset::plugin(pluginInstance, "res/icon/chess.svg"));
+			cache.svg = svg;
+			buildChessPieceAtlasBounds(&cache, svg);
 		}
 		catch (...) {
 			cache.svg.reset();
 		}
-		buildChessPieceAtlasBounds(&cache);
 	}
 	return cache;
 }
 
-bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cache) {
-	if (!vg || !cache || !cache->available || !cache->svg || !cache->svg->handle) {
+std::shared_ptr<Svg> chessPieceAtlasSvg(ChessPieceAtlasCache* cache) {
+	if (!cache) return nullptr;
+	if (std::shared_ptr<Svg> svg = cache->svg.lock()) return svg;
+	try {
+		std::shared_ptr<Svg> svg = Svg::load(
+			asset::plugin(pluginInstance, "res/icon/chess.svg"));
+		cache->svg = svg;
+		return svg;
+	}
+	catch (...) {
+		return nullptr;
+	}
+}
+
+void abandonChessPieceAtlasRasterImages(ChessPieceAtlasCache* cache) {
+	if (!cache) return;
+	auto clearHandle = [](NVGcontext*& owner, int& handle) {
+		int ignoredWidth = 0;
+		int ignoredHeight = 0;
+		nvg_gfx_lifecycle::resetOwnedNvgImage(
+			owner, handle, ignoredWidth, ignoredHeight, nullptr, false);
+	};
+	clearHandle(cache->rasterImageVg, cache->rasterImageHandle);
+	clearHandle(cache->rasterMaskImageVg, cache->rasterMaskImageHandle);
+	clearHandle(cache->rasterMaskGreenImageVg, cache->rasterMaskGreenImageHandle);
+	clearHandle(cache->rasterMaskGreenDarkImageVg, cache->rasterMaskGreenDarkImageHandle);
+	clearHandle(cache->rasterMaskSilhouetteGreenImageVg, cache->rasterMaskSilhouetteGreenImageHandle);
+	clearHandle(cache->rasterMaskSilhouetteGreenDarkImageVg, cache->rasterMaskSilhouetteGreenDarkImageHandle);
+	for (int colorIndex = 0; colorIndex < HIGHLIGHT_COLOR_COUNT; ++colorIndex) {
+		clearHandle(cache->rasterRingBandImageVg[size_t(colorIndex)],
+			cache->rasterRingBandImageHandle[size_t(colorIndex)]);
+		clearHandle(cache->rasterRingShellImageVg[size_t(colorIndex)],
+			cache->rasterRingShellImageHandle[size_t(colorIndex)]);
+	}
+}
+
+bool ensureChessPieceAtlasRasterImage(
+	NVGcontext* vg,
+	ChessPieceAtlasCache* cache,
+	const std::shared_ptr<Svg>& svg) {
+	if (!vg || !cache || !cache->available || !svg || !svg->handle) {
 		return false;
 	}
 	auto resetRasterHandles = [&](bool deleteCurrentContextHandles) {
@@ -479,9 +522,11 @@ bool ensureChessPieceAtlasRasterImage(NVGcontext* vg, ChessPieceAtlasCache* cach
 				return true;
 			}
 		}
-	resetRasterHandles(true);
+	// A context address may be reused by a DAW editor. Abandon rejected numeric
+	// handles instead of deleting values that might belong to the new context.
+	resetRasterHandles(false);
 
-	NSVGimage* image = cache->svg->handle;
+	NSVGimage* image = svg->handle;
 	int rasterWidth = std::max(1, int(std::ceil(image->width * CHESS_ATLAS_RASTER_SCALE)));
 	int rasterHeight = std::max(1, int(std::ceil(image->height * CHESS_ATLAS_RASTER_SCALE)));
 	std::vector<unsigned char> pixels(size_t(rasterWidth) * size_t(rasterHeight) * size_t(4), 0u);
@@ -876,6 +921,7 @@ struct ChessAtlasDrawSpec {
 
 bool buildChessAtlasDrawSpec(
 	const ChessPieceAtlasCache& cache,
+	const std::shared_ptr<Svg>& svg,
 	float centerX,
 	float centerY,
 	float cellWidth,
@@ -907,7 +953,7 @@ bool buildChessAtlasDrawSpec(
 	else {
 		scaleRefHeight = cache.maxGlyphHeight;
 	}
-	if (scaleRefHeight <= 0.f || !cache.svg || !cache.svg->handle) {
+	if (scaleRefHeight <= 0.f || !svg || !svg->handle) {
 		return false;
 	}
 
@@ -919,8 +965,8 @@ bool buildChessAtlasDrawSpec(
 	const float baselineY = centerY + targetH * 0.5f + yOffset;
 	const float x = centerX - drawWidth * 0.5f;
 	const float y = baselineY - drawHeight;
-	const float atlasDrawWidth = cache.svg->handle->width * scale;
-	const float atlasDrawHeight = cache.svg->handle->height * scale;
+	const float atlasDrawWidth = svg->handle->width * scale;
+	const float atlasDrawHeight = svg->handle->height * scale;
 	const float patternX = x - src.pos.x * scale;
 	const float patternY = y - src.pos.y * scale;
 
@@ -949,11 +995,12 @@ bool drawChessAtlasPiece(
 		return false;
 	}
 	ChessPieceAtlasCache& cache = chessPieceAtlasCache();
-	if (!cache.available || !cache.svg || !ensureChessPieceAtlasRasterImage(vg, &cache)) {
+	const std::shared_ptr<Svg> svg = chessPieceAtlasSvg(&cache);
+	if (!cache.available || !svg || !ensureChessPieceAtlasRasterImage(vg, &cache, svg)) {
 		return false;
 	}
 	ChessAtlasDrawSpec spec;
-	if (!buildChessAtlasDrawSpec(cache, centerX, centerY, cellWidth, cellHeight, piece, &spec)) {
+	if (!buildChessAtlasDrawSpec(cache, svg, centerX, centerY, cellWidth, cellHeight, piece, &spec)) {
 		return false;
 	}
 
@@ -990,9 +1037,10 @@ bool drawChessAtlasPieceRingContour(
 		return false;
 	}
 	ChessPieceAtlasCache& cache = chessPieceAtlasCache();
+	const std::shared_ptr<Svg> svg = chessPieceAtlasSvg(&cache);
 	if (!cache.available
-		|| !cache.svg
-		|| !ensureChessPieceAtlasRasterImage(vg, &cache)
+		|| !svg
+		|| !ensureChessPieceAtlasRasterImage(vg, &cache, svg)
 		|| highlightMode == Crownstep::HIGHLIGHT_OFF) {
 		return false;
 	}
@@ -1003,14 +1051,14 @@ bool drawChessAtlasPieceRingContour(
 	}
 
 	ChessAtlasDrawSpec spec;
-	if (!buildChessAtlasDrawSpec(cache, centerX, centerY, cellWidth, cellHeight, piece, &spec)) {
+	if (!buildChessAtlasDrawSpec(cache, svg, centerX, centerY, cellWidth, cellHeight, piece, &spec)) {
 		return false;
 	}
 
 	// Draw precomputed distance-field contour masks with fixed atlas mapping.
 	// Only the revealed outer margin breathes, which avoids shape-specific edge
 	// artifacts from rescaling the contour texture itself.
-	float atlasScale = spec.atlasDrawWidth / std::max(1.f, cache.svg->handle->width);
+	float atlasScale = spec.atlasDrawWidth / std::max(1.f, svg->handle->width);
 	float pxToScreen = atlasScale / std::max(0.001f, CHESS_ATLAS_RASTER_SCALE);
 	// Must cover the largest precomputed raster-distance shell extents.
 	float shellMargin = 25.5f * pxToScreen;
@@ -1059,6 +1107,16 @@ struct CrownstepBoardWidget final : Widget {
 
 	explicit CrownstepBoardWidget(Crownstep* crownstepModule) {
 		module = crownstepModule;
+	}
+
+	void onContextDestroy(const ContextDestroyEvent& e) override {
+		abandonChessPieceAtlasRasterImages(&chessPieceAtlasCache());
+		Widget::onContextDestroy(e);
+	}
+
+	void onContextCreate(const ContextCreateEvent& e) override {
+		abandonChessPieceAtlasRasterImages(&chessPieceAtlasCache());
+		Widget::onContextCreate(e);
 	}
 
 	int indexFromLocalPos(Vec pos) const {

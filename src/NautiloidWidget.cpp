@@ -640,6 +640,21 @@ struct NautiloidDisplay final : OpaqueWidget {
       imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
   }
 
+  void onContextDestroy(const ContextDestroyEvent& e) override {
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+    generation = uint64_t(-1);
+    OpaqueWidget::onContextDestroy(e);
+  }
+
+  void onContextCreate(const ContextCreateEvent& e) override {
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+    generation = uint64_t(-1);
+    if (framebuffer) framebuffer->setDirty();
+    OpaqueWidget::onContextCreate(e);
+  }
+
   Vec currentLocalMousePos() const {
     if (!parent || !APP || !APP->scene || !APP->scene->rack) {
       return Vec();
@@ -861,6 +876,21 @@ struct NautiloidIrisMiniDisplay final : OpaqueWidget {
     }
     nvg_gfx_lifecycle::resetOwnedNvgImage(
       imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+  }
+
+  void onContextDestroy(const ContextDestroyEvent& e) override {
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+    generation = uint64_t(-1);
+    OpaqueWidget::onContextDestroy(e);
+  }
+
+  void onContextCreate(const ContextCreateEvent& e) override {
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+    generation = uint64_t(-1);
+    if (framebuffer) framebuffer->setDirty();
+    OpaqueWidget::onContextCreate(e);
   }
 
   void step() override {

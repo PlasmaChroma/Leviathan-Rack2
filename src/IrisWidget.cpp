@@ -328,6 +328,21 @@ struct IrisDisplay final : OpaqueWidget {
       imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
   }
 
+  void onContextDestroy(const ContextDestroyEvent& e) override {
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+    generation = uint64_t(-1);
+    OpaqueWidget::onContextDestroy(e);
+  }
+
+  void onContextCreate(const ContextCreateEvent& e) override {
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+    generation = uint64_t(-1);
+    if (framebuffer) framebuffer->setDirty();
+    OpaqueWidget::onContextCreate(e);
+  }
+
   void step() override {
     const uint64_t currentGeneration =
       module ? module->previewGeneration.load(std::memory_order_acquire) : 0u;
@@ -494,6 +509,20 @@ struct IrisWaveformPreview final : TransparentWidget {
     }
     nvg_gfx_lifecycle::resetOwnedNvgImage(
       gradientContext, gradientImage, gradientWidth, gradientHeight, nullptr, false);
+  }
+
+  void onContextDestroy(const ContextDestroyEvent& e) override {
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      gradientContext, gradientImage, gradientWidth, gradientHeight, nullptr, false);
+    TransparentWidget::onContextDestroy(e);
+  }
+
+  void onContextCreate(const ContextCreateEvent& e) override {
+    nvg_gfx_lifecycle::resetOwnedNvgImage(
+      gradientContext, gradientImage, gradientWidth, gradientHeight, nullptr, false);
+    generation = uint64_t(-1);
+    if (framebuffer) framebuffer->setDirty();
+    TransparentWidget::onContextCreate(e);
   }
 
   bool ensureGradientImage(NVGcontext* vg) {
