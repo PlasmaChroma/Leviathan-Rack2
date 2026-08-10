@@ -165,12 +165,35 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		textureShaderInitAttempted = false;
 	}
 
+	void releaseGlResources(bool deleteGlObjects) {
+		if (deleteGlObjects && vbo) {
+			glDeleteBuffers(1, &vbo);
+		}
+		vbo = 0;
+		releaseShaderResources(deleteGlObjects);
+	}
+
 	~BifurxSpectrumGLWidget() {
 		// DAW plugin editors can destroy/recreate their GL context around the
 		// Rack UI. Avoid driver calls from widget teardown; the context owner
 		// reclaims these resources when the editor context is destroyed.
-		vbo = 0;
-		releaseShaderResources(false);
+		releaseGlResources(false);
+	}
+
+	void onContextDestroy(const ContextDestroyEvent& e) override {
+		OpenGlWidget::onContextDestroy(e);
+		releaseGlResources(true);
+	}
+
+	void onContextCreate(const ContextCreateEvent& e) override {
+		OpenGlWidget::onContextCreate(e);
+		// Rack module widgets can survive a DAW editor replacement and miss the
+		// old scene's destroy event. Never carry GL names into the new context:
+		// they can alias unrelated buffers, programs, or textures there.
+		releaseGlResources(false);
+		shaderRendererActiveLastFrame = false;
+		shaderRendererFallbackLastFrame = false;
+		setDirty();
 	}
 
 	bool ensureShaderReady() {

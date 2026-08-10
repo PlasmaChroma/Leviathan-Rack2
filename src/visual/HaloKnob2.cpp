@@ -372,6 +372,19 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		bypassed = forceNanoVg;
 	}
 
+	void onContextCreate(const ContextCreateEvent& e) override {
+		OpenGlWidget::onContextCreate(e);
+		// A Rack module widget can outlive the DAW editor scene. In that case it
+		// may miss the old scene's ContextDestroyEvent but later receive the new
+		// context event with nonzero GL names from the previous context. Those
+		// numeric names are not portable and can alias unrelated objects in the
+		// replacement context, so abandon them unconditionally and rebuild.
+		releaseGlResources(false);
+		shaderFailed = false;
+		bypassed = forceNanoVg;
+		setDirty();
+	}
+
 	void releaseGlResources(bool deleteObjects) {
 		if (deleteObjects) {
 			if (capTexture) glDeleteTextures(1, &capTexture);
