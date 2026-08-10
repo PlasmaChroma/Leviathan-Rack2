@@ -70,7 +70,7 @@ PuffyRasterAsset resolveRasterAsset(
 		return raster;
 	}
 	struct CachedRaster {
-		std::shared_ptr<window::Image> lifecycleImage;
+		std::weak_ptr<window::Image> lifecycleImage;
 		PuffyRasterAsset raster;
 	};
 	struct RasterCache {
@@ -86,7 +86,14 @@ PuffyRasterAsset resolveRasterAsset(
 	}
 	const auto cached = cache.entries.find(relativePath);
 	if (cached != cache.entries.end()) {
-		return cached->second.raster;
+		// A function-static cache must not own Rack window resources: its
+		// destructor runs from __cxa_finalize while the plugin is unloading,
+		// potentially after Rack has torn down the image's NanoVG context.
+		// Rack/widget owners keep the lifecycle image alive during normal use.
+		if (cached->second.lifecycleImage.lock()) {
+			return cached->second.raster;
+		}
+		cache.entries.erase(cached);
 	}
 	const std::string fullPath = asset::plugin(pluginInstance, relativePath);
 	std::shared_ptr<window::Image> image = APP->window->loadImage(fullPath);
