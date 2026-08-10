@@ -62,6 +62,28 @@ struct PuffyRasterAsset {
 	}
 };
 
+struct CachedPuffyRaster {
+	std::weak_ptr<window::Image> lifecycleImage;
+	PuffyRasterAsset raster;
+};
+
+struct PuffyRasterCache {
+	NVGcontext* activeVg = nullptr;
+	std::unordered_map<std::string, CachedPuffyRaster> entries;
+};
+
+PuffyRasterCache& puffyRasterCache() {
+	static PuffyRasterCache cache;
+	return cache;
+}
+
+void invalidatePuffyRasterCache(NVGcontext* vg) {
+	PuffyRasterCache& cache = puffyRasterCache();
+	if (cache.activeVg != vg) return;
+	cache.activeVg = nullptr;
+	cache.entries.clear();
+}
+
 PuffyRasterAsset resolveRasterAsset(
 	NVGcontext* vg,
 	const char* relativePath) {
@@ -69,15 +91,7 @@ PuffyRasterAsset resolveRasterAsset(
 	if (!vg || !relativePath || !APP || !APP->window) {
 		return raster;
 	}
-	struct CachedRaster {
-		std::weak_ptr<window::Image> lifecycleImage;
-		PuffyRasterAsset raster;
-	};
-	struct RasterCache {
-		NVGcontext* activeVg = nullptr;
-		std::unordered_map<std::string, CachedRaster> entries;
-	};
-	static RasterCache cache;
+	PuffyRasterCache& cache = puffyRasterCache();
 	if (cache.activeVg != vg) {
 		// Handles belong to their NanoVG context. Retaining only the source path
 		// across a switch lets Rack rebuild the lifecycle image safely on demand.
@@ -111,7 +125,7 @@ PuffyRasterAsset resolveRasterAsset(
 	}
 	if (raster) {
 		cache.entries.emplace(
-			relativePath, CachedRaster {image, raster});
+			relativePath, CachedPuffyRaster {image, raster});
 	}
 	return raster;
 }
@@ -175,6 +189,14 @@ PuffyFishWidget::PuffyFishWidget(Puffy* module, bool roamingAvatar)
 		compassFramebuffer->hide();
 		addChild(compassFramebuffer);
 	}
+}
+
+void PuffyFishWidget::onContextDestroy(const ContextDestroyEvent& e) {
+	// Drop every shared handle while Rack still identifies the retiring context.
+	// No nvgDeleteImage() call is needed: context destruction owns that cleanup.
+	puffy_body_cache::onContextDestroy(e.vg);
+	invalidatePuffyRasterCache(e.vg);
+	TransparentWidget::onContextDestroy(e);
 }
 
 void PuffyFishWidget::step() {

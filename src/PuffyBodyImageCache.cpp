@@ -381,4 +381,20 @@ ImageAccess ensureTransitionAtlas(NVGcontext* vg) {
 	return result;
 }
 
+void onContextDestroy(NVGcontext* vg) {
+	SharedCache& shared = cache();
+	std::lock_guard<std::mutex> lock(shared.mutex);
+	if (shared.activeVg != vg) {
+		return;
+	}
+	shared.activeVg = nullptr;
+	shared.transitionAtlas = {};
+	for (CachedImage& image : shared.finalBodies) {
+		image = {};
+	}
+	for (CachedImage& image : shared.finalPointers) {
+		image = {};
+	}
+}
+
 } // namespace puffy_body_cache

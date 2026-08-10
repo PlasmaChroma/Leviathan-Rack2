@@ -30,4 +30,9 @@ ImageAccess ensureFinalPointer(
 	int positiveCharacter);
 ImageAccess ensureTransitionAtlas(NVGcontext* vg);
 
+// Called from Rack's ContextDestroyEvent, before NanoVG is destroyed. Handles
+// are abandoned rather than deleted because the context owns their storage and
+// is about to release it as a unit.
+void onContextDestroy(NVGcontext* vg);
+
 } // namespace puffy_body_cache

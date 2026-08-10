@@ -139,11 +139,17 @@ NVGcolor applyPanelGlassTint(NVGcolor color) {
 } // namespace
 
 std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path) {
-	static std::map<std::string, std::shared_ptr<window::Svg>> cache;
+	// Widgets own the SVGs they use. Keeping only weak references here prevents
+	// plugin-static destruction from releasing Rack window resources during
+	// __cxa_finalize after the host has begun tearing its graphics state down.
+	static std::map<std::string, std::weak_ptr<window::Svg>> cache;
 	const std::string key = path ? path : "";
 	auto it = cache.find(key);
 	if (it != cache.end()) {
-		return it->second;
+		if (std::shared_ptr<window::Svg> svg = it->second.lock()) {
+			return svg;
+		}
+		cache.erase(it);
 	}
 	std::shared_ptr<window::Svg> svg = Svg::load(asset::plugin(pluginInstance, key));
 	cache[key] = svg;
