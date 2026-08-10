@@ -282,7 +282,7 @@
    transform="matrix(1.0032751,0,0,1.0029283,209.46053,1458.9832)"><g
      id="branding_wave_left"
      transform="matrix(1.72,0,0,1.72,774.18594,11678.805)"
-     style="display:inline">
+     style="display:none">
         <path
    style="fill:#4995ec"
    d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713"
@@ -582,7 +582,7 @@
    id="reworked_LEVIATHAN_LOGO"
    x="2304.9004"
    y="12598.224"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient1);stroke:none;stroke-width:37.1;stroke-dasharray:none"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:none;fill:url(#linearGradient1);stroke:none;stroke-width:37.1;stroke-dasharray:none"
    xml:space="preserve"
    inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text><text
    x="3280"

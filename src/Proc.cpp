@@ -1773,7 +1773,7 @@ struct ProcWidget : ModuleWidget {
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/proc.panel.svg");
 		const std::string& panelBasePath = splitPanel.panelPath();
 		splitPanel.addLabels("res/proc.labels.svg");
-		splitPanel.addPerfectWaveBranding();
+		splitPanel.addCompactLeviathanLogoBranding();
 		visual_assets::addFractalGlassOverlay(
 			this, panelBasePath, splitPanel.panelSurfaceEffectWidget());
 		previewBuildTimer.markPanelDone();

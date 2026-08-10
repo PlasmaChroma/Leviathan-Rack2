@@ -390,4 +390,25 @@ int addPerfectWaveSoloPanelBranding(
 		opacity);
 }
 
+int addCompactLeviathanLogoBranding(
+	Widget* parent,
+	const std::string& panelPath,
+	float opacity) {
+	if (!parent) {
+		return 0;
+	}
+	// Proc, Undertow, and TD.Scope share the same 8 HP panel dimensions.
+	math::Rect logoRectMm(
+		Vec(3.960335f, 118.43102f),
+		Vec(32.71933f, 12.24054f));
+	panel_svg::loadRectFromSvgMm(
+		panelPath, "BRANDING_LEVIATHAN_LOGO_RASTER", &logoRectMm);
+	parent->addChild(createAspectFitRasterImageWidget(
+		"res/icon/Leviathan_Logo_S2.png",
+		logoRectMm,
+		false,
+		clamp(opacity, 0.f, 1.f)));
+	return 1;
+}
+
 } // namespace visual_assets

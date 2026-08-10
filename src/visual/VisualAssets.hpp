@@ -59,6 +59,12 @@ int addPerfectWaveSoloPanelBranding(
 	Widget* parent,
 	const std::string& panelPath,
 	float opacity = 1.f);
+// Standard centered Leviathan raster logo for 8 HP / 40.64 mm panels. An SVG
+// rect anchor can override the shared fallback without changing widget code.
+int addCompactLeviathanLogoBranding(
+	Widget* parent,
+	const std::string& panelPath,
+	float opacity = 1.f);
 Widget* createPanelSurfaceEffectWidget(
 	const std::string& svgPath,
 	Vec panelSizePx,
@@ -72,6 +78,8 @@ class SplitPanelRenderer final {
 	std::string panelPath_;
 	std::string labelsAssetPath_;
 	float previewProgressionPhase_ = -1.f;
+	float leviathanLogoOpacity_ = 1.f;
+	bool addLeviathanLogo_ = false;
 
 public:
 	SplitPanelRenderer(ModuleWidget* parent, const char* panelAssetPath);
@@ -81,6 +89,7 @@ public:
 	float previewProgressionPhase() const;
 	int addPerfectWaveBranding(float opacity = 1.f);
 	int addPerfectWaveSoloBranding(float opacity = 1.f);
+	void addCompactLeviathanLogoBranding(float opacity = 1.f);
 	// Labels are inserted when this scoped renderer is destroyed, after the
 	// module constructor has added its controls and dynamic visual layers.
 	void addLabels(const char* labelsAssetPath);

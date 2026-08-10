@@ -152,10 +152,16 @@ struct TDScopeWidget : ModuleWidget {
     PreviewBuildLogTimer previewBuildTimer("TDScope", module);
     const std::string panelPath = asset::plugin(pluginInstance, "res/tdscope.svg");
     setPanel(createPanel(panelPath));
-    visual_assets::addPerfectWavePanelBranding(this, panelPath);
     previewBuildTimer.markPanelDone();
     if (auto *svgPanel = dynamic_cast<app::SvgPanel *>(getPanel())) {
+      // Bake the logo into the panel framebuffer so both NanoVG and OpenGL
+      // waveform paths, including their transparent edge widgets, are always
+      // composited above it.
+      visual_assets::addCompactLeviathanLogoBranding(svgPanel->fb, panelPath);
       panelBorder = findPanelBorder(svgPanel->fb);
+    }
+    else {
+      visual_assets::addCompactLeviathanLogoBranding(this, panelPath);
     }
 
     math::Rect scopeRectMm;

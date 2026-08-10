@@ -1409,11 +1409,25 @@ int SplitPanelRenderer::addPerfectWaveSoloBranding(float opacity) {
 	return visual_assets::addPerfectWaveSoloPanelBranding(parent_, panelPath_, opacity);
 }
 
+void SplitPanelRenderer::addCompactLeviathanLogoBranding(float opacity) {
+	addLeviathanLogo_ = true;
+	leviathanLogoOpacity_ = clamp(opacity, 0.f, 1.f);
+}
+
 SplitPanelRenderer::~SplitPanelRenderer() {
-	if (!parent_ || labelsAssetPath_.empty()) {
+	if (!parent_) {
 		return;
 	}
-	parent_->addChild(createPanelLabelsWidget(labelsAssetPath_.c_str(), parent_->box.size));
+	// Branding belongs below the labels layer so labels and panel annotations
+	// retain their intended visual priority wherever their bounds overlap.
+	if (addLeviathanLogo_) {
+		visual_assets::addCompactLeviathanLogoBranding(
+			parent_, panelPath_, leviathanLogoOpacity_);
+	}
+	if (!labelsAssetPath_.empty()) {
+		parent_->addChild(createPanelLabelsWidget(
+			labelsAssetPath_.c_str(), parent_->box.size));
+	}
 }
 
 void SplitPanelRenderer::addLabels(const char* labelsAssetPath) {
