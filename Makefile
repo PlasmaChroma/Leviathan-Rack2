@@ -199,12 +199,15 @@ RACK_RUNTIME_DIRS := \
 	/mingw32/bin
 
 define run_test_bin
-	@if [ -x "$(1)" ]; then "$(1)"; \
+	@run_with_test_env() { \
+		DYLD_LIBRARY_PATH="$(RACK_RUNTIME_DIR):$$DYLD_LIBRARY_PATH" "$$1"; \
+	}; \
+	if [ -x "$(1)" ]; then run_with_test_env "$(1)"; \
 	elif [ -x "$(1).exe" ]; then \
 		if uname -s | grep -qi "linux" && command -v file >/dev/null 2>&1 && file "$(1).exe" | grep -qi "PE32"; then \
 			echo "[SKIP] $(1).exe is a Windows test binary; cannot execute in this Linux shell."; \
 		else \
-			"$(1).exe"; \
+			run_with_test_env "$(1).exe"; \
 		fi; \
 	elif [ -f "$(1).exe" ]; then \
 		if uname -s | grep -qi "linux" && command -v file >/dev/null 2>&1 && file "$(1).exe" | grep -qi "PE32"; then \
@@ -428,13 +431,13 @@ build/tests/puffy_engine_spec: tests/puffy_engine_spec.cpp src/PuffyEngine.cpp s
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/puffy_engine_spec.cpp src/PuffyEngine.cpp src/MathHelpers.cpp -o $@
 
 build/tests/puffy_character_controller_spec: tests/puffy_character_controller_spec.cpp src/PuffyCharacterController.cpp src/PuffyCharacterController.hpp src/PuffyPose.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/puffy_character_controller_spec.cpp src/PuffyCharacterController.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=$(RACK_DIR) -o $@
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/puffy_character_controller_spec.cpp src/PuffyCharacterController.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 build/tests/longplayer_stream_spec: tests/longplayer_stream_spec.cpp src/LongplayerStream.cpp src/LongplayerStream.hpp src/codec.cpp src/codec.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/longplayer_stream_spec.cpp src/LongplayerStream.cpp src/codec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=$(RACK_DIR) -pthread -o $@
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/longplayer_stream_spec.cpp src/LongplayerStream.cpp src/codec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@
 
 build/tests/temporaldeck_longplay_spec: tests/temporaldeck_longplay_spec.cpp src/LongPlayStreamEngine.cpp src/LongPlayStreamEngine.hpp src/codec.cpp src/codec.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/temporaldeck_longplay_spec.cpp src/LongPlayStreamEngine.cpp src/codec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=$(RACK_DIR) -pthread -o $@
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/temporaldeck_longplay_spec.cpp src/LongPlayStreamEngine.cpp src/codec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@
 
 build/tests/doorstop_engine_spec: tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
@@ -455,21 +458,21 @@ build/tests/deepcache_archive_spec: tests/deepcache_archive_spec.cpp src/Deepcac
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/deepcache_archive_spec.cpp src/DeepcacheArchive.cpp src/DeepcacheQoi.cpp -o $@
 
 build/tests/chromatide_spec: tests/chromatide_spec.cpp src/ChromatideCanvas.cpp src/Chromatide.cpp src/IrisSourceField.cpp src/DeepcacheQoi.cpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chromatide_spec.cpp src/ChromatideCanvas.cpp src/Chromatide.cpp src/IrisSourceField.cpp src/DeepcacheQoi.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=$(RACK_DIR) -o $@
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chromatide_spec.cpp src/ChromatideCanvas.cpp src/Chromatide.cpp src/IrisSourceField.cpp src/DeepcacheQoi.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 build/tests/bifurx_runtime_spec: tests/bifurx_runtime_spec.cpp src/Bifurx.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp | build/tests
-	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra -Wno-subobject-linkage $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
+	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra -Wno-subobject-linkage $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@
 
 build/tests/chronomaw_serialization_spec: tests/chronomaw_serialization_spec.cpp src/Chronomaw.cpp src/ChronomawEngine.cpp | build/tests
-	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chronomaw_serialization_spec.cpp src/Chronomaw.cpp src/ChronomawEngine.cpp -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
+	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chronomaw_serialization_spec.cpp src/Chronomaw.cpp src/ChronomawEngine.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@
 
 # Rack-linked tests are heavy C++ translation units under MSYS/MinGW. Chain
 # them to avoid concurrent peak-memory spikes when users invoke `make -jN`.
 build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp | build/tests build/tests/bifurx_runtime_spec
-	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
+	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@
 
 build/tests/crownstep_persistence_spec: tests/crownstep_persistence_spec.cpp $(CROWNSTEP_MODULE_SOURCES) | build/tests build/tests/panel_svg_utils_spec
-	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
+	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@
 
 build/tests/doorstop_runtime_spec: tests/doorstop_runtime_spec.cpp src/Doorstop.cpp src/DoorstopEngine.cpp src/DoorstopEngineRouter.cpp src/ReferenceSpringEngine.cpp src/MathHelpers.cpp | build/tests build/tests/panel_svg_utils_spec
-	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath=/tmp/Rack2 -o $@
+	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@

@@ -12,7 +12,7 @@ struct PuffyTransferPreviewWidget final : TransparentWidget {
 	static constexpr int SWARM_POINT_COUNT =
 		SWARM_COLUMN_COUNT * SWARM_SAMPLES_PER_COLUMN;
 	// Normalized audio domain: +/-1 is +/-5 V.
-	static constexpr float DOMAIN = 1.f;
+	static constexpr float NORMALIZED_DOMAIN = 1.f;
 
 	Puffy* module = nullptr;
 	PuffyVisualState visual;

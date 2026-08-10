@@ -107,13 +107,13 @@ PuffyTransferPreviewWidget::PuffyTransferPreviewWidget(Puffy* module)
 }
 
 float PuffyTransferPreviewWidget::inputToX(float input) const {
-	return (0.5f + 0.5f * clamp(input / DOMAIN, -1.f, 1.f)) * box.size.x;
+	return (0.5f + 0.5f * clamp(input / NORMALIZED_DOMAIN, -1.f, 1.f)) * box.size.x;
 }
 
 float PuffyTransferPreviewWidget::outputToY(float output) const {
 	const float usableHeight = box.size.y * (1.f - 2.f * kVerticalMarginFraction);
 	return box.size.y * kVerticalMarginFraction
-		+ (0.5f - 0.5f * clamp(output / DOMAIN, -1.f, 1.f)) * usableHeight;
+		+ (0.5f - 0.5f * clamp(output / NORMALIZED_DOMAIN, -1.f, 1.f)) * usableHeight;
 }
 
 void PuffyTransferPreviewWidget::rebuildPoints() {
@@ -140,7 +140,7 @@ void PuffyTransferPreviewWidget::rebuildPoints() {
 	curveSamples.reserve(POINT_COUNT + 2 * 257);
 	for (int i = 0; i < POINT_COUNT; ++i) {
 		const float normalized = float(i) / float(POINT_COUNT - 1);
-		const float input = -DOMAIN + 2.f * DOMAIN * normalized;
+		const float input = -NORMALIZED_DOMAIN + 2.f * NORMALIZED_DOMAIN * normalized;
 		curveSamples.push_back({input, false});
 	}
 	if (negativeCharacter == puffy::Character::Void) {
@@ -159,7 +159,7 @@ void PuffyTransferPreviewWidget::rebuildPoints() {
 		});
 	curvePoints.clear();
 	curvePoints.reserve(curveSamples.size() * 2);
-	float lastDiscontinuity = -2.f * DOMAIN;
+	float lastDiscontinuity = -2.f * NORMALIZED_DOMAIN;
 	for (const CurveSampleInput& sample : curveSamples) {
 		if (!sample.discontinuity
 			&& std::fabs(sample.input - lastDiscontinuity) < 1e-7f) {
@@ -194,7 +194,7 @@ void PuffyTransferPreviewWidget::rebuildPoints() {
 	swarmPointCount = 0;
 	for (int column = 0; column < SWARM_COLUMN_COUNT; ++column) {
 		const float normalized = float(column) / float(SWARM_COLUMN_COUNT - 1);
-		const float input = -DOMAIN + 2.f * DOMAIN * normalized;
+		const float input = -NORMALIZED_DOMAIN + 2.f * NORMALIZED_DOMAIN * normalized;
 		const bool positive = input >= 0.f;
 		const puffy::Character character = positive
 			? positiveCharacter : negativeCharacter;
@@ -298,9 +298,9 @@ void PuffyTransferPreviewWidget::draw(const DrawArgs& args) {
 	const auto drawActivityLane = [&](float negativeActivity,
 		float positiveActivity, float laneY, float laneHeight) {
 		const float negativeX = inputToX(
-			-clamp(negativeActivity, 0.f, DOMAIN));
+			-clamp(negativeActivity, 0.f, NORMALIZED_DOMAIN));
 		const float positiveX = inputToX(
-			clamp(positiveActivity, 0.f, DOMAIN));
+			clamp(positiveActivity, 0.f, NORMALIZED_DOMAIN));
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, negativeX, laneY, centerX - negativeX, laneHeight);
 		nvgFillColor(args.vg, withAlpha(negativeTint, 0.18f));
@@ -325,9 +325,9 @@ void PuffyTransferPreviewWidget::draw(const DrawArgs& args) {
 
 		// Each lane retains 25% headroom beyond the visible +/-5 V domain.
 		const float negativeOverrange = clamp(
-			(negativeActivity - DOMAIN) / 0.25f, 0.f, 1.f);
+			(negativeActivity - NORMALIZED_DOMAIN) / 0.25f, 0.f, 1.f);
 		const float positiveOverrange = clamp(
-			(positiveActivity - DOMAIN) / 0.25f, 0.f, 1.f);
+			(positiveActivity - NORMALIZED_DOMAIN) / 0.25f, 0.f, 1.f);
 		if (negativeOverrange > 0.f) {
 			const float stripWidth = 1.f + 2.f * negativeOverrange;
 			nvgBeginPath(args.vg);
@@ -398,8 +398,8 @@ void PuffyTransferPreviewWidget::drawCurve(const DrawArgs& args) const {
 	nvgSave(args.vg);
 	nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 	nvgBeginPath(args.vg);
-	nvgMoveTo(args.vg, inputToX(-DOMAIN), outputToY(-DOMAIN));
-	nvgLineTo(args.vg, inputToX(DOMAIN), outputToY(DOMAIN));
+	nvgMoveTo(args.vg, inputToX(-NORMALIZED_DOMAIN), outputToY(-NORMALIZED_DOMAIN));
+	nvgLineTo(args.vg, inputToX(NORMALIZED_DOMAIN), outputToY(NORMALIZED_DOMAIN));
 	nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 34));
 	nvgStrokeWidth(args.vg, 0.65f);
 	nvgStroke(args.vg);
