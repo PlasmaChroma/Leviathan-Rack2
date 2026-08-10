@@ -1075,14 +1075,15 @@ struct IrisWidget final : ModuleWidget {
     visual_assets::SplitPanelRenderer splitPanel(this, "res/iris.panel.svg");
     const std::string& panelPath = splitPanel.panelPath();
     splitPanel.addLabels("res/iris.labels.svg");
-    splitPanel.addPerfectWaveBranding();
+    splitPanel.addCompactLeviathanLogoBranding();
     visual_assets::addFractalGlassOverlay(
       this, panelPath, splitPanel.panelSurfaceEffectWidget());
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0.f)));
-    addChild(createWidget<CyanOrbScrew>(Vec(0.f, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
     addChild(createWidget<CyanOrbScrew>(
-      Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+      Vec(RACK_GRID_WIDTH, box.size.y - RACK_GRID_WIDTH)));
+    addChild(createWidget<CyanOrbScrew>(
+      Vec(box.size.x - 2.f * RACK_GRID_WIDTH, box.size.y - RACK_GRID_WIDTH)));
 
     math::Rect displayRectMm(Vec(4.3f, 13.2f), Vec(52.36f, 25.9f));
     panel_svg::loadRectFromSvgMm(panelPath, "IRIS_DISPLAY", &displayRectMm);

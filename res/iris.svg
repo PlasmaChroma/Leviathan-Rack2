@@ -95,7 +95,7 @@
     <g
        id="branding_wave_left"
        transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)"
-       style="display:inline">
+       style="display:none">
       <path
          style="fill:#4995ec"
          d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713"
@@ -112,7 +112,7 @@
     <g
        id="branding_wave_right"
        transform="matrix(-1.72,0,0,1.72,7743.0744,11996.75)"
-       style="display:inline">
+       style="display:none">
       <path
          style="fill:#4995ec"
          d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713"
@@ -446,7 +446,7 @@
        id="reworked_LEVIATHAN_LOGO"
        x="3046.0955"
        y="12598.223"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient300);fill-rule:evenodd;stroke-width:37.088"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:none;fill:url(#linearGradient300);fill-rule:evenodd;stroke-width:37.088"
        xml:space="preserve"
        inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
   </g>
@@ -465,5 +465,11 @@
        y="12338.190"
        width="1306.748"
        height="511.810" />
+    <rect
+       id="BRANDING_LEVIATHAN_LOGO_RASTER"
+       x="1412.0335"
+       y="11843.102"
+       width="3271.933"
+       height="1224.054" />
   </g>
 </svg>

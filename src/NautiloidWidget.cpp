@@ -1691,6 +1691,7 @@ struct NautiloidWidget final : ModuleWidget {
     const std::string& panelPath = splitPanel.panelPath();
     splitPanel.addLabels("res/nautiloid.labels.svg");
     splitPanel.addPerfectWaveBranding();
+    splitPanel.addCompactLeviathanLogoBranding();
     visual_assets::addFractalGlassOverlay(
       this, panelPath, splitPanel.panelSurfaceEffectWidget());
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
