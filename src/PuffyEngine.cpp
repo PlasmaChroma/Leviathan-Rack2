@@ -11,6 +11,7 @@ namespace {
 constexpr float kPi = 3.14159265358979323846f;
 constexpr float kMinimumSampleRate = 1000.f;
 constexpr float kLiveCeilingVolts = 5.f;
+constexpr float kSoftKneeVolts = 4.f;
 
 float clamp01(float value) {
 	return std::max(0.f, std::min(value, 1.f));
@@ -112,6 +113,10 @@ void Engine::setSwarmSeed(std::uint32_t seed) {
 	swarmPreviousFast = 0.f;
 	swarmCurrentFast = 0.f;
 	swarmSlow = 0.f;
+}
+
+void Engine::setLimiterMode(LimiterMode mode) {
+	limiterMode = mode;
 }
 
 void Engine::resetSharedControlState() {
@@ -758,21 +763,38 @@ Frame Engine::process(
 	normalizedRight *= appliedAutoGain;
 	float outputLeft = normalizedLeft * kReferenceVolts;
 	float outputRight = normalizedRight * kReferenceVolts;
-	const float peak = std::max(std::fabs(outputLeft), std::fabs(outputRight));
-	const float desiredGain = peak > kLiveCeilingVolts
-		? kLiveCeilingVolts / std::max(peak, std::numeric_limits<float>::min())
-		: 1.f;
-	limiterGain += (1.f - limiterGain) * limiterReleaseCoefficient;
-	limiterGain = std::min(limiterGain, desiredGain);
-	outputLeft *= limiterGain;
-	outputRight *= limiterGain;
+	if (limiterMode != LimiterMode::Off) {
+		const float peak = std::max(std::fabs(outputLeft), std::fabs(outputRight));
+		float desiredGain = 1.f;
+		if (limiterMode == LimiterMode::Soft && peak > kSoftKneeVolts) {
+			// A unity-slope knee that approaches the 5 V rail asymptotically.
+			// Deriving one gain from the linked peak preserves the stereo image.
+			const float aboveKnee = peak - kSoftKneeVolts;
+			const float mappedPeak = kSoftKneeVolts
+				+ aboveKnee / (1.f + aboveKnee);
+			desiredGain = mappedPeak
+				/ std::max(peak, std::numeric_limits<float>::min());
+		}
+		else if (peak > kLiveCeilingVolts) {
+			desiredGain = kLiveCeilingVolts
+				/ std::max(peak, std::numeric_limits<float>::min());
+		}
+		limiterGain += (1.f - limiterGain) * limiterReleaseCoefficient;
+		limiterGain = std::min(limiterGain, desiredGain);
+		outputLeft *= limiterGain;
+		outputRight *= limiterGain;
 
-	const float limitedPeak = std::max(std::fabs(outputLeft), std::fabs(outputRight));
-	if (limitedPeak > kLiveCeilingVolts) {
-		const float guard = kLiveCeilingVolts / limitedPeak;
-		outputLeft *= guard;
-		outputRight *= guard;
-		limiterGain *= guard;
+		const float limitedPeak = std::max(
+			std::fabs(outputLeft), std::fabs(outputRight));
+		if (limitedPeak > kLiveCeilingVolts) {
+			const float guard = kLiveCeilingVolts / limitedPeak;
+			outputLeft *= guard;
+			outputRight *= guard;
+			limiterGain *= guard;
+		}
+	}
+	else {
+		limiterGain = 1.f;
 	}
 
 	if (!std::isfinite(outputLeft) || !std::isfinite(outputRight)) {

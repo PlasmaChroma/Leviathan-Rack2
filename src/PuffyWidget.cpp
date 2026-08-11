@@ -49,6 +49,84 @@ struct PuffyViewportGradient final : TransparentWidget {
 	}
 };
 
+struct PuffyLimiterModeButton final : SmallGoldButton {
+	ui::Tooltip* tooltip = nullptr;
+
+	PuffyLimiterModeButton() : SmallGoldButton(15.f) {
+	}
+
+	~PuffyLimiterModeButton() override {
+		destroyTooltip();
+	}
+
+	std::string getTooltipString() const {
+		static const char* const names[] = {"Hard", "Soft", "Off"};
+		const auto* puffyModule = dynamic_cast<const Puffy*>(module);
+		const int mode = puffyModule
+			? clamp(puffyModule->limiterMode.load(std::memory_order_relaxed), 0, 2)
+			: 0;
+		return std::string("Limiter: ") + names[mode];
+	}
+
+	void createTooltip() {
+		if (!settings::tooltips || tooltip || !APP || !APP->scene) {
+			return;
+		}
+		tooltip = new ui::Tooltip();
+		tooltip->text = getTooltipString();
+		APP->scene->addChild(tooltip);
+	}
+
+	void destroyTooltip() {
+		if (!tooltip) {
+			return;
+		}
+		if (tooltip->parent) {
+			tooltip->parent->removeChild(tooltip);
+		}
+		delete tooltip;
+		tooltip = nullptr;
+	}
+
+	void step() override {
+		SmallGoldButton::step();
+		if (tooltip) {
+			tooltip->text = getTooltipString();
+		}
+	}
+
+	void onEnter(const event::Enter& e) override {
+		createTooltip();
+		event::Enter eCopy = e;
+		OpaqueWidget::onEnter(eCopy);
+	}
+
+	void onLeave(const event::Leave& e) override {
+		destroyTooltip();
+		event::Leave eCopy = e;
+		OpaqueWidget::onLeave(eCopy);
+	}
+};
+
+struct PuffyLimiterModeLabels final : TransparentWidget {
+	void draw(const DrawArgs& args) override {
+		if (!APP || !APP->window || !APP->window->uiFont) {
+			return;
+		}
+		static const char* const labels[] = {"H", "S", "∅"};
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFontSize(args.vg, 8.f);
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		nvgFillColor(args.vg, nvgRGB(255, 255, 255));
+		const float rowSpacing = mm2px(3.f);
+		for (int row = 0; row < 3; ++row) {
+			nvgText(
+				args.vg, 0.5f * box.size.x, rowSpacing * (float(row) + 0.5f),
+				labels[row], nullptr);
+		}
+	}
+};
+
 struct PuffyRangeTooltip final : ui::Tooltip {
 	WeakPtr<Widget> anchor;
 	float selectorLeftFraction = 0.f;
@@ -1480,6 +1558,33 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 		fish->box.size.x - characterMenuSize.x - characterMenuInset.x,
 		fish->box.size.y - characterMenuSize.y - characterMenuInset.y));
 	addParam(positiveCharacterMenu);
+
+	// Keep the limiter controls aligned to the positive-character pill's right
+	// edge: labels lead into a compact vertical LED bank, then the mode button.
+	const float limiterRight = positiveCharacterMenu->box.pos.x
+		+ positiveCharacterMenu->box.size.x;
+	const float limiterLedX = limiterRight - mm2px(1.15f);
+	const float limiterRowSpacing = mm2px(3.f);
+	const float limiterFirstY = positiveCharacterMenu->box.pos.y - mm2px(13.5f);
+	auto* limiterLabels = new PuffyLimiterModeLabels();
+	limiterLabels->box.pos = Vec(
+		limiterLedX - mm2px(4.f), limiterFirstY - 0.5f * limiterRowSpacing);
+	limiterLabels->box.size = Vec(mm2px(2.9f), 3.f * limiterRowSpacing);
+	addChild(limiterLabels);
+	addChild(createLightCentered<TinyAperture<RedApertureLight>>(
+		Vec(limiterLedX, limiterFirstY), module, Puffy::LIMITER_HARD_LIGHT));
+	addChild(createLightCentered<TinyAperture<AmberApertureLight>>(
+		Vec(limiterLedX, limiterFirstY + limiterRowSpacing),
+		module, Puffy::LIMITER_SOFT_LIGHT));
+	addChild(createLightCentered<TinyAperture<WhiteApertureLight>>(
+		Vec(limiterLedX, limiterFirstY + 2.f * limiterRowSpacing),
+		module, Puffy::LIMITER_OFF_LIGHT));
+	const float limiterButtonSize = 15.f;
+	addParam(createParam<PuffyLimiterModeButton>(
+		Vec(
+			limiterRight - limiterButtonSize,
+			positiveCharacterMenu->box.pos.y - limiterButtonSize - mm2px(0.9f)),
+		module, Puffy::LIMITER_BUTTON_PARAM));
 
 	math::Rect transferPreviewRectMm;
 	if (!panel_svg::loadRectFromSvgMm(

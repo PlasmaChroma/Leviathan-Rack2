@@ -774,6 +774,42 @@ Result linkedLimiter() {
 	};
 }
 
+Result limiterModes() {
+	puffy::Engine soft;
+	puffy::Engine off;
+	soft.setSampleRate(48000.f);
+	off.setSampleRate(48000.f);
+	soft.setLimiterMode(puffy::LimiterMode::Soft);
+	off.setLimiterMode(puffy::LimiterMode::Off);
+	float softPeak = 0.f;
+	float offPeak = 0.f;
+	float softRatioError = 0.f;
+	for (int i = 0; i < 48000; ++i) {
+		const float phase = 2.f * kPi * 997.f * float(i) / 48000.f;
+		const float left = 8.f * std::sin(phase);
+		const float right = 2.f * std::sin(phase);
+		const puffy::Frame softFrame = soft.process(
+			left, right, 0.f, 0, false, 0.f);
+		const puffy::Frame offFrame = off.process(
+			left, right, 0.f, 0, false, 0.f);
+		softPeak = std::max(softPeak, std::fabs(softFrame.left));
+		offPeak = std::max(offPeak, std::fabs(offFrame.left));
+		if (i > 1000 && std::fabs(softFrame.left) > 1e-4f) {
+			softRatioError = std::max(
+				softRatioError,
+				std::fabs(softFrame.right / softFrame.left - 0.25f));
+		}
+	}
+	return {
+		"SOFT stays below 5 V with linked gain while OFF permits overrange",
+		softPeak > 4.f && softPeak <= 5.00001f
+			&& offPeak > 7.f && softRatioError < 2e-4f,
+		"softPeak=" + std::to_string(softPeak)
+			+ " offPeak=" + std::to_string(offPeak)
+			+ " ratioError=" + std::to_string(softRatioError)
+	};
+}
+
 Result sensitivityChangesInputProjectionAndLevel() {
 	puffy::Engine low;
 	puffy::Engine center;
@@ -1082,6 +1118,7 @@ int main() {
 		unityAndStereo(),
 		dynamicAutoDeflateTracksProgramEnergy(),
 		linkedLimiter(),
+		limiterModes(),
 		sensitivityChangesInputProjectionAndLevel(),
 		wetDryMixEndpoints(),
 		recoveryAndSilence(),

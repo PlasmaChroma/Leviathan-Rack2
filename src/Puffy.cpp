@@ -47,6 +47,7 @@ Puffy::Puffy() {
 	configParam(
 		ROAMING_RANGE_PARAM, 0.f, 1.f, 310.f / 810.f,
 		"Roaming range", "%", 0.f, 100.f);
+	configButton(LIMITER_BUTTON_PARAM, "Limiter mode");
 
 	configInput(INPUT_L, "Left audio");
 	configInput(INPUT_R, "Right audio");
@@ -55,6 +56,9 @@ Puffy::Puffy() {
 	configOutput(OUTPUT_R, "Right audio");
 	configLight(LIMIT_LIGHT, "Limiter gain reduction");
 	configLight(CHARACTER_LINK_LIGHT, "Polarity character link");
+	configLight(LIMITER_HARD_LIGHT, "Hard limiter selected");
+	configLight(LIMITER_SOFT_LIGHT, "Soft limiter selected");
+	configLight(LIMITER_OFF_LIGHT, "Limiter off");
 	configBypass(INPUT_L, OUTPUT_L);
 	configBypass(INPUT_R, OUTPUT_R);
 }
@@ -206,6 +210,13 @@ void Puffy::process(const ProcessArgs& args) {
 				params[POSITIVE_CHARACTER_PARAM].getValue())),
 			0,
 			puffy::kCharacterCount - 1);
+	if (limiterButtonTrigger.process(params[LIMITER_BUTTON_PARAM].getValue())) {
+		const int next = (limiterMode.load(std::memory_order_relaxed) + 1) % 3;
+		limiterMode.store(next, std::memory_order_relaxed);
+	}
+	const int activeLimiterMode = clamp(
+		limiterMode.load(std::memory_order_relaxed), 0, 2);
+	engine.setLimiterMode(static_cast<puffy::LimiterMode>(activeLimiterMode));
 	const puffy::Frame frame = engine.process(
 		left,
 		right,
@@ -229,6 +240,9 @@ void Puffy::process(const ProcessArgs& args) {
 	}
 	lights[LIMIT_LIGHT].setSmoothBrightness(lastGainReduction, args.sampleTime);
 	lights[CHARACTER_LINK_LIGHT].setBrightness(charactersLinked ? 1.f : 0.f);
+	lights[LIMITER_HARD_LIGHT].setBrightness(activeLimiterMode == 0 ? 1.f : 0.f);
+	lights[LIMITER_SOFT_LIGHT].setBrightness(activeLimiterMode == 1 ? 1.f : 0.f);
+	lights[LIMITER_OFF_LIGHT].setBrightness(activeLimiterMode == 2 ? 1.f : 0.f);
 	if (measurePerf) {
 		debugMetrics.recordProcess(
 			debug_terminal::elapsedNsSince(processStart));
@@ -239,6 +253,8 @@ void Puffy::onReset(const ResetEvent& event) {
 	(void) event;
 	engine.reset();
 	autoDeflateEnabled.store(false, std::memory_order_relaxed);
+	limiterMode.store(int(puffy::LimiterMode::Hard), std::memory_order_relaxed);
+	limiterButtonTrigger.reset();
 	params[CHARACTER_LINK_PARAM].setValue(1.f);
 	params[POSITIVE_CHARACTER_PARAM].setValue(
 		params[CHARACTER_PARAM].getValue());
@@ -248,6 +264,9 @@ void Puffy::onReset(const ResetEvent& event) {
 	publishVisualState(frame, false);
 	lights[LIMIT_LIGHT].setBrightness(0.f);
 	lights[CHARACTER_LINK_LIGHT].setBrightness(1.f);
+	lights[LIMITER_HARD_LIGHT].setBrightness(1.f);
+	lights[LIMITER_SOFT_LIGHT].setBrightness(0.f);
+	lights[LIMITER_OFF_LIGHT].setBrightness(0.f);
 }
 
 void Puffy::onSampleRateChange(const SampleRateChangeEvent& event) {
@@ -262,7 +281,11 @@ json_t* Puffy::dataToJson() {
 	json_t* root = json_object();
 	json_object_set_new(root, "schemaVersion", json_integer(1));
 	json_object_set_new(root, "oversampling", json_integer(4));
-	json_object_set_new(root, "limiterMode", json_string("live"));
+	static const char* const limiterModeNames[] = {"hard", "soft", "off"};
+	const int savedLimiterMode = clamp(
+		limiterMode.load(std::memory_order_relaxed), 0, 2);
+	json_object_set_new(
+		root, "limiterMode", json_string(limiterModeNames[savedLimiterMode]));
 	json_object_set_new(
 		root,
 		"autoDeflate",
@@ -277,7 +300,15 @@ json_t* Puffy::dataToJson() {
 void Puffy::dataFromJson(json_t* root) {
 	bool loadedAutoDeflate = false;
 	bool loadedRoaming = false;
+	int loadedLimiterMode = int(puffy::LimiterMode::Hard);
 	if (root) {
+		json_t* limiter = json_object_get(root, "limiterMode");
+		if (json_is_string(limiter)) {
+			const std::string value = json_string_value(limiter);
+			if (value == "soft") loadedLimiterMode = int(puffy::LimiterMode::Soft);
+			else if (value == "off") loadedLimiterMode = int(puffy::LimiterMode::Off);
+			// The former "live" value intentionally migrates to Hard.
+		}
 		json_t* autoDeflate = json_object_get(root, "autoDeflate");
 		if (json_is_boolean(autoDeflate)) {
 			loadedAutoDeflate = json_boolean_value(autoDeflate);
@@ -289,6 +320,7 @@ void Puffy::dataFromJson(json_t* root) {
 	}
 	autoDeflateEnabled.store(loadedAutoDeflate, std::memory_order_relaxed);
 	roamingEnabled.store(loadedRoaming, std::memory_order_relaxed);
+	limiterMode.store(loadedLimiterMode, std::memory_order_relaxed);
 	if (params[CHARACTER_LINK_PARAM].getValue() > 0.5f) {
 		params[POSITIVE_CHARACTER_PARAM].setValue(
 			params[CHARACTER_PARAM].getValue());

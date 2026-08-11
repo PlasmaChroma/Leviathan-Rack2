@@ -12,6 +12,12 @@ constexpr float kReferenceVolts = 5.f;
 constexpr int kOversampleFactor = 4;
 constexpr int kOversampleQuality = 8;
 
+enum class LimiterMode {
+	Hard = 0,
+	Soft = 1,
+	Off = 2
+};
+
 enum class Character {
 	Bloom = 0,
 	Spine = 1,
@@ -54,6 +60,7 @@ public:
 
 	void setSampleRate(float sampleRate);
 	void setSwarmSeed(std::uint32_t seed);
+	void setLimiterMode(LimiterMode mode);
 	void reset();
 	Frame process(
 		float inputLeft,
@@ -166,6 +173,7 @@ private:
 	float rightPositiveInputActivity = 0.f;
 	float rightNegativeInputActivity = 0.f;
 	float limiterGain = 1.f;
+	LimiterMode limiterMode = LimiterMode::Hard;
 	float projectedInputGain = 1.f;
 	float cachedSensitivity = -2.f;
 	float cachedSensitivityTargetGain = 1.f;

@@ -36,6 +36,7 @@ struct Puffy final : Module {
 		POSITIVE_CHARACTER_PARAM,
 		CHARACTER_LINK_PARAM,
 		ROAMING_RANGE_PARAM,
+		LIMITER_BUTTON_PARAM,
 		PARAMS_LEN
 	};
 
@@ -55,6 +56,9 @@ struct Puffy final : Module {
 	enum LightId {
 		LIMIT_LIGHT,
 		CHARACTER_LINK_LIGHT,
+		LIMITER_HARD_LIGHT,
+		LIMITER_SOFT_LIGHT,
+		LIMITER_OFF_LIGHT,
 		LIGHTS_LEN
 	};
 
@@ -62,6 +66,8 @@ struct Puffy final : Module {
 	puffy::Engine engine;
 	std::atomic<bool> autoDeflateEnabled {false};
 	std::atomic<bool> roamingEnabled {false};
+	std::atomic<int> limiterMode {int(puffy::LimiterMode::Hard)};
+	dsp::SchmittTrigger limiterButtonTrigger;
 	// UI acknowledgement that the rack-level roaming avatar is attached.
 	// Keep this separate from the persisted preference so the panel fish never
 	// disappears merely because the overlay could not yet be created.
