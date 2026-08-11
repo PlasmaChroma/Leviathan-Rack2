@@ -11,7 +11,8 @@ namespace {
 constexpr float kHeightPx = 22.f;
 constexpr float kWidthPx = kHeightPx * (168.f / 262.f);
 constexpr float kShadowBleedPx = 8.f;
-constexpr double kAnimationFps = 120.0;
+constexpr double kAnimationFps = 24.0;
+constexpr double kVisualUpdateIntervalSec = 1.0 / kAnimationFps;
 constexpr bool kDrawGlass = false;
 thread_local PlasmaSwitchDrawMetrics gPlasmaSwitchDrawMetrics;
 
@@ -96,6 +97,16 @@ struct ShadowLayer : TransparentWidget {
 		fillPass(componentSize.x * 0.055f, componentSize.x * 0.12f, componentSize.y * 0.09f, 44);
 		fillPass(componentSize.x * 0.13f, componentSize.x * 0.14f, componentSize.y * 0.08f, 28);
 		nvgRestore(args.vg);
+	}
+};
+
+struct PlasmaSwitchVisualLayer : TransparentWidget {
+	PlasmaSwitch* owner = nullptr;
+
+	void draw(const DrawArgs& args) override {
+		if (owner) {
+			owner->drawVisual(args);
+		}
 	}
 };
 
@@ -217,6 +228,15 @@ PlasmaSwitch::PlasmaSwitch() {
 	shadowLayer->componentSize = box.size;
 	shadowFb->addChild(shadowLayer);
 	addChild(shadowFb);
+
+	visualFb = new widget::FramebufferWidget();
+	visualFb->dirtyOnSubpixelChange = false;
+	visualFb->box.size = box.size;
+	PlasmaSwitchVisualLayer* visualLayer = new PlasmaSwitchVisualLayer();
+	visualLayer->box.size = box.size;
+	visualLayer->owner = this;
+	visualFb->addChild(visualLayer);
+	addChild(visualFb);
 }
 
 PlasmaSwitch::~PlasmaSwitch() {
@@ -272,11 +292,18 @@ int PlasmaSwitch::ensureBackingImageHandle(NVGcontext* vg) {
 void PlasmaSwitch::step() {
 	app::Switch::step();
 	const double nowSec = system::getTime();
-	const double dt = lastStepSec > 0.0 ? std::max(0.0, nowSec - lastStepSec) : 0.0;
-	lastStepSec = nowSec;
-
 	engine::ParamQuantity* pq = getParamQuantity();
 	const float target = (!pq || pq->getValue() > 0.5f) ? 1.f : 0.f;
+	const bool targetChanged = target != lastVisualTarget;
+	const bool updateDue = nextVisualUpdateSec <= 0.0 || nowSec >= nextVisualUpdateSec || nowSec < lastVisualUpdateSec;
+	if (!targetChanged && !updateDue) {
+		return;
+	}
+
+	const double dt = lastVisualUpdateSec > 0.0 ? std::max(0.0, nowSec - lastVisualUpdateSec) : 0.0;
+	lastVisualUpdateSec = nowSec;
+	nextVisualUpdateSec = nowSec + kVisualUpdateIntervalSec;
+	lastVisualTarget = target;
 	if (!displayValueInitialized) {
 		displayValue = target;
 		displayValueInitialized = true;
@@ -298,16 +325,14 @@ void PlasmaSwitch::step() {
 		sparkOffsetX[i] = std::sin(phase) * (0.42f + 0.08f * i);
 		sparkOffsetY[i] = std::cos(phase * 1.21f) * 0.46f;
 	}
+	if (visualFb) {
+		visualFb->setDirty();
+	}
 }
 
 void PlasmaSwitch::draw(const DrawArgs& args) {
 	if (box.size.x <= 1.f || box.size.y <= 1.f) {
 		return;
-	}
-	if (!displayValueInitialized) {
-		engine::ParamQuantity* pq = getParamQuantity();
-		displayValue = (!pq || pq->getValue() > 0.5f) ? 1.f : 0.f;
-		displayValueInitialized = true;
 	}
 	const auto shadowStart = std::chrono::steady_clock::now();
 	if (shadowFb) {
@@ -315,6 +340,17 @@ void PlasmaSwitch::draw(const DrawArgs& args) {
 	}
 	const auto shadowEnd = std::chrono::steady_clock::now();
 	gPlasmaSwitchDrawMetrics.shadowNs += elapsedNs(shadowStart, shadowEnd);
+	if (visualFb) {
+		drawChild(visualFb, args);
+	}
+}
+
+void PlasmaSwitch::drawVisual(const DrawArgs& args) {
+	if (!displayValueInitialized) {
+		engine::ParamQuantity* pq = getParamQuantity();
+		displayValue = (!pq || pq->getValue() > 0.5f) ? 1.f : 0.f;
+		displayValueInitialized = true;
+	}
 
 	const auto imageEnsureStart = std::chrono::steady_clock::now();
 	const int imageHandle = ensureBackingImageHandle(args.vg);
