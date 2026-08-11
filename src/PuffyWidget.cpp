@@ -1042,17 +1042,21 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 		Vec center = avatarCenter();
 		float dt = APP->window ? APP->window->getLastFrameDuration() : 1.f/60.f;
 		if (dt > 0.1f) dt = 0.1f;
+		const float zoomScale = rackZoom();
 		Vec toMouse = mousePos.minus(center);
 		float distToMouse = toMouse.norm();
 
 		Vec acceleration{0.f, 0.f};
 
 		// 1. Flee mouse
-		float fleeRadius = 340.f;
+		// Mouse and avatar positions are in scene pixels. Scale both the radius
+		// and acceleration so avoidance has the same Rack-space behavior at every
+		// zoom level.
+		const float fleeRadius = 340.f * zoomScale;
 		if (distToMouse < fleeRadius && distToMouse > 0.001f) {
 			// Use a quadratic falloff: gentle push at the edges, strong darting when very close
 			float normalizedDist = 1.f - (distToMouse / fleeRadius);
-			float force = normalizedDist * normalizedDist * 1500.f;
+			float force = normalizedDist * normalizedDist * 1500.f * zoomScale;
 			acceleration = acceleration.plus(toMouse.normalize().mult(-force));
 		}
 
@@ -1119,12 +1123,11 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 		float distToAnchor = toAnchor.norm();
 		const float rangeSetting = clamp(
 			module->params[Puffy::ROAMING_RANGE_PARAM].getValue(), 0.f, 1.f);
-		const float rackZoom = this->rackZoom();
-		float maxDist = crossfade(90.f, 900.f, rangeSetting) * rackZoom;
+		float maxDist = crossfade(90.f, 900.f, rangeSetting) * zoomScale;
 		const float distanceRatio = clamp(
 			distToAnchor / std::max(maxDist, 1.f), 0.f, 1.f);
 		module->roamingDistance.store(
-			distToAnchor / std::max(rackZoom, 0.05f),
+			distToAnchor / std::max(zoomScale, 0.05f),
 			std::memory_order_relaxed);
 
 		// Normalize navigation against the user-selected range. The visitation
@@ -1173,7 +1176,7 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 				explorationTargetNormalized.mult(maxDist));
 			const Vec toTarget = targetScene.minus(center);
 			const float targetDistance = toTarget.norm();
-			if (targetDistance + 5.f * rackZoom < bestTargetDistance) {
+			if (targetDistance + 5.f * zoomScale < bestTargetDistance) {
 				bestTargetDistance = targetDistance;
 				noTargetProgressTime = 0.f;
 			}
@@ -1181,7 +1184,7 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 				noTargetProgressTime += dt;
 			}
 			const float reachedDistance = std::max(
-				22.f * rackZoom, 0.055f * maxDist);
+				22.f * zoomScale, 0.055f * maxDist);
 			if (targetDistance < reachedDistance
 				|| explorationTimeRemaining <= 0.f
 				|| noTargetProgressTime > 2.4f) {
@@ -1526,9 +1529,9 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 
 	auto* roamingRange = createParam<PuffyRoamingRangeBar>(
 		Vec(), module, Puffy::ROAMING_RANGE_PARAM);
-	roamingRange->box.size = Vec(fish->box.size.x * 0.84f, 28.f);
+	roamingRange->box.size = Vec(fish->box.size.x * 0.96f, 28.f);
 	roamingRange->box.pos = fish->box.pos.plus(Vec(
-		fish->box.size.x * 0.08f, 1.f));
+		fish->box.size.x * 0.02f, 1.f));
 	addParam(roamingRange);
 
 	const Vec characterMenuSize = mm2px(Vec(13.5f, 4.5f));
