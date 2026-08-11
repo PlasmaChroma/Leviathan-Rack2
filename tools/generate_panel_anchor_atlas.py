@@ -152,7 +152,12 @@ def scan_svg(path: pathlib.Path, rel_path: str, svg_index: int) -> tuple[SvgReco
 
 def generate(repo_root: pathlib.Path, output: pathlib.Path) -> None:
     res_dir = repo_root / "res"
-    svg_paths = sorted(p for p in res_dir.glob("*.svg") if p.is_file())
+    # Keep generated indices stable across case-sensitive and case-insensitive
+    # filesystems (the resource tree contains mixed-case module names).
+    svg_paths = sorted(
+        (p for p in res_dir.glob("*.svg") if p.is_file()),
+        key=lambda p: p.name.lower(),
+    )
     svg_records: list[SvgRecord] = []
     anchors: list[AnchorRecord] = []
 

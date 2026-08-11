@@ -149,13 +149,13 @@
     <g
        id="glass">
       <path
-         d="M 235,8800 H 5861 C 5980,8800 6040,8860 6040,8980 V 10420 C 6040,10540 5980,10600 5861,10600 H 3138 C 3058,10600 3018,10640 3018,10720 V 12020 C 3018,12100 2978,12140 2898,12140 H 235 C 116,12140 56,12080 56,11960 V 8980 C 56,8860 116,8800 235,8800 Z"
+         d="M 235,8800 H 5861 C 5980,8800 6040,8860 6040,8980 V 10420 C 6040,10540 5980,10600 5861,10600 H 2700 C 2620,10600 2580,10640 2580,10720 V 12020 C 2580,12100 2540,12140 2460,12140 H 235 C 116,12140 56,12080 56,11960 V 8980 C 56,8860 116,8800 235,8800 Z"
          id="puffy_input_field"
          style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
       <rect
-         x="3048"
+         x="3750"
          y="10630"
-         width="2992"
+         width="2290"
          height="1510"
          rx="118"
          ry="126"
@@ -205,7 +205,7 @@
          x="5477.2314"
          y="10330.878">WET</tspan></text>
     <text
-       x="762"
+       x="650"
        y="11903.639"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
@@ -214,7 +214,7 @@
        id="text18"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">IN L</text>
     <text
-       x="2286"
+       x="1900"
        y="11903.639"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
@@ -223,7 +223,7 @@
        id="text19"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">IN R</text>
     <text
-       x="3810"
+       x="4200"
        y="11903.639"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
@@ -232,7 +232,7 @@
        id="text20"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">OUT L</text>
     <text
-       x="5334"
+       x="5450"
        y="11903.639"
        text-anchor="middle"
        font-family="'DejaVu Sans', sans-serif"
@@ -299,13 +299,13 @@
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="input_l"
-       cx="762"
+       cx="650"
        cy="11193.589"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="input_r"
-       cx="2286"
+       cx="1900"
        cy="11193.589"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
@@ -317,19 +317,19 @@
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="output_l"
-       cx="3810"
+       cx="4200"
        cy="11193.589"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="output_r"
-       cx="5334"
+       cx="5450"
        cy="11193.589"
        r="220"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="limit_light"
-       cx="4572"
+       cx="4825"
        cy="11193.589"
        r="100"
        style="fill:#425f34;fill-opacity:1" />

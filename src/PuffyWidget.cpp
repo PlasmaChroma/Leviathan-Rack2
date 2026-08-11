@@ -1562,33 +1562,6 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 		fish->box.size.y - characterMenuSize.y - characterMenuInset.y));
 	addParam(positiveCharacterMenu);
 
-	// Keep the limiter controls aligned to the positive-character pill's right
-	// edge: labels lead into a compact vertical LED bank, then the mode button.
-	const float limiterRight = positiveCharacterMenu->box.pos.x
-		+ positiveCharacterMenu->box.size.x;
-	const float limiterLedX = limiterRight - mm2px(1.15f);
-	const float limiterRowSpacing = mm2px(3.f);
-	const float limiterFirstY = positiveCharacterMenu->box.pos.y - mm2px(13.5f);
-	auto* limiterLabels = new PuffyLimiterModeLabels();
-	limiterLabels->box.pos = Vec(
-		limiterLedX - mm2px(4.f), limiterFirstY - 0.5f * limiterRowSpacing);
-	limiterLabels->box.size = Vec(mm2px(2.9f), 3.f * limiterRowSpacing);
-	addChild(limiterLabels);
-	addChild(createLightCentered<TinyAperture<RedApertureLight>>(
-		Vec(limiterLedX, limiterFirstY), module, Puffy::LIMITER_HARD_LIGHT));
-	addChild(createLightCentered<TinyAperture<AmberApertureLight>>(
-		Vec(limiterLedX, limiterFirstY + limiterRowSpacing),
-		module, Puffy::LIMITER_SOFT_LIGHT));
-	addChild(createLightCentered<TinyAperture<WhiteApertureLight>>(
-		Vec(limiterLedX, limiterFirstY + 2.f * limiterRowSpacing),
-		module, Puffy::LIMITER_OFF_LIGHT));
-	const float limiterButtonSize = 15.f;
-	addParam(createParam<PuffyLimiterModeButton>(
-		Vec(
-			limiterRight - limiterButtonSize,
-			positiveCharacterMenu->box.pos.y - limiterButtonSize - mm2px(0.9f)),
-		module, Puffy::LIMITER_BUTTON_PARAM));
-
 	math::Rect transferPreviewRectMm;
 	if (!panel_svg::loadRectFromSvgMm(
 		panelPath, "transfer_preview_rect", &transferPreviewRectMm)) {
@@ -1631,24 +1604,48 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	addParam(puffCvAmountKnob);
 
 	addInput(createInputCentered<Magitek2InputJack>(
-		anchor("input_l", Vec(7.62f, 111.93589f)),
+		anchor("input_l", Vec(6.5f, 111.93589f)),
 		module, Puffy::INPUT_L));
 	addInput(createInputCentered<Magitek2InputJack>(
-		anchor("input_r", Vec(22.86f, 111.93589f)),
+		anchor("input_r", Vec(19.f, 111.93589f)),
 		module, Puffy::INPUT_R));
 	addInput(createInputCentered<Magitek2InputJack>(
 		anchor("puff_cv_input", Vec(43.f, 108.f)),
 		module, Puffy::PUFF_CV_INPUT));
 	addOutput(createOutputCentered<Magitek2OutputJack>(
-		anchor("output_l", Vec(38.10f, 111.93589f)),
+		anchor("output_l", Vec(42.f, 111.93589f)),
 		module, Puffy::OUTPUT_L));
 	addOutput(createOutputCentered<Magitek2OutputJack>(
-		anchor("output_r", Vec(53.34f, 111.93589f)),
+		anchor("output_r", Vec(54.5f, 111.93589f)),
 		module, Puffy::OUTPUT_R));
 
 	addChild(createLightCentered<SmallAperture<RedApertureLight>>(
-		anchor("limit_light", Vec(45.72f, 111.93589f)),
+		anchor("limit_light", Vec(48.25f, 111.93589f)),
 		module, Puffy::LIMIT_LIGHT));
+
+	// The bottom-row black channel visually places the limiter between Puffy's
+	// input and output groups. Preserve the established right-aligned stack.
+	const float limiterRight = mm2px(34.5f);
+	const float limiterLedX = limiterRight - mm2px(1.15f);
+	const float limiterRowSpacing = mm2px(3.f);
+	const float limiterFirstY = mm2px(108.f);
+	auto* limiterLabels = new PuffyLimiterModeLabels();
+	limiterLabels->box.pos = Vec(
+		limiterLedX - mm2px(4.f), limiterFirstY - 0.5f * limiterRowSpacing);
+	limiterLabels->box.size = Vec(mm2px(2.9f), 3.f * limiterRowSpacing);
+	addChild(limiterLabels);
+	addChild(createLightCentered<TinyAperture<RedApertureLight>>(
+		Vec(limiterLedX, limiterFirstY), module, Puffy::LIMITER_HARD_LIGHT));
+	addChild(createLightCentered<TinyAperture<AmberApertureLight>>(
+		Vec(limiterLedX, limiterFirstY + limiterRowSpacing),
+		module, Puffy::LIMITER_SOFT_LIGHT));
+	addChild(createLightCentered<TinyAperture<WhiteApertureLight>>(
+		Vec(limiterLedX, limiterFirstY + 2.f * limiterRowSpacing),
+		module, Puffy::LIMITER_OFF_LIGHT));
+	const float limiterButtonSize = 15.f;
+	addParam(createParam<PuffyLimiterModeButton>(
+		Vec(limiterRight - limiterButtonSize, mm2px(115.8f)),
+		module, Puffy::LIMITER_BUTTON_PARAM));
 
 	addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
 	addChild(createWidget<CyanOrbScrew>(
