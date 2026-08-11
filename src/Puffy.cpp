@@ -48,6 +48,9 @@ Puffy::Puffy() {
 		ROAMING_RANGE_PARAM, 0.f, 1.f, 310.f / 810.f,
 		"Roaming range", "%", 0.f, 100.f);
 	configButton(LIMITER_BUTTON_PARAM, "Limiter mode");
+	configSwitch(
+		ROAMING_BUTTON_PARAM, 0.f, 1.f, 0.f, "Roam",
+		{"Off", "On"});
 
 	configInput(INPUT_L, "Left audio");
 	configInput(INPUT_R, "Right audio");
@@ -59,6 +62,7 @@ Puffy::Puffy() {
 	configLight(LIMITER_HARD_LIGHT, "Hard limiter selected");
 	configLight(LIMITER_SOFT_LIGHT, "Soft limiter selected");
 	configLight(LIMITER_OFF_LIGHT, "Limiter off");
+	configLight(ROAMING_LIGHT, "Roaming mode enabled");
 	configBypass(INPUT_L, OUTPUT_L);
 	configBypass(INPUT_R, OUTPUT_R);
 }
@@ -214,6 +218,11 @@ void Puffy::process(const ProcessArgs& args) {
 		const int next = (limiterMode.load(std::memory_order_relaxed) + 1) % 3;
 		limiterMode.store(next, std::memory_order_relaxed);
 	}
+	// SmallGoldApertureButton is a latching switch. Mirror its stable state
+	// directly instead of edge-detecting it as though it were momentary.
+	roamingEnabled.store(
+		params[ROAMING_BUTTON_PARAM].getValue() > 0.5f,
+		std::memory_order_relaxed);
 	const int activeLimiterMode = clamp(
 		limiterMode.load(std::memory_order_relaxed), 0, 2);
 	engine.setLimiterMode(static_cast<puffy::LimiterMode>(activeLimiterMode));
@@ -243,6 +252,8 @@ void Puffy::process(const ProcessArgs& args) {
 	lights[LIMITER_HARD_LIGHT].setBrightness(activeLimiterMode == 0 ? 1.f : 0.f);
 	lights[LIMITER_SOFT_LIGHT].setBrightness(activeLimiterMode == 1 ? 1.f : 0.f);
 	lights[LIMITER_OFF_LIGHT].setBrightness(activeLimiterMode == 2 ? 1.f : 0.f);
+	lights[ROAMING_LIGHT].setBrightness(
+		roamingEnabled.load(std::memory_order_relaxed) ? 1.f : 0.f);
 	if (measurePerf) {
 		debugMetrics.recordProcess(
 			debug_terminal::elapsedNsSince(processStart));
@@ -255,6 +266,7 @@ void Puffy::onReset(const ResetEvent& event) {
 	autoDeflateEnabled.store(false, std::memory_order_relaxed);
 	limiterMode.store(int(puffy::LimiterMode::Hard), std::memory_order_relaxed);
 	limiterButtonTrigger.reset();
+	params[ROAMING_BUTTON_PARAM].setValue(0.f);
 	params[CHARACTER_LINK_PARAM].setValue(1.f);
 	params[POSITIVE_CHARACTER_PARAM].setValue(
 		params[CHARACTER_PARAM].getValue());
@@ -267,6 +279,7 @@ void Puffy::onReset(const ResetEvent& event) {
 	lights[LIMITER_HARD_LIGHT].setBrightness(1.f);
 	lights[LIMITER_SOFT_LIGHT].setBrightness(0.f);
 	lights[LIMITER_OFF_LIGHT].setBrightness(0.f);
+	lights[ROAMING_LIGHT].setBrightness(0.f);
 }
 
 void Puffy::onSampleRateChange(const SampleRateChangeEvent& event) {
@@ -320,6 +333,7 @@ void Puffy::dataFromJson(json_t* root) {
 	}
 	autoDeflateEnabled.store(loadedAutoDeflate, std::memory_order_relaxed);
 	roamingEnabled.store(loadedRoaming, std::memory_order_relaxed);
+	params[ROAMING_BUTTON_PARAM].setValue(loadedRoaming ? 1.f : 0.f);
 	limiterMode.store(loadedLimiterMode, std::memory_order_relaxed);
 	if (params[CHARACTER_LINK_PARAM].getValue() > 0.5f) {
 		params[POSITIVE_CHARACTER_PARAM].setValue(

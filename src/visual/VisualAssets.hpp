@@ -308,6 +308,9 @@ struct SmallGoldApertureLight : app::ModuleLightWidget {
 
 	SmallGoldApertureLight();
 	void setBaseColor(NVGcolor color);
+	void onHover(const HoverEvent& e) override;
+	void onEnter(const EnterEvent& e) override;
+	void onLeave(const LeaveEvent& e) override;
 	void drawBackground(const DrawArgs& args) override;
 	void drawLight(const DrawArgs& args) override;
 	void drawHalo(const DrawArgs& args) override;

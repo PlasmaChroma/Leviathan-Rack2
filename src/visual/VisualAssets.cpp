@@ -2941,6 +2941,20 @@ void SmallGoldApertureLight::setBaseColor(NVGcolor color) {
 	addBaseColor(color);
 }
 
+void SmallGoldApertureLight::onHover(const HoverEvent& e) {
+	// The enclosing gold button owns the useful parameter tooltip. Leaving the
+	// aperture hover-transparent prevents a duplicate light-description tooltip.
+	(void) e;
+}
+
+void SmallGoldApertureLight::onEnter(const EnterEvent& e) {
+	(void) e;
+}
+
+void SmallGoldApertureLight::onLeave(const LeaveEvent& e) {
+	(void) e;
+}
+
 void SmallGoldApertureLight::drawBackground(const DrawArgs& args) {
 	const float s = std::min(box.size.x, box.size.y);
 	if (s <= 1.f) {

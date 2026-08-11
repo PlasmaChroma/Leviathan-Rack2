@@ -1562,6 +1562,15 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 		fish->box.size.y - characterMenuSize.y - characterMenuInset.y));
 	addParam(positiveCharacterMenu);
 
+	// Match Undertow's OCT control: the aperture LED is integrated directly
+	// into the gold button. Align its right edge with the positive-character pill.
+	auto* roamingButton = createLightParamCentered<SmallGoldApertureButton>(
+		anchor("roaming_button", Vec(56.25f, 45.33f)),
+		module, Puffy::ROAMING_BUTTON_PARAM, Puffy::ROAMING_LIGHT);
+	static_cast<SmallGoldApertureLight*>(roamingButton->getLight())
+		->setBaseColor(nvgRGB(255, 118, 24));
+	addParam(roamingButton);
+
 	math::Rect transferPreviewRectMm;
 	if (!panel_svg::loadRectFromSvgMm(
 		panelPath, "transfer_preview_rect", &transferPreviewRectMm)) {
@@ -1607,28 +1616,31 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 		anchor("input_l", Vec(6.5f, 111.93589f)),
 		module, Puffy::INPUT_L));
 	addInput(createInputCentered<Magitek2InputJack>(
-		anchor("input_r", Vec(19.f, 111.93589f)),
+		anchor("input_r", Vec(20.5f, 111.93589f)),
 		module, Puffy::INPUT_R));
 	addInput(createInputCentered<Magitek2InputJack>(
 		anchor("puff_cv_input", Vec(43.f, 108.f)),
 		module, Puffy::PUFF_CV_INPUT));
 	addOutput(createOutputCentered<Magitek2OutputJack>(
-		anchor("output_l", Vec(42.f, 111.93589f)),
+		anchor("output_l", Vec(40.5f, 111.93589f)),
 		module, Puffy::OUTPUT_L));
 	addOutput(createOutputCentered<Magitek2OutputJack>(
 		anchor("output_r", Vec(54.5f, 111.93589f)),
 		module, Puffy::OUTPUT_R));
 
 	addChild(createLightCentered<SmallAperture<RedApertureLight>>(
-		anchor("limit_light", Vec(48.25f, 111.93589f)),
+		anchor("limit_light", Vec(47.5f, 111.93589f)),
 		module, Puffy::LIMIT_LIGHT));
 
 	// The bottom-row black channel visually places the limiter between Puffy's
-	// input and output groups. Preserve the established right-aligned stack.
-	const float limiterRight = mm2px(34.5f);
+	// input and output groups. The master-SVG anchor is the button's top-right
+	// corner; every part of the cluster is derived from that single point.
+	const Vec limiterGroupAnchor = anchor(
+		"limiter_mode_group", Vec(33.15f, 115.8f));
+	const float limiterRight = limiterGroupAnchor.x;
 	const float limiterLedX = limiterRight - mm2px(1.15f);
 	const float limiterRowSpacing = mm2px(3.f);
-	const float limiterFirstY = mm2px(108.f);
+	const float limiterFirstY = limiterGroupAnchor.y - mm2px(7.8f);
 	auto* limiterLabels = new PuffyLimiterModeLabels();
 	limiterLabels->box.pos = Vec(
 		limiterLedX - mm2px(4.f), limiterFirstY - 0.5f * limiterRowSpacing);
@@ -1644,7 +1656,7 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 		module, Puffy::LIMITER_OFF_LIGHT));
 	const float limiterButtonSize = 15.f;
 	addParam(createParam<PuffyLimiterModeButton>(
-		Vec(limiterRight - limiterButtonSize, mm2px(115.8f)),
+		Vec(limiterRight - limiterButtonSize, limiterGroupAnchor.y),
 		module, Puffy::LIMITER_BUTTON_PARAM));
 
 	addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
@@ -1676,8 +1688,8 @@ void PuffyWidget::appendContextMenu(Menu* menu) {
 		[puffyModule]() {
 			const bool enabled = puffyModule->roamingEnabled.load(
 				std::memory_order_relaxed);
-			puffyModule->roamingEnabled.store(
-				!enabled, std::memory_order_relaxed);
+			puffyModule->params[Puffy::ROAMING_BUTTON_PARAM].setValue(
+				enabled ? 0.f : 1.f);
 		}));
 
 	menu->addChild(createCheckMenuItem(
