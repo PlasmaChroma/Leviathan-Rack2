@@ -27,6 +27,7 @@ struct CrownstepSettingsOverlay final : widget::OpaqueWidget {
 	int pendingPlayerMode = Crownstep::PLAYER_INIT;
 	bool confirmationOpen = false;
 	bool rangeDragging = false;
+	bool drawAboveRackCables = false;
 	float rangeDragOldValue = 0.f;
 	float rangeDragValue = 0.f;
 	std::function<void()> closeAction;
@@ -42,6 +43,8 @@ struct CrownstepSettingsOverlay final : widget::OpaqueWidget {
 	void cancelConfirmation();
 
 	void draw(const DrawArgs& args) override;
+	void drawLayer(const DrawArgs& args, int layer) override;
+	void drawSurface(const DrawArgs& args);
 	void onButton(const event::Button& e) override;
 	void onDragMove(const event::DragMove& e) override;
 	void onDragEnd(const event::DragEnd& e) override;

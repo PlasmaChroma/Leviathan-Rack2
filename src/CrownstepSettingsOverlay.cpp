@@ -187,6 +187,23 @@ void CrownstepSettingsOverlay::cancelConfirmation() {
 }
 
 void CrownstepSettingsOverlay::draw(const DrawArgs& args) {
+	if (!drawAboveRackCables) {
+		drawSurface(args);
+	}
+	OpaqueWidget::draw(args);
+}
+
+void CrownstepSettingsOverlay::drawLayer(const DrawArgs& args, int layer) {
+	// Rack draws plug ends on layer 2 and cable bodies on layer 3. Since the
+	// elevated overlay is appended after Rack's cable container, repainting here
+	// places the complete settings surface above both.
+	if (drawAboveRackCables && layer == 3) {
+		drawSurface(args);
+	}
+	OpaqueWidget::drawLayer(args, layer);
+}
+
+void CrownstepSettingsOverlay::drawSurface(const DrawArgs& args) {
 	const float w = box.size.x;
 	const float h = box.size.y;
 	// The settings surface sits above the module controls. Give it a fully opaque
@@ -341,7 +358,6 @@ void CrownstepSettingsOverlay::draw(const DrawArgs& args) {
 		nvgText(args.vg, dx + dw - 69.f, dy + dh - 30.5f, "START NEW GAME", nullptr);
 	}
 
-	OpaqueWidget::draw(args);
 }
 
 void CrownstepSettingsOverlay::onButton(const event::Button& e) {

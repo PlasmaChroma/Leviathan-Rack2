@@ -3980,6 +3980,7 @@ struct CrownstepWidget final : ModuleWidget {
 		const Vec rackPos = settingsOverlay->getRelativeOffset(Vec(), rack);
 		removeChild(settingsOverlay);
 		settingsOverlay->box.pos = rackPos;
+		settingsOverlay->drawAboveRackCables = true;
 		rack->addChild(settingsOverlay);
 		settingsOverlay->open();
 	}
@@ -3997,6 +3998,7 @@ struct CrownstepWidget final : ModuleWidget {
 				settingsOverlay->parent->removeChild(settingsOverlay);
 			}
 			settingsOverlay->box.pos = Vec();
+			settingsOverlay->drawAboveRackCables = false;
 			addChild(settingsOverlay);
 		}
 	}
