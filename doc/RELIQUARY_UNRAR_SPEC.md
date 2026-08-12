@@ -1,9 +1,32 @@
 # Reliquary Embedded UnRAR Integration
 
-**Project:** Leviathan-Rack2  
-**Component:** Minimal read-only RAR decoder for RSN collections  
-**Document status:** Implementation specification, Draft 0.1  
-**Date:** 2026-08-04
+**Project:** Leviathan-Rack2
+
+**Component:** Minimal read-only RAR decoder for RSN collections
+
+**Document status:** Candidate archive integration specification, Draft 0.2
+
+**Date:** 2026-08-12
+
+---
+
+## Status and authority
+
+This document owns Reliquary's archive-reader boundary, archive processing
+algorithm, hostile-input limits, archive test corpus, and the candidate
+embedded-UnRAR build design. [RELIQUARY_SPEC.md](RELIQUARY_SPEC.md) remains
+authoritative for product behavior and real-time ownership.
+[RELIQUARY_PHASE0_PLAN.md](RELIQUARY_PHASE0_PLAN.md) owns the feasibility work
+and approval records.
+
+Embedded UnRAR is a candidate, not an approved dependency. No source may be
+vendored into the production tree and no distributable plugin may link it until
+the GPL/UnRAR compatibility gate in §5.2 is resolved in writing. If that gate
+fails, the project-owned `IRsnArchiveReader` boundary remains and the decoder
+candidate changes.
+
+The production Rack target is C++11. Project-owned archive interfaces and
+examples in this document shall remain C++11-compatible.
 
 ---
 
@@ -11,7 +34,11 @@
 
 This document defines a self-contained, read-only RAR extraction component for Reliquary and potentially other Leviathan features.
 
-The component shall vendor the official portable UnRAR source, compile it into the Leviathan plugin binary, and expose a narrow memory-oriented API. Users shall not install UnRAR, WinRAR, a shared library, command-line executable, or any other runtime dependency.
+Subject to the license and feasibility gates, the component will vendor a
+pinned official portable UnRAR source, compile it into the Leviathan plugin
+binary, and expose a narrow memory-oriented API. Users shall not install UnRAR,
+WinRAR, a shared library, command-line executable, or any other runtime
+dependency.
 
 The primary use case is extracting `.spc` entries from `.rsn` soundtrack archives. Potential use for internally packed Leviathan assets is explicitly secondary and must be justified through measurement.
 
@@ -19,7 +46,7 @@ The primary use case is extracting `.spc` entries from `.rsn` soundtrack archive
 
 ## 2. Decision summary
 
-The implementation shall:
+If approved, the implementation shall:
 
 - Vendor a pinned official UnRAR source release.
 - Compile UnRAR in library mode using the `RARDLL` interface.
@@ -32,7 +59,14 @@ The implementation shall:
 - Start with upstream source largely intact, then trim only after measuring linked size.
 - Maintain a small project-owned wrapper so UnRAR can be replaced without changing Reliquary.
 
-Official UnRAR includes a library-oriented C API with archive-open, header-read, process-file, callback, and close operations. Its upstream build also defines a static `libunrar.a` target in `RARDLL` mode. The license allows UnRAR source to be used and distributed in software that handles RAR archives, while prohibiting use to recreate the proprietary compression algorithm or build a compatible archiver.
+Official UnRAR includes a library-oriented C API with archive-open,
+header-read, process-file, callback, and close operations. Its upstream build
+also defines a static `libunrar.a` target in `RARDLL` mode. Its source license
+allows use for handling RAR archives while imposing a restriction against
+recreating the compression algorithm or developing a compatible archiver. That
+restriction is the reason compatibility with Leviathan's GPL-3.0-or-later
+distribution must be treated as an unresolved gate rather than a notice-only
+obligation.
 
 ---
 
@@ -82,7 +116,35 @@ The dependency shall be pinned by:
 
 ### 5.2 License obligations
 
-The repository and distributed plugin package shall retain the complete UnRAR license text.
+Leviathan declares GPL-3.0-or-later while the UnRAR source license contains a
+use restriction not present in the GPL. Static inclusion in the plugin must not
+be assumed compatible merely because UnRAR permits redistribution.
+
+Before source import, the project shall record one of these outcomes:
+
+1. A reviewed determination that the intended combined distribution can satisfy
+   both licenses, including the reasoning and exact upstream version reviewed.
+2. An explicit linking/distribution exception that the relevant Leviathan
+   copyright holders are legally able and willing to grant, together with a
+   review of all third-party GPL-covered contributions affected by that
+   exception.
+3. Rejection of embedded UnRAR and selection of another decoder behind
+   `IRsnArchiveReader`.
+
+This is a release gate and should receive qualified legal review where needed.
+The architecture document records the engineering decision; it does not
+substitute for legal advice.
+
+Reference material for the review includes RARLAB's official
+[UnRAR source page](https://www.rarlab.com/rar_add.htm), the complete license in
+the exact downloaded source package, the
+[RARLAB license terms](https://www.rarlab.com/license.htm), GPLv3
+[sections 7 and 10](https://www.gnu.org/licenses/gpl-3.0.en.html), and the GNU
+[GPL-incompatible-library guidance](https://www.gnu.org/licenses/gpl-faq.en.html#GPLIncompatibleLibs).
+Web summaries do not replace the license text shipped in the pinned archive.
+
+If UnRAR is approved, the repository and distributed plugin package shall
+retain the complete UnRAR license text.
 
 The required statement concerning prohibition of using the source to develop a RAR-compatible archiver or recreate the compression algorithm shall be included:
 
@@ -138,7 +200,8 @@ Do not scatter UnRAR-specific headers or types through Reliquary's general modul
 ## 7. Public project-owned API
 
 ```cpp
-namespace leviathan::archive {
+namespace leviathan {
+namespace archive {
 
 struct ArchiveLimits {
     uint64_t maxArchiveBytes;
@@ -166,6 +229,7 @@ enum class RsnArchiveErrorCode {
     MultiVolumeArchive,
     DictionaryTooLarge,
     EntryTooLarge,
+    ExpandedSizeExceeded,
     ArchiveTooLarge,
     TooManyEntries,
     ChecksumFailure,
@@ -190,15 +254,20 @@ public:
     virtual ~IRsnArchiveReader() = default;
 
     virtual RsnArchiveResult read(
-        const std::filesystem::path& archivePath,
+        const std::string& archivePathUtf8,
         const ArchiveLimits& limits,
         const std::atomic_bool* cancelFlag = nullptr) = 0;
 };
 
-}
+} // namespace archive
+} // namespace leviathan
 ```
 
 No caller outside the wrapper shall use `HANDLE`, `RAROpenArchiveDataEx`, callback messages, or any other UnRAR API type.
+
+The wrapper converts normalized UTF-8 to the platform-native path form
+internally. No production interface in this component depends on
+`std::filesystem` or a C++ standard later than C++11.
 
 ---
 
@@ -222,8 +291,16 @@ struct UnrarCallbackContext {
     const ArchiveLimits* limits = nullptr;
     const std::atomic_bool* cancelFlag = nullptr;
     uint64_t totalExpanded = 0;
+    uint64_t currentEntryExpanded = 0;
     RsnArchiveError pendingError;
 };
+
+static int failCallback(UnrarCallbackContext& ctx,
+                        RsnArchiveErrorCode code) {
+    if (ctx.pendingError.code == RsnArchiveErrorCode::None)
+        ctx.pendingError.code = code;
+    return -1;
+}
 
 static int CALLBACK unrarCallback(
     UINT message,
@@ -236,33 +313,54 @@ static int CALLBACK unrarCallback(
     switch (message) {
     case UCM_PROCESSDATA: {
         if (ctx.cancelFlag && ctx.cancelFlag->load(std::memory_order_relaxed))
-            return -1;
+            return failCallback(ctx, RsnArchiveErrorCode::Cancelled);
+
+        if (p2 < 0)
+            return failCallback(ctx, RsnArchiveErrorCode::DamagedArchive);
 
         const auto* data = reinterpret_cast<const uint8_t*>(p1);
         const size_t size = static_cast<size_t>(p2);
+        const uint64_t size64 = static_cast<uint64_t>(size);
 
-        if (!ctx.destination)
-            return 1;
+        if (size != 0 && data == nullptr)
+            return failCallback(ctx, RsnArchiveErrorCode::DamagedArchive);
 
-        if (ctx.destination->size() + size > ctx.limits->maxEntryBytes)
-            return -1;
+        if (ctx.totalExpanded > ctx.limits->maxTotalExpandedBytes ||
+            size64 > ctx.limits->maxTotalExpandedBytes - ctx.totalExpanded)
+            return failCallback(ctx, RsnArchiveErrorCode::ExpandedSizeExceeded);
 
-        if (ctx.totalExpanded + size > ctx.limits->maxTotalExpandedBytes)
-            return -1;
+        if (ctx.currentEntryExpanded > ctx.limits->maxEntryBytes ||
+            size64 > ctx.limits->maxEntryBytes - ctx.currentEntryExpanded)
+            return failCallback(ctx, RsnArchiveErrorCode::EntryTooLarge);
 
-        ctx.destination->insert(ctx.destination->end(), data, data + size);
-        ctx.totalExpanded += size;
+        ctx.totalExpanded += size64;
+        ctx.currentEntryExpanded += size64;
+
+        // Count discarded solid-history bytes too. Only retention is optional.
+        if (ctx.destination != nullptr && size != 0) {
+            if (ctx.destination->size() > ctx.limits->maxEntryBytes ||
+                size > ctx.limits->maxEntryBytes - ctx.destination->size())
+                return failCallback(ctx, RsnArchiveErrorCode::EntryTooLarge);
+            try {
+                ctx.destination->insert(ctx.destination->end(), data, data + size);
+            }
+            catch (...) {
+                return failCallback(ctx, RsnArchiveErrorCode::InternalError);
+            }
+        }
         return 1;
     }
 
     case UCM_NEEDPASSWORD:
     case UCM_NEEDPASSWORDW:
+        return failCallback(ctx, RsnArchiveErrorCode::EncryptedArchive);
+
     case UCM_CHANGEVOLUME:
     case UCM_CHANGEVOLUMEW:
-        return -1;
+        return failCallback(ctx, RsnArchiveErrorCode::MultiVolumeArchive);
 
     case UCM_LARGEDICT:
-        return -1;
+        return failCallback(ctx, RsnArchiveErrorCode::DictionaryTooLarge);
 
     default:
         return 1;
@@ -270,7 +368,12 @@ static int CALLBACK unrarCallback(
 }
 ```
 
-The exact callback return values and error propagation shall be verified against the pinned UnRAR version and covered by tests.
+The enum shall include `ExpandedSizeExceeded`, distinct from per-entry
+`EntryTooLarge`. The exact callback return values and native user-break mapping
+shall be verified against the pinned UnRAR version. No C++ exception may escape
+through the C callback ABI. `pendingError` takes precedence over a generic
+native cancellation/user-break result so cancellation, limits, encryption, and
+volume failures remain distinguishable.
 
 ---
 
@@ -280,12 +383,16 @@ The exact callback return values and error propagation shall be verified against
 
 1. Confirm the file exists and is a regular readable file.
 2. Reject if compressed file size exceeds `maxArchiveBytes`.
-3. Initialize `RAROpenArchiveDataEx` in extraction mode.
-4. Register the callback and context.
-5. Open the archive.
+3. Zero-initialize `RAROpenArchiveDataEx`, including all reserved fields.
+4. Set extraction mode, the native path, callback, and user-data fields before
+   `RAROpenArchiveEx`; alternatively use `RARSetCallback` only after a valid
+   handle exists. Do not describe both sequences as one operation.
+5. Open the archive and verify the pinned DLL API version with
+   `RARGetDllVersion()` where the pinned release requires it.
 6. Inspect archive flags.
 7. Reject encrypted headers.
-8. Reject multi-volume archives.
+8. Reject any volume archive, including a first volume presented alone.
+9. Install scope-bound archive-handle closure for every exit path.
 
 ### 9.2 Sequential loop
 
@@ -295,14 +402,41 @@ For every archive entry:
 2. Check entry count limit.
 3. Compute the 64-bit declared expanded size.
 4. Reject entries exceeding `maxEntryBytes`.
-5. Reject cumulative declared sizes exceeding `maxTotalExpandedBytes` when reliable.
-6. Reject unsupported redirection/link entries.
-7. Allocate or reserve a bounded destination buffer only for candidate regular files.
-8. Process the entry sequentially with `RAR_TEST` and callback capture.
-9. Validate checksum result.
-10. Validate SPC content by signature and structural checks.
-11. Retain valid SPC data; discard unrelated entry data.
-12. Continue in archive order.
+5. Reconstruct the dictionary request from `RARHeaderDataEx::DictSize`, which
+   the inspected API reports in KiB, using checked multiplication by 1024; reject
+   values above `maxDictionaryBytes` before processing. `UCM_LARGEDICT` remains
+   a second upstream-limit defense, not the custom-limit mechanism.
+6. Reject cumulative declared sizes exceeding `maxTotalExpandedBytes` when
+   reliable, using checked subtraction rather than overflowing addition.
+7. Reject encrypted entries and unsupported redirection/link entries.
+8. Classify the regular entry using §9.2.1.
+9. Reset `currentEntryExpanded`, `destination`, and `pendingError` for the entry.
+10. For a retained candidate, reserve only after all declared-size checks.
+11. Process with `RAR_TEST` when bytes or solid history are required; use
+    `RAR_SKIP` only where §9.3 permits it.
+12. Resolve callback error first, then require a successful native result. A
+    checksum/hash failure rejects the archive by default.
+13. Validate captured SPC content by signature and structural checks.
+14. Retain valid SPC data; discard unrelated entry data.
+15. Continue in archive order.
+
+All `RARHeaderDataEx` instances and their reserved fields shall be zeroed before
+each header read. The wrapper shall document reconstruction of the low/high
+packed and unpacked sizes and test it at 32-bit boundaries.
+
+### 9.2.1 Candidate classification
+
+Filename extension alone is not authoritative. A candidate is a regular,
+non-redirected entry whose declared size falls within the SPC validator's
+documented structural envelope, or an entry named `.spc` whose declared size is
+within the general per-entry cap. This permits extensionless SPC files while
+avoiding allocation for obviously unrelated large assets.
+
+Candidate bytes are still accepted only after signature and structural
+validation. The SPC validator shall publish its minimum, normal, and supported
+extended-size rules before archive implementation. A future streaming prefix
+probe may reduce retention cost, but it must not create filename-only false
+negatives.
 
 ### 9.3 Solid archives
 
@@ -312,7 +446,11 @@ Therefore:
 
 - The wrapper shall never seek directly to a selected track inside an unopened solid archive.
 - Every preceding entry shall be processed as required by UnRAR.
-- Non-SPC entries may be decompressed and discarded when necessary to preserve solid state.
+- Non-SPC entries shall be processed with `RAR_TEST` and a null destination when
+  necessary to preserve solid state; their actual expanded bytes still count
+  toward the cumulative limit.
+- A non-solid, noncandidate regular entry may use `RAR_SKIP` because no later
+  dictionary depends on it.
 - All valid SPC tracks shall normally be retained after the initial pass so later track changes do not repeat decompression.
 
 ### 9.4 Cancellation
@@ -398,6 +536,9 @@ These shall be enabled only after the full RSN corpus confirms that they preserv
 ### 11.4 Compiler policy
 
 - Use the Rack/Leviathan-selected C++ compiler.
+- Compile project-owned wrapper code and the pinned upstream dependency in a
+  C++11-compatible mode unless a separately measured translation-unit override
+  is approved; do not raise the plugin-wide language standard incidentally.
 - Inherit target architecture, sysroot, deployment target, and CRT settings.
 - Do not use `-march=native`.
 - Do not require architecture-specific crypto instructions.
@@ -440,6 +581,11 @@ Every target shall:
 - Report stripped binary-size delta.
 
 A universal/fat macOS dependency binary is unnecessary when Rack packages are built per architecture. Each target should compile UnRAR directly for its own architecture.
+
+WSL may run corpus tests and compile focused harnesses, but it is not
+authoritative for final Windows plugin linking. Windows x86_64 approval requires
+the repository's intended Windows/MSYS2 Rack toolchain. A WSL full-plugin link
+failure alone is not an UnRAR regression.
 
 ---
 
@@ -488,13 +634,15 @@ RAR 7 supports very large dictionary sizes, and upstream explicitly recommends r
 Initial limits should be conservative and configurable in code:
 
 ```cpp
-constexpr ArchiveLimits kDefaultRsnLimits {
-    .maxArchiveBytes       = 256ull * 1024 * 1024,
-    .maxEntryCount         = 4096,
-    .maxEntryBytes         = 4ull * 1024 * 1024,
-    .maxTotalExpandedBytes = 512ull * 1024 * 1024,
-    .maxDictionaryBytes    = 256ull * 1024 * 1024,
-};
+ArchiveLimits defaultRsnLimits() {
+    ArchiveLimits limits;
+    limits.maxArchiveBytes = 256ull * 1024 * 1024;
+    limits.maxEntryCount = 4096;
+    limits.maxEntryBytes = 4ull * 1024 * 1024;
+    limits.maxTotalExpandedBytes = 512ull * 1024 * 1024;
+    limits.maxDictionaryBytes = 256ull * 1024 * 1024;
+    return limits;
+}
 ```
 
 The exact defaults shall be tuned against real RSN libraries. SPC entries are normally tiny, so values far above expected SPC size provide compatibility while still bounding hostile input.
@@ -502,12 +650,15 @@ The exact defaults shall be tuned against real RSN libraries. SPC entries are no
 Additional requirements:
 
 - Check all 32-bit/64-bit size combinations for overflow.
+- Use compare-before-add/subtract checks; a requirement to “check overflow” is
+  not satisfied by evaluating a potentially overflowing sum first.
 - Reserve buffers only after limit checks.
 - Never trust filenames as safe paths.
 - Never create symlinks, hard links, directories, or special files.
 - Abort on checksum failure by default.
 - Abort on unsupported redirection/reference types.
-- Catch allocation failures at the wrapper boundary.
+- Catch allocation failures at the wrapper boundary and inside the C callback;
+  no exception may cross the UnRAR callback ABI.
 - Convert native errors into stable project error codes.
 
 ---
@@ -529,6 +680,11 @@ Benefits:
 
 Only one active UnRAR operation should run per loader service unless later testing proves the library and global state safe for concurrent instances.
 
+The callback context, cancel flag, destination vector, native path buffers, and
+archive handle must outlive the complete native operation. Cancellation does
+not publish partial entries or a partial collection. Destruction and archive
+close occur on the loader thread, never the Rack audio thread.
+
 ---
 
 ## 16. Error mapping
@@ -539,14 +695,20 @@ Examples:
 
 | Native condition | Project error |
 |---|---|
-| `ERAR_BAD_ARCHIVE` / unknown format | `NotRar` or `DamagedArchive` |
+| `ERAR_BAD_ARCHIVE` after failed archive recognition | `NotRar` |
 | `ERAR_BAD_DATA` | `DamagedArchive` |
 | `ERAR_UNKNOWN_FORMAT` | `UnsupportedVersion` |
+| `ERAR_EOPEN` / missing native path | `FileNotFound` or `OpenFailed`, selected from the preflight result |
 | `ERAR_MISSING_PASSWORD` / password callback | `EncryptedArchive` |
 | `ERAR_LARGE_DICT` / large-dictionary callback | `DictionaryTooLarge` |
 | Volume callback | `MultiVolumeArchive` |
-| Callback cancellation | `Cancelled` or applicable size error |
-| CRC/checksum failure | `ChecksumFailure` |
+| Generic native user-break after callback returned `-1` | The already recorded `pendingError` |
+| Native user-break without `pendingError` | `InternalError` |
+| CRC/BLAKE2 verification failure reported by `RAR_TEST` | `ChecksumFailure` |
+
+Mapping is evaluated in this order: wrapper preflight error, callback
+`pendingError`, specific native result, then fallback `InternalError`. A single
+native value shall not nondeterministically map to different project errors.
 
 The user-facing message should state what action is possible, for example:
 
@@ -593,6 +755,13 @@ Each valid RSN fixture shall contain small synthetic SPC-shaped test files with 
 - Error conversion.
 - SPC filtering.
 - Limits and overflow protection.
+- Actual-expanded accounting for discarded solid-history entries.
+- Dictionary KiB-to-byte conversion and the 256 MiB custom cap.
+- Distinct callback errors for cancellation, entry size, cumulative size,
+  encryption, volume, and allocation failure.
+- Zero-initialized reserved API fields and 64-bit low/high reconstruction.
+- Extensionless valid SPC and misleading `.spc` non-SPC entries.
+- Non-solid `RAR_SKIP` versus solid `RAR_TEST` selection.
 
 ### 17.2 Cross-platform smoke tests
 
@@ -617,6 +786,15 @@ At minimum:
 - Corrupt dictionary fields.
 - Corrupt entry CRCs.
 - Exercise repeated load/cancel/destroy cycles.
+- Assert wall-clock and allocation ceilings in the harness so a hang or
+  decompression bomb fails the test rather than the machine running it.
+
+RAR fixtures shall be generated only with an authorized archive-writing tool.
+The repository may store redistributable binary fixtures and their provenance;
+reproducing the corpus must not require Reliquary or UnRAR to author archives.
+Each fixture record shall name its authoring tool/version, options, expected
+entry hashes, license/provenance, and whether byte-for-byte regeneration is
+expected.
 
 ---
 
@@ -652,8 +830,17 @@ Internal asset packing is not part of the initial Reliquary milestone.
 
 ## 19. Implementation phases
 
+### Phase U-1 — legal and provenance gate
+
+- Select the exact official source release proposed for evaluation.
+- Record its source hash and complete license text without importing it into the
+  production dependency tree.
+- Resolve §5.2 for Leviathan's GPL-3.0-or-later distribution.
+- Stop or select another decoder if compatibility is not approved.
+
 ### Phase U0 — baseline source import
 
+- Begin only after Phase U-1 passes.
 - Pin official source.
 - Add license and provenance.
 - Build upstream-equivalent static library/object target.
@@ -704,18 +891,19 @@ Internal asset packing is not part of the initial Reliquary milestone.
 
 The embedded UnRAR component is approved for Reliquary when:
 
-1. It extracts valid SPC entries from representative solid and non-solid RSN archives.
-2. It supports the historical and current RAR generations represented in the approved corpus.
-3. It builds for macOS arm64, macOS x86_64, Windows x86_64, and Linux x86_64.
-4. It adds no runtime library or executable dependency.
-5. The final plugin exports no public UnRAR symbols beyond unavoidable platform behavior.
-6. It writes no temporary files.
-7. It rejects encrypted, multi-volume, oversized, excessive-dictionary, malformed, and checksum-failing input safely.
-8. It honors cancellation.
-9. Its stripped binary-size delta falls within the approved project budget.
-10. License and provenance notices are complete.
-11. The wrapper exposes no UnRAR-specific types to Reliquary.
-12. The same corpus produces equivalent entry hashes on every supported architecture.
+1. The GPL/UnRAR combined-distribution gate is approved in writing for the exact pinned release.
+2. It extracts valid SPC entries from representative solid and non-solid RSN archives.
+3. It supports the historical and current RAR generations represented in the approved corpus.
+4. It builds for macOS arm64, macOS x86_64, Windows x86_64, and Linux x86_64.
+5. It adds no runtime library or executable dependency.
+6. The final plugin exports no public UnRAR symbols beyond unavoidable platform behavior.
+7. It writes no temporary files.
+8. It rejects encrypted, multi-volume, oversized, excessive-dictionary, malformed, and checksum-failing input safely.
+9. It counts actual discarded solid-history output against cumulative limits and honors cancellation.
+10. Its stripped binary-size delta falls within the approved project budget.
+11. License, acknowledgements, patch provenance, and source notices are complete.
+12. The wrapper exposes no UnRAR-specific types to Reliquary and compiles under the production C++11 policy.
+13. The same corpus produces equivalent entry hashes on every supported architecture.
 
 ---
 

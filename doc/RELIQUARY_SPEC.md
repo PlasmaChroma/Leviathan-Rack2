@@ -1,9 +1,48 @@
 # Reliquary — SPC/RSN Performance Extraction Module
 
-**Project:** Leviathan-Rack2  
-**Working title:** Reliquary  
-**Document status:** Implementation specification, Draft 0.1  
-**Date:** 2026-08-04
+**Project:** Leviathan-Rack2
+
+**Working title:** Reliquary
+
+**Document status:** Architecture and product specification, Draft 0.2
+
+**Date:** 2026-08-12
+
+---
+
+## Status and document authority
+
+Reliquary is in preimplementation design. No Reliquary module or production
+runtime exists in the repository yet.
+
+This document owns the product contract, user-visible behavior, real-time
+architecture, logical-lane semantics, and milestone boundaries. Companion
+documents have narrower authority:
+
+- [RELIQUARY_UNRAR_SPEC.md](RELIQUARY_UNRAR_SPEC.md) owns the archive-reader
+  boundary, archive security policy, and candidate embedded-UnRAR design.
+- [RELIQUARY_PHASE0_PLAN.md](RELIQUARY_PHASE0_PLAN.md) owns the experiments,
+  measurements, decision records, and formal feasibility gates that must be
+  completed before production implementation.
+
+If a companion plan conflicts with this specification, this specification
+governs product behavior and the conflict must be resolved in documentation
+before code proceeds. Measured Phase 0 results may change this architecture,
+but the accepted decision and rationale must first be written back here.
+
+The delivery terms used throughout this document are:
+
+- **Phase 0 prototype:** disposable or narrowly scoped feasibility code. It is
+  not a module implementation.
+- **Core MVP:** Phases 1 through 3. It includes standalone SPC and RSN playback,
+  stable automatic logical mapping, and PITCH/GATE/TRIG/ENV outputs.
+- **Mapping-tools release:** Phase 4. It adds manual mapping tools, calibration,
+  CV mute/solo, and the optional audio solo monitor if its Phase 0 gate passes.
+- **Advanced analysis:** Phase 5 and later.
+
+Unless a requirement explicitly names a later phase, “MVP” means the Core MVP.
+The phrase “first release” is intentionally avoided because publication timing
+is a release-management decision rather than an architectural milestone.
 
 ---
 
@@ -11,7 +50,7 @@
 
 Reliquary is a VCV Rack module that loads Super Nintendo SPC snapshots and RSN soundtrack collections, resumes the captured SPC700/S-DSP program, and exposes the resulting performance as modular control signals.
 
-The module is not merely an SPC audio player. Its defining feature is a translation layer that converts the S-DSP's temporary eight-voice hardware allocation into stable, user-visible logical instrument lanes. Those lanes provide pitch, gate, trigger, envelope, and level signals that remain coherent even when the original sound driver moves an instrument between physical DSP voices.
+The module is not merely an SPC audio player. Its defining feature is a translation layer that converts the S-DSP's temporary eight-voice hardware allocation into stable, user-visible logical instrument lanes. Those lanes provide pitch, gate, trigger, and envelope signals, with optional later level estimation, that remain coherent even when the original sound driver moves an instrument between physical DSP voices.
 
 The working metaphor is an illuminated archive of preserved machine performances: Reliquary opens the snapshot, restores the original sound program, and reveals the score beneath its shifting hardware state.
 
@@ -34,9 +73,9 @@ Reliquary shall:
 
 ---
 
-## 3. Non-goals for the first release
+## 3. Non-goals and MVP boundary
 
-The first release shall not attempt to:
+The Core MVP shall not attempt to:
 
 - Convert an SPC performance into MIDI files.
 - Recover the composer's original sequence data or tracker project.
@@ -47,8 +86,14 @@ The first release shall not attempt to:
 - Provide arbitrary seeking with sample-perfect reconstruction.
 - Expose every album instrument simultaneously when a collection contains more logical identities than the available Rack lanes.
 - Reimplement the full SPC700/S-DSP emulator before the musical routing concept is proven.
+- Provide manual rename, pin, move, calibration, CV mute/solo, or collection-wide mapping tools.
+- Require per-voice isolated audio or expose SOLO L/R.
+- Require a LEVEL output.
+- Modulate playback speed until Phase 0 defines and validates its emulator semantics.
 
-These capabilities may be explored later without changing the core interfaces defined here.
+These capabilities may be explored later. Optional features must extend the
+minimum runtime boundary rather than making the proven Core MVP interface
+depend on an unavailable emulator capability.
 
 ---
 
@@ -88,7 +133,13 @@ The current relationship among logical lane, logical instrument, BRR identity, s
 
 ### 4.9 Solo monitor
 
-An audio-domain feature distinct from CV mute/solo. When a logical lane is selected for monitoring, the emulator's real audio contribution for the physical voice currently bound to that lane is routed to a dedicated stereo output, isolated from the rest of the mix. This is a listening aid for identifying and naming instruments; it does not affect PITCH/GATE/TRIG/ENV/LEVEL CV outputs.
+An optional Phase 4 audio-domain feature distinct from CV mute/solo. When a
+logical lane is selected for monitoring, the emulator's real audio contribution
+for the physical voice currently bound to that lane is routed to a dedicated
+stereo output, isolated from the rest of the mix. This is a listening aid for
+identifying and naming instruments; it does not affect CV outputs. It is not a
+Core MVP dependency and exists only if the selected runtime passes the
+selected-voice-stem feasibility gate.
 
 ---
 
@@ -120,9 +171,14 @@ If the SPC sound driver later moves Instrument 01 from DSP voice 6 to DSP voice 
 
 ### 5.3 Track changes
 
-Mappings may differ between tracks unless the user pins an identity or enables collection-aware mapping. A `TRACK CHANGE` trigger shall be emitted whenever the selected track changes so downstream patches can reset or react.
+Mappings may differ between tracks. Phase 4 pins and collection-aware mapping
+may preserve selected assignments. A `TRACK` trigger shall be emitted whenever
+a prepared track transition commits so downstream patches can reset or react.
 
-Reliquary shall favor the same lane for the same fingerprint across tracks when practical, but the first release does not guarantee a globally unique lane for every instrument in a large collection.
+The Core MVP guarantees lane stability within one track only. Phase 4 may favor
+the same lane for the same fingerprint across tracks, but no milestone
+guarantees a globally unique lane for every identity in a collection larger
+than the available lane bank.
 
 ---
 
@@ -134,24 +190,39 @@ Panel width is provisional. The design should target approximately 16–20 HP, s
 
 - **L** — emulated left audio output.
 - **R** — emulated right audio output.
-- **SOLO L** — isolated audio output for the currently monitored logical lane's left channel. Silent when no lane is monitored.
-- **SOLO R** — isolated audio output for the currently monitored logical lane's right channel. Silent when no lane is monitored.
 
-Audio outputs shall be Rack-standard bipolar audio voltage and shall preserve the emulator's stereo mix.
+The Core MVP maps emulator digital full scale to Rack-standard ±5 V bipolar
+audio. Values outside the representable emulator range shall be clamped before
+conversion rather than wrapping. Resampling and conversion must preserve the
+relative stereo mix.
 
-The solo outputs carry the emulator's actual rendered audio for the monitored lane's currently bound physical voice, not a synthesized approximation. Only one lane may be monitored at a time in the first release. If the monitored lane's physical-voice binding changes mid-note (per §11.3), the solo output shall continue to follow the same logical lane without introducing an audible discontinuity, consistent with the module's logical-lane stability principle.
+The Mapping-tools release may add **SOLO L** and **SOLO R** for one monitored
+logical lane only if the Phase 0 selected-voice-stem gate passes. These outputs
+must contain the selected physical voice's contribution from the exact primary
+render interval, not an approximation or a separately advanced emulator. They
+are silent when the monitored lane is idle or unbound. A normal note
+replacement may contain the discontinuity produced by the original machine;
+Reliquary shall add no discontinuity of its own.
 
 ### 6.2 Polyphonic CV outputs
 
-Each output shall expose a fixed 16-channel polyphonic cable while a source is loaded:
+Each Core MVP output shall expose a fixed 16-channel polyphonic cable while a
+valid source is active, including while it is paused:
 
 - **PITCH** — logarithmic pitch CV.
 - **GATE** — note-active state according to the selected gate policy.
 - **TRIG** — short pulse on logical note-on events.
 - **ENV** — emulated voice envelope normalized to 0–10 V.
-- **LEVEL** — estimated post-envelope voice level normalized to 0–10 V.
 
 Unused lanes shall output 0 V.
+
+With no valid source, these outputs shall advertise zero channels. A replacement
+load retains the old source and its 16 channels until the replacement commits.
+A failed replacement likewise leaves the old source active. Explicitly clearing
+the source drops all gates, zeros voltages, and then advertises zero channels.
+
+The Mapping-tools release may append **LEVEL**, an estimated post-envelope voice
+level normalized to 0–10 V. LEVEL is not part of Core MVP acceptance.
 
 ### 6.3 Event outputs
 
@@ -166,7 +237,7 @@ Unused lanes shall output 0 V.
 - **NEXT** — trigger to load the next valid track.
 - **PREV** — trigger to load the previous valid track.
 - **TRACK CV** — selects a track according to the configured CV mode.
-- **SPEED CV** — optional playback-speed modulation, applied around the panel speed setting.
+- **SPEED CV** — deferred until the Phase 0 speed-semantics decision passes.
 
 ### 6.5 Controls
 
@@ -175,7 +246,7 @@ Unused lanes shall output 0 V.
 - Restart button.
 - Previous and next track buttons.
 - Track selector encoder or stepped knob.
-- Speed control.
+- Speed control, only when the selected runtime's documented speed policy is enabled.
 - Global transpose control.
 - Mapping view button.
 - Settings button or context-menu entries for advanced policies.
@@ -239,14 +310,15 @@ DSP 2 → CV 03  Instrument 02
 
 This view is diagnostic and shall not be the default user abstraction.
 
-### 7.4 Mapping editor
+### 7.4 Mapping editor — Phase 4
 
-The first release should support at least:
+The Mapping-tools release should support at least:
 
 - Rename logical instrument.
 - Move or swap lane assignment.
 - Pin assignment.
-- Mute or solo logical instrument (CV domain: suppresses or isolates PITCH/GATE/TRIG/ENV/LEVEL output for the lane).
+- Mute or solo logical instrument (CV domain: suppresses or isolates the
+  available PITCH/GATE/TRIG/ENV and optional LEVEL output for the lane).
 - Monitor logical instrument (audio domain: routes the lane's real SPC audio to SOLO L/R for identification by ear; see §4.9 and §6.1).
 - Mark identity as tonal, percussion, noise, or effect.
 - Set pitch-root calibration.
@@ -269,18 +341,22 @@ struct SpcTrack {
     SpcMetadata metadata;
     double declaredDurationSeconds = 0.0;
     double declaredFadeSeconds = 0.0;
-    uint64_t contentHash = 0;
+    std::array<uint8_t, 32> contentSha256;
 };
 
 struct SpcCollection {
-    std::string sourcePath;
+    std::string sourcePathUtf8;
     std::string displayName;
-    uint64_t sourceHash = 0;
+    std::array<uint8_t, 32> sourceSha256;
     std::vector<SpcTrack> tracks;
 };
 ```
 
 A standalone SPC becomes a one-track collection.
+
+Paths crossing the project-owned boundary use normalized UTF-8. Platform path
+conversion is confined to the loader. Source and track identities use SHA-256
+computed on the worker thread; no source hash is computed in `process()`.
 
 ### 8.1 Loading states
 
@@ -319,32 +395,63 @@ Configurable hard limits shall prevent hostile or malformed archives from causin
 
 Reliquary shall not couple its mapping engine directly to one emulator implementation.
 
+The production Rack target is C++11. Public project-owned runtime interfaces
+shall therefore use C++11 types and shall not require `std::span`,
+`std::filesystem`, nested-namespace syntax, designated initializers, or other
+later-standard features.
+
 ```cpp
+struct SpcEvent;
+
+struct SelectedVoiceStemBuffer {
+    // Optional interleaved stereo destination for the selected physical voice.
+    // Null means no stem was requested for this render interval.
+    int physicalVoice = -1;
+    int16_t* interleavedStereo = nullptr;
+};
+
 class ISpcRuntime {
 public:
     virtual ~ISpcRuntime() = default;
 
-    virtual bool load(std::span<const uint8_t> spcBytes,
+    virtual bool load(const uint8_t* spcBytes,
+                      size_t byteCount,
                       SpcRuntimeError& error) = 0;
     virtual void reset() = 0;
-    virtual void setTempo(double multiplier) = 0;
 
     virtual void renderNative(int16_t* interleavedStereo,
-                              size_t nativeFrames) = 0;
-
-    virtual void renderIsolatedVoice(uint8_t physicalVoice,
-                                     int16_t* interleavedStereo,
-                                     size_t nativeFrames) = 0;
+                              size_t nativeFrames,
+                              SelectedVoiceStemBuffer* optionalStem) = 0;
 
     virtual std::array<PhysicalVoiceSnapshot, 8>
         voiceSnapshots() const = 0;
 
-    virtual std::span<const uint8_t> audioRam() const = 0;
+    virtual const uint8_t* audioRamData() const = 0;
+    virtual size_t audioRamSize() const = 0;
     virtual uint8_t dspRegister(uint8_t address) const = 0;
 
-    virtual void setEventSink(ISpcEventSink* sink) = 0;
+    virtual size_t drainEvents(SpcEvent* destination,
+                               size_t capacity,
+                               bool& overflowed) = 0;
+
+    virtual bool supportsSelectedVoiceStem() const = 0;
 };
 ```
+
+`renderNative()` advances persisted runtime state exactly once. If an optional
+stem is requested and supported, its samples must describe the same native
+frames produced in the main output. An adapter may obtain them from
+pre-summation buffers or from a validated internal checkpoint/restore strategy,
+but the externally visible runtime state must be identical to one ordinary
+render. Unsupported runtimes ignore a null stem and report
+`supportsSelectedVoiceStem() == false`; this remains valid for the Core MVP.
+
+Events are drained into caller-owned bounded storage after each native render
+chunk. The adapter must not allocate or invoke arbitrary UI callbacks while
+rendering. If capacity is exceeded, it sets `overflowed`, retains a diagnostic
+counter, and Reliquary forces affected gates low at the next safe sample
+boundary rather than risking stuck notes. Phase 0 shall choose a capacity large
+enough that the approved corpus produces no overflow.
 
 ### 9.1 Initial implementation strategy
 
@@ -356,17 +463,23 @@ The initial runtime should adapt a mature existing SPC core rather than begin wi
 - Read-only audio RAM access.
 - Physical voice-state snapshots.
 - Timestamped observation of relevant DSP register writes or equivalent effective events.
-- Per-voice isolated audio rendering, either via direct access to each voice's pre-summation buffer, or via a render mode that sums only a specified voice into the mix.
+- Optional selected-voice audio captured for the exact primary render interval.
 
-The exact runtime dependency remains a pre-implementation gate because technical fit, modification effort, license obligations, and single-package distribution must all be resolved. The interface above shall remain stable regardless of the selected core.
+The exact runtime dependency remains a preimplementation gate because technical
+fit, modification effort, license obligations, deterministic behavior,
+performance, and single-package distribution must all be resolved. Phase 0 may
+revise this interface before production implementation; after Phase 1 begins,
+changes require an explicit architecture decision record.
 
 ### 9.1.1 Isolated voice rendering
 
-`ISpcRuntime::renderIsolatedVoice()` shall render the audio contribution of a single physical voice independently of the main stereo mix.
-
-Implementations should prefer exposing each voice's pre-summation buffer from the existing render pass, at no additional rendering cost, where the underlying core supports it. If unavailable, implementations may render a second internal pass with all other voices masked at mix time, without altering persisted register or driver state, so that CPU and driver execution are identical to the primary render.
-
-The exact strategy is an implementation detail behind this interface and is a criterion to evaluate during the Phase 0 runtime selection spike (§9.1), since it determines cost and availability up front rather than being retrofittable later.
+Selected-voice monitoring shall prefer a voice's pre-summation contribution
+from the primary render. A second pass is acceptable only inside the adapter if
+Phase 0 demonstrates bit-identical main output, identical post-call runtime
+state, sample alignment, and acceptable CPU cost across the approved corpus.
+Calling the mutable runtime a second time without checkpoint/restore is
+forbidden. Failure of this optional gate removes SOLO L/R from Phase 4; it does
+not reject an otherwise suitable Core MVP runtime.
 
 ### 9.2 Runtime event stream
 
@@ -401,7 +514,21 @@ Reliquary must observe:
 - ENDX.
 - Effective ENVX and OUTX state.
 
+Phase 0 shall determine how time-varying effective envelope/output state reaches
+the caller without an unbounded callback: timestamped state events, a
+caller-owned per-native-frame state buffer, or bounded render quanta with
+snapshots. A single end-of-block snapshot is insufficient unless the approved
+render quantum proves one-Rack-sample alignment. The frozen Phase 1 interface
+must name the selected method and capacity.
+
 The emulator has eight voices and directly exposes key-on, key-off, pitch, sample-source, envelope, noise, and modulation state through the S-DSP register model. This makes direct event extraction preferable to mixed-audio pitch detection.
+
+`DspRegisterWrite` records the original write boundary. `KeyOn`, `KeyOff`,
+`SampleEnd`, and `VoiceStateBoundary` are effective machine events after any
+S-DSP internal delay, not merely aliases for writes to KON, KOFF, or ENDX.
+Every event timestamp is monotonic within one runtime generation and refers to
+the first native sample affected by the event. Reset or track replacement starts
+a new generation and clears undrained events.
 
 ---
 
@@ -419,6 +546,21 @@ The base identity shall hash:
 - BRR end and loop flags.
 - Loop offset relative to the sample start.
 - A version tag for the fingerprint algorithm.
+
+Fingerprint input is a canonical byte descriptor, not an in-memory struct. It
+shall encode all multibyte values in a documented byte order. The production
+digest algorithm and descriptor version must be selected and recorded before
+Phase 2; persisted mappings store both. Digest equality shall be confirmed by
+canonical-descriptor equality when descriptors are available, so a digest
+collision cannot silently merge instruments.
+
+BRR traversal operates on the audio-RAM state visible at the effective note-on
+boundary. It shall use checked 16-bit address arithmetic, record visited block
+addresses, stop at valid end/loop conditions, and reject or classify malformed
+cycles without reading outside the 64 KiB address space. The traversal is
+bounded by the number of BRR blocks addressable in audio RAM. If the driver
+later rewrites directory entries or BRR bytes, the next effective note-on is
+fingerprinted from the new state rather than reusing an address-only cache.
 
 The fingerprint must not depend on:
 
@@ -501,19 +643,31 @@ struct LogicalLaneState {
 
 ### 11.3 Note-on routing
 
+An effective `KeyOn` event begins a logical note. A KON register write alone is
+not sufficient. Before routing a new note on a physical voice, Reliquary closes
+that voice's previous binding as a replacement, lowers its gate according to
+the selected policy, and then processes the new note.
+
 On each logical note-on:
 
 1. Resolve the current physical voice's sample and articulation identity.
 2. Find all lanes reserved for that identity.
 3. Select the lowest-numbered free sibling lane.
 4. If no sibling is free and an unassigned lane remains, create a new sibling reservation.
-5. Bind the physical voice to the selected lane until release completion, sample end, or a new note replaces the voice.
+5. Bind the physical voice to the selected lane until effective release completion, sample end, reset, track transition, or a new note replaces the voice.
 6. Emit a trigger on that lane.
 7. Raise the gate according to the configured gate policy.
 
 ### 11.4 Lane stability
 
 A lane assigned to an identity shall not be silently reused for another identity during the same track.
+
+In incremental Core MVP mapping, unpinned reservations are created in
+first-effective-note-on order and remain until reset or track replacement. An
+identity arriving after all 16 lanes are reserved becomes overflow; an existing
+reservation is never evicted based on later activity. Any priority-based
+selection requires a completed pre-index and is not part of incremental MVP
+behavior.
 
 When the user pins a lane, the assignment shall persist across track reloads and, when the fingerprint is present, across tracks in the same collection.
 
@@ -522,7 +676,8 @@ When the user pins a lane, the assignment shall persist across track reloads and
 If a track requires more than 16 stable logical sibling lanes:
 
 - Pinned assignments take priority.
-- Active identities with the highest configured priority take remaining lanes.
+- With a completed pre-index, identities are selected by the documented priority policy before playback begins.
+- Without a completed pre-index, first-discovered stable reservations take the remaining lanes.
 - Unexposed events remain visible in the mapping display as overflow but do not mutate existing lane meanings.
 - An overflow indicator shall appear.
 
@@ -534,13 +689,18 @@ A future expander may expose additional lane banks. Dynamic lane reassignment du
 
 ### 12.1 Relative pitch mode
 
-Relative pitch is the first-release default and shall represent the logarithmic ratio of the DSP pitch register to the native sample rate reference:
+Relative pitch is the Core MVP default and shall represent the logarithmic ratio of the DSP pitch register to the native sample rate reference:
 
 ```text
 relativePitchCv = log2(dspPitch / 4096)
 ```
 
 This preserves intervals, vibrato, portamento, arpeggiation, and pitch bends but does not guarantee that 0 V corresponds to a standard musical note.
+
+The logarithm shall not be evaluated with a general transcendental function per
+sample. Cache conversion on effective pitch-register changes using a compact
+lookup table or a measured perceptually stable approximation. Transpose and
+calibration offsets are then inexpensive additions.
 
 ### 12.2 Calibrated pitch mode
 
@@ -561,7 +721,7 @@ Noise-enabled voices shall be marked unpitched by default. Their PITCH output ma
 
 ### 12.5 Pitch modulation
 
-The initial release may expose base register pitch only. An effective-pitch mode that includes S-DSP pitch modulation is desirable but shall not delay the MVP unless the selected runtime already makes it inexpensive and reliable.
+The Core MVP may expose base register pitch only. An effective-pitch mode that includes S-DSP pitch modulation is desirable but shall not delay the MVP unless the selected runtime already makes it inexpensive and reliable.
 
 ---
 
@@ -577,13 +737,22 @@ TRIG shall pulse on every logical note-on, even if the lane was already active d
 - **Audible gate:** high from KON until envelope reaches silence, sample ends, or the voice is replaced. Default.
 - **Trigger gate:** fixed-duration pulse only.
 
+Here KON and KOFF mean effective runtime events. For audible gate, silence is
+the selected runtime's effective zero-envelope state sustained through one
+native output sample; Phase 0 must verify this interpretation against the
+approved corpus. Reset, source clear, event overflow, and track transition force
+all gates low regardless of policy.
+
 ### 13.3 Envelope
 
 ENV shall scale the effective DSP envelope to 0–10 V and should update at audio rate or at a sufficiently high control rate to preserve the original contour.
 
 ### 13.4 Level
 
-LEVEL shall estimate audible contribution from envelope, current sample output, and voice volume. It is diagnostic/modulation CV and is not required to reconstruct exact isolated audio amplitude.
+Phase 4 may add LEVEL as an estimate of audible contribution from envelope,
+current sample output, and voice volume. It is diagnostic/modulation CV and is
+not required to reconstruct exact isolated audio amplitude. Its estimator and
+normalization must be documented before the output is added.
 
 ---
 
@@ -592,6 +761,13 @@ LEVEL shall estimate audible contribution from envelope, current sample output, 
 ### 14.1 Native rendering
 
 The selected runtime shall render at its native SPC output rate. Reliquary shall resample to the Rack engine rate using a deterministic, allocation-free resampler.
+
+The resampler shall define its latency, reset behavior, and response to Rack
+sample-rate changes. A sample-rate change rebuilds prepared coefficients outside
+the audio thread where necessary, clears stale history at a documented boundary,
+and must not access freed state. Phase 0 shall compare at least one inexpensive
+and one higher-quality deterministic configuration before choosing the MVP
+quality/cost point.
 
 ### 14.2 Event alignment
 
@@ -604,12 +780,16 @@ For the MVP, alignment within one Rack sample is the target. More exact internal
 Track changes shall use two runtime instances:
 
 1. Prepare the staged runtime outside the audio thread.
-2. Begin a short audio crossfade.
-3. Force old logical gates low at the transition boundary.
-4. Swap active and staged runtimes.
-5. Emit `TRACK CHANGE`.
+2. Publish the staged runtime through the bounded handoff.
+3. At an audio-sample boundary, force old logical gates low and begin rendering both old and staged runtimes.
+4. Crossfade only L/R audio; CV events from the staged runtime begin at the transition boundary and old-runtime events are discarded thereafter.
+5. When the fade completes, make the staged runtime solely active.
+6. Emit `TRACK` once, at the transition boundary where staged CV becomes authoritative.
+7. Return the old runtime to the worker/reclamation side for destruction.
 
 Default crossfade: approximately 10 ms, configurable or internally tuned.
+The transition budget includes two emulators and two resamplers for the fade
+interval. No runtime or collection destructor may run in `process()`.
 
 ### 14.4 End detection
 
@@ -619,6 +799,28 @@ End of track shall be determined by this priority:
 2. User-defined duration override.
 3. Sustained-silence detector after a minimum play time.
 4. Manual or infinite playback when no reliable end condition exists.
+
+Metadata fade attenuates L/R only; it does not slow emulation. `END` fires once
+when the selected end condition is reached, after which transport pauses and all
+gates are forced low unless loop mode is added by a later specification.
+
+### 14.5 Transport and speed semantics
+
+- With RUN unpatched, the panel state controls transport. With RUN patched, its
+  Schmitt-qualified gate is authoritative and panel presses do not override it.
+- Pause stops emulated time and holds pitch/envelope CV at their last values;
+  GATE behavior on pause is a user policy whose MVP default is forced low.
+- RESET restores the initial prepared snapshot at an audio-sample boundary,
+  clears resampler/event history, resets mapping reservations for the track,
+  and forces gates low before new events are accepted.
+- NEXT, PREV, and TRACK CV request asynchronous preparation. Repeated requests
+  coalesce to the newest target; a committed transition alone emits TRACK.
+- Global transpose offsets emitted PITCH CV and never mutates the emulated
+  machine.
+- SPEED and SPEED CV are absent from the Core MVP. Phase 0 must determine
+  whether a candidate runtime can change driver timing without undefined state,
+  whether sample pitch is preserved, and how event timestamps and metadata
+  duration scale. Only a documented, deterministic policy may be exposed.
 
 ---
 
@@ -657,6 +859,21 @@ End of track shall be determined by this priority:
 
 Prepared sources and mapping updates shall cross into the audio thread through atomically exchanged immutable objects, lock-free queues, or bounded handoff structures proven safe under Rack's process model.
 
+The mutable runtime has exactly one owner and is touched only by the audio
+thread after publication. The worker may construct and fully initialize a
+runtime, but shall not access it after handing it off. Publication uses a
+single-producer/single-consumer ownership transfer with an explicit generation
+number so stale loads cannot replace a newer request.
+
+Objects retired by reset, replacement, or module destruction cross back through
+a bounded reclamation queue. Their destructors, collection-vector releases,
+and source-buffer releases run on the non-audio side. If a handoff or
+reclamation queue is full, Reliquary keeps the current valid source and reports
+a bounded diagnostic condition; it does not block or free on the audio thread.
+
+UI snapshots contain fixed-size numeric state copied through a bounded snapshot
+mechanism. UI strings and table models are assembled outside `process()`.
+
 ---
 
 ## 16. Pre-indexing
@@ -687,22 +904,31 @@ When enabled, Reliquary may pool fingerprints across tracks and attempt to keep 
 
 Reliquary shall serialize:
 
+- Serialization schema version.
 - Source kind and source path.
-- Source content hash.
-- Selected track index and track hash.
+- Source SHA-256 and byte size.
+- Selected track index and track SHA-256.
 - Transport state where appropriate.
 - Track CV mode.
 - Mapping identity mode.
 - Logical lane assignments and pins.
+- Fingerprint descriptor version and digest algorithm identifier.
 - User labels.
 - Pitch calibrations.
 - Gate policy.
-- Tempo and transpose.
+- Transpose and any later approved speed policy/value.
 - Track duration overrides.
 
 ### 17.1 External file behavior
 
 By default, the patch stores a reference to the SPC or RSN file and validates it using size/hash information on reload.
+
+Paths are serialized as UTF-8 exactly as selected plus an optional normalized
+comparison form. They are not assumed portable across operating systems. On
+reload, source preparation is asynchronous and the module remains in a
+missing/loading state until the content hash is validated and a runtime is
+ready; serialized mappings are not applied to mismatched content without an
+explicit user confirmation.
 
 If the source is missing or changed:
 
@@ -711,6 +937,11 @@ If the source is missing or changed:
 - The user may locate a replacement file.
 
 Embedding complete RSN data in Rack patches is deferred because it can substantially increase patch size. Embedding a standalone SPC may be considered as a later option.
+
+Every schema change requires a deterministic migration test from each released
+schema. Unknown future schema fields are ignored where safe. Unknown fingerprint
+versions preserve labels and raw serialized mapping records but do not bind them
+to newly computed identities until a defined migration exists.
 
 ---
 
@@ -748,6 +979,13 @@ The source loader shall enforce configurable constants with conservative default
 - Maximum metadata string length.
 - Maximum analysis time per track and per collection.
 
+Archive defaults and their units are owned by the archive specification. The
+Core MVP additionally limits decoded metadata strings to 4 KiB each after UTF-8
+normalization, performs no automatic pre-index longer than 30 seconds per track
+or 5 minutes per collection, and checks cancellation at bounded work units.
+These analysis defaults are provisional Phase 0 corpus gates rather than user
+prompts.
+
 Archive paths shall never be written to disk, so path traversal entries are ignored as names rather than resolved as filesystem destinations.
 
 Malformed input must fail without crashing Rack, allocating unbounded memory, blocking indefinitely, or corrupting the previously active source.
@@ -758,20 +996,40 @@ Malformed input must fail without crashing Rack, allocating unbounded memory, bl
 
 These are initial engineering budgets, subject to measurement on representative hardware.
 
+Phase 0 shall record the reference CPU, operating system, compiler, Rack sample
+rate, Rack block size, runtime version, and measurement method. A budget may be
+revised only by an explicit decision record containing the measured tradeoff.
+
 ### 20.1 Steady-state audio
 
 - No heap allocations in `process()`.
 - No blocking synchronization in `process()`.
 - One active SPC runtime plus one staged runtime only during transitions.
 - Mapping/event overhead should be small relative to emulation and resampling.
-- The module should remain practical in normal multi-module patches on supported Rack systems.
-- The one-active-runtime budget assumes no lane is being monitored. While a lane is monitored via SOLO L/R, one additional isolated-voice render call per audio block is permitted as a bounded, opt-in cost; it shall not be paid when no lane is monitored.
+- At 48 kHz with a 64-sample Rack block on the recorded reference system, one
+  ordinary instance should consume no more than 10% of one block deadline on
+  average and 25% at the 99th percentile over the approved corpus.
+- A 10 ms track crossfade may use up to 50% of one block deadline at the 99th
+  percentile but shall produce no deadline miss in the controlled test.
+- Mapping and event extraction together should add no more than 20% over the
+  measured emulator-plus-resampler baseline.
+- Selected-voice monitoring, if approved, should add no more than 50% over the
+  ordinary instance cost and shall cost nothing when disabled beyond one
+  predictable capability branch.
+- An eight-instance stress test must report average, 95th, and 99th percentile
+  callback cost and any Rack engine overruns; approval requires an explicit
+  density decision rather than the word “practical.”
 
 ### 20.2 Loading
 
 - Archive extraction occurs on one background loader thread.
 - Typical RSN collections should become browsable without writing temporary files.
 - Track changes after initial extraction should be near-instant aside from runtime preparation and crossfade.
+- Cancellation should be observed within 100 ms or one archive callback/entry
+  boundary, whichever is later, on the approved corpus.
+- The Phase 0 report shall record compressed size, expanded retained size, peak
+  resident memory, initial load time, and subsequent track-preparation time for
+  small, median, and limit-approaching fixtures.
 
 ### 20.3 Rendering
 
@@ -795,6 +1053,10 @@ These are initial engineering budgets, subject to measurement on representative 
 - Lane pinning and overflow behavior.
 - Gate policies and retriggers.
 - Serialization round trips.
+- Serialization migrations from every released schema.
+- Bounded event-buffer overflow and forced-gate recovery.
+- Checked BRR traversal over malformed cycles and mutable audio RAM.
+- Incremental overflow without reservation eviction.
 
 ### 21.2 Runtime integration tests
 
@@ -803,6 +1065,9 @@ These are initial engineering budgets, subject to measurement on representative 
 - Physical voice reassignment preserves logical lane identity.
 - Same BRR sample under different SRCN/RAM addresses resolves to the same fingerprint.
 - Noise and pitch-modulation flags are observed correctly.
+- Effective KON timing is distinguished from the KON register-write boundary.
+- Reset and replacement destroy retired runtimes outside the audio thread.
+- Track crossfade renders both runtimes while only staged events drive new CV.
 
 ### 21.3 RSN tests
 
@@ -817,17 +1082,24 @@ Defined in the separate UnRAR specification, including solid archives, RAR gener
 - Mapping display agrees with audible events.
 - Calibrated pitch drives a Rack oscillator in tune with the original voice.
 
+Repository fixtures shall be synthetic, purpose-built, or otherwise clearly
+redistributable. Copyrighted soundtrack collections may be used for private
+manual evaluation but shall not become required repository or CI inputs.
+
 ---
 
 ## 22. Implementation phases
 
 ### Phase 0 — dependency and feasibility spikes
 
-- Complete embedded UnRAR spike.
-- Select and wrap an SPC runtime.
-- Demonstrate authentic stereo playback from one SPC.
-- Observe KON, KOFF, SRCN, pitch, envelope, and RAM.
-- Produce a stripped binary-size report.
+- Execute [RELIQUARY_PHASE0_PLAN.md](RELIQUARY_PHASE0_PLAN.md).
+- Resolve archive and SPC-runtime license/distribution gates before vendoring.
+- Approve or reject the embedded archive candidate.
+- Select an SPC runtime and freeze the minimum C++11 adapter contract.
+- Demonstrate authentic playback, effective events, bounded event draining,
+  audio-RAM access, deterministic reset, and real-time performance.
+- Approve or explicitly defer selected-voice monitoring and speed semantics.
+- Publish platform, CPU, memory, latency, and stripped binary-size reports.
 
 ### Phase 1 — raw SPC module
 
@@ -862,7 +1134,12 @@ Defined in the separate UnRAR specification, including solid archives, RAR gener
 - Pitch-root calibration.
 - Collection-aware lane preference.
 - Mapping reset and import/export sidecar if desired.
-- Single-lane audio solo/monitor (SOLO L/R); a second isolated render pass is an acceptable fallback if the selected core lacks pre-summation buffer access.
+- Single-lane audio solo/monitor (SOLO L/R) only if the selected-voice-stem gate passed.
+- Optional LEVEL output after its estimator and normalization are specified.
+
+If any earlier milestone has been publicly released, Phase 4 appends new
+parameter, input, output, and light IDs. It shall not reorder or reuse existing
+IDs, and serialization migrations must preserve earlier patches.
 
 ### Phase 5 — advanced analysis
 
@@ -888,8 +1165,11 @@ Reliquary MVP is complete when:
 8. The display clearly shows the current logical lane mapping and active DSP source.
 9. File loading and extraction cause no audio-thread allocation or blocking.
 10. Malformed or unsupported sources fail safely with useful messages.
-11. Patch serialization restores source, track, and user mapping state when the source remains available.
+11. Patch serialization restores source, track, automatic mapping reservations,
+    and Core MVP settings when the source remains available and hash-matched.
 12. Binary size and portability remain within the gates defined by the UnRAR and SPC dependency spikes.
+13. All retired runtime and source destruction occurs outside `process()`.
+14. Event-buffer overflow has deterministic recovery and produces no stuck gate.
 
 ---
 
@@ -899,12 +1179,13 @@ The following shall be decided during Phase 0 or visual design:
 
 - Exact SPC runtime implementation and distribution strategy.
 - Final panel width and control layout.
-- Whether LEVEL is included in the initial physical panel.
+- Whether the Phase 4 panel appends LEVEL and/or SOLO L/R after their gates pass.
 - Whether source data can optionally be embedded in patches.
 - Default track-mapping scope: strict per-track or collection-aware preference.
 - Exact overflow presentation and future expander protocol.
 - Whether pre-indexing is enabled automatically or on demand.
 - Whether internal RAR-packed assets are worthwhile after final package-size measurement.
+- Whether any deterministic, musically useful SPEED policy can be supported.
 
 ---
 
@@ -927,7 +1208,8 @@ Source file
                               ↓
                        logical lane router
                               ↓
-              PITCH / GATE / TRIG / ENV / LEVEL
+              PITCH / GATE / TRIG / ENV
+                    + optional Phase 4 LEVEL / SOLO monitor
                               ↓
                          mapping display
 ```
