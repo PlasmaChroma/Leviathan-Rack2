@@ -65,6 +65,15 @@
       "hidden": false
     },
     {
+      "slug": "Deepcache",
+      "name": "Deep Cache",
+      "description": "Preloads module-browser previews for faster browsing.",
+      "tags": [
+        "Utility"
+      ],
+      "hidden": false
+    },
+    {
       "slug": "Iris",
       "name": "Iris",
       "description": "Polyphonic image-to-wavetable oscillator with smooth table scanning.",
@@ -83,6 +92,17 @@
         "Expander"
       ],
       "hidden": true
+    },
+    {
+      "slug": "Puffy",
+      "name": "Puffy",
+      "description": "Character stereo saturator with animated peak control.",
+      "tags": [
+        "Distortion",
+        "Dynamics",
+        "Visual"
+      ],
+      "hidden": false
     },
     {
       "slug": "Crownstep",
@@ -112,18 +132,6 @@
         "Oscillator",
         "Waveshaper",
         "LFO"
-      ],
-      "hidden": false
-    },
-    {
-      "slug": "Mandelwake",
-      "name": "Mandelwake",
-      "description": "Deterministic polyphonic fractal orbit sequencer with the Abyssal Wake display.",
-      "tags": [
-        "Random",
-        "Clock generator",
-        "Polyphonic",
-        "Visual"
       ],
       "hidden": false
     },
@@ -160,15 +168,6 @@
       "hidden": true
     },
     {
-      "slug": "Deepcache",
-      "name": "Deep Cache",
-      "description": "Preloads module-browser previews for faster browsing.",
-      "tags": [
-        "Utility"
-      ],
-      "hidden": false
-    },
-    {
       "slug": "Umi",
       "name": "Umi",
       "description": "Visible pearl-physics probability sequencer with eight sink triggers and event CV.",
@@ -201,12 +200,13 @@
       "hidden": false
     },
     {
-      "slug": "Puffy",
-      "name": "Puffy",
-      "description": "Character stereo saturator with animated peak control.",
+      "slug": "Mandelwake",
+      "name": "Mandelwake",
+      "description": "Deterministic polyphonic fractal orbit sequencer with the Abyssal Wake display.",
       "tags": [
-        "Distortion",
-        "Dynamics",
+        "Random",
+        "Clock generator",
+        "Polyphonic",
         "Visual"
       ],
       "hidden": false
