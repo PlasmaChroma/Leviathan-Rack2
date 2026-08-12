@@ -104,6 +104,7 @@ struct Puffy final : Module {
 	~Puffy() override;
 
 	void process(const ProcessArgs& args) override;
+	void processBypass(const ProcessArgs& args) override;
 	void onReset(const ResetEvent& event) override;
 	void onSampleRateChange(const SampleRateChangeEvent& event) override;
 	json_t* dataToJson() override;
@@ -112,6 +113,12 @@ struct Puffy final : Module {
 	void synchronizeCharacterSelectionFromUi(bool negativeIsSource);
 
 private:
+	int updateModeControls();
+	void updateModeLights(
+		bool charactersLinked,
+		int activeLimiterMode,
+		float limiterBrightness,
+		float sampleTime);
 	void publishVisualState(const puffy::Frame& frame, bool stereoInputsConnected);
 };
 

@@ -173,7 +173,17 @@ private:
 	float rightPositiveInputActivity = 0.f;
 	float rightNegativeInputActivity = 0.f;
 	float limiterGain = 1.f;
-	LimiterMode limiterMode = LimiterMode::Hard;
+	float hardLimiterGain = 1.f;
+	float softLimiterGain = 1.f;
+	LimiterMode requestedLimiterMode = LimiterMode::Hard;
+	LimiterMode currentLimiterMode = LimiterMode::Hard;
+	LimiterMode limiterTransitionFrom = LimiterMode::Hard;
+	LimiterMode limiterTransitionTo = LimiterMode::Hard;
+	LimiterMode pendingLimiterMode = LimiterMode::Hard;
+	int limiterTransitionSample = 0;
+	int limiterTransitionLength = 1;
+	bool limiterTransitionActive = false;
+	bool pendingLimiterModeActive = false;
 	float projectedInputGain = 1.f;
 	float cachedSensitivity = -2.f;
 	float cachedSensitivityTargetGain = 1.f;
@@ -214,6 +224,12 @@ private:
 
 	void resetSharedControlState();
 	void resetChannel(bool left);
+	void beginLimiterTransition(LimiterMode requested);
+	float updateLimiterBranchGain(
+		LimiterMode mode,
+		float peak,
+		float currentGain) const;
+	float limiterBranchGain(LimiterMode mode) const;
 	void beginCharacterTransition(CharacterPair requested);
 	static CharacterCoefficients prepareCharacter(
 		Character character,

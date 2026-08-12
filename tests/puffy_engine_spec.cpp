@@ -810,6 +810,80 @@ Result limiterModes() {
 	};
 }
 
+Result limiterModeTransitionsAreContinuousAndRetargetable() {
+	constexpr float sampleRate = 48000.f;
+	constexpr float frequency = 10.f;
+	puffy::Engine engine;
+	engine.setSampleRate(sampleRate);
+
+	float previous = 0.f;
+	for (int i = 0; i < 48000; ++i) {
+		const float input = 8.f * std::cos(
+			2.f * kPi * frequency * float(i) / sampleRate);
+		previous = engine.process(
+			input, 0.25f * input, 0.f, 0, false, 0.f).left;
+	}
+
+	engine.setLimiterMode(puffy::LimiterMode::Off);
+	float switchDelta = 0.f;
+	bool finite = true;
+	for (int i = 48000; i < 48480; ++i) {
+		const float input = 8.f * std::cos(
+			2.f * kPi * frequency * float(i) / sampleRate);
+		const puffy::Frame frame = engine.process(
+			input, 0.25f * input, 0.f, 0, false, 0.f);
+		switchDelta = std::max(switchDelta, std::fabs(frame.left - previous));
+		finite = finite && std::isfinite(frame.left) && std::isfinite(frame.right);
+		previous = frame.left;
+	}
+
+	// Exercise reversal and a third queued destination while a fade is active.
+	for (int i = 0; i < 600; ++i) {
+		if (i == 40) engine.setLimiterMode(puffy::LimiterMode::Hard);
+		if (i == 80) engine.setLimiterMode(puffy::LimiterMode::Off);
+		if (i == 120) engine.setLimiterMode(puffy::LimiterMode::Soft);
+		if (i == 160) engine.setLimiterMode(puffy::LimiterMode::Hard);
+		const float input = 8.f * std::cos(
+			2.f * kPi * frequency * float(48480 + i) / sampleRate);
+		const puffy::Frame frame = engine.process(
+			input, 0.25f * input, 0.f, 0, false, 0.f);
+		finite = finite && std::isfinite(frame.left) && std::isfinite(frame.right);
+	}
+
+	engine.setLimiterMode(puffy::LimiterMode::Off);
+	float offPeak = 0.f;
+	for (int i = 0; i < 2000; ++i) {
+		const float input = 8.f * std::cos(
+			2.f * kPi * frequency * float(49080 + i) / sampleRate);
+		const puffy::Frame frame = engine.process(
+			input, 0.25f * input, 0.f, 0, false, 0.f);
+		if (i >= 1000) {
+			offPeak = std::max(offPeak, std::fabs(frame.left));
+		}
+	}
+
+	engine.setLimiterMode(puffy::LimiterMode::Hard);
+	float hardPeak = 0.f;
+	for (int i = 0; i < 2000; ++i) {
+		const float input = 8.f * std::cos(
+			2.f * kPi * frequency * float(51080 + i) / sampleRate);
+		const puffy::Frame frame = engine.process(
+			input, 0.25f * input, 0.f, 0, false, 0.f);
+		if (i >= 1000) {
+			hardPeak = std::max(hardPeak, std::fabs(frame.left));
+		}
+	}
+
+	return {
+		"Limiter mode changes crossfade continuously and survive rapid retargets",
+		finite && switchDelta < 0.1f && offPeak > 7.f
+			&& hardPeak <= 5.00001f,
+		"switchDelta=" + std::to_string(switchDelta)
+			+ " offPeak=" + std::to_string(offPeak)
+			+ " hardPeak=" + std::to_string(hardPeak)
+	};
+}
+
 Result sensitivityChangesInputProjectionAndLevel() {
 	puffy::Engine low;
 	puffy::Engine center;
@@ -1119,6 +1193,7 @@ int main() {
 		dynamicAutoDeflateTracksProgramEnergy(),
 		linkedLimiter(),
 		limiterModes(),
+		limiterModeTransitionsAreContinuousAndRetargetable(),
 		sensitivityChangesInputProjectionAndLevel(),
 		wetDryMixEndpoints(),
 		recoveryAndSilence(),
