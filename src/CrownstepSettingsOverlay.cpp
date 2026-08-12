@@ -1,6 +1,7 @@
 #include "CrownstepSettingsOverlay.hpp"
 
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 
 namespace {
@@ -80,6 +81,29 @@ void setParamValue(Crownstep* module, int paramId, float value, bool addHistory 
 	}
 	module->refreshHeldPitchForCurrentStep();
 }
+
+struct CrownstepRangeField final : ui::TextField {
+	Crownstep* module = nullptr;
+
+	void onSelectKey(const event::SelectKey& e) override {
+		if (e.action == GLFW_PRESS
+			&& (e.isKeyCommand(GLFW_KEY_ENTER) || e.isKeyCommand(GLFW_KEY_KP_ENTER))) {
+			char* end = nullptr;
+			const float semitones = std::strtof(text.c_str(), &end);
+			if (end != text.c_str() && std::isfinite(semitones) && module) {
+				const float boardSpan = float(std::max(1, module->boardCellCount() - 1));
+				const float rangeParam = crownstep::pitchRangeParamFromMultiplier(semitones / boardSpan);
+				setParamValue(module, Crownstep::RANGE_PARAM, rangeParam);
+				if (ui::MenuOverlay* overlay = getAncestorOfType<ui::MenuOverlay>()) {
+					overlay->requestDelete();
+				}
+			}
+			e.consume(this);
+			return;
+		}
+		ui::TextField::onSelectKey(e);
+	}
+};
 
 float rowY(int index) {
 	return CONTENT_Y + float(index) * (ROW_H + ROW_GAP);
@@ -186,10 +210,56 @@ void CrownstepSettingsOverlay::cancelConfirmation() {
 	confirmationOpen = false;
 }
 
+void CrownstepSettingsOverlay::openExactRangeMenu(const Vec& localPos) {
+	if (!module) {
+		return;
+	}
+	ui::Menu* menu = createMenu();
+	menu->box.pos = getAbsoluteOffset(localPos);
+	menu->addChild(createMenuLabel("Pitch range (semitones)"));
+	auto* field = new CrownstepRangeField();
+	field->module = module;
+	field->box.size.x = 150.f;
+	char text[32];
+	std::snprintf(text, sizeof(text), "%.6g",
+		crownstep::pitchRangeSemitoneSpan(
+			module->params[Crownstep::RANGE_PARAM].getValue(), module->boardCellCount()));
+	field->setText(text);
+	field->selectAll();
+	menu->addChild(field);
+	if (APP && APP->event) {
+		APP->event->setSelectedWidget(field);
+	}
+}
+
 void CrownstepSettingsOverlay::draw(const DrawArgs& args) {
+	if (!drawAboveRackCables) {
+		drawSurface(args);
+	}
+	OpaqueWidget::draw(args);
+}
+
+void CrownstepSettingsOverlay::drawLayer(const DrawArgs& args, int layer) {
+	// Rack draws plug ends on layer 2 and cable bodies on layer 3. Since the
+	// elevated overlay is appended after Rack's cable container, repainting here
+	// places the complete settings surface above both.
+	if (drawAboveRackCables && layer == 3) {
+		drawSurface(args);
+	}
+	OpaqueWidget::drawLayer(args, layer);
+}
+
+void CrownstepSettingsOverlay::drawSurface(const DrawArgs& args) {
 	const float w = box.size.x;
 	const float h = box.size.y;
-	fillRounded(args.vg, 1.f, 1.f, w - 2.f, h - 2.f, 6.f, nvgRGBA(5, 8, 14, 248));
+	// The settings surface sits above the module controls. Give it a fully opaque
+	// backing layer so bright jacks and lights cannot bleed through either the
+	// panel body or the rounded inset corners.
+	nvgBeginPath(args.vg);
+	nvgRect(args.vg, 0.f, 0.f, w, h);
+	nvgFillColor(args.vg, nvgRGB(5, 8, 14));
+	nvgFill(args.vg);
+	fillRounded(args.vg, 1.f, 1.f, w - 2.f, h - 2.f, 6.f, nvgRGB(5, 8, 14));
 	strokeRounded(args.vg, 1.5f, 1.5f, w - 3.f, h - 3.f, 6.f, nvgRGBA(93, 218, 241, 190), 1.3f);
 
 	setFont(args, 13.f, nvgRGBA(232, 247, 255, 245), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
@@ -255,15 +325,17 @@ void CrownstepSettingsOverlay::draw(const DrawArgs& args) {
 				const float semitones = crownstep::pitchRangeSemitoneSpan(value, module->boardCellCount());
 				fillRounded(args.vg, OUTER, y, w - 2.f * OUTER, ROW_H, 4.f, nvgRGBA(14, 20, 30, 238));
 				setFont(args, 10.f, nvgRGBA(183, 198, 216, 235), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-				nvgText(args.vg, OUTER + 8.f, y + 11.f, "RANGE", nullptr);
-				const float sx = OUTER + 70.f;
+				const float centerY = y + ROW_H * 0.5f;
+				nvgText(args.vg, OUTER + 8.f, centerY, "RANGE", nullptr);
+				const float sx = OUTER + 49.f;
 				const float sw = w - OUTER - 58.f - sx;
-				fillRounded(args.vg, sx, y + 22.f, sw, 3.f, 1.5f, nvgRGBA(42, 53, 68, 255));
-				fillRounded(args.vg, sx, y + 22.f, sw * clamp(value, 0.f, 1.f), 3.f, 1.5f, nvgRGBA(100, 218, 240, 245));
+				constexpr float trackH = 7.f;
+				fillRounded(args.vg, sx, centerY - trackH * 0.5f, sw, trackH, trackH * 0.5f, nvgRGBA(42, 53, 68, 255));
+				fillRounded(args.vg, sx, centerY - trackH * 0.5f, sw * clamp(value, 0.f, 1.f), trackH, trackH * 0.5f, nvgRGBA(100, 218, 240, 245));
 				char text[24];
 				std::snprintf(text, sizeof(text), "%.1f ST", semitones);
 				setFont(args, 9.5f, nvgRGBA(231, 239, 250, 245), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-				nvgText(args.vg, w - OUTER - 8.f, y + 11.f, text, nullptr);
+				nvgText(args.vg, w - OUTER - 8.f, centerY, text, nullptr);
 			}
 			drawRow(4, "BIPOLAR", module->pitchBipolarEnabled ? "ON" : "OFF", true, true);
 			drawRow(5, "SMOOTH MELODY", module->melodicBiasEnabled ? "ON" : "OFF", true, true);
@@ -334,12 +406,17 @@ void CrownstepSettingsOverlay::draw(const DrawArgs& args) {
 		nvgText(args.vg, dx + dw - 69.f, dy + dh - 30.5f, "START NEW GAME", nullptr);
 	}
 
-	OpaqueWidget::draw(args);
 }
 
 void CrownstepSettingsOverlay::onButton(const event::Button& e) {
 	if (e.action != GLFW_PRESS) {
 		OpaqueWidget::onButton(e);
+		return;
+	}
+	if (e.button == GLFW_MOUSE_BUTTON_RIGHT && activeTab == TAB_PITCH
+		&& pointIn(e.pos, OUTER, rowY(3), box.size.x - 2.f * OUTER, ROW_H)) {
+		openExactRangeMenu(e.pos.plus(Vec(0.f, 2.f)));
+		e.consume(this);
 		return;
 	}
 	if (e.button != GLFW_MOUSE_BUTTON_LEFT) {
@@ -405,7 +482,7 @@ void CrownstepSettingsOverlay::onButton(const event::Button& e) {
 		else if (row == 3) {
 			rangeDragging = true;
 			rangeDragOldValue = module->params[Crownstep::RANGE_PARAM].getValue();
-			const float sx = OUTER + 70.f;
+			const float sx = OUTER + 49.f;
 			const float sw = w - OUTER - 58.f - sx;
 			rangeDragValue = clamp((p.x - sx) / sw, 0.f, 1.f);
 			setParamValue(module, Crownstep::RANGE_PARAM, rangeDragValue, false);
@@ -430,8 +507,9 @@ void CrownstepSettingsOverlay::onButton(const event::Button& e) {
 void CrownstepSettingsOverlay::onDragMove(const event::DragMove& e) {
 	if (rangeDragging && module) {
 		const float w = box.size.x;
-		const float sw = w - OUTER - 58.f - (OUTER + 70.f);
-		rangeDragValue = clamp(rangeDragValue + e.mouseDelta.x / std::max(1.f, sw), 0.f, 1.f);
+		const float sw = w - OUTER - 58.f - (OUTER + 49.f);
+		const float localDeltaX = e.mouseDelta.x / std::max(0.001f, getAbsoluteZoom());
+		rangeDragValue = clamp(rangeDragValue + localDeltaX / std::max(1.f, sw), 0.f, 1.f);
 		setParamValue(module, Crownstep::RANGE_PARAM, rangeDragValue, false);
 		e.consume(this);
 		return;

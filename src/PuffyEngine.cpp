@@ -104,6 +104,8 @@ void Engine::setSampleRate(float requestedSampleRate) {
 	dcCoefficient = std::exp(-2.f * kPi * 5.f / sampleRate);
 	swarmSlowCoefficient = onePoleCoefficient(0.003f, sampleRate);
 	transitionLength = std::max(1, int(std::lround(0.005f * sampleRate)));
+	limiterTransitionLength = std::max(
+		1, int(std::lround(0.005f * sampleRate)));
 	reset();
 }
 
@@ -116,7 +118,16 @@ void Engine::setSwarmSeed(std::uint32_t seed) {
 }
 
 void Engine::setLimiterMode(LimiterMode mode) {
-	limiterMode = mode;
+	switch (mode) {
+		case LimiterMode::Hard:
+		case LimiterMode::Soft:
+		case LimiterMode::Off:
+			requestedLimiterMode = mode;
+			break;
+		default:
+			requestedLimiterMode = LimiterMode::Hard;
+			break;
+	}
 }
 
 void Engine::resetSharedControlState() {
@@ -129,6 +140,8 @@ void Engine::resetSharedControlState() {
 	rightPositiveInputActivity = 0.f;
 	rightNegativeInputActivity = 0.f;
 	limiterGain = 1.f;
+	hardLimiterGain = 1.f;
+	softLimiterGain = 1.f;
 	autoDeflateInputSq = 0.f;
 	autoDeflateOutputSq = 0.f;
 	autoDeflateGain = 1.f;
@@ -160,10 +173,83 @@ void Engine::reset() {
 	transitionSample = 0;
 	transitionActive = false;
 	pendingCharacterActive = false;
+	currentLimiterMode = requestedLimiterMode;
+	limiterTransitionFrom = requestedLimiterMode;
+	limiterTransitionTo = requestedLimiterMode;
+	pendingLimiterMode = requestedLimiterMode;
+	limiterTransitionSample = 0;
+	limiterTransitionActive = false;
+	pendingLimiterModeActive = false;
 	swarmRngState = swarmInitialSeed;
 	swarmPreviousFast = 0.f;
 	swarmCurrentFast = 0.f;
 	swarmSlow = 0.f;
+}
+
+void Engine::beginLimiterTransition(LimiterMode requested) {
+	if (limiterTransitionActive) {
+		if (requested == limiterTransitionTo) {
+			pendingLimiterModeActive = false;
+			return;
+		}
+		if (requested == limiterTransitionFrom) {
+			std::swap(limiterTransitionFrom, limiterTransitionTo);
+			limiterTransitionSample = std::max(
+				0,
+				limiterTransitionLength - 1 - limiterTransitionSample);
+			pendingLimiterModeActive = false;
+			return;
+		}
+		pendingLimiterMode = requested;
+		pendingLimiterModeActive = true;
+		return;
+	}
+	if (requested == currentLimiterMode) {
+		pendingLimiterModeActive = false;
+		return;
+	}
+	limiterTransitionFrom = currentLimiterMode;
+	limiterTransitionTo = requested;
+	limiterTransitionSample = 0;
+	limiterTransitionActive = true;
+}
+
+float Engine::updateLimiterBranchGain(
+	LimiterMode mode,
+	float peak,
+	float currentGain) const {
+	if (mode == LimiterMode::Off) {
+		return 1.f;
+	}
+
+	float desiredGain = 1.f;
+	if (mode == LimiterMode::Soft && peak > kSoftKneeVolts) {
+		// A unity-slope knee that approaches the 5 V rail asymptotically.
+		const float aboveKnee = peak - kSoftKneeVolts;
+		const float mappedPeak = kSoftKneeVolts
+			+ aboveKnee / (1.f + aboveKnee);
+		desiredGain = mappedPeak
+			/ std::max(peak, std::numeric_limits<float>::min());
+	}
+	else if (peak > kLiveCeilingVolts) {
+		desiredGain = kLiveCeilingVolts
+			/ std::max(peak, std::numeric_limits<float>::min());
+	}
+
+	currentGain += (1.f - currentGain) * limiterReleaseCoefficient;
+	return std::min(currentGain, desiredGain);
+}
+
+float Engine::limiterBranchGain(LimiterMode mode) const {
+	switch (mode) {
+		case LimiterMode::Soft:
+			return softLimiterGain;
+		case LimiterMode::Off:
+			return 1.f;
+		case LimiterMode::Hard:
+		default:
+			return hardLimiterGain;
+	}
 }
 
 void Engine::resetChannel(bool left) {
@@ -763,39 +849,37 @@ Frame Engine::process(
 	normalizedRight *= appliedAutoGain;
 	float outputLeft = normalizedLeft * kReferenceVolts;
 	float outputRight = normalizedRight * kReferenceVolts;
-	if (limiterMode != LimiterMode::Off) {
-		const float peak = std::max(std::fabs(outputLeft), std::fabs(outputRight));
-		float desiredGain = 1.f;
-		if (limiterMode == LimiterMode::Soft && peak > kSoftKneeVolts) {
-			// A unity-slope knee that approaches the 5 V rail asymptotically.
-			// Deriving one gain from the linked peak preserves the stereo image.
-			const float aboveKnee = peak - kSoftKneeVolts;
-			const float mappedPeak = kSoftKneeVolts
-				+ aboveKnee / (1.f + aboveKnee);
-			desiredGain = mappedPeak
-				/ std::max(peak, std::numeric_limits<float>::min());
-		}
-		else if (peak > kLiveCeilingVolts) {
-			desiredGain = kLiveCeilingVolts
-				/ std::max(peak, std::numeric_limits<float>::min());
-		}
-		limiterGain += (1.f - limiterGain) * limiterReleaseCoefficient;
-		limiterGain = std::min(limiterGain, desiredGain);
-		outputLeft *= limiterGain;
-		outputRight *= limiterGain;
-
-		const float limitedPeak = std::max(
-			std::fabs(outputLeft), std::fabs(outputRight));
-		if (limitedPeak > kLiveCeilingVolts) {
-			const float guard = kLiveCeilingVolts / limitedPeak;
-			outputLeft *= guard;
-			outputRight *= guard;
-			limiterGain *= guard;
+	const float peak = std::max(std::fabs(outputLeft), std::fabs(outputRight));
+	// Keep both limiting branches warm so switching never starts from a stale
+	// envelope. Mode changes then need only crossfade their linked gains.
+	hardLimiterGain = updateLimiterBranchGain(
+		LimiterMode::Hard, peak, hardLimiterGain);
+	softLimiterGain = updateLimiterBranchGain(
+		LimiterMode::Soft, peak, softLimiterGain);
+	beginLimiterTransition(requestedLimiterMode);
+	if (limiterTransitionActive) {
+		const float t = clamp01(
+			float(limiterTransitionSample)
+				/ float(std::max(limiterTransitionLength - 1, 1)));
+		const float fromGain = limiterBranchGain(limiterTransitionFrom);
+		const float toGain = limiterBranchGain(limiterTransitionTo);
+		limiterGain = fromGain + (toGain - fromGain) * t;
+		limiterTransitionSample++;
+		if (limiterTransitionSample >= limiterTransitionLength) {
+			currentLimiterMode = limiterTransitionTo;
+			limiterTransitionActive = false;
+			if (pendingLimiterModeActive) {
+				const LimiterMode queuedMode = pendingLimiterMode;
+				pendingLimiterModeActive = false;
+				beginLimiterTransition(queuedMode);
+			}
 		}
 	}
 	else {
-		limiterGain = 1.f;
+		limiterGain = limiterBranchGain(currentLimiterMode);
 	}
+	outputLeft *= limiterGain;
+	outputRight *= limiterGain;
 
 	if (!std::isfinite(outputLeft) || !std::isfinite(outputRight)) {
 		outputLeft = 0.f;
