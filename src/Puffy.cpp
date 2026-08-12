@@ -59,9 +59,9 @@ Puffy::Puffy() {
 	configOutput(OUTPUT_R, "Right audio");
 	configLight(LIMIT_LIGHT, "Limiter gain reduction");
 	configLight(CHARACTER_LINK_LIGHT, "Polarity character link");
-	configLight(LIMITER_HARD_LIGHT, "Hard limiter selected");
-	configLight(LIMITER_SOFT_LIGHT, "Soft limiter selected");
-	configLight(LIMITER_OFF_LIGHT, "Limiter off");
+	configLight(LIMITER_HARD_LIGHT, "Hard Limiter");
+	configLight(LIMITER_SOFT_LIGHT, "Soft Limiter");
+	configLight(LIMITER_OFF_LIGHT, "No Limiter");
 	configLight(ROAMING_LIGHT, "Roaming mode enabled");
 	configBypass(INPUT_L, OUTPUT_L);
 	configBypass(INPUT_R, OUTPUT_R);

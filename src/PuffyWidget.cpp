@@ -1534,32 +1534,33 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 		fish->box.size.x * 0.02f, 1.f));
 	addParam(roamingRange);
 
-	const Vec characterMenuSize = mm2px(Vec(13.5f, 4.5f));
-	const Vec characterMenuInset = mm2px(Vec(0.6f, 0.6f));
+	math::Rect negativeCharacterPillMm(
+		Vec(1.5369994f, 58.077893f), Vec(13.5f, 4.5f));
+	panel_svg::loadRectFromSvgMm(
+		panelPath, "negative_character_pillbox", &negativeCharacterPillMm);
 	auto* negativeCharacterMenu = createParam<PuffyCharacterMenuButton>(
 		Vec(), module, Puffy::CHARACTER_PARAM);
 	negativeCharacterMenu->negativePart = true;
-	negativeCharacterMenu->box.size = characterMenuSize;
-	negativeCharacterMenu->box.pos = fish->box.pos.plus(Vec(
-		characterMenuInset.x,
-		fish->box.size.y - characterMenuSize.y - characterMenuInset.y));
+	negativeCharacterMenu->box.pos = mm2px(negativeCharacterPillMm.pos);
+	negativeCharacterMenu->box.size = mm2px(negativeCharacterPillMm.size);
 	addParam(negativeCharacterMenu);
 
 	auto* polarityLinkIcon = createParam<PuffyPolarityLinkButton>(
-		Vec(
-			negativeCharacterMenu->box.pos.x,
-			negativeCharacterMenu->box.pos.y - 14.f - 3.f),
+		anchor("polarity_link_button", Vec(4.2463326f, 55.029892f))
+			.minus(Vec(8.f)),
 		module,
 		Puffy::CHARACTER_LINK_PARAM);
 	addParam(polarityLinkIcon);
 
+	math::Rect positiveCharacterPillMm(
+		Vec(45.921999f, 58.077893f), Vec(13.5f, 4.5f));
+	panel_svg::loadRectFromSvgMm(
+		panelPath, "positive_character_pillbox", &positiveCharacterPillMm);
 	auto* positiveCharacterMenu = createParam<PuffyCharacterMenuButton>(
 		Vec(), module, Puffy::POSITIVE_CHARACTER_PARAM);
 	positiveCharacterMenu->negativePart = false;
-	positiveCharacterMenu->box.size = characterMenuSize;
-	positiveCharacterMenu->box.pos = fish->box.pos.plus(Vec(
-		fish->box.size.x - characterMenuSize.x - characterMenuInset.x,
-		fish->box.size.y - characterMenuSize.y - characterMenuInset.y));
+	positiveCharacterMenu->box.pos = mm2px(positiveCharacterPillMm.pos);
+	positiveCharacterMenu->box.size = mm2px(positiveCharacterPillMm.size);
 	addParam(positiveCharacterMenu);
 
 	// Match Undertow's OCT control: the aperture LED is integrated directly
@@ -1633,14 +1634,16 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 		module, Puffy::LIMIT_LIGHT));
 
 	// The bottom-row black channel visually places the limiter between Puffy's
-	// input and output groups. The master-SVG anchor is the button's top-right
-	// corner; every part of the cluster is derived from that single point.
+	// input and output groups. The master-SVG anchor matches the button's center
+	// and radius; every part of the cluster is derived from that center.
 	const Vec limiterGroupAnchor = anchor(
-		"limiter_mode_group", Vec(33.15f, 115.8f));
-	const float limiterRight = limiterGroupAnchor.x;
+		"limiter_mode_group", Vec(30.61f, 118.34f));
+	const float limiterButtonSize = 15.f;
+	const float limiterRight = limiterGroupAnchor.x + 0.5f * limiterButtonSize;
 	const float limiterLedX = limiterRight - mm2px(1.15f);
 	const float limiterRowSpacing = mm2px(3.f);
-	const float limiterFirstY = limiterGroupAnchor.y - mm2px(7.8f);
+	const float limiterFirstY = limiterGroupAnchor.y
+		- 0.5f * limiterButtonSize - mm2px(7.8f);
 	auto* limiterLabels = new PuffyLimiterModeLabels();
 	limiterLabels->box.pos = Vec(
 		limiterLedX - mm2px(4.f), limiterFirstY - 0.5f * limiterRowSpacing);
@@ -1654,9 +1657,8 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	addChild(createLightCentered<TinyAperture<WhiteApertureLight>>(
 		Vec(limiterLedX, limiterFirstY + 2.f * limiterRowSpacing),
 		module, Puffy::LIMITER_OFF_LIGHT));
-	const float limiterButtonSize = 15.f;
 	addParam(createParam<PuffyLimiterModeButton>(
-		Vec(limiterRight - limiterButtonSize, limiterGroupAnchor.y),
+		limiterGroupAnchor.minus(Vec(0.5f * limiterButtonSize)),
 		module, Puffy::LIMITER_BUTTON_PARAM));
 
 	addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));

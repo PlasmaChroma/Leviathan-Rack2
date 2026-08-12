@@ -24,7 +24,7 @@
      inkscape:document-units="mm"
      inkscape:zoom="3.421466"
      inkscape:cx="109.60214"
-     inkscape:cy="349.7039"
+     inkscape:cy="256.17674"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -273,6 +273,24 @@
        width="3271.9331"
        height="1224.054"
        style="display:none" />
+    <rect
+       id="negative_character_pillbox"
+       x="153.69994"
+       y="5807.7893"
+       width="1350"
+       height="450"
+       rx="225"
+       ry="225"
+       style="fill:#425f34;fill-opacity:1" />
+    <rect
+       id="positive_character_pillbox"
+       x="4592.1999"
+       y="5807.7893"
+       width="1350"
+       height="450"
+       rx="225"
+       ry="225"
+       style="fill:#425f34;fill-opacity:1" />
     <circle
        id="puff_param"
        cx="820.40002"
@@ -335,15 +353,21 @@
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="limiter_mode_group"
-       cx="3315"
-       cy="11580"
-       r="20"
+       cx="3061"
+       cy="11834"
+       r="254"
+       style="fill:#425f34;fill-opacity:1" />
+    <circle
+       id="polarity_link_button"
+       cx="424.63328"
+       cy="5502.9893"
+       r="270.93333"
        style="fill:#425f34;fill-opacity:1" />
     <circle
        id="roaming_button"
-       cx="5625"
-       cy="4533"
-       r="20"
+       cx="5637.3999"
+       cy="5443"
+       r="304.79999"
        style="fill:#425f34;fill-opacity:1" />
   </g>
   <rect

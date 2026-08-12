@@ -32,6 +32,8 @@
   </g>
   <g id="components" opacity="0" style="display:inline;opacity:1">
     <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="1412.0334" y="11843.102" width="3271.9331" height="1224.054" style="display:none" />
+    <rect id="negative_character_pillbox" x="153.69994" y="5807.7893" width="1350" height="450" rx="225" ry="225" style="fill:#425f34;fill-opacity:1" />
+    <rect id="positive_character_pillbox" x="4592.1999" y="5807.7893" width="1350" height="450" rx="225" ry="225" style="fill:#425f34;fill-opacity:1" />
     <circle id="puff_param" cx="820.40002" cy="9585.2002" r="300" style="fill:#425f34;fill-opacity:1" />
     <circle id="sensitivity_param" cx="4296.5327" cy="9585.2002" r="200" style="fill:#425f34;fill-opacity:1" />
     <circle id="mix_param" cx="5477.2314" cy="9585.2002" r="200" style="fill:#425f34;fill-opacity:1" />
@@ -42,8 +44,9 @@
     <circle id="output_l" cx="4050" cy="11193.589" r="220" style="fill:#425f34;fill-opacity:1" />
     <circle id="output_r" cx="5450" cy="11193.589" r="220" style="fill:#425f34;fill-opacity:1" />
     <circle id="limit_light" cx="4750" cy="11193.589" r="100" style="fill:#425f34;fill-opacity:1" />
-    <circle id="limiter_mode_group" cx="3315" cy="11580" r="20" style="fill:#425f34;fill-opacity:1" />
-    <circle id="roaming_button" cx="5625" cy="4533" r="20" style="fill:#425f34;fill-opacity:1" />
+    <circle id="limiter_mode_group" cx="3061" cy="11834" r="254" style="fill:#425f34;fill-opacity:1" />
+    <circle id="polarity_link_button" cx="424.63328" cy="5502.9893" r="270.93333" style="fill:#425f34;fill-opacity:1" />
+    <circle id="roaming_button" cx="5637.3999" cy="5443" r="304.79999" style="fill:#425f34;fill-opacity:1" />
   </g>
   <rect id="fish_rect" x="73.699944" y="946.40009" width="5948.5" height="5391.3892" style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:29.8001;stroke-dasharray:none;stroke-opacity:1" />
   <rect id="transfer_preview_rect" x="76.940689" y="6413.54" width="5942.2183" height="2302.0186" style="display:inline;opacity:1;fill:none;fill-opacity:1;stroke:#1ccad8;stroke-width:36.0816;stroke-dasharray:none;stroke-opacity:1" />
