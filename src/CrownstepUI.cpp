@@ -3953,10 +3953,35 @@ struct CrownstepWidget final : ModuleWidget {
 		addChild(settingsOverlay);
 	}
 
-	void openSettings() {
-		if (settingsOverlay) {
-			settingsOverlay->open();
+	~CrownstepWidget() override {
+		// An open overlay is temporarily owned by RackWidget so it can render above
+		// Rack's cable and plug containers. Reclaim it before this widget disappears.
+		if (settingsOverlay && settingsOverlay->parent != this) {
+			if (settingsOverlay->parent) {
+				settingsOverlay->parent->removeChild(settingsOverlay);
+			}
+			delete settingsOverlay;
+			settingsOverlay = nullptr;
 		}
+	}
+
+	void openSettings() {
+		if (!settingsOverlay || !APP || !APP->scene || !APP->scene->rack) {
+			return;
+		}
+		auto* rack = APP->scene->rack;
+		if (parent != rack->getModuleContainer() || settingsOverlay->parent != this) {
+			return;
+		}
+
+		// Cables and their plugs are separate RackWidget children drawn after the
+		// module container. While open, host the overlay directly on RackWidget and
+		// add it last so the settings surface is genuinely above those layers.
+		const Vec rackPos = settingsOverlay->getRelativeOffset(Vec(), rack);
+		removeChild(settingsOverlay);
+		settingsOverlay->box.pos = rackPos;
+		rack->addChild(settingsOverlay);
+		settingsOverlay->open();
 	}
 
 	void closeSettings() {
@@ -3966,6 +3991,13 @@ struct CrownstepWidget final : ModuleWidget {
 		settingsOverlay->visible = false;
 		if (APP && APP->event && APP->event->getSelectedWidget() == settingsOverlay) {
 			APP->event->setSelectedWidget(nullptr);
+		}
+		if (settingsOverlay->parent != this) {
+			if (settingsOverlay->parent) {
+				settingsOverlay->parent->removeChild(settingsOverlay);
+			}
+			settingsOverlay->box.pos = Vec();
+			addChild(settingsOverlay);
 		}
 	}
 

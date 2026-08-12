@@ -189,7 +189,14 @@ void CrownstepSettingsOverlay::cancelConfirmation() {
 void CrownstepSettingsOverlay::draw(const DrawArgs& args) {
 	const float w = box.size.x;
 	const float h = box.size.y;
-	fillRounded(args.vg, 1.f, 1.f, w - 2.f, h - 2.f, 6.f, nvgRGBA(5, 8, 14, 248));
+	// The settings surface sits above the module controls. Give it a fully opaque
+	// backing layer so bright jacks and lights cannot bleed through either the
+	// panel body or the rounded inset corners.
+	nvgBeginPath(args.vg);
+	nvgRect(args.vg, 0.f, 0.f, w, h);
+	nvgFillColor(args.vg, nvgRGB(5, 8, 14));
+	nvgFill(args.vg);
+	fillRounded(args.vg, 1.f, 1.f, w - 2.f, h - 2.f, 6.f, nvgRGB(5, 8, 14));
 	strokeRounded(args.vg, 1.5f, 1.5f, w - 3.f, h - 3.f, 6.f, nvgRGBA(93, 218, 241, 190), 1.3f);
 
 	setFont(args, 13.f, nvgRGBA(232, 247, 255, 245), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
