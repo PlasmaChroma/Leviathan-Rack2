@@ -87,6 +87,134 @@ generation is deliberately not fixed in this plan.
 Pointer identity may be part of a key but must not be the only defense against
 allocator reuse.
 
+### 3.1 Source-confirmed context facts
+
+The Rack SDK and current Leviathan source establish the following:
+
+- `Widget::ContextCreateEvent` is recursively delivered after the Window,
+  OpenGL context, and NanoVG context are created.
+- `Widget::ContextDestroyEvent` is recursively delivered before those Window
+  contexts are destroyed.
+- Both events expose an `NVGcontext*`; neither exposes a unique OpenGL context
+  ID or monotonically increasing generation.
+- `OpenGlWidget` inherits `FramebufferWidget` and dirties every frame by
+  default. A cached GL surface must override `step()` and call
+  `FramebufferWidget::step()`.
+- `FramebufferWidget` owns its framebuffer internals, dirty scheduling,
+  context callbacks, and redraw-on-next-draw behavior.
+- The current UI thread can query `glfwGetCurrentContext()`. TD.Scope currently
+  regards GL as current when that value equals `APP->window->win`.
+- HaloKnob2 clears inherited GL names unconditionally in its explicit
+  context-create callback before lazy rebuilding.
+- Bifurx likewise has explicit create/destroy callbacks and abandons inherited
+  names on create.
+- A raw GL object name can be reused by a later context and therefore cannot
+  prove ownership or validity.
+- NanoVG image handles are context-owned; Puffy and shared NVG helpers treat a
+  changed or invalid context as a reason to abandon rather than cross-delete.
+
+These facts justify generation-based ownership but do not yet identify the
+correct global coordinator.
+
+### 3.2 Unresolved facts requiring diagnostic observation
+
+The first diagnostic run must determine:
+
+- callback order between parent framebuffer widgets, child OpenGL widgets, and
+  independent module widgets;
+- whether every surviving widget receives create after a missed destroy in the
+  target DAW;
+- whether the `NVGcontext*`, GLFW window pointer, or both can reuse the same
+  address across editor reopen;
+- whether module-browser previews use the primary Rack context, a distinct
+  context, or framebuffer bypass without GL initialization;
+- whether more than one relevant graphics context can be active during the
+  plugin's lifetime;
+- whether widgets inserted after initial context creation receive a create
+  event before first draw;
+- the actual UI thread identity for create, destroy, step, and draw callbacks;
+- whether destroy callbacks run while `glfwGetCurrentContext()` still matches
+  `APP->window->win` in standalone and each target plugin host;
+- behavior during window resize, monitor/DPR movement, and editor replacement;
+- whether Rack destroys the scene tree before or after the final useful shared
+  registry retirement point.
+
+No production resource-registry design may claim these answers from source
+alone.
+
+### 3.3 Context observation record
+
+Each diagnostic event row should contain:
+
+```text
+sequence,wall_time_us,thread_id,event,
+widget_family,widget_address,module_id,
+nvg_context_address,glfw_current_context_address,rack_window_address,
+resource_generation_if_any,notes
+```
+
+Address values are diagnostic correlation aids, not durable identifiers. Logs
+must avoid audio-thread access and remain debug-gated.
+
+### 3.4 C1 — Standalone context observation procedure
+
+Run two variants with the same instrumented build.
+
+#### C1A — Patch present at startup
+
+1. Save a patch containing Integral Flux, Bifurx, Puffy, TD.Scope, and Wyrm with
+   their relevant visuals visible.
+2. Start standalone Rack directly into that patch.
+3. Record create callbacks, first step/draw/acquire for each family, and first
+   correct visual frame.
+4. Pan and zoom without changing parameters.
+5. Open the module browser and expose Halo and GL-backed previews.
+6. Close the browser, remove one instance, add it again, then exit Rack.
+7. Record destroy callbacks and whether GL is still current during them.
+
+#### C1B — Widgets inserted after context creation
+
+1. Start standalone Rack with an empty patch.
+2. After the window is stable, insert the same target modules one at a time.
+3. Record whether each new widget receives context create before first step and
+   first draw.
+4. Duplicate modules and remove them in a different order.
+5. Exit and record destroy/teardown ordering.
+
+Repeat both variants at least three times before treating ordering as stable.
+
+### 3.5 C2 — Target-DAW editor lifecycle procedure
+
+1. Load the plugin in the target DAW with the C1 target patch.
+2. Open the editor and wait for all visuals to reach a correct frame.
+3. Resize the editor, pan/zoom Rack, and open/close the module browser.
+4. Close the editor without unloading the plugin instance.
+5. Wait at least two seconds, reopen, and record callbacks, pointer identities,
+   GL-current state, rebuilds, fallback, and time to first correct frame.
+6. Repeat close/reopen at least ten times.
+7. Repeat one cycle after moving the editor between monitors/DPRs if available.
+8. Save/reload the DAW project and distinguish plugin-instance destruction from
+   editor-only context replacement.
+9. Finally unload the plugin instance and record the terminal destroy/teardown
+   sequence.
+
+Run once with extra GL validation disabled and once enabled. The validation run
+is diagnostic only and is not used for performance comparison.
+
+### 3.6 Observation exit criteria
+
+The context discovery phase is complete only when:
+
+- C1A, C1B, and C2 raw logs are retained;
+- every unresolved item in Section 3.2 is answered or explicitly marked
+  unobservable;
+- event order differences between standalone and DAW are documented;
+- the chosen generation coordinator and key are justified from observations;
+- missed-destroy recovery behavior is demonstrated rather than assumed;
+- preview behavior is classified;
+- the proposed registry retirement point is named;
+- the decision is recorded before D1 exposes a shared GL handle.
+
 ---
 
 ## 4. Minimal conceptual API
@@ -271,6 +399,21 @@ Counters must distinguish logical resource families from raw GL object counts.
 ---
 
 ## 11. Implementation phases
+
+### Pre-code documentation gate
+
+Before even diagnostic code is added, the following must exist:
+
+- the source ownership inventory in `LRC_Baseline_and_Benchmarks.md`;
+- the benchmark environment and raw-result schema;
+- this fact/unknown context ledger;
+- the Halo visual-reference manifest;
+- the first-code file/change boundary and rollback sequence;
+- a named standalone and DAW observation procedure;
+- an explicit list of questions that diagnostic logging must answer.
+
+Once this gate is satisfied, the first code is diagnostic instrumentation only.
+The shared registry does not begin until those observations are recorded.
 
 ### Phase A — Context event probe
 

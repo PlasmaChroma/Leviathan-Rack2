@@ -90,6 +90,97 @@ The following may not change during this experiment:
 HaloKnob2 is consumed by released modules. Any intentional visual change is a
 separate task with explicit screenshot approval.
 
+### 3.1 Visual-reference manifest
+
+References are captured before shared-resource integration. They establish
+composition, alignment, rotation, color isolation, bloom behavior, and fallback
+expectations. They are not used to demand bit-identical pixels across different
+GPUs, drivers, DPRs, or NanoVG versus GLSL rasterization.
+
+#### Canonical value sweep
+
+Capture the GL renderer for both configurations:
+
+```text
+default cyan/purple
+bright orange
+```
+
+At normalized values:
+
+```text
+0.00, 0.25, 0.50, 0.75, 1.00
+```
+
+Use normal/unlit center state, the recorded project-default halo brightness,
+100% Rack zoom, and DPR 1. This produces ten canonical images.
+
+#### State and bloom sweep
+
+At normalized value `0.50`, capture both configurations with:
+
+- normal center;
+- hovered/lit center;
+- dragging/lit center after the first drag frame;
+- bloom raw values `0.0`, the recorded project default, and `1.5`.
+
+Hover and drag may currently share the same lit artwork, but both interaction
+transitions are captured to catch stale-state or dirtying regressions.
+
+#### Scale and pixel-ratio sweep
+
+For default cyan/purple at normalized value `0.50`, normal center, and the
+project-default bloom, capture:
+
+```text
+Rack zoom: 75%, 100%, 150%, 200%
+DPR:       1 and 2 where hardware/host support is available
+```
+
+Record the logical widget size, Rack framebuffer size, and actual pixel ratio
+with every image.
+
+#### Fallback comparison
+
+At values `0.00`, `0.50`, and `1.00`, capture GL and forced-NanoVG output for
+both configurations using identical zoom, DPR, and bloom settings.
+
+Fallback need not be pixel-identical, but it must preserve:
+
+- control bounds and center;
+- sweep direction and endpoint meaning;
+- active/inactive color identity;
+- cap value rotation;
+- normal versus lit center state;
+- absence of clipping, missing cap, stale frame, or opaque background.
+
+#### Multi-control state-isolation reference
+
+Capture one rack region containing adjacent default and orange Halo knobs at
+different values and center states. This becomes the reference for detecting
+uniform or texture state leakage between consecutive shared draws.
+
+#### Capture record and naming
+
+Reference images are lossless PNGs with no scaling or post-processing. Each
+capture records:
+
+```text
+code revision, module/control, config, normalized value,
+raw bloom value, center state, renderer, Rack zoom, DPR,
+logical widget size, framebuffer size, OS, GPU, driver
+```
+
+Suggested name:
+
+```text
+halo2_<config>_v050_bdefault_lit_gl_z100_dpr1.png
+```
+
+When captured, store the manifest and approved images under a dedicated
+`doc/LRC-reference/HaloKnob2/` directory or record an external stable location
+and checksums in the result document. Do not create placeholder images.
+
 ---
 
 ## 4. Target resource split
@@ -224,6 +315,87 @@ Actual measured counts override these source-derived expectations.
 
 ## 10. Implementation phases
 
+### 10.1 First-code boundary
+
+The initial work is deliberately divided so every stage can be removed without
+disturbing later stages.
+
+#### D0 — Diagnostic-only change
+
+Allowed changes:
+
+- `src/visual/HaloKnob2.cpp` for debug-gated context/resource event counters;
+- a small diagnostics-only helper under `src/` if local logging would otherwise
+  obscure Halo rendering;
+- build/test wiring required by that helper;
+- documentation of observed results.
+
+Forbidden changes:
+
+- GL ownership or rendering behavior;
+- shader source;
+- resource sharing;
+- fallback selection;
+- any module DSP, enum, serialization, SVG, or panel asset.
+
+Rollback: remove the diagnostic helper/calls and their build wiring. Visual and
+resource behavior must be identical before and after rollback.
+
+#### D1 — Dormant pure lifecycle model
+
+Provisional new files:
+
+```text
+src/LrcContextResources.hpp
+src/LrcContextResources.cpp
+tests/lrc_context_resources_spec.cpp
+```
+
+Names may be adjusted once context discovery identifies the correct boundary,
+but the responsibility remains limited to generation/resource state. D1 does
+not expose GL handles to Halo and does not change any draw.
+
+Allowed existing-file changes are build/test registration only.
+
+Rollback: remove the dormant files and build/test registration.
+
+#### D2 — Halo shared-program experiment
+
+Allowed changes:
+
+- the accepted context-resource files;
+- `src/visual/HaloKnob2.cpp`;
+- `src/visual/VisualAssets.hpp` only if a declaration boundary is genuinely
+  required;
+- focused tests and build wiring;
+- debug instrumentation and result documentation.
+
+`src/plugin.cpp` or `src/plugin.hpp` may change only if diagnostic evidence
+proves that plugin-level context coordination is required. They are not the
+default home for renderer state.
+
+Explicitly out of scope:
+
+- `BifurxGL.cpp`, `TDScopeGL.cpp`, `WyrmSandGL.cpp`, Puffy rendering, or other
+  consumers;
+- shader visual enhancements;
+- batching or instancing;
+- dynamic buffer pools;
+- texture/material catalogues;
+- module-wide Halo surfaces;
+- parameter, input, output, light, JSON, or patch changes;
+- SVG, raster, panel, or label assets.
+
+Rollback: switch Halo acquisition back to its existing local program ownership
+and remove the dormant shared-program path. The old local implementation is
+not deleted until D2 passes context, fallback, visual, and benchmark gates.
+
+#### D3 and D4 — Quad and texture sharing
+
+Only after D2 is accepted may later changes share the immutable quad and cap
+texture. Each remains a separate diff and rollback point; neither is folded
+into the first shared-program patch.
+
 ### Phase A — Freeze visual reference
 
 Capture reference screenshots for normal and bright-orange configs at several
@@ -263,7 +435,7 @@ added before this decision.
 
 ---
 
-## 11. Released-module validation matrix
+## 11. Halo-consumer validation matrix
 
 At minimum validate Halo consumers in:
 

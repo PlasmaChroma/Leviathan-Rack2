@@ -39,6 +39,8 @@ One module-wide dynamic surface is an available tool, not the LRC definition.
 
 Before any candidate implementation:
 
+- the source-audited ownership record in
+  `LRC_Baseline_and_Benchmarks.md` has been reviewed for that candidate;
 - its baseline scenario exists;
 - dirty causes and current redraw policy are known;
 - its graphics lifecycle has been exercised in the target DAW;

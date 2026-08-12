@@ -511,6 +511,26 @@ must be exercised in the Windows/MSYS2 Rack toolchain and the intended DAW host.
 
 Implementation is split into bounded companion plans.
 
+### Preimplementation documentation gate
+
+Before renderer architecture changes begin, the companion plans must contain:
+
+- a source-audited ownership/resource inventory;
+- a benchmark environment record and common result schema;
+- repeatable scenario recipes;
+- a source-confirmed fact versus observed-unknown context ledger;
+- standalone and DAW context-observation procedures;
+- a Halo visual-reference manifest;
+- a first-code file boundary, exclusions, and rollback sequence.
+
+Those definitions are now part of the companion plans. The reference images,
+runtime context observations, and measured baseline are execution artifacts and
+cannot be truthfully completed through prose alone.
+
+Accordingly, the first permitted implementation work is debug-gated diagnostic
+instrumentation. Shared resource ownership begins only after the observations
+and baseline are recorded.
+
 ### Milestone 0 — Baseline and benchmark contract
 
 Plan: [LRC baseline and benchmarks](LRC_Baseline_and_Benchmarks.md)
