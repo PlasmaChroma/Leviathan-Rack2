@@ -325,15 +325,17 @@ void CrownstepSettingsOverlay::drawSurface(const DrawArgs& args) {
 				const float semitones = crownstep::pitchRangeSemitoneSpan(value, module->boardCellCount());
 				fillRounded(args.vg, OUTER, y, w - 2.f * OUTER, ROW_H, 4.f, nvgRGBA(14, 20, 30, 238));
 				setFont(args, 10.f, nvgRGBA(183, 198, 216, 235), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-				nvgText(args.vg, OUTER + 8.f, y + 11.f, "RANGE", nullptr);
-				const float sx = OUTER + 70.f;
+				const float centerY = y + ROW_H * 0.5f;
+				nvgText(args.vg, OUTER + 8.f, centerY, "RANGE", nullptr);
+				const float sx = OUTER + 49.f;
 				const float sw = w - OUTER - 58.f - sx;
-				fillRounded(args.vg, sx, y + 22.f, sw, 3.f, 1.5f, nvgRGBA(42, 53, 68, 255));
-				fillRounded(args.vg, sx, y + 22.f, sw * clamp(value, 0.f, 1.f), 3.f, 1.5f, nvgRGBA(100, 218, 240, 245));
+				constexpr float trackH = 7.f;
+				fillRounded(args.vg, sx, centerY - trackH * 0.5f, sw, trackH, trackH * 0.5f, nvgRGBA(42, 53, 68, 255));
+				fillRounded(args.vg, sx, centerY - trackH * 0.5f, sw * clamp(value, 0.f, 1.f), trackH, trackH * 0.5f, nvgRGBA(100, 218, 240, 245));
 				char text[24];
 				std::snprintf(text, sizeof(text), "%.1f ST", semitones);
 				setFont(args, 9.5f, nvgRGBA(231, 239, 250, 245), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-				nvgText(args.vg, w - OUTER - 8.f, y + 11.f, text, nullptr);
+				nvgText(args.vg, w - OUTER - 8.f, centerY, text, nullptr);
 			}
 			drawRow(4, "BIPOLAR", module->pitchBipolarEnabled ? "ON" : "OFF", true, true);
 			drawRow(5, "SMOOTH MELODY", module->melodicBiasEnabled ? "ON" : "OFF", true, true);
@@ -480,7 +482,7 @@ void CrownstepSettingsOverlay::onButton(const event::Button& e) {
 		else if (row == 3) {
 			rangeDragging = true;
 			rangeDragOldValue = module->params[Crownstep::RANGE_PARAM].getValue();
-			const float sx = OUTER + 70.f;
+			const float sx = OUTER + 49.f;
 			const float sw = w - OUTER - 58.f - sx;
 			rangeDragValue = clamp((p.x - sx) / sw, 0.f, 1.f);
 			setParamValue(module, Crownstep::RANGE_PARAM, rangeDragValue, false);
@@ -505,7 +507,7 @@ void CrownstepSettingsOverlay::onButton(const event::Button& e) {
 void CrownstepSettingsOverlay::onDragMove(const event::DragMove& e) {
 	if (rangeDragging && module) {
 		const float w = box.size.x;
-		const float sw = w - OUTER - 58.f - (OUTER + 70.f);
+		const float sw = w - OUTER - 58.f - (OUTER + 49.f);
 		const float localDeltaX = e.mouseDelta.x / std::max(0.001f, getAbsoluteZoom());
 		rangeDragValue = clamp(rangeDragValue + localDeltaX / std::max(1.f, sw), 0.f, 1.f);
 		setParamValue(module, Crownstep::RANGE_PARAM, rangeDragValue, false);
