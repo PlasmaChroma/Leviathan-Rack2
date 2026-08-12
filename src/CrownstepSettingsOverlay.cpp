@@ -1,6 +1,7 @@
 #include "CrownstepSettingsOverlay.hpp"
 
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 
 namespace {
@@ -80,6 +81,29 @@ void setParamValue(Crownstep* module, int paramId, float value, bool addHistory 
 	}
 	module->refreshHeldPitchForCurrentStep();
 }
+
+struct CrownstepRangeField final : ui::TextField {
+	Crownstep* module = nullptr;
+
+	void onSelectKey(const event::SelectKey& e) override {
+		if (e.action == GLFW_PRESS
+			&& (e.isKeyCommand(GLFW_KEY_ENTER) || e.isKeyCommand(GLFW_KEY_KP_ENTER))) {
+			char* end = nullptr;
+			const float semitones = std::strtof(text.c_str(), &end);
+			if (end != text.c_str() && std::isfinite(semitones) && module) {
+				const float boardSpan = float(std::max(1, module->boardCellCount() - 1));
+				const float rangeParam = crownstep::pitchRangeParamFromMultiplier(semitones / boardSpan);
+				setParamValue(module, Crownstep::RANGE_PARAM, rangeParam);
+				if (ui::MenuOverlay* overlay = getAncestorOfType<ui::MenuOverlay>()) {
+					overlay->requestDelete();
+				}
+			}
+			e.consume(this);
+			return;
+		}
+		ui::TextField::onSelectKey(e);
+	}
+};
 
 float rowY(int index) {
 	return CONTENT_Y + float(index) * (ROW_H + ROW_GAP);
@@ -184,6 +208,28 @@ void CrownstepSettingsOverlay::confirmNewGame() {
 
 void CrownstepSettingsOverlay::cancelConfirmation() {
 	confirmationOpen = false;
+}
+
+void CrownstepSettingsOverlay::openExactRangeMenu(const Vec& localPos) {
+	if (!module) {
+		return;
+	}
+	ui::Menu* menu = createMenu();
+	menu->box.pos = getAbsoluteOffset(localPos);
+	menu->addChild(createMenuLabel("Pitch range (semitones)"));
+	auto* field = new CrownstepRangeField();
+	field->module = module;
+	field->box.size.x = 150.f;
+	char text[32];
+	std::snprintf(text, sizeof(text), "%.6g",
+		crownstep::pitchRangeSemitoneSpan(
+			module->params[Crownstep::RANGE_PARAM].getValue(), module->boardCellCount()));
+	field->setText(text);
+	field->selectAll();
+	menu->addChild(field);
+	if (APP && APP->event) {
+		APP->event->setSelectedWidget(field);
+	}
 }
 
 void CrownstepSettingsOverlay::draw(const DrawArgs& args) {
@@ -365,6 +411,12 @@ void CrownstepSettingsOverlay::onButton(const event::Button& e) {
 		OpaqueWidget::onButton(e);
 		return;
 	}
+	if (e.button == GLFW_MOUSE_BUTTON_RIGHT && activeTab == TAB_PITCH
+		&& pointIn(e.pos, OUTER, rowY(3), box.size.x - 2.f * OUTER, ROW_H)) {
+		openExactRangeMenu(e.pos.plus(Vec(0.f, 2.f)));
+		e.consume(this);
+		return;
+	}
 	if (e.button != GLFW_MOUSE_BUTTON_LEFT) {
 		e.consume(this);
 		return;
@@ -454,7 +506,8 @@ void CrownstepSettingsOverlay::onDragMove(const event::DragMove& e) {
 	if (rangeDragging && module) {
 		const float w = box.size.x;
 		const float sw = w - OUTER - 58.f - (OUTER + 70.f);
-		rangeDragValue = clamp(rangeDragValue + e.mouseDelta.x / std::max(1.f, sw), 0.f, 1.f);
+		const float localDeltaX = e.mouseDelta.x / std::max(0.001f, getAbsoluteZoom());
+		rangeDragValue = clamp(rangeDragValue + localDeltaX / std::max(1.f, sw), 0.f, 1.f);
 		setParamValue(module, Crownstep::RANGE_PARAM, rangeDragValue, false);
 		e.consume(this);
 		return;

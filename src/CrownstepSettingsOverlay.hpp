@@ -41,6 +41,7 @@ struct CrownstepSettingsOverlay final : widget::OpaqueWidget {
 	void requestNewGame();
 	void confirmNewGame();
 	void cancelConfirmation();
+	void openExactRangeMenu(const Vec& localPos);
 
 	void draw(const DrawArgs& args) override;
 	void drawLayer(const DrawArgs& args, int layer) override;
