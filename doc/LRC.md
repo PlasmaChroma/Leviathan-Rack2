@@ -1,968 +1,627 @@
-Absolutely. I’d frame it as a **performance-first rendering architecture**, with development ergonomics as a secondary dividend rather than the reason for the project.
+# Leviathan Render Core
 
-# Leviathan Shared Rendering System
-
-## High-Level Architecture Specification
+## Architecture Charter
 
 ### Status
 
-Proposed
+Active design direction. Implementation remains incremental and is governed by
+the measurable gates in the companion plans.
 
-### Working Name
+### Working name
 
 **Leviathan Render Core (LRC)**
 
 ---
 
-## 1. Purpose
+## 1. Executive decision
 
-Leviathan Render Core is a shared rendering subsystem for the Leviathan VCV Rack plugin suite.
+LRC is not a greenfield renderer and it is not a mandate to put every visual in
+one OpenGL surface.
 
-Its primary purpose is to improve **runtime rendering performance, frame consistency, and perceived UI fluidity inside VCV Rack**, particularly for modules containing many dynamic, procedural, animated, or GPU-rendered visual elements.
+Leviathan already has several mature rendering systems, including cached
+NanoVG surfaces, analytic GLSL controls, module-level OpenGL displays,
+context-recovery helpers, and debug-gated profiling. LRC exists to turn the
+parts that are demonstrably reusable into a context-safe shared foundation
+without discarding the update locality and fallback behavior that make the
+current implementations reliable.
 
-The system should reduce redundant rendering work across Leviathan widgets and modules while remaining compatible with Rack's existing rendering model.
+The governing principle is:
 
-A secondary goal is to provide a common visual infrastructure that makes future Leviathan modules easier to implement, optimize, profile, and maintain.
+> Share expensive immutable resources per graphics context, choose rendering
+> surface granularity from measured update behavior, and keep static content
+> cached for as long as possible.
 
-The project is considered successful only if it provides measurable runtime benefit or enables materially richer visuals at equivalent runtime cost.
+The first architectural proof is no longer whether a shader can outperform the
+old HaloKnob2 renderer. That experiment has already succeeded. The next proof
+is whether context-safe sharing of HaloKnob2's existing GPU resources improves
+duplication, initialization, context recreation, and dense-patch scaling
+without regressing its cached steady state or released-module reliability.
 
-Architectural cleanliness by itself is not sufficient justification.
+### Document map and authority
 
----
+This file owns LRC's architectural principles, constraints, and milestone
+gates. The companion plans own execution details:
 
-# 2. Primary Design Principle
+- [Baseline and benchmarks](LRC_Baseline_and_Benchmarks.md)
+- [Context resource core](LRC_Context_Resource_Core.md)
+- [HaloKnob2 sharing experiment](LRC_HaloKnob2_Sharing_Experiment.md)
+- [Dynamic surface experiments](LRC_Dynamic_Surface_Experiments.md)
 
-> **Share expensive rendering resources globally, consolidate dynamic rendering locally, and leave static content cached for as long as possible.**
-
-The intended structure is:
-
-```text
-VCV Rack Rendering System
-        │
-        │
-        ├── Static Rack / NanoVG content
-        │
-        └── Leviathan modules
-                │
-                ├── Module A Dynamic Surface
-                ├── Module B Dynamic Surface
-                └── Module C Dynamic Surface
-                         │
-                         ▼
-                 Leviathan Render Core
-                         │
-              ┌──────────┼──────────┐
-              │          │          │
-           Shaders    Geometry   Textures
-              │          │          │
-              └──────────┼──────────┘
-                         │
-                        GPU
-```
-
-The render core is shared plugin-wide.
-
-Dynamic compositing remains primarily **per module**, respecting Rack's widget hierarchy and avoiding attempts to replace Rack's global renderer.
+Module-specific rendering documents remain authoritative for their product and
+interaction contracts. `doc/haloknob_opt.md` is a valuable historical design
+record for the analytic Halo renderer, but its future-tense implementation
+steps are no longer the active LRC roadmap.
 
 ---
 
-# 3. Goals
+## 2. Purpose and success condition
 
-## 3.1 Runtime Performance
+LRC is a shared rendering foundation for the Leviathan VCV Rack plugin suite.
+Its primary purposes are:
 
-The highest priority is reducing the rendering cost of active Leviathan modules.
+- lower active rendering CPU cost;
+- improve 95th- and 99th-percentile frame times;
+- eliminate avoidable duplicate shaders, buffers, textures, and setup work;
+- make graphics-context destruction and recreation routine rather than
+  exceptional;
+- preserve excellent idle behavior;
+- allow richer visuals at equal or lower runtime cost;
+- make rendering performance observable and repeatable.
 
-Target improvements include:
-
-* lower CPU time spent preparing visual frames;
-* fewer redundant GL state transitions;
-* fewer redundant shader compilations and resource allocations;
-* fewer independent framebuffer redraws;
-* fewer expensive NanoVG operations on continuously changing visuals;
-* reduced framebuffer invalidation;
-* shared immutable geometry;
-* shared shader programs;
-* shared textures and atlases;
-* efficient dynamic vertex and instance data updates;
-* coherent batching of visually related objects;
-* graceful handling of large numbers of similar controls.
-
-Particular emphasis should be placed on the difference between:
-
-```text
-steady state
-```
-
-and:
-
-```text
-active interaction / animation
-```
-
-Leviathan already performs well when cached widgets remain unchanged.
-
-The largest opportunity is therefore reducing the cost of **continuous redraw and state changes**.
+The project is successful only when it produces measured runtime benefit,
+reduces a demonstrated reliability risk, or enables materially richer visuals
+at equivalent cost. Architectural cleanliness alone is not sufficient.
 
 ---
 
-## 3.2 Frame-Time Consistency
+## 3. Current implementation baseline
 
-Average FPS is not sufficient.
+The repository already contains important pieces of the intended architecture.
+Plans and implementation work must begin from this baseline rather than from
+the older assumption that LRC is wholly unimplemented.
 
-The renderer should optimize for consistent visual frame delivery and avoid isolated expensive redraws that produce visible stutter.
+### 3.1 HaloKnob2
 
-Performance evaluation should therefore consider:
+`src/visual/HaloKnob2.cpp` already provides:
 
-* average render time;
-* 95th percentile frame time;
-* 99th percentile frame time;
-* worst-frame latency;
-* redraw spikes during parameter movement;
-* redraw spikes during module insertion;
-* redraw spikes during zoom;
-* redraw spikes during window resize;
-* redraw behavior inside DAW-hosted Rack.
+- one independently cached `OpenGlWidget` surface per knob;
+- an analytic GLSL 1.20 ring, bloom, reflection, and cap composition;
+- a CPU-rasterized normal/lit cap atlas;
+- explicit dirty-state updates instead of continuous redraw;
+- NanoVG fallback and a fixed-GL failure frame;
+- context-create/context-destroy recovery;
+- optional extra GL validation;
+- debug-gated redraw timing and counts.
 
-A renderer that produces 120 FPS on average but periodically generates 40 ms frames should be considered worse than one producing a stable 90 FPS.
+This implementation delivered the earlier active-redraw performance proof.
+The shader program, VBO, and GPU cap texture are still owned by each surface,
+which makes HaloKnob2 the cleanest bounded experiment for shared per-context
+resources.
 
-Perceived smoothness is the primary metric.
+The per-knob framebuffer is intentional. It preserves independent invalidation
+when only one control moves. LRC must not replace it with a module-sized surface
+without evidence that the larger redraw and compositing tradeoff is better.
 
----
+### 3.2 Module-level OpenGL renderers
 
-## 3.3 Scalability
+Leviathan already has substantial module-level OpenGL systems, including:
 
-The rendering architecture should remain efficient as users add more Leviathan modules.
+- Bifurx spectrum and transfer rendering;
+- TD.Scope rendering backends;
+- Wyrm's sand renderer;
+- Integral Flux preview rendering.
 
-The preferred scaling behavior is:
+These implementations contain valuable shader, buffer, texture, fallback, and
+lifecycle knowledge. They also contain module-specific reset graphs and visual
+contracts that should not be forced into a generic abstraction.
 
-```text
-additional module
-      ≈
-additional visual workload
-```
+### 3.3 Shared lifecycle and cached-surface helpers
 
-rather than:
+Existing shared foundations include:
 
-```text
-additional module
-      =
-duplicated renderer infrastructure
-+ duplicated shaders
-+ duplicated geometry
-+ duplicated buffers
-+ duplicated setup overhead
-```
+- `src/NvgGraphicsLifecycle.hpp` for context-owned NanoVG image handles;
+- `src/GlLifecycleUtils.hpp` for optional GL resource validity checks;
+- `src/visual/PreviewSurface.hpp` for cached preview backgrounds;
+- shared raster-image and panel rendering infrastructure;
+- debug gating through `isDragonKingDebugEnabled()`;
+- the debug terminal for small external diagnostic packets.
 
-Repeated visual primitives should share GPU resources whenever technically appropriate.
+LRC extends these established patterns. It does not replace them with a second
+competing lifecycle system.
 
----
+### 3.4 Existing instrumentation
 
-## 3.4 Rich Visuals Without Proportional Cost
-
-The renderer should make it possible to increase visual sophistication without requiring proportional increases in CPU usage.
-
-Examples include:
-
-* animated halos;
-* procedural glow;
-* gradients;
-* particles;
-* spectral displays;
-* vector-like GPU geometry;
-* shader-based glass;
-* procedural highlights;
-* animated panel ornament;
-* 2D and limited 3D rendering.
-
-The intended direction is:
-
-> richer visuals through more efficient rendering rather than richer visuals through more CPU work.
+HaloKnob2, Puffy, Integral Flux, Bifurx, and TD.Scope already contain targeted
+profiling. LRC should unify metric definitions and benchmark methodology before
+attempting to replace every module-local counter.
 
 ---
 
-## 3.5 Development Consistency
-
-Although secondary to runtime performance, the system should reduce repeated rendering implementation work.
-
-Future modules should be able to consume stable primitives such as:
-
-```text
-Halo
-Arc
-GlowLine
-RoundedRect
-KnobBody
-Indicator
-GlassSurface
-ParticleField
-Spectrum
-Waveform
-TexturedQuad
-```
-
-without reimplementing shaders, lifecycle handling, buffer management, and context restoration.
-
----
-
-# 4. Non-Goals
-
-The initial system will **not** attempt to:
-
-* replace Rack's global renderer;
-* replace GLFW;
-* replace Rack's OpenGL context;
-* introduce Vulkan or Metal as alternative Rack backends;
-* render third-party modules;
-* intercept Rack's global scene;
-* modify Rack's cable renderer;
-* replace Rack's event system;
-* combine every Leviathan module into one Rack-wide framebuffer;
-* require modern OpenGL features unavailable on supported legacy platforms.
-
-The system should work *with* Rack rather than requiring unsupported host modifications.
-
----
-
-# 5. Architectural Model
-
-## 5.1 Plugin-Wide Render Core
-
-A single logical rendering subsystem should exist per active GL context.
+## 4. Proven constraints
 
-Conceptually:
+The following are treated as established constraints.
 
-```cpp
-LeviathanRenderCore
-{
-    ContextState
-    ShaderLibrary
-    GeometryCache
-    TextureCache
-    MaterialLibrary
-    DynamicBufferPool
-    RenderStats
-}
-```
+### 4.1 Rack owns the host renderer
 
-Resources that can safely be shared should belong here instead of individual widgets.
+Rack remains responsible for:
 
-Examples:
+- the window and OpenGL context;
+- scene composition;
+- module placement;
+- interaction and event dispatch;
+- global NanoVG rendering;
+- framebuffer scheduling;
+- third-party modules and cables.
 
-```text
-unit circle geometry
-unit quad geometry
-rounded rectangle geometry
-halo geometry
-common shaders
-common textures
-gradient ramps
-noise textures
-font atlases where appropriate
-```
+LRC renders only Leviathan-owned content through supported Rack widget and
+context boundaries.
 
----
+### 4.2 Graphics handles are context-owned
 
-# 6. Per-Module Dynamic Rendering Surface
+GL object names and NanoVG image handles are not portable between contexts.
+DAW editor close/reopen can recreate the graphics context while module widgets
+survive. A surviving widget may also miss an old context-destroy event.
 
-Complex Leviathan modules should progressively move toward one primary dynamic rendering surface.
+Therefore:
 
-Instead of:
+- every context-create event invalidates inherited numeric GL names;
+- resources are rebuilt lazily in a valid draw-time context;
+- destructor-time GL cleanup is avoided unless a current owning context is
+  guaranteed;
+- a handle is never deleted through a different `NVGcontext*`;
+- normal drawing does not perform unconditional `glIs*` validation.
 
-```text
-Module
- ├── framebuffer
- ├── framebuffer
- ├── framebuffer
- ├── framebuffer
- ├── OpenGL widget
- ├── NanoVG animation
- └── additional framebuffer
-```
+### 4.3 Nested Rack framebuffer caches do not compose as independent caches
 
-prefer:
+When Rack draws inside a framebuffer, nested `FramebufferWidget` caches may be
+bypassed and their contents drawn directly. LRC must not assume that nesting
+cached widgets produces reusable nested textures.
 
-```text
-Module
- ├── static/cached panel content
- │
- ├── Leviathan Dynamic Surface
- │     ├── knobs
- │     ├── halos
- │     ├── displays
- │     ├── meters
- │     ├── particles
- │     └── procedural effects
- │
- └── Rack interaction widgets
-```
+### 4.4 `OpenGlWidget` redraw policy must be explicit
 
-Rack widgets may continue to provide:
+Rack's ordinary `OpenGlWidget::step()` dirties the widget continuously. Cached
+OpenGL surfaces that should remain idle must preserve framebuffer caching and
+be invalidated only by visual-state changes.
 
-* parameter behavior;
-* mouse interaction;
-* drag handling;
-* tooltips;
-* context menus;
-* focus;
-* accessibility-related behavior.
+### 4.5 Sharing and batching are different optimizations
 
-Their visible appearance need not necessarily be rendered by the same widget.
+Sharing one shader program or unit quad does not batch independent Rack widget
+draws. Batching is practical only inside a render surface that owns the relevant
+draw ordering and framebuffer. Cross-widget batching must not be promised
+without a supported composition design.
 
-This explicitly separates:
-
-```text
-interaction model
-```
-
-from:
-
-```text
-visual model
-```
-
----
-
-# 7. Static vs Dynamic Rendering
-
-The renderer should aggressively distinguish between static and dynamic content.
-
-## Static Layer
-
-Examples:
-
-* panel artwork;
-* labels;
-* decorative geometry;
-* fixed shadows;
-* non-changing ornaments;
-* background textures.
-
-These should remain cached and should not participate in ordinary animation frames.
-
-## Dynamic Layer
-
-Examples:
-
-* knob indicators;
-* halo arcs;
-* scopes;
-* waveforms;
-* meters;
-* moving particles;
-* Puffy animation;
-* modulation indicators;
-* changing procedural effects.
-
-These should use the shared dynamic renderer.
-
-## Principle
-
-A change to one dynamic element should **not invalidate static content**.
-
-Likewise, static art changes should not force reconstruction of unrelated GPU resources.
-
----
-
-# 8. Shared Shader Library
-
-Shader programs should generally be compiled once per GL context rather than once per widget.
-
-Example conceptual API:
-
-```cpp
-auto* program =
-    renderCore.shaders().get("halo");
-```
-
-Programs should be lazily created and cached.
-
-Potential initial shaders include:
-
-```text
-FlatColor
-TexturedQuad
-SoftCircle
-Halo
-GlowStroke
-Gradient
-Spectrum
-Particle
-```
-
-Shader variants should be minimized.
-
-Prefer parameterized shaders over many slightly different programs when doing so does not significantly complicate rendering.
-
----
-
-# 9. Shared Geometry
-
-Common shapes should be uploaded once and reused.
-
-Examples:
-
-```text
-unit quad
-unit circle
-ring
-arc strip
-rounded rectangle
-knob shell
-indicator wedge
-simple line strip
-```
-
-Object-specific appearance should preferably be expressed through:
-
-* transformation;
-* uniform values;
-* vertex attributes;
-* textures;
-* instance data.
-
-For example:
-
-```text
-30 HaloKnobs
-
-should ideally mean
-
-1 knob mesh
-1 halo mesh
-30 transforms
-30 parameter sets
-```
-
-rather than 30 independently generated copies of equivalent geometry.
-
----
-
-# 10. Batching
-
-The renderer should minimize redundant state changes.
-
-Objects using the same:
-
-* shader;
-* texture;
-* blend mode;
-* geometry;
-* material
-
-should be rendered together when practical.
-
-A typical module render might conceptually become:
-
-```text
-bind halo shader
-draw all halos
-
-bind knob shader
-draw all knobs
-
-bind indicator shader
-draw all indicators
-
-bind display shader
-draw displays
-```
-
-rather than repeatedly switching renderer state for each widget.
-
-Initial batching does not require true GPU instancing.
-
-Simple coherent draw ordering may provide much of the benefit while retaining wide hardware compatibility.
-
----
-
-# 11. Optional Instanced Rendering
-
-Hardware-supported instanced rendering may be added as an optimization path.
-
-It must not be required for correct operation.
-
-The renderer should therefore support:
-
-```text
-Baseline Path
-    conservative OpenGL
-    ordinary VBO rendering
-
-Enhanced Path
-    instancing
-    newer buffer techniques
-    optional advanced features
-```
-
-Visual output should remain substantially equivalent.
-
----
-
-# 12. Dynamic Data Updates
-
-Frequently changing data should avoid unnecessary allocations and buffer recreation.
-
-The renderer should investigate:
-
-* persistent reusable CPU-side arrays;
-* reusable dynamic VBOs;
-* buffer orphaning where appropriate;
-* ring-buffered dynamic upload regions;
-* fixed-capacity particle buffers;
-* dirty ranges;
-* parameter/state snapshots.
-
-The render thread should avoid allocating memory during normal frames wherever practical.
-
----
-
-# 13. Dirty-State Model
-
-Not every dynamic surface needs to redraw continuously.
-
-The system should support at least:
-
-### Cached Surface
-
-Redraw only when visual state changes.
-
-Suitable for:
-
-* controls;
-* settings indicators;
-* mostly-static procedural visuals.
-
-### Live Surface
-
-Redraw each visual frame.
-
-Suitable for:
-
-* scopes;
-* animated particle systems;
-* continuously moving displays;
-* Puffy;
-* high-motion visualization.
-
-### Rate-Limited Surface
-
-Redraw at a configurable visual frequency independent of audio processing.
-
-Example:
-
-```text
-audio thread: 48 kHz
-
-display state: continuously updated
-
-visual renderer:
-30 / 60 / 90 Hz
-```
-
-This may provide major savings for displays where 144 Hz rendering provides no perceptible benefit.
-
----
-
-# 14. Audio/Render Separation
-
-The rendering architecture must preserve strict separation between DSP and graphics.
+### 4.6 Audio timing is inviolable
 
 The audio thread must never:
 
-* call OpenGL;
-* allocate rendering resources;
-* wait for the renderer;
-* lock a renderer mutex;
-* perform visualization geometry generation that can be moved elsewhere.
+- call OpenGL or NanoVG;
+- allocate graphics resources;
+- wait on the renderer;
+- lock a renderer mutex;
+- generate visualization geometry that can be built off the audio path.
 
-DSP modules should publish lightweight state snapshots.
-
-Example:
-
-```cpp
-struct VisualState {
-    float knobValues[8];
-    float modulation[8];
-    float level[8];
-};
-```
-
-The renderer consumes the latest available snapshot asynchronously.
-
-Dropped visual updates are preferable to affecting audio timing.
+DSP publishes bounded, lightweight snapshots. Rendering consumes the newest
+complete snapshot and may drop intermediate visual updates.
 
 ---
 
-# 15. Context Loss and Recreation
+## 5. Goals
 
-DAW-hosted Rack and platform-specific window behavior may destroy and recreate OpenGL contexts.
+### 5.1 Runtime performance
 
-The renderer must treat this as normal operation.
+Target reductions include:
 
-All GL objects must be associated with a context generation.
+- CPU time preparing active visual frames;
+- redundant GL state changes inside a surface;
+- shader compilation and link duplication;
+- immutable geometry and texture duplication;
+- dynamic allocation and buffer recreation;
+- unnecessary framebuffer invalidation;
+- expensive NanoVG path construction during continuous redraw;
+- resource rebuild spikes after context recreation.
 
-On context loss:
+Idle and active behavior must be measured separately.
+
+### 5.2 Frame-time consistency
+
+Average FPS is not an adequate result. Evaluation must include:
+
+- average CPU render time;
+- 95th- and 99th-percentile frame time;
+- worst observed frame;
+- redraw spikes during interaction and automation;
+- module insertion cost;
+- zoom, resize, and rack-pan behavior;
+- DAW editor close/reopen and resize behavior.
+
+Stable delivery is preferred over a higher average with visible stalls.
+
+### 5.3 Scalability
+
+Repeated modules and controls should add visual workload, not duplicate all
+renderer infrastructure. Immutable resources should be shared when their
+lifecycle and visual identity truly match.
+
+### 5.4 Development consistency
+
+Once proven, LRC may expose stable primitives such as textured quads, halos,
+arcs, rounded rectangles, glow strokes, waveform spans, and particle fields.
+Primitive APIs follow successful migrations; they are not designed in advance
+of measured consumers.
+
+---
+
+## 6. Non-goals
+
+The initial LRC will not:
+
+- replace Rack's renderer, GLFW, OpenGL context, or event system;
+- render third-party modules or cables;
+- combine the entire rack into one Leviathan framebuffer;
+- require Vulkan, Metal, compute shaders, or modern-only OpenGL;
+- require instancing for correctness;
+- force all visuals through OpenGL;
+- force every module into one dynamic surface;
+- centralize module-specific reset graphs that are clearer locally;
+- redesign released module state, parameter IDs, or user behavior as a side
+  effect of renderer work.
+
+---
+
+## 7. Architectural model
+
+LRC is a logical subsystem per active graphics context, with four layers.
 
 ```text
-GL handles become invalid
+Rack scene and graphics context
+        │
+        ├── LRC context/resource layer
+        │     ├── shader programs
+        │     ├── immutable geometry
+        │     ├── immutable textures
+        │     └── resource/rebuild statistics
+        │
+        ├── Leviathan render surfaces
+        │     ├── independently cached controls
+        │     ├── module dynamic surfaces
+        │     ├── live/rate-limited displays
+        │     └── NanoVG fallbacks
+        │
+        └── Rack interaction widgets
+              ├── parameters and drag handling
+              ├── tooltips and menus
+              └── focus and hit testing
 ```
 
-but logical renderer state should remain recoverable.
+### 7.1 Context/resource layer
 
-On context restoration:
+The first shared core is deliberately small. It should own only resources that
+are immutable or logically shared for one context generation:
+
+- linked shader programs;
+- unit quad and similarly universal geometry;
+- immutable texture atlases;
+- capability results needed to select a safe path;
+- creation, reuse, failure, and rebuild counters.
+
+It must not initially own module state, widget framebuffers, animation clocks,
+or interaction state.
+
+The exact context identity and generation mechanism must be proven by the
+resource-core plan before a public API is frozen. Pointer identity alone is not
+assumed sufficient because host allocators may reuse addresses.
+
+### 7.2 Render surfaces
+
+A render surface owns a coherent visual composition and its dirty policy.
+Supported shapes include:
+
+- independently cached control surface;
+- cached module subregion;
+- module-wide dynamic surface;
+- live surface;
+- rate-limited surface;
+- NanoVG-only cached surface.
+
+Surfaces borrow or lease shared resources but keep their own state and
+framebuffer ownership unless a migration proves another design superior.
+
+### 7.3 Interaction widgets
+
+Rack widgets remain the authority for parameters, pointer interaction,
+tooltips, context menus, and hit testing. A module surface may draw a control
+whose transparent interaction widget remains separate.
+
+### 7.4 Module-specific rendering
+
+Unusual systems may continue to own raw GL code. LRC is the preferred path for
+repeated and proven patterns, not a prohibition on specialized rendering.
+
+---
+
+## 8. Surface-granularity decision rule
+
+Surface granularity is selected from evidence, not aesthetic preference.
+
+| Candidate | Prefer it when | Primary risk |
+| --- | --- | --- |
+| Independently cached control | Elements change independently and occupy small separated areas | More framebuffer composites and per-surface bookkeeping |
+| Module subregion | Several nearby elements change together | Partial invalidation may still redraw excess pixels |
+| Module-wide dynamic surface | Many visuals update together and can be coherently batched | One small change may redraw a large surface |
+| Cached NanoVG surface | Visual changes are infrequent and vector construction is acceptable | Active redraw can become CPU-heavy |
+| Live/rate-limited surface | Motion is continuous or visual sampling can be decoupled from UI FPS | Persistent frame cost |
+
+Every migration records:
+
+- changed elements per frame;
+- dirty frequency and cause;
+- surface pixel area at representative zoom/DPR;
+- number of framebuffer composites at idle;
+- CPU preparation and draw-submission cost;
+- resource duplication;
+- fallback behavior.
+
+---
+
+## 9. Dirty-state model
+
+LRC surfaces support explicit policies:
+
+### Cached
+
+Redraw only when visual state changes. Appropriate for controls, settings
+indicators, and mostly static procedural content.
+
+### Live
+
+Redraw on each visual frame. Appropriate for genuinely continuous animation,
+scopes, and live particle fields.
+
+### Rate-limited
+
+Redraw at a bounded visual frequency independent of audio processing and,
+where appropriate, independent of the host UI refresh rate.
+
+Dirty causes should be classifiable during profiling, for example:
 
 ```text
-shared resources are rebuilt lazily
+value | hover | drag | animation | style | size | zoom | context | asset
 ```
 
-Modules should not individually implement their own context recovery systems unless absolutely necessary.
-
-Context lifecycle handling should be centralized.
+Repeated publication of equivalent visual state must not dirty a cached
+surface.
 
 ---
 
-# 16. Failure and Compatibility Strategy
+## 10. Lifecycle contract
 
-The rendering subsystem should degrade gracefully.
+All LRC work follows these rules:
 
-A failure in an advanced visual feature must not:
+1. Logical resource descriptions may outlive a context; GL/NVG handles may not.
+2. Context creation starts a new generation and abandons inherited names.
+3. Context destruction deletes only objects known to belong to the current
+   context, then clears the generation's handles.
+4. Missed destruction is survivable: the next context-create event clears old
+   numeric names without issuing deletion calls through the new context.
+5. Resources are lazily created from draw/step-time code with a valid context.
+6. Failure is sticky only for the current generation unless retry policy says
+   otherwise.
+7. Fallback rendering never depends on the failed advanced resource.
+8. Normal production draws avoid `glIs*`; extra validation remains debug-gated.
+9. Shared resource destruction is explicit and context-aware, not an accidental
+   consequence of arbitrary widget destructor order.
 
-* crash Rack;
-* destabilize the audio engine;
-* corrupt unrelated modules;
-* prevent patches from loading.
+The companion resource-core plan owns the exact registry and lease mechanics.
 
-Where possible:
+---
+
+## 11. Compatibility and fallback
+
+An advanced rendering failure must not crash Rack, affect audio, corrupt other
+modules, or prevent a patch from loading.
+
+Where practical:
 
 ```text
-advanced renderer unavailable
-        ↓
-simplified renderer
+shared/advanced path
+        ↓ failure
+module-local or NanoVG fallback
+        ↓ failure
+simple bounded visual
 ```
 
-should be preferable to complete module failure.
+Visual migrations affecting released modules require:
+
+- unchanged parameter/input/output/light ordering;
+- unchanged patch serialization unless explicitly versioned;
+- screenshot or manual visual-parity checks;
+- standalone Rack testing;
+- DAW editor close/reopen testing;
+- fallback testing;
+- multi-instance testing.
+
+Integral Flux, Proc, Temporal Deck, TD.Scope, and Undertow are released and must
+be treated accordingly. A shared HaloKnob2 change can affect several released
+modules at once even though it does not alter their DSP.
 
 ---
 
-# 17. Instrumentation
+## 12. Instrumentation contract
 
-The renderer should include internal profiling from the beginning.
+Instrumentation is part of the architecture, not a later embellishment.
 
-Metrics should include:
+Metrics should distinguish:
+
+### Surface work
+
+- redraw count by policy and dirty cause;
+- CPU preparation time;
+- framebuffer draw time;
+- dynamic bytes uploaded;
+- draw calls and state switches where cheaply observable.
+
+### Shared resources
+
+- create, reuse, failure, and rebuild counts;
+- live program/buffer/texture counts;
+- bytes of immutable and dynamic GPU data where knowable;
+- context generation changes;
+- fallback activations.
+
+### Frame behavior
+
+- average, p95, p99, and worst frame;
+- insertion and first-render spikes;
+- context reopen time to first correct frame;
+- dropped or rate-limited visual updates.
+
+Production instrumentation must be effectively dormant. Detailed timers,
+logs, overlays, and debug-terminal packets remain gated by
+`isDragonKingDebugEnabled()` and the relevant logging switch.
+
+GPU timers may be used only if capability checks and non-blocking result
+collection are reliable. The renderer must not stall merely to measure itself.
+
+---
+
+## 13. Performance methodology
+
+The authoritative benchmark definition lives in the
+[LRC baseline and benchmark plan](LRC_Baseline_and_Benchmarks.md).
+
+Required scenario families are:
+
+- idle cached rack;
+- one actively manipulated control;
+- simultaneous automation;
+- continuously animated modules;
+- dense multi-instance rack;
+- rack pan and zoom/DPR changes;
+- module insertion and removal;
+- standalone context behavior;
+- DAW editor resize and close/reopen.
+
+WSL is suitable for source checks and focused tests but is not authoritative
+for final Windows plugin linking or DAW graphics behavior. Final renderer gates
+must be exercised in the Windows/MSYS2 Rack toolchain and the intended DAW host.
+
+---
+
+## 14. Milestone map
+
+Implementation is split into bounded companion plans.
+
+### Milestone 0 — Baseline and benchmark contract
+
+Plan: [LRC baseline and benchmarks](LRC_Baseline_and_Benchmarks.md)
+
+Inventory existing surfaces, establish repeatable scenarios, record current
+metrics, and define the evidence format. No renderer architecture is considered
+validated without this baseline.
+
+### Milestone 1 — Minimal context/resource core
+
+Plan: [LRC context resource core](LRC_Context_Resource_Core.md)
+
+Implement the smallest context-aware sharing layer needed by one real consumer.
+Do not add a generalized material system, dynamic buffer pool, or primitive
+catalogue in this milestone.
+
+### Milestone 2 — HaloKnob2 sharing experiment
+
+Plan: [LRC HaloKnob2 sharing experiment](LRC_HaloKnob2_Sharing_Experiment.md)
+
+Share HaloKnob2's program, immutable quad, and GPU cap texture while preserving
+per-knob framebuffers, state, fallback, and dirty behavior.
+
+This is the formal LRC go/no-go gate.
+
+### Milestone 3 — Selective dynamic-surface experiments
+
+Plan: [LRC dynamic surface experiments](LRC_Dynamic_Surface_Experiments.md)
+
+Evaluate Bifurx, Puffy, TD.Scope, Wyrm, and other candidates individually.
+Prefer unreleased modules for high-risk experiments. Released-module migration
+requires a separate compatibility gate.
+
+### Milestone 4 — Proven primitive extraction
+
+Only after at least two consumers demonstrate the same stable need should LRC
+extract reusable draw primitives, material descriptions, dynamic upload
+helpers, or optional instancing.
+
+---
+
+## 15. Formal go/no-go criteria
+
+LRC proceeds beyond the Halo sharing experiment only if all of the following
+hold:
+
+- no measurable idle-frame regression;
+- no visual or interaction regression in Halo consumers;
+- correct standalone and DAW context recreation;
+- reliable fallback after forced initialization failure;
+- demonstrably fewer duplicate GPU resources in multi-knob/multi-module cases;
+- lower insertion or context-rebuild cost, or another measured scaling benefit;
+- no new production per-frame validation or allocation;
+- complexity remains bounded enough that module-local rendering is still easy
+  to reason about.
+
+If resource sharing produces negligible benefit, unreliable lifetime behavior,
+or hard-to-debug cross-module coupling, the correct result is to retain the
+proven per-surface implementation and stop broad LRC centralization.
+
+Dynamic-surface experiments have their own gate: a migration producing less
+than roughly 5–10% meaningful improvement while adding substantial complexity
+should be reconsidered. A 25% or greater reduction in the targeted active cost
+is a strong result, but thresholds must be tied to the baseline and scenario.
+
+---
+
+## 16. Open decisions
+
+The following remain intentionally unresolved until the companion plans gather
+evidence:
+
+- the safest context identity and generation mechanism available through Rack;
+- whether shared resources are held by explicit leases, generation-owned
+  registries, or another non-blocking UI-thread mechanism;
+- how shared resources are retired when no context-destroy event is observed;
+- whether GPU timer queries are reliable on the supported host matrix;
+- which renderer becomes the second shared-core consumer;
+- whether any candidate actually benefits from module-wide dynamic batching;
+- the minimum supported GL capability baseline beyond the existing GLSL 1.20
+  paths;
+- whether a user-facing renderer fallback is needed beyond automatic fallback
+  and debug controls.
+
+These are design questions, not permission to build a speculative framework.
+
+---
+
+## 17. Architectural north star
+
+The long-term objective is a coherent Leviathan visual engine embedded inside
+Rack, not a second global renderer and not a forced rewrite of successful
+widgets.
+
+The desired result is:
 
 ```text
-render calls
-draw calls
-shader switches
-texture binds
-geometry uploads
-dynamic bytes uploaded
-surface redraw count
-resource rebuild count
-CPU render preparation time
-GPU render time if reliably available
+shared context-safe foundations
+        +
+measured surface granularity
+        +
+strict static/dynamic separation
+        +
+audio-safe visual snapshots
+        +
+automatic bounded fallback
+        =
+a dense Leviathan rack that remains fluid and recoverable
 ```
 
-Optional developer overlays could expose metrics such as:
+Every architectural decision returns to one question:
 
-```text
-LRC
-CPU: 0.42 ms
-Draws: 18
-Surfaces: 2
-Uploads: 14 KB
-Shaders: 4
-```
-
-Without instrumentation, performance work will easily become speculative.
-
----
-
-# 18. Performance Test Methodology
-
-Changes to the shared renderer should be evaluated against repeatable test patches.
-
-Suggested scenarios:
-
-### Test A — Idle
-
-Large Leviathan patch with no changing controls.
-
-Purpose:
-
-Verify that the new system does not regress excellent cached steady-state behavior.
-
-### Test B — Heavy Interaction
-
-Multiple continuously moving HaloKnobs.
-
-Purpose:
-
-Measure the redraw path that currently causes elevated rendering cost.
-
-### Test C — Animated Modules
-
-Puffy, scopes, spectra, meters, or equivalent continuously animated content.
-
-Purpose:
-
-Measure sustained dynamic rendering.
-
-### Test D — Dense Rack
-
-Many Leviathan modules visible simultaneously.
-
-Purpose:
-
-Measure scaling behavior.
-
-### Test E — DAW Host
-
-VCV Rack hosted inside Reaper.
-
-Purpose:
-
-Measure:
-
-* frame pacing;
-* context behavior;
-* editor resize;
-* editor reopen;
-* visual smoothness.
-
-This environment deserves explicit testing because perceived stutter may not correlate directly with Rack's reported renderer FPS.
-
----
-
-# 19. Success Metrics
-
-Exact thresholds should be established after baseline profiling.
-
-Initial desired outcomes:
-
-* no measurable idle-performance regression;
-* lower active rendering CPU usage;
-* improved 95th/99th percentile frame time;
-* reduced redraw spikes;
-* fewer GL resource duplicates;
-* fewer framebuffer invalidations;
-* smoother parameter animation;
-* smoother hosted Rack UI;
-* predictable scaling with multiple Leviathan modules.
-
-For major migrations such as HaloKnob2, a target such as:
-
-```text
->= 25% reduction in active render CPU cost
-```
-
-would constitute a meaningful success.
-
-Larger gains should be pursued where batching opportunities allow them.
-
-If a migration produces less than roughly 5–10% measurable improvement and adds substantial complexity, it should be reconsidered.
-
----
-
-# 20. Development Ergonomics
-
-The renderer should expose simple primitives rather than require individual modules to manipulate raw GL state.
-
-Example:
-
-```cpp
-renderer.halo(...);
-renderer.knob(...);
-renderer.glowLine(...);
-renderer.texturedQuad(...);
-renderer.particleField(...);
-```
-
-Raw OpenGL should remain available for unusual modules but should not be the default development path.
-
-This provides several secondary benefits:
-
-* consistent visual quality;
-* fewer GL lifecycle bugs;
-* easier optimization;
-* faster module development;
-* easier cross-platform compatibility;
-* centralized shader improvements;
-* easier performance profiling.
-
-Any optimization made to a shared primitive benefits every module using it.
-
----
-
-# 21. Migration Strategy
-
-The renderer should be introduced incrementally.
-
-Existing working visual systems should not be rewritten wholesale.
-
-## Phase 0 — Render Core Extraction
-
-Use an existing GL-heavy module such as Bifurx.
-
-Extract:
-
-* shader management;
-* buffer management;
-* texture management;
-* context lifecycle;
-* common GL utilities.
-
-Visual output should remain unchanged.
-
-Purpose:
-
-Validate shared infrastructure with minimal behavioral risk.
-
----
-
-## Phase 1 — HaloKnob2 Experiment
-
-HaloKnob2 should serve as the primary performance experiment.
-
-Create a module-level renderer capable of drawing multiple HaloKnobs from shared geometry and shaders.
-
-Compare against the existing widget/framebuffer implementation.
-
-Measure:
-
-* active CPU cost;
-* frame pacing;
-* draw count;
-* framebuffer activity;
-* GPU cost;
-* visual fidelity.
-
-If this produces meaningful improvement, the architecture is validated.
-
----
-
-## Phase 2 — Shared Visual Primitives
-
-Generalize successful renderer elements into reusable primitives.
-
-Likely candidates:
-
-```text
-Halo
-Knob
-Arc
-Glow
-Gradient
-Indicator
-LED
-Glass
-Texture
-```
-
----
-
-## Phase 3 — Dynamic Modules
-
-Migrate suitable animated modules.
-
-Candidates include:
-
-```text
-Puffy
-Bifurx
-TD-Scope
-Iris displays
-future procedural visualizers
-```
-
-Each migration should remain independently benchmarkable.
-
----
-
-## Phase 4 — Advanced Rendering
-
-Only after the architecture proves itself should more ambitious features be explored:
-
-* GPU particle simulation;
-* instanced rendering;
-* 3D knob geometry;
-* shared texture atlases;
-* advanced blur/glow;
-* physically inspired materials;
-* procedural panel animation.
-
-Performance headroom should finance richer visuals rather than richer visuals consuming all newly gained performance.
-
----
-
-# 22. Guiding Constraints
-
-The renderer should remain:
-
-**Performance-first**
-
-Every abstraction must justify itself against real Rack runtime behavior.
-
-**Incremental**
-
-No flag-day rewrite.
-
-**Observable**
-
-Performance must be measurable.
-
-**Conservative at the host boundary**
-
-Avoid unsupported Rack internals where possible.
-
-**Aggressive inside Leviathan-owned surfaces**
-
-Once inside our rendering domain, optimize freely.
-
-**Audio-safe**
-
-Graphics can never compromise DSP timing.
-
-**Cross-platform**
-
-Linux, Windows, macOS Intel, and macOS ARM must remain first-class targets wherever supported by Rack.
-
----
-
-# 23. Architectural North Star
-
-The long-term objective is not merely to make individual widgets faster.
-
-It is to move Leviathan away from:
-
-```text
-a collection of independent widgets that happen to draw things
-```
-
-toward:
-
-```text
-a coherent visual engine embedded inside VCV Rack
-```
-
-while retaining Rack as the owner of:
-
-```text
-windowing
-scene composition
-module placement
-interaction
-global UI
-```
-
-Leviathan Render Core becomes responsible for efficiently rendering the visual world **inside Leviathan modules**.
-
-The desired result is that a dense Leviathan patch feels fluid even when many visual elements are simultaneously alive.
-
-If the renderer also makes beautiful modules easier to create, that is a significant secondary benefit.
-
-But the governing question for every architectural decision remains:
-
-> **Does this make Rack feel faster, smoother, or visually richer for the same computational cost?**
-
-I’d probably make the **HaloKnob2 benchmark the formal go/no-go gate** for the architecture. It gives us an unusually clean experiment: lots of repeated geometry, known expensive active redraw behavior, and a steady-state implementation that is already good enough that the new system can’t hide behind easy wins. If LRC materially improves *that* case, we’ve probably found something worth propagating across the suite.
+> Does this make Rack faster, smoother, more reliable, or visually richer for
+> the same computational cost—and can we demonstrate it?
