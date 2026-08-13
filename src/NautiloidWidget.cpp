@@ -1481,8 +1481,8 @@ struct NautiloidZoomReadout final : TransparentWidget {
   explicit NautiloidZoomReadout(Nautiloid* module) : module(module) {}
 
   void draw(const DrawArgs& args) override {
-    if (!module) return;
-    const float pct = 100.f * clamp(module->fractalZoom / kNautiloidMaxFractalZoom, 0.f, 1.f);
+    const float zoom = module ? float(module->fractalZoom) : 0.f;
+    const float pct = 100.f * clamp(zoom / kNautiloidMaxFractalZoom, 0.f, 1.f);
     const std::string text = string::f("Zoom: %.3f%%", pct);
 
     nvgFontSize(args.vg, LABEL_FONT_SIZE);
@@ -1502,9 +1502,10 @@ struct NautiloidPositionReadout final : TransparentWidget {
   explicit NautiloidPositionReadout(Nautiloid* module) : module(module) {}
 
   void draw(const DrawArgs& args) override {
-    if (!module) return;
-    float xPct = 100.f * clamp(float(double(module->fractalCenterX) / MAX_CENTER), -1.f, 1.f);
-    float yPct = 100.f * clamp(float(double(module->fractalCenterY) / MAX_CENTER), -1.f, 1.f);
+    const double centerX = module ? double(module->fractalCenterX) : 0.0;
+    const double centerY = module ? double(module->fractalCenterY) : 0.0;
+    float xPct = 100.f * clamp(float(centerX / MAX_CENTER), -1.f, 1.f);
+    float yPct = 100.f * clamp(float(centerY / MAX_CENTER), -1.f, 1.f);
     if (std::abs(xPct) < 0.0005f)
       xPct = 0.f;
     if (std::abs(yPct) < 0.0005f)

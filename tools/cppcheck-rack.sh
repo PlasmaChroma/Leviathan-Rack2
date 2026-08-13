@@ -20,6 +20,9 @@ set -Eeuo pipefail
 # Strongest analysis supported by the installed Cppcheck:
 #   ./cppcheck-rack.sh --deep
 #
+# Approximate the curated Cppcheck pass used by Rack maintainers:
+#   ./cppcheck-rack.sh --maintainer
+#
 # Explore alternate #ifdef configurations too:
 #   ./cppcheck-rack.sh --all-configs
 #
@@ -48,6 +51,12 @@ Compilation database:
   --reuse-db         Require/reuse the existing compile_commands.json.
 
 Analysis:
+  --maintainer       Approximate Rack's maintainer-facing Cppcheck profile:
+                     normal depth, captured build configuration, and the
+                     warning/performance/portability groups. Suppresses
+                     diagnostics originating in the Rack SDK and bundled
+                     third-party sources, plus copy-semantics noise from
+                     Rack's parent-owned widget pointer pattern.
   --deep             Use the strongest deeper-analysis switch supported.
                      Cppcheck >= 2.11: --check-level=exhaustive
                      Older Cppcheck: no fake equivalent is added.
@@ -98,6 +107,8 @@ MAX_CONFIGS=""
 MAKE_XML=0
 CLEAN_CACHE=0
 SHOW_CAPABILITIES=0
+MAINTAINER=0
+OUTPUT_EXPLICIT=0
 
 while (($#)); do
     case "$1" in
@@ -111,6 +122,10 @@ while (($#)); do
             ;;
         --deep)
             DEEP=1
+            shift
+            ;;
+        --maintainer)
+            MAINTAINER=1
             shift
             ;;
         --all-configs)
@@ -146,6 +161,7 @@ while (($#)); do
         -o|--output)
             [[ $# -ge 2 ]] || die "$1 requires a directory"
             OUTPUT_DIR="$2"
+            OUTPUT_EXPLICIT=1
             shift 2
             ;;
         -h|--help)
@@ -157,6 +173,15 @@ while (($#)); do
             ;;
     esac
 done
+
+if (( MAINTAINER )); then
+    (( DEEP == 0 )) || die "--maintainer cannot be combined with --deep"
+    (( ALL_CONFIGS == 0 )) || die "--maintainer cannot be combined with --all-configs"
+    [[ -z "$MAX_CONFIGS" ]] || die "--maintainer cannot be combined with --max-configs"
+    if (( OUTPUT_EXPLICIT == 0 )); then
+        OUTPUT_DIR="$ROOT/.analysis/cppcheck-maintainer"
+    fi
+fi
 
 have "$CPPCHECK_BIN" || die "Cannot find Cppcheck executable: $CPPCHECK_BIN"
 have "$MAKE_BIN"     || die "Cannot find make executable: $MAKE_BIN"
@@ -246,6 +271,51 @@ validate_db() {
     echo "$count"
 }
 
+# Find Rack SDK roots from the captured compiler include paths. Cppcheck still
+# parses these headers for types and control flow, but diagnostics originating
+# inside the SDK are external to the plugin and should not dominate its report.
+discover_rack_sdk_roots() {
+    python3 - "$DB" <<'PY'
+import json
+import shlex
+import sys
+from pathlib import Path
+
+with open(sys.argv[1], "r", encoding="utf-8") as f:
+    db = json.load(f)
+
+roots = set()
+for entry in db:
+    directory = Path(entry.get("directory") or ".")
+    args = entry.get("arguments")
+    if args is None:
+        args = shlex.split(entry.get("command", ""))
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        include = None
+        if arg == "-I" and i + 1 < len(args):
+            i += 1
+            include = args[i]
+        elif arg.startswith("-I") and len(arg) > 2:
+            include = arg[2:]
+        if include:
+            include_path = Path(include)
+            if not include_path.is_absolute():
+                include_path = directory / include_path
+            try:
+                include_path = include_path.resolve()
+            except OSError:
+                pass
+            if include_path.name == "include" and (include_path / "rack.hpp").is_file():
+                roots.add(str(include_path.parent))
+        i += 1
+
+for root in sorted(roots):
+    print(root)
+PY
+}
+
 generate_db() {
     echo "==> Rebuilding compilation database with Bear"
     rm -f "$DB"
@@ -299,15 +369,37 @@ CPPCHECK_ARGS=(
     "--project=$DB"
 )
 
+RACK_SDK_ROOTS=()
+while IFS= read -r sdk_root; do
+    [[ -n "$sdk_root" ]] && RACK_SDK_ROOTS+=("$sdk_root")
+done < <(discover_rack_sdk_roots)
+
+if has_cppcheck_option "--suppress"; then
+    for sdk_root in "${RACK_SDK_ROOTS[@]}"; do
+        CPPCHECK_ARGS+=("--suppress=*:$sdk_root/*")
+    done
+    if (( MAINTAINER )); then
+        CPPCHECK_ARGS+=("--suppress=*:$ROOT/src/third_party/*")
+        CPPCHECK_ARGS+=("--suppress=noCopyConstructor")
+        CPPCHECK_ARGS+=("--suppress=noOperatorEq")
+    fi
+elif (( ${#RACK_SDK_ROOTS[@]} )); then
+    note "$CPPCHECK_VERSION does not advertise --suppress; Rack SDK diagnostics cannot be filtered."
+fi
+
 if has_cppcheck_option "--enable"; then
-    CPPCHECK_ARGS+=("--enable=warning,style,performance,portability,information")
+    if (( MAINTAINER )); then
+        CPPCHECK_ARGS+=("--enable=warning,performance,portability")
+    else
+        CPPCHECK_ARGS+=("--enable=warning,style,performance,portability,information")
+    fi
 fi
 
 if has_cppcheck_option "--inline-suppr"; then
     CPPCHECK_ARGS+=("--inline-suppr")
 fi
 
-if has_cppcheck_option "--template"; then
+if (( MAINTAINER == 0 )) && has_cppcheck_option "--template"; then
     CPPCHECK_ARGS+=("--template=gcc")
 fi
 
@@ -372,8 +464,22 @@ fi
     echo "compile_database: $DB"
     echo "translation_units: $(db_entry_count)"
     echo "jobs_requested: $JOBS"
+    if (( MAINTAINER )); then
+        echo "analysis_profile: maintainer approximation"
+        echo "enabled_groups: warning,performance,portability"
+        echo "suppressed_bundled_sources: $ROOT/src/third_party"
+        echo "suppressed_ownership_checks: noCopyConstructor,noOperatorEq"
+    else
+        echo "analysis_profile: general"
+        echo "enabled_groups: warning,style,performance,portability,information"
+    fi
     echo "deep_analysis: $DEEP_DESCRIPTION"
     echo "configuration_analysis: $CONFIG_DESCRIPTION"
+	if (( ${#RACK_SDK_ROOTS[@]} )); then
+		echo "suppressed_rack_sdk_roots: ${RACK_SDK_ROOTS[*]}"
+	else
+		echo "suppressed_rack_sdk_roots: none detected"
+	fi
     echo
     print_capabilities
     echo
@@ -404,8 +510,22 @@ PY
 echo
 echo "==> Cppcheck capability selection"
 echo "    Version:       $CPPCHECK_VERSION"
+if (( MAINTAINER )); then
+    echo "    Profile:       maintainer approximation"
+    echo "    Check groups:  warning, performance, portability"
+    echo "    Bundled code:  suppressed ($ROOT/src/third_party)"
+    echo "    Rack ownership: suppress noCopyConstructor, noOperatorEq"
+else
+    echo "    Profile:       general"
+    echo "    Check groups:  warning, style, performance, portability, information"
+fi
 echo "    Deep analysis: $DEEP_DESCRIPTION"
 echo "    Configs:       $CONFIG_DESCRIPTION"
+if (( ${#RACK_SDK_ROOTS[@]} )); then
+    echo "    SDK findings:  suppressed (${RACK_SDK_ROOTS[*]})"
+else
+    echo "    SDK findings:  no Rack SDK root detected"
+fi
 echo
 echo "==> Running Cppcheck"
 echo "    Report:        $TEXT_REPORT"

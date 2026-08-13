@@ -174,21 +174,26 @@ struct ChromatidePaletteWidget final : widget::OpaqueWidget {
     explicit ChromatidePaletteWidget(Chromatide* module) : module(module) {}
 
     void draw(const DrawArgs& args) override {
-        if (!module) return;
+        static const std::array<ChromatideColor, 8> previewPalette {{
+            {0, 0, 0}, {255, 255, 255}, {255, 59, 48}, {255, 149, 0},
+            {255, 204, 0}, {52, 199, 89}, {90, 200, 250}, {175, 82, 222}
+        }};
+        const auto& palette = module ? module->palette : previewPalette;
+        const int selectedPaletteIndex = module ? module->selectedPaletteIndex : 1;
 
         float swatchWidth = (box.size.x - 7.0f * 4.0f) / 8.0f;
         float swatchHeight = box.size.y;
 
-        for (size_t i = 0; i < module->palette.size(); ++i) {
+        for (size_t i = 0; i < palette.size(); ++i) {
             float x = i * (swatchWidth + 4.0f);
-            const auto& col = module->palette[i];
+            const auto& col = palette[i];
 
             nvgBeginPath(args.vg);
             nvgRoundedRect(args.vg, x, 0, swatchWidth, swatchHeight, 3.0f);
             nvgFillColor(args.vg, nvgRGB(col.r, col.g, col.b));
             nvgFill(args.vg);
 
-            bool selected = (static_cast<int>(i) == module->selectedPaletteIndex);
+            bool selected = (static_cast<int>(i) == selectedPaletteIndex);
             if (selected) {
                 nvgStrokeColor(args.vg, nvgRGBA(28, 204, 217, 255));
                 nvgStrokeWidth(args.vg, 2.0f);

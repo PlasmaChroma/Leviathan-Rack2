@@ -943,7 +943,27 @@ struct ChronomawSurfaceWidget : Widget {
 	}
 
 	void drawTimelineLaneTrace(const DrawArgs& args, const math::Rect& rect, int channel, bool selected, float nowFrac) {
-		if (!module || channel < 0 || channel >= chronomaw::kNumOutputs || rect.size.x <= 3.f || rect.size.y <= 2.f) {
+		if (channel < 0 || channel >= chronomaw::kNumOutputs || rect.size.x <= 3.f || rect.size.y <= 2.f) {
+			return;
+		}
+		if (!module) {
+			nvgSave(args.vg);
+			nvgScissor(args.vg, rect.pos.x, rect.pos.y, rect.size.x, rect.size.y);
+			nvgBeginPath(args.vg);
+			constexpr int kPreviewPoints = 40;
+			for (int i = 0; i < kPreviewPoints; ++i) {
+				const float t = float(i) / float(kPreviewPoints - 1);
+				const float cycles = 1.f + 0.25f * float(channel);
+				const float wave = std::sin(2.f * float(M_PI) * (cycles * t + 0.08f * float(channel)));
+				const float x = rect.pos.x + t * rect.size.x;
+				const float y = rect.pos.y + (0.5f - 0.34f * wave) * rect.size.y;
+				if (i == 0) nvgMoveTo(args.vg, x, y);
+				else nvgLineTo(args.vg, x, y);
+			}
+			nvgStrokeWidth(args.vg, selected ? 1.35f : 0.85f);
+			nvgStrokeColor(args.vg, selected ? chronomawRgb(126, 224, 255, 220) : chronomawRgb(132, 174, 204, 150));
+			nvgStroke(args.vg);
+			nvgRestore(args.vg);
 			return;
 		}
 		nvgSave(args.vg);
@@ -1411,7 +1431,8 @@ struct ChronomawSurfaceWidget : Widget {
 				tabName(i)
 			);
 		}
-		chronomaw::OutputState* outState = selectedOutputState();
+		chronomaw::OutputState previewOutput;
+		chronomaw::OutputState* outState = module ? selectedOutputState() : &previewOutput;
 
 		const float contentX = inspectorRect.pos.x + 4.f;
 		const float contentW = inspectorRect.size.x - 8.f;
@@ -1520,9 +1541,6 @@ struct ChronomawSurfaceWidget : Widget {
 		}
 
 	void draw(const DrawArgs& args) override {
-		if (!module) {
-			return;
-		}
 		drawRectFilled(args, uiRects.globalBar, chronomawRgb(8, 13, 20, 98), chronomawRgb(96, 136, 162, 140));
 		drawOverview(args);
 		const math::Rect timelineRect = timelineRectForDensity();

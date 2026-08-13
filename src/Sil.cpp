@@ -2221,8 +2221,7 @@ struct HistogramWidget : TransparentWidget {
 	Sil* module;
 
 	void draw(const DrawArgs& args) override {
-		if (!module) return;
-		SilColors colors = SilColors::get(module->colorScheme);
+		SilColors colors = SilColors::get(module ? module->colorScheme : Sil::SCHEME_DEFAULT);
 
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, 0, 0, box.size.x, box.size.y);
@@ -2252,8 +2251,26 @@ struct HistogramWidget : TransparentWidget {
 			}
 		};
 
-		drawChannel(module->hist.minL, module->hist.maxL, midY * 0.5f);
-		drawChannel(module->hist.minR, module->hist.maxR, midY * 1.5f);
+		if (module) {
+			drawChannel(module->hist.minL, module->hist.maxL, midY * 0.5f);
+			drawChannel(module->hist.minR, module->hist.maxR, midY * 1.5f);
+		}
+		else {
+			for (float centerY : {midY * 0.5f, midY * 1.5f}) {
+				nvgBeginPath(args.vg);
+				for (int i = 0; i < 48; ++i) {
+					const float t = float(i) / 47.f;
+					const float envelope = std::sin(float(M_PI) * t);
+					const float y = centerY - std::sin(10.f * float(M_PI) * t) * envelope * halfH * 0.34f;
+					const float x = t * box.size.x;
+					if (i == 0) nvgMoveTo(args.vg, x, y);
+					else nvgLineTo(args.vg, x, y);
+				}
+				nvgStrokeColor(args.vg, nvgLerpRGBA(colors.low, colors.high, 0.45f));
+				nvgStrokeWidth(args.vg, 1.f);
+				nvgStroke(args.vg);
+			}
+		}
 
 		nvgBeginPath(args.vg);
 		nvgMoveTo(args.vg, 0, midY);
@@ -2269,11 +2286,10 @@ struct SpectrumWidget : TransparentWidget {
 	bool isRightChannel = false;
 
 	void draw(const DrawArgs& args) override {
-		if (!module) return;
-		if (!isRightChannel) {
+		if (module && !isRightChannel) {
 			module->updateSpectrumDisplayFromLatestSnapshot();
 		}
-		SilColors colors = SilColors::get(module->colorScheme);
+		SilColors colors = SilColors::get(module ? module->colorScheme : Sil::SCHEME_DEFAULT);
 		auto rgbToHsv = [](const NVGcolor& c, float& h, float& s, float& v) {
 			const float r = clamp(c.r, 0.f, 1.f);
 			const float g = clamp(c.g, 0.f, 1.f);
@@ -2385,11 +2401,15 @@ struct SpectrumWidget : TransparentWidget {
 			}
 		}
 
-		const float* norms = isRightChannel ? module->spec.displayNormR : module->spec.displayNormL;
 		float barW = box.size.x / Sil::SPEC_FREQ_BINS;
 
 		for (int i = 0; i < Sil::SPEC_FREQ_BINS; i++) {
-			const float norm = norms[i];
+			const float previewX = float(i) / float(Sil::SPEC_FREQ_BINS - 1);
+			const float previewShape = std::sin(float(M_PI) * previewX);
+			const float previewRipple = 0.08f * std::sin((isRightChannel ? 13.f : 11.f) * float(M_PI) * previewX);
+			const float norm = module
+				? (isRightChannel ? module->spec.displayNormR[i] : module->spec.displayNormL[i])
+				: clamp(0.08f + 0.48f * previewShape + previewRipple, 0.f, 1.f);
 			if (norm <= 0.01f) continue;
 
 			float barH = norm * box.size.y;
