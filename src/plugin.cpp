@@ -38,7 +38,10 @@ void refreshDragonKingDebugEnabled() {
 	if (!pluginInstance) {
 		return;
 	}
-	const std::string flagPath = asset::plugin(pluginInstance, "res/dragonking.txt");
+	// This is optional per-user developer configuration, not a distributable
+	// plugin asset. Keeping it under Rack's user directory also prevents a
+	// locally enabled debug file from being included in a release package.
+	const std::string flagPath = system::join(asset::user(), "Leviathan/dragonking.txt");
 	std::ifstream flagFile(flagPath);
 	if (!flagFile.good()) {
 		return;

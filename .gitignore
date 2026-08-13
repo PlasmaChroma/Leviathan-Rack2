@@ -15,9 +15,6 @@
 # Unlike build/, these are intended to survive normal build and git cleans.
 /Samples/Doorstop/Auditions/
 
-# Local runtime debug flag
-res/dragonking.txt
-
 # Python cache artifacts
 __pycache__/
 *.pyc
