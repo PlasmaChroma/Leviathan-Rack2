@@ -817,7 +817,7 @@ void Bifurx::process(const ProcessArgs& args) {
 			break;
 		case MOD_QUALITY_BALANCED:
 		default:
-			targetControlDivision = slowCvConnected ? 16 : 16;
+			targetControlDivision = 16;
 			break;
 	}
 	if (targetControlDivision != controlUpdateDivision) {

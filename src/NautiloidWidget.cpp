@@ -1198,17 +1198,13 @@ struct NautiloidZoomSlider final : ui::Slider {
       module && module->zoomRateCvConnected.load(std::memory_order_relaxed);
     const float cvSpeed =
       cvConnected ? module->zoomRateCvNorm.load(std::memory_order_relaxed) : 0.f;
-    bool xVelocityConnected = false;
-    bool yVelocityConnected = false;
     float xVelocity = 0.f;
     float yVelocity = 0.f;
     if (module) {
-      xVelocityConnected = module->xVelocityCvConnected.load(std::memory_order_relaxed);
-      yVelocityConnected = module->yVelocityCvConnected.load(std::memory_order_relaxed);
-      if (xVelocityConnected) {
+      if (module->xVelocityCvConnected.load(std::memory_order_relaxed)) {
         xVelocity = module->xVelocityCvNorm.load(std::memory_order_relaxed);
       }
-      if (yVelocityConnected) {
+      if (module->yVelocityCvConnected.load(std::memory_order_relaxed)) {
         yVelocity = module->yVelocityCvNorm.load(std::memory_order_relaxed);
       }
     }

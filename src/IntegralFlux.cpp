@@ -755,9 +755,8 @@ struct IntegralFluxImpl : IntegralFlux {
 
 		bool trigRise = ch.trigEdge.process(inputs[cfg.trigInput].getVoltage());
 		bool trigAccepted = false;
-		bool retriggerFromFall = false;
 		if (trigRise && ch.trigRearmSec <= 0.f && ch.phase != OUTER_RISE) {
-			retriggerFromFall = (ch.phase == OUTER_FALL);
+			const bool retriggerFromFall = (ch.phase == OUTER_FALL);
 			triggerOuterFunction(ch);
 			if (retriggerFromFall) {
 				// Manual behavior: trigger can reset only during FALL, restarting from cycle start.

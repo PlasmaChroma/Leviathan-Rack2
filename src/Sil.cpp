@@ -1585,8 +1585,8 @@ struct Sil : Module {
 		const float recoveredLowR = lowMid - lowSide * lowBandSideGain;
 		const float recoveredL = highL + recoveredLowL;
 		const float recoveredR = highR + recoveredLowR;
-		float impactAirL = recoveredL;
-		float impactAirR = recoveredR;
+		float impactAirL;
+		float impactAirR;
 		float impactAirLed = 0.f;
 		{
 			const float detector = std::fabs(lowMid);
@@ -1627,8 +1627,8 @@ struct Sil : Module {
 			impactAirLed = impactAir.ledAmount;
 		}
 		float removeMudLed = 0.f;
-		float mudCleanL = impactAirL;
-		float mudCleanR = impactAirR;
+		float mudCleanL;
+		float mudCleanR;
 		const float mono = 0.5f * (impactAirL + impactAirR);
 		removeMud.mudHp.process(mono);
 		const float mudHigh = removeMud.mudHp.highpass();

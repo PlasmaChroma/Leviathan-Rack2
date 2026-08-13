@@ -43,7 +43,7 @@ void applyPanelGlassProgression(double cycleTime) {
 	cycleTime = std::fmod(std::max(0.0, cycleTime), 180.0);
 	float amount = 0.f;
 	NVGcolor tintColor = nvgRGBf(1.f, 0.22f, 1.f);
-	NVGcolor washColor = nvgRGBA(255, 0, 255, 0);
+	NVGcolor washColor;
 	NVGcolor glowColor = nvgRGB(0x1c, 0xcc, 0xd9);
 	NVGcolor strokeColor = nvgRGB(0x2a, 0xab, 0xef);
 
