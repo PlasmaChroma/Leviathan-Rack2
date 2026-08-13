@@ -9,6 +9,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -935,7 +936,7 @@ LeviathanHaloKnob2::Config LeviathanHaloKnob2::brightOrangeConfig() {
 	return config;
 }
 
-LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(config) {
+LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(std::move(config)) {
 	minAngle = -0.83 * M_PI;
 	maxAngle = 0.83 * M_PI;
 	box.size = Vec(46.f, 46.f);

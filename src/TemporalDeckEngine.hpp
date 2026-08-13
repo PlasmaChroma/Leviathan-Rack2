@@ -219,24 +219,22 @@ struct TemporalDeckBuffer {
   };
 
   static const std::array<SincKernel, kSincPhaseCount> &sincKernelLut() {
-    struct LutBuilder {
-      std::array<SincKernel, kSincPhaseCount> kernels {};
-      LutBuilder() {
-        for (int phase = 0; phase < kSincPhaseCount; ++phase) {
-          float frac = float(phase) / float(kSincPhaseCount);
-          float weightSum = 0.f;
-          for (int tap = 0; tap < kSincTapCount; ++tap) {
-            int k = tap - kSincRadius + 1; // [-7, 8]
-            float w = windowedSinc(float(k) - frac, float(kSincRadius));
-            kernels[phase].weights[size_t(tap)] = w;
-            weightSum += w;
-          }
-          kernels[phase].invWeightSum = (std::fabs(weightSum) > 1e-6f) ? (1.f / weightSum) : 1.f;
+    static const std::array<SincKernel, kSincPhaseCount> kernels = []() {
+      std::array<SincKernel, kSincPhaseCount> result {};
+      for (int phase = 0; phase < kSincPhaseCount; ++phase) {
+        float frac = float(phase) / float(kSincPhaseCount);
+        float weightSum = 0.f;
+        for (int tap = 0; tap < kSincTapCount; ++tap) {
+          int k = tap - kSincRadius + 1; // [-7, 8]
+          float w = windowedSinc(float(k) - frac, float(kSincRadius));
+          result[phase].weights[size_t(tap)] = w;
+          weightSum += w;
         }
+        result[phase].invWeightSum = (std::fabs(weightSum) > 1e-6f) ? (1.f / weightSum) : 1.f;
       }
-    };
-    static const LutBuilder lutBuilder;
-    return lutBuilder.kernels;
+      return result;
+    }();
+    return kernels;
   }
 
   static const SincKernel &sincKernelForFraction(float frac) {

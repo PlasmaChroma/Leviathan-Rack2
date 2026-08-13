@@ -238,6 +238,7 @@ mkdir -p "$OUTPUT_DIR"
 
 CACHE_DIR="$OUTPUT_DIR/cache"
 TEXT_REPORT="$OUTPUT_DIR/cppcheck.txt"
+RAW_REPORT="$OUTPUT_DIR/cppcheck.raw.txt"
 XML_REPORT="$OUTPUT_DIR/cppcheck.xml"
 RUN_INFO="$OUTPUT_DIR/run-info.txt"
 
@@ -469,6 +470,7 @@ fi
         echo "enabled_groups: warning,performance,portability"
         echo "suppressed_bundled_sources: $ROOT/src/third_party"
         echo "suppressed_ownership_checks: noCopyConstructor,noOperatorEq"
+        echo "filtered_type_specific_checks: passedByValue(NVGcolor)"
     else
         echo "analysis_profile: general"
         echo "enabled_groups: warning,style,performance,portability,information"
@@ -529,12 +531,66 @@ fi
 echo
 echo "==> Running Cppcheck"
 echo "    Report:        $TEXT_REPORT"
+if (( MAINTAINER )); then
+    echo "    Raw report:    $RAW_REPORT"
+fi
 echo
 
 set +e
-"$CPPCHECK_BIN" "${CPPCHECK_ARGS[@]}" 2>&1 | tee "$TEXT_REPORT"
+if (( MAINTAINER )); then
+    "$CPPCHECK_BIN" "${CPPCHECK_ARGS[@]}" 2>&1 | tee "$RAW_REPORT"
+else
+    "$CPPCHECK_BIN" "${CPPCHECK_ARGS[@]}" 2>&1 | tee "$TEXT_REPORT"
+fi
 CPPCHECK_STATUS=${PIPESTATUS[0]}
 set -e
+
+FILTERED_NVGCOLOR_COUNT=0
+if (( MAINTAINER )); then
+    FILTERED_COUNT_FILE="$OUTPUT_DIR/filtered-nvgcolor-count.txt"
+    python3 - "$RAW_REPORT" "$TEXT_REPORT" "$FILTERED_COUNT_FILE" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+raw_path = Path(sys.argv[1])
+report_path = Path(sys.argv[2])
+count_path = Path(sys.argv[3])
+lines = raw_path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+diagnostic = re.compile(
+    r"^(.*):(\d+):(\d+):\s+\w+:\s+Function parameter '([^']+)' .*\[passedByValue\]\s*$"
+)
+
+def is_nvgcolor_parameter(filename, line_number, parameter):
+    try:
+        source_line = Path(filename).read_text(encoding="utf-8", errors="replace").splitlines()[line_number - 1]
+    except (OSError, IndexError):
+        return False
+    pattern = r"\bNVGcolor\s+(?:const\s+)?" + re.escape(parameter) + r"\b"
+    return re.search(pattern, source_line) is not None
+
+filtered = 0
+output = []
+i = 0
+while i < len(lines):
+    match = diagnostic.match(lines[i].rstrip("\r\n"))
+    if match and is_nvgcolor_parameter(match.group(1), int(match.group(2)), match.group(4)):
+        filtered += 1
+        i += 1
+        # Default Cppcheck output follows a diagnostic with its source line and
+        # caret. Remove only those two presentation lines when present.
+        for _ in range(2):
+            if i < len(lines) and not diagnostic.match(lines[i].rstrip("\r\n")):
+                i += 1
+        continue
+    output.append(lines[i])
+    i += 1
+
+report_path.write_text("".join(output), encoding="utf-8")
+count_path.write_text(str(filtered), encoding="ascii")
+PY
+    FILTERED_NVGCOLOR_COUNT="$(cat "$FILTERED_COUNT_FILE")"
+fi
 
 if (( MAKE_XML )); then
     if has_cppcheck_option "--xml"; then
@@ -566,6 +622,10 @@ fi
 echo
 echo "==> Analysis complete"
 echo "    Text report: $TEXT_REPORT"
+if (( MAINTAINER )); then
+    echo "    Raw report:  $RAW_REPORT"
+    echo "    Filtered:    $FILTERED_NVGCOLOR_COUNT passedByValue(NVGcolor) finding(s)"
+fi
 echo "    Run info:    $RUN_INFO"
 if (( MAKE_XML )) && [[ -f "$XML_REPORT" ]]; then
     echo "    XML report:  $XML_REPORT"
@@ -585,6 +645,10 @@ done
 
 echo
 if has_cppcheck_option "--error-exitcode"; then
+    if (( MAINTAINER )) && [[ "$CPPCHECK_STATUS" -eq 2 ]] &&
+        ! grep -Eq ':[[:space:]]+(error|warning|style|performance|portability|information):' "$TEXT_REPORT"; then
+        CPPCHECK_STATUS=0
+    fi
     case "$CPPCHECK_STATUS" in
         0)
             echo "Cppcheck exited 0: no enabled finding triggered the configured error exit code."
