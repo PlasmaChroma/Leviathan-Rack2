@@ -43,19 +43,11 @@ mandelwake::VisualSnapshot makeHeroSnapshot() {
 }
 
 struct MandelwakePanelLabels final : TransparentWidget {
-	std::shared_ptr<window::Font> rubik;
-
-	MandelwakePanelLabels() {
-		if (APP && APP->window) {
-			rubik = APP->window->loadFont(asset::plugin(pluginInstance, "fonts/Rubik-VariableFont_wght.ttf"));
-		}
-	}
-
 	void label(const DrawArgs& args, const char* text, float xMm, float yMm,
 		float sizeMm, NVGcolor color) {
 		if (!APP || !APP->window || !APP->window->uiFont) return;
 		const Vec position = mm2px(Vec(xMm, yMm));
-		nvgFontFaceId(args.vg, rubik && rubik->handle >= 0 ? rubik->handle : APP->window->uiFont->handle);
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 		nvgFontSize(args.vg, mm2px(sizeMm));
 		nvgTextLetterSpacing(args.vg, 0.f);
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
