@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [v2.9.1]
+
+- Static analysis cleanup
+
+## [v2.9.0]
+
+- Add Puffy - saturation module
+- Changed Temporal Deck to have long play feature to load samples longer than 10 minutes
+- Improved polyphonic display for Iris when scan is using polyphony
+
 ## [v2.8.0]
 - Add Iris - image wavetable oscillator
 - Deep Cache - allow configuration of zoom for raster caching
