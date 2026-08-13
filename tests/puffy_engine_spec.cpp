@@ -1084,6 +1084,34 @@ Result nonlinearGrowth() {
 	};
 }
 
+Result foldTransfersIgnoreInputDynamics() {
+	puffy::DynamicsState idle;
+	puffy::DynamicsState active;
+	active.fast = 1.f;
+	active.transient = 1.f;
+	float maximumDifference = 0.f;
+	for (puffy::Character character : {
+			puffy::Character::Frenzy, puffy::Character::Teeth}) {
+		for (int amountIndex = 0; amountIndex <= 20; ++amountIndex) {
+			const float amount = float(amountIndex) / 20.f;
+			for (int inputIndex = -400; inputIndex <= 400; ++inputIndex) {
+				const float input = float(inputIndex) / 400.f;
+				const float idleOutput = puffy::Engine::processCharacter(
+					character, input, amount, idle);
+				const float activeOutput = puffy::Engine::processCharacter(
+					character, input, amount, active);
+				maximumDifference = std::max(
+					maximumDifference, std::fabs(activeOutput - idleOutput));
+			}
+		}
+	}
+	return {
+		"FRENZY and TEETH retain a fixed transfer as input dynamics change",
+		maximumDifference == 0.f,
+		"maximumDifference=" + std::to_string(maximumDifference)
+	};
+}
+
 Result splitCharactersCreateContinuousAsymmetry() {
 	puffy::DynamicsState dynamics;
 	const float negativeZero = puffy::Engine::processCharacter(
@@ -1199,6 +1227,7 @@ int main() {
 		recoveryAndSilence(),
 		characterTransitionsAreTransparentAndRetargetable(),
 		nonlinearGrowth(),
+		foldTransfersIgnoreInputDynamics(),
 		splitCharactersCreateContinuousAsymmetry(),
 		bipolarInputActivityTracksStereoExcursions(),
 		realtimePathDoesNotAllocate()

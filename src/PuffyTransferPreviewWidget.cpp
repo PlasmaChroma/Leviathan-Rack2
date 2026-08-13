@@ -212,8 +212,6 @@ void PuffyTransferPreviewWidget::rebuildPoints() {
 	pointsValid = true;
 	lastAmount = amount;
 	lastAmountBin = amountBin;
-	lastFast = dynamics.fast;
-	lastTransient = dynamics.transient;
 	lastNegativeCharacter = int(negativeCharacter);
 	lastPositiveCharacter = int(positiveCharacter);
 	lastCurveSize = box.size;
@@ -242,11 +240,6 @@ void PuffyTransferPreviewWidget::step() {
 		visual.negativeCharacter, 0, puffy::kCharacterCount - 1);
 	const int positiveCharacter = clamp(
 		visual.positiveCharacter, 0, puffy::kCharacterCount - 1);
-	const bool frenzyReactive =
-		negativeCharacter == int(puffy::Character::Frenzy)
-		|| positiveCharacter == int(puffy::Character::Frenzy)
-		|| negativeCharacter == int(puffy::Character::Teeth)
-		|| positiveCharacter == int(puffy::Character::Teeth);
 	const bool swarmActive =
 		negativeCharacter == int(puffy::Character::Swarm)
 		|| positiveCharacter == int(puffy::Character::Swarm);
@@ -262,10 +255,7 @@ void PuffyTransferPreviewWidget::step() {
 		|| positiveCharacter != lastPositiveCharacter
 		|| (swarmActive
 			? amountBin != lastAmountBin
-			: std::fabs(visual.effectiveAmount - lastAmount) > 0.001f)
-		|| (frenzyReactive
-			&& (std::fabs(visual.inputActivity - lastFast) > 0.01f
-				|| std::fabs(visual.transientActivity - lastTransient) > 0.01f));
+			: std::fabs(visual.effectiveAmount - lastAmount) > 0.001f);
 	const bool curveRebuildAllowed = curveChanged
 		&& (lastCurveRebuildTime < 0.0
 			|| system::getTime() - lastCurveRebuildTime >= (1.0 / 30.0));

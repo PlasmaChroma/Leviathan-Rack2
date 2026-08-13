@@ -713,10 +713,12 @@ void Nautiloid::process(const ProcessArgs& args) {
     }
   } else if (irisConnected && generation != 0u) {
     if (generation != lastExpanderGenerationSentRight) {
-      const nautiloid_iris_expander::SourceSlot* slot = irisExpanderSourceSlotSnapshot(nullptr);
-      if (slot && irisAcceptsAutoSync) {
+      uint64_t ownedGeneration = 0u;
+      std::shared_ptr<const iris::SourceField> source =
+        irisExpanderOwnedSourceSnapshot(&ownedGeneration);
+      if (source && ownedGeneration == generation && irisAcceptsAutoSync) {
         if (Iris* irisModule = dynamic_cast<Iris*>(right)) {
-          irisModule->requestExpanderSource(slot, generation);
+          irisModule->requestOwnedExpanderSource(std::move(source), generation);
           lastExpanderGenerationSentRight = generation;
           irisExpanderPublishes.fetch_add(1u, std::memory_order_relaxed);
           forceIrisSourceSync.store(false, std::memory_order_release);
@@ -894,12 +896,12 @@ void Nautiloid::setGpuPreviewAvailable(bool available, bool requireCpuFallback) 
 
 void Nautiloid::requestIrisSourceSync() {
   forceIrisSourceSync.store(true, std::memory_order_release);
-  const uint64_t generation = irisPreviewGeneration.load(std::memory_order_acquire);
-  const nautiloid_iris_expander::SourceSlot* slot = irisExpanderSourceSlotSnapshot(nullptr);
+  uint64_t generation = 0u;
+  std::shared_ptr<const iris::SourceField> source = irisExpanderOwnedSourceSnapshot(&generation);
   Module* right = rightExpander.module;
-  if (generation != 0u && slot && isIrisModule(right) && right->leftExpander.module == this) {
+  if (generation != 0u && source && isIrisModule(right) && right->leftExpander.module == this) {
     if (Iris* irisModule = dynamic_cast<Iris*>(right)) {
-      irisModule->requestExpanderSource(slot, generation);
+      irisModule->requestOwnedExpanderSource(std::move(source), generation);
       lastExpanderGenerationSentRight = generation;
       irisExpanderPublishes.fetch_add(1u, std::memory_order_relaxed);
       forceIrisSourceSync.store(false, std::memory_order_release);
@@ -946,14 +948,14 @@ void Nautiloid::irisPreviewSnapshot(std::vector<uint8_t>* rgb, int* width, int* 
   }
 }
 
-const nautiloid_iris_expander::SourceSlot* Nautiloid::irisExpanderSourceSlotSnapshot(uint64_t* generation) const {
+std::shared_ptr<const iris::SourceField> Nautiloid::irisExpanderOwnedSourceSnapshot(uint64_t* generation) const {
+  std::lock_guard<std::mutex> lock(snapshotMutex);
   const uint64_t gen = irisPreviewGeneration.load(std::memory_order_acquire);
   if (generation) *generation = gen;
-  if (gen == 0u) return nullptr;
-  const int slotIndex = irisExpanderPublishedSlot.load(std::memory_order_acquire);
-  if (slotIndex < 0 || slotIndex >= nautiloid_iris_expander::kSourceSlotCount) return nullptr;
-  const nautiloid_iris_expander::SourceSlot& slot = irisExpanderSlots[size_t(slotIndex)];
-  return slot.generation.load(std::memory_order_acquire) == gen ? &slot : nullptr;
+  if (gen == 0u || !irisExpanderOwnedSource || !irisExpanderOwnedSource->valid()) {
+    return {};
+  }
+  return irisExpanderOwnedSource;
 }
 
 void Nautiloid::displayTileCacheSnapshot(DisplayTileCacheSnapshot* snapshot) const {
@@ -1030,7 +1032,7 @@ void Nautiloid::ensureFallbackWorkers() {
       debugGpuPreviewAvailable.load(std::memory_order_acquire) ||
       !cpuDisplayFallbackRequired.load(std::memory_order_acquire)) return;
   std::lock_guard<std::mutex> lifecycleLock(fallbackLifecycleMutex);
-  if (worker.joinable()) return;
+  if (fallbackWorkersStopping || worker.joinable()) return;
   {
     std::lock_guard<std::mutex> lock(workerMutex);
     workerStop = false;
@@ -1049,32 +1051,43 @@ void Nautiloid::ensureFallbackWorkers() {
 }
 
 void Nautiloid::stopFallbackWorkers() {
-  std::lock_guard<std::mutex> lifecycleLock(fallbackLifecycleMutex);
+  std::thread displayThread;
+  std::thread cacheThread;
+  std::thread reprojectionThread;
   {
-    std::lock_guard<std::mutex> lock(workerMutex);
-    workerStop = true;
-    requestPending = false;
+    std::unique_lock<std::mutex> lifecycleLock(fallbackLifecycleMutex);
+    fallbackLifecycleCv.wait(lifecycleLock, [this]() { return !fallbackWorkersStopping; });
+    fallbackWorkersStopping = true;
+    {
+      std::lock_guard<std::mutex> lock(workerMutex);
+      workerStop = true;
+      requestPending = false;
+    }
+    {
+      std::lock_guard<std::mutex> lock(cacheRequestMutex);
+      cacheWorkerStop = true;
+      cacheRequestPending = false;
+    }
+    {
+      std::lock_guard<std::mutex> lock(reprojectionRequestMutex);
+      reprojectionWorkerStop = true;
+      reprojectionRequestPending = false;
+    }
+    displayThread = std::move(worker);
+    cacheThread = std::move(cacheWorker);
+    reprojectionThread = std::move(reprojectionWorker);
   }
   workerCv.notify_one();
-  {
-    std::lock_guard<std::mutex> lock(cacheRequestMutex);
-    cacheWorkerStop = true;
-    cacheRequestPending = false;
-  }
   cacheRequestCv.notify_one();
-  {
-    std::lock_guard<std::mutex> lock(reprojectionRequestMutex);
-    reprojectionWorkerStop = true;
-    reprojectionRequestPending = false;
-  }
   reprojectionRequestCv.notify_one();
+  if (displayThread.joinable()) displayThread.join();
+  if (cacheThread.joinable()) cacheThread.join();
+  if (reprojectionThread.joinable()) reprojectionThread.join();
   {
-    // Joining here guarantees that no CPU display renderer survives an editor
-    // transition to the GPU path or module destruction.
-    if (worker.joinable()) worker.join();
-    if (cacheWorker.joinable()) cacheWorker.join();
-    if (reprojectionWorker.joinable()) reprojectionWorker.join();
+    std::lock_guard<std::mutex> lifecycleLock(fallbackLifecycleMutex);
+    fallbackWorkersStopping = false;
   }
+  fallbackLifecycleCv.notify_all();
 }
 
 void Nautiloid::submitRequest(const WorkerRequest& request) {
@@ -1886,7 +1899,7 @@ void Nautiloid::irisWorkerLoop() {
         irisCompatibleColorMode == request.colorMode;
     }
     if (irisCompatibleCurrent) {
-      if (irisExpanderSourceSlotSnapshot(nullptr)) {
+      if (irisExpanderOwnedSourceSnapshot(nullptr)) {
         continue;
       }
       iris::SourceField cachedSource;
@@ -1917,10 +1930,15 @@ void Nautiloid::irisWorkerLoop() {
       nautiloid_iris_expander::SourceSlot& slot = irisExpanderSlots[size_t(slotIndex)];
       slot.source = std::move(cachedSource);
       slot.generation.store(request.serial, std::memory_order_release);
+      {
+        std::lock_guard<std::mutex> lock(snapshotMutex);
+        irisExpanderOwnedSource =
+          std::make_shared<const iris::SourceField>(std::move(slot.source));
+        irisPreviewGeneration.store(request.serial, std::memory_order_release);
+      }
       irisExpanderWriteSlot = slotIndex;
       nautiloid_iris_expander::releaseSourceSlotWrite(&slot);
       irisExpanderPublishedSlot.store(slotIndex, std::memory_order_release);
-      irisPreviewGeneration.store(request.serial, std::memory_order_release);
       continue;
     }
 
@@ -1990,6 +2008,8 @@ void Nautiloid::irisWorkerLoop() {
     slot.generation.store(request.serial, std::memory_order_release);
     std::lock_guard<std::mutex> lock(snapshotMutex);
     irisCompatibleSource = slot.source;
+    irisExpanderOwnedSource =
+      std::make_shared<const iris::SourceField>(std::move(slot.source));
     irisCompatibleSerial = request.serial;
     irisCompatibleMode = request.mode;
     irisCompatibleZoom = request.zoom;

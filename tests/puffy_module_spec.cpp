@@ -78,8 +78,7 @@ int main() {
 	const bool lightsUpdated =
 		near(module.lights[Puffy::LIMITER_HARD_LIGHT].getBrightness(), 0.f)
 		&& near(module.lights[Puffy::LIMITER_SOFT_LIGHT].getBrightness(), 1.f)
-		&& near(module.lights[Puffy::LIMITER_OFF_LIGHT].getBrightness(), 0.f)
-		&& near(module.lights[Puffy::ROAMING_LIGHT].getBrightness(), 1.f);
+		&& near(module.lights[Puffy::LIMITER_OFF_LIGHT].getBrightness(), 0.f);
 	Puffy loaded;
 	loaded.dataFromJson(saved);
 	processBypass(loaded, 0);
@@ -87,15 +86,14 @@ int main() {
 		loaded.limiterMode.load(std::memory_order_relaxed)
 			== int(puffy::LimiterMode::Soft)
 		&& loaded.roamingEnabled.load(std::memory_order_relaxed)
-		&& near(loaded.lights[Puffy::LIMITER_SOFT_LIGHT].getBrightness(), 1.f)
-		&& near(loaded.lights[Puffy::ROAMING_LIGHT].getBrightness(), 1.f);
+		&& near(loaded.lights[Puffy::LIMITER_SOFT_LIGHT].getBrightness(), 1.f);
 	json_decref(saved);
 
 	module.params[Puffy::ROAMING_BUTTON_PARAM].setValue(0.f);
 	processBypass(module, frame++);
 	const bool roamingTurnsOff =
 		!module.roamingEnabled.load(std::memory_order_relaxed)
-		&& near(module.lights[Puffy::ROAMING_LIGHT].getBrightness(), 0.f);
+		&& !module.roamingEnabled.load(std::memory_order_relaxed);
 
 	const bool pass = routingPreserved && stateUpdated && stateReloaded
 		&& lightsUpdated && roamingTurnsOff;

@@ -108,6 +108,12 @@ struct PuffyLimiterModeButton final : SmallGoldButton {
 	}
 };
 
+struct PuffyRoamingButton final : SmallGoldButton {
+	PuffyRoamingButton() : SmallGoldButton(15.f) {
+		momentary = false;
+	}
+};
+
 struct PuffyLimiterModeLabels final : TransparentWidget {
 	void draw(const DrawArgs& args) override {
 		if (!APP || !APP->window || !APP->window->uiFont) {
@@ -1563,13 +1569,11 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	positiveCharacterMenu->box.size = mm2px(positiveCharacterPillMm.size);
 	addParam(positiveCharacterMenu);
 
-	// Match Undertow's OCT control: the aperture LED is integrated directly
-	// into the gold button. Align its right edge with the positive-character pill.
-	auto* roamingButton = createLightParamCentered<SmallGoldApertureButton>(
-		anchor("roaming_button", Vec(56.25f, 45.33f)),
-		module, Puffy::ROAMING_BUTTON_PARAM, Puffy::ROAMING_LIGHT);
-	static_cast<SmallGoldApertureLight*>(roamingButton->getLight())
-		->setBaseColor(nvgRGB(255, 118, 24));
+	// Puffy's visible presence in the rack is the roaming-state indicator.
+	// Keep this as a tactile latching button without a redundant LED.
+	auto* roamingButton = createParamCentered<PuffyRoamingButton>(
+		anchor("roaming_button", Vec(56.758f, 55.537893f)),
+		module, Puffy::ROAMING_BUTTON_PARAM);
 	addParam(roamingButton);
 
 	math::Rect transferPreviewRectMm;

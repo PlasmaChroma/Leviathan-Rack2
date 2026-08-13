@@ -60,6 +60,8 @@ struct Puffy final : Module {
 		LIMITER_HARD_LIGHT,
 		LIMITER_SOFT_LIGHT,
 		LIMITER_OFF_LIGHT,
+		// Reserved for compatibility with patches created before the roaming
+		// button's redundant indicator was removed.
 		ROAMING_LIGHT,
 		LIGHTS_LEN
 	};

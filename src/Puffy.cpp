@@ -62,7 +62,6 @@ Puffy::Puffy() {
 	configLight(LIMITER_HARD_LIGHT, "Hard Limiter");
 	configLight(LIMITER_SOFT_LIGHT, "Soft Limiter");
 	configLight(LIMITER_OFF_LIGHT, "No Limiter");
-	configLight(ROAMING_LIGHT, "Roaming mode enabled");
 	configBypass(INPUT_L, OUTPUT_L);
 	configBypass(INPUT_R, OUTPUT_R);
 }
@@ -199,8 +198,6 @@ void Puffy::updateModeLights(
 	lights[LIMITER_HARD_LIGHT].setBrightness(activeLimiterMode == 0 ? 1.f : 0.f);
 	lights[LIMITER_SOFT_LIGHT].setBrightness(activeLimiterMode == 1 ? 1.f : 0.f);
 	lights[LIMITER_OFF_LIGHT].setBrightness(activeLimiterMode == 2 ? 1.f : 0.f);
-	lights[ROAMING_LIGHT].setBrightness(
-		roamingEnabled.load(std::memory_order_relaxed) ? 1.f : 0.f);
 }
 
 void Puffy::process(const ProcessArgs& args) {
@@ -307,7 +304,6 @@ void Puffy::onReset(const ResetEvent& event) {
 	lights[LIMITER_HARD_LIGHT].setBrightness(1.f);
 	lights[LIMITER_SOFT_LIGHT].setBrightness(0.f);
 	lights[LIMITER_OFF_LIGHT].setBrightness(0.f);
-	lights[ROAMING_LIGHT].setBrightness(0.f);
 }
 
 void Puffy::onSampleRateChange(const SampleRateChangeEvent& event) {

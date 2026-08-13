@@ -310,6 +310,7 @@ Engine::CharacterCoefficients Engine::prepareCharacter(
 	Character character,
 	float amount,
 	const DynamicsState& dynamicsState) {
+	(void) dynamicsState;
 	CharacterCoefficients coefficients;
 	coefficients.character = character;
 	coefficients.amount = clamp01(amount);
@@ -352,15 +353,13 @@ Engine::CharacterCoefficients Engine::prepareCharacter(
 			break;
 		case Character::Frenzy:
 		case Character::Teeth: {
-			const float fastControl = clamp01(dynamicsState.fast);
-			const float transient = clamp01(dynamicsState.transient);
 			// Puff sweeps continuously from one to four complete sine-fold
-			// cycles while contracting their vertical span. Dynamics bends the
-			// phase asymmetrically without moving the origin or end anchors.
+			// cycles while contracting their vertical span. Keep the asymmetric
+			// phase bend fixed so input level moves along one stable transfer curve
+			// instead of modulating the waveshaper itself.
 			coefficients.foldPhaseCycles = 0.5f * (1.f + 3.f * a);
 			coefficients.foldGain = 1.f / (1.f + 0.5f * a);
-			coefficients.phaseSkew =
-				0.12f + 0.18f * fastControl + 0.12f * transient;
+			coefficients.phaseSkew = 0.12f;
 			// At half PUFF the fold endpoint is the worst-case rail peak, so a
 			// 0.398 edge slope leaves it at 0.999. Near full PUFF, smoothly restore
 			// the original +/-0.75 edge anchors while independently easing the
