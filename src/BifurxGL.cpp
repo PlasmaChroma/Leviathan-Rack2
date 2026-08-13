@@ -84,8 +84,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	debug_terminal::UiTimingRangeAccumulator stepUsRange;
 	debug_terminal::UiTimingRangeAccumulator drawUsRange;
 	uint64_t lastDrawVertexCount = 0;
-	float lastCurvePrepUs = 0.f;
-	float lastOverlayPrepUs = 0.f;
 
 	BifurxSpectrumGLWidget() : BifurxSpectrumBase() {
 		const size_t overlaySegmentCount = (kCurvePointCount > 0) ? size_t(kCurvePointCount - 1) : size_t(0);
@@ -942,7 +940,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			stepUsRange.add(stepMs * 1000.f);
 		}
 
-		if (isDragonKingDebugEnabled() && module && module->renderMode == Bifurx::RENDER_OPENGL) {
+		if (isDragonKingDebugEnabled()) {
 			double nowSec = system::getTime();
 			uint32_t debugId = module->debugInstanceId;
 			double& lastSubmitSec = gDebugTerminalLastSubmitSec[debugId];

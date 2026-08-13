@@ -54,8 +54,8 @@ struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 	};
 
 	widget::FramebufferWidget* framebuffer = nullptr;
-	float curveX[kCurvePointCount];
-	float curveY[kCurvePointCount];
+	float curveX[kCurvePointCount] {};
+	float curveY[kCurvePointCount] {};
 	float bottomY = 0.f;
 	float cachedCurveXPlotX = NAN;
 	float cachedCurveXUsableW = NAN;
@@ -71,8 +71,6 @@ struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 	debug_terminal::UiTimingRangeAccumulator stepUsRange;
 	debug_terminal::UiTimingRangeAccumulator drawUsRange;
 	uint64_t lastDrawVertexCount = 0;
-	float lastCurvePrepUs = 0.f;
-	float lastOverlayPrepUs = 0.f;
 	
 	BifurxLlTelemetryState llTelemetryState;
 	bool hasLlTelemetry = false;

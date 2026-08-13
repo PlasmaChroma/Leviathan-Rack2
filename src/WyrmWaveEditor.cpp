@@ -83,10 +83,9 @@ struct WyrmWaveEditor : TransparentWidget {
 	bool waveMaterialDirty = true;
 	std::vector<unsigned char> waveMaterialPixels;
 
-	explicit WyrmWaveEditor(Wyrm* m, std::shared_ptr<WyrmSand> sandState) {
-		module = m;
-		sand = sandState ? sandState : std::make_shared<WyrmSand>();
-	}
+	explicit WyrmWaveEditor(Wyrm* m, std::shared_ptr<WyrmSand> sandState)
+		: module(m)
+		, sand(sandState ? std::move(sandState) : std::make_shared<WyrmSand>()) {}
 
 	~WyrmWaveEditor() override {
 		nvg_gfx_lifecycle::resetOwnedNvgImage(

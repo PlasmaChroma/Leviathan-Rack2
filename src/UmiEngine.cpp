@@ -189,7 +189,7 @@ bool Engine::findBurstSpawnPosition(
 	}
 	constexpr int LANE_COUNT =
 		int((SPAWN_MAX_X - SPAWN_MIN_X) / SPAWN_SPACING) + 1;
-	const float radius = Ball {}.radius;
+	const float radius = Ball::DEFAULT_RADIUS;
 	for (float y : SPAWN_ROWS) {
 		int nearestLane = int(std::round((preferredX - SPAWN_MIN_X) / SPAWN_SPACING));
 		nearestLane = std::max(0, std::min(LANE_COUNT - 1, nearestLane));

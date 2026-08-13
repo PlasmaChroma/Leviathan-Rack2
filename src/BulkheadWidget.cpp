@@ -104,10 +104,10 @@ struct BulkheadRoomCanvasWidget : TransparentWidget {
 	std::shared_ptr<Svg> rotateIconNormal;
 	std::shared_ptr<Svg> rotateIconHighlighted;
 
-	explicit BulkheadRoomCanvasWidget(Bulkhead* module) : module(module) {
-		rotateIconNormal = Svg::load(asset::plugin(pluginInstance, "res/icon/reset-normal.svg"));
-		rotateIconHighlighted = Svg::load(asset::plugin(pluginInstance, "res/icon/reset-highlighted.svg"));
-	}
+	explicit BulkheadRoomCanvasWidget(Bulkhead* module)
+		: module(module)
+		, rotateIconNormal(Svg::load(asset::plugin(pluginInstance, "res/icon/reset-normal.svg")))
+		, rotateIconHighlighted(Svg::load(asset::plugin(pluginInstance, "res/icon/reset-highlighted.svg"))) {}
 
 	Vec rackMouseToLocal() const {
 		Vec localPos = APP->scene->rack->getMousePos().minus(box.pos);

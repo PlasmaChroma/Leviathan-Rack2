@@ -535,9 +535,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
       }
       return;
     }
-    if (module) {
-      module->setGpuPreviewAvailable(true);
-    }
+    module->setGpuPreviewAvailable(true);
 
     ModeProgram& modeProgram = modePrograms[size_t(mode)];
     const float zoomScale = std::pow(0.05f, clamp(module->fractalZoom, 0.f, kNautiloidMaxFractalZoom));
@@ -1152,8 +1150,8 @@ struct NautiloidZoomSlider final : ui::Slider {
   float lastDrawZoomAmount = -1.f;
   Vec lastDrawSize;
 
-  NautiloidZoomSlider() {
-    handleSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/LuminSliderHandle.svg"));
+  NautiloidZoomSlider()
+    : handleSvg(Svg::load(asset::plugin(pluginInstance, "res/icon/LuminSliderHandle.svg"))) {
     handleLight = new NautiloidZoomHandleLight;
     handleLightNaturalSize = handleLight->box.size;
     if (handleLight->fb) {

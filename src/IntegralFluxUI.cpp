@@ -1411,10 +1411,9 @@ struct IntegralFluxShapeModeGlyphOverlay : TransparentWidget {
 
 	IntegralFluxShapeModeGlyphOverlay(IntegralFlux* module, int shapeModeParamId)
 		: module(module)
-		, shapeModeParamId(shapeModeParamId) {
-		mirrorSvg = visual_assets::loadPluginSvgCached("res/icon/mirror_highlight.svg");
-		sharkSvg = visual_assets::loadPluginSvgCached("res/icon/shark_highlight.svg");
-	}
+		, shapeModeParamId(shapeModeParamId)
+		, mirrorSvg(visual_assets::loadPluginSvgCached("res/icon/mirror_highlight.svg"))
+		, sharkSvg(visual_assets::loadPluginSvgCached("res/icon/shark_highlight.svg")) {}
 
 	IntegralFlux::FunctionShapeMode currentMode(int shapeModeParamId) const {
 		if (!module || shapeModeParamId < 0) {

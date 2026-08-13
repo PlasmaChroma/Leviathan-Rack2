@@ -464,7 +464,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		if (ok == GL_TRUE) return shader;
 		GLint logLength = 0;
 		glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLength);
-		std::vector<char> log(size_t(std::max(logLength, 1)));
+		std::vector<char> log(static_cast<size_t>(std::max(logLength, 1)));
 		GLsizei written = 0;
 		glGetShaderInfoLog(shader, GLsizei(log.size()), &written, log.data());
 		WARN("HaloKnob2 shader compile failed (type=%u): %s", unsigned(type), log.data());
@@ -703,7 +703,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		if (linked != GL_TRUE) {
 			GLint logLength = 0;
 			glGetProgramiv(program, GL_INFO_LOG_LENGTH, &logLength);
-			std::vector<char> log(size_t(std::max(logLength, 1)));
+			std::vector<char> log(static_cast<size_t>(std::max(logLength, 1)));
 			GLsizei written = 0;
 			glGetProgramInfoLog(program, GLsizei(log.size()), &written, log.data());
 			WARN("HaloKnob2 shader link failed: %s", log.data());

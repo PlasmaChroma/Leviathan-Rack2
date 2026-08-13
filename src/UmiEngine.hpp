@@ -8,9 +8,10 @@
 namespace umi {
 
 struct Ball {
+	static constexpr float DEFAULT_RADIUS = 18.f;
 	Vec2 pos;
 	Vec2 vel;
-	float radius = 18.f;
+	float radius = DEFAULT_RADIUS;
 	float age = 0.f;
 	float lowSpeedTime = 0.f;
 	std::uint32_t id = 0;

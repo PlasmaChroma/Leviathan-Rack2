@@ -1012,6 +1012,9 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 	}
 
 	void setRackZoom(float zoom) {
+		if (!fishWidget) {
+			return;
+		}
 		zoom = std::isfinite(zoom)
 			? clamp(zoom, 0.05f, kMaximumRackZoom) : 1.f;
 		const Vec nextSize(
@@ -1021,10 +1024,8 @@ struct PuffyRoamingOverlay final : TransparentWidget {
 			return;
 		}
 		const Vec center = avatarCenter();
-		if (fishWidget) {
-			fishWidget->box.size = nextSize;
-			fishWidget->box.pos = box.size.minus(nextSize).mult(0.5f);
-		}
+		fishWidget->box.size = nextSize;
+		fishWidget->box.pos = box.size.minus(nextSize).mult(0.5f);
 		box.pos = center.minus(fishWidget->box.pos).minus(
 			fishWidget->box.size.mult(0.5f));
 	}

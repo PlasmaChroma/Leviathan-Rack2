@@ -253,7 +253,7 @@ void DeepcacheArchiveWorker::markUnavailable(int errorCode) {
 	setState(DatabaseState::ERROR);
 }
 
-void DeepcacheArchiveWorker::start(const std::string& directory, std::vector<ArchiveWantedEntry> wanted) {
+void DeepcacheArchiveWorker::start(const std::string& directory, const std::vector<ArchiveWantedEntry>& wanted) {
 	if (started_)
 		return;
 	directory_ = directory;

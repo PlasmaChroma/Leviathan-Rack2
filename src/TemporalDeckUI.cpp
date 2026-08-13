@@ -721,7 +721,7 @@ static std::string hexU64(uint64_t value) {
   return out.str();
 }
 
-static std::string jsonEscape(std::string text) {
+static std::string jsonEscape(const std::string& text) {
   std::ostringstream out;
   for (unsigned char c : text) {
     switch (c) {

@@ -9,11 +9,11 @@ namespace {
 struct WorkerOverlayScratch {
 	dsp::RealFFT fft;
 	alignas(16) float window[kFftSize];
-	alignas(16) float fftInputTime[kFftSize];
-	alignas(16) float fftOutputTime[kFftSize];
-	alignas(16) float fftOutputFreq[2 * kFftSize];
-	alignas(16) float fftResponseOutputFreq[2 * kFftSize];
-	alignas(16) float fftRawInputFreq[2 * kFftSize];
+	alignas(16) float fftInputTime[kFftSize] {};
+	alignas(16) float fftOutputTime[kFftSize] {};
+	alignas(16) float fftOutputFreq[2 * kFftSize] {};
+	alignas(16) float fftResponseOutputFreq[2 * kFftSize] {};
+	alignas(16) float fftRawInputFreq[2 * kFftSize] {};
 
 	WorkerOverlayScratch() : fft(kFftSize) {
 		for (int i = 0; i < kFftSize; ++i) {

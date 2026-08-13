@@ -391,12 +391,12 @@ struct BifurxSpectrumBase {
 	// Common FF resources for analysis
 	dsp::RealFFT fft;
 	alignas(16) float window[kFftSize];
-	alignas(16) float fftInputTime[kFftSize];
-	alignas(16) float fftOutputTime[kFftSize];
-	alignas(16) float fftInputFreq[2 * kFftSize];
-	alignas(16) float fftOutputFreq[2 * kFftSize];
-	alignas(16) float fftResponseOutputFreq[2 * kFftSize];
-	alignas(16) float fftRawInputFreq[2 * kFftSize];
+	alignas(16) float fftInputTime[kFftSize] {};
+	alignas(16) float fftOutputTime[kFftSize] {};
+	alignas(16) float fftInputFreq[2 * kFftSize] {};
+	alignas(16) float fftOutputFreq[2 * kFftSize] {};
+	alignas(16) float fftResponseOutputFreq[2 * kFftSize] {};
+	alignas(16) float fftRawInputFreq[2 * kFftSize] {};
 
 	uint32_t lastModelUpdateSeq = 0;
 	mutable BifurxPreviewModel cachedModel;
@@ -409,7 +409,7 @@ struct BifurxSpectrumBase {
 	mutable float refinedCurveTemplateSampleRate = 0.f;
 	mutable float refinedCurveTemplateAnchorX01[2] = {0.f, 0.f};
 	mutable bool refinedCurveTemplateMarkerPinned[2] = {false, false};
-	mutable BifurxMarkerLayout cachedMarkerLayout;
+	mutable BifurxMarkerLayout cachedMarkerLayout {};
 	mutable bool cachedMarkerLayoutValid = false;
 	mutable float cachedMarkerLayoutW = 0.f;
 	mutable float cachedMarkerLayoutH = 0.f;

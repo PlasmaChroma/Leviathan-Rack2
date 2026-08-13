@@ -145,8 +145,9 @@ struct WyrmEditorSurface final : Widget {
 	widget::FramebufferWidget* editorFramebuffer = nullptr;
 	TransparentWidget* waveEditor = nullptr;
 
-	explicit WyrmEditorSurface(Wyrm* m) : module(m) {
-		sandState = std::make_shared<WyrmSand>();
+	explicit WyrmEditorSurface(Wyrm* m)
+		: module(m)
+		, sandState(std::make_shared<WyrmSand>()) {
 		sandGlWidget = createWyrmSandGlWidget(module, sandState);
 		addChild(sandGlWidget);
 		waveEditor = createWyrmWaveEditor(module, sandState);

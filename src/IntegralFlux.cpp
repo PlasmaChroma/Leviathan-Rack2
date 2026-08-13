@@ -197,11 +197,8 @@ struct IntegralFluxImpl : IntegralFlux {
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
 	float previewDotPublishTimer = 0.f;
-	static constexpr float LINEAR_SHAPE = 0.33f;
 	static constexpr float OUTER_V_MIN = 0.f;
 	static constexpr float OUTER_V_MAX = 10.2f;
-	static constexpr float WARP_K_MAX = 40.f;
-	static constexpr int WARP_SCALE_SAMPLES = 16;
 	static constexpr float PARAM_CACHE_EPS = 1e-4f;
 	static constexpr float CV_CACHE_EPS = 1e-3f;
 	static constexpr float TARGET_EPS = 1e-4f;
@@ -321,7 +318,6 @@ struct IntegralFluxImpl : IntegralFlux {
 	static constexpr float PREVIEW_INTERACTIVE_HOLD = 0.25f;
 	static constexpr float PREVIEW_DOT_PUBLISH_INTERVAL = 1.f / 120.f;
 	static constexpr int KNOB_CURVE_LUT_SIZE = 4096;
-	static constexpr float SHARK_FIN_LINEAR_SHAPE = 0.5f;
 	std::array<float, KNOB_CURVE_LUT_SIZE> knobCurveLut {};
 	float cachedInjectSampleTime = -1.f;
 	float cachedInjectAlphaBase = 0.f;
@@ -379,61 +375,6 @@ struct IntegralFluxImpl : IntegralFlux {
 
 	static float shapeSignedFromKnobForMode(float shape01, FunctionShapeMode mode) {
 		return shapeSignedFromKnob(shape01, mode == FUNCTION_SHAPE_SHARK_FIN ? SHARK_FIN_LINEAR_SHAPE : LINEAR_SHAPE);
-	}
-
-	static FunctionShapeMode functionShapeModeFromParam(float value) {
-		return value >= 0.5f ? FUNCTION_SHAPE_MATHS : FUNCTION_SHAPE_SHARK_FIN;
-	}
-
-	static FunctionShapeMode functionShapeModeFromStoredInt(int value) {
-		return value == FUNCTION_SHAPE_SHARK_FIN ? FUNCTION_SHAPE_SHARK_FIN : FUNCTION_SHAPE_MATHS;
-	}
-
-	static float slopeWarp(float x, float s) {
-		// Differential warp used by both function-generator and slew modes.
-		// We shape local slope, then normalize total travel time with slopeWarpScale().
-		x = clamp(x, 0.f, 1.f);
-		float u = std::fabs(s);
-		if (u < 1e-6f) {
-			return 1.f;
-		}
-		float k = WARP_K_MAX * u;
-		float x2 = x * x;
-		if (s < 0.f) {
-			// LOG: fast near 0V, slow near top.
-			return 1.f / (1.f + k * x2);
-		}
-		// EXP: slow near 0V, fast near top.
-		return 1.f + k * x2;
-	}
-
-	static float slopeWarpScale(float s) {
-		// Numerically estimate scale so different curve settings keep similar segment duration.
-		// Integrates reciprocal slope over [0..1] with a small fixed sample count.
-		if (std::fabs(s) < 1e-6f) {
-			return 1.f;
-		}
-		float sum = 0.f;
-		for (int i = 0; i < WARP_SCALE_SAMPLES; ++i) {
-			float xi = (i + 0.5f) / float(WARP_SCALE_SAMPLES);
-			sum += 1.f / slopeWarp(xi, s);
-		}
-		return sum / float(WARP_SCALE_SAMPLES);
-	}
-
-	static float shapeSignedForMode(float shapeSigned, bool rising, FunctionShapeMode mode) {
-		if (mode == FUNCTION_SHAPE_SHARK_FIN) {
-			return rising ? -shapeSigned : shapeSigned;
-		}
-		return shapeSigned;
-	}
-
-	static float slopeWarpForMode(float outputNorm, float shapeSigned, bool rising, FunctionShapeMode mode) {
-		return slopeWarp(outputNorm, shapeSignedForMode(shapeSigned, rising, mode));
-	}
-
-	static float slopeWarpScaleForMode(float shapeSigned, bool rising, FunctionShapeMode mode) {
-		return slopeWarpScale(shapeSignedForMode(shapeSigned, rising, mode));
 	}
 
 	static float segmentPhaseFromOutputNorm(float outputNorm, float shapeSigned, bool rising) {
