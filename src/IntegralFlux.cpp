@@ -1314,31 +1314,10 @@ struct IntegralFluxImpl : IntegralFlux {
 	}
 };
 
+// Rack's createModel<> helper requires both concrete types to be complete at
+// the registration site. Keep the UI implementation logically separate while
+// compiling it in this translation unit so registration follows Rack's
+// standard lifecycle path.
+#include "IntegralFluxUI.inc"
 
-namespace {
-struct IntegralFluxModel : plugin::Model {
-	engine::Module* createModule() override {
-		engine::Module* m = new IntegralFluxImpl;
-		m->model = this;
-		return m;
-	}
-
-	app::ModuleWidget* createModuleWidget(engine::Module* m) override {
-		IntegralFlux* flux = nullptr;
-		if (m) {
-			assert(m->model == this);
-			flux = dynamic_cast<IntegralFlux*>(m);
-		}
-		app::ModuleWidget* mw = createIntegralFluxWidget(flux);
-		assert(mw->module == m);
-		mw->setModel(this);
-		return mw;
-	}
-};
-} // namespace
-
-Model* modelIntegralFlux = []() {
-	plugin::Model* model = new IntegralFluxModel;
-	model->slug = "IntegralFlux";
-	return model;
-}();
+Model* modelIntegralFlux = createModel<IntegralFluxImpl, IntegralFluxWidget>("IntegralFlux");

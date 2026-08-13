@@ -105,5 +105,3 @@ struct IntegralFlux : Module {
 	virtual float consumeCurveReductionAverageForUi(int channel) = 0;
 	virtual float consumeTracerReductionAverageForUi(int channel) = 0;
 };
-
-ModuleWidget* createIntegralFluxWidget(IntegralFlux* module);

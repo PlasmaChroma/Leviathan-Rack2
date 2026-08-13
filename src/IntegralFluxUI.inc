@@ -2418,7 +2418,3 @@ struct IntegralFluxWidget : ModuleWidget {
 };
 
 } // namespace
-
-ModuleWidget* createIntegralFluxWidget(IntegralFlux* module) {
-	return new IntegralFluxWidget(module);
-}

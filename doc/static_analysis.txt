@@ -1,0 +1,3 @@
+[error] [manifestModelMissing] plugin.json:0: Manifest slug "IntegralFlux" has no matching createModel() call in source -- Rack will refuse to load the ENTIRE plugin, not just this module
+
+This is a false positive. IntegralFlux uses a custom plugin::Model implementation instead of Rack’s conventional createModel<Module, ModuleWidget>() helper. The custom model explicitly sets its slug to "IntegralFlux" in IntegralFlux.cpp, is declared as modelIntegralFlux, and is registered with p->addModel(modelIntegralFlux) in plugin.cpp. Rack itself loads the module correctly.
