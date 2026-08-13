@@ -45,7 +45,8 @@ extern Model* modelMandelwake;
 // without depending on another plugin's custom class declarations.
 struct BefacoTinyKnobWhite : BefacoTinyKnob {};
 
-// Runtime feature flags loaded from `res/dragonking.txt`.
+// Runtime feature flags loaded from Rack's user directory at
+// `Leviathan/dragonking.txt`.
 bool isDragonKingDebugEnabled();
 bool isDragonKingPreviewWidgetOptionsEnabled();
 bool isCrownstepAddMoveEnabled();
