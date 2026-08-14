@@ -210,6 +210,16 @@
         "Visual"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Cantor",
+      "name": "Cantor",
+      "description": "Culture-inspired adaptive rational pitch interpreter.",
+      "tags": [
+        "Quantizer",
+        "Polyphonic"
+      ],
+      "hidden": false
     }
   ]
 }

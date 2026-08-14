@@ -1,0 +1,32 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="50.8mm" height="128.5mm" viewBox="0 0 5080 12850" version="1.1" id="cantor-source">
+  <defs>
+    <linearGradient id="cantor-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#111726" />
+      <stop offset="0.5" stop-color="#080b14" />
+      <stop offset="1" stop-color="#05060a" />
+    </linearGradient>
+    <linearGradient id="cantor-edge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7254d9" />
+      <stop offset="0.5" stop-color="#30d7de" />
+      <stop offset="1" stop-color="#7254d9" />
+    </linearGradient>
+  </defs>
+  <g id="panel_art" inkscape:label="Panel artwork">
+    <rect x="0" y="0" width="5080" height="12850" fill="url(#cantor-bg)" />
+    <rect x="45" y="45" width="4990" height="12760" rx="90" fill="none" stroke="url(#cantor-edge)" stroke-width="34" opacity="0.78" />
+    <rect x="220" y="1240" width="4640" height="3740" rx="180" fill="#09101c" stroke="#36d2dc" stroke-width="18" opacity="0.78" />
+    <rect x="180" y="10420" width="4720" height="1980" rx="170" fill="#5740bf" opacity="0.20" />
+    <path d="M 360 10220 H 4720" fill="none" stroke="#6f59d9" stroke-width="26" opacity="0.65" />
+    <g id="component_anchors" style="display:none">
+      <rect id="MIND_DISPLAY" x="300" y="1400" width="4480" height="3400" />
+      <circle id="INTENT_PARAM" cx="1400" cy="6700" r="10" />
+      <circle id="COHERENCE_PARAM" cx="3680" cy="6700" r="10" />
+      <circle id="INTERPRET_PARAM" cx="1400" cy="9100" r="10" />
+      <circle id="FIELD_PARAM" cx="3680" cy="9100" r="10" />
+      <circle id="PITCH_INPUT" cx="900" cy="11650" r="10" />
+      <circle id="GATE_INPUT" cx="2540" cy="11650" r="10" />
+      <circle id="PITCH_OUTPUT" cx="4180" cy="11650" r="10" />
+    </g>
+  </g>
+</svg>

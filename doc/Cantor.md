@@ -2135,3 +2135,46 @@ Cantor is unusual enough that some of its most important rules cannot be confide
 - and output,
 
 while allowing the actual musical intelligence inside those boundaries to be rewritten repeatedly as the instrument begins to reveal what it wants to be.
+
+---
+
+# 73. Culture-First MVP Implementation
+
+The first playable implementation intentionally begins with the experimental
+Culture behavior rather than the fixed-quantizer Stage 1 described above.
+
+Implemented first-pass scope:
+
+- Culture / MIND only,
+- polyphonic PITCH and GATE inputs,
+- polyphonic held pitch output,
+- static rational quantization when GATE is unpatched,
+- rising-edge adaptive selection,
+- falling-edge removal from harmonic context,
+- sovereign held notes,
+- a bounded precomputed 11-limit field,
+- INTENT, COHERENCE, INTERPRET, and FIELD controls,
+- deterministic selection at zero INTERPRET,
+- seeded weighted alternatives above zero INTERPRET,
+- fixed 0 V anchor when no voices are active,
+- pairwise scoring against active voices,
+- persisted interpretation seed and random state,
+- a compact developer display for request, result, distance, harmonic cost,
+  and active voice count.
+
+Deliberately deferred:
+
+- FLOW and HOLD mode selection,
+- EDO and conventional scale layers,
+- WYRM and ELDER tunings,
+- root/transposition control,
+- glide,
+- melodic-memory controls,
+- ratio naming,
+- Scala import,
+- FLUID retuning,
+- final visual design.
+
+The immediate listening question is whether the combination of input-distance,
+rational-complexity, and active-voice scoring feels like musical negotiation
+rather than correction or randomness.

@@ -1,0 +1,28 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="50.8mm" height="128.5mm" viewBox="0 0 5080 12850" version="1.1" id="Cantor-labels">
+  <defs>
+    <linearGradient id="cantor-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#111726" />
+      <stop offset="0.5" stop-color="#080b14" />
+      <stop offset="1" stop-color="#05060a" />
+    </linearGradient>
+    <linearGradient id="cantor-edge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7254d9" />
+      <stop offset="0.5" stop-color="#30d7de" />
+      <stop offset="1" stop-color="#7254d9" />
+    </linearGradient>
+  </defs>
+  <g id="labels" inkscape:label="Labels" font-family="Rubik, sans-serif" text-anchor="middle" fill="#e9edf2">
+    <text x="2540" y="720" font-size="440" font-weight="700">CANTOR</text>
+    <text x="2540" y="1060" font-size="165" letter-spacing="55" fill="#63e3df">CULTURE PROTOTYPE</text>
+    <text x="1400" y="5580" font-size="210" font-weight="600">INTENT</text>
+    <text x="3680" y="5580" font-size="210" font-weight="600">COHERENCE</text>
+    <text x="1400" y="7980" font-size="210" font-weight="600">INTERPRET</text>
+    <text x="3680" y="7980" font-size="210" font-weight="600">FIELD</text>
+    <text x="900" y="10810" font-size="190" font-weight="600">PITCH</text>
+    <text x="2540" y="10810" font-size="190" font-weight="600">GATE</text>
+    <text x="4180" y="10810" font-size="190" font-weight="600">PITCH</text>
+    <text x="4180" y="11040" font-size="130" fill="#5fe5df">OUT</text>
+    <text x="2540" y="12620" font-size="135" letter-spacing="45" fill="#8976dc">LEVIATHAN</text>
+  </g>
+</svg>

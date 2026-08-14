@@ -77,6 +77,8 @@ TEST_BINS_NON_RACK := \
 	build/tests/puffy_engine_spec \
 	build/tests/puffy_module_spec \
 	build/tests/puffy_character_controller_spec \
+	build/tests/cantor_culture_engine_spec \
+	build/tests/cantor_module_spec \
 	build/tests/doorstop_engine_spec \
 	build/tests/doorstop_reference_engine_spec \
 	build/tests/bifurx_filter_spec \
@@ -297,6 +299,8 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/puffy_engine_spec)
 	$(call run_test_bin,build/tests/puffy_module_spec)
 	$(call run_test_bin,build/tests/puffy_character_controller_spec)
+	$(call run_test_bin,build/tests/cantor_culture_engine_spec)
+	$(call run_test_bin,build/tests/cantor_module_spec)
 	$(call run_test_bin,build/tests/doorstop_engine_spec)
 	$(call run_test_bin,build/tests/doorstop_reference_engine_spec)
 	$(call run_test_bin,build/tests/bifurx_filter_spec)
@@ -435,6 +439,12 @@ build/tests/puffy_module_spec: tests/puffy_module_spec.cpp src/Puffy.cpp src/Puf
 
 build/tests/puffy_character_controller_spec: tests/puffy_character_controller_spec.cpp src/PuffyCharacterController.cpp src/PuffyCharacterController.hpp src/PuffyPose.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/puffy_character_controller_spec.cpp src/PuffyCharacterController.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+
+build/tests/cantor_culture_engine_spec: tests/cantor_culture_engine_spec.cpp src/CantorCultureEngine.cpp src/CantorCultureEngine.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/cantor_culture_engine_spec.cpp src/CantorCultureEngine.cpp -o $@
+
+build/tests/cantor_module_spec: tests/cantor_module_spec.cpp src/Cantor.cpp src/Cantor.hpp src/CantorCultureEngine.cpp src/CantorCultureEngine.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/cantor_module_spec.cpp src/Cantor.cpp src/CantorCultureEngine.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 build/tests/temporaldeck_longplay_spec: tests/temporaldeck_longplay_spec.cpp src/LongPlayStreamEngine.cpp src/LongPlayStreamEngine.hpp src/codec.cpp src/codec.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/temporaldeck_longplay_spec.cpp src/LongPlayStreamEngine.cpp src/codec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@
