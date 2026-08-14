@@ -301,6 +301,16 @@ int main() {
 	{
 		deepcache::DeepcacheArchiveWorker worker;
 		worker.start(directory, {{"one", "fp-one", "plugin-a"}, {"two", "stale-fingerprint", "plugin-a"}});
+		if (!waitUntil([&]() { return worker.indexDiscoveryComplete(); })) {
+			std::cerr << "[FAIL] index discovery barrier was not published\n";
+			return 1;
+		}
+		deepcache::IndexedCandidate candidate;
+		if (!worker.tryPopIndexedCandidate(candidate) || candidate.cacheKey != "one" ||
+		    candidate.fingerprint != "fp-one" || worker.tryPopIndexedCandidate(candidate)) {
+			std::cerr << "[FAIL] metadata discovery did not publish only matching candidates\n";
+			return 1;
+		}
 		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
 			std::cerr << "[FAIL] reload did not finish\n";
 			return 1;
@@ -359,8 +369,15 @@ int main() {
 			std::cerr << "[FAIL] corrupt pack reload did not finish\n";
 			return 1;
 		}
+		deepcache::IndexedCandidate corruptCandidate;
+		if (!worker.tryPopIndexedCandidate(corruptCandidate) ||
+		    corruptCandidate.cacheKey != "one") {
+			std::cerr << "[FAIL] corrupt payload was not published as an indexed candidate\n";
+			return 1;
+		}
 		deepcache::DecodedPreview preview;
-		if (worker.tryPopDecoded(preview) || worker.readyCount() != 0 ||
+		if (!worker.indexDiscoveryComplete() || worker.hasPendingIndexedCandidates() ||
+		    worker.tryPopDecoded(preview) || worker.readyCount() != 0 ||
 		    worker.state() == deepcache::DatabaseState::ERROR) {
 			std::cerr << "[FAIL] corrupt pack payload was not isolated as a cache miss\n";
 			return 1;

@@ -833,6 +833,7 @@ public:
 		if (cacheIdentityChanged)
 			onCacheIdentityChanged();
 		drainArchiveCommits();
+		drainArchiveIndexedCandidates();
 		drainArchiveDecoded();
 		publishDatabase();
 		if (archive_.state() == deepcache::DatabaseState::ERROR) {
@@ -1128,10 +1129,9 @@ private:
 
 	bool archiveReadyForPlanning() const {
 		const deepcache::DatabaseState databaseState = archive_.state();
-		return databaseState != deepcache::DatabaseState::LOADING &&
-		       databaseState != deepcache::DatabaseState::ERROR &&
-		       !archive_.hasPendingDecoded() && persistentUploadQueue_.empty() &&
-		       archiveWriteRetryQueue_.empty();
+		return databaseState != deepcache::DatabaseState::ERROR &&
+		       archive_.indexDiscoveryComplete() &&
+		       !archive_.hasPendingIndexedCandidates();
 	}
 
 	bool submitArchiveWrite(deepcache::PreviewWrite write) {
@@ -1207,6 +1207,20 @@ private:
 				}
 			}
 			cacheKey.clear();
+			drained++;
+		}
+	}
+
+	void drainArchiveIndexedCandidates() {
+		deepcache::IndexedCandidate candidate;
+		int drained = 0;
+		while (drained < 256 && archive_.tryPopIndexedCandidate(candidate)) {
+			const auto found = modelIndexByCacheKey_.find(candidate.cacheKey);
+			if (found != modelIndexByCacheKey_.end()) {
+				compressedModelIndices_.insert(found->second);
+				persistentModelIndices_.insert(found->second);
+			}
+			candidate = deepcache::IndexedCandidate();
 			drained++;
 		}
 	}

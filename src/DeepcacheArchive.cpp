@@ -272,6 +272,7 @@ void DeepcacheArchiveWorker::start(const std::string& directory, const std::vect
 	targetCount_.store(static_cast<int>(wanted_.size()), std::memory_order_relaxed);
 	targetPluginCount_.store(static_cast<int>(pluginTargetCounts_.size()), std::memory_order_relaxed);
 	setState(DatabaseState::LOADING);
+	indexDiscoveryComplete_.store(false, std::memory_order_release);
 	started_ = true;
 	try {
 		thread_ = std::thread(&DeepcacheArchiveWorker::run, this);
@@ -367,6 +368,20 @@ bool DeepcacheArchiveWorker::hasPendingDecoded() const {
 	return !decoded_.empty();
 }
 
+bool DeepcacheArchiveWorker::tryPopIndexedCandidate(IndexedCandidate& candidate) {
+	std::lock_guard<std::mutex> lock(mutex_);
+	if (indexedCandidates_.empty())
+		return false;
+	candidate = std::move(indexedCandidates_.front());
+	indexedCandidates_.pop_front();
+	return true;
+}
+
+bool DeepcacheArchiveWorker::hasPendingIndexedCandidates() const {
+	std::lock_guard<std::mutex> lock(mutex_);
+	return !indexedCandidates_.empty();
+}
+
 bool DeepcacheArchiveWorker::requestDecode(const std::string& cacheKey,
 	                                        std::uint64_t decodeGeneration) {
 	if (!started_ || cacheKey.empty() || canceled() || fatalError_.load(std::memory_order_relaxed))
@@ -448,6 +463,8 @@ bool DeepcacheArchiveWorker::requestReset() {
 		queuedVolatileWriteBytes_ = 0;
 		decoded_.clear();
 		decodedBytes_ = 0;
+		indexedCandidates_.clear();
+		indexDiscoveryComplete_.store(false, std::memory_order_release);
 		decodeRequests_.clear();
 		requestedDecodeGeneration_.clear();
 		committed_.clear();
@@ -478,6 +495,7 @@ void DeepcacheArchiveWorker::shutdown() {
 		decodeRequests_.clear();
 		requestedDecodeGeneration_.clear();
 		committed_.clear();
+		indexedCandidates_.clear();
 		compactRequested_ = false;
 		resetRequested_ = false;
 	}
@@ -733,11 +751,13 @@ bool DeepcacheArchiveWorker::resetArchive() {
 		std::lock_guard<std::mutex> lock(mutex_);
 		decoded_.clear();
 		decodedBytes_ = 0;
+		indexedCandidates_.clear();
 		decodeRequests_.clear();
 		requestedDecodeGeneration_.clear();
 		committed_.clear();
 	}
 	setState(DatabaseState::EMPTY);
+	indexDiscoveryComplete_.store(true, std::memory_order_release);
 	return true;
 }
 
@@ -986,6 +1006,7 @@ bool DeepcacheArchiveWorker::decodeEntry(const DecodeRequest& request) {
 }
 
 bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
+	indexDiscoveryComplete_.store(false, std::memory_order_release);
 	const std::string compactMarker = directory_ + "/compaction-v1.pending";
 	std::ifstream marker(compactMarker.c_str(), std::ios::binary);
 	if (marker) {
@@ -1022,6 +1043,7 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 		if (resetRequested_)
 			return false;
 		setState(DatabaseState::EMPTY);
+		indexDiscoveryComplete_.store(true, std::memory_order_release);
 		return true;
 	}
 	// Validate the much smaller index before touching pack payloads. A missing
@@ -1034,6 +1056,7 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 		if (!allowRecovery) {
 			entries_.clear();
 			setState(DatabaseState::EMPTY);
+			indexDiscoveryComplete_.store(true, std::memory_order_release);
 			return true;
 		}
 		return resetArchive();
@@ -1058,6 +1081,7 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 		pack.close();
 		if (!allowRecovery) {
 			setState(DatabaseState::EMPTY);
+			indexDiscoveryComplete_.store(true, std::memory_order_release);
 			return true;
 		}
 		return resetArchive();
@@ -1111,6 +1135,16 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 			          return a.entry->offset < b.entry->offset;
 		          return a.cacheKey < b.cacheKey;
 	          });
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		for (const StartupEntry& startup : startupEntries) {
+			indexedCandidates_.push_back(
+				{startup.cacheKey, startup.entry->fingerprint, startup.entry->offset});
+		}
+	}
+	// Publish the discovery barrier only after every candidate is visible in the
+	// metadata queue. The UI can now plan misses while payload hydration proceeds.
+	indexDiscoveryComplete_.store(true, std::memory_order_release);
 	std::uint64_t nextPackOffset = std::numeric_limits<std::uint64_t>::max();
 	for (const StartupEntry& startup : startupEntries) {
 		if (canceled() || resetPending()) {

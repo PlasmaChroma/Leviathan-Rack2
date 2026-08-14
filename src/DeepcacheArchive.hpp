@@ -34,6 +34,18 @@ struct ArchiveWantedEntry {
 	std::string pluginKey;
 };
 
+// Metadata-only evidence that a wanted raster has a structurally plausible
+// entry in the current pack. Payload checksum and QOI validation happen later.
+struct IndexedCandidate {
+	std::string cacheKey;
+	std::string fingerprint;
+	std::uint64_t offset = 0;
+
+	IndexedCandidate() = default;
+	IndexedCandidate(std::string cacheKey, std::string fingerprint, std::uint64_t offset)
+		: cacheKey(std::move(cacheKey)), fingerprint(std::move(fingerprint)), offset(offset) {}
+};
+
 struct DecodedPreview {
 	std::string cacheKey;
 	std::string fingerprint;
@@ -74,6 +86,11 @@ public:
 	bool canAcceptWrite(std::size_t byteCount) const;
 	bool tryPopDecoded(DecodedPreview& preview);
 	bool hasPendingDecoded() const;
+	bool tryPopIndexedCandidate(IndexedCandidate& candidate);
+	bool hasPendingIndexedCandidates() const;
+	bool indexDiscoveryComplete() const {
+		return indexDiscoveryComplete_.load(std::memory_order_acquire);
+	}
 	// Re-decodes an already validated entry from its bounded on-disk pack span.
 	// The archive worker owns the I/O and read-only workers may use it safely.
 	bool requestDecode(const std::string& cacheKey, std::uint64_t decodeGeneration);
@@ -167,6 +184,7 @@ private:
 	std::size_t queuedVolatileWriteBytes_ = 0;
 	std::deque<DecodedPreview> decoded_;
 	std::size_t decodedBytes_ = 0;
+	std::deque<IndexedCandidate> indexedCandidates_;
 	std::deque<DecodeRequest> decodeRequests_;
 	std::unordered_map<std::string, std::uint64_t> requestedDecodeGeneration_;
 	std::deque<std::string> committed_;
@@ -178,6 +196,7 @@ private:
 	std::atomic<bool> fatalError_ {false};
 	std::atomic<bool> leaseUnavailable_ {false};
 	std::atomic<bool> ownsLease_ {false};
+	std::atomic<bool> indexDiscoveryComplete_ {false};
 	std::atomic<int> state_ {static_cast<int>(DatabaseState::EMPTY)};
 	std::atomic<int> readyCount_ {0};
 	std::atomic<int> targetCount_ {0};
