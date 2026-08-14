@@ -8,6 +8,9 @@ struct PuffyFishWidget final : TransparentWidget {
 	PuffyCharacterController controller;
 	PuffyPose pose;
 	PuffyVisualState visual;
+	NVGcolor irisInnerColor {};
+	NVGcolor irisOuterColor {};
+	std::int64_t personalityModuleId = -2;
 	float updateAccumulator = 0.f;
 	int bodyStableDraws = 0;
 	bool transitionAtlasReady = false;
@@ -31,6 +34,7 @@ struct PuffyFishWidget final : TransparentWidget {
 	Vec compassCenter() const;
 
 private:
+	void configurePersonality(std::int64_t moduleId);
 	bool bodyTintIsSettled(
 		NVGcolor negativeTint,
 		NVGcolor positiveTint) const;
@@ -72,5 +76,7 @@ private:
 		float gazeX,
 		float gazeY,
 		float blink,
-		NVGcolor eyelidColor) const;
+		NVGcolor eyelidColor,
+		NVGcolor irisInnerColor,
+		NVGcolor irisOuterColor) const;
 };

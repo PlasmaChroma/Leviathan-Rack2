@@ -20,7 +20,7 @@ set -Eeuo pipefail
 # Strongest analysis supported by the installed Cppcheck:
 #   ./cppcheck-rack.sh --deep
 #
-# Approximate the curated Cppcheck pass used by Rack maintainers:
+# Reproduce the Cppcheck pass used by Rack maintainers:
 #   ./cppcheck-rack.sh --maintainer
 #
 # Explore alternate #ifdef configurations too:
@@ -51,12 +51,8 @@ Compilation database:
   --reuse-db         Require/reuse the existing compile_commands.json.
 
 Analysis:
-  --maintainer       Approximate Rack's maintainer-facing Cppcheck profile:
-                     normal depth, captured build configuration, and the
-                     warning/performance/portability groups. Suppresses
-                     diagnostics originating in the Rack SDK and bundled
-                     third-party sources, plus copy-semantics noise from
-                     Rack's parent-owned widget pointer pattern.
+  --maintainer       Reproduce Rack's Cppcheck 2.13.0 source-scan invocation.
+                     This profile does not use compile_commands.json or Bear.
   --deep             Use the strongest deeper-analysis switch supported.
                      Cppcheck >= 2.11: --check-level=exhaustive
                      Older Cppcheck: no fake equivalent is added.
@@ -178,15 +174,20 @@ if (( MAINTAINER )); then
     (( DEEP == 0 )) || die "--maintainer cannot be combined with --deep"
     (( ALL_CONFIGS == 0 )) || die "--maintainer cannot be combined with --all-configs"
     [[ -z "$MAX_CONFIGS" ]] || die "--maintainer cannot be combined with --max-configs"
+    [[ "$DB_MODE" == "auto" ]] || die "--maintainer cannot be combined with compilation-database options"
+    (( CLEAN_CACHE == 0 )) || die "--maintainer cannot be combined with --clean-cache"
+    (( MAKE_XML == 0 )) || die "--maintainer cannot be combined with --xml"
     if (( OUTPUT_EXPLICIT == 0 )); then
         OUTPUT_DIR="$ROOT/.analysis/cppcheck-maintainer"
     fi
 fi
 
 have "$CPPCHECK_BIN" || die "Cannot find Cppcheck executable: $CPPCHECK_BIN"
-have "$MAKE_BIN"     || die "Cannot find make executable: $MAKE_BIN"
-have "$BEAR_BIN"     || die "Cannot find Bear executable: $BEAR_BIN"
-have python3         || die "python3 is required to validate compile_commands.json"
+if (( MAINTAINER == 0 )); then
+    have "$MAKE_BIN" || die "Cannot find make executable: $MAKE_BIN"
+    have "$BEAR_BIN" || die "Cannot find Bear executable: $BEAR_BIN"
+    have python3 || die "python3 is required to validate compile_commands.json"
+fi
 
 CPPCHECK_VERSION="$("$CPPCHECK_BIN" --version 2>&1 | head -n 1)"
 CPPCHECK_HELP="$("$CPPCHECK_BIN" --help 2>&1 || true)"
@@ -227,20 +228,69 @@ if (( SHOW_CAPABILITIES )); then
     exit 0
 fi
 
+cd "$ROOT"
+mkdir -p "$OUTPUT_DIR"
+
+TEXT_REPORT="$OUTPUT_DIR/cppcheck.txt"
+RUN_INFO="$OUTPUT_DIR/run-info.txt"
+
+if (( MAINTAINER )); then
+    CPPCHECK_ARGS=(
+        "$ROOT/src"
+        "-i$ROOT/src/dep"
+        "-i$ROOT/src/tests"
+        "--std=c++11"
+        "--max-configs=1"
+        "--enable=warning,performance,portability"
+        '--suppress=*:*/dep/*'
+        '--suppress=*:*/tests/*'
+        "-j"
+        "$JOBS"
+        "-q"
+    )
+
+    {
+        echo "timestamp: $(date --iso-8601=seconds 2>/dev/null || date)"
+        echo "repo: $ROOT"
+        echo "cppcheck_version: $CPPCHECK_VERSION"
+        echo "analysis_profile: Rack maintainer"
+        echo "expected_maintainer_version: Cppcheck 2.13.0"
+        echo "jobs_requested: $JOBS"
+        echo
+        echo "cppcheck command:"
+        printf '%q ' "$CPPCHECK_BIN" "${CPPCHECK_ARGS[@]}"
+        echo
+    } > "$RUN_INFO"
+
+    echo
+    echo "==> Running Rack maintainer Cppcheck profile"
+    echo "    Installed: $CPPCHECK_VERSION"
+    if [[ "$CPPCHECK_VERSION" != "Cppcheck 2.13.0" ]]; then
+        note "Rack's maintainer profile uses Cppcheck 2.13.0; results can differ with $CPPCHECK_VERSION."
+    fi
+    echo "    Report:    $TEXT_REPORT"
+    echo
+
+    set +e
+    "$CPPCHECK_BIN" "${CPPCHECK_ARGS[@]}" 2>&1 | tee "$TEXT_REPORT"
+    CPPCHECK_STATUS=${PIPESTATUS[0]}
+    set -e
+
+    echo
+    echo "==> Analysis complete"
+    echo "    Text report: $TEXT_REPORT"
+    echo "    Run info:    $RUN_INFO"
+    exit "$CPPCHECK_STATUS"
+fi
+
 # compile_commands.json is the central requirement: it provides Cppcheck with
 # the actual -D, -I, standard, architecture and compiler configuration used by
 # the build rather than a guessed imitation of it.
 has_cppcheck_option "--project" ||
     die "$CPPCHECK_VERSION does not advertise --project support; cannot safely use the compilation-database workflow."
 
-cd "$ROOT"
-mkdir -p "$OUTPUT_DIR"
-
 CACHE_DIR="$OUTPUT_DIR/cache"
-TEXT_REPORT="$OUTPUT_DIR/cppcheck.txt"
-RAW_REPORT="$OUTPUT_DIR/cppcheck.raw.txt"
 XML_REPORT="$OUTPUT_DIR/cppcheck.xml"
-RUN_INFO="$OUTPUT_DIR/run-info.txt"
 
 db_entry_count() {
     python3 - "$DB" <<'PY'
@@ -379,28 +429,19 @@ if has_cppcheck_option "--suppress"; then
     for sdk_root in "${RACK_SDK_ROOTS[@]}"; do
         CPPCHECK_ARGS+=("--suppress=*:$sdk_root/*")
     done
-    if (( MAINTAINER )); then
-        CPPCHECK_ARGS+=("--suppress=*:$ROOT/src/third_party/*")
-        CPPCHECK_ARGS+=("--suppress=noCopyConstructor")
-        CPPCHECK_ARGS+=("--suppress=noOperatorEq")
-    fi
 elif (( ${#RACK_SDK_ROOTS[@]} )); then
     note "$CPPCHECK_VERSION does not advertise --suppress; Rack SDK diagnostics cannot be filtered."
 fi
 
 if has_cppcheck_option "--enable"; then
-    if (( MAINTAINER )); then
-        CPPCHECK_ARGS+=("--enable=warning,performance,portability")
-    else
-        CPPCHECK_ARGS+=("--enable=warning,style,performance,portability,information")
-    fi
+    CPPCHECK_ARGS+=("--enable=warning,style,performance,portability,information")
 fi
 
 if has_cppcheck_option "--inline-suppr"; then
     CPPCHECK_ARGS+=("--inline-suppr")
 fi
 
-if (( MAINTAINER == 0 )) && has_cppcheck_option "--template"; then
+if has_cppcheck_option "--template"; then
     CPPCHECK_ARGS+=("--template=gcc")
 fi
 
@@ -465,16 +506,8 @@ fi
     echo "compile_database: $DB"
     echo "translation_units: $(db_entry_count)"
     echo "jobs_requested: $JOBS"
-    if (( MAINTAINER )); then
-        echo "analysis_profile: maintainer approximation"
-        echo "enabled_groups: warning,performance,portability"
-        echo "suppressed_bundled_sources: $ROOT/src/third_party"
-        echo "suppressed_ownership_checks: noCopyConstructor,noOperatorEq"
-        echo "filtered_type_specific_checks: passedByValue(NVGcolor)"
-    else
-        echo "analysis_profile: general"
-        echo "enabled_groups: warning,style,performance,portability,information"
-    fi
+    echo "analysis_profile: general"
+    echo "enabled_groups: warning,style,performance,portability,information"
     echo "deep_analysis: $DEEP_DESCRIPTION"
     echo "configuration_analysis: $CONFIG_DESCRIPTION"
 	if (( ${#RACK_SDK_ROOTS[@]} )); then
@@ -512,15 +545,8 @@ PY
 echo
 echo "==> Cppcheck capability selection"
 echo "    Version:       $CPPCHECK_VERSION"
-if (( MAINTAINER )); then
-    echo "    Profile:       maintainer approximation"
-    echo "    Check groups:  warning, performance, portability"
-    echo "    Bundled code:  suppressed ($ROOT/src/third_party)"
-    echo "    Rack ownership: suppress noCopyConstructor, noOperatorEq"
-else
-    echo "    Profile:       general"
-    echo "    Check groups:  warning, style, performance, portability, information"
-fi
+echo "    Profile:       general"
+echo "    Check groups:  warning, style, performance, portability, information"
 echo "    Deep analysis: $DEEP_DESCRIPTION"
 echo "    Configs:       $CONFIG_DESCRIPTION"
 if (( ${#RACK_SDK_ROOTS[@]} )); then
@@ -531,66 +557,12 @@ fi
 echo
 echo "==> Running Cppcheck"
 echo "    Report:        $TEXT_REPORT"
-if (( MAINTAINER )); then
-    echo "    Raw report:    $RAW_REPORT"
-fi
 echo
 
 set +e
-if (( MAINTAINER )); then
-    "$CPPCHECK_BIN" "${CPPCHECK_ARGS[@]}" 2>&1 | tee "$RAW_REPORT"
-else
-    "$CPPCHECK_BIN" "${CPPCHECK_ARGS[@]}" 2>&1 | tee "$TEXT_REPORT"
-fi
+"$CPPCHECK_BIN" "${CPPCHECK_ARGS[@]}" 2>&1 | tee "$TEXT_REPORT"
 CPPCHECK_STATUS=${PIPESTATUS[0]}
 set -e
-
-FILTERED_NVGCOLOR_COUNT=0
-if (( MAINTAINER )); then
-    FILTERED_COUNT_FILE="$OUTPUT_DIR/filtered-nvgcolor-count.txt"
-    python3 - "$RAW_REPORT" "$TEXT_REPORT" "$FILTERED_COUNT_FILE" <<'PY'
-import re
-import sys
-from pathlib import Path
-
-raw_path = Path(sys.argv[1])
-report_path = Path(sys.argv[2])
-count_path = Path(sys.argv[3])
-lines = raw_path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
-diagnostic = re.compile(
-    r"^(.*):(\d+):(\d+):\s+\w+:\s+Function parameter '([^']+)' .*\[passedByValue\]\s*$"
-)
-
-def is_nvgcolor_parameter(filename, line_number, parameter):
-    try:
-        source_line = Path(filename).read_text(encoding="utf-8", errors="replace").splitlines()[line_number - 1]
-    except (OSError, IndexError):
-        return False
-    pattern = r"\bNVGcolor\s+(?:const\s+)?" + re.escape(parameter) + r"\b"
-    return re.search(pattern, source_line) is not None
-
-filtered = 0
-output = []
-i = 0
-while i < len(lines):
-    match = diagnostic.match(lines[i].rstrip("\r\n"))
-    if match and is_nvgcolor_parameter(match.group(1), int(match.group(2)), match.group(4)):
-        filtered += 1
-        i += 1
-        # Default Cppcheck output follows a diagnostic with its source line and
-        # caret. Remove only those two presentation lines when present.
-        for _ in range(2):
-            if i < len(lines) and not diagnostic.match(lines[i].rstrip("\r\n")):
-                i += 1
-        continue
-    output.append(lines[i])
-    i += 1
-
-report_path.write_text("".join(output), encoding="utf-8")
-count_path.write_text(str(filtered), encoding="ascii")
-PY
-    FILTERED_NVGCOLOR_COUNT="$(cat "$FILTERED_COUNT_FILE")"
-fi
 
 if (( MAKE_XML )); then
     if has_cppcheck_option "--xml"; then
@@ -622,10 +594,6 @@ fi
 echo
 echo "==> Analysis complete"
 echo "    Text report: $TEXT_REPORT"
-if (( MAINTAINER )); then
-    echo "    Raw report:  $RAW_REPORT"
-    echo "    Filtered:    $FILTERED_NVGCOLOR_COUNT passedByValue(NVGcolor) finding(s)"
-fi
 echo "    Run info:    $RUN_INFO"
 if (( MAKE_XML )) && [[ -f "$XML_REPORT" ]]; then
     echo "    XML report:  $XML_REPORT"
@@ -645,10 +613,6 @@ done
 
 echo
 if has_cppcheck_option "--error-exitcode"; then
-    if (( MAINTAINER )) && [[ "$CPPCHECK_STATUS" -eq 2 ]] &&
-        ! grep -Eq ':[[:space:]]+(error|warning|style|performance|portability|information):' "$TEXT_REPORT"; then
-        CPPCHECK_STATUS=0
-    fi
     case "$CPPCHECK_STATUS" in
         0)
             echo "Cppcheck exited 0: no enabled finding triggered the configured error exit code."

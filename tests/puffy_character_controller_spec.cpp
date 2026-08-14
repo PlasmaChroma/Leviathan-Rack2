@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <set>
 #include <string>
 
 namespace {
@@ -149,23 +150,75 @@ Result mouthClosesInfrequentlyAndReturnsToRest() {
 	PuffyCharacterController controller;
 	controller.reset(visual);
 	PuffyPose pose;
-	float earlyMaximum = 0.f;
-	for (int i = 0; i < 360; ++i) {
+	float maximumClosure = 0.f;
+	float previousClosure = 0.f;
+	int closeEvents = 0;
+	int restingFrames = 0;
+	for (int i = 0; i < 1200; ++i) {
 		controller.update(1.f / 60.f, visual, &pose);
-		earlyMaximum = std::max(earlyMaximum, pose.mouthClosure);
-	}
-	float sequenceMaximum = 0.f;
-	for (int i = 0; i < 180; ++i) {
-		controller.update(1.f / 60.f, visual, &pose);
-		sequenceMaximum = std::max(sequenceMaximum, pose.mouthClosure);
+		maximumClosure = std::max(maximumClosure, pose.mouthClosure);
+		if (previousClosure <= 1e-7f && pose.mouthClosure > 1e-7f) {
+			++closeEvents;
+		}
+		if (pose.mouthClosure <= 1e-7f) {
+			++restingFrames;
+		}
+		previousClosure = pose.mouthClosure;
 	}
 	return {
 		"Mouth rests open, closes occasionally, then reopens",
-		earlyMaximum < 1e-7f && sequenceMaximum > 0.99f
-			&& pose.mouthClosure < 1e-7f,
-		"early=" + std::to_string(earlyMaximum)
-			+ " closed=" + std::to_string(sequenceMaximum)
-			+ " tail=" + std::to_string(pose.mouthClosure)
+		maximumClosure > 0.99f && closeEvents >= 1 && closeEvents <= 3
+			&& restingFrames > 1000,
+		"closed=" + std::to_string(maximumClosure)
+			+ " events=" + std::to_string(closeEvents)
+			+ " restingFrames=" + std::to_string(restingFrames)
+	};
+}
+
+Result personalitySeedsDesynchronizeAutonomousMotion() {
+	std::set<int> blinkOnsets;
+	std::set<int> squintOnsets;
+	std::set<int> mouthOnsets;
+	float minimumInitialOffset = 1.f;
+	float maximumInitialOffset = -1.f;
+	for (std::uint32_t seed = 1u; seed <= 7u; ++seed) {
+		PuffyVisualState visual;
+		PuffyCharacterController controller(seed * 0x9e3779b9u);
+		controller.reset(visual);
+		PuffyPose pose;
+		controller.update(1.f / 60.f, visual, &pose);
+		minimumInitialOffset = std::min(minimumInitialOffset, pose.verticalOffset);
+		maximumInitialOffset = std::max(maximumInitialOffset, pose.verticalOffset);
+		bool blinkSeen = false;
+		bool squintSeen = false;
+		bool mouthSeen = false;
+		for (int frame = 1; frame <= 900; ++frame) {
+			controller.update(1.f / 60.f, visual, &pose);
+			if (!blinkSeen && std::max(pose.leftBlink, pose.rightBlink) > 1e-5f) {
+				blinkOnsets.insert(frame);
+				blinkSeen = true;
+			}
+			if (!squintSeen && pose.squint > 1e-5f) {
+				squintOnsets.insert(frame);
+				squintSeen = true;
+			}
+			if (!mouthSeen && pose.mouthClosure > 1e-5f) {
+				mouthOnsets.insert(frame);
+				mouthSeen = true;
+			}
+		}
+	}
+	return {
+		"Personality seeds separate idle phases and autonomous expressions",
+		maximumInitialOffset - minimumInitialOffset > 0.004f
+			&& blinkOnsets.size() >= 5
+			&& squintOnsets.size() >= 5
+			&& mouthOnsets.size() >= 5,
+		"offsetRange="
+			+ std::to_string(maximumInitialOffset - minimumInitialOffset)
+			+ " onsetCounts=" + std::to_string(blinkOnsets.size())
+			+ "/" + std::to_string(squintOnsets.size())
+			+ "/" + std::to_string(mouthOnsets.size())
 	};
 }
 
@@ -317,6 +370,7 @@ int main() {
 	const Result results[] = {
 		sharedTransientTwitch(),
 		characterMotionIsUniform(),
+		personalitySeedsDesynchronizeAutonomousMotion(),
 		twitchThresholdAndDecay(),
 		squintRemainsDistinctFromBlink(),
 		mouthClosesInfrequentlyAndReturnsToRest(),

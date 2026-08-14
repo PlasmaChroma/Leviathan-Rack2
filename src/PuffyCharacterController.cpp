@@ -14,10 +14,19 @@ float smoothstep(float value) {
 
 } // namespace
 
-PuffyCharacterController::PuffyCharacterController() {
+PuffyCharacterController::PuffyCharacterController(
+	std::uint32_t personalitySeed)
+	: personalitySeed(personalitySeed != 0u ? personalitySeed : 0x6d2b79f5u) {
 	PuffyVisualState preview;
 	preview.effectiveAmount = 0.25f;
 	reset(preview);
+}
+
+void PuffyCharacterController::setPersonalitySeed(
+	std::uint32_t seed,
+	const PuffyVisualState& visual) {
+	personalitySeed = seed != 0u ? seed : 0x6d2b79f5u;
+	reset(visual);
 }
 
 float PuffyCharacterController::clamp01(float value) {
@@ -32,7 +41,33 @@ float PuffyCharacterController::approach(
 	return current + (target - current) * clamp01(rate * dt);
 }
 
+std::uint32_t PuffyCharacterController::mixSeed(std::uint32_t value) {
+	value ^= value >> 16;
+	value *= 0x7feb352du;
+	value ^= value >> 15;
+	value *= 0x846ca68bu;
+	value ^= value >> 16;
+	return value != 0u ? value : 0x6d2b79f5u;
+}
+
+float PuffyCharacterController::nextRandom01(std::uint32_t* state) {
+	if (!state) {
+		return 0.5f;
+	}
+	std::uint32_t value = *state;
+	value ^= value << 13;
+	value ^= value >> 17;
+	value ^= value << 5;
+	*state = value != 0u ? value : 0x6d2b79f5u;
+	return float(*state & 0x00ffffffu) * (1.f / 16777216.f);
+}
+
 void PuffyCharacterController::reset(const PuffyVisualState& visual) {
+	blinkRng = mixSeed(personalitySeed ^ 0x424c494eu);
+	squintRng = mixSeed(personalitySeed ^ 0x53515549u);
+	mouthRng = mixSeed(personalitySeed ^ 0x4d4f5554u);
+	gazeRng = mixSeed(personalitySeed ^ 0x47415a45u);
+	motionRng = mixSeed(personalitySeed ^ 0x4d4f544eu);
 	inflation = clamp01(
 		0.65f * visual.effectiveAmount
 		+ 0.25f * visual.inputActivity
@@ -56,24 +91,25 @@ void PuffyCharacterController::reset(const PuffyVisualState& visual) {
 	excitement = 0.f;
 	excitementHold = 0.f;
 	excitementCooldown = 0.f;
-	excitementPhase = 0.f;
-	finFlutterPhase = 0.f;
+	excitementPhase = 2.f * kPi * nextRandom01(&motionRng);
+	finFlutterPhase = 2.f * kPi * nextRandom01(&motionRng);
+	breathPhase = 2.f * kPi * nextRandom01(&motionRng);
+	bobPhase = 2.f * kPi * nextRandom01(&motionRng);
 	movementFinActivity = 0.f;
 	energySurgeArmed = true;
 	idleTime = 0.f;
-	nextBlinkTime = 3.2f;
+	nextBlinkTime = 1.f + 3.5f * nextRandom01(&blinkRng);
 	blinkPhase = -1.f;
-	nextSquintTime = 5.4f;
+	nextSquintTime = 3.f + 5.f * nextRandom01(&squintRng);
 	squintPhase = -1.f;
-	nextMouthCloseTime = 7.6f;
+	nextMouthCloseTime = 5.f + 6.f * nextRandom01(&mouthRng);
 	mouthClosePhase = -1.f;
-	mouthCloseSequence = 0;
 	polarityDominance = 0.f;
 	gazeX = 0.f;
 	gazeTargetX = 0.f;
-	gazeStateTime = 1.2f;
+	gazeStateTime = 0.7f + 1.8f * nextRandom01(&gazeRng);
 	gazeGlancing = false;
-	gazeSequence = 0;
+	gazeSequence = nextRandom01(&gazeRng) < 0.5f ? 0 : 1;
 }
 
 bool PuffyCharacterController::update(
@@ -183,7 +219,7 @@ bool PuffyCharacterController::update(
 
 	if (blinkPhase < 0.f && squintPhase < 0.f && idleTime >= nextBlinkTime) {
 		blinkPhase = 0.f;
-		nextBlinkTime += 4.1f;
+		nextBlinkTime = idleTime + 3.4f + 1.8f * nextRandom01(&blinkRng);
 	}
 	float blink = 0.f;
 	if (blinkPhase >= 0.f) {
@@ -203,7 +239,7 @@ bool PuffyCharacterController::update(
 	}
 	if (squintPhase < 0.f && blinkPhase < 0.f && idleTime >= nextSquintTime) {
 		squintPhase = 0.f;
-		nextSquintTime += 7.7f;
+		nextSquintTime = idleTime + 6.5f + 3.f * nextRandom01(&squintRng);
 	}
 	float squint = 0.f;
 	if (squintPhase >= 0.f) {
@@ -225,9 +261,8 @@ bool PuffyCharacterController::update(
 
 	if (mouthClosePhase < 0.f && idleTime >= nextMouthCloseTime) {
 		mouthClosePhase = 0.f;
-		nextMouthCloseTime +=
-			8.7f + 1.3f * float(mouthCloseSequence % 3);
-		mouthCloseSequence++;
+		nextMouthCloseTime =
+			idleTime + 8.f + 4.f * nextRandom01(&mouthRng);
 	}
 	float mouthClosure = 0.f;
 	if (mouthClosePhase >= 0.f) {
@@ -247,13 +282,14 @@ bool PuffyCharacterController::update(
 		}
 	}
 
-	const float breath = std::sin(idleTime * (2.f * kPi / 4.2f))
+	const float breath = std::sin(
+		breathPhase + idleTime * (2.f * kPi / 4.2f))
 		* (0.003f + 0.006f * visual.inputActivity);
 	pose->inflation = clamp01(inflation + breath);
 	pose->squashX = 0.045f * twitch;
 	pose->squashY = -pose->squashX * 0.65f;
 	pose->verticalOffset =
-		std::sin(idleTime * (2.f * kPi / 5.4f)) * 0.008f
+		std::sin(bobPhase + idleTime * (2.f * kPi / 5.4f)) * 0.008f
 		- 0.022f * twitch
 		+ 0.026f * excitement * excitedWave;
 	// Doom-style gaze: rest near center, snap decisively to one side, hold
@@ -263,15 +299,14 @@ bool PuffyCharacterController::update(
 		if (gazeGlancing) {
 			gazeGlancing = false;
 			gazeTargetX = 0.f;
-			gazeStateTime = 2.20f + 0.55f * float(gazeSequence % 4);
+			gazeStateTime = 2.1f + 2.f * nextRandom01(&gazeRng);
 		}
 		else {
 			gazeGlancing = true;
 			const float direction = (gazeSequence & 1) ? 1.f : -1.f;
 			gazeTargetX = direction
-				* (0.60f + 0.06f * float(gazeSequence % 3));
-			gazeStateTime =
-				0.75f + 0.18f * float((gazeSequence + 1) % 3);
+				* (0.58f + 0.14f * nextRandom01(&gazeRng));
+			gazeStateTime = 0.72f + 0.38f * nextRandom01(&gazeRng);
 			gazeSequence++;
 		}
 	}

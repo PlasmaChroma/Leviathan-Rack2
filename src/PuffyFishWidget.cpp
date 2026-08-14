@@ -49,6 +49,28 @@ NVGcolor multiplyColor(NVGcolor color, NVGcolor tint) {
 		color.a * tint.a);
 }
 
+NVGcolor mixColor(NVGcolor from, NVGcolor to, float amount) {
+	const float mix = clamp01(amount);
+	return nvgRGBAf(
+		from.r + (to.r - from.r) * mix,
+		from.g + (to.g - from.g) * mix,
+		from.b + (to.b - from.b) * mix,
+		from.a + (to.a - from.a) * mix);
+}
+
+std::uint32_t puffyPersonalitySeed(std::int64_t moduleId) {
+	std::uint64_t value = moduleId >= 0
+		? std::uint64_t(moduleId) : 0x6d2b79f5u;
+	value ^= value >> 33;
+	value *= 0xff51afd7ed558ccdu;
+	value ^= value >> 33;
+	value *= 0xc4ceb9fe1a85ec53u;
+	value ^= value >> 33;
+	const std::uint32_t folded =
+		std::uint32_t(value) ^ std::uint32_t(value >> 32);
+	return folded != 0u ? folded : 0x6d2b79f5u;
+}
+
 std::uint8_t colorByte(float value) {
 	return std::uint8_t(clamp(int(value * 255.f + 0.5f), 0, 255));
 }
@@ -174,7 +196,9 @@ struct PuffyCompassRasterWidget final : TransparentWidget {
 } // namespace
 
 PuffyFishWidget::PuffyFishWidget(Puffy* module, bool roamingAvatar)
-	: module(module), roamingAvatar(roamingAvatar) {
+	: module(module),
+	  controller(puffyPersonalitySeed(module ? module->id : -1)),
+	  roamingAvatar(roamingAvatar) {
 	visual.effectiveAmount = 0.25f;
 	visual.negativeCharacter = int(puffy::Character::Bloom);
 	visual.positiveCharacter = int(puffy::Character::Spine);
@@ -185,7 +209,7 @@ PuffyFishWidget::PuffyFishWidget(Puffy* module, bool roamingAvatar)
 			visual = snapshot;
 		}
 	}
-	controller.reset(visual);
+	configurePersonality(module ? module->id : -1);
 	controller.update(0.f, visual, &pose);
 	pointerNegativeCharacter = visual.negativeCharacter;
 	pointerPositiveCharacter = visual.positiveCharacter;
@@ -199,6 +223,18 @@ PuffyFishWidget::PuffyFishWidget(Puffy* module, bool roamingAvatar)
 		compassFramebuffer->hide();
 		addChild(compassFramebuffer);
 	}
+}
+
+void PuffyFishWidget::configurePersonality(std::int64_t moduleId) {
+	const std::uint32_t seed = puffyPersonalitySeed(moduleId);
+	controller.setPersonalitySeed(seed, visual);
+	const std::uint32_t irisChoice = seed ^ 0x49524953u;
+	const NVGcolor irisBase = puffy_visual::characterTint(
+		int(irisChoice % std::uint32_t(puffy::kCharacterCount)));
+	const NVGcolor irisCharcoal = nvgRGB(18, 18, 20);
+	irisInnerColor = mixColor(irisCharcoal, irisBase, 0.82f);
+	irisOuterColor = mixColor(irisCharcoal, irisBase, 0.13f);
+	personalityModuleId = moduleId;
 }
 
 void PuffyFishWidget::onContextDestroy(const ContextDestroyEvent& e) {
@@ -251,6 +287,13 @@ void PuffyFishWidget::step() {
 					std::memory_order_relaxed);
 		}
 		visual = snapshot;
+	}
+	// Rack may create every widget in a multi-module paste before assigning the
+	// pasted modules their final unique IDs. Refresh the fallback personality as
+	// soon as that identity becomes available.
+	if (module->id >= 0 && module->id != personalityModuleId) {
+		configurePersonality(module->id);
+		controller.update(0.f, visual, &pose);
 	}
 	const float frameTime = APP && APP->window
 		? clamp(float(APP->window->getLastFrameDuration()), 0.f, 0.1f)
@@ -532,7 +575,9 @@ void PuffyFishWidget::drawEye(
 	float gazeX,
 	float gazeY,
 	float blink,
-	NVGcolor eyelidColor) const {
+	NVGcolor eyelidColor,
+	NVGcolor irisInnerColor,
+	NVGcolor irisOuterColor) const {
 	const float closed = clamp01(blink);
 	const float radiusX = radius * 0.86f;
 	nvgBeginPath(vg);
@@ -572,7 +617,7 @@ void PuffyFishWidget::drawEye(
 	const NVGpaint iris = nvgRadialGradient(
 		vg, pupil.x - radius * 0.12f, pupil.y - radius * 0.15f,
 		radius * 0.06f, radius * 0.50f,
-		nvgRGB(255, 194, 27), nvgRGB(28, 25, 22));
+		irisInnerColor, irisOuterColor);
 	nvgFillPaint(vg, iris);
 	nvgFill(vg);
 	nvgBeginPath(vg);
@@ -898,12 +943,14 @@ void PuffyFishWidget::draw(const DrawArgs& args) {
 			args.vg, Vec(center.x - eyeSpacing, eyeY), eyeRadius,
 			eyeball.handle,
 			pose.gazeX, pose.gazeY,
-			std::max(pose.leftBlink, pose.leftSquint), leftEyelidColor);
+			std::max(pose.leftBlink, pose.leftSquint), leftEyelidColor,
+			irisInnerColor, irisOuterColor);
 		drawEye(
 			args.vg, Vec(center.x + eyeSpacing, eyeY), eyeRadius,
 			eyeball.handle,
 			pose.gazeX, pose.gazeY,
-			std::max(pose.rightBlink, pose.rightSquint), rightEyelidColor);
+			std::max(pose.rightBlink, pose.rightSquint), rightEyelidColor,
+			irisInnerColor, irisOuterColor);
 	}
 
 	const float mouthY = center.y + radiusY * 0.30f;

@@ -3,10 +3,15 @@
 #include "Puffy.hpp"
 #include "PuffyPose.hpp"
 
+#include <cstdint>
+
 class PuffyCharacterController {
 public:
-	PuffyCharacterController();
+	explicit PuffyCharacterController(std::uint32_t personalitySeed = 0x6d2b79f5u);
 
+	void setPersonalitySeed(
+		std::uint32_t personalitySeed,
+		const PuffyVisualState& visual);
 	void reset(const PuffyVisualState& visual);
 	bool update(float dt, const PuffyVisualState& visual, PuffyPose* pose);
 
@@ -25,6 +30,8 @@ private:
 	float excitementCooldown = 0.f;
 	float excitementPhase = 0.f;
 	float finFlutterPhase = 0.f;
+	float breathPhase = 0.f;
+	float bobPhase = 0.f;
 	float movementFinActivity = 0.f;
 	bool energySurgeArmed = true;
 	float idleTime = 0.f;
@@ -34,14 +41,21 @@ private:
 	float squintPhase = -1.f;
 	float nextMouthCloseTime = 7.6f;
 	float mouthClosePhase = -1.f;
-	int mouthCloseSequence = 0;
 	float polarityDominance = 0.f;
 	float gazeX = 0.f;
 	float gazeTargetX = 0.f;
 	float gazeStateTime = 1.2f;
 	bool gazeGlancing = false;
 	int gazeSequence = 0;
+	std::uint32_t personalitySeed = 0x6d2b79f5u;
+	std::uint32_t blinkRng = 1u;
+	std::uint32_t squintRng = 1u;
+	std::uint32_t mouthRng = 1u;
+	std::uint32_t gazeRng = 1u;
+	std::uint32_t motionRng = 1u;
 
 	static float approach(float current, float target, float rate, float dt);
 	static float clamp01(float value);
+	static std::uint32_t mixSeed(std::uint32_t value);
+	static float nextRandom01(std::uint32_t* state);
 };
