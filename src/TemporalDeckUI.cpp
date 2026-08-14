@@ -959,6 +959,16 @@ static ExpandedVinylDownloadState &expandedVinylDownloadState() {
   return *state;
 }
 
+struct ScopedExpandedVinylSync {
+  ScopedExpandedVinylSync() {
+    expandedVinylDownloadState().syncDepth.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  ~ScopedExpandedVinylSync() {
+    expandedVinylDownloadState().syncDepth.fetch_sub(1, std::memory_order_relaxed);
+  }
+};
+
 struct ScopedExpandedVinylDownloadThreadCleanup {
   ~ScopedExpandedVinylDownloadThreadCleanup() {
     ExpandedVinylDownloadState &state = expandedVinylDownloadState();
@@ -2058,10 +2068,7 @@ static bool loadVinylDownloadPlan(const std::string &inventoryPath, VinylDownloa
 }
 
 static bool downloadExpandedVinylInventory(std::string *errorOut, int *fileCountOut) {
-  struct ScopedExpandedVinylSync {
-    ScopedExpandedVinylSync() { expandedVinylDownloadState().syncDepth.fetch_add(1, std::memory_order_relaxed); }
-    ~ScopedExpandedVinylSync() { expandedVinylDownloadState().syncDepth.fetch_sub(1, std::memory_order_relaxed); }
-  } scopedExpandedVinylSync;
+  ScopedExpandedVinylSync scopedExpandedVinylSync;
 
   ExpandedVinylDownloadState &state = expandedVinylDownloadState();
   const std::string finalRoot = expandedVinylRootPath();
