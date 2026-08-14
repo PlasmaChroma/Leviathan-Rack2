@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <iterator>
 #include <limits>
 
 #ifdef _WIN32
@@ -382,6 +383,29 @@ bool DeepcacheArchiveWorker::hasPendingIndexedCandidates() const {
 	return !indexedCandidates_.empty();
 }
 
+void DeepcacheArchiveWorker::promoteHydration(
+	const std::unordered_set<std::string>& cacheKeys) {
+	if (cacheKeys.empty())
+		return;
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		promotedHydrationKeys_.insert(cacheKeys.begin(), cacheKeys.end());
+		std::deque<DecodedPreview> promoted;
+		std::deque<DecodedPreview> remaining;
+		while (!decoded_.empty()) {
+			DecodedPreview preview = std::move(decoded_.front());
+			decoded_.pop_front();
+			(cacheKeys.count(preview.cacheKey) != 0 ? promoted : remaining)
+				.push_back(std::move(preview));
+		}
+		promoted.insert(promoted.end(),
+		                std::make_move_iterator(remaining.begin()),
+		                std::make_move_iterator(remaining.end()));
+		decoded_.swap(promoted);
+	}
+	condition_.notify_all();
+}
+
 bool DeepcacheArchiveWorker::requestDecode(const std::string& cacheKey,
 	                                        std::uint64_t decodeGeneration) {
 	if (!started_ || cacheKey.empty() || canceled() || fatalError_.load(std::memory_order_relaxed))
@@ -464,6 +488,7 @@ bool DeepcacheArchiveWorker::requestReset() {
 		decoded_.clear();
 		decodedBytes_ = 0;
 		indexedCandidates_.clear();
+		promotedHydrationKeys_.clear();
 		indexDiscoveryComplete_.store(false, std::memory_order_release);
 		decodeRequests_.clear();
 		requestedDecodeGeneration_.clear();
@@ -926,7 +951,10 @@ bool DeepcacheArchiveWorker::pushDecoded(DecodedPreview preview) {
 	if (canceled() || resetRequested_)
 		return false;
 	decodedBytes_ += byteCount;
-	decoded_.push_back(std::move(preview));
+	if (promotedHydrationKeys_.erase(preview.cacheKey) != 0)
+		decoded_.push_front(std::move(preview));
+	else
+		decoded_.push_back(std::move(preview));
 	return true;
 }
 
@@ -1146,12 +1174,24 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 	// metadata queue. The UI can now plan misses while payload hydration proceeds.
 	indexDiscoveryComplete_.store(true, std::memory_order_release);
 	std::uint64_t nextPackOffset = std::numeric_limits<std::uint64_t>::max();
-	for (const StartupEntry& startup : startupEntries) {
+	while (!startupEntries.empty()) {
 		if (canceled() || resetPending()) {
 			if (reusePackHandle)
 				pack.close();
 			return false;
 		}
+		std::size_t selected = 0;
+		{
+			std::lock_guard<std::mutex> lock(mutex_);
+			for (std::size_t index = 0; index < startupEntries.size(); ++index) {
+				if (promotedHydrationKeys_.count(startupEntries[index].cacheKey) != 0) {
+					selected = index;
+					break;
+				}
+			}
+		}
+		StartupEntry startup = startupEntries[selected];
+		startupEntries.erase(startupEntries.begin() + selected);
 		const Entry& entry = *startup.entry;
 		std::vector<std::uint8_t> payload;
 		const bool read = reusePackHandle

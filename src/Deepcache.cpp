@@ -476,6 +476,7 @@ struct DeepcacheBrowser : widget::OpaqueWidget {
 	DeepcacheModelBox* getModelBox(std::size_t index) const;
 	std::vector<deepcache::ModelDescriptor> snapshotModelDescriptors() const;
 	std::unordered_set<std::size_t> visibleModelIndices() const;
+	std::unordered_set<std::size_t> viewportModelIndices() const;
 	void writeDisplayEligibility(std::vector<std::uint8_t>* eligibility) const;
 	std::size_t residentPreviewCount() const;
 	std::size_t framebufferReadyPreviewCount() const;
@@ -678,6 +679,47 @@ public:
 	void promote(const std::unordered_set<std::size_t>& modelIndices) {
 		if (activeGeneration_ != 0)
 			worker_.promote(modelIndices, activeGeneration_);
+	}
+
+	void prioritizeViewport(const std::unordered_set<std::size_t>& modelIndices) {
+		if (modelIndices == viewportPriorityIndices_)
+			return;
+		viewportPriorityIndices_ = modelIndices;
+		if (modelIndices.empty())
+			return;
+		promote(modelIndices);
+		std::unordered_set<std::string> cacheKeys;
+		for (std::size_t modelIndex : modelIndices) {
+			const auto key = cacheKeyByModelIndex_.find(modelIndex);
+			if (key != cacheKeyByModelIndex_.end())
+				cacheKeys.insert(key->second);
+		}
+		archive_.promoteHydration(cacheKeys);
+
+		auto promoteQueue = [&](std::deque<std::pair<std::size_t, int>>& queue) {
+			std::deque<std::pair<std::size_t, int>> promoted;
+			std::deque<std::pair<std::size_t, int>> remaining;
+			while (!queue.empty()) {
+				auto request = queue.front();
+				queue.pop_front();
+				(modelIndices.count(request.first) != 0 ? promoted : remaining).push_back(request);
+			}
+			promoted.insert(promoted.end(), remaining.begin(), remaining.end());
+			queue.swap(promoted);
+		};
+		promoteQueue(persistentUploadQueue_);
+		promoteQueue(framebufferWarmQueue_);
+
+		std::deque<std::size_t> promotedOnDemand;
+		std::deque<std::size_t> remainingOnDemand;
+		while (!onDemandBuildQueue_.empty()) {
+			const std::size_t modelIndex = onDemandBuildQueue_.front();
+			onDemandBuildQueue_.pop_front();
+			(modelIndices.count(modelIndex) != 0 ? promotedOnDemand : remainingOnDemand)
+				.push_back(modelIndex);
+		}
+		promotedOnDemand.insert(promotedOnDemand.end(), remainingOnDemand.begin(), remainingOnDemand.end());
+		onDemandBuildQueue_.swap(promotedOnDemand);
 	}
 
 	void requestOnDemand(std::size_t modelIndex) {
@@ -1474,6 +1516,7 @@ private:
 	std::unordered_set<std::size_t> generationResidentIndices_;
 	std::unordered_set<std::size_t> persistentModelIndices_;
 	std::unordered_set<std::size_t> compressedModelIndices_;
+	std::unordered_set<std::size_t> viewportPriorityIndices_;
 	std::unordered_set<std::size_t> rehydrationPendingIndices_;
 	std::unordered_set<std::size_t> restoreDecodeRequestedIndices_;
 	std::unordered_set<std::size_t> restoreUploadQueuedIndices_;
@@ -2293,6 +2336,11 @@ void DeepcacheBrowser::step() {
 		modelContainer->onDirty(dirty);
 	}
 	OpaqueWidget::step();
+	if (cacheManager) {
+		const bool browserOpen = parent && parent->isVisible();
+		cacheManager->prioritizeViewport(
+			browserOpen ? viewportModelIndices() : std::unordered_set<std::size_t>());
+	}
 }
 
 void DeepcacheBrowser::draw(const DrawArgs& args) {
@@ -2503,6 +2551,21 @@ std::unordered_set<std::size_t> DeepcacheBrowser::visibleModelIndices() const {
 	std::unordered_set<std::size_t> indices;
 	for (DeepcacheModelBox* box : modelBoxes) {
 		if (box->isVisible())
+			indices.insert(box->modelIndex);
+	}
+	return indices;
+}
+
+std::unordered_set<std::size_t> DeepcacheBrowser::viewportModelIndices() const {
+	std::unordered_set<std::size_t> indices;
+	if (!modelScroll || modelScroll->box.size.x <= 0.f || modelScroll->box.size.y <= 0.f)
+		return indices;
+	const math::Rect viewport(math::Vec(), modelScroll->box.size);
+	for (DeepcacheModelBox* box : modelBoxes) {
+		if (!box || !box->isVisible())
+			continue;
+		const math::Vec position = box->getRelativeOffset(math::Vec(), modelScroll);
+		if (viewport.intersects(math::Rect(position, box->box.size)))
 			indices.insert(box->modelIndex);
 	}
 	return indices;

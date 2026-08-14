@@ -905,6 +905,27 @@ int main() {
 	{
 		deepcache::DeepcacheArchiveWorker worker;
 		worker.start(loadingResetDirectory, loadingWanted);
+		if (!waitUntil([&]() { return worker.indexDiscoveryComplete(); })) {
+			std::cerr << "[FAIL] priority reload did not discover its index\n";
+			return 1;
+		}
+		worker.promoteHydration({"loading-19"});
+		deepcache::DecodedPreview promoted;
+		bool foundPromoted = false;
+		for (int attempt = 0; attempt < 17 && !foundPromoted; ++attempt) {
+			if (!waitUntil([&]() { return worker.tryPopDecoded(promoted); }))
+				break;
+			foundPromoted = promoted.cacheKey == "loading-19";
+		}
+		if (!foundPromoted) {
+			std::cerr << "[FAIL] viewport hydration was not promoted ahead of background results\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(loadingResetDirectory, loadingWanted);
 		if (!waitUntil([&]() { return worker.hasPendingDecoded(); }) || !worker.requestReset()) {
 			std::cerr << "[FAIL] reset was not accepted during startup decode\n";
 			return 1;

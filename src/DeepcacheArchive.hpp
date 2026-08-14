@@ -91,6 +91,9 @@ public:
 	bool indexDiscoveryComplete() const {
 		return indexDiscoveryComplete_.load(std::memory_order_acquire);
 	}
+	// Promotes matching startup hydration and already-decoded handoff entries.
+	// Unmatched startup entries retain physical pack order.
+	void promoteHydration(const std::unordered_set<std::string>& cacheKeys);
 	// Re-decodes an already validated entry from its bounded on-disk pack span.
 	// The archive worker owns the I/O and read-only workers may use it safely.
 	bool requestDecode(const std::string& cacheKey, std::uint64_t decodeGeneration);
@@ -185,6 +188,7 @@ private:
 	std::deque<DecodedPreview> decoded_;
 	std::size_t decodedBytes_ = 0;
 	std::deque<IndexedCandidate> indexedCandidates_;
+	std::unordered_set<std::string> promotedHydrationKeys_;
 	std::deque<DecodeRequest> decodeRequests_;
 	std::unordered_map<std::string, std::uint64_t> requestedDecodeGeneration_;
 	std::deque<std::string> committed_;
