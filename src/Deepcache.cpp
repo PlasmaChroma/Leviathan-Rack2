@@ -565,12 +565,12 @@ public:
 		deepcache::PreviewPlanInput input;
 		input.generation = activeGeneration_;
 		input.visibleModelIndices = browser_->visibleModelIndices();
+		input.indexedModelIndices = compressedModelIndices_;
 		std::vector<deepcache::ModelDescriptor> descriptors = browser_->snapshotModelDescriptors();
 		descriptors.erase(std::remove_if(descriptors.begin(), descriptors.end(), [this](const deepcache::ModelDescriptor& descriptor) {
 			DeepcacheModelBox* box = browser_->getModelBox(descriptor.modelIndex);
-			return box && (box->state == deepcache::PreviewEntryState::FRAMEBUFFER_READY ||
-			               (!isDisplayEligible(descriptor.modelIndex) &&
-			                compressedModelIndices_.count(descriptor.modelIndex) != 0));
+			return compressedModelIndices_.count(descriptor.modelIndex) != 0 ||
+			       (box && box->state == deepcache::PreviewEntryState::FRAMEBUFFER_READY);
 		}), descriptors.end());
 		for (const deepcache::ModelDescriptor& descriptor : descriptors)
 			constructionPluginRemaining_[descriptor.pluginSlug]++;

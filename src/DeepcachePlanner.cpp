@@ -102,6 +102,8 @@ PreviewPlanResult planPreviewRequests(const std::vector<ModelDescriptor>& descri
 	identities.reserve(descriptors.size());
 
 	for (const ModelDescriptor& descriptor : descriptors) {
+		if (input.indexedModelIndices.count(descriptor.modelIndex) != 0)
+			continue;
 		if (!isDescriptorValid(descriptor)) {
 			result.invalidCount++;
 			continue;

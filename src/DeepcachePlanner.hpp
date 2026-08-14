@@ -86,6 +86,9 @@ struct PreviewPlanInput {
 	std::uint64_t generation = 0;
 	std::unordered_set<std::size_t> visibleModelIndices;
 	std::unordered_set<std::size_t> recentlyRequestedModelIndices;
+	// Structurally validated archive entries are hydration work, not preview
+	// construction misses. A later decode failure is submitted on demand.
+	std::unordered_set<std::size_t> indexedModelIndices;
 };
 
 struct PreviewPlanResult {

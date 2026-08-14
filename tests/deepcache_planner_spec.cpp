@@ -58,6 +58,20 @@ TestResult testDeduplicationAndInvalidEntries() {
 	            " invalid=" + std::to_string(result.invalidCount)};
 }
 
+TestResult testIndexedCandidatesAreNotConstructionMisses() {
+	PreviewPlanInput input;
+	input.generation = 43;
+	input.visibleModelIndices.insert(2);
+	input.indexedModelIndices.insert(0);
+	input.indexedModelIndices.insert(2);
+	auto result = deepcache::planPreviewRequests(descriptors(), input);
+	const bool pass = result.requests.size() == 2 &&
+	                  result.requests[0].modelIndex == 1 &&
+	                  result.requests[1].modelIndex == 3;
+	return {"indexed disk hits are excluded from construction planning", pass,
+	        "planned=" + std::to_string(result.requests.size())};
+}
+
 TestResult testGenerationAndPromotion() {
 	PreviewPlanInput input;
 	input.generation = 77;
@@ -324,6 +338,7 @@ int main() {
 	const std::vector<TestResult> tests = {
 		testPriorityOrdering(),
 		testDeduplicationAndInvalidEntries(),
+		testIndexedCandidatesAreNotConstructionMisses(),
 		testGenerationAndPromotion(),
 		testStableCacheKey(),
 		testCanonicalPreviewRenderScale(),
