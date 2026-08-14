@@ -628,14 +628,10 @@ struct PuffyPolarityLinkButton final : ParamWidget {
 			? (puffyModule->params[Puffy::CHARACTER_LINK_PARAM].getValue() > 0.5f)
 			: (getParamQuantity() ? getParamQuantity()->getValue() > 0.5f : true);
 
-		// Icon color selection
-		NVGcolor iconColor;
-		if (isLinked) {
-			iconColor = isHovered ? nvgRGB(255, 255, 255) : nvgRGB(150, 150, 165);
-		}
-		else {
-			iconColor = isHovered ? nvgRGB(245, 245, 255) : nvgRGBA(140, 140, 160, 160);
-		}
+		// Keep the chain material consistent; its geometry communicates link state.
+		const NVGcolor iconColor = isHovered
+			? nvgRGB(255, 255, 255)
+			: nvgRGB(150, 150, 165);
 
 		// Draw larger chain icon with realistic physical proportions & 3D weave outlines
 		nvgSave(args.vg);
