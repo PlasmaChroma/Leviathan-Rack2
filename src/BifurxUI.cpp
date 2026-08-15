@@ -781,6 +781,7 @@ struct BifurxWidget final : ModuleWidget {
 		previewBuildTimer.markPanelDone();
 		splitPanel.addLabels("res/bifurx.labels.svg");
 		splitPanel.addPerfectWaveBranding();
+		splitPanel.addCompactLeviathanLogoBranding();
 		visual_assets::addFractalGlassOverlay(
 			this, panelPath, splitPanel.panelSurfaceEffectWidget());
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0))); addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));

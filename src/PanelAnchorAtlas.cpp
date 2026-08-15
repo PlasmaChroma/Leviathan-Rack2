@@ -24,9 +24,9 @@ struct SvgAtlasRecord { const char* path; uint64_t size; uint64_t fnv64; float u
 struct AnchorAtlasRecord { uint16_t svgIndex; const char* id; uint32_t flags; float cx; float cy; float x; float y; float width; float height; float radius; };
 
 static const SvgAtlasRecord kSvgAtlas[] = {
-	{"res/bifurx.labels.svg", 48991ull, 0x726b4415a74a6cd6ull, 0.00999999986f},
-	{"res/bifurx.panel.svg", 18684ull, 0x68340a3ea68af3efull, 0.00999999986f},
-	{"res/bifurx.svg", 30147ull, 0x73f6b0b02643dc25ull, 0.00999999986f},
+	{"res/bifurx.labels.svg", 39304ull, 0x27d1809a536d5d32ull, 0.00999999986f},
+	{"res/bifurx.panel.svg", 18796ull, 0x2f6b6ae15bcb5c99ull, 0.00999999986f},
+	{"res/bifurx.svg", 30255ull, 0x9c880c41fe1b6e9eull, 0.00999999986f},
 	{"res/blank.svg", 21648ull, 0x5d682cc9d0d5089full, 0.01f},
 	{"res/bulkhead.svg", 16822ull, 0xb5956bc612dc50a9ull, 0.00999999988f},
 	{"res/Cantor.labels.svg", 1715ull, 0x18b5f397f35f477cull, 0.01f},
@@ -102,6 +102,7 @@ static const AnchorAtlasRecord kAnchorAtlas[] = {
 	{1, "SPECTRUM", 3u, 3553.84858f, 4114.48613f, 78.962128f, 946.43658f, 6949.7729f, 6336.0991f, 0.f},
 	{1, "BRANDING_WAVE_LEFT_RASTER", 3u, 1318.984f, 12594.095f, 665.61f, 12338.19f, 1306.748f, 511.81f, 0.f},
 	{1, "BRANDING_WAVE_RIGHT_RASTER", 3u, 5793.048f, 12594.095f, 5139.674f, 12338.19f, 1306.748f, 511.81f, 0.f},
+	{1, "BRANDING_LEVIATHAN_LOGO_RASTER", 3u, 3556.0002f, 12455.129f, 1920.0337f, 11843.102f, 3271.933f, 1224.054f, 0.f},
 	{2, "black_background", 3u, 4553.82826f, 7441.0425f, 986.18201f, 997.229f, 7135.2925f, 12887.627f, 0.f},
 	{2, "gray_outline", 3u, 6082.8187f, 7441.0425f, 1096.182f, 1107.229f, 9973.2734f, 12667.627f, 0.f},
 	{2, "outputs", 3u, 4513.5499f, 11506.2505f, 3974.6584f, 10837.059f, 1077.783f, 1338.3831f, 0.f},
@@ -128,6 +129,7 @@ static const AnchorAtlasRecord kAnchorAtlas[] = {
 	{2, "SPECTRUM", 3u, 3553.84858f, 4114.48613f, 78.962128f, 946.43658f, 6949.7729f, 6336.0991f, 0.f},
 	{2, "BRANDING_WAVE_LEFT_RASTER", 3u, 1318.984f, 12594.095f, 665.61f, 12338.19f, 1306.748f, 511.81f, 0.f},
 	{2, "BRANDING_WAVE_RIGHT_RASTER", 3u, 5793.048f, 12594.095f, 5139.674f, 12338.19f, 1306.748f, 511.81f, 0.f},
+	{2, "BRANDING_LEVIATHAN_LOGO_RASTER", 3u, 3556.0002f, 12455.129f, 1920.0337f, 11843.102f, 3271.933f, 1224.054f, 0.f},
 	{3, "black_background", 3u, 6082.81901f, 7441.0425f, 986.18201f, 997.229f, 10193.274f, 12887.627f, 0.f},
 	{3, "gray_outline", 3u, 6082.8187f, 7441.0425f, 1096.182f, 1107.229f, 9973.2734f, 12667.627f, 0.f},
 	{3, "LIN_LOG_1", 1u, 1397.5443f, 5052.6074f, 0.f, 0.f, 0.f, 0.f, 0.f},
