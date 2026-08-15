@@ -294,15 +294,15 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="6.7473656"
-   inkscape:cx="162.80428"
-   inkscape:cy="445.4331"
+   inkscape:zoom="2.385554"
+   inkscape:cx="144.6205"
+   inkscape:cy="220.70345"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
    inkscape:window-y="-8"
    inkscape:window-maximized="1"
-   inkscape:current-layer="Background_Rect"
+   inkscape:current-layer="svg488"
    showgrid="false"
    inkscape:pageshadow="2" />
   
@@ -550,13 +550,6 @@
      id="tspan10"
      x="7493.6675"
      y="12069.399">PITCH</tspan></text><text
-   id="new_lbl"
-   x="7379.6494"
-   y="798.63428"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
-   xml:space="preserve"><tspan
-     sodipodi:role="line"
-     id="tspan6">NEW</tspan></text><text
    id="mod_lbl"
    x="8589.8779"
    y="12042.941"
@@ -599,7 +592,7 @@
      r="295" /><circle
      id="SETTINGS_BUTTON"
      cx="7390"
-     cy="365.5"
+     cy="455.5"
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.5"
      r="170" /><ellipse
      id="CLOCK_INPUT"
@@ -674,8 +667,20 @@
    width="8880"
    height="8880"
    style="display:inline;fill:#501e5c;fill-opacity:1;stroke:none;stroke-width:31.1342;stroke-opacity:1" />
-<g id="perfect_wave_raster_anchors" style="display:none">
-  <rect id="BRANDING_WAVE_LEFT_RASTER" x="1681.610" y="12338.190" width="1306.748" height="511.810" />
-  <rect id="BRANDING_WAVE_RIGHT_RASTER" x="6155.674" y="12338.190" width="1306.748" height="511.810" />
+<g
+   id="perfect_wave_raster_anchors"
+   style="display:none">
+  <rect
+   id="BRANDING_WAVE_LEFT_RASTER"
+   x="1681.610"
+   y="12338.190"
+   width="1306.748"
+   height="511.810" />
+  <rect
+   id="BRANDING_WAVE_RIGHT_RASTER"
+   x="6155.674"
+   y="12338.190"
+   width="1306.748"
+   height="511.810" />
 </g>
 </svg>
