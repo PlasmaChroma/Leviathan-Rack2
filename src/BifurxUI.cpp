@@ -1,6 +1,7 @@
 #include "Bifurx.hpp"
 #include "DebugTerminalTransport.hpp"
 #include "BifurxWorker.hpp"
+#include "theme/ThemeDebugMenu.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
 #include <unordered_map>
@@ -1010,6 +1011,7 @@ struct BifurxWidget final : ModuleWidget {
 				}
 			));
 		if (isDragonKingDebugEnabled()) {
+			leviathan::theme::appendDebugThemeMenu(menu);
 			menu->addChild(createCheckMenuItem("Log Curve Debug", "",
 				[=]() { return bifurx->curveDebugLogging.load(std::memory_order_relaxed); },
 				[=]() { bifurx->curveDebugLogging.store(!bifurx->curveDebugLogging.load(std::memory_order_relaxed), std::memory_order_relaxed); }));

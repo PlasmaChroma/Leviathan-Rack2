@@ -3,6 +3,7 @@
 #include "../MathHelpers.hpp"
 #include "../NvgGraphicsLifecycle.hpp"
 #include "../PanelSvgUtils.hpp"
+#include "../theme/ThemeService.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -279,12 +280,14 @@ struct PreviewFrameEnhancementWidget : TransparentWidget {
 struct PanelSurfaceEffectWidget : TransparentWidget {
 	widget::FramebufferWidget* framebuffer = nullptr;
 	uint64_t tintGeneration = 0u;
+	uint64_t themeColorGeneration = 0u;
 	float previewProgressionPhase = -1.f;
 
 	struct GlassRectArt {
 		math::Rect rectPx;
 		float radiusPx = 0.f;
 		NVGcolor baseColor = nvgRGB(87, 64, 191);
+		leviathan::theme::ThemeRole themeRole = leviathan::theme::ThemeRole::None;
 	};
 
 	struct GlassPathArt {
@@ -292,6 +295,7 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		std::vector<panel_svg::SvgPathCommand> commandsPx;
 		math::Rect boundsPx;
 		NVGcolor baseColor = nvgRGB(87, 64, 191);
+		leviathan::theme::ThemeRole themeRole = leviathan::theme::ThemeRole::None;
 		bool useTemporalDeckInputsGlare = false;
 		bool useBifurxInputsGlare = false;
 		bool useWyrmInputsGlare = false;
@@ -315,6 +319,19 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 			&& a.pos.x + a.size.x > b.pos.x
 			&& a.pos.y < b.pos.y + b.size.y
 			&& a.pos.y + a.size.y > b.pos.y;
+	}
+
+	static NVGcolor themeColorNvg(leviathan::theme::ThemeColor color) {
+		return nvgRGB(color.r, color.g, color.b);
+	}
+
+	static NVGcolor resolveGlassPigment(
+		leviathan::theme::ThemeRole role,
+		NVGcolor authoredColor) {
+		if (role == leviathan::theme::ThemeRole::None) {
+			return applyPanelGlassTint(authoredColor);
+		}
+		return themeColorNvg(leviathan::theme::color(role));
 	}
 
 	static math::Rect rectIntersection(const math::Rect& a, const math::Rect& b) {
@@ -503,9 +520,10 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 
 		const float sourceRadius = glass.radiusPx > 0.f ? glass.radiusPx : std::min(std::min(w, h) * 0.085f, 8.0f);
 		const float r = clamp(sourceRadius, 0.f, std::min(w, h) * 0.5f);
-		const NVGcolor base = applyPanelGlassTint(glass.baseColor);
-		const NVGcolor cyan = applyPanelGlassTint(nvgRGB(0x1c, 0xcc, 0xd9));
-		const NVGcolor violet = applyPanelGlassTint(nvgRGB(0x7a, 0x5c, 0xff));
+		const bool semantic = glass.themeRole != leviathan::theme::ThemeRole::None;
+		const NVGcolor base = resolveGlassPigment(glass.themeRole, glass.baseColor);
+		const NVGcolor cyan = semantic ? nvgRGB(0x1c, 0xcc, 0xd9) : applyPanelGlassTint(nvgRGB(0x1c, 0xcc, 0xd9));
+		const NVGcolor violet = semantic ? nvgRGB(0x7a, 0x5c, 0xff) : applyPanelGlassTint(nvgRGB(0x7a, 0x5c, 0xff));
 		const float smallBoost = clamp((90.f - std::min(w, h)) / 55.f, 0.f, 1.f);
 		const float glowAlpha = 0.105f + smallBoost * 0.08f;
 		const float baseWashAlpha = 0.055f + smallBoost * 0.07f;
@@ -554,7 +572,7 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 			nvgStroke(args.vg);
 		}
 
-		if (gPanelGlassTint.currentAmount > 0.f) {
+		if (!semantic && gPanelGlassTint.currentAmount > 0.f) {
 			// Retain the strong magenta wash from the useful portion of the
 			// earlier diagnostic treatment, without its white debug border.
 			nvgBeginPath(args.vg);
@@ -820,9 +838,10 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 			return;
 		}
 
-		const NVGcolor base = applyPanelGlassTint(glass.baseColor);
-		const NVGcolor cyan = applyPanelGlassTint(nvgRGB(0x1c, 0xcc, 0xd9));
-		const NVGcolor violet = applyPanelGlassTint(nvgRGB(0x7a, 0x5c, 0xff));
+		const bool semantic = glass.themeRole != leviathan::theme::ThemeRole::None;
+		const NVGcolor base = resolveGlassPigment(glass.themeRole, glass.baseColor);
+		const NVGcolor cyan = semantic ? nvgRGB(0x1c, 0xcc, 0xd9) : applyPanelGlassTint(nvgRGB(0x1c, 0xcc, 0xd9));
+		const NVGcolor violet = semantic ? nvgRGB(0x7a, 0x5c, 0xff) : applyPanelGlassTint(nvgRGB(0x7a, 0x5c, 0xff));
 		const float smallBoost = clamp((90.f - std::min(w, h)) / 55.f, 0.f, 1.f);
 		const float edgeAlphaBoost = 1.f + smallBoost * 0.7f;
 		const float glassBaseAlpha = 0.05f + smallBoost * 0.032f;
@@ -873,7 +892,7 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 			nvgRGBA(0, 0, 0, int(std::round(30.f + smallBoost * 16.f)))));
 		nvgStroke(args.vg);
 
-		if (gPanelGlassTint.currentAmount > 0.f) {
+		if (!semantic && gPanelGlassTint.currentAmount > 0.f) {
 			nvgBeginPath(args.vg);
 			appendGlassPath(args.vg, glass);
 			nvgFillColor(args.vg, gPanelGlassTint.currentWashColor);
@@ -969,8 +988,11 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 
 	void step() override {
 		updatePanelGlassTint();
-		if (tintGeneration != gPanelGlassTint.generation) {
+		const uint64_t currentThemeColorGeneration = leviathan::theme::colorGeneration();
+		if (tintGeneration != gPanelGlassTint.generation
+			|| themeColorGeneration != currentThemeColorGeneration) {
 			tintGeneration = gPanelGlassTint.generation;
+			themeColorGeneration = currentThemeColorGeneration;
 			if (framebuffer) {
 				framebuffer->setDirty();
 			}
@@ -1020,10 +1042,11 @@ PanelSurfaceEffectDefinition loadPanelSurfaceEffectDefinition(const std::string&
 	}
 
 	std::vector<panel_svg::SvgRectMatch> glassMatches;
-	if (panel_svg::findRectsInGroupsWithIdSubstringMm(svgPath, "glass", &glassMatches)) {
+	if (panel_svg::findThemeGlassRectsMm(svgPath, &glassMatches)) {
 		def.glassRects.reserve(glassMatches.size());
 		for (const panel_svg::SvgRectMatch& match : glassMatches) {
 			PanelSurfaceEffectWidget::GlassRectArt art;
+			art.themeRole = match.themeRole;
 			art.rectPx = math::Rect(mm2px(match.rect.pos), mm2px(match.rect.size));
 			if (match.hasCornerRadius) {
 				const Vec radiusPx = mm2px(match.cornerRadius);
@@ -1037,11 +1060,12 @@ PanelSurfaceEffectDefinition loadPanelSurfaceEffectDefinition(const std::string&
 	}
 
 	std::vector<panel_svg::SvgPathMatch> glassPathMatches;
-	if (panel_svg::findPathsInGroupsWithIdSubstringMm(svgPath, "glass", &glassPathMatches)) {
+	if (panel_svg::findThemeGlassPathsMm(svgPath, &glassPathMatches)) {
 		def.glassPaths.reserve(glassPathMatches.size());
 		for (const panel_svg::SvgPathMatch& match : glassPathMatches) {
 			PanelSurfaceEffectWidget::GlassPathArt art;
 			art.id = match.id;
+			art.themeRole = match.themeRole;
 			art.useTemporalDeckInputsGlare = match.id == "inputs" && svgPath.find("deck.panel.svg") != std::string::npos;
 			art.useBifurxInputsGlare = match.id == "inputs" && svgPath.find("bifurx.panel.svg") != std::string::npos;
 			art.useWyrmInputsGlare = match.id == "frame_left" && svgPath.find("wyrm.panel.svg") != std::string::npos;
@@ -1339,6 +1363,7 @@ Widget* createPanelSurfaceEffectWidget(
 	PanelSurfaceEffectWidget* effect = new PanelSurfaceEffectWidget();
 	effect->framebuffer = fb;
 	effect->tintGeneration = gPanelGlassTint.generation;
+	effect->themeColorGeneration = leviathan::theme::colorGeneration();
 	effect->previewProgressionPhase = previewProgressionPhase;
 	effect->box.size = panelSizePx;
 	effect->metalRects = it->second.metalRects;

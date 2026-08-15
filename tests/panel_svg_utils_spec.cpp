@@ -414,21 +414,67 @@ TestResult testPerfectWaveBrandingDeploymentContract() {
 
 TestResult testBifurxGlassPathParses() {
   std::vector<panel_svg::SvgPathMatch> matches;
-  bool ok = panel_svg::findPathsInGroupsWithIdSubstringMm("res/bifurx.panel.svg", "glass", &matches);
+  std::vector<panel_svg::SvgRectMatch> rects;
+  bool ok = panel_svg::findThemeGlassPathsMm("res/bifurx.panel.svg", &matches);
+  bool rectOk = panel_svg::findThemeGlassRectsMm("res/bifurx.panel.svg", &rects);
   const auto input = std::find_if(matches.begin(), matches.end(), [](const panel_svg::SvgPathMatch& match) {
     return match.id == "inputs";
+  });
+  const auto output = std::find_if(rects.begin(), rects.end(), [](const panel_svg::SvgRectMatch& match) {
+    return match.id == "outputs-3";
   });
   const bool hasRoundedCurve = input != matches.end() && std::any_of(
     input->commands.begin(), input->commands.end(), [](const panel_svg::SvgPathCommand& command) {
       return command.type == panel_svg::SvgPathCommand::QuadTo ||
              command.type == panel_svg::SvgPathCommand::BezierTo;
     });
-  const bool pass = ok && input != matches.end() && !input->commands.empty() && hasRoundedCurve;
+  const bool pass = ok && rectOk
+    && input != matches.end()
+    && input->themeRole == leviathan::theme::ThemeRole::Input
+    && !input->commands.empty() && hasRoundedCurve
+    && output != rects.end()
+    && output->themeRole == leviathan::theme::ThemeRole::Output;
   return {"Bifurx inputs path is available to the glass renderer", pass,
           "ok=" + std::to_string(ok ? 1 : 0) +
             " count=" + std::to_string(matches.size()) +
             " inputs=" + std::to_string(input != matches.end() ? 1 : 0) +
+            " output=" + std::to_string(output != rects.end() ? 1 : 0) +
             " rounded=" + std::to_string(hasRoundedCurve ? 1 : 0)};
+}
+
+TestResult testExactThemeGlassRoles() {
+  using leviathan::theme::ThemeRole;
+  std::vector<panel_svg::SvgRectMatch> rects;
+  std::vector<panel_svg::SvgPathMatch> paths;
+  const bool rectOk = panel_svg::findThemeGlassRectsMm(
+    "tests/fixtures/theme_glass_roles.svg", &rects);
+  const bool pathOk = panel_svg::findThemeGlassPathsMm(
+    "tests/fixtures/theme_glass_roles.svg", &paths);
+  auto rectRole = [&](const char* id, ThemeRole role) {
+    const auto found = std::find_if(rects.begin(), rects.end(), [&](const panel_svg::SvgRectMatch& match) {
+      return match.id == id;
+    });
+    return found != rects.end() && found->themeRole == role;
+  };
+  const auto nearMiss = std::find_if(rects.begin(), rects.end(), [](const panel_svg::SvgRectMatch& match) {
+    return match.id == "near_miss";
+  });
+  const auto inputPath = std::find_if(paths.begin(), paths.end(), [](const panel_svg::SvgPathMatch& match) {
+    return match.id == "input";
+  });
+  const bool pass = rectOk && pathOk
+    && rectRole("generic", ThemeRole::None)
+    && rectRole("input_nested", ThemeRole::Input)
+    && rectRole("output", ThemeRole::Output)
+    && rectRole("nearest_wins", ThemeRole::Accent)
+    && rectRole("label_role", ThemeRole::Output)
+    && nearMiss == rects.end()
+    && inputPath != paths.end()
+    && inputPath->themeRole == ThemeRole::Input;
+  return {"Exact theme glass roles inherit from the nearest semantic ancestor", pass,
+          "rects=" + std::to_string(rects.size()) +
+            " paths=" + std::to_string(paths.size()) +
+            " nearMiss=" + std::to_string(nearMiss != rects.end() ? 1 : 0)};
 }
 
 } // namespace
@@ -447,6 +493,7 @@ int main() {
   tests.push_back(testTemporalDeckBrandingRasterAnchors());
   tests.push_back(testPerfectWaveBrandingDeploymentContract());
   tests.push_back(testBifurxGlassPathParses());
+  tests.push_back(testExactThemeGlassRoles());
 
   int failed = 0;
   std::cout << "Panel SVG Utils Spec\n";

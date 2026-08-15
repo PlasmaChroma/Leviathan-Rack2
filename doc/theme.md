@@ -229,6 +229,13 @@ struct ThemeState {
 
 ThemeState read();
 
+// Lock-free change probes for widget step() hot paths. A consumer calls read()
+// only after its relevant probe changes.
+uint64_t generation();
+uint64_t colorGeneration();
+uint64_t surfaceGeneration();
+uint64_t presetGeneration();
+
 ThemeColor color(ThemeRole role);
 
 ThemeChange setColor(ThemeRole role, ThemeColor color);
@@ -246,6 +253,10 @@ void shutdown();
 
 `read()` returns a value copy. The service must not expose a mutable reference,
 pointer, `NVGcolor`, widget, framebuffer, or graphics-context resource.
+
+The generation probe functions are atomic loads and must not take the snapshot
+mutex. Publishing a changed snapshot happens-before publishing its new domain
+generation. This keeps unchanged module widgets off the mutex in steady state.
 
 The service owns monotonically increasing runtime generation counters:
 
@@ -541,13 +552,19 @@ shadow and highlight
     derived from pigment by canonical shared glass-material functions
 
 edgeStart and edgeEnd
-    derived from pigment for semantic glass
-    retain the existing canonical dual-color treatment for generic glass
+    retain the existing canonical violet-to-cyan dual-color treatment in V1
+    for both generic and semantic glass
 ```
 
 The initial derivation must preserve the existing opacity, small-region boost,
 glare, reflection, and geometry-specific behavior. Exact derivation constants
 must live in one shared helper; modules must not derive their own theme palettes.
+
+Keeping the dual-color edge treatment canonical is the Phase 0 material
+decision: semantic Theme color controls the body pigment, glow, and pigment-based
+shading while the violet/cyan edge remains part of Leviathan's authored glass
+identity. Making edge colors semantic is a possible later extension, not a V1
+requirement.
 
 The glass renderer remains responsible for:
 

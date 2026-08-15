@@ -2,6 +2,7 @@
 
 #include "../NvgGraphicsLifecycle.hpp"
 #include "../PanelSvgUtils.hpp"
+#include "../theme/ThemeService.hpp"
 
 #include <atomic>
 #include <cmath>
@@ -268,7 +269,8 @@ struct FractalGlassOverlay::Impl {
 		math::Rect rect;
 		float radius = 0.f;
 		std::vector<panel_svg::SvgPathCommand> path;
-		iris::FractalPalette palette;
+		NVGcolor authoredColor = nvgRGB(124, 92, 255);
+		leviathan::theme::ThemeRole themeRole = leviathan::theme::ThemeRole::None;
 	};
 	struct Request {
 		iris::NautiloidFractalSourceParams params;
@@ -293,9 +295,13 @@ struct FractalGlassOverlay::Impl {
 	std::thread worker;
 	std::mutex resultMutex;
 	std::vector<std::vector<uint8_t>> rendered;
+	CachedFractalField sourceField;
 	int renderedWidth = 0;
 	int renderedHeight = 0;
 	std::atomic<uint64_t> generation {0u};
+	uint64_t observedThemeColorGeneration = 0u;
+	uint64_t observedThemeSurfaceGeneration = 0u;
+	bool hasSemanticRegion = false;
 	bool liveValid = false;
 	iris::NautiloidFractalSourceParams live;
 	bool wasLive = false;
@@ -316,17 +322,19 @@ struct FractalGlassOverlay::Impl {
 		, renderWidth(std::max(2, requestedRenderWidth))
 		, renderHeight(std::max(2, requestedRenderHeight)) {
 		std::vector<panel_svg::SvgRectMatch> matches;
-		if (panel_svg::findRectsInGroupsWithIdSubstringMm(panelPath, "glass", &matches)) {
+		if (panel_svg::findThemeGlassRectsMm(panelPath, &matches)) {
 			for (const auto& match : matches) {
 				Region region;
 				region.rect = math::Rect(mm2px(match.rect.pos), mm2px(match.rect.size));
 				if (match.hasCornerRadius) { Vec r = mm2px(match.cornerRadius); region.radius = std::min(r.x, r.y); }
-				region.palette = paletteForColor(match.hasFillColor ? match.fillColor : nvgRGB(124, 92, 255));
+				region.authoredColor = match.hasFillColor ? match.fillColor : nvgRGB(124, 92, 255);
+				region.themeRole = match.themeRole;
+				hasSemanticRegion = hasSemanticRegion || region.themeRole != leviathan::theme::ThemeRole::None;
 				regions.push_back(region);
 			}
 		}
 		std::vector<panel_svg::SvgPathMatch> pathMatches;
-		if (panel_svg::findPathsInGroupsWithIdSubstringMm(panelPath, "glass", &pathMatches)) {
+		if (panel_svg::findThemeGlassPathsMm(panelPath, &pathMatches)) {
 			for (const auto& match : pathMatches) {
 				Region region;
 				region.rect = math::Rect(mm2px(match.bounds.pos), mm2px(match.bounds.size));
@@ -337,12 +345,15 @@ struct FractalGlassOverlay::Impl {
 					command.p3 = mm2px(command.p3);
 					region.path.push_back(command);
 				}
-				region.palette = paletteForColor(
-					match.hasFillColor ? match.fillColor : nvgRGB(124, 92, 255));
+				region.authoredColor = match.hasFillColor ? match.fillColor : nvgRGB(124, 92, 255);
+				region.themeRole = match.themeRole;
+				hasSemanticRegion = hasSemanticRegion || region.themeRole != leviathan::theme::ThemeRole::None;
 				regions.push_back(region);
 			}
 		}
 		images.assign(regions.size(), -1);
+		observedThemeColorGeneration = leviathan::theme::colorGeneration();
+		observedThemeSurfaceGeneration = leviathan::theme::surfaceGeneration();
 		if (synchronousFallback && !regions.empty()) {
 			fallbackValid = selectRandomEntry(
 				selectionKey, &fallback, &fallbackIndex);
@@ -372,18 +383,49 @@ struct FractalGlassOverlay::Impl {
 		requestCv.notify_one();
 	}
 
+	NVGcolor resolvedRegionColor(const Region& region, const leviathan::theme::ThemeSnapshot& theme) const {
+		const leviathan::theme::ThemeColor* color = nullptr;
+		switch (region.themeRole) {
+			case leviathan::theme::ThemeRole::Input: color = &theme.colors.input; break;
+			case leviathan::theme::ThemeRole::Output: color = &theme.colors.output; break;
+			case leviathan::theme::ThemeRole::Accent: color = &theme.colors.accent; break;
+			case leviathan::theme::ThemeRole::None:
+			default: return region.authoredColor;
+		}
+		return nvgRGB(color->r, color->g, color->b);
+	}
+
 	void publishRendered(const CachedFractalField& source) {
 		if (!source || !source->valid()) return;
 		{
 			std::lock_guard<std::mutex> resultLock(resultMutex);
+			const leviathan::theme::ThemeSnapshot theme = leviathan::theme::read().snapshot;
+			sourceField = source;
 			rendered.resize(regions.size());
 			for (size_t i = 0; i < regions.size(); ++i) {
 				iris::SourceField tinted = *source;
-				iris::applyFractalPalette(&tinted, regions[i].palette);
+				iris::applyFractalPalette(&tinted, paletteForColor(resolvedRegionColor(regions[i], theme)));
 				rendered[i] = std::move(tinted.rgb8);
 			}
 			renderedWidth = source->width;
 			renderedHeight = source->height;
+		}
+		generation.fetch_add(1u, std::memory_order_release);
+	}
+
+	void repalettePublishedSource() {
+		{
+			std::lock_guard<std::mutex> resultLock(resultMutex);
+			if (!sourceField || !sourceField->valid()) return;
+			const leviathan::theme::ThemeSnapshot theme = leviathan::theme::read().snapshot;
+			rendered.resize(regions.size());
+			for (size_t i = 0; i < regions.size(); ++i) {
+				iris::SourceField tinted = *sourceField;
+				iris::applyFractalPalette(&tinted, paletteForColor(resolvedRegionColor(regions[i], theme)));
+				rendered[i] = std::move(tinted.rgb8);
+			}
+			renderedWidth = sourceField->width;
+			renderedHeight = sourceField->height;
 		}
 		generation.fetch_add(1u, std::memory_order_release);
 	}
@@ -447,6 +489,7 @@ bool FractalGlassOverlay::deleteFallbackSelection() {
 	{
 		std::lock_guard<std::mutex> resultLock(impl->resultMutex);
 		impl->rendered.clear();
+		impl->sourceField.reset();
 		impl->renderedWidth = 0;
 		impl->renderedHeight = 0;
 	}
@@ -480,6 +523,16 @@ void FractalGlassOverlay::step() {
 		}
 	}
 	impl->wasLive = impl->liveValid;
+	const uint64_t themeColorGeneration = leviathan::theme::colorGeneration();
+	if (themeColorGeneration != impl->observedThemeColorGeneration) {
+		impl->observedThemeColorGeneration = themeColorGeneration;
+		if (impl->hasSemanticRegion) impl->repalettePublishedSource();
+	}
+	const uint64_t themeSurfaceGeneration = leviathan::theme::surfaceGeneration();
+	if (themeSurfaceGeneration != impl->observedThemeSurfaceGeneration) {
+		impl->observedThemeSurfaceGeneration = themeSurfaceGeneration;
+		if (impl->framebuffer) impl->framebuffer->setDirty();
+	}
 	const uint64_t generation = impl->generation.load(std::memory_order_acquire);
 	if (impl->framebuffer && generation != impl->observedGeneration) impl->framebuffer->setDirty();
 	impl->observedGeneration = generation;
@@ -488,6 +541,9 @@ void FractalGlassOverlay::step() {
 
 void FractalGlassOverlay::draw(const DrawArgs& args) {
 	if (impl->regions.empty()) return;
+	const float textureAmount = leviathan::theme::read().snapshot.surface.textureAmount;
+	if (textureAmount <= 0.f) return;
+	const float textureOpacity = clamp(kFractalGlassOpacity * textureAmount, 0.f, 1.f);
 	auto resetImages = [&](bool deleteHandles) {
 		if (deleteHandles && impl->imageContext == args.vg) for (int image : impl->images) if (image >= 0) nvgDeleteImage(args.vg, image);
 		impl->images.assign(impl->regions.size(), -1);
@@ -558,7 +614,7 @@ void FractalGlassOverlay::draw(const DrawArgs& args) {
 		}
 		nvgFillPaint(args.vg, nvgImagePattern(
 			args.vg, 0.f, 0.f, box.size.x, box.size.y,
-			0.f, impl->images[i], kFractalGlassOpacity));
+			0.f, impl->images[i], textureOpacity));
 		nvgFill(args.vg);
 		nvgRestore(args.vg);
 	}

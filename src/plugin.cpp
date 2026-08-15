@@ -1,5 +1,6 @@
 #include "plugin.hpp"
 #include "BifurxWorker.hpp"
+#include "theme/ThemePersistence.hpp"
 #include "visual/VisualAssets.hpp"
 
 #include <atomic>
@@ -175,6 +176,7 @@ void init(Plugin* p) {
 	pluginInstance = p;
 	refreshDragonKingDebugEnabled();
 	visual_assets::loadSettings();
+	leviathan::theme::persistence::initializeFromUserStorage();
 
 	// Add modules here
 	// p->addModel(modelMyModule);
@@ -204,6 +206,7 @@ void init(Plugin* p) {
 
 void destroy() {
 	// Explicit plugin-lifecycle shutdown avoids static-destruction order hazards across TUs.
+	leviathan::theme::persistence::saveToUserStorage();
 	visual_assets::saveSettings();
 	bifurx::shutdownBifurxRenderService();
 }

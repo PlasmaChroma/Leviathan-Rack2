@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     width="40mm" height="20mm" viewBox="0 0 40 20">
+  <g id="glass">
+    <rect id="generic" x="1" y="1" width="4" height="4" fill="#5740bf"/>
+    <g id="glass_input">
+      <path id="input" d="M 7,1 H 11 V 5 H 7 Z" fill="#5740bf"/>
+      <g id="ordinary_nested_group">
+        <rect id="input_nested" x="12" y="1" width="4" height="4" fill="#5740bf"/>
+      </g>
+    </g>
+    <g id="glass_output">
+      <rect id="output" x="17" y="1" width="4" height="4" fill="#1cccd9"/>
+      <g id="glass_accent">
+        <rect id="nearest_wins" x="22" y="1" width="4" height="4" fill="#5740bf"/>
+      </g>
+    </g>
+  </g>
+  <g id="glass_input_decoration">
+    <rect id="near_miss" x="27" y="1" width="4" height="4" fill="#ff0000"/>
+  </g>
+  <g id="editor-generated" inkscape:label="glass_output">
+    <rect id="label_role" x="32" y="1" width="4" height="4" fill="#1cccd9"/>
+  </g>
+</svg>

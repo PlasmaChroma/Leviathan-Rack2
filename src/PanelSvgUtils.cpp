@@ -1239,6 +1239,155 @@ bool findPathsInGroupsWithIdSubstringMm(const std::string& svgPath, const std::s
 	return !outPaths->empty();
 }
 
+namespace {
+
+struct ThemeGlassGroupState {
+	bool insideGlass = false;
+	leviathan::theme::ThemeRole role = leviathan::theme::ThemeRole::None;
+};
+
+bool exactGlassGroupRole(const std::string& value, leviathan::theme::ThemeRole* role) {
+	if (!role) return false;
+	if (value == "glass") {
+		*role = leviathan::theme::ThemeRole::None;
+		return true;
+	}
+	if (value == "glass_input") {
+		*role = leviathan::theme::ThemeRole::Input;
+		return true;
+	}
+	if (value == "glass_output") {
+		*role = leviathan::theme::ThemeRole::Output;
+		return true;
+	}
+	if (value == "glass_accent") {
+		*role = leviathan::theme::ThemeRole::Accent;
+		return true;
+	}
+	return false;
+}
+
+ThemeGlassGroupState enterThemeGlassGroup(
+	const ThemeGlassGroupState& parent,
+	const std::string& id,
+	const std::string& label) {
+	ThemeGlassGroupState state = parent;
+	leviathan::theme::ThemeRole idRole = leviathan::theme::ThemeRole::None;
+	leviathan::theme::ThemeRole labelRole = leviathan::theme::ThemeRole::None;
+	const bool idMatches = exactGlassGroupRole(id, &idRole);
+	const bool labelMatches = exactGlassGroupRole(label, &labelRole);
+	if (idMatches || labelMatches) {
+		state.insideGlass = true;
+		state.role = idMatches ? idRole : labelRole;
+	}
+	return state;
+}
+
+} // namespace
+
+bool findThemeGlassRectsMm(const std::string& svgPath, std::vector<SvgRectMatch>* outRects) {
+	if (!outRects) return false;
+	outRects->clear();
+	std::string svgText;
+	if (!loadSvgText(svgPath, &svgText)) return false;
+
+	std::map<std::string, GradientResolvedColors> gradientCache;
+	const float unitScale = parseSvgUserUnitToMmScale(svgText);
+	std::vector<SvgAffine> transformStack(1u);
+	std::vector<ThemeGlassGroupState> groupStack(1u);
+	const std::regex tagRegex("</g\\s*>|<g\\b[^>]*>|<rect\\b[^>]*>", std::regex::icase);
+	for (auto it = std::sregex_iterator(svgText.begin(), svgText.end(), tagRegex);
+		it != std::sregex_iterator(); ++it) {
+		const std::string tag = it->str(0);
+		if (tag.size() >= 3u && tag[1] == '/') {
+			if (transformStack.size() > 1u) transformStack.pop_back();
+			if (groupStack.size() > 1u) groupStack.pop_back();
+			continue;
+		}
+		if (tag.size() >= 2u && (tag[1] == 'g' || tag[1] == 'G')) {
+			const SvgAffine combined = multiplyAffine(transformStack.back(), transformForTag(tag));
+			std::string id;
+			std::string label;
+			parseAttrString(tag, "id", &id);
+			parseAttrString(tag, "inkscape:label", &label);
+			if (tag.size() < 2u || tag[tag.size() - 2u] != '/') {
+				transformStack.push_back(combined);
+				groupStack.push_back(enterThemeGlassGroup(groupStack.back(), id, label));
+			}
+			continue;
+		}
+		if (!groupStack.back().insideGlass) continue;
+
+		std::string id;
+		std::string label;
+		parseAttrString(tag, "id", &id);
+		parseAttrString(tag, "inkscape:label", &label);
+		math::Rect rect;
+		if (!parseRectTagMm(tag, unitScale, &rect)) continue;
+		const SvgAffine transform = multiplyAffine(transformStack.back(), transformForTag(tag));
+		SvgRectMatch match;
+		match.id = !id.empty() ? id : label;
+		match.themeRole = groupStack.back().role;
+		match.rect = transformRectMm(rect, transform);
+		Vec cornerRadius;
+		if (parseRectCornerRadiusMm(tag, unitScale, &cornerRadius)) {
+			match.hasCornerRadius = true;
+			match.cornerRadius = transformCornerRadiusMm(cornerRadius, transform);
+		}
+		resolveRectFillColors(svgText, tag, &gradientCache, &match);
+		outRects->push_back(match);
+	}
+	return !outRects->empty();
+}
+
+bool findThemeGlassPathsMm(const std::string& svgPath, std::vector<SvgPathMatch>* outPaths) {
+	if (!outPaths) return false;
+	outPaths->clear();
+	std::string svgText;
+	if (!loadSvgText(svgPath, &svgText)) return false;
+
+	std::map<std::string, GradientResolvedColors> gradientCache;
+	const float unitScale = parseSvgUserUnitToMmScale(svgText);
+	std::vector<SvgAffine> transformStack(1u);
+	std::vector<ThemeGlassGroupState> groupStack(1u);
+	const std::regex tagRegex("</g\\s*>|<g\\b[^>]*>|<path\\b[^>]*>", std::regex::icase);
+	for (auto it = std::sregex_iterator(svgText.begin(), svgText.end(), tagRegex);
+		it != std::sregex_iterator(); ++it) {
+		const std::string tag = it->str(0);
+		if (tag.size() >= 3u && tag[1] == '/') {
+			if (transformStack.size() > 1u) transformStack.pop_back();
+			if (groupStack.size() > 1u) groupStack.pop_back();
+			continue;
+		}
+		if (tag.size() >= 2u && (tag[1] == 'g' || tag[1] == 'G')) {
+			const SvgAffine combined = multiplyAffine(transformStack.back(), transformForTag(tag));
+			std::string id;
+			std::string label;
+			parseAttrString(tag, "id", &id);
+			parseAttrString(tag, "inkscape:label", &label);
+			if (tag.size() < 2u || tag[tag.size() - 2u] != '/') {
+				transformStack.push_back(combined);
+				groupStack.push_back(enterThemeGlassGroup(groupStack.back(), id, label));
+			}
+			continue;
+		}
+		if (!groupStack.back().insideGlass) continue;
+
+		std::string id;
+		std::string label;
+		parseAttrString(tag, "id", &id);
+		parseAttrString(tag, "inkscape:label", &label);
+		SvgPathMatch match;
+		match.id = !id.empty() ? id : label;
+		match.themeRole = groupStack.back().role;
+		const SvgAffine transform = multiplyAffine(transformStack.back(), transformForTag(tag));
+		if (!parsePathTagMm(tag, unitScale, transform, &match.commands, &match.bounds)) continue;
+		resolvePathFillColor(svgText, tag, &gradientCache, &match);
+		outPaths->push_back(match);
+	}
+	return !outPaths->empty();
+}
+
 bool loadCircleFromSvg(
 	const std::string& svgPath,
 	const std::string& circleId,

@@ -556,7 +556,8 @@
    style="display:none;opacity:1;fill:#000000;fill-opacity:1;stroke:none"
    inkscape:label="Out_Under_Black" /><g
    id="glass"
-   style="display:inline"><path
+   style="display:inline"><g
+     id="glass_input"><path
      d="M 235.31167,7794.9995 H 6845.0156 c 118.627,0 177.9405,39.1554 177.9405,117.4661 v 4105.9274 c 0,78.311 -59.3135,117.466 -177.9405,117.466 H 5052.4033 c -33.3333,0 -50,-16.667 -50,-50 V 10930.6 c 0,-21.561 -14.5838,-52.337 -63.7033,-52.337 h -850.4 c -49.1195,0 -63.6797,30.776 -63.6797,52.337 v 1155.259 c 0,33.333 -16.6667,50 -50,50 H 235.31167 c -118.62701,0 -177.94052,-39.155 -177.94052,-117.466 V 7912.4656 c 0,-78.3107 59.31351,-117.4661 177.94052,-117.4661 z"
      fill="#000000"
      opacity="0.1"
@@ -566,7 +567,8 @@
      id="inputs"
      style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none"
      inkscape:label="inputs"
-     sodipodi:nodetypes="sssssssssssssssss" /><rect
+     sodipodi:nodetypes="sssssssssssssssss" /></g><g
+     id="glass_output"><rect
      x="4042.1721"
      y="10894.673"
      width="944.95349"
@@ -580,7 +582,7 @@
      stroke-width="40.4311"
      id="outputs-3"
      style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.501961;stroke:none;stroke-opacity:0.33"
-     inkscape:label="outputs" /></g>
+     inkscape:label="outputs" /></g></g>
       
     
     
