@@ -284,6 +284,7 @@ test-build-fast: $(TEST_BINS_NON_RACK)
 test-build-rack: $(TEST_BINS_RACK)
 
 test-fast: test-build-fast
+	python3 tests/split_svg_labels_spec.py
 	python3 tools/generate_mandelwake_tables.py --check
 	$(call run_test_bin,build/tests/temporaldeck_platter_spec_harness)
 	$(call run_test_bin,build/tests/temporaldeck_arc_lights_spec)

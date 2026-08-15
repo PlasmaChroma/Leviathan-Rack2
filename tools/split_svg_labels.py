@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import copy
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -38,6 +39,9 @@ INKSCAPE_NS = "http://www.inkscape.org/namespaces/inkscape"
 SODIPODI_NS = "http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
 XLINK_NS = "http://www.w3.org/1999/xlink"
 XML_NS = "http://www.w3.org/XML/1998/namespace"
+
+THEME_GLASS_IDS = {"glass_input", "glass_output", "glass_accent"}
+THEME_SUBSTRATE_ATTR = "data-theme-runtime-substrate"
 
 ET.register_namespace("", SVG_NS)
 ET.register_namespace("inkscape", INKSCAPE_NS)
@@ -139,6 +143,76 @@ def strip_font_text_elements(root: ET.Element) -> int:
                 parent.remove(child)
                 removed += 1
     return removed
+
+
+def parse_solid_rgb(value: str) -> tuple[int, int, int] | None:
+    """Parse the solid SVG colors needed by the substrate transform."""
+    text = value.strip().lower()
+    if text.startswith("#"):
+        digits = text[1:]
+        if len(digits) in {3, 4}:
+            try:
+                return tuple(int(digits[i] * 2, 16) for i in range(3))
+            except ValueError:
+                return None
+        if len(digits) in {6, 8}:
+            try:
+                return tuple(int(digits[i:i + 2], 16) for i in (0, 2, 4))
+            except ValueError:
+                return None
+
+    match = re.fullmatch(
+        r"rgb\(\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*\)",
+        text,
+    )
+    if match:
+        rgb = tuple(int(channel) for channel in match.groups())
+        if all(0 <= channel <= 255 for channel in rgb):
+            return rgb
+    return None
+
+
+def neutralize_chromatic_fill(value: str) -> str:
+    rgb = parse_solid_rgb(value)
+    if rgb is None or max(rgb) - min(rgb) <= 2:
+        return value
+    return "#000000"
+
+
+def neutralize_style_fill(style: str) -> str:
+    declarations: list[str] = []
+    for declaration in style.split(";"):
+        if ":" not in declaration:
+            declarations.append(declaration)
+            continue
+        name, value = declaration.split(":", 1)
+        if name.strip().lower() == "fill":
+            value = neutralize_chromatic_fill(value)
+        declarations.append(f"{name}:{value}")
+    return ";".join(declarations)
+
+
+def neutralize_semantic_panel_pigment(root: ET.Element) -> int:
+    """Convert master-only preview pigment into a neutral runtime substrate."""
+    transformed = 0
+    for semantic_group in root.iter():
+        if get_id(semantic_group) not in THEME_GLASS_IDS:
+            continue
+        semantic_group.attrib[THEME_SUBSTRATE_ATTR] = "neutral"
+        for elem in semantic_group.iter():
+            fill = elem.attrib.get("fill")
+            if fill is not None:
+                neutral = neutralize_chromatic_fill(fill)
+                if neutral != fill:
+                    elem.attrib["fill"] = neutral
+                    transformed += 1
+            style = elem.attrib.get("style")
+            if style is not None:
+                neutral_style = neutralize_style_fill(style)
+                if neutral_style != style:
+                    elem.attrib["style"] = neutral_style
+                    transformed += 1
+    return transformed
 
 
 def normalize_text_for_outline(root: ET.Element) -> None:
@@ -362,6 +436,8 @@ def split_svg(
         raise RuntimeError(f"{source_path}: internal error removing labels")
 
     panel_parent.remove(panel_label_group)
+
+    neutralize_semantic_panel_pigment(panel_root)
 
     if strip_panel_text:
         strip_font_text_elements(panel_root)

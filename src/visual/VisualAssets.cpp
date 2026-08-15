@@ -23,6 +23,7 @@ namespace {
 
 thread_local uint64_t gEclipseShadowDrawNs = 0u;
 thread_local uint64_t gEclipseShadowDrawCount = 0u;
+constexpr float kSemanticGlassPigmentAlpha = 0.33f;
 
 struct PanelGlassTintState {
 	bool enabled = false;
@@ -527,7 +528,7 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		const NVGcolor violet = semantic ? nvgRGB(0x7a, 0x5c, 0xff) : applyPanelGlassTint(nvgRGB(0x7a, 0x5c, 0xff));
 		const float smallBoost = clamp((90.f - std::min(w, h)) / 55.f, 0.f, 1.f);
 		const float glowAlpha = 0.105f + smallBoost * 0.08f;
-		const float baseWashAlpha = 0.055f + smallBoost * 0.07f;
+		const float baseWashAlpha = semantic ? kSemanticGlassPigmentAlpha : (0.055f + smallBoost * 0.07f);
 		const int strokeWhiteAlpha = int(std::round(24.f + smallBoost * 24.f));
 		const float edgeAlphaBoost = 1.f + smallBoost * 0.7f;
 
@@ -845,7 +846,7 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		const NVGcolor violet = semantic ? nvgRGB(0x7a, 0x5c, 0xff) : applyPanelGlassTint(nvgRGB(0x7a, 0x5c, 0xff));
 		const float smallBoost = clamp((90.f - std::min(w, h)) / 55.f, 0.f, 1.f);
 		const float edgeAlphaBoost = 1.f + smallBoost * 0.7f;
-		const float glassBaseAlpha = 0.05f + smallBoost * 0.032f;
+		const float glassBaseAlpha = semantic ? kSemanticGlassPigmentAlpha : (0.05f + smallBoost * 0.032f);
 
 		nvgSave(args.vg);
 

@@ -460,6 +460,17 @@ The splitter must preserve semantic group IDs through label outlining. A
 tooling test must verify that nested `theme_text*` groups survive extraction and
 text-to-path conversion.
 
+Semantic glass remains canonically colored in the editable master so its
+dimensions and authored composition are meaningful in the SVG editor. During
+splitting, chromatic solid fills beneath exact `glass_input`, `glass_output`,
+and `glass_accent` groups are converted to a neutral runtime substrate in the
+derived panel asset. Achromatic shading, highlights, geometry, opacity,
+transforms, clipping, and semantic IDs are preserved. Runtime theme pigment is
+therefore authoritative without reducing the master to invisible guide shapes.
+The Bifurx vertical slice begins with a texture-independent semantic pigment
+alpha of `0.33`; this remains a calibration constant until the canonical 0%,
+100%, and 200% Texture Amount captures are accepted.
+
 ---
 
 # 9. SVG Parser Changes
