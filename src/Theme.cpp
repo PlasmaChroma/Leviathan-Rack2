@@ -91,6 +91,13 @@ struct ThemeEditor final : TransparentWidget {
 	ThemeRole selectedRole = ThemeRole::Input;
 	DragTarget dragTarget = DragNone;
 	std::uint64_t observedGeneration = 0u;
+	bool pickerValid = false;
+	ThemeRole pickerRole = ThemeRole::None;
+	ThemeColor pickerColor;
+	float pickerHue = 0.f;
+	float pickerSaturation = 0.f;
+	float pickerValue = 0.f;
+	float retainedHue[3] = {0.f, 0.f, 0.f};
 
 	math::Rect roleRect(int index) const { return math::Rect(Vec(8.f + index * 56.f, 42.f), Vec(52.f, 29.f)); }
 	math::Rect svRect() const { return math::Rect(Vec(9.f, 82.f), Vec(137.f, 124.f)); }
@@ -114,21 +121,49 @@ struct ThemeEditor final : TransparentWidget {
 		if (framebuffer) framebuffer->dirty = true;
 	}
 
+	int selectedRoleIndex() const {
+		switch (selectedRole) {
+			case ThemeRole::Input: return 0;
+			case ThemeRole::Output: return 1;
+			case ThemeRole::Accent: return 2;
+			default: return 0;
+		}
+	}
+
+	void syncPicker(const ThemeSnapshot& snapshot) {
+		const ThemeColor current = colorForRole(snapshot, selectedRole);
+		if (pickerValid && pickerRole == selectedRole && pickerColor == current) return;
+		float hue = 0.f;
+		float saturation = 0.f;
+		float value = 0.f;
+		rgbToHsv(current, &hue, &saturation, &value);
+		const int roleIndex = selectedRoleIndex();
+		if (saturation > 1e-4f && value > 1e-4f)
+			retainedHue[roleIndex] = hue;
+		pickerHue = retainedHue[roleIndex];
+		pickerSaturation = saturation;
+		pickerValue = value;
+		pickerColor = current;
+		pickerRole = selectedRole;
+		pickerValid = true;
+	}
+
 	void applyDrag(Vec pos) {
 		const ThemeSnapshot snapshot = leviathan::theme::read().snapshot;
-		const ThemeColor current = colorForRole(snapshot, selectedRole);
-		float h = 0.f, s = 0.f, v = 0.f;
-		rgbToHsv(current, &h, &s, &v);
+		syncPicker(snapshot);
 		if (dragTarget == DragSv) {
 			const math::Rect area = svRect();
-			s = clamp((pos.x - area.pos.x) / area.size.x, 0.f, 1.f);
-			v = 1.f - clamp((pos.y - area.pos.y) / area.size.y, 0.f, 1.f);
-			leviathan::theme::setColor(selectedRole, hsvToRgb(h, s, v));
+			pickerSaturation = clamp((pos.x - area.pos.x) / area.size.x, 0.f, 1.f);
+			pickerValue = 1.f - clamp((pos.y - area.pos.y) / area.size.y, 0.f, 1.f);
+			pickerColor = hsvToRgb(pickerHue, pickerSaturation, pickerValue);
+			leviathan::theme::setColor(selectedRole, pickerColor);
 		}
 		else if (dragTarget == DragHue) {
 			const math::Rect area = hueRect();
-			h = clamp((pos.y - area.pos.y) / area.size.y, 0.f, 0.999999f);
-			leviathan::theme::setColor(selectedRole, hsvToRgb(h, s, v));
+			pickerHue = clamp((pos.y - area.pos.y) / area.size.y, 0.f, 0.999999f);
+			retainedHue[selectedRoleIndex()] = pickerHue;
+			pickerColor = hsvToRgb(pickerHue, pickerSaturation, pickerValue);
+			leviathan::theme::setColor(selectedRole, pickerColor);
 		}
 		else if (dragTarget == DragTexture) {
 			const math::Rect area = textureRect();
@@ -166,6 +201,7 @@ struct ThemeEditor final : TransparentWidget {
 		for (int i = 0; i < 3; ++i) {
 			if (roleRect(i).contains(e.pos)) {
 				selectedRole = i == 0 ? ThemeRole::Input : (i == 1 ? ThemeRole::Output : ThemeRole::Accent);
+				pickerValid = false;
 				dirty();
 				e.consume(this);
 				return;
@@ -213,7 +249,9 @@ struct ThemeEditor final : TransparentWidget {
 			TransparentWidget::onDragMove(e);
 			return;
 		}
-		applyDrag(currentLocalMousePos());
+		// step() samples the captured pointer once per UI frame. Rack can route
+		// drag-move events through the framebuffer inconsistently, and there may
+		// be several such events in one frame.
 		e.consume(this);
 	}
 
@@ -227,6 +265,14 @@ struct ThemeEditor final : TransparentWidget {
 	}
 
 	void step() override {
+		if (dragTarget != DragNone) {
+			const bool pressed = APP && APP->window && APP->window->win
+				&& glfwGetMouseButton(APP->window->win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+			if (pressed)
+				applyDrag(currentLocalMousePos());
+			else
+				commitDrag();
+		}
 		const std::uint64_t current = leviathan::theme::generation();
 		if (current != observedGeneration) {
 			observedGeneration = current;
@@ -261,8 +307,10 @@ struct ThemeEditor final : TransparentWidget {
 		const leviathan::theme::ThemeState state = leviathan::theme::read();
 		const ThemeSnapshot& snapshot = state.snapshot;
 		const ThemeColor selected = colorForRole(snapshot, selectedRole);
-		float hue = 0.f, saturation = 0.f, value = 0.f;
-		rgbToHsv(selected, &hue, &saturation, &value);
+		syncPicker(snapshot);
+		const float hue = pickerHue;
+		const float saturation = pickerSaturation;
+		const float value = pickerValue;
 
 		text(args, box.size.x * 0.5f, 17.f, 18.f, "THEME", nvgRGBA(240, 235, 255, 255));
 		text(args, box.size.x * 0.5f, 31.f, 8.5f, "GLOBAL CHROMA FIELD", nvgRGBA(129, 148, 166, 255));

@@ -290,6 +290,7 @@ struct FractalGlassOverlay::Impl {
 	std::condition_variable requestCv;
 	bool stop = false;
 	bool pending = false;
+	bool palettePending = false;
 	Request request;
 	uint64_t nextSerial = 0u;
 	std::thread worker;
@@ -369,7 +370,7 @@ struct FractalGlassOverlay::Impl {
 	}
 
 	~Impl() {
-		{ std::lock_guard<std::mutex> lock(requestMutex); stop = true; pending = false; }
+		{ std::lock_guard<std::mutex> lock(requestMutex); stop = true; pending = false; palettePending = false; }
 		requestCv.notify_one();
 		if (worker.joinable()) worker.join();
 	}
@@ -380,6 +381,12 @@ struct FractalGlassOverlay::Impl {
 		request.serial = ++nextSerial;
 		request.cacheable = cacheable;
 		pending = true;
+		requestCv.notify_one();
+	}
+
+	void requestRepalette() {
+		std::lock_guard<std::mutex> lock(requestMutex);
+		palettePending = true;
 		requestCv.notify_one();
 	}
 
@@ -433,20 +440,36 @@ struct FractalGlassOverlay::Impl {
 	void loop() {
 		while (true) {
 			Request current;
+			bool renderRequested = false;
+			bool repaletteRequested = false;
 			{
 				std::unique_lock<std::mutex> lock(requestMutex);
-				requestCv.wait(lock, [this]() { return stop || pending; });
+				requestCv.wait(lock, [this]() { return stop || pending || palettePending; });
 				if (stop) return;
-				current = request;
-				pending = false;
+				if (pending) {
+					current = request;
+					pending = false;
+					renderRequested = true;
+				}
+				repaletteRequested = palettePending;
+				palettePending = false;
 			}
-			const CachedFractalField source = current.cacheable
-				? cachedFractalField(current.params, renderWidth, renderHeight)
-				: renderFractalField(current.params, renderWidth, renderHeight);
-			if (!source || !source->valid()) continue;
-			std::lock_guard<std::mutex> requestLock(requestMutex);
-			if (current.serial != nextSerial) continue;
-			publishRendered(source);
+			if (renderRequested) {
+				const CachedFractalField source = current.cacheable
+					? cachedFractalField(current.params, renderWidth, renderHeight)
+					: renderFractalField(current.params, renderWidth, renderHeight);
+				if (source && source->valid()) {
+					std::lock_guard<std::mutex> requestLock(requestMutex);
+					if (current.serial == nextSerial) {
+						// publishRendered() reads the newest theme, so any palette
+						// request queued before this publication is already covered.
+						palettePending = false;
+						publishRendered(source);
+						continue;
+					}
+				}
+			}
+			if (repaletteRequested) repalettePublishedSource();
 		}
 	}
 };
@@ -526,7 +549,7 @@ void FractalGlassOverlay::step() {
 	const uint64_t themeColorGeneration = leviathan::theme::colorGeneration();
 	if (themeColorGeneration != impl->observedThemeColorGeneration) {
 		impl->observedThemeColorGeneration = themeColorGeneration;
-		if (impl->hasSemanticRegion) impl->repalettePublishedSource();
+		if (impl->hasSemanticRegion) impl->requestRepalette();
 	}
 	const uint64_t themeSurfaceGeneration = leviathan::theme::surfaceGeneration();
 	if (themeSurfaceGeneration != impl->observedThemeSurfaceGeneration) {

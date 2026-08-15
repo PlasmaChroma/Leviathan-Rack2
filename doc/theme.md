@@ -788,8 +788,10 @@ Texture Amount changes
 ```
 
 An overlay must retain or reacquire the cached source field needed for
-re-palettization. A theme color change may perform palette conversion and image
-upload at UI rate, but must not rerun fractal iteration.
+re-palettization. Palette conversion for a drag must run off the UI thread and
+coalesce pending work to the newest accepted theme state. Completed pixels are
+published back to the UI for image upload; intermediate drag states may be
+skipped. A theme color change must not rerun fractal iteration.
 
 ---
 
@@ -1653,8 +1655,10 @@ Texture amount changes must not regenerate fractal fields merely because composi
 
 Unrelated domains must remain cached: a Texture Amount edit does not rebuild
 glass or labels, a preset rename does not redraw modules, and a color edit does
-not regenerate fractal iteration. UI-frame coalescing and the persistence
-debounce prevent pointer-motion event rate from becoming redraw or filesystem
+not regenerate fractal iteration. Panels with no semantic elements must not
+invalidate for theme color changes. UI-frame coalescing, latest-state fractal
+palette publication, and the persistence debounce prevent pointer-motion event
+rate from becoming synchronous raster work, unrelated redraw, or filesystem
 write rate.
 
 Cross-plugin theme checks must never occur in DSP processing.

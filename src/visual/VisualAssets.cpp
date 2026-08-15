@@ -281,6 +281,7 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 	widget::FramebufferWidget* framebuffer = nullptr;
 	uint64_t tintGeneration = 0u;
 	uint64_t themeColorGeneration = 0u;
+	bool hasSemanticGlass = false;
 	float previewProgressionPhase = -1.f;
 
 	struct GlassRectArt {
@@ -988,9 +989,13 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 
 	void step() override {
 		updatePanelGlassTint();
-		const uint64_t currentThemeColorGeneration = leviathan::theme::colorGeneration();
-		if (tintGeneration != gPanelGlassTint.generation
-			|| themeColorGeneration != currentThemeColorGeneration) {
+		const bool tintChanged = tintGeneration != gPanelGlassTint.generation;
+		const uint64_t currentThemeColorGeneration = hasSemanticGlass
+			? leviathan::theme::colorGeneration()
+			: themeColorGeneration;
+		const bool themeChanged = hasSemanticGlass
+			&& themeColorGeneration != currentThemeColorGeneration;
+		if (tintChanged || themeChanged) {
 			tintGeneration = gPanelGlassTint.generation;
 			themeColorGeneration = currentThemeColorGeneration;
 			if (framebuffer) {
@@ -1006,6 +1011,7 @@ struct PanelSurfaceEffectDefinition {
 	std::vector<PanelSurfaceEffectWidget::GlassRectArt> glassRects;
 	std::vector<PanelSurfaceEffectWidget::GlassPathArt> glassPaths;
 	std::vector<math::Rect> screenRectsPx;
+	bool hasSemanticGlass = false;
 };
 
 math::Rect insetRectMm(math::Rect rect, float insetMm) {
@@ -1047,6 +1053,8 @@ PanelSurfaceEffectDefinition loadPanelSurfaceEffectDefinition(const std::string&
 		for (const panel_svg::SvgRectMatch& match : glassMatches) {
 			PanelSurfaceEffectWidget::GlassRectArt art;
 			art.themeRole = match.themeRole;
+			def.hasSemanticGlass = def.hasSemanticGlass
+				|| match.themeRole != leviathan::theme::ThemeRole::None;
 			art.rectPx = math::Rect(mm2px(match.rect.pos), mm2px(match.rect.size));
 			if (match.hasCornerRadius) {
 				const Vec radiusPx = mm2px(match.cornerRadius);
@@ -1066,6 +1074,8 @@ PanelSurfaceEffectDefinition loadPanelSurfaceEffectDefinition(const std::string&
 			PanelSurfaceEffectWidget::GlassPathArt art;
 			art.id = match.id;
 			art.themeRole = match.themeRole;
+			def.hasSemanticGlass = def.hasSemanticGlass
+				|| match.themeRole != leviathan::theme::ThemeRole::None;
 			art.useTemporalDeckInputsGlare = match.id == "inputs" && svgPath.find("deck.panel.svg") != std::string::npos;
 			art.useBifurxInputsGlare = match.id == "inputs" && svgPath.find("bifurx.panel.svg") != std::string::npos;
 			art.useWyrmInputsGlare = match.id == "frame_left" && svgPath.find("wyrm.panel.svg") != std::string::npos;
@@ -1364,6 +1374,7 @@ Widget* createPanelSurfaceEffectWidget(
 	effect->framebuffer = fb;
 	effect->tintGeneration = gPanelGlassTint.generation;
 	effect->themeColorGeneration = leviathan::theme::colorGeneration();
+	effect->hasSemanticGlass = it->second.hasSemanticGlass;
 	effect->previewProgressionPhase = previewProgressionPhase;
 	effect->box.size = panelSizePx;
 	effect->metalRects = it->second.metalRects;
