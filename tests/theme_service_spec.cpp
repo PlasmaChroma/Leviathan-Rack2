@@ -1,4 +1,5 @@
 #include "../src/theme/ThemeService.hpp"
+#include "../src/theme/ThemePresets.hpp"
 
 #include <cmath>
 #include <iostream>
@@ -19,7 +20,14 @@ void check(const std::string& name, bool pass) {
 int main() {
 	using namespace leviathan::theme;
 
-	initialize(canonicalDefault());
+	initialize(canonicalDefault(), "factory:leviathan");
+	std::size_t factoryCount = 0u;
+	const FactoryPreset* factory = factoryPresets(&factoryCount);
+	check("four stable factory presets are registered", factory && factoryCount == 4u);
+	check("canonical factory preset is discoverable",
+		findFactoryPreset("factory:leviathan")
+		&& findFactoryPreset("factory:leviathan")->snapshot == canonicalDefault());
+	check("unknown factory preset is rejected", findFactoryPreset("factory:unknown") == nullptr);
 	const ThemeState initial = read();
 	check("canonical input color", initial.snapshot.colors.input == ThemeColor{0x7a, 0x5c, 0xff});
 	check("canonical output color", initial.snapshot.colors.output == ThemeColor{0x1c, 0xcc, 0xd9});
@@ -33,13 +41,18 @@ int main() {
 		&& afterNoOp.surfaceGeneration == initial.surfaceGeneration);
 
 	const ThemeColor red{0xff, 0x20, 0x30};
-	check("input edit reports color change", setColor(ThemeRole::Input, red) == ChangeColors);
+	const ThemeChange inputChange = setColor(ThemeRole::Input, red);
+	check("input edit reports color and modified-preset changes",
+		(std::uint32_t(inputChange) & ChangeColors) != 0u
+		&& (std::uint32_t(inputChange) & ChangePresets) != 0u);
 	const ThemeState afterColor = read();
-	check("input edit changes only color generations",
+	check("input edit advances color and active-preset generations",
 		afterColor.snapshot.colors.input == red
 		&& afterColor.generation == initial.generation + 1u
 		&& afterColor.colorGeneration == initial.colorGeneration + 1u
-		&& afterColor.surfaceGeneration == initial.surfaceGeneration);
+		&& afterColor.surfaceGeneration == initial.surfaceGeneration
+		&& afterColor.presetGeneration == initial.presetGeneration + 1u
+		&& afterColor.activePreset == "modified");
 	check("None role cannot mutate state", setColor(ThemeRole::None, red) == ChangeNone);
 
 	check("texture edit reports surface change", setTextureAmount(3.f) == ChangeSurface);
@@ -71,6 +84,19 @@ int main() {
 		&& colorGeneration() == afterBoth.colorGeneration
 		&& surfaceGeneration() == afterBoth.surfaceGeneration
 		&& presetGeneration() == afterBoth.presetGeneration);
+
+	const ThemeState beforePreset = read();
+	check("preset identity change reports the preset domain",
+		(std::uint32_t(applyPreset(beforePreset.snapshot, "factory:abyssal")) & ChangePresets) != 0u);
+	const ThemeState afterPreset = read();
+	check("equal snapshot with new preset identity advances only preset generations",
+		afterPreset.generation == beforePreset.generation + 1u
+		&& afterPreset.presetGeneration == beforePreset.presetGeneration + 1u
+		&& afterPreset.colorGeneration == beforePreset.colorGeneration
+		&& afterPreset.surfaceGeneration == beforePreset.surfaceGeneration
+		&& afterPreset.activePreset == "factory:abyssal");
+	check("reselecting the same preset identity is a no-op",
+		applyPreset(afterPreset.snapshot, "factory:abyssal") == ChangeNone);
 
 	resetToDefault();
 	check("reset restores canonical snapshot", read().snapshot == canonicalDefault());

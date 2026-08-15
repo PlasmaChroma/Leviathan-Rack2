@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="60.96mm" height="128.5mm" viewBox="0 0 180 380">
+  <defs>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#111722"/>
+      <stop offset="0.5" stop-color="#080d14"/>
+      <stop offset="1" stop-color="#05080d"/>
+    </linearGradient>
+    <radialGradient id="aura" cx="50%" cy="0" r="90%">
+      <stop offset="0" stop-color="#5740bf" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#5740bf" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="180" height="380" fill="url(#panel)"/>
+  <rect width="180" height="380" fill="url(#aura)"/>
+  <path d="M1 1h178v378H1z" fill="none" stroke="#344253" stroke-width="2"/>
+  <path d="M4 4h172v372H4z" fill="none" stroke="#0a0f17" stroke-width="1"/>
+</svg>

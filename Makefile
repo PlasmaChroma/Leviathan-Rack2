@@ -445,8 +445,8 @@ build/tests/puffy_character_controller_spec: tests/puffy_character_controller_sp
 build/tests/cantor_culture_engine_spec: tests/cantor_culture_engine_spec.cpp src/CantorCultureEngine.cpp src/CantorCultureEngine.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/cantor_culture_engine_spec.cpp src/CantorCultureEngine.cpp -o $@
 
-build/tests/theme_service_spec: tests/theme_service_spec.cpp src/theme/ThemeService.cpp src/theme/ThemeService.hpp src/theme/ThemeTypes.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/theme_service_spec.cpp src/theme/ThemeService.cpp -o $@
+build/tests/theme_service_spec: tests/theme_service_spec.cpp src/theme/ThemeService.cpp src/theme/ThemeService.hpp src/theme/ThemeTypes.hpp src/theme/ThemePresets.cpp src/theme/ThemePresets.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/theme_service_spec.cpp src/theme/ThemeService.cpp src/theme/ThemePresets.cpp -o $@
 
 build/tests/cantor_module_spec: tests/cantor_module_spec.cpp src/Cantor.cpp src/Cantor.hpp src/CantorCultureEngine.cpp src/CantorCultureEngine.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/cantor_module_spec.cpp src/Cantor.cpp src/CantorCultureEngine.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@

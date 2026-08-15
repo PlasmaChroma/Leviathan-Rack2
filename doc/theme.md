@@ -221,6 +221,7 @@ enum ThemeChange : uint32_t {
 
 struct ThemeState {
     ThemeSnapshot snapshot;
+    std::string activePreset = "factory:leviathan";
     uint64_t generation = 0;
     uint64_t colorGeneration = 0;
     uint64_t surfaceGeneration = 0;
@@ -242,6 +243,8 @@ ThemeChange setColor(ThemeRole role, ThemeColor color);
 ThemeChange setTextureAmount(float amount);
 
 ThemeChange apply(const ThemeSnapshot& theme);
+
+ThemeChange applyPreset(const ThemeSnapshot& theme, const char* stableId);
 
 ThemeChange resetToDefault();
 
@@ -1810,6 +1813,13 @@ Acceptance:
 ---
 
 ## Phase 3 — Theme Module UI
+
+Implementation checkpoint (2026-08-15): the Rack-visible Phase 3 MVP is in
+place. It provides the parameterless global module, role selection, live HSV
+picker, Texture Amount, Swap, Reset Theme, the four factory presets, durable
+preference writes, and synchronization between multiple editor instances. The
+typed HSV/RGB/HEX fields, Reset Role, and user-preset management remain required
+before Phase 3 and Theme V1 can be declared complete.
 
 Implement:
 

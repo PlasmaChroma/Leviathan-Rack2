@@ -1,6 +1,7 @@
 #include "ThemePersistence.hpp"
 
 #include "ThemeService.hpp"
+#include "ThemePresets.hpp"
 #include "../plugin.hpp"
 
 #include <algorithm>
@@ -175,7 +176,7 @@ void initializeFromUserStorage() {
 		WARN("Leviathan Theme: invalid theme.json; using canonical defaults");
 	if (status == LoadStatus::FutureSchema && isDragonKingDebugEnabled())
 		WARN("Leviathan Theme: future theme.json schema preserved; using canonical defaults");
-	initialize(gDocument.active);
+	initialize(gDocument.active, gDocument.activePreset.c_str());
 }
 
 void saveToUserStorage() {
@@ -185,6 +186,22 @@ void saveToUserStorage() {
 	gDocument.active = current;
 	if (!saveDocumentAtomic(userThemePath(), gDocument) && isDragonKingDebugEnabled())
 		WARN("Leviathan Theme: failed to save theme.json");
+}
+
+bool applyFactoryPresetAndSave(const char* presetId) {
+	const FactoryPreset* preset = findFactoryPreset(presetId);
+	if (!preset) return false;
+	applyPreset(preset->snapshot, preset->id);
+	gDocument.activePreset = preset->id;
+	gDocument.active = read().snapshot;
+	if (!gMayOverwriteDocument) return true;
+	if (!saveDocumentAtomic(userThemePath(), gDocument) && isDragonKingDebugEnabled())
+		WARN("Leviathan Theme: failed to save factory preset");
+	return true;
+}
+
+void resetToCanonicalAndSave() {
+	applyFactoryPresetAndSave("factory:leviathan");
 }
 
 } // namespace persistence

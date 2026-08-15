@@ -220,6 +220,16 @@
         "Polyphonic"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Theme",
+      "name": "Theme",
+      "description": "Global semantic color and texture editor for theme-aware Leviathan modules.",
+      "tags": [
+        "Visual",
+        "Utility"
+      ],
+      "hidden": false
     }
   ]
 }

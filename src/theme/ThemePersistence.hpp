@@ -35,6 +35,8 @@ bool saveDocumentAtomic(const std::string& path, const ThemeDocument& document);
 
 void initializeFromUserStorage();
 void saveToUserStorage();
+bool applyFactoryPresetAndSave(const char* presetId);
+void resetToCanonicalAndSave();
 
 } // namespace persistence
 } // namespace theme

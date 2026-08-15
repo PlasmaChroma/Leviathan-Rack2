@@ -30,15 +30,19 @@ void increment(std::uint64_t* value, std::atomic<std::uint64_t>* published) {
 	published->store(*value, std::memory_order_release);
 }
 
-ThemeChange applyLocked(const ThemeSnapshot& candidate) {
+ThemeChange applyLocked(const ThemeSnapshot& candidate, const char* presetId, bool allowIdentityOnly) {
 	const ThemeSnapshot normalized = canonicalize(candidate);
 	const bool colorsChanged = normalized.colors != gThemeState.snapshot.colors;
 	const bool surfaceChanged = normalized.surface != gThemeState.snapshot.surface;
-	if (!colorsChanged && !surfaceChanged) {
+	const bool valuesChanged = colorsChanged || surfaceChanged;
+	const bool presetChanged = presetId && gThemeState.activePreset != presetId
+		&& (valuesChanged || allowIdentityOnly);
+	if (!valuesChanged && !presetChanged) {
 		return ChangeNone;
 	}
 
 	gThemeState.snapshot = normalized;
+	if (presetChanged) gThemeState.activePreset = presetId;
 	increment(&gThemeState.generation, &gPublishedGeneration);
 	std::uint32_t changed = ChangeNone;
 	if (colorsChanged) {
@@ -48,6 +52,10 @@ ThemeChange applyLocked(const ThemeSnapshot& candidate) {
 	if (surfaceChanged) {
 		increment(&gThemeState.surfaceGeneration, &gPublishedSurfaceGeneration);
 		changed |= ChangeSurface;
+	}
+	if (presetChanged) {
+		increment(&gThemeState.presetGeneration, &gPublishedPresetGeneration);
+		changed |= ChangePresets;
 	}
 	return static_cast<ThemeChange>(changed);
 }
@@ -105,35 +113,43 @@ ThemeChange setColor(ThemeRole role, ThemeColor value) {
 		case ThemeRole::None:
 		default: return ChangeNone;
 	}
-	return applyLocked(candidate);
+	return applyLocked(candidate, "modified", false);
 }
 
 ThemeChange setTextureAmount(float amount) {
 	std::lock_guard<std::mutex> lock(gThemeMutex);
 	ThemeSnapshot candidate = gThemeState.snapshot;
 	candidate.surface.textureAmount = amount;
-	return applyLocked(candidate);
+	return applyLocked(candidate, "modified", false);
 }
 
 ThemeChange apply(const ThemeSnapshot& snapshot) {
 	std::lock_guard<std::mutex> lock(gThemeMutex);
-	return applyLocked(snapshot);
+	return applyLocked(snapshot, "modified", false);
+}
+
+ThemeChange applyPreset(const ThemeSnapshot& snapshot, const char* presetId) {
+	std::lock_guard<std::mutex> lock(gThemeMutex);
+	return applyLocked(snapshot, presetId, true);
 }
 
 ThemeChange resetToDefault() {
 	return apply(canonicalDefault());
 }
 
-void initialize(const ThemeSnapshot& snapshot) {
+void initialize(const ThemeSnapshot& snapshot, const char* activePreset) {
 	std::lock_guard<std::mutex> lock(gThemeMutex);
 	const ThemeSnapshot normalized = canonicalize(snapshot);
-	if (normalized == gThemeState.snapshot) {
+	const std::string preset = activePreset ? activePreset : "modified";
+	if (normalized == gThemeState.snapshot && preset == gThemeState.activePreset) {
 		return;
 	}
 	gThemeState.snapshot = normalized;
+	gThemeState.activePreset = preset;
 	increment(&gThemeState.generation, &gPublishedGeneration);
 	increment(&gThemeState.colorGeneration, &gPublishedColorGeneration);
 	increment(&gThemeState.surfaceGeneration, &gPublishedSurfaceGeneration);
+	increment(&gThemeState.presetGeneration, &gPublishedPresetGeneration);
 }
 
 } // namespace theme
