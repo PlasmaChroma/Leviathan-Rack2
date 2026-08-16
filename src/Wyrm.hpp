@@ -117,17 +117,11 @@ inline float catmullPeriodic(const std::array<float, kWyrmPointCountMax>& points
 	const float t3 = t2 * t;
 	const float cubic = 0.5f * ((2.f * p1) + (-p0 + p2) * t + (2.f * p0 - 5.f * p1 + 4.f * p2 - p3) * t2 + (-p0 + 3.f * p1 - 3.f * p2 + p3) * t3);
 
-	// Catmull-Rom can ring/overshoot on steep adjacent steps, creating a
-	// pre-spike in the opposite direction. Clamp risky segments to the local
-	// endpoint range so jumps stay clean while keeping cubic shape elsewhere.
-	const float d01 = p1 - p0;
-	const float d12 = p2 - p1;
-	const float d23 = p3 - p2;
-	const bool hasTurnOrStep = (d01 * d12 <= 0.f) || (d12 * d23 <= 0.f);
-	if (hasTurnOrStep) {
-		return clamp(cubic, std::min(p1, p2), std::max(p1, p2));
-	}
-	return cubic;
+	// A steep neighboring segment can give Catmull-Rom enough momentum to
+	// overshoot even when p1 -> p2 is a smooth monotonic stroke. Keep the cubic
+	// shape inside every authored segment, but never let it leave that segment's
+	// endpoint range.
+	return clamp(cubic, std::min(p1, p2), std::max(p1, p2));
 }
 
 inline float slitherOffset(float phase, float travelPhase, float amount) {
@@ -205,6 +199,7 @@ struct Wyrm : Module {
 		LFO_MODE_PARAM,
 		SYNC_MODE_PARAM,
 		ENV_MODE_PARAM,
+		COARSE_STEP_MODE_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -225,6 +220,7 @@ struct Wyrm : Module {
 		LFO_MODE_LIGHT,
 		SYNC_MODE_LIGHT,
 		ENV_MODE_LIGHT,
+		COARSE_STEP_MODE_LIGHT,
 		LIGHTS_LEN
 	};
 
@@ -234,6 +230,7 @@ struct Wyrm : Module {
 	uint32_t appliedWaveVersion = 0;
 	std::atomic<float> displayFrequencyHz {0.f};
 	std::atomic<float> displayEnvelopeTimeMs {0.f};
+	std::atomic<bool> displayEnvelopeRunning {false};
 	// Rate-limited channel-one state for the low-frequency waveform tracer.
 	std::atomic<float> displayPhase {0.f};
 	std::atomic<float> displayPhaseFrequencyHz {0.f};
@@ -251,6 +248,7 @@ struct Wyrm : Module {
 	std::atomic<bool> lfoMode {false};
 	std::atomic<bool> envelopeMode {false};
 	bool envelopeModeWasActive = false;
+	bool publishedEnvelopeRunning = false;
 	std::atomic<bool> editorLocked {false};
 	std::atomic<bool> sandViewEnabled {false};
 	std::atomic<int> renderMode {WYRM_RENDER_NANOVG};
@@ -293,6 +291,7 @@ struct Wyrm : Module {
 	void setWavePoint(int index, float value);
 	float getWavePoint(int index) const;
 	void setFactoryShape(int shapeId);
+	void setEnvelopeArShape();
 	void setPointCount(int newPointCount);
 	void rebuildWavetable();
 	float lookupWave(float ph, float phaseStep = 0.f) const;

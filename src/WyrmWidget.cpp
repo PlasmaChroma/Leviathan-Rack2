@@ -517,6 +517,7 @@ struct WyrmWidget : ModuleWidget {
 		panel_svg::loadRectFromSvgMm(panelPath, "WYRM_WAVE_EDITOR", &editorRectMm);
 		math::Rect freqReadoutRectMm(Vec(editorRectMm.pos.x, editorRectMm.pos.y + editorRectMm.size.y + 1.1f), Vec(editorRectMm.size.x, 3.8f));
 		Vec freqPos(17.5f, 80.0f);
+		Vec coarseStepModePos(8.1455664f, 99.54583f);
 		Vec waveLeftPos(3.1315613f, 75.75f);
 		Vec waveRightPos(8.1659473f, 75.75f);
 		Vec finePos(20.5f, 86.225996f);
@@ -539,6 +540,7 @@ struct WyrmWidget : ModuleWidget {
 		Vec rawOutPos(24.0f, 122.0f);
 		Vec outPos(47.0f, 122.0f);
 		applyPt("WYRM_FREQ_PARAM", &freqPos);
+		applyPt("WYRM_COARSE_STEP_MODE_PARAM", &coarseStepModePos);
 		applyPt("WYRM_WAVE_LEFT_PARAM", &waveLeftPos);
 		applyPt("WYRM_WAVE_RIGHT_PARAM", &waveRightPos);
 		applyPt("WYRM_FINE_PARAM", &finePos);
@@ -612,7 +614,14 @@ struct WyrmWidget : ModuleWidget {
 		resetButton->box.pos = mm2px(resetPos).minus(resetButton->box.size.mult(0.5f));
 		resetButton->tooltipTextProvider = []() { return "Reset waveform"; };
 		if (module) {
-			resetButton->buttonAction = [module]() { module->setFactoryShape(module->selectedShape); };
+			resetButton->buttonAction = [module]() {
+				if (module->envelopeMode.load(std::memory_order_relaxed)) {
+					module->setEnvelopeArShape();
+				}
+				else {
+					module->setFactoryShape(module->selectedShape);
+				}
+			};
 		}
 		addChild(resetButton);
 		auto* waveLeft = createParamCentered<WyrmWaveLeftButton>(mm2px(waveLeftPos), module, Wyrm::WAVE_LEFT_PARAM);
@@ -644,6 +653,7 @@ struct WyrmWidget : ModuleWidget {
 		addModeToggle(Wyrm::SYNC_MODE_PARAM, Wyrm::SYNC_MODE_LIGHT, syncModePos);
 		addModeToggle(Wyrm::LFO_MODE_PARAM, Wyrm::LFO_MODE_LIGHT, lfoModePos);
 		addModeToggle(Wyrm::ENV_MODE_PARAM, Wyrm::ENV_MODE_LIGHT, envModePos);
+		addModeToggle(Wyrm::COARSE_STEP_MODE_PARAM, Wyrm::COARSE_STEP_MODE_LIGHT, coarseStepModePos);
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(foldCvPos), module, Wyrm::FOLD_CV_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(slitherCvPos), module, Wyrm::SLITHER_CV_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(slitherSpeedCvPos), module, Wyrm::SLITHER_SPEED_CV_INPUT));

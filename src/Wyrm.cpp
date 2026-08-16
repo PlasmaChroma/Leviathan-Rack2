@@ -67,6 +67,7 @@ Wyrm::Wyrm() {
 	configSwitch(LFO_MODE_PARAM, 0.f, 1.f, 0.f, "LFO mode", {"Audio", "LFO"});
 	configSwitch(SYNC_MODE_PARAM, 0.f, 1.f, 0.f, "Sync mode", {"Hard", "Soft"});
 	configSwitch(ENV_MODE_PARAM, 0.f, 1.f, 0.f, "Envelope mode", {"Oscillator", "Envelope"});
+	configSwitch(COARSE_STEP_MODE_PARAM, 0.f, 1.f, 0.f, "Octave stepped", {"Continuous", "Octave stepped"});
 	configInput(VOCT_INPUT, "V/Oct / Envelope trigger");
 	configInput(FM_INPUT, "FM");
 	configInput(SYNC_INPUT, "Sync");
@@ -179,6 +180,27 @@ void Wyrm::setFactoryShape(int shapeId) {
 	waveVersion.fetch_add(1u, std::memory_order_release);
 }
 
+void Wyrm::setEnvelopeArShape() {
+	const int lastIndex = std::max(1, pointCount - 1);
+	const int attackEnd = clamp(int(std::lround(0.15f * float(lastIndex))), 1, lastIndex - 1);
+	const int releaseLength = std::max(1, lastIndex - attackEnd);
+	for (int i = 0; i < pointCount; ++i) {
+		float unipolar = 0.f;
+		if (i <= attackEnd) {
+			const float t = float(i) / float(attackEnd);
+			unipolar = t + 0.35f * t * (1.f - t);
+		}
+		else {
+			const float t = float(i - attackEnd) / float(releaseLength);
+			const float tail = 1.f - t;
+			unipolar = tail * tail;
+		}
+		wavePoints[i].store(2.f * clamp(unipolar, 0.f, 1.f) - 1.f, std::memory_order_relaxed);
+	}
+	waveCustomized = true;
+	waveVersion.fetch_add(1u, std::memory_order_release);
+}
+
 void Wyrm::setPointCount(int newPointCount) {
 	newPointCount = clamp(newPointCount, 32, kWyrmPointCountMax);
 	if (newPointCount != 32 && newPointCount != 48 && newPointCount != 64 && newPointCount != 128 && newPointCount != 256) {
@@ -188,7 +210,12 @@ void Wyrm::setPointCount(int newPointCount) {
 		return;
 	}
 	pointCount = newPointCount;
-	setFactoryShape(selectedShape);
+	if (envelopeMode.load(std::memory_order_relaxed)) {
+		setEnvelopeArShape();
+	}
+	else {
+		setFactoryShape(selectedShape);
+	}
 }
 
 void Wyrm::rebuildWavetable() {
@@ -988,13 +1015,19 @@ void Wyrm::process(const ProcessArgs& args) {
 	const bool lfoModeNow = params[LFO_MODE_PARAM].getValue() > 0.5f;
 	const bool envelopeModeNow = params[ENV_MODE_PARAM].getValue() > 0.5f;
 	const bool softSyncModeNow = params[SYNC_MODE_PARAM].getValue() > 0.5f;
+	const bool coarseStepModeNow = params[COARSE_STEP_MODE_PARAM].getValue() > 0.5f;
 	lfoMode.store(lfoModeNow, std::memory_order_relaxed);
 	envelopeMode.store(envelopeModeNow, std::memory_order_relaxed);
 	lights[LFO_MODE_LIGHT].setBrightness(lfoModeNow ? 0.5f : 0.f);
 	lights[SYNC_MODE_LIGHT].setBrightness(softSyncModeNow ? 0.5f : 0.f);
 	lights[ENV_MODE_LIGHT].setBrightness(envelopeModeNow ? 0.5f : 0.f);
+	lights[COARSE_STEP_MODE_LIGHT].setBrightness(coarseStepModeNow ? 0.5f : 0.f);
 	const bool slowRateModeNow = lfoModeNow || envelopeModeNow;
-	const float baseFreq = wyrmBaseFrequencyFromKnob(knobNorm, slowRateModeNow);
+	float baseFreq = wyrmBaseFrequencyFromKnob(knobNorm, slowRateModeNow);
+	if (coarseStepModeNow) {
+		const float coarsePitch = std::log2(std::max(baseFreq, 1e-6f) / dsp::FREQ_C4);
+		baseFreq = dsp::FREQ_C4 * dsp::approxExp2_taylor5(std::round(coarsePitch));
+	}
 	const float fmAtten = finiteOr(params[FM_ATTEN_PARAM].getValue());
 	const float fine = finiteOr(params[FINE_PARAM].getValue()) / 1200.f;
 	const float displayRateNoFm = clamp(
@@ -1005,12 +1038,21 @@ void Wyrm::process(const ProcessArgs& args) {
 		displayEnvelopeTimeMs.store(1000.f / std::max(displayRateNoFm, 1e-6f), std::memory_order_relaxed);
 	}
 	if (envelopeModeNow != envelopeModeWasActive) {
+		if (envelopeModeNow) {
+			setEnvelopeArShape();
+			rebuildWavetable();
+			appliedWaveVersion = waveVersion.load(std::memory_order_acquire);
+		}
 		for (int c = 0; c < kWyrmMaxChannels; ++c) {
 			phase[c] = 0.f;
 			phaseDir[c] = 1.f;
 			envelopeRunning[c] = false;
 			envelopeTriggers[c].reset();
 		}
+		displayPhase.store(0.f, std::memory_order_relaxed);
+		displayPhaseFrequencyHz.store(0.f, std::memory_order_relaxed);
+		displayEnvelopeRunning.store(false, std::memory_order_relaxed);
+		publishedEnvelopeRunning = false;
 		envelopeModeWasActive = envelopeModeNow;
 	}
 	const float foldBase = finiteOr(params[FOLD_PARAM].getValue());
@@ -1097,6 +1139,9 @@ void Wyrm::process(const ProcessArgs& args) {
 			phase[c] = 0.f;
 			phaseDir[c] = 1.f;
 			envelopeRunning[c] = true;
+			if (c == 0) {
+				displayPhase.store(0.f, std::memory_order_relaxed);
+			}
 		}
 		if (syncConnected) {
 			const float s = inputs[SYNC_INPUT].getPolyVoltage(c);
@@ -1196,6 +1241,11 @@ void Wyrm::process(const ProcessArgs& args) {
 			phaseDisplay = phase[c];
 			phaseFrequencyDisplay = (!envelopeModeNow || envelopeRunning[c]) ? hz : 0.f;
 		}
+	}
+	const bool displayEnvelopeRunningNow = envelopeModeNow && envelopeRunning[0];
+	if (displayEnvelopeRunningNow != publishedEnvelopeRunning) {
+		displayEnvelopeRunning.store(displayEnvelopeRunningNow, std::memory_order_relaxed);
+		publishedEnvelopeRunning = displayEnvelopeRunningNow;
 	}
 
 	phaseTracerPublishTimer += args.sampleTime;

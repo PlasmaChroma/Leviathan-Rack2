@@ -48,10 +48,12 @@ void configureFastEnvelope(Wyrm& module, int channels = 1) {
 bool oneShotTraversesAndReturnsToZero() {
 	Wyrm module;
 	configureFastEnvelope(module);
-	const bool idleIsZero = std::fabs(module.outputs[Wyrm::RAW_OUTPUT].getVoltage()) < 1e-6f;
+	const bool idleIsZero = std::fabs(module.outputs[Wyrm::RAW_OUTPUT].getVoltage()) < 1e-6f
+		&& !module.displayEnvelopeRunning.load(std::memory_order_relaxed);
 
 	module.inputs[Wyrm::VOCT_INPUT].setVoltage(10.f);
 	process(module);
+	const bool displayBecameActive = module.displayEnvelopeRunning.load(std::memory_order_relaxed);
 	float minimum = 10.f;
 	float maximum = 0.f;
 	for (int i = 0; i < 240; ++i) {
@@ -64,10 +66,11 @@ bool oneShotTraversesAndReturnsToZero() {
 		&& maximum <= 10.00001f && module.envelopeRunning[0];
 	process(module, 300);
 	const bool completed = !module.envelopeRunning[0]
+		&& !module.displayEnvelopeRunning.load(std::memory_order_relaxed)
 		&& std::fabs(module.outputs[Wyrm::RAW_OUTPUT].getVoltage()) < 1e-6f
 		&& std::fabs(module.outputs[Wyrm::OUT_OUTPUT].getVoltage()) < 1e-6f;
 	const float durationMs = module.displayEnvelopeTimeMs.load(std::memory_order_relaxed);
-	return idleIsZero && traversedUnipolarRange && completed
+	return idleIsZero && displayBecameActive && traversedUnipolarRange && completed
 		&& durationMs > 9.9f && durationMs < 10.1f;
 }
 
@@ -96,16 +99,84 @@ bool polyphonicTriggersRemainIndependent() {
 	return firstOnly && module.envelopeRunning[0] && module.envelopeRunning[1];
 }
 
+bool interpolationStaysInsideAuthoredSegments() {
+	std::array<float, kWyrmPointCountMax> points {};
+	points[0] = -1.f;
+	points[1] = 0.25f;
+	points[2] = 0.30f;
+	points[3] = 0.40f;
+	for (int sample = 0; sample <= 64; ++sample) {
+		const float phase = (1.f + float(sample) / 64.f) / 4.f;
+		const float value = catmullPeriodic(points, 4, phase);
+		if (value < points[1] - 1e-6f || value > points[2] + 1e-6f) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool octaveModeQuantizesOscillatorAndEnvelopeRates() {
+	Wyrm module;
+	module.params[Wyrm::FREQ_PARAM].setValue(0.61f);
+	module.params[Wyrm::COARSE_STEP_MODE_PARAM].setValue(1.f);
+	process(module);
+	const float oscillatorHz = module.displayFrequencyHz.load(std::memory_order_relaxed);
+	const float oscillatorOctave = std::log2(oscillatorHz / dsp::FREQ_C4);
+	const bool oscillatorIsStepped = std::fabs(oscillatorOctave - std::round(oscillatorOctave)) < 1e-4f;
+
+	module.params[Wyrm::ENV_MODE_PARAM].setValue(1.f);
+	process(module);
+	const float envelopeMs = module.displayEnvelopeTimeMs.load(std::memory_order_relaxed);
+	const float envelopeRate = 1000.f / envelopeMs;
+	const float envelopeOctave = std::log2(envelopeRate / dsp::FREQ_C4);
+	const bool envelopeIsStepped = std::fabs(envelopeOctave - std::round(envelopeOctave)) < 1e-4f;
+	return oscillatorIsStepped && envelopeIsStepped;
+}
+
+bool enteringEnvelopeModeLoadsFastAttackSlowReleaseShape() {
+	Wyrm module;
+	module.setFactoryShape(SHAPE_SQUARE);
+	module.params[Wyrm::ENV_MODE_PARAM].setValue(1.f);
+	process(module);
+	const int last = module.pointCount - 1;
+	int peakIndex = 0;
+	float peak = -1.f;
+	for (int i = 0; i <= last; ++i) {
+		const float value = module.getWavePoint(i);
+		if (value > peak) {
+			peak = value;
+			peakIndex = i;
+		}
+	}
+	const float attackFraction = float(peakIndex) / float(last);
+	const int attackMidpoint = peakIndex / 2;
+	const float attackMidpointUnipolar = 0.5f * (module.getWavePoint(attackMidpoint) + 1.f);
+	return std::fabs(module.getWavePoint(0) + 1.f) < 1e-6f
+		&& std::fabs(module.getWavePoint(last) + 1.f) < 1e-6f
+		&& peak > 0.999f
+		&& peakIndex > 0
+		&& attackFraction > 0.14f
+		&& attackFraction < 0.16f
+		&& attackMidpointUnipolar > 0.55f
+		&& (last - peakIndex) > 4 * peakIndex;
+}
+
 } // namespace
 
 int main() {
 	const bool oneShot = oneShotTraversesAndReturnsToZero();
 	const bool retrigger = fallingThenRisingEdgeRetriggers();
 	const bool polyphony = polyphonicTriggersRemainIndependent();
+	const bool boundedInterpolation = interpolationStaysInsideAuthoredSegments();
+	const bool octaveStepping = octaveModeQuantizesOscillatorAndEnvelopeRates();
+	const bool arShape = enteringEnvelopeModeLoadsFastAttackSlowReleaseShape();
 	std::cout << (oneShot ? "[PASS] " : "[FAIL] ") << "ENV traverses 0-10 V once and returns to 0 V\n";
 	std::cout << (retrigger ? "[PASS] " : "[FAIL] ") << "ENV retriggers on a new rising edge\n";
 	std::cout << (polyphony ? "[PASS] " : "[FAIL] ") << "ENV trigger voices remain polyphonically independent\n";
-	const int passed = int(oneShot) + int(retrigger) + int(polyphony);
-	std::cout << "[SUMMARY] wyrm_envelope_spec: " << passed << "/3 passed\n";
-	return passed == 3 ? 0 : 1;
+	std::cout << (boundedInterpolation ? "[PASS] " : "[FAIL] ") << "wave interpolation stays within authored segment endpoints\n";
+	std::cout << (octaveStepping ? "[PASS] " : "[FAIL] ") << "OCT mode quantizes oscillator and envelope rates\n";
+	std::cout << (arShape ? "[PASS] " : "[FAIL] ") << "entering ENV loads a fast-attack slow-release shape\n";
+	const int passed = int(oneShot) + int(retrigger) + int(polyphony) + int(boundedInterpolation) + int(octaveStepping) + int(arShape);
+	std::cout << "[SUMMARY] wyrm_envelope_spec: " << passed << "/6 passed\n";
+	return passed == 6 ? 0 : 1;
 }

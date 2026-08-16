@@ -45,8 +45,11 @@ struct WyrmWaveEditor : TransparentWidget {
 	int lastSandDetail = -1;
 	int lastSandPersistence = -1;
 	bool lastEditorLocked = false;
+	bool lastEnvelopeMode = false;
 	bool tracerDotVisible = false;
 	float lastTracerPhase = -1.f;
+	bool envelopeProgressVisible = false;
+	float lastEnvelopeProgressPhase = -1.f;
 	float lastEditorDrawUs = 0.f;
 	float lastStepUsEma = 0.f;
 	debug_terminal::UiTimingRangeAccumulator stepUsRange;
@@ -78,6 +81,7 @@ struct WyrmWaveEditor : TransparentWidget {
 	int waveMaterialW = 0;
 	int waveMaterialH = 0;
 	int waveMaterialCount = -1;
+	bool waveMaterialEnvelopeMode = false;
 	int waveMaterialUploadedW = 0;
 	int waveMaterialUploadedH = 0;
 	bool waveMaterialDirty = true;
@@ -311,13 +315,14 @@ struct WyrmWaveEditor : TransparentWidget {
 		dst[3] = outA;
 	}
 
-	void rebuildWaveMaterialPixels(int count) {
+	void rebuildWaveMaterialPixels(int count, bool envelopeVisual) {
 		const int w = std::max(1, int(std::ceil(box.size.x)));
 		const int h = std::max(1, int(std::ceil(box.size.y)));
 		count = std::max(1, count);
 		waveMaterialW = w;
 		waveMaterialH = h;
 		waveMaterialCount = count;
+		waveMaterialEnvelopeMode = envelopeVisual;
 		waveMaterialDirty = true;
 		waveMaterialPixels.assign(size_t(w) * size_t(h) * 4u, 0u);
 
@@ -334,10 +339,12 @@ struct WyrmWaveEditor : TransparentWidget {
 
 		for (int py = 0; py < h; ++py) {
 			const float y = std::min(box.size.y, float(py) + 0.5f);
-			const bool positive = y < midY;
-			const float t = positive
-				? levi_math::clamp01((midY - y) / std::max(midY, 1.f))
-				: levi_math::clamp01((y - midY) / std::max(box.size.y - midY, 1.f));
+			const bool positive = envelopeVisual || y < midY;
+			const float t = envelopeVisual
+				? levi_math::clamp01((box.size.y - y) / std::max(box.size.y, 1.f))
+				: (positive
+					? levi_math::clamp01((midY - y) / std::max(midY, 1.f))
+					: levi_math::clamp01((y - midY) / std::max(box.size.y - midY, 1.f)));
 			const NVGcolor base = positive ? mixColor(posNear, posFar, t) : mixColor(negNear, negFar, t);
 			for (int px = 0; px < w; ++px) {
 				const float x = std::min(box.size.x, float(px) + 0.5f);
@@ -357,14 +364,15 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 	}
 
-	int ensureWaveMaterialImage(NVGcontext* vg, int count) {
+	int ensureWaveMaterialImage(NVGcontext* vg, int count, bool envelopeVisual) {
 		if (!vg || box.size.x <= 1.f || box.size.y <= 1.f || count <= 0) {
 			return -1;
 		}
 		const int targetW = std::max(1, int(std::ceil(box.size.x)));
 		const int targetH = std::max(1, int(std::ceil(box.size.y)));
-		if (waveMaterialW != targetW || waveMaterialH != targetH || waveMaterialCount != count || waveMaterialPixels.empty()) {
-			rebuildWaveMaterialPixels(count);
+		if (waveMaterialW != targetW || waveMaterialH != targetH || waveMaterialCount != count
+			|| waveMaterialEnvelopeMode != envelopeVisual || waveMaterialPixels.empty()) {
+			rebuildWaveMaterialPixels(count, envelopeVisual);
 		}
 		if (waveMaterialContext != vg) {
 			nvg_gfx_lifecycle::resetOwnedNvgImage(
@@ -621,6 +629,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		const int sandDetailNow = module->sandDetail.load(std::memory_order_relaxed);
 		const int sandPersistenceNow = module->sandPersistence.load(std::memory_order_relaxed);
 		const bool editorLockedNow = module->editorLocked.load(std::memory_order_relaxed);
+		const bool envelopeModeNow = module->envelopeMode.load(std::memory_order_relaxed);
 		const uint32_t waveVersionNow = module->waveVersion.load(std::memory_order_acquire);
 		const int pointCountNow = module->pointCount;
 		const int rockStateIndexNow = module->activeRockStateIndex.load(std::memory_order_acquire);
@@ -631,6 +640,9 @@ struct WyrmWaveEditor : TransparentWidget {
 			dirty = true;
 		}
 		if (editorLockedNow != lastEditorLocked) {
+			dirty = true;
+		}
+		if (envelopeModeNow != lastEnvelopeMode) {
 			dirty = true;
 		}
 
@@ -652,6 +664,16 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 		tracerDotVisible = tracerDotVisibleNow;
 		lastTracerPhase = tracerPhaseNow;
+		const bool envelopeProgressVisibleNow =
+			module->envelopeMode.load(std::memory_order_relaxed)
+			&& module->displayEnvelopeRunning.load(std::memory_order_relaxed);
+		if (envelopeProgressVisibleNow != envelopeProgressVisible
+			|| (envelopeProgressVisibleNow
+				&& std::fabs(tracerPhaseNow - lastEnvelopeProgressPhase) > 1e-5f)) {
+			dirty = true;
+		}
+		envelopeProgressVisible = envelopeProgressVisibleNow;
+		lastEnvelopeProgressPhase = tracerPhaseNow;
 
 		const Vec mouseLocal = currentLocalMousePos();
 		const bool mouseInside = (mouseLocal.x >= 0.f && mouseLocal.x <= box.size.x && mouseLocal.y >= 0.f && mouseLocal.y <= box.size.y);
@@ -684,6 +706,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		lastSandDetail = sandDetailNow;
 		lastSandPersistence = sandPersistenceNow;
 		lastEditorLocked = editorLockedNow;
+		lastEnvelopeMode = envelopeModeNow;
 		lastMouseInside = mouseInside;
 		lastHoverColumn = hoverColumnNow;
 		lastHoverRock = hoverRockNow;
@@ -764,6 +787,20 @@ struct WyrmWaveEditor : TransparentWidget {
 		if (hasModule) {
 			for (int i = 0; i < module->pointCount; ++i) {
 				bodyPoints[i] = module->getWavePoint(i);
+			}
+		}
+		if (hasModule
+			&& module->envelopeMode.load(std::memory_order_relaxed)
+			&& module->displayEnvelopeRunning.load(std::memory_order_relaxed)) {
+			const float progress = clamp(
+				module->displayPhase.load(std::memory_order_relaxed), 0.f, 1.f);
+			const float progressX = pointEdgeInset();
+			const float progressWidth = progress * pointDrawWidth();
+			if (progressWidth > 0.f) {
+				nvgBeginPath(args.vg);
+				nvgRect(args.vg, progressX, 0.f, progressWidth, box.size.y);
+				nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 34));
+				nvgFill(args.vg);
 			}
 		}
 		auto bodyWaveValueAtPhase = [&](float phase) {
@@ -857,8 +894,9 @@ struct WyrmWaveEditor : TransparentWidget {
 				}
 			}
 
+			const bool envelopeVisual = hasModule && module->envelopeMode.load(std::memory_order_relaxed);
 			const bool drawWaveArea = (!sandEnabled()) && drawBodyNanoVG && cachedBodySamples >= 2;
-			const int waveMaterialImageHandle = drawWaveArea ? ensureWaveMaterialImage(args.vg, count) : -1;
+			const int waveMaterialImageHandle = drawWaveArea ? ensureWaveMaterialImage(args.vg, count, envelopeVisual) : -1;
 			const bool useWaveMaterialImage = waveMaterialImageHandle >= 0;
 			auto emitPolarityFill = [&](bool positive) {
 				if (!drawWaveArea) {
@@ -921,8 +959,37 @@ struct WyrmWaveEditor : TransparentWidget {
 				}
 				nvgFill(args.vg);
 			};
-			emitPolarityFill(true);
-			emitPolarityFill(false);
+			auto emitEnvelopeFill = [&]() {
+				if (!drawWaveArea) {
+					return;
+				}
+				nvgBeginPath(args.vg);
+				nvgMoveTo(args.vg, cachedBodyPathPoints[0].x, cachedBodyPathPoints[0].y);
+				for (int i = 1; i < cachedBodySamples; ++i) {
+					nvgLineTo(args.vg, cachedBodyPathPoints[i].x, cachedBodyPathPoints[i].y);
+				}
+				nvgLineTo(args.vg, cachedBodyPathPoints[cachedBodySamples - 1].x, box.size.y);
+				nvgLineTo(args.vg, cachedBodyPathPoints[0].x, box.size.y);
+				nvgClosePath(args.vg);
+				if (useWaveMaterialImage) {
+					const NVGpaint material = nvgImagePattern(args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, waveMaterialImageHandle, 1.f);
+					nvgFillPaint(args.vg, material);
+				}
+				else {
+					const NVGpaint gradient = nvgLinearGradient(
+						args.vg, 0.f, box.size.y, 0.f, 0.f,
+						nvgRGBA(28, 204, 217, 46), nvgRGBA(42, 228, 255, 152));
+					nvgFillPaint(args.vg, gradient);
+				}
+				nvgFill(args.vg);
+			};
+			if (envelopeVisual) {
+				emitEnvelopeFill();
+			}
+			else {
+				emitPolarityFill(true);
+				emitPolarityFill(false);
+			}
 
 			auto emitAlternatingPolarityShade = [&](bool positive) {
 				if (!drawWaveArea || useWaveMaterialImage || count <= 0) {
@@ -1012,15 +1079,19 @@ struct WyrmWaveEditor : TransparentWidget {
 				nvgFillColor(args.vg, positive ? nvgRGBA(0, 56, 72, 132) : nvgRGBA(40, 24, 112, 92));
 				nvgFill(args.vg);
 			};
-			emitAlternatingPolarityShade(true);
-			emitAlternatingPolarityShade(false);
+			if (!envelopeVisual) {
+				emitAlternatingPolarityShade(true);
+				emitAlternatingPolarityShade(false);
+			}
 
-			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, 0.f, midY);
-			nvgLineTo(args.vg, box.size.x, midY);
-			nvgStrokeWidth(args.vg, 1.f);
-			nvgStrokeColor(args.vg, nvgRGBA(240, 180, 42, 150));
-			nvgStroke(args.vg);
+			if (!envelopeVisual) {
+				nvgBeginPath(args.vg);
+				nvgMoveTo(args.vg, 0.f, midY);
+				nvgLineTo(args.vg, box.size.x, midY);
+				nvgStrokeWidth(args.vg, 1.f);
+				nvgStrokeColor(args.vg, nvgRGBA(240, 180, 42, 150));
+				nvgStroke(args.vg);
+			}
 
 			auto emitRoundedBodyPath = [&]() {
 				const float roundCosThreshold = -0.25f;

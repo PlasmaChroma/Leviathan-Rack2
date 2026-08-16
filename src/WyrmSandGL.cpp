@@ -371,6 +371,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		const float drawWidth = std::max(1.f, size.x - 2.f * inset);
 		const float dx = drawWidth / float(std::max(1, count));
 		const float midY = 0.5f * size.y;
+		const bool envelopeVisual = module->envelopeMode.load(std::memory_order_relaxed);
 		ensureWaveColumnTexture(size, count);
 		if (waveColumnTexture == 0) {
 			return;
@@ -383,14 +384,15 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 			const float v = displayWaveValueAtIndex(module, i, size);
 			const float y = (0.5f - 0.5f * v) * size.y;
 			const float x = inset + (float(i) + 0.5f) * dx;
-			const float yTop = std::min(midY, y);
-			const float yBottom = std::max(midY, y);
+			const float yTop = envelopeVisual ? y : std::min(midY, y);
+			const float yBottom = envelopeVisual ? size.y : std::max(midY, y);
 			const float x0 = std::max(0.f, x - 0.5f * dx);
 			const float x1 = std::min(size.x, x + 0.5f * dx);
 			const float u0 = x0 / std::max(size.x, 1.f);
 			const float u1 = x1 / std::max(size.x, 1.f);
-			const float v0 = yTop / std::max(size.y, 1.f);
-			const float v1 = yBottom / std::max(size.y, 1.f);
+			const float textureScaleY = envelopeVisual ? 0.5f : 1.f;
+			const float v0 = textureScaleY * yTop / std::max(size.y, 1.f);
+			const float v1 = textureScaleY * yBottom / std::max(size.y, 1.f);
 			glTexCoord2f(u0, v0);
 			glVertex2f(x0, yTop);
 			glTexCoord2f(u1, v0);

@@ -365,7 +365,7 @@
      x="4641.5"
      y="10775.2"
      width="2368.228"
-     height="1339.5333"
+     height="1360.659"
      rx="172.54369"
      ry="158.23055"
      fill="#000000"
@@ -442,7 +442,7 @@
   <g
    id="wyrm_components"
    inkscape:label="wyrm_components"
-   style="display:none">
+   style="display:inline">
     
     <circle
    id="WYRM_FREQ_PARAM"
@@ -451,8 +451,14 @@
    r="260"
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
+   id="WYRM_COARSE_STEP_MODE_PARAM"
+   cx="814.55664"
+   cy="9954.583"
+   r="190"
+   style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle
    id="WYRM_FINE_PARAM"
-   cx="2050"
+   cx="2139.9653"
    cy="8622.5996"
    r="220"
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
@@ -641,21 +647,28 @@
         <text
    id="signal_in"
    x="814.55664"
-   y="9712.5996"
+   y="9432.6006"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
-     id="tspan45"
+     id="tspan6">FREQ</tspan></text><text
+   id="oct_mode_label"
+   x="814.55664"
+   y="10554.601"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan_oct_mode"
      x="814.55664"
-     y="9712.5996">FREQ</tspan></text><text
+     y="10554.601">OCT</tspan></text><text
    id="reso_cv_label"
-   x="2050"
+   x="2139.9653"
    y="9338.4219"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan44"
-     x="2050"
+     x="2139.9653"
      y="9338.4219">FINE</tspan></text><text
    id="slither_lbl"
    x="1240.0049"
