@@ -247,9 +247,9 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="7.9999996"
-   inkscape:cx="52.875003"
-   inkscape:cy="295.81252"
+   inkscape:zoom="3.9999998"
+   inkscape:cx="154.75001"
+   inkscape:cy="318.12502"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
@@ -755,7 +755,7 @@
      y="9019.8945">XM</tspan></text>
       </g><g
    id="components"
-   style="display:inline;opacity:0.169"><ellipse
+   style="display:none;opacity:0.169"><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="MODE_LEFT_PARAM"
      cx="816.59473"

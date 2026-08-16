@@ -504,8 +504,9 @@ struct WyrmWidget : ModuleWidget {
 		Vec finePos(35.56f, 80.0f);
 		Vec fmAttenPos(53.62f, 80.0f);
 		Vec foldPos(35.56f, 98.0f);
-		Vec lockPos(10.50f, 75.50f);
-		Vec resetPos(17.25f, 75.50f);
+		Vec expandEditorPos(58.151228f, 75.72f);
+		Vec lockPos(63.185614f, 75.72f);
+		Vec resetPos(68.22f, 75.72f);
 		Vec slitherPos(17.50f, 112.80f);
 		Vec slitherSpeedPos(26.50f, 112.80f);
 		Vec slitherCvPos = slitherPos.plus(Vec(6.8f, 0.f));
@@ -538,7 +539,6 @@ struct WyrmWidget : ModuleWidget {
 		applyPt("WYRM_FOLD_CV_INPUT", &foldCvPos);
 		applyPt("WYRM_RAW_OUTPUT", &rawOutPos);
 		applyPt("WYRM_OUT_OUTPUT", &outPos);
-		Vec expandEditorPos = lockPos.plus(Vec(-6.75f, 0.f));
 		applyPt("WYRM_EDITOR_EXPAND_BUTTON", &expandEditorPos);
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 		previewBuildTimer.markAnchorsDone();

@@ -77,14 +77,14 @@
     <path d="m 5222.5176,8493.414 -2.2633,1293.6516" stroke="url(#accentGrad)" stroke-width="40.7513" stroke-linecap="round" opacity="0.55" fill="none" id="FM_purple_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
     <path d="m 6434.5391,8474.0757 -2.2633,1293.6516" stroke="url(#accentGrad)" stroke-width="40.7513" stroke-linecap="round" opacity="0.55" fill="none" id="fold_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
   </g>
-  <g id="wyrm_components" inkscape:label="wyrm_components" style="display:inline">
+  <g id="wyrm_components" inkscape:label="wyrm_components" style="display:none">
     <circle id="WYRM_FREQ_PARAM" cx="814.55664" cy="8622.5996" r="260" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_FINE_PARAM" cx="2225.269" cy="8622.5996" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_FM_ATTEN_PARAM" cx="5218.3877" cy="8486.3018" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_FOLD_PARAM" cx="6428.4404" cy="8464.7998" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
-    <circle id="WYRM_LOCK_BUTTON" cx="6269.5" cy="7572" r="160" style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
-    <circle id="WYRM_EDITOR_EXPAND_BUTTON" cx="5717" cy="7572" r="160" style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
-    <circle id="WYRM_RESET_BUTTON" cx="6822" cy="7572" r="160" style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_LOCK_BUTTON" cx="6318.5615" cy="7572" r="270.93332" style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_EDITOR_EXPAND_BUTTON" cx="5815.1226" cy="7572" r="270.93332" style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_RESET_BUTTON" cx="6822" cy="7572" r="270.93332" style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_WAVE_LEFT_PARAM" cx="313.15613" cy="7575" r="270.93332" style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_WAVE_RIGHT_PARAM" cx="816.59473" cy="7575" r="270.93332" style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_SLITHER_PARAM" cx="709.98511" cy="11280" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
