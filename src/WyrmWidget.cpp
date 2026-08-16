@@ -157,6 +157,23 @@ struct WyrmFrequencyReadoutWidget final : Widget {
 	}
 };
 
+struct WyrmVoctModeLabelWidget final : Widget {
+	Wyrm* module = nullptr;
+
+	void draw(const DrawArgs& args) override {
+		if (!APP || !APP->window || !APP->window->uiFont) {
+			return;
+		}
+		const bool envelopeMode = module && module->envelopeMode.load(std::memory_order_relaxed);
+		nvgFontSize(args.vg, std::max(9.5f, box.size.y * 0.72f));
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y + mm2px(0.3f),
+			envelopeMode ? "TRIG" : "V/OCT", nullptr);
+	}
+};
+
 struct WyrmEditorSurface final : Widget {
 	Wyrm* module = nullptr;
 	std::shared_ptr<WyrmSand> sandState;
@@ -531,6 +548,7 @@ struct WyrmWidget : ModuleWidget {
 		Vec slitherCvPos = slitherPos.plus(Vec(6.8f, 0.f));
 		Vec slitherSpeedCvPos = slitherSpeedPos.plus(Vec(6.8f, 0.f));
 		Vec voctPos(31.8f, 86.281416f);
+		Vec voctModeLabelPos = voctPos.plus(Vec(0.f, 7.105625f));
 		Vec envModePos(42.6f, 86.281416f);
 		Vec fmPos(28.0f, 111.0f);
 		Vec syncPos(43.0f, 111.0f);
@@ -553,6 +571,8 @@ struct WyrmWidget : ModuleWidget {
 		applyPt("WYRM_SLITHER_CV_INPUT", &slitherCvPos);
 		applyPt("WYRM_SLITHER_SPEED_CV_INPUT", &slitherSpeedCvPos);
 		applyPt("WYRM_VOCT_INPUT", &voctPos);
+		voctModeLabelPos = voctPos.plus(Vec(0.f, 7.105625f));
+		applyPt("WYRM_VOCT_MODE_LABEL", &voctModeLabelPos);
 		applyPt("WYRM_ENV_MODE_PARAM", &envModePos);
 		applyPt("WYRM_FM_INPUT", &fmPos);
 		applyPt("WYRM_SYNC_INPUT", &syncPos);
@@ -643,6 +663,11 @@ struct WyrmWidget : ModuleWidget {
 		addParam(createParamCentered<Eclipse2Knob>(mm2px(slitherSpeedPos), module, Wyrm::SLITHER_SPEED_PARAM));
 
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(voctPos), module, Wyrm::VOCT_INPUT));
+		auto* voctModeLabel = new WyrmVoctModeLabelWidget();
+		voctModeLabel->module = module;
+		voctModeLabel->box.size = mm2px(Vec(12.f, 3.8f));
+		voctModeLabel->box.pos = mm2px(voctModeLabelPos).minus(voctModeLabel->box.size.mult(0.5f));
+		addChild(voctModeLabel);
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(fmPos), module, Wyrm::FM_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(syncPos), module, Wyrm::SYNC_INPUT));
 		auto addModeToggle = [&](int paramId, int lightId, Vec posMm) {

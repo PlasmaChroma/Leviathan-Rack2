@@ -1040,9 +1040,12 @@ void Wyrm::process(const ProcessArgs& args) {
 	if (envelopeModeNow != envelopeModeWasActive) {
 		if (envelopeModeNow) {
 			setEnvelopeArShape();
-			rebuildWavetable();
-			appliedWaveVersion = waveVersion.load(std::memory_order_acquire);
 		}
+		else {
+			setFactoryShape(SHAPE_SINE);
+		}
+		rebuildWavetable();
+		appliedWaveVersion = waveVersion.load(std::memory_order_acquire);
 		for (int c = 0; c < kWyrmMaxChannels; ++c) {
 			phase[c] = 0.f;
 			phaseDir[c] = 1.f;

@@ -161,6 +161,23 @@ bool enteringEnvelopeModeLoadsFastAttackSlowReleaseShape() {
 		&& (last - peakIndex) > 4 * peakIndex;
 }
 
+bool exitingEnvelopeModeRestoresDefaultSine() {
+	Wyrm module;
+	module.params[Wyrm::ENV_MODE_PARAM].setValue(1.f);
+	process(module);
+	module.setWavePoint(module.pointCount / 3, -0.25f);
+	module.params[Wyrm::ENV_MODE_PARAM].setValue(0.f);
+	process(module);
+	for (int i = 0; i < module.pointCount; ++i) {
+		const float phase = float(i) / float(module.pointCount);
+		const float expected = std::sin(2.f * float(M_PI) * phase);
+		if (std::fabs(module.getWavePoint(i) - expected) > 1e-5f) {
+			return false;
+		}
+	}
+	return module.selectedShape == SHAPE_SINE && !module.waveCustomized;
+}
+
 } // namespace
 
 int main() {
@@ -170,13 +187,15 @@ int main() {
 	const bool boundedInterpolation = interpolationStaysInsideAuthoredSegments();
 	const bool octaveStepping = octaveModeQuantizesOscillatorAndEnvelopeRates();
 	const bool arShape = enteringEnvelopeModeLoadsFastAttackSlowReleaseShape();
+	const bool sineRestore = exitingEnvelopeModeRestoresDefaultSine();
 	std::cout << (oneShot ? "[PASS] " : "[FAIL] ") << "ENV traverses 0-10 V once and returns to 0 V\n";
 	std::cout << (retrigger ? "[PASS] " : "[FAIL] ") << "ENV retriggers on a new rising edge\n";
 	std::cout << (polyphony ? "[PASS] " : "[FAIL] ") << "ENV trigger voices remain polyphonically independent\n";
 	std::cout << (boundedInterpolation ? "[PASS] " : "[FAIL] ") << "wave interpolation stays within authored segment endpoints\n";
 	std::cout << (octaveStepping ? "[PASS] " : "[FAIL] ") << "OCT mode quantizes oscillator and envelope rates\n";
 	std::cout << (arShape ? "[PASS] " : "[FAIL] ") << "entering ENV loads a fast-attack slow-release shape\n";
-	const int passed = int(oneShot) + int(retrigger) + int(polyphony) + int(boundedInterpolation) + int(octaveStepping) + int(arShape);
-	std::cout << "[SUMMARY] wyrm_envelope_spec: " << passed << "/6 passed\n";
-	return passed == 6 ? 0 : 1;
+	std::cout << (sineRestore ? "[PASS] " : "[FAIL] ") << "exiting ENV restores the default sine shape\n";
+	const int passed = int(oneShot) + int(retrigger) + int(polyphony) + int(boundedInterpolation) + int(octaveStepping) + int(arShape) + int(sineRestore);
+	std::cout << "[SUMMARY] wyrm_envelope_spec: " << passed << "/7 passed\n";
+	return passed == 7 ? 0 : 1;
 }

@@ -247,9 +247,9 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="2.8284272"
-   inkscape:cx="100.40916"
-   inkscape:cy="334.28472"
+   inkscape:zoom="8.0000002"
+   inkscape:cx="114.5"
+   inkscape:cy="351.06249"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
@@ -535,8 +535,14 @@
    r="190"
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
+   id="WYRM_VOCT_MODE_LABEL"
+   cx="3180"
+   cy="9313.0215"
+   r="20"
+   style="fill:#00ff88;fill-opacity:1;stroke:none" />
+    <circle
    id="WYRM_ENV_MODE_PARAM"
-   cx="4260"
+   cx="4229.981"
    cy="8628.1416"
    r="190"
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
@@ -661,6 +667,15 @@
      id="tspan_oct_mode"
      x="814.55664"
      y="10554.601">OCT</tspan></text><text
+   id="oct_mode_label-7"
+   x="4222.3608"
+   y="9338.4219"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan7"
+     x="4222.3608"
+     y="9338.4219">ENV</tspan></text><text
    id="reso_cv_label"
    x="2139.9653"
    y="9338.4219"
@@ -691,17 +706,12 @@
    id="fm_cv_label"
    x="3180"
    y="9338.7041"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:none;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan_fm"
      x="3180"
-     y="9338.7041">V/OCT</tspan></text><path
-   id="env_mode_label"
-   aria-label="ENV"
-   d="m 4073,9215 h 140 v 25 h -110 v 60 h 90 v 25 h -90 v 62 h 110 v 25 h -140 z m 180,197 v -197 h 30 l 100,150 v -150 h 30 v 197 h -30 l -100,-150 v 150 z m 195,-197 h 33 l 57,153 57,-153 h 33 l -75,197 h -30 z"
-   transform="translate(-90)"
-   style="display:inline;fill:#ffffff" /><text
+     y="9338.7041">V/OCT</tspan></text><text
    id="voct_label"
    x="5215.4648"
    y="10485.518"

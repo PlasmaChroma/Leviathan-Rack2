@@ -93,7 +93,8 @@
     <circle id="WYRM_SLITHER_CV_INPUT" cx="1800" cy="11280" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_SLITHER_SPEED_CV_INPUT" cx="3950.0149" cy="11280" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_VOCT_INPUT" cx="3180" cy="8628.1416" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
-    <circle id="WYRM_ENV_MODE_PARAM" cx="4260" cy="8628.1416" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_VOCT_MODE_LABEL" cx="3180" cy="9313.0215" r="20" style="fill:#00ff88;fill-opacity:1;stroke:none" />
+    <circle id="WYRM_ENV_MODE_PARAM" cx="4229.981" cy="8628.1416" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_FM_INPUT" cx="5215.4648" cy="9795.4688" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_SYNC_INPUT" cx="1800" cy="9954.583" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_SYNC_MODE_PARAM" cx="2875" cy="9954.583" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
