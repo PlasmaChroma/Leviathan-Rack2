@@ -487,8 +487,14 @@
    r="160"
    style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
-   id="WYRM_WAVEFORM_SELECT"
-   cx="622"
+   id="WYRM_WAVE_LEFT_PARAM"
+   cx="372"
+   cy="7575"
+   r="160"
+   style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle
+   id="WYRM_WAVE_RIGHT_PARAM"
+   cx="872"
    cy="7575"
    r="160"
    style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />

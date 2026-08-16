@@ -248,8 +248,8 @@
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
    inkscape:zoom="7.9999996"
-   inkscape:cx="159.43751"
-   inkscape:cy="432.81252"
+   inkscape:cx="52.875003"
+   inkscape:cy="295.81252"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
@@ -558,31 +558,31 @@
    id="glass"
    style="display:inline"><g
      id="glass_input"><path
-     d="M 235.31167,7794.9995 H 6845.0156 c 118.627,0 177.9405,39.1554 177.9405,117.4661 v 4105.9274 c 0,78.311 -59.3135,117.466 -177.9405,117.466 H 5052.4033 c -33.3333,0 -50,-16.667 -50,-50 V 10930.6 c 0,-21.561 -14.5838,-52.337 -63.7033,-52.337 h -850.4 c -49.1195,0 -63.6797,30.776 -63.6797,52.337 v 1155.259 c 0,33.333 -16.6667,50 -50,50 H 235.31167 c -118.62701,0 -177.94052,-39.155 -177.94052,-117.466 V 7912.4656 c 0,-78.3107 59.31351,-117.4661 177.94052,-117.4661 z"
-     fill="#000000"
-     opacity="0.1"
-     stroke="#ffffff"
-     stroke-opacity="0.06"
-     stroke-width="43.3423"
-     id="inputs"
-     style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none"
-     inkscape:label="inputs"
-     sodipodi:nodetypes="sssssssssssssssss" /></g><g
+       d="M 235.31167,7794.9995 H 6845.0156 c 118.627,0 177.9405,39.1554 177.9405,117.4661 v 4105.9274 c 0,78.311 -59.3135,117.466 -177.9405,117.466 H 5052.4033 c -33.3333,0 -50,-16.667 -50,-50 V 10930.6 c 0,-21.561 -14.5838,-52.337 -63.7033,-52.337 h -850.4 c -49.1195,0 -63.6797,30.776 -63.6797,52.337 v 1155.259 c 0,33.333 -16.6667,50 -50,50 H 235.31167 c -118.62701,0 -177.94052,-39.155 -177.94052,-117.466 V 7912.4656 c 0,-78.3107 59.31351,-117.4661 177.94052,-117.4661 z"
+       fill="#000000"
+       opacity="0.1"
+       stroke="#ffffff"
+       stroke-opacity="0.06"
+       stroke-width="43.3423"
+       id="inputs"
+       style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none"
+       inkscape:label="inputs"
+       sodipodi:nodetypes="sssssssssssssssss" /></g><g
      id="glass_output"><rect
-     x="4042.1721"
-     y="10894.673"
-     width="944.95349"
-     height="1250.9"
-     rx="58.695"
-     ry="63.930157"
-     fill="#000000"
-     opacity="0.1"
-     stroke="#ffffff"
-     stroke-opacity="0.06"
-     stroke-width="40.4311"
-     id="outputs-3"
-     style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.501961;stroke:none;stroke-opacity:0.33"
-     inkscape:label="outputs" /></g></g>
+       x="4042.1721"
+       y="10894.673"
+       width="944.95349"
+       height="1250.9"
+       rx="58.695"
+       ry="63.930157"
+       fill="#000000"
+       opacity="0.1"
+       stroke="#ffffff"
+       stroke-opacity="0.06"
+       stroke-width="40.4311"
+       id="outputs-3"
+       style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.501961;stroke:none;stroke-opacity:0.33"
+       inkscape:label="outputs" /></g></g>
       
     
     
@@ -598,7 +598,7 @@
    id="reworked_module_title_text"
    x="3541.4487"
    y="447.27814"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient500);stroke-width:28.1347"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:none;fill:url(#linearGradient500);stroke-width:28.1347"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan1"
@@ -755,19 +755,25 @@
      y="9019.8945">XM</tspan></text>
       </g><g
    id="components"
-   style="display:none;opacity:0.169"><ellipse
+   style="display:inline;opacity:0.169"><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
-     id="MODE_PARAM"
-     cx="1150.0443"
+     id="MODE_LEFT_PARAM"
+     cx="820.03333"
      cy="7570.0098"
-     rx="294.84427"
-     ry="295.80988" /><ellipse
-     style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:11.8608"
+     rx="270.93332"
+     ry="270.89343" /><ellipse
+     style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
+     id="MODE_RIGHT_PARAM"
+     cx="1320.0333"
+     cy="7570.0098"
+     rx="270.93332"
+     ry="270.89343" /><ellipse
+     style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="MODE_MENU_BUTTON"
      cx="313.15613"
      cy="7570.0098"
-     rx="113.15611"
-     ry="113.84389" /><ellipse
+     rx="270.93332"
+     ry="270.89343" /><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="LEVEL_PARAM"
      cx="1651.4443"
@@ -881,9 +887,32 @@
    x="78.962128"
    y="946.43658"
    ry="0" />
-<g id="perfect_wave_raster_anchors" style="display:none">
-  <rect id="BRANDING_WAVE_LEFT_RASTER" x="665.610" y="12338.190" width="1306.748" height="511.810" />
-  <rect id="BRANDING_WAVE_RIGHT_RASTER" x="5139.674" y="12338.190" width="1306.748" height="511.810" />
-  <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="1920.0337" y="11843.102" width="3271.933" height="1224.054" />
+<g
+   id="perfect_wave_raster_anchors"
+   style="display:none">
+  <rect
+   id="BRANDING_WAVE_LEFT_RASTER"
+   x="665.610"
+   y="12338.190"
+   width="1306.748"
+   height="511.810" />
+  <rect
+   id="BRANDING_WAVE_RIGHT_RASTER"
+   x="5139.674"
+   y="12338.190"
+   width="1306.748"
+   height="511.810" />
+  <rect
+   id="BRANDING_LEVIATHAN_LOGO_RASTER"
+   x="1920.0337"
+   y="11843.102"
+   width="3271.933"
+   height="1224.054" />
+  <rect
+   id="BIFURX_TITLE_RASTER"
+   x="2266.0002"
+   y="-26.0554"
+   width="2580.000"
+   height="946.667" />
 </g>
 </svg>

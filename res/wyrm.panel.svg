@@ -85,7 +85,8 @@
     <circle id="WYRM_LOCK_BUTTON" cx="6269.5" cy="7572" r="160" style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_EDITOR_EXPAND_BUTTON" cx="5717" cy="7572" r="160" style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_RESET_BUTTON" cx="6822" cy="7572" r="160" style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
-    <circle id="WYRM_WAVEFORM_SELECT" cx="622" cy="7575" r="160" style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_WAVE_LEFT_PARAM" cx="372" cy="7575" r="160" style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle id="WYRM_WAVE_RIGHT_PARAM" cx="872" cy="7575" r="160" style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_SLITHER_PARAM" cx="709.98511" cy="11280" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_SLITHER_SPEED_PARAM" cx="2860" cy="11280" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_SLITHER_CV_INPUT" cx="1800" cy="11280" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />

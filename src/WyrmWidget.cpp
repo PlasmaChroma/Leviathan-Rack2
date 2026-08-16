@@ -499,7 +499,8 @@ struct WyrmWidget : ModuleWidget {
 		panel_svg::loadRectFromSvgMm(panelPath, "WYRM_WAVE_EDITOR", &editorRectMm);
 		math::Rect freqReadoutRectMm(Vec(editorRectMm.pos.x, editorRectMm.pos.y + editorRectMm.size.y + 1.1f), Vec(editorRectMm.size.x, 3.8f));
 		Vec freqPos(17.5f, 80.0f);
-		Vec waveformSelectPos(35.56f, 75.2f);
+		Vec waveLeftPos(33.06f, 75.2f);
+		Vec waveRightPos(38.06f, 75.2f);
 		Vec finePos(35.56f, 80.0f);
 		Vec fmAttenPos(53.62f, 80.0f);
 		Vec foldPos(35.56f, 98.0f);
@@ -518,7 +519,8 @@ struct WyrmWidget : ModuleWidget {
 		Vec rawOutPos(24.0f, 122.0f);
 		Vec outPos(47.0f, 122.0f);
 		applyPt("WYRM_FREQ_PARAM", &freqPos);
-		applyPt("WYRM_WAVEFORM_SELECT", &waveformSelectPos);
+		applyPt("WYRM_WAVE_LEFT_PARAM", &waveLeftPos);
+		applyPt("WYRM_WAVE_RIGHT_PARAM", &waveRightPos);
 		applyPt("WYRM_FINE_PARAM", &finePos);
 		applyPt("WYRM_FM_ATTEN_PARAM", &fmAttenPos);
 		applyPt("WYRM_FOLD_PARAM", &foldPos);
@@ -593,10 +595,10 @@ struct WyrmWidget : ModuleWidget {
 			resetButton->buttonAction = [module]() { module->setFactoryShape(module->selectedShape); };
 		}
 		addChild(resetButton);
-		auto* waveLeft = createParamCentered<WyrmWaveLeftButton>(mm2px(waveformSelectPos.plus(Vec(-2.5f, 0.f))), module, Wyrm::WAVE_LEFT_PARAM);
+		auto* waveLeft = createParamCentered<WyrmWaveLeftButton>(mm2px(waveLeftPos), module, Wyrm::WAVE_LEFT_PARAM);
 		waveLeft->module = module;
 		addParam(waveLeft);
-		auto* waveRight = createParamCentered<WyrmWaveRightButton>(mm2px(waveformSelectPos.plus(Vec(2.5f, 0.f))), module, Wyrm::WAVE_RIGHT_PARAM);
+		auto* waveRight = createParamCentered<WyrmWaveRightButton>(mm2px(waveRightPos), module, Wyrm::WAVE_RIGHT_PARAM);
 		waveRight->module = module;
 		addParam(waveRight);
 
