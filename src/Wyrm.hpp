@@ -204,6 +204,7 @@ struct Wyrm : Module {
 		WAVE_RIGHT_PARAM,
 		LFO_MODE_PARAM,
 		SYNC_MODE_PARAM,
+		ENV_MODE_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -223,6 +224,7 @@ struct Wyrm : Module {
 	enum LightId {
 		LFO_MODE_LIGHT,
 		SYNC_MODE_LIGHT,
+		ENV_MODE_LIGHT,
 		LIGHTS_LEN
 	};
 
@@ -231,6 +233,7 @@ struct Wyrm : Module {
 	std::atomic<uint32_t> waveVersion {1};
 	uint32_t appliedWaveVersion = 0;
 	std::atomic<float> displayFrequencyHz {0.f};
+	std::atomic<float> displayEnvelopeTimeMs {0.f};
 	// Rate-limited channel-one state for the low-frequency waveform tracer.
 	std::atomic<float> displayPhase {0.f};
 	std::atomic<float> displayPhaseFrequencyHz {0.f};
@@ -242,8 +245,12 @@ struct Wyrm : Module {
 	std::array<float, kWyrmMaxChannels> slitherPhase {};
 	std::array<float, kWyrmMaxChannels> phaseDir {};
 	std::array<dsp::SchmittTrigger, kWyrmMaxChannels> syncTriggers;
+	std::array<dsp::SchmittTrigger, kWyrmMaxChannels> envelopeTriggers;
+	std::array<bool, kWyrmMaxChannels> envelopeRunning {};
 
 	std::atomic<bool> lfoMode {false};
+	std::atomic<bool> envelopeMode {false};
+	bool envelopeModeWasActive = false;
 	std::atomic<bool> editorLocked {false};
 	std::atomic<bool> sandViewEnabled {false};
 	std::atomic<int> renderMode {WYRM_RENDER_NANOVG};

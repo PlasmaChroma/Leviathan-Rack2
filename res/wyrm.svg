@@ -385,7 +385,7 @@
    id="sync_line"
    style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1"
    sodipodi:nodetypes="cc" /><path
-   d="m 814.12214,8620.0078 2745.60146,0.4012"
+   d="m 814.12214,8620.0078 2365.87786,0.4012"
    stroke="url(#accentGrad)"
    stroke-width="40.7513"
    stroke-linecap="round"
@@ -452,7 +452,7 @@
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
    id="WYRM_FINE_PARAM"
-   cx="2225.269"
+   cx="2050"
    cy="8622.5996"
    r="220"
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
@@ -524,7 +524,13 @@
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
    id="WYRM_VOCT_INPUT"
-   cx="3565.9817"
+   cx="3180"
+   cy="8628.1416"
+   r="190"
+   style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
+    <circle
+   id="WYRM_ENV_MODE_PARAM"
+   cx="4260"
    cy="8628.1416"
    r="190"
    style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
@@ -643,13 +649,13 @@
      x="814.55664"
      y="9712.5996">FREQ</tspan></text><text
    id="reso_cv_label"
-   x="2213.7649"
+   x="2050"
    y="9338.4219"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan44"
-     x="2213.7649"
+     x="2050"
      y="9338.4219">FINE</tspan></text><text
    id="slither_lbl"
    x="1240.0049"
@@ -670,14 +676,19 @@
      x="3390.0198"
      y="11970">SL.SPD</tspan></text><text
    id="fm_cv_label"
-   x="3564.8525"
+   x="3180"
    y="9338.7041"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan_fm"
-     x="3564.8525"
-     y="9338.7041">V/OCT</tspan></text><text
+     x="3180"
+     y="9338.7041">V/OCT</tspan></text><path
+   id="env_mode_label"
+   aria-label="ENV"
+   d="m 4073,9215 h 140 v 25 h -110 v 60 h 90 v 25 h -90 v 62 h 110 v 25 h -140 z m 180,197 v -197 h 30 l 100,150 v -150 h 30 v 197 h -30 l -100,-150 v 150 z m 195,-197 h 33 l 57,153 57,-153 h 33 l -75,197 h -30 z"
+   transform="translate(-90)"
+   style="display:inline;fill:#ffffff" /><text
    id="voct_label"
    x="5215.4648"
    y="10485.518"

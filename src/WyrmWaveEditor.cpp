@@ -635,9 +635,11 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 
 		bool tracerDotVisibleNow = tracerDotVisible;
-		const bool lfoModeNow = module->lfoMode.load(std::memory_order_relaxed);
+		const bool slowTraceModeNow =
+			module->lfoMode.load(std::memory_order_relaxed)
+			|| module->envelopeMode.load(std::memory_order_relaxed);
 		const float tracerFrequencyNow = module->displayPhaseFrequencyHz.load(std::memory_order_relaxed);
-		if (!lfoModeNow || !std::isfinite(tracerFrequencyNow) || tracerFrequencyNow >= 2.4f) {
+		if (!slowTraceModeNow || !std::isfinite(tracerFrequencyNow) || tracerFrequencyNow >= 2.4f) {
 			tracerDotVisibleNow = false;
 		}
 		else if (tracerFrequencyNow > 0.f && tracerFrequencyNow <= 2.f) {

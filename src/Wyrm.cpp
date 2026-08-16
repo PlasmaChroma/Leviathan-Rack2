@@ -66,7 +66,8 @@ Wyrm::Wyrm() {
 	configButton(WAVE_RIGHT_PARAM, "Waveform next");
 	configSwitch(LFO_MODE_PARAM, 0.f, 1.f, 0.f, "LFO mode", {"Audio", "LFO"});
 	configSwitch(SYNC_MODE_PARAM, 0.f, 1.f, 0.f, "Sync mode", {"Hard", "Soft"});
-	configInput(VOCT_INPUT, "V/Oct");
+	configSwitch(ENV_MODE_PARAM, 0.f, 1.f, 0.f, "Envelope mode", {"Oscillator", "Envelope"});
+	configInput(VOCT_INPUT, "V/Oct / Envelope trigger");
 	configInput(FM_INPUT, "FM");
 	configInput(SYNC_INPUT, "Sync");
 	configInput(FOLD_CV_INPUT, "Fold CV");
@@ -985,13 +986,33 @@ void Wyrm::process(const ProcessArgs& args) {
 
 	const float knobNorm = levi_math::clamp01(params[FREQ_PARAM].getValue());
 	const bool lfoModeNow = params[LFO_MODE_PARAM].getValue() > 0.5f;
+	const bool envelopeModeNow = params[ENV_MODE_PARAM].getValue() > 0.5f;
 	const bool softSyncModeNow = params[SYNC_MODE_PARAM].getValue() > 0.5f;
 	lfoMode.store(lfoModeNow, std::memory_order_relaxed);
+	envelopeMode.store(envelopeModeNow, std::memory_order_relaxed);
 	lights[LFO_MODE_LIGHT].setBrightness(lfoModeNow ? 0.5f : 0.f);
 	lights[SYNC_MODE_LIGHT].setBrightness(softSyncModeNow ? 0.5f : 0.f);
-	const float baseFreq = wyrmBaseFrequencyFromKnob(knobNorm, lfoModeNow);
+	lights[ENV_MODE_LIGHT].setBrightness(envelopeModeNow ? 0.5f : 0.f);
+	const bool slowRateModeNow = lfoModeNow || envelopeModeNow;
+	const float baseFreq = wyrmBaseFrequencyFromKnob(knobNorm, slowRateModeNow);
 	const float fmAtten = finiteOr(params[FM_ATTEN_PARAM].getValue());
 	const float fine = finiteOr(params[FINE_PARAM].getValue()) / 1200.f;
+	const float displayRateNoFm = clamp(
+		baseFreq * rack::dsp::exp2_taylor5(fine),
+		0.005f,
+		0.45f * args.sampleRate);
+	if (envelopeModeNow) {
+		displayEnvelopeTimeMs.store(1000.f / std::max(displayRateNoFm, 1e-6f), std::memory_order_relaxed);
+	}
+	if (envelopeModeNow != envelopeModeWasActive) {
+		for (int c = 0; c < kWyrmMaxChannels; ++c) {
+			phase[c] = 0.f;
+			phaseDir[c] = 1.f;
+			envelopeRunning[c] = false;
+			envelopeTriggers[c].reset();
+		}
+		envelopeModeWasActive = envelopeModeNow;
+	}
 	const float foldBase = finiteOr(params[FOLD_PARAM].getValue());
 	const float slitherAmountKnob = levi_math::clamp01(params[SLITHER_PARAM].getValue());
 	const float slitherSpeedKnob = levi_math::clamp01(params[SLITHER_SPEED_PARAM].getValue());
@@ -1047,6 +1068,7 @@ void Wyrm::process(const ProcessArgs& args) {
 	const bool foldActiveNow = foldCvConnected || foldBase > 1e-5f;
 	const bool monoPitchModulation = !voctPoly && !fmPoly;
 	const bool canUsePlainFastPath =
+		!envelopeModeNow &&
 		!hasRocks &&
 		!slitherActiveNow &&
 		!foldActiveNow &&
@@ -1070,9 +1092,15 @@ void Wyrm::process(const ProcessArgs& args) {
 	}
 
 	for (int c = 0; c < channels; ++c) {
+		const float voct = readPolyOrMonoVoltage(VOCT_INPUT, c, voctPoly, monoVoct);
+		if (envelopeModeNow && envelopeTriggers[c].process(voct)) {
+			phase[c] = 0.f;
+			phaseDir[c] = 1.f;
+			envelopeRunning[c] = true;
+		}
 		if (syncConnected) {
 			const float s = inputs[SYNC_INPUT].getPolyVoltage(c);
-			if (syncTriggers[c].process(s)) {
+			if (syncTriggers[c].process(s) && !envelopeModeNow) {
 				if (softSyncModeNow) {
 					phaseDir[c] = -phaseDir[c];
 					if (std::fabs(phaseDir[c]) < 0.5f) {
@@ -1104,45 +1132,69 @@ void Wyrm::process(const ProcessArgs& args) {
 			}
 			continue;
 		}
-		const float voct = readPolyOrMonoVoltage(VOCT_INPUT, c, voctPoly, monoVoct);
 		const float fm = readPolyOrMonoVoltage(FM_INPUT, c, fmPoly, monoFmVoltage) * fmAtten;
 		const float slitherAmount = slitherAmountCvPoly ? effectiveSlitherAmount(c) : monoSlitherAmount;
 		const float slitherSpeed = slitherSpeedCvPoly ? effectiveSlitherSpeed(c) : monoSlitherSpeed;
-		float hz = baseFreq * rack::dsp::exp2_taylor5(voct + fm + fine);
+		const float pitchOrTimeMod = envelopeModeNow ? (fm + fine) : (voct + fm + fine);
+		float hz = baseFreq * rack::dsp::exp2_taylor5(pitchOrTimeMod);
 		hz = finiteOr(hz, baseFreq);
 		hz = clamp(hz, 0.005f, 0.45f * args.sampleRate);
 		if (c == 0) {
-			const float displayHzNoFm = clamp(baseFreq * rack::dsp::exp2_taylor5(voct + fine), 0.005f, 0.45f * args.sampleRate);
+			const float displayHzNoFm = envelopeModeNow
+				? displayRateNoFm
+				: clamp(baseFreq * rack::dsp::exp2_taylor5(voct + fine), 0.005f, 0.45f * args.sampleRate);
 			displayFrequencyHz.store(displayHzNoFm, std::memory_order_relaxed);
 			displaySlitherAmount.store(slitherAmount, std::memory_order_relaxed);
 			displaySlitherSpeedFactor.store(slitherSpeed, std::memory_order_relaxed);
 		}
 		const float phaseStep = hz * args.sampleTime;
-		phase[c] = levi_math::wrap01Fast(phase[c] + (softSyncModeNow ? (phaseDir[c] * phaseStep) : phaseStep));
-		const float slitherBaseHz = lfoModeNow ? clamp(hz, 0.01f, 8.f) : clamp(0.125f * hz, 0.15f, 8.f);
+		if (!envelopeModeNow) {
+			phase[c] = levi_math::wrap01Fast(phase[c] + (softSyncModeNow ? (phaseDir[c] * phaseStep) : phaseStep));
+		}
+		const float slitherBaseHz = slowRateModeNow ? clamp(hz, 0.01f, 8.f) : clamp(0.125f * hz, 0.15f, 8.f);
 		const float slitherHz = clamp(slitherBaseHz * slitherSpeed, 0.01f, 16.f);
 		slitherPhase[c] = levi_math::wrap01Fast(slitherPhase[c] + slitherHz * args.sampleTime);
 		if (c == 0) {
 			displaySlitherPhase.store(slitherPhase[c], std::memory_order_relaxed);
 		}
-		const float baseWave = finiteOr(lookupWave(phase[c], phaseStep));
-		const float base = hasRocks ? finiteOr(applyRockPush(activeRockStateNow, baseWave, phase[c])) : baseWave;
-		float slither = 0.f;
-		if (slitherAmount > 1e-5f) {
-			const float slitherTarget = slitherOffset(phase[c], slitherPhase[c], slitherAmount);
-			slither = hasRocks ? finiteOr(applyRockClamp(activeRockStateNow, base, phase[c], slitherTarget)) : slitherTarget;
+		const bool renderEnvelopeVoice = !envelopeModeNow || envelopeRunning[c];
+		float raw = 0.f;
+		if (renderEnvelopeVoice) {
+			const float baseWave = finiteOr(lookupWave(phase[c], phaseStep));
+			const float base = hasRocks ? finiteOr(applyRockPush(activeRockStateNow, baseWave, phase[c])) : baseWave;
+			float slither = 0.f;
+			if (slitherAmount > 1e-5f) {
+				const float slitherTarget = slitherOffset(phase[c], slitherPhase[c], slitherAmount);
+				slither = hasRocks ? finiteOr(applyRockClamp(activeRockStateNow, base, phase[c], slitherTarget)) : slitherTarget;
+			}
+			raw = clamp(finiteOr(base + slither), -1.f, 1.f);
 		}
-		const float raw = clamp(finiteOr(base + slither), -1.f, 1.f);
 		const float foldAmt = foldCvPoly ? effectiveFoldAmt(c) : monoFoldAmt;
 		float folded = raw;
 		if (foldAmt > 1e-5f) {
 			folded = clamp(finiteOr(levi_math::softClip(foldWave(raw, foldAmt)) * kWyrmFoldMakeupGain), -1.f, 1.f);
 		}
-		outputs[RAW_OUTPUT].setVoltage(5.f * raw, c);
-		outputs[OUT_OUTPUT].setVoltage(5.f * folded, c);
+		const float rawVoltage = envelopeModeNow
+			? (renderEnvelopeVoice ? 5.f * (raw + 1.f) : 0.f)
+			: 5.f * raw;
+		const float foldedVoltage = envelopeModeNow
+			? (renderEnvelopeVoice ? 5.f * (folded + 1.f) : 0.f)
+			: 5.f * folded;
+		outputs[RAW_OUTPUT].setVoltage(rawVoltage, c);
+		outputs[OUT_OUTPUT].setVoltage(foldedVoltage, c);
+		if (envelopeModeNow && envelopeRunning[c]) {
+			const float nextPhase = phase[c] + phaseStep;
+			if (nextPhase >= 1.f) {
+				phase[c] = 0.f;
+				envelopeRunning[c] = false;
+			}
+			else {
+				phase[c] = nextPhase;
+			}
+		}
 		if (c == 0) {
 			phaseDisplay = phase[c];
-			phaseFrequencyDisplay = hz;
+			phaseFrequencyDisplay = (!envelopeModeNow || envelopeRunning[c]) ? hz : 0.f;
 		}
 	}
 
@@ -1178,18 +1230,36 @@ void Wyrm::process(const ProcessArgs& args) {
 
 float WyrmFreqQuantity::getDisplayValue() {
 	auto* wyrm = static_cast<Wyrm*>(module);
+	const bool envelopeModeNow = wyrm ? (wyrm->params[Wyrm::ENV_MODE_PARAM].getValue() > 0.5f) : false;
+	if (envelopeModeNow) {
+		return 1000.f / std::max(wyrmBaseFrequencyFromKnob(getValue(), true), 1e-6f);
+	}
 	const bool lfoModeNow = wyrm ? (wyrm->params[Wyrm::LFO_MODE_PARAM].getValue() > 0.5f) : false;
 	return wyrmBaseFrequencyFromKnob(getValue(), lfoModeNow);
 }
 
 void WyrmFreqQuantity::setDisplayValue(float displayValue) {
 	auto* wyrm = static_cast<Wyrm*>(module);
+	const bool envelopeModeNow = wyrm ? (wyrm->params[Wyrm::ENV_MODE_PARAM].getValue() > 0.5f) : false;
+	if (envelopeModeNow) {
+		const float durationMs = std::max(displayValue, 1e-3f);
+		setImmediateValue(wyrmKnobValueForFrequency(1000.f / durationMs, true));
+		return;
+	}
 	const bool lfoModeNow = wyrm ? (wyrm->params[Wyrm::LFO_MODE_PARAM].getValue() > 0.5f) : false;
 	setImmediateValue(wyrmKnobValueForFrequency(displayValue, lfoModeNow));
 }
 
 std::string WyrmFreqQuantity::getDisplayValueString() {
-	const float hz = getDisplayValue();
+	auto* wyrm = static_cast<Wyrm*>(module);
+	const bool envelopeModeNow = wyrm ? (wyrm->params[Wyrm::ENV_MODE_PARAM].getValue() > 0.5f) : false;
+	const float value = getDisplayValue();
+	if (envelopeModeNow) {
+		if (value < 10.f) return string::f("%.2f ms", value);
+		if (value < 100.f) return string::f("%.1f ms", value);
+		return string::f("%.0f ms", value);
+	}
+	const float hz = value;
 	if (hz >= 1000.f) {
 		return string::f("%.2f kHz", hz / 1000.f);
 	}

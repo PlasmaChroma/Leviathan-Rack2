@@ -116,6 +116,19 @@ struct WyrmFrequencyReadoutWidget final : Widget {
 		return string::f("%.0f Hz", hz);
 	}
 
+	static std::string formatEnvelopeTimeText(float ms) {
+		if (!std::isfinite(ms) || ms < 0.f) {
+			ms = 0.f;
+		}
+		if (ms < 10.f) {
+			return string::f("%.2f ms", ms);
+		}
+		if (ms < 100.f) {
+			return string::f("%.1f ms", ms);
+		}
+		return string::f("%.0f ms", ms);
+	}
+
 	void draw(const DrawArgs& args) override {
 		if (!module || !APP || !APP->window || !APP->window->uiFont) {
 			return;
@@ -124,13 +137,19 @@ struct WyrmFrequencyReadoutWidget final : Widget {
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		const float displayHz = module->displayFrequencyHz.load(std::memory_order_relaxed);
-		const std::string freqText = formatFrequencyText(displayHz);
 		std::string readoutText;
-		if (module->waveCustomized) {
+		if (module->envelopeMode.load(std::memory_order_relaxed)) {
+			const float timeMs = module->displayEnvelopeTimeMs.load(std::memory_order_relaxed);
+			readoutText = string::f("Time: %s", formatEnvelopeTimeText(timeMs).c_str());
+		}
+		else if (module->waveCustomized) {
+			const float displayHz = module->displayFrequencyHz.load(std::memory_order_relaxed);
+			const std::string freqText = formatFrequencyText(displayHz);
 			readoutText = string::f("Custom: %s", freqText.c_str());
 		}
 		else {
+			const float displayHz = module->displayFrequencyHz.load(std::memory_order_relaxed);
+			const std::string freqText = formatFrequencyText(displayHz);
 			const int shapeIndex = clamp(module->selectedShape, 0, SHAPE_COUNT - 1);
 			readoutText = string::f("%s: %s", kWyrmShapeLabels[shapeIndex], freqText.c_str());
 		}
@@ -320,7 +339,7 @@ struct WyrmEditorGlyphButton final : WyrmTooltipButton<LeviathanIconButton> {
 		const bool collapse = collapseGlyphAction ? collapseGlyphAction() : collapseGlyph;
 		const Vec center = box.size.mult(0.5f);
 		const float direction = collapse ? -1.f : 1.f;
-		const float innerX = 0.13f * box.size.x;
+		const float innerX = 0.075f * box.size.x;
 		const float outerX = 0.30f * box.size.x;
 		const float head = std::max(2.f, 0.11f * box.size.y);
 		nvgBeginPath(args.vg);
@@ -382,23 +401,23 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 	}
 
 	void layoutToScene() {
-		if (!APP || !APP->scene || !anchorDock || !editorSurface) return;
+		if (!APP || !APP->scene || !anchorDock || !anchorDock->parent || !editorSurface) return;
 		const Vec sceneSize = APP->scene->box.size;
 		const float margin = 12.f;
-		float top = margin;
-		if (APP->scene->menuBar && APP->scene->menuBar->isVisible()) {
-			top = std::max(top, APP->scene->menuBar->box.pos.y + APP->scene->menuBar->box.size.y + 6.f);
-		}
 		const float availableWidth = std::max(1.f, sceneSize.x - 2.f * margin);
-		const float availableHeight = std::max(1.f, sceneSize.y - top - margin);
 		const float dockZoom = std::max(anchorDock->getAbsoluteZoom(), 1e-6f);
+		const Vec moduleOrigin = anchorDock->parent->getAbsoluteOffset(Vec());
+		const Vec dockOrigin = anchorDock->getAbsoluteOffset(Vec());
+		const float dockBottom = dockOrigin.y + anchorDock->box.size.y * dockZoom;
+		const float availableHeight = std::max(1.f, sceneSize.y - moduleOrigin.y - margin);
 		const float desiredVerticalOverhang = mm2px(Vec(0.f, 0.45f)).y * dockZoom;
 		const float panelWidth = std::min(2.f * anchorDock->box.size.x * dockZoom, availableWidth);
-		const float editorScreenHeight = std::min(anchorDock->box.size.y * dockZoom, availableHeight);
+		const float desiredPanelHeight = std::max(1.f, dockBottom + desiredVerticalOverhang - moduleOrigin.y);
+		const float panelHeight = std::min(desiredPanelHeight, availableHeight);
 		const float verticalFrameOverhang = std::min(
 			desiredVerticalOverhang,
-			0.5f * std::max(0.f, availableHeight - editorScreenHeight));
-		const float panelHeight = editorScreenHeight + 2.f * verticalFrameOverhang;
+			0.5f * std::max(0.f, panelHeight - 1.f));
+		const float editorScreenHeight = std::max(1.f, panelHeight - 2.f * verticalFrameOverhang);
 		const Vec requiredSize(panelWidth, panelHeight);
 		if (!box.size.equals(requiredSize)) {
 			setSize(requiredSize);
@@ -414,11 +433,10 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 			editorSurface->resetVisualTransitionState();
 		}
 
-		const Vec dockOrigin = anchorDock->getAbsoluteOffset(Vec());
 		const Vec dockCenter = dockOrigin.plus(anchorDock->box.size.mult(0.5f * dockZoom));
 		setPosition(Vec(
 			dockCenter.x - 0.5f * panelWidth,
-			dockCenter.y - 0.5f * panelHeight));
+			moduleOrigin.y));
 	}
 
 	void step() override {
@@ -501,7 +519,7 @@ struct WyrmWidget : ModuleWidget {
 		Vec freqPos(17.5f, 80.0f);
 		Vec waveLeftPos(3.1315613f, 75.75f);
 		Vec waveRightPos(8.1659473f, 75.75f);
-		Vec finePos(35.56f, 80.0f);
+		Vec finePos(20.5f, 86.225996f);
 		Vec fmAttenPos(53.62f, 80.0f);
 		Vec foldPos(35.56f, 98.0f);
 		Vec expandEditorPos(58.151228f, 75.72f);
@@ -511,7 +529,8 @@ struct WyrmWidget : ModuleWidget {
 		Vec slitherSpeedPos(26.50f, 112.80f);
 		Vec slitherCvPos = slitherPos.plus(Vec(6.8f, 0.f));
 		Vec slitherSpeedCvPos = slitherSpeedPos.plus(Vec(6.8f, 0.f));
-		Vec voctPos(14.0f, 111.0f);
+		Vec voctPos(31.8f, 86.281416f);
+		Vec envModePos(42.6f, 86.281416f);
 		Vec fmPos(28.0f, 111.0f);
 		Vec syncPos(43.0f, 111.0f);
 		Vec syncModePos(50.0f, 111.0f);
@@ -532,6 +551,7 @@ struct WyrmWidget : ModuleWidget {
 		applyPt("WYRM_SLITHER_CV_INPUT", &slitherCvPos);
 		applyPt("WYRM_SLITHER_SPEED_CV_INPUT", &slitherSpeedCvPos);
 		applyPt("WYRM_VOCT_INPUT", &voctPos);
+		applyPt("WYRM_ENV_MODE_PARAM", &envModePos);
 		applyPt("WYRM_FM_INPUT", &fmPos);
 		applyPt("WYRM_SYNC_INPUT", &syncPos);
 		applyPt("WYRM_SYNC_MODE_PARAM", &syncModePos);
@@ -623,6 +643,7 @@ struct WyrmWidget : ModuleWidget {
 		};
 		addModeToggle(Wyrm::SYNC_MODE_PARAM, Wyrm::SYNC_MODE_LIGHT, syncModePos);
 		addModeToggle(Wyrm::LFO_MODE_PARAM, Wyrm::LFO_MODE_LIGHT, lfoModePos);
+		addModeToggle(Wyrm::ENV_MODE_PARAM, Wyrm::ENV_MODE_LIGHT, envModePos);
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(foldCvPos), module, Wyrm::FOLD_CV_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(slitherCvPos), module, Wyrm::SLITHER_CV_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(slitherSpeedCvPos), module, Wyrm::SLITHER_SPEED_CV_INPUT));
