@@ -499,8 +499,8 @@ struct WyrmWidget : ModuleWidget {
 		panel_svg::loadRectFromSvgMm(panelPath, "WYRM_WAVE_EDITOR", &editorRectMm);
 		math::Rect freqReadoutRectMm(Vec(editorRectMm.pos.x, editorRectMm.pos.y + editorRectMm.size.y + 1.1f), Vec(editorRectMm.size.x, 3.8f));
 		Vec freqPos(17.5f, 80.0f);
-		Vec waveLeftPos(33.06f, 75.2f);
-		Vec waveRightPos(38.06f, 75.2f);
+		Vec waveLeftPos(3.1315613f, 75.75f);
+		Vec waveRightPos(8.1659473f, 75.75f);
 		Vec finePos(35.56f, 80.0f);
 		Vec fmAttenPos(53.62f, 80.0f);
 		Vec foldPos(35.56f, 98.0f);

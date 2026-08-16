@@ -248,7 +248,7 @@
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
    inkscape:zoom="8.0000002"
-   inkscape:cx="210.99999"
+   inkscape:cx="46.749999"
    inkscape:cy="310.68749"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
@@ -442,7 +442,7 @@
   <g
    id="wyrm_components"
    inkscape:label="wyrm_components"
-   style="display:none">
+   style="display:inline">
     
     <circle
    id="WYRM_FREQ_PARAM"
@@ -488,15 +488,15 @@
    style="display:inline;fill:#000000;fill-opacity:0;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
    id="WYRM_WAVE_LEFT_PARAM"
-   cx="372"
+   cx="313.15613"
    cy="7575"
-   r="160"
+   r="270.93332"
    style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
    id="WYRM_WAVE_RIGHT_PARAM"
-   cx="872"
+   cx="816.59473"
    cy="7575"
-   r="160"
+   r="270.93332"
    style="display:inline;fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle
    id="WYRM_SLITHER_PARAM"
