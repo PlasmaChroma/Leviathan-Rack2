@@ -70,9 +70,9 @@ static const SvgAtlasRecord kSvgAtlas[] = {
 	{"res/undertow.labels.svg", 62100ull, 0x74373f499ae4964cull, 0.00999999975f},
 	{"res/undertow.panel.svg", 13045ull, 0xaa27e2253830aee4ull, 0.00999999975f},
 	{"res/undertow.svg", 23385ull, 0x48af998294802b77ull, 0.00999999975f},
-	{"res/wyrm.labels.svg", 14471ull, 0xe33f3b0385b54034ull, 0.00999999986f},
-	{"res/wyrm.panel.svg", 15194ull, 0x3a6b3d39aff6ea36ull, 0.00999999986f},
-	{"res/wyrm.svg", 28415ull, 0x96e623f23e5f49dfull, 0.00999999986f},
+	{"res/wyrm.labels.svg", 61628ull, 0x6eda67b1c2dd2025ull, 0.00999999986f},
+	{"res/wyrm.panel.svg", 15310ull, 0x47d8eb58b458c7d3ull, 0.00999999986f},
+	{"res/wyrm.svg", 28529ull, 0x1457ca0d5f291be2ull, 0.00999999986f},
 };
 
 static const AnchorAtlasRecord kAnchorAtlas[] = {
@@ -973,6 +973,7 @@ static const AnchorAtlasRecord kAnchorAtlas[] = {
 	{47, "WYRM_SLITHER_CV_INPUT", 5u, 1800.f, 11280.f, 0.f, 0.f, 0.f, 0.f, 190.f},
 	{47, "WYRM_SLITHER_SPEED_CV_INPUT", 5u, 3950.0149f, 11280.f, 0.f, 0.f, 0.f, 0.f, 190.f},
 	{47, "WYRM_VOCT_INPUT", 5u, 3180.f, 8628.1416f, 0.f, 0.f, 0.f, 0.f, 190.f},
+	{47, "WYRM_VOCT_MODE_LABEL", 5u, 3180.f, 9323.f, 0.f, 0.f, 0.f, 0.f, 20.f},
 	{47, "WYRM_ENV_MODE_PARAM", 5u, 4229.981f, 8628.1416f, 0.f, 0.f, 0.f, 0.f, 190.f},
 	{47, "WYRM_FM_INPUT", 5u, 5215.4648f, 9795.4688f, 0.f, 0.f, 0.f, 0.f, 190.f},
 	{47, "WYRM_SYNC_INPUT", 5u, 1800.f, 9954.583f, 0.f, 0.f, 0.f, 0.f, 190.f},
@@ -1003,7 +1004,7 @@ static const AnchorAtlasRecord kAnchorAtlas[] = {
 	{48, "WYRM_SLITHER_CV_INPUT", 5u, 1800.f, 11280.f, 0.f, 0.f, 0.f, 0.f, 190.f},
 	{48, "WYRM_SLITHER_SPEED_CV_INPUT", 5u, 3950.0149f, 11280.f, 0.f, 0.f, 0.f, 0.f, 190.f},
 	{48, "WYRM_VOCT_INPUT", 5u, 3180.f, 8628.1416f, 0.f, 0.f, 0.f, 0.f, 190.f},
-	{48, "WYRM_VOCT_MODE_LABEL", 5u, 3180.f, 9338.7041f, 0.f, 0.f, 0.f, 0.f, 20.f},
+	{48, "WYRM_VOCT_MODE_LABEL", 5u, 3180.f, 9323.f, 0.f, 0.f, 0.f, 0.f, 20.f},
 	{48, "WYRM_ENV_MODE_PARAM", 5u, 4229.981f, 8628.1416f, 0.f, 0.f, 0.f, 0.f, 190.f},
 	{48, "WYRM_FM_INPUT", 5u, 5215.4648f, 9795.4688f, 0.f, 0.f, 0.f, 0.f, 190.f},
 	{48, "WYRM_SYNC_INPUT", 5u, 1800.f, 9954.583f, 0.f, 0.f, 0.f, 0.f, 190.f},
@@ -1015,6 +1016,7 @@ static const AnchorAtlasRecord kAnchorAtlas[] = {
 	{48, "WYRM_WAVE_EDITOR", 3u, 3553.85015f, 4117.58711f, 78.404099f, 952.07806f, 6950.8921f, 6331.0181f, 0.f},
 	{48, "BRANDING_WAVE_LEFT_RASTER", 3u, 1318.984f, 12594.095f, 665.61f, 12338.19f, 1306.748f, 511.81f, 0.f},
 	{48, "BRANDING_WAVE_RIGHT_RASTER", 3u, 5793.048f, 12594.095f, 5139.674f, 12338.19f, 1306.748f, 511.81f, 0.f},
+	{48, "BRANDING_LEVIATHAN_LOGO_RASTER", 3u, 3556.0002f, 12455.129f, 1920.0337f, 11843.102f, 3271.933f, 1224.054f, 0.f},
 };
 
 std::string normalizePath(std::string path) {

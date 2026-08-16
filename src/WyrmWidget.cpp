@@ -169,8 +169,78 @@ struct WyrmVoctModeLabelWidget final : Widget {
 		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y + mm2px(0.3f),
+		nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y,
 			envelopeMode ? "TRIG" : "V/OCT", nullptr);
+	}
+};
+
+struct WyrmModeSwitchPulseWidget final : TransparentWidget {
+	Wyrm* module = nullptr;
+	bool modeInitialized = false;
+	bool lastEnvelopeMode = false;
+	double pulseStartedAtSec = -1.0;
+
+	void step() override {
+		if (!module) {
+			modeInitialized = false;
+			pulseStartedAtSec = -1.0;
+			return;
+		}
+
+		const bool envelopeMode = module->envelopeMode.load(std::memory_order_relaxed);
+		if (!modeInitialized) {
+			lastEnvelopeMode = envelopeMode;
+			modeInitialized = true;
+		}
+		else if (envelopeMode != lastEnvelopeMode) {
+			lastEnvelopeMode = envelopeMode;
+			pulseStartedAtSec = system::getTime();
+		}
+	}
+
+	void draw(const DrawArgs& args) override {
+		constexpr double kPulseDurationSec = 0.56;
+		if (pulseStartedAtSec < 0.0) {
+			return;
+		}
+
+		const float t = clamp(float((system::getTime() - pulseStartedAtSec) / kPulseDurationSec), 0.f, 1.f);
+		if (t >= 1.f) {
+			return;
+		}
+		const float attack = clamp(t * 12.f, 0.f, 1.f);
+		const float remaining = 1.f - t;
+		const float intensity = attack * remaining;
+		const float easedT = 1.f - remaining * remaining;
+		const Vec center = box.size.div(2.f);
+		const float glowRadius = mm2px(4.1f + 2.5f * easedT);
+
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, center.x, center.y, glowRadius);
+		nvgFillPaint(args.vg, nvgRadialGradient(
+			args.vg, center.x, center.y, mm2px(1.1f), glowRadius,
+			nvgRGBA(0xb5, 0x76, 0xff, int(std::round(205.f * intensity))),
+			nvgRGBA(0xa8, 0x62, 0xff, 0)));
+		nvgFill(args.vg);
+
+		const float ringRadius = mm2px(2.6f + 3.3f * easedT);
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, center.x, center.y, ringRadius);
+		nvgStrokeWidth(args.vg, mm2px(1.05f));
+		nvgStrokeColor(args.vg, nvgRGBA(0x96, 0x43, 0xff, int(std::round(108.f * intensity))));
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, center.x, center.y, ringRadius);
+		nvgStrokeWidth(args.vg, mm2px(0.72f));
+		nvgStrokeColor(args.vg, nvgRGBA(0x9e, 0x4e, 0xff, int(std::round(245.f * intensity))));
+		nvgStroke(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, center.x, center.y, ringRadius - mm2px(0.24f));
+		nvgStrokeWidth(args.vg, mm2px(0.25f));
+		nvgStrokeColor(args.vg, nvgRGBA(0xe2, 0xc9, 0xff, int(std::round(255.f * intensity))));
+		nvgStroke(args.vg);
 	}
 };
 
@@ -507,6 +577,7 @@ struct WyrmWidget : ModuleWidget {
 		const std::string& panelPath = splitPanel.panelPath();
 		splitPanel.addLabels("res/wyrm.labels.svg");
 		splitPanel.addPerfectWaveBranding();
+		splitPanel.addCompactLeviathanLogoBranding();
 		visual_assets::addFractalGlassOverlay(
 			this, panelPath, splitPanel.panelSurfaceEffectWidget());
 		previewBuildTimer.markPanelDone();
@@ -662,6 +733,11 @@ struct WyrmWidget : ModuleWidget {
 		addParam(createParamCentered<Eclipse2Knob>(mm2px(slitherPos), module, Wyrm::SLITHER_PARAM));
 		addParam(createParamCentered<Eclipse2Knob>(mm2px(slitherSpeedPos), module, Wyrm::SLITHER_SPEED_PARAM));
 
+		auto* voctModePulse = new WyrmModeSwitchPulseWidget();
+		voctModePulse->module = module;
+		voctModePulse->box.size = mm2px(Vec(16.f, 16.f));
+		voctModePulse->box.pos = mm2px(voctPos).minus(voctModePulse->box.size.mult(0.5f));
+		addChild(voctModePulse);
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(voctPos), module, Wyrm::VOCT_INPUT));
 		auto* voctModeLabel = new WyrmVoctModeLabelWidget();
 		voctModeLabel->module = module;

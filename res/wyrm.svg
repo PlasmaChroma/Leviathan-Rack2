@@ -537,7 +537,7 @@
     <circle
    id="WYRM_VOCT_MODE_LABEL"
    cx="3180"
-   cy="9313.0215"
+   cy="9323"
    r="20"
    style="fill:#00ff88;fill-opacity:1;stroke:none" />
     <circle
@@ -605,7 +605,7 @@
    id="reworked_LEVIATHAN_LOGO"
    x="3554.0957"
    y="12598.223"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient300);fill-rule:evenodd;stroke-width:37.088"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:none;fill:url(#linearGradient300);fill-rule:evenodd;stroke-width:37.088"
    xml:space="preserve"
    inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
         
@@ -806,5 +806,11 @@
    y="12338.190"
    width="1306.748"
    height="511.810" />
+  <rect
+   id="BRANDING_LEVIATHAN_LOGO_RASTER"
+   x="1920.0337"
+   y="11843.102"
+   width="3271.933"
+   height="1224.054" />
 </g>
 </svg>
