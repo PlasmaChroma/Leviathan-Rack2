@@ -248,8 +248,8 @@
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
    inkscape:zoom="3.9999998"
-   inkscape:cx="154.75001"
-   inkscape:cy="318.12502"
+   inkscape:cx="179.00001"
+   inkscape:cy="109.12501"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
@@ -647,7 +647,7 @@
    id="reworked_module_description"
    x="3555.2595"
    y="815.19421"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:none;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan2"
@@ -892,27 +892,27 @@
    style="display:none">
   <rect
    id="BRANDING_WAVE_LEFT_RASTER"
-   x="665.610"
-   y="12338.190"
+   x="665.60999"
+   y="12338.19"
    width="1306.748"
-   height="511.810" />
+   height="511.81" />
   <rect
    id="BRANDING_WAVE_RIGHT_RASTER"
-   x="5139.674"
-   y="12338.190"
+   x="5139.6738"
+   y="12338.19"
    width="1306.748"
-   height="511.810" />
+   height="511.81" />
   <rect
    id="BRANDING_LEVIATHAN_LOGO_RASTER"
    x="1920.0337"
    y="11843.102"
-   width="3271.933"
+   width="3271.9331"
    height="1224.054" />
   <rect
    id="BIFURX_TITLE_RASTER"
    x="2266.0002"
-   y="-26.0554"
-   width="2580.000"
-   height="946.667" />
+   y="3.9000001"
+   width="2580"
+   height="946.66699" />
 </g>
 </svg>
