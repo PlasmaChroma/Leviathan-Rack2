@@ -77,7 +77,7 @@
     <path d="m 5222.5176,8493.414 -2.2633,1293.6516" stroke="url(#accentGrad)" stroke-width="40.7513" stroke-linecap="round" opacity="0.55" fill="none" id="FM_purple_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
     <path d="m 6434.5391,8474.0757 -2.2633,1293.6516" stroke="url(#accentGrad)" stroke-width="40.7513" stroke-linecap="round" opacity="0.55" fill="none" id="fold_line" style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1" sodipodi:nodetypes="cc" />
   </g>
-  <g id="wyrm_components" inkscape:label="wyrm_components" style="display:inline">
+  <g id="wyrm_components" inkscape:label="wyrm_components" style="display:none">
     <circle id="WYRM_FREQ_PARAM" cx="814.55664" cy="8622.5996" r="260" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_COARSE_STEP_MODE_PARAM" cx="814.55664" cy="9954.583" r="190" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
     <circle id="WYRM_FINE_PARAM" cx="2139.9653" cy="8622.5996" r="220" style="fill:none;stroke:#00ff88;stroke-width:24;stroke-opacity:1" />
@@ -105,8 +105,9 @@
   </g>
   <rect id="WYRM_WAVE_EDITOR" x="78.404099" y="952.07806" width="6950.8921" height="6331.0181" style="display:inline;fill:none;stroke:#5841bf;stroke-width:40.3259;stroke-dasharray:none;stroke-opacity:1" />
   <g id="perfect_wave_raster_anchors" style="display:none">
-    <rect id="BRANDING_WAVE_LEFT_RASTER" x="665.610" y="12338.190" width="1306.748" height="511.810" />
-    <rect id="BRANDING_WAVE_RIGHT_RASTER" x="5139.674" y="12338.190" width="1306.748" height="511.810" />
-    <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="1920.0337" y="11843.102" width="3271.933" height="1224.054" />
+    <rect id="BRANDING_WAVE_LEFT_RASTER" x="665.60999" y="12338.19" width="1306.748" height="511.81" />
+    <rect id="BRANDING_WAVE_RIGHT_RASTER" x="5139.6738" y="12338.19" width="1306.748" height="511.81" />
+    <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="1920.0337" y="11843.102" width="3271.9331" height="1224.054" />
+    <rect id="WYRM_TITLE_RASTER" x="2269.3296" y="74.900002" width="2573.3408" height="804.66699" />
   </g>
 </svg>

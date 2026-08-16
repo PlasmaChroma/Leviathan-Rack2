@@ -580,6 +580,10 @@ struct WyrmWidget : ModuleWidget {
 		splitPanel.addCompactLeviathanLogoBranding();
 		visual_assets::addFractalGlassOverlay(
 			this, panelPath, splitPanel.panelSurfaceEffectWidget());
+		math::Rect titleRasterRectMm(Vec(22.693296f, 0.449446f), Vec(25.733408f, 8.04667f));
+		panel_svg::loadRectFromSvgMm(panelPath, "WYRM_TITLE_RASTER", &titleRasterRectMm);
+		addChild(visual_assets::createAspectFitRasterImageWidget(
+			"res/icon/Wyrm-CS-96c.png", titleRasterRectMm));
 		previewBuildTimer.markPanelDone();
 		try {
 			ageSigilSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/Vahdrim'Keth.svg"));

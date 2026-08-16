@@ -1825,15 +1825,10 @@ struct IntegralFluxWidget : ModuleWidget {
 		{
 			const Vec logoPosMm(27.8f, 120.25f);
 			const Vec logoSizeMm(46.0f, 7.85f);
-			widget::FramebufferWidget* logoFb = new widget::FramebufferWidget();
-			logoFb->box.pos = mm2px(logoPosMm);
-			logoFb->box.size = mm2px(logoSizeMm);
-			logoFb->dirtyOnSubpixelChange = false;
 			Widget* logo = visual_assets::createAspectFitRasterImageWidget(
 				"res/icon/Leviathan_Logo.png",
-				math::Rect(Vec(), logoSizeMm));
-			logoFb->addChild(logo);
-			addChild(logoFb);
+				math::Rect(logoPosMm, logoSizeMm));
+			addChild(logo);
 
 			IntegralFluxLogoCrystalButton* crystalButton =
 				new IntegralFluxLogoCrystalButton();

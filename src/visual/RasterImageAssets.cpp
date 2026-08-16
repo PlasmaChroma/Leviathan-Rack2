@@ -368,11 +368,16 @@ Widget* createAspectFitRasterImageWidget(
 	math::Rect rectMm,
 	bool flipHorizontal,
 	float opacity) {
+	widget::FramebufferWidget* framebuffer = new widget::FramebufferWidget();
+	framebuffer->box.pos = mm2px(rectMm.pos);
+	framebuffer->box.size = mm2px(rectMm.size);
+	framebuffer->dirtyOnSubpixelChange = false;
+
 	AspectFitRasterImageWidget* image = new AspectFitRasterImageWidget(
 		imageAssetPath ? imageAssetPath : "", flipHorizontal, opacity);
-	image->box.pos = mm2px(rectMm.pos);
-	image->box.size = mm2px(rectMm.size);
-	return image;
+	image->box.size = framebuffer->box.size;
+	framebuffer->addChild(image);
+	return framebuffer;
 }
 
 int addMirroredPanelRasterImages(

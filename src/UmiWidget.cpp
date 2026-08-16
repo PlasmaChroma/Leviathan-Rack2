@@ -35,9 +35,8 @@ struct UmiPanelArtWidget final : TransparentWidget {
 
 	bool ensureImage(NVGcontext* vg) {
 		if (!vg) return false;
-		// Keep the initial Umi distribution lean: the 2x panel is used at every
-		// display density until a higher-resolution runtime asset is re-enabled.
-		const char* relativePath = "res/Umi/panel_base_2x.png";
+		// Use the authored panel raster at every display density.
+		const char* relativePath = "res/Umi/Panel.jpg";
 		const std::string desiredPath = asset::plugin(pluginInstance, relativePath);
 		if (ownerVg == vg && loadedPath == desiredPath && imageHandle >= 0 &&
 			imageWidth > 0 && imageHeight > 0 &&

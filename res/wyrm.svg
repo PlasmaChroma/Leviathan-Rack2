@@ -247,9 +247,9 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="8.0000002"
-   inkscape:cx="114.5"
-   inkscape:cy="351.06249"
+   inkscape:zoom="2.0000001"
+   inkscape:cx="26.499999"
+   inkscape:cy="230.74999"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
@@ -442,7 +442,7 @@
   <g
    id="wyrm_components"
    inkscape:label="wyrm_components"
-   style="display:inline">
+   style="display:none">
     
     <circle
    id="WYRM_FREQ_PARAM"
@@ -595,7 +595,7 @@
    id="reworked_module_title_text"
    x="3541.4487"
    y="447.27814"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient500);stroke-width:28.1347"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:529.167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:none;fill:url(#linearGradient500);stroke-width:28.1347"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan1"
@@ -644,7 +644,7 @@
    id="reworked_module_description"
    x="3555.2595"
    y="815.19421"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:none;fill:#ffffff"
    xml:space="preserve"><tspan
      sodipodi:role="line"
      id="tspan16"
@@ -796,21 +796,27 @@
    style="display:none">
   <rect
    id="BRANDING_WAVE_LEFT_RASTER"
-   x="665.610"
-   y="12338.190"
+   x="665.60999"
+   y="12338.19"
    width="1306.748"
-   height="511.810" />
+   height="511.81" />
   <rect
    id="BRANDING_WAVE_RIGHT_RASTER"
-   x="5139.674"
-   y="12338.190"
+   x="5139.6738"
+   y="12338.19"
    width="1306.748"
-   height="511.810" />
+   height="511.81" />
   <rect
    id="BRANDING_LEVIATHAN_LOGO_RASTER"
    x="1920.0337"
    y="11843.102"
-   width="3271.933"
+   width="3271.9331"
    height="1224.054" />
+  <rect
+   id="WYRM_TITLE_RASTER"
+   x="2269.3296"
+   y="74.900002"
+   width="2573.3408"
+   height="804.66699" />
 </g>
 </svg>

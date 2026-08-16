@@ -70,9 +70,9 @@ static const SvgAtlasRecord kSvgAtlas[] = {
 	{"res/undertow.labels.svg", 62100ull, 0x74373f499ae4964cull, 0.00999999975f},
 	{"res/undertow.panel.svg", 13045ull, 0xaa27e2253830aee4ull, 0.00999999975f},
 	{"res/undertow.svg", 23385ull, 0x48af998294802b77ull, 0.00999999975f},
-	{"res/wyrm.labels.svg", 61628ull, 0x6eda67b1c2dd2025ull, 0.00999999986f},
-	{"res/wyrm.panel.svg", 15310ull, 0x47d8eb58b458c7d3ull, 0.00999999986f},
-	{"res/wyrm.svg", 28529ull, 0x1457ca0d5f291be2ull, 0.00999999986f},
+	{"res/wyrm.labels.svg", 48316ull, 0xb77e7a9fb00590ddull, 0.00999999986f},
+	{"res/wyrm.panel.svg", 15520ull, 0x6cf8678714efbb71ull, 0.00999999986f},
+	{"res/wyrm.svg", 28637ull, 0xe523a7dd17521cb7ull, 0.00999999986f},
 };
 
 static const AnchorAtlasRecord kAnchorAtlas[] = {
@@ -985,6 +985,8 @@ static const AnchorAtlasRecord kAnchorAtlas[] = {
 	{47, "WYRM_WAVE_EDITOR", 3u, 3553.85015f, 4117.58711f, 78.404099f, 952.07806f, 6950.8921f, 6331.0181f, 0.f},
 	{47, "BRANDING_WAVE_LEFT_RASTER", 3u, 1318.984f, 12594.095f, 665.61f, 12338.19f, 1306.748f, 511.81f, 0.f},
 	{47, "BRANDING_WAVE_RIGHT_RASTER", 3u, 5793.048f, 12594.095f, 5139.674f, 12338.19f, 1306.748f, 511.81f, 0.f},
+	{47, "BRANDING_LEVIATHAN_LOGO_RASTER", 3u, 3556.0002f, 12455.129f, 1920.0337f, 11843.102f, 3271.933f, 1224.054f, 0.f},
+	{47, "WYRM_TITLE_RASTER", 3u, 3556.f, 447.2781f, 2042.2701f, -26.0554f, 3027.4598f, 946.667f, 0.f},
 	{48, "black_background", 3u, 4553.82826f, 7441.0425f, 986.18201f, 997.229f, 7135.2925f, 12887.627f, 0.f},
 	{48, "gray_outline", 3u, 6082.8187f, 7441.0425f, 1096.182f, 1107.229f, 9973.2734f, 12667.627f, 0.f},
 	{48, "outputs", 3u, 5811.7012f, 11440.3851f, 4588.1016f, 10720.973f, 2447.1992f, 1438.8242f, 0.f},
@@ -1017,6 +1019,7 @@ static const AnchorAtlasRecord kAnchorAtlas[] = {
 	{48, "BRANDING_WAVE_LEFT_RASTER", 3u, 1318.984f, 12594.095f, 665.61f, 12338.19f, 1306.748f, 511.81f, 0.f},
 	{48, "BRANDING_WAVE_RIGHT_RASTER", 3u, 5793.048f, 12594.095f, 5139.674f, 12338.19f, 1306.748f, 511.81f, 0.f},
 	{48, "BRANDING_LEVIATHAN_LOGO_RASTER", 3u, 3556.0002f, 12455.129f, 1920.0337f, 11843.102f, 3271.933f, 1224.054f, 0.f},
+	{48, "WYRM_TITLE_RASTER", 3u, 3556.f, 447.2781f, 2269.3296f, 44.9446f, 2573.3408f, 804.667f, 0.f},
 };
 
 std::string normalizePath(std::string path) {
