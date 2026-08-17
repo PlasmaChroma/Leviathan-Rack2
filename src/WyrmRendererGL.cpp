@@ -1,6 +1,5 @@
 #include "Wyrm.hpp"
 #include "WyrmRenderGeometry.hpp"
-#include "GlLifecycleUtils.hpp"
 
 #include <array>
 #include <chrono>
@@ -25,10 +24,6 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	GLint bodyShaderSoftnessLoc = -1;
 	bool bodyShaderInitAttempted = false;
 	bool bodyShaderReady = false;
-	GLuint bodyRtFbo = 0;
-	GLuint bodyRtTex = 0;
-	int bodyRtW = 0;
-	int bodyRtH = 0;
 	bool redrawStateInitialized = false;
 	int lastRenderMode = -1;
 	uint32_t lastWaveVersion = 0;
@@ -59,23 +54,12 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		bodyShaderReady = false;
 	}
 
-	void resetBodyRenderTargetState() {
-		bodyRtFbo = 0;
-		bodyRtTex = 0;
-		bodyRtW = 0;
-		bodyRtH = 0;
-	}
-
 	void validateGlResourcesForCurrentContext() {
 		if (waveColumnTexture != 0 && !glIsTexture(waveColumnTexture)) {
 			resetWaveColumnTextureState();
 		}
 		if (bodyShaderReady && (bodyShaderProgram == 0 || !glIsProgram(bodyShaderProgram))) {
 			resetBodyShaderState();
-		}
-		if ((bodyRtTex != 0 || bodyRtFbo != 0) &&
-			!gl_lifecycle::isValidTextureFramebufferPair(bodyRtTex, bodyRtFbo)) {
-			resetBodyRenderTargetState();
 		}
 	}
 
@@ -149,53 +133,6 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			glDeleteProgram(bodyShaderProgram);
 			bodyShaderProgram = 0;
 		}
-	}
-
-	void ensureBodyRenderTarget(int w, int h) {
-		w = std::max(1, w);
-		h = std::max(1, h);
-		if (bodyRtTex != 0 && bodyRtW == w && bodyRtH == h && bodyRtFbo != 0) {
-			return;
-		}
-		GLint previousFbo = 0;
-		glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFbo);
-		if (bodyRtFbo != 0) {
-			glDeleteFramebuffers(1, &bodyRtFbo);
-			bodyRtFbo = 0;
-		}
-		if (bodyRtTex != 0) {
-			glDeleteTextures(1, &bodyRtTex);
-			bodyRtTex = 0;
-		}
-		glGenTextures(1, &bodyRtTex);
-		glBindTexture(GL_TEXTURE_2D, bodyRtTex);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-		glBindTexture(GL_TEXTURE_2D, 0);
-
-		glGenFramebuffers(1, &bodyRtFbo);
-		glBindFramebuffer(GL_FRAMEBUFFER, bodyRtFbo);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bodyRtTex, 0);
-		const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-		glBindFramebuffer(GL_FRAMEBUFFER, GLuint(previousFbo));
-		if (status != GL_FRAMEBUFFER_COMPLETE) {
-			glDeleteFramebuffers(1, &bodyRtFbo);
-			bodyRtFbo = 0;
-			glDeleteTextures(1, &bodyRtTex);
-			bodyRtTex = 0;
-			bodyRtW = 0;
-			bodyRtH = 0;
-			return;
-		}
-		bodyRtW = w;
-		bodyRtH = h;
-	}
-
-	static void computeRockClearance(Vec size, float* clearance, float* phaseClearance) {
-		wyrm_render::visualRockClearance(size, clearance, phaseClearance);
 	}
 
 	static NVGcolor mixColor(NVGcolor a, NVGcolor b, float t) {
@@ -408,128 +345,6 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		return off;
 	}
 
-	static void drawBodyStripWithOffsets(const std::vector<Vec>& pts, const std::vector<Vec>& off, float halfW, const NVGcolor& color, bool shaderPath) {
-		if (pts.size() < 2 || off.size() != pts.size()) return;
-		glColor4f(color.r, color.g, color.b, color.a);
-		if (shaderPath) {
-			glBegin(GL_TRIANGLE_STRIP);
-			for (size_t i = 0; i < pts.size(); ++i) {
-				const Vec l = pts[i].minus(off[i]);
-				const Vec r = pts[i].plus(off[i]);
-				glTexCoord2f(0.f, 0.f);
-				glVertex2f(l.x, l.y);
-				glTexCoord2f(1.f, 0.f);
-				glVertex2f(r.x, r.y);
-			}
-			glEnd();
-			return;
-		}
-
-		glBegin(GL_QUADS);
-		for (size_t i = 0; i + 1 < pts.size(); ++i) {
-			Vec seg = pts[i + 1].minus(pts[i]);
-			const float segLen = seg.norm();
-			if (segLen < 1e-4f) continue;
-			const Vec t = seg.div(segLen);
-			const float extend = std::min(0.55f, 0.22f * halfW + 0.10f);
-			const Vec ext = t.mult(extend);
-
-			const Vec aL = pts[i].minus(off[i]);
-			const Vec aR = pts[i].plus(off[i]);
-			const Vec bL = pts[i + 1].minus(off[i + 1]);
-			const Vec bR = pts[i + 1].plus(off[i + 1]);
-			const Vec aLe = aL.minus(ext);
-			const Vec aRe = aR.minus(ext);
-			const Vec bLe = bL.plus(ext);
-			const Vec bRe = bR.plus(ext);
-			if (shaderPath) glTexCoord2f(0.f, 0.f);
-			glVertex2f(aLe.x, aLe.y);
-			if (shaderPath) glTexCoord2f(1.f, 0.f);
-			glVertex2f(aRe.x, aRe.y);
-			if (shaderPath) glTexCoord2f(1.f, 1.f);
-			glVertex2f(bRe.x, bRe.y);
-			if (shaderPath) glTexCoord2f(0.f, 1.f);
-			glVertex2f(bLe.x, bLe.y);
-			}
-			glEnd();
-		}
-	static void drawBodyStripFeatherWithOffsets(const std::vector<Vec>& pts,
-	                                            const std::vector<Vec>& innerOff,
-	                                            const std::vector<Vec>& outerOff,
-	                                            float innerW,
-	                                            const NVGcolor& color,
-	                                            float edgeAlphaScale,
-	                                            bool shaderPath) {
-		if (pts.size() < 2 || innerOff.size() != pts.size() || outerOff.size() != pts.size() || innerW <= 1e-5f) return;
-		const float edgeA = clamp(color.a * edgeAlphaScale, 0.f, 1.f);
-
-		// Left feather quads.
-		glBegin(GL_QUADS);
-		for (size_t i = 0; i + 1 < pts.size(); ++i) {
-			Vec seg = pts[i + 1].minus(pts[i]);
-			const float segLen = seg.norm();
-			if (segLen < 1e-4f) continue;
-			const Vec t = seg.div(segLen);
-			const float extend = std::min(0.50f, 0.18f * innerW + 0.08f);
-			const Vec ext = t.mult(extend);
-
-			const Vec aI = pts[i].minus(innerOff[i]);
-			const Vec bI = pts[i + 1].minus(innerOff[i + 1]);
-			const Vec aO = pts[i].minus(outerOff[i]);
-			const Vec bO = pts[i + 1].minus(outerOff[i + 1]);
-			const Vec aIe = aI.minus(ext);
-			const Vec bIe = bI.plus(ext);
-			const Vec aOe = aO.minus(ext);
-			const Vec bOe = bO.plus(ext);
-			glColor4f(color.r, color.g, color.b, edgeA);
-			if (shaderPath) glTexCoord2f(0.f, 0.f);
-			glVertex2f(aIe.x, aIe.y);
-			glColor4f(color.r, color.g, color.b, edgeA);
-			if (shaderPath) glTexCoord2f(0.f, 1.f);
-			glVertex2f(bIe.x, bIe.y);
-			glColor4f(color.r, color.g, color.b, 0.f);
-			if (shaderPath) glTexCoord2f(1.f, 1.f);
-			glVertex2f(bOe.x, bOe.y);
-			glColor4f(color.r, color.g, color.b, 0.f);
-			if (shaderPath) glTexCoord2f(1.f, 0.f);
-			glVertex2f(aOe.x, aOe.y);
-		}
-		glEnd();
-
-		// Right feather quads.
-		glBegin(GL_QUADS);
-		for (size_t i = 0; i + 1 < pts.size(); ++i) {
-			Vec seg = pts[i + 1].minus(pts[i]);
-			const float segLen = seg.norm();
-			if (segLen < 1e-4f) continue;
-			const Vec t = seg.div(segLen);
-			const float extend = std::min(0.50f, 0.18f * innerW + 0.08f);
-			const Vec ext = t.mult(extend);
-
-			const Vec aI = pts[i].plus(innerOff[i]);
-			const Vec bI = pts[i + 1].plus(innerOff[i + 1]);
-			const Vec aO = pts[i].plus(outerOff[i]);
-			const Vec bO = pts[i + 1].plus(outerOff[i + 1]);
-			const Vec aIe = aI.minus(ext);
-			const Vec bIe = bI.plus(ext);
-			const Vec aOe = aO.minus(ext);
-			const Vec bOe = bO.plus(ext);
-			glColor4f(color.r, color.g, color.b, edgeA);
-			if (shaderPath) glTexCoord2f(0.f, 0.f);
-			glVertex2f(aIe.x, aIe.y);
-			glColor4f(color.r, color.g, color.b, edgeA);
-			if (shaderPath) glTexCoord2f(0.f, 1.f);
-			glVertex2f(bIe.x, bIe.y);
-			glColor4f(color.r, color.g, color.b, 0.f);
-			if (shaderPath) glTexCoord2f(1.f, 1.f);
-			glVertex2f(bOe.x, bOe.y);
-			glColor4f(color.r, color.g, color.b, 0.f);
-			if (shaderPath) glTexCoord2f(1.f, 0.f);
-			glVertex2f(aOe.x, aOe.y);
-			}
-			glEnd();
-	}
-
 	int bodySampleCountForSize(Vec size, bool shaderPath) {
 		return module
 			? wyrm_render::glBodySampleCount(
@@ -626,49 +441,10 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		}
 	}
 
-	void drawBodyMaskGl(Vec size) {
-		if (!module || module->pointCount < 2) return;
-		const int sampleCount = bodySampleCountForSize(size, false);
-		if (!geometryCache) {
-			geometryCache = std::make_shared<wyrm_render::DisplayGeometryCache>();
-		}
-		geometryCache->ensure(module, size, sampleCount);
-		const std::vector<Vec>& samples = geometryCache->points;
-		if (samples.size() < 2u) return;
-		std::vector<std::pair<float, std::vector<Vec>>> offsetCache;
-		auto getOffsets = [&](float halfW) -> const std::vector<Vec>& {
-			for (auto& e : offsetCache) {
-				if (std::fabs(e.first - halfW) <= 1e-6f) {
-					return e.second;
-				}
-			}
-			offsetCache.emplace_back(halfW, computeBodyJoinOffsets(samples, halfW));
-			return offsetCache.back().second;
-		};
-
-		// Phase 5B refined: soft alpha mask (core + graded fringe), not binary coverage.
-		// This preserves contour detail better when compositing back to panel space.
-		const float w0 = 3.15f;
-		const float h0 = 0.5f * w0;
-		const std::vector<Vec>& o0 = getOffsets(h0);
-		drawBodyStripWithOffsets(samples, o0, h0, nvgRGBAf(1.f, 1.f, 1.f, 0.88f), false);
-		const float w1 = 1.85f;
-		const float h1 = 0.5f * w1;
-		const std::vector<Vec>& o1 = getOffsets(h1);
-		drawBodyStripWithOffsets(samples, o1, h1, nvgRGBAf(1.f, 1.f, 1.f, 0.74f), false);
-		const float w2 = 1.18f;
-		const float h2 = 0.5f * w2;
-		drawBodyStripWithOffsets(samples, getOffsets(h2), h2, nvgRGBAf(1.f, 1.f, 1.f, 1.00f), false);
-		drawBodyStripFeatherWithOffsets(samples, o0, getOffsets(h0 + 0.82f), h0, nvgRGBAf(1.f, 1.f, 1.f, 0.44f), 0.78f, false);
-		drawBodyStripFeatherWithOffsets(samples, o1, getOffsets(h1 + 0.52f), h1, nvgRGBAf(1.f, 1.f, 1.f, 0.40f), 0.72f, false);
-		drawBodyStripFeatherWithOffsets(samples, o0, getOffsets(h0 + 1.45f), h0, nvgRGBAf(1.f, 1.f, 1.f, 0.20f), 0.58f, false);
-	}
-
 	~WyrmGlRendererWidget() override {
 		// DAW plugin editors can destroy/recreate their GL context around the
 		// Rack UI. Avoid driver calls from widget teardown; resources are
 		// reclaimed by the editor/context owner.
-		resetBodyRenderTargetState();
 		resetBodyShaderState();
 		resetWaveColumnTextureState();
 	}
@@ -759,99 +535,13 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		const bool shaderPath = useShdr && bodyShaderReady;
 
 		drawWaveColumnsGl(box.size, shaderPath);
-		// SHDR now draws direct shader-softened strips. Keep RT path disabled.
-		const bool useBodyRt = false;
-		// Legacy RT sizing retained for quick rollback.
-		const float rtScale = useShdr ? 1.25f : 1.0f;
-		const int rtW = std::max(1, int(std::lround(box.size.x * rtScale)));
-		const int rtH = std::max(1, int(std::lround(box.size.y * rtScale)));
-		if (useBodyRt) {
-			ensureBodyRenderTarget(rtW, rtH);
+		if (shaderPath) {
+			glUseProgram(bodyShaderProgram);
+			glUniform1f(bodyShaderSoftnessLoc, 0.205f);
 		}
-		if (useBodyRt && bodyRtFbo != 0 && bodyRtTex != 0) {
-			GLint previousFbo = 0;
-			glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFbo);
-			const GLboolean scissorWasEnabled = glIsEnabled(GL_SCISSOR_TEST);
-			const GLboolean cullWasEnabled = glIsEnabled(GL_CULL_FACE);
-			if (scissorWasEnabled) glDisable(GL_SCISSOR_TEST);
-			if (cullWasEnabled) glDisable(GL_CULL_FACE);
-
-			glBindFramebuffer(GL_FRAMEBUFFER, bodyRtFbo);
-			glViewport(0, 0, bodyRtW, bodyRtH);
-			glClearColor(0.f, 0.f, 0.f, 0.f);
-			glClear(GL_COLOR_BUFFER_BIT);
-			glMatrixMode(GL_PROJECTION);
-			glPushMatrix();
-			glLoadIdentity();
-			glOrtho(0.0, bodyRtW, bodyRtH, 0.0, -1.0, 1.0);
-			glMatrixMode(GL_MODELVIEW);
-			glPushMatrix();
-			glLoadIdentity();
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-			glColor4f(1.f, 1.f, 1.f, 1.f);
-			drawBodyMaskGl(Vec(float(bodyRtW), float(bodyRtH)));
-			glMatrixMode(GL_MODELVIEW);
-			glPopMatrix();
-			glMatrixMode(GL_PROJECTION);
-			glPopMatrix();
-			glBindFramebuffer(GL_FRAMEBUFFER, GLuint(previousFbo));
-			glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
-
-			glEnable(GL_TEXTURE_2D);
-			glBindTexture(GL_TEXTURE_2D, bodyRtTex);
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-			// Composite color layers from the mask in main framebuffer.
-			glColor4f(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 0.68f);
-			glBegin(GL_TRIANGLE_STRIP);
-			glTexCoord2f(0.f, 1.f); glVertex2f(0.f, 0.f);
-			glTexCoord2f(1.f, 1.f); glVertex2f(box.size.x, 0.f);
-			glTexCoord2f(0.f, 0.f); glVertex2f(0.f, box.size.y);
-			glTexCoord2f(1.f, 0.f); glVertex2f(box.size.x, box.size.y);
-			glEnd();
-
-			glColor4f(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 0.66f);
-			glBegin(GL_TRIANGLE_STRIP);
-			glTexCoord2f(0.f, 1.f); glVertex2f(0.f, 0.f);
-			glTexCoord2f(1.f, 1.f); glVertex2f(box.size.x, 0.f);
-			glTexCoord2f(0.f, 0.f); glVertex2f(0.f, box.size.y);
-			glTexCoord2f(1.f, 0.f); glVertex2f(box.size.x, box.size.y);
-			glEnd();
-
-			glColor4f(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 0.72f);
-			glBegin(GL_TRIANGLE_STRIP);
-			glTexCoord2f(0.f, 1.f); glVertex2f(0.f, 0.f);
-			glTexCoord2f(1.f, 1.f); glVertex2f(box.size.x, 0.f);
-			glTexCoord2f(0.f, 0.f); glVertex2f(0.f, box.size.y);
-			glTexCoord2f(1.f, 0.f); glVertex2f(box.size.x, box.size.y);
-			glEnd();
-			if (useShdr) {
-				// SHDR polish taps.
-				glColor4f(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 0.13f);
-				const float dx = 0.6f / std::max(1.f, box.size.x);
-				const float dy = 0.6f / std::max(1.f, box.size.y);
-				glBegin(GL_TRIANGLE_STRIP);
-				glTexCoord2f(0.f + dx, 1.f - dy); glVertex2f(0.f, 0.f);
-				glTexCoord2f(1.f + dx, 1.f - dy); glVertex2f(box.size.x, 0.f);
-				glTexCoord2f(0.f + dx, 0.f - dy); glVertex2f(0.f, box.size.y);
-				glTexCoord2f(1.f + dx, 0.f - dy); glVertex2f(box.size.x, box.size.y);
-				glEnd();
-			}
-			glBindTexture(GL_TEXTURE_2D, 0);
-			glDisable(GL_TEXTURE_2D);
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-			if (scissorWasEnabled) glEnable(GL_SCISSOR_TEST);
-			if (cullWasEnabled) glEnable(GL_CULL_FACE);
-		}
-		else {
-			if (shaderPath) {
-				glUseProgram(bodyShaderProgram);
-				glUniform1f(bodyShaderSoftnessLoc, 0.205f);
-			}
-			drawBodyGl(box.size, shaderPath, true, false);
-			if (shaderPath) {
-				glUseProgram(0);
-			}
+		drawBodyGl(box.size, shaderPath, true, false);
+		if (shaderPath) {
+			glUseProgram(0);
 		}
 
 		glMatrixMode(GL_MODELVIEW);

@@ -2,7 +2,6 @@
 #include "WyrmRenderGeometry.hpp"
 #include "DebugTerminalTransport.hpp"
 #include "NvgGraphicsLifecycle.hpp"
-#include "visual/VisualAssets.hpp"
 
 #include <chrono>
 #include <unordered_map>
@@ -573,7 +572,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		if (pointEditActive || draggingRock >= 0) {
 			dirty = true;
 		}
-		if (effectiveSlitherAmount() > 1e-5f) {
+		if (renderModeNow == WYRM_RENDER_NANOVG && effectiveSlitherAmount() > 1e-5f) {
 			dirty = true;
 		}
 		lastWaveVersion = waveVersionNow;
@@ -1005,25 +1004,9 @@ struct WyrmWaveEditor : TransparentWidget {
 struct WyrmEditorAnimationOverlay final : TransparentWidget {
 	Wyrm* module = nullptr;
 	bool tracerDotVisible = false;
-	std::string progressTexturePath;
-	std::shared_ptr<window::Image> progressTextureImage;
-	NVGcontext* progressTextureContext = nullptr;
 
 	explicit WyrmEditorAnimationOverlay(Wyrm* m)
-		: module(m)
-		, progressTexturePath(asset::plugin(pluginInstance, "res/icon/sand_white_cs_96c.png")) {
-	}
-
-	void onContextCreate(const ContextCreateEvent& e) override {
-		progressTextureImage.reset();
-		progressTextureContext = e.vg;
-		TransparentWidget::onContextCreate(e);
-	}
-
-	void onContextDestroy(const ContextDestroyEvent& e) override {
-		progressTextureImage.reset();
-		progressTextureContext = nullptr;
-		TransparentWidget::onContextDestroy(e);
+		: module(m) {
 	}
 
 	float pointEdgeInset() const {
@@ -1117,25 +1100,6 @@ struct WyrmEditorAnimationOverlay final : TransparentWidget {
 			base, base + slither, phase, clearance, phaseClearance);
 	}
 
-	int progressTextureHandle(NVGcontext* vg) {
-		if (!vg || !APP || !APP->window) {
-			return -1;
-		}
-		if (progressTextureContext != vg) {
-			progressTextureImage.reset();
-			progressTextureContext = vg;
-		}
-		if (!progressTextureImage) {
-			progressTextureImage = APP->window->loadImage(progressTexturePath);
-		}
-		if (!progressTextureImage || progressTextureImage->handle < 0) {
-			return -1;
-		}
-		const int mipmapHandle = visual_assets::loadRasterMipmapHandle(
-			vg, progressTextureImage, progressTexturePath);
-		return mipmapHandle >= 0 ? mipmapHandle : progressTextureImage->handle;
-	}
-
 	void drawEnvelopeProgress(const DrawArgs& args, float phase) {
 		const float progressX = pointEdgeInset();
 		const float progressWidth = clamp(phase, 0.f, 1.f) * pointDrawWidth();
@@ -1143,19 +1107,11 @@ struct WyrmEditorAnimationOverlay final : TransparentWidget {
 			return;
 		}
 
-		const int progressHandle = progressTextureHandle(args.vg);
 		nvgSave(args.vg);
 		nvgIntersectScissor(args.vg, progressX, 0.f, progressWidth, box.size.y);
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, progressX, 0.f, pointDrawWidth(), box.size.y);
-		if (progressHandle >= 0) {
-			nvgFillPaint(args.vg, nvgImagePattern(
-				args.vg, progressX, 0.f, pointDrawWidth(), box.size.y,
-				0.f, progressHandle, 0.32f));
-		}
-		else {
-			nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 34));
-		}
+		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 42));
 		nvgFill(args.vg);
 		nvgRestore(args.vg);
 	}
