@@ -81,21 +81,22 @@ WyrmEditorSurface
     waveform fill and body in OPENGL / OPENGL_SHDR
   cached NanoVG editor framebuffer
     waveform fill and body in NANOVG
-    rocks and editor interaction graphics in every mode
+    base rocks in every mode
   live NanoVG overlay
-    tracer and envelope progress
+    rock hover/drag decoration, tracer, and envelope progress
 ```
 
-The GL and NanoVG editor paths share `DisplayGeometryCache`. Slither changes the
-display curve every frame, but the cached NanoVG editor is currently also dirtied
-every frame in GL modes. The static background framebuffer is independent and is
-only dirtied on size changes.
+The GL and NanoVG editor paths share `DisplayGeometryCache`. GL Slither animation
+invalidates only the GL framebuffer; NanoVG Slither invalidates the NanoVG editor.
+Hover-only interaction stays in the live overlay. The static background
+framebuffer is independent and is only dirtied on size changes.
 
 The remaining significant costs and divergences are:
 
-- Hover changes and drag decoration also redraw the cached editor layer.
-- GL waveform fill uses a full-editor CPU-generated texture plus immediate-mode
-  quads for every authored point.
+- The analytical GL waveform fill is active, but its former full-resolution CPU
+  texture and immediate-mode column renderer remain compiled as fallback pending
+  final visual approval.
+- The accepted strip body still has bounded-miter compromises at acute corners.
 - GL timing measures CPU submission, not completed GPU work.
 
 ## Design rules
@@ -281,8 +282,8 @@ lost its fallback behavior.
 - [x] Remove dead body-render-target code (baseline capture remains manual).
 - [x] Phase 1: isolate cached NanoVG invalidation from GL animation and hover.
 - [x] Phase 2: add lean geometry requests and one canonical body material.
-- [ ] Phase 3: consolidate SHDR body to one analytical strip (implemented and
-  build-validated; visual approval pending).
+- [x] Phase 3: consolidate SHDR body to one analytical strip (provisionally
+  accepted with the documented bounded-miter limitation).
 - [ ] Phase 4: replace the waveform raster/column quads with one shader pass
   (analytical path implemented and build-validated; visual approval and old-raster
   removal pending).
