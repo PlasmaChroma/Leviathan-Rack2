@@ -3,11 +3,19 @@
 #include "WyrmSand.hpp"
 #include "GlLifecycleUtils.hpp"
 
+#include <array>
 #include <chrono>
 #include <string>
 #include <nanovg_gl.h>
 
 struct WyrmSandGlWidget final : widget::OpenGlWidget {
+	struct BodyStripVertex {
+		float x;
+		float y;
+		float u;
+		float v;
+	};
+
 	Wyrm* module = nullptr;
 	std::shared_ptr<WyrmSand> sand;
 	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache;
@@ -40,6 +48,11 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	float lastSlitherAmount = -1.f;
 	Vec lastDrawSize = Vec(-1.f, -1.f);
 	float lastAbsoluteZoom = -1.f;
+	uint64_t bodyJoinGeometryRevision = 0;
+	std::vector<Vec> bodyUnitOffsets;
+	uint64_t bodyStripGeometryRevision = 0;
+	bool bodyStripShaderPath = false;
+	std::array<std::vector<BodyStripVertex>, 3> bodyStripVertices;
 
 	void resetTextureState() {
 		texture = 0;
@@ -299,24 +312,32 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		waveColumnTextureCount = count;
 	}
 
-	static float displayWaveValueAtIndex(Wyrm* module, int index, Vec size) {
-		const float amount = levi_math::clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
-		const float travelPhase = module->uiSlitherPhase.load(std::memory_order_relaxed);
-		const float phase = (float(index) + 0.5f) / float(std::max(1, module->pointCount));
-		float clearance = 0.f;
-		float phaseClearance = 0.f;
-		computeRockClearance(size, &clearance, &phaseClearance);
-		const float baseRaw = module->getWavePoint(index);
-		const float base = module->resolveAgainstRocks(baseRaw, baseRaw, phase, clearance, phaseClearance);
-		const float slither = (amount > 1e-5f) ? slitherOffset(phase, travelPhase, amount) : 0.f;
-		return module->resolveAgainstRocks(base, base + slither, phase, clearance, phaseClearance);
-	}
-
-	void drawWaveColumnsGl(Vec size) {
+	void drawWaveColumnsGl(Vec size, bool shaderPath) {
 		if (!module || module->pointCount <= 0 || module->sandViewEnabled.load(std::memory_order_relaxed)) {
 			return;
 		}
 		const int count = module->pointCount;
+		if (!geometryCache) {
+			geometryCache = std::make_shared<wyrm_render::DisplayGeometryCache>();
+		}
+		geometryCache->ensure(module, size, bodySampleCountForSize(size, shaderPath));
+		const std::vector<Vec>& body = geometryCache->points;
+		if (body.size() < 2u) {
+			return;
+		}
+		auto displayValueAtPhase = [&](float phase) {
+			const float sampleIndex = clamp(phase, 0.f, 1.f) * float(body.size()) - 0.5f;
+			float y = body.front().y;
+			if (sampleIndex >= float(body.size() - 1u)) {
+				y = body.back().y;
+			}
+			else if (sampleIndex > 0.f) {
+				const int i0 = clamp(int(std::floor(sampleIndex)), 0, int(body.size()) - 2);
+				const float t = sampleIndex - float(i0);
+				y = body[size_t(i0)].y + (body[size_t(i0 + 1)].y - body[size_t(i0)].y) * t;
+			}
+			return clamp(1.f - 2.f * y / std::max(size.y, 1.f), -1.f, 1.f);
+		};
 		const float inset = 2.2f;
 		const float drawWidth = std::max(1.f, size.x - 2.f * inset);
 		const float dx = drawWidth / float(std::max(1, count));
@@ -331,7 +352,8 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		glColor4f(1.f, 1.f, 1.f, 1.f);
 		glBegin(GL_QUADS);
 		for (int i = 0; i < count; ++i) {
-			const float v = displayWaveValueAtIndex(module, i, size);
+			const float phase = (float(i) + 0.5f) / float(std::max(1, count));
+			const float v = displayValueAtPhase(phase);
 			const float y = (0.5f - 0.5f * v) * size.y;
 			const float x = inset + (float(i) + 0.5f) * dx;
 			const float yTop = envelopeVisual ? y : std::min(midY, y);
@@ -450,13 +472,6 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 			}
 			glEnd();
 		}
-	static void drawBodyStrip(const std::vector<Vec>& pts, float widthPx, const NVGcolor& color, bool shaderPath) {
-		if (pts.size() < 2) return;
-		const float halfW = 0.5f * widthPx;
-		const std::vector<Vec> off = computeBodyJoinOffsets(pts, halfW);
-		drawBodyStripWithOffsets(pts, off, halfW, color, shaderPath);
-	}
-
 	static void drawBodyStripFeatherWithOffsets(const std::vector<Vec>& pts,
 	                                            const std::vector<Vec>& innerOff,
 	                                            const std::vector<Vec>& outerOff,
@@ -534,15 +549,6 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 			glEnd();
 	}
 
-	static void drawBodyStripFeather(const std::vector<Vec>& pts, float widthPx, float featherPx, const NVGcolor& color, float edgeAlphaScale, bool shaderPath) {
-		if (pts.size() < 2 || featherPx <= 1e-4f) return;
-		const float innerW = 0.5f * widthPx;
-		const float outerW = innerW + featherPx;
-		const std::vector<Vec> innerOff = computeBodyJoinOffsets(pts, innerW);
-		const std::vector<Vec> outerOff = computeBodyJoinOffsets(pts, outerW);
-		drawBodyStripFeatherWithOffsets(pts, innerOff, outerOff, innerW, color, edgeAlphaScale, shaderPath);
-	}
-
 	int bodySampleCountForSize(Vec size, bool shaderPath) {
 		return module
 			? wyrm_render::glBodySampleCount(
@@ -559,49 +565,83 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		geometryCache->ensure(module, size, sampleCount);
 		const std::vector<Vec>& samples = geometryCache->points;
 		if (samples.size() < 2u) return;
-		std::vector<std::pair<float, std::vector<Vec>>> offsetCache;
-		auto getOffsets = [&](float halfW) -> const std::vector<Vec>& {
-			for (auto& e : offsetCache) {
-				if (std::fabs(e.first - halfW) <= 1e-6f) {
-					return e.second;
+		// Join direction is width-independent for these narrow strips. Build it
+		// once, then scale it for every visual layer instead of normalizing the
+		// same segments repeatedly.
+		if (bodyJoinGeometryRevision != geometryCache->revision
+			|| bodyUnitOffsets.size() != samples.size()) {
+			bodyUnitOffsets = computeBodyJoinOffsets(samples, 1.f);
+			bodyJoinGeometryRevision = geometryCache->revision;
+		}
+		if (bodyUnitOffsets.size() != samples.size()) return;
+		const std::array<float, 3> stripWidths = shaderPath
+			? std::array<float, 3>{{4.20f, 2.54f, 1.12f}}
+			: std::array<float, 3>{{4.0f, 2.6f, 1.15f}};
+		if (bodyStripGeometryRevision != geometryCache->revision
+			|| bodyStripShaderPath != shaderPath
+			|| bodyStripVertices[0].size() != samples.size() * 2u) {
+			for (size_t layer = 0; layer < bodyStripVertices.size(); ++layer) {
+				const float halfW = 0.5f * stripWidths[layer];
+				std::vector<BodyStripVertex>& vertices = bodyStripVertices[layer];
+				vertices.resize(samples.size() * 2u);
+				for (size_t i = 0; i < samples.size(); ++i) {
+					const Vec offset = bodyUnitOffsets[i].mult(halfW);
+					const Vec left = samples[i].minus(offset);
+					const Vec right = samples[i].plus(offset);
+					vertices[i * 2u] = BodyStripVertex {left.x, left.y, 0.f, 0.f};
+					vertices[i * 2u + 1u] = BodyStripVertex {right.x, right.y, 1.f, 0.f};
 				}
 			}
-			offsetCache.emplace_back(halfW, computeBodyJoinOffsets(samples, halfW));
-			return offsetCache.back().second;
+			bodyStripGeometryRevision = geometryCache->revision;
+			bodyStripShaderPath = shaderPath;
+		}
+		auto drawCachedStrip = [&](size_t layer, const NVGcolor& color) {
+			const std::vector<BodyStripVertex>& vertices = bodyStripVertices[layer];
+			if (vertices.empty()) return;
+			glColor4f(color.r, color.g, color.b, color.a);
+			glEnableClientState(GL_VERTEX_ARRAY);
+			glVertexPointer(2, GL_FLOAT, sizeof(BodyStripVertex), &vertices[0].x);
+			if (shaderPath) {
+				glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+				glTexCoordPointer(2, GL_FLOAT, sizeof(BodyStripVertex), &vertices[0].u);
+			}
+			glDrawArrays(GL_TRIANGLE_STRIP, 0, GLsizei(vertices.size()));
+			if (shaderPath) glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+			glDisableClientState(GL_VERTEX_ARRAY);
+		};
+		auto drawUncachedStrip = [&](float widthPx, const NVGcolor& color) {
+			const float halfW = 0.5f * widthPx;
+			glColor4f(color.r, color.g, color.b, color.a);
+			glBegin(GL_TRIANGLE_STRIP);
+			for (size_t i = 0; i < samples.size(); ++i) {
+				const Vec offset = bodyUnitOffsets[i].mult(halfW);
+				const Vec left = samples[i].minus(offset);
+				const Vec right = samples[i].plus(offset);
+				if (shaderPath) glTexCoord2f(0.f, 0.f);
+				glVertex2f(left.x, left.y);
+				if (shaderPath) glTexCoord2f(1.f, 0.f);
+				glVertex2f(right.x, right.y);
+			}
+			glEnd();
 		};
 
 		if (includeBase) {
 			if (shaderPath) {
 				// SHDR: rely on fragment AA softness and avoid extra feather geometry passes.
-				drawBodyStrip(samples, 4.20f, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 184.f / 255.f), true);
-				drawBodyStrip(samples, 2.54f, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 212.f / 255.f), true);
-				drawBodyStrip(samples, 1.12f, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 224.f / 255.f), true);
+				drawCachedStrip(0u, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 184.f / 255.f));
+				drawCachedStrip(1u, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 212.f / 255.f));
+				drawCachedStrip(2u, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 224.f / 255.f));
 			}
 			else {
-				const float wOuter = 3.75f;
-				const float hOuter = 0.5f * wOuter;
-				const std::vector<Vec>& oOuter = getOffsets(hOuter);
-				drawBodyStripWithOffsets(samples, oOuter, hOuter, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f), false);
-				drawBodyStripFeatherWithOffsets(samples, oOuter, getOffsets(hOuter + 0.66f), hOuter, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f), 0.40f, false);
-				drawBodyStripFeatherWithOffsets(samples, oOuter, getOffsets(hOuter + 1.35f), hOuter, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f), 0.11f, false);
-				const float wMid = 2.45f;
-				const float hMid = 0.5f * wMid;
-				const std::vector<Vec>& oMid = getOffsets(hMid);
-				drawBodyStripWithOffsets(samples, oMid, hMid, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 230.f / 255.f), false);
-				drawBodyStripFeatherWithOffsets(samples, oMid, getOffsets(hMid + 0.52f), hMid, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 230.f / 255.f), 0.32f, false);
-				const float wInner = 1.08f;
-				const float hInner = 0.5f * wInner;
-				const std::vector<Vec>& oInner = getOffsets(hInner);
-				drawBodyStripWithOffsets(samples, oInner, hInner, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 225.f / 255.f), false);
-				drawBodyStripFeatherWithOffsets(samples, oInner, getOffsets(hInner + 0.38f), hInner, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 225.f / 255.f), 0.24f, false);
+				// Match NanoVG's three-stroke body. The cached Rack framebuffer supplies
+				// edge filtering without tens of thousands of per-segment feather vertices.
+				drawCachedStrip(0u, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f));
+				drawCachedStrip(1u, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 230.f / 255.f));
+				drawCachedStrip(2u, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 225.f / 255.f));
 			}
 		}
 		if (includeGlow) {
-			const float wGlow = 5.10f;
-			const float hGlow = 0.5f * wGlow;
-			const std::vector<Vec>& oGlow = getOffsets(hGlow);
-			drawBodyStripWithOffsets(samples, oGlow, hGlow, nvgRGBAf(186.f / 255.f, 154.f / 255.f, 92.f / 255.f, 44.f / 255.f), true);
-			drawBodyStripFeatherWithOffsets(samples, oGlow, getOffsets(hGlow + 1.45f), hGlow, nvgRGBAf(186.f / 255.f, 154.f / 255.f, 92.f / 255.f, 44.f / 255.f), 0.34f, false);
+			drawUncachedStrip(5.10f, nvgRGBAf(186.f / 255.f, 154.f / 255.f, 92.f / 255.f, 44.f / 255.f));
 		}
 	}
 
@@ -748,6 +788,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		if (useShdr) {
 			ensureBodyShader();
 		}
+		const bool shaderPath = useShdr && bodyShaderReady;
 
 		if (module->sandViewEnabled.load(std::memory_order_relaxed)) {
 			const int detailSetting = module->sandDetail.load(std::memory_order_relaxed);
@@ -790,8 +831,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 			}
 		}
 
-		drawWaveColumnsGl(box.size);
-		const bool shaderPath = useShdr && bodyShaderReady;
+		drawWaveColumnsGl(box.size, shaderPath);
 		// SHDR now draws direct shader-softened strips. Keep RT path disabled.
 		const bool useBodyRt = false;
 		// Legacy RT sizing retained for quick rollback.

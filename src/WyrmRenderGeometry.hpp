@@ -38,17 +38,20 @@ inline int nanoVgBodySampleCount(Vec size, int pointCount) {
 }
 
 inline int glBodySampleCount(Vec size, int pointCount, float absoluteZoom, bool shaderPath) {
-	const float zoom = std::max(1.f, absoluteZoom);
-	const float samplesPerScreenPixel = shaderPath ? 2.05f : 1.75f;
+	// GL draws the same logical curve as NanoVG. Keep modest zoom awareness, but
+	// do not let framebuffer scale multiply work beyond the authored detail.
+	const float zoom = clamp(std::max(1.f, absoluteZoom), 1.f, 2.f);
+	const float samplesPerScreenPixel = shaderPath ? 1.35f : 1.20f;
 	const int pixelBudget = int(std::ceil(
 		pointDrawWidth(size) * zoom * samplesPerScreenPixel));
-	const int pointBudget = std::max(128, pointCount);
-	return clamp(std::max(pixelBudget, pointBudget), 128, 2048);
+	const int pointBudget = std::max(128, pointCount * 2);
+	return clamp(std::min(pixelBudget, pointBudget), 128, 512);
 }
 
 struct DisplayGeometryCache {
 	std::vector<Vec> points;
 	std::vector<uint8_t> nearRock;
+	uint64_t revision = 0;
 	bool valid = false;
 	uint32_t waveVersion = 0;
 	int rockStateIndex = -1;
@@ -143,6 +146,10 @@ struct DisplayGeometryCache {
 		size = requestedSize;
 		slitherPhase = requestedSlitherPhase;
 		slitherAmount = requestedSlitherAmount;
+		++revision;
+		if (revision == 0) {
+			revision = 1;
+		}
 		valid = true;
 		return true;
 	}
