@@ -357,7 +357,10 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 				return nNext.mult(halfW);
 			}
 			const Vec j = safeNormalize(nPrev.plus(nNext), nNext);
-			const float denom = std::max(0.285f, std::abs(j.x * nNext.x + j.y * nNext.y));
+			// Limit the miter to 1.6x half-width. This retains substantially more
+			// thickness than the former bevel blend without producing needle-like
+			// corners at acute authored turns.
+			const float denom = std::max(0.625f, std::abs(j.x * nNext.x + j.y * nNext.y));
 			return j.mult(halfW / denom);
 		};
 		for (size_t i = 0; i < pts.size(); ++i) off[i] = joinOffset(i, halfW);

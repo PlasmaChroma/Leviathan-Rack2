@@ -27,8 +27,14 @@ Immediate validation checkpoint:
 - Visually compare the new SHDR body against NanoVG and OpenGL in collapsed and
   expanded views, especially sharp rock bends, outer-edge softness, and internal
   layer transitions. `visual.png` exposed severe strip pinching at acute bends;
-  the previous bevel/miter clamps were replaced with width-preserving bounded
-  miters on 2026-08-17. That correction builds but still needs visual approval.
+  the previous bevel/miter clamps were replaced on 2026-08-17. Fully preserving
+  width produced visibly sharp miter spikes, so the current compromise caps the
+  miter at 1.6x half-width. That correction builds but still needs visual approval.
+
+Known limitation: a single triangle strip cannot provide both perfectly constant
+width and truly rounded joins at arbitrary acute turns. If the bounded-miter
+result is still unacceptable, do not continue tuning the scalar cap; use explicit
+join geometry or the deferred screen-space body renderer.
 
 Next implementation slice after approval:
 
