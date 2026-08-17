@@ -1,4 +1,5 @@
 #include "Wyrm.hpp"
+#include "WyrmRenderGeometry.hpp"
 #include "WyrmSand.hpp"
 #include "DebugTerminalTransport.hpp"
 #include "NvgGraphicsLifecycle.hpp"
@@ -33,10 +34,7 @@ struct WyrmWaveEditor : TransparentWidget {
 	WyrmRock previousDragRock {};
 	std::shared_ptr<WyrmSand> sand;
 	Vec lastBoxSize = Vec(-1.f, -1.f);
-	bool lastMouseInside = false;
-	int lastHoverColumn = -2;
 	int lastHoverRock = -2;
-	float lastHoverGuideY = -1.f;
 	uint32_t lastWaveVersion = 0;
 	int lastPointCount = -1;
 	int lastRockStateIndex = -1;
@@ -62,17 +60,7 @@ struct WyrmWaveEditor : TransparentWidget {
 	Vec cachedDisplaySize = Vec(-1.f, -1.f);
 	float cachedDisplaySlitherPhase = -1.f;
 	float cachedDisplaySlitherAmount = -1.f;
-	static constexpr int kBodySamplesMax = 768;
-	std::array<Vec, kBodySamplesMax> cachedBodyPathPoints {};
-	std::array<uint8_t, kBodySamplesMax> cachedBodyPathNearRock {};
-	int cachedBodySampleCount = 0;
-	bool cachedBodyPathValid = false;
-	uint32_t cachedBodyWaveVersion = 0;
-	int cachedBodyPointCount = -1;
-	int cachedBodyRockStateIndex = -1;
-	Vec cachedBodySize = Vec(-1.f, -1.f);
-	float cachedBodySlitherPhase = -1.f;
-	float cachedBodySlitherAmount = -1.f;
+	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache;
 	NVGcontext* waveMaterialContext = nullptr;
 	int waveMaterialImage = -1;
 	int waveMaterialW = 0;
@@ -84,9 +72,15 @@ struct WyrmWaveEditor : TransparentWidget {
 	bool waveMaterialDirty = true;
 	std::vector<unsigned char> waveMaterialPixels;
 
-	explicit WyrmWaveEditor(Wyrm* m, std::shared_ptr<WyrmSand> sandState)
+	explicit WyrmWaveEditor(
+		Wyrm* m,
+		std::shared_ptr<WyrmSand> sandState,
+		std::shared_ptr<wyrm_render::DisplayGeometryCache> sharedGeometryCache = nullptr)
 		: module(m)
-		, sand(sandState ? std::move(sandState) : std::make_shared<WyrmSand>()) {}
+		, sand(sandState ? std::move(sandState) : std::make_shared<WyrmSand>())
+		, geometryCache(sharedGeometryCache
+			? std::move(sharedGeometryCache)
+			: std::make_shared<wyrm_render::DisplayGeometryCache>()) {}
 
 	~WyrmWaveEditor() override {
 		nvg_gfx_lifecycle::resetOwnedNvgImage(
@@ -104,11 +98,11 @@ struct WyrmWaveEditor : TransparentWidget {
 	}
 
 	float pointEdgeInset() const {
-		return 2.2f;
+		return wyrm_render::kPointEdgeInsetPx;
 	}
 
 	float pointDrawWidth() const {
-		return std::max(1.f, box.size.x - 2.f * pointEdgeInset());
+		return wyrm_render::pointDrawWidth(box.size);
 	}
 
 	float pointStep(int count) const {
@@ -151,24 +145,15 @@ struct WyrmWaveEditor : TransparentWidget {
 	}
 
 	float visualRockClearance() const {
-		if (box.size.y <= 1.f) {
-			return kWyrmRockClearance;
-		}
-		const float maxBodyStrokePx = 4.f;
-		const float maxRockStrokePx = 2.2f;
-		const float pixelClearance = 0.5f * maxBodyStrokePx + 0.5f * maxRockStrokePx + 0.75f;
-		const float valueClearance = 2.f * pixelClearance / box.size.y;
-		return std::max(kWyrmRockClearance, valueClearance / std::max(kWyrmRockValueScale, 1e-4f));
+		float clearance = 0.f;
+		wyrm_render::visualRockClearance(box.size, &clearance, nullptr);
+		return clearance;
 	}
 
 	float visualRockPhaseClearance() const {
-		if (pointDrawWidth() <= 1.f) {
-			return 0.f;
-		}
-		const float maxBodyStrokePx = 4.f;
-		const float maxRockStrokePx = 2.2f;
-		const float pixelClearance = 0.5f * maxBodyStrokePx + 0.5f * maxRockStrokePx + 0.75f;
-		return pixelClearance / pointDrawWidth();
+		float clearance = 0.f;
+		wyrm_render::visualRockClearance(box.size, nullptr, &clearance);
+		return clearance;
 	}
 
 	bool visualRockBoundsAtPhase(const WyrmRock& rock, float phase, float* lower, float* upper) const {
@@ -645,13 +630,8 @@ struct WyrmWaveEditor : TransparentWidget {
 
 		const Vec mouseLocal = currentLocalMousePos();
 		const bool mouseInside = (mouseLocal.x >= 0.f && mouseLocal.x <= box.size.x && mouseLocal.y >= 0.f && mouseLocal.y <= box.size.y);
-		const int hoverColumnNow = mouseInside ? indexFromX(mouseLocal.x) : -1;
 		const int hoverRockNow = (draggingRock >= 0) ? draggingRock : (mouseInside ? rockIndexAt(mouseLocal) : -1);
-		const float hoverGuideYNow = mouseInside ? clamp(mouseLocal.y, 0.f, box.size.y) : -1.f;
-		if (mouseInside != lastMouseInside
-			|| hoverColumnNow != lastHoverColumn
-			|| hoverRockNow != lastHoverRock
-			|| std::fabs(hoverGuideYNow - lastHoverGuideY) > 0.25f) {
+		if (hoverRockNow != lastHoverRock) {
 			dirty = true;
 		}
 
@@ -675,10 +655,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		lastSandPersistence = sandPersistenceNow;
 		lastEditorLocked = editorLockedNow;
 		lastEnvelopeMode = envelopeModeNow;
-		lastMouseInside = mouseInside;
-		lastHoverColumn = hoverColumnNow;
 		lastHoverRock = hoverRockNow;
-		lastHoverGuideY = hoverGuideYNow;
 
 		if (dirty) {
 			framebuffer->setDirty();
@@ -742,120 +719,41 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 
 			const bool hasModule = (module != nullptr);
-			const uint32_t drawWaveVersion = hasModule ? module->waveVersion.load(std::memory_order_acquire) : 0u;
-			const int drawRockStateIndex = hasModule ? module->activeRockStateIndex.load(std::memory_order_acquire) : -1;
-			const float drawSlitherAmount = hasModule ? effectiveSlitherAmount() : 0.f;
-			const float drawSlitherPhase = renderedSlitherPhase;
 			nvgSave(args.vg);
 			nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 			const int count = hasModule ? module->pointCount : kWyrmPointCountDefault;
 			const float dx = pointStep(count);
-			const float graphColumnWidth = std::min(2.0f, dx);
-		std::array<float, kWyrmPointCountMax> bodyPoints {};
-		if (hasModule) {
-			for (int i = 0; i < module->pointCount; ++i) {
-				bodyPoints[i] = module->getWavePoint(i);
-			}
-		}
-		auto bodyWaveValueAtPhase = [&](float phase) {
-			if (hasModule) {
-				const float clearance = visualRockClearance();
-				const float phaseClearance = visualRockPhaseClearance();
-				const float raw = catmullPeriodic(bodyPoints, module->pointCount, phase);
-				const float base = module->resolveAgainstRocks(raw, raw, phase, clearance, phaseClearance);
-				return module->resolveAgainstRocks(base, base + slitherOffsetForPhase(phase), phase, clearance, phaseClearance);
-			}
-			return std::sin(2.f * float(M_PI) * phase);
-		};
-		auto phaseNearAnyRock = [&](float phase, float margin) {
-			if (!hasModule) {
-				return false;
-			}
-			for (int i = 0; i < module->rockCount; ++i) {
-				const WyrmRock& rock = module->rocks[i];
-				const float rx = rock.radiusPhase + visualRockPhaseClearance() + margin;
-				if (std::fabs(module->rockDx(phase, rock)) <= rx) {
-					return true;
-				}
-			}
-			return false;
-		};
-
 		Vec mouseLocal = currentLocalMousePos();
 		const bool mouseInside = (mouseLocal.x >= 0.f && mouseLocal.x <= box.size.x && mouseLocal.y >= 0.f && mouseLocal.y <= box.size.y);
-		const int hoveredColumn = mouseInside ? indexFromX(mouseLocal.x) : -1;
 		hoveredRock = (draggingRock >= 0) ? draggingRock : (mouseInside ? rockIndexAt(mouseLocal) : -1);
-		const bool drawHoverNanoVG = !module || module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG;
-		if (hasModule && mouseInside && drawHoverNanoVG) {
-			const float guideY = clamp(mouseLocal.y, 0.f, box.size.y);
-			const int hoverIdx = hoveredColumn;
-			const float dxHover = pointStep(count);
-			const float x0 = pointEdgeInset() + float(hoverIdx) * dxHover;
-			const float x1 = x0 + dxHover;
-
-			nvgBeginPath(args.vg);
-			nvgRect(args.vg, x0, 0.f, x1 - x0, box.size.y);
-			nvgFillColor(args.vg, nvgRGBA(28, 204, 217, 72));
-			nvgFill(args.vg);
-
-			const float guideX = 0.5f * (x0 + x1);
-			nvgBeginPath(args.vg);
-			nvgRect(args.vg, guideX - 0.5f * graphColumnWidth, 0.f, graphColumnWidth, box.size.y);
-			nvgFillColor(args.vg, nvgRGBA(28, 204, 217, 238));
-			nvgFill(args.vg);
-
-			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, 0.f, guideY);
-			nvgLineTo(args.vg, box.size.x, guideY);
-			nvgStrokeWidth(args.vg, 1.4f);
-			nvgStrokeColor(args.vg, nvgRGBA(186, 154, 92, 96));
-			nvgStroke(args.vg);
-		}
 
 		const float midY = 0.5f * box.size.y;
-			// Tessellate to visible pixel density rather than multiplying the authored
-			// point count blindly. At 256 points the normal editor is narrower than the
-			// source data, so 768 body samples only repeat subpixel work. Expanded view
-			// naturally receives a larger budget from its wider logical box.
-			const int pixelSampleBudget = std::max(
-				128, int(std::ceil(pointDrawWidth() * 1.25f)));
-			const int pointSampleBudget = std::max(128, count * 2);
-			const int bodySampleCount = hasModule
-				? clamp(std::min(pixelSampleBudget, pointSampleBudget), 128, 512)
-				: count;
-			const int cachedBodySamples = clamp(bodySampleCount, 0, kBodySamplesMax);
 			const bool drawBodyNanoVG = !module || module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG;
-			if (drawBodyNanoVG) {
-				const bool bodyCacheValid =
-					hasModule &&
-					cachedBodyPathValid &&
-					cachedBodySampleCount == cachedBodySamples &&
-					cachedBodyPointCount == count &&
-					cachedBodyWaveVersion == drawWaveVersion &&
-					cachedBodyRockStateIndex == drawRockStateIndex &&
-					std::fabs(cachedBodySize.x - box.size.x) <= 1e-4f &&
-					std::fabs(cachedBodySize.y - box.size.y) <= 1e-4f &&
-					std::fabs(cachedBodySlitherPhase - drawSlitherPhase) <= 1e-6f &&
-					std::fabs(cachedBodySlitherAmount - drawSlitherAmount) <= 1e-6f;
-				if (!bodyCacheValid) {
-					for (int i = 0; i < cachedBodySamples; ++i) {
-						const float phase = (float(i) + 0.5f) / float(std::max(cachedBodySamples, 1));
-						cachedBodyPathPoints[i] = Vec(
-							pointEdgeInset() + phase * pointDrawWidth(),
-							(0.5f - 0.5f * bodyWaveValueAtPhase(phase)) * box.size.y
-						);
-						cachedBodyPathNearRock[i] = phaseNearAnyRock(phase, 1.5f / float(std::max(cachedBodySamples, 1))) ? 1u : 0u;
-					}
-					cachedBodySampleCount = cachedBodySamples;
-					cachedBodyPointCount = count;
-					cachedBodyWaveVersion = drawWaveVersion;
-					cachedBodyRockStateIndex = drawRockStateIndex;
-					cachedBodySize = box.size;
-					cachedBodySlitherPhase = drawSlitherPhase;
-					cachedBodySlitherAmount = drawSlitherAmount;
-					cachedBodyPathValid = hasModule;
+			const int bodySampleCount = hasModule
+				? wyrm_render::nanoVgBodySampleCount(box.size, count)
+				: count;
+			std::vector<Vec> previewBodyPoints;
+			std::vector<uint8_t> previewNearRock;
+			if (drawBodyNanoVG && hasModule && geometryCache) {
+				geometryCache->ensure(module, box.size, bodySampleCount);
+			}
+			else if (drawBodyNanoVG && !hasModule) {
+				previewBodyPoints.resize(size_t(bodySampleCount));
+				previewNearRock.assign(size_t(bodySampleCount), 0u);
+				for (int i = 0; i < bodySampleCount; ++i) {
+					const float phase = (float(i) + 0.5f) / float(bodySampleCount);
+					previewBodyPoints[size_t(i)] = Vec(
+						pointEdgeInset() + phase * pointDrawWidth(),
+						(0.5f - 0.5f * std::sin(2.f * float(M_PI) * phase)) * box.size.y);
 				}
 			}
+			const std::vector<Vec>& bodyPathPoints = hasModule
+				? geometryCache->points
+				: previewBodyPoints;
+			const std::vector<uint8_t>& bodyPathNearRock = hasModule
+				? geometryCache->nearRock
+				: previewNearRock;
+			const int cachedBodySamples = int(bodyPathPoints.size());
 
 			const bool envelopeVisual = hasModule && module->envelopeMode.load(std::memory_order_relaxed);
 			const bool drawWaveArea = (!sandEnabled()) && drawBodyNanoVG && cachedBodySamples >= 2;
@@ -888,8 +786,8 @@ struct WyrmWaveEditor : TransparentWidget {
 
 				nvgBeginPath(args.vg);
 				for (int i = 0; i < cachedBodySamples - 1; ++i) {
-					const Vec p0 = cachedBodyPathPoints[i];
-					const Vec p1 = cachedBodyPathPoints[i + 1];
+					const Vec p0 = bodyPathPoints[i];
+					const Vec p1 = bodyPathPoints[i + 1];
 					const bool in0 = inside(p0);
 					const bool in1 = inside(p1);
 					if (in0 && !open) {
@@ -908,7 +806,7 @@ struct WyrmWaveEditor : TransparentWidget {
 					}
 				}
 				if (open) {
-					closeAt(cachedBodyPathPoints[cachedBodySamples - 1]);
+					closeAt(bodyPathPoints[cachedBodySamples - 1]);
 				}
 				if (useWaveMaterialImage) {
 					const NVGpaint material = nvgImagePattern(args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, waveMaterialImageHandle, 1.f);
@@ -927,12 +825,12 @@ struct WyrmWaveEditor : TransparentWidget {
 					return;
 				}
 				nvgBeginPath(args.vg);
-				nvgMoveTo(args.vg, cachedBodyPathPoints[0].x, cachedBodyPathPoints[0].y);
+				nvgMoveTo(args.vg, bodyPathPoints[0].x, bodyPathPoints[0].y);
 				for (int i = 1; i < cachedBodySamples; ++i) {
-					nvgLineTo(args.vg, cachedBodyPathPoints[i].x, cachedBodyPathPoints[i].y);
+					nvgLineTo(args.vg, bodyPathPoints[i].x, bodyPathPoints[i].y);
 				}
-				nvgLineTo(args.vg, cachedBodyPathPoints[cachedBodySamples - 1].x, box.size.y);
-				nvgLineTo(args.vg, cachedBodyPathPoints[0].x, box.size.y);
+				nvgLineTo(args.vg, bodyPathPoints[cachedBodySamples - 1].x, box.size.y);
+				nvgLineTo(args.vg, bodyPathPoints[0].x, box.size.y);
 				nvgClosePath(args.vg);
 				if (useWaveMaterialImage) {
 					const NVGpaint material = nvgImagePattern(args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, waveMaterialImageHandle, 1.f);
@@ -970,14 +868,14 @@ struct WyrmWaveEditor : TransparentWidget {
 					const float phase = clamp((x - pointEdgeInset()) / std::max(pointDrawWidth(), 1e-6f), 0.f, 1.f);
 					const float sampleIndex = phase * float(cachedBodySamples) - 0.5f;
 					if (sampleIndex <= 0.f) {
-						return Vec(x, cachedBodyPathPoints[0].y);
+						return Vec(x, bodyPathPoints[0].y);
 					}
 					if (sampleIndex >= float(cachedBodySamples - 1)) {
-						return Vec(x, cachedBodyPathPoints[cachedBodySamples - 1].y);
+						return Vec(x, bodyPathPoints[cachedBodySamples - 1].y);
 					}
 					const int i0 = clamp(int(std::floor(sampleIndex)), 0, cachedBodySamples - 2);
 					const float t = sampleIndex - float(i0);
-					const float y = cachedBodyPathPoints[i0].y + (cachedBodyPathPoints[i0 + 1].y - cachedBodyPathPoints[i0].y) * t;
+					const float y = bodyPathPoints[i0].y + (bodyPathPoints[i0 + 1].y - bodyPathPoints[i0].y) * t;
 					return Vec(x, y);
 				};
 				bool open = false;
@@ -1002,11 +900,11 @@ struct WyrmWaveEditor : TransparentWidget {
 					const float x1 = std::min(pointEdgeInset() + float(column + 1) * dx, pointEdgeInset() + pointDrawWidth());
 					columnPoints.clear();
 					columnPoints.push_back(sampleBodyPointAtX(x0));
-					while (sampleCursor < cachedBodySamples && cachedBodyPathPoints[sampleCursor].x <= x0) {
+					while (sampleCursor < cachedBodySamples && bodyPathPoints[sampleCursor].x <= x0) {
 						++sampleCursor;
 					}
 					for (int sample = sampleCursor; sample < cachedBodySamples; ++sample) {
-						const Vec p = cachedBodyPathPoints[sample];
+						const Vec p = bodyPathPoints[sample];
 						if (p.x >= x1) {
 							break;
 						}
@@ -1062,18 +960,18 @@ struct WyrmWaveEditor : TransparentWidget {
 					return;
 				}
 				if (cachedBodySamples == 1) {
-					const Vec p = cachedBodyPathPoints[0];
+					const Vec p = bodyPathPoints[0];
 					nvgMoveTo(args.vg, p.x, p.y);
 					return;
 				}
 
-				const Vec pStart = cachedBodyPathPoints[0];
+				const Vec pStart = bodyPathPoints[0];
 				nvgMoveTo(args.vg, pStart.x, pStart.y);
 
 				for (int i = 1; i < cachedBodySamples - 1; ++i) {
-					const Vec p0 = cachedBodyPathPoints[i - 1];
-					const Vec p1 = cachedBodyPathPoints[i];
-					const Vec p2 = cachedBodyPathPoints[i + 1];
+					const Vec p0 = bodyPathPoints[i - 1];
+					const Vec p1 = bodyPathPoints[i];
+					const Vec p2 = bodyPathPoints[i + 1];
 					Vec vIn = p1.minus(p0);
 					Vec vOut = p2.minus(p1);
 				const float inLen = std::sqrt(vIn.x * vIn.x + vIn.y * vIn.y);
@@ -1085,7 +983,7 @@ struct WyrmWaveEditor : TransparentWidget {
 					vIn = vIn.div(inLen);
 					vOut = vOut.div(outLen);
 					const float cornerCos = vIn.x * vOut.x + vIn.y * vOut.y;
-					if (cachedBodyPathNearRock[i]) {
+					if (bodyPathNearRock[i]) {
 						nvgLineTo(args.vg, p1.x, p1.y);
 					}
 					else if (cornerCos >= roundCosThreshold) {
@@ -1097,7 +995,7 @@ struct WyrmWaveEditor : TransparentWidget {
 					}
 				}
 
-				const Vec pEnd = cachedBodyPathPoints[cachedBodySamples - 1];
+				const Vec pEnd = bodyPathPoints[cachedBodySamples - 1];
 				nvgLineTo(args.vg, pEnd.x, pEnd.y);
 			};
 
@@ -1224,30 +1122,68 @@ struct WyrmEditorAnimationOverlay final : TransparentWidget {
 	}
 
 	float pointEdgeInset() const {
-		return 2.2f;
+		return wyrm_render::kPointEdgeInsetPx;
 	}
 
 	float pointDrawWidth() const {
-		return std::max(1.f, box.size.x - 2.f * pointEdgeInset());
+		return wyrm_render::pointDrawWidth(box.size);
 	}
 
 	float visualRockClearance() const {
-		if (box.size.y <= 1.f) {
-			return kWyrmRockClearance;
-		}
-		const float pixelClearance = 0.5f * 4.f + 0.5f * 2.2f + 0.75f;
-		const float valueClearance = 2.f * pixelClearance / box.size.y;
-		return std::max(
-			kWyrmRockClearance,
-			valueClearance / std::max(kWyrmRockValueScale, 1e-4f));
+		float clearance = 0.f;
+		wyrm_render::visualRockClearance(box.size, &clearance, nullptr);
+		return clearance;
 	}
 
 	float visualRockPhaseClearance() const {
-		if (pointDrawWidth() <= 1.f) {
-			return 0.f;
+		float clearance = 0.f;
+		wyrm_render::visualRockClearance(box.size, nullptr, &clearance);
+		return clearance;
+	}
+
+	Vec currentLocalMousePos() const {
+		if (!APP || !APP->scene) {
+			return Vec();
 		}
-		const float pixelClearance = 0.5f * 4.f + 0.5f * 2.2f + 0.75f;
-		return pixelClearance / pointDrawWidth();
+		auto* self = const_cast<WyrmEditorAnimationOverlay*>(this);
+		const Vec absoluteOrigin = self->getAbsoluteOffset(Vec());
+		const float absoluteZoom = std::max(self->getAbsoluteZoom(), 1e-6f);
+		return APP->scene->getMousePos().minus(absoluteOrigin).div(absoluteZoom);
+	}
+
+	void drawHoverGuides(const DrawArgs& args) {
+		if (!module || module->pointCount <= 0) {
+			return;
+		}
+		const Vec mouseLocal = currentLocalMousePos();
+		if (mouseLocal.x < 0.f || mouseLocal.x > box.size.x
+			|| mouseLocal.y < 0.f || mouseLocal.y > box.size.y) {
+			return;
+		}
+		const int count = module->pointCount;
+		const float dx = pointDrawWidth() / float(std::max(count, 1));
+		const int column = clamp(
+			int(std::floor((mouseLocal.x - pointEdgeInset()) / std::max(dx, 1e-6f))),
+			0, count - 1);
+		const float x0 = pointEdgeInset() + float(column) * dx;
+		const float x1 = x0 + dx;
+		const float guideX = 0.5f * (x0 + x1);
+		const float columnWidth = std::min(2.f, dx);
+
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, x0, 0.f, x1 - x0, box.size.y);
+		nvgFillColor(args.vg, nvgRGBA(28, 204, 217, 72));
+		nvgFill(args.vg);
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, guideX - 0.5f * columnWidth, 0.f, columnWidth, box.size.y);
+		nvgFillColor(args.vg, nvgRGBA(28, 204, 217, 238));
+		nvgFill(args.vg);
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, 0.f, mouseLocal.y);
+		nvgLineTo(args.vg, box.size.x, mouseLocal.y);
+		nvgStrokeWidth(args.vg, 1.4f);
+		nvgStrokeColor(args.vg, nvgRGBA(186, 154, 92, 96));
+		nvgStroke(args.vg);
 	}
 
 	float displayWaveValueAtPhase(float phase) const {
@@ -1355,6 +1291,7 @@ struct WyrmEditorAnimationOverlay final : TransparentWidget {
 			module->displayPhase.load(std::memory_order_relaxed));
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		drawHoverGuides(args);
 		if (envelopeMode
 			&& module->displayEnvelopeRunning.load(std::memory_order_relaxed)) {
 			drawEnvelopeProgress(args, phase);
@@ -1372,6 +1309,13 @@ TransparentWidget* createWyrmWaveEditor(Wyrm* module) {
 
 TransparentWidget* createWyrmWaveEditor(Wyrm* module, std::shared_ptr<WyrmSand> sandState) {
 	return new WyrmWaveEditor(module, sandState);
+}
+
+TransparentWidget* createWyrmWaveEditor(
+	Wyrm* module,
+	std::shared_ptr<WyrmSand> sandState,
+	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache) {
+	return new WyrmWaveEditor(module, std::move(sandState), std::move(geometryCache));
 }
 
 TransparentWidget* createWyrmEditorAnimationOverlay(Wyrm* module) {

@@ -148,6 +148,9 @@ inline float slitherSpeedFactor(float speedKnob) {
 
 struct Wyrm;
 struct WyrmSand;
+namespace wyrm_render {
+struct DisplayGeometryCache;
+}
 
 struct WyrmFreqQuantity final : ParamQuantity {
 	float getDisplayValue() override;
@@ -325,5 +328,13 @@ struct Wyrm : Module {
 
 TransparentWidget* createWyrmWaveEditor(Wyrm* module);
 TransparentWidget* createWyrmWaveEditor(Wyrm* module, std::shared_ptr<WyrmSand> sandState);
+TransparentWidget* createWyrmWaveEditor(
+	Wyrm* module,
+	std::shared_ptr<WyrmSand> sandState,
+	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache);
 TransparentWidget* createWyrmEditorAnimationOverlay(Wyrm* module);
 Widget* createWyrmSandGlWidget(Wyrm* module, std::shared_ptr<WyrmSand> sandState);
+Widget* createWyrmSandGlWidget(
+	Wyrm* module,
+	std::shared_ptr<WyrmSand> sandState,
+	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache);

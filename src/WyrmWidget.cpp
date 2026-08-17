@@ -1,4 +1,5 @@
 #include "Wyrm.hpp"
+#include "WyrmRenderGeometry.hpp"
 #include "WyrmSand.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
@@ -247,6 +248,7 @@ struct WyrmModeSwitchPulseWidget final : TransparentWidget {
 struct WyrmEditorSurface final : Widget {
 	Wyrm* module = nullptr;
 	std::shared_ptr<WyrmSand> sandState;
+	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache;
 	Widget* sandGlWidget = nullptr;
 	widget::FramebufferWidget* editorFramebuffer = nullptr;
 	TransparentWidget* waveEditor = nullptr;
@@ -254,10 +256,11 @@ struct WyrmEditorSurface final : Widget {
 
 	explicit WyrmEditorSurface(Wyrm* m)
 		: module(m)
-		, sandState(std::make_shared<WyrmSand>()) {
-		sandGlWidget = createWyrmSandGlWidget(module, sandState);
+		, sandState(std::make_shared<WyrmSand>())
+		, geometryCache(std::make_shared<wyrm_render::DisplayGeometryCache>()) {
+		sandGlWidget = createWyrmSandGlWidget(module, sandState, geometryCache);
 		addChild(sandGlWidget);
-		waveEditor = createWyrmWaveEditor(module, sandState);
+		waveEditor = createWyrmWaveEditor(module, sandState, geometryCache);
 		editorFramebuffer = new widget::FramebufferWidget();
 		editorFramebuffer->dirtyOnSubpixelChange = false;
 		editorFramebuffer->addChild(waveEditor);

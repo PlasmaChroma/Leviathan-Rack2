@@ -1,8 +1,8 @@
 #include "Wyrm.hpp"
+#include "WyrmRenderGeometry.hpp"
 #include "WyrmSand.hpp"
 #include "GlLifecycleUtils.hpp"
 
-#include <array>
 #include <chrono>
 #include <string>
 #include <nanovg_gl.h>
@@ -10,6 +10,7 @@
 struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	Wyrm* module = nullptr;
 	std::shared_ptr<WyrmSand> sand;
+	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache;
 	GLuint texture = 0;
 	int textureW = 0;
 	int textureH = 0;
@@ -18,7 +19,6 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	int waveColumnTextureW = 0;
 	int waveColumnTextureH = 0;
 	int waveColumnTextureCount = -1;
-	double lastUiPhaseUpdateSec = -1.0;
 	GLuint bodyShaderProgram = 0;
 	GLint bodyShaderSoftnessLoc = -1;
 	bool bodyShaderInitAttempted = false;
@@ -27,15 +27,6 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	GLuint bodyRtTex = 0;
 	int bodyRtW = 0;
 	int bodyRtH = 0;
-	std::vector<Vec> cachedBodySamples;
-	uint32_t cachedBodyWaveVersion = 0;
-	int cachedBodyRockStateIndex = -1;
-	int cachedBodyPointCount = -1;
-	int cachedBodySampleCount = -1;
-	Vec cachedBodySize = Vec(-1.f, -1.f);
-	float cachedBodySlitherPhase = -1.f;
-	float cachedBodySlitherAmount = -1.f;
-	bool cachedBodySamplesValid = false;
 	bool redrawStateInitialized = false;
 	int lastRenderMode = -1;
 	uint32_t lastWaveVersion = 0;
@@ -49,9 +40,6 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	float lastSlitherAmount = -1.f;
 	Vec lastDrawSize = Vec(-1.f, -1.f);
 	float lastAbsoluteZoom = -1.f;
-	bool lastMouseInside = false;
-	int lastHoverIndex = -1;
-	float lastHoverY = -1.f;
 
 	void resetTextureState() {
 		texture = 0;
@@ -212,47 +200,8 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		bodyRtH = h;
 	}
 
-	void advanceUiSlitherPhase() {
-		if (!module) return;
-		const double nowSec = system::getTime();
-		if (!std::isfinite(nowSec)) return;
-		if (lastUiPhaseUpdateSec < 0.0 || !std::isfinite(lastUiPhaseUpdateSec)) {
-			lastUiPhaseUpdateSec = nowSec;
-			return;
-		}
-		const float elapsed = clamp(float(nowSec - lastUiPhaseUpdateSec), 0.f, 0.25f);
-		lastUiPhaseUpdateSec = nowSec;
-		float phase = module->uiSlitherPhase.load(std::memory_order_relaxed);
-		const float speedFactor = module->displaySlitherSpeedFactor.load(std::memory_order_relaxed);
-		phase = levi_math::wrap01(phase + 0.65f * speedFactor * elapsed);
-		module->uiSlitherPhase.store(phase, std::memory_order_relaxed);
-	}
-
-	Vec currentLocalMousePos() const {
-		if (!APP || !APP->scene) {
-			return Vec();
-		}
-		auto* self = const_cast<WyrmSandGlWidget*>(this);
-		const Vec absoluteOrigin = self->getAbsoluteOffset(Vec());
-		const float absoluteZoom = std::max(self->getAbsoluteZoom(), 1e-6f);
-		return APP->scene->getMousePos().minus(absoluteOrigin).div(absoluteZoom);
-	}
-
-	static int indexFromX(float x, int count, float sizeX) {
-		const float inset = 2.2f;
-		const float drawWidth = std::max(1.f, sizeX - 2.f * inset);
-		const float dx = drawWidth / float(std::max(count, 1));
-		const float column = (x - inset) / std::max(dx, 1e-6f);
-		return clamp(int(std::floor(column)), 0, count - 1);
-	}
-
 	static void computeRockClearance(Vec size, float* clearance, float* phaseClearance) {
-		const float maxBodyStrokePx = 4.f;
-		const float maxRockStrokePx = 2.2f;
-		const float pixelClearance = 0.5f * maxBodyStrokePx + 0.5f * maxRockStrokePx + 0.75f;
-		const float valueClearance = (size.y > 1.f) ? (2.f * pixelClearance / size.y) : kWyrmRockClearance;
-		*clearance = std::max(kWyrmRockClearance, valueClearance / std::max(kWyrmRockValueScale, 1e-4f));
-		*phaseClearance = (size.x > 1.f) ? (pixelClearance / std::max(1.f, size.x - 4.4f)) : 0.f;
+		wyrm_render::visualRockClearance(size, clearance, phaseClearance);
 	}
 
 	static NVGcolor mixColor(NVGcolor a, NVGcolor b, float t) {
@@ -363,21 +312,6 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		return module->resolveAgainstRocks(base, base + slither, phase, clearance, phaseClearance);
 	}
 
-	static Vec bodyPointForPhase(Wyrm* module, const std::array<float, kWyrmPointCountMax>& points, float phase, Vec size) {
-		const float amount = levi_math::clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
-		const float travelPhase = module->uiSlitherPhase.load(std::memory_order_relaxed);
-		const float raw = catmullPeriodic(points, module->pointCount, phase);
-		float clearance = 0.f;
-		float phaseClearance = 0.f;
-		computeRockClearance(size, &clearance, &phaseClearance);
-		const float base = module->resolveAgainstRocks(raw, raw, phase, clearance, phaseClearance);
-		const float slither = (amount > 1e-5f) ? slitherOffset(phase, travelPhase, amount) : 0.f;
-		const float value = module->resolveAgainstRocks(base, base + slither, phase, clearance, phaseClearance);
-		const float x = 2.2f + phase * std::max(1.f, size.x - 4.4f);
-		const float y = (0.5f - 0.5f * clamp(value, -1.f, 1.f)) * size.y;
-		return Vec(x, y);
-	}
-
 	void drawWaveColumnsGl(Vec size) {
 		if (!module || module->pointCount <= 0 || module->sandViewEnabled.load(std::memory_order_relaxed)) {
 			return;
@@ -420,58 +354,6 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		}
 		glEnd();
 		glDisable(GL_TEXTURE_2D);
-	}
-
-	void drawHoverGuidesGl(Vec size) {
-		if (!module || module->pointCount <= 0) {
-			return;
-		}
-		const Vec mouseLocal = currentLocalMousePos();
-		const bool mouseInside = (mouseLocal.x >= 0.f && mouseLocal.x <= size.x && mouseLocal.y >= 0.f && mouseLocal.y <= size.y);
-		if (!mouseInside) {
-			return;
-		}
-
-		const int count = module->pointCount;
-		const int hoverIdx = indexFromX(mouseLocal.x, count, size.x);
-		const float inset = 2.2f;
-		const float drawWidth = std::max(1.f, size.x - 2.f * inset);
-		const float dx = drawWidth / float(std::max(count, 1));
-		const float x0 = inset + float(hoverIdx) * dx;
-		const float x1 = x0 + dx;
-		const float graphColumnWidth = std::min(2.0f, dx);
-		const float guideX = 0.5f * (x0 + x1);
-		const float guideY = clamp(mouseLocal.y, 0.f, size.y);
-
-		const NVGcolor band = nvgRGBA(28, 204, 217, 72);
-		glColor4f(band.r, band.g, band.b, band.a);
-		glBegin(GL_QUADS);
-		glVertex2f(x0, 0.f);
-		glVertex2f(x1, 0.f);
-		glVertex2f(x1, size.y);
-		glVertex2f(x0, size.y);
-		glEnd();
-
-		const NVGcolor col = nvgRGBA(28, 204, 217, 238);
-		glColor4f(col.r, col.g, col.b, col.a);
-		glBegin(GL_QUADS);
-		glVertex2f(guideX - 0.5f * graphColumnWidth, 0.f);
-		glVertex2f(guideX + 0.5f * graphColumnWidth, 0.f);
-		glVertex2f(guideX + 0.5f * graphColumnWidth, size.y);
-		glVertex2f(guideX - 0.5f * graphColumnWidth, size.y);
-		glEnd();
-
-		const NVGcolor line = nvgRGBA(186, 154, 92, 96);
-		glColor4f(line.r, line.g, line.b, line.a);
-		const float lineH = 1.4f;
-		const float y0 = clamp(guideY - 0.5f * lineH, 0.f, size.y);
-		const float y1 = clamp(guideY + 0.5f * lineH, 0.f, size.y);
-		glBegin(GL_QUADS);
-		glVertex2f(0.f, y0);
-		glVertex2f(size.x, y0);
-		glVertex2f(size.x, y1);
-		glVertex2f(0.f, y1);
-		glEnd();
 	}
 
 	static std::vector<Vec> computeBodyJoinOffsets(const std::vector<Vec>& pts, float halfW) {
@@ -661,69 +543,21 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		drawBodyStripFeatherWithOffsets(pts, innerOff, outerOff, innerW, color, edgeAlphaScale, shaderPath);
 	}
 
-	const std::vector<Vec>& ensureBodySamples(Vec size, int sampleCount) {
-		if (!module || module->pointCount < 2 || sampleCount <= 0) {
-			cachedBodySamples.clear();
-			cachedBodySamplesValid = false;
-			return cachedBodySamples;
-		}
-		const uint32_t waveVersion = module->waveVersion.load(std::memory_order_acquire);
-		const int rockStateIndex = module->activeRockStateIndex.load(std::memory_order_acquire);
-		const float slitherAmount = levi_math::clamp01(module->displaySlitherAmount.load(std::memory_order_relaxed));
-		const float slitherPhase = module->uiSlitherPhase.load(std::memory_order_relaxed);
-		const bool cacheValid =
-			cachedBodySamplesValid &&
-			cachedBodyWaveVersion == waveVersion &&
-			cachedBodyRockStateIndex == rockStateIndex &&
-			cachedBodyPointCount == module->pointCount &&
-			cachedBodySampleCount == sampleCount &&
-			std::fabs(cachedBodySize.x - size.x) <= 1e-4f &&
-			std::fabs(cachedBodySize.y - size.y) <= 1e-4f &&
-			std::fabs(cachedBodySlitherPhase - slitherPhase) <= 1e-6f &&
-			std::fabs(cachedBodySlitherAmount - slitherAmount) <= 1e-6f;
-		if (cacheValid) {
-			module->perfBodySampleCacheHits.fetch_add(1u, std::memory_order_relaxed);
-			return cachedBodySamples;
-		}
-		module->perfBodySampleCacheMisses.fetch_add(1u, std::memory_order_relaxed);
-		std::array<float, kWyrmPointCountMax> bodyPoints {};
-		for (int i = 0; i < module->pointCount; ++i) {
-			bodyPoints[i] = module->getWavePoint(i);
-		}
-		cachedBodySamples.clear();
-		cachedBodySamples.reserve(size_t(sampleCount));
-		for (int i = 0; i < sampleCount; ++i) {
-			const float phase = (float(i) + 0.5f) / float(sampleCount);
-			cachedBodySamples.push_back(bodyPointForPhase(module, bodyPoints, phase, size));
-		}
-		cachedBodyWaveVersion = waveVersion;
-		cachedBodyRockStateIndex = rockStateIndex;
-		cachedBodyPointCount = module->pointCount;
-		cachedBodySampleCount = sampleCount;
-		cachedBodySize = size;
-		cachedBodySlitherPhase = slitherPhase;
-		cachedBodySlitherAmount = slitherAmount;
-		cachedBodySamplesValid = true;
-		return cachedBodySamples;
-	}
-
 	int bodySampleCountForSize(Vec size, bool shaderPath) {
-		if (!module) {
-			return 128;
-		}
-		const float zoom = std::max(1.f, getAbsoluteZoom());
-		const float drawWidth = std::max(1.f, size.x - 4.4f);
-		const float samplesPerScreenPixel = shaderPath ? 2.05f : 1.75f;
-		const int pixelSampleBudget = int(std::ceil(
-			drawWidth * zoom * samplesPerScreenPixel));
-		const int pointSampleBudget = std::max(128, module->pointCount);
-		return clamp(std::max(pixelSampleBudget, pointSampleBudget), 128, 2048);
+		return module
+			? wyrm_render::glBodySampleCount(
+				size, module->pointCount, getAbsoluteZoom(), shaderPath)
+			: 128;
 	}
 
 	void drawBodyGl(Vec size, bool shaderPath, bool includeBase, bool includeGlow) {
 		if (!module || module->pointCount < 2) return;
 		const int sampleCount = bodySampleCountForSize(size, shaderPath);
-		const std::vector<Vec>& samples = ensureBodySamples(size, sampleCount);
+		if (!geometryCache) {
+			geometryCache = std::make_shared<wyrm_render::DisplayGeometryCache>();
+		}
+		geometryCache->ensure(module, size, sampleCount);
+		const std::vector<Vec>& samples = geometryCache->points;
 		if (samples.size() < 2u) return;
 		std::vector<std::pair<float, std::vector<Vec>>> offsetCache;
 		auto getOffsets = [&](float halfW) -> const std::vector<Vec>& {
@@ -774,7 +608,11 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	void drawBodyMaskGl(Vec size) {
 		if (!module || module->pointCount < 2) return;
 		const int sampleCount = bodySampleCountForSize(size, false);
-		const std::vector<Vec>& samples = ensureBodySamples(size, sampleCount);
+		if (!geometryCache) {
+			geometryCache = std::make_shared<wyrm_render::DisplayGeometryCache>();
+		}
+		geometryCache->ensure(module, size, sampleCount);
+		const std::vector<Vec>& samples = geometryCache->points;
 		if (samples.size() < 2u) return;
 		std::vector<std::pair<float, std::vector<Vec>>> offsetCache;
 		auto getOffsets = [&](float halfW) -> const std::vector<Vec>& {
@@ -827,8 +665,6 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 			module->perfSandGlUs.store(0.f, std::memory_order_relaxed);
 			return;
 		}
-		advanceUiSlitherPhase();
-
 		const uint32_t waveVersion = module->waveVersion.load(std::memory_order_acquire);
 		const int rockStateIndex = module->activeRockStateIndex.load(std::memory_order_acquire);
 		const int pointCount = module->pointCount;
@@ -840,15 +676,6 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 			module->displaySlitherAmount.load(std::memory_order_relaxed));
 		const float slitherPhase = module->uiSlitherPhase.load(std::memory_order_relaxed);
 		const float absoluteZoom = std::max(1.f, getAbsoluteZoom());
-
-		const Vec mouseLocal = currentLocalMousePos();
-		const bool mouseInside =
-			mouseLocal.x >= 0.f && mouseLocal.x <= box.size.x
-			&& mouseLocal.y >= 0.f && mouseLocal.y <= box.size.y;
-		const int hoverIndex = mouseInside
-			? indexFromX(mouseLocal.x, std::max(pointCount, 1), box.size.x)
-			: -1;
-		const float hoverY = mouseInside ? clamp(mouseLocal.y, 0.f, box.size.y) : -1.f;
 
 		bool dirty = !redrawStateInitialized;
 		dirty = dirty || mode != lastRenderMode;
@@ -862,9 +689,6 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		dirty = dirty || std::fabs(box.size.x - lastDrawSize.x) > 1e-4f;
 		dirty = dirty || std::fabs(box.size.y - lastDrawSize.y) > 1e-4f;
 		dirty = dirty || std::fabs(absoluteZoom - lastAbsoluteZoom) > 1e-4f;
-		dirty = dirty || mouseInside != lastMouseInside;
-		dirty = dirty || hoverIndex != lastHoverIndex;
-		dirty = dirty || std::fabs(hoverY - lastHoverY) > 0.25f;
 		dirty = dirty || std::fabs(slitherAmount - lastSlitherAmount) > 1e-5f;
 		dirty = dirty || (slitherAmount > 1e-5f
 			&& std::fabs(slitherPhase - lastSlitherPhase) > 1e-6f);
@@ -881,9 +705,6 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		lastSlitherPhase = slitherPhase;
 		lastDrawSize = box.size;
 		lastAbsoluteZoom = absoluteZoom;
-		lastMouseInside = mouseInside;
-		lastHoverIndex = hoverIndex;
-		lastHoverY = hoverY;
 		redrawStateInitialized = true;
 
 		if (dirty) {
@@ -970,7 +791,6 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		}
 
 		drawWaveColumnsGl(box.size);
-		drawHoverGuidesGl(box.size);
 		const bool shaderPath = useShdr && bodyShaderReady;
 		// SHDR now draws direct shader-softened strips. Keep RT path disabled.
 		const bool useBodyRt = false;
@@ -1082,8 +902,21 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 };
 
 Widget* createWyrmSandGlWidget(Wyrm* module, std::shared_ptr<WyrmSand> sandState) {
+	return createWyrmSandGlWidget(
+		module,
+		std::move(sandState),
+		std::make_shared<wyrm_render::DisplayGeometryCache>());
+}
+
+Widget* createWyrmSandGlWidget(
+	Wyrm* module,
+	std::shared_ptr<WyrmSand> sandState,
+	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache) {
 	auto* w = new WyrmSandGlWidget();
 	w->module = module;
 	w->sand = sandState ? sandState : std::make_shared<WyrmSand>();
+	w->geometryCache = geometryCache
+		? std::move(geometryCache)
+		: std::make_shared<wyrm_render::DisplayGeometryCache>();
 	return w;
 }
