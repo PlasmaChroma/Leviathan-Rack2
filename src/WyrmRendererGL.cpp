@@ -20,6 +20,19 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	int waveColumnTextureW = 0;
 	int waveColumnTextureH = 0;
 	int waveColumnTextureCount = -1;
+	bool waveColumnTextureEnvelope = false;
+	GLuint curveTexture = 0;
+	int curveTextureCount = 0;
+	uint64_t curveTextureRevision = 0;
+	GLuint waveShaderProgram = 0;
+	GLint waveShaderCurveLoc = -1;
+	GLint waveShaderCurveCountLoc = -1;
+	GLint waveShaderPointCountLoc = -1;
+	GLint waveShaderInsetLoc = -1;
+	GLint waveShaderInvHeightLoc = -1;
+	GLint waveShaderEnvelopeLoc = -1;
+	bool waveShaderInitAttempted = false;
+	bool waveShaderReady = false;
 	GLuint bodyShaderProgram = 0;
 	GLint bodyShaderSoftnessLoc = -1;
 	GLint bodyShaderMiddleRatioLoc = -1;
@@ -49,6 +62,25 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		waveColumnTextureW = 0;
 		waveColumnTextureH = 0;
 		waveColumnTextureCount = -1;
+		waveColumnTextureEnvelope = false;
+	}
+
+	void resetCurveTextureState() {
+		curveTexture = 0;
+		curveTextureCount = 0;
+		curveTextureRevision = 0;
+	}
+
+	void resetWaveShaderState() {
+		waveShaderProgram = 0;
+		waveShaderCurveLoc = -1;
+		waveShaderCurveCountLoc = -1;
+		waveShaderPointCountLoc = -1;
+		waveShaderInsetLoc = -1;
+		waveShaderInvHeightLoc = -1;
+		waveShaderEnvelopeLoc = -1;
+		waveShaderInitAttempted = false;
+		waveShaderReady = false;
 	}
 
 	void resetBodyShaderState() {
@@ -67,6 +99,12 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		if (waveColumnTexture != 0 && !glIsTexture(waveColumnTexture)) {
 			resetWaveColumnTextureState();
 		}
+		if (curveTexture != 0 && !glIsTexture(curveTexture)) {
+			resetCurveTextureState();
+		}
+		if (waveShaderReady && (waveShaderProgram == 0 || !glIsProgram(waveShaderProgram))) {
+			resetWaveShaderState();
+		}
 		if (bodyShaderReady && (bodyShaderProgram == 0 || !glIsProgram(bodyShaderProgram))) {
 			resetBodyShaderState();
 		}
@@ -84,6 +122,134 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			return 0;
 		}
 		return shader;
+	}
+
+	void ensureWaveShader() {
+		if (waveShaderInitAttempted) return;
+		waveShaderInitAttempted = true;
+		static const char* kVs = R"GLSL(
+			#version 120
+			varying vec2 vUv;
+			void main() {
+				gl_Position = ftransform();
+				vUv = gl_MultiTexCoord0.xy;
+			}
+		)GLSL";
+		static const char* kFs = R"GLSL(
+			#version 120
+			varying vec2 vUv;
+			uniform sampler2D uCurve;
+			uniform float uCurveCount;
+			uniform float uPointCount;
+			uniform float uInset;
+			uniform float uInvHeight;
+			uniform float uEnvelope;
+
+			vec4 over(vec4 dst, vec4 src) {
+				float outA = src.a + dst.a * (1.0 - src.a);
+				vec3 premul = src.rgb * src.a + dst.rgb * dst.a * (1.0 - src.a);
+				return vec4(outA > 0.00001 ? premul / outA : vec3(0.0), outA);
+			}
+
+			void main() {
+				float span = max(0.00001, 1.0 - 2.0 * uInset);
+				float phase = (vUv.x - uInset) / span;
+				float valid = step(0.0, phase) * step(phase, 1.0);
+				float curveU = (clamp(phase, 0.0, 1.0) * (uCurveCount - 1.0) + 0.5) / uCurveCount;
+				float curveY = texture2D(uCurve, vec2(curveU, 0.5)).r;
+				float aa = max(uInvHeight * 1.25, 0.0001);
+				float y = vUv.y;
+				float fillMask;
+				if (uEnvelope > 0.5) {
+					fillMask = smoothstep(curveY - aa, curveY + aa, y);
+				}
+				else if (curveY < 0.5) {
+					fillMask = smoothstep(curveY - aa, curveY + aa, y)
+						* (1.0 - smoothstep(0.5, 0.5 + aa, y));
+				}
+				else {
+					fillMask = smoothstep(0.5 - aa, 0.5, y)
+						* (1.0 - smoothstep(curveY - aa, curveY + aa, y));
+				}
+				fillMask *= valid;
+
+				bool positive = y < 0.5;
+				vec4 cyanNear = vec4(28.0, 204.0, 217.0, 46.0) / 255.0;
+				vec4 cyanFar = vec4(42.0, 228.0, 255.0, 152.0) / 255.0;
+				vec4 purpleNear = vec4(115.0, 72.0, 224.0, 50.0) / 255.0;
+				vec4 purpleFar = vec4(150.0, 92.0, 255.0, 162.0) / 255.0;
+				vec4 color;
+				if (uEnvelope > 0.5) {
+					// Envelope height is unipolar: use one continuous material field,
+					// purple at the floor and cyan at the ceiling.
+					color = mix(purpleFar, cyanFar, clamp(1.0 - y, 0.0, 1.0));
+				}
+				else {
+					float depth = positive ? clamp((0.5 - y) * 2.0, 0.0, 1.0)
+						: clamp((y - 0.5) * 2.0, 0.0, 1.0);
+					color = positive
+						? mix(cyanNear, cyanFar, depth)
+						: mix(purpleNear, purpleFar, depth);
+				}
+				color.a *= fillMask;
+
+				float column = floor(clamp(phase, 0.0, 0.999999) * uPointCount);
+				if (mod(column, 2.0) >= 1.0 && fillMask > 0.0) {
+					vec4 cyanShade = vec4(0.0, 56.0, 72.0, 132.0) / 255.0;
+					vec4 purpleShade = vec4(40.0, 24.0, 112.0, 92.0) / 255.0;
+					vec4 shade = uEnvelope > 0.5
+						? mix(purpleShade, cyanShade, clamp(1.0 - y, 0.0, 1.0))
+						: (positive ? cyanShade : purpleShade);
+					shade.a *= fillMask;
+					color = over(color, shade);
+				}
+
+				if (uEnvelope < 0.5) {
+					float midMask = 1.0 - smoothstep(0.5 * uInvHeight, 1.5 * uInvHeight, abs(y - 0.5));
+					color = over(color, vec4(240.0 / 255.0, 180.0 / 255.0, 42.0 / 255.0,
+						(150.0 / 255.0) * midMask));
+				}
+				gl_FragColor = color;
+			}
+		)GLSL";
+		GLuint vs = compileShader(GL_VERTEX_SHADER, kVs);
+		GLuint fs = compileShader(GL_FRAGMENT_SHADER, kFs);
+		if (!vs || !fs) {
+			if (vs) glDeleteShader(vs);
+			if (fs) glDeleteShader(fs);
+			return;
+		}
+		waveShaderProgram = glCreateProgram();
+		if (!waveShaderProgram) {
+			glDeleteShader(vs);
+			glDeleteShader(fs);
+			return;
+		}
+		glAttachShader(waveShaderProgram, vs);
+		glAttachShader(waveShaderProgram, fs);
+		glLinkProgram(waveShaderProgram);
+		glDeleteShader(vs);
+		glDeleteShader(fs);
+		GLint linked = GL_FALSE;
+		glGetProgramiv(waveShaderProgram, GL_LINK_STATUS, &linked);
+		if (linked != GL_TRUE) {
+			glDeleteProgram(waveShaderProgram);
+			waveShaderProgram = 0;
+			return;
+		}
+		waveShaderCurveLoc = glGetUniformLocation(waveShaderProgram, "uCurve");
+		waveShaderCurveCountLoc = glGetUniformLocation(waveShaderProgram, "uCurveCount");
+		waveShaderPointCountLoc = glGetUniformLocation(waveShaderProgram, "uPointCount");
+		waveShaderInsetLoc = glGetUniformLocation(waveShaderProgram, "uInset");
+		waveShaderInvHeightLoc = glGetUniformLocation(waveShaderProgram, "uInvHeight");
+		waveShaderEnvelopeLoc = glGetUniformLocation(waveShaderProgram, "uEnvelope");
+		waveShaderReady = waveShaderCurveLoc >= 0 && waveShaderCurveCountLoc >= 0
+			&& waveShaderPointCountLoc >= 0 && waveShaderInsetLoc >= 0
+			&& waveShaderInvHeightLoc >= 0 && waveShaderEnvelopeLoc >= 0;
+		if (!waveShaderReady) {
+			glDeleteProgram(waveShaderProgram);
+			waveShaderProgram = 0;
+		}
 	}
 
 	void ensureBodyShader() {
@@ -190,14 +356,15 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		dst[3] = outA;
 	}
 
-	void ensureWaveColumnTexture(Vec size, int count) {
+	void ensureWaveColumnTexture(Vec size, int count, bool envelopeVisual) {
 		const int w = std::max(1, int(std::ceil(size.x)));
 		const int h = std::max(1, int(std::ceil(size.y)));
 		count = std::max(1, count);
 		if (waveColumnTexture != 0 &&
 			waveColumnTextureW == w &&
 			waveColumnTextureH == h &&
-			waveColumnTextureCount == count) {
+			waveColumnTextureCount == count &&
+			waveColumnTextureEnvelope == envelopeVisual) {
 			return;
 		}
 
@@ -220,7 +387,9 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			const float t = positive
 				? levi_math::clamp01((midY - y) / std::max(midY, 1.f))
 				: levi_math::clamp01((y - midY) / std::max(size.y - midY, 1.f));
-			const NVGcolor base = positive ? mixColor(posNear, posFar, t) : mixColor(negNear, negFar, t);
+			const NVGcolor base = envelopeVisual
+				? mixColor(negFar, posFar, levi_math::clamp01(1.f - y / std::max(size.y, 1.f)))
+				: (positive ? mixColor(posNear, posFar, t) : mixColor(negNear, negFar, t));
 			for (int px = 0; px < w; ++px) {
 				const float x = std::min(size.x, float(px) + 0.5f);
 				const float columnF = (x - inset) / std::max(dx, 1e-6f);
@@ -236,7 +405,10 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 				float out[4] = {0.f, 0.f, 0.f, 0.f};
 				compositeOver(base, out);
 				if ((column & 1) != 0) {
-					compositeOver(positive ? posShade : negShade, out);
+					const NVGcolor shade = envelopeVisual
+						? mixColor(negShade, posShade, levi_math::clamp01(1.f - y / std::max(size.y, 1.f)))
+						: (positive ? posShade : negShade);
+					compositeOver(shade, out);
 				}
 				const size_t offset = (size_t(py) * size_t(w) + size_t(px)) * 4u;
 				pixels[offset + 0u] = uint8_t(clamp(int(std::lround(out[0] * 255.f)), 0, 255));
@@ -258,9 +430,65 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		waveColumnTextureW = w;
 		waveColumnTextureH = h;
 		waveColumnTextureCount = count;
+		waveColumnTextureEnvelope = envelopeVisual;
 	}
 
-	void drawWaveColumnsGl(Vec size, bool shaderPath) {
+	bool drawWaveAnalyticalGl(Vec size, bool shaderPath) {
+		if (!module || module->pointCount <= 0) return false;
+		ensureWaveShader();
+		if (!waveShaderReady) return false;
+		if (!geometryCache) {
+			geometryCache = std::make_shared<wyrm_render::DisplayGeometryCache>();
+		}
+		geometryCache->ensure(module, size, bodySampleCountForSize(size, shaderPath),
+			wyrm_render::DisplayGeometryRequirement::PointsOnly);
+		const std::vector<Vec>& curve = geometryCache->points;
+		if (curve.size() < 2u) return false;
+
+		if (curveTexture == 0 || curveTextureRevision != geometryCache->revision
+			|| curveTextureCount != int(curve.size())) {
+			std::vector<float> pixels(curve.size() * 4u, 0.f);
+			for (size_t i = 0; i < curve.size(); ++i) {
+				pixels[i * 4u] = clamp(curve[i].y / std::max(size.y, 1.f), 0.f, 1.f);
+				pixels[i * 4u + 3u] = 1.f;
+			}
+			if (curveTexture == 0) glGenTextures(1, &curveTexture);
+			glBindTexture(GL_TEXTURE_2D, curveTexture);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, GLsizei(curve.size()), 1,
+				0, GL_RGBA, GL_FLOAT, pixels.data());
+			curveTextureCount = int(curve.size());
+			curveTextureRevision = geometryCache->revision;
+		}
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, curveTexture);
+		glEnable(GL_TEXTURE_2D);
+		glUseProgram(waveShaderProgram);
+		glUniform1i(waveShaderCurveLoc, 0);
+		glUniform1f(waveShaderCurveCountLoc, float(curveTextureCount));
+		glUniform1f(waveShaderPointCountLoc, float(std::max(1, module->pointCount)));
+		glUniform1f(waveShaderInsetLoc, wyrm_render::kPointEdgeInsetPx / std::max(size.x, 1.f));
+		glUniform1f(waveShaderInvHeightLoc, 1.f / std::max(size.y, 1.f));
+		glUniform1f(waveShaderEnvelopeLoc,
+			module->envelopeMode.load(std::memory_order_relaxed) ? 1.f : 0.f);
+		glColor4f(1.f, 1.f, 1.f, 1.f);
+		glBegin(GL_TRIANGLE_STRIP);
+		glTexCoord2f(0.f, 0.f); glVertex2f(0.f, 0.f);
+		glTexCoord2f(1.f, 0.f); glVertex2f(size.x, 0.f);
+		glTexCoord2f(0.f, 1.f); glVertex2f(0.f, size.y);
+		glTexCoord2f(1.f, 1.f); glVertex2f(size.x, size.y);
+		glEnd();
+		glUseProgram(0);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		glDisable(GL_TEXTURE_2D);
+		return true;
+	}
+
+	void drawWaveColumnsFallbackGl(Vec size, bool shaderPath) {
 		if (!module || module->pointCount <= 0) {
 			return;
 		}
@@ -292,7 +520,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		const float dx = drawWidth / float(std::max(1, count));
 		const float midY = 0.5f * size.y;
 		const bool envelopeVisual = module->envelopeMode.load(std::memory_order_relaxed);
-		ensureWaveColumnTexture(size, count);
+		ensureWaveColumnTexture(size, count, envelopeVisual);
 		if (waveColumnTexture == 0) {
 			return;
 		}
@@ -311,7 +539,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			const float x1 = std::min(size.x, x + 0.5f * dx);
 			const float u0 = x0 / std::max(size.x, 1.f);
 			const float u1 = x1 / std::max(size.x, 1.f);
-			const float textureScaleY = envelopeVisual ? 0.5f : 1.f;
+			const float textureScaleY = 1.f;
 			const float v0 = textureScaleY * yTop / std::max(size.y, 1.f);
 			const float v1 = textureScaleY * yBottom / std::max(size.y, 1.f);
 			glTexCoord2f(u0, v0);
@@ -325,6 +553,12 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		}
 		glEnd();
 		glDisable(GL_TEXTURE_2D);
+	}
+
+	void drawWaveColumnsGl(Vec size, bool shaderPath) {
+		if (!drawWaveAnalyticalGl(size, shaderPath)) {
+			drawWaveColumnsFallbackGl(size, shaderPath);
+		}
 	}
 
 	static std::vector<Vec> computeBodyJoinOffsets(const std::vector<Vec>& pts, float halfW) {
@@ -451,6 +685,8 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		// Rack UI. Avoid driver calls from widget teardown; resources are
 		// reclaimed by the editor/context owner.
 		resetBodyShaderState();
+		resetWaveShaderState();
+		resetCurveTextureState();
 		resetWaveColumnTextureState();
 	}
 

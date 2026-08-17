@@ -24,6 +24,16 @@ Implemented and build-validated:
 - Rock hover emphasis, drag arrows, and the drag-mode label now render in the
   live overlay. Hover-only pointer movement no longer dirties the cached editor;
   actual rock dragging still does because it changes persistent geometry.
+- The GL waveform area now has an analytical shader path backed by the shared
+  display curve in a one-row `RGBA32F` texture. One editor-sized quad evaluates
+  oscillator/envelope coverage, polarity gradients, alternating columns, curve
+  AA, and the oscillator midpoint. The former CPU raster and per-column quads are
+  retained temporarily as automatic shader-initialization fallback.
+- Envelope fill in the analytical GL path uses a continuous height gradient from
+  purple at the editor floor to cyan at the ceiling. Oscillator mode retains its
+  bipolar cyan/purple material split.
+- NanoVG envelope fill uses the same purple-floor to cyan-ceiling material,
+  including matching alternating-column shading and its non-texture fallback.
 
 Immediate validation checkpoint:
 
@@ -39,10 +49,19 @@ width and truly rounded joins at arbitrary acute turns. If the bounded-miter
 result is still unacceptable, do not continue tuning the scalar cap; use explicit
 join geometry or the deferred screen-space body renderer.
 
+Checkpoint result: the bounded-miter body was provisionally accepted after a
+brief Rack test. It is not considered perfect, but further join tuning is deferred
+until after the curve-texture and analytical-fill work, since that data path may
+support replacing strip-based body rendering altogether.
+
 Next implementation slice after approval:
 
-1. Implement the analytical waveform-fill shader and curve texture.
-2. Add reusable buffers, then asynchronous GPU timing.
+1. Visually validate analytical fill parity in oscillator/envelope and collapsed/
+   expanded views. In particular check polarity, midpoint thickness, column
+   alignment, curve-edge AA, and behavior around rock-constrained segments.
+2. After approval, remove the full-resolution CPU waveform raster; decide whether
+   the immediate-mode fallback remains worthwhile or should become NanoVG fallback.
+3. Add reusable buffers, then asynchronous GPU timing.
 
 This plan covers Wyrm's waveform fill, body, editor compositing, and renderer
 instrumentation. The static background field is an independent cached layer and
@@ -264,7 +283,9 @@ lost its fallback behavior.
 - [x] Phase 2: add lean geometry requests and one canonical body material.
 - [ ] Phase 3: consolidate SHDR body to one analytical strip (implemented and
   build-validated; visual approval pending).
-- [ ] Phase 4: replace the waveform raster/column quads with one shader pass.
+- [ ] Phase 4: replace the waveform raster/column quads with one shader pass
+  (analytical path implemented and build-validated; visual approval and old-raster
+  removal pending).
 - [ ] Phase 5: add reusable buffers and asynchronous GPU timing.
 - [ ] Decide from measurements whether screen-space body rendering is justified.
 

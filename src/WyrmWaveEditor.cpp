@@ -276,13 +276,14 @@ struct WyrmWaveEditor : TransparentWidget {
 
 		for (int py = 0; py < h; ++py) {
 			const float y = std::min(box.size.y, float(py) + 0.5f);
-			const bool positive = envelopeVisual || y < midY;
-			const float t = envelopeVisual
-				? levi_math::clamp01((box.size.y - y) / std::max(box.size.y, 1.f))
-				: (positive
-					? levi_math::clamp01((midY - y) / std::max(midY, 1.f))
-					: levi_math::clamp01((y - midY) / std::max(box.size.y - midY, 1.f)));
-			const NVGcolor base = positive ? mixColor(posNear, posFar, t) : mixColor(negNear, negFar, t);
+			const bool positive = y < midY;
+			const float heightT = levi_math::clamp01((box.size.y - y) / std::max(box.size.y, 1.f));
+			const float t = positive
+				? levi_math::clamp01((midY - y) / std::max(midY, 1.f))
+				: levi_math::clamp01((y - midY) / std::max(box.size.y - midY, 1.f));
+			const NVGcolor base = envelopeVisual
+				? mixColor(negFar, posFar, heightT)
+				: (positive ? mixColor(posNear, posFar, t) : mixColor(negNear, negFar, t));
 			for (int px = 0; px < w; ++px) {
 				const float x = std::min(box.size.x, float(px) + 0.5f);
 				const float columnF = (x - inset) / std::max(dx, 1e-6f);
@@ -290,7 +291,9 @@ struct WyrmWaveEditor : TransparentWidget {
 				float out[4] = {0.f, 0.f, 0.f, 0.f};
 				compositeOver(base, out);
 				if (column >= 0 && column < count && (column & 1) != 0) {
-					compositeOver(positive ? posShade : negShade, out);
+					compositeOver(envelopeVisual
+						? mixColor(negShade, posShade, heightT)
+						: (positive ? posShade : negShade), out);
 				}
 				const size_t offset = (size_t(py) * size_t(w) + size_t(px)) * 4u;
 				waveMaterialPixels[offset + 0u] = wyrmClampU8(int(std::lround(out[0] * out[3] * 255.f)));
@@ -749,7 +752,7 @@ struct WyrmWaveEditor : TransparentWidget {
 				else {
 					const NVGpaint gradient = nvgLinearGradient(
 						args.vg, 0.f, box.size.y, 0.f, 0.f,
-						nvgRGBA(28, 204, 217, 46), nvgRGBA(42, 228, 255, 152));
+						nvgRGBA(150, 92, 255, 162), nvgRGBA(42, 228, 255, 152));
 					nvgFillPaint(args.vg, gradient);
 				}
 				nvgFill(args.vg);
