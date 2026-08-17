@@ -36,6 +36,22 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	float cachedBodySlitherPhase = -1.f;
 	float cachedBodySlitherAmount = -1.f;
 	bool cachedBodySamplesValid = false;
+	bool redrawStateInitialized = false;
+	int lastRenderMode = -1;
+	uint32_t lastWaveVersion = 0;
+	int lastRockStateIndex = -1;
+	int lastPointCount = -1;
+	bool lastEnvelopeMode = false;
+	bool lastSandEnabled = false;
+	int lastSandDetail = -1;
+	uint64_t lastSandRevision = 0;
+	float lastSlitherPhase = -1.f;
+	float lastSlitherAmount = -1.f;
+	Vec lastDrawSize = Vec(-1.f, -1.f);
+	float lastAbsoluteZoom = -1.f;
+	bool lastMouseInside = false;
+	int lastHoverIndex = -1;
+	float lastHoverY = -1.f;
 
 	void resetTextureState() {
 		texture = 0;
@@ -691,15 +707,22 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		return cachedBodySamples;
 	}
 
-	void drawBodyGl(Vec size, bool shaderPath, bool includeBase, bool includeGlow) {
-		if (!module || module->pointCount < 2) return;
-		const int baseSampleCount = std::max(module->pointCount, std::min(1536, std::max(256, module->pointCount * 8)));
+	int bodySampleCountForSize(Vec size, bool shaderPath) {
+		if (!module) {
+			return 128;
+		}
 		const float zoom = std::max(1.f, getAbsoluteZoom());
 		const float drawWidth = std::max(1.f, size.x - 4.4f);
-		// Keep roughly <= 1px phase step in screen-space at high zoom to avoid visible strip aliasing.
-		const float shdrSampleScale = shaderPath ? 2.05f : 1.75f;
-		const int zoomSampleTarget = int(std::ceil(drawWidth * zoom * shdrSampleScale));
-		const int sampleCount = clamp(std::max(baseSampleCount, zoomSampleTarget), module->pointCount, 8192);
+		const float samplesPerScreenPixel = shaderPath ? 2.05f : 1.75f;
+		const int pixelSampleBudget = int(std::ceil(
+			drawWidth * zoom * samplesPerScreenPixel));
+		const int pointSampleBudget = std::max(128, module->pointCount);
+		return clamp(std::max(pixelSampleBudget, pointSampleBudget), 128, 2048);
+	}
+
+	void drawBodyGl(Vec size, bool shaderPath, bool includeBase, bool includeGlow) {
+		if (!module || module->pointCount < 2) return;
+		const int sampleCount = bodySampleCountForSize(size, shaderPath);
 		const std::vector<Vec>& samples = ensureBodySamples(size, sampleCount);
 		if (samples.size() < 2u) return;
 		std::vector<std::pair<float, std::vector<Vec>>> offsetCache;
@@ -750,11 +773,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 
 	void drawBodyMaskGl(Vec size) {
 		if (!module || module->pointCount < 2) return;
-		const int baseSampleCount = std::max(module->pointCount, std::min(1536, std::max(256, module->pointCount * 8)));
-		const float zoom = std::max(1.f, getAbsoluteZoom());
-		const float drawWidth = std::max(1.f, size.x - 4.4f);
-		const int zoomSampleTarget = int(std::ceil(drawWidth * zoom * 1.75f));
-		const int sampleCount = clamp(std::max(baseSampleCount, zoomSampleTarget), module->pointCount, 8192);
+		const int sampleCount = bodySampleCountForSize(size, false);
 		const std::vector<Vec>& samples = ensureBodySamples(size, sampleCount);
 		if (samples.size() < 2u) return;
 		std::vector<std::pair<float, std::vector<Vec>>> offsetCache;
@@ -804,12 +823,75 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		const bool renderGl = (mode == WYRM_RENDER_OPENGL || mode == WYRM_RENDER_OPENGL_SHDR);
 		visible = renderGl;
 		if (!visible) {
+			redrawStateInitialized = false;
 			module->perfSandGlUs.store(0.f, std::memory_order_relaxed);
 			return;
 		}
 		advanceUiSlitherPhase();
-		setDirty();
-		OpenGlWidget::step();
+
+		const uint32_t waveVersion = module->waveVersion.load(std::memory_order_acquire);
+		const int rockStateIndex = module->activeRockStateIndex.load(std::memory_order_acquire);
+		const int pointCount = module->pointCount;
+		const bool envelopeMode = module->envelopeMode.load(std::memory_order_relaxed);
+		const bool sandEnabled = module->sandViewEnabled.load(std::memory_order_relaxed);
+		const int sandDetail = module->sandDetail.load(std::memory_order_relaxed);
+		const uint64_t sandRevision = sand ? sand->imageDataRevision() : 0;
+		const float slitherAmount = levi_math::clamp01(
+			module->displaySlitherAmount.load(std::memory_order_relaxed));
+		const float slitherPhase = module->uiSlitherPhase.load(std::memory_order_relaxed);
+		const float absoluteZoom = std::max(1.f, getAbsoluteZoom());
+
+		const Vec mouseLocal = currentLocalMousePos();
+		const bool mouseInside =
+			mouseLocal.x >= 0.f && mouseLocal.x <= box.size.x
+			&& mouseLocal.y >= 0.f && mouseLocal.y <= box.size.y;
+		const int hoverIndex = mouseInside
+			? indexFromX(mouseLocal.x, std::max(pointCount, 1), box.size.x)
+			: -1;
+		const float hoverY = mouseInside ? clamp(mouseLocal.y, 0.f, box.size.y) : -1.f;
+
+		bool dirty = !redrawStateInitialized;
+		dirty = dirty || mode != lastRenderMode;
+		dirty = dirty || waveVersion != lastWaveVersion;
+		dirty = dirty || rockStateIndex != lastRockStateIndex;
+		dirty = dirty || pointCount != lastPointCount;
+		dirty = dirty || envelopeMode != lastEnvelopeMode;
+		dirty = dirty || sandEnabled != lastSandEnabled;
+		dirty = dirty || sandDetail != lastSandDetail;
+		dirty = dirty || (sandEnabled && sandRevision != lastSandRevision);
+		dirty = dirty || std::fabs(box.size.x - lastDrawSize.x) > 1e-4f;
+		dirty = dirty || std::fabs(box.size.y - lastDrawSize.y) > 1e-4f;
+		dirty = dirty || std::fabs(absoluteZoom - lastAbsoluteZoom) > 1e-4f;
+		dirty = dirty || mouseInside != lastMouseInside;
+		dirty = dirty || hoverIndex != lastHoverIndex;
+		dirty = dirty || std::fabs(hoverY - lastHoverY) > 0.25f;
+		dirty = dirty || std::fabs(slitherAmount - lastSlitherAmount) > 1e-5f;
+		dirty = dirty || (slitherAmount > 1e-5f
+			&& std::fabs(slitherPhase - lastSlitherPhase) > 1e-6f);
+
+		lastRenderMode = mode;
+		lastWaveVersion = waveVersion;
+		lastRockStateIndex = rockStateIndex;
+		lastPointCount = pointCount;
+		lastEnvelopeMode = envelopeMode;
+		lastSandEnabled = sandEnabled;
+		lastSandDetail = sandDetail;
+		lastSandRevision = sandRevision;
+		lastSlitherAmount = slitherAmount;
+		lastSlitherPhase = slitherPhase;
+		lastDrawSize = box.size;
+		lastAbsoluteZoom = absoluteZoom;
+		lastMouseInside = mouseInside;
+		lastHoverIndex = hoverIndex;
+		lastHoverY = hoverY;
+		redrawStateInitialized = true;
+
+		if (dirty) {
+			setDirty();
+		}
+		// OpenGlWidget::step() deliberately redraws every frame. Use the cached
+		// framebuffer behavior now that all live GL invalidation is explicit above.
+		widget::FramebufferWidget::step();
 	}
 
 	void drawFramebuffer() override {

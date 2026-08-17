@@ -325,4 +325,5 @@ struct Wyrm : Module {
 
 TransparentWidget* createWyrmWaveEditor(Wyrm* module);
 TransparentWidget* createWyrmWaveEditor(Wyrm* module, std::shared_ptr<WyrmSand> sandState);
+TransparentWidget* createWyrmEditorAnimationOverlay(Wyrm* module);
 Widget* createWyrmSandGlWidget(Wyrm* module, std::shared_ptr<WyrmSand> sandState);

@@ -2,6 +2,7 @@
 #include "WyrmSand.hpp"
 #include "DebugTerminalTransport.hpp"
 #include "NvgGraphicsLifecycle.hpp"
+#include "visual/VisualAssets.hpp"
 
 #include <chrono>
 #include <unordered_map>
@@ -46,10 +47,6 @@ struct WyrmWaveEditor : TransparentWidget {
 	int lastSandPersistence = -1;
 	bool lastEditorLocked = false;
 	bool lastEnvelopeMode = false;
-	bool tracerDotVisible = false;
-	float lastTracerPhase = -1.f;
-	bool envelopeProgressVisible = false;
-	float lastEnvelopeProgressPhase = -1.f;
 	float lastEditorDrawUs = 0.f;
 	float lastStepUsEma = 0.f;
 	debug_terminal::UiTimingRangeAccumulator stepUsRange;
@@ -646,35 +643,6 @@ struct WyrmWaveEditor : TransparentWidget {
 			dirty = true;
 		}
 
-		bool tracerDotVisibleNow = tracerDotVisible;
-		const bool slowTraceModeNow =
-			module->lfoMode.load(std::memory_order_relaxed)
-			|| module->envelopeMode.load(std::memory_order_relaxed);
-		const float tracerFrequencyNow = module->displayPhaseFrequencyHz.load(std::memory_order_relaxed);
-		if (!slowTraceModeNow || !std::isfinite(tracerFrequencyNow) || tracerFrequencyNow >= 2.4f) {
-			tracerDotVisibleNow = false;
-		}
-		else if (tracerFrequencyNow > 0.f && tracerFrequencyNow <= 2.f) {
-			tracerDotVisibleNow = true;
-		}
-		const float tracerPhaseNow = levi_math::wrap01(module->displayPhase.load(std::memory_order_relaxed));
-		if (tracerDotVisibleNow != tracerDotVisible
-			|| (tracerDotVisibleNow && std::fabs(tracerPhaseNow - lastTracerPhase) > 1e-5f)) {
-			dirty = true;
-		}
-		tracerDotVisible = tracerDotVisibleNow;
-		lastTracerPhase = tracerPhaseNow;
-		const bool envelopeProgressVisibleNow =
-			module->envelopeMode.load(std::memory_order_relaxed)
-			&& module->displayEnvelopeRunning.load(std::memory_order_relaxed);
-		if (envelopeProgressVisibleNow != envelopeProgressVisible
-			|| (envelopeProgressVisibleNow
-				&& std::fabs(tracerPhaseNow - lastEnvelopeProgressPhase) > 1e-5f)) {
-			dirty = true;
-		}
-		envelopeProgressVisible = envelopeProgressVisibleNow;
-		lastEnvelopeProgressPhase = tracerPhaseNow;
-
 		const Vec mouseLocal = currentLocalMousePos();
 		const bool mouseInside = (mouseLocal.x >= 0.f && mouseLocal.x <= box.size.x && mouseLocal.y >= 0.f && mouseLocal.y <= box.size.y);
 		const int hoverColumnNow = mouseInside ? indexFromX(mouseLocal.x) : -1;
@@ -789,20 +757,6 @@ struct WyrmWaveEditor : TransparentWidget {
 				bodyPoints[i] = module->getWavePoint(i);
 			}
 		}
-		if (hasModule
-			&& module->envelopeMode.load(std::memory_order_relaxed)
-			&& module->displayEnvelopeRunning.load(std::memory_order_relaxed)) {
-			const float progress = clamp(
-				module->displayPhase.load(std::memory_order_relaxed), 0.f, 1.f);
-			const float progressX = pointEdgeInset();
-			const float progressWidth = progress * pointDrawWidth();
-			if (progressWidth > 0.f) {
-				nvgBeginPath(args.vg);
-				nvgRect(args.vg, progressX, 0.f, progressWidth, box.size.y);
-				nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 34));
-				nvgFill(args.vg);
-			}
-		}
 		auto bodyWaveValueAtPhase = [&](float phase) {
 			if (hasModule) {
 				const float clearance = visualRockClearance();
@@ -859,7 +813,16 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 
 		const float midY = 0.5f * box.size.y;
-			const int bodySampleCount = std::max(count, hasModule ? std::min(768, std::max(128, module->pointCount * 4)) : count);
+			// Tessellate to visible pixel density rather than multiplying the authored
+			// point count blindly. At 256 points the normal editor is narrower than the
+			// source data, so 768 body samples only repeat subpixel work. Expanded view
+			// naturally receives a larger budget from its wider logical box.
+			const int pixelSampleBudget = std::max(
+				128, int(std::ceil(pointDrawWidth() * 1.25f)));
+			const int pointSampleBudget = std::max(128, count * 2);
+			const int bodySampleCount = hasModule
+				? clamp(std::min(pixelSampleBudget, pointSampleBudget), 128, 512)
+				: count;
 			const int cachedBodySamples = clamp(bodySampleCount, 0, kBodySamplesMax);
 			const bool drawBodyNanoVG = !module || module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG;
 			if (drawBodyNanoVG) {
@@ -1139,30 +1102,21 @@ struct WyrmWaveEditor : TransparentWidget {
 			};
 
 			if (drawBodyNanoVG) {
-			nvgLineJoin(args.vg, NVG_ROUND);
-			nvgLineCap(args.vg, NVG_ROUND);
-			nvgBeginPath(args.vg);
-			emitRoundedBodyPath();
-			nvgStrokeWidth(args.vg, 4.0f);
-			nvgStrokeColor(args.vg, nvgRGBA(74, 54, 24, 205));
-			nvgStroke(args.vg);
+				nvgLineJoin(args.vg, NVG_ROUND);
+				nvgLineCap(args.vg, NVG_ROUND);
+				nvgBeginPath(args.vg);
+				emitRoundedBodyPath();
 
-			nvgLineJoin(args.vg, NVG_ROUND);
-			nvgLineCap(args.vg, NVG_ROUND);
-			nvgBeginPath(args.vg);
-			emitRoundedBodyPath();
-			nvgStrokeWidth(args.vg, 2.6f);
-			nvgStrokeColor(args.vg, nvgRGBA(167, 132, 72, 230));
-			nvgStroke(args.vg);
-
-			nvgLineJoin(args.vg, NVG_ROUND);
-			nvgLineCap(args.vg, NVG_ROUND);
-			nvgBeginPath(args.vg);
-			emitRoundedBodyPath();
-			nvgStrokeWidth(args.vg, 1.15f);
-			nvgStrokeColor(args.vg, nvgRGBA(246, 215, 136, 225));
-			nvgStroke(args.vg);
-		}
+				nvgStrokeWidth(args.vg, 4.0f);
+				nvgStrokeColor(args.vg, nvgRGBA(74, 54, 24, 205));
+				nvgStroke(args.vg);
+				nvgStrokeWidth(args.vg, 2.6f);
+				nvgStrokeColor(args.vg, nvgRGBA(167, 132, 72, 230));
+				nvgStroke(args.vg);
+				nvgStrokeWidth(args.vg, 1.15f);
+				nvgStrokeColor(args.vg, nvgRGBA(246, 215, 136, 225));
+				nvgStroke(args.vg);
+			}
 
 		for (int i = 0; hasModule && i < module->rockCount; ++i) {
 			const WyrmRock& rock = module->rocks[i];
@@ -1230,22 +1184,6 @@ struct WyrmWaveEditor : TransparentWidget {
 			}
 		}
 
-		if (hasModule && tracerDotVisible) {
-			const float phase = levi_math::wrap01(module->displayPhase.load(std::memory_order_relaxed));
-			const float x = pointEdgeInset() + phase * pointDrawWidth();
-			const float y = yFromValue(bodyWaveValueAtPhase(phase));
-			constexpr float dotRadius = 2.8f;
-
-			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, x, y, dotRadius);
-			nvgFillColor(args.vg, nvgRGBA(148, 255, 64, 255));
-			nvgFill(args.vg);
-			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, x, y, dotRadius + 0.7f);
-			nvgStrokeWidth(args.vg, 1.15f);
-			nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 235));
-			nvgStroke(args.vg);
-		}
 		nvgResetScissor(args.vg);
 		nvgRestore(args.vg);
 
@@ -1261,10 +1199,181 @@ struct WyrmWaveEditor : TransparentWidget {
 	}
 };
 
+struct WyrmEditorAnimationOverlay final : TransparentWidget {
+	Wyrm* module = nullptr;
+	bool tracerDotVisible = false;
+	std::string sandPath;
+	std::shared_ptr<window::Image> sandImage;
+	NVGcontext* sandImageContext = nullptr;
+
+	explicit WyrmEditorAnimationOverlay(Wyrm* m)
+		: module(m)
+		, sandPath(asset::plugin(pluginInstance, "res/icon/sand_white_cs_96c.png")) {
+	}
+
+	void onContextCreate(const ContextCreateEvent& e) override {
+		sandImage.reset();
+		sandImageContext = e.vg;
+		TransparentWidget::onContextCreate(e);
+	}
+
+	void onContextDestroy(const ContextDestroyEvent& e) override {
+		sandImage.reset();
+		sandImageContext = nullptr;
+		TransparentWidget::onContextDestroy(e);
+	}
+
+	float pointEdgeInset() const {
+		return 2.2f;
+	}
+
+	float pointDrawWidth() const {
+		return std::max(1.f, box.size.x - 2.f * pointEdgeInset());
+	}
+
+	float visualRockClearance() const {
+		if (box.size.y <= 1.f) {
+			return kWyrmRockClearance;
+		}
+		const float pixelClearance = 0.5f * 4.f + 0.5f * 2.2f + 0.75f;
+		const float valueClearance = 2.f * pixelClearance / box.size.y;
+		return std::max(
+			kWyrmRockClearance,
+			valueClearance / std::max(kWyrmRockValueScale, 1e-4f));
+	}
+
+	float visualRockPhaseClearance() const {
+		if (pointDrawWidth() <= 1.f) {
+			return 0.f;
+		}
+		const float pixelClearance = 0.5f * 4.f + 0.5f * 2.2f + 0.75f;
+		return pixelClearance / pointDrawWidth();
+	}
+
+	float displayWaveValueAtPhase(float phase) const {
+		if (!module) {
+			return 0.f;
+		}
+		std::array<float, kWyrmPointCountMax> points {};
+		const int count = clamp(module->pointCount, 1, kWyrmPointCountMax);
+		for (int i = 0; i < count; ++i) {
+			points[i] = module->getWavePoint(i);
+		}
+		const float raw = catmullPeriodic(points, count, phase);
+		const float clearance = visualRockClearance();
+		const float phaseClearance = visualRockPhaseClearance();
+		const float base = module->resolveAgainstRocks(
+			raw, raw, phase, clearance, phaseClearance);
+		const float slitherAmount = levi_math::clamp01(
+			module->displaySlitherAmount.load(std::memory_order_relaxed));
+		const float slither = slitherAmount > 1e-5f
+			? slitherOffset(
+				phase,
+				module->uiSlitherPhase.load(std::memory_order_relaxed),
+				slitherAmount)
+			: 0.f;
+		return module->resolveAgainstRocks(
+			base, base + slither, phase, clearance, phaseClearance);
+	}
+
+	int sandTextureHandle(NVGcontext* vg) {
+		if (!vg || !APP || !APP->window) {
+			return -1;
+		}
+		if (sandImageContext != vg) {
+			sandImage.reset();
+			sandImageContext = vg;
+		}
+		if (!sandImage) {
+			sandImage = APP->window->loadImage(sandPath);
+		}
+		if (!sandImage || sandImage->handle < 0) {
+			return -1;
+		}
+		const int mipmapHandle = visual_assets::loadRasterMipmapHandle(
+			vg, sandImage, sandPath);
+		return mipmapHandle >= 0 ? mipmapHandle : sandImage->handle;
+	}
+
+	void drawEnvelopeProgress(const DrawArgs& args, float phase) {
+		const float progressX = pointEdgeInset();
+		const float progressWidth = clamp(phase, 0.f, 1.f) * pointDrawWidth();
+		if (progressWidth <= 0.f) {
+			return;
+		}
+
+		const int sandHandle = sandTextureHandle(args.vg);
+		nvgSave(args.vg);
+		nvgIntersectScissor(args.vg, progressX, 0.f, progressWidth, box.size.y);
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, progressX, 0.f, pointDrawWidth(), box.size.y);
+		if (sandHandle >= 0) {
+			nvgFillPaint(args.vg, nvgImagePattern(
+				args.vg, progressX, 0.f, pointDrawWidth(), box.size.y,
+				0.f, sandHandle, 0.32f));
+		}
+		else {
+			nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 34));
+		}
+		nvgFill(args.vg);
+		nvgRestore(args.vg);
+	}
+
+	void drawTracerDot(const DrawArgs& args, float phase) {
+		const float x = pointEdgeInset() + phase * pointDrawWidth();
+		const float value = displayWaveValueAtPhase(phase);
+		const float y = (0.5f - 0.5f * clamp(value, -1.f, 1.f)) * box.size.y;
+		constexpr float dotRadius = 2.8f;
+
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, x, y, dotRadius);
+		nvgFillColor(args.vg, nvgRGBA(148, 255, 64, 255));
+		nvgFill(args.vg);
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, x, y, dotRadius + 0.7f);
+		nvgStrokeWidth(args.vg, 1.15f);
+		nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 235));
+		nvgStroke(args.vg);
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (!module || !args.vg) {
+			return;
+		}
+		const bool envelopeMode = module->envelopeMode.load(std::memory_order_relaxed);
+		const float tracerFrequency = module->displayPhaseFrequencyHz.load(std::memory_order_relaxed);
+		const bool slowTraceMode =
+			module->lfoMode.load(std::memory_order_relaxed) || envelopeMode;
+		if (!slowTraceMode || !std::isfinite(tracerFrequency) || tracerFrequency >= 2.4f) {
+			tracerDotVisible = false;
+		}
+		else if (tracerFrequency > 0.f && tracerFrequency <= 2.f) {
+			tracerDotVisible = true;
+		}
+
+		const float phase = levi_math::wrap01(
+			module->displayPhase.load(std::memory_order_relaxed));
+		nvgSave(args.vg);
+		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		if (envelopeMode
+			&& module->displayEnvelopeRunning.load(std::memory_order_relaxed)) {
+			drawEnvelopeProgress(args, phase);
+		}
+		if (tracerDotVisible) {
+			drawTracerDot(args, phase);
+		}
+		nvgRestore(args.vg);
+	}
+};
+
 TransparentWidget* createWyrmWaveEditor(Wyrm* module) {
 	return new WyrmWaveEditor(module, std::make_shared<WyrmSand>());
 }
 
 TransparentWidget* createWyrmWaveEditor(Wyrm* module, std::shared_ptr<WyrmSand> sandState) {
 	return new WyrmWaveEditor(module, sandState);
+}
+
+TransparentWidget* createWyrmEditorAnimationOverlay(Wyrm* module) {
+	return new WyrmEditorAnimationOverlay(module);
 }

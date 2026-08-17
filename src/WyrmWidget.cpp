@@ -250,6 +250,7 @@ struct WyrmEditorSurface final : Widget {
 	Widget* sandGlWidget = nullptr;
 	widget::FramebufferWidget* editorFramebuffer = nullptr;
 	TransparentWidget* waveEditor = nullptr;
+	TransparentWidget* animationOverlay = nullptr;
 
 	explicit WyrmEditorSurface(Wyrm* m)
 		: module(m)
@@ -261,6 +262,8 @@ struct WyrmEditorSurface final : Widget {
 		editorFramebuffer->dirtyOnSubpixelChange = false;
 		editorFramebuffer->addChild(waveEditor);
 		addChild(editorFramebuffer);
+		animationOverlay = createWyrmEditorAnimationOverlay(module);
+		addChild(animationOverlay);
 	}
 
 	void setEditorSize(Vec size) {
@@ -273,6 +276,8 @@ struct WyrmEditorSurface final : Widget {
 		editorFramebuffer->setSize(size);
 		waveEditor->setPosition(Vec());
 		waveEditor->setSize(size);
+		animationOverlay->setPosition(Vec());
+		animationOverlay->setSize(size);
 		editorFramebuffer->setDirty();
 	}
 
