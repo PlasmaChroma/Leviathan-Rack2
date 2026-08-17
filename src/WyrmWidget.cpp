@@ -293,12 +293,84 @@ struct WyrmEditorBackground final : TransparentWidget {
 		if (imageHandle < 0) {
 			imageHandle = image->handle;
 		}
+		// Expanded mode is approximately twice as wide as the docked editor. Keep
+		// the tile's horizontal density instead of stretching the 2x2 field.
+		const int columnCount = box.size.x > 1.5f * box.size.y ? 4 : 2;
+		const float baseTileW = box.size.x / float(columnCount);
+		const float baseTileH = 0.5f * box.size.y;
+		auto drawTile = [&](float x, float y, float tileW, float tileH,
+		                    bool flipX, bool flipY, float opacity) {
+			nvgSave(args.vg);
+			nvgTranslate(
+				args.vg,
+				x + (flipX ? tileW : 0.f),
+				y + (flipY ? tileH : 0.f));
+			nvgScale(args.vg, flipX ? -1.f : 1.f, flipY ? -1.f : 1.f);
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, 0.f, 0.f, tileW, tileH);
+			nvgFillPaint(args.vg, nvgImagePattern(
+				args.vg, 0.f, 0.f, tileW, tileH,
+				0.f, imageHandle, opacity));
+			nvgFill(args.vg);
+			nvgRestore(args.vg);
+		};
+		auto drawMirroredField = [&](float tileW, float tileH, Vec offset,
+		                             float opacity) {
+			const int firstColumn = int(std::floor(-offset.x / tileW)) - 1;
+			const int lastColumn = int(std::ceil((box.size.x - offset.x) / tileW)) + 1;
+			const int firstRow = int(std::floor(-offset.y / tileH)) - 1;
+			const int lastRow = int(std::ceil((box.size.y - offset.y) / tileH)) + 1;
+			for (int row = firstRow; row <= lastRow; ++row) {
+				for (int column = firstColumn; column <= lastColumn; ++column) {
+					const bool flipX = (std::abs(column) & 1) != 0;
+					const bool flipY = (std::abs(row) & 1) != 0;
+					drawTile(
+						offset.x + float(column) * tileW,
+						offset.y + float(row) * tileH,
+						tileW, tileH, flipX, flipY, opacity);
+				}
+			}
+		};
+
+		nvgSave(args.vg);
+		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		drawMirroredField(baseTileW, baseTileH, Vec(), 1.f);
+		drawMirroredField(
+			baseTileW / 1.6f,
+			baseTileH / 1.6f,
+			Vec(0.23f * baseTileW, -0.17f * baseTileH),
+			0.50f);
+
+		auto drawColorWash = [&](Vec center, float innerRadius, float outerRadius,
+		                         NVGcolor color) {
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+			nvgFillPaint(args.vg, nvgRadialGradient(
+				args.vg, center.x, center.y, innerRadius, outerRadius,
+				color, nvgRGBAf(color.r, color.g, color.b, 0.f)));
+			nvgFill(args.vg);
+		};
+		const float shortSide = std::max(1.f, std::min(box.size.x, box.size.y));
+		drawColorWash(
+			Vec(0.18f * box.size.x, 0.28f * box.size.y),
+			0.f, 0.72f * shortSide, nvgRGBA(22, 132, 150, 18));
+		drawColorWash(
+			Vec(0.73f * box.size.x, 0.62f * box.size.y),
+			0.f, 0.68f * shortSide, nvgRGBA(102, 68, 164, 15));
+		drawColorWash(
+			Vec(0.48f * box.size.x, 0.12f * box.size.y),
+			0.f, 0.48f * shortSide, nvgRGBA(168, 118, 52, 10));
+
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
-		nvgFillPaint(args.vg, nvgImagePattern(
-			args.vg, 0.f, 0.f, box.size.x, box.size.y,
-			0.f, imageHandle, 1.f));
+		nvgFillPaint(args.vg, nvgRadialGradient(
+			args.vg,
+			0.5f * box.size.x, 0.47f * box.size.y,
+			0.28f * shortSide, 0.82f * shortSide,
+			nvgRGBA(0, 0, 0, 0), nvgRGBA(0, 0, 0, 58)));
 		nvgFill(args.vg);
+		nvgResetScissor(args.vg);
+		nvgRestore(args.vg);
 	}
 };
 
@@ -306,6 +378,7 @@ struct WyrmEditorSurface final : Widget {
 	Wyrm* module = nullptr;
 	std::shared_ptr<WyrmSand> sandState;
 	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache;
+	widget::FramebufferWidget* backgroundFramebuffer = nullptr;
 	WyrmEditorBackground* background = nullptr;
 	Widget* sandGlWidget = nullptr;
 	widget::FramebufferWidget* editorFramebuffer = nullptr;
@@ -316,8 +389,11 @@ struct WyrmEditorSurface final : Widget {
 		: module(m)
 		, sandState(std::make_shared<WyrmSand>())
 		, geometryCache(std::make_shared<wyrm_render::DisplayGeometryCache>()) {
+		backgroundFramebuffer = new widget::FramebufferWidget();
+		backgroundFramebuffer->dirtyOnSubpixelChange = false;
 		background = new WyrmEditorBackground();
-		addChild(background);
+		backgroundFramebuffer->addChild(background);
+		addChild(backgroundFramebuffer);
 		sandGlWidget = createWyrmSandGlWidget(module, sandState, geometryCache);
 		addChild(sandGlWidget);
 		waveEditor = createWyrmWaveEditor(module, sandState, geometryCache);
@@ -333,8 +409,11 @@ struct WyrmEditorSurface final : Widget {
 		size.x = std::max(1.f, size.x);
 		size.y = std::max(1.f, size.y);
 		setSize(size);
+		backgroundFramebuffer->setPosition(Vec());
+		backgroundFramebuffer->setSize(size);
 		background->setPosition(Vec());
 		background->setSize(size);
+		backgroundFramebuffer->setDirty();
 		sandGlWidget->setPosition(Vec());
 		sandGlWidget->setSize(size);
 		editorFramebuffer->setPosition(Vec());

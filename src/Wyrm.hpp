@@ -267,6 +267,8 @@ struct Wyrm : Module {
 	std::atomic<bool> lfoMode {false};
 	std::atomic<bool> envelopeMode {false};
 	bool envelopeModeWasActive = false;
+	bool preserveLoadedWaveUntilModeRestored = false;
+	bool loadedWaveEnvelopeMode = false;
 	bool publishedEnvelopeRunning = false;
 	std::atomic<bool> editorLocked {false};
 	std::atomic<bool> sandViewEnabled {false};

@@ -967,6 +967,8 @@ json_t* Wyrm::dataToJson() {
 	json_object_set_new(root, "sandDetail", json_integer(sandDetail.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "sandPersistence", json_integer(sandPersistence.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "waveCustomized", json_boolean(waveCustomized));
+	json_object_set_new(root, "waveEnvelopeMode", json_boolean(
+		envelopeMode.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "selectedShape", json_integer(selectedShape));
 	json_object_set_new(root, "selectedEnvelopeShape", json_integer(selectedEnvelopeShape));
 	json_object_set_new(root, "pointCount", json_integer(pointCount));
@@ -1028,6 +1030,10 @@ void Wyrm::dataFromJson(json_t* root) {
 	}
 	json_t* customizedJ = json_object_get(root, "waveCustomized");
 	if (customizedJ) waveCustomized = json_is_true(customizedJ);
+	json_t* waveEnvelopeModeJ = json_object_get(root, "waveEnvelopeMode");
+	loadedWaveEnvelopeMode = waveEnvelopeModeJ
+		? json_is_true(waveEnvelopeModeJ)
+		: params[ENV_MODE_PARAM].getValue() >= 0.5f;
 	json_t* shapeJ = json_object_get(root, "selectedShape");
 	if (shapeJ) selectedShape = clamp(int(json_integer_value(shapeJ)), 0, SHAPE_COUNT - 1);
 	json_t* envelopeShapeJ = json_object_get(root, "selectedEnvelopeShape");
@@ -1065,6 +1071,10 @@ void Wyrm::dataFromJson(json_t* root) {
 		if (!customizedJ && n > 0) {
 			waveCustomized = true;
 		}
+		// Rack restores module JSON and parameter state on separate paths. Do not
+		// let the first envelope-mode synchronization replace these saved points
+		// with a generated preset while the ENV parameter is settling.
+		preserveLoadedWaveUntilModeRestored = n > 0;
 		waveVersion.fetch_add(1u, std::memory_order_release);
 	}
 	json_t* rocksJ = json_object_get(root, "rocks");
@@ -1138,12 +1148,21 @@ void Wyrm::process(const ProcessArgs& args) {
 	if (envelopeModeNow) {
 		displayEnvelopeTimeMs.store(1000.f / std::max(displayRateNoFm, 1e-6f), std::memory_order_relaxed);
 	}
-	if (envelopeModeNow != envelopeModeWasActive) {
-		if (envelopeModeNow) {
-			setEnvelopeShape(selectedEnvelopeShape);
+	bool preserveLoadedWave = false;
+	if (preserveLoadedWaveUntilModeRestored) {
+		preserveLoadedWave = true;
+		if (envelopeModeNow == loadedWaveEnvelopeMode) {
+			preserveLoadedWaveUntilModeRestored = false;
 		}
-		else {
-			setFactoryShape(SHAPE_SINE);
+	}
+	if (envelopeModeNow != envelopeModeWasActive) {
+		if (!preserveLoadedWave) {
+			if (envelopeModeNow) {
+				setEnvelopeShape(selectedEnvelopeShape);
+			}
+			else {
+				setFactoryShape(SHAPE_SINE);
+			}
 		}
 		rebuildWavetable();
 		appliedWaveVersion = waveVersion.load(std::memory_order_acquire);
