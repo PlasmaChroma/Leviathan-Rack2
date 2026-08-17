@@ -60,7 +60,7 @@ available to diagnose the issue.
 
 ## Current Implementation
 
-TD.Scope, Bifurx, and WyrmSand gate their steady-state `glIs*` checks behind
+TD.Scope, Bifurx, and Wyrm gate their steady-state `glIs*` checks behind
 `extraGlValidation`. Normal production draws use lifecycle-driven reset and lazy recreation.
 
 TD.Scope CSV logging includes `extra_gl_validation` so validation-enabled frames are explicit.

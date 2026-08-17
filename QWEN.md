@@ -182,7 +182,7 @@ The Leviathan plugin suite is a collection of VCV Rack 2 modules focused on expe
 |------|---------|
 | `Wyrm.hpp` | Wavetable oscillator with rocks (waveform sculpting), FM, sync, fold |
 | `Wyrm.cpp` | Module implementation |
-| `WyrmSand.hpp` / `WyrmSand.cpp` / `WyrmSandGL.cpp` | Sand visualization system (NanoVG and OpenGL backends) |
+| `WyrmRendererGL.cpp` | Wyrm OpenGL waveform and body renderer |
 | `WyrmWaveEditor.cpp` | Wave editor widget |
 | `WyrmWidget.cpp` | Main UI widget |
 

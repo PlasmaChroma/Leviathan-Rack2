@@ -1,6 +1,5 @@
 #include "Wyrm.hpp"
 #include "WyrmRenderGeometry.hpp"
-#include "WyrmSand.hpp"
 #include "DebugTerminalTransport.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "visual/VisualAssets.hpp"
@@ -28,29 +27,21 @@ struct WyrmWaveEditor : TransparentWidget {
 	bool pointEditActive = false;
 	float pointEditSlitherPhase = 0.f;
 	float visualSlitherPhase = 0.f;
-	float renderedSlitherPhase = 0.f;
 	double lastVisualUpdateSec = -1.0;
 	Vec rockDragOffset;
 	WyrmRock previousDragRock {};
-	std::shared_ptr<WyrmSand> sand;
 	Vec lastBoxSize = Vec(-1.f, -1.f);
 	int lastHoverRock = -2;
 	uint32_t lastWaveVersion = 0;
 	int lastPointCount = -1;
 	int lastRockStateIndex = -1;
-	bool lastSandEnabledState = false;
 	int lastRenderMode = -1;
-	int lastSandBackend = -1;
-	int lastSandDetail = -1;
-	int lastSandPersistence = -1;
 	bool lastEditorLocked = false;
 	bool lastEnvelopeMode = false;
 	float lastEditorDrawUs = 0.f;
 	float lastStepUsEma = 0.f;
 	debug_terminal::UiTimingRangeAccumulator stepUsRange;
 	debug_terminal::UiTimingRangeAccumulator drawUsRange;
-	float lastSandUpdateUs = 0.f;
-	float lastSandDrawUs = 0.f;
 	int lastBodySampleCount = 0;
 	std::array<float, kWyrmPointCountMax> cachedDisplayWaveValues {};
 	int cachedDisplayWaveCount = 0;
@@ -74,10 +65,8 @@ struct WyrmWaveEditor : TransparentWidget {
 
 	explicit WyrmWaveEditor(
 		Wyrm* m,
-		std::shared_ptr<WyrmSand> sandState,
 		std::shared_ptr<wyrm_render::DisplayGeometryCache> sharedGeometryCache = nullptr)
 		: module(m)
-		, sand(sandState ? std::move(sandState) : std::make_shared<WyrmSand>())
 		, geometryCache(sharedGeometryCache
 			? std::move(sharedGeometryCache)
 			: std::make_shared<wyrm_render::DisplayGeometryCache>()) {}
@@ -91,10 +80,6 @@ struct WyrmWaveEditor : TransparentWidget {
 			nullptr,
 			false
 		);
-	}
-
-	bool sandEnabled() const {
-		return module && module->sandViewEnabled.load(std::memory_order_relaxed);
 	}
 
 	float pointEdgeInset() const {
@@ -237,44 +222,6 @@ struct WyrmWaveEditor : TransparentWidget {
 		const float phaseClearance = visualRockPhaseClearance();
 		const float base = module->resolveAgainstRocks(module->getWavePoint(index), module->getWavePoint(index), phase, clearance, phaseClearance);
 		return module->resolveAgainstRocks(base, base + slitherOffsetForIndex(index), phase, clearance, phaseClearance);
-	}
-
-	void updateSand(double nowSec) {
-		if (!sandEnabled() || !std::isfinite(nowSec)) {
-			sand->resetHistory();
-			return;
-		}
-		const int detailSetting = module
-			? module->sandDetail.load(std::memory_order_relaxed)
-			: WYRMSAND_DETAIL_AUTO;
-		if (!module || module->pointCount <= 1) {
-			std::array<Vec, kWyrmPointCountMax> emptyPath {};
-			sand->update(box.size, nowSec, detailSetting, emptyPath, 0, 0.f);
-			return;
-		}
-		const int count = clamp(module->pointCount, 2, kWyrmPointCountMax);
-		std::array<Vec, kWyrmPointCountMax> currentPath {};
-		for (int i = 0; i < count; ++i) {
-			currentPath[i] = Vec(pointX(i, count), yFromValue(displayWavePoint(i)));
-		}
-		sand->update(box.size, nowSec, detailSetting, currentPath, count, effectiveSlitherAmount());
-	}
-
-	void drawSandBackground(NVGcontext* vg) {
-		// The editor surface owns the persistent background texture. When Sand View
-		// is disabled, leave this layer transparent so that texture remains visible.
-		if (!sandEnabled()) {
-			return;
-		}
-		const int backendSetting = module
-			? module->sandBackend.load(std::memory_order_relaxed)
-			: WYRMSAND_NANOVG_IMAGE;
-		const int detailSetting = module
-			? module->sandDetail.load(std::memory_order_relaxed)
-			: WYRMSAND_DETAIL_AUTO;
-		if (backendSetting != WYRMSAND_OPENGL_TEXTURE && backendSetting != WYRMSAND_SHADER_FEEDBACK) {
-			sand->draw(vg, box.size, sandEnabled(), backendSetting, detailSetting);
-		}
 	}
 
 	static NVGcolor mixColor(NVGcolor a, NVGcolor b, float t) {
@@ -432,7 +379,6 @@ struct WyrmWaveEditor : TransparentWidget {
 		const Vec adjusted = pos.minus(rockDragOffset);
 		WyrmRock& rock = module->rocks[rockIndex];
 		const WyrmRock previousRock = rock;
-		const Vec previousCenter = rockCenter(previousRock);
 		const float phase = phaseFromX(adjusted.x);
 		const float value = valueFromY(adjusted.y);
 		auto shortestPhaseDelta = [](float from, float to) {
@@ -464,12 +410,6 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 		module->publishRockState();
 		previousDragRock = rock;
-		const Vec newCenter = rockCenter(rock);
-		const Vec radius = rockPixelRadius(rock);
-		const float stampRadius = clamp(0.35f * std::max(radius.x, radius.y), 5.f, 18.f);
-		const bool liftMode = (dragRockMouseMode == ROCK_MOUSE_LIFTS);
-		sand->stamp(box.size, previousCenter, stampRadius, liftMode ? -0.025f : -0.075f, liftMode ? 0.04f : 0.18f);
-		sand->stamp(box.size, newCenter, stampRadius, liftMode ? -0.020f : 0.055f, liftMode ? 0.04f : 0.14f);
 	}
 
 	Vec currentLocalMousePos() const {
@@ -508,7 +448,6 @@ struct WyrmWaveEditor : TransparentWidget {
 		}
 		lastIndex = idx;
 		lastPointEditPos = pos;
-		sand->stamp(box.size, pos, 5.5f, -0.16f, 0.28f);
 	}
 
 	void onButton(const event::Button& e) override {
@@ -534,7 +473,7 @@ struct WyrmWaveEditor : TransparentWidget {
 				return;
 			}
 			pointEditActive = true;
-			pointEditSlitherPhase = renderedSlitherPhase;
+			pointEditSlitherPhase = visualSlitherPhase;
 			applyPointFromPos(e.pos);
 			e.consume(this);
 			return;
@@ -552,11 +491,6 @@ struct WyrmWaveEditor : TransparentWidget {
 				module->rebuildRockBoundaryCache(releasedRock);
 				if (dragRockMouseMode == ROCK_MOUSE_DRAGS) {
 					module->sculptWaveAroundRock(releasedRock, &previousDragRock);
-				}
-				else if (dragRockMouseMode == ROCK_MOUSE_LIFTS) {
-					const Vec center = rockCenter(module->rocks[releasedRock]);
-					const Vec radius = rockPixelRadius(module->rocks[releasedRock]);
-					sand->stamp(box.size, center, clamp(0.45f * std::max(radius.x, radius.y), 6.f, 22.f), -0.11f, 0.34f);
 				}
 				module->publishRockState();
 			}
@@ -610,11 +544,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			return;
 		}
 
-		const bool sandEnabledNow = sandEnabled();
 		const int renderModeNow = module->renderMode.load(std::memory_order_relaxed);
-		const int sandBackendNow = module->sandBackend.load(std::memory_order_relaxed);
-		const int sandDetailNow = module->sandDetail.load(std::memory_order_relaxed);
-		const int sandPersistenceNow = module->sandPersistence.load(std::memory_order_relaxed);
 		const bool editorLockedNow = module->editorLocked.load(std::memory_order_relaxed);
 		const bool envelopeModeNow = module->envelopeMode.load(std::memory_order_relaxed);
 		const uint32_t waveVersionNow = module->waveVersion.load(std::memory_order_acquire);
@@ -623,7 +553,7 @@ struct WyrmWaveEditor : TransparentWidget {
 		if (waveVersionNow != lastWaveVersion || pointCountNow != lastPointCount || rockStateIndexNow != lastRockStateIndex) {
 			dirty = true;
 		}
-		if (sandEnabledNow != lastSandEnabledState || renderModeNow != lastRenderMode || sandBackendNow != lastSandBackend || sandDetailNow != lastSandDetail || sandPersistenceNow != lastSandPersistence) {
+		if (renderModeNow != lastRenderMode) {
 			dirty = true;
 		}
 		if (editorLockedNow != lastEditorLocked) {
@@ -646,18 +576,10 @@ struct WyrmWaveEditor : TransparentWidget {
 		if (effectiveSlitherAmount() > 1e-5f) {
 			dirty = true;
 		}
-		if (sandEnabledNow && sand && sand->hasActiveVisual()) {
-			dirty = true;
-		}
-
 		lastWaveVersion = waveVersionNow;
 		lastPointCount = pointCountNow;
 		lastRockStateIndex = rockStateIndexNow;
-		lastSandEnabledState = sandEnabledNow;
 		lastRenderMode = renderModeNow;
-		lastSandBackend = sandBackendNow;
-		lastSandDetail = sandDetailNow;
-		lastSandPersistence = sandPersistenceNow;
 		lastEditorLocked = editorLockedNow;
 		lastEnvelopeMode = envelopeModeNow;
 		lastHoverRock = hoverRockNow;
@@ -674,7 +596,7 @@ struct WyrmWaveEditor : TransparentWidget {
 					module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
 					const uint64_t bodySampleCacheHits = module->perfBodySampleCacheHits.exchange(0, std::memory_order_acq_rel);
 					const uint64_t bodySampleCacheMisses = module->perfBodySampleCacheMisses.exchange(0, std::memory_order_acq_rel);
-					const float sandGlUs = module->perfSandGlUs.load(std::memory_order_relaxed);
+					const float wyrmGlUs = module->perfWyrmGlUs.load(std::memory_order_relaxed);
 					lastSubmitSec = nowSec;
 					debug_terminal::submitWyrmMetrics(
 						debugId,
@@ -682,9 +604,7 @@ struct WyrmWaveEditor : TransparentWidget {
 						stepUsRange.consume(),
 						drawUsRange.consume(),
 						lastEditorDrawUs,
-						lastSandUpdateUs,
-						lastSandDrawUs,
-						sandGlUs,
+						wyrmGlUs,
 						module->perfChannels.load(std::memory_order_relaxed),
 						lastBodySampleCount,
 						bodySampleCacheHits,
@@ -705,24 +625,6 @@ struct WyrmWaveEditor : TransparentWidget {
 		using PerfClock = std::chrono::steady_clock;
 		const bool measurePerf = module && isDragonKingDebugEnabled();
 		const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
-		float sandUpdateUs = 0.f;
-		float sandDrawUs = 0.f;
-		const double nowSec = system::getTime();
-		renderedSlitherPhase = visualSlitherPhase;
-		const PerfClock::time_point sandUpdateStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
-		updateSand(nowSec);
-		if (measurePerf) {
-			sandUpdateUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-				PerfClock::now() - sandUpdateStart).count()) * 0.001f;
-		}
-
-		const PerfClock::time_point sandDrawStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
-		drawSandBackground(args.vg);
-		if (measurePerf) {
-			sandDrawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-				PerfClock::now() - sandDrawStart).count()) * 0.001f;
-		}
-
 			const bool hasModule = (module != nullptr);
 			nvgSave(args.vg);
 			nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
@@ -761,7 +663,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			const int cachedBodySamples = int(bodyPathPoints.size());
 
 			const bool envelopeVisual = hasModule && module->envelopeMode.load(std::memory_order_relaxed);
-			const bool drawWaveArea = (!sandEnabled()) && drawBodyNanoVG && cachedBodySamples >= 2;
+			const bool drawWaveArea = drawBodyNanoVG && cachedBodySamples >= 2;
 			const int waveMaterialImageHandle = drawWaveArea ? ensureWaveMaterialImage(args.vg, count, envelopeVisual) : -1;
 			const bool useWaveMaterialImage = waveMaterialImageHandle >= 0;
 			auto emitPolarityFill = [&](bool positive) {
@@ -1094,10 +996,8 @@ struct WyrmWaveEditor : TransparentWidget {
 			const float editorDrawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfStart).count()) * 0.001f;
 			lastEditorDrawUs = editorDrawUs;
-			lastSandUpdateUs = sandUpdateUs;
-			lastSandDrawUs = sandDrawUs;
 			lastBodySampleCount = bodySampleCount;
-			drawUsRange.add(editorDrawUs + module->perfSandGlUs.load(std::memory_order_relaxed));
+			drawUsRange.add(editorDrawUs + module->perfWyrmGlUs.load(std::memory_order_relaxed));
 		}
 	}
 };
@@ -1105,24 +1005,24 @@ struct WyrmWaveEditor : TransparentWidget {
 struct WyrmEditorAnimationOverlay final : TransparentWidget {
 	Wyrm* module = nullptr;
 	bool tracerDotVisible = false;
-	std::string sandPath;
-	std::shared_ptr<window::Image> sandImage;
-	NVGcontext* sandImageContext = nullptr;
+	std::string progressTexturePath;
+	std::shared_ptr<window::Image> progressTextureImage;
+	NVGcontext* progressTextureContext = nullptr;
 
 	explicit WyrmEditorAnimationOverlay(Wyrm* m)
 		: module(m)
-		, sandPath(asset::plugin(pluginInstance, "res/icon/sand_white_cs_96c.png")) {
+		, progressTexturePath(asset::plugin(pluginInstance, "res/icon/sand_white_cs_96c.png")) {
 	}
 
 	void onContextCreate(const ContextCreateEvent& e) override {
-		sandImage.reset();
-		sandImageContext = e.vg;
+		progressTextureImage.reset();
+		progressTextureContext = e.vg;
 		TransparentWidget::onContextCreate(e);
 	}
 
 	void onContextDestroy(const ContextDestroyEvent& e) override {
-		sandImage.reset();
-		sandImageContext = nullptr;
+		progressTextureImage.reset();
+		progressTextureContext = nullptr;
 		TransparentWidget::onContextDestroy(e);
 	}
 
@@ -1217,23 +1117,23 @@ struct WyrmEditorAnimationOverlay final : TransparentWidget {
 			base, base + slither, phase, clearance, phaseClearance);
 	}
 
-	int sandTextureHandle(NVGcontext* vg) {
+	int progressTextureHandle(NVGcontext* vg) {
 		if (!vg || !APP || !APP->window) {
 			return -1;
 		}
-		if (sandImageContext != vg) {
-			sandImage.reset();
-			sandImageContext = vg;
+		if (progressTextureContext != vg) {
+			progressTextureImage.reset();
+			progressTextureContext = vg;
 		}
-		if (!sandImage) {
-			sandImage = APP->window->loadImage(sandPath);
+		if (!progressTextureImage) {
+			progressTextureImage = APP->window->loadImage(progressTexturePath);
 		}
-		if (!sandImage || sandImage->handle < 0) {
+		if (!progressTextureImage || progressTextureImage->handle < 0) {
 			return -1;
 		}
 		const int mipmapHandle = visual_assets::loadRasterMipmapHandle(
-			vg, sandImage, sandPath);
-		return mipmapHandle >= 0 ? mipmapHandle : sandImage->handle;
+			vg, progressTextureImage, progressTexturePath);
+		return mipmapHandle >= 0 ? mipmapHandle : progressTextureImage->handle;
 	}
 
 	void drawEnvelopeProgress(const DrawArgs& args, float phase) {
@@ -1243,15 +1143,15 @@ struct WyrmEditorAnimationOverlay final : TransparentWidget {
 			return;
 		}
 
-		const int sandHandle = sandTextureHandle(args.vg);
+		const int progressHandle = progressTextureHandle(args.vg);
 		nvgSave(args.vg);
 		nvgIntersectScissor(args.vg, progressX, 0.f, progressWidth, box.size.y);
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, progressX, 0.f, pointDrawWidth(), box.size.y);
-		if (sandHandle >= 0) {
+		if (progressHandle >= 0) {
 			nvgFillPaint(args.vg, nvgImagePattern(
 				args.vg, progressX, 0.f, pointDrawWidth(), box.size.y,
-				0.f, sandHandle, 0.32f));
+				0.f, progressHandle, 0.32f));
 		}
 		else {
 			nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 34));
@@ -1309,18 +1209,13 @@ struct WyrmEditorAnimationOverlay final : TransparentWidget {
 };
 
 TransparentWidget* createWyrmWaveEditor(Wyrm* module) {
-	return new WyrmWaveEditor(module, std::make_shared<WyrmSand>());
-}
-
-TransparentWidget* createWyrmWaveEditor(Wyrm* module, std::shared_ptr<WyrmSand> sandState) {
-	return new WyrmWaveEditor(module, sandState);
+	return new WyrmWaveEditor(module);
 }
 
 TransparentWidget* createWyrmWaveEditor(
 	Wyrm* module,
-	std::shared_ptr<WyrmSand> sandState,
 	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache) {
-	return new WyrmWaveEditor(module, std::move(sandState), std::move(geometryCache));
+	return new WyrmWaveEditor(module, std::move(geometryCache));
 }
 
 TransparentWidget* createWyrmEditorAnimationOverlay(Wyrm* module) {

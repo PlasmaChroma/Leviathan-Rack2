@@ -1,6 +1,5 @@
 #include "Wyrm.hpp"
 #include "WyrmRenderGeometry.hpp"
-#include "WyrmSand.hpp"
 #include "GlLifecycleUtils.hpp"
 
 #include <array>
@@ -8,7 +7,7 @@
 #include <string>
 #include <nanovg_gl.h>
 
-struct WyrmSandGlWidget final : widget::OpenGlWidget {
+struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	struct BodyStripVertex {
 		float x;
 		float y;
@@ -17,12 +16,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	};
 
 	Wyrm* module = nullptr;
-	std::shared_ptr<WyrmSand> sand;
 	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache;
-	GLuint texture = 0;
-	int textureW = 0;
-	int textureH = 0;
-	uint64_t uploadedRevision = 0;
 	GLuint waveColumnTexture = 0;
 	int waveColumnTextureW = 0;
 	int waveColumnTextureH = 0;
@@ -41,9 +35,6 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	int lastRockStateIndex = -1;
 	int lastPointCount = -1;
 	bool lastEnvelopeMode = false;
-	bool lastSandEnabled = false;
-	int lastSandDetail = -1;
-	uint64_t lastSandRevision = 0;
 	float lastSlitherPhase = -1.f;
 	float lastSlitherAmount = -1.f;
 	Vec lastDrawSize = Vec(-1.f, -1.f);
@@ -53,13 +44,6 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	uint64_t bodyStripGeometryRevision = 0;
 	bool bodyStripShaderPath = false;
 	std::array<std::vector<BodyStripVertex>, 3> bodyStripVertices;
-
-	void resetTextureState() {
-		texture = 0;
-		textureW = 0;
-		textureH = 0;
-		uploadedRevision = 0;
-	}
 
 	void resetWaveColumnTextureState() {
 		waveColumnTexture = 0;
@@ -83,9 +67,6 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	}
 
 	void validateGlResourcesForCurrentContext() {
-		if (texture != 0 && !glIsTexture(texture)) {
-			resetTextureState();
-		}
 		if (waveColumnTexture != 0 && !glIsTexture(waveColumnTexture)) {
 			resetWaveColumnTextureState();
 		}
@@ -313,7 +294,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 	}
 
 	void drawWaveColumnsGl(Vec size, bool shaderPath) {
-		if (!module || module->pointCount <= 0 || module->sandViewEnabled.load(std::memory_order_relaxed)) {
+		if (!module || module->pointCount <= 0) {
 			return;
 		}
 		const int count = module->pointCount;
@@ -683,14 +664,13 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		drawBodyStripFeatherWithOffsets(samples, o0, getOffsets(h0 + 1.45f), h0, nvgRGBAf(1.f, 1.f, 1.f, 0.20f), 0.58f, false);
 	}
 
-	~WyrmSandGlWidget() override {
+	~WyrmGlRendererWidget() override {
 		// DAW plugin editors can destroy/recreate their GL context around the
 		// Rack UI. Avoid driver calls from widget teardown; resources are
 		// reclaimed by the editor/context owner.
 		resetBodyRenderTargetState();
 		resetBodyShaderState();
 		resetWaveColumnTextureState();
-		resetTextureState();
 	}
 
 	void step() override {
@@ -702,16 +682,13 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		visible = renderGl;
 		if (!visible) {
 			redrawStateInitialized = false;
-			module->perfSandGlUs.store(0.f, std::memory_order_relaxed);
+			module->perfWyrmGlUs.store(0.f, std::memory_order_relaxed);
 			return;
 		}
 		const uint32_t waveVersion = module->waveVersion.load(std::memory_order_acquire);
 		const int rockStateIndex = module->activeRockStateIndex.load(std::memory_order_acquire);
 		const int pointCount = module->pointCount;
 		const bool envelopeMode = module->envelopeMode.load(std::memory_order_relaxed);
-		const bool sandEnabled = module->sandViewEnabled.load(std::memory_order_relaxed);
-		const int sandDetail = module->sandDetail.load(std::memory_order_relaxed);
-		const uint64_t sandRevision = sand ? sand->imageDataRevision() : 0;
 		const float slitherAmount = levi_math::clamp01(
 			module->displaySlitherAmount.load(std::memory_order_relaxed));
 		const float slitherPhase = module->uiSlitherPhase.load(std::memory_order_relaxed);
@@ -723,9 +700,6 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		dirty = dirty || rockStateIndex != lastRockStateIndex;
 		dirty = dirty || pointCount != lastPointCount;
 		dirty = dirty || envelopeMode != lastEnvelopeMode;
-		dirty = dirty || sandEnabled != lastSandEnabled;
-		dirty = dirty || sandDetail != lastSandDetail;
-		dirty = dirty || (sandEnabled && sandRevision != lastSandRevision);
 		dirty = dirty || std::fabs(box.size.x - lastDrawSize.x) > 1e-4f;
 		dirty = dirty || std::fabs(box.size.y - lastDrawSize.y) > 1e-4f;
 		dirty = dirty || std::fabs(absoluteZoom - lastAbsoluteZoom) > 1e-4f;
@@ -738,9 +712,6 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		lastRockStateIndex = rockStateIndex;
 		lastPointCount = pointCount;
 		lastEnvelopeMode = envelopeMode;
-		lastSandEnabled = sandEnabled;
-		lastSandDetail = sandDetail;
-		lastSandRevision = sandRevision;
 		lastSlitherAmount = slitherAmount;
 		lastSlitherPhase = slitherPhase;
 		lastDrawSize = box.size;
@@ -767,10 +738,7 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		glClearColor(0.f, 0.f, 0.f, 0.f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		if (!module || !sand) {
-			if (module) {
-				module->perfSandGlUs.store(0.f, std::memory_order_relaxed);
-			}
+		if (!module) {
 			return;
 		}
 		glEnable(GL_BLEND);
@@ -789,47 +757,6 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 			ensureBodyShader();
 		}
 		const bool shaderPath = useShdr && bodyShaderReady;
-
-		if (module->sandViewEnabled.load(std::memory_order_relaxed)) {
-			const int detailSetting = module->sandDetail.load(std::memory_order_relaxed);
-			sand->ensureImageRaster(box.size, detailSetting);
-			const unsigned char* pixels = sand->imageData();
-			const int imageW = sand->imageWidth();
-			const int imageH = sand->imageHeight();
-			if (pixels && imageW > 0 && imageH > 0) {
-				if (texture == 0) {
-					glGenTextures(1, &texture);
-					textureW = 0;
-					textureH = 0;
-					uploadedRevision = 0;
-				}
-				glBindTexture(GL_TEXTURE_2D, texture);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-				const uint64_t revision = sand->imageDataRevision();
-				if (textureW != imageW || textureH != imageH) {
-					glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageW, imageH, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-					textureW = imageW;
-					textureH = imageH;
-					uploadedRevision = revision;
-				}
-				else if (uploadedRevision != revision) {
-					glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, imageW, imageH, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-					uploadedRevision = revision;
-				}
-				glEnable(GL_TEXTURE_2D);
-				glColor4f(1.f, 1.f, 1.f, 1.f);
-				glBegin(GL_TRIANGLE_STRIP);
-				glTexCoord2f(0.f, 0.f); glVertex2f(0.f, 0.f);
-				glTexCoord2f(1.f, 0.f); glVertex2f(box.size.x, 0.f);
-				glTexCoord2f(0.f, 1.f); glVertex2f(0.f, box.size.y);
-				glTexCoord2f(1.f, 1.f); glVertex2f(box.size.x, box.size.y);
-				glEnd();
-				glDisable(GL_TEXTURE_2D);
-			}
-		}
 
 		drawWaveColumnsGl(box.size, shaderPath);
 		// SHDR now draws direct shader-softened strips. Keep RT path disabled.
@@ -934,27 +861,24 @@ struct WyrmSandGlWidget final : widget::OpenGlWidget {
 		glMatrixMode(GL_MODELVIEW);
 
 		if (measurePerf) {
-			const float sandGlUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			const float wyrmGlUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfStart).count()) * 0.001f;
-			module->perfSandGlUs.store(sandGlUs, std::memory_order_relaxed);
+			module->perfWyrmGlUs.store(wyrmGlUs, std::memory_order_relaxed);
 		}
 	}
 };
 
-Widget* createWyrmSandGlWidget(Wyrm* module, std::shared_ptr<WyrmSand> sandState) {
-	return createWyrmSandGlWidget(
+Widget* createWyrmGlRendererWidget(Wyrm* module) {
+	return createWyrmGlRendererWidget(
 		module,
-		std::move(sandState),
 		std::make_shared<wyrm_render::DisplayGeometryCache>());
 }
 
-Widget* createWyrmSandGlWidget(
+Widget* createWyrmGlRendererWidget(
 	Wyrm* module,
-	std::shared_ptr<WyrmSand> sandState,
 	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache) {
-	auto* w = new WyrmSandGlWidget();
+	auto* w = new WyrmGlRendererWidget();
 	w->module = module;
-	w->sand = sandState ? sandState : std::make_shared<WyrmSand>();
 	w->geometryCache = geometryCache
 		? std::move(geometryCache)
 		: std::make_shared<wyrm_render::DisplayGeometryCache>();

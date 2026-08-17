@@ -376,7 +376,7 @@ default home for renderer state.
 
 Explicitly out of scope:
 
-- `BifurxGL.cpp`, `TDScopeGL.cpp`, `WyrmSandGL.cpp`, Puffy rendering, or other
+- `BifurxGL.cpp`, `TDScopeGL.cpp`, `WyrmRendererGL.cpp`, Puffy rendering, or other
   consumers;
 - shader visual enhancements;
 - batching or instancing;

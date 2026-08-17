@@ -1,6 +1,5 @@
 #include "Wyrm.hpp"
 #include "WyrmRenderGeometry.hpp"
-#include "WyrmSand.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
@@ -376,27 +375,25 @@ struct WyrmEditorBackground final : TransparentWidget {
 
 struct WyrmEditorSurface final : Widget {
 	Wyrm* module = nullptr;
-	std::shared_ptr<WyrmSand> sandState;
 	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache;
 	widget::FramebufferWidget* backgroundFramebuffer = nullptr;
 	WyrmEditorBackground* background = nullptr;
-	Widget* sandGlWidget = nullptr;
+	Widget* glRendererWidget = nullptr;
 	widget::FramebufferWidget* editorFramebuffer = nullptr;
 	TransparentWidget* waveEditor = nullptr;
 	TransparentWidget* animationOverlay = nullptr;
 
 	explicit WyrmEditorSurface(Wyrm* m)
 		: module(m)
-		, sandState(std::make_shared<WyrmSand>())
 		, geometryCache(std::make_shared<wyrm_render::DisplayGeometryCache>()) {
 		backgroundFramebuffer = new widget::FramebufferWidget();
 		backgroundFramebuffer->dirtyOnSubpixelChange = false;
 		background = new WyrmEditorBackground();
 		backgroundFramebuffer->addChild(background);
 		addChild(backgroundFramebuffer);
-		sandGlWidget = createWyrmSandGlWidget(module, sandState, geometryCache);
-		addChild(sandGlWidget);
-		waveEditor = createWyrmWaveEditor(module, sandState, geometryCache);
+		glRendererWidget = createWyrmGlRendererWidget(module, geometryCache);
+		addChild(glRendererWidget);
+		waveEditor = createWyrmWaveEditor(module, geometryCache);
 		editorFramebuffer = new widget::FramebufferWidget();
 		editorFramebuffer->dirtyOnSubpixelChange = false;
 		editorFramebuffer->addChild(waveEditor);
@@ -414,8 +411,8 @@ struct WyrmEditorSurface final : Widget {
 		background->setPosition(Vec());
 		background->setSize(size);
 		backgroundFramebuffer->setDirty();
-		sandGlWidget->setPosition(Vec());
-		sandGlWidget->setSize(size);
+		glRendererWidget->setPosition(Vec());
+		glRendererWidget->setSize(size);
 		editorFramebuffer->setPosition(Vec());
 		editorFramebuffer->setSize(size);
 		waveEditor->setPosition(Vec());
@@ -426,9 +423,6 @@ struct WyrmEditorSurface final : Widget {
 	}
 
 	void resetVisualTransitionState() {
-		if (sandState) {
-			sandState->resetHistory();
-		}
 		if (editorFramebuffer) {
 			editorFramebuffer->setDirty();
 		}
@@ -1041,7 +1035,7 @@ struct WyrmWidget : ModuleWidget {
 		ModuleWidget::appendContextMenu(menu);
 		auto* module = dynamic_cast<Wyrm*>(this->module);
 		if (!module) return;
-		auto sandRendererLabel = [&](int backend) {
+		auto rendererLabel = [&](int backend) {
 			switch (backend) {
 				case WYRM_RENDER_OPENGL: return "OpenGL";
 				case WYRM_RENDER_OPENGL_SHDR: return "OpenGL SHDR";
@@ -1052,35 +1046,6 @@ struct WyrmWidget : ModuleWidget {
 		auto applyRenderMode = [=](int mode) {
 			mode = clamp(mode, WYRM_RENDER_NANOVG, WYRM_RENDER_OPENGL_SHDR);
 			module->renderMode.store(mode, std::memory_order_relaxed);
-			switch (mode) {
-				case WYRM_RENDER_OPENGL:
-					module->sandBackend.store(WYRMSAND_OPENGL_TEXTURE, std::memory_order_relaxed);
-					break;
-				case WYRM_RENDER_OPENGL_SHDR:
-					module->sandBackend.store(WYRMSAND_SHADER_FEEDBACK, std::memory_order_relaxed);
-					break;
-				case WYRM_RENDER_NANOVG:
-				default:
-					module->sandBackend.store(WYRMSAND_NANOVG_IMAGE, std::memory_order_relaxed);
-					break;
-			}
-		};
-		auto sandDetailLabel = [&](int detail) {
-			switch (detail) {
-				case WYRMSAND_DETAIL_LOW: return "Low";
-				case WYRMSAND_DETAIL_MEDIUM: return "Medium";
-				case WYRMSAND_DETAIL_HIGH: return "High";
-				case WYRMSAND_DETAIL_AUTO: return "Auto";
-				default: return "Unknown";
-			}
-		};
-		auto sandPersistenceLabel = [&](int persistence) {
-			switch (persistence) {
-				case WYRMSAND_PERSISTENCE_SHORT: return "Short";
-				case WYRMSAND_PERSISTENCE_MEDIUM: return "Medium";
-				case WYRMSAND_PERSISTENCE_LONG: return "Long";
-				default: return "Unknown";
-			}
 		};
 
 		menu->addChild(new MenuSeparator());
@@ -1094,7 +1059,7 @@ struct WyrmWidget : ModuleWidget {
 			[=]() { return module->editorLocked.load(std::memory_order_relaxed); },
 			[=]() { module->editorLocked.store(!module->editorLocked.load(std::memory_order_relaxed), std::memory_order_relaxed); }
 		));
-		menu->addChild(createSubmenuItem("Renderer", sandRendererLabel(module->renderMode.load(std::memory_order_relaxed)), [=](Menu* rendererMenu) {
+		menu->addChild(createSubmenuItem("Renderer", rendererLabel(module->renderMode.load(std::memory_order_relaxed)), [=](Menu* rendererMenu) {
 			rendererMenu->addChild(createCheckMenuItem("NanoVG", "",
 				[=]() { return module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_NANOVG; },
 				[=]() { applyRenderMode(WYRM_RENDER_NANOVG); }
@@ -1107,45 +1072,6 @@ struct WyrmWidget : ModuleWidget {
 				[=]() { return module->renderMode.load(std::memory_order_relaxed) == WYRM_RENDER_OPENGL_SHDR; },
 				[=]() { applyRenderMode(WYRM_RENDER_OPENGL_SHDR); }
 			));
-		}));
-		menu->addChild(createSubmenuItem("Sand", "", [=](Menu* submenu) {
-			submenu->addChild(createCheckMenuItem("Sand View", "",
-				[=]() { return module->sandViewEnabled.load(std::memory_order_relaxed); },
-				[=]() { module->sandViewEnabled.store(!module->sandViewEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }
-			));
-			submenu->addChild(new MenuSeparator());
-			submenu->addChild(createSubmenuItem("Detail", sandDetailLabel(module->sandDetail.load(std::memory_order_relaxed)), [=](Menu* detailMenu) {
-				detailMenu->addChild(createCheckMenuItem("Auto", "",
-					[=]() { return module->sandDetail.load(std::memory_order_relaxed) == WYRMSAND_DETAIL_AUTO; },
-					[=]() { module->sandDetail.store(WYRMSAND_DETAIL_AUTO, std::memory_order_relaxed); }
-				));
-				detailMenu->addChild(createCheckMenuItem("Low", "",
-					[=]() { return module->sandDetail.load(std::memory_order_relaxed) == WYRMSAND_DETAIL_LOW; },
-					[=]() { module->sandDetail.store(WYRMSAND_DETAIL_LOW, std::memory_order_relaxed); }
-				));
-				detailMenu->addChild(createCheckMenuItem("Medium", "",
-					[=]() { return module->sandDetail.load(std::memory_order_relaxed) == WYRMSAND_DETAIL_MEDIUM; },
-					[=]() { module->sandDetail.store(WYRMSAND_DETAIL_MEDIUM, std::memory_order_relaxed); }
-				));
-				detailMenu->addChild(createCheckMenuItem("High", "",
-					[=]() { return module->sandDetail.load(std::memory_order_relaxed) == WYRMSAND_DETAIL_HIGH; },
-					[=]() { module->sandDetail.store(WYRMSAND_DETAIL_HIGH, std::memory_order_relaxed); }
-				));
-			}));
-			submenu->addChild(createSubmenuItem("Persistence", sandPersistenceLabel(module->sandPersistence.load(std::memory_order_relaxed)), [=](Menu* persistenceMenu) {
-				persistenceMenu->addChild(createCheckMenuItem("Short", "",
-					[=]() { return module->sandPersistence.load(std::memory_order_relaxed) == WYRMSAND_PERSISTENCE_SHORT; },
-					[=]() { module->sandPersistence.store(WYRMSAND_PERSISTENCE_SHORT, std::memory_order_relaxed); }
-				));
-				persistenceMenu->addChild(createCheckMenuItem("Medium", "",
-					[=]() { return module->sandPersistence.load(std::memory_order_relaxed) == WYRMSAND_PERSISTENCE_MEDIUM; },
-					[=]() { module->sandPersistence.store(WYRMSAND_PERSISTENCE_MEDIUM, std::memory_order_relaxed); }
-				));
-				persistenceMenu->addChild(createCheckMenuItem("Long", "",
-					[=]() { return module->sandPersistence.load(std::memory_order_relaxed) == WYRMSAND_PERSISTENCE_LONG; },
-					[=]() { module->sandPersistence.store(WYRMSAND_PERSISTENCE_LONG, std::memory_order_relaxed); }
-				));
-			}));
 		}));
 		menu->addChild(createSubmenuItem("Rocks", string::f("%d", module->rockCount), [=](Menu* submenu) {
 			const bool dragModeSelected = (module->rockMouseMode == ROCK_MOUSE_DRAGS);

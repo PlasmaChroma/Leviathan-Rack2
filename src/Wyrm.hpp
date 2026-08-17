@@ -47,30 +47,10 @@ enum WyrmRockMouseMode {
 	ROCK_MOUSE_LIFTS,
 };
 
-enum WyrmSandBackend {
-	WYRMSAND_NANOVG_CELLS = 0,
-	WYRMSAND_NANOVG_IMAGE,
-	WYRMSAND_OPENGL_TEXTURE,
-	WYRMSAND_SHADER_FEEDBACK,
-};
-
 enum WyrmRenderMode {
 	WYRM_RENDER_NANOVG = 0,
 	WYRM_RENDER_OPENGL,
 	WYRM_RENDER_OPENGL_SHDR,
-};
-
-enum WyrmSandDetail {
-	WYRMSAND_DETAIL_LOW = 0,
-	WYRMSAND_DETAIL_MEDIUM,
-	WYRMSAND_DETAIL_HIGH,
-	WYRMSAND_DETAIL_AUTO,
-};
-
-enum WyrmSandPersistence {
-	WYRMSAND_PERSISTENCE_SHORT = 0,
-	WYRMSAND_PERSISTENCE_MEDIUM,
-	WYRMSAND_PERSISTENCE_LONG,
 };
 
 extern const char* const kWyrmShapeLabels[SHAPE_COUNT];
@@ -163,7 +143,6 @@ inline float slitherSpeedFactor(float speedKnob) {
 }
 
 struct Wyrm;
-struct WyrmSand;
 namespace wyrm_render {
 struct DisplayGeometryCache;
 }
@@ -271,11 +250,7 @@ struct Wyrm : Module {
 	bool loadedWaveEnvelopeMode = false;
 	bool publishedEnvelopeRunning = false;
 	std::atomic<bool> editorLocked {false};
-	std::atomic<bool> sandViewEnabled {false};
 	std::atomic<int> renderMode {WYRM_RENDER_NANOVG};
-	std::atomic<int> sandBackend {WYRMSAND_NANOVG_IMAGE};
-	std::atomic<int> sandDetail {WYRMSAND_DETAIL_AUTO};
-	std::atomic<int> sandPersistence {WYRMSAND_PERSISTENCE_MEDIUM};
 	bool waveCustomized = false;
 	int selectedShape = SHAPE_SINE;
 	int selectedEnvelopeShape = ENVELOPE_SHAPE_D2;
@@ -298,7 +273,7 @@ struct Wyrm : Module {
 	std::atomic<bool> perfSlitherActive {false};
 	std::atomic<bool> perfLfoMode {false};
 	std::atomic<bool> perfWavetableRebuilt {false};
-	std::atomic<float> perfSandGlUs {0.f};
+	std::atomic<float> perfWyrmGlUs {0.f};
 	std::atomic<uint64_t> perfBodySampleCacheHits {0};
 	std::atomic<uint64_t> perfBodySampleCacheMisses {0};
 	float phaseTracerPublishTimer = 0.f;
@@ -347,14 +322,11 @@ struct Wyrm : Module {
 };
 
 TransparentWidget* createWyrmWaveEditor(Wyrm* module);
-TransparentWidget* createWyrmWaveEditor(Wyrm* module, std::shared_ptr<WyrmSand> sandState);
 TransparentWidget* createWyrmWaveEditor(
 	Wyrm* module,
-	std::shared_ptr<WyrmSand> sandState,
 	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache);
 TransparentWidget* createWyrmEditorAnimationOverlay(Wyrm* module);
-Widget* createWyrmSandGlWidget(Wyrm* module, std::shared_ptr<WyrmSand> sandState);
-Widget* createWyrmSandGlWidget(
+Widget* createWyrmGlRendererWidget(Wyrm* module);
+Widget* createWyrmGlRendererWidget(
 	Wyrm* module,
-	std::shared_ptr<WyrmSand> sandState,
 	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache);
