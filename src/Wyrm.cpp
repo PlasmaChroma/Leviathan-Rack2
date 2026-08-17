@@ -50,6 +50,20 @@ const char* const kWyrmShapeLabels[SHAPE_COUNT] = {
 	"S.Saw"
 };
 
+const char* const kWyrmEnvelopeShapeLabels[ENVELOPE_SHAPE_COUNT] = {
+	"Attack / Release",
+	"D1",
+	"D2",
+	"D3",
+	"D4",
+	"D5",
+	"D6",
+	"D7",
+	"D8",
+	"D9",
+	"D10"
+};
+
 Wyrm::Wyrm() {
 	debugInstanceId = gWyrmDebugInstanceCounter.fetch_add(1u, std::memory_order_relaxed);
 	createdUnixTimeSec = system::getUnixTime();
@@ -180,25 +194,106 @@ void Wyrm::setFactoryShape(int shapeId) {
 	waveVersion.fetch_add(1u, std::memory_order_release);
 }
 
-void Wyrm::setEnvelopeArShape() {
+void Wyrm::setEnvelopeShape(int shapeId) {
+	shapeId = clamp(shapeId, 0, ENVELOPE_SHAPE_COUNT - 1);
+	selectedEnvelopeShape = shapeId;
 	const int lastIndex = std::max(1, pointCount - 1);
-	const int attackEnd = clamp(int(std::lround(0.15f * float(lastIndex))), 1, lastIndex - 1);
-	const int releaseLength = std::max(1, lastIndex - attackEnd);
+	auto smooth01 = [](float t) {
+		t = levi_math::clamp01(t);
+		return t * t * (3.f - 2.f * t);
+	};
+	auto bell = [](float p, float center, float width) {
+		const float x = (p - center) / std::max(width, 1e-4f);
+		return std::exp(-0.5f * x * x);
+	};
 	for (int i = 0; i < pointCount; ++i) {
+		const float p = float(i) / float(lastIndex);
 		float unipolar = 0.f;
-		if (i <= attackEnd) {
-			const float t = float(i) / float(attackEnd);
-			unipolar = t + 0.35f * t * (1.f - t);
-		}
-		else {
-			const float t = float(i - attackEnd) / float(releaseLength);
-			const float tail = 1.f - t;
-			unipolar = tail * tail;
+		switch (shapeId) {
+			case ENVELOPE_SHAPE_D1:
+				// Rounded full-length decay.
+				unipolar = 1.f - smooth01(p);
+				break;
+			case ENVELOPE_SHAPE_D2:
+			case ENVELOPE_SHAPE_AR: {
+				// Default Attack / Release contour. The legacy AR ID remains an
+				// alias so existing patches retain their original envelope.
+				const float attackEnd = 0.15f;
+				if (p <= attackEnd) {
+					const float t = p / attackEnd;
+					unipolar = t + 0.35f * t * (1.f - t);
+				}
+				else {
+					const float tail = 1.f - (p - attackEnd) / (1.f - attackEnd);
+					unipolar = tail * tail;
+				}
+			} break;
+			case ENVELOPE_SHAPE_D3: {
+				// Short hold followed by a steep rounded decay.
+				const float body = p <= 0.30f
+					? 1.f
+					: 1.f - smooth01((p - 0.30f) / 0.70f);
+				unipolar = smooth01(p / 0.055f) * body;
+			} break;
+			case ENVELOPE_SHAPE_D4: {
+				// Fast attack, notched shoulder, then decay.
+				const float attack = smooth01(p / 0.11f);
+				const float decay = 1.f - smooth01((p - 0.11f) / 0.89f);
+				const float notch = 0.24f * bell(p, 0.27f, 0.035f);
+				const float shoulder = 0.14f * bell(p, 0.36f, 0.055f);
+				unipolar = attack * decay - notch + shoulder;
+			} break;
+			case ENVELOPE_SHAPE_D5:
+				// Two narrow peaks separated by a deep valley.
+				unipolar = smooth01(p / 0.055f) * std::max(
+					bell(p, 0.22f, 0.075f),
+					0.96f * bell(p, 0.48f, 0.11f));
+				break;
+			case ENVELOPE_SHAPE_D6: {
+				// Two broad, connected peaks.
+				const float body = std::max(
+					bell(p, 0.20f, 0.13f),
+					0.84f * bell(p, 0.56f, 0.16f));
+				unipolar = p < 0.20f ? smooth01(p / 0.20f) : body;
+			} break;
+			case ENVELOPE_SHAPE_D7: {
+				// Primary transient with a small terminal echo.
+				const float body = std::max(
+					bell(p, 0.20f, 0.12f),
+					0.30f * bell(p, 0.79f, 0.075f));
+				unipolar = p < 0.20f ? smooth01(p / 0.20f) : body;
+			} break;
+			case ENVELOPE_SHAPE_D8: {
+				// Attack, descending shoulder, mid-level hold, release.
+				const float attack = smooth01(p / 0.12f);
+				const float shoulder = 1.f - 0.40f * smooth01((p - 0.12f) / 0.17f);
+				const float release = 1.f - smooth01((p - 0.60f) / 0.40f);
+				unipolar = attack * shoulder * release;
+			} break;
+			case ENVELOPE_SHAPE_D9: {
+				// Fast attack, long sustain, late release.
+				const float attack = smooth01(p / 0.12f);
+				const float release = 1.f - smooth01((p - 0.67f) / 0.33f);
+				unipolar = attack * release;
+			} break;
+			case ENVELOPE_SHAPE_D10: {
+				// High hold, stepped sustain, then release.
+				const float attack = smooth01(p / 0.08f);
+				const float step = 1.f - 0.38f * smooth01((p - 0.38f) / 0.08f);
+				const float release = 1.f - smooth01((p - 0.69f) / 0.31f);
+				unipolar = attack * step * release;
+			} break;
+			default:
+				break;
 		}
 		wavePoints[i].store(2.f * clamp(unipolar, 0.f, 1.f) - 1.f, std::memory_order_relaxed);
 	}
 	waveCustomized = true;
 	waveVersion.fetch_add(1u, std::memory_order_release);
+}
+
+void Wyrm::setEnvelopeArShape() {
+	setEnvelopeShape(ENVELOPE_SHAPE_D2);
 }
 
 void Wyrm::setPointCount(int newPointCount) {
@@ -211,7 +306,7 @@ void Wyrm::setPointCount(int newPointCount) {
 	}
 	pointCount = newPointCount;
 	if (envelopeMode.load(std::memory_order_relaxed)) {
-		setEnvelopeArShape();
+		setEnvelopeShape(selectedEnvelopeShape);
 	}
 	else {
 		setFactoryShape(selectedShape);
@@ -873,6 +968,7 @@ json_t* Wyrm::dataToJson() {
 	json_object_set_new(root, "sandPersistence", json_integer(sandPersistence.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "waveCustomized", json_boolean(waveCustomized));
 	json_object_set_new(root, "selectedShape", json_integer(selectedShape));
+	json_object_set_new(root, "selectedEnvelopeShape", json_integer(selectedEnvelopeShape));
 	json_object_set_new(root, "pointCount", json_integer(pointCount));
 	json_object_set_new(root, "rockCount", json_integer(rockCount));
 	json_object_set_new(root, "rockMouseMode", json_integer(rockMouseMode));
@@ -934,6 +1030,11 @@ void Wyrm::dataFromJson(json_t* root) {
 	if (customizedJ) waveCustomized = json_is_true(customizedJ);
 	json_t* shapeJ = json_object_get(root, "selectedShape");
 	if (shapeJ) selectedShape = clamp(int(json_integer_value(shapeJ)), 0, SHAPE_COUNT - 1);
+	json_t* envelopeShapeJ = json_object_get(root, "selectedEnvelopeShape");
+	if (envelopeShapeJ) {
+		selectedEnvelopeShape = clamp(
+			int(json_integer_value(envelopeShapeJ)), 0, ENVELOPE_SHAPE_COUNT - 1);
+	}
 	json_t* pointCountJ = json_object_get(root, "pointCount");
 	if (pointCountJ) {
 		int loadedPointCount = int(json_integer_value(pointCountJ));
@@ -1039,7 +1140,7 @@ void Wyrm::process(const ProcessArgs& args) {
 	}
 	if (envelopeModeNow != envelopeModeWasActive) {
 		if (envelopeModeNow) {
-			setEnvelopeArShape();
+			setEnvelopeShape(selectedEnvelopeShape);
 		}
 		else {
 			setFactoryShape(SHAPE_SINE);

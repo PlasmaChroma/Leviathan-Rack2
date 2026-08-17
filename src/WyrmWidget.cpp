@@ -36,9 +36,20 @@ struct WyrmWaveLeftButton final : TL1105 {
 	void onButton(const event::Button& e) override {
 		TL1105::onButton(e);
 		if (module && e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
-			const int current = clamp(module->selectedShape, 0, SHAPE_COUNT - 1);
-			const int next = (current + SHAPE_COUNT - 1) % SHAPE_COUNT;
-			module->setFactoryShape(next);
+			if (module->envelopeMode.load(std::memory_order_relaxed)) {
+				const int current = clamp(
+					module->selectedEnvelopeShape,
+					int(ENVELOPE_SHAPE_D1), int(ENVELOPE_SHAPE_D10));
+				const int shapeCount = ENVELOPE_SHAPE_D10 - ENVELOPE_SHAPE_D1 + 1;
+				const int next = ENVELOPE_SHAPE_D1
+					+ (current - ENVELOPE_SHAPE_D1 + shapeCount - 1) % shapeCount;
+				module->setEnvelopeShape(next);
+			}
+			else {
+				const int current = clamp(module->selectedShape, 0, SHAPE_COUNT - 1);
+				const int next = (current + SHAPE_COUNT - 1) % SHAPE_COUNT;
+				module->setFactoryShape(next);
+			}
 		}
 	}
 	void draw(const DrawArgs& args) override {
@@ -52,29 +63,25 @@ struct WyrmWaveRightButton final : TL1105 {
 	void onButton(const event::Button& e) override {
 		TL1105::onButton(e);
 		if (module && e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
-			const int current = clamp(module->selectedShape, 0, SHAPE_COUNT - 1);
-			const int next = (current + 1) % SHAPE_COUNT;
-			module->setFactoryShape(next);
+			if (module->envelopeMode.load(std::memory_order_relaxed)) {
+				const int current = clamp(
+					module->selectedEnvelopeShape,
+					int(ENVELOPE_SHAPE_D1), int(ENVELOPE_SHAPE_D10));
+				const int shapeCount = ENVELOPE_SHAPE_D10 - ENVELOPE_SHAPE_D1 + 1;
+				const int next = ENVELOPE_SHAPE_D1
+					+ (current - ENVELOPE_SHAPE_D1 + 1) % shapeCount;
+				module->setEnvelopeShape(next);
+			}
+			else {
+				const int current = clamp(module->selectedShape, 0, SHAPE_COUNT - 1);
+				const int next = (current + 1) % SHAPE_COUNT;
+				module->setFactoryShape(next);
+			}
 		}
 	}
 	void draw(const DrawArgs& args) override {
 		TL1105::draw(args);
 		drawWyrmStepTriangle(args, box.size, true);
-	}
-};
-
-struct WyrmShapeMenuItem : MenuItem {
-	Wyrm* module = nullptr;
-	int shape = SHAPE_SINE;
-
-	void onAction(const event::Action& e) override {
-		if (module) module->setFactoryShape(shape);
-		MenuItem::onAction(e);
-	}
-
-	void step() override {
-		rightText = (module && module->selectedShape == shape) ? "✓" : "";
-		MenuItem::step();
 	}
 };
 
@@ -245,10 +252,61 @@ struct WyrmModeSwitchPulseWidget final : TransparentWidget {
 	}
 };
 
+struct WyrmEditorBackground final : TransparentWidget {
+	std::string imagePath;
+	std::shared_ptr<window::Image> image;
+	NVGcontext* imageContext = nullptr;
+
+	WyrmEditorBackground()
+		: imagePath(asset::plugin(pluginInstance, "res/icon/sand_color_96c.png")) {
+	}
+
+	void onContextCreate(const ContextCreateEvent& e) override {
+		image.reset();
+		imageContext = e.vg;
+		TransparentWidget::onContextCreate(e);
+	}
+
+	void onContextDestroy(const ContextDestroyEvent& e) override {
+		image.reset();
+		imageContext = nullptr;
+		TransparentWidget::onContextDestroy(e);
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (!args.vg || !APP || !APP->window) {
+			return;
+		}
+		if (imageContext != args.vg) {
+			image.reset();
+			imageContext = args.vg;
+		}
+		if (!image) {
+			image = APP->window->loadImage(imagePath);
+		}
+		if (!image || image->handle < 0) {
+			return;
+		}
+
+		int imageHandle = visual_assets::loadRasterMipmapHandle(
+			args.vg, image, imagePath);
+		if (imageHandle < 0) {
+			imageHandle = image->handle;
+		}
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		nvgFillPaint(args.vg, nvgImagePattern(
+			args.vg, 0.f, 0.f, box.size.x, box.size.y,
+			0.f, imageHandle, 1.f));
+		nvgFill(args.vg);
+	}
+};
+
 struct WyrmEditorSurface final : Widget {
 	Wyrm* module = nullptr;
 	std::shared_ptr<WyrmSand> sandState;
 	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache;
+	WyrmEditorBackground* background = nullptr;
 	Widget* sandGlWidget = nullptr;
 	widget::FramebufferWidget* editorFramebuffer = nullptr;
 	TransparentWidget* waveEditor = nullptr;
@@ -258,6 +316,8 @@ struct WyrmEditorSurface final : Widget {
 		: module(m)
 		, sandState(std::make_shared<WyrmSand>())
 		, geometryCache(std::make_shared<wyrm_render::DisplayGeometryCache>()) {
+		background = new WyrmEditorBackground();
+		addChild(background);
 		sandGlWidget = createWyrmSandGlWidget(module, sandState, geometryCache);
 		addChild(sandGlWidget);
 		waveEditor = createWyrmWaveEditor(module, sandState, geometryCache);
@@ -273,6 +333,8 @@ struct WyrmEditorSurface final : Widget {
 		size.x = std::max(1.f, size.x);
 		size.y = std::max(1.f, size.y);
 		setSize(size);
+		background->setPosition(Vec());
+		background->setSize(size);
 		sandGlWidget->setPosition(Vec());
 		sandGlWidget->setSize(size);
 		editorFramebuffer->setPosition(Vec());
@@ -715,11 +777,11 @@ struct WyrmWidget : ModuleWidget {
 		addChild(lockButton);
 		auto* resetButton = new WyrmTooltipButton<LeviathanResetButton>();
 		resetButton->box.pos = mm2px(resetPos).minus(resetButton->box.size.mult(0.5f));
-		resetButton->tooltipTextProvider = []() { return "Reset waveform"; };
-		if (module) {
-			resetButton->buttonAction = [module]() {
-				if (module->envelopeMode.load(std::memory_order_relaxed)) {
-					module->setEnvelopeArShape();
+			resetButton->tooltipTextProvider = []() { return "Reset waveform"; };
+			if (module) {
+				resetButton->buttonAction = [module]() {
+					if (module->envelopeMode.load(std::memory_order_relaxed)) {
+						module->setEnvelopeShape(module->selectedEnvelopeShape);
 				}
 				else {
 					module->setFactoryShape(module->selectedShape);
@@ -1052,14 +1114,33 @@ struct WyrmWidget : ModuleWidget {
 			}
 		}));
 		menu->addChild(new MenuSeparator());
-		menu->addChild(createMenuLabel("Factory Shape"));
-		for (int i = 0; i < SHAPE_COUNT; ++i) {
-			auto* item = new WyrmShapeMenuItem();
-			item->text = kWyrmShapeLabels[i];
-			item->module = module;
-			item->shape = i;
-			menu->addChild(item);
-		}
+		const bool envelopeMode = module->envelopeMode.load(std::memory_order_relaxed);
+		const int selectedShape = clamp(module->selectedShape, 0, SHAPE_COUNT - 1);
+		const int selectedEnvelopeShape = clamp(
+			module->selectedEnvelopeShape, 0, ENVELOPE_SHAPE_COUNT - 1);
+		const std::string selectedShapeLabel = envelopeMode
+			? kWyrmEnvelopeShapeLabels[selectedEnvelopeShape]
+			: kWyrmShapeLabels[selectedShape];
+		menu->addChild(createSubmenuItem("Shape", selectedShapeLabel, [=](Menu* submenu) {
+			if (module->envelopeMode.load(std::memory_order_relaxed)) {
+				submenu->addChild(createMenuLabel("Envelope Shapes"));
+				for (int shape = ENVELOPE_SHAPE_D1; shape < ENVELOPE_SHAPE_COUNT; ++shape) {
+					submenu->addChild(createCheckMenuItem(
+						kWyrmEnvelopeShapeLabels[shape], "",
+						[=]() { return module->selectedEnvelopeShape == shape; },
+						[=]() { module->setEnvelopeShape(shape); }));
+				}
+				return;
+			}
+
+			submenu->addChild(createMenuLabel("Oscillator Shapes"));
+			for (int shape = 0; shape < SHAPE_COUNT; ++shape) {
+				submenu->addChild(createCheckMenuItem(
+					kWyrmShapeLabels[shape], "",
+					[=]() { return module->selectedShape == shape; },
+					[=]() { module->setFactoryShape(shape); }));
+			}
+		}));
 	}
 };
 

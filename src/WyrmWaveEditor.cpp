@@ -261,6 +261,11 @@ struct WyrmWaveEditor : TransparentWidget {
 	}
 
 	void drawSandBackground(NVGcontext* vg) {
+		// The editor surface owns the persistent background texture. When Sand View
+		// is disabled, leave this layer transparent so that texture remains visible.
+		if (!sandEnabled()) {
+			return;
+		}
 		const int backendSetting = module
 			? module->sandBackend.load(std::memory_order_relaxed)
 			: WYRMSAND_NANOVG_IMAGE;

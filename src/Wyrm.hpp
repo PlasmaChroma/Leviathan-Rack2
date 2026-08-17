@@ -27,6 +27,21 @@ enum WyrmShapeId {
 	SHAPE_COUNT
 };
 
+enum WyrmEnvelopeShapeId {
+	ENVELOPE_SHAPE_AR = 0,
+	ENVELOPE_SHAPE_D1,
+	ENVELOPE_SHAPE_D2,
+	ENVELOPE_SHAPE_D3,
+	ENVELOPE_SHAPE_D4,
+	ENVELOPE_SHAPE_D5,
+	ENVELOPE_SHAPE_D6,
+	ENVELOPE_SHAPE_D7,
+	ENVELOPE_SHAPE_D8,
+	ENVELOPE_SHAPE_D9,
+	ENVELOPE_SHAPE_D10,
+	ENVELOPE_SHAPE_COUNT
+};
+
 enum WyrmRockMouseMode {
 	ROCK_MOUSE_DRAGS = 0,
 	ROCK_MOUSE_LIFTS,
@@ -59,6 +74,7 @@ enum WyrmSandPersistence {
 };
 
 extern const char* const kWyrmShapeLabels[SHAPE_COUNT];
+extern const char* const kWyrmEnvelopeShapeLabels[ENVELOPE_SHAPE_COUNT];
 
 constexpr float kWyrmAudioMinHz = 9.99f;
 constexpr float kWyrmAudioMaxHz = 9999.f;
@@ -260,6 +276,7 @@ struct Wyrm : Module {
 	std::atomic<int> sandPersistence {WYRMSAND_PERSISTENCE_MEDIUM};
 	bool waveCustomized = false;
 	int selectedShape = SHAPE_SINE;
+	int selectedEnvelopeShape = ENVELOPE_SHAPE_D2;
 	int pointCount = kWyrmPointCountDefault;
 	int rockCount = 0;
 	int rockMouseMode = ROCK_MOUSE_DRAGS;
@@ -294,6 +311,7 @@ struct Wyrm : Module {
 	void setWavePoint(int index, float value);
 	float getWavePoint(int index) const;
 	void setFactoryShape(int shapeId);
+	void setEnvelopeShape(int shapeId);
 	void setEnvelopeArShape();
 	void setPointCount(int newPointCount);
 	void rebuildWavetable();
