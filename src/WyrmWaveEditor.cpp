@@ -641,7 +641,8 @@ struct WyrmWaveEditor : TransparentWidget {
 			std::vector<Vec> previewBodyPoints;
 			std::vector<uint8_t> previewNearRock;
 			if (drawBodyNanoVG && hasModule && geometryCache) {
-				geometryCache->ensure(module, box.size, bodySampleCount);
+				geometryCache->ensure(module, box.size, bodySampleCount,
+					wyrm_render::DisplayGeometryRequirement::PointsAndNearRock);
 			}
 			else if (drawBodyNanoVG && !hasModule) {
 				previewBodyPoints.resize(size_t(bodySampleCount));
@@ -906,20 +907,17 @@ struct WyrmWaveEditor : TransparentWidget {
 			};
 
 			if (drawBodyNanoVG) {
+				const wyrm_render::BodyMaterial& bodyMaterial = wyrm_render::bodyMaterial();
 				nvgLineJoin(args.vg, NVG_ROUND);
 				nvgLineCap(args.vg, NVG_ROUND);
 				nvgBeginPath(args.vg);
 				emitRoundedBodyPath();
 
-				nvgStrokeWidth(args.vg, 4.0f);
-				nvgStrokeColor(args.vg, nvgRGBA(74, 54, 24, 205));
-				nvgStroke(args.vg);
-				nvgStrokeWidth(args.vg, 2.6f);
-				nvgStrokeColor(args.vg, nvgRGBA(167, 132, 72, 230));
-				nvgStroke(args.vg);
-				nvgStrokeWidth(args.vg, 1.15f);
-				nvgStrokeColor(args.vg, nvgRGBA(246, 215, 136, 225));
-				nvgStroke(args.vg);
+				for (const wyrm_render::BodyLayerMaterial& layer : bodyMaterial.layers) {
+					nvgStrokeWidth(args.vg, layer.widthPx);
+					nvgStrokeColor(args.vg, nvgRGBA(layer.r, layer.g, layer.b, layer.a));
+					nvgStroke(args.vg);
+				}
 			}
 
 		for (int i = 0; hasModule && i < module->rockCount; ++i) {

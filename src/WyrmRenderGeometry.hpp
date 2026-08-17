@@ -12,6 +12,33 @@ namespace wyrm_render {
 
 constexpr float kPointEdgeInsetPx = 2.2f;
 
+struct BodyLayerMaterial {
+	float widthPx;
+	unsigned char r;
+	unsigned char g;
+	unsigned char b;
+	unsigned char a;
+};
+
+struct BodyMaterial {
+	std::array<BodyLayerMaterial, 3> layers;
+	float edgeSoftness;
+
+	BodyMaterial()
+		: layers {{
+			BodyLayerMaterial {4.0f, 74, 54, 24, 205},
+			BodyLayerMaterial {2.6f, 167, 132, 72, 230},
+			BodyLayerMaterial {1.15f, 246, 215, 136, 225},
+		}}
+		, edgeSoftness(0.205f) {
+	}
+};
+
+inline const BodyMaterial& bodyMaterial() {
+	static const BodyMaterial material;
+	return material;
+}
+
 inline float pointDrawWidth(Vec size) {
 	return std::max(1.f, size.x - 2.f * kPointEdgeInsetPx);
 }
@@ -48,11 +75,17 @@ inline int glBodySampleCount(Vec size, int pointCount, float absoluteZoom, bool 
 	return clamp(std::min(pixelBudget, pointBudget), 128, 512);
 }
 
+enum class DisplayGeometryRequirement {
+	PointsOnly,
+	PointsAndNearRock,
+};
+
 struct DisplayGeometryCache {
 	std::vector<Vec> points;
 	std::vector<uint8_t> nearRock;
 	uint64_t revision = 0;
 	bool valid = false;
+	bool nearRockValid = false;
 	uint32_t waveVersion = 0;
 	int rockStateIndex = -1;
 	int pointCount = -1;
@@ -63,13 +96,16 @@ struct DisplayGeometryCache {
 
 	void invalidate() {
 		valid = false;
+		nearRockValid = false;
 	}
 
-	bool ensure(Wyrm* module, Vec requestedSize, int requestedSampleCount) {
+	bool ensure(Wyrm* module, Vec requestedSize, int requestedSampleCount,
+	            DisplayGeometryRequirement requirement) {
 		if (!module || module->pointCount < 2 || requestedSampleCount < 2) {
 			points.clear();
 			nearRock.clear();
 			valid = false;
+			nearRockValid = false;
 			return false;
 		}
 
@@ -95,7 +131,27 @@ struct DisplayGeometryCache {
 			&& std::fabs(size.y - requestedSize.y) <= 1e-4f
 			&& std::fabs(slitherPhase - requestedSlitherPhase) <= 1e-6f
 			&& std::fabs(slitherAmount - requestedSlitherAmount) <= 1e-6f;
+		if (cacheValid && (requirement == DisplayGeometryRequirement::PointsOnly || nearRockValid)) {
+			module->perfBodySampleCacheHits.fetch_add(1u, std::memory_order_relaxed);
+			return false;
+		}
 		if (cacheValid) {
+			const float nearRockMargin = 1.5f / float(requestedSampleCount);
+			float phaseClearance = 0.f;
+			visualRockClearance(requestedSize, nullptr, &phaseClearance);
+			nearRock.assign(size_t(requestedSampleCount), 0u);
+			for (int i = 0; i < requestedSampleCount; ++i) {
+				const float phase = (float(i) + 0.5f) / float(requestedSampleCount);
+				for (int rockIndex = 0; rockIndex < module->rockCount; ++rockIndex) {
+					const WyrmRock& rock = module->rocks[rockIndex];
+					const float radius = rock.radiusPhase + phaseClearance + nearRockMargin;
+					if (std::fabs(module->rockDx(phase, rock)) <= radius) {
+						nearRock[size_t(i)] = 1u;
+						break;
+					}
+				}
+			}
+			nearRockValid = true;
 			module->perfBodySampleCacheHits.fetch_add(1u, std::memory_order_relaxed);
 			return false;
 		}
@@ -110,9 +166,9 @@ struct DisplayGeometryCache {
 		float phaseClearance = 0.f;
 		visualRockClearance(requestedSize, &valueClearance, &phaseClearance);
 		const float drawWidth = pointDrawWidth(requestedSize);
-		const float nearRockMargin = 1.5f / float(requestedSampleCount);
 		points.resize(size_t(requestedSampleCount));
-		nearRock.resize(size_t(requestedSampleCount));
+		nearRock.clear();
+		nearRockValid = false;
 		for (int i = 0; i < requestedSampleCount; ++i) {
 			const float phase = (float(i) + 0.5f) / float(requestedSampleCount);
 			const float raw = catmullPeriodic(authoredPoints, requestedPointCount, phase);
@@ -126,17 +182,6 @@ struct DisplayGeometryCache {
 			points[size_t(i)] = Vec(
 				kPointEdgeInsetPx + phase * drawWidth,
 				(0.5f - 0.5f * clamp(value, -1.f, 1.f)) * requestedSize.y);
-
-			bool closeToRock = false;
-			for (int rockIndex = 0; rockIndex < module->rockCount; ++rockIndex) {
-				const WyrmRock& rock = module->rocks[rockIndex];
-				const float radius = rock.radiusPhase + phaseClearance + nearRockMargin;
-				if (std::fabs(module->rockDx(phase, rock)) <= radius) {
-					closeToRock = true;
-					break;
-				}
-			}
-			nearRock[size_t(i)] = closeToRock ? 1u : 0u;
 		}
 
 		waveVersion = requestedWaveVersion;
@@ -151,6 +196,9 @@ struct DisplayGeometryCache {
 			revision = 1;
 		}
 		valid = true;
+		if (requirement == DisplayGeometryRequirement::PointsAndNearRock) {
+			ensure(module, requestedSize, requestedSampleCount, requirement);
+		}
 		return true;
 	}
 };

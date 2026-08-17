@@ -22,6 +22,11 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	int waveColumnTextureCount = -1;
 	GLuint bodyShaderProgram = 0;
 	GLint bodyShaderSoftnessLoc = -1;
+	GLint bodyShaderMiddleRatioLoc = -1;
+	GLint bodyShaderCoreRatioLoc = -1;
+	GLint bodyShaderOuterColorLoc = -1;
+	GLint bodyShaderMiddleColorLoc = -1;
+	GLint bodyShaderCoreColorLoc = -1;
 	bool bodyShaderInitAttempted = false;
 	bool bodyShaderReady = false;
 	bool redrawStateInitialized = false;
@@ -34,11 +39,10 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	float lastSlitherAmount = -1.f;
 	Vec lastDrawSize = Vec(-1.f, -1.f);
 	float lastAbsoluteZoom = -1.f;
-	uint64_t bodyJoinGeometryRevision = 0;
-	std::vector<Vec> bodyUnitOffsets;
 	uint64_t bodyStripGeometryRevision = 0;
 	bool bodyStripShaderPath = false;
-	std::array<std::vector<BodyStripVertex>, 3> bodyStripVertices;
+	std::vector<BodyStripVertex> shaderBodyStripVertices;
+	std::array<std::vector<BodyStripVertex>, 3> fallbackBodyStripVertices;
 
 	void resetWaveColumnTextureState() {
 		waveColumnTexture = 0;
@@ -50,6 +54,11 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	void resetBodyShaderState() {
 		bodyShaderProgram = 0;
 		bodyShaderSoftnessLoc = -1;
+		bodyShaderMiddleRatioLoc = -1;
+		bodyShaderCoreRatioLoc = -1;
+		bodyShaderOuterColorLoc = -1;
+		bodyShaderMiddleColorLoc = -1;
+		bodyShaderCoreColorLoc = -1;
 		bodyShaderInitAttempted = false;
 		bodyShaderReady = false;
 	}
@@ -82,24 +91,37 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		bodyShaderInitAttempted = true;
 		static const char* kVs = R"GLSL(
 			#version 120
-			varying vec4 vColor;
-			varying vec2 vUv;
+			varying float vSide;
 			void main() {
 				gl_Position = ftransform();
-				vColor = gl_Color;
-				vUv = gl_MultiTexCoord0.xy;
+				vSide = gl_MultiTexCoord0.x * 2.0 - 1.0;
 			}
 		)GLSL";
 		static const char* kFs = R"GLSL(
 			#version 120
-			varying vec4 vColor;
-			varying vec2 vUv;
+			varying float vSide;
 			uniform float uSoftness;
+			uniform float uMiddleRatio;
+			uniform float uCoreRatio;
+			uniform vec4 uOuterColor;
+			uniform vec4 uMiddleColor;
+			uniform vec4 uCoreColor;
+			vec4 over(vec4 dst, vec4 src) {
+				float outA = src.a + dst.a * (1.0 - src.a);
+				vec3 outPremul = src.rgb * src.a + dst.rgb * dst.a * (1.0 - src.a);
+				return vec4(outA > 0.00001 ? outPremul / outA : vec3(0.0), outA);
+			}
 			void main() {
-				float edge = abs(vUv.x * 2.0 - 1.0);
-				float inner = clamp(1.0 - uSoftness, 0.0, 1.0);
-				float aa = 1.0 - smoothstep(inner, 1.0, edge);
-				gl_FragColor = vec4(vColor.rgb, vColor.a * aa);
+				float d = abs(vSide);
+				float outerMask = 1.0 - smoothstep(1.0 - uSoftness, 1.0, d);
+				float middleSoftness = uSoftness * uMiddleRatio;
+				float coreSoftness = uSoftness * uCoreRatio;
+				float middleMask = 1.0 - smoothstep(uMiddleRatio - middleSoftness, uMiddleRatio, d);
+				float coreMask = 1.0 - smoothstep(uCoreRatio - coreSoftness, uCoreRatio, d);
+				vec4 color = vec4(uOuterColor.rgb, uOuterColor.a * outerMask);
+				color = over(color, vec4(uMiddleColor.rgb, uMiddleColor.a * middleMask));
+				color = over(color, vec4(uCoreColor.rgb, uCoreColor.a * coreMask));
+				gl_FragColor = color;
 			}
 		)GLSL";
 		GLuint vs = compileShader(GL_VERTEX_SHADER, kVs);
@@ -128,7 +150,15 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			return;
 		}
 		bodyShaderSoftnessLoc = glGetUniformLocation(bodyShaderProgram, "uSoftness");
-		bodyShaderReady = (bodyShaderSoftnessLoc >= 0);
+		bodyShaderMiddleRatioLoc = glGetUniformLocation(bodyShaderProgram, "uMiddleRatio");
+		bodyShaderCoreRatioLoc = glGetUniformLocation(bodyShaderProgram, "uCoreRatio");
+		bodyShaderOuterColorLoc = glGetUniformLocation(bodyShaderProgram, "uOuterColor");
+		bodyShaderMiddleColorLoc = glGetUniformLocation(bodyShaderProgram, "uMiddleColor");
+		bodyShaderCoreColorLoc = glGetUniformLocation(bodyShaderProgram, "uCoreColor");
+		bodyShaderReady = bodyShaderSoftnessLoc >= 0
+			&& bodyShaderMiddleRatioLoc >= 0 && bodyShaderCoreRatioLoc >= 0
+			&& bodyShaderOuterColorLoc >= 0 && bodyShaderMiddleColorLoc >= 0
+			&& bodyShaderCoreColorLoc >= 0;
 		if (!bodyShaderReady) {
 			glDeleteProgram(bodyShaderProgram);
 			bodyShaderProgram = 0;
@@ -238,7 +268,8 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		if (!geometryCache) {
 			geometryCache = std::make_shared<wyrm_render::DisplayGeometryCache>();
 		}
-		geometryCache->ensure(module, size, bodySampleCountForSize(size, shaderPath));
+		geometryCache->ensure(module, size, bodySampleCountForSize(size, shaderPath),
+			wyrm_render::DisplayGeometryRequirement::PointsOnly);
 		const std::vector<Vec>& body = geometryCache->points;
 		if (body.size() < 2u) {
 			return;
@@ -319,27 +350,15 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			const Vec nPrev = Vec(-tPrev.y, tPrev.x);
 			const Vec nNext = Vec(-tNext.y, tNext.x);
 			const float turnDot = tPrev.x * tNext.x + tPrev.y * tNext.y;
+			// A single strip cannot represent a true reversal without overlapping
+			// itself. Keep that exceptional case bounded; all ordinary bends use a
+			// width-preserving miter so the body does not pinch at the vertex.
+			if (turnDot < -0.82f) {
+				return nNext.mult(halfW);
+			}
 			const Vec j = safeNormalize(nPrev.plus(nNext), nNext);
-			const float denom = std::max(0.80f, std::abs(j.x * nNext.x + j.y * nNext.y));
-			const float miter = std::min(1.18f, 1.f / denom);
-			const Vec miterOff = j.mult(halfW * miter);
-			const Vec bevelOff = nNext.mult(halfW);
-			const float t = clamp((turnDot - 0.12f) / 0.18f, 0.f, 1.f);
-			Vec off = bevelOff.mult(1.f - t).plus(miterOff.mult(t));
-			// Corner safety: if blended join points against either adjacent normal, force bevel.
-			if (off.x * nPrev.x + off.y * nPrev.y <= 0.02f * halfW ||
-				off.x * nNext.x + off.y * nNext.y <= 0.02f * halfW) {
-				off = bevelOff;
-			}
-			const float prevLen = pts[i].minus(pts[i - 1]).norm();
-			const float nextLen = pts[i + 1].minus(pts[i]).norm();
-			const float localLen = std::max(1e-4f, std::min(prevLen, nextLen));
-			const float offLen = off.norm();
-			const float maxOff = std::max(halfW, 0.42f * localLen);
-			if (offLen > maxOff && offLen > 1e-4f) {
-				off = off.mult(maxOff / offLen);
-			}
-			return off;
+			const float denom = std::max(0.285f, std::abs(j.x * nNext.x + j.y * nNext.y));
+			return j.mult(halfW / denom);
 		};
 		for (size_t i = 0; i < pts.size(); ++i) off[i] = joinOffset(i, halfW);
 		return off;
@@ -354,91 +373,74 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 
 	void drawBodyGl(Vec size, bool shaderPath, bool includeBase, bool includeGlow) {
 		if (!module || module->pointCount < 2) return;
+		const wyrm_render::BodyMaterial& material = wyrm_render::bodyMaterial();
 		const int sampleCount = bodySampleCountForSize(size, shaderPath);
 		if (!geometryCache) {
 			geometryCache = std::make_shared<wyrm_render::DisplayGeometryCache>();
 		}
-		geometryCache->ensure(module, size, sampleCount);
+		geometryCache->ensure(module, size, sampleCount,
+			wyrm_render::DisplayGeometryRequirement::PointsOnly);
 		const std::vector<Vec>& samples = geometryCache->points;
 		if (samples.size() < 2u) return;
-		// Join direction is width-independent for these narrow strips. Build it
-		// once, then scale it for every visual layer instead of normalizing the
-		// same segments repeatedly.
-		if (bodyJoinGeometryRevision != geometryCache->revision
-			|| bodyUnitOffsets.size() != samples.size()) {
-			bodyUnitOffsets = computeBodyJoinOffsets(samples, 1.f);
-			bodyJoinGeometryRevision = geometryCache->revision;
-		}
-		if (bodyUnitOffsets.size() != samples.size()) return;
-		const std::array<float, 3> stripWidths = shaderPath
-			? std::array<float, 3>{{4.20f, 2.54f, 1.12f}}
-			: std::array<float, 3>{{4.0f, 2.6f, 1.15f}};
 		if (bodyStripGeometryRevision != geometryCache->revision
 			|| bodyStripShaderPath != shaderPath
-			|| bodyStripVertices[0].size() != samples.size() * 2u) {
-			for (size_t layer = 0; layer < bodyStripVertices.size(); ++layer) {
-				const float halfW = 0.5f * stripWidths[layer];
-				std::vector<BodyStripVertex>& vertices = bodyStripVertices[layer];
+			|| (shaderPath && shaderBodyStripVertices.size() != samples.size() * 2u)
+			|| (!shaderPath && fallbackBodyStripVertices[0].size() != samples.size() * 2u)) {
+			if (shaderPath) {
+				const float halfW = 0.5f * material.layers[0].widthPx;
+				const std::vector<Vec> offsets = computeBodyJoinOffsets(samples, halfW);
+				shaderBodyStripVertices.resize(samples.size() * 2u);
+				for (size_t i = 0; i < samples.size(); ++i) {
+					const Vec left = samples[i].minus(offsets[i]);
+					const Vec right = samples[i].plus(offsets[i]);
+					shaderBodyStripVertices[i * 2u] = BodyStripVertex {left.x, left.y, 0.f, 0.f};
+					shaderBodyStripVertices[i * 2u + 1u] = BodyStripVertex {right.x, right.y, 1.f, 0.f};
+				}
+			}
+			else {
+				for (size_t layer = 0; layer < fallbackBodyStripVertices.size(); ++layer) {
+					const float halfW = 0.5f * material.layers[layer].widthPx;
+					const std::vector<Vec> offsets = computeBodyJoinOffsets(samples, halfW);
+					std::vector<BodyStripVertex>& vertices = fallbackBodyStripVertices[layer];
 				vertices.resize(samples.size() * 2u);
 				for (size_t i = 0; i < samples.size(); ++i) {
-					const Vec offset = bodyUnitOffsets[i].mult(halfW);
-					const Vec left = samples[i].minus(offset);
-					const Vec right = samples[i].plus(offset);
+					const Vec left = samples[i].minus(offsets[i]);
+					const Vec right = samples[i].plus(offsets[i]);
 					vertices[i * 2u] = BodyStripVertex {left.x, left.y, 0.f, 0.f};
 					vertices[i * 2u + 1u] = BodyStripVertex {right.x, right.y, 1.f, 0.f};
+				}
 				}
 			}
 			bodyStripGeometryRevision = geometryCache->revision;
 			bodyStripShaderPath = shaderPath;
 		}
-		auto drawCachedStrip = [&](size_t layer, const NVGcolor& color) {
-			const std::vector<BodyStripVertex>& vertices = bodyStripVertices[layer];
+		auto drawCachedStrip = [&](const std::vector<BodyStripVertex>& vertices,
+		                           const wyrm_render::BodyLayerMaterial& layer,
+		                           bool provideSide) {
 			if (vertices.empty()) return;
-			glColor4f(color.r, color.g, color.b, color.a);
+			glColor4ub(layer.r, layer.g, layer.b, layer.a);
 			glEnableClientState(GL_VERTEX_ARRAY);
 			glVertexPointer(2, GL_FLOAT, sizeof(BodyStripVertex), &vertices[0].x);
-			if (shaderPath) {
+			if (provideSide) {
 				glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 				glTexCoordPointer(2, GL_FLOAT, sizeof(BodyStripVertex), &vertices[0].u);
 			}
 			glDrawArrays(GL_TRIANGLE_STRIP, 0, GLsizei(vertices.size()));
-			if (shaderPath) glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+			if (provideSide) glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 			glDisableClientState(GL_VERTEX_ARRAY);
-		};
-		auto drawUncachedStrip = [&](float widthPx, const NVGcolor& color) {
-			const float halfW = 0.5f * widthPx;
-			glColor4f(color.r, color.g, color.b, color.a);
-			glBegin(GL_TRIANGLE_STRIP);
-			for (size_t i = 0; i < samples.size(); ++i) {
-				const Vec offset = bodyUnitOffsets[i].mult(halfW);
-				const Vec left = samples[i].minus(offset);
-				const Vec right = samples[i].plus(offset);
-				if (shaderPath) glTexCoord2f(0.f, 0.f);
-				glVertex2f(left.x, left.y);
-				if (shaderPath) glTexCoord2f(1.f, 0.f);
-				glVertex2f(right.x, right.y);
-			}
-			glEnd();
 		};
 
 		if (includeBase) {
 			if (shaderPath) {
-				// SHDR: rely on fragment AA softness and avoid extra feather geometry passes.
-				drawCachedStrip(0u, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 184.f / 255.f));
-				drawCachedStrip(1u, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 212.f / 255.f));
-				drawCachedStrip(2u, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 224.f / 255.f));
+				drawCachedStrip(shaderBodyStripVertices, material.layers[0], true);
 			}
 			else {
-				// Match NanoVG's three-stroke body. The cached Rack framebuffer supplies
-				// edge filtering without tens of thousands of per-segment feather vertices.
-				drawCachedStrip(0u, nvgRGBAf(74.f / 255.f, 54.f / 255.f, 24.f / 255.f, 205.f / 255.f));
-				drawCachedStrip(1u, nvgRGBAf(167.f / 255.f, 132.f / 255.f, 72.f / 255.f, 230.f / 255.f));
-				drawCachedStrip(2u, nvgRGBAf(246.f / 255.f, 215.f / 255.f, 136.f / 255.f, 225.f / 255.f));
+				for (size_t layer = 0; layer < fallbackBodyStripVertices.size(); ++layer) {
+					drawCachedStrip(fallbackBodyStripVertices[layer], material.layers[layer], false);
+				}
 			}
 		}
-		if (includeGlow) {
-			drawUncachedStrip(5.10f, nvgRGBAf(186.f / 255.f, 154.f / 255.f, 92.f / 255.f, 44.f / 255.f));
-		}
+		(void) includeGlow;
 	}
 
 	~WyrmGlRendererWidget() override {
@@ -536,8 +538,17 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 
 		drawWaveColumnsGl(box.size, shaderPath);
 		if (shaderPath) {
+			const wyrm_render::BodyMaterial& material = wyrm_render::bodyMaterial();
+			auto setLayerColor = [](GLint location, const wyrm_render::BodyLayerMaterial& layer) {
+				glUniform4f(location, layer.r / 255.f, layer.g / 255.f, layer.b / 255.f, layer.a / 255.f);
+			};
 			glUseProgram(bodyShaderProgram);
-			glUniform1f(bodyShaderSoftnessLoc, 0.205f);
+			glUniform1f(bodyShaderSoftnessLoc, material.edgeSoftness);
+			glUniform1f(bodyShaderMiddleRatioLoc, material.layers[1].widthPx / material.layers[0].widthPx);
+			glUniform1f(bodyShaderCoreRatioLoc, material.layers[2].widthPx / material.layers[0].widthPx);
+			setLayerColor(bodyShaderOuterColorLoc, material.layers[0]);
+			setLayerColor(bodyShaderMiddleColorLoc, material.layers[1]);
+			setLayerColor(bodyShaderCoreColorLoc, material.layers[2]);
 		}
 		drawBodyGl(box.size, shaderPath, true, false);
 		if (shaderPath) {

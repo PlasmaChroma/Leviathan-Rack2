@@ -4,6 +4,39 @@
 
 Last reviewed: 2026-08-17, after removal of the animated sand-field system.
 
+## Resume state
+
+Updated: 2026-08-17
+
+Implemented and build-validated:
+
+- Removed the disabled body render-target/FBO implementation.
+- GL Slither no longer dirties the cached NanoVG editor framebuffer.
+- `DisplayGeometryCache` supports points-only GL requests and upgrades cached
+  points with `nearRock` metadata only for NanoVG.
+- Envelope progress is now a plain translucent overlay rather than a PNG-backed
+  texture.
+- NanoVG, OpenGL, and SHDR now read one canonical body material.
+- SHDR now builds and submits one outer strip; its fragment shader composites the
+  outer, middle, and highlight layers analytically.
+- Body joins are calculated at each actual fallback width, and at the actual
+  outer width for SHDR, rather than scaling a width-constrained unit join.
+
+Immediate validation checkpoint:
+
+- Visually compare the new SHDR body against NanoVG and OpenGL in collapsed and
+  expanded views, especially sharp rock bends, outer-edge softness, and internal
+  layer transitions. `visual.png` exposed severe strip pinching at acute bends;
+  the previous bevel/miter clamps were replaced with width-preserving bounded
+  miters on 2026-08-17. That correction builds but still needs visual approval.
+
+Next implementation slice after approval:
+
+1. Move rock hover and drag decoration to the live overlay and stop hover-only
+   cached-editor invalidation.
+2. Implement the analytical waveform-fill shader and curve texture.
+3. Add reusable buffers, then asynchronous GPU timing.
+
 This plan covers Wyrm's waveform fill, body, editor compositing, and renderer
 instrumentation. The static background field is an independent cached layer and
 is not part of this optimization. A future procedural/fractal background should
@@ -34,14 +67,9 @@ only dirtied on size changes.
 
 The remaining significant costs and divergences are:
 
-- GL Slither needlessly redraws the NanoVG editor framebuffer.
 - Hover changes and drag decoration also redraw the cached editor layer.
-- `DisplayGeometryCache` always computes `nearRock`, though GL only uses points.
-- SHDR builds three client-side strips and submits three body draws.
 - GL waveform fill uses a full-editor CPU-generated texture plus immediate-mode
   quads for every authored point.
-- NanoVG and GL body materials use different widths and alpha values.
-- The source retains an unused body render-target allocation path.
 - GL timing measures CPU submission, not completed GPU work.
 
 ## Design rules
@@ -224,10 +252,12 @@ lost its fallback behavior.
 
 ## Checklist
 
-- [ ] Phase 0: capture baseline and remove dead body-render-target code.
-- [ ] Phase 1: isolate cached NanoVG invalidation from GL animation and hover.
-- [ ] Phase 2: add lean geometry requests and one canonical body material.
-- [ ] Phase 3: consolidate SHDR body to one analytical strip.
+- [x] Remove dead body-render-target code (baseline capture remains manual).
+- [ ] Phase 1: isolate cached NanoVG invalidation from GL animation and hover
+  (Slither complete; hover/drag overlay pending).
+- [x] Phase 2: add lean geometry requests and one canonical body material.
+- [ ] Phase 3: consolidate SHDR body to one analytical strip (implemented and
+  build-validated; visual approval pending).
 - [ ] Phase 4: replace the waveform raster/column quads with one shader pass.
 - [ ] Phase 5: add reusable buffers and asynchronous GPU timing.
 - [ ] Decide from measurements whether screen-space body rendering is justified.
