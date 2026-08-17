@@ -376,6 +376,7 @@ struct WyrmEditorBackground final : TransparentWidget {
 struct WyrmEditorSurface final : Widget {
 	Wyrm* module = nullptr;
 	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache;
+	std::shared_ptr<WyrmEditorInteractionState> interactionState;
 	widget::FramebufferWidget* backgroundFramebuffer = nullptr;
 	WyrmEditorBackground* background = nullptr;
 	Widget* glRendererWidget = nullptr;
@@ -385,7 +386,8 @@ struct WyrmEditorSurface final : Widget {
 
 	explicit WyrmEditorSurface(Wyrm* m)
 		: module(m)
-		, geometryCache(std::make_shared<wyrm_render::DisplayGeometryCache>()) {
+		, geometryCache(std::make_shared<wyrm_render::DisplayGeometryCache>())
+		, interactionState(std::make_shared<WyrmEditorInteractionState>()) {
 		backgroundFramebuffer = new widget::FramebufferWidget();
 		backgroundFramebuffer->dirtyOnSubpixelChange = false;
 		background = new WyrmEditorBackground();
@@ -393,12 +395,12 @@ struct WyrmEditorSurface final : Widget {
 		addChild(backgroundFramebuffer);
 		glRendererWidget = createWyrmGlRendererWidget(module, geometryCache);
 		addChild(glRendererWidget);
-		waveEditor = createWyrmWaveEditor(module, geometryCache);
+		waveEditor = createWyrmWaveEditor(module, geometryCache, interactionState);
 		editorFramebuffer = new widget::FramebufferWidget();
 		editorFramebuffer->dirtyOnSubpixelChange = false;
 		editorFramebuffer->addChild(waveEditor);
 		addChild(editorFramebuffer);
-		animationOverlay = createWyrmEditorAnimationOverlay(module);
+		animationOverlay = createWyrmEditorAnimationOverlay(module, interactionState);
 		addChild(animationOverlay);
 	}
 

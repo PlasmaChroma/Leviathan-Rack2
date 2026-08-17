@@ -30,7 +30,6 @@ struct WyrmWaveEditor : TransparentWidget {
 	Vec rockDragOffset;
 	WyrmRock previousDragRock {};
 	Vec lastBoxSize = Vec(-1.f, -1.f);
-	int lastHoverRock = -2;
 	uint32_t lastWaveVersion = 0;
 	int lastPointCount = -1;
 	int lastRockStateIndex = -1;
@@ -51,6 +50,7 @@ struct WyrmWaveEditor : TransparentWidget {
 	float cachedDisplaySlitherPhase = -1.f;
 	float cachedDisplaySlitherAmount = -1.f;
 	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache;
+	std::shared_ptr<WyrmEditorInteractionState> interactionState;
 	NVGcontext* waveMaterialContext = nullptr;
 	int waveMaterialImage = -1;
 	int waveMaterialW = 0;
@@ -64,11 +64,15 @@ struct WyrmWaveEditor : TransparentWidget {
 
 	explicit WyrmWaveEditor(
 		Wyrm* m,
-		std::shared_ptr<wyrm_render::DisplayGeometryCache> sharedGeometryCache = nullptr)
+		std::shared_ptr<wyrm_render::DisplayGeometryCache> sharedGeometryCache = nullptr,
+		std::shared_ptr<WyrmEditorInteractionState> sharedInteractionState = nullptr)
 		: module(m)
 		, geometryCache(sharedGeometryCache
 			? std::move(sharedGeometryCache)
-			: std::make_shared<wyrm_render::DisplayGeometryCache>()) {}
+			: std::make_shared<wyrm_render::DisplayGeometryCache>())
+		, interactionState(sharedInteractionState
+			? std::move(sharedInteractionState)
+			: std::make_shared<WyrmEditorInteractionState>()) {}
 
 	~WyrmWaveEditor() override {
 		nvg_gfx_lifecycle::resetOwnedNvgImage(
@@ -565,9 +569,9 @@ struct WyrmWaveEditor : TransparentWidget {
 		const Vec mouseLocal = currentLocalMousePos();
 		const bool mouseInside = (mouseLocal.x >= 0.f && mouseLocal.x <= box.size.x && mouseLocal.y >= 0.f && mouseLocal.y <= box.size.y);
 		const int hoverRockNow = (draggingRock >= 0) ? draggingRock : (mouseInside ? rockIndexAt(mouseLocal) : -1);
-		if (hoverRockNow != lastHoverRock) {
-			dirty = true;
-		}
+		interactionState->hoveredRock.store(hoverRockNow, std::memory_order_relaxed);
+		interactionState->draggingRock.store(draggingRock, std::memory_order_relaxed);
+		interactionState->dragRockMouseMode.store(dragRockMouseMode, std::memory_order_relaxed);
 
 		if (pointEditActive || draggingRock >= 0) {
 			dirty = true;
@@ -581,7 +585,6 @@ struct WyrmWaveEditor : TransparentWidget {
 		lastRenderMode = renderModeNow;
 		lastEditorLocked = editorLockedNow;
 		lastEnvelopeMode = envelopeModeNow;
-		lastHoverRock = hoverRockNow;
 
 		if (dirty) {
 			framebuffer->setDirty();
@@ -924,66 +927,19 @@ struct WyrmWaveEditor : TransparentWidget {
 			const WyrmRock& rock = module->rocks[i];
 			const Vec center = rockCenter(rock);
 			const Vec radius = rockPixelRadius(rock);
-			const bool hot = (i == hoveredRock || i == draggingRock);
 			nvgBeginPath(args.vg);
 			nvgEllipse(args.vg, center.x, center.y, radius.x, radius.y);
 			const int shade = 102 + int(44.f * hashUnit(rock.seed ^ 0x7a13u));
-			nvgFillColor(args.vg, nvgRGBA(shade, shade, shade + 4, hot ? 245 : 215));
+			nvgFillColor(args.vg, nvgRGBA(shade, shade, shade + 4, 215));
 			nvgFill(args.vg);
-			nvgStrokeWidth(args.vg, hot ? 2.2f : 1.1f);
-			nvgStrokeColor(args.vg, hot ? nvgRGBA(236, 226, 190, 235) : nvgRGBA(42, 42, 44, 190));
+			nvgStrokeWidth(args.vg, 1.1f);
+			nvgStrokeColor(args.vg, nvgRGBA(42, 42, 44, 190));
 			nvgStroke(args.vg);
 
 			nvgBeginPath(args.vg);
 			nvgEllipse(args.vg, center.x - 0.22f * radius.x, center.y - 0.24f * radius.y, 0.24f * radius.x, 0.16f * radius.y);
-			nvgFillColor(args.vg, nvgRGBA(205, 205, 202, hot ? 100 : 72));
+			nvgFillColor(args.vg, nvgRGBA(205, 205, 202, 72));
 			nvgFill(args.vg);
-		}
-
-		if (hasModule && draggingRock >= 0 && draggingRock < module->rockCount) {
-			const Vec center = rockCenter(module->rocks[draggingRock]);
-			const Vec radius = rockPixelRadius(module->rocks[draggingRock]);
-			const bool liftMode = (dragRockMouseMode == ROCK_MOUSE_LIFTS);
-			const NVGcolor arrowColor =
-				liftMode
-					? nvgRGBA(110, 228, 255, 235)
-					: nvgRGBA(236, 226, 190, 225);
-			auto drawArrow = [&](Vec dir, Vec normal) {
-				const Vec start = center.plus(Vec(dir.x * (radius.x + 3.f), dir.y * (radius.y + 3.f)));
-				const Vec end = center.plus(Vec(dir.x * (radius.x + 18.f), dir.y * (radius.y + 18.f)));
-				nvgBeginPath(args.vg);
-				nvgMoveTo(args.vg, start.x, start.y);
-				nvgLineTo(args.vg, end.x, end.y);
-				nvgStrokeWidth(args.vg, 1.5f);
-				nvgStrokeColor(args.vg, arrowColor);
-				nvgStroke(args.vg);
-
-				const Vec headA = end.minus(Vec(dir.x * 5.f, dir.y * 5.f)).plus(normal.mult(3.5f));
-				const Vec headB = end.minus(Vec(dir.x * 5.f, dir.y * 5.f)).minus(normal.mult(3.5f));
-				nvgBeginPath(args.vg);
-				nvgMoveTo(args.vg, end.x, end.y);
-				nvgLineTo(args.vg, headA.x, headA.y);
-				nvgMoveTo(args.vg, end.x, end.y);
-				nvgLineTo(args.vg, headB.x, headB.y);
-				nvgStrokeWidth(args.vg, 1.5f);
-				nvgStrokeColor(args.vg, arrowColor);
-				nvgStroke(args.vg);
-			};
-			drawArrow(Vec(1.f, 0.f), Vec(0.f, 1.f));
-			drawArrow(Vec(-1.f, 0.f), Vec(0.f, 1.f));
-			drawArrow(Vec(0.f, 1.f), Vec(1.f, 0.f));
-			drawArrow(Vec(0.f, -1.f), Vec(1.f, 0.f));
-
-			if (APP && APP->window && APP->window->uiFont) {
-				const char* modeText = liftMode ? "LIFT" : "DRAG";
-				const float labelX = center.x - radius.x - 16.f;
-				const float labelY = center.y - radius.y + 1.f;
-				nvgFontSize(args.vg, 8.0f);
-				nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-				nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
-				nvgFillColor(args.vg, arrowColor);
-				nvgText(args.vg, labelX, labelY, modeText, nullptr);
-			}
 		}
 
 		nvgResetScissor(args.vg);
@@ -1001,10 +957,16 @@ struct WyrmWaveEditor : TransparentWidget {
 
 struct WyrmEditorAnimationOverlay final : TransparentWidget {
 	Wyrm* module = nullptr;
+	std::shared_ptr<WyrmEditorInteractionState> interactionState;
 	bool tracerDotVisible = false;
 
-	explicit WyrmEditorAnimationOverlay(Wyrm* m)
-		: module(m) {
+	explicit WyrmEditorAnimationOverlay(
+		Wyrm* m,
+		std::shared_ptr<WyrmEditorInteractionState> sharedInteractionState = nullptr)
+		: module(m)
+		, interactionState(sharedInteractionState
+			? std::move(sharedInteractionState)
+			: std::make_shared<WyrmEditorInteractionState>()) {
 	}
 
 	float pointEdgeInset() const {
@@ -1013,6 +975,74 @@ struct WyrmEditorAnimationOverlay final : TransparentWidget {
 
 	float pointDrawWidth() const {
 		return wyrm_render::pointDrawWidth(box.size);
+	}
+
+	float yFromValue(float value) const {
+		return (0.5f - 0.5f * clamp(value, -1.f, 1.f)) * box.size.y;
+	}
+
+	Vec rockCenter(const WyrmRock& rock) const {
+		return Vec(pointEdgeInset() + rock.phase * pointDrawWidth(), yFromValue(rock.value));
+	}
+
+	Vec rockPixelRadius(const WyrmRock& rock) const {
+		return Vec(
+			std::max(5.f, rock.radiusPhase * pointDrawWidth()),
+			std::max(5.f, kWyrmRockValueScale * rock.radiusValue * box.size.y));
+	}
+
+	void drawRockInteraction(const DrawArgs& args) {
+		if (!module || !interactionState) return;
+		const int dragging = interactionState->draggingRock.load(std::memory_order_relaxed);
+		const int hovered = dragging >= 0
+			? dragging
+			: interactionState->hoveredRock.load(std::memory_order_relaxed);
+		if (hovered < 0 || hovered >= module->rockCount) return;
+
+		const WyrmRock& rock = module->rocks[hovered];
+		const Vec center = rockCenter(rock);
+		const Vec radius = rockPixelRadius(rock);
+		nvgBeginPath(args.vg);
+		nvgEllipse(args.vg, center.x, center.y, radius.x, radius.y);
+		nvgFillColor(args.vg, nvgRGBA(236, 226, 190, 28));
+		nvgFill(args.vg);
+		nvgStrokeWidth(args.vg, 2.2f);
+		nvgStrokeColor(args.vg, nvgRGBA(236, 226, 190, 235));
+		nvgStroke(args.vg);
+
+		if (dragging < 0) return;
+		const bool liftMode = interactionState->dragRockMouseMode.load(std::memory_order_relaxed) == ROCK_MOUSE_LIFTS;
+		const NVGcolor arrowColor = liftMode
+			? nvgRGBA(110, 228, 255, 235)
+			: nvgRGBA(236, 226, 190, 225);
+		auto drawArrow = [&](Vec dir, Vec normal) {
+			const Vec start = center.plus(Vec(dir.x * (radius.x + 3.f), dir.y * (radius.y + 3.f)));
+			const Vec end = center.plus(Vec(dir.x * (radius.x + 18.f), dir.y * (radius.y + 18.f)));
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, start.x, start.y);
+			nvgLineTo(args.vg, end.x, end.y);
+			const Vec headBase = end.minus(Vec(dir.x * 5.f, dir.y * 5.f));
+			nvgMoveTo(args.vg, end.x, end.y);
+			nvgLineTo(args.vg, headBase.x + normal.x * 3.5f, headBase.y + normal.y * 3.5f);
+			nvgMoveTo(args.vg, end.x, end.y);
+			nvgLineTo(args.vg, headBase.x - normal.x * 3.5f, headBase.y - normal.y * 3.5f);
+			nvgStrokeWidth(args.vg, 1.5f);
+			nvgStrokeColor(args.vg, arrowColor);
+			nvgStroke(args.vg);
+		};
+		drawArrow(Vec(1.f, 0.f), Vec(0.f, 1.f));
+		drawArrow(Vec(-1.f, 0.f), Vec(0.f, 1.f));
+		drawArrow(Vec(0.f, 1.f), Vec(1.f, 0.f));
+		drawArrow(Vec(0.f, -1.f), Vec(1.f, 0.f));
+
+		if (APP && APP->window && APP->window->uiFont) {
+			nvgFontSize(args.vg, 8.f);
+			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+			nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
+			nvgFillColor(args.vg, arrowColor);
+			nvgText(args.vg, center.x - radius.x - 16.f, center.y - radius.y + 1.f,
+				liftMode ? "LIFT" : "DRAG", nullptr);
+		}
 	}
 
 	float visualRockClearance() const {
@@ -1151,6 +1181,7 @@ struct WyrmEditorAnimationOverlay final : TransparentWidget {
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 		drawHoverGuides(args);
+		drawRockInteraction(args);
 		if (envelopeMode
 			&& module->displayEnvelopeRunning.load(std::memory_order_relaxed)) {
 			drawEnvelopeProgress(args, phase);
@@ -1168,10 +1199,13 @@ TransparentWidget* createWyrmWaveEditor(Wyrm* module) {
 
 TransparentWidget* createWyrmWaveEditor(
 	Wyrm* module,
-	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache) {
-	return new WyrmWaveEditor(module, std::move(geometryCache));
+	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache,
+	std::shared_ptr<WyrmEditorInteractionState> interactionState) {
+	return new WyrmWaveEditor(module, std::move(geometryCache), std::move(interactionState));
 }
 
-TransparentWidget* createWyrmEditorAnimationOverlay(Wyrm* module) {
-	return new WyrmEditorAnimationOverlay(module);
+TransparentWidget* createWyrmEditorAnimationOverlay(
+	Wyrm* module,
+	std::shared_ptr<WyrmEditorInteractionState> interactionState) {
+	return new WyrmEditorAnimationOverlay(module, std::move(interactionState));
 }

@@ -21,6 +21,9 @@ Implemented and build-validated:
   outer, middle, and highlight layers analytically.
 - Body joins are calculated at each actual fallback width, and at the actual
   outer width for SHDR, rather than scaling a width-constrained unit join.
+- Rock hover emphasis, drag arrows, and the drag-mode label now render in the
+  live overlay. Hover-only pointer movement no longer dirties the cached editor;
+  actual rock dragging still does because it changes persistent geometry.
 
 Immediate validation checkpoint:
 
@@ -38,10 +41,8 @@ join geometry or the deferred screen-space body renderer.
 
 Next implementation slice after approval:
 
-1. Move rock hover and drag decoration to the live overlay and stop hover-only
-   cached-editor invalidation.
-2. Implement the analytical waveform-fill shader and curve texture.
-3. Add reusable buffers, then asynchronous GPU timing.
+1. Implement the analytical waveform-fill shader and curve texture.
+2. Add reusable buffers, then asynchronous GPU timing.
 
 This plan covers Wyrm's waveform fill, body, editor compositing, and renderer
 instrumentation. The static background field is an independent cached layer and
@@ -259,8 +260,7 @@ lost its fallback behavior.
 ## Checklist
 
 - [x] Remove dead body-render-target code (baseline capture remains manual).
-- [ ] Phase 1: isolate cached NanoVG invalidation from GL animation and hover
-  (Slither complete; hover/drag overlay pending).
+- [x] Phase 1: isolate cached NanoVG invalidation from GL animation and hover.
 - [x] Phase 2: add lean geometry requests and one canonical body material.
 - [ ] Phase 3: consolidate SHDR body to one analytical strip (implemented and
   build-validated; visual approval pending).

@@ -143,6 +143,11 @@ inline float slitherSpeedFactor(float speedKnob) {
 }
 
 struct Wyrm;
+struct WyrmEditorInteractionState {
+	std::atomic<int> hoveredRock {-1};
+	std::atomic<int> draggingRock {-1};
+	std::atomic<int> dragRockMouseMode {-1};
+};
 namespace wyrm_render {
 struct DisplayGeometryCache;
 }
@@ -324,8 +329,11 @@ struct Wyrm : Module {
 TransparentWidget* createWyrmWaveEditor(Wyrm* module);
 TransparentWidget* createWyrmWaveEditor(
 	Wyrm* module,
-	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache);
-TransparentWidget* createWyrmEditorAnimationOverlay(Wyrm* module);
+	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache,
+	std::shared_ptr<WyrmEditorInteractionState> interactionState = nullptr);
+TransparentWidget* createWyrmEditorAnimationOverlay(
+	Wyrm* module,
+	std::shared_ptr<WyrmEditorInteractionState> interactionState = nullptr);
 Widget* createWyrmGlRendererWidget(Wyrm* module);
 Widget* createWyrmGlRendererWidget(
 	Wyrm* module,
