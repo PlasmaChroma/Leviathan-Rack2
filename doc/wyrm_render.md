@@ -79,6 +79,50 @@ Implemented and build-validated:
   faster between sessions, so the conservative session-normalized body gain is
   about 8.6%. Other follow-up states were captured at different framebuffer
   sizes and are useful scaling data rather than direct before/after comparisons.
+- A conservative vertical-rejection experiment bounded the eight local curve
+  points and discarded fragments that could not intersect the widest body. The
+  same-size follow-up found that branch/discard and unrolling costs outweighed
+  the skipped projections on this GPU: waveform-normalized body time regressed
+  about 7--10% in three of four states and improved only collapsed envelope
+  (about 9.8%). The experiment was removed; the squared-distance optimization
+  remains.
+- SHDR now evaluates waveform fill and analytical body in one fullscreen shader,
+  composing the unchanged straight-alpha materials internally in the same order
+  as the former two passes. Shader initialization failure retains the separate
+  analytical-waveform plus strip-body fallback. GPU CSV rows mark combined-pass
+  samples with `gpu_sample_combined=1`; for those rows `gpu_body_us` contains the
+  complete combined query and `gpu_wave_us` is zero. Same-size GPU and visual
+  validation are pending.
+
+Combined-pass validation to capture now:
+
+- Use one Wyrm in SHDR mode at Rack zoom 2.378. Hold zoom fixed for the entire
+  run and capture Slither-active oscillator and envelope states in both views.
+  Expected framebuffer sizes are 489x445 collapsed and 977x509 expanded; treat
+  any other size as scaling data, not a direct before/after comparison.
+- Keep each of the four states active for at least five seconds. Order does not
+  matter. Avoid waveform edits, rock dragging, rack movement, and other UI work
+  during each interval.
+- Retain only rows with `gpu_sample_valid=1`, `gpu_sample_combined=1`,
+  `gpu_sample_mode=2`, positive `gpu_sample_slither`, and the expected width and
+  height. Check that sample sequences are unique and that each state has enough
+  samples for median and p95 reporting.
+- For combined rows, compare `gpu_body_us` against the former sum of
+  `gpu_wave_us + gpu_body_us`. The same-size squared-distance baselines are:
+  collapsed oscillator 146.54 us median / 353.89 us p95; collapsed envelope
+  207.60 / 392.03 us; expanded oscillator 283.75 / 557.46 us; expanded envelope
+  348.67 / 554.01 us. Also compare `gl_framebuffer_us`, whole-draw median/p95,
+  and outliers so a GPU improvement is not offset by CPU or driver cost.
+- Before accepting timing, visually compare against the prior SHDR path in both
+  oscillator and envelope modes. Check fill polarity and height gradient,
+  alternating-column cadence and alignment, midpoint thickness, curve-edge AA,
+  body layer colors and alpha, outer-edge softness, acute peaks, steep segments,
+  round endpoints, and sharp rock-constrained bends. Pay special attention to
+  body-over-fill blending because composition moved inside the shader.
+- Keep the merge only if all four visual states remain equivalent and the
+  same-size GPU results show a repeatable end-to-end benefit beyond ordinary
+  between-session variation. Otherwise restore the separate passes while
+  retaining the squared-distance body optimization and GPU trace.
 
 Immediate validation checkpoint:
 

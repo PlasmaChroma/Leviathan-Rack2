@@ -42,8 +42,10 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	GLint bodyShaderCoreColorLoc = -1;
 	GLint bodyShaderCurveLoc = -1;
 	GLint bodyShaderCurveCountLoc = -1;
+	GLint bodyShaderPointCountLoc = -1;
 	GLint bodyShaderInsetLoc = -1;
 	GLint bodyShaderInvSizeLoc = -1;
+	GLint bodyShaderEnvelopeLoc = -1;
 	GLint bodyShaderOuterWidthLoc = -1;
 	bool bodyShaderInitAttempted = false;
 	bool bodyShaderReady = false;
@@ -71,6 +73,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		float slither = 0.f;
 		int width = 0;
 		int height = 0;
+		bool combined = false;
 	};
 	static constexpr size_t kGpuTimerSlotCount = 6u;
 	std::array<GpuTimerSlot, kGpuTimerSlotCount> gpuTimerSlots {};
@@ -115,8 +118,10 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		bodyShaderCoreColorLoc = -1;
 		bodyShaderCurveLoc = -1;
 		bodyShaderCurveCountLoc = -1;
+		bodyShaderPointCountLoc = -1;
 		bodyShaderInsetLoc = -1;
 		bodyShaderInvSizeLoc = -1;
+		bodyShaderEnvelopeLoc = -1;
 		bodyShaderOuterWidthLoc = -1;
 		bodyShaderInitAttempted = false;
 		bodyShaderReady = false;
@@ -134,6 +139,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		gpuTimerSupported = false;
 		if (module) {
 			module->perfCsvGpuSampleValid.store(false, std::memory_order_relaxed);
+			module->perfCsvGpuSampleCombined.store(false, std::memory_order_relaxed);
 		}
 	}
 
@@ -161,14 +167,18 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		uint64_t newestBodyNs = 0;
 		for (GpuTimerSlot& slot : gpuTimerSlots) {
 			if (!slot.pending) continue;
-			GLint waveReady = GL_FALSE;
+			GLint waveReady = slot.combined ? GL_TRUE : GL_FALSE;
 			GLint bodyReady = GL_FALSE;
-			glGetQueryObjectiv(slot.waveQuery, GL_QUERY_RESULT_AVAILABLE, &waveReady);
+			if (!slot.combined) {
+				glGetQueryObjectiv(slot.waveQuery, GL_QUERY_RESULT_AVAILABLE, &waveReady);
+			}
 			glGetQueryObjectiv(slot.bodyQuery, GL_QUERY_RESULT_AVAILABLE, &bodyReady);
 			if (waveReady != GL_TRUE || bodyReady != GL_TRUE) continue;
 			GLuint64 waveNs = 0;
 			GLuint64 bodyNs = 0;
-			glGetQueryObjectui64v(slot.waveQuery, GL_QUERY_RESULT, &waveNs);
+			if (!slot.combined) {
+				glGetQueryObjectui64v(slot.waveQuery, GL_QUERY_RESULT, &waveNs);
+			}
 			glGetQueryObjectui64v(slot.bodyQuery, GL_QUERY_RESULT, &bodyNs);
 			if (!newestResolved || slot.sequence > newestResolved->sequence) {
 				newestResolved = &slot;
@@ -186,6 +196,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			module->perfCsvGpuSampleSlither.store(newestResolved->slither, std::memory_order_relaxed);
 			module->perfCsvGpuSampleWidth.store(newestResolved->width, std::memory_order_relaxed);
 			module->perfCsvGpuSampleHeight.store(newestResolved->height, std::memory_order_relaxed);
+			module->perfCsvGpuSampleCombined.store(newestResolved->combined, std::memory_order_relaxed);
 			module->perfCsvGpuSampleValid.store(true, std::memory_order_relaxed);
 		}
 	}
@@ -203,6 +214,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			slot.slither = module->displaySlitherAmount.load(std::memory_order_relaxed);
 			slot.width = std::max(1, int(std::lround(framebufferSize.x)));
 			slot.height = std::max(1, int(std::lround(framebufferSize.y)));
+			slot.combined = false;
 			nextGpuTimerSlot = (index + 1u) % gpuTimerSlots.size();
 			return &slot;
 		}
@@ -385,8 +397,10 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			varying vec2 vUv;
 			uniform sampler2D uCurve;
 			uniform float uCurveCount;
+			uniform float uPointCount;
 			uniform float uInset;
 			uniform vec2 uInvSize;
+			uniform float uEnvelope;
 			uniform float uOuterWidth;
 			uniform float uSoftness;
 			uniform float uMiddleRatio;
@@ -417,10 +431,59 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			void main() {
 				vec2 p = vec2(vUv.x / uInvSize.x, vUv.y / uInvSize.y);
 				float span = max(0.00001, 1.0 - 2.0 * uInset);
-				float phase = clamp((vUv.x - uInset) / span, 0.0, 1.0);
+				float unclampedPhase = (vUv.x - uInset) / span;
+				float phase = clamp(unclampedPhase, 0.0, 1.0);
+				float curveU = (phase * (uCurveCount - 1.0) + 0.5) / uCurveCount;
+				float curveY = texture2D(uCurve, vec2(curveU, 0.5)).r;
+				float aa = max(uInvSize.y * 1.25, 0.0001);
+				float y = vUv.y;
+				float fillMask;
+				if (uEnvelope > 0.5) {
+					fillMask = smoothstep(curveY - aa, curveY + aa, y);
+				}
+				else if (curveY < 0.5) {
+					fillMask = smoothstep(curveY - aa, curveY + aa, y)
+						* (1.0 - smoothstep(0.5, 0.5 + aa, y));
+				}
+				else {
+					fillMask = smoothstep(0.5 - aa, 0.5, y)
+						* (1.0 - smoothstep(curveY - aa, curveY + aa, y));
+				}
+				fillMask *= step(0.0, unclampedPhase) * step(unclampedPhase, 1.0);
+				bool positive = y < 0.5;
+				vec4 cyanNear = vec4(28.0, 204.0, 217.0, 46.0) / 255.0;
+				vec4 cyanFar = vec4(42.0, 228.0, 255.0, 152.0) / 255.0;
+				vec4 purpleNear = vec4(115.0, 72.0, 224.0, 50.0) / 255.0;
+				vec4 purpleFar = vec4(150.0, 92.0, 255.0, 162.0) / 255.0;
+				vec4 waveColor;
+				if (uEnvelope > 0.5) {
+					waveColor = mix(purpleFar, cyanFar, clamp(1.0 - y, 0.0, 1.0));
+				}
+				else {
+					float depth = positive ? clamp((0.5 - y) * 2.0, 0.0, 1.0)
+						: clamp((y - 0.5) * 2.0, 0.0, 1.0);
+					waveColor = positive ? mix(cyanNear, cyanFar, depth)
+						: mix(purpleNear, purpleFar, depth);
+				}
+				waveColor.a *= fillMask;
+				float column = floor(clamp(unclampedPhase, 0.0, 0.999999) * uPointCount);
+				if (mod(column, 2.0) >= 1.0 && fillMask > 0.0) {
+					vec4 cyanShade = vec4(0.0, 56.0, 72.0, 132.0) / 255.0;
+					vec4 purpleShade = vec4(40.0, 24.0, 112.0, 92.0) / 255.0;
+					vec4 shade = uEnvelope > 0.5
+						? mix(purpleShade, cyanShade, clamp(1.0 - y, 0.0, 1.0))
+						: (positive ? cyanShade : purpleShade);
+					shade.a *= fillMask;
+					waveColor = over(waveColor, shade);
+				}
+				if (uEnvelope < 0.5) {
+					float midMask = 1.0 - smoothstep(0.0, uInvSize.y, abs(y - 0.5));
+					waveColor = over(waveColor, vec4(240.0 / 255.0, 180.0 / 255.0,
+						42.0 / 255.0, (150.0 / 255.0) * midMask));
+				}
 				float centerIndex = floor(phase * uCurveCount - 0.5);
-				float distanceSquaredPx = 1000000000000.0;
 				float firstIndex = centerIndex - 3.0;
+				float distanceSquaredPx = 1000000000000.0;
 				vec2 a = curvePoint(firstIndex);
 				for (int offset = 0; offset < 7; ++offset) {
 					vec2 b = curvePoint(firstIndex + float(offset + 1));
@@ -438,7 +501,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 				vec4 color = vec4(uOuterColor.rgb, uOuterColor.a * outerMask);
 				color = over(color, vec4(uMiddleColor.rgb, uMiddleColor.a * middleMask));
 				color = over(color, vec4(uCoreColor.rgb, uCoreColor.a * coreMask));
-				gl_FragColor = color;
+				gl_FragColor = over(waveColor, color);
 			}
 		)GLSL";
 		GLuint vs = compileShader(GL_VERTEX_SHADER, kVs);
@@ -474,15 +537,18 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		bodyShaderCoreColorLoc = glGetUniformLocation(bodyShaderProgram, "uCoreColor");
 		bodyShaderCurveLoc = glGetUniformLocation(bodyShaderProgram, "uCurve");
 		bodyShaderCurveCountLoc = glGetUniformLocation(bodyShaderProgram, "uCurveCount");
+		bodyShaderPointCountLoc = glGetUniformLocation(bodyShaderProgram, "uPointCount");
 		bodyShaderInsetLoc = glGetUniformLocation(bodyShaderProgram, "uInset");
 		bodyShaderInvSizeLoc = glGetUniformLocation(bodyShaderProgram, "uInvSize");
+		bodyShaderEnvelopeLoc = glGetUniformLocation(bodyShaderProgram, "uEnvelope");
 		bodyShaderOuterWidthLoc = glGetUniformLocation(bodyShaderProgram, "uOuterWidth");
 		bodyShaderReady = bodyShaderSoftnessLoc >= 0
 			&& bodyShaderMiddleRatioLoc >= 0 && bodyShaderCoreRatioLoc >= 0
 			&& bodyShaderOuterColorLoc >= 0 && bodyShaderMiddleColorLoc >= 0
 			&& bodyShaderCoreColorLoc >= 0 && bodyShaderCurveLoc >= 0
-			&& bodyShaderCurveCountLoc >= 0 && bodyShaderInsetLoc >= 0
-			&& bodyShaderInvSizeLoc >= 0 && bodyShaderOuterWidthLoc >= 0;
+			&& bodyShaderCurveCountLoc >= 0 && bodyShaderPointCountLoc >= 0
+			&& bodyShaderInsetLoc >= 0 && bodyShaderInvSizeLoc >= 0
+			&& bodyShaderEnvelopeLoc >= 0 && bodyShaderOuterWidthLoc >= 0;
 		if (!bodyShaderReady) {
 			glDeleteProgram(bodyShaderProgram);
 			bodyShaderProgram = 0;
@@ -591,10 +657,8 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		waveColumnTextureEnvelope = envelopeVisual;
 	}
 
-	bool drawWaveAnalyticalGl(Vec size, bool shaderPath) {
+	bool prepareCurveTexture(Vec size, bool shaderPath) {
 		if (!module || module->pointCount <= 0) return false;
-		ensureWaveShader();
-		if (!waveShaderReady) return false;
 		if (!geometryCache) {
 			geometryCache = std::make_shared<wyrm_render::DisplayGeometryCache>();
 		}
@@ -621,6 +685,12 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			curveTextureCount = int(curve.size());
 			curveTextureRevision = geometryCache->revision;
 		}
+		return curveTexture != 0 && curveTextureCount >= 2;
+	}
+
+	bool drawWaveAnalyticalGl(Vec size, bool shaderPath) {
+		ensureWaveShader();
+		if (!waveShaderReady || !prepareCurveTexture(size, shaderPath)) return false;
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, curveTexture);
@@ -769,7 +839,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	void drawBodyGl(Vec size, bool shaderPath, bool includeBase, bool includeGlow) {
 		if (!module || module->pointCount < 2) return;
 		const wyrm_render::BodyMaterial& material = wyrm_render::bodyMaterial();
-		if (shaderPath && curveTexture != 0 && curveTextureCount >= 2) {
+		if (shaderPath && prepareCurveTexture(size, shaderPath)) {
 			auto setLayerColor = [](GLint location, const wyrm_render::BodyLayerMaterial& layer) {
 				glUniform4f(location, layer.r / 255.f, layer.g / 255.f, layer.b / 255.f, layer.a / 255.f);
 			};
@@ -779,10 +849,13 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			glUseProgram(bodyShaderProgram);
 			glUniform1i(bodyShaderCurveLoc, 0);
 			glUniform1f(bodyShaderCurveCountLoc, float(curveTextureCount));
+			glUniform1f(bodyShaderPointCountLoc, float(std::max(1, module->pointCount)));
 			glUniform1f(bodyShaderInsetLoc,
 				wyrm_render::kPointEdgeInsetPx / std::max(size.x, 1.f));
 			glUniform2f(bodyShaderInvSizeLoc,
 				1.f / std::max(size.x, 1.f), 1.f / std::max(size.y, 1.f));
+			glUniform1f(bodyShaderEnvelopeLoc,
+				module->envelopeMode.load(std::memory_order_relaxed) ? 1.f : 0.f);
 			glUniform1f(bodyShaderOuterWidthLoc, material.layers[0].widthPx);
 			glUniform1f(bodyShaderSoftnessLoc, material.edgeSoftness);
 			glUniform1f(bodyShaderMiddleRatioLoc,
@@ -981,15 +1054,23 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		const bool shaderPath = useShdr && bodyShaderReady;
 		GpuTimerSlot* gpuTimer = logGpu ? beginGpuTimerSample(fbSize, mode) : nullptr;
 
-		if (gpuTimer) glBeginQuery(GL_TIME_ELAPSED, gpuTimer->waveQuery);
-		drawWaveColumnsGl(box.size, shaderPath);
-		if (gpuTimer) glEndQuery(GL_TIME_ELAPSED);
-		if (gpuTimer) glBeginQuery(GL_TIME_ELAPSED, gpuTimer->bodyQuery);
-		drawBodyGl(box.size, shaderPath, true, false);
-		if (gpuTimer) {
-			glEndQuery(GL_TIME_ELAPSED);
-			gpuTimer->pending = true;
+		if (shaderPath) {
+			if (gpuTimer) {
+				gpuTimer->combined = true;
+				glBeginQuery(GL_TIME_ELAPSED, gpuTimer->bodyQuery);
+			}
+			drawBodyGl(box.size, true, true, false);
+			if (gpuTimer) glEndQuery(GL_TIME_ELAPSED);
 		}
+		else {
+			if (gpuTimer) glBeginQuery(GL_TIME_ELAPSED, gpuTimer->waveQuery);
+			drawWaveColumnsGl(box.size, false);
+			if (gpuTimer) glEndQuery(GL_TIME_ELAPSED);
+			if (gpuTimer) glBeginQuery(GL_TIME_ELAPSED, gpuTimer->bodyQuery);
+			drawBodyGl(box.size, false, true, false);
+			if (gpuTimer) glEndQuery(GL_TIME_ELAPSED);
+		}
+		if (gpuTimer) gpuTimer->pending = true;
 
 		glMatrixMode(GL_MODELVIEW);
 		glPopMatrix();
