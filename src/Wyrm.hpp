@@ -295,6 +295,15 @@ struct Wyrm : Module {
 	std::atomic<uint64_t> perfCsvOverlayDrawNs {0};
 	std::atomic<uint64_t> perfCsvGlDrawNs {0};
 	std::atomic<bool> perfCsvGlDirty {false};
+	std::atomic<uint64_t> perfCsvGpuWaveNs {0};
+	std::atomic<uint64_t> perfCsvGpuBodyNs {0};
+	std::atomic<uint64_t> perfCsvGpuSampleSequence {0};
+	std::atomic<int> perfCsvGpuSampleMode {-1};
+	std::atomic<bool> perfCsvGpuSampleEnvelope {false};
+	std::atomic<float> perfCsvGpuSampleSlither {0.f};
+	std::atomic<int> perfCsvGpuSampleWidth {0};
+	std::atomic<int> perfCsvGpuSampleHeight {0};
+	std::atomic<bool> perfCsvGpuSampleValid {false};
 	std::atomic<uint64_t> perfOverlayDrawMinNs {std::numeric_limits<uint64_t>::max()};
 	std::atomic<uint64_t> perfOverlayDrawMaxNs {0};
 	std::atomic<uint64_t> perfBodySampleCacheHits {0};

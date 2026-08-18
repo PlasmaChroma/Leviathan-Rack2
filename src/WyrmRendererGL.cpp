@@ -61,6 +61,24 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	bool bodyStripShaderPath = false;
 	std::array<std::vector<BodyStripVertex>, 3> fallbackBodyStripVertices;
 
+	struct GpuTimerSlot {
+		GLuint waveQuery = 0;
+		GLuint bodyQuery = 0;
+		bool pending = false;
+		uint64_t sequence = 0;
+		int mode = -1;
+		bool envelope = false;
+		float slither = 0.f;
+		int width = 0;
+		int height = 0;
+	};
+	static constexpr size_t kGpuTimerSlotCount = 6u;
+	std::array<GpuTimerSlot, kGpuTimerSlotCount> gpuTimerSlots {};
+	size_t nextGpuTimerSlot = 0u;
+	uint64_t nextGpuTimerSequence = 1u;
+	bool gpuTimerSupportChecked = false;
+	bool gpuTimerSupported = false;
+
 	void resetWaveColumnTextureState() {
 		waveColumnTexture = 0;
 		waveColumnTextureW = 0;
@@ -102,6 +120,93 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		bodyShaderOuterWidthLoc = -1;
 		bodyShaderInitAttempted = false;
 		bodyShaderReady = false;
+	}
+
+	void resetGpuTimerState() {
+		for (GpuTimerSlot& slot : gpuTimerSlots) {
+			slot.waveQuery = 0;
+			slot.bodyQuery = 0;
+			slot.pending = false;
+		}
+		nextGpuTimerSlot = 0u;
+		nextGpuTimerSequence = 1u;
+		gpuTimerSupportChecked = false;
+		gpuTimerSupported = false;
+		if (module) {
+			module->perfCsvGpuSampleValid.store(false, std::memory_order_relaxed);
+		}
+	}
+
+	bool ensureGpuTimers() {
+		if (!gpuTimerSupportChecked) {
+			gpuTimerSupportChecked = true;
+			gpuTimerSupported = GLEW_VERSION_3_3 || GLEW_ARB_timer_query;
+		}
+		if (!gpuTimerSupported) return false;
+		for (GpuTimerSlot& slot : gpuTimerSlots) {
+			if (slot.waveQuery == 0) glGenQueries(1, &slot.waveQuery);
+			if (slot.bodyQuery == 0) glGenQueries(1, &slot.bodyQuery);
+			if (slot.waveQuery == 0 || slot.bodyQuery == 0) {
+				gpuTimerSupported = false;
+				return false;
+			}
+		}
+		return true;
+	}
+
+	void resolveGpuTimers() {
+		if (!module || !gpuTimerSupported) return;
+		GpuTimerSlot* newestResolved = nullptr;
+		uint64_t newestWaveNs = 0;
+		uint64_t newestBodyNs = 0;
+		for (GpuTimerSlot& slot : gpuTimerSlots) {
+			if (!slot.pending) continue;
+			GLint waveReady = GL_FALSE;
+			GLint bodyReady = GL_FALSE;
+			glGetQueryObjectiv(slot.waveQuery, GL_QUERY_RESULT_AVAILABLE, &waveReady);
+			glGetQueryObjectiv(slot.bodyQuery, GL_QUERY_RESULT_AVAILABLE, &bodyReady);
+			if (waveReady != GL_TRUE || bodyReady != GL_TRUE) continue;
+			GLuint64 waveNs = 0;
+			GLuint64 bodyNs = 0;
+			glGetQueryObjectui64v(slot.waveQuery, GL_QUERY_RESULT, &waveNs);
+			glGetQueryObjectui64v(slot.bodyQuery, GL_QUERY_RESULT, &bodyNs);
+			if (!newestResolved || slot.sequence > newestResolved->sequence) {
+				newestResolved = &slot;
+				newestWaveNs = uint64_t(waveNs);
+				newestBodyNs = uint64_t(bodyNs);
+			}
+			slot.pending = false;
+		}
+		if (newestResolved) {
+			module->perfCsvGpuWaveNs.store(newestWaveNs, std::memory_order_relaxed);
+			module->perfCsvGpuBodyNs.store(newestBodyNs, std::memory_order_relaxed);
+			module->perfCsvGpuSampleSequence.store(newestResolved->sequence, std::memory_order_relaxed);
+			module->perfCsvGpuSampleMode.store(newestResolved->mode, std::memory_order_relaxed);
+			module->perfCsvGpuSampleEnvelope.store(newestResolved->envelope, std::memory_order_relaxed);
+			module->perfCsvGpuSampleSlither.store(newestResolved->slither, std::memory_order_relaxed);
+			module->perfCsvGpuSampleWidth.store(newestResolved->width, std::memory_order_relaxed);
+			module->perfCsvGpuSampleHeight.store(newestResolved->height, std::memory_order_relaxed);
+			module->perfCsvGpuSampleValid.store(true, std::memory_order_relaxed);
+		}
+	}
+
+	GpuTimerSlot* beginGpuTimerSample(Vec framebufferSize, int mode) {
+		if (!module || !ensureGpuTimers()) return nullptr;
+		resolveGpuTimers();
+		for (size_t offset = 0; offset < gpuTimerSlots.size(); ++offset) {
+			const size_t index = (nextGpuTimerSlot + offset) % gpuTimerSlots.size();
+			GpuTimerSlot& slot = gpuTimerSlots[index];
+			if (slot.pending) continue;
+			slot.sequence = nextGpuTimerSequence++;
+			slot.mode = mode;
+			slot.envelope = module->envelopeMode.load(std::memory_order_relaxed);
+			slot.slither = module->displaySlitherAmount.load(std::memory_order_relaxed);
+			slot.width = std::max(1, int(std::lround(framebufferSize.x)));
+			slot.height = std::max(1, int(std::lround(framebufferSize.y)));
+			nextGpuTimerSlot = (index + 1u) % gpuTimerSlots.size();
+			return &slot;
+		}
+		return nullptr;
 	}
 
 	void validateGlResourcesForCurrentContext() {
@@ -302,25 +407,28 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 					(uInset + curveU * span) / uInvSize.x,
 					texture2D(uCurve, vec2(curveU, 0.5)).r / uInvSize.y);
 			}
-			float segmentDistance(vec2 p, vec2 a, vec2 b) {
+			float segmentDistanceSquared(vec2 p, vec2 a, vec2 b) {
 				vec2 ab = b - a;
 				float denom = max(dot(ab, ab), 0.00001);
 				float t = clamp(dot(p - a, ab) / denom, 0.0, 1.0);
-				return length(p - (a + ab * t));
+				vec2 delta = p - (a + ab * t);
+				return dot(delta, delta);
 			}
 			void main() {
 				vec2 p = vec2(vUv.x / uInvSize.x, vUv.y / uInvSize.y);
 				float span = max(0.00001, 1.0 - 2.0 * uInset);
 				float phase = clamp((vUv.x - uInset) / span, 0.0, 1.0);
 				float centerIndex = floor(phase * uCurveCount - 0.5);
-				float distancePx = 1000000.0;
+				float distanceSquaredPx = 1000000000000.0;
 				float firstIndex = centerIndex - 3.0;
 				vec2 a = curvePoint(firstIndex);
 				for (int offset = 0; offset < 7; ++offset) {
 					vec2 b = curvePoint(firstIndex + float(offset + 1));
-					distancePx = min(distancePx, segmentDistance(p, a, b));
+					distanceSquaredPx = min(
+						distanceSquaredPx, segmentDistanceSquared(p, a, b));
 					a = b;
 				}
+				float distancePx = sqrt(distanceSquaredPx);
 				float d = distancePx * 2.0 / uOuterWidth;
 				float outerMask = 1.0 - smoothstep(1.0 - uSoftness, 1.0, d);
 				float middleSoftness = uSoftness * uMiddleRatio;
@@ -748,6 +856,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	}
 
 	void abandonGlResources() {
+		resetGpuTimerState();
 		resetBodyShaderState();
 		resetWaveShaderState();
 		resetCurveTextureState();
@@ -864,13 +973,23 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		glLoadIdentity();
 		const int mode = module->renderMode.load(std::memory_order_relaxed);
 		const bool useShdr = (mode == WYRM_RENDER_OPENGL_SHDR);
+		const bool logGpu = useShdr && isDragonKingDebugEnabled() && isWyrmDrawLoggingEnabled();
+		if (module) module->perfCsvGpuSampleValid.store(false, std::memory_order_relaxed);
 		if (useShdr) {
 			ensureBodyShader();
 		}
 		const bool shaderPath = useShdr && bodyShaderReady;
+		GpuTimerSlot* gpuTimer = logGpu ? beginGpuTimerSample(fbSize, mode) : nullptr;
 
+		if (gpuTimer) glBeginQuery(GL_TIME_ELAPSED, gpuTimer->waveQuery);
 		drawWaveColumnsGl(box.size, shaderPath);
+		if (gpuTimer) glEndQuery(GL_TIME_ELAPSED);
+		if (gpuTimer) glBeginQuery(GL_TIME_ELAPSED, gpuTimer->bodyQuery);
 		drawBodyGl(box.size, shaderPath, true, false);
+		if (gpuTimer) {
+			glEndQuery(GL_TIME_ELAPSED);
+			gpuTimer->pending = true;
+		}
 
 		glMatrixMode(GL_MODELVIEW);
 		glPopMatrix();

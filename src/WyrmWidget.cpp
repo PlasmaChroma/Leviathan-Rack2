@@ -440,7 +440,9 @@ struct WyrmDrawCsvRecorder {
 			<< "row,time_sec,module_id,instance_id,scope,render_mode,envelope,slither_amount,"
 			<< "point_count,wave_version,rack_zoom,total_us,children_us,decorations_us,"
 			<< "editor_surface_us,editor_cache_us,editor_cache_dirty,overlay_us,"
-			<< "gl_framebuffer_us,gl_dirty,editor_other_us,outer_other_us\n";
+			<< "gl_framebuffer_us,gl_dirty,editor_other_us,outer_other_us,"
+			<< "gpu_sample_valid,gpu_sample_sequence,gpu_sample_mode,gpu_sample_envelope,"
+			<< "gpu_sample_slither,gpu_sample_width,gpu_sample_height,gpu_wave_us,gpu_body_us\n";
 		INFO("Wyrm started draw log CSV: %s", path.c_str());
 	}
 
@@ -492,6 +494,16 @@ struct WyrmDrawCsvRecorder {
 			<< (includesEditorSurface && glMode ? int(module->perfCsvGlDirty.load(std::memory_order_relaxed)) : 0)
 			<< ',' << float(editorOtherNs) * nsToUs
 			<< ',' << float(outerOtherNs) * nsToUs
+			<< ',' << int(includesEditorSurface
+				&& module->perfCsvGpuSampleValid.load(std::memory_order_relaxed))
+			<< ',' << module->perfCsvGpuSampleSequence.load(std::memory_order_relaxed)
+			<< ',' << module->perfCsvGpuSampleMode.load(std::memory_order_relaxed)
+			<< ',' << int(module->perfCsvGpuSampleEnvelope.load(std::memory_order_relaxed))
+			<< ',' << module->perfCsvGpuSampleSlither.load(std::memory_order_relaxed)
+			<< ',' << module->perfCsvGpuSampleWidth.load(std::memory_order_relaxed)
+			<< ',' << module->perfCsvGpuSampleHeight.load(std::memory_order_relaxed)
+			<< ',' << float(module->perfCsvGpuWaveNs.load(std::memory_order_relaxed)) * nsToUs
+			<< ',' << float(module->perfCsvGpuBodyNs.load(std::memory_order_relaxed)) * nsToUs
 			<< '\n';
 		if ((row % 120u) == 0u) {
 			file.flush();

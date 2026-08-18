@@ -62,6 +62,23 @@ Implemented and build-validated:
   Dirty flags identify actual framebuffer rebuilds. CSV writes occur after the
   timed draw and flush periodically; disabling the flag on the next configuration
   refresh closes the file.
+- In SHDR mode the same opt-in trace also uses asynchronous GPU timer queries to
+  separate waveform-fill and analytical-body execution. A six-slot query ring
+  never waits for results; supported drivers append valid, sequenced samples and
+  their originating mode, envelope, Slither, and framebuffer-size metadata to
+  later CSV rows. Unsupported timer-query contexts retain the CPU trace with
+  `gpu_sample_valid=0`.
+- The first Linux GPU capture found the analytical body responsible for roughly
+  46--50% of collapsed SHDR pass time and 58--59% expanded. Its seven-segment
+  neighborhood search now minimizes squared distance and takes one square root
+  after the loop instead of one per candidate segment; the resulting distance
+  and material coverage are otherwise unchanged. At the exact 489x445
+  oscillator comparison point, the follow-up Linux capture reduced median body
+  GPU time from 112.34 us to 94.79 us (15.6%) and combined fill-plus-body time
+  from 167.73 us to 146.54 us (12.6%). The unchanged waveform control was 7.7%
+  faster between sessions, so the conservative session-normalized body gain is
+  about 8.6%. Other follow-up states were captured at different framebuffer
+  sizes and are useful scaling data rather than direct before/after comparisons.
 
 Immediate validation checkpoint:
 
