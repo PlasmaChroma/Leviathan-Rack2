@@ -278,8 +278,6 @@ struct Wyrm : Module {
 	std::atomic<bool> perfSlitherActive {false};
 	std::atomic<bool> perfLfoMode {false};
 	std::atomic<bool> perfWavetableRebuilt {false};
-	std::atomic<float> perfWyrmGlUs {0.f};
-	std::atomic<float> perfWyrmGpuUs {0.f};
 	std::atomic<uint64_t> perfModuleStepMinNs {std::numeric_limits<uint64_t>::max()};
 	std::atomic<uint64_t> perfModuleStepMaxNs {0};
 	std::atomic<uint64_t> perfExpandedStepMinNs {std::numeric_limits<uint64_t>::max()};
@@ -288,6 +286,15 @@ struct Wyrm : Module {
 	std::atomic<uint64_t> perfModuleDrawMaxNs {0};
 	std::atomic<uint64_t> perfExpandedDrawMinNs {std::numeric_limits<uint64_t>::max()};
 	std::atomic<uint64_t> perfExpandedDrawMaxNs {0};
+	std::atomic<uint64_t> perfEditorCacheDrawMinNs {std::numeric_limits<uint64_t>::max()};
+	std::atomic<uint64_t> perfEditorCacheDrawMaxNs {0};
+	std::atomic<uint64_t> perfEditorCacheLastNs {0};
+	std::atomic<uint64_t> perfCsvEditorCacheDrawNs {0};
+	std::atomic<bool> perfCsvEditorCacheDirty {false};
+	std::atomic<uint64_t> perfCsvEditorSurfaceDrawNs {0};
+	std::atomic<uint64_t> perfCsvOverlayDrawNs {0};
+	std::atomic<uint64_t> perfCsvGlDrawNs {0};
+	std::atomic<bool> perfCsvGlDirty {false};
 	std::atomic<uint64_t> perfOverlayDrawMinNs {std::numeric_limits<uint64_t>::max()};
 	std::atomic<uint64_t> perfOverlayDrawMaxNs {0};
 	std::atomic<uint64_t> perfBodySampleCacheHits {0};

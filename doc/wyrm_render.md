@@ -40,14 +40,28 @@ Implemented and build-validated:
   boundaries rather than baked into its logical-resolution material bitmap. This
   matches the analytical GL cadence across renderer switches, zoom, and editor
   size; final visual approval remains pending.
-- Dragon King debug telemetry now reports asynchronous completed-GPU time from a
-  four-query `GL_TIME_ELAPSED` ring separately from GL CPU submission time. Query,
-  shader, and texture names are invalidated explicitly across graphics-context
-  recreation; unsupported timer-query contexts retain CPU-only telemetry.
+- The temporary live GL CPU/GPU Debug Terminal probes and timer-query ring were
+  removed after confirming that GL submission and execution were small relative
+  to the whole-module draw. Reintroduce detailed renderer timing as CSV capture if
+  later profiling makes it necessary.
 - Debug Terminal `Process`, `Step`, and `Draw` retain their repository-wide macro
   meaning. Wyrm aggregates module-widget and detached expanded-overlay work for
-  `Step`/`Draw`; editor-step, cached-editor, live-overlay, GL CPU, and GPU timings
+  `Step`/`Draw`; editor-step, cached-editor, and live-overlay timings
   are reported only as subsequent component fields.
+- Debug Terminal `Cache` measures the complete Rack editor-framebuffer redraw
+  boundary (including framebuffer setup, NanoVG flush, and compositing) only when
+  that cache is dirty. `CL.us` is the most recent such redraw; clean cached-image
+  composites do not dilute either measurement.
+- Detailed per-draw diagnosis now uses an opt-in CSV trace. Set
+  `"WyrmDrawLogging": true` in the Rack user file
+  `Leviathan/dragonking.txt` (with `"debug": true`) and restart Rack. Each Wyrm
+  instance writes `Leviathan/Wyrm/wyrm_draw_<instance>_<timestamp>_<sequence>.csv`
+  beneath the Rack user directory. Rows distinguish the normal module draw from
+  the detached expanded editor and report total, child, decoration, editor
+  surface, editor framebuffer, overlay, GL framebuffer, and residual timing.
+  Dirty flags identify actual framebuffer rebuilds. CSV writes occur after the
+  timed draw and flush periodically; disabling the flag on the next configuration
+  refresh closes the file.
 
 Immediate validation checkpoint:
 
@@ -136,7 +150,8 @@ The remaining significant costs and divergences are:
   count, editor draw time, and GL CPU submission time.
 - Remove the unused body render-target fields, allocation helper, validation, and
   cleanup branches from `WyrmRendererGL.cpp`.
-- Verify the renamed whole-renderer `perfWyrmGlUs` telemetry end to end.
+- Keep detailed renderer timing out of the live terminal; use a dedicated CSV
+  capture if another renderer investigation is needed.
 
 ### Acceptance
 
@@ -259,16 +274,16 @@ computes:
 
 - Add a static/shared buffer for editor-sized quads if it simplifies submission.
 - Restore resources safely after Rack or DAW GL context recreation.
-- Add a rotating pool of GPU timer queries where supported; read results several
-  frames later and never synchronously wait.
-- Report geometry CPU time, GL CPU submission time, and GPU time separately.
+- If renderer profiling becomes necessary, capture geometry CPU time, GL CPU
+  submission time, and asynchronous GPU timer-query results to CSV rather than
+  expanding the live Debug Terminal schema.
 
 ### Acceptance
 
 - SHDR body rendering does not submit pointers into CPU vectors.
 - Static quad geometry is not rebuilt per draw.
 - Context recreation does not retain stale GL handles.
-- Unsupported contexts keep CPU-only telemetry without behavior changes.
+- Profiling remains optional and introduces no work in normal rendering.
 - Buffer changes are retained only if they improve submission or simplify code.
 
 ## Screen-space SHDR body rendering (implemented, pending approval)

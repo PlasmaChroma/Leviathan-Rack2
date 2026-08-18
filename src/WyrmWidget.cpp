@@ -7,8 +7,12 @@
 
 #include <algorithm>
 #include <chrono>
+#include <ctime>
 #include <cstdio>
+#include <fstream>
 #include <functional>
+#include <iomanip>
+#include <sstream>
 
 void drawWyrmStepTriangle(const Widget::DrawArgs& args, const Vec& size, bool pointRight) {
 	const float cx = 0.5f * size.x;
@@ -375,6 +379,165 @@ struct WyrmEditorBackground final : TransparentWidget {
 	}
 };
 
+struct WyrmDrawCsvRecorder {
+	std::ofstream file;
+	std::string path;
+	uint64_t row = 0;
+	bool active = false;
+
+	static std::string rootPath() {
+		return system::join(asset::user(), "Leviathan/Wyrm");
+	}
+
+	static std::string dateTimeStamp() {
+		std::time_t now = std::time(nullptr);
+		std::tm tm {};
+#if defined(_WIN32)
+		localtime_s(&tm, &now);
+#else
+		localtime_r(&now, &tm);
+#endif
+		std::ostringstream out;
+		out << std::put_time(&tm, "%Y%m%d_%H%M%S");
+		return out.str();
+	}
+
+	void stop() {
+		if (file.is_open()) {
+			file.close();
+		}
+		path.clear();
+		row = 0;
+		active = false;
+	}
+
+	void sync(bool enabled, Wyrm* module) {
+		if (!enabled || !module) {
+			if (active || file.is_open() || !path.empty()) {
+				stop();
+			}
+			return;
+		}
+		if (active && file.is_open()) {
+			return;
+		}
+		system::createDirectories(rootPath());
+		static uint32_t openSequence = 0;
+		path = system::join(
+			rootPath(),
+			"wyrm_draw_" + std::to_string(module->debugInstanceId) + "_"
+				+ dateTimeStamp() + "_" + std::to_string(openSequence++) + ".csv");
+		file.open(path.c_str(), std::ios::out | std::ios::trunc);
+		if (!file.is_open()) {
+			WARN("Wyrm failed to open draw log CSV: %s", path.c_str());
+			stop();
+			return;
+		}
+		active = true;
+		row = 0;
+		file << std::fixed << std::setprecision(3);
+		file
+			<< "row,time_sec,module_id,instance_id,scope,render_mode,envelope,slither_amount,"
+			<< "point_count,wave_version,rack_zoom,total_us,children_us,decorations_us,"
+			<< "editor_surface_us,editor_cache_us,editor_cache_dirty,overlay_us,"
+			<< "gl_framebuffer_us,gl_dirty,editor_other_us,outer_other_us\n";
+		INFO("Wyrm started draw log CSV: %s", path.c_str());
+	}
+
+	void write(Wyrm* module,
+	           const char* scope,
+	           float rackZoom,
+	           uint64_t totalNs,
+	           uint64_t childrenNs,
+	           uint64_t decorationsNs,
+	           bool includesEditorSurface) {
+		if (!active || !file.is_open() || !module) {
+			return;
+		}
+		const bool glMode = module->renderMode.load(std::memory_order_relaxed) != WYRM_RENDER_NANOVG;
+		const float nsToUs = 0.001f;
+		const uint64_t editorSurfaceNs = includesEditorSurface
+			? module->perfCsvEditorSurfaceDrawNs.load(std::memory_order_relaxed) : 0;
+		const uint64_t editorCacheNs = includesEditorSurface
+			? module->perfCsvEditorCacheDrawNs.load(std::memory_order_relaxed) : 0;
+		const uint64_t overlayNs = includesEditorSurface
+			? module->perfCsvOverlayDrawNs.load(std::memory_order_relaxed) : 0;
+		const uint64_t glNs = includesEditorSurface && glMode
+			? module->perfCsvGlDrawNs.load(std::memory_order_relaxed) : 0;
+		const uint64_t accountedEditorNs = editorCacheNs + overlayNs + glNs;
+		const uint64_t editorOtherNs = editorSurfaceNs > accountedEditorNs
+			? editorSurfaceNs - accountedEditorNs : 0;
+		const uint64_t outerOtherNs = childrenNs > editorSurfaceNs
+			? childrenNs - editorSurfaceNs : 0;
+		file
+			<< row++ << ','
+			<< system::getTime() << ','
+			<< module->id << ','
+			<< module->debugInstanceId << ','
+			<< scope << ','
+			<< module->renderMode.load(std::memory_order_relaxed) << ','
+			<< int(module->envelopeMode.load(std::memory_order_relaxed)) << ','
+			<< module->displaySlitherAmount.load(std::memory_order_relaxed) << ','
+			<< module->pointCount << ','
+			<< module->waveVersion.load(std::memory_order_relaxed) << ','
+			<< rackZoom << ','
+			<< float(totalNs) * nsToUs << ','
+			<< float(childrenNs) * nsToUs << ','
+			<< float(decorationsNs) * nsToUs << ','
+			<< float(editorSurfaceNs) * nsToUs << ','
+			<< float(editorCacheNs) * nsToUs << ','
+			<< (includesEditorSurface ? int(module->perfCsvEditorCacheDirty.load(std::memory_order_relaxed)) : 0) << ','
+			<< float(overlayNs) * nsToUs << ','
+			<< float(glNs) * nsToUs << ','
+			<< (includesEditorSurface && glMode ? int(module->perfCsvGlDirty.load(std::memory_order_relaxed)) : 0)
+			<< ',' << float(editorOtherNs) * nsToUs
+			<< ',' << float(outerOtherNs) * nsToUs
+			<< '\n';
+		if ((row % 120u) == 0u) {
+			file.flush();
+		}
+	}
+
+	~WyrmDrawCsvRecorder() {
+		stop();
+	}
+};
+
+struct WyrmEditorFramebuffer final : widget::FramebufferWidget {
+	Wyrm* module = nullptr;
+
+	explicit WyrmEditorFramebuffer(Wyrm* m) : module(m) {}
+
+	void draw(const DrawArgs& args) override {
+		using PerfClock = std::chrono::steady_clock;
+		// Only report actual cache rebuilds. Clean draws merely composite the
+		// persistent framebuffer and would hide the invalidation cost we want.
+		const bool debugEnabled = module && isDragonKingDebugEnabled();
+		const bool cacheWasDirty = dirty;
+		const bool logCsv = debugEnabled && isWyrmDrawLoggingEnabled();
+		const bool measure = (debugEnabled && cacheWasDirty) || logCsv;
+		const PerfClock::time_point perfStart = measure
+			? PerfClock::now()
+			: PerfClock::time_point();
+
+		widget::FramebufferWidget::draw(args);
+
+		if (measure) {
+			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - perfStart).count());
+			if (debugEnabled && cacheWasDirty) {
+				debug_terminal::recordAudioProcessTiming(
+					module->perfEditorCacheDrawMinNs, module->perfEditorCacheDrawMaxNs, elapsedNs);
+				module->perfEditorCacheLastNs.store(elapsedNs, std::memory_order_relaxed);
+			}
+			if (logCsv) {
+				module->perfCsvEditorCacheDrawNs.store(elapsedNs, std::memory_order_relaxed);
+				module->perfCsvEditorCacheDirty.store(cacheWasDirty, std::memory_order_relaxed);
+			}
+		}
+	}
+};
+
 struct WyrmEditorSurface final : Widget {
 	Wyrm* module = nullptr;
 	std::shared_ptr<wyrm_render::DisplayGeometryCache> geometryCache;
@@ -398,7 +561,7 @@ struct WyrmEditorSurface final : Widget {
 		glRendererWidget = createWyrmGlRendererWidget(module, geometryCache);
 		addChild(glRendererWidget);
 		waveEditor = createWyrmWaveEditor(module, geometryCache, interactionState);
-		editorFramebuffer = new widget::FramebufferWidget();
+		editorFramebuffer = new WyrmEditorFramebuffer(module);
 		editorFramebuffer->dirtyOnSubpixelChange = false;
 		editorFramebuffer->addChild(waveEditor);
 		addChild(editorFramebuffer);
@@ -429,6 +592,18 @@ struct WyrmEditorSurface final : Widget {
 	void resetVisualTransitionState() {
 		if (editorFramebuffer) {
 			editorFramebuffer->setDirty();
+		}
+	}
+
+	void draw(const DrawArgs& args) override {
+		using PerfClock = std::chrono::steady_clock;
+		const bool logCsv = module && isDragonKingDebugEnabled() && isWyrmDrawLoggingEnabled();
+		const PerfClock::time_point start = logCsv ? PerfClock::now() : PerfClock::time_point();
+		Widget::draw(args);
+		if (logCsv) {
+			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - start).count());
+			module->perfCsvEditorSurfaceDrawNs.store(elapsedNs, std::memory_order_relaxed);
 		}
 	}
 };
@@ -600,6 +775,7 @@ struct WyrmExpandedEditorOverlay;
 struct WyrmEditorOverlayLink {
 	WyrmWidget* owner = nullptr;
 	WyrmExpandedEditorOverlay* overlay = nullptr;
+	std::shared_ptr<WyrmDrawCsvRecorder> drawCsvRecorder;
 };
 
 struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
@@ -694,6 +870,10 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 		using PerfClock = std::chrono::steady_clock;
 		Wyrm* module = editorSurface ? editorSurface->module : nullptr;
 		const bool measurePerf = module && isDragonKingDebugEnabled();
+		const bool logCsv = measurePerf && isWyrmDrawLoggingEnabled();
+		if (link && link->drawCsvRecorder) {
+			link->drawCsvRecorder->sync(logCsv, module);
+		}
 		const PerfClock::time_point perfStart = measurePerf
 			? PerfClock::now()
 			: PerfClock::time_point();
@@ -702,7 +882,11 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 		nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 255));
 		nvgFill(args.vg);
 
+		const PerfClock::time_point childrenStart = logCsv ? PerfClock::now() : PerfClock::time_point();
 		Widget::draw(args);
+		const uint64_t childrenNs = logCsv
+			? uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - childrenStart).count())
+			: 0;
 
 		const float borderWidth = 2.f;
 		const float inset = 0.5f * borderWidth;
@@ -713,11 +897,22 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 		nvgStrokeColor(args.vg, nvgRGBA(112, 78, 224, 255));
 		nvgStrokeWidth(args.vg, borderWidth);
 		nvgStroke(args.vg);
+		uint64_t elapsedNs = 0;
 		if (measurePerf) {
-			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfStart).count());
 			debug_terminal::recordAudioProcessTiming(
 				module->perfExpandedDrawMinNs, module->perfExpandedDrawMaxNs, elapsedNs);
+		}
+		if (logCsv && link && link->drawCsvRecorder) {
+			link->drawCsvRecorder->write(
+				module,
+				"expanded_editor",
+				getAbsoluteZoom(),
+				elapsedNs,
+				childrenNs,
+				elapsedNs > childrenNs ? elapsedNs - childrenNs : 0,
+				true);
 		}
 	}
 
@@ -738,11 +933,14 @@ struct WyrmWidget : ModuleWidget {
 	WyrmEditorSurface* editorSurface = nullptr;
 	WyrmEditorGlyphButton* expandEditorButton = nullptr;
 	std::shared_ptr<WyrmEditorOverlayLink> editorOverlayLink;
+	std::shared_ptr<WyrmDrawCsvRecorder> drawCsvRecorder;
 
 	explicit WyrmWidget(Wyrm* module) {
 		setModule(module);
+		drawCsvRecorder = std::make_shared<WyrmDrawCsvRecorder>();
 		editorOverlayLink = std::make_shared<WyrmEditorOverlayLink>();
 		editorOverlayLink->owner = this;
+		editorOverlayLink->drawCsvRecorder = drawCsvRecorder;
 		PreviewBuildLogTimer previewBuildTimer("Wyrm", module);
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/wyrm.panel.svg");
 		const std::string& panelPath = splitPanel.panelPath();
@@ -940,6 +1138,9 @@ struct WyrmWidget : ModuleWidget {
 
 	~WyrmWidget() override {
 		closeExpandedEditor();
+		if (drawCsvRecorder) {
+			drawCsvRecorder->stop();
+		}
 		if (editorOverlayLink) {
 			editorOverlayLink->owner = nullptr;
 		}
@@ -1033,10 +1234,18 @@ struct WyrmWidget : ModuleWidget {
 		Wyrm* wyrm = dynamic_cast<Wyrm*>(module);
 		using PerfClock = std::chrono::steady_clock;
 		const bool measurePerf = wyrm && isDragonKingDebugEnabled();
+		const bool logCsv = measurePerf && isWyrmDrawLoggingEnabled();
+		if (drawCsvRecorder) {
+			drawCsvRecorder->sync(logCsv, wyrm);
+		}
 		const PerfClock::time_point perfStart = measurePerf
 			? PerfClock::now()
 			: PerfClock::time_point();
+		const PerfClock::time_point childrenStart = logCsv ? PerfClock::now() : PerfClock::time_point();
 		ModuleWidget::draw(args);
+		const uint64_t childrenNs = logCsv
+			? uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - childrenStart).count())
+			: 0;
 		if (measurePerf && APP && APP->window && APP->window->uiFont) {
 			char debugIdLabel[32];
 			std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", wyrm->debugInstanceId);
@@ -1072,11 +1281,22 @@ struct WyrmWidget : ModuleWidget {
 				drawSigilAt(rightSigilCenter);
 			}
 		}
+		uint64_t elapsedNs = 0;
 		if (measurePerf) {
-			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfStart).count());
 			debug_terminal::recordAudioProcessTiming(
 				wyrm->perfModuleDrawMinNs, wyrm->perfModuleDrawMaxNs, elapsedNs);
+		}
+		if (logCsv && drawCsvRecorder) {
+			drawCsvRecorder->write(
+				wyrm,
+				"module",
+				getAbsoluteZoom(),
+				elapsedNs,
+				childrenNs,
+				elapsedNs > childrenNs ? elapsedNs - childrenNs : 0,
+				!isEditorExpanded());
 		}
 	}
 

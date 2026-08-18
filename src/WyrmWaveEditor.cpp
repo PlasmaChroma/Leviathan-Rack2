@@ -36,10 +36,8 @@ struct WyrmWaveEditor : TransparentWidget {
 	int lastRenderMode = -1;
 	bool lastEditorLocked = false;
 	bool lastEnvelopeMode = false;
-	float lastEditorDrawUs = 0.f;
 	float lastStepUsEma = 0.f;
 	debug_terminal::UiTimingRangeAccumulator stepUsRange;
-	debug_terminal::UiTimingRangeAccumulator drawUsRange;
 	int lastBodySampleCount = 0;
 	std::array<float, kWyrmPointCountMax> cachedDisplayWaveValues {};
 	int cachedDisplayWaveCount = 0;
@@ -588,8 +586,6 @@ struct WyrmWaveEditor : TransparentWidget {
 					module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
 					const uint64_t bodySampleCacheHits = module->perfBodySampleCacheHits.exchange(0, std::memory_order_acq_rel);
 					const uint64_t bodySampleCacheMisses = module->perfBodySampleCacheMisses.exchange(0, std::memory_order_acq_rel);
-					const float wyrmGlUs = module->perfWyrmGlUs.load(std::memory_order_relaxed);
-					const float wyrmGpuUs = module->perfWyrmGpuUs.load(std::memory_order_relaxed);
 					auto addTimingRanges = [](debug_terminal::TimingRangeUs a,
 					                          debug_terminal::TimingRangeUs b) {
 						if (b.max <= 0.f) return a;
@@ -617,12 +613,11 @@ struct WyrmWaveEditor : TransparentWidget {
 						moduleStepUs,
 						moduleDrawUs,
 						stepUsRange.consume(),
-						drawUsRange.consume(),
+						debug_terminal::consumeAudioProcessTiming(
+							module->perfEditorCacheDrawMinNs, module->perfEditorCacheDrawMaxNs),
 						debug_terminal::consumeAudioProcessTiming(
 							module->perfOverlayDrawMinNs, module->perfOverlayDrawMaxNs),
-						lastEditorDrawUs,
-						wyrmGlUs,
-						wyrmGpuUs,
+						float(module->perfEditorCacheLastNs.load(std::memory_order_relaxed)) * 0.001f,
 						module->perfChannels.load(std::memory_order_relaxed),
 						lastBodySampleCount,
 						bodySampleCacheHits,
@@ -640,9 +635,6 @@ struct WyrmWaveEditor : TransparentWidget {
 
 	void draw(const DrawArgs& args) override {
 		if (!args.vg) return;
-		using PerfClock = std::chrono::steady_clock;
-		const bool measurePerf = module && isDragonKingDebugEnabled();
-		const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 			const bool hasModule = (module != nullptr);
 			nvgSave(args.vg);
 			nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
@@ -1014,12 +1006,8 @@ struct WyrmWaveEditor : TransparentWidget {
 		nvgResetScissor(args.vg);
 		nvgRestore(args.vg);
 
-		if (measurePerf) {
-			const float editorDrawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-				PerfClock::now() - perfStart).count()) * 0.001f;
-			lastEditorDrawUs = editorDrawUs;
+		if (module && isDragonKingDebugEnabled()) {
 			lastBodySampleCount = bodySampleCount;
-			drawUsRange.add(editorDrawUs);
 		}
 	}
 };
@@ -1269,6 +1257,9 @@ struct WyrmEditorAnimationOverlay final : TransparentWidget {
 				PerfClock::now() - perfStart).count());
 			debug_terminal::recordAudioProcessTiming(
 				module->perfOverlayDrawMinNs, module->perfOverlayDrawMaxNs, elapsedNs);
+			if (isWyrmDrawLoggingEnabled()) {
+				module->perfCsvOverlayDrawNs.store(elapsedNs, std::memory_order_relaxed);
+			}
 		}
 	}
 };

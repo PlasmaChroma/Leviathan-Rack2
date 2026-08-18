@@ -58,6 +58,7 @@ bool isModuleTeardownLoggingEnabled();
 bool isScopeDrawLoggingEnabled();
 bool isIntegralFluxDrawLoggingEnabled();
 bool isPuffyDrawLoggingEnabled();
+bool isWyrmDrawLoggingEnabled();
 bool isExtraGlValidationEnabled();
 bool isDragonKingUserFractalParamsEnabled();
 void refreshDragonKingDebugEnabled();
