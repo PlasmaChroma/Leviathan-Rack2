@@ -17,10 +17,12 @@ Implemented and build-validated:
 - Envelope progress is now a plain translucent overlay rather than a PNG-backed
   texture.
 - NanoVG, OpenGL, and SHDR now read one canonical body material.
-- SHDR now builds and submits one outer strip; its fragment shader composites the
-  outer, middle, and highlight layers analytically.
-- Body joins are calculated at each actual fallback width, and at the actual
-  outer width for SHDR, rather than scaling a width-constrained unit join.
+- SHDR now renders body distance analytically in screen space from the shared
+  curve texture. This removes strip joins, produces continuous acute peaks, and
+  gives endpoints true round-cap distance semantics. The former analytical strip
+  remains superseded; non-SHDR OpenGL retains its layered-strip fallback.
+- Fallback body joins are calculated at each actual layer width rather than
+  scaling a width-constrained unit join.
 - Rock hover emphasis, drag arrows, and the drag-mode label now render in the
   live overlay. Hover-only pointer movement no longer dirties the cached editor;
   actual rock dragging still does because it changes persistent geometry.
@@ -34,31 +36,34 @@ Implemented and build-validated:
   bipolar cyan/purple material split.
 - NanoVG envelope fill uses the same purple-floor to cyan-ceiling material,
   including matching alternating-column shading and its non-texture fallback.
+- NanoVG alternating-column shading is now emitted from exact authored-column
+  boundaries rather than baked into its logical-resolution material bitmap. This
+  matches the analytical GL cadence across renderer switches, zoom, and editor
+  size; final visual approval remains pending.
 
 Immediate validation checkpoint:
 
-- Visually compare the new SHDR body against NanoVG and OpenGL in collapsed and
-  expanded views, especially sharp rock bends, outer-edge softness, and internal
-  layer transitions. `visual.png` exposed severe strip pinching at acute bends;
-  the previous bevel/miter clamps were replaced on 2026-08-17. Fully preserving
-  width produced visibly sharp miter spikes, so the current compromise caps the
-  miter at 1.6x half-width. That correction builds but still needs visual approval.
+- Visually compare the screen-space SHDR body against NanoVG in collapsed and
+  expanded views, especially acute peaks, round endcaps, steep segments, sharp
+  rock bends, outer-edge softness, and internal layer transitions.
 
-Known limitation: a single triangle strip cannot provide both perfectly constant
-width and truly rounded joins at arbitrary acute turns. If the bounded-miter
-result is still unacceptable, do not continue tuning the scalar cap; use explicit
-join geometry or the deferred screen-space body renderer.
+Known limitation: screen-space distance checks a fixed local neighborhood of
+curve segments for GLSL 1.20 compatibility and bounded fragment cost. Pathological
+near-vertical folds should be included in visual validation; expand the fixed
+neighborhood only if a real capture shows a missed nearest segment.
 
 Checkpoint result: the bounded-miter body was provisionally accepted after a
-brief Rack test. It is not considered perfect, but further join tuning is deferred
-until after the curve-texture and analytical-fill work, since that data path may
-support replacing strip-based body rendering altogether.
+brief Rack test, then `wyrm.png` exposed remaining peak continuity and square-cap
+differences against NanoVG. A radial-over-strip experiment merely changed those
+artifacts by double-compositing visible nodes, so it was removed. SHDR now uses
+screen-space curve distance and awaits visual approval.
 
 Next implementation slice after approval:
 
 1. Visually validate analytical fill parity in oscillator/envelope and collapsed/
    expanded views. In particular check polarity, midpoint thickness, column
-   alignment, curve-edge AA, and behavior around rock-constrained segments.
+   alignment and cadence, curve-edge AA, and behavior around rock-constrained
+   segments.
 2. After approval, remove the full-resolution CPU waveform raster; decide whether
    the immediate-mode fallback remains worthwhile or should become NanoVG fallback.
 3. Add reusable buffers, then asynchronous GPU timing.
@@ -96,7 +101,7 @@ The remaining significant costs and divergences are:
 - The analytical GL waveform fill is active, but its former full-resolution CPU
   texture and immediate-mode column renderer remain compiled as fallback pending
   final visual approval.
-- The accepted strip body still has bounded-miter compromises at acute corners.
+- The new screen-space SHDR body still needs visual and GPU-cost approval.
 - GL timing measures CPU submission, not completed GPU work.
 
 ## Design rules

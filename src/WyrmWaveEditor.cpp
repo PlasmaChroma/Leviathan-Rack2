@@ -263,16 +263,11 @@ struct WyrmWaveEditor : TransparentWidget {
 		waveMaterialDirty = true;
 		waveMaterialPixels.assign(size_t(w) * size_t(h) * 4u, 0u);
 
-		const float inset = pointEdgeInset();
-		const float drawWidth = std::max(1.f, box.size.x - 2.f * inset);
-		const float dx = drawWidth / float(count);
 		const float midY = 0.5f * box.size.y;
 		const NVGcolor posNear = nvgRGBA(28, 204, 217, 46);
 		const NVGcolor posFar = nvgRGBA(42, 228, 255, 152);
 		const NVGcolor negNear = nvgRGBA(115, 72, 224, 50);
 		const NVGcolor negFar = nvgRGBA(150, 92, 255, 162);
-		const NVGcolor posShade = nvgRGBA(0, 56, 72, 132);
-		const NVGcolor negShade = nvgRGBA(40, 24, 112, 92);
 
 		for (int py = 0; py < h; ++py) {
 			const float y = std::min(box.size.y, float(py) + 0.5f);
@@ -285,16 +280,8 @@ struct WyrmWaveEditor : TransparentWidget {
 				? mixColor(negFar, posFar, heightT)
 				: (positive ? mixColor(posNear, posFar, t) : mixColor(negNear, negFar, t));
 			for (int px = 0; px < w; ++px) {
-				const float x = std::min(box.size.x, float(px) + 0.5f);
-				const float columnF = (x - inset) / std::max(dx, 1e-6f);
-				const int column = int(std::floor(columnF));
 				float out[4] = {0.f, 0.f, 0.f, 0.f};
 				compositeOver(base, out);
-				if (column >= 0 && column < count && (column & 1) != 0) {
-					compositeOver(envelopeVisual
-						? mixColor(negShade, posShade, heightT)
-						: (positive ? posShade : negShade), out);
-				}
 				const size_t offset = (size_t(py) * size_t(w) + size_t(px)) * 4u;
 				waveMaterialPixels[offset + 0u] = wyrmClampU8(int(std::lround(out[0] * out[3] * 255.f)));
 				waveMaterialPixels[offset + 1u] = wyrmClampU8(int(std::lround(out[1] * out[3] * 255.f)));
@@ -766,7 +753,7 @@ struct WyrmWaveEditor : TransparentWidget {
 			}
 
 			auto emitAlternatingPolarityShade = [&](bool positive) {
-				if (!drawWaveArea || useWaveMaterialImage || count <= 0) {
+				if (!drawWaveArea || count <= 0) {
 					return;
 				}
 				auto inside = [&](const Vec& p) {
@@ -853,7 +840,60 @@ struct WyrmWaveEditor : TransparentWidget {
 				nvgFillColor(args.vg, positive ? nvgRGBA(0, 56, 72, 132) : nvgRGBA(40, 24, 112, 92));
 				nvgFill(args.vg);
 			};
-			if (!envelopeVisual) {
+			auto emitAlternatingEnvelopeShade = [&]() {
+				if (!drawWaveArea || count <= 0) {
+					return;
+				}
+				auto sampleBodyPointAtX = [&](float x) {
+					const float phase = clamp((x - pointEdgeInset()) / std::max(pointDrawWidth(), 1e-6f), 0.f, 1.f);
+					const float sampleIndex = phase * float(cachedBodySamples) - 0.5f;
+					if (sampleIndex <= 0.f) {
+						return Vec(x, bodyPathPoints[0].y);
+					}
+					if (sampleIndex >= float(cachedBodySamples - 1)) {
+						return Vec(x, bodyPathPoints[cachedBodySamples - 1].y);
+					}
+					const int i0 = clamp(int(std::floor(sampleIndex)), 0, cachedBodySamples - 2);
+					const float t = sampleIndex - float(i0);
+					return Vec(x, bodyPathPoints[i0].y
+						+ (bodyPathPoints[i0 + 1].y - bodyPathPoints[i0].y) * t);
+				};
+
+				nvgBeginPath(args.vg);
+				int sampleCursor = 0;
+				for (int column = 1; column < count; column += 2) {
+					const float x0 = pointEdgeInset() + float(column) * dx;
+					const float x1 = std::min(
+						pointEdgeInset() + float(column + 1) * dx,
+						pointEdgeInset() + pointDrawWidth());
+					const Vec p0 = sampleBodyPointAtX(x0);
+					const Vec p1 = sampleBodyPointAtX(x1);
+					nvgMoveTo(args.vg, p0.x, p0.y);
+					while (sampleCursor < cachedBodySamples && bodyPathPoints[sampleCursor].x <= x0) {
+						++sampleCursor;
+					}
+					for (int sample = sampleCursor; sample < cachedBodySamples; ++sample) {
+						const Vec p = bodyPathPoints[sample];
+						if (p.x >= x1) {
+							break;
+						}
+						nvgLineTo(args.vg, p.x, p.y);
+					}
+					nvgLineTo(args.vg, p1.x, p1.y);
+					nvgLineTo(args.vg, x1, box.size.y);
+					nvgLineTo(args.vg, x0, box.size.y);
+					nvgClosePath(args.vg);
+				}
+				const NVGpaint shade = nvgLinearGradient(
+					args.vg, 0.f, box.size.y, 0.f, 0.f,
+					nvgRGBA(40, 24, 112, 92), nvgRGBA(0, 56, 72, 132));
+				nvgFillPaint(args.vg, shade);
+				nvgFill(args.vg);
+			};
+			if (envelopeVisual) {
+				emitAlternatingEnvelopeShade();
+			}
+			else {
 				emitAlternatingPolarityShade(true);
 				emitAlternatingPolarityShade(false);
 			}
