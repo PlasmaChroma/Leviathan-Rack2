@@ -509,14 +509,18 @@ void submitWyrmMetrics(uint32_t instanceId,
                        TimingRangeUs processUs,
                        TimingRangeUs stepUs,
                        TimingRangeUs drawUs,
+                       TimingRangeUs editorStepUs,
+                       TimingRangeUs cachedEditorUs,
+                       TimingRangeUs overlayUs,
                        float editorDrawUs,
                        float wyrmGlUs,
+                       float wyrmGpuUs,
                        int channels,
                        int bodySamples,
                        uint64_t bodySampleCacheHits,
                        uint64_t bodySampleCacheMisses) {
   submitUiMetricSchema("Wyrm",
-                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"ed_us\",\"label\":\"Ed (us)\"},{\"key\":\"wyrm_gl_us\",\"label\":\"GL (us)\"},{\"key\":\"ch\",\"label\":\"Ch\"},{\"key\":\"body\",\"label\":\"Body\"},{\"key\":\"body_cache_hit\",\"label\":\"BHit\"},{\"key\":\"body_cache_miss\",\"label\":\"BMiss\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"editor_step_us\",\"label\":\"Ed Step (us)\"},{\"key\":\"cached_editor_us\",\"label\":\"Cache (us)\"},{\"key\":\"overlay_us\",\"label\":\"Overlay (us)\"},{\"key\":\"ed_us\",\"label\":\"Cache last (us)\"},{\"key\":\"wyrm_gl_us\",\"label\":\"GL CPU (us)\"},{\"key\":\"wyrm_gpu_us\",\"label\":\"GL GPU (us)\"},{\"key\":\"ch\",\"label\":\"Ch\"},{\"key\":\"body\",\"label\":\"Body\"},{\"key\":\"body_cache_hit\",\"label\":\"BHit\"},{\"key\":\"body_cache_miss\",\"label\":\"BMiss\"}]");
   char dataBuf[512];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
@@ -532,9 +536,22 @@ void submitWyrmMetrics(uint32_t instanceId,
   appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
   std::snprintf(dataBuf + std::strlen(dataBuf),
                 sizeof(dataBuf) - std::strlen(dataBuf),
-                ",\"ed_us\":%.3f,\"wyrm_gl_us\":%.3f,\"ch\":%d,\"body\":%d,\"body_cache_hit\":%llu,\"body_cache_miss\":%llu}",
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "editor_step_us", editorStepUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "cached_editor_us", cachedEditorUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",");
+  appendRange(dataBuf, sizeof(dataBuf), "overlay_us", overlayUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf),
+                sizeof(dataBuf) - std::strlen(dataBuf),
+                ",\"ed_us\":%.3f,\"wyrm_gl_us\":%.3f,\"wyrm_gpu_us\":%.3f,\"ch\":%d,\"body\":%d,\"body_cache_hit\":%llu,\"body_cache_miss\":%llu}",
                 std::max(0.f, editorDrawUs),
                 std::max(0.f, wyrmGlUs),
+                std::max(0.f, wyrmGpuUs),
                 std::max(0, channels),
                 std::max(0, bodySamples),
                 static_cast<unsigned long long>(bodySampleCacheHits),

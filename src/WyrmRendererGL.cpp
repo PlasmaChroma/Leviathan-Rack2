@@ -60,6 +60,13 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	uint64_t bodyStripGeometryRevision = 0;
 	bool bodyStripShaderPath = false;
 	std::array<std::vector<BodyStripVertex>, 3> fallbackBodyStripVertices;
+	static constexpr int kGpuTimerQueryCount = 4;
+	std::array<GLuint, kGpuTimerQueryCount> gpuTimerQueries {};
+	std::array<bool, kGpuTimerQueryCount> gpuTimerPending {};
+	int gpuTimerWriteIndex = 0;
+	int gpuTimerActiveIndex = -1;
+	bool gpuTimerInitAttempted = false;
+	bool gpuTimerSupported = false;
 
 	void resetWaveColumnTextureState() {
 		waveColumnTexture = 0;
@@ -104,6 +111,64 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		bodyShaderReady = false;
 	}
 
+	void resetGpuTimerState() {
+		gpuTimerQueries.fill(0);
+		gpuTimerPending.fill(false);
+		gpuTimerWriteIndex = 0;
+		gpuTimerActiveIndex = -1;
+		gpuTimerInitAttempted = false;
+		gpuTimerSupported = false;
+	}
+
+	void ensureGpuTimerQueries() {
+		if (gpuTimerInitAttempted) return;
+		gpuTimerInitAttempted = true;
+		gpuTimerSupported = GLEW_VERSION_3_3 || GLEW_ARB_timer_query;
+		if (!gpuTimerSupported) return;
+		glGenQueries(kGpuTimerQueryCount, gpuTimerQueries.data());
+		for (GLuint query : gpuTimerQueries) {
+			if (query == 0) {
+				resetGpuTimerState();
+				gpuTimerInitAttempted = true;
+				return;
+			}
+		}
+		gpuTimerSupported = true;
+	}
+
+	void pollGpuTimerQueries() {
+		if (!gpuTimerSupported || !module) return;
+		for (int i = 0; i < kGpuTimerQueryCount; ++i) {
+			if (!gpuTimerPending[size_t(i)]) continue;
+			GLint available = GL_FALSE;
+			glGetQueryObjectiv(gpuTimerQueries[size_t(i)], GL_QUERY_RESULT_AVAILABLE, &available);
+			if (available != GL_TRUE) continue;
+			GLuint64 elapsedNs = 0;
+			glGetQueryObjectui64v(gpuTimerQueries[size_t(i)], GL_QUERY_RESULT, &elapsedNs);
+			gpuTimerPending[size_t(i)] = false;
+			module->perfWyrmGpuUs.store(float(elapsedNs) * 0.001f, std::memory_order_relaxed);
+		}
+	}
+
+	bool beginGpuTimerQuery() {
+		ensureGpuTimerQueries();
+		pollGpuTimerQueries();
+		if (!gpuTimerSupported) return false;
+		const int slot = gpuTimerWriteIndex;
+		if (gpuTimerPending[size_t(slot)]) return false;
+		glBeginQuery(GL_TIME_ELAPSED, gpuTimerQueries[size_t(slot)]);
+		gpuTimerActiveIndex = slot;
+		return true;
+	}
+
+	void endGpuTimerQuery() {
+		if (gpuTimerActiveIndex < 0) return;
+		glEndQuery(GL_TIME_ELAPSED);
+		gpuTimerPending[size_t(gpuTimerActiveIndex)] = true;
+		gpuTimerWriteIndex = (gpuTimerActiveIndex + 1) % kGpuTimerQueryCount;
+		gpuTimerActiveIndex = -1;
+	}
+
 	void validateGlResourcesForCurrentContext() {
 		if (waveColumnTexture != 0 && !glIsTexture(waveColumnTexture)) {
 			resetWaveColumnTextureState();
@@ -116,6 +181,15 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		}
 		if (bodyShaderReady && (bodyShaderProgram == 0 || !glIsProgram(bodyShaderProgram))) {
 			resetBodyShaderState();
+		}
+		if (gpuTimerSupported) {
+			for (int i = 0; i < kGpuTimerQueryCount; ++i) {
+				const GLuint query = gpuTimerQueries[size_t(i)];
+				if (query == 0 || (gpuTimerPending[size_t(i)] && !glIsQuery(query))) {
+					resetGpuTimerState();
+					break;
+				}
+			}
 		}
 	}
 
@@ -747,14 +821,32 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		(void) includeGlow;
 	}
 
-	~WyrmGlRendererWidget() override {
-		// DAW plugin editors can destroy/recreate their GL context around the
-		// Rack UI. Avoid driver calls from widget teardown; resources are
-		// reclaimed by the editor/context owner.
+	void abandonGlResources() {
 		resetBodyShaderState();
 		resetWaveShaderState();
 		resetCurveTextureState();
 		resetWaveColumnTextureState();
+		resetGpuTimerState();
+		bodyStripGeometryRevision = 0;
+		redrawStateInitialized = false;
+	}
+
+	~WyrmGlRendererWidget() override {
+		// DAW plugin editors can destroy/recreate their GL context around the
+		// Rack UI. Avoid driver calls from widget teardown; resources are
+		// reclaimed by the editor/context owner.
+		abandonGlResources();
+	}
+
+	void onContextDestroy(const ContextDestroyEvent& e) override {
+		OpenGlWidget::onContextDestroy(e);
+		abandonGlResources();
+	}
+
+	void onContextCreate(const ContextCreateEvent& e) override {
+		OpenGlWidget::onContextCreate(e);
+		abandonGlResources();
+		setDirty();
 	}
 
 	void step() override {
@@ -767,6 +859,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		if (!visible) {
 			redrawStateInitialized = false;
 			module->perfWyrmGlUs.store(0.f, std::memory_order_relaxed);
+			module->perfWyrmGpuUs.store(0.f, std::memory_order_relaxed);
 			return;
 		}
 		const uint32_t waveVersion = module->waveVersion.load(std::memory_order_acquire);
@@ -825,6 +918,10 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		if (!module) {
 			return;
 		}
+		const bool gpuTimerActive = measurePerf && beginGpuTimerQuery();
+		if (measurePerf && !gpuTimerActive && gpuTimerInitAttempted && !gpuTimerSupported) {
+			module->perfWyrmGpuUs.store(0.f, std::memory_order_relaxed);
+		}
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -850,6 +947,9 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		glMatrixMode(GL_PROJECTION);
 		glPopMatrix();
 		glMatrixMode(GL_MODELVIEW);
+		if (gpuTimerActive) {
+			endGpuTimerQuery();
+		}
 
 		if (measurePerf) {
 			const float wyrmGlUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(

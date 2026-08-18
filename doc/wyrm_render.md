@@ -40,6 +40,14 @@ Implemented and build-validated:
   boundaries rather than baked into its logical-resolution material bitmap. This
   matches the analytical GL cadence across renderer switches, zoom, and editor
   size; final visual approval remains pending.
+- Dragon King debug telemetry now reports asynchronous completed-GPU time from a
+  four-query `GL_TIME_ELAPSED` ring separately from GL CPU submission time. Query,
+  shader, and texture names are invalidated explicitly across graphics-context
+  recreation; unsupported timer-query contexts retain CPU-only telemetry.
+- Debug Terminal `Process`, `Step`, and `Draw` retain their repository-wide macro
+  meaning. Wyrm aggregates module-widget and detached expanded-overlay work for
+  `Step`/`Draw`; editor-step, cached-editor, live-overlay, GL CPU, and GPU timings
+  are reported only as subsequent component fields.
 
 Immediate validation checkpoint:
 
@@ -66,7 +74,9 @@ Next implementation slice after approval:
    segments.
 2. After approval, remove the full-resolution CPU waveform raster; decide whether
    the immediate-mode fallback remains worthwhile or should become NanoVG fallback.
-3. Add reusable buffers, then asynchronous GPU timing.
+3. Capture GPU timing for the screen-space body in collapsed, expanded, and
+   Slither-active states before deciding whether to consolidate the two full-screen
+   shader passes.
 
 This plan covers Wyrm's waveform fill, body, editor compositing, and renderer
 instrumentation. The static background field is an independent cached layer and
@@ -102,7 +112,8 @@ The remaining significant costs and divergences are:
   texture and immediate-mode column renderer remain compiled as fallback pending
   final visual approval.
 - The new screen-space SHDR body still needs visual and GPU-cost approval.
-- GL timing measures CPU submission, not completed GPU work.
+- GPU timing is available in Dragon King debug but still needs authoritative
+  Windows/MSYS2 Rack captures.
 
 ## Design rules
 
@@ -175,7 +186,11 @@ The remaining significant costs and divergences are:
 - Remaining visual differences are caused by path construction or AA, not
   different material constants.
 
-## Phase 3: One-strip analytical SHDR body
+## Phase 3: One-strip analytical SHDR body (superseded)
+
+This phase landed and provided a working fallback, but visual comparison exposed
+join and cap differences inherent to the strip topology. SHDR now uses the
+screen-space body phase below; non-SHDR OpenGL retains layered strips.
 
 ### Design
 
@@ -242,9 +257,7 @@ computes:
 
 ### Work
 
-- Add one reusable dynamic VBO for the consolidated body strip.
 - Add a static/shared buffer for editor-sized quads if it simplifies submission.
-- Upload body data only when the geometry revision changes.
 - Restore resources safely after Rack or DAW GL context recreation.
 - Add a rotating pool of GPU timer queries where supported; read results several
   frames later and never synchronously wait.
@@ -252,18 +265,19 @@ computes:
 
 ### Acceptance
 
-- SHDR does not submit pointers into CPU vectors.
+- SHDR body rendering does not submit pointers into CPU vectors.
 - Static quad geometry is not rebuilt per draw.
 - Context recreation does not retain stale GL handles.
 - Unsupported contexts keep CPU-only telemetry without behavior changes.
 - Buffer changes are retained only if they improve submission or simplify code.
 
-## Deferred: screen-space body rendering
+## Screen-space SHDR body rendering (implemented, pending approval)
 
-After the incremental phases, evaluate deriving body distance from the same curve
-texture used by the waveform fill. This could remove strip joins entirely, but it
-has higher risk around steep slopes, end caps, and rock-constrained bends. Proceed
-only if measured geometry or body submission cost remains meaningful.
+SHDR derives body distance from the same curve texture used by the waveform fill.
+This removes strip joins and naturally produces round endcaps. Its fixed local
+segment neighborhood preserves GLSL 1.20 compatibility and bounded work, but steep
+slopes, rock-constrained bends, expanded-editor GPU time, and continuous Slither
+remain approval gates.
 
 ## Validation matrix
 
@@ -287,13 +301,14 @@ lost its fallback behavior.
 - [x] Remove dead body-render-target code (baseline capture remains manual).
 - [x] Phase 1: isolate cached NanoVG invalidation from GL animation and hover.
 - [x] Phase 2: add lean geometry requests and one canonical body material.
-- [x] Phase 3: consolidate SHDR body to one analytical strip (provisionally
-  accepted with the documented bounded-miter limitation).
+- [x] Phase 3: consolidate SHDR body to one analytical strip (subsequently
+  superseded after visual evaluation).
+- [ ] Approve the screen-space SHDR body visually and from GPU timing captures.
 - [ ] Phase 4: replace the waveform raster/column quads with one shader pass
   (analytical path implemented and build-validated; visual approval and old-raster
   removal pending).
-- [ ] Phase 5: add reusable buffers and asynchronous GPU timing.
-- [ ] Decide from measurements whether screen-space body rendering is justified.
+- [ ] Phase 5: asynchronous GPU timing implemented; capture authoritative results
+  and decide whether reusable quad buffers are worthwhile.
 
 ## Likely files
 

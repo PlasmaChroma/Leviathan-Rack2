@@ -1,10 +1,12 @@
 #include "Wyrm.hpp"
 #include "WyrmRenderGeometry.hpp"
+#include "DebugTerminalTransport.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <functional>
 
@@ -672,11 +674,29 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 	}
 
 	void step() override {
+		using PerfClock = std::chrono::steady_clock;
+		Wyrm* module = editorSurface ? editorSurface->module : nullptr;
+		const bool measurePerf = module && isDragonKingDebugEnabled();
+		const PerfClock::time_point perfStart = measurePerf
+			? PerfClock::now()
+			: PerfClock::time_point();
 		layoutToScene();
 		widget::OpaqueWidget::step();
+		if (measurePerf) {
+			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - perfStart).count());
+			debug_terminal::recordAudioProcessTiming(
+				module->perfExpandedStepMinNs, module->perfExpandedStepMaxNs, elapsedNs);
+		}
 	}
 
 	void draw(const DrawArgs& args) override {
+		using PerfClock = std::chrono::steady_clock;
+		Wyrm* module = editorSurface ? editorSurface->module : nullptr;
+		const bool measurePerf = module && isDragonKingDebugEnabled();
+		const PerfClock::time_point perfStart = measurePerf
+			? PerfClock::now()
+			: PerfClock::time_point();
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 		nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 255));
@@ -693,6 +713,12 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 		nvgStrokeColor(args.vg, nvgRGBA(112, 78, 224, 255));
 		nvgStrokeWidth(args.vg, borderWidth);
 		nvgStroke(args.vg);
+		if (measurePerf) {
+			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - perfStart).count());
+			debug_terminal::recordAudioProcessTiming(
+				module->perfExpandedDrawMinNs, module->perfExpandedDrawMaxNs, elapsedNs);
+		}
 	}
 
 	void onHoverKey(const event::HoverKey& e) override {
@@ -982,19 +1008,36 @@ struct WyrmWidget : ModuleWidget {
 	}
 
 	void step() override {
-		ModuleWidget::step();
+		using PerfClock = std::chrono::steady_clock;
 		Wyrm* wyrm = dynamic_cast<Wyrm*>(module);
-		if (!wyrm || ageSigilUnlocked) return;
-		const double createdUnixTimeSec = wyrm->createdUnixTimeSec;
-		if (std::isfinite(createdUnixTimeSec) && createdUnixTimeSec > 0.0) {
-			ageSigilUnlocked = (system::getUnixTime() - createdUnixTimeSec) >= 666.0;
+		const bool measurePerf = wyrm && isDragonKingDebugEnabled();
+		const PerfClock::time_point perfStart = measurePerf
+			? PerfClock::now()
+			: PerfClock::time_point();
+		ModuleWidget::step();
+		if (wyrm && !ageSigilUnlocked) {
+			const double createdUnixTimeSec = wyrm->createdUnixTimeSec;
+			if (std::isfinite(createdUnixTimeSec) && createdUnixTimeSec > 0.0) {
+				ageSigilUnlocked = (system::getUnixTime() - createdUnixTimeSec) >= 666.0;
+			}
+		}
+		if (measurePerf) {
+			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - perfStart).count());
+			debug_terminal::recordAudioProcessTiming(
+				wyrm->perfModuleStepMinNs, wyrm->perfModuleStepMaxNs, elapsedNs);
 		}
 	}
 
 	void draw(const DrawArgs& args) override {
-		ModuleWidget::draw(args);
 		Wyrm* wyrm = dynamic_cast<Wyrm*>(module);
-		if (wyrm && isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
+		using PerfClock = std::chrono::steady_clock;
+		const bool measurePerf = wyrm && isDragonKingDebugEnabled();
+		const PerfClock::time_point perfStart = measurePerf
+			? PerfClock::now()
+			: PerfClock::time_point();
+		ModuleWidget::draw(args);
+		if (measurePerf && APP && APP->window && APP->window->uiFont) {
 			char debugIdLabel[32];
 			std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", wyrm->debugInstanceId);
 			const float x = box.size.x - mm2px(0.9f);
@@ -1009,28 +1052,32 @@ struct WyrmWidget : ModuleWidget {
 			nvgText(args.vg, x, y, debugIdLabel, nullptr);
 			nvgRestore(args.vg);
 		}
-		if (!wyrm || !ageSigilSvg || !ageSigilUnlocked) {
-			return;
+		if (wyrm && ageSigilSvg && ageSigilUnlocked) {
+			const Vec sigilSize = mm2px(Vec(3.8f, 4.6f));
+			const Vec rightSigilCenter = mm2px(Vec(54.8f, 4.47f));
+			const Vec leftSigilCenter(box.size.x - rightSigilCenter.x, rightSigilCenter.y);
+			const Vec svgSize = ageSigilSvg->getSize();
+			if (svgSize.x > 1.f && svgSize.y > 1.f) {
+				const float scaleX = sigilSize.x / svgSize.x;
+				const float scaleY = sigilSize.y / svgSize.y;
+				auto drawSigilAt = [&](const Vec& center) {
+					nvgSave(args.vg);
+					nvgTranslate(args.vg, center.x, center.y);
+					nvgScale(args.vg, scaleX, scaleY);
+					nvgTranslate(args.vg, -svgSize.x * 0.5f, -svgSize.y * 0.5f);
+					ageSigilSvg->draw(args.vg);
+					nvgRestore(args.vg);
+				};
+				drawSigilAt(leftSigilCenter);
+				drawSigilAt(rightSigilCenter);
+			}
 		}
-		const Vec sigilSize = mm2px(Vec(3.8f, 4.6f));
-		const Vec rightSigilCenter = mm2px(Vec(54.8f, 4.47f));
-		const Vec leftSigilCenter(box.size.x - rightSigilCenter.x, rightSigilCenter.y);
-		const Vec svgSize = ageSigilSvg->getSize();
-		if (svgSize.x <= 1.f || svgSize.y <= 1.f) {
-			return;
+		if (measurePerf) {
+			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - perfStart).count());
+			debug_terminal::recordAudioProcessTiming(
+				wyrm->perfModuleDrawMinNs, wyrm->perfModuleDrawMaxNs, elapsedNs);
 		}
-		const float scaleX = sigilSize.x / svgSize.x;
-		const float scaleY = sigilSize.y / svgSize.y;
-		auto drawSigilAt = [&](const Vec& center) {
-			nvgSave(args.vg);
-			nvgTranslate(args.vg, center.x, center.y);
-			nvgScale(args.vg, scaleX, scaleY);
-			nvgTranslate(args.vg, -svgSize.x * 0.5f, -svgSize.y * 0.5f);
-			ageSigilSvg->draw(args.vg);
-			nvgRestore(args.vg);
-		};
-		drawSigilAt(leftSigilCenter);
-		drawSigilAt(rightSigilCenter);
 	}
 
 	void appendContextMenu(Menu* menu) override {

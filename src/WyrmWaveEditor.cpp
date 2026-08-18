@@ -589,14 +589,40 @@ struct WyrmWaveEditor : TransparentWidget {
 					const uint64_t bodySampleCacheHits = module->perfBodySampleCacheHits.exchange(0, std::memory_order_acq_rel);
 					const uint64_t bodySampleCacheMisses = module->perfBodySampleCacheMisses.exchange(0, std::memory_order_acq_rel);
 					const float wyrmGlUs = module->perfWyrmGlUs.load(std::memory_order_relaxed);
+					const float wyrmGpuUs = module->perfWyrmGpuUs.load(std::memory_order_relaxed);
+					auto addTimingRanges = [](debug_terminal::TimingRangeUs a,
+					                          debug_terminal::TimingRangeUs b) {
+						if (b.max <= 0.f) return a;
+						if (a.max <= 0.f) return b;
+						a.min += b.min;
+						a.max += b.max;
+						return a;
+					};
+					debug_terminal::TimingRangeUs moduleStepUs =
+						debug_terminal::consumeAudioProcessTiming(
+							module->perfModuleStepMinNs, module->perfModuleStepMaxNs);
+					moduleStepUs = addTimingRanges(moduleStepUs,
+						debug_terminal::consumeAudioProcessTiming(
+							module->perfExpandedStepMinNs, module->perfExpandedStepMaxNs));
+					debug_terminal::TimingRangeUs moduleDrawUs =
+						debug_terminal::consumeAudioProcessTiming(
+							module->perfModuleDrawMinNs, module->perfModuleDrawMaxNs);
+					moduleDrawUs = addTimingRanges(moduleDrawUs,
+						debug_terminal::consumeAudioProcessTiming(
+							module->perfExpandedDrawMinNs, module->perfExpandedDrawMaxNs));
 					lastSubmitSec = nowSec;
 					debug_terminal::submitWyrmMetrics(
 						debugId,
 						debug_terminal::consumeAudioProcessTiming(module->perfAudioProcessMinNs, module->perfAudioProcessMaxNs),
+						moduleStepUs,
+						moduleDrawUs,
 						stepUsRange.consume(),
 						drawUsRange.consume(),
+						debug_terminal::consumeAudioProcessTiming(
+							module->perfOverlayDrawMinNs, module->perfOverlayDrawMaxNs),
 						lastEditorDrawUs,
 						wyrmGlUs,
+						wyrmGpuUs,
 						module->perfChannels.load(std::memory_order_relaxed),
 						lastBodySampleCount,
 						bodySampleCacheHits,
@@ -993,7 +1019,7 @@ struct WyrmWaveEditor : TransparentWidget {
 				PerfClock::now() - perfStart).count()) * 0.001f;
 			lastEditorDrawUs = editorDrawUs;
 			lastBodySampleCount = bodySampleCount;
-			drawUsRange.add(editorDrawUs + module->perfWyrmGlUs.load(std::memory_order_relaxed));
+			drawUsRange.add(editorDrawUs);
 		}
 	}
 };
@@ -1208,6 +1234,11 @@ struct WyrmEditorAnimationOverlay final : TransparentWidget {
 		if (!module || !args.vg) {
 			return;
 		}
+		using PerfClock = std::chrono::steady_clock;
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const PerfClock::time_point perfStart = measurePerf
+			? PerfClock::now()
+			: PerfClock::time_point();
 		const bool envelopeMode = module->envelopeMode.load(std::memory_order_relaxed);
 		const float tracerFrequency = module->displayPhaseFrequencyHz.load(std::memory_order_relaxed);
 		const bool slowTraceMode =
@@ -1233,6 +1264,12 @@ struct WyrmEditorAnimationOverlay final : TransparentWidget {
 			drawTracerDot(args, phase);
 		}
 		nvgRestore(args.vg);
+		if (measurePerf) {
+			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				PerfClock::now() - perfStart).count());
+			debug_terminal::recordAudioProcessTiming(
+				module->perfOverlayDrawMinNs, module->perfOverlayDrawMaxNs, elapsedNs);
+		}
 	}
 };
 

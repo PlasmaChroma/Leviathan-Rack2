@@ -41,6 +41,8 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
 
 - We have a debug terminal seen in tools/debug_terminal/server.py that allows us to get small debug data packets over a socket to be viewed outside of rack.  This type of debug should be gated by isDragonKingDebugEnabled.
 
+- Debug Terminal performance telemetry has a stable macro contract: the first three metrics are `Process`, `Step`, and `Draw`, representing total module-level audio processing, UI stepping, and visible rendering work. Do not rename, relabel, or reinterpret those fields as a component/cache/backend metric when rendering or widget ownership is refactored. If work is split across widgets, layers, overlays, cached framebuffers, or GL/NanoVG backends, preserve or introduce module-level aggregation for these three metrics. Add component timings as separate fields after the macro metrics (for example cached-editor, live-overlay, GL CPU, or GPU timing).
+
 - For modules that are released, the safe pattern is to append to the lists of controls and parameters, so that modules in existing user Racks do not experience enum re-ordering and breakage.  Current modules that are released include: Integral Flux, Proc, Temporal Deck, TD.Scope, and Undertow.
 
 ## Testing Note

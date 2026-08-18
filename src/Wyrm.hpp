@@ -279,6 +279,17 @@ struct Wyrm : Module {
 	std::atomic<bool> perfLfoMode {false};
 	std::atomic<bool> perfWavetableRebuilt {false};
 	std::atomic<float> perfWyrmGlUs {0.f};
+	std::atomic<float> perfWyrmGpuUs {0.f};
+	std::atomic<uint64_t> perfModuleStepMinNs {std::numeric_limits<uint64_t>::max()};
+	std::atomic<uint64_t> perfModuleStepMaxNs {0};
+	std::atomic<uint64_t> perfExpandedStepMinNs {std::numeric_limits<uint64_t>::max()};
+	std::atomic<uint64_t> perfExpandedStepMaxNs {0};
+	std::atomic<uint64_t> perfModuleDrawMinNs {std::numeric_limits<uint64_t>::max()};
+	std::atomic<uint64_t> perfModuleDrawMaxNs {0};
+	std::atomic<uint64_t> perfExpandedDrawMinNs {std::numeric_limits<uint64_t>::max()};
+	std::atomic<uint64_t> perfExpandedDrawMaxNs {0};
+	std::atomic<uint64_t> perfOverlayDrawMinNs {std::numeric_limits<uint64_t>::max()};
+	std::atomic<uint64_t> perfOverlayDrawMaxNs {0};
 	std::atomic<uint64_t> perfBodySampleCacheHits {0};
 	std::atomic<uint64_t> perfBodySampleCacheMisses {0};
 	float phaseTracerPublishTimer = 0.f;
