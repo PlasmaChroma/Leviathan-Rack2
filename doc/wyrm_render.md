@@ -132,8 +132,32 @@ Implemented and build-validated:
   radii use a compile-time-bounded GLSL loop, and radii above 16 fall back to the
   non-analytical body path. The selected count is appended to GPU CSV rows as
   `gpu_body_segment_count`. This should principally help wider/expanded views;
-  tightly spaced collapsed views are expected to retain seven segments. Windows
-  runtime shader compilation, visual parity, and GPU timing remain pending.
+  tightly spaced collapsed views retain seven segments. The Windows four-state
+  capture confirmed runtime compilation and selected seven collapsed/five
+  expanded segments with unchanged tile domains and no CPU regression. Body GPU
+  timing remained pinned at the 1.024 us query floor, so a Linux laptop capture
+  is still needed to quantify the reduced expanded projection count.
+- The research document's premultiplied-accumulation experiment was tested and
+  removed. It kept intermediate RGB premultiplied through nested waveform/body
+  material composition and converted to straight alpha only once for the existing
+  blend mode. The four-state Windows capture
+  `wyrm_draw_1_20260818_220928_0.csv` found no attributable gain: body timing
+  remained at the 1.024 us query floor and expanded CPU GL medians moved by only
+  +0.05 to +0.5 us. The algebra was exact, but a neutral result did not justify
+  retaining extra shader code.
+- Separate compile-time oscillator and envelope waveform programs were then
+  tested on top of premultiplied accumulation and removed. The variants compiled
+  and rendered successfully, eliminating the mode uniform and the other mode's
+  fill, material, shade, and midpoint paths. However, comparison of
+  `wyrm_draw_1_20260818_220928_0.csv` with
+  `wyrm_draw_1_20260818_221756_0.csv` exposed capture-order/GPU-clock behavior
+  rather than a specialization gain: whichever collapsed state ran first measured
+  7.168 us, while the later collapsed state fell to 5.120 or 4.096 us. Expanded
+  results similarly shifted by one 1.024 us timer quantum, and CPU GL timing
+  mirrored the ordering. The additional program and context-lifecycle state was
+  therefore not supported by measurable benefit. SHDR retains the single uniform-
+  selected waveform shader and straight-alpha internal composition from the
+  preceding committed baseline.
 
 Immediate validation checkpoint:
 
