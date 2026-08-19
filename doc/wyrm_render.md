@@ -113,8 +113,12 @@ Implemented and build-validated:
   Y bounds conservatively contain every intersecting segment endpoint, expanded
   by the outer body radius plus a one-pixel raster guard. Tiles change only the
   fragment invocation domain; they do not define body coverage or overlap in X.
-  Scratch storage and tile capacity persist across Slither frames. GPU CSV rows
-  append `gpu_body_domain_fraction`, the summed tile area divided by editor area.
+  Scratch storage and tile capacity persist across Slither frames. A cached
+  client-array submission experiment was 2--4% slower in CPU GL/editor median
+  time across all four same-size Windows states, with identical GPU and domain
+  measurements, so the small tile batch retains one immediate-mode `GL_QUADS`
+  submission. GPU CSV rows append `gpu_body_domain_fraction`, the summed tile
+  area divided by editor area.
   Set the flag to `false` to restore the packed fullscreen body oracle for a
   same-build-family A/B. Windows and Linux laptop visual/GPU/CPU validation are
   pending.

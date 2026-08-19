@@ -856,14 +856,13 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		bodyTiles.reserve(size_t(tileCount));
 		for (int tile = 0; tile < tileCount; ++tile) {
 			if (!bodyTileActive[size_t(tile)]) continue;
-			BodyTile bounds;
-			bounds.x0 = float(tile) * tileWidth;
-			bounds.x1 = std::min(size.x, float(tile + 1) * tileWidth);
-			bounds.y0 = std::max(0.f, bodyTileMinY[size_t(tile)] - support);
-			bounds.y1 = std::min(size.y, bodyTileMaxY[size_t(tile)] + support);
-			if (bounds.x1 <= bounds.x0 || bounds.y1 <= bounds.y0) continue;
-			domainArea += (bounds.x1 - bounds.x0) * (bounds.y1 - bounds.y0);
-			bodyTiles.push_back(bounds);
+			const float x0 = float(tile) * tileWidth;
+			const float x1 = std::min(size.x, float(tile + 1) * tileWidth);
+			const float y0 = std::max(0.f, bodyTileMinY[size_t(tile)] - support);
+			const float y1 = std::min(size.y, bodyTileMaxY[size_t(tile)] + support);
+			if (x1 <= x0 || y1 <= y0) continue;
+			domainArea += (x1 - x0) * (y1 - y0);
+			bodyTiles.push_back(BodyTile {x0, y0, x1, y1});
 		}
 		bodyTileDomainFraction = clamp(domainArea / (size.x * size.y), 0.f, 1.f);
 	}
