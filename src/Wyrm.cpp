@@ -999,6 +999,11 @@ void Wyrm::dataFromJson(json_t* root) {
 		const int mode = clamp(int(json_integer_value(renderModeJ)), WYRM_RENDER_NANOVG, WYRM_RENDER_OPENGL_SHDR);
 		renderMode.store(mode, std::memory_order_relaxed);
 	}
+	else {
+		// Patches written before renderer selection existed used NanoVG. Keep that
+		// legacy behavior while allowing genuinely new modules to default to SHDR.
+		renderMode.store(WYRM_RENDER_NANOVG, std::memory_order_relaxed);
+	}
 	json_t* customizedJ = json_object_get(root, "waveCustomized");
 	if (customizedJ) waveCustomized = json_is_true(customizedJ);
 	json_t* waveEnvelopeModeJ = json_object_get(root, "waveEnvelopeMode");

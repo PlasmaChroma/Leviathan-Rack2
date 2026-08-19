@@ -255,7 +255,7 @@ struct Wyrm : Module {
 	bool loadedWaveEnvelopeMode = false;
 	bool publishedEnvelopeRunning = false;
 	std::atomic<bool> editorLocked {false};
-	std::atomic<int> renderMode {WYRM_RENDER_NANOVG};
+	std::atomic<int> renderMode {WYRM_RENDER_OPENGL_SHDR};
 	bool waveCustomized = false;
 	int selectedShape = SHAPE_SINE;
 	int selectedEnvelopeShape = ENVELOPE_SHAPE_D2;

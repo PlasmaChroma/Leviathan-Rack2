@@ -799,6 +799,7 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 	widget::ZoomWidget* editorZoom = nullptr;
 	std::shared_ptr<WyrmEditorOverlayLink> link;
 	std::function<void()> collapseAction;
+	std::function<void()> contextMenuAction;
 
 	WyrmExpandedEditorOverlay() {
 		editorZoom = new widget::ZoomWidget();
@@ -938,6 +939,16 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 			return;
 		}
 		widget::OpaqueWidget::onHoverKey(e);
+	}
+
+	void onButton(const event::Button& e) override {
+		if (e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_RIGHT
+			&& contextMenuAction) {
+			contextMenuAction();
+			e.consume(this);
+			return;
+		}
+		widget::OpaqueWidget::onButton(e);
 	}
 };
 
@@ -1179,6 +1190,11 @@ struct WyrmWidget : ModuleWidget {
 				link->owner->closeExpandedEditor();
 			}
 		};
+		overlay->contextMenuAction = [link]() {
+			if (link && link->owner) {
+				link->owner->createContextMenu();
+			}
+		};
 		editorOverlayLink->overlay = overlay;
 
 		editorDock->removeChild(editorSurface);
@@ -1214,6 +1230,7 @@ struct WyrmWidget : ModuleWidget {
 		overlay->anchorDock = nullptr;
 		overlay->editorSurface = nullptr;
 		overlay->collapseAction = nullptr;
+		overlay->contextMenuAction = nullptr;
 		editorOverlayLink->overlay = nullptr;
 		if (overlay->parent) {
 			overlay->requestDelete();

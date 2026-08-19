@@ -178,6 +178,27 @@ bool exitingEnvelopeModeRestoresDefaultSine() {
 	return module.selectedShape == SHAPE_SINE && !module.waveCustomized;
 }
 
+bool rendererDefaultAndPatchCompatibilityRemainStable() {
+	Wyrm fresh;
+	const bool freshUsesShdr = fresh.renderMode.load(std::memory_order_relaxed)
+		== WYRM_RENDER_OPENGL_SHDR;
+
+	json_t* legacyPatch = json_object();
+	fresh.dataFromJson(legacyPatch);
+	json_decref(legacyPatch);
+	const bool legacyMissingModeUsesNanoVg = fresh.renderMode.load(std::memory_order_relaxed)
+		== WYRM_RENDER_NANOVG;
+
+	fresh.renderMode.store(WYRM_RENDER_OPENGL, std::memory_order_relaxed);
+	json_t* savedPatch = fresh.dataToJson();
+	Wyrm restored;
+	restored.dataFromJson(savedPatch);
+	json_decref(savedPatch);
+	const bool explicitModeRoundTrips = restored.renderMode.load(std::memory_order_relaxed)
+		== WYRM_RENDER_OPENGL;
+	return freshUsesShdr && legacyMissingModeUsesNanoVg && explicitModeRoundTrips;
+}
+
 } // namespace
 
 int main() {
@@ -188,6 +209,7 @@ int main() {
 	const bool octaveStepping = octaveModeQuantizesOscillatorAndEnvelopeRates();
 	const bool arShape = enteringEnvelopeModeLoadsFastAttackSlowReleaseShape();
 	const bool sineRestore = exitingEnvelopeModeRestoresDefaultSine();
+	const bool rendererCompatibility = rendererDefaultAndPatchCompatibilityRemainStable();
 	std::cout << (oneShot ? "[PASS] " : "[FAIL] ") << "ENV traverses 0-10 V once and returns to 0 V\n";
 	std::cout << (retrigger ? "[PASS] " : "[FAIL] ") << "ENV retriggers on a new rising edge\n";
 	std::cout << (polyphony ? "[PASS] " : "[FAIL] ") << "ENV trigger voices remain polyphonically independent\n";
@@ -195,7 +217,10 @@ int main() {
 	std::cout << (octaveStepping ? "[PASS] " : "[FAIL] ") << "OCT mode quantizes oscillator and envelope rates\n";
 	std::cout << (arShape ? "[PASS] " : "[FAIL] ") << "entering ENV loads a fast-attack slow-release shape\n";
 	std::cout << (sineRestore ? "[PASS] " : "[FAIL] ") << "exiting ENV restores the default sine shape\n";
-	const int passed = int(oneShot) + int(retrigger) + int(polyphony) + int(boundedInterpolation) + int(octaveStepping) + int(arShape) + int(sineRestore);
-	std::cout << "[SUMMARY] wyrm_envelope_spec: " << passed << "/7 passed\n";
-	return passed == 7 ? 0 : 1;
+	std::cout << (rendererCompatibility ? "[PASS] " : "[FAIL] ")
+		<< "new modules default to SHDR while legacy and explicit renderer state remain compatible\n";
+	const int passed = int(oneShot) + int(retrigger) + int(polyphony) + int(boundedInterpolation)
+		+ int(octaveStepping) + int(arShape) + int(sineRestore) + int(rendererCompatibility);
+	std::cout << "[SUMMARY] wyrm_envelope_spec: " << passed << "/8 passed\n";
+	return passed == 8 ? 0 : 1;
 }

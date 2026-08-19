@@ -1,5 +1,14 @@
 # Wyrm Renderer Implementation Plan
 
+New Wyrm modules now default to OpenGL SHDR. Renderer mode remains serialized per
+module, and patches predating the `renderMode` field explicitly retain NanoVG on
+load, so the new default does not reinterpret legacy patches.
+
+While the waveform editor is expanded, an unhandled right-click anywhere on its
+overlay opens the owning module's standard context menu. This keeps renderer,
+editor-lock, initialization, and other normal module actions accessible without
+first collapsing the editor.
+
 ## Status and scope
 
 Last reviewed: 2026-08-17, after removal of the animated sand-field system.
