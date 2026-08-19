@@ -5,12 +5,28 @@
 #include <chrono>
 #include <nanovg_gl.h>
 
+namespace {
+
+// Retain the fullscreen body as a compile-time visual/performance oracle while
+// evaluating the exact same shader over a conservative disjoint tile domain.
+constexpr bool kWyrmUseConservativeBodyTiles = true;
+constexpr float kWyrmBodyTileWidthPx = 16.f;
+constexpr float kWyrmBodyTileRasterGuardPx = 1.f;
+
+} // namespace
+
 struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	struct BodyStripVertex {
 		float x;
 		float y;
 		float u;
 		float v;
+	};
+	struct BodyTile {
+		float x0;
+		float y0;
+		float x1;
+		float y1;
 	};
 
 	Wyrm* module = nullptr;
@@ -59,6 +75,13 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	uint64_t bodyStripGeometryRevision = 0;
 	bool bodyStripShaderPath = false;
 	std::array<std::vector<BodyStripVertex>, 3> fallbackBodyStripVertices;
+	uint64_t bodyTileGeometryRevision = 0;
+	Vec bodyTileSize = Vec(-1.f, -1.f);
+	std::vector<BodyTile> bodyTiles;
+	std::vector<float> bodyTileMinY;
+	std::vector<float> bodyTileMaxY;
+	std::vector<uint8_t> bodyTileActive;
+	float bodyTileDomainFraction = 1.f;
 
 	struct GpuTimerSlot {
 		GLuint waveQuery = 0;
@@ -70,6 +93,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		float slither = 0.f;
 		int width = 0;
 		int height = 0;
+		float bodyDomainFraction = 1.f;
 	};
 	static constexpr size_t kGpuTimerSlotCount = 6u;
 	std::array<GpuTimerSlot, kGpuTimerSlotCount> gpuTimerSlots {};
@@ -185,6 +209,8 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			module->perfCsvGpuSampleSlither.store(newestResolved->slither, std::memory_order_relaxed);
 			module->perfCsvGpuSampleWidth.store(newestResolved->width, std::memory_order_relaxed);
 			module->perfCsvGpuSampleHeight.store(newestResolved->height, std::memory_order_relaxed);
+			module->perfCsvGpuBodyDomainFraction.store(
+				newestResolved->bodyDomainFraction, std::memory_order_relaxed);
 			module->perfCsvGpuSampleValid.store(true, std::memory_order_relaxed);
 		}
 	}
@@ -202,6 +228,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			slot.slither = module->displaySlitherAmount.load(std::memory_order_relaxed);
 			slot.width = std::max(1, int(std::lround(framebufferSize.x)));
 			slot.height = std::max(1, int(std::lround(framebufferSize.y)));
+			slot.bodyDomainFraction = 1.f;
 			nextGpuTimerSlot = (index + 1u) % gpuTimerSlots.size();
 			return &slot;
 		}
@@ -791,10 +818,66 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			: 128;
 	}
 
+	void ensureBodyTiles(Vec size, float outerRadius) {
+		if (bodyTileGeometryRevision == geometryCache->revision
+			&& bodyTileSize == size) {
+			return;
+		}
+		bodyTileGeometryRevision = geometryCache->revision;
+		bodyTileSize = size;
+		bodyTiles.clear();
+		bodyTileDomainFraction = 0.f;
+		const std::vector<Vec>& points = geometryCache->points;
+		if (points.size() < 2u || size.x <= 0.f || size.y <= 0.f) return;
+
+		const float tileWidth = std::max(1.f, kWyrmBodyTileWidthPx);
+		const int tileCount = std::max(1, int(std::ceil(size.x / tileWidth)));
+		bodyTileMinY.assign(size_t(tileCount), size.y);
+		bodyTileMaxY.assign(size_t(tileCount), 0.f);
+		bodyTileActive.assign(size_t(tileCount), 0u);
+		const float support = outerRadius + kWyrmBodyTileRasterGuardPx;
+		for (size_t i = 0; i + 1u < points.size(); ++i) {
+			const Vec& a = points[i];
+			const Vec& b = points[i + 1u];
+			const float segmentX0 = std::min(a.x, b.x) - support;
+			const float segmentX1 = std::max(a.x, b.x) + support;
+			const int firstTile = clamp(int(std::floor(segmentX0 / tileWidth)), 0, tileCount - 1);
+			const int lastTile = clamp(int(std::floor(segmentX1 / tileWidth)), 0, tileCount - 1);
+			const float segmentMinY = std::min(a.y, b.y);
+			const float segmentMaxY = std::max(a.y, b.y);
+			for (int tile = firstTile; tile <= lastTile; ++tile) {
+				bodyTileActive[size_t(tile)] = 1u;
+				bodyTileMinY[size_t(tile)] = std::min(bodyTileMinY[size_t(tile)], segmentMinY);
+				bodyTileMaxY[size_t(tile)] = std::max(bodyTileMaxY[size_t(tile)], segmentMaxY);
+			}
+		}
+
+		float domainArea = 0.f;
+		bodyTiles.reserve(size_t(tileCount));
+		for (int tile = 0; tile < tileCount; ++tile) {
+			if (!bodyTileActive[size_t(tile)]) continue;
+			BodyTile bounds;
+			bounds.x0 = float(tile) * tileWidth;
+			bounds.x1 = std::min(size.x, float(tile + 1) * tileWidth);
+			bounds.y0 = std::max(0.f, bodyTileMinY[size_t(tile)] - support);
+			bounds.y1 = std::min(size.y, bodyTileMaxY[size_t(tile)] + support);
+			if (bounds.x1 <= bounds.x0 || bounds.y1 <= bounds.y0) continue;
+			domainArea += (bounds.x1 - bounds.x0) * (bounds.y1 - bounds.y0);
+			bodyTiles.push_back(bounds);
+		}
+		bodyTileDomainFraction = clamp(domainArea / (size.x * size.y), 0.f, 1.f);
+	}
+
 	void drawBodyGl(Vec size, bool shaderPath, bool includeBase, bool includeGlow) {
 		if (!module || module->pointCount < 2) return;
 		const wyrm_render::BodyMaterial& material = wyrm_render::bodyMaterial();
 		if (shaderPath && prepareCurveTexture(size, shaderPath)) {
+			if (kWyrmUseConservativeBodyTiles) {
+				ensureBodyTiles(size, 0.5f * material.layers[0].widthPx);
+			}
+			else {
+				bodyTileDomainFraction = 1.f;
+			}
 			auto setLayerColor = [](GLint location, const wyrm_render::BodyLayerMaterial& layer) {
 				glUniform4f(location, layer.r / 255.f, layer.g / 255.f, layer.b / 255.f, layer.a / 255.f);
 			};
@@ -818,12 +901,24 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			setLayerColor(bodyShaderMiddleColorLoc, material.layers[1]);
 			setLayerColor(bodyShaderCoreColorLoc, material.layers[2]);
 			glColor4f(1.f, 1.f, 1.f, 1.f);
-			glBegin(GL_TRIANGLE_STRIP);
-			glTexCoord2f(0.f, 0.f); glVertex2f(0.f, 0.f);
-			glTexCoord2f(1.f, 0.f); glVertex2f(size.x, 0.f);
-			glTexCoord2f(0.f, 1.f); glVertex2f(0.f, size.y);
-			glTexCoord2f(1.f, 1.f); glVertex2f(size.x, size.y);
-			glEnd();
+			if (kWyrmUseConservativeBodyTiles) {
+				glBegin(GL_QUADS);
+				for (const BodyTile& tile : bodyTiles) {
+					glTexCoord2f(tile.x0 / size.x, tile.y0 / size.y); glVertex2f(tile.x0, tile.y0);
+					glTexCoord2f(tile.x1 / size.x, tile.y0 / size.y); glVertex2f(tile.x1, tile.y0);
+					glTexCoord2f(tile.x1 / size.x, tile.y1 / size.y); glVertex2f(tile.x1, tile.y1);
+					glTexCoord2f(tile.x0 / size.x, tile.y1 / size.y); glVertex2f(tile.x0, tile.y1);
+				}
+				glEnd();
+			}
+			else {
+				glBegin(GL_TRIANGLE_STRIP);
+				glTexCoord2f(0.f, 0.f); glVertex2f(0.f, 0.f);
+				glTexCoord2f(1.f, 0.f); glVertex2f(size.x, 0.f);
+				glTexCoord2f(0.f, 1.f); glVertex2f(0.f, size.y);
+				glTexCoord2f(1.f, 1.f); glVertex2f(size.x, size.y);
+				glEnd();
+			}
 			glUseProgram(0);
 			glBindTexture(GL_TEXTURE_2D, 0);
 			glDisable(GL_TEXTURE_2D);
@@ -1005,6 +1100,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		}
 		const bool shaderPath = useShdr && bodyShaderReady;
 		GpuTimerSlot* gpuTimer = logGpu ? beginGpuTimerSample(fbSize, mode) : nullptr;
+		bodyTileDomainFraction = 1.f;
 
 		if (gpuTimer) glBeginQuery(GL_TIME_ELAPSED, gpuTimer->waveQuery);
 		drawWaveColumnsGl(box.size, shaderPath);
@@ -1012,7 +1108,10 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		if (gpuTimer) glBeginQuery(GL_TIME_ELAPSED, gpuTimer->bodyQuery);
 		drawBodyGl(box.size, shaderPath, true, false);
 		if (gpuTimer) glEndQuery(GL_TIME_ELAPSED);
-		if (gpuTimer) gpuTimer->pending = true;
+		if (gpuTimer) {
+			gpuTimer->bodyDomainFraction = bodyTileDomainFraction;
+			gpuTimer->pending = true;
+		}
 
 		glMatrixMode(GL_MODELVIEW);
 		glPopMatrix();

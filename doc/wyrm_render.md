@@ -106,6 +106,18 @@ Implemented and build-validated:
   capture showed a possible 2--3 us CPU-side GL increase. Packing now normalizes
   each point once and copies the three prior red-channel values. Repeat Windows
   CPU timing and Linux laptop GPU timing before final acceptance.
+- The second ranked research experiment is now implemented behind the
+  compile-time `kWyrmUseConservativeBodyTiles` oracle flag, defaulting to tiled
+  rendering. The waveform remains one fullscreen analytical pass. The unchanged
+  exact body shader is submitted once over disjoint 16-pixel-wide X tiles whose
+  Y bounds conservatively contain every intersecting segment endpoint, expanded
+  by the outer body radius plus a one-pixel raster guard. Tiles change only the
+  fragment invocation domain; they do not define body coverage or overlap in X.
+  Scratch storage and tile capacity persist across Slither frames. GPU CSV rows
+  append `gpu_body_domain_fraction`, the summed tile area divided by editor area.
+  Set the flag to `false` to restore the packed fullscreen body oracle for a
+  same-build-family A/B. Windows and Linux laptop visual/GPU/CPU validation are
+  pending.
 
 Immediate validation checkpoint:
 
