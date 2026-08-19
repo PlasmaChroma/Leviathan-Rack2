@@ -86,43 +86,26 @@ Implemented and build-validated:
   about 7--10% in three of four states and improved only collapsed envelope
   (about 9.8%). The experiment was removed; the squared-distance optimization
   remains.
-- SHDR now evaluates waveform fill and analytical body in one fullscreen shader,
-  composing the unchanged straight-alpha materials internally in the same order
-  as the former two passes. Shader initialization failure retains the separate
-  analytical-waveform plus strip-body fallback. GPU CSV rows mark combined-pass
-  samples with `gpu_sample_combined=1`; for those rows `gpu_body_us` contains the
-  complete combined query and `gpu_wave_us` is zero. Same-size GPU and visual
-  validation are pending.
-
-Combined-pass validation to capture now:
-
-- Use one Wyrm in SHDR mode at Rack zoom 2.378. Hold zoom fixed for the entire
-  run and capture Slither-active oscillator and envelope states in both views.
-  Expected framebuffer sizes are 489x445 collapsed and 977x509 expanded; treat
-  any other size as scaling data, not a direct before/after comparison.
-- Keep each of the four states active for at least five seconds. Order does not
-  matter. Avoid waveform edits, rock dragging, rack movement, and other UI work
-  during each interval.
-- Retain only rows with `gpu_sample_valid=1`, `gpu_sample_combined=1`,
-  `gpu_sample_mode=2`, positive `gpu_sample_slither`, and the expected width and
-  height. Check that sample sequences are unique and that each state has enough
-  samples for median and p95 reporting.
-- For combined rows, compare `gpu_body_us` against the former sum of
-  `gpu_wave_us + gpu_body_us`. The same-size squared-distance baselines are:
-  collapsed oscillator 146.54 us median / 353.89 us p95; collapsed envelope
-  207.60 / 392.03 us; expanded oscillator 283.75 / 557.46 us; expanded envelope
-  348.67 / 554.01 us. Also compare `gl_framebuffer_us`, whole-draw median/p95,
-  and outliers so a GPU improvement is not offset by CPU or driver cost.
-- Before accepting timing, visually compare against the prior SHDR path in both
-  oscillator and envelope modes. Check fill polarity and height gradient,
-  alternating-column cadence and alignment, midpoint thickness, curve-edge AA,
-  body layer colors and alpha, outer-edge softness, acute peaks, steep segments,
-  round endpoints, and sharp rock-constrained bends. Pay special attention to
-  body-over-fill blending because composition moved inside the shader.
-- Keep the merge only if all four visual states remain equivalent and the
-  same-size GPU results show a repeatable end-to-end benefit beyond ordinary
-  between-session variation. Otherwise restore the separate passes while
-  retaining the squared-distance body optimization and GPU trace.
+- A combined waveform-fill and analytical-body shader experiment regressed
+  same-size Linux laptop median GPU time by 13.7--42.6% across all four states.
+  A same-driver Windows A/B subsequently found only a timer-quantized mixed
+  result: small oscillator gains, a collapsed-envelope regression, and an
+  expanded-envelope tie. The combined shader, selection branch, uniforms, timer
+  mode, and temporary CSV field were removed. SHDR again uses separate analytical
+  waveform and analytical body passes with independent GPU queries. Historical
+  combined-capture details remain in `doc/render_linux_laptop.md`.
+- The separate analytical body shader now tests the first ranked experiment from
+  `doc/polyline_research.md`: each curve texel retains `y[i]` in red for the
+  unchanged waveform lookup and packs `y[i-1]`, `y[i-2]`, and `y[i-3]` into
+  green, blue, and alpha. The body obtains the same eight clamped endpoints from
+  one packed read plus four forward reads instead of eight reads. Geometry,
+  texture allocation, waveform filtering, and endpoint semantics are unchanged.
+  The first same-driver Windows capture reduced body medians by 16.7--25.0% and
+  waveform-plus-body medians by 7.1--13.3%, with the waveform query stable as a
+  control. The initial CPU packer normalized each channel separately and the
+  capture showed a possible 2--3 us CPU-side GL increase. Packing now normalizes
+  each point once and copies the three prior red-channel values. Repeat Windows
+  CPU timing and Linux laptop GPU timing before final acceptance.
 
 Immediate validation checkpoint:
 
