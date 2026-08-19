@@ -443,7 +443,7 @@ struct WyrmDrawCsvRecorder {
 			<< "gl_framebuffer_us,gl_dirty,editor_other_us,outer_other_us,"
 			<< "gpu_sample_valid,gpu_sample_sequence,gpu_sample_mode,gpu_sample_envelope,"
 			<< "gpu_sample_slither,gpu_sample_width,gpu_sample_height,gpu_wave_us,gpu_body_us,"
-			<< "gpu_body_domain_fraction\n";
+			<< "gpu_body_domain_fraction,gpu_body_segment_count\n";
 		INFO("Wyrm started draw log CSV: %s", path.c_str());
 	}
 
@@ -506,6 +506,7 @@ struct WyrmDrawCsvRecorder {
 			<< ',' << float(module->perfCsvGpuWaveNs.load(std::memory_order_relaxed)) * nsToUs
 			<< ',' << float(module->perfCsvGpuBodyNs.load(std::memory_order_relaxed)) * nsToUs
 			<< ',' << module->perfCsvGpuBodyDomainFraction.load(std::memory_order_relaxed)
+			<< ',' << module->perfCsvGpuBodySegmentCount.load(std::memory_order_relaxed)
 			<< '\n';
 		if ((row % 120u) == 0u) {
 			file.flush();

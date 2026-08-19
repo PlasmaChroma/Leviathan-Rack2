@@ -304,6 +304,7 @@ struct Wyrm : Module {
 	std::atomic<int> perfCsvGpuSampleWidth {0};
 	std::atomic<int> perfCsvGpuSampleHeight {0};
 	std::atomic<float> perfCsvGpuBodyDomainFraction {1.f};
+	std::atomic<int> perfCsvGpuBodySegmentCount {0};
 	std::atomic<bool> perfCsvGpuSampleValid {false};
 	std::atomic<uint64_t> perfOverlayDrawMinNs {std::numeric_limits<uint64_t>::max()};
 	std::atomic<uint64_t> perfOverlayDrawMaxNs {0};

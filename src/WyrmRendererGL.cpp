@@ -3,6 +3,7 @@
 
 #include <array>
 #include <chrono>
+#include <string>
 #include <nanovg_gl.h>
 
 namespace {
@@ -12,6 +13,7 @@ namespace {
 constexpr bool kWyrmUseConservativeBodyTiles = true;
 constexpr float kWyrmBodyTileWidthPx = 16.f;
 constexpr float kWyrmBodyTileRasterGuardPx = 1.f;
+constexpr int kWyrmMaxBodySegmentRadius = 16;
 
 } // namespace
 
@@ -62,6 +64,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	GLint bodyShaderOuterWidthLoc = -1;
 	bool bodyShaderInitAttempted = false;
 	bool bodyShaderReady = false;
+	int bodyShaderSegmentRadius = 0;
 	bool redrawStateInitialized = false;
 	int lastRenderMode = -1;
 	uint32_t lastWaveVersion = 0;
@@ -82,6 +85,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	std::vector<float> bodyTileMaxY;
 	std::vector<uint8_t> bodyTileActive;
 	float bodyTileDomainFraction = 1.f;
+	int activeBodySegmentCount = 0;
 
 	struct GpuTimerSlot {
 		GLuint waveQuery = 0;
@@ -94,6 +98,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		int width = 0;
 		int height = 0;
 		float bodyDomainFraction = 1.f;
+		int bodySegmentCount = 0;
 	};
 	static constexpr size_t kGpuTimerSlotCount = 6u;
 	std::array<GpuTimerSlot, kGpuTimerSlotCount> gpuTimerSlots {};
@@ -143,6 +148,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		bodyShaderOuterWidthLoc = -1;
 		bodyShaderInitAttempted = false;
 		bodyShaderReady = false;
+		bodyShaderSegmentRadius = 0;
 	}
 
 	void resetGpuTimerState() {
@@ -211,6 +217,8 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			module->perfCsvGpuSampleHeight.store(newestResolved->height, std::memory_order_relaxed);
 			module->perfCsvGpuBodyDomainFraction.store(
 				newestResolved->bodyDomainFraction, std::memory_order_relaxed);
+			module->perfCsvGpuBodySegmentCount.store(
+				newestResolved->bodySegmentCount, std::memory_order_relaxed);
 			module->perfCsvGpuSampleValid.store(true, std::memory_order_relaxed);
 		}
 	}
@@ -229,6 +237,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			slot.width = std::max(1, int(std::lround(framebufferSize.x)));
 			slot.height = std::max(1, int(std::lround(framebufferSize.y)));
 			slot.bodyDomainFraction = 1.f;
+			slot.bodySegmentCount = 0;
 			nextGpuTimerSlot = (index + 1u) % gpuTimerSlots.size();
 			return &slot;
 		}
@@ -395,9 +404,15 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		}
 	}
 
-	void ensureBodyShader() {
-		if (bodyShaderInitAttempted) return;
+	void ensureBodyShader(int segmentRadius) {
+		segmentRadius = clamp(segmentRadius, 1, kWyrmMaxBodySegmentRadius);
+		if (bodyShaderInitAttempted && bodyShaderSegmentRadius == segmentRadius) return;
+		if (bodyShaderProgram != 0) {
+			glDeleteProgram(bodyShaderProgram);
+		}
+		resetBodyShaderState();
 		bodyShaderInitAttempted = true;
+		bodyShaderSegmentRadius = segmentRadius;
 		static const char* kVs = R"GLSL(
 			#version 120
 			varying vec2 vUv;
@@ -406,8 +421,9 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 				vUv = gl_MultiTexCoord0.xy;
 			}
 		)GLSL";
-		static const char* kFs = R"GLSL(
-			#version 120
+		const std::string fsSource = std::string(
+			"#version 120\n#define WYRM_SEGMENT_RADIUS ")
+			+ std::to_string(segmentRadius) + "\n" + R"GLSL(
 			varying vec2 vUv;
 			uniform sampler2D uCurve;
 			uniform float uCurveCount;
@@ -453,6 +469,22 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 				float span = max(0.00001, 1.0 - 2.0 * uInset);
 				float phase = clamp((vUv.x - uInset) / span, 0.0, 1.0);
 				float centerIndex = floor(phase * uCurveCount - 0.5);
+		#if WYRM_SEGMENT_RADIUS == 2
+				float packedIndex = clamp(centerIndex, 0.0, uCurveCount - 1.0);
+				vec4 packedBack = texture2D(uCurve,
+					vec2((packedIndex + 0.5) / uCurveCount, 0.5));
+				vec2 p0 = curvePointWithY(centerIndex - 2.0, packedBack.b);
+				vec2 p1 = curvePointWithY(centerIndex - 1.0, packedBack.g);
+				vec2 p2 = curvePointWithY(centerIndex, packedBack.r);
+				vec2 p3 = curvePoint(centerIndex + 1.0);
+				vec2 p4 = curvePoint(centerIndex + 2.0);
+				vec2 p5 = curvePoint(centerIndex + 3.0);
+				float distanceSquaredPx = segmentDistanceSquared(p, p0, p1);
+				distanceSquaredPx = min(distanceSquaredPx, segmentDistanceSquared(p, p1, p2));
+				distanceSquaredPx = min(distanceSquaredPx, segmentDistanceSquared(p, p2, p3));
+				distanceSquaredPx = min(distanceSquaredPx, segmentDistanceSquared(p, p3, p4));
+				distanceSquaredPx = min(distanceSquaredPx, segmentDistanceSquared(p, p4, p5));
+		#elif WYRM_SEGMENT_RADIUS == 3
 				float packedIndex = clamp(centerIndex, 0.0, uCurveCount - 1.0);
 				vec4 packedBack = texture2D(uCurve,
 					vec2((packedIndex + 0.5) / uCurveCount, 0.5));
@@ -471,6 +503,17 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 				distanceSquaredPx = min(distanceSquaredPx, segmentDistanceSquared(p, p4, p5));
 				distanceSquaredPx = min(distanceSquaredPx, segmentDistanceSquared(p, p5, p6));
 				distanceSquaredPx = min(distanceSquaredPx, segmentDistanceSquared(p, p6, p7));
+		#else
+				float firstIndex = centerIndex - float(WYRM_SEGMENT_RADIUS);
+				vec2 a = curvePoint(firstIndex);
+				float distanceSquaredPx = 1000000000000.0;
+				for (int offset = 0; offset < (2 * WYRM_SEGMENT_RADIUS + 1); ++offset) {
+					vec2 b = curvePoint(firstIndex + float(offset + 1));
+					distanceSquaredPx = min(
+						distanceSquaredPx, segmentDistanceSquared(p, a, b));
+					a = b;
+				}
+		#endif
 				float distancePx = sqrt(distanceSquaredPx);
 				float d = distancePx * 2.0 / uOuterWidth;
 				float outerMask = 1.0 - smoothstep(1.0 - uSoftness, 1.0, d);
@@ -485,7 +528,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			}
 		)GLSL";
 		GLuint vs = compileShader(GL_VERTEX_SHADER, kVs);
-		GLuint fs = compileShader(GL_FRAGMENT_SHADER, kFs);
+		GLuint fs = compileShader(GL_FRAGMENT_SHADER, fsSource.c_str());
 		if (!vs || !fs) {
 			if (vs) glDeleteShader(vs);
 			if (fs) glDeleteShader(fs);
@@ -818,6 +861,16 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			: 128;
 	}
 
+	int requiredBodySegmentRadius(Vec size, float outerRadius) const {
+		if (curveTextureCount < 2) return 0;
+		const float spacing = wyrm_render::pointDrawWidth(size) / float(curveTextureCount);
+		if (spacing <= 1e-5f) return 0;
+		// A segment m indices away has at least (m - 1) * spacing horizontal
+		// separation from the fragment's containing segment. Include the boundary
+		// segment so every segment capable of nonzero outer coverage is tested.
+		return std::max(1, int(std::floor(outerRadius / spacing)) + 1);
+	}
+
 	void ensureBodyTiles(Vec size, float outerRadius) {
 		if (bodyTileGeometryRevision == geometryCache->revision
 			&& bodyTileSize == size) {
@@ -1094,10 +1147,20 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		const bool useShdr = (mode == WYRM_RENDER_OPENGL_SHDR);
 		const bool logGpu = useShdr && isDragonKingDebugEnabled() && isWyrmDrawLoggingEnabled();
 		if (module) module->perfCsvGpuSampleValid.store(false, std::memory_order_relaxed);
-		if (useShdr) {
-			ensureBodyShader();
+		int requiredSegmentRadius = 0;
+		bool analyticalBodySupported = false;
+		if (useShdr && prepareCurveTexture(box.size, true)) {
+			requiredSegmentRadius = requiredBodySegmentRadius(
+				box.size, 0.5f * wyrm_render::bodyMaterial().layers[0].widthPx);
+			analyticalBodySupported = requiredSegmentRadius > 0
+				&& requiredSegmentRadius <= kWyrmMaxBodySegmentRadius;
+			if (analyticalBodySupported) {
+				ensureBodyShader(requiredSegmentRadius);
+			}
 		}
-		const bool shaderPath = useShdr && bodyShaderReady;
+		const bool shaderPath = useShdr && analyticalBodySupported
+			&& bodyShaderReady && bodyShaderSegmentRadius == requiredSegmentRadius;
+		activeBodySegmentCount = shaderPath ? 2 * requiredSegmentRadius + 1 : 0;
 		GpuTimerSlot* gpuTimer = logGpu ? beginGpuTimerSample(fbSize, mode) : nullptr;
 		bodyTileDomainFraction = 1.f;
 
@@ -1109,6 +1172,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		if (gpuTimer) glEndQuery(GL_TIME_ELAPSED);
 		if (gpuTimer) {
 			gpuTimer->bodyDomainFraction = bodyTileDomainFraction;
+			gpuTimer->bodySegmentCount = activeBodySegmentCount;
 			gpuTimer->pending = true;
 		}
 

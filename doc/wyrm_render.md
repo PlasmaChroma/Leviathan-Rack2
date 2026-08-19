@@ -122,6 +122,18 @@ Implemented and build-validated:
   Set the flag to `false` to restore the packed fullscreen body oracle for a
   same-build-family A/B. Windows and Linux laptop visual/GPU/CPU validation are
   pending.
+- The next research refinement replaces the hard-coded seven-segment body
+  neighborhood with a conservative shader variant selected from curve-point
+  spacing and the outer body radius. A segment `m` indices from the fragment's
+  containing segment has at least `(m - 1) * spacing` horizontal separation, so
+  `floor(outerRadius / spacing) + 1` is sufficient while retaining the boundary
+  segment. Common radius-two and radius-three variants preserve the packed
+  texture reads and test five or seven segments respectively; larger supported
+  radii use a compile-time-bounded GLSL loop, and radii above 16 fall back to the
+  non-analytical body path. The selected count is appended to GPU CSV rows as
+  `gpu_body_segment_count`. This should principally help wider/expanded views;
+  tightly spaced collapsed views are expected to retain seven segments. Windows
+  runtime shader compilation, visual parity, and GPU timing remain pending.
 
 Immediate validation checkpoint:
 
@@ -129,10 +141,10 @@ Immediate validation checkpoint:
   expanded views, especially acute peaks, round endcaps, steep segments, sharp
   rock bends, outer-edge softness, and internal layer transitions.
 
-Known limitation: screen-space distance checks a fixed local neighborhood of
-curve segments for GLSL 1.20 compatibility and bounded fragment cost. Pathological
-near-vertical folds should be included in visual validation; expand the fixed
-neighborhood only if a real capture shows a missed nearest segment.
+Known limitation: screen-space distance checks a spacing-derived local
+neighborhood of curve segments for GLSL 1.20 compatibility and bounded fragment
+cost. Pathological near-vertical folds should remain in visual validation; the
+derivation relies on monotonic, evenly spaced curve X coordinates.
 
 Checkpoint result: the bounded-miter body was provisionally accepted after a
 brief Rack test, then `wyrm.png` exposed remaining peak continuity and square-cap
@@ -349,10 +361,10 @@ computes:
 ## Screen-space SHDR body rendering (implemented, pending approval)
 
 SHDR derives body distance from the same curve texture used by the waveform fill.
-This removes strip joins and naturally produces round endcaps. Its fixed local
-segment neighborhood preserves GLSL 1.20 compatibility and bounded work, but steep
-slopes, rock-constrained bends, expanded-editor GPU time, and continuous Slither
-remain approval gates.
+This removes strip joins and naturally produces round endcaps. Its spacing-derived,
+compile-time-bounded segment neighborhood preserves GLSL 1.20 compatibility and
+bounded work, but steep slopes, rock-constrained bends, expanded-editor GPU time,
+and continuous Slither remain approval gates.
 
 ## Validation matrix
 
