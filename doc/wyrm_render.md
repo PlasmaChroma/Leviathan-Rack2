@@ -158,6 +158,17 @@ Implemented and build-validated:
   therefore not supported by measurable benefit. SHDR retains the single uniform-
   selected waveform shader and straight-alpha internal composition from the
   preceding committed baseline.
+- The final low-risk waveform experiment replaced the alternating-column `if`
+  with a branchless `step` mask applied to shade alpha and was removed. The
+  four-state Windows capture `wyrm_draw_1_20260819_123803_0.csv` compiled and
+  rendered correctly, but waveform GPU medians were mixed: against the closest
+  same-order capture, expanded envelope tied while expanded oscillator regressed
+  by one 1.024 us timer quantum; collapsed results were one tie and one apparent
+  gain. CPU GL medians moved only about 0.5--2%. Comparison with the committed
+  baseline was likewise inconsistent and capture-order-sensitive. Unconditionally
+  evaluating shade selection and composition therefore had no repeatable benefit
+  over the driver's handling of the spatially coherent branch, so the original
+  conditional remains.
 
 Immediate validation checkpoint:
 
