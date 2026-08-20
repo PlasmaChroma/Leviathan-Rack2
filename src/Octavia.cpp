@@ -266,6 +266,17 @@ struct Octavia : Module {
     // Audio analysis — written in audio thread, read by HTTP thread
     AudioRingBuf audioRing[2];    // 0 = L input, 1 = R input
     std::atomic<float> sampleRate{44100.f};  // set in process(), read by HTTP
+    std::atomic<bool> audioInputConnected[2];
+
+    // Feedback needs a trend across independent requests. Keeping only the
+    // strongest candidate per channel gives useful confirmation without
+    // retaining spectra or flooding MCP responses.
+    struct FeedbackTrack {
+        float hz = 0.f, db = -140.f;
+        int risingObservations = 0;
+        std::chrono::steady_clock::time_point seen;
+    } feedbackTrack[2];
+    std::mutex feedbackMtx;
 
     // ── Loudness / stereo meter ────────────────────────────────────────────────
     // Audio thread accumulates into working sums (thread-local to process()),
@@ -277,10 +288,12 @@ struct Octavia : Module {
         // audio-thread working state
         double z[2][4] = {};                 // biquad states per ch: hs1,hs2,hp1,hp2
         double kSum[2] = {}, rawSum[2] = {}, sumLR = 0.0, peak[2] = {};
+        uint64_t clipped[2] = {};
         uint64_t n = 0;
         int flushTimer = 0;
         // published (mtx-protected)
         double pKSum[2] = {}, pRawSum[2] = {}, pSumLR = 0.0, pPeak[2] = {};
+        uint64_t pClipped[2] = {};
         uint64_t pN = 0;
         std::mutex mtx;
         std::atomic<bool> resetFlag{false};
@@ -347,6 +360,7 @@ struct Octavia : Module {
         // used here because HTTP handlers snapshot this data concurrently.
         float ch[2];
         for (int j = 0; j < 2; j++) {
+            audioInputConnected[j].store(inputs[j].isConnected(), std::memory_order_relaxed);
             float v = inputs[j].getVoltage();
             ch[j] = v;
             int h = audioRing[j].head.load(std::memory_order_relaxed);
@@ -358,9 +372,9 @@ struct Octavia : Module {
         if (lm.resetFlag.load(std::memory_order_relaxed)) {
             if (lm.mtx.try_lock()) {
                 for (int j = 0; j < 2; j++) {
-                    lm.kSum[j] = lm.rawSum[j] = lm.peak[j] = 0.0;
+                    lm.kSum[j] = lm.rawSum[j] = lm.peak[j] = 0.0; lm.clipped[j] = 0;
                     lm.z[j][0] = lm.z[j][1] = lm.z[j][2] = lm.z[j][3] = 0.0;
-                    lm.pKSum[j] = lm.pRawSum[j] = lm.pPeak[j] = 0.0;
+                    lm.pKSum[j] = lm.pRawSum[j] = lm.pPeak[j] = 0.0; lm.pClipped[j] = 0;
                 }
                 lm.sumLR = lm.pSumLR = 0.0; lm.n = lm.pN = 0; lm.flushTimer = 0;
                 lm.resetFlag.store(false, std::memory_order_relaxed);
@@ -377,6 +391,7 @@ struct Octavia : Module {
                 double in = ch[j] * 0.1;                     // 10V → 1.0 full scale
                 double a  = std::fabs(in);
                 if (a > lm.peak[j]) lm.peak[j] = a;
+                if (a >= 1.0) lm.clipped[j]++;
                 lm.rawSum[j] += in * in;
                 // shelving stage (transposed direct form II)
                 double y1 = hsB0*in + lm.z[j][0];
@@ -395,6 +410,7 @@ struct Octavia : Module {
                 for (int j = 0; j < 2; j++) {
                     lm.pKSum[j] += lm.kSum[j]; lm.kSum[j] = 0.0;
                     lm.pRawSum[j] += lm.rawSum[j]; lm.rawSum[j] = 0.0;
+                    lm.pClipped[j] += lm.clipped[j]; lm.clipped[j] = 0;
                     if (lm.peak[j] > lm.pPeak[j]) lm.pPeak[j] = lm.peak[j];
                     lm.peak[j] = 0.0;
                 }
@@ -1192,6 +1208,7 @@ struct Octavia : Module {
                 std::vector<float> wbuf;   // Hann-windowed, DC-removed
                 std::vector<float> dbs;    // per grid bin
                 float rms = 0.f, pk = 0.f;
+                int clippedSamples = 0;
                 double mean = 0.0;
             };
 
@@ -1227,6 +1244,7 @@ struct Octavia : Module {
                     sumSq += v * v;
                     float a = std::fabs(v);
                     if (a > sn.pk) sn.pk = a;
+                    if (a >= 10.f) sn.clippedSamples++;
                     sn.wbuf[i] = v * win[i];
                 }
                 sn.rms = sqrtf(sumSq / AUDIO_BUF);
@@ -1300,18 +1318,35 @@ struct Octavia : Module {
             if (has50) issues.push_back("hum_50");
             if (has60) issues.push_back("hum_60");
 
-            // Feedback suspect: dominant stable-or-rising narrow peak at high level
+            // Feedback candidates must rise across independent requests. This
+            // avoids calling a stable musical oscillator "feedback" after one
+            // short two-snapshot observation.
             std::string feedback = "null";
             for (auto& p : peaks) {
                 if (p.prom < 18.f || p.db < -20.f) continue;
                 int bi = (int)roundf(12.f * log2f(p.hz / 20.f));
                 if (bi < 0 || bi >= nb) continue;
                 float rise = B.dbs[bi] - A.dbs[bi];
-                if (rise >= -1.f) {  // not decaying
+                int observations = 0;
+                {
+                    std::unique_lock<std::mutex> lk(feedbackMtx);
+                    FeedbackTrack& track = feedbackTrack[port];
+                    double age = track.seen.time_since_epoch().count() == 0 ? 99.0
+                        : std::chrono::duration<double>(std::chrono::steady_clock::now() - track.seen).count();
+                    bool samePeak = track.hz > 0.f && std::fabs(log2f(p.hz / track.hz)) < (1.f / 12.f);
+                    if (samePeak && age < 2.5 && p.db >= track.db + 0.75f)
+                        track.risingObservations++;
+                    else
+                        track.risingObservations = rise >= 1.f ? 1 : 0;
+                    track.hz = p.hz; track.db = p.db; track.seen = std::chrono::steady_clock::now();
+                    observations = track.risingObservations;
+                }
+                if (observations >= 2) {
                     feedback = "{" + jStr("hz") + ": " + jNum(p.hz)
                              + ", " + jStr("note") + ": " + jStr(freqToNote(p.hz))
                              + ", " + jStr("db") + ": " + jNum(p.db)
-                             + ", " + jStr("riseDb") + ": " + jNum(rise) + "}";
+                             + ", " + jStr("riseDb") + ": " + jNum(rise)
+                             + ", " + jStr("risingObservations") + ": " + std::to_string(observations) + "}";
                     issues.push_back("feedback_suspect");
                     break;
                 }
@@ -1340,12 +1375,13 @@ struct Octavia : Module {
             }
             inharm += "]";
 
-            // Band energies (avg dB per band)
+            // Average linear power, then express it in dB. Averaging dB bins
+            // would bias broad-band material downward.
             auto bandDb = [&](float lo, float hi) -> float {
-                float sum = 0.f; int cnt = 0;
+                double sumPower = 0.0; int cnt = 0;
                 for (int i = 0; i < nb; i++)
-                    if (freqs[i] >= lo && freqs[i] < hi) { sum += B.dbs[i]; cnt++; }
-                return cnt ? sum / cnt : -140.f;
+                    if (freqs[i] >= lo && freqs[i] < hi) { sumPower += pow(10.0, B.dbs[i] / 10.0); cnt++; }
+                return cnt ? (float)(10.0 * log10(sumPower / cnt + 1e-14)) : -140.f;
             };
             float rumbleDb = bandDb(20.f, 45.f),   bassDb = bandDb(45.f, 250.f);
             float lowmidDb = bandDb(250.f, 800.f), midDb = bandDb(800.f, 2500.f);
@@ -1356,6 +1392,7 @@ struct Octavia : Module {
             if (rumbleDb > bassDb + 6.f && rumbleDb > -60.f) issues.push_back("rumble");
             if (sibDb > midDb + 6.f && sibDb > -60.f) issues.push_back("sibilance");
             if (B.rms < 1e-4f) issues.push_back("silence");
+            if (B.clippedSamples > 0) issues.push_back("clipping");
 
             std::string issuesArr = "[";
             for (size_t i = 0; i < issues.size(); i++) {
@@ -1366,9 +1403,11 @@ struct Octavia : Module {
 
             std::string body = "{";
             body += jStr("port") + ": " + std::to_string(port) + ", ";
+            body += jStr("inputConnected") + ": " + (audioInputConnected[port].load(std::memory_order_relaxed) ? "true" : "false") + ", ";
             body += jStr("issues") + ": " + issuesArr + ", ";
             body += jStr("rms") + ": " + jNum(B.rms) + ", ";
             body += jStr("peak") + ": " + jNum(B.pk) + ", ";
+            body += jStr("clippedSamples") + ": " + std::to_string(B.clippedSamples) + ", ";
             body += jStr("dcOffset") + ": " + jNum((float)B.mean) + ", ";
             body += jStr("noiseFloorDb") + ": " + jNum(floorDb) + ", ";
             body += jStr("bandsDb") + ": {"
@@ -1413,10 +1452,10 @@ struct Octavia : Module {
         // Continuous meter fed by the Analyze L/R inputs. POST /audio/loudness/reset
         // to start a fresh measurement window, let the patch play, then read.
         svr.Get("/audio/loudness", [this](const httplib::Request&, httplib::Response& res){
-            double kSum[2], rawSum[2], peak[2], sumLR; uint64_t n;
+            double kSum[2], rawSum[2], peak[2], sumLR; uint64_t clipped[2], n;
             {
                 std::unique_lock<std::mutex> lk(lm.mtx);
-                for (int j = 0; j < 2; j++) { kSum[j]=lm.pKSum[j]; rawSum[j]=lm.pRawSum[j]; peak[j]=lm.pPeak[j]; }
+                for (int j = 0; j < 2; j++) { kSum[j]=lm.pKSum[j]; rawSum[j]=lm.pRawSum[j]; peak[j]=lm.pPeak[j]; clipped[j]=lm.pClipped[j]; }
                 sumLR = lm.pSumLR; n = lm.pN;
             }
             if (n < sampleRate.load(std::memory_order_relaxed) * 3.f) {
@@ -1439,22 +1478,31 @@ struct Octavia : Module {
             double midMS  = (rawSum[0] + 2.0*sumLR + rawSum[1]) / (4.0 * n);
             double sideMS = (rawSum[0] - 2.0*sumLR + rawSum[1]) / (4.0 * n);
             double sideMidDb = db(sideMS) - db(midMS);
+            bool leftConnected = audioInputConnected[0].load(std::memory_order_relaxed);
+            bool rightConnected = audioInputConnected[1].load(std::memory_order_relaxed);
 
             std::string b = "{";
             b += jStr("secondsMeasured") + ": " + jNum((float)seconds) + ", ";
+            b += jStr("inputs") + ": {" + jStr("leftConnected") + ": " + (leftConnected ? "true" : "false")
+               + ", " + jStr("rightConnected") + ": " + (rightConnected ? "true" : "false") + "}, ";
             b += jStr("kWeightedDbfsEstimate") + ": " + jNum((float)kWeightedDbfs) + ", ";
             b += jStr("left")  + ": {" + jStr("kWeightedDbfsEstimate") + ": " + jNum((float)kWeightedDbfsL) + ", "
                + jStr("rmsDb") + ": " + jNum((float)rmsL) + ", "
                + jStr("peakDb") + ": " + jNum((float)peakL) + ", "
-               + jStr("crestDb") + ": " + jNum((float)(peakL - rmsL)) + "}, ";
+               + jStr("crestDb") + ": " + jNum((float)(peakL - rmsL)) + ", "
+               + jStr("clippedSamples") + ": " + std::to_string(clipped[0]) + "}, ";
             b += jStr("right") + ": {" + jStr("kWeightedDbfsEstimate") + ": " + jNum((float)kWeightedDbfsR) + ", "
                + jStr("rmsDb") + ": " + jNum((float)rmsR) + ", "
                + jStr("peakDb") + ": " + jNum((float)peakR) + ", "
-               + jStr("crestDb") + ": " + jNum((float)(peakR - rmsR)) + "}, ";
-            b += jStr("stereo") + ": {"
-               + jStr("correlation") + ": " + jNum((float)corr) + ", "
-               + jStr("balanceDb") + ": " + jNum((float)balDb) + ", "
-               + jStr("sideMidDb") + ": " + jNum((float)sideMidDb) + "}";
+               + jStr("crestDb") + ": " + jNum((float)(peakR - rmsR)) + ", "
+               + jStr("clippedSamples") + ": " + std::to_string(clipped[1]) + "}, ";
+            b += jStr("stereo") + ": {" + jStr("available") + ": " + (leftConnected && rightConnected ? "true" : "false");
+            if (leftConnected && rightConnected) {
+                b += ", " + jStr("correlation") + ": " + jNum((float)corr) + ", "
+                   + jStr("balanceDb") + ": " + jNum((float)balDb) + ", "
+                   + jStr("sideMidDb") + ": " + jNum((float)sideMidDb);
+            }
+            b += "}";
             b += "}";
             res.set_content(b, "application/json");
         });

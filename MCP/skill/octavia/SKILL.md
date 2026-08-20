@@ -87,7 +87,7 @@ incoming cables → missing source.
 |---|---|---|
 | Understand unknown patch | **2** | vcv_list_modules → vcv_list_cables |
 | Full patch audit | **3** | vcv_list_modules → vcv_list_cables → vcv_find_unpatched |
-| Spectral / Mix / Quality audit | **2–3** | spectrum → reset loudness → let audio play ≥3 sec → loudness |
+| Spectral / Mix / Quality audit | **3–4** | spectrum → reset loudness → let audio play ≥3 sec → loudness; repeat spectrum only if feedback is suspected |
 | Debug silence | **2** | vcv_get_signal_levels → vcv_get_module(suspect_id) |
 | Read one module in depth | **1** | vcv_get_module(id) |
 | Module recommendation | **1–2** | vcv_list_library(q=...) — ALWAYS filtered |
@@ -105,6 +105,10 @@ incoming cables → missing source.
 2. vcv_reset_loudness → let the patch play for at least 3 seconds → vcv_analyze_audio(mode='loudness')
    to check the K-weighted level estimate, crest factor, L/R balance, and stereo phase correlation
 3. Report: sonic balance, phase health, identified resonances, and gain staging recommendations
+
+**Keep responses compact:** use the default spectrum summary. Request `include_spectrum=true` only
+when choosing a precise corrective frequency. A feedback warning requires a rising narrow peak across
+successive spectrum reads; repeat the spectrum check after a short musical passage when warranted.
 
 ### "I hear nothing"
 1. vcv_get_signal_levels → first module with peak ≈ 0 in the audio chain
