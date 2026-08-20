@@ -29,7 +29,7 @@ Create an isolated Python environment and install the runtime dependencies.
 
 ```sh
 python3 -m venv ~/.octavia-mcp
-~/.octavia-mcp/bin/python -m pip install "mcp[cli]" httpx pydantic
+~/.octavia-mcp/bin/python -m pip install -r requirements.txt
 cp mcp_server/Octavia_MCP.py ~/.octavia-mcp/Octavia_MCP.py
 ```
 
@@ -37,7 +37,7 @@ cp mcp_server/Octavia_MCP.py ~/.octavia-mcp/Octavia_MCP.py
 
 ```powershell
 py -m venv "$env:USERPROFILE\.octavia-mcp"
-& "$env:USERPROFILE\.octavia-mcp\Scripts\python.exe" -m pip install "mcp[cli]" httpx pydantic
+& "$env:USERPROFILE\.octavia-mcp\Scripts\python.exe" -m pip install -r requirements.txt
 Copy-Item mcp_server\Octavia_MCP.py "$env:USERPROFILE\.octavia-mcp\Octavia_MCP.py"
 ```
 

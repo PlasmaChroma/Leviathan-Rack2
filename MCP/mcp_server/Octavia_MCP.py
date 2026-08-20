@@ -13,7 +13,19 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("vcv_rack_mcp")
 
-BRIDGE_PORT = int(os.environ.get("OCTAVIA_PORT", "7777"))
+
+def _read_bridge_port() -> int:
+    raw = os.environ.get("OCTAVIA_PORT", "7777")
+    try:
+        port = int(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"OCTAVIA_PORT must be an integer, got {raw!r}") from exc
+    if not 1 <= port <= 65535:
+        raise RuntimeError(f"OCTAVIA_PORT must be between 1 and 65535, got {port}")
+    return port
+
+
+BRIDGE_PORT = _read_bridge_port()
 BRIDGE_URL = f"http://127.0.0.1:{BRIDGE_PORT}"
 BRIDGE_TOKEN = os.environ.get("OCTAVIA_TOKEN", "")
 BRIDGE_HEADERS = {"X-Octavia-Token": BRIDGE_TOKEN} if BRIDGE_TOKEN else {}
@@ -31,7 +43,10 @@ async def _call(endpoint: str, method: str = "GET", data: dict = None) -> dict:
         else:
             r = await client.post(f"{BRIDGE_URL}/{endpoint}", json=data or {}, headers=BRIDGE_HEADERS)
         r.raise_for_status()
-        return r.json()
+        payload = r.json()
+        if isinstance(payload, dict) and "error" in payload:
+            raise OctaviaBridgeError(str(payload["error"]))
+        return payload
 
 
 async def _resolve_port(module_id: int, port_kind: str,
@@ -55,7 +70,13 @@ async def _resolve_port(module_id: int, port_kind: str,
     return int(matches[0]["id"])
 
 
-def _err(e: Exception) -> str:
+class OctaviaBridgeError(RuntimeError):
+    """A failure reported by Octavia's local HTTP bridge."""
+
+
+def _error_message(e: Exception) -> str:
+    if isinstance(e, OctaviaBridgeError):
+        return f"Error: {e}"
     if isinstance(e, (httpx.ConnectError, httpx.ConnectTimeout)):
         return (
             "Error: Cannot reach the Octavia module. "
@@ -68,6 +89,11 @@ def _err(e: Exception) -> str:
     return f"Error: {type(e).__name__}: {e}"
 
 
+def _err(e: Exception) -> None:
+    """Raise a tool failure so MCP clients receive an error result, not success text."""
+    raise RuntimeError(_error_message(e)) from e
+
+
 
 # ── Tools ─────────────────────────────────────────────────────────────────────
 
@@ -78,12 +104,12 @@ def _err(e: Exception) -> str:
 async def vcv_get_status() -> str:
     """Get the current status of the Octavia MCP server running inside VCV Rack.
 
-    Returns whether the server is running, the port number (7777), and VCV Rack version.
+    Returns whether the server is running, its configured port, and the Octavia API version.
     Use this first to verify the connection before calling other tools.
 
     Returns:
         str: JSON with keys: running (bool), port (int), version (str)
-        On failure: error string with instructions to fix the connection.
+        Raises a tool error with instructions for restoring the connection.
     """
     try:
         return json.dumps(await _call("status"), indent=2)
@@ -103,7 +129,7 @@ async def vcv_list_modules() -> str:
 
     Returns:
         str: JSON array of modules, each with: id (int), plugin (str), model (str)
-        On failure: error string.
+        Raises a tool error if Octavia cannot provide the module list.
     """
     try:
         return json.dumps(await _call("modules/summary"), indent=2)
@@ -132,7 +158,7 @@ async def vcv_get_module(params: GetModuleInput) -> str:
 
     Returns:
         str: JSON object with id, plugin, model, params[], inputs[], outputs[]
-        On failure: error string.
+        Raises a tool error if the module cannot be created.
     """
     try:
         return json.dumps(await _call(f"modules/{params.module_id}"), indent=2)
@@ -421,6 +447,9 @@ async def vcv_get_module_state(params: ModuleStateInput) -> str:
         async with httpx.AsyncClient(timeout=5.0) as client:
             r = await client.get(f"{BRIDGE_URL}/modules/{params.module_id}/state", headers=BRIDGE_HEADERS)
             r.raise_for_status()
+            payload = r.json()
+            if isinstance(payload, dict) and "error" in payload:
+                raise OctaviaBridgeError(str(payload["error"]))
             return r.text  # raw JSON state
     except Exception as e:
         return _err(e)
@@ -483,11 +512,13 @@ async def vcv_list_library(params: ListLibraryInput) -> str:
             query_params["plugin"] = params.plugin
         if params.q:
             query_params["q"] = params.q
-        qs = ("?" + "&".join(f"{k}={v}" for k, v in query_params.items())) if query_params else ""
         async with httpx.AsyncClient(timeout=10.0) as client:
-            r = await client.get(f"{BRIDGE_URL}/library{qs}", headers=BRIDGE_HEADERS)
+            r = await client.get(f"{BRIDGE_URL}/library", params=query_params, headers=BRIDGE_HEADERS)
             r.raise_for_status()
-            return json.dumps(r.json(), indent=2)
+            payload = r.json()
+            if isinstance(payload, dict) and "error" in payload:
+                raise OctaviaBridgeError(str(payload["error"]))
+            return json.dumps(payload, indent=2)
     except Exception as e:
         return _err(e)
 
@@ -621,7 +652,7 @@ async def vcv_connect_cables(params: BulkConnectInput) -> str:
             applied.append(index)
         return json.dumps({"ok": True, "applied": len(applied)}, indent=2)
     except Exception as e:
-        return json.dumps({"ok": False, "applied": len(applied), "error": _err(e)}, indent=2)
+        return json.dumps({"ok": False, "applied": len(applied), "error": _error_message(e)}, indent=2)
 
 
 @mcp.tool(
@@ -644,18 +675,6 @@ async def vcv_undo() -> str:
     """Undo the most recent reversible Octavia write operation."""
     try:
         return json.dumps(await _call("undo", "POST"), indent=2)
-    except Exception as e:
-        return _err(e)
-
-
-@mcp.tool(
-    name="vcv_get_patch_info",
-    annotations={"title": "Get Patch Info", "readOnlyHint": True, "destructiveHint": False}
-)
-async def vcv_get_patch_info() -> str:
-    """Get the current patch path and whether it can be saved in place."""
-    try:
-        return json.dumps(await _call("patch"), indent=2)
     except Exception as e:
         return _err(e)
 
