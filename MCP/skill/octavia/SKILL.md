@@ -10,7 +10,7 @@ description: >
 
 # VCV Rack — Leviathan Octavia
 
-HTTP server on `localhost:7777`. Plugin: **Leviathan** | Module: **Octavia** | Start button → green orb.
+HTTP server on `localhost:7777`. Plugin: **Leviathan** | Module: **Octavia** | Start button → full-brightness Octopus.
 
 Deep reference (read on demand): `references/tables.md` — module database by category,
 quick-pick by task, troubleshooting matrix, CPU optimization.
@@ -18,7 +18,7 @@ quick-pick by task, troubleshooting matrix, CPU optimization.
 ## ALWAYS START HERE
 
 ```
-vcv_get_status   →  {"running": true, "port": 7777}
+vcv_get_status   →  {"running": true, "port": 7777, "patch": {"path": "...", "hasSavePath": true}}
 ```
 If it fails → tell user to check Octavia + press START. Do not retry automatically.
 
@@ -30,15 +30,15 @@ When the user asks to change the patch, the LLM may use the write tools directly
    and ports, `vcv_list_cables` for routing, or filtered `vcv_list_library` before adding.
 2. Translate the user's musical intent into concrete module IDs, parameter IDs/values,
    and port IDs/names. Never guess an ID, parameter range, or plugin/model slug.
-3. Make the smallest coherent change. Prefer `vcv_set_parameters` when several parameter
-   changes form one edit because it creates one vcv_undo step.
-4. Check every write response for `error`, `failedIndices`, or partial bulk application.
-5. Verify with the cheapest relevant read: `vcv_get_parameter`, `vcv_list_cables`,
+3. Make the smallest coherent change. Use `vcv_set_parameters` for one or multiple parameter
+   changes because it creates one clean vcv_undo step.
+4. Check write responses for `error`, `failedIndices`, or partial bulk application.
+5. Verify with the cheapest relevant read: `vcv_get_module`, `vcv_list_cables`,
    `vcv_list_modules`, or `vcv_get_signal_levels`. Report exactly what changed.
 
-Write tools: `vcv_add_module`, `vcv_set_parameter`, `vcv_set_parameters`, `vcv_connect_cable`,
-`vcv_connect_cables`, `vcv_disconnect_cable`, `vcv_disconnect_output`, `vcv_move_module`, `vcv_set_bypass`,
-`vcv_set_module_state`, `vcv_undo`, `vcv_delete_module`, and `vcv_save_patch`.
+Write tools: `vcv_add_module`, `vcv_set_parameters`, `vcv_connect_cables`,
+`vcv_disconnect_cable`, `vcv_update_module`, `vcv_set_module_state`,
+`vcv_undo`, `vcv_delete_module`, and `vcv_save_patch`.
 
 ### Safety and approval
 
@@ -48,11 +48,11 @@ Write tools: `vcv_add_module`, `vcv_set_parameter`, `vcv_set_parameters`, `vcv_c
 - `vcv_delete_module` is not undoable through Octavia. Confirm the module details and obtain
   explicit user approval naming the module before deleting it.
 - `vcv_save_patch` overwrites the patch's existing file and is not undoable through Octavia.
-  Check `vcv_get_patch_info` and obtain explicit user approval before saving.
+  Check patch save status via `vcv_get_status` and obtain explicit user approval before saving.
 - Do not silently broaden an edit. If the request is exploratory ("what could improve?"),
   advise first; only mutate when the user asks to apply or make changes.
 - If verification fails, stop further writes, explain the partial state, and offer/use
-  `vcv_undo` for reversible operations. A bulk cable call can partially apply and reports how
+  `vcv_undo` for reversible operations. A cable call can partially apply and reports how
   many cables succeeded; vcv_undo that many times if rollback is requested.
 
 ---
@@ -85,7 +85,7 @@ incoming cables → missing source.
 | Task | Calls | Sequence |
 |---|---|---|
 | Understand unknown patch | **2** | vcv_list_modules → vcv_list_cables |
-| Full patch audit | **3** | vcv_list_modules → vcv_list_cables → find_unpatched |
+| Full patch audit | **3** | vcv_list_modules → vcv_list_cables → vcv_find_unpatched |
 | Debug silence | **2** | vcv_get_signal_levels → vcv_get_module(suspect_id) |
 | Read one module in depth | **1** | vcv_get_module(id) |
 | Module recommendation | **1–2** | vcv_list_library(q=...) — ALWAYS filtered |
@@ -95,7 +95,7 @@ incoming cables → missing source.
 ## Decision Trees
 
 ### "Analyze my patch"
-1. vcv_list_modules → classify roles · 2. vcv_list_cables → trace chains · 3. find_unpatched → gaps
+1. vcv_list_modules → classify roles · 2. vcv_list_cables → trace chains · 3. vcv_find_unpatched → gaps
 4. Report: signal flow map, polyphony path, bypassed modules, dead ends, improvement advice
 
 ### "I hear nothing"
@@ -135,7 +135,7 @@ ch = poly channels · connected:false + peak>0 = stale peak.
 
 ## Tool Gotchas
 
-- `vcv_list_library` without `plugin=` or `q=` returns 200k+ chars — **always filter**.
+- `vcv_list_library` requires `plugin=` or `q=` to prevent an oversized response.
 - Cache lag ~1s; all data is pull. Per-module CPU is not available (only whole-process).
 - `vcv_get_module_state` returns the full preset JSON — useful to show the user a backup
   they can save before manual edits.

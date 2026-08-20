@@ -12,7 +12,7 @@ class ServerContractTest(unittest.TestCase):
         cls.source = SERVER_PATH.read_text(encoding="utf-8")
         cls.tree = ast.parse(cls.source, filename=str(SERVER_PATH))
 
-    def test_tool_names_are_unique(self):
+    def test_tool_names_are_unique_and_registered(self):
         names = []
         for node in self.tree.body:
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -32,8 +32,17 @@ class ServerContractTest(unittest.TestCase):
                 )
                 names.append(explicit_name or node.name)
 
-        self.assertGreater(len(names), 20)
+        self.assertGreaterEqual(len(names), 15)
         self.assertEqual(len(names), len(set(names)), f"duplicate MCP tool names: {names}")
+        expected_tools = {
+            "vcv_get_status", "vcv_get_perf", "vcv_list_modules", "vcv_get_module",
+            "vcv_list_library", "vcv_list_cables", "vcv_get_signal_levels",
+            "vcv_find_unpatched", "vcv_add_module", "vcv_delete_module",
+            "vcv_update_module", "vcv_set_parameters", "vcv_connect_cables",
+            "vcv_disconnect_cable", "vcv_get_module_state", "vcv_set_module_state",
+            "vcv_undo", "vcv_save_patch"
+        }
+        self.assertEqual(set(names), expected_tools)
 
     def test_bridge_configuration_is_supported(self):
         self.assertIn('os.environ.get("OCTAVIA_PORT"', self.source)
@@ -46,6 +55,10 @@ class ServerContractTest(unittest.TestCase):
             if isinstance(node, ast.FunctionDef) and node.name == "_err"
         )
         self.assertTrue(any(isinstance(node, ast.Raise) for node in ast.walk(error_helper)))
+
+    def test_library_search_is_bounded_and_cable_failures_identify_the_connection(self):
+        self.assertIn("if not params.plugin and not params.q:", self.source)
+        self.assertIn('"failedIndex": failed_index', self.source)
 
 
 if __name__ == "__main__":
