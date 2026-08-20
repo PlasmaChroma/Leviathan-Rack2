@@ -230,6 +230,16 @@
         "Utility"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Octavia",
+      "name": "Octavia",
+      "description": "HTTP control bridge for inspecting and manipulating a running Rack patch.",
+      "tags": [
+        "Utility",
+        "Visual"
+      ],
+      "hidden": false
     }
   ]
 }
