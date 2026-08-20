@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include "visual/VisualAssets.hpp"
 #include "third_party/httplib.h"
 #include <thread>
 #include <atomic>
@@ -1711,34 +1712,41 @@ static const NVGcolor WHITE = nvgRGB(255,255,255);
 static const NVGcolor DIM   = nvgRGB(80,80,80);
 static const NVGcolor GOLD  = nvgRGB(160,120,0);
 
-// ── Sphere (status orb) — layered NanoVG radial gradients ────────────────────
-static void drawSphere(NVGcontext* vg, float cx, float cy, float r, bool on) {
-    // Layer 1: black base
-    nvgBeginPath(vg); nvgCircle(vg, cx, cy, r);
-    nvgFillColor(vg, nvgRGB(0,0,0)); nvgFill(vg);
+struct OctaviaStatusWidget : TransparentWidget {
+    Octavia* module = nullptr;
+    std::shared_ptr<window::Svg> octopusSvg;
 
-    // Layer 2: body light — offset center, bright color → transparent at rim
-    float hx = cx - r*0.20f, hy = cy - r*0.24f;
-    NVGpaint body = nvgRadialGradient(vg, hx, hy, r*0.05f, r*1.35f,
-        on ? nvgRGBA(68,255,136,255) : nvgRGBA(255,68,34,255),
-        nvgRGBA(0,0,0,0));
-    nvgBeginPath(vg); nvgCircle(vg, cx, cy, r);
-    nvgFillPaint(vg, body); nvgFill(vg);
+    explicit OctaviaStatusWidget(Octavia* module)
+        : module(module) {
+        if (APP && APP->window) {
+            octopusSvg = APP->window->loadSvg(
+                asset::plugin(pluginInstance, "res/icon/Octopus-V.svg"));
+        }
+    }
 
-    // Layer 3: rim shadow — transparent center → black at edge
-    NVGpaint rim = nvgRadialGradient(vg, cx, cy, r*0.45f, r,
-        nvgRGBA(0,0,0,0), nvgRGBA(0,0,0,210));
-    nvgBeginPath(vg); nvgCircle(vg, cx, cy, r);
-    nvgFillPaint(vg, rim); nvgFill(vg);
+    void draw(const DrawArgs& args) override {
+        const bool serverRunning = module
+            && module->serverRunning.load(std::memory_order_relaxed);
+        if (!octopusSvg || !octopusSvg->handle) {
+            return;
+        }
 
-    // Layer 4: specular highlight — top-left
-    float sx = cx - r*0.28f, sy = cy - r*0.32f;
-    NVGpaint spec = nvgRadialGradient(vg, sx, sy, 0.f, r*0.50f,
-        on ? nvgRGBA(180,255,200,100) : nvgRGBA(255,180,150,100),
-        nvgRGBA(0,0,0,0));
-    nvgBeginPath(vg); nvgCircle(vg, cx, cy, r);
-    nvgFillPaint(vg, spec); nvgFill(vg);
-}
+        const Vec svgSize = octopusSvg->getSize();
+        if (svgSize.x <= 0.f || svgSize.y <= 0.f) {
+            return;
+        }
+
+        const float scale = std::min(box.size.x / svgSize.x, box.size.y / svgSize.y);
+        const Vec fittedSize = svgSize.mult(scale);
+        const Vec offset = box.size.minus(fittedSize).div(2.f);
+        nvgSave(args.vg);
+        nvgGlobalAlpha(args.vg, serverRunning ? 1.f : 0.28f);
+        nvgTranslate(args.vg, offset.x, offset.y);
+        nvgScale(args.vg, scale, scale);
+        octopusSvg->draw(args.vg);
+        nvgRestore(args.vg);
+    }
+};
 
 // ── Widget ────────────────────────────────────────────────────────────────────
 struct OctaviaWidget : ModuleWidget {
@@ -1765,40 +1773,34 @@ struct OctaviaWidget : ModuleWidget {
     OctaviaWidget(Octavia* module) {
         setModule(module);
         setPanel(createPanel(asset::plugin(pluginInstance,"res/Octavia.svg")));
-        addChild(createWidget<ScrewBlack>(Vec(0,0)));
-        addChild(createWidget<ScrewBlack>(Vec(0,RACK_GRID_HEIGHT-RACK_GRID_WIDTH)));
+        addChild(createWidget<CyanOrbScrew>(Vec(0, 0)));
+        addChild(createWidget<CyanOrbScrew>(Vec(0, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-        // Sphere replaces STATUS LED — drawn in draw()
+        OctaviaStatusWidget* status = new OctaviaStatusWidget(module);
+        status->box.pos = mm2px(Vec(0.74f, 13.5f));
+        status->box.size = mm2px(Vec(29.f, 36.f));
+        addChild(status);
+
         addParam(createParamCentered<TL1105>(mm2px(Vec(23.f,77.f)), module, Octavia::START_PARAM));
 
         // Audio analysis inputs
-        addInput(createInputCentered<PJ301MPort>(mm2px(Vec(8.f,110.f)),  module, Octavia::AUDIO_IN_L));
-        addInput(createInputCentered<PJ301MPort>(mm2px(Vec(22.f,110.f)), module, Octavia::AUDIO_IN_R));
+        addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(8.f,110.f)),  module, Octavia::AUDIO_IN_L));
+        addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(22.f,110.f)), module, Octavia::AUDIO_IN_R));
     }
 
     void draw(const DrawArgs& args) override {
         ModuleWidget::draw(args);
 
-        // Read server state (false in preview / no module)
-        bool on = module ? static_cast<Octavia*>(module)->serverRunning.load() : false;
-
         float cx = mm2px(Vec(15.24f,0.f)).x;
         float lx = mm2px(Vec(4.5f,0.f)).x;
 
         // ── Zone 1: Identity ──────────────────────────────────────────────────
-        // Sphere center y=17mm, r=7mm (bottom edge ≈ 24mm)
-        drawSphere(args.vg, cx, mm2px(Vec(0.f,17.f)).y, mm2px(Vec(0.f,7.f)).y, on);
-
         if (!APP || !APP->window || !APP->window->uiFont) return;
         nvgFontFaceId(args.vg, APP->window->uiFont->handle);
         nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
 
-        // Text group centered between sphere bottom (24mm) and Port label (63mm) → midpoint 43.5mm
         nvgFontSize(args.vg,18.f); nvgFillColor(args.vg,WHITE);
-        nvgText(args.vg, cx, mm2px(Vec(0.f,40.f)).y, "Octavia", NULL);
-
-        nvgFontSize(args.vg,7.8f); nvgFillColor(args.vg,WHITE);
-        nvgText(args.vg, cx, mm2px(Vec(0.f,49.f)).y, "Leviathan", NULL);
+        nvgText(args.vg, cx, mm2px(Vec(0.f,7.5f)).y, "Octavia", NULL);
 
         // ── Zone 2: Control (y 60–80mm) ───────────────────────────────────────
         nvgFontSize(args.vg,8.f);
