@@ -454,8 +454,8 @@ build/tests/theme_service_spec: tests/theme_service_spec.cpp src/theme/ThemeServ
 build/tests/cantor_module_spec: tests/cantor_module_spec.cpp src/Cantor.cpp src/Cantor.hpp src/CantorCultureEngine.cpp src/CantorCultureEngine.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/cantor_module_spec.cpp src/Cantor.cpp src/CantorCultureEngine.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
-build/tests/wyrm_envelope_spec: tests/wyrm_envelope_spec.cpp src/Wyrm.cpp src/Wyrm.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/wyrm_envelope_spec.cpp src/Wyrm.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+build/tests/wyrm_envelope_spec: tests/wyrm_envelope_spec.cpp src/Wyrm.cpp src/Wyrm.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/wyrm_envelope_spec.cpp src/Wyrm.cpp src/MathHelpers.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 build/tests/temporaldeck_longplay_spec: tests/temporaldeck_longplay_spec.cpp src/LongPlayStreamEngine.cpp src/LongPlayStreamEngine.hpp src/codec.cpp src/codec.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/temporaldeck_longplay_spec.cpp src/LongPlayStreamEngine.cpp src/codec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@

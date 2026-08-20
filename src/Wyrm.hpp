@@ -16,6 +16,9 @@ constexpr int kWyrmTableMipLevels = 8;
 constexpr int kWyrmMaxChannels = 16;
 constexpr int kWyrmMaxRocks = 6;
 constexpr int kWyrmRockBoundarySamples = 64;
+constexpr int kWyrmWavetableBuildWorkPerSample = 64;
+
+using WyrmWavetable = std::array<std::array<float, kWyrmTableSize>, kWyrmTableMipLevels>;
 
 enum WyrmShapeId {
 	SHAPE_SINE = 0,
@@ -94,7 +97,7 @@ inline float foldWave(float x, float amount) {
 	}
 	const float drive = 1.f + 5.5f * amount;
 	const float d = x * drive;
-	return std::sin(0.5f * float(M_PI) * d);
+	return levi_math::sinCyclesAudioBounded(0.25f * d);
 }
 
 inline float catmullPeriodic(const std::array<float, kWyrmPointCountMax>& points, int pointCount, float phase) {
@@ -122,7 +125,8 @@ inline float catmullPeriodic(const std::array<float, kWyrmPointCountMax>& points
 
 inline float slitherOffset(float phase, float travelPhase, float amount) {
 	const float shapedAmount = amount * amount;
-	return kWyrmSlitherMaxOffset * shapedAmount * std::sin(2.f * float(M_PI) * (levi_math::wrap01(phase) - levi_math::wrap01(travelPhase)));
+	return kWyrmSlitherMaxOffset * shapedAmount * levi_math::sinCyclesAudioBounded(
+		levi_math::wrap01(phase) - levi_math::wrap01(travelPhase));
 }
 
 inline float slitherSpeedFactor(float speedKnob) {
@@ -228,9 +232,19 @@ struct Wyrm : Module {
 	};
 
 	std::array<std::atomic<float>, kWyrmPointCountMax> wavePoints {};
-	std::array<std::array<float, kWyrmTableSize>, kWyrmTableMipLevels> wavetableMip {};
+	std::array<WyrmWavetable, 2> wavetableBuffers {};
+	int activeWavetableIndex = 0;
 	std::atomic<uint32_t> waveVersion {1};
 	uint32_t appliedWaveVersion = 0;
+	std::atomic<int> publishedPointCount {kWyrmPointCountDefault};
+	std::array<float, kWyrmPointCountMax> wavetableBuildPoints {};
+	uint32_t wavetableBuildVersion = 0;
+	int wavetableBuildPointCount = kWyrmPointCountDefault;
+	int wavetableBuildTarget = 1;
+	int wavetableBuildStage = 0;
+	int wavetableBuildLevel = 1;
+	int wavetableBuildIndex = 0;
+	float wavetableBuildMaxAbs = 1e-6f;
 	std::atomic<float> displayFrequencyHz {0.f};
 	std::atomic<float> displayEnvelopeTimeMs {0.f};
 	std::atomic<bool> displayEnvelopeRunning {false};
@@ -326,6 +340,7 @@ struct Wyrm : Module {
 	void setEnvelopeArShape();
 	void setPointCount(int newPointCount);
 	void rebuildWavetable();
+	bool advanceWavetableBuild(uint32_t requestedVersion);
 	float lookupWave(float ph, float phaseStep = 0.f) const;
 	float rockDx(float ph, const WyrmRock& rock) const;
 	float rockClearancePhase(const WyrmRock& rock) const;

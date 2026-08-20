@@ -92,6 +92,8 @@ Wyrm::Wyrm() {
 	configOutput(RAW_OUTPUT, "Signal");
 
 	setFactoryShape(SHAPE_SINE);
+	rebuildWavetable();
+	appliedWaveVersion = waveVersion.load(std::memory_order_acquire);
 	for (int i = 0; i < kWyrmMaxRocks; ++i) {
 		placeRock(i);
 	}
@@ -306,6 +308,7 @@ void Wyrm::setPointCount(int newPointCount) {
 		return;
 	}
 	pointCount = newPointCount;
+	publishedPointCount.store(pointCount, std::memory_order_release);
 	if (envelopeMode.load(std::memory_order_relaxed)) {
 		setEnvelopeShape(selectedEnvelopeShape);
 	}
@@ -323,12 +326,13 @@ void Wyrm::rebuildWavetable() {
 	for (int i = 0; i < kWyrmTableSize; ++i) {
 		const float ph = float(i) / float(kWyrmTableSize);
 		const float y = catmullPeriodic(local, pointCount, ph);
-		wavetableMip[0][i] = y;
+		wavetableBuffers[activeWavetableIndex][0][i] = y;
 		maxAbs = std::max(maxAbs, std::fabs(y));
 	}
 	const float inv = 1.f / maxAbs;
 	for (int i = 0; i < kWyrmTableSize; ++i) {
-		wavetableMip[0][i] = clamp(wavetableMip[0][i] * inv, -1.f, 1.f);
+		wavetableBuffers[activeWavetableIndex][0][i] = clamp(
+			wavetableBuffers[activeWavetableIndex][0][i] * inv, -1.f, 1.f);
 	}
 
 	// Build progressively band-limited mip tables for high-frequency playback.
@@ -336,8 +340,10 @@ void Wyrm::rebuildWavetable() {
 		for (int i = 0; i < kWyrmTableSize; ++i) {
 			const int im1 = (i - 1 + kWyrmTableSize) % kWyrmTableSize;
 			const int ip1 = (i + 1) % kWyrmTableSize;
-			wavetableMip[level][i] = clamp(
-				0.25f * wavetableMip[level - 1][im1] + 0.5f * wavetableMip[level - 1][i] + 0.25f * wavetableMip[level - 1][ip1],
+			wavetableBuffers[activeWavetableIndex][level][i] = clamp(
+				0.25f * wavetableBuffers[activeWavetableIndex][level - 1][im1]
+					+ 0.5f * wavetableBuffers[activeWavetableIndex][level - 1][i]
+					+ 0.25f * wavetableBuffers[activeWavetableIndex][level - 1][ip1],
 				-1.f,
 				1.f
 			);
@@ -345,7 +351,78 @@ void Wyrm::rebuildWavetable() {
 	}
 }
 
+bool Wyrm::advanceWavetableBuild(uint32_t requestedVersion) {
+	if (wavetableBuildStage == 0 || requestedVersion != wavetableBuildVersion) {
+		wavetableBuildVersion = requestedVersion;
+		wavetableBuildPointCount = publishedPointCount.load(std::memory_order_acquire);
+		for (int i = 0; i < wavetableBuildPointCount; ++i) {
+			wavetableBuildPoints[i] = wavePoints[i].load(std::memory_order_relaxed);
+		}
+		// A point writer publishes its version after all point stores. If it raced
+		// this snapshot, discard the mixed snapshot and begin again next sample.
+		if (waveVersion.load(std::memory_order_acquire) != requestedVersion) {
+			wavetableBuildStage = 0;
+			return false;
+		}
+		wavetableBuildTarget = 1 - activeWavetableIndex;
+		wavetableBuildStage = 1;
+		wavetableBuildLevel = 1;
+		wavetableBuildIndex = 0;
+		wavetableBuildMaxAbs = 1e-6f;
+	}
+
+	WyrmWavetable& target = wavetableBuffers[wavetableBuildTarget];
+	int workRemaining = kWyrmWavetableBuildWorkPerSample;
+	while (workRemaining-- > 0) {
+		if (wavetableBuildStage == 1) {
+			const int i = wavetableBuildIndex++;
+			const float ph = float(i) / float(kWyrmTableSize);
+			const float y = catmullPeriodic(
+				wavetableBuildPoints, wavetableBuildPointCount, ph);
+			target[0][i] = y;
+			wavetableBuildMaxAbs = std::max(wavetableBuildMaxAbs, std::fabs(y));
+			if (wavetableBuildIndex == kWyrmTableSize) {
+				wavetableBuildStage = 2;
+				wavetableBuildIndex = 0;
+			}
+		}
+		else if (wavetableBuildStage == 2) {
+			const int i = wavetableBuildIndex++;
+			target[0][i] = clamp(target[0][i] / wavetableBuildMaxAbs, -1.f, 1.f);
+			if (wavetableBuildIndex == kWyrmTableSize) {
+				wavetableBuildStage = 3;
+				wavetableBuildIndex = 0;
+			}
+		}
+		else {
+			const int i = wavetableBuildIndex++;
+			const int im1 = (i - 1 + kWyrmTableSize) % kWyrmTableSize;
+			const int ip1 = (i + 1) % kWyrmTableSize;
+			target[wavetableBuildLevel][i] = clamp(
+				0.25f * target[wavetableBuildLevel - 1][im1]
+					+ 0.5f * target[wavetableBuildLevel - 1][i]
+					+ 0.25f * target[wavetableBuildLevel - 1][ip1],
+				-1.f, 1.f);
+			if (wavetableBuildIndex == kWyrmTableSize) {
+				wavetableBuildIndex = 0;
+				if (++wavetableBuildLevel == kWyrmTableMipLevels) {
+					if (waveVersion.load(std::memory_order_acquire) == wavetableBuildVersion) {
+						activeWavetableIndex = wavetableBuildTarget;
+						appliedWaveVersion = wavetableBuildVersion;
+						wavetableBuildStage = 0;
+						return true;
+					}
+					wavetableBuildStage = 0;
+					return false;
+				}
+			}
+		}
+	}
+	return false;
+}
+
 float Wyrm::lookupWave(float ph, float phaseStep) const {
+	const WyrmWavetable& wavetableMip = wavetableBuffers[activeWavetableIndex];
 	float p = ph;
 	if (p >= 1.f) {
 		p -= 1.f;
@@ -1022,6 +1099,7 @@ void Wyrm::dataFromJson(json_t* root) {
 		int loadedPointCount = int(json_integer_value(pointCountJ));
 		if (loadedPointCount == 32 || loadedPointCount == 48 || loadedPointCount == 64 || loadedPointCount == 128 || loadedPointCount == 256) {
 			pointCount = loadedPointCount;
+			publishedPointCount.store(pointCount, std::memory_order_release);
 		}
 	}
 	json_t* rockCountJ = json_object_get(root, "rockCount");
@@ -1081,10 +1159,8 @@ void Wyrm::process(const ProcessArgs& args) {
 	const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 	bool wavetableRebuilt = false;
 	const uint32_t v = waveVersion.load(std::memory_order_acquire);
-	if (v != appliedWaveVersion) {
-		rebuildWavetable();
-		appliedWaveVersion = v;
-		wavetableRebuilt = true;
+	if (v != appliedWaveVersion || wavetableBuildStage != 0) {
+		wavetableRebuilt = advanceWavetableBuild(v);
 	}
 
 	const int channels = std::max(1, std::max({
@@ -1140,8 +1216,8 @@ void Wyrm::process(const ProcessArgs& args) {
 				setFactoryShape(SHAPE_SINE);
 			}
 		}
-		rebuildWavetable();
-		appliedWaveVersion = waveVersion.load(std::memory_order_acquire);
+		// Keep playing the previous complete table while the replacement is built
+		// incrementally into the inactive buffer by subsequent process() calls.
 		for (int c = 0; c < kWyrmMaxChannels; ++c) {
 			phase[c] = 0.f;
 			phaseDir[c] = 1.f;

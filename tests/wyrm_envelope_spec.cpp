@@ -199,6 +199,57 @@ bool rendererDefaultAndPatchCompatibilityRemainStable() {
 	return freshUsesShdr && legacyMissingModeUsesNanoVg && explicitModeRoundTrips;
 }
 
+bool wavetableRebuildPublishesOnlyCompleteTables() {
+	Wyrm module;
+	const int initialTable = module.activeWavetableIndex;
+	const float initialQuarter = module.lookupWave(0.25f);
+	module.setFactoryShape(SHAPE_SQUARE);
+	const uint32_t requestedVersion = module.waveVersion.load(std::memory_order_acquire);
+
+	process(module);
+	const bool oldTableRemainsAudible = module.activeWavetableIndex == initialTable
+		&& module.appliedWaveVersion != requestedVersion
+		&& std::fabs(module.lookupWave(0.25f) - initialQuarter) < 1e-6f;
+
+	const int totalBuildCallbacks =
+		(kWyrmTableSize * (kWyrmTableMipLevels + 1))
+		/ kWyrmWavetableBuildWorkPerSample;
+	process(module, totalBuildCallbacks - 2);
+	const bool notPublishedEarly = module.activeWavetableIndex == initialTable
+		&& module.appliedWaveVersion != requestedVersion;
+	process(module);
+	const bool completeTablePublished = module.activeWavetableIndex != initialTable
+		&& module.appliedWaveVersion == requestedVersion
+		&& module.lookupWave(0.25f) > 0.99f;
+	return oldTableRemainsAudible && notPublishedEarly && completeTablePublished;
+}
+
+bool hotPathSineLutPreservesFoldAndSlither() {
+	float maximumFoldError = 0.f;
+	float maximumSlitherError = 0.f;
+	for (int amountIndex = 0; amountIndex <= 100; ++amountIndex) {
+		const float amount = float(amountIndex) / 100.f;
+		for (int sample = 0; sample <= 1000; ++sample) {
+			const float x = -1.f + 2.f * float(sample) / 1000.f;
+			const float drive = 1.f + 5.5f * amount;
+			const float expectedFold = amount <= 1e-5f
+				? x
+				: std::sin(0.5f * float(M_PI) * x * drive);
+			maximumFoldError = std::max(
+				maximumFoldError, std::fabs(foldWave(x, amount) - expectedFold));
+
+			const float phase = float(sample) / 1000.f;
+			const float travelPhase = 1.f - phase;
+			const float cycles = levi_math::wrap01(phase) - levi_math::wrap01(travelPhase);
+			const float expectedSlither = kWyrmSlitherMaxOffset * amount * amount
+				* std::sin(2.f * float(M_PI) * cycles);
+			maximumSlitherError = std::max(maximumSlitherError,
+				std::fabs(slitherOffset(phase, travelPhase, amount) - expectedSlither));
+		}
+	}
+	return maximumFoldError < 2.2e-6f && maximumSlitherError < 1e-6f;
+}
+
 } // namespace
 
 int main() {
@@ -210,6 +261,8 @@ int main() {
 	const bool arShape = enteringEnvelopeModeLoadsFastAttackSlowReleaseShape();
 	const bool sineRestore = exitingEnvelopeModeRestoresDefaultSine();
 	const bool rendererCompatibility = rendererDefaultAndPatchCompatibilityRemainStable();
+	const bool atomicWavetablePublication = wavetableRebuildPublishesOnlyCompleteTables();
+	const bool sineLutEquivalence = hotPathSineLutPreservesFoldAndSlither();
 	std::cout << (oneShot ? "[PASS] " : "[FAIL] ") << "ENV traverses 0-10 V once and returns to 0 V\n";
 	std::cout << (retrigger ? "[PASS] " : "[FAIL] ") << "ENV retriggers on a new rising edge\n";
 	std::cout << (polyphony ? "[PASS] " : "[FAIL] ") << "ENV trigger voices remain polyphonically independent\n";
@@ -219,8 +272,13 @@ int main() {
 	std::cout << (sineRestore ? "[PASS] " : "[FAIL] ") << "exiting ENV restores the default sine shape\n";
 	std::cout << (rendererCompatibility ? "[PASS] " : "[FAIL] ")
 		<< "new modules default to SHDR while legacy and explicit renderer state remain compatible\n";
+	std::cout << (atomicWavetablePublication ? "[PASS] " : "[FAIL] ")
+		<< "incremental wavetable rebuild publishes only a complete replacement\n";
+	std::cout << (sineLutEquivalence ? "[PASS] " : "[FAIL] ")
+		<< "shared sine LUT preserves Wyrm fold and Slither waveforms\n";
 	const int passed = int(oneShot) + int(retrigger) + int(polyphony) + int(boundedInterpolation)
-		+ int(octaveStepping) + int(arShape) + int(sineRestore) + int(rendererCompatibility);
-	std::cout << "[SUMMARY] wyrm_envelope_spec: " << passed << "/8 passed\n";
-	return passed == 8 ? 0 : 1;
+		+ int(octaveStepping) + int(arShape) + int(sineRestore) + int(rendererCompatibility)
+		+ int(atomicWavetablePublication) + int(sineLutEquivalence);
+	std::cout << "[SUMMARY] wyrm_envelope_spec: " << passed << "/10 passed\n";
+	return passed == 10 ? 0 : 1;
 }
