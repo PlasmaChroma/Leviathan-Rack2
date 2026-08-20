@@ -38,7 +38,8 @@ When the user asks to change the patch, the LLM may use the write tools directly
 
 Write tools: `vcv_add_module`, `vcv_set_parameters`, `vcv_connect_cables`,
 `vcv_disconnect_cable`, `vcv_update_module`, `vcv_set_module_state`,
-`vcv_undo`, `vcv_delete_module`, and `vcv_save_patch`.
+`vcv_undo`, `vcv_delete_module`, `vcv_save_patch`, and `vcv_reset_loudness`.
+Cables default to white; `vcv_connect_cables` accepts optional `color` name ('red', 'green', 'blue', 'yellow', etc.) or hex ('#ffffff').
 
 ### Safety and approval
 
@@ -86,6 +87,7 @@ incoming cables → missing source.
 |---|---|---|
 | Understand unknown patch | **2** | vcv_list_modules → vcv_list_cables |
 | Full patch audit | **3** | vcv_list_modules → vcv_list_cables → vcv_find_unpatched |
+| Spectral / Mix / Quality audit | **2–3** | spectrum → reset loudness → let audio play ≥3 sec → loudness |
 | Debug silence | **2** | vcv_get_signal_levels → vcv_get_module(suspect_id) |
 | Read one module in depth | **1** | vcv_get_module(id) |
 | Module recommendation | **1–2** | vcv_list_library(q=...) — ALWAYS filtered |
@@ -97,6 +99,12 @@ incoming cables → missing source.
 ### "Analyze my patch"
 1. vcv_list_modules → classify roles · 2. vcv_list_cables → trace chains · 3. vcv_find_unpatched → gaps
 4. Report: signal flow map, polyphony path, bypassed modules, dead ends, improvement advice
+
+### "Analyze my mix / sound quality"
+1. vcv_analyze_audio(mode='spectrum') → check frequency bands (sub/bass/mid/air), hum, standing resonances
+2. vcv_reset_loudness → let the patch play for at least 3 seconds → vcv_analyze_audio(mode='loudness')
+   to check the K-weighted level estimate, crest factor, L/R balance, and stereo phase correlation
+3. Report: sonic balance, phase health, identified resonances, and gain staging recommendations
 
 ### "I hear nothing"
 1. vcv_get_signal_levels → first module with peak ≈ 0 in the audio chain

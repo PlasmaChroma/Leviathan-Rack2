@@ -8,9 +8,11 @@
 #include <chrono>
 #include <memory>
 #include <algorithm>
+#include <array>
 #include <vector>
 #include <unordered_map>
 #include <cmath>
+#include <cctype>
 #include <cstring>
 #if defined(_WIN32)
   #include <windows.h>
@@ -107,8 +109,15 @@ static std::string freqToNote(float freq) {
 static const int AUDIO_BUF = 4096;  // power of 2, ~93ms @ 44100 Hz
 
 struct AudioRingBuf {
-    float            data[AUDIO_BUF] = {};
+    // Individual atomic samples keep the audio thread lock-free while making a
+    // best-effort HTTP snapshot defined by the C++ memory model. A snapshot can
+    // span a write boundary, but never reads a concurrently-written float.
+    std::atomic<float> data[AUDIO_BUF];
     std::atomic<int> head{0};         // total samples written; pos = head & (AUDIO_BUF-1)
+
+    AudioRingBuf() {
+        for (int i = 0; i < AUDIO_BUF; i++) data[i].store(0.f, std::memory_order_relaxed);
+    }
 };
 
 // ── Oscilloscope voltage tracking ─────────────────────────────────────────────
@@ -125,6 +134,44 @@ struct ModuleVolts {
     std::vector<PortVolts> outputs;
 };
 
+static NVGcolor parseColorString(const std::string& str) {
+    if (str.empty()) {
+        return nvgRGB(255, 255, 255); // Default white
+    }
+    std::string s = str;
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+    if (s == "white") return nvgRGB(255, 255, 255);
+    if (s == "black") return nvgRGB(30, 30, 30);
+    if (s == "red") return nvgRGB(255, 50, 50);
+    if (s == "green") return nvgRGB(50, 230, 80);
+    if (s == "blue") return nvgRGB(50, 140, 255);
+    if (s == "yellow") return nvgRGB(255, 230, 50);
+    if (s == "orange") return nvgRGB(255, 140, 30);
+    if (s == "purple" || s == "violet") return nvgRGB(180, 60, 255);
+    if (s == "cyan" || s == "teal") return nvgRGB(40, 220, 240);
+    if (s == "magenta" || s == "pink") return nvgRGB(255, 80, 200);
+    if (s == "gray" || s == "grey") return nvgRGB(160, 160, 160);
+
+    // Hex parsing #RRGGBB or RRGGBB or #RGB
+    if (s[0] == '#') s = s.substr(1);
+    if (s.size() == 6) {
+        try {
+            int r = std::stoi(s.substr(0, 2), nullptr, 16);
+            int g = std::stoi(s.substr(2, 2), nullptr, 16);
+            int b = std::stoi(s.substr(4, 2), nullptr, 16);
+            return nvgRGB(r, g, b);
+        } catch (...) {}
+    } else if (s.size() == 3) {
+        try {
+            int r = std::stoi(std::string(2, s[0]), nullptr, 16);
+            int g = std::stoi(std::string(2, s[1]), nullptr, 16);
+            int b = std::stoi(std::string(2, s[2]), nullptr, 16);
+            return nvgRGB(r, g, b);
+        } catch (...) {}
+    }
+    return nvgRGB(255, 255, 255);
+}
+
 // ── Job types ─────────────────────────────────────────────────────────────────
 struct SetParamJob {
     int64_t moduleId; int paramId; float value;
@@ -134,6 +181,7 @@ struct CableJob {
     enum Type { ADD, REMOVE, REMOVE_OUTPUT };
     Type type;
     int64_t outModId=-1, outPortId=-1, inModId=-1, inPortId=-1;
+    std::string color;
     std::atomic<bool> done{false}; bool success=false; std::string error;
 };
 struct AddModuleJob {
@@ -182,7 +230,13 @@ struct UndoAction {
     struct POld { int64_t m; int p; float v; };
     std::vector<POld> paramList;                          // PARAMS
     int64_t inModId=-1; int inPortId=-1;                  // CABLE_CLEAR target
-    std::vector<std::array<int64_t,4>> cables;            // CABLE_RECONNECT: out,outPort,in,inPort
+    struct CableRestore {
+        int64_t outModId, outPortId, inModId, inPortId;
+        NVGcolor color;
+        CableRestore(int64_t om, int64_t op, int64_t im, int64_t ip, NVGcolor c)
+            : outModId(om), outPortId(op), inModId(im), inPortId(ip), color(c) {}
+    };
+    std::vector<CableRestore> cables; // CABLE_RECONNECT: endpoints and original colour
     bool oldBypassed=false;
     std::string oldState;
     float oldX=0.f, oldY=0.f;
@@ -211,7 +265,7 @@ struct Octavia : Module {
 
     // Audio analysis — written in audio thread, read by HTTP thread
     AudioRingBuf audioRing[2];    // 0 = L input, 1 = R input
-    float        sampleRate = 44100.f;  // set in process(), read by HTTP
+    std::atomic<float> sampleRate{44100.f};  // set in process(), read by HTTP
 
     // ── Loudness / stereo meter ────────────────────────────────────────────────
     // Audio thread accumulates into working sums (thread-local to process()),
@@ -287,16 +341,17 @@ struct Octavia : Module {
     void process(const ProcessArgs& args) override {
         if (startTrig.process(params[START_PARAM].getValue() > 0.f)) startServer();
 
-        sampleRate = args.sampleRate;
+        sampleRate.store(args.sampleRate, std::memory_order_relaxed);
 
-        // Sample audio inputs into ring buffers (lock-free: aligned float writes are atomic on x86/ARM)
+        // Sample audio inputs into ring buffers. Atomic writes are deliberately
+        // used here because HTTP handlers snapshot this data concurrently.
         float ch[2];
         for (int j = 0; j < 2; j++) {
             float v = inputs[j].getVoltage();
             ch[j] = v;
             int h = audioRing[j].head.load(std::memory_order_relaxed);
-            audioRing[j].data[h & (AUDIO_BUF - 1)] = v;
-            audioRing[j].head.store(h + 1, std::memory_order_relaxed);
+            audioRing[j].data[h & (AUDIO_BUF - 1)].store(v, std::memory_order_relaxed);
+            audioRing[j].head.store(h + 1, std::memory_order_release);
         }
 
         // Loudness/stereo meter accumulation (normalized: 10V = 0 dBFS)
@@ -666,6 +721,7 @@ struct Octavia : Module {
                 c->inputModule=dst;  c->inputId=(int)job->inPortId;
                 APP->engine->addCable(c);
                 CableWidget* cw=new CableWidget;
+                cw->color = parseColorString(job->color);
                 cw->setCable(c);
                 if (!cw->isComplete()) {
                     APP->engine->removeCable(cw->releaseCable()); delete cw;
@@ -687,9 +743,12 @@ struct Octavia : Module {
                     for (int64_t cid : APP->engine->getCableIds()) {
                         engine::Cable* c = APP->engine->getCable(cid);
                         if (c && c->inputModule && c->inputModule->id==job->inModId
-                            && c->inputId==(int)job->inPortId && c->outputModule)
-                            a.cables.push_back({c->outputModule->id,(int64_t)c->outputId,
-                                                c->inputModule->id,(int64_t)c->inputId});
+                            && c->inputId==(int)job->inPortId && c->outputModule) {
+                            CableWidget* cw = APP->scene->rack->getCable(cid);
+                            a.cables.emplace_back(c->outputModule->id, (int64_t)c->outputId,
+                                                  c->inputModule->id, (int64_t)c->inputId,
+                                                  cw ? cw->color : parseColorString(""));
+                        }
                     }
                     a.label="disconnect input port "+std::to_string(job->inPortId)+" on module "+std::to_string(job->inModId);
                     APP->scene->rack->clearCablesOnPort(inPort);
@@ -700,20 +759,23 @@ struct Octavia : Module {
             } else { job->error="module not found"; }
         } else { // REMOVE_OUTPUT — disconnect all cables from one output port
             // Collect input locations first, then remove (avoid modifying list while iterating)
-            std::vector<std::pair<int64_t,int>> targets;
+            std::vector<UndoAction::CableRestore> targets;
             for (int64_t cid : APP->engine->getCableIds()) {
                 engine::Cable* c = APP->engine->getCable(cid);
                 if (c && c->outputModule && c->outputModule->id==job->outModId
-                    && c->outputId==(int)job->outPortId && c->inputModule)
-                    targets.push_back({c->inputModule->id, c->inputId});
+                    && c->outputId==(int)job->outPortId && c->inputModule) {
+                    CableWidget* cw = APP->scene->rack->getCable(cid);
+                    targets.emplace_back(job->outModId, job->outPortId, c->inputModule->id, c->inputId,
+                                         cw ? cw->color : parseColorString(""));
+                }
             }
             UndoAction a; a.type=UndoAction::CABLE_RECONNECT;
             for (auto& t : targets)
-                a.cables.push_back({job->outModId, job->outPortId, t.first, (int64_t)t.second});
+                a.cables.push_back(t);
             for (auto& t : targets) {
-                ModuleWidget* inW = APP->scene->rack->getModule(t.first);
+                ModuleWidget* inW = APP->scene->rack->getModule(t.inModId);
                 if (!inW) continue;
-                PortWidget* inPort = inW->getInput(t.second);
+                PortWidget* inPort = inW->getInput((int)t.inPortId);
                 if (inPort) APP->scene->rack->clearCablesOnPort(inPort);
             }
             if (!a.cables.empty()) {
@@ -822,16 +884,17 @@ struct Octavia : Module {
             case UndoAction::CABLE_RECONNECT: {
                 job->success=true;
                 for (auto& cb : a.cables) {
-                    engine::Module* src=APP->engine->getModule(cb[0]);
-                    engine::Module* dst=APP->engine->getModule(cb[2]);
-                    ModuleWidget* outW=APP->scene->rack->getModule(cb[0]);
-                    ModuleWidget* inW =APP->scene->rack->getModule(cb[2]);
+                    engine::Module* src=APP->engine->getModule(cb.outModId);
+                    engine::Module* dst=APP->engine->getModule(cb.inModId);
+                    ModuleWidget* outW=APP->scene->rack->getModule(cb.outModId);
+                    ModuleWidget* inW =APP->scene->rack->getModule(cb.inModId);
                     if (!src||!dst||!outW||!inW) continue;
                     engine::Cable* c=new engine::Cable;
-                    c->outputModule=src; c->outputId=(int)cb[1];
-                    c->inputModule=dst;  c->inputId=(int)cb[3];
+                    c->outputModule=src; c->outputId=(int)cb.outPortId;
+                    c->inputModule=dst;  c->inputId=(int)cb.inPortId;
                     APP->engine->addCable(c);
                     CableWidget* cw=new CableWidget;
+                    cw->color = cb.color;
                     cw->setCable(c);
                     if (!cw->isComplete()) { APP->engine->removeCable(cw->releaseCable()); delete cw; }
                     else APP->scene->rack->addCable(cw);
@@ -1038,9 +1101,9 @@ struct Octavia : Module {
             {
                 int h = audioRing[port].head.load(std::memory_order_relaxed);
                 for (int i = 0; i < AUDIO_BUF; i++)
-                    buf[i] = audioRing[port].data[(h - AUDIO_BUF + i + AUDIO_BUF) & (AUDIO_BUF - 1)];
+                    buf[i] = audioRing[port].data[(h - AUDIO_BUF + i + AUDIO_BUF) & (AUDIO_BUF - 1)].load(std::memory_order_relaxed);
             }
-            float sr = sampleRate;
+            float sr = sampleRate.load(std::memory_order_relaxed);
 
             // RMS + peak
             float sumSq = 0.f, pk = 0.f;
@@ -1108,7 +1171,7 @@ struct Octavia : Module {
                 res.set_content("{\"error\": \"port must be 0 (L) or 1 (R)\"}", "application/json");
                 return;
             }
-            float sr = sampleRate;
+            float sr = sampleRate.load(std::memory_order_relaxed);
 
             // 1/12-octave grid 20 Hz → min(20 kHz, 0.45*sr)
             float fMax = std::min(20000.f, sr * 0.45f);
@@ -1117,13 +1180,13 @@ struct Octavia : Module {
                 freqs.push_back(f);
             const int nb = (int)freqs.size();
 
-            static float win[AUDIO_BUF];
-            static bool winInit = false;
-            if (!winInit) {
+            // Function-local initialization is performed exactly once by C++.
+            static const std::array<float, AUDIO_BUF> win = [] {
+                std::array<float, AUDIO_BUF> values{};
                 for (int i = 0; i < AUDIO_BUF; i++)
-                    win[i] = 0.5f * (1.f - cosf(2.f * float(M_PI) * i / (AUDIO_BUF - 1)));
-                winInit = true;
-            }
+                    values[i] = 0.5f * (1.f - cosf(2.f * float(M_PI) * i / (AUDIO_BUF - 1)));
+                return values;
+            }();
 
             struct Snap {
                 std::vector<float> wbuf;   // Hann-windowed, DC-removed
@@ -1151,9 +1214,9 @@ struct Octavia : Module {
                 Snap sn;
                 float buf[AUDIO_BUF];
                 {
-                    int h = audioRing[port].head.load(std::memory_order_relaxed);
+                    int h = audioRing[port].head.load(std::memory_order_acquire);
                     for (int i = 0; i < AUDIO_BUF; i++)
-                        buf[i] = audioRing[port].data[(h - AUDIO_BUF + i + AUDIO_BUF) & (AUDIO_BUF - 1)];
+                        buf[i] = audioRing[port].data[(h - AUDIO_BUF + i + AUDIO_BUF) & (AUDIO_BUF - 1)].load(std::memory_order_relaxed);
                 }
                 for (int i = 0; i < AUDIO_BUF; i++) sn.mean += buf[i];
                 sn.mean /= AUDIO_BUF;
@@ -1356,17 +1419,19 @@ struct Octavia : Module {
                 for (int j = 0; j < 2; j++) { kSum[j]=lm.pKSum[j]; rawSum[j]=lm.pRawSum[j]; peak[j]=lm.pPeak[j]; }
                 sumLR = lm.pSumLR; n = lm.pN;
             }
-            if (n < 4800) {
-                res.set_content("{\"error\":\"not enough data — reset the meter, let the patch play a few seconds, then read again\"}",
+            if (n < sampleRate.load(std::memory_order_relaxed) * 3.f) {
+                res.set_content("{\"error\":\"not enough data — let the patch play for at least three seconds, then read again\"}",
                                 "application/json");
                 return;
             }
             auto db  = [](double x){ return 10.0 * log10(x + 1e-12); };
-            double seconds = n / (double)sampleRate;
-            // BS.1770: stereo integrated = sum of channel mean squares (K-weighted)
-            double lufs   = -0.691 + db((kSum[0] + kSum[1]) / n);
-            double lufsL  = -0.691 + db(kSum[0] / n);
-            double lufsR  = -0.691 + db(kSum[1] / n);
+            double seconds = n / (double)sampleRate.load(std::memory_order_relaxed);
+            // This is a long-term K-weighted estimate. It deliberately does not
+            // claim BS.1770 compliance: coefficients are fixed at 48 kHz and
+            // the standard's absolute/relative gating is not implemented.
+            double kWeightedDbfs   = -0.691 + db((kSum[0] + kSum[1]) / n);
+            double kWeightedDbfsL  = -0.691 + db(kSum[0] / n);
+            double kWeightedDbfsR  = -0.691 + db(kSum[1] / n);
             double rmsL   = db(rawSum[0] / n), rmsR = db(rawSum[1] / n);
             double peakL  = 20.0 * log10(peak[0] + 1e-12), peakR = 20.0 * log10(peak[1] + 1e-12);
             double corr   = sumLR / (sqrt(rawSum[0] * rawSum[1]) + 1e-12);
@@ -1377,12 +1442,12 @@ struct Octavia : Module {
 
             std::string b = "{";
             b += jStr("secondsMeasured") + ": " + jNum((float)seconds) + ", ";
-            b += jStr("lufsIntegrated") + ": " + jNum((float)lufs) + ", ";
-            b += jStr("left")  + ": {" + jStr("lufs") + ": " + jNum((float)lufsL) + ", "
+            b += jStr("kWeightedDbfsEstimate") + ": " + jNum((float)kWeightedDbfs) + ", ";
+            b += jStr("left")  + ": {" + jStr("kWeightedDbfsEstimate") + ": " + jNum((float)kWeightedDbfsL) + ", "
                + jStr("rmsDb") + ": " + jNum((float)rmsL) + ", "
                + jStr("peakDb") + ": " + jNum((float)peakL) + ", "
                + jStr("crestDb") + ": " + jNum((float)(peakL - rmsL)) + "}, ";
-            b += jStr("right") + ": {" + jStr("lufs") + ": " + jNum((float)lufsR) + ", "
+            b += jStr("right") + ": {" + jStr("kWeightedDbfsEstimate") + ": " + jNum((float)kWeightedDbfsR) + ", "
                + jStr("rmsDb") + ": " + jNum((float)rmsR) + ", "
                + jStr("peakDb") + ": " + jNum((float)peakR) + ", "
                + jStr("crestDb") + ": " + jNum((float)(peakR - rmsR)) + "}, ";
@@ -1445,6 +1510,7 @@ struct Octavia : Module {
             auto job=std::make_shared<CableJob>(); job->type=CableJob::ADD;
             job->outModId=parseInt64Field(r.body,"outputModuleId"); job->outPortId=parseInt64Field(r.body,"outputPortId");
             job->inModId=parseInt64Field(r.body,"inputModuleId");   job->inPortId=parseInt64Field(r.body,"inputPortId");
+            job->color=parseStringField(r.body,"color");
             { std::unique_lock<std::mutex> lk(cableQueueMtx); cableQueue.push(job); }
             if (!waitDone(job)) res.set_content("{\"error\":\"timeout\"}","application/json");
             else if (job->success) res.set_content("{\"ok\":true}","application/json");
@@ -1564,9 +1630,9 @@ struct Octavia : Module {
             { std::unique_lock<std::mutex> lk(lm.mtx);
               for (int j = 0; j < 2; j++) { kSum[j]=lm.pKSum[j]; rawSum[j]=lm.pRawSum[j]; peak[j]=lm.pPeak[j]; }
               sumLR = lm.pSumLR; n = lm.pN; }
-            if (n < 4800) { res.set_content("{\"error\":\"no audio data during measurement window\"}","application/json"); return; }
+            if (n < sampleRate.load(std::memory_order_relaxed) * 1.f) { res.set_content("{\"error\":\"no audio data during measurement window\"}","application/json"); return; }
             auto db = [](double x){ return 10.0 * log10(x + 1e-12); };
-            double lufs  = -0.691 + db((kSum[0] + kSum[1]) / n);
+            double kWeightedDbfs = -0.691 + db((kSum[0] + kSum[1]) / n);
             double rmsL  = db(rawSum[0] / n), rmsR = db(rawSum[1] / n);
             double peakL = 20.0*log10(peak[0]+1e-12), peakR = 20.0*log10(peak[1]+1e-12);
             double corr  = sumLR / (sqrt(rawSum[0]*rawSum[1]) + 1e-12);
@@ -1574,8 +1640,8 @@ struct Octavia : Module {
             double midMS  = (rawSum[0] + 2.0*sumLR + rawSum[1]) / (4.0*n);
             double sideMS = (rawSum[0] - 2.0*sumLR + rawSum[1]) / (4.0*n);
             std::string b = "{";
-            b += jStr("secondsMeasured") + ": " + jNum((float)(n/(double)sampleRate)) + ", ";
-            b += jStr("lufsIntegrated") + ": " + jNum((float)lufs) + ", ";
+            b += jStr("secondsMeasured") + ": " + jNum((float)(n/(double)sampleRate.load(std::memory_order_relaxed))) + ", ";
+            b += jStr("kWeightedDbfsEstimate") + ": " + jNum((float)kWeightedDbfs) + ", ";
             b += jStr("left")  + ": {" + jStr("rmsDb") + ": " + jNum((float)rmsL) + ", " + jStr("peakDb") + ": " + jNum((float)peakL) + ", " + jStr("crestDb") + ": " + jNum((float)(peakL-rmsL)) + "}, ";
             b += jStr("right") + ": {" + jStr("rmsDb") + ": " + jNum((float)rmsR) + ", " + jStr("peakDb") + ": " + jNum((float)peakR) + ", " + jStr("crestDb") + ": " + jNum((float)(peakR-rmsR)) + "}, ";
             b += jStr("stereo") + ": {" + jStr("correlation") + ": " + jNum((float)corr) + ", " + jStr("balanceDb") + ": " + jNum((float)balDb) + ", " + jStr("sideMidDb") + ": " + jNum((float)(db(sideMS)-db(midMS))) + "}";
@@ -1604,7 +1670,7 @@ struct Octavia : Module {
             double sysSec  = ru.ru_stime.tv_sec + ru.ru_stime.tv_usec/1e6;
 #endif
             std::string b = "{";
-            b += jStr("sampleRate")+": "+std::to_string(sampleRate)+", ";
+            b += jStr("sampleRate")+": "+std::to_string(sampleRate.load(std::memory_order_relaxed))+", ";
             b += jStr("blockFrames")+": "+std::to_string(blockFr)+", ";
             b += jStr("blockDurationMs")+": "+std::to_string(blockDur)+", ";
             b += jStr("moduleCount")+": "+std::to_string(modCnt)+", ";

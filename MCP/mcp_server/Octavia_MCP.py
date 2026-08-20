@@ -240,6 +240,48 @@ async def vcv_get_signal_levels() -> str:
         return _err(e)
 
 
+class AnalyzeAudioInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    mode: Literal["spectrum", "loudness"] = Field(
+        "spectrum",
+        description="'spectrum' for real-time frequency bands/resonances/issues; 'loudness' for a long-term K-weighted level estimate, crest factor, and stereo correlation."
+    )
+    port: int = Field(0, description="For spectrum mode: 0 for Left input, 1 for Right input. Defaults to 0.", ge=0, le=1)
+    include_spectrum: bool = Field(False, description="For spectrum mode: include raw 1/12-octave frequency bins. This produces a much larger response.")
+
+
+@mcp.tool(
+    name="vcv_analyze_audio",
+    annotations={"title": "Analyze Audio", "readOnlyHint": True, "destructiveHint": False}
+)
+async def vcv_analyze_audio(params: AnalyzeAudioInput = AnalyzeAudioInput()) -> str:
+    """Analyze real-time audio fed into Octavia's Audio Analyze inputs.
+
+    Supports:
+    - 'spectrum': real-time snapshot of frequency bands (sub/bass/mid/air), standing resonances, DC offset, hum, and feedback.
+    - 'loudness': long-term K-weighted dBFS estimate, L/R sample peak/crest factor, stereo phase correlation, and Mid/Side balance. It is advisory, not a standards-compliant LUFS meter.
+    """
+    try:
+        if params.mode == "loudness":
+            return json.dumps(await _call("audio/loudness"), indent=2)
+        query = "?spectrum=1" if params.include_spectrum else ""
+        return json.dumps(await _call(f"audio/{params.port}/analyze{query}"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(
+    name="vcv_reset_loudness",
+    annotations={"title": "Reset Loudness Meter", "readOnlyHint": False, "destructiveHint": False}
+)
+async def vcv_reset_loudness() -> str:
+    """Start a fresh loudness measurement window for Octavia's Analyze L/R inputs."""
+    try:
+        return json.dumps(await _call("audio/loudness/reset", "POST"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
 @mcp.tool(
     name="vcv_find_unpatched",
     annotations={"title": "Find Unpatched Ports", "readOnlyHint": True, "destructiveHint": False}
@@ -466,6 +508,7 @@ class CableConnection(BaseModel):
     input_module_id: int = Field(..., description="Destination module ID", ge=0)
     input_port_id: Optional[int] = Field(None, description="Input port index (0-based). Use this OR input_port_name.", ge=0)
     input_port_name: Optional[str] = Field(None, description="Input port name (case-insensitive, e.g. 'V/Oct', 'In').")
+    color: Optional[str] = Field(None, description="Cable color name ('white', 'red', 'green', 'blue', 'yellow', 'orange', 'purple', 'cyan', 'magenta', 'gray', 'black') or hex ('#ffffff'). Defaults to 'white'.")
 
 
 class ConnectCablesInput(BaseModel):
@@ -494,10 +537,13 @@ async def vcv_connect_cables(params: ConnectCablesInput) -> str:
                                            c.output_port_id, c.output_port_name)
             in_port = await _resolve_port(c.input_module_id, "input",
                                           c.input_port_id, c.input_port_name)
-            result = await _call("cables", "POST", {
+            payload = {
                 "outputModuleId": c.output_module_id, "outputPortId": out_port,
                 "inputModuleId": c.input_module_id, "inputPortId": in_port,
-            })
+            }
+            if c.color:
+                payload["color"] = c.color
+            result = await _call("cables", "POST", payload)
             applied.append(index)
         return json.dumps({"ok": True, "applied": len(applied)}, indent=2)
     except Exception as e:

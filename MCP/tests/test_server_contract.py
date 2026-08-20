@@ -37,7 +37,7 @@ class ServerContractTest(unittest.TestCase):
         expected_tools = {
             "vcv_get_status", "vcv_get_perf", "vcv_list_modules", "vcv_get_module",
             "vcv_list_library", "vcv_list_cables", "vcv_get_signal_levels",
-            "vcv_find_unpatched", "vcv_add_module", "vcv_delete_module",
+            "vcv_find_unpatched", "vcv_analyze_audio", "vcv_reset_loudness", "vcv_add_module", "vcv_delete_module",
             "vcv_update_module", "vcv_set_parameters", "vcv_connect_cables",
             "vcv_disconnect_cable", "vcv_get_module_state", "vcv_set_module_state",
             "vcv_undo", "vcv_save_patch"
