@@ -4,11 +4,11 @@ Octavia connects VCV Rack to any MCP-capable coding agent. The included Python
 server translates MCP tool calls into requests to the Octavia module at
 `localhost:7777`.
 
-The MCP server uses standard **stdio transport** and works with any client that
-supports local MCP servers. This guide includes specific steps for
-**Codex**, **Claude** (Desktop and Code), **Gemini CLI**, and **Antigravity**,
-but the generic JSON configuration at the end of each section works for any
-compliant client.
+The MCP server uses standard **stdio transport** and works with clients that
+support local MCP servers. This guide gives verified Codex instructions plus
+common configuration examples for other clients. MCP does not standardize how
+each client stores server configuration, so consult that client's current
+documentation when its setup differs.
 
 ## Requirements
 
@@ -23,7 +23,8 @@ compliant client.
 
 1. Install or build the Leviathan plugin and restart VCV Rack.
 2. Add **Leviathan > Octavia** to the patch.
-3. Press **Start**. The status orb turns green when the HTTP bridge is listening.
+3. Press **Start**. The Octopus artwork becomes full brightness when the HTTP
+   bridge is listening.
 
 Octavia listens only on `127.0.0.1`. The default port is `7777`; set
 `OCTAVIA_PORT` in VCV Rack's environment before launch to use another port.
@@ -33,10 +34,13 @@ Octavia listens only on `127.0.0.1`. The default port is `7777`; set
 ## 2. Install the MCP server
 
 Create an isolated Python environment and install the runtime dependencies.
+Run the following commands from the repository's `MCP/` directory, which
+contains `requirements.txt` and `mcp_server/Octavia_MCP.py`.
 
 ### macOS and Linux
 
 ```sh
+cd MCP
 python3 -m venv ~/.octavia-mcp
 ~/.octavia-mcp/bin/python -m pip install -r requirements.txt
 cp mcp_server/Octavia_MCP.py ~/.octavia-mcp/Octavia_MCP.py
@@ -45,6 +49,7 @@ cp mcp_server/Octavia_MCP.py ~/.octavia-mcp/Octavia_MCP.py
 ### Windows PowerShell
 
 ```powershell
+Set-Location MCP
 py -m venv "$env:USERPROFILE\.octavia-mcp"
 & "$env:USERPROFILE\.octavia-mcp\Scripts\python.exe" -m pip install -r requirements.txt
 Copy-Item mcp_server\Octavia_MCP.py "$env:USERPROFILE\.octavia-mcp\Octavia_MCP.py"
@@ -58,15 +63,17 @@ Copy-Item mcp_server\Octavia_MCP.py "$env:USERPROFILE\.octavia-mcp\Octavia_MCP.p
 ## 3. Register the MCP server with your client
 
 Pick the section that matches your coding agent. Every section registers the
-same stdio server; only the configuration surface differs.
+same stdio server; only the configuration surface differs. Third-party client
+paths and commands can change between releases, so treat those as examples and
+check the client documentation when they do not work.
 
 ### 3a. Codex
 
 ```sh
-# macOS / Linux
 codex mcp add vcv-rack -- ~/.octavia-mcp/bin/python ~/.octavia-mcp/Octavia_MCP.py
+```
 
-# Windows PowerShell
+```powershell
 codex mcp add vcv-rack -- "$env:USERPROFILE\.octavia-mcp\Scripts\python.exe" "$env:USERPROFILE\.octavia-mcp\Octavia_MCP.py"
 ```
 
@@ -80,8 +87,9 @@ claude mcp add vcv-rack -- ~/.octavia-mcp/bin/python ~/.octavia-mcp/Octavia_MCP.
 
 # macOS / Linux — user scope (available in all projects)
 claude mcp add -s user vcv-rack -- ~/.octavia-mcp/bin/python ~/.octavia-mcp/Octavia_MCP.py
+```
 
-# Windows PowerShell
+```powershell
 claude mcp add vcv-rack -- "$env:USERPROFILE\.octavia-mcp\Scripts\python.exe" "$env:USERPROFILE\.octavia-mcp\Octavia_MCP.py"
 ```
 
@@ -109,7 +117,7 @@ Add the server inside the `mcpServers` object:
 
 Fully quit and restart Claude Desktop after saving.
 
-### 3d. Gemini CLI
+### 3d. Gemini CLI example
 
 Edit `~/.gemini/settings.json` (global) or `.gemini/settings.json` (project):
 
@@ -126,7 +134,7 @@ Edit `~/.gemini/settings.json` (global) or `.gemini/settings.json` (project):
 
 Restart the Gemini CLI or run `/mcp` inside a session to verify.
 
-### 3e. Antigravity
+### 3e. Antigravity example
 
 Edit `~/.gemini/config/mcp_config.json` (global) or
 `.agents/mcp_config.json` (workspace):
@@ -147,8 +155,8 @@ Restart the Antigravity session after saving.
 ### 3f. Other MCP clients
 
 Register `Octavia_MCP.py` as a local stdio MCP server using the Python
-interpreter from the virtual environment. The JSON object for the server is
-always the same:
+interpreter from the virtual environment. Many clients use a JSON object
+similar to this one:
 
 ```json
 {
@@ -161,7 +169,8 @@ always the same:
 }
 ```
 
-The exact configuration filename and restart procedure depend on the client.
+The exact configuration schema, filename, and restart procedure depend on the
+client.
 
 ---
 
@@ -182,50 +191,15 @@ New-Item -ItemType Directory -Force "$env:USERPROFILE\.codex\skills" | Out-Null
 Copy-Item -Recurse -Force skill\octavia "$env:USERPROFILE\.codex\skills\octavia"
 ```
 
-### Claude Code
+### Other clients
 
-Claude Code does not have a built-in skill directory. Instead, add the skill
-content to your project's `CLAUDE.md` or include it in the system prompt via
-your project settings. The reference material in `skill/octavia/SKILL.md` and
-`skill/octavia/references/tables.md` can be pasted or linked there.
+`skill/octavia/` is written in the Codex skill format. If another client
+supports compatible skills, install the entire directory according to that
+client's current documentation. Otherwise, use `SKILL.md` as project guidance
+and keep its `references/` directory alongside it.
 
-### Gemini CLI
-
-```sh
-# macOS / Linux — project scope
-mkdir -p .gemini/skills
-cp -R skill/octavia .gemini/skills/octavia
-
-# macOS / Linux — global scope
-mkdir -p ~/.gemini/skills
-cp -R skill/octavia ~/.gemini/skills/octavia
-```
-
-### Antigravity
-
-```sh
-# macOS / Linux — workspace scope (this project)
-mkdir -p .agents/skills
-cp -R skill/octavia .agents/skills/octavia
-
-# macOS / Linux — global scope (all projects)
-mkdir -p ~/.gemini/config/skills
-cp -R skill/octavia ~/.gemini/config/skills/octavia
-```
-
-### Windows (all Gemini-family clients)
-
-```powershell
-# Workspace scope
-New-Item -ItemType Directory -Force ".agents\skills" | Out-Null
-Copy-Item -Recurse -Force skill\octavia ".agents\skills\octavia"
-
-# Global scope
-New-Item -ItemType Directory -Force "$env:USERPROFILE\.gemini\config\skills" | Out-Null
-Copy-Item -Recurse -Force skill\octavia "$env:USERPROFILE\.gemini\config\skills\octavia"
-```
-
-Restart your agent session after installing or updating the skill.
+Restart the agent session after installing or updating any skill or project
+guidance.
 
 ---
 
@@ -249,8 +223,7 @@ codex mcp add --env OCTAVIA_PORT=7777 --env OCTAVIA_TOKEN=replace-me vcv-rack --
 claude mcp add -e OCTAVIA_PORT=7777 -e OCTAVIA_TOKEN=replace-me vcv-rack -- ~/.octavia-mcp/bin/python ~/.octavia-mcp/Octavia_MCP.py
 ```
 
-For JSON-based clients (Claude Desktop, Gemini CLI, Antigravity), add an `env`
-block:
+If a JSON-configured client accepts an `env` block, add one like this:
 
 ```json
 {
