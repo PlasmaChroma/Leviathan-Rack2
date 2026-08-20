@@ -1,16 +1,23 @@
 # Octavia MCP installation
 
-Octavia connects VCV Rack to MCP-capable coding agents. The included Python server
-translates MCP tool calls into requests to the Octavia module at `localhost:7777`.
+Octavia connects VCV Rack to any MCP-capable coding agent. The included Python
+server translates MCP tool calls into requests to the Octavia module at
+`localhost:7777`.
 
-This guide uses Codex as the primary client. The MCP server itself uses standard stdio
-transport and can also be registered with other MCP clients.
+The MCP server uses standard **stdio transport** and works with any client that
+supports local MCP servers. This guide includes specific steps for
+**Codex**, **Claude** (Desktop and Code), **Gemini CLI**, and **Antigravity**,
+but the generic JSON configuration at the end of each section works for any
+compliant client.
 
 ## Requirements
 
 - VCV Rack 2.x with the Leviathan plugin
 - Python 3.10 or newer
-- Codex CLI or another client that supports local stdio MCP servers
+- An MCP-capable client (Codex, Claude Desktop, Claude Code, Gemini CLI,
+  Antigravity, or any tool that supports stdio MCP servers)
+
+---
 
 ## 1. Start Octavia in VCV Rack
 
@@ -20,6 +27,8 @@ transport and can also be registered with other MCP clients.
 
 Octavia listens only on `127.0.0.1`. The default port is `7777`; set
 `OCTAVIA_PORT` in VCV Rack's environment before launch to use another port.
+
+---
 
 ## 2. Install the MCP server
 
@@ -41,72 +50,105 @@ py -m venv "$env:USERPROFILE\.octavia-mcp"
 Copy-Item mcp_server\Octavia_MCP.py "$env:USERPROFILE\.octavia-mcp\Octavia_MCP.py"
 ```
 
-## 3. Register it with Codex
+> **Tip:** Write down the absolute paths to the Python interpreter and
+> `Octavia_MCP.py` inside the venv — you will need them for registration below.
 
-### macOS and Linux
+---
+
+## 3. Register the MCP server with your client
+
+Pick the section that matches your coding agent. Every section registers the
+same stdio server; only the configuration surface differs.
+
+### 3a. Codex
 
 ```sh
+# macOS / Linux
 codex mcp add vcv-rack -- ~/.octavia-mcp/bin/python ~/.octavia-mcp/Octavia_MCP.py
-```
 
-Use absolute paths if your shell does not expand `~` in command arguments.
-
-### Windows PowerShell
-
-```powershell
+# Windows PowerShell
 codex mcp add vcv-rack -- "$env:USERPROFILE\.octavia-mcp\Scripts\python.exe" "$env:USERPROFILE\.octavia-mcp\Octavia_MCP.py"
 ```
 
-Confirm the registration with:
+Confirm with `codex mcp get vcv-rack`, then restart any existing Codex session.
+
+### 3b. Claude Code
 
 ```sh
-codex mcp get vcv-rack
+# macOS / Linux — project scope (saved to .mcp.json)
+claude mcp add vcv-rack -- ~/.octavia-mcp/bin/python ~/.octavia-mcp/Octavia_MCP.py
+
+# macOS / Linux — user scope (available in all projects)
+claude mcp add -s user vcv-rack -- ~/.octavia-mcp/bin/python ~/.octavia-mcp/Octavia_MCP.py
+
+# Windows PowerShell
+claude mcp add vcv-rack -- "$env:USERPROFILE\.octavia-mcp\Scripts\python.exe" "$env:USERPROFILE\.octavia-mcp\Octavia_MCP.py"
 ```
 
-Restart an existing Codex session after adding the server so its tools are discovered.
+Verify with `claude mcp list`, or type `/mcp` inside a Claude Code session.
 
-## 4. Install the optional Codex skill
+### 3c. Claude Desktop
 
-The skill teaches Codex efficient VCV Rack workflows and safety rules. Copy the complete
-skill directory into the Codex skills directory:
+Edit `claude_desktop_config.json`:
 
-### macOS and Linux
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 
-```sh
-mkdir -p ~/.codex/skills
-cp -R skill/octavia ~/.codex/skills/octavia
+Add the server inside the `mcpServers` object:
+
+```json
+{
+  "mcpServers": {
+    "vcv-rack": {
+      "command": "/absolute/path/to/.octavia-mcp/bin/python",
+      "args": ["/absolute/path/to/.octavia-mcp/Octavia_MCP.py"]
+    }
+  }
+}
 ```
 
-### Windows PowerShell
+Fully quit and restart Claude Desktop after saving.
 
-```powershell
-New-Item -ItemType Directory -Force "$env:USERPROFILE\.codex\skills" | Out-Null
-Copy-Item -Recurse -Force skill\octavia "$env:USERPROFILE\.codex\skills\octavia"
+### 3d. Gemini CLI
+
+Edit `~/.gemini/settings.json` (global) or `.gemini/settings.json` (project):
+
+```json
+{
+  "mcpServers": {
+    "vcv-rack": {
+      "command": "/absolute/path/to/.octavia-mcp/bin/python",
+      "args": ["/absolute/path/to/.octavia-mcp/Octavia_MCP.py"]
+    }
+  }
+}
 ```
 
-Restart Codex after installing or updating the skill.
+Restart the Gemini CLI or run `/mcp` inside a session to verify.
 
-## Configuration and authentication
+### 3e. Antigravity
 
-The defaults work without configuration. Optional environment variables are:
+Edit `~/.gemini/config/mcp_config.json` (global) or
+`.agents/mcp_config.json` (workspace):
 
-- `OCTAVIA_PORT`: HTTP port used by both the Rack module and MCP server; default `7777`.
-- `OCTAVIA_TOKEN`: shared secret sent as `X-Octavia-Token` by the MCP server.
-
-When using a token or non-default port, set the same values in VCV Rack's launch
-environment and in the Codex MCP registration:
-
-```sh
-codex mcp remove vcv-rack
-codex mcp add --env OCTAVIA_PORT=7777 --env OCTAVIA_TOKEN=replace-me vcv-rack -- ~/.octavia-mcp/bin/python ~/.octavia-mcp/Octavia_MCP.py
+```json
+{
+  "mcpServers": {
+    "vcv-rack": {
+      "command": "/absolute/path/to/.octavia-mcp/bin/python",
+      "args": ["/absolute/path/to/.octavia-mcp/Octavia_MCP.py"]
+    }
+  }
+}
 ```
 
-Do not put a real token in this repository.
+Restart the Antigravity session after saving.
 
-## Other MCP clients
+### 3f. Other MCP clients
 
-Register `Octavia_MCP.py` as a local stdio MCP server using the Python interpreter from
-the virtual environment. A generic configuration looks like this:
+Register `Octavia_MCP.py` as a local stdio MCP server using the Python
+interpreter from the virtual environment. The JSON object for the server is
+always the same:
 
 ```json
 {
@@ -121,13 +163,123 @@ the virtual environment. A generic configuration looks like this:
 
 The exact configuration filename and restart procedure depend on the client.
 
+---
+
+## 4. Install the optional skill
+
+The skill teaches your agent efficient VCV Rack workflows and safety rules.
+Install it into the skill directory that matches your client.
+
+### Codex
+
+```sh
+# macOS / Linux
+mkdir -p ~/.codex/skills
+cp -R skill/octavia ~/.codex/skills/octavia
+
+# Windows PowerShell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.codex\skills" | Out-Null
+Copy-Item -Recurse -Force skill\octavia "$env:USERPROFILE\.codex\skills\octavia"
+```
+
+### Claude Code
+
+Claude Code does not have a built-in skill directory. Instead, add the skill
+content to your project's `CLAUDE.md` or include it in the system prompt via
+your project settings. The reference material in `skill/octavia/SKILL.md` and
+`skill/octavia/references/tables.md` can be pasted or linked there.
+
+### Gemini CLI
+
+```sh
+# macOS / Linux — project scope
+mkdir -p .gemini/skills
+cp -R skill/octavia .gemini/skills/octavia
+
+# macOS / Linux — global scope
+mkdir -p ~/.gemini/skills
+cp -R skill/octavia ~/.gemini/skills/octavia
+```
+
+### Antigravity
+
+```sh
+# macOS / Linux — workspace scope (this project)
+mkdir -p .agents/skills
+cp -R skill/octavia .agents/skills/octavia
+
+# macOS / Linux — global scope (all projects)
+mkdir -p ~/.gemini/config/skills
+cp -R skill/octavia ~/.gemini/config/skills/octavia
+```
+
+### Windows (all Gemini-family clients)
+
+```powershell
+# Workspace scope
+New-Item -ItemType Directory -Force ".agents\skills" | Out-Null
+Copy-Item -Recurse -Force skill\octavia ".agents\skills\octavia"
+
+# Global scope
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.gemini\config\skills" | Out-Null
+Copy-Item -Recurse -Force skill\octavia "$env:USERPROFILE\.gemini\config\skills\octavia"
+```
+
+Restart your agent session after installing or updating the skill.
+
+---
+
+## Configuration and authentication
+
+The defaults work without configuration. Optional environment variables are:
+
+- `OCTAVIA_PORT`: HTTP port used by both the Rack module and MCP server; default `7777`.
+- `OCTAVIA_TOKEN`: shared secret sent as `X-Octavia-Token` by the MCP server.
+
+When using a token or non-default port, set the same values in VCV Rack's launch
+environment **and** in the MCP server registration. For CLI-based clients, pass
+the variables at registration time:
+
+```sh
+# Codex
+codex mcp remove vcv-rack
+codex mcp add --env OCTAVIA_PORT=7777 --env OCTAVIA_TOKEN=replace-me vcv-rack -- ~/.octavia-mcp/bin/python ~/.octavia-mcp/Octavia_MCP.py
+
+# Claude Code
+claude mcp add -e OCTAVIA_PORT=7777 -e OCTAVIA_TOKEN=replace-me vcv-rack -- ~/.octavia-mcp/bin/python ~/.octavia-mcp/Octavia_MCP.py
+```
+
+For JSON-based clients (Claude Desktop, Gemini CLI, Antigravity), add an `env`
+block:
+
+```json
+{
+  "mcpServers": {
+    "vcv-rack": {
+      "command": "/absolute/path/to/.octavia-mcp/bin/python",
+      "args": ["/absolute/path/to/.octavia-mcp/Octavia_MCP.py"],
+      "env": {
+        "OCTAVIA_PORT": "7777",
+        "OCTAVIA_TOKEN": "replace-me"
+      }
+    }
+  }
+}
+```
+
+Do not put a real token in this repository.
+
+---
+
 ## Verify and troubleshoot
 
-Ask the client to call `vcv_get_status`. A working connection returns JSON containing
-`"running": true` and the configured port.
+Ask the client to call `vcv_get_status`. A working connection returns JSON
+containing `"running": true` and the configured port.
 
-- Connection refused: VCV Rack is not running, Octavia is absent, or **Start** was not pressed.
-- Unauthorized response: `OCTAVIA_TOKEN` differs between VCV Rack and the MCP process.
-- Tools are missing: confirm `codex mcp get vcv-rack`, then restart Codex.
-- Wrong port: set the same `OCTAVIA_PORT` for VCV Rack and the MCP registration.
-- Server startup failure: run the registered Python command directly to see dependency errors.
+| Symptom | Cause | Fix |
+|---|---|---|
+| Connection refused | VCV Rack is not running, Octavia is absent, or **Start** was not pressed | Launch VCV Rack and press Start on the Octavia module |
+| Unauthorized response | `OCTAVIA_TOKEN` differs between VCV Rack and the MCP process | Set the same token in both environments |
+| Tools are missing | Server not registered or session not restarted | Re-check registration (see section 3), then restart the agent session |
+| Wrong port | `OCTAVIA_PORT` mismatch | Set the same port for VCV Rack and the MCP registration |
+| Server startup failure | Missing Python dependencies | Run the registered Python command directly in a terminal to see errors |
