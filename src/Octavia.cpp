@@ -1,5 +1,5 @@
 #include "plugin.hpp"
-#include "lib/httplib.h"
+#include "third_party/httplib.h"
 #include <thread>
 #include <atomic>
 #include <mutex>
