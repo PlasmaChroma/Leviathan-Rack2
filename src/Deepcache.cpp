@@ -2117,7 +2117,10 @@ void DeepcacheModelBox::onDragMove(const DragMoveEvent& e) {
 		return;
 
 	pendingDragDelta = pendingDragDelta.plus(e.mouseDelta);
-	constexpr float transferDistance = 4.f;
+	// Keep ordinary click jitter from transferring the browser gesture to the
+	// newly placed rack module. A drag-in should require a short, deliberate
+	// movement away from the model card, matching Rack's stock one-HP threshold.
+	const float transferDistance = RACK_GRID_WIDTH;
 	if (pendingDragDelta.x * pendingDragDelta.x + pendingDragDelta.y * pendingDragDelta.y <
 	    transferDistance * transferDistance)
 		return;
