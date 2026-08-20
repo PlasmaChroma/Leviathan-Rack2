@@ -103,7 +103,7 @@ incoming cables → missing source.
 ### "Analyze my mix / sound quality"
 1. vcv_analyze_audio(mode='spectrum') → check frequency bands (sub/bass/mid/air), hum, standing resonances
 2. vcv_reset_loudness → let the patch play for at least 3 seconds → vcv_analyze_audio(mode='loudness')
-   to check the K-weighted level estimate, crest factor, L/R balance, and stereo phase correlation
+   to check momentary, short-term, and integrated LUFS, crest factor, L/R balance, and stereo phase correlation
 3. Report: sonic balance, phase health, identified resonances, and gain staging recommendations
 
 **Keep responses compact:** use the default spectrum summary. Request `include_spectrum=true` only

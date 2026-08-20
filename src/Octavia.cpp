@@ -107,6 +107,7 @@ static std::string freqToNote(float freq) {
 
 // ── Audio ring buffer (written by audio thread, snapshotted by HTTP thread) ───
 static const int AUDIO_BUF = 4096;  // power of 2, ~93ms @ 44100 Hz
+static const int LOUDNESS_BLOCKS = 36000; // one hour of 100 ms EBU-R128 blocks
 
 struct AudioRingBuf {
     // Individual atomic samples keep the audio thread lock-free while making a
@@ -285,19 +286,51 @@ struct Octavia : Module {
     // 10V = 0 dBFS. K-weighting: ITU BS.1770 biquads (48kHz coefficients —
     // close enough at 44.1/96k for target-checking purposes).
     struct LoudnessMeter {
+        struct Coeffs { double b0=1., b1=0., b2=0., a1=0., a2=0.; } shelf, highPass;
         // audio-thread working state
         double z[2][4] = {};                 // biquad states per ch: hs1,hs2,hp1,hp2
         double kSum[2] = {}, rawSum[2] = {}, sumLR = 0.0, peak[2] = {};
         uint64_t clipped[2] = {};
         uint64_t n = 0;
         int flushTimer = 0;
+        double blockKSum = 0.0;
+        int blockFrames = 0, blockTarget = 4800;
+        float filterSampleRate = 0.f;
+        std::array<std::atomic<float>, LOUDNESS_BLOCKS> blocks;
+        std::atomic<uint64_t> blockTotal{0};
         // published (mtx-protected)
         double pKSum[2] = {}, pRawSum[2] = {}, pSumLR = 0.0, pPeak[2] = {};
         uint64_t pClipped[2] = {};
         uint64_t pN = 0;
         std::mutex mtx;
         std::atomic<bool> resetFlag{false};
+
+        LoudnessMeter() {
+            for (int i = 0; i < LOUDNESS_BLOCKS; i++) blocks[i].store(0.f, std::memory_order_relaxed);
+        }
     } lm;
+
+    static LoudnessMeter::Coeffs makeHighPass(float fs, float hz, float q) {
+        const double w = 2.0 * M_PI * hz / fs, c = cos(w), alpha = sin(w) / (2.0 * q);
+        const double a0 = 1.0 + alpha;
+        LoudnessMeter::Coeffs f;
+        f.b0 = ((1.0 + c) * .5) / a0; f.b1 = -(1.0 + c) / a0; f.b2 = f.b0;
+        f.a1 = (-2.0 * c) / a0; f.a2 = (1.0 - alpha) / a0;
+        return f;
+    }
+
+    static LoudnessMeter::Coeffs makeHighShelf(float fs, float hz, float gainDb) {
+        const double A = pow(10.0, gainDb / 40.0), w = 2.0 * M_PI * hz / fs, c = cos(w);
+        const double alpha = sin(w) * .5 * sqrt((A + 1.0 / A) * 2.0);
+        const double rootA = sqrt(A), a0 = (A + 1.0) - (A - 1.0) * c + 2.0 * rootA * alpha;
+        LoudnessMeter::Coeffs f;
+        f.b0 = A * ((A + 1.0) + (A - 1.0) * c + 2.0 * rootA * alpha) / a0;
+        f.b1 = -2.0 * A * ((A - 1.0) + (A + 1.0) * c) / a0;
+        f.b2 = A * ((A + 1.0) + (A - 1.0) * c - 2.0 * rootA * alpha) / a0;
+        f.a1 = -2.0 * ((A - 1.0) - (A + 1.0) * c) / a0;
+        f.a2 = ((A + 1.0) - (A - 1.0) * c - 2.0 * rootA * alpha) / a0;
+        return f;
+    }
 
     // Patch cache — UI thread writes, HTTP thread reads
     std::vector<ModuleEntry> cache;
@@ -376,16 +409,21 @@ struct Octavia : Module {
                     lm.z[j][0] = lm.z[j][1] = lm.z[j][2] = lm.z[j][3] = 0.0;
                     lm.pKSum[j] = lm.pRawSum[j] = lm.pPeak[j] = 0.0; lm.pClipped[j] = 0;
                 }
-                lm.sumLR = lm.pSumLR = 0.0; lm.n = lm.pN = 0; lm.flushTimer = 0;
+                lm.sumLR = lm.pSumLR = lm.blockKSum = 0.0; lm.n = lm.pN = 0;
+                lm.blockFrames = lm.flushTimer = 0; lm.blockTotal.store(0, std::memory_order_relaxed);
                 lm.resetFlag.store(false, std::memory_order_relaxed);
                 lm.mtx.unlock();
             }
         } else {
-            // BS.1770 K-weighting biquads (48kHz coefficients)
-            static const double hsB0=1.53512485958697, hsB1=-2.69169618940638, hsB2=1.19839281085285,
-                                hsA1=-1.69065929318241, hsA2=0.73248077421585;
-            static const double hpB0=1.0, hpB1=-2.0, hpB2=1.0,
-                                hpA1=-1.99004745483398, hpA2=0.99007225036621;
+            // BS.1770 K-weighting stages, redesigned whenever Rack's sample
+            // rate changes. The 100 ms block history below powers R128 gating.
+            if (lm.filterSampleRate != args.sampleRate) {
+                lm.shelf = makeHighShelf(args.sampleRate, 1681.974f, 4.f);
+                lm.highPass = makeHighPass(args.sampleRate, 38.1355f, .5f);
+                lm.filterSampleRate = args.sampleRate;
+                lm.blockTarget = std::max(1, (int)roundf(args.sampleRate * .1f));
+                memset(lm.z, 0, sizeof(lm.z));
+            }
             double x[2];
             for (int j = 0; j < 2; j++) {
                 double in = ch[j] * 0.1;                     // 10V → 1.0 full scale
@@ -394,18 +432,25 @@ struct Octavia : Module {
                 if (a >= 1.0) lm.clipped[j]++;
                 lm.rawSum[j] += in * in;
                 // shelving stage (transposed direct form II)
-                double y1 = hsB0*in + lm.z[j][0];
-                lm.z[j][0] = hsB1*in - hsA1*y1 + lm.z[j][1];
-                lm.z[j][1] = hsB2*in - hsA2*y1;
+                double y1 = lm.shelf.b0*in + lm.z[j][0];
+                lm.z[j][0] = lm.shelf.b1*in - lm.shelf.a1*y1 + lm.z[j][1];
+                lm.z[j][1] = lm.shelf.b2*in - lm.shelf.a2*y1;
                 // high-pass stage
-                double y2 = hpB0*y1 + lm.z[j][2];
-                lm.z[j][2] = hpB1*y1 - hpA1*y2 + lm.z[j][3];
-                lm.z[j][3] = hpB2*y1 - hpA2*y2;
+                double y2 = lm.highPass.b0*y1 + lm.z[j][2];
+                lm.z[j][2] = lm.highPass.b1*y1 - lm.highPass.a1*y2 + lm.z[j][3];
+                lm.z[j][3] = lm.highPass.b2*y1 - lm.highPass.a2*y2;
                 lm.kSum[j] += y2 * y2;
+                lm.blockKSum += y2 * y2;
                 x[j] = in;
             }
             lm.sumLR += x[0] * x[1];
             lm.n++;
+            if (++lm.blockFrames >= lm.blockTarget) {
+                uint64_t block = lm.blockTotal.load(std::memory_order_relaxed);
+                lm.blocks[block % LOUDNESS_BLOCKS].store((float)(lm.blockKSum / lm.blockFrames), std::memory_order_relaxed);
+                lm.blockTotal.store(block + 1, std::memory_order_release);
+                lm.blockKSum = 0.0; lm.blockFrames = 0;
+            }
             if (++lm.flushTimer >= 2048 && lm.mtx.try_lock()) {
                 for (int j = 0; j < 2; j++) {
                     lm.pKSum[j] += lm.kSum[j]; lm.kSum[j] = 0.0;
@@ -1464,13 +1509,32 @@ struct Octavia : Module {
                 return;
             }
             auto db  = [](double x){ return 10.0 * log10(x + 1e-12); };
+            auto lufsFromPower = [&](double p){ return -0.691 + db(p); };
+            uint64_t totalBlocks = lm.blockTotal.load(std::memory_order_acquire);
+            int availableBlocks = (int)std::min<uint64_t>(totalBlocks, LOUDNESS_BLOCKS);
+            std::vector<float> blockPowers;
+            blockPowers.reserve(availableBlocks);
+            for (uint64_t i = totalBlocks - availableBlocks; i < totalBlocks; i++)
+                blockPowers.push_back(lm.blocks[i % LOUDNESS_BLOCKS].load(std::memory_order_relaxed));
+            auto windowLufs = [&](int blocks) -> double {
+                if ((int)blockPowers.size() < blocks) return -INFINITY;
+                double sum = 0.;
+                for (int i = (int)blockPowers.size() - blocks; i < (int)blockPowers.size(); i++) sum += blockPowers[i];
+                return lufsFromPower(sum / blocks);
+            };
+            // EBU R128: 400 ms blocks, 75% overlap, absolute -70 LUFS gate,
+            // then a relative gate 10 LU below the absolute-gated programme.
+            std::vector<double> absoluteGated;
+            for (float p : blockPowers) if (lufsFromPower(p) > -70.0) absoluteGated.push_back(p);
+            double absoluteMean = 0.; for (double p : absoluteGated) absoluteMean += p;
+            absoluteMean /= std::max<size_t>(1, absoluteGated.size());
+            double relativeGate = lufsFromPower(absoluteMean) - 10.0, gatedSum = 0.; int gatedCount = 0;
+            for (double p : absoluteGated) if (lufsFromPower(p) > relativeGate) { gatedSum += p; gatedCount++; }
+            double integratedLufs = gatedCount ? lufsFromPower(gatedSum / gatedCount) : -INFINITY;
+            double momentaryLufs = windowLufs(4), shortTermLufs = windowLufs(30);
             double seconds = n / (double)sampleRate.load(std::memory_order_relaxed);
-            // This is a long-term K-weighted estimate. It deliberately does not
-            // claim BS.1770 compliance: coefficients are fixed at 48 kHz and
-            // the standard's absolute/relative gating is not implemented.
-            double kWeightedDbfs   = -0.691 + db((kSum[0] + kSum[1]) / n);
-            double kWeightedDbfsL  = -0.691 + db(kSum[0] / n);
-            double kWeightedDbfsR  = -0.691 + db(kSum[1] / n);
+            double kWeightedDbfsL  = lufsFromPower(kSum[0] / n);
+            double kWeightedDbfsR  = lufsFromPower(kSum[1] / n);
             double rmsL   = db(rawSum[0] / n), rmsR = db(rawSum[1] / n);
             double peakL  = 20.0 * log10(peak[0] + 1e-12), peakR = 20.0 * log10(peak[1] + 1e-12);
             double corr   = sumLR / (sqrt(rawSum[0] * rawSum[1]) + 1e-12);
@@ -1485,7 +1549,10 @@ struct Octavia : Module {
             b += jStr("secondsMeasured") + ": " + jNum((float)seconds) + ", ";
             b += jStr("inputs") + ": {" + jStr("leftConnected") + ": " + (leftConnected ? "true" : "false")
                + ", " + jStr("rightConnected") + ": " + (rightConnected ? "true" : "false") + "}, ";
-            b += jStr("kWeightedDbfsEstimate") + ": " + jNum((float)kWeightedDbfs) + ", ";
+            b += jStr("integratedLufs") + ": " + jNum((float)integratedLufs) + ", ";
+            b += jStr("momentaryLufs") + ": " + jNum((float)momentaryLufs) + ", ";
+            b += jStr("shortTermLufs") + ": " + jNum((float)shortTermLufs) + ", ";
+            b += jStr("gatedBlocks") + ": " + std::to_string(gatedCount) + ", ";
             b += jStr("left")  + ": {" + jStr("kWeightedDbfsEstimate") + ": " + jNum((float)kWeightedDbfsL) + ", "
                + jStr("rmsDb") + ": " + jNum((float)rmsL) + ", "
                + jStr("peakDb") + ": " + jNum((float)peakL) + ", "

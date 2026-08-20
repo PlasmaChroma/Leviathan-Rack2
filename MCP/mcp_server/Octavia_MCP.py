@@ -244,7 +244,7 @@ class AnalyzeAudioInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     mode: Literal["spectrum", "loudness"] = Field(
         "spectrum",
-        description="'spectrum' for real-time frequency bands/resonances/issues; 'loudness' for a long-term K-weighted level estimate, crest factor, and stereo correlation."
+        description="'spectrum' for real-time frequency bands/resonances/issues; 'loudness' for EBU R128-style momentary, short-term, and integrated LUFS plus crest factor and stereo correlation."
     )
     port: int = Field(0, description="For spectrum mode: 0 for Left input, 1 for Right input. Defaults to 0.", ge=0, le=1)
     include_spectrum: bool = Field(False, description="For spectrum mode: include raw 1/12-octave frequency bins. This produces a much larger response.")
@@ -259,7 +259,7 @@ async def vcv_analyze_audio(params: AnalyzeAudioInput = AnalyzeAudioInput()) -> 
 
     Supports:
     - 'spectrum': real-time snapshot of frequency bands (sub/bass/mid/air), standing resonances, DC offset, hum, and feedback.
-    - 'loudness': long-term K-weighted dBFS estimate, L/R sample peak/crest factor, stereo phase correlation, and Mid/Side balance. It is advisory, not a standards-compliant LUFS meter.
+    - 'loudness': momentary (400 ms), short-term (3 s), and dual-gated integrated LUFS, plus L/R sample peak/crest factor, stereo phase correlation, and Mid/Side balance.
     """
     try:
         if params.mode == "loudness":
