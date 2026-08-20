@@ -282,6 +282,42 @@ async def vcv_reset_loudness() -> str:
         return _err(e)
 
 
+class TemporalDeckTransportInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    module_id: int
+    action: Literal["load", "play", "stop_rewind", "seek", "set_loop", "status"]
+    path: Optional[str] = Field(None, description="Required for load: absolute local path to a supported audio file.")
+    position: Optional[float] = Field(None, ge=0, le=1, description="Required for seek: normalized position, 0=start and 1=end.")
+    enabled: Optional[bool] = Field(None, description="Required for set_loop.")
+
+
+@mcp.tool(
+    name="vcv_temporal_deck_transport",
+    annotations={"title": "Control Temporal Deck Sample Transport", "readOnlyHint": False, "destructiveHint": False}
+)
+async def vcv_temporal_deck_transport(params: TemporalDeckTransportInput) -> str:
+    """Load and control a Temporal Deck sample without changing its user interface.
+
+    Use status after load until loaded=true, then stop_rewind, reset Octavia's
+    loudness meter, play, and measure. This is intended for repeatable local
+    reference-audio tests as well as normal transport control.
+    """
+    try:
+        if params.action == "load" and not params.path:
+            raise ValueError("path is required for action='load'")
+        if params.action == "seek" and params.position is None:
+            raise ValueError("position is required for action='seek'")
+        if params.action == "set_loop" and params.enabled is None:
+            raise ValueError("enabled is required for action='set_loop'")
+        payload = {"action": params.action}
+        if params.path is not None: payload["path"] = params.path
+        if params.position is not None: payload["position"] = params.position
+        if params.enabled is not None: payload["enabled"] = params.enabled
+        return json.dumps(await _call(f"temporal-deck/{params.module_id}/transport", "POST", payload), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
 @mcp.tool(
     name="vcv_find_unpatched",
     annotations={"title": "Find Unpatched Ports", "readOnlyHint": True, "destructiveHint": False}

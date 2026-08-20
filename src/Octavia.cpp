@@ -1,5 +1,6 @@
 #include "plugin.hpp"
 #include "visual/VisualAssets.hpp"
+#include "TemporalDeck.hpp"
 #include "third_party/httplib.h"
 #include <thread>
 #include <atomic>
@@ -211,6 +212,12 @@ struct PatchSaveJob {
     std::string savedPath;
     std::atomic<bool> done{false}; bool success=false; std::string error;
 };
+struct TemporalDeckJob {
+    enum Type { LOAD, PLAY, STOP_REWIND, SEEK, SET_LOOP, STATUS } type;
+    int64_t moduleId = -1; std::string path; float position = 0.f; bool enabled = false;
+    bool loaded = false, playing = false, loop = false;
+    std::atomic<bool> done{false}; bool success=false; std::string error;
+};
 struct BulkParamJob {
     struct Change { int64_t moduleId; int paramId; float value; };
     std::vector<Change> changes;
@@ -371,6 +378,7 @@ struct Octavia : Module {
     std::queue<std::shared_ptr<BypassJob>>      bypassQueue;    std::mutex bypassQueueMtx;
     std::queue<std::shared_ptr<ModuleStateJob>> stateQueue;     std::mutex stateQueueMtx;
     std::queue<std::shared_ptr<PatchSaveJob>>   patchSaveQueue; std::mutex patchSaveQueueMtx;
+    std::queue<std::shared_ptr<TemporalDeckJob>> temporalDeckQueue; std::mutex temporalDeckQueueMtx;
 
     dsp::BooleanTrigger startTrig;
 
@@ -844,6 +852,36 @@ struct Octavia : Module {
                 pushUndo(std::move(a));
             }
             job->success=true;
+        }
+        job->done=true;
+    }
+
+    void processTemporalDeckQueue() {
+        std::shared_ptr<TemporalDeckJob> job;
+        { std::unique_lock<std::mutex> lk(temporalDeckQueueMtx); if (!temporalDeckQueue.empty()) { job=temporalDeckQueue.front(); temporalDeckQueue.pop(); } }
+        if (!job) return;
+        TemporalDeck* deck = dynamic_cast<TemporalDeck*>(APP->engine->getModule(job->moduleId));
+        if (!deck) job->error = "Temporal Deck module not found";
+        else {
+            switch (job->type) {
+            case TemporalDeckJob::LOAD: {
+                if (!system::exists(job->path)) job->error = "sample file not found";
+                else {
+                    std::string error;
+                    job->success = deck->loadSampleFromPath(job->path, &error);
+                    deck->setSampleModeEnabled(job->success);
+                    deck->setSampleLoopEnabled(false);
+                    if (!job->success) job->error = error.empty() ? "sample load failed" : error;
+                }
+                break;
+            }
+            case TemporalDeckJob::PLAY: deck->setSampleTransportPlaying(true); job->success=true; break;
+            case TemporalDeckJob::STOP_REWIND: deck->stopSampleTransport(); job->success=true; break;
+            case TemporalDeckJob::SEEK: deck->seekSampleByNormalizedPosition(job->position); job->success=true; break;
+            case TemporalDeckJob::SET_LOOP: deck->setSampleLoopEnabled(job->enabled); job->success=true; break;
+            case TemporalDeckJob::STATUS: job->success=true; break;
+            }
+            job->loaded=deck->hasLoadedSample(); job->playing=deck->isSampleTransportPlaying(); job->loop=deck->isSampleLoopEnabled();
         }
         job->done=true;
     }
@@ -1824,6 +1862,22 @@ struct Octavia : Module {
             else res.set_content("{\"error\":"+jStr(job->error)+"}","application/json");
         });
 
+        svr.Post(R"(/temporal-deck/(\d+)/transport)", [this](const httplib::Request& r, httplib::Response& res){
+            auto job=std::make_shared<TemporalDeckJob>(); job->moduleId=std::stoll(r.matches[1].str());
+            std::string action=parseStringField(r.body,"action");
+            if (action=="load") { job->type=TemporalDeckJob::LOAD; job->path=parseStringField(r.body,"path"); }
+            else if (action=="play") job->type=TemporalDeckJob::PLAY;
+            else if (action=="stop_rewind") job->type=TemporalDeckJob::STOP_REWIND;
+            else if (action=="seek") { job->type=TemporalDeckJob::SEEK; job->position=rack::math::clamp(parseFloatField(r.body,"position"),0.f,1.f); }
+            else if (action=="set_loop") { job->type=TemporalDeckJob::SET_LOOP; job->enabled=parseBoolField(r.body,"enabled"); }
+            else if (action=="status") job->type=TemporalDeckJob::STATUS;
+            else { res.set_content("{\"error\":\"action must be load, play, stop_rewind, seek, set_loop, or status\"}","application/json"); return; }
+            { std::unique_lock<std::mutex> lk(temporalDeckQueueMtx); temporalDeckQueue.push(job); }
+            if (!waitDone(job, 5000)) res.set_content("{\"error\":\"timeout\"}","application/json");
+            else if (!job->success) res.set_content("{\"error\":"+jStr(job->error)+"}","application/json");
+            else res.set_content("{\"ok\":true,\"loaded\":"+std::string(job->loaded?"true":"false")+",\"playing\":"+std::string(job->playing?"true":"false")+",\"loop\":"+std::string(job->loop?"true":"false")+"}","application/json");
+        });
+
         svr.Post("/patch/save", [this](const httplib::Request&, httplib::Response& res){
             auto job=std::make_shared<PatchSaveJob>();
             { std::unique_lock<std::mutex> lk(patchSaveQueueMtx); patchSaveQueue.push(job); }
@@ -1941,6 +1995,7 @@ struct OctaviaWidget : ModuleWidget {
         if (++uiTimer >= 60) { uiTimer=0; m->updateCache(); }
         m->processSetQueue();
         m->processCableQueue();
+        m->processTemporalDeckQueue();
         m->processAddQueue();
         m->processDeleteQueue();
         m->processMoveQueue();
