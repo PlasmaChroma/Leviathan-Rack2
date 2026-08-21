@@ -232,7 +232,8 @@ async def vcv_list_cables(params: ListCablesInput) -> str:
 async def vcv_get_signal_levels() -> str:
     """Get a voltage and peak snapshot for all module outputs in the patch.
 
-    Use this to identify active signal chains, clipping (peak > 10V), or silent sections.
+    Use this to identify active signal chains, Octavia full-scale overrange
+    (peak >= 5V), or silent sections.
     """
     try:
         return json.dumps(await _call("modules/voltages"), indent=2)

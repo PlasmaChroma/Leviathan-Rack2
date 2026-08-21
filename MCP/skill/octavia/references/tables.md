@@ -85,7 +85,7 @@ Use this when selecting which module to add for a given role. Ordered by prefere
 | Feedback drone | ComfortZone TZFM Lead | Bogaudio FM-OP + loop | — | — |
 
 **Voltage quick-reference when connecting:**
-- Audio: ±5V nominal (±10V = 0dBFS clip)
+- Octavia LUFS reference: ±5V = 0 dBFS. Patch signals may exceed this, but Octavia reports them as overrange.
 - CV unipolar: 0–10V | CV bipolar: ±5V
 - Gate/Trigger: 10V, 1ms pulse
 - Pitch: 1V/oct, 0V = C4 = 261.63Hz
@@ -170,4 +170,3 @@ Threads → set to physical cores − 2 (e.g., 8-core → 6 threads)
 ```
 
 ---
-

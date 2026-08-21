@@ -12,7 +12,12 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
   - Treat the environment as **non-authoritative for final plugin linking**.
   - You may edit code and run local/unit tests.
   - Do **not** treat `plugin.so` / full plugin link failures as code regressions.
-  - Final authoritative plugin build/link is expected to be done by the user in their Windows/MSYS2 toolchain.
+  - Final authoritative plugin build/link must be done in a native Windows/MSYS2 or matching real-Linux toolchain.
+
+- If running in **native Windows/MSYS2 MINGW64** with the matching Rack SDK:
+  - Treat this as an **authoritative plugin build/link environment**.
+  - Run and verify a full `plugin.dll` build as part of validation when practical.
+  - Use the MINGW64 environment, not the generic MSYS shell: the latter does not expose the MinGW compiler toolchain.
 
 - If running on **real Linux** with a matching Rack SDK/toolchain:
   - Full plugin builds are expected to work.
@@ -52,6 +57,7 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
 ## Practical Expectation
 
 - In WSL context: prefer validating behavior with focused tests (e.g. `build/tests/crownstep_spec`) and source-level checks.
+- In native Windows/MSYS2 MINGW64 context: include full `plugin.dll` build verification.
 - In real Linux context: include full plugin build verification.
 - Do not stage or commit files to github -- all staging and committing of code is left as an exercise for the user.
 

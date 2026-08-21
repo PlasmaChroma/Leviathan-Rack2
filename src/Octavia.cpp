@@ -1,3 +1,21 @@
+#if defined(_WIN32)
+// cpp-httplib 0.48 uses Windows 10 APIs (CreateFile2 and
+// CreateFileMappingFromApp). Set the SDK target before Rack or any other
+// header has a chance to include the Windows headers.
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0A00
+#elif _WIN32_WINNT < 0x0A00
+#undef _WIN32_WINNT
+#define _WIN32_WINNT 0x0A00
+#endif
+#ifndef WINVER
+#define WINVER _WIN32_WINNT
+#elif WINVER < 0x0A00
+#undef WINVER
+#define WINVER 0x0A00
+#endif
+#endif
+
 #include "plugin.hpp"
 #include "visual/VisualAssets.hpp"
 #include "TemporalDeck.hpp"
@@ -290,8 +308,9 @@ struct Octavia : Module {
     // Audio thread accumulates into working sums (thread-local to process()),
     // merges into published sums every 2048 samples via try_lock (never blocks).
     // HTTP thread reads published sums under the mutex. Samples normalized to
-    // 10V = 0 dBFS. K-weighting: ITU BS.1770 biquads (48kHz coefficients —
-    // close enough at 44.1/96k for target-checking purposes).
+    // 5V = 0 dBFS, matching Rack's conventional audio signal range.
+    // K-weighting: ITU BS.1770 biquads, recalculated for Rack's sample rate
+    // from the standard's analog prototypes.
     struct LoudnessMeter {
         struct Coeffs { double b0=1., b1=0., b2=0., a1=0., a2=0.; } shelf, highPass;
         // audio-thread working state
@@ -318,24 +337,28 @@ struct Octavia : Module {
     } lm;
 
     static LoudnessMeter::Coeffs makeHighPass(float fs, float hz, float q) {
-        const double w = 2.0 * M_PI * hz / fs, c = cos(w), alpha = sin(w) / (2.0 * q);
-        const double a0 = 1.0 + alpha;
+        const double k = tan(M_PI * hz / fs);
+        const double a0 = 1.0 + k / q + k * k;
         LoudnessMeter::Coeffs f;
-        f.b0 = ((1.0 + c) * .5) / a0; f.b1 = -(1.0 + c) / a0; f.b2 = f.b0;
-        f.a1 = (-2.0 * c) / a0; f.a2 = (1.0 - alpha) / a0;
+        f.b0 = 1.0 / a0; f.b1 = -2.0 / a0; f.b2 = f.b0;
+        f.a1 = 2.0 * (k * k - 1.0) / a0;
+        f.a2 = (1.0 - k / q + k * k) / a0;
         return f;
     }
 
     static LoudnessMeter::Coeffs makeHighShelf(float fs, float hz, float gainDb) {
-        const double A = pow(10.0, gainDb / 40.0), w = 2.0 * M_PI * hz / fs, c = cos(w);
-        const double alpha = sin(w) * .5 * sqrt((A + 1.0 / A) * 2.0);
-        const double rootA = sqrt(A), a0 = (A + 1.0) - (A - 1.0) * c + 2.0 * rootA * alpha;
+        constexpr double kShelfQ = 0.7071752369554196;
+        constexpr double kVbExponent = 0.4996667741545416;
+        const double k = tan(M_PI * hz / fs);
+        const double vh = pow(10.0, gainDb / 20.0);
+        const double vb = pow(vh, kVbExponent);
+        const double a0 = 1.0 + k / kShelfQ + k * k;
         LoudnessMeter::Coeffs f;
-        f.b0 = A * ((A + 1.0) + (A - 1.0) * c + 2.0 * rootA * alpha) / a0;
-        f.b1 = -2.0 * A * ((A - 1.0) + (A + 1.0) * c) / a0;
-        f.b2 = A * ((A + 1.0) + (A - 1.0) * c - 2.0 * rootA * alpha) / a0;
-        f.a1 = -2.0 * ((A - 1.0) - (A + 1.0) * c) / a0;
-        f.a2 = ((A + 1.0) - (A - 1.0) * c - 2.0 * rootA * alpha) / a0;
+        f.b0 = (vh + vb * k / kShelfQ + k * k) / a0;
+        f.b1 = 2.0 * (k * k - vh) / a0;
+        f.b2 = (vh - vb * k / kShelfQ + k * k) / a0;
+        f.a1 = 2.0 * (k * k - 1.0) / a0;
+        f.a2 = (1.0 - k / kShelfQ + k * k) / a0;
         return f;
     }
 
@@ -409,7 +432,7 @@ struct Octavia : Module {
             audioRing[j].head.store(h + 1, std::memory_order_release);
         }
 
-        // Loudness/stereo meter accumulation (normalized: 10V = 0 dBFS)
+        // Loudness/stereo meter accumulation (normalized: 5V = 0 dBFS)
         if (lm.resetFlag.load(std::memory_order_relaxed)) {
             if (lm.mtx.try_lock()) {
                 for (int j = 0; j < 2; j++) {
@@ -426,15 +449,15 @@ struct Octavia : Module {
             // BS.1770 K-weighting stages, redesigned whenever Rack's sample
             // rate changes. The 100 ms block history below powers R128 gating.
             if (lm.filterSampleRate != args.sampleRate) {
-                lm.shelf = makeHighShelf(args.sampleRate, 1681.974f, 4.f);
-                lm.highPass = makeHighPass(args.sampleRate, 38.1355f, .5f);
+                lm.shelf = makeHighShelf(args.sampleRate, 1681.974450955533f, 3.999843853973347f);
+                lm.highPass = makeHighPass(args.sampleRate, 38.13547087602444f, .5003270373238773f);
                 lm.filterSampleRate = args.sampleRate;
                 lm.blockTarget = std::max(1, (int)roundf(args.sampleRate * .1f));
                 memset(lm.z, 0, sizeof(lm.z));
             }
             double x[2];
             for (int j = 0; j < 2; j++) {
-                double in = ch[j] * 0.1;                     // 10V → 1.0 full scale
+                double in = ch[j] * 0.2;                     // 5V → 1.0 full scale
                 double a  = std::fabs(in);
                 if (a > lm.peak[j]) lm.peak[j] = a;
                 if (a >= 1.0) lm.clipped[j]++;

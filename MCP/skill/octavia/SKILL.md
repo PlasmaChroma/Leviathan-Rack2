@@ -118,7 +118,7 @@ successive spectrum reads; repeat the spectrum check after a short musical passa
 5. Tell the user exactly what to check/turn
 
 ### "What should I improve?"
-1. Audit (above) → 2. Check levels: healthy voices ±3–7V peak, >±8V too hot, ±10V clips
+1. Audit (above) → 2. Check levels: healthy voices ±1.5–3.5V peak, >±4V hot, ±5V reaches Octavia full scale
 3. Give a prioritized manual to-do list with exact module names, knob names, target values
 
 ### "Change / improve my patch"
@@ -131,13 +131,13 @@ successive spectrum reads; repeat the spectrum check after a short musical passa
 
 | Level | Voltage (peak) |
 |---|---|
-| Clipping | > ±10 V |
-| Hot | > ±8 V |
-| Healthy voice | ±3 – ±7 V |
-| Quiet / background | ±0.5 – ±2 V |
+| Octavia full-scale overrange | > ±5 V |
+| Hot | > ±4 V |
+| Healthy voice | ±1.5 – ±3.5 V |
+| Quiet / background | ±0.25 – ±1 V |
 | Dead | < ±0.1 V |
 
-**dB anchors:** ±10V = 0 dBFS · ±5V = -6 dBFS (voice target) · ±1.26V = -18 dBFS (0 dBVU)
+**dB anchors:** ±5V = 0 dBFS · ±2.5V = -6 dBFS (voice target) · ±0.63V = -18 dBFS (0 dBVU)
 **1V/oct:** C4 = 0V = 261.63 Hz · 1 semitone = 0.0833V · fifth = 0.5833V
 
 **vcv_get_signal_levels fields:** peak = highest |V| in ~1s (headroom) · v = instantaneous ·
