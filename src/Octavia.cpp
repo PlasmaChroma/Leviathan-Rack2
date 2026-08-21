@@ -328,16 +328,16 @@ struct Octavia : Module {
         // audio-thread working state
         double z[2][4] = {};                 // biquad states per ch: hs1,hs2,hp1,hp2
         double kSum[2] = {}, rawSum[2] = {}, sumLR = 0.0, peak[2] = {};
-        double meterBlockPeak = 0.0;
+        double meterBlockPeak[2] = {};
         uint64_t clipped[2] = {};
         uint64_t n = 0;
         int flushTimer = 0;
-        double blockKSum = 0.0;
+        double blockKSum[2] = {};
         int blockFrames = 0, blockTarget = 4800;
         float filterSampleRate = 0.f;
-        std::array<std::atomic<float>, LOUDNESS_BLOCKS> blocks;
+        std::array<std::array<std::atomic<float>, LOUDNESS_BLOCKS>, 2> blocks;
         std::atomic<uint64_t> blockTotal{0};
-        std::atomic<float> meterPeak{0.f};
+        std::atomic<float> meterPeak[2];
         // published (mtx-protected)
         double pKSum[2] = {}, pRawSum[2] = {}, pSumLR = 0.0, pPeak[2] = {};
         uint64_t pClipped[2] = {};
@@ -346,7 +346,11 @@ struct Octavia : Module {
         std::atomic<bool> resetFlag{false};
 
         LoudnessMeter() {
-            for (int i = 0; i < LOUDNESS_BLOCKS; i++) blocks[i].store(0.f, std::memory_order_relaxed);
+            for (int j = 0; j < 2; ++j) {
+                meterPeak[j].store(0.f, std::memory_order_relaxed);
+                for (int i = 0; i < LOUDNESS_BLOCKS; ++i)
+                    blocks[j][i].store(0.f, std::memory_order_relaxed);
+            }
         }
     } lm;
 
@@ -452,12 +456,13 @@ struct Octavia : Module {
             if (lm.mtx.try_lock()) {
                 for (int j = 0; j < 2; j++) {
                     lm.kSum[j] = lm.rawSum[j] = lm.peak[j] = 0.0; lm.clipped[j] = 0;
+                    lm.blockKSum[j] = lm.meterBlockPeak[j] = 0.0;
                     lm.z[j][0] = lm.z[j][1] = lm.z[j][2] = lm.z[j][3] = 0.0;
                     lm.pKSum[j] = lm.pRawSum[j] = lm.pPeak[j] = 0.0; lm.pClipped[j] = 0;
+                    lm.meterPeak[j].store(0.f, std::memory_order_relaxed);
                 }
-                lm.sumLR = lm.pSumLR = lm.blockKSum = lm.meterBlockPeak = 0.0; lm.n = lm.pN = 0;
+                lm.sumLR = lm.pSumLR = 0.0; lm.n = lm.pN = 0;
                 lm.blockFrames = lm.flushTimer = 0; lm.blockTotal.store(0, std::memory_order_relaxed);
-                lm.meterPeak.store(0.f, std::memory_order_relaxed);
                 lm.resetFlag.store(false, std::memory_order_relaxed);
                 lm.mtx.unlock();
             }
@@ -476,7 +481,7 @@ struct Octavia : Module {
                 double in = ch[j] * 0.2;                     // 5V → 1.0 full scale
                 double a  = std::fabs(in);
                 if (a > lm.peak[j]) lm.peak[j] = a;
-                if (a > lm.meterBlockPeak) lm.meterBlockPeak = a;
+                if (a > lm.meterBlockPeak[j]) lm.meterBlockPeak[j] = a;
                 if (a >= 1.0) lm.clipped[j]++;
                 lm.rawSum[j] += in * in;
                 // shelving stage (transposed direct form II)
@@ -488,18 +493,22 @@ struct Octavia : Module {
                 lm.z[j][2] = lm.highPass.b1*y1 - lm.highPass.a1*y2 + lm.z[j][3];
                 lm.z[j][3] = lm.highPass.b2*y1 - lm.highPass.a2*y2;
                 lm.kSum[j] += y2 * y2;
-                lm.blockKSum += y2 * y2;
+                lm.blockKSum[j] += y2 * y2;
                 x[j] = in;
             }
             lm.sumLR += x[0] * x[1];
             lm.n++;
             if (++lm.blockFrames >= lm.blockTarget) {
                 uint64_t block = lm.blockTotal.load(std::memory_order_relaxed);
-                lm.blocks[block % LOUDNESS_BLOCKS].store((float)(lm.blockKSum / lm.blockFrames), std::memory_order_relaxed);
+                for (int j = 0; j < 2; ++j) {
+                    lm.blocks[j][block % LOUDNESS_BLOCKS].store(
+                        (float)(lm.blockKSum[j] / lm.blockFrames), std::memory_order_relaxed);
+                    lm.meterPeak[j].store((float)lm.meterBlockPeak[j], std::memory_order_relaxed);
+                    lm.blockKSum[j] = 0.0;
+                    lm.meterBlockPeak[j] = 0.0;
+                }
                 lm.blockTotal.store(block + 1, std::memory_order_release);
-                lm.meterPeak.store((float)lm.meterBlockPeak, std::memory_order_relaxed);
-                lm.blockKSum = 0.0; lm.blockFrames = 0;
-                lm.meterBlockPeak = 0.0;
+                lm.blockFrames = 0;
             }
             if (++lm.flushTimer >= 2048 && lm.mtx.try_lock()) {
                 for (int j = 0; j < 2; j++) {
@@ -1655,7 +1664,9 @@ struct Octavia : Module {
             std::vector<float> blockPowers;
             blockPowers.reserve(availableBlocks);
             for (uint64_t i = totalBlocks - availableBlocks; i < totalBlocks; i++)
-                blockPowers.push_back(lm.blocks[i % LOUDNESS_BLOCKS].load(std::memory_order_relaxed));
+                blockPowers.push_back(
+                    lm.blocks[0][i % LOUDNESS_BLOCKS].load(std::memory_order_relaxed)
+                    + lm.blocks[1][i % LOUDNESS_BLOCKS].load(std::memory_order_relaxed));
             auto windowLufs = [&](int blocks) -> double {
                 if ((int)blockPowers.size() < blocks) return -INFINITY;
                 double sum = 0.;
@@ -2129,8 +2140,8 @@ struct OctaviaStatusWidget : TransparentWidget {
 
 struct OctaviaMeterWidget : TransparentWidget {
     Octavia* module = nullptr;
-    float displayedLufs = 0.f;
-    float displayedDbfs = 0.f;
+    float displayedLufs[2] = {};
+    float displayedDbfs[2] = {};
 
     explicit OctaviaMeterWidget(Octavia* module)
         : module(module) {}
@@ -2146,28 +2157,30 @@ struct OctaviaMeterWidget : TransparentWidget {
 
     void step() override {
         TransparentWidget::step();
-        float lufsTarget = 0.f;
-        float dbfsTarget = 0.f;
-        if (module && (module->audioInputConnected[0].load(std::memory_order_relaxed)
-                || module->audioInputConnected[1].load(std::memory_order_relaxed))) {
-            const uint64_t total = module->lm.blockTotal.load(std::memory_order_acquire);
-            const int count = (int)std::min<uint64_t>(total, 4);
-            if (count > 0) {
+        const uint64_t total = module
+            ? module->lm.blockTotal.load(std::memory_order_acquire) : 0;
+        const int count = (int)std::min<uint64_t>(total, 4);
+        for (int j = 0; j < 2; ++j) {
+            float lufsTarget = 0.f;
+            float dbfsTarget = 0.f;
+            const bool connected = module
+                && module->audioInputConnected[j].load(std::memory_order_relaxed);
+            if (connected && count > 0) {
                 double power = 0.0;
                 for (uint64_t i = total - count; i < total; ++i)
-                    power += module->lm.blocks[i % LOUDNESS_BLOCKS].load(std::memory_order_relaxed);
-                const float momentaryLufs = -0.691f + 10.f * std::log10((float)(power / count) + 1e-12f);
+                    power += module->lm.blocks[j][i % LOUDNESS_BLOCKS].load(std::memory_order_relaxed);
+                const float momentaryLufs = -0.691f
+                    + 10.f * std::log10((float)(power / count) + 1e-12f);
                 lufsTarget = normalizedDb(momentaryLufs);
+                const float peak = module->lm.meterPeak[j].load(std::memory_order_relaxed);
+                dbfsTarget = normalizedDb(20.f * std::log10(peak + 1e-12f));
             }
-            const float peak = module->lm.meterPeak.load(std::memory_order_relaxed);
-            dbfsTarget = normalizedDb(20.f * std::log10(peak + 1e-12f));
+            displayedLufs[j] = follow(displayedLufs[j], lufsTarget);
+            displayedDbfs[j] = follow(displayedDbfs[j], dbfsTarget);
         }
-        displayedLufs = follow(displayedLufs, lufsTarget);
-        displayedDbfs = follow(displayedDbfs, dbfsTarget);
     }
 
-    static void drawBar(NVGcontext* vg, const math::Rect& bounds, float level) {
-        level = std::max(0.f, std::min(1.f, level));
+    static void drawBar(NVGcontext* vg, const math::Rect& bounds, const float levels[2]) {
         const float radius = std::min(0.5f * bounds.size.x, 2.5f);
         nvgBeginPath(vg);
         nvgRoundedRect(vg, bounds.pos.x, bounds.pos.y, bounds.size.x, bounds.size.y, radius);
@@ -2180,27 +2193,40 @@ struct OctaviaMeterWidget : TransparentWidget {
         const float inset = 1.25f;
         const Vec fillPos = bounds.pos.plus(Vec(inset, inset));
         const Vec fillSize = bounds.size.minus(Vec(2.f * inset, 2.f * inset));
-        const float fillHeight = std::max(0.f, fillSize.y * level);
-        if (fillHeight <= 0.f || fillSize.x <= 0.f) return;
+        const float gap = 1.f;
+        const float channelWidth = std::max(0.f, 0.5f * (fillSize.x - gap));
+        for (int j = 0; j < 2; ++j) {
+            const float level = std::max(0.f, std::min(1.f, levels[j]));
+            const float fillHeight = std::max(0.f, fillSize.y * level);
+            if (fillHeight <= 0.f || channelWidth <= 0.f) continue;
+            const float channelX = fillPos.x + j * (channelWidth + gap);
+            nvgSave(vg);
+            nvgIntersectScissor(vg, channelX, fillPos.y + fillSize.y - fillHeight,
+                channelWidth, fillHeight);
+            nvgBeginPath(vg);
+            nvgRoundedRect(vg, channelX, fillPos.y, channelWidth, fillSize.y,
+                std::max(0.f, 0.5f * channelWidth));
+            const NVGpaint fill = nvgLinearGradient(vg,
+                channelX, fillPos.y + fillSize.y, channelX, fillPos.y,
+                nvgRGB(122, 92, 255), nvgRGB(28, 204, 217));
+            nvgFillPaint(vg, fill);
+            nvgFill(vg);
+            nvgRestore(vg);
+        }
 
-        nvgSave(vg);
-        nvgIntersectScissor(vg, fillPos.x, fillPos.y + fillSize.y - fillHeight,
-            fillSize.x, fillHeight);
+        const float dividerX = fillPos.x + 0.5f * fillSize.x;
         nvgBeginPath(vg);
-        nvgRoundedRect(vg, fillPos.x, fillPos.y, fillSize.x, fillSize.y,
-            std::max(0.f, 0.5f * fillSize.x));
-        const NVGpaint fill = nvgLinearGradient(vg,
-            fillPos.x, fillPos.y + fillSize.y, fillPos.x, fillPos.y,
-            nvgRGB(122, 92, 255), nvgRGB(28, 204, 217));
-        nvgFillPaint(vg, fill);
-        nvgFill(vg);
-        nvgRestore(vg);
+        nvgMoveTo(vg, dividerX, fillPos.y);
+        nvgLineTo(vg, dividerX, fillPos.y + fillSize.y);
+        nvgStrokeWidth(vg, 1.f);
+        nvgStrokeColor(vg, nvgRGBA(174, 132, 255, 72));
+        nvgStroke(vg);
     }
 
     void draw(const DrawArgs& args) override {
-        const float barWidth = mm2px(5.f);
+        const float barWidth = mm2px(8.f);
         const float barHeight = box.size.y - mm2px(4.5f);
-        const float leftX = mm2px(2.1f);
+        const float leftX = mm2px(0.8f);
         const float rightX = box.size.x - leftX - barWidth;
         drawBar(args.vg, math::Rect(Vec(leftX, 0.f), Vec(barWidth, barHeight)), displayedLufs);
         drawBar(args.vg, math::Rect(Vec(rightX, 0.f), Vec(barWidth, barHeight)), displayedDbfs);
@@ -2273,7 +2299,7 @@ struct OctaviaWidget : ModuleWidget {
         addChild(status);
 
         OctaviaMeterWidget* meter = new OctaviaMeterWidget(module);
-        math::Rect meterRectMm(Vec(4.5f, 72.f), Vec(21.48f, 29.f));
+        math::Rect meterRectMm(Vec(3.f, 72.f), Vec(24.48f, 29.f));
         panel_svg::loadRectFromSvgMm(panelPath, "LOUDNESS_METERS", &meterRectMm);
         meter->box.pos = mm2px(meterRectMm.pos);
         meter->box.size = mm2px(meterRectMm.size);

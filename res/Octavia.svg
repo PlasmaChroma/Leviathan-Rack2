@@ -16,7 +16,7 @@
     <circle id="PORT_VALUE_LABEL" cx="26" cy="55.5" r="0.1"/>
     <circle id="START_LABEL" cx="4.5" cy="66" r="0.1"/>
     <circle id="START_PARAM" cx="23" cy="66" r="0.1"/>
-    <rect id="LOUDNESS_METERS" x="4.5" y="72" width="21.48" height="29"/>
+    <rect id="LOUDNESS_METERS" x="3" y="72" width="24.48" height="29"/>
     <circle id="AUDIO_IN_L" cx="8" cy="110" r="0.1"/>
     <circle id="AUDIO_IN_R" cx="22" cy="110" r="0.1"/>
     <circle id="AUDIO_LABEL_L" cx="8" cy="120.5" r="0.1"/>
