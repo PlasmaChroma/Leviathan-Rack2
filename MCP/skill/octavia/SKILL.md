@@ -37,9 +37,16 @@ When the user asks to change the patch, the LLM may use the write tools directly
    `vcv_list_modules`, or `vcv_get_signal_levels`. Report exactly what changed.
 
 Write tools: `vcv_add_module`, `vcv_set_parameters`, `vcv_connect_cables`,
-`vcv_disconnect_cable`, `vcv_update_module`, `vcv_set_module_state`,
+`vcv_disconnect_cable`, `vcv_update_module`, `vcv_layout_modules`, `vcv_set_module_state`,
 `vcv_undo`, `vcv_delete_module`, `vcv_save_patch`, and `vcv_reset_loudness`.
 Cables default to white; `vcv_connect_cables` accepts optional `color` name ('red', 'green', 'blue', 'yellow', etc.) or hex ('#ffffff').
+
+### Cluster Anchoring & Layout Guidelines
+
+- **Cluster Anchor Rule**: VCV Rack is an unbounded 2D canvas. **Never assume a patch begins at `(row: 0, hp: 0)`.** Patches are frequently built far out in the canvas (e.g. `row 5`, `hp 2000`).
+- **Preserve Viewport & Coordinates**: Before placing new modules or rearranging a patch, find the cluster's bounding anchor (the minimum `row` and `posX` across existing active modules). Always place new or rearranged modules **relative to the existing cluster's coordinates** so the patch remains in the user's active viewport.
+- **Atomic Multi-Module Layout**: Use `vcv_layout_modules` for multi-module rearrangement. It validates collisions in advance, moves all modules together, and creates a single clean `vcv_undo` step.
+- **Functional Row Lanes**: When arranging across rows, use neighboring rows within the active cluster (e.g. Cluster Row $N$ for Sources/CV, Row $N+1$ for Mixing/FX/Mastering) with left-to-right signal flow per row.
 
 ### Safety and approval
 
@@ -148,6 +155,7 @@ ch = poly channels · connected:false + peak>0 = stale peak.
 ## Tool Gotchas
 
 - `vcv_list_library` requires `plugin=` or `q=` to prevent an oversized response.
+- `vcv_layout_modules` coordinates are absolute: always anchor to the active patch cluster's existing row and HP base offset, never arbitrarily reset to (0, 0).
 - Cache lag ~1s; all data is pull. Per-module CPU is not available (only whole-process).
 - `vcv_get_module_state` returns the full preset JSON — useful to show the user a backup
   they can save before manual edits.

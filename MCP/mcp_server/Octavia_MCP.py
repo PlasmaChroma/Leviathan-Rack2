@@ -6,9 +6,13 @@ Connects MCP-compatible agents to VCV Rack through the Octavia module.
 
 import json
 import os
+import warnings
 import httpx
 from typing import Optional, Literal
 from pydantic import BaseModel, Field, ConfigDict
+
+warnings.filterwarnings("ignore")
+
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("vcv_rack_mcp")
@@ -210,7 +214,7 @@ class ListCablesInput(BaseModel):
     name="vcv_list_cables",
     annotations={"title": "List Cables", "readOnlyHint": True, "destructiveHint": False}
 )
-async def vcv_list_cables(params: ListCablesInput) -> str:
+async def vcv_list_cables(params: ListCablesInput = ListCablesInput()) -> str:
     """List cables currently patched, with source/destination module IDs, port IDs, and names."""
     try:
         cables = await _call("cables")
