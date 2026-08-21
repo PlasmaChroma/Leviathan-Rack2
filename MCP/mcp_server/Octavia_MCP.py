@@ -212,15 +212,24 @@ class SibylValidateInput(SibylModuleInput):
 class SibylEditInput(SibylModuleInput):
     expected_revision: int = Field(..., description="Last accepted revision read from Sibyl", ge=0)
     operations: list[dict] = Field(..., description="Atomic semantic edit operations", min_length=1)
-    apply_at: Literal["immediate", "nextStep", "nextBeat", "nextScene"] = Field(
-        "nextBeat", description="Musical boundary at which the accepted revision becomes active"
+    apply_at: Optional[Literal["immediate", "nextStep", "nextBeat", "nextScene"]] = Field(
+        None, description="Optional adoption boundary; otherwise use the composition default"
+    )
+    phase_policy: Literal["preserve", "restartChanged", "restartAll"] = Field(
+        "preserve", description="How pattern phases respond when the revision becomes active"
     )
 
 
 class SibylTransportInput(SibylModuleInput):
-    action: Literal["play", "pause", "stop", "reset", "next_scene", "previous_scene", "select_scene", "reseed"]
+    action: Literal["play", "pause", "stop", "reset", "restart", "panic", "next_scene", "previous_scene", "select_scene", "reseed"]
     scene_id: Optional[str] = Field(None, description="Scene ID for select_scene")
     apply_at: Optional[Literal["immediate", "nextStep", "nextBeat", "nextScene"]] = None
+    target: Optional[Literal["scene", "arrangement", "patterns", "randomness"]] = Field(
+        None, description="Restart domain; required by restart and invalid for unrelated actions"
+    )
+    phase_mode: Optional[Literal["restart", "continue", "alignGlobal"]] = Field(
+        None, description="Optional scene-entry phase override for this transport request"
+    )
     seed: Optional[int] = Field(None, description="Optional deterministic seed for reseed")
 
 
@@ -263,8 +272,10 @@ async def vcv_sibyl_edit(params: SibylEditInput) -> str:
     """Apply semantic operations atomically. A successful transaction creates one vcv_undo entry."""
     try:
         payload = {"expectedRevision": params.expected_revision,
-                   "applyAt": params.apply_at,
+                   "phasePolicy": params.phase_policy,
                    "operations": params.operations}
+        if params.apply_at is not None:
+            payload["applyAt"] = params.apply_at
         return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/edit", "POST", payload), indent=2)
     except Exception as e:
         return _err(e)
@@ -290,6 +301,8 @@ async def vcv_sibyl_transport(params: SibylTransportInput) -> str:
             payload["sceneId"] = payload.pop("scene_id")
         if "apply_at" in payload:
             payload["applyAt"] = payload.pop("apply_at")
+        if "phase_mode" in payload:
+            payload["phaseMode"] = payload.pop("phase_mode")
         return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/transport", "POST", payload), indent=2)
     except Exception as e:
         return _err(e)

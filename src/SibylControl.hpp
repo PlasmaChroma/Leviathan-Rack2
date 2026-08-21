@@ -25,6 +25,8 @@ struct SibylControl {
     // is the fallback diagnostic when no structured response is available.
     // EDIT must return true only after accepting a mutation; Octavia interprets
     // that value as the commit point and records exactly one undo snapshot.
+    // The opaque v1 request contract includes EDIT phasePolicy and TRANSPORT
+    // restart target/phaseMode fields; Sibyl validates their combinations.
     virtual bool handleSibylRequest(Operation operation,
                                     const std::string& requestJson,
                                     std::string& responseJson,

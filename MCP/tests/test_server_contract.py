@@ -72,8 +72,12 @@ class ServerContractTest(unittest.TestCase):
         self.assertIn('await _sibyl_call(f"sibyl/{params.module_id}/validate", "POST"', self.source)
         self.assertIn('await _sibyl_call(f"sibyl/{params.module_id}/edit", "POST"', self.source)
         self.assertIn('"expectedRevision": params.expected_revision', self.source)
+        self.assertIn('"phasePolicy": params.phase_policy', self.source)
+        self.assertIn('Literal["preserve", "restartChanged", "restartAll"]', self.source)
         self.assertIn('await _sibyl_call(f"sibyl/{params.module_id}/status")', self.source)
         self.assertIn('await _sibyl_call(f"sibyl/{params.module_id}/transport", "POST"', self.source)
+        self.assertIn('Literal["scene", "arrangement", "patterns", "randomness"]', self.source)
+        self.assertIn('payload["phaseMode"] = payload.pop("phase_mode")', self.source)
 
 
 if __name__ == "__main__":
