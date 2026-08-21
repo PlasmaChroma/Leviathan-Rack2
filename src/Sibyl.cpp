@@ -1,6 +1,8 @@
 #include "plugin.hpp"
 #include "SibylControl.hpp"
 #include "SibylJSON.hpp"
+#include "visual/VisualAssets.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 #include <jansson.h>
 
 using namespace rack;
@@ -39,6 +41,25 @@ struct SibylModule : Module, SibylControl {
 
 	SibylModule() {
 		config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
+
+		configInput(CLOCK_INPUT, "Clock");
+		configInput(RUN_INPUT, "Run");
+		configInput(RESET_INPUT, "Reset");
+		configInput(SCENE_TRIG_INPUT, "Scene Trigger");
+		configInput(SCENE_CV_INPUT, "Scene CV (0–10 V)");
+		configInput(MACRO_1_INPUT, "Macro 1 (0–10 V)");
+		configInput(MACRO_2_INPUT, "Macro 2 (0–10 V)");
+		configInput(MACRO_3_INPUT, "Macro 3 (0–10 V)");
+		configInput(MACRO_4_INPUT, "Macro 4 (0–10 V)");
+
+		configOutput(V_OCT_OUTPUT, "1 V/oct Pitch (Polyphonic)");
+		configOutput(GATE_OUTPUT, "Gate (Polyphonic)");
+		configOutput(VELOCITY_OUTPUT, "Velocity (0–10 V Polyphonic)");
+		configOutput(MOD_OUTPUT, "Modulation (Polyphonic)");
+		configOutput(CLOCK_OUTPUT, "Reconstructed Clock");
+		configOutput(SCENE_OUTPUT, "Scene Transition Trigger");
+		configOutput(EOC_OUTPUT, "End of Cycle Trigger");
+
 		auto comp = std::make_shared<sibyl::Composition>();
 		m_history.push_back(comp);
 		m_activeCompositionPtr.store(comp.get(), std::memory_order_release);
@@ -172,6 +193,123 @@ struct SibylModule : Module, SibylControl {
 		if (operation == Operation::CAPABILITIES) {
 			responseJson = "{\"ok\":true,\"capabilities\":{\"sibyl\":{\"apiVersion\":1,\"schemaVersion\":1,\"revision\":" + std::to_string(m_activeRevision) + ",\"operations\":[\"get_composition\",\"validate\",\"edit\",\"get_status\",\"transport\"]}}}";
 			return true;
+		} else if (operation == Operation::GET_COMPOSITION) {
+			const sibyl::Composition* comp = m_activeCompositionPtr.load(std::memory_order_acquire);
+			if (!comp) {
+				error = "No composition loaded";
+				return false;
+			}
+			std::string view = "summary";
+			std::string id = "";
+			json_error_t jerror;
+			json_t* reqJ = json_loads(requestJson.c_str(), 0, &jerror);
+			if (reqJ) {
+				json_t* viewJ = json_object_get(reqJ, "view");
+				if (viewJ && json_is_string(viewJ)) view = json_string_value(viewJ);
+				json_t* idJ = json_object_get(reqJ, "id");
+				if (idJ && json_is_string(idJ)) id = json_string_value(idJ);
+				json_decref(reqJ);
+			}
+			if (view == "full") {
+				responseJson = sibyl::serializeFullCompositionJson(*comp);
+			} else if (view == "pattern") {
+				responseJson = sibyl::serializePatternViewJson(*comp, id);
+			} else if (view == "scene") {
+				responseJson = sibyl::serializeSceneViewJson(*comp, id);
+			} else {
+				responseJson = sibyl::serializeSummaryJson(*comp);
+			}
+			return true;
+		} else if (operation == Operation::GET_STATUS) {
+			const sibyl::Composition* comp = m_activeCompositionPtr.load(std::memory_order_acquire);
+			int rev = m_activeRevision;
+			int actRev = comp ? comp->revision : 0;
+			bool running = comp ? comp->transport.running : true;
+			float bpm = comp ? comp->meta.bpm : 120.0f;
+			std::string sceneId = "";
+			int sceneRepeat = m_sceneRepeat;
+			double beat = m_scenePhase;
+			if (comp && m_sceneIndex >= 0 && m_sceneIndex < (int)comp->arrangement.size()) {
+				sceneId = comp->arrangement[m_sceneIndex].id;
+			}
+			json_t* stJ = json_object();
+			json_object_set_new(stJ, "ok", json_true());
+			json_object_set_new(stJ, "revision", json_integer(rev));
+			json_object_set_new(stJ, "activeRevision", json_integer(actRev));
+			json_object_set_new(stJ, "pendingRevision", json_null());
+			json_object_set_new(stJ, "pendingApplyAt", json_null());
+			json_object_set_new(stJ, "pendingPhasePolicy", json_null());
+			json_object_set_new(stJ, "pendingTransport", json_null());
+			json_object_set_new(stJ, "running", json_boolean(running));
+			json_object_set_new(stJ, "clockSource", json_string(inputs[CLOCK_INPUT].isConnected() ? "external" : "internal"));
+			json_object_set_new(stJ, "estimatedBpm", json_real(bpm));
+			if (!sceneId.empty()) {
+				json_object_set_new(stJ, "sceneId", json_string(sceneId.c_str()));
+			} else {
+				json_object_set_new(stJ, "sceneId", json_null());
+			}
+			json_object_set_new(stJ, "sceneRepeat", json_integer(sceneRepeat));
+			json_object_set_new(stJ, "beat", json_real(beat));
+			json_object_set_new(stJ, "lastError", json_null());
+			json_object_set_new(stJ, "warnings", json_array());
+
+			char* dumped = json_dumps(stJ, JSON_COMPACT);
+			responseJson = dumped ? dumped : "{}";
+			if (dumped) free(dumped);
+			json_decref(stJ);
+			return true;
+		} else if (operation == Operation::VALIDATE) {
+			json_error_t jerror;
+			json_t* root = json_loads(requestJson.c_str(), 0, &jerror);
+			if (!root) {
+				error = std::string("Invalid JSON: ") + jerror.text;
+				return false;
+			}
+			json_t* candJ = json_object_get(root, "candidate");
+			char* candStr = json_dumps(candJ ? candJ : root, JSON_COMPACT);
+			sibyl::ParseResult res = sibyl::parseCompositionJson(candStr ? candStr : "{}", m_activeRevision);
+			if (candStr) free(candStr);
+			json_decref(root);
+
+			json_t* respJ = json_object();
+			json_object_set_new(respJ, "ok", json_true());
+			json_object_set_new(respJ, "revision", json_integer(m_activeRevision));
+			json_object_set_new(respJ, "valid", json_boolean(res.valid));
+			json_t* errsJ = json_array();
+			for (const auto& issue : res.errors) {
+				json_t* issueJ = json_object();
+				json_object_set_new(issueJ, "path", json_string(issue.path.c_str()));
+				json_object_set_new(issueJ, "message", json_string(issue.message.c_str()));
+				json_array_append_new(errsJ, issueJ);
+			}
+			json_object_set_new(respJ, "errors", errsJ);
+			json_object_set_new(respJ, "warnings", json_array());
+			char* dumped = json_dumps(respJ, JSON_COMPACT);
+			responseJson = dumped ? dumped : "{}";
+			if (dumped) free(dumped);
+			json_decref(respJ);
+			return true;
+		} else if (operation == Operation::TRANSPORT) {
+			json_error_t jerror;
+			json_t* root = json_loads(requestJson.c_str(), 0, &jerror);
+			if (root) {
+				json_t* actJ = json_object_get(root, "action");
+				if (actJ && json_is_string(actJ)) {
+					std::string action = json_string_value(actJ);
+					if (action == "restart" || action == "reset") {
+						m_sceneIndex = 0;
+						m_sceneRepeat = 0;
+						m_scenePhase = 0.0;
+						for (int c = 0; c < 16; c++) {
+							m_trackStates[c].lastFiredStep = -1;
+							m_trackStates[c].patternPhaseBeats = 0.0;
+						}
+					}
+				}
+				json_decref(root);
+			}
+			responseJson = "{\"ok\":true}";
+			return true;
 		} else if (operation == Operation::EDIT) {
 			json_error_t jerror;
 			json_t* root = json_loads(requestJson.c_str(), 0, &jerror);
@@ -189,7 +327,6 @@ struct SibylModule : Module, SibylControl {
 			if (expectedRev != m_activeRevision) {
 				json_decref(root);
 				error = "Revision conflict";
-				// Ideally return structured error as per spec
 				responseJson = "{\"ok\":false,\"error\":{\"code\":\"revision_conflict\",\"message\":\"Expected revision " + std::to_string(expectedRev) + " but current is " + std::to_string(m_activeRevision) + "\"}}";
 				return false;
 			}
@@ -248,31 +385,50 @@ struct SibylModule : Module, SibylControl {
 };
 
 struct SibylWidget : ModuleWidget {
-	SibylWidget(SibylModule* module) {
+	explicit SibylWidget(SibylModule* module) {
 		setModule(module);
-		setPanel(createPanel(asset::plugin(pluginInstance, "res/Sibyl.svg")));
-		box.size = mm2px(Vec(50.8, 128.5));
+		PreviewBuildLogTimer previewTimer("Sibyl", module);
+		visual_assets::SplitPanelRenderer splitPanel(this, "res/Sibyl.panel.svg");
+		const std::string& panelPath = splitPanel.panelPath();
+		splitPanel.addLabels("res/Sibyl.labels.svg");
+		splitPanel.addCompactLeviathanLogoBranding();
+		visual_assets::addFractalGlassOverlay(this, panelPath, splitPanel.panelSurfaceEffectWidget());
 
-		float xLeft = 10.0f, xRight = 40.8f, ySpace = 12.0f, yStart = 20.0f;
+		// Inputs: Left column (x = 8.5mm), Second column (x = 20.0mm)
+		// Row 1: y = 49mm (CLK, RUN)
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(8.5f, 49.0f)), module, SibylModule::CLOCK_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(20.0f, 49.0f)), module, SibylModule::RUN_INPUT));
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(xLeft, yStart + 0 * ySpace)), module, SibylModule::CLOCK_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(xLeft, yStart + 1 * ySpace)), module, SibylModule::RUN_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(xLeft, yStart + 2 * ySpace)), module, SibylModule::RESET_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(xLeft, yStart + 3 * ySpace)), module, SibylModule::SCENE_TRIG_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(xLeft, yStart + 4 * ySpace)), module, SibylModule::SCENE_CV_INPUT));
-		
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(xLeft, yStart + 6 * ySpace)), module, SibylModule::MACRO_1_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(xLeft, yStart + 7 * ySpace)), module, SibylModule::MACRO_2_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(xLeft, yStart + 8 * ySpace)), module, SibylModule::MACRO_3_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(xLeft, yStart + 9 * ySpace)), module, SibylModule::MACRO_4_INPUT));
+		// Row 2: y = 64mm (RST, TRIG)
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(8.5f, 64.0f)), module, SibylModule::RESET_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(20.0f, 64.0f)), module, SibylModule::SCENE_TRIG_INPUT));
 
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(xRight, yStart + 0 * ySpace)), module, SibylModule::V_OCT_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(xRight, yStart + 1 * ySpace)), module, SibylModule::GATE_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(xRight, yStart + 2 * ySpace)), module, SibylModule::VELOCITY_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(xRight, yStart + 3 * ySpace)), module, SibylModule::MOD_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(xRight, yStart + 4 * ySpace)), module, SibylModule::CLOCK_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(xRight, yStart + 5 * ySpace)), module, SibylModule::SCENE_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(xRight, yStart + 6 * ySpace)), module, SibylModule::EOC_OUTPUT));
+		// Row 3: y = 79mm (S.CV)
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(8.5f, 79.0f)), module, SibylModule::SCENE_CV_INPUT));
+
+		// Row 4: y = 94mm (M1, M2)
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(8.5f, 94.0f)), module, SibylModule::MACRO_1_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(20.0f, 94.0f)), module, SibylModule::MACRO_2_INPUT));
+
+		// Row 5: y = 109mm (M3, M4)
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(8.5f, 109.0f)), module, SibylModule::MACRO_3_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(20.0f, 109.0f)), module, SibylModule::MACRO_4_INPUT));
+
+		// Outputs: Third column (x = 32.5mm), Fourth column (x = 43.0mm)
+		// Row 1: y = 49mm (V/OCT, GATE)
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(Vec(32.5f, 49.0f)), module, SibylModule::V_OCT_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(Vec(43.0f, 49.0f)), module, SibylModule::GATE_OUTPUT));
+
+		// Row 2: y = 64mm (VEL, MOD)
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(Vec(32.5f, 64.0f)), module, SibylModule::VELOCITY_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(Vec(43.0f, 64.0f)), module, SibylModule::MOD_OUTPUT));
+
+		// Row 3: y = 79mm (CLK, SCENE)
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(Vec(32.5f, 79.0f)), module, SibylModule::CLOCK_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(Vec(43.0f, 79.0f)), module, SibylModule::SCENE_OUTPUT));
+
+		// Row 4: y = 94mm (EOC)
+		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(Vec(37.75f, 94.0f)), module, SibylModule::EOC_OUTPUT));
 	}
 };
 

@@ -1,0 +1,45 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="50.8mm" height="128.5mm" viewBox="0 0 5080 12850" version="1.1" id="Sibyl-labels">
+  <g id="labels" inkscape:label="Labels" font-family="Rubik, sans-serif" text-anchor="middle" fill="#dce6f2">
+    <!-- Header Titles -->
+    <text x="2540" y="680" font-size="440" font-weight="700" letter-spacing="30">SIBYL</text>
+    <text x="2540" y="1020" font-size="160" letter-spacing="60" fill="#3cd7de">POLYPHONIC ARRANGER</text>
+
+    <!-- OLED Display Placeholder Text -->
+    <text x="2540" y="2400" font-size="220" font-family="'Share Tech Mono', monospace" fill="#2fd1dc" opacity="0.8">[ SIBYL DISP ]</text>
+    <text x="2540" y="2800" font-size="150" font-family="'Share Tech Mono', monospace" fill="#8898b0" opacity="0.6">REV 0 • 120 BPM</text>
+
+    <!-- Section Headers -->
+    <text x="1415" y="4220" font-size="180" font-weight="700" letter-spacing="35" fill="#5ee2e6">INPUTS</text>
+    <text x="3765" y="4220" font-size="180" font-weight="700" letter-spacing="35" fill="#a78bfa">OUTPUTS</text>
+
+    <!-- Row 1: y=4900 (Labels at y=4620) -->
+    <text x="850" y="4620" font-size="180" font-weight="600">CLK</text>
+    <text x="2000" y="4620" font-size="180" font-weight="600">RUN</text>
+    <text x="3250" y="4620" font-size="180" font-weight="600" fill="#e2d4fd">V/OCT</text>
+    <text x="4300" y="4620" font-size="180" font-weight="600" fill="#e2d4fd">GATE</text>
+
+    <!-- Row 2: y=6400 (Labels at y=6120) -->
+    <text x="850" y="6120" font-size="180" font-weight="600">RST</text>
+    <text x="2000" y="6120" font-size="180" font-weight="600">TRIG</text>
+    <text x="3250" y="6120" font-size="180" font-weight="600" fill="#e2d4fd">VEL</text>
+    <text x="4300" y="6120" font-size="180" font-weight="600" fill="#e2d4fd">MOD</text>
+
+    <!-- Row 3: y=7900 (Labels at y=7620) -->
+    <text x="850" y="7620" font-size="180" font-weight="600">S.CV</text>
+    <text x="3250" y="7620" font-size="180" font-weight="600" fill="#e2d4fd">CLK</text>
+    <text x="4300" y="7620" font-size="180" font-weight="600" fill="#e2d4fd">SCENE</text>
+
+    <!-- Row 4: y=9400 (Labels at y=9120) -->
+    <text x="850" y="9120" font-size="180" font-weight="600">M1</text>
+    <text x="2000" y="9120" font-size="180" font-weight="600">M2</text>
+    <text x="3775" y="9120" font-size="180" font-weight="600" fill="#e2d4fd">EOC</text>
+
+    <!-- Row 5: y=10900 (Labels at y=10620) -->
+    <text x="850" y="10620" font-size="180" font-weight="600">M3</text>
+    <text x="2000" y="10620" font-size="180" font-weight="600">M4</text>
+
+    <!-- Footer Branding -->
+    <text x="2540" y="12600" font-size="135" letter-spacing="45" fill="#8976dc">LEVIATHAN</text>
+  </g>
+</svg>

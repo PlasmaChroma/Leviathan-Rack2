@@ -21,7 +21,10 @@ struct ParseResult {
 // Parses a complete JSON composition payload and compiles it into an immutable snapshot.
 ParseResult parseCompositionJson(const std::string& jsonString, int revision);
 
-// Validate candidate mutations.
-// ParseResult validateOperation(const std::string& opJson, CompositionPtr current);
+// Serializers for SibylControl GET_COMPOSITION views
+std::string serializeSummaryJson(const Composition& comp);
+std::string serializeFullCompositionJson(const Composition& comp);
+std::string serializePatternViewJson(const Composition& comp, const std::string& patternId);
+std::string serializeSceneViewJson(const Composition& comp, const std::string& sceneId);
 
 } // namespace sibyl

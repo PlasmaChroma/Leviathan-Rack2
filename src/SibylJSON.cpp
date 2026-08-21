@@ -323,4 +323,326 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
     return res;
 }
 
+static const char* scaleToString(ScaleType s) {
+    switch (s) {
+        case ScaleType::MAJOR: return "major";
+        case ScaleType::NATURAL_MINOR: return "natural_minor";
+        case ScaleType::HARMONIC_MINOR: return "harmonic_minor";
+        case ScaleType::MELODIC_MINOR: return "melodic_minor";
+        case ScaleType::DORIAN: return "dorian";
+        case ScaleType::PHRYGIAN: return "phrygian";
+        case ScaleType::LYDIAN: return "lydian";
+        case ScaleType::MIXOLYDIAN: return "mixolydian";
+        case ScaleType::LOCRIAN: return "locrian";
+        case ScaleType::MAJOR_PENTATONIC: return "major_pentatonic";
+        case ScaleType::MINOR_PENTATONIC: return "minor_pentatonic";
+        default: return "chromatic";
+    }
+}
+
+static const char* applyAtToString(ApplyAt a) {
+    switch (a) {
+        case ApplyAt::IMMEDIATE: return "immediate";
+        case ApplyAt::NEXT_STEP: return "nextStep";
+        case ApplyAt::NEXT_SCENE: return "nextScene";
+        default: return "nextBeat";
+    }
+}
+
+static const char* phaseModeToString(PhaseMode p) {
+    switch (p) {
+        case PhaseMode::CONTINUE: return "continue";
+        case PhaseMode::ALIGN_GLOBAL: return "alignGlobal";
+        default: return "restart";
+    }
+}
+
+static const char* onExternalStopToString(OnExternalStop o) {
+    switch (o) {
+        case OnExternalStop::FREE_RUN: return "freeRun";
+        case OnExternalStop::INTERNAL: return "internal";
+        default: return "hold";
+    }
+}
+
+static json_t* patternToJson(const Pattern& pat) {
+    json_t* patJ = json_object();
+    json_object_set_new(patJ, "length", json_integer(pat.length));
+    json_object_set_new(patJ, "resolution", json_string(pat.resolutionStr.c_str()));
+    json_t* stepsJ = json_array();
+    for (const auto& ev : pat.steps) {
+        json_t* evJ = json_object();
+        json_object_set_new(evJ, "step", json_integer(ev.step));
+        if (ev.pitchType == PitchType::PITCH_V) {
+            json_object_set_new(evJ, "pitchV", json_real(ev.pitchV));
+        } else if (ev.pitchType == PitchType::DEGREE) {
+            json_object_set_new(evJ, "degree", json_integer(ev.degree));
+            if (ev.octave != 0) json_object_set_new(evJ, "octave", json_integer(ev.octave));
+        } else if (ev.pitchType == PitchType::NOTE) {
+            json_object_set_new(evJ, "note", json_string(ev.note.c_str()));
+        }
+        if (ev.hasGate) json_object_set_new(evJ, "gate", json_real(ev.gate));
+        if (ev.hasVelocity) json_object_set_new(evJ, "velocity", json_real(ev.velocity));
+        if (ev.hasMod) json_object_set_new(evJ, "mod", json_real(ev.mod));
+        if (ev.hasProbability) json_object_set_new(evJ, "probability", json_real(ev.probability));
+        if (ev.tie) json_object_set_new(evJ, "tie", json_true());
+        if (ev.glideMs > 0.0f) json_object_set_new(evJ, "glideMs", json_real(ev.glideMs));
+        if (ev.microshift != 0.0f) json_object_set_new(evJ, "microshift", json_real(ev.microshift));
+        if (ev.ratchets > 1) json_object_set_new(evJ, "ratchets", json_integer(ev.ratchets));
+        json_array_append_new(stepsJ, evJ);
+    }
+    json_object_set_new(patJ, "steps", stepsJ);
+    return patJ;
+}
+
+static json_t* sceneToJson(const Scene& sc) {
+    json_t* scJ = json_object();
+    json_object_set_new(scJ, "id", json_string(sc.id.c_str()));
+    if (!sc.name.empty()) json_object_set_new(scJ, "name", json_string(sc.name.c_str()));
+    json_object_set_new(scJ, "lengthBeats", json_real(sc.lengthBeats));
+    json_object_set_new(scJ, "repeats", json_integer(sc.repeats));
+    json_object_set_new(scJ, "phaseMode", json_string(phaseModeToString(sc.phaseMode)));
+    json_t* tracksJ = json_object();
+    for (const auto& kv : sc.tracks) {
+        if (kv.second.patternId.empty()) {
+            json_object_set_new(tracksJ, kv.first.c_str(), json_null());
+        } else if (kv.second.hasPhaseModeOverride) {
+            json_t* overrideJ = json_object();
+            json_object_set_new(overrideJ, "pattern", json_string(kv.second.patternId.c_str()));
+            json_object_set_new(overrideJ, "phaseMode", json_string(phaseModeToString(kv.second.phaseModeOverride)));
+            json_object_set_new(tracksJ, kv.first.c_str(), overrideJ);
+        } else {
+            json_object_set_new(tracksJ, kv.first.c_str(), json_string(kv.second.patternId.c_str()));
+        }
+    }
+    json_object_set_new(scJ, "tracks", tracksJ);
+    return scJ;
+}
+
+static json_t* compositionToJson(const Composition& comp) {
+    json_t* root = json_object();
+
+    // Meta
+    json_t* metaJ = json_object();
+    json_object_set_new(metaJ, "title", json_string(comp.meta.title.c_str()));
+    if (!comp.meta.prompt.empty()) json_object_set_new(metaJ, "prompt", json_string(comp.meta.prompt.c_str()));
+    json_object_set_new(metaJ, "bpm", json_real(comp.meta.bpm));
+    json_object_set_new(metaJ, "root", json_string(comp.meta.root.c_str()));
+    json_object_set_new(metaJ, "rootOctave", json_integer(comp.meta.rootOctave));
+    json_object_set_new(metaJ, "scale", json_string(scaleToString(comp.meta.scale)));
+    json_object_set_new(metaJ, "swing", json_real(comp.meta.swing));
+    json_object_set_new(metaJ, "seed", json_integer(comp.meta.seed));
+    json_object_set_new(root, "meta", metaJ);
+
+    // Clock
+    json_t* clockJ = json_object();
+    json_object_set_new(clockJ, "externalPpqn", json_integer(comp.clock.externalPpqn));
+    json_object_set_new(clockJ, "outputPpqn", json_integer(comp.clock.outputPpqn));
+    json_object_set_new(clockJ, "externalTimeoutMs", json_real(comp.clock.externalTimeoutMs));
+    json_object_set_new(clockJ, "onExternalStop", json_string(onExternalStopToString(comp.clock.onExternalStop)));
+    json_object_set_new(root, "clock", clockJ);
+
+    // Transport
+    json_t* transportJ = json_object();
+    json_object_set_new(transportJ, "running", json_boolean(comp.transport.running));
+    json_object_set_new(transportJ, "loop", json_boolean(comp.transport.loop));
+    json_object_set_new(transportJ, "defaultApplyAt", json_string(applyAtToString(comp.transport.defaultApplyAt)));
+    json_object_set_new(root, "transport", transportJ);
+
+    // Tracks
+    json_t* tracksJ = json_array();
+    for (const auto& tr : comp.tracks) {
+        json_t* trJ = json_object();
+        json_object_set_new(trJ, "id", json_string(tr.id.c_str()));
+        json_object_set_new(trJ, "channel", json_integer(tr.channel));
+        json_object_set_new(trJ, "defaultGate", json_real(tr.defaultGate));
+        json_object_set_new(trJ, "defaultVelocity", json_real(tr.defaultVelocity));
+        json_object_set_new(trJ, "modRange", json_string(tr.modRange == ModRange::BIPOLAR ? "bipolar" : "unipolar"));
+        json_array_append_new(tracksJ, trJ);
+    }
+    json_object_set_new(root, "tracks", tracksJ);
+
+    // Patterns
+    json_t* patternsJ = json_object();
+    for (const auto& kv : comp.patterns) {
+        json_object_set_new(patternsJ, kv.first.c_str(), patternToJson(kv.second));
+    }
+    json_object_set_new(root, "patterns", patternsJ);
+
+    // Arrangement
+    json_t* arrJ = json_array();
+    for (const auto& sc : comp.arrangement) {
+        json_array_append_new(arrJ, sceneToJson(sc));
+    }
+    json_object_set_new(root, "arrangement", arrJ);
+
+    // Macros
+    json_t* macrosJ = json_object();
+    for (const auto& kv : comp.macros) {
+        json_t* mJ = json_object();
+        json_object_set_new(mJ, "target", json_string(kv.second.target.c_str()));
+        json_object_set_new(mJ, "amount", json_real(kv.second.amount));
+        json_object_set_new(mJ, "polarity", json_string(kv.second.polarity == MacroPolarity::BIPOLAR ? "bipolar" : "unipolar"));
+        json_t* clampJ = json_array();
+        json_array_append_new(clampJ, json_real(kv.second.clampMin));
+        json_array_append_new(clampJ, json_real(kv.second.clampMax));
+        json_object_set_new(mJ, "clamp", clampJ);
+        json_object_set_new(macrosJ, kv.first.c_str(), mJ);
+    }
+    json_object_set_new(root, "macros", macrosJ);
+
+    return root;
+}
+
+static std::string dumpAndFree(json_t* root) {
+    if (!root) return "{}";
+    char* str = json_dumps(root, JSON_COMPACT);
+    std::string out = str ? str : "{}";
+    if (str) free(str);
+    json_decref(root);
+    return out;
+}
+
+std::string serializeSummaryJson(const Composition& comp) {
+    json_t* root = json_object();
+    json_object_set_new(root, "ok", json_true());
+    json_object_set_new(root, "revision", json_integer(comp.revision));
+    json_object_set_new(root, "schemaVersion", json_integer(1));
+    json_object_set_new(root, "view", json_string("summary"));
+
+    // Meta
+    json_t* metaJ = json_object();
+    json_object_set_new(metaJ, "title", json_string(comp.meta.title.c_str()));
+    if (!comp.meta.prompt.empty()) json_object_set_new(metaJ, "prompt", json_string(comp.meta.prompt.c_str()));
+    json_object_set_new(metaJ, "bpm", json_real(comp.meta.bpm));
+    json_object_set_new(metaJ, "root", json_string(comp.meta.root.c_str()));
+    json_object_set_new(metaJ, "rootOctave", json_integer(comp.meta.rootOctave));
+    json_object_set_new(metaJ, "scale", json_string(scaleToString(comp.meta.scale)));
+    json_object_set_new(metaJ, "swing", json_real(comp.meta.swing));
+    json_object_set_new(metaJ, "seed", json_integer(comp.meta.seed));
+    json_object_set_new(root, "meta", metaJ);
+
+    // Clock
+    json_t* clockJ = json_object();
+    json_object_set_new(clockJ, "externalPpqn", json_integer(comp.clock.externalPpqn));
+    json_object_set_new(clockJ, "outputPpqn", json_integer(comp.clock.outputPpqn));
+    json_object_set_new(root, "clock", clockJ);
+
+    // Transport
+    json_t* transportJ = json_object();
+    json_object_set_new(transportJ, "running", json_boolean(comp.transport.running));
+    json_object_set_new(transportJ, "loop", json_boolean(comp.transport.loop));
+    json_object_set_new(root, "transport", transportJ);
+
+    // Tracks
+    json_t* tracksJ = json_array();
+    for (const auto& tr : comp.tracks) {
+        json_t* trJ = json_object();
+        json_object_set_new(trJ, "id", json_string(tr.id.c_str()));
+        json_object_set_new(trJ, "channel", json_integer(tr.channel));
+        json_array_append_new(tracksJ, trJ);
+    }
+    json_object_set_new(root, "tracks", tracksJ);
+
+    // Scenes summary
+    json_t* scenesJ = json_array();
+    for (const auto& sc : comp.arrangement) {
+        json_t* scJ = json_object();
+        json_object_set_new(scJ, "id", json_string(sc.id.c_str()));
+        if (!sc.name.empty()) json_object_set_new(scJ, "name", json_string(sc.name.c_str()));
+        json_object_set_new(scJ, "lengthBeats", json_real(sc.lengthBeats));
+        json_object_set_new(scJ, "repeats", json_integer(sc.repeats));
+        json_object_set_new(scJ, "trackCount", json_integer(sc.tracks.size()));
+        json_array_append_new(scenesJ, scJ);
+    }
+    json_object_set_new(root, "scenes", scenesJ);
+
+    // Patterns summary
+    json_t* patternsJ = json_array();
+    for (const auto& kv : comp.patterns) {
+        json_t* pJ = json_object();
+        json_object_set_new(pJ, "id", json_string(kv.first.c_str()));
+        json_object_set_new(pJ, "length", json_integer(kv.second.length));
+        json_object_set_new(pJ, "resolution", json_string(kv.second.resolutionStr.c_str()));
+        json_object_set_new(pJ, "durationBeats", json_real(kv.second.length * kv.second.resolutionBeats));
+        json_object_set_new(pJ, "eventCount", json_integer(kv.second.steps.size()));
+        json_array_append_new(patternsJ, pJ);
+    }
+    json_object_set_new(root, "patterns", patternsJ);
+
+    json_object_set_new(root, "warnings", json_array());
+    return dumpAndFree(root);
+}
+
+std::string serializeFullCompositionJson(const Composition& comp) {
+    json_t* root = json_object();
+    json_object_set_new(root, "ok", json_true());
+    json_object_set_new(root, "revision", json_integer(comp.revision));
+    json_object_set_new(root, "schemaVersion", json_integer(1));
+    json_object_set_new(root, "view", json_string("full"));
+    json_object_set_new(root, "composition", compositionToJson(comp));
+    json_object_set_new(root, "warnings", json_array());
+    return dumpAndFree(root);
+}
+
+std::string serializePatternViewJson(const Composition& comp, const std::string& patternId) {
+    auto it = comp.patterns.find(patternId);
+    if (it == comp.patterns.end()) {
+        json_t* err = json_object();
+        json_object_set_new(err, "ok", json_false());
+        json_t* errorJ = json_object();
+        json_object_set_new(errorJ, "code", json_string("pattern_not_found"));
+        json_object_set_new(errorJ, "message", json_string(("Pattern not found: " + patternId).c_str()));
+        json_object_set_new(err, "error", errorJ);
+        return dumpAndFree(err);
+    }
+    json_t* root = json_object();
+    json_object_set_new(root, "ok", json_true());
+    json_object_set_new(root, "revision", json_integer(comp.revision));
+    json_object_set_new(root, "schemaVersion", json_integer(1));
+    json_object_set_new(root, "view", json_string("pattern"));
+    json_object_set_new(root, "id", json_string(patternId.c_str()));
+    json_object_set_new(root, "pattern", patternToJson(it->second));
+
+    json_t* derivedJ = json_object();
+    json_object_set_new(derivedJ, "durationBeats", json_real(it->second.length * it->second.resolutionBeats));
+    json_object_set_new(derivedJ, "eventCount", json_integer(it->second.steps.size()));
+    json_object_set_new(root, "derived", derivedJ);
+
+    json_object_set_new(root, "warnings", json_array());
+    return dumpAndFree(root);
+}
+
+std::string serializeSceneViewJson(const Composition& comp, const std::string& sceneId) {
+    const Scene* found = nullptr;
+    for (const auto& sc : comp.arrangement) {
+        if (sc.id == sceneId) { found = &sc; break; }
+    }
+    if (!found) {
+        json_t* err = json_object();
+        json_object_set_new(err, "ok", json_false());
+        json_t* errorJ = json_object();
+        json_object_set_new(errorJ, "code", json_string("scene_not_found"));
+        json_object_set_new(errorJ, "message", json_string(("Scene not found: " + sceneId).c_str()));
+        json_object_set_new(err, "error", errorJ);
+        return dumpAndFree(err);
+    }
+    json_t* root = json_object();
+    json_object_set_new(root, "ok", json_true());
+    json_object_set_new(root, "revision", json_integer(comp.revision));
+    json_object_set_new(root, "schemaVersion", json_integer(1));
+    json_object_set_new(root, "view", json_string("scene"));
+    json_object_set_new(root, "id", json_string(sceneId.c_str()));
+    json_object_set_new(root, "scene", sceneToJson(*found));
+
+    json_t* derivedJ = json_object();
+    json_object_set_new(derivedJ, "durationBeats", json_real(found->lengthBeats));
+    json_object_set_new(derivedJ, "totalBeats", json_real(found->lengthBeats * found->repeats));
+    json_object_set_new(root, "derived", derivedJ);
+
+    json_object_set_new(root, "warnings", json_array());
+    return dumpAndFree(root);
+}
+
 } // namespace sibyl
+
