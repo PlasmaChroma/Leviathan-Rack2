@@ -7,6 +7,7 @@ Connects MCP-compatible agents to VCV Rack through the Octavia module.
 import json
 import os
 import warnings
+from urllib.parse import urlencode
 import httpx
 from typing import Optional, Literal
 from pydantic import BaseModel, Field, ConfigDict
@@ -48,6 +49,22 @@ async def _call(endpoint: str, method: str = "GET", data: dict = None) -> dict:
         r.raise_for_status()
         payload = r.json()
         if isinstance(payload, dict) and "error" in payload:
+            raise OctaviaBridgeError(str(payload["error"]))
+        return payload
+
+
+async def _sibyl_call(endpoint: str, method: str = "GET", data: dict = None) -> dict:
+    """Keep handled Sibyl rejection envelopes intact for agent recovery."""
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        if method == "GET":
+            r = await client.get(f"{BRIDGE_URL}/{endpoint}", headers=BRIDGE_HEADERS)
+        else:
+            r = await client.post(f"{BRIDGE_URL}/{endpoint}", json=data or {}, headers=BRIDGE_HEADERS)
+        r.raise_for_status()
+        payload = r.json()
+        if not isinstance(payload, dict):
+            raise OctaviaBridgeError("Sibyl bridge returned a non-object response")
+        if "ok" not in payload and "error" in payload:
             raise OctaviaBridgeError(str(payload["error"]))
         return payload
 
@@ -170,6 +187,110 @@ async def vcv_get_module(params: GetModuleInput) -> str:
     """
     try:
         return json.dumps(await _call(f"modules/{params.module_id}"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+# ── Sibyl semantic composition tools ─────────────────────────────────────────
+
+class SibylModuleInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    module_id: int = Field(..., description="Sibyl module ID from vcv_list_modules", ge=0)
+
+
+class SibylCompositionInput(SibylModuleInput):
+    view: Literal["summary", "full", "pattern", "scene"] = Field(
+        "summary", description="Compact summary, full composition, or one named pattern/scene"
+    )
+    id: Optional[str] = Field(None, description="Pattern or scene ID; required by pattern and scene views")
+
+
+class SibylValidateInput(SibylModuleInput):
+    candidate: dict = Field(..., description="Candidate composition, pattern, scene, or edit payload to validate")
+
+
+class SibylEditInput(SibylModuleInput):
+    expected_revision: int = Field(..., description="Last accepted revision read from Sibyl", ge=0)
+    operations: list[dict] = Field(..., description="Atomic semantic edit operations", min_length=1)
+    apply_at: Literal["immediate", "nextStep", "nextBeat", "nextScene"] = Field(
+        "nextBeat", description="Musical boundary at which the accepted revision becomes active"
+    )
+
+
+class SibylTransportInput(SibylModuleInput):
+    action: Literal["play", "pause", "stop", "reset", "next_scene", "previous_scene", "select_scene", "reseed"]
+    scene_id: Optional[str] = Field(None, description="Scene ID for select_scene")
+    apply_at: Optional[Literal["immediate", "nextStep", "nextBeat", "nextScene"]] = None
+    seed: Optional[int] = Field(None, description="Optional deterministic seed for reseed")
+
+
+@mcp.tool(name="vcv_sibyl_get_capabilities",
+          annotations={"title": "Get Sibyl Capabilities", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_sibyl_get_capabilities(params: SibylModuleInput) -> str:
+    """Discover the Sibyl API/schema versions and semantic operations supported by a module."""
+    try:
+        return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/capabilities"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_sibyl_get_composition",
+          annotations={"title": "Get Sibyl Composition", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_sibyl_get_composition(params: SibylCompositionInput) -> str:
+    """Read a compact summary, the full composition, or one Sibyl pattern/scene."""
+    try:
+        query = {"view": params.view}
+        if params.id is not None:
+            query["id"] = params.id
+        return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/composition?{urlencode(query)}"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_sibyl_validate",
+          annotations={"title": "Validate Sibyl Composition", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_sibyl_validate(params: SibylValidateInput) -> str:
+    """Validate a candidate with Sibyl's own musical rules without changing playback."""
+    try:
+        return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/validate", "POST", params.candidate), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_sibyl_edit",
+          annotations={"title": "Edit Sibyl Composition", "readOnlyHint": False, "destructiveHint": False})
+async def vcv_sibyl_edit(params: SibylEditInput) -> str:
+    """Apply semantic operations atomically. A successful transaction creates one vcv_undo entry."""
+    try:
+        payload = {"expectedRevision": params.expected_revision,
+                   "applyAt": params.apply_at,
+                   "operations": params.operations}
+        return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/edit", "POST", payload), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_sibyl_get_status",
+          annotations={"title": "Get Sibyl Runtime Status", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_sibyl_get_status(params: SibylModuleInput) -> str:
+    """Read runtime transport, scene, clock, active revision, and pending apply state."""
+    try:
+        return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/status"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_sibyl_transport",
+          annotations={"title": "Control Sibyl Transport", "readOnlyHint": False, "destructiveHint": False})
+async def vcv_sibyl_transport(params: SibylTransportInput) -> str:
+    """Control Sibyl performance state without creating an undo entry."""
+    try:
+        payload = params.model_dump(exclude={"module_id"}, exclude_none=True)
+        if "scene_id" in payload:
+            payload["sceneId"] = payload.pop("scene_id")
+        if "apply_at" in payload:
+            payload["applyAt"] = payload.pop("apply_at")
+        return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/transport", "POST", payload), indent=2)
     except Exception as e:
         return _err(e)
 
@@ -560,7 +681,7 @@ async def vcv_get_module_state(params: ModuleStateInput) -> str:
 class SetModuleStateInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     module_id: int = Field(..., description="Module ID to restore state into", ge=0)
-    state_json: str = Field(..., description="Raw JSON preset string from vcv_get_module_state")
+    state_json: str = Field(..., description="Complete authoritative JSON preset from vcv_get_module_state; preserve the Rack wrapper")
 
 
 @mcp.tool(
@@ -568,7 +689,7 @@ class SetModuleStateInput(BaseModel):
     annotations={"title": "Restore Module State", "readOnlyHint": False, "destructiveHint": False}
 )
 async def vcv_set_module_state(params: SetModuleStateInput) -> str:
-    """Restore a module's internal preset state from JSON. Revert with vcv_undo."""
+    """Authoritatively restore complete module state. This interoperable path remains valid for Sibyl; it bypasses semantic revision guards but still uses Sibyl validation. Revert with vcv_undo."""
     try:
         state = json.loads(params.state_json)
         if not isinstance(state, dict):

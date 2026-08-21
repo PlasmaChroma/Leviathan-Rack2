@@ -40,7 +40,9 @@ class ServerContractTest(unittest.TestCase):
             "vcv_find_unpatched", "vcv_analyze_audio", "vcv_reset_loudness", "vcv_temporal_deck_transport", "vcv_add_module", "vcv_delete_module",
             "vcv_update_module", "vcv_layout_modules", "vcv_set_parameters", "vcv_connect_cables",
             "vcv_disconnect_cable", "vcv_get_module_state", "vcv_set_module_state",
-            "vcv_undo", "vcv_save_patch"
+            "vcv_undo", "vcv_save_patch", "vcv_sibyl_get_capabilities",
+            "vcv_sibyl_get_composition", "vcv_sibyl_validate", "vcv_sibyl_edit",
+            "vcv_sibyl_get_status", "vcv_sibyl_transport"
         }
         self.assertEqual(set(names), expected_tools)
 
@@ -64,6 +66,14 @@ class ServerContractTest(unittest.TestCase):
         self.assertIn("row: Optional[int]", self.source)
         self.assertIn('name="vcv_layout_modules"', self.source)
         self.assertIn('await _call("modules/layout"', self.source)
+
+    def test_sibyl_tools_use_semantic_routes_and_revision_guard(self):
+        self.assertIn('await _sibyl_call(f"sibyl/{params.module_id}/composition?', self.source)
+        self.assertIn('await _sibyl_call(f"sibyl/{params.module_id}/validate", "POST"', self.source)
+        self.assertIn('await _sibyl_call(f"sibyl/{params.module_id}/edit", "POST"', self.source)
+        self.assertIn('"expectedRevision": params.expected_revision', self.source)
+        self.assertIn('await _sibyl_call(f"sibyl/{params.module_id}/status")', self.source)
+        self.assertIn('await _sibyl_call(f"sibyl/{params.module_id}/transport", "POST"', self.source)
 
 
 if __name__ == "__main__":

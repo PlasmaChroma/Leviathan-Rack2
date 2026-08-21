@@ -20,6 +20,7 @@
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "TemporalDeck.hpp"
+#include "SibylControl.hpp"
 #include "third_party/httplib.h"
 #include <thread>
 #include <atomic>
@@ -236,6 +237,13 @@ struct ModuleStateJob {
     std::string stateJson; // output for GET, input for SET
     std::atomic<bool> done{false}; bool success=false; std::string error;
 };
+struct SibylJob {
+    SibylControl::Operation operation;
+    int64_t moduleId = -1;
+    std::string requestJson = "{}";
+    std::string responseJson;
+    std::atomic<bool> done{false}; bool success=false; std::string error;
+};
 struct PatchSaveJob {
     std::string savedPath;
     std::atomic<bool> done{false}; bool success=false; std::string error;
@@ -421,6 +429,7 @@ struct Octavia : Module {
     std::queue<std::shared_ptr<ModuleStateJob>> stateQueue;     std::mutex stateQueueMtx;
     std::queue<std::shared_ptr<PatchSaveJob>>   patchSaveQueue; std::mutex patchSaveQueueMtx;
     std::queue<std::shared_ptr<TemporalDeckJob>> temporalDeckQueue; std::mutex temporalDeckQueueMtx;
+    std::queue<std::shared_ptr<SibylJob>> sibylQueue; std::mutex sibylQueueMtx;
 
     dsp::BooleanTrigger startTrig;
 
@@ -1200,6 +1209,48 @@ struct Octavia : Module {
         job->success=true; job->done=true;
     }
 
+    void processSibylQueue() {
+        std::shared_ptr<SibylJob> job;
+        { std::unique_lock<std::mutex> lk(sibylQueueMtx); if (!sibylQueue.empty()) { job=sibylQueue.front(); sibylQueue.pop(); } }
+        if (!job) return;
+        engine::Module* module = APP->engine->getModule(job->moduleId);
+        if (!module) { job->error="module not found"; job->done=true; return; }
+        SibylControl* sibyl = dynamic_cast<SibylControl*>(module);
+        if (!sibyl) { job->error="module does not provide the Sibyl semantic-control capability"; job->done=true; return; }
+
+        std::string oldState;
+        if (job->operation == SibylControl::Operation::EDIT) {
+            json_t* oldJ = module->toJson();
+            if (oldJ) {
+                char* str = json_dumps(oldJ, JSON_COMPACT);
+                if (str) { oldState = str; free(str); }
+                json_decref(oldJ);
+            }
+        }
+        job->success = sibyl->handleSibylRequest(job->operation, job->requestJson,
+                                                 job->responseJson, job->error);
+        if (!job->responseJson.empty()) {
+            json_error_t jerr;
+            json_t* responseJ = json_loads(job->responseJson.c_str(), 0, &jerr);
+            if (!responseJ || !json_is_object(responseJ)) {
+                if (responseJ) json_decref(responseJ);
+                job->success=false;
+                job->responseJson.clear();
+                job->error="Sibyl returned an invalid JSON response object";
+            } else json_decref(responseJ);
+        } else if (job->success) {
+            job->success=false;
+            job->error="Sibyl returned an empty response";
+        }
+        if (job->success && job->operation == SibylControl::Operation::EDIT && !oldState.empty()) {
+            UndoAction undo; undo.type=UndoAction::STATE; undo.moduleId=job->moduleId;
+            undo.oldState=std::move(oldState);
+            undo.label="edit Sibyl composition on module "+std::to_string(job->moduleId);
+            pushUndo(std::move(undo));
+        }
+        job->done=true;
+    }
+
     void processPatchSaveQueue() {
         std::shared_ptr<PatchSaveJob> job;
         { std::unique_lock<std::mutex> lk(patchSaveQueueMtx); if (!patchSaveQueue.empty()) { job=patchSaveQueue.front(); patchSaveQueue.pop(); } }
@@ -1236,6 +1287,17 @@ struct Octavia : Module {
             pos += upto.size();
         }
         return s;
+    }
+
+    void dispatchSibyl(httplib::Response& res, int64_t moduleId,
+                       SibylControl::Operation operation, const std::string& requestJson) {
+        auto job=std::make_shared<SibylJob>();
+        job->moduleId=moduleId; job->operation=operation; job->requestJson=requestJson;
+        { std::unique_lock<std::mutex> lk(sibylQueueMtx); sibylQueue.push(job); }
+        if (!waitDone(job, 5000)) res.set_content("{\"error\":\"timeout\"}","application/json");
+        else if (!job->success && !job->responseJson.empty()) res.set_content(job->responseJson,"application/json");
+        else if (!job->success) res.set_content("{\"error\":"+jStr(job->error)+"}","application/json");
+        else res.set_content(job->responseJson,"application/json");
     }
 
     // ── HTTP routes ───────────────────────────────────────────────────────────
@@ -2008,6 +2070,31 @@ struct Octavia : Module {
             else res.set_content("{\"error\":"+jStr(job->error)+"}","application/json");
         });
 
+        // Sibyl semantic API. Payloads are passed opaquely to the target module,
+        // which is the sole authority for the composition schema and validation.
+        svr.Get(R"(/sibyl/(\d+)/capabilities)", [this](const httplib::Request& r, httplib::Response& res){
+            dispatchSibyl(res, std::stoll(r.matches[1].str()), SibylControl::Operation::CAPABILITIES, "{}");
+        });
+        svr.Get(R"(/sibyl/(\d+)/composition)", [this](const httplib::Request& r, httplib::Response& res){
+            std::string view=r.has_param("view") ? r.get_param_value("view") : "summary";
+            std::string request="{\"view\":"+jStr(view);
+            if (r.has_param("id")) request+=",\"id\":"+jStr(r.get_param_value("id"));
+            request+="}";
+            dispatchSibyl(res, std::stoll(r.matches[1].str()), SibylControl::Operation::GET_COMPOSITION, request);
+        });
+        svr.Post(R"(/sibyl/(\d+)/validate)", [this](const httplib::Request& r, httplib::Response& res){
+            dispatchSibyl(res, std::stoll(r.matches[1].str()), SibylControl::Operation::VALIDATE, r.body);
+        });
+        svr.Post(R"(/sibyl/(\d+)/edit)", [this](const httplib::Request& r, httplib::Response& res){
+            dispatchSibyl(res, std::stoll(r.matches[1].str()), SibylControl::Operation::EDIT, r.body);
+        });
+        svr.Get(R"(/sibyl/(\d+)/status)", [this](const httplib::Request& r, httplib::Response& res){
+            dispatchSibyl(res, std::stoll(r.matches[1].str()), SibylControl::Operation::GET_STATUS, "{}");
+        });
+        svr.Post(R"(/sibyl/(\d+)/transport)", [this](const httplib::Request& r, httplib::Response& res){
+            dispatchSibyl(res, std::stoll(r.matches[1].str()), SibylControl::Operation::TRANSPORT, r.body);
+        });
+
         svr.Post(R"(/modules/(\d+)/state)", [this](const httplib::Request& r, httplib::Response& res){
             auto job=std::make_shared<ModuleStateJob>(); job->type=ModuleStateJob::SET;
             job->moduleId=std::stoll(r.matches[1].str());
@@ -2267,6 +2354,7 @@ struct OctaviaWidget : ModuleWidget {
         m->processBulkMoveQueue();
         m->processBypassQueue();
         m->processStateQueue();
+        m->processSibylQueue();
         m->processPatchSaveQueue();
         m->processBulkParamQueue();
         m->processUndoQueue();
