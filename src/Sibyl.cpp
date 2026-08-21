@@ -1,6 +1,7 @@
 #include "plugin.hpp"
 #include "SibylControl.hpp"
 #include "SibylAdoption.hpp"
+#include "SibylEdit.hpp"
 #include "SibylJSON.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
@@ -721,50 +722,54 @@ struct SibylModule : Module, SibylControl {
 				return false;
 			}
 
-			// Very naive MVP: look for replace_composition
-			bool foundReplace = false;
-			std::string compJsonStr;
-			size_t idx; json_t* opJ;
-			json_array_foreach(opsJ, idx, opJ) {
-				json_t* opNameJ = json_object_get(opJ, "op");
-				if (opNameJ && json_is_string(opNameJ) && std::string(json_string_value(opNameJ)) == "replace_composition") {
-					json_t* compJ = json_object_get(opJ, "composition");
-					if (compJ) {
-						foundReplace = true;
-						char* dumped = json_dumps(compJ, 0);
-						compJsonStr = dumped;
-						free(dumped);
-					}
-				} else {
-					json_decref(root);
-					error = "Unsupported operation in MVP";
-					return false;
-				}
+			if (!m_acceptedCompositionPtr) {
+				json_decref(root);
+				error = "No composition loaded";
+				return false;
 			}
-
-			if (foundReplace) {
-				sibyl::ParseResult res = sibyl::parseCompositionJson(compJsonStr, m_acceptedRevision + 1);
-				if (res.valid) {
-					if (!applyAtJ) applyAt = res.composition->transport.defaultApplyAt;
-					acceptComposition(res.composition, applyAt, phasePolicy, res.warnings);
-					int activeRevision = m_activeRevision.load(std::memory_order_acquire);
-					responseJson = "{\"ok\":true,\"revision\":" + std::to_string(m_acceptedRevision) +
-						",\"activeRevision\":" + std::to_string(activeRevision) +
-						",\"pendingRevision\":" + std::to_string(m_acceptedRevision) +
-						",\"applyAt\":\"" + sibyl::applyAtName(applyAt) +
-						"\",\"phasePolicy\":\"" + sibyl::phasePolicyName(phasePolicy) + "\",\"warnings\":[]}";
-					json_decref(root);
-					return true;
-				} else {
-					json_decref(root);
-					error = "Validation failed: " + (!res.errors.empty() ? res.errors[0].message : "Unknown");
-					return false;
-				}
+			sibyl::EditResult edit = sibyl::applyCompositionEdit(
+				*m_acceptedCompositionPtr, opsJ, m_acceptedRevision + 1);
+			if (!edit.valid || !edit.composition) {
+				json_t* respJ = json_object();
+				json_object_set_new(respJ, "ok", json_false());
+				json_t* errorJ = json_object();
+				json_object_set_new(errorJ, "code", json_string(edit.errorCode.empty() ? "validation_failed" : edit.errorCode.c_str()));
+				json_object_set_new(errorJ, "message", json_string(edit.errorMessage.empty() ? "Composition edit failed." : edit.errorMessage.c_str()));
+				if (edit.errorPath.empty()) json_object_set_new(errorJ, "path", json_null());
+				else json_object_set_new(errorJ, "path", json_string(edit.errorPath.c_str()));
+				json_object_set_new(respJ, "error", errorJ);
+				char* dumped = json_dumps(respJ, JSON_COMPACT);
+				responseJson = dumped ? dumped : "{}";
+				if (dumped) free(dumped);
+				json_decref(respJ);
+				json_decref(root);
+				error = edit.errorMessage.empty() ? "Composition edit failed" : edit.errorMessage;
+				return false;
 			}
-
+			if (!applyAtJ) applyAt = edit.composition->transport.defaultApplyAt;
+			acceptComposition(edit.composition, applyAt, phasePolicy, edit.warnings);
+			int activeRevision = m_activeRevision.load(std::memory_order_acquire);
+			json_t* respJ = json_object();
+			json_object_set_new(respJ, "ok", json_true());
+			json_object_set_new(respJ, "revision", json_integer(m_acceptedRevision));
+			json_object_set_new(respJ, "activeRevision", json_integer(activeRevision));
+			json_object_set_new(respJ, "pendingRevision", json_integer(m_acceptedRevision));
+			json_object_set_new(respJ, "applyAt", json_string(sibyl::applyAtName(applyAt)));
+			json_object_set_new(respJ, "phasePolicy", json_string(sibyl::phasePolicyName(phasePolicy)));
+			json_t* warningsJ = json_array();
+			for (const auto& warning : edit.warnings) {
+				json_t* issueJ = json_object();
+				json_object_set_new(issueJ, "path", json_string(warning.path.c_str()));
+				json_object_set_new(issueJ, "message", json_string(warning.message.c_str()));
+				json_array_append_new(warningsJ, issueJ);
+			}
+			json_object_set_new(respJ, "warnings", warningsJ);
+			char* dumped = json_dumps(respJ, JSON_COMPACT);
+			responseJson = dumped ? dumped : "{}";
+			if (dumped) free(dumped);
+			json_decref(respJ);
 			json_decref(root);
-			error = "No supported operations found";
-			return false;
+			return true;
 		}
 		error = "Not implemented";
 		return false;

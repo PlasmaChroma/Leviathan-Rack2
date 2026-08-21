@@ -8,7 +8,7 @@ This document tracks the implementation status of the **Sibyl** module against t
 
 ## 1. Executive Summary
 
-Sibyl is currently an **integrated end-to-end prototype**. The module, panel, basic sequencer playback, complete-composition JSON path, and initial Octavia adapter are operational. Contract Core work is in progress: strict v1 composition validation and the accepted/active/pending revision-adoption model are now implemented and covered by focused tests. Granular edit operations, complete transport semantics, and several playback policies still need implementation before the semantic API can be considered v1-compliant.
+Sibyl is currently an **integrated end-to-end prototype**. The module, panel, basic sequencer playback, complete-composition JSON path, and initial Octavia adapter are operational. Contract Core work is in progress: strict v1 composition validation, revisioned adoption, and granular atomic composition edits are now implemented and covered by focused tests. Complete transport semantics and several playback policies still need implementation before the semantic API can be considered v1-compliant.
 
 | Component | Status | Notes |
 |---|---|---|
@@ -18,8 +18,8 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, ba
 | **Lock-Free DSP Engine** | 🟡 Substantial | Atomic immutable-snapshot reading and boundary adoption exist; retained snapshots are currently unbounded, and reclamation/hot-path hardening remain. |
 | **Hardware Clock & Sync** | 🟡 Partial | Physical I/O, basic clock/scene behavior, and edit-adoption boundary detection exist; transport-command quantization, hysteresis, interpolation, and non-loop termination remain. |
 | **Pitch & Scale Compiler** | 🟡 Substantial | Scientific pitch, 12 scales, Euclidean degree wrapping, and compiled voltage bounds are implemented and tested; playback-level edge cases need broader coverage. |
-| **Octavia Bridge (Core)** | 🟡 Routes Integrated | All routes exist. Full views, bulk replacement, optimistic revision checks, normalized adoption options, and pending-state reporting work; focused validation, granular edits, and complete transport remain. |
-| **Granular `EDIT` Ops** | ⏳ Pending | Atomic incremental mutations (`upsert_pattern`, `set_scene_track`, `set_meta`, etc.). |
+| **Octavia Bridge (Core)** | 🟡 Substantial | All routes exist. Full views, atomic edits, optimistic revision checks, normalized adoption options, and pending-state reporting work; focused validation and complete transport remain. |
+| **Granular `EDIT` Ops** | ✅ Core Complete | All v1 operation names apply in order to a private copy, then pass through one strict full-composition validation/compile. |
 | **Edit Adoption & Phase Policies** | ✅ Core Complete | `immediate`, `nextStep`, `nextBeat`, and `nextScene` adoption plus `preserve`, `restartChanged`, and `restartAll`; broader module-level behavior tests remain. |
 | **OLED Display Widget** | ⏳ Pending | Real-time front-panel OLED / LED matrix display for title, scene, BPM, and track activity. |
 | **Micro-timing & Swing** | ⏳ Pending | `swing` subdivision delay and `microshift` step offsets. |
@@ -48,7 +48,14 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, ba
 - Macro definitions now compile into the immutable snapshot; previously they were serialized and consumed by DSP but not parsed from composition JSON.
 - Added `tests/sibyl_json_spec.cpp` to `test-fast`, covering valid compilation, revision assignment, scale-degree compilation, macro compilation, warnings, and representative rejection paths.
 
-### 2.4 Hardware I/O & Real-Time Sync
+### 2.4 Atomic Granular Edit Transactions
+- Added all v1 operations: `set_meta`, `set_clock`, track/pattern/scene/macro upsert and delete, `reorder_scenes`, `set_scene_track`, and ordered `replace_composition`.
+- Operations mutate a private JSON composition in request order; the result is then validated and compiled exactly once. Rejection leaves the accepted and pending snapshots unchanged.
+- Upserts normalize object identity from the operation `id`. Scalar setters accept only their documented semantic paths.
+- Referenced track and pattern deletion reports `object_in_use`; reassignment/removal earlier in the same transaction permits deletion.
+- Added `tests/sibyl_edit_spec.cpp` to `test-fast`, covering the complete mutation families, ordering, reference protection, missing/unknown objects, validator rejection, and base-snapshot immutability.
+
+### 2.5 Hardware I/O & Real-Time Sync
 - **10 HP Physical Interface:**
   - `CLOCK IN`: Schmitt trigger with interval timing measurement, `externalPpqn` division, and timeout fallback (`hold`, `freeRun`, `internal`).
   - `RUN IN`: High = play, Low = pause (retains position, closes gates).
@@ -64,7 +71,7 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, ba
   - `SCENE OUT`: 10 V, 1 ms pulse generator on every scene transition.
   - `EOC OUT`: 10 V, 1 ms pulse generator on arrangement loop wrap.
 
-### 2.5 Pitch, Timing, & Playback Features
+### 2.6 Pitch, Timing, & Playback Features
 - **Pitch Representations:**
   - Direct V/Oct voltage (`pitchV`, C4 = 0 V).
   - Scientific pitch grammar (`note`, e.g. `"C4"`, `"Eb3"`, `"F#5"`).
@@ -76,7 +83,7 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, ba
   - `tie: true` gate holding (suppresses re-attack and maintains gate high across steps).
   - Deterministic pseudo-randomness for `probability` checks seeded by `meta.seed` and event coordinates.
 
-### 2.6 Semantic Interaction Protocol (Octavia Reference Adapter)
+### 2.7 Semantic Interaction Protocol (Octavia Reference Adapter)
 - **`vcv_sibyl_get_capabilities`**: Advertises API version 1, schema version 1, active revision, and supported operations.
 - **`vcv_sibyl_get_composition`**:
   - `summary`: Token-efficient overview returning metadata, clock/transport settings, track declarations, scene outlines with track counts, pattern IDs with derived durations and event counts.
@@ -92,30 +99,20 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, ba
 
 ## 3. Pending Features ("What Needs Done")
 
-### 3.1 Granular Incremental Edit Operations
-Expand `handleSibylRequest(Operation::EDIT, ...)` to support partial atomic mutations on a working copy:
-- `set_meta`: Update individual metadata properties (`title`, `bpm`, `prompt`, `swing`, `scale`, `root`, `rootOctave`, `seed`).
-- `set_clock`: Update clock properties (`externalPpqn`, `outputPpqn`, `externalTimeoutMs`, `onExternalStop`).
-- `upsert_track` / `delete_track`: Add, update, or remove track declarations (with `object_in_use` checks).
-- `upsert_pattern` / `delete_pattern`: Add, replace, or delete pattern definitions.
-- `upsert_scene` / `delete_scene` / `reorder_scenes` / `set_scene_track`: Modify arrangement scenes and track-pattern assignments.
-- `upsert_macro` / `delete_macro`: Configure performance macro targets and ranges.
-- `object_in_use` validation: Reject deletion of patterns or tracks that are referenced in existing scenes within the same transaction.
-
-### 3.2 Adoption Hardening
+### 3.1 Adoption Hardening
 - Add module-level integration coverage proving gate closure, phase reset, event generation, and coalesced-edit behavior at real DSP boundaries; the pure adoption contract currently has focused unit coverage.
 - Replace the intentionally retained composition/request histories with bounded, non-audio-thread reclamation while guaranteeing that the DSP thread never destroys the final snapshot reference.
 - Publish status/playhead telemetry through an explicit race-free snapshot rather than reading mutable DSP counters directly from the control thread.
 - Complete the finer `preserve` semantics for changed pattern lengths, newly inserted past events, and unchanged sounding-event continuity described in `doc/sibyl.md`.
 
-### 3.3 Front-Panel OLED Display Widget
+### 3.2 Front-Panel OLED Display Widget
 - Implement a custom NanoVG `TransparentWidget` inside the OLED bezel (`res/Sibyl.panel.svg` display rect):
   - Track activity / gate matrix (16-channel LED indicators).
   - Song title (`meta.title`) and BPM.
   - Active scene ID and repeat counter (e.g. `VERSE A [1/2]`).
   - Active revision and sync source (`INT` / `EXT`).
 
-### 3.4 Micro-timing & Swing
+### 3.3 Micro-timing & Swing
 - **Swing:** Delay even-numbered subdivision steps by `meta.swing` (0.0 to 0.49 fraction of step).
 - **Microshift:** Apply signed sub-step timing offset (`microshift` strictly between -0.5 and +0.5).
 
@@ -129,6 +126,8 @@ src/
 ├── SibylAdoption.hpp   # Adoption boundaries, phase policies, and request contract
 ├── SibylAdoption.cpp   # Changed-track detection and adoption helpers
 ├── SibylControl.hpp    # In-process C++ RTTI adapter interface for Octavia
+├── SibylEdit.hpp       # Atomic semantic edit result and transaction interface
+├── SibylEdit.cpp       # Ordered JSON-tree mutations and full compile handoff
 ├── SibylJSON.hpp       # Parser, validator, and serializer declarations
 ├── SibylJSON.cpp       # Jansson-based schema compiler, note parser, scale quantizer
 └── SibylTypes.hpp      # C++ data structures for immutable Composition snapshots
