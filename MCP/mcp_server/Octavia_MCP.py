@@ -409,6 +409,7 @@ class UpdateModuleInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     module_id: int = Field(..., description="Module ID from vcv_list_modules", ge=0)
     hp: Optional[float] = Field(None, description="Horizontal position in HP (rack units, 1 HP = 5.08mm)")
+    row: Optional[int] = Field(None, description="Rack row index. Omit to preserve the module's current row")
     bypassed: Optional[bool] = Field(None, description="True to bypass module, False to re-enable")
 
 
@@ -417,19 +418,25 @@ class UpdateModuleInput(BaseModel):
     annotations={"title": "Update Module", "readOnlyHint": False, "destructiveHint": False}
 )
 async def vcv_update_module(params: UpdateModuleInput) -> str:
-    """Update a module's horizontal rack position (HP) and/or bypass state.
+    """Update a module's rack position and/or bypass state.
 
     Position and bypass are separate writes and therefore separate undo steps. If one
     succeeds before a later write fails, the response reports the applied operation.
+    Moving by HP alone preserves the current row; provide row to move between rows.
     """
-    if params.hp is None and params.bypassed is None:
+    if params.hp is None and (params.row is not None or params.bypassed is None):
+        if params.row is not None:
+            raise ValueError("'row' requires 'hp'")
         raise ValueError("Provide at least one of 'hp' or 'bypassed'")
     results = {}
     applied = []
     if params.hp is not None:
         try:
+            payload = {"hp": params.hp}
+            if params.row is not None:
+                payload["row"] = params.row
             results["position"] = await _call(
-                f"modules/{params.module_id}/position", "POST", {"hp": params.hp}
+                f"modules/{params.module_id}/position", "POST", payload
             )
             applied.append("position")
         except Exception as e:
@@ -453,6 +460,40 @@ async def vcv_update_module(params: UpdateModuleInput) -> str:
                 "error": _error_message(e),
             }, indent=2)
     return json.dumps({"ok": True, "applied": applied, "results": results}, indent=2)
+
+
+class LayoutChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    module_id: int = Field(..., description="Module ID", ge=0)
+    hp: float = Field(..., description="Horizontal position in HP")
+    row: int = Field(..., description="Rack row index")
+
+
+class LayoutModulesInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    changes: list[LayoutChange] = Field(..., min_length=1, description="Complete set of module positions")
+
+
+@mcp.tool(
+    name="vcv_layout_modules",
+    annotations={"title": "Layout Modules", "readOnlyHint": False, "destructiveHint": False}
+)
+async def vcv_layout_modules(params: LayoutModulesInput) -> str:
+    """Atomically arrange modules across rack rows as one undoable operation.
+
+    The bridge validates all modules and target rectangles before moving anything.
+    Collisions reject the whole operation. The response reports resolved positions.
+    Use separate rows when functional lanes improve readability, such as sequencing,
+    drums, melodic voices, and mixing/effects, with signal flow left-to-right per row.
+    """
+    changes = [
+        {"moduleId": change.module_id, "hp": change.hp, "row": change.row}
+        for change in params.changes
+    ]
+    try:
+        return json.dumps(await _call("modules/layout", "POST", {"changes": changes}), indent=2)
+    except Exception as e:
+        return _err(e)
 
 
 # ── Parameter & Preset Operations ─────────────────────────────────────────────

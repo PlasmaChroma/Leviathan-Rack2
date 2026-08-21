@@ -17,6 +17,7 @@
 #endif
 
 #include "plugin.hpp"
+#include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "TemporalDeck.hpp"
 #include "third_party/httplib.h"
@@ -30,6 +31,7 @@
 #include <array>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <cmath>
 #include <cctype>
 #include <cstring>
@@ -213,7 +215,15 @@ struct DeleteModuleJob {
     std::atomic<bool> done{false}; bool success=false; std::string error;
 };
 struct MoveModuleJob {
-    int64_t moduleId; float hp;
+    int64_t moduleId; float hp; int row = 0; bool hasRow = false;
+    float resolvedHp = 0.f; int resolvedRow = 0;
+    std::atomic<bool> done{false}; bool success=false; std::string error;
+};
+struct BulkMoveJob {
+    struct Change { int64_t moduleId; float hp; int row; };
+    struct Result { int64_t moduleId; float hp; int row; };
+    std::vector<Change> changes;
+    std::vector<Result> results;
     std::atomic<bool> done{false}; bool success=false; std::string error;
 };
 struct BypassJob {
@@ -250,7 +260,7 @@ struct UndoJob {
 // One reversible action. All fields UI-thread-owned; stack guarded by undoMtx
 // only for push/pop/size (HTTP thread reads labels).
 struct UndoAction {
-    enum Type { PARAM, PARAMS, CABLE_RECONNECT, CABLE_CLEAR, BYPASS, STATE, MOVE, DELETE_ADDED } type;
+    enum Type { PARAM, PARAMS, CABLE_RECONNECT, CABLE_CLEAR, BYPASS, STATE, MOVE, MOVES, DELETE_ADDED } type;
     int64_t moduleId=-1; int paramId=-1; float oldValue=0.f;
     std::vector<std::array<float,3>> paramOlds;           // PARAMS: not used (see paramList)
     struct POld { int64_t m; int p; float v; };
@@ -266,6 +276,8 @@ struct UndoAction {
     bool oldBypassed=false;
     std::string oldState;
     float oldX=0.f, oldY=0.f;
+    struct MoveOld { int64_t moduleId; float x; float y; };
+    std::vector<MoveOld> moveOlds;
     std::string label;
 };
 struct ParamEntry {
@@ -275,7 +287,7 @@ struct ParamEntry {
 struct ModuleEntry {
     int64_t id; std::string plugin, model;
     std::vector<ParamEntry> params;
-    float posX=0.f, posY=0.f;
+    float posX=0.f, posY=0.f; int row=0;
 };
 
 // ── Octavia Module ─────────────────────────────────────────────
@@ -316,6 +328,7 @@ struct Octavia : Module {
         // audio-thread working state
         double z[2][4] = {};                 // biquad states per ch: hs1,hs2,hp1,hp2
         double kSum[2] = {}, rawSum[2] = {}, sumLR = 0.0, peak[2] = {};
+        double meterBlockPeak = 0.0;
         uint64_t clipped[2] = {};
         uint64_t n = 0;
         int flushTimer = 0;
@@ -324,6 +337,7 @@ struct Octavia : Module {
         float filterSampleRate = 0.f;
         std::array<std::atomic<float>, LOUDNESS_BLOCKS> blocks;
         std::atomic<uint64_t> blockTotal{0};
+        std::atomic<float> meterPeak{0.f};
         // published (mtx-protected)
         double pKSum[2] = {}, pRawSum[2] = {}, pSumLR = 0.0, pPeak[2] = {};
         uint64_t pClipped[2] = {};
@@ -390,7 +404,7 @@ struct Octavia : Module {
 
     // Undo (stack owned by UI thread; mutex only guards container ops)
     std::vector<UndoAction> undoStack; std::mutex undoMtx;
-    static const size_t UNDO_MAX = 32;
+    static const size_t UNDO_MAX = 256;
     bool applyingUndo = false;   // suppress recording while undoing
     std::queue<std::shared_ptr<UndoJob>>      undoQueue;      std::mutex undoQueueMtx;
     std::queue<std::shared_ptr<BulkParamJob>> bulkParamQueue; std::mutex bulkParamQueueMtx;
@@ -398,6 +412,7 @@ struct Octavia : Module {
     // Delete / Move job queues
     std::queue<std::shared_ptr<DeleteModuleJob>> deleteQueue; std::mutex deleteQueueMtx;
     std::queue<std::shared_ptr<MoveModuleJob>>   moveQueue;   std::mutex moveQueueMtx;
+    std::queue<std::shared_ptr<BulkMoveJob>> bulkMoveQueue; std::mutex bulkMoveQueueMtx;
     std::queue<std::shared_ptr<BypassJob>>      bypassQueue;    std::mutex bypassQueueMtx;
     std::queue<std::shared_ptr<ModuleStateJob>> stateQueue;     std::mutex stateQueueMtx;
     std::queue<std::shared_ptr<PatchSaveJob>>   patchSaveQueue; std::mutex patchSaveQueueMtx;
@@ -440,8 +455,9 @@ struct Octavia : Module {
                     lm.z[j][0] = lm.z[j][1] = lm.z[j][2] = lm.z[j][3] = 0.0;
                     lm.pKSum[j] = lm.pRawSum[j] = lm.pPeak[j] = 0.0; lm.pClipped[j] = 0;
                 }
-                lm.sumLR = lm.pSumLR = lm.blockKSum = 0.0; lm.n = lm.pN = 0;
+                lm.sumLR = lm.pSumLR = lm.blockKSum = lm.meterBlockPeak = 0.0; lm.n = lm.pN = 0;
                 lm.blockFrames = lm.flushTimer = 0; lm.blockTotal.store(0, std::memory_order_relaxed);
+                lm.meterPeak.store(0.f, std::memory_order_relaxed);
                 lm.resetFlag.store(false, std::memory_order_relaxed);
                 lm.mtx.unlock();
             }
@@ -460,6 +476,7 @@ struct Octavia : Module {
                 double in = ch[j] * 0.2;                     // 5V → 1.0 full scale
                 double a  = std::fabs(in);
                 if (a > lm.peak[j]) lm.peak[j] = a;
+                if (a > lm.meterBlockPeak) lm.meterBlockPeak = a;
                 if (a >= 1.0) lm.clipped[j]++;
                 lm.rawSum[j] += in * in;
                 // shelving stage (transposed direct form II)
@@ -480,7 +497,9 @@ struct Octavia : Module {
                 uint64_t block = lm.blockTotal.load(std::memory_order_relaxed);
                 lm.blocks[block % LOUDNESS_BLOCKS].store((float)(lm.blockKSum / lm.blockFrames), std::memory_order_relaxed);
                 lm.blockTotal.store(block + 1, std::memory_order_release);
+                lm.meterPeak.store((float)lm.meterBlockPeak, std::memory_order_relaxed);
                 lm.blockKSum = 0.0; lm.blockFrames = 0;
+                lm.meterBlockPeak = 0.0;
             }
             if (++lm.flushTimer >= 2048 && lm.mtx.try_lock()) {
                 for (int j = 0; j < 2; j++) {
@@ -545,7 +564,11 @@ struct Octavia : Module {
             e.plugin = (m->model && m->model->plugin) ? m->model->plugin->slug : "unknown";
             e.model  = m->model ? m->model->slug : "unknown";
             ModuleWidget* mw_pos = APP->scene->rack->getModule(ids[i]);
-            if (mw_pos) { e.posX = mw_pos->box.pos.x / RACK_GRID_WIDTH; e.posY = mw_pos->box.pos.y / RACK_GRID_WIDTH; }
+            if (mw_pos) {
+                e.posX = mw_pos->box.pos.x / RACK_GRID_WIDTH;
+                e.posY = mw_pos->box.pos.y / RACK_GRID_WIDTH;
+                e.row = (int)std::lround(mw_pos->box.pos.y / RACK_GRID_HEIGHT);
+            }
             for (size_t pi = 0; pi < m->params.size(); pi++) {
                 ParamEntry pe;
                 pe.value = m->params[pi].getValue();
@@ -570,6 +593,7 @@ struct Octavia : Module {
             json += jStr("bypassed") + ": " + (m->isBypassed() ? "true" : "false") + ", ";
             json += jStr("posX") + ": " + std::to_string(e.posX) + ", ";
             json += jStr("posY") + ": " + std::to_string(e.posY) + ", ";
+            json += jStr("row") + ": " + std::to_string(e.row) + ", ";
 
             json += jStr("params") + ": [";
             for (size_t j = 0; j < m->params.size(); j++) {
@@ -645,6 +669,7 @@ struct Octavia : Module {
                      + jStr("bypassed") + ": " + (m->isBypassed() ? "true" : "false") + ", "
                      + jStr("posX") + ": " + std::to_string(e.posX) + ", "
                      + jStr("posY") + ": " + std::to_string(e.posY) + ", "
+                     + jStr("row") + ": " + std::to_string(e.row) + ", "
                      + jStr("polyOut") + ": " + std::to_string(maxOutCh) + ", "
                      + jStr("paramCount") + ": " + std::to_string(m->params.size()) + ", "
                      + jStr("inputCount") + ": " + std::to_string(m->inputs.size()) + ", "
@@ -1037,8 +1062,16 @@ struct Octavia : Module {
                 break; }
             case UndoAction::MOVE: {
                 ModuleWidget* mw = APP->scene->rack->getModule(a.moduleId);
-                if (mw) { APP->scene->rack->setModulePosNearest(mw, math::Vec(a.oldX, a.oldY)); job->success=true; }
+                if (mw) { APP->scene->rack->setModulePosForce(mw, math::Vec(a.oldX, a.oldY)); job->success=true; }
                 else job->error="module gone";
+                break; }
+            case UndoAction::MOVES: {
+                job->success=true;
+                for (auto& old : a.moveOlds) {
+                    ModuleWidget* mw = APP->scene->rack->getModule(old.moduleId);
+                    if (mw) APP->scene->rack->setModulePosForce(mw, math::Vec(old.x, old.y));
+                    else { job->success=false; job->error="one or more modules are gone"; }
+                }
                 break; }
             case UndoAction::DELETE_ADDED: {
                 ModuleWidget* mw = APP->scene->rack->getModule(a.moduleId);
@@ -1064,8 +1097,54 @@ struct Octavia : Module {
         UndoAction a; a.type=UndoAction::MOVE; a.moduleId=job->moduleId;
         a.oldX=mw->box.pos.x; a.oldY=mw->box.pos.y;
         a.label="move module "+std::to_string(job->moduleId);
-        // RACK_GRID_WIDTH = 15px per HP
-        APP->scene->rack->setModulePosNearest(mw, math::Vec(job->hp * RACK_GRID_WIDTH, 0.f));
+        const float y = job->hasRow ? job->row * RACK_GRID_HEIGHT : mw->box.pos.y;
+        APP->scene->rack->setModulePosNearest(mw, math::Vec(job->hp * RACK_GRID_WIDTH, y));
+        job->resolvedHp = mw->box.pos.x / RACK_GRID_WIDTH;
+        job->resolvedRow = (int)std::lround(mw->box.pos.y / RACK_GRID_HEIGHT);
+        pushUndo(std::move(a));
+        job->success=true; job->done=true;
+    }
+
+    void processBulkMoveQueue() {
+        std::shared_ptr<BulkMoveJob> job;
+        { std::unique_lock<std::mutex> lk(bulkMoveQueueMtx); if (!bulkMoveQueue.empty()) { job=bulkMoveQueue.front(); bulkMoveQueue.pop(); } }
+        if (!job) return;
+
+        std::unordered_set<int64_t> moving;
+        std::vector<std::pair<ModuleWidget*, math::Vec>> targets;
+        for (auto& ch : job->changes) {
+            if (!moving.insert(ch.moduleId).second) { job->error="duplicate module id"; job->done=true; return; }
+            ModuleWidget* mw = APP->scene->rack->getModule(ch.moduleId);
+            if (!mw) { job->error="module not found: "+std::to_string(ch.moduleId); job->done=true; return; }
+            targets.push_back({mw, math::Vec(ch.hp * RACK_GRID_WIDTH, ch.row * RACK_GRID_HEIGHT)});
+        }
+        auto overlaps = [](math::Vec ap, math::Vec as, math::Vec bp, math::Vec bs) {
+            return ap.x < bp.x + bs.x && bp.x < ap.x + as.x && ap.y < bp.y + bs.y && bp.y < ap.y + as.y;
+        };
+        for (size_t i=0; i<targets.size(); i++) {
+            for (size_t j=i+1; j<targets.size(); j++) {
+                if (overlaps(targets[i].second, targets[i].first->box.size, targets[j].second, targets[j].first->box.size)) {
+                    job->error="target modules overlap"; job->done=true; return;
+                }
+            }
+            for (Widget* child : APP->scene->rack->getModuleContainer()->children) {
+                ModuleWidget* other = dynamic_cast<ModuleWidget*>(child);
+                if (!other || !other->module || moving.count(other->module->id)) continue;
+                if (overlaps(targets[i].second, targets[i].first->box.size, other->box.pos, other->box.size)) {
+                    job->error="target overlaps unmoved module "+std::to_string(other->module->id); job->done=true; return;
+                }
+            }
+        }
+        UndoAction a; a.type=UndoAction::MOVES;
+        for (auto& target : targets)
+            a.moveOlds.push_back({target.first->module->id, target.first->box.pos.x, target.first->box.pos.y});
+        for (size_t i=0; i<targets.size(); i++) {
+            APP->scene->rack->setModulePosForce(targets[i].first, targets[i].second);
+            job->results.push_back({job->changes[i].moduleId,
+                targets[i].first->box.pos.x / RACK_GRID_WIDTH,
+                (int)std::lround(targets[i].first->box.pos.y / RACK_GRID_HEIGHT)});
+        }
+        a.label="layout "+std::to_string(a.moveOlds.size())+" modules";
         pushUndo(std::move(a));
         job->success=true; job->done=true;
     }
@@ -1724,10 +1803,53 @@ struct Octavia : Module {
             auto job=std::make_shared<MoveModuleJob>();
             job->moduleId=std::stoll(r.matches[1].str());
             job->hp=parseFloatField(r.body,"hp");
+            json_error_t jerr;
+            json_t* root=json_loads(r.body.c_str(),0,&jerr);
+            json_t* row=root ? json_object_get(root,"row") : NULL;
+            if (row && json_is_integer(row)) { job->row=(int)json_integer_value(row); job->hasRow=true; }
+            if (root) json_decref(root);
             { std::unique_lock<std::mutex> lk(moveQueueMtx); moveQueue.push(job); }
             if (!waitDone(job)) res.set_content("{\"error\":\"timeout\"}","application/json");
-            else if (job->success) res.set_content("{\"ok\":true}","application/json");
+            else if (job->success) res.set_content("{\"ok\":true,\"hp\":"+jNum(job->resolvedHp)+",\"row\":"+std::to_string(job->resolvedRow)+"}","application/json");
             else res.set_content("{\"error\":"+jStr(job->error)+"}","application/json");
+        });
+
+        // Atomically position multiple modules. All targets are validated before
+        // any module moves, and the complete prior layout occupies one undo slot.
+        svr.Post("/modules/layout", [this](const httplib::Request& r, httplib::Response& res){
+            json_error_t jerr;
+            json_t* root=json_loads(r.body.c_str(),0,&jerr);
+            json_t* arr=root ? json_object_get(root,"changes") : NULL;
+            if (!arr || !json_is_array(arr) || json_array_size(arr)==0) {
+                if (root) json_decref(root);
+                res.set_content("{\"error\":\"body must be {changes:[{moduleId,hp,row}]}\"}","application/json");
+                return;
+            }
+            auto job=std::make_shared<BulkMoveJob>();
+            size_t idx; json_t* el;
+            json_array_foreach(arr,idx,el) {
+                json_t* jm=json_object_get(el,"moduleId");
+                json_t* jh=json_object_get(el,"hp");
+                json_t* jr=json_object_get(el,"row");
+                if (!json_is_integer(jm) || !json_is_number(jh) || !json_is_integer(jr)) {
+                    json_decref(root);
+                    res.set_content("{\"error\":\"each layout change requires integer moduleId, numeric hp, and integer row\"}","application/json");
+                    return;
+                }
+                job->changes.push_back({(int64_t)json_integer_value(jm),(float)json_number_value(jh),(int)json_integer_value(jr)});
+            }
+            json_decref(root);
+            { std::unique_lock<std::mutex> lk(bulkMoveQueueMtx); bulkMoveQueue.push(job); }
+            if (!waitDone(job,2000)) { res.set_content("{\"error\":\"timeout\"}","application/json"); return; }
+            if (!job->success) { res.set_content("{\"error\":"+jStr(job->error)+"}","application/json"); return; }
+            std::string b="{\"ok\":true,\"applied\":"+std::to_string(job->results.size())+",\"positions\":[";
+            for (size_t i=0;i<job->results.size();i++) {
+                if (i) b+=",";
+                auto& p=job->results[i];
+                b+="{\"moduleId\":"+std::to_string(p.moduleId)+",\"hp\":"+jNum(p.hp)+",\"row\":"+std::to_string(p.row)+"}";
+            }
+            b+="]}";
+            res.set_content(b,"application/json");
         });
 
         // ── POST /params/bulk — set many parameters in one call ──────────────
@@ -1968,7 +2090,6 @@ struct Octavia : Module {
 // ── Colors ────────────────────────────────────────────────────────────────────
 static const NVGcolor WHITE = nvgRGB(255,255,255);
 static const NVGcolor DIM   = nvgRGB(80,80,80);
-static const NVGcolor GOLD  = nvgRGB(160,120,0);
 
 struct OctaviaStatusWidget : TransparentWidget {
     Octavia* module = nullptr;
@@ -2006,9 +2127,104 @@ struct OctaviaStatusWidget : TransparentWidget {
     }
 };
 
+struct OctaviaMeterWidget : TransparentWidget {
+    Octavia* module = nullptr;
+    float displayedLufs = 0.f;
+    float displayedDbfs = 0.f;
+
+    explicit OctaviaMeterWidget(Octavia* module)
+        : module(module) {}
+
+    static float normalizedDb(float db) {
+        return std::max(0.f, std::min(1.f, (db + 60.f) / 60.f));
+    }
+
+    static float follow(float current, float target) {
+        const float amount = target > current ? 0.42f : 0.075f;
+        return current + (target - current) * amount;
+    }
+
+    void step() override {
+        TransparentWidget::step();
+        float lufsTarget = 0.f;
+        float dbfsTarget = 0.f;
+        if (module && (module->audioInputConnected[0].load(std::memory_order_relaxed)
+                || module->audioInputConnected[1].load(std::memory_order_relaxed))) {
+            const uint64_t total = module->lm.blockTotal.load(std::memory_order_acquire);
+            const int count = (int)std::min<uint64_t>(total, 4);
+            if (count > 0) {
+                double power = 0.0;
+                for (uint64_t i = total - count; i < total; ++i)
+                    power += module->lm.blocks[i % LOUDNESS_BLOCKS].load(std::memory_order_relaxed);
+                const float momentaryLufs = -0.691f + 10.f * std::log10((float)(power / count) + 1e-12f);
+                lufsTarget = normalizedDb(momentaryLufs);
+            }
+            const float peak = module->lm.meterPeak.load(std::memory_order_relaxed);
+            dbfsTarget = normalizedDb(20.f * std::log10(peak + 1e-12f));
+        }
+        displayedLufs = follow(displayedLufs, lufsTarget);
+        displayedDbfs = follow(displayedDbfs, dbfsTarget);
+    }
+
+    static void drawBar(NVGcontext* vg, const math::Rect& bounds, float level) {
+        level = std::max(0.f, std::min(1.f, level));
+        const float radius = std::min(0.5f * bounds.size.x, 2.5f);
+        nvgBeginPath(vg);
+        nvgRoundedRect(vg, bounds.pos.x, bounds.pos.y, bounds.size.x, bounds.size.y, radius);
+        nvgFillColor(vg, nvgRGB(7, 10, 15));
+        nvgFill(vg);
+        nvgStrokeWidth(vg, 1.f);
+        nvgStrokeColor(vg, nvgRGBA(174, 132, 255, 96));
+        nvgStroke(vg);
+
+        const float inset = 1.25f;
+        const Vec fillPos = bounds.pos.plus(Vec(inset, inset));
+        const Vec fillSize = bounds.size.minus(Vec(2.f * inset, 2.f * inset));
+        const float fillHeight = std::max(0.f, fillSize.y * level);
+        if (fillHeight <= 0.f || fillSize.x <= 0.f) return;
+
+        nvgSave(vg);
+        nvgIntersectScissor(vg, fillPos.x, fillPos.y + fillSize.y - fillHeight,
+            fillSize.x, fillHeight);
+        nvgBeginPath(vg);
+        nvgRoundedRect(vg, fillPos.x, fillPos.y, fillSize.x, fillSize.y,
+            std::max(0.f, 0.5f * fillSize.x));
+        const NVGpaint fill = nvgLinearGradient(vg,
+            fillPos.x, fillPos.y + fillSize.y, fillPos.x, fillPos.y,
+            nvgRGB(122, 92, 255), nvgRGB(28, 204, 217));
+        nvgFillPaint(vg, fill);
+        nvgFill(vg);
+        nvgRestore(vg);
+    }
+
+    void draw(const DrawArgs& args) override {
+        const float barWidth = mm2px(5.f);
+        const float barHeight = box.size.y - mm2px(4.5f);
+        const float leftX = mm2px(2.1f);
+        const float rightX = box.size.x - leftX - barWidth;
+        drawBar(args.vg, math::Rect(Vec(leftX, 0.f), Vec(barWidth, barHeight)), displayedLufs);
+        drawBar(args.vg, math::Rect(Vec(rightX, 0.f), Vec(barWidth, barHeight)), displayedDbfs);
+
+        if (!APP || !APP->window || !APP->window->uiFont) return;
+        nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+        nvgFontSize(args.vg, 8.f);
+        nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+        nvgFillColor(args.vg, WHITE);
+        const float labelY = box.size.y - mm2px(1.7f);
+        nvgText(args.vg, leftX + 0.5f * barWidth, labelY, "LUFS", NULL);
+        nvgText(args.vg, rightX + 0.5f * barWidth, labelY, "dBFS", NULL);
+    }
+};
+
 // ── Widget ────────────────────────────────────────────────────────────────────
 struct OctaviaWidget : ModuleWidget {
     int uiTimer = 0;
+    Vec titleLabelMm{15.24f, 7.5f};
+    Vec portLabelMm{4.5f, 55.5f};
+    Vec portValueLabelMm{26.f, 55.5f};
+    Vec startLabelMm{4.5f, 66.f};
+    Vec audioLabelLMm{8.f, 120.5f};
+    Vec audioLabelRMm{22.f, 120.5f};
 
     void step() override {
         ModuleWidget::step();
@@ -2022,6 +2238,7 @@ struct OctaviaWidget : ModuleWidget {
         m->processAddQueue();
         m->processDeleteQueue();
         m->processMoveQueue();
+        m->processBulkMoveQueue();
         m->processBypassQueue();
         m->processStateQueue();
         m->processPatchSaveQueue();
@@ -2031,27 +2248,51 @@ struct OctaviaWidget : ModuleWidget {
 
     OctaviaWidget(Octavia* module) {
         setModule(module);
-        setPanel(createPanel(asset::plugin(pluginInstance,"res/Octavia.svg")));
+        const std::string panelPath = asset::plugin(pluginInstance,"res/Octavia.svg");
+        setPanel(createPanel(panelPath));
         addChild(createWidget<CyanOrbScrew>(Vec(0, 0)));
         addChild(createWidget<CyanOrbScrew>(Vec(0, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
+        auto anchorPoint = [&](const char* id, const Vec& fallbackMm) {
+            Vec result;
+            if (!panel_svg::loadPointFromSvgMm(panelPath, id, &result)) result = fallbackMm;
+            return result;
+        };
+        titleLabelMm = anchorPoint("TITLE_LABEL", titleLabelMm);
+        portLabelMm = anchorPoint("PORT_LABEL", portLabelMm);
+        portValueLabelMm = anchorPoint("PORT_VALUE_LABEL", portValueLabelMm);
+        startLabelMm = anchorPoint("START_LABEL", startLabelMm);
+        audioLabelLMm = anchorPoint("AUDIO_LABEL_L", audioLabelLMm);
+        audioLabelRMm = anchorPoint("AUDIO_LABEL_R", audioLabelRMm);
+
         OctaviaStatusWidget* status = new OctaviaStatusWidget(module);
-        status->box.pos = mm2px(Vec(0.74f, 13.5f));
-        status->box.size = mm2px(Vec(29.f, 36.f));
+        math::Rect statusRectMm(Vec(0.74f, 13.5f), Vec(29.f, 36.f));
+        panel_svg::loadRectFromSvgMm(panelPath, "OCTOPUS_STATUS", &statusRectMm);
+        status->box.pos = mm2px(statusRectMm.pos);
+        status->box.size = mm2px(statusRectMm.size);
         addChild(status);
 
-        addParam(createParamCentered<TL1105>(mm2px(Vec(23.f,77.f)), module, Octavia::START_PARAM));
+        OctaviaMeterWidget* meter = new OctaviaMeterWidget(module);
+        math::Rect meterRectMm(Vec(4.5f, 72.f), Vec(21.48f, 29.f));
+        panel_svg::loadRectFromSvgMm(panelPath, "LOUDNESS_METERS", &meterRectMm);
+        meter->box.pos = mm2px(meterRectMm.pos);
+        meter->box.size = mm2px(meterRectMm.size);
+        addChild(meter);
+
+        addParam(createParamCentered<SmallGoldButton>(
+            mm2px(anchorPoint("START_PARAM", Vec(23.f, 66.f))), module, Octavia::START_PARAM));
 
         // Audio analysis inputs
-        addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(8.f,110.f)),  module, Octavia::AUDIO_IN_L));
-        addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(22.f,110.f)), module, Octavia::AUDIO_IN_R));
+        addInput(createInputCentered<Magitek2InputJack>(
+            mm2px(anchorPoint("AUDIO_IN_L", Vec(8.f, 110.f))), module, Octavia::AUDIO_IN_L));
+        addInput(createInputCentered<Magitek2InputJack>(
+            mm2px(anchorPoint("AUDIO_IN_R", Vec(22.f, 110.f))), module, Octavia::AUDIO_IN_R));
     }
 
     void draw(const DrawArgs& args) override {
         ModuleWidget::draw(args);
 
-        float cx = mm2px(Vec(15.24f,0.f)).x;
-        float lx = mm2px(Vec(4.5f,0.f)).x;
+        const float cx = mm2px(titleLabelMm).x;
 
         // ── Zone 1: Identity ──────────────────────────────────────────────────
         if (!APP || !APP->window || !APP->window->uiFont) return;
@@ -2059,28 +2300,26 @@ struct OctaviaWidget : ModuleWidget {
         nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
 
         nvgFontSize(args.vg,18.f); nvgFillColor(args.vg,WHITE);
-        nvgText(args.vg, cx, mm2px(Vec(0.f,7.5f)).y, "Octavia", NULL);
+        nvgText(args.vg, cx, mm2px(titleLabelMm).y, "Octavia", NULL);
 
-        // ── Zone 2: Control (y 60–80mm) ───────────────────────────────────────
+        // ── Zone 2: Server controls ───────────────────────────────────────────
         nvgFontSize(args.vg,8.f);
         nvgTextAlign(args.vg, NVG_ALIGN_LEFT|NVG_ALIGN_MIDDLE);
         nvgFillColor(args.vg,DIM);
-        nvgText(args.vg, lx, mm2px(Vec(0.f,63.f)).y, "Port", NULL);
+        nvgText(args.vg, mm2px(portLabelMm).x, mm2px(portLabelMm).y, "Port", NULL);
         nvgTextAlign(args.vg, NVG_ALIGN_RIGHT|NVG_ALIGN_MIDDLE);
         nvgFillColor(args.vg,WHITE);
-        nvgText(args.vg, mm2px(Vec(26.f,0.f)).x, mm2px(Vec(0.f,63.f)).y, "7777", NULL);
+        nvgText(args.vg, mm2px(portValueLabelMm).x, mm2px(portValueLabelMm).y, "7777", NULL);
 
         nvgTextAlign(args.vg, NVG_ALIGN_LEFT|NVG_ALIGN_MIDDLE);
         nvgFillColor(args.vg,WHITE);
-        nvgText(args.vg, lx, mm2px(Vec(0.f,77.f)).y, "Start", NULL);
+        nvgText(args.vg, mm2px(startLabelMm).x, mm2px(startLabelMm).y, "Start", NULL);
 
-        // ── Zone 3: Input (y 97–123mm) ────────────────────────────────────────
-        nvgFontSize(args.vg,7.f); nvgFillColor(args.vg,GOLD);
+        // ── Zone 3: Audio input labels ────────────────────────────────────────
+        nvgFontSize(args.vg,8.f); nvgFillColor(args.vg,WHITE);
         nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
-        nvgText(args.vg, mm2px(Vec(8.f,0.f)).x,  mm2px(Vec(0.f,100.f)).y, "L", NULL);
-        nvgText(args.vg, mm2px(Vec(22.f,0.f)).x, mm2px(Vec(0.f,100.f)).y, "R", NULL);
-        nvgFontSize(args.vg,5.5f); nvgFillColor(args.vg,nvgRGBA(160,120,0,128));
-        nvgText(args.vg, cx, mm2px(Vec(0.f,120.5f)).y, "Analyze", NULL);
+        nvgText(args.vg, mm2px(audioLabelLMm).x, mm2px(audioLabelLMm).y, "L", NULL);
+        nvgText(args.vg, mm2px(audioLabelRMm).x, mm2px(audioLabelRMm).y, "R", NULL);
     }
 };
 

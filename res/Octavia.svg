@@ -5,8 +5,22 @@
   <!-- BACKGROUND -->
   <rect width="30.48" height="128.5" fill="#080808"/>
 
-  <!-- START ring (green tint) — y=77mm -->
-  <circle cx="23" cy="77" r="4"
+  <!-- START ring (green tint) -->
+  <circle cx="23" cy="66" r="4"
           fill="#0D0D0D" stroke="#1E3A1E" stroke-width="0.6"/>
+
+  <g id="components" aria-label="Component anchors" style="display:none">
+    <circle id="TITLE_LABEL" cx="15.24" cy="7.5" r="0.1"/>
+    <rect id="OCTOPUS_STATUS" x="0.74" y="13.5" width="29" height="36"/>
+    <circle id="PORT_LABEL" cx="4.5" cy="55.5" r="0.1"/>
+    <circle id="PORT_VALUE_LABEL" cx="26" cy="55.5" r="0.1"/>
+    <circle id="START_LABEL" cx="4.5" cy="66" r="0.1"/>
+    <circle id="START_PARAM" cx="23" cy="66" r="0.1"/>
+    <rect id="LOUDNESS_METERS" x="4.5" y="72" width="21.48" height="29"/>
+    <circle id="AUDIO_IN_L" cx="8" cy="110" r="0.1"/>
+    <circle id="AUDIO_IN_R" cx="22" cy="110" r="0.1"/>
+    <circle id="AUDIO_LABEL_L" cx="8" cy="120.5" r="0.1"/>
+    <circle id="AUDIO_LABEL_R" cx="22" cy="120.5" r="0.1"/>
+  </g>
 
 </svg>
