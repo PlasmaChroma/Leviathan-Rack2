@@ -104,6 +104,74 @@ static double parseResolution(const std::string& s, ParseResult& res, const std:
     return 0.25; // default 1/16
 }
 
+static int rootPitchClassFromName(const std::string& root) {
+    if (root.empty()) return 0;
+    char name = root[0];
+    int offset = 0;
+    if (root.length() > 1) {
+        if (root[1] == 'b') offset = -1;
+        else if (root[1] == '#') offset = 1;
+    }
+    int pc = 0;
+    switch (name) {
+        case 'C': pc = 0; break;
+        case 'D': pc = 2; break;
+        case 'E': pc = 4; break;
+        case 'F': pc = 5; break;
+        case 'G': pc = 7; break;
+        case 'A': pc = 9; break;
+        case 'B': pc = 11; break;
+        default: pc = 0; break;
+    }
+    return (pc + offset + 12) % 12;
+}
+
+static const std::vector<int>& getScaleIntervals(ScaleType scale) {
+    static const std::vector<int> major = {0, 2, 4, 5, 7, 9, 11};
+    static const std::vector<int> natMinor = {0, 2, 3, 5, 7, 8, 10};
+    static const std::vector<int> harmMinor = {0, 2, 3, 5, 7, 8, 11};
+    static const std::vector<int> melMinor = {0, 2, 3, 5, 7, 9, 11};
+    static const std::vector<int> dorian = {0, 2, 3, 5, 7, 9, 10};
+    static const std::vector<int> phrygian = {0, 1, 3, 5, 7, 8, 10};
+    static const std::vector<int> lydian = {0, 2, 4, 6, 7, 9, 11};
+    static const std::vector<int> mixolydian = {0, 2, 4, 5, 7, 9, 10};
+    static const std::vector<int> locrian = {0, 1, 3, 5, 6, 8, 10};
+    static const std::vector<int> majPent = {0, 2, 4, 7, 9};
+    static const std::vector<int> minPent = {0, 3, 5, 7, 10};
+    static const std::vector<int> chromatic = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+
+    switch (scale) {
+        case ScaleType::MAJOR: return major;
+        case ScaleType::NATURAL_MINOR: return natMinor;
+        case ScaleType::HARMONIC_MINOR: return harmMinor;
+        case ScaleType::MELODIC_MINOR: return melMinor;
+        case ScaleType::DORIAN: return dorian;
+        case ScaleType::PHRYGIAN: return phrygian;
+        case ScaleType::LYDIAN: return lydian;
+        case ScaleType::MIXOLYDIAN: return mixolydian;
+        case ScaleType::LOCRIAN: return locrian;
+        case ScaleType::MAJOR_PENTATONIC: return majPent;
+        case ScaleType::MINOR_PENTATONIC: return minPent;
+        default: return chromatic;
+    }
+}
+
+static float degreeToPitchV(int degree, int octaveOffset, ScaleType scale, const std::string& rootName, int rootOctave) {
+    const auto& intervals = getScaleIntervals(scale);
+    int numDegrees = (int)intervals.size();
+    if (numDegrees == 0) return 0.0f;
+
+    int octaveWrap = (degree >= 0) ? (degree / numDegrees) : ((degree - numDegrees + 1) / numDegrees);
+    int degreeInScale = degree - octaveWrap * numDegrees;
+    if (degreeInScale < 0) degreeInScale += numDegrees;
+
+    int semitoneInScale = intervals[degreeInScale];
+    int rootPc = rootPitchClassFromName(rootName);
+    int totalOctave = rootOctave + octaveOffset + octaveWrap;
+    int totalSemitones = rootPc + semitoneInScale + (totalOctave - 4) * 12;
+    return totalSemitones / 12.0f;
+}
+
 static float noteToPitchV(const std::string& noteStr, ParseResult& res, const std::string& path) {
     // Basic scientific pitch parser. C4 = 0V. 1V/Octave.
     if (noteStr.empty()) return 0.0f;
@@ -242,9 +310,20 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
                     if (pitchDefs != 1) {
                         addError(res, path, "Exactly one of pitchV, degree, or note is required");
                     } else {
-                        if (pitchVJ) { e.pitchType = PitchType::PITCH_V; e.pitchV = json_number_value(pitchVJ); e.compiledPitchV = e.pitchV; }
-                        else if (degreeJ) { e.pitchType = PitchType::DEGREE; e.degree = json_integer_value(degreeJ); e.octave = getInteger(stepJ, "octave", 0); }
-                        else if (noteJ) { e.pitchType = PitchType::NOTE; e.note = json_string_value(noteJ); e.compiledPitchV = noteToPitchV(e.note, res, path); }
+                        if (pitchVJ) {
+                            e.pitchType = PitchType::PITCH_V;
+                            e.pitchV = json_number_value(pitchVJ);
+                            e.compiledPitchV = e.pitchV;
+                        } else if (degreeJ) {
+                            e.pitchType = PitchType::DEGREE;
+                            e.degree = json_integer_value(degreeJ);
+                            e.octave = getInteger(stepJ, "octave", 0);
+                            e.compiledPitchV = degreeToPitchV(e.degree, e.octave, comp.meta.scale, comp.meta.root, comp.meta.rootOctave);
+                        } else if (noteJ) {
+                            e.pitchType = PitchType::NOTE;
+                            e.note = json_string_value(noteJ);
+                            e.compiledPitchV = noteToPitchV(e.note, res, path);
+                        }
                     }
                     
                     json_t* gateJ = json_object_get(stepJ, "gate");

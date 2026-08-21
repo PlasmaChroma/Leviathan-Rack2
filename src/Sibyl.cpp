@@ -33,11 +33,26 @@ struct SibylModule : Module, SibylControl {
 		double patternPhaseBeats = 0.0;
 		int lastFiredStep = -1;
 		float currentPitch = 0.0f;
+		float targetPitch = 0.0f;
+		float glideRatePerSample = 0.0f;
 		float currentGate = 0.0f;
 		float currentVel = 0.0f;
 		float currentMod = 0.0f;
 	};
 	TrackState m_trackStates[16];
+
+	// Hardware Schmitt triggers & pulse generators
+	dsp::SchmittTrigger m_clockTrigger;
+	dsp::SchmittTrigger m_resetTrigger;
+	dsp::SchmittTrigger m_sceneTrigger;
+	dsp::PulseGenerator m_clockPulse;
+	dsp::PulseGenerator m_scenePulse;
+	dsp::PulseGenerator m_eocPulse;
+
+	// External clock interval tracking
+	double m_lastClockEdgeSampleTime = 0.0;
+	double m_clockIntervalSeconds = 0.5; // ~120 BPM default
+	double m_timeSinceLastClockEdge = 0.0;
 
 	SibylModule() {
 		config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
@@ -65,24 +80,123 @@ struct SibylModule : Module, SibylControl {
 		m_activeCompositionPtr.store(comp.get(), std::memory_order_release);
 	}
 
+	json_t* dataToJson() override {
+		json_t* rootJ = json_object();
+		json_object_set_new(rootJ, "schemaVersion", json_integer(1));
+		json_object_set_new(rootJ, "revision", json_integer(m_activeRevision));
+		
+		const sibyl::Composition* comp = m_activeCompositionPtr.load(std::memory_order_acquire);
+		if (comp) {
+			std::string fullJson = sibyl::serializeFullCompositionJson(*comp);
+			json_error_t err;
+			json_t* compWrapper = json_loads(fullJson.c_str(), 0, &err);
+			if (compWrapper) {
+				json_t* innerComp = json_object_get(compWrapper, "composition");
+				if (innerComp) {
+					json_object_set(rootJ, "composition", innerComp);
+				}
+				json_decref(compWrapper);
+			}
+		}
+
+		json_t* statusJ = json_object();
+		json_object_set_new(statusJ, "acceptedRevision", json_integer(m_activeRevision));
+		json_object_set_new(statusJ, "lastError", json_null());
+		json_object_set_new(statusJ, "warnings", json_array());
+		json_object_set_new(rootJ, "status", statusJ);
+
+		return rootJ;
+	}
+
+	void dataFromJson(json_t* rootJ) override {
+		if (!rootJ || !json_is_object(rootJ)) return;
+
+		json_t* compJ = json_object_get(rootJ, "composition");
+		json_t* revJ = json_object_get(rootJ, "revision");
+		int rev = revJ && json_is_integer(revJ) ? json_integer_value(revJ) : 0;
+
+		if (compJ) {
+			char* str = json_dumps(compJ, JSON_COMPACT);
+			if (str) {
+				sibyl::ParseResult res = sibyl::parseCompositionJson(str, rev);
+				free(str);
+				if (res.valid && res.composition) {
+					m_history.push_back(res.composition);
+					m_activeCompositionPtr.store(res.composition.get(), std::memory_order_release);
+					m_activeRevision = rev;
+				}
+			}
+		}
+	}
+
 	void process(const ProcessArgs& args) override {
 		const sibyl::Composition* comp = m_activeCompositionPtr.load(std::memory_order_acquire);
 		if (!comp) return;
 
+		// --- Transport Run / Pause ---
+		bool isRunning = comp->transport.running;
+		if (inputs[RUN_INPUT].isConnected()) {
+			isRunning = inputs[RUN_INPUT].getVoltage() >= 1.0f;
+		}
+
+		// --- Reset Trigger ---
+		if (m_resetTrigger.process(inputs[RESET_INPUT].getVoltage())) {
+			m_sceneIndex = 0;
+			m_sceneRepeat = 0;
+			m_scenePhase = 0.0;
+			for (int c = 0; c < 16; c++) {
+				m_trackStates[c].lastFiredStep = -1;
+				m_trackStates[c].patternPhaseBeats = 0.0;
+			}
+		}
+
+		// --- Clock Processing ---
 		double beatDelta = 0.0;
+		bool clockTick = false;
 		if (inputs[CLOCK_INPUT].isConnected()) {
-			// MVP: fallback to 0 or we could do naive edge detection
-			// Wait, let's keep it simple: internal clock if not connected
-			// Real external clock estimator requires bounded phase tracking.
+			m_timeSinceLastClockEdge += args.sampleTime;
+			if (m_clockTrigger.process(inputs[CLOCK_INPUT].getVoltage())) {
+				if (m_timeSinceLastClockEdge > 0.001) {
+					m_clockIntervalSeconds = m_timeSinceLastClockEdge;
+				}
+				m_timeSinceLastClockEdge = 0.0;
+				int ppqn = std::max(1, comp->clock.externalPpqn);
+				beatDelta = 1.0 / ppqn;
+				clockTick = true;
+			} else {
+				// Timeout check
+				if (m_timeSinceLastClockEdge * 1000.0 > comp->clock.externalTimeoutMs) {
+					if (comp->clock.onExternalStop == sibyl::OnExternalStop::INTERNAL) {
+						double beatsPerSec = comp->meta.bpm / 60.0;
+						beatDelta = beatsPerSec * args.sampleTime;
+					} else if (comp->clock.onExternalStop == sibyl::OnExternalStop::FREE_RUN) {
+						if (m_clockIntervalSeconds > 0.0) {
+							beatDelta = (1.0 / std::max(1, comp->clock.externalPpqn)) * (args.sampleTime / m_clockIntervalSeconds);
+						}
+					} else {
+						// HOLD
+						beatDelta = 0.0;
+					}
+				}
+			}
 		} else {
 			double bpm = comp->meta.bpm;
 			double beatsPerSecond = bpm / 60.0;
 			beatDelta = beatsPerSecond * args.sampleTime;
 		}
 
-		if (!comp->transport.running) beatDelta = 0.0;
+		if (!isRunning) beatDelta = 0.0;
 
 		m_globalPhaseBeats += beatDelta;
+
+		// Clock output pulse (every beat subdivision)
+		if (isRunning) {
+			int outPpqn = std::max(1, comp->clock.outputPpqn);
+			double clockPhase = fmod(m_globalPhaseBeats * outPpqn, 1.0);
+			if (clockPhase < (beatDelta * outPpqn) || clockTick) {
+				m_clockPulse.trigger(1e-3f);
+			}
+		}
 
 		if (comp->arrangement.empty()) {
 			outputs[V_OCT_OUTPUT].setChannels(1);
@@ -93,7 +207,30 @@ struct SibylModule : Module, SibylControl {
 			outputs[GATE_OUTPUT].setVoltage(0.f, 0);
 			outputs[VELOCITY_OUTPUT].setVoltage(0.f, 0);
 			outputs[MOD_OUTPUT].setVoltage(0.f, 0);
+			outputs[CLOCK_OUTPUT].setVoltage(m_clockPulse.process(args.sampleTime) ? 10.0f : 0.0f);
+			outputs[SCENE_OUTPUT].setVoltage(m_scenePulse.process(args.sampleTime) ? 10.0f : 0.0f);
+			outputs[EOC_OUTPUT].setVoltage(m_eocPulse.process(args.sampleTime) ? 10.0f : 0.0f);
 			return;
+		}
+
+		// --- Scene Addressing (Trigger & CV) ---
+		bool manualSceneJump = false;
+		if (m_sceneTrigger.process(inputs[SCENE_TRIG_INPUT].getVoltage())) {
+			m_sceneIndex = (m_sceneIndex + 1) % comp->arrangement.size();
+			m_sceneRepeat = 0;
+			m_scenePhase = 0.0;
+			manualSceneJump = true;
+			m_scenePulse.trigger(1e-3f);
+		} else if (inputs[SCENE_CV_INPUT].isConnected()) {
+			float cvNorm = clamp(inputs[SCENE_CV_INPUT].getVoltage() / 10.0f, 0.0f, 1.0f);
+			int targetIdx = clamp(int(cvNorm * comp->arrangement.size()), 0, (int)comp->arrangement.size() - 1);
+			if (targetIdx != m_sceneIndex) {
+				m_sceneIndex = targetIdx;
+				m_sceneRepeat = 0;
+				m_scenePhase = 0.0;
+				manualSceneJump = true;
+				m_scenePulse.trigger(1e-3f);
+			}
 		}
 
 		if (m_sceneIndex >= (int)comp->arrangement.size()) {
@@ -103,26 +240,75 @@ struct SibylModule : Module, SibylControl {
 		}
 
 		const auto& scene = comp->arrangement[m_sceneIndex];
-		m_scenePhase += beatDelta;
+		if (!manualSceneJump) {
+			m_scenePhase += beatDelta;
+		}
 
+		// --- Scene Boundary Progression ---
 		if (m_scenePhase >= scene.lengthBeats) {
 			m_scenePhase -= scene.lengthBeats;
 			m_sceneRepeat++;
 			if (m_sceneRepeat >= scene.repeats) {
 				m_sceneRepeat = 0;
 				m_sceneIndex++;
+				m_scenePulse.trigger(1e-3f);
 				if (m_sceneIndex >= (int)comp->arrangement.size()) {
-					if (comp->transport.loop) m_sceneIndex = 0;
-					else m_sceneIndex = comp->arrangement.size() - 1; // halt at end MVP
+					if (comp->transport.loop) {
+						m_sceneIndex = 0;
+						m_eocPulse.trigger(1e-3f);
+					} else {
+						m_sceneIndex = (int)comp->arrangement.size() - 1;
+					}
 				}
 			}
-			// Restart tracks on scene boundary (MVP assumption)
-			for (int c = 0; c < 16; c++) {
-				m_trackStates[c].lastFiredStep = -1;
-				m_trackStates[c].patternPhaseBeats = 0.0;
+			// Reset track phases on scene boundary if scene phaseMode == RESTART
+			if (scene.phaseMode == sibyl::PhaseMode::RESTART) {
+				for (int c = 0; c < 16; c++) {
+					m_trackStates[c].lastFiredStep = -1;
+					m_trackStates[c].patternPhaseBeats = 0.0;
+				}
 			}
 		}
 
+		// --- Macro Inputs Evaluation (0–10 V) ---
+		float globalProbMacro = 0.f;
+		float globalVelMacro = 0.f;
+		float trackProbMacro[16] = {};
+		float trackVelMacro[16] = {};
+		float trackGateMacro[16] = {};
+
+		for (int m = 0; m < 4; m++) {
+			int inputId = MACRO_1_INPUT + m;
+			if (!inputs[inputId].isConnected()) continue;
+			std::string macroKey = std::to_string(m + 1);
+			auto it = comp->macros.find(macroKey);
+			if (it == comp->macros.end()) continue;
+
+			float rawNorm = clamp(inputs[inputId].getVoltage() / 10.0f, 0.0f, 1.0f);
+			float contrib = (it->second.polarity == sibyl::MacroPolarity::BIPOLAR)
+				? (rawNorm * 2.0f - 1.0f) * it->second.amount
+				: rawNorm * it->second.amount;
+
+			const std::string& target = it->second.target;
+			if (target == "global.probability") globalProbMacro += contrib;
+			else if (target == "global.velocity") globalVelMacro += contrib;
+			else if (target.rfind("track.", 0) == 0) {
+				size_t secondDot = target.rfind('.');
+				if (secondDot != std::string::npos && secondDot > 6) {
+					std::string trackId = target.substr(6, secondDot - 6);
+					std::string param = target.substr(secondDot + 1);
+					for (const auto& tr : comp->tracks) {
+						if (tr.id == trackId && tr.channel >= 0 && tr.channel < 16) {
+							if (param == "probability") trackProbMacro[tr.channel] += contrib;
+							else if (param == "velocity") trackVelMacro[tr.channel] += contrib;
+							else if (param == "gate") trackGateMacro[tr.channel] += contrib;
+						}
+					}
+				}
+			}
+		}
+
+		// --- Polyphonic Track Output Evaluation ---
 		int maxChannel = -1;
 		for (const auto& trackDef : comp->tracks) {
 			int ch = trackDef.channel;
@@ -146,35 +332,103 @@ struct SibylModule : Module, SibylControl {
 			double stepPhaseBeats = fmod(m_trackStates[ch].patternPhaseBeats, pat.length * pat.resolutionBeats);
 			int currentStep = static_cast<int>(stepPhaseBeats / pat.resolutionBeats);
 
+			// Linear Glide interpolation
+			if (m_trackStates[ch].glideRatePerSample != 0.0f) {
+				float diff = m_trackStates[ch].targetPitch - m_trackStates[ch].currentPitch;
+				if (std::abs(diff) <= std::abs(m_trackStates[ch].glideRatePerSample)) {
+					m_trackStates[ch].currentPitch = m_trackStates[ch].targetPitch;
+					m_trackStates[ch].glideRatePerSample = 0.0f;
+				} else {
+					m_trackStates[ch].currentPitch += m_trackStates[ch].glideRatePerSample;
+				}
+			}
+
 			if (currentStep != m_trackStates[ch].lastFiredStep) {
 				m_trackStates[ch].lastFiredStep = currentStep;
-				m_trackStates[ch].currentGate = 0.0f; 
+
+				// Find event for this step
+				const sibyl::StepEvent* matchedEvent = nullptr;
+				for (const auto& ev : pat.steps) {
+					if (ev.step == currentStep) {
+						matchedEvent = &ev;
+						break;
+					}
+				}
+
+				if (matchedEvent) {
+					// Deterministic Probability Check + Macro Modulation
+					float baseProb = matchedEvent->hasProbability ? matchedEvent->probability : 1.0f;
+					float effProb = clamp(baseProb + globalProbMacro + trackProbMacro[ch], 0.0f, 1.0f);
+					uint64_t hash = comp->meta.seed ^ (m_sceneIndex * 73856093ULL) ^ (ch * 19349663ULL) ^ (currentStep * 83492791ULL);
+					float randVal = (float)((hash % 10000ULL) / 10000.0);
+					bool play = randVal < effProb;
+
+					if (play) {
+						if (!matchedEvent->tie) {
+							m_trackStates[ch].currentGate = 10.0f;
+						}
+						// Glide or Instant pitch
+						if (matchedEvent->glideMs > 0.0f) {
+							m_trackStates[ch].targetPitch = matchedEvent->compiledPitchV;
+							float numSamples = (matchedEvent->glideMs * 0.001f) * args.sampleRate;
+							if (numSamples > 1.0f) {
+								m_trackStates[ch].glideRatePerSample = (m_trackStates[ch].targetPitch - m_trackStates[ch].currentPitch) / numSamples;
+							} else {
+								m_trackStates[ch].currentPitch = matchedEvent->compiledPitchV;
+								m_trackStates[ch].glideRatePerSample = 0.0f;
+							}
+						} else {
+							m_trackStates[ch].currentPitch = matchedEvent->compiledPitchV;
+							m_trackStates[ch].targetPitch = matchedEvent->compiledPitchV;
+							m_trackStates[ch].glideRatePerSample = 0.0f;
+						}
+
+						float baseVel = matchedEvent->hasVelocity ? matchedEvent->velocity : trackDef.defaultVelocity;
+						float effVel = clamp(baseVel + globalVelMacro + trackVelMacro[ch], 0.0f, 1.0f);
+						m_trackStates[ch].currentVel = effVel * 10.0f;
+						m_trackStates[ch].currentMod = matchedEvent->hasMod ? matchedEvent->mod * (trackDef.modRange == sibyl::ModRange::BIPOLAR ? 5.0f : 10.0f) : 0.0f;
+					} else {
+						m_trackStates[ch].currentGate = 0.0f;
+					}
+				} else {
+					m_trackStates[ch].currentGate = 0.0f; // Rest
+				}
+			} else {
+				// Gate length & ratchet slicing + Gate Macro
+				double stepFraction = (stepPhaseBeats - currentStep * pat.resolutionBeats) / pat.resolutionBeats;
+				float baseGate = trackDef.defaultGate;
+				int ratchets = 1;
+				bool tie = false;
 
 				for (const auto& ev : pat.steps) {
 					if (ev.step == currentStep) {
-						m_trackStates[ch].currentPitch = ev.compiledPitchV;
-						m_trackStates[ch].currentGate = 10.0f;
-						m_trackStates[ch].currentVel = ev.hasVelocity ? ev.velocity * 10.0f : trackDef.defaultVelocity * 10.0f;
-						m_trackStates[ch].currentMod = ev.hasMod ? ev.mod * (trackDef.modRange == sibyl::ModRange::BIPOLAR ? 5.0f : 10.0f) : 0.0f;
+						if (ev.hasGate) baseGate = ev.gate;
+						ratchets = std::max(1, ev.ratchets);
+						tie = ev.tie;
 						break;
 					}
 				}
-			} else {
-				// Gate logic MVP: hold if fraction < gateLength
-				double fraction = (stepPhaseBeats - currentStep * pat.resolutionBeats) / pat.resolutionBeats;
-				float gateLength = trackDef.defaultGate; 
-				for (const auto& ev : pat.steps) {
-					if (ev.step == currentStep) {
-						if (ev.hasGate) gateLength = ev.gate;
-						break;
+
+				float effGate = clamp(baseGate + trackGateMacro[ch], 0.01f, 1.0f);
+
+				if (!tie) {
+					if (ratchets > 1) {
+						double sliceFraction = fmod(stepFraction * ratchets, 1.0);
+						if (sliceFraction > effGate) {
+							m_trackStates[ch].currentGate = 0.0f;
+						} else {
+							m_trackStates[ch].currentGate = 10.0f;
+						}
+					} else {
+						if (stepFraction > effGate) {
+							m_trackStates[ch].currentGate = 0.0f;
+						}
 					}
-				}
-				if (fraction > gateLength) {
-					m_trackStates[ch].currentGate = 0.0f;
 				}
 			}
 		}
 
+		// Write Polyphonic outputs
 		int numChannels = std::max(1, maxChannel + 1);
 		outputs[V_OCT_OUTPUT].setChannels(numChannels);
 		outputs[GATE_OUTPUT].setChannels(numChannels);
@@ -187,6 +441,11 @@ struct SibylModule : Module, SibylControl {
 			outputs[VELOCITY_OUTPUT].setVoltage(m_trackStates[c].currentVel, c);
 			outputs[MOD_OUTPUT].setVoltage(m_trackStates[c].currentMod, c);
 		}
+
+		// Write Pulse triggers
+		outputs[CLOCK_OUTPUT].setVoltage(m_clockPulse.process(args.sampleTime) ? 10.0f : 0.0f);
+		outputs[SCENE_OUTPUT].setVoltage(m_scenePulse.process(args.sampleTime) ? 10.0f : 0.0f);
+		outputs[EOC_OUTPUT].setVoltage(m_eocPulse.process(args.sampleTime) ? 10.0f : 0.0f);
 	}
 
 	bool handleSibylRequest(Operation operation, const std::string& requestJson, std::string& responseJson, std::string& error) override {
