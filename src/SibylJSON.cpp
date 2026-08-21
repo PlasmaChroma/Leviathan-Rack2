@@ -3,6 +3,8 @@
 #include <cmath>
 #include <set>
 #include <regex>
+#include <limits>
+#include <unordered_set>
 
 namespace sibyl {
 
@@ -13,6 +15,266 @@ static void addError(ParseResult& res, const std::string& path, const std::strin
 
 static void addWarning(ParseResult& res, const std::string& path, const std::string& msg) {
     res.warnings.push_back({path, msg});
+}
+
+static std::string childPath(const std::string& parent, const std::string& key) {
+    return parent.empty() ? key : parent + "." + key;
+}
+
+static void warnUnknownFields(json_t* object, const std::string& path,
+                              std::initializer_list<const char*> known, ParseResult& res) {
+    if (!json_is_object(object)) return;
+    std::unordered_set<std::string> allowed;
+    for (const char* key : known) allowed.emplace(key);
+    const char* key; json_t* value;
+    json_object_foreach(object, key, value) {
+        if (!allowed.count(key))
+            addWarning(res, childPath(path, key), "Unknown field ignored for forward compatibility");
+    }
+}
+
+static bool requireObjectIfPresent(json_t* parent, const char* key, const std::string& path, ParseResult& res) {
+    json_t* value = json_object_get(parent, key);
+    if (value && !json_is_object(value)) {
+        addError(res, childPath(path, key), "Expected object");
+        return false;
+    }
+    return value != nullptr;
+}
+
+static void validateStringField(json_t* object, const char* key, const std::string& path,
+                                size_t maxLength, ParseResult& res) {
+    json_t* value = json_object_get(object, key);
+    if (!value) return;
+    const std::string fieldPath = childPath(path, key);
+    if (!json_is_string(value)) addError(res, fieldPath, "Expected string");
+    else if (json_string_length(value) > maxLength) addError(res, fieldPath, "String exceeds maximum length of " + std::to_string(maxLength));
+}
+
+static void validateNumberField(json_t* object, const char* key, const std::string& path,
+                                double minimum, double maximum, ParseResult& res) {
+    json_t* value = json_object_get(object, key);
+    if (!value) return;
+    const std::string fieldPath = childPath(path, key);
+    if (!json_is_number(value)) { addError(res, fieldPath, "Expected number"); return; }
+    double number = json_number_value(value);
+    if (!std::isfinite(number) || number < minimum || number > maximum)
+        addError(res, fieldPath, "Value out of range " + std::to_string(minimum) + " to " + std::to_string(maximum));
+}
+
+static void validateIntegerField(json_t* object, const char* key, const std::string& path,
+                                 json_int_t minimum, json_int_t maximum, ParseResult& res) {
+    json_t* value = json_object_get(object, key);
+    if (!value) return;
+    const std::string fieldPath = childPath(path, key);
+    if (!json_is_integer(value)) { addError(res, fieldPath, "Expected integer"); return; }
+    json_int_t number = json_integer_value(value);
+    if (number < minimum || number > maximum)
+        addError(res, fieldPath, "Integer out of range " + std::to_string(minimum) + " to " + std::to_string(maximum));
+}
+
+static void validateBooleanField(json_t* object, const char* key, const std::string& path, ParseResult& res) {
+    json_t* value = json_object_get(object, key);
+    if (value && !json_is_boolean(value)) addError(res, childPath(path, key), "Expected boolean");
+}
+
+static bool isOneOf(const std::string& value, std::initializer_list<const char*> allowed) {
+    for (const char* candidate : allowed) if (value == candidate) return true;
+    return false;
+}
+
+static void validateEnumField(json_t* object, const char* key, const std::string& path,
+                              std::initializer_list<const char*> allowed, ParseResult& res) {
+    json_t* value = json_object_get(object, key);
+    if (!value) return;
+    const std::string fieldPath = childPath(path, key);
+    if (!json_is_string(value)) { addError(res, fieldPath, "Expected string enum"); return; }
+    if (!isOneOf(json_string_value(value), allowed)) addError(res, fieldPath, "Unsupported enum value: " + std::string(json_string_value(value)));
+}
+
+static bool validId(const std::string& value) { return !value.empty() && value.size() <= 64; }
+
+static void validateCompositionSchema(json_t* root, ParseResult& res) {
+    if (!json_is_object(root)) { addError(res, "$", "Composition must be a JSON object"); return; }
+    warnUnknownFields(root, "", {"meta", "clock", "transport", "tracks", "patterns", "arrangement", "macros"}, res);
+
+    if (requireObjectIfPresent(root, "meta", "", res)) {
+        json_t* meta = json_object_get(root, "meta");
+        warnUnknownFields(meta, "meta", {"title", "prompt", "bpm", "root", "rootOctave", "scale", "swing", "seed", "lastEditor", "editSummary"}, res);
+        validateStringField(meta, "title", "meta", 2048, res);
+        validateStringField(meta, "prompt", "meta", 2048, res);
+        validateNumberField(meta, "bpm", "meta", 20.0, 400.0, res);
+        validateStringField(meta, "root", "meta", 2, res);
+        json_t* rootName = json_object_get(meta, "root");
+        if (json_is_string(rootName) && !std::regex_match(std::string(json_string_value(rootName)), std::regex("^[A-G][b#]?$")))
+            addError(res, "meta.root", "Root must match [A-G][b#]?");
+        validateIntegerField(meta, "rootOctave", "meta", -1, 9, res);
+        validateEnumField(meta, "scale", "meta", {"chromatic", "major", "natural_minor", "harmonic_minor", "melodic_minor", "dorian", "phrygian", "lydian", "mixolydian", "locrian", "major_pentatonic", "minor_pentatonic"}, res);
+        validateNumberField(meta, "swing", "meta", 0.0, 0.49, res);
+        validateIntegerField(meta, "seed", "meta", 0, INT64_MAX, res);
+    }
+    if (requireObjectIfPresent(root, "clock", "", res)) {
+        json_t* clock = json_object_get(root, "clock");
+        warnUnknownFields(clock, "clock", {"externalPpqn", "outputPpqn", "externalTimeoutMs", "onExternalStop"}, res);
+        validateIntegerField(clock, "externalPpqn", "clock", 1, 960, res);
+        validateIntegerField(clock, "outputPpqn", "clock", 1, 960, res);
+        validateNumberField(clock, "externalTimeoutMs", "clock", 1.0, 60000.0, res);
+        validateEnumField(clock, "onExternalStop", "clock", {"hold", "freeRun", "internal"}, res);
+    }
+    if (requireObjectIfPresent(root, "transport", "", res)) {
+        json_t* transport = json_object_get(root, "transport");
+        warnUnknownFields(transport, "transport", {"running", "loop", "defaultApplyAt"}, res);
+        validateBooleanField(transport, "running", "transport", res);
+        validateBooleanField(transport, "loop", "transport", res);
+        validateEnumField(transport, "defaultApplyAt", "transport", {"nextBeat", "nextStep", "nextScene", "immediate"}, res);
+    }
+
+    std::set<std::string> trackIds;
+    json_t* tracks = json_object_get(root, "tracks");
+    if (tracks && !json_is_array(tracks)) addError(res, "tracks", "Expected array");
+    else if (tracks) {
+        if (json_array_size(tracks) > 16) addError(res, "tracks", "Maximum 16 tracks allowed");
+        std::set<int> channels;
+        size_t index; json_t* track;
+        json_array_foreach(tracks, index, track) {
+            std::string path = "tracks[" + std::to_string(index) + "]";
+            if (!json_is_object(track)) { addError(res, path, "Expected object"); continue; }
+            warnUnknownFields(track, path, {"id", "channel", "defaultGate", "defaultVelocity", "modRange"}, res);
+            validateStringField(track, "id", path, 64, res);
+            validateIntegerField(track, "channel", path, 0, 15, res);
+            validateNumberField(track, "defaultGate", path, 0.0, 1.0, res);
+            validateNumberField(track, "defaultVelocity", path, 0.0, 1.0, res);
+            validateEnumField(track, "modRange", path, {"unipolar", "bipolar"}, res);
+            json_t* id = json_object_get(track, "id");
+            if (!json_is_string(id) || !validId(json_string_value(id))) addError(res, path + ".id", "Track id is required and must be 1-64 characters");
+            else if (!trackIds.insert(json_string_value(id)).second) addError(res, path + ".id", "Duplicate track id");
+            json_t* channel = json_object_get(track, "channel");
+            if (!channel) addError(res, path + ".channel", "Required field is missing");
+            else if (json_is_integer(channel) && !channels.insert((int)json_integer_value(channel)).second) addError(res, path + ".channel", "Duplicate channel");
+        }
+    }
+
+    std::set<std::string> patternIds;
+    json_t* patterns = json_object_get(root, "patterns");
+    if (patterns && !json_is_object(patterns)) addError(res, "patterns", "Expected object");
+    else if (patterns) {
+        if (json_object_size(patterns) > 256) addError(res, "patterns", "Maximum 256 patterns allowed");
+        const char* patternId; json_t* pattern;
+        json_object_foreach(patterns, patternId, pattern) {
+            std::string path = "patterns." + std::string(patternId);
+            patternIds.insert(patternId);
+            if (!validId(patternId)) addError(res, path, "Pattern id must be 1-64 characters");
+            if (!json_is_object(pattern)) { addError(res, path, "Expected object"); continue; }
+            warnUnknownFields(pattern, path, {"length", "resolution", "steps"}, res);
+            validateIntegerField(pattern, "length", path, 1, 1024, res);
+            validateStringField(pattern, "resolution", path, 5, res);
+            json_t* resolution = json_object_get(pattern, "resolution");
+            if (json_is_string(resolution) && !std::regex_match(std::string(json_string_value(resolution)), std::regex("^1/(1|2|4|8|16|32|64)[dt]?$")))
+                addError(res, path + ".resolution", "Unsupported resolution");
+            int length = json_is_integer(json_object_get(pattern, "length")) ? (int)json_integer_value(json_object_get(pattern, "length")) : 0;
+            json_t* steps = json_object_get(pattern, "steps");
+            if (steps && !json_is_array(steps)) { addError(res, path + ".steps", "Expected array"); continue; }
+            if (!steps) continue;
+            if (json_array_size(steps) > 1024) addError(res, path + ".steps", "Maximum 1024 events allowed");
+            std::set<int> seenSteps;
+            size_t stepIndex; json_t* step;
+            json_array_foreach(steps, stepIndex, step) {
+                std::string stepPath = path + ".steps[" + std::to_string(stepIndex) + "]";
+                if (!json_is_object(step)) { addError(res, stepPath, "Expected object"); continue; }
+                warnUnknownFields(step, stepPath, {"step", "pitchV", "degree", "note", "octave", "gate", "velocity", "mod", "probability", "tie", "glideMs", "microshift", "ratchets"}, res);
+                validateIntegerField(step, "step", stepPath, 0, std::max(0, length - 1), res);
+                json_t* stepNumber = json_object_get(step, "step");
+                if (!stepNumber) addError(res, stepPath + ".step", "Required field is missing");
+                else if (json_is_integer(stepNumber) && !seenSteps.insert((int)json_integer_value(stepNumber)).second) addError(res, stepPath + ".step", "Duplicate step index");
+                int pitchCount = (json_object_get(step, "pitchV") ? 1 : 0) + (json_object_get(step, "degree") ? 1 : 0) + (json_object_get(step, "note") ? 1 : 0);
+                if (pitchCount != 1) addError(res, stepPath, "Exactly one of pitchV, degree, or note is required");
+                validateNumberField(step, "pitchV", stepPath, -10.0, 10.0, res);
+                validateIntegerField(step, "degree", stepPath, INT32_MIN, INT32_MAX, res);
+                validateIntegerField(step, "octave", stepPath, INT32_MIN, INT32_MAX, res);
+                if (json_object_get(step, "octave") && !json_object_get(step, "degree")) addError(res, stepPath + ".octave", "octave is valid only with degree");
+                validateStringField(step, "note", stepPath, 5, res);
+                json_t* note = json_object_get(step, "note");
+                if (json_is_string(note) && !std::regex_match(std::string(json_string_value(note)), std::regex("^[A-G][b#]?(-1|[0-9])$"))) addError(res, stepPath + ".note", "Invalid scientific pitch; expected octave -1 through 9");
+                validateNumberField(step, "gate", stepPath, 0.0, 1.0, res);
+                validateNumberField(step, "velocity", stepPath, 0.0, 1.0, res);
+                validateNumberField(step, "mod", stepPath, -1.0, 1.0, res);
+                validateNumberField(step, "probability", stepPath, 0.0, 1.0, res);
+                validateBooleanField(step, "tie", stepPath, res);
+                validateNumberField(step, "glideMs", stepPath, 0.0, 3600000.0, res);
+                validateNumberField(step, "microshift", stepPath, -0.499999999, 0.499999999, res);
+                validateIntegerField(step, "ratchets", stepPath, 1, 16, res);
+            }
+        }
+    }
+
+    json_t* arrangement = json_object_get(root, "arrangement");
+    if (arrangement && !json_is_array(arrangement)) addError(res, "arrangement", "Expected array");
+    else if (arrangement) {
+        if (json_array_size(arrangement) > 256) addError(res, "arrangement", "Maximum 256 scenes allowed");
+        std::set<std::string> sceneIds;
+        size_t index; json_t* scene;
+        json_array_foreach(arrangement, index, scene) {
+            std::string path = "arrangement[" + std::to_string(index) + "]";
+            if (!json_is_object(scene)) { addError(res, path, "Expected object"); continue; }
+            warnUnknownFields(scene, path, {"id", "name", "lengthBeats", "repeats", "phaseMode", "tracks"}, res);
+            validateStringField(scene, "id", path, 64, res);
+            validateStringField(scene, "name", path, 64, res);
+            validateNumberField(scene, "lengthBeats", path, std::numeric_limits<double>::min(), 1e9, res);
+            validateIntegerField(scene, "repeats", path, 1, INT32_MAX, res);
+            validateEnumField(scene, "phaseMode", path, {"restart", "continue", "alignGlobal"}, res);
+            json_t* id = json_object_get(scene, "id");
+            if (!json_is_string(id) || !validId(json_string_value(id))) addError(res, path + ".id", "Scene id is required and must be 1-64 characters");
+            else if (!sceneIds.insert(json_string_value(id)).second) addError(res, path + ".id", "Duplicate scene id");
+            json_t* assignments = json_object_get(scene, "tracks");
+            if (assignments && !json_is_object(assignments)) { addError(res, path + ".tracks", "Expected object"); continue; }
+            if (!assignments) continue;
+            const char* trackId; json_t* assignment;
+            json_object_foreach(assignments, trackId, assignment) {
+                std::string assignmentPath = path + ".tracks." + trackId;
+                if (!trackIds.count(trackId)) addError(res, assignmentPath, "Undefined track referenced: " + std::string(trackId));
+                std::string assignedPattern;
+                if (json_is_string(assignment)) assignedPattern = json_string_value(assignment);
+                else if (json_is_object(assignment)) {
+                    warnUnknownFields(assignment, assignmentPath, {"pattern", "phaseMode"}, res);
+                    validateStringField(assignment, "pattern", assignmentPath, 64, res);
+                    validateEnumField(assignment, "phaseMode", assignmentPath, {"restart", "continue", "alignGlobal"}, res);
+                    json_t* assigned = json_object_get(assignment, "pattern");
+                    if (!assigned) addError(res, assignmentPath + ".pattern", "Required field is missing");
+                    else if (json_is_string(assigned)) assignedPattern = json_string_value(assigned);
+                } else if (!json_is_null(assignment)) addError(res, assignmentPath, "Expected pattern id, assignment object, or null");
+                if (!assignedPattern.empty() && !patternIds.count(assignedPattern)) addError(res, assignmentPath, "Undefined pattern referenced: " + assignedPattern);
+            }
+        }
+    }
+
+    json_t* macros = json_object_get(root, "macros");
+    if (macros && !json_is_object(macros)) addError(res, "macros", "Expected object");
+    else if (macros) {
+        const char* macroId; json_t* macro;
+        json_object_foreach(macros, macroId, macro) {
+            std::string path = "macros." + std::string(macroId);
+            if (!isOneOf(macroId, {"1", "2", "3", "4"})) addError(res, path, "Macro id must be 1, 2, 3, or 4");
+            if (!json_is_object(macro)) { addError(res, path, "Expected object"); continue; }
+            warnUnknownFields(macro, path, {"target", "amount", "polarity", "clamp"}, res);
+            validateStringField(macro, "target", path, 128, res);
+            validateNumberField(macro, "amount", path, -100.0, 100.0, res);
+            validateEnumField(macro, "polarity", path, {"unipolar", "bipolar"}, res);
+            json_t* target = json_object_get(macro, "target");
+            if (!json_is_string(target)) addError(res, path + ".target", "Required field is missing or invalid");
+            else {
+                std::string targetName = json_string_value(target);
+                bool validTarget = isOneOf(targetName, {"global.probability", "global.swing", "global.velocity"});
+                std::smatch match;
+                if (!validTarget && std::regex_match(targetName, match, std::regex("^track\\.([^.]+)\\.(probability|swing|velocity|gate|mod)$"))) validTarget = trackIds.count(match[1].str()) != 0;
+                if (!validTarget) addError(res, path + ".target", "Unknown or unresolved macro target: " + targetName);
+            }
+            json_t* clamp = json_object_get(macro, "clamp");
+            if (clamp) {
+                if (!json_is_array(clamp) || json_array_size(clamp) != 2 || !json_is_number(json_array_get(clamp, 0)) || !json_is_number(json_array_get(clamp, 1))) addError(res, path + ".clamp", "Clamp must be a two-number array");
+                else if (json_number_value(json_array_get(clamp, 0)) > json_number_value(json_array_get(clamp, 1))) addError(res, path + ".clamp", "Clamp minimum must not exceed maximum");
+            }
+        }
+    }
 }
 
 // Helpers for reading json
@@ -219,6 +481,12 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
         return res;
     }
 
+    validateCompositionSchema(root, res);
+    if (!res.valid) {
+        json_decref(root);
+        return res;
+    }
+
     // Parse Meta
     json_t* metaJ = json_object_get(root, "meta");
     if (metaJ) {
@@ -388,6 +656,34 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
         }
     }
 
+    // Parse Macros
+    json_t* macrosJ = json_object_get(root, "macros");
+    if (macrosJ && json_is_object(macrosJ)) {
+        const char* key; json_t* val;
+        json_object_foreach(macrosJ, key, val) {
+            Macro macro;
+            macro.id = key;
+            macro.target = getString(val, "target");
+            macro.amount = getNumber(val, "amount", 0.0f);
+            macro.polarity = getString(val, "polarity", "unipolar") == "bipolar"
+                ? MacroPolarity::BIPOLAR : MacroPolarity::UNIPOLAR;
+            json_t* clampJ = json_object_get(val, "clamp");
+            if (clampJ) {
+                macro.clampMin = json_number_value(json_array_get(clampJ, 0));
+                macro.clampMax = json_number_value(json_array_get(clampJ, 1));
+            }
+            comp.macros[macro.id] = macro;
+        }
+    }
+
+    for (const auto& patternEntry : comp.patterns) {
+        for (const auto& event : patternEntry.second.steps) {
+            if (!std::isfinite(event.compiledPitchV) || event.compiledPitchV < -10.0f || event.compiledPitchV > 10.0f) {
+                addError(res, "patterns." + patternEntry.first, "Compiled pitch is outside -10 to 10 V");
+            }
+        }
+    }
+
     json_decref(root);
     
     // Validate bounds
@@ -396,8 +692,6 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
     if (comp.arrangement.size() > 256) addError(res, "arrangement", "Maximum 256 scenes allowed");
     if (comp.meta.bpm < 20.0f || comp.meta.bpm > 400.0f) addError(res, "meta.bpm", "BPM out of range 20-400");
     
-    // Needs scale resolution for 'degree' pitch Types. Left out for MVP brevity but should be done here.
-
     if (!res.errors.empty()) res.valid = false;
     return res;
 }
@@ -724,4 +1018,3 @@ std::string serializeSceneViewJson(const Composition& comp, const std::string& s
 }
 
 } // namespace sibyl
-

@@ -8,11 +8,20 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
 
 ## Toolchain Rule
 
-- If running in **WSL / WSL-like shell** (for example `uname -r` contains `microsoft`, or `WSL_INTEROP` is set):
-  - Treat the environment as **non-authoritative for final plugin linking**.
-  - You may edit code and run local/unit tests.
-  - Do **not** treat `plugin.so` / full plugin link failures as code regressions.
-  - Final authoritative plugin build/link must be done in a native Windows/MSYS2 or matching real-Linux toolchain.
+- If the controlling terminal is **WSL / WSL-like** (for example `uname -r`
+  contains `microsoft`, or `WSL_INTEROP` is set), distinguish the compiler that
+  actually performs the build:
+  - A `make` command run directly by the WSL/Linux compiler is suitable for
+    focused tests and source checks, but its `plugin.so` link is not the
+    authoritative Windows result.
+  - This repository can invoke the installed native MSYS2 MINGW64 toolchain
+    from WSL through `/mnt/c/msys64/usr/bin/bash.exe`. That bridged build is an
+    **authoritative Windows plugin build** and should be used for `plugin.dll`,
+    `dist`, and `install` validation when available.
+  - Sandboxed terminals may require approval to cross the WSL-to-Windows
+    process boundary. A sandbox interoperability failure does not mean the
+    native build is unavailable; retry the documented invocation with the
+    required approval.
 
 - If running in **native Windows/MSYS2 MINGW64** with the matching Rack SDK:
   - Treat this as an **authoritative plugin build/link environment**.
@@ -52,14 +61,35 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
 
 ## Testing Note
 
-- In either environment the simple test-fast set is expected to pass, although test-rack is a work in progress and will not be able to run.  Stick to test-fast for now if tests are required.
+- `test-fast` is expected to pass both directly in WSL and as native Windows
+  `.exe` tests through the MINGW64 bridge. Prefer the native run when validating
+  Windows-specific compilation or Rack-linked behavior.
+- Native Rack-linked tests require the installed Rack runtime directory so they
+  load `libRack.dll` and its matching runtime DLLs. On this machine, invoke the
+  bridged build with:
+
+  ```sh
+  make -j10 test-fast RACK_APP_RUNTIME_DIR="/c/Program Files/VCV/Rack2Pro"
+  ```
+
+  inside the documented MINGW64 `bash.exe` environment. Keep the Rack
+  application directory ahead of compiler runtime directories in the test
+  process path.
+- `test-rack` remains a work in progress. Use `test-fast` as the routine suite
+  unless a task explicitly targets one of the Rack-hosted tests.
 
 ## Practical Expectation
 
-- In WSL context: prefer validating behavior with focused tests (e.g. `build/tests/crownstep_spec`) and source-level checks.
-- In native Windows/MSYS2 MINGW64 context: include full `plugin.dll` build verification.
+- From WSL, use focused tests for quick iteration and use the documented native
+  MINGW64 bridge for authoritative `plugin.dll` verification when practical.
+- In a directly opened Windows/MSYS2 MINGW64 shell, include full `plugin.dll`
+  build verification.
 - In real Linux context: include full plugin build verification.
 - Do not stage or commit files to github -- all staging and committing of code is left as an exercise for the user.
+
+For invoking the authoritative Windows toolchain from a sandboxed WSL Codex
+terminal, see `doc/windows_build_from_wsl.md`. Use its explicit MINGW64 `bash.exe`
+invocation and preserve incremental build objects during normal development.
 
 # Release Compatibility Note
 

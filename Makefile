@@ -62,6 +62,7 @@ build/src/doom/%.c.o: CFLAGS += $(DOOM_LEGACY_WARN_FLAGS)
 build/src/Mandelwake.cpp.o build/src/MandelwakeEngine.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 
 TEST_BINS_NON_RACK := \
+	build/tests/sibyl_json_spec \
 	build/tests/theme_service_spec \
 	build/tests/temporaldeck_platter_spec_harness \
 	build/tests/temporaldeck_arc_lights_spec \
@@ -114,6 +115,10 @@ TEST_BINS := $(TEST_BINS_NON_RACK) $(TEST_BINS_RACK)
 RACK_TEST_WARN_FLAGS := -Wno-unused-parameter
 RACK_TEST_OPT_FLAGS := -O1
 CXX_MACHINE := $(shell $(CXX) -dumpmachine 2>/dev/null)
+MINGW_TEST_CPPFLAGS :=
+ifneq (,$(findstring mingw,$(CXX_MACHINE)))
+MINGW_TEST_CPPFLAGS += -D_USE_MATH_DEFINES
+endif
 
 .PHONY: generate-panel-anchor-atlas generate-mandelwake-tables check-mandelwake-tables validate-plugin-json doorstop-reference-grid doorstop-corpus-audit doorstop-reference-evaluate doorstop-variant-grid doorstop-variant-evaluate doorstop-boing-audition
 generate-panel-anchor-atlas:
@@ -226,16 +231,16 @@ endef
 define run_rack_test_bin
 	@rack_path="$$PATH"; \
 	rack_ld_path="$$LD_LIBRARY_PATH"; \
-	if [ -n "$(RACK_APP_RUNTIME_DIR)" ] && [ -d "$(RACK_APP_RUNTIME_DIR)" ]; then \
-		rack_path="$(RACK_APP_RUNTIME_DIR):$$rack_path"; \
-		rack_ld_path="$(RACK_APP_RUNTIME_DIR):$$rack_ld_path"; \
-	fi; \
 	for d in $(RACK_RUNTIME_DIRS); do \
 		if [ -d "$$d" ]; then \
 			rack_path="$$d:$$rack_path"; \
 			rack_ld_path="$$d:$$rack_ld_path"; \
 		fi; \
 	done; \
+	if [ -n "$(RACK_APP_RUNTIME_DIR)" ] && [ -d "$(RACK_APP_RUNTIME_DIR)" ]; then \
+		rack_path="$(RACK_APP_RUNTIME_DIR):$$rack_path"; \
+		rack_ld_path="$(RACK_APP_RUNTIME_DIR):$$rack_ld_path"; \
+	fi; \
 	run_with_rack_env() { \
 		PATH="$$rack_path" LD_LIBRARY_PATH="$$rack_ld_path" "$$1"; \
 		rc=$$?; \
@@ -285,6 +290,7 @@ test-build-fast: $(TEST_BINS_NON_RACK)
 test-build-rack: $(TEST_BINS_RACK)
 
 test-fast: test-build-fast
+	$(call run_rack_test_bin,build/tests/sibyl_json_spec)
 	python3 tests/split_svg_labels_spec.py
 	python3 tools/generate_mandelwake_tables.py --check
 	$(call run_test_bin,build/tests/temporaldeck_platter_spec_harness)
@@ -301,11 +307,11 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/undertow_shape_spec)
 	$(call run_test_bin,build/tests/math_helpers_spec)
 	$(call run_test_bin,build/tests/puffy_engine_spec)
-	$(call run_test_bin,build/tests/puffy_module_spec)
-	$(call run_test_bin,build/tests/puffy_character_controller_spec)
+	$(call run_rack_test_bin,build/tests/puffy_module_spec)
+	$(call run_rack_test_bin,build/tests/puffy_character_controller_spec)
 	$(call run_test_bin,build/tests/cantor_culture_engine_spec)
-	$(call run_test_bin,build/tests/cantor_module_spec)
-	$(call run_test_bin,build/tests/wyrm_envelope_spec)
+	$(call run_rack_test_bin,build/tests/cantor_module_spec)
+	$(call run_rack_test_bin,build/tests/wyrm_envelope_spec)
 	$(call run_test_bin,build/tests/doorstop_engine_spec)
 	$(call run_test_bin,build/tests/doorstop_reference_engine_spec)
 	$(call run_test_bin,build/tests/bifurx_filter_spec)
@@ -318,7 +324,8 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/wave_preview_simplification_spec)
 	$(call run_test_bin,build/tests/deepcache_planner_spec)
 	$(call run_test_bin,build/tests/deepcache_archive_spec)
-	$(call run_test_bin,build/tests/temporaldeck_longplay_spec)
+	$(call run_rack_test_bin,build/tests/chromatide_spec)
+	$(call run_rack_test_bin,build/tests/temporaldeck_longplay_spec)
 
 test-rack: test-build-rack
 	$(call run_rack_test_bin,build/tests/bifurx_runtime_spec)
@@ -382,6 +389,9 @@ build/tests:
 build/tests/temporaldeck_platter_spec_harness: tests/platter_spec_main.cpp tests/platter_spec_cases.cpp tests/platter_trace_replay.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
+build/tests/sibyl_json_spec: tests/sibyl_json_spec.cpp src/SibylJSON.cpp src/SibylJSON.hpp src/SibylTypes.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_json_spec.cpp src/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+
 build/tests/temporaldeck_arc_lights_spec: tests/temporaldeck_arc_lights_spec.cpp src/TemporalDeckArcLights.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
@@ -404,7 +414,7 @@ build/tests/temporaldeck_sample_prep_spec: tests/temporaldeck_sample_prep_spec.c
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
 build/tests/sil_repair_spec: tests/sil_repair_spec.cpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(MINGW_TEST_CPPFLAGS) $^ -o $@
 
 build/tests/bulkhead_geometry_spec: tests/bulkhead_geometry_spec.cpp src/BulkheadGeometry.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
@@ -437,10 +447,10 @@ build/tests/math_helpers_spec: tests/math_helpers_spec.cpp src/MathHelpers.cpp s
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/math_helpers_spec.cpp src/MathHelpers.cpp -o $@
 
 build/tests/puffy_engine_spec: tests/puffy_engine_spec.cpp src/PuffyEngine.cpp src/PuffyEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/puffy_engine_spec.cpp src/PuffyEngine.cpp src/MathHelpers.cpp -o $@
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(MINGW_TEST_CPPFLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/puffy_engine_spec.cpp src/PuffyEngine.cpp src/MathHelpers.cpp -o $@
 
 build/tests/puffy_module_spec: tests/puffy_module_spec.cpp src/Puffy.cpp src/Puffy.hpp src/PuffyEngine.cpp src/PuffyEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/puffy_module_spec.cpp src/Puffy.cpp src/PuffyEngine.cpp src/MathHelpers.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(MINGW_TEST_CPPFLAGS) -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/puffy_module_spec.cpp src/Puffy.cpp src/PuffyEngine.cpp src/MathHelpers.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 build/tests/puffy_character_controller_spec: tests/puffy_character_controller_spec.cpp src/PuffyCharacterController.cpp src/PuffyCharacterController.hpp src/PuffyPose.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/puffy_character_controller_spec.cpp src/PuffyCharacterController.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
@@ -455,7 +465,7 @@ build/tests/cantor_module_spec: tests/cantor_module_spec.cpp src/Cantor.cpp src/
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/cantor_module_spec.cpp src/Cantor.cpp src/CantorCultureEngine.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 build/tests/wyrm_envelope_spec: tests/wyrm_envelope_spec.cpp src/Wyrm.cpp src/Wyrm.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/wyrm_envelope_spec.cpp src/Wyrm.cpp src/MathHelpers.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(MINGW_TEST_CPPFLAGS) -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/wyrm_envelope_spec.cpp src/Wyrm.cpp src/MathHelpers.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 build/tests/temporaldeck_longplay_spec: tests/temporaldeck_longplay_spec.cpp src/LongPlayStreamEngine.cpp src/LongPlayStreamEngine.hpp src/codec.cpp src/codec.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/temporaldeck_longplay_spec.cpp src/LongPlayStreamEngine.cpp src/codec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@
@@ -470,7 +480,7 @@ build/tests/bifurx_filter_spec: tests/bifurx_filter_spec.cpp tests/bifurx_filter
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $< -o $@
 
 build/tests/wave_preview_simplification_spec: tests/wave_preview_simplification_spec.cpp src/WavePreviewSimplifier.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/wave_preview_simplification_spec.cpp -o $@
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(MINGW_TEST_CPPFLAGS) tests/wave_preview_simplification_spec.cpp -o $@
 
 build/tests/deepcache_planner_spec: tests/deepcache_planner_spec.cpp src/DeepcachePlanner.cpp src/DeepcachePlanner.hpp src/DeepcacheBrowserLogic.cpp src/DeepcacheBrowserLogic.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread tests/deepcache_planner_spec.cpp src/DeepcachePlanner.cpp src/DeepcacheBrowserLogic.cpp -o $@
