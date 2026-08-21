@@ -240,6 +240,16 @@
         "Visual"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Sibyl",
+      "name": "Sibyl",
+      "description": "Headless machine-first polyphonic sequencer and arranger.",
+      "tags": [
+        "Sequencer",
+        "Utility"
+      ],
+      "hidden": false
     }
   ]
 }

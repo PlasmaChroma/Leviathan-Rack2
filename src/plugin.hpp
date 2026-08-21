@@ -43,6 +43,7 @@ extern Model* modelMandelwake;
 extern Model* modelCantor;
 extern Model* modelTheme;
 extern Model* modelOctavia;
+extern Model* modelSibyl;
 
 // Local semantic alias so module code can request a white tiny Befaco knob
 // without depending on another plugin's custom class declarations.
