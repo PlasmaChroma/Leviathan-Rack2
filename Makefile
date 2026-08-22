@@ -63,6 +63,7 @@ build/src/Mandelwake.cpp.o build/src/MandelwakeEngine.cpp.o: FLAGS += -fno-fast-
 
 TEST_BINS_NON_RACK := \
 	build/tests/sibyl_adoption_spec \
+	build/tests/sibyl_hardware_control_spec \
 	build/tests/sibyl_edit_spec \
 	build/tests/sibyl_json_spec \
 	build/tests/sibyl_transport_spec \
@@ -294,6 +295,7 @@ test-build-rack: $(TEST_BINS_RACK)
 
 test-fast: test-build-fast
 	$(call run_test_bin,build/tests/sibyl_adoption_spec)
+	$(call run_test_bin,build/tests/sibyl_hardware_control_spec)
 	$(call run_rack_test_bin,build/tests/sibyl_edit_spec)
 	$(call run_rack_test_bin,build/tests/sibyl_json_spec)
 	$(call run_rack_test_bin,build/tests/sibyl_transport_spec)
@@ -400,6 +402,9 @@ build/tests/sibyl_json_spec: tests/sibyl_json_spec.cpp src/SibylJSON.cpp src/Sib
 
 build/tests/sibyl_adoption_spec: tests/sibyl_adoption_spec.cpp src/SibylAdoption.cpp src/SibylAdoption.hpp src/SibylTypes.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/sibyl_adoption_spec.cpp src/SibylAdoption.cpp -o $@
+
+build/tests/sibyl_hardware_control_spec: tests/sibyl_hardware_control_spec.cpp src/SibylHardwareControl.cpp src/SibylHardwareControl.hpp src/SibylAdoption.hpp src/SibylTypes.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/sibyl_hardware_control_spec.cpp src/SibylHardwareControl.cpp -o $@
 
 build/tests/sibyl_edit_spec: tests/sibyl_edit_spec.cpp src/SibylEdit.cpp src/SibylEdit.hpp src/SibylJSON.cpp src/SibylJSON.hpp src/SibylTypes.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_edit_spec.cpp src/SibylEdit.cpp src/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@

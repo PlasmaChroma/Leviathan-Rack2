@@ -27,7 +27,7 @@ Sibyl acts as the "Ghost in the Machine." Its austere panel provides sync, perfo
 * **SCENE CV IN:** Addresses scenes from 0–10 V using equal-width ranges across the arrangement. Selection is clamped and hysteretic, then uses the same transition quantization as SCENE TRIG.
 * **MACRO 1–4 IN:** Four 0–10 V performance inputs. Mapping, polarity, amount, and clamp range are declared in JSON.
 
-Clock, reset, and trigger inputs use Rack-compatible Schmitt-trigger thresholds. Exact thresholds shall be documented by the implementation.
+Clock, reset, and trigger inputs use Rack-compatible Schmitt-trigger thresholds: signals rise at 1.0 V and return low at 0.1 V. RUN is level-sensitive with high beginning at 1.0 V; voltages below 1.0 V are low.
 
 ### 2.2 Outputs
 

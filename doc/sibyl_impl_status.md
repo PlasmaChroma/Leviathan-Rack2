@@ -8,7 +8,7 @@ This document tracks the implementation status of the **Sibyl** module against t
 
 ## 1. Executive Summary
 
-Sibyl is currently an **integrated end-to-end prototype**. The module, panel, basic sequencer playback, complete-composition JSON path, and initial Octavia adapter are operational. Contract Core work is in progress: strict v1 composition validation, revisioned adoption, granular atomic edits, and the runtime transport command core are implemented and covered by focused tests. Transport still needs live integration coverage, and several playback policies remain before the semantic API can be considered v1-compliant.
+Sibyl is currently an **integrated end-to-end prototype**. The module, panel, sequencer playback, complete-composition JSON path, semantic Octavia adapter, revisioned adoption, granular atomic edits, and runtime transport core are operational. The transport/API milestone has passed an 18-scenario live Rack/Octavia acceptance run, including follow-up verification of RUN precedence and non-looping termination. Remaining v1 work is concentrated in physical-control semantics, real-time lifetime and telemetry hardening, complete phase-preserving adoption, external-clock quality, and musical micro-timing. The OLED follows the telemetry foundation rather than preceding core correctness.
 
 | Component | Status | Notes |
 |---|---|---|
@@ -16,13 +16,13 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, ba
 | **Patch Persistence** | 🟡 Substantial | Full composition serialization, authoritative revision assignment, failure/warning status, and safe immediate load adoption exist; broader persistence/undo integration tests remain. |
 | **Composition Compiler** | 🟡 Contract Core | Strict v1 types, enums, structural limits, pitch grammar, ranges, references, macro targets, and forward-compatible warnings are tested. Further cross-object semantic checks remain. |
 | **Lock-Free DSP Engine** | 🟡 Substantial | Atomic immutable-snapshot reading and boundary adoption exist; retained snapshots are currently unbounded, and reclamation/hot-path hardening remain. |
-| **Hardware Clock & Sync** | 🟡 Partial | Physical I/O, clock/scene behavior, edit/transport quantization, RUN precedence, and non-loop termination exist; estimator hysteresis and interpolation remain. |
+| **Hardware Control & Sync** | 🟡 Substantial | RUN edge gate closure, quantized RESET/SCENE TRIG/Scene CV requests, Scene CV hysteresis, destination phase behavior, external timeout policies, and non-loop termination are implemented. Cable-level live acceptance and clock-estimator quality remain. |
 | **Pitch & Scale Compiler** | 🟡 Substantial | Scientific pitch, 12 scales, Euclidean degree wrapping, and compiled voltage bounds are implemented and tested; playback-level edge cases need broader coverage. |
 | **Octavia Bridge (Core)** | 🟡 Substantial | All routes exist. Full views, atomic edits, optimistic revision checks, adoption, transport commands, and pending-state reporting work; focused validation and broader integration coverage remain. |
-| **Runtime Transport** | 🟡 Core Implemented | Full v1 command vocabulary, quantized publication, scene/restart policies, runtime run state, panic, and probability epochs exist; live Rack behavior testing remains. |
+| **Runtime Transport** | ✅ Core Accepted | Full v1 command vocabulary, quantized publication, scene/restart policies, runtime run state, panic, and probability epochs passed focused tests and an 18-scenario live Rack/Octavia acceptance run. |
 | **Granular `EDIT` Ops** | ✅ Core Complete | All v1 operation names apply in order to a private copy, then pass through one strict full-composition validation/compile. |
 | **Edit Adoption & Phase Policies** | ✅ Core Complete | `immediate`, `nextStep`, `nextBeat`, and `nextScene` adoption plus `preserve`, `restartChanged`, and `restartAll`; broader module-level behavior tests remain. |
-| **OLED Display Widget** | ⏳ Pending | Real-time front-panel OLED / LED matrix display for title, scene, BPM, and track activity. |
+| **OLED Display Widget** | ⏳ Sequenced After Telemetry | Real-time front-panel OLED / LED matrix display for title, scene, BPM, and track activity; must consume the planned race-free telemetry snapshot. |
 | **Micro-timing & Swing** | ⏳ Pending | `swing` subdivision delay and `microshift` step offsets. |
 
 ---
@@ -59,10 +59,10 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, ba
 ### 2.5 Hardware I/O & Real-Time Sync
 - **10 HP Physical Interface:**
   - `CLOCK IN`: Schmitt trigger with interval timing measurement, `externalPpqn` division, and timeout fallback (`hold`, `freeRun`, `internal`).
-  - `RUN IN`: High = play, Low = pause (retains position, closes gates).
-  - `RESET IN`: Schmitt trigger for resetting arrangement to scene 0, beat 0.
-  - `SCENE TRIG IN`: Schmitt trigger for manual stepping to the next scene.
-  - `SCENE CV IN`: 0–10 V continuous scene addressing with range clamping.
+  - `RUN IN`: High/low effective run precedence with falling-edge gate closure and position-preserving resume.
+  - `RESET IN`: Schmitt-triggered arrangement reset at the next external clock edge or internal beat, applying destination phase behavior.
+  - `SCENE TRIG IN`: Schmitt-triggered next-scene request using the composition's configured adoption boundary.
+  - `SCENE CV IN`: 0–10 V scene addressing with clamping, a 5%-of-bin hysteresis margin, and quantized transition routing.
   - `MACRO 1–4 IN`: 0–10 V CV performance inputs routing unipolar/bipolar modulation to targets (`probability`, `velocity`, `gate`).
   - `V/OCT OUT`: Polyphonic pitch output ($max(\text{channel}) + 1$ channels, up to 16).
   - `GATE OUT`: Polyphonic gate output.
@@ -104,29 +104,73 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, ba
 - Scene changes apply the destination scene phase policy or a one-request override. Restart targets independently address scene, arrangement, assigned patterns, or deterministic randomness.
 - `panic` is always immediate, closes gates, and cancels generated pulses. `reseed` changes a runtime probability epoch without modifying `meta.seed`; arrangement restart restores the composition-seeded epoch.
 - Added `tests/sibyl_transport_spec.cpp` to `test-fast`, covering normalization, aliases, strict field applicability, required targets/destinations, boundaries, phase modes, and stable response names.
-- Live Rack/Octavia acceptance covered all transport commands and boundary interactions. Follow-up fixes make status report the effective hardware-overridden RUN state and stop non-looping arrangements at the final scene with gates closed.
+- Live Rack/Octavia acceptance completed 18 scenarios covering immediate and quantized play/pause, stop/reset/restart targets, reseeding, scene navigation, phase overrides, panic, edit/transport ordering, pending-edit survival, revision immutability, RUN precedence, non-looping termination, and Octavia meter inspection. Follow-up fixes were retested for a final 18/18 pass.
 
 ---
 
-## 3. Pending Features ("What Needs Done")
+## 3. Planned Milestones (Priority Order)
 
-### 3.1 Adoption Hardening
-- Add module-level integration coverage proving gate closure, phase reset, event generation, and coalesced-edit behavior at real DSP boundaries; the pure adoption contract currently has focused unit coverage.
-- Replace the intentionally retained composition/request histories with bounded, non-audio-thread reclamation while guaranteeing that the DSP thread never destroys the final snapshot reference.
-- Publish status/playhead telemetry through an explicit race-free snapshot rather than reading mutable DSP counters directly from the control thread.
-- Complete the finer `preserve` semantics for changed pattern lengths, newly inserted past events, and unchanged sounding-event continuity described in `doc/sibyl.md`.
-- Add live Rack/Octavia transport coverage for gate closure, paused quantization, scene destinations, edit-before-transport ordering, pulse cancellation, and deterministic reseeding.
+### 3.1 Hardware Control Semantics — Implemented; Live Acceptance Pending
 
-### 3.2 Front-Panel OLED Display Widget
-- Implement a custom NanoVG `TransparentWidget` inside the OLED bezel (`res/Sibyl.panel.svg` display rect):
-  - Track activity / gate matrix (16-channel LED indicators).
-  - Song title (`meta.title`) and BPM.
-  - Active scene ID and repeat counter (e.g. `VERSE A [1/2]`).
-  - Active revision and sync source (`INT` / `EXT`).
+Unify physical control requests with the same boundary and phase machinery used by semantic transport commands.
 
-### 3.3 Micro-timing & Swing
-- **Swing:** Delay even-numbered subdivision steps by `meta.swing` (0.0 to 0.49 fraction of step).
-- **Microshift:** Apply signed sub-step timing offset (`microshift` strictly between -0.5 and +0.5).
+- Close all gates on a patched RUN input's falling edge while preserving clock, arrangement, scene, and pattern position; resume without rewinding on its rising edge.
+- Quantize RESET to the next external clock edge or internal beat boundary and apply the first scene's phase policy.
+- Route SCENE TRIG through the composition's transition quantization rather than changing scenes immediately.
+- Add hysteresis to SCENE CV selection and route a changed selection through the same quantized scene-transition path.
+- Apply destination scene and per-assignment phase behavior consistently for physical and API scene changes.
+- Document the implementation's exact Schmitt-trigger thresholds.
+
+Implementation result:
+
+- Physical RESET and scene selection now use an allocation-free pending request on the DSP thread and share the semantic boundary helpers.
+- API, physical, and natural scene entry now resolve destination scene defaults and per-track assignment phase overrides through one path.
+- Focused tests cover RUN edge decisions, internal/external reset boundaries, all four scene adoption boundaries, bidirectional Scene CV hysteresis, clamping, and phase-mode resolution.
+- `test-fast` passes and the native Windows/MSYS2 `plugin.dll` builds successfully.
+- A live cable-level Rack pass remains before this milestone is marked fully accepted.
+
+Acceptance criteria:
+
+- Focused DSP tests cover RUN high/low edges, gate closure and preserved resume position, RESET in internal and external clock modes, all supported scene boundaries, noisy Scene CV near a boundary, and destination phase behavior.
+- Existing Sibyl JSON, edit, adoption, transport, and Octavia contract tests remain green under `test-fast`.
+- The native Windows/MSYS2 `plugin.dll` build succeeds.
+- A short live Rack/Octavia pass verifies physical RUN, RESET, SCENE TRIG, and Scene CV behavior without regressing the accepted runtime transport suite.
+
+### 3.2 Real-Time Lifetime and Telemetry Hardening
+
+- Replace intentionally retained composition, adoption-request, and transport-request histories with bounded, non-audio-thread reclamation.
+- Guarantee that the DSP thread never destroys the final reference to a published snapshot or request.
+- Publish status, playhead, track activity, revision, and clock state through an explicit race-free immutable telemetry snapshot rather than reading mutable DSP counters from the control/UI thread.
+- Add sustained edit/transport stress coverage and hot-path checks for allocation, locking, and lifetime regressions.
+
+This milestone is a prerequisite for the OLED so the display and Octavia consume the same safe runtime state.
+
+### 3.3 Complete Phase-Preserving Adoption
+
+- Add module-level coverage for gate closure, phase reset, destination event generation, and coalesced edits at real DSP boundaries.
+- Complete `preserve` semantics for changed pattern-length modulo mapping, newly inserted events behind the playhead, removed sounding events, unchanged sounding-event continuity, and changed-pitch glide behavior.
+- Verify that `restartChanged` and `restartAll` generate destination step-zero events at adoption.
+
+### 3.4 External Clock Hardening
+
+- Add bounded external-tempo estimation, interpolation between detected edges, and estimator hysteresis.
+- Verify stable `hold`, `freeRun`, and `internal` timeout transitions without moving detected edges away from their arrival samples.
+- Broaden playback-level coverage for reconstructed CLOCK OUT phase and restart behavior.
+
+### 3.5 Swing and Microshift
+
+- **Swing:** Delay alternating eligible subdivisions by `meta.swing` (0.0 to 0.49 fraction of a step).
+- **Microshift:** Apply signed sub-step event offsets (`microshift` strictly between -0.5 and +0.5).
+- Define and test interactions among straight, dotted, and triplet resolutions, ratchets, ties, scene boundaries, swing, and positive/negative microshift.
+
+### 3.6 Front-Panel OLED Display Widget
+
+Implement a custom NanoVG `TransparentWidget` inside the OLED bezel (`res/Sibyl.panel.svg` display rect), reading only the race-free telemetry snapshot:
+
+- Song title and shortened prompt.
+- Active scene ID and repeat counter (for example `VERSE A [1/2]`).
+- Track playheads and gate activity for up to 16 channels.
+- Run state, clock source (`INT` / `EXT`), accepted/active/pending revision, and validation/error indication.
 
 ---
 

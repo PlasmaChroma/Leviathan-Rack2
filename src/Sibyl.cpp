@@ -2,6 +2,7 @@
 #include "SibylControl.hpp"
 #include "SibylAdoption.hpp"
 #include "SibylEdit.hpp"
+#include "SibylHardwareControl.hpp"
 #include "SibylJSON.hpp"
 #include "SibylTransport.hpp"
 #include "visual/VisualAssets.hpp"
@@ -36,7 +37,13 @@ struct SibylModule : Module, SibylControl {
 	std::atomic<const sibyl::TransportRequest*> m_pendingTransportPtr{nullptr};
 	std::atomic<bool> m_runtimeRunning{true};
 	std::atomic<bool> m_effectiveRunning{true};
+	bool m_previousEffectiveRunning = true;
 	uint64_t m_randomnessEpoch = 0;
+
+	enum class HardwareAction { NONE, RESET_ARRANGEMENT, SELECT_SCENE };
+	HardwareAction m_pendingHardwareAction = HardwareAction::NONE;
+	int m_pendingHardwareScene = 0;
+	sibyl::ApplyAt m_pendingHardwareApplyAt = sibyl::ApplyAt::NEXT_BEAT;
 
 	// Realtime playback state
 	double m_globalPhaseBeats = 0.0;
@@ -167,12 +174,19 @@ struct SibylModule : Module, SibylControl {
 		}
 	}
 
-	sibyl::PhaseMode scenePhaseMode(const sibyl::Composition& composition, int sceneIndex,
-			const sibyl::TransportRequest& request) const {
-		if (request.hasPhaseModeOverride) return request.phaseMode;
-		if (sceneIndex >= 0 && sceneIndex < (int)composition.arrangement.size())
-			return composition.arrangement[sceneIndex].phaseMode;
-		return sibyl::PhaseMode::RESTART;
+	void applyDestinationScenePhases(const sibyl::Composition& composition, int sceneIndex,
+			const sibyl::TransportRequest* request = nullptr) {
+		if (sceneIndex < 0 || sceneIndex >= (int)composition.arrangement.size()) return;
+		const auto& scene = composition.arrangement[sceneIndex];
+		for (const auto& track : composition.tracks) {
+			if (track.channel < 0 || track.channel >= 16 || !scene.tracks.count(track.id)) continue;
+			sibyl::PhaseMode mode = request && request->hasPhaseModeOverride
+				? request->phaseMode : sibyl::destinationTrackPhaseMode(scene, track.id);
+			if (mode == sibyl::PhaseMode::CONTINUE) continue;
+			auto& state = m_trackStates[track.channel];
+			state.patternPhaseBeats = mode == sibyl::PhaseMode::ALIGN_GLOBAL ? m_globalPhaseBeats : 0.0;
+			state.lastFiredStep = -1;
+		}
 	}
 
 	void enterScene(const sibyl::Composition& composition, int sceneIndex,
@@ -182,8 +196,26 @@ struct SibylModule : Module, SibylControl {
 		m_sceneRepeat = 0;
 		m_scenePhase = 0.0;
 		closeAllGates();
-		applyPatternPhase(scenePhaseMode(composition, m_sceneIndex, request));
+		applyDestinationScenePhases(composition, m_sceneIndex, &request);
 		m_scenePulse.trigger(1e-3f);
+	}
+
+	void applyPendingHardwareIfReady(const sibyl::BoundaryState& boundary,
+			const sibyl::Composition& composition, bool externalClockConnected, bool clockTick) {
+		if (m_pendingHardwareAction == HardwareAction::NONE) return;
+		bool ready = m_pendingHardwareAction == HardwareAction::RESET_ARRANGEMENT
+			? sibyl::hardwareResetBoundaryReached(externalClockConnected, clockTick, boundary)
+			: sibyl::hardwareSceneBoundaryReached(m_pendingHardwareApplyAt, boundary);
+		if (!ready) return;
+
+		sibyl::TransportRequest request;
+		if (m_pendingHardwareAction == HardwareAction::RESET_ARRANGEMENT) {
+			enterScene(composition, 0, request);
+			m_randomnessEpoch = 0;
+		} else {
+			enterScene(composition, m_pendingHardwareScene, request);
+		}
+		m_pendingHardwareAction = HardwareAction::NONE;
 	}
 
 	void applyPendingTransportIfReady(const sibyl::BoundaryState& boundary,
@@ -313,18 +345,37 @@ struct SibylModule : Module, SibylControl {
 		// --- Transport Run / Pause ---
 		bool isRunning = m_runtimeRunning.load(std::memory_order_acquire);
 		if (inputs[RUN_INPUT].isConnected()) {
-			isRunning = inputs[RUN_INPUT].getVoltage() >= 1.0f;
+			isRunning = inputs[RUN_INPUT].getVoltage() >= sibyl::kHardwareSchmittHighVolts;
 		}
+		if (sibyl::hardwareRunFallingEdge(m_previousEffectiveRunning, isRunning)) closeAllGates();
 		m_effectiveRunning.store(isRunning, std::memory_order_release);
+		m_previousEffectiveRunning = isRunning;
 
-		// --- Reset Trigger ---
+		// Hardware requests are captured immediately and applied only at their
+		// documented musical boundary below.
 		if (m_resetTrigger.process(inputs[RESET_INPUT].getVoltage())) {
-			m_sceneIndex = 0;
-			m_sceneRepeat = 0;
-			m_scenePhase = 0.0;
-			for (int c = 0; c < 16; c++) {
-				m_trackStates[c].lastFiredStep = -1;
-				m_trackStates[c].patternPhaseBeats = 0.0;
+			m_pendingHardwareAction = HardwareAction::RESET_ARRANGEMENT;
+		}
+		if (!comp->arrangement.empty() && m_sceneTrigger.process(inputs[SCENE_TRIG_INPUT].getVoltage()) &&
+				m_pendingHardwareAction != HardwareAction::RESET_ARRANGEMENT) {
+			m_pendingHardwareAction = HardwareAction::SELECT_SCENE;
+			m_pendingHardwareScene = (m_sceneIndex + 1) % comp->arrangement.size();
+			m_pendingHardwareApplyAt = comp->transport.defaultApplyAt;
+		}
+		if (!comp->arrangement.empty() && inputs[SCENE_CV_INPUT].isConnected() &&
+				m_pendingHardwareAction != HardwareAction::RESET_ARRANGEMENT) {
+			int referenceScene = m_pendingHardwareAction == HardwareAction::SELECT_SCENE
+				? m_pendingHardwareScene : m_sceneIndex;
+			int target = sibyl::sceneIndexFromCv(inputs[SCENE_CV_INPUT].getVoltage(),
+				(int)comp->arrangement.size(), referenceScene);
+			if (target != referenceScene) {
+				if (target == m_sceneIndex) {
+					m_pendingHardwareAction = HardwareAction::NONE;
+				} else {
+					m_pendingHardwareAction = HardwareAction::SELECT_SCENE;
+					m_pendingHardwareScene = target;
+					m_pendingHardwareApplyAt = comp->transport.defaultApplyAt;
+				}
 			}
 		}
 
@@ -381,9 +432,13 @@ struct SibylModule : Module, SibylControl {
 		if (!comp) return;
 		const sibyl::TransportRequest* pendingTransport = m_pendingTransportPtr.load(std::memory_order_acquire);
 		applyPendingTransportIfReady(adoptionBoundary, *comp, pendingTransport);
+		applyPendingHardwareIfReady(adoptionBoundary, *comp, inputs[CLOCK_INPUT].isConnected(), clockTick);
 		isRunning = m_runtimeRunning.load(std::memory_order_acquire);
-		if (inputs[RUN_INPUT].isConnected()) isRunning = inputs[RUN_INPUT].getVoltage() >= 1.0f;
+		if (inputs[RUN_INPUT].isConnected())
+			isRunning = inputs[RUN_INPUT].getVoltage() >= sibyl::kHardwareSchmittHighVolts;
+		if (sibyl::hardwareRunFallingEdge(m_previousEffectiveRunning, isRunning)) closeAllGates();
 		m_effectiveRunning.store(isRunning, std::memory_order_release);
+		m_previousEffectiveRunning = isRunning;
 		double beatDelta = isRunning ? rawBeatDelta : 0.0;
 
 		m_clockBoundaryPhaseBeats += rawBeatDelta;
@@ -413,26 +468,6 @@ struct SibylModule : Module, SibylControl {
 			return;
 		}
 
-		// --- Scene Addressing (Trigger & CV) ---
-		bool manualSceneJump = false;
-		if (m_sceneTrigger.process(inputs[SCENE_TRIG_INPUT].getVoltage())) {
-			m_sceneIndex = (m_sceneIndex + 1) % comp->arrangement.size();
-			m_sceneRepeat = 0;
-			m_scenePhase = 0.0;
-			manualSceneJump = true;
-			m_scenePulse.trigger(1e-3f);
-		} else if (inputs[SCENE_CV_INPUT].isConnected()) {
-			float cvNorm = clamp(inputs[SCENE_CV_INPUT].getVoltage() / 10.0f, 0.0f, 1.0f);
-			int targetIdx = clamp(int(cvNorm * comp->arrangement.size()), 0, (int)comp->arrangement.size() - 1);
-			if (targetIdx != m_sceneIndex) {
-				m_sceneIndex = targetIdx;
-				m_sceneRepeat = 0;
-				m_scenePhase = 0.0;
-				manualSceneJump = true;
-				m_scenePulse.trigger(1e-3f);
-			}
-		}
-
 		if (m_sceneIndex >= (int)comp->arrangement.size()) {
 			m_sceneIndex = 0;
 			m_sceneRepeat = 0;
@@ -440,9 +475,7 @@ struct SibylModule : Module, SibylControl {
 		}
 
 		const auto& scene = comp->arrangement[m_sceneIndex];
-		if (!manualSceneJump) {
-			m_scenePhase += beatDelta;
-		}
+		m_scenePhase += beatDelta;
 
 		// --- Scene Boundary Progression ---
 		if (m_scenePhase >= scene.lengthBeats) {
@@ -452,11 +485,13 @@ struct SibylModule : Module, SibylControl {
 				m_sceneRepeat = 0;
 				m_sceneIndex++;
 				m_scenePulse.trigger(1e-3f);
+				bool enteredScene = true;
 				if (m_sceneIndex >= (int)comp->arrangement.size()) {
 					if (comp->transport.loop) {
 						m_sceneIndex = 0;
 						m_eocPulse.trigger(1e-3f);
 					} else {
+						enteredScene = false;
 						m_sceneIndex = (int)comp->arrangement.size() - 1;
 						m_scenePhase = comp->arrangement.back().lengthBeats;
 						m_runtimeRunning.store(false, std::memory_order_release);
@@ -466,12 +501,9 @@ struct SibylModule : Module, SibylControl {
 						closeAllGates();
 					}
 				}
-			}
-			// Reset track phases on scene boundary if scene phaseMode == RESTART
-			if (scene.phaseMode == sibyl::PhaseMode::RESTART) {
-				for (int c = 0; c < 16; c++) {
-					m_trackStates[c].lastFiredStep = -1;
-					m_trackStates[c].patternPhaseBeats = 0.0;
+				if (enteredScene) {
+					closeAllGates();
+					applyDestinationScenePhases(*comp, m_sceneIndex);
 				}
 			}
 		}
