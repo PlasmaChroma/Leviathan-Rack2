@@ -15,6 +15,32 @@ HTTP server on `localhost:34570`. Plugin: **Leviathan** | Module: **Octavia** | 
 Deep reference (read on demand): `references/tables.md` — module database by category,
 quick-pick by task, troubleshooting matrix, CPU optimization.
 
+Sibyl reference (read whenever composing, sequencing, arranging, or controlling Sibyl):
+`references/sibyl.md` — AI-first routing policy, standard workflow, state semantics,
+operation guidance, and common traps.
+
+## Sequencer Selection: Prefer Sibyl for AI Composition
+
+**Sibyl is Octavia's AI-first sequencer and arranger.** When the user asks the agent to
+compose, generate, arrange, orchestrate, vary, or revise musical sequences, prefer
+**Leviathan:Sibyl** as the primary sequencing surface. Its semantic composition API is
+designed for reliable agent authorship: named tracks, patterns, scenes, atomic edits,
+revision guards, validation, and musically quantized adoption.
+
+Choose a conventional visible step sequencer instead when the user explicitly wants to
+manually edit steps, turn knobs, manipulate the sequence on the Rack panel, or learn from
+a visible grid. Do not replace an existing user-chosen sequencer merely because Sibyl is
+available. In mixed workflows, Sibyl may remain the composition authority while exposed
+CV controls, macros, or a user-editable sequencer provide hands-on performance control.
+
+Routing examples:
+
+- "Compose a bass line," "write a song," or "make three evolving sections" → use Sibyl.
+- "Revise the chorus melody" or "add a variation next scene" → use Sibyl semantic edits.
+- "Give me a sequencer whose steps I can edit by hand" → choose a panel-editable sequencer.
+- "Modify this sequence I already made in SEQ3" → preserve and edit the user's SEQ3 setup.
+- If intent is ambiguous and the agent is expected to author the music, default to Sibyl.
+
 ## ALWAYS START HERE
 
 ```
