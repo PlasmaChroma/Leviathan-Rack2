@@ -8,7 +8,7 @@ This document tracks the implementation status of the **Sibyl** module against t
 
 ## 1. Executive Summary
 
-Sibyl is currently an **integrated end-to-end prototype**. The module, panel, basic sequencer playback, complete-composition JSON path, and initial Octavia adapter are operational. Contract Core work is in progress: strict v1 composition validation, revisioned adoption, and granular atomic composition edits are now implemented and covered by focused tests. Complete transport semantics and several playback policies still need implementation before the semantic API can be considered v1-compliant.
+Sibyl is currently an **integrated end-to-end prototype**. The module, panel, basic sequencer playback, complete-composition JSON path, and initial Octavia adapter are operational. Contract Core work is in progress: strict v1 composition validation, revisioned adoption, granular atomic edits, and the runtime transport command core are implemented and covered by focused tests. Transport still needs live integration coverage, and several playback policies remain before the semantic API can be considered v1-compliant.
 
 | Component | Status | Notes |
 |---|---|---|
@@ -18,7 +18,8 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, ba
 | **Lock-Free DSP Engine** | 🟡 Substantial | Atomic immutable-snapshot reading and boundary adoption exist; retained snapshots are currently unbounded, and reclamation/hot-path hardening remain. |
 | **Hardware Clock & Sync** | 🟡 Partial | Physical I/O, basic clock/scene behavior, and edit-adoption boundary detection exist; transport-command quantization, hysteresis, interpolation, and non-loop termination remain. |
 | **Pitch & Scale Compiler** | 🟡 Substantial | Scientific pitch, 12 scales, Euclidean degree wrapping, and compiled voltage bounds are implemented and tested; playback-level edge cases need broader coverage. |
-| **Octavia Bridge (Core)** | 🟡 Substantial | All routes exist. Full views, atomic edits, optimistic revision checks, normalized adoption options, and pending-state reporting work; focused validation and complete transport remain. |
+| **Octavia Bridge (Core)** | 🟡 Substantial | All routes exist. Full views, atomic edits, optimistic revision checks, adoption, transport commands, and pending-state reporting work; focused validation and broader integration coverage remain. |
+| **Runtime Transport** | 🟡 Core Implemented | Full v1 command vocabulary, quantized publication, scene/restart policies, runtime run state, panic, and probability epochs exist; live Rack behavior testing remains. |
 | **Granular `EDIT` Ops** | ✅ Core Complete | All v1 operation names apply in order to a private copy, then pass through one strict full-composition validation/compile. |
 | **Edit Adoption & Phase Policies** | ✅ Core Complete | `immediate`, `nextStep`, `nextBeat`, and `nextScene` adoption plus `preserve`, `restartChanged`, and `restartAll`; broader module-level behavior tests remain. |
 | **OLED Display Widget** | ⏳ Pending | Real-time front-panel OLED / LED matrix display for title, scene, BPM, and track activity. |
@@ -92,8 +93,17 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, ba
   - `scene`: Single scene inspection with derived beat totals.
 - **`vcv_sibyl_get_status`**: Real-time telemetry including accepted/active/pending revisions, pending adoption options, run/clock state, active scene/playhead, and latest errors/warnings.
 - **`vcv_sibyl_validate`**: Dry-run candidate validation returning validation errors and paths without side effects.
-- **`vcv_sibyl_transport`**: Route and request plumbing are present; only immediate `reset`/`restart` currently mutate runtime state.
+- **`vcv_sibyl_transport`**: Publishes validated runtime-only commands for DSP-boundary application and reports normalized action, target, boundary, phase mode, and pending scene.
 - **`vcv_sibyl_edit`**: Bulk `replace_composition` transaction with optimistic concurrency protection (`expected_revision`), `apply_at`, and `phase_policy`.
+
+### 2.8 Runtime Transport Core
+- Added `play`, `pause`, `stop`, `restart`, `panic`, `next_scene`, `previous_scene`, `select_scene`, and `reseed`; `reset` normalizes to an arrangement restart.
+- Transport requests are immutable and atomically published for audio-thread application. Composition adoption occurs first when both requests share a boundary.
+- Runtime run state is separate from serialized `transport.running`, so performance commands do not change composition revision, patch state, or undo history.
+- Pending commands support the same four musical boundaries and remain visible through `get_status`. A separate clock-boundary phase permits quantized commands while the arrangement playhead is paused.
+- Scene changes apply the destination scene phase policy or a one-request override. Restart targets independently address scene, arrangement, assigned patterns, or deterministic randomness.
+- `panic` is always immediate, closes gates, and cancels generated pulses. `reseed` changes a runtime probability epoch without modifying `meta.seed`; arrangement restart restores the composition-seeded epoch.
+- Added `tests/sibyl_transport_spec.cpp` to `test-fast`, covering normalization, aliases, strict field applicability, required targets/destinations, boundaries, phase modes, and stable response names.
 
 ---
 
@@ -104,6 +114,7 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, ba
 - Replace the intentionally retained composition/request histories with bounded, non-audio-thread reclamation while guaranteeing that the DSP thread never destroys the final snapshot reference.
 - Publish status/playhead telemetry through an explicit race-free snapshot rather than reading mutable DSP counters directly from the control thread.
 - Complete the finer `preserve` semantics for changed pattern lengths, newly inserted past events, and unchanged sounding-event continuity described in `doc/sibyl.md`.
+- Add live Rack/Octavia transport coverage for gate closure, paused quantization, scene destinations, edit-before-transport ordering, pulse cancellation, and deterministic reseeding.
 
 ### 3.2 Front-Panel OLED Display Widget
 - Implement a custom NanoVG `TransparentWidget` inside the OLED bezel (`res/Sibyl.panel.svg` display rect):
@@ -130,6 +141,8 @@ src/
 ├── SibylEdit.cpp       # Ordered JSON-tree mutations and full compile handoff
 ├── SibylJSON.hpp       # Parser, validator, and serializer declarations
 ├── SibylJSON.cpp       # Jansson-based schema compiler, note parser, scale quantizer
+├── SibylTransport.hpp  # Runtime transport command and validation contract
+├── SibylTransport.cpp  # Strict command parser and normalization helpers
 └── SibylTypes.hpp      # C++ data structures for immutable Composition snapshots
 res/
 ├── Sibyl.panel.svg     # 10 HP vector background panel & bezel art

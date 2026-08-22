@@ -2268,9 +2268,8 @@ struct OctaviaMeterWidget : TransparentWidget {
     }
 
     static void drawBar(NVGcontext* vg, const math::Rect& bounds, const float levels[2]) {
-        const float radius = std::min(0.5f * bounds.size.x, 2.5f);
         nvgBeginPath(vg);
-        nvgRoundedRect(vg, bounds.pos.x, bounds.pos.y, bounds.size.x, bounds.size.y, radius);
+        nvgRect(vg, bounds.pos.x, bounds.pos.y, bounds.size.x, bounds.size.y);
         nvgFillColor(vg, nvgRGB(7, 10, 15));
         nvgFill(vg);
         nvgStrokeWidth(vg, 1.f);
@@ -2291,8 +2290,7 @@ struct OctaviaMeterWidget : TransparentWidget {
             nvgIntersectScissor(vg, channelX, fillPos.y + fillSize.y - fillHeight,
                 channelWidth, fillHeight);
             nvgBeginPath(vg);
-            nvgRoundedRect(vg, channelX, fillPos.y, channelWidth, fillSize.y,
-                std::max(0.f, 0.5f * channelWidth));
+            nvgRect(vg, channelX, fillPos.y, channelWidth, fillSize.y);
             const NVGpaint fill = nvgLinearGradient(vg,
                 channelX, fillPos.y + fillSize.y, channelX, fillPos.y,
                 nvgRGB(122, 92, 255), nvgRGB(28, 204, 217));

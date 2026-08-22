@@ -3,6 +3,7 @@
 #include "SibylAdoption.hpp"
 #include "SibylEdit.hpp"
 #include "SibylJSON.hpp"
+#include "SibylTransport.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
 #include <jansson.h>
@@ -31,9 +32,14 @@ struct SibylModule : Module, SibylControl {
 	std::atomic<int> m_activeRevision{0};
 	std::vector<std::unique_ptr<const sibyl::AdoptionRequest>> m_adoptionHistory;
 	std::atomic<const sibyl::AdoptionRequest*> m_pendingAdoptionPtr{nullptr};
+	std::vector<std::unique_ptr<const sibyl::TransportRequest>> m_transportHistory;
+	std::atomic<const sibyl::TransportRequest*> m_pendingTransportPtr{nullptr};
+	std::atomic<bool> m_runtimeRunning{true};
+	uint64_t m_randomnessEpoch = 0;
 
 	// Realtime playback state
 	double m_globalPhaseBeats = 0.0;
+	double m_clockBoundaryPhaseBeats = 0.0;
 	int m_sceneIndex = 0;
 	int m_sceneRepeat = 0;
 	double m_scenePhase = 0.0;
@@ -148,6 +154,100 @@ struct SibylModule : Module, SibylControl {
 		}
 	}
 
+	void closeAllGates() {
+		for (auto& state : m_trackStates) state.currentGate = 0.0f;
+	}
+
+	void applyPatternPhase(sibyl::PhaseMode mode) {
+		if (mode == sibyl::PhaseMode::CONTINUE) return;
+		for (auto& state : m_trackStates) {
+			state.patternPhaseBeats = mode == sibyl::PhaseMode::ALIGN_GLOBAL ? m_globalPhaseBeats : 0.0;
+			state.lastFiredStep = -1;
+		}
+	}
+
+	sibyl::PhaseMode scenePhaseMode(const sibyl::Composition& composition, int sceneIndex,
+			const sibyl::TransportRequest& request) const {
+		if (request.hasPhaseModeOverride) return request.phaseMode;
+		if (sceneIndex >= 0 && sceneIndex < (int)composition.arrangement.size())
+			return composition.arrangement[sceneIndex].phaseMode;
+		return sibyl::PhaseMode::RESTART;
+	}
+
+	void enterScene(const sibyl::Composition& composition, int sceneIndex,
+			const sibyl::TransportRequest& request) {
+		if (composition.arrangement.empty()) return;
+		m_sceneIndex = std::max(0, std::min(sceneIndex, (int)composition.arrangement.size() - 1));
+		m_sceneRepeat = 0;
+		m_scenePhase = 0.0;
+		closeAllGates();
+		applyPatternPhase(scenePhaseMode(composition, m_sceneIndex, request));
+		m_scenePulse.trigger(1e-3f);
+	}
+
+	void applyPendingTransportIfReady(const sibyl::BoundaryState& boundary,
+			const sibyl::Composition& composition, const sibyl::TransportRequest* request) {
+		if (!request || !sibyl::adoptionBoundaryReached(request->applyAt, boundary)) return;
+		switch (request->action) {
+			case sibyl::TransportAction::PLAY:
+				m_runtimeRunning.store(true, std::memory_order_release);
+				break;
+			case sibyl::TransportAction::PAUSE:
+				m_runtimeRunning.store(false, std::memory_order_release);
+				closeAllGates();
+				break;
+			case sibyl::TransportAction::STOP:
+				m_runtimeRunning.store(false, std::memory_order_release);
+				enterScene(composition, 0, *request);
+				m_randomnessEpoch = 0;
+				break;
+			case sibyl::TransportAction::PANIC:
+				closeAllGates();
+				m_clockPulse.reset();
+				m_scenePulse.reset();
+				m_eocPulse.reset();
+				break;
+			case sibyl::TransportAction::RESEED:
+				++m_randomnessEpoch;
+				break;
+			case sibyl::TransportAction::NEXT_SCENE:
+				enterScene(composition, (m_sceneIndex + 1) % std::max(1, (int)composition.arrangement.size()), *request);
+				break;
+			case sibyl::TransportAction::PREVIOUS_SCENE:
+				enterScene(composition, (m_sceneIndex - 1 + std::max(1, (int)composition.arrangement.size())) %
+					std::max(1, (int)composition.arrangement.size()), *request);
+				break;
+			case sibyl::TransportAction::SELECT_SCENE: {
+				int target = 0;
+				for (size_t i = 0; i < composition.arrangement.size(); ++i)
+					if (composition.arrangement[i].id == request->sceneId) { target = int(i); break; }
+				enterScene(composition, target, *request);
+				break;
+			}
+			case sibyl::TransportAction::RESTART:
+				switch (request->target) {
+					case sibyl::RestartTarget::SCENE:
+						enterScene(composition, m_sceneIndex, *request);
+						break;
+					case sibyl::RestartTarget::ARRANGEMENT:
+						enterScene(composition, 0, *request);
+						m_randomnessEpoch = 0;
+						break;
+					case sibyl::RestartTarget::PATTERNS:
+						closeAllGates();
+						applyPatternPhase(sibyl::PhaseMode::RESTART);
+						break;
+					case sibyl::RestartTarget::RANDOMNESS:
+						m_randomnessEpoch = 0;
+						break;
+					case sibyl::RestartTarget::NONE: break;
+				}
+				break;
+		}
+		const sibyl::TransportRequest* expected = request;
+		m_pendingTransportPtr.compare_exchange_strong(expected, nullptr, std::memory_order_acq_rel);
+	}
+
 	json_t* dataToJson() override {
 		json_t* rootJ = json_object();
 		json_object_set_new(rootJ, "schemaVersion", json_integer(1));
@@ -195,6 +295,7 @@ struct SibylModule : Module, SibylControl {
 				sibyl::ParseResult res = sibyl::parseCompositionJson(str, revision);
 				free(str);
 				if (res.valid && res.composition) {
+					m_runtimeRunning.store(res.composition->transport.running, std::memory_order_release);
 					acceptComposition(res.composition, sibyl::ApplyAt::IMMEDIATE,
 						sibyl::PhasePolicy::RESTART_ALL, res.warnings);
 				} else {
@@ -209,7 +310,7 @@ struct SibylModule : Module, SibylControl {
 		if (!comp) return;
 
 		// --- Transport Run / Pause ---
-		bool isRunning = comp->transport.running;
+		bool isRunning = m_runtimeRunning.load(std::memory_order_acquire);
 		if (inputs[RUN_INPUT].isConnected()) {
 			isRunning = inputs[RUN_INPUT].getVoltage() >= 1.0f;
 		}
@@ -226,7 +327,7 @@ struct SibylModule : Module, SibylControl {
 		}
 
 		// --- Clock Processing ---
-		double beatDelta = 0.0;
+		double rawBeatDelta = 0.0;
 		bool clockTick = false;
 		if (inputs[CLOCK_INPUT].isConnected()) {
 			m_timeSinceLastClockEdge += args.sampleTime;
@@ -236,50 +337,53 @@ struct SibylModule : Module, SibylControl {
 				}
 				m_timeSinceLastClockEdge = 0.0;
 				int ppqn = std::max(1, comp->clock.externalPpqn);
-				beatDelta = 1.0 / ppqn;
+				rawBeatDelta = 1.0 / ppqn;
 				clockTick = true;
 			} else {
 				// Timeout check
 				if (m_timeSinceLastClockEdge * 1000.0 > comp->clock.externalTimeoutMs) {
 					if (comp->clock.onExternalStop == sibyl::OnExternalStop::INTERNAL) {
 						double beatsPerSec = comp->meta.bpm / 60.0;
-						beatDelta = beatsPerSec * args.sampleTime;
+						rawBeatDelta = beatsPerSec * args.sampleTime;
 					} else if (comp->clock.onExternalStop == sibyl::OnExternalStop::FREE_RUN) {
 						if (m_clockIntervalSeconds > 0.0) {
-							beatDelta = (1.0 / std::max(1, comp->clock.externalPpqn)) * (args.sampleTime / m_clockIntervalSeconds);
+							rawBeatDelta = (1.0 / std::max(1, comp->clock.externalPpqn)) * (args.sampleTime / m_clockIntervalSeconds);
 						}
 					} else {
 						// HOLD
-						beatDelta = 0.0;
+						rawBeatDelta = 0.0;
 					}
 				}
 			}
 		} else {
 			double bpm = comp->meta.bpm;
 			double beatsPerSecond = bpm / 60.0;
-			beatDelta = beatsPerSecond * args.sampleTime;
+			rawBeatDelta = beatsPerSecond * args.sampleTime;
 		}
-
-		if (!isRunning) beatDelta = 0.0;
 
 		// Accepted revisions remain pending until their requested musical boundary.
 		// Boundary detection uses the currently sounding composition; adoption then
 		// occurs before this sample advances transport or generates events.
 		sibyl::BoundaryState adoptionBoundary;
-		adoptionBoundary.beat = beatDelta > 0.0 &&
-			std::floor(m_globalPhaseBeats) != std::floor(m_globalPhaseBeats + beatDelta);
-		adoptionBoundary.step = crossesActiveStepBoundary(*comp, beatDelta);
-		if (beatDelta > 0.0 && m_sceneIndex >= 0 && m_sceneIndex < (int)comp->arrangement.size()) {
+		adoptionBoundary.beat = rawBeatDelta > 0.0 &&
+			std::floor(m_clockBoundaryPhaseBeats) != std::floor(m_clockBoundaryPhaseBeats + rawBeatDelta);
+		adoptionBoundary.step = crossesActiveStepBoundary(*comp, rawBeatDelta);
+		if (rawBeatDelta > 0.0 && m_sceneIndex >= 0 && m_sceneIndex < (int)comp->arrangement.size()) {
 			const auto& currentScene = comp->arrangement[m_sceneIndex];
-			adoptionBoundary.scene = m_scenePhase + beatDelta >= currentScene.lengthBeats &&
+			adoptionBoundary.scene = m_scenePhase + rawBeatDelta >= currentScene.lengthBeats &&
 				m_sceneRepeat + 1 >= currentScene.repeats;
 		}
 		const sibyl::AdoptionRequest* pending = m_pendingAdoptionPtr.load(std::memory_order_acquire);
 		adoptPendingIfReady(adoptionBoundary, pending);
 		comp = m_activeCompositionPtr.load(std::memory_order_acquire);
 		if (!comp) return;
-		if (!inputs[RUN_INPUT].isConnected()) isRunning = comp->transport.running;
+		const sibyl::TransportRequest* pendingTransport = m_pendingTransportPtr.load(std::memory_order_acquire);
+		applyPendingTransportIfReady(adoptionBoundary, *comp, pendingTransport);
+		isRunning = m_runtimeRunning.load(std::memory_order_acquire);
+		if (inputs[RUN_INPUT].isConnected()) isRunning = inputs[RUN_INPUT].getVoltage() >= 1.0f;
+		double beatDelta = isRunning ? rawBeatDelta : 0.0;
 
+		m_clockBoundaryPhaseBeats += rawBeatDelta;
 		m_globalPhaseBeats += beatDelta;
 
 		// Clock output pulse (every beat subdivision)
@@ -452,7 +556,8 @@ struct SibylModule : Module, SibylControl {
 					// Deterministic Probability Check + Macro Modulation
 					float baseProb = matchedEvent->hasProbability ? matchedEvent->probability : 1.0f;
 					float effProb = clamp(baseProb + globalProbMacro + trackProbMacro[ch], 0.0f, 1.0f);
-					uint64_t hash = comp->meta.seed ^ (m_sceneIndex * 73856093ULL) ^ (ch * 19349663ULL) ^ (currentStep * 83492791ULL);
+					uint64_t hash = comp->meta.seed ^ (m_randomnessEpoch * 11400714819323198485ULL) ^
+						(m_sceneIndex * 73856093ULL) ^ (ch * 19349663ULL) ^ (currentStep * 83492791ULL);
 					float randVal = (float)((hash % 10000ULL) / 10000.0);
 					bool play = randVal < effProb;
 
@@ -577,7 +682,8 @@ struct SibylModule : Module, SibylControl {
 			int rev = m_acceptedRevision;
 			int actRev = m_activeRevision.load(std::memory_order_acquire);
 			const sibyl::AdoptionRequest* pending = m_pendingAdoptionPtr.load(std::memory_order_acquire);
-			bool running = comp ? comp->transport.running : true;
+			const sibyl::TransportRequest* pendingTransport = m_pendingTransportPtr.load(std::memory_order_acquire);
+			bool running = m_runtimeRunning.load(std::memory_order_acquire);
 			float bpm = comp ? comp->meta.bpm : 120.0f;
 			std::string sceneId = "";
 			int sceneRepeat = m_sceneRepeat;
@@ -598,7 +704,18 @@ struct SibylModule : Module, SibylControl {
 				json_object_set_new(stJ, "pendingApplyAt", json_null());
 				json_object_set_new(stJ, "pendingPhasePolicy", json_null());
 			}
-			json_object_set_new(stJ, "pendingTransport", json_null());
+			if (pendingTransport) {
+				json_t* transportJ = json_object();
+				json_object_set_new(transportJ, "action", json_string(sibyl::transportActionName(pendingTransport->action)));
+				if (pendingTransport->target == sibyl::RestartTarget::NONE) json_object_set_new(transportJ, "target", json_null());
+				else json_object_set_new(transportJ, "target", json_string(sibyl::restartTargetName(pendingTransport->target)));
+				json_object_set_new(transportJ, "applyAt", json_string(sibyl::applyAtName(pendingTransport->applyAt)));
+				if (pendingTransport->sceneId.empty()) json_object_set_new(transportJ, "sceneId", json_null());
+				else json_object_set_new(transportJ, "sceneId", json_string(pendingTransport->sceneId.c_str()));
+				if (pendingTransport->hasPhaseModeOverride) json_object_set_new(transportJ, "phaseMode", json_string(sibyl::phaseModeName(pendingTransport->phaseMode)));
+				else json_object_set_new(transportJ, "phaseMode", json_null());
+				json_object_set_new(stJ, "pendingTransport", transportJ);
+			} else json_object_set_new(stJ, "pendingTransport", json_null());
 			json_object_set_new(stJ, "running", json_boolean(running));
 			json_object_set_new(stJ, "clockSource", json_string(inputs[CLOCK_INPUT].isConnected() ? "external" : "internal"));
 			json_object_set_new(stJ, "estimatedBpm", json_real(bpm));
@@ -654,23 +771,57 @@ struct SibylModule : Module, SibylControl {
 		} else if (operation == Operation::TRANSPORT) {
 			json_error_t jerror;
 			json_t* root = json_loads(requestJson.c_str(), 0, &jerror);
-			if (root) {
-				json_t* actJ = json_object_get(root, "action");
-				if (actJ && json_is_string(actJ)) {
-					std::string action = json_string_value(actJ);
-					if (action == "restart" || action == "reset") {
-						m_sceneIndex = 0;
-						m_sceneRepeat = 0;
-						m_scenePhase = 0.0;
-						for (int c = 0; c < 16; c++) {
-							m_trackStates[c].lastFiredStep = -1;
-							m_trackStates[c].patternPhaseBeats = 0.0;
-						}
-					}
-				}
-				json_decref(root);
+			if (!root) {
+				error = std::string("Invalid JSON: ") + jerror.text;
+				return false;
 			}
-			responseJson = "{\"ok\":true}";
+			const sibyl::Composition* accepted = m_acceptedCompositionPtr;
+			sibyl::ApplyAt defaultApplyAt = accepted ? accepted->transport.defaultApplyAt : sibyl::ApplyAt::NEXT_BEAT;
+			sibyl::TransportParseResult parsed = sibyl::parseTransportRequest(root, defaultApplyAt);
+			json_decref(root);
+			if (!parsed.valid) {
+				json_t* respJ = json_object();
+				json_object_set_new(respJ, "ok", json_false());
+				json_t* errorJ = json_object();
+				json_object_set_new(errorJ, "code", json_string(parsed.code.c_str()));
+				json_object_set_new(errorJ, "path", json_string(parsed.path.c_str()));
+				json_object_set_new(errorJ, "message", json_string(parsed.message.c_str()));
+				json_object_set_new(respJ, "error", errorJ);
+				char* dumped = json_dumps(respJ, JSON_COMPACT);
+				responseJson = dumped ? dumped : "{}";
+				if (dumped) free(dumped);
+				json_decref(respJ);
+				error = parsed.message;
+				return false;
+			}
+			if (parsed.request.action == sibyl::TransportAction::SELECT_SCENE) {
+				bool found = false;
+				if (accepted) for (const auto& scene : accepted->arrangement) if (scene.id == parsed.request.sceneId) { found = true; break; }
+				if (!found) {
+					error = "Scene not found: " + parsed.request.sceneId;
+				responseJson = "{\"ok\":false,\"error\":{\"code\":\"object_not_found\",\"path\":\"scene_id\",\"message\":\"Scene not found\"}}";
+					return false;
+				}
+			}
+			std::unique_ptr<sibyl::TransportRequest> request(new sibyl::TransportRequest(parsed.request));
+			const sibyl::TransportRequest* requestPtr = request.get();
+			m_transportHistory.emplace_back(request.release());
+			m_pendingTransportPtr.store(requestPtr, std::memory_order_release);
+			json_t* respJ = json_object();
+			json_object_set_new(respJ, "ok", json_true());
+			json_object_set_new(respJ, "action", json_string(sibyl::transportActionName(requestPtr->action)));
+			if (requestPtr->target == sibyl::RestartTarget::NONE) json_object_set_new(respJ, "target", json_null());
+			else json_object_set_new(respJ, "target", json_string(sibyl::restartTargetName(requestPtr->target)));
+			json_object_set_new(respJ, "applyAt", json_string(sibyl::applyAtName(requestPtr->applyAt)));
+			json_object_set_new(respJ, "pending", json_true());
+			if (requestPtr->sceneId.empty()) json_object_set_new(respJ, "pendingScene", json_null());
+			else json_object_set_new(respJ, "pendingScene", json_string(requestPtr->sceneId.c_str()));
+			if (requestPtr->hasPhaseModeOverride) json_object_set_new(respJ, "phaseMode", json_string(sibyl::phaseModeName(requestPtr->phaseMode)));
+			else json_object_set_new(respJ, "phaseMode", json_null());
+			char* dumped = json_dumps(respJ, JSON_COMPACT);
+			responseJson = dumped ? dumped : "{}";
+			if (dumped) free(dumped);
+			json_decref(respJ);
 			return true;
 		} else if (operation == Operation::EDIT) {
 			json_error_t jerror;
