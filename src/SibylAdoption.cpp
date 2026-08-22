@@ -42,6 +42,22 @@ const char* phasePolicyName(PhasePolicy value) {
 	return "preserve";
 }
 
+ChannelAdoptionAction channelAdoptionAction(PhasePolicy policy, bool channelChanged) {
+	ChannelAdoptionAction action;
+	action.restartPhase = policy == PhasePolicy::RESTART_ALL ||
+		(policy == PhasePolicy::RESTART_CHANGED && channelChanged);
+	action.closeGate = channelChanged || action.restartPhase;
+	action.cancelGlide = channelChanged || action.restartPhase;
+	return action;
+}
+
+double preservedPatternPhase(double elapsedBeats, double replacementDurationBeats) {
+	if (!std::isfinite(elapsedBeats) || elapsedBeats < 0.0) return 0.0;
+	if (!std::isfinite(replacementDurationBeats) || replacementDurationBeats <= 0.0) return elapsedBeats;
+	double phase = std::fmod(elapsedBeats, replacementDurationBeats);
+	return phase < 0.0 ? phase + replacementDurationBeats : phase;
+}
+
 static bool sameEvent(const StepEvent& a, const StepEvent& b) {
 	return a.step == b.step && a.pitchType == b.pitchType && a.pitchV == b.pitchV &&
 		a.degree == b.degree && a.note == b.note && a.octave == b.octave &&

@@ -228,15 +228,33 @@ struct SibylModule : Module, SibylControl {
 
 	void adoptPendingIfReady(const sibyl::BoundaryState& boundary, const sibyl::AdoptionRequest* request) {
 		if (!request || !request->composition || !sibyl::adoptionBoundaryReached(request->applyAt, boundary)) return;
-		uint16_t restartMask = 0;
-		if (request->phasePolicy == sibyl::PhasePolicy::RESTART_ALL) restartMask = 0xffffu;
-		else if (request->phasePolicy == sibyl::PhasePolicy::RESTART_CHANGED) restartMask = request->restartChannelMask;
+		const sibyl::Composition& replacement = *request->composition;
+		const sibyl::Scene* destinationScene = m_sceneIndex >= 0 && m_sceneIndex < (int)replacement.arrangement.size()
+			? &replacement.arrangement[m_sceneIndex] : nullptr;
 		for (int channel = 0; channel < 16; ++channel) {
-			if (request->restartChannelMask & (1u << channel)) m_trackStates[channel].currentGate = 0.0f;
-			if (!(restartMask & (1u << channel))) continue;
-			m_trackStates[channel].patternPhaseBeats = 0.0;
-			m_trackStates[channel].lastFiredStep = -1;
-			m_trackStates[channel].currentGate = 0.0f;
+			bool changed = (request->restartChannelMask & (1u << channel)) != 0;
+			sibyl::ChannelAdoptionAction action = sibyl::channelAdoptionAction(request->phasePolicy, changed);
+			if (action.closeGate) m_trackStates[channel].currentGate = 0.0f;
+			if (action.cancelGlide) {
+				m_trackStates[channel].targetPitch = m_trackStates[channel].currentPitch;
+				m_trackStates[channel].glideRatePerSample = 0.0f;
+			}
+			if (action.restartPhase) {
+				m_trackStates[channel].patternPhaseBeats = 0.0;
+				m_trackStates[channel].lastFiredStep = -1;
+			} else if (changed && destinationScene) {
+				for (const auto& track : replacement.tracks) {
+					if (track.channel != channel) continue;
+					auto assignment = destinationScene->tracks.find(track.id);
+					if (assignment == destinationScene->tracks.end()) break;
+					auto pattern = replacement.patterns.find(assignment->second.patternId);
+					if (pattern == replacement.patterns.end()) break;
+					double duration = pattern->second.length * pattern->second.resolutionBeats;
+					m_trackStates[channel].patternPhaseBeats = sibyl::preservedPatternPhase(
+						m_trackStates[channel].patternPhaseBeats, duration);
+					break;
+				}
+			}
 		}
 		m_activeCompositionPtr.store(request->composition, std::memory_order_release);
 		m_activeRevision.store(request->composition->revision, std::memory_order_release);
@@ -566,14 +584,14 @@ struct SibylModule : Module, SibylControl {
 			m_scenePhase = 0.0;
 		}
 
-		const auto& scene = comp->arrangement[m_sceneIndex];
+		const auto& boundaryScene = comp->arrangement[m_sceneIndex];
 		m_scenePhase += beatDelta;
 
 		// --- Scene Boundary Progression ---
-		if (m_scenePhase >= scene.lengthBeats) {
-			m_scenePhase -= scene.lengthBeats;
+		if (m_scenePhase >= boundaryScene.lengthBeats) {
+			m_scenePhase -= boundaryScene.lengthBeats;
 			m_sceneRepeat++;
-			if (m_sceneRepeat >= scene.repeats) {
+			if (m_sceneRepeat >= boundaryScene.repeats) {
 				m_sceneRepeat = 0;
 				m_sceneIndex++;
 				m_scenePulse.trigger(1e-3f);
@@ -599,6 +617,10 @@ struct SibylModule : Module, SibylControl {
 				}
 			}
 		}
+		// Scene progression above may have changed m_sceneIndex. Event generation
+		// must use the destination scene on this same sample so restarted tracks can
+		// emit their destination step-zero events without a one-sample stale scene.
+		const auto& playbackScene = comp->arrangement[m_sceneIndex];
 
 		// --- Macro Inputs Evaluation (0–10 V) ---
 		float globalProbMacro = 0.f;
@@ -649,8 +671,8 @@ struct SibylModule : Module, SibylControl {
 				continue;
 			}
 
-			auto trackAsgIt = scene.tracks.find(trackDef.id);
-			if (trackAsgIt == scene.tracks.end() || trackAsgIt->second.patternId.empty()) {
+			auto trackAsgIt = playbackScene.tracks.find(trackDef.id);
+			if (trackAsgIt == playbackScene.tracks.end() || trackAsgIt->second.patternId.empty()) {
 				m_trackStates[ch].currentGate = 0.0f;
 				continue;
 			}
@@ -1070,6 +1092,7 @@ struct SibylModule : Module, SibylControl {
 	}
 };
 
+#ifndef SIBYL_MODULE_TEST
 struct SibylWidget : ModuleWidget {
 	explicit SibylWidget(SibylModule* module) {
 		setModule(module);
@@ -1119,3 +1142,4 @@ struct SibylWidget : ModuleWidget {
 };
 
 Model* modelSibyl = createModel<SibylModule, SibylWidget>("Sibyl");
+#endif

@@ -15,13 +15,13 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, se
 | **Module Lifecycle & Panel** | ✅ Complete | 10 HP panel (`res/Sibyl.panel.svg` + `res/Sibyl.labels.svg`), 16 physical jacks, tooltips. |
 | **Patch Persistence** | 🟡 Substantial | Full composition serialization, authoritative revision assignment, failure/warning status, and safe immediate load adoption exist; broader persistence/undo integration tests remain. |
 | **Composition Compiler** | 🟡 Contract Core | Strict v1 types, enums, structural limits, pitch grammar, ranges, references, macro targets, and forward-compatible warnings are tested. Further cross-object semantic checks remain. |
-| **Lock-Free DSP Engine** | 🟡 Hardening In Progress | Immutable publication now uses audio-thread hazard pointers and bounded control-thread reclamation; sustained stress and explicit allocation/lock instrumentation remain. |
+| **Lock-Free DSP Engine** | ✅ Live Accepted | Immutable publication uses audio-thread hazard pointers and bounded control-thread reclamation; a 129-operation live edit/transport stress run passed without anomalies. |
 | **Hardware Control & Sync** | 🟡 Substantial | RUN edge gate closure, quantized RESET/SCENE TRIG/Scene CV requests, Scene CV hysteresis, destination phase behavior, external timeout policies, and non-loop termination are implemented. Cable-level live acceptance and clock-estimator quality remain. |
 | **Pitch & Scale Compiler** | 🟡 Substantial | Scientific pitch, 12 scales, Euclidean degree wrapping, and compiled voltage bounds are implemented and tested; playback-level edge cases need broader coverage. |
 | **Octavia Bridge (Core)** | 🟡 Substantial | All routes exist. Full views, atomic edits, optimistic revision checks, adoption, transport commands, and pending-state reporting work; focused validation and broader integration coverage remain. |
 | **Runtime Transport** | ✅ Core Accepted | Full v1 command vocabulary, quantized publication, scene/restart policies, runtime run state, panic, and probability epochs passed focused tests and an 18-scenario live Rack/Octavia acceptance run. |
 | **Granular `EDIT` Ops** | ✅ Core Complete | All v1 operation names apply in order to a private copy, then pass through one strict full-composition validation/compile. |
-| **Edit Adoption & Phase Policies** | ✅ Core Complete | `immediate`, `nextStep`, `nextBeat`, and `nextScene` adoption plus `preserve`, `restartChanged`, and `restartAll`; broader module-level behavior tests remain. |
+| **Edit Adoption & Phase Policies** | ✅ Complete | All boundaries and phase policies, changed-length modulo mapping, stale-gate/glide handling, newest-wins coalescing, and destination step-zero generation are covered. |
 | **OLED Display Widget** | ⏳ Sequenced After Telemetry | Real-time front-panel OLED / LED matrix display for title, scene, BPM, and track activity; must consume the planned race-free telemetry snapshot. |
 | **Micro-timing & Swing** | ⏳ Pending | `swing` subdivision delay and `microshift` step offsets. |
 
@@ -153,11 +153,26 @@ Implementation progress (2026-08-22):
 - WSL `test-fast` passes and the authoritative native MINGW64 `plugin.dll` builds successfully.
 - Remaining work: add sustained edit/transport lifetime stress coverage, explicit hot-path allocation/lock checks, and expand the telemetry payload for per-track playheads and clock estimation.
 
+Live acceptance result:
+
+- A 129-operation Rack/Octavia run exercised granular edits, all 12 adoption-boundary/phase-policy combinations, transport navigation, rejection stability, rapid immediate edits, and interleaved edit/transport publication.
+- All 129 operations passed. Telemetry converged with no stale pending state, freeze, deadlock, reported audio interruption, or visible memory-growth pattern, and the original composition was restored.
+- Structural review remains the authority for the no-audio-thread-destruction guarantee; the live run validates its observable behavior under pressure.
+
 ### 3.3 Complete Phase-Preserving Adoption
 
 - Add module-level coverage for gate closure, phase reset, destination event generation, and coalesced edits at real DSP boundaries.
 - Complete `preserve` semantics for changed pattern-length modulo mapping, newly inserted events behind the playhead, removed sounding events, unchanged sounding-event continuity, and changed-pitch glide behavior.
 - Verify that `restartChanged` and `restartAll` generate destination step-zero events at adoption.
+
+Implementation progress (2026-08-22):
+
+- Centralized the per-channel adoption action for `preserve`, `restartChanged`, and `restartAll` and added focused coverage for unchanged continuity, changed-channel gate closure, and restart selection.
+- Changed material now cancels a stale in-flight pitch glide while retaining its current pitch, rather than continuing toward a target from the replaced snapshot.
+- Preserved phase is explicitly mapped modulo the replacement pattern duration; longer replacements retain their existing elapsed phase.
+- Added a Rack-linked `sibyl_module_spec` exercising real `SibylModule::process()` boundaries, newest-wins coalescing, pending-state clearance, and destination step-zero pitch/gate output.
+- The module harness exposed and fixed a stale-scene evaluation bug: after a natural scene crossing, the same sample previously generated events from the source scene. Playback now evaluates the destination scene immediately.
+- WSL and native Windows `test-fast` pass, and the authoritative MINGW64 `plugin.dll` builds successfully. This milestone is accepted.
 
 ### 3.4 External Clock Hardening
 

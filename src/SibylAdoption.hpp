@@ -16,6 +16,20 @@ struct AdoptionRequest {
 	uint16_t restartChannelMask = 0;
 };
 
+struct ChannelAdoptionAction {
+	bool closeGate = false;
+	bool restartPhase = false;
+	bool cancelGlide = false;
+};
+
+// Resolves the realtime-safe per-channel state transition. Changed material
+// never continues toward a pitch target that belonged to the old snapshot.
+ChannelAdoptionAction channelAdoptionAction(PhasePolicy policy, bool channelChanged);
+
+// Maps elapsed phase into replacement material without rewinding its musical
+// position. Invalid/empty durations conservatively preserve the prior phase.
+double preservedPatternPhase(double elapsedBeats, double replacementDurationBeats);
+
 bool parseApplyAtName(const std::string& name, ApplyAt& value);
 const char* applyAtName(ApplyAt value);
 bool parsePhasePolicyName(const std::string& name, PhasePolicy& value);
