@@ -10,7 +10,7 @@ description: >
 
 # VCV Rack — Leviathan Octavia
 
-HTTP server on `localhost:7777`. Plugin: **Leviathan** | Module: **Octavia** | Start button → full-brightness Octopus.
+HTTP server on `localhost:34570`. Plugin: **Leviathan** | Module: **Octavia** | Start button → full-brightness Octopus.
 
 Deep reference (read on demand): `references/tables.md` — module database by category,
 quick-pick by task, troubleshooting matrix, CPU optimization.
@@ -18,7 +18,7 @@ quick-pick by task, troubleshooting matrix, CPU optimization.
 ## ALWAYS START HERE
 
 ```
-vcv_get_status   →  {"running": true, "port": 7777, "patch": {"path": "...", "hasSavePath": true}}
+vcv_get_status   →  {"running": true, "port": 34570, "patch": {"path": "...", "hasSavePath": true}}
 ```
 If it fails → tell user to check Octavia + press START. Do not retry automatically.
 

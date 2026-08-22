@@ -109,7 +109,7 @@ static bool parseBoolField(const std::string& body, const std::string& key) {
 static int octaviaPort() {
     const char* e = getenv("OCTAVIA_PORT");
     if (e) { int p = atoi(e); if (p > 0 && p < 65536) return p; }
-    return 7777;
+    return 34570;
 }
 static std::string octaviaToken() {
     const char* e = getenv("OCTAVIA_TOKEN");
@@ -303,9 +303,19 @@ struct Octavia : Module {
     enum ParamId  { START_PARAM, PARAMS_LEN };
     enum InputId  { AUDIO_IN_L, AUDIO_IN_R, INPUTS_LEN };
     enum OutputId { OUTPUTS_LEN };
-    enum LightId  { STATUS_R_LIGHT, STATUS_G_LIGHT, STATUS_B_LIGHT, LIGHTS_LEN };
+    enum LightId  {
+        STATUS_R_LIGHT, STATUS_G_LIGHT, STATUS_B_LIGHT,
+        READ_ACTIVITY_LIGHT, WRITE_ACTIVITY_LIGHT,
+        LIGHTS_LEN
+    };
 
     std::atomic<bool> serverRunning{false};
+    std::atomic<uint64_t> readActivityGeneration{0};
+    std::atomic<uint64_t> writeActivityGeneration{0};
+    uint64_t seenReadActivityGeneration = 0;
+    uint64_t seenWriteActivityGeneration = 0;
+    float readActivityEnvelope = 0.f;
+    float writeActivityEnvelope = 0.f;
     httplib::Server   svr;
     std::thread       serverThread;
 
@@ -438,6 +448,8 @@ struct Octavia : Module {
         configButton(START_PARAM, "Start Octavia Server");
         configInput(AUDIO_IN_L, "Audio Analyze L");
         configInput(AUDIO_IN_R, "Audio Analyze R");
+        configLight(READ_ACTIVITY_LIGHT, "HTTP read activity");
+        configLight(WRITE_ACTIVITY_LIGHT, "HTTP write activity");
         setupRoutes();
     }
     ~Octavia() { stopServer(); }
@@ -538,6 +550,23 @@ struct Octavia : Module {
         lights[STATUS_R_LIGHT].setBrightness(on ? 0.f  : 0.8f);
         lights[STATUS_G_LIGHT].setBrightness(on ? 0.8f : 0.f);
         lights[STATUS_B_LIGHT].setBrightness(0.f);
+
+        const uint64_t readGeneration = readActivityGeneration.load(std::memory_order_relaxed);
+        const uint64_t writeGeneration = writeActivityGeneration.load(std::memory_order_relaxed);
+        if (readGeneration != seenReadActivityGeneration) {
+            seenReadActivityGeneration = readGeneration;
+            readActivityEnvelope = 1.f;
+        }
+        if (writeGeneration != seenWriteActivityGeneration) {
+            seenWriteActivityGeneration = writeGeneration;
+            writeActivityEnvelope = 1.f;
+        }
+        constexpr float activityDecaySeconds = 0.18f;
+        const float activityDecay = args.sampleTime / activityDecaySeconds;
+        readActivityEnvelope = std::max(0.f, readActivityEnvelope - activityDecay);
+        writeActivityEnvelope = std::max(0.f, writeActivityEnvelope - activityDecay);
+        lights[READ_ACTIVITY_LIGHT].setBrightness(readActivityEnvelope);
+        lights[WRITE_ACTIVITY_LIGHT].setBrightness(writeActivityEnvelope);
     }
 
     // ── UI-thread: sample voltages ─────────────────────────────────────────────
@@ -1305,16 +1334,18 @@ struct Octavia : Module {
         // Optional shared-secret auth: set OCTAVIA_TOKEN in the environment
         // (both for VCV Rack and the MCP server) to require it on every request.
         static const std::string token = octaviaToken();
-        if (!token.empty()) {
-            svr.set_pre_routing_handler([](const httplib::Request& req, httplib::Response& res){
-                if (req.get_header_value("X-Octavia-Token") != token) {
-                    res.status = 401;
-                    res.set_content("{\"error\":\"invalid or missing X-Octavia-Token\"}", "application/json");
-                    return httplib::Server::HandlerResponse::Handled;
-                }
-                return httplib::Server::HandlerResponse::Unhandled;
-            });
-        }
+        svr.set_pre_routing_handler([this](const httplib::Request& req, httplib::Response& res){
+            if (!token.empty() && req.get_header_value("X-Octavia-Token") != token) {
+                res.status = 401;
+                res.set_content("{\"error\":\"invalid or missing X-Octavia-Token\"}", "application/json");
+                return httplib::Server::HandlerResponse::Handled;
+            }
+            if (req.method == "GET" || req.method == "HEAD")
+                readActivityGeneration.fetch_add(1, std::memory_order_relaxed);
+            else
+                writeActivityGeneration.fetch_add(1, std::memory_order_relaxed);
+            return httplib::Server::HandlerResponse::Unhandled;
+        });
         svr.Get("/status", [this](const httplib::Request&, httplib::Response& res) {
             std::string b = "{"+jStr("running")+": "+(serverRunning?"true":"false")+", "+jStr("port")+": "+std::to_string(octaviaPort())+", "+jStr("version")+": "+jStr("2.10.0")+"}";
             res.set_content(b,"application/json");
@@ -2187,7 +2218,6 @@ struct Octavia : Module {
 
 // ── Colors ────────────────────────────────────────────────────────────────────
 static const NVGcolor WHITE = nvgRGB(255,255,255);
-static const NVGcolor DIM   = nvgRGB(80,80,80);
 
 struct OctaviaStatusWidget : TransparentWidget {
     Octavia* module = nullptr;
@@ -2333,6 +2363,8 @@ struct OctaviaWidget : ModuleWidget {
     Vec titleLabelMm{15.24f, 7.5f};
     Vec portLabelMm{4.5f, 55.5f};
     Vec portValueLabelMm{26.f, 55.5f};
+    Vec readActivityLabelMm{11.f, 56.f};
+    Vec writeActivityLabelMm{19.f, 56.f};
     Vec startLabelMm{4.5f, 66.f};
     Vec audioLabelLMm{8.f, 120.5f};
     Vec audioLabelRMm{22.f, 120.5f};
@@ -2373,6 +2405,8 @@ struct OctaviaWidget : ModuleWidget {
         titleLabelMm = anchorPoint("TITLE_LABEL", titleLabelMm);
         portLabelMm = anchorPoint("PORT_LABEL", portLabelMm);
         portValueLabelMm = anchorPoint("PORT_VALUE_LABEL", portValueLabelMm);
+        readActivityLabelMm = anchorPoint("READ_ACTIVITY_LABEL", readActivityLabelMm);
+        writeActivityLabelMm = anchorPoint("WRITE_ACTIVITY_LABEL", writeActivityLabelMm);
         startLabelMm = anchorPoint("START_LABEL", startLabelMm);
         audioLabelLMm = anchorPoint("AUDIO_LABEL_L", audioLabelLMm);
         audioLabelRMm = anchorPoint("AUDIO_LABEL_R", audioLabelRMm);
@@ -2383,6 +2417,11 @@ struct OctaviaWidget : ModuleWidget {
         status->box.pos = mm2px(statusRectMm.pos);
         status->box.size = mm2px(statusRectMm.size);
         addChild(status);
+
+        addChild(createLightCentered<SmallAperture<GreenApertureLight>>(
+            mm2px(anchorPoint("READ_ACTIVITY_LIGHT", Vec(11.f, 51.f))), module, Octavia::READ_ACTIVITY_LIGHT));
+        addChild(createLightCentered<SmallAperture<RedApertureLight>>(
+            mm2px(anchorPoint("WRITE_ACTIVITY_LIGHT", Vec(19.f, 51.f))), module, Octavia::WRITE_ACTIVITY_LIGHT));
 
         OctaviaMeterWidget* meter = new OctaviaMeterWidget(module);
         math::Rect meterRectMm(Vec(3.f, 72.f), Vec(24.48f, 29.f));
@@ -2416,14 +2455,17 @@ struct OctaviaWidget : ModuleWidget {
 
         // ── Zone 2: Server controls ───────────────────────────────────────────
         nvgFontSize(args.vg,8.f);
-        nvgTextAlign(args.vg, NVG_ALIGN_LEFT|NVG_ALIGN_MIDDLE);
-        nvgFillColor(args.vg,DIM);
-        nvgText(args.vg, mm2px(portLabelMm).x, mm2px(portLabelMm).y, "Port", NULL);
-        nvgTextAlign(args.vg, NVG_ALIGN_RIGHT|NVG_ALIGN_MIDDLE);
+        nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
         nvgFillColor(args.vg,WHITE);
-        nvgText(args.vg, mm2px(portValueLabelMm).x, mm2px(portValueLabelMm).y, "7777", NULL);
+        nvgText(args.vg, mm2px(portLabelMm).x, mm2px(portLabelMm).y, "Port", NULL);
+        const std::string portText = std::to_string(octaviaPort());
+        nvgText(args.vg, mm2px(portValueLabelMm).x, mm2px(portValueLabelMm).y, portText.c_str(), NULL);
 
-        nvgTextAlign(args.vg, NVG_ALIGN_LEFT|NVG_ALIGN_MIDDLE);
+        nvgFontSize(args.vg,7.f);
+        nvgText(args.vg, mm2px(readActivityLabelMm).x, mm2px(readActivityLabelMm).y, "READ", NULL);
+        nvgText(args.vg, mm2px(writeActivityLabelMm).x, mm2px(writeActivityLabelMm).y, "WRITE", NULL);
+
+        nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
         nvgFillColor(args.vg,WHITE);
         nvgText(args.vg, mm2px(startLabelMm).x, mm2px(startLabelMm).y, "Start", NULL);
 

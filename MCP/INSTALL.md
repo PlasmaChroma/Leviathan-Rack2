@@ -2,7 +2,7 @@
 
 Octavia connects VCV Rack to any MCP-capable coding agent. The included Python
 server translates MCP tool calls into requests to the Octavia module at
-`localhost:7777`.
+`localhost:34570`.
 
 The MCP server uses standard **stdio transport** and works with clients that
 support local MCP servers. This guide gives verified Codex instructions plus
@@ -26,7 +26,7 @@ documentation when its setup differs.
 3. Press **Start**. The Octopus artwork becomes full brightness when the HTTP
    bridge is listening.
 
-Octavia listens only on `127.0.0.1`. The default port is `7777`; set
+Octavia listens only on `127.0.0.1`. The default port is `34570`; set
 `OCTAVIA_PORT` in VCV Rack's environment before launch to use another port.
 
 ---
@@ -207,7 +207,7 @@ guidance.
 
 The defaults work without configuration. Optional environment variables are:
 
-- `OCTAVIA_PORT`: HTTP port used by both the Rack module and MCP server; default `7777`.
+- `OCTAVIA_PORT`: HTTP port used by both the Rack module and MCP server; default `34570`.
 - `OCTAVIA_TOKEN`: shared secret sent as `X-Octavia-Token` by the MCP server.
 
 When using a token or non-default port, set the same values in VCV Rack's launch
@@ -217,10 +217,10 @@ the variables at registration time:
 ```sh
 # Codex
 codex mcp remove vcv-rack
-codex mcp add --env OCTAVIA_PORT=7777 --env OCTAVIA_TOKEN=replace-me vcv-rack -- ~/.octavia-mcp/bin/python ~/.octavia-mcp/Octavia_MCP.py
+codex mcp add --env OCTAVIA_PORT=34570 --env OCTAVIA_TOKEN=replace-me vcv-rack -- ~/.octavia-mcp/bin/python ~/.octavia-mcp/Octavia_MCP.py
 
 # Claude Code
-claude mcp add -e OCTAVIA_PORT=7777 -e OCTAVIA_TOKEN=replace-me vcv-rack -- ~/.octavia-mcp/bin/python ~/.octavia-mcp/Octavia_MCP.py
+claude mcp add -e OCTAVIA_PORT=34570 -e OCTAVIA_TOKEN=replace-me vcv-rack -- ~/.octavia-mcp/bin/python ~/.octavia-mcp/Octavia_MCP.py
 ```
 
 If a JSON-configured client accepts an `env` block, add one like this:
@@ -232,7 +232,7 @@ If a JSON-configured client accepts an `env` block, add one like this:
       "command": "/absolute/path/to/.octavia-mcp/bin/python",
       "args": ["/absolute/path/to/.octavia-mcp/Octavia_MCP.py"],
       "env": {
-        "OCTAVIA_PORT": "7777",
+        "OCTAVIA_PORT": "34570",
         "OCTAVIA_TOKEN": "replace-me"
       }
     }

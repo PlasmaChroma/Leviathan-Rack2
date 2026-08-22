@@ -20,7 +20,7 @@ mcp = FastMCP("vcv_rack_mcp")
 
 
 def _read_bridge_port() -> int:
-    raw = os.environ.get("OCTAVIA_PORT", "7777")
+    raw = os.environ.get("OCTAVIA_PORT", "34570")
     try:
         port = int(raw)
     except ValueError as exc:
