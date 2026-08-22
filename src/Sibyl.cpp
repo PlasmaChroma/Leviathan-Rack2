@@ -35,6 +35,7 @@ struct SibylModule : Module, SibylControl {
 	std::vector<std::unique_ptr<const sibyl::TransportRequest>> m_transportHistory;
 	std::atomic<const sibyl::TransportRequest*> m_pendingTransportPtr{nullptr};
 	std::atomic<bool> m_runtimeRunning{true};
+	std::atomic<bool> m_effectiveRunning{true};
 	uint64_t m_randomnessEpoch = 0;
 
 	// Realtime playback state
@@ -314,6 +315,7 @@ struct SibylModule : Module, SibylControl {
 		if (inputs[RUN_INPUT].isConnected()) {
 			isRunning = inputs[RUN_INPUT].getVoltage() >= 1.0f;
 		}
+		m_effectiveRunning.store(isRunning, std::memory_order_release);
 
 		// --- Reset Trigger ---
 		if (m_resetTrigger.process(inputs[RESET_INPUT].getVoltage())) {
@@ -381,6 +383,7 @@ struct SibylModule : Module, SibylControl {
 		applyPendingTransportIfReady(adoptionBoundary, *comp, pendingTransport);
 		isRunning = m_runtimeRunning.load(std::memory_order_acquire);
 		if (inputs[RUN_INPUT].isConnected()) isRunning = inputs[RUN_INPUT].getVoltage() >= 1.0f;
+		m_effectiveRunning.store(isRunning, std::memory_order_release);
 		double beatDelta = isRunning ? rawBeatDelta : 0.0;
 
 		m_clockBoundaryPhaseBeats += rawBeatDelta;
@@ -455,6 +458,12 @@ struct SibylModule : Module, SibylControl {
 						m_eocPulse.trigger(1e-3f);
 					} else {
 						m_sceneIndex = (int)comp->arrangement.size() - 1;
+						m_scenePhase = comp->arrangement.back().lengthBeats;
+						m_runtimeRunning.store(false, std::memory_order_release);
+						m_effectiveRunning.store(false, std::memory_order_release);
+						isRunning = false;
+						beatDelta = 0.0;
+						closeAllGates();
 					}
 				}
 			}
@@ -511,6 +520,10 @@ struct SibylModule : Module, SibylControl {
 			int ch = trackDef.channel;
 			if (ch < 0 || ch > 15) continue;
 			maxChannel = std::max(maxChannel, ch);
+			if (!isRunning) {
+				m_trackStates[ch].currentGate = 0.0f;
+				continue;
+			}
 
 			auto trackAsgIt = scene.tracks.find(trackDef.id);
 			if (trackAsgIt == scene.tracks.end() || trackAsgIt->second.patternId.empty()) {
@@ -683,7 +696,7 @@ struct SibylModule : Module, SibylControl {
 			int actRev = m_activeRevision.load(std::memory_order_acquire);
 			const sibyl::AdoptionRequest* pending = m_pendingAdoptionPtr.load(std::memory_order_acquire);
 			const sibyl::TransportRequest* pendingTransport = m_pendingTransportPtr.load(std::memory_order_acquire);
-			bool running = m_runtimeRunning.load(std::memory_order_acquire);
+			bool running = m_effectiveRunning.load(std::memory_order_acquire);
 			float bpm = comp ? comp->meta.bpm : 120.0f;
 			std::string sceneId = "";
 			int sceneRepeat = m_sceneRepeat;

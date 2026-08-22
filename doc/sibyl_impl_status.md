@@ -16,7 +16,7 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, ba
 | **Patch Persistence** | 🟡 Substantial | Full composition serialization, authoritative revision assignment, failure/warning status, and safe immediate load adoption exist; broader persistence/undo integration tests remain. |
 | **Composition Compiler** | 🟡 Contract Core | Strict v1 types, enums, structural limits, pitch grammar, ranges, references, macro targets, and forward-compatible warnings are tested. Further cross-object semantic checks remain. |
 | **Lock-Free DSP Engine** | 🟡 Substantial | Atomic immutable-snapshot reading and boundary adoption exist; retained snapshots are currently unbounded, and reclamation/hot-path hardening remain. |
-| **Hardware Clock & Sync** | 🟡 Partial | Physical I/O, basic clock/scene behavior, and edit-adoption boundary detection exist; transport-command quantization, hysteresis, interpolation, and non-loop termination remain. |
+| **Hardware Clock & Sync** | 🟡 Partial | Physical I/O, clock/scene behavior, edit/transport quantization, RUN precedence, and non-loop termination exist; estimator hysteresis and interpolation remain. |
 | **Pitch & Scale Compiler** | 🟡 Substantial | Scientific pitch, 12 scales, Euclidean degree wrapping, and compiled voltage bounds are implemented and tested; playback-level edge cases need broader coverage. |
 | **Octavia Bridge (Core)** | 🟡 Substantial | All routes exist. Full views, atomic edits, optimistic revision checks, adoption, transport commands, and pending-state reporting work; focused validation and broader integration coverage remain. |
 | **Runtime Transport** | 🟡 Core Implemented | Full v1 command vocabulary, quantized publication, scene/restart policies, runtime run state, panic, and probability epochs exist; live Rack behavior testing remains. |
@@ -104,6 +104,7 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, ba
 - Scene changes apply the destination scene phase policy or a one-request override. Restart targets independently address scene, arrangement, assigned patterns, or deterministic randomness.
 - `panic` is always immediate, closes gates, and cancels generated pulses. `reseed` changes a runtime probability epoch without modifying `meta.seed`; arrangement restart restores the composition-seeded epoch.
 - Added `tests/sibyl_transport_spec.cpp` to `test-fast`, covering normalization, aliases, strict field applicability, required targets/destinations, boundaries, phase modes, and stable response names.
+- Live Rack/Octavia acceptance covered all transport commands and boundary interactions. Follow-up fixes make status report the effective hardware-overridden RUN state and stop non-looping arrangements at the final scene with gates closed.
 
 ---
 
