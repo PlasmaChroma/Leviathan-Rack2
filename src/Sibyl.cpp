@@ -8,6 +8,7 @@
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
 #include <jansson.h>
+#include <algorithm>
 
 using namespace rack;
 
@@ -28,13 +29,16 @@ struct SibylModule : Module, SibylControl {
 	bool m_seenAuthoritativeLoad = false;
 	std::string m_lastError;
 	std::vector<sibyl::ValidationIssue> m_lastWarnings;
-	std::vector<std::shared_ptr<const sibyl::Composition>> m_history;
+	std::vector<std::shared_ptr<const sibyl::Composition>> m_compositionOwners;
 	std::atomic<const sibyl::Composition*> m_activeCompositionPtr{nullptr};
+	std::atomic<const sibyl::Composition*> m_compositionHazard{nullptr};
 	std::atomic<int> m_activeRevision{0};
-	std::vector<std::unique_ptr<const sibyl::AdoptionRequest>> m_adoptionHistory;
+	std::vector<std::unique_ptr<const sibyl::AdoptionRequest>> m_adoptionOwners;
 	std::atomic<const sibyl::AdoptionRequest*> m_pendingAdoptionPtr{nullptr};
-	std::vector<std::unique_ptr<const sibyl::TransportRequest>> m_transportHistory;
+	std::atomic<const sibyl::AdoptionRequest*> m_adoptionHazard{nullptr};
+	std::vector<std::unique_ptr<const sibyl::TransportRequest>> m_transportOwners;
 	std::atomic<const sibyl::TransportRequest*> m_pendingTransportPtr{nullptr};
+	std::atomic<const sibyl::TransportRequest*> m_transportHazard{nullptr};
 	std::atomic<bool> m_runtimeRunning{true};
 	std::atomic<bool> m_effectiveRunning{true};
 	bool m_previousEffectiveRunning = true;
@@ -51,6 +55,24 @@ struct SibylModule : Module, SibylControl {
 	int m_sceneIndex = 0;
 	int m_sceneRepeat = 0;
 	double m_scenePhase = 0.0;
+
+	// A sequence-guarded set of atomics gives the control/UI thread one coherent
+	// telemetry view without reading mutable DSP state or making the audio thread
+	// allocate. Odd sequence values mean that publication is in progress.
+	std::atomic<uint64_t> m_telemetrySequence{0};
+	std::atomic<int> m_telemetrySceneIndex{0};
+	std::atomic<int> m_telemetrySceneRepeat{0};
+	std::atomic<double> m_telemetryScenePhase{0.0};
+	std::atomic<uint16_t> m_telemetryGateMask{0};
+	std::atomic<bool> m_telemetryExternalClock{false};
+
+	struct TelemetrySnapshot {
+		int sceneIndex = 0;
+		int sceneRepeat = 0;
+		double scenePhase = 0.0;
+		uint16_t gateMask = 0;
+		bool externalClock = false;
+	};
 
 	struct TrackState {
 		double patternPhaseBeats = 0.0;
@@ -99,15 +121,80 @@ struct SibylModule : Module, SibylControl {
 		configOutput(EOC_OUTPUT, "End of Cycle Trigger");
 
 		auto comp = std::make_shared<sibyl::Composition>();
-		m_history.push_back(comp);
+		m_compositionOwners.push_back(comp);
 		m_acceptedCompositionPtr = comp.get();
 		m_activeCompositionPtr.store(comp.get(), std::memory_order_release);
 	}
 
+	void reclaimPublishedObjects() {
+		const sibyl::Composition* active = m_activeCompositionPtr.load(std::memory_order_acquire);
+		const sibyl::Composition* hazard = m_compositionHazard.load(std::memory_order_acquire);
+		const sibyl::AdoptionRequest* pendingAdoption = m_pendingAdoptionPtr.load(std::memory_order_acquire);
+		m_compositionOwners.erase(std::remove_if(m_compositionOwners.begin(), m_compositionOwners.end(),
+			[&](const std::shared_ptr<const sibyl::Composition>& owner) {
+			const sibyl::Composition* ptr = owner.get();
+			return ptr != m_acceptedCompositionPtr && ptr != active && ptr != hazard &&
+				(!pendingAdoption || pendingAdoption->composition != ptr);
+		}), m_compositionOwners.end());
+
+		const sibyl::AdoptionRequest* adoptionHazard = m_adoptionHazard.load(std::memory_order_acquire);
+		m_adoptionOwners.erase(std::remove_if(m_adoptionOwners.begin(), m_adoptionOwners.end(),
+			[&](const std::unique_ptr<const sibyl::AdoptionRequest>& owner) {
+				return owner.get() != pendingAdoption && owner.get() != adoptionHazard;
+			}),
+			m_adoptionOwners.end());
+
+		const sibyl::TransportRequest* pendingTransport = m_pendingTransportPtr.load(std::memory_order_acquire);
+		const sibyl::TransportRequest* transportHazard = m_transportHazard.load(std::memory_order_acquire);
+		m_transportOwners.erase(std::remove_if(m_transportOwners.begin(), m_transportOwners.end(),
+			[&](const std::unique_ptr<const sibyl::TransportRequest>& owner) {
+				return owner.get() != pendingTransport && owner.get() != transportHazard;
+			}),
+			m_transportOwners.end());
+	}
+
+	template <typename T>
+	const T* acquirePublished(const std::atomic<const T*>& source, std::atomic<const T*>& hazard) {
+		const T* value = nullptr;
+		do {
+			value = source.load(std::memory_order_acquire);
+			hazard.store(value, std::memory_order_release);
+		} while (value != source.load(std::memory_order_acquire));
+		return value;
+	}
+
+	void publishTelemetry(bool externalClock) {
+		m_telemetrySequence.fetch_add(1, std::memory_order_acq_rel);
+		uint16_t gateMask = 0;
+		for (int channel = 0; channel < 16; ++channel)
+			if (m_trackStates[channel].currentGate > 0.0f) gateMask |= uint16_t(1u << channel);
+		m_telemetrySceneIndex.store(m_sceneIndex, std::memory_order_relaxed);
+		m_telemetrySceneRepeat.store(m_sceneRepeat, std::memory_order_relaxed);
+		m_telemetryScenePhase.store(m_scenePhase, std::memory_order_relaxed);
+		m_telemetryGateMask.store(gateMask, std::memory_order_relaxed);
+		m_telemetryExternalClock.store(externalClock, std::memory_order_relaxed);
+		m_telemetrySequence.fetch_add(1, std::memory_order_release);
+	}
+
+	TelemetrySnapshot readTelemetry() const {
+		TelemetrySnapshot snapshot;
+		for (;;) {
+			uint64_t before = m_telemetrySequence.load(std::memory_order_acquire);
+			if (before & 1u) continue;
+			snapshot.sceneIndex = m_telemetrySceneIndex.load(std::memory_order_relaxed);
+			snapshot.sceneRepeat = m_telemetrySceneRepeat.load(std::memory_order_relaxed);
+			snapshot.scenePhase = m_telemetryScenePhase.load(std::memory_order_relaxed);
+			snapshot.gateMask = m_telemetryGateMask.load(std::memory_order_relaxed);
+			snapshot.externalClock = m_telemetryExternalClock.load(std::memory_order_relaxed);
+			if (before == m_telemetrySequence.load(std::memory_order_acquire)) return snapshot;
+		}
+	}
+
 	void acceptComposition(const sibyl::CompositionPtr& composition, sibyl::ApplyAt applyAt,
 			sibyl::PhasePolicy phasePolicy, const std::vector<sibyl::ValidationIssue>& warnings = {}) {
+		reclaimPublishedObjects();
 		const sibyl::Composition* sounding = m_activeCompositionPtr.load(std::memory_order_acquire);
-		m_history.push_back(composition);
+		m_compositionOwners.push_back(composition);
 		std::unique_ptr<sibyl::AdoptionRequest> request(new sibyl::AdoptionRequest());
 		request->composition = composition.get();
 		request->applyAt = applyAt;
@@ -115,7 +202,7 @@ struct SibylModule : Module, SibylControl {
 		request->restartChannelMask = sounding
 			? sibyl::changedTrackChannelMask(*sounding, *composition) : uint16_t(0xffffu);
 		const sibyl::AdoptionRequest* requestPtr = request.get();
-		m_adoptionHistory.emplace_back(request.release());
+		m_adoptionOwners.emplace_back(request.release());
 		m_acceptedCompositionPtr = composition.get();
 		m_acceptedRevision = composition->revision;
 		m_lastError.clear();
@@ -339,7 +426,7 @@ struct SibylModule : Module, SibylControl {
 	}
 
 	void process(const ProcessArgs& args) override {
-		const sibyl::Composition* comp = m_activeCompositionPtr.load(std::memory_order_acquire);
+		const sibyl::Composition* comp = acquirePublished(m_activeCompositionPtr, m_compositionHazard);
 		if (!comp) return;
 
 		// --- Transport Run / Pause ---
@@ -426,12 +513,15 @@ struct SibylModule : Module, SibylControl {
 			adoptionBoundary.scene = m_scenePhase + rawBeatDelta >= currentScene.lengthBeats &&
 				m_sceneRepeat + 1 >= currentScene.repeats;
 		}
-		const sibyl::AdoptionRequest* pending = m_pendingAdoptionPtr.load(std::memory_order_acquire);
+		const sibyl::AdoptionRequest* pending = acquirePublished(m_pendingAdoptionPtr, m_adoptionHazard);
 		adoptPendingIfReady(adoptionBoundary, pending);
-		comp = m_activeCompositionPtr.load(std::memory_order_acquire);
+		m_adoptionHazard.store(nullptr, std::memory_order_release);
+		m_compositionHazard.store(nullptr, std::memory_order_release);
+		comp = acquirePublished(m_activeCompositionPtr, m_compositionHazard);
 		if (!comp) return;
-		const sibyl::TransportRequest* pendingTransport = m_pendingTransportPtr.load(std::memory_order_acquire);
+		const sibyl::TransportRequest* pendingTransport = acquirePublished(m_pendingTransportPtr, m_transportHazard);
 		applyPendingTransportIfReady(adoptionBoundary, *comp, pendingTransport);
+		m_transportHazard.store(nullptr, std::memory_order_release);
 		applyPendingHardwareIfReady(adoptionBoundary, *comp, inputs[CLOCK_INPUT].isConnected(), clockTick);
 		isRunning = m_runtimeRunning.load(std::memory_order_acquire);
 		if (inputs[RUN_INPUT].isConnected())
@@ -465,6 +555,8 @@ struct SibylModule : Module, SibylControl {
 			outputs[CLOCK_OUTPUT].setVoltage(m_clockPulse.process(args.sampleTime) ? 10.0f : 0.0f);
 			outputs[SCENE_OUTPUT].setVoltage(m_scenePulse.process(args.sampleTime) ? 10.0f : 0.0f);
 			outputs[EOC_OUTPUT].setVoltage(m_eocPulse.process(args.sampleTime) ? 10.0f : 0.0f);
+			publishTelemetry(inputs[CLOCK_INPUT].isConnected());
+			m_compositionHazard.store(nullptr, std::memory_order_release);
 			return;
 		}
 
@@ -689,6 +781,8 @@ struct SibylModule : Module, SibylControl {
 		outputs[CLOCK_OUTPUT].setVoltage(m_clockPulse.process(args.sampleTime) ? 10.0f : 0.0f);
 		outputs[SCENE_OUTPUT].setVoltage(m_scenePulse.process(args.sampleTime) ? 10.0f : 0.0f);
 		outputs[EOC_OUTPUT].setVoltage(m_eocPulse.process(args.sampleTime) ? 10.0f : 0.0f);
+		publishTelemetry(inputs[CLOCK_INPUT].isConnected());
+		m_compositionHazard.store(nullptr, std::memory_order_release);
 	}
 
 	bool handleSibylRequest(Operation operation, const std::string& requestJson, std::string& responseJson, std::string& error) override {
@@ -723,7 +817,9 @@ struct SibylModule : Module, SibylControl {
 			}
 			return true;
 		} else if (operation == Operation::GET_STATUS) {
+			reclaimPublishedObjects();
 			const sibyl::Composition* comp = m_activeCompositionPtr.load(std::memory_order_acquire);
+			TelemetrySnapshot telemetry = readTelemetry();
 			int rev = m_acceptedRevision;
 			int actRev = m_activeRevision.load(std::memory_order_acquire);
 			const sibyl::AdoptionRequest* pending = m_pendingAdoptionPtr.load(std::memory_order_acquire);
@@ -731,10 +827,10 @@ struct SibylModule : Module, SibylControl {
 			bool running = m_effectiveRunning.load(std::memory_order_acquire);
 			float bpm = comp ? comp->meta.bpm : 120.0f;
 			std::string sceneId = "";
-			int sceneRepeat = m_sceneRepeat;
-			double beat = m_scenePhase;
-			if (comp && m_sceneIndex >= 0 && m_sceneIndex < (int)comp->arrangement.size()) {
-				sceneId = comp->arrangement[m_sceneIndex].id;
+			int sceneRepeat = telemetry.sceneRepeat;
+			double beat = telemetry.scenePhase;
+			if (comp && telemetry.sceneIndex >= 0 && telemetry.sceneIndex < (int)comp->arrangement.size()) {
+				sceneId = comp->arrangement[telemetry.sceneIndex].id;
 			}
 			json_t* stJ = json_object();
 			json_object_set_new(stJ, "ok", json_true());
@@ -762,7 +858,8 @@ struct SibylModule : Module, SibylControl {
 				json_object_set_new(stJ, "pendingTransport", transportJ);
 			} else json_object_set_new(stJ, "pendingTransport", json_null());
 			json_object_set_new(stJ, "running", json_boolean(running));
-			json_object_set_new(stJ, "clockSource", json_string(inputs[CLOCK_INPUT].isConnected() ? "external" : "internal"));
+			json_object_set_new(stJ, "clockSource", json_string(telemetry.externalClock ? "external" : "internal"));
+			json_object_set_new(stJ, "gateMask", json_integer(telemetry.gateMask));
 			json_object_set_new(stJ, "estimatedBpm", json_real(bpm));
 			if (!sceneId.empty()) {
 				json_object_set_new(stJ, "sceneId", json_string(sceneId.c_str()));
@@ -814,6 +911,7 @@ struct SibylModule : Module, SibylControl {
 			json_decref(respJ);
 			return true;
 		} else if (operation == Operation::TRANSPORT) {
+			reclaimPublishedObjects();
 			json_error_t jerror;
 			json_t* root = json_loads(requestJson.c_str(), 0, &jerror);
 			if (!root) {
@@ -850,7 +948,7 @@ struct SibylModule : Module, SibylControl {
 			}
 			std::unique_ptr<sibyl::TransportRequest> request(new sibyl::TransportRequest(parsed.request));
 			const sibyl::TransportRequest* requestPtr = request.get();
-			m_transportHistory.emplace_back(request.release());
+			m_transportOwners.emplace_back(request.release());
 			m_pendingTransportPtr.store(requestPtr, std::memory_order_release);
 			json_t* respJ = json_object();
 			json_object_set_new(respJ, "ok", json_true());

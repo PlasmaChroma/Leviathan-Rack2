@@ -1,6 +1,6 @@
 # Sibyl – Implementation Status & Roadmap
 
-*Last updated: 2026-08-21*
+*Last updated: 2026-08-22*
 
 This document tracks the implementation status of the **Sibyl** module against the specification in [`doc/sibyl.md`](./sibyl.md).
 
@@ -15,7 +15,7 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, se
 | **Module Lifecycle & Panel** | ✅ Complete | 10 HP panel (`res/Sibyl.panel.svg` + `res/Sibyl.labels.svg`), 16 physical jacks, tooltips. |
 | **Patch Persistence** | 🟡 Substantial | Full composition serialization, authoritative revision assignment, failure/warning status, and safe immediate load adoption exist; broader persistence/undo integration tests remain. |
 | **Composition Compiler** | 🟡 Contract Core | Strict v1 types, enums, structural limits, pitch grammar, ranges, references, macro targets, and forward-compatible warnings are tested. Further cross-object semantic checks remain. |
-| **Lock-Free DSP Engine** | 🟡 Substantial | Atomic immutable-snapshot reading and boundary adoption exist; retained snapshots are currently unbounded, and reclamation/hot-path hardening remain. |
+| **Lock-Free DSP Engine** | 🟡 Hardening In Progress | Immutable publication now uses audio-thread hazard pointers and bounded control-thread reclamation; sustained stress and explicit allocation/lock instrumentation remain. |
 | **Hardware Control & Sync** | 🟡 Substantial | RUN edge gate closure, quantized RESET/SCENE TRIG/Scene CV requests, Scene CV hysteresis, destination phase behavior, external timeout policies, and non-loop termination are implemented. Cable-level live acceptance and clock-estimator quality remain. |
 | **Pitch & Scale Compiler** | 🟡 Substantial | Scientific pitch, 12 scales, Euclidean degree wrapping, and compiled voltage bounds are implemented and tested; playback-level edge cases need broader coverage. |
 | **Octavia Bridge (Core)** | 🟡 Substantial | All routes exist. Full views, atomic edits, optimistic revision checks, adoption, transport commands, and pending-state reporting work; focused validation and broader integration coverage remain. |
@@ -144,6 +144,14 @@ Acceptance criteria:
 - Add sustained edit/transport stress coverage and hot-path checks for allocation, locking, and lifetime regressions.
 
 This milestone is a prerequisite for the OLED so the display and Octavia consume the same safe runtime state.
+
+Implementation progress (2026-08-22):
+
+- Replaced unbounded composition, adoption-request, and transport-request histories with hazard-protected owner pools reclaimed only on the control thread.
+- The DSP thread publishes hazards before dereferencing raw immutable objects and never releases an owning smart pointer, so it cannot destroy the final reference.
+- Added a sequence-guarded atomic telemetry publication for scene position, repeat, gate activity, and clock source. `get_status` no longer reads mutable DSP scene counters or Rack input state directly and now exposes `gateMask` for the future OLED/activity view.
+- WSL `test-fast` passes and the authoritative native MINGW64 `plugin.dll` builds successfully.
+- Remaining work: add sustained edit/transport lifetime stress coverage, explicit hot-path allocation/lock checks, and expand the telemetry payload for per-track playheads and clock estimation.
 
 ### 3.3 Complete Phase-Preserving Adoption
 
