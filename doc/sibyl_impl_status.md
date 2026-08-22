@@ -16,7 +16,7 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, se
 | **Patch Persistence** | 🟡 Substantial | Full composition serialization, authoritative revision assignment, failure/warning status, and safe immediate load adoption exist; broader persistence/undo integration tests remain. |
 | **Composition Compiler** | 🟡 Contract Core | Strict v1 types, enums, structural limits, pitch grammar, ranges, references, macro targets, and forward-compatible warnings are tested. Further cross-object semantic checks remain. |
 | **Lock-Free DSP Engine** | ✅ Live Accepted | Immutable publication uses audio-thread hazard pointers and bounded control-thread reclamation; a 129-operation live edit/transport stress run passed without anomalies. |
-| **Hardware Control & Sync** | 🟡 Substantial | RUN edge gate closure, quantized RESET/SCENE TRIG/Scene CV requests, Scene CV hysteresis, destination phase behavior, external timeout policies, and non-loop termination are implemented. Cable-level live acceptance and clock-estimator quality remain. |
+| **Hardware Control & Sync** | 🟡 Implementation Complete | Physical semantics and external-clock hardening are implemented and covered; consolidated live cable-level acceptance remains. |
 | **Pitch & Scale Compiler** | 🟡 Substantial | Scientific pitch, 12 scales, Euclidean degree wrapping, and compiled voltage bounds are implemented and tested; playback-level edge cases need broader coverage. |
 | **Octavia Bridge (Core)** | 🟡 Substantial | All routes exist. Full views, atomic edits, optimistic revision checks, adoption, transport commands, and pending-state reporting work; focused validation and broader integration coverage remain. |
 | **Runtime Transport** | ✅ Core Accepted | Full v1 command vocabulary, quantized publication, scene/restart policies, runtime run state, panic, and probability epochs passed focused tests and an 18-scenario live Rack/Octavia acceptance run. |
@@ -179,6 +179,19 @@ Implementation progress (2026-08-22):
 - Add bounded external-tempo estimation, interpolation between detected edges, and estimator hysteresis.
 - Verify stable `hold`, `freeRun`, and `internal` timeout transitions without moving detected edges away from their arrival samples.
 - Broaden playback-level coverage for reconstructed CLOCK OUT phase and restart behavior.
+
+Implementation progress (2026-08-22):
+
+- Added an allocation-free bounded external-clock estimator. Measured tempo is constrained to Sibyl's 20–400 BPM contract, per-edge movement is limited, and small jitter uses a slower smoothing coefficient.
+- Between-edge phase is interpolated from the learned interval but capped at the next expected quantum. A detected edge always completes the remaining quantum on its actual arrival sample, so prediction never relocates a physical edge.
+- Implemented explicit `hold`, learned-tempo `freeRun`, and composition-tempo `internal` timeout paths without clearing the learned estimator.
+- `estimatedBpm` telemetry now reports the learned external tempo rather than the composition BPM while CLOCK IN is connected.
+- Reconstructed CLOCK OUT now triggers from output-grid crossings and honors `outputPpqn`; it no longer emits a pulse for every external input edge.
+- Focused estimator and Rack-linked module tests pass at 120 BPM, including 4-PPQN input to 1-PPQN output reconstruction. WSL and native Windows `test-fast` pass, and the MINGW64 `plugin.dll` builds successfully.
+- Alternating-jitter and isolated-outlier tests verify estimator stability and bounded response.
+- CLOCK OUT now owns a separate phase domain. Scene, arrangement, pattern, hardware RESET, and stop/restart behavior can realign it without changing the global musical timeline or clearing the learned external interval; randomness-only restart leaves it untouched.
+- The `internal` timeout policy free-runs at the learned rate only until the next quarter-note boundary, then changes to the composition BPM. A returning physical edge cancels fallback while preserving estimator history.
+- External-clock implementation is feature-complete. The remaining acceptance item is the consolidated live cable-level Rack pass.
 
 ### 3.5 Swing and Microshift
 

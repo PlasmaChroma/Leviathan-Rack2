@@ -1,6 +1,7 @@
 #include "plugin.hpp"
 #include "SibylControl.hpp"
 #include "SibylAdoption.hpp"
+#include "SibylClockEstimator.hpp"
 #include "SibylEdit.hpp"
 #include "SibylHardwareControl.hpp"
 #include "SibylJSON.hpp"
@@ -52,6 +53,7 @@ struct SibylModule : Module, SibylControl {
 	// Realtime playback state
 	double m_globalPhaseBeats = 0.0;
 	double m_clockBoundaryPhaseBeats = 0.0;
+	double m_outputClockPhaseBeats = 0.0;
 	int m_sceneIndex = 0;
 	int m_sceneRepeat = 0;
 	double m_scenePhase = 0.0;
@@ -65,6 +67,7 @@ struct SibylModule : Module, SibylControl {
 	std::atomic<double> m_telemetryScenePhase{0.0};
 	std::atomic<uint16_t> m_telemetryGateMask{0};
 	std::atomic<bool> m_telemetryExternalClock{false};
+	std::atomic<double> m_telemetryEstimatedBpm{120.0};
 
 	struct TelemetrySnapshot {
 		int sceneIndex = 0;
@@ -72,6 +75,7 @@ struct SibylModule : Module, SibylControl {
 		double scenePhase = 0.0;
 		uint16_t gateMask = 0;
 		bool externalClock = false;
+		double estimatedBpm = 120.0;
 	};
 
 	struct TrackState {
@@ -94,10 +98,8 @@ struct SibylModule : Module, SibylControl {
 	dsp::PulseGenerator m_scenePulse;
 	dsp::PulseGenerator m_eocPulse;
 
-	// External clock interval tracking
-	double m_lastClockEdgeSampleTime = 0.0;
-	double m_clockIntervalSeconds = 0.5; // ~120 BPM default
-	double m_timeSinceLastClockEdge = 0.0;
+	// External clock prediction remains edge-anchored and allocation-free.
+	sibyl::ExternalClockEstimator m_externalClockEstimator;
 
 	SibylModule() {
 		config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
@@ -163,7 +165,7 @@ struct SibylModule : Module, SibylControl {
 		return value;
 	}
 
-	void publishTelemetry(bool externalClock) {
+	void publishTelemetry(bool externalClock, double estimatedBpm) {
 		m_telemetrySequence.fetch_add(1, std::memory_order_acq_rel);
 		uint16_t gateMask = 0;
 		for (int channel = 0; channel < 16; ++channel)
@@ -173,6 +175,7 @@ struct SibylModule : Module, SibylControl {
 		m_telemetryScenePhase.store(m_scenePhase, std::memory_order_relaxed);
 		m_telemetryGateMask.store(gateMask, std::memory_order_relaxed);
 		m_telemetryExternalClock.store(externalClock, std::memory_order_relaxed);
+		m_telemetryEstimatedBpm.store(estimatedBpm, std::memory_order_relaxed);
 		m_telemetrySequence.fetch_add(1, std::memory_order_release);
 	}
 
@@ -186,6 +189,7 @@ struct SibylModule : Module, SibylControl {
 			snapshot.scenePhase = m_telemetryScenePhase.load(std::memory_order_relaxed);
 			snapshot.gateMask = m_telemetryGateMask.load(std::memory_order_relaxed);
 			snapshot.externalClock = m_telemetryExternalClock.load(std::memory_order_relaxed);
+			snapshot.estimatedBpm = m_telemetryEstimatedBpm.load(std::memory_order_relaxed);
 			if (before == m_telemetrySequence.load(std::memory_order_acquire)) return snapshot;
 		}
 	}
@@ -271,6 +275,12 @@ struct SibylModule : Module, SibylControl {
 		for (auto& state : m_trackStates) state.currentGate = 0.0f;
 	}
 
+	void realignOutputClock(bool emitPulse) {
+		m_outputClockPhaseBeats = 0.0;
+		m_clockPulse.reset();
+		if (emitPulse) m_clockPulse.trigger(1e-3f);
+	}
+
 	void applyPatternPhase(sibyl::PhaseMode mode) {
 		if (mode == sibyl::PhaseMode::CONTINUE) return;
 		for (auto& state : m_trackStates) {
@@ -317,6 +327,7 @@ struct SibylModule : Module, SibylControl {
 		if (m_pendingHardwareAction == HardwareAction::RESET_ARRANGEMENT) {
 			enterScene(composition, 0, request);
 			m_randomnessEpoch = 0;
+			realignOutputClock(true);
 		} else {
 			enterScene(composition, m_pendingHardwareScene, request);
 		}
@@ -338,6 +349,7 @@ struct SibylModule : Module, SibylControl {
 				m_runtimeRunning.store(false, std::memory_order_release);
 				enterScene(composition, 0, *request);
 				m_randomnessEpoch = 0;
+				realignOutputClock(false);
 				break;
 			case sibyl::TransportAction::PANIC:
 				closeAllGates();
@@ -366,14 +378,17 @@ struct SibylModule : Module, SibylControl {
 				switch (request->target) {
 					case sibyl::RestartTarget::SCENE:
 						enterScene(composition, m_sceneIndex, *request);
+						realignOutputClock(true);
 						break;
 					case sibyl::RestartTarget::ARRANGEMENT:
 						enterScene(composition, 0, *request);
 						m_randomnessEpoch = 0;
+						realignOutputClock(true);
 						break;
 					case sibyl::RestartTarget::PATTERNS:
 						closeAllGates();
 						applyPatternPhase(sibyl::PhaseMode::RESTART);
+						realignOutputClock(true);
 						break;
 					case sibyl::RestartTarget::RANDOMNESS:
 						m_randomnessEpoch = 0;
@@ -488,31 +503,11 @@ struct SibylModule : Module, SibylControl {
 		double rawBeatDelta = 0.0;
 		bool clockTick = false;
 		if (inputs[CLOCK_INPUT].isConnected()) {
-			m_timeSinceLastClockEdge += args.sampleTime;
-			if (m_clockTrigger.process(inputs[CLOCK_INPUT].getVoltage())) {
-				if (m_timeSinceLastClockEdge > 0.001) {
-					m_clockIntervalSeconds = m_timeSinceLastClockEdge;
-				}
-				m_timeSinceLastClockEdge = 0.0;
-				int ppqn = std::max(1, comp->clock.externalPpqn);
-				rawBeatDelta = 1.0 / ppqn;
-				clockTick = true;
-			} else {
-				// Timeout check
-				if (m_timeSinceLastClockEdge * 1000.0 > comp->clock.externalTimeoutMs) {
-					if (comp->clock.onExternalStop == sibyl::OnExternalStop::INTERNAL) {
-						double beatsPerSec = comp->meta.bpm / 60.0;
-						rawBeatDelta = beatsPerSec * args.sampleTime;
-					} else if (comp->clock.onExternalStop == sibyl::OnExternalStop::FREE_RUN) {
-						if (m_clockIntervalSeconds > 0.0) {
-							rawBeatDelta = (1.0 / std::max(1, comp->clock.externalPpqn)) * (args.sampleTime / m_clockIntervalSeconds);
-						}
-					} else {
-						// HOLD
-						rawBeatDelta = 0.0;
-					}
-				}
-			}
+			clockTick = m_clockTrigger.process(inputs[CLOCK_INPUT].getVoltage());
+			sibyl::ClockAdvance advance = m_externalClockEstimator.process(args.sampleTime, clockTick,
+				comp->clock.externalPpqn, comp->clock.externalTimeoutMs,
+				comp->clock.onExternalStop, comp->meta.bpm);
+			rawBeatDelta = advance.beatDelta;
 		} else {
 			double bpm = comp->meta.bpm;
 			double beatsPerSecond = bpm / 60.0;
@@ -551,12 +546,14 @@ struct SibylModule : Module, SibylControl {
 
 		m_clockBoundaryPhaseBeats += rawBeatDelta;
 		m_globalPhaseBeats += beatDelta;
+		m_outputClockPhaseBeats += beatDelta;
 
 		// Clock output pulse (every beat subdivision)
 		if (isRunning) {
 			int outPpqn = std::max(1, comp->clock.outputPpqn);
-			double clockPhase = fmod(m_globalPhaseBeats * outPpqn, 1.0);
-			if (clockPhase < (beatDelta * outPpqn) || clockTick) {
+			double previousOutputTick = (m_outputClockPhaseBeats - beatDelta) * outPpqn;
+			double currentOutputTick = m_outputClockPhaseBeats * outPpqn;
+			if (beatDelta > 0.0 && std::floor(previousOutputTick) != std::floor(currentOutputTick)) {
 				m_clockPulse.trigger(1e-3f);
 			}
 		}
@@ -573,7 +570,8 @@ struct SibylModule : Module, SibylControl {
 			outputs[CLOCK_OUTPUT].setVoltage(m_clockPulse.process(args.sampleTime) ? 10.0f : 0.0f);
 			outputs[SCENE_OUTPUT].setVoltage(m_scenePulse.process(args.sampleTime) ? 10.0f : 0.0f);
 			outputs[EOC_OUTPUT].setVoltage(m_eocPulse.process(args.sampleTime) ? 10.0f : 0.0f);
-			publishTelemetry(inputs[CLOCK_INPUT].isConnected());
+			publishTelemetry(inputs[CLOCK_INPUT].isConnected(), inputs[CLOCK_INPUT].isConnected()
+				? m_externalClockEstimator.estimatedBpm(comp->clock.externalPpqn, comp->meta.bpm) : comp->meta.bpm);
 			m_compositionHazard.store(nullptr, std::memory_order_release);
 			return;
 		}
@@ -803,7 +801,8 @@ struct SibylModule : Module, SibylControl {
 		outputs[CLOCK_OUTPUT].setVoltage(m_clockPulse.process(args.sampleTime) ? 10.0f : 0.0f);
 		outputs[SCENE_OUTPUT].setVoltage(m_scenePulse.process(args.sampleTime) ? 10.0f : 0.0f);
 		outputs[EOC_OUTPUT].setVoltage(m_eocPulse.process(args.sampleTime) ? 10.0f : 0.0f);
-		publishTelemetry(inputs[CLOCK_INPUT].isConnected());
+		publishTelemetry(inputs[CLOCK_INPUT].isConnected(), inputs[CLOCK_INPUT].isConnected()
+			? m_externalClockEstimator.estimatedBpm(comp->clock.externalPpqn, comp->meta.bpm) : comp->meta.bpm);
 		m_compositionHazard.store(nullptr, std::memory_order_release);
 	}
 
@@ -847,7 +846,7 @@ struct SibylModule : Module, SibylControl {
 			const sibyl::AdoptionRequest* pending = m_pendingAdoptionPtr.load(std::memory_order_acquire);
 			const sibyl::TransportRequest* pendingTransport = m_pendingTransportPtr.load(std::memory_order_acquire);
 			bool running = m_effectiveRunning.load(std::memory_order_acquire);
-			float bpm = comp ? comp->meta.bpm : 120.0f;
+			double bpm = telemetry.estimatedBpm;
 			std::string sceneId = "";
 			int sceneRepeat = telemetry.sceneRepeat;
 			double beat = telemetry.scenePhase;

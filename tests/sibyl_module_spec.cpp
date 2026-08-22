@@ -20,6 +20,9 @@ sibyl::CompositionPtr makeComposition(int revision, bool twoScenes, float destin
 	composition->meta.bpm = 120.0f;
 	composition->transport.running = true;
 	composition->transport.loop = true;
+	composition->clock.externalPpqn = 4;
+	composition->clock.outputPpqn = 1;
+	composition->clock.externalTimeoutMs = 1000.0f;
 
 	sibyl::TrackDef track;
 	track.id = "voice";
@@ -106,6 +109,56 @@ int main() {
 			"coalesced edits adopt only the newest accepted revision");
 		check(module.m_pendingAdoptionPtr.load(std::memory_order_acquire) == nullptr,
 			"newest coalesced adoption clears pending state at its boundary");
+	}
+
+	{
+		SibylModule module;
+		module.acceptComposition(makeComposition(1, false), sibyl::ApplyAt::IMMEDIATE,
+			sibyl::PhasePolicy::RESTART_ALL);
+		module.inputs[SibylModule::CLOCK_INPUT].channels = 1;
+		Module::ProcessArgs args;
+		args.sampleRate = 1000.0f;
+		args.sampleTime = 0.001f;
+		module.inputs[SibylModule::CLOCK_INPUT].setVoltage(0.0f);
+		module.process(args); // Adopt before the first external edge.
+		bool previousClockOut = false;
+		int outputRisingEdges = 0;
+		for (int frame = 0; frame < 500; ++frame) {
+			module.inputs[SibylModule::CLOCK_INPUT].setVoltage(frame % 125 == 0 ? 10.0f : 0.0f);
+			args.frame = frame;
+			module.process(args);
+			bool clockOut = module.outputs[SibylModule::CLOCK_OUTPUT].getVoltage() > 5.0f;
+			if (clockOut && !previousClockOut) ++outputRisingEdges;
+			previousClockOut = clockOut;
+		}
+		std::cout << "[INFO] reconstructed clock rising edges: " << outputRisingEdges << "\n";
+		check(outputRisingEdges == 1,
+			"reconstructed CLOCK OUT honors output PPQN instead of copying every external edge");
+		double estimatedBpm = module.m_externalClockEstimator.estimatedBpm(4, 0.0);
+		std::cout << "[INFO] module estimated BPM: " << estimatedBpm << "\n";
+		check(std::abs(estimatedBpm - 120.0) < 1.0,
+			"module clock estimator converges on the external tempo");
+
+		double learnedInterval = module.m_externalClockEstimator.intervalSeconds();
+		module.m_outputClockPhaseBeats = 0.73;
+		sibyl::TransportRequest restart;
+		restart.action = sibyl::TransportAction::RESTART;
+		restart.target = sibyl::RestartTarget::ARRANGEMENT;
+		restart.applyAt = sibyl::ApplyAt::IMMEDIATE;
+		sibyl::BoundaryState boundary;
+		const sibyl::Composition* active = module.m_activeCompositionPtr.load(std::memory_order_acquire);
+		module.applyPendingTransportIfReady(boundary, *active, &restart);
+		check(module.m_outputClockPhaseBeats == 0.0,
+			"arrangement restart realigns the independent CLOCK OUT phase");
+		check(std::abs(module.m_externalClockEstimator.intervalSeconds() - learnedInterval) < 1e-12,
+			"musical restart preserves the learned external clock estimate");
+
+		module.m_outputClockPhaseBeats = 0.41;
+		sibyl::TransportRequest randomnessRestart = restart;
+		randomnessRestart.target = sibyl::RestartTarget::RANDOMNESS;
+		module.applyPendingTransportIfReady(boundary, *active, &randomnessRestart);
+		check(std::abs(module.m_outputClockPhaseBeats - 0.41) < 1e-12,
+			"randomness-only restart does not disturb CLOCK OUT phase");
 	}
 
 	std::cout << "[SUMMARY] sibyl_module_spec: " << (failures ? "FAILED" : "passed") << "\n";
