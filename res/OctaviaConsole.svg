@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg width="60.96mm" height="128.5mm" viewBox="0 0 60.96 128.5" version="1.1"
+<svg width="121.92mm" height="128.5mm" viewBox="0 0 121.92 128.5" version="1.1"
  xmlns="http://www.w3.org/2000/svg">
-  <rect width="60.96" height="128.5" fill="#080808"/>
-  <rect x="2.5" y="16.5" width="55.96" height="56" rx="1.2" fill="#10171a" stroke="#28758b" stroke-width="0.5"/>
-  <rect x="2.5" y="78.5" width="55.96" height="32" rx="1.2" fill="#10171a" stroke="#6b6030" stroke-width="0.5"/>
+  <rect width="121.92" height="128.5" fill="#080808"/>
+  <rect x="2.5" y="16.5" width="116.92" height="56" rx="1.2" fill="#10171a" stroke="#28758b" stroke-width="0.5"/>
+  <rect x="2.5" y="78.5" width="116.92" height="32" rx="1.2" fill="#10171a" stroke="#6b6030" stroke-width="0.5"/>
   <g id="components" aria-label="Component anchors" style="display:none">
-    <rect id="RESPONSE_FIELD" x="3" y="17" width="54.96" height="55" fill="#306928"/>
-    <rect id="PROMPT_FIELD" x="3" y="79" width="54.96" height="31" fill="#306928"/>
+    <rect id="RESPONSE_FIELD" x="3" y="17" width="115.92" height="55" fill="#306928"/>
+    <rect id="PROMPT_FIELD" x="3" y="79" width="115.92" height="31" fill="#306928"/>
   </g>
 </svg>

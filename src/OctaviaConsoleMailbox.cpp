@@ -22,6 +22,18 @@ const char* agentStateName(AgentState state) {
 	return "OFFLINE";
 }
 
+void Mailbox::appendTranscript(const char* speaker, const std::string& text) {
+	if (!transcript_.empty()) transcript_ += "\n\n";
+	transcript_ += speaker;
+	transcript_ += "\n";
+	transcript_ += text;
+	if (transcript_.size() > kMaxTranscriptChars) {
+		const std::size_t keepFrom = transcript_.size() - kMaxTranscriptChars;
+		const std::size_t boundary = transcript_.find("\n\n", keepFrom);
+		transcript_.erase(0, boundary == std::string::npos ? keepFrom : boundary + 2);
+	}
+}
+
 bool Mailbox::submitPrompt(std::string text, uint64_t* promptId, std::string* error) {
 	if (text.empty()) {
 		if (error) *error = "prompt must not be empty";
@@ -41,6 +53,7 @@ bool Mailbox::submitPrompt(std::string text, uint64_t* promptId, std::string* er
 	prompt.text = std::move(text);
 	if (promptId) *promptId = prompt.id;
 	prompts_.push_back(std::move(prompt));
+	appendTranscript("YOU", prompts_.back().text);
 	state_ = AgentState::WORKING;
 	error_.clear();
 	promptReady_.notify_all();
@@ -83,13 +96,15 @@ bool Mailbox::postResponse(uint64_t promptId, std::string text, bool isError, st
 	prompts_.erase(prompts_.begin(), std::next(found));
 	latestResponsePromptId_ = promptId;
 	if (isError) {
-		error_ = std::move(text);
+		error_ = text;
 		response_.clear();
 		state_ = AgentState::ERROR;
+		appendTranscript("OCTAVIA — ERROR", text);
 	} else {
-		response_ = std::move(text);
+		response_ = text;
 		error_.clear();
 		state_ = AgentState::REPLY;
+		appendTranscript("OCTAVIA", text);
 	}
 	return true;
 }
@@ -101,9 +116,10 @@ void Mailbox::setAgentState(AgentState state) {
 
 void Mailbox::setError(std::string error) {
 	std::lock_guard<std::mutex> lock(mutex_);
-	error_ = std::move(error);
+	error_ = error;
 	response_.clear();
 	state_ = AgentState::ERROR;
+	appendTranscript("CONSOLE — ERROR", error);
 }
 
 Snapshot Mailbox::snapshot() const {
@@ -115,6 +131,7 @@ Snapshot Mailbox::snapshot() const {
 	result.pendingCount = prompts_.size();
 	result.response = response_;
 	result.error = error_;
+	result.transcript = transcript_;
 	return result;
 }
 

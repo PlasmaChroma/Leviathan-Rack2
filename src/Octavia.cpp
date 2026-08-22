@@ -22,6 +22,9 @@
 #include "TemporalDeck.hpp"
 #include "SibylControl.hpp"
 #include "OctaviaConsoleMailbox.hpp"
+#include "OctaviaCableValidation.hpp"
+#include "OctaviaActionValidation.hpp"
+#include "OctaviaJobControl.hpp"
 #include "third_party/httplib.h"
 #include <thread>
 #include <atomic>
@@ -62,48 +65,6 @@ static std::string jStr(const std::string& s) {
 static std::string jNum(float f) {
     if (std::isnan(f) || std::isinf(f)) return "0";
     return std::to_string(f);
-}
-
-static float parseFloatField(const std::string& body, const std::string& key) {
-    auto p = body.find("\"" + key + "\"");
-    if (p == std::string::npos) return 0.f;
-    p = body.find(":", p);
-    if (p == std::string::npos) return 0.f;
-    try { return std::stof(body.substr(p + 1)); } catch (...) { return 0.f; }
-}
-
-static int64_t parseInt64Field(const std::string& body, const std::string& key) {
-    auto p = body.find("\"" + key + "\"");
-    if (p == std::string::npos) return -1;
-    p = body.find(":", p);
-    if (p == std::string::npos) return -1;
-    try { return std::stoll(body.substr(p + 1)); } catch (...) { return -1; }
-}
-
-static std::string parseStringField(const std::string& body, const std::string& key) {
-    auto p = body.find("\"" + key + "\"");
-    if (p == std::string::npos) return "";
-    p = body.find(":", p);
-    if (p == std::string::npos) return "";
-    auto q1 = body.find("\"", p);
-    if (q1 == std::string::npos) return "";
-    std::string out;
-    for (size_t i = q1 + 1; i < body.size(); i++) {
-        char c = body[i];
-        if (c == '\\' && i + 1 < body.size()) { out += body[i + 1]; i++; continue; }
-        if (c == '"') break;
-        out += c;
-    }
-    return out;
-}
-
-static bool parseBoolField(const std::string& body, const std::string& key) {
-    auto p = body.find("\"" + key + "\"");
-    if (p == std::string::npos) return false;
-    p = body.find(":", p);
-    if (p == std::string::npos) return false;
-    while (p < body.size() && (body[p] == ':' || body[p] == ' ')) p++;
-    return p + 4 <= body.size() && body.substr(p, 4) == "true";
 }
 
 // ── Config from environment ───────────────────────────────────────────────────
@@ -199,70 +160,70 @@ static NVGcolor parseColorString(const std::string& str) {
 // ── Job types ─────────────────────────────────────────────────────────────────
 struct SetParamJob {
     int64_t moduleId; int paramId; float value;
-    std::atomic<bool> done{false}; bool success = false;
+    std::atomic<bool> done{false}, cancelled{false}; bool success = false; std::string error;
 };
 struct CableJob {
     enum Type { ADD, REMOVE, REMOVE_OUTPUT };
     Type type;
     int64_t outModId=-1, outPortId=-1, inModId=-1, inPortId=-1;
     std::string color;
-    std::atomic<bool> done{false}; bool success=false; std::string error;
+    std::atomic<bool> done{false}, cancelled{false}; bool success=false; std::string error;
 };
 struct AddModuleJob {
     std::string pluginSlug, modelSlug;
-    std::atomic<bool> done{false}; bool success=false; int64_t newId=-1; std::string error;
+    std::atomic<bool> done{false}, cancelled{false}; bool success=false; int64_t newId=-1; std::string error;
 };
 struct DeleteModuleJob {
     int64_t moduleId;
-    std::atomic<bool> done{false}; bool success=false; std::string error;
+    std::atomic<bool> done{false}, cancelled{false}; bool success=false; std::string error;
 };
 struct MoveModuleJob {
     int64_t moduleId; float hp; int row = 0; bool hasRow = false;
     float resolvedHp = 0.f; int resolvedRow = 0;
-    std::atomic<bool> done{false}; bool success=false; std::string error;
+    std::atomic<bool> done{false}, cancelled{false}; bool success=false; std::string error;
 };
 struct BulkMoveJob {
     struct Change { int64_t moduleId; float hp; int row; };
     struct Result { int64_t moduleId; float hp; int row; };
     std::vector<Change> changes;
     std::vector<Result> results;
-    std::atomic<bool> done{false}; bool success=false; std::string error;
+    std::atomic<bool> done{false}, cancelled{false}; bool success=false; std::string error;
 };
 struct BypassJob {
     int64_t moduleId; bool bypassed;
-    std::atomic<bool> done{false}; bool success=false; std::string error;
+    std::atomic<bool> done{false}, cancelled{false}; bool success=false; std::string error;
 };
 struct ModuleStateJob {
     enum Type { GET, SET };
     Type type; int64_t moduleId;
     std::string stateJson; // output for GET, input for SET
-    std::atomic<bool> done{false}; bool success=false; std::string error;
+    std::atomic<bool> done{false}, cancelled{false}; bool success=false; std::string error;
 };
 struct SibylJob {
     SibylControl::Operation operation;
     int64_t moduleId = -1;
     std::string requestJson = "{}";
     std::string responseJson;
-    std::atomic<bool> done{false}; bool success=false; std::string error;
+    std::atomic<bool> done{false}, cancelled{false}; bool success=false; std::string error;
 };
 struct PatchSaveJob {
     std::string savedPath;
-    std::atomic<bool> done{false}; bool success=false; std::string error;
+    std::atomic<bool> done{false}, cancelled{false}; bool success=false; std::string error;
 };
 struct TemporalDeckJob {
     enum Type { LOAD, PLAY, STOP_REWIND, SEEK, SET_LOOP, STATUS } type;
     int64_t moduleId = -1; std::string path; float position = 0.f; bool enabled = false;
     bool loaded = false, playing = false, loop = false;
-    std::atomic<bool> done{false}; bool success=false; std::string error;
+    std::atomic<bool> done{false}, cancelled{false}; bool success=false; std::string error;
 };
 struct BulkParamJob {
     struct Change { int64_t moduleId; int paramId; float value; };
     std::vector<Change> changes;
     std::vector<int> failed;              // indices that could not be applied
-    std::atomic<bool> done{false}; bool success=false;
+    std::atomic<bool> done{false}, cancelled{false}; bool success=false; std::string error;
 };
 struct UndoJob {
-    std::atomic<bool> done{false}; bool success=false;
+    std::atomic<bool> done{false}, cancelled{false}; bool success=false;
     std::string label; std::string error;
 };
 
@@ -852,12 +813,24 @@ struct Octavia : Module {
         if (undoStack.size() > UNDO_MAX) undoStack.erase(undoStack.begin());
     }
 
+    template <typename T>
+    static bool beginJob(const std::shared_ptr<T>& job) {
+        return octavia::beginQueuedJob(job);
+    }
+
     void processSetQueue() {
         std::shared_ptr<SetParamJob> job;
         { std::unique_lock<std::mutex> lk(setQueueMtx); if (!setQueue.empty()) { job=setQueue.front(); setQueue.pop(); } }
-        if (!job) return;
+        if (!beginJob(job)) return;
         engine::Module* m = APP->engine->getModule(job->moduleId);
-        if (m && job->paramId>=0 && job->paramId<(int)m->params.size()) {
+        if (!m) job->error="module not found: "+std::to_string(job->moduleId);
+        else if (job->paramId<0 || job->paramId>=(int)m->params.size()) {
+            job->error="parameter "+std::to_string(job->paramId)+" out of range for "+moduleIdentity(m)
+                +" module "+std::to_string(job->moduleId)+"; valid IDs are "
+                +(m->params.empty()?std::string("none"):std::string("0-")+std::to_string(m->params.size()-1));
+        } else if (!(job->error = octavia::validateParameterValue(job->value)).empty()) {
+            job->error += " on module "+std::to_string(job->moduleId)+" parameter "+std::to_string(job->paramId);
+        } else {
             float v=job->value;
             ParamQuantity* pq=m->getParamQuantity(job->paramId);
             if (pq) v=rack::math::clamp(v,pq->getMinValue(),pq->getMaxValue());
@@ -871,39 +844,79 @@ struct Octavia : Module {
         job->done=true;
     }
 
+    static std::string moduleIdentity(engine::Module* module) {
+        if (!module || !module->model) return {};
+        const std::string pluginSlug = module->model->plugin ? module->model->plugin->slug : "unknown";
+        return pluginSlug + ":" + module->model->slug;
+    }
+
+    PortWidget* validateLiveCableEndpoint(const char* direction, int64_t moduleId,
+                                           int64_t portId, std::string* error) {
+        engine::Module* module = APP->engine->getModule(moduleId);
+        ModuleWidget* widget = APP->scene->rack->getModule(moduleId);
+        const bool output = std::string(direction) == "output";
+        const std::size_t portCount = module ? (output ? module->outputs.size() : module->inputs.size()) : 0;
+        octavia::CableEndpointValidation initial{
+            direction, moduleId, moduleIdentity(module), portId, portCount,
+            module != nullptr, widget != nullptr, true};
+        std::string validationError = octavia::validateCableEndpoint(initial);
+        if (!validationError.empty()) {
+            if (error) *error = std::move(validationError);
+            return nullptr;
+        }
+        PortWidget* port = output ? widget->getOutput((int)portId) : widget->getInput((int)portId);
+        if (!port) {
+            initial.portWidgetExists = false;
+            if (error) *error = octavia::validateCableEndpoint(initial);
+        }
+        return port;
+    }
+
+    bool addCableValidated(int64_t outModuleId, int64_t outPortId,
+                           int64_t inModuleId, int64_t inPortId,
+                           NVGcolor color, std::string* error) {
+        PortWidget* outPort = validateLiveCableEndpoint("output", outModuleId, outPortId, error);
+        if (!outPort) return false;
+        PortWidget* inPort = validateLiveCableEndpoint("input", inModuleId, inPortId, error);
+        if (!inPort) return false;
+        engine::Module* src = APP->engine->getModule(outModuleId);
+        engine::Module* dst = APP->engine->getModule(inModuleId);
+        engine::Cable* cable = new engine::Cable;
+        cable->outputModule = src;
+        cable->outputId = (int)outPortId;
+        cable->inputModule = dst;
+        cable->inputId = (int)inPortId;
+        CableWidget* cableWidget = new CableWidget;
+        cableWidget->color = color;
+        cableWidget->setCable(cable);
+        if (!cableWidget->isComplete()) {
+            engine::Cable* released = cableWidget->releaseCable();
+            delete cableWidget;
+            delete released;
+            if (error) *error = "Rack rejected a cable whose validated widgets became incomplete";
+            return false;
+        }
+        APP->engine->addCable(cable);
+        APP->scene->rack->addCable(cableWidget);
+        return true;
+    }
+
     void processCableQueue() {
         std::shared_ptr<CableJob> job;
         { std::unique_lock<std::mutex> lk(cableQueueMtx); if (!cableQueue.empty()) { job=cableQueue.front(); cableQueue.pop(); } }
-        if (!job) return;
+        if (!beginJob(job)) return;
         if (job->type==CableJob::ADD) {
-            ModuleWidget* outW=APP->scene->rack->getModule(job->outModId);
-            ModuleWidget* inW =APP->scene->rack->getModule(job->inModId);
-            engine::Module* src=APP->engine->getModule(job->outModId);
-            engine::Module* dst=APP->engine->getModule(job->inModId);
-            if (outW&&inW&&src&&dst) {
-                engine::Cable* c=new engine::Cable;
-                c->outputModule=src; c->outputId=(int)job->outPortId;
-                c->inputModule=dst;  c->inputId=(int)job->inPortId;
-                APP->engine->addCable(c);
-                CableWidget* cw=new CableWidget;
-                cw->color = parseColorString(job->color);
-                cw->setCable(c);
-                if (!cw->isComplete()) {
-                    APP->engine->removeCable(cw->releaseCable()); delete cw;
-                    job->error="cable incomplete: port not found (outPort="+std::to_string(job->outPortId)+" inPort="+std::to_string(job->inPortId)+")";
-                } else {
-                    APP->scene->rack->addCable(cw); job->success=true;
-                    UndoAction a; a.type=UndoAction::CABLE_CLEAR;
-                    a.inModId=job->inModId; a.inPortId=(int)job->inPortId;
-                    a.label="connect cable -> module "+std::to_string(job->inModId)+" port "+std::to_string(job->inPortId);
-                    pushUndo(std::move(a));
-                }
-            } else { job->error="module not found"; }
+            job->success = addCableValidated(job->outModId, job->outPortId,
+                job->inModId, job->inPortId, parseColorString(job->color), &job->error);
+            if (job->success) {
+                UndoAction a; a.type=UndoAction::CABLE_CLEAR;
+                a.inModId=job->inModId; a.inPortId=(int)job->inPortId;
+                a.label="connect cable -> module "+std::to_string(job->inModId)+" port "+std::to_string(job->inPortId);
+                pushUndo(std::move(a));
+            }
         } else if (job->type==CableJob::REMOVE) {
-            ModuleWidget* inW=APP->scene->rack->getModule(job->inModId);
-            if (inW) {
-                PortWidget* inPort=inW->getInput((int)job->inPortId);
-                if (inPort) {
+            PortWidget* inPort = validateLiveCableEndpoint("input", job->inModId, job->inPortId, &job->error);
+            if (inPort) {
                     UndoAction a; a.type=UndoAction::CABLE_RECONNECT;
                     for (int64_t cid : APP->engine->getCableIds()) {
                         engine::Cable* c = APP->engine->getCable(cid);
@@ -919,10 +932,11 @@ struct Octavia : Module {
                     APP->scene->rack->clearCablesOnPort(inPort);
                     if (!a.cables.empty()) pushUndo(std::move(a));
                     job->success=true;
-                }
-                else { job->error="port not found"; }
-            } else { job->error="module not found"; }
+            }
         } else { // REMOVE_OUTPUT — disconnect all cables from one output port
+            PortWidget* outPort = validateLiveCableEndpoint("output", job->outModId, job->outPortId, &job->error);
+            if (!outPort) { job->done=true; return; }
+            (void)outPort;
             // Collect input locations first, then remove (avoid modifying list while iterating)
             std::vector<UndoAction::CableRestore> targets;
             for (int64_t cid : APP->engine->getCableIds()) {
@@ -955,7 +969,7 @@ struct Octavia : Module {
     void processTemporalDeckQueue() {
         std::shared_ptr<TemporalDeckJob> job;
         { std::unique_lock<std::mutex> lk(temporalDeckQueueMtx); if (!temporalDeckQueue.empty()) { job=temporalDeckQueue.front(); temporalDeckQueue.pop(); } }
-        if (!job) return;
+        if (!beginJob(job)) return;
         TemporalDeck* deck = dynamic_cast<TemporalDeck*>(APP->engine->getModule(job->moduleId));
         if (!deck) job->error = "Temporal Deck module not found";
         else {
@@ -985,26 +999,46 @@ struct Octavia : Module {
     void processAddQueue() {
         std::shared_ptr<AddModuleJob> job;
         { std::unique_lock<std::mutex> lk(addQueueMtx); if (!addQueue.empty()) { job=addQueue.front(); addQueue.pop(); } }
-        if (!job) return;
+        if (!beginJob(job)) return;
         plugin::Model* model=plugin::getModel(job->pluginSlug,job->modelSlug);
         if (!model) { job->error="model not found: "+job->pluginSlug+"/"+job->modelSlug; }
         else {
+            engine::Module* module = nullptr;
+            ModuleWidget* widget = nullptr;
+            bool engineAdded = false;
+            bool widgetAdded = false;
             try {
-                engine::Module* m=model->createModule(); APP->engine->addModule(m);
-                ModuleWidget* mw=model->createModuleWidget(m); APP->scene->rack->addModule(mw);
+                module=model->createModule();
+                if (!module) throw std::runtime_error("model returned no module instance");
+                APP->engine->addModule(module); engineAdded = true;
+                widget=model->createModuleWidget(module);
+                if (!widget) throw std::runtime_error("model returned no module widget");
+                APP->scene->rack->addModule(widget); widgetAdded = true;
                 float sumX=0.f,sumY=0.f; int cnt=0;
                 for (int64_t oid : APP->engine->getModuleIds()) {
-                    if (oid==m->id) continue;
+                    if (oid==module->id) continue;
                     ModuleWidget* omw=APP->scene->rack->getModule(oid);
                     if (omw) { sumX+=omw->box.pos.x+omw->box.size.x*0.5f; sumY+=omw->box.pos.y+omw->box.size.y*0.5f; cnt++; }
                 }
                 math::Vec target=cnt>0?math::Vec(sumX/cnt,sumY/cnt):math::Vec(0.f,0.f);
-                APP->scene->rack->setModulePosNearest(mw,target);
-                job->newId=m->id; job->success=true;
-                UndoAction a; a.type=UndoAction::DELETE_ADDED; a.moduleId=m->id;
+                APP->scene->rack->setModulePosNearest(widget,target);
+                job->newId=module->id; job->success=true;
+                UndoAction a; a.type=UndoAction::DELETE_ADDED; a.moduleId=module->id;
                 a.label="add module "+job->pluginSlug+"/"+job->modelSlug;
                 pushUndo(std::move(a));
-            } catch (std::exception& e) { job->error=e.what(); }
+            } catch (const std::exception& e) {
+                job->error = std::string("could not add ") + job->pluginSlug + "/" + job->modelSlug + ": " + e.what();
+                if (widgetAdded) APP->scene->rack->removeModule(widget);
+                if (engineAdded) APP->engine->removeModule(module);
+                if (widget) delete widget;
+                if (module) delete module;
+            } catch (...) {
+                job->error = "could not add " + job->pluginSlug + "/" + job->modelSlug + ": unknown exception";
+                if (widgetAdded) APP->scene->rack->removeModule(widget);
+                if (engineAdded) APP->engine->removeModule(module);
+                if (widget) delete widget;
+                if (module) delete module;
+            }
         }
         job->done=true;
     }
@@ -1012,10 +1046,20 @@ struct Octavia : Module {
     void processDeleteQueue() {
         std::shared_ptr<DeleteModuleJob> job;
         { std::unique_lock<std::mutex> lk(deleteQueueMtx); if (!deleteQueue.empty()) { job=deleteQueue.front(); deleteQueue.pop(); } }
-        if (!job) return;
+        if (!beginJob(job)) return;
+        if (job->moduleId == id) {
+            job->error="refusing to delete the Octavia module serving this request";
+            job->done=true;
+            return;
+        }
         ModuleWidget* mw = APP->scene->rack->getModule(job->moduleId);
         if (!mw) { job->error="module not found"; job->done=true; return; }
         engine::Module* m = mw->module;
+        Octavia* targetOctavia = dynamic_cast<Octavia*>(m);
+        if (targetOctavia && targetOctavia->serverRunning.load(std::memory_order_acquire)) {
+            job->error="refusing to delete an Octavia module while its server is running";
+            job->done=true; return;
+        }
         // removeModule: disconnects cables + removes mw from scene (no engine removal)
         APP->scene->rack->removeModule(mw);
         // Remove module from engine
@@ -1027,14 +1071,32 @@ struct Octavia : Module {
     void processBulkParamQueue() {
         std::shared_ptr<BulkParamJob> job;
         { std::unique_lock<std::mutex> lk(bulkParamQueueMtx); if (!bulkParamQueue.empty()) { job=bulkParamQueue.front(); bulkParamQueue.pop(); } }
-        if (!job) return;
+        if (!beginJob(job)) return;
         UndoAction a; a.type=UndoAction::PARAMS;
+        if (job->changes.empty()) {
+            job->error="changes must contain at least one parameter update";
+            job->done=true;
+            return;
+        }
+        if (job->changes.size() > octavia::kMaxBulkChanges) {
+            job->error="parameter batch exceeds 1024 changes";
+            job->done=true;
+            return;
+        }
+        for (size_t i = 0; i < job->changes.size(); ++i) {
+            auto& ch = job->changes[i];
+            engine::Module* m = APP->engine->getModule(ch.moduleId);
+            if (!m) job->error="change "+std::to_string(i)+": module not found: "+std::to_string(ch.moduleId);
+            else if (ch.paramId < 0 || ch.paramId >= (int)m->params.size())
+                job->error="change "+std::to_string(i)+": parameter "+std::to_string(ch.paramId)
+                    +" out of range for "+moduleIdentity(m)+" module "+std::to_string(ch.moduleId);
+            else if (!octavia::validateParameterValue(ch.value).empty())
+                job->error="change "+std::to_string(i)+": parameter value must be finite";
+            if (!job->error.empty()) { job->done=true; return; }
+        }
         for (size_t i = 0; i < job->changes.size(); i++) {
             auto& ch = job->changes[i];
             engine::Module* m = APP->engine->getModule(ch.moduleId);
-            if (!m || ch.paramId < 0 || ch.paramId >= (int)m->params.size()) {
-                job->failed.push_back((int)i); continue;
-            }
             float v = ch.value;
             ParamQuantity* pq = m->getParamQuantity(ch.paramId);
             if (pq) v = rack::math::clamp(v, pq->getMinValue(), pq->getMaxValue());
@@ -1051,7 +1113,7 @@ struct Octavia : Module {
     void processUndoQueue() {
         std::shared_ptr<UndoJob> job;
         { std::unique_lock<std::mutex> lk(undoQueueMtx); if (!undoQueue.empty()) { job=undoQueue.front(); undoQueue.pop(); } }
-        if (!job) return;
+        if (!beginJob(job)) return;
         UndoAction a;
         { std::unique_lock<std::mutex> lk(undoMtx);
           if (undoStack.empty()) { job->error="nothing to undo"; job->done=true; return; }
@@ -1079,20 +1141,13 @@ struct Octavia : Module {
             case UndoAction::CABLE_RECONNECT: {
                 job->success=true;
                 for (auto& cb : a.cables) {
-                    engine::Module* src=APP->engine->getModule(cb.outModId);
-                    engine::Module* dst=APP->engine->getModule(cb.inModId);
-                    ModuleWidget* outW=APP->scene->rack->getModule(cb.outModId);
-                    ModuleWidget* inW =APP->scene->rack->getModule(cb.inModId);
-                    if (!src||!dst||!outW||!inW) continue;
-                    engine::Cable* c=new engine::Cable;
-                    c->outputModule=src; c->outputId=(int)cb.outPortId;
-                    c->inputModule=dst;  c->inputId=(int)cb.inPortId;
-                    APP->engine->addCable(c);
-                    CableWidget* cw=new CableWidget;
-                    cw->color = cb.color;
-                    cw->setCable(c);
-                    if (!cw->isComplete()) { APP->engine->removeCable(cw->releaseCable()); delete cw; }
-                    else APP->scene->rack->addCable(cw);
+                    std::string cableError;
+                    if (!addCableValidated(cb.outModId, cb.outPortId, cb.inModId, cb.inPortId,
+                                            cb.color, &cableError)) {
+                        job->success=false;
+                        job->error = "could not restore cable: " + cableError;
+                        break;
+                    }
                 }
                 break; }
             case UndoAction::BYPASS: {
@@ -1125,6 +1180,11 @@ struct Octavia : Module {
                 ModuleWidget* mw = APP->scene->rack->getModule(a.moduleId);
                 if (mw) {
                     engine::Module* m = mw->module;
+                    Octavia* targetOctavia = dynamic_cast<Octavia*>(m);
+                    if (targetOctavia && targetOctavia->serverRunning.load(std::memory_order_acquire)) {
+                        job->error="refusing to undo-add an Octavia module while its server is running";
+                        break;
+                    }
                     APP->scene->rack->removeModule(mw);
                     APP->engine->removeModule(m);
                     job->success=true;
@@ -1139,9 +1199,12 @@ struct Octavia : Module {
     void processMoveQueue() {
         std::shared_ptr<MoveModuleJob> job;
         { std::unique_lock<std::mutex> lk(moveQueueMtx); if (!moveQueue.empty()) { job=moveQueue.front(); moveQueue.pop(); } }
-        if (!job) return;
+        if (!beginJob(job)) return;
         ModuleWidget* mw = APP->scene->rack->getModule(job->moduleId);
         if (!mw) { job->error="module not found"; job->done=true; return; }
+        const int targetRow = job->hasRow ? job->row : (int)std::lround(mw->box.pos.y / RACK_GRID_HEIGHT);
+        job->error = octavia::validateRackPosition(job->hp, targetRow);
+        if (!job->error.empty()) { job->done=true; return; }
         UndoAction a; a.type=UndoAction::MOVE; a.moduleId=job->moduleId;
         a.oldX=mw->box.pos.x; a.oldY=mw->box.pos.y;
         a.label="move module "+std::to_string(job->moduleId);
@@ -1156,11 +1219,13 @@ struct Octavia : Module {
     void processBulkMoveQueue() {
         std::shared_ptr<BulkMoveJob> job;
         { std::unique_lock<std::mutex> lk(bulkMoveQueueMtx); if (!bulkMoveQueue.empty()) { job=bulkMoveQueue.front(); bulkMoveQueue.pop(); } }
-        if (!job) return;
+        if (!beginJob(job)) return;
 
         std::unordered_set<int64_t> moving;
         std::vector<std::pair<ModuleWidget*, math::Vec>> targets;
         for (auto& ch : job->changes) {
+            job->error = octavia::validateRackPosition(ch.hp, ch.row);
+            if (!job->error.empty()) { job->done=true; return; }
             if (!moving.insert(ch.moduleId).second) { job->error="duplicate module id"; job->done=true; return; }
             ModuleWidget* mw = APP->scene->rack->getModule(ch.moduleId);
             if (!mw) { job->error="module not found: "+std::to_string(ch.moduleId); job->done=true; return; }
@@ -1200,7 +1265,7 @@ struct Octavia : Module {
     void processBypassQueue() {
         std::shared_ptr<BypassJob> job;
         { std::unique_lock<std::mutex> lk(bypassQueueMtx); if (!bypassQueue.empty()) { job=bypassQueue.front(); bypassQueue.pop(); } }
-        if (!job) return;
+        if (!beginJob(job)) return;
         engine::Module* m = APP->engine->getModule(job->moduleId);
         if (!m) { job->error="module not found"; job->done=true; return; }
         UndoAction a; a.type=UndoAction::BYPASS; a.moduleId=job->moduleId;
@@ -1214,20 +1279,41 @@ struct Octavia : Module {
     void processStateQueue() {
         std::shared_ptr<ModuleStateJob> job;
         { std::unique_lock<std::mutex> lk(stateQueueMtx); if (!stateQueue.empty()) { job=stateQueue.front(); stateQueue.pop(); } }
-        if (!job) return;
+        if (!beginJob(job)) return;
         engine::Module* m = APP->engine->getModule(job->moduleId);
         if (!m) { job->error="module not found"; job->done=true; return; }
-        if (job->type == ModuleStateJob::GET) {
+        try {
+          if (job->type == ModuleStateJob::GET) {
             json_t* rootJ = m->toJson();
             if (!rootJ) { job->error="toJson() returned null"; job->done=true; return; }
             char* str = json_dumps(rootJ, JSON_COMPACT);
             job->stateJson = str ? std::string(str) : "{}";
             if (str) free(str);
             json_decref(rootJ);
-        } else {
+          } else {
+            if (job->stateJson.size() > octavia::kMaxModuleStateBytes) {
+                job->error="module state exceeds the 1 MiB safety limit"; job->done=true; return;
+            }
             json_error_t jerr;
             json_t* rootJ = json_loads(job->stateJson.c_str(), 0, &jerr);
             if (!rootJ) { job->error = std::string("JSON parse: ") + jerr.text; job->done=true; return; }
+            if (!json_is_object(rootJ)) {
+                json_decref(rootJ); job->error="module state root must be a JSON object"; job->done=true; return;
+            }
+            json_t* pluginJ = json_object_get(rootJ, "plugin");
+            json_t* modelJ = json_object_get(rootJ, "model");
+            if (!json_is_string(pluginJ) || !json_is_string(modelJ)) {
+                json_decref(rootJ);
+                job->error="module state must preserve the Rack plugin and model identity fields";
+                job->done=true; return;
+            }
+            const std::string expectedPlugin = m->model && m->model->plugin ? m->model->plugin->slug : "";
+            const std::string expectedModel = m->model ? m->model->slug : "";
+            if (expectedPlugin != json_string_value(pluginJ) || expectedModel != json_string_value(modelJ)) {
+                job->error="module state identity mismatch: expected "+expectedPlugin+":"+expectedModel
+                    +", received "+json_string_value(pluginJ)+":"+json_string_value(modelJ);
+                json_decref(rootJ); job->done=true; return;
+            }
             UndoAction a; a.type=UndoAction::STATE; a.moduleId=job->moduleId;
             { json_t* oldJ = m->toJson();
               if (oldJ) { char* str=json_dumps(oldJ,JSON_COMPACT); if (str){ a.oldState=str; free(str);} json_decref(oldJ); } }
@@ -1235,6 +1321,11 @@ struct Octavia : Module {
             m->fromJson(rootJ);
             if (!a.oldState.empty()) pushUndo(std::move(a));
             json_decref(rootJ);
+          }
+        } catch (const std::exception& e) {
+            job->error=std::string("module state operation failed: ")+e.what(); job->done=true; return;
+        } catch (...) {
+            job->error="module state operation failed with an unknown exception"; job->done=true; return;
         }
         job->success=true; job->done=true;
     }
@@ -1242,7 +1333,7 @@ struct Octavia : Module {
     void processSibylQueue() {
         std::shared_ptr<SibylJob> job;
         { std::unique_lock<std::mutex> lk(sibylQueueMtx); if (!sibylQueue.empty()) { job=sibylQueue.front(); sibylQueue.pop(); } }
-        if (!job) return;
+        if (!beginJob(job)) return;
         engine::Module* module = APP->engine->getModule(job->moduleId);
         if (!module) { job->error="module not found"; job->done=true; return; }
         SibylControl* sibyl = dynamic_cast<SibylControl*>(module);
@@ -1284,13 +1375,19 @@ struct Octavia : Module {
     void processPatchSaveQueue() {
         std::shared_ptr<PatchSaveJob> job;
         { std::unique_lock<std::mutex> lk(patchSaveQueueMtx); if (!patchSaveQueue.empty()) { job=patchSaveQueue.front(); patchSaveQueue.pop(); } }
-        if (!job) return;
+        if (!beginJob(job)) return;
         if (APP->patch->path.empty()) {
             job->error = "patch has no file path (File > Save As in VCV Rack first)";
         } else {
-            job->savedPath = APP->patch->path;
-            APP->patch->save(APP->patch->path);
-            job->success = true;
+            try {
+                job->savedPath = APP->patch->path;
+                APP->patch->save(APP->patch->path);
+                job->success = true;
+            } catch (const std::exception& e) {
+                job->error = std::string("patch save failed: ") + e.what();
+            } catch (...) {
+                job->error = "patch save failed with an unknown exception";
+            }
         }
         job->done = true;
     }
@@ -1300,6 +1397,7 @@ struct Octavia : Module {
         auto dl=std::chrono::steady_clock::now()+std::chrono::milliseconds(ms);
         while (!job->done.load() && std::chrono::steady_clock::now()<dl)
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
+        if (!job->done.load()) octavia::cancelTimedOutJob(job);
         return job->done.load();
     }
 
@@ -1321,6 +1419,10 @@ struct Octavia : Module {
 
     void dispatchSibyl(httplib::Response& res, int64_t moduleId,
                        SibylControl::Operation operation, const std::string& requestJson) {
+        if (requestJson.size() > octavia::kMaxSemanticRequestBytes) {
+            res.set_content("{\"error\":\"Sibyl request exceeds the 1 MiB safety limit\"}","application/json");
+            return;
+        }
         auto job=std::make_shared<SibylJob>();
         job->moduleId=moduleId; job->operation=operation; job->requestJson=requestJson;
         { std::unique_lock<std::mutex> lk(sibylQueueMtx); sibylQueue.push(job); }
@@ -1927,8 +2029,17 @@ struct Octavia : Module {
             });
 
         svr.Post("/modules", [this](const httplib::Request& r, httplib::Response& res){
+            json_error_t jerr; json_t* root=json_loads(r.body.c_str(),0,&jerr);
+            json_t* pluginJ=root?json_object_get(root,"plugin"):NULL;
+            json_t* modelJ=root?json_object_get(root,"model"):NULL;
+            if (!json_is_object(root) || !json_is_string(pluginJ) || !json_is_string(modelJ)
+                || !*json_string_value(pluginJ) || !*json_string_value(modelJ)) {
+                if (root) json_decref(root);
+                res.set_content("{\"error\":\"module addition requires non-empty string plugin and model slugs\"}","application/json"); return;
+            }
             auto job=std::make_shared<AddModuleJob>();
-            job->pluginSlug=parseStringField(r.body,"plugin"); job->modelSlug=parseStringField(r.body,"model");
+            job->pluginSlug=json_string_value(pluginJ); job->modelSlug=json_string_value(modelJ);
+            json_decref(root);
             { std::unique_lock<std::mutex> lk(addQueueMtx); addQueue.push(job); }
             if (!waitDone(job,2000)) res.set_content("{\"error\":\"timeout\"}","application/json");
             else if (job->success) res.set_content("{\"ok\":true,\"id\":"+std::to_string(job->newId)+"}","application/json");
@@ -1937,41 +2048,70 @@ struct Octavia : Module {
 
         svr.Post(R"(/modules/(\d+)/params/(\d+))",
             [this](const httplib::Request& r, httplib::Response& res){
+                json_error_t jerr; json_t* root=json_loads(r.body.c_str(),0,&jerr);
+                json_t* valueJ=root?json_object_get(root,"value"):NULL;
+                if (!json_is_object(root) || !json_is_number(valueJ)) {
+                    if (root) json_decref(root);
+                    res.set_content("{\"error\":\"parameter update requires numeric value\"}","application/json"); return;
+                }
                 auto job=std::make_shared<SetParamJob>();
-                job->moduleId=std::stoll(r.matches[1].str()); job->paramId=std::stoi(r.matches[2].str()); job->value=parseFloatField(r.body,"value");
+                job->moduleId=std::stoll(r.matches[1].str()); job->paramId=std::stoi(r.matches[2].str()); job->value=(float)json_number_value(valueJ);
+                json_decref(root);
                 { std::unique_lock<std::mutex> lk(setQueueMtx); setQueue.push(job); }
                 if (!waitDone(job)) res.set_content("{\"error\":\"timeout\"}","application/json");
                 else if (job->success) res.set_content("{\"ok\":true,\"value\":"+std::to_string(job->value)+"}","application/json");
-                else res.set_content("{\"error\":\"param not found\"}","application/json");
+                else res.set_content("{\"error\":"+jStr(job->error)+"}","application/json");
             });
 
         svr.Post("/cables", [this](const httplib::Request& r, httplib::Response& res){
+            json_error_t jerr; json_t* root=json_loads(r.body.c_str(),0,&jerr);
+            json_t* om=root?json_object_get(root,"outputModuleId"):NULL; json_t* op=root?json_object_get(root,"outputPortId"):NULL;
+            json_t* im=root?json_object_get(root,"inputModuleId"):NULL; json_t* ip=root?json_object_get(root,"inputPortId"):NULL;
+            json_t* color=root?json_object_get(root,"color"):NULL;
+            if (!json_is_object(root) || !json_is_integer(om) || !json_is_integer(op)
+                || !json_is_integer(im) || !json_is_integer(ip) || (color && !json_is_string(color))) {
+                if (root) json_decref(root);
+                res.set_content("{\"error\":\"cable requires integer module/port IDs and optional string color\"}","application/json"); return;
+            }
             auto job=std::make_shared<CableJob>(); job->type=CableJob::ADD;
-            job->outModId=parseInt64Field(r.body,"outputModuleId"); job->outPortId=parseInt64Field(r.body,"outputPortId");
-            job->inModId=parseInt64Field(r.body,"inputModuleId");   job->inPortId=parseInt64Field(r.body,"inputPortId");
-            job->color=parseStringField(r.body,"color");
+            job->outModId=json_integer_value(om); job->outPortId=json_integer_value(op);
+            job->inModId=json_integer_value(im); job->inPortId=json_integer_value(ip);
+            if (color) job->color=json_string_value(color);
+            json_decref(root);
             { std::unique_lock<std::mutex> lk(cableQueueMtx); cableQueue.push(job); }
             if (!waitDone(job)) res.set_content("{\"error\":\"timeout\"}","application/json");
             else if (job->success) res.set_content("{\"ok\":true}","application/json");
-            else res.set_content("{\"error\":\""+job->error+"\"}","application/json");
+            else res.set_content("{\"error\":"+jStr(job->error)+"}","application/json");
         });
 
         svr.Post("/cables/disconnect", [this](const httplib::Request& r, httplib::Response& res){
+            json_error_t jerr; json_t* root=json_loads(r.body.c_str(),0,&jerr);
+            json_t* im=root?json_object_get(root,"inputModuleId"):NULL; json_t* ip=root?json_object_get(root,"inputPortId"):NULL;
+            if (!json_is_object(root) || !json_is_integer(im) || !json_is_integer(ip)) {
+                if (root) json_decref(root);
+                res.set_content("{\"error\":\"disconnect requires integer inputModuleId and inputPortId\"}","application/json"); return;
+            }
             auto job=std::make_shared<CableJob>(); job->type=CableJob::REMOVE;
-            job->inModId=parseInt64Field(r.body,"inputModuleId"); job->inPortId=parseInt64Field(r.body,"inputPortId");
+            job->inModId=json_integer_value(im); job->inPortId=json_integer_value(ip); json_decref(root);
             { std::unique_lock<std::mutex> lk(cableQueueMtx); cableQueue.push(job); }
             if (!waitDone(job)) res.set_content("{\"error\":\"timeout\"}","application/json");
             else if (job->success) res.set_content("{\"ok\":true}","application/json");
-            else res.set_content("{\"error\":\""+job->error+"\"}","application/json");
+            else res.set_content("{\"error\":"+jStr(job->error)+"}","application/json");
         });
 
         svr.Post("/cables/disconnect-output", [this](const httplib::Request& r, httplib::Response& res){
+            json_error_t jerr; json_t* root=json_loads(r.body.c_str(),0,&jerr);
+            json_t* om=root?json_object_get(root,"outputModuleId"):NULL; json_t* op=root?json_object_get(root,"outputPortId"):NULL;
+            if (!json_is_object(root) || !json_is_integer(om) || !json_is_integer(op)) {
+                if (root) json_decref(root);
+                res.set_content("{\"error\":\"disconnect requires integer outputModuleId and outputPortId\"}","application/json"); return;
+            }
             auto job=std::make_shared<CableJob>(); job->type=CableJob::REMOVE_OUTPUT;
-            job->outModId=parseInt64Field(r.body,"outputModuleId"); job->outPortId=parseInt64Field(r.body,"outputPortId");
+            job->outModId=json_integer_value(om); job->outPortId=json_integer_value(op); json_decref(root);
             { std::unique_lock<std::mutex> lk(cableQueueMtx); cableQueue.push(job); }
             if (!waitDone(job)) res.set_content("{\"error\":\"timeout\"}","application/json");
             else if (job->success) res.set_content("{\"ok\":true}","application/json");
-            else res.set_content("{\"error\":\""+job->error+"\"}","application/json");
+            else res.set_content("{\"error\":"+jStr(job->error)+"}","application/json");
         });
 
         svr.Delete(R"(/modules/(\d+))", [this](const httplib::Request& r, httplib::Response& res){
@@ -1986,11 +2126,20 @@ struct Octavia : Module {
         svr.Post(R"(/modules/(\d+)/position)", [this](const httplib::Request& r, httplib::Response& res){
             auto job=std::make_shared<MoveModuleJob>();
             job->moduleId=std::stoll(r.matches[1].str());
-            job->hp=parseFloatField(r.body,"hp");
             json_error_t jerr;
             json_t* root=json_loads(r.body.c_str(),0,&jerr);
+            json_t* hp=root ? json_object_get(root,"hp") : NULL;
             json_t* row=root ? json_object_get(root,"row") : NULL;
-            if (row && json_is_integer(row)) { job->row=(int)json_integer_value(row); job->hasRow=true; }
+            if (!json_is_object(root) || !json_is_number(hp) || (row && !json_is_integer(row))) {
+                if (root) json_decref(root);
+                res.set_content("{\"error\":\"position requires numeric hp and optional integer row\"}","application/json"); return;
+            }
+            const json_int_t rowValue = row ? json_integer_value(row) : 0;
+            if (row && (rowValue < -octavia::kMaxAbsRackRow || rowValue > octavia::kMaxAbsRackRow)) {
+                json_decref(root); res.set_content("{\"error\":\"row exceeds the safe coordinate limit of +/-100000\"}","application/json"); return;
+            }
+            job->hp=(float)json_number_value(hp);
+            if (row) { job->row=(int)rowValue; job->hasRow=true; }
             if (root) json_decref(root);
             { std::unique_lock<std::mutex> lk(moveQueueMtx); moveQueue.push(job); }
             if (!waitDone(job)) res.set_content("{\"error\":\"timeout\"}","application/json");
@@ -2004,7 +2153,7 @@ struct Octavia : Module {
             json_error_t jerr;
             json_t* root=json_loads(r.body.c_str(),0,&jerr);
             json_t* arr=root ? json_object_get(root,"changes") : NULL;
-            if (!arr || !json_is_array(arr) || json_array_size(arr)==0) {
+            if (!arr || !json_is_array(arr) || json_array_size(arr)==0 || json_array_size(arr)>octavia::kMaxBulkChanges) {
                 if (root) json_decref(root);
                 res.set_content("{\"error\":\"body must be {changes:[{moduleId,hp,row}]}\"}","application/json");
                 return;
@@ -2020,7 +2169,11 @@ struct Octavia : Module {
                     res.set_content("{\"error\":\"each layout change requires integer moduleId, numeric hp, and integer row\"}","application/json");
                     return;
                 }
-                job->changes.push_back({(int64_t)json_integer_value(jm),(float)json_number_value(jh),(int)json_integer_value(jr)});
+                const json_int_t rowValue=json_integer_value(jr);
+                if (json_integer_value(jm)<0 || rowValue < -octavia::kMaxAbsRackRow || rowValue > octavia::kMaxAbsRackRow) {
+                    json_decref(root); res.set_content("{\"error\":\"layout module IDs must be non-negative and rows within +/-100000\"}","application/json"); return;
+                }
+                job->changes.push_back({(int64_t)json_integer_value(jm),(float)json_number_value(jh),(int)rowValue});
             }
             json_decref(root);
             { std::unique_lock<std::mutex> lk(bulkMoveQueueMtx); bulkMoveQueue.push(job); }
@@ -2042,7 +2195,7 @@ struct Octavia : Module {
             json_error_t jerr;
             json_t* root = json_loads(r.body.c_str(), 0, &jerr);
             json_t* arr = root ? json_object_get(root, "changes") : NULL;
-            if (!arr || !json_is_array(arr)) {
+            if (!arr || !json_is_array(arr) || json_array_size(arr)==0 || json_array_size(arr)>octavia::kMaxBulkChanges) {
                 if (root) json_decref(root);
                 res.set_content("{\"error\":\"body must be {changes:[{moduleId,paramId,value}]}\"}","application/json");
                 return;
@@ -2053,7 +2206,12 @@ struct Octavia : Module {
                 json_t* jm = json_object_get(el, "moduleId");
                 json_t* jp = json_object_get(el, "paramId");
                 json_t* jv = json_object_get(el, "value");
-                if (!jm || !jp || !jv) { job->failed.push_back((int)idx); continue; }
+                if (!json_is_integer(jm) || !json_is_integer(jp) || !json_is_number(jv)
+                    || json_integer_value(jm)<0 || json_integer_value(jp)<0) {
+                    json_decref(root);
+                    res.set_content("{\"error\":"+jStr("change "+std::to_string(idx)+" requires non-negative integer moduleId/paramId and numeric value")+"}","application/json");
+                    return;
+                }
                 job->changes.push_back({(int64_t)json_integer_value(jm),
                                         (int)json_integer_value(jp),
                                         (float)json_number_value(jv)});
@@ -2061,6 +2219,7 @@ struct Octavia : Module {
             json_decref(root);
             { std::unique_lock<std::mutex> lk(bulkParamQueueMtx); bulkParamQueue.push(job); }
             if (!waitDone(job, 2000)) { res.set_content("{\"error\":\"timeout\"}","application/json"); return; }
+            if (!job->success) { res.set_content("{\"error\":"+jStr(job->error)+"}","application/json"); return; }
             std::string b = "{" + jStr("ok") + ": true, "
                           + jStr("applied") + ": " + std::to_string(job->changes.size() - job->failed.size())
                           + ", " + jStr("failedIndices") + ": [";
@@ -2163,9 +2322,15 @@ struct Octavia : Module {
             res.set_content(b,"application/json");
         });
         svr.Post(R"(/modules/(\d+)/bypass)", [this](const httplib::Request& r, httplib::Response& res){
+            json_error_t jerr; json_t* root=json_loads(r.body.c_str(),0,&jerr);
+            json_t* bypassedJ=root?json_object_get(root,"bypassed"):NULL;
+            if (!json_is_object(root) || !json_is_boolean(bypassedJ)) {
+                if (root) json_decref(root);
+                res.set_content("{\"error\":\"bypass requires boolean bypassed\"}","application/json"); return;
+            }
             auto job=std::make_shared<BypassJob>();
             job->moduleId=std::stoll(r.matches[1].str());
-            job->bypassed=parseBoolField(r.body,"bypassed");
+            job->bypassed=json_is_true(bypassedJ); json_decref(root);
             { std::unique_lock<std::mutex> lk(bypassQueueMtx); bypassQueue.push(job); }
             if (!waitDone(job)) res.set_content("{\"error\":\"timeout\"}","application/json");
             else if (job->success) res.set_content("{\"ok\":true,\"bypassed\":"+std::string(job->bypassed?"true":"false")+"}","application/json");
@@ -2207,6 +2372,9 @@ struct Octavia : Module {
         });
 
         svr.Post(R"(/modules/(\d+)/state)", [this](const httplib::Request& r, httplib::Response& res){
+            if (r.body.size() > octavia::kMaxModuleStateBytes) {
+                res.set_content("{\"error\":\"module state exceeds the 1 MiB safety limit\"}","application/json"); return;
+            }
             auto job=std::make_shared<ModuleStateJob>(); job->type=ModuleStateJob::SET;
             job->moduleId=std::stoll(r.matches[1].str());
             job->stateJson=r.body;
@@ -2217,15 +2385,38 @@ struct Octavia : Module {
         });
 
         svr.Post(R"(/temporal-deck/(\d+)/transport)", [this](const httplib::Request& r, httplib::Response& res){
+            json_error_t jerr; json_t* root=json_loads(r.body.c_str(),0,&jerr);
+            json_t* actionJ=root?json_object_get(root,"action"):NULL;
+            if (!json_is_object(root) || !json_is_string(actionJ)) {
+                if (root) json_decref(root);
+                res.set_content("{\"error\":\"transport requires string action\"}","application/json"); return;
+            }
             auto job=std::make_shared<TemporalDeckJob>(); job->moduleId=std::stoll(r.matches[1].str());
-            std::string action=parseStringField(r.body,"action");
-            if (action=="load") { job->type=TemporalDeckJob::LOAD; job->path=parseStringField(r.body,"path"); }
+            std::string action=json_string_value(actionJ);
+            if (action=="load") {
+                json_t* pathJ=json_object_get(root,"path");
+                if (!json_is_string(pathJ) || !*json_string_value(pathJ)) {
+                    json_decref(root); res.set_content("{\"error\":\"load requires non-empty string path\"}","application/json"); return;
+                }
+                job->type=TemporalDeckJob::LOAD; job->path=json_string_value(pathJ);
+            }
             else if (action=="play") job->type=TemporalDeckJob::PLAY;
             else if (action=="stop_rewind") job->type=TemporalDeckJob::STOP_REWIND;
-            else if (action=="seek") { job->type=TemporalDeckJob::SEEK; job->position=rack::math::clamp(parseFloatField(r.body,"position"),0.f,1.f); }
-            else if (action=="set_loop") { job->type=TemporalDeckJob::SET_LOOP; job->enabled=parseBoolField(r.body,"enabled"); }
+            else if (action=="seek") {
+                json_t* positionJ=json_object_get(root,"position");
+                if (!json_is_number(positionJ)) { json_decref(root); res.set_content("{\"error\":\"seek requires numeric position\"}","application/json"); return; }
+                const float position=(float)json_number_value(positionJ);
+                if (!std::isfinite(position)) { json_decref(root); res.set_content("{\"error\":\"seek position must be finite\"}","application/json"); return; }
+                job->type=TemporalDeckJob::SEEK; job->position=rack::math::clamp(position,0.f,1.f);
+            }
+            else if (action=="set_loop") {
+                json_t* enabledJ=json_object_get(root,"enabled");
+                if (!json_is_boolean(enabledJ)) { json_decref(root); res.set_content("{\"error\":\"set_loop requires boolean enabled\"}","application/json"); return; }
+                job->type=TemporalDeckJob::SET_LOOP; job->enabled=json_is_true(enabledJ);
+            }
             else if (action=="status") job->type=TemporalDeckJob::STATUS;
-            else { res.set_content("{\"error\":\"action must be load, play, stop_rewind, seek, set_loop, or status\"}","application/json"); return; }
+            else { json_decref(root); res.set_content("{\"error\":\"action must be load, play, stop_rewind, seek, set_loop, or status\"}","application/json"); return; }
+            json_decref(root);
             { std::unique_lock<std::mutex> lk(temporalDeckQueueMtx); temporalDeckQueue.push(job); }
             if (!waitDone(job, 5000)) res.set_content("{\"error\":\"timeout\"}","application/json");
             else if (!job->success) res.set_content("{\"error\":"+jStr(job->error)+"}","application/json");

@@ -4,6 +4,9 @@
 #include "visual/VisualAssets.hpp"
 
 #include <ui/TextField.hpp>
+#include <ui/ScrollWidget.hpp>
+
+#include <algorithm>
 
 struct OctaviaConsole : Module {
 	enum ParamId { SEND_PARAM, PARAMS_LEN };
@@ -38,27 +41,25 @@ struct OctaviaConsole : Module {
 	}
 };
 
-struct OctaviaConsoleResponseField : ui::TextField {
-	OctaviaConsoleResponseField() {
-		multiline = true;
-		placeholder = "Agent responses appear here";
+struct OctaviaConsoleTranscript : TransparentWidget {
+	std::string text;
+
+	void setTranscript(std::string next) {
+		text = std::move(next);
 	}
 
-	void onSelectText(const SelectTextEvent& e) override {
-		// Keep selection and clipboard access, but reject typed replacement.
-		if (e.codepoint < 0x20) ui::TextField::onSelectText(e);
-	}
-
-	void onSelectKey(const SelectKeyEvent& e) override {
-		if ((e.mods & RACK_MOD_MASK) == RACK_MOD_CTRL &&
-			(e.key == GLFW_KEY_C || e.key == GLFW_KEY_A)) {
-			ui::TextField::onSelectKey(e);
+	void draw(const DrawArgs& args) override {
+		if (!APP || !APP->window || !APP->window->uiFont) return;
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFontSize(args.vg, 10.f);
+		nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+		nvgFillColor(args.vg, nvgRGB(225, 238, 241));
+		if (text.empty()) {
+			nvgFillColor(args.vg, nvgRGB(125, 145, 150));
+			nvgText(args.vg, 4.f, 4.f, "Conversation history appears here", nullptr);
 			return;
 		}
-		if (e.key == GLFW_KEY_LEFT || e.key == GLFW_KEY_RIGHT ||
-			e.key == GLFW_KEY_UP || e.key == GLFW_KEY_DOWN ||
-			e.key == GLFW_KEY_HOME || e.key == GLFW_KEY_END || e.key == GLFW_KEY_PAGE_UP ||
-			e.key == GLFW_KEY_PAGE_DOWN) ui::TextField::onSelectKey(e);
+		nvgTextBox(args.vg, 4.f, 4.f, box.size.x - 8.f, text.c_str(), nullptr);
 	}
 };
 
@@ -92,9 +93,10 @@ struct OctaviaConsoleStatus : TransparentWidget {
 };
 
 struct OctaviaConsoleWidget : ModuleWidget {
-	OctaviaConsoleResponseField* responseField = nullptr;
+	ui::ScrollWidget* responseScroll = nullptr;
+	OctaviaConsoleTranscript* transcript = nullptr;
 	OctaviaConsolePromptField* promptField = nullptr;
-	std::string displayedResponse;
+	std::string displayedTranscript;
 	bool sendWasHigh = false;
 
 	OctaviaConsoleWidget(OctaviaConsole* module) {
@@ -106,14 +108,18 @@ struct OctaviaConsoleWidget : ModuleWidget {
 		addChild(createWidget<CyanOrbScrew>(Vec(0, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		math::Rect responseMm(Vec(3.f, 17.f), Vec(54.96f, 55.f));
-		math::Rect promptMm(Vec(3.f, 79.f), Vec(54.96f, 31.f));
+		math::Rect responseMm(Vec(3.f, 17.f), Vec(115.92f, 55.f));
+		math::Rect promptMm(Vec(3.f, 79.f), Vec(115.92f, 31.f));
 		panel_svg::loadRectFromSvgMm(panelPath, "RESPONSE_FIELD", &responseMm);
 		panel_svg::loadRectFromSvgMm(panelPath, "PROMPT_FIELD", &promptMm);
-		responseField = new OctaviaConsoleResponseField;
-		responseField->box.pos = mm2px(responseMm.pos);
-		responseField->box.size = mm2px(responseMm.size);
-		addChild(responseField);
+		responseScroll = new ui::ScrollWidget;
+		responseScroll->box.pos = mm2px(responseMm.pos);
+		responseScroll->box.size = mm2px(responseMm.size);
+		addChild(responseScroll);
+		transcript = new OctaviaConsoleTranscript;
+		transcript->box.size.x = responseScroll->box.size.x - 12.f;
+		transcript->box.size.y = responseScroll->box.size.y;
+		responseScroll->container->addChild(transcript);
 		promptField = new OctaviaConsolePromptField;
 		promptField->box.pos = mm2px(promptMm.pos);
 		promptField->box.size = mm2px(promptMm.size);
@@ -121,9 +127,9 @@ struct OctaviaConsoleWidget : ModuleWidget {
 
 		OctaviaConsoleStatus* status = new OctaviaConsoleStatus(module);
 		status->box.pos = mm2px(Vec(3.f, 112.5f));
-		status->box.size = mm2px(Vec(37.f, 8.f));
+		status->box.size = mm2px(Vec(98.f, 8.f));
 		addChild(status);
-		addParam(createParamCentered<SmallGoldButton>(mm2px(Vec(51.f, 116.5f)), module,
+		addParam(createParamCentered<SmallGoldButton>(mm2px(Vec(112.f, 116.5f)), module,
 			OctaviaConsole::SEND_PARAM));
 	}
 
@@ -133,11 +139,14 @@ struct OctaviaConsoleWidget : ModuleWidget {
 		if (!console) return;
 		console->refreshRegistration();
 		auto snapshot = console->mailbox->snapshot();
-		const std::string nextResponse = snapshot.state == octavia_console::AgentState::ERROR
-			? snapshot.error : snapshot.response;
-		if (nextResponse != displayedResponse) {
-			displayedResponse = nextResponse;
-			responseField->setText(displayedResponse);
+		if (snapshot.transcript != displayedTranscript) {
+			displayedTranscript = snapshot.transcript;
+			transcript->setTranscript(displayedTranscript);
+			const std::size_t lines = 1 + std::count(displayedTranscript.begin(), displayedTranscript.end(), '\n');
+			const std::size_t wrappedLines = displayedTranscript.size() / 72;
+			transcript->box.size.y = std::max(responseScroll->box.size.y,
+				8.f + 13.f * static_cast<float>(lines + wrappedLines));
+			responseScroll->scrollTo(math::Rect(Vec(0.f, transcript->box.size.y - 1.f), Vec(1.f, 1.f)));
 		}
 
 		const bool sendHigh = console->params[OctaviaConsole::SEND_PARAM].getValue() > .5f;
@@ -163,7 +172,7 @@ struct OctaviaConsoleWidget : ModuleWidget {
 		nvgFontSize(args.vg, 8.f);
 		nvgText(args.vg, box.size.x * .5f, mm2px(14.f), "AGENT", nullptr);
 		nvgText(args.vg, box.size.x * .5f, mm2px(76.f), "PROMPT", nullptr);
-		nvgText(args.vg, mm2px(51.f), mm2px(123.f), "SEND", nullptr);
+		nvgText(args.vg, mm2px(112.f), mm2px(123.f), "SEND", nullptr);
 	}
 };
 

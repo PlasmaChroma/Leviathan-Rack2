@@ -62,6 +62,9 @@ build/src/doom/%.c.o: CFLAGS += $(DOOM_LEGACY_WARN_FLAGS)
 build/src/Mandelwake.cpp.o build/src/MandelwakeEngine.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 
 TEST_BINS_NON_RACK := \
+	build/tests/octavia_job_control_spec \
+	build/tests/octavia_action_validation_spec \
+	build/tests/octavia_cable_validation_spec \
 	build/tests/octavia_console_mailbox_spec \
 	build/tests/sibyl_adoption_spec \
 	build/tests/sibyl_hardware_control_spec \
@@ -295,6 +298,9 @@ test-build-fast: $(TEST_BINS_NON_RACK)
 test-build-rack: $(TEST_BINS_RACK)
 
 test-fast: test-build-fast
+	$(call run_test_bin,build/tests/octavia_job_control_spec)
+	$(call run_test_bin,build/tests/octavia_action_validation_spec)
+	$(call run_test_bin,build/tests/octavia_cable_validation_spec)
 	$(call run_test_bin,build/tests/octavia_console_mailbox_spec)
 	$(call run_test_bin,build/tests/sibyl_adoption_spec)
 	$(call run_test_bin,build/tests/sibyl_hardware_control_spec)
@@ -398,6 +404,15 @@ build/tests:
 
 build/tests/octavia_console_mailbox_spec: tests/octavia_console_mailbox_spec.cpp src/OctaviaConsoleMailbox.cpp src/OctaviaConsoleMailbox.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_console_mailbox_spec.cpp src/OctaviaConsoleMailbox.cpp -o $@
+
+build/tests/octavia_cable_validation_spec: tests/octavia_cable_validation_spec.cpp src/OctaviaCableValidation.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/octavia_cable_validation_spec.cpp -o $@
+
+build/tests/octavia_action_validation_spec: tests/octavia_action_validation_spec.cpp src/OctaviaActionValidation.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/octavia_action_validation_spec.cpp -o $@
+
+build/tests/octavia_job_control_spec: tests/octavia_job_control_spec.cpp src/OctaviaJobControl.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_job_control_spec.cpp -o $@
 
 build/tests/temporaldeck_platter_spec_harness: tests/platter_spec_main.cpp tests/platter_spec_cases.cpp tests/platter_trace_replay.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@

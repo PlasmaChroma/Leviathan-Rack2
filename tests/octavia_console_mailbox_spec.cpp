@@ -28,6 +28,8 @@ int main() {
 	check(snapshot.state == octavia_console::AgentState::REPLY &&
 		snapshot.response == "Reduced the filter cutoff." && snapshot.pendingCount == 0,
 		"Rack snapshot publishes the reply and clears the queue");
+	check(snapshot.transcript == "YOU\nMake the bass darker\n\nOCTAVIA\nReduced the filter cutoff.",
+		"conversation transcript appends both sides in order");
 	check(!mailbox->postResponse(promptId, "duplicate", false, &error),
 		"duplicate response is rejected");
 

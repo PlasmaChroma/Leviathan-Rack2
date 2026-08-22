@@ -614,8 +614,8 @@ async def vcv_delete_module(params: DeleteModuleInput) -> str:
 class UpdateModuleInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     module_id: int = Field(..., description="Module ID from vcv_list_modules", ge=0)
-    hp: Optional[float] = Field(None, description="Horizontal position in HP (rack units, 1 HP = 5.08mm)")
-    row: Optional[int] = Field(None, description="Rack row index. Omit to preserve the module's current row")
+    hp: Optional[float] = Field(None, description="Horizontal position in HP (rack units, 1 HP = 5.08mm)", allow_inf_nan=False, ge=-1000000, le=1000000)
+    row: Optional[int] = Field(None, description="Rack row index. Omit to preserve the module's current row", ge=-100000, le=100000)
     bypassed: Optional[bool] = Field(None, description="True to bypass module, False to re-enable")
 
 
@@ -671,13 +671,13 @@ async def vcv_update_module(params: UpdateModuleInput) -> str:
 class LayoutChange(BaseModel):
     model_config = ConfigDict(extra="forbid")
     module_id: int = Field(..., description="Module ID", ge=0)
-    hp: float = Field(..., description="Horizontal position in HP")
-    row: int = Field(..., description="Rack row index")
+    hp: float = Field(..., description="Horizontal position in HP", allow_inf_nan=False, ge=-1000000, le=1000000)
+    row: int = Field(..., description="Rack row index", ge=-100000, le=100000)
 
 
 class LayoutModulesInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    changes: list[LayoutChange] = Field(..., min_length=1, description="Complete set of module positions")
+    changes: list[LayoutChange] = Field(..., min_length=1, max_length=1024, description="Complete set of module positions")
 
 
 @mcp.tool(
@@ -708,13 +708,13 @@ class ParamChange(BaseModel):
     model_config = ConfigDict(extra="forbid")
     module_id: int = Field(..., description="Module ID", ge=0)
     param_id: int = Field(..., description="Parameter index on module", ge=0)
-    value: float = Field(..., description="New native-range value (e.g. BPM, V/oct volts, Hz)")
+    value: float = Field(..., description="New native-range value (e.g. BPM, V/oct volts, Hz)", allow_inf_nan=False)
 
 
 class SetParamsInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     changes: list[ParamChange] = Field(
-        ..., min_length=1,
+        ..., min_length=1, max_length=1024,
         description="One or more parameter changes applied in a single undo step"
     )
 

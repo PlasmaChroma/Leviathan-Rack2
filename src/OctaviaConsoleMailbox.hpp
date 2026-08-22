@@ -12,6 +12,7 @@ namespace octavia_console {
 constexpr std::size_t kMaxPromptChars = 4096;
 constexpr std::size_t kMaxResponseChars = 16384;
 constexpr std::size_t kMaxPendingPrompts = 8;
+constexpr std::size_t kMaxTranscriptChars = 65536;
 
 enum class AgentState {
 	OFFLINE,
@@ -36,6 +37,7 @@ struct Snapshot {
 	std::size_t pendingCount = 0;
 	std::string response;
 	std::string error;
+	std::string transcript;
 };
 
 class Mailbox {
@@ -56,6 +58,9 @@ private:
 	AgentState state_ = AgentState::READY;
 	std::string response_;
 	std::string error_;
+	std::string transcript_;
+
+	void appendTranscript(const char* speaker, const std::string& text);
 };
 
 void registerMailbox(int64_t moduleId, const std::shared_ptr<Mailbox>& mailbox);
