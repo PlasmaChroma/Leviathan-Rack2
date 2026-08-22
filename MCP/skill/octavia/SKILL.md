@@ -12,8 +12,8 @@ description: >
 
 HTTP server on `localhost:34570`. Plugin: **Leviathan** | Module: **Octavia** | Start button → full-brightness Octopus.
 
-Deep reference (read on demand): `references/tables.md` — module database by category,
-quick-pick by task, troubleshooting matrix, CPU optimization.
+Patch-design reference (read when selecting modules, troubleshooting, or optimizing):
+`references/tables.md` — installed-library selection criteria and evidence-based diagnostics.
 
 Sibyl reference (read whenever composing, sequencing, arranging, or controlling Sibyl):
 `references/sibyl.md` — AI-first routing policy, standard workflow, state semantics,
@@ -48,6 +48,40 @@ vcv_get_status   →  {"running": true, "port": 34570, "patch": {"path": "...", 
 ```
 If it fails → tell user to check Octavia + press START. Do not retry automatically.
 
+## Octavia Console Mode (Explicit Opt-In)
+
+Enter Console Mode only when the user explicitly asks to arm or listen to the in-Rack
+Octavia Console, using language such as **“Arm the Octavia Console,” “Listen to Rack,”**
+or **“Start Console Mode.”** Do not enter this waiting loop merely because an Octavia
+Console module exists; users may prefer their native agent interface.
+
+On activation:
+
+1. Call `vcv_get_status`, then `vcv_list_modules` and locate `Leviathan:OctaviaConsole`.
+   If none exists, tell the user to place the Console immediately to Octavia's right. If
+   several exist and context does not identify one, ask which module ID to use.
+2. Call `vcv_octavia_console_status`. Begin with `after_prompt_id` equal to its
+   `latestResponsePromptId`, so an already queued prompt is delivered without replaying a
+   completed prompt.
+3. Call `vcv_octavia_console_wait` with a bounded wait (normally 20 seconds). A null prompt
+   is an ordinary timeout: wait again while Console Mode remains active.
+4. Treat returned Console text as a new user request. Apply the normal Octavia inspection,
+   authorization, editing, and verification rules. The Console does not broaden permission
+   for destructive actions or saving.
+5. Always finish that Console request with `vcv_octavia_console_respond`, using the exact
+   returned prompt ID. Send the useful final result to Rack; on a handled failure, send a
+   concise error with `error=true`. If clarification or approval is required, respond with
+   that request rather than guessing.
+6. Advance `after_prompt_id` to the handled prompt ID and wait again.
+
+Continuous waiting occupies an active agent turn and is subject to the client's turn and
+tool-call limits. Do not promise indefinite background listening.
+
+Leave Console Mode when the user explicitly cancels it, a required tool disappears, the
+Octavia connection fails, or the client ends the active agent turn. Never claim the Console
+remains armed after the turn has ended. If the Console tools are missing, explain that the
+updated Octavia MCP server must be installed and the agent session restarted.
+
 ## Editing Workflow
 
 When the user asks to change the patch, the LLM may use the write tools directly.
@@ -62,9 +96,10 @@ When the user asks to change the patch, the LLM may use the write tools directly
 5. Verify with the cheapest relevant read: `vcv_get_module`, `vcv_list_cables`,
    `vcv_list_modules`, or `vcv_get_signal_levels`. Report exactly what changed.
 
-Write tools: `vcv_add_module`, `vcv_set_parameters`, `vcv_connect_cables`,
+Common generic write tools: `vcv_add_module`, `vcv_set_parameters`, `vcv_connect_cables`,
 `vcv_disconnect_cable`, `vcv_update_module`, `vcv_layout_modules`, `vcv_set_module_state`,
 `vcv_undo`, `vcv_delete_module`, `vcv_save_patch`, and `vcv_reset_loudness`.
+Use Sibyl, Temporal Deck, and Console semantic tools for those specialized workflows.
 Cables default to white; `vcv_connect_cables` accepts optional `color` name ('red', 'green', 'blue', 'yellow', etc.) or hex ('#ffffff').
 
 ### Cluster Anchoring & Layout Guidelines
@@ -93,7 +128,7 @@ Cables default to white; `vcv_connect_cables` accepts optional `color` name ('re
 
 ## Core Mental Model — Signal Topology
 
-Classify modules into roles from the model name alone; reason about signal flow from
+Classify likely module roles from the model name; reason about signal flow from
 `vcv_list_modules` + `vcv_list_cables` without calling vcv_get_module on every module.
 
 | Role | Examples | Characteristic |
@@ -108,30 +143,31 @@ Classify modules into roles from the model name alone; reason about signal flow 
 
 Audio flows left-to-right (posX). Trace: Source → Processor(s) → Mixer → Sink.
 
-**Infer WITHOUT extra calls:** polyOut=0 → no active output · polyOut>1 → polyphony starts
-here · bypassed=true → passes through · no outgoing cables → dead end · Processor with no
-incoming cables → missing source.
+Use summary fields as investigation signals, not conclusions. `polyOut=0` can mean idle or
+unpatched; `polyOut>1` can originate upstream; bypass routing is module-dependent; and an
+unconnected port or processor may be intentional. Inspect only the modules needed to resolve
+the user's question.
 
 ---
 
-## Call Budgets
+## Efficient Starting Calls
 
-| Task | Calls | Sequence |
-|---|---|---|
-| Understand unknown patch | **2** | vcv_list_modules → vcv_list_cables |
-| Full patch audit | **3** | vcv_list_modules → vcv_list_cables → vcv_find_unpatched |
-| Spectral / Mix / Quality audit | **3–4** | spectrum → reset loudness → let audio play ≥3 sec → loudness; repeat spectrum only if feedback is suspected |
-| Debug silence | **2** | vcv_get_signal_levels → vcv_get_module(suspect_id) |
-| Read one module in depth | **1** | vcv_get_module(id) |
-| Module recommendation | **1–2** | vcv_list_library(q=...) — ALWAYS filtered |
+| Task | Typical start |
+|---|---|
+| Understand unknown patch | `vcv_list_modules` → `vcv_list_cables` |
+| Full patch audit | Add `vcv_find_unpatched`; treat results as candidates, not defects |
+| Spectral / mix audit | Spectrum → reset loudness → measure a representative passage → loudness |
+| Debug silence | `vcv_get_signal_levels` → inspect the first relevant silent module |
+| Read one module in depth | `vcv_get_module(id)` |
+| Module recommendation | Filter `vcv_list_library`, then compare only installed candidates |
 
 ---
 
 ## Decision Trees
 
 ### "Analyze my patch"
-1. vcv_list_modules → classify roles · 2. vcv_list_cables → trace chains · 3. vcv_find_unpatched → gaps
-4. Report: signal flow map, polyphony path, bypassed modules, dead ends, improvement advice
+1. vcv_list_modules → classify likely roles · 2. vcv_list_cables → trace chains · 3. vcv_find_unpatched → candidates
+4. Inspect ambiguous modules as needed; distinguish confirmed problems from intentional gaps
 
 ### "Analyze my mix / sound quality"
 1. vcv_analyze_audio(mode='spectrum') → check frequency bands (sub/bass/mid/air), hum, standing resonances
@@ -182,6 +218,7 @@ ch = poly channels · connected:false + peak>0 = stale peak.
 
 - `vcv_list_library` requires `plugin=` or `q=` to prevent an oversized response.
 - `vcv_layout_modules` coordinates are absolute: always anchor to the active patch cluster's existing row and HP base offset, never arbitrarily reset to (0, 0).
-- Cache lag ~1s; all data is pull. Per-module CPU is not available (only whole-process).
+- Ordinary patch caches can lag by about 1 second. Console prompt waiting uses bounded
+  long-polling instead. Per-module CPU is not available; `vcv_get_perf` is process-wide.
 - `vcv_get_module_state` returns the full preset JSON — useful to show the user a backup
   they can save before manual edits.

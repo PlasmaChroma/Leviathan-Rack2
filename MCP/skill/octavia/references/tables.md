@@ -1,172 +1,77 @@
-# Module Database & Operations Tables — VCV Rack Reference
+# Patch Design and Troubleshooting — VCV Rack Reference
 
-Load this file for: choosing modules by task, troubleshooting matrix, CPU optimization.
+Read this reference when selecting modules, diagnosing common patch problems, or reducing
+the cost of a patch. Treat it as decision guidance, not a fixed shopping list.
 
-### Module Database — Recommended by Category
+## Selecting Modules
 
-**Oscillators:**
-- VCV VCO-1 / WT VCO — free, reliable, core
-- Audible Instruments Plaits (Macro Oscillator 2) — 24 modes, includes FM, granular, Karplus
-- Bogaudio VCO / XCO — precise, analog-character
-- SurgeXT VCO — wide range, wavetable, FM
+The installed Rack library is authoritative. Before recommending or adding a module, call
+`vcv_list_library` with a focused `q` or `plugin` filter and use the returned plugin/model
+slugs. Do not assume a module is installed, guess a slug, or replace a user's chosen module
+without a reason tied to their request.
 
-**Filters:**
-- VCV VCF — Moog Ladder style, 24dB LP
-- Vult Tangents / Freak — multiple filter types, drive
-- Audible Instruments Ripples — smooth, musical
-- Bogaudio LVCF / VCF — versatile, CPU-light
+Choose by required behavior:
 
-**VCA / Envelopes:**
-- VCV VCA + ADSR — baseline, always works
-- Befaco Rampage — dual slope generator, function generator, LPG mode
-- Bogaudio DADSR — delay + ADSR, full control
+| Role | Selection questions |
+|---|---|
+| Agent-authored sequencer | Prefer `Leviathan:Sibyl`; it provides semantic tracks, patterns, scenes, atomic edits, and revision guards. Read `sibyl.md`. |
+| Manual sequencer | Does the user want a visible step grid, direct panel editing, performance controls, melodic CV, gates, or both? Preserve an existing sequencer when present. |
+| Oscillator | Required pitch range, polyphony, FM/sync behavior, waveform family, and modulation inputs. |
+| Filter | Required response, slope, resonance behavior, drive, stereo/polyphony, and modulation inputs. |
+| Envelope/function generator | Gate versus trigger behavior, stage count, retriggering, looping, voltage range, and polyphony. |
+| VCA/mixer | Channel count, mono/stereo/polyphony, CV response, sends, metering, and whether a simple utility is sufficient. |
+| Effect | Mono/stereo I/O, clocking, freeze/modulation features, latency, and whether it belongs per voice or after mixing. |
+| Random/generative source | Clock/reset contract, deterministic seeding, probability controls, voltage range, and quantization needs. |
+| Utility | Exact operation and voltage convention; prefer the smallest module that satisfies the routing need. |
+| Analysis | Measurement required: waveform, spectrum, tuning, voltage, loudness, or stereo behavior. Octavia's own analysis tools may already suffice. |
 
-**Sequencers:**
-- Impromptu PhraseSeq16/32 — most capable, chord sequences, per-step gates
-- Impromptu Gate-Seq-64 — 64-step TR-style drum sequencer
-- Count Modula — Euclidean, boolean logic, switches
+When several installed modules qualify, explain the relevant tradeoff briefly instead of
+declaring a universal winner. Use `vcv_get_module` after selection to confirm actual ports,
+parameter ranges, and polyphonic behavior.
 
-**Mixers:**
-- **MindMeld MixMaster** — de-facto professional standard: 16 tracks, 4 aux, EQ, compressor, true stereo, LUFS meter, mute groups. Use this for any serious mix.
-- Bogaudio MIX4 / MIX8 — lightweight, good for submixes
+## Voltage Conventions
 
-**Reverb / Delay:**
-- Valley Plateau — lush hall reverb, size/decay/pre-delay/damping
-- Chronoblob2 — tempo-sync delay, ping-pong, feedback filter
+These are common Rack conventions, not guarantees. Inspect the selected module when the
+exact contract matters.
 
-**Generative / Random:**
-- Audible Instruments Random Sampler (Marbles) — Turing Machine, quantized random, gates+CV
-- HetrickCV — logic, chaos, probability utilities
+- Audio and bipolar CV are commonly around ±5 V; unipolar CV is commonly 0–10 V.
+- Gates are commonly 10 V, while trigger duration depends on the source.
+- Pitch commonly uses 1 V/octave; in Octavia/Sibyl, C4 is 0 V.
+- Octavia's analyzer normalizes ±5 V peak to 0 dBFS. Higher voltages are reported as
+  overrange even though Rack cables can carry them.
 
-**Utility:**
-- Bogaudio 8VERT / OFFSET / SLEW / BOOL — essential toolkit
-- Stoermelder STRIP / MIDI-CAT — patch documentation, MIDI mapping
-- Impromptu Clocked — master clock, PPQN, swing, reset
+## Troubleshooting Guidance
 
-**Analysis:**
-- VCV Scope — oscilloscope, XY, FFT
-- NYSTHI Multimeter — RMS, peak, frequency
+Treat each row as a hypothesis to test. Inspect current routing, signal levels, and the
+actual module controls before changing values.
 
----
-
-### Module Quick-Pick by Task (Agent Cheat Sheet)
-
-Use this when selecting which module to add for a given role. Ordered by preference.
-
-| Task | 1st Choice | 2nd Choice | 3rd Choice | Poly? |
-|---|---|---|---|---|
-| VCO analog warm | Bogaudio VCO / XCO | VCV VCO-1 | Instruo Tš-L | yes |
-| VCO FM TZ | Bogaudio FM-OP | NYSTHI TZOP | Surge XT | yes |
-| VCO Wavetable | VCV WT VCO | Surge XT | Plaits WT Mode | yes |
-| VCF clean | Vult Freak | Audible Ripples | Bogaudio VCF | yes |
-| VCF character | Vult Tangents | Valley Feline | Bogaudio LVCF | partial |
-| VCA | VCV VCA | Bogaudio VCA/VCMIX | Audible Veils | yes |
-| ADSR | VCV ADSR | Bogaudio ADSR/DADSR | Count Modula EG | yes |
-| LFO | Bogaudio LFO/4FO | Frozen Wasteland LFO | VCV LFO-2 | yes |
-| Random / S&H | VCV RANDOM | HetrickCV Dust | Audible Marbles | yes |
-| Quantizer | ML Quantum | VCV Quantizer | Bogaudio ADDR-SEQ | yes |
-| Sequencer melodic | Impromptu PhraseSeq32 | JW NoteSeq | Voxglitch Digital Seq | yes |
-| Euclidean drums | Count Modula Euclidean | Frozen Wasteland Seeds | Impromptu GateSeq64 | yes |
-| Mixer pro | MindMeld MixMaster | Bogaudio MIX16 | VCV MIXER | yes stereo |
-| EQ | MindMeld EqMaster | Bogaudio PEQ14 | — | yes |
-| Compressor | Vult Comp | MindMeld Track Comp | VCV Compressor | stereo |
-| Reverb | Valley Plateau | Valley Interzone | VCV Reverb | stereo |
-| Delay | Chronoblob2 | VCV Delay | Valley Interzone | stereo |
-| Distortion / Sat | Vult Debriatus | Vult Freak Drive | Befaco Chopping Kinky | yes |
-| Granular | Audible Clouds | Voxglitch Grain Engine | NYSTHI Simpliciter | stereo |
-| Sampler | NYSTHI Simpliciter | Voxglitch WavBank | — | stereo |
-| MIDI MPE | moDllz MIDIpolyMPE | VCV MIDI-CV MPE Mode | — | P16 |
-| Controller map | Stoermelder MIDI-CAT | VCV MIDI-MAP | — | — |
-| Scope / Tuner | VCV Scope | NYSTHI Multimeter | NYSTHI TUNATHOR | — |
-| Utility math | Bogaudio OFFSET/SUM/BOOL | VCV SUM/8VERT | Submarine/Venom | yes |
-| Physical modeling | Audible Rings/Elements | — | — | yes |
-| Drum synth | Vult Trummor 2 | Bidoo dTrOY | — | partial |
-| FM TZ vintage | NYSTHI TZOP + DX7 Env | Bogaudio FM-OP ×4 | Surge XT | partial |
-| Feedback drone | ComfortZone TZFM Lead | Bogaudio FM-OP + loop | — | — |
-
-**Voltage quick-reference when connecting:**
-- Octavia LUFS reference: ±5V = 0 dBFS. Patch signals may exceed this, but Octavia reports them as overrange.
-- CV unipolar: 0–10V | CV bipolar: ±5V
-- Gate/Trigger: 10V, 1ms pulse
-- Pitch: 1V/oct, 0V = C4 = 261.63Hz
-
----
-
-### Troubleshooting Matrix
-
-| Symptom | Most likely cause | Fix |
+| Symptom | Inspect first | Possible correction |
 |---|---|---|
-| No sound at output | VCA closed, gate missing, Audio module wrong | Check gate→ADSR→VCA chain; set VCA CV to 10V manually to test |
-| Silence only on some notes | ADSR Release too short + notes overlap | Increase Release; check gate polarity |
-| Out of tune / wrong pitch | VCO fine-tune off, or 1V/oct offset | Right-click VCO → Initialize; verify C4 = 0V = 261.63 Hz |
-| Clicks/pops on note start | ADSR Attack = 0 | Set Attack ≥ 1.5 ms (≥ 0.01 on 0–1 scale) |
-| Clicks on note end | Release = 0, abrupt VCA cutoff | Set Release ≥ 5 ms |
-| Hum / 50 Hz buzz | DC offset, ground loop | HPF at 30 Hz before Audio module; check interface |
-| Phase cancellation (thin sound) | Two copies of same signal summed with opposite phase | Invert one signal via attenuverter at -100% and compare |
-| Bass disappears in stereo | Sub-bass content is out of phase between L/R | Force bass to mono (HPF on Side channel at 150 Hz) |
-| Clipping at Audio module | Signal > ±10V | Add limiter (Ceiling ±9.5V) before Audio output |
-| CPU dropouts | Too many polyphonic voices, expensive reverbs | Reduce poly count; increase blocksize to 512; bounce Plateau to audio |
-| Sequencer drifting / off-beat | Clock/Reset race condition | Use Clocked module; ensure Reset fires 1 ms before Clock after Reset |
-| Aliasing artifacts | High-frequency digital oscillators without anti-aliasing | Use bandlimited oscillators; increase sample rate to 96 kHz |
-| Turing Machine always the same | Probability at 0% (locked) | Increase to 50–85% for evolution |
-| Turing Machine pure noise | Probability at 100% | Reduce to 85%; always use Quantizer downstream |
-| Quantizer ignores CV | Scale mask not set, or wrong scale selected | Right-click Quantizer → set scale; check CV range is 0–10V |
-| LFO not modulating | Attenuator at 0 downstream, or CV sum out of range | Check attenuverter settings; LFO output ±5V needs attenuating |
-| Reverb tail too muddy | No HPF on reverb send or return | Add HPF 200–300 Hz on reverb input; LPF 8 kHz on return |
-| CPU dropout during MPE | Too many voices + expensive modules | Reduce to 8 voices live; move Reverb/Granular to Send bus; increase blocksize to 512 |
-| Saturation adds DC offset | Heavy drive without HPF | Add HPF 18 Hz (Vult Stabile or Bogaudio) after any heavy saturation stage |
-| Microtuning not working | Quantizer overriding pitch CV | When using Scala/Surge XT, disable external Quantizer; Surge XT handles tuning internally |
-| TZFM pitch drifts upward | Using VCO-1 (not TZ) — clamps at 0 | Switch to Bogaudio FM-OP or NYSTHI TZOP |
-| TZFM no effect / dull | Index = 0 or modulator silent | Open FM Depth CV / VCA; check modulator output ±5V |
-| TZFM metallic screech | Index > 8, aliasing | Keep Index < 5; add LP 8–12kHz post-FM; enable oversampling |
-| Feedback loop howling | Loop gain ≥ 1.0, no limiter | Reduce gain to < 0.94; add Limiter (Vult Comp, threshold ≤6V) in loop |
-| Feedback DC runaway | No DC blocker in feedback loop | Add HP 22–30Hz (Bogaudio or Vult) in feedback path |
-| NaN / sudden silence in feedback | Filter or reverb became unstable in loop | Kill feedback VCA to 0; restart feedback from gain=0; check for isfinite |
-| MPE Pitch Bend wrong scale | Bend range mismatch controller vs module | Match controller + moDllz bend range (24/48/96 semitones) exactly |
-| HiRes CC has zipper noise | Standard 7-bit CC used instead of HiRes | Use moDllz HiRcc74 output, not standard CC output |
+| No sound | Trace backward from the audio sink; find the first silent output, then inspect that module and its gate/CV inputs. | Restore the missing source, open the VCA, correct routing, or start the stopped transport. |
+| Intermittent missing notes | Gate duration, envelope retriggering, voice/channel counts, probability, and sequencer run state. | Align gate/envelope timing or polyphony with the intended articulation. |
+| Wrong pitch | Pitch source, offsets, fine tune, quantizers, scale settings, and 1 V/oct routing. | Remove unintended offsets or configure the actual quantizer/oscillator contract. |
+| Clicks at note boundaries | Waveform discontinuity, zero-time envelope stages, retriggers, and abrupt VCA changes. | Add a small attack/release appropriate to the module or correct retrigger behavior. |
+| Clipping/overrange | Use Octavia signal and loudness analysis to locate the first excessive stage. | Reduce gain at that stage; add limiting only when it serves the musical intent. |
+| Thin or disappearing stereo content | Correlation, polarity, duplicated paths, and low-frequency side energy. | Correct polarity/routing or narrow only the problematic frequency region. |
+| Muddy effects | Send level, low-frequency content entering time-based effects, decay, feedback, and return EQ. | Reduce the contributing range or shorten/attenuate the effect rather than applying a fixed cutoff blindly. |
+| Clock drift or wrong reset | Clock source, PPQN, reset polarity/timing, transport state, and competing clocks. | Use one clock authority and match the documented clock/reset contract of the modules involved. |
+| Random source is static or chaotic | Probability, seed/lock state, clock, range, and downstream quantization. | Adjust only the control responsible for the undesired behavior; quantize only when pitched output is intended. |
+| Feedback howl or runaway | Loop gain, DC, latency, nonlinear stages, and limiter state. | Break or mute the loop first, then rebuild from low gain with bounded stages. |
+| High CPU/dropouts | Rack's CPU meter, polyphony, sample rate, oversampling, visual load, and repeated per-voice effects. | Measure one change at a time; reduce the demonstrated bottleneck while preserving the requested sound. |
 
----
+## Performance Guidance
 
-### CPU Optimization — Concrete Numbers
+Do not quote fixed CPU percentages, safe voice counts, thread counts, or guaranteed savings.
+They vary with processor, Rack and plugin versions, sample rate, block size, polyphony, and
+patch topology. Octavia exposes whole-process timing through `vcv_get_perf`, but not reliable
+per-module CPU attribution.
 
-**CPU cost reference (Ryzen 5800X / M1 Pro, VCV 2.5, 48 kHz):**
+For an optimization request:
 
-| Module | 1 Voice | 8 Voice poly | 16 Voice poly |
-|---|---|---|---|
-| VCO Core Saw | 0.3% | 2.1% | 4.3% |
-| Audible Instruments Plaits | 0.9% | 6.8% | 13.5% |
-| Vult Freak | 0.6% | 4.5% | 9.1% |
-| Valley Plateau (stereo) | 1.8% | — (always mono) | — |
-| MindMeld MixMaster | 1.2% base | +0.15%/ch | — |
-| moDllz MIDIpolyMPE | 0.4% | 0.7% | 1.1% |
-
-**Rules:**
-- Poly 16 ≈ 8–12× CPU vs mono (not 16× due to SIMD, but cache pressure)
-- MPE live: 8 voices max. Studio: 12. Bounce-only: 16.
-- CPU > 72% real-time → dropout risk, especially during MPE note bursts
-
-**Block size settings:**
-- Live / MPE performance: **128–256 samples** (2.7–5.3 ms latency)
-- Recording / mixing: **512 samples** (-28% CPU vs 256)
-- Render / bounce: **1024–2048** (offline, CPU unconstrained)
-
-**Sample rate:** 48 kHz standard. 96 kHz = ×1.9 CPU — only for heavy FM or oversampled saturation.
-
-**Save CPU:**
-```
-Reverb/Granular → always on SEND bus, never per-voice (saves factor N)
-Scope/Analyzer/Visualizer → disable live (-3–8% CPU)
-Vult "High Quality" oversampling → off live, on for render
-UI frame rate → 30 Hz instead of 60 Hz on weak GPUs (-5–12%)
-Threads → set to physical cores − 2 (e.g., 8-core → 6 threads)
-```
-
-**Bounce workflow:**
-```
-1. Record MPE performance as MIDI (Entrian Timeline)
-2. Freeze heavy voices: Voice → AUDIO-16 → WAV 32-bit float
-3. Reimport via Simpliciter (1-shot playback) → CPU of that voice = 0%
-4. Keep MIDI file for later edits
-```
-
----
+1. Inspect topology and current performance before changing anything.
+2. Identify likely repeated costs such as high polyphony, per-voice effects, oversampling,
+   expensive visualizers, or unnecessarily high sample rate.
+3. Change one reversible factor at a time and compare the same musical passage.
+4. Preserve sound and latency requirements stated by the user; do not impose a generic live,
+   studio, or bounce configuration.
+5. Report what was measured, what changed, and any audible or workflow tradeoff.

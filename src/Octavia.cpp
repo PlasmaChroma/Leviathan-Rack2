@@ -21,6 +21,7 @@
 #include "visual/VisualAssets.hpp"
 #include "TemporalDeck.hpp"
 #include "SibylControl.hpp"
+#include "OctaviaConsoleMailbox.hpp"
 #include "third_party/httplib.h"
 #include <thread>
 #include <atomic>
@@ -1349,6 +1350,85 @@ struct Octavia : Module {
         svr.Get("/status", [this](const httplib::Request&, httplib::Response& res) {
             std::string b = "{"+jStr("running")+": "+(serverRunning?"true":"false")+", "+jStr("port")+": "+std::to_string(octaviaPort())+", "+jStr("version")+": "+jStr("2.10.0")+"}";
             res.set_content(b,"application/json");
+        });
+
+        // ── Octavia Console mailbox ─────────────────────────────────────────
+        // Text exchange is control/UI work only. The audio thread never reads
+        // or writes these mailboxes.
+        svr.Get(R"(/console/(\d+)/status)", [](const httplib::Request& r, httplib::Response& res) {
+            int64_t moduleId = std::stoll(r.matches[1].str());
+            auto mailbox = octavia_console::findMailbox(moduleId);
+            if (!mailbox) {
+                res.status = 404;
+                res.set_content("{\"error\":\"Octavia Console not found\"}", "application/json");
+                return;
+            }
+            auto snapshot = mailbox->snapshot();
+            std::string body = "{" + jStr("moduleId") + ":" + std::to_string(moduleId)
+                + "," + jStr("state") + ":" + jStr(octavia_console::agentStateName(snapshot.state))
+                + "," + jStr("latestPromptId") + ":" + std::to_string(snapshot.latestPromptId)
+                + "," + jStr("latestResponsePromptId") + ":" + std::to_string(snapshot.latestResponsePromptId)
+                + "," + jStr("pendingCount") + ":" + std::to_string(snapshot.pendingCount) + "}";
+            res.set_content(body, "application/json");
+        });
+        svr.Get(R"(/console/(\d+)/prompt)", [](const httplib::Request& r, httplib::Response& res) {
+            int64_t moduleId = std::stoll(r.matches[1].str());
+            auto mailbox = octavia_console::findMailbox(moduleId);
+            if (!mailbox) {
+                res.status = 404;
+                res.set_content("{\"error\":\"Octavia Console not found\"}", "application/json");
+                return;
+            }
+            uint64_t afterId = 0;
+            int waitMs = 0;
+            try {
+                if (r.has_param("after")) afterId = std::stoull(r.get_param_value("after"));
+                if (r.has_param("waitMs")) waitMs = std::stoi(r.get_param_value("waitMs"));
+            } catch (...) {
+                res.status = 400;
+                res.set_content("{\"error\":\"after and waitMs must be integers\"}", "application/json");
+                return;
+            }
+            octavia_console::Prompt prompt;
+            if (!mailbox->waitForPrompt(afterId, std::max(0, std::min(waitMs, 25000)), &prompt)) {
+                res.set_content("{\"prompt\":null}", "application/json");
+                return;
+            }
+            res.set_content("{" + jStr("prompt") + ":{" + jStr("id") + ":" +
+                std::to_string(prompt.id) + "," + jStr("text") + ":" + jStr(prompt.text) + "}}",
+                "application/json");
+        });
+        svr.Post(R"(/console/(\d+)/response)", [](const httplib::Request& r, httplib::Response& res) {
+            int64_t moduleId = std::stoll(r.matches[1].str());
+            auto mailbox = octavia_console::findMailbox(moduleId);
+            if (!mailbox) {
+                res.status = 404;
+                res.set_content("{\"error\":\"Octavia Console not found\"}", "application/json");
+                return;
+            }
+            json_error_t jsonError;
+            json_t* root = json_loads(r.body.c_str(), 0, &jsonError);
+            if (!root || !json_is_object(root)) {
+                if (root) json_decref(root);
+                res.status = 400;
+                res.set_content("{\"error\":\"response body must be a JSON object\"}", "application/json");
+                return;
+            }
+            json_t* promptIdJ = json_object_get(root, "promptId");
+            json_t* textJ = json_object_get(root, "text");
+            json_t* errorJ = json_object_get(root, "error");
+            int64_t promptId = json_is_integer(promptIdJ) ? json_integer_value(promptIdJ) : -1;
+            std::string text = json_is_string(textJ) ? json_string_value(textJ) : "";
+            bool isError = json_is_true(errorJ);
+            json_decref(root);
+            std::string error;
+            if (promptId < 0 || !mailbox->postResponse((uint64_t)promptId, std::move(text), isError, &error)) {
+                res.status = 400;
+                res.set_content("{" + jStr("error") + ":" + jStr(error.empty() ? "invalid promptId" : error) + "}",
+                    "application/json");
+                return;
+            }
+            res.set_content("{\"ok\":true}", "application/json");
         });
 
         svr.Get("/modules",  [this](const httplib::Request&, httplib::Response& res){ std::unique_lock<std::mutex> lk(cacheMtx); res.set_content(moduleListJson,"application/json"); });

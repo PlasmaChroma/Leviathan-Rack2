@@ -42,7 +42,9 @@ class ServerContractTest(unittest.TestCase):
             "vcv_disconnect_cable", "vcv_get_module_state", "vcv_set_module_state",
             "vcv_undo", "vcv_save_patch", "vcv_sibyl_get_capabilities",
             "vcv_sibyl_get_composition", "vcv_sibyl_validate", "vcv_sibyl_edit",
-            "vcv_sibyl_get_status", "vcv_sibyl_transport"
+            "vcv_sibyl_get_status", "vcv_sibyl_transport",
+            "vcv_octavia_console_status", "vcv_octavia_console_wait",
+            "vcv_octavia_console_respond"
         }
         self.assertEqual(set(names), expected_tools)
 

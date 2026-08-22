@@ -40,14 +40,15 @@ is the default.
 6. Validate unfamiliar, broad, or structural candidates before editing.
 7. Send one coherent atomic `vcv_sibyl_edit`; prefer semantic operations over replacing
    the whole composition.
-8. For quantized changes, poll status until `activeRevision` reaches the accepted
-   `revision`. A successful response does not imply the edit is sounding yet.
+8. For quantized changes, poll status for a bounded interval. If `activeRevision` still
+   lags, report the pending revision and boundary rather than waiting indefinitely. A
+   successful response does not imply the edit is sounding yet.
 9. Re-read the affected pattern, scene, or summary to verify the result.
 
-Use `nextScene` for major structural rewrites, `nextBeat` for responsive musical edits,
-and `immediate` for emergency or explicitly requested changes. Default to `preserve` phase
-policy unless the musical intent requires changed patterns or the entire arrangement to
-restart.
+Use `nextScene` for major structural rewrites only when transport is expected to reach
+another scene boundary. Use `nextBeat` for responsive musical edits and `immediate` for
+emergency or explicitly requested changes. Default to `preserve` phase policy unless the
+musical intent requires changed patterns or the entire arrangement to restart.
 
 ## Composition State Versus Runtime State
 
@@ -69,7 +70,7 @@ an undo entry.
 - With CLOCK unpatched, Sibyl runs from composition `meta.bpm`.
 - With CLOCK patched, external pulses drive time.
 - After `externalTimeoutMs` without a pulse, `onExternalStop` controls behavior:
-  `hold` preserves position, `freeRun` continues at the learned tempo, and `internal`
+  `hold` preserves position, `freeRun` continues from observed external timing, and `internal`
   falls back to `meta.bpm`.
 - With RUN patched, its voltage determines effective play/pause state and takes precedence
   over API runtime commands.

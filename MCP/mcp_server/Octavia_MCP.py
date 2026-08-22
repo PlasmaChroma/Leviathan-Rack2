@@ -69,6 +69,20 @@ async def _sibyl_call(endpoint: str, method: str = "GET", data: dict = None) -> 
         return payload
 
 
+async def _console_call(endpoint: str, method: str = "GET", data: dict = None,
+                        timeout: float = 5.0) -> dict:
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        if method == "GET":
+            r = await client.get(f"{BRIDGE_URL}/{endpoint}", headers=BRIDGE_HEADERS)
+        else:
+            r = await client.post(f"{BRIDGE_URL}/{endpoint}", json=data or {}, headers=BRIDGE_HEADERS)
+        r.raise_for_status()
+        payload = r.json()
+        if isinstance(payload, dict) and "error" in payload:
+            raise OctaviaBridgeError(str(payload["error"]))
+        return payload
+
+
 async def _resolve_port(module_id: int, port_kind: str,
                         port_id: Optional[int], port_name: Optional[str]) -> int:
     """Resolve an input/output port by index or case-insensitive display name."""
@@ -196,6 +210,60 @@ async def vcv_get_module(params: GetModuleInput) -> str:
 class SibylModuleInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     module_id: int = Field(..., description="Sibyl module ID from vcv_list_modules", ge=0)
+
+
+class OctaviaConsoleInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    module_id: int = Field(..., description="Octavia Console module ID from vcv_list_modules", ge=0)
+
+
+class OctaviaConsoleWaitInput(OctaviaConsoleInput):
+    after_prompt_id: int = Field(0, description="Return only prompts newer than this ID", ge=0)
+    wait_ms: int = Field(20000, description="Long-poll duration; capped at 25000 ms", ge=0, le=25000)
+
+
+class OctaviaConsoleResponseInput(OctaviaConsoleInput):
+    prompt_id: int = Field(..., description="Prompt ID returned by vcv_octavia_console_wait", ge=1)
+    text: str = Field(..., description="Agent response displayed in Rack", min_length=1, max_length=16384)
+    error: bool = Field(False, description="Display this response as an error")
+
+
+@mcp.tool(name="vcv_octavia_console_status",
+          annotations={"title": "Get Octavia Console Status", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_octavia_console_status(params: OctaviaConsoleInput) -> str:
+    """Read mailbox state and prompt/response generations for an Octavia Console module."""
+    try:
+        return json.dumps(await _console_call(f"console/{params.module_id}/status"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_octavia_console_wait",
+          annotations={"title": "Wait for Rack Prompt", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_octavia_console_wait(params: OctaviaConsoleWaitInput) -> str:
+    """Wait for the user to submit a prompt from an Octavia Console panel.
+
+    Use in an explicitly armed console session. When a prompt is returned, handle it as the
+    user's request using the normal Octavia tools, then call vcv_octavia_console_respond.
+    """
+    try:
+        query = urlencode({"after": params.after_prompt_id, "waitMs": params.wait_ms})
+        payload = await _console_call(f"console/{params.module_id}/prompt?{query}",
+                                      timeout=max(5.0, params.wait_ms / 1000.0 + 5.0))
+        return json.dumps(payload, indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_octavia_console_respond",
+          annotations={"title": "Reply in Octavia Console", "readOnlyHint": False, "destructiveHint": False})
+async def vcv_octavia_console_respond(params: OctaviaConsoleResponseInput) -> str:
+    """Post the final response for a Rack-submitted prompt to the Octavia Console display."""
+    try:
+        payload = {"promptId": params.prompt_id, "text": params.text, "error": params.error}
+        return json.dumps(await _console_call(f"console/{params.module_id}/response", "POST", payload), indent=2)
+    except Exception as e:
+        return _err(e)
 
 
 class SibylCompositionInput(SibylModuleInput):

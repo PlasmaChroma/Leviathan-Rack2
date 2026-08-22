@@ -242,6 +242,17 @@
       "hidden": false
     },
     {
+      "slug": "OctaviaConsole",
+      "name": "Octavia Console",
+      "description": "Optional in-Rack prompt and response console for the Octavia agent bridge.",
+      "tags": [
+        "Expander",
+        "Utility",
+        "Visual"
+      ],
+      "hidden": false
+    },
+    {
       "slug": "Sibyl",
       "name": "Sibyl",
       "description": "Headless machine-first polyphonic sequencer and arranger.",
