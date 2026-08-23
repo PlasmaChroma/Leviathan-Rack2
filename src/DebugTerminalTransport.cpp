@@ -556,6 +556,36 @@ void submitWyrmMetrics(uint32_t instanceId,
   transport().submit("Wyrm", instanceId, "ui", "metric", dataBuf, ts);
 }
 
+void submitGlZoomMetrics(const char* moduleName,
+                         uint32_t instanceId,
+                         uint32_t contextGeneration,
+                         uint32_t dirtyMask,
+                         float absoluteZoom,
+                         int framebufferWidth,
+                         int framebufferHeight,
+                         float framebufferDrawUs,
+                         uint64_t framebufferDrawCount,
+                         float shaderCompileUs,
+                         float shaderLinkUs,
+                         int shaderVariant) {
+  if (!moduleName || !moduleName[0]) return;
+  if (shouldSubmitSchema(moduleName, "gl_zoom")) {
+    transport().submit(
+      moduleName, 0u, "gl_zoom", "schema",
+      "{\"schema\":1,\"target_kind\":\"metric\",\"columns\":[{\"key\":\"context_gen\",\"label\":\"Ctx\"},{\"key\":\"dirty_mask\",\"label\":\"Dirty\"},{\"key\":\"zoom\",\"label\":\"Zoom\"},{\"key\":\"fb_w\",\"label\":\"FB W\"},{\"key\":\"fb_h\",\"label\":\"FB H\"},{\"key\":\"draw_us\",\"label\":\"FB Draw (us)\"},{\"key\":\"draw_count\",\"label\":\"Draw #\"},{\"key\":\"shader_compile_us\",\"label\":\"Compile (us)\"},{\"key\":\"shader_link_us\",\"label\":\"Link (us)\"},{\"key\":\"shader_variant\",\"label\":\"Variant\"}]}",
+      system::getTime());
+  }
+  char dataBuf[768];
+  std::snprintf(
+    dataBuf, sizeof(dataBuf),
+    "{\"context_gen\":%u,\"dirty_mask\":%u,\"zoom\":%.5f,\"fb_w\":%d,\"fb_h\":%d,\"draw_us\":%.3f,\"draw_count\":%llu,\"shader_compile_us\":%.3f,\"shader_link_us\":%.3f,\"shader_variant\":%d}",
+    contextGeneration, dirtyMask, absoluteZoom, framebufferWidth, framebufferHeight,
+    std::max(0.f, framebufferDrawUs),
+    static_cast<unsigned long long>(framebufferDrawCount),
+    std::max(0.f, shaderCompileUs), std::max(0.f, shaderLinkUs), shaderVariant);
+  transport().submit(moduleName, instanceId, "gl_zoom", "metric", dataBuf, system::getTime());
+}
+
 void submitIntegralFluxMetrics(uint32_t instanceId,
                                TimingRangeUs processUs,
                                TimingRangeUs stepUs,

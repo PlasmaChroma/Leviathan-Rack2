@@ -122,6 +122,19 @@ void submitWyrmMetrics(uint32_t instanceId,
                        uint64_t bodySampleCacheHits,
                        uint64_t bodySampleCacheMisses);
 
+void submitGlZoomMetrics(const char* moduleName,
+                         uint32_t instanceId,
+                         uint32_t contextGeneration,
+                         uint32_t dirtyMask,
+                         float absoluteZoom,
+                         int framebufferWidth,
+                         int framebufferHeight,
+                         float framebufferDrawUs,
+                         uint64_t framebufferDrawCount,
+                         float shaderCompileUs,
+                         float shaderLinkUs,
+                         int shaderVariant);
+
 void submitIntegralFluxMetrics(uint32_t instanceId,
                                TimingRangeUs processUs,
                                TimingRangeUs stepUs,

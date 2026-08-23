@@ -2631,6 +2631,9 @@ struct OctaviaMeterWidget : TransparentWidget {
 // ── Widget ────────────────────────────────────────────────────────────────────
 struct OctaviaWidget : ModuleWidget {
     int uiTimer = 0;
+    widget::FramebufferWidget* statusFramebuffer = nullptr;
+    bool statusFramebufferStateInitialized = false;
+    bool lastStatusFramebufferServerRunning = false;
     Vec titleLabelMm{15.24f, 7.5f};
     Vec portLabelMm{4.5f, 55.5f};
     Vec portValueLabelMm{26.f, 55.5f};
@@ -2644,6 +2647,13 @@ struct OctaviaWidget : ModuleWidget {
         ModuleWidget::step();
         if (!module) return;
         Octavia* m = static_cast<Octavia*>(module);
+        const bool serverRunning = m->serverRunning.load(std::memory_order_relaxed);
+        if (!statusFramebufferStateInitialized
+                || serverRunning != lastStatusFramebufferServerRunning) {
+            statusFramebufferStateInitialized = true;
+            lastStatusFramebufferServerRunning = serverRunning;
+            if (statusFramebuffer) statusFramebuffer->setDirty();
+        }
         m->updateVoltages();
         if (++uiTimer >= 60) { uiTimer=0; m->updateCache(); }
         m->processSetQueue();
@@ -2682,12 +2692,15 @@ struct OctaviaWidget : ModuleWidget {
         audioLabelLMm = anchorPoint("AUDIO_LABEL_L", audioLabelLMm);
         audioLabelRMm = anchorPoint("AUDIO_LABEL_R", audioLabelRMm);
 
-        OctaviaStatusWidget* status = new OctaviaStatusWidget(module);
         math::Rect statusRectMm(Vec(0.74f, 13.5f), Vec(29.f, 36.f));
         panel_svg::loadRectFromSvgMm(panelPath, "OCTOPUS_STATUS", &statusRectMm);
-        status->box.pos = mm2px(statusRectMm.pos);
-        status->box.size = mm2px(statusRectMm.size);
-        addChild(status);
+        statusFramebuffer = new widget::FramebufferWidget;
+        statusFramebuffer->box.pos = mm2px(statusRectMm.pos);
+        statusFramebuffer->box.size = mm2px(statusRectMm.size);
+        OctaviaStatusWidget* status = new OctaviaStatusWidget(module);
+        status->box.size = statusFramebuffer->box.size;
+        statusFramebuffer->addChild(status);
+        addChild(statusFramebuffer);
 
         addChild(createLightCentered<SmallAperture<GreenApertureLight>>(
             mm2px(anchorPoint("READ_ACTIVITY_LIGHT", Vec(11.f, 51.f))), module, Octavia::READ_ACTIVITY_LIGHT));
