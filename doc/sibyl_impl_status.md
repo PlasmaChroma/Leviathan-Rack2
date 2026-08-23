@@ -22,7 +22,7 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, se
 | **Runtime Transport** | ✅ Core Accepted | Full v1 command vocabulary, quantized publication, scene/restart policies, runtime run state, panic, and probability epochs passed focused tests and an 18-scenario live Rack/Octavia acceptance run. |
 | **Granular `EDIT` Ops** | ✅ Core Complete | All v1 operation names apply in order to a private copy, then pass through one strict full-composition validation/compile. |
 | **Edit Adoption & Phase Policies** | ✅ Complete | All boundaries and phase policies, changed-length modulo mapping, stale-gate/glide handling, newest-wins coalescing, and destination step-zero generation are covered. |
-| **OLED Display Widget** | ⏳ Sequenced After Telemetry | Real-time front-panel OLED / LED matrix display for title, scene, BPM, and track activity; must consume the planned race-free telemetry snapshot. |
+| **OLED Display Widget** | 🟡 Implementation Complete | Custom oracle display for title, prompt, scene/repeat, 16 track playheads and gates, run/clock/revision state, pending adoption, warnings, and errors. Native Rack visual acceptance remains. |
 | **Micro-timing & Swing** | ✅ Live Accepted | Straight-grid swing, signed microshift, macro swing, shifted ratchets/ties, loop wrapping, and clock/scene interaction passed live musical acceptance. |
 
 ---
@@ -229,12 +229,23 @@ Live acceptance result:
 
 ### 3.6 Front-Panel OLED Display Widget
 
-Implement a custom NanoVG `TransparentWidget` inside the OLED bezel (`res/Sibyl.panel.svg` display rect), reading only the race-free telemetry snapshot:
+Implemented a custom NanoVG `TransparentWidget` inside the OLED bezel (`res/Sibyl.panel.svg` display rect), reading the race-free telemetry and a hazard-protected immutable composition snapshot:
 
 - Song title and shortened prompt.
 - Active scene ID and repeat counter (for example `VERSE A [1/2]`).
 - Track playheads and gate activity for up to 16 channels.
 - Run state, clock source (`INT` / `EXT`), accepted/active/pending revision, and validation/error indication.
+
+Implementation details:
+
+- The central “oracle constellation” presents all 16 channels as two banks of eight phase rails. Active pattern playheads move independently and gated channels bloom with a cyan phosphor flare.
+- A scene-progress aura traverses the glass behind the constellation without feeding state back to the engine.
+- The bottom message band prioritizes validation errors, then warnings, then the shortened composition prompt. The footer distinguishes internal/external clock and exposes BPM plus active, accepted, and pending revisions.
+- Per-track phase was added to the existing sequence-guarded atomic telemetry publication. Display metadata is copied on the UI thread while holding a dedicated immutable-composition hazard, preventing reclamation races without introducing DSP allocation or locking.
+- `res/Sibyl.svg` is again the correct 10 HP editable master. The panel, labels, display bezel, hidden `SIBYL_DISPLAY` anchor, and all jack anchors now regenerate from it; the panel anchor atlas was regenerated.
+- `sibyl_module_spec` verifies display metadata, normalized active-track phase, coherent revision/repeat state, and release of the display hazard. WSL `test-fast`, native Windows `test-fast`, the focused native Windows Sibyl test, and the authoritative `plugin.dll` build pass.
+
+Remaining acceptance is visual: load the native plugin in Rack and inspect typography, clipping, animation cadence, gate flares, pending/error states, and graphics-context recreation at practical zoom levels.
 
 ---
 

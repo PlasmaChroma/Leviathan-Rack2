@@ -269,6 +269,30 @@ int main() {
 			"tied shifted onset changes pitch without retriggering or dropping the gate");
 	}
 
+	{
+		SibylModule module;
+		std::shared_ptr<sibyl::Composition> composition = std::const_pointer_cast<sibyl::Composition>(
+			makeComposition(7, false));
+		composition->meta.title = "Constellation Engine";
+		composition->meta.prompt = "A bright ascending ritual";
+		composition->arrangement[0].name = "Invocation";
+		composition->arrangement[0].repeats = 3;
+		module.acceptComposition(composition, sibyl::ApplyAt::IMMEDIATE, sibyl::PhasePolicy::RESTART_ALL);
+		processOneSample(module);
+		module.m_trackStates[0].patternPhaseBeats = 0.5;
+		processOneSample(module);
+		SibylModule::DisplaySnapshot display = module.readDisplaySnapshot();
+		check(display.title == "Constellation Engine" &&
+			display.prompt == "A bright ascending ritual" && display.scene == "Invocation",
+			"oracle snapshot resolves immutable title, prompt, and active scene metadata");
+		check((display.activeTrackMask & 1u) != 0 && display.playhead[0] > 0.49f && display.playhead[0] < 0.51f,
+			"oracle snapshot publishes a normalized active-track playhead");
+		check(display.acceptedRevision == 7 && display.activeRevision == 7 && display.sceneRepeats == 3,
+			"oracle snapshot reports coherent revision and repeat state");
+		check(module.m_displayCompositionHazard.load(std::memory_order_acquire) == nullptr,
+			"oracle snapshot releases its immutable-composition hazard");
+	}
+
 	std::cout << "[SUMMARY] sibyl_module_spec: " << (failures ? "FAILED" : "passed") << "\n";
 	return failures ? 1 : 0;
 }

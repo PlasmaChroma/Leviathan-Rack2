@@ -7,10 +7,14 @@
 #include "SibylJSON.hpp"
 #include "SibylTiming.hpp"
 #include "SibylTransport.hpp"
+#include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
 #include <jansson.h>
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdio>
 
 using namespace rack;
 
@@ -34,6 +38,7 @@ struct SibylModule : Module, SibylControl {
 	std::vector<std::shared_ptr<const sibyl::Composition>> m_compositionOwners;
 	std::atomic<const sibyl::Composition*> m_activeCompositionPtr{nullptr};
 	std::atomic<const sibyl::Composition*> m_compositionHazard{nullptr};
+	std::atomic<const sibyl::Composition*> m_displayCompositionHazard{nullptr};
 	std::atomic<int> m_activeRevision{0};
 	std::vector<std::unique_ptr<const sibyl::AdoptionRequest>> m_adoptionOwners;
 	std::atomic<const sibyl::AdoptionRequest*> m_pendingAdoptionPtr{nullptr};
@@ -69,6 +74,7 @@ struct SibylModule : Module, SibylControl {
 	std::atomic<uint16_t> m_telemetryGateMask{0};
 	std::atomic<bool> m_telemetryExternalClock{false};
 	std::atomic<double> m_telemetryEstimatedBpm{120.0};
+	std::array<std::atomic<double>, 16> m_telemetryTrackPhase;
 
 	struct TelemetrySnapshot {
 		int sceneIndex = 0;
@@ -77,6 +83,27 @@ struct SibylModule : Module, SibylControl {
 		uint16_t gateMask = 0;
 		bool externalClock = false;
 		double estimatedBpm = 120.0;
+		std::array<double, 16> trackPhase {};
+	};
+
+	struct DisplaySnapshot {
+		std::string title;
+		std::string prompt;
+		std::string scene;
+		std::string error;
+		std::array<float, 16> playhead {};
+		uint16_t activeTrackMask = 0;
+		uint16_t gateMask = 0;
+		int sceneRepeat = 0;
+		int sceneRepeats = 1;
+		int acceptedRevision = 0;
+		int activeRevision = 0;
+		int pendingRevision = -1;
+		int warningCount = 0;
+		float sceneProgress = 0.f;
+		float bpm = 120.f;
+		bool running = true;
+		bool externalClock = false;
 	};
 
 	struct TrackState {
@@ -134,16 +161,18 @@ struct SibylModule : Module, SibylControl {
 		m_compositionOwners.push_back(comp);
 		m_acceptedCompositionPtr = comp.get();
 		m_activeCompositionPtr.store(comp.get(), std::memory_order_release);
+		for (auto& phase : m_telemetryTrackPhase) phase.store(0.0, std::memory_order_relaxed);
 	}
 
 	void reclaimPublishedObjects() {
 		const sibyl::Composition* active = m_activeCompositionPtr.load(std::memory_order_acquire);
 		const sibyl::Composition* hazard = m_compositionHazard.load(std::memory_order_acquire);
+		const sibyl::Composition* displayHazard = m_displayCompositionHazard.load(std::memory_order_acquire);
 		const sibyl::AdoptionRequest* pendingAdoption = m_pendingAdoptionPtr.load(std::memory_order_acquire);
 		m_compositionOwners.erase(std::remove_if(m_compositionOwners.begin(), m_compositionOwners.end(),
 			[&](const std::shared_ptr<const sibyl::Composition>& owner) {
 			const sibyl::Composition* ptr = owner.get();
-			return ptr != m_acceptedCompositionPtr && ptr != active && ptr != hazard &&
+			return ptr != m_acceptedCompositionPtr && ptr != active && ptr != hazard && ptr != displayHazard &&
 				(!pendingAdoption || pendingAdoption->composition != ptr);
 		}), m_compositionOwners.end());
 
@@ -184,6 +213,8 @@ struct SibylModule : Module, SibylControl {
 		m_telemetryGateMask.store(gateMask, std::memory_order_relaxed);
 		m_telemetryExternalClock.store(externalClock, std::memory_order_relaxed);
 		m_telemetryEstimatedBpm.store(estimatedBpm, std::memory_order_relaxed);
+		for (int channel = 0; channel < 16; ++channel)
+			m_telemetryTrackPhase[channel].store(m_trackStates[channel].patternPhaseBeats, std::memory_order_relaxed);
 		m_telemetrySequence.fetch_add(1, std::memory_order_release);
 	}
 
@@ -198,8 +229,56 @@ struct SibylModule : Module, SibylControl {
 			snapshot.gateMask = m_telemetryGateMask.load(std::memory_order_relaxed);
 			snapshot.externalClock = m_telemetryExternalClock.load(std::memory_order_relaxed);
 			snapshot.estimatedBpm = m_telemetryEstimatedBpm.load(std::memory_order_relaxed);
+			for (int channel = 0; channel < 16; ++channel)
+				snapshot.trackPhase[channel] = m_telemetryTrackPhase[channel].load(std::memory_order_relaxed);
 			if (before == m_telemetrySequence.load(std::memory_order_acquire)) return snapshot;
 		}
+	}
+
+	DisplaySnapshot readDisplaySnapshot() {
+		DisplaySnapshot display;
+		const TelemetrySnapshot telemetry = readTelemetry();
+		display.gateMask = telemetry.gateMask;
+		display.externalClock = telemetry.externalClock;
+		display.bpm = static_cast<float>(telemetry.estimatedBpm);
+		display.running = m_effectiveRunning.load(std::memory_order_acquire);
+		display.acceptedRevision = m_acceptedRevision;
+		display.activeRevision = m_activeRevision.load(std::memory_order_acquire);
+		display.warningCount = static_cast<int>(m_lastWarnings.size());
+		display.error = m_lastError;
+		const sibyl::AdoptionRequest* pending = m_pendingAdoptionPtr.load(std::memory_order_acquire);
+		if (pending && pending->composition && pending->composition->revision != display.activeRevision)
+			display.pendingRevision = pending->composition->revision;
+
+		const sibyl::Composition* composition = acquirePublished(m_activeCompositionPtr, m_displayCompositionHazard);
+		if (composition) {
+			display.title = composition->meta.title;
+			display.prompt = composition->meta.prompt;
+			if (telemetry.sceneIndex >= 0 && telemetry.sceneIndex < static_cast<int>(composition->arrangement.size())) {
+				const sibyl::Scene& scene = composition->arrangement[telemetry.sceneIndex];
+				display.scene = scene.name.empty() ? scene.id : scene.name;
+				display.sceneRepeat = telemetry.sceneRepeat;
+				display.sceneRepeats = std::max(1, scene.repeats);
+				display.sceneProgress = scene.lengthBeats > 0.f
+					? clamp(static_cast<float>(telemetry.scenePhase / scene.lengthBeats), 0.f, 1.f) : 0.f;
+				for (const sibyl::TrackDef& track : composition->tracks) {
+					if (track.channel < 0 || track.channel >= 16) continue;
+					auto assignment = scene.tracks.find(track.id);
+					if (assignment == scene.tracks.end() || assignment->second.patternId.empty()) continue;
+					auto pattern = composition->patterns.find(assignment->second.patternId);
+					if (pattern == composition->patterns.end()) continue;
+					display.activeTrackMask |= uint16_t(1u << track.channel);
+					const double duration = pattern->second.length * pattern->second.resolutionBeats;
+					if (duration > 0.0) {
+						double phase = std::fmod(telemetry.trackPhase[track.channel], duration);
+						if (phase < 0.0) phase += duration;
+						display.playhead[track.channel] = static_cast<float>(phase / duration);
+					}
+				}
+			}
+		}
+		m_displayCompositionHazard.store(nullptr, std::memory_order_release);
+		return display;
 	}
 
 	void acceptComposition(const sibyl::CompositionPtr& composition, sibyl::ApplyAt applyAt,
@@ -1105,6 +1184,195 @@ struct SibylModule : Module, SibylControl {
 };
 
 #ifndef SIBYL_MODULE_TEST
+struct SibylOracleDisplay final : TransparentWidget {
+	SibylModule* module = nullptr;
+
+	explicit SibylOracleDisplay(SibylModule* module) : module(module) {}
+
+	static std::string shortened(const std::string& text, size_t limit) {
+		if (text.size() <= limit) return text;
+		if (limit <= 3) return text.substr(0, limit);
+		return text.substr(0, limit - 3) + "...";
+	}
+
+	static std::array<std::string, 2> wrappedPrompt(const std::string& source, size_t columns) {
+		std::array<std::string, 2> lines;
+		size_t cursor = 0;
+		for (int line = 0; line < 2 && cursor < source.size(); ++line) {
+			while (cursor < source.size() && source[cursor] == ' ') ++cursor;
+			const size_t remaining = source.size() - cursor;
+			if (line == 1 && remaining > columns) {
+				lines[line] = shortened(source.substr(cursor), columns);
+				break;
+			}
+			if (remaining <= columns) {
+				lines[line] = source.substr(cursor);
+				break;
+			}
+			size_t split = source.rfind(' ', cursor + columns);
+			if (split == std::string::npos || split < cursor) split = cursor + columns;
+			lines[line] = source.substr(cursor, split - cursor);
+			cursor = split;
+		}
+		return lines;
+	}
+
+	static void text(const DrawArgs& args, float x, float y, float size, int align,
+			NVGcolor color, const std::string& value) {
+		if (!APP || !APP->window || !APP->window->uiFont) return;
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFontSize(args.vg, size);
+		nvgTextAlign(args.vg, align);
+		nvgFillColor(args.vg, color);
+		nvgText(args.vg, x, y, value.c_str(), nullptr);
+	}
+
+	void draw(const DrawArgs& args) override {
+		const float w = box.size.x;
+		const float h = box.size.y;
+		if (w <= 1.f || h <= 1.f) return;
+		SibylModule::DisplaySnapshot state;
+		if (module) {
+			state = module->readDisplaySnapshot();
+		} else {
+			state.title = "THE ORACLE AWAKENS";
+			state.prompt = "Awaiting a composition from beyond the rack...";
+			state.scene = "PREMONITION";
+			state.activeTrackMask = 0x00ffu;
+			state.gateMask = 0x0029u;
+			state.sceneRepeats = 2;
+			state.sceneProgress = 0.37f;
+			state.acceptedRevision = state.activeRevision = 1;
+			for (int i = 0; i < 16; ++i) state.playhead[i] = std::fmod(0.11f * i + 0.18f, 1.f);
+		}
+
+		nvgSave(args.vg);
+		nvgScissor(args.vg, 0.f, 0.f, w, h);
+		NVGpaint glass = nvgLinearGradient(args.vg, 0.f, 0.f, 0.f, h,
+			nvgRGBA(5, 14, 25, 255), nvgRGBA(1, 4, 10, 255));
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, 0.f, 0.f, w, h, 4.f);
+		nvgFillPaint(args.vg, glass);
+		nvgFill(args.vg);
+
+		// A slow scene-phase aura makes the display read as an instrument rather
+		// than a status terminal. It is pure UI work and never feeds the engine.
+		const float auraX = w * (0.18f + 0.64f * state.sceneProgress);
+		NVGpaint aura = nvgRadialGradient(args.vg, auraX, h * 0.48f, 1.f, w * 0.42f,
+			nvgRGBA(51, 224, 232, 42), nvgRGBA(71, 42, 155, 0));
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0.f, 0.f, w, h);
+		nvgFillPaint(args.vg, aura);
+		nvgFill(args.vg);
+
+		const float pad = 6.f;
+		const NVGcolor cyan = nvgRGBA(80, 232, 238, 255);
+		const NVGcolor violet = nvgRGBA(167, 139, 250, 255);
+		const NVGcolor dim = nvgRGBA(126, 151, 174, 220);
+		const NVGcolor white = nvgRGBA(226, 241, 247, 255);
+		const NVGcolor red = nvgRGBA(255, 91, 119, 255);
+
+		text(args, pad, 5.f, 8.8f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, white,
+			shortened(state.title.empty() ? "UNTITLED" : state.title, 27));
+		std::string runLabel = state.running ? "RUN" : "HOLD";
+		text(args, w - pad, 5.f, 7.1f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP,
+			state.running ? cyan : red, runLabel);
+
+		const float sceneY = 20.f;
+		text(args, pad, sceneY, 10.2f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, cyan,
+			shortened(state.scene.empty() ? "NO SCENE" : state.scene, 22));
+		char repeatText[24];
+		std::snprintf(repeatText, sizeof(repeatText), "%d/%d", state.sceneRepeat + 1, state.sceneRepeats);
+		text(args, w - pad, sceneY + 1.f, 7.2f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, violet, repeatText);
+
+		// Give both eight-channel banks equal breathing room. The lower bank used
+		// to surrender too much height to the message/revision footer, which was
+		// easy to miss in patches that only populated channels 1-8.
+		const float gridTop = 35.f;
+		const float gridBottom = h - 38.f;
+		const float cellW = (w - pad * 2.f) / 8.f;
+		const float rowH = std::max(8.f, (gridBottom - gridTop) * 0.5f);
+		for (int channel = 0; channel < 16; ++channel) {
+			const int column = channel & 7;
+			const int row = channel >> 3;
+			const float x0 = pad + column * cellW + 2.f;
+			const float x1 = pad + (column + 1) * cellW - 3.f;
+			const float y = gridTop + (row + 0.5f) * rowH;
+			const bool active = (state.activeTrackMask & uint16_t(1u << channel)) != 0;
+			const bool gated = (state.gateMask & uint16_t(1u << channel)) != 0;
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, x0, y);
+			nvgLineTo(args.vg, x1, y);
+			nvgStrokeWidth(args.vg, gated ? 1.4f : 0.75f);
+			nvgStrokeColor(args.vg, active ? nvgRGBA(64, 124, 150, 205) : nvgRGBA(35, 49, 65, 155));
+			nvgStroke(args.vg);
+			if (active) {
+				const float px = x0 + clamp(state.playhead[channel], 0.f, 1.f) * (x1 - x0);
+				if (gated) {
+					NVGpaint glow = nvgRadialGradient(args.vg, px, y, 0.4f, 5.f,
+						nvgRGBA(74, 247, 239, 190), nvgRGBA(74, 247, 239, 0));
+					nvgBeginPath(args.vg);
+					nvgCircle(args.vg, px, y, 5.f);
+					nvgFillPaint(args.vg, glow);
+					nvgFill(args.vg);
+				}
+				nvgBeginPath(args.vg);
+				nvgCircle(args.vg, px, y, gated ? 2.2f : 1.25f);
+				nvgFillColor(args.vg, gated ? cyan : violet);
+				nvgFill(args.vg);
+			}
+			char channelText[4];
+			std::snprintf(channelText, sizeof(channelText), "%X", channel + 1);
+			text(args, x0, y - 5.2f, 4.4f, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
+				active ? dim : nvgRGBA(55, 66, 80, 160), channelText);
+		}
+
+		const float messageTop = h - 31.f;
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, pad, messageTop - 3.f);
+		nvgLineTo(args.vg, w - pad, messageTop - 3.f);
+		nvgStrokeWidth(args.vg, 0.7f);
+		nvgStrokeColor(args.vg, nvgRGBA(68, 188, 199, 90));
+		nvgStroke(args.vg);
+		const std::string message = !state.error.empty() ? "! " + state.error
+			: (state.warningCount > 0 ? "! " + std::to_string(state.warningCount) + " WARNING"
+			: (state.prompt.empty() ? "THE MACHINE IS LISTENING" : state.prompt));
+		const std::array<std::string, 2> promptLines = wrappedPrompt(message, 49);
+		text(args, pad, messageTop, 6.2f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP,
+			state.error.empty() ? dim : red, promptLines[0]);
+		text(args, pad, messageTop + 7.2f, 6.2f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP,
+			state.error.empty() ? dim : red, promptLines[1]);
+
+		char footer[64];
+		if (state.pendingRevision >= 0) {
+			std::snprintf(footer, sizeof(footer), "%s  %5.1f  R%d>%d  P%d",
+				state.externalClock ? "EXT" : "INT", state.bpm,
+				state.activeRevision, state.acceptedRevision, state.pendingRevision);
+		} else {
+			std::snprintf(footer, sizeof(footer), "%s  %5.1f BPM  REV %d",
+				state.externalClock ? "EXT" : "INT", state.bpm, state.activeRevision);
+		}
+		text(args, w - pad, h - 5.f, 5.8f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, violet, footer);
+
+		// Fine scanlines and a bright inner edge sell the glass/ phosphor depth.
+		for (float y = 1.f; y < h; y += 3.f) {
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, 1.f, y);
+			nvgLineTo(args.vg, w - 1.f, y);
+			nvgStrokeWidth(args.vg, 0.45f);
+			nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 42));
+			nvgStroke(args.vg);
+		}
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, 0.5f, 0.5f, w - 1.f, h - 1.f, 4.f);
+		nvgStrokeWidth(args.vg, 1.f);
+		nvgStrokeColor(args.vg, nvgRGBA(64, 224, 230, 145));
+		nvgStroke(args.vg);
+		nvgResetScissor(args.vg);
+		nvgRestore(args.vg);
+	}
+};
+
 struct SibylWidget : ModuleWidget {
 	explicit SibylWidget(SibylModule* module) {
 		setModule(module);
@@ -1115,41 +1383,35 @@ struct SibylWidget : ModuleWidget {
 		splitPanel.addCompactLeviathanLogoBranding();
 		visual_assets::addFractalGlassOverlay(this, panelPath, splitPanel.panelSurfaceEffectWidget());
 
-		// Inputs: Left column (x = 8.5mm), Second column (x = 20.0mm)
-		// Row 1: y = 49mm (CLK, RUN)
-		addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(8.5f, 49.0f)), module, SibylModule::CLOCK_INPUT));
-		addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(20.0f, 49.0f)), module, SibylModule::RUN_INPUT));
+		math::Rect displayMm(Vec(2.4f, 13.f), Vec(46.f, 24.f));
+		panel_svg::loadRectFromSvgMm(panelPath, "SIBYL_DISPLAY", &displayMm);
+		auto* display = new SibylOracleDisplay(module);
+		display->box.pos = mm2px(displayMm.pos);
+		display->box.size = mm2px(displayMm.size);
+		addChild(display);
+		auto anchor = [&](const char* id, Vec fallbackMm) {
+			Vec pointMm = fallbackMm;
+			panel_svg::loadPointFromSvgMm(panelPath, id, &pointMm);
+			return mm2px(pointMm);
+		};
 
-		// Row 2: y = 64mm (RST, TRIG)
-		addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(8.5f, 64.0f)), module, SibylModule::RESET_INPUT));
-		addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(20.0f, 64.0f)), module, SibylModule::SCENE_TRIG_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(anchor("CLOCK_INPUT", Vec(8.5f, 55.f)), module, SibylModule::CLOCK_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(anchor("RUN_INPUT", Vec(20.f, 55.f)), module, SibylModule::RUN_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(anchor("RESET_INPUT", Vec(8.5f, 69.5f)), module, SibylModule::RESET_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(anchor("SCENE_TRIG_INPUT", Vec(20.f, 69.5f)), module, SibylModule::SCENE_TRIG_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(anchor("SCENE_CV_INPUT", Vec(8.5f, 84.f)), module, SibylModule::SCENE_CV_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(anchor("MACRO_1_INPUT", Vec(8.5f, 98.5f)), module, SibylModule::MACRO_1_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(anchor("MACRO_2_INPUT", Vec(20.f, 98.5f)), module, SibylModule::MACRO_2_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(anchor("MACRO_3_INPUT", Vec(8.5f, 113.f)), module, SibylModule::MACRO_3_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(anchor("MACRO_4_INPUT", Vec(20.f, 113.f)), module, SibylModule::MACRO_4_INPUT));
 
-		// Row 3: y = 79mm (S.CV)
-		addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(8.5f, 79.0f)), module, SibylModule::SCENE_CV_INPUT));
-
-		// Row 4: y = 94mm (M1, M2)
-		addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(8.5f, 94.0f)), module, SibylModule::MACRO_1_INPUT));
-		addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(20.0f, 94.0f)), module, SibylModule::MACRO_2_INPUT));
-
-		// Row 5: y = 109mm (M3, M4)
-		addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(8.5f, 109.0f)), module, SibylModule::MACRO_3_INPUT));
-		addInput(createInputCentered<Magitek2InputJack>(mm2px(Vec(20.0f, 109.0f)), module, SibylModule::MACRO_4_INPUT));
-
-		// Outputs: Third column (x = 32.5mm), Fourth column (x = 43.0mm)
-		// Row 1: y = 49mm (V/OCT, GATE)
-		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(Vec(32.5f, 49.0f)), module, SibylModule::V_OCT_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(Vec(43.0f, 49.0f)), module, SibylModule::GATE_OUTPUT));
-
-		// Row 2: y = 64mm (VEL, MOD)
-		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(Vec(32.5f, 64.0f)), module, SibylModule::VELOCITY_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(Vec(43.0f, 64.0f)), module, SibylModule::MOD_OUTPUT));
-
-		// Row 3: y = 79mm (CLK, SCENE)
-		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(Vec(32.5f, 79.0f)), module, SibylModule::CLOCK_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(Vec(43.0f, 79.0f)), module, SibylModule::SCENE_OUTPUT));
-
-		// Row 4: y = 94mm (EOC)
-		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(Vec(37.75f, 94.0f)), module, SibylModule::EOC_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("V_OCT_OUTPUT", Vec(32.5f, 55.f)), module, SibylModule::V_OCT_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("GATE_OUTPUT", Vec(43.f, 55.f)), module, SibylModule::GATE_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("VELOCITY_OUTPUT", Vec(32.5f, 69.5f)), module, SibylModule::VELOCITY_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("MOD_OUTPUT", Vec(43.f, 69.5f)), module, SibylModule::MOD_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("CLOCK_OUTPUT", Vec(32.5f, 84.f)), module, SibylModule::CLOCK_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("SCENE_OUTPUT", Vec(43.f, 84.f)), module, SibylModule::SCENE_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("EOC_OUTPUT", Vec(37.75f, 98.5f)), module, SibylModule::EOC_OUTPUT));
 	}
 };
 
