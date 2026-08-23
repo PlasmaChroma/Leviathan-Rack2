@@ -1216,6 +1216,14 @@ struct SibylOracleDisplay final : TransparentWidget {
 		return "...";
 	}
 
+	static float measuredTextWidth(const DrawArgs& args, const std::string& value, float fontSize) {
+		if (!APP || !APP->window || !APP->window->uiFont || value.empty()) return 0.f;
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFontSize(args.vg, fontSize);
+		float bounds[4] {};
+		return nvgTextBounds(args.vg, 0.f, 0.f, value.c_str(), nullptr, bounds);
+	}
+
 	void draw(const DrawArgs& args) override {
 		const float w = box.size.x;
 		const float h = box.size.y;
@@ -1261,17 +1269,21 @@ struct SibylOracleDisplay final : TransparentWidget {
 		const NVGcolor white = nvgRGBA(226, 241, 247, 255);
 		const NVGcolor red = nvgRGBA(255, 91, 119, 255);
 
-		text(args, pad, 5.f, 8.8f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, white,
-			fittedText(args, state.title.empty() ? "UNTITLED" : state.title, 8.8f, w - pad * 2.f - 34.f));
 		std::string runLabel = state.running ? "RUN" : "HOLD";
+		const float runWidth = measuredTextWidth(args, runLabel, 7.1f);
+		text(args, pad, 5.f, 8.8f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, white,
+			fittedText(args, state.title.empty() ? "UNTITLED" : state.title, 8.8f,
+				std::max(1.f, w - pad * 2.f - runWidth - 7.f)));
 		text(args, w - pad, 5.f, 7.1f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP,
 			state.running ? cyan : red, runLabel);
 
 		const float sceneY = 20.f;
-		text(args, pad, sceneY, 10.2f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, cyan,
-			fittedText(args, state.scene.empty() ? "NO SCENE" : state.scene, 10.2f, w - pad * 2.f - 34.f));
 		char repeatText[24];
 		std::snprintf(repeatText, sizeof(repeatText), "%d/%d", state.sceneRepeat + 1, state.sceneRepeats);
+		const float repeatWidth = measuredTextWidth(args, repeatText, 7.2f);
+		text(args, pad, sceneY, 10.2f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, cyan,
+			fittedText(args, state.scene.empty() ? "NO SCENE" : state.scene, 10.2f,
+				std::max(1.f, w - pad * 2.f - repeatWidth - 7.f)));
 		text(args, w - pad, sceneY + 1.f, 7.2f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, violet, repeatText);
 
 		// Give both eight-channel banks equal breathing room. The lower bank used
@@ -1311,8 +1323,8 @@ struct SibylOracleDisplay final : TransparentWidget {
 				nvgFill(args.vg);
 			}
 			char channelText[4];
-			std::snprintf(channelText, sizeof(channelText), "%X", channel + 1);
-			text(args, x0, y - 5.2f, 4.4f, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
+			std::snprintf(channelText, sizeof(channelText), "%d", channel + 1);
+			text(args, x0, y - 5.6f, 5.2f, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
 				active ? dim : nvgRGBA(55, 66, 80, 160), channelText);
 		}
 
