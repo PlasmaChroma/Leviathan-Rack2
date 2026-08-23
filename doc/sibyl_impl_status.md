@@ -12,7 +12,7 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, se
 
 | Component | Status | Notes |
 |---|---|---|
-| **Module Lifecycle & Panel** | ✅ Complete | 10 HP panel (`res/Sibyl.panel.svg` + `res/Sibyl.labels.svg`), 16 physical jacks, tooltips. |
+| **Module Lifecycle & Panel** | ✅ Complete | 14 HP panel (`res/Sibyl.panel.svg` + `res/Sibyl.labels.svg`), 16 physical jacks, tooltips. |
 | **Patch Persistence** | 🟡 Substantial | Full composition serialization, authoritative revision assignment, failure/warning status, and safe immediate load adoption exist; broader persistence/undo integration tests remain. |
 | **Composition Compiler** | 🟡 Contract Core | Strict v1 types, enums, structural limits, pitch grammar, ranges, references, macro targets, and forward-compatible warnings are tested. Further cross-object semantic checks remain. |
 | **Lock-Free DSP Engine** | ✅ Live Accepted | Immutable publication uses audio-thread hazard pointers and bounded control-thread reclamation; a 129-operation live edit/transport stress run passed without anomalies. |
@@ -57,7 +57,7 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, se
 - Added `tests/sibyl_edit_spec.cpp` to `test-fast`, covering the complete mutation families, ordering, reference protection, missing/unknown objects, validator rejection, and base-snapshot immutability.
 
 ### 2.5 Hardware I/O & Real-Time Sync
-- **10 HP Physical Interface:**
+- **14 HP Physical Interface:**
   - `CLOCK IN`: Schmitt trigger with interval timing measurement, `externalPpqn` division, and timeout fallback (`hold`, `freeRun`, `internal`).
   - `RUN IN`: High/low effective run precedence with falling-edge gate closure and position-preserving resume.
   - `RESET IN`: Schmitt-triggered arrangement reset at the next external clock edge or internal beat, applying destination phase behavior.
@@ -242,7 +242,8 @@ Implementation details:
 - A scene-progress aura traverses the glass behind the constellation without feeding state back to the engine.
 - The bottom message band prioritizes validation errors, then warnings, then the shortened composition prompt. The footer distinguishes internal/external clock and exposes BPM plus active, accepted, and pending revisions.
 - Per-track phase was added to the existing sequence-guarded atomic telemetry publication. Display metadata is copied on the UI thread while holding a dedicated immutable-composition hazard, preventing reclamation races without introducing DSP allocation or locking.
-- `res/Sibyl.svg` is again the correct 10 HP editable master. The panel, labels, display bezel, hidden `SIBYL_DISPLAY` anchor, and all jack anchors now regenerate from it; the panel anchor atlas was regenerated.
+- `res/Sibyl.svg` is the 14 HP editable master. The expanded panel, outlined labels, display bezel, hidden `SIBYL_DISPLAY` anchor, and all jack anchors regenerate from it; the panel anchor atlas was regenerated.
+- The wider layout replaces five narrow I/O rows with separate three-column input and output matrices. This gives the oracle substantially more width and height while preserving clear signal grouping.
 - `sibyl_module_spec` verifies display metadata, normalized active-track phase, coherent revision/repeat state, and release of the display hazard. WSL `test-fast`, native Windows `test-fast`, the focused native Windows Sibyl test, and the authoritative `plugin.dll` build pass.
 
 Remaining acceptance is visual: load the native plugin in Rack and inspect typography, clipping, animation cadence, gate flares, pending/error states, and graphics-context recreation at practical zoom levels.
@@ -265,6 +266,6 @@ src/
 ├── SibylTransport.cpp  # Strict command parser and normalization helpers
 └── SibylTypes.hpp      # C++ data structures for immutable Composition snapshots
 res/
-├── Sibyl.panel.svg     # 10 HP vector background panel & bezel art
+├── Sibyl.panel.svg     # 14 HP vector background panel & bezel art
 └── Sibyl.labels.svg    # Vector label overlays for all 16 jacks
 ```

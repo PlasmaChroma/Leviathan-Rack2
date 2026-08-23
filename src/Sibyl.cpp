@@ -1189,34 +1189,6 @@ struct SibylOracleDisplay final : TransparentWidget {
 
 	explicit SibylOracleDisplay(SibylModule* module) : module(module) {}
 
-	static std::string shortened(const std::string& text, size_t limit) {
-		if (text.size() <= limit) return text;
-		if (limit <= 3) return text.substr(0, limit);
-		return text.substr(0, limit - 3) + "...";
-	}
-
-	static std::array<std::string, 2> wrappedPrompt(const std::string& source, size_t columns) {
-		std::array<std::string, 2> lines;
-		size_t cursor = 0;
-		for (int line = 0; line < 2 && cursor < source.size(); ++line) {
-			while (cursor < source.size() && source[cursor] == ' ') ++cursor;
-			const size_t remaining = source.size() - cursor;
-			if (line == 1 && remaining > columns) {
-				lines[line] = shortened(source.substr(cursor), columns);
-				break;
-			}
-			if (remaining <= columns) {
-				lines[line] = source.substr(cursor);
-				break;
-			}
-			size_t split = source.rfind(' ', cursor + columns);
-			if (split == std::string::npos || split < cursor) split = cursor + columns;
-			lines[line] = source.substr(cursor, split - cursor);
-			cursor = split;
-		}
-		return lines;
-	}
-
 	static void text(const DrawArgs& args, float x, float y, float size, int align,
 			NVGcolor color, const std::string& value) {
 		if (!APP || !APP->window || !APP->window->uiFont) return;
@@ -1225,6 +1197,23 @@ struct SibylOracleDisplay final : TransparentWidget {
 		nvgTextAlign(args.vg, align);
 		nvgFillColor(args.vg, color);
 		nvgText(args.vg, x, y, value.c_str(), nullptr);
+	}
+
+	static std::string fittedText(const DrawArgs& args, const std::string& source,
+			float fontSize, float maxWidth) {
+		if (!APP || !APP->window || !APP->window->uiFont || source.empty()) return source;
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFontSize(args.vg, fontSize);
+		float bounds[4] {};
+		if (nvgTextBounds(args.vg, 0.f, 0.f, source.c_str(), nullptr, bounds) <= maxWidth) return source;
+		std::string fitted = source;
+		while (!fitted.empty()) {
+			fitted.pop_back();
+			const std::string candidate = fitted + "...";
+			if (nvgTextBounds(args.vg, 0.f, 0.f, candidate.c_str(), nullptr, bounds) <= maxWidth)
+				return candidate;
+		}
+		return "...";
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -1273,14 +1262,14 @@ struct SibylOracleDisplay final : TransparentWidget {
 		const NVGcolor red = nvgRGBA(255, 91, 119, 255);
 
 		text(args, pad, 5.f, 8.8f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, white,
-			shortened(state.title.empty() ? "UNTITLED" : state.title, 27));
+			fittedText(args, state.title.empty() ? "UNTITLED" : state.title, 8.8f, w - pad * 2.f - 34.f));
 		std::string runLabel = state.running ? "RUN" : "HOLD";
 		text(args, w - pad, 5.f, 7.1f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP,
 			state.running ? cyan : red, runLabel);
 
 		const float sceneY = 20.f;
 		text(args, pad, sceneY, 10.2f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, cyan,
-			shortened(state.scene.empty() ? "NO SCENE" : state.scene, 22));
+			fittedText(args, state.scene.empty() ? "NO SCENE" : state.scene, 10.2f, w - pad * 2.f - 34.f));
 		char repeatText[24];
 		std::snprintf(repeatText, sizeof(repeatText), "%d/%d", state.sceneRepeat + 1, state.sceneRepeats);
 		text(args, w - pad, sceneY + 1.f, 7.2f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, violet, repeatText);
@@ -1289,7 +1278,7 @@ struct SibylOracleDisplay final : TransparentWidget {
 		// to surrender too much height to the message/revision footer, which was
 		// easy to miss in patches that only populated channels 1-8.
 		const float gridTop = 35.f;
-		const float gridBottom = h - 38.f;
+		const float gridBottom = h - 42.f;
 		const float cellW = (w - pad * 2.f) / 8.f;
 		const float rowH = std::max(8.f, (gridBottom - gridTop) * 0.5f);
 		for (int channel = 0; channel < 16; ++channel) {
@@ -1327,21 +1316,29 @@ struct SibylOracleDisplay final : TransparentWidget {
 				active ? dim : nvgRGBA(55, 66, 80, 160), channelText);
 		}
 
-		const float messageTop = h - 31.f;
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, pad, messageTop - 3.f);
-		nvgLineTo(args.vg, w - pad, messageTop - 3.f);
-		nvgStrokeWidth(args.vg, 0.7f);
-		nvgStrokeColor(args.vg, nvgRGBA(68, 188, 199, 90));
-		nvgStroke(args.vg);
+		const float messageTop = h - 40.f;
 		const std::string message = !state.error.empty() ? "! " + state.error
 			: (state.warningCount > 0 ? "! " + std::to_string(state.warningCount) + " WARNING"
 			: (state.prompt.empty() ? "THE MACHINE IS LISTENING" : state.prompt));
-		const std::array<std::string, 2> promptLines = wrappedPrompt(message, 49);
-		text(args, pad, messageTop, 6.2f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP,
-			state.error.empty() ? dim : red, promptLines[0]);
-		text(args, pad, messageTop + 7.2f, 6.2f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP,
-			state.error.empty() ? dim : red, promptLines[1]);
+		if (APP && APP->window && APP->window->uiFont) {
+			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+			nvgFontSize(args.vg, 7.2f);
+			nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+			nvgFillColor(args.vg, state.error.empty() ? dim : red);
+			NVGtextRow rows[3] {};
+			const int rowCount = nvgTextBreakLines(args.vg, message.c_str(), nullptr,
+				w - pad * 2.f, rows, 3);
+			for (int row = 0; row < rowCount; ++row) {
+				const bool hasMore = row == rowCount - 1 && rows[row].next && *rows[row].next != '\0';
+				if (hasMore) {
+					std::string lastLine(rows[row].start, rows[row].end);
+					lastLine = fittedText(args, lastLine + "...", 7.2f, w - pad * 2.f);
+					nvgText(args.vg, pad, messageTop + row * 8.2f, lastLine.c_str(), nullptr);
+				} else {
+					nvgText(args.vg, pad, messageTop + row * 8.2f, rows[row].start, rows[row].end);
+				}
+			}
+		}
 
 		char footer[64];
 		if (state.pendingRevision >= 0) {

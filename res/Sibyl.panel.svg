@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="50.8mm" height="128.5mm" viewBox="0 0 5080 12850" version="1.1" id="sibyl-master">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="71.12mm" height="128.5mm" viewBox="0 0 7112 12850" version="1.1" id="sibyl-master">
   <defs>
     <linearGradient id="sibyl-bg" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#0e1320" />
@@ -22,32 +22,36 @@
     </radialGradient>
   </defs>
   <g id="panel_art" inkscape:label="Panel artwork">
-    <rect x="0" y="0" width="5080" height="12850" fill="url(#sibyl-bg)" />
-    <rect x="45" y="45" width="4990" height="12760" rx="90" fill="none" stroke="url(#sibyl-edge)" stroke-width="34" opacity="0.8" />
-    <path d="M240 1100H4840" fill="none" stroke="#30d7de" stroke-width="16" opacity="0.4" />
-    <rect x="190" y="1180" width="4700" height="3220" rx="165" fill="#02050a" stroke="#6048bd" stroke-width="46" opacity="0.95" />
-    <rect x="225" y="1215" width="4630" height="3150" rx="135" fill="url(#oracle-halo)" stroke="#36ced6" stroke-width="12" opacity="0.72" />
-    <path d="M360 1320H4720M360 4230H4720" stroke="#7c62e5" stroke-width="9" opacity="0.38" />
-    <rect x="240" y="4600" width="2350" height="7700" rx="120" fill="url(#sibyl-section)" stroke="#3a4b6e" stroke-width="14" opacity="0.6" />
-    <rect x="2690" y="4600" width="2150" height="7700" rx="120" fill="url(#sibyl-section)" stroke="#5d43b8" stroke-width="14" opacity="0.6" />
+    <rect x="0" y="0" width="7112" height="12850" fill="url(#sibyl-bg)" />
+    <rect x="45" y="45" width="7022" height="12760" rx="90" fill="none" stroke="url(#sibyl-edge)" stroke-width="34" opacity="0.8" />
+    <path d="M300 1100H6812" fill="none" stroke="#30d7de" stroke-width="16" opacity="0.4" />
+    <rect x="250" y="1180" width="6612" height="4240" rx="165" fill="#02050a" stroke="#6048bd" stroke-width="46" opacity="0.95" />
+    <rect x="285" y="1215" width="6542" height="4170" rx="135" fill="url(#oracle-halo)" stroke="#36ced6" stroke-width="12" opacity="0.72" />
+    <path d="M430 1320H6682M430 5250H6682" stroke="#7c62e5" stroke-width="9" opacity="0.38" />
+    <g id="glass_input" data-theme-runtime-substrate="neutral">
+      <rect x="300" y="5700" width="3260" height="6500" rx="120" fill="#000000" fill-opacity="1" opacity="0.33" stroke="none" />
+    </g>
+    <g id="glass_output" data-theme-runtime-substrate="neutral">
+      <rect x="3650" y="5700" width="3162" height="6500" rx="120" fill="#000000" fill-opacity="0.5" opacity="0.33" stroke="none" />
+    </g>
   </g>
   <g id="components" inkscape:label="Component anchors" style="display:none">
-    <rect id="SIBYL_DISPLAY" x="240" y="1250" width="4600" height="3050" rx="120" />
-    <circle id="CLOCK_INPUT" cx="850" cy="5500" r="400" />
-    <circle id="RUN_INPUT" cx="2000" cy="5500" r="400" />
-    <circle id="RESET_INPUT" cx="850" cy="6950" r="400" />
-    <circle id="SCENE_TRIG_INPUT" cx="2000" cy="6950" r="400" />
-    <circle id="SCENE_CV_INPUT" cx="850" cy="8400" r="400" />
-    <circle id="MACRO_1_INPUT" cx="850" cy="9850" r="400" />
-    <circle id="MACRO_2_INPUT" cx="2000" cy="9850" r="400" />
-    <circle id="MACRO_3_INPUT" cx="850" cy="11300" r="400" />
-    <circle id="MACRO_4_INPUT" cx="2000" cy="11300" r="400" />
-    <circle id="V_OCT_OUTPUT" cx="3250" cy="5500" r="400" />
-    <circle id="GATE_OUTPUT" cx="4300" cy="5500" r="400" />
-    <circle id="VELOCITY_OUTPUT" cx="3250" cy="6950" r="400" />
-    <circle id="MOD_OUTPUT" cx="4300" cy="6950" r="400" />
-    <circle id="CLOCK_OUTPUT" cx="3250" cy="8400" r="400" />
-    <circle id="SCENE_OUTPUT" cx="4300" cy="8400" r="400" />
-    <circle id="EOC_OUTPUT" cx="3775" cy="9850" r="400" />
+    <rect id="SIBYL_DISPLAY" x="300" y="1250" width="6512" height="4100" rx="120" />
+    <circle id="CLOCK_INPUT" cx="850" cy="6900" r="400" />
+    <circle id="RUN_INPUT" cx="1930" cy="6900" r="400" />
+    <circle id="RESET_INPUT" cx="3010" cy="6900" r="400" />
+    <circle id="SCENE_TRIG_INPUT" cx="850" cy="8850" r="400" />
+    <circle id="SCENE_CV_INPUT" cx="1930" cy="8850" r="400" />
+    <circle id="MACRO_1_INPUT" cx="3010" cy="8850" r="400" />
+    <circle id="MACRO_2_INPUT" cx="850" cy="10800" r="400" />
+    <circle id="MACRO_3_INPUT" cx="1930" cy="10800" r="400" />
+    <circle id="MACRO_4_INPUT" cx="3010" cy="10800" r="400" />
+    <circle id="V_OCT_OUTPUT" cx="4100" cy="6900" r="400" />
+    <circle id="GATE_OUTPUT" cx="5230" cy="6900" r="400" />
+    <circle id="VELOCITY_OUTPUT" cx="6360" cy="6900" r="400" />
+    <circle id="MOD_OUTPUT" cx="4100" cy="8850" r="400" />
+    <circle id="CLOCK_OUTPUT" cx="5230" cy="8850" r="400" />
+    <circle id="SCENE_OUTPUT" cx="6360" cy="8850" r="400" />
+    <circle id="EOC_OUTPUT" cx="4100" cy="10800" r="400" />
   </g>
 </svg>
