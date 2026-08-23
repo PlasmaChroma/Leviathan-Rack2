@@ -899,7 +899,12 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		using PerfClock = std::chrono::steady_clock;
 		const bool measurePerf = isDragonKingDebugEnabled();
 		const PerfClock::time_point perfStepStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
-		OpenGlWidget::step();
+		// OpenGlWidget::step() dirties its framebuffer unconditionally. Bifurx
+		// already has an explicit invalidation policy below, so retain the cached
+		// image between meaningful visual changes. This is especially important
+		// while Rack animates between zoom levels, when unconditional redraws can
+		// amplify framebuffer resize stalls.
+		widget::FramebufferWidget::step();
 		if (!module) return;
 		if (module->renderMode != Bifurx::RENDER_OPENGL) return;
 
@@ -1199,7 +1204,18 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	}
 
 	void draw(const DrawArgs& args) override {
-		widget::OpenGlWidget::draw(args);
+		// Rack normally sizes FramebufferWidget storage from absolute zoom. That
+		// turns every animated zoom step into a new GL allocation and full SHDR
+		// render. Cancel the zoom component so this surface stays at a stable
+		// logical resolution and Rack merely scales the completed image.
+		if (dirty) {
+			const float absoluteZoom = std::max(1e-4f, getAbsoluteZoom());
+			// The spectrum is compact enough to retain a crisp 2x logical raster
+			// without returning to zoom-dependent allocation sizes.
+			const float fixedScale = 2.f / absoluteZoom;
+			render(Vec(fixedScale, fixedScale));
+		}
+		widget::FramebufferWidget::draw(args);
 	}
 
 	void drawNanoVG(const DrawArgs& args) override {

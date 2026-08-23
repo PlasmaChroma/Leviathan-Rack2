@@ -74,7 +74,6 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	float lastSlitherPhase = -1.f;
 	float lastSlitherAmount = -1.f;
 	Vec lastDrawSize = Vec(-1.f, -1.f);
-	float lastAbsoluteZoom = -1.f;
 	uint64_t bodyStripGeometryRevision = 0;
 	bool bodyStripShaderPath = false;
 	std::array<std::vector<BodyStripVertex>, 3> fallbackBodyStripVertices;
@@ -1073,8 +1072,6 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		const float slitherAmount = levi_math::clamp01(
 			module->displaySlitherAmount.load(std::memory_order_relaxed));
 		const float slitherPhase = module->uiSlitherPhase.load(std::memory_order_relaxed);
-		const float absoluteZoom = std::max(1.f, getAbsoluteZoom());
-
 		bool dirty = !redrawStateInitialized;
 		dirty = dirty || mode != lastRenderMode;
 		dirty = dirty || waveVersion != lastWaveVersion;
@@ -1083,7 +1080,6 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		dirty = dirty || envelopeMode != lastEnvelopeMode;
 		dirty = dirty || std::fabs(box.size.x - lastDrawSize.x) > 1e-4f;
 		dirty = dirty || std::fabs(box.size.y - lastDrawSize.y) > 1e-4f;
-		dirty = dirty || std::fabs(absoluteZoom - lastAbsoluteZoom) > 1e-4f;
 		dirty = dirty || std::fabs(slitherAmount - lastSlitherAmount) > 1e-5f;
 		dirty = dirty || (slitherAmount > 1e-5f
 			&& std::fabs(slitherPhase - lastSlitherPhase) > 1e-6f);
@@ -1096,7 +1092,6 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		lastSlitherAmount = slitherAmount;
 		lastSlitherPhase = slitherPhase;
 		lastDrawSize = box.size;
-		lastAbsoluteZoom = absoluteZoom;
 		redrawStateInitialized = true;
 
 		if (dirty) {
@@ -1112,6 +1107,19 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		const bool logCsv = module && isDragonKingDebugEnabled() && isWyrmDrawLoggingEnabled();
 		const bool cacheWasDirty = dirty;
 		const PerfClock::time_point start = logCsv ? PerfClock::now() : PerfClock::time_point();
+		// Keep the SHDR framebuffer at a stable logical resolution. Rack's default
+		// physical-pixel sizing otherwise reallocates it throughout every animated
+		// zoom transition, even though Wyrm's authored geometry is unchanged.
+		if (dirty) {
+			const float absoluteZoom = std::max(1e-4f, getAbsoluteZoom());
+			// Give the compact panel editor enough raster density for smoothly
+			// animated slither. The expanded editor can be roughly twice as wide, so
+			// retain its bounded 1.5x budget. Neither density depends on Rack zoom.
+			const bool compactEditor = box.size.x <= 300.f;
+			const float logicalDensity = compactEditor ? 2.f : 1.5f;
+			const float fixedScale = logicalDensity / absoluteZoom;
+			render(Vec(fixedScale, fixedScale));
+		}
 		widget::FramebufferWidget::draw(args);
 		if (logCsv) {
 			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(

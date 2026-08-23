@@ -65,12 +65,14 @@ inline int nanoVgBodySampleCount(Vec size, int pointCount) {
 }
 
 inline int glBodySampleCount(Vec size, int pointCount, float absoluteZoom, bool shaderPath) {
-	// GL draws the same logical curve as NanoVG. Keep modest zoom awareness, but
-	// do not let framebuffer scale multiply work beyond the authored detail.
-	const float zoom = clamp(std::max(1.f, absoluteZoom), 1.f, 2.f);
+	// Keep authored geometry stable across Rack zoom transitions. The backing
+	// framebuffer already follows display scale, so multiplying sample density
+	// by absolute zoom only causes geometry/texture churn and can force Wyrm's
+	// specialized body shader to be synchronously recompiled mid-transition.
+	(void) absoluteZoom;
 	const float samplesPerScreenPixel = shaderPath ? 1.35f : 1.20f;
 	const int pixelBudget = int(std::ceil(
-		pointDrawWidth(size) * zoom * samplesPerScreenPixel));
+		pointDrawWidth(size) * samplesPerScreenPixel));
 	const int pointBudget = std::max(128, pointCount * 2);
 	return clamp(std::min(pixelBudget, pointBudget), 128, 512);
 }
