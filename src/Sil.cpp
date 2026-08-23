@@ -2758,6 +2758,17 @@ struct SilStageHistoryWidget : TransparentWidget {
 	float histogramStartX = 0.f;
 	double lastSampleSec = -1.0;
 	bool staggerDeferred = false;
+	NVGcontext* rasterImageVg = nullptr;
+	int rasterImage = -1;
+	int rasterWidth = 0;
+	int rasterHeight = 0;
+	int rasterWriteIndex = -1;
+	std::vector<unsigned char> rasterPixels;
+
+	~SilStageHistoryWidget() override {
+		nvg_gfx_lifecycle::resetOwnedNvgImage(
+			rasterImageVg, rasterImage, rasterWidth, rasterHeight, nullptr, false);
+	}
 
 	void step() override {
 		TransparentWidget::step();
@@ -2816,34 +2827,75 @@ struct SilStageHistoryWidget : TransparentWidget {
 		const float histW = std::max(24.f, box.size.x - x0 - rightPad);
 		const float histH = 8.f;
 		const float barW = histW / float(kHistBins);
+		(void) barW;
 
-		// All graph backgrounds share one fill.
-		nvgBeginPath(args.vg);
-		for (int i = 0; i < kCount; ++i) {
-			const float centerY = textPositions[i].y;
-			const float top = centerY - 0.5f * histH;
-			nvgRect(args.vg, x0, top, histW, histH);
+		const int targetWidth = kHistBins;
+		const int targetHeight = std::max(2, int(std::ceil(box.size.y)));
+		if (rasterImageVg != args.vg) {
+			nvg_gfx_lifecycle::resetOwnedNvgImage(
+				rasterImageVg, rasterImage, rasterWidth, rasterHeight, args.vg, false);
+			rasterWriteIndex = -1;
 		}
-		nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 80));
-		nvgFill(args.vg);
+		if (rasterImage >= 0 && !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(
+			args.vg, rasterImage, rasterWidth, rasterHeight)) {
+			nvg_gfx_lifecycle::resetOwnedNvgImage(
+				rasterImageVg, rasterImage, rasterWidth, rasterHeight, args.vg, true);
+			rasterWriteIndex = -1;
+		}
+		if (rasterImage < 0 || rasterWidth != targetWidth || rasterHeight != targetHeight) {
+			nvg_gfx_lifecycle::resetOwnedNvgImage(
+				rasterImageVg, rasterImage, rasterWidth, rasterHeight, args.vg, true);
+			rasterWidth = targetWidth;
+			rasterHeight = targetHeight;
+			rasterPixels.assign(size_t(rasterWidth * rasterHeight * 4), 0u);
+			rasterImage = nvgCreateImageRGBA(
+				args.vg, rasterWidth, rasterHeight, NVG_IMAGE_PREMULTIPLIED, rasterPixels.data());
+			rasterImageVg = args.vg;
+			rasterWriteIndex = -1;
+		}
 
-		// One path/fill per stage replaces up to 160 independent fills.
-		for (int i = 0; i < kCount; ++i) {
-			const float centerY = textPositions[i].y;
-			const float top = centerY - 0.5f * histH;
-			nvgBeginPath(args.vg);
-			for (int j = 0; j < kHistBins; ++j) {
-				const int idx = (writeIndex + j) % kHistBins;
-				const float v = clamp(histories[i][size_t(idx)], 0.f, 1.f);
-				if (v <= 0.01f) {
-					continue;
-				}
-				const float x = x0 + j * barW;
-				const float h = v * histH;
-				nvgRect(args.vg, x, top + (histH - h), std::max(0.8f, barW - 0.25f), h);
+		if (rasterImage >= 0) {
+			int advance = rasterWriteIndex < 0 ? rasterWidth
+				: (writeIndex - rasterWriteIndex + rasterWidth) % rasterWidth;
+			if (rasterWriteIndex < 0 || advance <= 0 || advance >= rasterWidth) {
+				advance = rasterWidth;
+				std::fill(rasterPixels.begin(), rasterPixels.end(), 0u);
 			}
-			nvgFillColor(args.vg, nvgRGBA(245, 245, 245, 210));
+			else {
+				const size_t rowBytes = size_t(rasterWidth) * 4u;
+				const size_t keptBytes = size_t(rasterWidth - advance) * 4u;
+				for (int y = 0; y < rasterHeight; ++y) {
+					unsigned char* row = rasterPixels.data() + size_t(y) * rowBytes;
+					std::memmove(row, row + size_t(advance) * 4u, keptBytes);
+					std::memset(row + keptBytes, 0, size_t(advance) * 4u);
+				}
+			}
+			auto setPixel = [&](int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+				if (x < 0 || x >= rasterWidth || y < 0 || y >= rasterHeight) return;
+				unsigned char* p = rasterPixels.data() + (size_t(y) * size_t(rasterWidth) + size_t(x)) * 4u;
+				p[0] = uint8_t((uint16_t(r) * a) / 255u);
+				p[1] = uint8_t((uint16_t(g) * a) / 255u);
+				p[2] = uint8_t((uint16_t(b) * a) / 255u);
+				p[3] = a;
+			};
+			for (int x = rasterWidth - advance; x < rasterWidth; ++x) {
+				const int idx = (writeIndex + x) % rasterWidth;
+				for (int i = 0; i < kCount; ++i) {
+					const int top = int(std::round(textPositions[i].y - 0.5f * histH));
+					const int bottom = int(std::round(textPositions[i].y + 0.5f * histH));
+					for (int y = top; y <= bottom; ++y) setPixel(x, y, 0, 0, 0, 80);
+					const float v = clamp(histories[i][size_t(idx)], 0.f, 1.f);
+					const int barTop = int(std::round(float(bottom) - v * histH));
+					for (int y = barTop; y <= bottom; ++y) setPixel(x, y, 245, 245, 245, 210);
+				}
+			}
+			nvgUpdateImage(args.vg, rasterImage, rasterPixels.data());
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, x0, 0.f, histW, box.size.y);
+			nvgFillPaint(args.vg, nvgImagePattern(
+				args.vg, x0, 0.f, histW, box.size.y, 0.f, rasterImage, 1.f));
 			nvgFill(args.vg);
+			rasterWriteIndex = writeIndex;
 		}
 		if (measurePerf) {
 			renderDebugMetrics->recordDraw(
