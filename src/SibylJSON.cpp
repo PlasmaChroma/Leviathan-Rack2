@@ -558,7 +558,7 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
             p.resolutionBeats = parseResolution(p.resolutionStr, res, "patterns." + std::string(key) + ".resolution");
             
             json_t* stepsJ = json_object_get(val, "steps");
-            if (stepsJ && json_is_array(stepsJ)) {
+			if (stepsJ && json_is_array(stepsJ)) {
                 size_t idx; json_t* stepJ;
                 std::set<int> seenSteps;
                 json_array_foreach(stepsJ, idx, stepJ) {
@@ -609,9 +609,14 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
                     e.ratchets = getInteger(stepJ, "ratchets", 1);
                     
                     p.steps.push_back(e);
-                }
-            }
-            comp.patterns[p.id] = p;
+				}
+			}
+			p.eventIndexByStep.assign(std::max(0, p.length), -1);
+			for (size_t eventIndex = 0; eventIndex < p.steps.size(); ++eventIndex) {
+				int step = p.steps[eventIndex].step;
+				if (step >= 0 && step < p.length) p.eventIndexByStep[step] = static_cast<int>(eventIndex);
+			}
+			comp.patterns[p.id] = p;
         }
     }
 

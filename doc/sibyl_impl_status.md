@@ -16,14 +16,14 @@ Sibyl is currently an **integrated end-to-end prototype**. The module, panel, se
 | **Patch Persistence** | 🟡 Substantial | Full composition serialization, authoritative revision assignment, failure/warning status, and safe immediate load adoption exist; broader persistence/undo integration tests remain. |
 | **Composition Compiler** | 🟡 Contract Core | Strict v1 types, enums, structural limits, pitch grammar, ranges, references, macro targets, and forward-compatible warnings are tested. Further cross-object semantic checks remain. |
 | **Lock-Free DSP Engine** | ✅ Live Accepted | Immutable publication uses audio-thread hazard pointers and bounded control-thread reclamation; a 129-operation live edit/transport stress run passed without anomalies. |
-| **Hardware Control & Sync** | 🟡 Implementation Complete | Physical semantics and external-clock hardening are implemented and covered; consolidated live cable-level acceptance remains. |
+| **Hardware Control & Sync** | ✅ Live Accepted | Physical controls and external-clock behavior passed consolidated live cable-level acceptance, including estimation, timeout policies, reconstructed output, RESET, RUN, and scene controls. |
 | **Pitch & Scale Compiler** | 🟡 Substantial | Scientific pitch, 12 scales, Euclidean degree wrapping, and compiled voltage bounds are implemented and tested; playback-level edge cases need broader coverage. |
 | **Octavia Bridge (Core)** | 🟡 Substantial | All routes exist. Full views, atomic edits, optimistic revision checks, adoption, transport commands, and pending-state reporting work; focused validation and broader integration coverage remain. |
 | **Runtime Transport** | ✅ Core Accepted | Full v1 command vocabulary, quantized publication, scene/restart policies, runtime run state, panic, and probability epochs passed focused tests and an 18-scenario live Rack/Octavia acceptance run. |
 | **Granular `EDIT` Ops** | ✅ Core Complete | All v1 operation names apply in order to a private copy, then pass through one strict full-composition validation/compile. |
 | **Edit Adoption & Phase Policies** | ✅ Complete | All boundaries and phase policies, changed-length modulo mapping, stale-gate/glide handling, newest-wins coalescing, and destination step-zero generation are covered. |
 | **OLED Display Widget** | ⏳ Sequenced After Telemetry | Real-time front-panel OLED / LED matrix display for title, scene, BPM, and track activity; must consume the planned race-free telemetry snapshot. |
-| **Micro-timing & Swing** | ⏳ Pending | `swing` subdivision delay and `microshift` step offsets. |
+| **Micro-timing & Swing** | ✅ Live Accepted | Straight-grid swing, signed microshift, macro swing, shifted ratchets/ties, loop wrapping, and clock/scene interaction passed live musical acceptance. |
 
 ---
 
@@ -191,13 +191,41 @@ Implementation progress (2026-08-22):
 - Alternating-jitter and isolated-outlier tests verify estimator stability and bounded response.
 - CLOCK OUT now owns a separate phase domain. Scene, arrangement, pattern, hardware RESET, and stop/restart behavior can realign it without changing the global musical timeline or clearing the learned external interval; randomness-only restart leaves it untouched.
 - The `internal` timeout policy free-runs at the learned rate only until the next quarter-note boundary, then changes to the composition BPM. A returning physical edge cancels fallback while preserving estimator history.
-- External-clock implementation is feature-complete. The remaining acceptance item is the consolidated live cable-level Rack pass.
+- External-clock implementation is feature-complete.
+
+Live acceptance result:
+
+- An 8-scenario Rack/Octavia cable-level run passed CLOCK IN convergence at 120 and 90 BPM, continuous jitter rejection, isolated-outlier containment, and clean external resynchronization.
+- Reconstructed CLOCK OUT passed 4→1, 4→2, and 4→4 PPQN configurations without observed duplicate or missing pulses after convergence.
+- `hold`, `freeRun`, and next-beat `internal` timeout policies behaved as specified; the measured internal fallback followed the configured 80 BPM composition tempo.
+- RUN falling-edge gate closure and position-preserving resume, external-edge-quantized RESET, SCENE TRIG quantization, Scene CV clamping/hysteresis, and restart clock-domain behavior all passed.
+- Final telemetry was coherent (`revision == activeRevision`, no pending adoption/transport, no error or warnings), with no observed freeze, deadlock, xrun, audio interruption, or abnormal memory-growth pattern.
+- Temporary clock/control modules and cables were removed, and the original `31-EDO Microtonal Leviathan` composition and patch topology were restored.
 
 ### 3.5 Swing and Microshift
 
 - **Swing:** Delay alternating eligible subdivisions by `meta.swing` (0.0 to 0.49 fraction of a step).
 - **Microshift:** Apply signed sub-step event offsets (`microshift` strictly between -0.5 and +0.5).
 - Define and test interactions among straight, dotted, and triplet resolutions, ratchets, ties, scene boundaries, swing, and positive/negative microshift.
+
+Implementation result (2026-08-22):
+
+- Added a compiled O(1) step-to-event index so the audio scheduler can inspect nearby shifted events without scanning sparse patterns per sample.
+- Replaced integer-step firing with allocation-free scheduled-onset crossing. Positive and negative microshift work across pattern wraps, including negative step-zero offsets before the next loop boundary.
+- Swing delays odd subdivisions only for straight resolutions; dotted and triplet grids retain their authored timing. Global and per-track swing macro contributions are additive and clamped to 0–0.49.
+- Gate length and ratchet slices are measured from the shifted onset. Adjacent tied events hold the preceding gate continuously through a positive swing/microshift delay and suppress re-attack at the tied onset.
+- Focused timing tests cover straight/dotted/triplet eligibility, additive offsets, Euclidean wrapping, exact-once crossings, and compiled lookup. Rack-linked module tests cover sample-level swing delay, negative microshift, shifted ratchets, and delayed ties.
+- The complete WSL and native Windows `test-fast` suites pass, and the authoritative MINGW64 `plugin.dll` builds successfully.
+
+Live acceptance result:
+
+- An 8-scenario Rack/Octavia musical run passed straight `1/16` swing at 0.00, 0.20, and 0.48 while keeping even subdivisions anchored and producing no observed duplicate or missing events.
+- Dotted and triplet grids remained immune to swing. Positive and negative microshift, including ±0.48 and negative step-zero loop wrapping, produced the expected measured onset fractions.
+- Shifted two-slice ratchets were anchored to their shifted onset with no attack at the old grid position. A positively delayed tied event maintained a continuous 10 V gate and changed pitch at the shifted onset without a gate re-attack.
+- Global swing macro modulation moved both tracks additively, clamped at 0.49, and per-track swing modulation affected only its destination track.
+- Internal/external clock operation and `restart`, `continue`, and `alignGlobal` scene transitions completed without observed stale events, freeze, deadlock, or audio interruption.
+- Octavia's roughly 5 ms HTTP observation cadence was sufficient at the deliberately slow test tempos to resolve the tested onset fractions, but it is not an audio-sample-accurate measurement instrument; focused DSP tests remain the authority for sample-level boundaries.
+- All temporary modules and cables were removed, and the original 11-module/14-cable topology and Sibyl composition were restored.
 
 ### 3.6 Front-Panel OLED Display Widget
 

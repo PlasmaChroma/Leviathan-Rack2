@@ -5,6 +5,7 @@
 #include "SibylEdit.hpp"
 #include "SibylHardwareControl.hpp"
 #include "SibylJSON.hpp"
+#include "SibylTiming.hpp"
 #include "SibylTransport.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
@@ -87,6 +88,13 @@ struct SibylModule : Module, SibylControl {
 		float currentGate = 0.0f;
 		float currentVel = 0.0f;
 		float currentMod = 0.0f;
+		int activeEventStep = -1;
+		int64_t activeNominalStep = 0;
+		double activeEventOnsetBeats = 0.0;
+		float activeEventGate = 0.5f;
+		int activeEventRatchets = 1;
+		bool activeEventTie = false;
+		bool activeEventPlayed = false;
 	};
 	TrackState m_trackStates[16];
 
@@ -239,6 +247,7 @@ struct SibylModule : Module, SibylControl {
 			bool changed = (request->restartChannelMask & (1u << channel)) != 0;
 			sibyl::ChannelAdoptionAction action = sibyl::channelAdoptionAction(request->phasePolicy, changed);
 			if (action.closeGate) m_trackStates[channel].currentGate = 0.0f;
+			if (action.closeGate) m_trackStates[channel].activeEventPlayed = false;
 			if (action.cancelGlide) {
 				m_trackStates[channel].targetPitch = m_trackStates[channel].currentPitch;
 				m_trackStates[channel].glideRatePerSample = 0.0f;
@@ -272,7 +281,10 @@ struct SibylModule : Module, SibylControl {
 	}
 
 	void closeAllGates() {
-		for (auto& state : m_trackStates) state.currentGate = 0.0f;
+		for (auto& state : m_trackStates) {
+			state.currentGate = 0.0f;
+			state.activeEventPlayed = false;
+		}
 	}
 
 	void realignOutputClock(bool emitPulse) {
@@ -623,9 +635,11 @@ struct SibylModule : Module, SibylControl {
 		// --- Macro Inputs Evaluation (0–10 V) ---
 		float globalProbMacro = 0.f;
 		float globalVelMacro = 0.f;
+		float globalSwingMacro = 0.f;
 		float trackProbMacro[16] = {};
 		float trackVelMacro[16] = {};
 		float trackGateMacro[16] = {};
+		float trackSwingMacro[16] = {};
 
 		for (int m = 0; m < 4; m++) {
 			int inputId = MACRO_1_INPUT + m;
@@ -642,6 +656,7 @@ struct SibylModule : Module, SibylControl {
 			const std::string& target = it->second.target;
 			if (target == "global.probability") globalProbMacro += contrib;
 			else if (target == "global.velocity") globalVelMacro += contrib;
+			else if (target == "global.swing") globalSwingMacro += contrib;
 			else if (target.rfind("track.", 0) == 0) {
 				size_t secondDot = target.rfind('.');
 				if (secondDot != std::string::npos && secondDot > 6) {
@@ -652,6 +667,7 @@ struct SibylModule : Module, SibylControl {
 							if (param == "probability") trackProbMacro[tr.channel] += contrib;
 							else if (param == "velocity") trackVelMacro[tr.channel] += contrib;
 							else if (param == "gate") trackGateMacro[tr.channel] += contrib;
+							else if (param == "swing") trackSwingMacro[tr.channel] += contrib;
 						}
 					}
 				}
@@ -681,10 +697,10 @@ struct SibylModule : Module, SibylControl {
 
 			if (pat.resolutionBeats <= 0) continue;
 
+			double previousPatternPhase = m_trackStates[ch].patternPhaseBeats;
 			m_trackStates[ch].patternPhaseBeats += beatDelta;
-			
-			double stepPhaseBeats = fmod(m_trackStates[ch].patternPhaseBeats, pat.length * pat.resolutionBeats);
-			int currentStep = static_cast<int>(stepPhaseBeats / pat.resolutionBeats);
+			double currentPatternPhase = m_trackStates[ch].patternPhaseBeats;
+			double effectiveSwing = clamp(comp->meta.swing + globalSwingMacro + trackSwingMacro[ch], 0.0f, 0.49f);
 
 			// Linear Glide interpolation
 			if (m_trackStates[ch].glideRatePerSample != 0.0f) {
@@ -697,26 +713,32 @@ struct SibylModule : Module, SibylControl {
 				}
 			}
 
-			if (currentStep != m_trackStates[ch].lastFiredStep) {
-				m_trackStates[ch].lastFiredStep = currentStep;
+			if (beatDelta > 0.0) {
+				int64_t firstNominalStep = static_cast<int64_t>(std::floor(previousPatternPhase / pat.resolutionBeats)) - 1;
+				int64_t lastNominalStep = static_cast<int64_t>(std::floor(currentPatternPhase / pat.resolutionBeats)) + 1;
+				for (int64_t nominalStep = firstNominalStep; nominalStep <= lastNominalStep; ++nominalStep) {
+					int eventStep = sibyl::wrappedStep(nominalStep, pat.length);
+					const sibyl::StepEvent* matchedEvent = sibyl::eventAtStep(pat, eventStep);
+					if (!matchedEvent) continue;
+					double scheduledBeat = sibyl::scheduledEventBeat(pat, nominalStep, *matchedEvent, effectiveSwing);
+					if (!sibyl::scheduledEventCrossed(previousPatternPhase, currentPatternPhase, scheduledBeat)) continue;
 
-				// Find event for this step
-				const sibyl::StepEvent* matchedEvent = nullptr;
-				for (const auto& ev : pat.steps) {
-					if (ev.step == currentStep) {
-						matchedEvent = &ev;
-						break;
-					}
-				}
+					m_trackStates[ch].lastFiredStep = eventStep;
+					m_trackStates[ch].activeEventStep = eventStep;
+					m_trackStates[ch].activeNominalStep = nominalStep;
+					m_trackStates[ch].activeEventOnsetBeats = scheduledBeat;
+					m_trackStates[ch].activeEventGate = matchedEvent->hasGate ? matchedEvent->gate : trackDef.defaultGate;
+					m_trackStates[ch].activeEventRatchets = std::max(1, matchedEvent->ratchets);
+					m_trackStates[ch].activeEventTie = matchedEvent->tie;
 
-				if (matchedEvent) {
 					// Deterministic Probability Check + Macro Modulation
 					float baseProb = matchedEvent->hasProbability ? matchedEvent->probability : 1.0f;
 					float effProb = clamp(baseProb + globalProbMacro + trackProbMacro[ch], 0.0f, 1.0f);
 					uint64_t hash = comp->meta.seed ^ (m_randomnessEpoch * 11400714819323198485ULL) ^
-						(m_sceneIndex * 73856093ULL) ^ (ch * 19349663ULL) ^ (currentStep * 83492791ULL);
+						(m_sceneIndex * 73856093ULL) ^ (ch * 19349663ULL) ^ (eventStep * 83492791ULL);
 					float randVal = (float)((hash % 10000ULL) / 10000.0);
 					bool play = randVal < effProb;
+					m_trackStates[ch].activeEventPlayed = play;
 
 					if (play) {
 						if (!matchedEvent->tie) {
@@ -745,40 +767,31 @@ struct SibylModule : Module, SibylControl {
 					} else {
 						m_trackStates[ch].currentGate = 0.0f;
 					}
-				} else {
-					m_trackStates[ch].currentGate = 0.0f; // Rest
 				}
-			} else {
-				// Gate length & ratchet slicing + Gate Macro
-				double stepFraction = (stepPhaseBeats - currentStep * pat.resolutionBeats) / pat.resolutionBeats;
-				float baseGate = trackDef.defaultGate;
-				int ratchets = 1;
-				bool tie = false;
+			}
 
-				for (const auto& ev : pat.steps) {
-					if (ev.step == currentStep) {
-						if (ev.hasGate) baseGate = ev.gate;
-						ratchets = std::max(1, ev.ratchets);
-						tie = ev.tie;
-						break;
-					}
+			// Gate and ratchet timing are measured from the shifted event onset,
+			// rather than from the unshifted integer grid position.
+			if (m_trackStates[ch].activeEventStep >= 0 && m_trackStates[ch].activeEventPlayed &&
+					!m_trackStates[ch].activeEventTie) {
+				double elapsed = currentPatternPhase - m_trackStates[ch].activeEventOnsetBeats;
+				int64_t nextNominalStep = m_trackStates[ch].activeNominalStep + 1;
+				const sibyl::StepEvent* nextEvent = sibyl::eventAtStep(pat,
+					sibyl::wrappedStep(nextNominalStep, pat.length));
+				bool awaitingTie = false;
+				if (nextEvent && nextEvent->tie) {
+					double tieOnset = sibyl::scheduledEventBeat(pat, nextNominalStep, *nextEvent, effectiveSwing);
+					awaitingTie = currentPatternPhase <= tieOnset;
 				}
-
-				float effGate = clamp(baseGate + trackGateMacro[ch], 0.01f, 1.0f);
-
-				if (!tie) {
-					if (ratchets > 1) {
-						double sliceFraction = fmod(stepFraction * ratchets, 1.0);
-						if (sliceFraction > effGate) {
-							m_trackStates[ch].currentGate = 0.0f;
-						} else {
-							m_trackStates[ch].currentGate = 10.0f;
-						}
-					} else {
-						if (stepFraction > effGate) {
-							m_trackStates[ch].currentGate = 0.0f;
-						}
-					}
+				if (awaitingTie) {
+					m_trackStates[ch].currentGate = 10.0f;
+				} else if (elapsed >= 0.0 && elapsed < pat.resolutionBeats) {
+					double eventFraction = elapsed / pat.resolutionBeats;
+					double sliceFraction = std::fmod(eventFraction * m_trackStates[ch].activeEventRatchets, 1.0);
+					float effectiveGate = clamp(m_trackStates[ch].activeEventGate + trackGateMacro[ch], 0.01f, 1.0f);
+					m_trackStates[ch].currentGate = sliceFraction <= effectiveGate ? 10.0f : 0.0f;
+				} else if (elapsed >= pat.resolutionBeats) {
+					m_trackStates[ch].currentGate = 0.0f;
 				}
 			}
 		}

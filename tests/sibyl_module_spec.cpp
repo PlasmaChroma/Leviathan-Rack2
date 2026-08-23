@@ -71,6 +71,50 @@ sibyl::CompositionPtr makeComposition(int revision, bool twoScenes, float destin
 	return composition;
 }
 
+sibyl::CompositionPtr makeTimingComposition(float swing, float microshift, int ratchets = 1, float gate = 0.5f) {
+	std::shared_ptr<sibyl::Composition> composition = std::const_pointer_cast<sibyl::Composition>(
+		makeComposition(1, false));
+	composition->meta.bpm = 60.0f;
+	composition->meta.swing = swing;
+	auto& pattern = composition->patterns["first"];
+	pattern.steps.clear();
+	sibyl::StepEvent event;
+	event.step = 1;
+	event.compiledPitchV = 3.0f;
+	event.microshift = microshift;
+	event.ratchets = ratchets;
+	event.hasGate = true;
+	event.gate = gate;
+	pattern.steps.push_back(event);
+	pattern.eventIndexByStep.assign(pattern.length, -1);
+	pattern.eventIndexByStep[1] = 0;
+	return composition;
+}
+
+sibyl::CompositionPtr makeTiedSwingComposition() {
+	std::shared_ptr<sibyl::Composition> composition = std::const_pointer_cast<sibyl::Composition>(
+		makeComposition(1, false));
+	composition->meta.bpm = 60.0f;
+	composition->meta.swing = 0.2f;
+	auto& pattern = composition->patterns["first"];
+	pattern.steps.clear();
+	sibyl::StepEvent first;
+	first.step = 0;
+	first.compiledPitchV = 1.0f;
+	first.hasGate = true;
+	first.gate = 0.2f;
+	pattern.steps.push_back(first);
+	sibyl::StepEvent tied;
+	tied.step = 1;
+	tied.compiledPitchV = 2.0f;
+	tied.tie = true;
+	pattern.steps.push_back(tied);
+	pattern.eventIndexByStep.assign(pattern.length, -1);
+	pattern.eventIndexByStep[0] = 0;
+	pattern.eventIndexByStep[1] = 1;
+	return composition;
+}
+
 void processOneSample(SibylModule& module) {
 	Module::ProcessArgs args;
 	args.sampleRate = 48000.0f;
@@ -159,6 +203,70 @@ int main() {
 		module.applyPendingTransportIfReady(boundary, *active, &randomnessRestart);
 		check(std::abs(module.m_outputClockPhaseBeats - 0.41) < 1e-12,
 			"randomness-only restart does not disturb CLOCK OUT phase");
+	}
+
+	{
+		SibylModule module;
+		module.acceptComposition(makeTimingComposition(0.2f, 0.0f), sibyl::ApplyAt::IMMEDIATE,
+			sibyl::PhasePolicy::RESTART_ALL);
+		Module::ProcessArgs args;
+		args.sampleRate = 1000.0f;
+		args.sampleTime = 0.001f;
+		module.process(args);
+		module.m_trackStates[0].patternPhaseBeats = 0.0;
+		module.m_trackStates[0].lastFiredStep = -1;
+		module.m_trackStates[0].activeEventStep = -1;
+		for (int i = 0; i < 299; ++i) { args.frame = i; module.process(args); }
+		check(module.m_trackStates[0].lastFiredStep != 1, "swing holds the odd event until its delayed onset");
+		args.frame = 299; module.process(args);
+		check(module.m_trackStates[0].lastFiredStep == 1 &&
+			std::abs(module.outputs[SibylModule::V_OCT_OUTPUT].getVoltage(0) - 3.0f) < 1e-6f,
+			"swing fires the odd event at the shifted sample");
+	}
+
+	{
+		SibylModule module;
+		module.acceptComposition(makeTimingComposition(0.0f, -0.2f, 2, 0.25f), sibyl::ApplyAt::IMMEDIATE,
+			sibyl::PhasePolicy::RESTART_ALL);
+		Module::ProcessArgs args;
+		args.sampleRate = 1000.0f;
+		args.sampleTime = 0.001f;
+		module.process(args);
+		module.m_trackStates[0].patternPhaseBeats = 0.0;
+		module.m_trackStates[0].lastFiredStep = -1;
+		module.m_trackStates[0].activeEventStep = -1;
+		module.m_trackStates[0].activeEventPlayed = false;
+		module.m_trackStates[0].currentGate = 0.0f;
+		for (int i = 0; i < 199; ++i) { args.frame = i; module.process(args); }
+		check(module.m_trackStates[0].lastFiredStep != 1, "negative microshift does not fire before its authored early onset");
+		args.frame = 199; module.process(args);
+		check(module.m_trackStates[0].lastFiredStep == 1, "negative microshift advances the event onset");
+		for (int i = 200; i < 240; ++i) { args.frame = i; module.process(args); }
+		check(module.outputs[SibylModule::GATE_OUTPUT].getVoltage(0) == 0.0f,
+			"ratchet gate closes within its first shifted slice");
+		for (int i = 240; i < 330; ++i) { args.frame = i; module.process(args); }
+		check(module.outputs[SibylModule::GATE_OUTPUT].getVoltage(0) > 9.0f,
+			"ratchet reopens from the shifted event-relative clock");
+	}
+
+	{
+		SibylModule module;
+		module.acceptComposition(makeTiedSwingComposition(), sibyl::ApplyAt::IMMEDIATE,
+			sibyl::PhasePolicy::RESTART_ALL);
+		Module::ProcessArgs args;
+		args.sampleRate = 1000.0f;
+		args.sampleTime = 0.001f;
+		module.process(args);
+		module.m_trackStates[0].patternPhaseBeats = 0.0;
+		module.m_trackStates[0].lastFiredStep = -1;
+		module.m_trackStates[0].activeEventStep = -1;
+		for (int i = 0; i < 299; ++i) { args.frame = i; module.process(args); }
+		check(module.outputs[SibylModule::GATE_OUTPUT].getVoltage(0) > 9.0f,
+			"a delayed tied event holds the preceding gate through the swing gap");
+		args.frame = 299; module.process(args);
+		check(module.m_trackStates[0].lastFiredStep == 1 &&
+			module.outputs[SibylModule::GATE_OUTPUT].getVoltage(0) > 9.0f,
+			"tied shifted onset changes pitch without retriggering or dropping the gate");
 	}
 
 	std::cout << "[SUMMARY] sibyl_module_spec: " << (failures ? "FAILED" : "passed") << "\n";

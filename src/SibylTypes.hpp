@@ -87,6 +87,9 @@ struct Pattern {
 	// rational tick representation (e.g. 1/16 = 1 beat / 4)
 	double resolutionBeats = 0.25; 
 	std::vector<StepEvent> steps;
+	// Compiled O(1) sparse-event lookup for the realtime scheduler. Entries are
+	// indices into steps, or -1 for rests.
+	std::vector<int> eventIndexByStep;
 };
 
 struct TrackAssignment {
