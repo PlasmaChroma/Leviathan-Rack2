@@ -76,6 +76,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	float cachedTopLabelReservedWidth = 0.f;
 	bool lastShowModuleResponseOverlay = false;
 	bool lastUseGlShaderRenderer = false;
+	int lastColorScheme = -1;
 	bool shaderRendererActiveLastFrame = false;
 	bool shaderRendererFallbackLastFrame = false;
 	uint64_t lastDrawNs = 0;
@@ -84,11 +85,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	debug_terminal::UiTimingRangeAccumulator stepUsRange;
 	debug_terminal::UiTimingRangeAccumulator drawUsRange;
 	uint64_t lastDrawVertexCount = 0;
-	uint32_t contextGeneration = 0;
-	uint32_t pendingDirtyMask = 0;
-	uint64_t framebufferDrawCount = 0;
-	float lastFramebufferDrawUs = 0.f;
-	double lastZoomMetricSubmitSec = 0.0;
 
 	BifurxSpectrumGLWidget() : BifurxSpectrumBase() {
 		const size_t overlaySegmentCount = (kCurvePointCount > 0) ? size_t(kCurvePointCount - 1) : size_t(0);
@@ -196,8 +192,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		releaseGlResources(false);
 		shaderRendererActiveLastFrame = false;
 		shaderRendererFallbackLastFrame = false;
-		++contextGeneration;
-		pendingDirtyMask |= 1u << 7;
 		setDirty();
 	}
 
@@ -932,22 +926,22 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		}
 		const bool showModuleResponseOverlayNow = module->showModuleResponseOverlay.load(std::memory_order_relaxed);
 		const bool useGlShaderRendererNow = module->useGlShaderRenderer.load(std::memory_order_relaxed);
+		const int colorSchemeNow = int(module->colorScheme);
 
 		// Shared dirty policy with NanoVG path: redraw on new data or active animation.
 		if (tick.previewUpdated || tick.analysisUpdated || tick.animationActive) {
-			if (tick.previewUpdated) pendingDirtyMask |= 1u << 0;
-			if (tick.analysisUpdated) pendingDirtyMask |= 1u << 1;
-			if (tick.animationActive) pendingDirtyMask |= 1u << 2;
 			setDirty();
 		}
 		if (showModuleResponseOverlayNow != lastShowModuleResponseOverlay) {
-			pendingDirtyMask |= 1u << 3;
 			lastShowModuleResponseOverlay = showModuleResponseOverlayNow;
 			setDirty();
 		}
 		if (useGlShaderRendererNow != lastUseGlShaderRenderer) {
-			pendingDirtyMask |= 1u << 3;
 			lastUseGlShaderRenderer = useGlShaderRendererNow;
+			setDirty();
+		}
+		if (colorSchemeNow != lastColorScheme) {
+			lastColorScheme = colorSchemeNow;
 			setDirty();
 		}
 		if (measurePerf) {
@@ -1216,28 +1210,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	}
 
 	void draw(const DrawArgs& args) override {
-		using PerfClock = std::chrono::steady_clock;
-		const bool measureZoom = module && isDragonKingDebugEnabled();
-		const float absoluteZoom = std::max(1e-4f, getAbsoluteZoom());
-		const PerfClock::time_point drawStart = measureZoom ? PerfClock::now() : PerfClock::time_point();
 		widget::FramebufferWidget::draw(args);
-		++framebufferDrawCount;
-		if (measureZoom) {
-			lastFramebufferDrawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-				PerfClock::now() - drawStart).count()) * 0.001f;
-			const double nowSec = system::getTime();
-			if (lastZoomMetricSubmitSec <= 0.0 || nowSec - lastZoomMetricSubmitSec >= kDebugTerminalSubmitIntervalSec) {
-				const Vec fbSize = getFramebufferSize();
-				debug_terminal::submitGlZoomMetrics(
-					"Bifurx", module->debugInstanceId, contextGeneration, pendingDirtyMask,
-					absoluteZoom,
-					int(std::lround(fbSize.x)), int(std::lround(fbSize.y)),
-					lastFramebufferDrawUs, framebufferDrawCount, 0.f, 0.f,
-					shaderRendererActiveLastFrame ? 1 : 0);
-				pendingDirtyMask = 0;
-				lastZoomMetricSubmitSec = nowSec;
-			}
-		}
 	}
 
 	void drawNanoVG(const DrawArgs& args) override {

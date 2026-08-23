@@ -1,6 +1,5 @@
 #include "Wyrm.hpp"
 #include "WyrmRenderGeometry.hpp"
-#include "DebugTerminalTransport.hpp"
 
 #include <array>
 #include <chrono>
@@ -86,13 +85,6 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	std::vector<uint8_t> bodyTileActive;
 	float bodyTileDomainFraction = 1.f;
 	int activeBodySegmentCount = 0;
-	uint32_t contextGeneration = 0;
-	uint32_t pendingDirtyMask = 0;
-	uint64_t framebufferDrawCount = 0;
-	float lastFramebufferDrawUs = 0.f;
-	float lastShaderCompileUs = 0.f;
-	float lastShaderLinkUs = 0.f;
-	double lastZoomMetricSubmitSec = 0.0;
 
 	struct GpuTimerSlot {
 		GLuint waveQuery = 0;
@@ -412,7 +404,6 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	}
 
 	void ensureBodyShader(int segmentRadius) {
-		using PerfClock = std::chrono::steady_clock;
 		segmentRadius = clamp(segmentRadius, 1, kWyrmMaxBodySegmentRadius);
 		if (bodyShaderInitAttempted && bodyShaderSegmentRadius == segmentRadius) return;
 		if (bodyShaderProgram != 0) {
@@ -535,14 +526,8 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 				gl_FragColor = color;
 			}
 		)GLSL";
-		const bool measureCompile = isDragonKingDebugEnabled();
-		const PerfClock::time_point compileStart = measureCompile ? PerfClock::now() : PerfClock::time_point();
 		GLuint vs = compileShader(GL_VERTEX_SHADER, kVs);
 		GLuint fs = compileShader(GL_FRAGMENT_SHADER, fsSource.c_str());
-		if (measureCompile) {
-			lastShaderCompileUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-				PerfClock::now() - compileStart).count()) * 0.001f;
-		}
 		if (!vs || !fs) {
 			if (vs) glDeleteShader(vs);
 			if (fs) glDeleteShader(fs);
@@ -556,16 +541,11 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		}
 		glAttachShader(bodyShaderProgram, vs);
 		glAttachShader(bodyShaderProgram, fs);
-		const PerfClock::time_point linkStart = measureCompile ? PerfClock::now() : PerfClock::time_point();
 		glLinkProgram(bodyShaderProgram);
 		glDeleteShader(vs);
 		glDeleteShader(fs);
 		GLint linkOk = GL_FALSE;
 		glGetProgramiv(bodyShaderProgram, GL_LINK_STATUS, &linkOk);
-		if (measureCompile) {
-			lastShaderLinkUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-				PerfClock::now() - linkStart).count()) * 0.001f;
-		}
 		if (linkOk != GL_TRUE) {
 			glDeleteProgram(bodyShaderProgram);
 			bodyShaderProgram = 0;
@@ -1071,8 +1051,6 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	void onContextCreate(const ContextCreateEvent& e) override {
 		OpenGlWidget::onContextCreate(e);
 		abandonGlResources();
-		++contextGeneration;
-		pendingDirtyMask |= 1u << 7;
 		setDirty();
 	}
 
@@ -1095,16 +1073,6 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			module->displaySlitherAmount.load(std::memory_order_relaxed));
 		const float slitherPhase = module->uiSlitherPhase.load(std::memory_order_relaxed);
 		bool dirty = !redrawStateInitialized;
-		if (!redrawStateInitialized) pendingDirtyMask |= 1u << 7;
-		if (waveVersion != lastWaveVersion) pendingDirtyMask |= 1u << 0;
-		if (slitherAmount > 1e-5f && std::fabs(slitherPhase - lastSlitherPhase) > 1e-6f)
-			pendingDirtyMask |= 1u << 2;
-		if (mode != lastRenderMode || rockStateIndex != lastRockStateIndex
-			|| pointCount != lastPointCount || envelopeMode != lastEnvelopeMode)
-			pendingDirtyMask |= 1u << 3;
-		if (std::fabs(box.size.x - lastDrawSize.x) > 1e-4f
-			|| std::fabs(box.size.y - lastDrawSize.y) > 1e-4f)
-			pendingDirtyMask |= 1u << 4;
 		dirty = dirty || mode != lastRenderMode;
 		dirty = dirty || waveVersion != lastWaveVersion;
 		dirty = dirty || rockStateIndex != lastRockStateIndex;
@@ -1136,31 +1104,10 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 
 	void draw(const DrawArgs& args) override {
 		using PerfClock = std::chrono::steady_clock;
-		const bool debugEnabled = module && isDragonKingDebugEnabled();
-		const bool logCsv = debugEnabled && isWyrmDrawLoggingEnabled();
-		const float absoluteZoom = std::max(1e-4f, getAbsoluteZoom());
+		const bool logCsv = module && isDragonKingDebugEnabled() && isWyrmDrawLoggingEnabled();
 		const bool cacheWasDirty = dirty;
 		const PerfClock::time_point start = logCsv ? PerfClock::now() : PerfClock::time_point();
-		const PerfClock::time_point framebufferStart = debugEnabled ? PerfClock::now() : PerfClock::time_point();
 		widget::FramebufferWidget::draw(args);
-		++framebufferDrawCount;
-		if (debugEnabled) {
-			lastFramebufferDrawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-				PerfClock::now() - framebufferStart).count()) * 0.001f;
-			const double nowSec = system::getTime();
-			if (lastZoomMetricSubmitSec <= 0.0 || nowSec - lastZoomMetricSubmitSec >= debug_terminal::kTimingRangeSubmitIntervalSec) {
-				const Vec fbSize = getFramebufferSize();
-				debug_terminal::submitGlZoomMetrics(
-					"Wyrm", module->debugInstanceId, contextGeneration, pendingDirtyMask,
-					absoluteZoom,
-					int(std::lround(fbSize.x)), int(std::lround(fbSize.y)),
-					lastFramebufferDrawUs, framebufferDrawCount,
-					lastShaderCompileUs, lastShaderLinkUs,
-					bodyShaderSegmentRadius);
-				pendingDirtyMask = 0;
-				lastZoomMetricSubmitSec = nowSec;
-			}
-		}
 		if (logCsv) {
 			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - start).count());

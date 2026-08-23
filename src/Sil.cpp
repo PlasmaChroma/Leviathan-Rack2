@@ -3,6 +3,7 @@
 #include "visual/VisualAssets.hpp"
 #include "SilRepairBuffer.hpp"
 #include "SilRepairKernel.hpp"
+#include "DebugTerminalMetrics.hpp"
 #include <vector>
 #include <algorithm>
 #include <array>
@@ -15,8 +16,17 @@
 #include <iomanip>
 #include <string>
 
+namespace {
+
+std::atomic<uint32_t> gSilDebugInstanceCounter {1u};
+constexpr int kSilPerfMeasureDivision = 17;
+
+} // namespace
+
 struct Sil : Module {
 	ModuleTeardownTimer teardownTimer {"Sil"};
+	debug_terminal::BaselineModuleMetrics debugMetrics;
+	dsp::ClockDivider perfMeasureDivider;
 	struct Biquad {
 		float b0 = 1.f;
 		float b1 = 0.f;
@@ -145,10 +155,13 @@ struct Sil : Module {
 	static constexpr float HISTOGRAM_DURATION = 10.f;
 
 	struct HistogramData {
-		float minL[HISTOGRAM_BINS] = {};
-		float maxL[HISTOGRAM_BINS] = {};
-		float minR[HISTOGRAM_BINS] = {};
-		float maxR[HISTOGRAM_BINS] = {};
+		// Audio-owned accumulation is published through atomics only when a bin
+		// completes. UI widgets copy these into a local immutable draw snapshot.
+		std::atomic<float> displayMinL[HISTOGRAM_BINS] {};
+		std::atomic<float> displayMaxL[HISTOGRAM_BINS] {};
+		std::atomic<float> displayMinR[HISTOGRAM_BINS] {};
+		std::atomic<float> displayMaxR[HISTOGRAM_BINS] {};
+		std::atomic<int> displayWritePtr {0};
 		int writePtr = 0;
 
 		float currentMinL = 1e10f, currentMaxL = -1e10f;
@@ -1113,6 +1126,8 @@ struct Sil : Module {
 	}
 
 	Sil() {
+		debugMetrics.assignInstanceId(gSilDebugInstanceCounter);
+		perfMeasureDivider.setDivision(kSilPerfMeasureDivision);
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configSwitch(MASTERING_ENABLED_PARAM, 0.f, 1.f, 1.f, "Mastering", {"Disabled", "Enabled"});
 		configSwitch(REPAIR_ENABLED_PARAM, 0.f, 1.f, 1.f, "Repair", {"Disabled", "Enabled"});
@@ -1469,6 +1484,8 @@ struct Sil : Module {
 	}
 
 	void process(const ProcessArgs& args) override {
+		const bool measurePerf = isDragonKingDebugEnabled() && perfMeasureDivider.process();
+		const auto processStart = debug_terminal::debugTimerStart(measurePerf);
 		masteringEnabled = params[MASTERING_ENABLED_PARAM].getValue() > 0.5f;
 		repairEnabled = params[REPAIR_ENABLED_PARAM].getValue() > 0.5f;
 		const bool repairActive = repairFeatureAvailable() && repairEnabled;
@@ -2127,11 +2144,12 @@ struct Sil : Module {
 		hist.samplesInCurrentBin++;
 
 		if (hist.samplesInCurrentBin >= hist.samplesPerBin) {
-			hist.minL[hist.writePtr] = hist.currentMinL;
-			hist.maxL[hist.writePtr] = hist.currentMaxL;
-			hist.minR[hist.writePtr] = hist.currentMinR;
-			hist.maxR[hist.writePtr] = hist.currentMaxR;
+			hist.displayMinL[hist.writePtr].store(hist.currentMinL, std::memory_order_relaxed);
+			hist.displayMaxL[hist.writePtr].store(hist.currentMaxL, std::memory_order_relaxed);
+			hist.displayMinR[hist.writePtr].store(hist.currentMinR, std::memory_order_relaxed);
+			hist.displayMaxR[hist.writePtr].store(hist.currentMaxR, std::memory_order_relaxed);
 			hist.writePtr = (hist.writePtr + 1) % HISTOGRAM_BINS;
+			hist.displayWritePtr.store(hist.writePtr, std::memory_order_release);
 
 			const float instantPeak = std::max(
 				std::max(std::fabs(hist.currentMinL), std::fabs(hist.currentMaxL)),
@@ -2169,6 +2187,10 @@ struct Sil : Module {
 			}
 			specSnapshotIndex.store(writeIndex, std::memory_order_release);
 			specSnapshotSeq.fetch_add(1u, std::memory_order_release);
+		}
+
+		if (measurePerf) {
+			debugMetrics.recordProcess(debug_terminal::elapsedNsSince(processStart));
 		}
 	}
 
@@ -2218,7 +2240,37 @@ struct SilColors {
 };
 
 struct HistogramWidget : TransparentWidget {
-	Sil* module;
+	Sil* module = nullptr;
+	widget::FramebufferWidget* framebuffer = nullptr;
+	int lastWritePtr = -1;
+	int lastColorScheme = -1;
+	double lastRefreshSec = -1.0;
+	std::array<float, Sil::HISTOGRAM_BINS> minL {};
+	std::array<float, Sil::HISTOGRAM_BINS> maxL {};
+	std::array<float, Sil::HISTOGRAM_BINS> minR {};
+	std::array<float, Sil::HISTOGRAM_BINS> maxR {};
+
+	void step() override {
+		TransparentWidget::step();
+		if (!module || !framebuffer) return;
+		const int writePtr = module->hist.displayWritePtr.load(std::memory_order_acquire);
+		const int colorScheme = int(module->colorScheme);
+		const double nowSec = system::getTime();
+		const bool paletteChanged = colorScheme != lastColorScheme;
+		const bool refreshDue = lastRefreshSec < 0.0 || nowSec - lastRefreshSec >= (1.0 / 30.0);
+		if (paletteChanged || (writePtr != lastWritePtr && refreshDue)) {
+			for (int i = 0; i < Sil::HISTOGRAM_BINS; ++i) {
+				minL[size_t(i)] = module->hist.displayMinL[i].load(std::memory_order_relaxed);
+				maxL[size_t(i)] = module->hist.displayMaxL[i].load(std::memory_order_relaxed);
+				minR[size_t(i)] = module->hist.displayMinR[i].load(std::memory_order_relaxed);
+				maxR[size_t(i)] = module->hist.displayMaxR[i].load(std::memory_order_relaxed);
+			}
+			lastWritePtr = writePtr;
+			lastColorScheme = colorScheme;
+			lastRefreshSec = nowSec;
+			framebuffer->setDirty();
+		}
+	}
 
 	void draw(const DrawArgs& args) override {
 		SilColors colors = SilColors::get(module ? module->colorScheme : Sil::SCHEME_DEFAULT);
@@ -2232,28 +2284,32 @@ struct HistogramWidget : TransparentWidget {
 		float halfH = box.size.y / 4.f;
 
 		auto drawChannel = [&](const float* minBuf, const float* maxBuf, float centerY) {
-			for (int i = 0; i < Sil::HISTOGRAM_BINS; i++) {
-				int idx = (module->hist.writePtr + i) % Sil::HISTOGRAM_BINS;
-				float x = (float)i / (Sil::HISTOGRAM_BINS - 1) * box.size.x;
-				float valMin = clamp(minBuf[idx] / Sil::kAudioFullScaleV, -1.f, 1.f);
-				float valMax = clamp(maxBuf[idx] / Sil::kAudioFullScaleV, -1.f, 1.f);
-				float yMin = centerY - valMin * halfH;
-				float yMax = centerY - valMax * halfH;
-				float amp = std::max(std::abs(valMin), std::abs(valMax));
-				NVGcolor color = nvgLerpRGBA(colors.low, colors.high, amp);
-
+			// Quantize the amplitude tint into a small palette so all lines sharing
+			// a tint can be emitted as one NanoVG path instead of 1000 strokes.
+			static constexpr int kColorBuckets = 16;
+			for (int bucket = 0; bucket < kColorBuckets; ++bucket) {
 				nvgBeginPath(args.vg);
-				nvgMoveTo(args.vg, x, yMin);
-				nvgLineTo(args.vg, x, yMax);
-				nvgStrokeColor(args.vg, color);
-				nvgStrokeWidth(args.vg, 1.0f);
+				for (int i = 0; i < Sil::HISTOGRAM_BINS; ++i) {
+					const int idx = (lastWritePtr + i) % Sil::HISTOGRAM_BINS;
+					const float valMin = clamp(minBuf[idx] / Sil::kAudioFullScaleV, -1.f, 1.f);
+					const float valMax = clamp(maxBuf[idx] / Sil::kAudioFullScaleV, -1.f, 1.f);
+					const float amp = std::max(std::abs(valMin), std::abs(valMax));
+					const int ampBucket = clamp(int(amp * float(kColorBuckets)), 0, kColorBuckets - 1);
+					if (ampBucket != bucket) continue;
+					const float x = float(i) / float(Sil::HISTOGRAM_BINS - 1) * box.size.x;
+					nvgMoveTo(args.vg, x, centerY - valMin * halfH);
+					nvgLineTo(args.vg, x, centerY - valMax * halfH);
+				}
+				const float tint = (float(bucket) + 0.5f) / float(kColorBuckets);
+				nvgStrokeColor(args.vg, nvgLerpRGBA(colors.low, colors.high, tint));
+				nvgStrokeWidth(args.vg, 1.f);
 				nvgStroke(args.vg);
 			}
 		};
 
 		if (module) {
-			drawChannel(module->hist.minL, module->hist.maxL, midY * 0.5f);
-			drawChannel(module->hist.minR, module->hist.maxR, midY * 1.5f);
+			drawChannel(minL.data(), maxL.data(), midY * 0.5f);
+			drawChannel(minR.data(), maxR.data(), midY * 1.5f);
 		}
 		else {
 			for (float centerY : {midY * 0.5f, midY * 1.5f}) {
@@ -2281,14 +2337,67 @@ struct HistogramWidget : TransparentWidget {
 	}
 };
 
+struct SpectrumGridWidget : TransparentWidget {
+	void draw(const DrawArgs& args) override {
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		nvgFillColor(args.vg, nvgRGB(0, 0, 0));
+		nvgFill(args.vg);
+
+		auto getX = [&](float hz) {
+			return (std::log10(hz / 20.f) / 3.f) * box.size.x;
+		};
+		for (int majorPass = 0; majorPass < 2; ++majorPass) {
+			nvgBeginPath(args.vg);
+			for (float decade = 10.f; decade <= 10000.f; decade *= 10.f) {
+				for (int i = 1; i <= 9; ++i) {
+					if ((i == 1) != (majorPass != 0)) continue;
+					const float frequency = decade * float(i);
+					if (frequency < 20.f) continue;
+					if (frequency > 20000.f) break;
+					const float x = getX(frequency);
+					if (x < 0.f || x > box.size.x) continue;
+					nvgMoveTo(args.vg, x, 0.f);
+					nvgLineTo(args.vg, x, box.size.y);
+				}
+			}
+			if (majorPass == 0) {
+				const float x20k = getX(20000.f);
+				if (x20k >= 0.f && x20k <= box.size.x) {
+					nvgMoveTo(args.vg, x20k, 0.f);
+					nvgLineTo(args.vg, x20k, box.size.y);
+				}
+			}
+			nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, majorPass ? 34 : 16));
+			nvgStrokeWidth(args.vg, majorPass ? 1.f : 0.7f);
+			nvgStroke(args.vg);
+		}
+	}
+};
+
 struct SpectrumWidget : TransparentWidget {
-	Sil* module;
+	Sil* module = nullptr;
+	widget::FramebufferWidget* framebuffer = nullptr;
 	bool isRightChannel = false;
+	uint32_t lastSnapshotSeq = uint32_t(-1);
+	int lastColorScheme = -1;
+
+	void step() override {
+		TransparentWidget::step();
+		if (!module || !framebuffer) return;
+		const uint32_t snapshotSeq = module->specSnapshotSeq.load(std::memory_order_acquire);
+		const int colorScheme = int(module->colorScheme);
+		if (snapshotSeq != lastSnapshotSeq || colorScheme != lastColorScheme) {
+			lastSnapshotSeq = snapshotSeq;
+			lastColorScheme = colorScheme;
+			framebuffer->setDirty();
+		}
+	}
 
 	void draw(const DrawArgs& args) override {
-		if (module && !isRightChannel) {
-			module->updateSpectrumDisplayFromLatestSnapshot();
-		}
+		// Keep the FFT demand-driven by visible rendering. The step method only
+		// invalidates the cache, so an offscreen Sil does not perform UI FFT work.
+		if (module && !isRightChannel) module->updateSpectrumDisplayFromLatestSnapshot();
 		SilColors colors = SilColors::get(module ? module->colorScheme : Sil::SCHEME_DEFAULT);
 		auto rgbToHsv = [](const NVGcolor& c, float& h, float& s, float& v) {
 			const float r = clamp(c.r, 0.f, 1.f);
@@ -2357,76 +2466,41 @@ struct SpectrumWidget : TransparentWidget {
 		const NVGcolor channelLow = isRightChannel ? sideLow : colors.low;
 		const NVGcolor channelHigh = isRightChannel ? sideHigh : colors.high;
 
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, 0, 0, box.size.x, box.size.y);
-		nvgFillColor(args.vg, colors.bg);
-		nvgFill(args.vg);
-
-		// Draw background grid
-		auto getX = [&](float hz) {
-			float f01 = std::log10(hz / 20.f) / 3.f; // log10(20000/20) = 3
-			return f01 * box.size.x;
-		};
-
-		// Vertical frequency lines: 10 per decade
-		for (float decade = 10.f; decade <= 10000.f; decade *= 10.f) {
-			for (int i = 1; i <= 9; i++) {
-				float f = decade * i;
-				if (f < 20.f) continue;
-				if (f > 20000.f) break;
-
-				float x = getX(f);
-				if (x < 0 || x > box.size.x) continue;
-
-				bool isDecade = (i == 1);
-
-				nvgBeginPath(args.vg);
-				nvgMoveTo(args.vg, x, 0);
-				nvgLineTo(args.vg, x, box.size.y);
-				nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, isDecade ? 34 : 16));
-				nvgStrokeWidth(args.vg, isDecade ? 1.0f : 0.7f);
-				nvgStroke(args.vg);
-			}
-		}
-		// 20kHz line
-		{
-			float x = getX(20000.f);
-			if (x >= 0 && x <= box.size.x) {
-				nvgBeginPath(args.vg);
-				nvgMoveTo(args.vg, x, 0);
-				nvgLineTo(args.vg, x, box.size.y);
-				nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 16));
-				nvgStrokeWidth(args.vg, 0.7f);
-				nvgStroke(args.vg);
-			}
-		}
-
 		float barW = box.size.x / Sil::SPEC_FREQ_BINS;
 
-		for (int i = 0; i < Sil::SPEC_FREQ_BINS; i++) {
-			const float previewX = float(i) / float(Sil::SPEC_FREQ_BINS - 1);
-			const float previewShape = std::sin(float(M_PI) * previewX);
-			const float previewRipple = 0.08f * std::sin((isRightChannel ? 13.f : 11.f) * float(M_PI) * previewX);
-			const float norm = module
-				? (isRightChannel ? module->spec.displayNormR[i] : module->spec.displayNormL[i])
-				: clamp(0.08f + 0.48f * previewShape + previewRipple, 0.f, 1.f);
-			if (norm <= 0.01f) continue;
-
-			float barH = norm * box.size.y;
-			float x = (float)i * barW;
-			NVGcolor color = nvgLerpRGBA(channelLow, channelHigh, norm);
-
+		static constexpr int kColorBuckets = 16;
+		for (int bucket = 0; bucket < kColorBuckets; ++bucket) {
 			nvgBeginPath(args.vg);
-			nvgRect(args.vg, x, box.size.y - barH, barW - 0.5f, barH);
-			nvgFillColor(args.vg, color);
+			for (int i = 0; i < Sil::SPEC_FREQ_BINS; ++i) {
+				float norm = 0.f;
+				if (module) {
+					norm = isRightChannel ? module->spec.displayNormR[i] : module->spec.displayNormL[i];
+				}
+				else {
+					const float previewX = float(i) / float(Sil::SPEC_FREQ_BINS - 1);
+					const float previewShape = std::sin(float(M_PI) * previewX);
+					const float previewRipple = 0.08f * std::sin(
+						(isRightChannel ? 13.f : 11.f) * float(M_PI) * previewX);
+					norm = clamp(0.08f + 0.48f * previewShape + previewRipple, 0.f, 1.f);
+				}
+				if (norm <= 0.01f) continue;
+				const int normBucket = clamp(int(norm * float(kColorBuckets)), 0, kColorBuckets - 1);
+				if (normBucket != bucket) continue;
+				const float barH = norm * box.size.y;
+				const float x = float(i) * barW;
+				nvgRect(args.vg, x, box.size.y - barH, barW - 0.5f, barH);
+			}
+			const float tint = (float(bucket) + 0.5f) / float(kColorBuckets);
+			nvgFillColor(args.vg, nvgLerpRGBA(channelLow, channelHigh, tint));
 			nvgFill(args.vg);
 		}
 
 	}
 };
 
-struct ChainLedDebugReadoutWidget : TransparentWidget {
+struct SilStageHistoryWidget : TransparentWidget {
 	Sil* module = nullptr;
+	widget::FramebufferWidget* framebuffer = nullptr;
 	static constexpr int kCount = 8;
 	static constexpr int kHistBins = 160;
 	std::array<int, kCount> lightIds = {
@@ -2441,8 +2515,24 @@ struct ChainLedDebugReadoutWidget : TransparentWidget {
 	};
 	std::array<Vec, kCount> textPositions;
 	std::array<std::array<float, kHistBins>, kCount> histories {};
+	std::array<float, kCount> current {};
 	int writeIndex = 0;
 	float histogramStartX = 0.f;
+	double lastSampleSec = -1.0;
+
+	void step() override {
+		TransparentWidget::step();
+		if (!module || !framebuffer) return;
+		const double nowSec = system::getTime();
+		if (lastSampleSec >= 0.0 && nowSec - lastSampleSec < (1.0 / 30.0)) return;
+		lastSampleSec = nowSec;
+		for (int i = 0; i < kCount; ++i) {
+			current[i] = clamp(module->lights[lightIds[i]].getBrightness(), 0.f, 1.f);
+			histories[i][size_t(writeIndex)] = current[i];
+		}
+		writeIndex = (writeIndex + 1) % kHistBins;
+		framebuffer->setDirty();
+	}
 
 	void draw(const DrawArgs& args) override {
 		if (!module || !APP || !APP->window || !APP->window->uiFont) {
@@ -2453,11 +2543,9 @@ struct ChainLedDebugReadoutWidget : TransparentWidget {
 		nvgFontSize(args.vg, 9.0f);
 		nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
 
-		std::array<float, kCount> current {};
 		char label[16];
 		for (int i = 0; i < kCount; ++i) {
-			const float b = clamp(module->lights[lightIds[i]].getBrightness(), 0.f, 1.f);
-			current[i] = b;
+			const float b = current[i];
 			const int pct = int(std::round(b * 100.f));
 			std::snprintf(label, sizeof(label), "%3d%%", pct);
 
@@ -2468,26 +2556,27 @@ struct ChainLedDebugReadoutWidget : TransparentWidget {
 			nvgText(args.vg, p.x, p.y, label, nullptr);
 		}
 
-		for (int i = 0; i < kCount; ++i) {
-			histories[i][size_t(writeIndex)] = current[i];
-		}
-		writeIndex = (writeIndex + 1) % kHistBins;
-
 		const float x0 = (histogramStartX > 0.f) ? histogramStartX : 0.50f * box.size.x;
 		const float rightPad = 6.f;
 		const float histW = std::max(24.f, box.size.x - x0 - rightPad);
 		const float histH = 8.f;
 		const float barW = histW / float(kHistBins);
 
+		// All graph backgrounds share one fill.
+		nvgBeginPath(args.vg);
 		for (int i = 0; i < kCount; ++i) {
 			const float centerY = textPositions[i].y;
 			const float top = centerY - 0.5f * histH;
-
-			nvgBeginPath(args.vg);
 			nvgRect(args.vg, x0, top, histW, histH);
-			nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 80));
-			nvgFill(args.vg);
+		}
+		nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 80));
+		nvgFill(args.vg);
 
+		// One path/fill per stage replaces up to 160 independent fills.
+		for (int i = 0; i < kCount; ++i) {
+			const float centerY = textPositions[i].y;
+			const float top = centerY - 0.5f * histH;
+			nvgBeginPath(args.vg);
 			for (int j = 0; j < kHistBins; ++j) {
 				const int idx = (writeIndex + j) % kHistBins;
 				const float v = clamp(histories[i][size_t(idx)], 0.f, 1.f);
@@ -2496,11 +2585,10 @@ struct ChainLedDebugReadoutWidget : TransparentWidget {
 				}
 				const float x = x0 + j * barW;
 				const float h = v * histH;
-				nvgBeginPath(args.vg);
 				nvgRect(args.vg, x, top + (histH - h), std::max(0.8f, barW - 0.25f), h);
-				nvgFillColor(args.vg, nvgRGBA(245, 245, 245, 210));
-				nvgFill(args.vg);
 			}
+			nvgFillColor(args.vg, nvgRGBA(245, 245, 245, 210));
+			nvgFill(args.vg);
 		}
 	}
 };
@@ -2530,6 +2618,8 @@ struct MicropeakRepairCountWidget : TransparentWidget {
 };
 
 struct SilWidget : ModuleWidget {
+	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
+
 	SilWidget(Sil* module) {
 		setModule(module);
 		PreviewBuildLogTimer previewBuildTimer("Sil", module);
@@ -2541,24 +2631,34 @@ struct SilWidget : ModuleWidget {
 		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		auto addCachedDisplay = [&](const math::Rect& rectPx, Widget* content) {
+			widget::FramebufferWidget* framebuffer = new widget::FramebufferWidget;
+			framebuffer->box = rectPx;
+			framebuffer->dirtyOnSubpixelChange = false;
+			content->box.size = rectPx.size;
+			framebuffer->addChild(content);
+			addChild(framebuffer);
+			return framebuffer;
+		};
 
 		math::Rect histRect;
 		if (panel_svg::loadRectFromSvgMm(panelPath, "HISTOGRAM", &histRect)) {
 			histRect = histRect.grow(Vec(-0.2f, -0.2f));
-			HistogramWidget* hw = createWidget<HistogramWidget>(mm2px(histRect.pos));
-			hw->box.size = mm2px(histRect.size);
+			HistogramWidget* hw = new HistogramWidget;
 			hw->module = module;
-			addChild(hw);
+			hw->framebuffer = addCachedDisplay(
+				math::Rect(mm2px(histRect.pos), mm2px(histRect.size)), hw);
 		}
 
 		math::Rect specLRect;
 		if (panel_svg::loadRectFromSvgMm(panelPath, "SPECTROGRAM_LEFT", &specLRect)) {
 			specLRect = specLRect.grow(Vec(-0.2f, -0.2f));
-			SpectrumWidget* sw = createWidget<SpectrumWidget>(mm2px(specLRect.pos));
-			sw->box.size = mm2px(specLRect.size);
+			const math::Rect spectrumRectPx(mm2px(specLRect.pos), mm2px(specLRect.size));
+			addCachedDisplay(spectrumRectPx, new SpectrumGridWidget);
+			SpectrumWidget* sw = new SpectrumWidget;
 			sw->module = module;
 			sw->isRightChannel = false;
-			addChild(sw);
+			sw->framebuffer = addCachedDisplay(spectrumRectPx, sw);
 		}
 
 		math::Rect specRRect;
@@ -2566,11 +2666,12 @@ struct SilWidget : ModuleWidget {
 		if (panel_svg::loadRectFromSvgMm(panelPath, "SPECTROGRAM_RIGHT", &specRRect)) {
 			specRRect = specRRect.grow(Vec(-0.2f, -0.2f));
 			sideSpecLeftX = mm2px(specRRect.pos).x;
-			SpectrumWidget* sw = createWidget<SpectrumWidget>(mm2px(specRRect.pos));
-			sw->box.size = mm2px(specRRect.size);
+			const math::Rect spectrumRectPx(mm2px(specRRect.pos), mm2px(specRRect.size));
+			addCachedDisplay(spectrumRectPx, new SpectrumGridWidget);
+			SpectrumWidget* sw = new SpectrumWidget;
 			sw->module = module;
 			sw->isRightChannel = true;
-			addChild(sw);
+			sw->framebuffer = addCachedDisplay(spectrumRectPx, sw);
 		}
 
 		Vec inputLPos(26.f, 118.f);
@@ -2646,8 +2747,7 @@ struct SilWidget : ModuleWidget {
 			addChild(micropeakCount);
 		}
 
-		ChainLedDebugReadoutWidget* chainLedReadout = createWidget<ChainLedDebugReadoutWidget>(Vec(0.f, 0.f));
-		chainLedReadout->box.size = box.size;
+		SilStageHistoryWidget* chainLedReadout = new SilStageHistoryWidget;
 		chainLedReadout->module = module;
 		const float histLeftExtension = 0.125f * box.size.x;
 		chainLedReadout->histogramStartX = std::max(0.f, sideSpecLeftX - histLeftExtension);
@@ -2662,16 +2762,61 @@ struct SilWidget : ModuleWidget {
 				mm2px(Vec(stereoEnhanceLightPos.x - textOffsetMm, stereoEnhanceLightPos.y)),
 				mm2px(Vec(saturatorLightPos.x - textOffsetMm, saturatorLightPos.y))
 		};
-		addChild(chainLedReadout);
+		float historyTop = chainLedReadout->textPositions[0].y;
+		float historyBottom = historyTop;
+		float historyLabelLeft = chainLedReadout->textPositions[0].x;
+		for (const Vec& position : chainLedReadout->textPositions) {
+			historyTop = std::min(historyTop, position.y);
+			historyBottom = std::max(historyBottom, position.y);
+			historyLabelLeft = std::min(historyLabelLeft, position.x);
+		}
+		const Vec historyOrigin(
+			std::max(0.f, historyLabelLeft - 34.f),
+			std::max(0.f, historyTop - 6.f));
+		const Vec historyEnd(
+			std::max(historyOrigin.x + 1.f, box.size.x - 6.f),
+			std::min(box.size.y, historyBottom + 6.f));
+		for (Vec& position : chainLedReadout->textPositions) position = position.minus(historyOrigin);
+		chainLedReadout->histogramStartX -= historyOrigin.x;
+		chainLedReadout->framebuffer = addCachedDisplay(
+			math::Rect(historyOrigin, historyEnd.minus(historyOrigin)), chainLedReadout);
 
 	}
 
 	void step() override {
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
 		Sil* sil = dynamic_cast<Sil*>(module);
 		if (sil) {
 			sil->drainMicropeakDebugQueueToCsv();
 		}
 		ModuleWidget::step();
+		if (measurePerf) {
+			debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
+		}
+	}
+
+	void draw(const DrawArgs& args) override {
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const auto drawStart = debug_terminal::debugTimerStart(measurePerf);
+		ModuleWidget::draw(args);
+
+		Sil* sil = dynamic_cast<Sil*>(module);
+		if (!sil || !measurePerf) {
+			return;
+		}
+
+		debug_terminal::drawDebugInstanceId(args.vg, box.size, sil->debugMetrics.instanceId);
+		debugWidgetMetrics.recordDraw(debug_terminal::elapsedUsSince(drawStart));
+		const double nowSec = system::getTime();
+		if (debug_terminal::baselineSubmitDue("Sil", sil->debugMetrics.instanceId, nowSec)) {
+			debug_terminal::submitBaselineMetrics(
+				"Sil",
+				sil->debugMetrics.instanceId,
+				sil->debugMetrics.consumeProcessRange(),
+				debugWidgetMetrics.consumeStepRange(),
+				debugWidgetMetrics.consumeDrawRange());
+		}
 	}
 
 	void appendContextMenu(Menu* menu) override {
