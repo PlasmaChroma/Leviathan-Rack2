@@ -4,6 +4,7 @@
 #include "SilRepairBuffer.hpp"
 #include "SilRepairKernel.hpp"
 #include "DebugTerminalMetrics.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 #include <vector>
 #include <algorithm>
 #include <array>
@@ -15,6 +16,7 @@
 #include <fstream>
 #include <iomanip>
 #include <string>
+#include <cstring>
 
 namespace {
 
@@ -27,6 +29,7 @@ struct Sil : Module {
 	ModuleTeardownTimer teardownTimer {"Sil"};
 	debug_terminal::BaselineModuleMetrics debugMetrics;
 	dsp::ClockDivider perfMeasureDivider;
+	std::atomic<uint64_t> perfLatestProcessNs {0u};
 	struct Biquad {
 		float b0 = 1.f;
 		float b1 = 0.f;
@@ -2190,7 +2193,9 @@ struct Sil : Module {
 		}
 
 		if (measurePerf) {
-			debugMetrics.recordProcess(debug_terminal::elapsedNsSince(processStart));
+			const uint64_t elapsedNs = debug_terminal::elapsedNsSince(processStart);
+			perfLatestProcessNs.store(elapsedNs, std::memory_order_relaxed);
+			debugMetrics.recordProcess(elapsedNs);
 		}
 	}
 
@@ -2239,9 +2244,99 @@ struct SilColors {
 	}
 };
 
+struct SilRenderDebugMetrics {
+	enum Slot {
+		HISTOGRAM,
+		SPECTRUM_LEFT,
+		SPECTRUM_RIGHT,
+		STAGE_HISTORY,
+		SLOT_COUNT
+	};
+	enum DirtyReason : uint32_t {
+		DIRTY_DATA = 1u << 0,
+		DIRTY_PALETTE = 1u << 1,
+		DIRTY_INITIAL = 1u << 2,
+		DIRTY_EXTERNAL = 1u << 3
+	};
+	enum CacheSlot {
+		CACHE_HISTOGRAM,
+		CACHE_SPECTRUM_LEFT_GRID,
+		CACHE_SPECTRUM_LEFT_DATA,
+		CACHE_SPECTRUM_RIGHT_GRID,
+		CACHE_SPECTRUM_RIGHT_DATA,
+		CACHE_STAGE_HISTORY,
+		CACHE_SLOT_COUNT
+	};
+
+	std::array<float, SLOT_COUNT> frameDrawUs {};
+	std::array<uint32_t, SLOT_COUNT> frameDrawn {};
+	std::array<uint32_t, SLOT_COUNT> frameDirtyReasons {};
+	std::array<uint32_t, SLOT_COUNT> pendingDirtyReasons {};
+	std::array<uint64_t, SLOT_COUNT> totalDraws {};
+	std::array<float, CACHE_SLOT_COUNT> frameCacheUs {};
+	std::array<uint32_t, CACHE_SLOT_COUNT> frameCacheDirty {};
+	std::array<float, CACHE_SLOT_COUNT> frameCacheWidth {};
+	std::array<float, CACHE_SLOT_COUNT> frameCacheHeight {};
+
+	void beginFrame() {
+		frameDrawUs.fill(0.f);
+		frameDrawn.fill(0u);
+		frameDirtyReasons.fill(0u);
+		frameCacheUs.fill(0.f);
+		frameCacheDirty.fill(0u);
+	}
+
+	void markDirty(Slot slot, uint32_t reasons) {
+		pendingDirtyReasons[size_t(slot)] |= reasons;
+	}
+
+	void recordDraw(Slot slot, float elapsedUs) {
+		const size_t index = size_t(slot);
+		frameDrawUs[index] += elapsedUs;
+		frameDrawn[index] = 1u;
+		frameDirtyReasons[index] |= pendingDirtyReasons[index]
+			? pendingDirtyReasons[index] : uint32_t(DIRTY_EXTERNAL);
+		pendingDirtyReasons[index] = 0u;
+		++totalDraws[index];
+	}
+
+	void recordCacheDraw(CacheSlot slot, float elapsedUs, bool wasDirty, Vec framebufferSize) {
+		const size_t index = size_t(slot);
+		frameCacheUs[index] += elapsedUs;
+		frameCacheDirty[index] |= wasDirty ? 1u : 0u;
+		frameCacheWidth[index] = framebufferSize.x;
+		frameCacheHeight[index] = framebufferSize.y;
+	}
+};
+
+struct SilTimedFramebufferWidget : widget::FramebufferWidget {
+	SilRenderDebugMetrics* renderDebugMetrics = nullptr;
+	SilRenderDebugMetrics::CacheSlot debugSlot = SilRenderDebugMetrics::CACHE_HISTOGRAM;
+
+	void draw(const DrawArgs& args) override {
+		const bool measurePerf = renderDebugMetrics && isDragonKingDebugEnabled();
+		const bool cacheWasDirty = dirty;
+		const auto drawStart = debug_terminal::debugTimerStart(measurePerf);
+		widget::FramebufferWidget::draw(args);
+		if (measurePerf) {
+			renderDebugMetrics->recordCacheDraw(
+				debugSlot,
+				debug_terminal::elapsedUsSince(drawStart),
+				cacheWasDirty,
+				getFramebufferSize());
+		}
+	}
+};
+
+struct SilUiRefreshCoordinator {
+	bool histogramRefreshedThisStep = false;
+};
+
 struct HistogramWidget : TransparentWidget {
 	Sil* module = nullptr;
 	widget::FramebufferWidget* framebuffer = nullptr;
+	SilRenderDebugMetrics* renderDebugMetrics = nullptr;
+	SilUiRefreshCoordinator* refreshCoordinator = nullptr;
 	int lastWritePtr = -1;
 	int lastColorScheme = -1;
 	double lastRefreshSec = -1.0;
@@ -2249,6 +2344,18 @@ struct HistogramWidget : TransparentWidget {
 	std::array<float, Sil::HISTOGRAM_BINS> maxL {};
 	std::array<float, Sil::HISTOGRAM_BINS> minR {};
 	std::array<float, Sil::HISTOGRAM_BINS> maxR {};
+	NVGcontext* rasterImageVg = nullptr;
+	int rasterImage = -1;
+	int rasterWidth = 0;
+	int rasterHeight = 0;
+	int rasterWritePtr = -1;
+	int rasterColorScheme = -1;
+	std::vector<unsigned char> rasterPixels;
+
+	~HistogramWidget() override {
+		nvg_gfx_lifecycle::resetOwnedNvgImage(
+			rasterImageVg, rasterImage, rasterWidth, rasterHeight, nullptr, false);
+	}
 
 	void step() override {
 		TransparentWidget::step();
@@ -2259,6 +2366,12 @@ struct HistogramWidget : TransparentWidget {
 		const bool paletteChanged = colorScheme != lastColorScheme;
 		const bool refreshDue = lastRefreshSec < 0.0 || nowSec - lastRefreshSec >= (1.0 / 30.0);
 		if (paletteChanged || (writePtr != lastWritePtr && refreshDue)) {
+			if (refreshCoordinator) refreshCoordinator->histogramRefreshedThisStep = true;
+			uint32_t dirtyReasons = 0u;
+			if (lastRefreshSec < 0.0) dirtyReasons |= SilRenderDebugMetrics::DIRTY_INITIAL;
+			if (paletteChanged) dirtyReasons |= SilRenderDebugMetrics::DIRTY_PALETTE;
+			if (writePtr != lastWritePtr) dirtyReasons |= SilRenderDebugMetrics::DIRTY_DATA;
+			if (renderDebugMetrics) renderDebugMetrics->markDirty(SilRenderDebugMetrics::HISTOGRAM, dirtyReasons);
 			for (int i = 0; i < Sil::HISTOGRAM_BINS; ++i) {
 				minL[size_t(i)] = module->hist.displayMinL[i].load(std::memory_order_relaxed);
 				maxL[size_t(i)] = module->hist.displayMaxL[i].load(std::memory_order_relaxed);
@@ -2273,7 +2386,101 @@ struct HistogramWidget : TransparentWidget {
 	}
 
 	void draw(const DrawArgs& args) override {
+		const bool measurePerf = renderDebugMetrics && isDragonKingDebugEnabled();
+		const auto drawStart = debug_terminal::debugTimerStart(measurePerf);
 		SilColors colors = SilColors::get(module ? module->colorScheme : Sil::SCHEME_DEFAULT);
+		if (module) {
+			const int targetWidth = Sil::HISTOGRAM_BINS;
+			const int targetHeight = std::max(2, int(std::ceil(box.size.y)));
+			if (rasterImageVg != args.vg) {
+				nvg_gfx_lifecycle::resetOwnedNvgImage(
+					rasterImageVg, rasterImage, rasterWidth, rasterHeight, args.vg, false);
+				rasterWritePtr = -1;
+			}
+			if (rasterImage >= 0 && !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(
+				args.vg, rasterImage, rasterWidth, rasterHeight)) {
+				nvg_gfx_lifecycle::resetOwnedNvgImage(
+					rasterImageVg, rasterImage, rasterWidth, rasterHeight, args.vg, true);
+				rasterWritePtr = -1;
+			}
+			if (rasterImage < 0 || rasterWidth != targetWidth || rasterHeight != targetHeight) {
+				nvg_gfx_lifecycle::resetOwnedNvgImage(
+					rasterImageVg, rasterImage, rasterWidth, rasterHeight, args.vg, true);
+				rasterWidth = targetWidth;
+				rasterHeight = targetHeight;
+				rasterPixels.assign(size_t(rasterWidth * rasterHeight * 4), 0u);
+				rasterImage = nvgCreateImageRGBA(
+					args.vg, rasterWidth, rasterHeight, NVG_IMAGE_PREMULTIPLIED, rasterPixels.data());
+				rasterImageVg = args.vg;
+				rasterWritePtr = -1;
+			}
+
+			if (rasterImage >= 0) {
+				const bool paletteChanged = rasterColorScheme != int(module->colorScheme);
+				int advance = rasterWritePtr < 0 ? rasterWidth
+					: (lastWritePtr - rasterWritePtr + rasterWidth) % rasterWidth;
+				const bool fullRebuild = rasterWritePtr < 0 || paletteChanged || advance <= 0 || advance >= rasterWidth;
+				if (fullRebuild) {
+					advance = rasterWidth;
+					std::fill(rasterPixels.begin(), rasterPixels.end(), 0u);
+				}
+				else {
+					const size_t rowBytes = size_t(rasterWidth) * 4u;
+					const size_t keptBytes = size_t(rasterWidth - advance) * 4u;
+					for (int y = 0; y < rasterHeight; ++y) {
+						unsigned char* row = rasterPixels.data() + size_t(y) * rowBytes;
+						std::memmove(row, row + size_t(advance) * 4u, keptBytes);
+						std::memset(row + keptBytes, 0, size_t(advance) * 4u);
+					}
+				}
+
+				auto writePixel = [&](int x, int y, NVGcolor color) {
+					if (x < 0 || x >= rasterWidth || y < 0 || y >= rasterHeight) return;
+					unsigned char* pixel = rasterPixels.data() + (size_t(y) * size_t(rasterWidth) + size_t(x)) * 4u;
+					pixel[0] = uint8_t(clamp(color.r * color.a, 0.f, 1.f) * 255.f);
+					pixel[1] = uint8_t(clamp(color.g * color.a, 0.f, 1.f) * 255.f);
+					pixel[2] = uint8_t(clamp(color.b * color.a, 0.f, 1.f) * 255.f);
+					pixel[3] = 255u;
+				};
+				auto drawSpan = [&](int x, const float* minBuf, const float* maxBuf, float centerY, int index) {
+					const float valMin = clamp(minBuf[index] / Sil::kAudioFullScaleV, -1.f, 1.f);
+					const float valMax = clamp(maxBuf[index] / Sil::kAudioFullScaleV, -1.f, 1.f);
+					const float amp = std::max(std::abs(valMin), std::abs(valMax));
+					const int bucket = clamp(int(amp * 16.f), 0, 15);
+					const float tint = (float(bucket) + 0.5f) / 16.f;
+					const NVGcolor color = nvgLerpRGBA(colors.low, colors.high, tint);
+					const float halfH = float(rasterHeight) * 0.25f;
+					int y0 = int(std::round(centerY - valMin * halfH));
+					int y1 = int(std::round(centerY - valMax * halfH));
+					if (y0 > y1) std::swap(y0, y1);
+					for (int y = y0; y <= y1; ++y) writePixel(x, y, color);
+				};
+				const int firstX = rasterWidth - advance;
+				for (int x = firstX; x < rasterWidth; ++x) {
+					for (int y = 0; y < rasterHeight; ++y) {
+						writePixel(x, y, nvgRGBA(0, 0, 0, 255));
+					}
+					const int index = (lastWritePtr + x) % rasterWidth;
+					drawSpan(x, minL.data(), maxL.data(), float(rasterHeight) * 0.25f, index);
+					drawSpan(x, minR.data(), maxR.data(), float(rasterHeight) * 0.75f, index);
+					writePixel(x, rasterHeight / 2, colors.divider);
+				}
+				nvgUpdateImage(args.vg, rasterImage, rasterPixels.data());
+				nvgBeginPath(args.vg);
+				nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+				nvgFillPaint(args.vg, nvgImagePattern(
+					args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, rasterImage, 1.f));
+				nvgFill(args.vg);
+				rasterWritePtr = lastWritePtr;
+				rasterColorScheme = int(module->colorScheme);
+				if (measurePerf) {
+					renderDebugMetrics->recordDraw(
+						SilRenderDebugMetrics::HISTOGRAM,
+						debug_terminal::elapsedUsSince(drawStart));
+				}
+				return;
+			}
+		}
 
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, 0, 0, box.size.x, box.size.y);
@@ -2334,11 +2541,21 @@ struct HistogramWidget : TransparentWidget {
 		nvgStrokeColor(args.vg, colors.divider);
 		nvgStrokeWidth(args.vg, 0.5f);
 		nvgStroke(args.vg);
+		if (measurePerf) {
+			renderDebugMetrics->recordDraw(
+				SilRenderDebugMetrics::HISTOGRAM,
+				debug_terminal::elapsedUsSince(drawStart));
+		}
 	}
 };
 
 struct SpectrumGridWidget : TransparentWidget {
+	SilRenderDebugMetrics* renderDebugMetrics = nullptr;
+	SilRenderDebugMetrics::Slot debugSlot = SilRenderDebugMetrics::SPECTRUM_LEFT;
+
 	void draw(const DrawArgs& args) override {
+		const bool measurePerf = renderDebugMetrics && isDragonKingDebugEnabled();
+		const auto drawStart = debug_terminal::debugTimerStart(measurePerf);
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 		nvgFillColor(args.vg, nvgRGB(0, 0, 0));
@@ -2372,12 +2589,16 @@ struct SpectrumGridWidget : TransparentWidget {
 			nvgStrokeWidth(args.vg, majorPass ? 1.f : 0.7f);
 			nvgStroke(args.vg);
 		}
+		if (measurePerf) {
+			renderDebugMetrics->recordDraw(debugSlot, debug_terminal::elapsedUsSince(drawStart));
+		}
 	}
 };
 
 struct SpectrumWidget : TransparentWidget {
 	Sil* module = nullptr;
 	widget::FramebufferWidget* framebuffer = nullptr;
+	SilRenderDebugMetrics* renderDebugMetrics = nullptr;
 	bool isRightChannel = false;
 	uint32_t lastSnapshotSeq = uint32_t(-1);
 	int lastColorScheme = -1;
@@ -2388,6 +2609,15 @@ struct SpectrumWidget : TransparentWidget {
 		const uint32_t snapshotSeq = module->specSnapshotSeq.load(std::memory_order_acquire);
 		const int colorScheme = int(module->colorScheme);
 		if (snapshotSeq != lastSnapshotSeq || colorScheme != lastColorScheme) {
+			uint32_t dirtyReasons = 0u;
+			if (lastSnapshotSeq == uint32_t(-1)) dirtyReasons |= SilRenderDebugMetrics::DIRTY_INITIAL;
+			if (snapshotSeq != lastSnapshotSeq) dirtyReasons |= SilRenderDebugMetrics::DIRTY_DATA;
+			if (colorScheme != lastColorScheme) dirtyReasons |= SilRenderDebugMetrics::DIRTY_PALETTE;
+			if (renderDebugMetrics) {
+				renderDebugMetrics->markDirty(
+					isRightChannel ? SilRenderDebugMetrics::SPECTRUM_RIGHT : SilRenderDebugMetrics::SPECTRUM_LEFT,
+					dirtyReasons);
+			}
 			lastSnapshotSeq = snapshotSeq;
 			lastColorScheme = colorScheme;
 			framebuffer->setDirty();
@@ -2395,6 +2625,8 @@ struct SpectrumWidget : TransparentWidget {
 	}
 
 	void draw(const DrawArgs& args) override {
+		const bool measurePerf = renderDebugMetrics && isDragonKingDebugEnabled();
+		const auto drawStart = debug_terminal::debugTimerStart(measurePerf);
 		// Keep the FFT demand-driven by visible rendering. The step method only
 		// invalidates the cache, so an offscreen Sil does not perform UI FFT work.
 		if (module && !isRightChannel) module->updateSpectrumDisplayFromLatestSnapshot();
@@ -2494,13 +2726,19 @@ struct SpectrumWidget : TransparentWidget {
 			nvgFillColor(args.vg, nvgLerpRGBA(channelLow, channelHigh, tint));
 			nvgFill(args.vg);
 		}
-
+		if (measurePerf) {
+			renderDebugMetrics->recordDraw(
+				isRightChannel ? SilRenderDebugMetrics::SPECTRUM_RIGHT : SilRenderDebugMetrics::SPECTRUM_LEFT,
+				debug_terminal::elapsedUsSince(drawStart));
+		}
 	}
 };
 
 struct SilStageHistoryWidget : TransparentWidget {
 	Sil* module = nullptr;
 	widget::FramebufferWidget* framebuffer = nullptr;
+	SilRenderDebugMetrics* renderDebugMetrics = nullptr;
+	SilUiRefreshCoordinator* refreshCoordinator = nullptr;
 	static constexpr int kCount = 8;
 	static constexpr int kHistBins = 160;
 	std::array<int, kCount> lightIds = {
@@ -2519,12 +2757,27 @@ struct SilStageHistoryWidget : TransparentWidget {
 	int writeIndex = 0;
 	float histogramStartX = 0.f;
 	double lastSampleSec = -1.0;
+	bool staggerDeferred = false;
 
 	void step() override {
 		TransparentWidget::step();
 		if (!module || !framebuffer) return;
 		const double nowSec = system::getTime();
 		if (lastSampleSec >= 0.0 && nowSec - lastSampleSec < (1.0 / 30.0)) return;
+		// Histogram and stage history are the two expensive steady-state caches.
+		// When both become due together, move history to the following UI frame.
+		// The one-deferral limit prevents starvation at unusually low UI rates.
+		if (refreshCoordinator && refreshCoordinator->histogramRefreshedThisStep && !staggerDeferred) {
+			staggerDeferred = true;
+			return;
+		}
+		staggerDeferred = false;
+		if (renderDebugMetrics) {
+			renderDebugMetrics->markDirty(
+				SilRenderDebugMetrics::STAGE_HISTORY,
+				(lastSampleSec < 0.0 ? SilRenderDebugMetrics::DIRTY_INITIAL : 0u)
+					| SilRenderDebugMetrics::DIRTY_DATA);
+		}
 		lastSampleSec = nowSec;
 		for (int i = 0; i < kCount; ++i) {
 			current[i] = clamp(module->lights[lightIds[i]].getBrightness(), 0.f, 1.f);
@@ -2535,6 +2788,8 @@ struct SilStageHistoryWidget : TransparentWidget {
 	}
 
 	void draw(const DrawArgs& args) override {
+		const bool measurePerf = renderDebugMetrics && isDragonKingDebugEnabled();
+		const auto drawStart = debug_terminal::debugTimerStart(measurePerf);
 		if (!module || !APP || !APP->window || !APP->window->uiFont) {
 			return;
 		}
@@ -2590,6 +2845,11 @@ struct SilStageHistoryWidget : TransparentWidget {
 			nvgFillColor(args.vg, nvgRGBA(245, 245, 245, 210));
 			nvgFill(args.vg);
 		}
+		if (measurePerf) {
+			renderDebugMetrics->recordDraw(
+				SilRenderDebugMetrics::STAGE_HISTORY,
+				debug_terminal::elapsedUsSince(drawStart));
+		}
 	}
 };
 
@@ -2619,6 +2879,155 @@ struct MicropeakRepairCountWidget : TransparentWidget {
 
 struct SilWidget : ModuleWidget {
 	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
+	SilRenderDebugMetrics renderDebugMetrics;
+	SilUiRefreshCoordinator refreshCoordinator;
+	std::ofstream timingLogFile;
+	std::string timingLogPath;
+	bool timingLogActive = false;
+	uint64_t timingLogRow = 0u;
+	double timingLogStartedAtSec = 0.0;
+	double timingLogPreviousFrameSec = 0.0;
+	float latestStepUs = 0.f;
+	uint32_t timingLogPreviousSnapshotSeq = uint32_t(-1);
+
+	~SilWidget() override {
+		stopTimingLog();
+	}
+
+	void startTimingLog(Sil* sil) {
+		if (!sil || timingLogActive || !isDragonKingDebugEnabled()) {
+			return;
+		}
+		system::createDirectories(Sil::userDebugRootPath());
+		static uint32_t openSequence = 0u;
+		timingLogPath = system::join(
+			Sil::userDebugRootPath(),
+			"timings_" + std::to_string(sil->debugMetrics.instanceId) + "_"
+				+ std::to_string(std::time(nullptr)) + "_"
+				+ std::to_string(openSequence++) + ".csv");
+		timingLogFile.open(timingLogPath.c_str(), std::ios::out | std::ios::trunc);
+		if (!timingLogFile.is_open()) {
+			WARN("Sil failed to open timing CSV: %s", timingLogPath.c_str());
+			timingLogPath.clear();
+			return;
+		}
+		timingLogFile << std::fixed << std::setprecision(3);
+		timingLogFile
+			<< "row,elapsed_sec,module_id,instance_id,process_us,step_us,draw_us,"
+			<< "frame_interval_ms,histogram_draw_us,spectrum_left_draw_us,spectrum_right_draw_us,"
+			<< "stage_history_draw_us,other_draw_us,"
+			<< "histogram_fb_us,spectrum_left_grid_fb_us,spectrum_left_data_fb_us,"
+			<< "spectrum_right_grid_fb_us,spectrum_right_data_fb_us,stage_history_fb_us,"
+			<< "histogram_fb_dirty,spectrum_left_grid_fb_dirty,spectrum_left_data_fb_dirty,"
+			<< "spectrum_right_grid_fb_dirty,spectrum_right_data_fb_dirty,stage_history_fb_dirty,"
+			<< "histogram_fb_width,histogram_fb_height,spectrum_left_data_fb_width,spectrum_left_data_fb_height,"
+			<< "spectrum_right_data_fb_width,spectrum_right_data_fb_height,stage_history_fb_width,stage_history_fb_height,"
+			<< "histogram_drawn,spectrum_left_drawn,spectrum_right_drawn,stage_history_drawn,"
+			<< "histogram_dirty_reasons,spectrum_left_dirty_reasons,spectrum_right_dirty_reasons,stage_history_dirty_reasons,"
+			<< "histogram_total_draws,spectrum_left_total_draws,spectrum_right_total_draws,stage_history_total_draws,"
+			<< "spectrum_snapshot_seq,spectrum_snapshot_changed,histogram_write_ptr,rack_zoom,pixel_ratio\n";
+		timingLogActive = true;
+		timingLogRow = 0u;
+		timingLogStartedAtSec = system::getTime();
+		timingLogPreviousFrameSec = 0.0;
+		timingLogPreviousSnapshotSeq = uint32_t(-1);
+		INFO("Sil started timing CSV: %s", timingLogPath.c_str());
+	}
+
+	void stopTimingLog() {
+		if (timingLogFile.is_open()) {
+			timingLogFile.flush();
+			timingLogFile.close();
+		}
+		if (timingLogActive) {
+			INFO("Sil stopped timing CSV: %s", timingLogPath.c_str());
+		}
+		timingLogActive = false;
+		timingLogRow = 0u;
+		timingLogStartedAtSec = 0.0;
+		timingLogPreviousFrameSec = 0.0;
+		timingLogPreviousSnapshotSeq = uint32_t(-1);
+	}
+
+	void writeTimingLogRow(Sil* sil, double nowSec, float drawUs) {
+		if (!timingLogActive || !timingLogFile.is_open() || !sil) {
+			return;
+		}
+		const float processUs = float(double(
+			sil->perfLatestProcessNs.load(std::memory_order_relaxed)) * 0.001);
+		const float componentDrawUs =
+			renderDebugMetrics.frameDrawUs[SilRenderDebugMetrics::HISTOGRAM]
+			+ renderDebugMetrics.frameDrawUs[SilRenderDebugMetrics::SPECTRUM_LEFT]
+			+ renderDebugMetrics.frameDrawUs[SilRenderDebugMetrics::SPECTRUM_RIGHT]
+			+ renderDebugMetrics.frameDrawUs[SilRenderDebugMetrics::STAGE_HISTORY];
+		const float otherDrawUs = std::max(0.f, drawUs - componentDrawUs);
+		const double frameIntervalMs = timingLogPreviousFrameSec > 0.0
+			? (nowSec - timingLogPreviousFrameSec) * 1000.0 : 0.0;
+		timingLogPreviousFrameSec = nowSec;
+		const uint32_t snapshotSeq = sil->specSnapshotSeq.load(std::memory_order_acquire);
+		const bool snapshotChanged = timingLogPreviousSnapshotSeq != uint32_t(-1)
+			&& snapshotSeq != timingLogPreviousSnapshotSeq;
+		timingLogPreviousSnapshotSeq = snapshotSeq;
+		float rackZoom = 1.f;
+		if (APP && APP->scene && APP->scene->rackScroll) {
+			rackZoom = APP->scene->rackScroll->getZoom();
+		}
+		const float pixelRatio = (APP && APP->window) ? APP->window->pixelRatio : 1.f;
+		timingLogFile
+			<< timingLogRow << ','
+			<< (nowSec - timingLogStartedAtSec) << ','
+			<< sil->id << ','
+			<< sil->debugMetrics.instanceId << ','
+			<< processUs << ','
+			<< latestStepUs << ','
+			<< drawUs << ','
+			<< frameIntervalMs << ','
+			<< renderDebugMetrics.frameDrawUs[SilRenderDebugMetrics::HISTOGRAM] << ','
+			<< renderDebugMetrics.frameDrawUs[SilRenderDebugMetrics::SPECTRUM_LEFT] << ','
+			<< renderDebugMetrics.frameDrawUs[SilRenderDebugMetrics::SPECTRUM_RIGHT] << ','
+			<< renderDebugMetrics.frameDrawUs[SilRenderDebugMetrics::STAGE_HISTORY] << ','
+			<< otherDrawUs << ','
+			<< renderDebugMetrics.frameCacheUs[SilRenderDebugMetrics::CACHE_HISTOGRAM] << ','
+			<< renderDebugMetrics.frameCacheUs[SilRenderDebugMetrics::CACHE_SPECTRUM_LEFT_GRID] << ','
+			<< renderDebugMetrics.frameCacheUs[SilRenderDebugMetrics::CACHE_SPECTRUM_LEFT_DATA] << ','
+			<< renderDebugMetrics.frameCacheUs[SilRenderDebugMetrics::CACHE_SPECTRUM_RIGHT_GRID] << ','
+			<< renderDebugMetrics.frameCacheUs[SilRenderDebugMetrics::CACHE_SPECTRUM_RIGHT_DATA] << ','
+			<< renderDebugMetrics.frameCacheUs[SilRenderDebugMetrics::CACHE_STAGE_HISTORY] << ','
+			<< renderDebugMetrics.frameCacheDirty[SilRenderDebugMetrics::CACHE_HISTOGRAM] << ','
+			<< renderDebugMetrics.frameCacheDirty[SilRenderDebugMetrics::CACHE_SPECTRUM_LEFT_GRID] << ','
+			<< renderDebugMetrics.frameCacheDirty[SilRenderDebugMetrics::CACHE_SPECTRUM_LEFT_DATA] << ','
+			<< renderDebugMetrics.frameCacheDirty[SilRenderDebugMetrics::CACHE_SPECTRUM_RIGHT_GRID] << ','
+			<< renderDebugMetrics.frameCacheDirty[SilRenderDebugMetrics::CACHE_SPECTRUM_RIGHT_DATA] << ','
+			<< renderDebugMetrics.frameCacheDirty[SilRenderDebugMetrics::CACHE_STAGE_HISTORY] << ','
+			<< renderDebugMetrics.frameCacheWidth[SilRenderDebugMetrics::CACHE_HISTOGRAM] << ','
+			<< renderDebugMetrics.frameCacheHeight[SilRenderDebugMetrics::CACHE_HISTOGRAM] << ','
+			<< renderDebugMetrics.frameCacheWidth[SilRenderDebugMetrics::CACHE_SPECTRUM_LEFT_DATA] << ','
+			<< renderDebugMetrics.frameCacheHeight[SilRenderDebugMetrics::CACHE_SPECTRUM_LEFT_DATA] << ','
+			<< renderDebugMetrics.frameCacheWidth[SilRenderDebugMetrics::CACHE_SPECTRUM_RIGHT_DATA] << ','
+			<< renderDebugMetrics.frameCacheHeight[SilRenderDebugMetrics::CACHE_SPECTRUM_RIGHT_DATA] << ','
+			<< renderDebugMetrics.frameCacheWidth[SilRenderDebugMetrics::CACHE_STAGE_HISTORY] << ','
+			<< renderDebugMetrics.frameCacheHeight[SilRenderDebugMetrics::CACHE_STAGE_HISTORY] << ','
+			<< renderDebugMetrics.frameDrawn[SilRenderDebugMetrics::HISTOGRAM] << ','
+			<< renderDebugMetrics.frameDrawn[SilRenderDebugMetrics::SPECTRUM_LEFT] << ','
+			<< renderDebugMetrics.frameDrawn[SilRenderDebugMetrics::SPECTRUM_RIGHT] << ','
+			<< renderDebugMetrics.frameDrawn[SilRenderDebugMetrics::STAGE_HISTORY] << ','
+			<< renderDebugMetrics.frameDirtyReasons[SilRenderDebugMetrics::HISTOGRAM] << ','
+			<< renderDebugMetrics.frameDirtyReasons[SilRenderDebugMetrics::SPECTRUM_LEFT] << ','
+			<< renderDebugMetrics.frameDirtyReasons[SilRenderDebugMetrics::SPECTRUM_RIGHT] << ','
+			<< renderDebugMetrics.frameDirtyReasons[SilRenderDebugMetrics::STAGE_HISTORY] << ','
+			<< renderDebugMetrics.totalDraws[SilRenderDebugMetrics::HISTOGRAM] << ','
+			<< renderDebugMetrics.totalDraws[SilRenderDebugMetrics::SPECTRUM_LEFT] << ','
+			<< renderDebugMetrics.totalDraws[SilRenderDebugMetrics::SPECTRUM_RIGHT] << ','
+			<< renderDebugMetrics.totalDraws[SilRenderDebugMetrics::STAGE_HISTORY] << ','
+			<< snapshotSeq << ','
+			<< (snapshotChanged ? 1 : 0) << ','
+			<< sil->hist.displayWritePtr.load(std::memory_order_acquire) << ','
+			<< rackZoom << ','
+			<< pixelRatio << '\n';
+		if ((timingLogRow++ & 63u) == 0u) {
+			timingLogFile.flush();
+		}
+	}
 
 	SilWidget(Sil* module) {
 		setModule(module);
@@ -2631,10 +3040,13 @@ struct SilWidget : ModuleWidget {
 		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-		auto addCachedDisplay = [&](const math::Rect& rectPx, Widget* content) {
-			widget::FramebufferWidget* framebuffer = new widget::FramebufferWidget;
+		auto addCachedDisplay = [&](const math::Rect& rectPx, Widget* content,
+			SilRenderDebugMetrics::CacheSlot cacheSlot) {
+			SilTimedFramebufferWidget* framebuffer = new SilTimedFramebufferWidget;
 			framebuffer->box = rectPx;
 			framebuffer->dirtyOnSubpixelChange = false;
+			framebuffer->renderDebugMetrics = &renderDebugMetrics;
+			framebuffer->debugSlot = cacheSlot;
 			content->box.size = rectPx.size;
 			framebuffer->addChild(content);
 			addChild(framebuffer);
@@ -2646,19 +3058,27 @@ struct SilWidget : ModuleWidget {
 			histRect = histRect.grow(Vec(-0.2f, -0.2f));
 			HistogramWidget* hw = new HistogramWidget;
 			hw->module = module;
+			hw->renderDebugMetrics = &renderDebugMetrics;
+			hw->refreshCoordinator = &refreshCoordinator;
 			hw->framebuffer = addCachedDisplay(
-				math::Rect(mm2px(histRect.pos), mm2px(histRect.size)), hw);
+				math::Rect(mm2px(histRect.pos), mm2px(histRect.size)), hw,
+				SilRenderDebugMetrics::CACHE_HISTOGRAM);
 		}
 
 		math::Rect specLRect;
 		if (panel_svg::loadRectFromSvgMm(panelPath, "SPECTROGRAM_LEFT", &specLRect)) {
 			specLRect = specLRect.grow(Vec(-0.2f, -0.2f));
 			const math::Rect spectrumRectPx(mm2px(specLRect.pos), mm2px(specLRect.size));
-			addCachedDisplay(spectrumRectPx, new SpectrumGridWidget);
+			SpectrumGridWidget* grid = new SpectrumGridWidget;
+			grid->renderDebugMetrics = &renderDebugMetrics;
+			grid->debugSlot = SilRenderDebugMetrics::SPECTRUM_LEFT;
+			addCachedDisplay(spectrumRectPx, grid, SilRenderDebugMetrics::CACHE_SPECTRUM_LEFT_GRID);
 			SpectrumWidget* sw = new SpectrumWidget;
 			sw->module = module;
 			sw->isRightChannel = false;
-			sw->framebuffer = addCachedDisplay(spectrumRectPx, sw);
+			sw->renderDebugMetrics = &renderDebugMetrics;
+			sw->framebuffer = addCachedDisplay(
+				spectrumRectPx, sw, SilRenderDebugMetrics::CACHE_SPECTRUM_LEFT_DATA);
 		}
 
 		math::Rect specRRect;
@@ -2667,11 +3087,16 @@ struct SilWidget : ModuleWidget {
 			specRRect = specRRect.grow(Vec(-0.2f, -0.2f));
 			sideSpecLeftX = mm2px(specRRect.pos).x;
 			const math::Rect spectrumRectPx(mm2px(specRRect.pos), mm2px(specRRect.size));
-			addCachedDisplay(spectrumRectPx, new SpectrumGridWidget);
+			SpectrumGridWidget* grid = new SpectrumGridWidget;
+			grid->renderDebugMetrics = &renderDebugMetrics;
+			grid->debugSlot = SilRenderDebugMetrics::SPECTRUM_RIGHT;
+			addCachedDisplay(spectrumRectPx, grid, SilRenderDebugMetrics::CACHE_SPECTRUM_RIGHT_GRID);
 			SpectrumWidget* sw = new SpectrumWidget;
 			sw->module = module;
 			sw->isRightChannel = true;
-			sw->framebuffer = addCachedDisplay(spectrumRectPx, sw);
+			sw->renderDebugMetrics = &renderDebugMetrics;
+			sw->framebuffer = addCachedDisplay(
+				spectrumRectPx, sw, SilRenderDebugMetrics::CACHE_SPECTRUM_RIGHT_DATA);
 		}
 
 		Vec inputLPos(26.f, 118.f);
@@ -2749,6 +3174,8 @@ struct SilWidget : ModuleWidget {
 
 		SilStageHistoryWidget* chainLedReadout = new SilStageHistoryWidget;
 		chainLedReadout->module = module;
+		chainLedReadout->renderDebugMetrics = &renderDebugMetrics;
+		chainLedReadout->refreshCoordinator = &refreshCoordinator;
 		const float histLeftExtension = 0.125f * box.size.x;
 		chainLedReadout->histogramStartX = std::max(0.f, sideSpecLeftX - histLeftExtension);
 		const float textOffsetMm = 2.4f;
@@ -2779,25 +3206,34 @@ struct SilWidget : ModuleWidget {
 		for (Vec& position : chainLedReadout->textPositions) position = position.minus(historyOrigin);
 		chainLedReadout->histogramStartX -= historyOrigin.x;
 		chainLedReadout->framebuffer = addCachedDisplay(
-			math::Rect(historyOrigin, historyEnd.minus(historyOrigin)), chainLedReadout);
+			math::Rect(historyOrigin, historyEnd.minus(historyOrigin)), chainLedReadout,
+			SilRenderDebugMetrics::CACHE_STAGE_HISTORY);
 
 	}
 
 	void step() override {
 		const bool measurePerf = isDragonKingDebugEnabled();
+		if (!measurePerf && timingLogActive) {
+			stopTimingLog();
+		}
 		const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
+		refreshCoordinator.histogramRefreshedThisStep = false;
 		Sil* sil = dynamic_cast<Sil*>(module);
 		if (sil) {
 			sil->drainMicropeakDebugQueueToCsv();
 		}
 		ModuleWidget::step();
 		if (measurePerf) {
-			debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
+			latestStepUs = debug_terminal::elapsedUsSince(stepStart);
+			debugWidgetMetrics.recordStep(latestStepUs);
 		}
 	}
 
 	void draw(const DrawArgs& args) override {
 		const bool measurePerf = isDragonKingDebugEnabled();
+		if (measurePerf) {
+			renderDebugMetrics.beginFrame();
+		}
 		const auto drawStart = debug_terminal::debugTimerStart(measurePerf);
 		ModuleWidget::draw(args);
 
@@ -2807,8 +3243,10 @@ struct SilWidget : ModuleWidget {
 		}
 
 		debug_terminal::drawDebugInstanceId(args.vg, box.size, sil->debugMetrics.instanceId);
-		debugWidgetMetrics.recordDraw(debug_terminal::elapsedUsSince(drawStart));
+		const float drawUs = debug_terminal::elapsedUsSince(drawStart);
+		debugWidgetMetrics.recordDraw(drawUs);
 		const double nowSec = system::getTime();
+		writeTimingLogRow(sil, nowSec, drawUs);
 		if (debug_terminal::baselineSubmitDue("Sil", sil->debugMetrics.instanceId, nowSec)) {
 			debug_terminal::submitBaselineMetrics(
 				"Sil",
@@ -2843,6 +3281,21 @@ struct SilWidget : ModuleWidget {
 			const bool debugActive = sil->isMicropeakDebugCaptureActive();
 			menu->addChild(new MenuSeparator());
 			menu->addChild(createMenuLabel("Debug"));
+			menu->addChild(createCheckMenuItem(
+				"Timing log (CSV)", "",
+				[this]() { return timingLogActive; },
+				[this, sil]() {
+					if (timingLogActive) {
+						stopTimingLog();
+					}
+					else {
+						startTimingLog(sil);
+					}
+				}));
+			if (!timingLogPath.empty()) {
+				menu->addChild(createMenuLabel(
+					std::string(timingLogActive ? "Writing: " : "Last log: ") + timingLogPath));
+			}
 			menu->addChild(createMenuItem(
 				debugActive ? "Close Sil micropeak CSV" : "Begin Sil micropeak CSV",
 				debugActive ? "Active" : "",
