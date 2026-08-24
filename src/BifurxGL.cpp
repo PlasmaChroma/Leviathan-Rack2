@@ -1,7 +1,7 @@
 #include "Bifurx.hpp"
 #include "GlLifecycleUtils.hpp"
-#include "NvgGraphicsLifecycle.hpp"
 #include "DebugTerminalTransport.hpp"
+#include "visual/AdaptiveGlSurface.hpp"
 #include <nanovg_gl.h>
 #include <cstddef>
 #include <unordered_map>
@@ -86,20 +86,9 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	debug_terminal::UiTimingRangeAccumulator stepUsRange;
 	debug_terminal::UiTimingRangeAccumulator drawUsRange;
 	uint64_t lastDrawVertexCount = 0;
-	NVGLUframebuffer* fixedFrontSurface = nullptr;
-	NVGLUframebuffer* fixedBackSurface = nullptr;
-	NVGcontext* fixedSurfaceVg = nullptr;
-	int fixedFrontWidth = 0;
-	int fixedFrontHeight = 0;
-	int fixedBackWidth = 0;
-	int fixedBackHeight = 0;
-	int fixedFrontActiveWidth = 0;
-	int fixedFrontActiveHeight = 0;
-	int fixedBackActiveWidth = 0;
-	int fixedBackActiveHeight = 0;
-	bool fixedSurfaceDirty = true;
+	visual_assets::AdaptiveGlSurface fixedSurface;
+	NVGcontext* rendererVg = nullptr;
 	bool lastFixedSurfaceEnabled = false;
-	uint64_t fixedSurfaceGeneration = 0;
 
 	BifurxSpectrumGLWidget() : BifurxSpectrumBase() {
 		const size_t overlaySegmentCount = (kCurvePointCount > 0) ? size_t(kCurvePointCount - 1) : size_t(0);
@@ -179,41 +168,27 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		textureShaderInitAttempted = false;
 	}
 
-	void releaseGlResources(bool deleteGlObjects) {
+	void releaseRendererResources(bool deleteGlObjects) {
 		if (deleteGlObjects && vbo) {
 			glDeleteBuffers(1, &vbo);
 		}
 		vbo = 0;
 		releaseShaderResources(deleteGlObjects);
-		if (deleteGlObjects && fixedSurfaceVg && APP && APP->window && APP->window->vg == fixedSurfaceVg) {
-			if (fixedFrontSurface) nvgluDeleteFramebuffer(fixedFrontSurface);
-			if (fixedBackSurface) nvgluDeleteFramebuffer(fixedBackSurface);
-		}
-		fixedFrontSurface = nullptr;
-		fixedBackSurface = nullptr;
-		fixedSurfaceVg = nullptr;
-		fixedFrontWidth = 0;
-		fixedFrontHeight = 0;
-		fixedBackWidth = 0;
-		fixedBackHeight = 0;
-		fixedFrontActiveWidth = 0;
-		fixedFrontActiveHeight = 0;
-		fixedBackActiveWidth = 0;
-		fixedBackActiveHeight = 0;
-		fixedSurfaceDirty = true;
-		fixedSurfaceGeneration = 0;
+		rendererVg = nullptr;
 	}
 
 	~BifurxSpectrumGLWidget() {
 		// DAW plugin editors can destroy/recreate their GL context around the
 		// Rack UI. Avoid driver calls from widget teardown; the context owner
 		// reclaims these resources when the editor context is destroyed.
-		releaseGlResources(false);
+		releaseRendererResources(false);
+		fixedSurface.reset(false);
 	}
 
 	void onContextDestroy(const ContextDestroyEvent& e) override {
 		OpenGlWidget::onContextDestroy(e);
-		releaseGlResources(true);
+		releaseRendererResources(true);
+		fixedSurface.reset(true);
 	}
 
 	void onContextCreate(const ContextCreateEvent& e) override {
@@ -221,37 +196,12 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		// Rack module widgets can survive a DAW editor replacement and miss the
 		// old scene's destroy event. Never carry GL names into the new context:
 		// they can alias unrelated buffers, programs, or textures there.
-		releaseGlResources(false);
+		releaseRendererResources(false);
+		fixedSurface.reset(false);
 		shaderRendererActiveLastFrame = false;
 		shaderRendererFallbackLastFrame = false;
 		setDirty();
-		fixedSurfaceDirty = true;
-	}
-
-	bool ensureFixedBackSurface(NVGcontext* vg, int targetWidth, int targetHeight) {
-		if (!vg || targetWidth < 1 || targetHeight < 1) return false;
-		if (fixedSurfaceVg != vg) {
-			// Handles belong to their NanoVG/GL context. If Rack replaced the
-			// editor context without the old destroy event, forget them here.
-			releaseGlResources(false);
-			fixedSurfaceVg = vg;
-		}
-
-		bool backMatches = fixedBackSurface
-			&& fixedBackWidth == targetWidth && fixedBackHeight == targetHeight;
-		if (backMatches && isExtraGlValidationEnabled()) {
-			backMatches = gl_lifecycle::isValidTextureFramebufferPair(
-				fixedBackSurface->texture, fixedBackSurface->fbo)
-				&& nvg_gfx_lifecycle::ownedNvgImageSizeMatches(
-					vg, fixedBackSurface->image, targetWidth, targetHeight);
-		}
-		if (!backMatches) {
-			if (fixedBackSurface) nvgluDeleteFramebuffer(fixedBackSurface);
-			fixedBackSurface = nvgluCreateFramebuffer(vg, targetWidth, targetHeight, 0);
-			fixedBackWidth = fixedBackSurface ? targetWidth : 0;
-			fixedBackHeight = fixedBackSurface ? targetHeight : 0;
-		}
-		return fixedBackSurface != nullptr;
+		fixedSurface.markDirty();
 	}
 
 	bool ensureShaderReady() {
@@ -1007,7 +957,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			contentDirty = true;
 		}
 		if (contentDirty) {
-			fixedSurfaceDirty = true;
+			fixedSurface.markDirty();
 			setDirty();
 		}
 		// Rack owns the current UI GL context during step(), before NanoVG begins
@@ -1052,11 +1002,11 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 					workerSnapshotAgeMs(),
 					workerQueueLatencyMs(),
 					fixedSurfaceEnabledNow,
-					fixedFrontActiveWidth,
-					fixedFrontActiveHeight,
-					fixedFrontWidth,
-					fixedFrontHeight,
-					fixedSurfaceGeneration
+					fixedSurface.activeWidth(),
+					fixedSurface.activeHeight(),
+					fixedSurface.capacityWidth(),
+					fixedSurface.capacityHeight(),
+					fixedSurface.generation()
 				);
 			}
 		}
@@ -1292,98 +1242,32 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		if (!module || !module->fixedSurfaceExperiment.load(std::memory_order_relaxed)) return;
 		NVGcontext* vg = (APP && APP->window) ? APP->window->vg : nullptr;
 		if (!vg) return;
-		if (fixedSurfaceVg != vg) {
-			releaseGlResources(false);
-			fixedSurfaceVg = vg;
-			fixedSurfaceDirty = true;
+		if (rendererVg != vg) {
+			// Module-owned GL names must not survive a missed context-destroy
+			// notification. Surface handles are managed independently below.
+			releaseRendererResources(false);
+			rendererVg = vg;
+			fixedSurface.markDirty();
 		}
-		const int capacityWidth = std::max(1, int(std::ceil(box.size.x * 2.f)));
-		const int capacityHeight = std::max(1, int(std::ceil(box.size.y * 2.f)));
 		float rackZoom = 1.f;
 		if (APP && APP->scene && APP->scene->rackScroll) {
 			rackZoom = std::max(APP->scene->rackScroll->getZoom(), 1e-4f);
 		}
 		const float pixelRatio = (APP && APP->window)
-			? std::max(1.f, std::floor(APP->window->pixelRatio)) : 1.f;
-		const float requestedDensity = clamp(rackZoom * pixelRatio, 0.25f, 2.f);
-		static constexpr int kActiveSizeQuantum = 16;
-		auto quantizedExtent = [](float logicalSize, float density, int capacity) {
-			const int requested = std::max(1, int(std::ceil(logicalSize * density)));
-			const int quantized = ((requested + kActiveSizeQuantum - 1) / kActiveSizeQuantum)
-				* kActiveSizeQuantum;
-			return std::min(capacity, quantized);
-		};
-		const int targetActiveWidth = quantizedExtent(box.size.x, requestedDensity, capacityWidth);
-		const int targetActiveHeight = quantizedExtent(box.size.y, requestedDensity, capacityHeight);
-		const bool resolutionGrowth = targetActiveWidth > fixedFrontActiveWidth
-			|| targetActiveHeight > fixedFrontActiveHeight;
-		if (!fixedSurfaceDirty && !resolutionGrowth) return;
-		if (!ensureFixedBackSurface(vg, capacityWidth, capacityHeight)) return;
-
-		GLint previousFramebuffer = 0;
-		GLint previousProgram = 0;
-		GLint previousArrayBuffer = 0;
-		GLint previousActiveTexture = GL_TEXTURE0;
-		GLint previousTexture2d = 0;
-		GLint previousMatrixMode = GL_MODELVIEW;
-		glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
-		glGetIntegerv(GL_CURRENT_PROGRAM, &previousProgram);
-		glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previousArrayBuffer);
-		glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
-		glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture2d);
-		glGetIntegerv(GL_MATRIX_MODE, &previousMatrixMode);
-		glPushAttrib(GL_ALL_ATTRIB_BITS);
-		glPushClientAttrib(GL_CLIENT_ALL_ATTRIB_BITS);
-		glMatrixMode(GL_PROJECTION);
-		glPushMatrix();
-		glMatrixMode(GL_MODELVIEW);
-		glPushMatrix();
-
-		nvgluBindFramebuffer(fixedBackSurface);
-		// NVGLU images are vertically flipped for NanoVG. Put the active render
-		// against the texture's top edge so the cropped image pattern samples it.
-		const int viewportY = capacityHeight - targetActiveHeight;
-		renderGlContent(Vec(float(targetActiveWidth), float(targetActiveHeight)), viewportY);
-		// The back render and NanoVG composite execute later on the same GL
-		// context and command stream, so command ordering is sufficient. Forcing
-		// a flush here adds driver submission latency directly to Widget::step().
-
-		glMatrixMode(GL_MODELVIEW);
-		glPopMatrix();
-		glMatrixMode(GL_PROJECTION);
-		glPopMatrix();
-		glMatrixMode(GLenum(previousMatrixMode));
-		glPopClientAttrib();
-		glPopAttrib();
-		glUseProgram(GLuint(previousProgram));
-		glBindBuffer(GL_ARRAY_BUFFER, GLuint(previousArrayBuffer));
-		glActiveTexture(GLenum(previousActiveTexture));
-		glBindTexture(GL_TEXTURE_2D, GLuint(previousTexture2d));
-		glBindFramebuffer(GL_FRAMEBUFFER, GLuint(previousFramebuffer));
-		std::swap(fixedFrontSurface, fixedBackSurface);
-		std::swap(fixedFrontWidth, fixedBackWidth);
-		std::swap(fixedFrontHeight, fixedBackHeight);
-		fixedBackActiveWidth = fixedFrontActiveWidth;
-		fixedBackActiveHeight = fixedFrontActiveHeight;
-		fixedFrontActiveWidth = targetActiveWidth;
-		fixedFrontActiveHeight = targetActiveHeight;
-		fixedSurfaceDirty = false;
-		++fixedSurfaceGeneration;
+			? APP->window->pixelRatio : 1.f;
+		visual_assets::AdaptiveGlSurfacePolicy policy;
+		fixedSurface.renderIfNeeded(
+			vg, box.size, rackZoom, pixelRatio, policy,
+			isExtraGlValidationEnabled(),
+			[](void* user, Vec activeSize, int viewportY) {
+				static_cast<BifurxSpectrumGLWidget*>(user)->renderGlContent(activeSize, viewportY);
+			},
+			this);
 	}
 
 	void draw(const DrawArgs& args) override {
 		if (module && module->fixedSurfaceExperiment.load(std::memory_order_relaxed)
-			&& fixedFrontSurface && fixedFrontSurface->image >= 0
-			&& fixedFrontActiveWidth > 0 && fixedFrontActiveHeight > 0) {
-			const float patternWidth = box.size.x * float(fixedFrontWidth) / float(fixedFrontActiveWidth);
-			const float patternHeight = box.size.y * float(fixedFrontHeight) / float(fixedFrontActiveHeight);
-			nvgBeginPath(args.vg);
-			nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
-			nvgFillPaint(args.vg, nvgImagePattern(
-				args.vg, 0.f, 0.f, patternWidth, patternHeight, 0.f, fixedFrontSurface->image, 1.f));
-			nvgFill(args.vg);
-			return;
-		}
+			&& fixedSurface.draw(args, box.size)) return;
 		widget::FramebufferWidget::draw(args);
 	}
 
