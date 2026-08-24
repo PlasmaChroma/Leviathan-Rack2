@@ -485,6 +485,8 @@ void BifurxSpectrumWidget::step() {
 				false,
 				0,
 				0,
+				0,
+				0,
 				0u
 			);
 		}

@@ -1301,7 +1301,9 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 
 		nvgluBindFramebuffer(fixedBackSurface);
 		renderGlContent(Vec(float(targetWidth), float(targetHeight)));
-		glFlush();
+		// NanoVG composites this texture later on the same GL context and command
+		// stream, so ordering is already guaranteed. Avoid forcing driver
+		// submission latency into Widget::step().
 
 		glMatrixMode(GL_MODELVIEW);
 		glPopMatrix();

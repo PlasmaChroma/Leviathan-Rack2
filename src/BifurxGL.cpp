@@ -93,6 +93,10 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	int fixedFrontHeight = 0;
 	int fixedBackWidth = 0;
 	int fixedBackHeight = 0;
+	int fixedFrontActiveWidth = 0;
+	int fixedFrontActiveHeight = 0;
+	int fixedBackActiveWidth = 0;
+	int fixedBackActiveHeight = 0;
 	bool fixedSurfaceDirty = true;
 	bool lastFixedSurfaceEnabled = false;
 	uint64_t fixedSurfaceGeneration = 0;
@@ -192,6 +196,10 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		fixedFrontHeight = 0;
 		fixedBackWidth = 0;
 		fixedBackHeight = 0;
+		fixedFrontActiveWidth = 0;
+		fixedFrontActiveHeight = 0;
+		fixedBackActiveWidth = 0;
+		fixedBackActiveHeight = 0;
 		fixedSurfaceDirty = true;
 		fixedSurfaceGeneration = 0;
 	}
@@ -1044,6 +1052,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 					workerSnapshotAgeMs(),
 					workerQueueLatencyMs(),
 					fixedSurfaceEnabledNow,
+					fixedFrontActiveWidth,
+					fixedFrontActiveHeight,
 					fixedFrontWidth,
 					fixedFrontHeight,
 					fixedSurfaceGeneration
@@ -1052,7 +1062,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		}
 	}
 
-	void renderGlContent(Vec fbSize) {
+	void renderGlContent(Vec fbSize, int viewportY = 0) {
 		using PerfClock = std::chrono::steady_clock;
 		const bool measurePerf = isDragonKingDebugEnabled();
 		const PerfClock::time_point perfDrawStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
@@ -1063,7 +1073,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			validateShaderResourcesForCurrentContext();
 		}
 
-		glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
+		glViewport(0, viewportY, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
+		glDisable(GL_SCISSOR_TEST);
 		glClearColor(0.f, 0.f, 0.f, 0.f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
@@ -1078,8 +1089,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 		glDisable(GL_DEPTH_TEST);
 		glDisable(GL_CULL_FACE);
-		glDisable(GL_SCISSOR_TEST);
-
 		const float padY = std::max(4.f, h * 0.035f);
 		const float labelBandHeight = std::max(5.2f, h * 0.072f), labelBandTop = h - labelBandHeight;
 		const float spectrumTopY = padY * 0.35f, spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
@@ -1288,10 +1297,28 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			fixedSurfaceVg = vg;
 			fixedSurfaceDirty = true;
 		}
-		if (!fixedSurfaceDirty) return;
-		const int targetWidth = std::max(1, int(std::ceil(box.size.x * 2.f)));
-		const int targetHeight = std::max(1, int(std::ceil(box.size.y * 2.f)));
-		if (!ensureFixedBackSurface(vg, targetWidth, targetHeight)) return;
+		const int capacityWidth = std::max(1, int(std::ceil(box.size.x * 2.f)));
+		const int capacityHeight = std::max(1, int(std::ceil(box.size.y * 2.f)));
+		float rackZoom = 1.f;
+		if (APP && APP->scene && APP->scene->rackScroll) {
+			rackZoom = std::max(APP->scene->rackScroll->getZoom(), 1e-4f);
+		}
+		const float pixelRatio = (APP && APP->window)
+			? std::max(1.f, std::floor(APP->window->pixelRatio)) : 1.f;
+		const float requestedDensity = clamp(rackZoom * pixelRatio, 0.25f, 2.f);
+		static constexpr int kActiveSizeQuantum = 16;
+		auto quantizedExtent = [](float logicalSize, float density, int capacity) {
+			const int requested = std::max(1, int(std::ceil(logicalSize * density)));
+			const int quantized = ((requested + kActiveSizeQuantum - 1) / kActiveSizeQuantum)
+				* kActiveSizeQuantum;
+			return std::min(capacity, quantized);
+		};
+		const int targetActiveWidth = quantizedExtent(box.size.x, requestedDensity, capacityWidth);
+		const int targetActiveHeight = quantizedExtent(box.size.y, requestedDensity, capacityHeight);
+		const bool resolutionGrowth = targetActiveWidth > fixedFrontActiveWidth
+			|| targetActiveHeight > fixedFrontActiveHeight;
+		if (!fixedSurfaceDirty && !resolutionGrowth) return;
+		if (!ensureFixedBackSurface(vg, capacityWidth, capacityHeight)) return;
 
 		GLint previousFramebuffer = 0;
 		GLint previousProgram = 0;
@@ -1313,8 +1340,13 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		glPushMatrix();
 
 		nvgluBindFramebuffer(fixedBackSurface);
-		renderGlContent(Vec(float(targetWidth), float(targetHeight)));
-		glFlush();
+		// NVGLU images are vertically flipped for NanoVG. Put the active render
+		// against the texture's top edge so the cropped image pattern samples it.
+		const int viewportY = capacityHeight - targetActiveHeight;
+		renderGlContent(Vec(float(targetActiveWidth), float(targetActiveHeight)), viewportY);
+		// The back render and NanoVG composite execute later on the same GL
+		// context and command stream, so command ordering is sufficient. Forcing
+		// a flush here adds driver submission latency directly to Widget::step().
 
 		glMatrixMode(GL_MODELVIEW);
 		glPopMatrix();
@@ -1331,17 +1363,24 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		std::swap(fixedFrontSurface, fixedBackSurface);
 		std::swap(fixedFrontWidth, fixedBackWidth);
 		std::swap(fixedFrontHeight, fixedBackHeight);
+		fixedBackActiveWidth = fixedFrontActiveWidth;
+		fixedBackActiveHeight = fixedFrontActiveHeight;
+		fixedFrontActiveWidth = targetActiveWidth;
+		fixedFrontActiveHeight = targetActiveHeight;
 		fixedSurfaceDirty = false;
 		++fixedSurfaceGeneration;
 	}
 
 	void draw(const DrawArgs& args) override {
 		if (module && module->fixedSurfaceExperiment.load(std::memory_order_relaxed)
-			&& fixedFrontSurface && fixedFrontSurface->image >= 0) {
+			&& fixedFrontSurface && fixedFrontSurface->image >= 0
+			&& fixedFrontActiveWidth > 0 && fixedFrontActiveHeight > 0) {
+			const float patternWidth = box.size.x * float(fixedFrontWidth) / float(fixedFrontActiveWidth);
+			const float patternHeight = box.size.y * float(fixedFrontHeight) / float(fixedFrontActiveHeight);
 			nvgBeginPath(args.vg);
 			nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 			nvgFillPaint(args.vg, nvgImagePattern(
-				args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, fixedFrontSurface->image, 1.f));
+				args.vg, 0.f, 0.f, patternWidth, patternHeight, 0.f, fixedFrontSurface->image, 1.f));
 			nvgFill(args.vg);
 			return;
 		}

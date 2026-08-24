@@ -111,6 +111,8 @@ void submitBifurxUiMetrics(uint32_t instanceId,
                            bool fixedSurface,
                            int fixedSurfaceWidth,
                            int fixedSurfaceHeight,
+                           int fixedSurfaceCapacityWidth,
+                           int fixedSurfaceCapacityHeight,
                            uint64_t fixedSurfaceGeneration);
 
 void submitWyrmMetrics(uint32_t instanceId,
