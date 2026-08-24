@@ -1,5 +1,6 @@
 #include "Bifurx.hpp"
 #include "GlLifecycleUtils.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 #include "DebugTerminalTransport.hpp"
 #include <nanovg_gl.h>
 #include <cstddef>
@@ -88,8 +89,10 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	NVGLUframebuffer* fixedFrontSurface = nullptr;
 	NVGLUframebuffer* fixedBackSurface = nullptr;
 	NVGcontext* fixedSurfaceVg = nullptr;
-	int fixedSurfaceWidth = 0;
-	int fixedSurfaceHeight = 0;
+	int fixedFrontWidth = 0;
+	int fixedFrontHeight = 0;
+	int fixedBackWidth = 0;
+	int fixedBackHeight = 0;
 	bool fixedSurfaceDirty = true;
 	bool lastFixedSurfaceEnabled = false;
 	uint64_t fixedSurfaceGeneration = 0;
@@ -185,8 +188,10 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		fixedFrontSurface = nullptr;
 		fixedBackSurface = nullptr;
 		fixedSurfaceVg = nullptr;
-		fixedSurfaceWidth = 0;
-		fixedSurfaceHeight = 0;
+		fixedFrontWidth = 0;
+		fixedFrontHeight = 0;
+		fixedBackWidth = 0;
+		fixedBackHeight = 0;
 		fixedSurfaceDirty = true;
 		fixedSurfaceGeneration = 0;
 	}
@@ -215,29 +220,30 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		fixedSurfaceDirty = true;
 	}
 
-	bool ensureFixedSurfaces(NVGcontext* vg) {
-		if (!vg) return false;
-		const int targetWidth = std::max(1, int(std::ceil(box.size.x * 2.f)));
-		const int targetHeight = std::max(1, int(std::ceil(box.size.y * 2.f)));
-		if (fixedSurfaceVg != vg || fixedSurfaceWidth != targetWidth || fixedSurfaceHeight != targetHeight) {
-			if (fixedSurfaceVg == vg) {
-				if (fixedFrontSurface) nvgluDeleteFramebuffer(fixedFrontSurface);
-				if (fixedBackSurface) nvgluDeleteFramebuffer(fixedBackSurface);
-			}
-			fixedFrontSurface = nullptr;
-			fixedBackSurface = nullptr;
+	bool ensureFixedBackSurface(NVGcontext* vg, int targetWidth, int targetHeight) {
+		if (!vg || targetWidth < 1 || targetHeight < 1) return false;
+		if (fixedSurfaceVg != vg) {
+			// Handles belong to their NanoVG/GL context. If Rack replaced the
+			// editor context without the old destroy event, forget them here.
+			releaseGlResources(false);
 			fixedSurfaceVg = vg;
-			fixedSurfaceWidth = targetWidth;
-			fixedSurfaceHeight = targetHeight;
-			fixedSurfaceDirty = true;
 		}
-		if (!fixedFrontSurface) {
-			fixedFrontSurface = nvgluCreateFramebuffer(vg, targetWidth, targetHeight, 0);
+
+		bool backMatches = fixedBackSurface
+			&& fixedBackWidth == targetWidth && fixedBackHeight == targetHeight;
+		if (backMatches && isExtraGlValidationEnabled()) {
+			backMatches = gl_lifecycle::isValidTextureFramebufferPair(
+				fixedBackSurface->texture, fixedBackSurface->fbo)
+				&& nvg_gfx_lifecycle::ownedNvgImageSizeMatches(
+					vg, fixedBackSurface->image, targetWidth, targetHeight);
 		}
-		if (!fixedBackSurface) {
+		if (!backMatches) {
+			if (fixedBackSurface) nvgluDeleteFramebuffer(fixedBackSurface);
 			fixedBackSurface = nvgluCreateFramebuffer(vg, targetWidth, targetHeight, 0);
+			fixedBackWidth = fixedBackSurface ? targetWidth : 0;
+			fixedBackHeight = fixedBackSurface ? targetHeight : 0;
 		}
-		return fixedFrontSurface && fixedBackSurface;
+		return fixedBackSurface != nullptr;
 	}
 
 	bool ensureShaderReady() {
@@ -1038,7 +1044,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 					workerSnapshotAgeMs(),
 					workerQueueLatencyMs(),
 					fixedSurfaceEnabledNow,
-					float(fixedSurfaceWidth * fixedSurfaceHeight) * 1e-6f,
+					fixedFrontWidth,
+					fixedFrontHeight,
 					fixedSurfaceGeneration
 				);
 			}
@@ -1275,7 +1282,16 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	void renderFixedSurfaceIfNeeded() {
 		if (!module || !module->fixedSurfaceExperiment.load(std::memory_order_relaxed)) return;
 		NVGcontext* vg = (APP && APP->window) ? APP->window->vg : nullptr;
-		if (!ensureFixedSurfaces(vg) || !fixedSurfaceDirty) return;
+		if (!vg) return;
+		if (fixedSurfaceVg != vg) {
+			releaseGlResources(false);
+			fixedSurfaceVg = vg;
+			fixedSurfaceDirty = true;
+		}
+		if (!fixedSurfaceDirty) return;
+		const int targetWidth = std::max(1, int(std::ceil(box.size.x * 2.f)));
+		const int targetHeight = std::max(1, int(std::ceil(box.size.y * 2.f)));
+		if (!ensureFixedBackSurface(vg, targetWidth, targetHeight)) return;
 
 		GLint previousFramebuffer = 0;
 		GLint previousProgram = 0;
@@ -1297,7 +1313,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		glPushMatrix();
 
 		nvgluBindFramebuffer(fixedBackSurface);
-		renderGlContent(Vec(float(fixedSurfaceWidth), float(fixedSurfaceHeight)));
+		renderGlContent(Vec(float(targetWidth), float(targetHeight)));
 		glFlush();
 
 		glMatrixMode(GL_MODELVIEW);
@@ -1313,6 +1329,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		glBindTexture(GL_TEXTURE_2D, GLuint(previousTexture2d));
 		glBindFramebuffer(GL_FRAMEBUFFER, GLuint(previousFramebuffer));
 		std::swap(fixedFrontSurface, fixedBackSurface);
+		std::swap(fixedFrontWidth, fixedBackWidth);
+		std::swap(fixedFrontHeight, fixedBackHeight);
 		fixedSurfaceDirty = false;
 		++fixedSurfaceGeneration;
 	}

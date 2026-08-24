@@ -483,7 +483,8 @@ void BifurxSpectrumWidget::step() {
 				workerSnapshotAgeMs(),
 				workerQueueLatencyMs(),
 				false,
-				0.f,
+				0,
+				0,
 				0u
 			);
 		}
