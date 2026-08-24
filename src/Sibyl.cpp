@@ -11,14 +11,20 @@
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
 #include <jansson.h>
+#include <osdialog.h>
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
+#include <cstring>
 #include <cstdio>
+#include <fstream>
+#include <sstream>
 
 using namespace rack;
 
 struct SibylModule : Module, SibylControl {
+	static constexpr std::streamoff kMaxPortableCompositionBytes = 16 * 1024 * 1024;
 	enum ParamIds { NUM_PARAMS };
 	enum InputIds {
 		CLOCK_INPUT, RUN_INPUT, RESET_INPUT, SCENE_TRIG_INPUT, SCENE_CV_INPUT,
@@ -299,6 +305,129 @@ struct SibylModule : Module, SibylControl {
 		m_lastError.clear();
 		m_lastWarnings = warnings;
 		m_pendingAdoptionPtr.store(requestPtr, std::memory_order_release);
+	}
+
+	bool saveCompositionToPath(const std::string& path, std::string* errorOut) const {
+		if (errorOut) errorOut->clear();
+		if (!m_acceptedCompositionPtr) {
+			if (errorOut) *errorOut = "Sibyl has no composition to save.";
+			return false;
+		}
+
+		json_error_t jsonError {};
+		const std::string serialized = sibyl::serializeFullCompositionJson(*m_acceptedCompositionPtr);
+		json_t* full = json_loads(serialized.c_str(), 0, &jsonError);
+		json_t* composition = full ? json_object_get(full, "composition") : nullptr;
+		if (!composition || !json_is_object(composition)) {
+			if (full) json_decref(full);
+			if (errorOut) *errorOut = "Could not serialize the current Sibyl composition.";
+			return false;
+		}
+
+		json_t* envelope = json_object();
+		json_object_set_new(envelope, "format", json_string("Leviathan.SibylComposition"));
+		json_object_set_new(envelope, "schemaVersion", json_integer(1));
+		json_object_set(envelope, "composition", composition);
+		char* pretty = json_dumps(envelope, JSON_INDENT(2));
+		json_decref(envelope);
+		json_decref(full);
+		if (!pretty) {
+			if (errorOut) *errorOut = "Could not encode the Sibyl composition as JSON.";
+			return false;
+		}
+
+		std::ofstream output(path.c_str(), std::ios::binary | std::ios::trunc);
+		if (!output) {
+			free(pretty);
+			if (errorOut) *errorOut = "Could not open the selected file for writing.";
+			return false;
+		}
+		output.write(pretty, static_cast<std::streamsize>(std::strlen(pretty)));
+		output.put('\n');
+		free(pretty);
+		if (!output.good()) {
+			if (errorOut) *errorOut = "Writing the Sibyl composition did not complete.";
+			return false;
+		}
+		return true;
+	}
+
+	bool loadCompositionFromPath(const std::string& path, std::string* errorOut) {
+		if (errorOut) errorOut->clear();
+		std::ifstream input(path.c_str(), std::ios::binary | std::ios::ate);
+		if (!input) {
+			if (errorOut) *errorOut = "Could not open the selected Sibyl composition.";
+			return false;
+		}
+		const std::streamoff size = input.tellg();
+		if (size < 0 || size > kMaxPortableCompositionBytes) {
+			if (errorOut) *errorOut = "Sibyl composition files must be 16 MB or smaller.";
+			return false;
+		}
+		input.seekg(0, std::ios::beg);
+		std::string contents(static_cast<size_t>(size), '\0');
+		if (size > 0) input.read(&contents[0], static_cast<std::streamsize>(size));
+		if (!input.good() && !input.eof()) {
+			if (errorOut) *errorOut = "Could not finish reading the Sibyl composition.";
+			return false;
+		}
+
+		json_error_t jsonError {};
+		json_t* root = json_loads(contents.c_str(), 0, &jsonError);
+		if (!root || !json_is_object(root)) {
+			if (root) json_decref(root);
+			const std::string message = string::f("Invalid JSON at line %d: %s", jsonError.line, jsonError.text);
+			m_lastError = message;
+			if (errorOut) *errorOut = message;
+			return false;
+		}
+		json_t* formatJ = json_object_get(root, "format");
+		if (formatJ && (!json_is_string(formatJ) ||
+			std::string(json_string_value(formatJ)) != "Leviathan.SibylComposition")) {
+			json_decref(root);
+			m_lastError = "This JSON file is not a supported Sibyl composition.";
+			if (errorOut) *errorOut = m_lastError;
+			return false;
+		}
+		json_t* schemaJ = json_object_get(root, "schemaVersion");
+		if (schemaJ && (!json_is_integer(schemaJ) || json_integer_value(schemaJ) != 1)) {
+			json_decref(root);
+			m_lastError = "This Sibyl composition uses an unsupported schema version.";
+			if (errorOut) *errorOut = m_lastError;
+			return false;
+		}
+
+		json_t* composition = json_object_get(root, "composition");
+		if (!composition) composition = root;
+		if (!json_is_object(composition)) {
+			json_decref(root);
+			m_lastError = "The Sibyl file's composition field must be a JSON object.";
+			if (errorOut) *errorOut = m_lastError;
+			return false;
+		}
+		char* compact = json_dumps(composition, JSON_COMPACT);
+		json_decref(root);
+		if (!compact) {
+			m_lastError = "Could not decode the Sibyl composition.";
+			if (errorOut) *errorOut = m_lastError;
+			return false;
+		}
+
+		const int revision = m_acceptedRevision + 1;
+		sibyl::ParseResult parsed = sibyl::parseCompositionJson(compact, revision);
+		free(compact);
+		if (!parsed.valid || !parsed.composition) {
+			m_lastError = !parsed.errors.empty()
+				? parsed.errors.front().path + ": " + parsed.errors.front().message
+				: "Composition validation failed.";
+			if (errorOut) *errorOut = m_lastError;
+			return false;
+		}
+
+		m_runtimeRunning.store(parsed.composition->transport.running, std::memory_order_release);
+		acceptComposition(parsed.composition, sibyl::ApplyAt::IMMEDIATE,
+			sibyl::PhasePolicy::RESTART_ALL, parsed.warnings);
+		return true;
 	}
 
 	bool crossesActiveStepBoundary(const sibyl::Composition& composition, double beatDelta) const {
@@ -1383,6 +1512,34 @@ struct SibylOracleDisplay final : TransparentWidget {
 };
 
 struct SibylWidget : ModuleWidget {
+	static std::string portableDirectory() {
+		return asset::user("Sibyl");
+	}
+
+	static std::string portableFilename(const SibylModule* module) {
+		std::string title = "sibyl-composition";
+		if (module && module->m_acceptedCompositionPtr && !module->m_acceptedCompositionPtr->meta.title.empty()) {
+			title = module->m_acceptedCompositionPtr->meta.title;
+		}
+		for (char& c : title) {
+			const bool safe = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+				(c >= '0' && c <= '9') || c == '-' || c == '_';
+			if (!safe) c = '-';
+		}
+		while (!title.empty() && title.back() == '-') title.pop_back();
+		if (title.empty()) title = "sibyl-composition";
+		return title + ".sibyl.json";
+	}
+
+	static std::string ensureJsonExtension(std::string path) {
+		std::string suffix = path.size() >= 5 ? path.substr(path.size() - 5) : std::string();
+		std::transform(suffix.begin(), suffix.end(), suffix.begin(), [](unsigned char c) {
+			return static_cast<char>(std::tolower(c));
+		});
+		if (suffix != ".json") path += ".json";
+		return path;
+	}
+
 	explicit SibylWidget(SibylModule* module) {
 		setModule(module);
 		PreviewBuildLogTimer previewTimer("Sibyl", module);
@@ -1421,6 +1578,45 @@ struct SibylWidget : ModuleWidget {
 		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("CLOCK_OUTPUT", Vec(32.5f, 84.f)), module, SibylModule::CLOCK_OUTPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("SCENE_OUTPUT", Vec(43.f, 84.f)), module, SibylModule::SCENE_OUTPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("EOC_OUTPUT", Vec(37.75f, 98.5f)), module, SibylModule::EOC_OUTPUT));
+	}
+
+	void appendContextMenu(Menu* menu) override {
+		ModuleWidget::appendContextMenu(menu);
+		auto* sibylModule = dynamic_cast<SibylModule*>(module);
+		if (!sibylModule) return;
+
+		menu->addChild(new MenuSeparator());
+		menu->addChild(createMenuLabel("Composition"));
+		menu->addChild(createMenuItem("Load composition…", "JSON", [sibylModule]() {
+			system::createDirectories(portableDirectory());
+			osdialog_filters* filters = osdialog_filters_parse("Sibyl composition:json,JSON");
+			char* pathC = osdialog_file(OSDIALOG_OPEN, portableDirectory().c_str(), nullptr, filters);
+			osdialog_filters_free(filters);
+			if (!pathC) return;
+			const std::string path(pathC);
+			std::free(pathC);
+			std::string error;
+			if (!sibylModule->loadCompositionFromPath(path, &error)) {
+				osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK,
+					(error.empty() ? "Sibyl composition load failed." : error.c_str()));
+			}
+		}));
+		menu->addChild(createMenuItem("Save composition…", "JSON", [sibylModule]() {
+			const std::string directory = portableDirectory();
+			system::createDirectories(directory);
+			const std::string filename = portableFilename(sibylModule);
+			osdialog_filters* filters = osdialog_filters_parse("Sibyl composition:json,JSON");
+			char* pathC = osdialog_file(OSDIALOG_SAVE, directory.c_str(), filename.c_str(), filters);
+			osdialog_filters_free(filters);
+			if (!pathC) return;
+			const std::string path = ensureJsonExtension(pathC);
+			std::free(pathC);
+			std::string error;
+			if (!sibylModule->saveCompositionToPath(path, &error)) {
+				osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK,
+					(error.empty() ? "Sibyl composition save failed." : error.c_str()));
+			}
+		}));
 	}
 };
 

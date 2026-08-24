@@ -481,7 +481,10 @@ void BifurxSpectrumWidget::step() {
 				lastOverlayPrepUs,
 				vwMode,
 				workerSnapshotAgeMs(),
-				workerQueueLatencyMs()
+				workerQueueLatencyMs(),
+				false,
+				0.f,
+				0u
 			);
 		}
 	}
@@ -1000,6 +1003,18 @@ struct BifurxWidget final : ModuleWidget {
 			menu->addChild(createCheckMenuItem("Show Module Response", "",
 				[=]() { return bifurx->showModuleResponseOverlay.load(std::memory_order_relaxed); },
 				[=]() { bifurx->showModuleResponseOverlay.store(!bifurx->showModuleResponseOverlay.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
+			if (isDragonKingDebugEnabled()) {
+				menu->addChild(new MenuSeparator());
+				menu->addChild(createMenuLabel("Debug Rendering"));
+				menu->addChild(createCheckMenuItem(
+					"Context-owned fixed GL surface", "",
+					[=]() { return bifurx->fixedSurfaceExperiment.load(std::memory_order_relaxed); },
+					[=]() {
+						bifurx->fixedSurfaceExperiment.store(
+							!bifurx->fixedSurfaceExperiment.load(std::memory_order_relaxed),
+							std::memory_order_relaxed);
+					}));
+			}
 			menu->addChild(createCheckMenuItem("Low Latency Offload", "",
 				[=]() { return bifurx->lowLatencyVisual.load(std::memory_order_relaxed); },
 				[=]() { bifurx->lowLatencyVisual.store(!bifurx->lowLatencyVisual.load(std::memory_order_relaxed), std::memory_order_relaxed); }));

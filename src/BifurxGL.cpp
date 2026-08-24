@@ -85,6 +85,14 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	debug_terminal::UiTimingRangeAccumulator stepUsRange;
 	debug_terminal::UiTimingRangeAccumulator drawUsRange;
 	uint64_t lastDrawVertexCount = 0;
+	NVGLUframebuffer* fixedFrontSurface = nullptr;
+	NVGLUframebuffer* fixedBackSurface = nullptr;
+	NVGcontext* fixedSurfaceVg = nullptr;
+	int fixedSurfaceWidth = 0;
+	int fixedSurfaceHeight = 0;
+	bool fixedSurfaceDirty = true;
+	bool lastFixedSurfaceEnabled = false;
+	uint64_t fixedSurfaceGeneration = 0;
 
 	BifurxSpectrumGLWidget() : BifurxSpectrumBase() {
 		const size_t overlaySegmentCount = (kCurvePointCount > 0) ? size_t(kCurvePointCount - 1) : size_t(0);
@@ -170,6 +178,17 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		}
 		vbo = 0;
 		releaseShaderResources(deleteGlObjects);
+		if (deleteGlObjects && fixedSurfaceVg && APP && APP->window && APP->window->vg == fixedSurfaceVg) {
+			if (fixedFrontSurface) nvgluDeleteFramebuffer(fixedFrontSurface);
+			if (fixedBackSurface) nvgluDeleteFramebuffer(fixedBackSurface);
+		}
+		fixedFrontSurface = nullptr;
+		fixedBackSurface = nullptr;
+		fixedSurfaceVg = nullptr;
+		fixedSurfaceWidth = 0;
+		fixedSurfaceHeight = 0;
+		fixedSurfaceDirty = true;
+		fixedSurfaceGeneration = 0;
 	}
 
 	~BifurxSpectrumGLWidget() {
@@ -193,6 +212,32 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		shaderRendererActiveLastFrame = false;
 		shaderRendererFallbackLastFrame = false;
 		setDirty();
+		fixedSurfaceDirty = true;
+	}
+
+	bool ensureFixedSurfaces(NVGcontext* vg) {
+		if (!vg) return false;
+		const int targetWidth = std::max(1, int(std::ceil(box.size.x * 2.f)));
+		const int targetHeight = std::max(1, int(std::ceil(box.size.y * 2.f)));
+		if (fixedSurfaceVg != vg || fixedSurfaceWidth != targetWidth || fixedSurfaceHeight != targetHeight) {
+			if (fixedSurfaceVg == vg) {
+				if (fixedFrontSurface) nvgluDeleteFramebuffer(fixedFrontSurface);
+				if (fixedBackSurface) nvgluDeleteFramebuffer(fixedBackSurface);
+			}
+			fixedFrontSurface = nullptr;
+			fixedBackSurface = nullptr;
+			fixedSurfaceVg = vg;
+			fixedSurfaceWidth = targetWidth;
+			fixedSurfaceHeight = targetHeight;
+			fixedSurfaceDirty = true;
+		}
+		if (!fixedFrontSurface) {
+			fixedFrontSurface = nvgluCreateFramebuffer(vg, targetWidth, targetHeight, 0);
+		}
+		if (!fixedBackSurface) {
+			fixedBackSurface = nvgluCreateFramebuffer(vg, targetWidth, targetHeight, 0);
+		}
+		return fixedFrontSurface && fixedBackSurface;
 	}
 
 	bool ensureShaderReady() {
@@ -927,22 +972,34 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const bool showModuleResponseOverlayNow = module->showModuleResponseOverlay.load(std::memory_order_relaxed);
 		const bool useGlShaderRendererNow = module->useGlShaderRenderer.load(std::memory_order_relaxed);
 		const int colorSchemeNow = int(module->colorScheme);
+		const bool fixedSurfaceEnabledNow = module->fixedSurfaceExperiment.load(std::memory_order_relaxed);
+		bool contentDirty = tick.previewUpdated || tick.analysisUpdated || tick.animationActive;
 
 		// Shared dirty policy with NanoVG path: redraw on new data or active animation.
-		if (tick.previewUpdated || tick.analysisUpdated || tick.animationActive) {
-			setDirty();
-		}
 		if (showModuleResponseOverlayNow != lastShowModuleResponseOverlay) {
 			lastShowModuleResponseOverlay = showModuleResponseOverlayNow;
-			setDirty();
+			contentDirty = true;
 		}
 		if (useGlShaderRendererNow != lastUseGlShaderRenderer) {
 			lastUseGlShaderRenderer = useGlShaderRendererNow;
-			setDirty();
+			contentDirty = true;
 		}
 		if (colorSchemeNow != lastColorScheme) {
 			lastColorScheme = colorSchemeNow;
+			contentDirty = true;
+		}
+		if (fixedSurfaceEnabledNow != lastFixedSurfaceEnabled) {
+			lastFixedSurfaceEnabled = fixedSurfaceEnabledNow;
+			contentDirty = true;
+		}
+		if (contentDirty) {
+			fixedSurfaceDirty = true;
 			setDirty();
+		}
+		// Rack owns the current UI GL context during step(), before NanoVG begins
+		// the visible frame. draw() later samples only the completed front image.
+		if (fixedSurfaceEnabledNow) {
+			renderFixedSurfaceIfNeeded();
 		}
 		if (measurePerf) {
 			const float stepMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -979,13 +1036,16 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 					lastOverlayPrepUs,
 					vwMode,
 					workerSnapshotAgeMs(),
-					workerQueueLatencyMs()
+					workerQueueLatencyMs(),
+					fixedSurfaceEnabledNow,
+					float(fixedSurfaceWidth * fixedSurfaceHeight) * 1e-6f,
+					fixedSurfaceGeneration
 				);
 			}
 		}
 	}
 
-	void drawFramebuffer() override {
+	void renderGlContent(Vec fbSize) {
 		using PerfClock = std::chrono::steady_clock;
 		const bool measurePerf = isDragonKingDebugEnabled();
 		const PerfClock::time_point perfDrawStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
@@ -996,7 +1056,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			validateShaderResourcesForCurrentContext();
 		}
 
-		Vec fbSize = getFramebufferSize();
 		glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
 		glClearColor(0.f, 0.f, 0.f, 0.f);
 		glClear(GL_COLOR_BUFFER_BIT);
@@ -1209,7 +1268,65 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		}
 	}
 
+	void drawFramebuffer() override {
+		renderGlContent(getFramebufferSize());
+	}
+
+	void renderFixedSurfaceIfNeeded() {
+		if (!module || !module->fixedSurfaceExperiment.load(std::memory_order_relaxed)) return;
+		NVGcontext* vg = (APP && APP->window) ? APP->window->vg : nullptr;
+		if (!ensureFixedSurfaces(vg) || !fixedSurfaceDirty) return;
+
+		GLint previousFramebuffer = 0;
+		GLint previousProgram = 0;
+		GLint previousArrayBuffer = 0;
+		GLint previousActiveTexture = GL_TEXTURE0;
+		GLint previousTexture2d = 0;
+		GLint previousMatrixMode = GL_MODELVIEW;
+		glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
+		glGetIntegerv(GL_CURRENT_PROGRAM, &previousProgram);
+		glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previousArrayBuffer);
+		glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
+		glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture2d);
+		glGetIntegerv(GL_MATRIX_MODE, &previousMatrixMode);
+		glPushAttrib(GL_ALL_ATTRIB_BITS);
+		glPushClientAttrib(GL_CLIENT_ALL_ATTRIB_BITS);
+		glMatrixMode(GL_PROJECTION);
+		glPushMatrix();
+		glMatrixMode(GL_MODELVIEW);
+		glPushMatrix();
+
+		nvgluBindFramebuffer(fixedBackSurface);
+		renderGlContent(Vec(float(fixedSurfaceWidth), float(fixedSurfaceHeight)));
+		glFlush();
+
+		glMatrixMode(GL_MODELVIEW);
+		glPopMatrix();
+		glMatrixMode(GL_PROJECTION);
+		glPopMatrix();
+		glMatrixMode(GLenum(previousMatrixMode));
+		glPopClientAttrib();
+		glPopAttrib();
+		glUseProgram(GLuint(previousProgram));
+		glBindBuffer(GL_ARRAY_BUFFER, GLuint(previousArrayBuffer));
+		glActiveTexture(GLenum(previousActiveTexture));
+		glBindTexture(GL_TEXTURE_2D, GLuint(previousTexture2d));
+		glBindFramebuffer(GL_FRAMEBUFFER, GLuint(previousFramebuffer));
+		std::swap(fixedFrontSurface, fixedBackSurface);
+		fixedSurfaceDirty = false;
+		++fixedSurfaceGeneration;
+	}
+
 	void draw(const DrawArgs& args) override {
+		if (module && module->fixedSurfaceExperiment.load(std::memory_order_relaxed)
+			&& fixedFrontSurface && fixedFrontSurface->image >= 0) {
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+			nvgFillPaint(args.vg, nvgImagePattern(
+				args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f, fixedFrontSurface->image, 1.f));
+			nvgFill(args.vg);
+			return;
+		}
 		widget::FramebufferWidget::draw(args);
 	}
 

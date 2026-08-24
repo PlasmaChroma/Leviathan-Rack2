@@ -107,7 +107,10 @@ void submitBifurxUiMetrics(uint32_t instanceId,
                            float overlayPrepUs,
                            int visualWorkerMode,
                            float visualWorkerAgeMs,
-                           float visualWorkerQueueMs);
+                           float visualWorkerQueueMs,
+                           bool fixedSurface,
+                           float fixedSurfaceMegapixels,
+                           uint64_t fixedSurfaceGeneration);
 
 void submitWyrmMetrics(uint32_t instanceId,
                        TimingRangeUs processUs,

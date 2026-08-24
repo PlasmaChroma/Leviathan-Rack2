@@ -2,6 +2,8 @@
 #include "../src/Sibyl.cpp"
 
 #include <cmath>
+#include <cstdio>
+#include <fstream>
 #include <iostream>
 
 Plugin* pluginInstance = nullptr;
@@ -291,6 +293,44 @@ int main() {
 			"oracle snapshot reports coherent revision and repeat state");
 		check(module.m_displayCompositionHazard.load(std::memory_order_acquire) == nullptr,
 			"oracle snapshot releases its immutable-composition hazard");
+	}
+
+	{
+		const std::string path = "build/tests/sibyl_portable_composition_spec.json";
+		SibylModule source;
+		std::shared_ptr<sibyl::Composition> composition = std::const_pointer_cast<sibyl::Composition>(
+			makeComposition(12, true));
+		composition->meta.title = "Portable Constellation";
+		source.acceptComposition(composition, sibyl::ApplyAt::IMMEDIATE, sibyl::PhasePolicy::RESTART_ALL);
+		std::string error;
+		check(source.saveCompositionToPath(path, &error),
+			"portable composition saves as a standalone JSON envelope");
+
+		json_error_t jsonError {};
+		json_t* saved = json_load_file(path.c_str(), 0, &jsonError);
+		check(saved && json_is_object(saved) &&
+			json_is_string(json_object_get(saved, "format")) &&
+			std::string(json_string_value(json_object_get(saved, "format"))) == "Leviathan.SibylComposition" &&
+			json_is_object(json_object_get(saved, "composition")),
+			"portable composition envelope is versioned and self-identifying");
+		if (saved) json_decref(saved);
+
+		SibylModule destination;
+		check(destination.loadCompositionFromPath(path, &error) &&
+			destination.m_acceptedCompositionPtr &&
+			destination.m_acceptedCompositionPtr->meta.title == "Portable Constellation",
+			"portable composition round-trips through Sibyl validation");
+		const int acceptedRevision = destination.m_acceptedRevision;
+		const sibyl::Composition* acceptedComposition = destination.m_acceptedCompositionPtr;
+		{
+			std::ofstream invalid(path.c_str(), std::ios::binary | std::ios::trunc);
+			invalid << "{\"format\":\"Leviathan.SibylComposition\",\"schemaVersion\":99,\"composition\":{}}";
+		}
+		check(!destination.loadCompositionFromPath(path, &error) &&
+			destination.m_acceptedRevision == acceptedRevision &&
+			destination.m_acceptedCompositionPtr == acceptedComposition,
+			"invalid portable composition leaves the accepted sequence untouched");
+		std::remove(path.c_str());
 	}
 
 	std::cout << "[SUMMARY] sibyl_module_spec: " << (failures ? "FAILED" : "passed") << "\n";
