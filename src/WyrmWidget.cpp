@@ -1374,6 +1374,16 @@ struct WyrmWidget : ModuleWidget {
 				[=]() { applyRenderMode(WYRM_RENDER_OPENGL_SHDR); }
 			));
 		}));
+		if (isDragonKingDebugEnabled()) {
+			menu->addChild(createCheckMenuItem("Context-owned fixed GL surface", "",
+				[=]() { return module->fixedSurfaceExperiment.load(std::memory_order_relaxed); },
+				[=]() {
+					module->fixedSurfaceExperiment.store(
+						!module->fixedSurfaceExperiment.load(std::memory_order_relaxed),
+						std::memory_order_relaxed);
+				}
+			));
+		}
 		menu->addChild(createSubmenuItem("Rocks", string::f("%d", module->rockCount), [=](Menu* submenu) {
 			const bool dragModeSelected = (module->rockMouseMode == ROCK_MOUSE_DRAGS);
 			const std::string dragLabel = dragModeSelected ? "Mouse Drags Rocks" : "Mouse Drags Rocks (shift)";

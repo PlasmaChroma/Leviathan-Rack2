@@ -1,5 +1,7 @@
 #include "Wyrm.hpp"
 #include "WyrmRenderGeometry.hpp"
+#include "GlLifecycleUtils.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 
 #include <array>
 #include <chrono>
@@ -85,6 +87,16 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	std::vector<uint8_t> bodyTileActive;
 	float bodyTileDomainFraction = 1.f;
 	int activeBodySegmentCount = 0;
+	NVGLUframebuffer* fixedFrontSurface = nullptr;
+	NVGLUframebuffer* fixedBackSurface = nullptr;
+	NVGcontext* fixedSurfaceVg = nullptr;
+	int fixedFrontWidth = 0;
+	int fixedFrontHeight = 0;
+	int fixedBackWidth = 0;
+	int fixedBackHeight = 0;
+	bool fixedSurfaceDirty = true;
+	bool lastFixedSurfaceEnabled = false;
+	uint64_t fixedSurfaceGeneration = 0;
 
 	struct GpuTimerSlot {
 		GLuint waveQuery = 0;
@@ -1026,7 +1038,56 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		(void) includeGlow;
 	}
 
-	void abandonGlResources() {
+	void releaseFixedSurfaces(bool deleteGlObjects) {
+		if (deleteGlObjects && fixedSurfaceVg && APP && APP->window
+			&& APP->window->vg == fixedSurfaceVg) {
+			if (fixedFrontSurface) nvgluDeleteFramebuffer(fixedFrontSurface);
+			if (fixedBackSurface) nvgluDeleteFramebuffer(fixedBackSurface);
+		}
+		fixedFrontSurface = nullptr;
+		fixedBackSurface = nullptr;
+		fixedSurfaceVg = nullptr;
+		fixedFrontWidth = 0;
+		fixedFrontHeight = 0;
+		fixedBackWidth = 0;
+		fixedBackHeight = 0;
+		fixedSurfaceDirty = true;
+		fixedSurfaceGeneration = 0;
+		if (module) {
+			module->perfFixedSurfaceWidth.store(0, std::memory_order_relaxed);
+			module->perfFixedSurfaceHeight.store(0, std::memory_order_relaxed);
+			module->perfFixedSurfaceGeneration.store(0, std::memory_order_relaxed);
+		}
+	}
+
+	bool ensureFixedBackSurface(NVGcontext* vg, int targetWidth, int targetHeight) {
+		if (!vg || targetWidth < 1 || targetHeight < 1) return false;
+		if (fixedSurfaceVg != vg) {
+			// Handles are context-owned. If Rack replaced the editor context without
+			// delivering its old destroy event, forget them and let that context's
+			// owner reclaim the underlying GL objects.
+			releaseFixedSurfaces(false);
+			fixedSurfaceVg = vg;
+		}
+
+		bool backMatches = fixedBackSurface
+			&& fixedBackWidth == targetWidth && fixedBackHeight == targetHeight;
+		if (backMatches && isExtraGlValidationEnabled()) {
+			backMatches = gl_lifecycle::isValidTextureFramebufferPair(
+				fixedBackSurface->texture, fixedBackSurface->fbo)
+				&& nvg_gfx_lifecycle::ownedNvgImageSizeMatches(
+					vg, fixedBackSurface->image, targetWidth, targetHeight);
+		}
+		if (!backMatches) {
+			if (fixedBackSurface) nvgluDeleteFramebuffer(fixedBackSurface);
+			fixedBackSurface = nvgluCreateFramebuffer(vg, targetWidth, targetHeight, 0);
+			fixedBackWidth = fixedBackSurface ? targetWidth : 0;
+			fixedBackHeight = fixedBackSurface ? targetHeight : 0;
+		}
+		return fixedBackSurface != nullptr;
+	}
+
+	void abandonGlResources(bool deleteOwnedSurfaces = false) {
 		resetGpuTimerState();
 		resetBodyShaderState();
 		resetWaveShaderState();
@@ -1034,23 +1095,24 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		resetWaveColumnTextureState();
 		bodyStripGeometryRevision = 0;
 		redrawStateInitialized = false;
+		releaseFixedSurfaces(deleteOwnedSurfaces);
 	}
 
 	~WyrmGlRendererWidget() override {
 		// DAW plugin editors can destroy/recreate their GL context around the
 		// Rack UI. Avoid driver calls from widget teardown; resources are
 		// reclaimed by the editor/context owner.
-		abandonGlResources();
+		abandonGlResources(false);
 	}
 
 	void onContextDestroy(const ContextDestroyEvent& e) override {
 		OpenGlWidget::onContextDestroy(e);
-		abandonGlResources();
+		abandonGlResources(true);
 	}
 
 	void onContextCreate(const ContextCreateEvent& e) override {
 		OpenGlWidget::onContextCreate(e);
-		abandonGlResources();
+		abandonGlResources(false);
 		setDirty();
 	}
 
@@ -1062,6 +1124,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		const bool renderGl = (mode == WYRM_RENDER_OPENGL || mode == WYRM_RENDER_OPENGL_SHDR);
 		visible = renderGl;
 		if (!visible) {
+			module->perfFixedSurfaceActive.store(false, std::memory_order_relaxed);
 			redrawStateInitialized = false;
 			return;
 		}
@@ -1072,6 +1135,8 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		const float slitherAmount = levi_math::clamp01(
 			module->displaySlitherAmount.load(std::memory_order_relaxed));
 		const float slitherPhase = module->uiSlitherPhase.load(std::memory_order_relaxed);
+		const bool fixedSurfaceEnabled = module->fixedSurfaceExperiment.load(std::memory_order_relaxed);
+		module->perfFixedSurfaceActive.store(fixedSurfaceEnabled, std::memory_order_relaxed);
 		bool dirty = !redrawStateInitialized;
 		dirty = dirty || mode != lastRenderMode;
 		dirty = dirty || waveVersion != lastWaveVersion;
@@ -1083,6 +1148,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		dirty = dirty || std::fabs(slitherAmount - lastSlitherAmount) > 1e-5f;
 		dirty = dirty || (slitherAmount > 1e-5f
 			&& std::fabs(slitherPhase - lastSlitherPhase) > 1e-6f);
+		dirty = dirty || fixedSurfaceEnabled != lastFixedSurfaceEnabled;
 
 		lastRenderMode = mode;
 		lastWaveVersion = waveVersion;
@@ -1092,10 +1158,15 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		lastSlitherAmount = slitherAmount;
 		lastSlitherPhase = slitherPhase;
 		lastDrawSize = box.size;
+		lastFixedSurfaceEnabled = fixedSurfaceEnabled;
 		redrawStateInitialized = true;
 
 		if (dirty) {
+			fixedSurfaceDirty = true;
 			setDirty();
+		}
+		if (fixedSurfaceEnabled) {
+			renderFixedSurfaceIfNeeded();
 		}
 		// OpenGlWidget::step() deliberately redraws every frame. Use the cached
 		// framebuffer behavior now that all live GL invalidation is explicit above.
@@ -1105,9 +1176,21 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	void draw(const DrawArgs& args) override {
 		using PerfClock = std::chrono::steady_clock;
 		const bool logCsv = module && isDragonKingDebugEnabled() && isWyrmDrawLoggingEnabled();
-		const bool cacheWasDirty = dirty;
+		const bool fixedSurfaceEnabled = module
+			&& module->fixedSurfaceExperiment.load(std::memory_order_relaxed);
+		const bool cacheWasDirty = fixedSurfaceEnabled ? fixedSurfaceDirty : dirty;
 		const PerfClock::time_point start = logCsv ? PerfClock::now() : PerfClock::time_point();
-		widget::FramebufferWidget::draw(args);
+		if (fixedSurfaceEnabled && fixedFrontSurface && fixedFrontSurface->image >= 0) {
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+			nvgFillPaint(args.vg, nvgImagePattern(
+				args.vg, 0.f, 0.f, box.size.x, box.size.y, 0.f,
+				fixedFrontSurface->image, 1.f));
+			nvgFill(args.vg);
+		}
+		else {
+			widget::FramebufferWidget::draw(args);
+		}
 		if (logCsv) {
 			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - start).count());
@@ -1116,8 +1199,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		}
 	}
 
-	void drawFramebuffer() override {
-		Vec fbSize = getFramebufferSize();
+	void renderGlContent(Vec fbSize) {
 		glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
 		if (isExtraGlValidationEnabled()) {
 			validateGlResourcesForCurrentContext();
@@ -1176,6 +1258,72 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		glMatrixMode(GL_PROJECTION);
 		glPopMatrix();
 		glMatrixMode(GL_MODELVIEW);
+	}
+
+	void drawFramebuffer() override {
+		renderGlContent(getFramebufferSize());
+	}
+
+	void renderFixedSurfaceIfNeeded() {
+		if (!module || !module->fixedSurfaceExperiment.load(std::memory_order_relaxed)) return;
+		NVGcontext* vg = (APP && APP->window) ? APP->window->vg : nullptr;
+		if (!vg) return;
+		if (fixedSurfaceVg != vg) {
+			releaseFixedSurfaces(false);
+			fixedSurfaceVg = vg;
+			fixedSurfaceDirty = true;
+		}
+		if (!fixedSurfaceDirty) return;
+		const bool compactEditor = box.size.x <= 300.f;
+		const float density = compactEditor ? 2.f : 1.5f;
+		const int targetWidth = std::max(1, int(std::ceil(box.size.x * density)));
+		const int targetHeight = std::max(1, int(std::ceil(box.size.y * density)));
+		if (!ensureFixedBackSurface(vg, targetWidth, targetHeight)) return;
+
+		GLint previousFramebuffer = 0;
+		GLint previousProgram = 0;
+		GLint previousArrayBuffer = 0;
+		GLint previousActiveTexture = GL_TEXTURE0;
+		GLint previousTexture2d = 0;
+		GLint previousMatrixMode = GL_MODELVIEW;
+		glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
+		glGetIntegerv(GL_CURRENT_PROGRAM, &previousProgram);
+		glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previousArrayBuffer);
+		glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
+		glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture2d);
+		glGetIntegerv(GL_MATRIX_MODE, &previousMatrixMode);
+		glPushAttrib(GL_ALL_ATTRIB_BITS);
+		glPushClientAttrib(GL_CLIENT_ALL_ATTRIB_BITS);
+		glMatrixMode(GL_PROJECTION);
+		glPushMatrix();
+		glMatrixMode(GL_MODELVIEW);
+		glPushMatrix();
+
+		nvgluBindFramebuffer(fixedBackSurface);
+		renderGlContent(Vec(float(targetWidth), float(targetHeight)));
+		glFlush();
+
+		glMatrixMode(GL_MODELVIEW);
+		glPopMatrix();
+		glMatrixMode(GL_PROJECTION);
+		glPopMatrix();
+		glMatrixMode(GLenum(previousMatrixMode));
+		glPopClientAttrib();
+		glPopAttrib();
+		glUseProgram(GLuint(previousProgram));
+		glBindBuffer(GL_ARRAY_BUFFER, GLuint(previousArrayBuffer));
+		glActiveTexture(GLenum(previousActiveTexture));
+		glBindTexture(GL_TEXTURE_2D, GLuint(previousTexture2d));
+		glBindFramebuffer(GL_FRAMEBUFFER, GLuint(previousFramebuffer));
+
+		std::swap(fixedFrontSurface, fixedBackSurface);
+		std::swap(fixedFrontWidth, fixedBackWidth);
+		std::swap(fixedFrontHeight, fixedBackHeight);
+		fixedSurfaceDirty = false;
+		++fixedSurfaceGeneration;
+		module->perfFixedSurfaceWidth.store(fixedFrontWidth, std::memory_order_relaxed);
+		module->perfFixedSurfaceHeight.store(fixedFrontHeight, std::memory_order_relaxed);
+		module->perfFixedSurfaceGeneration.store(fixedSurfaceGeneration, std::memory_order_relaxed);
 	}
 };
 

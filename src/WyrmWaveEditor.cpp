@@ -621,7 +621,11 @@ struct WyrmWaveEditor : TransparentWidget {
 						module->perfChannels.load(std::memory_order_relaxed),
 						lastBodySampleCount,
 						bodySampleCacheHits,
-						bodySampleCacheMisses
+						bodySampleCacheMisses,
+						module->perfFixedSurfaceActive.load(std::memory_order_relaxed),
+						module->perfFixedSurfaceWidth.load(std::memory_order_relaxed),
+						module->perfFixedSurfaceHeight.load(std::memory_order_relaxed),
+						module->perfFixedSurfaceGeneration.load(std::memory_order_relaxed)
 					);
 				}
 			}

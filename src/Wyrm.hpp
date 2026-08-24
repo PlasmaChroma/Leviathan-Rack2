@@ -270,6 +270,9 @@ struct Wyrm : Module {
 	bool publishedEnvelopeRunning = false;
 	std::atomic<bool> editorLocked {false};
 	std::atomic<int> renderMode {WYRM_RENDER_OPENGL_SHDR};
+	// Context-owned GL surface prototype. Intentionally not serialized while the
+	// compact/expanded lifecycle is being validated in Rack and DAW editors.
+	std::atomic<bool> fixedSurfaceExperiment {true};
 	bool waveCustomized = false;
 	int selectedShape = SHAPE_SINE;
 	int selectedEnvelopeShape = ENVELOPE_SHAPE_D2;
@@ -309,6 +312,10 @@ struct Wyrm : Module {
 	std::atomic<uint64_t> perfCsvOverlayDrawNs {0};
 	std::atomic<uint64_t> perfCsvGlDrawNs {0};
 	std::atomic<bool> perfCsvGlDirty {false};
+	std::atomic<bool> perfFixedSurfaceActive {false};
+	std::atomic<int> perfFixedSurfaceWidth {0};
+	std::atomic<int> perfFixedSurfaceHeight {0};
+	std::atomic<uint64_t> perfFixedSurfaceGeneration {0};
 	std::atomic<uint64_t> perfCsvGpuWaveNs {0};
 	std::atomic<uint64_t> perfCsvGpuBodyNs {0};
 	std::atomic<uint64_t> perfCsvGpuSampleSequence {0};

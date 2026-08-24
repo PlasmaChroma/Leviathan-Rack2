@@ -609,7 +609,7 @@ struct Bifurx : Module {
 	RenderMode renderMode = RENDER_OPENGL;
 	// Debug-only A/B control for the context-owned fixed GL surface prototype.
 	// Intentionally not serialized until the lifecycle experiment is accepted.
-	std::atomic<bool> fixedSurfaceExperiment {false};
+	std::atomic<bool> fixedSurfaceExperiment {true};
 	dsp::ClockDivider previewPublishDivider;
 	dsp::ClockDivider previewPublishSlowDivider;
 	dsp::ClockDivider controlUpdateDivider;

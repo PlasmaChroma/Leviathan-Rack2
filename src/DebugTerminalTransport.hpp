@@ -123,7 +123,11 @@ void submitWyrmMetrics(uint32_t instanceId,
                        int channels,
                        int bodySamples,
                        uint64_t bodySampleCacheHits,
-                       uint64_t bodySampleCacheMisses);
+                       uint64_t bodySampleCacheMisses,
+                       bool fixedSurface,
+                       int fixedSurfaceWidth,
+                       int fixedSurfaceHeight,
+                       uint64_t fixedSurfaceGeneration);
 
 void submitIntegralFluxMetrics(uint32_t instanceId,
                                TimingRangeUs processUs,
