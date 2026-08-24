@@ -1457,6 +1457,16 @@ struct Octavia : Module {
         // ── Octavia Console mailbox ─────────────────────────────────────────
         // Text exchange is control/UI work only. The audio thread never reads
         // or writes these mailboxes.
+        svr.Get("/console", [](const httplib::Request&, httplib::Response& res) {
+            const std::vector<int64_t> ids = octavia_console::listMailboxIds();
+            std::string body = "{" + jStr("moduleIds") + ":[";
+            for (std::size_t i = 0; i < ids.size(); ++i) {
+                if (i) body += ",";
+                body += std::to_string(ids[i]);
+            }
+            body += "]}";
+            res.set_content(body, "application/json");
+        });
         svr.Get(R"(/console/(\d+)/status)", [](const httplib::Request& r, httplib::Response& res) {
             int64_t moduleId = std::stoll(r.matches[1].str());
             auto mailbox = octavia_console::findMailbox(moduleId);
@@ -1470,7 +1480,11 @@ struct Octavia : Module {
                 + "," + jStr("state") + ":" + jStr(octavia_console::agentStateName(snapshot.state))
                 + "," + jStr("latestPromptId") + ":" + std::to_string(snapshot.latestPromptId)
                 + "," + jStr("latestResponsePromptId") + ":" + std::to_string(snapshot.latestResponsePromptId)
-                + "," + jStr("pendingCount") + ":" + std::to_string(snapshot.pendingCount) + "}";
+                + "," + jStr("pendingCount") + ":" + std::to_string(snapshot.pendingCount)
+                + "," + jStr("queuedCount") + ":" + std::to_string(snapshot.queuedCount)
+                + "," + jStr("claimedCount") + ":" + std::to_string(snapshot.claimedCount)
+                + "," + jStr("liveWorkerCount") + ":" + std::to_string(snapshot.liveWorkerCount)
+                + "," + jStr("backgroundWorkerEnabled") + ":" + (snapshot.backgroundWorkerEnabled ? "true" : "false") + "}";
             res.set_content(body, "application/json");
         });
         svr.Get(R"(/console/(\d+)/prompt)", [](const httplib::Request& r, httplib::Response& res) {
@@ -1530,6 +1544,105 @@ struct Octavia : Module {
                     "application/json");
                 return;
             }
+            res.set_content("{\"ok\":true}", "application/json");
+        });
+
+        // Background-worker API. These routes are additive; the MCP long-poll
+        // path above remains a supported synthetic legacy claimant.
+        svr.Post(R"(/console/(\d+)/workers)", [](const httplib::Request& r, httplib::Response& res) {
+            auto mailbox = octavia_console::findMailbox(std::stoll(r.matches[1].str()));
+            if (!mailbox) { res.status = 404; res.set_content("{\"error\":\"Octavia Console not found\"}", "application/json"); return; }
+            std::string name = "worker";
+            json_error_t je; json_t* root = json_loads(r.body.c_str(), 0, &je);
+            if (root && json_is_object(root)) { json_t* value = json_object_get(root, "name"); if (json_is_string(value)) name = json_string_value(value); }
+            if (root) json_decref(root);
+            std::string workerId, error;
+            if (!mailbox->registerWorker(std::move(name), &workerId, &error)) { res.status = 403; res.set_content("{" + jStr("error") + ":" + jStr(error) + "}", "application/json"); return; }
+            res.status = 201; res.set_content("{" + jStr("workerId") + ":" + jStr(workerId) + "}", "application/json");
+        });
+        svr.Post(R"(/console/(\d+)/workers/([^/]+)/heartbeat)", [](const httplib::Request& r, httplib::Response& res) {
+            auto mailbox = octavia_console::findMailbox(std::stoll(r.matches[1].str())); std::string error;
+            if (!mailbox) { res.status = 404; res.set_content("{\"error\":\"Octavia Console not found\"}", "application/json"); return; }
+            if (!mailbox->heartbeatWorker(r.matches[2].str(), &error)) { res.status = 410; res.set_content("{" + jStr("error") + ":" + jStr(error) + "}", "application/json"); return; }
+            res.set_content("{\"ok\":true}", "application/json");
+        });
+        svr.Post(R"(/console/(\d+)/workers/([^/]+)/unregister)", [](const httplib::Request& r, httplib::Response& res) {
+            auto mailbox = octavia_console::findMailbox(std::stoll(r.matches[1].str())); std::string error;
+            if (!mailbox) { res.status = 404; res.set_content("{\"error\":\"Octavia Console not found\"}", "application/json"); return; }
+            if (!mailbox->unregisterWorker(r.matches[2].str(), &error)) { res.status = 410; res.set_content("{" + jStr("error") + ":" + jStr(error) + "}", "application/json"); return; }
+            res.set_content("{\"ok\":true}", "application/json");
+        });
+        svr.Get(R"(/console/(\d+)/events)", [](const httplib::Request& r, httplib::Response& res) {
+            auto mailbox = octavia_console::findMailbox(std::stoll(r.matches[1].str()));
+            if (!mailbox) { res.status = 404; res.set_content("{\"error\":\"Octavia Console not found\"}", "application/json"); return; }
+            const std::string workerId = r.has_param("workerId") ? r.get_param_value("workerId") : "";
+            std::string error;
+            if (!mailbox->heartbeatWorker(workerId, &error)) { res.status = 410; res.set_content("{" + jStr("error") + ":" + jStr(error) + "}", "application/json"); return; }
+            uint64_t afterId = 0;
+            try {
+                if (r.has_param("after")) afterId = std::stoull(r.get_param_value("after"));
+                const std::string lastEventId = r.get_header_value("Last-Event-ID");
+                if (!lastEventId.empty()) afterId = std::max(afterId, static_cast<uint64_t>(std::stoull(lastEventId)));
+            } catch (...) { res.status = 400; res.set_content("{\"error\":\"after and Last-Event-ID must be integers\"}", "application/json"); return; }
+            res.set_header("Cache-Control", "no-cache");
+            res.set_header("X-Accel-Buffering", "no");
+            res.set_chunked_content_provider("text/event-stream",
+                [mailbox, workerId, afterId](size_t, httplib::DataSink& sink) mutable {
+                    std::string heartbeatError;
+                    if (!mailbox->heartbeatWorker(workerId, &heartbeatError)) {
+                        const std::string revoked = "event: worker.revoked\ndata: {}\n\n";
+                        sink.write(revoked.data(), revoked.size());
+                        sink.done();
+                        return false;
+                    }
+                    octavia_console::Event event;
+                    if (!mailbox->waitForEvent(afterId, 10000, &event)) {
+                        const std::string keepalive = ": keepalive\n\n";
+                        return sink.write(keepalive.data(), keepalive.size());
+                    }
+                    afterId = event.id;
+                    const std::string data = "id: " + std::to_string(event.id) + "\nevent: " + event.type
+                        + "\ndata: {" + jStr("promptId") + ":" + std::to_string(event.promptId) + "}\n\n";
+                    return sink.write(data.data(), data.size());
+                });
+        });
+        svr.Post(R"(/console/(\d+)/prompts/(\d+)/claim)", [](const httplib::Request& r, httplib::Response& res) {
+            auto mailbox = octavia_console::findMailbox(std::stoll(r.matches[1].str()));
+            if (!mailbox) { res.status = 404; res.set_content("{\"error\":\"Octavia Console not found\"}", "application/json"); return; }
+            json_error_t je; json_t* root = json_loads(r.body.c_str(), 0, &je); std::string workerId;
+            if (root && json_is_object(root)) { json_t* value = json_object_get(root, "workerId"); if (json_is_string(value)) workerId = json_string_value(value); }
+            if (root) json_decref(root);
+            octavia_console::Prompt prompt; std::string claimToken, error;
+            if (!mailbox->claimPrompt(workerId, std::stoull(r.matches[2].str()), &prompt, &claimToken, &error)) { res.status = 409; res.set_content("{" + jStr("error") + ":" + jStr(error) + "}", "application/json"); return; }
+            res.set_content("{" + jStr("prompt") + ":{" + jStr("id") + ":" + std::to_string(prompt.id) + "," + jStr("text") + ":" + jStr(prompt.text) + "}," + jStr("claimToken") + ":" + jStr(claimToken) + "}", "application/json");
+        });
+        svr.Post(R"(/console/(\d+)/prompts/claim-next)", [](const httplib::Request& r, httplib::Response& res) {
+            auto mailbox = octavia_console::findMailbox(std::stoll(r.matches[1].str()));
+            if (!mailbox) { res.status = 404; res.set_content("{\"error\":\"Octavia Console not found\"}", "application/json"); return; }
+            json_error_t je; json_t* root = json_loads(r.body.c_str(), 0, &je); std::string workerId;
+            if (root && json_is_object(root)) { json_t* value = json_object_get(root, "workerId"); if (json_is_string(value)) workerId = json_string_value(value); }
+            if (root) json_decref(root);
+            octavia_console::Prompt prompt; std::string claimToken, error;
+            if (!mailbox->claimNextPrompt(workerId, &prompt, &claimToken, &error)) { res.status = 409; res.set_content("{" + jStr("error") + ":" + jStr(error) + "}", "application/json"); return; }
+            res.set_content("{" + jStr("prompt") + ":{" + jStr("id") + ":" + std::to_string(prompt.id) + "," + jStr("text") + ":" + jStr(prompt.text) + "}," + jStr("claimToken") + ":" + jStr(claimToken) + "}", "application/json");
+        });
+        svr.Post(R"(/console/(\d+)/prompts/(\d+)/(renew|release|complete))", [](const httplib::Request& r, httplib::Response& res) {
+            auto mailbox = octavia_console::findMailbox(std::stoll(r.matches[1].str()));
+            if (!mailbox) { res.status = 404; res.set_content("{\"error\":\"Octavia Console not found\"}", "application/json"); return; }
+            json_error_t je; json_t* root = json_loads(r.body.c_str(), 0, &je);
+            std::string token, text, operationId; bool isError = false;
+            if (root && json_is_object(root)) {
+                json_t* v = json_object_get(root, "claimToken"); if (json_is_string(v)) token = json_string_value(v);
+                v = json_object_get(root, "text"); if (json_is_string(v)) text = json_string_value(v);
+                v = json_object_get(root, "operationId"); if (json_is_string(v)) operationId = json_string_value(v);
+                isError = json_is_true(json_object_get(root, "error"));
+            }
+            if (root) json_decref(root);
+            const uint64_t promptId = std::stoull(r.matches[2].str()); const std::string action = r.matches[3].str(); std::string error; bool ok = false;
+            if (action == "renew") ok = mailbox->renewClaim(promptId, token, &error);
+            else if (action == "release") ok = mailbox->releaseClaim(promptId, token, &error);
+            else ok = mailbox->completeClaim(promptId, token, std::move(text), isError, operationId, &error);
+            if (!ok) { res.status = 409; res.set_content("{" + jStr("error") + ":" + jStr(error) + "}", "application/json"); return; }
             res.set_content("{\"ok\":true}", "application/json");
         });
 

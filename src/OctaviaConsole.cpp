@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include "DebugTerminalMetrics.hpp"
 #include "OctaviaConsoleMailbox.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
@@ -38,6 +39,19 @@ struct OctaviaConsole : Module {
 		octavia_console::unregisterMailbox(registeredId, mailbox);
 		registeredId = id;
 		octavia_console::registerMailbox(registeredId, mailbox);
+	}
+
+	json_t* dataToJson() override {
+		json_t* root = json_object();
+		json_object_set_new(root, "backgroundWorkerEnabled",
+			json_boolean(mailbox->backgroundWorkerEnabled()));
+		return root;
+	}
+
+	void dataFromJson(json_t* root) override {
+		if (!root) return;
+		if (json_t* enabled = json_object_get(root, "backgroundWorkerEnabled"))
+			mailbox->setBackgroundWorkerEnabled(json_boolean_value(enabled));
 	}
 };
 
@@ -173,6 +187,26 @@ struct OctaviaConsoleWidget : ModuleWidget {
 		nvgText(args.vg, box.size.x * .5f, mm2px(14.f), "AGENT", nullptr);
 		nvgText(args.vg, box.size.x * .5f, mm2px(76.f), "PROMPT", nullptr);
 		nvgText(args.vg, mm2px(112.f), mm2px(123.f), "SEND", nullptr);
+
+		OctaviaConsole* console = dynamic_cast<OctaviaConsole*>(module);
+		if (console && isDragonKingDebugEnabled() && console->id >= 0) {
+			debug_terminal::drawDebugInstanceId(
+				args.vg, box.size, static_cast<uint64_t>(console->id));
+		}
+	}
+
+	void appendContextMenu(Menu* menu) override {
+		ModuleWidget::appendContextMenu(menu);
+		OctaviaConsole* console = dynamic_cast<OctaviaConsole*>(module);
+		if (!console) return;
+		menu->addChild(new MenuSeparator);
+		menu->addChild(createMenuLabel("Agent handling"));
+		menu->addChild(createCheckMenuItem("Interactive listener", "",
+			[console]() { return !console->mailbox->backgroundWorkerEnabled(); },
+			[console]() { console->mailbox->setBackgroundWorkerEnabled(false); }));
+		menu->addChild(createCheckMenuItem("Allow background worker (experimental)", "",
+			[console]() { return console->mailbox->backgroundWorkerEnabled(); },
+			[console]() { console->mailbox->setBackgroundWorkerEnabled(true); }));
 	}
 };
 

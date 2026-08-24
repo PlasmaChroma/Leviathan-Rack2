@@ -299,32 +299,32 @@ TestResult testDoorstopSoloBrandingFitsThreeHp() {
 TestResult testTemporalDeckBrandingRasterAnchors() {
   math::Rect left;
   math::Rect right;
-  std::vector<panel_svg::SvgPathMatch> labelPaths;
+  math::Rect logo;
   const bool leftOk = panel_svg::loadRectFromSvgMm(
     "res/deck.panel.svg", "BRANDING_WAVE_LEFT_RASTER", &left);
   const bool rightOk = panel_svg::loadRectFromSvgMm(
     "res/deck.panel.svg", "BRANDING_WAVE_RIGHT_RASTER", &right);
-  const bool labelsOk = panel_svg::findPathsInGroupsWithIdSubstringMm(
-    "res/deck.labels.svg", "labels", &labelPaths);
-  const auto branding = std::find_if(
-    labelPaths.begin(), labelPaths.end(), [](const panel_svg::SvgPathMatch& path) {
-      return path.id == "Leviathan_Branding";
-    });
-  const bool pass = leftOk && rightOk && labelsOk && branding != labelPaths.end()
+  const bool logoOk = panel_svg::loadRectFromSvgMm(
+    "res/deck.panel.svg", "BRANDING_LEVIATHAN_LOGO_RASTER", &logo);
+  const bool pass = leftOk && rightOk && logoOk
     && nearlyEqual(left.pos.x, 21.89610f, 1e-4f)
     && nearlyEqual(right.pos.x, 66.63674f, 1e-4f)
     && nearlyEqual(left.pos.y, right.pos.y, 1e-4f)
     && nearlyEqual(left.size.x, right.size.x, 1e-4f)
     && nearlyEqual(left.size.y, right.size.y, 1e-4f)
-    && nearlyEqual(left.size.y, branding->bounds.size.y, 1e-4f)
     && nearlyEqual(left.pos.y + left.size.y, 128.5f, 1e-4f)
-    && nearlyEqual(right.pos.y + right.size.y, 128.5f, 1e-4f);
-  return {"Temporal Deck branding raster anchors are paired", pass,
+    && nearlyEqual(right.pos.y + right.size.y, 128.5f, 1e-4f)
+    && nearlyEqual(logo.pos.x, 34.44015f, 1e-4f)
+    && nearlyEqual(logo.pos.y, 118.43102f, 1e-4f)
+    && nearlyEqual(logo.size.x, 32.71933f, 1e-4f)
+    && nearlyEqual(logo.size.y, 12.24054f, 1e-4f)
+    && nearlyEqual(logo.pos.x + logo.size.x * 0.5f, 50.799815f, 1e-4f);
+  return {"Temporal Deck raster branding anchors match runtime layout", pass,
           "left=" + std::to_string(left.pos.x) + "," + std::to_string(left.pos.y) +
             " right=" + std::to_string(right.pos.x) + "," + std::to_string(right.pos.y) +
             " size=" + std::to_string(left.size.x) + "," + std::to_string(left.size.y) +
-            " logoHeight=" + (branding == labelPaths.end()
-              ? std::string("missing") : std::to_string(branding->bounds.size.y))};
+            " logo=" + std::to_string(logo.pos.x) + "," + std::to_string(logo.pos.y) +
+            " logo_sz=" + std::to_string(logo.size.x) + "," + std::to_string(logo.size.y)};
 }
 
 TestResult testPerfectWaveBrandingDeploymentContract() {

@@ -70,10 +70,11 @@ inline uint64_t elapsedNsSince(std::chrono::steady_clock::time_point startedAt) 
     std::chrono::steady_clock::now() - startedAt).count());
 }
 
-inline void drawDebugInstanceId(NVGcontext* vg, Vec widgetSize, uint32_t instanceId) {
+inline void drawDebugInstanceId(NVGcontext* vg, Vec widgetSize, uint64_t instanceId) {
   if (!vg || !APP || !APP->window || !APP->window->uiFont) return;
   char label[32];
-  std::snprintf(label, sizeof(label), "ID:%u", instanceId);
+  std::snprintf(label, sizeof(label), "ID:%llu",
+    static_cast<unsigned long long>(instanceId));
   const float x = widgetSize.x - mm2px(0.9f);
   const float y = mm2px(2.5f);
   nvgSave(vg);

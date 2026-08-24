@@ -29,6 +29,35 @@ documentation when its setup differs.
 Octavia listens only on `127.0.0.1`. The default port is `34570`; set
 `OCTAVIA_PORT` in VCV Rack's environment before launch to use another port.
 
+### Optional Codex background worker
+
+The Octavia Console can use a resident Codex app-server worker instead of keeping an
+interactive agent turn open. This adapter is Codex-specific; the ordinary MCP server
+remains the portable integration for every client.
+
+1. Place an Octavia Console immediately to Octavia's right.
+2. Open the Console context menu and select **Allow background worker (experimental)**.
+3. From the repository's `MCP/` directory, run:
+
+```sh
+.venv/bin/python mcp_server/octavia_codex_worker.py \
+  --cwd /absolute/path/to/your/project
+```
+
+The worker automatically selects the Console when exactly one is present. An explicit
+`CONSOLE_MODULE_ID` positional argument remains available for patches with multiple Consoles.
+
+The worker creates and retains a dedicated Codex thread for that Console module. Its
+thread ID is stored under `~/.config/leviathan/` by default. Set `--state PATH` to choose
+another state file. `OCTAVIA_PORT` and `OCTAVIA_TOKEN` use the same values as the MCP
+server.
+
+The worker uses Codex's automatic approval reviewer for tool requests. Ordinary reversible
+Rack edits explicitly requested in the Console can proceed under the Octavia skill's safety
+rules; destructive actions still require the explicit authorization described by that skill.
+Stop the worker with Ctrl-C. Disabling the Console option revokes its registration and
+returns outstanding claims to the queue.
+
 ---
 
 ## 2. Install the MCP server
