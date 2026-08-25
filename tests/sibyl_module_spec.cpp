@@ -457,9 +457,13 @@ int main() {
 			coherentReads = coherentReads && display.acceptedRevision == revision &&
 				display.activeRevision >= 1 && display.activeRevision <= revision;
 			module.reclaimPublishedObjects();
+			if ((revision & 15) == 0) std::this_thread::yield();
 		}
 		stopDsp.store(true, std::memory_order_release);
 		dspThread.join();
+		// The control loop must not depend on the host scheduler giving the DSP
+		// thread a final timeslice. Consume any last coalesced adoption explicitly.
+		processOneSample(module);
 		module.reclaimPublishedObjects();
 		check(coherentReads && module.m_compositionOwners.size() <= 2 &&
 			module.m_adoptionOwners.size() <= 1,

@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / "src" / "Octavia.cpp").read_text(encoding="utf-8")
+OBSERVATION = (ROOT / "src" / "OctaviaObservation.hpp").read_text(encoding="utf-8")
 PANEL_PATH = ROOT / "res" / "Octavia.svg"
 PANEL = ET.parse(PANEL_PATH).getroot()
 
@@ -62,10 +63,23 @@ class OctaviaMonitoringPanelContractTest(unittest.TestCase):
 
     def test_phase_one_led_baseline_is_off_or_dim_connected(self):
         self.assertIn("inputs[MONITOR_A_INPUT + monitor].isConnected()", SOURCE)
-        self.assertIn("setBrightness(connected ? 0.12f : 0.f)", SOURCE)
+        self.assertIn("const float idle = connected ? 0.12f : 0.f", SOURCE)
+        self.assertIn("std::max(idle, monitorActivityEnvelope[monitor])", SOURCE)
 
     def test_widened_panel_has_both_right_edge_screws(self):
         self.assertEqual(SOURCE.count("box.size.x - RACK_GRID_WIDTH"), 2)
+
+    def test_phase_two_routes_use_the_shared_observation_substrate(self):
+        self.assertIn('svr.Get("/audio/monitors"', SOURCE)
+        self.assertIn('svr.Post("/audio/snapshot"', SOURCE)
+        self.assertIn('/audio/snapshot/(\\d+)', SOURCE)
+        self.assertIn("observationHistory.publish", SOURCE)
+        self.assertNotIn("AudioRingBuf", SOURCE)
+        self.assertNotIn("audioRing[", SOURCE)
+
+    def test_phase_two_history_and_pool_are_bounded(self):
+        self.assertIn("OBSERVATION_HISTORY_FRAMES = 262144", OBSERVATION)
+        self.assertIn("SNAPSHOT_POOL_LIMIT = 12", OBSERVATION)
 
 
 if __name__ == "__main__":

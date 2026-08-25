@@ -25,6 +25,7 @@
 #include "OctaviaCableValidation.hpp"
 #include "OctaviaActionValidation.hpp"
 #include "OctaviaJobControl.hpp"
+#include "OctaviaObservation.hpp"
 #include "third_party/httplib.h"
 #include <thread>
 #include <atomic>
@@ -89,21 +90,10 @@ static std::string freqToNote(float freq) {
     return std::string(names[n]) + std::to_string(oct);
 }
 
-// ── Audio ring buffer (written by audio thread, snapshotted by HTTP thread) ───
+// Legacy analysis window size. Samples now come from the shared six-channel,
+// frame-addressed observation history rather than independent ring heads.
 static const int AUDIO_BUF = 4096;  // power of 2, ~93ms @ 44100 Hz
 static const int LOUDNESS_BLOCKS = 36000; // one hour of 100 ms EBU-R128 blocks
-
-struct AudioRingBuf {
-    // Individual atomic samples keep the audio thread lock-free while making a
-    // best-effort HTTP snapshot defined by the C++ memory model. A snapshot can
-    // span a write boundary, but never reads a concurrently-written float.
-    std::atomic<float> data[AUDIO_BUF];
-    std::atomic<int> head{0};         // total samples written; pos = head & (AUDIO_BUF-1)
-
-    AudioRingBuf() {
-        for (int i = 0; i < AUDIO_BUF; i++) data[i].store(0.f, std::memory_order_relaxed);
-    }
-};
 
 // ── Oscilloscope voltage tracking ─────────────────────────────────────────────
 static const int HISTORY_LEN       = 16;
@@ -304,10 +294,13 @@ struct Octavia : Module {
     httplib::Server   svr;
     std::thread       serverThread;
 
-    // Audio analysis — written in audio thread, read by HTTP thread
-    AudioRingBuf audioRing[2];    // 0 = L input, 1 = R input
+    // Audio observation — one coherent Rack-frame timeline for Master L/R and A-D.
+    octavia::ObservationHistory observationHistory;
+    octavia::ObservationSnapshotPool snapshotPool;
     std::atomic<float> sampleRate{44100.f};  // set in process(), read by HTTP
     std::atomic<bool> audioInputConnected[2];
+    std::array<uint64_t, 4> seenMonitorSnapshotGeneration{{0, 0, 0, 0}};
+    std::array<float, 4> monitorActivityEnvelope{{0.f, 0.f, 0.f, 0.f}};
 
     // Feedback needs a trend across independent requests. Keeping only the
     // strongest candidate per channel gives useful confirmation without
@@ -428,7 +421,7 @@ struct Octavia : Module {
 
     dsp::BooleanTrigger startTrig;
 
-    Octavia() {
+    Octavia() : snapshotPool(&observationHistory) {
         config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
         configButton(START_PARAM, "Start Octavia Server");
         configInput(MASTER_L_INPUT, "Master L");
@@ -453,17 +446,28 @@ struct Octavia : Module {
 
         sampleRate.store(args.sampleRate, std::memory_order_relaxed);
 
-        // Sample audio inputs into ring buffers. Atomic writes are deliberately
-        // used here because HTTP handlers snapshot this data concurrently.
+        // Publish all physical observation points as one coherent Rack engine frame.
+        // Channel 0 is intentionally the v1 observation boundary for polyphonic ports.
         float ch[2];
-        for (int j = 0; j < 2; j++) {
-            audioInputConnected[j].store(inputs[j].isConnected(), std::memory_order_relaxed);
-            float v = inputs[j].getVoltage();
-            ch[j] = v;
-            int h = audioRing[j].head.load(std::memory_order_relaxed);
-            audioRing[j].data[h & (AUDIO_BUF - 1)].store(v, std::memory_order_relaxed);
-            audioRing[j].head.store(h + 1, std::memory_order_release);
+        std::array<float, octavia::OBSERVATION_CHANNELS> observationVolts{{}};
+        std::array<uint8_t, octavia::OBSERVATION_CHANNELS> observationChannels{{}};
+        uint8_t connectedMask = 0;
+        for (size_t channel = 0; channel < octavia::OBSERVATION_CHANNELS; ++channel) {
+            const bool connected = inputs[channel].isConnected();
+            const int channels = connected ? inputs[channel].getChannels() : 0;
+            observationChannels[channel] = static_cast<uint8_t>(
+                std::max(0, std::min(channels, 255)));
+            if (connected) {
+                connectedMask |= static_cast<uint8_t>(1u << channel);
+                observationVolts[channel] = inputs[channel].getVoltage(0);
+            }
+            if (channel < 2) {
+                audioInputConnected[channel].store(connected, std::memory_order_relaxed);
+                ch[channel] = observationVolts[channel];
+            }
         }
+        observationHistory.publish(static_cast<uint64_t>(args.frame), args.sampleRate,
+            observationVolts, connectedMask, observationChannels);
 
         // Loudness/stereo meter accumulation (normalized: 5V = 0 dBFS)
         if (lm.resetFlag.load(std::memory_order_relaxed)) {
@@ -560,9 +564,21 @@ struct Octavia : Module {
         writeActivityEnvelope = std::max(0.f, writeActivityEnvelope - activityDecay);
         lights[READ_ACTIVITY_LIGHT].setBrightness(readActivityEnvelope);
         lights[WRITE_ACTIVITY_LIGHT].setBrightness(writeActivityEnvelope);
+        constexpr float monitorActivityDecaySeconds = 0.22f;
+        const float monitorActivityDecay = args.sampleTime / monitorActivityDecaySeconds;
         for (int monitor = 0; monitor < 4; ++monitor) {
+            const octavia::ObserveChannel channel = static_cast<octavia::ObserveChannel>(monitor + 2);
+            const uint64_t generation = observationHistory.snapshotGeneration(channel);
+            if (generation != seenMonitorSnapshotGeneration[monitor]) {
+                seenMonitorSnapshotGeneration[monitor] = generation;
+                monitorActivityEnvelope[monitor] = 1.f;
+            }
+            monitorActivityEnvelope[monitor] = std::max(
+                0.f, monitorActivityEnvelope[monitor] - monitorActivityDecay);
             const bool connected = inputs[MONITOR_A_INPUT + monitor].isConnected();
-            lights[MONITOR_A_LIGHT + monitor].setBrightness(connected ? 0.12f : 0.f);
+            const float idle = connected ? 0.12f : 0.f;
+            lights[MONITOR_A_LIGHT + monitor].setBrightness(
+                std::max(idle, monitorActivityEnvelope[monitor]));
         }
     }
 
@@ -1468,6 +1484,39 @@ struct Octavia : Module {
     }
 
     // ── HTTP routes ───────────────────────────────────────────────────────────
+    static std::string snapshotJson(const octavia::ObservationSnapshot& snapshot) {
+        const octavia::FrozenObservation& frozen = snapshot.observation;
+        std::string body = "{";
+        body += jStr("snapshotId") + ":" + std::to_string(frozen.id) + ",";
+        body += jStr("state") + ":" + jStr(octavia::snapshotStateName(snapshot.state)) + ",";
+        body += jStr("triggerFrame") + ":" + std::to_string(frozen.triggerFrame) + ",";
+        body += jStr("startFrame") + ":" + std::to_string(frozen.startFrame) + ",";
+        body += jStr("endFrame") + ":" + std::to_string(frozen.endFrame) + ",";
+        body += jStr("preFrames") + ":" + std::to_string(frozen.preFrames) + ",";
+        body += jStr("postFrames") + ":" + std::to_string(frozen.postFrames) + ",";
+        body += jStr("sampleRate") + ":" + jNum(frozen.sampleRate) + ",";
+        const double frames = frozen.endFrame >= frozen.startFrame
+            ? static_cast<double>(frozen.endFrame - frozen.startFrame + 1) : 0.0;
+        body += jStr("durationMs") + ":" + jNum(frozen.sampleRate > 0.f
+            ? static_cast<float>(1000.0 * frames / frozen.sampleRate) : 0.f) + ",";
+        body += jStr("label") + ":" + jStr(frozen.label) + ",";
+        body += jStr("requestedMonitors") + ":[";
+        bool first = true;
+        for (size_t channel = 0; channel < octavia::OBSERVATION_CHANNELS; ++channel) {
+            if (!(frozen.requestedMask & (1u << channel))) continue;
+            if (!first) body += ",";
+            first = false;
+            body += jStr(octavia::observeChannelName(
+                static_cast<octavia::ObserveChannel>(channel)));
+        }
+        body += "],";
+        body += jStr("allConnectedMask") + ":" + std::to_string(frozen.allConnectedMask) + ",";
+        body += jStr("anyConnectedMask") + ":" + std::to_string(frozen.anyConnectedMask);
+        if (!snapshot.error.empty()) body += "," + jStr("error") + ":" + jStr(snapshot.error);
+        body += "}";
+        return body;
+    }
+
     void setupRoutes() {
         // Optional shared-secret auth: set OCTAVIA_TOKEN in the environment
         // (both for VCV Rack and the MCP server) to require it on every request.
@@ -1718,6 +1767,132 @@ struct Octavia : Module {
             res.set_content(scopeJson.substr(start,end-start+1),"application/json");
         });
 
+        // ── Shared observation history and snapshot API ─────────────────────
+        svr.Get("/audio/monitors", [this](const httplib::Request&, httplib::Response& res){
+            const bool published = observationHistory.hasPublishedFrame();
+            std::string body = "{";
+            body += jStr("sampleRate") + ":" + jNum(observationHistory.currentSampleRate()) + ",";
+            body += jStr("publishedFrame") + ":";
+            body += published ? std::to_string(observationHistory.publishedFrame()) : "null";
+            body += "," + jStr("historyFrames") + ":" +
+                std::to_string(octavia::OBSERVATION_HISTORY_FRAMES) + ",";
+            body += jStr("monitors") + ":[";
+            const uint8_t connectedMask = observationHistory.currentConnectedMask();
+            for (size_t channel = 0; channel < octavia::OBSERVATION_CHANNELS; ++channel) {
+                if (channel) body += ",";
+                const octavia::ObserveChannel observed =
+                    static_cast<octavia::ObserveChannel>(channel);
+                body += "{" + jStr("id") + ":" +
+                    jStr(octavia::observeChannelName(observed)) + ",";
+                body += jStr("connected") + ":" +
+                    ((connectedMask & (1u << channel)) ? "true" : "false") + ",";
+                body += jStr("channels") + ":" +
+                    std::to_string(observationHistory.currentChannelCount(observed)) + ",";
+                body += jStr("liveMeter") + ":" + (channel < 2 ? "true" : "false") + "}";
+            }
+            body += "]}";
+            res.set_content(body, "application/json");
+        });
+
+        svr.Post("/audio/snapshot", [this](const httplib::Request& r, httplib::Response& res){
+            json_error_t jsonError;
+            json_t* root = json_loads(r.body.c_str(), 0, &jsonError);
+            if (!root || !json_is_object(root)) {
+                if (root) json_decref(root);
+                res.status = 400;
+                res.set_content("{\"error\":\"body must be a JSON object\"}", "application/json");
+                return;
+            }
+
+            uint8_t requestedMask = 0;
+            json_t* monitors = json_object_get(root, "monitors");
+            if (!monitors) {
+                requestedMask = octavia::observeChannelBit(octavia::ObserveChannel::MasterL)
+                    | octavia::observeChannelBit(octavia::ObserveChannel::MasterR);
+            } else if (!json_is_array(monitors) || json_array_size(monitors) == 0) {
+                json_decref(root);
+                res.status = 400;
+                res.set_content("{\"error\":\"monitors must be a non-empty string array\"}", "application/json");
+                return;
+            } else {
+                size_t index; json_t* value;
+                json_array_foreach(monitors, index, value) {
+                    octavia::ObserveChannel channel;
+                    if (!json_is_string(value)
+                            || !octavia::parseObserveChannel(json_string_value(value), &channel)) {
+                        json_decref(root);
+                        res.status = 400;
+                        res.set_content("{\"error\":\"unknown monitor name\"}", "application/json");
+                        return;
+                    }
+                    requestedMask |= octavia::observeChannelBit(channel);
+                }
+            }
+
+            const float sr = observationHistory.currentSampleRate();
+            double preMs = sr > 0.f ? 1000.0 * (AUDIO_BUF - 1) / sr : 0.0;
+            double postMs = 0.0;
+            json_t* pre = json_object_get(root, "preMs");
+            json_t* post = json_object_get(root, "postMs");
+            if (pre) preMs = json_is_number(pre) ? json_number_value(pre) : -1.0;
+            if (post) postMs = json_is_number(post) ? json_number_value(post) : -1.0;
+            json_t* labelValue = json_object_get(root, "label");
+            std::string label = json_is_string(labelValue) ? json_string_value(labelValue) : "";
+            if (!std::isfinite(preMs) || !std::isfinite(postMs) || preMs < 0.0 || postMs < 0.0
+                    || label.size() > 256 || sr <= 0.f) {
+                json_decref(root);
+                res.status = 400;
+                res.set_content("{\"error\":\"invalid preMs, postMs, label, or sample rate\"}",
+                    "application/json");
+                return;
+            }
+            const double maxFrames = static_cast<double>(octavia::OBSERVATION_HISTORY_FRAMES - 1);
+            const double preFrameValue = std::round(preMs * sr / 1000.0);
+            const double postFrameValue = std::round(postMs * sr / 1000.0);
+            if (preFrameValue + postFrameValue > maxFrames) {
+                json_decref(root);
+                res.status = 400;
+                res.set_content("{\"error\":\"requested window exceeds observation history\"}",
+                    "application/json");
+                return;
+            }
+            const uint32_t preFrames = static_cast<uint32_t>(preFrameValue);
+            const uint32_t postFrames = static_cast<uint32_t>(postFrameValue);
+            json_decref(root);
+
+            octavia::ObservationSnapshot snapshot;
+            std::string error;
+            if (!snapshotPool.create(preFrames, postFrames, requestedMask, label,
+                    &snapshot, &error)) {
+                res.status = error == "snapshot_pool_busy" ? 429 : 409;
+                res.set_content("{" + jStr("error") + ":" + jStr(error) + "}",
+                    "application/json");
+                return;
+            }
+            res.status = snapshot.state == octavia::SnapshotState::Complete ? 201 : 202;
+            res.set_content(snapshotJson(snapshot), "application/json");
+        });
+
+        svr.Get(R"(/audio/snapshot/(\d+))", [this](const httplib::Request& r,
+                httplib::Response& res){
+            uint64_t id = 0;
+            try { id = std::stoull(r.matches[1].str()); }
+            catch (...) {
+                res.status = 400;
+                res.set_content("{\"error\":\"invalid snapshot ID\"}", "application/json");
+                return;
+            }
+            octavia::ObservationSnapshot snapshot;
+            if (!snapshotPool.get(id, &snapshot)) {
+                res.status = 404;
+                res.set_content("{\"error\":\"snapshot_expired\"}", "application/json");
+                return;
+            }
+            if (snapshot.state == octavia::SnapshotState::Pending) res.status = 202;
+            else if (snapshot.state == octavia::SnapshotState::Failed) res.status = 409;
+            res.set_content(snapshotJson(snapshot), "application/json");
+        });
+
         // ── GET /audio/{port} — audio-rate analysis ───────────────────────────
         // Legacy numeric routes remain port 0 = Master L, port 1 = Master R.
         // Connect a cable from any module's output into the Bridge's ANALYZE input
@@ -1729,14 +1904,10 @@ struct Octavia : Module {
                 return;
             }
 
-            // Snapshot ring buffer
-            float buf[AUDIO_BUF];
-            {
-                int h = audioRing[port].head.load(std::memory_order_relaxed);
-                for (int i = 0; i < AUDIO_BUF; i++)
-                    buf[i] = audioRing[port].data[(h - AUDIO_BUF + i + AUDIO_BUF) & (AUDIO_BUF - 1)].load(std::memory_order_relaxed);
-            }
+            std::vector<float> buf;
             float sr = sampleRate.load(std::memory_order_relaxed);
+            observationHistory.copyLatest(static_cast<octavia::ObserveChannel>(port),
+                AUDIO_BUF, &buf, &sr);
 
             // RMS + peak
             float sumSq = 0.f, pk = 0.f;
@@ -1846,12 +2017,9 @@ struct Octavia : Module {
 
             auto capture = [&]() -> Snap {
                 Snap sn;
-                float buf[AUDIO_BUF];
-                {
-                    int h = audioRing[port].head.load(std::memory_order_acquire);
-                    for (int i = 0; i < AUDIO_BUF; i++)
-                        buf[i] = audioRing[port].data[(h - AUDIO_BUF + i + AUDIO_BUF) & (AUDIO_BUF - 1)].load(std::memory_order_relaxed);
-                }
+                std::vector<float> buf;
+                observationHistory.copyLatest(static_cast<octavia::ObserveChannel>(port),
+                    AUDIO_BUF, &buf);
                 for (int i = 0; i < AUDIO_BUF; i++) sn.mean += buf[i];
                 sn.mean /= AUDIO_BUF;
                 float sumSq = 0.f;

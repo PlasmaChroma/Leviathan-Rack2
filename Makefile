@@ -62,6 +62,7 @@ build/src/doom/%.c.o: CFLAGS += $(DOOM_LEGACY_WARN_FLAGS)
 build/src/Mandelwake.cpp.o build/src/MandelwakeEngine.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 
 TEST_BINS_NON_RACK := \
+	build/tests/octavia_observation_spec \
 	build/tests/octavia_job_control_spec \
 	build/tests/octavia_action_validation_spec \
 	build/tests/octavia_cable_validation_spec \
@@ -295,7 +296,7 @@ CROWNSTEP_MODULE_SOURCES := \
 	src/CrownstepSerialization.cpp \
 	src/DebugTerminalTransport.cpp
 
-.PHONY: test test-fast test-rack test-build test-build-fast test-build-rack test-odr test-sibyl-tsan
+.PHONY: test test-fast test-rack test-build test-build-fast test-build-rack test-odr test-sibyl-tsan test-octavia-observation-tsan
 test-build: $(TEST_BINS)
 test-build-fast: $(TEST_BINS_NON_RACK)
 test-build-rack: $(TEST_BINS_RACK)
@@ -305,7 +306,11 @@ test-sibyl-tsan: build/tests/sibyl_module_tsan_spec
 	LD_LIBRARY_PATH="$(RACK_RUNTIME_DIR):$$LD_LIBRARY_PATH" \
 	build/tests/sibyl_module_tsan_spec
 
+test-octavia-observation-tsan: build/tests/octavia_observation_tsan_spec
+	@TSAN_OPTIONS=halt_on_error=1 build/tests/octavia_observation_tsan_spec
+
 test-fast: test-build-fast
+	$(call run_test_bin,build/tests/octavia_observation_spec)
 	$(call run_test_bin,build/tests/octavia_job_control_spec)
 	$(call run_test_bin,build/tests/octavia_action_validation_spec)
 	$(call run_test_bin,build/tests/octavia_cable_validation_spec)
@@ -426,6 +431,12 @@ build/tests/octavia_action_validation_spec: tests/octavia_action_validation_spec
 
 build/tests/octavia_job_control_spec: tests/octavia_job_control_spec.cpp src/OctaviaJobControl.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_job_control_spec.cpp -o $@
+
+build/tests/octavia_observation_spec: tests/octavia_observation_spec.cpp src/OctaviaObservation.cpp src/OctaviaObservation.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_observation_spec.cpp src/OctaviaObservation.cpp -o $@
+
+build/tests/octavia_observation_tsan_spec: tests/octavia_observation_spec.cpp src/OctaviaObservation.cpp src/OctaviaObservation.hpp | build/tests
+	$(CXX) -std=c++17 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer -Isrc tests/octavia_observation_spec.cpp src/OctaviaObservation.cpp -o $@
 
 build/tests/temporaldeck_platter_spec_harness: tests/platter_spec_main.cpp tests/platter_spec_cases.cpp tests/platter_trace_replay.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
