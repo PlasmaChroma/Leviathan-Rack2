@@ -1633,6 +1633,80 @@ struct Octavia : Module {
         return body + "}}}";
     }
 
+    bool analyzeLatestMaster(int port, uint32_t frames, bool includeSpectrum,
+            octavia::ObservationSnapshot* snapshot, octavia::ChannelAnalysis* analysis,
+            std::string* error) {
+        if (port < 0 || port > 1 || frames < 64) {
+            if (error) *error = "invalid_legacy_analysis_request";
+            return false;
+        }
+        const octavia::ObserveChannel channel = static_cast<octavia::ObserveChannel>(port);
+        if (!snapshotPool.create(frames - 1, 0, octavia::observeChannelBit(channel),
+                "legacy-master-analysis", snapshot, error)) return false;
+        if (snapshot->state != octavia::SnapshotState::Complete) {
+            if (error) *error = snapshot->error.empty()
+                ? octavia::snapshotStateName(snapshot->state) : snapshot->error;
+            return false;
+        }
+        octavia::AnalysisGroup group;
+        group.first = channel;
+        octavia::GroupAnalysis result;
+        if (!analysisEngine.tryAnalyze(snapshot->observation, group, true,
+                includeSpectrum, &result, error)) return false;
+        *analysis = result.mono;
+        return true;
+    }
+
+    static std::string legacyTimingJson(const octavia::ObservationSnapshot& snapshot) {
+        const auto& frozen = snapshot.observation;
+        return jStr("snapshotId") + ":" + std::to_string(frozen.id) + ","
+            + jStr("triggerFrame") + ":" + std::to_string(frozen.triggerFrame) + ","
+            + jStr("startFrame") + ":" + std::to_string(frozen.startFrame) + ","
+            + jStr("endFrame") + ":" + std::to_string(frozen.endFrame) + ","
+            + jStr("sampleRate") + ":" + jNum(frozen.sampleRate);
+    }
+
+    static std::string legacyBasicAnalysisJson(int port,
+            const octavia::ObservationSnapshot& snapshot,
+            const octavia::ChannelAnalysis& analysis) {
+        float dominantHz = 0.f;
+        float dominantDb = -140.f;
+        for (const auto& bin : analysis.spectrum) {
+            if (bin.hz > 2000.f) break;
+            if (bin.db > dominantDb) { dominantDb = bin.db; dominantHz = bin.hz; }
+        }
+        std::string body = "{";
+        body += jStr("port") + ":" + std::to_string(port) + ",";
+        body += jStr("rms") + ":" + jNum(analysis.rms) + ",";
+        body += jStr("peak") + ":" + jNum(analysis.peak) + ",";
+        body += jStr("dominantHz") + ":" + jNum(dominantHz) + ",";
+        body += jStr("dominantNote") + ":" + jStr(freqToNote(dominantHz)) + ",";
+        body += legacyTimingJson(snapshot) + "," + jStr("spectrum") + ":[";
+        bool first = true;
+        for (const auto& bin : analysis.spectrum) {
+            if (bin.hz > 2000.f) break;
+            if (!first) body += ",";
+            first = false;
+            const float magnitude = 5.f * std::pow(10.f, bin.db / 20.f);
+            body += "{" + jStr("hz") + ":" + jNum(bin.hz) + ","
+                + jStr("mag") + ":" + jNum(magnitude) + "}";
+        }
+        return body + "]}";
+    }
+
+    static std::string legacyDetailedAnalysisJson(int port,
+            const octavia::ObservationSnapshot& snapshot,
+            const octavia::ChannelAnalysis& analysis, bool includeSpectrum) {
+        std::string full = channelAnalysisJson(analysis, includeSpectrum);
+        // Preserve legacy top-level fields while reusing the canonical analyzer
+        // serialization. Removing the outer braces makes the result additive.
+        if (full.size() >= 2) full = full.substr(1, full.size() - 2);
+        return "{" + jStr("port") + ":" + std::to_string(port) + ","
+            + jStr("inputConnected") + ":" + (analysis.connected ? "true" : "false") + ","
+            + legacyTimingJson(snapshot) + "," + full + ","
+            + jStr("inharmonicHighPeaks") + ":[]}";
+    }
+
     static std::string measurementJson(const octavia::MeasurementResult& measured,
             bool leftConnected, bool rightConnected) {
         const double n = static_cast<double>(measured.measuredFrames);
@@ -2229,346 +2303,56 @@ struct Octavia : Module {
                 + jStr("comparison") + ":" + comparisonJson(comparison, includeSpectrum) + "}", "application/json");
         });
 
-        // ── GET /audio/{port} — audio-rate analysis ───────────────────────────
-        // Legacy numeric routes remain port 0 = Master L, port 1 = Master R.
-        // Connect a cable from any module's output into the Bridge's ANALYZE input
-        // to get real-time frequency analysis.
+        // Legacy numeric contracts now freeze Master history and use the same
+        // analyzer as named snapshot requests.
         svr.Get(R"(/audio/(\d+))", [this](const httplib::Request& r, httplib::Response& res){
-            int port = std::stoi(r.matches[1].str());
-            if (port < 0 || port >= 2) {
-                res.set_content("{\"error\": \"port must be 0 (L) or 1 (R)\"}", "application/json");
+            const int port = std::stoi(r.matches[1].str());
+            if (port < 0 || port > 1) {
+                res.status = 400;
+                res.set_content("{\"error\":\"port must be 0 (L) or 1 (R)\"}", "application/json");
                 return;
             }
-
-            std::vector<float> buf;
-            float sr = sampleRate.load(std::memory_order_relaxed);
-            observationHistory.copyLatest(static_cast<octavia::ObserveChannel>(port),
-                AUDIO_BUF, &buf, &sr);
-
-            // RMS + peak
-            float sumSq = 0.f, pk = 0.f;
-            for (int i = 0; i < AUDIO_BUF; i++) {
-                sumSq += buf[i] * buf[i];
-                float av = std::fabs(buf[i]);
-                if (av > pk) pk = av;
-            }
-            float rms = sqrtf(sumSq / AUDIO_BUF);
-
-            // Spectrum: DFT at 20–2000 Hz in 20 Hz steps, stride-8 sampling
-            // Stride-8 → effective sr = 44100/8 = 5512 Hz (Nyquist = 2756 Hz, covers our range)
-            const int STRIDE = 8;
-            const int N      = AUDIO_BUF / STRIDE;  // 512 samples per DFT
-            float strSr      = sr / STRIDE;
-
-            float bestMag  = 0.f;
-            float bestFreq = 0.f;
-            std::string spec = "[";
-            bool sfirst = true;
-
-            for (int fi = 1; fi <= 100; fi++) {           // 20, 40, 60 … 2000 Hz
-                float freq = fi * 20.f;
-                if (freq > strSr * 0.5f) break;            // above Nyquist → skip
-                float re = 0.f, im = 0.f;
-                float k  = 2.0f * float(M_PI) * freq / strSr;
-                for (int i = 0; i < N; i++) {
-                    float v = buf[i * STRIDE];
-                    re += v * cosf(k * i);
-                    im += v * sinf(k * i);
-                }
-                float mag = sqrtf(re*re + im*im) / N;
-                if (mag > bestMag) { bestMag = mag; bestFreq = freq; }
-                if (!sfirst) spec += ", ";
-                sfirst = false;
-                spec += "{" + jStr("hz") + ": " + std::to_string((int)freq)
-                           + ", " + jStr("mag") + ": " + std::to_string(mag) + "}";
-            }
-            spec += "]";
-
-            std::string note = freqToNote(bestFreq);
-
-            std::string body = "{";
-            body += jStr("port")         + ": " + std::to_string(port) + ", ";
-            body += jStr("rms")          + ": " + std::to_string(rms) + ", ";
-            body += jStr("peak")         + ": " + std::to_string(pk) + ", ";
-            body += jStr("dominantHz")   + ": " + std::to_string(bestFreq) + ", ";
-            body += jStr("dominantNote") + ": " + jStr(note) + ", ";
-            body += jStr("spectrum")     + ": " + spec;
-            body += "}";
-            res.set_content(body, "application/json");
-        });
-
-        // ── GET /audio/{port}/analyze — full-band problem-frequency analysis ──
-        // Two spectral snapshots ~120 ms apart (temporal stability separates
-        // constant defects like hum/feedback from musical content).
-        // Goertzel spectrum 20 Hz – 20 kHz on a 1/12-octave log grid.
-        // Reports: issues[] summary, resonances (with stable flag), hum
-        // (narrowband + stability checked), feedback suspect, inharmonic
-        // high peaks (aliasing/artifacts), band levels, noise floor, DC offset.
-        // ?spectrum=1 appends the raw bins of the latest snapshot.
-        svr.Get(R"(/audio/(\d+)/analyze)", [this](const httplib::Request& r, httplib::Response& res){
-            int port = std::stoi(r.matches[1].str());
-            if (port < 0 || port >= 2) {
-                res.set_content("{\"error\": \"port must be 0 (L) or 1 (R)\"}", "application/json");
+            octavia::ObservationSnapshot snapshot;
+            octavia::ChannelAnalysis analysis;
+            std::string error;
+            if (!analyzeLatestMaster(port, AUDIO_BUF, true, &snapshot, &analysis, &error)) {
+                res.status = error == "analysis_busy" ? 429 : 409;
+                res.set_content("{" + jStr("error") + ":" + jStr(error) + "}", "application/json");
                 return;
             }
-            float sr = sampleRate.load(std::memory_order_relaxed);
-
-            // 1/12-octave grid 20 Hz → min(20 kHz, 0.45*sr)
-            float fMax = std::min(20000.f, sr * 0.45f);
-            std::vector<float> freqs;
-            for (float f = 20.f; f <= fMax; f *= 1.0594631f)  // 2^(1/12)
-                freqs.push_back(f);
-            const int nb = (int)freqs.size();
-
-            // Function-local initialization is performed exactly once by C++.
-            static const std::array<float, AUDIO_BUF> win = [] {
-                std::array<float, AUDIO_BUF> values{};
-                for (int i = 0; i < AUDIO_BUF; i++)
-                    values[i] = 0.5f * (1.f - cosf(2.f * float(M_PI) * i / (AUDIO_BUF - 1)));
-                return values;
-            }();
-
-            struct Snap {
-                std::vector<float> wbuf;   // Hann-windowed, DC-removed
-                std::vector<float> dbs;    // per grid bin
-                float rms = 0.f, pk = 0.f;
-                int clippedSamples = 0;
-                double mean = 0.0;
-            };
-
-            // Goertzel magnitude in dB (0 dB = 5V sine amplitude)
-            auto magDb = [&](const Snap& sn, float f) -> float {
-                float w = 2.f * float(M_PI) * f / sr;
-                float coeff = 2.f * cosf(w);
-                float s1 = 0.f, s2 = 0.f;
-                for (int i = 0; i < AUDIO_BUF; i++) {
-                    float s0 = sn.wbuf[i] + coeff * s1 - s2;
-                    s2 = s1; s1 = s0;
-                }
-                float power = s1*s1 + s2*s2 - coeff*s1*s2;
-                if (power < 0.f) power = 0.f;
-                float amp = sqrtf(power) * (4.f / AUDIO_BUF) / 5.f;
-                return 20.f * log10f(amp + 1e-7f);
-            };
-
-            auto capture = [&]() -> Snap {
-                Snap sn;
-                std::vector<float> buf;
-                observationHistory.copyLatest(static_cast<octavia::ObserveChannel>(port),
-                    AUDIO_BUF, &buf);
-                for (int i = 0; i < AUDIO_BUF; i++) sn.mean += buf[i];
-                sn.mean /= AUDIO_BUF;
-                float sumSq = 0.f;
-                sn.wbuf.resize(AUDIO_BUF);
-                for (int i = 0; i < AUDIO_BUF; i++) {
-                    float v = buf[i] - (float)sn.mean;
-                    sumSq += v * v;
-                    float a = std::fabs(v);
-                    if (a > sn.pk) sn.pk = a;
-                    if (a >= 10.f) sn.clippedSamples++;
-                    sn.wbuf[i] = v * win[i];
-                }
-                sn.rms = sqrtf(sumSq / AUDIO_BUF);
-                sn.dbs.resize(nb);
-                for (int i = 0; i < nb; i++) sn.dbs[i] = magDb(sn, freqs[i]);
-                return sn;
-            };
-
-            Snap A = capture();
-            std::this_thread::sleep_for(std::chrono::milliseconds(120));
-            Snap B = capture();
-
-            // Noise floor = median bin level of latest snapshot
-            std::vector<float> sorted = B.dbs;
-            std::sort(sorted.begin(), sorted.end());
-            float floorDb = sorted[nb / 2];
-
-            std::vector<std::string> issues;
-
-            // Resonance peaks in B: local maxima, >=8 dB prominence.
-            // stable = same level (±3 dB) in snapshot A → standing resonance,
-            // prime EQ-notch candidate; unstable = transient musical content.
-            struct Peak { float hz, db, prom; bool stable; };
-            std::vector<Peak> peaks;
-            for (int i = 2; i < nb - 2; i++) {
-                if (B.dbs[i] <= B.dbs[i-1] || B.dbs[i] < B.dbs[i+1]) continue;
-                float loc = 0.f; int cnt = 0;
-                for (int k = -6; k <= 6; k++) {
-                    if (k >= -1 && k <= 1) continue;
-                    int j = i + k;
-                    if (j < 0 || j >= nb) continue;
-                    loc += B.dbs[j]; cnt++;
-                }
-                loc /= std::max(cnt, 1);
-                float prom = B.dbs[i] - loc;
-                if (prom >= 8.f && B.dbs[i] > floorDb + 6.f && B.dbs[i] > -80.f) {
-                    bool stable = std::fabs(A.dbs[i] - B.dbs[i]) <= 3.f;
-                    peaks.push_back({freqs[i], B.dbs[i], prom, stable});
-                }
-            }
-            std::sort(peaks.begin(), peaks.end(),
-                      [](const Peak& a, const Peak& b){ return a.prom > b.prom; });
-            if (peaks.size() > 10) peaks.resize(10);
-
-            // Mains hum: per harmonic require level > floor+12 dB AND
-            // narrowband (>=6 dB above ±15% off-grid neighbors — rejects broad
-            // musical energy near the 50/60 Hz grid) AND stable across snapshots.
-            auto humSeries = [&](float f0, std::string& arr) -> bool {
-                int hits = 0;
-                arr = "[";
-                for (int k = 1; k <= 4; k++) {
-                    float f = f0 * k;
-                    float d  = magDb(B, f);
-                    float nbr = std::max(magDb(B, f * 0.85f), magDb(B, f * 1.15f));
-                    float narrow = d - nbr;
-                    bool stable = std::fabs(magDb(A, f) - d) < 4.f;
-                    bool hit = d > floorDb + 12.f && narrow >= 6.f && stable;
-                    if (hit) hits++;
-                    if (k > 1) arr += ",";
-                    arr += "{" + jStr("hz") + ": " + std::to_string((int)f)
-                         + ", " + jStr("db") + ": " + jNum(d)
-                         + ", " + jStr("narrowDb") + ": " + jNum(narrow)
-                         + ", " + jStr("stable") + ": " + (stable ? "true" : "false") + "}";
-                }
-                arr += "]";
-                return hits >= 2;  // fundamental-ish + at least one harmonic
-            };
-            std::string hum50, hum60;
-            bool has50 = humSeries(50.f, hum50);
-            bool has60 = humSeries(60.f, hum60);
-            if (has50) issues.push_back("hum_50");
-            if (has60) issues.push_back("hum_60");
-
-            // Feedback candidates must rise across independent requests. This
-            // avoids calling a stable musical oscillator "feedback" after one
-            // short two-snapshot observation.
-            std::string feedback = "null";
-            for (auto& p : peaks) {
-                if (p.prom < 18.f || p.db < -20.f) continue;
-                int bi = (int)roundf(12.f * log2f(p.hz / 20.f));
-                if (bi < 0 || bi >= nb) continue;
-                float rise = B.dbs[bi] - A.dbs[bi];
-                int observations = 0;
-                {
-                    std::unique_lock<std::mutex> lk(feedbackMtx);
-                    FeedbackTrack& track = feedbackTrack[port];
-                    double age = track.seen.time_since_epoch().count() == 0 ? 99.0
-                        : std::chrono::duration<double>(std::chrono::steady_clock::now() - track.seen).count();
-                    bool samePeak = track.hz > 0.f && std::fabs(log2f(p.hz / track.hz)) < (1.f / 12.f);
-                    if (samePeak && age < 2.5 && p.db >= track.db + 0.75f)
-                        track.risingObservations++;
-                    else
-                        track.risingObservations = rise >= 1.f ? 1 : 0;
-                    track.hz = p.hz; track.db = p.db; track.seen = std::chrono::steady_clock::now();
-                    observations = track.risingObservations;
-                }
-                if (observations >= 2) {
-                    feedback = "{" + jStr("hz") + ": " + jNum(p.hz)
-                             + ", " + jStr("note") + ": " + jStr(freqToNote(p.hz))
-                             + ", " + jStr("db") + ": " + jNum(p.db)
-                             + ", " + jStr("riseDb") + ": " + jNum(rise)
-                             + ", " + jStr("risingObservations") + ": " + std::to_string(observations) + "}";
-                    issues.push_back("feedback_suspect");
-                    break;
-                }
-            }
-
-            // Aliasing/artifact suspect: peaks >8 kHz not harmonically related
-            // to the strongest peak below 5 kHz (ratio far from an integer)
-            std::string inharm = "[";
-            {
-                float f0 = 0.f, best = -999.f;
-                for (auto& p : peaks)
-                    if (p.hz < 5000.f && p.db > best) { best = p.db; f0 = p.hz; }
-                bool first = true;
-                for (auto& p : peaks) {
-                    if (p.hz < 8000.f || f0 <= 0.f) continue;
-                    float ratio = p.hz / f0;
-                    float offInt = std::fabs(ratio - roundf(ratio));
-                    if (offInt > 0.07f && p.db > floorDb + 12.f) {
-                        if (!first) inharm += ", ";
-                        first = false;
-                        inharm += "{" + jStr("hz") + ": " + jNum(p.hz)
-                                + ", " + jStr("db") + ": " + jNum(p.db) + "}";
-                    }
-                }
-                if (!first) issues.push_back("aliasing_suspect");
-            }
-            inharm += "]";
-
-            // Average linear power, then express it in dB. Averaging dB bins
-            // would bias broad-band material downward.
-            auto bandDb = [&](float lo, float hi) -> float {
-                double sumPower = 0.0; int cnt = 0;
-                for (int i = 0; i < nb; i++)
-                    if (freqs[i] >= lo && freqs[i] < hi) { sumPower += pow(10.0, B.dbs[i] / 10.0); cnt++; }
-                return cnt ? (float)(10.0 * log10(sumPower / cnt + 1e-14)) : -140.f;
-            };
-            float rumbleDb = bandDb(20.f, 45.f),   bassDb = bandDb(45.f, 250.f);
-            float lowmidDb = bandDb(250.f, 800.f), midDb = bandDb(800.f, 2500.f);
-            float highmidDb = bandDb(2500.f, 5000.f);
-            float sibDb = bandDb(5000.f, 8000.f),  airDb = bandDb(8000.f, 16000.f);
-
-            if (std::fabs((float)B.mean) > 0.25f) issues.push_back("dc_offset");
-            if (rumbleDb > bassDb + 6.f && rumbleDb > -60.f) issues.push_back("rumble");
-            if (sibDb > midDb + 6.f && sibDb > -60.f) issues.push_back("sibilance");
-            if (B.rms < 1e-4f) issues.push_back("silence");
-            if (B.clippedSamples > 0) issues.push_back("clipping");
-
-            std::string issuesArr = "[";
-            for (size_t i = 0; i < issues.size(); i++) {
-                if (i) issuesArr += ", ";
-                issuesArr += jStr(issues[i]);
-            }
-            issuesArr += "]";
-
-            std::string body = "{";
-            body += jStr("port") + ": " + std::to_string(port) + ", ";
-            body += jStr("inputConnected") + ": " + (audioInputConnected[port].load(std::memory_order_relaxed) ? "true" : "false") + ", ";
-            body += jStr("issues") + ": " + issuesArr + ", ";
-            body += jStr("rms") + ": " + jNum(B.rms) + ", ";
-            body += jStr("peak") + ": " + jNum(B.pk) + ", ";
-            body += jStr("clippedSamples") + ": " + std::to_string(B.clippedSamples) + ", ";
-            body += jStr("dcOffset") + ": " + jNum((float)B.mean) + ", ";
-            body += jStr("noiseFloorDb") + ": " + jNum(floorDb) + ", ";
-            body += jStr("bandsDb") + ": {"
-                  + jStr("rumble_20_45") + ": " + jNum(rumbleDb) + ", "
-                  + jStr("bass_45_250") + ": " + jNum(bassDb) + ", "
-                  + jStr("lowmid_250_800") + ": " + jNum(lowmidDb) + ", "
-                  + jStr("mid_800_2500") + ": " + jNum(midDb) + ", "
-                  + jStr("highmid_2500_5000") + ": " + jNum(highmidDb) + ", "
-                  + jStr("sibilance_5000_8000") + ": " + jNum(sibDb) + ", "
-                  + jStr("air_8000_16000") + ": " + jNum(airDb) + "}, ";
-            body += jStr("hum") + ": {"
-                  + jStr("detected50") + ": " + (has50 ? "true" : "false") + ", "
-                  + jStr("detected60") + ": " + (has60 ? "true" : "false") + ", "
-                  + jStr("series50") + ": " + hum50 + ", "
-                  + jStr("series60") + ": " + hum60 + "}, ";
-            body += jStr("feedback") + ": " + feedback + ", ";
-            body += jStr("inharmonicHighPeaks") + ": " + inharm + ", ";
-            body += jStr("resonances") + ": [";
-            for (size_t i = 0; i < peaks.size(); i++) {
-                if (i) body += ", ";
-                body += "{" + jStr("hz") + ": " + jNum(peaks[i].hz)
-                      + ", " + jStr("note") + ": " + jStr(freqToNote(peaks[i].hz))
-                      + ", " + jStr("db") + ": " + jNum(peaks[i].db)
-                      + ", " + jStr("prominenceDb") + ": " + jNum(peaks[i].prom)
-                      + ", " + jStr("stable") + ": " + (peaks[i].stable ? "true" : "false") + "}";
-            }
-            body += "]";
-            if (r.has_param("spectrum") && r.get_param_value("spectrum") != "0") {
-                body += ", " + jStr("spectrum") + ": [";
-                for (int i = 0; i < nb; i++) {
-                    if (i) body += ",";
-                    body += "{" + jStr("hz") + ": " + std::to_string((int)roundf(freqs[i]))
-                          + "," + jStr("db") + ": " + jNum(B.dbs[i]) + "}";
-                }
-                body += "]";
-            }
-            body += "}";
-            res.set_content(body, "application/json");
+            res.set_content(legacyBasicAnalysisJson(port, snapshot, analysis), "application/json");
         });
 
+        svr.Get(R"(/audio/(\d+)/analyze)", [this](const httplib::Request& r,
+                httplib::Response& res){
+            const int port = std::stoi(r.matches[1].str());
+            if (port < 0 || port > 1) {
+                res.status = 400;
+                res.set_content("{\"error\":\"port must be 0 (L) or 1 (R)\"}", "application/json");
+                return;
+            }
+            const bool includeSpectrum = r.has_param("spectrum")
+                && r.get_param_value("spectrum") != "0";
+            octavia::ObservationSnapshot snapshot;
+            octavia::ChannelAnalysis analysis;
+            std::string error;
+            // Enough frozen context for two 4096-frame windows separated by
+            // the analyzer's deterministic 120 ms stability interval.
+            const float sr = std::max(1.f, observationHistory.currentSampleRate());
+            const uint32_t frames = static_cast<uint32_t>(std::min<double>(
+                octavia::OBSERVATION_HISTORY_FRAMES, std::max<double>(16384.0, sr * 0.35)));
+            if (!analyzeLatestMaster(port, frames, includeSpectrum,
+                    &snapshot, &analysis, &error)) {
+                res.status = error == "analysis_busy" ? 429 : 409;
+                res.set_content("{" + jStr("error") + ":" + jStr(error) + "}", "application/json");
+                return;
+            }
+            res.set_content(legacyDetailedAnalysisJson(port, snapshot, analysis,
+                includeSpectrum), "application/json");
+        });
+
+        // Retained temporarily as non-compiled reference code while compatibility
+        // output is validated; Phase 5 traffic uses the routes above.
         // Legacy reset/read workflow backed by an explicitly armed measurement session.
         svr.Get("/audio/loudness", [this](const httplib::Request&, httplib::Response& res){
             const octavia::MeasurementResult measured = masterMeasurement.read();
