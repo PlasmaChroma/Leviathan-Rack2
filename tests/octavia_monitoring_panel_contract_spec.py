@@ -9,6 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / "src" / "Octavia.cpp").read_text(encoding="utf-8")
 OBSERVATION = (ROOT / "src" / "OctaviaObservation.hpp").read_text(encoding="utf-8")
+MEASUREMENT = (ROOT / "src" / "OctaviaMeasurement.hpp").read_text(encoding="utf-8")
+MEASUREMENT_IMPL = (ROOT / "src" / "OctaviaMeasurement.cpp").read_text(encoding="utf-8")
 PANEL_PATH = ROOT / "res" / "Octavia.svg"
 PANEL = ET.parse(PANEL_PATH).getroot()
 
@@ -80,6 +82,17 @@ class OctaviaMonitoringPanelContractTest(unittest.TestCase):
     def test_phase_two_history_and_pool_are_bounded(self):
         self.assertIn("OBSERVATION_HISTORY_FRAMES = 262144", OBSERVATION)
         self.assertIn("SNAPSHOT_POOL_LIMIT = 12", OBSERVATION)
+
+    def test_phase_three_continuous_meter_is_slimmed(self):
+        self.assertIn("MASTER_METER_BLOCKS = 32", SOURCE)
+        for removed in ("resetFlag", "pKSum", "pRawSum", "pClipped", "pSumLR", "pN"):
+            self.assertNotIn(removed, SOURCE)
+        self.assertIn("masterMeasurement.process", SOURCE)
+
+    def test_phase_three_legacy_routes_arm_triggered_sessions(self):
+        self.assertIn("masterMeasurement.arm(0, true", SOURCE)
+        self.assertIn("measurement_busy", MEASUREMENT_IMPL)
+        self.assertIn("requestedDurationFrames_", MEASUREMENT)
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@
 #include "OctaviaActionValidation.hpp"
 #include "OctaviaJobControl.hpp"
 #include "OctaviaObservation.hpp"
+#include "OctaviaMeasurement.hpp"
 #include "third_party/httplib.h"
 #include <thread>
 #include <atomic>
@@ -41,6 +42,7 @@
 #include <cmath>
 #include <cctype>
 #include <cstring>
+#include <limits>
 #if defined(_WIN32)
   #include <windows.h>
 #else
@@ -93,7 +95,7 @@ static std::string freqToNote(float freq) {
 // Legacy analysis window size. Samples now come from the shared six-channel,
 // frame-addressed observation history rather than independent ring heads.
 static const int AUDIO_BUF = 4096;  // power of 2, ~93ms @ 44100 Hz
-static const int LOUDNESS_BLOCKS = 36000; // one hour of 100 ms EBU-R128 blocks
+static const int MASTER_METER_BLOCKS = 32; // 3.2 s of live 100 ms meter blocks
 
 // ── Oscilloscope voltage tracking ─────────────────────────────────────────────
 static const int HISTORY_LEN       = 16;
@@ -312,43 +314,32 @@ struct Octavia : Module {
     } feedbackTrack[2];
     std::mutex feedbackMtx;
 
-    // ── Loudness / stereo meter ────────────────────────────────────────────────
-    // Audio thread accumulates into working sums (thread-local to process()),
-    // merges into published sums every 2048 samples via try_lock (never blocks).
-    // HTTP thread reads published sums under the mutex. Samples normalized to
-    // 5V = 0 dBFS, matching Rack's conventional audio signal range.
+    // ── Minimal always-on Master meter ────────────────────────────────────────
+    // Only live K-weighted blocks and recent peaks run continuously. Integrated
+    // loudness, raw RMS, clipping, and stereo metrics live in masterMeasurement
+    // and incur per-sample work only while explicitly armed.
     // K-weighting: ITU BS.1770 biquads, recalculated for Rack's sample rate
     // from the standard's analog prototypes.
     struct LoudnessMeter {
         struct Coeffs { double b0=1., b1=0., b2=0., a1=0., a2=0.; } shelf, highPass;
         // audio-thread working state
         double z[2][4] = {};                 // biquad states per ch: hs1,hs2,hp1,hp2
-        double kSum[2] = {}, rawSum[2] = {}, sumLR = 0.0, peak[2] = {};
         double meterBlockPeak[2] = {};
-        uint64_t clipped[2] = {};
-        uint64_t n = 0;
-        int flushTimer = 0;
         double blockKSum[2] = {};
         int blockFrames = 0, blockTarget = 4800;
         float filterSampleRate = 0.f;
-        std::array<std::array<std::atomic<float>, LOUDNESS_BLOCKS>, 2> blocks;
+        std::array<std::array<std::atomic<float>, MASTER_METER_BLOCKS>, 2> blocks;
         std::atomic<uint64_t> blockTotal{0};
         std::atomic<float> meterPeak[2];
-        // published (mtx-protected)
-        double pKSum[2] = {}, pRawSum[2] = {}, pSumLR = 0.0, pPeak[2] = {};
-        uint64_t pClipped[2] = {};
-        uint64_t pN = 0;
-        std::mutex mtx;
-        std::atomic<bool> resetFlag{false};
-
         LoudnessMeter() {
             for (int j = 0; j < 2; ++j) {
                 meterPeak[j].store(0.f, std::memory_order_relaxed);
-                for (int i = 0; i < LOUDNESS_BLOCKS; ++i)
+                for (int i = 0; i < MASTER_METER_BLOCKS; ++i)
                     blocks[j][i].store(0.f, std::memory_order_relaxed);
             }
         }
     } lm;
+    octavia::MasterMeasurement masterMeasurement;
 
     static LoudnessMeter::Coeffs makeHighPass(float fs, float hz, float q) {
         const double k = tan(M_PI * hz / fs);
@@ -469,79 +460,50 @@ struct Octavia : Module {
         observationHistory.publish(static_cast<uint64_t>(args.frame), args.sampleRate,
             observationVolts, connectedMask, observationChannels);
 
-        // Loudness/stereo meter accumulation (normalized: 5V = 0 dBFS)
-        if (lm.resetFlag.load(std::memory_order_relaxed)) {
-            if (lm.mtx.try_lock()) {
-                for (int j = 0; j < 2; j++) {
-                    lm.kSum[j] = lm.rawSum[j] = lm.peak[j] = 0.0; lm.clipped[j] = 0;
-                    lm.blockKSum[j] = lm.meterBlockPeak[j] = 0.0;
-                    lm.z[j][0] = lm.z[j][1] = lm.z[j][2] = lm.z[j][3] = 0.0;
-                    lm.pKSum[j] = lm.pRawSum[j] = lm.pPeak[j] = 0.0; lm.pClipped[j] = 0;
-                    lm.meterPeak[j].store(0.f, std::memory_order_relaxed);
-                }
-                lm.sumLR = lm.pSumLR = 0.0; lm.n = lm.pN = 0;
-                lm.blockFrames = lm.flushTimer = 0; lm.blockTotal.store(0, std::memory_order_relaxed);
-                lm.resetFlag.store(false, std::memory_order_relaxed);
-                lm.mtx.unlock();
-            }
-        } else {
-            // BS.1770 K-weighting stages, redesigned whenever Rack's sample
-            // rate changes. The 100 ms block history below powers R128 gating.
-            if (lm.filterSampleRate != args.sampleRate) {
-                lm.shelf = makeHighShelf(args.sampleRate, 1681.974450955533f, 3.999843853973347f);
-                lm.highPass = makeHighPass(args.sampleRate, 38.13547087602444f, .5003270373238773f);
-                lm.filterSampleRate = args.sampleRate;
-                lm.blockTarget = std::max(1, (int)roundf(args.sampleRate * .1f));
-                memset(lm.z, 0, sizeof(lm.z));
-            }
-            double x[2];
-            for (int j = 0; j < 2; j++) {
-                double in = ch[j] * 0.2;                     // 5V → 1.0 full scale
-                double a  = std::fabs(in);
-                if (a > lm.peak[j]) lm.peak[j] = a;
-                if (a > lm.meterBlockPeak[j]) lm.meterBlockPeak[j] = a;
-                if (a >= 1.0) lm.clipped[j]++;
-                lm.rawSum[j] += in * in;
-                // shelving stage (transposed direct form II)
-                double y1 = lm.shelf.b0*in + lm.z[j][0];
-                lm.z[j][0] = lm.shelf.b1*in - lm.shelf.a1*y1 + lm.z[j][1];
-                lm.z[j][1] = lm.shelf.b2*in - lm.shelf.a2*y1;
-                // high-pass stage
-                double y2 = lm.highPass.b0*y1 + lm.z[j][2];
-                lm.z[j][2] = lm.highPass.b1*y1 - lm.highPass.a1*y2 + lm.z[j][3];
-                lm.z[j][3] = lm.highPass.b2*y1 - lm.highPass.a2*y2;
-                lm.kSum[j] += y2 * y2;
-                lm.blockKSum[j] += y2 * y2;
-                x[j] = in;
-            }
-            lm.sumLR += x[0] * x[1];
-            lm.n++;
-            if (++lm.blockFrames >= lm.blockTarget) {
-                uint64_t block = lm.blockTotal.load(std::memory_order_relaxed);
-                for (int j = 0; j < 2; ++j) {
-                    lm.blocks[j][block % LOUDNESS_BLOCKS].store(
-                        (float)(lm.blockKSum[j] / lm.blockFrames), std::memory_order_relaxed);
-                    lm.meterPeak[j].store((float)lm.meterBlockPeak[j], std::memory_order_relaxed);
-                    lm.blockKSum[j] = 0.0;
-                    lm.meterBlockPeak[j] = 0.0;
-                }
-                lm.blockTotal.store(block + 1, std::memory_order_release);
-                lm.blockFrames = 0;
-            }
-            if (++lm.flushTimer >= 2048 && lm.mtx.try_lock()) {
-                for (int j = 0; j < 2; j++) {
-                    lm.pKSum[j] += lm.kSum[j]; lm.kSum[j] = 0.0;
-                    lm.pRawSum[j] += lm.rawSum[j]; lm.rawSum[j] = 0.0;
-                    lm.pClipped[j] += lm.clipped[j]; lm.clipped[j] = 0;
-                    if (lm.peak[j] > lm.pPeak[j]) lm.pPeak[j] = lm.peak[j];
-                    lm.peak[j] = 0.0;
-                }
-                lm.pSumLR += lm.sumLR; lm.sumLR = 0.0;
-                lm.pN += lm.n; lm.n = 0;
-                lm.flushTimer = 0;
-                lm.mtx.unlock();
+        // Minimal live Master meter (normalized: 5V = 0 dBFS).
+        if (lm.filterSampleRate != args.sampleRate) {
+            lm.shelf = makeHighShelf(args.sampleRate, 1681.974450955533f, 3.999843853973347f);
+            lm.highPass = makeHighPass(args.sampleRate, 38.13547087602444f, .5003270373238773f);
+            lm.filterSampleRate = args.sampleRate;
+            lm.blockTarget = std::max(1, (int)roundf(args.sampleRate * .1f));
+            lm.blockFrames = 0;
+            lm.blockTotal.store(0, std::memory_order_relaxed);
+            memset(lm.z, 0, sizeof(lm.z));
+            for (int j = 0; j < 2; ++j) {
+                lm.blockKSum[j] = 0.0;
+                lm.meterBlockPeak[j] = 0.0;
+                lm.meterPeak[j].store(0.f, std::memory_order_relaxed);
             }
         }
+        std::array<double, 2> normalized{{}};
+        std::array<double, 2> kPower{{}};
+        for (int j = 0; j < 2; j++) {
+            const double in = ch[j] * 0.2;
+            normalized[j] = in;
+            lm.meterBlockPeak[j] = std::max(lm.meterBlockPeak[j], std::fabs(in));
+            const double y1 = lm.shelf.b0*in + lm.z[j][0];
+            lm.z[j][0] = lm.shelf.b1*in - lm.shelf.a1*y1 + lm.z[j][1];
+            lm.z[j][1] = lm.shelf.b2*in - lm.shelf.a2*y1;
+            const double y2 = lm.highPass.b0*y1 + lm.z[j][2];
+            lm.z[j][2] = lm.highPass.b1*y1 - lm.highPass.a1*y2 + lm.z[j][3];
+            lm.z[j][3] = lm.highPass.b2*y1 - lm.highPass.a2*y2;
+            kPower[j] = y2 * y2;
+            lm.blockKSum[j] += kPower[j];
+        }
+        if (++lm.blockFrames >= lm.blockTarget) {
+            const uint64_t block = lm.blockTotal.load(std::memory_order_relaxed);
+            for (int j = 0; j < 2; ++j) {
+                lm.blocks[j][block % MASTER_METER_BLOCKS].store(
+                    (float)(lm.blockKSum[j] / lm.blockFrames), std::memory_order_relaxed);
+                lm.meterPeak[j].store((float)lm.meterBlockPeak[j], std::memory_order_relaxed);
+                lm.blockKSum[j] = 0.0;
+                lm.meterBlockPeak[j] = 0.0;
+            }
+            lm.blockTotal.store(block + 1, std::memory_order_release);
+            lm.blockFrames = 0;
+        }
+        masterMeasurement.process(static_cast<uint64_t>(args.frame), args.sampleRate,
+            normalized, kPower);
 
         bool on = serverRunning;
         lights[STATUS_R_LIGHT].setBrightness(on ? 0.f  : 0.8f);
@@ -1517,6 +1479,88 @@ struct Octavia : Module {
         return body;
     }
 
+    static std::string measurementJson(const octavia::MeasurementResult& measured,
+            bool leftConnected, bool rightConnected) {
+        const double n = static_cast<double>(measured.measuredFrames);
+        auto db = [](double power) { return 10.0 * log10(power + 1e-12); };
+        auto lufs = [&](double power) { return -0.691 + db(power); };
+        auto windowLufs = [&](size_t blocks) -> double {
+            if (measured.blockPowers.size() < blocks) return -std::numeric_limits<double>::infinity();
+            double sum = 0.0;
+            for (size_t i = measured.blockPowers.size() - blocks;
+                    i < measured.blockPowers.size(); ++i) sum += measured.blockPowers[i];
+            return lufs(sum / blocks);
+        };
+        std::vector<double> absoluteGated;
+        for (size_t i = 0; i < measured.blockPowers.size(); ++i) {
+            const double power = measured.blockPowers[i];
+            if (lufs(power) > -70.0) absoluteGated.push_back(power);
+        }
+        double absoluteMean = 0.0;
+        for (size_t i = 0; i < absoluteGated.size(); ++i) absoluteMean += absoluteGated[i];
+        absoluteMean /= std::max<size_t>(1, absoluteGated.size());
+        const double relativeGate = lufs(absoluteMean) - 10.0;
+        double gatedSum = 0.0; int gatedCount = 0;
+        for (size_t i = 0; i < absoluteGated.size(); ++i) {
+            if (lufs(absoluteGated[i]) > relativeGate) {
+                gatedSum += absoluteGated[i]; ++gatedCount;
+            }
+        }
+        const double integratedLufs = gatedCount ? lufs(gatedSum / gatedCount)
+            : -std::numeric_limits<double>::infinity();
+        const double rmsL = db(measured.rawSum[0] / std::max(1.0, n));
+        const double rmsR = db(measured.rawSum[1] / std::max(1.0, n));
+        const double peakL = 20.0 * log10(measured.peak[0] + 1e-12);
+        const double peakR = 20.0 * log10(measured.peak[1] + 1e-12);
+        const double correlation = measured.sumLR /
+            (sqrt(measured.rawSum[0] * measured.rawSum[1]) + 1e-12);
+        const double balance = 0.5 * (db(measured.rawSum[0]) - db(measured.rawSum[1]));
+        const double mid = (measured.rawSum[0] + 2.0 * measured.sumLR
+            + measured.rawSum[1]) / (4.0 * std::max(1.0, n));
+        const double side = (measured.rawSum[0] - 2.0 * measured.sumLR
+            + measured.rawSum[1]) / (4.0 * std::max(1.0, n));
+        std::string body = "{";
+        body += jStr("measurementId") + ":" + std::to_string(measured.id) + ",";
+        body += jStr("state") + ":" + jStr(octavia::measurementStateName(measured.state)) + ",";
+        body += jStr("startFrame") + ":" + std::to_string(measured.startFrame) + ",";
+        body += jStr("endFrame") + ":" + std::to_string(measured.endFrame) + ",";
+        body += jStr("framesMeasured") + ":" + std::to_string(measured.measuredFrames) + ",";
+        body += jStr("secondsMeasured") + ":" + jNum(measured.sampleRate > 0.f
+            ? static_cast<float>(n / measured.sampleRate) : 0.f) + ",";
+        body += jStr("inputs") + ":{" + jStr("leftConnected") + ":" +
+            (leftConnected ? "true" : "false") + "," + jStr("rightConnected") + ":" +
+            (rightConnected ? "true" : "false") + "},";
+        body += jStr("integratedLufs") + ":" + jNum((float)integratedLufs) + ",";
+        body += jStr("momentaryLufs") + ":" + jNum((float)windowLufs(4)) + ",";
+        body += jStr("shortTermLufs") + ":" + jNum((float)windowLufs(30)) + ",";
+        body += jStr("gatedBlocks") + ":" + std::to_string(gatedCount) + ",";
+        body += jStr("blockHistoryTruncated") + ":" +
+            (measured.blockHistoryTruncated ? "true" : "false") + ",";
+        body += jStr("kWeightedDbfsEstimate") + ":" + jNum((float)lufs(
+            (measured.kSum[0] + measured.kSum[1]) / std::max(1.0, n))) + ",";
+        body += jStr("left") + ":{" + jStr("kWeightedDbfsEstimate") + ":" +
+            jNum((float)lufs(measured.kSum[0] / std::max(1.0, n))) + "," +
+            jStr("rmsDb") + ":" + jNum((float)rmsL) + "," + jStr("peakDb") + ":" +
+            jNum((float)peakL) + "," + jStr("crestDb") + ":" +
+            jNum((float)(peakL - rmsL)) + "," + jStr("clippedSamples") + ":" +
+            std::to_string(measured.clipped[0]) + "},";
+        body += jStr("right") + ":{" + jStr("kWeightedDbfsEstimate") + ":" +
+            jNum((float)lufs(measured.kSum[1] / std::max(1.0, n))) + "," +
+            jStr("rmsDb") + ":" + jNum((float)rmsR) + "," + jStr("peakDb") + ":" +
+            jNum((float)peakR) + "," + jStr("crestDb") + ":" +
+            jNum((float)(peakR - rmsR)) + "," + jStr("clippedSamples") + ":" +
+            std::to_string(measured.clipped[1]) + "},";
+        body += jStr("stereo") + ":{" + jStr("available") + ":" +
+            (leftConnected && rightConnected ? "true" : "false");
+        if (leftConnected && rightConnected) {
+            body += "," + jStr("correlation") + ":" + jNum((float)correlation) + "," +
+                jStr("balanceDb") + ":" + jNum((float)balance) + "," +
+                jStr("sideMidDb") + ":" + jNum((float)(db(side) - db(mid)));
+        }
+        body += "}}";
+        return body;
+    }
+
     void setupRoutes() {
         // Optional shared-secret auth: set OCTAVIA_TOKEN in the environment
         // (both for VCV Rack and the MCP server) to require it on every request.
@@ -2233,92 +2277,26 @@ struct Octavia : Module {
             res.set_content(body, "application/json");
         });
 
-        // ── GET /audio/loudness — integrated loudness + stereo image since reset ──
-        // Continuous meter fed by the Analyze L/R inputs. POST /audio/loudness/reset
-        // to start a fresh measurement window, let the patch play, then read.
+        // Legacy reset/read workflow backed by an explicitly armed measurement session.
         svr.Get("/audio/loudness", [this](const httplib::Request&, httplib::Response& res){
-            double kSum[2], rawSum[2], peak[2], sumLR; uint64_t clipped[2], n;
-            {
-                std::unique_lock<std::mutex> lk(lm.mtx);
-                for (int j = 0; j < 2; j++) { kSum[j]=lm.pKSum[j]; rawSum[j]=lm.pRawSum[j]; peak[j]=lm.pPeak[j]; clipped[j]=lm.pClipped[j]; }
-                sumLR = lm.pSumLR; n = lm.pN;
-            }
-            if (n < sampleRate.load(std::memory_order_relaxed) * 3.f) {
-                res.set_content("{\"error\":\"not enough data — let the patch play for at least three seconds, then read again\"}",
-                                "application/json");
+            const octavia::MeasurementResult measured = masterMeasurement.read();
+            if (measured.state == octavia::MeasurementState::Idle || measured.id == 0) {
+                res.status = 409;
+                res.set_content("{\"state\":\"idle\",\"error\":\"no measurement armed; POST /audio/loudness/reset first\"}",
+                    "application/json");
                 return;
             }
-            auto db  = [](double x){ return 10.0 * log10(x + 1e-12); };
-            auto lufsFromPower = [&](double p){ return -0.691 + db(p); };
-            uint64_t totalBlocks = lm.blockTotal.load(std::memory_order_acquire);
-            int availableBlocks = (int)std::min<uint64_t>(totalBlocks, LOUDNESS_BLOCKS);
-            std::vector<float> blockPowers;
-            blockPowers.reserve(availableBlocks);
-            for (uint64_t i = totalBlocks - availableBlocks; i < totalBlocks; i++)
-                blockPowers.push_back(
-                    lm.blocks[0][i % LOUDNESS_BLOCKS].load(std::memory_order_relaxed)
-                    + lm.blocks[1][i % LOUDNESS_BLOCKS].load(std::memory_order_relaxed));
-            auto windowLufs = [&](int blocks) -> double {
-                if ((int)blockPowers.size() < blocks) return -INFINITY;
-                double sum = 0.;
-                for (int i = (int)blockPowers.size() - blocks; i < (int)blockPowers.size(); i++) sum += blockPowers[i];
-                return lufsFromPower(sum / blocks);
-            };
-            // EBU R128: 400 ms blocks, 75% overlap, absolute -70 LUFS gate,
-            // then a relative gate 10 LU below the absolute-gated programme.
-            std::vector<double> absoluteGated;
-            for (float p : blockPowers) if (lufsFromPower(p) > -70.0) absoluteGated.push_back(p);
-            double absoluteMean = 0.; for (double p : absoluteGated) absoluteMean += p;
-            absoluteMean /= std::max<size_t>(1, absoluteGated.size());
-            double relativeGate = lufsFromPower(absoluteMean) - 10.0, gatedSum = 0.; int gatedCount = 0;
-            for (double p : absoluteGated) if (lufsFromPower(p) > relativeGate) { gatedSum += p; gatedCount++; }
-            double integratedLufs = gatedCount ? lufsFromPower(gatedSum / gatedCount) : -INFINITY;
-            double momentaryLufs = windowLufs(4), shortTermLufs = windowLufs(30);
-            double seconds = n / (double)sampleRate.load(std::memory_order_relaxed);
-            double kWeightedDbfsL  = lufsFromPower(kSum[0] / n);
-            double kWeightedDbfsR  = lufsFromPower(kSum[1] / n);
-            double rmsL   = db(rawSum[0] / n), rmsR = db(rawSum[1] / n);
-            double peakL  = 20.0 * log10(peak[0] + 1e-12), peakR = 20.0 * log10(peak[1] + 1e-12);
-            double corr   = sumLR / (sqrt(rawSum[0] * rawSum[1]) + 1e-12);
-            double balDb  = 0.5 * (db(rawSum[0]) - db(rawSum[1]));  // >0 = left louder
-            double midMS  = (rawSum[0] + 2.0*sumLR + rawSum[1]) / (4.0 * n);
-            double sideMS = (rawSum[0] - 2.0*sumLR + rawSum[1]) / (4.0 * n);
-            double sideMidDb = db(sideMS) - db(midMS);
-            bool leftConnected = audioInputConnected[0].load(std::memory_order_relaxed);
-            bool rightConnected = audioInputConnected[1].load(std::memory_order_relaxed);
-
-            std::string b = "{";
-            b += jStr("secondsMeasured") + ": " + jNum((float)seconds) + ", ";
-            b += jStr("inputs") + ": {" + jStr("leftConnected") + ": " + (leftConnected ? "true" : "false")
-               + ", " + jStr("rightConnected") + ": " + (rightConnected ? "true" : "false") + "}, ";
-            b += jStr("integratedLufs") + ": " + jNum((float)integratedLufs) + ", ";
-            b += jStr("momentaryLufs") + ": " + jNum((float)momentaryLufs) + ", ";
-            b += jStr("shortTermLufs") + ": " + jNum((float)shortTermLufs) + ", ";
-            b += jStr("gatedBlocks") + ": " + std::to_string(gatedCount) + ", ";
-            b += jStr("left")  + ": {" + jStr("kWeightedDbfsEstimate") + ": " + jNum((float)kWeightedDbfsL) + ", "
-               + jStr("rmsDb") + ": " + jNum((float)rmsL) + ", "
-               + jStr("peakDb") + ": " + jNum((float)peakL) + ", "
-               + jStr("crestDb") + ": " + jNum((float)(peakL - rmsL)) + ", "
-               + jStr("clippedSamples") + ": " + std::to_string(clipped[0]) + "}, ";
-            b += jStr("right") + ": {" + jStr("kWeightedDbfsEstimate") + ": " + jNum((float)kWeightedDbfsR) + ", "
-               + jStr("rmsDb") + ": " + jNum((float)rmsR) + ", "
-               + jStr("peakDb") + ": " + jNum((float)peakR) + ", "
-               + jStr("crestDb") + ": " + jNum((float)(peakR - rmsR)) + ", "
-               + jStr("clippedSamples") + ": " + std::to_string(clipped[1]) + "}, ";
-            b += jStr("stereo") + ": {" + jStr("available") + ": " + (leftConnected && rightConnected ? "true" : "false");
-            if (leftConnected && rightConnected) {
-                b += ", " + jStr("correlation") + ": " + jNum((float)corr) + ", "
-                   + jStr("balanceDb") + ": " + jNum((float)balDb) + ", "
-                   + jStr("sideMidDb") + ": " + jNum((float)sideMidDb);
-            }
-            b += "}";
-            b += "}";
-            res.set_content(b, "application/json");
+            res.set_content(measurementJson(measured,
+                audioInputConnected[0].load(std::memory_order_relaxed),
+                audioInputConnected[1].load(std::memory_order_relaxed)), "application/json");
         });
 
         svr.Post("/audio/loudness/reset", [this](const httplib::Request&, httplib::Response& res){
-            lm.resetFlag.store(true, std::memory_order_relaxed);
-            res.set_content("{\"ok\":true}", "application/json");
+            uint64_t id = 0; std::string error;
+            masterMeasurement.arm(0, true, &id, &error);
+            res.status = 202;
+            res.set_content("{\"ok\":true,\"state\":\"pending\",\"measurementId\":" +
+                std::to_string(id) + "}", "application/json");
         });
 
         svr.Get(R"(/modules/(\d+)/params/(\d+))",
@@ -2568,42 +2546,42 @@ struct Octavia : Module {
             res.set_content(b, "application/json");
         });
 
-        // ── GET /audio/measure?seconds=N — reset meter, measure, return ──────
-        // Server-side version of reset -> wait -> read: one call, correct timing.
+        // Convenience route backed by exact engine-frame session boundaries.
         svr.Get("/audio/measure", [this](const httplib::Request& r, httplib::Response& res){
             int seconds = 15;
-            if (r.has_param("seconds")) seconds = std::stoi(r.get_param_value("seconds"));
-            seconds = std::max(1, std::min(60, seconds));
-            lm.resetFlag.store(true, std::memory_order_relaxed);
-            // wait for audio thread to consume the reset (or engine paused)
-            for (int i = 0; i < 100 && lm.resetFlag.load(std::memory_order_relaxed); i++)
-                std::this_thread::sleep_for(std::chrono::milliseconds(5));
-            if (lm.resetFlag.load(std::memory_order_relaxed)) {
-                res.set_content("{\"error\":\"audio engine not running — is VCV paused?\"}","application/json");
+            try { if (r.has_param("seconds")) seconds = std::stoi(r.get_param_value("seconds")); }
+            catch (...) {
+                res.status = 400;
+                res.set_content("{\"error\":\"seconds must be an integer\"}", "application/json");
                 return;
             }
-            std::this_thread::sleep_for(std::chrono::seconds(seconds));
-            double kSum[2], rawSum[2], peak[2], sumLR; uint64_t n;
-            { std::unique_lock<std::mutex> lk(lm.mtx);
-              for (int j = 0; j < 2; j++) { kSum[j]=lm.pKSum[j]; rawSum[j]=lm.pRawSum[j]; peak[j]=lm.pPeak[j]; }
-              sumLR = lm.pSumLR; n = lm.pN; }
-            if (n < sampleRate.load(std::memory_order_relaxed) * 1.f) { res.set_content("{\"error\":\"no audio data during measurement window\"}","application/json"); return; }
-            auto db = [](double x){ return 10.0 * log10(x + 1e-12); };
-            double kWeightedDbfs = -0.691 + db((kSum[0] + kSum[1]) / n);
-            double rmsL  = db(rawSum[0] / n), rmsR = db(rawSum[1] / n);
-            double peakL = 20.0*log10(peak[0]+1e-12), peakR = 20.0*log10(peak[1]+1e-12);
-            double corr  = sumLR / (sqrt(rawSum[0]*rawSum[1]) + 1e-12);
-            double balDb = 0.5 * (db(rawSum[0]) - db(rawSum[1]));
-            double midMS  = (rawSum[0] + 2.0*sumLR + rawSum[1]) / (4.0*n);
-            double sideMS = (rawSum[0] - 2.0*sumLR + rawSum[1]) / (4.0*n);
-            std::string b = "{";
-            b += jStr("secondsMeasured") + ": " + jNum((float)(n/(double)sampleRate.load(std::memory_order_relaxed))) + ", ";
-            b += jStr("kWeightedDbfsEstimate") + ": " + jNum((float)kWeightedDbfs) + ", ";
-            b += jStr("left")  + ": {" + jStr("rmsDb") + ": " + jNum((float)rmsL) + ", " + jStr("peakDb") + ": " + jNum((float)peakL) + ", " + jStr("crestDb") + ": " + jNum((float)(peakL-rmsL)) + "}, ";
-            b += jStr("right") + ": {" + jStr("rmsDb") + ": " + jNum((float)rmsR) + ", " + jStr("peakDb") + ": " + jNum((float)peakR) + ", " + jStr("crestDb") + ": " + jNum((float)(peakR-rmsR)) + "}, ";
-            b += jStr("stereo") + ": {" + jStr("correlation") + ": " + jNum((float)corr) + ", " + jStr("balanceDb") + ": " + jNum((float)balDb) + ", " + jStr("sideMidDb") + ": " + jNum((float)(db(sideMS)-db(midMS))) + "}";
-            b += "}";
-            res.set_content(b, "application/json");
+            seconds = std::max(1, std::min(60, seconds));
+            const float sr = sampleRate.load(std::memory_order_relaxed);
+            uint64_t id = 0; std::string error;
+            if (!masterMeasurement.arm(static_cast<uint64_t>(std::llround(seconds * sr)),
+                    false, &id, &error)) {
+                res.status = 409;
+                res.set_content("{" + jStr("error") + ":" + jStr(error) + "}", "application/json");
+                return;
+            }
+            const auto deadline = std::chrono::steady_clock::now()
+                + std::chrono::milliseconds(seconds * 1000 + 1500);
+            octavia::MeasurementResult measured;
+            do {
+                measured = masterMeasurement.read();
+                if (measured.id == id && (measured.state == octavia::MeasurementState::Complete
+                        || measured.state == octavia::MeasurementState::Cancelled)) break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            } while (std::chrono::steady_clock::now() < deadline);
+            if (measured.id != id || measured.state != octavia::MeasurementState::Complete) {
+                res.status = measured.state == octavia::MeasurementState::Cancelled ? 409 : 503;
+                res.set_content("{\"error\":\"measurement did not complete on engine frames\"}",
+                    "application/json");
+                return;
+            }
+            res.set_content(measurementJson(measured,
+                audioInputConnected[0].load(std::memory_order_relaxed),
+                audioInputConnected[1].load(std::memory_order_relaxed)), "application/json");
         });
 
         svr.Get("/perf", [this](const httplib::Request&, httplib::Response& res){
@@ -2872,7 +2850,7 @@ struct OctaviaMeterWidget : TransparentWidget {
             if (connected && count > 0) {
                 double power = 0.0;
                 for (uint64_t i = total - count; i < total; ++i)
-                    power += module->lm.blocks[j][i % LOUDNESS_BLOCKS].load(std::memory_order_relaxed);
+                    power += module->lm.blocks[j][i % MASTER_METER_BLOCKS].load(std::memory_order_relaxed);
                 const float momentaryLufs = -0.691f
                     + 10.f * std::log10((float)(power / count) + 1e-12f);
                 lufsTarget = normalizedDb(momentaryLufs);
