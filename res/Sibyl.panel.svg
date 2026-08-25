@@ -40,10 +40,14 @@
   </g>
   <g id="components" inkscape:label="Component anchors" style="display:inline">
     <rect id="SIBYL_DISPLAY" x="300" y="1250" width="6512" height="4800" rx="120" />
-    <circle id="CLOCK_INPUT" cx="781.00006" cy="6900" r="400" />
+    <circle id="CLOCK_INPUT" cx="781.00006" cy="8850" r="400" />
     <circle id="RUN_INPUT" cx="1861" cy="6900" r="400" />
     <circle id="RESET_INPUT" cx="2941" cy="6900" r="400" />
-    <circle id="SCENE_TRIG_INPUT" cx="781.00006" cy="8850" r="400" />
+    <circle id="SCENE_TRIG_INPUT" cx="781.00006" cy="6900" r="400" />
+    <circle id="SCENE_TRIG_BUTTON" cx="781.00006" cy="8100" r="120" />
+    <circle id="RUN_BUTTON" cx="1861" cy="8100" r="120" />
+    <circle id="RESET_BUTTON" cx="2941" cy="8100" r="120" />
+    <circle id="LOOP_BUTTON" cx="781.00006" cy="10050" r="120" />
     <circle id="SCENE_CV_INPUT" cx="1861" cy="8850" r="400" />
     <circle id="MACRO_1_INPUT" cx="2941" cy="8850" r="400" />
     <circle id="MACRO_2_INPUT" cx="781.00006" cy="10800" r="400" />

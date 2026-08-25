@@ -129,6 +129,56 @@ void processOneSample(SibylModule& module) {
 int main() {
 	{
 		SibylModule module;
+		std::shared_ptr<sibyl::Composition> composition = std::const_pointer_cast<sibyl::Composition>(
+			makeComposition(1, false));
+		sibyl::Scene secondScene = composition->arrangement.front();
+		secondScene.id = "second_scene";
+		composition->arrangement.push_back(secondScene);
+		module.acceptComposition(composition, sibyl::ApplyAt::IMMEDIATE,
+			sibyl::PhasePolicy::RESTART_ALL);
+		processOneSample(module);
+
+		module.params[SibylModule::SCENE_TRIG_BUTTON_PARAM].setValue(1.f);
+		processOneSample(module);
+		check(module.m_pendingHardwareAction == SibylModule::HardwareAction::SELECT_SCENE,
+			"manual TRIG button requests a scene change through the hardware path");
+		check(module.m_pendingHardwareScene == (module.m_sceneIndex + 1) % 2,
+			"manual TRIG button targets the next scene");
+		module.params[SibylModule::SCENE_TRIG_BUTTON_PARAM].setValue(0.f);
+		processOneSample(module);
+
+		module.params[SibylModule::RESET_BUTTON_PARAM].setValue(1.f);
+		processOneSample(module);
+		check(module.m_pendingHardwareAction == SibylModule::HardwareAction::RESET_ARRANGEMENT,
+			"manual RST button requests an arrangement reset through the hardware path");
+
+		const bool initialRunning = module.m_runtimeRunning.load(std::memory_order_acquire);
+		module.params[SibylModule::RUN_BUTTON_PARAM].setValue(1.f);
+		processOneSample(module);
+		check(module.m_runtimeRunning.load(std::memory_order_acquire) != initialRunning,
+			"manual RUN button toggles runtime transport");
+		module.inputs[SibylModule::RUN_INPUT].channels = 1;
+		module.inputs[SibylModule::RUN_INPUT].setVoltage(0.f);
+		module.params[SibylModule::RUN_BUTTON_PARAM].setValue(0.f);
+		processOneSample(module);
+		check(!module.m_effectiveRunning.load(std::memory_order_acquire),
+			"patched RUN input retains precedence over the manual button");
+
+		module.params[SibylModule::LOOP_BUTTON_PARAM].setValue(1.f);
+		processOneSample(module);
+		check(module.m_loopOverride.load(std::memory_order_acquire) == 0 &&
+			!module.readDisplaySnapshot().looping,
+			"manual CLK loop button selects ONCE and updates display status");
+		json_t* saved = module.dataToJson();
+		SibylModule restored;
+		restored.dataFromJson(saved);
+		check(restored.m_loopOverride.load(std::memory_order_acquire) == 0,
+			"manual loop override persists with the patch");
+		json_decref(saved);
+	}
+
+	{
+		SibylModule module;
 		module.acceptComposition(makeComposition(1, true), sibyl::ApplyAt::IMMEDIATE,
 			sibyl::PhasePolicy::RESTART_ALL);
 		processOneSample(module);

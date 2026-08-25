@@ -217,7 +217,7 @@
        font-size="180"
        font-weight="600"
        id="text18"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">CLK</text>
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">TRIG</text>
     <text
        x="1861"
        y="7660.0259"
@@ -262,7 +262,7 @@
        font-size="180"
        font-weight="600"
        id="text24"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">TRIG</text>
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">CLK</text>
     <text
        x="1861"
        y="9610.0264"
@@ -345,7 +345,7 @@
     <circle
        id="CLOCK_INPUT"
        cx="781.00006"
-       cy="6900"
+       cy="8850"
        r="400" />
     <circle
        id="RUN_INPUT"
@@ -360,8 +360,28 @@
     <circle
        id="SCENE_TRIG_INPUT"
        cx="781.00006"
-       cy="8850"
+       cy="6900"
        r="400" />
+    <circle
+       id="SCENE_TRIG_BUTTON"
+       cx="781.00006"
+       cy="8100"
+       r="120" />
+    <circle
+       id="RUN_BUTTON"
+       cx="1861"
+       cy="8100"
+       r="120" />
+    <circle
+       id="RESET_BUTTON"
+       cx="2941"
+       cy="8100"
+       r="120" />
+    <circle
+       id="LOOP_BUTTON"
+       cx="781.00006"
+       cy="10050"
+       r="120" />
     <circle
        id="SCENE_CV_INPUT"
        cx="1861"

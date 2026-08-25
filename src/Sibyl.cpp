@@ -25,7 +25,9 @@ using namespace rack;
 
 struct SibylModule : Module, SibylControl {
 	static constexpr std::streamoff kMaxPortableCompositionBytes = 16 * 1024 * 1024;
-	enum ParamIds { NUM_PARAMS };
+	enum ParamIds {
+		SCENE_TRIG_BUTTON_PARAM, RUN_BUTTON_PARAM, RESET_BUTTON_PARAM, LOOP_BUTTON_PARAM, NUM_PARAMS
+	};
 	enum InputIds {
 		CLOCK_INPUT, RUN_INPUT, RESET_INPUT, SCENE_TRIG_INPUT, SCENE_CV_INPUT,
 		MACRO_1_INPUT, MACRO_2_INPUT, MACRO_3_INPUT, MACRO_4_INPUT, NUM_INPUTS
@@ -54,6 +56,8 @@ struct SibylModule : Module, SibylControl {
 	std::atomic<const sibyl::TransportRequest*> m_transportHazard{nullptr};
 	std::atomic<bool> m_runtimeRunning{true};
 	std::atomic<bool> m_effectiveRunning{true};
+	// -1 follows the composition; 0/1 is an explicit persistent panel override.
+	std::atomic<int> m_loopOverride{-1};
 	bool m_previousEffectiveRunning = true;
 	uint64_t m_randomnessEpoch = 0;
 
@@ -109,6 +113,7 @@ struct SibylModule : Module, SibylControl {
 		float sceneProgress = 0.f;
 		float bpm = 120.f;
 		bool running = true;
+		bool looping = true;
 		bool externalClock = false;
 	};
 
@@ -134,7 +139,11 @@ struct SibylModule : Module, SibylControl {
 	// Hardware Schmitt triggers & pulse generators
 	dsp::SchmittTrigger m_clockTrigger;
 	dsp::SchmittTrigger m_resetTrigger;
+	dsp::SchmittTrigger m_resetButtonTrigger;
 	dsp::SchmittTrigger m_sceneTrigger;
+	dsp::SchmittTrigger m_sceneButtonTrigger;
+	dsp::SchmittTrigger m_runButtonTrigger;
+	dsp::SchmittTrigger m_loopButtonTrigger;
 	dsp::PulseGenerator m_clockPulse;
 	dsp::PulseGenerator m_scenePulse;
 	dsp::PulseGenerator m_eocPulse;
@@ -144,6 +153,10 @@ struct SibylModule : Module, SibylControl {
 
 	SibylModule() {
 		config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
+		configButton(SCENE_TRIG_BUTTON_PARAM, "Trigger next scene");
+		configButton(RUN_BUTTON_PARAM, "Run / Pause");
+		configButton(RESET_BUTTON_PARAM, "Reset arrangement");
+		configButton(LOOP_BUTTON_PARAM, "Toggle automatic looping");
 
 		configInput(CLOCK_INPUT, "Clock");
 		configInput(RUN_INPUT, "Run");
@@ -258,6 +271,8 @@ struct SibylModule : Module, SibylControl {
 
 		const sibyl::Composition* composition = acquirePublished(m_activeCompositionPtr, m_displayCompositionHazard);
 		if (composition) {
+			const int loopOverride = m_loopOverride.load(std::memory_order_acquire);
+			display.looping = loopOverride >= 0 ? loopOverride != 0 : composition->transport.loop;
 			display.title = composition->meta.title;
 			display.prompt = composition->meta.prompt;
 			if (telemetry.sceneIndex >= 0 && telemetry.sceneIndex < static_cast<int>(composition->arrangement.size())) {
@@ -625,6 +640,8 @@ struct SibylModule : Module, SibylControl {
 		json_t* rootJ = json_object();
 		json_object_set_new(rootJ, "schemaVersion", json_integer(1));
 		json_object_set_new(rootJ, "revision", json_integer(m_acceptedRevision));
+		json_object_set_new(rootJ, "loopOverride",
+			json_integer(m_loopOverride.load(std::memory_order_acquire)));
 
 		const sibyl::Composition* comp = m_acceptedCompositionPtr;
 		if (comp) {
@@ -654,6 +671,12 @@ struct SibylModule : Module, SibylControl {
 
 	void dataFromJson(json_t* rootJ) override {
 		if (!rootJ || !json_is_object(rootJ)) return;
+		json_t* loopOverrideJ = json_object_get(rootJ, "loopOverride");
+		if (loopOverrideJ && json_is_integer(loopOverrideJ)) {
+			const int loopOverride = static_cast<int>(json_integer_value(loopOverrideJ));
+			m_loopOverride.store(loopOverride < 0 ? -1 : (loopOverride != 0 ? 1 : 0),
+				std::memory_order_release);
+		}
 
 		json_t* compJ = json_object_get(rootJ, "composition");
 		json_t* revJ = json_object_get(rootJ, "revision");
@@ -681,6 +704,15 @@ struct SibylModule : Module, SibylControl {
 	void process(const ProcessArgs& args) override {
 		const sibyl::Composition* comp = acquirePublished(m_activeCompositionPtr, m_compositionHazard);
 		if (!comp) return;
+		if (m_runButtonTrigger.process(params[RUN_BUTTON_PARAM].getValue())) {
+			bool running = m_runtimeRunning.load(std::memory_order_acquire);
+			m_runtimeRunning.store(!running, std::memory_order_release);
+		}
+		if (m_loopButtonTrigger.process(params[LOOP_BUTTON_PARAM].getValue())) {
+			const int loopOverride = m_loopOverride.load(std::memory_order_acquire);
+			const bool looping = loopOverride >= 0 ? loopOverride != 0 : comp->transport.loop;
+			m_loopOverride.store(looping ? 0 : 1, std::memory_order_release);
+		}
 
 		// --- Transport Run / Pause ---
 		bool isRunning = m_runtimeRunning.load(std::memory_order_acquire);
@@ -693,10 +725,14 @@ struct SibylModule : Module, SibylControl {
 
 		// Hardware requests are captured immediately and applied only at their
 		// documented musical boundary below.
-		if (m_resetTrigger.process(inputs[RESET_INPUT].getVoltage())) {
+		const bool resetEdge = m_resetTrigger.process(inputs[RESET_INPUT].getVoltage()) |
+			m_resetButtonTrigger.process(10.f * params[RESET_BUTTON_PARAM].getValue());
+		if (resetEdge) {
 			m_pendingHardwareAction = HardwareAction::RESET_ARRANGEMENT;
 		}
-		if (!comp->arrangement.empty() && m_sceneTrigger.process(inputs[SCENE_TRIG_INPUT].getVoltage()) &&
+		const bool sceneTriggerEdge = m_sceneTrigger.process(inputs[SCENE_TRIG_INPUT].getVoltage()) |
+			m_sceneButtonTrigger.process(10.f * params[SCENE_TRIG_BUTTON_PARAM].getValue());
+		if (!comp->arrangement.empty() && sceneTriggerEdge &&
 				m_pendingHardwareAction != HardwareAction::RESET_ARRANGEMENT) {
 			m_pendingHardwareAction = HardwareAction::SELECT_SCENE;
 			m_pendingHardwareScene = (m_sceneIndex + 1) % comp->arrangement.size();
@@ -815,7 +851,9 @@ struct SibylModule : Module, SibylControl {
 				m_scenePulse.trigger(1e-3f);
 				bool enteredScene = true;
 				if (m_sceneIndex >= (int)comp->arrangement.size()) {
-					if (comp->transport.loop) {
+					const int loopOverride = m_loopOverride.load(std::memory_order_acquire);
+					const bool looping = loopOverride >= 0 ? loopOverride != 0 : comp->transport.loop;
+					if (looping) {
 						m_sceneIndex = 0;
 						m_eocPulse.trigger(1e-3f);
 					} else {
@@ -1367,6 +1405,7 @@ struct SibylOracleDisplay final : TransparentWidget {
 			state.activeTrackMask = 0x00ffu;
 			state.gateMask = 0x0029u;
 			state.sceneRepeats = 2;
+			state.looping = true;
 			state.sceneProgress = 0.37f;
 			state.acceptedRevision = state.activeRevision = 1;
 			for (int i = 0; i < 16; ++i) state.playhead[i] = std::fmod(0.11f * i + 0.18f, 1.f);
@@ -1457,7 +1496,7 @@ struct SibylOracleDisplay final : TransparentWidget {
 				active ? dim : nvgRGBA(55, 66, 80, 160), channelText);
 		}
 
-		const float messageTop = h - 40.f;
+		const float messageTop = h - 43.f;
 		const std::string message = !state.error.empty() ? "! " + state.error
 			: (state.warningCount > 0 ? "! " + std::to_string(state.warningCount) + " WARNING"
 			: (state.prompt.empty() ? "THE MACHINE IS LISTENING" : state.prompt));
@@ -1481,16 +1520,17 @@ struct SibylOracleDisplay final : TransparentWidget {
 			}
 		}
 
-		char footer[64];
+		char footer[80];
 		if (state.pendingRevision >= 0) {
-			std::snprintf(footer, sizeof(footer), "%s  %5.1f  R%d>%d  P%d",
-				state.externalClock ? "EXT" : "INT", state.bpm,
+			std::snprintf(footer, sizeof(footer), "%s  %s  %5.1f  R%d>%d  P%d",
+				state.looping ? "LOOP" : "ONCE", state.externalClock ? "EXT" : "INT", state.bpm,
 				state.activeRevision, state.acceptedRevision, state.pendingRevision);
 		} else {
-			std::snprintf(footer, sizeof(footer), "%s  %5.1f BPM  REV %d",
-				state.externalClock ? "EXT" : "INT", state.bpm, state.activeRevision);
+			std::snprintf(footer, sizeof(footer), "%s  %s  %5.1f BPM  REV %d",
+				state.looping ? "LOOP" : "ONCE", state.externalClock ? "EXT" : "INT",
+				state.bpm, state.activeRevision);
 		}
-		text(args, w - pad, h - 5.f, 5.8f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, violet, footer);
+		text(args, w - pad, h - 4.f, 7.0f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, violet, footer);
 
 		// Fine scanlines and a bright inner edge sell the glass/ phosphor depth.
 		for (float y = 1.f; y < h; y += 3.f) {
@@ -1561,15 +1601,24 @@ struct SibylWidget : ModuleWidget {
 			return mm2px(pointMm);
 		};
 
-		addInput(createInputCentered<Magitek2InputJack>(anchor("CLOCK_INPUT", Vec(8.5f, 55.f)), module, SibylModule::CLOCK_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(anchor("CLOCK_INPUT", Vec(8.5f, 69.5f)), module, SibylModule::CLOCK_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(anchor("RUN_INPUT", Vec(20.f, 55.f)), module, SibylModule::RUN_INPUT));
-		addInput(createInputCentered<Magitek2InputJack>(anchor("RESET_INPUT", Vec(8.5f, 69.5f)), module, SibylModule::RESET_INPUT));
-		addInput(createInputCentered<Magitek2InputJack>(anchor("SCENE_TRIG_INPUT", Vec(20.f, 69.5f)), module, SibylModule::SCENE_TRIG_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(anchor("RESET_INPUT", Vec(31.5f, 55.f)), module, SibylModule::RESET_INPUT));
+		addInput(createInputCentered<Magitek2InputJack>(anchor("SCENE_TRIG_INPUT", Vec(8.5f, 55.f)), module, SibylModule::SCENE_TRIG_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(anchor("SCENE_CV_INPUT", Vec(8.5f, 84.f)), module, SibylModule::SCENE_CV_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(anchor("MACRO_1_INPUT", Vec(8.5f, 98.5f)), module, SibylModule::MACRO_1_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(anchor("MACRO_2_INPUT", Vec(20.f, 98.5f)), module, SibylModule::MACRO_2_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(anchor("MACRO_3_INPUT", Vec(8.5f, 113.f)), module, SibylModule::MACRO_3_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(anchor("MACRO_4_INPUT", Vec(20.f, 113.f)), module, SibylModule::MACRO_4_INPUT));
+
+		addParam(createParamCentered<SmallGoldButton>(anchor("SCENE_TRIG_BUTTON", Vec(8.5f, 63.5f)), module,
+			SibylModule::SCENE_TRIG_BUTTON_PARAM));
+		addParam(createParamCentered<SmallGoldButton>(anchor("RUN_BUTTON", Vec(20.f, 63.5f)), module,
+			SibylModule::RUN_BUTTON_PARAM));
+		addParam(createParamCentered<SmallGoldButton>(anchor("RESET_BUTTON", Vec(31.5f, 63.5f)), module,
+			SibylModule::RESET_BUTTON_PARAM));
+		addParam(createParamCentered<SmallGoldButton>(anchor("LOOP_BUTTON", Vec(8.5f, 78.f)), module,
+			SibylModule::LOOP_BUTTON_PARAM));
 
 		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("V_OCT_OUTPUT", Vec(32.5f, 55.f)), module, SibylModule::V_OCT_OUTPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("GATE_OUTPUT", Vec(43.f, 55.f)), module, SibylModule::GATE_OUTPUT));
