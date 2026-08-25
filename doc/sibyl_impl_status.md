@@ -24,22 +24,21 @@ The major implementation milestones are complete:
 - race-free telemetry, bounded snapshot ownership, and the oracle display;
 - physical inputs, manual performance buttons, and a persistent loop override.
 
-The remaining work is not another large feature milestone. It is a bounded release tail:
-native Rack acceptance of the latest panel and musical changes, explicit real-time
-regression instrumentation, broader persistence/integration coverage, and a final
-compatibility freeze.
+The remaining work is not another large feature milestone. The Linux and live-Rack
+hardening gates are closed; the bounded release tail is an authoritative native Windows
+build/package and a fresh-install smoke test of the resulting release artifacts.
 
 | Area | Current state | Release significance |
 |---|---|---|
-| Module lifecycle and panel | ✅ Functionally complete | Latest layout needs final native visual acceptance |
+| Module lifecycle and panel | ✅ Live accepted | Recheck only if the panel changes |
 | Schema-v2 compiler | ✅ Functionally complete | Add selected cross-object edge cases as they are discovered |
-| Playback and timing | ✅ Functionally complete | Latest multi-step gates need live musical acceptance |
-| Clock, transport, and hardware control | ✅ Live accepted | Recheck manual buttons and loop override with the final panel |
+| Playback and timing | ✅ Live accepted | Internal and external-clock acceptance complete |
+| Clock, transport, and hardware control | ✅ Live accepted | Recheck only after behavior or panel changes |
 | Revisioned editing and adoption | ✅ Complete | Existing focused and live stress coverage is strong |
-| Real-time ownership and telemetry | ✅ Implemented and stress-tested | Add explicit allocation/locking regression checks |
-| Octavia semantic bridge | ✅ Functionally complete | Run final end-to-end contract acceptance after schema freeze |
-| Persistence | ✅ Implemented | Broaden corrupt-file, patch reload, and undo integration coverage |
-| Oracle display | ✅ Implemented | Final typography, clipping, animation, and context-recreation pass remains |
+| Real-time ownership and telemetry | ✅ Sanitizer-tested | Allocation, reclamation, and concurrent display guards are repeatable |
+| Octavia semantic bridge | ✅ Contract-tested | Restart deployed MCP server to load the final adapter fix |
+| Persistence | ✅ Live accepted | Portable errors, patch reload, preset replacement, and Rack undo covered |
+| Oracle display | ✅ Live accepted | Typography, clipping, and context recovery passed ANT1 |
 
 ---
 
@@ -166,6 +165,16 @@ The routine suite contains focused Sibyl tests for:
 - runtime transport parsing and normalization;
 - Octavia/Sibyl adapter contract behavior.
 
+The release-hardening pass added a concurrent DSP/control/display reclamation test and a
+dedicated `make test-sibyl-tsan` target. The finalized target passes under ThreadSanitizer
+with no reported races. The full `make test-fast` suite and Linux plugin link also pass.
+
+Live semantic-edit acceptance exposed and fixed an Octavia adapter mismatch: Sibyl's
+public request fields `expected_revision`, `phase_policy`, `apply_at`, `scene_id`, and
+`phase_mode` must remain snake_case. The adapter now preserves them, and its contract test
+guards against the prior camelCase spellings. A running MCP server must be restarted to
+load this source change.
+
 Both WSL-focused builds and authoritative native MINGW64 `plugin.dll` builds have passed
 throughout the implementation and the current playability work.
 
@@ -197,7 +206,8 @@ released and freezing compatibility-sensitive IDs and file semantics.
 - [x] Patch MOD1–3 polyphonically and verify independent −10 V to +10 V behavior.
 - [x] Hear-test fractional, one-step, and multi-step gates; ties; ratchets; and interruption
   by later events across straight and swung internal-clock patterns.
-- [ ] Repeat the gate/interruption hear-test under an external clock source.
+- [x] Repeat external-clock gate/interruption acceptance with live clock-driven telemetry
+  and output-voltage inspection; focused module tests retain sample-exact timing coverage.
 - [x] Close and reopen the Rack/DAW window to verify NanoVG context recreation and display
   cache recovery.
 
@@ -207,7 +217,7 @@ released and freezing compatibility-sensitive IDs and file semantics.
   contains no locking primitives.
 - [x] Add a repeatable sustained edit/transport reclamation stress test rather than
   relying only on the completed manual 129-operation run.
-- [ ] Exercise rapid UI/display reads during snapshot reclamation under a sanitizer-capable
+- [x] Exercise rapid UI/display reads during snapshot reclamation under a sanitizer-capable
   test environment when practical.
 
 ### 4.3 Persistence and Contract Closure
@@ -216,7 +226,7 @@ released and freezing compatibility-sensitive IDs and file semantics.
   stopped/non-looping arrangements.
 - [x] Define diagnostics as derived state and verify patch reload does not resurrect stale
   serialized warnings or errors.
-- [ ] Exercise Rack undo/preset integration around authoritative composition replacement.
+- [x] Exercise Rack undo/preset integration around authoritative composition replacement.
 - [x] Add portable-file cases for malformed/foreign envelopes, missing composition data,
   truncated JSON, oversize rejection, and schema-version mismatch while retaining the
   accepted composition.
@@ -226,13 +236,16 @@ released and freezing compatibility-sensitive IDs and file semantics.
 
 ### 4.4 Compatibility Freeze
 
-- [ ] Decide that the schema-v2 event and macro vocabulary is sufficient for the first
+- [x] Decide that the schema-v2 event and macro vocabulary is sufficient for the first
   public release.
-- [ ] Freeze parameter, input, output, and light enum ordering at release.
-- [ ] Freeze portable composition envelope semantics and document the future migration
+- [x] Freeze parameter, input, output, and light enum ordering at release, with compile-time
+  assertions guarding the released numeric IDs.
+- [x] Freeze portable composition envelope semantics and document the future migration
   policy before accepting schema v3 work.
-- [ ] Perform the final native `test-fast`, `plugin.dll`, packaging, and fresh-install
-  smoke test.
+- [x] Pass the final Linux `test-fast`, ThreadSanitizer target, plugin link, and x64 package
+  construction (`Leviathan-2.9.1-lin-x64.vcvplugin`).
+- [ ] Perform the authoritative native Windows `plugin.dll` build/package and fresh-install
+  smoke tests of the release artifacts on their target platforms.
 
 ---
 

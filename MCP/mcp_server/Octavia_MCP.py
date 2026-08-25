@@ -6,6 +6,7 @@ Connects MCP-compatible agents to VCV Rack through the Octavia module.
 
 import json
 import os
+import re
 import warnings
 from urllib.parse import urlencode
 import httpx
@@ -38,7 +39,28 @@ BRIDGE_HEADERS = {"X-Octavia-Token": BRIDGE_TOKEN} if BRIDGE_TOKEN else {}
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
 
+async def _normalize_endpoint(endpoint: str) -> str:
+    """Resolve module_id in endpoints to protect against client JSON float precision truncation."""
+    m = re.match(r"^((?:sibyl|console|modules|temporal-deck)/)(\d+)(/.*|\?.*)?$", endpoint)
+    if not m:
+        return endpoint
+    prefix, mid_str, suffix = m.group(1), m.group(2), m.group(3) or ""
+    try:
+        req_id = int(mid_str)
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(f"{BRIDGE_URL}/modules", headers=BRIDGE_HEADERS)
+            if r.status_code == 200:
+                for mod in r.json():
+                    actual_id = mod.get("id")
+                    if actual_id is not None and (actual_id == req_id or abs(int(actual_id) - req_id) <= 64):
+                        return f"{prefix}{actual_id}{suffix}"
+    except Exception:
+        pass
+    return endpoint
+
+
 async def _call(endpoint: str, method: str = "GET", data: dict = None) -> dict:
+    endpoint = await _normalize_endpoint(endpoint)
     async with httpx.AsyncClient(timeout=5.0) as client:
         if method == "GET":
             r = await client.get(f"{BRIDGE_URL}/{endpoint}", headers=BRIDGE_HEADERS)
@@ -55,6 +77,7 @@ async def _call(endpoint: str, method: str = "GET", data: dict = None) -> dict:
 
 async def _sibyl_call(endpoint: str, method: str = "GET", data: dict = None) -> dict:
     """Keep handled Sibyl rejection envelopes intact for agent recovery."""
+    endpoint = await _normalize_endpoint(endpoint)
     async with httpx.AsyncClient(timeout=5.0) as client:
         if method == "GET":
             r = await client.get(f"{BRIDGE_URL}/{endpoint}", headers=BRIDGE_HEADERS)
@@ -71,6 +94,7 @@ async def _sibyl_call(endpoint: str, method: str = "GET", data: dict = None) -> 
 
 async def _console_call(endpoint: str, method: str = "GET", data: dict = None,
                         timeout: float = 5.0) -> dict:
+    endpoint = await _normalize_endpoint(endpoint)
     async with httpx.AsyncClient(timeout=timeout) as client:
         if method == "GET":
             r = await client.get(f"{BRIDGE_URL}/{endpoint}", headers=BRIDGE_HEADERS)
@@ -339,11 +363,11 @@ async def vcv_sibyl_validate(params: SibylValidateInput) -> str:
 async def vcv_sibyl_edit(params: SibylEditInput) -> str:
     """Apply semantic operations atomically. A successful transaction creates one vcv_undo entry."""
     try:
-        payload = {"expectedRevision": params.expected_revision,
-                   "phasePolicy": params.phase_policy,
+        payload = {"expected_revision": params.expected_revision,
+                   "phase_policy": params.phase_policy,
                    "operations": params.operations}
         if params.apply_at is not None:
-            payload["applyAt"] = params.apply_at
+            payload["apply_at"] = params.apply_at
         return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/edit", "POST", payload), indent=2)
     except Exception as e:
         return _err(e)
@@ -365,12 +389,6 @@ async def vcv_sibyl_transport(params: SibylTransportInput) -> str:
     """Control Sibyl performance state without creating an undo entry."""
     try:
         payload = params.model_dump(exclude={"module_id"}, exclude_none=True)
-        if "scene_id" in payload:
-            payload["sceneId"] = payload.pop("scene_id")
-        if "apply_at" in payload:
-            payload["applyAt"] = payload.pop("apply_at")
-        if "phase_mode" in payload:
-            payload["phaseMode"] = payload.pop("phase_mode")
         return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/transport", "POST", payload), indent=2)
     except Exception as e:
         return _err(e)

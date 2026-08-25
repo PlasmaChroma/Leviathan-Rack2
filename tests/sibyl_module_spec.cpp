@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <new>
+#include <thread>
 
 #if defined(__GNUC__)
 #pragma GCC diagnostic ignored "-Wmismatched-new-delete"
@@ -437,6 +438,32 @@ int main() {
 		check(module.m_compositionOwners.size() <= 2 && module.m_adoptionOwners.size() <= 1 &&
 			module.m_transportOwners.size() <= 1,
 			"sustained edit and transport publication reclaims owner pools to bounded size");
+	}
+
+	{
+		SibylModule module;
+		module.acceptComposition(makeComposition(1, false), sibyl::ApplyAt::IMMEDIATE,
+			sibyl::PhasePolicy::RESTART_ALL);
+		processOneSample(module);
+		std::atomic<bool> stopDsp {false};
+		std::thread dspThread([&]() {
+			while (!stopDsp.load(std::memory_order_acquire)) processOneSample(module);
+		});
+		bool coherentReads = true;
+		for (int revision = 2; revision <= 1001; ++revision) {
+			module.acceptComposition(makeComposition(revision, false), sibyl::ApplyAt::IMMEDIATE,
+				sibyl::PhasePolicy::PRESERVE);
+			const SibylModule::DisplaySnapshot display = module.readDisplaySnapshot();
+			coherentReads = coherentReads && display.acceptedRevision == revision &&
+				display.activeRevision >= 1 && display.activeRevision <= revision;
+			module.reclaimPublishedObjects();
+		}
+		stopDsp.store(true, std::memory_order_release);
+		dspThread.join();
+		module.reclaimPublishedObjects();
+		check(coherentReads && module.m_compositionOwners.size() <= 2 &&
+			module.m_adoptionOwners.size() <= 1,
+			"concurrent DSP adoption, display reads, and snapshot reclamation remain coherent");
 	}
 
 	{

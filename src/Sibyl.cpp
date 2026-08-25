@@ -38,6 +38,21 @@ struct SibylModule : Module, SibylControl {
 	};
 	enum LightIds { NUM_LIGHTS };
 
+	// Rack patch cables and parameter automation persist numeric IDs. These values are
+	// frozen for Sibyl's first public schema-v2 release; append future IDs, never reorder.
+	static_assert(SCENE_TRIG_BUTTON_PARAM == 0 && RUN_BUTTON_PARAM == 1 &&
+		RESET_BUTTON_PARAM == 2 && LOOP_BUTTON_PARAM == 3 && NUM_PARAMS == 4,
+		"Sibyl parameter IDs are compatibility-frozen");
+	static_assert(CLOCK_INPUT == 0 && RUN_INPUT == 1 && RESET_INPUT == 2 &&
+		SCENE_TRIG_INPUT == 3 && SCENE_CV_INPUT == 4 && MACRO_1_INPUT == 5 &&
+		MACRO_2_INPUT == 6 && MACRO_3_INPUT == 7 && MACRO_4_INPUT == 8 && NUM_INPUTS == 9,
+		"Sibyl input IDs are compatibility-frozen");
+	static_assert(V_OCT_OUTPUT == 0 && GATE_OUTPUT == 1 && VELOCITY_OUTPUT == 2 &&
+		MOD_OUTPUT == 3 && CLOCK_OUTPUT == 4 && SCENE_OUTPUT == 5 && EOC_OUTPUT == 6 &&
+		MOD_2_OUTPUT == 7 && MOD_3_OUTPUT == 8 && NUM_OUTPUTS == 9,
+		"Sibyl output IDs are compatibility-frozen");
+	static_assert(NUM_LIGHTS == 0, "Sibyl light IDs are compatibility-frozen");
+
 	int m_acceptedRevision = 0;
 	const sibyl::Composition* m_acceptedCompositionPtr = nullptr;
 	bool m_seenAuthoritativeLoad = false;

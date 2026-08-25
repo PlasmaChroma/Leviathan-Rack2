@@ -281,6 +281,41 @@ Accepted `resolution` values in version 2 are:
 
 Unknown fields produce warnings for forward compatibility. Invalid types, missing references, duplicate IDs/channels/steps, unsupported schema versions, and out-of-range structural values reject the entire update atomically. The last accepted composition continues playing.
 
+### 3.6 Schema-v2 Compatibility Freeze and Migration Policy
+
+Schema v2 is the frozen first-public-release vocabulary. Its event fields, macro targets,
+scale names, timing meanings, voltage units, and validation ranges will not be silently
+reinterpreted. New optional fields that an older v2 reader can safely ignore may be added
+only when they preserve those meanings and produce the existing unknown-field warning.
+A change that alters an existing meaning or requires new playback semantics requires a new
+composition schema version.
+
+Portable composition files use this frozen envelope:
+
+```json
+{
+  "format": "Leviathan.SibylComposition",
+  "schemaVersion": 2,
+  "composition": {}
+}
+```
+
+The `format` string and the meaning of `schemaVersion` are stable. A malformed envelope,
+foreign format, missing composition, unsupported version, truncated file, or file above
+the documented size limit is rejected atomically while the accepted composition continues
+playing. Portable files deliberately contain composition state, not runtime playhead,
+pending-command, gate, or clock-estimator state.
+
+When schema v3 is introduced, migration must run on the control thread and be explicit and
+deterministic. A future writer may emit v3, but it must retain a tested v2 reader or provide
+an explicit conversion workflow. It must never treat a v2 document as v3 by inference,
+silently overwrite the source file, or partially adopt a failed conversion. Schema-v1
+portable files remain rejected unless a separately specified migration is implemented.
+
+Rack-facing numeric parameter, input, output, and light IDs are also compatibility-frozen.
+Future controls and ports must be appended; existing numeric IDs must not be reordered or
+repurposed.
+
 ---
 
 ## 4. Playback and Sync Engine
@@ -380,7 +415,10 @@ Because Octavia is Sibyl's reference editor, it exposes musical operations rathe
 
 Generic `vcv_get_module_state` and `vcv_set_module_state` remain supported for preset transfer, backup, recovery, and clients that do not understand the semantic protocol. They are an authoritative whole-composition workflow, not a degraded or forbidden one; they simply lack cooperative conflict protection and token-efficient edits.
 
-MCP inputs identify the Rack module with `module_id` and use snake-case field names. Octavia translates them to the camel-case adapter fields shown where relevant below. Sibyl's opaque responses use camel case. Successful responses contain `ok: true` and `moduleId`. Failures contain `ok: false` and a structured `error`:
+MCP inputs identify the Rack module with `module_id` and use snake-case field names. The
+Octavia adapter preserves the public snake-case request fields. Sibyl's opaque responses
+use camel case. Successful responses contain `ok: true` and `moduleId`. Failures contain
+`ok: false` and a structured `error`:
 
 ```json
 {
