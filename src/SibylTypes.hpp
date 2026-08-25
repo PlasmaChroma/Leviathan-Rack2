@@ -20,8 +20,6 @@ enum class ApplyAt { NEXT_BEAT, NEXT_STEP, NEXT_SCENE, IMMEDIATE };
 
 enum class PhaseMode { RESTART, CONTINUE, ALIGN_GLOBAL };
 
-enum class ModRange { UNIPOLAR, BIPOLAR };
-
 enum class MacroPolarity { UNIPOLAR, BIPOLAR };
 
 struct Meta {
@@ -53,7 +51,6 @@ struct TrackDef {
 	int channel = 0;
 	float defaultGate = 0.5f;
 	float defaultVelocity = 0.5f;
-	ModRange modRange = ModRange::UNIPOLAR;
 };
 
 enum class PitchType { PITCH_V, DEGREE, NOTE };
@@ -69,6 +66,8 @@ struct StepEvent {
 	bool hasGate = false; float gate = 0.5f;
 	bool hasVelocity = false; float velocity = 0.5f;
 	bool hasMod = false; float mod = 0.0f;
+	bool hasMod2 = false; float mod2 = 0.0f;
+	bool hasMod3 = false; float mod3 = 0.0f;
 	bool hasProbability = false; float probability = 1.0f;
 	
 	bool tie = false;
@@ -101,6 +100,7 @@ struct TrackAssignment {
 struct Scene {
 	std::string id;
 	std::string name;
+	std::string description;
 	float lengthBeats = 16.0f;
 	int repeats = 1;
 	PhaseMode phaseMode = PhaseMode::RESTART;

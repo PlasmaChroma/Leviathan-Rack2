@@ -34,19 +34,19 @@ Clock, reset, and trigger inputs use Rack-compatible Schmitt-trigger thresholds:
 * **V/OCT OUT:** Polyphonic pitch with stable declared channel assignments.
 * **GATE OUT:** Polyphonic gates or triggers.
 * **VELOCITY OUT:** Polyphonic velocity, 0–10 V.
-* **MOD OUT:** Polyphonic modulation; each track declares `unipolar` (0–10 V) or `bipolar` (-5–5 V).
+* **MOD1 / MOD2 / MOD3 OUT:** Three independent polyphonic modulation lanes spanning -10 V to +10 V. Step fields `mod`, `mod2`, and `mod3` are literal output voltages; the original `mod` field remains the stable name for MOD1.
 * **CLOCK OUT:** Reconstructed clock at `outputPpqn` in either clock mode, not an unsmoothed external-clock thru.
 * **SCENE OUT:** Trigger on every scene transition.
 * **EOC OUT:** Trigger only when the arrangement wraps from the last scene to the first.
 
-All musical polyphonic outputs expose `max(channel) + 1` channels, up to 16. An inactive track has zero gate, velocity, and mod; pitch holds its most recent value to avoid unnecessary oscillator jumps.
+All musical polyphonic outputs expose `max(channel) + 1` channels, up to 16. An inactive track has zero gate, velocity, and modulation; pitch holds its most recent value to avoid unnecessary oscillator jumps.
 
 ### 2.3 Display
 
 A central non-editable OLED or LED matrix displays:
 
-* `meta.title` and a shortened `meta.prompt`.
-* Active scene, repeat count, and track playheads/gates.
+* `meta.title` and the active scene's `description`, falling back to a shortened `meta.prompt`.
+* Active scene as `[current/total] name`, repeat count, and track playheads/gates.
 * Clock source, run state, pending update, accepted revision, and validation errors.
 
 ---
@@ -67,7 +67,7 @@ Conceptual wire shape (Rack may add standard fields):
   "model": "Sibyl",
   "params": [],
   "data": {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "revision": 12,
     "composition": {},
     "status": {
@@ -125,8 +125,8 @@ Octavia's C++ `SibylControl` adapter is an in-process reference integration, not
     "defaultApplyAt": "nextBeat"
   },
   "tracks": [
-    { "id": "bass", "channel": 0, "defaultGate": 0.5, "defaultVelocity": 0.8, "modRange": "unipolar" },
-    { "id": "lead", "channel": 1, "defaultGate": 0.4, "defaultVelocity": 0.7, "modRange": "bipolar" }
+    { "id": "bass", "channel": 0, "defaultGate": 0.5, "defaultVelocity": 0.8 },
+    { "id": "lead", "channel": 1, "defaultGate": 0.4, "defaultVelocity": 0.7 }
   ],
   "patterns": {
     "bass_verse": {
@@ -149,12 +149,16 @@ Octavia's C++ `SibylControl` adapter is an in-process reference integration, not
   },
   "arrangement": [
     {
-      "id": "intro", "name": "Intro", "lengthBeats": 16, "repeats": 1,
+      "id": "intro", "name": "Intro",
+      "description": "A restrained opening that establishes the bass ritual.",
+      "lengthBeats": 16, "repeats": 1,
       "phaseMode": "restart",
       "tracks": { "bass": "bass_verse", "lead": null }
     },
     {
-      "id": "verse_a", "name": "Verse A", "lengthBeats": 16, "repeats": 2,
+      "id": "verse_a", "name": "Verse A",
+      "description": "Introduce the polymetric lead while preserving the grounded bass pulse.",
+      "lengthBeats": 16, "repeats": 2,
       "phaseMode": "restart",
       "tracks": {
         "bass": "bass_verse",
@@ -179,17 +183,18 @@ Version 1 enum values used above:
 1. **Sparse events:** `steps` contains active events only; a missing step is a rest.
 2. **Stable tracks:** Human-readable track IDs reference fixed polyphonic `channel` values. IDs and channels are unique.
 3. **Explicit scene duration:** `lengthBeats` defines one scene cycle independently of pattern lengths. Every assigned pattern loops within it; `repeats` repeats that complete cycle.
-4. **Polymeter and phase:** Patterns have independent lengths and resolutions. A scene's `phaseMode` is `restart` (default), `continue`, or `alignGlobal`. Track assignments may use the compact pattern-ID string form or an object with `pattern` and a per-track `phaseMode` override. Details are in Section 4.2.
-5. **Unambiguous pitch:** An event contains exactly one of `pitchV`, `degree`, or `note`. `pitchV` follows C4 = 0 V. `degree` is zero-based in `meta.scale`, relative to root/rootOctave, with a signed scale-octave offset. Degrees outside one scale octave wrap using Euclidean division, so degree 8 in a seven-note scale is degree 1 one octave higher. `note` uses the grammar defined below.
-6. **Timing:** `gate` is a 0–1 fraction of step duration. `microshift` is a signed step fraction, clamped below half a step. `glideMs` is milliseconds. `ratchets` is the total evenly spaced attacks in the step.
-7. **Tie versus glide:** `tie: true` suppresses a new gate attack and holds the prior gate. Glide moves pitch but does not imply a tie.
-8. **Velocity and mod:** Velocity and unipolar mod use normalized 0–1 values; bipolar mod uses -1–1.
-9. **Swing:** `meta.swing` delays the second subdivision of each straight pair by that fraction of one subdivision. Range is 0–0.49. Macro offsets are additive and clamped.
-10. **Duplicate events:** Version 1 rejects multiple events on one step; ratchets represent repeated attacks.
+4. **Scene intent:** Optional `description` text records the scene's musical purpose. It is non-semantic metadata, has no DSP effect, and is shown in Sibyl's lower display while that scene is active; the composition prompt is the fallback when no scene description exists.
+5. **Polymeter and phase:** Patterns have independent lengths and resolutions. A scene's `phaseMode` is `restart` (default), `continue`, or `alignGlobal`. Track assignments may use the compact pattern-ID string form or an object with `pattern` and a per-track `phaseMode` override. Details are in Section 4.2.
+6. **Unambiguous pitch:** An event contains exactly one of `pitchV`, `degree`, or `note`. `pitchV` follows C4 = 0 V. `degree` is zero-based in `meta.scale`, relative to root/rootOctave, with a signed scale-octave offset. Degrees outside one scale octave wrap using Euclidean division, so degree 8 in a seven-note scale is degree 1 one octave higher. `note` uses the grammar defined below.
+7. **Timing:** `gate` is a 0–1 fraction of step duration. `microshift` is a signed step fraction, clamped below half a step. `glideMs` is milliseconds. `ratchets` is the total evenly spaced attacks in the step.
+8. **Tie versus glide:** `tie: true` suppresses a new gate attack and holds the prior gate. Glide moves pitch but does not imply a tie.
+9. **Velocity and mod:** Velocity uses normalized 0–1 values. MOD1, MOD2, and MOD3 values are literal modular voltages from -10 V to +10 V.
+10. **Swing:** `meta.swing` delays the second subdivision of each straight pair by that fraction of one subdivision. Range is 0–0.49. Macro offsets are additive and clamped.
+11. **Duplicate events:** Version 1 rejects multiple events on one step; ratchets represent repeated attacks.
 
 #### 3.4.1 Step Event Fields
 
-Version 1 patterns contain note events. Modulation-only or other event kinds are reserved for a later schema.
+Version 2 patterns contain note events. Modulation-only or other event kinds are reserved for a later schema.
 
 | Field | Type | Required | Default | Range or constraint |
 |---|---|---:|---|---|
@@ -200,7 +205,9 @@ Version 1 patterns contain note events. Modulation-only or other event kinds are
 | `octave` | integer | no | 0 | Signed scale-octave offset; valid only with `degree` |
 | `gate` | number | no | Track `defaultGate` | 0–1 fraction of the step, or of each ratchet slice |
 | `velocity` | number | no | Track `defaultVelocity` | Normalized 0–1 |
-| `mod` | number | no | 0 | 0–1 unipolar or -1–1 bipolar, according to the track |
+| `mod` | number | no | 0 V | MOD1 voltage, -10 V to +10 V |
+| `mod2` | number | no | 0 V | Independent MOD2 voltage, -10 V to +10 V |
+| `mod3` | number | no | 0 V | Independent MOD3 voltage, -10 V to +10 V |
 | `probability` | number | no | 1 | 0–1 |
 | `tie` | boolean | no | `false` | Suppresses the new gate attack and holds the prior gate |
 | `glideMs` | number | no | 0 | Nonnegative milliseconds of linear V/Oct glide |
@@ -232,7 +239,9 @@ Accepted `meta.scale` values in version 1 are `chromatic`, `major`, `natural_min
 | `track.<id>.swing` | One track's swing | 0–0.49 |
 | `track.<id>.velocity` | One track's velocities | 0–1 |
 | `track.<id>.gate` | One track's gate fractions | 0–1 |
-| `track.<id>.mod` | One track's MOD output | Track `modRange` |
+| `track.<id>.mod` | One track's MOD1 output | -10 V to +10 V |
+| `track.<id>.mod2` | One track's MOD2 output | -10 V to +10 V |
+| `track.<id>.mod3` | One track's MOD3 output | -10 V to +10 V |
 
 An unknown target or unresolved track ID is a validation error. An unpatched macro contributes zero. For a patched input:
 
@@ -244,18 +253,19 @@ effectiveValue = clamp(storedValue + sum(global contributions) + sum(track contr
 ```
 
 Multiple macros addressing the same target add before the final clamp. The macro's explicit `clamp` may narrow, but never expand, the target's intrinsic range.
+For MOD1, MOD2, and MOD3 targets, `amount` and `clamp` values are expressed directly in volts.
 
 ### 3.5 Validation and Limits
 
-Version 1 enforces conservative fixed limits:
+Version 2 enforces conservative fixed limits:
 
 * 16 tracks, 256 patterns, and 256 scenes.
 * 1–1024 steps and at most 1024 sparse events per pattern.
-* 64-character IDs/names and 2048-character title/prompt fields.
+* 64-character IDs/names, 512-character scene descriptions, and 2048-character title/prompt fields.
 * BPM 20–400, positive scene length, probability 0–1, and ratchets 1–16.
 * `phaseMode`, `phase_policy`, restart targets, and apply boundaries must use the enumerated values in Sections 4 and 5. Fields supplied to an unrelated transport action are validation errors rather than silently ignored.
 
-Accepted `resolution` values in version 1 are:
+Accepted `resolution` values in version 2 are:
 
 | Straight | Dotted | Triplet |
 |---|---|---|
@@ -398,7 +408,7 @@ Stable error codes are intended for agent recovery; prose is intended for the us
   "capabilities": {
     "sibyl": {
       "apiVersion": 1,
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "revision": 12,
       "operations": ["get_composition", "validate", "edit", "get_status", "transport"]
     }
@@ -423,7 +433,7 @@ Stable error codes are intended for agent recovery; prose is intended for the us
   "ok": true,
   "moduleId": 42,
   "revision": 12,
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "view": "pattern",
   "id": "bass_verse",
   "pattern": {},

@@ -139,12 +139,11 @@ static void validateCompositionSchema(json_t* root, ParseResult& res) {
         json_array_foreach(tracks, index, track) {
             std::string path = "tracks[" + std::to_string(index) + "]";
             if (!json_is_object(track)) { addError(res, path, "Expected object"); continue; }
-            warnUnknownFields(track, path, {"id", "channel", "defaultGate", "defaultVelocity", "modRange"}, res);
+            warnUnknownFields(track, path, {"id", "channel", "defaultGate", "defaultVelocity"}, res);
             validateStringField(track, "id", path, 64, res);
             validateIntegerField(track, "channel", path, 0, 15, res);
             validateNumberField(track, "defaultGate", path, 0.0, 1.0, res);
             validateNumberField(track, "defaultVelocity", path, 0.0, 1.0, res);
-            validateEnumField(track, "modRange", path, {"unipolar", "bipolar"}, res);
             json_t* id = json_object_get(track, "id");
             if (!json_is_string(id) || !validId(json_string_value(id))) addError(res, path + ".id", "Track id is required and must be 1-64 characters");
             else if (!trackIds.insert(json_string_value(id)).second) addError(res, path + ".id", "Duplicate track id");
@@ -181,7 +180,7 @@ static void validateCompositionSchema(json_t* root, ParseResult& res) {
             json_array_foreach(steps, stepIndex, step) {
                 std::string stepPath = path + ".steps[" + std::to_string(stepIndex) + "]";
                 if (!json_is_object(step)) { addError(res, stepPath, "Expected object"); continue; }
-                warnUnknownFields(step, stepPath, {"step", "pitchV", "degree", "note", "octave", "gate", "velocity", "mod", "probability", "tie", "glideMs", "microshift", "ratchets"}, res);
+                warnUnknownFields(step, stepPath, {"step", "pitchV", "degree", "note", "octave", "gate", "velocity", "mod", "mod2", "mod3", "probability", "tie", "glideMs", "microshift", "ratchets"}, res);
                 validateIntegerField(step, "step", stepPath, 0, std::max(0, length - 1), res);
                 json_t* stepNumber = json_object_get(step, "step");
                 if (!stepNumber) addError(res, stepPath + ".step", "Required field is missing");
@@ -197,7 +196,9 @@ static void validateCompositionSchema(json_t* root, ParseResult& res) {
                 if (json_is_string(note) && !std::regex_match(std::string(json_string_value(note)), std::regex("^[A-G][b#]?(-1|[0-9])$"))) addError(res, stepPath + ".note", "Invalid scientific pitch; expected octave -1 through 9");
                 validateNumberField(step, "gate", stepPath, 0.0, 1.0, res);
                 validateNumberField(step, "velocity", stepPath, 0.0, 1.0, res);
-                validateNumberField(step, "mod", stepPath, -1.0, 1.0, res);
+                validateNumberField(step, "mod", stepPath, -10.0, 10.0, res);
+                validateNumberField(step, "mod2", stepPath, -10.0, 10.0, res);
+                validateNumberField(step, "mod3", stepPath, -10.0, 10.0, res);
                 validateNumberField(step, "probability", stepPath, 0.0, 1.0, res);
                 validateBooleanField(step, "tie", stepPath, res);
                 validateNumberField(step, "glideMs", stepPath, 0.0, 3600000.0, res);
@@ -216,9 +217,10 @@ static void validateCompositionSchema(json_t* root, ParseResult& res) {
         json_array_foreach(arrangement, index, scene) {
             std::string path = "arrangement[" + std::to_string(index) + "]";
             if (!json_is_object(scene)) { addError(res, path, "Expected object"); continue; }
-            warnUnknownFields(scene, path, {"id", "name", "lengthBeats", "repeats", "phaseMode", "tracks"}, res);
+            warnUnknownFields(scene, path, {"id", "name", "description", "lengthBeats", "repeats", "phaseMode", "tracks"}, res);
             validateStringField(scene, "id", path, 64, res);
             validateStringField(scene, "name", path, 64, res);
+            validateStringField(scene, "description", path, 512, res);
             validateNumberField(scene, "lengthBeats", path, std::numeric_limits<double>::min(), 1e9, res);
             validateIntegerField(scene, "repeats", path, 1, INT32_MAX, res);
             validateEnumField(scene, "phaseMode", path, {"restart", "continue", "alignGlobal"}, res);
@@ -265,7 +267,7 @@ static void validateCompositionSchema(json_t* root, ParseResult& res) {
                 std::string targetName = json_string_value(target);
                 bool validTarget = isOneOf(targetName, {"global.probability", "global.swing", "global.velocity"});
                 std::smatch match;
-                if (!validTarget && std::regex_match(targetName, match, std::regex("^track\\.([^.]+)\\.(probability|swing|velocity|gate|mod)$"))) validTarget = trackIds.count(match[1].str()) != 0;
+                if (!validTarget && std::regex_match(targetName, match, std::regex("^track\\.([^.]+)\\.(probability|swing|velocity|gate|mod|mod2|mod3)$"))) validTarget = trackIds.count(match[1].str()) != 0;
                 if (!validTarget) addError(res, path + ".target", "Unknown or unresolved macro target: " + targetName);
             }
             json_t* clamp = json_object_get(macro, "clamp");
@@ -532,7 +534,6 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
             t.channel = getInteger(value, "channel", 0);
             t.defaultGate = getNumber(value, "defaultGate", 0.5f);
             t.defaultVelocity = getNumber(value, "defaultVelocity", 0.5f);
-            t.modRange = getString(value, "modRange") == "bipolar" ? ModRange::BIPOLAR : ModRange::UNIPOLAR;
             
             std::string path = "tracks[" + std::to_string(index) + "]";
             if (t.id.empty()) addError(res, path, "Track id is missing");
@@ -600,6 +601,10 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
                     if (velJ) { e.hasVelocity = true; e.velocity = json_number_value(velJ); }
                     json_t* modJ = json_object_get(stepJ, "mod");
                     if (modJ) { e.hasMod = true; e.mod = json_number_value(modJ); }
+                    json_t* mod2J = json_object_get(stepJ, "mod2");
+                    if (mod2J) { e.hasMod2 = true; e.mod2 = json_number_value(mod2J); }
+                    json_t* mod3J = json_object_get(stepJ, "mod3");
+                    if (mod3J) { e.hasMod3 = true; e.mod3 = json_number_value(mod3J); }
                     json_t* probJ = json_object_get(stepJ, "probability");
                     if (probJ) { e.hasProbability = true; e.probability = json_number_value(probJ); }
                     
@@ -628,6 +633,7 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
             Scene s;
             s.id = getString(val, "id");
             s.name = getString(val, "name");
+            s.description = getString(val, "description");
             s.lengthBeats = getNumber(val, "lengthBeats", 16.0f);
             s.repeats = getInteger(val, "repeats", 1);
             s.phaseMode = parsePhaseMode(getString(val, "phaseMode", "restart"));
@@ -762,6 +768,8 @@ static json_t* patternToJson(const Pattern& pat) {
         if (ev.hasGate) json_object_set_new(evJ, "gate", json_real(ev.gate));
         if (ev.hasVelocity) json_object_set_new(evJ, "velocity", json_real(ev.velocity));
         if (ev.hasMod) json_object_set_new(evJ, "mod", json_real(ev.mod));
+        if (ev.hasMod2) json_object_set_new(evJ, "mod2", json_real(ev.mod2));
+        if (ev.hasMod3) json_object_set_new(evJ, "mod3", json_real(ev.mod3));
         if (ev.hasProbability) json_object_set_new(evJ, "probability", json_real(ev.probability));
         if (ev.tie) json_object_set_new(evJ, "tie", json_true());
         if (ev.glideMs > 0.0f) json_object_set_new(evJ, "glideMs", json_real(ev.glideMs));
@@ -777,6 +785,7 @@ static json_t* sceneToJson(const Scene& sc) {
     json_t* scJ = json_object();
     json_object_set_new(scJ, "id", json_string(sc.id.c_str()));
     if (!sc.name.empty()) json_object_set_new(scJ, "name", json_string(sc.name.c_str()));
+    if (!sc.description.empty()) json_object_set_new(scJ, "description", json_string(sc.description.c_str()));
     json_object_set_new(scJ, "lengthBeats", json_real(sc.lengthBeats));
     json_object_set_new(scJ, "repeats", json_integer(sc.repeats));
     json_object_set_new(scJ, "phaseMode", json_string(phaseModeToString(sc.phaseMode)));
@@ -835,7 +844,6 @@ static json_t* compositionToJson(const Composition& comp) {
         json_object_set_new(trJ, "channel", json_integer(tr.channel));
         json_object_set_new(trJ, "defaultGate", json_real(tr.defaultGate));
         json_object_set_new(trJ, "defaultVelocity", json_real(tr.defaultVelocity));
-        json_object_set_new(trJ, "modRange", json_string(tr.modRange == ModRange::BIPOLAR ? "bipolar" : "unipolar"));
         json_array_append_new(tracksJ, trJ);
     }
     json_object_set_new(root, "tracks", tracksJ);
@@ -885,7 +893,7 @@ std::string serializeSummaryJson(const Composition& comp) {
     json_t* root = json_object();
     json_object_set_new(root, "ok", json_true());
     json_object_set_new(root, "revision", json_integer(comp.revision));
-    json_object_set_new(root, "schemaVersion", json_integer(1));
+    json_object_set_new(root, "schemaVersion", json_integer(2));
     json_object_set_new(root, "view", json_string("summary"));
 
     // Meta
@@ -928,6 +936,7 @@ std::string serializeSummaryJson(const Composition& comp) {
         json_t* scJ = json_object();
         json_object_set_new(scJ, "id", json_string(sc.id.c_str()));
         if (!sc.name.empty()) json_object_set_new(scJ, "name", json_string(sc.name.c_str()));
+        if (!sc.description.empty()) json_object_set_new(scJ, "description", json_string(sc.description.c_str()));
         json_object_set_new(scJ, "lengthBeats", json_real(sc.lengthBeats));
         json_object_set_new(scJ, "repeats", json_integer(sc.repeats));
         json_object_set_new(scJ, "trackCount", json_integer(sc.tracks.size()));
@@ -956,7 +965,7 @@ std::string serializeFullCompositionJson(const Composition& comp) {
     json_t* root = json_object();
     json_object_set_new(root, "ok", json_true());
     json_object_set_new(root, "revision", json_integer(comp.revision));
-    json_object_set_new(root, "schemaVersion", json_integer(1));
+    json_object_set_new(root, "schemaVersion", json_integer(2));
     json_object_set_new(root, "view", json_string("full"));
     json_object_set_new(root, "composition", compositionToJson(comp));
     json_object_set_new(root, "warnings", json_array());
@@ -977,7 +986,7 @@ std::string serializePatternViewJson(const Composition& comp, const std::string&
     json_t* root = json_object();
     json_object_set_new(root, "ok", json_true());
     json_object_set_new(root, "revision", json_integer(comp.revision));
-    json_object_set_new(root, "schemaVersion", json_integer(1));
+    json_object_set_new(root, "schemaVersion", json_integer(2));
     json_object_set_new(root, "view", json_string("pattern"));
     json_object_set_new(root, "id", json_string(patternId.c_str()));
     json_object_set_new(root, "pattern", patternToJson(it->second));
@@ -1008,7 +1017,7 @@ std::string serializeSceneViewJson(const Composition& comp, const std::string& s
     json_t* root = json_object();
     json_object_set_new(root, "ok", json_true());
     json_object_set_new(root, "revision", json_integer(comp.revision));
-    json_object_set_new(root, "schemaVersion", json_integer(1));
+    json_object_set_new(root, "schemaVersion", json_integer(2));
     json_object_set_new(root, "view", json_string("scene"));
     json_object_set_new(root, "id", json_string(sceneId.c_str()));
     json_object_set_new(root, "scene", sceneToJson(*found));

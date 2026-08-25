@@ -64,6 +64,8 @@ static bool sameEvent(const StepEvent& a, const StepEvent& b) {
 		a.hasGate == b.hasGate && a.gate == b.gate &&
 		a.hasVelocity == b.hasVelocity && a.velocity == b.velocity &&
 		a.hasMod == b.hasMod && a.mod == b.mod &&
+		a.hasMod2 == b.hasMod2 && a.mod2 == b.mod2 &&
+		a.hasMod3 == b.hasMod3 && a.mod3 == b.mod3 &&
 		a.hasProbability == b.hasProbability && a.probability == b.probability &&
 		a.tie == b.tie && a.glideMs == b.glideMs && a.microshift == b.microshift &&
 		a.ratchets == b.ratchets && a.compiledPitchV == b.compiledPitchV;
@@ -77,7 +79,7 @@ static bool samePattern(const Pattern& a, const Pattern& b) {
 
 static bool sameTrack(const TrackDef& a, const TrackDef& b) {
 	return a.id == b.id && a.channel == b.channel && a.defaultGate == b.defaultGate &&
-		a.defaultVelocity == b.defaultVelocity && a.modRange == b.modRange;
+		a.defaultVelocity == b.defaultVelocity;
 }
 
 static void collectAssignments(const Composition& composition, const std::string& trackId,

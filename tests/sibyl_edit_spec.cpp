@@ -17,7 +17,7 @@ const char* baseJson = R"JSON({
   "meta":{"title":"Base","bpm":120,"root":"C","rootOctave":4,"scale":"chromatic","swing":0,"seed":1},
   "clock":{"externalPpqn":24,"outputPpqn":24,"externalTimeoutMs":2000,"onExternalStop":"hold"},
   "transport":{"running":true,"loop":true,"defaultApplyAt":"nextBeat"},
-  "tracks":[{"id":"bass","channel":0,"defaultGate":0.5,"defaultVelocity":0.8,"modRange":"unipolar"}],
+  "tracks":[{"id":"bass","channel":0,"defaultGate":0.5,"defaultVelocity":0.8}],
   "patterns":{"old":{"length":4,"resolution":"1/16","steps":[{"step":0,"note":"C3"}]}},
   "arrangement":[
     {"id":"verse","name":"Verse","lengthBeats":4,"repeats":1,"phaseMode":"restart","tracks":{"bass":"old"}},
@@ -45,14 +45,14 @@ int main() {
 	auto changed = edit(*parsed.composition, R"JSON([
 	  {"op":"set_meta","path":"title","value":"Edited"},
 	  {"op":"set_clock","path":"outputPpqn","value":12},
-	  {"op":"upsert_track","id":"lead","track":{"channel":1,"defaultGate":0.4,"defaultVelocity":0.7,"modRange":"bipolar"}},
+	  {"op":"upsert_track","id":"lead","track":{"channel":1,"defaultGate":0.4,"defaultVelocity":0.7}},
 	  {"op":"upsert_pattern","id":"leadline","pattern":{"length":8,"resolution":"1/8","steps":[{"step":0,"note":"E4"}]}},
 	  {"op":"set_scene_track","scene_id":"verse","track_id":"bass","pattern_id":null},
 	  {"op":"delete_pattern","id":"old"},
 	  {"op":"set_scene_track","scene_id":"verse","track_id":"lead","pattern_id":"leadline"},
-	  {"op":"upsert_scene","id":"bridge","scene":{"name":"Bridge","lengthBeats":2,"repeats":1,"phaseMode":"continue","tracks":{"lead":"leadline"}}},
+	  {"op":"upsert_scene","id":"bridge","scene":{"name":"Bridge","description":"Strip the bass away and suspend the lead before the return.","lengthBeats":2,"repeats":1,"phaseMode":"continue","tracks":{"lead":"leadline"}}},
 	  {"op":"reorder_scenes","scene_ids":["bridge","verse","outro"]},
-	  {"op":"upsert_macro","id":"2","macro":{"target":"track.lead.mod","amount":0.25,"polarity":"bipolar","clamp":[-1,1]}},
+	  {"op":"upsert_macro","id":"2","macro":{"target":"track.lead.mod2","amount":0.25,"polarity":"bipolar","clamp":[-1,1]}},
 	  {"op":"delete_macro","id":"1"}
 	])JSON", 9);
 	check(changed.valid && changed.composition && changed.composition->revision == 9, "ordered transaction compiles once with requested revision");
@@ -63,6 +63,9 @@ int main() {
 	check(changed.composition && changed.composition->arrangement.size() == 3 && changed.composition->arrangement[0].id == "bridge" &&
 		changed.composition->arrangement[1].tracks.at("lead").patternId == "leadline",
 		"scene upsert, assignment, and reorder operations apply");
+	check(changed.composition && changed.composition->arrangement[0].description ==
+		"Strip the bass away and suspend the lead before the return.",
+		"scene upsert preserves descriptive musical intent");
 	check(changed.composition && changed.composition->macros.count("1") == 0 && changed.composition->macros.count("2") == 1,
 		"macro upsert/delete operations apply");
 	auto removed = changed.composition ? edit(*changed.composition, R"JSON([

@@ -34,7 +34,7 @@ struct SibylModule : Module, SibylControl {
 	};
 	enum OutputIds {
 		V_OCT_OUTPUT, GATE_OUTPUT, VELOCITY_OUTPUT, MOD_OUTPUT,
-		CLOCK_OUTPUT, SCENE_OUTPUT, EOC_OUTPUT, NUM_OUTPUTS
+		CLOCK_OUTPUT, SCENE_OUTPUT, EOC_OUTPUT, MOD_2_OUTPUT, MOD_3_OUTPUT, NUM_OUTPUTS
 	};
 	enum LightIds { NUM_LIGHTS };
 
@@ -100,12 +100,15 @@ struct SibylModule : Module, SibylControl {
 		std::string title;
 		std::string prompt;
 		std::string scene;
+		std::string sceneDescription;
 		std::string error;
 		std::array<float, 16> playhead {};
 		uint16_t activeTrackMask = 0;
 		uint16_t gateMask = 0;
 		int sceneRepeat = 0;
 		int sceneRepeats = 1;
+		int sceneIndex = 0;
+		int sceneCount = 0;
 		int acceptedRevision = 0;
 		int activeRevision = 0;
 		int pendingRevision = -1;
@@ -125,7 +128,7 @@ struct SibylModule : Module, SibylControl {
 		float glideRatePerSample = 0.0f;
 		float currentGate = 0.0f;
 		float currentVel = 0.0f;
-		float currentMod = 0.0f;
+		float currentMod[3] {};
 		int activeEventStep = -1;
 		int64_t activeNominalStep = 0;
 		double activeEventOnsetBeats = 0.0;
@@ -171,10 +174,12 @@ struct SibylModule : Module, SibylControl {
 		configOutput(V_OCT_OUTPUT, "1 V/oct Pitch (Polyphonic)");
 		configOutput(GATE_OUTPUT, "Gate (Polyphonic)");
 		configOutput(VELOCITY_OUTPUT, "Velocity (0–10 V Polyphonic)");
-		configOutput(MOD_OUTPUT, "Modulation (Polyphonic)");
+		configOutput(MOD_OUTPUT, "Modulation 1 (Polyphonic)");
 		configOutput(CLOCK_OUTPUT, "Reconstructed Clock");
 		configOutput(SCENE_OUTPUT, "Scene Transition Trigger");
 		configOutput(EOC_OUTPUT, "End of Cycle Trigger");
+		configOutput(MOD_2_OUTPUT, "Modulation 2 (Polyphonic)");
+		configOutput(MOD_3_OUTPUT, "Modulation 3 (Polyphonic)");
 
 		auto comp = std::make_shared<sibyl::Composition>();
 		m_compositionOwners.push_back(comp);
@@ -277,7 +282,10 @@ struct SibylModule : Module, SibylControl {
 			display.prompt = composition->meta.prompt;
 			if (telemetry.sceneIndex >= 0 && telemetry.sceneIndex < static_cast<int>(composition->arrangement.size())) {
 				const sibyl::Scene& scene = composition->arrangement[telemetry.sceneIndex];
+				display.sceneIndex = telemetry.sceneIndex;
+				display.sceneCount = static_cast<int>(composition->arrangement.size());
 				display.scene = scene.name.empty() ? scene.id : scene.name;
+				display.sceneDescription = scene.description;
 				display.sceneRepeat = telemetry.sceneRepeat;
 				display.sceneRepeats = std::max(1, scene.repeats);
 				display.sceneProgress = scene.lengthBeats > 0.f
@@ -341,7 +349,7 @@ struct SibylModule : Module, SibylControl {
 
 		json_t* envelope = json_object();
 		json_object_set_new(envelope, "format", json_string("Leviathan.SibylComposition"));
-		json_object_set_new(envelope, "schemaVersion", json_integer(1));
+		json_object_set_new(envelope, "schemaVersion", json_integer(2));
 		json_object_set(envelope, "composition", composition);
 		char* pretty = json_dumps(envelope, JSON_INDENT(2));
 		json_decref(envelope);
@@ -405,7 +413,7 @@ struct SibylModule : Module, SibylControl {
 			return false;
 		}
 		json_t* schemaJ = json_object_get(root, "schemaVersion");
-		if (schemaJ && (!json_is_integer(schemaJ) || json_integer_value(schemaJ) != 1)) {
+		if (schemaJ && (!json_is_integer(schemaJ) || json_integer_value(schemaJ) != 2)) {
 			json_decref(root);
 			m_lastError = "This Sibyl composition uses an unsupported schema version.";
 			if (errorOut) *errorOut = m_lastError;
@@ -638,7 +646,7 @@ struct SibylModule : Module, SibylControl {
 
 	json_t* dataToJson() override {
 		json_t* rootJ = json_object();
-		json_object_set_new(rootJ, "schemaVersion", json_integer(1));
+		json_object_set_new(rootJ, "schemaVersion", json_integer(2));
 		json_object_set_new(rootJ, "revision", json_integer(m_acceptedRevision));
 		json_object_set_new(rootJ, "loopOverride",
 			json_integer(m_loopOverride.load(std::memory_order_acquire)));
@@ -819,10 +827,14 @@ struct SibylModule : Module, SibylControl {
 			outputs[GATE_OUTPUT].setChannels(1);
 			outputs[VELOCITY_OUTPUT].setChannels(1);
 			outputs[MOD_OUTPUT].setChannels(1);
+			outputs[MOD_2_OUTPUT].setChannels(1);
+			outputs[MOD_3_OUTPUT].setChannels(1);
 			outputs[V_OCT_OUTPUT].setVoltage(0.f, 0);
 			outputs[GATE_OUTPUT].setVoltage(0.f, 0);
 			outputs[VELOCITY_OUTPUT].setVoltage(0.f, 0);
 			outputs[MOD_OUTPUT].setVoltage(0.f, 0);
+			outputs[MOD_2_OUTPUT].setVoltage(0.f, 0);
+			outputs[MOD_3_OUTPUT].setVoltage(0.f, 0);
 			outputs[CLOCK_OUTPUT].setVoltage(m_clockPulse.process(args.sampleTime) ? 10.0f : 0.0f);
 			outputs[SCENE_OUTPUT].setVoltage(m_scenePulse.process(args.sampleTime) ? 10.0f : 0.0f);
 			outputs[EOC_OUTPUT].setVoltage(m_eocPulse.process(args.sampleTime) ? 10.0f : 0.0f);
@@ -886,6 +898,7 @@ struct SibylModule : Module, SibylControl {
 		float trackVelMacro[16] = {};
 		float trackGateMacro[16] = {};
 		float trackSwingMacro[16] = {};
+		float trackModMacro[3][16] = {};
 
 		for (int m = 0; m < 4; m++) {
 			int inputId = MACRO_1_INPUT + m;
@@ -914,6 +927,9 @@ struct SibylModule : Module, SibylControl {
 							else if (param == "velocity") trackVelMacro[tr.channel] += contrib;
 							else if (param == "gate") trackGateMacro[tr.channel] += contrib;
 							else if (param == "swing") trackSwingMacro[tr.channel] += contrib;
+							else if (param == "mod") trackModMacro[0][tr.channel] += contrib;
+							else if (param == "mod2") trackModMacro[1][tr.channel] += contrib;
+							else if (param == "mod3") trackModMacro[2][tr.channel] += contrib;
 						}
 					}
 				}
@@ -1009,7 +1025,13 @@ struct SibylModule : Module, SibylControl {
 						float baseVel = matchedEvent->hasVelocity ? matchedEvent->velocity : trackDef.defaultVelocity;
 						float effVel = clamp(baseVel + globalVelMacro + trackVelMacro[ch], 0.0f, 1.0f);
 						m_trackStates[ch].currentVel = effVel * 10.0f;
-						m_trackStates[ch].currentMod = matchedEvent->hasMod ? matchedEvent->mod * (trackDef.modRange == sibyl::ModRange::BIPOLAR ? 5.0f : 10.0f) : 0.0f;
+						const float authoredMod[3] {matchedEvent->mod, matchedEvent->mod2, matchedEvent->mod3};
+						const bool hasMod[3] {matchedEvent->hasMod, matchedEvent->hasMod2, matchedEvent->hasMod3};
+						for (int lane = 0; lane < 3; ++lane) {
+							const float authoredVoltage = hasMod[lane] ? authoredMod[lane] : 0.0f;
+							m_trackStates[ch].currentMod[lane] = clamp(
+								authoredVoltage + trackModMacro[lane][ch], -10.0f, 10.0f);
+						}
 					} else {
 						m_trackStates[ch].currentGate = 0.0f;
 					}
@@ -1048,12 +1070,16 @@ struct SibylModule : Module, SibylControl {
 		outputs[GATE_OUTPUT].setChannels(numChannels);
 		outputs[VELOCITY_OUTPUT].setChannels(numChannels);
 		outputs[MOD_OUTPUT].setChannels(numChannels);
+		outputs[MOD_2_OUTPUT].setChannels(numChannels);
+		outputs[MOD_3_OUTPUT].setChannels(numChannels);
 
 		for (int c = 0; c < numChannels; c++) {
 			outputs[V_OCT_OUTPUT].setVoltage(m_trackStates[c].currentPitch, c);
 			outputs[GATE_OUTPUT].setVoltage(m_trackStates[c].currentGate, c);
 			outputs[VELOCITY_OUTPUT].setVoltage(m_trackStates[c].currentVel, c);
-			outputs[MOD_OUTPUT].setVoltage(m_trackStates[c].currentMod, c);
+			outputs[MOD_OUTPUT].setVoltage(m_trackStates[c].currentMod[0], c);
+			outputs[MOD_2_OUTPUT].setVoltage(m_trackStates[c].currentMod[1], c);
+			outputs[MOD_3_OUTPUT].setVoltage(m_trackStates[c].currentMod[2], c);
 		}
 
 		// Write Pulse triggers
@@ -1067,7 +1093,7 @@ struct SibylModule : Module, SibylControl {
 
 	bool handleSibylRequest(Operation operation, const std::string& requestJson, std::string& responseJson, std::string& error) override {
 		if (operation == Operation::CAPABILITIES) {
-			responseJson = "{\"ok\":true,\"capabilities\":{\"sibyl\":{\"apiVersion\":1,\"schemaVersion\":1,\"revision\":" + std::to_string(m_acceptedRevision) + ",\"operations\":[\"get_composition\",\"validate\",\"edit\",\"get_status\",\"transport\"]}}}";
+			responseJson = "{\"ok\":true,\"capabilities\":{\"sibyl\":{\"apiVersion\":1,\"schemaVersion\":2,\"revision\":" + std::to_string(m_acceptedRevision) + ",\"operations\":[\"get_composition\",\"validate\",\"edit\",\"get_status\",\"transport\"]}}}";
 			return true;
 		} else if (operation == Operation::GET_COMPOSITION) {
 			const sibyl::Composition* comp = m_acceptedCompositionPtr;
@@ -1402,9 +1428,12 @@ struct SibylOracleDisplay final : TransparentWidget {
 			state.title = "THE ORACLE AWAKENS";
 			state.prompt = "Awaiting a composition from beyond the rack...";
 			state.scene = "PREMONITION";
+			state.sceneDescription = "A distant pattern gathers around the active scene.";
 			state.activeTrackMask = 0x00ffu;
 			state.gateMask = 0x0029u;
 			state.sceneRepeats = 2;
+			state.sceneIndex = 1;
+			state.sceneCount = 4;
 			state.looping = true;
 			state.sceneProgress = 0.37f;
 			state.acceptedRevision = state.activeRevision = 1;
@@ -1446,11 +1475,15 @@ struct SibylOracleDisplay final : TransparentWidget {
 			state.running ? cyan : red, runLabel);
 
 		const float sceneY = 20.f;
+		const std::string scenePosition = state.sceneCount > 0
+			? "[" + std::to_string(state.sceneIndex + 1) + "/" + std::to_string(state.sceneCount) + "] "
+			: "[0/0] ";
+		const std::string sceneLabel = scenePosition + (state.scene.empty() ? "NO SCENE" : state.scene);
 		char repeatText[24];
 		std::snprintf(repeatText, sizeof(repeatText), "%d/%d", state.sceneRepeat + 1, state.sceneRepeats);
 		const float repeatWidth = measuredTextWidth(args, repeatText, 7.2f);
 		text(args, pad, sceneY, 10.2f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, cyan,
-			fittedText(args, state.scene.empty() ? "NO SCENE" : state.scene, 10.2f,
+			fittedText(args, sceneLabel, 10.2f,
 				std::max(1.f, w - pad * 2.f - repeatWidth - 7.f)));
 		text(args, w - pad, sceneY + 1.f, 7.2f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, violet, repeatText);
 
@@ -1497,9 +1530,10 @@ struct SibylOracleDisplay final : TransparentWidget {
 		}
 
 		const float messageTop = h - 43.f;
+		const std::string musicalContext = state.sceneDescription.empty() ? state.prompt : state.sceneDescription;
 		const std::string message = !state.error.empty() ? "! " + state.error
 			: (state.warningCount > 0 ? "! " + std::to_string(state.warningCount) + " WARNING"
-			: (state.prompt.empty() ? "THE MACHINE IS LISTENING" : state.prompt));
+			: (musicalContext.empty() ? "THE MACHINE IS LISTENING" : musicalContext));
 		if (APP && APP->window && APP->window->uiFont) {
 			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
 			nvgFontSize(args.vg, 7.2f);
@@ -1623,10 +1657,12 @@ struct SibylWidget : ModuleWidget {
 		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("V_OCT_OUTPUT", Vec(32.5f, 55.f)), module, SibylModule::V_OCT_OUTPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("GATE_OUTPUT", Vec(43.f, 55.f)), module, SibylModule::GATE_OUTPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("VELOCITY_OUTPUT", Vec(32.5f, 69.5f)), module, SibylModule::VELOCITY_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("MOD_OUTPUT", Vec(43.f, 69.5f)), module, SibylModule::MOD_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("MOD_OUTPUT", Vec(32.5f, 69.5f)), module, SibylModule::MOD_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("MOD_2_OUTPUT", Vec(37.75f, 69.5f)), module, SibylModule::MOD_2_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("MOD_3_OUTPUT", Vec(43.f, 69.5f)), module, SibylModule::MOD_3_OUTPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("CLOCK_OUTPUT", Vec(32.5f, 84.f)), module, SibylModule::CLOCK_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("SCENE_OUTPUT", Vec(43.f, 84.f)), module, SibylModule::SCENE_OUTPUT));
-		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("EOC_OUTPUT", Vec(37.75f, 98.5f)), module, SibylModule::EOC_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("SCENE_OUTPUT", Vec(37.75f, 84.f)), module, SibylModule::SCENE_OUTPUT));
+		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("EOC_OUTPUT", Vec(43.f, 84.f)), module, SibylModule::EOC_OUTPUT));
 	}
 
 	void appendContextMenu(Menu* menu) override {

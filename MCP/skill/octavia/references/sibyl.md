@@ -11,6 +11,17 @@ step sequencer, Sibyl exposes semantic objects—tracks, patterns, scenes, macro
 and transport—through validation, revision-guarded atomic edits, and musical adoption
 boundaries.
 
+Each step can author three independent modulation lanes: `mod` (panel MOD1), `mod2`, and
+`mod3`. Schema v2 expresses every lane directly in modular volts from -10 V to +10 V;
+there is no track-level range transform. Use separate lanes when a composition should
+sequence multiple parameters or stages of a modular voice.
+Macro amounts and clamps targeting these lanes are likewise expressed in volts.
+
+Scenes may carry an optional `description` containing their musical intent. Prefer a
+concise description that explains the section's role rather than restating its name or
+enumerating its patterns. Sibyl displays the active scene description in its lower text
+box and falls back to the composition-level `meta.prompt` when it is absent.
+
 Prefer Sibyl when the user asks the agent to:
 
 - compose melodies, bass lines, rhythms, harmonies, or complete pieces;

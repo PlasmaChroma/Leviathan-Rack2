@@ -43,6 +43,12 @@ sibyl::CompositionPtr makeComposition(int revision, bool twoScenes, float destin
 	firstEvent.compiledPitchV = 1.0f;
 	firstEvent.hasGate = true;
 	firstEvent.gate = 1.0f;
+	firstEvent.hasMod = true;
+	firstEvent.mod = -10.0f;
+	firstEvent.hasMod2 = true;
+	firstEvent.mod2 = 6.5f;
+	firstEvent.hasMod3 = true;
+	firstEvent.mod3 = 10.0f;
 	firstPattern.steps.push_back(firstEvent);
 	composition->patterns[firstPattern.id] = firstPattern;
 
@@ -189,6 +195,10 @@ int main() {
 			"destination event, not the stale source scene, drives pitch");
 		check(module.outputs[SibylModule::GATE_OUTPUT].getVoltage(0) > 9.0f,
 			"destination step-zero gate opens immediately");
+		check(std::abs(module.outputs[SibylModule::MOD_OUTPUT].getVoltage(0) - (-10.0f)) < 1e-6f &&
+			std::abs(module.outputs[SibylModule::MOD_2_OUTPUT].getVoltage(0) - 6.5f) < 1e-6f &&
+			std::abs(module.outputs[SibylModule::MOD_3_OUTPUT].getVoltage(0) - 10.0f) < 1e-6f,
+			"three independent polyphonic modulation lanes follow authored step values");
 	}
 
 	{
@@ -328,6 +338,7 @@ int main() {
 		composition->meta.title = "Constellation Engine";
 		composition->meta.prompt = "A bright ascending ritual";
 		composition->arrangement[0].name = "Invocation";
+		composition->arrangement[0].description = "Open slowly, keeping the first voice suspended.";
 		composition->arrangement[0].repeats = 3;
 		module.acceptComposition(composition, sibyl::ApplyAt::IMMEDIATE, sibyl::PhasePolicy::RESTART_ALL);
 		processOneSample(module);
@@ -337,6 +348,10 @@ int main() {
 		check(display.title == "Constellation Engine" &&
 			display.prompt == "A bright ascending ritual" && display.scene == "Invocation",
 			"oracle snapshot resolves immutable title, prompt, and active scene metadata");
+		check(display.sceneIndex == 0 && display.sceneCount == 1,
+			"oracle snapshot exposes one-based scene-position source data");
+		check(display.sceneDescription == "Open slowly, keeping the first voice suspended.",
+			"oracle snapshot exposes the active scene description for the message box");
 		check((display.activeTrackMask & 1u) != 0 && display.playhead[0] > 0.49f && display.playhead[0] < 0.51f,
 			"oracle snapshot publishes a normalized active-track playhead");
 		check(display.acceptedRevision == 7 && display.activeRevision == 7 && display.sceneRepeats == 3,
@@ -361,6 +376,7 @@ int main() {
 		check(saved && json_is_object(saved) &&
 			json_is_string(json_object_get(saved, "format")) &&
 			std::string(json_string_value(json_object_get(saved, "format"))) == "Leviathan.SibylComposition" &&
+			json_integer_value(json_object_get(saved, "schemaVersion")) == 2 &&
 			json_is_object(json_object_get(saved, "composition")),
 			"portable composition envelope is versioned and self-identifying");
 		if (saved) json_decref(saved);
@@ -374,12 +390,12 @@ int main() {
 		const sibyl::Composition* acceptedComposition = destination.m_acceptedCompositionPtr;
 		{
 			std::ofstream invalid(path.c_str(), std::ios::binary | std::ios::trunc);
-			invalid << "{\"format\":\"Leviathan.SibylComposition\",\"schemaVersion\":99,\"composition\":{}}";
+			invalid << "{\"format\":\"Leviathan.SibylComposition\",\"schemaVersion\":1,\"composition\":{}}";
 		}
 		check(!destination.loadCompositionFromPath(path, &error) &&
 			destination.m_acceptedRevision == acceptedRevision &&
 			destination.m_acceptedCompositionPtr == acceptedComposition,
-			"invalid portable composition leaves the accepted sequence untouched");
+			"legacy schema v1 composition is rejected without disturbing the accepted sequence");
 		std::remove(path.c_str());
 	}
 
