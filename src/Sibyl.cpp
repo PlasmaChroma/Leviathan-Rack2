@@ -405,7 +405,8 @@ struct SibylModule : Module, SibylControl {
 			return false;
 		}
 		json_t* formatJ = json_object_get(root, "format");
-		if (formatJ && (!json_is_string(formatJ) ||
+		const bool hasEnvelope = formatJ != nullptr;
+		if (hasEnvelope && (!json_is_string(formatJ) ||
 			std::string(json_string_value(formatJ)) != "Leviathan.SibylComposition")) {
 			json_decref(root);
 			m_lastError = "This JSON file is not a supported Sibyl composition.";
@@ -413,7 +414,7 @@ struct SibylModule : Module, SibylControl {
 			return false;
 		}
 		json_t* schemaJ = json_object_get(root, "schemaVersion");
-		if (schemaJ && (!json_is_integer(schemaJ) || json_integer_value(schemaJ) != 2)) {
+		if (hasEnvelope && (!json_is_integer(schemaJ) || json_integer_value(schemaJ) != 2)) {
 			json_decref(root);
 			m_lastError = "This Sibyl composition uses an unsupported schema version.";
 			if (errorOut) *errorOut = m_lastError;
@@ -421,7 +422,7 @@ struct SibylModule : Module, SibylControl {
 		}
 
 		json_t* composition = json_object_get(root, "composition");
-		if (!composition) composition = root;
+		if (!composition && !hasEnvelope) composition = root;
 		if (!json_is_object(composition)) {
 			json_decref(root);
 			m_lastError = "The Sibyl file's composition field must be a JSON object.";

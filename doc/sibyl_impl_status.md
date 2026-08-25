@@ -200,8 +200,9 @@ released and freezing compatibility-sensitive IDs and file semantics.
 
 - [ ] Broaden Rack patch/preset reload coverage around pending revisions, warnings/errors,
   loop override, and stopped/non-looping arrangements.
-- [ ] Add portable-file cases for malformed envelopes, truncated JSON, oversize rejection,
-  and schema-version mismatch while retaining the accepted composition.
+- [x] Add portable-file cases for malformed/foreign envelopes, missing composition data,
+  truncated JSON, oversize rejection, and schema-version mismatch while retaining the
+  accepted composition.
 - [ ] Run the complete Octavia/Sibyl contract suite against the final schema-v2 plugin.
 - [ ] Review examples and agent guidance once more for stale schema-v1, single-MOD, or
   normalized-modulation language.

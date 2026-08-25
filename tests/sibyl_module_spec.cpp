@@ -417,6 +417,40 @@ int main() {
 			destination.m_acceptedRevision == acceptedRevision &&
 			destination.m_acceptedCompositionPtr == acceptedComposition,
 			"legacy schema v1 composition is rejected without disturbing the accepted sequence");
+		{
+			std::ofstream invalid(path.c_str(), std::ios::binary | std::ios::trunc);
+			invalid << "{\"format\":\"Leviathan.SibylComposition\",\"schemaVersion\":2,";
+		}
+		check(!destination.loadCompositionFromPath(path, &error) && !error.empty() &&
+			destination.m_acceptedRevision == acceptedRevision &&
+			destination.m_acceptedCompositionPtr == acceptedComposition,
+			"truncated portable JSON is rejected without disturbing the accepted sequence");
+		{
+			std::ofstream invalid(path.c_str(), std::ios::binary | std::ios::trunc);
+			invalid << "{\"format\":\"Another.Sequencer\",\"schemaVersion\":2,\"composition\":{}}";
+		}
+		check(!destination.loadCompositionFromPath(path, &error) &&
+			destination.m_acceptedRevision == acceptedRevision &&
+			destination.m_acceptedCompositionPtr == acceptedComposition,
+			"foreign portable envelope is rejected without disturbing the accepted sequence");
+		{
+			std::ofstream invalid(path.c_str(), std::ios::binary | std::ios::trunc);
+			invalid << "{\"format\":\"Leviathan.SibylComposition\",\"schemaVersion\":2}";
+		}
+		check(!destination.loadCompositionFromPath(path, &error) &&
+			destination.m_acceptedRevision == acceptedRevision &&
+			destination.m_acceptedCompositionPtr == acceptedComposition,
+			"portable envelope without a composition is rejected safely");
+		{
+			std::ofstream oversized(path.c_str(), std::ios::binary | std::ios::trunc);
+			oversized.seekp(16 * 1024 * 1024);
+			oversized.put('x');
+		}
+		check(!destination.loadCompositionFromPath(path, &error) &&
+			error.find("16 MB") != std::string::npos &&
+			destination.m_acceptedRevision == acceptedRevision &&
+			destination.m_acceptedCompositionPtr == acceptedComposition,
+			"oversized portable composition is rejected before parsing without disturbing playback");
 		std::remove(path.c_str());
 	}
 
