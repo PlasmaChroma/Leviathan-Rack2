@@ -250,6 +250,50 @@ int main() {
 
 	{
 		SibylModule module;
+		std::shared_ptr<sibyl::Composition> composition =
+			std::const_pointer_cast<sibyl::Composition>(makeComposition(2, false));
+		sibyl::StepEvent& event = composition->patterns["first"].steps[0];
+		event.hasObservation = true;
+		event.observation.octaviaModuleId = 2468;
+		event.observation.preFrames = 32;
+		event.observation.postFrames = 96;
+		event.observation.monitorMask = 0x0c;
+		event.observation.label = "authored-onset";
+		uint64_t cursor = octavia::observationBus().latestSequence();
+		module.acceptComposition(composition, sibyl::ApplyAt::IMMEDIATE,
+			sibyl::PhasePolicy::RESTART_ALL);
+		Module::ProcessArgs args;
+		args.sampleRate = 48000.f;
+		args.sampleTime = 1.f / args.sampleRate;
+		args.frame = 555;
+		gAllocationCount = 0;
+		gTrackAllocations = true;
+		module.process(args);
+		gTrackAllocations = false;
+		octavia::ObservationTrigger trigger;
+		uint64_t dropped = 0;
+		check(octavia::observationBus().poll(&cursor, &trigger, &dropped)
+			&& trigger.octaviaModuleId == 2468 && trigger.triggerFrame == 555
+			&& trigger.preFrames == 32 && trigger.postFrames == 96
+			&& trigger.monitorMask == 0x0c && trigger.labelString() == "authored-onset",
+			"authored observation marker publishes on the exact sounding event frame");
+		check(gAllocationCount == 0,
+			"authored observation publication performs no audio-thread allocation");
+
+		SibylModule silentModule;
+		composition->patterns["first"].steps[0].hasProbability = true;
+		composition->patterns["first"].steps[0].probability = 0.f;
+		cursor = octavia::observationBus().latestSequence();
+		silentModule.acceptComposition(composition, sibyl::ApplyAt::IMMEDIATE,
+			sibyl::PhasePolicy::RESTART_ALL);
+		args.frame = 556;
+		silentModule.process(args);
+		check(!octavia::observationBus().poll(&cursor, &trigger, &dropped),
+			"probability-suppressed event does not publish an observation marker");
+	}
+
+	{
+		SibylModule module;
 		module.acceptComposition(makeComposition(1, true), sibyl::ApplyAt::IMMEDIATE,
 			sibyl::PhasePolicy::RESTART_ALL);
 		processOneSample(module);

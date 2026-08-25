@@ -55,6 +55,14 @@ struct TrackDef {
 
 enum class PitchType { PITCH_V, DEGREE, NOTE };
 
+struct ObservationMarker {
+	int64_t octaviaModuleId = -1;
+	uint32_t preFrames = 0;
+	uint32_t postFrames = 0;
+	uint8_t monitorMask = 0;
+	std::string label;
+};
+
 struct StepEvent {
 	int step = 0;
 	PitchType pitchType = PitchType::PITCH_V;
@@ -74,6 +82,8 @@ struct StepEvent {
 	float glideMs = 0.0f;
 	float microshift = 0.0f;
 	int ratchets = 1;
+	bool hasObservation = false;
+	ObservationMarker observation;
 
 	// Compiled data (populated by compiler)
 	float compiledPitchV = 0.0f; 

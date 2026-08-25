@@ -29,7 +29,7 @@ const char* validComposition = R"JSON({
   ],
   "patterns":{
     "bassline":{"length":16,"resolution":"1/16","steps":[
-      {"step":0,"degree":0,"octave":-1,"gate":4,"velocity":1,"mod":-10,"mod2":6.5,"mod3":10},
+      {"step":0,"degree":0,"octave":-1,"gate":4,"velocity":1,"mod":-10,"mod2":6.5,"mod3":10,"observation":{"octaviaModuleId":9876,"monitors":["A","B"],"preFrames":4800,"postFrames":12000,"label":"filter transition"}},
       {"step":7,"note":"Eb4","probability":0.8,"ratchets":3},
       {"step":14,"pitchV":-1.0,"glideMs":100,"microshift":-0.08}
     ]}
@@ -66,6 +66,16 @@ int main() {
     check(valid.composition && valid.composition->patterns.at("bassline").steps[0].gate == 4.0f &&
           valid.composition->tracks[1].defaultGate == 4.0f,
           "multi-step event and track-default gates compile");
+    const sibyl::StepEvent& observed = valid.composition->patterns.at("bassline").steps[0];
+    check(observed.hasObservation && observed.observation.octaviaModuleId == 9876
+          && observed.observation.monitorMask == 0x0c && observed.observation.preFrames == 4800
+          && observed.observation.postFrames == 12000
+          && observed.observation.label == "filter transition",
+          "event observation marker compiles to an immutable exact-frame request");
+    const std::string serialized = sibyl::serializeFullCompositionJson(*valid.composition);
+    check(serialized.find("\"observation\"") != std::string::npos
+          && serialized.find("filter transition") != std::string::npos,
+          "observation marker survives portable composition serialization");
 
     auto forwardCompatible = sibyl::parseCompositionJson(R"({"meta":{"bpm":120,"futureColor":"violet"},"futureTop":7})", 1);
     check(forwardCompatible.valid && hasPath(forwardCompatible.warnings, "meta.futureColor") && hasPath(forwardCompatible.warnings, "futureTop"),
@@ -81,6 +91,9 @@ int main() {
     expectInvalid(R"({"patterns":{"p":{"length":1,"resolution":"1/16","steps":[{"step":0,"pitchV":0,"probability":1.1}]}}})", "patterns.p.steps[0].probability", "event ranges are enforced");
     expectInvalid(R"({"patterns":{"p":{"length":1,"resolution":"1/16","steps":[{"step":0,"pitchV":0,"mod2":10.1}]}}})", "patterns.p.steps[0].mod2", "secondary modulation voltage ranges are enforced");
     expectInvalid(R"({"patterns":{"p":{"length":1,"resolution":"1/16","steps":[{"step":0,"pitchV":0,"gate":1.1,"ratchets":2}]}}})", "patterns.p.steps[0].gate", "multi-step gates are rejected for ratcheted events");
+    expectInvalid(R"({"patterns":{"p":{"length":1,"resolution":"1/16","steps":[{"step":0,"pitchV":0,"observation":{"monitors":["A"]}}]}}})", "patterns.p.steps[0].observation.octaviaModuleId", "observation requires an Octavia module ID");
+    expectInvalid(R"({"patterns":{"p":{"length":1,"resolution":"1/16","steps":[{"step":0,"pitchV":0,"observation":{"octaviaModuleId":1,"monitors":["A","A"]}}]}}})", "patterns.p.steps[0].observation.monitors[1]", "observation monitor names are unique and validated");
+    expectInvalid(R"({"patterns":{"p":{"length":1,"resolution":"1/16","steps":[{"step":0,"pitchV":0,"observation":{"octaviaModuleId":1,"monitors":["A"],"preFrames":200000,"postFrames":100000}}]}}})", "patterns.p.steps[0].observation", "observation window is bounded by retained history");
     expectInvalid(R"({"tracks":[{"id":"a","channel":0},{"id":"b","channel":0}]})", "tracks[1].channel", "duplicate channels are rejected");
     expectInvalid(R"({"tracks":[{"id":"a","channel":0}],"arrangement":[{"id":"s","lengthBeats":4,"repeats":1,"tracks":{"missing":null}}]})", "arrangement[0].tracks.missing", "scene track references are resolved");
     expectInvalid(std::string("{\"arrangement\":[{\"id\":\"s\",\"description\":\"") +

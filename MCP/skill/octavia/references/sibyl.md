@@ -27,6 +27,26 @@ concise description that explains the section's role rather than restating its n
 enumerating its patterns. Sibyl displays the active scene description in its lower text
 box and falls back to the composition-level `meta.prompt` when it is absent.
 
+An event may schedule an exact-frame Octavia observation of physically cabled monitor
+inputs:
+
+```json
+"observation": {
+  "octaviaModuleId": 1234,
+  "monitors": ["A", "B"],
+  "preFrames": 4800,
+  "postFrames": 12000,
+  "label": "filter transition"
+}
+```
+
+Resolve the Octavia module ID from the live patch; never guess it. Valid monitor names are
+`masterL`, `masterR`, `A`, `B`, `C`, and `D`. The combined frame window must fit Octavia's
+262144-frame rolling history. The marker publishes when the event passes its probability
+check and sounds, at the event's swing/microshift-adjusted onset, and only once even when
+the event ratchets. Physical cables determine what is captured. Use sufficient post-roll
+for envelopes, effects, and buffered processors whose audible response follows the event.
+
 Prefer Sibyl when the user asks the agent to:
 
 - compose melodies, bass lines, rhythms, harmonies, or complete pieces;

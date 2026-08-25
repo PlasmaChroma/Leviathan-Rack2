@@ -1046,6 +1046,15 @@ struct SibylModule : Module, SibylControl {
 					m_trackStates[ch].activeEventPlayed = play;
 
 					if (play) {
+						if (matchedEvent->hasObservation) {
+							publishObservationTrigger(
+								matchedEvent->observation.octaviaModuleId,
+								static_cast<uint64_t>(args.frame),
+								matchedEvent->observation.preFrames,
+								matchedEvent->observation.postFrames,
+								matchedEvent->observation.monitorMask,
+								matchedEvent->observation.label.c_str());
+						}
 						if (!matchedEvent->tie) {
 							m_trackStates[ch].currentGate = 10.0f;
 						}

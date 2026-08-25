@@ -48,6 +48,86 @@ vcv_get_status   →  {"running": true, "port": 34570, "patch": {"path": "...", 
 ```
 If it fails → tell user to check Octavia + press START. Do not retry automatically.
 
+## Machine Listening and Monitoring
+
+Octavia exposes six physically cabled observation channels on one Rack-frame timeline:
+
+- `masterL` and `masterR` are the persistent Master listening point and drive the live
+  LUFS/dBFS meters.
+- `A`, `B`, `C`, and `D` are independent mono probes. They have no fixed before/after or
+  stereo meaning; interpretation is assigned per analysis request.
+
+Physical Rack cables are the sensory boundary. Never imply that Octavia can hear an
+unpatched module output, and never replace monitor cables with hidden arbitrary reads.
+Use `GET /audio/monitors` or the corresponding MCP discovery tool to verify connection,
+polyphony, sample rate, rolling state, snapshot generation, and active analysis users.
+
+Choose the least expensive observation that answers the question:
+
+1. Use ordinary signal levels for silence and gain-stage diagnosis.
+2. Use a recent snapshot for repeatable RMS, peak, crest, DC, clipping, or spectrum work.
+3. Capture all points needed for a comparison in one snapshot so their samples and frame
+   window are identical.
+4. Use a triggered measurement for multi-second loudness, clipping, RMS, or correlation.
+5. Request raw spectrum only when exact corrective frequencies matter.
+
+Snapshot workflow:
+
+```text
+GET /audio/monitors
+POST /audio/snapshot       {monitors, preMs, postMs, label}
+GET /audio/snapshot/{id}   poll only when post-roll is pending
+POST /audio/analyze        {snapshotId, channels or stereo, detail, includeSpectrum}
+POST /audio/compare        {snapshotId, reference, target, detail}
+```
+
+Valid group examples are mono `{"channels":["A"]}` and stereo
+`{"stereo":{"left":"A","right":"B"}}`. Comparisons return absolute results plus
+explicit `target - reference` deltas. Use `levelNormalizedBandsDb` to distinguish a tonal
+change from a pure gain change. Stereo results include balance, correlation, mid/side
+energy, and side-to-mid ratio. A negative correlation warning is evidence about that
+selected pair, not proof that the entire patch is out of phase.
+
+Snapshot analysis is immutable and repeatable: analyzing the same snapshot ID must not
+recapture audio. Frame metadata identifies exactly what was heard. Post-roll waits outside
+the audio thread. `analysis_busy` and `measurement_busy` are bounded-work responses; wait
+briefly or reduce the request rather than flooding retries. Snapshot IDs are held in a
+bounded pool and can expire.
+
+For before/after work, cable the reference and target simultaneously when possible—for
+example A before a filter and B after it—then compare them from one snapshot. For stereo
+before/after, use two explicit pairs such as stereo(A,B) versus stereo(C,D). Do not assume
+A/B are a pair merely because of their names.
+
+Legacy Master routes remain supported: `/audio/0` is Master L, `/audio/1` is Master R,
+and their detailed analyzer routes use the same frozen backend. The legacy loudness
+reset → play → read workflow now arms an explicit Master measurement session rather than
+reading an always-running long-term accumulator.
+
+A Sibyl event may carry an exact-frame observation marker:
+
+```json
+"observation": {
+  "octaviaModuleId": 1234,
+  "monitors": ["A", "B"],
+  "preFrames": 4800,
+  "postFrames": 12000,
+  "label": "filter transition"
+}
+```
+
+The marker publishes only when that probabilistic event plays and fires once at its
+shifted musical onset, not once per ratchet. Octavia targets are resolved by module ID;
+never guess the ID. The trigger frame remains the authored event time even when an
+envelope, effect, or buffered processor produces its audible consequence later—use
+post-roll (and, when available, latency estimation) to represent that delay. Triggered
+request-to-snapshot mappings are visible at `/audio/triggered-snapshots`.
+
+Panel monitor LEDs show machine attention, not amplitude: off means disconnected, dim
+means rolling history is available, a flash means snapshot capture, and bright/pulsing
+means active detailed analysis. Master meters remain continuous and are separate from
+this attention state.
+
 ## Octavia Console Mode (Explicit Opt-In)
 
 Enter Console Mode only when the user explicitly asks to arm or listen to the in-Rack

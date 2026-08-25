@@ -94,6 +94,16 @@ static void validateEnumField(json_t* object, const char* key, const std::string
 
 static bool validId(const std::string& value) { return !value.empty() && value.size() <= 64; }
 
+static uint8_t observationMonitorBit(const std::string& name) {
+	if (name == "masterL") return 1u << 0;
+	if (name == "masterR") return 1u << 1;
+	if (name == "A") return 1u << 2;
+	if (name == "B") return 1u << 3;
+	if (name == "C") return 1u << 4;
+	if (name == "D") return 1u << 5;
+	return 0;
+}
+
 static void validateCompositionSchema(json_t* root, ParseResult& res) {
     if (!json_is_object(root)) { addError(res, "$", "Composition must be a JSON object"); return; }
     warnUnknownFields(root, "", {"meta", "clock", "transport", "tracks", "patterns", "arrangement", "macros"}, res);
@@ -180,7 +190,7 @@ static void validateCompositionSchema(json_t* root, ParseResult& res) {
             json_array_foreach(steps, stepIndex, step) {
                 std::string stepPath = path + ".steps[" + std::to_string(stepIndex) + "]";
                 if (!json_is_object(step)) { addError(res, stepPath, "Expected object"); continue; }
-                warnUnknownFields(step, stepPath, {"step", "pitchV", "degree", "note", "octave", "gate", "velocity", "mod", "mod2", "mod3", "probability", "tie", "glideMs", "microshift", "ratchets"}, res);
+                warnUnknownFields(step, stepPath, {"step", "pitchV", "degree", "note", "octave", "gate", "velocity", "mod", "mod2", "mod3", "probability", "tie", "glideMs", "microshift", "ratchets", "observation"}, res);
                 validateIntegerField(step, "step", stepPath, 0, std::max(0, length - 1), res);
                 json_t* stepNumber = json_object_get(step, "step");
                 if (!stepNumber) addError(res, stepPath + ".step", "Required field is missing");
@@ -209,6 +219,49 @@ static void validateCompositionSchema(json_t* root, ParseResult& res) {
                 if (json_is_number(gate) && json_is_integer(ratchets) &&
                     json_number_value(gate) > 1.0 && json_integer_value(ratchets) > 1)
                     addError(res, stepPath + ".gate", "Gate above 1 step is incompatible with ratchets");
+                json_t* observation = json_object_get(step, "observation");
+                if (observation) {
+                    const std::string observationPath = stepPath + ".observation";
+                    if (!json_is_object(observation)) {
+                        addError(res, observationPath, "Expected object");
+                    } else {
+                        warnUnknownFields(observation, observationPath,
+                            {"octaviaModuleId", "monitors", "preFrames", "postFrames", "label"}, res);
+                        validateIntegerField(observation, "octaviaModuleId", observationPath, 0, INT64_MAX, res);
+                        validateIntegerField(observation, "preFrames", observationPath, 0, 262143, res);
+                        validateIntegerField(observation, "postFrames", observationPath, 0, 262143, res);
+                        validateStringField(observation, "label", observationPath, 63, res);
+                        json_t* target = json_object_get(observation, "octaviaModuleId");
+                        json_t* monitors = json_object_get(observation, "monitors");
+                        if (!target) addError(res, observationPath + ".octaviaModuleId", "Required field is missing");
+                        if (!json_is_array(monitors) || json_array_size(monitors) == 0
+                                || json_array_size(monitors) > 6) {
+                            addError(res, observationPath + ".monitors",
+                                "Expected a non-empty array of at most six monitor names");
+                        } else {
+                            uint8_t mask = 0;
+                            size_t monitorIndex; json_t* monitor;
+                            json_array_foreach(monitors, monitorIndex, monitor) {
+                                if (!json_is_string(monitor)
+                                        || !observationMonitorBit(json_string_value(monitor))) {
+                                    addError(res, observationPath + ".monitors[" +
+                                        std::to_string(monitorIndex) + "]", "Unknown monitor name");
+                                    continue;
+                                }
+                                const uint8_t bit = observationMonitorBit(json_string_value(monitor));
+                                if (mask & bit) addError(res, observationPath + ".monitors[" +
+                                    std::to_string(monitorIndex) + "]", "Duplicate monitor name");
+                                mask |= bit;
+                            }
+                        }
+                        const uint64_t pre = json_is_integer(json_object_get(observation, "preFrames"))
+                            ? uint64_t(json_integer_value(json_object_get(observation, "preFrames"))) : 0;
+                        const uint64_t post = json_is_integer(json_object_get(observation, "postFrames"))
+                            ? uint64_t(json_integer_value(json_object_get(observation, "postFrames"))) : 0;
+                        if (pre + post + 1 > 262144)
+                            addError(res, observationPath, "Combined pre/post window exceeds observation history");
+                    }
+                }
             }
         }
     }
@@ -617,6 +670,22 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
                     e.glideMs = getNumber(stepJ, "glideMs", 0.0f);
                     e.microshift = getNumber(stepJ, "microshift", 0.0f);
                     e.ratchets = getInteger(stepJ, "ratchets", 1);
+                    json_t* observationJ = json_object_get(stepJ, "observation");
+                    if (json_is_object(observationJ)) {
+                        e.hasObservation = true;
+                        e.observation.octaviaModuleId = json_integer_value(
+                            json_object_get(observationJ, "octaviaModuleId"));
+                        e.observation.preFrames = static_cast<uint32_t>(getInteger(
+                            observationJ, "preFrames", 0));
+                        e.observation.postFrames = static_cast<uint32_t>(getInteger(
+                            observationJ, "postFrames", 0));
+                        json_t* labelJ = json_object_get(observationJ, "label");
+                        if (json_is_string(labelJ)) e.observation.label = json_string_value(labelJ);
+                        json_t* monitorsJ = json_object_get(observationJ, "monitors");
+                        size_t monitorIndex; json_t* monitorJ;
+                        json_array_foreach(monitorsJ, monitorIndex, monitorJ)
+                            e.observation.monitorMask |= observationMonitorBit(json_string_value(monitorJ));
+                    }
                     
                     p.steps.push_back(e);
 				}
@@ -780,6 +849,24 @@ static json_t* patternToJson(const Pattern& pat) {
         if (ev.glideMs > 0.0f) json_object_set_new(evJ, "glideMs", json_real(ev.glideMs));
         if (ev.microshift != 0.0f) json_object_set_new(evJ, "microshift", json_real(ev.microshift));
         if (ev.ratchets > 1) json_object_set_new(evJ, "ratchets", json_integer(ev.ratchets));
+        if (ev.hasObservation) {
+            json_t* observationJ = json_object();
+            json_object_set_new(observationJ, "octaviaModuleId",
+                json_integer(ev.observation.octaviaModuleId));
+            json_t* monitorsJ = json_array();
+            static const char* monitorNames[] = {"masterL", "masterR", "A", "B", "C", "D"};
+            for (size_t monitor = 0; monitor < 6; ++monitor)
+                if (ev.observation.monitorMask & (1u << monitor))
+                    json_array_append_new(monitorsJ, json_string(monitorNames[monitor]));
+            json_object_set_new(observationJ, "monitors", monitorsJ);
+            if (ev.observation.preFrames)
+                json_object_set_new(observationJ, "preFrames", json_integer(ev.observation.preFrames));
+            if (ev.observation.postFrames)
+                json_object_set_new(observationJ, "postFrames", json_integer(ev.observation.postFrames));
+            if (!ev.observation.label.empty())
+                json_object_set_new(observationJ, "label", json_string(ev.observation.label.c_str()));
+            json_object_set_new(evJ, "observation", observationJ);
+        }
         json_array_append_new(stepsJ, evJ);
     }
     json_object_set_new(patJ, "steps", stepsJ);
