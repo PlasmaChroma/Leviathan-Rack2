@@ -172,15 +172,32 @@ int main() {
 
 		module.params[SibylModule::LOOP_BUTTON_PARAM].setValue(1.f);
 		processOneSample(module);
+		SibylModule::DisplaySnapshot loopDisplay = module.readDisplaySnapshot();
+		check(module.m_loopOverride.load(std::memory_order_acquire) == 1 &&
+			loopDisplay.looping && !loopDisplay.loopFollowsComposition,
+			"manual CLK loop button advances AUTO to explicit LOOP");
+		module.params[SibylModule::LOOP_BUTTON_PARAM].setValue(0.f);
+		processOneSample(module);
+		module.params[SibylModule::LOOP_BUTTON_PARAM].setValue(1.f);
+		processOneSample(module);
+		loopDisplay = module.readDisplaySnapshot();
 		check(module.m_loopOverride.load(std::memory_order_acquire) == 0 &&
-			!module.readDisplaySnapshot().looping,
-			"manual CLK loop button selects ONCE and updates display status");
+			!loopDisplay.looping && !loopDisplay.loopFollowsComposition,
+			"manual CLK loop button advances LOOP to explicit ONCE");
 		json_t* saved = module.dataToJson();
 		SibylModule restored;
 		restored.dataFromJson(saved);
 		check(restored.m_loopOverride.load(std::memory_order_acquire) == 0,
 			"manual loop override persists with the patch");
 		json_decref(saved);
+		module.params[SibylModule::LOOP_BUTTON_PARAM].setValue(0.f);
+		processOneSample(module);
+		module.params[SibylModule::LOOP_BUTTON_PARAM].setValue(1.f);
+		processOneSample(module);
+		loopDisplay = module.readDisplaySnapshot();
+		check(module.m_loopOverride.load(std::memory_order_acquire) == -1 &&
+			loopDisplay.looping && loopDisplay.loopFollowsComposition,
+			"manual CLK loop button advances ONCE back to AUTO");
 	}
 
 	{

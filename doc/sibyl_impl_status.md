@@ -96,8 +96,9 @@ Modulation macro amounts and clamps are likewise expressed directly in volts.
   and reseed. Runtime state does not rewrite the saved composition.
 - RUN, RESET, SCENE TRIG, and SCENE CV share the same boundary and destination-phase
   machinery used by semantic transport.
-- Gold panel buttons manually trigger TRIG, RUN, and RESET. The CLK-column button toggles
-  the persistent loop override. Patched RUN retains precedence over the manual run state.
+- Gold panel buttons manually trigger TRIG, RUN, and RESET. The CLK-column button cycles
+  `AUTO → LOOP → ONCE`; AUTO follows the composition while LOOP and ONCE are persistent
+  overrides. Patched RUN retains precedence over the manual run state.
 
 ### 2.5 Oracle Display
 
@@ -105,7 +106,8 @@ Modulation macro amounts and clamps are likewise expressed directly in volts.
   clock/run state, BPM, accepted/active/pending revision state, warnings, and errors.
 - The lower message area shows the active scene description and falls back to the
   composition prompt when no description is present.
-- The footer exposes `LOOP`/`ONCE` so the panel loop override is visible.
+- The footer exposes `AUTO LOOP`/`AUTO ONCE`, `LOOP`, or `ONCE` so both the selected mode
+  and AUTO's effective composition behavior are visible.
 - Display metadata and phase telemetry use the same race-free publication model consumed
   by the semantic status route.
 
@@ -180,7 +182,7 @@ released and freezing compatibility-sensitive IDs and file semantics.
   practical zoom levels.
 - [ ] Exercise TRIG, RUN, RESET, and loop buttons alongside patched inputs.
 - [ ] Confirm `[X/Y]` scene naming, descriptions, prompt fallback, larger status text, and
-  `LOOP`/`ONCE` presentation without clipping.
+  `AUTO LOOP`/`AUTO ONCE`/`LOOP`/`ONCE` presentation without clipping.
 - [ ] Patch MOD1–3 polyphonically and verify independent −10 V to +10 V behavior.
 - [ ] Hear-test fractional, one-step, and multi-step gates; ties; ratchets; and interruption
   by later events across straight, swung, and externally clocked patterns.

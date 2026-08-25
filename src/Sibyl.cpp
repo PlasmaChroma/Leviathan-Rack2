@@ -117,6 +117,7 @@ struct SibylModule : Module, SibylControl {
 		float bpm = 120.f;
 		bool running = true;
 		bool looping = true;
+		bool loopFollowsComposition = true;
 		bool externalClock = false;
 	};
 
@@ -159,7 +160,7 @@ struct SibylModule : Module, SibylControl {
 		configButton(SCENE_TRIG_BUTTON_PARAM, "Trigger next scene");
 		configButton(RUN_BUTTON_PARAM, "Run / Pause");
 		configButton(RESET_BUTTON_PARAM, "Reset arrangement");
-		configButton(LOOP_BUTTON_PARAM, "Toggle automatic looping");
+		configButton(LOOP_BUTTON_PARAM, "Cycle loop mode: Auto / Loop / Once");
 
 		configInput(CLOCK_INPUT, "Clock");
 		configInput(RUN_INPUT, "Run");
@@ -278,6 +279,7 @@ struct SibylModule : Module, SibylControl {
 		if (composition) {
 			const int loopOverride = m_loopOverride.load(std::memory_order_acquire);
 			display.looping = loopOverride >= 0 ? loopOverride != 0 : composition->transport.loop;
+			display.loopFollowsComposition = loopOverride < 0;
 			display.title = composition->meta.title;
 			display.prompt = composition->meta.prompt;
 			if (telemetry.sceneIndex >= 0 && telemetry.sceneIndex < static_cast<int>(composition->arrangement.size())) {
@@ -719,8 +721,10 @@ struct SibylModule : Module, SibylControl {
 		}
 		if (m_loopButtonTrigger.process(params[LOOP_BUTTON_PARAM].getValue())) {
 			const int loopOverride = m_loopOverride.load(std::memory_order_acquire);
-			const bool looping = loopOverride >= 0 ? loopOverride != 0 : comp->transport.loop;
-			m_loopOverride.store(looping ? 0 : 1, std::memory_order_release);
+			// Cycle all three authored/performance states explicitly:
+			// follow composition -> force loop -> force once -> follow composition.
+			const int nextLoopOverride = loopOverride < 0 ? 1 : (loopOverride > 0 ? 0 : -1);
+			m_loopOverride.store(nextLoopOverride, std::memory_order_release);
 		}
 
 		// --- Transport Run / Pause ---
@@ -1560,13 +1564,16 @@ struct SibylOracleDisplay final : TransparentWidget {
 		}
 
 		char footer[80];
+		const char* loopLabel = state.loopFollowsComposition
+			? (state.looping ? "AUTO LOOP" : "AUTO ONCE")
+			: (state.looping ? "LOOP" : "ONCE");
 		if (state.pendingRevision >= 0) {
 			std::snprintf(footer, sizeof(footer), "%s  %s  %5.1f  R%d>%d  P%d",
-				state.looping ? "LOOP" : "ONCE", state.externalClock ? "EXT" : "INT", state.bpm,
+				loopLabel, state.externalClock ? "EXT" : "INT", state.bpm,
 				state.activeRevision, state.acceptedRevision, state.pendingRevision);
 		} else {
 			std::snprintf(footer, sizeof(footer), "%s  %s  %5.1f BPM  REV %d",
-				state.looping ? "LOOP" : "ONCE", state.externalClock ? "EXT" : "INT",
+				loopLabel, state.externalClock ? "EXT" : "INT",
 				state.bpm, state.activeRevision);
 		}
 		text(args, w - pad, h - 4.f, 7.0f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, violet, footer);
