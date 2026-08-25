@@ -288,6 +288,27 @@ int main() {
 
 	{
 		SibylModule module;
+		module.acceptComposition(makeTimingComposition(0.0f, 0.0f, 1, 3.0f), sibyl::ApplyAt::IMMEDIATE,
+			sibyl::PhasePolicy::RESTART_ALL);
+		Module::ProcessArgs args;
+		args.sampleRate = 1000.0f;
+		args.sampleTime = 0.001f;
+		module.process(args);
+		module.m_trackStates[0].patternPhaseBeats = 0.0;
+		module.m_trackStates[0].lastFiredStep = -1;
+		module.m_trackStates[0].activeEventStep = -1;
+		module.m_trackStates[0].activeEventPlayed = false;
+		module.m_trackStates[0].currentGate = 0.0f;
+		for (int i = 0; i < 800; ++i) { args.frame = i; module.process(args); }
+		check(module.outputs[SibylModule::GATE_OUTPUT].getVoltage(0) > 9.0f,
+			"multi-step gate remains high beyond its originating step");
+		for (int i = 800; i < 1050; ++i) { args.frame = i; module.process(args); }
+		check(module.outputs[SibylModule::GATE_OUTPUT].getVoltage(0) == 0.0f,
+			"multi-step gate closes after its authored duration");
+	}
+
+	{
+		SibylModule module;
 		module.acceptComposition(makeTimingComposition(0.0f, -0.2f, 2, 0.25f), sibyl::ApplyAt::IMMEDIATE,
 			sibyl::PhasePolicy::RESTART_ALL);
 		Module::ProcessArgs args;

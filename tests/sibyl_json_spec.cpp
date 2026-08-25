@@ -25,11 +25,11 @@ const char* validComposition = R"JSON({
   "transport":{"running":true,"loop":true,"defaultApplyAt":"nextBeat"},
   "tracks":[
     {"id":"bass","channel":0,"defaultGate":0.5,"defaultVelocity":0.8},
-    {"id":"lead","channel":3,"defaultGate":0.4,"defaultVelocity":0.7}
+    {"id":"lead","channel":3,"defaultGate":4,"defaultVelocity":0.7}
   ],
   "patterns":{
     "bassline":{"length":16,"resolution":"1/16","steps":[
-      {"step":0,"degree":0,"octave":-1,"gate":0.8,"velocity":1,"mod":-10,"mod2":6.5,"mod3":10},
+      {"step":0,"degree":0,"octave":-1,"gate":4,"velocity":1,"mod":-10,"mod2":6.5,"mod3":10},
       {"step":7,"note":"Eb4","probability":0.8,"ratchets":3},
       {"step":14,"pitchV":-1.0,"glideMs":100,"microshift":-0.08}
     ]}
@@ -63,6 +63,9 @@ int main() {
     check(valid.composition && valid.composition->patterns.at("bassline").steps[0].hasMod2 &&
           valid.composition->patterns.at("bassline").steps[0].hasMod3,
           "MOD2 and MOD3 values compile as independent modulation lanes");
+    check(valid.composition && valid.composition->patterns.at("bassline").steps[0].gate == 4.0f &&
+          valid.composition->tracks[1].defaultGate == 4.0f,
+          "multi-step event and track-default gates compile");
 
     auto forwardCompatible = sibyl::parseCompositionJson(R"({"meta":{"bpm":120,"futureColor":"violet"},"futureTop":7})", 1);
     check(forwardCompatible.valid && hasPath(forwardCompatible.warnings, "meta.futureColor") && hasPath(forwardCompatible.warnings, "futureTop"),
@@ -77,6 +80,7 @@ int main() {
     expectInvalid(R"({"patterns":{"p":{"length":1,"resolution":"1/16","steps":[{"step":0,"pitchV":0,"degree":1}]}}})", "patterns.p.steps[0]", "conflicting pitch representations are rejected");
     expectInvalid(R"({"patterns":{"p":{"length":1,"resolution":"1/16","steps":[{"step":0,"pitchV":0,"probability":1.1}]}}})", "patterns.p.steps[0].probability", "event ranges are enforced");
     expectInvalid(R"({"patterns":{"p":{"length":1,"resolution":"1/16","steps":[{"step":0,"pitchV":0,"mod2":10.1}]}}})", "patterns.p.steps[0].mod2", "secondary modulation voltage ranges are enforced");
+    expectInvalid(R"({"patterns":{"p":{"length":1,"resolution":"1/16","steps":[{"step":0,"pitchV":0,"gate":1.1,"ratchets":2}]}}})", "patterns.p.steps[0].gate", "multi-step gates are rejected for ratcheted events");
     expectInvalid(R"({"tracks":[{"id":"a","channel":0},{"id":"b","channel":0}]})", "tracks[1].channel", "duplicate channels are rejected");
     expectInvalid(R"({"tracks":[{"id":"a","channel":0}],"arrangement":[{"id":"s","lengthBeats":4,"repeats":1,"tracks":{"missing":null}}]})", "arrangement[0].tracks.missing", "scene track references are resolved");
     expectInvalid(std::string("{\"arrangement\":[{\"id\":\"s\",\"description\":\"") +

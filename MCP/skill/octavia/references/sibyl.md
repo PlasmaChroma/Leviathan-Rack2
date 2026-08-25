@@ -17,6 +17,11 @@ there is no track-level range transform. Use separate lanes when a composition s
 sequence multiple parameters or stages of a modular voice.
 Macro amounts and clamps targeting these lanes are likewise expressed in volts.
 
+Gate values are durations measured in pattern steps. Use values above `1` for sustained
+notes instead of emitting redundant tied events. Reserve `tie: true` for legato continuation
+or pitch changes without retriggering. Ratcheted events require an explicit gate no greater
+than `1`, because their gate fraction applies within each ratchet slice.
+
 Scenes may carry an optional `description` containing their musical intent. Prefer a
 concise description that explains the section's role rather than restating its name or
 enumerating its patterns. Sibyl displays the active scene description in its lower text

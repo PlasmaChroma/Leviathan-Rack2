@@ -142,7 +142,7 @@ static void validateCompositionSchema(json_t* root, ParseResult& res) {
             warnUnknownFields(track, path, {"id", "channel", "defaultGate", "defaultVelocity"}, res);
             validateStringField(track, "id", path, 64, res);
             validateIntegerField(track, "channel", path, 0, 15, res);
-            validateNumberField(track, "defaultGate", path, 0.0, 1.0, res);
+            validateNumberField(track, "defaultGate", path, 0.0, 1024.0, res);
             validateNumberField(track, "defaultVelocity", path, 0.0, 1.0, res);
             json_t* id = json_object_get(track, "id");
             if (!json_is_string(id) || !validId(json_string_value(id))) addError(res, path + ".id", "Track id is required and must be 1-64 characters");
@@ -194,7 +194,7 @@ static void validateCompositionSchema(json_t* root, ParseResult& res) {
                 validateStringField(step, "note", stepPath, 5, res);
                 json_t* note = json_object_get(step, "note");
                 if (json_is_string(note) && !std::regex_match(std::string(json_string_value(note)), std::regex("^[A-G][b#]?(-1|[0-9])$"))) addError(res, stepPath + ".note", "Invalid scientific pitch; expected octave -1 through 9");
-                validateNumberField(step, "gate", stepPath, 0.0, 1.0, res);
+                validateNumberField(step, "gate", stepPath, 0.0, 1024.0, res);
                 validateNumberField(step, "velocity", stepPath, 0.0, 1.0, res);
                 validateNumberField(step, "mod", stepPath, -10.0, 10.0, res);
                 validateNumberField(step, "mod2", stepPath, -10.0, 10.0, res);
@@ -204,6 +204,11 @@ static void validateCompositionSchema(json_t* root, ParseResult& res) {
                 validateNumberField(step, "glideMs", stepPath, 0.0, 3600000.0, res);
                 validateNumberField(step, "microshift", stepPath, -0.499999999, 0.499999999, res);
                 validateIntegerField(step, "ratchets", stepPath, 1, 16, res);
+                json_t* gate = json_object_get(step, "gate");
+                json_t* ratchets = json_object_get(step, "ratchets");
+                if (json_is_number(gate) && json_is_integer(ratchets) &&
+                    json_number_value(gate) > 1.0 && json_integer_value(ratchets) > 1)
+                    addError(res, stepPath + ".gate", "Gate above 1 step is incompatible with ratchets");
             }
         }
     }

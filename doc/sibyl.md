@@ -173,7 +173,7 @@ Octavia's C++ `SibylControl` adapter is an in-process reference integration, not
 }
 ```
 
-Version 1 enum values used above:
+Version 2 enum values used above:
 
 * `clock.onExternalStop`: `"hold"` (default), `"freeRun"`, or `"internal"`.
 * `transport.defaultApplyAt`: `"nextBeat"` (default), `"nextStep"`, `"nextScene"`, or `"immediate"`.
@@ -186,11 +186,11 @@ Version 1 enum values used above:
 4. **Scene intent:** Optional `description` text records the scene's musical purpose. It is non-semantic metadata, has no DSP effect, and is shown in Sibyl's lower display while that scene is active; the composition prompt is the fallback when no scene description exists.
 5. **Polymeter and phase:** Patterns have independent lengths and resolutions. A scene's `phaseMode` is `restart` (default), `continue`, or `alignGlobal`. Track assignments may use the compact pattern-ID string form or an object with `pattern` and a per-track `phaseMode` override. Details are in Section 4.2.
 6. **Unambiguous pitch:** An event contains exactly one of `pitchV`, `degree`, or `note`. `pitchV` follows C4 = 0 V. `degree` is zero-based in `meta.scale`, relative to root/rootOctave, with a signed scale-octave offset. Degrees outside one scale octave wrap using Euclidean division, so degree 8 in a seven-note scale is degree 1 one octave higher. `note` uses the grammar defined below.
-7. **Timing:** `gate` is a 0–1 fraction of step duration. `microshift` is a signed step fraction, clamped below half a step. `glideMs` is milliseconds. `ratchets` is the total evenly spaced attacks in the step.
-8. **Tie versus glide:** `tie: true` suppresses a new gate attack and holds the prior gate. Glide moves pitch but does not imply a tie.
+7. **Timing:** `gate` is a duration measured in pattern steps: values below 1 provide short articulation, `1` fills one step, and values above 1 sustain across steps. `microshift` is a signed step fraction, clamped below half a step. `glideMs` is milliseconds. `ratchets` is the total evenly spaced attacks in the step.
+8. **Tie versus glide:** Long unchanged notes should use `gate` above 1. `tie: true` is reserved for legato continuation or pitch changes without a new gate attack. Glide moves pitch but does not imply a tie.
 9. **Velocity and mod:** Velocity uses normalized 0–1 values. MOD1, MOD2, and MOD3 values are literal modular voltages from -10 V to +10 V.
 10. **Swing:** `meta.swing` delays the second subdivision of each straight pair by that fraction of one subdivision. Range is 0–0.49. Macro offsets are additive and clamped.
-11. **Duplicate events:** Version 1 rejects multiple events on one step; ratchets represent repeated attacks.
+11. **Duplicate events:** Version 2 rejects multiple events on one step; ratchets represent repeated attacks.
 
 #### 3.4.1 Step Event Fields
 
@@ -203,7 +203,7 @@ Version 2 patterns contain note events. Modulation-only or other event kinds are
 | `degree` | integer | exactly one¹ | — | Zero-based scale degree; may extend across octaves |
 | `note` | string | exactly one¹ | — | Scientific-pitch grammar below |
 | `octave` | integer | no | 0 | Signed scale-octave offset; valid only with `degree` |
-| `gate` | number | no | Track `defaultGate` | 0–1 fraction of the step, or of each ratchet slice |
+| `gate` | number | no | Track `defaultGate` | 0–1024 step durations; with `ratchets > 1`, an explicit value must be 0–1 and applies to each ratchet slice |
 | `velocity` | number | no | Track `defaultVelocity` | Normalized 0–1 |
 | `mod` | number | no | 0 V | MOD1 voltage, -10 V to +10 V |
 | `mod2` | number | no | 0 V | Independent MOD2 voltage, -10 V to +10 V |
@@ -226,7 +226,7 @@ Version 2 patterns contain note events. Modulation-only or other event kinds are
 
 Examples: `"C4"`, `"Eb5"`, `"F#3"`, and `"Bb-1"`. `meta.root` uses the same grammar without an octave, for example `"F"`, `"C#"`, or `"Eb"`. Enharmonic spellings compile to the same pitch class but retain the supplied spelling for display. A compiled pitch outside -10 to 10 V is a validation error.
 
-Accepted `meta.scale` values in version 1 are `chromatic`, `major`, `natural_minor`, `harmonic_minor`, `melodic_minor`, `dorian`, `phrygian`, `lydian`, `mixolydian`, `locrian`, `major_pentatonic`, and `minor_pentatonic`. `melodic_minor` means the ascending form in both directions. Unknown scale names are validation errors.
+Accepted `meta.scale` values in version 2 are `chromatic`, `major`, `natural_minor`, `harmonic_minor`, `melodic_minor`, `dorian`, `phrygian`, `lydian`, `mixolydian`, `locrian`, `major_pentatonic`, and `minor_pentatonic`. `melodic_minor` means the ascending form in both directions. Unknown scale names are validation errors.
 
 #### 3.4.3 Macro Targets and Evaluation
 
@@ -238,7 +238,7 @@ Accepted `meta.scale` values in version 1 are `chromatic`, `major`, `natural_min
 | `track.<id>.probability` | One track's event probabilities | 0–1 |
 | `track.<id>.swing` | One track's swing | 0–0.49 |
 | `track.<id>.velocity` | One track's velocities | 0–1 |
-| `track.<id>.gate` | One track's gate fractions | 0–1 |
+| `track.<id>.gate` | One track's gate duration in steps | 0–1024; capped at 1 for ratcheted events |
 | `track.<id>.mod` | One track's MOD1 output | -10 V to +10 V |
 | `track.<id>.mod2` | One track's MOD2 output | -10 V to +10 V |
 | `track.<id>.mod3` | One track's MOD3 output | -10 V to +10 V |
@@ -318,7 +318,7 @@ Scene entry resolves phase independently for every assigned track:
 * `continue`: Preserve the track's prior pattern phase. This is an explicit choice for evolving polymeters.
 * `alignGlobal`: Derive phase from the global musical tick timeline, allowing an early scene jump to retain globally aligned drums or harmonic rhythm.
 
-The scene-level `phaseMode` supplies the default. An object-form track assignment may override it. A string-form assignment uses the scene default. Entering a scene closes outgoing gates; version 1 does not tie gates across scenes.
+The scene-level `phaseMode` supplies the default. An object-form track assignment may override it. A string-form assignment uses the scene default. Entering a scene closes outgoing gates; version 2 does not tie gates across scenes.
 
 ### 4.3 Phase-Preserving Composition Adoption
 
@@ -336,7 +336,7 @@ Multiple accepted revisions awaiting the same or a later boundary may coalesce: 
 
 ### 4.4 Glide
 
-`glideMs` applies linear V/Oct interpolation from the held pitch to the new pitch. This gives an exact arrival time and avoids a one-pole filter's indefinite tail. Version 1 changes MOD at event boundaries; later schemas may add MOD glide.
+`glideMs` applies linear V/Oct interpolation from the held pitch to the new pitch. This gives an exact arrival time and avoids a one-pole filter's indefinite tail. Version 2 changes MOD at event boundaries; later schemas may add MOD glide.
 
 ### 4.5 Probability and Determinism
 
@@ -347,7 +347,7 @@ effectiveProbability = clamp(eventProbability + macroOffset, 0, 1)
 play = deterministicRandom(seed, sceneCycle, trackId, patternCycle, step) < effectiveProbability
 ```
 
-Randomness uses `meta.seed` and stable event coordinates rather than mutable global call order. The same composition, reset point, and macro voltages produce the same result, and adding another track does not change existing tracks' choices. Version 1 makes one decision for an entire ratcheted event.
+Randomness uses `meta.seed` and stable event coordinates rather than mutable global call order. The same composition, reset point, and macro voltages produce the same result, and adding another track does not change existing tracks' choices. Version 2 makes one decision for an entire ratcheted event.
 
 ### 4.6 Real-Time State Architecture
 
@@ -495,7 +495,7 @@ An invalid musical candidate is a successful validation request with `valid: fal
 }
 ```
 
-Version 1 operations are:
+Version 2 operations are:
 
 * `set_meta` and `set_clock`
 * `upsert_track` and `delete_track`

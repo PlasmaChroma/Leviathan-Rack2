@@ -1053,11 +1053,15 @@ struct SibylModule : Module, SibylControl {
 				}
 				if (awaitingTie) {
 					m_trackStates[ch].currentGate = 10.0f;
-				} else if (elapsed >= 0.0 && elapsed < pat.resolutionBeats) {
+				} else if (elapsed >= 0.0 && m_trackStates[ch].activeEventRatchets > 1 &&
+						elapsed < pat.resolutionBeats) {
 					double eventFraction = elapsed / pat.resolutionBeats;
 					double sliceFraction = std::fmod(eventFraction * m_trackStates[ch].activeEventRatchets, 1.0);
 					float effectiveGate = clamp(m_trackStates[ch].activeEventGate + trackGateMacro[ch], 0.01f, 1.0f);
 					m_trackStates[ch].currentGate = sliceFraction <= effectiveGate ? 10.0f : 0.0f;
+				} else if (elapsed >= 0.0 && m_trackStates[ch].activeEventRatchets == 1) {
+					float effectiveGate = clamp(m_trackStates[ch].activeEventGate + trackGateMacro[ch], 0.01f, 1024.0f);
+					m_trackStates[ch].currentGate = elapsed <= pat.resolutionBeats * effectiveGate ? 10.0f : 0.0f;
 				} else if (elapsed >= pat.resolutionBeats) {
 					m_trackStates[ch].currentGate = 0.0f;
 				}
