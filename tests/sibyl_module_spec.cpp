@@ -2,9 +2,35 @@
 #include "../src/Sibyl.cpp"
 
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <fstream>
 #include <iostream>
+#include <new>
+
+#if defined(__GNUC__)
+#pragma GCC diagnostic ignored "-Wmismatched-new-delete"
+#endif
+
+namespace {
+bool gTrackAllocations = false;
+std::size_t gAllocationCount = 0;
+}
+
+void* operator new(std::size_t size) {
+	if (gTrackAllocations) ++gAllocationCount;
+	if (void* memory = std::malloc(size)) return memory;
+	throw std::bad_alloc();
+}
+
+void* operator new[](std::size_t size) {
+	return ::operator new(size);
+}
+
+void operator delete(void* memory) noexcept { std::free(memory); }
+void operator delete[](void* memory) noexcept { std::free(memory); }
+void operator delete(void* memory, std::size_t) noexcept { std::free(memory); }
+void operator delete[](void* memory, std::size_t) noexcept { std::free(memory); }
 
 Plugin* pluginInstance = nullptr;
 
@@ -176,6 +202,12 @@ int main() {
 		check(module.m_loopOverride.load(std::memory_order_acquire) == 1 &&
 			loopDisplay.looping && !loopDisplay.loopFollowsComposition,
 			"manual CLK loop button advances AUTO to explicit LOOP");
+		json_t* loopSaved = module.dataToJson();
+		SibylModule loopRestored;
+		loopRestored.dataFromJson(loopSaved);
+		check(loopRestored.m_loopOverride.load(std::memory_order_acquire) == 1,
+			"explicit LOOP override persists with the patch");
+		json_decref(loopSaved);
 		module.params[SibylModule::LOOP_BUTTON_PARAM].setValue(0.f);
 		processOneSample(module);
 		module.params[SibylModule::LOOP_BUTTON_PARAM].setValue(1.f);
@@ -371,6 +403,44 @@ int main() {
 
 	{
 		SibylModule module;
+		module.acceptComposition(makeComposition(1, false), sibyl::ApplyAt::IMMEDIATE,
+			sibyl::PhasePolicy::RESTART_ALL);
+		processOneSample(module);
+		gAllocationCount = 0;
+		gTrackAllocations = true;
+		for (int i = 0; i < 4096; ++i) processOneSample(module);
+		gTrackAllocations = false;
+		check(gAllocationCount == 0,
+			"steady-state Sibyl process performs no dynamic allocation");
+	}
+
+	{
+		SibylModule module;
+		module.acceptComposition(makeComposition(1, false), sibyl::ApplyAt::IMMEDIATE,
+			sibyl::PhasePolicy::RESTART_ALL);
+		processOneSample(module);
+		for (int revision = 2; revision <= 1001; ++revision) {
+			module.acceptComposition(makeComposition(revision, false), sibyl::ApplyAt::IMMEDIATE,
+				sibyl::PhasePolicy::PRESERVE);
+			processOneSample(module);
+		}
+		std::string response;
+		std::string error;
+		bool transportsAccepted = true;
+		for (int i = 0; i < 1000; ++i) {
+			transportsAccepted = module.handleSibylRequest(SibylControl::Operation::TRANSPORT,
+				"{\"action\":\"panic\"}", response, error) && transportsAccepted;
+			processOneSample(module);
+		}
+		check(transportsAccepted, "sustained transport requests remain accepted");
+		module.reclaimPublishedObjects();
+		check(module.m_compositionOwners.size() <= 2 && module.m_adoptionOwners.size() <= 1 &&
+			module.m_transportOwners.size() <= 1,
+			"sustained edit and transport publication reclaims owner pools to bounded size");
+	}
+
+	{
+		SibylModule module;
 		std::shared_ptr<sibyl::Composition> composition = std::const_pointer_cast<sibyl::Composition>(
 			makeComposition(7, false));
 		composition->meta.title = "Constellation Engine";
@@ -396,6 +466,37 @@ int main() {
 			"oracle snapshot reports coherent revision and repeat state");
 		check(module.m_displayCompositionHazard.load(std::memory_order_acquire) == nullptr,
 			"oracle snapshot releases its immutable-composition hazard");
+	}
+
+	{
+		SibylModule source;
+		source.acceptComposition(makeComposition(20, false), sibyl::ApplyAt::IMMEDIATE,
+			sibyl::PhasePolicy::RESTART_ALL);
+		processOneSample(source);
+		std::shared_ptr<sibyl::Composition> pending = std::const_pointer_cast<sibyl::Composition>(
+			makeComposition(21, false));
+		pending->meta.title = "Pending reload winner";
+		pending->transport.running = false;
+		pending->transport.loop = false;
+		source.acceptComposition(pending, sibyl::ApplyAt::NEXT_SCENE, sibyl::PhasePolicy::PRESERVE);
+		source.m_lastError = "stale transient error";
+		source.m_lastWarnings.push_back({"meta", "stale transient warning"});
+		json_t* saved = source.dataToJson();
+		SibylModule restored;
+		restored.dataFromJson(saved);
+		json_decref(saved);
+		processOneSample(restored);
+		const SibylModule::DisplaySnapshot display = restored.readDisplaySnapshot();
+		check(restored.m_acceptedRevision == 21 && restored.m_activeRevision.load(std::memory_order_acquire) == 21 &&
+			restored.m_acceptedCompositionPtr->meta.title == "Pending reload winner",
+			"patch reload restores the newest accepted composition even when it was pending");
+		check(!restored.m_runtimeRunning.load(std::memory_order_acquire) && !display.running,
+			"patch reload restores a stopped composition");
+		check(restored.m_loopOverride.load(std::memory_order_acquire) == -1 &&
+			display.loopFollowsComposition && !display.looping,
+			"patch reload preserves AUTO and follows a non-looping composition");
+		check(restored.m_lastError.empty() && restored.m_lastWarnings.empty(),
+			"patch reload derives diagnostics instead of restoring stale serialized status");
 	}
 
 	{

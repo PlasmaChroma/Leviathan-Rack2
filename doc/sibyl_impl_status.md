@@ -169,6 +169,17 @@ The routine suite contains focused Sibyl tests for:
 Both WSL-focused builds and authoritative native MINGW64 `plugin.dll` builds have passed
 throughout the implementation and the current playability work.
 
+### 3.5 ANT1 Native Acceptance
+
+A 10/10 ANT1 live acceptance run passed on VCV Rack 2.10.0 with Leviathan 2.9.1. It
+covered the final panel and oracle display, the `AUTO → LOOP → ONCE` button cycle and all
+four footer presentations, patch-state persistence, manual and patched transport
+precedence, non-looping termination, fractional and multi-step gates, interruption, ties,
+ratchets, swing, three independent bipolar modulation lanes, revision adoption, rapid
+newest-wins edits, graphics recovery, and final test-state restoration. No stuck gates,
+transport freezes, stale pending revisions, loop-state ambiguity, or graphics errors were
+observed. The Rack patch was left unsaved.
+
 ---
 
 ## 4. Release-Hardening Checklist
@@ -178,35 +189,39 @@ released and freezing compatibility-sensitive IDs and file semantics.
 
 ### 4.1 Final Native Rack Acceptance
 
-- [ ] Inspect the final input/output matrix, gold buttons, labels, and jack alignment at
+- [x] Inspect the final input/output matrix, gold buttons, labels, and jack alignment at
   practical zoom levels.
-- [ ] Exercise TRIG, RUN, RESET, and loop buttons alongside patched inputs.
-- [ ] Confirm `[X/Y]` scene naming, descriptions, prompt fallback, larger status text, and
+- [x] Exercise TRIG, RUN, RESET, and loop buttons alongside patched inputs.
+- [x] Confirm `[X/Y]` scene naming, descriptions, prompt fallback, larger status text, and
   `AUTO LOOP`/`AUTO ONCE`/`LOOP`/`ONCE` presentation without clipping.
-- [ ] Patch MOD1–3 polyphonically and verify independent −10 V to +10 V behavior.
-- [ ] Hear-test fractional, one-step, and multi-step gates; ties; ratchets; and interruption
-  by later events across straight, swung, and externally clocked patterns.
-- [ ] Close and reopen the Rack/DAW window to verify NanoVG context recreation and display
+- [x] Patch MOD1–3 polyphonically and verify independent −10 V to +10 V behavior.
+- [x] Hear-test fractional, one-step, and multi-step gates; ties; ratchets; and interruption
+  by later events across straight and swung internal-clock patterns.
+- [ ] Repeat the gate/interruption hear-test under an external clock source.
+- [x] Close and reopen the Rack/DAW window to verify NanoVG context recreation and display
   cache recovery.
 
 ### 4.2 Real-Time Regression Guardrails
 
-- [ ] Add an explicit hot-path test or instrumentation proving that steady-state
-  `process()` performs no allocation and takes no locks.
-- [ ] Add a repeatable sustained edit/transport reclamation stress test rather than
+- [x] Add an explicit hot-path allocation guard for steady-state `process()`; the hot path
+  contains no locking primitives.
+- [x] Add a repeatable sustained edit/transport reclamation stress test rather than
   relying only on the completed manual 129-operation run.
 - [ ] Exercise rapid UI/display reads during snapshot reclamation under a sanitizer-capable
   test environment when practical.
 
 ### 4.3 Persistence and Contract Closure
 
-- [ ] Broaden Rack patch/preset reload coverage around pending revisions, warnings/errors,
-  loop override, and stopped/non-looping arrangements.
+- [x] Cover patch reload of pending accepted revisions, all loop-override states, and
+  stopped/non-looping arrangements.
+- [x] Define diagnostics as derived state and verify patch reload does not resurrect stale
+  serialized warnings or errors.
+- [ ] Exercise Rack undo/preset integration around authoritative composition replacement.
 - [x] Add portable-file cases for malformed/foreign envelopes, missing composition data,
   truncated JSON, oversize rejection, and schema-version mismatch while retaining the
   accepted composition.
-- [ ] Run the complete Octavia/Sibyl contract suite against the final schema-v2 plugin.
-- [ ] Review examples and agent guidance once more for stale schema-v1, single-MOD, or
+- [x] Run the complete Octavia/Sibyl contract suite against the final schema-v2 plugin.
+- [x] Review examples and agent guidance once more for stale schema-v1, single-MOD, or
   normalized-modulation language.
 
 ### 4.4 Compatibility Freeze
