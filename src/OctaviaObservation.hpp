@@ -110,6 +110,9 @@ public:
 
 	bool create(uint32_t preFrames, uint32_t postFrames, uint8_t requestedMask,
 		const std::string& label, ObservationSnapshot* result, std::string* error);
+	bool createAt(uint64_t triggerFrame, uint32_t preFrames, uint32_t postFrames,
+		uint8_t requestedMask, const std::string& label,
+		ObservationSnapshot* result, std::string* error);
 	bool get(uint64_t id, ObservationSnapshot* result);
 	size_t size() const;
 

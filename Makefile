@@ -62,6 +62,7 @@ build/src/doom/%.c.o: CFLAGS += $(DOOM_LEGACY_WARN_FLAGS)
 build/src/Mandelwake.cpp.o build/src/MandelwakeEngine.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 
 TEST_BINS_NON_RACK := \
+	build/tests/octavia_observation_bus_spec \
 	build/tests/octavia_analysis_spec \
 	build/tests/octavia_measurement_spec \
 	build/tests/octavia_observation_spec \
@@ -298,7 +299,7 @@ CROWNSTEP_MODULE_SOURCES := \
 	src/CrownstepSerialization.cpp \
 	src/DebugTerminalTransport.cpp
 
-.PHONY: test test-fast test-rack test-build test-build-fast test-build-rack test-odr test-sibyl-tsan test-octavia-observation-tsan test-octavia-measurement-tsan
+.PHONY: test test-fast test-rack test-build test-build-fast test-build-rack test-odr test-sibyl-tsan test-octavia-observation-tsan test-octavia-observation-bus-tsan test-octavia-measurement-tsan
 test-build: $(TEST_BINS)
 test-build-fast: $(TEST_BINS_NON_RACK)
 test-build-rack: $(TEST_BINS_RACK)
@@ -311,10 +312,14 @@ test-sibyl-tsan: build/tests/sibyl_module_tsan_spec
 test-octavia-observation-tsan: build/tests/octavia_observation_tsan_spec
 	@TSAN_OPTIONS=halt_on_error=1 build/tests/octavia_observation_tsan_spec
 
+test-octavia-observation-bus-tsan: build/tests/octavia_observation_bus_tsan_spec
+	@TSAN_OPTIONS=halt_on_error=1 build/tests/octavia_observation_bus_tsan_spec
+
 test-octavia-measurement-tsan: build/tests/octavia_measurement_tsan_spec
 	@TSAN_OPTIONS=halt_on_error=1 build/tests/octavia_measurement_tsan_spec
 
 test-fast: test-build-fast
+	$(call run_test_bin,build/tests/octavia_observation_bus_spec)
 	$(call run_test_bin,build/tests/octavia_analysis_spec)
 	$(call run_test_bin,build/tests/octavia_measurement_spec)
 	$(call run_test_bin,build/tests/octavia_observation_spec)
@@ -445,6 +450,12 @@ build/tests/octavia_observation_spec: tests/octavia_observation_spec.cpp src/Oct
 build/tests/octavia_analysis_spec: tests/octavia_analysis_spec.cpp src/OctaviaAnalysis.cpp src/OctaviaAnalysis.hpp src/OctaviaObservation.cpp src/OctaviaObservation.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_analysis_spec.cpp src/OctaviaAnalysis.cpp src/OctaviaObservation.cpp -o $@
 
+build/tests/octavia_observation_bus_spec: tests/octavia_observation_bus_spec.cpp src/OctaviaObservationBus.cpp src/OctaviaObservationBus.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_observation_bus_spec.cpp src/OctaviaObservationBus.cpp -o $@
+
+build/tests/octavia_observation_bus_tsan_spec: tests/octavia_observation_bus_spec.cpp src/OctaviaObservationBus.cpp src/OctaviaObservationBus.hpp | build/tests
+	$(CXX) -std=c++17 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer -Isrc tests/octavia_observation_bus_spec.cpp src/OctaviaObservationBus.cpp -o $@
+
 build/tests/octavia_measurement_spec: tests/octavia_measurement_spec.cpp src/OctaviaMeasurement.cpp src/OctaviaMeasurement.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_measurement_spec.cpp src/OctaviaMeasurement.cpp -o $@
 
@@ -478,11 +489,11 @@ build/tests/sibyl_transport_spec: tests/sibyl_transport_spec.cpp src/SibylTransp
 build/tests/sibyl_timing_spec: tests/sibyl_timing_spec.cpp src/SibylTiming.cpp src/SibylTiming.hpp src/SibylTypes.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/sibyl_timing_spec.cpp src/SibylTiming.cpp -o $@
 
-build/tests/sibyl_module_spec: tests/sibyl_module_spec.cpp src/Sibyl.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_module_spec.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+build/tests/sibyl_module_spec: tests/sibyl_module_spec.cpp src/Sibyl.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_module_spec.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
-build/tests/sibyl_module_tsan_spec: tests/sibyl_module_spec.cpp src/Sibyl.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp | build/tests
-	$(CXX) -std=c++17 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_module_spec.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+build/tests/sibyl_module_tsan_spec: tests/sibyl_module_spec.cpp src/Sibyl.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp | build/tests
+	$(CXX) -std=c++17 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_module_spec.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
 build/tests/temporaldeck_arc_lights_spec: tests/temporaldeck_arc_lights_spec.cpp src/TemporalDeckArcLights.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@

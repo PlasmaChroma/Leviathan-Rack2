@@ -149,6 +149,22 @@ void testBoundedSnapshotPool() {
 		"snapshot pool remains bounded and evicts its oldest completed capture");
 }
 
+void testExactTriggerFrame() {
+	octavia::ObservationHistory history;
+	for (uint64_t frame = 100; frame <= 120; ++frame) publish(history, frame, 48000.f);
+	octavia::ObservationSnapshotPool pool(&history);
+	octavia::ObservationSnapshot snapshot;
+	std::string error;
+	check(pool.createAt(110, 3, 4, octavia::observeChannelBit(octavia::ObserveChannel::C),
+		"sibyl-exact", &snapshot, &error)
+		&& snapshot.observation.triggerFrame == 110
+		&& snapshot.observation.startFrame == 107
+		&& snapshot.observation.endFrame == 114
+		&& snapshot.observation.samples[4].front() == valuesFor(107)[4]
+		&& snapshot.observation.samples[4].back() == valuesFor(114)[4],
+		"explicit trigger frame freezes exact pre/post-roll history independent of latest frame");
+}
+
 void testConcurrentPublicationAndReads() {
 	octavia::ObservationHistory history;
 	std::atomic<bool> done{false};
@@ -184,6 +200,7 @@ int main() {
 	testPendingPostrollAndPool();
 	testLegacyRecentWindow();
 	testBoundedSnapshotPool();
+	testExactTriggerFrame();
 	testConcurrentPublicationAndReads();
 	std::cout << "[SUMMARY] octavia_observation_spec: "
 		<< (failures ? "failed" : "passed") << "\n";

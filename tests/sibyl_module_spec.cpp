@@ -235,6 +235,21 @@ int main() {
 
 	{
 		SibylModule module;
+		uint64_t cursor = octavia::observationBus().latestSequence();
+		const uint64_t requestId = module.publishObservationTrigger(
+			9876, 123456, 240, 480, 0x3c, "scene-experiment");
+		octavia::ObservationTrigger trigger;
+		uint64_t dropped = 0;
+		check(requestId != 0 && octavia::observationBus().poll(&cursor, &trigger, &dropped)
+			&& trigger.requestId == requestId && trigger.octaviaModuleId == 9876
+			&& trigger.triggerFrame == 123456 && trigger.preFrames == 240
+			&& trigger.postFrames == 480 && trigger.monitorMask == 0x3c
+			&& trigger.labelString() == "scene-experiment" && dropped == 0,
+			"Sibyl publishes an allocation-free exact-frame Octavia observation trigger");
+	}
+
+	{
+		SibylModule module;
 		module.acceptComposition(makeComposition(1, true), sibyl::ApplyAt::IMMEDIATE,
 			sibyl::PhasePolicy::RESTART_ALL);
 		processOneSample(module);

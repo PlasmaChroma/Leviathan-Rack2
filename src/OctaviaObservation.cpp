@@ -269,6 +269,17 @@ bool ObservationSnapshotPool::create(uint32_t preFrames, uint32_t postFrames,
 		if (error) *error = "insufficient_history";
 		return false;
 	}
+	return createAt(history_->publishedFrame(), preFrames, postFrames,
+		requestedMask, label, result, error);
+}
+
+bool ObservationSnapshotPool::createAt(uint64_t triggerFrame, uint32_t preFrames,
+		uint32_t postFrames, uint8_t requestedMask, const std::string& label,
+		ObservationSnapshot* result, std::string* error) {
+	if (!history_ || !history_->hasPublishedFrame()) {
+		if (error) *error = "insufficient_history";
+		return false;
+	}
 	const uint64_t totalFrames = static_cast<uint64_t>(preFrames) + postFrames + 1;
 	if (requestedMask == 0 || totalFrames > OBSERVATION_HISTORY_FRAMES) {
 		if (error) *error = "invalid_snapshot_request";
@@ -281,7 +292,7 @@ bool ObservationSnapshotPool::create(uint32_t preFrames, uint32_t postFrames,
 	}
 	ObservationSnapshot snapshot;
 	snapshot.observation.id = nextId_++;
-	snapshot.observation.triggerFrame = history_->publishedFrame();
+	snapshot.observation.triggerFrame = triggerFrame;
 	if (snapshot.observation.triggerFrame < preFrames) {
 		if (error) *error = "insufficient_history";
 		return false;

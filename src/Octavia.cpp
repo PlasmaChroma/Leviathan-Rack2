@@ -28,6 +28,7 @@
 #include "OctaviaObservation.hpp"
 #include "OctaviaMeasurement.hpp"
 #include "OctaviaAnalysis.hpp"
+#include "OctaviaObservationBus.hpp"
 #include "third_party/httplib.h"
 #include <thread>
 #include <atomic>
@@ -301,6 +302,17 @@ struct Octavia : Module {
     octavia::ObservationHistory observationHistory;
     octavia::ObservationSnapshotPool snapshotPool;
     octavia::AnalysisEngine analysisEngine;
+    std::atomic<uint64_t> observationBusCursor{0};
+    std::atomic<uint64_t> droppedObservationTriggers{0};
+    struct TriggeredSnapshot {
+        uint64_t requestId = 0;
+        uint64_t snapshotId = 0;
+        uint64_t triggerFrame = 0;
+        std::string label;
+        std::string error;
+    };
+    std::deque<TriggeredSnapshot> triggeredSnapshots;
+    std::mutex triggeredSnapshotsMtx;
     std::atomic<float> sampleRate{44100.f};  // set in process(), read by HTTP
     std::atomic<bool> audioInputConnected[2];
     std::array<uint64_t, 4> seenMonitorSnapshotGeneration{{0, 0, 0, 0}};
@@ -416,6 +428,8 @@ struct Octavia : Module {
     dsp::BooleanTrigger startTrig;
 
     Octavia() : snapshotPool(&observationHistory) {
+        observationBusCursor.store(octavia::observationBus().latestSequence(),
+            std::memory_order_relaxed);
         for (auto& count : monitorAnalysisCount)
             count.store(0, std::memory_order_relaxed);
         config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -574,6 +588,37 @@ struct Octavia : Module {
                 if (doHistory) { mv.outputs[j].history[mv.outputs[j].histIdx % HISTORY_LEN] = v; mv.outputs[j].histIdx++; }
             }
         }
+    }
+
+    // UI-thread consumer for lock-free Sibyl publications. Snapshot allocation
+    // and pool locking remain completely outside both modules' process().
+    void processObservationTriggers() {
+        uint64_t cursor = observationBusCursor.load(std::memory_order_relaxed);
+        uint64_t dropped = droppedObservationTriggers.load(std::memory_order_relaxed);
+        for (int consumed = 0; consumed < 16; ++consumed) {
+            octavia::ObservationTrigger trigger;
+            const uint64_t before = cursor;
+            if (!octavia::observationBus().poll(&cursor, &trigger, &dropped)) {
+                if (cursor == before) break;
+                continue;
+            }
+            if (trigger.octaviaModuleId != id) continue;
+            TriggeredSnapshot recorded;
+            recorded.requestId = trigger.requestId;
+            recorded.triggerFrame = trigger.triggerFrame;
+            recorded.label = trigger.labelString();
+            octavia::ObservationSnapshot snapshot;
+            if (snapshotPool.createAt(trigger.triggerFrame, trigger.preFrames,
+                    trigger.postFrames, trigger.monitorMask, recorded.label,
+                    &snapshot, &recorded.error)) {
+                recorded.snapshotId = snapshot.observation.id;
+            }
+            std::lock_guard<std::mutex> lock(triggeredSnapshotsMtx);
+            if (triggeredSnapshots.size() >= 64) triggeredSnapshots.pop_front();
+            triggeredSnapshots.push_back(recorded);
+        }
+        observationBusCursor.store(cursor, std::memory_order_relaxed);
+        droppedObservationTriggers.store(dropped, std::memory_order_relaxed);
     }
 
     // ── UI-thread: build cache JSON ────────────────────────────────────────────
@@ -2073,6 +2118,29 @@ struct Octavia : Module {
             res.set_content(body, "application/json");
         });
 
+        svr.Get("/audio/triggered-snapshots", [this](const httplib::Request&,
+                httplib::Response& res){
+            std::lock_guard<std::mutex> lock(triggeredSnapshotsMtx);
+            std::string body = "{" + jStr("busCursor") + ":" +
+                std::to_string(observationBusCursor.load(std::memory_order_relaxed)) + ",";
+            body += jStr("droppedTriggers") + ":" +
+                std::to_string(droppedObservationTriggers.load(std::memory_order_relaxed)) + ",";
+            body += jStr("triggers") + ":[";
+            for (size_t i = 0; i < triggeredSnapshots.size(); ++i) {
+                if (i) body += ",";
+                const auto& item = triggeredSnapshots[i];
+                body += "{" + jStr("requestId") + ":" + std::to_string(item.requestId) + ","
+                    + jStr("snapshotId") + ":" + (item.snapshotId
+                        ? std::to_string(item.snapshotId) : "null") + ","
+                    + jStr("triggerFrame") + ":" + std::to_string(item.triggerFrame) + ","
+                    + jStr("label") + ":" + jStr(item.label);
+                if (!item.error.empty()) body += "," + jStr("error") + ":" + jStr(item.error);
+                body += "}";
+            }
+            body += "]}";
+            res.set_content(body, "application/json");
+        });
+
         svr.Post("/audio/snapshot", [this](const httplib::Request& r, httplib::Response& res){
             json_error_t jsonError;
             json_t* root = json_loads(r.body.c_str(), 0, &jsonError);
@@ -3028,6 +3096,7 @@ struct OctaviaWidget : ModuleWidget {
             if (statusFramebuffer) statusFramebuffer->setDirty();
         }
         m->updateVoltages();
+        m->processObservationTriggers();
         if (++uiTimer >= 60) { uiTimer=0; m->updateCache(); }
         m->processSetQueue();
         m->processCableQueue();

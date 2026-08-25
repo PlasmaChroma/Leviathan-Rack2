@@ -7,6 +7,7 @@
 #include "SibylJSON.hpp"
 #include "SibylTiming.hpp"
 #include "SibylTransport.hpp"
+#include "OctaviaObservationBus.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
@@ -202,6 +203,28 @@ struct SibylModule : Module, SibylControl {
 		m_acceptedCompositionPtr = comp.get();
 		m_activeCompositionPtr.store(comp.get(), std::memory_order_release);
 		for (auto& phase : m_telemetryTrackPhase) phase.store(0.0, std::memory_order_relaxed);
+	}
+
+	// Allocation-free insertion point for future composition/event analysis
+	// markers. Publication is broadcast and Octavia resolves its own module ID.
+	uint64_t publishObservationTrigger(int64_t octaviaModuleId, uint64_t triggerFrame,
+			uint32_t preFrames, uint32_t postFrames, uint8_t monitorMask,
+			const char* label) noexcept {
+		if (octaviaModuleId < 0 || monitorMask == 0 || (monitorMask & ~uint8_t(0x3f)))
+			return 0;
+		octavia::ObservationTrigger trigger;
+		trigger.octaviaModuleId = octaviaModuleId;
+		trigger.triggerFrame = triggerFrame;
+		trigger.preFrames = preFrames;
+		trigger.postFrames = postFrames;
+		trigger.monitorMask = monitorMask;
+		if (label) {
+			size_t index = 0;
+			for (; index + 1 < trigger.label.size() && label[index]; ++index)
+				trigger.label[index] = label[index];
+			trigger.label[index] = '\0';
+		}
+		return octavia::observationBus().publish(trigger);
 	}
 
 	void reclaimPublishedObjects() {
