@@ -74,6 +74,12 @@ class OctaviaMonitoringPanelContractTest(unittest.TestCase):
     def test_phase_two_routes_use_the_shared_observation_substrate(self):
         self.assertIn('svr.Get("/audio/monitors"', SOURCE)
         self.assertIn('svr.Post("/audio/snapshot"', SOURCE)
+        self.assertIn('svr.Post("/audio/analyze"', SOURCE)
+        self.assertIn('svr.Post("/audio/compare"', SOURCE)
+        self.assertIn("AnalysisEngine analysisEngine", SOURCE)
+        self.assertIn("levelNormalizedBandsDb", SOURCE)
+        self.assertIn('jStr("activeAnalysisUsers")', SOURCE)
+        self.assertIn('jStr("snapshotGeneration")', SOURCE)
         self.assertIn('/audio/snapshot/(\\d+)', SOURCE)
         self.assertIn("observationHistory.publish", SOURCE)
         self.assertNotIn("AudioRingBuf", SOURCE)

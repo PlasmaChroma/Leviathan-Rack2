@@ -27,6 +27,7 @@
 #include "OctaviaJobControl.hpp"
 #include "OctaviaObservation.hpp"
 #include "OctaviaMeasurement.hpp"
+#include "OctaviaAnalysis.hpp"
 #include "third_party/httplib.h"
 #include <thread>
 #include <atomic>
@@ -299,10 +300,12 @@ struct Octavia : Module {
     // Audio observation — one coherent Rack-frame timeline for Master L/R and A-D.
     octavia::ObservationHistory observationHistory;
     octavia::ObservationSnapshotPool snapshotPool;
+    octavia::AnalysisEngine analysisEngine;
     std::atomic<float> sampleRate{44100.f};  // set in process(), read by HTTP
     std::atomic<bool> audioInputConnected[2];
     std::array<uint64_t, 4> seenMonitorSnapshotGeneration{{0, 0, 0, 0}};
     std::array<float, 4> monitorActivityEnvelope{{0.f, 0.f, 0.f, 0.f}};
+    std::array<std::atomic<uint32_t>, 4> monitorAnalysisCount;
 
     // Feedback needs a trend across independent requests. Keeping only the
     // strongest candidate per channel gives useful confirmation without
@@ -413,6 +416,8 @@ struct Octavia : Module {
     dsp::BooleanTrigger startTrig;
 
     Octavia() : snapshotPool(&observationHistory) {
+        for (auto& count : monitorAnalysisCount)
+            count.store(0, std::memory_order_relaxed);
         config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
         configButton(START_PARAM, "Start Octavia Server");
         configInput(MASTER_L_INPUT, "Master L");
@@ -539,8 +544,12 @@ struct Octavia : Module {
                 0.f, monitorActivityEnvelope[monitor] - monitorActivityDecay);
             const bool connected = inputs[MONITOR_A_INPUT + monitor].isConnected();
             const float idle = connected ? 0.12f : 0.f;
+            const bool analyzing = monitorAnalysisCount[monitor].load(std::memory_order_relaxed) > 0;
+            const float active = analyzing
+                ? 0.82f + 0.18f * std::sin(2.f * float(M_PI) * float(args.frame) * args.sampleTime * 2.f)
+                : 0.f;
             lights[MONITOR_A_LIGHT + monitor].setBrightness(
-                std::max(idle, monitorActivityEnvelope[monitor]));
+                std::max(active, std::max(idle, monitorActivityEnvelope[monitor])));
         }
     }
 
@@ -1479,6 +1488,151 @@ struct Octavia : Module {
         return body;
     }
 
+    static bool parseAnalysisGroup(json_t* value, octavia::AnalysisGroup* group,
+            std::string* error) {
+        if (!json_is_object(value) || !group) {
+            if (error) *error = "analysis group must be an object";
+            return false;
+        }
+        json_t* channels = json_object_get(value, "channels");
+        json_t* stereo = json_object_get(value, "stereo");
+        if (channels && stereo) {
+            if (error) *error = "analysis group cannot contain both channels and stereo";
+            return false;
+        }
+        if (channels) {
+            if (!json_is_array(channels) || json_array_size(channels) != 1
+                    || !json_is_string(json_array_get(channels, 0))
+                    || !octavia::parseObserveChannel(
+                        json_string_value(json_array_get(channels, 0)), &group->first)) {
+                if (error) *error = "channels must contain exactly one named monitor";
+                return false;
+            }
+            group->stereo = false;
+            return true;
+        }
+        if (!json_is_object(stereo)) {
+            if (error) *error = "analysis group requires channels or stereo";
+            return false;
+        }
+        json_t* left = json_object_get(stereo, "left");
+        json_t* right = json_object_get(stereo, "right");
+        if (!json_is_string(left) || !json_is_string(right)
+                || !octavia::parseObserveChannel(json_string_value(left), &group->first)
+                || !octavia::parseObserveChannel(json_string_value(right), &group->second)
+                || group->first == group->second) {
+            if (error) *error = "stereo requires distinct named left and right monitors";
+            return false;
+        }
+        group->stereo = true;
+        return true;
+    }
+
+    static std::string channelAnalysisJson(const octavia::ChannelAnalysis& analysis,
+            bool includeSpectrum) {
+        std::string body = "{";
+        body += jStr("channel") + ":" + jStr(octavia::observeChannelName(analysis.channel)) + ",";
+        body += jStr("connected") + ":" + (analysis.connected ? "true" : "false") + ",";
+        body += jStr("frames") + ":" + std::to_string(analysis.frames) + ",";
+        body += jStr("rms") + ":" + jNum(analysis.rms) + ",";
+        body += jStr("rmsDb") + ":" + jNum(analysis.rmsDb) + ",";
+        body += jStr("peak") + ":" + jNum(analysis.peak) + ",";
+        body += jStr("peakDb") + ":" + jNum(analysis.peakDb) + ",";
+        body += jStr("crestDb") + ":" + jNum(analysis.crestDb) + ",";
+        body += jStr("dcOffset") + ":" + jNum(analysis.dcOffset) + ",";
+        body += jStr("clippedSamples") + ":" + std::to_string(analysis.clippedSamples) + ",";
+        body += jStr("noiseFloorDb") + ":" + jNum(analysis.noiseFloorDb) + ",";
+        body += jStr("temporalSeparationFrames") + ":" +
+            std::to_string(analysis.temporalSeparationFrames) + ",";
+        body += jStr("issues") + ":[";
+        for (size_t i = 0; i < analysis.issues.size(); ++i) {
+            if (i) body += ",";
+            body += jStr(analysis.issues[i]);
+        }
+        body += "]," + jStr("hum") + ":{";
+        body += jStr("detected50") + ":" + (analysis.hum.detected50 ? "true" : "false") + ",";
+        body += jStr("detected60") + ":" + (analysis.hum.detected60 ? "true" : "false") + ",";
+        body += jStr("series50Db") + ":[";
+        for (size_t i = 0; i < 4; ++i) { if (i) body += ","; body += jNum(analysis.hum.series50Db[i]); }
+        body += "]," + jStr("series60Db") + ":[";
+        for (size_t i = 0; i < 4; ++i) { if (i) body += ","; body += jNum(analysis.hum.series60Db[i]); }
+        body += "]}," + jStr("feedback") + ":";
+        if (analysis.feedbackSuspect) {
+            body += "{" + jStr("hz") + ":" + jNum(analysis.feedbackHz) + ","
+                + jStr("riseDb") + ":" + jNum(analysis.feedbackRiseDb) + "},";
+        } else body += "null,";
+        body += jStr("resonances") + ":[";
+        for (size_t i = 0; i < analysis.resonances.size(); ++i) {
+            if (i) body += ",";
+            const auto& resonance = analysis.resonances[i];
+            body += "{" + jStr("hz") + ":" + jNum(resonance.hz) + ","
+                + jStr("db") + ":" + jNum(resonance.db) + ","
+                + jStr("prominenceDb") + ":" + jNum(resonance.prominenceDb) + ","
+                + jStr("stable") + ":" + (resonance.stable ? "true" : "false") + "}";
+        }
+        body += "],";
+        body += jStr("bandsDb") + ":{";
+        const auto& names = octavia::analysisBandNames();
+        for (size_t i = 0; i < names.size(); ++i) {
+            if (i) body += ",";
+            body += jStr(names[i]) + ":" + jNum(analysis.bandsDb[i]);
+        }
+        body += "}";
+        if (includeSpectrum) {
+            body += "," + jStr("spectrum") + ":[";
+            for (size_t i = 0; i < analysis.spectrum.size(); ++i) {
+                if (i) body += ",";
+                body += "{" + jStr("hz") + ":" + jNum(analysis.spectrum[i].hz)
+                    + "," + jStr("db") + ":" + jNum(analysis.spectrum[i].db) + "}";
+            }
+            body += "]";
+        }
+        return body + "}";
+    }
+
+    static std::string groupAnalysisJson(const octavia::GroupAnalysis& analysis,
+            bool includeSpectrum) {
+        if (!analysis.group.stereo)
+            return "{" + jStr("type") + ":" + jStr("mono") + "," +
+                jStr("analysis") + ":" + channelAnalysisJson(analysis.mono, includeSpectrum) + "}";
+        const octavia::StereoAnalysis& stereo = analysis.stereo;
+        return "{" + jStr("type") + ":" + jStr("stereo") + ","
+            + jStr("left") + ":" + channelAnalysisJson(stereo.leftAnalysis, includeSpectrum) + ","
+            + jStr("right") + ":" + channelAnalysisJson(stereo.rightAnalysis, includeSpectrum) + ","
+            + jStr("balanceDb") + ":" + jNum(stereo.balanceDb) + ","
+            + jStr("correlation") + ":" + jNum(stereo.correlation) + ","
+            + jStr("midRms") + ":" + jNum(stereo.midRms) + ","
+            + jStr("sideRms") + ":" + jNum(stereo.sideRms) + ","
+            + jStr("sideToMidDb") + ":" + jNum(stereo.sideToMidDb) + "}";
+    }
+
+    static std::string comparisonJson(const octavia::ComparisonAnalysis& comparison,
+            bool includeSpectrum) {
+        std::string body = "{";
+        body += jStr("reference") + ":" + groupAnalysisJson(comparison.reference, includeSpectrum) + ",";
+        body += jStr("target") + ":" + groupAnalysisJson(comparison.target, includeSpectrum) + ",";
+        body += jStr("delta") + ":{";
+        body += jStr("rmsDb") + ":" + jNum(comparison.rmsDeltaDb) + ",";
+        body += jStr("peakDb") + ":" + jNum(comparison.peakDeltaDb) + ",";
+        body += jStr("crestDb") + ":" + jNum(comparison.crestDeltaDb) + ",";
+        body += jStr("dcOffset") + ":" + jNum(comparison.dcOffsetDelta) + ",";
+        body += jStr("balanceDb") + ":" + jNum(comparison.balanceDeltaDb) + ",";
+        body += jStr("correlation") + ":" + jNum(comparison.correlationDelta) + ",";
+        body += jStr("sideToMidDb") + ":" + jNum(comparison.widthDeltaDb) + ",";
+        body += jStr("bandsDb") + ":{";
+        const auto& names = octavia::analysisBandNames();
+        for (size_t i = 0; i < names.size(); ++i) {
+            if (i) body += ",";
+            body += jStr(names[i]) + ":" + jNum(comparison.spectralDeltaDb[i]);
+        }
+        body += "}," + jStr("levelNormalizedBandsDb") + ":{";
+        for (size_t i = 0; i < names.size(); ++i) {
+            if (i) body += ",";
+            body += jStr(names[i]) + ":" + jNum(comparison.normalizedSpectralDeltaDb[i]);
+        }
+        return body + "}}}";
+    }
+
     static std::string measurementJson(const octavia::MeasurementResult& measured,
             bool leftConnected, bool rightConnected) {
         const double n = static_cast<double>(measured.measuredFrames);
@@ -1832,7 +1986,14 @@ struct Octavia : Module {
                     ((connectedMask & (1u << channel)) ? "true" : "false") + ",";
                 body += jStr("channels") + ":" +
                     std::to_string(observationHistory.currentChannelCount(observed)) + ",";
-                body += jStr("liveMeter") + ":" + (channel < 2 ? "true" : "false") + "}";
+                body += jStr("liveMeter") + ":" + (channel < 2 ? "true" : "false") + ",";
+                body += jStr("snapshotGeneration") + ":" +
+                    std::to_string(observationHistory.snapshotGeneration(observed)) + ",";
+                const uint32_t activeUsers = channel >= 2
+                    ? monitorAnalysisCount[channel - 2].load(std::memory_order_relaxed) : 0;
+                body += jStr("activeAnalysisUsers") + ":" + std::to_string(activeUsers) + ",";
+                body += jStr("activity") + ":" + jStr(activeUsers ? "analyzing"
+                    : ((connectedMask & (1u << channel)) ? "rolling" : "disconnected")) + "}";
             }
             body += "]}";
             res.set_content(body, "application/json");
@@ -1935,6 +2096,137 @@ struct Octavia : Module {
             if (snapshot.state == octavia::SnapshotState::Pending) res.status = 202;
             else if (snapshot.state == octavia::SnapshotState::Failed) res.status = 409;
             res.set_content(snapshotJson(snapshot), "application/json");
+        });
+
+        // Explicit snapshot analysis. Frozen samples make multi-monitor results
+        // repeatable and remove the legacy analyzer's sleep-based recapture.
+        svr.Post("/audio/analyze", [this](const httplib::Request& r, httplib::Response& res){
+            json_error_t jsonError;
+            json_t* root = json_loads(r.body.c_str(), 0, &jsonError);
+            json_t* idValue = root ? json_object_get(root, "snapshotId") : NULL;
+            if (!json_is_object(root) || !json_is_integer(idValue)
+                    || json_integer_value(idValue) <= 0) {
+                if (root) json_decref(root);
+                res.status = 400;
+                res.set_content("{\"error\":\"analysis requires a positive snapshotId\"}", "application/json");
+                return;
+            }
+            octavia::AnalysisGroup group;
+            std::string error;
+            if (!parseAnalysisGroup(root, &group, &error)) {
+                json_decref(root); res.status = 400;
+                res.set_content("{" + jStr("error") + ":" + jStr(error) + "}", "application/json");
+                return;
+            }
+            json_t* detailValue = json_object_get(root, "detail");
+            const std::string detail = json_is_string(detailValue) ? json_string_value(detailValue) : "basic";
+            json_t* spectrumValue = json_object_get(root, "includeSpectrum");
+            const bool includeSpectrum = json_is_true(spectrumValue);
+            const uint64_t snapshotId = static_cast<uint64_t>(json_integer_value(idValue));
+            json_decref(root);
+            if (detail != "basic" && detail != "detailed") {
+                res.status = 400;
+                res.set_content("{\"error\":\"detail must be basic or detailed\"}", "application/json");
+                return;
+            }
+            octavia::ObservationSnapshot snapshot;
+            if (!snapshotPool.get(snapshotId, &snapshot)) {
+                res.status = 404; res.set_content("{\"error\":\"snapshot_expired\"}", "application/json"); return;
+            }
+            if (snapshot.state != octavia::SnapshotState::Complete) {
+                res.status = snapshot.state == octavia::SnapshotState::Pending ? 409 : 422;
+                res.set_content("{" + jStr("error") + ":" + jStr(octavia::snapshotStateName(snapshot.state)) + "}", "application/json");
+                return;
+            }
+            const uint8_t selectedMask = octavia::observeChannelBit(group.first)
+                | (group.stereo ? octavia::observeChannelBit(group.second) : 0);
+            if ((snapshot.observation.requestedMask & selectedMask) != selectedMask) {
+                res.status = 422;
+                res.set_content("{\"error\":\"selected monitor is not present in snapshot\"}", "application/json"); return;
+            }
+            octavia::GroupAnalysis analysis;
+            for (int monitor = 0; monitor < 4; ++monitor)
+                if (selectedMask & (1u << (monitor + 2)))
+                    monitorAnalysisCount[monitor].fetch_add(1, std::memory_order_relaxed);
+            if (!analysisEngine.tryAnalyze(snapshot.observation, group, detail == "detailed",
+                    includeSpectrum, &analysis, &error)) {
+                for (int monitor = 0; monitor < 4; ++monitor)
+                    if (selectedMask & (1u << (monitor + 2)))
+                        monitorAnalysisCount[monitor].fetch_sub(1, std::memory_order_relaxed);
+                res.status = error == "analysis_busy" ? 429 : 422;
+                res.set_content("{" + jStr("error") + ":" + jStr(error) + "}", "application/json"); return;
+            }
+            for (int monitor = 0; monitor < 4; ++monitor)
+                if (selectedMask & (1u << (monitor + 2)))
+                    monitorAnalysisCount[monitor].fetch_sub(1, std::memory_order_relaxed);
+            res.set_content("{" + jStr("snapshotId") + ":" + std::to_string(snapshotId) + ","
+                + jStr("triggerFrame") + ":" + std::to_string(snapshot.observation.triggerFrame) + ","
+                + jStr("startFrame") + ":" + std::to_string(snapshot.observation.startFrame) + ","
+                + jStr("endFrame") + ":" + std::to_string(snapshot.observation.endFrame) + ","
+                + jStr("sampleRate") + ":" + jNum(snapshot.observation.sampleRate) + ","
+                + jStr("detail") + ":" + jStr(detail) + ","
+                + jStr("result") + ":" + groupAnalysisJson(analysis, includeSpectrum) + "}", "application/json");
+        });
+
+        svr.Post("/audio/compare", [this](const httplib::Request& r, httplib::Response& res){
+            json_error_t jsonError;
+            json_t* root = json_loads(r.body.c_str(), 0, &jsonError);
+            json_t* idValue = root ? json_object_get(root, "snapshotId") : NULL;
+            if (!json_is_object(root) || !json_is_integer(idValue) || json_integer_value(idValue) <= 0) {
+                if (root) json_decref(root);
+                res.status = 400; res.set_content("{\"error\":\"comparison requires a positive snapshotId\"}", "application/json"); return;
+            }
+            octavia::AnalysisGroup reference, target;
+            std::string error;
+            if (!parseAnalysisGroup(json_object_get(root, "reference"), &reference, &error)
+                    || !parseAnalysisGroup(json_object_get(root, "target"), &target, &error)) {
+                json_decref(root); res.status = 400;
+                res.set_content("{" + jStr("error") + ":" + jStr(error) + "}", "application/json"); return;
+            }
+            json_t* detailValue = json_object_get(root, "detail");
+            const std::string detail = json_is_string(detailValue) ? json_string_value(detailValue) : "detailed";
+            const bool includeSpectrum = json_is_true(json_object_get(root, "includeSpectrum"));
+            const uint64_t snapshotId = static_cast<uint64_t>(json_integer_value(idValue));
+            json_decref(root);
+            if (detail != "basic" && detail != "detailed") {
+                res.status = 400; res.set_content("{\"error\":\"detail must be basic or detailed\"}", "application/json"); return;
+            }
+            octavia::ObservationSnapshot snapshot;
+            if (!snapshotPool.get(snapshotId, &snapshot)) {
+                res.status = 404; res.set_content("{\"error\":\"snapshot_expired\"}", "application/json"); return;
+            }
+            if (snapshot.state != octavia::SnapshotState::Complete) {
+                res.status = snapshot.state == octavia::SnapshotState::Pending ? 409 : 422;
+                res.set_content("{" + jStr("error") + ":" + jStr(octavia::snapshotStateName(snapshot.state)) + "}", "application/json"); return;
+            }
+            uint8_t selectedMask = octavia::observeChannelBit(reference.first)
+                | octavia::observeChannelBit(target.first);
+            if (reference.stereo) selectedMask |= octavia::observeChannelBit(reference.second);
+            if (target.stereo) selectedMask |= octavia::observeChannelBit(target.second);
+            if ((snapshot.observation.requestedMask & selectedMask) != selectedMask) {
+                res.status = 422; res.set_content("{\"error\":\"selected monitor is not present in snapshot\"}", "application/json"); return;
+            }
+            octavia::ComparisonAnalysis comparison;
+            for (int monitor = 0; monitor < 4; ++monitor)
+                if (selectedMask & (1u << (monitor + 2)))
+                    monitorAnalysisCount[monitor].fetch_add(1, std::memory_order_relaxed);
+            if (!analysisEngine.tryCompare(snapshot.observation, reference, target,
+                    detail == "detailed", includeSpectrum, &comparison, &error)) {
+                for (int monitor = 0; monitor < 4; ++monitor)
+                    if (selectedMask & (1u << (monitor + 2)))
+                        monitorAnalysisCount[monitor].fetch_sub(1, std::memory_order_relaxed);
+                res.status = error == "analysis_busy" ? 429 : 422;
+                res.set_content("{" + jStr("error") + ":" + jStr(error) + "}", "application/json"); return;
+            }
+            for (int monitor = 0; monitor < 4; ++monitor)
+                if (selectedMask & (1u << (monitor + 2)))
+                    monitorAnalysisCount[monitor].fetch_sub(1, std::memory_order_relaxed);
+            res.set_content("{" + jStr("snapshotId") + ":" + std::to_string(snapshotId) + ","
+                + jStr("triggerFrame") + ":" + std::to_string(snapshot.observation.triggerFrame) + ","
+                + jStr("startFrame") + ":" + std::to_string(snapshot.observation.startFrame) + ","
+                + jStr("endFrame") + ":" + std::to_string(snapshot.observation.endFrame) + ","
+                + jStr("sampleRate") + ":" + jNum(snapshot.observation.sampleRate) + ","
+                + jStr("comparison") + ":" + comparisonJson(comparison, includeSpectrum) + "}", "application/json");
         });
 
         // ── GET /audio/{port} — audio-rate analysis ───────────────────────────
