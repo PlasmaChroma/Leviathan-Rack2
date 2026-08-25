@@ -263,13 +263,36 @@ struct ModuleEntry {
 // ── Octavia Module ─────────────────────────────────────────────
 struct Octavia : Module {
     enum ParamId  { START_PARAM, PARAMS_LEN };
-    enum InputId  { AUDIO_IN_L, AUDIO_IN_R, INPUTS_LEN };
+    enum InputId  {
+        MASTER_L_INPUT = 0,
+        MASTER_R_INPUT = 1,
+        MONITOR_A_INPUT,
+        MONITOR_B_INPUT,
+        MONITOR_C_INPUT,
+        MONITOR_D_INPUT,
+        INPUTS_LEN
+    };
     enum OutputId { OUTPUTS_LEN };
     enum LightId  {
         STATUS_R_LIGHT, STATUS_G_LIGHT, STATUS_B_LIGHT,
         READ_ACTIVITY_LIGHT, WRITE_ACTIVITY_LIGHT,
+        MONITOR_A_LIGHT, MONITOR_B_LIGHT, MONITOR_C_LIGHT, MONITOR_D_LIGHT,
         LIGHTS_LEN
     };
+
+    // Rack patch cables and light state persist numeric IDs. Preserve the original
+    // Master and activity IDs; append future observation ports and lights only.
+    static_assert(MASTER_L_INPUT == 0 && MASTER_R_INPUT == 1,
+        "Octavia Master input IDs must remain patch-compatible");
+    static_assert(MONITOR_A_INPUT == 2 && MONITOR_B_INPUT == 3 &&
+        MONITOR_C_INPUT == 4 && MONITOR_D_INPUT == 5 && INPUTS_LEN == 6,
+        "Octavia monitor input IDs are append-only");
+    static_assert(STATUS_R_LIGHT == 0 && STATUS_G_LIGHT == 1 && STATUS_B_LIGHT == 2 &&
+        READ_ACTIVITY_LIGHT == 3 && WRITE_ACTIVITY_LIGHT == 4,
+        "Octavia legacy light IDs must remain patch-compatible");
+    static_assert(MONITOR_A_LIGHT == 5 && MONITOR_B_LIGHT == 6 &&
+        MONITOR_C_LIGHT == 7 && MONITOR_D_LIGHT == 8 && LIGHTS_LEN == 9,
+        "Octavia monitor light IDs are append-only");
 
     std::atomic<bool> serverRunning{false};
     std::atomic<uint64_t> readActivityGeneration{0};
@@ -408,10 +431,18 @@ struct Octavia : Module {
     Octavia() {
         config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
         configButton(START_PARAM, "Start Octavia Server");
-        configInput(AUDIO_IN_L, "Audio Analyze L");
-        configInput(AUDIO_IN_R, "Audio Analyze R");
+        configInput(MASTER_L_INPUT, "Master L");
+        configInput(MASTER_R_INPUT, "Master R");
+        configInput(MONITOR_A_INPUT, "Monitor A");
+        configInput(MONITOR_B_INPUT, "Monitor B");
+        configInput(MONITOR_C_INPUT, "Monitor C");
+        configInput(MONITOR_D_INPUT, "Monitor D");
         configLight(READ_ACTIVITY_LIGHT, "HTTP read activity");
         configLight(WRITE_ACTIVITY_LIGHT, "HTTP write activity");
+        configLight(MONITOR_A_LIGHT, "Monitor A attention");
+        configLight(MONITOR_B_LIGHT, "Monitor B attention");
+        configLight(MONITOR_C_LIGHT, "Monitor C attention");
+        configLight(MONITOR_D_LIGHT, "Monitor D attention");
         setupRoutes();
     }
     ~Octavia() { stopServer(); }
@@ -529,6 +560,10 @@ struct Octavia : Module {
         writeActivityEnvelope = std::max(0.f, writeActivityEnvelope - activityDecay);
         lights[READ_ACTIVITY_LIGHT].setBrightness(readActivityEnvelope);
         lights[WRITE_ACTIVITY_LIGHT].setBrightness(writeActivityEnvelope);
+        for (int monitor = 0; monitor < 4; ++monitor) {
+            const bool connected = inputs[MONITOR_A_INPUT + monitor].isConnected();
+            lights[MONITOR_A_LIGHT + monitor].setBrightness(connected ? 0.12f : 0.f);
+        }
     }
 
     // ── UI-thread: sample voltages ─────────────────────────────────────────────
@@ -1684,7 +1719,7 @@ struct Octavia : Module {
         });
 
         // ── GET /audio/{port} — audio-rate analysis ───────────────────────────
-        // port 0 = AUDIO_IN_L, port 1 = AUDIO_IN_R
+        // Legacy numeric routes remain port 0 = Master L, port 1 = Master R.
         // Connect a cable from any module's output into the Bridge's ANALYZE input
         // to get real-time frequency analysis.
         svr.Get(R"(/audio/(\d+))", [this](const httplib::Request& r, httplib::Response& res){
@@ -2747,14 +2782,17 @@ struct OctaviaWidget : ModuleWidget {
     widget::FramebufferWidget* statusFramebuffer = nullptr;
     bool statusFramebufferStateInitialized = false;
     bool lastStatusFramebufferServerRunning = false;
-    Vec titleLabelMm{15.24f, 7.5f};
+    Vec titleLabelMm{19.05f, 7.5f};
     Vec portLabelMm{4.5f, 55.5f};
     Vec portValueLabelMm{26.f, 55.5f};
     Vec readActivityLabelMm{11.f, 56.f};
     Vec writeActivityLabelMm{19.f, 56.f};
     Vec startLabelMm{4.5f, 66.f};
-    Vec audioLabelLMm{8.f, 120.5f};
-    Vec audioLabelRMm{22.f, 120.5f};
+    Vec masterLabelLMm{11.f, 120.5f};
+    Vec masterLabelRMm{28.f, 120.5f};
+    std::array<Vec, 4> monitorLabelMm{{
+        Vec(44.f, 20.f), Vec(44.f, 42.f), Vec(44.f, 64.f), Vec(44.f, 86.f)
+    }};
 
     void step() override {
         ModuleWidget::step();
@@ -2790,10 +2828,21 @@ struct OctaviaWidget : ModuleWidget {
         setPanel(createPanel(panelPath));
         addChild(createWidget<CyanOrbScrew>(Vec(0, 0)));
         addChild(createWidget<CyanOrbScrew>(Vec(0, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+        addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - RACK_GRID_WIDTH, 0)));
+        addChild(createWidget<CyanOrbScrew>(Vec(
+            box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
         auto anchorPoint = [&](const char* id, const Vec& fallbackMm) {
             Vec result;
             if (!panel_svg::loadPointFromSvgMm(panelPath, id, &result)) result = fallbackMm;
+            return result;
+        };
+        auto anchorPointWithLegacy = [&](const char* id, const char* legacyId,
+                                         const Vec& fallbackMm) {
+            Vec result;
+            if (!panel_svg::loadPointFromSvgMm(panelPath, id, &result)
+                    && !panel_svg::loadPointFromSvgMm(panelPath, legacyId, &result))
+                result = fallbackMm;
             return result;
         };
         titleLabelMm = anchorPoint("TITLE_LABEL", titleLabelMm);
@@ -2802,8 +2851,13 @@ struct OctaviaWidget : ModuleWidget {
         readActivityLabelMm = anchorPoint("READ_ACTIVITY_LABEL", readActivityLabelMm);
         writeActivityLabelMm = anchorPoint("WRITE_ACTIVITY_LABEL", writeActivityLabelMm);
         startLabelMm = anchorPoint("START_LABEL", startLabelMm);
-        audioLabelLMm = anchorPoint("AUDIO_LABEL_L", audioLabelLMm);
-        audioLabelRMm = anchorPoint("AUDIO_LABEL_R", audioLabelRMm);
+        masterLabelLMm = anchorPointWithLegacy("MASTER_L_LABEL", "AUDIO_LABEL_L", masterLabelLMm);
+        masterLabelRMm = anchorPointWithLegacy("MASTER_R_LABEL", "AUDIO_LABEL_R", masterLabelRMm);
+        static const char* monitorLabelAnchors[] = {
+            "MONITOR_A_LABEL", "MONITOR_B_LABEL", "MONITOR_C_LABEL", "MONITOR_D_LABEL"
+        };
+        for (int monitor = 0; monitor < 4; ++monitor)
+            monitorLabelMm[monitor] = anchorPoint(monitorLabelAnchors[monitor], monitorLabelMm[monitor]);
 
         math::Rect statusRectMm(Vec(0.74f, 13.5f), Vec(29.f, 36.f));
         panel_svg::loadRectFromSvgMm(panelPath, "OCTOPUS_STATUS", &statusRectMm);
@@ -2830,11 +2884,30 @@ struct OctaviaWidget : ModuleWidget {
         addParam(createParamCentered<SmallGoldButton>(
             mm2px(anchorPoint("START_PARAM", Vec(23.f, 66.f))), module, Octavia::START_PARAM));
 
-        // Audio analysis inputs
+        // Persistent Master listening inputs. The legacy SVG anchors remain valid while
+        // custom/intermediate panels migrate to the semantic Master names.
         addInput(createInputCentered<Magitek2InputJack>(
-            mm2px(anchorPoint("AUDIO_IN_L", Vec(8.f, 110.f))), module, Octavia::AUDIO_IN_L));
+            mm2px(anchorPointWithLegacy("MASTER_L_INPUT", "AUDIO_IN_L", Vec(11.f, 110.f))),
+            module, Octavia::MASTER_L_INPUT));
         addInput(createInputCentered<Magitek2InputJack>(
-            mm2px(anchorPoint("AUDIO_IN_R", Vec(22.f, 110.f))), module, Octavia::AUDIO_IN_R));
+            mm2px(anchorPointWithLegacy("MASTER_R_INPUT", "AUDIO_IN_R", Vec(28.f, 110.f))),
+            module, Octavia::MASTER_R_INPUT));
+
+        static const char* monitorInputAnchors[] = {
+            "MONITOR_A_INPUT", "MONITOR_B_INPUT", "MONITOR_C_INPUT", "MONITOR_D_INPUT"
+        };
+        static const char* monitorLightAnchors[] = {
+            "MONITOR_A_LIGHT", "MONITOR_B_LIGHT", "MONITOR_C_LIGHT", "MONITOR_D_LIGHT"
+        };
+        for (int monitor = 0; monitor < 4; ++monitor) {
+            const float y = 27.f + 22.f * monitor;
+            addInput(createInputCentered<Magitek2InputJack>(
+                mm2px(anchorPoint(monitorInputAnchors[monitor], Vec(44.f, y))), module,
+                Octavia::MONITOR_A_INPUT + monitor));
+            addChild(createLightCentered<SmallAperture<TealApertureLight>>(
+                mm2px(anchorPoint(monitorLightAnchors[monitor], Vec(37.5f, y))), module,
+                Octavia::MONITOR_A_LIGHT + monitor));
+        }
     }
 
     void draw(const DrawArgs& args) override {
@@ -2866,11 +2939,15 @@ struct OctaviaWidget : ModuleWidget {
         nvgFillColor(args.vg,WHITE);
         nvgText(args.vg, mm2px(startLabelMm).x, mm2px(startLabelMm).y, "Start", NULL);
 
-        // ── Zone 3: Audio input labels ────────────────────────────────────────
-        nvgFontSize(args.vg,8.f); nvgFillColor(args.vg,WHITE);
+        // ── Zone 3: Master and independent monitor labels ────────────────────
+        nvgFontSize(args.vg,7.f); nvgFillColor(args.vg,WHITE);
         nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
-        nvgText(args.vg, mm2px(audioLabelLMm).x, mm2px(audioLabelLMm).y, "L", NULL);
-        nvgText(args.vg, mm2px(audioLabelRMm).x, mm2px(audioLabelRMm).y, "R", NULL);
+        nvgText(args.vg, mm2px(masterLabelLMm).x, mm2px(masterLabelLMm).y, "MASTER L", NULL);
+        nvgText(args.vg, mm2px(masterLabelRMm).x, mm2px(masterLabelRMm).y, "MASTER R", NULL);
+        static const char* monitorLabels[] = {"A", "B", "C", "D"};
+        for (int monitor = 0; monitor < 4; ++monitor)
+            nvgText(args.vg, mm2px(monitorLabelMm[monitor]).x,
+                mm2px(monitorLabelMm[monitor]).y, monitorLabels[monitor], NULL);
     }
 };
 

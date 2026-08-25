@@ -319,6 +319,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/sibyl_timing_spec)
 	$(call run_rack_test_bin,build/tests/sibyl_transport_spec)
 	python3 tests/octavia_sibyl_contract_spec.py
+	python3 tests/octavia_monitoring_panel_contract_spec.py
 	python3 tests/split_svg_labels_spec.py
 	python3 tools/generate_mandelwake_tables.py --check
 	$(call run_test_bin,build/tests/temporaldeck_platter_spec_harness)
