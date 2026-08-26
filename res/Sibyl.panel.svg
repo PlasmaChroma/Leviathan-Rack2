@@ -42,6 +42,7 @@
     <circle id="RESET_INPUT" cx="2941" cy="6900" r="400" />
     <circle id="SCENE_TRIG_INPUT" cx="781.00006" cy="6900" r="400" />
     <circle id="SCENE_TRIG_BUTTON" cx="781.00006" cy="8100" r="120" />
+    <circle id="VOICING_MENU_BUTTON" cx="3556" cy="6250" r="270" />
     <circle id="RUN_BUTTON" cx="1861" cy="8100" r="120" />
     <circle id="RESET_BUTTON" cx="2941" cy="8100" r="120" />
     <circle id="LOOP_BUTTON" cx="781.00006" cy="10050" r="120" />

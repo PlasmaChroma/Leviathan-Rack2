@@ -368,6 +368,11 @@
        cy="8100"
        r="120" />
     <circle
+       id="VOICING_MENU_BUTTON"
+       cx="3556"
+       cy="6250"
+       r="270" />
+    <circle
        id="RUN_BUTTON"
        cx="1861"
        cy="8100"

@@ -570,6 +570,14 @@ int main() {
 			"oracle snapshot reports coherent revision and repeat state");
 		check(module.m_displayCompositionHazard.load(std::memory_order_acquire) == nullptr,
 			"oracle snapshot releases its immutable-composition hazard");
+		const SibylModule::VoicingSnapshot voicing = module.readVoicingSnapshot();
+		check(voicing.scene == "Invocation" && voicing.rows.size() == 1
+			&& voicing.rows[0].channel == 0 && voicing.rows[0].trackId == "voice"
+			&& voicing.rows[0].patternId == "first" && voicing.rows[0].pitches.size() == 1
+			&& std::abs(voicing.rows[0].pitches[0] - 1.f) < 1e-6f,
+			"voicing snapshot exposes each active part's authored pitch material");
+		check(module.m_voicingCompositionHazard.load(std::memory_order_acquire) == nullptr,
+			"voicing snapshot releases its immutable-composition hazard");
 	}
 
 	{

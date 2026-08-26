@@ -27,7 +27,8 @@ using namespace rack;
 struct SibylModule : Module, SibylControl {
 	static constexpr std::streamoff kMaxPortableCompositionBytes = 16 * 1024 * 1024;
 	enum ParamIds {
-		SCENE_TRIG_BUTTON_PARAM, RUN_BUTTON_PARAM, RESET_BUTTON_PARAM, LOOP_BUTTON_PARAM, NUM_PARAMS
+		SCENE_TRIG_BUTTON_PARAM, RUN_BUTTON_PARAM, RESET_BUTTON_PARAM, LOOP_BUTTON_PARAM,
+		VOICING_MENU_PARAM, NUM_PARAMS
 	};
 	enum InputIds {
 		CLOCK_INPUT, RUN_INPUT, RESET_INPUT, SCENE_TRIG_INPUT, SCENE_CV_INPUT,
@@ -42,7 +43,8 @@ struct SibylModule : Module, SibylControl {
 	// Rack patch cables and parameter automation persist numeric IDs. These values are
 	// frozen for Sibyl's first public schema-v2 release; append future IDs, never reorder.
 	static_assert(SCENE_TRIG_BUTTON_PARAM == 0 && RUN_BUTTON_PARAM == 1 &&
-		RESET_BUTTON_PARAM == 2 && LOOP_BUTTON_PARAM == 3 && NUM_PARAMS == 4,
+		RESET_BUTTON_PARAM == 2 && LOOP_BUTTON_PARAM == 3 && VOICING_MENU_PARAM == 4 &&
+		NUM_PARAMS == 5,
 		"Sibyl parameter IDs are compatibility-frozen");
 	static_assert(CLOCK_INPUT == 0 && RUN_INPUT == 1 && RESET_INPUT == 2 &&
 		SCENE_TRIG_INPUT == 3 && SCENE_CV_INPUT == 4 && MACRO_1_INPUT == 5 &&
@@ -63,6 +65,7 @@ struct SibylModule : Module, SibylControl {
 	std::atomic<const sibyl::Composition*> m_activeCompositionPtr{nullptr};
 	std::atomic<const sibyl::Composition*> m_compositionHazard{nullptr};
 	std::atomic<const sibyl::Composition*> m_displayCompositionHazard{nullptr};
+	std::atomic<const sibyl::Composition*> m_voicingCompositionHazard{nullptr};
 	std::atomic<int> m_activeRevision{0};
 	std::vector<std::unique_ptr<const sibyl::AdoptionRequest>> m_adoptionOwners;
 	std::atomic<const sibyl::AdoptionRequest*> m_pendingAdoptionPtr{nullptr};
@@ -142,6 +145,18 @@ struct SibylModule : Module, SibylControl {
 		bool externalClock = false;
 	};
 
+	struct VoicingRow {
+		int channel = 0;
+		std::string trackId;
+		std::string patternId;
+		std::vector<float> pitches;
+	};
+
+	struct VoicingSnapshot {
+		std::string scene;
+		std::vector<VoicingRow> rows;
+	};
+
 	struct TrackState {
 		double patternPhaseBeats = 0.0;
 		int lastFiredStep = -1;
@@ -182,6 +197,7 @@ struct SibylModule : Module, SibylControl {
 		configButton(RUN_BUTTON_PARAM, "Run / Pause");
 		configButton(RESET_BUTTON_PARAM, "Reset arrangement");
 		configButton(LOOP_BUTTON_PARAM, "Cycle loop mode: Auto / Loop / Once");
+		configButton(VOICING_MENU_PARAM, "Show active scene voicing");
 
 		configInput(CLOCK_INPUT, "Clock");
 		configInput(RUN_INPUT, "Run");
@@ -236,11 +252,13 @@ struct SibylModule : Module, SibylControl {
 		const sibyl::Composition* active = m_activeCompositionPtr.load(std::memory_order_acquire);
 		const sibyl::Composition* hazard = m_compositionHazard.load(std::memory_order_acquire);
 		const sibyl::Composition* displayHazard = m_displayCompositionHazard.load(std::memory_order_acquire);
+		const sibyl::Composition* voicingHazard = m_voicingCompositionHazard.load(std::memory_order_acquire);
 		const sibyl::AdoptionRequest* pendingAdoption = m_pendingAdoptionPtr.load(std::memory_order_acquire);
 		m_compositionOwners.erase(std::remove_if(m_compositionOwners.begin(), m_compositionOwners.end(),
 			[&](const std::shared_ptr<const sibyl::Composition>& owner) {
 			const sibyl::Composition* ptr = owner.get();
 			return ptr != m_acceptedCompositionPtr && ptr != active && ptr != hazard && ptr != displayHazard &&
+				ptr != voicingHazard &&
 				(!pendingAdoption || pendingAdoption->composition != ptr);
 		}), m_compositionOwners.end());
 
@@ -399,6 +417,35 @@ struct SibylModule : Module, SibylControl {
 		}
 		m_displayCompositionHazard.store(nullptr, std::memory_order_release);
 		return display;
+	}
+
+	VoicingSnapshot readVoicingSnapshot() {
+		VoicingSnapshot voicing;
+		const TelemetrySnapshot telemetry = readTelemetry();
+		const sibyl::Composition* composition = acquirePublished(
+			m_activeCompositionPtr, m_voicingCompositionHazard);
+		if (composition && telemetry.sceneIndex >= 0 &&
+				telemetry.sceneIndex < static_cast<int>(composition->arrangement.size())) {
+			const sibyl::Scene& scene = composition->arrangement[telemetry.sceneIndex];
+			voicing.scene = scene.name.empty() ? scene.id : scene.name;
+			for (const sibyl::TrackDef& track : composition->tracks) {
+				auto assignment = scene.tracks.find(track.id);
+				if (assignment == scene.tracks.end() || assignment->second.patternId.empty()) continue;
+				VoicingRow row;
+				row.channel = track.channel;
+				row.trackId = track.id;
+				row.patternId = assignment->second.patternId;
+				auto pattern = composition->patterns.find(row.patternId);
+				if (pattern != composition->patterns.end()) {
+					row.pitches.reserve(pattern->second.steps.size());
+					for (const sibyl::StepEvent& event : pattern->second.steps)
+						row.pitches.push_back(event.compiledPitchV);
+				}
+				voicing.rows.push_back(std::move(row));
+			}
+		}
+		m_voicingCompositionHazard.store(nullptr, std::memory_order_release);
+		return voicing;
 	}
 
 	void acceptComposition(const sibyl::CompositionPtr& composition, sibyl::ApplyAt applyAt,
@@ -1562,16 +1609,6 @@ struct SibylOracleDisplay final : TransparentWidget {
 		nvgFillPaint(args.vg, glass);
 		nvgFill(args.vg);
 
-		// A slow scene-phase aura makes the display read as an instrument rather
-		// than a status terminal. It is pure UI work and never feeds the engine.
-		const float auraX = w * (0.18f + 0.64f * state.sceneProgress);
-		NVGpaint aura = nvgRadialGradient(args.vg, auraX, h * 0.48f, 1.f, w * 0.42f,
-			nvgRGBA(51, 224, 232, 42), nvgRGBA(71, 42, 155, 0));
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, 0.f, 0.f, w, h);
-		nvgFillPaint(args.vg, aura);
-		nvgFill(args.vg);
-
 		const float pad = 6.f;
 		const NVGcolor cyan = nvgRGBA(80, 232, 238, 255);
 		const NVGcolor violet = nvgRGBA(167, 139, 250, 255);
@@ -1588,17 +1625,9 @@ struct SibylOracleDisplay final : TransparentWidget {
 			state.running ? cyan : red, runLabel);
 
 		const float sceneY = 20.f;
-		const std::string scenePosition = state.sceneCount > 0
-			? "[" + std::to_string(state.sceneIndex + 1) + "/" + std::to_string(state.sceneCount) + "] "
-			: "[0/0] ";
-		const std::string sceneLabel = scenePosition + (state.scene.empty() ? "NO SCENE" : state.scene);
-		char repeatText[24];
-		std::snprintf(repeatText, sizeof(repeatText), "%d/%d", state.sceneRepeat + 1, state.sceneRepeats);
-		const float repeatWidth = measuredTextWidth(args, repeatText, 7.2f);
+		const std::string sceneLabel = state.scene.empty() ? "NO SCENE" : state.scene;
 		text(args, pad, sceneY, 10.2f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, cyan,
-			fittedText(args, sceneLabel, 10.2f,
-				std::max(1.f, w - pad * 2.f - repeatWidth - 7.f)));
-		text(args, w - pad, sceneY + 1.f, 7.2f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, violet, repeatText);
+			fittedText(args, sceneLabel, 10.2f, std::max(1.f, w - pad * 2.f)));
 
 		// One duration-weighted segment per scene makes the arrangement readable at
 		// a glance. Repeats contribute to their scene's width, while the continuous
@@ -1614,7 +1643,7 @@ struct SibylOracleDisplay final : TransparentWidget {
 		const float filledW = progressW * clamp(state.arrangementProgress, 0.f, 1.f);
 		if (filledW > 0.f) {
 			NVGpaint progressPaint = nvgLinearGradient(args.vg, progressX, progressY,
-				progressX + progressW, progressY, violet, cyan);
+				progressX + progressW, progressY, nvgRGBA(235, 241, 255, 255), cyan);
 			nvgBeginPath(args.vg);
 			nvgRoundedRect(args.vg, progressX, progressY, filledW, progressH, progressH * 0.5f);
 			nvgFillPaint(args.vg, progressPaint);
@@ -1622,8 +1651,8 @@ struct SibylOracleDisplay final : TransparentWidget {
 		}
 		float lastDividerX = progressX;
 		for (int index = 0; index + 1 < state.progressSegmentCount; ++index) {
-			const float dividerX = progressX
-				+ progressW * clamp(state.progressSegmentEnds[index], 0.f, 1.f);
+			const float segmentEnd = clamp(state.progressSegmentEnds[index], 0.f, 1.f);
+			const float dividerX = progressX + progressW * segmentEnd;
 			// Dense arrangements retain their proportional fill without collapsing
 			// into an opaque picket fence at compact display scale.
 			if (dividerX - lastDividerX < 2.f) continue;
@@ -1631,7 +1660,8 @@ struct SibylOracleDisplay final : TransparentWidget {
 			nvgMoveTo(args.vg, dividerX, progressY + 0.5f);
 			nvgLineTo(args.vg, dividerX, progressY + progressH - 0.5f);
 			nvgStrokeWidth(args.vg, 0.8f);
-			nvgStrokeColor(args.vg, nvgRGBA(3, 9, 17, 210));
+			nvgStrokeColor(args.vg, state.arrangementProgress >= segmentEnd
+				? nvgRGBA(3, 9, 17, 210) : white);
 			nvgStroke(args.vg);
 			lastDividerX = dividerX;
 		}
@@ -1640,7 +1670,7 @@ struct SibylOracleDisplay final : TransparentWidget {
 		// repeat, so the current repeat and its local phase remain legible even when
 		// the arrangement-level scene segment is narrow.
 		const float sceneProgressY = progressY + progressH + 4.f;
-		const float sceneProgressH = 4.f;
+		const float sceneProgressH = progressH * (2.f / 3.f);
 		const int sceneRepeats = std::max(1, state.sceneRepeats);
 		const float repeatedSceneProgress = clamp(
 			(state.sceneRepeat + clamp(state.sceneProgress, 0.f, 1.f)) / sceneRepeats,
@@ -1664,13 +1694,15 @@ struct SibylOracleDisplay final : TransparentWidget {
 			const float repeatW = progressW / sceneRepeats;
 			float lastRepeatDividerX = progressX;
 			for (int repeat = 1; repeat < sceneRepeats; ++repeat) {
+				const float repeatEnd = static_cast<float>(repeat) / sceneRepeats;
 				const float dividerX = progressX + repeatW * repeat;
 				if (dividerX - lastRepeatDividerX < 2.f) continue;
 				nvgBeginPath(args.vg);
 				nvgMoveTo(args.vg, dividerX, sceneProgressY + 0.5f);
 				nvgLineTo(args.vg, dividerX, sceneProgressY + sceneProgressH - 0.5f);
 				nvgStrokeWidth(args.vg, 0.8f);
-				nvgStrokeColor(args.vg, nvgRGBA(3, 9, 17, 210));
+				nvgStrokeColor(args.vg, repeatedSceneProgress >= repeatEnd
+					? nvgRGBA(3, 9, 17, 210) : white);
 				nvgStroke(args.vg);
 				lastRepeatDividerX = dividerX;
 			}
@@ -1680,7 +1712,7 @@ struct SibylOracleDisplay final : TransparentWidget {
 		// to surrender too much height to the message/revision footer, which was
 		// easy to miss in patches that only populated channels 1-8.
 		const float gridTop = 54.f;
-		const float gridBottom = h - 42.f;
+		const float gridBottom = h - 44.f;
 		const float cellW = (w - pad * 2.f) / 8.f;
 		const float rowH = std::max(8.f, (gridBottom - gridTop) * 0.5f);
 		for (int channel = 0; channel < 16; ++channel) {
@@ -1718,7 +1750,7 @@ struct SibylOracleDisplay final : TransparentWidget {
 				active ? dim : nvgRGBA(55, 66, 80, 160), channelText);
 		}
 
-		const float messageTop = h - 43.f;
+		const float messageTop = h - 45.f;
 		const std::string musicalContext = state.sceneDescription.empty() ? state.prompt : state.sceneDescription;
 		const std::string message = !state.error.empty() ? "! " + state.error
 			: (state.warningCount > 0 ? "! " + std::to_string(state.warningCount) + " WARNING"
@@ -1744,6 +1776,23 @@ struct SibylOracleDisplay final : TransparentWidget {
 		}
 
 		char footer[80];
+		char sceneStatus[24];
+		char repeatStatus[24];
+		std::snprintf(sceneStatus, sizeof(sceneStatus), "S: %d/%d",
+			state.sceneCount > 0 ? state.sceneIndex + 1 : 0, state.sceneCount);
+		std::snprintf(repeatStatus, sizeof(repeatStatus), "R: %d/%d",
+			state.sceneRepeat + 1, std::max(1, state.sceneRepeats));
+		const float footerFontSize = 7.8f;
+		const std::string statusDivider = " · ";
+		const float sceneStatusWidth = measuredTextWidth(args, sceneStatus, footerFontSize);
+		const float dividerWidth = measuredTextWidth(args, statusDivider, footerFontSize);
+		const float repeatStatusWidth = measuredTextWidth(args, repeatStatus, footerFontSize);
+		const float leftStatusWidth = sceneStatusWidth + dividerWidth + repeatStatusWidth;
+		text(args, pad, h - 4.f, footerFontSize, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, cyan, sceneStatus);
+		text(args, pad + sceneStatusWidth, h - 4.f, footerFontSize,
+			NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, dim, statusDivider);
+		text(args, pad + sceneStatusWidth + dividerWidth, h - 4.f, footerFontSize,
+			NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, violet, repeatStatus);
 		const char* loopLabel = state.loopFollowsComposition
 			? (state.looping ? "AUTO LOOP" : "AUTO ONCE")
 			: (state.looping ? "LOOP" : "ONCE");
@@ -1756,7 +1805,9 @@ struct SibylOracleDisplay final : TransparentWidget {
 				loopLabel, state.externalClock ? "EXT" : "INT",
 				state.bpm, state.activeRevision);
 		}
-		text(args, w - pad, h - 4.f, 7.0f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, violet, footer);
+		text(args, w - pad, h - 4.f, footerFontSize, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, violet,
+			fittedText(args, footer, footerFontSize,
+				std::max(1.f, w - pad * 2.f - leftStatusWidth - 7.f)));
 
 		// Retain a bright inner edge around the Oracle glass.
 		nvgBeginPath(args.vg);
@@ -1766,6 +1817,87 @@ struct SibylOracleDisplay final : TransparentWidget {
 		nvgStroke(args.vg);
 		nvgResetScissor(args.vg);
 		nvgRestore(args.vg);
+	}
+};
+
+struct SibylVoicingMenuButton final : TL1105 {
+	SibylModule* module = nullptr;
+
+	static int floorDiv12(int value) {
+		return value >= 0 ? value / 12 : -((-value + 11) / 12);
+	}
+
+	static std::string noteNameForCents(int centsFromC4) {
+		static const char* names[12] = {
+			"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
+		};
+		const int semitone = static_cast<int>(std::lround(centsFromC4 / 100.f));
+		const int midi = 60 + semitone;
+		const int pitchClass = ((midi % 12) + 12) % 12;
+		const int octave = floorDiv12(midi) - 1;
+		const int residualCents = centsFromC4 - semitone * 100;
+		std::string label = names[pitchClass] + std::to_string(octave);
+		if (residualCents != 0) label += string::f("%+dc", residualCents);
+		return label;
+	}
+
+	static std::string pitchSummary(const std::vector<float>& pitches) {
+		if (pitches.empty()) return "rests only";
+		std::vector<int> cents;
+		cents.reserve(pitches.size());
+		for (float pitch : pitches)
+			cents.push_back(static_cast<int>(std::lround(pitch * 1200.f)));
+		std::sort(cents.begin(), cents.end());
+		cents.erase(std::unique(cents.begin(), cents.end()), cents.end());
+		constexpr size_t kVisiblePitchCount = 6;
+		std::string summary;
+		const size_t visible = std::min(cents.size(), kVisiblePitchCount);
+		for (size_t index = 0; index < visible; ++index) {
+			if (!summary.empty()) summary += " ";
+			summary += noteNameForCents(cents[index]);
+		}
+		if (visible < cents.size()) summary += "  +" + std::to_string(cents.size() - visible);
+		return summary;
+	}
+
+	void onButton(const event::Button& e) override {
+		if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) {
+			TL1105::onButton(e);
+			return;
+		}
+		const SibylModule::VoicingSnapshot voicing = module->readVoicingSnapshot();
+		ui::Menu* menu = createMenu();
+		menu->box.pos = getAbsoluteOffset(Vec(0.f, box.size.y));
+		menu->addChild(createMenuLabel(voicing.scene.empty()
+			? "Active Scene Voicing" : "Voicing · " + voicing.scene));
+		if (voicing.rows.empty()) {
+			menu->addChild(createMenuLabel("No voiced parts in this scene"));
+		} else {
+			for (const SibylModule::VoicingRow& row : voicing.rows) {
+				MenuItem* item = new MenuItem;
+				item->text = string::f("CH %02d  %s", row.channel + 1, row.trackId.c_str());
+				item->rightText = pitchSummary(row.pitches);
+				item->disabled = true;
+				menu->addChild(item);
+			}
+		}
+		e.consume(this);
+	}
+
+	void draw(const DrawArgs& args) override {
+		TL1105::draw(args);
+		const float cx = 0.5f * box.size.x;
+		const float cy = 0.5f * box.size.y;
+		const float dy = std::max(1.6f, 0.16f * box.size.y);
+		const float halfW = std::max(1.9f, 0.22f * box.size.x);
+		for (int line = -1; line <= 1; ++line) {
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, cx - halfW, cy + dy * line);
+			nvgLineTo(args.vg, cx + halfW, cy + dy * line);
+			nvgStrokeWidth(args.vg, 1.2f);
+			nvgStrokeColor(args.vg, nvgRGBA(225, 232, 240, 244));
+			nvgStroke(args.vg);
+		}
 	}
 };
 
@@ -1837,6 +1969,11 @@ struct SibylWidget : ModuleWidget {
 			SibylModule::RESET_BUTTON_PARAM));
 		addParam(createParamCentered<SmallGoldButton>(anchor("LOOP_BUTTON", Vec(8.5f, 78.f)), module,
 			SibylModule::LOOP_BUTTON_PARAM));
+		auto* voicingButton = createParamCentered<SibylVoicingMenuButton>(
+			anchor("VOICING_MENU_BUTTON", Vec(35.56f, 62.5f)), module,
+			SibylModule::VOICING_MENU_PARAM);
+		voicingButton->module = module;
+		addParam(voicingButton);
 
 		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("V_OCT_OUTPUT", Vec(32.5f, 55.f)), module, SibylModule::V_OCT_OUTPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(anchor("GATE_OUTPUT", Vec(43.f, 55.f)), module, SibylModule::GATE_OUTPUT));
