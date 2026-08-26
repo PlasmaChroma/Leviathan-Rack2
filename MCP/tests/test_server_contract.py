@@ -43,6 +43,11 @@ class ServerContractTest(unittest.TestCase):
             "vcv_undo", "vcv_save_patch", "vcv_sibyl_get_capabilities",
             "vcv_sibyl_get_composition", "vcv_sibyl_validate", "vcv_sibyl_edit",
             "vcv_sibyl_get_status", "vcv_sibyl_transport",
+            "vcv_moirai_get_capabilities", "vcv_moirai_get_bank", "vcv_moirai_get_program",
+            "vcv_moirai_validate", "vcv_moirai_edit", "vcv_moirai_get_status", "vcv_moirai_command",
+            "vcv_octavia_get_monitors", "vcv_octavia_create_snapshot", "vcv_octavia_get_snapshot",
+            "vcv_octavia_analyze_snapshot", "vcv_octavia_compare_snapshot",
+            "vcv_octavia_get_triggered_snapshots",
             "vcv_octavia_console_status", "vcv_octavia_console_wait",
             "vcv_octavia_console_respond"
         }
@@ -90,6 +95,25 @@ class ServerContractTest(unittest.TestCase):
         self.assertIn('await _sibyl_call(f"sibyl/{params.module_id}/transport", "POST"', self.source)
         self.assertIn('Literal["scene", "arrangement", "patterns", "randomness"]', self.source)
         self.assertIn('payload = params.model_dump(exclude={"module_id"}, exclude_none=True)', self.source)
+
+    def test_moirai_tools_use_generic_routes_and_forward_revision_policies(self):
+        self.assertIn('f"semantic/{params.module_id}/document?', self.source)
+        self.assertIn('f"semantic/{params.module_id}/validate", "POST"', self.source)
+        self.assertIn('f"semantic/{params.module_id}/edit", "POST"', self.source)
+        self.assertIn("expected_revision: int", self.source)
+        self.assertIn('Literal["immediate", "nextTrigger", "allIdle", "nextClock"]', self.source)
+        self.assertIn('Literal["finishCurrent", "restartActive"]', self.source)
+        self.assertIn('f"semantic/{params.module_id}/status"', self.source)
+        self.assertIn('f"semantic/{params.module_id}/command", "POST"', self.source)
+
+    def test_snapshot_tools_use_frozen_observation_routes(self):
+        for route in (
+            '"audio/monitors"', '"audio/snapshot"', 'f"audio/snapshot/{params.snapshot_id}"',
+            '"audio/analyze"', '"audio/compare"', '"audio/triggered-snapshots"',
+        ):
+            self.assertIn(route, self.source)
+        self.assertIn("Preserve structured semantic and observation states", self.source)
+        self.assertIn('payload["snapshotId"] = payload.pop("snapshot_id")', self.source)
 
 
 if __name__ == "__main__":

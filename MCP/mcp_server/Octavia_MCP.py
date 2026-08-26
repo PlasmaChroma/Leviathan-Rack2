@@ -41,7 +41,7 @@ BRIDGE_HEADERS = {"X-Octavia-Token": BRIDGE_TOKEN} if BRIDGE_TOKEN else {}
 
 async def _normalize_endpoint(endpoint: str) -> str:
     """Resolve module_id in endpoints to protect against client JSON float precision truncation."""
-    m = re.match(r"^((?:sibyl|console|modules|temporal-deck|debug/metrics|debug/capture)/)(\d+)(/.*|\?.*)?$", endpoint)
+    m = re.match(r"^((?:sibyl|semantic|console|modules|temporal-deck|debug/metrics|debug/capture)/)(\d+)(/.*|\?.*)?$", endpoint)
     if not m:
         return endpoint
     prefix, mid_str, suffix = m.group(1), m.group(2), m.group(3) or ""
@@ -89,6 +89,28 @@ async def _sibyl_call(endpoint: str, method: str = "GET", data: dict = None) -> 
             raise OctaviaBridgeError("Sibyl bridge returned a non-object response")
         if "ok" not in payload and "error" in payload:
             raise OctaviaBridgeError(str(payload["error"]))
+        return payload
+
+
+async def _envelope_call(endpoint: str, method: str = "GET", data: dict = None) -> dict:
+    """Preserve structured semantic and observation states, including non-2xx replies."""
+    endpoint = await _normalize_endpoint(endpoint)
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        if method == "GET":
+            response = await client.get(f"{BRIDGE_URL}/{endpoint}", headers=BRIDGE_HEADERS)
+        else:
+            response = await client.post(
+                f"{BRIDGE_URL}/{endpoint}", json=data or {}, headers=BRIDGE_HEADERS
+            )
+        try:
+            payload = response.json()
+        except ValueError:
+            response.raise_for_status()
+            raise OctaviaBridgeError("Octavia bridge returned a non-JSON response")
+        if not isinstance(payload, dict):
+            raise OctaviaBridgeError("Octavia bridge returned a non-object response")
+        if response.is_error and "error" not in payload:
+            response.raise_for_status()
         return payload
 
 
@@ -444,6 +466,223 @@ async def vcv_sibyl_transport(params: SibylTransportInput) -> str:
     try:
         payload = params.model_dump(exclude={"module_id"}, exclude_none=True)
         return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/transport", "POST", payload), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+# ── Moirai semantic tools ────────────────────────────────────────────────────
+
+class MoiraiModuleInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    module_id: int = Field(..., description="Moirai module ID from vcv_list_modules", ge=0)
+
+
+class MoiraiBankInput(MoiraiModuleInput):
+    view: Literal["summary", "full", "program", "channel", "lane"] = "summary"
+    id: Optional[str] = Field(None, description="Program ID, lane A/B, or zero-based channel")
+
+
+class MoiraiValidateInput(MoiraiModuleInput):
+    candidate: dict = Field(..., description="Complete candidate Moirai envelope bank")
+
+
+class MoiraiEditInput(MoiraiModuleInput):
+    expected_revision: int = Field(..., description="Last accepted Moirai revision", ge=0)
+    operations: list[dict] = Field(..., description="Ordered atomic bank operations", min_length=1)
+    apply_at: Literal["immediate", "nextTrigger", "allIdle", "nextClock"] = "nextTrigger"
+    active_voice_policy: Literal["finishCurrent", "restartActive"] = "finishCurrent"
+
+
+class MoiraiCommandInput(MoiraiModuleInput):
+    action: Literal["trigger", "reset", "select"]
+    lane: Optional[Literal["A", "B", "both"]] = None
+    channel: Optional[int] = Field(None, ge=0, le=15)
+
+
+@mcp.tool(name="vcv_moirai_get_capabilities",
+          annotations={"title": "Get Moirai Capabilities", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_moirai_get_capabilities(params: MoiraiModuleInput) -> str:
+    """Discover the Moirai envelope-bank schema, limits, policies, and operations."""
+    try:
+        return json.dumps(await _envelope_call(f"semantic/{params.module_id}/capabilities"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_moirai_get_bank",
+          annotations={"title": "Get Moirai Bank", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_moirai_get_bank(params: MoiraiBankInput) -> str:
+    """Read a Moirai summary, full bank, program, channel, or lane view."""
+    try:
+        query = {"view": params.view}
+        if params.id is not None:
+            query["id"] = params.id
+        endpoint = f"semantic/{params.module_id}/document?{urlencode(query)}"
+        return json.dumps(await _envelope_call(endpoint), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_moirai_get_program",
+          annotations={"title": "Get Moirai Program", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_moirai_get_program(params: MoiraiBankInput) -> str:
+    """Read one complete authored Moirai program. Set id to its program ID."""
+    try:
+        if not params.id:
+            raise ValueError("id is required for a Moirai program view")
+        query = urlencode({"view": "program", "id": params.id})
+        return json.dumps(await _envelope_call(f"semantic/{params.module_id}/document?{query}"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_moirai_validate",
+          annotations={"title": "Validate Moirai Bank", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_moirai_validate(params: MoiraiValidateInput) -> str:
+    """Validate and compile a candidate bank without changing accepted state or playback."""
+    try:
+        return json.dumps(await _envelope_call(
+            f"semantic/{params.module_id}/validate", "POST", {"candidate": params.candidate}
+        ), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_moirai_edit",
+          annotations={"title": "Edit Moirai Bank", "readOnlyHint": False, "destructiveHint": False})
+async def vcv_moirai_edit(params: MoiraiEditInput) -> str:
+    """Apply one revision-guarded atomic bank transaction and preserve rejection envelopes."""
+    try:
+        payload = params.model_dump(exclude={"module_id"})
+        return json.dumps(await _envelope_call(
+            f"semantic/{params.module_id}/edit", "POST", payload
+        ), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_moirai_get_status",
+          annotations={"title": "Get Moirai Runtime Status", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_moirai_get_status(params: MoiraiModuleInput) -> str:
+    """Read accepted, active, and pending revisions plus runtime envelope telemetry."""
+    try:
+        return json.dumps(await _envelope_call(f"semantic/{params.module_id}/status"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_moirai_command",
+          annotations={"title": "Command Moirai", "readOnlyHint": False, "destructiveHint": False})
+async def vcv_moirai_command(params: MoiraiCommandInput) -> str:
+    """Trigger/reset Moirai or select its inspected voice without creating an undo entry."""
+    try:
+        payload = params.model_dump(exclude={"module_id"}, exclude_none=True)
+        return json.dumps(await _envelope_call(
+            f"semantic/{params.module_id}/command", "POST", payload
+        ), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+# ── Frozen Octavia observation tools ─────────────────────────────────────────
+
+MonitorName = Literal["masterL", "masterR", "A", "B", "C", "D"]
+
+
+class SnapshotInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    monitors: Optional[list[MonitorName]] = Field(None, min_length=1)
+    pre_ms: Optional[float] = Field(None, ge=0, alias="preMs")
+    post_ms: float = Field(0, ge=0, alias="postMs")
+    label: str = Field("", max_length=256)
+
+
+class SnapshotIdInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    snapshot_id: int = Field(..., ge=1)
+
+
+class AnalysisGroupInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    channels: Optional[list[MonitorName]] = Field(None, min_length=1, max_length=1)
+    stereo: Optional[dict[Literal["left", "right"], MonitorName]] = None
+
+
+class AnalyzeSnapshotInput(SnapshotIdInput):
+    channels: Optional[list[MonitorName]] = Field(None, min_length=1, max_length=1)
+    stereo: Optional[dict[Literal["left", "right"], MonitorName]] = None
+    detail: Literal["basic", "detailed"] = "basic"
+    include_spectrum: bool = Field(False, alias="includeSpectrum")
+
+
+class CompareSnapshotInput(SnapshotIdInput):
+    reference: AnalysisGroupInput
+    target: AnalysisGroupInput
+    detail: Literal["basic", "detailed"] = "detailed"
+    include_spectrum: bool = Field(False, alias="includeSpectrum")
+
+
+@mcp.tool(name="vcv_octavia_get_monitors",
+          annotations={"title": "Get Octavia Monitors", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_octavia_get_monitors() -> str:
+    """Discover physically cabled monitor inputs and observation-history state."""
+    try:
+        return json.dumps(await _envelope_call("audio/monitors"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_octavia_create_snapshot",
+          annotations={"title": "Create Audio Snapshot", "readOnlyHint": False, "destructiveHint": False})
+async def vcv_octavia_create_snapshot(params: SnapshotInput) -> str:
+    """Freeze one frame-aligned window from explicitly selected physical monitors."""
+    try:
+        payload = params.model_dump(by_alias=True, exclude_none=True)
+        return json.dumps(await _envelope_call("audio/snapshot", "POST", payload), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_octavia_get_snapshot",
+          annotations={"title": "Get Audio Snapshot", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_octavia_get_snapshot(params: SnapshotIdInput) -> str:
+    """Poll an existing immutable snapshot without recapturing audio."""
+    try:
+        return json.dumps(await _envelope_call(f"audio/snapshot/{params.snapshot_id}"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_octavia_analyze_snapshot",
+          annotations={"title": "Analyze Audio Snapshot", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_octavia_analyze_snapshot(params: AnalyzeSnapshotInput) -> str:
+    """Analyze one mono or stereo group from an existing frozen snapshot."""
+    try:
+        payload = params.model_dump(by_alias=True, exclude_none=True)
+        payload["snapshotId"] = payload.pop("snapshot_id")
+        return json.dumps(await _envelope_call("audio/analyze", "POST", payload), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_octavia_compare_snapshot",
+          annotations={"title": "Compare Audio Snapshot Groups", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_octavia_compare_snapshot(params: CompareSnapshotInput) -> str:
+    """Compare reference and target groups captured in the same immutable window."""
+    try:
+        payload = params.model_dump(by_alias=True, exclude_none=True)
+        payload["snapshotId"] = payload.pop("snapshot_id")
+        return json.dumps(await _envelope_call("audio/compare", "POST", payload), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_octavia_get_triggered_snapshots",
+          annotations={"title": "Get Triggered Snapshots", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_octavia_get_triggered_snapshots() -> str:
+    """Map semantic observation request IDs to resulting snapshot IDs and failures."""
+    try:
+        return json.dumps(await _envelope_call("audio/triggered-snapshots"), indent=2)
     except Exception as e:
         return _err(e)
 
