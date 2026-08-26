@@ -478,6 +478,20 @@ int main() {
 		SibylModule module;
 		module.acceptComposition(makeComposition(1, false), sibyl::ApplyAt::IMMEDIATE,
 			sibyl::PhasePolicy::RESTART_ALL);
+		module.m_telemetrySequence.store(0, std::memory_order_relaxed);
+		module.m_telemetryPublishCountdown = 0;
+		for (int sample = 0; sample < 800; ++sample) processOneSample(module);
+		const uint64_t firstWindowSequence = module.m_telemetrySequence.load(std::memory_order_acquire);
+		processOneSample(module);
+		const uint64_t secondWindowSequence = module.m_telemetrySequence.load(std::memory_order_acquire);
+		check(firstWindowSequence == 2 && secondWindowSequence == 4,
+			"display telemetry publishes at 60 Hz instead of on every audio sample");
+	}
+
+	{
+		SibylModule module;
+		module.acceptComposition(makeComposition(1, false), sibyl::ApplyAt::IMMEDIATE,
+			sibyl::PhasePolicy::RESTART_ALL);
 		processOneSample(module);
 		for (int revision = 2; revision <= 1001; ++revision) {
 			module.acceptComposition(makeComposition(revision, false), sibyl::ApplyAt::IMMEDIATE,
@@ -541,7 +555,7 @@ int main() {
 		module.acceptComposition(composition, sibyl::ApplyAt::IMMEDIATE, sibyl::PhasePolicy::RESTART_ALL);
 		processOneSample(module);
 		module.m_trackStates[0].patternPhaseBeats = 0.5;
-		processOneSample(module);
+		module.publishTelemetry(false, 120.0);
 		SibylModule::DisplaySnapshot display = module.readDisplaySnapshot();
 		check(display.title == "Constellation Engine" &&
 			display.prompt == "A bright ascending ritual" && display.scene == "Invocation",
@@ -556,6 +570,35 @@ int main() {
 			"oracle snapshot reports coherent revision and repeat state");
 		check(module.m_displayCompositionHazard.load(std::memory_order_acquire) == nullptr,
 			"oracle snapshot releases its immutable-composition hazard");
+	}
+
+	{
+		SibylModule module;
+		std::shared_ptr<sibyl::Composition> composition = std::const_pointer_cast<sibyl::Composition>(
+			makeComposition(8, false));
+		composition->arrangement[0].lengthBeats = 4.f;
+		composition->arrangement[0].repeats = 2;
+		sibyl::Scene secondScene = composition->arrangement[0];
+		secondScene.id = "long_second_scene";
+		secondScene.lengthBeats = 8.f;
+		secondScene.repeats = 1;
+		composition->arrangement.push_back(secondScene);
+		module.acceptComposition(composition, sibyl::ApplyAt::IMMEDIATE, sibyl::PhasePolicy::RESTART_ALL);
+		processOneSample(module);
+		module.m_sceneIndex = 0;
+		module.m_sceneRepeat = 1;
+		module.m_scenePhase = 2.0;
+		module.publishTelemetry(false, 120.0);
+		const SibylModule::DisplaySnapshot display = module.readDisplaySnapshot();
+		check(display.progressSegmentCount == 2
+			&& std::abs(display.progressSegmentEnds[0] - 0.5f) < 1e-6f
+			&& std::abs(display.progressSegmentEnds[1] - 1.f) < 1e-6f,
+			"oracle arrangement bar weights scene segments by length and repeats");
+		check(std::abs(display.sceneProgress - 0.5f) < 1e-6f
+			&& std::abs(display.arrangementProgress - 0.375f) < 1e-6f,
+			"oracle arrangement bar includes completed repeats and current scene progress");
+		check(module.m_displayCompositionHazard.load(std::memory_order_acquire) == nullptr,
+			"arrangement progress calculation releases its immutable-composition hazard");
 	}
 
 	{

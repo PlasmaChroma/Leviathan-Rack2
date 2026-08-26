@@ -101,6 +101,7 @@ struct SibylModule : Module, SibylControl {
 	std::atomic<bool> m_telemetryExternalClock{false};
 	std::atomic<double> m_telemetryEstimatedBpm{120.0};
 	std::array<std::atomic<double>, 16> m_telemetryTrackPhase;
+	int m_telemetryPublishCountdown = 0;
 
 	struct TelemetrySnapshot {
 		int sceneIndex = 0;
@@ -113,12 +114,14 @@ struct SibylModule : Module, SibylControl {
 	};
 
 	struct DisplaySnapshot {
+		static constexpr int kMaxProgressSegments = 256;
 		std::string title;
 		std::string prompt;
 		std::string scene;
 		std::string sceneDescription;
 		std::string error;
 		std::array<float, 16> playhead {};
+		std::array<float, kMaxProgressSegments> progressSegmentEnds {};
 		uint16_t activeTrackMask = 0;
 		uint16_t gateMask = 0;
 		int sceneRepeat = 0;
@@ -129,7 +132,9 @@ struct SibylModule : Module, SibylControl {
 		int activeRevision = 0;
 		int pendingRevision = -1;
 		int warningCount = 0;
+		int progressSegmentCount = 0;
 		float sceneProgress = 0.f;
+		float arrangementProgress = 0.f;
 		float bpm = 120.f;
 		bool running = true;
 		bool looping = true;
@@ -281,6 +286,21 @@ struct SibylModule : Module, SibylControl {
 		m_telemetrySequence.fetch_add(1, std::memory_order_release);
 	}
 
+	void maybePublishTelemetry(float sampleRate, bool externalClock,
+			int externalPpqn, float fallbackBpm) {
+		if (m_telemetryPublishCountdown > 0) {
+			--m_telemetryPublishCountdown;
+			return;
+		}
+		const float safeSampleRate = std::max(1.f, sampleRate);
+		const int publishPeriod = std::max(1, static_cast<int>(safeSampleRate / 60.f));
+		m_telemetryPublishCountdown = publishPeriod - 1;
+		const double estimatedBpm = externalClock
+			? m_externalClockEstimator.estimatedBpm(externalPpqn, fallbackBpm)
+			: fallbackBpm;
+		publishTelemetry(externalClock, estimatedBpm);
+	}
+
 	TelemetrySnapshot readTelemetry() const {
 		TelemetrySnapshot snapshot;
 		for (;;) {
@@ -320,6 +340,24 @@ struct SibylModule : Module, SibylControl {
 			display.loopFollowsComposition = loopOverride < 0;
 			display.title = composition->meta.title;
 			display.prompt = composition->meta.prompt;
+			double arrangementBeats = 0.0;
+			for (const sibyl::Scene& arrangedScene : composition->arrangement) {
+				arrangementBeats += std::max(0.0, static_cast<double>(arrangedScene.lengthBeats))
+					* std::max(1, arrangedScene.repeats);
+			}
+			if (arrangementBeats > 0.0) {
+				double cumulativeBeats = 0.0;
+				display.progressSegmentCount = std::min(
+					static_cast<int>(composition->arrangement.size()),
+					DisplaySnapshot::kMaxProgressSegments);
+				for (int index = 0; index < display.progressSegmentCount; ++index) {
+					const sibyl::Scene& arrangedScene = composition->arrangement[index];
+					cumulativeBeats += std::max(0.0, static_cast<double>(arrangedScene.lengthBeats))
+						* std::max(1, arrangedScene.repeats);
+					display.progressSegmentEnds[index] = clamp(
+						static_cast<float>(cumulativeBeats / arrangementBeats), 0.f, 1.f);
+				}
+			}
 			if (telemetry.sceneIndex >= 0 && telemetry.sceneIndex < static_cast<int>(composition->arrangement.size())) {
 				const sibyl::Scene& scene = composition->arrangement[telemetry.sceneIndex];
 				display.sceneIndex = telemetry.sceneIndex;
@@ -330,6 +368,19 @@ struct SibylModule : Module, SibylControl {
 				display.sceneRepeats = std::max(1, scene.repeats);
 				display.sceneProgress = scene.lengthBeats > 0.f
 					? clamp(static_cast<float>(telemetry.scenePhase / scene.lengthBeats), 0.f, 1.f) : 0.f;
+				if (arrangementBeats > 0.0) {
+					double completedBeats = 0.0;
+					for (int index = 0; index < telemetry.sceneIndex; ++index) {
+						const sibyl::Scene& priorScene = composition->arrangement[index];
+						completedBeats += std::max(0.0, static_cast<double>(priorScene.lengthBeats))
+							* std::max(1, priorScene.repeats);
+					}
+					const int repeat = clamp(telemetry.sceneRepeat, 0, std::max(1, scene.repeats) - 1);
+					completedBeats += static_cast<double>(scene.lengthBeats)
+						* (repeat + display.sceneProgress);
+					display.arrangementProgress = clamp(
+						static_cast<float>(completedBeats / arrangementBeats), 0.f, 1.f);
+				}
 				for (const sibyl::TrackDef& track : composition->tracks) {
 					if (track.channel < 0 || track.channel >= 16) continue;
 					auto assignment = scene.tracks.find(track.id);
@@ -881,8 +932,8 @@ struct SibylModule : Module, SibylControl {
 			outputs[CLOCK_OUTPUT].setVoltage(m_clockPulse.process(args.sampleTime) ? 10.0f : 0.0f);
 			outputs[SCENE_OUTPUT].setVoltage(m_scenePulse.process(args.sampleTime) ? 10.0f : 0.0f);
 			outputs[EOC_OUTPUT].setVoltage(m_eocPulse.process(args.sampleTime) ? 10.0f : 0.0f);
-			publishTelemetry(inputs[CLOCK_INPUT].isConnected(), inputs[CLOCK_INPUT].isConnected()
-				? m_externalClockEstimator.estimatedBpm(comp->clock.externalPpqn, comp->meta.bpm) : comp->meta.bpm);
+			maybePublishTelemetry(args.sampleRate, inputs[CLOCK_INPUT].isConnected(),
+				comp->clock.externalPpqn, comp->meta.bpm);
 			m_compositionHazard.store(nullptr, std::memory_order_release);
 			return;
 		}
@@ -1142,8 +1193,8 @@ struct SibylModule : Module, SibylControl {
 		outputs[CLOCK_OUTPUT].setVoltage(m_clockPulse.process(args.sampleTime) ? 10.0f : 0.0f);
 		outputs[SCENE_OUTPUT].setVoltage(m_scenePulse.process(args.sampleTime) ? 10.0f : 0.0f);
 		outputs[EOC_OUTPUT].setVoltage(m_eocPulse.process(args.sampleTime) ? 10.0f : 0.0f);
-		publishTelemetry(inputs[CLOCK_INPUT].isConnected(), inputs[CLOCK_INPUT].isConnected()
-			? m_externalClockEstimator.estimatedBpm(comp->clock.externalPpqn, comp->meta.bpm) : comp->meta.bpm);
+		maybePublishTelemetry(args.sampleRate, inputs[CLOCK_INPUT].isConnected(),
+			comp->clock.externalPpqn, comp->meta.bpm);
 		m_compositionHazard.store(nullptr, std::memory_order_release);
 	}
 
@@ -1492,6 +1543,12 @@ struct SibylOracleDisplay final : TransparentWidget {
 			state.sceneCount = 4;
 			state.looping = true;
 			state.sceneProgress = 0.37f;
+			state.arrangementProgress = 0.34f;
+			state.progressSegmentCount = 4;
+			state.progressSegmentEnds[0] = 0.18f;
+			state.progressSegmentEnds[1] = 0.45f;
+			state.progressSegmentEnds[2] = 0.72f;
+			state.progressSegmentEnds[3] = 1.f;
 			state.acceptedRevision = state.activeRevision = 1;
 			for (int i = 0; i < 16; ++i) state.playhead[i] = std::fmod(0.11f * i + 0.18f, 1.f);
 		}
@@ -1543,10 +1600,86 @@ struct SibylOracleDisplay final : TransparentWidget {
 				std::max(1.f, w - pad * 2.f - repeatWidth - 7.f)));
 		text(args, w - pad, sceneY + 1.f, 7.2f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, violet, repeatText);
 
+		// One duration-weighted segment per scene makes the arrangement readable at
+		// a glance. Repeats contribute to their scene's width, while the continuous
+		// fill includes completed repeats and the active scene phase.
+		const float progressX = pad;
+		const float progressY = 33.5f;
+		const float progressW = w - pad * 2.f;
+		const float progressH = 6.5f;
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, progressX, progressY, progressW, progressH, progressH * 0.5f);
+		nvgFillColor(args.vg, nvgRGBA(24, 39, 55, 225));
+		nvgFill(args.vg);
+		const float filledW = progressW * clamp(state.arrangementProgress, 0.f, 1.f);
+		if (filledW > 0.f) {
+			NVGpaint progressPaint = nvgLinearGradient(args.vg, progressX, progressY,
+				progressX + progressW, progressY, violet, cyan);
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, progressX, progressY, filledW, progressH, progressH * 0.5f);
+			nvgFillPaint(args.vg, progressPaint);
+			nvgFill(args.vg);
+		}
+		float lastDividerX = progressX;
+		for (int index = 0; index + 1 < state.progressSegmentCount; ++index) {
+			const float dividerX = progressX
+				+ progressW * clamp(state.progressSegmentEnds[index], 0.f, 1.f);
+			// Dense arrangements retain their proportional fill without collapsing
+			// into an opaque picket fence at compact display scale.
+			if (dividerX - lastDividerX < 2.f) continue;
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, dividerX, progressY + 0.5f);
+			nvgLineTo(args.vg, dividerX, progressY + progressH - 0.5f);
+			nvgStrokeWidth(args.vg, 0.8f);
+			nvgStrokeColor(args.vg, nvgRGBA(3, 9, 17, 210));
+			nvgStroke(args.vg);
+			lastDividerX = dividerX;
+		}
+
+		// Expand the active scene into its own strip. Each equal-width cell is one
+		// repeat, so the current repeat and its local phase remain legible even when
+		// the arrangement-level scene segment is narrow.
+		const float sceneProgressY = progressY + progressH + 4.f;
+		const float sceneProgressH = 4.f;
+		const int sceneRepeats = std::max(1, state.sceneRepeats);
+		const float repeatedSceneProgress = clamp(
+			(state.sceneRepeat + clamp(state.sceneProgress, 0.f, 1.f)) / sceneRepeats,
+			0.f, 1.f);
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, progressX, sceneProgressY, progressW, sceneProgressH,
+			sceneProgressH * 0.5f);
+		nvgFillColor(args.vg, nvgRGBA(20, 31, 49, 225));
+		nvgFill(args.vg);
+		const float filledSceneW = progressW * repeatedSceneProgress;
+		if (filledSceneW > 0.f) {
+			NVGpaint scenePaint = nvgLinearGradient(args.vg, progressX, sceneProgressY,
+				progressX + progressW, sceneProgressY, nvgRGBA(125, 95, 224, 255), violet);
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, progressX, sceneProgressY, filledSceneW,
+				sceneProgressH, sceneProgressH * 0.5f);
+			nvgFillPaint(args.vg, scenePaint);
+			nvgFill(args.vg);
+		}
+		if (sceneRepeats > 1) {
+			const float repeatW = progressW / sceneRepeats;
+			float lastRepeatDividerX = progressX;
+			for (int repeat = 1; repeat < sceneRepeats; ++repeat) {
+				const float dividerX = progressX + repeatW * repeat;
+				if (dividerX - lastRepeatDividerX < 2.f) continue;
+				nvgBeginPath(args.vg);
+				nvgMoveTo(args.vg, dividerX, sceneProgressY + 0.5f);
+				nvgLineTo(args.vg, dividerX, sceneProgressY + sceneProgressH - 0.5f);
+				nvgStrokeWidth(args.vg, 0.8f);
+				nvgStrokeColor(args.vg, nvgRGBA(3, 9, 17, 210));
+				nvgStroke(args.vg);
+				lastRepeatDividerX = dividerX;
+			}
+		}
+
 		// Give both eight-channel banks equal breathing room. The lower bank used
 		// to surrender too much height to the message/revision footer, which was
 		// easy to miss in patches that only populated channels 1-8.
-		const float gridTop = 35.f;
+		const float gridTop = 54.f;
 		const float gridBottom = h - 42.f;
 		const float cellW = (w - pad * 2.f) / 8.f;
 		const float rowH = std::max(8.f, (gridBottom - gridTop) * 0.5f);
@@ -1581,7 +1714,7 @@ struct SibylOracleDisplay final : TransparentWidget {
 			}
 			char channelText[4];
 			std::snprintf(channelText, sizeof(channelText), "%d", channel + 1);
-			text(args, x0, y - 5.6f, 5.2f, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
+			text(args, x0, y - 5.6f, 6.5f, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
 				active ? dim : nvgRGBA(55, 66, 80, 160), channelText);
 		}
 
@@ -1615,25 +1748,17 @@ struct SibylOracleDisplay final : TransparentWidget {
 			? (state.looping ? "AUTO LOOP" : "AUTO ONCE")
 			: (state.looping ? "LOOP" : "ONCE");
 		if (state.pendingRevision >= 0) {
-			std::snprintf(footer, sizeof(footer), "%s  %s  %5.1f  R%d>%d  P%d",
+			std::snprintf(footer, sizeof(footer), "%s · %s · %5.1f · R%d>%d · P%d",
 				loopLabel, state.externalClock ? "EXT" : "INT", state.bpm,
 				state.activeRevision, state.acceptedRevision, state.pendingRevision);
 		} else {
-			std::snprintf(footer, sizeof(footer), "%s  %s  %5.1f BPM  REV %d",
+			std::snprintf(footer, sizeof(footer), "%s · %s · %5.1f BPM · REV %d",
 				loopLabel, state.externalClock ? "EXT" : "INT",
 				state.bpm, state.activeRevision);
 		}
 		text(args, w - pad, h - 4.f, 7.0f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, violet, footer);
 
-		// Fine scanlines and a bright inner edge sell the glass/ phosphor depth.
-		for (float y = 1.f; y < h; y += 3.f) {
-			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, 1.f, y);
-			nvgLineTo(args.vg, w - 1.f, y);
-			nvgStrokeWidth(args.vg, 0.45f);
-			nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 42));
-			nvgStroke(args.vg);
-		}
+		// Retain a bright inner edge around the Oracle glass.
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, 0.5f, 0.5f, w - 1.f, h - 1.f, 4.f);
 		nvgStrokeWidth(args.vg, 1.f);
