@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstdint>
 #include <limits>
+#include <string>
 
 namespace debug_terminal {
 
@@ -178,5 +179,19 @@ void submitBaselineMetrics(const char* moduleName,
                            TimingRangeUs processUs,
                            TimingRangeUs stepUs,
                            TimingRangeUs drawUs);
+
+void submitSibylMetrics(uint32_t instanceId,
+                        int64_t rackModuleId,
+                        TimingRangeUs processUs,
+                        TimingRangeUs stepUs,
+                        TimingRangeUs drawUs,
+                        TimingRangeUs snapshotUs,
+                        TimingRangeUs oracleUs,
+                        int nvgPathOps);
+
+// Read-only bridge for Octavia. This intentionally exposes only the latest
+// compact terminal metric row; detailed profiling belongs in a separate,
+// explicitly armed capture path.
+std::string latestMetricsJson(int64_t rackModuleId);
 
 } // namespace debug_terminal

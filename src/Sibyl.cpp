@@ -11,6 +11,9 @@
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
+#ifndef SIBYL_MODULE_TEST
+#include "DebugTerminalMetrics.hpp"
+#endif
 #include <jansson.h>
 #include <osdialog.h>
 #include <algorithm>
@@ -23,6 +26,12 @@
 #include <sstream>
 
 using namespace rack;
+
+#ifndef SIBYL_MODULE_TEST
+namespace {
+std::atomic<uint32_t> gSibylDebugInstanceCounter {1u};
+}
+#endif
 
 struct SibylModule : Module, SibylControl {
 	static constexpr std::streamoff kMaxPortableCompositionBytes = 16 * 1024 * 1024;
@@ -143,7 +152,54 @@ struct SibylModule : Module, SibylControl {
 		bool looping = true;
 		bool loopFollowsComposition = true;
 		bool externalClock = false;
+
+		void resetForReuse() {
+			title.clear();
+			prompt.clear();
+			scene.clear();
+			sceneDescription.clear();
+			error.clear();
+			playhead.fill(0.f);
+			progressSegmentEnds.fill(0.f);
+			activeTrackMask = 0;
+			gateMask = 0;
+			sceneRepeat = 0;
+			sceneRepeats = 1;
+			sceneIndex = 0;
+			sceneCount = 0;
+			acceptedRevision = 0;
+			activeRevision = 0;
+			pendingRevision = -1;
+			warningCount = 0;
+			progressSegmentCount = 0;
+			sceneProgress = 0.f;
+			arrangementProgress = 0.f;
+			bpm = 120.f;
+			running = true;
+			looping = true;
+			loopFollowsComposition = true;
+			externalClock = false;
+		}
 	};
+
+	struct DisplayLayoutCache {
+		const sibyl::Composition* composition = nullptr;
+		int sceneIndex = -1;
+		std::string title;
+		std::string prompt;
+		std::string scene;
+		std::string sceneDescription;
+		std::array<float, DisplaySnapshot::kMaxProgressSegments> progressSegmentEnds {};
+		std::array<double, 16> patternDurationBeats {};
+		double arrangementBeats = 0.0;
+		double completedSceneBeats = 0.0;
+		float sceneLengthBeats = 0.f;
+		uint16_t activeTrackMask = 0;
+		int progressSegmentCount = 0;
+		int sceneRepeats = 1;
+		int sceneCount = 0;
+	};
+	DisplayLayoutCache m_displayLayoutCache;
 
 	struct VoicingRow {
 		int channel = 0;
@@ -176,6 +232,33 @@ struct SibylModule : Module, SibylControl {
 	};
 	TrackState m_trackStates[16];
 
+	// Immutable composition routing is resolved only when the sounding revision or
+	// scene changes. The audio-rate path then walks fixed arrays instead of hashing
+	// track and pattern strings (twice) on every sample.
+	struct CachedTrackRoute {
+		const sibyl::TrackDef* track = nullptr;
+		const sibyl::Pattern* pattern = nullptr;
+	};
+	enum class CachedMacroTarget : uint8_t {
+		NONE, GLOBAL_PROBABILITY, GLOBAL_VELOCITY, GLOBAL_SWING,
+		TRACK_PROBABILITY, TRACK_VELOCITY, TRACK_GATE, TRACK_SWING,
+		TRACK_MOD_1, TRACK_MOD_2, TRACK_MOD_3
+	};
+	struct CachedMacroRoute {
+		const sibyl::Macro* macro = nullptr;
+		CachedMacroTarget target = CachedMacroTarget::NONE;
+		int channel = -1;
+	};
+	const sibyl::Composition* m_cachedRoutingComposition = nullptr;
+	int m_cachedRoutingSceneIndex = -1;
+	std::array<CachedTrackRoute, 16> m_cachedTrackRoutes {};
+	std::array<CachedMacroRoute, 4> m_cachedMacroRoutes {};
+	int m_cachedOutputChannels = 1;
+
+#ifndef SIBYL_MODULE_TEST
+	debug_terminal::BaselineModuleMetrics debugMetrics;
+#endif
+
 	// Hardware Schmitt triggers & pulse generators
 	dsp::SchmittTrigger m_clockTrigger;
 	dsp::SchmittTrigger m_resetTrigger;
@@ -192,6 +275,9 @@ struct SibylModule : Module, SibylControl {
 	sibyl::ExternalClockEstimator m_externalClockEstimator;
 
 	SibylModule() {
+#ifndef SIBYL_MODULE_TEST
+		debugMetrics.assignInstanceId(gSibylDebugInstanceCounter);
+#endif
 		config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
 		configButton(SCENE_TRIG_BUTTON_PARAM, "Trigger next scene");
 		configButton(RUN_BUTTON_PARAM, "Run / Pause");
@@ -336,8 +422,68 @@ struct SibylModule : Module, SibylControl {
 		}
 	}
 
-	DisplaySnapshot readDisplaySnapshot() {
-		DisplaySnapshot display;
+	void refreshDisplayLayoutCache(const sibyl::Composition& composition, int sceneIndex) {
+		if (m_displayLayoutCache.composition == &composition &&
+				m_displayLayoutCache.sceneIndex == sceneIndex) return;
+		DisplayLayoutCache& cache = m_displayLayoutCache;
+		cache.composition = &composition;
+		cache.sceneIndex = sceneIndex;
+		cache.title = composition.meta.title;
+		cache.prompt = composition.meta.prompt;
+		cache.scene.clear();
+		cache.sceneDescription.clear();
+		cache.progressSegmentEnds.fill(0.f);
+		cache.patternDurationBeats.fill(0.0);
+		cache.arrangementBeats = 0.0;
+		cache.completedSceneBeats = 0.0;
+		cache.sceneLengthBeats = 0.f;
+		cache.activeTrackMask = 0;
+		cache.progressSegmentCount = std::min(
+			static_cast<int>(composition.arrangement.size()),
+			DisplaySnapshot::kMaxProgressSegments);
+		cache.sceneRepeats = 1;
+		cache.sceneCount = static_cast<int>(composition.arrangement.size());
+
+		for (const sibyl::Scene& arrangedScene : composition.arrangement) {
+			cache.arrangementBeats += std::max(0.0, static_cast<double>(arrangedScene.lengthBeats))
+				* std::max(1, arrangedScene.repeats);
+		}
+		if (cache.arrangementBeats > 0.0) {
+			double cumulativeBeats = 0.0;
+			for (int index = 0; index < cache.progressSegmentCount; ++index) {
+				const sibyl::Scene& arrangedScene = composition.arrangement[index];
+				cumulativeBeats += std::max(0.0, static_cast<double>(arrangedScene.lengthBeats))
+					* std::max(1, arrangedScene.repeats);
+				cache.progressSegmentEnds[index] = clamp(
+					static_cast<float>(cumulativeBeats / cache.arrangementBeats), 0.f, 1.f);
+			}
+		}
+		if (sceneIndex < 0 || sceneIndex >= cache.sceneCount) return;
+
+		const sibyl::Scene& scene = composition.arrangement[sceneIndex];
+		cache.scene = scene.name.empty() ? scene.id : scene.name;
+		cache.sceneDescription = scene.description;
+		cache.sceneLengthBeats = scene.lengthBeats;
+		cache.sceneRepeats = std::max(1, scene.repeats);
+		for (int index = 0; index < sceneIndex; ++index) {
+			const sibyl::Scene& priorScene = composition.arrangement[index];
+			cache.completedSceneBeats += std::max(0.0, static_cast<double>(priorScene.lengthBeats))
+				* std::max(1, priorScene.repeats);
+		}
+		for (const sibyl::TrackDef& track : composition.tracks) {
+			if (track.channel < 0 || track.channel >= 16) continue;
+			auto assignment = scene.tracks.find(track.id);
+			if (assignment == scene.tracks.end() || assignment->second.patternId.empty()) continue;
+			auto pattern = composition.patterns.find(assignment->second.patternId);
+			if (pattern == composition.patterns.end()) continue;
+			cache.activeTrackMask |= uint16_t(1u << track.channel);
+			cache.patternDurationBeats[track.channel] =
+				pattern->second.length * pattern->second.resolutionBeats;
+		}
+	}
+
+	void readDisplaySnapshot(DisplaySnapshot& display) {
+		display.resetForReuse();
 		const TelemetrySnapshot telemetry = readTelemetry();
 		display.gateMask = telemetry.gateMask;
 		display.externalClock = telemetry.externalClock;
@@ -353,69 +499,51 @@ struct SibylModule : Module, SibylControl {
 
 		const sibyl::Composition* composition = acquirePublished(m_activeCompositionPtr, m_displayCompositionHazard);
 		if (composition) {
+			refreshDisplayLayoutCache(*composition, telemetry.sceneIndex);
+			const DisplayLayoutCache& cache = m_displayLayoutCache;
 			const int loopOverride = m_loopOverride.load(std::memory_order_acquire);
 			display.looping = loopOverride >= 0 ? loopOverride != 0 : composition->transport.loop;
 			display.loopFollowsComposition = loopOverride < 0;
-			display.title = composition->meta.title;
-			display.prompt = composition->meta.prompt;
-			double arrangementBeats = 0.0;
-			for (const sibyl::Scene& arrangedScene : composition->arrangement) {
-				arrangementBeats += std::max(0.0, static_cast<double>(arrangedScene.lengthBeats))
-					* std::max(1, arrangedScene.repeats);
-			}
-			if (arrangementBeats > 0.0) {
-				double cumulativeBeats = 0.0;
-				display.progressSegmentCount = std::min(
-					static_cast<int>(composition->arrangement.size()),
-					DisplaySnapshot::kMaxProgressSegments);
-				for (int index = 0; index < display.progressSegmentCount; ++index) {
-					const sibyl::Scene& arrangedScene = composition->arrangement[index];
-					cumulativeBeats += std::max(0.0, static_cast<double>(arrangedScene.lengthBeats))
-						* std::max(1, arrangedScene.repeats);
-					display.progressSegmentEnds[index] = clamp(
-						static_cast<float>(cumulativeBeats / arrangementBeats), 0.f, 1.f);
-				}
-			}
-			if (telemetry.sceneIndex >= 0 && telemetry.sceneIndex < static_cast<int>(composition->arrangement.size())) {
-				const sibyl::Scene& scene = composition->arrangement[telemetry.sceneIndex];
+			display.title = cache.title;
+			display.prompt = cache.prompt;
+			display.progressSegmentCount = cache.progressSegmentCount;
+			std::copy(cache.progressSegmentEnds.begin(),
+				cache.progressSegmentEnds.begin() + cache.progressSegmentCount,
+				display.progressSegmentEnds.begin());
+			if (telemetry.sceneIndex >= 0 && telemetry.sceneIndex < cache.sceneCount) {
 				display.sceneIndex = telemetry.sceneIndex;
-				display.sceneCount = static_cast<int>(composition->arrangement.size());
-				display.scene = scene.name.empty() ? scene.id : scene.name;
-				display.sceneDescription = scene.description;
+				display.sceneCount = cache.sceneCount;
+				display.scene = cache.scene;
+				display.sceneDescription = cache.sceneDescription;
 				display.sceneRepeat = telemetry.sceneRepeat;
-				display.sceneRepeats = std::max(1, scene.repeats);
-				display.sceneProgress = scene.lengthBeats > 0.f
-					? clamp(static_cast<float>(telemetry.scenePhase / scene.lengthBeats), 0.f, 1.f) : 0.f;
-				if (arrangementBeats > 0.0) {
-					double completedBeats = 0.0;
-					for (int index = 0; index < telemetry.sceneIndex; ++index) {
-						const sibyl::Scene& priorScene = composition->arrangement[index];
-						completedBeats += std::max(0.0, static_cast<double>(priorScene.lengthBeats))
-							* std::max(1, priorScene.repeats);
-					}
-					const int repeat = clamp(telemetry.sceneRepeat, 0, std::max(1, scene.repeats) - 1);
-					completedBeats += static_cast<double>(scene.lengthBeats)
+				display.sceneRepeats = cache.sceneRepeats;
+				display.sceneProgress = cache.sceneLengthBeats > 0.f
+					? clamp(static_cast<float>(telemetry.scenePhase / cache.sceneLengthBeats), 0.f, 1.f) : 0.f;
+				if (cache.arrangementBeats > 0.0) {
+					const int repeat = clamp(telemetry.sceneRepeat, 0, cache.sceneRepeats - 1);
+					const double completedBeats = cache.completedSceneBeats +
+						static_cast<double>(cache.sceneLengthBeats)
 						* (repeat + display.sceneProgress);
 					display.arrangementProgress = clamp(
-						static_cast<float>(completedBeats / arrangementBeats), 0.f, 1.f);
+						static_cast<float>(completedBeats / cache.arrangementBeats), 0.f, 1.f);
 				}
-				for (const sibyl::TrackDef& track : composition->tracks) {
-					if (track.channel < 0 || track.channel >= 16) continue;
-					auto assignment = scene.tracks.find(track.id);
-					if (assignment == scene.tracks.end() || assignment->second.patternId.empty()) continue;
-					auto pattern = composition->patterns.find(assignment->second.patternId);
-					if (pattern == composition->patterns.end()) continue;
-					display.activeTrackMask |= uint16_t(1u << track.channel);
-					const double duration = pattern->second.length * pattern->second.resolutionBeats;
+				display.activeTrackMask = cache.activeTrackMask;
+				for (int channel = 0; channel < 16; ++channel) {
+					const double duration = cache.patternDurationBeats[channel];
 					if (duration > 0.0) {
-						double phase = std::fmod(telemetry.trackPhase[track.channel], duration);
+						double phase = std::fmod(telemetry.trackPhase[channel], duration);
 						if (phase < 0.0) phase += duration;
-						display.playhead[track.channel] = static_cast<float>(phase / duration);
+						display.playhead[channel] = static_cast<float>(phase / duration);
 					}
 				}
 			}
 		}
 		m_displayCompositionHazard.store(nullptr, std::memory_order_release);
+	}
+
+	DisplaySnapshot readDisplaySnapshot() {
+		DisplaySnapshot display;
+		readDisplaySnapshot(display);
 		return display;
 	}
 
@@ -592,17 +720,77 @@ struct SibylModule : Module, SibylControl {
 		return true;
 	}
 
+	void refreshRealtimeRouting(const sibyl::Composition& composition) {
+		if (m_cachedRoutingComposition == &composition &&
+				m_cachedRoutingSceneIndex == m_sceneIndex) return;
+
+		m_cachedRoutingComposition = &composition;
+		m_cachedRoutingSceneIndex = m_sceneIndex;
+		m_cachedTrackRoutes.fill({});
+		m_cachedMacroRoutes.fill({});
+		m_cachedOutputChannels = 1;
+
+		const sibyl::Scene* scene = m_sceneIndex >= 0 &&
+			m_sceneIndex < static_cast<int>(composition.arrangement.size())
+			? &composition.arrangement[m_sceneIndex] : nullptr;
+		for (const sibyl::TrackDef& track : composition.tracks) {
+			if (track.channel < 0 || track.channel >= 16) continue;
+			m_cachedOutputChannels = std::max(m_cachedOutputChannels, track.channel + 1);
+			if (!scene) continue;
+			auto assignment = scene->tracks.find(track.id);
+			if (assignment == scene->tracks.end() || assignment->second.patternId.empty()) continue;
+			auto pattern = composition.patterns.find(assignment->second.patternId);
+			if (pattern == composition.patterns.end()) continue;
+			m_cachedTrackRoutes[track.channel].track = &track;
+			m_cachedTrackRoutes[track.channel].pattern = &pattern->second;
+		}
+
+		static const char* const macroIds[4] {"1", "2", "3", "4"};
+		for (int index = 0; index < 4; ++index) {
+			auto found = composition.macros.find(macroIds[index]);
+			if (found == composition.macros.end()) continue;
+			CachedMacroRoute& route = m_cachedMacroRoutes[index];
+			route.macro = &found->second;
+			const std::string& target = found->second.target;
+			if (target == "global.probability") route.target = CachedMacroTarget::GLOBAL_PROBABILITY;
+			else if (target == "global.velocity") route.target = CachedMacroTarget::GLOBAL_VELOCITY;
+			else if (target == "global.swing") route.target = CachedMacroTarget::GLOBAL_SWING;
+			else if (target.compare(0, 6, "track.") == 0) {
+				const size_t parameterDot = target.rfind('.');
+				if (parameterDot == std::string::npos || parameterDot <= 6) continue;
+				for (const sibyl::TrackDef& track : composition.tracks) {
+					if (track.channel < 0 || track.channel >= 16 ||
+						track.id.size() != parameterDot - 6 ||
+						target.compare(6, parameterDot - 6, track.id) != 0) continue;
+					route.channel = track.channel;
+					const size_t parameterOffset = parameterDot + 1;
+					if (target.compare(parameterOffset, std::string::npos, "probability") == 0)
+						route.target = CachedMacroTarget::TRACK_PROBABILITY;
+					else if (target.compare(parameterOffset, std::string::npos, "velocity") == 0)
+						route.target = CachedMacroTarget::TRACK_VELOCITY;
+					else if (target.compare(parameterOffset, std::string::npos, "gate") == 0)
+						route.target = CachedMacroTarget::TRACK_GATE;
+					else if (target.compare(parameterOffset, std::string::npos, "swing") == 0)
+						route.target = CachedMacroTarget::TRACK_SWING;
+					else if (target.compare(parameterOffset, std::string::npos, "mod") == 0)
+						route.target = CachedMacroTarget::TRACK_MOD_1;
+					else if (target.compare(parameterOffset, std::string::npos, "mod2") == 0)
+						route.target = CachedMacroTarget::TRACK_MOD_2;
+					else if (target.compare(parameterOffset, std::string::npos, "mod3") == 0)
+						route.target = CachedMacroTarget::TRACK_MOD_3;
+					break;
+				}
+			}
+		}
+	}
+
 	bool crossesActiveStepBoundary(const sibyl::Composition& composition, double beatDelta) const {
 		if (beatDelta <= 0.0 || m_sceneIndex < 0 || m_sceneIndex >= (int)composition.arrangement.size()) return false;
-		const auto& scene = composition.arrangement[m_sceneIndex];
-		for (const auto& track : composition.tracks) {
-			if (track.channel < 0 || track.channel >= 16) continue;
-			auto assignment = scene.tracks.find(track.id);
-			if (assignment == scene.tracks.end() || assignment->second.patternId.empty()) continue;
-			auto pattern = composition.patterns.find(assignment->second.patternId);
-			if (pattern == composition.patterns.end() || pattern->second.resolutionBeats <= 0.0) continue;
-			double before = m_trackStates[track.channel].patternPhaseBeats / pattern->second.resolutionBeats;
-			double after = (m_trackStates[track.channel].patternPhaseBeats + beatDelta) / pattern->second.resolutionBeats;
+		for (int channel = 0; channel < 16; ++channel) {
+			const sibyl::Pattern* pattern = m_cachedTrackRoutes[channel].pattern;
+			if (!pattern || pattern->resolutionBeats <= 0.0) continue;
+			double before = m_trackStates[channel].patternPhaseBeats / pattern->resolutionBeats;
+			double after = (m_trackStates[channel].patternPhaseBeats + beatDelta) / pattern->resolutionBeats;
 			if (std::floor(before) != std::floor(after)) return true;
 		}
 		return false;
@@ -849,8 +1037,21 @@ struct SibylModule : Module, SibylControl {
 	}
 
 	void process(const ProcessArgs& args) override {
+#ifndef SIBYL_MODULE_TEST
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const auto processStart = debug_terminal::debugTimerStart(measurePerf);
+		auto recordProcessTiming = [&]() {
+			if (measurePerf)
+				debugMetrics.recordProcess(debug_terminal::elapsedNsSince(processStart));
+		};
+#endif
 		const sibyl::Composition* comp = acquirePublished(m_activeCompositionPtr, m_compositionHazard);
-		if (!comp) return;
+		if (!comp) {
+#ifndef SIBYL_MODULE_TEST
+			recordProcessTiming();
+#endif
+			return;
+		}
 		if (m_runButtonTrigger.process(params[RUN_BUTTON_PARAM].getValue())) {
 			bool running = m_runtimeRunning.load(std::memory_order_acquire);
 			m_runtimeRunning.store(!running, std::memory_order_release);
@@ -919,28 +1120,43 @@ struct SibylModule : Module, SibylControl {
 			rawBeatDelta = beatsPerSecond * args.sampleTime;
 		}
 
+		refreshRealtimeRouting(*comp);
+
 		// Accepted revisions remain pending until their requested musical boundary.
 		// Boundary detection uses the currently sounding composition; adoption then
 		// occurs before this sample advances transport or generates events.
+		const sibyl::AdoptionRequest* pending = acquirePublished(m_pendingAdoptionPtr, m_adoptionHazard);
+		const sibyl::TransportRequest* pendingTransport = acquirePublished(
+			m_pendingTransportPtr, m_transportHazard);
+		const bool needsStepBoundary =
+			(pending && pending->applyAt == sibyl::ApplyAt::NEXT_STEP) ||
+			(pendingTransport && pendingTransport->applyAt == sibyl::ApplyAt::NEXT_STEP) ||
+			(m_pendingHardwareAction == HardwareAction::SELECT_SCENE &&
+				m_pendingHardwareApplyAt == sibyl::ApplyAt::NEXT_STEP);
 		sibyl::BoundaryState adoptionBoundary;
 		adoptionBoundary.beat = rawBeatDelta > 0.0 &&
 			std::floor(m_clockBoundaryPhaseBeats) != std::floor(m_clockBoundaryPhaseBeats + rawBeatDelta);
-		adoptionBoundary.step = crossesActiveStepBoundary(*comp, rawBeatDelta);
+		adoptionBoundary.step = needsStepBoundary && crossesActiveStepBoundary(*comp, rawBeatDelta);
 		if (rawBeatDelta > 0.0 && m_sceneIndex >= 0 && m_sceneIndex < (int)comp->arrangement.size()) {
 			const auto& currentScene = comp->arrangement[m_sceneIndex];
 			adoptionBoundary.scene = m_scenePhase + rawBeatDelta >= currentScene.lengthBeats &&
 				m_sceneRepeat + 1 >= currentScene.repeats;
 		}
-		const sibyl::AdoptionRequest* pending = acquirePublished(m_pendingAdoptionPtr, m_adoptionHazard);
 		adoptPendingIfReady(adoptionBoundary, pending);
 		m_adoptionHazard.store(nullptr, std::memory_order_release);
 		m_compositionHazard.store(nullptr, std::memory_order_release);
 		comp = acquirePublished(m_activeCompositionPtr, m_compositionHazard);
-		if (!comp) return;
-		const sibyl::TransportRequest* pendingTransport = acquirePublished(m_pendingTransportPtr, m_transportHazard);
+		if (!comp) {
+			m_transportHazard.store(nullptr, std::memory_order_release);
+#ifndef SIBYL_MODULE_TEST
+			recordProcessTiming();
+#endif
+			return;
+		}
 		applyPendingTransportIfReady(adoptionBoundary, *comp, pendingTransport);
 		m_transportHazard.store(nullptr, std::memory_order_release);
 		applyPendingHardwareIfReady(adoptionBoundary, *comp, inputs[CLOCK_INPUT].isConnected(), clockTick);
+		refreshRealtimeRouting(*comp);
 		isRunning = m_runtimeRunning.load(std::memory_order_acquire);
 		if (inputs[RUN_INPUT].isConnected())
 			isRunning = inputs[RUN_INPUT].getVoltage() >= sibyl::kHardwareSchmittHighVolts;
@@ -982,6 +1198,9 @@ struct SibylModule : Module, SibylControl {
 			maybePublishTelemetry(args.sampleRate, inputs[CLOCK_INPUT].isConnected(),
 				comp->clock.externalPpqn, comp->meta.bpm);
 			m_compositionHazard.store(nullptr, std::memory_order_release);
+#ifndef SIBYL_MODULE_TEST
+			recordProcessTiming();
+#endif
 			return;
 		}
 
@@ -1029,7 +1248,7 @@ struct SibylModule : Module, SibylControl {
 		// Scene progression above may have changed m_sceneIndex. Event generation
 		// must use the destination scene on this same sample so restarted tracks can
 		// emit their destination step-zero events without a one-sample stale scene.
-		const auto& playbackScene = comp->arrangement[m_sceneIndex];
+		refreshRealtimeRouting(*comp);
 
 		// --- Macro Inputs Evaluation (0–10 V) ---
 		float globalProbMacro = 0.f;
@@ -1044,59 +1263,42 @@ struct SibylModule : Module, SibylControl {
 		for (int m = 0; m < 4; m++) {
 			int inputId = MACRO_1_INPUT + m;
 			if (!inputs[inputId].isConnected()) continue;
-			std::string macroKey = std::to_string(m + 1);
-			auto it = comp->macros.find(macroKey);
-			if (it == comp->macros.end()) continue;
+			const CachedMacroRoute& route = m_cachedMacroRoutes[m];
+			if (!route.macro) continue;
 
 			float rawNorm = clamp(inputs[inputId].getVoltage() / 10.0f, 0.0f, 1.0f);
-			float contrib = (it->second.polarity == sibyl::MacroPolarity::BIPOLAR)
-				? (rawNorm * 2.0f - 1.0f) * it->second.amount
-				: rawNorm * it->second.amount;
+			float contrib = (route.macro->polarity == sibyl::MacroPolarity::BIPOLAR)
+				? (rawNorm * 2.0f - 1.0f) * route.macro->amount
+				: rawNorm * route.macro->amount;
 
-			const std::string& target = it->second.target;
-			if (target == "global.probability") globalProbMacro += contrib;
-			else if (target == "global.velocity") globalVelMacro += contrib;
-			else if (target == "global.swing") globalSwingMacro += contrib;
-			else if (target.rfind("track.", 0) == 0) {
-				size_t secondDot = target.rfind('.');
-				if (secondDot != std::string::npos && secondDot > 6) {
-					std::string trackId = target.substr(6, secondDot - 6);
-					std::string param = target.substr(secondDot + 1);
-					for (const auto& tr : comp->tracks) {
-						if (tr.id == trackId && tr.channel >= 0 && tr.channel < 16) {
-							if (param == "probability") trackProbMacro[tr.channel] += contrib;
-							else if (param == "velocity") trackVelMacro[tr.channel] += contrib;
-							else if (param == "gate") trackGateMacro[tr.channel] += contrib;
-							else if (param == "swing") trackSwingMacro[tr.channel] += contrib;
-							else if (param == "mod") trackModMacro[0][tr.channel] += contrib;
-							else if (param == "mod2") trackModMacro[1][tr.channel] += contrib;
-							else if (param == "mod3") trackModMacro[2][tr.channel] += contrib;
-						}
-					}
-				}
+			switch (route.target) {
+				case CachedMacroTarget::GLOBAL_PROBABILITY: globalProbMacro += contrib; break;
+				case CachedMacroTarget::GLOBAL_VELOCITY: globalVelMacro += contrib; break;
+				case CachedMacroTarget::GLOBAL_SWING: globalSwingMacro += contrib; break;
+				case CachedMacroTarget::TRACK_PROBABILITY: trackProbMacro[route.channel] += contrib; break;
+				case CachedMacroTarget::TRACK_VELOCITY: trackVelMacro[route.channel] += contrib; break;
+				case CachedMacroTarget::TRACK_GATE: trackGateMacro[route.channel] += contrib; break;
+				case CachedMacroTarget::TRACK_SWING: trackSwingMacro[route.channel] += contrib; break;
+				case CachedMacroTarget::TRACK_MOD_1: trackModMacro[0][route.channel] += contrib; break;
+				case CachedMacroTarget::TRACK_MOD_2: trackModMacro[1][route.channel] += contrib; break;
+				case CachedMacroTarget::TRACK_MOD_3: trackModMacro[2][route.channel] += contrib; break;
+				case CachedMacroTarget::NONE: break;
 			}
 		}
 
 		// --- Polyphonic Track Output Evaluation ---
-		int maxChannel = -1;
-		for (const auto& trackDef : comp->tracks) {
-			int ch = trackDef.channel;
-			if (ch < 0 || ch > 15) continue;
-			maxChannel = std::max(maxChannel, ch);
+		for (int ch = 0; ch < 16; ++ch) {
+			const CachedTrackRoute& route = m_cachedTrackRoutes[ch];
+			if (!route.track || !route.pattern) {
+				m_trackStates[ch].currentGate = 0.0f;
+				continue;
+			}
+			const sibyl::TrackDef& trackDef = *route.track;
 			if (!isRunning) {
 				m_trackStates[ch].currentGate = 0.0f;
 				continue;
 			}
-
-			auto trackAsgIt = playbackScene.tracks.find(trackDef.id);
-			if (trackAsgIt == playbackScene.tracks.end() || trackAsgIt->second.patternId.empty()) {
-				m_trackStates[ch].currentGate = 0.0f;
-				continue;
-			}
-
-			auto patIt = comp->patterns.find(trackAsgIt->second.patternId);
-			if (patIt == comp->patterns.end()) continue;
-			const auto& pat = patIt->second;
+			const sibyl::Pattern& pat = *route.pattern;
 
 			if (pat.resolutionBeats <= 0) continue;
 
@@ -1219,7 +1421,7 @@ struct SibylModule : Module, SibylControl {
 		}
 
 		// Write Polyphonic outputs
-		int numChannels = std::max(1, maxChannel + 1);
+		int numChannels = m_cachedOutputChannels;
 		outputs[V_OCT_OUTPUT].setChannels(numChannels);
 		outputs[GATE_OUTPUT].setChannels(numChannels);
 		outputs[VELOCITY_OUTPUT].setChannels(numChannels);
@@ -1243,6 +1445,9 @@ struct SibylModule : Module, SibylControl {
 		maybePublishTelemetry(args.sampleRate, inputs[CLOCK_INPUT].isConnected(),
 			comp->clock.externalPpqn, comp->meta.bpm);
 		m_compositionHazard.store(nullptr, std::memory_order_release);
+#ifndef SIBYL_MODULE_TEST
+		recordProcessTiming();
+#endif
 	}
 
 	bool handleSibylRequest(Operation operation, const std::string& requestJson, std::string& responseJson, std::string& error) override {
@@ -1533,6 +1738,10 @@ struct SibylModule : Module, SibylControl {
 #ifndef SIBYL_MODULE_TEST
 struct SibylOracleDisplay final : TransparentWidget {
 	SibylModule* module = nullptr;
+	SibylModule::DisplaySnapshot displayState;
+	debug_terminal::UiTimingRangeAccumulator snapshotUsRange;
+	debug_terminal::UiTimingRangeAccumulator oracleUsRange;
+	int latestNvgPathOps = 0;
 
 	explicit SibylOracleDisplay(SibylModule* module) : module(module) {}
 
@@ -1575,10 +1784,16 @@ struct SibylOracleDisplay final : TransparentWidget {
 		const float w = box.size.x;
 		const float h = box.size.y;
 		if (w <= 1.f || h <= 1.f) return;
-		SibylModule::DisplaySnapshot state;
+		const bool measurePerf = module && isDragonKingDebugEnabled();
+		const auto oracleStart = debug_terminal::debugTimerStart(measurePerf);
+		SibylModule::DisplaySnapshot& state = displayState;
 		if (module) {
-			state = module->readDisplaySnapshot();
+			const auto snapshotStart = debug_terminal::debugTimerStart(measurePerf);
+			module->readDisplaySnapshot(state);
+			if (measurePerf)
+				snapshotUsRange.add(debug_terminal::elapsedUsSince(snapshotStart));
 		} else {
+			state.resetForReuse();
 			state.title = "THE ORACLE AWAKENS";
 			state.prompt = "Awaiting a composition from beyond the rack...";
 			state.scene = "PREMONITION";
@@ -1599,6 +1814,7 @@ struct SibylOracleDisplay final : TransparentWidget {
 			state.acceptedRevision = state.activeRevision = 1;
 			for (int i = 0; i < 16; ++i) state.playhead[i] = std::fmod(0.11f * i + 0.18f, 1.f);
 		}
+		int nvgPathOps = 0;
 
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, w, h);
@@ -1608,6 +1824,7 @@ struct SibylOracleDisplay final : TransparentWidget {
 		nvgRoundedRect(args.vg, 0.f, 0.f, w, h, 4.f);
 		nvgFillPaint(args.vg, glass);
 		nvgFill(args.vg);
+		++nvgPathOps;
 
 		const float pad = 6.f;
 		const NVGcolor cyan = nvgRGBA(80, 232, 238, 255);
@@ -1640,6 +1857,7 @@ struct SibylOracleDisplay final : TransparentWidget {
 		nvgRoundedRect(args.vg, progressX, progressY, progressW, progressH, progressH * 0.5f);
 		nvgFillColor(args.vg, nvgRGBA(24, 39, 55, 225));
 		nvgFill(args.vg);
+		++nvgPathOps;
 		const float filledW = progressW * clamp(state.arrangementProgress, 0.f, 1.f);
 		if (filledW > 0.f) {
 			NVGpaint progressPaint = nvgLinearGradient(args.vg, progressX, progressY,
@@ -1648,22 +1866,31 @@ struct SibylOracleDisplay final : TransparentWidget {
 			nvgRoundedRect(args.vg, progressX, progressY, filledW, progressH, progressH * 0.5f);
 			nvgFillPaint(args.vg, progressPaint);
 			nvgFill(args.vg);
+			++nvgPathOps;
 		}
 		float lastDividerX = progressX;
-		for (int index = 0; index + 1 < state.progressSegmentCount; ++index) {
-			const float segmentEnd = clamp(state.progressSegmentEnds[index], 0.f, 1.f);
-			const float dividerX = progressX + progressW * segmentEnd;
-			// Dense arrangements retain their proportional fill without collapsing
-			// into an opaque picket fence at compact display scale.
-			if (dividerX - lastDividerX < 2.f) continue;
+		for (int completed = 0; completed < 2; ++completed) {
+			bool hasDivider = false;
+			lastDividerX = progressX;
 			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, dividerX, progressY + 0.5f);
-			nvgLineTo(args.vg, dividerX, progressY + progressH - 0.5f);
-			nvgStrokeWidth(args.vg, 0.8f);
-			nvgStrokeColor(args.vg, state.arrangementProgress >= segmentEnd
-				? nvgRGBA(3, 9, 17, 210) : white);
-			nvgStroke(args.vg);
-			lastDividerX = dividerX;
+			for (int index = 0; index + 1 < state.progressSegmentCount; ++index) {
+				const float segmentEnd = clamp(state.progressSegmentEnds[index], 0.f, 1.f);
+				const float dividerX = progressX + progressW * segmentEnd;
+				// Dense arrangements retain their proportional fill without collapsing
+				// into an opaque picket fence at compact display scale.
+				if (dividerX - lastDividerX < 2.f) continue;
+				lastDividerX = dividerX;
+				if ((state.arrangementProgress >= segmentEnd) != (completed != 0)) continue;
+				nvgMoveTo(args.vg, dividerX, progressY + 0.5f);
+				nvgLineTo(args.vg, dividerX, progressY + progressH - 0.5f);
+				hasDivider = true;
+			}
+			if (hasDivider) {
+				nvgStrokeWidth(args.vg, 0.8f);
+				nvgStrokeColor(args.vg, completed ? nvgRGBA(3, 9, 17, 210) : white);
+				nvgStroke(args.vg);
+				++nvgPathOps;
+			}
 		}
 
 		// Expand the active scene into its own strip. Each equal-width cell is one
@@ -1680,6 +1907,7 @@ struct SibylOracleDisplay final : TransparentWidget {
 			sceneProgressH * 0.5f);
 		nvgFillColor(args.vg, nvgRGBA(20, 31, 49, 225));
 		nvgFill(args.vg);
+		++nvgPathOps;
 		const float filledSceneW = progressW * repeatedSceneProgress;
 		if (filledSceneW > 0.f) {
 			NVGpaint scenePaint = nvgLinearGradient(args.vg, progressX, sceneProgressY,
@@ -1689,22 +1917,30 @@ struct SibylOracleDisplay final : TransparentWidget {
 				sceneProgressH, sceneProgressH * 0.5f);
 			nvgFillPaint(args.vg, scenePaint);
 			nvgFill(args.vg);
+			++nvgPathOps;
 		}
 		if (sceneRepeats > 1) {
 			const float repeatW = progressW / sceneRepeats;
-			float lastRepeatDividerX = progressX;
-			for (int repeat = 1; repeat < sceneRepeats; ++repeat) {
-				const float repeatEnd = static_cast<float>(repeat) / sceneRepeats;
-				const float dividerX = progressX + repeatW * repeat;
-				if (dividerX - lastRepeatDividerX < 2.f) continue;
+			for (int completed = 0; completed < 2; ++completed) {
+				bool hasDivider = false;
+				float lastRepeatDividerX = progressX;
 				nvgBeginPath(args.vg);
-				nvgMoveTo(args.vg, dividerX, sceneProgressY + 0.5f);
-				nvgLineTo(args.vg, dividerX, sceneProgressY + sceneProgressH - 0.5f);
-				nvgStrokeWidth(args.vg, 0.8f);
-				nvgStrokeColor(args.vg, repeatedSceneProgress >= repeatEnd
-					? nvgRGBA(3, 9, 17, 210) : white);
-				nvgStroke(args.vg);
-				lastRepeatDividerX = dividerX;
+				for (int repeat = 1; repeat < sceneRepeats; ++repeat) {
+					const float repeatEnd = static_cast<float>(repeat) / sceneRepeats;
+					const float dividerX = progressX + repeatW * repeat;
+					if (dividerX - lastRepeatDividerX < 2.f) continue;
+					lastRepeatDividerX = dividerX;
+					if ((repeatedSceneProgress >= repeatEnd) != (completed != 0)) continue;
+					nvgMoveTo(args.vg, dividerX, sceneProgressY + 0.5f);
+					nvgLineTo(args.vg, dividerX, sceneProgressY + sceneProgressH - 0.5f);
+					hasDivider = true;
+				}
+				if (hasDivider) {
+					nvgStrokeWidth(args.vg, 0.8f);
+					nvgStrokeColor(args.vg, completed ? nvgRGBA(3, 9, 17, 210) : white);
+					nvgStroke(args.vg);
+					++nvgPathOps;
+				}
 			}
 		}
 
@@ -1715,35 +1951,74 @@ struct SibylOracleDisplay final : TransparentWidget {
 		const float gridBottom = h - 44.f;
 		const float cellW = (w - pad * 2.f) / 8.f;
 		const float rowH = std::max(8.f, (gridBottom - gridTop) * 0.5f);
-		for (int channel = 0; channel < 16; ++channel) {
+		auto channelGeometry = [&](int channel, float& x0, float& x1, float& y) {
 			const int column = channel & 7;
 			const int row = channel >> 3;
-			const float x0 = pad + column * cellW + 2.f;
-			const float x1 = pad + (column + 1) * cellW - 3.f;
-			const float y = gridTop + (row + 0.5f) * rowH;
+			x0 = pad + column * cellW + 2.f;
+			x1 = pad + (column + 1) * cellW - 3.f;
+			y = gridTop + (row + 0.5f) * rowH;
+		};
+		for (int style = 0; style < 4; ++style) {
+			const bool styleActive = (style & 2) != 0;
+			const bool styleGated = (style & 1) != 0;
+			bool hasRail = false;
+			nvgBeginPath(args.vg);
+			for (int channel = 0; channel < 16; ++channel) {
+				const bool active = (state.activeTrackMask & uint16_t(1u << channel)) != 0;
+				const bool gated = (state.gateMask & uint16_t(1u << channel)) != 0;
+				if (active != styleActive || gated != styleGated) continue;
+				float x0, x1, y;
+				channelGeometry(channel, x0, x1, y);
+				nvgMoveTo(args.vg, x0, y);
+				nvgLineTo(args.vg, x1, y);
+				hasRail = true;
+			}
+			if (hasRail) {
+				nvgStrokeWidth(args.vg, styleGated ? 1.4f : 0.75f);
+				nvgStrokeColor(args.vg, styleActive
+					? nvgRGBA(64, 124, 150, 205) : nvgRGBA(35, 49, 65, 155));
+				nvgStroke(args.vg);
+				++nvgPathOps;
+			}
+		}
+		for (int channel = 0; channel < 16; ++channel) {
 			const bool active = (state.activeTrackMask & uint16_t(1u << channel)) != 0;
 			const bool gated = (state.gateMask & uint16_t(1u << channel)) != 0;
+			if (!active || !gated) continue;
+			float x0, x1, y;
+			channelGeometry(channel, x0, x1, y);
+			const float px = x0 + clamp(state.playhead[channel], 0.f, 1.f) * (x1 - x0);
+			NVGpaint glow = nvgRadialGradient(args.vg, px, y, 0.4f, 5.f,
+				nvgRGBA(74, 247, 239, 190), nvgRGBA(74, 247, 239, 0));
 			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, x0, y);
-			nvgLineTo(args.vg, x1, y);
-			nvgStrokeWidth(args.vg, gated ? 1.4f : 0.75f);
-			nvgStrokeColor(args.vg, active ? nvgRGBA(64, 124, 150, 205) : nvgRGBA(35, 49, 65, 155));
-			nvgStroke(args.vg);
-			if (active) {
+			nvgCircle(args.vg, px, y, 5.f);
+			nvgFillPaint(args.vg, glow);
+			nvgFill(args.vg);
+			++nvgPathOps;
+		}
+		for (int gatedStyle = 0; gatedStyle < 2; ++gatedStyle) {
+			bool hasCore = false;
+			nvgBeginPath(args.vg);
+			for (int channel = 0; channel < 16; ++channel) {
+				const bool active = (state.activeTrackMask & uint16_t(1u << channel)) != 0;
+				const bool gated = (state.gateMask & uint16_t(1u << channel)) != 0;
+				if (!active || gated != (gatedStyle != 0)) continue;
+				float x0, x1, y;
+				channelGeometry(channel, x0, x1, y);
 				const float px = x0 + clamp(state.playhead[channel], 0.f, 1.f) * (x1 - x0);
-				if (gated) {
-					NVGpaint glow = nvgRadialGradient(args.vg, px, y, 0.4f, 5.f,
-						nvgRGBA(74, 247, 239, 190), nvgRGBA(74, 247, 239, 0));
-					nvgBeginPath(args.vg);
-					nvgCircle(args.vg, px, y, 5.f);
-					nvgFillPaint(args.vg, glow);
-					nvgFill(args.vg);
-				}
-				nvgBeginPath(args.vg);
 				nvgCircle(args.vg, px, y, gated ? 2.2f : 1.25f);
-				nvgFillColor(args.vg, gated ? cyan : violet);
-				nvgFill(args.vg);
+				hasCore = true;
 			}
+			if (hasCore) {
+				nvgFillColor(args.vg, gatedStyle ? cyan : violet);
+				nvgFill(args.vg);
+				++nvgPathOps;
+			}
+		}
+		for (int channel = 0; channel < 16; ++channel) {
+			float x0, x1, y;
+			channelGeometry(channel, x0, x1, y);
+			const bool active = (state.activeTrackMask & uint16_t(1u << channel)) != 0;
 			char channelText[4];
 			std::snprintf(channelText, sizeof(channelText), "%d", channel + 1);
 			text(args, x0, y - 5.6f, 6.5f, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
@@ -1815,8 +2090,13 @@ struct SibylOracleDisplay final : TransparentWidget {
 		nvgStrokeWidth(args.vg, 1.f);
 		nvgStrokeColor(args.vg, nvgRGBA(64, 224, 230, 145));
 		nvgStroke(args.vg);
+		++nvgPathOps;
 		nvgResetScissor(args.vg);
 		nvgRestore(args.vg);
+		if (measurePerf) {
+			latestNvgPathOps = nvgPathOps;
+			oracleUsRange.add(debug_terminal::elapsedUsSince(oracleStart));
+		}
 	}
 };
 
@@ -1902,6 +2182,42 @@ struct SibylVoicingMenuButton final : TL1105 {
 };
 
 struct SibylWidget : ModuleWidget {
+	debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
+	SibylOracleDisplay* oracleDisplay = nullptr;
+
+	void step() override {
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
+		ModuleWidget::step();
+		if (measurePerf)
+			debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
+	}
+
+	void draw(const DrawArgs& args) override {
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const auto drawStart = debug_terminal::debugTimerStart(measurePerf);
+		ModuleWidget::draw(args);
+		SibylModule* sibylModule = static_cast<SibylModule*>(module);
+		if (!sibylModule || !measurePerf) return;
+
+		debug_terminal::drawDebugInstanceId(
+			args.vg, box.size, sibylModule->debugMetrics.instanceId);
+		debugWidgetMetrics.recordDraw(debug_terminal::elapsedUsSince(drawStart));
+		const double nowSec = system::getTime();
+		if (debug_terminal::baselineSubmitDue(
+				"Sibyl", sibylModule->debugMetrics.instanceId, nowSec)) {
+			debug_terminal::submitSibylMetrics(
+				sibylModule->debugMetrics.instanceId,
+				sibylModule->id,
+				sibylModule->debugMetrics.consumeProcessRange(),
+				debugWidgetMetrics.consumeStepRange(),
+				debugWidgetMetrics.consumeDrawRange(),
+				oracleDisplay ? oracleDisplay->snapshotUsRange.consume() : debug_terminal::TimingRangeUs(),
+				oracleDisplay ? oracleDisplay->oracleUsRange.consume() : debug_terminal::TimingRangeUs(),
+				oracleDisplay ? oracleDisplay->latestNvgPathOps : 0);
+		}
+	}
+
 	static std::string portableDirectory() {
 		return asset::user("Sibyl");
 	}
@@ -1942,6 +2258,7 @@ struct SibylWidget : ModuleWidget {
 		math::Rect displayMm(Vec(2.4f, 13.f), Vec(46.f, 24.f));
 		panel_svg::loadRectFromSvgMm(panelPath, "SIBYL_DISPLAY", &displayMm);
 		auto* display = new SibylOracleDisplay(module);
+		oracleDisplay = display;
 		display->box.pos = mm2px(displayMm.pos);
 		display->box.size = mm2px(displayMm.size);
 		addChild(display);

@@ -478,6 +478,21 @@ int main() {
 		SibylModule module;
 		module.acceptComposition(makeComposition(1, false), sibyl::ApplyAt::IMMEDIATE,
 			sibyl::PhasePolicy::RESTART_ALL);
+		processOneSample(module);
+		SibylModule::DisplaySnapshot display;
+		module.readDisplaySnapshot(display);
+		gAllocationCount = 0;
+		gTrackAllocations = true;
+		for (int i = 0; i < 256; ++i) module.readDisplaySnapshot(display);
+		gTrackAllocations = false;
+		check(gAllocationCount == 0,
+			"steady-state Oracle snapshots reuse immutable layout data and string storage");
+	}
+
+	{
+		SibylModule module;
+		module.acceptComposition(makeComposition(1, false), sibyl::ApplyAt::IMMEDIATE,
+			sibyl::PhasePolicy::RESTART_ALL);
 		module.m_telemetrySequence.store(0, std::memory_order_relaxed);
 		module.m_telemetryPublishCountdown = 0;
 		for (int sample = 0; sample < 800; ++sample) processOneSample(module);

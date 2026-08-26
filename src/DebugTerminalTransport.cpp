@@ -40,6 +40,7 @@ struct Snapshot {
   std::string stream;
   std::string kind;
   std::string dataJson;
+  int64_t rackModuleId = -1;
   double ts = 0.0;
 };
 
@@ -92,7 +93,8 @@ public:
               const char *stream,
               const char *kind,
               const std::string &dataJson,
-              double ts) {
+              double ts,
+              int64_t rackModuleId = -1) {
     if (!isEnabled()) {
       return;
     }
@@ -105,10 +107,40 @@ public:
     snap.stream = stream ? stream : "";
     snap.kind = kind ? kind : "";
     snap.dataJson = dataJson;
+    snap.rackModuleId = rackModuleId;
     snap.ts = ts;
 
     std::lock_guard<std::mutex> lock(mutex_);
     snapshots_[makeKey(snap.module, snap.instance, snap.stream, snap.kind)] = snap;
+  }
+
+  std::string latestMetricsJson(int64_t rackModuleId) {
+    const double nowSec = system::getTime();
+    std::string out = "{\"debugEnabled\":";
+    out += isDragonKingDebugEnabled() ? "true" : "false";
+    out += ",\"moduleId\":" + std::to_string(rackModuleId) + ",\"metrics\":[";
+
+    bool first = true;
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (const auto &entry : snapshots_) {
+      const Snapshot &snap = entry.second;
+      if (snap.kind != "metric" || snap.rackModuleId != rackModuleId
+          || (nowSec - snap.ts) > kSnapshotStaleSec) {
+        continue;
+      }
+      if (!first) {
+        out += ',';
+      }
+      first = false;
+      out += "{\"module\":\"" + jsonEscape(snap.module)
+          + "\",\"instance\":\"" + jsonEscape(snap.instance)
+          + "\",\"stream\":\"" + jsonEscape(snap.stream)
+          + "\",\"ts\":" + formatFloat(snap.ts)
+          + ",\"ageMs\":" + formatFloat(std::max(0.0, (nowSec - snap.ts) * 1000.0))
+          + ",\"data\":" + snap.dataJson + '}';
+    }
+    out += "]}";
+    return out;
   }
 
 private:
@@ -645,6 +677,36 @@ void submitBaselineMetrics(const char* moduleName,
                 "}");
   double ts = system::getTime();
   transport().submit(safeModuleName, instanceId, "ui", "metric", dataBuf, ts);
+}
+
+void submitSibylMetrics(uint32_t instanceId,
+                        int64_t rackModuleId,
+                        TimingRangeUs processUs,
+                        TimingRangeUs stepUs,
+                        TimingRangeUs drawUs,
+                        TimingRangeUs snapshotUs,
+                        TimingRangeUs oracleUs,
+                        int nvgPathOps) {
+  submitUiMetricSchema("Sibyl",
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"snapshot_us\",\"label\":\"Snap (us)\"},{\"key\":\"oracle_us\",\"label\":\"Oracle (us)\"},{\"key\":\"nvg_path_ops\",\"label\":\"NVG Paths\"}]");
+  char dataBuf[320];
+  std::snprintf(dataBuf, sizeof(dataBuf), "{");
+  appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "step_us", stepUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "snapshot_us", snapshotUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
+  appendRange(dataBuf, sizeof(dataBuf), "oracle_us", oracleUs);
+  std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf),
+                ",\"nvg_path_ops\":%d}", std::max(0, nvgPathOps));
+  transport().submit("Sibyl", instanceId, "ui", "metric", dataBuf, system::getTime(), rackModuleId);
+}
+
+std::string latestMetricsJson(int64_t rackModuleId) {
+  return transport().latestMetricsJson(rackModuleId);
 }
 
 void submitProcMetrics(uint32_t instanceId,

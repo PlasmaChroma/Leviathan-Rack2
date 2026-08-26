@@ -35,7 +35,7 @@ class ServerContractTest(unittest.TestCase):
         self.assertGreaterEqual(len(names), 15)
         self.assertEqual(len(names), len(set(names)), f"duplicate MCP tool names: {names}")
         expected_tools = {
-            "vcv_get_status", "vcv_get_perf", "vcv_list_modules", "vcv_get_module",
+            "vcv_get_status", "vcv_get_perf", "vcv_get_debug_metrics", "vcv_list_modules", "vcv_get_module",
             "vcv_list_library", "vcv_list_cables", "vcv_get_signal_levels",
             "vcv_find_unpatched", "vcv_analyze_audio", "vcv_reset_loudness", "vcv_temporal_deck_transport", "vcv_add_module", "vcv_delete_module",
             "vcv_update_module", "vcv_layout_modules", "vcv_set_parameters", "vcv_connect_cables",
@@ -52,6 +52,10 @@ class ServerContractTest(unittest.TestCase):
         self.assertIn('os.environ.get("OCTAVIA_PORT"', self.source)
         self.assertIn('os.environ.get("OCTAVIA_TOKEN"', self.source)
         self.assertIn('"X-Octavia-Token"', self.source)
+
+    def test_debug_metrics_are_module_scoped_and_brief(self):
+        self.assertIn('await _call(f"debug/metrics/{params.module_id}")', self.source)
+        self.assertIn("It does not start or return detailed", self.source)
 
     def test_tool_errors_are_raised(self):
         error_helper = next(
@@ -73,13 +77,13 @@ class ServerContractTest(unittest.TestCase):
         self.assertIn('await _sibyl_call(f"sibyl/{params.module_id}/composition?', self.source)
         self.assertIn('await _sibyl_call(f"sibyl/{params.module_id}/validate", "POST"', self.source)
         self.assertIn('await _sibyl_call(f"sibyl/{params.module_id}/edit", "POST"', self.source)
-        self.assertIn('"expectedRevision": params.expected_revision', self.source)
-        self.assertIn('"phasePolicy": params.phase_policy', self.source)
+        self.assertIn('"expected_revision": params.expected_revision', self.source)
+        self.assertIn('"phase_policy": params.phase_policy', self.source)
         self.assertIn('Literal["preserve", "restartChanged", "restartAll"]', self.source)
         self.assertIn('await _sibyl_call(f"sibyl/{params.module_id}/status")', self.source)
         self.assertIn('await _sibyl_call(f"sibyl/{params.module_id}/transport", "POST"', self.source)
         self.assertIn('Literal["scene", "arrangement", "patterns", "randomness"]', self.source)
-        self.assertIn('payload["phaseMode"] = payload.pop("phase_mode")', self.source)
+        self.assertIn('payload = params.model_dump(exclude={"module_id"}, exclude_none=True)', self.source)
 
 
 if __name__ == "__main__":

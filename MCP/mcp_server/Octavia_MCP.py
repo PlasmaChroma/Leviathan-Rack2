@@ -41,7 +41,7 @@ BRIDGE_HEADERS = {"X-Octavia-Token": BRIDGE_TOKEN} if BRIDGE_TOKEN else {}
 
 async def _normalize_endpoint(endpoint: str) -> str:
     """Resolve module_id in endpoints to protect against client JSON float precision truncation."""
-    m = re.match(r"^((?:sibyl|console|modules|temporal-deck)/)(\d+)(/.*|\?.*)?$", endpoint)
+    m = re.match(r"^((?:sibyl|console|modules|temporal-deck|debug/metrics)/)(\d+)(/.*|\?.*)?$", endpoint)
     if not m:
         return endpoint
     prefix, mid_str, suffix = m.group(1), m.group(2), m.group(3) or ""
@@ -189,6 +189,28 @@ async def vcv_get_perf() -> str:
     """
     try:
         return json.dumps(await _call("perf"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+class DebugMetricsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    module_id: int = Field(..., description="Rack module ID from vcv_list_modules", ge=0)
+
+
+@mcp.tool(
+    name="vcv_get_debug_metrics",
+    annotations={"title": "Get Brief Module Debug Metrics", "readOnlyHint": True, "destructiveHint": False}
+)
+async def vcv_get_debug_metrics(params: DebugMetricsInput) -> str:
+    """Get a module's latest compact debug timing row while Dragon King debug mode is enabled.
+
+    This mirrors the human-readable debug terminal summary (for Sibyl: process, step, full draw,
+    snapshot, Oracle, and NanoVG path-operation counts). It does not start or return detailed
+    profiling captures or CSV data.
+    """
+    try:
+        return json.dumps(await _call(f"debug/metrics/{params.module_id}"), indent=2)
     except Exception as e:
         return _err(e)
 

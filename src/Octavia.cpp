@@ -29,6 +29,7 @@
 #include "OctaviaMeasurement.hpp"
 #include "OctaviaAnalysis.hpp"
 #include "OctaviaObservationBus.hpp"
+#include "DebugTerminalTransport.hpp"
 #include "third_party/httplib.h"
 #include <thread>
 #include <atomic>
@@ -2758,6 +2759,15 @@ struct Octavia : Module {
             b += jStr("processCpuSysSec")+": "+std::to_string(sysSec);
             b += "}";
             res.set_content(b,"application/json");
+        });
+        svr.Get(R"(/debug/metrics/(\d+))", [](const httplib::Request& req, httplib::Response& res){
+            try {
+                const int64_t moduleId = std::stoll(req.matches[1].str());
+                res.set_content(debug_terminal::latestMetricsJson(moduleId), "application/json");
+            } catch (...) {
+                res.status = 400;
+                res.set_content("{\"error\":\"invalid module id\"}", "application/json");
+            }
         });
         svr.Post(R"(/modules/(\d+)/bypass)", [this](const httplib::Request& r, httplib::Response& res){
             json_error_t jerr; json_t* root=json_loads(r.body.c_str(),0,&jerr);
