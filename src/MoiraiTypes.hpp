@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -194,6 +195,7 @@ struct CompiledLane {
 };
 
 struct CompiledBank {
+	mutable std::atomic<int> activeVoiceCount {0};
 	int revision = 0;
 	uint64_t seed = 0;
 	ClockSettings clock;

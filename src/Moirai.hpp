@@ -3,12 +3,13 @@
 #include "MoiraiCompiler.hpp"
 #include "MoiraiEngine.hpp"
 #include "MoiraiPresets.hpp"
+#include "OctaviaSemanticControl.hpp"
 #include "plugin.hpp"
 
 #include <array>
 #include <atomic>
 
-struct Moirai final : Module {
+struct Moirai final : Module, OctaviaSemanticControl {
 	enum ParamId {
 		TIME_PARAM,
 		CURVE_PARAM,
@@ -66,6 +67,8 @@ struct Moirai final : Module {
 	std::array<std::atomic<float>, moirai::kLaneCount> telemetrySelectedValue;
 	std::atomic<float> telemetryBpm {120.f};
 	std::atomic<bool> telemetryExternalClock {false};
+	std::array<std::atomic<uint16_t>, moirai::kLaneCount> semanticTriggerMask;
+	std::atomic<bool> semanticResetRequested {false};
 	int telemetryCountdown = 0;
 	int manualChannelFloor = 1;
 	double clockElapsed = 0.0;
@@ -77,6 +80,12 @@ struct Moirai final : Module {
 	void onReset(const ResetEvent& e) override;
 	json_t* dataToJson() override;
 	void dataFromJson(json_t* rootJ) override;
+	const char* semanticCapabilityId() const noexcept override {
+		return "leviathan.moirai.envelope-bank";
+	}
+	bool handleSemanticRequest(OctaviaSemanticControl::Operation operation,
+		const std::string& requestJson, std::string& responseJson,
+		std::string& error) override;
 
 	float resolvedInputVoltage(InputId inputId, int channel, float neutral) noexcept;
 	void resetRuntime() noexcept;

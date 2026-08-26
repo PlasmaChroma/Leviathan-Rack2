@@ -66,7 +66,7 @@ int main() {
 	check(!inUse.valid && inUse.errorCode == "object_in_use",
 		"program deletion rejects lane references before final compilation");
 
-	const auto invalidFinal = edit(base, R"({"expected_revision":0,"apply_at":"allIdle","active_voice_policy":"restartActive","operations":[{"op":"set_clock","clock":{"fallbackBpm":900}}]})");
+	const auto invalidFinal = edit(base, R"({"expected_revision":0,"apply_at":"allIdle","active_voice_policy":"finishCurrent","operations":[{"op":"set_clock","clock":{"fallbackBpm":900}}]})");
 	check(!invalidFinal.valid && invalidFinal.errorCode == "validation_failed"
 		&& base.clock.fallbackBpm == 120.f,
 		"full-bank validation failure leaves the accepted bank untouched");
@@ -75,6 +75,10 @@ int main() {
 	check(!unknown.valid && unknown.errorCode == "unknown_operation"
 		&& unknown.errorPath == "/operations/0/op",
 		"unknown operations fail with a stable indexed path");
+	const auto illegalRestart = edit(base, R"({"expected_revision":0,"apply_at":"nextTrigger","active_voice_policy":"restartActive","operations":[{"op":"set_clock","clock":{"fallbackBpm":90}}]})");
+	check(!illegalRestart.valid && illegalRestart.errorCode == "invalid_request"
+		&& illegalRestart.errorPath == "/active_voice_policy",
+		"restartActive is rejected outside immediate adoption");
 
 	std::cout << "[SUMMARY] moirai_edit_spec: " << (failures ? "FAILED" : "passed") << "\n";
 	return failures == 0 ? 0 : 1;

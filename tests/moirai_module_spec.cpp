@@ -16,6 +16,14 @@ void process(Moirai& module, float sampleTime) {
 	args.sampleRate = 1.f / sampleTime;
 	module.process(args);
 }
+json_t* request(Moirai& module, OctaviaSemanticControl::Operation operation,
+		const char* body, bool& handled) {
+	std::string response;
+	std::string error;
+	handled = module.handleSemanticRequest(operation, body, response, error);
+	json_error_t parseError {};
+	return json_loads(response.c_str(), 0, &parseError);
+}
 }
 
 int main() {
@@ -78,6 +86,61 @@ int main() {
 		restored.compiledBank && !restored.persistenceError.empty(),
 		"invalid patch bank falls back safely and records a load error");
 	json_decref(invalidState);
+
+	Moirai semantic;
+	semantic.outputs[Moirai::A_OUTPUT].channels = 1;
+	semantic.outputs[Moirai::B_OUTPUT].channels = 1;
+	bool handled = false;
+	json_t* capabilities = request(semantic, OctaviaSemanticControl::Operation::CAPABILITIES, "{}", handled);
+	check(handled && capabilities && json_is_true(json_object_get(capabilities, "ok")) &&
+		std::string(json_string_value(json_object_get(capabilities, "capabilityId"))) ==
+			"leviathan.moirai.envelope-bank",
+		"Moirai advertises the generic semantic capability identity");
+	json_decref(capabilities);
+	json_t* programView = request(semantic, OctaviaSemanticControl::Operation::GET_DOCUMENT,
+		R"({"view":"program","id":"factory_adsr"})", handled);
+	check(handled && programView && std::string(json_string_value(json_object_get(programView, "id"))) == "factory_adsr",
+		"semantic program view returns one complete authored program");
+	json_decref(programView);
+	json_t* channelView = request(semantic, OctaviaSemanticControl::Operation::GET_DOCUMENT,
+		R"({"view":"channel","id":"0"})", handled);
+	check(handled && channelView && json_integer_value(json_object_get(channelView, "channel")) == 0 &&
+		json_is_object(json_object_get(channelView, "lanes")),
+		"semantic channel view returns both lane assignments");
+	json_decref(channelView);
+
+	json_t* edited = request(semantic, OctaviaSemanticControl::Operation::EDIT,
+		R"({"expected_revision":0,"apply_at":"nextTrigger","active_voice_policy":"finishCurrent","operations":[{"op":"set_clock","clock":{"fallbackBpm":98}}]})", handled);
+	check(handled && edited && json_integer_value(json_object_get(edited, "acceptedRevision")) == 1 &&
+		json_integer_value(json_object_get(edited, "activeRevision")) == 0 &&
+		json_integer_value(json_object_get(edited, "pendingRevision")) == 1,
+		"semantic edit commits one accepted generation and reports pending adoption");
+	json_decref(edited);
+	semantic.inputs[Moirai::GATE_INPUT].channels = 1;
+	semantic.inputs[Moirai::GATE_INPUT].setVoltage(10.f);
+	process(semantic, 1.f / 48000.f);
+	json_t* status = request(semantic, OctaviaSemanticControl::Operation::GET_STATUS, "{}", handled);
+	check(handled && status && json_integer_value(json_object_get(status, "activeRevision")) == 1 &&
+		json_is_null(json_object_get(status, "pendingRevision")),
+		"nextTrigger edit adopts before the triggering audio sample");
+	json_decref(status);
+
+	json_t* conflict = request(semantic, OctaviaSemanticControl::Operation::EDIT,
+		R"({"expected_revision":0,"apply_at":"immediate","active_voice_policy":"finishCurrent","operations":[{"op":"set_clock","clock":{"fallbackBpm":110}}]})", handled);
+	check(!handled && conflict && std::string(json_string_value(json_object_get(
+		json_object_get(conflict, "error"), "code"))) == "revision_conflict",
+		"semantic revision conflicts reject without committing");
+	json_decref(conflict);
+
+	semantic.inputs[Moirai::GATE_INPUT].setVoltage(0.f);
+	process(semantic, 1.f / 48000.f);
+	json_t* command = request(semantic, OctaviaSemanticControl::Operation::COMMAND,
+		R"({"action":"trigger","lane":"A","channel":3})", handled);
+	process(semantic, 1.f / 48000.f);
+	check(handled && command && semantic.envelopeEngine.voice(0, 3).running &&
+		!semantic.envelopeEngine.voice(1, 3).running,
+		"semantic trigger command crosses atomically to the selected audio-thread voice");
+	json_decref(command);
 
 	std::cout << (failures ? "[SUMMARY] moirai_module_spec: FAILED\n"
 		: "[SUMMARY] moirai_module_spec: passed\n");

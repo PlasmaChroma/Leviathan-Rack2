@@ -80,6 +80,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/sibyl_timing_spec \
 	build/tests/sibyl_transport_spec \
 	build/tests/moirai_curves_spec \
+	build/tests/moirai_adoption_spec \
 	build/tests/moirai_compiler_spec \
 	build/tests/moirai_edit_spec \
 	build/tests/moirai_json_spec \
@@ -374,6 +375,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/sibyl_timing_spec)
 	$(call run_rack_test_bin,build/tests/sibyl_transport_spec)
 	$(call run_test_bin,build/tests/moirai_curves_spec)
+	$(call run_test_bin,build/tests/moirai_adoption_spec)
 	$(call run_test_bin,build/tests/moirai_compiler_spec)
 	$(call run_rack_test_bin,build/tests/moirai_edit_spec)
 	$(call run_rack_test_bin,build/tests/moirai_json_spec)
@@ -546,6 +548,9 @@ build/tests/sibyl_module_tsan_spec: tests/sibyl_module_spec.cpp src/Sibyl.cpp sr
 build/tests/moirai_curves_spec: tests/moirai_curves_spec.cpp src/MoiraiCurves.hpp src/MoiraiTypes.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/moirai_curves_spec.cpp -o $@
 
+build/tests/moirai_adoption_spec: tests/moirai_adoption_spec.cpp src/MoiraiEngine.cpp src/MoiraiEngine.hpp src/MoiraiCompiler.cpp src/MoiraiCompiler.hpp src/MoiraiPresets.cpp src/MoiraiPresets.hpp src/MoiraiTypes.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/moirai_adoption_spec.cpp src/MoiraiEngine.cpp src/MoiraiCompiler.cpp src/MoiraiPresets.cpp -o $@
+
 build/tests/moirai_compiler_spec: tests/moirai_compiler_spec.cpp src/MoiraiCompiler.cpp src/MoiraiCompiler.hpp src/MoiraiCurves.hpp src/MoiraiPresets.cpp src/MoiraiPresets.hpp src/MoiraiTypes.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/moirai_compiler_spec.cpp src/MoiraiCompiler.cpp src/MoiraiPresets.cpp -o $@
 
@@ -558,8 +563,8 @@ build/tests/moirai_json_spec: tests/moirai_json_spec.cpp src/MoiraiJSON.cpp src/
 build/tests/moirai_engine_spec: tests/moirai_engine_spec.cpp src/MoiraiEngine.cpp src/MoiraiEngine.hpp src/MoiraiCompiler.cpp src/MoiraiCompiler.hpp src/MoiraiCurves.hpp src/MoiraiPresets.cpp src/MoiraiPresets.hpp src/MoiraiTypes.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/moirai_engine_spec.cpp src/MoiraiEngine.cpp src/MoiraiCompiler.cpp src/MoiraiPresets.cpp -o $@
 
-build/tests/moirai_module_spec: tests/moirai_module_spec.cpp src/Moirai.cpp src/Moirai.hpp src/MoiraiJSON.cpp src/MoiraiJSON.hpp src/MoiraiEngine.cpp src/MoiraiEngine.hpp src/MoiraiCompiler.cpp src/MoiraiCompiler.hpp src/MoiraiCurves.hpp src/MoiraiPresets.cpp src/MoiraiPresets.hpp src/MoiraiTypes.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/moirai_module_spec.cpp src/Moirai.cpp src/MoiraiJSON.cpp src/MoiraiEngine.cpp src/MoiraiCompiler.cpp src/MoiraiPresets.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+build/tests/moirai_module_spec: tests/moirai_module_spec.cpp src/Moirai.cpp src/Moirai.hpp src/MoiraiEdit.cpp src/MoiraiEdit.hpp src/MoiraiJSON.cpp src/MoiraiJSON.hpp src/MoiraiEngine.cpp src/MoiraiEngine.hpp src/MoiraiCompiler.cpp src/MoiraiCompiler.hpp src/MoiraiCurves.hpp src/MoiraiPresets.cpp src/MoiraiPresets.hpp src/MoiraiTypes.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/moirai_module_spec.cpp src/Moirai.cpp src/MoiraiEdit.cpp src/MoiraiJSON.cpp src/MoiraiEngine.cpp src/MoiraiCompiler.cpp src/MoiraiPresets.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
 build/tests/temporaldeck_arc_lights_spec: tests/temporaldeck_arc_lights_spec.cpp src/TemporalDeckArcLights.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@

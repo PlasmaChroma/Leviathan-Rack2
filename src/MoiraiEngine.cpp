@@ -49,22 +49,83 @@ const std::vector<CompiledStage>& currentPath(const EnvelopeVoice& voice) {
 
 } // namespace
 
+Engine::~Engine() {
+	reset();
+}
+
 void Engine::setBank(const CompiledBank* bank) noexcept {
 	m_bank = bank;
+	m_activeBank.store(bank, std::memory_order_release);
+}
+
+void Engine::installBank(const CompiledBankPtr& bank) {
+	reset();
+	m_bankOwners.clear();
+	m_adoptionOwners.clear();
+	m_pendingAdoption.store(nullptr, std::memory_order_release);
+	if (bank) m_bankOwners.push_back(bank);
+	setBank(bank.get());
+}
+
+void Engine::acceptBank(const CompiledBankPtr& bank, ApplyAt applyAt,
+		ActiveVoicePolicy activeVoicePolicy) {
+	if (!bank) return;
+	m_bankOwners.push_back(bank);
+	std::unique_ptr<AdoptionRequest> request(new AdoptionRequest());
+	request->bank = bank.get();
+	request->applyAt = applyAt;
+	request->activeVoicePolicy = activeVoicePolicy;
+	const AdoptionRequest* published = request.get();
+	m_adoptionOwners.emplace_back(request.release());
+	m_pendingAdoption.store(published, std::memory_order_release);
+}
+
+int Engine::activeRevision() const noexcept {
+	const CompiledBank* bank = m_activeBank.load(std::memory_order_acquire);
+	return bank ? bank->revision : -1;
+}
+
+int Engine::pendingRevision() const noexcept {
+	const AdoptionRequest* request = m_pendingAdoption.load(std::memory_order_acquire);
+	return request && request->bank ? request->bank->revision : -1;
+}
+
+void Engine::reclaimGenerations() {
+	const CompiledBank* active = m_activeBank.load(std::memory_order_acquire);
+	const CompiledBank* hazard = m_activeHazard.load(std::memory_order_acquire);
+	const AdoptionRequest* pending = m_pendingAdoption.load(std::memory_order_acquire);
+	const AdoptionRequest* adoptionHazard = m_adoptionHazard.load(std::memory_order_acquire);
+	const CompiledBank* accepted = m_bankOwners.empty() ? nullptr : m_bankOwners.back().get();
+	m_bankOwners.erase(std::remove_if(m_bankOwners.begin(), m_bankOwners.end(),
+		[&](const CompiledBankPtr& owner) {
+			const CompiledBank* ptr = owner.get();
+			return ptr != active && ptr != hazard && ptr != accepted
+				&& (!pending || pending->bank != ptr)
+				&& (!adoptionHazard || adoptionHazard->bank != ptr)
+				&& ptr->activeVoiceCount.load(std::memory_order_acquire) == 0;
+		}), m_bankOwners.end());
+	m_adoptionOwners.erase(std::remove_if(m_adoptionOwners.begin(), m_adoptionOwners.end(),
+		[&](const std::unique_ptr<const AdoptionRequest>& owner) {
+			return owner.get() != pending && owner.get() != adoptionHazard;
+		}), m_adoptionOwners.end());
 }
 
 void Engine::reset() noexcept {
-	for (EnvelopeVoice& voice : m_voices) voice = EnvelopeVoice();
+	for (EnvelopeVoice& voice : m_voices) {
+		stopVoice(voice);
+		voice = EnvelopeVoice();
+	}
 	m_gateHigh.fill(false);
 }
 
-const CompiledProgram* Engine::assignedProgram(int lane, int channel) const noexcept {
-	if (!m_bank || lane < 0 || lane >= kLaneCount || channel < 0 || channel >= kMaxChannels) return nullptr;
-	const CompiledLane& compiledLane = m_bank->lanes[lane];
+const CompiledProgram* Engine::assignedProgram(const CompiledBank* bank,
+		int lane, int channel) const noexcept {
+	if (!bank || lane < 0 || lane >= kLaneCount || channel < 0 || channel >= kMaxChannels) return nullptr;
+	const CompiledLane& compiledLane = bank->lanes[lane];
 	int index = compiledLane.assignments[channel];
 	if (index < 0) index = compiledLane.defaultProgram;
-	if (index < 0 || index >= static_cast<int>(m_bank->programs.size())) return nullptr;
-	return &m_bank->programs[index];
+	if (index < 0 || index >= static_cast<int>(bank->programs.size())) return nullptr;
+	return &bank->programs[index];
 }
 
 void Engine::triggerVoice(EnvelopeVoice& voice, const CompiledProgram* program,
@@ -73,6 +134,7 @@ void Engine::triggerVoice(EnvelopeVoice& voice, const CompiledProgram* program,
 	if (voice.running) {
 		if (program->retrigger == RetriggerPolicy::IGNORE_WHILE_RUNNING ||
 				program->retrigger == RetriggerPolicy::LEGATO) return;
+		stopVoice(voice);
 	}
 	const float priorValue = voice.value;
 	const uint32_t triggerCount = voice.triggerCount + 1u;
@@ -82,6 +144,7 @@ void Engine::triggerVoice(EnvelopeVoice& voice, const CompiledProgram* program,
 	voice.triggerCount = triggerCount;
 	voice.gateHigh = true;
 	voice.running = true;
+	voice.bank->activeVoiceCount.fetch_add(1, std::memory_order_acq_rel);
 	voice.segmentStart = program->retrigger == RetriggerPolicy::FROM_CURRENT ? priorValue : 0.f;
 	voice.value = voice.segmentStart;
 	voice.latchedTimeScale = std::max(0.0001f, inputs.panelTimeScale);
@@ -128,7 +191,7 @@ void Engine::releaseVoice(EnvelopeVoice& voice) noexcept {
 	voice.segmentPhase = 0.f;
 	voice.segmentStart = voice.value;
 	voice.loopIteration = 0;
-	if (voice.program->releasePath.empty()) voice.running = false;
+	if (voice.program->releasePath.empty()) stopVoice(voice);
 }
 
 bool Engine::advanceVoice(EnvelopeVoice& voice, float sampleTime, float bpm,
@@ -156,7 +219,7 @@ bool Engine::advanceVoice(EnvelopeVoice& voice, float sampleTime, float bpm,
 				if (remaining <= 0.f) break;
 				continue;
 			}
-			voice.running = false;
+			stopVoice(voice);
 			return true;
 		}
 
@@ -178,7 +241,7 @@ bool Engine::advanceVoice(EnvelopeVoice& voice, float sampleTime, float bpm,
 				voice.segmentStart = voice.value;
 				continue;
 			}
-			voice.running = false;
+			stopVoice(voice);
 			return true;
 		}
 		const CompiledStage& stage = path[voice.segment];
@@ -213,10 +276,10 @@ bool Engine::advanceVoice(EnvelopeVoice& voice, float sampleTime, float bpm,
 }
 
 float Engine::outputValue(const EnvelopeVoice& voice, int lane, float panelLevel) const noexcept {
-	if (!m_bank || lane < 0 || lane >= kLaneCount) return 0.f;
+	if (!voice.bank || lane < 0 || lane >= kLaneCount) return 0.f;
 	const float normalized = clamp01(voice.value * voice.latchedLevelScale + voice.latchedLevelOffset);
 	const float level = std::max(0.f, std::min(1.f, panelLevel));
-	switch (m_bank->lanes[lane].outputMode) {
+	switch (voice.bank->lanes[lane].outputMode) {
 		case OutputMode::UNIPOLAR_10: return 10.f * normalized * level;
 		case OutputMode::UNIPOLAR_5: return 5.f * normalized * level;
 		case OutputMode::BIPOLAR_5: return (10.f * normalized - 5.f) * level;
@@ -224,9 +287,71 @@ float Engine::outputValue(const EnvelopeVoice& voice, int lane, float panelLevel
 	return 0.f;
 }
 
+void Engine::stopVoice(EnvelopeVoice& voice) noexcept {
+	if (voice.running && voice.bank)
+		voice.bank->activeVoiceCount.fetch_sub(1, std::memory_order_acq_rel);
+	voice.running = false;
+}
+
+bool Engine::allVoicesIdle() const noexcept {
+	for (const EnvelopeVoice& voice : m_voices) if (voice.running) return false;
+	return true;
+}
+
+template <typename T>
+const T* Engine::acquirePublished(const std::atomic<const T*>& source,
+		std::atomic<const T*>& hazard) noexcept {
+	const T* value = nullptr;
+	do {
+		value = source.load(std::memory_order_acquire);
+		hazard.store(value, std::memory_order_release);
+	} while (value != source.load(std::memory_order_acquire));
+	return value;
+}
+
+void Engine::adoptPending(const AdoptionRequest& request,
+		const EngineInputs& inputs) noexcept {
+	m_bank = request.bank;
+	m_activeBank.store(request.bank, std::memory_order_release);
+	if (request.activeVoicePolicy == ActiveVoicePolicy::RESTART_ACTIVE) {
+		for (int lane = 0; lane < kLaneCount; ++lane) {
+			for (int channel = 0; channel < kMaxChannels; ++channel) {
+				EnvelopeVoice& voice = m_voices[lane * kMaxChannels + channel];
+				if (!voice.running) continue;
+				const float prior = voice.value;
+				stopVoice(voice);
+				triggerVoice(voice, assignedProgram(request.bank, lane, channel),
+					lane, channel, inputs);
+				voice.segmentStart = prior;
+				voice.value = prior;
+				voice.gateHigh = inputs.gate[channel] >= 1.f;
+			}
+		}
+	}
+	const AdoptionRequest* expected = &request;
+	m_pendingAdoption.compare_exchange_strong(
+		expected, nullptr, std::memory_order_acq_rel);
+}
+
 void Engine::process(const EngineInputs& inputs, EngineOutputs& outputs) noexcept {
 	outputs = EngineOutputs();
 	outputs.channels = std::max(1, std::min(kMaxChannels, inputs.channels));
+	const CompiledBank* active = acquirePublished(m_activeBank, m_activeHazard);
+	if (active) m_bank = active;
+	bool anyRising = false;
+	for (int channel = 0; channel < outputs.channels; ++channel)
+		anyRising = anyRising || (inputs.gate[channel] >= 1.f && !m_gateHigh[channel]);
+	const AdoptionRequest* pending = acquirePublished(
+		m_pendingAdoption, m_adoptionHazard);
+	if (pending) {
+		const bool due = pending->applyAt == ApplyAt::IMMEDIATE
+			|| (pending->applyAt == ApplyAt::NEXT_TRIGGER && anyRising)
+			|| (pending->applyAt == ApplyAt::ALL_IDLE && allVoicesIdle())
+			|| (pending->applyAt == ApplyAt::NEXT_CLOCK && inputs.clockEdge);
+		if (due) adoptPending(*pending, inputs);
+	}
+	m_adoptionHazard.store(nullptr, std::memory_order_release);
+	m_activeHazard.store(nullptr, std::memory_order_release);
 	for (int channel = 0; channel < outputs.channels; ++channel) {
 		const bool gateHigh = inputs.gate[channel] >= 1.f;
 		const bool rising = gateHigh && !m_gateHigh[channel];
@@ -234,8 +359,12 @@ void Engine::process(const EngineInputs& inputs, EngineOutputs& outputs) noexcep
 		m_gateHigh[channel] = gateHigh;
 		for (int lane = 0; lane < kLaneCount; ++lane) {
 			EnvelopeVoice& active = m_voices[lane * kMaxChannels + channel];
+			if (inputs.triggerMask[lane] & uint16_t(1u << channel)) {
+				if (active.running) stopVoice(active);
+				triggerVoice(active, assignedProgram(m_bank, lane, channel), lane, channel, inputs);
+			}
 			active.gateHigh = gateHigh;
-			if (rising) triggerVoice(active, assignedProgram(lane, channel), lane, channel, inputs);
+			if (rising) triggerVoice(active, assignedProgram(m_bank, lane, channel), lane, channel, inputs);
 			active.gateHigh = gateHigh;
 			if (falling) releaseVoice(active);
 			bool loopCompleted = false;

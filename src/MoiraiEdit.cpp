@@ -205,6 +205,10 @@ bool parsePolicies(json_t* request, EditResult& result) {
 	if (std::string(policy) == "finishCurrent") result.activeVoicePolicy = ActiveVoicePolicy::FINISH_CURRENT;
 	else if (std::string(policy) == "restartActive") result.activeVoicePolicy = ActiveVoicePolicy::RESTART_ACTIVE;
 	else return fail(result, "invalid_request", "/active_voice_policy", "unsupported active voice policy");
+	if (result.activeVoicePolicy == ActiveVoicePolicy::RESTART_ACTIVE
+			&& result.applyAt != ApplyAt::IMMEDIATE)
+		return fail(result, "invalid_request", "/active_voice_policy",
+			"restartActive is valid only with immediate adoption");
 	return true;
 }
 
