@@ -56,6 +56,29 @@ int main() {
 			reset = reset && !module.envelopeEngine.voice(lane, channel).running;
 	check(reset, "RESET immediately idles every active Moirai voice");
 
+	module.authoredBank.revision = 17;
+	module.authoredBank.seed = 991;
+	module.authoredBank.lanes[0].channelLabels[5] = "fifth voice";
+	module.selectedLane.store(1);
+	json_t* saved = module.dataToJson();
+	Moirai restored;
+	restored.dataFromJson(saved);
+	check(restored.authoredBank.revision == 17 && restored.authoredBank.seed == 991 &&
+		restored.authoredBank.lanes[0].channelLabels[5] == "fifth voice" &&
+		restored.compiledBank && restored.compiledBank->revision == 17 &&
+		restored.selectedLane.load() == 1,
+		"patch state round-trips the authored and compiled bank");
+	json_decref(saved);
+
+	json_t* invalidState = module.dataToJson();
+	json_object_set_new(json_object_get(invalidState, "bank"), "schemaVersion", json_integer(99));
+	restored.dataFromJson(invalidState);
+	check(restored.authoredBank.revision == 0 &&
+		restored.authoredBank.programs.count("factory_adsr") == 1 &&
+		restored.compiledBank && !restored.persistenceError.empty(),
+		"invalid patch bank falls back safely and records a load error");
+	json_decref(invalidState);
+
 	std::cout << (failures ? "[SUMMARY] moirai_module_spec: FAILED\n"
 		: "[SUMMARY] moirai_module_spec: passed\n");
 	return failures ? 1 : 0;

@@ -1,5 +1,7 @@
 #include "Moirai.hpp"
 
+#include "MoiraiJSON.hpp"
+
 #include <algorithm>
 #include <cmath>
 
@@ -148,11 +150,30 @@ void Moirai::process(const ProcessArgs& args) {
 json_t* Moirai::dataToJson() {
 	json_t* root = json_object();
 	json_object_set_new(root, "selectedLane", json_integer(selectedLane.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "bank", moirai::bankToJson(authoredBank));
 	return root;
 }
 
 void Moirai::dataFromJson(json_t* rootJ) {
 	json_t* laneJ = json_object_get(rootJ, "selectedLane");
 	if (json_is_integer(laneJ)) selectedLane.store(clamp(int(json_integer_value(laneJ)), 0, 1));
+	persistenceError.clear();
+	if (json_t* bankJ = json_object_get(rootJ, "bank")) {
+		moirai::JsonResult parsed = moirai::parseBankJson(bankJ);
+		if (parsed.valid) {
+			moirai::CompileResult compiled = moirai::compileBank(parsed.bank);
+			if (compiled.valid) {
+				authoredBank = std::move(parsed.bank);
+				compiledBank = compiled.bank;
+				envelopeEngine.setBank(compiledBank.get());
+			} else persistenceError = compiled.errors.empty() ? "invalid bank" : compiled.errors.front().message;
+		} else persistenceError = parsed.errors.empty() ? "invalid bank" : parsed.errors.front().message;
+		if (!persistenceError.empty()) {
+			authoredBank = moirai::makeInitialBank();
+			moirai::CompileResult fallback = moirai::compileBank(authoredBank);
+			compiledBank = fallback.bank;
+			envelopeEngine.setBank(compiledBank.get());
+		}
+	}
 	resetRuntime();
 }

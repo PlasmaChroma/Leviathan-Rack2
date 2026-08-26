@@ -52,6 +52,7 @@ struct Moirai final : Module {
 
 	moirai::Bank authoredBank;
 	moirai::CompiledBankPtr compiledBank;
+	std::string persistenceError;
 	moirai::Engine envelopeEngine;
 	dsp::SchmittTrigger resetTrigger;
 	dsp::SchmittTrigger clockTrigger;
