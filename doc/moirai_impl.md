@@ -10,6 +10,33 @@ Moirai is currently unreleased. Its initial enum and state formats may be chosen
 cleanly, but they become compatibility contracts as soon as a public build is
 made.
 
+## Current Implementation Status — 2026-08-26
+
+The v1 implementation is functionally complete through Phase 5 on the current
+development branch. The authoritative evidence is the focused test suite plus
+the independent live reports in `mAnt1.md`, `m2-report.md`, `mTest2.md`, and
+`mTest3.md`.
+
+| Area | Status | Evidence / remaining qualification |
+|---|---|---|
+| Phase 0 semantic transport | Complete | Independent legacy Sibyl, generic semantic, undo-isolation, containment, observation-regression, and repetition tests passed. |
+| Phase 1 model/JSON/compiler/presets | Complete | Factory catalog, structured validation, round-trip, limit, curve, and compiler tests pass. |
+| Phase 2 engine/adoption | Complete | Voice behavior, allocation-free steady state, all adoption boundaries, old-generation voice retention, restart policy, coalescing, and concurrent reclamation tests pass. |
+| Phase 3 Rack module/persistence/semantic handler | Complete | Rack-linked module round-trip, atomic edit, revision, command, fallback, generic-route, and plugin-link tests pass. |
+| Phase 4 panel/display/preset UI | Code complete; live smoke substantially observed | SVG-only anchors and coherent telemetry contracts pass. The user reports the inspected UI looks correct. Formal screenshot evidence, exhaustive preset-menu undo/redo, and close/reopen graphics-lifecycle recording remain optional release-checklist items rather than known defects. |
+| Phase 5 MCP and observation workflow | Complete | Typed discovery/read/validate/edit/status/command passed live. Direct A/B frozen capture, immutable repeated analysis, comparison, structured expiry recovery, disconnected-monitor behavior, and exact-frame Sibyl request-to-snapshot resolution were demonstrated. |
+| Phase 6 authoritative Windows validation | Not run | Run the documented MINGW64 `test-fast` and plugin build before a Windows release candidate. |
+
+Current known implementation defects: **none**. An earlier one-off aggregate
+`sibyl_module_spec` failure did not recur in the subsequent single-run
+`make test-fast` gate. A later attempt to produce a second Sibyl observation
+marker did not sound during its bounded polling window, but an existing
+`mTest3 Moirai onset` request resolved to a complete exact-frame A/B snapshot;
+there is therefore no confirmed observation-path defect.
+
+This status section records implementation progress; the contracts and
+acceptance criteria below remain normative.
+
 ## 1. Product Contract
 
 Moirai is a 12 HP, dual-lane, 16-channel polyphonic envelope bank.
