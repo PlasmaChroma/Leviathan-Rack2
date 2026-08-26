@@ -1,0 +1,31 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="60.96mm" height="128.5mm" viewBox="0 0 6096 12850" version="1.1">
+  <g id="panel">
+    <rect width="6096" height="12850" fill="#111722" />
+    <rect x="180" y="180" width="5736" height="12490" rx="150" fill="#172334" stroke="#61dbe3" stroke-width="20" opacity="0.94" />
+    <rect x="240" y="8100" width="5616" height="1800" rx="130" fill="#070d16" opacity="0.72" />
+    <rect x="240" y="10400" width="5616" height="2000" rx="130" fill="#070d16" opacity="0.72" />
+  </g>
+  <g id="components" inkscape:label="Component anchors" style="display:none">
+    <rect id="MOIRAI_DISPLAY" x="300" y="1100" width="5496" height="3000" rx="120" />
+    <circle id="LANE_PARAM" cx="1200" cy="5300" r="270" />
+    <circle id="CHANNEL_PARAM" cx="3048" cy="5300" r="450" />
+    <circle id="MANUAL_TRIGGER_PARAM" cx="4900" cy="5300" r="270" />
+    <circle id="TIME_PARAM" cx="1200" cy="7200" r="450" />
+    <circle id="CURVE_PARAM" cx="3048" cy="7200" r="450" />
+    <circle id="LEVEL_PARAM" cx="4900" cy="7200" r="450" />
+    <circle id="LANE_A_LIGHT" cx="800" cy="5900" r="100" />
+    <circle id="LANE_B_LIGHT" cx="1600" cy="5900" r="100" />
+    <circle id="GATE_INPUT" cx="500" cy="9300" r="400" />
+    <circle id="VELOCITY_INPUT" cx="1350" cy="9300" r="400" />
+    <circle id="M1_INPUT" cx="2200" cy="9300" r="400" />
+    <circle id="M2_INPUT" cx="3050" cy="9300" r="400" />
+    <circle id="M3_INPUT" cx="3900" cy="9300" r="400" />
+    <circle id="CLOCK_INPUT" cx="4750" cy="9300" r="400" />
+    <circle id="RESET_INPUT" cx="5600" cy="9300" r="400" />
+    <circle id="A_OUTPUT" cx="800" cy="11600" r="400" />
+    <circle id="EOC_A_OUTPUT" cx="2200" cy="11600" r="400" />
+    <circle id="B_OUTPUT" cx="3900" cy="11600" r="400" />
+    <circle id="EOC_B_OUTPUT" cx="5300" cy="11600" r="400" />
+  </g>
+</svg>

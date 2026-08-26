@@ -34,6 +34,7 @@ does not justify guessing IDs or overwriting a user's chosen topology.
 | `Octavia` | Rack bridge and monitor | An agent needs live Rack inspection, editing, snapshots, analysis, or measurement | Exclude it from ordinary audio-role diagnostics except for its six physical monitor inputs. Never delete the active bridge during a task. |
 | `OctaviaConsole` | Prompt/response expander | The user explicitly wants an in-Rack agent conversation surface | Place immediately to Octavia's right and enter Console Mode only on explicit request. It does not grant extra mutation or save authority. |
 | `Sibyl` | Machine-first sequencer/arranger | An agent should compose, arrange, revise, or control semantic musical structure | Prefer its revisioned semantic API over raw state edits. Read `sibyl.md`; outputs are polyphonic track channels and its authored observation markers can target Octavia. |
+| `Moirai` | Polyphonic envelope bank | Two independently authored envelope lanes should shape up to sixteen polyphonic parts | Accepts ordinary polyphonic GATE/VEL/M1-M3 cables, making it a natural Sibyl companion without requiring adjacency or a private bus. Semantic editing is not yet exposed in this initial registered build. |
 
 ## Relationships and placement
 

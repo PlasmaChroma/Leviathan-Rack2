@@ -261,6 +261,17 @@
         "Utility"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Moirai",
+      "name": "Moirai",
+      "description": "Dual-lane 16-channel polyphonic envelope bank for authored modulation and Sibyl-driven voices.",
+      "tags": [
+        "Envelope generator",
+        "Function generator",
+        "Polyphonic"
+      ],
+      "hidden": false
     }
   ]
 }
