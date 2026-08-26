@@ -13,6 +13,10 @@ class OctaviaSibylContractTest(unittest.TestCase):
         for route in ("capabilities", "composition", "validate", "edit", "status", "transport"):
             self.assertIn(f'/sibyl/(\\d+)/{route}', OCTAVIA)
 
+    def test_debug_capture_uses_sibyl_ui_thread_dispatch(self):
+        self.assertIn('/debug/capture/(\\d+)', OCTAVIA)
+        self.assertIn('SibylControl::Operation::DEBUG_CAPTURE', OCTAVIA)
+
     def test_schema_is_owned_by_capability_implementation(self):
         self.assertIn("handleSibylRequest", INTERFACE)
         self.assertIn("const std::string& requestJson", INTERFACE)

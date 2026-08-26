@@ -2769,6 +2769,15 @@ struct Octavia : Module {
                 res.set_content("{\"error\":\"invalid module id\"}", "application/json");
             }
         });
+        svr.Post(R"(/debug/capture/(\d+))", [this](const httplib::Request& req, httplib::Response& res){
+            try {
+                dispatchSibyl(res, std::stoll(req.matches[1].str()),
+                    SibylControl::Operation::DEBUG_CAPTURE, req.body);
+            } catch (...) {
+                res.status = 400;
+                res.set_content("{\"error\":\"invalid module id\"}", "application/json");
+            }
+        });
         svr.Post(R"(/modules/(\d+)/bypass)", [this](const httplib::Request& r, httplib::Response& res){
             json_error_t jerr; json_t* root=json_loads(r.body.c_str(),0,&jerr);
             json_t* bypassedJ=root?json_object_get(root,"bypassed"):NULL;

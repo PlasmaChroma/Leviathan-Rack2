@@ -682,6 +682,8 @@ void submitBaselineMetrics(const char* moduleName,
 void submitSibylMetrics(uint32_t instanceId,
                         int64_t rackModuleId,
                         TimingRangeUs processUs,
+                        float processMeanUs,
+                        uint64_t processSamples,
                         TimingRangeUs stepUs,
                         TimingRangeUs drawUs,
                         TimingRangeUs snapshotUs,
@@ -701,7 +703,10 @@ void submitSibylMetrics(uint32_t instanceId,
   std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
   appendRange(dataBuf, sizeof(dataBuf), "oracle_us", oracleUs);
   std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf),
-                ",\"nvg_path_ops\":%d}", std::max(0, nvgPathOps));
+                ",\"nvg_path_ops\":%d,\"process_mean_us\":%.4f,\"process_samples\":%llu}",
+                std::max(0, nvgPathOps),
+                std::max(0.f, processMeanUs),
+                static_cast<unsigned long long>(processSamples));
   transport().submit("Sibyl", instanceId, "ui", "metric", dataBuf, system::getTime(), rackModuleId);
 }
 

@@ -41,7 +41,7 @@ BRIDGE_HEADERS = {"X-Octavia-Token": BRIDGE_TOKEN} if BRIDGE_TOKEN else {}
 
 async def _normalize_endpoint(endpoint: str) -> str:
     """Resolve module_id in endpoints to protect against client JSON float precision truncation."""
-    m = re.match(r"^((?:sibyl|console|modules|temporal-deck|debug/metrics)/)(\d+)(/.*|\?.*)?$", endpoint)
+    m = re.match(r"^((?:sibyl|console|modules|temporal-deck|debug/metrics|debug/capture)/)(\d+)(/.*|\?.*)?$", endpoint)
     if not m:
         return endpoint
     prefix, mid_str, suffix = m.group(1), m.group(2), m.group(3) or ""
@@ -211,6 +211,38 @@ async def vcv_get_debug_metrics(params: DebugMetricsInput) -> str:
     """
     try:
         return json.dumps(await _call(f"debug/metrics/{params.module_id}"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+class DebugCaptureInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    module_id: int = Field(..., description="Rack module ID from vcv_list_modules", ge=0)
+    action: str = Field("status", description="Capture action; currently start or status", min_length=1, max_length=32)
+    capture_kind: str = Field("process", description="Capture kind; currently process", min_length=1, max_length=64)
+    duration_seconds: float = Field(5.0, description="Bounded capture duration", ge=1.0, le=10.0)
+
+
+@mcp.tool(
+    name="vcv_debug_capture",
+    annotations={"title": "Control Detailed Debug Capture", "readOnlyHint": False, "destructiveHint": False}
+)
+async def vcv_debug_capture(params: DebugCaptureInput) -> str:
+    """Start or inspect an explicitly armed detailed module debug capture.
+
+    Sibyl process captures are bounded to 1–10 seconds, record into preallocated audio-thread
+    storage, and write CSV off the audio thread. Use action=status until state is complete.
+    The action and capture_kind strings intentionally form a stable extensible diagnostics surface.
+    """
+    payload = {
+        "action": params.action,
+        "capture_kind": params.capture_kind,
+        "duration_seconds": params.duration_seconds,
+    }
+    try:
+        return json.dumps(await _sibyl_call(
+            f"debug/capture/{params.module_id}", "POST", payload
+        ), indent=2)
     except Exception as e:
         return _err(e)
 

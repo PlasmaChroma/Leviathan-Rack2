@@ -35,7 +35,7 @@ class ServerContractTest(unittest.TestCase):
         self.assertGreaterEqual(len(names), 15)
         self.assertEqual(len(names), len(set(names)), f"duplicate MCP tool names: {names}")
         expected_tools = {
-            "vcv_get_status", "vcv_get_perf", "vcv_get_debug_metrics", "vcv_list_modules", "vcv_get_module",
+            "vcv_get_status", "vcv_get_perf", "vcv_get_debug_metrics", "vcv_debug_capture", "vcv_list_modules", "vcv_get_module",
             "vcv_list_library", "vcv_list_cables", "vcv_get_signal_levels",
             "vcv_find_unpatched", "vcv_analyze_audio", "vcv_reset_loudness", "vcv_temporal_deck_transport", "vcv_add_module", "vcv_delete_module",
             "vcv_update_module", "vcv_layout_modules", "vcv_set_parameters", "vcv_connect_cables",
@@ -56,6 +56,12 @@ class ServerContractTest(unittest.TestCase):
     def test_debug_metrics_are_module_scoped_and_brief(self):
         self.assertIn('await _call(f"debug/metrics/{params.module_id}")', self.source)
         self.assertIn("It does not start or return detailed", self.source)
+
+    def test_debug_capture_is_bounded_and_extensible(self):
+        self.assertIn('name="vcv_debug_capture"', self.source)
+        self.assertIn('f"debug/capture/{params.module_id}"', self.source)
+        self.assertIn("ge=1.0, le=10.0", self.source)
+        self.assertIn("stable extensible diagnostics surface", self.source)
 
     def test_tool_errors_are_raised(self):
         error_helper = next(

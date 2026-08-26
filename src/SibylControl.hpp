@@ -15,6 +15,7 @@ struct SibylControl {
         EDIT,
         GET_STATUS,
         TRANSPORT,
+        DEBUG_CAPTURE,
     };
 
     virtual ~SibylControl() = default;

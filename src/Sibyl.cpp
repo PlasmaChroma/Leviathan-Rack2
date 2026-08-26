@@ -13,6 +13,7 @@
 #include "visual/FractalGlassOverlay.hpp"
 #ifndef SIBYL_MODULE_TEST
 #include "DebugTerminalMetrics.hpp"
+#include "SibylProcessCapture.hpp"
 #endif
 #include <jansson.h>
 #include <osdialog.h>
@@ -254,9 +255,11 @@ struct SibylModule : Module, SibylControl {
 	std::array<CachedTrackRoute, 16> m_cachedTrackRoutes {};
 	std::array<CachedMacroRoute, 4> m_cachedMacroRoutes {};
 	int m_cachedOutputChannels = 1;
+	int m_appliedOutputChannels = -1;
 
 #ifndef SIBYL_MODULE_TEST
 	debug_terminal::BaselineModuleMetrics debugMetrics;
+	sibyl_debug::ProcessCapture processCapture;
 #endif
 
 	// Hardware Schmitt triggers & pulse generators
@@ -310,6 +313,12 @@ struct SibylModule : Module, SibylControl {
 		m_acceptedCompositionPtr = comp.get();
 		m_activeCompositionPtr.store(comp.get(), std::memory_order_release);
 		for (auto& phase : m_telemetryTrackPhase) phase.store(0.0, std::memory_order_relaxed);
+	}
+
+	~SibylModule() override {
+#ifndef SIBYL_MODULE_TEST
+		processCapture.shutdown();
+#endif
 	}
 
 	// Allocation-free insertion point for future composition/event analysis
@@ -784,6 +793,18 @@ struct SibylModule : Module, SibylControl {
 		}
 	}
 
+	void applyOutputChannels(int channels) {
+		channels = clamp(channels, 1, 16);
+		if (channels == m_appliedOutputChannels) return;
+		outputs[V_OCT_OUTPUT].setChannels(channels);
+		outputs[GATE_OUTPUT].setChannels(channels);
+		outputs[VELOCITY_OUTPUT].setChannels(channels);
+		outputs[MOD_OUTPUT].setChannels(channels);
+		outputs[MOD_2_OUTPUT].setChannels(channels);
+		outputs[MOD_3_OUTPUT].setChannels(channels);
+		m_appliedOutputChannels = channels;
+	}
+
 	bool crossesActiveStepBoundary(const sibyl::Composition& composition, double beatDelta) const {
 		if (beatDelta <= 0.0 || m_sceneIndex < 0 || m_sceneIndex >= (int)composition.arrangement.size()) return false;
 		for (int channel = 0; channel < 16; ++channel) {
@@ -1038,11 +1059,23 @@ struct SibylModule : Module, SibylControl {
 
 	void process(const ProcessArgs& args) override {
 #ifndef SIBYL_MODULE_TEST
+		const sibyl_debug::ProcessCaptureToken captureToken = processCapture.begin();
 		const bool measurePerf = isDragonKingDebugEnabled();
-		const auto processStart = debug_terminal::debugTimerStart(measurePerf);
+		const bool measureElapsed = measurePerf || captureToken.session;
+		const auto processStart = debug_terminal::debugTimerStart(measureElapsed);
+		uint32_t captureWorkFlags = 0u;
+		uint16_t captureActiveTracks = 0u;
+		uint16_t captureEvaluatedEvents = 0u;
+		uint16_t captureFiredEvents = 0u;
 		auto recordProcessTiming = [&]() {
-			if (measurePerf)
-				debugMetrics.recordProcess(debug_terminal::elapsedNsSince(processStart));
+			if (!measureElapsed) return;
+			const uint64_t elapsedNs = debug_terminal::elapsedNsSince(processStart);
+			if (measurePerf) debugMetrics.recordProcess(elapsedNs);
+			if (captureToken.session) {
+				processCapture.finish(captureToken, static_cast<uint64_t>(args.frame),
+					elapsedNs,
+					captureWorkFlags, captureActiveTracks, captureEvaluatedEvents, captureFiredEvents);
+			}
 		};
 #endif
 		const sibyl::Composition* comp = acquirePublished(m_activeCompositionPtr, m_compositionHazard);
@@ -1110,6 +1143,9 @@ struct SibylModule : Module, SibylControl {
 		bool clockTick = false;
 		if (inputs[CLOCK_INPUT].isConnected()) {
 			clockTick = m_clockTrigger.process(inputs[CLOCK_INPUT].getVoltage());
+#ifndef SIBYL_MODULE_TEST
+			if (clockTick) captureWorkFlags |= sibyl_debug::PROCESS_EXTERNAL_CLOCK_TICK;
+#endif
 			sibyl::ClockAdvance advance = m_externalClockEstimator.process(args.sampleTime, clockTick,
 				comp->clock.externalPpqn, comp->clock.externalTimeoutMs,
 				comp->clock.onExternalStop, comp->meta.bpm);
@@ -1142,10 +1178,17 @@ struct SibylModule : Module, SibylControl {
 			adoptionBoundary.scene = m_scenePhase + rawBeatDelta >= currentScene.lengthBeats &&
 				m_sceneRepeat + 1 >= currentScene.repeats;
 		}
+		const bool adoptedComposition = pending && pending->composition &&
+			sibyl::adoptionBoundaryReached(pending->applyAt, adoptionBoundary);
+#ifndef SIBYL_MODULE_TEST
+		if (adoptedComposition) captureWorkFlags |= sibyl_debug::PROCESS_COMPOSITION_ADOPTION;
+#endif
 		adoptPendingIfReady(adoptionBoundary, pending);
 		m_adoptionHazard.store(nullptr, std::memory_order_release);
-		m_compositionHazard.store(nullptr, std::memory_order_release);
-		comp = acquirePublished(m_activeCompositionPtr, m_compositionHazard);
+		if (adoptedComposition) {
+			m_compositionHazard.store(nullptr, std::memory_order_release);
+			comp = acquirePublished(m_activeCompositionPtr, m_compositionHazard);
+		}
 		if (!comp) {
 			m_transportHazard.store(nullptr, std::memory_order_release);
 #ifndef SIBYL_MODULE_TEST
@@ -1180,12 +1223,7 @@ struct SibylModule : Module, SibylControl {
 		}
 
 		if (comp->arrangement.empty()) {
-			outputs[V_OCT_OUTPUT].setChannels(1);
-			outputs[GATE_OUTPUT].setChannels(1);
-			outputs[VELOCITY_OUTPUT].setChannels(1);
-			outputs[MOD_OUTPUT].setChannels(1);
-			outputs[MOD_2_OUTPUT].setChannels(1);
-			outputs[MOD_3_OUTPUT].setChannels(1);
+			applyOutputChannels(1);
 			outputs[V_OCT_OUTPUT].setVoltage(0.f, 0);
 			outputs[GATE_OUTPUT].setVoltage(0.f, 0);
 			outputs[VELOCITY_OUTPUT].setVoltage(0.f, 0);
@@ -1215,6 +1253,9 @@ struct SibylModule : Module, SibylControl {
 
 		// --- Scene Boundary Progression ---
 		if (m_scenePhase >= boundaryScene.lengthBeats) {
+#ifndef SIBYL_MODULE_TEST
+			captureWorkFlags |= sibyl_debug::PROCESS_SCENE_BOUNDARY;
+#endif
 			m_scenePhase -= boundaryScene.lengthBeats;
 			m_sceneRepeat++;
 			if (m_sceneRepeat >= boundaryScene.repeats) {
@@ -1294,6 +1335,9 @@ struct SibylModule : Module, SibylControl {
 				continue;
 			}
 			const sibyl::TrackDef& trackDef = *route.track;
+#ifndef SIBYL_MODULE_TEST
+			++captureActiveTracks;
+#endif
 			if (!isRunning) {
 				m_trackStates[ch].currentGate = 0.0f;
 				continue;
@@ -1327,6 +1371,10 @@ struct SibylModule : Module, SibylControl {
 					if (!matchedEvent) continue;
 					double scheduledBeat = sibyl::scheduledEventBeat(pat, nominalStep, *matchedEvent, effectiveSwing);
 					if (!sibyl::scheduledEventCrossed(previousPatternPhase, currentPatternPhase, scheduledBeat)) continue;
+#ifndef SIBYL_MODULE_TEST
+					captureWorkFlags |= sibyl_debug::PROCESS_EVENT_EVALUATED;
+					++captureEvaluatedEvents;
+#endif
 
 					m_trackStates[ch].lastFiredStep = eventStep;
 					m_trackStates[ch].activeEventStep = eventStep;
@@ -1346,6 +1394,10 @@ struct SibylModule : Module, SibylControl {
 					m_trackStates[ch].activeEventPlayed = play;
 
 					if (play) {
+#ifndef SIBYL_MODULE_TEST
+						captureWorkFlags |= sibyl_debug::PROCESS_EVENT_FIRED;
+						++captureFiredEvents;
+#endif
 						if (matchedEvent->hasObservation) {
 							publishObservationTrigger(
 								matchedEvent->observation.octaviaModuleId,
@@ -1422,12 +1474,7 @@ struct SibylModule : Module, SibylControl {
 
 		// Write Polyphonic outputs
 		int numChannels = m_cachedOutputChannels;
-		outputs[V_OCT_OUTPUT].setChannels(numChannels);
-		outputs[GATE_OUTPUT].setChannels(numChannels);
-		outputs[VELOCITY_OUTPUT].setChannels(numChannels);
-		outputs[MOD_OUTPUT].setChannels(numChannels);
-		outputs[MOD_2_OUTPUT].setChannels(numChannels);
-		outputs[MOD_3_OUTPUT].setChannels(numChannels);
+		applyOutputChannels(numChannels);
 
 		for (int c = 0; c < numChannels; c++) {
 			outputs[V_OCT_OUTPUT].setVoltage(m_trackStates[c].currentPitch, c);
@@ -1451,7 +1498,50 @@ struct SibylModule : Module, SibylControl {
 	}
 
 	bool handleSibylRequest(Operation operation, const std::string& requestJson, std::string& responseJson, std::string& error) override {
-		if (operation == Operation::CAPABILITIES) {
+		if (operation == Operation::DEBUG_CAPTURE) {
+#ifdef SIBYL_MODULE_TEST
+			error = "debug capture is unavailable in the Sibyl module test harness";
+			return false;
+#else
+			json_error_t jerror {};
+			json_t* root = json_loads(requestJson.c_str(), 0, &jerror);
+			if (!root || !json_is_object(root)) {
+				if (root) json_decref(root);
+				error = std::string("Invalid debug capture request: ") + jerror.text;
+				return false;
+			}
+			json_t* actionJ = json_object_get(root, "action");
+			const std::string action = json_is_string(actionJ) ? json_string_value(actionJ) : "status";
+			if (action == "status") {
+				json_decref(root);
+				responseJson = processCapture.statusJson();
+				return true;
+			}
+			json_t* kindJ = json_object_get(root, "capture_kind");
+			const std::string kind = json_is_string(kindJ) ? json_string_value(kindJ) : "process";
+			json_t* durationJ = json_object_get(root, "duration_seconds");
+			const double durationSec = json_is_number(durationJ) ? json_number_value(durationJ) : 5.0;
+			json_decref(root);
+			if (action != "start" || kind != "process") {
+				error = "debug capture supports action start/status and capture_kind process";
+				responseJson = "{\"ok\":false,\"error\":{\"code\":\"invalid_request\",\"message\":\"Unsupported debug capture action or kind\"}}";
+				return false;
+			}
+			if (!isDragonKingDebugEnabled()) {
+				error = "Dragon King debug mode must be enabled";
+				responseJson = "{\"ok\":false,\"error\":{\"code\":\"debug_disabled\",\"message\":\"Dragon King debug mode must be enabled\"}}";
+				return false;
+			}
+			const float sampleRate = APP && APP->engine ? APP->engine->getSampleRate() : 0.f;
+			if (!processCapture.start(durationSec, sampleRate, settings::threadCount, id,
+					debugMetrics.instanceId, m_activeRevision.load(std::memory_order_acquire), error)) {
+				responseJson = "{\"ok\":false,\"error\":{\"code\":\"capture_busy\",\"message\":\"" + error + "\"}}";
+				return false;
+			}
+			responseJson = processCapture.statusJson();
+			return true;
+#endif
+		} else if (operation == Operation::CAPABILITIES) {
 			responseJson = "{\"ok\":true,\"capabilities\":{\"sibyl\":{\"apiVersion\":1,\"schemaVersion\":2,\"revision\":" + std::to_string(m_acceptedRevision) + ",\"operations\":[\"get_composition\",\"validate\",\"edit\",\"get_status\",\"transport\"]}}}";
 			return true;
 		} else if (operation == Operation::GET_COMPOSITION) {
@@ -2069,7 +2159,7 @@ struct SibylOracleDisplay final : TransparentWidget {
 		text(args, pad + sceneStatusWidth + dividerWidth, h - 4.f, footerFontSize,
 			NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, violet, repeatStatus);
 		const char* loopLabel = state.loopFollowsComposition
-			? (state.looping ? "AUTO LOOP" : "AUTO ONCE")
+			? (state.looping ? "(A) LOOP" : "(A) ONCE")
 			: (state.looping ? "LOOP" : "ONCE");
 		if (state.pendingRevision >= 0) {
 			std::snprintf(footer, sizeof(footer), "%s · %s · %5.1f · R%d>%d · P%d",
@@ -2189,6 +2279,10 @@ struct SibylWidget : ModuleWidget {
 		const bool measurePerf = isDragonKingDebugEnabled();
 		const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
 		ModuleWidget::step();
+#ifndef SIBYL_MODULE_TEST
+		SibylModule* sibylModule = static_cast<SibylModule*>(module);
+		if (sibylModule) sibylModule->processCapture.poll();
+#endif
 		if (measurePerf)
 			debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
 	}
@@ -2206,10 +2300,14 @@ struct SibylWidget : ModuleWidget {
 		const double nowSec = system::getTime();
 		if (debug_terminal::baselineSubmitDue(
 				"Sibyl", sibylModule->debugMetrics.instanceId, nowSec)) {
+			const debug_terminal::ProcessTimingStats processStats =
+				sibylModule->debugMetrics.consumeProcessStats();
 			debug_terminal::submitSibylMetrics(
 				sibylModule->debugMetrics.instanceId,
 				sibylModule->id,
-				sibylModule->debugMetrics.consumeProcessRange(),
+				processStats.range,
+				processStats.meanUs,
+				processStats.samples,
 				debugWidgetMetrics.consumeStepRange(),
 				debugWidgetMetrics.consumeDrawRange(),
 				oracleDisplay ? oracleDisplay->snapshotUsRange.consume() : debug_terminal::TimingRangeUs(),

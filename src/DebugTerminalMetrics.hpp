@@ -12,6 +12,12 @@
 
 namespace debug_terminal {
 
+struct ProcessTimingStats {
+  TimingRangeUs range;
+  float meanUs = 0.f;
+  uint64_t samples = 0;
+};
+
 struct BaselineModuleMetrics {
   std::atomic<uint64_t> sampledCount {0};
   std::atomic<uint64_t> processNs {0};
@@ -29,10 +35,18 @@ struct BaselineModuleMetrics {
     recordAudioProcessTiming(processMinNs, processMaxNs, elapsedNs);
   }
 
+  ProcessTimingStats consumeProcessStats() {
+    ProcessTimingStats stats;
+    stats.samples = sampledCount.exchange(0, std::memory_order_acq_rel);
+    const uint64_t totalNs = processNs.exchange(0, std::memory_order_acq_rel);
+    stats.range = consumeAudioProcessTiming(processMinNs, processMaxNs);
+    if (stats.samples > 0)
+      stats.meanUs = float(double(totalNs) * 0.001 / double(stats.samples));
+    return stats;
+  }
+
   TimingRangeUs consumeProcessRange() {
-    sampledCount.exchange(0, std::memory_order_acq_rel);
-    processNs.exchange(0, std::memory_order_acq_rel);
-    return consumeAudioProcessTiming(processMinNs, processMaxNs);
+    return consumeProcessStats().range;
   }
 };
 
