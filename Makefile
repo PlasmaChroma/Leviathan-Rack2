@@ -140,7 +140,7 @@ ifneq (,$(findstring mingw,$(CXX_MACHINE)))
 MINGW_TEST_CPPFLAGS += -D_USE_MATH_DEFINES
 endif
 
-.PHONY: generate-panel-anchor-atlas generate-mandelwake-tables check-mandelwake-tables validate-plugin-json doorstop-reference-grid doorstop-corpus-audit doorstop-reference-evaluate doorstop-variant-grid doorstop-variant-evaluate doorstop-boing-audition
+.PHONY: generate-panel-anchor-atlas generate-mandelwake-tables check-mandelwake-tables validate-plugin-json doorstop-reference-grid doorstop-corpus-audit doorstop-reference-evaluate doorstop-variant-grid doorstop-variant-evaluate doorstop-boing-audition doorstop-v2-phase-grid doorstop-v2-phase-evaluate
 generate-panel-anchor-atlas:
 	python3 tools/generate_panel_anchor_atlas.py
 
@@ -161,6 +161,7 @@ DOORSTOP_REFERENCE_VELOCITIES ?= 0.5 0.75 1.0
 DOORSTOP_REFERENCE_SEEDS ?= 1 77 7331 65537 104729 999983 2654435761 305419896 610839776 195948557 271828183 314159265 3735928559 324508639 4277009102 4294967291
 DOORSTOP_REFERENCE_VARIANTS ?= current spring-only modes-only spring-forward spring-refined rack-v2 boing-refined
 DOORSTOP_BOING_AUDITION_DIR ?= Samples/Doorstop/Auditions/reference-v2-vs-boing-refined
+DOORSTOP_V2_PHASES ?= 0 15 30 45 60 75 90
 
 doorstop-reference-grid: build/tools/doorstop_reference_render
 	mkdir -p build/doorstop-reference-renders
@@ -202,6 +203,35 @@ doorstop-boing-audition: build/tools/doorstop_reference_render
 	python3 tools/compare_doorstop_variants.py \
 		--variants current rack-v2 boing-refined \
 		--output-dir $(DOORSTOP_BOING_AUDITION_DIR)
+
+# Stage 0 phase probe. Each phase gets the bounded Rack output and the exact
+# signal presented to tanh so saturation can be evaluated independently.
+doorstop-v2-phase-grid: build/tools/doorstop_reference_render
+	@for phase in $(DOORSTOP_V2_PHASES); do \
+		phase_name=$$(printf "%03d" $$phase); \
+		mkdir -p build/doorstop-v2-phase-renders/v2-phase-$$phase_name; \
+		for velocity in $(DOORSTOP_REFERENCE_VELOCITIES); do \
+			for seed in $(DOORSTOP_REFERENCE_SEEDS); do \
+				base=build/doorstop-v2-phase-renders/v2-phase-$$phase_name/v2-phase-$$phase_name-v$${velocity}-seed$${seed}; \
+				build/tools/doorstop_reference_render $$base-module.wav --quiet \
+					--variant rack-v2 --radiation-phase $$phase --output-tap module \
+					--velocity $$velocity --seed $$seed; \
+				build/tools/doorstop_reference_render $$base-preconditioned.wav --quiet \
+					--variant rack-v2 --radiation-phase $$phase --output-tap preconditioned \
+					--velocity $$velocity --seed $$seed; \
+			done; \
+		done; \
+	done
+
+doorstop-v2-phase-evaluate: doorstop-v2-phase-grid
+	python3 tools/compare_doorstop_variants.py \
+		--variant-root build/doorstop-v2-phase-renders \
+		--output-dir build/doorstop-v2-phase-analysis/module \
+		--baseline v2-phase-090 --tap module --blind
+	python3 tools/compare_doorstop_variants.py \
+		--variant-root build/doorstop-v2-phase-renders \
+		--output-dir build/doorstop-v2-phase-analysis/preconditioned \
+		--baseline v2-phase-090 --tap preconditioned --blind
 
 ifneq (,$(findstring mingw,$(CXX_MACHINE)))
 LDFLAGS += -lws2_32
@@ -602,7 +632,7 @@ build/tests/doorstop_engine_spec: tests/doorstop_engine_spec.cpp src/DoorstopEng
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
 
 build/tests/doorstop_reference_engine_spec: tests/doorstop_reference_engine_spec.cpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/DoorstopEngineRouter.cpp src/DoorstopEngineRouter.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_reference_engine_spec.cpp src/ReferenceSpringEngine.cpp src/DoorstopEngineRouter.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -DDOORSTOP_REFERENCE_ANALYSIS=1 tests/doorstop_reference_engine_spec.cpp src/ReferenceSpringEngine.cpp src/DoorstopEngineRouter.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
 
 build/tests/bifurx_filter_spec: tests/bifurx_filter_spec.cpp tests/bifurx_filter_test_model.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $< -o $@

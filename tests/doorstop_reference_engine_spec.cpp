@@ -262,6 +262,56 @@ Result referenceV2IsDarkBoundedAndJunctionFree() {
 			+ " slept=" + std::to_string(slept)};
 }
 
+#if defined(DOORSTOP_REFERENCE_ANALYSIS)
+Result referenceV2PhaseAndOutputProbesAreDeterministic() {
+	constexpr float rate = 48000.f;
+	constexpr float dt = 1.f / rate;
+	doorstop::ReferenceSpringEngine crossing(
+		doorstop::ReferenceSpringProfile::DarkRefinedV2);
+	doorstop::ReferenceSpringEngine extrema(
+		doorstop::ReferenceSpringProfile::DarkRefinedV2);
+	doorstop::ReferenceSpringEngine preconditioned(
+		doorstop::ReferenceSpringProfile::DarkRefinedV2);
+	for (doorstop::ReferenceSpringEngine* engine :
+		{&crossing, &extrema, &preconditioned}) {
+		engine->setSampleRate(rate);
+		engine->setSpecimenSeed(77u);
+	}
+	crossing.setAnalysisRadiationPhaseDegrees(90.f);
+	extrema.setAnalysisRadiationPhaseDegrees(0.f);
+	preconditioned.setAnalysisRadiationPhaseDegrees(90.f);
+	preconditioned.setAnalysisOutput(
+		doorstop::ReferenceAnalysisOutput::Preconditioned);
+	crossing.strike(0.75f);
+	extrema.strike(0.75f);
+	preconditioned.strike(0.75f);
+	double phaseDifference = 0.0;
+	double saturationDifference = 0.0;
+	bool finite = true;
+	float preconditionedPeak = 0.f;
+	for (int i = 0; i < int(2.f * rate); ++i) {
+		const float crossingSample = crossing.process(dt).outputVolts;
+		const float extremaSample = extrema.process(dt).outputVolts;
+		const float preconditionedSample =
+			preconditioned.process(dt).outputVolts;
+		phaseDifference += std::fabs(crossingSample - extremaSample);
+		saturationDifference +=
+			std::fabs(crossingSample - preconditionedSample);
+		preconditionedPeak = std::max(
+			preconditionedPeak, std::fabs(preconditionedSample));
+		finite = finite && std::isfinite(crossingSample)
+			&& std::isfinite(extremaSample)
+			&& std::isfinite(preconditionedSample);
+	}
+	return {"Reference V2 phase and preconditioned-output probes are active",
+		finite && phaseDifference > 1000.0 && saturationDifference > 10.0
+			&& preconditionedPeak > 0.1f,
+		"phaseDifference=" + std::to_string(phaseDifference)
+			+ " saturationDifference=" + std::to_string(saturationDifference)
+			+ " preconditionedPeak=" + std::to_string(preconditionedPeak)};
+}
+#endif
+
 Result referenceV2RouterUsesExactComputationPath() {
 	constexpr float rate = 48000.f;
 	constexpr float dt = 1.f / rate;
@@ -361,6 +411,9 @@ int main() {
 	results.push_back(specimenIsDeterministicAndDistinct());
 	results.push_back(correlatedSpecimenTraitsSpanDarkToBright());
 	results.push_back(referenceV2IsDarkBoundedAndJunctionFree());
+#if defined(DOORSTOP_REFERENCE_ANALYSIS)
+	results.push_back(referenceV2PhaseAndOutputProbesAreDeterministic());
+#endif
 	results.push_back(referenceV2RouterUsesExactComputationPath());
 	results.push_back(legacyRouterUsesExactComputationPath());
 	results.push_back(switchingIsBounded());

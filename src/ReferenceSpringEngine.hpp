@@ -23,6 +23,11 @@ enum class ReferenceAnalysisVariant : std::uint8_t {
 	SpringRefined,
 	BoingRefined
 };
+
+enum class ReferenceAnalysisOutput : std::uint8_t {
+	ModuleOutput = 0,
+	Preconditioned
+};
 #endif
 
 struct ReferenceDiagnostics {
@@ -50,6 +55,8 @@ public:
 	void setSpecimenSeed(std::uint32_t seed);
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
 	void setAnalysisVariant(ReferenceAnalysisVariant variant);
+	void setAnalysisRadiationPhaseDegrees(float degrees);
+	void setAnalysisOutput(ReferenceAnalysisOutput output);
 #endif
 	void strike(float normalizedVelocity);
 	Frame process(float requestedSampleTime);
@@ -88,6 +95,9 @@ private:
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
 	ReferenceAnalysisVariant analysisVariant =
 		ReferenceAnalysisVariant::Current;
+	ReferenceAnalysisOutput analysisOutput =
+		ReferenceAnalysisOutput::ModuleOutput;
+	float analysisRadiationPhaseRadians = 0.5f * PI;
 #endif
 
 	float baseFrequencyHz = 16.f;

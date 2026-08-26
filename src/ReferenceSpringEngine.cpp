@@ -171,6 +171,18 @@ void ReferenceSpringEngine::setAnalysisVariant(
 	updateCoefficients();
 	resetMotion();
 }
+
+void ReferenceSpringEngine::setAnalysisRadiationPhaseDegrees(float degrees) {
+	if (!std::isfinite(degrees)) {
+		return;
+	}
+	analysisRadiationPhaseRadians =
+		clampf(degrees, 0.f, 90.f) * PI / 180.f;
+}
+
+void ReferenceSpringEngine::setAnalysisOutput(ReferenceAnalysisOutput output) {
+	analysisOutput = output;
+}
 #endif
 
 float ReferenceSpringEngine::specimenUnit(std::uint32_t propertyTag) const {
@@ -789,10 +801,20 @@ Frame ReferenceSpringEngine::process(float requestedSampleTime) {
 	const float phaseVelocity = std::fabs(springVelocity);
 	const float phaseDisplacement =
 		baseOmega * std::fabs(displacement);
-	const float articulationVelocity = phaseVelocity
-		/ std::max(phaseVelocity + phaseDisplacement, 1e-6f);
-	const float phasePulse = articulationVelocity
-		* lerpf(1.f, articulationVelocity, radiationCurvature);
+	const float phaseMagnitude =
+		std::max(phaseVelocity + phaseDisplacement, 1e-6f);
+	const float articulationVelocity = phaseVelocity / phaseMagnitude;
+	float articulationPhase = articulationVelocity;
+#if defined(DOORSTOP_REFERENCE_ANALYSIS)
+	const float normalizedDisplacement =
+		baseOmega * displacement / phaseMagnitude;
+	const float normalizedVelocity = springVelocity / phaseMagnitude;
+	articulationPhase = std::fabs(
+		std::cos(analysisRadiationPhaseRadians) * normalizedDisplacement
+		+ std::sin(analysisRadiationPhaseRadians) * normalizedVelocity);
+#endif
+	const float phasePulse = articulationPhase
+		* lerpf(1.f, articulationPhase, radiationCurvature);
 	const float targetPulse = phasePulse * (0.72f + 0.28f * flexEnergy);
 	const float smoothing = targetPulse > radiationEnvelope
 		? radiationAttack : radiationRelease;
@@ -886,8 +908,13 @@ Frame ReferenceSpringEngine::process(float requestedSampleTime) {
 	// required about 5x makeup after demoting the modal bank; apply that makeup
 	// inside the existing bounded stage for a useful modular output level.
 	const float outputDrive = usesDarkV2Bias() ? 10.5f : 2.2f;
-	const float outputVolts =
-		5.f * levi_math::tanhAudio(signal * outputDrive);
+	const float preconditioned = signal * outputDrive;
+	float outputVolts = 5.f * levi_math::tanhAudio(preconditioned);
+#if defined(DOORSTOP_REFERENCE_ANALYSIS)
+	if (analysisOutput == ReferenceAnalysisOutput::Preconditioned) {
+		outputVolts = 5.f * preconditioned;
+	}
+#endif
 	strikeLightEnvelope *= strikeLightDecay;
 
 	diagnostics.radiationGate = radiationGate;

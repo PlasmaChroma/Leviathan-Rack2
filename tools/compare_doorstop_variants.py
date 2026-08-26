@@ -127,6 +127,7 @@ def package_listening_set(
     variants: list[str],
     rows_by_variant: dict[str, list[corpus.AuditedHit]],
     fixtures: list[dict],
+    blind: bool = False,
 ) -> list[dict]:
     listening_dir = output_dir / "listening"
     listening_dir.mkdir(parents=True, exist_ok=True)
@@ -137,6 +138,10 @@ def package_listening_set(
         stale_fixture.unlink()
     packaged: list[dict] = []
     playlist: list[str] = []
+    blind_labels = {
+        variant: f"candidate-{chr(ord('a') + index)}"
+        for index, variant in enumerate(variants)
+    }
     for role_index, fixture in enumerate(fixtures, start=1):
         seed = fixture["seed"]
         velocity = fixture["velocity"]
@@ -176,13 +181,14 @@ def package_listening_set(
         for item in group:
             variant_index = item["variant_index"]
             variant = item["variant"]
+            display_variant = blind_labels[variant] if blind else variant
             source = item["source"]
             gain = group_target_rms / max(item["measured_rms"], 1e-12)
             audio = (item["audio"] * gain).astype(np.float32)
             rate = item["rate"]
             output_name = (
                 f"{role_index:02d}-{fixture['role']}__"
-                f"{variant_index:02d}-{variant}.wav"
+                f"{variant_index:02d}-{display_variant}.wav"
             )
             sf.write(
                 listening_dir / output_name,
@@ -195,6 +201,7 @@ def package_listening_set(
                 {
                     "role": fixture["role"],
                     "variant": variant,
+                    "display_variant": display_variant,
                     "seed": seed,
                     "velocity": velocity,
                     "source": str(source),
@@ -215,29 +222,31 @@ def package_listening_set(
         "over 50 ms–2.5 s. The common level is lowered as needed to keep every",
         "peak at or below 0.95. Listen for material and motion rather than loudness.",
         "",
-        "| Group | Variant | Seed | Velocity | File |",
+        "| Group | Candidate | Seed | Velocity | File |",
         "|---|---|---:|---:|---|",
     ]
     for item in packaged:
         filename = Path(item["output"]).name
         lines.append(
-            f"| {item['role']} | {item['variant']} | {item['seed']} | "
+            f"| {item['role']} | {item['display_variant']} | {item['seed']} | "
             f"{item['velocity']:.2f} | [{filename}]({filename}) |"
         )
     lines.extend(
         [
             "",
-            "For the current refinement decision, compare rack-v2 with",
-            "boing-refined. The latter trades some of V2's narrow modulation",
-            "depth for rounder radiation windows and correlated downward pitch",
-            "motion. Other entries remain historical candidates or diagnostic",
-            "stems when their render directories are present.",
+            "Compare candidates within each group; filenames intentionally omit",
+            "the source variant when blind packaging is enabled. Consult the key",
+            "only after recording a preference.",
             "",
         ]
     )
     (listening_dir / "README.md").write_text(
         "\n".join(lines), encoding="utf-8"
     )
+    if blind:
+        (output_dir / "blind_key.json").write_text(
+            json.dumps(blind_labels, indent=2) + "\n", encoding="utf-8"
+        )
     return packaged
 
 
@@ -246,6 +255,7 @@ def write_report(
     ordered_variants: list[str],
     scores: dict[str, dict],
     fixtures: list[dict],
+    baseline: str,
 ) -> None:
     lines = [
         "# Doorstop variant screening",
@@ -296,7 +306,7 @@ def write_report(
             "",
             "## Matched fixture seeds",
             "",
-            "| Role | Seed | Velocity | Current centroid Hz |",
+            f"| Role | Seed | Velocity | {baseline} centroid Hz |",
             "|---|---:|---:|---:|",
         ]
     )
@@ -341,6 +351,21 @@ def main() -> int:
         nargs="+",
         help="optional explicit variant directory names to compare and package",
     )
+    parser.add_argument(
+        "--baseline",
+        default="current",
+        help="variant used to select common dark/balanced/bright fixtures",
+    )
+    parser.add_argument(
+        "--tap",
+        choices=("module", "preconditioned"),
+        help="only analyze WAV filenames ending in this output tap",
+    )
+    parser.add_argument(
+        "--blind",
+        action="store_true",
+        help="hide variant names in listening filenames and write a separate key",
+    )
     args = parser.parse_args()
 
     if args.variants:
@@ -365,7 +390,8 @@ def main() -> int:
     rows_by_variant: dict[str, list[corpus.AuditedHit]] = {}
     scores: dict[str, dict] = {}
     for variant_dir in variant_dirs:
-        paths = sorted(variant_dir.glob("*.wav"))
+        pattern = f"*-{args.tap}.wav" if args.tap else "*.wav"
+        paths = sorted(variant_dir.glob(pattern))
         if not paths:
             continue
         rows = corpus.load_model_hits(paths)
@@ -373,13 +399,13 @@ def main() -> int:
         score = corpus.population_score(rows, ranges)
         score["screening_score"] = screening_score(score)
         scores[variant_dir.name] = score
-    if "current" not in rows_by_variant:
-        parser.error("the variant set must contain a current baseline")
+    if args.baseline not in rows_by_variant:
+        parser.error(f"the variant set must contain baseline {args.baseline}")
 
     ordered_variants = sorted(
         scores, key=lambda name: scores[name]["screening_score"], reverse=True
     )
-    fixtures = select_common_fixtures(rows_by_variant["current"], ranges)
+    fixtures = select_common_fixtures(rows_by_variant[args.baseline], ranges)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     packaged = package_listening_set(
         args.output_dir,
@@ -387,9 +413,12 @@ def main() -> int:
         ordered_variants,
         rows_by_variant,
         fixtures,
+        blind=args.blind,
     )
     payload = {
         "warning": "screening rank is not a perceptual material verdict",
+        "baseline": args.baseline,
+        "output_tap": args.tap,
         "ordered_variants": ordered_variants,
         "scores": scores,
         "fixtures": fixtures,
@@ -404,6 +433,7 @@ def main() -> int:
         ordered_variants,
         scores,
         fixtures,
+        args.baseline,
     )
     print(
         f"Compared {len(scores)} variants; objective order: "

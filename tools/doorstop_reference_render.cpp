@@ -131,6 +131,8 @@ void usage(const char* executable) {
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
 		<< "  --variant NAME      current, spring-only, modes-only, spring-forward,\n"
 		<< "                      spring-refined, rack-v2, or boing-refined\n"
+		<< "  --radiation-phase DEG  V2 phase probe: 0=extrema, 90=crossing\n"
+		<< "  --output-tap NAME   module (default) or preconditioned\n"
 #endif
 		;
 }
@@ -157,6 +159,9 @@ int main(int argc, char** argv) {
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
 		doorstop::ReferenceAnalysisVariant variant =
 			doorstop::ReferenceAnalysisVariant::Current;
+		doorstop::ReferenceAnalysisOutput analysisOutput =
+			doorstop::ReferenceAnalysisOutput::ModuleOutput;
+		float radiationPhaseDegrees = 90.f;
 #endif
 		std::vector<Strike> strikes;
 		for (int i = 2; i < argc; ++i) {
@@ -206,6 +211,24 @@ int main(int argc, char** argv) {
 					variant = parseVariant(value);
 				}
 			}
+			else if (option == "--radiation-phase") {
+				radiationPhaseDegrees = parseFloat(value, option.c_str());
+			}
+			else if (option == "--output-tap") {
+				const std::string tap(value);
+				if (tap == "module") {
+					analysisOutput =
+						doorstop::ReferenceAnalysisOutput::ModuleOutput;
+				}
+				else if (tap == "preconditioned") {
+					analysisOutput =
+						doorstop::ReferenceAnalysisOutput::Preconditioned;
+				}
+				else {
+					throw std::runtime_error(
+						"output tap must be module or preconditioned");
+				}
+			}
 #endif
 			else if (option == "--strike") {
 				strikes.push_back(parseStrike(value));
@@ -217,7 +240,11 @@ int main(int argc, char** argv) {
 		if (sampleRate < 1000 || duration <= 0.f || retriggerHz < 0.f
 			|| breakIn < 0.f
 			|| breakIn > 1.f || defaultVelocity < -1.f
-			|| defaultVelocity > 1.f) {
+			|| defaultVelocity > 1.f
+#if defined(DOORSTOP_REFERENCE_ANALYSIS)
+			|| radiationPhaseDegrees < 0.f || radiationPhaseDegrees > 90.f
+#endif
+			) {
 			throw std::runtime_error("render option is out of range");
 		}
 		if (strikes.empty() && retriggerHz > 0.f) {
@@ -233,6 +260,8 @@ int main(int argc, char** argv) {
 		doorstop::ReferenceSpringEngine engine(profile);
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
 		engine.setAnalysisVariant(variant);
+		engine.setAnalysisRadiationPhaseDegrees(radiationPhaseDegrees);
+		engine.setAnalysisOutput(analysisOutput);
 #endif
 		engine.setSampleRate(float(sampleRate));
 		engine.setSpecimenSeed(seed);
