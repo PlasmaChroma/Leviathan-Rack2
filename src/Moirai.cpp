@@ -84,6 +84,8 @@ Moirai::Moirai() {
 	envelopeEngine.installBank(compiledBank);
 	for (auto& mask : telemetryActiveMask) mask.store(0u, std::memory_order_relaxed);
 	for (auto& value : telemetrySelectedValue) value.store(0.f, std::memory_order_relaxed);
+	for (auto& phase : telemetrySelectedPhase) phase.store(0.f, std::memory_order_relaxed);
+	for (auto& stage : telemetrySelectedStage) stage.store(0, std::memory_order_relaxed);
 	for (auto& mask : semanticTriggerMask) mask.store(0u, std::memory_order_relaxed);
 }
 
@@ -197,6 +199,10 @@ void Moirai::process(const ProcessArgs& args) {
 	lights[LANE_B_LIGHT].setBrightness(lane == 1 ? 1.f : 0.08f);
 	if (--telemetryCountdown <= 0) {
 		telemetryCountdown = std::max(1, static_cast<int>(args.sampleRate / 60.f));
+		telemetrySequence.fetch_add(1, std::memory_order_acq_rel);
+		telemetryAcceptedRevision.store(acceptedRevisionSource.load(std::memory_order_acquire), std::memory_order_relaxed);
+		telemetryActiveRevision.store(envelopeEngine.activeRevision(), std::memory_order_relaxed);
+		telemetryPendingRevision.store(envelopeEngine.pendingRevision(), std::memory_order_relaxed);
 		telemetryChannels.store(channels, std::memory_order_relaxed);
 		telemetryBpm.store(estimatedBpm, std::memory_order_relaxed);
 		telemetryExternalClock.store(inputs[CLOCK_INPUT].isConnected(), std::memory_order_relaxed);
@@ -207,7 +213,34 @@ void Moirai::process(const ProcessArgs& args) {
 			telemetryActiveMask[telemetryLane].store(activeMask, std::memory_order_relaxed);
 			telemetrySelectedValue[telemetryLane].store(
 				envelopeEngine.voice(telemetryLane, channelSelection).value, std::memory_order_relaxed);
+			telemetrySelectedPhase[telemetryLane].store(
+				envelopeEngine.voice(telemetryLane, channelSelection).segmentPhase, std::memory_order_relaxed);
+			telemetrySelectedStage[telemetryLane].store(
+				envelopeEngine.voice(telemetryLane, channelSelection).segment, std::memory_order_relaxed);
 		}
+		telemetrySequence.fetch_add(1, std::memory_order_release);
+	}
+}
+
+MoiraiTelemetrySnapshot Moirai::readTelemetry() const noexcept {
+	MoiraiTelemetrySnapshot result;
+	for (;;) {
+		const uint64_t before = telemetrySequence.load(std::memory_order_acquire);
+		if (before & 1u) continue;
+		result.acceptedRevision = telemetryAcceptedRevision.load(std::memory_order_relaxed);
+		result.activeRevision = telemetryActiveRevision.load(std::memory_order_relaxed);
+		result.pendingRevision = telemetryPendingRevision.load(std::memory_order_relaxed);
+		result.channels = telemetryChannels.load(std::memory_order_relaxed);
+		result.estimatedBpm = telemetryBpm.load(std::memory_order_relaxed);
+		result.externalClock = telemetryExternalClock.load(std::memory_order_relaxed);
+		for (int lane = 0; lane < moirai::kLaneCount; ++lane) {
+			result.activeMask[lane] = telemetryActiveMask[lane].load(std::memory_order_relaxed);
+			result.selectedValue[lane] = telemetrySelectedValue[lane].load(std::memory_order_relaxed);
+			result.selectedPhase[lane] = telemetrySelectedPhase[lane].load(std::memory_order_relaxed);
+			result.selectedStage[lane] = telemetrySelectedStage[lane].load(std::memory_order_relaxed);
+		}
+		const uint64_t after = telemetrySequence.load(std::memory_order_acquire);
+		if (before == after) return result;
 	}
 }
 
@@ -329,6 +362,7 @@ bool Moirai::handleSemanticRequest(OctaviaSemanticControl::Operation operation,
 			responseJson = dumpJson(response); json_decref(response); error = edited.errorMessage; return false;
 		}
 		authoredBank = std::move(edited.bank); compiledBank = edited.compiledBank;
+		acceptedRevisionSource.store(authoredBank.revision, std::memory_order_release);
 		envelopeEngine.acceptBank(compiledBank, edited.applyAt, edited.activeVoicePolicy);
 		json_t* response = json_object(); json_object_set_new(response, "ok", json_true());
 		setRevisionFields(response, *this);
@@ -372,12 +406,14 @@ void Moirai::dataFromJson(json_t* rootJ) {
 			moirai::CompileResult compiled = moirai::compileBank(parsed.bank);
 			if (compiled.valid) {
 				authoredBank = std::move(parsed.bank);
+				acceptedRevisionSource.store(authoredBank.revision, std::memory_order_release);
 				compiledBank = compiled.bank;
 				envelopeEngine.installBank(compiledBank);
 			} else persistenceError = compiled.errors.empty() ? "invalid bank" : compiled.errors.front().message;
 		} else persistenceError = parsed.errors.empty() ? "invalid bank" : parsed.errors.front().message;
 		if (!persistenceError.empty()) {
 			authoredBank = moirai::makeInitialBank();
+			acceptedRevisionSource.store(authoredBank.revision, std::memory_order_release);
 			moirai::CompileResult fallback = moirai::compileBank(authoredBank);
 			compiledBank = fallback.bank;
 			envelopeEngine.installBank(compiledBank);

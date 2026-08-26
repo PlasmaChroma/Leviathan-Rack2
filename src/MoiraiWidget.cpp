@@ -28,16 +28,27 @@ struct MoiraiDisplay final : TransparentWidget {
 		float values[2] {0.62f, 0.35f};
 		uint16_t masks[2] {1u, 1u};
 		bool external = false;
+		int acceptedRevision = 0;
+		int activeRevision = 0;
+		int pendingRevision = -1;
+		std::string programName = "factory_adsr";
 		if (module) {
+			const MoiraiTelemetrySnapshot telemetry = module->readTelemetry();
 			lane = module->selectedLane.load(std::memory_order_relaxed);
 			channel = module->selectedChannel.load(std::memory_order_relaxed);
-			channels = module->telemetryChannels.load(std::memory_order_relaxed);
-			bpm = module->telemetryBpm.load(std::memory_order_relaxed);
-			external = module->telemetryExternalClock.load(std::memory_order_relaxed);
+			channels = telemetry.channels;
+			bpm = telemetry.estimatedBpm;
+			external = telemetry.externalClock;
+			acceptedRevision = telemetry.acceptedRevision;
+			activeRevision = telemetry.activeRevision;
+			pendingRevision = telemetry.pendingRevision;
 			for (int index = 0; index < 2; ++index) {
-				values[index] = module->telemetrySelectedValue[index].load(std::memory_order_relaxed);
-				masks[index] = module->telemetryActiveMask[index].load(std::memory_order_relaxed);
+				values[index] = telemetry.selectedValue[index];
+				masks[index] = telemetry.activeMask[index];
 			}
+			const moirai::Lane& selected = module->authoredBank.lanes[lane];
+			programName = selected.assignments[channel].empty()
+				? selected.defaultProgram : selected.assignments[channel];
 		}
 		if (APP && APP->window && APP->window->uiFont) {
 			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
@@ -48,7 +59,8 @@ struct MoiraiDisplay final : TransparentWidget {
 			nvgFillColor(args.vg, nvgRGBA(83, 229, 236, 255));
 			nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
 			nvgFontSize(args.vg, 7.f);
-			const std::string status = string::f("%s  %3.0f BPM", external ? "EXT" : "INT", bpm);
+			const std::string status = string::f("%s %3.0f  r%d/%d%s", external ? "EXT" : "INT", bpm,
+				activeRevision, acceptedRevision, pendingRevision >= 0 ? "*" : "");
 			nvgText(args.vg, w - 7.f, 7.f, status.c_str(), nullptr);
 			nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
 			nvgFontSize(args.vg, 7.5f);
@@ -56,7 +68,7 @@ struct MoiraiDisplay final : TransparentWidget {
 			nvgText(args.vg, 7.f, 20.f, selection.c_str(), nullptr);
 			nvgFillColor(args.vg, nvgRGBA(157, 137, 245, 255));
 			nvgFontSize(args.vg, 7.f);
-			nvgText(args.vg, 7.f, 32.f, "factory_adsr", nullptr);
+			nvgText(args.vg, 7.f, 32.f, programName.c_str(), nullptr);
 		}
 
 		const float barX = 7.f;
@@ -98,12 +110,12 @@ struct MoiraiWidget final : ModuleWidget {
 		splitPanel.addLabels("res/Moirai.labels.svg");
 		splitPanel.addCompactLeviathanLogoBranding();
 		visual_assets::addFractalGlassOverlay(this, panelPath, splitPanel.panelSurfaceEffectWidget());
-		auto anchor = [&](const char* id, Vec fallbackMm) {
-			Vec point = fallbackMm;
+		auto anchor = [&](const char* id) {
+			Vec point;
 			panel_svg::loadPointFromSvgMm(panelPath, id, &point);
 			return mm2px(point);
 		};
-		math::Rect displayMm(Vec(3.f, 11.f), Vec(54.96f, 20.f));
+		math::Rect displayMm;
 		panel_svg::loadRectFromSvgMm(panelPath, "MOIRAI_DISPLAY", &displayMm);
 		auto* display = new MoiraiDisplay;
 		display->module = module;
@@ -111,23 +123,68 @@ struct MoiraiWidget final : ModuleWidget {
 		display->box.size = mm2px(displayMm.size);
 		addChild(display);
 
-		addParam(createParamCentered<SmallGoldButton>(anchor("LANE_PARAM", Vec(12.f, 53.f)), module, Moirai::LANE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(anchor("CHANNEL_PARAM", Vec(30.48f, 53.f)), module, Moirai::CHANNEL_PARAM));
-		addParam(createParamCentered<SmallGoldButton>(anchor("MANUAL_TRIGGER_PARAM", Vec(49.f, 53.f)), module, Moirai::MANUAL_TRIGGER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(anchor("TIME_PARAM", Vec(12.f, 72.f)), module, Moirai::TIME_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(anchor("CURVE_PARAM", Vec(30.48f, 72.f)), module, Moirai::CURVE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(anchor("LEVEL_PARAM", Vec(49.f, 72.f)), module, Moirai::LEVEL_PARAM));
-		addChild(createLightCentered<SmallLight<GreenLight>>(anchor("LANE_A_LIGHT", Vec(8.f, 59.f)), module, Moirai::LANE_A_LIGHT));
-		addChild(createLightCentered<SmallLight<BlueLight>>(anchor("LANE_B_LIGHT", Vec(16.f, 59.f)), module, Moirai::LANE_B_LIGHT));
+		addParam(createParamCentered<SmallGoldButton>(anchor("LANE_PARAM"), module, Moirai::LANE_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(anchor("CHANNEL_PARAM"), module, Moirai::CHANNEL_PARAM));
+		addParam(createParamCentered<SmallGoldButton>(anchor("MANUAL_TRIGGER_PARAM"), module, Moirai::MANUAL_TRIGGER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(anchor("TIME_PARAM"), module, Moirai::TIME_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(anchor("CURVE_PARAM"), module, Moirai::CURVE_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(anchor("LEVEL_PARAM"), module, Moirai::LEVEL_PARAM));
+		addChild(createLightCentered<SmallLight<GreenLight>>(anchor("LANE_A_LIGHT"), module, Moirai::LANE_A_LIGHT));
+		addChild(createLightCentered<SmallLight<BlueLight>>(anchor("LANE_B_LIGHT"), module, Moirai::LANE_B_LIGHT));
 
-		const float inputX[7] = {5.f, 13.5f, 22.f, 30.5f, 39.f, 47.5f, 56.f};
 		const char* inputIds[7] = {"GATE_INPUT", "VELOCITY_INPUT", "M1_INPUT", "M2_INPUT", "M3_INPUT", "CLOCK_INPUT", "RESET_INPUT"};
 		for (int index = 0; index < 7; ++index)
-			addInput(createInputCentered<Magitek2InputJack>(anchor(inputIds[index], Vec(inputX[index], 93.f)), module, index));
-		const float outputX[4] = {8.f, 22.f, 39.f, 53.f};
+			addInput(createInputCentered<Magitek2InputJack>(anchor(inputIds[index]), module, index));
 		const char* outputIds[4] = {"A_OUTPUT", "EOC_A_OUTPUT", "B_OUTPUT", "EOC_B_OUTPUT"};
 		for (int index = 0; index < 4; ++index)
-			addOutput(createOutputCentered<Magitek2OutputJack>(anchor(outputIds[index], Vec(outputX[index], 116.f)), module, index));
+			addOutput(createOutputCentered<Magitek2OutputJack>(anchor(outputIds[index]), module, index));
+	}
+
+	void appendContextMenu(Menu* menu) override {
+		ModuleWidget::appendContextMenu(menu);
+		auto* moiraiModule = dynamic_cast<Moirai*>(module);
+		if (!moiraiModule) return;
+		menu->addChild(new MenuSeparator());
+		menu->addChild(createSubmenuItem("Factory preset for selected voice", "", [moiraiModule](Menu* submenu) {
+			for (const moirai::Program& preset : moirai::factoryPrograms()) {
+				submenu->addChild(createMenuItem(preset.name, preset.id, [moiraiModule, preset]() {
+					const int lane = clamp(moiraiModule->selectedLane.load(std::memory_order_relaxed), 0, 1);
+					const int channel = clamp(moiraiModule->selectedChannel.load(std::memory_order_relaxed), 0, 15);
+					std::string stem = preset.id;
+					if (stem.compare(0, 8, "factory_") == 0) stem.erase(0, 8);
+					const std::string target = string::f("preset_%s_%c_ch%02d",
+						stem.c_str(), lane ? 'b' : 'a', channel + 1);
+					json_t* request = json_object();
+					json_object_set_new(request, "expected_revision", json_integer(moiraiModule->authoredBank.revision));
+					json_object_set_new(request, "apply_at", json_string("immediate"));
+					json_object_set_new(request, "active_voice_policy", json_string("finishCurrent"));
+					json_t* operations = json_array();
+					json_array_append_new(operations, json_pack("{s:s,s:s,s:s}",
+						"op", "apply_preset", "preset_id", preset.id.c_str(), "id", target.c_str()));
+					json_array_append_new(operations, json_pack("{s:s,s:s,s:i,s:s}",
+						"op", "assign_program", "lane", lane ? "B" : "A", "channel", channel,
+						"program", target.c_str()));
+					json_object_set_new(request, "operations", operations);
+					char* text = json_dumps(request, JSON_COMPACT);
+					json_decref(request);
+					if (!text) return;
+					std::string response;
+					std::string error;
+					json_t* oldModuleJ = (APP && APP->history) ? moiraiModule->toJson() : nullptr;
+					const bool changed = moiraiModule->handleSemanticRequest(
+						OctaviaSemanticControl::Operation::EDIT, text, response, error);
+					free(text);
+					if (changed && APP && APP->history) {
+						history::ModuleChange* action = new history::ModuleChange();
+						action->name = "apply Moirai factory preset";
+						action->moduleId = moiraiModule->id;
+						action->oldModuleJ = oldModuleJ;
+						action->newModuleJ = moiraiModule->toJson();
+						APP->history->push(action);
+					} else if (oldModuleJ) json_decref(oldModuleJ);
+				}));
+			}
+		}));
 	}
 };
 

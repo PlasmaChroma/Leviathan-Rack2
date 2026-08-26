@@ -9,6 +9,19 @@
 #include <array>
 #include <atomic>
 
+struct MoiraiTelemetrySnapshot {
+	int acceptedRevision = 0;
+	int activeRevision = 0;
+	int pendingRevision = -1;
+	int channels = 1;
+	float estimatedBpm = 120.f;
+	bool externalClock = false;
+	uint16_t activeMask[moirai::kLaneCount] {};
+	float selectedValue[moirai::kLaneCount] {};
+	float selectedPhase[moirai::kLaneCount] {};
+	int selectedStage[moirai::kLaneCount] {};
+};
+
 struct Moirai final : Module, OctaviaSemanticControl {
 	enum ParamId {
 		TIME_PARAM,
@@ -67,6 +80,13 @@ struct Moirai final : Module, OctaviaSemanticControl {
 	std::array<std::atomic<float>, moirai::kLaneCount> telemetrySelectedValue;
 	std::atomic<float> telemetryBpm {120.f};
 	std::atomic<bool> telemetryExternalClock {false};
+	std::atomic<uint64_t> telemetrySequence {0};
+	std::atomic<int> acceptedRevisionSource {0};
+	std::atomic<int> telemetryAcceptedRevision {0};
+	std::atomic<int> telemetryActiveRevision {0};
+	std::atomic<int> telemetryPendingRevision {-1};
+	std::array<std::atomic<float>, moirai::kLaneCount> telemetrySelectedPhase;
+	std::array<std::atomic<int>, moirai::kLaneCount> telemetrySelectedStage;
 	std::array<std::atomic<uint16_t>, moirai::kLaneCount> semanticTriggerMask;
 	std::atomic<bool> semanticResetRequested {false};
 	int telemetryCountdown = 0;
@@ -80,6 +100,7 @@ struct Moirai final : Module, OctaviaSemanticControl {
 	void onReset(const ResetEvent& e) override;
 	json_t* dataToJson() override;
 	void dataFromJson(json_t* rootJ) override;
+	MoiraiTelemetrySnapshot readTelemetry() const noexcept;
 	const char* semanticCapabilityId() const noexcept override {
 		return "leviathan.moirai.envelope-bank";
 	}

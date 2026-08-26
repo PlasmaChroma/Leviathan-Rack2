@@ -45,6 +45,10 @@ int main() {
 		"factory ADSR responds independently on both lanes and channels");
 	check(module.outputs[Moirai::A_OUTPUT].getVoltage(0) > 0.f,
 		"disconnected velocity input uses its neutral 10 V level");
+	const MoiraiTelemetrySnapshot telemetry = module.readTelemetry();
+	check(telemetry.channels == 2 && telemetry.activeRevision == 0 &&
+		telemetry.pendingRevision == -1 && (telemetry.activeMask[0] & 1u),
+		"display telemetry publishes one coherent revision and voice snapshot");
 
 	module.params[Moirai::CHANNEL_PARAM].setValue(3.f);
 	module.params[Moirai::MANUAL_TRIGGER_PARAM].setValue(1.f);
