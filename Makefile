@@ -67,6 +67,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/octavia_measurement_spec \
 	build/tests/octavia_observation_spec \
 	build/tests/octavia_job_control_spec \
+	build/tests/octavia_semantic_control_spec \
 	build/tests/octavia_action_validation_spec \
 	build/tests/octavia_cable_validation_spec \
 	build/tests/octavia_console_mailbox_spec \
@@ -80,6 +81,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/sibyl_transport_spec \
 	build/tests/moirai_curves_spec \
 	build/tests/moirai_compiler_spec \
+	build/tests/moirai_edit_spec \
 	build/tests/moirai_json_spec \
 	build/tests/moirai_engine_spec \
 	build/tests/moirai_module_spec \
@@ -359,6 +361,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/octavia_measurement_spec)
 	$(call run_test_bin,build/tests/octavia_observation_spec)
 	$(call run_test_bin,build/tests/octavia_job_control_spec)
+	$(call run_test_bin,build/tests/octavia_semantic_control_spec)
 	$(call run_test_bin,build/tests/octavia_action_validation_spec)
 	$(call run_test_bin,build/tests/octavia_cable_validation_spec)
 	$(call run_test_bin,build/tests/octavia_console_mailbox_spec)
@@ -372,10 +375,12 @@ test-fast: test-build-fast
 	$(call run_rack_test_bin,build/tests/sibyl_transport_spec)
 	$(call run_test_bin,build/tests/moirai_curves_spec)
 	$(call run_test_bin,build/tests/moirai_compiler_spec)
+	$(call run_rack_test_bin,build/tests/moirai_edit_spec)
 	$(call run_rack_test_bin,build/tests/moirai_json_spec)
 	$(call run_test_bin,build/tests/moirai_engine_spec)
 	$(call run_rack_test_bin,build/tests/moirai_module_spec)
 	python3 tests/octavia_sibyl_contract_spec.py
+	python3 tests/octavia_semantic_contract_spec.py
 	python3 tests/octavia_monitoring_panel_contract_spec.py
 	python3 tests/split_svg_labels_spec.py
 	python3 tools/generate_mandelwake_tables.py --check
@@ -490,6 +495,9 @@ build/tests/octavia_observation_spec: tests/octavia_observation_spec.cpp src/Oct
 build/tests/octavia_analysis_spec: tests/octavia_analysis_spec.cpp src/OctaviaAnalysis.cpp src/OctaviaAnalysis.hpp src/OctaviaObservation.cpp src/OctaviaObservation.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_analysis_spec.cpp src/OctaviaAnalysis.cpp src/OctaviaObservation.cpp -o $@
 
+build/tests/octavia_semantic_control_spec: tests/octavia_semantic_control_spec.cpp src/OctaviaSemanticControl.hpp src/SibylControl.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/octavia_semantic_control_spec.cpp -o $@
+
 build/tests/octavia_observation_bus_spec: tests/octavia_observation_bus_spec.cpp src/OctaviaObservationBus.cpp src/OctaviaObservationBus.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_observation_bus_spec.cpp src/OctaviaObservationBus.cpp -o $@
 
@@ -540,6 +548,9 @@ build/tests/moirai_curves_spec: tests/moirai_curves_spec.cpp src/MoiraiCurves.hp
 
 build/tests/moirai_compiler_spec: tests/moirai_compiler_spec.cpp src/MoiraiCompiler.cpp src/MoiraiCompiler.hpp src/MoiraiCurves.hpp src/MoiraiPresets.cpp src/MoiraiPresets.hpp src/MoiraiTypes.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/moirai_compiler_spec.cpp src/MoiraiCompiler.cpp src/MoiraiPresets.cpp -o $@
+
+build/tests/moirai_edit_spec: tests/moirai_edit_spec.cpp src/MoiraiEdit.cpp src/MoiraiEdit.hpp src/MoiraiJSON.cpp src/MoiraiJSON.hpp src/MoiraiCompiler.cpp src/MoiraiCompiler.hpp src/MoiraiPresets.cpp src/MoiraiPresets.hpp src/MoiraiTypes.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/moirai_edit_spec.cpp src/MoiraiEdit.cpp src/MoiraiJSON.cpp src/MoiraiCompiler.cpp src/MoiraiPresets.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
 build/tests/moirai_json_spec: tests/moirai_json_spec.cpp src/MoiraiJSON.cpp src/MoiraiJSON.hpp src/MoiraiCompiler.cpp src/MoiraiCompiler.hpp src/MoiraiPresets.cpp src/MoiraiPresets.hpp src/MoiraiTypes.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/moirai_json_spec.cpp src/MoiraiJSON.cpp src/MoiraiCompiler.cpp src/MoiraiPresets.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@

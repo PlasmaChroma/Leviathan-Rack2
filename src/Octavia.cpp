@@ -21,6 +21,7 @@
 #include "visual/VisualAssets.hpp"
 #include "TemporalDeck.hpp"
 #include "SibylControl.hpp"
+#include "OctaviaSemanticControl.hpp"
 #include "OctaviaConsoleMailbox.hpp"
 #include "OctaviaCableValidation.hpp"
 #include "OctaviaActionValidation.hpp"
@@ -194,8 +195,11 @@ struct ModuleStateJob {
     std::string stateJson; // output for GET, input for SET
     std::atomic<bool> done{false}, cancelled{false}; bool success=false; std::string error;
 };
-struct SibylJob {
-    SibylControl::Operation operation;
+struct SemanticJob {
+    OctaviaSemanticControl::Operation operation =
+        OctaviaSemanticControl::Operation::GET_STATUS;
+    SibylControl::Operation sibylOperation = SibylControl::Operation::GET_STATUS;
+    bool legacySibyl = false;
     int64_t moduleId = -1;
     std::string requestJson = "{}";
     std::string responseJson;
@@ -424,7 +428,7 @@ struct Octavia : Module {
     std::queue<std::shared_ptr<ModuleStateJob>> stateQueue;     std::mutex stateQueueMtx;
     std::queue<std::shared_ptr<PatchSaveJob>>   patchSaveQueue; std::mutex patchSaveQueueMtx;
     std::queue<std::shared_ptr<TemporalDeckJob>> temporalDeckQueue; std::mutex temporalDeckQueueMtx;
-    std::queue<std::shared_ptr<SibylJob>> sibylQueue; std::mutex sibylQueueMtx;
+    std::queue<std::shared_ptr<SemanticJob>> semanticQueue; std::mutex semanticQueueMtx;
 
     dsp::BooleanTrigger startTrig;
 
@@ -1398,17 +1402,29 @@ struct Octavia : Module {
         job->success=true; job->done=true;
     }
 
-    void processSibylQueue() {
-        std::shared_ptr<SibylJob> job;
-        { std::unique_lock<std::mutex> lk(sibylQueueMtx); if (!sibylQueue.empty()) { job=sibylQueue.front(); sibylQueue.pop(); } }
+    void processSemanticQueue() {
+        std::shared_ptr<SemanticJob> job;
+        { std::unique_lock<std::mutex> lk(semanticQueueMtx); if (!semanticQueue.empty()) { job=semanticQueue.front(); semanticQueue.pop(); } }
         if (!beginJob(job)) return;
         engine::Module* module = APP->engine->getModule(job->moduleId);
         if (!module) { job->error="module not found"; job->done=true; return; }
-        SibylControl* sibyl = dynamic_cast<SibylControl*>(module);
-        if (!sibyl) { job->error="module does not provide the Sibyl semantic-control capability"; job->done=true; return; }
+
+        SibylControl* sibyl = job->legacySibyl
+            ? dynamic_cast<SibylControl*>(module) : nullptr;
+        OctaviaSemanticControl* semantic = job->legacySibyl
+            ? nullptr : dynamic_cast<OctaviaSemanticControl*>(module);
+        if (job->legacySibyl && !sibyl) {
+            job->error="module does not provide the Sibyl semantic-control capability";
+            job->done=true; return;
+        }
+        if (!job->legacySibyl && !semantic) {
+            job->error="module does not provide semantic-control capability";
+            job->responseJson="{\"ok\":false,\"error\":{\"code\":\"missing_capability\",\"message\":\"module does not provide semantic-control capability\"}}";
+            job->done=true; return;
+        }
 
         std::string oldState;
-        if (job->operation == SibylControl::Operation::EDIT) {
+        if (job->operation == OctaviaSemanticControl::Operation::EDIT) {
             json_t* oldJ = module->toJson();
             if (oldJ) {
                 char* str = json_dumps(oldJ, JSON_COMPACT);
@@ -1416,8 +1432,11 @@ struct Octavia : Module {
                 json_decref(oldJ);
             }
         }
-        job->success = sibyl->handleSibylRequest(job->operation, job->requestJson,
-                                                 job->responseJson, job->error);
+        job->success = job->legacySibyl
+            ? sibyl->handleSibylRequest(job->sibylOperation, job->requestJson,
+                                        job->responseJson, job->error)
+            : semantic->handleSemanticRequest(job->operation, job->requestJson,
+                                              job->responseJson, job->error);
         if (!job->responseJson.empty()) {
             json_error_t jerr;
             json_t* responseJ = json_loads(job->responseJson.c_str(), 0, &jerr);
@@ -1425,16 +1444,30 @@ struct Octavia : Module {
                 if (responseJ) json_decref(responseJ);
                 job->success=false;
                 job->responseJson.clear();
-                job->error="Sibyl returned an invalid JSON response object";
-            } else json_decref(responseJ);
+                job->error="semantic capability returned an invalid JSON response object";
+            } else {
+                if (!job->legacySibyl
+                        && job->operation == OctaviaSemanticControl::Operation::CAPABILITIES) {
+                    json_t* capabilityJ = json_object_get(responseJ, "capabilityId");
+                    const char* expected = semantic->semanticCapabilityId();
+                    if (!json_is_string(capabilityJ) || !expected
+                            || std::string(json_string_value(capabilityJ)) != expected) {
+                        job->success=false;
+                        job->responseJson.clear();
+                        job->error="semantic capability response id mismatch";
+                    }
+                }
+                json_decref(responseJ);
+            }
         } else if (job->success) {
             job->success=false;
-            job->error="Sibyl returned an empty response";
+            job->error="semantic capability returned an empty response";
         }
-        if (job->success && job->operation == SibylControl::Operation::EDIT && !oldState.empty()) {
+        if (job->success && job->operation == OctaviaSemanticControl::Operation::EDIT && !oldState.empty()) {
             UndoAction undo; undo.type=UndoAction::STATE; undo.moduleId=job->moduleId;
             undo.oldState=std::move(oldState);
-            undo.label="edit Sibyl composition on module "+std::to_string(job->moduleId);
+            undo.label=(job->legacySibyl ? "edit Sibyl composition on module "
+                : "edit semantic document on module ")+std::to_string(job->moduleId);
             pushUndo(std::move(undo));
         }
         job->done=true;
@@ -1491,9 +1524,35 @@ struct Octavia : Module {
             res.set_content("{\"error\":\"Sibyl request exceeds the 1 MiB safety limit\"}","application/json");
             return;
         }
-        auto job=std::make_shared<SibylJob>();
+        auto job=std::make_shared<SemanticJob>();
+        job->moduleId=moduleId; job->legacySibyl=true;
+        job->sibylOperation=operation; job->requestJson=requestJson;
+        switch (operation) {
+            case SibylControl::Operation::CAPABILITIES: job->operation=OctaviaSemanticControl::Operation::CAPABILITIES; break;
+            case SibylControl::Operation::GET_COMPOSITION: job->operation=OctaviaSemanticControl::Operation::GET_DOCUMENT; break;
+            case SibylControl::Operation::VALIDATE: job->operation=OctaviaSemanticControl::Operation::VALIDATE; break;
+            case SibylControl::Operation::EDIT: job->operation=OctaviaSemanticControl::Operation::EDIT; break;
+            case SibylControl::Operation::GET_STATUS: job->operation=OctaviaSemanticControl::Operation::GET_STATUS; break;
+            case SibylControl::Operation::TRANSPORT: job->operation=OctaviaSemanticControl::Operation::COMMAND; break;
+            case SibylControl::Operation::DEBUG_CAPTURE: job->operation=OctaviaSemanticControl::Operation::COMMAND; break;
+        }
+        { std::unique_lock<std::mutex> lk(semanticQueueMtx); semanticQueue.push(job); }
+        if (!waitDone(job, 5000)) res.set_content("{\"error\":\"timeout\"}","application/json");
+        else if (!job->success && !job->responseJson.empty()) res.set_content(job->responseJson,"application/json");
+        else if (!job->success) res.set_content("{\"error\":"+jStr(job->error)+"}","application/json");
+        else res.set_content(job->responseJson,"application/json");
+    }
+
+    void dispatchSemantic(httplib::Response& res, int64_t moduleId,
+                          OctaviaSemanticControl::Operation operation,
+                          const std::string& requestJson) {
+        if (requestJson.size() > octavia::kMaxSemanticRequestBytes) {
+            res.set_content("{\"error\":\"semantic request exceeds the 1 MiB safety limit\"}","application/json");
+            return;
+        }
+        auto job=std::make_shared<SemanticJob>();
         job->moduleId=moduleId; job->operation=operation; job->requestJson=requestJson;
-        { std::unique_lock<std::mutex> lk(sibylQueueMtx); sibylQueue.push(job); }
+        { std::unique_lock<std::mutex> lk(semanticQueueMtx); semanticQueue.push(job); }
         if (!waitDone(job, 5000)) res.set_content("{\"error\":\"timeout\"}","application/json");
         else if (!job->success && !job->responseJson.empty()) res.set_content(job->responseJson,"application/json");
         else if (!job->success) res.set_content("{\"error\":"+jStr(job->error)+"}","application/json");
@@ -2828,6 +2887,32 @@ struct Octavia : Module {
             dispatchSibyl(res, std::stoll(r.matches[1].str()), SibylControl::Operation::TRANSPORT, r.body);
         });
 
+        // Generic semantic API. The target module owns its document schema;
+        // Octavia supplies UI-thread dispatch, response validation, timeout,
+        // cancellation, request limits, and edit-only undo.
+        svr.Get(R"(/semantic/(\d+)/capabilities)", [this](const httplib::Request& r, httplib::Response& res){
+            dispatchSemantic(res, std::stoll(r.matches[1].str()), OctaviaSemanticControl::Operation::CAPABILITIES, "{}");
+        });
+        svr.Get(R"(/semantic/(\d+)/document)", [this](const httplib::Request& r, httplib::Response& res){
+            std::string view=r.has_param("view") ? r.get_param_value("view") : "summary";
+            std::string request="{\"view\":"+jStr(view);
+            if (r.has_param("id")) request+=",\"id\":"+jStr(r.get_param_value("id"));
+            request+="}";
+            dispatchSemantic(res, std::stoll(r.matches[1].str()), OctaviaSemanticControl::Operation::GET_DOCUMENT, request);
+        });
+        svr.Post(R"(/semantic/(\d+)/validate)", [this](const httplib::Request& r, httplib::Response& res){
+            dispatchSemantic(res, std::stoll(r.matches[1].str()), OctaviaSemanticControl::Operation::VALIDATE, r.body);
+        });
+        svr.Post(R"(/semantic/(\d+)/edit)", [this](const httplib::Request& r, httplib::Response& res){
+            dispatchSemantic(res, std::stoll(r.matches[1].str()), OctaviaSemanticControl::Operation::EDIT, r.body);
+        });
+        svr.Get(R"(/semantic/(\d+)/status)", [this](const httplib::Request& r, httplib::Response& res){
+            dispatchSemantic(res, std::stoll(r.matches[1].str()), OctaviaSemanticControl::Operation::GET_STATUS, "{}");
+        });
+        svr.Post(R"(/semantic/(\d+)/command)", [this](const httplib::Request& r, httplib::Response& res){
+            dispatchSemantic(res, std::stoll(r.matches[1].str()), OctaviaSemanticControl::Operation::COMMAND, r.body);
+        });
+
         svr.Post(R"(/modules/(\d+)/state)", [this](const httplib::Request& r, httplib::Response& res){
             if (r.body.size() > octavia::kMaxModuleStateBytes) {
                 res.set_content("{\"error\":\"module state exceeds the 1 MiB safety limit\"}","application/json"); return;
@@ -3126,7 +3211,7 @@ struct OctaviaWidget : ModuleWidget {
         m->processBulkMoveQueue();
         m->processBypassQueue();
         m->processStateQueue();
-        m->processSibylQueue();
+        m->processSemanticQueue();
         m->processPatchSaveQueue();
         m->processBulkParamQueue();
         m->processUndoQueue();

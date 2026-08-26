@@ -24,9 +24,9 @@ class OctaviaSibylContractTest(unittest.TestCase):
         self.assertNotIn("arrangement", OCTAVIA)
 
     def test_only_successful_edits_create_one_undo_action(self):
-        self.assertIn("job->success && job->operation == SibylControl::Operation::EDIT", OCTAVIA)
-        self.assertIn('undo.label="edit Sibyl composition', OCTAVIA)
-        self.assertNotIn("SibylControl::Operation::TRANSPORT &&", OCTAVIA)
+        self.assertIn("job->success && job->operation == OctaviaSemanticControl::Operation::EDIT", OCTAVIA)
+        self.assertIn('job->legacySibyl ? "edit Sibyl composition', OCTAVIA)
+        self.assertNotIn("OctaviaSemanticControl::Operation::COMMAND &&", OCTAVIA)
 
     def test_mcp_adapter_preserves_public_snake_case_fields(self):
         self.assertIn('{"expected_revision": params.expected_revision', MCP_ADAPTER)

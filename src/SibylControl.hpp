@@ -1,5 +1,7 @@
 #pragma once
 
+#include "OctaviaSemanticControl.hpp"
+
 #include <string>
 
 // Optional in-process reference adapter implemented by Sibyl for Octavia.
@@ -7,7 +9,7 @@
 // bridges; this C++ RTTI interface is not intended as a cross-plugin ABI.
 // Octavia treats JSON as opaque: Sibyl owns its schema, validation, revisions,
 // compilation, and transport semantics.
-struct SibylControl {
+struct SibylControl : OctaviaSemanticControl {
     enum class Operation {
         CAPABILITIES,
         GET_COMPOSITION,
@@ -32,4 +34,37 @@ struct SibylControl {
                                     const std::string& requestJson,
                                     std::string& responseJson,
                                     std::string& error) = 0;
+
+    const char* semanticCapabilityId() const noexcept override {
+        return "leviathan.sibyl.composition";
+    }
+
+    bool handleSemanticRequest(OctaviaSemanticControl::Operation operation,
+                               const std::string& requestJson,
+                               std::string& responseJson,
+                               std::string& error) override {
+        Operation sibylOperation = Operation::GET_STATUS;
+        switch (operation) {
+            case OctaviaSemanticControl::Operation::CAPABILITIES:
+                sibylOperation = Operation::CAPABILITIES; break;
+            case OctaviaSemanticControl::Operation::GET_DOCUMENT:
+                sibylOperation = Operation::GET_COMPOSITION; break;
+            case OctaviaSemanticControl::Operation::VALIDATE:
+                sibylOperation = Operation::VALIDATE; break;
+            case OctaviaSemanticControl::Operation::EDIT:
+                sibylOperation = Operation::EDIT; break;
+            case OctaviaSemanticControl::Operation::GET_STATUS:
+                sibylOperation = Operation::GET_STATUS; break;
+            case OctaviaSemanticControl::Operation::COMMAND:
+                sibylOperation = Operation::TRANSPORT; break;
+        }
+        const bool handled = handleSibylRequest(
+            sibylOperation, requestJson, responseJson, error);
+        if (handled && operation == OctaviaSemanticControl::Operation::CAPABILITIES
+                && !responseJson.empty() && responseJson.front() == '{') {
+            responseJson.insert(1,
+                "\"capabilityId\":\"leviathan.sibyl.composition\",");
+        }
+        return handled;
+    }
 };
