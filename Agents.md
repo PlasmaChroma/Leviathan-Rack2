@@ -34,6 +34,8 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
 
 ## Patterns
 
+- Use the Octavia skill only for work involving Octavia, Octavia Console, Sibyl, or Moirai, not unrelated VCV Rack module source or UI work.
+
 - We have an established pattern that allows placement of Rack components dynamically using the components layer in the SVG and helper functions.  See PanelSvgUtils for information.
 
 - For modules that use split panel assets, `res/<Module>.svg` is the editable master and source of truth. Do not edit the generated `res/<Module>.panel.svg` or `res/<Module>.labels.svg` files directly. Make panel artwork, section-field, label, and hidden component-anchor changes in the master SVG, then regenerate the runtime assets with `python3 tools/split_svg_labels.py res/<Module>.svg --overwrite`. If SVG contents or anchors changed, also run `make generate-panel-anchor-atlas` so runtime anchor lookup and asset hashes remain current.
