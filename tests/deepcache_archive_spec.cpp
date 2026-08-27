@@ -912,7 +912,11 @@ int main() {
 		worker.promoteHydration({"loading-19"});
 		deepcache::DecodedPreview promoted;
 		bool foundPromoted = false;
-		for (int attempt = 0; attempt < 17 && !foundPromoted; ++attempt) {
+		// The handoff can already contain its 16-entry maximum while one more
+		// background preview is decoded and blocked in pushDecoded(). Promotion
+		// reorders the queued entries immediately and is selected after that one
+		// in-flight preview, so the promoted result is bounded by position 18.
+		for (int attempt = 0; attempt < 18 && !foundPromoted; ++attempt) {
 			if (!waitUntil([&]() { return worker.tryPopDecoded(promoted); }))
 				break;
 			foundPromoted = promoted.cacheKey == "loading-19";

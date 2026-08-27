@@ -25,11 +25,16 @@ the independent live reports in `mAnt1.md`, `m2-report.md`, `mTest2.md`, and
 | Phase 3 Rack module/persistence/semantic handler | Complete | Rack-linked module round-trip, atomic edit, revision, command, fallback, generic-route, and plugin-link tests pass. |
 | Phase 4 panel/display/preset UI | Code complete; live smoke substantially observed | SVG-only anchors and coherent telemetry contracts pass. The user reports the inspected UI looks correct. Formal screenshot evidence, exhaustive preset-menu undo/redo, and close/reopen graphics-lifecycle recording remain optional release-checklist items rather than known defects. |
 | Phase 5 MCP and observation workflow | Complete | Typed discovery/read/validate/edit/status/command passed live. Direct A/B frozen capture, immutable repeated analysis, comparison, structured expiry recovery, disconnected-monitor behavior, and exact-frame Sibyl request-to-snapshot resolution were demonstrated. |
-| Phase 6 authoritative Windows validation | Not run | Run the documented MINGW64 `test-fast` and plugin build before a Windows release candidate. |
+| Phase 6 authoritative Windows validation | Automated gates complete; final smoke pending | Native MINGW64 `test-fast` passes, the current `plugin.dll` is a successful x86-64 PE build containing Moirai, and plugin tag validation passes. Final live Rack smoke remains pending because no Octavia server was available at `localhost:34570`. |
 
-Current known implementation defects: **none**. An earlier one-off aggregate
-`sibyl_module_spec` failure did not recur in the subsequent single-run
-`make test-fast` gate. A later attempt to produce a second Sibyl observation
+Current known Moirai implementation defects: **none**. The 2026-08-26 native
+MINGW64 run passed the complete `test-fast` gate, including every Moirai focused
+test. The earlier Deepcache viewport-hydration failure was an off-by-one test
+bound: a 16-entry decoded queue can have one additional preview already decoded
+and blocked in handoff when promotion arrives, placing the promoted result at
+position 18 rather than 17. The corrected test passes repeated Linux and native
+stress runs. An earlier one-off aggregate `sibyl_module_spec` failure did not
+recur in subsequent runs. A later attempt to produce a second Sibyl observation
 marker did not sound during its bounded polling window, but an existing
 `mTest3 Moirai onset` request resolved to a complete exact-frame A/B snapshot;
 there is therefore no confirmed observation-path defect.
