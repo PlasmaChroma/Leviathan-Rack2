@@ -785,11 +785,29 @@ struct BifurxWidget final : ModuleWidget {
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/bifurx.panel.svg");
 		const std::string& panelPath = splitPanel.panelPath();
 		previewBuildTimer.markPanelDone();
-		splitPanel.addLabels("res/bifurx.labels.svg");
+		// Temporarily hidden while evaluating the lower-panel raster experiment.
+		// splitPanel.addLabels("res/bifurx.labels.svg");
 		splitPanel.addPerfectWaveBranding();
-		splitPanel.addCompactLeviathanLogoBranding();
 		visual_assets::addFractalGlassOverlay(
 			this, panelPath, splitPanel.panelSurfaceEffectWidget());
+		constexpr float kBottomRasterXmm = 0.4f;
+		constexpr float kBottomRasterYmm = 77.5f;
+		constexpr float kBottomRasterWidthMm = 70.32f;
+		constexpr float kBottomRasterAspect = 1584.f / 993.f;
+		const float bottomRasterHeightMm = kBottomRasterWidthMm / kBottomRasterAspect;
+		addChild(visual_assets::createAspectFitRasterImageWidget(
+			"res/Bifurx_Raster_B4.png",
+			math::Rect(
+				Vec(kBottomRasterXmm, kBottomRasterYmm),
+				Vec(kBottomRasterWidthMm, bottomRasterHeightMm))));
+		math::Rect leviathanLogoRectMm(
+			Vec(19.200337f, 118.43102f),
+			Vec(32.719331f, 12.24054f));
+		panel_svg::loadRectFromSvgMm(
+			panelPath, "BRANDING_LEVIATHAN_LOGO_RASTER", &leviathanLogoRectMm);
+		leviathanLogoRectMm.pos.y += 1.f;
+		addChild(visual_assets::createAspectFitRasterImageWidget(
+			"res/icon/Leviathan_Logo_S2.png", leviathanLogoRectMm));
 		math::Rect titleRasterRectMm(Vec(22.66f, 0.f), Vec(25.8f, 9.46667f));
 		panel_svg::loadRectFromSvgMm(panelPath, "BIFURX_TITLE_RASTER", &titleRasterRectMm);
 		addChild(visual_assets::createAspectFitRasterImageWidget(
@@ -924,6 +942,11 @@ struct BifurxWidget final : ModuleWidget {
 
 	void appendContextMenu(Menu* menu) override {
 		ModuleWidget::appendContextMenu(menu); Bifurx* bifurx = dynamic_cast<Bifurx*>(module); if (!bifurx) return;
+		auto rendererLabel = [=]() {
+			if (bifurx->renderMode == Bifurx::RENDER_NANOVG) return "NanoVG";
+			return bifurx->useGlShaderRenderer.load(std::memory_order_relaxed)
+				? "OpenGL SHDR" : "OpenGL";
+		};
 		auto setRenderStateWithHistory = [=](Bifurx::RenderMode newMode, bool newUseShaderRenderer) {
 			if (!bifurx || (bifurx->renderMode == newMode && bifurx->useGlShaderRenderer.load(std::memory_order_relaxed) == newUseShaderRenderer)) return;
 			if (APP && APP->history) {
@@ -980,7 +1003,7 @@ struct BifurxWidget final : ModuleWidget {
 				addSchemeItem(Bifurx::SCHEME_RETRO_AMBER, "Retro Amber");
 				addSchemeItem(Bifurx::SCHEME_RETRO_GREEN, "Retro Green");
 			}));
-			menu->addChild(createSubmenuItem("Render Engine", "", [=](Menu* submenu) {
+			menu->addChild(createSubmenuItem("Renderer", rendererLabel(), [=](Menu* submenu) {
 			submenu->addChild(createCheckMenuItem(
 				"NanoVG", "",
 				[=]() { return bifurx->renderMode == Bifurx::RENDER_NANOVG; },
