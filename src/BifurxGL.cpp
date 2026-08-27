@@ -395,8 +395,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			void main() {
 				float radius = max(vRadius, 0.25);
 				float dist = abs(vSideDist);
-				float sigma = max(radius * 0.56, 0.001);
-				float coverage = exp(-0.5 * (dist * dist) / (sigma * sigma));
+				float aa = clamp(fwidth(vSideDist), 0.35, 0.75);
+				float coverage = 1.0 - smoothstep(radius - aa, radius + aa, dist);
 				float alpha = clamp(vColor.a * coverage, 0.0, 1.0);
 				gl_FragColor = vec4(vColor.rgb, alpha);
 			}
@@ -919,8 +919,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				6.f / 255.f, 8.f / 255.f, 12.f / 255.f, 210.f / 255.f
 			});
 		}
-		appendStrokePolyline(expectedCurveLineVertices, 1.67f, &expectedCurveStrokeVertices);
-		appendGuideLayer(6.f / 255.f, 8.f / 255.f, 12.f / 255.f, 210.f / 255.f, 1.67f);
+		appendStrokePolyline(expectedCurveLineVertices, 1.15f, &expectedCurveStrokeVertices);
+		appendGuideLayer(6.f / 255.f, 8.f / 255.f, 12.f / 255.f, 210.f / 255.f, 1.1f);
 
 		for (GlVertex& point : expectedCurveLineVertices) {
 			point.r = 235.f / 255.f;
@@ -928,8 +928,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			point.b = 128.f / 255.f;
 			point.a = 244.f / 255.f;
 		}
-		appendStrokePolyline(expectedCurveLineVertices, 1.29f, &expectedCurveStrokeVertices);
-		appendGuideLayer(235.f / 255.f, 204.f / 255.f, 128.f / 255.f, 244.f / 255.f, 1.29f);
+		appendStrokePolyline(expectedCurveLineVertices, 0.90f, &expectedCurveStrokeVertices);
+		appendGuideLayer(235.f / 255.f, 204.f / 255.f, 128.f / 255.f, 244.f / 255.f, 0.85f);
 
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
