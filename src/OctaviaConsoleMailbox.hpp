@@ -61,7 +61,7 @@ public:
 	bool waitForEvent(uint64_t afterId, int waitMs, Event* event);
 	uint64_t latestEventId() const;
 	void setAgentState(AgentState state);
-	void setError(std::string error);
+	void setError(const std::string& error);
 	Snapshot snapshot() const;
 
 private:

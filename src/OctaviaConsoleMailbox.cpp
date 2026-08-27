@@ -203,7 +203,7 @@ AgentState Mailbox::derivedStateLocked() const {
 	return AgentState::READY;
 }
 void Mailbox::setAgentState(AgentState state) { std::lock_guard<std::mutex> lock(mutex_); terminalState_ = state; }
-void Mailbox::setError(std::string error) { std::lock_guard<std::mutex> lock(mutex_); error_ = error; response_.clear(); terminalState_ = AgentState::ERROR; appendTranscript("CONSOLE — ERROR", error); }
+void Mailbox::setError(const std::string& error) { std::lock_guard<std::mutex> lock(mutex_); error_ = error; response_.clear(); terminalState_ = AgentState::ERROR; appendTranscript("CONSOLE — ERROR", error); }
 Snapshot Mailbox::snapshot() const {
 	std::lock_guard<std::mutex> lock(mutex_); const_cast<Mailbox*>(this)->expireLocked(Clock::now()); Snapshot s;
 	s.state = derivedStateLocked(); s.latestPromptId = nextPromptId_ - 1; s.latestResponsePromptId = latestResponsePromptId_; s.pendingCount = prompts_.size();
