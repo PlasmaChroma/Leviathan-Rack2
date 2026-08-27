@@ -21,6 +21,7 @@ constexpr std::array<float, HelicalContinuumEngine::PAIR_COUNT> PAIR_TIP {{
 constexpr std::array<float, HelicalContinuumEngine::PAIR_COUNT> PAIR_RADIATION {{
 	0.0025f, 0.30f, 0.38f, 0.47f, 0.42f, 0.31f, 0.20f
 }};
+constexpr float RADIATION_VELOCITY_COEFFICIENT = 2.f * 3.14159265358979323846f * 140.f;
 
 float clamp01(float value) {
 	return std::max(0.f, std::min(value, 1.f));
@@ -109,6 +110,7 @@ void HelicalContinuumEngine::updateSpecimenCoefficients() {
 void HelicalContinuumEngine::updateCoefficients() {
 	dcPole = std::exp(-2.f * PI * 8.f / sampleRate);
 	strikeLightDecay = std::exp(-1.f / (0.075f * sampleRate));
+	visualEnvelopeDecay = std::exp(-1.f / (0.18f * sampleRate));
 }
 
 void HelicalContinuumEngine::clearDynamicState() {
@@ -121,6 +123,7 @@ void HelicalContinuumEngine::clearDynamicState() {
 	dcPreviousInput = 0.f;
 	dcPreviousOutput = 0.f;
 	strikeLight = 0.f;
+	visualAudibleEnvelope = 0.f;
 	quietTime = 0.f;
 	sleeping = true;
 }
@@ -213,7 +216,13 @@ float HelicalContinuumEngine::processSubstep(float h) {
 				- stiffnessScale * omegaSq[index] * mode.position;
 			mode.velocity += h * mode.acceleration;
 			mode.position += h * mode.velocity;
-			radiation += radiationWeight[index] * mode.acceleration;
+			// A fixed observer hears both local acceleration and structural
+			// velocity. The velocity term keeps the lower body modes audible
+			// through their mechanical decay instead of reducing V3 to a short,
+			// acceleration-dominated transient.
+			const float observedMotion = mode.acceleration
+				+ RADIATION_VELOCITY_COEFFICIENT * mode.velocity;
+			radiation += radiationWeight[index] * observedMotion;
 		}
 	}
 	return radiation;
@@ -269,6 +278,9 @@ Frame HelicalContinuumEngine::process(float requestedSampleTime) {
 	// the safety knee so listening reflects the mechanics, not saturation.
 	const float preconditioned = processDcBlocker(radiation * 0.0068f);
 	const float output = 5.f * std::tanh(preconditioned * 0.55f);
+	const float audibleVisualTarget = std::min(1.f, std::fabs(output) * 0.8f);
+	visualAudibleEnvelope = std::max(
+		audibleVisualTarget, visualAudibleEnvelope * visualEnvelopeDecay);
 	const float energy = calculateEnergy();
 	const float normalizedEnergy = std::min(1.f, energy * 0.000015f);
 	strikeLight *= strikeLightDecay;
@@ -283,8 +295,15 @@ Frame HelicalContinuumEngine::process(float requestedSampleTime) {
 
 	Frame frame;
 	frame.outputVolts = output;
-	frame.displacement = std::max(-2.f, std::min(modes[0].position * 1.25f, 2.f));
-	frame.velocity = std::max(-1.f, std::min(modes[0].velocity * 0.025f, 1.f));
+	// Modal coordinates are expressed in mechanical-model units, several
+	// orders of magnitude below the display's +/-2 visual range. Project the
+	// retained fundamental into visual units without altering the audio state.
+	constexpr float VISUAL_DISPLACEMENT_GAIN = 450.f;
+	constexpr float VISUAL_VELOCITY_GAIN = 1.625f;
+	frame.displacement = std::max(-2.f, std::min(
+		modes[0].position * VISUAL_DISPLACEMENT_GAIN * visualAudibleEnvelope, 2.f));
+	frame.velocity = std::max(-1.f, std::min(
+		modes[0].velocity * VISUAL_VELOCITY_GAIN * visualAudibleEnvelope, 1.f));
 	frame.energy = normalizedEnergy;
 	frame.strikeLight = strikeLight;
 	frame.sleeping = sleeping;

@@ -1060,7 +1060,7 @@ bool findRectsWithIdSubstringMm(const std::string& svgPath, const std::string& i
 		}
 		if (tag.size() >= 2u && (tag[1] == 'g' || tag[1] == 'G')) {
 			const SvgAffine combined = multiplyAffine(transformStack.back(), transformForTag(tag));
-			if (tag.size() < 2u || tag[tag.size() - 2u] != '/') {
+			if (tag[tag.size() - 2u] != '/') {
 				transformStack.push_back(combined);
 			}
 			continue;
@@ -1133,7 +1133,7 @@ bool findRectsInGroupsWithIdSubstringMm(const std::string& svgPath, const std::s
 			parseAttrString(tag, "inkscape:label", &label);
 			const bool thisGroupMatches = id.find(groupIdSubstring) != std::string::npos
 				|| label.find(groupIdSubstring) != std::string::npos;
-			if (tag.size() < 2u || tag[tag.size() - 2u] != '/') {
+			if (tag[tag.size() - 2u] != '/') {
 				transformStack.push_back(combined);
 				groupMatchStack.push_back(groupMatchStack.back() || thisGroupMatches);
 			}
@@ -1210,7 +1210,7 @@ bool findPathsInGroupsWithIdSubstringMm(const std::string& svgPath, const std::s
 			parseAttrString(tag, "inkscape:label", &label);
 			const bool thisGroupMatches = id.find(groupIdSubstring) != std::string::npos
 				|| label.find(groupIdSubstring) != std::string::npos;
-			if (tag.size() < 2u || tag[tag.size() - 2u] != '/') {
+			if (tag[tag.size() - 2u] != '/') {
 				transformStack.push_back(combined);
 				groupMatchStack.push_back(groupMatchStack.back() || thisGroupMatches);
 			}
@@ -1310,7 +1310,7 @@ bool findThemeGlassRectsMm(const std::string& svgPath, std::vector<SvgRectMatch>
 			std::string label;
 			parseAttrString(tag, "id", &id);
 			parseAttrString(tag, "inkscape:label", &label);
-			if (tag.size() < 2u || tag[tag.size() - 2u] != '/') {
+			if (tag[tag.size() - 2u] != '/') {
 				transformStack.push_back(combined);
 				groupStack.push_back(enterThemeGlassGroup(groupStack.back(), id, label));
 			}
@@ -1365,7 +1365,7 @@ bool findThemeGlassPathsMm(const std::string& svgPath, std::vector<SvgPathMatch>
 			std::string label;
 			parseAttrString(tag, "id", &id);
 			parseAttrString(tag, "inkscape:label", &label);
-			if (tag.size() < 2u || tag[tag.size() - 2u] != '/') {
+			if (tag[tag.size() - 2u] != '/') {
 				transformStack.push_back(combined);
 				groupStack.push_back(enterThemeGlassGroup(groupStack.back(), id, label));
 			}

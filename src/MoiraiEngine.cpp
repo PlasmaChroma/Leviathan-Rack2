@@ -205,7 +205,6 @@ bool Engine::advanceVoice(EnvelopeVoice& voice, float sampleTime, float bpm,
 			const float toEnd = (1.f - voice.segmentPhase) * duration;
 			if (remaining < toEnd) {
 				voice.segmentPhase += remaining / duration;
-				remaining = 0.f;
 				voice.value = evaluateContour(*voice.program, voice.segmentPhase);
 				break;
 			}

@@ -2297,8 +2297,6 @@ struct TemporalDeckEngine {
         lagEstimate = scratchLagTargetSamples;
         scratch3LagVelocity = 0.f;
       }
-    }
-    if (!loopActive) {
       if ((lagEstimate <= 0.0 && scratch3LagVelocity < 0.f) ||
           (lagEstimate >= limit && scratch3LagVelocity > 0.f)) {
         scratch3LagVelocity = 0.f;

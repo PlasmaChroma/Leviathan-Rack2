@@ -76,6 +76,7 @@ inline float evaluateContour(const CompiledProgram& program, float phase) {
 	if (time >= program.points.back().time) return program.points.back().value;
 	size_t high = 1;
 	while (high < program.points.size() && time > program.points[high].time) ++high;
+	if (high >= program.points.size()) return program.points.back().value;
 	const CompiledContourPoint& left = program.points[high - 1];
 	const CompiledContourPoint& right = program.points[high];
 	if (program.interpolation == Interpolation::MONOTONE_CUBIC)

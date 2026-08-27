@@ -96,12 +96,12 @@ inline SubmenuLayout buildSubmenuLayout(const std::vector<SubmenuItem> &items) {
   }
 
   std::sort(layout.groups.begin(), layout.groups.end(), [](const SubmenuGroup &a, const SubmenuGroup &b) {
-    bool aHasSortOrder = a.sortOrder >= 0;
-    bool bHasSortOrder = b.sortOrder >= 0;
+    const bool aHasSortOrder = a.sortOrder >= 0;
+    const bool bHasSortOrder = b.sortOrder >= 0;
     if (aHasSortOrder != bHasSortOrder) {
       return aHasSortOrder;
     }
-    if (aHasSortOrder && bHasSortOrder && a.sortOrder != b.sortOrder) {
+    if (aHasSortOrder && a.sortOrder != b.sortOrder) {
       return a.sortOrder < b.sortOrder;
     }
     if (a.firstMenuId != b.firstMenuId) {

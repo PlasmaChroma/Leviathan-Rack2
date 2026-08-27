@@ -984,7 +984,7 @@ struct Sil : Module {
 		const bool newValid = peak > kAdaptiveSilenceVolts;
 		const bool oldValid = saturator.binValid[saturator.writeBin] != 0;
 		const int oldHist = int(saturator.binToHist[saturator.writeBin]);
-		if (oldValid && oldHist >= 0 && oldHist < SaturatorState::PERCENTILE_BINS && saturator.percentileHist[oldHist] > 0) {
+		if (oldValid && oldHist < SaturatorState::PERCENTILE_BINS && saturator.percentileHist[oldHist] > 0) {
 			saturator.percentileHist[oldHist]--;
 		}
 		if (oldValid && !newValid) {

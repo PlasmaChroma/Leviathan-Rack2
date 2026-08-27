@@ -2141,8 +2141,8 @@ struct SibylOracleDisplay final : TransparentWidget {
 		}
 
 		char footer[80];
-		char sceneStatus[24];
-		char repeatStatus[24];
+		char sceneStatus[32];
+		char repeatStatus[32];
 		std::snprintf(sceneStatus, sizeof(sceneStatus), "S: %d/%d",
 			state.sceneCount > 0 ? state.sceneIndex + 1 : 0, state.sceneCount);
 		std::snprintf(repeatStatus, sizeof(repeatStatus), "R: %d/%d",

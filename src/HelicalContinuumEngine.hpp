@@ -81,6 +81,8 @@ private:
 	float dcPole = 0.f;
 	float strikeLight = 0.f;
 	float strikeLightDecay = 0.f;
+	float visualAudibleEnvelope = 0.f;
+	float visualEnvelopeDecay = 0.f;
 	float quietTime = 0.f;
 	bool sleeping = true;
 

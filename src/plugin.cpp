@@ -71,7 +71,7 @@ void refreshDragonKingDebugEnabled() {
 		if (!extraGlValidationJ) {
 			extraGlValidationJ = json_object_get(root, "ExtraGlValidation");
 		}
-		gDragonKingDebugEnabled.store(!debugJ || json_boolean_value(debugJ), std::memory_order_relaxed);
+		gDragonKingDebugEnabled.store(debugJ == nullptr || json_is_true(debugJ), std::memory_order_relaxed);
 		gDragonKingPreviewWidgetOptionsEnabled.store(json_boolean_value(previewWidgetOptionsJ), std::memory_order_relaxed);
 		gCrownstepAddMoveEnabled.store(json_boolean_value(crownstepAddMoveJ), std::memory_order_relaxed);
 		gClockworkDragDebugLoggingEnabled.store(json_boolean_value(clockworkDragLoggingJ), std::memory_order_relaxed);

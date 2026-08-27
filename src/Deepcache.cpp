@@ -1354,10 +1354,7 @@ private:
 		deepcache::DecodedPreview preview;
 		while (drained < 16 && restoreUploadQueuedIndices_.size() < 16 &&
 		       pendingUploadBytes_ < 64u * 1024u * 1024u && archive_.tryPopDecoded(preview)) {
-			if (ignoreArchiveResults_ || preview.decodeGeneration != graphicsGeneration_) {
-				preview = deepcache::DecodedPreview();
-			}
-			else {
+			if (!ignoreArchiveResults_ && preview.decodeGeneration == graphicsGeneration_) {
 				const auto found = modelIndexByCacheKey_.find(preview.cacheKey);
 				if (found != modelIndexByCacheKey_.end()) {
 					const std::size_t modelIndex = found->second;
