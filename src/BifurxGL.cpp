@@ -32,6 +32,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	std::vector<GlStrokeQuadVertex> fillCrestStrokeVertices;
 	std::vector<GlStrokeQuadVertex> strokeQuadVertices;
 	std::vector<BifurxCurvePoint> overlayCurvePoints;
+	std::vector<GlVertex> expectedCurveLineVertices;
+	std::vector<GlStrokeQuadVertex> expectedCurveStrokeVertices;
 	std::vector<uint16_t> curveTexels; // RGBA16 normalized, kCurvePointCount wide, reused each frame
 
 	GLuint textureProgram = 0;
@@ -72,6 +74,14 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	GLuint strokeShaderVbo = 0;
 	GLint strokeUniformViewport = -1;
 	GLsizeiptr strokeShaderVboCapacityBytes = 0;
+	bool markerShaderInitAttempted = false;
+	bool markerShaderReady = false;
+	GLuint markerShaderProgram = 0;
+	GLuint markerShaderVertex = 0;
+	GLuint markerShaderFragment = 0;
+	GLint markerUniformFillRadius = -1;
+	GLint markerUniformOutlineRadius = -1;
+	GLint markerUniformOutlineHalfWidth = -1;
 	int cachedTopLabelFontHandle = -1;
 	float cachedTopLabelFontSize = NAN;
 	float cachedTopLabelReservedWidth = 0.f;
@@ -80,6 +90,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	int lastColorScheme = -1;
 	bool shaderRendererActiveLastFrame = false;
 	bool shaderRendererFallbackLastFrame = false;
+	bool expectedCurveShaderActiveLastFrame = false;
+	bool markerShaderActiveLastFrame = false;
 	uint64_t lastDrawNs = 0;
 	float lastDrawMsEma = 0.f;
 	float lastStepMsEma = 0.f;
@@ -99,6 +111,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		fillCrestStrokeVertices.reserve(overlaySegmentCount * 6);
 		strokeQuadVertices.reserve(size_t(kCurvePointCount) * 24u);
 		overlayCurvePoints.reserve(refinedPointReserve);
+		expectedCurveLineVertices.reserve(refinedPointReserve);
+		expectedCurveStrokeVertices.reserve((refinedPointReserve - 1u) * 12u + 48u);
 		curveTexels.resize(size_t(kCurvePointCount) * 4u, 0); // 4 channels per pixel (RGBA16)
 	}
 
@@ -119,6 +133,10 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			glDeleteProgram(strokeShaderProgram);
 		}
 		strokeShaderProgram = 0;
+		if (deleteGlObjects && markerShaderProgram) {
+			glDeleteProgram(markerShaderProgram);
+		}
+		markerShaderProgram = 0;
 		if (deleteGlObjects && shaderVertex) {
 			glDeleteShader(shaderVertex);
 		}
@@ -135,6 +153,14 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			glDeleteShader(strokeShaderFragment);
 		}
 		strokeShaderFragment = 0;
+		if (deleteGlObjects && markerShaderVertex) {
+			glDeleteShader(markerShaderVertex);
+		}
+		markerShaderVertex = 0;
+		if (deleteGlObjects && markerShaderFragment) {
+			glDeleteShader(markerShaderFragment);
+		}
+		markerShaderFragment = 0;
 		if (deleteGlObjects && textureVbo) {
 			glDeleteBuffers(1, &textureVbo);
 		}
@@ -164,6 +190,11 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		strokeUniformViewport = -1;
 		strokeShaderReady = false;
 		strokeShaderInitAttempted = false;
+		markerUniformFillRadius = -1;
+		markerUniformOutlineRadius = -1;
+		markerUniformOutlineHalfWidth = -1;
+		markerShaderReady = false;
+		markerShaderInitAttempted = false;
 		textureShaderReady = false;
 		textureShaderInitAttempted = false;
 	}
@@ -200,6 +231,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		fixedSurface.reset(false);
 		shaderRendererActiveLastFrame = false;
 		shaderRendererFallbackLastFrame = false;
+		expectedCurveShaderActiveLastFrame = false;
+		markerShaderActiveLastFrame = false;
 		setDirty();
 		fixedSurface.markDirty();
 	}
@@ -465,6 +498,80 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		return true;
 	}
 
+	bool ensureMarkerShaderReady() {
+		if (markerShaderInitAttempted) return markerShaderReady;
+		markerShaderInitAttempted = true;
+
+		static const char* const kVertexShaderSrc = R"GLSL(
+			#version 120
+			varying vec2 vLocal;
+			void main() {
+				gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
+				vLocal = gl_MultiTexCoord0.xy;
+			}
+		)GLSL";
+		static const char* const kFragmentShaderSrc = R"GLSL(
+			#version 120
+			varying vec2 vLocal;
+			uniform float uFillRadius;
+			uniform float uOutlineRadius;
+			uniform float uOutlineHalfWidth;
+			void main() {
+				float distancePx = length(vLocal);
+				float aa = 0.65;
+				float fillCoverage = 1.0 - smoothstep(
+					uFillRadius - aa, uFillRadius + aa, distancePx);
+				float ringInner = smoothstep(
+					uOutlineRadius - uOutlineHalfWidth - aa,
+					uOutlineRadius - uOutlineHalfWidth + aa, distancePx);
+				float ringOuter = 1.0 - smoothstep(
+					uOutlineRadius + uOutlineHalfWidth - aa,
+					uOutlineRadius + uOutlineHalfWidth + aa, distancePx);
+				vec4 fill = vec4(252.0 / 255.0, 1.0, 1.0, (244.0 / 255.0) * fillCoverage);
+				vec4 ring = vec4(8.0 / 255.0, 10.0 / 255.0, 14.0 / 255.0,
+					(220.0 / 255.0) * ringInner * ringOuter);
+				float outA = ring.a + fill.a * (1.0 - ring.a);
+				vec3 outRgb = outA > 0.00001
+					? (ring.rgb * ring.a + fill.rgb * fill.a * (1.0 - ring.a)) / outA
+					: vec3(0.0);
+				gl_FragColor = vec4(outRgb, outA);
+			}
+		)GLSL";
+
+		auto compileShader = [](GLenum type, const char* src) -> GLuint {
+			GLuint shader = glCreateShader(type);
+			if (!shader) return 0;
+			glShaderSource(shader, 1, &src, nullptr);
+			glCompileShader(shader);
+			GLint status = GL_FALSE;
+			glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+			if (status != GL_TRUE) {
+				glDeleteShader(shader);
+				return 0;
+			}
+			return shader;
+		};
+
+		markerShaderVertex = compileShader(GL_VERTEX_SHADER, kVertexShaderSrc);
+		markerShaderFragment = compileShader(GL_FRAGMENT_SHADER, kFragmentShaderSrc);
+		if (!markerShaderVertex || !markerShaderFragment) return false;
+		markerShaderProgram = glCreateProgram();
+		if (!markerShaderProgram) return false;
+		glAttachShader(markerShaderProgram, markerShaderVertex);
+		glAttachShader(markerShaderProgram, markerShaderFragment);
+		glLinkProgram(markerShaderProgram);
+		GLint linked = GL_FALSE;
+		glGetProgramiv(markerShaderProgram, GL_LINK_STATUS, &linked);
+		if (linked != GL_TRUE) return false;
+		markerUniformFillRadius = glGetUniformLocation(markerShaderProgram, "uFillRadius");
+		markerUniformOutlineRadius = glGetUniformLocation(markerShaderProgram, "uOutlineRadius");
+		markerUniformOutlineHalfWidth = glGetUniformLocation(markerShaderProgram, "uOutlineHalfWidth");
+		markerShaderReady = markerUniformFillRadius >= 0
+			&& markerUniformOutlineRadius >= 0
+			&& markerUniformOutlineHalfWidth >= 0;
+		return markerShaderReady;
+	}
+
 	bool ensureTextureShaderReady() {
 		if (textureShaderInitAttempted) {
 			return textureShaderReady;
@@ -676,8 +783,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			GlStrokeQuadVertex left;
 			GlStrokeQuadVertex right;
 		};
-		std::vector<StrokePair> pairs;
-		pairs.reserve(lineVerts.size());
 
 		auto normalized = [](float x, float y) {
 			const float lenSq = x * x + y * y;
@@ -700,8 +805,19 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		auto leftNormalFromDir = [](const Vec& dir) {
 			return Vec(-dir.y, dir.x);
 		};
+		auto isSevereJoin = [&](size_t i) {
+			if (i == 0u || i + 1u >= lineVerts.size()) return false;
+			const Vec prevDir = normalized(
+				lineVerts[i].x - lineVerts[i - 1u].x,
+				lineVerts[i].y - lineVerts[i - 1u].y);
+			const Vec nextDir = normalized(
+				lineVerts[i + 1u].x - lineVerts[i].x,
+				lineVerts[i + 1u].y - lineVerts[i].y);
+			if (isNearlyZero(prevDir) || isNearlyZero(nextDir)) return true;
+			return prevDir.x * nextDir.x + prevDir.y * nextDir.y < 0.25f;
+		};
 
-		for (size_t i = 0; i < lineVerts.size(); ++i) {
+		auto makeStrokePair = [&](size_t i) {
 			const GlVertex& p = lineVerts[i];
 			Vec normal(0.f, -1.f);
 			float miterScale = pad;
@@ -741,22 +857,119 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 			const float ox = normal.x * miterScale;
 			const float oy = normal.y * miterScale;
-			pairs.push_back({
+			return StrokePair {
 				{p.x - ox, p.y - oy, p.r, p.g, p.b, p.a, -pad, radius},
 				{p.x + ox, p.y + oy, p.r, p.g, p.b, p.a, pad, radius}
-			});
-		}
+			};
+		};
 
-		for (size_t i = 1; i < pairs.size(); ++i) {
-			const StrokePair& a = pairs[i - 1];
-			const StrokePair& b = pairs[i];
+		StrokePair a = makeStrokePair(0u);
+		for (size_t i = 1; i < lineVerts.size(); ++i) {
+			if (isSevereJoin(i)) {
+				// A tight notch can reverse direction over less than one screen pixel.
+				// Connecting the opposing side pairs folds the miter strip across
+				// itself, so terminate the incoming segment and restart at the cusp.
+				appendStrokeSegment(lineVerts[i - 1u], lineVerts[i], radius, out);
+				a = makeStrokePair(i);
+				continue;
+			}
+			const StrokePair b = makeStrokePair(i);
 			out->push_back(a.left);
 			out->push_back(a.right);
 			out->push_back(b.right);
 			out->push_back(a.left);
 			out->push_back(b.right);
 			out->push_back(b.left);
+			a = b;
 		}
+	}
+
+	void drawExpectedCurveShader(float w, float h) {
+		expectedCurveShaderActiveLastFrame = false;
+		if (!state.hasPreview || !ensureStrokeShaderReady()) return;
+
+		calculateRefinedCurvePoints(&overlayCurvePoints, w, h);
+		if (overlayCurvePoints.size() < 2u) return;
+		BifurxMarkerLayout layout;
+		getCachedMarkerLayout(&layout, w, h);
+		const float padY = std::max(4.f, h * 0.035f);
+		const float labelBandHeight = std::max(5.2f, h * 0.072f);
+		const float spectrumBottomY = std::max(
+			padY * 0.35f + 1.f,
+			h - labelBandHeight - std::max(0.05f, h * 0.0008f));
+
+		expectedCurveLineVertices.clear();
+		expectedCurveStrokeVertices.clear();
+		auto appendGuideLayer = [&](float r, float g, float b, float a, float radius) {
+			for (int i = 0; i < 2; ++i) {
+				if (!layout.markers[i].visible) continue;
+				appendStrokeSegment(
+					{layout.markers[i].x, spectrumBottomY, r, g, b, a},
+					{layout.markers[i].x, layout.markers[i].yMarker, r, g, b, a},
+					radius, &expectedCurveStrokeVertices);
+				appendStrokeSegment(
+					{layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f, r, g, b, a},
+					{layout.markers[i].x, layout.guideYBottom, r, g, b, a},
+					radius, &expectedCurveStrokeVertices);
+			}
+		};
+		for (const BifurxCurvePoint& point : overlayCurvePoints) {
+			expectedCurveLineVertices.push_back({
+				w * point.x01, point.y,
+				6.f / 255.f, 8.f / 255.f, 12.f / 255.f, 210.f / 255.f
+			});
+		}
+		appendStrokePolyline(expectedCurveLineVertices, 1.67f, &expectedCurveStrokeVertices);
+		appendGuideLayer(6.f / 255.f, 8.f / 255.f, 12.f / 255.f, 210.f / 255.f, 1.67f);
+
+		for (GlVertex& point : expectedCurveLineVertices) {
+			point.r = 235.f / 255.f;
+			point.g = 204.f / 255.f;
+			point.b = 128.f / 255.f;
+			point.a = 244.f / 255.f;
+		}
+		appendStrokePolyline(expectedCurveLineVertices, 1.29f, &expectedCurveStrokeVertices);
+		appendGuideLayer(235.f / 255.f, 204.f / 255.f, 128.f / 255.f, 244.f / 255.f, 1.29f);
+
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		drawStrokeQuadsShader(expectedCurveStrokeVertices, w, h);
+		expectedCurveShaderActiveLastFrame = true;
+	}
+
+	void drawMarkerCirclesShader(float w, float h) {
+		markerShaderActiveLastFrame = false;
+		if (!state.hasPreview || !ensureMarkerShaderReady()) return;
+		BifurxMarkerLayout layout;
+		getCachedMarkerLayout(&layout, w, h);
+		bool hasVisibleMarker = false;
+		for (int i = 0; i < 2; ++i) {
+			hasVisibleMarker = hasVisibleMarker || layout.markers[i].visible;
+		}
+		if (!hasVisibleMarker) return;
+
+		const float outlineRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius;
+		const float outlineHalfWidth = 0.5f * kPeakMarkerOutlineStrokeWidth;
+		const float extent = outlineRadius + outlineHalfWidth + 0.65f;
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glUseProgram(markerShaderProgram);
+		glUniform1f(markerUniformFillRadius, kPeakMarkerFillRadius);
+		glUniform1f(markerUniformOutlineRadius, outlineRadius);
+		glUniform1f(markerUniformOutlineHalfWidth, outlineHalfWidth);
+		glBegin(GL_QUADS);
+		for (int i = 0; i < 2; ++i) {
+			if (!layout.markers[i].visible) continue;
+			const float x = layout.markers[i].x;
+			const float y = layout.markers[i].yMarker;
+			glTexCoord2f(-extent, -extent); glVertex2f(x - extent, y - extent);
+			glTexCoord2f( extent, -extent); glVertex2f(x + extent, y - extent);
+			glTexCoord2f( extent,  extent); glVertex2f(x + extent, y + extent);
+			glTexCoord2f(-extent,  extent); glVertex2f(x - extent, y + extent);
+		}
+		glEnd();
+		glUseProgram(0);
+		markerShaderActiveLastFrame = true;
 	}
 
 	void appendStrokeSegment(const GlVertex& a, const GlVertex& b, float radius, std::vector<GlStrokeQuadVertex>* out) {
@@ -862,6 +1075,16 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			strokeShaderVboCapacityBytes = 0;
 			strokeShaderReady = false;
 			strokeShaderInitAttempted = false;
+		}
+		if (markerShaderReady && (markerShaderProgram == 0 || !glIsProgram(markerShaderProgram))) {
+			markerShaderProgram = 0;
+			markerShaderVertex = 0;
+			markerShaderFragment = 0;
+			markerUniformFillRadius = -1;
+			markerUniformOutlineRadius = -1;
+			markerUniformOutlineHalfWidth = -1;
+			markerShaderReady = false;
+			markerShaderInitAttempted = false;
 		}
 		if (textureShaderReady &&
 			(!gl_lifecycle::isValidProgramBufferPair(textureProgram, textureVbo) ||
@@ -1050,11 +1273,14 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const bool useShaderRenderer = module->useGlShaderRenderer.load(std::memory_order_relaxed) && ensureTextureShaderReady();
 		shaderRendererActiveLastFrame = useShaderRenderer;
 		shaderRendererFallbackLastFrame = module->useGlShaderRenderer.load(std::memory_order_relaxed) && !useShaderRenderer;
+		expectedCurveShaderActiveLastFrame = false;
+		markerShaderActiveLastFrame = false;
 
 		fillVertices.clear();
 		fillSoftCapVertices.clear();
 		fillCrestLineVertices.clear();
 		fillCrestStrokeVertices.clear();
+		expectedCurveStrokeVertices.clear();
 		const float displayOnlyShapeControl = module ? clamp(module->params[Bifurx::FM_AMT_PARAM].getValue(), -1.f, 1.f) : 0.f;
 
 		if (useShaderRenderer) {
@@ -1124,7 +1350,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				glBindTexture(GL_TEXTURE_2D, 0);
 				glUseProgram(0);
 			}
-			lastDrawVertexCount = 4;
 		}
 		else {
 			// CPU geometry generation logic fallback
@@ -1224,7 +1449,16 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			glDisableClientState(GL_COLOR_ARRAY);
 			glDisableClientState(GL_VERTEX_ARRAY);
 		}
-		lastDrawVertexCount = uint64_t(fillVertices.size() + fillSoftCapVertices.size() + fillCrestLineVertices.size() + fillCrestStrokeVertices.size());
+		if (useShaderRenderer && !displayOnlyMode) {
+			drawExpectedCurveShader(w, h);
+			drawMarkerCirclesShader(w, h);
+		}
+		if (useShaderRenderer) {
+			lastDrawVertexCount = (state.hasOverlay ? 4u : 0u) + uint64_t(expectedCurveStrokeVertices.size());
+		}
+		else {
+			lastDrawVertexCount = uint64_t(fillVertices.size() + fillSoftCapVertices.size() + fillCrestLineVertices.size() + fillCrestStrokeVertices.size());
+		}
 
 		if (measurePerf) {
 			lastDrawNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfDrawStart).count();
@@ -1287,7 +1521,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const float spectrumTopY = padY * 0.35f;
 		const float spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
 		auto responseYForDb = [&](float db) { return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY); };
-		if (!displayOnlyMode) {
+		if (!displayOnlyMode && !expectedCurveShaderActiveLastFrame) {
 			calculateRefinedCurvePoints(&overlayCurvePoints, w, h);
 		}
 		else {
@@ -1315,58 +1549,62 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		}
 
 		if (!displayOnlyMode) {
-			for (int i = 0; i < 2; i++) {
-				if (!layout.markers[i].visible) continue;
-				nvgBeginPath(args.vg);
-				nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY);
-				nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
-				nvgStrokeColor(args.vg, nvgRGBA(6, 8, 12, 210));
-				nvgStrokeWidth(args.vg, 2.2f);
-				nvgStroke(args.vg);
-				nvgBeginPath(args.vg);
-				nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY);
-				nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
-				nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 244));
-				nvgStrokeWidth(args.vg, 1.7f);
-				nvgStroke(args.vg);
-				nvgBeginPath(args.vg);
-				nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f);
-				nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom);
-				nvgStrokeColor(args.vg, nvgRGBA(6, 8, 12, 210));
-				nvgStrokeWidth(args.vg, 2.2f);
-				nvgStroke(args.vg);
-				nvgBeginPath(args.vg);
-				nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f);
-				nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom);
-				nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 244));
-				nvgStrokeWidth(args.vg, 1.7f);
-				nvgStroke(args.vg);
+			if (!expectedCurveShaderActiveLastFrame) {
+				for (int i = 0; i < 2; i++) {
+					if (!layout.markers[i].visible) continue;
+					nvgBeginPath(args.vg);
+					nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY);
+					nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
+					nvgStrokeColor(args.vg, nvgRGBA(6, 8, 12, 210));
+					nvgStrokeWidth(args.vg, 2.2f);
+					nvgStroke(args.vg);
+					nvgBeginPath(args.vg);
+					nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY);
+					nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
+					nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 244));
+					nvgStrokeWidth(args.vg, 1.7f);
+					nvgStroke(args.vg);
+					nvgBeginPath(args.vg);
+					nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f);
+					nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom);
+					nvgStrokeColor(args.vg, nvgRGBA(6, 8, 12, 210));
+					nvgStrokeWidth(args.vg, 2.2f);
+					nvgStroke(args.vg);
+					nvgBeginPath(args.vg);
+					nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f);
+					nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom);
+					nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 244));
+					nvgStrokeWidth(args.vg, 1.7f);
+					nvgStroke(args.vg);
+				}
 			}
 
-			nvgBeginPath(args.vg);
-			for (size_t i = 0; i < overlayCurvePoints.size(); ++i) {
-				const float x = w * overlayCurvePoints[i].x01;
-				const float y = overlayCurvePoints[i].y;
-				if (i == 0) nvgMoveTo(args.vg, x, y);
-				else nvgLineTo(args.vg, x, y);
+			if (!expectedCurveShaderActiveLastFrame) {
+				nvgBeginPath(args.vg);
+				for (size_t i = 0; i < overlayCurvePoints.size(); ++i) {
+					const float x = w * overlayCurvePoints[i].x01;
+					const float y = overlayCurvePoints[i].y;
+					if (i == 0) nvgMoveTo(args.vg, x, y);
+					else nvgLineTo(args.vg, x, y);
+				}
+				nvgLineJoin(args.vg, NVG_ROUND);
+				nvgLineCap(args.vg, NVG_ROUND);
+				nvgStrokeWidth(args.vg, 2.2f);
+				nvgStrokeColor(args.vg, nvgRGBA(6, 8, 12, 210));
+				nvgStroke(args.vg);
+				nvgBeginPath(args.vg);
+				for (size_t i = 0; i < overlayCurvePoints.size(); ++i) {
+					const float x = w * overlayCurvePoints[i].x01;
+					const float y = overlayCurvePoints[i].y;
+					if (i == 0) nvgMoveTo(args.vg, x, y);
+					else nvgLineTo(args.vg, x, y);
+				}
+				nvgLineJoin(args.vg, NVG_ROUND);
+				nvgLineCap(args.vg, NVG_ROUND);
+				nvgStrokeWidth(args.vg, 1.7f);
+				nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 244));
+				nvgStroke(args.vg);
 			}
-			nvgLineJoin(args.vg, NVG_ROUND);
-			nvgLineCap(args.vg, NVG_ROUND);
-			nvgStrokeWidth(args.vg, 2.2f);
-			nvgStrokeColor(args.vg, nvgRGBA(6, 8, 12, 210));
-			nvgStroke(args.vg);
-			nvgBeginPath(args.vg);
-			for (size_t i = 0; i < overlayCurvePoints.size(); ++i) {
-				const float x = w * overlayCurvePoints[i].x01;
-				const float y = overlayCurvePoints[i].y;
-				if (i == 0) nvgMoveTo(args.vg, x, y);
-				else nvgLineTo(args.vg, x, y);
-			}
-			nvgLineJoin(args.vg, NVG_ROUND);
-			nvgLineCap(args.vg, NVG_ROUND);
-			nvgStrokeWidth(args.vg, 1.7f);
-			nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 244));
-			nvgStroke(args.vg);
 		}
 		nvgResetScissor(args.vg);
 		nvgRestore(args.vg);
@@ -1375,16 +1613,18 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		if (!displayOnlyMode) {
 			for (int i = 0; i < 2; i++) {
 				if (!layout.markers[i].visible) continue;
-				nvgBeginPath(args.vg);
-				nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius);
-				nvgFillColor(args.vg, nvgRGBA(252, 255, 255, 244));
-				nvgFill(args.vg);
-				
-				nvgBeginPath(args.vg);
-				nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius);
-				nvgStrokeColor(args.vg, nvgRGBA(8, 10, 14, 220));
-				nvgStrokeWidth(args.vg, kPeakMarkerOutlineStrokeWidth);
-				nvgStroke(args.vg);
+				if (!markerShaderActiveLastFrame) {
+					nvgBeginPath(args.vg);
+					nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius);
+					nvgFillColor(args.vg, nvgRGBA(252, 255, 255, 244));
+					nvgFill(args.vg);
+					
+					nvgBeginPath(args.vg);
+					nvgCircle(args.vg, layout.markers[i].x, layout.markers[i].yMarker, kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius);
+					nvgStrokeColor(args.vg, nvgRGBA(8, 10, 14, 220));
+					nvgStrokeWidth(args.vg, kPeakMarkerOutlineStrokeWidth);
+					nvgStroke(args.vg);
+				}
 			}
 
 			nvgFontSize(args.vg, layout.labelFontSize);
