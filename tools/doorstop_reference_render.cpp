@@ -1,4 +1,5 @@
 #include "../src/ReferenceSpringEngine.hpp"
+#include "../src/HelicalContinuumEngine.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -130,7 +131,8 @@ void usage(const char* executable) {
 		<< "  --discard-output    process without writing a WAV (benchmarking)\n"
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
 		<< "  --variant NAME      current, spring-only, modes-only, spring-forward,\n"
-		<< "                      spring-refined, rack-v2, or boing-refined\n"
+		<< "                      spring-refined, rack-v2, boing-refined,\n"
+		<< "                      or v3-paired-surrogate\n"
 		<< "  --radiation-phase DEG  V2 phase probe: 0=extrema, 90=crossing\n"
 		<< "  --output-tap NAME   module (default) or preconditioned\n"
 #endif
@@ -162,6 +164,7 @@ int main(int argc, char** argv) {
 		doorstop::ReferenceAnalysisOutput analysisOutput =
 			doorstop::ReferenceAnalysisOutput::ModuleOutput;
 		float radiationPhaseDegrees = 90.f;
+		bool useHelicalEngine = false;
 #endif
 		std::vector<Strike> strikes;
 		for (int i = 2; i < argc; ++i) {
@@ -199,7 +202,10 @@ int main(int argc, char** argv) {
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
 			else if (option == "--variant") {
 				const std::string variantName(value);
-				if (variantName == "rack-v2"
+				if (variantName == "v3-paired-surrogate") {
+					useHelicalEngine = true;
+				}
+				else if (variantName == "rack-v2"
 					|| variantName == "boing-refined") {
 					profile =
 						doorstop::ReferenceSpringProfile::DarkRefinedV2;
@@ -258,6 +264,7 @@ int main(int argc, char** argv) {
 			[](const Strike& a, const Strike& b) { return a.time < b.time; });
 
 		doorstop::ReferenceSpringEngine engine(profile);
+		doorstop::HelicalContinuumEngine helicalEngine;
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
 		engine.setAnalysisVariant(variant);
 		engine.setAnalysisRadiationPhaseDegrees(radiationPhaseDegrees);
@@ -266,6 +273,9 @@ int main(int argc, char** argv) {
 		engine.setSampleRate(float(sampleRate));
 		engine.setSpecimenSeed(seed);
 		engine.setBreakIn(breakIn);
+		helicalEngine.setSampleRate(float(sampleRate));
+		helicalEngine.setSpecimenSeed(seed);
+		helicalEngine.setBreakIn(breakIn);
 		const std::size_t sampleCount =
 			std::size_t(duration * float(sampleRate));
 		std::vector<float> samples;
@@ -278,11 +288,13 @@ int main(int argc, char** argv) {
 			const float time = float(i) / float(sampleRate);
 			while (nextStrike < strikes.size()
 				&& strikes[nextStrike].time <= time) {
-				engine.strike(strikes[nextStrike].velocity);
+				if (useHelicalEngine) helicalEngine.strike(strikes[nextStrike].velocity);
+				else engine.strike(strikes[nextStrike].velocity);
 				++nextStrike;
 			}
-			const float output =
-				engine.process(1.f / float(sampleRate)).outputVolts / 5.f;
+			const float output = (useHelicalEngine
+				? helicalEngine.process(1.f / float(sampleRate)).outputVolts
+				: engine.process(1.f / float(sampleRate)).outputVolts) / 5.f;
 			if (discardOutput) outputChecksum += output;
 			else samples[i] = output;
 		}

@@ -108,6 +108,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/wyrm_envelope_spec \
 	build/tests/doorstop_engine_spec \
 	build/tests/doorstop_reference_engine_spec \
+	build/tests/doorstop_helical_engine_spec \
 	build/tests/bifurx_filter_spec \
 	build/tests/sil_repair_spec \
 	build/tests/bulkhead_geometry_spec \
@@ -143,7 +144,7 @@ ifneq (,$(findstring mingw,$(CXX_MACHINE)))
 MINGW_TEST_CPPFLAGS += -D_USE_MATH_DEFINES
 endif
 
-.PHONY: generate-panel-anchor-atlas generate-mandelwake-tables check-mandelwake-tables validate-plugin-json doorstop-reference-grid doorstop-corpus-audit doorstop-reference-evaluate doorstop-variant-grid doorstop-variant-evaluate doorstop-boing-audition doorstop-v2-phase-grid doorstop-v2-phase-evaluate
+.PHONY: generate-panel-anchor-atlas generate-mandelwake-tables check-mandelwake-tables validate-plugin-json doorstop-reference-grid doorstop-corpus-audit doorstop-reference-evaluate doorstop-variant-grid doorstop-variant-evaluate doorstop-boing-audition doorstop-v3-paired-audition doorstop-v2-phase-grid doorstop-v2-phase-evaluate
 generate-panel-anchor-atlas:
 	python3 tools/generate_panel_anchor_atlas.py
 
@@ -156,13 +157,13 @@ check-mandelwake-tables:
 validate-plugin-json:
 	python3 tools/validate_plugin_json_tags.py plugin.json
 
-build/tools/doorstop_reference_render: tools/doorstop_reference_render.cpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build
+build/tools/doorstop_reference_render: tools/doorstop_reference_render.cpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/HelicalContinuumEngine.cpp src/HelicalContinuumEngine.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build
 	mkdir -p build/tools
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -DDOORSTOP_REFERENCE_ANALYSIS=1 tools/doorstop_reference_render.cpp src/ReferenceSpringEngine.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -DDOORSTOP_REFERENCE_ANALYSIS=1 tools/doorstop_reference_render.cpp src/ReferenceSpringEngine.cpp src/HelicalContinuumEngine.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
 
 DOORSTOP_REFERENCE_VELOCITIES ?= 0.5 0.75 1.0
 DOORSTOP_REFERENCE_SEEDS ?= 1 77 7331 65537 104729 999983 2654435761 305419896 610839776 195948557 271828183 314159265 3735928559 324508639 4277009102 4294967291
-DOORSTOP_REFERENCE_VARIANTS ?= current spring-only modes-only spring-forward spring-refined rack-v2 boing-refined
+DOORSTOP_REFERENCE_VARIANTS ?= current spring-only modes-only spring-forward spring-refined rack-v2 boing-refined v3-paired-surrogate
 DOORSTOP_BOING_AUDITION_DIR ?= Samples/Doorstop/Auditions/reference-v2-vs-boing-refined
 DOORSTOP_V2_PHASES ?= 0 15 30 45 60 75 90
 
@@ -206,6 +207,14 @@ doorstop-boing-audition: build/tools/doorstop_reference_render
 	python3 tools/compare_doorstop_variants.py \
 		--variants current rack-v2 boing-refined \
 		--output-dir $(DOORSTOP_BOING_AUDITION_DIR)
+
+doorstop-v3-paired-audition: build/tools/doorstop_reference_render
+	$(MAKE) DOORSTOP_REFERENCE_VARIANTS="rack-v2 v3-paired-surrogate" doorstop-variant-grid
+	python3 tools/compare_doorstop_variants.py \
+		--variants rack-v2 v3-paired-surrogate \
+		--variant-root build/doorstop-variant-renders \
+		--baseline rack-v2 --blind \
+		--output-dir build/doorstop-v3-paired-analysis
 
 # Stage 0 phase probe. Each phase gets the bounded Rack output and the exact
 # signal presented to tanh so saturation can be evaluated independently.
@@ -408,6 +417,7 @@ test-fast: test-build-fast
 	$(call run_rack_test_bin,build/tests/wyrm_envelope_spec)
 	$(call run_test_bin,build/tests/doorstop_engine_spec)
 	$(call run_test_bin,build/tests/doorstop_reference_engine_spec)
+	$(call run_test_bin,build/tests/doorstop_helical_engine_spec)
 	$(call run_test_bin,build/tests/bifurx_filter_spec)
 	$(call run_test_bin,build/tests/sil_repair_spec)
 	$(call run_test_bin,build/tests/bulkhead_geometry_spec)
@@ -648,8 +658,11 @@ build/tests/temporaldeck_longplay_spec: tests/temporaldeck_longplay_spec.cpp src
 build/tests/doorstop_engine_spec: tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
 
-build/tests/doorstop_reference_engine_spec: tests/doorstop_reference_engine_spec.cpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/DoorstopEngineRouter.cpp src/DoorstopEngineRouter.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -DDOORSTOP_REFERENCE_ANALYSIS=1 tests/doorstop_reference_engine_spec.cpp src/ReferenceSpringEngine.cpp src/DoorstopEngineRouter.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
+build/tests/doorstop_reference_engine_spec: tests/doorstop_reference_engine_spec.cpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/HelicalContinuumEngine.cpp src/HelicalContinuumEngine.hpp src/DoorstopEngineRouter.cpp src/DoorstopEngineRouter.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -DDOORSTOP_REFERENCE_ANALYSIS=1 tests/doorstop_reference_engine_spec.cpp src/ReferenceSpringEngine.cpp src/HelicalContinuumEngine.cpp src/DoorstopEngineRouter.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
+
+build/tests/doorstop_helical_engine_spec: tests/doorstop_helical_engine_spec.cpp src/HelicalContinuumEngine.cpp src/HelicalContinuumEngine.hpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/DoorstopEngineRouter.cpp src/DoorstopEngineRouter.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_helical_engine_spec.cpp src/HelicalContinuumEngine.cpp src/ReferenceSpringEngine.cpp src/DoorstopEngineRouter.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
 
 build/tests/bifurx_filter_spec: tests/bifurx_filter_spec.cpp tests/bifurx_filter_test_model.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $< -o $@
@@ -680,5 +693,5 @@ build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/PanelSvgUti
 build/tests/crownstep_persistence_spec: tests/crownstep_persistence_spec.cpp $(CROWNSTEP_MODULE_SOURCES) | build/tests build/tests/panel_svg_utils_spec
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@
 
-build/tests/doorstop_runtime_spec: tests/doorstop_runtime_spec.cpp src/Doorstop.cpp src/DoorstopEngine.cpp src/DoorstopEngineRouter.cpp src/ReferenceSpringEngine.cpp src/MathHelpers.cpp | build/tests build/tests/panel_svg_utils_spec
+build/tests/doorstop_runtime_spec: tests/doorstop_runtime_spec.cpp src/Doorstop.cpp src/DoorstopEngine.cpp src/DoorstopEngineRouter.cpp src/ReferenceSpringEngine.cpp src/HelicalContinuumEngine.cpp src/MathHelpers.cpp | build/tests build/tests/panel_svg_utils_spec
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@

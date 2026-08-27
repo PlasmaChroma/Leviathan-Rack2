@@ -291,15 +291,18 @@ def write_report(
         ]
     )
     for field in CRITICAL_MATERIAL_FEATURES:
-        first = scores[ordered_variants[0]]["features"][field]
-        cells = [
-            f"{first['reference_q10']:.4g}–{first['reference_q90']:.4g}"
+        available = [
+            scores[variant]["features"].get(field)
+            for variant in ordered_variants
         ]
+        first = next((feature for feature in available if feature), None)
+        if first is None:
+            continue
+        cells = [f"{first['reference_q10']:.4g}–{first['reference_q90']:.4g}"]
         for variant in ordered_variants:
-            feature = scores[variant]["features"][field]
-            cells.append(
-                f"{feature['model_q10']:.4g}–{feature['model_q90']:.4g}"
-            )
+            feature = scores[variant]["features"].get(field)
+            cells.append("n/a" if feature is None else
+                f"{feature['model_q10']:.4g}–{feature['model_q90']:.4g}")
         lines.append(f"| {field} | " + " | ".join(cells) + " |")
     lines.extend(
         [

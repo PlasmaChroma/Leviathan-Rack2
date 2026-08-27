@@ -10,6 +10,7 @@ const char* engineModeName(doorstop::EngineMode mode) {
 	switch (mode) {
 		case doorstop::EngineMode::ReferenceV1: return "referenceV1";
 		case doorstop::EngineMode::ReferenceV2: return "referenceV2";
+		case doorstop::EngineMode::ReferenceV3: return "referenceV3";
 		case doorstop::EngineMode::Legacy: return "legacy";
 		default: return "referenceV1";
 	}
@@ -39,6 +40,10 @@ bool parseEngineMode(json_t* value, doorstop::EngineMode* mode) {
 	}
 	if (name == "referenceV2") {
 		*mode = doorstop::EngineMode::ReferenceV2;
+		return true;
+	}
+	if (name == "referenceV3") {
+		*mode = doorstop::EngineMode::ReferenceV3;
 		return true;
 	}
 	return false;

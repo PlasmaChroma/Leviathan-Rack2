@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DoorstopEngine.hpp"
+#include "HelicalContinuumEngine.hpp"
 #include "ReferenceSpringEngine.hpp"
 
 #include <cstdint>
@@ -11,6 +12,7 @@ enum class EngineMode : std::uint8_t {
 	ReferenceV1 = 0,
 	Legacy,
 	ReferenceV2,
+	ReferenceV3,
 	Count
 };
 
@@ -47,6 +49,10 @@ public:
 	const ReferenceSpringEngine& getReferenceV2Engine() const {
 		return referenceV2;
 	}
+	HelicalContinuumEngine& getReferenceV3Engine() { return referenceV3; }
+	const HelicalContinuumEngine& getReferenceV3Engine() const {
+		return referenceV3;
+	}
 
 private:
 	Engine legacy;
@@ -54,6 +60,7 @@ private:
 	ReferenceSpringEngine referenceV2 {
 		ReferenceSpringProfile::DarkRefinedV2
 	};
+	HelicalContinuumEngine referenceV3;
 	EngineMode selectedMode = EngineMode::ReferenceV1;
 	SoundModel selectedLegacyModel = SoundModel::ProbabilisticMix;
 	float sampleRate = 44100.f;
