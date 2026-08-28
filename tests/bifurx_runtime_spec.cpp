@@ -55,6 +55,46 @@ float freqNormForCenterHz(float centerHz) {
   return clamp(std::log2(safeCenter / kFreqMinHz) / kFreqLog2Span, 0.f, 1.f);
 }
 
+TestResult testResonanceCurveUsesFullControlTravel() {
+  struct ResonancePoint {
+    float knob;
+    float expectedQ;
+  };
+  constexpr ResonancePoint points[] = {
+    {0.f, 0.5f},
+    {0.25f, 0.9f},
+    {0.5f, 1.75f},
+    {0.75f, 5.f},
+    {1.f, 33.3333f},
+  };
+
+  bool targetsPass = true;
+  std::string measured;
+  for (const ResonancePoint& point : points) {
+    const float q = 1.f / resoToDamping(point.knob);
+    const float relativeError = std::fabs(q - point.expectedQ) / point.expectedQ;
+    targetsPass = targetsPass && relativeError < 0.025f;
+    measured += " [r=" + std::to_string(point.knob) + " Q=" + std::to_string(q) + "]";
+  }
+
+  bool monotonic = true;
+  float previousQ = 1.f / resoToDamping(0.f);
+  for (int i = 1; i <= 100; ++i) {
+    const float q = 1.f / resoToDamping(float(i) / 100.f);
+    monotonic = monotonic && q > previousQ;
+    previousQ = q;
+  }
+
+  const bool belgradOnsetPreserved = std::fabs(kSelfOscResoStart - 0.80f) < 1e-6f;
+  return {
+    "Resonance curve uses full travel while preserving 0.80 self-osc onset",
+    targetsPass && monotonic && belgradOnsetPreserved,
+    "targets=" + std::to_string(int(targetsPass)) +
+      " monotonic=" + std::to_string(int(monotonic)) +
+      " onset=" + std::to_string(kSelfOscResoStart) + measured
+  };
+}
+
 void configureBaseParams(Bifurx& module, int mode, float freqNorm, float spanNorm, float reso, float balance) {
   module.params[Bifurx::MODE_PARAM].setValue(float(mode));
   module.params[Bifurx::LEVEL_PARAM].setValue(0.5f);
@@ -807,6 +847,7 @@ TestResult testBrowserPreviewUsesSquareWaveFft() {
 
 int main() {
   const std::vector<TestResult> tests = {
+    testResonanceCurveUsesFullControlTravel(),
     testRuntimeSpanMonotonicInPreviewState(),
     testRuntimeBalanceTiltsBandBandInSvf(),
     testRuntimeReportedLowCaseKeepsAudibleOutput(),

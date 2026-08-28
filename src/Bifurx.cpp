@@ -169,7 +169,15 @@ float softLimitExpectedCurveDb(float db) {
 
 float resoToDamping(float resoNorm) {
 	const float r = levi_math::clamp01(resoNorm);
-	return 2.f - 1.97f * std::pow(r, 1.18f);
+	// Shape resonance in log-Q space so each part of the control travel has an
+	// audible effect. The linear term opens the lower half, while r^4 retains
+	// the steep approach to self-oscillation near the top. Endpoints remain
+	// Q=0.5 (damping=2) and Q=33.33 (damping=0.03).
+	constexpr float kLinearLogQ = 2.264f;
+	constexpr float kTopLogQ = 1.935705f;
+	const float r2 = r * r;
+	const float logQOverMin = kLinearLogQ * r + kTopLogQ * r2 * r2;
+	return 2.f * fastExp(-logQOverMin);
 }
 
 float signedWeight(float balance, bool upperPeak) {

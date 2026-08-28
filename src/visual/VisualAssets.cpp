@@ -2491,6 +2491,17 @@ LuminSlider::LuminSlider() {
 		movingRail->drawWidthPx = railDrawWidthPx;
 		movingRail->drawHeightPx = railDrawHeightPx;
 		fb->addChildBelow(movingRail, handle);
+
+		// Keep the engraved scale fixed inside the channel, beneath both the
+		// moving illuminated rail and carriage so the vertical mechanism passes
+		// continuously over the calibration marks.
+		auto* tickOverlay = new widget::SvgWidget;
+		tickOverlay->setSvg(visual_assets::loadPluginSvgCached("res/icon/LuminSliderTicks.svg"));
+		tickOverlay->box.pos = Vec(
+			0.5f * (anchorWidthPx - tickOverlay->box.size.x),
+			0.5f * (anchorHeightPx - tickOverlay->box.size.y)
+		);
+		fb->addChildBelow(tickOverlay, movingRail);
 	}
 	setHandlePosCentered(
 		math::Vec(anchorWidthPx * 0.5f, anchorHeightPx - handleTravelInsetPx),

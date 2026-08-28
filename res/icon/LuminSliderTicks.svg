@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+   width="24.56693"
+   height="98.26772"
+   viewBox="0 0 24.56693 98.26772"
+   version="1.1"
+   xmlns="http://www.w3.org/2000/svg">
+  <title>Lumin slider internal bipolar scale</title>
+  <desc>Filter-free tick overlay drawn above the moving rail and below the slider carriage.</desc>
+  <g
+     id="slider-track-ticks"
+     fill="none"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+    <path
+       id="slider-track-major-ticks-positive"
+       d="M 10.183465,12.826168 H 14.383465 M 10.433465,20.894544 H 14.133465 M 10.683465,28.962911 H 13.883465 M 10.933465,37.031296 H 13.633465 M 11.183465,45.099671 H 13.383465"
+       stroke="#1ccad8"
+       stroke-width="0.88"
+       stroke-opacity="0.84" />
+    <path
+       id="slider-track-minor-ticks-positive"
+       d="M 11.483465,14.439843 H 13.083465 M 11.483465,16.053518 H 13.083465 M 11.483465,17.667194 H 13.083465 M 11.483465,19.280869 H 13.083465 M 11.483465,22.508217 H 13.083465 M 11.483465,24.121891 H 13.083465 M 11.483465,25.735566 H 13.083465 M 11.483465,27.349241 H 13.083465 M 11.483465,30.576588 H 13.083465 M 11.483465,32.190265 H 13.083465 M 11.483465,33.803942 H 13.083465 M 11.483465,35.417619 H 13.083465 M 11.483465,38.644971 H 13.083465 M 11.483465,40.258646 H 13.083465 M 11.483465,41.872321 H 13.083465 M 11.483465,43.485996 H 13.083465"
+       stroke="#1ccad8"
+       stroke-width="0.52"
+       stroke-opacity="0.58" />
+    <path
+       id="slider-track-zero-tick"
+       d="M 10.683465,49.133860 H 13.883465"
+       stroke="#d8d7ff"
+       stroke-width="0.68"
+       stroke-opacity="0.7" />
+    <path
+       id="slider-track-major-ticks-negative"
+       d="M 11.183465,53.168049 H 13.383465 M 10.933465,61.236415 H 13.633465 M 10.683465,69.304800 H 13.883465 M 10.433465,77.373166 H 14.133465 M 10.183465,85.441552 H 14.383465"
+       stroke="#b58aff"
+       stroke-width="0.88"
+       stroke-opacity="0.84" />
+    <path
+       id="slider-track-minor-ticks-negative"
+       d="M 11.483465,54.781722 H 13.083465 M 11.483465,56.395395 H 13.083465 M 11.483465,58.009069 H 13.083465 M 11.483465,59.622742 H 13.083465 M 11.483465,62.850092 H 13.083465 M 11.483465,64.463769 H 13.083465 M 11.483465,66.077446 H 13.083465 M 11.483465,67.691123 H 13.083465 M 11.483465,70.918473 H 13.083465 M 11.483465,72.532146 H 13.083465 M 11.483465,74.145820 H 13.083465 M 11.483465,75.759493 H 13.083465 M 11.483465,78.986843 H 13.083465 M 11.483465,80.600520 H 13.083465 M 11.483465,82.214197 H 13.083465 M 11.483465,83.827874 H 13.083465"
+       stroke="#b58aff"
+       stroke-width="0.52"
+       stroke-opacity="0.58" />
+  </g>
+</svg>
