@@ -194,7 +194,13 @@ int main() {
 		worker.enqueue(std::move(second));
 		if (!waitUntil([&]() { return worker.readyCount() == 2; }) ||
 		    worker.targetPluginCount() != 1 || worker.readyPluginCount() != 1) {
-			std::cerr << "[FAIL] initial append did not commit\n";
+			std::cerr << "[FAIL] initial append did not commit"
+			          << " state=" << static_cast<int>(worker.state())
+			          << " ready=" << worker.readyCount()
+			          << " target=" << worker.targetCount()
+			          << " readyPlugins=" << worker.readyPluginCount()
+			          << " targetPlugins=" << worker.targetPluginCount()
+			          << " error=" << worker.errorCode() << "\n";
 			return 1;
 		}
 		bool committedOne = false;
@@ -1027,8 +1033,55 @@ int main() {
 	}
 	removeDirectory(lazyHydrationDirectory);
 
+	// A version-1 entry from the opposite Rack panel theme remains readable as
+	// a provisional candidate. The archive format itself is unchanged.
+	const std::string alternateThemeDirectory = directory + "-alternate-theme";
+	removeDirectory(alternateThemeDirectory);
+	makeDirectory(alternateThemeDirectory);
+	const std::vector<std::uint8_t> alternateThemePixels = pixels(13, 9, 88);
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(alternateThemeDirectory, {{"theme-model", "light-fp", "plugin-theme"}});
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] alternate-theme archive did not initialize\n";
+			return 1;
+		}
+		deepcache::PreviewWrite write;
+		write.cacheKey = "theme-model";
+		write.fingerprint = "light-fp";
+		write.width = 13;
+		write.height = 9;
+		write.rgba = std::make_shared<const std::vector<std::uint8_t>>(alternateThemePixels);
+		worker.enqueue(std::move(write));
+		if (!waitUntil([&]() { return worker.readyCount() == 1; })) {
+			std::cerr << "[FAIL] alternate-theme source preview did not commit\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	bool alternateCandidate = false;
+	bool alternateDecoded = false;
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(alternateThemeDirectory,
+		             {{"theme-model", "dark-fp", "plugin-theme", true, "light-fp"}});
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] alternate-theme reload did not finish\n";
+			return 1;
+		}
+		deepcache::IndexedCandidate candidate;
+		alternateCandidate = worker.tryPopIndexedCandidate(candidate) && candidate.alternateTheme &&
+		                     candidate.fingerprint == "light-fp";
+		deepcache::DecodedPreview preview;
+		alternateDecoded = worker.tryPopDecoded(preview) && preview.alternateTheme &&
+		                   preview.fingerprint == "light-fp" && preview.rgba == alternateThemePixels;
+		worker.shutdown();
+	}
+	removeDirectory(alternateThemeDirectory);
+
 	removeDirectory(directory);
-	const bool pass = decodedLatest && staleRejected && compactedSize < sizeAfterUpdate;
+	const bool pass = decodedLatest && staleRejected && compactedSize < sizeAfterUpdate &&
+	                  alternateCandidate && alternateDecoded;
 	std::cout << (pass ? "[PASS]" : "[FAIL]")
 	          << " append-only QOI archive reloads, invalidates, compacts, cancels, and repairs corruption"
 	          << " :: append=" << sizeAfterUpdate << " compact=" << compactedSize << "\n";

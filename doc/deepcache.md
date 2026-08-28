@@ -1215,5 +1215,10 @@ GPU-warm progress target includes only display-eligible plugin builds.
 Plugin fingerprints include the plugin identity, Rack panel-theme preference,
 plugin directory timestamp, and binary/manifest size plus file modification time.
 Changing the panel theme during a session is detected even while the browser is
-closed. It invalidates resident rasters, refreshes their fingerprints, and
-persists the rebuilt images so the next launch can reuse them.
+closed. Resident rasters remain usable while replacements are built, then swap
+atomically after successful capture. Pixel-identical theme captures are learned
+as invariant for the exact plugin build and preview resolution. This optional
+classification lives in `theme-classifier-v1.bin`; the version-1 pack and index
+formats remain unchanged. An opposite-theme version-1 archive entry can be used
+provisionally while the classifier is unknown or a theme-sensitive replacement
+is rebuilt.

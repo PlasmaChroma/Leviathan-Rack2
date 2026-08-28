@@ -35,12 +35,17 @@ struct ArchiveWantedEntry {
 	// Hidden, disabled, and non-whitelisted models remain valid persistent
 	// entries but do not need QOI decode or GPU upload during cold startup.
 	bool hydrateAtStartup = true;
+	// An entry rendered for the opposite Rack panel theme may be admitted as a
+	// provisional stale preview while the requested fingerprint is rebuilt.
+	std::string alternateThemeFingerprint;
 
 	ArchiveWantedEntry() = default;
 	ArchiveWantedEntry(std::string cacheKey, std::string fingerprint,
-	                   std::string pluginKey, bool hydrateAtStartup = true)
+	                   std::string pluginKey, bool hydrateAtStartup = true,
+	                   std::string alternateThemeFingerprint = std::string())
 		: cacheKey(std::move(cacheKey)), fingerprint(std::move(fingerprint)),
-		  pluginKey(std::move(pluginKey)), hydrateAtStartup(hydrateAtStartup) {}
+		  pluginKey(std::move(pluginKey)), hydrateAtStartup(hydrateAtStartup),
+		  alternateThemeFingerprint(std::move(alternateThemeFingerprint)) {}
 };
 
 struct ArchiveStartupMetrics {
@@ -62,10 +67,13 @@ struct IndexedCandidate {
 	std::string cacheKey;
 	std::string fingerprint;
 	std::uint64_t offset = 0;
+	bool alternateTheme = false;
 
 	IndexedCandidate() = default;
-	IndexedCandidate(std::string cacheKey, std::string fingerprint, std::uint64_t offset)
-		: cacheKey(std::move(cacheKey)), fingerprint(std::move(fingerprint)), offset(offset) {}
+	IndexedCandidate(std::string cacheKey, std::string fingerprint, std::uint64_t offset,
+	                 bool alternateTheme = false)
+		: cacheKey(std::move(cacheKey)), fingerprint(std::move(fingerprint)), offset(offset),
+		  alternateTheme(alternateTheme) {}
 };
 
 struct DecodedPreview {
@@ -74,6 +82,7 @@ struct DecodedPreview {
 	// Zero identifies the initial archive load. Later values identify the
 	// graphics-context generation that requested an indexed QOI re-decode.
 	std::uint64_t decodeGeneration = 0;
+	bool alternateTheme = false;
 	int width = 0;
 	int height = 0;
 	std::vector<std::uint8_t> rgba;
@@ -194,6 +203,7 @@ private:
 	std::string packPath_;
 	std::string indexPath_;
 	std::unordered_map<std::string, std::string> wanted_;
+	std::unordered_map<std::string, std::string> alternateThemeWanted_;
 	std::unordered_set<std::string> startupHydrationKeys_;
 	std::unordered_map<std::string, std::string> wantedPluginByKey_;
 	std::unordered_map<std::string, int> pluginTargetCounts_;

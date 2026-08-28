@@ -38,6 +38,23 @@ high-resolution plugin modification timestamp, relevant artifact sizes, panel
 theme, and the Deepcache raster schema. Development builds therefore invalidate
 without requiring a semantic version change.
 
+Rack panel-theme changes use stale-while-revalidate behavior. Deepcache keeps
+the resident raster visible while a replacement preview widget is constructed
+and captured under the new theme. A successful capture replaces the stale
+raster atomically; a construction or capture failure leaves the stale raster in
+place. Pixel-identical light/dark captures are retained as one raster and record
+the model as theme-invariant for that exact plugin build and preview resolution.
+
+Theme classifications are stored in the optional
+`theme-classifier-v1.bin` sidecar. The sidecar is keyed by the existing model
+cache key and a theme-independent plugin artifact fingerprint. It does not
+change `previews-v1.pack` or `index-v1.bin`. Missing, corrupt, or build-stale
+classifier records degrade to an unknown classification and another comparison;
+they never invalidate preview pixels. During archive loading, a version-1 entry
+whose fingerprint matches the opposite Rack panel theme is admitted as a
+provisional raster. Known invariant models may use it directly, while unknown
+or sensitive models keep it visible until revalidation completes.
+
 The archive worker checks cancellation between entries and before commits. The
 module destructor signals cancellation and joins it before browser teardown;
 temporary data is discarded or recovered on the next launch.

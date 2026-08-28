@@ -271,11 +271,13 @@ void DeepcacheArchiveWorker::start(const std::string& directory, const std::vect
 	for (const ArchiveWantedEntry& entry : wanted) {
 		if (wanted_.count(entry.cacheKey) != 0) {
 			wanted_[entry.cacheKey] = entry.fingerprint;
+			alternateThemeWanted_[entry.cacheKey] = entry.alternateThemeFingerprint;
 			if (entry.hydrateAtStartup)
 				startupHydrationKeys_.insert(entry.cacheKey);
 			continue;
 		}
 		wanted_[entry.cacheKey] = entry.fingerprint;
+		alternateThemeWanted_[entry.cacheKey] = entry.alternateThemeFingerprint;
 		if (entry.hydrateAtStartup)
 			startupHydrationKeys_.insert(entry.cacheKey);
 		const std::string pluginKey = entry.pluginKey.empty() ? entry.cacheKey : entry.pluginKey;
@@ -1041,11 +1043,18 @@ bool DeepcacheArchiveWorker::decodeEntry(const DecodeRequest& request) {
 	preview.cacheKey = request.cacheKey;
 	preview.decodeGeneration = request.generation;
 	const auto wanted = wanted_.find(request.cacheKey);
+	const auto alternate = alternateThemeWanted_.find(request.cacheKey);
 	if (wanted != wanted_.end())
 		preview.fingerprint = wanted->second;
 	const auto volatileFound = volatileEntries_.find(request.cacheKey);
-	if (wanted != wanted_.end() && volatileFound != volatileEntries_.end() &&
-	    volatileFound->second.fingerprint == wanted->second) {
+	const bool volatileCurrent = wanted != wanted_.end() && volatileFound != volatileEntries_.end() &&
+	                             volatileFound->second.fingerprint == wanted->second;
+	const bool volatileAlternate = alternate != alternateThemeWanted_.end() &&
+	                               !alternate->second.empty() && volatileFound != volatileEntries_.end() &&
+	                               volatileFound->second.fingerprint == alternate->second;
+	if (volatileCurrent || volatileAlternate) {
+		preview.fingerprint = volatileFound->second.fingerprint;
+		preview.alternateTheme = volatileAlternate;
 		const VolatileEntry& entry = volatileFound->second;
 		if (!decodeQoi(entry.qoi.data(), entry.qoi.size(), preview) ||
 		    preview.width != entry.width || preview.height != entry.height) {
@@ -1060,9 +1069,14 @@ bool DeepcacheArchiveWorker::decodeEntry(const DecodeRequest& request) {
 		return pushDecoded(std::move(preview));
 	const Entry& entry = found->second;
 	std::vector<std::uint8_t> payload;
-	if (entry.fingerprint != wanted->second ||
+	const bool currentFingerprint = entry.fingerprint == wanted->second;
+	const bool alternateFingerprint = alternate != alternateThemeWanted_.end() &&
+	                                  !alternate->second.empty() && entry.fingerprint == alternate->second;
+	if ((!currentFingerprint && !alternateFingerprint) ||
 	    !readPackRange(entry.offset, entry.length, payload))
 		return pushDecoded(std::move(preview));
+	preview.fingerprint = entry.fingerprint;
+	preview.alternateTheme = alternateFingerprint;
 	if (deepcacheChecksum(payload.data(), payload.size()) != entry.checksum ||
 	    !decodeQoi(payload.data(), payload.size(), preview) ||
 	    preview.width != static_cast<int>(entry.width) || preview.height != static_cast<int>(entry.height)) {
@@ -1178,9 +1192,10 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 	struct StartupEntry {
 		std::string cacheKey;
 		const Entry* entry;
+		bool alternateTheme;
 
-		StartupEntry(const std::string& cacheKey, const Entry* entry)
-			: cacheKey(cacheKey), entry(entry) {}
+		StartupEntry(const std::string& cacheKey, const Entry* entry, bool alternateTheme)
+			: cacheKey(cacheKey), entry(entry), alternateTheme(alternateTheme) {}
 	};
 	std::vector<std::string> invalidEntries;
 	std::list<StartupEntry> startupEntries;
@@ -1188,7 +1203,11 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 		const auto found = entries_.find(wanted.first);
 		if (found == entries_.end())
 			continue;
-		if (found->second.fingerprint != wanted.second) {
+		const auto alternate = alternateThemeWanted_.find(wanted.first);
+		const bool alternateMatch = alternate != alternateThemeWanted_.end() &&
+		                            !alternate->second.empty() &&
+		                            found->second.fingerprint == alternate->second;
+		if (found->second.fingerprint != wanted.second && !alternateMatch) {
 			invalidEntries.push_back(wanted.first);
 			continue;
 		}
@@ -1198,7 +1217,7 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 			invalidEntries.push_back(wanted.first);
 			continue;
 		}
-		startupEntries.push_back(StartupEntry(wanted.first, &entry));
+		startupEntries.push_back(StartupEntry(wanted.first, &entry, alternateMatch));
 	}
 	startupEntries.sort(
 	          [](const StartupEntry& a, const StartupEntry& b) {
@@ -1210,7 +1229,8 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 		std::lock_guard<std::mutex> lock(mutex_);
 		for (const StartupEntry& startup : startupEntries) {
 			indexedCandidates_.push_back(
-				{startup.cacheKey, startup.entry->fingerprint, startup.entry->offset});
+				{startup.cacheKey, startup.entry->fingerprint, startup.entry->offset,
+				 startup.alternateTheme});
 		}
 	}
 	startupIndexedEntries_.store(startupEntries.size(), std::memory_order_relaxed);
@@ -1268,6 +1288,7 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 		DecodedPreview preview;
 		preview.cacheKey = startup.cacheKey;
 		preview.fingerprint = entry.fingerprint;
+		preview.alternateTheme = startup.alternateTheme;
 		const auto decodeStarted = StartupClock::now();
 		const bool decoded = decodeQoi(payload.data(), payload.size(), preview);
 		startupDecodeMicros_.fetch_add(elapsedMicros(decodeStarted), std::memory_order_relaxed);

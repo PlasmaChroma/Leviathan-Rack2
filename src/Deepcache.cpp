@@ -2,6 +2,7 @@
 
 #include "DeepcacheBrowserLogic.hpp"
 #include "DeepcacheArchive.hpp"
+#include "DeepcacheThemeClassifier.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/ApertureLight.hpp"
@@ -179,7 +180,10 @@ void saveDeepcachePluginSettings(int previewResolutionPercent) {
 	}
 }
 
-std::string pluginArtifactFingerprint(const plugin::Plugin* plugin, int previewResolutionPercent) {
+std::string pluginArtifactFingerprintForTheme(const plugin::Plugin* plugin,
+	                                           int previewResolutionPercent,
+	                                           bool darkTheme,
+	                                           bool includeTheme = true) {
 	if (!plugin)
 		return "missing-plugin";
 	std::uint64_t hash = 1469598103934665603ull;
@@ -195,7 +199,8 @@ std::string pluginArtifactFingerprint(const plugin::Plugin* plugin, int previewR
 	mix(plugin->version);
 	mix(plugin->path);
 	mix(string::f("%.9f", plugin->modifiedTimestamp));
-	mix(settings::preferDarkPanels ? "dark" : "light");
+	if (includeTheme)
+		mix(darkTheme ? "dark" : "light");
 	const char* artifacts[] = {"plugin.dll", "plugin.so", "plugin.dylib", "plugin.json"};
 	for (const char* artifact : artifacts) {
 		const std::string path = system::join(plugin->path, artifact);
@@ -214,6 +219,15 @@ std::string pluginArtifactFingerprint(const plugin::Plugin* plugin, int previewR
 		}
 	}
 	return string::f("%016llx", static_cast<unsigned long long>(hash));
+}
+
+std::string pluginArtifactFingerprint(const plugin::Plugin* plugin, int previewResolutionPercent) {
+	return pluginArtifactFingerprintForTheme(
+		plugin, previewResolutionPercent, settings::preferDarkPanels);
+}
+
+std::string pluginArtifactBaseFingerprint(const plugin::Plugin* plugin, int previewResolutionPercent) {
+	return pluginArtifactFingerprintForTheme(plugin, previewResolutionPercent, false, false);
 }
 
 std::vector<std::string> deepcacheSortNames() {
@@ -315,6 +329,10 @@ struct DeepcacheModelBox : widget::OpaqueWidget {
 	app::ModuleWidget* moduleWidget = nullptr;
 	ModuleWidgetContainer* moduleContainer = nullptr;
 	DeepcacheRasterWidget* rasterWidget = nullptr;
+	bool preservingRasterDuringRefresh = false;
+	std::uint64_t rasterChecksum = 0;
+	int rasterChecksumWidth = 0;
+	int rasterChecksumHeight = 0;
 	ui::Tooltip* tooltip = nullptr;
 	deepcache::PreviewEntryState state = deepcache::PreviewEntryState::EMPTY;
 	std::string failureReason;
@@ -325,6 +343,10 @@ struct DeepcacheModelBox : widget::OpaqueWidget {
 	                  PreviewCacheManager* manager);
 	~DeepcacheModelBox() override;
 	bool ensurePreviewConstructed();
+	bool beginThemeRefresh();
+	void finishThemeRefreshKeepingRaster();
+	bool rasterMatches(const std::vector<std::uint8_t>& rgba, int width, int height) const;
+	bool hasRasterPreview() const { return rasterWidget != nullptr; }
 	bool installDecodedPreview(deepcache::DecodedPreview preview);
 	bool installRasterPreview(std::shared_ptr<const std::vector<std::uint8_t>> rgba, int width, int height);
 	bool ensurePersistentImage(NVGcontext* vg);
@@ -567,8 +589,12 @@ public:
 		input.generation = activeGeneration_;
 		input.visibleModelIndices = browser_->visibleModelIndices();
 		input.indexedModelIndices = compressedModelIndices_;
+		for (std::size_t modelIndex : themeRefreshPendingIndices_)
+			input.indexedModelIndices.erase(modelIndex);
 		std::vector<deepcache::ModelDescriptor> descriptors = browser_->snapshotModelDescriptors();
 		descriptors.erase(std::remove_if(descriptors.begin(), descriptors.end(), [this](const deepcache::ModelDescriptor& descriptor) {
+			if (themeRefreshPendingIndices_.count(descriptor.modelIndex) != 0)
+				return false;
 			DeepcacheModelBox* box = browser_->getModelBox(descriptor.modelIndex);
 			return compressedModelIndices_.count(descriptor.modelIndex) != 0 ||
 			       (box && box->state == deepcache::PreviewEntryState::FRAMEBUFFER_READY);
@@ -644,7 +670,9 @@ public:
 		warmTrackedGeneration_.clear();
 		onDemandBuildQueue_.clear();
 		onDemandQueuedIndices_.clear();
+		deferredThemeRefreshRequests_.clear();
 		generationResidentIndices_.clear();
+		themeRefreshPendingIndices_.clear();
 		constructionPluginRemaining_.clear();
 		constructionCountedIndices_.clear();
 		constructionPluginTarget_ = 0;
@@ -656,6 +684,7 @@ public:
 	void stop() {
 		if (stopped_)
 			return;
+		flushThemeClassifier();
 		stopped_ = true;
 		state_ = deepcache::CacheState::STOPPING;
 		publish();
@@ -754,6 +783,8 @@ public:
 		archive_.discardPendingWrites();
 		clear();
 		std::unordered_map<const plugin::Plugin*, std::string> pluginFingerprints;
+		std::unordered_map<const plugin::Plugin*, std::string> baseFingerprints;
+		std::unordered_map<const plugin::Plugin*, std::string> alternateFingerprints;
 		for (std::size_t modelIndex = 0; modelIndex < browser_->modelBoxes.size(); ++modelIndex) {
 			DeepcacheModelBox* box = browser_->getModelBox(modelIndex);
 			if (!box || !box->model || !box->model->plugin)
@@ -763,12 +794,109 @@ public:
 			if (fingerprint == pluginFingerprints.end())
 				fingerprint = pluginFingerprints.emplace(
 					plugin, pluginArtifactFingerprint(plugin, previewCacheResolutionPercent())).first;
+			auto base = baseFingerprints.find(plugin);
+			if (base == baseFingerprints.end())
+				base = baseFingerprints.emplace(
+					plugin, pluginArtifactBaseFingerprint(plugin, previewCacheResolutionPercent())).first;
+			auto alternate = alternateFingerprints.find(plugin);
+			if (alternate == alternateFingerprints.end())
+				alternate = alternateFingerprints.emplace(
+					plugin, pluginArtifactFingerprintForTheme(
+						plugin, previewCacheResolutionPercent(), !settings::preferDarkPanels)).first;
 			fingerprintByModelIndex_[modelIndex] = fingerprint->second;
+			baseFingerprintByModelIndex_[modelIndex] = base->second;
+			alternateFingerprintByModelIndex_[modelIndex] = alternate->second;
 			if (modelIndex < browser_->modelDescriptors.size())
 				browser_->modelDescriptors[modelIndex].artifactFingerprint = fingerprint->second;
 		}
 		if (restart)
 			start();
+	}
+
+	void onPanelThemeChanged() {
+		if (!browser_)
+			return;
+		const bool restart = startRequested_ || activeGeneration_ != 0 ||
+		                     state_ == deepcache::CacheState::PLANNING ||
+		                     state_ == deepcache::CacheState::WARMING ||
+		                     state_ == deepcache::CacheState::PAUSED ||
+		                     state_ == deepcache::CacheState::READY;
+		archive_.discardPendingWrites();
+		archive_.discardPendingDecodes();
+		if (activeGeneration_ != 0)
+			worker_.cancel(activeGeneration_);
+		activeGeneration_ = 0;
+		framebufferWarmQueue_.clear();
+		warmQueuedIndices_.clear();
+		warmTrackedGeneration_.clear();
+		onDemandBuildQueue_.clear();
+		onDemandQueuedIndices_.clear();
+		deferredThemeRefreshRequests_.clear();
+		archiveWriteRetryQueue_.clear();
+		generationResidentIndices_.clear();
+		themeRefreshPendingIndices_.clear();
+
+		std::unordered_map<const plugin::Plugin*, std::string> currentFingerprints;
+		std::unordered_map<const plugin::Plugin*, std::string> alternateFingerprints;
+		std::unordered_map<const plugin::Plugin*, std::string> baseFingerprints;
+		for (std::size_t modelIndex = 0; modelIndex < browser_->modelBoxes.size(); ++modelIndex) {
+			DeepcacheModelBox* box = browser_->getModelBox(modelIndex);
+			if (!box || !box->model || !box->model->plugin)
+				continue;
+			const plugin::Plugin* plugin = box->model->plugin;
+			auto current = currentFingerprints.find(plugin);
+			if (current == currentFingerprints.end())
+				current = currentFingerprints.emplace(
+					plugin, pluginArtifactFingerprintForTheme(
+						plugin, previewCacheResolutionPercent(), settings::preferDarkPanels)).first;
+			auto alternate = alternateFingerprints.find(plugin);
+			if (alternate == alternateFingerprints.end())
+				alternate = alternateFingerprints.emplace(
+					plugin, pluginArtifactFingerprintForTheme(
+						plugin, previewCacheResolutionPercent(), !settings::preferDarkPanels)).first;
+			auto base = baseFingerprints.find(plugin);
+			if (base == baseFingerprints.end())
+				base = baseFingerprints.emplace(
+					plugin, pluginArtifactBaseFingerprint(plugin, previewCacheResolutionPercent())).first;
+			fingerprintByModelIndex_[modelIndex] = current->second;
+			alternateFingerprintByModelIndex_[modelIndex] = alternate->second;
+			baseFingerprintByModelIndex_[modelIndex] = base->second;
+			if (modelIndex < browser_->modelDescriptors.size())
+				browser_->modelDescriptors[modelIndex].artifactFingerprint = current->second;
+
+			if (box->hasRasterPreview()) {
+				if (themeClassification(modelIndex) != deepcache::ThemeClassification::INVARIANT)
+					themeRefreshPendingIndices_.insert(modelIndex);
+			}
+			else {
+				// A half-built live widget is not a usable stale raster. Reconstruct it
+				// normally under the new global theme.
+				box->clearPreview();
+			}
+		}
+
+		if (restart) {
+			setState(deepcache::CacheState::CLEARING);
+			setState(deepcache::CacheState::IDLE);
+			start();
+		}
+	}
+
+	deepcache::ThemeClassification themeClassification(std::size_t modelIndex) const {
+		const auto key = cacheKeyByModelIndex_.find(modelIndex);
+		const auto base = baseFingerprintByModelIndex_.find(modelIndex);
+		if (key == cacheKeyByModelIndex_.end() || base == baseFingerprintByModelIndex_.end())
+			return deepcache::ThemeClassification::UNKNOWN;
+		return themeClassifier_.get(key->second, base->second);
+	}
+
+	void flushThemeClassifier() {
+		if (!themeClassifierDirty_ || archiveDirectory_.empty())
+			return;
+		if (themeClassifier_.save(archiveDirectory_))
+			themeClassifierDirty_ = false;
+		else if (isDragonKingDebugEnabled())
+			WARN("Leviathan Deepcache: could not save theme classifier sidecar");
 	}
 
 	bool isDisplayEligible(std::size_t modelIndex) const {
@@ -862,18 +990,15 @@ public:
 		if (stopped_ || !browser_)
 			return;
 		reconcileDisplayEligibility();
-		bool cacheIdentityChanged = false;
 		if (settings::preferDarkPanels != lastPreferDarkPanels_) {
 			lastPreferDarkPanels_ = settings::preferDarkPanels;
-			cacheIdentityChanged = true;
+			onPanelThemeChanged();
 		}
 		const int requestedResolution = previewCacheResolutionPercent();
 		if (requestedResolution != lastPreviewCacheResolutionPercent_) {
 			lastPreviewCacheResolutionPercent_ = requestedResolution;
-			cacheIdentityChanged = true;
-		}
-		if (cacheIdentityChanged)
 			onCacheIdentityChanged();
+		}
 		drainArchiveCommits();
 		drainArchiveIndexedCandidates();
 		drainArchiveDecoded();
@@ -941,6 +1066,26 @@ public:
 				if (key != cacheKeyByModelIndex_.end())
 					request.cacheKey = key->second;
 			}
+			else if (!deferredThemeRefreshRequests_.empty()) {
+				const deepcache::PreviewBuildRequest& deferred = deferredThemeRefreshRequests_.front();
+				DeepcacheModelBox* deferredBox = browser_->getModelBox(deferred.modelIndex);
+				if ((deferredBox && deferredBox->hasRasterPreview()) ||
+				    archive_.state() != deepcache::DatabaseState::LOADING) {
+					request = deferred;
+					deferredThemeRefreshRequests_.pop_front();
+					if (request.generation != activeGeneration_)
+						continue;
+					tracked = true;
+				}
+				else if (state_ != deepcache::CacheState::WARMING || !worker_.tryPop(request)) {
+					break;
+				}
+				else {
+					if (request.generation != activeGeneration_)
+						continue;
+					tracked = true;
+				}
+			}
 			else {
 				if (state_ != deepcache::CacheState::WARMING || !worker_.tryPop(request))
 					break;
@@ -961,13 +1106,22 @@ public:
 				publish();
 				continue;
 			}
+			const bool themeRefresh = themeRefreshPendingIndices_.count(request.modelIndex) != 0;
+			if (tracked && themeRefresh && !box->hasRasterPreview() &&
+			    archive_.state() == deepcache::DatabaseState::LOADING) {
+				deferredThemeRefreshRequests_.push_back(request);
+				processedThisFrame++;
+				continue;
+			}
 
-			const bool wasComplete = box->state == deepcache::PreviewEntryState::RESIDENT ||
-			                         box->state == deepcache::PreviewEntryState::FRAMEBUFFER_READY ||
-			                         box->state == deepcache::PreviewEntryState::FAILED;
+			const bool wasComplete = !themeRefresh &&
+				(box->state == deepcache::PreviewEntryState::RESIDENT ||
+				 box->state == deepcache::PreviewEntryState::FRAMEBUFFER_READY ||
+				 box->state == deepcache::PreviewEntryState::FAILED);
 			const double startedAt = system::getTime();
 			const bool resident = wasComplete ? box->state != deepcache::PreviewEntryState::FAILED
-			                                  : box->ensurePreviewConstructed();
+			                                  : (themeRefresh ? box->beginThemeRefresh()
+			                                                  : box->ensurePreviewConstructed());
 			const double durationMs = (system::getTime() - startedAt) * 1000.0;
 			if (!wasComplete) {
 				constructedCount_++;
@@ -979,6 +1133,8 @@ public:
 				}
 			}
 			if (!resident) {
+				if (themeRefresh)
+					themeRefreshPendingIndices_.erase(request.modelIndex);
 				if (tracked) {
 					failed_++;
 					constructionFailed_++;
@@ -1042,11 +1198,28 @@ public:
 					result = FramebufferWarmResult::RETRY;
 				}
 				else {
+					const bool themeRefresh = themeRefreshPendingIndices_.count(request.first) != 0;
+					const bool hadStaleRaster = themeRefresh && box->hasRasterPreview();
+					const bool unchangedAcrossThemes = hadStaleRaster &&
+						box->rasterMatches(captured, width, height);
+					if (hadStaleRaster) {
+						const auto key = cacheKeyByModelIndex_.find(request.first);
+						const auto base = baseFingerprintByModelIndex_.find(request.first);
+						if (key != cacheKeyByModelIndex_.end() && base != baseFingerprintByModelIndex_.end() &&
+						    themeClassifier_.set(
+							key->second, base->second,
+							unchangedAcrossThemes ? deepcache::ThemeClassification::INVARIANT
+							                      : deepcache::ThemeClassification::SENSITIVE))
+							themeClassifierDirty_ = true;
+					}
 					auto pixels = std::make_shared<const std::vector<std::uint8_t>>(std::move(captured));
-					if (!box->installRasterPreview(pixels, width, height)) {
+					if (unchangedAcrossThemes)
+						box->finishThemeRefreshKeepingRaster();
+					else if (!box->installRasterPreview(pixels, width, height)) {
 						result = FramebufferWarmResult::FAILED;
 					}
 					else {
+						themeRefreshPendingIndices_.erase(request.first);
 						persistentModelIndices_.insert(request.first);
 						const auto key = cacheKeyByModelIndex_.find(request.first);
 						if (key != cacheKeyByModelIndex_.end()) {
@@ -1065,6 +1238,27 @@ public:
 						else {
 							// The temporary framebuffer was needed to create the QOI, but an
 							// unavailable model must not retain a persistent GPU image.
+							box->releasePersistentImage();
+							result = FramebufferWarmResult::READY;
+						}
+					}
+					if (unchangedAcrossThemes) {
+						themeRefreshPendingIndices_.erase(request.first);
+						persistentModelIndices_.insert(request.first);
+						const auto key = cacheKeyByModelIndex_.find(request.first);
+						if (key != cacheKeyByModelIndex_.end()) {
+							deepcache::PreviewWrite write;
+							write.cacheKey = key->second;
+							write.fingerprint = fingerprintByModelIndex_[request.first];
+							write.width = width;
+							write.height = height;
+							write.rgba = pixels;
+							submitArchiveWrite(std::move(write));
+						}
+						if (isDisplayEligible(request.first))
+							result = box->ensurePersistentImage(APP && APP->window ? APP->window->vg : nullptr)
+							       ? FramebufferWarmResult::READY : FramebufferWarmResult::RETRY;
+						else {
 							box->releasePersistentImage();
 							result = FramebufferWarmResult::READY;
 						}
@@ -1094,8 +1288,12 @@ public:
 				}
 				if (result == FramebufferWarmResult::READY)
 					markFramebufferModelComplete(request.first);
-				else if (box && box->framebuffer)
-					box->clearPreview();
+				else if (box && box->framebuffer) {
+					if (themeRefreshPendingIndices_.erase(request.first) != 0 && box->hasRasterPreview())
+						box->finishThemeRefreshKeepingRaster();
+					else
+						box->clearPreview();
+				}
 				if (isDragonKingDebugEnabled() && durationMs >= 16.0) {
 					WARN("Leviathan Deepcache: slow framebuffer warm %.2f ms: %s", durationMs,
 					     box && box->model ? box->model->getFullName().c_str() : "unknown");
@@ -1148,6 +1346,7 @@ private:
 			     static_cast<unsigned long long>(framebufferReadyPreviewCount()),
 			     elapsedMs, averageMs, constructionMaxMs_);
 		}
+		flushThemeClassifier();
 		setState(deepcache::CacheState::READY);
 	}
 
@@ -1225,15 +1424,26 @@ private:
 			publishDatabase();
 			return;
 		}
+		archiveDirectory_ = directory;
+		if (!themeClassifier_.load(directory) && isDragonKingDebugEnabled())
+			WARN("Leviathan Deepcache: ignoring corrupt theme classifier sidecar");
 		std::vector<deepcache::ArchiveWantedEntry> wanted;
 		for (const deepcache::ModelDescriptor& descriptor : browser_->snapshotModelDescriptors()) {
 			const std::string key = deepcache::makePreviewCacheKey(descriptor);
+			DeepcacheModelBox* box = browser_->getModelBox(descriptor.modelIndex);
+			const plugin::Plugin* plugin = box && box->model ? box->model->plugin : nullptr;
+			const std::string baseFingerprint =
+				pluginArtifactBaseFingerprint(plugin, previewCacheResolutionPercent());
+			const std::string alternateFingerprint = pluginArtifactFingerprintForTheme(
+				plugin, previewCacheResolutionPercent(), !settings::preferDarkPanels);
 			cacheKeyByModelIndex_[descriptor.modelIndex] = key;
 			fingerprintByModelIndex_[descriptor.modelIndex] = descriptor.artifactFingerprint;
+			baseFingerprintByModelIndex_[descriptor.modelIndex] = baseFingerprint;
+			alternateFingerprintByModelIndex_[descriptor.modelIndex] = alternateFingerprint;
 			modelIndexByCacheKey_[key] = descriptor.modelIndex;
 			modelPluginKeyByIndex_[descriptor.modelIndex] = descriptor.pluginSlug;
 			wanted.push_back({key, descriptor.artifactFingerprint, descriptor.pluginSlug,
-			                  isDisplayEligible(descriptor.modelIndex)});
+			                  isDisplayEligible(descriptor.modelIndex), alternateFingerprint});
 		}
 		resetFramebufferPluginProgress();
 		archive_.start(directory, std::move(wanted));
@@ -1275,8 +1485,12 @@ private:
 		while (drained < 256 && archive_.tryPopIndexedCandidate(candidate)) {
 			const auto found = modelIndexByCacheKey_.find(candidate.cacheKey);
 			if (found != modelIndexByCacheKey_.end()) {
-				compressedModelIndices_.insert(found->second);
-				persistentModelIndices_.insert(found->second);
+				const std::size_t modelIndex = found->second;
+				compressedModelIndices_.insert(modelIndex);
+				persistentModelIndices_.insert(modelIndex);
+				if (candidate.alternateTheme &&
+				    themeClassification(modelIndex) != deepcache::ThemeClassification::INVARIANT)
+					themeRefreshPendingIndices_.insert(modelIndex);
 			}
 			candidate = deepcache::IndexedCandidate();
 			drained++;
@@ -1508,6 +1722,7 @@ private:
 	deepcache::PreviewPlannerWorker worker_;
 	deepcache::MemoryPreviewCacheBackend backend_;
 	deepcache::DeepcacheArchiveWorker archive_;
+	deepcache::ThemeClassifier themeClassifier_;
 	deepcache::CacheState state_ = deepcache::CacheState::IDLE;
 	std::uint64_t nextGeneration_ = 0;
 	std::uint64_t activeGeneration_ = 0;
@@ -1525,8 +1740,10 @@ private:
 	std::unordered_set<std::size_t> warmQueuedIndices_;
 	std::unordered_map<std::size_t, std::uint64_t> warmTrackedGeneration_;
 	std::deque<std::size_t> onDemandBuildQueue_;
+	std::deque<deepcache::PreviewBuildRequest> deferredThemeRefreshRequests_;
 	std::unordered_set<std::size_t> onDemandQueuedIndices_;
 	std::unordered_set<std::size_t> generationResidentIndices_;
+	std::unordered_set<std::size_t> themeRefreshPendingIndices_;
 	std::unordered_set<std::size_t> persistentModelIndices_;
 	std::unordered_set<std::size_t> compressedModelIndices_;
 	std::unordered_set<std::size_t> viewportPriorityIndices_;
@@ -1541,6 +1758,8 @@ private:
 	std::unordered_map<std::string, std::size_t> modelIndexByCacheKey_;
 	std::unordered_map<std::size_t, std::string> cacheKeyByModelIndex_;
 	std::unordered_map<std::size_t, std::string> fingerprintByModelIndex_;
+	std::unordered_map<std::size_t, std::string> alternateFingerprintByModelIndex_;
+	std::unordered_map<std::size_t, std::string> baseFingerprintByModelIndex_;
 	std::unordered_map<std::size_t, std::string> modelPluginKeyByIndex_;
 	std::unordered_map<std::string, int> constructionPluginRemaining_;
 	std::unordered_set<std::size_t> constructionCountedIndices_;
@@ -1553,6 +1772,8 @@ private:
 	int constructedCount_ = 0;
 	bool stopped_ = false;
 	bool archiveStarted_ = false;
+	bool themeClassifierDirty_ = false;
+	std::string archiveDirectory_;
 	bool archiveStartupMetricsLogged_ = false;
 	bool startRequested_ = false;
 	bool ignoreArchiveResults_ = false;
@@ -1810,15 +2031,25 @@ bool DeepcacheModelBox::installRasterPreview(std::shared_ptr<const std::vector<s
 	if (!rgba || rgba->empty() || width <= 0 || height <= 0 ||
 	    state == deepcache::PreviewEntryState::CONSTRUCTING)
 		return false;
+	const std::uint64_t checksum = deepcache::deepcacheChecksum(rgba->data(), rgba->size());
+	preservingRasterDuringRefresh = false;
 	clearPreview();
 	rasterWidget = new DeepcacheRasterWidget;
 	rasterWidget->rgba = std::move(rgba);
 	rasterWidget->width = width;
 	rasterWidget->height = height;
+	rasterChecksum = checksum;
+	rasterChecksumWidth = width;
+	rasterChecksumHeight = height;
 	addChild(rasterWidget);
 	state = deepcache::PreviewEntryState::RESIDENT;
 	updateZoom();
 	return true;
+}
+
+bool DeepcacheModelBox::rasterMatches(const std::vector<std::uint8_t>& rgba, int width, int height) const {
+	return rasterWidget && width == rasterChecksumWidth && height == rasterChecksumHeight &&
+	       !rgba.empty() && deepcache::deepcacheChecksum(rgba.data(), rgba.size()) == rasterChecksum;
 }
 
 bool DeepcacheModelBox::ensurePersistentImage(NVGcontext* vg) {
@@ -1897,8 +2128,8 @@ bool DeepcacheModelBox::captureFramebuffer(std::vector<std::uint8_t>& rgba, int&
 }
 
 bool DeepcacheModelBox::ensurePreviewConstructed() {
-	if (state == deepcache::PreviewEntryState::RESIDENT ||
-	    state == deepcache::PreviewEntryState::FRAMEBUFFER_READY)
+	if (!preservingRasterDuringRefresh && (state == deepcache::PreviewEntryState::RESIDENT ||
+	    state == deepcache::PreviewEntryState::FRAMEBUFFER_READY))
 		return true;
 	if (state == deepcache::PreviewEntryState::CONSTRUCTING ||
 	    state == deepcache::PreviewEntryState::FAILED)
@@ -1925,6 +2156,14 @@ bool DeepcacheModelBox::ensurePreviewConstructed() {
 		framebuffer->box.size = moduleWidget->box.size;
 		moduleWidget->step();
 		updateZoom();
+		if (preservingRasterDuringRefresh && rasterWidget && rasterWidget->parent == this) {
+			// Direct framebuffer warming does not require normal scene drawing. Hide
+			// the replacement tree so the usable stale raster is the only browser
+			// child paid for while revalidation is in flight.
+			previewRoot->hide();
+			removeChild(rasterWidget);
+			addChild(rasterWidget);
+		}
 		state = deepcache::PreviewEntryState::RESIDENT;
 		failureReason.clear();
 		return true;
@@ -1941,11 +2180,55 @@ bool DeepcacheModelBox::ensurePreviewConstructed() {
 		     model ? model->getFullName().c_str() : "unknown", failureReason.c_str());
 	}
 	const std::string capturedFailure = failureReason;
-	state = deepcache::PreviewEntryState::EMPTY;
-	clearPreview();
-	failureReason = capturedFailure;
-	state = deepcache::PreviewEntryState::FAILED;
+	if (preservingRasterDuringRefresh && rasterWidget) {
+		finishThemeRefreshKeepingRaster();
+		failureReason = capturedFailure;
+	}
+	else {
+		state = deepcache::PreviewEntryState::EMPTY;
+		clearPreview();
+		failureReason = capturedFailure;
+		state = deepcache::PreviewEntryState::FAILED;
+	}
 	return false;
+}
+
+bool DeepcacheModelBox::beginThemeRefresh() {
+	if (!rasterWidget)
+		return ensurePreviewConstructed();
+	if (previewRoot) {
+		releaseFramebuffers(previewRoot);
+		if (previewRoot->parent == this)
+			removeChild(previewRoot);
+		delete previewRoot;
+		previewRoot = nullptr;
+		zoomWidget = nullptr;
+		framebuffer = nullptr;
+		moduleWidget = nullptr;
+		moduleContainer = nullptr;
+	}
+	preservingRasterDuringRefresh = true;
+	state = deepcache::PreviewEntryState::EMPTY;
+	return ensurePreviewConstructed();
+}
+
+void DeepcacheModelBox::finishThemeRefreshKeepingRaster() {
+	if (previewRoot) {
+		releaseFramebuffers(previewRoot);
+		if (previewRoot->parent == this)
+			removeChild(previewRoot);
+		delete previewRoot;
+	}
+	previewRoot = nullptr;
+	zoomWidget = nullptr;
+	framebuffer = nullptr;
+	moduleWidget = nullptr;
+	moduleContainer = nullptr;
+	preservingRasterDuringRefresh = false;
+	state = rasterWidget && rasterWidget->imageHandle >= 0
+	      ? deepcache::PreviewEntryState::FRAMEBUFFER_READY
+	      : deepcache::PreviewEntryState::RESIDENT;
+	updateZoom();
 }
 
 bool DeepcacheModelBox::hasValidFramebufferImage() const {
@@ -1969,7 +2252,7 @@ bool DeepcacheModelBox::hasValidFramebufferImage() const {
 FramebufferWarmResult DeepcacheModelBox::warmFramebuffer() {
 	if (state == deepcache::PreviewEntryState::FRAMEBUFFER_READY && hasValidFramebufferImage())
 		return FramebufferWarmResult::READY;
-	if (state == deepcache::PreviewEntryState::RESIDENT && rasterWidget) {
+	if (state == deepcache::PreviewEntryState::RESIDENT && rasterWidget && !framebuffer) {
 		if (!APP || !APP->window || !APP->window->vg)
 			return FramebufferWarmResult::RETRY;
 		return ensurePersistentImage(APP->window->vg) ? FramebufferWarmResult::READY
@@ -2051,6 +2334,10 @@ void DeepcacheModelBox::clearPreview() {
 	moduleWidget = nullptr;
 	moduleContainer = nullptr;
 	rasterWidget = nullptr;
+	preservingRasterDuringRefresh = false;
+	rasterChecksum = 0;
+	rasterChecksumWidth = 0;
+	rasterChecksumHeight = 0;
 	failureReason.clear();
 	state = deepcache::PreviewEntryState::EMPTY;
 	updateZoom();

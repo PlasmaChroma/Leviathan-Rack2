@@ -119,6 +119,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/wave_preview_simplification_spec \
 	build/tests/deepcache_planner_spec \
 	build/tests/deepcache_archive_spec \
+	build/tests/deepcache_theme_classifier_spec \
 	build/tests/chromatide_spec \
 	build/tests/temporaldeck_longplay_spec
 
@@ -428,6 +429,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/wave_preview_simplification_spec)
 	$(call run_test_bin,build/tests/deepcache_planner_spec)
 	$(call run_test_bin,build/tests/deepcache_archive_spec)
+	$(call run_test_bin,build/tests/deepcache_theme_classifier_spec)
 	$(call run_rack_test_bin,build/tests/chromatide_spec)
 	$(call run_rack_test_bin,build/tests/temporaldeck_longplay_spec)
 
@@ -675,6 +677,9 @@ build/tests/deepcache_planner_spec: tests/deepcache_planner_spec.cpp src/Deepcac
 
 build/tests/deepcache_archive_spec: tests/deepcache_archive_spec.cpp src/DeepcacheArchive.cpp src/DeepcacheArchive.hpp src/DeepcacheQoi.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/deepcache_archive_spec.cpp src/DeepcacheArchive.cpp src/DeepcacheQoi.cpp -o $@
+
+build/tests/deepcache_theme_classifier_spec: tests/deepcache_theme_classifier_spec.cpp src/DeepcacheThemeClassifier.cpp src/DeepcacheThemeClassifier.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/deepcache_theme_classifier_spec.cpp src/DeepcacheThemeClassifier.cpp -o $@
 
 build/tests/chromatide_spec: tests/chromatide_spec.cpp src/ChromatideCanvas.cpp src/Chromatide.cpp src/IrisSourceField.cpp src/DeepcacheQoi.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chromatide_spec.cpp src/ChromatideCanvas.cpp src/Chromatide.cpp src/IrisSourceField.cpp src/DeepcacheQoi.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
