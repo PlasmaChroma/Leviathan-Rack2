@@ -477,29 +477,15 @@ void BifurxSpectrumWidget::step() {
 			module->perfAudioPreviewNs.store(0, std::memory_order_release);
 			module->perfAudioAnalysisNs.store(0, std::memory_order_release);
 			module->perfAudioProcessMaxNs.store(0, std::memory_order_release);
-			const int vwMode = effectiveVisualWorkerMode();
-			const float uiLocalPrepUs = (vwMode == Bifurx::VISUAL_WORKER_OFF)
-				? (std::max(0.f, lastCurvePrepUs) + std::max(0.f, lastOverlayPrepUs))
-				: 0.f;
 			lastSubmitSec = nowSec;
 			debug_terminal::submitBifurxUiMetrics(
 				debugId,
 				debug_terminal::consumeAudioProcessTiming(module->perfAudioProcessRangeMinNs, module->perfAudioProcessRangeMaxNs),
 				stepUsRange.consume(),
 				drawUsRange.consume(),
-				uiLocalPrepUs,
 				false, // opengl
 				lastCurvePrepUs,
-				lastOverlayPrepUs,
-				vwMode,
-				workerSnapshotAgeMs(),
-				workerQueueLatencyMs(),
-				false,
-				0,
-				0,
-				0,
-				0,
-				0u
+				lastOverlayPrepUs
 			);
 		}
 	}
@@ -699,7 +685,7 @@ struct BifurxSpectrumBackgroundWidget final : Widget {
 		if (!(w > 0.f && h > 0.f)) return;
 		const float padX = 0.f, padY = std::max(4.f, h * 0.035f), plotX = padX, usableW = std::max(1.f, w - plotX - padX), minHz = 10.f, maxHz = std::min(20000.f, 0.46f * sampleRate), labelBandHeight = std::max(5.2f, h * 0.072f), labelBandTop = h - labelBandHeight, spectrumBottomY = std::max(padY * 0.35f + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
 		nvgSave(args.vg); nvgScissor(args.vg, 0.8f, 0.8f, std::max(0.f, w - 1.6f), std::max(0.f, h - 1.6f));
-		nvgBeginPath(args.vg); nvgRect(args.vg, 0.f, 0.f, w, h); nvgFillColor(args.vg, nvgRGBA(7, 10, 14, 26)); nvgFill(args.vg);
+		nvgBeginPath(args.vg); nvgRect(args.vg, 0.f, 0.f, w, h); nvgFillColor(args.vg, nvgRGBA(7, 10, 14, 255)); nvgFill(args.vg);
 		nvgBeginPath(args.vg); nvgRect(args.vg, 0.f, labelBandTop, w, h - labelBandTop); nvgFillColor(args.vg, nvgRGBA(4, 7, 11, 208)); nvgFill(args.vg);
 		nvgBeginPath(args.vg); nvgMoveTo(args.vg, 0.f, labelBandTop); nvgLineTo(args.vg, w, labelBandTop); nvgStrokeColor(args.vg, nvgRGBA(255, 255, 255, 20)); nvgStrokeWidth(args.vg, 1.f); nvgStroke(args.vg);
 		nvgSave(args.vg); nvgScissor(args.vg, plotX, 0.f, usableW, std::max(1.f, spectrumBottomY));
@@ -787,11 +773,23 @@ struct BifurxModeReadoutWidget final : Widget {
 	}
 };
 
+struct BifurxModernPanelBackingWidget final : Widget {
+	void draw(const DrawArgs& args) override {
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		nvgFillColor(args.vg, nvgRGB(0, 0, 0));
+		nvgFill(args.vg);
+	}
+};
+
 struct BifurxWidget final : ModuleWidget {
 	widget::FramebufferWidget* spectrumNanoVG = nullptr;
 	Widget* spectrumOpenGL = nullptr;
+	Widget* modernPanelBacking = nullptr;
 	Widget* modernTopRaster = nullptr;
 	Widget* modernBottomRaster = nullptr;
+	Widget* legacySvgPanel = nullptr;
+	Widget* modernPanelBorder = nullptr;
 	Widget* legacyTitleRaster = nullptr;
 	Widget* legacyLabels = nullptr;
 	Widget* modernSpectrumFrame = nullptr;
@@ -833,8 +831,11 @@ struct BifurxWidget final : ModuleWidget {
 	}
 
 	void applyLegacyVisuals(bool legacy) {
+		if (legacySvgPanel) legacySvgPanel->setVisible(legacy);
+		if (modernPanelBacking) modernPanelBacking->setVisible(!legacy);
 		if (modernTopRaster) modernTopRaster->setVisible(!legacy);
 		if (modernBottomRaster) modernBottomRaster->setVisible(!legacy);
+		if (modernPanelBorder) modernPanelBorder->setVisible(!legacy);
 		if (legacyTitleRaster) legacyTitleRaster->setVisible(legacy);
 		if (legacyLabels) legacyLabels->setVisible(legacy);
 		if (modernSpectrumFrame) modernSpectrumFrame->setVisible(!legacy);
@@ -848,8 +849,19 @@ struct BifurxWidget final : ModuleWidget {
 		setModule(module);
 		PreviewBuildLogTimer previewBuildTimer("Bifurx", module);
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/bifurx.panel.svg");
+		legacySvgPanel = getPanel();
 		const std::string& panelPath = splitPanel.panelPath();
 		previewBuildTimer.markPanelDone();
+		{
+			widget::FramebufferWidget* backingFramebuffer = new widget::FramebufferWidget();
+			backingFramebuffer->box.size = box.size;
+			backingFramebuffer->dirtyOnSubpixelChange = false;
+			BifurxModernPanelBackingWidget* backing = new BifurxModernPanelBackingWidget();
+			backing->box.size = box.size;
+			backingFramebuffer->addChild(backing);
+			modernPanelBacking = backingFramebuffer;
+			addChildBottom(modernPanelBacking);
+		}
 		// Temporarily hidden while evaluating the lower-panel raster experiment.
 		// splitPanel.addLabels("res/bifurx.labels.svg");
 		splitPanel.addPerfectWaveBranding();
@@ -872,6 +884,9 @@ struct BifurxWidget final : ModuleWidget {
 				Vec(kBottomRasterXmm, kBottomRasterYmm),
 				Vec(kBottomRasterWidthMm, bottomRasterHeightMm)));
 		addChild(modernBottomRaster);
+		modernPanelBorder = new app::PanelBorder();
+		modernPanelBorder->box.size = box.size;
+		addChild(modernPanelBorder);
 		math::Rect leviathanLogoRectMm(
 			Vec(19.200337f, 118.43102f),
 			Vec(32.719331f, 12.24054f));
@@ -913,7 +928,8 @@ struct BifurxWidget final : ModuleWidget {
 		
 		spectrumOpenGL = createGlSpectrumDisplay(module, sRect);
 		addChild(spectrumOpenGL);
-		modernSpectrumFrame = visual_assets::createPreviewFrameEnhancementWidget(modernSpectrumRectMm);
+		modernSpectrumFrame = visual_assets::createPreviewFrameEnhancementWidget(
+			modernSpectrumRectMm, nvgRGBA(28, 202, 216, 255));
 		legacySpectrumFrame = visual_assets::createPreviewFrameEnhancementWidget(legacySpectrumRectMm);
 		addChild(modernSpectrumFrame);
 		addChild(legacySpectrumFrame);

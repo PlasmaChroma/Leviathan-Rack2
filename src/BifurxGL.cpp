@@ -1213,29 +1213,15 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				module->perfAudioPreviewNs.store(0, std::memory_order_release);
 				module->perfAudioAnalysisNs.store(0, std::memory_order_release);
 				module->perfAudioProcessMaxNs.store(0, std::memory_order_release);
-				const int vwMode = effectiveVisualWorkerMode();
-				const float uiLocalPrepUs = (vwMode == Bifurx::VISUAL_WORKER_OFF)
-					? (std::max(0.f, lastCurvePrepUs) + std::max(0.f, lastOverlayPrepUs))
-					: 0.f;
 				lastSubmitSec = nowSec;
 				debug_terminal::submitBifurxUiMetrics(
 					debugId,
 					debug_terminal::consumeAudioProcessTiming(module->perfAudioProcessRangeMinNs, module->perfAudioProcessRangeMaxNs),
 					stepUsRange.consume(),
 					drawUsRange.consume(),
-					uiLocalPrepUs,
 					true, // opengl
 					lastCurvePrepUs,
-					lastOverlayPrepUs,
-					vwMode,
-					workerSnapshotAgeMs(),
-					workerQueueLatencyMs(),
-					fixedSurfaceEnabledNow,
-					fixedSurface.activeWidth(),
-					fixedSurface.activeHeight(),
-					fixedSurface.capacityWidth(),
-					fixedSurface.capacityHeight(),
-					fixedSurface.generation()
+					lastOverlayPrepUs
 				);
 			}
 		}

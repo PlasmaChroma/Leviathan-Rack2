@@ -501,21 +501,11 @@ void submitBifurxUiMetrics(uint32_t instanceId,
                            TimingRangeUs processUs,
                            TimingRangeUs stepUs,
                            TimingRangeUs drawUs,
-                           float uiLocalPrepUs,
                            bool renderOpengl,
                            float curvePrepUs,
-                           float overlayPrepUs,
-                           int visualWorkerMode,
-                           float visualWorkerAgeMs,
-                           float visualWorkerQueueMs,
-                           bool fixedSurface,
-                           int fixedSurfaceWidth,
-                           int fixedSurfaceHeight,
-                           int fixedSurfaceCapacityWidth,
-                           int fixedSurfaceCapacityHeight,
-                           uint64_t fixedSurfaceGeneration) {
+                           float overlayPrepUs) {
   submitUiMetricSchema("Bifurx",
-                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"ui_local_prep_us\",\"label\":\"Prep (us)\"},{\"key\":\"opengl\",\"label\":\"GL\"},{\"key\":\"vw_mode\",\"label\":\"VW\"},{\"key\":\"vw_age_ms\",\"label\":\"VW age (ms)\"},{\"key\":\"vw_queue_ms\",\"label\":\"VW q (ms)\"},{\"key\":\"curve_prep_us\",\"label\":\"Curve (us)\"},{\"key\":\"overlay_prep_us\",\"label\":\"Overlay (us)\"},{\"key\":\"fixed_surface\",\"label\":\"Fixed\"},{\"key\":\"surface_w\",\"label\":\"Surf W\"},{\"key\":\"surface_h\",\"label\":\"Surf H\"},{\"key\":\"capacity_w\",\"label\":\"Cap W\"},{\"key\":\"capacity_h\",\"label\":\"Cap H\"},{\"key\":\"surface_gen\",\"label\":\"Gen\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"opengl\",\"label\":\"GL\"},{\"key\":\"curve_prep_us\",\"label\":\"Curve (us)\"},{\"key\":\"overlay_prep_us\",\"label\":\"Overlay (us)\"}]");
   char dataBuf[512];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
@@ -531,20 +521,10 @@ void submitBifurxUiMetrics(uint32_t instanceId,
   appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
   std::snprintf(dataBuf + std::strlen(dataBuf),
                 sizeof(dataBuf) - std::strlen(dataBuf),
-                ",\"ui_local_prep_us\":%.3f,\"opengl\":%d,\"curve_prep_us\":%.3f,\"overlay_prep_us\":%.3f,\"vw_mode\":%d,\"vw_age_ms\":%.3f,\"vw_queue_ms\":%.3f,\"fixed_surface\":%d,\"surface_w\":%d,\"surface_h\":%d,\"capacity_w\":%d,\"capacity_h\":%d,\"surface_gen\":%llu}",
-                std::max(0.f, uiLocalPrepUs),
+                ",\"opengl\":%d,\"curve_prep_us\":%.3f,\"overlay_prep_us\":%.3f}",
                 renderOpengl ? 1 : 0,
                 std::max(0.f, curvePrepUs),
-                std::max(0.f, overlayPrepUs),
-                visualWorkerMode,
-                std::max(0.f, visualWorkerAgeMs),
-                std::max(0.f, visualWorkerQueueMs),
-                fixedSurface ? 1 : 0,
-                std::max(0, fixedSurfaceWidth),
-                std::max(0, fixedSurfaceHeight),
-                std::max(0, fixedSurfaceCapacityWidth),
-                std::max(0, fixedSurfaceCapacityHeight),
-                static_cast<unsigned long long>(fixedSurfaceGeneration));
+                std::max(0.f, overlayPrepUs));
   double ts = system::getTime();
   transport().submit("Bifurx", instanceId, "ui", "metric", dataBuf, ts);
 }
