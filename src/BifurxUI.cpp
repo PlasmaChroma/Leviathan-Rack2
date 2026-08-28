@@ -536,10 +536,6 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	char topLabel[32]; std::snprintf(topLabel, sizeof(topLabel), "%+5.1f dBFS", displayMaxDbfs);
 	const float topLabelReservedWidth = getTopLabelReservedWidth(args, topLabelFontSize);
 	nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP); nvgText(args.vg, 1.5f + topLabelReservedWidth, 1.f, topLabel, nullptr);
-	const float badgeFontSize = std::max(6.6f, h * 0.045f);
-	nvgFontSize(args.vg, badgeFontSize); nvgFontFaceId(args.vg, APP->window->uiFont->handle); nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
-	nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 220)); nvgText(args.vg, w - 2.2f + 0.5f, 1.6f + 0.5f, "NVG", nullptr);
-	nvgFillColor(args.vg, nvgRGBA(225, 232, 240, 230)); nvgText(args.vg, w - 2.2f, 1.6f, "NVG", nullptr);
 	recordDrawSection(uiDrawBackgroundCount, uiDrawBackgroundNs);
 
 	const BifurxColors palette = BifurxColors::get(
@@ -787,7 +783,9 @@ struct BifurxWidget final : ModuleWidget {
 	Widget* spectrumOpenGL = nullptr;
 	Widget* modernPanelBacking = nullptr;
 	Widget* modernTopRaster = nullptr;
+	Widget* modernTopRasterDark = nullptr;
 	Widget* modernBottomRaster = nullptr;
+	Widget* modernBottomRasterDark = nullptr;
 	Widget* legacySvgPanel = nullptr;
 	Widget* modernPanelBorder = nullptr;
 	Widget* legacyTitleRaster = nullptr;
@@ -804,6 +802,7 @@ struct BifurxWidget final : ModuleWidget {
 	math::Rect legacySpectrumRectMm;
 	float modernTopScrewY = 0.f;
 	bool lastLegacyVisuals = false;
+	bool lastPreferDarkPanels = false;
 
 	void applySpectrumRect(const math::Rect& rectMm) {
 		const Vec posPx = mm2px(rectMm.pos);
@@ -831,10 +830,13 @@ struct BifurxWidget final : ModuleWidget {
 	}
 
 	void applyLegacyVisuals(bool legacy) {
+		const bool dark = settings::preferDarkPanels;
 		if (legacySvgPanel) legacySvgPanel->setVisible(legacy);
 		if (modernPanelBacking) modernPanelBacking->setVisible(!legacy);
-		if (modernTopRaster) modernTopRaster->setVisible(!legacy);
-		if (modernBottomRaster) modernBottomRaster->setVisible(!legacy);
+		if (modernTopRaster) modernTopRaster->setVisible(!legacy && !dark);
+		if (modernTopRasterDark) modernTopRasterDark->setVisible(!legacy && dark);
+		if (modernBottomRaster) modernBottomRaster->setVisible(!legacy && !dark);
+		if (modernBottomRasterDark) modernBottomRasterDark->setVisible(!legacy && dark);
 		if (modernPanelBorder) modernPanelBorder->setVisible(!legacy);
 		if (legacyTitleRaster) legacyTitleRaster->setVisible(legacy);
 		if (legacyLabels) legacyLabels->setVisible(legacy);
@@ -868,15 +870,18 @@ struct BifurxWidget final : ModuleWidget {
 		visual_assets::addFractalGlassOverlay(
 			this, panelPath, splitPanel.panelSurfaceEffectWidget());
 		math::Rect topRasterRectMm(
-			Vec(0.f, 0.f), Vec(71.12f, 71.12f / (2141.f / 426.f)));
+			Vec(0.f, 0.f), Vec(71.12f, 71.12f / (2141.f / 285.f)));
 		panel_svg::loadRectFromSvgMm(panelPath, "BIFURX_TOP_RASTER", &topRasterRectMm);
 		modernTopRaster = visual_assets::createAspectFitRasterImageWidget(
-			"res/B6-Top.png", topRasterRectMm);
+			"res/Bifurx-LT.png", topRasterRectMm);
 		addChild(modernTopRaster);
+		modernTopRasterDark = visual_assets::createAspectFitRasterImageWidget(
+			"res/Bifurx-DT.png", topRasterRectMm);
+		addChild(modernTopRasterDark);
 		constexpr float kBottomRasterXmm = 0.4f;
 		constexpr float kBottomRasterYmm = 77.5f;
 		constexpr float kBottomRasterWidthMm = 70.32f;
-		constexpr float kBottomRasterAspect = 1583.f / 993.f;
+		constexpr float kBottomRasterAspect = 1584.f / 993.f;
 		const float bottomRasterHeightMm = kBottomRasterWidthMm / kBottomRasterAspect;
 		modernBottomRaster = visual_assets::createAspectFitRasterImageWidget(
 			"res/Bifurx-LB.png",
@@ -884,6 +889,12 @@ struct BifurxWidget final : ModuleWidget {
 				Vec(kBottomRasterXmm, kBottomRasterYmm),
 				Vec(kBottomRasterWidthMm, bottomRasterHeightMm)));
 		addChild(modernBottomRaster);
+		modernBottomRasterDark = visual_assets::createAspectFitRasterImageWidget(
+			"res/Bifurx-DB.png",
+			math::Rect(
+				Vec(kBottomRasterXmm, kBottomRasterYmm),
+				Vec(kBottomRasterWidthMm, bottomRasterHeightMm)));
+		addChild(modernBottomRasterDark);
 		modernPanelBorder = new app::PanelBorder();
 		modernPanelBorder->box.size = box.size;
 		addChild(modernPanelBorder);
@@ -910,7 +921,7 @@ struct BifurxWidget final : ModuleWidget {
 		addChild(topRightScrew);
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH))); addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		auto applyPt = [&](const char* id, Vec* pos) { Vec p; if (panel_svg::loadPointFromSvgMm(panelPath, id, &p)) *pos = p; };
-		modernSpectrumRectMm = math::Rect(Vec(0.789621f, 14.15505f), Vec(69.497729f, 58.670307f));
+		modernSpectrumRectMm = math::Rect(Vec(0.789621f, 9.464366f), Vec(69.497729f, 63.360991f));
 		panel_svg::loadRectFromSvgMm(panelPath, "SPECTRUM_MODERN", &modernSpectrumRectMm);
 		legacySpectrumRectMm = math::Rect(Vec(0.789621f, 9.464366f), Vec(69.497729f, 63.360991f));
 		panel_svg::loadRectFromSvgMm(panelPath, "SPECTRUM", &legacySpectrumRectMm);
@@ -974,11 +985,17 @@ struct BifurxWidget final : ModuleWidget {
 		lastLegacyVisuals = module
 			? module->legacyVisuals.load(std::memory_order_relaxed)
 			: false;
+		lastPreferDarkPanels = settings::preferDarkPanels;
 		applyLegacyVisuals(lastLegacyVisuals);
 	}
 
 	void step() override {
 		ModuleWidget::step();
+		const bool preferDarkPanelsNow = settings::preferDarkPanels;
+		if (preferDarkPanelsNow != lastPreferDarkPanels) {
+			lastPreferDarkPanels = preferDarkPanelsNow;
+			applyLegacyVisuals(lastLegacyVisuals);
+		}
 		Bifurx* bifurx = dynamic_cast<Bifurx*>(module);
 		if (!bifurx) return;
 		const bool legacyVisualsNow = bifurx->legacyVisuals.load(std::memory_order_relaxed);
@@ -986,7 +1003,6 @@ struct BifurxWidget final : ModuleWidget {
 			lastLegacyVisuals = legacyVisualsNow;
 			applyLegacyVisuals(lastLegacyVisuals);
 		}
-
 		bool showGL = (bifurx->renderMode == Bifurx::RENDER_OPENGL);
 		if (spectrumNanoVG) spectrumNanoVG->setVisible(!showGL);
 		if (spectrumOpenGL) spectrumOpenGL->setVisible(showGL);
