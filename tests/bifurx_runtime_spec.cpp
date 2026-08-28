@@ -716,6 +716,61 @@ TestResult testDisplayOnlyColorSchemeJsonRoundTripAndPassThrough() {
   };
 }
 
+TestResult testTwoColorFftGradientMidpointAndJsonRoundTrip() {
+  bool pass = true;
+  bool authoredMiddleDiffers = false;
+  for (int scheme = 0; scheme < Bifurx::SCHEME_LEN; ++scheme) {
+    const BifurxColors authored = BifurxColors::get((Bifurx::ColorScheme) scheme, true);
+    const BifurxColors continuous = BifurxColors::get((Bifurx::ColorScheme) scheme, false);
+    const NVGcolor midpoint = mixColor(authored.low, authored.high, 0.5f);
+    const auto close = [](float a, float b) { return std::fabs(a - b) < 1e-6f; };
+    pass = pass
+      && close(continuous.low.r, authored.low.r)
+      && close(continuous.low.g, authored.low.g)
+      && close(continuous.low.b, authored.low.b)
+      && close(continuous.high.r, authored.high.r)
+      && close(continuous.high.g, authored.high.g)
+      && close(continuous.high.b, authored.high.b)
+      && close(continuous.white.r, midpoint.r)
+      && close(continuous.white.g, midpoint.g)
+      && close(continuous.white.b, midpoint.b)
+      && close(continuous.white.a, midpoint.a);
+    authoredMiddleDiffers = authoredMiddleDiffers
+      || !close(authored.white.r, midpoint.r)
+      || !close(authored.white.g, midpoint.g)
+      || !close(authored.white.b, midpoint.b);
+  }
+
+  Bifurx source;
+  source.threeColorFftGradient.store(false, std::memory_order_relaxed);
+  source.legacyVisuals.store(true, std::memory_order_relaxed);
+  json_t* stateJ = source.dataToJson();
+  Bifurx loaded;
+  loaded.dataFromJson(stateJ);
+  json_decref(stateJ);
+  const bool roundTripDisabled = !loaded.threeColorFftGradient.load(std::memory_order_relaxed);
+  const bool legacyVisualsRoundTrip = loaded.legacyVisuals.load(std::memory_order_relaxed);
+
+  Bifurx legacyDefault;
+  json_t* legacyJ = json_object();
+  legacyDefault.dataFromJson(legacyJ);
+  json_decref(legacyJ);
+  const bool legacyDefaultsEnabled = legacyDefault.threeColorFftGradient.load(std::memory_order_relaxed);
+	const bool modernVisualsDefault = !legacyDefault.legacyVisuals.load(std::memory_order_relaxed);
+
+  pass = pass && authoredMiddleDiffers && roundTripDisabled && legacyVisualsRoundTrip
+    && legacyDefaultsEnabled && modernVisualsDefault;
+  return {
+    "Two-color FFT gradient uses endpoint midpoint and persists",
+    pass,
+    "authoredMiddleDiffers=" + std::to_string(int(authoredMiddleDiffers)) +
+      " roundTripDisabled=" + std::to_string(int(roundTripDisabled)) +
+      " legacyVisualsRoundTrip=" + std::to_string(int(legacyVisualsRoundTrip)) +
+      " gradientLegacyDefault=" + std::to_string(int(legacyDefaultsEnabled)) +
+      " modernVisualsDefault=" + std::to_string(int(modernVisualsDefault))
+  };
+}
+
 TestResult testBrowserPreviewUsesSquareWaveFft() {
   BifurxSpectrumBase display;
   display.initializeStaticPreviewStateIfNeeded();
@@ -763,6 +818,7 @@ int main() {
     testRuntimeSelfOscSoftOnsetRamp(),
     testRuntimeSelfOscHighResBounded(),
     testDisplayOnlyColorSchemeJsonRoundTripAndPassThrough(),
+    testTwoColorFftGradientMidpointAndJsonRoundTrip(),
     testBrowserPreviewUsesSquareWaveFft(),
   };
 

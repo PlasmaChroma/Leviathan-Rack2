@@ -213,22 +213,33 @@ float displayOnlyColorTone(float energy, float shapeControl) {
 	return bifurx::mixf(e, hot, ctl);
 }
 
-BifurxColors BifurxColors::get(Bifurx::ColorScheme scheme) {
+BifurxColors BifurxColors::get(Bifurx::ColorScheme scheme, bool threeColorGradient) {
+	BifurxColors palette;
 	switch (scheme) {
 		case Bifurx::SCHEME_CLASSIC:
-			return {nvgRGBA(0x00, 0xff, 0x00, 0xff), nvgRGBA(0xff, 0x00, 0x00, 0xff), nvgRGBA(0xce, 0xd2, 0xd8, 0xff)};
+			palette = {nvgRGBA(0x00, 0xff, 0x00, 0xff), nvgRGBA(0xff, 0x00, 0x00, 0xff), nvgRGBA(0xce, 0xd2, 0xd8, 0xff)};
+			break;
 		case Bifurx::SCHEME_MONOCHROME:
-			return {nvgRGBA(0x40, 0x40, 0x40, 0xff), nvgRGBA(0xff, 0xff, 0xff, 0xff), nvgRGBA(0xce, 0xd2, 0xd8, 0xff)};
+			palette = {nvgRGBA(0x40, 0x40, 0x40, 0xff), nvgRGBA(0xff, 0xff, 0xff, 0xff), nvgRGBA(0xce, 0xd2, 0xd8, 0xff)};
+			break;
 		case Bifurx::SCHEME_FIRE:
-			return {nvgRGBA(0x80, 0x00, 0x00, 0xff), nvgRGBA(0xff, 0xff, 0x00, 0xff), nvgRGBA(0xce, 0xd2, 0xd8, 0xff)};
+			palette = {nvgRGBA(0x80, 0x00, 0x00, 0xff), nvgRGBA(0xff, 0xff, 0x00, 0xff), nvgRGBA(0xce, 0xd2, 0xd8, 0xff)};
+			break;
 		case Bifurx::SCHEME_RETRO_AMBER:
-			return {nvgRGBA(0x5a, 0x2f, 0x00, 0xff), nvgRGBA(0xff, 0xb8, 0x3d, 0xff), nvgRGBA(0xff, 0xd8, 0x8a, 0xff)};
+			palette = {nvgRGBA(0x5a, 0x2f, 0x00, 0xff), nvgRGBA(0xff, 0xb8, 0x3d, 0xff), nvgRGBA(0xff, 0xd8, 0x8a, 0xff)};
+			break;
 		case Bifurx::SCHEME_RETRO_GREEN:
-			return {nvgRGBA(0x0b, 0x3d, 0x22, 0xff), nvgRGBA(0x49, 0xff, 0x8f, 0xff), nvgRGBA(0xb7, 0xff, 0xcc, 0xff)};
+			palette = {nvgRGBA(0x0b, 0x3d, 0x22, 0xff), nvgRGBA(0x49, 0xff, 0x8f, 0xff), nvgRGBA(0xb7, 0xff, 0xcc, 0xff)};
+			break;
 		case Bifurx::SCHEME_DEFAULT:
 		default:
-			return {nvgRGBA(0x7a, 0x5c, 0xff, 0xff), nvgRGBA(0x1c, 0xcc, 0xd9, 0xff), nvgRGBA(0xce, 0xd2, 0xd8, 0xff)};
+			palette = {nvgRGBA(0x7a, 0x5c, 0xff, 0xff), nvgRGBA(0x1c, 0xcc, 0xd9, 0xff), nvgRGBA(0xce, 0xd2, 0xd8, 0xff)};
+			break;
 	}
+	if (!threeColorGradient) {
+		palette.white = mixColor(palette.low, palette.high, 0.5f);
+	}
+	return palette;
 }
 
 void formatFrequencyLabel(float hz, char* out, size_t outSize) {
@@ -591,6 +602,8 @@ json_t* Bifurx::dataToJson() {
 	json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "showModuleResponseOverlay", json_boolean(showModuleResponseOverlay.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "colorScheme", json_integer(colorScheme));
+	json_object_set_new(root, "threeColorFftGradient", json_boolean(threeColorFftGradient.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "legacyVisuals", json_boolean(legacyVisuals.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "useGlShaderRenderer", json_boolean(useGlShaderRenderer.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "lowLatencyVisual", json_boolean(lowLatencyVisual.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "visualWorkerMode", json_integer(visualWorkerMode.load(std::memory_order_relaxed)));
@@ -620,6 +633,14 @@ void Bifurx::dataFromJson(json_t* root) {
 	json_t* colorSchemeJ = json_object_get(root, "colorScheme");
 	if (colorSchemeJ) {
 		colorScheme = (ColorScheme) clamp(int(json_integer_value(colorSchemeJ)), 0, SCHEME_LEN - 1);
+	}
+	json_t* threeColorFftGradientJ = json_object_get(root, "threeColorFftGradient");
+	if (threeColorFftGradientJ) {
+		threeColorFftGradient.store(json_is_true(threeColorFftGradientJ), std::memory_order_relaxed);
+	}
+	json_t* legacyVisualsJ = json_object_get(root, "legacyVisuals");
+	if (legacyVisualsJ) {
+		legacyVisuals.store(json_is_true(legacyVisualsJ), std::memory_order_relaxed);
 	}
 	json_t* useGlShaderRendererJ = json_object_get(root, "useGlShaderRenderer");
 	if (useGlShaderRendererJ) {

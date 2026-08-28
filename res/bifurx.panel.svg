@@ -138,6 +138,8 @@
   </g>
   <rect style="display:inline;opacity:1;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:#1ccad8;stroke-width:29.9279;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1" id="SPECTRUM" width="6949.7729" height="6336.0991" x="78.962128" y="946.43658" ry="0" />
   <g id="perfect_wave_raster_anchors" style="display:none">
+    <rect id="BIFURX_TOP_RASTER" x="0" y="0" width="7112.0004" height="1415.505" />
+    <rect id="SPECTRUM_MODERN" x="78.962128" y="1415.505" width="6949.7729" height="5867.0307" />
     <rect id="BRANDING_WAVE_LEFT_RASTER" x="665.60999" y="12338.19" width="1306.748" height="511.81" />
     <rect id="BRANDING_WAVE_RIGHT_RASTER" x="5139.6738" y="12338.19" width="1306.748" height="511.81" />
     <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="1920.0337" y="11843.102" width="3271.9331" height="1224.054" />

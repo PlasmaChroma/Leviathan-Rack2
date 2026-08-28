@@ -11,6 +11,7 @@
 #include <fstream>
 #include <iterator>
 #include <limits>
+#include <list>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -29,6 +30,13 @@
 
 namespace deepcache {
 namespace {
+
+using StartupClock = std::chrono::steady_clock;
+
+std::uint64_t elapsedMicros(StartupClock::time_point start) {
+	return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+		StartupClock::now() - start).count());
+}
 
 const char kIndexMagic[8] = {'L', 'V', 'D', 'C', 'I', 'D', 'X', '1'};
 const std::uint32_t kIndexVersion = 1;
@@ -263,13 +271,27 @@ void DeepcacheArchiveWorker::start(const std::string& directory, const std::vect
 	for (const ArchiveWantedEntry& entry : wanted) {
 		if (wanted_.count(entry.cacheKey) != 0) {
 			wanted_[entry.cacheKey] = entry.fingerprint;
+			if (entry.hydrateAtStartup)
+				startupHydrationKeys_.insert(entry.cacheKey);
 			continue;
 		}
 		wanted_[entry.cacheKey] = entry.fingerprint;
+		if (entry.hydrateAtStartup)
+			startupHydrationKeys_.insert(entry.cacheKey);
 		const std::string pluginKey = entry.pluginKey.empty() ? entry.cacheKey : entry.pluginKey;
 		wantedPluginByKey_[entry.cacheKey] = pluginKey;
 		pluginTargetCounts_[pluginKey]++;
 	}
+	startupTotalMicros_.store(0, std::memory_order_relaxed);
+	startupIndexMicros_.store(0, std::memory_order_relaxed);
+	startupReadMicros_.store(0, std::memory_order_relaxed);
+	startupChecksumMicros_.store(0, std::memory_order_relaxed);
+	startupDecodeMicros_.store(0, std::memory_order_relaxed);
+	startupHandoffWaitMicros_.store(0, std::memory_order_relaxed);
+	startupSelectionChecks_.store(0, std::memory_order_relaxed);
+	startupIndexedEntries_.store(0, std::memory_order_relaxed);
+	startupHydratedEntries_.store(0, std::memory_order_relaxed);
+	startupDeferredEntries_.store(0, std::memory_order_relaxed);
 	targetCount_.store(static_cast<int>(wanted_.size()), std::memory_order_relaxed);
 	targetPluginCount_.store(static_cast<int>(pluginTargetCounts_.size()), std::memory_order_relaxed);
 	setState(DatabaseState::LOADING);
@@ -284,6 +306,21 @@ void DeepcacheArchiveWorker::start(const std::string& directory, const std::vect
 		errorCode_.store(4, std::memory_order_relaxed);
 		setState(DatabaseState::ERROR);
 	}
+}
+
+ArchiveStartupMetrics DeepcacheArchiveWorker::startupMetrics() const {
+	ArchiveStartupMetrics metrics;
+	metrics.totalMicros = startupTotalMicros_.load(std::memory_order_relaxed);
+	metrics.indexMicros = startupIndexMicros_.load(std::memory_order_relaxed);
+	metrics.readMicros = startupReadMicros_.load(std::memory_order_relaxed);
+	metrics.checksumMicros = startupChecksumMicros_.load(std::memory_order_relaxed);
+	metrics.decodeMicros = startupDecodeMicros_.load(std::memory_order_relaxed);
+	metrics.handoffWaitMicros = startupHandoffWaitMicros_.load(std::memory_order_relaxed);
+	metrics.selectionChecks = startupSelectionChecks_.load(std::memory_order_relaxed);
+	metrics.indexedEntries = startupIndexedEntries_.load(std::memory_order_relaxed);
+	metrics.hydratedEntries = startupHydratedEntries_.load(std::memory_order_relaxed);
+	metrics.deferredEntries = startupDeferredEntries_.load(std::memory_order_relaxed);
+	return metrics;
 }
 
 bool DeepcacheArchiveWorker::enqueue(PreviewWrite write) {
@@ -943,6 +980,7 @@ bool DeepcacheArchiveWorker::loadIndex(const std::string& path) {
 bool DeepcacheArchiveWorker::pushDecoded(DecodedPreview preview) {
 	const std::size_t byteCount = preview.rgba.size();
 	std::unique_lock<std::mutex> lock(mutex_);
+	const auto waitStarted = StartupClock::now();
 	condition_.wait(lock, [&]() {
 		return canceled() || resetRequested_ ||
 		       (decoded_.size() < kMaxDecodedQueueEntries &&
@@ -950,6 +988,8 @@ bool DeepcacheArchiveWorker::pushDecoded(DecodedPreview preview) {
 	});
 	if (canceled() || resetRequested_)
 		return false;
+	if (preview.decodeGeneration == 0)
+		startupHandoffWaitMicros_.fetch_add(elapsedMicros(waitStarted), std::memory_order_relaxed);
 	decodedBytes_ += byteCount;
 	if (promotedHydrationKeys_.erase(preview.cacheKey) != 0)
 		decoded_.push_front(std::move(preview));
@@ -1034,6 +1074,7 @@ bool DeepcacheArchiveWorker::decodeEntry(const DecodeRequest& request) {
 }
 
 bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
+	const auto startupStarted = StartupClock::now();
 	indexDiscoveryComplete_.store(false, std::memory_order_release);
 	const std::string compactMarker = directory_ + "/compaction-v1.pending";
 	std::ifstream marker(compactMarker.c_str(), std::ios::binary);
@@ -1077,7 +1118,10 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 	// Validate the much smaller index before touching pack payloads. A missing
 	// or corrupt index makes every pack byte unreachable, so an owning worker
 	// can safely reset the disposable cache without reading it first.
-	if (!loadIndex(indexPath_) && !loadIndex(indexPath_ + ".bak")) {
+	const auto indexStarted = StartupClock::now();
+	const bool indexLoaded = loadIndex(indexPath_) || loadIndex(indexPath_ + ".bak");
+	startupIndexMicros_.store(elapsedMicros(indexStarted), std::memory_order_relaxed);
+	if (!indexLoaded) {
 		pack.close();
 		if (canceled() || resetPending())
 			return false;
@@ -1139,8 +1183,7 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 			: cacheKey(cacheKey), entry(entry) {}
 	};
 	std::vector<std::string> invalidEntries;
-	std::vector<StartupEntry> startupEntries;
-	startupEntries.reserve(entries_.size());
+	std::list<StartupEntry> startupEntries;
 	for (const auto& wanted : wanted_) {
 		const auto found = entries_.find(wanted.first);
 		if (found == entries_.end())
@@ -1157,7 +1200,7 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 		}
 		startupEntries.push_back(StartupEntry(wanted.first, &entry));
 	}
-	std::sort(startupEntries.begin(), startupEntries.end(),
+	startupEntries.sort(
 	          [](const StartupEntry& a, const StartupEntry& b) {
 		          if (a.entry->offset != b.entry->offset)
 			          return a.entry->offset < b.entry->offset;
@@ -1170,6 +1213,7 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 				{startup.cacheKey, startup.entry->fingerprint, startup.entry->offset});
 		}
 	}
+	startupIndexedEntries_.store(startupEntries.size(), std::memory_order_relaxed);
 	// Publish the discovery barrier only after every candidate is visible in the
 	// metadata queue. The UI can now plan misses while payload hydration proceeds.
 	indexDiscoveryComplete_.store(true, std::memory_order_release);
@@ -1180,32 +1224,54 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 				pack.close();
 			return false;
 		}
-		std::size_t selected = 0;
+		auto selected = startupEntries.begin();
 		{
 			std::lock_guard<std::mutex> lock(mutex_);
-			for (std::size_t index = 0; index < startupEntries.size(); ++index) {
-				if (promotedHydrationKeys_.count(startupEntries[index].cacheKey) != 0) {
-					selected = index;
-					break;
+			if (!promotedHydrationKeys_.empty()) {
+				bool foundPromotion = false;
+				for (auto it = startupEntries.begin(); it != startupEntries.end(); ++it) {
+					startupSelectionChecks_.fetch_add(1, std::memory_order_relaxed);
+					if (promotedHydrationKeys_.count(it->cacheKey) != 0) {
+						selected = it;
+						foundPromotion = true;
+						break;
+					}
 				}
+				// Promotions for entries already in the decoded handoff, or entries
+				// absent from this archive, have already served their purpose.
+				if (!foundPromotion)
+					promotedHydrationKeys_.clear();
 			}
 		}
-		StartupEntry startup = startupEntries[selected];
-		startupEntries.erase(startupEntries.begin() + selected);
+		StartupEntry startup = *selected;
+		startupEntries.erase(selected);
 		const Entry& entry = *startup.entry;
+		if (startupHydrationKeys_.count(startup.cacheKey) == 0) {
+			markReady(startup.cacheKey);
+			startupDeferredEntries_.fetch_add(1, std::memory_order_relaxed);
+			continue;
+		}
 		std::vector<std::uint8_t> payload;
+		const auto readStarted = StartupClock::now();
 		const bool read = reusePackHandle
 			? readPackRange(pack, entry.offset, entry.length, payload, nextPackOffset)
 			: readPackRange(entry.offset, entry.length, payload);
-		if (!read ||
-		    deepcacheChecksum(payload.data(), payload.size()) != entry.checksum) {
+		startupReadMicros_.fetch_add(elapsedMicros(readStarted), std::memory_order_relaxed);
+		const auto checksumStarted = StartupClock::now();
+		const bool checksumMatches = read
+			&& deepcacheChecksum(payload.data(), payload.size()) == entry.checksum;
+		startupChecksumMicros_.fetch_add(elapsedMicros(checksumStarted), std::memory_order_relaxed);
+		if (!checksumMatches) {
 			invalidEntries.push_back(startup.cacheKey);
 			continue;
 		}
 		DecodedPreview preview;
 		preview.cacheKey = startup.cacheKey;
 		preview.fingerprint = entry.fingerprint;
-		if (!decodeQoi(payload.data(), payload.size(), preview) ||
+		const auto decodeStarted = StartupClock::now();
+		const bool decoded = decodeQoi(payload.data(), payload.size(), preview);
+		startupDecodeMicros_.fetch_add(elapsedMicros(decodeStarted), std::memory_order_relaxed);
+		if (!decoded ||
 		    preview.width != static_cast<int>(entry.width) || preview.height != static_cast<int>(entry.height)) {
 			invalidEntries.push_back(startup.cacheKey);
 			continue;
@@ -1216,6 +1282,7 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 			return false;
 		}
 		markReady(startup.cacheKey);
+		startupHydratedEntries_.fetch_add(1, std::memory_order_relaxed);
 	}
 	if (reusePackHandle)
 		pack.close();
@@ -1227,6 +1294,7 @@ bool DeepcacheArchiveWorker::loadArchive(bool allowRecovery) {
 			return false;
 		setState(entries_.empty() ? DatabaseState::EMPTY : DatabaseState::READY);
 	}
+	startupTotalMicros_.store(elapsedMicros(startupStarted), std::memory_order_relaxed);
 	return true;
 }
 

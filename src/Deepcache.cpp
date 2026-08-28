@@ -878,6 +878,21 @@ public:
 		drainArchiveIndexedCandidates();
 		drainArchiveDecoded();
 		publishDatabase();
+		if (!archiveStartupMetricsLogged_ && archive_.indexDiscoveryComplete() &&
+		    archive_.state() != deepcache::DatabaseState::LOADING) {
+			archiveStartupMetricsLogged_ = true;
+			if (isDragonKingDebugEnabled()) {
+				const deepcache::ArchiveStartupMetrics metrics = archive_.startupMetrics();
+				INFO("Leviathan Deepcache reload: total=%.2f ms index=%.2f ms read=%.2f ms checksum=%.2f ms decode=%.2f ms handoffWait=%.2f ms indexed=%llu hydrated=%llu deferred=%llu priorityChecks=%llu",
+				     metrics.totalMicros / 1000.0, metrics.indexMicros / 1000.0,
+				     metrics.readMicros / 1000.0, metrics.checksumMicros / 1000.0,
+				     metrics.decodeMicros / 1000.0, metrics.handoffWaitMicros / 1000.0,
+				     static_cast<unsigned long long>(metrics.indexedEntries),
+				     static_cast<unsigned long long>(metrics.hydratedEntries),
+				     static_cast<unsigned long long>(metrics.deferredEntries),
+				     static_cast<unsigned long long>(metrics.selectionChecks));
+			}
+		}
 		if (archive_.state() == deepcache::DatabaseState::ERROR) {
 			startRequested_ = false;
 			if (activeGeneration_ != 0)
@@ -1217,7 +1232,8 @@ private:
 			fingerprintByModelIndex_[descriptor.modelIndex] = descriptor.artifactFingerprint;
 			modelIndexByCacheKey_[key] = descriptor.modelIndex;
 			modelPluginKeyByIndex_[descriptor.modelIndex] = descriptor.pluginSlug;
-			wanted.push_back({key, descriptor.artifactFingerprint, descriptor.pluginSlug});
+			wanted.push_back({key, descriptor.artifactFingerprint, descriptor.pluginSlug,
+			                  isDisplayEligible(descriptor.modelIndex)});
 		}
 		resetFramebufferPluginProgress();
 		archive_.start(directory, std::move(wanted));
@@ -1537,6 +1553,7 @@ private:
 	int constructedCount_ = 0;
 	bool stopped_ = false;
 	bool archiveStarted_ = false;
+	bool archiveStartupMetricsLogged_ = false;
 	bool startRequested_ = false;
 	bool ignoreArchiveResults_ = false;
 	bool graphicsContextLost_ = false;

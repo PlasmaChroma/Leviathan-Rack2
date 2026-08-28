@@ -64,6 +64,8 @@ struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 	float cachedTopLabelReservedWidth = 0.f;
 	bool lastFftScaleDynamic = true;
 	bool lastShowModuleResponseOverlay = false;
+	int lastColorScheme = -1;
+	bool lastThreeColorFftGradient = true;
 	double lastCurveDebugLogTimeSec = -1.0;
 	uint64_t lastDrawNs = 0;
 	float lastDrawMsEma = 0.f;
@@ -355,6 +357,16 @@ void BifurxSpectrumWidget::step() {
 		lastShowModuleResponseOverlay = showModuleResponseOverlayNow;
 		dirty = true;
 	}
+	const int colorSchemeNow = int(module->colorScheme);
+	if (colorSchemeNow != lastColorScheme) {
+		lastColorScheme = colorSchemeNow;
+		dirty = true;
+	}
+	const bool threeColorFftGradientNow = module->threeColorFftGradient.load(std::memory_order_relaxed);
+	if (threeColorFftGradientNow != lastThreeColorFftGradient) {
+		lastThreeColorFftGradient = threeColorFftGradientNow;
+		dirty = true;
+	}
 
 	float uiFrameSec = 1.f / 60.f;
 	if (APP && APP->window) {
@@ -544,7 +556,9 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	nvgFillColor(args.vg, nvgRGBA(225, 232, 240, 230)); nvgText(args.vg, w - 2.2f, 1.6f, "NVG", nullptr);
 	recordDrawSection(uiDrawBackgroundCount, uiDrawBackgroundNs);
 
-	const BifurxColors palette = BifurxColors::get(module ? module->colorScheme : Bifurx::SCHEME_DEFAULT);
+	const BifurxColors palette = BifurxColors::get(
+		module ? module->colorScheme : Bifurx::SCHEME_DEFAULT,
+		module ? module->threeColorFftGradient.load(std::memory_order_relaxed) : true);
 	const NVGcolor expectedPurple = palette.low;
 	const NVGcolor expectedCyan = palette.high;
 	const NVGcolor expectedWhite = palette.white;
@@ -774,10 +788,61 @@ struct BifurxModeReadoutWidget final : Widget {
 };
 
 struct BifurxWidget final : ModuleWidget {
-	Widget* spectrumNanoVG = nullptr;
+	widget::FramebufferWidget* spectrumNanoVG = nullptr;
 	Widget* spectrumOpenGL = nullptr;
-	std::shared_ptr<window::Svg> ageSigilSvg;
-	bool ageSigilUnlocked = false;
+	Widget* modernTopRaster = nullptr;
+	Widget* modernBottomRaster = nullptr;
+	Widget* legacyTitleRaster = nullptr;
+	Widget* legacyLabels = nullptr;
+	Widget* modernSpectrumFrame = nullptr;
+	Widget* legacySpectrumFrame = nullptr;
+	widget::FramebufferWidget* spectrumBackgroundFramebuffer = nullptr;
+	BifurxSpectrumBackgroundWidget* spectrumBackgroundContent = nullptr;
+	BifurxSpectrumWidget* spectrumNanoVGContent = nullptr;
+	BifurxModeReadoutWidget* modeReadout = nullptr;
+	CyanOrbScrew* topLeftScrew = nullptr;
+	CyanOrbScrew* topRightScrew = nullptr;
+	math::Rect modernSpectrumRectMm;
+	math::Rect legacySpectrumRectMm;
+	float modernTopScrewY = 0.f;
+	bool lastLegacyVisuals = false;
+
+	void applySpectrumRect(const math::Rect& rectMm) {
+		const Vec posPx = mm2px(rectMm.pos);
+		const Vec sizePx = mm2px(rectMm.size);
+		if (spectrumBackgroundFramebuffer && spectrumBackgroundContent) {
+			spectrumBackgroundFramebuffer->box.pos = posPx;
+			spectrumBackgroundFramebuffer->box.size = sizePx;
+			spectrumBackgroundContent->box.size = sizePx;
+			spectrumBackgroundFramebuffer->setDirty();
+		}
+		if (spectrumNanoVG && spectrumNanoVGContent) {
+			spectrumNanoVG->box.pos = posPx;
+			spectrumNanoVG->box.size = sizePx;
+			spectrumNanoVGContent->box.size = sizePx;
+			spectrumNanoVG->setDirty();
+		}
+		if (spectrumOpenGL) {
+			spectrumOpenGL->box.pos = posPx;
+			spectrumOpenGL->box.size = sizePx;
+		}
+		if (modeReadout) {
+			modeReadout->box.pos = mm2px(Vec(rectMm.pos.x, rectMm.pos.y + rectMm.size.y + 0.9f));
+			modeReadout->box.size = mm2px(Vec(rectMm.size.x, 4.2f));
+		}
+	}
+
+	void applyLegacyVisuals(bool legacy) {
+		if (modernTopRaster) modernTopRaster->setVisible(!legacy);
+		if (modernBottomRaster) modernBottomRaster->setVisible(!legacy);
+		if (legacyTitleRaster) legacyTitleRaster->setVisible(legacy);
+		if (legacyLabels) legacyLabels->setVisible(legacy);
+		if (modernSpectrumFrame) modernSpectrumFrame->setVisible(!legacy);
+		if (legacySpectrumFrame) legacySpectrumFrame->setVisible(legacy);
+		if (topLeftScrew) topLeftScrew->box.pos.y = legacy ? 0.f : modernTopScrewY;
+		if (topRightScrew) topRightScrew->box.pos.y = legacy ? 0.f : modernTopScrewY;
+		applySpectrumRect(legacy ? legacySpectrumRectMm : modernSpectrumRectMm);
+	}
 
 	explicit BifurxWidget(Bifurx* module) {
 		setModule(module);
@@ -790,16 +855,23 @@ struct BifurxWidget final : ModuleWidget {
 		splitPanel.addPerfectWaveBranding();
 		visual_assets::addFractalGlassOverlay(
 			this, panelPath, splitPanel.panelSurfaceEffectWidget());
+		math::Rect topRasterRectMm(
+			Vec(0.f, 0.f), Vec(71.12f, 71.12f / (2141.f / 426.f)));
+		panel_svg::loadRectFromSvgMm(panelPath, "BIFURX_TOP_RASTER", &topRasterRectMm);
+		modernTopRaster = visual_assets::createAspectFitRasterImageWidget(
+			"res/B6-Top.png", topRasterRectMm);
+		addChild(modernTopRaster);
 		constexpr float kBottomRasterXmm = 0.4f;
 		constexpr float kBottomRasterYmm = 77.5f;
 		constexpr float kBottomRasterWidthMm = 70.32f;
-		constexpr float kBottomRasterAspect = 1584.f / 993.f;
+		constexpr float kBottomRasterAspect = 1583.f / 993.f;
 		const float bottomRasterHeightMm = kBottomRasterWidthMm / kBottomRasterAspect;
-		addChild(visual_assets::createAspectFitRasterImageWidget(
-			"res/Bifurx_Raster_B4.png",
+		modernBottomRaster = visual_assets::createAspectFitRasterImageWidget(
+			"res/Bifurx-LB.png",
 			math::Rect(
 				Vec(kBottomRasterXmm, kBottomRasterYmm),
-				Vec(kBottomRasterWidthMm, bottomRasterHeightMm))));
+				Vec(kBottomRasterWidthMm, bottomRasterHeightMm)));
+		addChild(modernBottomRaster);
 		math::Rect leviathanLogoRectMm(
 			Vec(19.200337f, 118.43102f),
 			Vec(32.719331f, 12.24054f));
@@ -810,35 +882,51 @@ struct BifurxWidget final : ModuleWidget {
 			"res/icon/Leviathan_Logo_S2.png", leviathanLogoRectMm));
 		math::Rect titleRasterRectMm(Vec(22.66f, 0.f), Vec(25.8f, 9.46667f));
 		panel_svg::loadRectFromSvgMm(panelPath, "BIFURX_TITLE_RASTER", &titleRasterRectMm);
-		addChild(visual_assets::createAspectFitRasterImageWidget(
-			"res/icon/Bifurx-CS-96c.png", titleRasterRectMm));
-		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0))); addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+		legacyTitleRaster = visual_assets::createAspectFitRasterImageWidget(
+			"res/icon/Bifurx-CS-96c.png", titleRasterRectMm);
+		addChild(legacyTitleRaster);
+		modernTopScrewY =
+			mm2px(topRasterRectMm.pos.y + 0.5f * topRasterRectMm.size.y)
+			- 0.5f * RACK_GRID_WIDTH;
+		topLeftScrew = createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, modernTopScrewY));
+		topRightScrew = createWidget<CyanOrbScrew>(
+			Vec(box.size.x - 2 * RACK_GRID_WIDTH, modernTopScrewY));
+		addChild(topLeftScrew);
+		addChild(topRightScrew);
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH))); addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		auto applyPt = [&](const char* id, Vec* pos) { Vec p; if (panel_svg::loadPointFromSvgMm(panelPath, id, &p)) *pos = p; };
-		math::Rect sRect(Vec(1.32f, 75.43f), Vec(68.45f, 21.41f)); panel_svg::loadRectFromSvgMm(panelPath, "SPECTRUM", &sRect);
+		modernSpectrumRectMm = math::Rect(Vec(0.789621f, 14.15505f), Vec(69.497729f, 58.670307f));
+		panel_svg::loadRectFromSvgMm(panelPath, "SPECTRUM_MODERN", &modernSpectrumRectMm);
+		legacySpectrumRectMm = math::Rect(Vec(0.789621f, 9.464366f), Vec(69.497729f, 63.360991f));
+		panel_svg::loadRectFromSvgMm(panelPath, "SPECTRUM", &legacySpectrumRectMm);
+		const math::Rect sRect = modernSpectrumRectMm;
 		auto addFb = [&](math::Rect r, Widget* w) { widget::FramebufferWidget* fb = new widget::FramebufferWidget(); fb->box.pos = mm2px(r.pos); fb->box.size = mm2px(r.size); fb->dirtyOnSubpixelChange = false; w->box.size = fb->box.size; fb->addChild(w); addChild(fb); return fb; };
-		BifurxSpectrumBackgroundWidget* sBg = new BifurxSpectrumBackgroundWidget(); sBg->module = module; sBg->framebuffer = addFb(sRect, sBg);
+		spectrumBackgroundContent = new BifurxSpectrumBackgroundWidget();
+		spectrumBackgroundContent->module = module;
+		spectrumBackgroundFramebuffer = addFb(sRect, spectrumBackgroundContent);
+		spectrumBackgroundContent->framebuffer = spectrumBackgroundFramebuffer;
 		
-		BifurxSpectrumWidget* sNano = new BifurxSpectrumWidget(); sNano->module = module; sNano->framebuffer = addFb(sRect, sNano);
-		spectrumNanoVG = sNano->framebuffer;
+		spectrumNanoVGContent = new BifurxSpectrumWidget();
+		spectrumNanoVGContent->module = module;
+		spectrumNanoVG = addFb(sRect, spectrumNanoVGContent);
+		spectrumNanoVGContent->framebuffer = spectrumNanoVG;
 		
 		spectrumOpenGL = createGlSpectrumDisplay(module, sRect);
 		addChild(spectrumOpenGL);
-		addChild(visual_assets::createPreviewFrameEnhancementWidget(sRect));
+		modernSpectrumFrame = visual_assets::createPreviewFrameEnhancementWidget(modernSpectrumRectMm);
+		legacySpectrumFrame = visual_assets::createPreviewFrameEnhancementWidget(legacySpectrumRectMm);
+		addChild(modernSpectrumFrame);
+		addChild(legacySpectrumFrame);
 
 		bool showGL = (module && module->renderMode == Bifurx::RENDER_OPENGL);
 		if (spectrumNanoVG) spectrumNanoVG->setVisible(!showGL);
 		if (spectrumOpenGL) spectrumOpenGL->setVisible(showGL);
 
-		try {
-			ageSigilSvg = Svg::load(asset::plugin(pluginInstance, "res/icon/Vahdrim'Keth.svg"));
-		}
-		catch (const std::exception& e) {
-			WARN("Bifurx: failed to load age sigil SVG: %s", e.what());
-			ageSigilSvg.reset();
-		}
-
-		BifurxModeReadoutWidget* mR = new BifurxModeReadoutWidget(); mR->module = module; mR->box.pos = mm2px(Vec(sRect.pos.x, sRect.pos.y + sRect.size.y + 0.9f)); mR->box.size = mm2px(Vec(sRect.size.x, 4.2f)); addChild(mR);
+		modeReadout = new BifurxModeReadoutWidget();
+		modeReadout->module = module;
+		modeReadout->box.pos = mm2px(Vec(sRect.pos.x, sRect.pos.y + sRect.size.y + 0.9f));
+		modeReadout->box.size = mm2px(Vec(sRect.size.x, 4.2f));
+		addChild(modeReadout);
 		Vec mlP(10.9f, 22.f), mrP(15.9f, 22.f), mmP(8.9f, 22.f), lP(13.4f, 41.f), rP(13.4f, 60.f), fP(35.56f, 46.5f), tP(57.7f, 22.f), sP(57.7f, 41.f), bP(57.7f, 60.f), faP(25.3f, 45.f), saP(45.82f, 45.f);
 		Vec iP(7.6f, 112.2f), vP(17.15f, 112.2f), fmP(26.7f, 112.2f), rcP(36.25f, 112.2f), bcP(45.8f, 112.2f), scP(55.35f, 112.2f), oP(64.9f, 112.2f);
 		applyPt("MODE_LEFT_PARAM", &mlP); applyPt("MODE_RIGHT_PARAM", &mrP); applyPt("LEVEL_PARAM", &lP); applyPt("RESO_PARAM", &rP); applyPt("FREQ_PARAM", &fP); applyPt("TITO_PARAM", &tP); applyPt("SPAN_PARAM", &sP); applyPt("BALANCE_PARAM", &bP); applyPt("FM_AMT_PARAM", &faP); applyPt("SPAN_CV_ATTEN_PARAM", &saP);
@@ -864,22 +952,28 @@ struct BifurxWidget final : ModuleWidget {
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(iP), module, Bifurx::IN_INPUT)); addInput(createInputCentered<Magitek2InputJack>(mm2px(vP), module, Bifurx::VOCT_INPUT)); addInput(createInputCentered<Magitek2InputJack>(mm2px(fmP), module, Bifurx::FM_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(rcP), module, Bifurx::RESO_CV_INPUT)); addInput(createInputCentered<Magitek2InputJack>(mm2px(bcP), module, Bifurx::BALANCE_CV_INPUT)); addInput(createInputCentered<Magitek2InputJack>(mm2px(scP), module, Bifurx::SPAN_CV_INPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(oP), module, Bifurx::OUT_OUTPUT));
+		legacyLabels = visual_assets::createPanelLabelsWidget(
+			"res/bifurx.labels.svg", box.size);
+		addChild(legacyLabels);
+		lastLegacyVisuals = module
+			? module->legacyVisuals.load(std::memory_order_relaxed)
+			: false;
+		applyLegacyVisuals(lastLegacyVisuals);
 	}
 
 	void step() override {
 		ModuleWidget::step();
 		Bifurx* bifurx = dynamic_cast<Bifurx*>(module);
 		if (!bifurx) return;
+		const bool legacyVisualsNow = bifurx->legacyVisuals.load(std::memory_order_relaxed);
+		if (legacyVisualsNow != lastLegacyVisuals) {
+			lastLegacyVisuals = legacyVisualsNow;
+			applyLegacyVisuals(lastLegacyVisuals);
+		}
 
 		bool showGL = (bifurx->renderMode == Bifurx::RENDER_OPENGL);
 		if (spectrumNanoVG) spectrumNanoVG->setVisible(!showGL);
 		if (spectrumOpenGL) spectrumOpenGL->setVisible(showGL);
-		if (!ageSigilUnlocked) {
-			const double createdUnixTimeSec = bifurx->createdUnixTimeSec;
-			if (std::isfinite(createdUnixTimeSec) && createdUnixTimeSec > 0.0) {
-				ageSigilUnlocked = (system::getUnixTime() - createdUnixTimeSec) >= 666.0;
-			}
-		}
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -888,26 +982,6 @@ struct BifurxWidget final : ModuleWidget {
 		const PerfClock::time_point perfDrawStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 		ModuleWidget::draw(args);
 		Bifurx* bifurx = dynamic_cast<Bifurx*>(module);
-		if (bifurx && ageSigilSvg && ageSigilUnlocked) {
-				const Vec sigilSize = mm2px(Vec(3.8f, 4.6f));
-				const Vec rightSigilCenter = mm2px(Vec(54.8f, 4.47f));
-				const Vec leftSigilCenter(box.size.x - rightSigilCenter.x, rightSigilCenter.y);
-				const Vec svgSize = ageSigilSvg->getSize();
-				if (svgSize.x > 1.f && svgSize.y > 1.f) {
-					const float scaleX = sigilSize.x / svgSize.x;
-					const float scaleY = sigilSize.y / svgSize.y;
-					auto drawSigilAt = [&](const Vec& center) {
-						nvgSave(args.vg);
-						nvgTranslate(args.vg, center.x, center.y);
-						nvgScale(args.vg, scaleX, scaleY);
-						nvgTranslate(args.vg, -svgSize.x * 0.5f, -svgSize.y * 0.5f);
-						ageSigilSvg->draw(args.vg);
-						nvgRestore(args.vg);
-					};
-					drawSigilAt(leftSigilCenter);
-					drawSigilAt(rightSigilCenter);
-				}
-		}
 		if (bifurx && bifurx->renderMode == Bifurx::RENDER_OPENGL && spectrumOpenGL && spectrumOpenGL->visible) {
 			nvgSave(args.vg);
 			nvgTranslate(args.vg, spectrumOpenGL->box.pos.x, spectrumOpenGL->box.pos.y);
@@ -1003,6 +1077,20 @@ struct BifurxWidget final : ModuleWidget {
 				addSchemeItem(Bifurx::SCHEME_RETRO_AMBER, "Retro Amber");
 				addSchemeItem(Bifurx::SCHEME_RETRO_GREEN, "Retro Green");
 			}));
+			menu->addChild(createCheckMenuItem(
+				"Three-color FFT gradient", "",
+				[=]() { return bifurx->threeColorFftGradient.load(std::memory_order_relaxed); },
+				[=]() {
+					const bool enabled = bifurx->threeColorFftGradient.load(std::memory_order_relaxed);
+					bifurx->threeColorFftGradient.store(!enabled, std::memory_order_relaxed);
+				}));
+			menu->addChild(createCheckMenuItem(
+				"Legacy visuals", "",
+				[=]() { return bifurx->legacyVisuals.load(std::memory_order_relaxed); },
+				[=]() {
+					const bool enabled = bifurx->legacyVisuals.load(std::memory_order_relaxed);
+					bifurx->legacyVisuals.store(!enabled, std::memory_order_relaxed);
+				}));
 			menu->addChild(createSubmenuItem("Renderer", rendererLabel(), [=](Menu* submenu) {
 			submenu->addChild(createCheckMenuItem(
 				"NanoVG", "",

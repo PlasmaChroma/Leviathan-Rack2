@@ -950,6 +950,83 @@ int main() {
 	}
 	removeDirectory(loadingResetDirectory);
 
+	// Cold reload must remain linear in ordinary physical pack order, and
+	// display-ineligible entries must stay indexed without paying QOI decode and
+	// RGBA handoff costs until explicitly requested.
+	const std::string lazyHydrationDirectory = directory + "-lazy-hydration";
+	removeDirectory(lazyHydrationDirectory);
+	makeDirectory(lazyHydrationDirectory);
+	std::vector<deepcache::ArchiveWantedEntry> lazyWanted;
+	for (int i = 0; i < 24; ++i) {
+		const std::string suffix = std::to_string(i);
+		lazyWanted.push_back({"lazy-" + suffix, "fp-lazy-" + suffix,
+		                      "plugin-lazy", true});
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(lazyHydrationDirectory, lazyWanted);
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] lazy hydration archive did not initialize\n";
+			return 1;
+		}
+		for (int i = 0; i < 24; ++i) {
+			deepcache::PreviewWrite write;
+			write.cacheKey = lazyWanted[i].cacheKey;
+			write.fingerprint = lazyWanted[i].fingerprint;
+			write.width = 13;
+			write.height = 9;
+			write.rgba = std::make_shared<const std::vector<std::uint8_t>>(
+				pixels(13, 9, 70 + i));
+			if (!waitUntil([&]() { return worker.enqueue(write); })) {
+				std::cerr << "[FAIL] lazy hydration archive write queue stalled\n";
+				return 1;
+			}
+		}
+		if (!waitUntil([&]() { return worker.readyCount() == 24; })) {
+			std::cerr << "[FAIL] lazy hydration archive was not populated\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	for (int i = 0; i < 24; ++i)
+		lazyWanted[i].hydrateAtStartup = (i % 2) == 0;
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(lazyHydrationDirectory, lazyWanted);
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] eligibility-aware cold reload did not finish\n";
+			return 1;
+		}
+		int eagerDecoded = 0;
+		deepcache::DecodedPreview preview;
+		while (worker.tryPopDecoded(preview)) {
+			if (!preview.rgba.empty()) eagerDecoded++;
+			preview = deepcache::DecodedPreview();
+		}
+		const deepcache::ArchiveStartupMetrics metrics = worker.startupMetrics();
+		if (worker.readyCount() != 24 || eagerDecoded != 12 ||
+		    metrics.indexedEntries != 24 || metrics.hydratedEntries != 12 ||
+		    metrics.deferredEntries != 12 || metrics.selectionChecks != 0) {
+			std::cerr << "[FAIL] cold reload did unnecessary scheduling or hydration work"
+			          << " ready=" << worker.readyCount()
+			          << " decoded=" << eagerDecoded
+			          << " indexed=" << metrics.indexedEntries
+			          << " hydrated=" << metrics.hydratedEntries
+			          << " deferred=" << metrics.deferredEntries
+			          << " checks=" << metrics.selectionChecks << "\n";
+			return 1;
+		}
+		if (!worker.requestDecode("lazy-1", 91) ||
+		    !waitUntil([&]() { return worker.tryPopDecoded(preview); }) ||
+		    preview.cacheKey != "lazy-1" || preview.decodeGeneration != 91 ||
+		    preview.rgba != pixels(13, 9, 71)) {
+			std::cerr << "[FAIL] deferred archive entry did not hydrate on demand\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	removeDirectory(lazyHydrationDirectory);
+
 	removeDirectory(directory);
 	const bool pass = decodedLatest && staleRejected && compactedSize < sizeAfterUpdate;
 	std::cout << (pass ? "[PASS]" : "[FAIL]")

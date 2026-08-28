@@ -1189,17 +1189,19 @@ persistence error but does not disable memory-only browser acceleration.
 The owning worker evaluates archive compaction after startup and after writes;
 it compacts when dead data is at least 64 MB and at least 25% of the pack.
 
-The archive's QOI pack remains hot in process memory, but successfully uploaded
-cards do not permanently retain decoded RGBA. On a DAW graphics-context destroy,
+The archive keeps validated QOI locations in memory and reads their bounded pack
+spans on demand; successfully uploaded cards do not permanently retain decoded
+RGBA. Cold startup eagerly hydrates only display-eligible models. Hidden,
+disabled, and non-whitelisted models retain their persistent index entries and
+hydrate if they later become eligible. On a DAW graphics-context destroy,
 NanoVG handles are invalidated and decoding pauses. When a new context appears,
-the archive worker re-decodes from the in-memory QOI pack through the same
-bounded handoff, visible cards are prioritized, and each temporary RGBA buffer
-is released again after upload. Read-only archive workers support the same
-disk-free restoration path. Memory-only previews without a recoverable QOI
-entry are encoded into a volatile in-memory QOI entry by read-only workers; they
-never mutate the shared database. RGBA is retained only while encoding/upload is
-pending or when the archive worker cannot accept either persistent or volatile
-work.
+the archive worker re-decodes needed QOI spans through the same bounded handoff,
+visible cards are prioritized, and each temporary RGBA buffer is released again
+after upload. Read-only archive workers support the same restoration path.
+Memory-only previews without a recoverable QOI entry are encoded into a volatile
+in-memory QOI entry by read-only workers; they never mutate the shared database.
+RGBA is retained only while encoding/upload is pending or when the archive worker
+cannot accept either persistent or volatile work.
 
 Persistent GPU residency is limited to models Rack can display at all. Models
 that are hidden, disabled, or not whitelisted retain their QOI database entries

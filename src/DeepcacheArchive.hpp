@@ -32,6 +32,28 @@ struct ArchiveWantedEntry {
 	std::string cacheKey;
 	std::string fingerprint;
 	std::string pluginKey;
+	// Hidden, disabled, and non-whitelisted models remain valid persistent
+	// entries but do not need QOI decode or GPU upload during cold startup.
+	bool hydrateAtStartup = true;
+
+	ArchiveWantedEntry() = default;
+	ArchiveWantedEntry(std::string cacheKey, std::string fingerprint,
+	                   std::string pluginKey, bool hydrateAtStartup = true)
+		: cacheKey(std::move(cacheKey)), fingerprint(std::move(fingerprint)),
+		  pluginKey(std::move(pluginKey)), hydrateAtStartup(hydrateAtStartup) {}
+};
+
+struct ArchiveStartupMetrics {
+	std::uint64_t totalMicros = 0;
+	std::uint64_t indexMicros = 0;
+	std::uint64_t readMicros = 0;
+	std::uint64_t checksumMicros = 0;
+	std::uint64_t decodeMicros = 0;
+	std::uint64_t handoffWaitMicros = 0;
+	std::uint64_t selectionChecks = 0;
+	std::uint64_t indexedEntries = 0;
+	std::uint64_t hydratedEntries = 0;
+	std::uint64_t deferredEntries = 0;
 };
 
 // Metadata-only evidence that a wanted raster has a structurally plausible
@@ -118,6 +140,7 @@ public:
 		return volatileBytes_.load(std::memory_order_relaxed);
 	}
 	int errorCode() const { return errorCode_.load(std::memory_order_relaxed); }
+	ArchiveStartupMetrics startupMetrics() const;
 
 private:
 	struct Entry {
@@ -171,6 +194,7 @@ private:
 	std::string packPath_;
 	std::string indexPath_;
 	std::unordered_map<std::string, std::string> wanted_;
+	std::unordered_set<std::string> startupHydrationKeys_;
 	std::unordered_map<std::string, std::string> wantedPluginByKey_;
 	std::unordered_map<std::string, int> pluginTargetCounts_;
 	std::unordered_map<std::string, int> pluginReadyCounts_;
@@ -209,6 +233,16 @@ private:
 	std::atomic<std::uint64_t> packBytes_ {0};
 	std::atomic<std::uint64_t> volatileBytes_ {0};
 	std::atomic<int> errorCode_ {0};
+	std::atomic<std::uint64_t> startupTotalMicros_ {0};
+	std::atomic<std::uint64_t> startupIndexMicros_ {0};
+	std::atomic<std::uint64_t> startupReadMicros_ {0};
+	std::atomic<std::uint64_t> startupChecksumMicros_ {0};
+	std::atomic<std::uint64_t> startupDecodeMicros_ {0};
+	std::atomic<std::uint64_t> startupHandoffWaitMicros_ {0};
+	std::atomic<std::uint64_t> startupSelectionChecks_ {0};
+	std::atomic<std::uint64_t> startupIndexedEntries_ {0};
+	std::atomic<std::uint64_t> startupHydratedEntries_ {0};
+	std::atomic<std::uint64_t> startupDeferredEntries_ {0};
 	std::uintptr_t leaseHandle_ = 0;
 };
 

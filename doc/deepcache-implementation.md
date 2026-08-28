@@ -16,6 +16,18 @@ not require equivalent startup RAM. NanoVG image creation remains on Rack's draw
 thread. Graphics-context recreation requests bounded per-entry re-decodes from
 disk rather than retaining the complete compressed pack in memory.
 
+Cold reload publishes every structurally valid matching index entry before QOI
+hydration. Entries for hidden, disabled, or non-whitelisted models remain
+persistent cache hits but defer their pack read, checksum, and QOI decode until
+they become display-eligible. Eligible entries hydrate in physical pack order,
+with viewport promotions selected from a linked work queue so an ordinary reload
+does not repeatedly scan and shift the remaining population.
+
+When Dragon King debugging is enabled, the completed reload reports separate
+index, pack-read, checksum, QOI-decode, decoded-handoff wait, hydrated/deferred,
+and priority-selection measurements. These are component metrics and do not
+replace the stable module-level Process, Step, and Draw telemetry contract.
+
 Normal updates append instead of rewriting the pack. Compaction is requested
 automatically only after at least 64 MB is reclaimable and dead space reaches
 25%, or manually from the module menu. A transaction marker and old pack/index

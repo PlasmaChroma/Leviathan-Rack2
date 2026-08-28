@@ -693,6 +693,8 @@ struct Bifurx : Module {
 	std::atomic<bool> fftScaleDynamic {true};
 	std::atomic<bool> showModuleResponseOverlay {false};
 	ColorScheme colorScheme = SCHEME_DEFAULT;
+	std::atomic<bool> threeColorFftGradient {true};
+	std::atomic<bool> legacyVisuals {false};
 	std::atomic<bool> useGlShaderRenderer {true};
 	std::atomic<bool> lowLatencyVisual {false};
 	std::atomic<int> visualWorkerMode {VISUAL_WORKER_INHERIT};
@@ -738,7 +740,7 @@ struct BifurxColors {
 	NVGcolor low;
 	NVGcolor high;
 	NVGcolor white;
-	static BifurxColors get(Bifurx::ColorScheme scheme);
+	static BifurxColors get(Bifurx::ColorScheme scheme, bool threeColorGradient = true);
 };
 
 } // namespace bifurx

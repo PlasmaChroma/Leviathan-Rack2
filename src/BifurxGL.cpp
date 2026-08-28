@@ -88,6 +88,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	bool lastShowModuleResponseOverlay = false;
 	bool lastUseGlShaderRenderer = false;
 	int lastColorScheme = -1;
+	bool lastThreeColorFftGradient = true;
 	bool shaderRendererActiveLastFrame = false;
 	bool shaderRendererFallbackLastFrame = false;
 	bool expectedCurveShaderActiveLastFrame = false;
@@ -1175,6 +1176,11 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			lastColorScheme = colorSchemeNow;
 			contentDirty = true;
 		}
+		const bool threeColorFftGradientNow = module->threeColorFftGradient.load(std::memory_order_relaxed);
+		if (threeColorFftGradientNow != lastThreeColorFftGradient) {
+			lastThreeColorFftGradient = threeColorFftGradientNow;
+			contentDirty = true;
+		}
 		if (fixedSurfaceEnabledNow != lastFixedSurfaceEnabled) {
 			lastFixedSurfaceEnabled = fixedSurfaceEnabledNow;
 			contentDirty = true;
@@ -1310,7 +1316,9 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				glUniform2f(textureUniformViewport, std::max(w, 1.f), std::max(h, 1.f));
 				glUniform1i(textureUniformCurveTex, 0);
 
-				const BifurxColors palette = BifurxColors::get(module ? module->colorScheme : Bifurx::SCHEME_DEFAULT);
+				const BifurxColors palette = BifurxColors::get(
+					module ? module->colorScheme : Bifurx::SCHEME_DEFAULT,
+					module ? module->threeColorFftGradient.load(std::memory_order_relaxed) : true);
 				glUniform4f(textureUniformExpectedWhite, palette.white.r, palette.white.g, palette.white.b, palette.white.a);
 				glUniform4f(textureUniformExpectedCyan, palette.high.r, palette.high.g, palette.high.b, palette.high.a);
 				glUniform4f(textureUniformExpectedPurple, palette.low.r, palette.low.g, palette.low.b, palette.low.a);
@@ -1361,7 +1369,9 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 					if (energy <= 0.005f) continue;
 					
 					float posA = levi_math::clamp01(avgD / 18.f), negA = levi_math::clamp01(-avgD / 18.f);
-					const BifurxColors palette = BifurxColors::get(module ? module->colorScheme : Bifurx::SCHEME_DEFAULT);
+					const BifurxColors palette = BifurxColors::get(
+						module ? module->colorScheme : Bifurx::SCHEME_DEFAULT,
+						module ? module->threeColorFftGradient.load(std::memory_order_relaxed) : true);
 					NVGcolor expectedWhite = palette.white;
 					NVGcolor expectedCyan = palette.high;
 					NVGcolor expectedPurple = palette.low;
