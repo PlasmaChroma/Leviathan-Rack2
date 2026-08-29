@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Resize and optimize Bifurx panel raster sources for Rack.
+"""Resize and optimize ordinary Bifurx panel raster sources for Rack.
 
-Split-bottom example:
+Top-panel example:
     python3 tools/convert_bifurx_rasters.py \
-        --light-bottom-background artwork/Bifurx/Bifurx-LB-background.png \
-        --dark-bottom-background artwork/Bifurx/Bifurx-DB-background.png \
+        --light-top artwork/Bifurx/Bifurx-LT-source.png \
+        --dark-top artwork/Bifurx/Bifurx-DT-source.png \
         --output-dir res/bifurx
 
 Output filenames follow the selected asset flags and are written beside the
-other Bifurx runtime rasters in res/bifurx by default.
+other Bifurx runtime rasters in res/bifurx by default. Generate the combined
+bottom backgrounds, labels, and halos with ``composite_bifurx_bottom.py``.
 """
 
 from __future__ import annotations
@@ -25,8 +26,6 @@ ASSETS = {
     "dark_top": ("Bifurx-DT.png", (834, 111)),
     "light_bottom": ("Bifurx-LB.png", (834, 523)),
     "dark_bottom": ("Bifurx-DB.png", (834, 523)),
-    "light_bottom_background": ("Bifurx-LB-background.png", (834, 523)),
-    "dark_bottom_background": ("Bifurx-DB-background.png", (834, 523)),
 }
 
 

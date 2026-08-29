@@ -73,13 +73,6 @@ Widget* createPanelSurfaceEffectWidget(
 	Vec panelSizePx,
 	float previewProgressionPhase = -1.f);
 Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float oversample = 2.0f);
-Widget* createThemedPanelLabelsWidget(
-	const char* svgPath,
-	Vec panelSizePx,
-	NVGcolor lightPanelFillColor,
-	NVGcolor darkPanelFillColor,
-	NVGcolor lightPanelHaloColor,
-	NVGcolor darkPanelHaloColor);
 
 // Installs the standard static layers for modules with split panel and label SVGs.
 class SplitPanelRenderer final {

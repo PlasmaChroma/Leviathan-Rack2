@@ -760,7 +760,6 @@ struct BifurxWidget final : ModuleWidget {
 	Widget* modernTopRasterDark = nullptr;
 	Widget* modernBottomRaster = nullptr;
 	Widget* modernBottomRasterDark = nullptr;
-	Widget* modernLabels = nullptr;
 	Widget* legacySvgPanel = nullptr;
 	Widget* modernPanelBorder = nullptr;
 	Widget* legacyTitleRaster = nullptr;
@@ -772,11 +771,10 @@ struct BifurxWidget final : ModuleWidget {
 	BifurxSpectrumWidget* spectrumNanoVGContent = nullptr;
 	BifurxSpectrumBase* spectrumOpenGLBase = nullptr;
 	BifurxModeReadoutWidget* modeReadout = nullptr;
-	CyanOrbScrew* topLeftScrew = nullptr;
-	CyanOrbScrew* topRightScrew = nullptr;
+	CyanOrbScrew* legacyTopLeftScrew = nullptr;
+	CyanOrbScrew* legacyTopRightScrew = nullptr;
 	math::Rect modernSpectrumRectMm;
 	math::Rect legacySpectrumRectMm;
-	float modernTopScrewY = 0.f;
 	bool lastLegacyVisuals = false;
 	bool lastPreferDarkPanels = false;
 	int lastRenderMode = -1;
@@ -816,14 +814,13 @@ struct BifurxWidget final : ModuleWidget {
 		if (modernTopRasterDark) modernTopRasterDark->setVisible(!legacy && dark);
 		if (modernBottomRaster) modernBottomRaster->setVisible(!legacy && !dark);
 		if (modernBottomRasterDark) modernBottomRasterDark->setVisible(!legacy && dark);
-		if (modernLabels) modernLabels->setVisible(!legacy);
 		if (modernPanelBorder) modernPanelBorder->setVisible(!legacy);
 		if (legacyTitleRaster) legacyTitleRaster->setVisible(legacy);
 		if (legacyLabels) legacyLabels->setVisible(legacy);
 		if (modernSpectrumFrame) modernSpectrumFrame->setVisible(!legacy);
 		if (legacySpectrumFrame) legacySpectrumFrame->setVisible(legacy);
-		if (topLeftScrew) topLeftScrew->box.pos.y = legacy ? 0.f : modernTopScrewY;
-		if (topRightScrew) topRightScrew->box.pos.y = legacy ? 0.f : modernTopScrewY;
+		if (legacyTopLeftScrew) legacyTopLeftScrew->setVisible(legacy);
+		if (legacyTopRightScrew) legacyTopRightScrew->setVisible(legacy);
 		applySpectrumRect(legacy ? legacySpectrumRectMm : modernSpectrumRectMm);
 	}
 
@@ -865,19 +862,11 @@ struct BifurxWidget final : ModuleWidget {
 			Vec(kBottomRasterXmm, kBottomRasterYmm),
 			Vec(kBottomRasterWidthMm, bottomRasterHeightMm));
 		modernBottomRaster = visual_assets::createAspectFitRasterImageWidget(
-			"res/bifurx/Bifurx-LB-background.png", bottomRasterRectMm);
+			"res/bifurx/Bifurx-LB.png", bottomRasterRectMm);
 		addChild(modernBottomRaster);
 		modernBottomRasterDark = visual_assets::createAspectFitRasterImageWidget(
-			"res/bifurx/Bifurx-DB-background.png", bottomRasterRectMm);
+			"res/bifurx/Bifurx-DB.png", bottomRasterRectMm);
 		addChild(modernBottomRasterDark);
-		modernLabels = visual_assets::createThemedPanelLabelsWidget(
-			"res/bifurx.labels.svg",
-			box.size,
-			nvgRGB(18, 20, 25),
-			nvgRGB(238, 240, 244),
-			nvgRGBA(248, 248, 244, 224),
-			nvgRGBA(2, 4, 8, 208));
-		addChild(modernLabels);
 		modernPanelBorder = new app::PanelBorder();
 		modernPanelBorder->box.size = box.size;
 		addChild(modernPanelBorder);
@@ -894,14 +883,11 @@ struct BifurxWidget final : ModuleWidget {
 		legacyTitleRaster = visual_assets::createAspectFitRasterImageWidget(
 			"res/icon/Bifurx-CS-96c.png", titleRasterRectMm);
 		addChild(legacyTitleRaster);
-		modernTopScrewY =
-			mm2px(topRasterRectMm.pos.y + 0.5f * topRasterRectMm.size.y)
-			- 0.5f * RACK_GRID_WIDTH;
-		topLeftScrew = createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, modernTopScrewY));
-		topRightScrew = createWidget<CyanOrbScrew>(
-			Vec(box.size.x - 2 * RACK_GRID_WIDTH, modernTopScrewY));
-		addChild(topLeftScrew);
-		addChild(topRightScrew);
+		legacyTopLeftScrew = createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f));
+		legacyTopRightScrew = createWidget<CyanOrbScrew>(
+			Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0.f));
+		addChild(legacyTopLeftScrew);
+		addChild(legacyTopRightScrew);
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH))); addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		auto applyPt = [&](const char* id, Vec* pos) { Vec p; if (panel_svg::loadPointFromSvgMm(panelPath, id, &p)) *pos = p; };
 		modernSpectrumRectMm = math::Rect(Vec(0.789621f, 9.464366f), Vec(69.497729f, 63.360991f));
