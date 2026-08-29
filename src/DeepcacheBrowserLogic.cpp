@@ -57,7 +57,7 @@ bool browserModelIsDisplayEligible(const BrowserModelRecord& record) {
 }
 
 bool browserModelMatches(const BrowserModelRecord& record, const BrowserFilter& filter) {
-	if (!browserModelIsDisplayEligible(record))
+	if (!filter.unhide && !browserModelIsDisplayEligible(record))
 		return false;
 	if (filter.favoritesOnly && !record.favorite)
 		return false;

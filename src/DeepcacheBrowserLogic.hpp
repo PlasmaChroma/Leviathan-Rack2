@@ -49,6 +49,7 @@ struct BrowserFilter {
 	std::string brand;
 	std::set<int> tagIds;
 	bool favoritesOnly = false;
+	bool unhide = false;
 };
 
 void normalizeBrowserModelRecord(BrowserModelRecord& record);

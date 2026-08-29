@@ -316,6 +316,27 @@ TestResult testDisplayEligibilityIsFilterIndependent() {
 	          " disabled=" + std::to_string(disabled) + " blocked=" + std::to_string(blocked)};
 }
 
+TestResult testBrowserUnhideIncludesUnavailableModels() {
+	auto records = browserRecords();
+	records[1].enabled = false;
+	records[2].whitelisted = false;
+	deepcache::BrowserFilter filter;
+	const bool excludedByDefault = !deepcache::browserModelMatches(records[1], filter) &&
+	                               !deepcache::browserModelMatches(records[2], filter) &&
+	                               !deepcache::browserModelMatches(records[3], filter);
+	filter.unhide = true;
+	const bool allIncluded = deepcache::browserModelMatches(records[1], filter) &&
+	                         deepcache::browserModelMatches(records[2], filter) &&
+	                         deepcache::browserModelMatches(records[3], filter);
+	filter.favoritesOnly = true;
+	const bool otherFiltersStillApply = !deepcache::browserModelMatches(records[1], filter) &&
+	                                    deepcache::browserModelMatches(records[3], filter);
+	return {"browser Unhide includes hidden, disabled, and non-whitelisted models",
+	        excludedByDefault && allIncluded && otherFiltersStillApply,
+	        "default=" + std::to_string(excludedByDefault) + " unhide=" + std::to_string(allIncluded) +
+	          " composed=" + std::to_string(otherFiltersStillApply)};
+}
+
 TestResult testBrowserSortParity() {
 	const auto records = browserRecords();
 	const auto updated = deepcache::sortBrowserModelIndices(records, deepcache::BrowserSortMode::UPDATED, "");
@@ -349,6 +370,7 @@ int main() {
 		testWorkerPauseAndReplacement(),
 		testBrowserFilterParity(),
 		testDisplayEligibilityIsFilterIndependent(),
+		testBrowserUnhideIncludesUnavailableModels(),
 		testBrowserSortParity(),
 	};
 

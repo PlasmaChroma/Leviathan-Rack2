@@ -1,17 +1,13 @@
 #include "Bifurx.hpp"
 #include "GlLifecycleUtils.hpp"
-#include "DebugTerminalTransport.hpp"
 #include "visual/AdaptiveGlSurface.hpp"
 #include <nanovg_gl.h>
 #include <cstddef>
-#include <unordered_map>
 #include <array>
 
 namespace bifurx {
 
-static constexpr double kDebugTerminalSubmitIntervalSec = debug_terminal::kTimingRangeSubmitIntervalSec;
 static constexpr size_t kCurveTextureRingSize = 3;
-static std::unordered_map<uint32_t, double> gDebugTerminalLastSubmitSec;
 
 struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	struct GlVertex {
@@ -96,8 +92,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	uint64_t lastDrawNs = 0;
 	float lastDrawMsEma = 0.f;
 	float lastStepMsEma = 0.f;
-	debug_terminal::UiTimingRangeAccumulator stepUsRange;
-	debug_terminal::UiTimingRangeAccumulator drawUsRange;
 	uint64_t lastDrawVertexCount = 0;
 	visual_assets::AdaptiveGlSurface fixedSurface;
 	NVGcontext* rendererVg = nullptr;
@@ -1130,6 +1124,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	}
 
 	void step() override {
+		if (!isVisible()) return;
 		using PerfClock = std::chrono::steady_clock;
 		const bool measurePerf = isDragonKingDebugEnabled();
 		const PerfClock::time_point perfStepStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
@@ -1198,32 +1193,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			const float stepMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfStepStart).count()) * 1e-6f;
 			lastStepMsEma = (lastStepMsEma > 0.f) ? (lastStepMsEma + (stepMs - lastStepMsEma) * 0.18f) : stepMs;
-			stepUsRange.add(stepMs * 1000.f);
-		}
-
-		if (isDragonKingDebugEnabled()) {
-			double nowSec = system::getTime();
-			uint32_t debugId = module->debugInstanceId;
-			double& lastSubmitSec = gDebugTerminalLastSubmitSec[debugId];
-			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
-				module->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
-				module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
-				module->perfAudioControlsNs.store(0, std::memory_order_release);
-				module->perfAudioCoreNs.store(0, std::memory_order_release);
-				module->perfAudioPreviewNs.store(0, std::memory_order_release);
-				module->perfAudioAnalysisNs.store(0, std::memory_order_release);
-				module->perfAudioProcessMaxNs.store(0, std::memory_order_release);
-				lastSubmitSec = nowSec;
-				debug_terminal::submitBifurxUiMetrics(
-					debugId,
-					debug_terminal::consumeAudioProcessTiming(module->perfAudioProcessRangeMinNs, module->perfAudioProcessRangeMaxNs),
-					stepUsRange.consume(),
-					drawUsRange.consume(),
-					true, // opengl
-					lastCurvePrepUs,
-					lastOverlayPrepUs
-				);
-			}
 		}
 	}
 
@@ -1238,10 +1207,17 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			validateShaderResourcesForCurrentContext();
 		}
 
-		glViewport(0, viewportY, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
-		glDisable(GL_SCISSOR_TEST);
+		const int activeWidth = std::max(1, int(std::lround(fbSize.x)));
+		const int activeHeight = std::max(1, int(std::lround(fbSize.y)));
+		glViewport(0, viewportY, activeWidth, activeHeight);
+		// The adaptive surface keeps a maximum-density backing allocation. Limit
+		// clears to the active zoom-dependent prefix instead of clearing the full
+		// 2x-capacity texture every animated frame.
+		glEnable(GL_SCISSOR_TEST);
+		glScissor(0, viewportY, activeWidth, activeHeight);
 		glClearColor(0.f, 0.f, 0.f, 0.f);
 		glClear(GL_COLOR_BUFFER_BIT);
+		glDisable(GL_SCISSOR_TEST);
 
 		const float w = box.size.x, h = box.size.y;
 		if (!(w > 0.f && h > 0.f)) return;
@@ -1460,7 +1436,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			lastDrawNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfDrawStart).count();
 			const float drawMs = std::max(0.f, float(double(lastDrawNs) * 1e-6));
 			lastDrawMsEma = (lastDrawMsEma > 0.f) ? (lastDrawMsEma + (drawMs - lastDrawMsEma) * 0.18f) : drawMs;
-			drawUsRange.add(drawMs * 1000.f);
 		}
 	}
 
@@ -1486,13 +1461,21 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const float pixelRatio = (APP && APP->window)
 			? APP->window->pixelRatio : 1.f;
 		visual_assets::AdaptiveGlSurfacePolicy policy;
-		fixedSurface.renderIfNeeded(
+		const bool measurePerf = isDragonKingDebugEnabled();
+		const auto renderStart = measurePerf
+			? std::chrono::steady_clock::now()
+			: std::chrono::steady_clock::time_point();
+		const bool rendered = fixedSurface.renderIfNeeded(
 			vg, box.size, rackZoom, pixelRatio, policy,
 			isExtraGlValidationEnabled(),
 			[](void* user, Vec activeSize, int viewportY) {
 				static_cast<BifurxSpectrumGLWidget*>(user)->renderGlContent(activeSize, viewportY);
 			},
 			this);
+		if (rendered && measurePerf) {
+			lastSurfaceRenderUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				std::chrono::steady_clock::now() - renderStart).count()) * 1e-3f;
+		}
 	}
 
 	void draw(const DrawArgs& args) override {

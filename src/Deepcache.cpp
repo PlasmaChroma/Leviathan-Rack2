@@ -387,6 +387,12 @@ struct DeepcacheFavoriteQuantity : Quantity {
 	float getValue() override;
 };
 
+struct DeepcacheUnhideQuantity : Quantity {
+	DeepcacheBrowser* browser = nullptr;
+	void setValue(float value) override;
+	float getValue() override;
+};
+
 struct DeepcacheZoomButton : ui::ChoiceButton {
 	DeepcacheBrowser* browser = nullptr;
 	void onAction(const ActionEvent& e) override;
@@ -463,6 +469,8 @@ struct DeepcacheBrowser : widget::OpaqueWidget {
 	DeepcacheTagButton* tagButton = nullptr;
 	DeepcacheFavoriteQuantity* favoriteQuantity = nullptr;
 	ui::OptionButton* favoriteButton = nullptr;
+	DeepcacheUnhideQuantity* unhideQuantity = nullptr;
+	ui::OptionButton* unhideButton = nullptr;
 	ui::Label* countLabel = nullptr;
 	ui::ScrollWidget* modelScroll = nullptr;
 	widget::Widget* modelMargin = nullptr;
@@ -474,6 +482,7 @@ struct DeepcacheBrowser : widget::OpaqueWidget {
 	std::string brand;
 	std::set<int> tagIds;
 	bool favoritesOnly = false;
+	bool unhide = false;
 	float lastBrowserZoom = NAN;
 	bool lastPreferDarkPanels = false;
 	NVGcontext* dragonOwnerVg = nullptr;
@@ -2529,6 +2538,14 @@ DeepcacheBrowser::DeepcacheBrowser(PreviewCacheManager* manager)
 	favoriteButton->box.size.x = 70.f;
 	headerLayout->addChild(favoriteButton);
 
+	unhideQuantity = new DeepcacheUnhideQuantity;
+	unhideQuantity->browser = this;
+	unhideButton = new ui::OptionButton;
+	unhideButton->quantity = unhideQuantity;
+	unhideButton->text = "Unhide";
+	unhideButton->box.size.x = 70.f;
+	headerLayout->addChild(unhideButton);
+
 	auto* clearButton = new DeepcacheClearButton;
 	clearButton->browser = this;
 	clearButton->text = string::translate("Browser.resetFilters");
@@ -2619,6 +2636,7 @@ DeepcacheBrowser::~DeepcacheBrowser() {
 	                                     dragonImageWidth, dragonImageHeight,
 	                                     current, dragonOwnerVg == current);
 	delete favoriteQuantity;
+	delete unhideQuantity;
 }
 
 void DeepcacheBrowser::step() {
@@ -2728,6 +2746,7 @@ void DeepcacheBrowser::refresh() {
 	filter.brand = brand;
 	filter.tagIds = tagIds;
 	filter.favoritesOnly = favoritesOnly;
+	filter.unhide = unhide;
 	deepcache::normalizeBrowserFilter(filter);
 	int visibleCount = 0;
 	std::unordered_set<std::size_t> visibleIndices;
@@ -2753,7 +2772,11 @@ void DeepcacheBrowser::clearFilters() {
 	brand.clear();
 	tagIds.clear();
 	favoritesOnly = false;
+	const bool eligibilityChanged = unhide;
+	unhide = false;
 	refresh();
+	if (eligibilityChanged && cacheManager)
+		cacheManager->reconcileDisplayEligibility(true);
 }
 
 deepcache::BrowserModelRecord DeepcacheBrowser::makeBrowserRecord(const DeepcacheModelBox* box) const {
@@ -2882,7 +2905,7 @@ void DeepcacheBrowser::writeDisplayEligibility(std::vector<std::uint8_t>* eligib
 		eligibility->resize(modelBoxes.size());
 	for (std::size_t index = 0; index < modelBoxes.size(); ++index) {
 		DeepcacheModelBox* box = modelBoxes[index];
-		(*eligibility)[index] = box && rackModelIsDisplayEligible(box->model) ? 1u : 0u;
+		(*eligibility)[index] = box && (unhide || rackModelIsDisplayEligible(box->model)) ? 1u : 0u;
 	}
 }
 
@@ -2999,6 +3022,20 @@ void DeepcacheFavoriteQuantity::setValue(float value) {
 
 float DeepcacheFavoriteQuantity::getValue() {
 	return browser->favoritesOnly ? 1.f : 0.f;
+}
+
+void DeepcacheUnhideQuantity::setValue(float value) {
+	const bool next = value >= 0.5f;
+	if (browser->unhide == next)
+		return;
+	browser->unhide = next;
+	browser->refresh();
+	if (browser->cacheManager)
+		browser->cacheManager->reconcileDisplayEligibility(true);
+}
+
+float DeepcacheUnhideQuantity::getValue() {
+	return browser->unhide ? 1.f : 0.f;
 }
 
 void DeepcacheMulticolumnMenu::step() {

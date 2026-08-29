@@ -1409,6 +1409,7 @@ struct CachedPanelLabelsWidget final : Widget {
 	}
 
 	void step() override {
+		if (!isVisible()) return;
 		if (fb) {
 			fb->oversample = targetOversample();
 		}
@@ -1501,6 +1502,7 @@ struct ThemedPanelLabelsWidget final : Widget {
 	}
 
 	void step() override {
+		if (!isVisible()) return;
 		if (fb) {
 			fb->oversample = targetOversample();
 			const bool dark = settings::preferDarkPanels;

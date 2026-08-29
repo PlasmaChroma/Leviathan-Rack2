@@ -1306,6 +1306,7 @@ void BifurxSpectrumBase::releaseWorkerRegistration() {
 	workerLastSubmittedAnalysisSeq = 0;
 	workerLastAppliedAnalysisSeq = 0;
 	workerSnapshotCache.reset();
+	lastWorkerSubmitUs = 0.f;
 }
 
 void BifurxSpectrumBase::submitWorkerCurveRequest() {
@@ -1316,6 +1317,10 @@ void BifurxSpectrumBase::submitWorkerCurveRequest() {
 		workerLastSubmittedAnalysisSeq == state.lastAnalysisSeq) {
 		return;
 	}
+	const bool measurePerf = isDragonKingDebugEnabled();
+	const auto submitStart = measurePerf
+		? std::chrono::steady_clock::now()
+		: std::chrono::steady_clock::time_point();
 	BifurxUiRenderRequest request;
 	request.displayId = workerDisplayId;
 	request.requestSeq = ++workerRequestSeq;
@@ -1348,10 +1353,14 @@ void BifurxSpectrumBase::submitWorkerCurveRequest() {
 	workerLastSubmittedPreviewSeq = state.lastPreviewSeq;
 	workerLastSubmittedAnalysisSeq = state.lastAnalysisSeq;
 	bifurxRenderService().submitLatest(request);
+	if (measurePerf) {
+		lastWorkerSubmitUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			std::chrono::steady_clock::now() - submitStart).count()) * 1e-3f;
+	}
 }
 
 bool BifurxSpectrumBase::adoptWorkerCurveSnapshot() {
-	if (workerDisplayId == 0) {
+	if (workerDisplayId == 0 || workerLastAppliedRequestSeq >= workerRequestSeq) {
 		return false;
 	}
 	workerSnapshotCache = bifurxRenderService().getLatestSnapshot(workerDisplayId);

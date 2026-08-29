@@ -387,6 +387,8 @@ struct BifurxSpectrumBase {
 	uint32_t workerLastSubmittedAnalysisSeq = 0;
 	uint32_t workerLastAppliedAnalysisSeq = 0;
 	std::shared_ptr<const BifurxUiRenderSnapshot> workerSnapshotCache;
+	float lastWorkerSubmitUs = 0.f;
+	float lastSurfaceRenderUs = 0.f;
 
 	// Common FF resources for analysis
 	dsp::RealFFT fft;

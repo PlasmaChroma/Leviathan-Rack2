@@ -503,9 +503,11 @@ void submitBifurxUiMetrics(uint32_t instanceId,
                            TimingRangeUs drawUs,
                            bool renderOpengl,
                            float curvePrepUs,
-                           float overlayPrepUs) {
+                           float overlayPrepUs,
+                           float surfaceRenderUs,
+                           float workerSubmitUs) {
   submitUiMetricSchema("Bifurx",
-                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"opengl\",\"label\":\"GL\"},{\"key\":\"curve_prep_us\",\"label\":\"Curve (us)\"},{\"key\":\"overlay_prep_us\",\"label\":\"Overlay (us)\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"opengl\",\"label\":\"GL\"},{\"key\":\"curve_prep_us\",\"label\":\"Curve (us)\"},{\"key\":\"overlay_prep_us\",\"label\":\"Overlay (us)\"},{\"key\":\"surface_render_us\",\"label\":\"Surface (us)\"},{\"key\":\"worker_submit_us\",\"label\":\"Worker (us)\"}]");
   char dataBuf[512];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
@@ -521,10 +523,12 @@ void submitBifurxUiMetrics(uint32_t instanceId,
   appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
   std::snprintf(dataBuf + std::strlen(dataBuf),
                 sizeof(dataBuf) - std::strlen(dataBuf),
-                ",\"opengl\":%d,\"curve_prep_us\":%.3f,\"overlay_prep_us\":%.3f}",
+                ",\"opengl\":%d,\"curve_prep_us\":%.3f,\"overlay_prep_us\":%.3f,\"surface_render_us\":%.3f,\"worker_submit_us\":%.3f}",
                 renderOpengl ? 1 : 0,
                 std::max(0.f, curvePrepUs),
-                std::max(0.f, overlayPrepUs));
+                std::max(0.f, overlayPrepUs),
+                std::max(0.f, surfaceRenderUs),
+                std::max(0.f, workerSubmitUs));
   double ts = system::getTime();
   transport().submit("Bifurx", instanceId, "ui", "metric", dataBuf, ts);
 }

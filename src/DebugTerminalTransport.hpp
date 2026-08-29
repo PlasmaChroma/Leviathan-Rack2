@@ -104,7 +104,9 @@ void submitBifurxUiMetrics(uint32_t instanceId,
                            TimingRangeUs drawUs,
                            bool renderOpengl,
                            float curvePrepUs,
-                           float overlayPrepUs);
+                           float overlayPrepUs,
+                           float surfaceRenderUs,
+                           float workerSubmitUs);
 
 void submitWyrmMetrics(uint32_t instanceId,
                        TimingRangeUs processUs,

@@ -70,8 +70,6 @@ struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 	uint64_t lastDrawNs = 0;
 	float lastDrawMsEma = 0.f;
 	float lastStepMsEma = 0.f;
-	debug_terminal::UiTimingRangeAccumulator stepUsRange;
-	debug_terminal::UiTimingRangeAccumulator drawUsRange;
 	uint64_t lastDrawVertexCount = 0;
 	
 	BifurxLlTelemetryState llTelemetryState;
@@ -460,34 +458,6 @@ void BifurxSpectrumWidget::step() {
 		const float stepMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 			PerfClock::now() - perfStepStart).count()) * 1e-6f;
 		lastStepMsEma = (lastStepMsEma > 0.f) ? (lastStepMsEma + (stepMs - lastStepMsEma) * 0.18f) : stepMs;
-		if (isDragonKingDebugEnabled()) {
-			stepUsRange.add(stepMs * 1000.f);
-		}
-	}
-	
-	if (isDragonKingDebugEnabled() && module->renderMode == Bifurx::RENDER_NANOVG) {
-		double nowSec = system::getTime();
-		uint32_t debugId = module->debugInstanceId;
-		double& lastSubmitSec = gDebugTerminalLastSubmitSec[debugId];
-		if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kDebugTerminalSubmitIntervalSec) {
-			module->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
-			module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
-			module->perfAudioControlsNs.store(0, std::memory_order_release);
-			module->perfAudioCoreNs.store(0, std::memory_order_release);
-			module->perfAudioPreviewNs.store(0, std::memory_order_release);
-			module->perfAudioAnalysisNs.store(0, std::memory_order_release);
-			module->perfAudioProcessMaxNs.store(0, std::memory_order_release);
-			lastSubmitSec = nowSec;
-			debug_terminal::submitBifurxUiMetrics(
-				debugId,
-				debug_terminal::consumeAudioProcessTiming(module->perfAudioProcessRangeMinNs, module->perfAudioProcessRangeMaxNs),
-				stepUsRange.consume(),
-				drawUsRange.consume(),
-				false, // opengl
-				lastCurvePrepUs,
-				lastOverlayPrepUs
-			);
-		}
 	}
 
 	if (perfLoggingActive) {
@@ -640,9 +610,6 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 		lastDrawNs = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfDrawStart).count();
 		const float drawMs = std::max(0.f, float(double(lastDrawNs) * 1e-6));
 		lastDrawMsEma = (lastDrawMsEma > 0.f) ? (lastDrawMsEma + (drawMs - lastDrawMsEma) * 0.18f) : drawMs;
-		if (isDragonKingDebugEnabled()) {
-			drawUsRange.add(drawMs * 1000.f);
-		}
 		if (perfLoggingActive) {
 			uiDrawCount++; uiDrawNs += lastDrawNs; uiDrawMaxNs = std::max(uiDrawMaxNs, lastDrawNs);
 		}
@@ -778,6 +745,13 @@ struct BifurxModernPanelBackingWidget final : Widget {
 	}
 };
 
+struct BifurxVisibleFramebufferWidget final : widget::FramebufferWidget {
+	void step() override {
+		if (!isVisible()) return;
+		widget::FramebufferWidget::step();
+	}
+};
+
 struct BifurxWidget final : ModuleWidget {
 	widget::FramebufferWidget* spectrumNanoVG = nullptr;
 	Widget* spectrumOpenGL = nullptr;
@@ -796,6 +770,7 @@ struct BifurxWidget final : ModuleWidget {
 	widget::FramebufferWidget* spectrumBackgroundFramebuffer = nullptr;
 	BifurxSpectrumBackgroundWidget* spectrumBackgroundContent = nullptr;
 	BifurxSpectrumWidget* spectrumNanoVGContent = nullptr;
+	BifurxSpectrumBase* spectrumOpenGLBase = nullptr;
 	BifurxModeReadoutWidget* modeReadout = nullptr;
 	CyanOrbScrew* topLeftScrew = nullptr;
 	CyanOrbScrew* topRightScrew = nullptr;
@@ -804,6 +779,9 @@ struct BifurxWidget final : ModuleWidget {
 	float modernTopScrewY = 0.f;
 	bool lastLegacyVisuals = false;
 	bool lastPreferDarkPanels = false;
+	int lastRenderMode = -1;
+	debug_terminal::UiTimingRangeAccumulator moduleStepUsRange;
+	debug_terminal::UiTimingRangeAccumulator moduleDrawUsRange;
 
 	void applySpectrumRect(const math::Rect& rectMm) {
 		const Vec posPx = mm2px(rectMm.pos);
@@ -857,7 +835,7 @@ struct BifurxWidget final : ModuleWidget {
 		const std::string& panelPath = splitPanel.panelPath();
 		previewBuildTimer.markPanelDone();
 		{
-			widget::FramebufferWidget* backingFramebuffer = new widget::FramebufferWidget();
+			widget::FramebufferWidget* backingFramebuffer = new BifurxVisibleFramebufferWidget();
 			backingFramebuffer->box.size = box.size;
 			backingFramebuffer->dirtyOnSubpixelChange = false;
 			BifurxModernPanelBackingWidget* backing = new BifurxModernPanelBackingWidget();
@@ -931,7 +909,7 @@ struct BifurxWidget final : ModuleWidget {
 		legacySpectrumRectMm = math::Rect(Vec(0.789621f, 9.464366f), Vec(69.497729f, 63.360991f));
 		panel_svg::loadRectFromSvgMm(panelPath, "SPECTRUM", &legacySpectrumRectMm);
 		const math::Rect sRect = modernSpectrumRectMm;
-		auto addFb = [&](math::Rect r, Widget* w) { widget::FramebufferWidget* fb = new widget::FramebufferWidget(); fb->box.pos = mm2px(r.pos); fb->box.size = mm2px(r.size); fb->dirtyOnSubpixelChange = false; w->box.size = fb->box.size; fb->addChild(w); addChild(fb); return fb; };
+		auto addFb = [&](math::Rect r, Widget* w) { widget::FramebufferWidget* fb = new BifurxVisibleFramebufferWidget(); fb->box.pos = mm2px(r.pos); fb->box.size = mm2px(r.size); fb->dirtyOnSubpixelChange = false; w->box.size = fb->box.size; fb->addChild(w); addChild(fb); return fb; };
 		spectrumBackgroundContent = new BifurxSpectrumBackgroundWidget();
 		spectrumBackgroundContent->module = module;
 		spectrumBackgroundFramebuffer = addFb(sRect, spectrumBackgroundContent);
@@ -943,6 +921,7 @@ struct BifurxWidget final : ModuleWidget {
 		spectrumNanoVGContent->framebuffer = spectrumNanoVG;
 		
 		spectrumOpenGL = createGlSpectrumDisplay(module, sRect);
+		spectrumOpenGLBase = dynamic_cast<BifurxSpectrumBase*>(spectrumOpenGL);
 		addChild(spectrumOpenGL);
 		modernSpectrumFrame = visual_assets::createPreviewFrameEnhancementWidget(
 			modernSpectrumRectMm, nvgRGBA(28, 202, 216, 255));
@@ -951,6 +930,7 @@ struct BifurxWidget final : ModuleWidget {
 		addChild(legacySpectrumFrame);
 
 		bool showGL = (module && module->renderMode == Bifurx::RENDER_OPENGL);
+		lastRenderMode = showGL ? Bifurx::RENDER_OPENGL : Bifurx::RENDER_NANOVG;
 		if (spectrumNanoVG) spectrumNanoVG->setVisible(!showGL);
 		if (spectrumOpenGL) spectrumOpenGL->setVisible(showGL);
 
@@ -995,22 +975,65 @@ struct BifurxWidget final : ModuleWidget {
 	}
 
 	void step() override {
-		ModuleWidget::step();
+		using PerfClock = std::chrono::steady_clock;
+		Bifurx* bifurx = dynamic_cast<Bifurx*>(module);
+		const bool measurePerf = bifurx && isDragonKingDebugEnabled();
+		const PerfClock::time_point perfStepStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 		const bool preferDarkPanelsNow = settings::preferDarkPanels;
 		if (preferDarkPanelsNow != lastPreferDarkPanels) {
 			lastPreferDarkPanels = preferDarkPanelsNow;
 			applyLegacyVisuals(lastLegacyVisuals);
 		}
-		Bifurx* bifurx = dynamic_cast<Bifurx*>(module);
-		if (!bifurx) return;
-		const bool legacyVisualsNow = bifurx->legacyVisuals.load(std::memory_order_relaxed);
-		if (legacyVisualsNow != lastLegacyVisuals) {
-			lastLegacyVisuals = legacyVisualsNow;
-			applyLegacyVisuals(lastLegacyVisuals);
+		bool showGL = false;
+		if (bifurx) {
+			const bool legacyVisualsNow = bifurx->legacyVisuals.load(std::memory_order_relaxed);
+			if (legacyVisualsNow != lastLegacyVisuals) {
+				lastLegacyVisuals = legacyVisualsNow;
+				applyLegacyVisuals(lastLegacyVisuals);
+			}
+			showGL = bifurx->renderMode == Bifurx::RENDER_OPENGL;
+			const int renderModeNow = showGL ? Bifurx::RENDER_OPENGL : Bifurx::RENDER_NANOVG;
+			if (renderModeNow != lastRenderMode) {
+				lastRenderMode = renderModeNow;
+				if (spectrumNanoVG) spectrumNanoVG->setVisible(!showGL);
+				if (spectrumOpenGL) spectrumOpenGL->setVisible(showGL);
+			}
 		}
-		bool showGL = (bifurx->renderMode == Bifurx::RENDER_OPENGL);
-		if (spectrumNanoVG) spectrumNanoVG->setVisible(!showGL);
-		if (spectrumOpenGL) spectrumOpenGL->setVisible(showGL);
+		ModuleWidget::step();
+		if (!measurePerf) return;
+
+		const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			PerfClock::now() - perfStepStart).count()) * 1e-3f;
+		moduleStepUsRange.add(stepUs);
+		const double nowSec = system::getTime();
+		double& lastSubmitSec = gDebugTerminalLastSubmitSec[bifurx->debugInstanceId];
+		if (lastSubmitSec > 0.0 && nowSec - lastSubmitSec < kDebugTerminalSubmitIntervalSec)
+			return;
+
+		lastSubmitSec = nowSec;
+		bifurx->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
+		bifurx->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
+		bifurx->perfAudioControlsNs.store(0, std::memory_order_release);
+		bifurx->perfAudioCoreNs.store(0, std::memory_order_release);
+		bifurx->perfAudioPreviewNs.store(0, std::memory_order_release);
+		bifurx->perfAudioAnalysisNs.store(0, std::memory_order_release);
+		bifurx->perfAudioProcessMaxNs.store(0, std::memory_order_release);
+		BifurxSpectrumBase* activeSpectrum = showGL
+			? spectrumOpenGLBase
+			: static_cast<BifurxSpectrumBase*>(spectrumNanoVGContent);
+		const bool fixedSurfaceActive = showGL
+			&& bifurx->fixedSurfaceExperiment.load(std::memory_order_relaxed);
+		debug_terminal::submitBifurxUiMetrics(
+			bifurx->debugInstanceId,
+			debug_terminal::consumeAudioProcessTiming(
+				bifurx->perfAudioProcessRangeMinNs, bifurx->perfAudioProcessRangeMaxNs),
+			moduleStepUsRange.consume(),
+			moduleDrawUsRange.consume(),
+			showGL,
+			activeSpectrum ? activeSpectrum->lastCurvePrepUs : 0.f,
+			activeSpectrum ? activeSpectrum->lastOverlayPrepUs : 0.f,
+			fixedSurfaceActive && activeSpectrum ? activeSpectrum->lastSurfaceRenderUs : 0.f,
+			activeSpectrum ? activeSpectrum->lastWorkerSubmitUs : 0.f);
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -1045,6 +1068,7 @@ struct BifurxWidget final : ModuleWidget {
 		if (bifurx && measurePerf) {
 			const float drawMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfDrawStart).count()) * 1e-6f;
+			moduleDrawUsRange.add(drawMs * 1000.f);
 			const float prevMs = bifurx->perfUiRenderMs.load(std::memory_order_relaxed);
 			const float emaMs = (prevMs > 0.f) ? (prevMs + (drawMs - prevMs) * 0.18f) : drawMs;
 			bifurx->perfUiRenderMs.store(std::max(0.f, emaMs), std::memory_order_relaxed);
