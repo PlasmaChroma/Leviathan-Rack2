@@ -1425,6 +1425,7 @@ Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float over
 struct ThemedPanelLabelsWidget final : Widget {
 	widget::FramebufferWidget* fb = nullptr;
 	widget::SvgWidget* labels = nullptr;
+	std::vector<widget::SvgWidget*> haloLabels;
 	std::string svgPath;
 	NVGcolor lightPanelFillColor;
 	NVGcolor darkPanelFillColor;
@@ -1451,6 +1452,25 @@ struct ThemedPanelLabelsWidget final : Widget {
 		fb->dirtyOnSubpixelChange = false;
 		fb->box.size = panelSizePx;
 
+		// The exported label paths are fill-only, so a recolored SVG stroke cannot
+		// create the requested outline. Composite a small ring of cached label
+		// silhouettes behind the foreground instead. The enclosing framebuffer
+		// absorbs this cost only when the asset or panel theme changes.
+		const Vec haloOffsets[] = {
+			Vec(-0.62f, 0.f), Vec(0.62f, 0.f),
+			Vec(0.f, -0.62f), Vec(0.f, 0.62f),
+			Vec(-0.44f, -0.44f), Vec(0.44f, -0.44f),
+			Vec(-0.44f, 0.44f), Vec(0.44f, 0.44f)
+		};
+		haloLabels.reserve(sizeof(haloOffsets) / sizeof(haloOffsets[0]));
+		for (Vec offset : haloOffsets) {
+			widget::SvgWidget* halo = new widget::SvgWidget();
+			halo->box.pos = offset;
+			halo->box.size = panelSizePx;
+			haloLabels.push_back(halo);
+			fb->addChild(halo);
+		}
+
 		labels = new widget::SvgWidget();
 		applyTheme(lastDark);
 		labels->box.size = panelSizePx;
@@ -1474,24 +1494,35 @@ struct ThemedPanelLabelsWidget final : Widget {
 		}
 		const std::string fullPath = asset::plugin(pluginInstance, svgPath);
 		const std::vector<std::uint8_t> bytes = system::readFile(fullPath);
-		std::shared_ptr<window::Svg> themedSvg = std::make_shared<window::Svg>();
-		themedSvg->loadString(std::string((const char*) bytes.data(), bytes.size()));
 		const unsigned int fillColor = toNsvgColor(
 			dark ? darkPanelFillColor : lightPanelFillColor);
-		const unsigned int haloColor = toNsvgColor(
-			dark ? darkPanelHaloColor : lightPanelHaloColor);
-		if (themedSvg->handle) {
-			for (NSVGshape* shape = themedSvg->handle->shapes; shape; shape = shape->next) {
+		NVGcolor haloNvgColor = dark ? darkPanelHaloColor : lightPanelHaloColor;
+		// Several silhouettes overlap around each glyph. Reduce the contribution
+		// of each copy so their combined edge respects the requested halo alpha.
+		haloNvgColor.a *= 0.55f;
+		const unsigned int haloColor = toNsvgColor(haloNvgColor);
+		auto loadRecoloredSvg = [&](unsigned int color) {
+			std::shared_ptr<window::Svg> svg = std::make_shared<window::Svg>();
+			svg->loadString(std::string((const char*) bytes.data(), bytes.size()));
+			if (!svg->handle) return svg;
+			for (NSVGshape* shape = svg->handle->shapes; shape; shape = shape->next) {
 				if (shape->fill.type != NSVG_PAINT_NONE) {
 					shape->fill.type = NSVG_PAINT_COLOR;
-					shape->fill.color = fillColor;
+					shape->fill.color = color;
 				}
 				if (shape->stroke.type != NSVG_PAINT_NONE) {
 					shape->stroke.type = NSVG_PAINT_COLOR;
-					shape->stroke.color = haloColor;
+					shape->stroke.color = color;
 				}
 			}
+			return svg;
+		};
+		const std::shared_ptr<window::Svg> haloSvg = loadRecoloredSvg(haloColor);
+		for (widget::SvgWidget* halo : haloLabels) {
+			halo->setSvg(haloSvg);
+			halo->box.size = box.size;
 		}
+		const std::shared_ptr<window::Svg> themedSvg = loadRecoloredSvg(fillColor);
 		labels->setSvg(themedSvg);
 		labels->box.size = box.size;
 	}
