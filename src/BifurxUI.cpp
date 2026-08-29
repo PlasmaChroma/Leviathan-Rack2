@@ -3,6 +3,7 @@
 #include "BifurxWorker.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
+#include <array>
 #include <unordered_map>
 
 namespace bifurx {
@@ -752,6 +753,152 @@ struct BifurxVisibleFramebufferWidget final : widget::FramebufferWidget {
 	}
 };
 
+struct BifurxPlasmaConduitWidget final : Widget {
+	struct Segment {
+		Vec start;
+		Vec end;
+		bool reversePalette = false;
+
+		Segment() = default;
+		Segment(Vec start, Vec end, bool reversePalette)
+			: start(start), end(end), reversePalette(reversePalette) {}
+	};
+
+	std::array<Segment, 5> segments {};
+
+	void drawSegment(const DrawArgs& args, const Segment& segment, bool dark) {
+		const NVGcolor cyan = dark
+			? nvgRGBA(28, 204, 216, 210)
+			: nvgRGBA(16, 154, 177, 205);
+		const NVGcolor violet = dark
+			? nvgRGBA(122, 92, 255, 205)
+			: nvgRGBA(91, 61, 191, 200);
+		const NVGcolor startColor = segment.reversePalette ? violet : cyan;
+		const NVGcolor endColor = segment.reversePalette ? cyan : violet;
+		const NVGpaint plasmaGradient = nvgLinearGradient(
+			args.vg,
+			segment.start.x, segment.start.y,
+			segment.end.x, segment.end.y,
+			startColor, endColor);
+		const NVGcolor brightCyan = dark
+			? nvgRGBA(178, 248, 255, 238)
+			: nvgRGBA(137, 233, 247, 222);
+		const NVGcolor brightViolet = dark
+			? nvgRGBA(213, 194, 255, 232)
+			: nvgRGBA(184, 157, 250, 218);
+		const NVGpaint coreGradient = nvgLinearGradient(
+			args.vg,
+			segment.start.x, segment.start.y,
+			segment.end.x, segment.end.y,
+			segment.reversePalette ? brightViolet : brightCyan,
+			segment.reversePalette ? brightCyan : brightViolet);
+
+		auto strokeColor = [&](float widthMm, NVGcolor color) {
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, segment.start.x, segment.start.y);
+			nvgLineTo(args.vg, segment.end.x, segment.end.y);
+			nvgStrokeWidth(args.vg, mm2px(widthMm));
+			nvgLineCap(args.vg, NVG_ROUND);
+			nvgStrokeColor(args.vg, color);
+			nvgStroke(args.vg);
+		};
+		auto strokeGradient = [&](float widthMm, float alpha) {
+			nvgSave(args.vg);
+			nvgGlobalAlpha(args.vg, alpha);
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, segment.start.x, segment.start.y);
+			nvgLineTo(args.vg, segment.end.x, segment.end.y);
+			nvgStrokeWidth(args.vg, mm2px(widthMm));
+			nvgLineCap(args.vg, NVG_ROUND);
+			nvgStrokePaint(args.vg, plasmaGradient);
+			nvgStroke(args.vg);
+			nvgRestore(args.vg);
+		};
+		auto strokeCoreGradient = [&](float widthMm, float alpha) {
+			nvgSave(args.vg);
+			nvgGlobalAlpha(args.vg, alpha);
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, segment.start.x, segment.start.y);
+			nvgLineTo(args.vg, segment.end.x, segment.end.y);
+			nvgStrokeWidth(args.vg, mm2px(widthMm));
+			nvgLineCap(args.vg, NVG_ROUND);
+			nvgStrokePaint(args.vg, coreGradient);
+			nvgStroke(args.vg);
+			nvgRestore(args.vg);
+		};
+
+		// A layered channel reads as a physical recess at panel scale. The broad
+		// color passes imply glow without relying on an expensive blur filter.
+		strokeGradient(2.15f, dark ? 0.16f : 0.12f);
+		strokeGradient(1.55f, dark ? 0.22f : 0.17f);
+		strokeColor(1.12f, dark ? nvgRGBA(0, 2, 7, 232) : nvgRGBA(10, 14, 23, 212));
+		strokeGradient(0.74f, dark ? 0.62f : 0.54f);
+		strokeColor(0.40f, dark ? nvgRGBA(1, 5, 12, 172) : nvgRGBA(4, 9, 17, 158));
+		// Build the continuous core from broad, overlapping energy fields. The
+		// brightest pass remains wide enough that it diffuses into the surrounding
+		// color instead of resolving as a thin wire at ordinary Rack zoom levels.
+		strokeGradient(0.82f, dark ? 0.20f : 0.16f);
+		strokeCoreGradient(0.62f, dark ? 0.22f : 0.19f);
+		strokeCoreGradient(0.44f, dark ? 0.34f : 0.30f);
+		strokeCoreGradient(0.29f, dark ? 0.62f : 0.54f);
+
+		const Vec delta = segment.end.minus(segment.start);
+		const float length = std::sqrt(delta.x * delta.x + delta.y * delta.y);
+		const Vec normal = length > 1e-4f
+			? Vec(-delta.y / length, delta.x / length)
+			: Vec(1.f, 0.f);
+		auto strokeRail = [&](float offsetMm, float widthMm, NVGcolor color) {
+			const Vec offset = normal.mult(mm2px(offsetMm));
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, segment.start.x + offset.x, segment.start.y + offset.y);
+			nvgLineTo(args.vg, segment.end.x + offset.x, segment.end.y + offset.y);
+			nvgStrokeWidth(args.vg, mm2px(widthMm));
+			nvgLineCap(args.vg, NVG_ROUND);
+			nvgStrokeColor(args.vg, color);
+			nvgStroke(args.vg);
+		};
+		// Opposing specular rails make the colored wall read as a glass tube
+		// instead of a single neon stroke, regardless of segment orientation.
+		strokeRail(-0.28f, 0.075f,
+			dark ? nvgRGBA(198, 248, 255, 166) : nvgRGBA(229, 255, 255, 148));
+		strokeRail(0.28f, 0.09f,
+			dark ? nvgRGBA(154, 113, 255, 158) : nvgRGBA(82, 49, 190, 142));
+
+		// A translucent glass canopy sits over the plasma. This
+		// deliberately lowers local contrast inside the tube while preserving the
+		// crisp asymmetric wall rails outside it.
+		strokeColor(0.56f,
+			dark ? nvgRGBA(154, 211, 230, 20) : nvgRGBA(224, 244, 248, 26));
+		strokeGradient(0.43f, dark ? 0.075f : 0.06f);
+
+		for (Vec center : {segment.start, segment.end}) {
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, center.x, center.y, mm2px(0.82f));
+			nvgFillPaint(args.vg, nvgRadialGradient(
+				args.vg, center.x, center.y,
+				0.f, mm2px(0.82f),
+				nvgRGBA(124, 226, 255, dark ? 72 : 48),
+				nvgRGBA(90, 60, 210, 0)));
+			nvgFill(args.vg);
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, center.x, center.y, mm2px(0.46f));
+			nvgStrokeWidth(args.vg, mm2px(0.08f));
+			nvgStrokeColor(args.vg,
+				dark ? nvgRGBA(181, 239, 255, 165) : nvgRGBA(75, 59, 178, 150));
+			nvgStroke(args.vg);
+		}
+	}
+
+	void draw(const DrawArgs& args) override {
+		const bool dark = settings::preferDarkPanels;
+		nvgSave(args.vg);
+		for (const Segment& segment : segments) {
+			drawSegment(args, segment, dark);
+		}
+		nvgRestore(args.vg);
+	}
+};
+
 struct BifurxWidget final : ModuleWidget {
 	widget::FramebufferWidget* spectrumNanoVG = nullptr;
 	Widget* spectrumOpenGL = nullptr;
@@ -760,6 +907,7 @@ struct BifurxWidget final : ModuleWidget {
 	Widget* modernTopRasterDark = nullptr;
 	Widget* modernBottomRaster = nullptr;
 	Widget* modernBottomRasterDark = nullptr;
+	BifurxVisibleFramebufferWidget* conduitFramebuffer = nullptr;
 	Widget* legacySvgPanel = nullptr;
 	Widget* modernPanelBorder = nullptr;
 	Widget* legacyTitleRaster = nullptr;
@@ -814,6 +962,10 @@ struct BifurxWidget final : ModuleWidget {
 		if (modernTopRasterDark) modernTopRasterDark->setVisible(!legacy && dark);
 		if (modernBottomRaster) modernBottomRaster->setVisible(!legacy && !dark);
 		if (modernBottomRasterDark) modernBottomRasterDark->setVisible(!legacy && dark);
+		if (conduitFramebuffer) {
+			conduitFramebuffer->setVisible(true);
+			conduitFramebuffer->setDirty();
+		}
 		if (modernPanelBorder) modernPanelBorder->setVisible(!legacy);
 		if (legacyTitleRaster) legacyTitleRaster->setVisible(legacy);
 		if (legacyLabels) legacyLabels->setVisible(legacy);
@@ -930,6 +1082,22 @@ struct BifurxWidget final : ModuleWidget {
 		applyPt("MODE_LEFT_PARAM", &mlP); applyPt("MODE_RIGHT_PARAM", &mrP); applyPt("LEVEL_PARAM", &lP); applyPt("RESO_PARAM", &rP); applyPt("FREQ_PARAM", &fP); applyPt("TITO_PARAM", &tP); applyPt("SPAN_PARAM", &sP); applyPt("BALANCE_PARAM", &bP); applyPt("FM_AMT_PARAM", &faP); applyPt("SPAN_CV_ATTEN_PARAM", &saP);
 		applyPt("MODE_MENU_BUTTON", &mmP);
 		applyPt("IN_INPUT", &iP); applyPt("VOCT_INPUT", &vP); applyPt("FM_INPUT", &fmP); applyPt("RESO_CV_INPUT", &rcP); applyPt("BALANCE_CV_INPUT", &bcP); applyPt("SPAN_CV_INPUT", &scP); applyPt("OUT_OUTPUT", &oP);
+		{
+			BifurxPlasmaConduitWidget* conduits = new BifurxPlasmaConduitWidget();
+			conduits->box.size = box.size;
+			conduits->segments = std::array<BifurxPlasmaConduitWidget::Segment, 5> {{
+				BifurxPlasmaConduitWidget::Segment(mm2px(fmP), mm2px(faP), false),
+				BifurxPlasmaConduitWidget::Segment(mm2px(rcP), mm2px(rP), true),
+				BifurxPlasmaConduitWidget::Segment(mm2px(vP), mm2px(fP), false),
+				BifurxPlasmaConduitWidget::Segment(mm2px(bcP), mm2px(bP), true),
+				BifurxPlasmaConduitWidget::Segment(mm2px(scP), mm2px(saP), false)
+			}};
+			conduitFramebuffer = new BifurxVisibleFramebufferWidget();
+			conduitFramebuffer->box.size = box.size;
+			conduitFramebuffer->dirtyOnSubpixelChange = false;
+			conduitFramebuffer->addChild(conduits);
+			addChild(conduitFramebuffer);
+		}
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 		previewBuildTimer.markAnchorsDone();
 		auto* modeMenuButton = createParamCentered<BifurxModeMenuButton>(mm2px(mmP), module, Bifurx::MODE_MENU_PARAM);

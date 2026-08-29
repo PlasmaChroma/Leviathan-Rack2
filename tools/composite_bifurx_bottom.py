@@ -194,7 +194,8 @@ def build_combined(
         np.rint(combined_srgb * 255.0).astype(np.uint8), mode="RGB"
     )
     combined = combined.resize(RUNTIME_SIZE, Image.Resampling.LANCZOS)
-    combined = combined.quantize(colors=colors, method=Image.Quantize.MEDIANCUT)
+    if colors > 0:
+        combined = combined.quantize(colors=colors, method=Image.Quantize.MEDIANCUT)
     destination.parent.mkdir(parents=True, exist_ok=True)
     combined.save(destination, format="PNG", optimize=True)
     print(f"{background_path} + labels -> {destination} ({RUNTIME_SIZE[0]}x{RUNTIME_SIZE[1]})")
@@ -232,8 +233,8 @@ def main() -> int:
     parser.add_argument(
         "--colors",
         type=int,
-        default=192,
-        help="maximum indexed-PNG palette size (default: 192)",
+        default=0,
+        help="indexed-PNG palette size; 0 preserves full RGB (default: 0)",
     )
     args = parser.parse_args()
 
@@ -242,8 +243,8 @@ def main() -> int:
             parser.error(f"source asset does not exist: {source}")
     if not 1 <= args.supersample <= 8:
         parser.error("--supersample must be between 1 and 8")
-    if not 16 <= args.colors <= 256:
-        parser.error("--colors must be between 16 and 256")
+    if args.colors != 0 and not 16 <= args.colors <= 256:
+        parser.error("--colors must be 0 or between 16 and 256")
 
     mask_size = (
         SOURCE_SIZE[0] * args.supersample,

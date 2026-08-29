@@ -247,9 +247,9 @@
    inkscape:pagecheckerboard="true"
    inkscape:deskcolor="#d1d1d1"
    inkscape:document-units="mm"
-   inkscape:zoom="3.9999998"
-   inkscape:cx="179.00001"
-   inkscape:cy="109.12501"
+   inkscape:zoom="11.313708"
+   inkscape:cx="239.7976"
+   inkscape:cy="429.5232"
    inkscape:window-width="2560"
    inkscape:window-height="1377"
    inkscape:window-x="-8"
@@ -346,7 +346,7 @@
    id="fm_line"
    style="display:inline;opacity:1;stroke:#5740bf;stroke-width:50;stroke-dasharray:none;stroke-opacity:1"
    sodipodi:nodetypes="cc" /><path
-   d="m 6401.961,11431.042 0.078,-1134.188"
+   d="m 6409.9595,11431.042 0.078,-1134.188"
    stroke="url(#accentGrad)"
    stroke-width="40.7084"
    stroke-linecap="round"
@@ -755,7 +755,7 @@
      y="9019.8945">XM</tspan></text>
       </g><g
    id="components"
-   style="display:none;opacity:0.169"><ellipse
+   style="display:inline;opacity:0.169"><ellipse
      style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013"
      id="MODE_LEFT_PARAM"
      cx="816.59473"
@@ -821,7 +821,7 @@
      id="SPAN_CV_ATTEN_PARAM"
      width="300"
      height="2600"
-     x="6252"
+     x="6259.9985"
      y="8230"
      rx="103.84616"
      ry="80.68972" /><ellipse

@@ -66,7 +66,7 @@
       <path d="M 1397.1228,1952.2443 H 7648.7534" stroke="url(#accentGrad)" stroke-width="40.8777" stroke-linecap="round" opacity="0.55" fill="none" id="top_horizontal_line" style="display:none;opacity:1;stroke:#5740bf;stroke-opacity:1" />
     </g>
     <path d="m 679.961,11431.042 0.078,-1134.188" stroke="url(#accentGrad)" stroke-width="40.7084" stroke-linecap="round" opacity="0.55" fill="none" id="fm_line" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:50;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
-    <path d="m 6401.961,11431.042 0.078,-1134.188" stroke="url(#accentGrad)" stroke-width="40.7084" stroke-linecap="round" opacity="0.55" fill="none" id="span_line" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:50;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
+    <path d="m 6409.9595,11431.042 0.078,-1134.188" stroke="url(#accentGrad)" stroke-width="40.7084" stroke-linecap="round" opacity="0.55" fill="none" id="span_line" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:50;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
     <path d="m 3543.4534,11454.444 0.078,-1134.188" stroke="url(#accentGrad)" stroke-width="40.7084" stroke-linecap="round" opacity="0.55" fill="none" id="freq_line" style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1;stroke-width:50.00000025;stroke-dasharray:none" sodipodi:nodetypes="cc" />
     <path d="m 1650.7542,11431.042 0.078,-1134.188" stroke="url(#accentGrad)" stroke-width="40.7084" stroke-linecap="round" opacity="0.55" fill="none" id="res_line" style="display:inline;stroke:#5740bf;stroke-opacity:1;opacity:1;stroke-width:50.00000025;stroke-dasharray:none" sodipodi:nodetypes="cc" />
     <path d="m 5450.7542,11413.942 0.078,-1134.188" stroke="url(#accentGrad)" stroke-width="40.7084" stroke-linecap="round" opacity="0.55" fill="none" id="bal_line" style="display:inline;stroke:#5740bf;stroke-opacity:1;opacity:1;stroke-width:50.00000025;stroke-dasharray:none" sodipodi:nodetypes="cc" />
@@ -114,7 +114,7 @@
       </g>
     </g>
   </g>
-  <g id="components" style="display:none;opacity:0.169">
+  <g id="components" style="display:inline;opacity:0.169">
     <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="MODE_LEFT_PARAM" cx="816.59473" cy="7570.0098" rx="270.93332" ry="270.89343" />
     <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="MODE_RIGHT_PARAM" cx="1320.0333" cy="7570.0098" rx="270.93332" ry="270.89343" />
     <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="MODE_MENU_BUTTON" cx="313.15613" cy="7570.0098" rx="270.93332" ry="270.89343" />
@@ -125,7 +125,7 @@
     <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="SPAN_PARAM" cx="5451.3442" cy="8760.0098" rx="294.84427" ry="295.80988" />
     <ellipse style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:30.9013" id="BALANCE_PARAM" cx="5451.3232" cy="10295.81" rx="294.84427" ry="295.80988" />
     <rect style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:27.4616" id="FM_AMT_PARAM" width="300" height="2600" x="530" y="8230" rx="103.84615" ry="80.68969" />
-    <rect style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:27.4617" id="SPAN_CV_ATTEN_PARAM" width="300" height="2600" x="6252" y="8230" rx="103.84616" ry="80.68972" />
+    <rect style="display:inline;fill:#ff0000;fill-opacity:1;fill-rule:evenodd;stroke-width:27.4617" id="SPAN_CV_ATTEN_PARAM" width="300" height="2600" x="6259.9985" y="8230" rx="103.84616" ry="80.68972" />
     <ellipse style="display:none;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597" id="FM_AMT_LIGHT" cx="680" cy="7980.0312" rx="114.98675" ry="120.83137" />
     <ellipse style="display:none;fill:#ff00ff;fill-opacity:1;fill-rule:evenodd;stroke-width:3.60597" id="SPAN_CV_ATTEN_LIGHT" cx="6402" cy="7980.0312" rx="114.98675" ry="120.83137" />
     <ellipse style="display:inline;fill:#00ff00;fill-opacity:1;fill-rule:evenodd;stroke-width:38.3021" id="IN_INPUT" cx="2589.9988" cy="11389.972" rx="398.39865" ry="405.17142" />
