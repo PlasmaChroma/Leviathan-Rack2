@@ -782,31 +782,31 @@ TestResult testTwoColorFftGradientMidpointAndJsonRoundTrip() {
   }
 
   Bifurx source;
-  source.threeColorFftGradient.store(false, std::memory_order_relaxed);
+  source.threeColorFftGradient.store(true, std::memory_order_relaxed);
   source.legacyVisuals.store(true, std::memory_order_relaxed);
   json_t* stateJ = source.dataToJson();
   Bifurx loaded;
   loaded.dataFromJson(stateJ);
   json_decref(stateJ);
-  const bool roundTripDisabled = !loaded.threeColorFftGradient.load(std::memory_order_relaxed);
+  const bool roundTripEnabled = loaded.threeColorFftGradient.load(std::memory_order_relaxed);
   const bool legacyVisualsRoundTrip = loaded.legacyVisuals.load(std::memory_order_relaxed);
 
   Bifurx legacyDefault;
   json_t* legacyJ = json_object();
   legacyDefault.dataFromJson(legacyJ);
   json_decref(legacyJ);
-  const bool legacyDefaultsEnabled = legacyDefault.threeColorFftGradient.load(std::memory_order_relaxed);
-	const bool modernVisualsDefault = !legacyDefault.legacyVisuals.load(std::memory_order_relaxed);
+  const bool threeColorDefaultDisabled = !legacyDefault.threeColorFftGradient.load(std::memory_order_relaxed);
+  const bool modernVisualsDefault = !legacyDefault.legacyVisuals.load(std::memory_order_relaxed);
 
-  pass = pass && authoredMiddleDiffers && roundTripDisabled && legacyVisualsRoundTrip
-    && legacyDefaultsEnabled && modernVisualsDefault;
+  pass = pass && authoredMiddleDiffers && roundTripEnabled && legacyVisualsRoundTrip
+    && threeColorDefaultDisabled && modernVisualsDefault;
   return {
     "Two-color FFT gradient uses endpoint midpoint and persists",
     pass,
     "authoredMiddleDiffers=" + std::to_string(int(authoredMiddleDiffers)) +
-      " roundTripDisabled=" + std::to_string(int(roundTripDisabled)) +
+      " roundTripEnabled=" + std::to_string(int(roundTripEnabled)) +
       " legacyVisualsRoundTrip=" + std::to_string(int(legacyVisualsRoundTrip)) +
-      " gradientLegacyDefault=" + std::to_string(int(legacyDefaultsEnabled)) +
+      " threeColorDefaultDisabled=" + std::to_string(int(threeColorDefaultDisabled)) +
       " modernVisualsDefault=" + std::to_string(int(modernVisualsDefault))
   };
 }

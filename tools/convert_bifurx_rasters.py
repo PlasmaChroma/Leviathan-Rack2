@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Resize and optimize Bifurx panel raster sources for Rack.
 
-Bottom-only example:
+Split-bottom example:
     python3 tools/convert_bifurx_rasters.py \
-        --light-bottom artwork/Bifurx-LB-source.png \
-        --dark-bottom artwork/Bifurx-DB-source.png
+        --light-bottom-background artwork/Bifurx/Bifurx-LB-background.png \
+        --dark-bottom-background artwork/Bifurx/Bifurx-DB-background.png \
+        --output-dir res/bifurx
 
-Outputs are written as res/Bifurx-{LT,DT,LB,DB}.png by default.
+Output filenames follow the selected asset flags and are written beside the
+other Bifurx runtime rasters in res/bifurx by default.
 """
 
 from __future__ import annotations
@@ -23,6 +25,8 @@ ASSETS = {
     "dark_top": ("Bifurx-DT.png", (834, 111)),
     "light_bottom": ("Bifurx-LB.png", (834, 523)),
     "dark_bottom": ("Bifurx-DB.png", (834, 523)),
+    "light_bottom_background": ("Bifurx-LB-background.png", (834, 523)),
+    "dark_bottom_background": ("Bifurx-DB-background.png", (834, 523)),
 }
 
 
@@ -58,8 +62,8 @@ def main() -> int:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=REPO_ROOT / "res",
-        help="destination directory (default: repository res directory)",
+        default=REPO_ROOT / "res" / "bifurx",
+        help="destination directory (default: repository res/bifurx directory)",
     )
     parser.add_argument(
         "--colors",

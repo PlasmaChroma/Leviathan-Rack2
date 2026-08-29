@@ -1421,6 +1421,115 @@ Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float over
 	return new CachedPanelLabelsWidget(svgPath, panelSizePx);
 }
 
+struct ThemedPanelLabelsWidget final : Widget {
+	widget::FramebufferWidget* fb = nullptr;
+	widget::SvgWidget* labels = nullptr;
+	std::string svgPath;
+	NVGcolor lightPanelFillColor;
+	NVGcolor darkPanelFillColor;
+	NVGcolor lightPanelHaloColor;
+	NVGcolor darkPanelHaloColor;
+	bool lastDark = false;
+
+	ThemedPanelLabelsWidget(
+		const char* svgAssetPath,
+		Vec panelSizePx,
+		NVGcolor lightFillColor,
+		NVGcolor darkFillColor,
+		NVGcolor lightHaloColor,
+		NVGcolor darkHaloColor)
+		: svgPath(svgAssetPath ? svgAssetPath : ""),
+		  lightPanelFillColor(lightFillColor),
+		  darkPanelFillColor(darkFillColor),
+		  lightPanelHaloColor(lightHaloColor),
+		  darkPanelHaloColor(darkHaloColor) {
+		box.size = panelSizePx;
+		lastDark = settings::preferDarkPanels;
+		fb = new widget::FramebufferWidget();
+		fb->oversample = targetOversample();
+		fb->dirtyOnSubpixelChange = false;
+		fb->box.size = panelSizePx;
+
+		labels = new widget::SvgWidget();
+		applyTheme(lastDark);
+		labels->box.size = panelSizePx;
+		fb->addChild(labels);
+		addChild(fb);
+	}
+
+	static unsigned int toNsvgColor(NVGcolor color) {
+		auto toByte = [](float channel) {
+			return (unsigned int) std::lround(clamp(channel, 0.f, 1.f) * 255.f);
+		};
+		return toByte(color.r)
+			| (toByte(color.g) << 8)
+			| (toByte(color.b) << 16)
+			| (toByte(color.a) << 24);
+	}
+
+	void applyTheme(bool dark) {
+		if (!labels || svgPath.empty()) {
+			return;
+		}
+		const std::string fullPath = asset::plugin(pluginInstance, svgPath);
+		const std::vector<std::uint8_t> bytes = system::readFile(fullPath);
+		std::shared_ptr<window::Svg> themedSvg = std::make_shared<window::Svg>();
+		themedSvg->loadString(std::string((const char*) bytes.data(), bytes.size()));
+		const unsigned int fillColor = toNsvgColor(
+			dark ? darkPanelFillColor : lightPanelFillColor);
+		const unsigned int haloColor = toNsvgColor(
+			dark ? darkPanelHaloColor : lightPanelHaloColor);
+		if (themedSvg->handle) {
+			for (NSVGshape* shape = themedSvg->handle->shapes; shape; shape = shape->next) {
+				if (shape->fill.type != NSVG_PAINT_NONE) {
+					shape->fill.type = NSVG_PAINT_COLOR;
+					shape->fill.color = fillColor;
+				}
+				if (shape->stroke.type != NSVG_PAINT_NONE) {
+					shape->stroke.type = NSVG_PAINT_COLOR;
+					shape->stroke.color = haloColor;
+				}
+			}
+		}
+		labels->setSvg(themedSvg);
+		labels->box.size = box.size;
+	}
+
+	float targetOversample() const {
+		const float pixelRatio = (APP && APP->window) ? APP->window->pixelRatio : 1.f;
+		return (pixelRatio < 2.f) ? 2.f : 1.f;
+	}
+
+	void step() override {
+		if (fb) {
+			fb->oversample = targetOversample();
+			const bool dark = settings::preferDarkPanels;
+			if (dark != lastDark) {
+				lastDark = dark;
+				applyTheme(dark);
+				fb->setDirty();
+			}
+		}
+		Widget::step();
+	}
+};
+
+Widget* createThemedPanelLabelsWidget(
+	const char* svgPath,
+	Vec panelSizePx,
+	NVGcolor lightPanelFillColor,
+	NVGcolor darkPanelFillColor,
+	NVGcolor lightPanelHaloColor,
+	NVGcolor darkPanelHaloColor) {
+	return new ThemedPanelLabelsWidget(
+		svgPath,
+		panelSizePx,
+		lightPanelFillColor,
+		darkPanelFillColor,
+		lightPanelHaloColor,
+		darkPanelHaloColor);
+}
+
 SplitPanelRenderer::SplitPanelRenderer(ModuleWidget* parent, const char* panelAssetPath)
 	: parent_(parent) {
 	if (!parent_ || !panelAssetPath || panelAssetPath[0] == '\0') {

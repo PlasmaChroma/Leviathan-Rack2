@@ -1272,6 +1272,7 @@ struct SibylModule : Module, SibylControl {
 					} else {
 						enteredScene = false;
 						m_sceneIndex = (int)comp->arrangement.size() - 1;
+						m_sceneRepeat = std::max(1, comp->arrangement.back().repeats) - 1;
 						m_scenePhase = comp->arrangement.back().lengthBeats;
 						m_runtimeRunning.store(false, std::memory_order_release);
 						m_effectiveRunning.store(false, std::memory_order_release);

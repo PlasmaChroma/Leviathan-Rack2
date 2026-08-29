@@ -625,6 +625,27 @@ int main() {
 	}
 
 	{
+		SibylModule module;
+		std::shared_ptr<sibyl::Composition> composition = std::const_pointer_cast<sibyl::Composition>(
+			makeComposition(9, false));
+		composition->transport.loop = false;
+		composition->arrangement[0].repeats = 3;
+		module.acceptComposition(composition, sibyl::ApplyAt::IMMEDIATE,
+			sibyl::PhasePolicy::RESTART_ALL);
+		processOneSample(module);
+		module.m_sceneRepeat = 2;
+		module.m_scenePhase = composition->arrangement[0].lengthBeats - 1e-6;
+		processOneSample(module);
+		module.publishTelemetry(false, composition->meta.bpm);
+		const SibylModule::DisplaySnapshot display = module.readDisplaySnapshot();
+		check(!module.m_runtimeRunning.load(std::memory_order_acquire)
+			&& display.sceneRepeat == 2
+			&& std::abs(display.sceneProgress - 1.f) < 1e-6f
+			&& std::abs(display.arrangementProgress - 1.f) < 1e-6f,
+			"non-looping repeated finale keeps both progress bars full after stopping");
+	}
+
+	{
 		SibylModule source;
 		source.acceptComposition(makeComposition(20, false), sibyl::ApplyAt::IMMEDIATE,
 			sibyl::PhasePolicy::RESTART_ALL);

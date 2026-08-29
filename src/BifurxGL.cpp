@@ -88,7 +88,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	bool lastShowModuleResponseOverlay = false;
 	bool lastUseGlShaderRenderer = false;
 	int lastColorScheme = -1;
-	bool lastThreeColorFftGradient = true;
+	bool lastThreeColorFftGradient = false;
 	bool shaderRendererActiveLastFrame = false;
 	bool shaderRendererFallbackLastFrame = false;
 	bool expectedCurveShaderActiveLastFrame = false;
@@ -1304,7 +1304,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 				const BifurxColors palette = BifurxColors::get(
 					module ? module->colorScheme : Bifurx::SCHEME_DEFAULT,
-					module ? module->threeColorFftGradient.load(std::memory_order_relaxed) : true);
+					module ? module->threeColorFftGradient.load(std::memory_order_relaxed) : false);
 				glUniform4f(textureUniformExpectedWhite, palette.white.r, palette.white.g, palette.white.b, palette.white.a);
 				glUniform4f(textureUniformExpectedCyan, palette.high.r, palette.high.g, palette.high.b, palette.high.a);
 				glUniform4f(textureUniformExpectedPurple, palette.low.r, palette.low.g, palette.low.b, palette.low.a);
@@ -1357,7 +1357,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 					float posA = levi_math::clamp01(avgD / 18.f), negA = levi_math::clamp01(-avgD / 18.f);
 					const BifurxColors palette = BifurxColors::get(
 						module ? module->colorScheme : Bifurx::SCHEME_DEFAULT,
-						module ? module->threeColorFftGradient.load(std::memory_order_relaxed) : true);
+						module ? module->threeColorFftGradient.load(std::memory_order_relaxed) : false);
 					NVGcolor expectedWhite = palette.white;
 					NVGcolor expectedCyan = palette.high;
 					NVGcolor expectedPurple = palette.low;

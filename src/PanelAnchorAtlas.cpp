@@ -24,9 +24,9 @@ struct SvgAtlasRecord { const char* path; uint64_t size; uint64_t fnv64; float u
 struct AnchorAtlasRecord { uint16_t svgIndex; const char* id; uint32_t flags; float cx; float cy; float x; float y; float width; float height; float radius; };
 
 static const SvgAtlasRecord kSvgAtlas[] = {
-	{"res/bifurx.labels.svg", 30075ull, 0x8e4390b94c068152ull, 0.00999999986f},
+	{"res/bifurx.labels.svg", 30152ull, 0x44ec49dae7a13a77ull, 0.00999999986f},
 	{"res/bifurx.panel.svg", 19271ull, 0x5b8cf41727d66485ull, 0.00999999986f},
-	{"res/bifurx.svg", 30889ull, 0x0060224bad1c0fffull, 0.00999999986f},
+	{"res/bifurx.svg", 30966ull, 0xd2e490fb29fa9a16ull, 0.00999999986f},
 	{"res/blank.svg", 21648ull, 0x5d682cc9d0d5089full, 0.01f},
 	{"res/bulkhead.svg", 16822ull, 0xb5956bc612dc50a9ull, 0.00999999988f},
 	{"res/Cantor.labels.svg", 1715ull, 0x18b5f397f35f477cull, 0.01f},

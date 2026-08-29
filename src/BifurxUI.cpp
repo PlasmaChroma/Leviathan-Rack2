@@ -65,7 +65,7 @@ struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 	bool lastFftScaleDynamic = true;
 	bool lastShowModuleResponseOverlay = false;
 	int lastColorScheme = -1;
-	bool lastThreeColorFftGradient = true;
+	bool lastThreeColorFftGradient = false;
 	double lastCurveDebugLogTimeSec = -1.0;
 	uint64_t lastDrawNs = 0;
 	float lastDrawMsEma = 0.f;
@@ -540,7 +540,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 
 	const BifurxColors palette = BifurxColors::get(
 		module ? module->colorScheme : Bifurx::SCHEME_DEFAULT,
-		module ? module->threeColorFftGradient.load(std::memory_order_relaxed) : true);
+		module ? module->threeColorFftGradient.load(std::memory_order_relaxed) : false);
 	const NVGcolor expectedPurple = palette.low;
 	const NVGcolor expectedCyan = palette.high;
 	const NVGcolor expectedWhite = palette.white;
@@ -786,6 +786,7 @@ struct BifurxWidget final : ModuleWidget {
 	Widget* modernTopRasterDark = nullptr;
 	Widget* modernBottomRaster = nullptr;
 	Widget* modernBottomRasterDark = nullptr;
+	Widget* modernLabels = nullptr;
 	Widget* legacySvgPanel = nullptr;
 	Widget* modernPanelBorder = nullptr;
 	Widget* legacyTitleRaster = nullptr;
@@ -837,6 +838,7 @@ struct BifurxWidget final : ModuleWidget {
 		if (modernTopRasterDark) modernTopRasterDark->setVisible(!legacy && dark);
 		if (modernBottomRaster) modernBottomRaster->setVisible(!legacy && !dark);
 		if (modernBottomRasterDark) modernBottomRasterDark->setVisible(!legacy && dark);
+		if (modernLabels) modernLabels->setVisible(!legacy);
 		if (modernPanelBorder) modernPanelBorder->setVisible(!legacy);
 		if (legacyTitleRaster) legacyTitleRaster->setVisible(legacy);
 		if (legacyLabels) legacyLabels->setVisible(legacy);
@@ -864,8 +866,6 @@ struct BifurxWidget final : ModuleWidget {
 			modernPanelBacking = backingFramebuffer;
 			addChildBottom(modernPanelBacking);
 		}
-		// Temporarily hidden while evaluating the lower-panel raster experiment.
-		// splitPanel.addLabels("res/bifurx.labels.svg");
 		splitPanel.addPerfectWaveBranding();
 		visual_assets::addFractalGlassOverlay(
 			this, panelPath, splitPanel.panelSurfaceEffectWidget());
@@ -873,28 +873,33 @@ struct BifurxWidget final : ModuleWidget {
 			Vec(0.f, 0.f), Vec(71.12f, 71.12f / (2141.f / 285.f)));
 		panel_svg::loadRectFromSvgMm(panelPath, "BIFURX_TOP_RASTER", &topRasterRectMm);
 		modernTopRaster = visual_assets::createAspectFitRasterImageWidget(
-			"res/Bifurx-LT.png", topRasterRectMm);
+			"res/bifurx/Bifurx-LT.png", topRasterRectMm);
 		addChild(modernTopRaster);
 		modernTopRasterDark = visual_assets::createAspectFitRasterImageWidget(
-			"res/Bifurx-DT.png", topRasterRectMm);
+			"res/bifurx/Bifurx-DT.png", topRasterRectMm);
 		addChild(modernTopRasterDark);
 		constexpr float kBottomRasterXmm = 0.4f;
 		constexpr float kBottomRasterYmm = 77.5f;
 		constexpr float kBottomRasterWidthMm = 70.32f;
 		constexpr float kBottomRasterAspect = 1584.f / 993.f;
 		const float bottomRasterHeightMm = kBottomRasterWidthMm / kBottomRasterAspect;
+		const math::Rect bottomRasterRectMm(
+			Vec(kBottomRasterXmm, kBottomRasterYmm),
+			Vec(kBottomRasterWidthMm, bottomRasterHeightMm));
 		modernBottomRaster = visual_assets::createAspectFitRasterImageWidget(
-			"res/Bifurx-LB.png",
-			math::Rect(
-				Vec(kBottomRasterXmm, kBottomRasterYmm),
-				Vec(kBottomRasterWidthMm, bottomRasterHeightMm)));
+			"res/bifurx/Bifurx-LB-background.png", bottomRasterRectMm);
 		addChild(modernBottomRaster);
 		modernBottomRasterDark = visual_assets::createAspectFitRasterImageWidget(
-			"res/Bifurx-DB.png",
-			math::Rect(
-				Vec(kBottomRasterXmm, kBottomRasterYmm),
-				Vec(kBottomRasterWidthMm, bottomRasterHeightMm)));
+			"res/bifurx/Bifurx-DB-background.png", bottomRasterRectMm);
 		addChild(modernBottomRasterDark);
+		modernLabels = visual_assets::createThemedPanelLabelsWidget(
+			"res/bifurx.labels.svg",
+			box.size,
+			nvgRGB(18, 20, 25),
+			nvgRGB(238, 240, 244),
+			nvgRGBA(248, 248, 244, 224),
+			nvgRGBA(2, 4, 8, 208));
+		addChild(modernLabels);
 		modernPanelBorder = new app::PanelBorder();
 		modernPanelBorder->box.size = box.size;
 		addChild(modernPanelBorder);
