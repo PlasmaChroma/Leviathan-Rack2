@@ -37,16 +37,6 @@ inline float signedWeight(float balance, bool upperPeak) {
   return fastExp(0.82f * sign * shaped);
 }
 
-inline float cascadeWideMorph(float spanNorm) {
-  const float x = clamp01((clamp01(spanNorm) - 0.03f) / 0.97f);
-  return std::pow(x, 0.58f);
-}
-
-inline float highHighSpanCompGain(float wideMorph) {
-  const float x = clamp01((wideMorph - 0.75f) / 0.25f);
-  return 1.f + 0.685f * std::pow(x, 1.1f);
-}
-
 struct SvfOutputs {
   float lp = 0.f;
   float bp = 0.f;
@@ -135,10 +125,8 @@ inline T combineModeResponse(
   const T& cascadeHighToNotch,
   const T& cascadeHpToHp,
   float wA,
-  float wB,
-  float wideMorph
+  float wB
 ) {
-  (void)wideMorph;
   switch (mode) {
     case 0:
       return cascadeLp;
@@ -159,7 +147,7 @@ inline T combineModeResponse(
     case 8:
       return T(1.18f) * T(wA) * bpA + T(0.94f) * T(wB) * hpB - T(0.14f) * (hpA + bpB);
     case 9:
-      return T(1.06f * highHighSpanCompGain(wideMorph)) * cascadeHpToHp;
+      return cascadeHpToHp;
     default:
       return T(1.f);
   }
@@ -192,7 +180,6 @@ struct PreviewModel {
   float resoNorm = 0.f;
   float wA = 1.f;
   float wB = 1.f;
-  float wideMorph = 0.f;
   int mode = 0;
 };
 
@@ -222,7 +209,6 @@ inline PreviewModel makePreviewModel(const PreviewState& state) {
   const float norm = 2.f / (lowW + highW);
   model.wA = lowW * norm;
   model.wB = highW * norm;
-  model.wideMorph = cascadeWideMorph(state.spanNorm);
   return model;
 }
 
@@ -248,7 +234,7 @@ inline std::complex<float> response(const PreviewModel& model, float hz) {
     lpA, bpA, hpA, ntA,
     lpB, bpB, hpB, ntB,
     cascadeLp, cascadeNotch, cascadeNotchToLow, cascadeHpToLp, cascadeHighToNotch, cascadeHpToHp,
-    model.wA, model.wB, model.wideMorph
+    model.wA, model.wB
   );
 }
 
@@ -480,8 +466,7 @@ inline float simulateHhRuntimeGainDb(
   float cutoffA,
   float cutoffB,
   float dampingA,
-  float dampingB,
-  float wideMorph
+  float dampingB
 ) {
   const int settleSamples = int(sampleRate * 0.30f);
   const int measureSamples = int(sampleRate * 0.60f);
@@ -492,7 +477,6 @@ inline float simulateHhRuntimeGainDb(
   SvfState a;
   SvfState b;
 
-  const float hhGain = 1.06f * highHighSpanCompGain(wideMorph);
   float inSq = 0.f;
   float outSq = 0.f;
   int nAccum = 0;
@@ -503,7 +487,7 @@ inline float simulateHhRuntimeGainDb(
     const float drivenIn = applyLevelInputStage(in, levelKnob);
     const SvfOutputs oA = processSvf(a, drivenIn, cA);
     const SvfOutputs oB = processSvf(b, oA.hp, cB);
-    const float modeOut = hhGain * oB.hp;
+    const float modeOut = oB.hp;
     const float out = applyLevelOutputStage(modeOut, levelKnob);
 
     if (n >= settleSamples) {

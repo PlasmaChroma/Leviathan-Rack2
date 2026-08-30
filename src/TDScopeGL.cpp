@@ -1,6 +1,7 @@
 #include "TDScope.hpp"
 #include "TDScopeShared.hpp"
 #include "GlLifecycleUtils.hpp"
+#include "visual/AdaptiveGlSurface.hpp"
 #include <nanovg_gl.h>
 
 #include <algorithm>
@@ -261,6 +262,9 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   bool redrawLastUseGlShaderRenderer = false;
   int redrawLastRenderMode = -1;
   bool fallbackRendererActive = false;
+  visual_assets::AdaptiveGlSurface adaptiveSurface;
+  NVGcontext *rendererVg = nullptr;
+  bool redrawLastAdaptiveSurfaceEnabled = false;
   std::vector<float> rowX0;
   std::vector<float> rowX1;
   std::vector<float> rowX0Right;
@@ -549,6 +553,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     }
     resetFieldShaderState();
     fallbackRendererActive = false;
+    rendererVg = nullptr;
   }
 
   ~TDScopeGlWidget() override {
@@ -557,11 +562,23 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     // GL context. Only issue driver calls when Rack's window context is
     // definitely current; otherwise fall back to state invalidation only.
     releaseGlResources(hasCurrentRackGlContext());
+    adaptiveSurface.reset(hasCurrentRackGlContext());
   }
 
   void onContextDestroy(const ContextDestroyEvent &e) override {
     OpenGlWidget::onContextDestroy(e);
     releaseGlResources(hasCurrentRackGlContext());
+    adaptiveSurface.reset(hasCurrentRackGlContext());
+  }
+
+  void onContextCreate(const ContextCreateEvent &e) override {
+    OpenGlWidget::onContextCreate(e);
+    // A module widget can survive a DAW editor/context replacement. Forget all
+    // names from the old context and rebuild lazily in the new one.
+    releaseGlResources(false);
+    adaptiveSurface.reset(false);
+    adaptiveSurface.markDirty();
+    setDirty();
   }
 
   void resetLineShaderState() {
@@ -684,6 +701,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     const int scopeColorScheme = module->scopeColorScheme.load(std::memory_order_relaxed);
     const bool debugUseGlShaderRenderer = module->useOpenGlShaderRenderMode();
     const int debugRenderMode = module->debugRenderMode.load(std::memory_order_relaxed);
+    const bool adaptiveSurfaceEnabled =
+      module->debugFramebufferCacheEnabled.load(std::memory_order_relaxed);
     if (scopeDisplayRangeMode != redrawLastRangeMode) {
       dirty = true;
       redrawLastRangeMode = scopeDisplayRangeMode;
@@ -712,6 +731,10 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
       dirty = true;
       redrawLastRenderMode = debugRenderMode;
     }
+    if (adaptiveSurfaceEnabled != redrawLastAdaptiveSurfaceEnabled) {
+      dirty = true;
+      redrawLastAdaptiveSurfaceEnabled = adaptiveSurfaceEnabled;
+    }
 
     temporaldeck_expander::HostToDisplay msg;
     bool snapshotOk = module->readSnapshotForUi(&msg);
@@ -726,12 +749,16 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     }
     redrawHasFreshFrame = hasFreshFrame;
     if (dirty) {
+      adaptiveSurface.markDirty();
       setDirty();
+    }
+    if (adaptiveSurfaceEnabled) {
+      renderAdaptiveSurfaceIfNeeded();
     }
     FramebufferWidget::step();
   }
 
-  void drawFramebuffer() override {
+  void renderGlContent(math::Vec requestedFbSize, int viewportY = 0) {
     const bool measurePerf = module && isDragonKingDebugEnabled();
     const bool logScopeDraw = module && isDragonKingDebugEnabled() && isScopeDrawLoggingEnabled();
     syncScopeDrawLog(logScopeDraw);
@@ -776,12 +803,15 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     };
 
     PerfClock::time_point subStageStart = logScopeDraw ? PerfClock::now() : PerfClock::time_point();
-    math::Vec fbSize = getFramebufferSize();
+    math::Vec fbSize = requestedFbSize;
     if (logScopeDraw) {
       logRow.framebufferSizeUs += logElapsedUs(subStageStart, PerfClock::now());
       subStageStart = PerfClock::now();
     }
-    glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
+    glViewport(
+      0, viewportY,
+      std::max(1, int(std::lround(fbSize.x))),
+      std::max(1, int(std::lround(fbSize.y))));
     if (logScopeDraw) {
       logRow.viewportUs += logElapsedUs(subStageStart, PerfClock::now());
       subStageStart = PerfClock::now();
@@ -830,7 +860,8 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     const float scaleY = (box.size.y > 1e-6f) ? (fbSize.y / box.size.y) : 1.f;
     const int scissorX = std::max(0, int(std::lround(xInset * scaleX)));
     const int scissorW = std::max(1, int(std::lround(std::max(1.f, box.size.x - 2.f * xInset) * scaleX)));
-    const int scissorY = std::max(0, int(std::lround((box.size.y - drawBottom) * scaleY)));
+    const int scissorY = viewportY
+      + std::max(0, int(std::lround((box.size.y - drawBottom) * scaleY)));
     const int scissorH = std::max(1, int(std::lround(drawHeight * scaleY)));
     subStageStart = logScopeDraw ? PerfClock::now() : subStageStart;
     glEnable(GL_SCISSOR_TEST);
@@ -3302,6 +3333,51 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     }
 
     publishUiDebugMetrics(densityPct, rowCount);
+  }
+
+  void drawFramebuffer() override {
+    renderGlContent(getFramebufferSize());
+  }
+
+  void renderAdaptiveSurfaceIfNeeded() {
+    if (!module || !module->useOpenGlGeometryRenderMode()
+        || !module->debugFramebufferCacheEnabled.load(std::memory_order_relaxed)) {
+      return;
+    }
+    NVGcontext *vg = (APP && APP->window) ? APP->window->vg : nullptr;
+    if (!vg) {
+      return;
+    }
+    if (rendererVg != vg) {
+      // Renderer-owned programs, buffers, and textures are context-bound too.
+      // The adaptive surface independently detects and replaces its FBO state.
+      releaseGlResources(false);
+      rendererVg = vg;
+      adaptiveSurface.markDirty();
+    }
+
+    float rackZoom = 1.f;
+    if (APP && APP->scene && APP->scene->rackScroll) {
+      rackZoom = std::max(APP->scene->rackScroll->getZoom(), 1e-4f);
+    }
+    const float pixelRatio = (APP && APP->window) ? APP->window->pixelRatio : 1.f;
+    visual_assets::AdaptiveGlSurfacePolicy policy;
+    adaptiveSurface.renderIfNeeded(
+      vg, box.size, rackZoom, pixelRatio, policy,
+      isExtraGlValidationEnabled(),
+      [](void *user, Vec activeSize, int activeViewportY) {
+        static_cast<TDScopeGlWidget *>(user)->renderGlContent(activeSize, activeViewportY);
+      },
+      this);
+  }
+
+  void draw(const DrawArgs &args) override {
+    if (module && module->useOpenGlGeometryRenderMode()
+        && module->debugFramebufferCacheEnabled.load(std::memory_order_relaxed)
+        && adaptiveSurface.draw(args, box.size)) {
+      return;
+    }
+    widget::FramebufferWidget::draw(args);
   }
 };
 

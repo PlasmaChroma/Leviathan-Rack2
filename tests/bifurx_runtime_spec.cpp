@@ -1,8 +1,10 @@
 #include "../src/plugin.hpp"
 
 #include <cmath>
+#include <atomic>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -92,6 +94,51 @@ TestResult testResonanceCurveUsesFullControlTravel() {
     "targets=" + std::to_string(int(targetsPass)) +
       " monotonic=" + std::to_string(int(monotonic)) +
       " onset=" + std::to_string(kSelfOscResoStart) + measured
+  };
+}
+
+TestResult testFrequencyQuantityRoundTripsAccurately() {
+  constexpr float frequencies[] = {4.f, 10.f, 440.f, 4000.f, 28000.f};
+  float worstRelativeError = 0.f;
+  bool pass = true;
+  for (float hz : frequencies) {
+    const float param = bifurxParamFromFrequencyHz(hz);
+    const float roundTripHz = bifurxFrequencyHzFromParam(param);
+    const float relativeError = std::fabs(roundTripHz - hz) / std::max(hz, 1.f);
+    worstRelativeError = std::max(worstRelativeError, relativeError);
+    pass = pass && relativeError < 2e-6f;
+  }
+  pass = pass
+    && bifurxParamFromFrequencyHz(4.f) == 0.f
+    && bifurxParamFromFrequencyHz(28000.f) == 1.f;
+  return {
+    "Frequency text-entry mapping round-trips accurately at endpoints and interior values",
+    pass,
+    "worstRelativeError=" + std::to_string(worstRelativeError)
+  };
+}
+
+TestResult testPreviewInvalidatesForModelDependencies() {
+  BifurxPreviewState base;
+  base.freqA = 400.f;
+  base.freqB = 1600.f;
+  base.qA = 2.f;
+  base.qB = 3.f;
+  base.spanNorm = 0.25f;
+  base.resoNorm = 0.4f;
+
+  BifurxPreviewState spanChanged = base;
+  spanChanged.spanNorm = 0.75f;
+  BifurxPreviewState resoChanged = base;
+  resoChanged.resoNorm = 0.6f;
+  const bool pass = previewStatesDiffer(base, spanChanged)
+    && previewStatesDiffer(base, resoChanged)
+    && !previewStatesDiffer(base, base);
+  return {
+    "Preview invalidation includes SPAN and resonance model dependencies",
+    pass,
+    "spanChanged=" + std::to_string(int(previewStatesDiffer(base, spanChanged)))
+      + " resoChanged=" + std::to_string(int(previewStatesDiffer(base, resoChanged)))
   };
 }
 
@@ -309,9 +356,9 @@ bool capturePreviewStateForSpan(float spanNorm, BifurxPreviewState* outState) {
     return false;
   }
 
-  const int idx = module.previewPublishedIndex.load(std::memory_order_acquire);
-  *outState = module.previewStates[idx];
-  return true;
+  double publishTimeSec = 0.0;
+  uint32_t copiedSeq = seqBefore;
+  return module.readPreviewState(seqBefore, outState, &publishTimeSec, &copiedSeq);
 }
 
 bool capturePreviewState(
@@ -346,9 +393,210 @@ bool capturePreviewState(
     return false;
   }
 
-  const int idx = module.previewPublishedIndex.load(std::memory_order_acquire);
-  *outState = module.previewStates[idx];
-  return true;
+  double publishTimeSec = 0.0;
+  uint32_t copiedSeq = seqBefore;
+  return module.readPreviewState(seqBefore, outState, &publishTimeSec, &copiedSeq);
+}
+
+TestResult testPublishedSnapshotsRemainCoherentUnderContention() {
+  Bifurx module;
+  std::atomic<bool> writerDone {false};
+  std::atomic<bool> coherent {true};
+  std::atomic<int> reads {0};
+
+  std::thread writer([&]() {
+    for (int i = 1; i <= 50000; ++i) {
+      const float base = float(i);
+      BifurxPreviewState state;
+      state.sampleRate = 48000.f;
+      state.freqA = base;
+      state.freqB = base + 100000.f;
+      state.qA = base + 200000.f;
+      state.qB = base + 300000.f;
+      state.balance = base + 400000.f;
+      state.spanNorm = base + 500000.f;
+      module.publishPreviewState(state);
+    }
+    writerDone.store(true, std::memory_order_release);
+  });
+
+  std::thread reader([&]() {
+    uint32_t lastSeq = 0;
+    while (!writerDone.load(std::memory_order_acquire)
+        || lastSeq != module.previewPublishSeq.load(std::memory_order_acquire)) {
+      BifurxPreviewState state;
+      double publishTimeSec = 0.0;
+      uint32_t seq = lastSeq;
+      if (!module.readPreviewState(lastSeq, &state, &publishTimeSec, &seq)) {
+        std::this_thread::yield();
+        continue;
+      }
+      const float base = state.freqA;
+      const bool snapshotCoherent =
+        state.freqB == base + 100000.f &&
+        state.qA == base + 200000.f &&
+        state.qB == base + 300000.f &&
+        state.balance == base + 400000.f &&
+        state.spanNorm == base + 500000.f &&
+        std::isfinite(publishTimeSec) &&
+        seq > lastSeq;
+      coherent.store(coherent.load(std::memory_order_relaxed) && snapshotCoherent, std::memory_order_relaxed);
+      lastSeq = seq;
+      reads.fetch_add(1, std::memory_order_relaxed);
+    }
+  });
+
+  writer.join();
+  reader.join();
+  const bool pass = coherent.load(std::memory_order_relaxed) && reads.load(std::memory_order_relaxed) > 0;
+  return {
+    "Published preview snapshots remain coherent under contention",
+    pass,
+    "reads=" + std::to_string(reads.load(std::memory_order_relaxed))
+  };
+}
+
+TestResult testAnalysisFramesPublishAsOverlappingWindows() {
+  Bifurx module;
+  alignas(16) float raw[kFftSize] = {};
+  alignas(16) float output[kFftSize] = {};
+  alignas(16) float response[kFftSize] = {};
+  uint32_t seq = 0;
+
+  for (int i = 0; i < kFftSize - 1; ++i) {
+    module.pushAnalysisSample(float(i), float(i + 10), float(i + 20));
+  }
+  const bool earlyPublish = module.copyAnalysisFrame(0, raw, output, response, &seq);
+  module.pushAnalysisSample(float(kFftSize - 1), float(kFftSize + 9), float(kFftSize + 19));
+  const bool firstPublished = module.copyAnalysisFrame(0, raw, output, response, &seq);
+  const uint32_t firstSeq = seq;
+  const bool firstWindow = firstPublished && raw[0] == 0.f && raw[kFftSize - 1] == float(kFftSize - 1)
+    && output[0] == 10.f && response[kFftSize - 1] == float(kFftSize + 19);
+
+  for (int i = kFftSize; i < kFftSize + kFftHopSize; ++i) {
+    module.pushAnalysisSample(float(i), float(i + 10), float(i + 20));
+  }
+  const bool secondPublished = module.copyAnalysisFrame(firstSeq, raw, output, response, &seq);
+  const bool overlappingWindow = secondPublished
+    && raw[0] == float(kFftHopSize)
+    && raw[kFftSize - 1] == float(kFftSize + kFftHopSize - 1);
+  const bool pass = !earlyPublish && firstWindow && overlappingWindow && seq == firstSeq + 1u;
+  return {
+    "Analysis publishes coherent 50-percent-overlapped frames without rotation",
+    pass,
+    "firstSeq=" + std::to_string(firstSeq) + " secondSeq=" + std::to_string(seq)
+  };
+}
+
+TestResult testResetClearsRuntimeState() {
+  Bifurx module;
+  configureBaseParams(module, 5, freqNormForCenterHz(900.f), 0.58f, 0.75f, 0.f);
+  module.params[Bifurx::TITO_PARAM].setValue(0.7f);
+
+  Module::ProcessArgs args;
+  args.sampleRate = 48000.f;
+  args.sampleTime = 1.f / args.sampleRate;
+  for (int n = 0; n < 4096; ++n) {
+    module.inputs[Bifurx::IN_INPUT].setVoltage(4.f * std::sin(2.f * kRuntimePi * 733.f * float(n) * args.sampleTime));
+    module.process(args);
+  }
+  const bool wasExcited = std::fabs(module.coreA.ic1eq) + std::fabs(module.coreA.ic2eq)
+    + std::fabs(module.coreB.ic1eq) + std::fabs(module.coreB.ic2eq) > 1e-5f;
+
+  // Rack's ResetEvent base implementation dispatches the deprecated no-argument
+  // hook after resetting parameters. Call that hook directly in this standalone
+  // harness, which has no live Rack engine/history context.
+  module.onReset();
+  const bool coresCleared = module.coreA.ic1eq == 0.f && module.coreA.ic2eq == 0.f
+    && module.coreB.ic1eq == 0.f && module.coreB.ic2eq == 0.f;
+  const bool cachesCleared = !module.controlFastCacheValid
+    && module.titoCoeffFreqA == 0.f && module.titoCoeffFreqB == 0.f
+    && module.selfOscCoeffFreqA == 0.f && module.selfOscCoeffFreqB == 0.f
+    && module.cachedFrequencyRangeSampleRate == 0.f
+    && !module.previewFilterInitialized;
+  const bool analysisCleared = module.analysisCaptureSlots[0] < 0
+    && module.analysisCaptureSlots[1] < 0 && module.analysisCaptureCountdown == 0;
+
+  module.inputs[Bifurx::IN_INPUT].setVoltage(0.f);
+  module.process(args);
+  const float firstOutput = module.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+  const bool silentRestart = std::isfinite(firstOutput) && std::fabs(firstOutput) < 1e-7f;
+  return {
+    "Reset clears Bifurx circuit, coefficient, smoothing, and capture state",
+    wasExcited && coresCleared && cachesCleared && analysisCleared && silentRestart,
+    "excited=" + std::to_string(int(wasExcited)) + " firstOutput=" + std::to_string(firstOutput)
+  };
+}
+
+TestResult testVoctStepsImmediatelyWithoutImplicitGlide() {
+  Bifurx module;
+  configureBaseParams(module, 5, freqNormForCenterHz(440.f), 0.f, 0.35f, 0.f);
+  clearCvInputs(module);
+  // The standalone Rack harness has no Engine cable bookkeeping, so mark the
+  // port connected directly before exercising its voltage.
+  module.inputs[Bifurx::VOCT_INPUT].channels = 1;
+
+  Module::ProcessArgs args;
+  args.sampleRate = 48000.f;
+  args.sampleTime = 1.f / args.sampleRate;
+  module.inputs[Bifurx::VOCT_INPUT].setVoltage(0.f);
+  module.process(args);
+  const float baseHz = module.cachedFreqA0;
+
+  module.inputs[Bifurx::VOCT_INPUT].setVoltage(1.f);
+  module.process(args);
+  const float steppedHz = module.cachedFreqA0;
+  const float ratio = steppedHz / std::max(baseHz, 1e-6f);
+  const bool pass = std::fabs(ratio - 2.f) < 2e-4f;
+  return {
+    "V/Oct follows a one-volt pitch step on the next sample without internal glide",
+    pass,
+    "baseHz=" + std::to_string(baseHz) + " steppedHz=" + std::to_string(steppedHz)
+      + " ratio=" + std::to_string(ratio)
+  };
+}
+
+TestResult testSpanIsPreservedAtFrequencyRails() {
+  constexpr float spanParam = 0.55f;
+  const float expectedRatio = std::exp2(8.f * shapedSpan(spanParam));
+  float measuredRatios[2] = {};
+  bool pass = true;
+
+  for (int edge = 0; edge < 2; ++edge) {
+    Bifurx module;
+    configureBaseParams(module, 5, edge == 0 ? 0.f : 1.f, spanParam, 0.35f, 0.f);
+    clearCvInputs(module);
+    Module::ProcessArgs args;
+    args.sampleRate = 48000.f;
+    args.sampleTime = 1.f / args.sampleRate;
+    module.process(args);
+    measuredRatios[edge] = module.cachedFreqB0 / std::max(module.cachedFreqA0, 1e-6f);
+    pass = pass && std::fabs(measuredRatios[edge] / expectedRatio - 1.f) < 5e-4f;
+  }
+
+  return {
+    "SPAN separation is preserved by shifting the cutoff pair at both frequency rails",
+    pass,
+    "expectedRatio=" + std::to_string(expectedRatio)
+      + " low=" + std::to_string(measuredRatios[0])
+      + " high=" + std::to_string(measuredRatios[1])
+  };
+}
+
+TestResult testRuntimeHighHighHasUnityCascadeGain() {
+  constexpr float cascadeHpToHp = 0.731f;
+  const float combined = combineModeResponse<float>(
+    9,
+    0.f, 0.f, 0.f, 0.f,
+    0.f, 0.f, 0.f, 0.f,
+    0.f, 0.f, 0.f, 0.f, 0.f, cascadeHpToHp,
+    1.f, 1.f
+  );
+  return {
+    "Production High + High applies unity gain to the cascaded high-pass output",
+    combined == cascadeHpToHp,
+    "cascade=" + std::to_string(cascadeHpToHp) + " combined=" + std::to_string(combined)
+  };
 }
 
 std::vector<float> curveSignatureDb(const BifurxPreviewState& state, const std::vector<float>& hz) {
@@ -850,6 +1098,14 @@ TestResult testBrowserPreviewUsesAuthoredUndertowScene() {
 int main() {
   const std::vector<TestResult> tests = {
     testResonanceCurveUsesFullControlTravel(),
+    testFrequencyQuantityRoundTripsAccurately(),
+    testPreviewInvalidatesForModelDependencies(),
+    testPublishedSnapshotsRemainCoherentUnderContention(),
+    testAnalysisFramesPublishAsOverlappingWindows(),
+    testResetClearsRuntimeState(),
+    testVoctStepsImmediatelyWithoutImplicitGlide(),
+    testSpanIsPreservedAtFrequencyRails(),
+    testRuntimeHighHighHasUnityCascadeGain(),
     testRuntimeSpanMonotonicInPreviewState(),
     testRuntimeBalanceTiltsBandBandInSvf(),
     testRuntimeReportedLowCaseKeepsAudibleOutput(),

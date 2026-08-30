@@ -8,6 +8,85 @@ namespace bifurx {
 
 static_assert((kFftSize & (kFftSize - 1)) == 0, "kFftSize must be a power of two for bitmask ring indexing.");
 
+namespace {
+
+constexpr uint64_t kPublishedSlotIndexMask = 0x7u;
+constexpr uint32_t kPublishedSlotWriterClaim = 0x80000000u;
+
+inline int publishedSlotFromToken(uint64_t token) {
+	return token ? int(token & kPublishedSlotIndexMask) : -1;
+}
+
+inline uint64_t makePublishedSlotToken(uint64_t generation, int slot) {
+	return (generation << 3u) | uint64_t(slot);
+}
+
+template <int SlotCount, typename CopyFn>
+bool readPublishedSlot(
+	std::atomic<uint64_t>& publishedToken,
+	std::atomic<uint32_t> (&readerCounts)[SlotCount],
+	CopyFn&& copyFn
+) {
+	for (int attempt = 0; attempt < SlotCount + 2; ++attempt) {
+		const uint64_t tokenBefore = publishedToken.load(std::memory_order_acquire);
+		const int slot = publishedSlotFromToken(tokenBefore);
+		if (slot < 0 || slot >= SlotCount) {
+			return false;
+		}
+		uint32_t claimState = readerCounts[slot].load(std::memory_order_acquire);
+		bool claimed = false;
+		while ((claimState & kPublishedSlotWriterClaim) == 0u) {
+			if (readerCounts[slot].compare_exchange_weak(
+				claimState,
+				claimState + 1u,
+				std::memory_order_acq_rel,
+				std::memory_order_acquire
+			)) {
+				claimed = true;
+				break;
+			}
+		}
+		if (!claimed) {
+			continue;
+		}
+		const uint64_t tokenAfter = publishedToken.load(std::memory_order_acquire);
+		if (tokenAfter == tokenBefore) {
+			copyFn(slot);
+			readerCounts[slot].fetch_sub(1u, std::memory_order_release);
+			return true;
+		}
+		readerCounts[slot].fetch_sub(1u, std::memory_order_release);
+	}
+	return false;
+}
+
+template <int SlotCount>
+int findWritableSlot(
+	const std::atomic<uint64_t>& publishedToken,
+	std::atomic<uint32_t> (&readerCounts)[SlotCount],
+	int excludedSlotA = -1,
+	int excludedSlotB = -1
+) {
+	const int publishedSlot = publishedSlotFromToken(publishedToken.load(std::memory_order_relaxed));
+	for (int slot = 0; slot < SlotCount; ++slot) {
+		if (slot == publishedSlot || slot == excludedSlotA || slot == excludedSlotB) {
+			continue;
+		}
+		uint32_t expected = 0u;
+		if (readerCounts[slot].compare_exchange_strong(
+			expected,
+			kPublishedSlotWriterClaim,
+			std::memory_order_acq_rel,
+			std::memory_order_acquire
+		)) {
+			return slot;
+		}
+	}
+	return -1;
+}
+
+} // namespace
+
 const char* const kBifurxModeLabels[kBifurxModeCount] = {
 	"Low + Low",
 	"Low + Band",
@@ -108,12 +187,14 @@ float logFrequencyAt(float x01, float minHz, float maxHz) {
 }
 
 float bifurxFrequencyHzFromParam(float paramValue) {
-	return kFreqMinHz * fastExp2(kFreqLog2Span * clamp(paramValue, 0.f, 1.f));
+	// Quantity display/editing is not an audio-rate path. Keep it accurately
+	// invertible instead of inheriting the coarse fast-log/exp approximations.
+	return kFreqMinHz * std::exp2(kFreqLog2Span * clamp(paramValue, 0.f, 1.f));
 }
 
 float bifurxParamFromFrequencyHz(float hz) {
 	const float safeHz = clamp(hz, kFreqMinHz, kFreqMaxHz);
-	return clamp(fastLog2(safeHz / kFreqMinHz) / kFreqLog2Span, 0.f, 1.f);
+	return clamp(std::log2(safeHz / kFreqMinHz) / kFreqLog2Span, 0.f, 1.f);
 }
 
 float bifurxSpanSemitonesFromParam(float paramValue) {
@@ -187,16 +268,6 @@ float signedWeight(float balance, bool upperPeak) {
 	const float shaped = clamp(b + 0.35f * b * b * b, -1.f, 1.f);
 	const float sign = upperPeak ? 1.f : -1.f;
 	return fastExp(0.82f * sign * shaped);
-}
-
-float cascadeWideMorph(float spanNorm) {
-	const float x = levi_math::clamp01((levi_math::clamp01(spanNorm) - 0.03f) / 0.97f);
-	return std::pow(x, 0.58f);
-}
-
-float highHighSpanCompGain(float wideMorph) {
-	const float x = levi_math::clamp01((wideMorph - 0.75f) / 0.25f);
-	return 1.f + 0.685f * std::pow(x, 1.1f);
 }
 
 NVGcolor mixColor(const NVGcolor& a, const NVGcolor& b, float t) {
@@ -286,7 +357,8 @@ SvfCoeffs makeSvfCoeffs(float sampleRate, float cutoff, float damping, float dam
 }
 
 bool shouldRefreshTitoCoeffs(float cutoff, float cachedCutoff, float damping, float cachedDamping, float sampleRate, float cachedSampleRate, float relativeThreshold, float absoluteThresholdHz) {
-	if (cachedCutoff <= 0.f || std::fabs(sampleRate - cachedSampleRate) > 0.5f || std::fabs(damping - cachedDamping) > 1e-5f) {
+	const float dampingThreshold = (relativeThreshold <= 0.f && absoluteThresholdHz <= 0.f) ? 0.f : 1e-5f;
+	if (cachedCutoff <= 0.f || std::fabs(sampleRate - cachedSampleRate) > 0.5f || std::fabs(damping - cachedDamping) > dampingThreshold) {
 		return true;
 	}
 	const float thresholdHz = std::max(absoluteThresholdHz, std::fabs(cachedCutoff) * relativeThreshold);
@@ -302,10 +374,11 @@ void updateTitoCoeffs(
 	float damping,
 	float sampleRate,
 	float relativeThreshold,
-	float absoluteThresholdHz
+	float absoluteThresholdHz,
+	float dampingMin = kSvfDampingMin
 ) {
 	if (shouldRefreshTitoCoeffs(cutoff, cachedCutoff, damping, cachedDamping, sampleRate, cachedSampleRate, relativeThreshold, absoluteThresholdHz)) {
-		coeffs = makeSvfCoeffs(sampleRate, cutoff, damping);
+		coeffs = makeSvfCoeffs(sampleRate, cutoff, damping, dampingMin);
 		cachedCutoff = cutoff;
 		cachedDamping = damping;
 		cachedSampleRate = sampleRate;
@@ -384,31 +457,56 @@ SvfOutputs processCharacterStage(
 	const SvfCoeffs* cachedCoeffsOrNull
 ) {
 	(void) stageIndex;
+	const SvfCoeffs normalCoeffs = cachedCoeffsOrNull
+		? *cachedCoeffsOrNull
+		: makeSvfCoeffs(sampleRate, cutoff, damping);
+	const CharacterStageState character = prepareCharacterStageState(drive, resoNorm, highResonanceSelfOscEnabled);
+	if (!character.selfOscillating) {
+		return core.processWithCoeffs(input, normalCoeffs);
+	}
+	const float selfDamping = mixf(damping, kSvfSelfOscDampingMin, character.oscOnset);
+	const SvfCoeffs selfOscCoeffs = makeSvfCoeffs(sampleRate, cutoff, selfDamping, kSvfSelfOscDampingMin);
+	return processCharacterStagePrepared(core, input, normalCoeffs, &selfOscCoeffs, character);
+}
+
+CharacterStageState prepareCharacterStageState(float drive, float resoNorm, bool highResonanceSelfOscEnabled) {
+	CharacterStageState character;
 	if (!highResonanceSelfOscEnabled) {
-		if (cachedCoeffsOrNull) {
-			return core.processWithCoeffs(input, *cachedCoeffsOrNull);
-		}
-		return core.process(input, sampleRate, cutoff, damping);
+		return character;
 	}
-	const float oscNorm = levi_math::smoothstep01((levi_math::clamp01(resoNorm) - kSelfOscResoStart) / (kSelfOscResoFull - kSelfOscResoStart));
+	const float r = levi_math::clamp01(resoNorm);
+	const float oscNorm = levi_math::smoothstep01((r - kSelfOscResoStart) / (kSelfOscResoFull - kSelfOscResoStart));
 	if (oscNorm <= 0.f) {
-		if (cachedCoeffsOrNull) {
-			return core.processWithCoeffs(input, *cachedCoeffsOrNull);
-		}
-		return core.process(input, sampleRate, cutoff, damping);
+		return character;
 	}
-	const float oscOnset = std::sqrt(std::max(oscNorm, 0.f));
-	const float oscHeat = levi_math::smoothstep01((levi_math::clamp01(resoNorm) - kSelfOscHeatStart) / (1.f - kSelfOscHeatStart));
-	const float oscDrive = mixf(0.75f, 2.6f, oscHeat) * mixf(0.85f, 1.35f, levi_math::clamp01((drive - 1.f) / 2.f));
-	const float selfDamping = mixf(damping, kSvfSelfOscDampingMin, oscOnset);
-	const SvfCoeffs coeffs = makeSvfCoeffs(sampleRate, cutoff, selfDamping, kSvfSelfOscDampingMin);
-	SvfOutputs out = core.processSelfOscWithCoeffs(coeffs, input, oscOnset, oscHeat, oscDrive);
+	character.selfOscillating = true;
+	character.oscOnset = std::sqrt(oscNorm);
+	character.oscHeat = levi_math::smoothstep01((r - kSelfOscHeatStart) / (1.f - kSelfOscHeatStart));
+	character.oscDrive = mixf(0.75f, 2.6f, character.oscHeat)
+		* mixf(0.85f, 1.35f, levi_math::clamp01((drive - 1.f) / 2.f));
+	return character;
+}
+
+SvfOutputs processCharacterStagePrepared(
+	TptSvf& core,
+	float input,
+	const SvfCoeffs& normalCoeffs,
+	const SvfCoeffs* selfOscCoeffsOrNull,
+	const CharacterStageState& character
+) {
+	if (!character.selfOscillating || !selfOscCoeffsOrNull) {
+		return core.processWithCoeffs(input, normalCoeffs);
+	}
+	SvfOutputs out = core.processSelfOscWithCoeffs(
+		*selfOscCoeffsOrNull,
+		input,
+		character.oscOnset,
+		character.oscHeat,
+		character.oscDrive
+	);
 	if (!std::isfinite(out.lp) || !std::isfinite(out.bp) || !std::isfinite(out.hp) || !std::isfinite(out.notch)) {
 		sanitizeCoreState(core);
-		if (cachedCoeffsOrNull) {
-			return core.processWithCoeffs(input, *cachedCoeffsOrNull);
-		}
-		return core.process(input, sampleRate, cutoff, damping);
+		return core.processWithCoeffs(input, normalCoeffs);
 	}
 	return out;
 }
@@ -425,50 +523,40 @@ std::complex<float> DisplayBiquad::response(std::complex<float> z1, std::complex
 }
 
 DisplayBiquad makeDisplayBiquad(float sampleRate, float cutoff, float q, int type) {
-	const float sr = std::max(sampleRate, 1.f);
-	const float freq = clamp(cutoff, 4.f, 0.46f * sr);
-	const float omega = 2.f * kPi * freq / sr;
-	const float cosW = std::cos(omega);
-	const float sinW = std::sin(omega);
-	const float clampedQ = std::max(q, 1.f / kSvfDampingMax);
-	const float alpha = sinW / (2.f * clampedQ);
+	const float damping = 1.f / std::max(q, 1.f / kSvfDampingMax);
+	const SvfCoeffs coeffs = makeSvfCoeffs(sampleRate, cutoff, damping);
+	const float g = coeffs.g;
+	const float g2 = g * g;
+	const float k = coeffs.k;
+	const float a = coeffs.a1;
 
-	float b0 = 0.f;
-	float b1 = 0.f;
-	float b2 = 0.f;
-	float a0 = 1.f + alpha;
-	float a1 = -2.f * cosW;
-	float a2 = 1.f - alpha;
-
+	// Exact z-domain transfer functions of TptSvf::processWithCoeffs(). This
+	// keeps the nominal gold curve aligned with the production linear core.
+	DisplayBiquad biquad;
+	biquad.a1 = 2.f * a * (g2 - 1.f);
+	biquad.a2 = 2.f * a * (g2 + 1.f) - 1.f;
 	switch (type) {
 		case 0: // lowpass
-			b0 = 0.5f * (1.f - cosW);
-			b1 = 1.f - cosW;
-			b2 = 0.5f * (1.f - cosW);
+			biquad.b0 = a * g2;
+			biquad.b1 = 2.f * a * g2;
+			biquad.b2 = a * g2;
 			break;
 		case 1: // bandpass
-			b0 = alpha * clampedQ;
-			b1 = 0.f;
-			b2 = -b0;
+			biquad.b0 = a * g;
+			biquad.b1 = 0.f;
+			biquad.b2 = -a * g;
 			break;
 		case 2: // highpass
-			b0 = 0.5f * (1.f + cosW);
-			b1 = -(1.f + cosW);
-			b2 = 0.5f * (1.f + cosW);
+			biquad.b0 = 1.f - a * g2 - a * g * k;
+			biquad.b1 = -2.f * a;
+			biquad.b2 = a * (g2 + g * k + 2.f) - 1.f;
 			break;
-		default: // notch
-			b0 = 1.f;
-			b1 = -2.f * cosW;
-			b2 = 1.f;
+		default: // notch, exactly LP + HP
+			biquad.b0 = a * g2 + (1.f - a * g2 - a * g * k);
+			biquad.b1 = 2.f * a * g2 - 2.f * a;
+			biquad.b2 = a * g2 + a * (g2 + g * k + 2.f) - 1.f;
 			break;
 	}
-
-	DisplayBiquad biquad;
-	biquad.b0 = b0 / a0;
-	biquad.b1 = b1 / a0;
-	biquad.b2 = b2 / a0;
-	biquad.a1 = a1 / a0;
-	biquad.a2 = a2 / a0;
 	return biquad;
 }
 
@@ -480,6 +568,8 @@ bool previewStatesDiffer(const BifurxPreviewState& a, const BifurxPreviewState& 
 	if (std::fabs(fastLog2(std::max(a.freqB, 1.f)) - fastLog2(std::max(b.freqB, 1.f))) > 1e-3f) return true;
 	if (std::fabs(a.qA - b.qA) > 1e-3f) return true;
 	if (std::fabs(a.qB - b.qB) > 1e-3f) return true;
+	if (std::fabs(a.spanNorm - b.spanNorm) > 1e-4f) return true;
+	if (std::fabs(a.resoNorm - b.resoNorm) > 1e-4f) return true;
 	return false;
 }
 
@@ -512,7 +602,6 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 	const float norm = 2.f / (lowW + highW);
 	model.wA = lowW * norm;
 	model.wB = highW * norm;
-	model.wideMorph = cascadeWideMorph(state.spanNorm);
 	return model;
 }
 
@@ -528,7 +617,7 @@ std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float 
 	std::complex<float> bpB = model.bandB.response(z1, z2);
 	std::complex<float> hpB = model.highB.response(z1, z2);
 	const std::complex<float> ntA = lpA + hpA, ntB = lpB + hpB, cascadeLp = lpB * lpA, cascadeNotch = ntB * ntA, cascadeNotchToLow = lpB * ntA, cascadeHpToLp = lpB * hpA, cascadeHighToNotch = ntB * hpA, cascadeHpToHp = hpB * hpA;
-	return combineModeResponse<std::complex<float>>(model.mode, lpA, bpA, hpA, ntA, lpB, bpB, hpB, ntB, cascadeLp, cascadeNotch, cascadeNotchToLow, cascadeHpToLp, cascadeHighToNotch, cascadeHpToHp, model.wA, model.wB, model.wideMorph);
+	return combineModeResponse<std::complex<float>>(model.mode, lpA, bpA, hpA, ntA, lpB, bpB, hpB, ntB, cascadeLp, cascadeNotch, cascadeNotchToLow, cascadeHpToLp, cascadeHighToNotch, cascadeHpToHp, model.wA, model.wB);
 }
 
 float previewModelResponseDb(const BifurxPreviewModel& model, float hz) {
@@ -613,7 +702,7 @@ SvfOutputs processProbeStage(BifurxProbeEngineState& state, int stageIndex, floa
 void simulatePreviewProbeResponse(const BifurxPreviewState& state, float* inputBuffer, float* outputBuffer, int sampleCount) {
 	if (!inputBuffer || !outputBuffer || sampleCount <= 0) return;
 	BifurxProbeEngineState engine;
-	const float sampleRate = std::max(state.sampleRate, 1.f), freqA = clamp(state.freqA, kFreqMinHz, 0.46f * sampleRate), freqB = clamp(state.freqB, kFreqMinHz, 0.46f * sampleRate), dampingA = clamp(1.f / std::max(state.qA, 0.05f), 0.02f, 2.2f), dampingB = clamp(1.f / std::max(state.qB, 0.05f), 0.02f, 2.2f), lowW = signedWeight(state.balance, false), highW = signedWeight(state.balance, true), norm = 2.f / (lowW + highW), wA = lowW * norm, wB = highW * norm, wideMorph = cascadeWideMorph(state.spanNorm), drive = levelDriveGain(kPreviewProbeLevelKnob);
+	const float sampleRate = std::max(state.sampleRate, 1.f), freqA = clamp(state.freqA, kFreqMinHz, 0.46f * sampleRate), freqB = clamp(state.freqB, kFreqMinHz, 0.46f * sampleRate), dampingA = clamp(1.f / std::max(state.qA, 0.05f), 0.02f, 2.2f), dampingB = clamp(1.f / std::max(state.qB, 0.05f), 0.02f, 2.2f), lowW = signedWeight(state.balance, false), highW = signedWeight(state.balance, true), norm = 2.f / (lowW + highW), wA = lowW * norm, wB = highW * norm, drive = levelDriveGain(kPreviewProbeLevelKnob);
 	const int mode = clamp(state.mode, 0, kBifurxModeCount - 1);
 	generateUndertowBrowserPreview(inputBuffer, sampleCount, sampleRate);
 	for (int i = 0; i < sampleCount; ++i) {
@@ -621,17 +710,17 @@ void simulatePreviewProbeResponse(const BifurxPreviewState& state, float* inputB
 		const SvfOutputs a = processProbeStage(engine, 0, excitation, sampleRate, freqA, dampingA, drive, state.resoNorm, true);
 		SvfOutputs b; float modeOut = 0.f;
 		switch (mode) {
-			case 0: b = processProbeStage(engine, 1, a.lp, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, wideMorph); break;
+			case 0: b = processProbeStage(engine, 1, a.lp, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB); break;
 			case 1:
 			case 4:
 			case 5:
-			case 8: b = processProbeStage(engine, 1, excitation, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, wideMorph); break;
-			case 2: b = processProbeStage(engine, 1, a.notch, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, b.lp, 0.f, 0.f, 0.f, wA, wB, wideMorph); break;
-			case 3: b = processProbeStage(engine, 1, a.notch, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, wideMorph); break;
-			case 6: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, b.lp, 0.f, 0.f, wA, wB, wideMorph); break;
-			case 7: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, b.notch, 0.f, wA, wB, wideMorph); break;
-			case 9: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, b.hp, wA, wB, wideMorph); break;
-			default: b = processProbeStage(engine, 1, a.lp, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(0, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, wideMorph); break;
+			case 8: b = processProbeStage(engine, 1, excitation, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB); break;
+			case 2: b = processProbeStage(engine, 1, a.notch, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, b.lp, 0.f, 0.f, 0.f, wA, wB); break;
+			case 3: b = processProbeStage(engine, 1, a.notch, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB); break;
+			case 6: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, b.lp, 0.f, 0.f, wA, wB); break;
+			case 7: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, b.notch, 0.f, wA, wB); break;
+			case 9: b = processProbeStage(engine, 1, a.hp, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, b.hp, wA, wB); break;
+			default: b = processProbeStage(engine, 1, a.lp, sampleRate, freqB, dampingB, drive, state.resoNorm, true); modeOut = combineModeResponse<float>(0, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB); break;
 		}
 		inputBuffer[i] = excitation; outputBuffer[i] = applyLevelOutputStage(modeOut, kPreviewProbeLevelKnob);
 	}
@@ -667,7 +756,67 @@ Bifurx::~Bifurx() {
 	teardownTimer.begin(id);
 }
 
-void Bifurx::resetCircuitStates() { coreA.ic1eq = 0.f; coreA.ic2eq = 0.f; coreB.ic1eq = 0.f; coreB.ic2eq = 0.f; llTelemetryExcitationSq = 0.f; llTelemetryStageALpSq = 0.f; llTelemetryStageBLpSq = 0.f; llTelemetryOutputSq = 0.f; voctCvFiltered = 0.f; voctCvFilterInitialized = false; }
+void Bifurx::resetAnalysisCapture() {
+	for (int captureIndex = 0; captureIndex < 2; ++captureIndex) {
+		const int slot = analysisCaptureSlots[captureIndex];
+		if (slot >= 0 && slot < kAnalysisFrameSlotCount) {
+			analysisFrameReaders[slot].store(0u, std::memory_order_release);
+		}
+	}
+	analysisCaptureSlots[0] = -1;
+	analysisCaptureSlots[1] = -1;
+	analysisCapturePositions[0] = 0;
+	analysisCapturePositions[1] = 0;
+	analysisCaptureCountdown = 0;
+}
+
+void Bifurx::resetCircuitStates() {
+	coreA = TptSvf {};
+	coreB = TptSvf {};
+	cachedCoeffsA = SvfCoeffs {};
+	cachedCoeffsB = SvfCoeffs {};
+	titoCoeffsA = SvfCoeffs {};
+	titoCoeffsB = SvfCoeffs {};
+	titoCoeffFreqA = 0.f;
+	titoCoeffFreqB = 0.f;
+	titoCoeffDampingA = 0.f;
+	titoCoeffDampingB = 0.f;
+	titoCoeffSampleRateA = 0.f;
+	titoCoeffSampleRateB = 0.f;
+	selfOscCoeffsA = SvfCoeffs {};
+	selfOscCoeffsB = SvfCoeffs {};
+	selfOscCoeffFreqA = 0.f;
+	selfOscCoeffFreqB = 0.f;
+	selfOscCoeffDampingA = 0.f;
+	selfOscCoeffDampingB = 0.f;
+	selfOscCoeffSampleRateA = 0.f;
+	selfOscCoeffSampleRateB = 0.f;
+	cachedFrequencyRangeSampleRate = 0.f;
+	cachedFrequencyRangeOctaves = 0.f;
+	controlFastCacheValid = false;
+
+	llTelemetryExcitationSq = 0.f;
+	llTelemetryStageALpSq = 0.f;
+	llTelemetryStageBLpSq = 0.f;
+	llTelemetryOutputSq = 0.f;
+	previewFilterInitialized = false;
+	previewTargetMotionInitialized = false;
+	previewTargetStillSamples = 0;
+	previewSampleAccum = 0;
+	previewAdaptiveCooldown = 0;
+	hasLastPreviewState = false;
+	modeLeftTrigger.reset();
+	modeRightTrigger.reset();
+	previewPublishDivider.reset();
+	previewPublishSlowDivider.reset();
+	controlUpdateDivider.reset();
+	perfMeasureDivider.reset();
+	resetAnalysisCapture();
+}
+
+void Bifurx::onReset() {
+	resetCircuitStates();
+}
 json_t* Bifurx::dataToJson() {
 	json_t* root = json_object();
 	json_object_set_new(root, "fftScaleDynamic", json_boolean(fftScaleDynamic.load(std::memory_order_relaxed)));
@@ -798,39 +947,161 @@ void Bifurx::dataFromJson(json_t* root) {
 	}
 }
 void Bifurx::resetPerfStats() { perfAudioSampledCount.store(0, std::memory_order_release); perfAudioProcessNs.store(0, std::memory_order_release); perfAudioProcessRangeMinNs.store(std::numeric_limits<uint64_t>::max(), std::memory_order_release); perfAudioProcessRangeMaxNs.store(0, std::memory_order_release); perfAudioControlsNs.store(0, std::memory_order_release); perfAudioCoreNs.store(0, std::memory_order_release); perfAudioPreviewNs.store(0, std::memory_order_release); perfAudioAnalysisNs.store(0, std::memory_order_release); perfAudioProcessMaxNs.store(0, std::memory_order_release); }
-void Bifurx::publishPreviewState(const BifurxPreviewState& state) { int writeIndex = 1 - previewPublishedIndex.load(std::memory_order_relaxed); previewStates[writeIndex] = state; previewPublishedIndex.store(writeIndex, std::memory_order_release); previewPublishTimeSec.store(system::getTime(), std::memory_order_release); previewPublishSeq.fetch_add(1, std::memory_order_release); lastPreviewState = state; hasLastPreviewState = true; }
-void Bifurx::publishLlTelemetryState(const BifurxLlTelemetryState& state) { const int writeIndex = 1 - llTelemetryPublishedIndex.load(std::memory_order_relaxed); llTelemetryStates[writeIndex] = state; llTelemetryPublishedIndex.store(writeIndex, std::memory_order_release); llTelemetryPublishSeq.fetch_add(1, std::memory_order_release); }
-void Bifurx::pushAnalysisSample(float rawInputSample, float outputSample, float responseOutputSample) {
-	analysisRawInputHistory[analysisWritePos] = bifurx::sanitizeFinite(rawInputSample);
-	analysisOutputHistory[analysisWritePos] = bifurx::sanitizeFinite(outputSample);
-	analysisResponseOutputHistory[analysisWritePos] = bifurx::sanitizeFinite(responseOutputSample);
-	analysisWritePos = (analysisWritePos + 1) & (kFftSize - 1);
-	if (analysisFilled < kFftSize) {
-		analysisFilled++;
+void Bifurx::publishPreviewState(const BifurxPreviewState& state) {
+	const int writeIndex = findWritableSlot(previewPublishedToken, previewStateReaders);
+	if (writeIndex < 0) {
+		return;
 	}
-	if (analysisFilled == kFftSize) {
-		analysisHopCounter++;
-		if (!analysisPublishedOnce || analysisHopCounter >= kFftHopSize) {
-			analysisHopCounter = 0;
-			const int writeFrameIndex = 1 - analysisPublishedFrameIndex.load(std::memory_order_relaxed);
-			const int start = clamp(analysisWritePos, 0, kFftSize - 1);
-			for (int i = 0; i < kFftSize; ++i) {
-				const int index = (start + i) & (kFftSize - 1);
-				analysisPublishedRawInputFrames[writeFrameIndex][i] = analysisRawInputHistory[index];
-				analysisPublishedOutputFrames[writeFrameIndex][i] = analysisOutputHistory[index];
-				analysisPublishedResponseOutputFrames[writeFrameIndex][i] = analysisResponseOutputHistory[index];
+	const uint32_t seq = previewPublishSeq.load(std::memory_order_relaxed) + 1u;
+	const double publishTime = system::getTime();
+	previewStates[writeIndex] = state;
+	previewStatePublishTimes[writeIndex] = publishTime;
+	previewStateSeqs[writeIndex] = seq;
+	previewPublishedToken.store(
+		makePublishedSlotToken(++previewPublishGeneration, writeIndex),
+		std::memory_order_release
+	);
+	previewStateReaders[writeIndex].store(0u, std::memory_order_release);
+	previewPublishSeq.store(seq, std::memory_order_release);
+	lastPreviewState = state;
+	hasLastPreviewState = true;
+}
+
+void Bifurx::publishLlTelemetryState(const BifurxLlTelemetryState& state) {
+	const int writeIndex = findWritableSlot(llTelemetryPublishedToken, llTelemetryStateReaders);
+	if (writeIndex < 0) {
+		return;
+	}
+	const uint32_t seq = llTelemetryPublishSeq.load(std::memory_order_relaxed) + 1u;
+	llTelemetryStates[writeIndex] = state;
+	llTelemetryStateSeqs[writeIndex] = seq;
+	llTelemetryPublishedToken.store(
+		makePublishedSlotToken(++llTelemetryPublishGeneration, writeIndex),
+		std::memory_order_release
+	);
+	llTelemetryStateReaders[writeIndex].store(0u, std::memory_order_release);
+	llTelemetryPublishSeq.store(seq, std::memory_order_release);
+}
+
+bool Bifurx::readPreviewState(
+	uint32_t lastSeq,
+	BifurxPreviewState* state,
+	double* publishTime,
+	uint32_t* seq
+) {
+	if (!state || !publishTime || !seq) {
+		return false;
+	}
+	bool changed = false;
+	readPublishedSlot(previewPublishedToken, previewStateReaders, [&](int slot) {
+		const uint32_t slotSeq = previewStateSeqs[slot];
+		if (slotSeq != lastSeq) {
+			*state = previewStates[slot];
+			*publishTime = previewStatePublishTimes[slot];
+			*seq = slotSeq;
+			changed = true;
+		}
+	});
+	return changed;
+}
+
+bool Bifurx::readLlTelemetryState(
+	uint32_t lastSeq,
+	BifurxLlTelemetryState* state,
+	uint32_t* seq
+) {
+	if (!state || !seq) {
+		return false;
+	}
+	bool changed = false;
+	readPublishedSlot(llTelemetryPublishedToken, llTelemetryStateReaders, [&](int slot) {
+		const uint32_t slotSeq = llTelemetryStateSeqs[slot];
+		if (slotSeq != lastSeq) {
+			*state = llTelemetryStates[slot];
+			*seq = slotSeq;
+			changed = true;
+		}
+	});
+	return changed;
+}
+
+bool Bifurx::copyAnalysisFrame(
+	uint32_t lastSeq,
+	float* rawInput,
+	float* output,
+	float* responseOutput,
+	uint32_t* seq
+) {
+	if (!rawInput || !output || !responseOutput || !seq) {
+		return false;
+	}
+	bool changed = false;
+	readPublishedSlot(analysisPublishedToken, analysisFrameReaders, [&](int slot) {
+		const uint32_t slotSeq = analysisFrameSeqs[slot];
+		if (slotSeq != lastSeq) {
+			std::memcpy(rawInput, analysisFrames[slot].rawInput, sizeof(analysisFrames[slot].rawInput));
+			std::memcpy(output, analysisFrames[slot].output, sizeof(analysisFrames[slot].output));
+			std::memcpy(responseOutput, analysisFrames[slot].responseOutput, sizeof(analysisFrames[slot].responseOutput));
+			*seq = slotSeq;
+			changed = true;
+		}
+	});
+	return changed;
+}
+
+void Bifurx::pushAnalysisSample(float rawInputSample, float outputSample, float responseOutputSample) {
+	if (analysisCaptureCountdown <= 0) {
+		int captureIndex = (analysisCaptureSlots[0] < 0) ? 0 : ((analysisCaptureSlots[1] < 0) ? 1 : -1);
+		if (captureIndex >= 0) {
+			const int slot = findWritableSlot(
+				analysisPublishedToken,
+				analysisFrameReaders,
+				analysisCaptureSlots[0],
+				analysisCaptureSlots[1]
+			);
+			if (slot >= 0) {
+				analysisCaptureSlots[captureIndex] = slot;
+				analysisCapturePositions[captureIndex] = 0;
 			}
-			analysisPublishedFrameIndex.store(writeFrameIndex, std::memory_order_release);
-			analysisPublishSeq.fetch_add(1, std::memory_order_release);
-			analysisPublishedOnce = true;
+		}
+		analysisCaptureCountdown = kFftHopSize;
+	}
+
+	const float safeRawInput = bifurx::sanitizeFinite(rawInputSample);
+	const float safeOutput = bifurx::sanitizeFinite(outputSample);
+	const float safeResponseOutput = bifurx::sanitizeFinite(responseOutputSample);
+	for (int captureIndex = 0; captureIndex < 2; ++captureIndex) {
+		const int slot = analysisCaptureSlots[captureIndex];
+		if (slot < 0) {
+			continue;
+		}
+		const int position = analysisCapturePositions[captureIndex];
+		analysisFrames[slot].rawInput[position] = safeRawInput;
+		analysisFrames[slot].output[position] = safeOutput;
+		analysisFrames[slot].responseOutput[position] = safeResponseOutput;
+		const int nextPosition = position + 1;
+		analysisCapturePositions[captureIndex] = nextPosition;
+		if (nextPosition >= kFftSize) {
+			const uint32_t seq = analysisPublishSeq.load(std::memory_order_relaxed) + 1u;
+			analysisFrameSeqs[slot] = seq;
+			analysisPublishedToken.store(
+				makePublishedSlotToken(++analysisPublishGeneration, slot),
+				std::memory_order_release
+			);
+			analysisFrameReaders[slot].store(0u, std::memory_order_release);
+			analysisPublishSeq.store(seq, std::memory_order_release);
+			analysisCaptureSlots[captureIndex] = -1;
+			analysisCapturePositions[captureIndex] = 0;
 		}
 	}
+	analysisCaptureCountdown--;
 }
 void Bifurx::onSampleRateChange(const SampleRateChangeEvent& e) {
 	controlFastCacheValid = false;
-	voctCvFilterInitialized = false;
+	cachedFrequencyRangeSampleRate = 0.f;
 	previewFilterInitialized = false;
 	previewSampleAccum = 0;
+	resetAnalysisCapture();
 	const float sampleRate = std::max(e.sampleRate, 1.f);
 	llTelemetryAlpha = onePoleAlpha(1.f / sampleRate, kLlTelemetryTauSeconds);
 	llTelemetryAlphaSampleRate = sampleRate;
@@ -879,11 +1150,9 @@ void Bifurx::process(const ProcessArgs& args) {
 	const bool titoNeutral = titoAbs < 0.02f;
 	const float freqParamNorm = clamp(params[FREQ_PARAM].getValue(), 0.f, 1.f);
 	const bool voctConnected = inputs[VOCT_INPUT].isConnected();
-	const float voctCvRaw = voctConnected ? clamp(inputs[VOCT_INPUT].getVoltage(), -10.f, 10.f) : 0.f;
-	if (std::fabs(voctCvFilterSampleRate - args.sampleRate) > 0.5f) { voctCvFilterAlpha = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), kVoctSmoothingTauSeconds); voctCvFilterSampleRate = args.sampleRate; }
-	float voctCv = 0.f;
-	if (voctConnected) { if (!voctCvFilterInitialized) { voctCvFiltered = voctCvRaw; voctCvFilterInitialized = true; } else voctCvFiltered += voctCvFilterAlpha * (voctCvRaw - voctCvFiltered); voctCv = (std::fabs(voctCvFiltered) < kVoctDeadbandVolts) ? 0.f : voctCvFiltered; }
-	else { voctCvFiltered = 0.f; voctCvFilterInitialized = false; }
+	// V/Oct is a calibrated pitch input, so follow it directly. Any glide is an
+	// explicit patching choice rather than an undocumented module behavior.
+	const float voctCv = voctConnected ? clamp(inputs[VOCT_INPUT].getVoltage(), -10.f, 10.f) : 0.f;
 	const bool fmConnected = inputs[FM_INPUT].isConnected();
 	const bool resoCvConnected = inputs[RESO_CV_INPUT].isConnected();
 	const bool balanceCvConnected = inputs[BALANCE_CV_INPUT].isConnected();
@@ -929,6 +1198,8 @@ void Bifurx::process(const ProcessArgs& args) {
 		perfSampleRate.store(args.sampleRate, std::memory_order_relaxed);
 		perfMode.store(mode, std::memory_order_relaxed);
 		perfFastPathEligible.store(fastPathEligible, std::memory_order_relaxed);
+		perfPreviewPitchCvConnected.store(voctConnected || fmConnected, std::memory_order_relaxed);
+		cachedLowLatencyVisual = lowLatencyVisual.load(std::memory_order_relaxed);
 	}
 	const bool forceAudioRateControls = modulationQualityModeNow == MOD_QUALITY_EXACT;
 	const bool updateSlowControls =
@@ -942,8 +1213,7 @@ void Bifurx::process(const ProcessArgs& args) {
 	}
 
 	float freqA0 = cachedFreqA0, freqB0 = cachedFreqB0, dampingA = cachedDampingA, dampingB = cachedDampingB, wA = cachedWA, wB = cachedWB, balance = cachedBalance;
-	float resoNorm = cachedResoNorm, balanceNorm = cachedBalanceNorm, spanParamNorm = cachedSpanParamNorm, spanCvNorm = cachedSpanCvNorm, spanAtten = cachedSpanAtten, spanNorm = cachedSpanNorm, spanOct = cachedSpanOct, spanWideMorph = cachedSpanWideMorph;
-	float spanFreqMulA = cachedSpanFreqMulA, spanFreqMulB = cachedSpanFreqMulB;
+	float resoNorm = cachedResoNorm, balanceNorm = cachedBalanceNorm, spanParamNorm = cachedSpanParamNorm, spanCvNorm = cachedSpanCvNorm, spanAtten = cachedSpanAtten, spanNorm = cachedSpanNorm, spanOct = cachedSpanOct;
 	if (updateSlowControls) {
 		const float resoCvNorm = resoCvConnected ? clamp(inputs[RESO_CV_INPUT].getVoltage(), 0.f, 8.f) / 8.f : 0.f;
 		resoNorm = clamp(params[RESO_PARAM].getValue() + resoCvNorm, 0.f, 1.f);
@@ -954,33 +1224,26 @@ void Bifurx::process(const ProcessArgs& args) {
 		spanCvNorm = spanCvConnected ? clamp(inputs[SPAN_CV_INPUT].getVoltage(), -10.f, 10.f) / 5.f : 0.f;
 		spanNorm = clamp(spanParamNorm + 0.5f * spanAtten * spanCvNorm, 0.f, 1.f);
 		spanOct = 8.f * bifurx::shapedSpan(spanNorm);
-		spanWideMorph = cascadeWideMorph(spanNorm);
-		spanFreqMulA = fastExp2(-0.5f * spanOct);
-		spanFreqMulB = fastExp2(0.5f * spanOct);
 		balance = balanceNorm;
 		const float baseDamping = resoToDamping(resoNorm);
 		dampingA = clamp(baseDamping * fastExp(0.48f * balance), 0.02f, 2.2f); dampingB = clamp(baseDamping * fastExp(-0.48f * balance), 0.02f, 2.2f);
 		const float lowW = signedWeight(balance, false), highW = signedWeight(balance, true), norm = 2.f / (lowW + highW); wA = lowW * norm; wB = highW * norm;
-		cachedDampingA = dampingA; cachedDampingB = dampingB; cachedWA = wA; cachedWB = wB; cachedBalance = balance; cachedResoNorm = resoNorm; cachedBalanceNorm = balanceNorm; cachedSpanParamNorm = spanParamNorm; cachedSpanCvNorm = spanCvNorm; cachedSpanAtten = spanAtten; cachedSpanNorm = spanNorm; cachedSpanOct = spanOct; cachedSpanWideMorph = spanWideMorph; cachedSpanFreqMulA = spanFreqMulA; cachedSpanFreqMulB = spanFreqMulB;
+		cachedDampingA = dampingA; cachedDampingB = dampingB; cachedWA = wA; cachedWB = wB; cachedBalance = balance; cachedResoNorm = resoNorm; cachedBalanceNorm = balanceNorm; cachedSpanParamNorm = spanParamNorm; cachedSpanCvNorm = spanCvNorm; cachedSpanAtten = spanAtten; cachedSpanNorm = spanNorm; cachedSpanOct = spanOct;
 	}
 	if (updatePitchControls) {
 		const float sr = std::max(args.sampleRate, 1.f);
 		const float maxHz = 0.46f * sr;
-		const float centerHz = kFreqMinHz * fastExp2(kFreqLog2Span * freqParamNorm + voctCv + fm);
-		const float safeCenterHz = clamp(centerHz, kFreqMinHz, maxHz);
-		const float freqAUnclamped = safeCenterHz * spanFreqMulA;
-		const float freqBUnclamped = safeCenterHz * spanFreqMulB;
-		if (freqAUnclamped >= kFreqMinHz && freqBUnclamped <= maxHz) {
-			freqA0 = freqAUnclamped;
-			freqB0 = freqBUnclamped;
+		if (std::fabs(cachedFrequencyRangeSampleRate - sr) > 0.5f) {
+			cachedFrequencyRangeOctaves = std::log2(maxHz / kFreqMinHz);
+			cachedFrequencyRangeSampleRate = sr;
 		}
-		else {
-			const float maxShiftUp = std::max(0.f, fastLog2(maxHz / safeCenterHz));
-			const float maxShiftDown = std::max(0.f, fastLog2(safeCenterHz / kFreqMinHz));
-			const float halfSpanOct = std::min(0.5f * spanOct, std::min(maxShiftUp, maxShiftDown));
-			freqA0 = clamp(safeCenterHz * fastExp2(-halfSpanOct), kFreqMinHz, maxHz);
-			freqB0 = clamp(safeCenterHz * fastExp2(halfSpanOct), kFreqMinHz, maxHz);
-		}
+		const float availableOctaves = std::max(cachedFrequencyRangeOctaves, 0.f);
+		const float effectiveSpanOct = std::min(spanOct, availableOctaves);
+		const float halfSpanOct = 0.5f * effectiveSpanOct;
+		const float requestedCenterOct = kFreqLog2Span * freqParamNorm + voctCv + fm;
+		const float shiftedCenterOct = clamp(requestedCenterOct, halfSpanOct, availableOctaves - halfSpanOct);
+		freqA0 = kFreqMinHz * fastExp2(shiftedCenterOct - halfSpanOct);
+		freqB0 = kFreqMinHz * fastExp2(shiftedCenterOct + halfSpanOct);
 		cachedFreqA0 = freqA0; cachedFreqB0 = freqB0;
 		cachedCoeffsA = makeSvfCoeffs(args.sampleRate, freqA0, dampingA);
 		cachedCoeffsB = makeSvfCoeffs(args.sampleRate, freqB0, dampingB);
@@ -990,9 +1253,8 @@ void Bifurx::process(const ProcessArgs& args) {
 	const float titoModeScale = 1.22f, titoStrength = 2.4f * titoAbs, couplingDepth = titoStrength * titoModeScale * (0.026f + 0.28f * resoNorm * resoNorm);
 	const float drivenIn = applyLevelInputStage(in, level);
 	const bool highResonanceSelfOscEnabledNow = highResonanceSelfOscEnabled.load(std::memory_order_relaxed);
-	const float oscNorm = highResonanceSelfOscEnabledNow
-		? levi_math::smoothstep01((levi_math::clamp01(resoNorm) - kSelfOscResoStart) / (kSelfOscResoFull - kSelfOscResoStart))
-		: 0.f;
+	const CharacterStageState character = prepareCharacterStageState(drive, resoNorm, highResonanceSelfOscEnabledNow);
+	const float oscNorm = character.selfOscillating ? character.oscOnset * character.oscOnset : 0.f;
 	const float selfOscSeed = (oscNorm > 0.f) ? (2e-7f + 8e-7f * oscNorm) : 0.f;
 	if ((highResonanceSelfOscEnabledNow && oscNorm > 0.f) || controlDividerTick) {
 		sanitizeCoreState(coreA);
@@ -1013,17 +1275,27 @@ void Bifurx::process(const ProcessArgs& args) {
 		coeffsAForSample = &titoCoeffsA;
 		coeffsBForSample = &titoCoeffsB;
 	}
+	const SvfCoeffs* selfOscCoeffsAForSample = nullptr;
+	const SvfCoeffs* selfOscCoeffsBForSample = nullptr;
+	if (character.selfOscillating) {
+		const float selfDampingA = mixf(dampingA, kSvfSelfOscDampingMin, character.oscOnset);
+		const float selfDampingB = mixf(dampingB, kSvfSelfOscDampingMin, character.oscOnset);
+		// Preserve sample-accurate pitch modulation in the otherwise static
+		// self-oscillator path. TITO already owns an explicit quality threshold.
+		const float selfOscRelativeThreshold = (titoNeutral && audioRateControlsActive) ? 0.f : titoCoeffRelativeThreshold;
+		const float selfOscAbsoluteThresholdHz = (titoNeutral && audioRateControlsActive) ? 0.f : titoCoeffAbsoluteThresholdHz;
+		updateTitoCoeffs(selfOscCoeffsA, selfOscCoeffFreqA, selfOscCoeffDampingA, selfOscCoeffSampleRateA, cutoffA, selfDampingA, args.sampleRate, selfOscRelativeThreshold, selfOscAbsoluteThresholdHz, kSvfSelfOscDampingMin);
+		updateTitoCoeffs(selfOscCoeffsB, selfOscCoeffFreqB, selfOscCoeffDampingB, selfOscCoeffSampleRateB, cutoffB, selfDampingB, args.sampleRate, selfOscRelativeThreshold, selfOscAbsoluteThresholdHz, kSvfSelfOscDampingMin);
+		selfOscCoeffsAForSample = &selfOscCoeffsA;
+		selfOscCoeffsBForSample = &selfOscCoeffsB;
+	}
 	if (measurePerf) perfCoreStart = PerfClock::now();
 	float modeOut = 0.f, llExc = 0.f, llA = 0.f, llB = 0.f;
 	auto pA = [&](float s) {
-		return processCharacterStage(
-			coreA, 0, s, args.sampleRate, cutoffA, dampingA, drive, resoNorm, highResonanceSelfOscEnabledNow, coeffsAForSample
-		);
+		return processCharacterStagePrepared(coreA, s, *coeffsAForSample, selfOscCoeffsAForSample, character);
 	};
 	auto pB = [&](float s) {
-		return processCharacterStage(
-			coreB, 1, s, args.sampleRate, cutoffB, dampingB, drive, resoNorm, highResonanceSelfOscEnabledNow, coeffsBForSample
-		);
+		return processCharacterStagePrepared(coreB, s, *coeffsBForSample, selfOscCoeffsBForSample, character);
 	};
 
 	const bool displayOnlyMode = isBifurxDisplayOnlyMode(mode);
@@ -1032,17 +1304,17 @@ void Bifurx::process(const ProcessArgs& args) {
 	}
 	else {
 		switch (mode) {
-			case 0: { const SvfOutputs a = pA(excitation), b = pB(a.lp); llExc = excitation; llA = a.lp; llB = b.lp; modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-			case 1: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-			case 2: { const SvfOutputs a = pA(excitation), b = pB(a.notch); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, b.lp, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-			case 3: { const SvfOutputs a = pA(excitation), b = pB(a.notch); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-			case 4: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-			case 5: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-			case 6: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, b.lp, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-			case 7: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, b.notch, 0.f, wA, wB, spanWideMorph); } break;
-			case 8: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
-			case 9: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, b.hp, wA, wB, spanWideMorph); } break;
-			default: { const SvfOutputs a = pA(excitation), b = pB(a.lp); modeOut = combineModeResponse<float>(0, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB, spanWideMorph); } break;
+			case 0: { const SvfOutputs a = pA(excitation), b = pB(a.lp); llExc = excitation; llA = a.lp; llB = b.lp; modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB); } break;
+			case 1: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB); } break;
+			case 2: { const SvfOutputs a = pA(excitation), b = pB(a.notch); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, b.lp, 0.f, 0.f, 0.f, wA, wB); } break;
+			case 3: { const SvfOutputs a = pA(excitation), b = pB(a.notch); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, b.notch, 0.f, 0.f, 0.f, 0.f, wA, wB); } break;
+			case 4: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB); } break;
+			case 5: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB); } break;
+			case 6: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, b.lp, 0.f, 0.f, wA, wB); } break;
+			case 7: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, b.notch, 0.f, wA, wB); } break;
+			case 8: { const SvfOutputs a = pA(excitation), b = pB(excitation); modeOut = combineModeResponse<float>(mode, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB); } break;
+			case 9: { const SvfOutputs a = pA(excitation), b = pB(a.hp); modeOut = b.hp; } break;
+			default: { const SvfOutputs a = pA(excitation), b = pB(a.lp); modeOut = combineModeResponse<float>(0, a.lp, a.bp, a.hp, a.notch, b.lp, b.bp, b.hp, b.notch, b.lp, 0.f, 0.f, 0.f, 0.f, 0.f, wA, wB); } break;
 		}
 	}
 
@@ -1055,9 +1327,8 @@ void Bifurx::process(const ProcessArgs& args) {
 	if (measurePerf) perfPreviewStart = PerfClock::now();
 
 	const bool pPitchCvConn = voctConnected || fmConnected;
-	perfPreviewPitchCvConnected.store(pPitchCvConn, std::memory_order_relaxed);
 	if (previewAdaptiveCooldown > 0) previewAdaptiveCooldown--;
-	const bool lowLatencyVisualNow = lowLatencyVisual.load(std::memory_order_relaxed);
+	const bool lowLatencyVisualNow = cachedLowLatencyVisual;
 	const int targetFastPreviewDivision = lowLatencyVisualNow ? 64 : bifurx::kPreviewPublishFastDivision;
 	const int targetSlowPreviewDivision = lowLatencyVisualNow ? 128 : bifurx::kPreviewPublishSlowDivision;
 	if (targetFastPreviewDivision != previewPublishFastDivision) {
@@ -1252,11 +1523,17 @@ void BifurxSpectrumBase::syncBase() {
 	else {
 		releaseWorkerRegistration();
 	}
-	const uint32_t previewSeq = module->previewPublishSeq.load(std::memory_order_acquire);
-	if (previewSeq != state.lastPreviewSeq) {
-		const int index = module->previewPublishedIndex.load(std::memory_order_acquire);
-		state.previewState = module->previewStates[index];
-		state.previewPublishTimeSec = module->previewPublishTimeSec.load(std::memory_order_acquire);
+	BifurxPreviewState previewState;
+	double previewPublishTimeSec = 0.0;
+	uint32_t previewSeq = 0;
+	if (module->readPreviewState(
+		state.lastPreviewSeq,
+		&previewState,
+		&previewPublishTimeSec,
+		&previewSeq
+	)) {
+		state.previewState = previewState;
+		state.previewPublishTimeSec = previewPublishTimeSec;
 		state.hasPreview = true;
 		state.lastPreviewSeq = previewSeq;
 		if (!useWorkerCurve) {
@@ -1276,14 +1553,20 @@ void BifurxSpectrumBase::syncBase() {
 		if (!useWorkerCurve) {
 			const bool measurePrep = isDragonKingDebugEnabled();
 			const auto overlayPrepStart = measurePrep ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
-			updateOverlayCache();
+			uint32_t copiedAnalysisSeq = state.lastAnalysisSeq;
+			const bool copiedAnalysis = updateOverlayCache(&copiedAnalysisSeq);
 			if (measurePrep) {
 				lastOverlayPrepUs = float(std::chrono::duration_cast<std::chrono::microseconds>(
 					std::chrono::steady_clock::now() - overlayPrepStart).count());
 			}
-			state.hasOverlay = true;
+			if (copiedAnalysis) {
+				state.lastAnalysisSeq = copiedAnalysisSeq;
+				state.hasOverlay = true;
+			}
 		}
-		state.lastAnalysisSeq = analysisSeq;
+		else {
+			state.lastAnalysisSeq = analysisSeq;
+		}
 	}
 
 	if (useWorkerCurve) {
@@ -1388,7 +1671,7 @@ void BifurxSpectrumBase::submitWorkerCurveRequest() {
 	request.displayId = workerDisplayId;
 	request.requestSeq = ++workerRequestSeq;
 	request.previewSeq = state.lastPreviewSeq;
-	request.analysisSeq = state.lastAnalysisSeq;
+	request.analysisSeq = workerLastSubmittedAnalysisSeq;
 	request.requestSubmittedAtSec = system::getTime();
 	request.sourcePreviewTimeSec = state.previewPublishTimeSec;
 	request.previewState = state.previewState;
@@ -1407,14 +1690,20 @@ void BifurxSpectrumBase::submitWorkerCurveRequest() {
 	const bool analysisChangedSinceSubmit =
 		(state.lastAnalysisSeq != 0) && (state.lastAnalysisSeq != workerLastSubmittedAnalysisSeq);
 	if (analysisChangedSinceSubmit) {
-		request.hasAnalysisFrame = true;
-		const int frameIndex = clamp(module->analysisPublishedFrameIndex.load(std::memory_order_acquire), 0, 1);
-		std::memcpy(request.analysisRawInput, module->analysisPublishedRawInputFrames[frameIndex], sizeof(request.analysisRawInput));
-		std::memcpy(request.analysisOutput, module->analysisPublishedOutputFrames[frameIndex], sizeof(request.analysisOutput));
-		std::memcpy(request.analysisResponseOutput, module->analysisPublishedResponseOutputFrames[frameIndex], sizeof(request.analysisResponseOutput));
+		uint32_t copiedAnalysisSeq = workerLastSubmittedAnalysisSeq;
+		request.hasAnalysisFrame = module->copyAnalysisFrame(
+			workerLastSubmittedAnalysisSeq,
+			request.analysisRawInput,
+			request.analysisOutput,
+			request.analysisResponseOutput,
+			&copiedAnalysisSeq
+		);
+		if (request.hasAnalysisFrame) {
+			request.analysisSeq = copiedAnalysisSeq;
+		}
 	}
 	workerLastSubmittedPreviewSeq = state.lastPreviewSeq;
-	workerLastSubmittedAnalysisSeq = state.lastAnalysisSeq;
+	workerLastSubmittedAnalysisSeq = request.analysisSeq;
 	bifurxRenderService().submitLatest(request);
 	if (measurePerf) {
 		lastWorkerSubmitUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -1578,26 +1867,31 @@ const BifurxPreviewModel& BifurxSpectrumBase::getOrUpdateModel() const {
 	return cachedModel;
 }
 
-void BifurxSpectrumBase::updateOverlayCache() {
-	if (!state.hasPreview) return;
-	if (!module) return;
+bool BifurxSpectrumBase::updateOverlayCache(uint32_t* copiedSeq) {
+	if (!state.hasPreview || !module) return false;
 	updateAxisCache();
-	const int frameIndex = clamp(module->analysisPublishedFrameIndex.load(std::memory_order_acquire), 0, 1);
-	const float* outputFrame = module->analysisPublishedOutputFrames[frameIndex];
-	const float* responseFrame = module->analysisPublishedResponseOutputFrames[frameIndex];
-	const float* inputFrame = module->analysisPublishedRawInputFrames[frameIndex];
+	uint32_t frameSeq = state.lastAnalysisSeq;
+	if (!module->copyAnalysisFrame(
+		state.lastAnalysisSeq,
+		fftInputTime,
+		fftOutputTime,
+		fftResponseOutputFreq,
+		&frameSeq
+	)) {
+		return false;
+	}
 	for (int i = 0; i < kFftSize; i++) {
-		fftOutputTime[i] = outputFrame[i] * window[i];
+		fftOutputTime[i] *= window[i];
 	}
 	fft.rfft(fftOutputTime, fftOutputFreq);
 	const bool displayOnlyMode = isBifurxDisplayOnlyMode(state.previewState.mode);
 	if (!displayOnlyMode) {
 		for (int i = 0; i < kFftSize; i++) {
-			fftOutputTime[i] = responseFrame[i] * window[i];
+			fftOutputTime[i] = fftResponseOutputFreq[i] * window[i];
 		}
 		fft.rfft(fftOutputTime, fftResponseOutputFreq);
 		for (int i = 0; i < kFftSize; i++) {
-			fftInputTime[i] = inputFrame[i] * window[i];
+			fftInputTime[i] *= window[i];
 		}
 		fft.rfft(fftInputTime, fftRawInputFreq);
 	}
@@ -1623,6 +1917,10 @@ void BifurxSpectrumBase::updateOverlayCache() {
 		}
 		state.hasOverlayTarget = true;
 	}
+	if (copiedSeq) {
+		*copiedSeq = frameSeq;
+	}
+	return true;
 }
 
 bool BifurxSpectrumBase::updateAnimation(float dt) {

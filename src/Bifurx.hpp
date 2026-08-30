@@ -51,6 +51,8 @@ constexpr int kCurvePointCount = 513;
 constexpr int kFftSize = 4096;
 constexpr int kFftBinCount = kFftSize / 2 + 1;
 constexpr int kFftHopSize = kFftSize / 2;
+constexpr int kSnapshotSlotCount = 3;
+constexpr int kAnalysisFrameSlotCount = 4;
 constexpr int kPreviewPublishFastDivision = 128;
 constexpr int kPreviewPublishSlowDivision = 256;
 constexpr int kPerfMeasureDivision = 17;
@@ -78,8 +80,6 @@ constexpr float kOverlayDbfsFloor = -96.f;
 constexpr float kOverlayDbfsCeiling = 6.f;
 constexpr float kOverlaySubsonicCutHz = 10.f;
 constexpr float kOverlaySubsonicFadeHz = 30.f;
-constexpr float kVoctSmoothingTauSeconds = 0.0025f;
-constexpr float kVoctDeadbandVolts = 0.001f;
 constexpr float kTitoCoeffRelativeUpdateThreshold = 2.5e-4f;
 constexpr float kTitoCoeffAbsoluteUpdateThresholdHz = 0.002f;
 constexpr float kDisplayDbfsSpan = 48.f;
@@ -172,8 +172,6 @@ float softLimitExpectedCurveDb(float db);
 float resoToDamping(float resoNorm);
 
 float signedWeight(float balance, bool upperPeak);
-float cascadeWideMorph(float spanNorm);
-float highHighSpanCompGain(float wideMorph);
 
 struct SvfOutputs {
 	float lp = 0.f;
@@ -191,6 +189,15 @@ struct SvfCoeffs {
 	float k = 0.f;
 	float a1 = 1.f;
 };
+
+struct CharacterStageState {
+	bool selfOscillating = false;
+	float oscOnset = 0.f;
+	float oscHeat = 0.f;
+	float oscDrive = 1.f;
+};
+
+CharacterStageState prepareCharacterStageState(float drive, float resoNorm, bool highResonanceSelfOscEnabled);
 
 SvfCoeffs makeSvfCoeffs(float sampleRate, float cutoff, float damping, float dampingMin = kSvfDampingMin);
 
@@ -216,6 +223,14 @@ SvfOutputs processCharacterStage(
 	float resoNorm,
 	bool highResonanceSelfOscEnabled,
 	const SvfCoeffs* cachedCoeffsOrNull = nullptr
+);
+
+SvfOutputs processCharacterStagePrepared(
+	TptSvf& core,
+	float input,
+	const SvfCoeffs& normalCoeffs,
+	const SvfCoeffs* selfOscCoeffsOrNull,
+	const CharacterStageState& character
 );
 
 struct DisplayBiquad {
@@ -248,8 +263,7 @@ T combineModeResponse(
 	const T& cascadeHighToNotch,
 	const T& cascadeHpToHp,
 	float wA,
-	float wB,
-	float wideMorph
+	float wB
 ) {
 	switch (mode) {
 		case 0:
@@ -262,7 +276,7 @@ T combineModeResponse(
 		case 6: return T(1.04f) * cascadeHpToLp;
 		case 7: return T(1.04f) * cascadeHighToNotch;
 		case 8: return T(1.18f) * T(wA) * bpA + T(0.92f) * T(wB) * hpB - T(0.16f) * (bpA + bpB);
-		case 9: return T(1.06f * highHighSpanCompGain(wideMorph)) * cascadeHpToHp;
+		case 9: return cascadeHpToHp;
 		default: return T(1.f);
 	}
 }
@@ -313,14 +327,13 @@ struct BifurxPreviewModel {
 	float resoNorm = 0.f;
 	float wA = 1.f;
 	float wB = 1.f;
-	float wideMorph = 0.f;
 	int mode = 0;
 };
 
 struct BifurxAnalysisFrame {
-	alignas(16) float rawInput[kFftSize];
-	alignas(16) float output[kFftSize];
-	alignas(16) float responseOutput[kFftSize];
+	alignas(16) float rawInput[kFftSize] = {};
+	alignas(16) float output[kFftSize] = {};
+	alignas(16) float responseOutput[kFftSize] = {};
 };
 
 struct BifurxSpectrumState {
@@ -449,7 +462,7 @@ struct BifurxSpectrumBase {
 	void updateAxisCache();
 	void updateCurveCache();
 	const BifurxPreviewModel& getOrUpdateModel() const;
-	void updateOverlayCache();
+	bool updateOverlayCache(uint32_t* copiedSeq = nullptr);
 	bool updateAnimation(float dt);
 	BifurxRenderTickResult runRenderTick(float dt);
 	virtual void drawNanoVG(const rack::widget::Widget::DrawArgs& args) {}
@@ -630,12 +643,18 @@ struct Bifurx : Module {
 	dsp::ClockDivider perfMeasureDivider;
 	BifurxPreviewState lastPreviewState;
 	bool hasLastPreviewState = false;
-	BifurxPreviewState previewStates[2];
-	std::atomic<int> previewPublishedIndex{0};
+	BifurxPreviewState previewStates[kSnapshotSlotCount];
+	double previewStatePublishTimes[kSnapshotSlotCount] = {};
+	uint32_t previewStateSeqs[kSnapshotSlotCount] = {};
+	std::atomic<uint32_t> previewStateReaders[kSnapshotSlotCount] {};
+	std::atomic<uint64_t> previewPublishedToken{0};
+	uint64_t previewPublishGeneration = 0;
 	std::atomic<uint32_t> previewPublishSeq{0};
-	std::atomic<double> previewPublishTimeSec{0.0};
-	BifurxLlTelemetryState llTelemetryStates[2];
-	std::atomic<int> llTelemetryPublishedIndex{0};
+	BifurxLlTelemetryState llTelemetryStates[kSnapshotSlotCount];
+	uint32_t llTelemetryStateSeqs[kSnapshotSlotCount] = {};
+	std::atomic<uint32_t> llTelemetryStateReaders[kSnapshotSlotCount] {};
+	std::atomic<uint64_t> llTelemetryPublishedToken{0};
+	uint64_t llTelemetryPublishGeneration = 0;
 	std::atomic<uint32_t> llTelemetryPublishSeq{0};
 	float previewFreqAFiltered = 440.f;
 	float previewFreqBFiltered = 440.f;
@@ -646,10 +665,6 @@ struct Bifurx : Module {
 	float previewFilterAlpha = 0.f;
 	float previewFilterAlphaSlow = 0.f;
 	float previewFilterAlphaSampleRate = 0.f;
-	float voctCvFiltered = 0.f;
-	bool voctCvFilterInitialized = false;
-	float voctCvFilterAlpha = 0.f;
-	float voctCvFilterSampleRate = 0.f;
 	float llTelemetryAlpha = 0.f;
 	float llTelemetryAlphaSampleRate = 0.f;
 	float previewPrevTargetFreqA = 440.f;
@@ -673,11 +688,19 @@ struct Bifurx : Module {
 	float cachedSpanAtten = 0.f;
 	float cachedSpanNorm = 0.33f;
 	float cachedSpanOct = 0.f;
-	float cachedSpanWideMorph = 0.f;
-	float cachedSpanFreqMulA = 1.f;
-	float cachedSpanFreqMulB = 1.f;
+	float cachedFrequencyRangeSampleRate = 0.f;
+	float cachedFrequencyRangeOctaves = 0.f;
+	bool cachedLowLatencyVisual = false;
 	SvfCoeffs cachedCoeffsA;
 	SvfCoeffs cachedCoeffsB;
+	SvfCoeffs selfOscCoeffsA;
+	SvfCoeffs selfOscCoeffsB;
+	float selfOscCoeffFreqA = 0.f;
+	float selfOscCoeffFreqB = 0.f;
+	float selfOscCoeffDampingA = 0.f;
+	float selfOscCoeffDampingB = 0.f;
+	float selfOscCoeffSampleRateA = 0.f;
+	float selfOscCoeffSampleRateB = 0.f;
 	SvfCoeffs titoCoeffsA;
 	SvfCoeffs titoCoeffsB;
 	float titoCoeffFreqA = 0.f;
@@ -686,23 +709,20 @@ struct Bifurx : Module {
 	float titoCoeffDampingB = 0.f;
 	float titoCoeffSampleRateA = 0.f;
 	float titoCoeffSampleRateB = 0.f;
-	float analysisRawInputHistory[kFftSize] = {};
-	float analysisOutputHistory[kFftSize] = {};
-	float analysisResponseOutputHistory[kFftSize] = {};
-	float analysisPublishedRawInputFrames[2][kFftSize] = {};
-	float analysisPublishedOutputFrames[2][kFftSize] = {};
-	float analysisPublishedResponseOutputFrames[2][kFftSize] = {};
+	BifurxAnalysisFrame analysisFrames[kAnalysisFrameSlotCount];
+	uint32_t analysisFrameSeqs[kAnalysisFrameSlotCount] = {};
+	std::atomic<uint32_t> analysisFrameReaders[kAnalysisFrameSlotCount] {};
+	std::atomic<uint64_t> analysisPublishedToken{0};
+	uint64_t analysisPublishGeneration = 0;
+	int analysisCaptureSlots[2] = {-1, -1};
+	int analysisCapturePositions[2] = {};
+	int analysisCaptureCountdown = 0;
 	float llTelemetryExcitationSq = 0.f;
 	float llTelemetryStageALpSq = 0.f;
 	float llTelemetryStageBLpSq = 0.f;
 	float llTelemetryOutputSq = 0.f;
-	int analysisWritePos = 0;
-	int analysisFilled = 0;
-	int analysisHopCounter = 0;
-	bool analysisPublishedOnce = false;
 	dsp::SchmittTrigger modeLeftTrigger;
 	dsp::SchmittTrigger modeRightTrigger;
-	std::atomic<int> analysisPublishedFrameIndex{0};
 	std::atomic<uint32_t> analysisPublishSeq{0};
 	std::atomic<bool> fftScaleDynamic {true};
 	std::atomic<bool> showModuleResponseOverlay {false};
@@ -745,8 +765,21 @@ struct Bifurx : Module {
 	void resetPerfStats();
 	void publishPreviewState(const BifurxPreviewState& state);
 	void publishLlTelemetryState(const BifurxLlTelemetryState& state);
+	bool readPreviewState(uint32_t lastSeq, BifurxPreviewState* state, double* publishTimeSec, uint32_t* seq);
+	bool readLlTelemetryState(uint32_t lastSeq, BifurxLlTelemetryState* state, uint32_t* seq);
+	bool copyAnalysisFrame(
+		uint32_t lastSeq,
+		float* rawInput,
+		float* output,
+		float* responseOutput,
+		uint32_t* seq
+	);
 	void pushAnalysisSample(float rawInputSample, float outputSample, float responseOutputSample);
+	void resetAnalysisCapture();
 	void onSampleRateChange(const SampleRateChangeEvent& e) override;
+	// Rack's ResetEvent base implementation resets parameters, then dispatches
+	// this deprecated hook for module-specific runtime state.
+	void onReset() override;
 	void process(const ProcessArgs& args) override;
 };
 

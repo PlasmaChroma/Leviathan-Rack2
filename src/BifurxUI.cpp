@@ -388,10 +388,10 @@ void BifurxSpectrumWidget::step() {
 		dirty = true;
 	}
 
-	const uint32_t llTelemetrySeq = module->llTelemetryPublishSeq.load(std::memory_order_acquire);
-	if (llTelemetrySeq != lastLlTelemetrySeq) {
-		const int index = module->llTelemetryPublishedIndex.load(std::memory_order_acquire);
-		llTelemetryState = module->llTelemetryStates[index];
+	uint32_t llTelemetrySeq = lastLlTelemetrySeq;
+	BifurxLlTelemetryState telemetryState;
+	if (module->readLlTelemetryState(lastLlTelemetrySeq, &telemetryState, &llTelemetrySeq)) {
+		llTelemetryState = telemetryState;
 		hasLlTelemetry = true;
 		lastLlTelemetrySeq = llTelemetrySeq;
 	}
@@ -622,10 +622,11 @@ struct BifurxSpectrumBackgroundWidget final : Widget {
 		Widget::step();
 		bool dirty = false;
 		if (module) {
-			const uint32_t previewSeq = module->previewPublishSeq.load(std::memory_order_acquire);
-			if (previewSeq != lastPreviewSeq) {
-				const int index = module->previewPublishedIndex.load(std::memory_order_acquire);
-				const float newSampleRate = std::max(1.f, module->previewStates[index].sampleRate);
+			BifurxPreviewState previewState;
+			double publishTimeSec = 0.0;
+			uint32_t previewSeq = lastPreviewSeq;
+			if (module->readPreviewState(lastPreviewSeq, &previewState, &publishTimeSec, &previewSeq)) {
+				const float newSampleRate = std::max(1.f, previewState.sampleRate);
 				if (std::fabs(newSampleRate - sampleRate) > 0.5f) { sampleRate = newSampleRate; dirty = true; }
 				lastPreviewSeq = previewSeq;
 			}
