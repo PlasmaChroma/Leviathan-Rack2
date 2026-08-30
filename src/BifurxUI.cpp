@@ -322,8 +322,9 @@ float BifurxSpectrumWidget::getTopLabelReservedWidth(const DrawArgs& args, float
 
 void BifurxSpectrumWidget::step() {
 	using PerfClock = std::chrono::steady_clock;
-	const bool perfLoggingActive = module && module->perfDebugLogging.load(std::memory_order_relaxed);
-	const bool measurePerf = isDragonKingDebugEnabled() || perfLoggingActive;
+	const bool debugEnabled = isDragonKingDebugEnabled();
+	const bool perfLoggingActive = debugEnabled && module && module->perfDebugLogging.load(std::memory_order_relaxed);
+	const bool measurePerf = debugEnabled;
 	const PerfClock::time_point perfStepStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 	Widget::step();
 	syncCurveDebugCaptureState();
@@ -472,8 +473,9 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	const float w = box.size.x, h = box.size.y;
 	if (!(w > 0.f && h > 0.f)) return;
 	using PerfClock = std::chrono::steady_clock;
-	const bool perfLoggingActive = module && module->perfDebugLogging.load(std::memory_order_relaxed);
-	const bool measurePerf = isDragonKingDebugEnabled() || perfLoggingActive;
+	const bool debugEnabled = isDragonKingDebugEnabled();
+	const bool perfLoggingActive = debugEnabled && module && module->perfDebugLogging.load(std::memory_order_relaxed);
+	const bool measurePerf = debugEnabled;
 	const PerfClock::time_point perfDrawStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 	PerfClock::time_point perfSectionStart = perfDrawStart;
 	auto recordDrawSection = [&](uint64_t& count, uint64_t& totalNs) {
@@ -748,6 +750,7 @@ struct BifurxVisibleFramebufferWidget final : widget::FramebufferWidget {
 
 struct BifurxWidget final : ModuleWidget {
 	std::unique_ptr<Bifurx> browserPreviewModule;
+	Bifurx* analysisSubscriptionModule = nullptr;
 	widget::FramebufferWidget* spectrumNanoVG = nullptr;
 	Widget* spectrumOpenGL = nullptr;
 	Widget* modernPanelBacking = nullptr;
@@ -826,6 +829,10 @@ struct BifurxWidget final : ModuleWidget {
 
 	explicit BifurxWidget(Bifurx* module) {
 		setModule(module);
+		if (module) {
+			analysisSubscriptionModule = module;
+			analysisSubscriptionModule->subscribeAnalysisVisual();
+		}
 		Bifurx* displayModule = module;
 		if (!displayModule) {
 			browserPreviewModule.reset(new Bifurx());
@@ -985,6 +992,13 @@ struct BifurxWidget final : ModuleWidget {
 		applyLegacyVisuals(lastLegacyVisuals);
 	}
 
+	~BifurxWidget() override {
+		if (analysisSubscriptionModule) {
+			analysisSubscriptionModule->unsubscribeAnalysisVisual();
+			analysisSubscriptionModule = nullptr;
+		}
+	}
+
 	void step() override {
 		using PerfClock = std::chrono::steady_clock;
 		Bifurx* bifurx = dynamic_cast<Bifurx*>(module);
@@ -1008,6 +1022,8 @@ struct BifurxWidget final : ModuleWidget {
 				lastRenderMode = renderModeNow;
 				if (spectrumNanoVG) spectrumNanoVG->setVisible(!showGL);
 				if (spectrumOpenGL) spectrumOpenGL->setVisible(showGL);
+				if (showGL && spectrumNanoVGContent) spectrumNanoVGContent->releaseWorkerRegistration();
+				if (!showGL && spectrumOpenGLBase) spectrumOpenGLBase->releaseWorkerRegistration();
 			}
 		}
 		ModuleWidget::step();
@@ -1033,7 +1049,7 @@ struct BifurxWidget final : ModuleWidget {
 			? spectrumOpenGLBase
 			: static_cast<BifurxSpectrumBase*>(spectrumNanoVGContent);
 		const bool fixedSurfaceActive = showGL
-			&& bifurx->fixedSurfaceExperiment.load(std::memory_order_relaxed);
+			&& bifurx->fixedGlSurfaceEnabled.load(std::memory_order_relaxed);
 		debug_terminal::submitBifurxUiMetrics(
 			bifurx->debugInstanceId,
 			debug_terminal::consumeAudioProcessTiming(
@@ -1194,10 +1210,10 @@ struct BifurxWidget final : ModuleWidget {
 				menu->addChild(createMenuLabel("Debug Rendering"));
 				menu->addChild(createCheckMenuItem(
 					"Context-owned fixed GL surface", "",
-					[=]() { return bifurx->fixedSurfaceExperiment.load(std::memory_order_relaxed); },
+					[=]() { return bifurx->fixedGlSurfaceEnabled.load(std::memory_order_relaxed); },
 					[=]() {
-						bifurx->fixedSurfaceExperiment.store(
-							!bifurx->fixedSurfaceExperiment.load(std::memory_order_relaxed),
+						bifurx->fixedGlSurfaceEnabled.store(
+							!bifurx->fixedGlSurfaceEnabled.load(std::memory_order_relaxed),
 							std::memory_order_relaxed);
 					}));
 			}

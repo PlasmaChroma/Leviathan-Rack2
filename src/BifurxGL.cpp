@@ -1164,7 +1164,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const bool showModuleResponseOverlayNow = module->showModuleResponseOverlay.load(std::memory_order_relaxed);
 		const bool useGlShaderRendererNow = module->useGlShaderRenderer.load(std::memory_order_relaxed);
 		const int colorSchemeNow = int(module->colorScheme);
-		const bool fixedSurfaceEnabledNow = module->fixedSurfaceExperiment.load(std::memory_order_relaxed);
+		const bool fixedSurfaceEnabledNow = module->fixedGlSurfaceEnabled.load(std::memory_order_relaxed);
 		bool contentDirty = tick.previewUpdated || tick.analysisUpdated || tick.animationActive;
 
 		// Shared dirty policy with NanoVG path: redraw on new data or active animation.
@@ -1453,7 +1453,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	}
 
 	void renderFixedSurfaceIfNeeded() {
-		if (!module || !module->fixedSurfaceExperiment.load(std::memory_order_relaxed)) return;
+		if (!module || !module->fixedGlSurfaceEnabled.load(std::memory_order_relaxed)) return;
 		NVGcontext* vg = (APP && APP->window) ? APP->window->vg : nullptr;
 		if (!vg) return;
 		if (rendererVg != vg) {
@@ -1488,7 +1488,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	}
 
 	void draw(const DrawArgs& args) override {
-		if (module && module->fixedSurfaceExperiment.load(std::memory_order_relaxed)
+		if (module && module->fixedGlSurfaceEnabled.load(std::memory_order_relaxed)
 			&& fixedSurface.draw(args, box.size)) return;
 		widget::FramebufferWidget::draw(args);
 	}

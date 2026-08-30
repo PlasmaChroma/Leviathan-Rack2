@@ -12,6 +12,20 @@ namespace {
 
 constexpr uint64_t kPublishedSlotIndexMask = 0x7u;
 constexpr uint32_t kPublishedSlotWriterClaim = 0x80000000u;
+constexpr int kSpanShapeLutIntervals = 1024;
+
+struct SpanShapeLut {
+	float values[kSpanShapeLutIntervals + 1] = {};
+
+	SpanShapeLut() {
+		for (int i = 0; i <= kSpanShapeLutIntervals; ++i) {
+			const float x = float(i) / float(kSpanShapeLutIntervals);
+			values[i] = std::pow(x, 1.45f);
+		}
+	}
+};
+
+const SpanShapeLut gSpanShapeLut;
 
 inline int publishedSlotFromToken(uint64_t token) {
 	return token ? int(token & kPublishedSlotIndexMask) : -1;
@@ -103,6 +117,14 @@ const char* const kBifurxModeLabels[kBifurxModeCount] = {
 
 std::string bifurxUserRootPath() {
 	return system::join(asset::user(), "Leviathan/Bifurx");
+}
+
+float shapedSpan(float value) {
+	const float x = levi_math::clamp01(value);
+	const float position = x * float(kSpanShapeLutIntervals);
+	const int index = std::min(int(position), kSpanShapeLutIntervals - 1);
+	const float fraction = position - float(index);
+	return mixf(gSpanShapeLut.values[index], gSpanShapeLut.values[index + 1], fraction);
 }
 
 constexpr float kSelfOscResoStart = 0.80f;
@@ -770,6 +792,21 @@ void Bifurx::resetAnalysisCapture() {
 	analysisCaptureCountdown = 0;
 }
 
+void Bifurx::subscribeAnalysisVisual() {
+	analysisVisualSubscribers.fetch_add(1u, std::memory_order_release);
+}
+
+void Bifurx::unsubscribeAnalysisVisual() {
+	uint32_t subscribers = analysisVisualSubscribers.load(std::memory_order_acquire);
+	while (subscribers > 0u && !analysisVisualSubscribers.compare_exchange_weak(
+		subscribers,
+		subscribers - 1u,
+		std::memory_order_acq_rel,
+		std::memory_order_acquire
+	)) {
+	}
+}
+
 void Bifurx::resetCircuitStates() {
 	coreA = TptSvf {};
 	coreB = TptSvf {};
@@ -793,6 +830,15 @@ void Bifurx::resetCircuitStates() {
 	selfOscCoeffSampleRateB = 0.f;
 	cachedFrequencyRangeSampleRate = 0.f;
 	cachedFrequencyRangeOctaves = 0.f;
+	cachedFreqParamNorm = -1.f;
+	cachedVoctCv = 0.f;
+	cachedFm = 0.f;
+	cachedPitchSampleRate = 0.f;
+	cachedCharacterState = CharacterStageState {};
+	cachedCharacterDrive = 0.f;
+	cachedCharacterResoNorm = 0.f;
+	cachedCharacterHighResEnabled = false;
+	cachedCharacterStateValid = false;
 	controlFastCacheValid = false;
 
 	llTelemetryExcitationSq = 0.f;
@@ -1050,6 +1096,12 @@ bool Bifurx::copyAnalysisFrame(
 }
 
 void Bifurx::pushAnalysisSample(float rawInputSample, float outputSample, float responseOutputSample) {
+	if (analysisVisualSubscribers.load(std::memory_order_acquire) == 0u) {
+		if (analysisCaptureSlots[0] >= 0 || analysisCaptureSlots[1] >= 0 || analysisCaptureCountdown != 0) {
+			resetAnalysisCapture();
+		}
+		return;
+	}
 	if (analysisCaptureCountdown <= 0) {
 		int captureIndex = (analysisCaptureSlots[0] < 0) ? 0 : ((analysisCaptureSlots[1] < 0) ? 1 : -1);
 		if (captureIndex >= 0) {
@@ -1099,6 +1151,7 @@ void Bifurx::pushAnalysisSample(float rawInputSample, float outputSample, float 
 void Bifurx::onSampleRateChange(const SampleRateChangeEvent& e) {
 	controlFastCacheValid = false;
 	cachedFrequencyRangeSampleRate = 0.f;
+	cachedPitchSampleRate = 0.f;
 	previewFilterInitialized = false;
 	previewSampleAccum = 0;
 	resetAnalysisCapture();
@@ -1186,6 +1239,7 @@ void Bifurx::process(const ProcessArgs& args) {
 		controlUpdateDivider.setDivision(controlUpdateDivision);
 	}
 	const bool controlDividerTick = controlUpdateDivider.process();
+	const bool initializeControlState = !controlFastCacheValid;
 	if (controlDividerTick) {
 		if (modeLeftTrigger.process(params[MODE_LEFT_PARAM].getValue())) { const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, kBifurxUiModeCount - 1); params[MODE_PARAM].setValue(float((currentMode + kBifurxUiModeCount - 1) % kBifurxUiModeCount)); }
 		if (modeRightTrigger.process(params[MODE_RIGHT_PARAM].getValue())) { const int currentMode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, kBifurxUiModeCount - 1); params[MODE_PARAM].setValue(float((currentMode + 1) % kBifurxUiModeCount)); }
@@ -1194,18 +1248,18 @@ void Bifurx::process(const ProcessArgs& args) {
 		params[MODE_PARAM].setValue(float(kBifurxUiModeCount - 1));
 	}
 	const int mode = clamp(int(std::round(params[MODE_PARAM].getValue())), 0, kBifurxUiModeCount - 1);
-	if (controlDividerTick) {
+	if (controlDividerTick || initializeControlState) {
 		perfSampleRate.store(args.sampleRate, std::memory_order_relaxed);
 		perfMode.store(mode, std::memory_order_relaxed);
 		perfFastPathEligible.store(fastPathEligible, std::memory_order_relaxed);
 		perfPreviewPitchCvConnected.store(voctConnected || fmConnected, std::memory_order_relaxed);
 		cachedLowLatencyVisual = lowLatencyVisual.load(std::memory_order_relaxed);
+		cachedHighResonanceSelfOscEnabled = highResonanceSelfOscEnabled.load(std::memory_order_relaxed);
+		cachedSoftLimitingEnabled = softLimitingEnabled.load(std::memory_order_relaxed);
 	}
 	const bool forceAudioRateControls = modulationQualityModeNow == MOD_QUALITY_EXACT;
-	const bool updateSlowControls =
-		!controlFastCacheValid || controlDividerTick || (forceAudioRateControls && slowCvConnected);
-	const bool updatePitchControls =
-		!controlFastCacheValid || audioRateControlsActive || updateSlowControls;
+	const bool inspectSlowControls =
+		initializeControlState || controlDividerTick || (forceAudioRateControls && slowCvConnected);
 	if (std::fabs(previewFilterAlphaSampleRate - args.sampleRate) > 0.5f) { previewFilterAlpha = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), 0.05f); previewFilterAlphaSlow = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), 0.20f); previewFilterAlphaSampleRate = args.sampleRate; }
 	if (std::fabs(llTelemetryAlphaSampleRate - args.sampleRate) > 0.5f) {
 		llTelemetryAlpha = onePoleAlpha(1.f / std::max(args.sampleRate, 1.f), kLlTelemetryTauSeconds);
@@ -1214,22 +1268,59 @@ void Bifurx::process(const ProcessArgs& args) {
 
 	float freqA0 = cachedFreqA0, freqB0 = cachedFreqB0, dampingA = cachedDampingA, dampingB = cachedDampingB, wA = cachedWA, wB = cachedWB, balance = cachedBalance;
 	float resoNorm = cachedResoNorm, balanceNorm = cachedBalanceNorm, spanParamNorm = cachedSpanParamNorm, spanCvNorm = cachedSpanCvNorm, spanAtten = cachedSpanAtten, spanNorm = cachedSpanNorm, spanOct = cachedSpanOct;
-	if (updateSlowControls) {
+	bool slowDerivedStateChanged = false;
+	if (inspectSlowControls) {
 		const float resoCvNorm = resoCvConnected ? clamp(inputs[RESO_CV_INPUT].getVoltage(), 0.f, 8.f) / 8.f : 0.f;
-		resoNorm = clamp(params[RESO_PARAM].getValue() + resoCvNorm, 0.f, 1.f);
+		const float nextResoNorm = clamp(params[RESO_PARAM].getValue() + resoCvNorm, 0.f, 1.f);
 		const float balanceCvNorm = balanceCvConnected ? clamp(inputs[BALANCE_CV_INPUT].getVoltage(), -5.f, 5.f) / 5.f : 0.f;
-		balanceNorm = clamp(params[BALANCE_PARAM].getValue() + balanceCvNorm, -1.f, 1.f);
-		spanParamNorm = clamp(params[SPAN_PARAM].getValue(), 0.f, 1.f);
-		spanAtten = clamp(params[SPAN_CV_ATTEN_PARAM].getValue(), -1.f, 1.f);
-		spanCvNorm = spanCvConnected ? clamp(inputs[SPAN_CV_INPUT].getVoltage(), -10.f, 10.f) / 5.f : 0.f;
-		spanNorm = clamp(spanParamNorm + 0.5f * spanAtten * spanCvNorm, 0.f, 1.f);
-		spanOct = 8.f * bifurx::shapedSpan(spanNorm);
-		balance = balanceNorm;
-		const float baseDamping = resoToDamping(resoNorm);
-		dampingA = clamp(baseDamping * fastExp(0.48f * balance), 0.02f, 2.2f); dampingB = clamp(baseDamping * fastExp(-0.48f * balance), 0.02f, 2.2f);
-		const float lowW = signedWeight(balance, false), highW = signedWeight(balance, true), norm = 2.f / (lowW + highW); wA = lowW * norm; wB = highW * norm;
-		cachedDampingA = dampingA; cachedDampingB = dampingB; cachedWA = wA; cachedWB = wB; cachedBalance = balance; cachedResoNorm = resoNorm; cachedBalanceNorm = balanceNorm; cachedSpanParamNorm = spanParamNorm; cachedSpanCvNorm = spanCvNorm; cachedSpanAtten = spanAtten; cachedSpanNorm = spanNorm; cachedSpanOct = spanOct;
+		const float nextBalanceNorm = clamp(params[BALANCE_PARAM].getValue() + balanceCvNorm, -1.f, 1.f);
+		const float nextSpanParamNorm = clamp(params[SPAN_PARAM].getValue(), 0.f, 1.f);
+		const float nextSpanAtten = clamp(params[SPAN_CV_ATTEN_PARAM].getValue(), -1.f, 1.f);
+		const float nextSpanCvNorm = spanCvConnected ? clamp(inputs[SPAN_CV_INPUT].getVoltage(), -10.f, 10.f) / 5.f : 0.f;
+		const float nextSpanNorm = clamp(nextSpanParamNorm + 0.5f * nextSpanAtten * nextSpanCvNorm, 0.f, 1.f);
+		const bool slowSourcesChanged = initializeControlState
+			|| nextResoNorm != cachedResoNorm
+			|| nextBalanceNorm != cachedBalanceNorm
+			|| nextSpanParamNorm != cachedSpanParamNorm
+			|| nextSpanCvNorm != cachedSpanCvNorm
+			|| nextSpanAtten != cachedSpanAtten
+			|| nextSpanNorm != cachedSpanNorm;
+		slowDerivedStateChanged = initializeControlState
+			|| nextResoNorm != cachedResoNorm
+			|| nextBalanceNorm != cachedBalanceNorm
+			|| nextSpanNorm != cachedSpanNorm;
+		if (slowSourcesChanged) {
+			resoNorm = nextResoNorm;
+			balanceNorm = nextBalanceNorm;
+			spanParamNorm = nextSpanParamNorm;
+			spanAtten = nextSpanAtten;
+			spanCvNorm = nextSpanCvNorm;
+			spanNorm = nextSpanNorm;
+			cachedResoNorm = resoNorm;
+			cachedBalanceNorm = balanceNorm;
+			cachedSpanParamNorm = spanParamNorm;
+			cachedSpanCvNorm = spanCvNorm;
+			cachedSpanAtten = spanAtten;
+			cachedSpanNorm = spanNorm;
+		}
+		if (slowDerivedStateChanged) {
+			spanOct = 8.f * bifurx::shapedSpan(spanNorm);
+			balance = balanceNorm;
+			const float baseDamping = resoToDamping(resoNorm);
+			dampingA = clamp(baseDamping * fastExp(0.48f * balance), 0.02f, 2.2f);
+			dampingB = clamp(baseDamping * fastExp(-0.48f * balance), 0.02f, 2.2f);
+			const float lowW = signedWeight(balance, false), highW = signedWeight(balance, true), norm = 2.f / (lowW + highW);
+			wA = lowW * norm;
+			wB = highW * norm;
+			cachedDampingA = dampingA; cachedDampingB = dampingB; cachedWA = wA; cachedWB = wB; cachedBalance = balance; cachedSpanOct = spanOct;
+		}
 	}
+	const bool pitchSourcesChanged = initializeControlState
+		|| freqParamNorm != cachedFreqParamNorm
+		|| voctCv != cachedVoctCv
+		|| fm != cachedFm
+		|| std::fabs(args.sampleRate - cachedPitchSampleRate) > 0.5f;
+	const bool updatePitchControls = slowDerivedStateChanged || pitchSourcesChanged;
 	if (updatePitchControls) {
 		const float sr = std::max(args.sampleRate, 1.f);
 		const float maxHz = 0.46f * sr;
@@ -1247,13 +1338,28 @@ void Bifurx::process(const ProcessArgs& args) {
 		cachedFreqA0 = freqA0; cachedFreqB0 = freqB0;
 		cachedCoeffsA = makeSvfCoeffs(args.sampleRate, freqA0, dampingA);
 		cachedCoeffsB = makeSvfCoeffs(args.sampleRate, freqB0, dampingB);
+		cachedFreqParamNorm = freqParamNorm;
+		cachedVoctCv = voctCv;
+		cachedFm = fm;
+		cachedPitchSampleRate = args.sampleRate;
 		controlFastCacheValid = true;
 	}
 
 	const float titoModeScale = 1.22f, titoStrength = 2.4f * titoAbs, couplingDepth = titoStrength * titoModeScale * (0.026f + 0.28f * resoNorm * resoNorm);
 	const float drivenIn = applyLevelInputStage(in, level);
-	const bool highResonanceSelfOscEnabledNow = highResonanceSelfOscEnabled.load(std::memory_order_relaxed);
-	const CharacterStageState character = prepareCharacterStageState(drive, resoNorm, highResonanceSelfOscEnabledNow);
+	const bool highResonanceSelfOscEnabledNow = cachedHighResonanceSelfOscEnabled;
+	if (!cachedCharacterStateValid
+		|| drive != cachedCharacterDrive
+		|| resoNorm != cachedCharacterResoNorm
+		|| highResonanceSelfOscEnabledNow != cachedCharacterHighResEnabled
+	) {
+		cachedCharacterState = prepareCharacterStageState(drive, resoNorm, highResonanceSelfOscEnabledNow);
+		cachedCharacterDrive = drive;
+		cachedCharacterResoNorm = resoNorm;
+		cachedCharacterHighResEnabled = highResonanceSelfOscEnabledNow;
+		cachedCharacterStateValid = true;
+	}
+	const CharacterStageState& character = cachedCharacterState;
 	const float oscNorm = character.selfOscillating ? character.oscOnset * character.oscOnset : 0.f;
 	const float selfOscSeed = (oscNorm > 0.f) ? (2e-7f + 8e-7f * oscNorm) : 0.f;
 	if ((highResonanceSelfOscEnabledNow && oscNorm > 0.f) || controlDividerTick) {
@@ -1318,7 +1424,7 @@ void Bifurx::process(const ProcessArgs& args) {
 		}
 	}
 
-	const bool softLimitingEnabledNow = softLimitingEnabled.load(std::memory_order_relaxed);
+	const bool softLimitingEnabledNow = cachedSoftLimitingEnabled;
 	const float out = displayOnlyMode ? in : applyLevelOutputStage(modeOut, level, softLimitingEnabledNow);
 	outputs[OUT_OUTPUT].setVoltage(out);
 	const float llAlpha = llTelemetryAlpha;

@@ -50,6 +50,27 @@ struct TestResult {
   std::string detail;
 };
 
+TestResult testSpanShapeLutTracksReferenceCurve() {
+  float maxError = 0.f;
+  bool monotonic = true;
+  float previous = shapedSpan(0.f);
+  constexpr int steps = 20000;
+  for (int i = 1; i <= steps; ++i) {
+    const float x = float(i) / float(steps);
+    const float actual = shapedSpan(x);
+    const float reference = std::pow(x, 1.45f);
+    maxError = std::max(maxError, std::fabs(actual - reference));
+    monotonic = monotonic && actual >= previous;
+    previous = actual;
+  }
+  const bool endpoints = shapedSpan(0.f) == 0.f && shapedSpan(1.f) == 1.f;
+  return {
+    "SPAN lookup table preserves the authored shaping curve",
+    endpoints && monotonic && maxError < 7e-6f,
+    "maxError=" + std::to_string(maxError)
+  };
+}
+
 float freqNormForCenterHz(float centerHz) {
   constexpr float kFreqMinHz = 4.f;
   constexpr float kFreqLog2Span = 12.7731392f;  // log2(28000 / 4)
@@ -458,6 +479,7 @@ TestResult testPublishedSnapshotsRemainCoherentUnderContention() {
 
 TestResult testAnalysisFramesPublishAsOverlappingWindows() {
   Bifurx module;
+  module.subscribeAnalysisVisual();
   alignas(16) float raw[kFftSize] = {};
   alignas(16) float output[kFftSize] = {};
   alignas(16) float response[kFftSize] = {};
@@ -480,11 +502,57 @@ TestResult testAnalysisFramesPublishAsOverlappingWindows() {
   const bool overlappingWindow = secondPublished
     && raw[0] == float(kFftHopSize)
     && raw[kFftSize - 1] == float(kFftSize + kFftHopSize - 1);
+  module.unsubscribeAnalysisVisual();
   const bool pass = !earlyPublish && firstWindow && overlappingWindow && seq == firstSeq + 1u;
   return {
     "Analysis publishes coherent 50-percent-overlapped frames without rotation",
     pass,
     "firstSeq=" + std::to_string(firstSeq) + " secondSeq=" + std::to_string(seq)
+  };
+}
+
+TestResult testAnalysisCaptureSleepsWithoutVisualSubscriber() {
+  Bifurx module;
+  for (int i = 0; i < kFftSize + kFftHopSize; ++i) {
+    module.pushAnalysisSample(float(i), float(i), float(i));
+  }
+  const bool slept = module.analysisPublishSeq.load(std::memory_order_acquire) == 0u
+    && module.analysisCaptureSlots[0] < 0
+    && module.analysisCaptureSlots[1] < 0
+    && module.analysisCaptureCountdown == 0;
+
+  module.subscribeAnalysisVisual();
+  for (int i = 0; i < 64; ++i) {
+    module.pushAnalysisSample(float(i), float(i), float(i));
+  }
+  const bool woke = module.analysisCaptureSlots[0] >= 0
+    && module.analysisCapturePositions[0] == 64;
+  module.unsubscribeAnalysisVisual();
+  module.pushAnalysisSample(0.f, 0.f, 0.f);
+  const bool stoppedCleanly = module.analysisVisualSubscribers.load(std::memory_order_acquire) == 0u
+    && module.analysisCaptureSlots[0] < 0
+    && module.analysisCaptureSlots[1] < 0
+    && module.analysisCaptureCountdown == 0;
+  return {
+    "Analysis capture sleeps without a live visual subscriber",
+    slept && woke && stoppedCleanly,
+    "slept=" + std::to_string(int(slept)) + " woke=" + std::to_string(int(woke))
+      + " stopped=" + std::to_string(int(stoppedCleanly))
+  };
+}
+
+TestResult testVisualWorkerDefaultSetterHonorsMode() {
+  setBifurxVisualWorkerDefaultMode(VISUAL_WORKER_OFF);
+  const bool off = getBifurxVisualWorkerDefaultMode() == VISUAL_WORKER_OFF;
+  setBifurxVisualWorkerDefaultMode(VISUAL_WORKER_AUTO);
+  const bool automatic = getBifurxVisualWorkerDefaultMode() == VISUAL_WORKER_AUTO;
+  setBifurxVisualWorkerDefaultMode(VISUAL_WORKER_ON);
+  const bool on = getBifurxVisualWorkerDefaultMode() == VISUAL_WORKER_ON;
+  return {
+    "Visual worker global default setter honors supported modes",
+    off && automatic && on,
+    "off=" + std::to_string(int(off)) + " auto=" + std::to_string(int(automatic))
+      + " on=" + std::to_string(int(on))
   };
 }
 
@@ -513,6 +581,8 @@ TestResult testResetClearsRuntimeState() {
     && module.titoCoeffFreqA == 0.f && module.titoCoeffFreqB == 0.f
     && module.selfOscCoeffFreqA == 0.f && module.selfOscCoeffFreqB == 0.f
     && module.cachedFrequencyRangeSampleRate == 0.f
+    && module.cachedPitchSampleRate == 0.f
+    && !module.cachedCharacterStateValid
     && !module.previewFilterInitialized;
   const bool analysisCleared = module.analysisCaptureSlots[0] < 0
     && module.analysisCaptureSlots[1] < 0 && module.analysisCaptureCountdown == 0;
@@ -1097,11 +1167,14 @@ TestResult testBrowserPreviewUsesAuthoredUndertowScene() {
 
 int main() {
   const std::vector<TestResult> tests = {
+    testSpanShapeLutTracksReferenceCurve(),
     testResonanceCurveUsesFullControlTravel(),
     testFrequencyQuantityRoundTripsAccurately(),
     testPreviewInvalidatesForModelDependencies(),
     testPublishedSnapshotsRemainCoherentUnderContention(),
     testAnalysisFramesPublishAsOverlappingWindows(),
+    testAnalysisCaptureSleepsWithoutVisualSubscriber(),
+    testVisualWorkerDefaultSetterHonorsMode(),
     testResetClearsRuntimeState(),
     testVoctStepsImmediatelyWithoutImplicitGlide(),
     testSpanIsPreservedAtFrequencyRails(),

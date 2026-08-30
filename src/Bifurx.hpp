@@ -120,9 +120,7 @@ inline float amplitudeRatioDb(float numerator, float denominator) {
 
 std::string bifurxUserRootPath();
 
-inline float shapedSpan(float value) {
-	return std::pow(levi_math::clamp01(value), 1.45f);
-}
+float shapedSpan(float value);
 
 float levelDriveGain(float knob);
 float levelInputGain(float knob);
@@ -634,9 +632,9 @@ struct Bifurx : Module {
 	TptSvf coreA;
 	TptSvf coreB;
 	RenderMode renderMode = RENDER_OPENGL;
-	// Debug-only A/B control for the context-owned fixed GL surface prototype.
-	// Intentionally not serialized until the lifecycle experiment is accepted.
-	std::atomic<bool> fixedSurfaceExperiment {true};
+	// Production context-owned fixed GL surface. The debug menu may disable it
+	// temporarily for diagnostics, but enabled is the supported default path.
+	std::atomic<bool> fixedGlSurfaceEnabled {true};
 	dsp::ClockDivider previewPublishDivider;
 	dsp::ClockDivider previewPublishSlowDivider;
 	dsp::ClockDivider controlUpdateDivider;
@@ -690,7 +688,18 @@ struct Bifurx : Module {
 	float cachedSpanOct = 0.f;
 	float cachedFrequencyRangeSampleRate = 0.f;
 	float cachedFrequencyRangeOctaves = 0.f;
+	float cachedFreqParamNorm = -1.f;
+	float cachedVoctCv = 0.f;
+	float cachedFm = 0.f;
+	float cachedPitchSampleRate = 0.f;
 	bool cachedLowLatencyVisual = false;
+	bool cachedHighResonanceSelfOscEnabled = false;
+	bool cachedSoftLimitingEnabled = true;
+	CharacterStageState cachedCharacterState;
+	float cachedCharacterDrive = 0.f;
+	float cachedCharacterResoNorm = 0.f;
+	bool cachedCharacterHighResEnabled = false;
+	bool cachedCharacterStateValid = false;
 	SvfCoeffs cachedCoeffsA;
 	SvfCoeffs cachedCoeffsB;
 	SvfCoeffs selfOscCoeffsA;
@@ -724,6 +733,7 @@ struct Bifurx : Module {
 	dsp::SchmittTrigger modeLeftTrigger;
 	dsp::SchmittTrigger modeRightTrigger;
 	std::atomic<uint32_t> analysisPublishSeq{0};
+	std::atomic<uint32_t> analysisVisualSubscribers{0};
 	std::atomic<bool> fftScaleDynamic {true};
 	std::atomic<bool> showModuleResponseOverlay {false};
 	ColorScheme colorScheme = SCHEME_DEFAULT;
@@ -776,6 +786,8 @@ struct Bifurx : Module {
 	);
 	void pushAnalysisSample(float rawInputSample, float outputSample, float responseOutputSample);
 	void resetAnalysisCapture();
+	void subscribeAnalysisVisual();
+	void unsubscribeAnalysisVisual();
 	void onSampleRateChange(const SampleRateChangeEvent& e) override;
 	// Rack's ResetEvent base implementation resets parameters, then dispatches
 	// this deprecated hook for module-specific runtime state.

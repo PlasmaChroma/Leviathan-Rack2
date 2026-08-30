@@ -1,6 +1,7 @@
 #include "BifurxWorker.hpp"
 #include "BifurxRenderPrep.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <condition_variable>
 #include <deque>
@@ -23,7 +24,7 @@ void loadBifurxVisualWorkerDefaultModeIfNeeded() {
 	if (gBifurxVisualWorkerSettingsLoaded.load(std::memory_order_relaxed)) {
 		return;
 	}
-	// Global default is intentionally fixed to ON.
+	// Start enabled; the setter may select another supported global default.
 	gBifurxVisualWorkerDefaultMode.store(VISUAL_WORKER_ON, std::memory_order_relaxed);
 	gBifurxVisualWorkerSettingsLoaded.store(true, std::memory_order_release);
 }
@@ -227,9 +228,11 @@ void shutdownBifurxRenderService() {
 }
 
 void setBifurxVisualWorkerDefaultMode(int mode) {
-	(void) mode;
 	loadBifurxVisualWorkerDefaultModeIfNeeded();
-	gBifurxVisualWorkerDefaultMode.store(VISUAL_WORKER_ON, std::memory_order_relaxed);
+	gBifurxVisualWorkerDefaultMode.store(
+		std::max(int(VISUAL_WORKER_OFF), std::min(mode, int(VISUAL_WORKER_ON))),
+		std::memory_order_relaxed
+	);
 }
 
 int getBifurxVisualWorkerDefaultMode() {
