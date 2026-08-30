@@ -42,20 +42,6 @@ struct PlasmaConduitWidget final : Widget {
 		stroke(0.29f, nvgRGBA(255, 218, 125, 246));
 		stroke(0.13f, nvgRGBA(255, 252, 225, 255));
 
-		for (Vec center : {segment.start, segment.end}) {
-			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, center.x, center.y, mm2px(1.35f));
-			nvgFillPaint(args.vg, nvgRadialGradient(
-				args.vg, center.x, center.y,
-				0.f, mm2px(1.35f),
-				nvgRGBA(255, 245, 184, 150),
-				nvgRGBA(255, 132, 18, 0)));
-			nvgFill(args.vg);
-			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, center.x, center.y, mm2px(0.20f));
-			nvgFillColor(args.vg, nvgRGBA(255, 253, 225, 245));
-			nvgFill(args.vg);
-		}
 	}
 
 	void draw(const DrawArgs& args) override {
