@@ -684,7 +684,7 @@ build/tests/deepcache_theme_classifier_spec: tests/deepcache_theme_classifier_sp
 build/tests/chromatide_spec: tests/chromatide_spec.cpp src/ChromatideCanvas.cpp src/Chromatide.cpp src/IrisSourceField.cpp src/DeepcacheQoi.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chromatide_spec.cpp src/ChromatideCanvas.cpp src/Chromatide.cpp src/IrisSourceField.cpp src/DeepcacheQoi.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
-build/tests/bifurx_runtime_spec: tests/bifurx_runtime_spec.cpp src/Bifurx.cpp src/BifurxInputStage.hpp src/BifurxOutputStage.hpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/MathHelpers.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp | build/tests
+build/tests/bifurx_runtime_spec: tests/bifurx_runtime_spec.cpp src/Bifurx.cpp src/BifurxInputStage.hpp src/BifurxOutputStage.hpp src/BifurxRenderData.hpp src/BifurxWorker.hpp src/BifurxWorker.cpp src/BifurxRenderPrep.hpp src/BifurxRenderPrep.cpp src/MathHelpers.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp | build/tests
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra -Wno-subobject-linkage $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/MathHelpers.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@
 
 build/tests/chronomaw_serialization_spec: tests/chronomaw_serialization_spec.cpp src/Chronomaw.cpp src/ChronomawEngine.cpp | build/tests

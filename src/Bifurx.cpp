@@ -1659,10 +1659,9 @@ void BifurxSpectrumBase::ensureWorkerRegistration() {
 }
 
 void BifurxSpectrumBase::releaseWorkerRegistration() {
-	if (workerDisplayId == 0) {
-		return;
+	if (workerDisplayId != 0) {
+		bifurxRenderService().unregisterDisplay(workerDisplayId);
 	}
-	bifurxRenderService().unregisterDisplay(workerDisplayId);
 	workerDisplayId = 0;
 	workerRequestSeq = 0;
 	workerLastAppliedRequestSeq = 0;
@@ -1671,7 +1670,26 @@ void BifurxSpectrumBase::releaseWorkerRegistration() {
 	workerLastSubmittedAnalysisSeq = 0;
 	workerLastAppliedAnalysisSeq = 0;
 	workerSnapshotCache.reset();
+	for (auto& analysisFrame : workerAnalysisFramePool) {
+		analysisFrame.reset();
+	}
+	workerAnalysisFramePoolCursor = 0;
 	lastWorkerSubmitUs = 0.f;
+}
+
+std::shared_ptr<BifurxUiRenderPayload> BifurxSpectrumBase::acquireWorkerAnalysisFrame() {
+	for (size_t attempt = 0; attempt < kWorkerAnalysisFramePoolSize; ++attempt) {
+		const size_t index = (workerAnalysisFramePoolCursor + attempt) % kWorkerAnalysisFramePoolSize;
+		auto& frame = workerAnalysisFramePool[index];
+		if (!frame) {
+			frame = std::make_shared<BifurxUiRenderPayload>();
+		}
+		if (frame.use_count() == 1) {
+			workerAnalysisFramePoolCursor = (index + 1) % kWorkerAnalysisFramePoolSize;
+			return frame;
+		}
+	}
+	return nullptr;
 }
 
 void BifurxSpectrumBase::submitWorkerCurveRequest() {
@@ -1696,34 +1714,38 @@ void BifurxSpectrumBase::submitWorkerCurveRequest() {
 	request.previewState = state.previewState;
 	request.fftScaleDynamic = module->fftScaleDynamic.load(std::memory_order_relaxed);
 	request.showModuleResponseOverlay = module->showModuleResponseOverlay.load(std::memory_order_relaxed);
-	request.hasOverlayTarget = state.hasOverlayTarget;
-	std::memcpy(
-		request.previousOverlayTargetModuleDb,
-		state.overlayTargetModuleDb,
-		sizeof(request.previousOverlayTargetModuleDb)
-	);
-	std::memcpy(
-		request.previousOverlayTargetOutputDbfs,
-		state.overlayTargetOutputDbfs,
-		sizeof(request.previousOverlayTargetOutputDbfs)
-	);
 	const bool analysisChangedSinceSubmit =
 		(state.lastAnalysisSeq != 0) && (state.lastAnalysisSeq != workerLastSubmittedAnalysisSeq);
 	if (analysisChangedSinceSubmit) {
-		uint32_t copiedAnalysisSeq = workerLastSubmittedAnalysisSeq;
-		request.hasAnalysisFrame = module->copyAnalysisFrame(
-			workerLastSubmittedAnalysisSeq,
-			request.analysisRawInput,
-			request.analysisOutput,
-			&copiedAnalysisSeq
-		);
-		if (request.hasAnalysisFrame) {
-			request.analysisSeq = copiedAnalysisSeq;
+		std::shared_ptr<BifurxUiRenderPayload> payload = acquireWorkerAnalysisFrame();
+		if (payload) {
+			uint32_t copiedAnalysisSeq = workerLastSubmittedAnalysisSeq;
+			const bool copiedAnalysis = module->copyAnalysisFrame(
+				workerLastSubmittedAnalysisSeq,
+				payload->analysisFrame.rawInput,
+				payload->analysisFrame.output,
+				&copiedAnalysisSeq
+			);
+			if (copiedAnalysis) {
+				payload->hasOverlayTarget = state.hasOverlayTarget;
+				std::memcpy(
+					payload->previousOverlayTargetModuleDb,
+					state.overlayTargetModuleDb,
+					sizeof(payload->previousOverlayTargetModuleDb)
+				);
+				std::memcpy(
+					payload->previousOverlayTargetOutputDbfs,
+					state.overlayTargetOutputDbfs,
+					sizeof(payload->previousOverlayTargetOutputDbfs)
+				);
+				request.payload = std::move(payload);
+				request.analysisSeq = copiedAnalysisSeq;
+			}
 		}
 	}
 	workerLastSubmittedPreviewSeq = state.lastPreviewSeq;
 	workerLastSubmittedAnalysisSeq = request.analysisSeq;
-	bifurxRenderService().submitLatest(request);
+	bifurxRenderService().submitLatest(std::move(request));
 	if (measurePerf) {
 		lastWorkerSubmitUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 			std::chrono::steady_clock::now() - submitStart).count()) * 1e-3f;

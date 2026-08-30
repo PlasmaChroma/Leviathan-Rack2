@@ -556,6 +556,91 @@ TestResult testVisualWorkerDefaultSetterHonorsMode() {
   };
 }
 
+TestResult testWorkerAnalysisFramePoolIsBoundedAndReusable() {
+  BifurxSpectrumBase display;
+  const bool lazyBeforeUse = !display.workerAnalysisFramePool[0]
+    && !display.workerAnalysisFramePool[1]
+    && !display.workerAnalysisFramePool[2];
+
+  auto first = display.acquireWorkerAnalysisFrame();
+  auto second = display.acquireWorkerAnalysisFrame();
+  auto third = display.acquireWorkerAnalysisFrame();
+  auto exhausted = display.acquireWorkerAnalysisFrame();
+  BifurxUiRenderPayload* const firstAddress = first.get();
+  const bool threeDistinctSlots = first && second && third
+    && first.get() != second.get()
+    && first.get() != third.get()
+    && second.get() != third.get();
+  const bool bounded = !exhausted;
+
+  first.reset();
+  auto recycled = display.acquireWorkerAnalysisFrame();
+  const bool reusesReleasedSlot = recycled && recycled.get() == firstAddress;
+  const bool compactRequest = sizeof(BifurxUiRenderRequest) < 256;
+
+  return {
+    "Worker analysis payload pool is lazy, bounded, compact, and reusable",
+    lazyBeforeUse && threeDistinctSlots && bounded && reusesReleasedSlot && compactRequest,
+    "requestBytes=" + std::to_string(sizeof(BifurxUiRenderRequest)) +
+      " payloadBytes=" + std::to_string(sizeof(BifurxUiRenderPayload)) +
+      " reused=" + std::to_string(int(reusesReleasedSlot))
+  };
+}
+
+TestResult testWorkerLatestRequestRetainsOwnedAnalysisPayload() {
+  BifurxUiRenderService service;
+  service.start();
+  const uint64_t displayId = service.registerDisplay();
+  constexpr uint64_t finalRequestSeq = 64;
+  constexpr float finalOutputGain = 3.f;
+
+  for (uint64_t seq = 1; seq <= finalRequestSeq; ++seq) {
+    BifurxUiRenderRequest request;
+    request.displayId = displayId;
+    request.requestSeq = seq;
+    request.previewSeq = 1;
+    request.analysisSeq = uint32_t(seq);
+    request.previewState.sampleRate = 48000.f;
+    request.previewState.mode = 0;
+    auto payload = std::make_shared<BifurxUiRenderPayload>();
+    payload->analysisFrame.rawInput[kFftSize / 2] = 1.f;
+    payload->analysisFrame.output[kFftSize / 2] = (seq == finalRequestSeq) ? finalOutputGain : 1.f;
+    request.payload = std::move(payload);
+    service.submitLatest(std::move(request));
+  }
+
+  std::shared_ptr<const BifurxUiRenderSnapshot> snapshot;
+  for (int attempt = 0; attempt < 2000; ++attempt) {
+    snapshot = service.getLatestSnapshot(displayId);
+    if (snapshot && snapshot->requestSeq == finalRequestSeq) {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+
+  float maxResponseDb = -1000.f;
+  if (snapshot) {
+    for (int i = 0; i < kCurvePointCount; ++i) {
+      maxResponseDb = std::max(maxResponseDb, snapshot->overlayTargetModuleDb[i]);
+    }
+  }
+  const float expectedResponseDb = 20.f * std::log10(finalOutputGain);
+  const bool latestWins = snapshot && snapshot->requestSeq == finalRequestSeq
+    && snapshot->analysisSeq == finalRequestSeq;
+  const bool payloadStayedAlive = snapshot && snapshot->hasOverlayTarget
+    && std::fabs(maxResponseDb - expectedResponseDb) < 0.05f;
+
+  service.unregisterDisplay(displayId);
+  service.stop();
+  return {
+    "Worker coalescing retains owned FFT payload and publishes the latest request",
+    displayId != 0 && latestWins && payloadStayedAlive,
+    "latest=" + std::to_string(snapshot ? snapshot->requestSeq : 0) +
+      " maxResponseDb=" + std::to_string(maxResponseDb) +
+      " expectedDb=" + std::to_string(expectedResponseDb)
+  };
+}
+
 TestResult testProductionOutputSafetyStageContract() {
   bool transparent = true;
   bool monotonic = true;
@@ -1176,10 +1261,11 @@ TestResult testHiddenResponseLinePreservesFftColorResponse() {
   BifurxUiRenderRequest hiddenRequest;
   hiddenRequest.previewState.sampleRate = 48000.f;
   hiddenRequest.previewState.mode = 0;
-  hiddenRequest.hasAnalysisFrame = true;
   hiddenRequest.showModuleResponseOverlay = false;
-  hiddenRequest.analysisRawInput[kFftSize / 2] = 1.f;
-  hiddenRequest.analysisOutput[kFftSize / 2] = 2.f;
+  auto analysisFrame = std::make_shared<BifurxUiRenderPayload>();
+  analysisFrame->analysisFrame.rawInput[kFftSize / 2] = 1.f;
+  analysisFrame->analysisFrame.output[kFftSize / 2] = 2.f;
+  hiddenRequest.payload = analysisFrame;
 
   BifurxUiRenderSnapshot hiddenSnapshot;
   prepareCurveSnapshot(hiddenRequest, &hiddenSnapshot);
@@ -1255,6 +1341,8 @@ int main() {
     testAnalysisFramesPublishAsOverlappingWindows(),
     testAnalysisCaptureSleepsWithoutVisualSubscriber(),
     testVisualWorkerDefaultSetterHonorsMode(),
+    testWorkerAnalysisFramePoolIsBoundedAndReusable(),
+    testWorkerLatestRequestRetainsOwnedAnalysisPayload(),
     testProductionOutputSafetyStageContract(),
     testResetClearsRuntimeState(),
     testVoctStepsImmediatelyWithoutImplicitGlide(),

@@ -8,6 +8,7 @@
 #include <mutex>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 
 namespace bifurx {
 
@@ -79,7 +80,9 @@ struct BifurxUiRenderService::Impl {
 					if (!slot.active || !slot.hasPending || slot.inFlight) {
 						continue;
 					}
-					request = slot.pending;
+					// Payload ownership moves with a small request; no FFT data is
+					// copied while the service mutex is held.
+					request = std::move(slot.pending);
 					slot.hasPending = false;
 					slot.inFlight = true;
 					previousSnapshot = slot.latestSnapshot;
@@ -184,7 +187,7 @@ void BifurxUiRenderService::unregisterDisplay(uint64_t displayId) {
 	}
 }
 
-void BifurxUiRenderService::submitLatest(const BifurxUiRenderRequest& request) {
+void BifurxUiRenderService::submitLatest(BifurxUiRenderRequest request) {
 	if (gBifurxRenderServiceShuttingDown.load(std::memory_order_acquire)) {
 		return;
 	}
@@ -195,11 +198,14 @@ void BifurxUiRenderService::submitLatest(const BifurxUiRenderRequest& request) {
 			return;
 		}
 		DisplaySlot& slot = it->second;
-		slot.pending = request;
+		// Replacing a pending request only transfers its pool-slot lease. The
+		// superseded lease is released automatically and can be reused by its
+		// display producer once no in-flight request retains it.
+		slot.pending = std::move(request);
 		slot.hasPending = true;
 		if (!slot.inFlight && !slot.queued) {
 			slot.queued = true;
-			impl->readyQueue.push_back(request.displayId);
+			impl->readyQueue.push_back(slot.pending.displayId);
 		}
 	}
 	impl->cv.notify_one();

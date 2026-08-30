@@ -3,8 +3,16 @@
 #include "Bifurx.hpp"
 
 #include <cstdint>
+#include <memory>
 
 namespace bifurx {
+
+struct BifurxUiRenderPayload {
+	BifurxAnalysisFrame analysisFrame;
+	bool hasOverlayTarget = false;
+	float previousOverlayTargetModuleDb[kCurvePointCount] = {};
+	float previousOverlayTargetOutputDbfs[kCurvePointCount] = {};
+};
 
 struct BifurxUiRenderRequest {
 	uint64_t displayId = 0;
@@ -15,15 +23,15 @@ struct BifurxUiRenderRequest {
 	double requestSubmittedAtSec = 0.0;
 	double sourcePreviewTimeSec = 0.0;
 	BifurxPreviewState previewState;
-	bool hasAnalysisFrame = false;
 	bool fftScaleDynamic = true;
 	bool showModuleResponseOverlay = false;
-	bool hasOverlayTarget = false;
-	float previousOverlayTargetModuleDb[kCurvePointCount] = {};
-	float previousOverlayTargetOutputDbfs[kCurvePointCount] = {};
-	alignas(16) float analysisRawInput[kFftSize] = {};
-	alignas(16) float analysisOutput[kFftSize] = {};
+	// Immutable lease on a bounded per-display pool slot. The only bulk copy is
+	// from the audio module's published frame into this slot; request coalescing
+	// and worker pickup move/copy only this shared ownership handle.
+	std::shared_ptr<const BifurxUiRenderPayload> payload;
 };
+
+static_assert(sizeof(BifurxUiRenderRequest) < 256, "Bifurx worker requests must not embed FFT or curve payload arrays.");
 
 struct BifurxUiRenderSnapshot {
 	uint64_t displayId = 0;

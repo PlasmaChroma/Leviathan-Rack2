@@ -7,6 +7,7 @@
 #include "PanelSvgUtils.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -25,6 +26,7 @@ namespace bifurx {
 // Forward declarations
 struct Bifurx;
 struct BifurxSpectrumGLWidget;
+struct BifurxUiRenderPayload;
 struct BifurxUiRenderSnapshot;
 struct BifurxFreqQuantity final : ParamQuantity {
 	float getDisplayValue() override;
@@ -379,6 +381,8 @@ struct BifurxRenderTickResult {
 };
 
 struct BifurxSpectrumBase {
+	static constexpr size_t kWorkerAnalysisFramePoolSize = 3;
+
 	Bifurx* module = nullptr;
 	BifurxSpectrumState state;
 	uint64_t workerDisplayId = 0;
@@ -389,6 +393,8 @@ struct BifurxSpectrumBase {
 	uint32_t workerLastSubmittedAnalysisSeq = 0;
 	uint32_t workerLastAppliedAnalysisSeq = 0;
 	std::shared_ptr<const BifurxUiRenderSnapshot> workerSnapshotCache;
+	std::array<std::shared_ptr<BifurxUiRenderPayload>, kWorkerAnalysisFramePoolSize> workerAnalysisFramePool {};
+	size_t workerAnalysisFramePoolCursor = 0;
 	float lastWorkerSubmitUs = 0.f;
 	float lastSurfaceRenderUs = 0.f;
 
@@ -443,6 +449,7 @@ struct BifurxSpectrumBase {
 	float workerQueueLatencyMs() const;
 	void ensureWorkerRegistration();
 	void releaseWorkerRegistration();
+	std::shared_ptr<BifurxUiRenderPayload> acquireWorkerAnalysisFrame();
 	void submitWorkerCurveRequest();
 	bool adoptWorkerCurveSnapshot();
 	void initializeStaticPreviewStateIfNeeded();

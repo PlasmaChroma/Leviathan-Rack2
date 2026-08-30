@@ -186,9 +186,11 @@ void prepareCurveSnapshot(const BifurxUiRenderRequest& request, BifurxUiRenderSn
 		snapshot->curvePrepUs = 0.f;
 	}
 
-	if (!request.hasAnalysisFrame) {
+	if (!request.payload) {
 		return;
 	}
+	const BifurxUiRenderPayload& payload = *request.payload;
+	const BifurxAnalysisFrame& analysisFrame = payload.analysisFrame;
 
 	const auto overlayPrepStart = measurePrep ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
 	thread_local WorkerOverlayScratch scratch;
@@ -198,19 +200,19 @@ void prepareCurveSnapshot(const BifurxUiRenderRequest& request, BifurxUiRenderSn
 	// are the only path whose gradient is independent of the input spectrum.
 	const bool moduleResponseEnabled = !displayOnlyMode;
 	for (int i = 0; i < kFftSize; ++i) {
-		scratch.fftOutputTime[i] = request.analysisOutput[i] * scratch.window[i];
+		scratch.fftOutputTime[i] = analysisFrame.output[i] * scratch.window[i];
 	}
 	scratch.fft.rfft(scratch.fftOutputTime, scratch.fftOutputFreq);
 	if (moduleResponseEnabled) {
 		for (int i = 0; i < kFftSize; ++i) {
-			scratch.fftInputTime[i] = request.analysisRawInput[i] * scratch.window[i];
+			scratch.fftInputTime[i] = analysisFrame.rawInput[i] * scratch.window[i];
 		}
 		scratch.fft.rfft(scratch.fftInputTime, scratch.fftRawInputFreq);
 	}
 
 	for (int i = 0; i < kCurvePointCount; ++i) {
-		snapshot->overlayTargetModuleDb[i] = request.previousOverlayTargetModuleDb[i];
-		snapshot->overlayTargetOutputDbfs[i] = request.previousOverlayTargetOutputDbfs[i];
+		snapshot->overlayTargetModuleDb[i] = payload.previousOverlayTargetModuleDb[i];
+		snapshot->overlayTargetOutputDbfs[i] = payload.previousOverlayTargetOutputDbfs[i];
 	}
 	prepareOverlayTargetsFromSpectra(
 		request.previewState.sampleRate,
@@ -218,7 +220,7 @@ void prepareCurveSnapshot(const BifurxUiRenderRequest& request, BifurxUiRenderSn
 		scratch.fftOutputFreq,
 		scratch.fftRawInputFreq,
 		moduleResponseEnabled,
-		request.hasOverlayTarget,
+		payload.hasOverlayTarget,
 		request.fftScaleDynamic,
 		snapshot->overlayTargetModuleDb,
 		snapshot->overlayTargetOutputDbfs,

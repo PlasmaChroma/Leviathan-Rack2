@@ -20,7 +20,7 @@ public:
 
 	uint64_t registerDisplay();
 	void unregisterDisplay(uint64_t displayId);
-	void submitLatest(const BifurxUiRenderRequest& request);
+	void submitLatest(BifurxUiRenderRequest request);
 	std::shared_ptr<const BifurxUiRenderSnapshot> getLatestSnapshot(uint64_t displayId) const;
 
 	void start();
