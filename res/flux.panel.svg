@@ -66,11 +66,15 @@
     </g>
     <g id="panel_graphics" style="display:inline" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
       <g id="glass" inkscape:label="Frame" style="display:inline">
-        <rect x="1214.5623" y="1936.1384" width="4717.731" height="5832.3184" rx="184.06866" ry="185.70001" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="46.2204" id="frame_left" style="opacity:0.33;fill:#5740bf;fill-opacity:1" />
-        <rect x="4149.1533" y="7895.5234" width="1569.8323" height="1233.2272" rx="186.41948" ry="177.22072" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="45.4405" id="frame_input_2" style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1" />
-        <rect x="6376.6152" y="7895.4141" width="1479.7565" height="1233.4116" rx="182.77031" ry="179.0224" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="45.2216" id="frame_input_3" style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1" />
-        <rect x="6231.5308" y="1936.2898" width="4717.438" height="5831.98" rx="188.23064" ry="183.89819" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="46.5131" id="frame_right" style="opacity:0.33;fill:#5740bf;fill-opacity:1" />
-        <rect x="1381.7048" y="10215.551" width="9402.2285" height="2845.8301" rx="182.51744" ry="183.18156" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="45.7123" id="outputs" style="opacity:0.33;fill:#1cccd9;fill-opacity:0.5" />
+        <g id="glass_input" data-theme-runtime-substrate="neutral">
+          <rect x="1214.5623" y="1936.1384" width="4717.731" height="5832.3184" rx="184.06866" ry="185.70001" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="46.2204" id="frame_left" style="opacity:0.33;fill:#000000;fill-opacity:1" />
+          <rect x="4149.1533" y="7895.5234" width="1569.8323" height="1233.2272" rx="186.41948" ry="177.22072" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="45.4405" id="frame_input_2" style="display:inline;opacity:0.33;fill:#000000;fill-opacity:1" />
+          <rect x="6376.6152" y="7895.4141" width="1479.7565" height="1233.4116" rx="182.77031" ry="179.0224" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="45.2216" id="frame_input_3" style="display:inline;opacity:0.33;fill:#000000;fill-opacity:1" />
+          <rect x="6231.5308" y="1936.2898" width="4717.438" height="5831.98" rx="188.23064" ry="183.89819" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="46.5131" id="frame_right" style="opacity:0.33;fill:#000000;fill-opacity:1" />
+        </g>
+        <g id="glass_output" data-theme-runtime-substrate="neutral">
+          <rect x="1381.7048" y="10215.551" width="9402.2285" height="2845.8301" rx="182.51744" ry="183.18156" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="45.7123" id="outputs" style="opacity:0.33;fill:#000000;fill-opacity:0.5" />
+        </g>
       </g>
       <g id="legacy_hidden_connectors" style="display:none">
         <path style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:#ffffff;stroke-width:50.155;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1" d="m 2382.6694,6060.1029 -657.9069,-539.492" id="linear_line" sodipodi:nodetypes="cc" />

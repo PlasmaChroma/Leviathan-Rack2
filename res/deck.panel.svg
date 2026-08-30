@@ -33,8 +33,12 @@
       <path d="m 17.8,62.099986 c 0,-18.225409 14.774604,-32.999993 33,-32.999993 18.225396,0 33,14.774577 33,32.999986" fill="none" opacity="1" stroke="#f4d24b" stroke-linecap="round" stroke-width="3.7" id="path1573" sodipodi:nodetypes="csc" style="display:none" />
     </g>
     <g id="glass" inkscape:label="glass" style="display:inline">
-      <rect fill="#13233a" height="27.878769" rx="2.2240479" ry="2.3716216" stroke="#47a0ff" stroke-width="0.592526" width="22.812" x="77.14624" y="93.317749" id="outputs" style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.5;stroke:none;stroke-opacity:1" />
-      <path d="M 4.7463355,79.6           H 20.992665           Q 23.5,79.6 23.5,82.2           V 90.482001           Q 23.5,93.082001 26.007335,93.082001           H 61.970663           Q 64.477998,93.082001 64.477998,95.681999           V 118.579           Q 64.477998,121.17887 61.970663,121.17887           H 4.7463355           Q 2.2390001,121.17887 2.2390001,118.579           V 82.2           Q 2.2390001,79.6 4.7463355,79.6           Z" fill="#241935" stroke="#7e50c7" stroke-width="0.441909" id="inputs" style="display:inline;opacity:0.33;fill:#553ec1;fill-opacity:1;stroke:none" sodipodi:nodetypes="ccccccccccccccccccccc" />
+      <g id="glass_output" data-theme-runtime-substrate="neutral">
+        <rect fill="#000000" height="27.878769" rx="2.2240479" ry="2.3716216" stroke="#47a0ff" stroke-width="0.592526" width="22.812" x="77.14624" y="93.317749" id="outputs" style="display:inline;opacity:0.33;fill:#000000;fill-opacity:0.5;stroke:none;stroke-opacity:1" />
+      </g>
+      <g id="glass_input" data-theme-runtime-substrate="neutral">
+        <path d="M 4.7463355,79.6           H 20.992665           Q 23.5,79.6 23.5,82.2           V 90.482001           Q 23.5,93.082001 26.007335,93.082001           H 61.970663           Q 64.477998,93.082001 64.477998,95.681999           V 118.579           Q 64.477998,121.17887 61.970663,121.17887           H 4.7463355           Q 2.2390001,121.17887 2.2390001,118.579           V 82.2           Q 2.2390001,79.6 4.7463355,79.6           Z" fill="#000000" stroke="#7e50c7" stroke-width="0.441909" id="inputs" style="display:inline;opacity:0.33;fill:#000000;fill-opacity:1;stroke:none" sodipodi:nodetypes="ccccccccccccccccccccc" />
+      </g>
     </g>
     <path d="M 4.186227,9.522227 H 97.413935" stroke="url(#accentGrad)" stroke-width="0.498454" stroke-linecap="round" opacity="0.55" fill="none" id="top_horizontal_line" style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1" />
     <g id="waves_layer" style="display:none;opacity:0.5" transform="matrix(0.01000001,0,0,0.01,-1.7562905e-5,1.4246172)">

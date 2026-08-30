@@ -27,10 +27,24 @@ struct UmiPanelArtWidget final : TransparentWidget {
 	std::string loadedPath;
 
 	~UmiPanelArtWidget() override {
-		NVGcontext* currentVg = APP && APP->window ? APP->window->vg : nullptr;
 		nvg_gfx_lifecycle::resetOwnedNvgImage(
 			ownerVg, imageHandle, imageWidth, imageHeight,
-			currentVg, ownerVg == currentVg);
+			nullptr, false);
+		loadedPath.clear();
+	}
+
+	void onContextDestroy(const ContextDestroyEvent& e) override {
+		nvg_gfx_lifecycle::resetOwnedNvgImage(
+			ownerVg, imageHandle, imageWidth, imageHeight, nullptr, false);
+		loadedPath.clear();
+		TransparentWidget::onContextDestroy(e);
+	}
+
+	void onContextCreate(const ContextCreateEvent& e) override {
+		nvg_gfx_lifecycle::resetOwnedNvgImage(
+			ownerVg, imageHandle, imageWidth, imageHeight, nullptr, false);
+		loadedPath.clear();
+		TransparentWidget::onContextCreate(e);
 	}
 
 	bool ensureImage(NVGcontext* vg) {

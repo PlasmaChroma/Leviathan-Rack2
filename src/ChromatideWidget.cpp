@@ -231,11 +231,21 @@ ChromatideEditorSurface::ChromatideEditorSurface(Chromatide* module) : module(mo
 }
 
 ChromatideEditorSurface::~ChromatideEditorSurface() {
-    if (APP && APP->window && APP->window->vg) {
-        nvg_gfx_lifecycle::resetOwnedNvgImage(imageContext, imageHandle, uploadedWidth, uploadedHeight, APP->window->vg, true);
-    } else {
-        nvg_gfx_lifecycle::resetOwnedNvgImage(imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
-    }
+	// Window is destroyed before Scene during Rack shutdown.
+	nvg_gfx_lifecycle::resetOwnedNvgImage(
+		imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+}
+
+void ChromatideEditorSurface::onContextDestroy(const ContextDestroyEvent& e) {
+	nvg_gfx_lifecycle::resetOwnedNvgImage(
+		imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+	OpaqueWidget::onContextDestroy(e);
+}
+
+void ChromatideEditorSurface::onContextCreate(const ContextCreateEvent& e) {
+	nvg_gfx_lifecycle::resetOwnedNvgImage(
+		imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
+	OpaqueWidget::onContextCreate(e);
 }
 
 void ChromatideEditorSurface::updateTextureBuffer() {

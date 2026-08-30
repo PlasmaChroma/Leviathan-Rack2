@@ -398,14 +398,6 @@ struct BifurxSpectrumBase {
 	float lastWorkerSubmitUs = 0.f;
 	float lastSurfaceRenderUs = 0.f;
 
-	// Common FF resources for analysis
-	dsp::RealFFT fft;
-	alignas(16) float window[kFftSize];
-	alignas(16) float fftInputTime[kFftSize] {};
-	alignas(16) float fftOutputTime[kFftSize] {};
-	alignas(16) float fftOutputFreq[2 * kFftSize] {};
-	alignas(16) float fftRawInputFreq[2 * kFftSize] {};
-
 	uint32_t lastModelUpdateSeq = 0;
 	mutable BifurxPreviewModel cachedModel;
 	float lastCurvePrepUs = 0.f;
@@ -426,10 +418,7 @@ struct BifurxSpectrumBase {
 	mutable float cachedMarkerLayoutAnchorX01[2] = {0.f, 0.f};
 	mutable bool cachedMarkerLayoutMarkerPinned[2] = {false, false};
 
-	BifurxSpectrumBase() : fft(kFftSize) {
-		for (int i = 0; i < kFftSize; i++) {
-			window[i] = 0.5f - 0.5f * std::cos(2.f * kPi * float(i) / float(kFftSize - 1));
-		}
+	BifurxSpectrumBase() {
 		for (int i = 0; i < kCurvePointCount; i++) {
 			state.curveDb[i] = kResponseMinDb;
 			state.curveTargetDb[i] = kResponseMinDb;

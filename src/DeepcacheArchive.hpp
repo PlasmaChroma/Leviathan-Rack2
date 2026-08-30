@@ -35,6 +35,9 @@ struct ArchiveWantedEntry {
 	// Hidden, disabled, and non-whitelisted models remain valid persistent
 	// entries but do not need QOI decode or GPU upload during cold startup.
 	bool hydrateAtStartup = true;
+	// Optional theme variants are retained and indexed without making the
+	// database's user-facing readiness counters wait for both themes.
+	bool requiredForReadiness = true;
 	// An entry rendered for the opposite Rack panel theme may be admitted as a
 	// provisional stale preview while the requested fingerprint is rebuilt.
 	std::string alternateThemeFingerprint;
@@ -42,9 +45,11 @@ struct ArchiveWantedEntry {
 	ArchiveWantedEntry() = default;
 	ArchiveWantedEntry(std::string cacheKey, std::string fingerprint,
 	                   std::string pluginKey, bool hydrateAtStartup = true,
-	                   std::string alternateThemeFingerprint = std::string())
+	                   std::string alternateThemeFingerprint = std::string(),
+	                   bool requiredForReadiness = true)
 		: cacheKey(std::move(cacheKey)), fingerprint(std::move(fingerprint)),
 		  pluginKey(std::move(pluginKey)), hydrateAtStartup(hydrateAtStartup),
+		  requiredForReadiness(requiredForReadiness),
 		  alternateThemeFingerprint(std::move(alternateThemeFingerprint)) {}
 };
 

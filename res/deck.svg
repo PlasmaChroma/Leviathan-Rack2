@@ -222,7 +222,9 @@
        id="glass"
        inkscape:label="glass"
        style="display:inline">
-      <rect
+      <g
+         id="glass_output">
+        <rect
          fill="#13233a"
          height="27.878769"
          rx="2.2240479"
@@ -232,16 +234,20 @@
          width="22.812"
          x="77.14624"
          y="93.317749"
-         id="outputs"
-         style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.5;stroke:none;stroke-opacity:1" />
-      <path
+           id="outputs"
+           style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.5;stroke:none;stroke-opacity:1" />
+      </g>
+      <g
+         id="glass_input">
+        <path
          d="M 4.7463355,79.6           H 20.992665           Q 23.5,79.6 23.5,82.2           V 90.482001           Q 23.5,93.082001 26.007335,93.082001           H 61.970663           Q 64.477998,93.082001 64.477998,95.681999           V 118.579           Q 64.477998,121.17887 61.970663,121.17887           H 4.7463355           Q 2.2390001,121.17887 2.2390001,118.579           V 82.2           Q 2.2390001,79.6 4.7463355,79.6           Z"
          fill="#241935"
          stroke="#7e50c7"
          stroke-width="0.441909"
          id="inputs"
-         style="display:inline;opacity:0.33;fill:#553ec1;fill-opacity:1;stroke:none"
-         sodipodi:nodetypes="ccccccccccccccccccccc" />
+           style="display:inline;opacity:0.33;fill:#553ec1;fill-opacity:1;stroke:none"
+           sodipodi:nodetypes="ccccccccccccccccccccc" />
+      </g>
     </g>
     <path
        d="M 4.186227,9.522227 H 97.413935"

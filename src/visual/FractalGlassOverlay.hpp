@@ -23,10 +23,13 @@ public:
 
 	void step() override;
 	void draw(const DrawArgs& args) override;
+	void onContextDestroy(const ContextDestroyEvent& e) override;
+	void onContextCreate(const ContextCreateEvent& e) override;
 
 private:
 	struct Impl;
 	std::unique_ptr<Impl> impl;
+	void abandonImages();
 };
 
 FractalGlassOverlay* addFractalGlassOverlay(

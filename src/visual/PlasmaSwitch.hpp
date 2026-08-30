@@ -30,7 +30,6 @@ struct PlasmaSwitch : app::Switch {
 	std::string backingFullPath;
 	widget::FramebufferWidget* shadowFb = nullptr;
 	widget::FramebufferWidget* visualFb = nullptr;
-	std::shared_ptr<window::Image> fallbackBackingImage;
 	NVGcontext* backingImageOwnerVg = nullptr;
 	int backingImageHandle = -1;
 	int backingImageWidth = 0;
@@ -42,6 +41,8 @@ struct PlasmaSwitch : app::Switch {
 	void step() override;
 	void draw(const DrawArgs& args) override;
 	void drawVisual(const DrawArgs& args);
+	void onContextDestroy(const ContextDestroyEvent& e) override;
+	void onContextCreate(const ContextCreateEvent& e) override;
 
 	void resetBackingImageHandle(NVGcontext* currentVg, bool deleteCurrentHandle);
 	int ensureBackingImageHandle(NVGcontext* vg);

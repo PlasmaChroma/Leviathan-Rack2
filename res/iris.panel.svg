@@ -27,8 +27,12 @@
   </g>
   <g id="iris_section_fields" style="display:inline">
     <g id="glass">
-      <path d="m 235,6968.0032 h 5626 c 119,0 179,60 179,180 V 10414 c 0,120 -60,180 -179,180 H 3490 c -80,0 -120,40 -120,120 v 1306 c 0,80 -40,120 -120,120 H 235 c -119,0 -179,-60 -179,-180 V 7148.0032 c 0,-120 60,-180 179,-180 z" id="iris_input_field" style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none" />
-      <rect x="3400" y="10630" width="2632" height="1510" rx="117.93464" ry="126" id="iris_output_field" style="display:inline;opacity:0.35;fill:#1cccd9;fill-opacity:0.58;stroke:none;stroke-width:0.967464" />
+      <g id="glass_input" data-theme-runtime-substrate="neutral">
+        <path d="m 235,6968.0032 h 5626 c 119,0 179,60 179,180 V 10414 c 0,120 -60,180 -179,180 H 3490 c -80,0 -120,40 -120,120 v 1306 c 0,80 -40,120 -120,120 H 235 c -119,0 -179,-60 -179,-180 V 7148.0032 c 0,-120 60,-180 179,-180 z" id="iris_input_field" style="display:inline;opacity:0.33;fill:#000000;fill-opacity:1;stroke:none" />
+      </g>
+      <g id="glass_output" data-theme-runtime-substrate="neutral">
+        <rect x="3400" y="10630" width="2632" height="1510" rx="117.93464" ry="126" id="iris_output_field" style="display:inline;opacity:0.35;fill:#000000;fill-opacity:0.58;stroke:none;stroke-width:0.967464" />
+      </g>
     </g>
     <rect x="76" y="900" width="5944" height="5408" rx="126" ry="126" id="iris_preview_field" style="display:none;opacity:0.22;fill:#5740bf;fill-opacity:1;stroke:none" />
     <g id="plasma_conduit_anchors" inkscape:label="Plasma Conduit Anchors" style="display:none">

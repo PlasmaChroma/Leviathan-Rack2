@@ -587,6 +587,41 @@ TestResult testWorkerAnalysisFramePoolIsBoundedAndReusable() {
   };
 }
 
+TestResult testSynchronousFftScratchIsLazyAndThreadLocalReusable() {
+  bool startsUnallocated = false;
+  bool baseConstructionStaysLazy = false;
+  bool sameArenaReused = false;
+  bool allocatedAfterUse = false;
+  int64_t firstUseUs = 0;
+
+  std::thread probe([&]() {
+    startsUnallocated = !synchronousOverlayScratchAllocatedForCurrentThread();
+    BifurxSpectrumBase firstDisplay;
+    BifurxSpectrumBase secondDisplay;
+    baseConstructionStaysLazy = !synchronousOverlayScratchAllocatedForCurrentThread();
+    const auto firstUseStart = std::chrono::steady_clock::now();
+    SynchronousOverlayScratch* const firstArena = &synchronousOverlayScratch();
+    firstUseUs = std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::steady_clock::now() - firstUseStart
+    ).count();
+    SynchronousOverlayScratch* const secondArena = &synchronousOverlayScratch();
+    sameArenaReused = firstArena == secondArena;
+    allocatedAfterUse = synchronousOverlayScratchAllocatedForCurrentThread();
+  });
+  probe.join();
+
+  const bool compactBase = sizeof(BifurxSpectrumBase) < 64u * 1024u;
+  return {
+    "Synchronous FFT scratch is lazy and reused once per calling thread",
+    startsUnallocated && baseConstructionStaysLazy && sameArenaReused && allocatedAfterUse && compactBase,
+    "baseBytes=" + std::to_string(sizeof(BifurxSpectrumBase)) +
+      " scratchBytes=" + std::to_string(sizeof(SynchronousOverlayScratch)) +
+      " firstUseUs=" + std::to_string(firstUseUs) +
+      " lazy=" + std::to_string(int(baseConstructionStaysLazy)) +
+      " reused=" + std::to_string(int(sameArenaReused))
+  };
+}
+
 TestResult testWorkerLatestRequestRetainsOwnedAnalysisPayload() {
   BifurxUiRenderService service;
   service.start();
@@ -1342,6 +1377,7 @@ int main() {
     testAnalysisCaptureSleepsWithoutVisualSubscriber(),
     testVisualWorkerDefaultSetterHonorsMode(),
     testWorkerAnalysisFramePoolIsBoundedAndReusable(),
+    testSynchronousFftScratchIsLazyAndThreadLocalReusable(),
     testWorkerLatestRequestRetainsOwnedAnalysisPayload(),
     testProductionOutputSafetyStageContract(),
     testResetClearsRuntimeState(),

@@ -750,6 +750,105 @@ int main() {
 	}
 	removeDirectory(themeDirectory);
 
+	// Theme-sensitive modules keep both rasters in the archive, but only the
+	// active theme participates in startup readiness and eager RGBA hydration.
+	// The inactive theme remains directly decodable after a live theme switch.
+	const std::string themeVariantsDirectory = directory + "-theme-variants";
+	removeDirectory(themeVariantsDirectory);
+	makeDirectory(themeVariantsDirectory);
+	const std::vector<std::uint8_t> lightThemePixels = pixels(13, 9, 101);
+	const std::vector<std::uint8_t> darkThemePixels = pixels(13, 9, 102);
+	const std::vector<deepcache::ArchiveWantedEntry> lightThemeWanted = {
+		{"theme-model/panel-light", "light-fp", "plugin-theme", true, std::string(), true},
+		{"theme-model/panel-dark", "dark-fp", "plugin-theme", false, std::string(), false}
+	};
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(themeVariantsDirectory, lightThemeWanted);
+		deepcache::PreviewWrite light;
+		light.cacheKey = "theme-model/panel-light";
+		light.fingerprint = "light-fp";
+		light.width = 13;
+		light.height = 9;
+		light.rgba = std::make_shared<const std::vector<std::uint8_t>>(lightThemePixels);
+		deepcache::PreviewWrite dark;
+		dark.cacheKey = "theme-model/panel-dark";
+		dark.fingerprint = "dark-fp";
+		dark.width = 13;
+		dark.height = 9;
+		dark.rgba = std::make_shared<const std::vector<std::uint8_t>>(darkThemePixels);
+		if (!worker.enqueue(std::move(light)) || !worker.enqueue(std::move(dark)) ||
+		    !waitUntil([&]() { return worker.readyCount() == 1; })) {
+			std::cerr << "[FAIL] dual-theme rasters did not persist independently\n";
+			return 1;
+		}
+		bool committedLight = false;
+		bool committedDark = false;
+		std::string committedKey;
+		if (!waitUntil([&]() {
+			while (worker.tryPopCommitted(committedKey)) {
+				committedLight = committedLight || committedKey == "theme-model/panel-light";
+				committedDark = committedDark || committedKey == "theme-model/panel-dark";
+			}
+			return committedLight && committedDark;
+		})) {
+			std::cerr << "[FAIL] inactive theme raster was not committed to disk\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	{
+		deepcache::DeepcacheArchiveWorker worker;
+		worker.start(themeVariantsDirectory, lightThemeWanted);
+		if (!waitUntil([&]() { return worker.state() != deepcache::DatabaseState::LOADING; })) {
+			std::cerr << "[FAIL] dual-theme archive reload did not finish\n";
+			return 1;
+		}
+		bool indexedLight = false;
+		bool indexedDark = false;
+		deepcache::IndexedCandidate candidate;
+		while (worker.tryPopIndexedCandidate(candidate)) {
+			indexedLight = indexedLight || candidate.cacheKey == "theme-model/panel-light";
+			indexedDark = indexedDark || candidate.cacheKey == "theme-model/panel-dark";
+		}
+		int startupDecoded = 0;
+		deepcache::DecodedPreview preview;
+		while (worker.tryPopDecoded(preview)) {
+			if (!preview.rgba.empty()) {
+				startupDecoded++;
+				if (preview.cacheKey != "theme-model/panel-light" ||
+				    preview.rgba != lightThemePixels) {
+					std::cerr << "[FAIL] inactive theme raster was eagerly hydrated\n";
+					return 1;
+				}
+			}
+		}
+		const deepcache::ArchiveStartupMetrics metrics = worker.startupMetrics();
+		if (!indexedLight || !indexedDark || startupDecoded != 1 ||
+		    worker.targetCount() != 1 || worker.readyCount() != 1 ||
+		    worker.targetPluginCount() != 1 || worker.readyPluginCount() != 1 ||
+		    metrics.indexedEntries != 2 || metrics.hydratedEntries != 1 ||
+		    metrics.deferredEntries != 1) {
+			std::cerr << "[FAIL] inactive theme affected startup readiness or hydration"
+			          << " decoded=" << startupDecoded
+			          << " ready=" << worker.readyCount()
+			          << " target=" << worker.targetCount()
+			          << " indexed=" << metrics.indexedEntries
+			          << " hydrated=" << metrics.hydratedEntries
+			          << " deferred=" << metrics.deferredEntries << "\n";
+			return 1;
+		}
+		if (!worker.requestDecode("theme-model/panel-dark", 103) ||
+		    !waitUntil([&]() { return worker.tryPopDecoded(preview); }) ||
+		    preview.cacheKey != "theme-model/panel-dark" ||
+		    preview.decodeGeneration != 103 || preview.rgba != darkThemePixels) {
+			std::cerr << "[FAIL] inactive theme raster did not decode on demand\n";
+			return 1;
+		}
+		worker.shutdown();
+	}
+	removeDirectory(themeVariantsDirectory);
+
 	// Startup evaluates the normal compaction threshold even when no new writes
 	// arrive. With no live index entries, a fully dead pack is truncated safely.
 	const std::string startupCompactDirectory = directory + "-startup-compact";

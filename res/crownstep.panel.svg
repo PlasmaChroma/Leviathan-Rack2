@@ -78,8 +78,12 @@
     <g id="panel_graphics" style="display:inline" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
       <g id="grp_frame" inkscape:label="Frame" style="display:inline">
         <g id="glass">
-          <rect x="1026.0244" y="12044.202" width="4358.4023" height="1203.173" rx="178.52095" ry="170.11723" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="43.5671" id="frame_left" style="opacity:0.33;fill:#5740bf;fill-opacity:1" inkscape:label="inputs" />
-          <rect x="5789.2886" y="12037.598" width="4335.8989" height="1200.7349" rx="190.86508" ry="177.42184" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="46.0052" id="outputs" style="opacity:0.33;fill:#1cccd9;fill-opacity:0.5" />
+          <g id="glass_input" data-theme-runtime-substrate="neutral">
+            <rect x="1026.0244" y="12044.202" width="4358.4023" height="1203.173" rx="178.52095" ry="170.11723" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="43.5671" id="frame_left" style="opacity:0.33;fill:#000000;fill-opacity:1" inkscape:label="inputs" />
+          </g>
+          <g id="glass_output" data-theme-runtime-substrate="neutral">
+            <rect x="5789.2886" y="12037.598" width="4335.8989" height="1200.7349" rx="190.86508" ry="177.42184" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="46.0052" id="outputs" style="opacity:0.33;fill:#000000;fill-opacity:0.5" />
+          </g>
         </g>
         <rect x="1010.9381" y="10831.871" width="9129.5479" height="1188.876" rx="47.203239" ry="49.655888" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="48.4366" id="outputs-3" style="display:none;opacity:0.33;fill:url(#linearGradient34)" inkscape:label="under_widget_blend" />
       </g>

@@ -338,7 +338,8 @@
    id="glass"
    inkscape:label="Frame"
    style="display:inline">
-        <rect
+        <g
+   id="glass_input"><rect
    x="1214.5623"
    y="1936.1384"
    width="4717.731"
@@ -391,8 +392,9 @@
    stroke-opacity="0.06"
    stroke-width="46.5131"
    id="frame_right"
-   style="opacity:0.33;fill:#5740bf;fill-opacity:1" />
-        <rect
+   style="opacity:0.33;fill:#5740bf;fill-opacity:1" /></g>
+        <g
+   id="glass_output"><rect
    x="1381.7048"
    y="10215.551"
    width="9402.2285"
@@ -405,7 +407,7 @@
    stroke-opacity="0.06"
    stroke-width="45.7123"
    id="outputs"
-   style="opacity:0.33;fill:#1cccd9;fill-opacity:0.5" />
+   style="opacity:0.33;fill:#1cccd9;fill-opacity:0.5" /></g>
         
       </g>
       <g

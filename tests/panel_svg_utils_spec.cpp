@@ -539,6 +539,71 @@ TestResult testPlasmaConduitAnchorConvention() {
               " firstFailure=" + firstFailure)};
 }
 
+TestResult testThemeGlassDeploymentContract() {
+  using leviathan::theme::ThemeRole;
+  struct PanelContract {
+    const char* path;
+    size_t expectedInputs;
+    size_t expectedOutputs;
+  };
+  const PanelContract panels[] = {
+    {"res/bifurx.panel.svg", 1u, 1u},
+    {"res/Sibyl.panel.svg", 1u, 1u},
+    {"res/Puffy.panel.svg", 1u, 1u},
+    {"res/crownstep.panel.svg", 1u, 1u},
+    {"res/deck.panel.svg", 1u, 1u},
+    {"res/doorstop.panel.svg", 1u, 1u},
+    {"res/flux.panel.svg", 4u, 1u},
+    {"res/iris.panel.svg", 1u, 1u},
+    {"res/nautiloid.panel.svg", 1u, 1u},
+    {"res/proc.panel.svg", 1u, 1u},
+    {"res/undertow.panel.svg", 1u, 1u},
+    {"res/wyrm.panel.svg", 1u, 1u},
+  };
+
+  bool pass = true;
+  size_t totalInputs = 0u;
+  size_t totalOutputs = 0u;
+  std::string firstFailure;
+  for (const PanelContract& panel : panels) {
+    std::vector<panel_svg::SvgRectMatch> rects;
+    std::vector<panel_svg::SvgPathMatch> paths;
+    panel_svg::findThemeGlassRectsMm(panel.path, &rects);
+    panel_svg::findThemeGlassPathsMm(panel.path, &paths);
+    const auto countRole = [&](ThemeRole role) {
+      return static_cast<size_t>(std::count_if(
+               rects.begin(), rects.end(), [role](const panel_svg::SvgRectMatch& match) {
+                 return match.themeRole == role;
+               }))
+        + static_cast<size_t>(std::count_if(
+               paths.begin(), paths.end(), [role](const panel_svg::SvgPathMatch& match) {
+                 return match.themeRole == role;
+               }));
+    };
+    const size_t inputs = countRole(ThemeRole::Input);
+    const size_t outputs = countRole(ThemeRole::Output);
+    const size_t accents = countRole(ThemeRole::Accent);
+    const size_t generic = countRole(ThemeRole::None);
+    const bool panelPass = inputs == panel.expectedInputs
+      && outputs == panel.expectedOutputs
+      && accents == 0u
+      && generic == 0u;
+    if (!panelPass && firstFailure.empty()) {
+      firstFailure = panel.path;
+    }
+    totalInputs += inputs;
+    totalOutputs += outputs;
+    pass = pass && panelPass;
+  }
+
+  return {"Split panels expose semantic THEME input/output glass roles", pass,
+          "panels=" + std::to_string(sizeof(panels) / sizeof(panels[0]))
+            + " inputs=" + std::to_string(totalInputs)
+            + " outputs=" + std::to_string(totalOutputs)
+            + (firstFailure.empty() ? std::string() :
+              " firstFailure=" + firstFailure)};
+}
+
 TestResult testExactThemeGlassRoles() {
   using leviathan::theme::ThemeRole;
   std::vector<panel_svg::SvgRectMatch> rects;
@@ -592,6 +657,7 @@ int main() {
   tests.push_back(testPerfectWaveBrandingDeploymentContract());
   tests.push_back(testBifurxGlassPathParses());
   tests.push_back(testPlasmaConduitAnchorConvention());
+  tests.push_back(testThemeGlassDeploymentContract());
   tests.push_back(testExactThemeGlassRoles());
 
   int failed = 0;

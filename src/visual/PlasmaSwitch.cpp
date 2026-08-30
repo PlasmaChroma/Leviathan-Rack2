@@ -240,7 +240,9 @@ PlasmaSwitch::PlasmaSwitch() {
 }
 
 PlasmaSwitch::~PlasmaSwitch() {
-	resetBackingImageHandle(backingImageOwnerVg, false);
+	// Rack destroys Window before Scene, so widget teardown must not release a
+	// Rack Image or issue NanoVG driver calls through the retired context.
+	resetBackingImageHandle(nullptr, false);
 }
 
 void PlasmaSwitch::resetBackingImageHandle(NVGcontext* currentVg, bool deleteCurrentHandle) {
@@ -272,6 +274,15 @@ int PlasmaSwitch::ensureBackingImageHandle(NVGcontext* vg) {
 	if (!backingImageCreateAttempted) {
 		backingImageCreateAttempted = true;
 		backingImageHandle = nvgCreateImage(vg, backingFullPath.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
+		if (backingImageHandle < 0) {
+			// Keep the fallback context-owned. A persistent window::Image would run
+			// its deleter after Rack has already destroyed Window during shutdown.
+			backingImageHandle = visual_assets::createContextOwnedRasterMipmapHandle(
+				vg, backingFullPath);
+			if (backingImageHandle >= 0) {
+				++gPlasmaSwitchDrawMetrics.imageFallbacks;
+			}
+		}
 		if (backingImageHandle >= 0) {
 			backingImageOwnerVg = vg;
 			nvgImageSize(vg, backingImageHandle, &backingImageWidth, &backingImageHeight);
@@ -279,14 +290,21 @@ int PlasmaSwitch::ensureBackingImageHandle(NVGcontext* vg) {
 			return backingImageHandle;
 		}
 	}
-	if (!fallbackBackingImage && APP && APP->window) {
-		fallbackBackingImage = APP->window->loadImage(backingFullPath);
-	}
-	if (fallbackBackingImage && fallbackBackingImage->handle >= 0) {
-		++gPlasmaSwitchDrawMetrics.imageFallbacks;
-		return fallbackBackingImage->handle;
-	}
 	return -1;
+}
+
+void PlasmaSwitch::onContextDestroy(const ContextDestroyEvent& e) {
+	resetBackingImageHandle(nullptr, false);
+	app::Switch::onContextDestroy(e);
+}
+
+void PlasmaSwitch::onContextCreate(const ContextCreateEvent& e) {
+	// Treat this as a new generation even if the host reused the NVGcontext
+	// address. Numeric image handles from the previous generation are invalid.
+	resetBackingImageHandle(nullptr, false);
+	if (shadowFb) shadowFb->setDirty();
+	if (visualFb) visualFb->setDirty();
+	app::Switch::onContextCreate(e);
 }
 
 void PlasmaSwitch::step() {

@@ -629,11 +629,6 @@ struct NautiloidDisplay final : OpaqueWidget {
   }
 
   ~NautiloidDisplay() override {
-    if (APP && APP->window && APP->window->vg) {
-      nvg_gfx_lifecycle::resetOwnedNvgImage(
-        imageContext, imageHandle, uploadedWidth, uploadedHeight, APP->window->vg, true);
-      return;
-    }
     nvg_gfx_lifecycle::resetOwnedNvgImage(
       imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
   }
@@ -867,11 +862,6 @@ struct NautiloidIrisMiniDisplay final : OpaqueWidget {
   explicit NautiloidIrisMiniDisplay(Nautiloid* module) : module(module) {}
 
   ~NautiloidIrisMiniDisplay() override {
-    if (APP && APP->window && APP->window->vg) {
-      nvg_gfx_lifecycle::resetOwnedNvgImage(
-        imageContext, imageHandle, uploadedWidth, uploadedHeight, APP->window->vg, true);
-      return;
-    }
     nvg_gfx_lifecycle::resetOwnedNvgImage(
       imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
   }

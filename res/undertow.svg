@@ -328,7 +328,8 @@
    style="display:none;stroke:#3c3f42;stroke-opacity:1" />
       
     </g><g
-   id="glass"><rect
+   id="glass"><g
+   id="glass_output"><rect
      x="89.212578"
      y="10734.063"
      width="3885.575"
@@ -341,7 +342,8 @@
      stroke-opacity="0.06"
      stroke-width="18.3253"
      id="outputs"
-     style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.5;stroke:#404040;stroke-opacity:1;stroke-width:20.00000076;stroke-dasharray:none" /><rect
+     style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.5;stroke:#404040;stroke-opacity:1;stroke-width:20.00000076;stroke-dasharray:none" /></g><g
+   id="glass_input"><rect
      x="105.83292"
      y="927.39355"
      width="3852.334"
@@ -354,7 +356,7 @@
      stroke-opacity="0.06"
      stroke-width="51.4139"
      id="inputs"
-     style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none;stroke-width:20.1603;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1" /></g><path
+     style="display:inline;opacity:0.33;fill:#5740bf;fill-opacity:1;stroke:none;stroke-width:20.1603;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1" /></g></g><path
    d="M 216.55646,952.22271 H 3847.4434"
    stroke="url(#accentGrad)"
    stroke-width="31.1071"

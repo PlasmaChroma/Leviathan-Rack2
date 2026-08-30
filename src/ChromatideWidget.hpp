@@ -23,7 +23,8 @@ struct ChromatideEditorSurface final : widget::OpaqueWidget {
     Vec currentLocalMousePos() const;
     void updateTextureBuffer();
     void draw(const DrawArgs& args) override;
-
+	void onContextDestroy(const ContextDestroyEvent& e) override;
+	void onContextCreate(const ContextCreateEvent& e) override;
 
     void onButton(const ButtonEvent& e) override;
     void onHover(const HoverEvent& e) override;

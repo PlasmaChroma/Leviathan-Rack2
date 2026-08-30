@@ -30,8 +30,12 @@
   <g id="panel_art" inkscape:label="Panel artwork">
     <rect width="1524" height="12850" fill="url(#bg)" id="rect13" x="0" y="0" />
     <g id="glass" inkscape:label="glass">
-      <rect id="inputs" x="110" y="8080" width="1304" height="2750" rx="150" fill="#5740bf" fill-opacity="0.52" stroke="#b8a7ff" stroke-opacity="0.16" stroke-width="20" style="stroke:#5740bf;stroke-opacity:1;opacity:0.33" />
-      <rect id="outputs" x="110" y="10910" width="1304" height="1210" rx="150" fill="#1cccd9" fill-opacity="0.5" stroke="#a8fbff" stroke-opacity="0.18" stroke-width="20" style="stroke:#1cccd9;stroke-opacity:0.50196081;opacity:0.33" />
+      <g id="glass_input" data-theme-runtime-substrate="neutral">
+        <rect id="inputs" x="110" y="8080" width="1304" height="2750" rx="150" fill="#000000" fill-opacity="0.52" stroke="#b8a7ff" stroke-opacity="0.16" stroke-width="20" style="stroke:#5740bf;stroke-opacity:1;opacity:0.33" />
+      </g>
+      <g id="glass_output" data-theme-runtime-substrate="neutral">
+        <rect id="outputs" x="110" y="10910" width="1304" height="1210" rx="150" fill="#000000" fill-opacity="0.5" stroke="#a8fbff" stroke-opacity="0.18" stroke-width="20" style="stroke:#1cccd9;stroke-opacity:0.50196081;opacity:0.33" />
+      </g>
     </g>
     <rect x="82" y="12530" width="1360" height="264" rx="70" fill="#030407" stroke="#ffffff" stroke-opacity="0.05" stroke-width="12" id="rect21" style="display:none" />
     <g id="mount_plate" style="display:inline" transform="translate(0,-650.03707)">

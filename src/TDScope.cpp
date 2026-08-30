@@ -137,11 +137,18 @@ struct TDScopeDisplayWidget final : Widget {
   }
 
   ~TDScopeDisplayWidget() override {
-    if (APP && APP->window && APP->window->vg) {
-      resetTailRasterImage(APP->window->vg, true);
-      return;
-    }
     resetTailRasterImage(nullptr, false);
+  }
+
+  void onContextDestroy(const ContextDestroyEvent& e) override {
+    resetTailRasterImage(nullptr, false);
+    Widget::onContextDestroy(e);
+  }
+
+  void onContextCreate(const ContextCreateEvent& e) override {
+    resetTailRasterImage(nullptr, false);
+    if (framebuffer) framebuffer->setDirty();
+    Widget::onContextCreate(e);
   }
 
   struct ScopeWindowMap {

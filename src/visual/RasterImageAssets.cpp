@@ -323,10 +323,7 @@ int loadRasterMipmapHandle(
 		cache.entries.erase(it);
 	}
 
-	int handle = createLowBitIndexedPngMipmapImage(vg, fullPath);
-	if (handle < 0) {
-		handle = nvgCreateImage(vg, fullPath.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
-	}
+	int handle = createContextOwnedRasterMipmapHandle(vg, fullPath);
 	if (handle < 0) {
 		return -1;
 	}
@@ -341,6 +338,21 @@ int loadRasterMipmapHandle(
 	}
 	entry.lifecycleImage = lifecycleImage;
 	cache.entries[fullPath] = entry;
+	return handle;
+}
+
+int createContextOwnedRasterMipmapHandle(
+	NVGcontext* vg,
+	const std::string& fullPath
+) {
+	if (!vg || fullPath.empty()) {
+		return -1;
+	}
+	int handle = createLowBitIndexedPngMipmapImage(vg, fullPath);
+	if (handle < 0) {
+		handle = nvgCreateImage(
+			vg, fullPath.c_str(), NVG_IMAGE_GENERATE_MIPMAPS);
+	}
 	return handle;
 }
 

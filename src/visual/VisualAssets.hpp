@@ -13,6 +13,11 @@ namespace visual_assets {
 std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path);
 // Loads a mipmapped raster texture and works around Rack's low-bit indexed
 // PNG decoder bug by expanding 1/2/4-bit palette images in memory.
+// The returned handle is owned by vg. Callers that retain it must track that
+// context and must not delete it after the context has been destroyed.
+int createContextOwnedRasterMipmapHandle(
+	NVGcontext* vg,
+	const std::string& fullPath);
 int loadRasterMipmapHandle(
 	NVGcontext* vg,
 	std::shared_ptr<window::Image> lifecycleImage,

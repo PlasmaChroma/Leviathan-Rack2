@@ -390,7 +390,8 @@
         
         
         <g
-   id="glass"><rect
+   id="glass"><g
+   id="glass_input"><rect
      x="1026.0244"
      y="12044.202"
      width="4358.4023"
@@ -404,7 +405,8 @@
      stroke-width="43.5671"
      id="frame_left"
      style="opacity:0.33;fill:#5740bf;fill-opacity:1"
-     inkscape:label="inputs" /><rect
+     inkscape:label="inputs" /></g><g
+   id="glass_output"><rect
      x="5789.2886"
      y="12037.598"
      width="4335.8989"
@@ -417,7 +419,7 @@
      stroke-opacity="0.06"
      stroke-width="46.0052"
      id="outputs"
-     style="opacity:0.33;fill:#1cccd9;fill-opacity:0.5" /></g><rect
+     style="opacity:0.33;fill:#1cccd9;fill-opacity:0.5" /></g></g><rect
    x="1010.9381"
    y="10831.871"
    width="9129.5479"

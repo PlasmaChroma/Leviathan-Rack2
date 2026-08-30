@@ -1,6 +1,7 @@
 #include "Wyrm.hpp"
 #include "WyrmRenderGeometry.hpp"
 #include "DebugTerminalTransport.hpp"
+#include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
@@ -260,22 +261,37 @@ struct WyrmModeSwitchPulseWidget final : TransparentWidget {
 
 struct WyrmEditorBackground final : TransparentWidget {
 	std::string imagePath;
-	std::shared_ptr<window::Image> image;
+	int imageHandle = -1;
+	int imageWidth = 0;
+	int imageHeight = 0;
 	NVGcontext* imageContext = nullptr;
 
 	WyrmEditorBackground()
 		: imagePath(asset::plugin(pluginInstance, "res/icon/sand_color_96c.png")) {
 	}
 
+	~WyrmEditorBackground() override {
+		// Rack destroys Window before Scene, so APP->window may already be a
+		// dangling pointer when browser-preview widgets are released. Destructor
+		// cleanup must therefore be entirely driver-free; the owning NanoVG
+		// context reclaims the small texture during its own teardown.
+		abandonImage();
+	}
+
+	void abandonImage() {
+		nvg_gfx_lifecycle::resetOwnedNvgImage(
+			imageContext, imageHandle, imageWidth, imageHeight,
+			nullptr, false);
+	}
+
 	void onContextCreate(const ContextCreateEvent& e) override {
-		image.reset();
+		abandonImage();
 		imageContext = e.vg;
 		TransparentWidget::onContextCreate(e);
 	}
 
 	void onContextDestroy(const ContextDestroyEvent& e) override {
-		image.reset();
-		imageContext = nullptr;
+		abandonImage();
 		TransparentWidget::onContextDestroy(e);
 	}
 
@@ -284,20 +300,27 @@ struct WyrmEditorBackground final : TransparentWidget {
 			return;
 		}
 		if (imageContext != args.vg) {
-			image.reset();
+			abandonImage();
 			imageContext = args.vg;
 		}
-		if (!image) {
-			image = APP->window->loadImage(imagePath);
+		if (imageHandle >= 0
+			&& !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(
+				args.vg, imageHandle, imageWidth, imageHeight)) {
+			abandonImage();
+			imageContext = args.vg;
 		}
-		if (!image || image->handle < 0) {
-			return;
-		}
-
-		int imageHandle = visual_assets::loadRasterMipmapHandle(
-			args.vg, image, imagePath);
 		if (imageHandle < 0) {
-			imageHandle = image->handle;
+			imageHandle = visual_assets::createContextOwnedRasterMipmapHandle(
+				args.vg, imagePath);
+			if (imageHandle < 0) {
+				return;
+			}
+			nvgImageSize(args.vg, imageHandle, &imageWidth, &imageHeight);
+			if (imageWidth <= 0 || imageHeight <= 0) {
+				abandonImage();
+				imageContext = args.vg;
+				return;
+			}
 		}
 		// Expanded mode is approximately twice as wide as the docked editor. Keep
 		// the tile's horizontal density instead of stretching the 2x2 field.

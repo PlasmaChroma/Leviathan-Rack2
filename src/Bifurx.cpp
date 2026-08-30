@@ -27,6 +27,38 @@ struct SpanShapeLut {
 
 const SpanShapeLut gSpanShapeLut;
 
+struct SynchronousOverlayScratch {
+	dsp::RealFFT fft;
+	alignas(16) float window[kFftSize];
+	alignas(16) float fftInputTime[kFftSize] {};
+	alignas(16) float fftOutputTime[kFftSize] {};
+	alignas(16) float fftOutputFreq[2 * kFftSize] {};
+	alignas(16) float fftRawInputFreq[2 * kFftSize] {};
+
+	SynchronousOverlayScratch() : fft(kFftSize) {
+		for (int i = 0; i < kFftSize; ++i) {
+			window[i] = 0.5f - 0.5f * std::cos(2.f * kPi * float(i) / float(kFftSize - 1));
+		}
+	}
+};
+
+inline std::unique_ptr<SynchronousOverlayScratch>& synchronousOverlayScratchSlot() {
+	thread_local std::unique_ptr<SynchronousOverlayScratch> scratch;
+	return scratch;
+}
+
+inline bool synchronousOverlayScratchAllocatedForCurrentThread() {
+	return bool(synchronousOverlayScratchSlot());
+}
+
+SynchronousOverlayScratch& synchronousOverlayScratch() {
+	auto& scratch = synchronousOverlayScratchSlot();
+	if (!scratch) {
+		scratch.reset(new SynchronousOverlayScratch());
+	}
+	return *scratch;
+}
+
 inline int publishedSlotFromToken(uint64_t token) {
 	return token ? int(token & kPublishedSlotIndexMask) : -1;
 }
@@ -1847,18 +1879,19 @@ void BifurxSpectrumBase::initializeStaticPreviewStateIfNeeded() {
 	// The module browser has no live engine input. Recreate the authored Undertow
 	// Morph scene, run it through the real filter, and feed both signals through
 	// the same FFT preparation used by an instantiated module.
-	simulatePreviewProbeResponse(preview, fftInputTime, fftOutputTime, kFftSize);
+	SynchronousOverlayScratch& scratch = synchronousOverlayScratch();
+	simulatePreviewProbeResponse(preview, scratch.fftInputTime, scratch.fftOutputTime, kFftSize);
 	for (int i = 0; i < kFftSize; ++i) {
-		fftInputTime[i] *= window[i];
-		fftOutputTime[i] *= window[i];
+		scratch.fftInputTime[i] *= scratch.window[i];
+		scratch.fftOutputTime[i] *= scratch.window[i];
 	}
-	fft.rfft(fftInputTime, fftRawInputFreq);
-	fft.rfft(fftOutputTime, fftOutputFreq);
+	scratch.fft.rfft(scratch.fftInputTime, scratch.fftRawInputFreq);
+	scratch.fft.rfft(scratch.fftOutputTime, scratch.fftOutputFreq);
 	prepareOverlayTargetsFromSpectra(
 		preview.sampleRate,
 		state.curveBinPos,
-		fftOutputFreq,
-		fftRawInputFreq,
+		scratch.fftOutputFreq,
+		scratch.fftRawInputFreq,
 		true,
 		false,
 		true,
@@ -1910,19 +1943,20 @@ const BifurxPreviewModel& BifurxSpectrumBase::getOrUpdateModel() const {
 bool BifurxSpectrumBase::updateOverlayCache(uint32_t* copiedSeq) {
 	if (!state.hasPreview || !module) return false;
 	updateAxisCache();
+	SynchronousOverlayScratch& scratch = synchronousOverlayScratch();
 	uint32_t frameSeq = state.lastAnalysisSeq;
 	if (!module->copyAnalysisFrame(
 		state.lastAnalysisSeq,
-		fftInputTime,
-		fftOutputTime,
+		scratch.fftInputTime,
+		scratch.fftOutputTime,
 		&frameSeq
 	)) {
 		return false;
 	}
 	for (int i = 0; i < kFftSize; i++) {
-		fftOutputTime[i] *= window[i];
+		scratch.fftOutputTime[i] *= scratch.window[i];
 	}
-	fft.rfft(fftOutputTime, fftOutputFreq);
+	scratch.fft.rfft(scratch.fftOutputTime, scratch.fftOutputFreq);
 	const bool displayOnlyMode = isBifurxDisplayOnlyMode(state.previewState.mode);
 	// The measured response drives both the optional response line and the
 	// normal spectrum fill's low/high color tint. Keep it alive when the line
@@ -1930,16 +1964,16 @@ bool BifurxSpectrumBase::updateOverlayCache(uint32_t* copiedSeq) {
 	const bool moduleResponseEnabled = !displayOnlyMode;
 	if (moduleResponseEnabled) {
 		for (int i = 0; i < kFftSize; i++) {
-			fftInputTime[i] *= window[i];
+			scratch.fftInputTime[i] *= scratch.window[i];
 		}
-		fft.rfft(fftInputTime, fftRawInputFreq);
+		scratch.fft.rfft(scratch.fftInputTime, scratch.fftRawInputFreq);
 	}
 	const bool fftScaleDynamic = module ? module->fftScaleDynamic.load(std::memory_order_relaxed) : true;
 	prepareOverlayTargetsFromSpectra(
 		state.previewState.sampleRate,
 		state.curveBinPos,
-		fftOutputFreq,
-		fftRawInputFreq,
+		scratch.fftOutputFreq,
+		scratch.fftRawInputFreq,
 		moduleResponseEnabled,
 		state.hasOverlayTarget,
 		fftScaleDynamic,

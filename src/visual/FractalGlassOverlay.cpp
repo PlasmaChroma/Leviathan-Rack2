@@ -480,7 +480,30 @@ FractalGlassOverlay::FractalGlassOverlay(
 	: impl(new Impl(panelPath, selectionKey, renderWidth, renderHeight,
 		synchronousFallback)) {}
 
-FractalGlassOverlay::~FractalGlassOverlay() = default;
+FractalGlassOverlay::~FractalGlassOverlay() {
+	abandonImages();
+}
+
+void FractalGlassOverlay::abandonImages() {
+	impl->images.assign(impl->regions.size(), -1);
+	impl->imageContext = nullptr;
+	impl->uploadedWidth = 0;
+	impl->uploadedHeight = 0;
+	impl->uploadedGeneration = uint64_t(-1);
+}
+
+void FractalGlassOverlay::onContextDestroy(const ContextDestroyEvent& e) {
+	abandonImages();
+	TransparentWidget::onContextDestroy(e);
+}
+
+void FractalGlassOverlay::onContextCreate(const ContextCreateEvent& e) {
+	// Context addresses may be recycled by DAW editors. Always invalidate the
+	// numeric handles on the authoritative creation event.
+	abandonImages();
+	if (impl->framebuffer) impl->framebuffer->setDirty();
+	TransparentWidget::onContextCreate(e);
+}
 
 void FractalGlassOverlay::setFramebuffer(widget::FramebufferWidget* framebuffer) { impl->framebuffer = framebuffer; }
 

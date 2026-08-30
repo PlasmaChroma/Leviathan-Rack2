@@ -66,8 +66,12 @@
     </g>
     <g id="panel_graphics" style="display:inline" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
       <g id="glass" inkscape:label="glass" style="display:inline">
-        <rect x="1089.5947" y="1936.0962" width="3870.4844" height="5997.0835" rx="181.70528" ry="187.84001" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="46.1868" id="inputs" style="opacity:0.33;fill:#5740bf;fill-opacity:1" />
-        <rect x="1226.6439" y="10178.908" width="3596.386" height="2873.2893" rx="162.81253" ry="182.65692" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="28.0455" id="outputs" style="opacity:0.33;fill:#1cccd9;fill-opacity:0.5" />
+        <g id="glass_input" data-theme-runtime-substrate="neutral">
+          <rect x="1089.5947" y="1936.0962" width="3870.4844" height="5997.0835" rx="181.70528" ry="187.84001" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="46.1868" id="inputs" style="opacity:0.33;fill:#000000;fill-opacity:1" />
+        </g>
+        <g id="glass_output" data-theme-runtime-substrate="neutral">
+          <rect x="1226.6439" y="10178.908" width="3596.386" height="2873.2893" rx="162.81253" ry="182.65692" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="28.0455" id="outputs" style="opacity:0.33;fill:#000000;fill-opacity:0.5" />
+        </g>
       </g>
       <g id="connector_lines">
         <path style="display:none;opacity:1;fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:#ffffff;stroke-width:50.155;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1" d="m 2161.9375,6802.2764 -657.9069,-539.492" id="linear_line" sodipodi:nodetypes="cc" />

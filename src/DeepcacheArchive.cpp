@@ -274,15 +274,22 @@ void DeepcacheArchiveWorker::start(const std::string& directory, const std::vect
 			alternateThemeWanted_[entry.cacheKey] = entry.alternateThemeFingerprint;
 			if (entry.hydrateAtStartup)
 				startupHydrationKeys_.insert(entry.cacheKey);
+			if (entry.requiredForReadiness && wantedPluginByKey_.count(entry.cacheKey) == 0) {
+				const std::string pluginKey = entry.pluginKey.empty() ? entry.cacheKey : entry.pluginKey;
+				wantedPluginByKey_[entry.cacheKey] = pluginKey;
+				pluginTargetCounts_[pluginKey]++;
+			}
 			continue;
 		}
 		wanted_[entry.cacheKey] = entry.fingerprint;
 		alternateThemeWanted_[entry.cacheKey] = entry.alternateThemeFingerprint;
 		if (entry.hydrateAtStartup)
 			startupHydrationKeys_.insert(entry.cacheKey);
-		const std::string pluginKey = entry.pluginKey.empty() ? entry.cacheKey : entry.pluginKey;
-		wantedPluginByKey_[entry.cacheKey] = pluginKey;
-		pluginTargetCounts_[pluginKey]++;
+		if (entry.requiredForReadiness) {
+			const std::string pluginKey = entry.pluginKey.empty() ? entry.cacheKey : entry.pluginKey;
+			wantedPluginByKey_[entry.cacheKey] = pluginKey;
+			pluginTargetCounts_[pluginKey]++;
+		}
 	}
 	startupTotalMicros_.store(0, std::memory_order_relaxed);
 	startupIndexMicros_.store(0, std::memory_order_relaxed);
@@ -294,7 +301,7 @@ void DeepcacheArchiveWorker::start(const std::string& directory, const std::vect
 	startupIndexedEntries_.store(0, std::memory_order_relaxed);
 	startupHydratedEntries_.store(0, std::memory_order_relaxed);
 	startupDeferredEntries_.store(0, std::memory_order_relaxed);
-	targetCount_.store(static_cast<int>(wanted_.size()), std::memory_order_relaxed);
+	targetCount_.store(static_cast<int>(wantedPluginByKey_.size()), std::memory_order_relaxed);
 	targetPluginCount_.store(static_cast<int>(pluginTargetCounts_.size()), std::memory_order_relaxed);
 	setState(DatabaseState::LOADING);
 	indexDiscoveryComplete_.store(false, std::memory_order_release);
@@ -486,10 +493,10 @@ bool DeepcacheArchiveWorker::tryPopCommitted(std::string& cacheKey) {
 void DeepcacheArchiveWorker::markReady(const std::string& cacheKey) {
 	if (!readyKeys_.insert(cacheKey).second)
 		return;
-	readyCount_.store(static_cast<int>(readyKeys_.size()), std::memory_order_relaxed);
 	const auto plugin = wantedPluginByKey_.find(cacheKey);
 	if (plugin == wantedPluginByKey_.end())
 		return;
+	readyCount_.fetch_add(1, std::memory_order_relaxed);
 	const int ready = ++pluginReadyCounts_[plugin->second];
 	const auto target = pluginTargetCounts_.find(plugin->second);
 	if (target != pluginTargetCounts_.end() && ready >= target->second) {
