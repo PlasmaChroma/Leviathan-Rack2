@@ -375,7 +375,9 @@
      stroke-width="41.308"
      id="outputs-3"
      style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.501961;stroke:none;stroke-opacity:0.33"
-     inkscape:label="outputs" /></g><path
+     inkscape:label="outputs" /></g><g
+   id="plasma_conduit_candidates"
+   inkscape:label="Plasma Conduit Candidates"><path
    d="m 1812.5205,9954.4275 1059.159,0.311"
    stroke="url(#accentGrad)"
    stroke-width="40.8409"
@@ -429,7 +431,7 @@
    fill="none"
    id="fold_line"
    style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;stroke:#5740bf;stroke-opacity:1"
-   sodipodi:nodetypes="cc" />
+   sodipodi:nodetypes="cc" /></g>
     
     
     

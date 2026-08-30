@@ -155,7 +155,10 @@
        ry="126"
        id="iris_preview_field"
        style="display:none;opacity:0.22;fill:#5740bf;fill-opacity:1;stroke:none" />
-    <path
+    <g
+       id="plasma_conduit_candidates"
+       inkscape:label="Plasma Conduit Candidates">
+      <path
        d="M 1126.72,7760.0522 H 3358.8802"
        id="iris_freq_guide"
        style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:37.8809;stroke-linecap:round;stroke-opacity:1" />
@@ -171,6 +174,7 @@
        d="m 4704,7793.5083 h 545.2969"
        id="iris_soft_sync_guide"
        style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />
+    </g>
   </g>
   <g
      id="components"

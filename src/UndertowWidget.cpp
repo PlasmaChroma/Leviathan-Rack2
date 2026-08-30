@@ -3,6 +3,7 @@
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
+#include "visual/PlasmaConduit.hpp"
 #include "visual/PreviewSurface.hpp"
 #include "WavePreviewTracer.hpp"
 #include <array>
@@ -266,6 +267,10 @@ struct UndertowWidget final : ModuleWidget {
     splitPanel.addCompactLeviathanLogoBranding();
     visual_assets::addFractalGlassOverlay(
       this, panelPath, splitPanel.panelSurfaceEffectWidget());
+    if (widget::FramebufferWidget* conduits =
+        visual_assets::createPlasmaConduitLayer(panelPath, box.size)) {
+      addChild(conduits);
+    }
     addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
     previewBuildTimer.markPanelDone();

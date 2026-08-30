@@ -376,7 +376,9 @@
      style="display:none;opacity:1;fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:#ffffff;stroke-width:50.155;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1"
      d="m 2161.9375,6802.2764 -657.9069,-539.492"
      id="linear_line"
-     sodipodi:nodetypes="cc" /><path
+     sodipodi:nodetypes="cc" /><g
+     id="plasma_conduit_candidates"
+     inkscape:label="Plasma Conduit Candidates"><path
      style="display:inline;opacity:1;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:58.7818;stroke-dasharray:none;stroke-opacity:1"
      d="m 2982.8495,4194.0677 1264.2608,327.6294"
      id="surge_connector"
@@ -384,7 +386,7 @@
      style="display:inline;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.1551;stroke-dasharray:none;stroke-opacity:1"
      d="m 4237.3591,6376.5454 -865.0558,976.6498"
      id="sink_connector"
-     sodipodi:nodetypes="cc" /></g></g>
+     sodipodi:nodetypes="cc" /></g></g></g>
     
     
   <g

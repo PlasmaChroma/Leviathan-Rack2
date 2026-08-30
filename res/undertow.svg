@@ -369,7 +369,9 @@
     
     
     
-  <path
+  <g
+   id="plasma_conduit_anchors"
+   inkscape:label="Plasma Conduit Anchors"><path
    d="M 922.07621,1966.136 2024.2003,3030.8782"
    stroke="url(#accentGrad)"
    stroke-width="31.1071"
@@ -405,7 +407,7 @@
    fill="none"
    id="lin_fm_line"
    style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1;stroke-width:50.00000203;stroke-dasharray:none"
-   sodipodi:nodetypes="cc" /></g><g
+   sodipodi:nodetypes="cc" /></g></g><g
    id="components"
    style="display:none;opacity:0.5">
   <circle
