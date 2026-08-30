@@ -17,12 +17,12 @@ struct BifurxUiRenderRequest {
 	BifurxPreviewState previewState;
 	bool hasAnalysisFrame = false;
 	bool fftScaleDynamic = true;
+	bool showModuleResponseOverlay = false;
 	bool hasOverlayTarget = false;
 	float previousOverlayTargetModuleDb[kCurvePointCount] = {};
 	float previousOverlayTargetOutputDbfs[kCurvePointCount] = {};
 	alignas(16) float analysisRawInput[kFftSize] = {};
 	alignas(16) float analysisOutput[kFftSize] = {};
-	alignas(16) float analysisResponseOutput[kFftSize] = {};
 };
 
 struct BifurxUiRenderSnapshot {

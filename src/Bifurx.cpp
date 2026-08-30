@@ -131,66 +131,9 @@ constexpr float kSelfOscResoStart = 0.80f;
 constexpr float kSelfOscResoFull = 0.98f;
 constexpr float kSelfOscHeatStart = 0.90f;
 constexpr float kSelfOscPush = 0.120f;
-constexpr float kSelfOscAmpDampingClean = 0.060f;
-constexpr float kSelfOscAmpDampingHot = 0.120f;
+constexpr float kSelfOscPlateauAmpDamping = 0.045f;
+constexpr float kSelfOscPlateauHeatTrim = 1.08f;
 constexpr float kSvfSelfOscDampingMin = 0.0005f;
-
-float levelDriveGain(float knob) {
-	const float x = levi_math::clamp01(knob);
-	// Midpoint should be exactly unity so the default LEVEL setting is neutral.
-	return 0.075f + 0.95f * x + 3.6f * x * x * x;
-}
-
-float levelInputGain(float knob) {
-	const float x = levi_math::clamp01(knob);
-	if (x <= 0.5f) {
-		return 2.f * x;
-	}
-	const float hot = 2.f * (x - 0.5f);
-	return 1.f + 2.5f * hot * hot;
-}
-
-float levelDriveAmount(float knob) {
-	const float x = levi_math::clamp01(knob);
-	constexpr float kLevelDriveStart = 0.62f;
-	if (x <= kLevelDriveStart) {
-		return 0.f;
-	}
-	const float hot = levi_math::clamp01((x - kLevelDriveStart) / (1.f - kLevelDriveStart));
-	return hot * hot;
-}
-
-float levelOutputClipWet(float knob) {
-	(void) knob;
-	return 0.f;
-}
-
-float levelOutputMakeupGain(float knob) {
-	(void) knob;
-	return 1.f;
-}
-
-float applyLevelInputStage(float in, float levelKnob) {
-	constexpr float kLevelMaxDriveGain = 2.5f;
-	const float clean = in * levelInputGain(levelKnob);
-	const float driveAmount = levelDriveAmount(levelKnob);
-	if (driveAmount <= 1e-5f) {
-		return clean;
-	}
-	const float driveGain = 1.f + (kLevelMaxDriveGain - 1.f) * driveAmount;
-	const float driven = 5.f * levi_math::softClip((clean * driveGain) / 5.f);
-	return bifurx::mixf(clean, driven, driveAmount);
-}
-
-float applyLevelOutputStage(float modeOut, float levelKnob, bool softLimitingEnabled) {
-	(void) levelKnob;
-	const float out = bifurx::sanitizeFinite(modeOut);
-	if (!softLimitingEnabled) {
-		return out;
-	}
-	constexpr float kSoftLimitVolts = 10.f;
-	return kSoftLimitVolts * levi_math::softClip(out / kSoftLimitVolts);
-}
 
 float onePoleAlpha(float dt, float tauSeconds) {
 	if (tauSeconds <= 0.f) {
@@ -243,32 +186,6 @@ float responseYForDbDisplay(float db, float minDb, float maxDb, float bottomY, f
 		return midY;
 	}
 	return rescale(clampedDb, minDb, 0.f, bottomY, midY);
-}
-
-float softLimitOverlayDeltaDb(float db) {
-	constexpr float kneeDb = 18.f;
-	constexpr float limitDb = 42.f;
-	const float sign = (db < 0.f) ? -1.f : 1.f;
-	const float absDb = std::fabs(db);
-	if (absDb <= kneeDb) {
-		return db;
-	}
-	const float over = absDb - kneeDb;
-	const float compressed = kneeDb + (limitDb - kneeDb) * (1.f - fastExp(-over / (limitDb - kneeDb)));
-	return sign * std::min(compressed, limitDb);
-}
-
-float softLimitExpectedCurveDb(float db) {
-	constexpr float kneeDb = 26.f;
-	constexpr float limitDb = 48.f;
-	const float sign = (db < 0.f) ? -1.f : 1.f;
-	const float absDb = std::fabs(db);
-	if (absDb <= kneeDb) {
-		return clamp(db, -limitDb, limitDb);
-	}
-	const float over = absDb - kneeDb;
-	const float compressed = kneeDb + (limitDb - kneeDb) * (1.f - fastExp(-over / (limitDb - kneeDb)));
-	return sign * std::min(compressed, limitDb);
 }
 
 float resoToDamping(float resoNorm) {
@@ -426,17 +343,14 @@ SvfOutputs TptSvf::processSelfOscWithCoeffs(
 	const SvfCoeffs& coeffs,
 	float input,
 	float oscOnset,
-	float oscHeat,
-	float oscDrive
+	float oscAmpDamping
 ) {
 	const float m = ic1eq + coeffs.g * (input - ic2eq);
 	const float onePlusG2 = 1.f + coeffs.g * coeffs.g;
 	float v1 = m / std::max(onePlusG2 + coeffs.g * coeffs.k, 1e-5f);
 
-	const float drive = std::max(oscDrive, 1e-4f);
-	const float amp = v1 * drive;
-	const float ampDamping = mixf(kSelfOscAmpDampingClean, kSelfOscAmpDampingHot, levi_math::clamp01(oscHeat));
-	const float kEff = coeffs.k - kSelfOscPush * levi_math::clamp01(oscOnset) + ampDamping * amp * amp;
+	const float ampDamping = std::max(oscAmpDamping, 1e-6f);
+	const float kEff = coeffs.k - kSelfOscPush * levi_math::clamp01(oscOnset) + ampDamping * v1 * v1;
 	v1 = m / std::max(onePlusG2 + coeffs.g * kEff, 1e-5f);
 
 	const float v2 = ic2eq + coeffs.g * v1;
@@ -446,8 +360,7 @@ SvfOutputs TptSvf::processSelfOscWithCoeffs(
 	SvfOutputs out;
 	out.bp = v1;
 	out.lp = v2;
-	const float outAmp = v1 * drive;
-	const float outKEff = coeffs.k - kSelfOscPush * levi_math::clamp01(oscOnset) + ampDamping * outAmp * outAmp;
+	const float outKEff = coeffs.k - kSelfOscPush * levi_math::clamp01(oscOnset) + ampDamping * v1 * v1;
 	out.hp = input - outKEff * v1 - v2;
 	out.notch = out.lp + out.hp;
 	return out;
@@ -503,9 +416,15 @@ CharacterStageState prepareCharacterStageState(float drive, float resoNorm, bool
 	}
 	character.selfOscillating = true;
 	character.oscOnset = std::sqrt(oscNorm);
-	character.oscHeat = levi_math::smoothstep01((r - kSelfOscHeatStart) / (1.f - kSelfOscHeatStart));
-	character.oscDrive = mixf(0.75f, 2.6f, character.oscHeat)
-		* mixf(0.85f, 1.35f, levi_math::clamp01((drive - 1.f) / 2.f));
+	const float oscHeat = levi_math::smoothstep01((r - kSelfOscHeatStart) / (1.f - kSelfOscHeatStart));
+	const float levelScale = mixf(0.85f, 1.35f, levi_math::clamp01((drive - 1.f) / 2.f));
+	// Match nonlinear damping to the growing negative-resistance push so the
+	// established onset rises naturally and then settles into a controlled
+	// plateau. Heat adds only a small trim instead of the former ~24x increase.
+	character.oscAmpDamping = kSelfOscPlateauAmpDamping
+		* character.oscOnset
+		* mixf(1.f, kSelfOscPlateauHeatTrim, oscHeat)
+		* levelScale * levelScale;
 	return character;
 }
 
@@ -523,8 +442,7 @@ SvfOutputs processCharacterStagePrepared(
 		*selfOscCoeffsOrNull,
 		input,
 		character.oscOnset,
-		character.oscHeat,
-		character.oscDrive
+		character.oscAmpDamping
 	);
 	if (!std::isfinite(out.lp) || !std::isfinite(out.bp) || !std::isfinite(out.hp) || !std::isfinite(out.notch)) {
 		sanitizeCoreState(core);
@@ -1075,10 +993,9 @@ bool Bifurx::copyAnalysisFrame(
 	uint32_t lastSeq,
 	float* rawInput,
 	float* output,
-	float* responseOutput,
 	uint32_t* seq
 ) {
-	if (!rawInput || !output || !responseOutput || !seq) {
+	if (!rawInput || !output || !seq) {
 		return false;
 	}
 	bool changed = false;
@@ -1087,7 +1004,6 @@ bool Bifurx::copyAnalysisFrame(
 		if (slotSeq != lastSeq) {
 			std::memcpy(rawInput, analysisFrames[slot].rawInput, sizeof(analysisFrames[slot].rawInput));
 			std::memcpy(output, analysisFrames[slot].output, sizeof(analysisFrames[slot].output));
-			std::memcpy(responseOutput, analysisFrames[slot].responseOutput, sizeof(analysisFrames[slot].responseOutput));
 			*seq = slotSeq;
 			changed = true;
 		}
@@ -1095,7 +1011,7 @@ bool Bifurx::copyAnalysisFrame(
 	return changed;
 }
 
-void Bifurx::pushAnalysisSample(float rawInputSample, float outputSample, float responseOutputSample) {
+void Bifurx::pushAnalysisSample(float rawInputSample, float outputSample) {
 	if (analysisVisualSubscribers.load(std::memory_order_acquire) == 0u) {
 		if (analysisCaptureSlots[0] >= 0 || analysisCaptureSlots[1] >= 0 || analysisCaptureCountdown != 0) {
 			resetAnalysisCapture();
@@ -1121,7 +1037,6 @@ void Bifurx::pushAnalysisSample(float rawInputSample, float outputSample, float 
 
 	const float safeRawInput = bifurx::sanitizeFinite(rawInputSample);
 	const float safeOutput = bifurx::sanitizeFinite(outputSample);
-	const float safeResponseOutput = bifurx::sanitizeFinite(responseOutputSample);
 	for (int captureIndex = 0; captureIndex < 2; ++captureIndex) {
 		const int slot = analysisCaptureSlots[captureIndex];
 		if (slot < 0) {
@@ -1130,7 +1045,6 @@ void Bifurx::pushAnalysisSample(float rawInputSample, float outputSample, float 
 		const int position = analysisCapturePositions[captureIndex];
 		analysisFrames[slot].rawInput[position] = safeRawInput;
 		analysisFrames[slot].output[position] = safeOutput;
-		analysisFrames[slot].responseOutput[position] = safeResponseOutput;
 		const int nextPosition = position + 1;
 		analysisCapturePositions[captureIndex] = nextPosition;
 		if (nextPosition >= kFftSize) {
@@ -1475,7 +1389,9 @@ void Bifurx::process(const ProcessArgs& args) {
 		if (perTick || adpTick) { BifurxLlTelemetryState llTS; llTS.active = (mode == 0); llTS.excitationRms = std::sqrt(std::max(llTelemetryExcitationSq, 0.f)); llTS.stageALpRms = std::sqrt(std::max(llTelemetryStageALpSq, 0.f)); llTS.stageBLpRms = std::sqrt(std::max(llTelemetryStageBLpSq, 0.f)); llTS.outputRms = std::sqrt(std::max(llTelemetryOutputSq, 0.f)); llTS.stageBLpOverALpDb = amplitudeRatioDb(llTS.stageBLpRms, llTS.stageALpRms); llTS.outputOverInputDb = amplitudeRatioDb(llTS.outputRms, llTS.excitationRms); publishLlTelemetryState(llTS); }
 	}
 	if (measurePerf) perfAnalysisStart = PerfClock::now();
-	pushAnalysisSample(in, out, modeOut);
+	// The measured module-response overlay represents the complete audible
+	// transfer, including the optional output safety stage.
+	pushAnalysisSample(in, out);
 
 	if (controlDividerTick) {
 		lights[FM_AMT_POS_LIGHT].setBrightness(std::max(fmAmt, 0.f)); lights[FM_AMT_NEG_LIGHT].setBrightness(std::max(-fmAmt, 0.f));
@@ -1544,7 +1460,6 @@ inline void prepareOverlayTargetsFromSpectra(
 	float sampleRate,
 	const float* curveBinPos,
 	const float* fftOutputFreq,
-	const float* fftResponseOutputFreq,
 	const float* fftRawInputFreq,
 	bool moduleResponseEnabled,
 	bool hasOverlayTarget,
@@ -1555,7 +1470,6 @@ inline void prepareOverlayTargetsFromSpectra(
 ) {
 	float binOutputDbfs[kFftBinCount];
 	float binOutputPower[kFftBinCount];
-	float binResponseOutputPower[kFftBinCount];
 	float binRawInputPower[kFftBinCount];
 	float binModuleDeltaDb[kFftBinCount];
 	const float amplitudeScale = 4.f / float(kFftSize);
@@ -1566,7 +1480,6 @@ inline void prepareOverlayTargetsFromSpectra(
 		const float weightedPowerScale = subsonicWeight * subsonicWeight * amplitudeScaleSq;
 		binOutputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftOutputFreq, bin);
 		if (moduleResponseEnabled) {
-			binResponseOutputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftResponseOutputFreq, bin);
 			binRawInputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftRawInputFreq, bin);
 		}
 	}
@@ -1582,12 +1495,12 @@ inline void prepareOverlayTargetsFromSpectra(
 			const float w = kOverlayBandKernel[k + kOverlayBandRadius];
 			outputEnergy += w * binOutputPower[sampleBin];
 			if (moduleResponseEnabled) {
-				responseOutputEnergy += w * binResponseOutputPower[sampleBin];
+				responseOutputEnergy += w * binOutputPower[sampleBin];
 				rawInputEnergy += w * binRawInputPower[sampleBin];
 			}
 		}
 		binModuleDeltaDb[bin] = moduleResponseEnabled
-			? softLimitOverlayDeltaDb(10.f * std::log10((responseOutputEnergy + 1e-12f) / (rawInputEnergy + 1e-12f)))
+			? 10.f * std::log10((responseOutputEnergy + 1e-12f) / (rawInputEnergy + 1e-12f))
 			: 0.f;
 		outputEnergy += 1e-12f;
 		binOutputDbfs[bin] = clamp(10.f * std::log10(outputEnergy / 25.f + 1e-12f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
@@ -1782,6 +1695,7 @@ void BifurxSpectrumBase::submitWorkerCurveRequest() {
 	request.sourcePreviewTimeSec = state.previewPublishTimeSec;
 	request.previewState = state.previewState;
 	request.fftScaleDynamic = module->fftScaleDynamic.load(std::memory_order_relaxed);
+	request.showModuleResponseOverlay = module->showModuleResponseOverlay.load(std::memory_order_relaxed);
 	request.hasOverlayTarget = state.hasOverlayTarget;
 	std::memcpy(
 		request.previousOverlayTargetModuleDb,
@@ -1801,7 +1715,6 @@ void BifurxSpectrumBase::submitWorkerCurveRequest() {
 			workerLastSubmittedAnalysisSeq,
 			request.analysisRawInput,
 			request.analysisOutput,
-			request.analysisResponseOutput,
 			&copiedAnalysisSeq
 		);
 		if (request.hasAnalysisFrame) {
@@ -1923,7 +1836,6 @@ void BifurxSpectrumBase::initializeStaticPreviewStateIfNeeded() {
 		preview.sampleRate,
 		state.curveBinPos,
 		fftOutputFreq,
-		fftOutputFreq,
 		fftRawInputFreq,
 		true,
 		false,
@@ -1981,7 +1893,6 @@ bool BifurxSpectrumBase::updateOverlayCache(uint32_t* copiedSeq) {
 		state.lastAnalysisSeq,
 		fftInputTime,
 		fftOutputTime,
-		fftResponseOutputFreq,
 		&frameSeq
 	)) {
 		return false;
@@ -1991,11 +1902,11 @@ bool BifurxSpectrumBase::updateOverlayCache(uint32_t* copiedSeq) {
 	}
 	fft.rfft(fftOutputTime, fftOutputFreq);
 	const bool displayOnlyMode = isBifurxDisplayOnlyMode(state.previewState.mode);
-	if (!displayOnlyMode) {
-		for (int i = 0; i < kFftSize; i++) {
-			fftOutputTime[i] = fftResponseOutputFreq[i] * window[i];
-		}
-		fft.rfft(fftOutputTime, fftResponseOutputFreq);
+	// The measured response drives both the optional response line and the
+	// normal spectrum fill's low/high color tint. Keep it alive when the line
+	// is hidden; only display-only previews use an energy-only gradient.
+	const bool moduleResponseEnabled = !displayOnlyMode;
+	if (moduleResponseEnabled) {
 		for (int i = 0; i < kFftSize; i++) {
 			fftInputTime[i] *= window[i];
 		}
@@ -2006,9 +1917,8 @@ bool BifurxSpectrumBase::updateOverlayCache(uint32_t* copiedSeq) {
 		state.previewState.sampleRate,
 		state.curveBinPos,
 		fftOutputFreq,
-		fftResponseOutputFreq,
 		fftRawInputFreq,
-		!displayOnlyMode,
+		moduleResponseEnabled,
 		state.hasOverlayTarget,
 		fftScaleDynamic,
 		state.overlayTargetModuleDb,

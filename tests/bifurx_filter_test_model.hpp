@@ -1,5 +1,8 @@
 #pragma once
 
+#include "../src/BifurxInputStage.hpp"
+#include "../src/BifurxOutputStage.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <complex>
@@ -243,64 +246,13 @@ inline float responseDb(const PreviewModel& model, float hz) {
   return 20.f * std::log10(std::max(mag, 1e-5f));
 }
 
-inline float levelDriveGain(float knob) {
-  const float x = clamp01(knob);
-  return 0.075f + 0.95f * x + 3.6f * x * x * x;
-}
+using bifurx::applyLevelInputStage;
+using bifurx::applyLevelOutputStage;
+using bifurx::levelDriveGain;
 
 inline float smoothstep01(float x) {
   const float t = clamp01(x);
   return t * t * (3.f - 2.f * t);
-}
-
-inline float levelInputGain(float knob) {
-  const float x = clamp01(knob);
-  if (x <= 0.5f) {
-    return 2.f * x;
-  }
-  const float hot = 2.f * (x - 0.5f);
-  return 1.f + 2.5f * hot * hot;
-}
-
-inline float levelDriveAmount(float knob) {
-  const float x = clamp01(knob);
-  constexpr float kLevelDriveStart = 0.62f;
-  if (x <= kLevelDriveStart) {
-    return 0.f;
-  }
-  const float hot = clamp01((x - kLevelDriveStart) / (1.f - kLevelDriveStart));
-  return hot * hot;
-}
-
-inline float levelOutputClipWet(float knob) {
-  (void) knob;
-  return 0.f;
-}
-
-inline float levelOutputMakeupGain(float knob) {
-  (void) knob;
-  return 1.f;
-}
-
-inline float softClip(float x) {
-  return std::tanh(x);
-}
-
-inline float applyLevelInputStage(float in, float levelKnob) {
-  constexpr float kLevelMaxDriveGain = 2.5f;
-  const float clean = in * levelInputGain(levelKnob);
-  const float driveAmount = levelDriveAmount(levelKnob);
-  if (driveAmount <= 1e-5f) {
-    return clean;
-  }
-  const float driveGain = 1.f + (kLevelMaxDriveGain - 1.f) * driveAmount;
-  const float driven = 5.f * softClip((clean * driveGain) / 5.f);
-  return clean + (driven - clean) * driveAmount;
-}
-
-inline float applyLevelOutputStage(float modeOut, float levelKnob) {
-  (void) levelKnob;
-  return modeOut;
 }
 
 inline float amplitudeRatioDb(float numerator, float denominator) {

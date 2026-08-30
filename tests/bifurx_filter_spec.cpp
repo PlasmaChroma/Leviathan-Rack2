@@ -516,14 +516,20 @@ TestResult testLevelMidpointInputStageIsCleanUnity() {
   };
 }
 
-TestResult testLevelMidpointOutputStageIsDry() {
-  const float modeOut = 6.f;
-  const float midOut = bifurx_test_model::applyLevelOutputStage(modeOut, 0.5f);
-  const bool pass = std::fabs(midOut - modeOut) < 1e-5f;
+TestResult testOutputLimiterIsTransparentThroughFourVolts() {
+  bool pass = true;
+  float worstError = 0.f;
+  for (int i = -400; i <= 400; ++i) {
+    const float input = float(i) * 0.01f;
+    const float output = bifurx_test_model::applyLevelOutputStage(input, 0.5f);
+    const float error = std::fabs(output - input);
+    worstError = std::max(worstError, error);
+    pass = pass && error < 1e-7f;
+  }
   return {
-    "LEVEL midpoint keeps output stage dry",
+    "Output safety stage is exactly transparent through +/-4 V",
     pass,
-    "modeOut=" + std::to_string(modeOut) + " out=" + std::to_string(midOut)
+    "worstError=" + std::to_string(worstError)
   };
 }
 
@@ -539,14 +545,35 @@ TestResult testLevelUpperHalfIntroducesSaturation() {
   };
 }
 
-TestResult testLevelOutputStageRemainsDryAtMax() {
-  const float hotModeOut = 8.f;
-  const float maxOut = bifurx_test_model::applyLevelOutputStage(hotModeOut, 1.0f);
-  const bool pass = std::fabs(maxOut - hotModeOut) < 1e-5f;
+TestResult testInputDriveUsesSharedProductionCurve() {
+  const float input = 1.f;
+  const float actual = bifurx_test_model::applyLevelInputStage(input, 1.f);
+  const float expected = 5.f * levi_math::tanhLegacy(1.75f);
+  const float formerDuplicate = 5.f * std::tanh(1.75f);
+  const bool pass = std::fabs(actual - expected) < 1e-7f
+    && std::fabs(actual - formerDuplicate) > 0.05f;
   return {
-    "LEVEL output stage remains transparent at max",
+    "Standalone model uses the shared production LEVEL drive curve",
     pass,
-    "modeOut=" + std::to_string(hotModeOut) + " out=" + std::to_string(maxOut)
+    "actual=" + std::to_string(actual) + " legacy=" + std::to_string(expected)
+      + " formerStdTanh=" + std::to_string(formerDuplicate)
+  };
+}
+
+TestResult testOutputLimiterApproachesFiveVoltBoundary() {
+  const float atFive = bifurx_test_model::applyLevelOutputStage(5.f, 0.5f);
+  const float atSix = bifurx_test_model::applyLevelOutputStage(6.f, 0.5f);
+  const float atTen = bifurx_test_model::applyLevelOutputStage(10.f, 1.f);
+  const float negativeSix = bifurx_test_model::applyLevelOutputStage(-6.f, 0.f);
+  const bool pass = std::fabs(atFive - (4.f + std::tanh(1.f))) < 1e-5f
+    && std::fabs(atSix - (4.f + std::tanh(2.f))) < 1e-5f
+    && atFive > 4.f && atFive < atSix && atSix < atTen && atTen <= 5.f
+    && std::fabs(negativeSix + atSix) < 1e-6f;
+  return {
+    "Output safety stage enters a symmetric knee and approaches +/-5 V",
+    pass,
+    "out(5,6,10,-6)=(" + std::to_string(atFive) + "," + std::to_string(atSix)
+      + "," + std::to_string(atTen) + "," + std::to_string(negativeSix) + ")"
   };
 }
 
@@ -1179,9 +1206,10 @@ int main() {
     testSvfBandBandResonanceLiftIncreasesWithQ(),
     testSvfBandpassPreviewPeakRisesAboveUnityAtHighQ(),
     testLevelMidpointInputStageIsCleanUnity(),
-    testLevelMidpointOutputStageIsDry(),
+    testOutputLimiterIsTransparentThroughFourVolts(),
     testLevelUpperHalfIntroducesSaturation(),
-    testLevelOutputStageRemainsDryAtMax(),
+    testInputDriveUsesSharedProductionCurve(),
+    testOutputLimiterApproachesFiveVoltBoundary(),
     testLowHighModeRetainsLowPeakAtHighLevel(),
     testMixedNotchModesDoNotTurnNotchIntoHighQPeak(),
     testSvfLowLowRuntimeDoesNotCollapseNearLowPeak(),

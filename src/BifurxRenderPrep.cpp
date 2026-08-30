@@ -12,7 +12,6 @@ struct WorkerOverlayScratch {
 	alignas(16) float fftInputTime[kFftSize] {};
 	alignas(16) float fftOutputTime[kFftSize] {};
 	alignas(16) float fftOutputFreq[2 * kFftSize] {};
-	alignas(16) float fftResponseOutputFreq[2 * kFftSize] {};
 	alignas(16) float fftRawInputFreq[2 * kFftSize] {};
 
 	WorkerOverlayScratch() : fft(kFftSize) {
@@ -67,7 +66,6 @@ void prepareOverlayTargetsFromSpectra(
 	float sampleRate,
 	const float* curveBinPos,
 	const float* fftOutputFreq,
-	const float* fftResponseOutputFreq,
 	const float* fftRawInputFreq,
 	bool moduleResponseEnabled,
 	bool hasOverlayTarget,
@@ -78,7 +76,6 @@ void prepareOverlayTargetsFromSpectra(
 ) {
 	float binOutputDbfs[kFftBinCount];
 	float binOutputPower[kFftBinCount];
-	float binResponseOutputPower[kFftBinCount];
 	float binRawInputPower[kFftBinCount];
 	float binModuleDeltaDb[kFftBinCount];
 	const float amplitudeScale = 4.f / float(kFftSize);
@@ -89,7 +86,6 @@ void prepareOverlayTargetsFromSpectra(
 		const float weightedPowerScale = subsonicWeight * subsonicWeight * amplitudeScaleSq;
 		binOutputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftOutputFreq, bin);
 		if (moduleResponseEnabled) {
-			binResponseOutputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftResponseOutputFreq, bin);
 			binRawInputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftRawInputFreq, bin);
 		}
 	}
@@ -105,12 +101,12 @@ void prepareOverlayTargetsFromSpectra(
 			const float w = kOverlayBandKernel[k + kOverlayBandRadius];
 			outputEnergy += w * binOutputPower[sampleBin];
 			if (moduleResponseEnabled) {
-				responseOutputEnergy += w * binResponseOutputPower[sampleBin];
+				responseOutputEnergy += w * binOutputPower[sampleBin];
 				rawInputEnergy += w * binRawInputPower[sampleBin];
 			}
 		}
 		binModuleDeltaDb[bin] = moduleResponseEnabled
-			? softLimitOverlayDeltaDb(10.f * std::log10((responseOutputEnergy + 1e-12f) / (rawInputEnergy + 1e-12f)))
+			? 10.f * std::log10((responseOutputEnergy + 1e-12f) / (rawInputEnergy + 1e-12f))
 			: 0.f;
 		outputEnergy += 1e-12f;
 		binOutputDbfs[bin] = clamp(10.f * std::log10(outputEnergy / 25.f + 1e-12f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
@@ -197,15 +193,15 @@ void prepareCurveSnapshot(const BifurxUiRenderRequest& request, BifurxUiRenderSn
 	const auto overlayPrepStart = measurePrep ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
 	thread_local WorkerOverlayScratch scratch;
 	const bool displayOnlyMode = isBifurxDisplayOnlyMode(request.previewState.mode);
+	// Normal module rendering uses measured response for the FFT fill colors
+	// even when the response line itself is hidden. Browser/display-only views
+	// are the only path whose gradient is independent of the input spectrum.
+	const bool moduleResponseEnabled = !displayOnlyMode;
 	for (int i = 0; i < kFftSize; ++i) {
 		scratch.fftOutputTime[i] = request.analysisOutput[i] * scratch.window[i];
 	}
 	scratch.fft.rfft(scratch.fftOutputTime, scratch.fftOutputFreq);
-	if (!displayOnlyMode) {
-		for (int i = 0; i < kFftSize; ++i) {
-			scratch.fftOutputTime[i] = request.analysisResponseOutput[i] * scratch.window[i];
-		}
-		scratch.fft.rfft(scratch.fftOutputTime, scratch.fftResponseOutputFreq);
+	if (moduleResponseEnabled) {
 		for (int i = 0; i < kFftSize; ++i) {
 			scratch.fftInputTime[i] = request.analysisRawInput[i] * scratch.window[i];
 		}
@@ -220,9 +216,8 @@ void prepareCurveSnapshot(const BifurxUiRenderRequest& request, BifurxUiRenderSn
 		request.previewState.sampleRate,
 		snapshot->curveBinPos,
 		scratch.fftOutputFreq,
-		scratch.fftResponseOutputFreq,
 		scratch.fftRawInputFreq,
-		!displayOnlyMode,
+		moduleResponseEnabled,
 		request.hasOverlayTarget,
 		request.fftScaleDynamic,
 		snapshot->overlayTargetModuleDb,

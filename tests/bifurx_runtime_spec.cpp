@@ -37,6 +37,7 @@ ModuleTeardownTimer::~ModuleTeardownTimer() {
 }
 
 #include "../src/Bifurx.cpp"
+#include "../src/BifurxRenderPrep.hpp"
 
 using namespace bifurx;
 
@@ -482,23 +483,22 @@ TestResult testAnalysisFramesPublishAsOverlappingWindows() {
   module.subscribeAnalysisVisual();
   alignas(16) float raw[kFftSize] = {};
   alignas(16) float output[kFftSize] = {};
-  alignas(16) float response[kFftSize] = {};
   uint32_t seq = 0;
 
   for (int i = 0; i < kFftSize - 1; ++i) {
-    module.pushAnalysisSample(float(i), float(i + 10), float(i + 20));
+    module.pushAnalysisSample(float(i), float(i + 10));
   }
-  const bool earlyPublish = module.copyAnalysisFrame(0, raw, output, response, &seq);
-  module.pushAnalysisSample(float(kFftSize - 1), float(kFftSize + 9), float(kFftSize + 19));
-  const bool firstPublished = module.copyAnalysisFrame(0, raw, output, response, &seq);
+  const bool earlyPublish = module.copyAnalysisFrame(0, raw, output, &seq);
+  module.pushAnalysisSample(float(kFftSize - 1), float(kFftSize + 9));
+  const bool firstPublished = module.copyAnalysisFrame(0, raw, output, &seq);
   const uint32_t firstSeq = seq;
   const bool firstWindow = firstPublished && raw[0] == 0.f && raw[kFftSize - 1] == float(kFftSize - 1)
-    && output[0] == 10.f && response[kFftSize - 1] == float(kFftSize + 19);
+    && output[0] == 10.f && output[kFftSize - 1] == float(kFftSize + 9);
 
   for (int i = kFftSize; i < kFftSize + kFftHopSize; ++i) {
-    module.pushAnalysisSample(float(i), float(i + 10), float(i + 20));
+    module.pushAnalysisSample(float(i), float(i + 10));
   }
-  const bool secondPublished = module.copyAnalysisFrame(firstSeq, raw, output, response, &seq);
+  const bool secondPublished = module.copyAnalysisFrame(firstSeq, raw, output, &seq);
   const bool overlappingWindow = secondPublished
     && raw[0] == float(kFftHopSize)
     && raw[kFftSize - 1] == float(kFftSize + kFftHopSize - 1);
@@ -514,7 +514,7 @@ TestResult testAnalysisFramesPublishAsOverlappingWindows() {
 TestResult testAnalysisCaptureSleepsWithoutVisualSubscriber() {
   Bifurx module;
   for (int i = 0; i < kFftSize + kFftHopSize; ++i) {
-    module.pushAnalysisSample(float(i), float(i), float(i));
+    module.pushAnalysisSample(float(i), float(i));
   }
   const bool slept = module.analysisPublishSeq.load(std::memory_order_acquire) == 0u
     && module.analysisCaptureSlots[0] < 0
@@ -523,12 +523,12 @@ TestResult testAnalysisCaptureSleepsWithoutVisualSubscriber() {
 
   module.subscribeAnalysisVisual();
   for (int i = 0; i < 64; ++i) {
-    module.pushAnalysisSample(float(i), float(i), float(i));
+    module.pushAnalysisSample(float(i), float(i));
   }
   const bool woke = module.analysisCaptureSlots[0] >= 0
     && module.analysisCapturePositions[0] == 64;
   module.unsubscribeAnalysisVisual();
-  module.pushAnalysisSample(0.f, 0.f, 0.f);
+  module.pushAnalysisSample(0.f, 0.f);
   const bool stoppedCleanly = module.analysisVisualSubscribers.load(std::memory_order_acquire) == 0u
     && module.analysisCaptureSlots[0] < 0
     && module.analysisCaptureSlots[1] < 0
@@ -553,6 +553,39 @@ TestResult testVisualWorkerDefaultSetterHonorsMode() {
     off && automatic && on,
     "off=" + std::to_string(int(off)) + " auto=" + std::to_string(int(automatic))
       + " on=" + std::to_string(int(on))
+  };
+}
+
+TestResult testProductionOutputSafetyStageContract() {
+  bool transparent = true;
+  bool monotonic = true;
+  bool bounded = true;
+  float previous = applyLevelOutputStage(0.f, 0.5f, true);
+  for (int i = 0; i <= 20000; ++i) {
+    const float input = 10.f * float(i) / 20000.f;
+    const float output = applyLevelOutputStage(input, 0.5f, true);
+    if (input <= kOutputSoftLimitKneeVolts) {
+      transparent = transparent && output == input;
+    }
+    monotonic = monotonic && output >= previous;
+    bounded = bounded && output <= kOutputSoftLimitCeilingVolts;
+    previous = output;
+  }
+
+  const float atFive = applyLevelOutputStage(5.f, 0.f, true);
+  const float atSix = applyLevelOutputStage(6.f, 1.f, true);
+  const bool referencePoints = std::fabs(atFive - (4.f + std::tanh(1.f))) < 1e-5f
+    && std::fabs(atSix - (4.f + std::tanh(2.f))) < 1e-5f;
+  const bool symmetric = std::fabs(applyLevelOutputStage(-6.f, 0.5f, true) + atSix) < 1e-6f;
+  const bool bypassExact = applyLevelOutputStage(12.5f, 0.5f, false) == 12.5f
+    && applyLevelOutputStage(-12.5f, 0.5f, false) == -12.5f;
+  const bool finiteRecovery = applyLevelOutputStage(NAN, 0.5f, true) == 0.f
+    && applyLevelOutputStage(INFINITY, 0.5f, false) == 0.f;
+  return {
+    "Production output stage is linear to 4 V and softly bounded by 5 V",
+    transparent && monotonic && bounded && referencePoints && symmetric && bypassExact && finiteRecovery,
+    "out(5,6)=(" + std::to_string(atFive) + "," + std::to_string(atSix)
+      + ") bypass=" + std::to_string(int(bypassExact))
   };
 }
 
@@ -975,20 +1008,30 @@ TestResult testRuntimeTitoProducesFiniteContrastAcrossModes() {
 
 TestResult testRuntimeSelfOscSoftOnsetRamp() {
   const ZeroInputCapture low = captureZeroInputOutput(5, 900.f, 0.58f, 0.78f, 0.f, 0.5f, 12000, 20000);
-  const ZeroInputCapture onset = captureZeroInputOutput(5, 900.f, 0.58f, 0.90f, 0.f, 0.5f, 12000, 20000);
-  const ZeroInputCapture hot = captureZeroInputOutput(5, 900.f, 0.58f, 1.00f, 0.f, 0.5f, 12000, 20000);
+  constexpr float plateauRes[] = {0.90f, 0.94f, 0.98f, 1.00f};
+  ZeroInputCapture plateau[4];
+  bool finite = low.finite;
+  bool bounded = true;
+  float plateauMin = INFINITY;
+  float plateauMax = 0.f;
+  std::string contour;
+  for (int i = 0; i < 4; ++i) {
+    plateau[i] = captureZeroInputOutput(5, 900.f, 0.58f, plateauRes[i], 0.f, 0.5f, 12000, 20000);
+    finite = finite && plateau[i].finite;
+    bounded = bounded && plateau[i].peakAbs < 5.f;
+    plateauMin = std::min(plateauMin, plateau[i].rms);
+    plateauMax = std::max(plateauMax, plateau[i].rms);
+    contour += " r=" + std::to_string(plateauRes[i]) + ":" + std::to_string(plateau[i].rms);
+  }
 
-  const bool finite = low.finite && onset.finite && hot.finite;
-  const bool onsetRises = onset.rms > std::max(low.rms * 1.4f, 1e-4f);
-  const bool hotRemainsActive = hot.rms > 0.02f;
-  const bool bounded = onset.peakAbs < 20.f && hot.peakAbs < 20.f;
-  const bool pass = finite && onsetRises && hotRemainsActive && bounded;
+  const bool onsetRises = plateau[0].rms > std::max(low.rms * 1.4f, 1e-4f);
+  const float plateauRatio = plateauMax / std::max(plateauMin, 1e-6f);
+  const bool controlledPlateau = plateauMin > 1.f && plateauRatio < 1.15f;
+  const bool pass = finite && onsetRises && controlledPlateau && bounded;
   return {
-    "Runtime self-osc onset ramps near upper-RESO region without abrupt jump",
+    "Runtime self-oscillation rises after 0.80 and settles into a controlled plateau",
     pass,
-    "rms(low,onset,hot)=(" + std::to_string(low.rms) + "," + std::to_string(onset.rms) + "," +
-      std::to_string(hot.rms) + ") peak(onset,hot)=(" + std::to_string(onset.peakAbs) + "," +
-      std::to_string(hot.peakAbs) + ")"
+    "low=" + std::to_string(low.rms) + contour + " plateauRatio=" + std::to_string(plateauRatio)
   };
 }
 
@@ -1129,6 +1172,43 @@ TestResult testTwoColorFftGradientMidpointAndJsonRoundTrip() {
   };
 }
 
+TestResult testHiddenResponseLinePreservesFftColorResponse() {
+  BifurxUiRenderRequest hiddenRequest;
+  hiddenRequest.previewState.sampleRate = 48000.f;
+  hiddenRequest.previewState.mode = 0;
+  hiddenRequest.hasAnalysisFrame = true;
+  hiddenRequest.showModuleResponseOverlay = false;
+  hiddenRequest.analysisRawInput[kFftSize / 2] = 1.f;
+  hiddenRequest.analysisOutput[kFftSize / 2] = 2.f;
+
+  BifurxUiRenderSnapshot hiddenSnapshot;
+  prepareCurveSnapshot(hiddenRequest, &hiddenSnapshot);
+
+  BifurxUiRenderRequest visibleRequest = hiddenRequest;
+  visibleRequest.showModuleResponseOverlay = true;
+  BifurxUiRenderSnapshot visibleSnapshot;
+  prepareCurveSnapshot(visibleRequest, &visibleSnapshot);
+
+  float maxHiddenResponseDb = -1000.f;
+  float maxVisibilityDifference = 0.f;
+  for (int i = 0; i < kCurvePointCount; ++i) {
+    maxHiddenResponseDb = std::max(maxHiddenResponseDb, hiddenSnapshot.overlayTargetModuleDb[i]);
+    maxVisibilityDifference = std::max(
+      maxVisibilityDifference,
+      std::fabs(hiddenSnapshot.overlayTargetModuleDb[i] - visibleSnapshot.overlayTargetModuleDb[i])
+    );
+  }
+
+  const bool hasColorDrivingResponse = maxHiddenResponseDb > 5.5f;
+  const bool visibilityOnlyAffectsLine = maxVisibilityDifference < 1e-5f;
+  return {
+    "Hidden response line preserves two-color FFT response data",
+    hasColorDrivingResponse && visibilityOnlyAffectsLine,
+    "maxResponseDb=" + std::to_string(maxHiddenResponseDb) +
+      " visibilityDifference=" + std::to_string(maxVisibilityDifference)
+  };
+}
+
 TestResult testBrowserPreviewUsesAuthoredUndertowScene() {
   BifurxSpectrumBase display;
   display.initializeStaticPreviewStateIfNeeded();
@@ -1175,6 +1255,7 @@ int main() {
     testAnalysisFramesPublishAsOverlappingWindows(),
     testAnalysisCaptureSleepsWithoutVisualSubscriber(),
     testVisualWorkerDefaultSetterHonorsMode(),
+    testProductionOutputSafetyStageContract(),
     testResetClearsRuntimeState(),
     testVoctStepsImmediatelyWithoutImplicitGlide(),
     testSpanIsPreservedAtFrequencyRails(),
@@ -1191,6 +1272,7 @@ int main() {
     testRuntimeSelfOscHighResBounded(),
     testDisplayOnlyColorSchemeJsonRoundTripAndPassThrough(),
     testTwoColorFftGradientMidpointAndJsonRoundTrip(),
+    testHiddenResponseLinePreservesFftColorResponse(),
     testBrowserPreviewUsesAuthoredUndertowScene(),
   };
 

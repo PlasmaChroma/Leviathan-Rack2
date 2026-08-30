@@ -2,6 +2,8 @@
 
 #include "plugin.hpp"
 #include "MathHelpers.hpp"
+#include "BifurxInputStage.hpp"
+#include "BifurxOutputStage.hpp"
 #include "PanelSvgUtils.hpp"
 
 #include <algorithm>
@@ -122,13 +124,6 @@ std::string bifurxUserRootPath();
 
 float shapedSpan(float value);
 
-float levelDriveGain(float knob);
-float levelInputGain(float knob);
-float levelDriveAmount(float knob);
-float levelOutputClipWet(float knob);
-float applyLevelInputStage(float in, float levelKnob);
-float applyLevelOutputStage(float modeOut, float levelKnob, bool softLimitingEnabled = true);
-
 inline float sanitizeFinite(float x, float fallback = 0.f) {
 	return std::isfinite(x) ? x : fallback;
 }
@@ -165,8 +160,6 @@ float onePoleAlpha(float dt, float tauSeconds);
 float logPosition(float hz, float minHz, float maxHz);
 float logFrequencyAt(float x01, float minHz, float maxHz);
 float responseYForDbDisplay(float db, float minDb, float maxDb, float bottomY, float topY);
-float softLimitOverlayDeltaDb(float db);
-float softLimitExpectedCurveDb(float db);
 float resoToDamping(float resoNorm);
 
 float signedWeight(float balance, bool upperPeak);
@@ -191,8 +184,7 @@ struct SvfCoeffs {
 struct CharacterStageState {
 	bool selfOscillating = false;
 	float oscOnset = 0.f;
-	float oscHeat = 0.f;
-	float oscDrive = 1.f;
+	float oscAmpDamping = 0.f;
 };
 
 CharacterStageState prepareCharacterStageState(float drive, float resoNorm, bool highResonanceSelfOscEnabled);
@@ -204,7 +196,7 @@ struct TptSvf {
 	float ic2eq = 0.f;
 
 	SvfOutputs processWithCoeffs(float input, const SvfCoeffs& coeffs);
-	SvfOutputs processSelfOscWithCoeffs(const SvfCoeffs& coeffs, float input, float oscOnset, float oscHeat, float oscDrive);
+	SvfOutputs processSelfOscWithCoeffs(const SvfCoeffs& coeffs, float input, float oscOnset, float oscAmpDamping);
 	SvfOutputs process(float input, float sampleRate, float cutoff, float damping);
 };
 
@@ -331,7 +323,6 @@ struct BifurxPreviewModel {
 struct BifurxAnalysisFrame {
 	alignas(16) float rawInput[kFftSize] = {};
 	alignas(16) float output[kFftSize] = {};
-	alignas(16) float responseOutput[kFftSize] = {};
 };
 
 struct BifurxSpectrumState {
@@ -406,9 +397,7 @@ struct BifurxSpectrumBase {
 	alignas(16) float window[kFftSize];
 	alignas(16) float fftInputTime[kFftSize] {};
 	alignas(16) float fftOutputTime[kFftSize] {};
-	alignas(16) float fftInputFreq[2 * kFftSize] {};
 	alignas(16) float fftOutputFreq[2 * kFftSize] {};
-	alignas(16) float fftResponseOutputFreq[2 * kFftSize] {};
 	alignas(16) float fftRawInputFreq[2 * kFftSize] {};
 
 	uint32_t lastModelUpdateSeq = 0;
@@ -781,10 +770,9 @@ struct Bifurx : Module {
 		uint32_t lastSeq,
 		float* rawInput,
 		float* output,
-		float* responseOutput,
 		uint32_t* seq
 	);
-	void pushAnalysisSample(float rawInputSample, float outputSample, float responseOutputSample);
+	void pushAnalysisSample(float rawInputSample, float outputSample);
 	void resetAnalysisCapture();
 	void subscribeAnalysisVisual();
 	void unsubscribeAnalysisVisual();
