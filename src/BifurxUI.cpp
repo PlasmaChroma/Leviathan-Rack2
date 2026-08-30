@@ -877,11 +877,10 @@ struct BifurxWidget final : ModuleWidget {
 		modernPanelBorder->box.size = box.size;
 		addChild(modernPanelBorder);
 		math::Rect leviathanLogoRectMm(
-			Vec(19.200337f, 118.43102f),
+			Vec(19.200337f, 119.43102f),
 			Vec(32.719331f, 12.24054f));
 		panel_svg::loadRectFromSvgMm(
 			panelPath, "BRANDING_LEVIATHAN_LOGO_RASTER", &leviathanLogoRectMm);
-		leviathanLogoRectMm.pos.y += 1.f;
 		addChild(visual_assets::createAspectFitRasterImageWidget(
 			"res/icon/Leviathan_Logo_S2.png", leviathanLogoRectMm));
 		math::Rect titleRasterRectMm(Vec(22.66f, 0.f), Vec(25.8f, 9.46667f));

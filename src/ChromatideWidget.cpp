@@ -224,7 +224,10 @@ struct ChromatidePaletteWidget final : widget::OpaqueWidget {
 
 // --- ChromatideEditorSurface ---
 ChromatideEditorSurface::ChromatideEditorSurface(Chromatide* module) : module(module) {
-    rgbaBuffer.resize(ChromatideCanvas::WIDTH * ChromatideCanvas::HEIGHT * 4, 255);
+    rgbaBuffer.resize(ChromatideCanvas::WIDTH * ChromatideCanvas::HEIGHT * 4, 0);
+    for (size_t i = 3; i < rgbaBuffer.size(); i += 4) {
+        rgbaBuffer[i] = 255;
+    }
 }
 
 ChromatideEditorSurface::~ChromatideEditorSurface() {

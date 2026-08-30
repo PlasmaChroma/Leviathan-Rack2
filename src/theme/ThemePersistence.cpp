@@ -172,6 +172,14 @@ void initializeFromUserStorage() {
 	gDocument = defaultDocument();
 	const LoadStatus status = loadDocument(userThemePath(), &gDocument);
 	gMayOverwriteDocument = status != LoadStatus::FutureSchema;
+	// Factory preset IDs describe the current built-in preset, not a frozen copy
+	// of its colors from the plugin version that last wrote theme.json. Refresh
+	// those snapshots on startup while preserving modified and user presets.
+	if (status == LoadStatus::Loaded) {
+		if (const FactoryPreset* preset = findFactoryPreset(gDocument.activePreset.c_str())) {
+			gDocument.active = preset->snapshot;
+		}
+	}
 	if (status == LoadStatus::Invalid && isDragonKingDebugEnabled())
 		WARN("Leviathan Theme: invalid theme.json; using canonical defaults");
 	if (status == LoadStatus::FutureSchema && isDragonKingDebugEnabled())

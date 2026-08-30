@@ -1,78 +1,67 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-  width="91.44mm" height="128.5mm" viewBox="0 0 9144 12850">
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="91.44mm" height="128.5mm" viewBox="0 0 9144 12850">
   <defs>
-    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#141325"/>
-      <stop offset="0.48" stop-color="#090b16"/>
-      <stop offset="1" stop-color="#04060d"/>
+    <linearGradient id="sourcePanel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#141325" />
+      <stop offset=".5" stop-color="#090b16" />
+      <stop offset="1" stop-color="#04060d" />
     </linearGradient>
-    <radialGradient id="wake" cx="50%" cy="22%" r="72%">
-      <stop offset="0" stop-color="#44318a" stop-opacity=".38"/>
-      <stop offset=".42" stop-color="#171532" stop-opacity=".18"/>
-      <stop offset="1" stop-color="#00020a" stop-opacity="0"/>
-    </radialGradient>
   </defs>
-  <rect width="9144" height="12850" fill="url(#panel)"/>
-  <rect width="9144" height="12850" fill="url(#wake)"/>
-  <g fill="none" stroke="#6e5bb5" stroke-opacity=".13" stroke-width="18">
-    <path d="M-900 4650 C1250 3820 2030 5030 3970 4470 S7060 3680 10000 4560"/>
-    <path d="M-900 5030 C1220 4210 2270 5420 4140 4830 S7200 4100 10000 5010"/>
-    <path d="M-900 5480 C1350 4720 2480 5750 4320 5260 S7440 4580 10000 5500"/>
-    <path d="M-900 6020 C1500 5280 2690 6150 4540 5740 S7650 5140 10000 6060"/>
-    <path d="M-900 6660 C1680 5950 2870 6670 4700 6400 S7850 5780 10000 6740"/>
-    <path d="M-900 7420 C1810 6750 3050 7280 4930 7140 S8050 6500 10000 7530"/>
+  <rect width="9144" height="12850" fill="url(#sourcePanel)" />
+  <g fill="none" stroke="#6e5bb5" stroke-opacity=".16" stroke-width="18">
+    <path d="M-900 4700 C1250 3900 2100 5100 4100 4500 S7200 3800 10000 4700" />
+    <path d="M-900 5350 C1450 4600 2500 5650 4400 5200 S7500 4500 10000 5400" />
+    <path d="M-900 6100 C1650 5400 2800 6250 4700 5900 S7800 5200 10000 6200" />
+    <path d="M-900 7000 C1800 6350 3100 7000 5000 6900 S8100 6200 10000 7100" />
   </g>
   <g id="SIGNAL_FIELDS" stroke="#ffffff" stroke-width="24" stroke-opacity=".06">
-    <rect x="220" y="3930" width="8704" height="3100" rx="180"
-      style="opacity:0.33;fill:#5740bf;fill-opacity:1"/>
-    <rect x="220" y="7150" width="5380" height="3100" rx="180"
-      style="opacity:0.33;fill:#5740bf;fill-opacity:1"/>
-    <rect x="220" y="10350" width="5380" height="1470" rx="180"
-      style="opacity:0.33;fill:#5740bf;fill-opacity:1"/>
-    <rect x="5800" y="7150" width="3120" height="4670" rx="180"
-      style="opacity:0.33;fill:#1cccd9;fill-opacity:0.5"/>
+    <rect x="220" y="3930" width="8704" height="3100" rx="180" style="opacity:0.33;fill:#5740bf;fill-opacity:1" />
+    <rect x="220" y="7150" width="5380" height="3100" rx="180" style="opacity:0.33;fill:#5740bf;fill-opacity:1" />
+    <rect x="220" y="10350" width="5380" height="1470" rx="180" style="opacity:0.33;fill:#5740bf;fill-opacity:1" />
+    <rect x="5800" y="7150" width="3120" height="4670" rx="180" style="opacity:0.33;fill:#1cccd9;fill-opacity:0.5" />
   </g>
   <g id="CV_PAIR_LINKS" fill="none" stroke="#7a5cff" stroke-opacity=".72" stroke-width="45" stroke-linecap="round">
-    <path d="M1200 7800 H1600"/><path d="M3800 7800 H4200"/>
-    <path d="M1200 9400 H1600"/><path d="M3800 9400 H4200"/>
+    <path d="M1200 7800 H1600" />
+    <path d="M3800 7800 H4200" />
+    <path d="M1200 9400 H1600" />
+    <path d="M3800 9400 H4200" />
   </g>
-  <rect x="1110" y="780" width="6924" height="3040" rx="180" fill="#02040a" stroke="#6752af" stroke-width="32"/>
-  <rect x="1180" y="860" width="6784" height="2880" rx="130" fill="none" stroke="#1fc6d5" stroke-opacity=".32" stroke-width="16"/>
+  <rect x="1110" y="780" width="6924" height="3040" rx="180" fill="#02040a" stroke="#6752af" stroke-width="32" />
+  <rect x="1180" y="860" width="6784" height="2880" rx="130" fill="none" stroke="#1fc6d5" stroke-opacity=".32" stroke-width="16" />
   <g inkscape:groupmode="layer" inkscape:label="components" id="components" opacity="0">
-    <rect id="MANDELWAKE_DISPLAY" x="1172" y="850" width="6800" height="2900" rx="120"/>
-    <rect id="BRANDING_WAVE_LEFT_RASTER" x="1681.644" y="12338.190" width="1306.748" height="511.810"/>
-    <rect id="BRANDING_WAVE_RIGHT_RASTER" x="6155.708" y="12338.190" width="1306.748" height="511.810"/>
-    <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="2936.034" y="11843.102" width="3271.933" height="1224.054"/>
-    <circle id="MAP_PARAM" cx="800" cy="4500" r="20"/>
-    <circle id="CENTER_X_PARAM" cx="2400" cy="4500" r="20"/>
-    <circle id="CENTER_Y_PARAM" cx="4200" cy="4500" r="20"/>
-    <circle id="ZOOM_PARAM" cx="6000" cy="4500" r="20"/>
-    <circle id="ITERATIONS_PARAM" cx="7800" cy="4500" r="20"/>
-    <circle id="MUTATION_PARAM" cx="1700" cy="6150" r="20"/>
-    <circle id="SMOOTH_PARAM" cx="3600" cy="6150" r="20"/>
-    <circle id="RATE_PARAM" cx="5500" cy="6150" r="20"/>
-    <circle id="DENSITY_PARAM" cx="7400" cy="6150" r="20"/>
-    <circle id="X_AMOUNT_PARAM" cx="800" cy="7800" r="20"/>
-    <circle id="Y_AMOUNT_PARAM" cx="3400" cy="7800" r="20"/>
-    <circle id="ZOOM_AMOUNT_PARAM" cx="800" cy="9400" r="20"/>
-    <circle id="MUTATE_AMOUNT_PARAM" cx="3400" cy="9400" r="20"/>
-    <circle id="RESEED_PARAM" cx="600" cy="3050" r="20"/>
-    <circle id="SEED_LOCK_PARAM" cx="8544" cy="3050" r="20"/>
-    <circle id="CLOCK_INPUT" cx="800" cy="11000" r="20"/>
-    <circle id="RESET_INPUT" cx="2200" cy="11000" r="20"/>
-    <circle id="X_INPUT" cx="2000" cy="7800" r="20"/>
-    <circle id="Y_INPUT" cx="4600" cy="7800" r="20"/>
-    <circle id="ZOOM_INPUT" cx="2000" cy="9400" r="20"/>
-    <circle id="MUTATE_INPUT" cx="4600" cy="9400" r="20"/>
-    <circle id="SMOOTH_INPUT" cx="3600" cy="11000" r="20"/>
-    <circle id="RATE_INPUT" cx="5000" cy="11000" r="20"/>
-    <circle id="X_OUTPUT" cx="6200" cy="7800" r="20"/>
-    <circle id="Y_OUTPUT" cx="7300" cy="7800" r="20"/>
-    <circle id="RADIUS_OUTPUT" cx="8400" cy="7800" r="20"/>
-    <circle id="PHASE_OUTPUT" cx="6550" cy="9400" r="20"/>
-    <circle id="GATE_OUTPUT" cx="8200" cy="9400" r="20"/>
-    <circle id="ESCAPE_OUTPUT" cx="6550" cy="11000" r="20"/>
-    <circle id="STEP_OUTPUT" cx="8200" cy="11000" r="20"/>
+    <rect id="MANDELWAKE_DISPLAY" x="1172" y="850" width="6800" height="2900" rx="120" />
+    <rect id="BRANDING_WAVE_LEFT_RASTER" x="1681.644" y="12338.190" width="1306.748" height="511.810" />
+    <rect id="BRANDING_WAVE_RIGHT_RASTER" x="6155.708" y="12338.190" width="1306.748" height="511.810" />
+    <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="2936.034" y="11943.102" width="3271.933" height="1224.054" />
+    <circle id="MAP_PARAM" cx="800" cy="4500" r="20" />
+    <circle id="CENTER_X_PARAM" cx="2400" cy="4500" r="20" />
+    <circle id="CENTER_Y_PARAM" cx="4200" cy="4500" r="20" />
+    <circle id="ZOOM_PARAM" cx="6000" cy="4500" r="20" />
+    <circle id="ITERATIONS_PARAM" cx="7800" cy="4500" r="20" />
+    <circle id="MUTATION_PARAM" cx="1700" cy="6150" r="20" />
+    <circle id="SMOOTH_PARAM" cx="3600" cy="6150" r="20" />
+    <circle id="RATE_PARAM" cx="5500" cy="6150" r="20" />
+    <circle id="DENSITY_PARAM" cx="7400" cy="6150" r="20" />
+    <circle id="X_AMOUNT_PARAM" cx="800" cy="7800" r="20" />
+    <circle id="Y_AMOUNT_PARAM" cx="3400" cy="7800" r="20" />
+    <circle id="ZOOM_AMOUNT_PARAM" cx="800" cy="9400" r="20" />
+    <circle id="MUTATE_AMOUNT_PARAM" cx="3400" cy="9400" r="20" />
+    <circle id="RESEED_PARAM" cx="600" cy="3050" r="20" />
+    <circle id="SEED_LOCK_PARAM" cx="8544" cy="3050" r="20" />
+    <circle id="CLOCK_INPUT" cx="800" cy="11000" r="20" />
+    <circle id="RESET_INPUT" cx="2200" cy="11000" r="20" />
+    <circle id="X_INPUT" cx="2000" cy="7800" r="20" />
+    <circle id="Y_INPUT" cx="4600" cy="7800" r="20" />
+    <circle id="ZOOM_INPUT" cx="2000" cy="9400" r="20" />
+    <circle id="MUTATE_INPUT" cx="4600" cy="9400" r="20" />
+    <circle id="SMOOTH_INPUT" cx="3600" cy="11000" r="20" />
+    <circle id="RATE_INPUT" cx="5000" cy="11000" r="20" />
+    <circle id="X_OUTPUT" cx="6200" cy="7800" r="20" />
+    <circle id="Y_OUTPUT" cx="7300" cy="7800" r="20" />
+    <circle id="RADIUS_OUTPUT" cx="8400" cy="7800" r="20" />
+    <circle id="PHASE_OUTPUT" cx="6550" cy="9400" r="20" />
+    <circle id="GATE_OUTPUT" cx="8200" cy="9400" r="20" />
+    <circle id="ESCAPE_OUTPUT" cx="6550" cy="11000" r="20" />
+    <circle id="STEP_OUTPUT" cx="8200" cy="11000" r="20" />
   </g>
 </svg>

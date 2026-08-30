@@ -72,7 +72,7 @@ struct ThemeSnapshot {
 
 inline ThemeSnapshot canonicalDefault() {
 	ThemeSnapshot snapshot;
-	snapshot.colors.input = {0x7a, 0x5c, 0xff};
+	snapshot.colors.input = {0x57, 0x40, 0xbf};
 	snapshot.colors.output = {0x1c, 0xcc, 0xd9};
 	snapshot.colors.accent = {0x57, 0x40, 0xbf};
 	snapshot.surface.textureAmount = 1.f;

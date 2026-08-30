@@ -1483,7 +1483,7 @@ PuffyWidget::PuffyWidget(Puffy* module) {
 	visual_assets::addFractalGlassOverlay(
 		this, panelPath, splitPanel.panelSurfaceEffectWidget());
 	math::Rect leviathanLogoRectMm(
-		Vec(14.120335f, 118.43102f),
+		Vec(14.120335f, 119.43102f),
 		Vec(32.71933f, 12.24054f));
 	panel_svg::loadRectFromSvgMm(
 		panelPath,

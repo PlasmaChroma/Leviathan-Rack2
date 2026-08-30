@@ -315,7 +315,7 @@ TestResult testTemporalDeckBrandingRasterAnchors() {
     && nearlyEqual(left.pos.y + left.size.y, 128.5f, 1e-4f)
     && nearlyEqual(right.pos.y + right.size.y, 128.5f, 1e-4f)
     && nearlyEqual(logo.pos.x, 34.44015f, 1e-4f)
-    && nearlyEqual(logo.pos.y, 118.43102f, 1e-4f)
+    && nearlyEqual(logo.pos.y, 119.43102f, 1e-4f)
     && nearlyEqual(logo.size.x, 32.71933f, 1e-4f)
     && nearlyEqual(logo.size.y, 12.24054f, 1e-4f)
     && nearlyEqual(logo.pos.x + logo.size.x * 0.5f, 50.799815f, 1e-4f);
@@ -325,6 +325,43 @@ TestResult testTemporalDeckBrandingRasterAnchors() {
             " size=" + std::to_string(left.size.x) + "," + std::to_string(left.size.y) +
             " logo=" + std::to_string(logo.pos.x) + "," + std::to_string(logo.pos.y) +
             " logo_sz=" + std::to_string(logo.size.x) + "," + std::to_string(logo.size.y)};
+}
+
+TestResult testCompactLeviathanLogoBaseline() {
+  const char* paths[] = {
+    "res/Puffy.svg",
+    "res/Puffy.panel.svg",
+    "res/bifurx.svg",
+    "res/bifurx.panel.svg",
+    "res/deck.svg",
+    "res/deck.panel.svg",
+    "res/iris.svg",
+    "res/iris.panel.svg",
+    "res/mandelwake.svg",
+    "res/mandelwake.panel.svg",
+    "res/nautiloid.svg",
+    "res/nautiloid.panel.svg",
+    "res/wyrm.svg",
+    "res/wyrm.panel.svg",
+  };
+  bool pass = true;
+  std::string firstFailure;
+  for (const char* path : paths) {
+    math::Rect logo;
+    const bool pathPass = panel_svg::loadRectFromSvgMm(
+      path, "BRANDING_LEVIATHAN_LOGO_RASTER", &logo)
+      && nearlyEqual(logo.pos.y, 119.43102f, 1e-4f)
+      && nearlyEqual(logo.size.x, 32.71933f, 1e-4f)
+      && nearlyEqual(logo.size.y, 12.24054f, 1e-4f);
+    if (!pathPass && firstFailure.empty()) {
+      firstFailure = path;
+    }
+    pass = pass && pathPass;
+  }
+  return {"Compact Leviathan logos share the Bifurx baseline", pass,
+          "paths=" + std::to_string(sizeof(paths) / sizeof(paths[0]))
+            + (firstFailure.empty() ? std::string() :
+              " firstFailure=" + firstFailure)};
 }
 
 TestResult testPerfectWaveBrandingDeploymentContract() {
@@ -599,6 +636,7 @@ int main() {
   tests.push_back(testDeepcachePanelAnchorsUseRepositoryUnits());
   tests.push_back(testDoorstopSoloBrandingFitsThreeHp());
   tests.push_back(testTemporalDeckBrandingRasterAnchors());
+  tests.push_back(testCompactLeviathanLogoBaseline());
   tests.push_back(testPerfectWaveBrandingDeploymentContract());
   tests.push_back(testBifurxGlassPathParses());
   tests.push_back(testPlasmaConduitAnchorConvention());

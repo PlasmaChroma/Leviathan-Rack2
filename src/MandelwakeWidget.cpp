@@ -291,7 +291,7 @@ MandelwakeWidget::MandelwakeWidget(Mandelwake* module) {
 	const std::string& panelPath = splitPanel.panelPath();
 	splitPanel.addPerfectWaveBranding();
 	visual_assets::addFractalGlassOverlay(this, panelPath, splitPanel.panelSurfaceEffectWidget());
-	math::Rect leviathanLogoRectMm(Vec(29.36034f, 118.43102f), Vec(32.71933f, 12.24054f));
+	math::Rect leviathanLogoRectMm(Vec(29.36034f, 119.43102f), Vec(32.71933f, 12.24054f));
 	panel_svg::loadRectFromSvgMm(
 		panelPath, "BRANDING_LEVIATHAN_LOGO_RASTER", &leviathanLogoRectMm);
 	addChild(visual_assets::createAspectFitRasterImageWidget(

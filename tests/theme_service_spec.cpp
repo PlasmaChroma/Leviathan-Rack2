@@ -29,7 +29,8 @@ int main() {
 		&& findFactoryPreset("factory:leviathan")->snapshot == canonicalDefault());
 	check("unknown factory preset is rejected", findFactoryPreset("factory:unknown") == nullptr);
 	const ThemeState initial = read();
-	check("canonical input color", initial.snapshot.colors.input == ThemeColor{0x7a, 0x5c, 0xff});
+	check("canonical input color matches classic panel purple",
+		initial.snapshot.colors.input == ThemeColor{0x57, 0x40, 0xbf});
 	check("canonical output color", initial.snapshot.colors.output == ThemeColor{0x1c, 0xcc, 0xd9});
 	check("canonical accent color", initial.snapshot.colors.accent == ThemeColor{0x57, 0x40, 0xbf});
 
