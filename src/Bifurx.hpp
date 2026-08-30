@@ -514,6 +514,18 @@ float previewModelResponseDb(const BifurxPreviewModel& model, float hz);
 
 constexpr float kPreviewProbeLevelKnob = 0.5f;
 
+// Authored module-browser scene. These values intentionally affect only the
+// no-engine preview; normal module defaults and existing patches remain unchanged.
+constexpr int kBrowserPreviewMode = 1;
+constexpr float kBrowserPreviewLevel = 0.5f;
+constexpr float kBrowserPreviewFrequency = 0.57605934143066406f;
+constexpr float kBrowserPreviewResonance = 0.61867547035217285f;
+constexpr float kBrowserPreviewBalance = 0.41204833984375f;
+constexpr float kBrowserPreviewSpan = 0.75362539291381836f;
+constexpr float kBrowserPreviewFmAmount = 0.0040000001899898052f;
+constexpr float kBrowserPreviewSpanAttenuator = 0.f;
+constexpr float kBrowserPreviewTito = 0.5f;
+
 float previewProbeStimulusSample(const BifurxPreviewState& state, int sampleIndex);
 
 struct BifurxProbeEngineState {

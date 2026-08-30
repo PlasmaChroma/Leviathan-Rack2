@@ -811,7 +811,7 @@ TestResult testTwoColorFftGradientMidpointAndJsonRoundTrip() {
   };
 }
 
-TestResult testBrowserPreviewUsesSquareWaveFft() {
+TestResult testBrowserPreviewUsesAuthoredUndertowScene() {
   BifurxSpectrumBase display;
   display.initializeStaticPreviewStateIfNeeded();
 
@@ -826,17 +826,19 @@ TestResult testBrowserPreviewUsesSquareWaveFft() {
   }
 
   const BifurxPreviewState& preview = display.state.previewState;
-  const bool configured = preview.mode == 0 &&
-    std::fabs(preview.spanParamNorm - 0.33f) < 1e-4f &&
-    preview.freqA > 780.f && preview.freqA < 850.f &&
-    preview.freqB > 2400.f && preview.freqB < 2600.f;
-  const bool squareAlternates = previewProbeStimulusSample(preview, 0) > 0.f &&
-    previewProbeStimulusSample(preview, 200) < 0.f;
+  const bool configured = preview.mode == kBrowserPreviewMode &&
+    std::fabs(preview.spanParamNorm - kBrowserPreviewSpan) < 1e-4f &&
+    std::fabs(preview.resoNorm - kBrowserPreviewResonance) < 1e-4f &&
+    std::fabs(preview.balance - kBrowserPreviewBalance) < 1e-4f &&
+    preview.freqA > 90.f && preview.freqA < 120.f &&
+    preview.freqB > 3500.f && preview.freqB < 4500.f;
+  const bool undertowShapeVaries = previewProbeStimulusSample(preview, 0) > 4.f &&
+    previewProbeStimulusSample(preview, 60) < -3.f;
   const bool hasSpectrum = display.state.hasOverlay && (overlayMax - overlayMin) > 12.f;
 
   return {
-    "Browser preview FFT uses 144 Hz square into default-span Low + Low",
-    configured && squareAlternates && finite && hasSpectrum,
+    "Browser preview recreates the authored Undertow Morph into Low + Band scene",
+    configured && undertowShapeVaries && finite && hasSpectrum,
     "cutoffsHz=(" + std::to_string(preview.freqA) + "," + std::to_string(preview.freqB) +
       ") rangeDb=" + std::to_string(overlayMax - overlayMin) +
       " topDbfs=" + std::to_string(display.state.displayTopDbfs)
@@ -860,7 +862,7 @@ int main() {
     testRuntimeSelfOscHighResBounded(),
     testDisplayOnlyColorSchemeJsonRoundTripAndPassThrough(),
     testTwoColorFftGradientMidpointAndJsonRoundTrip(),
-    testBrowserPreviewUsesSquareWaveFft(),
+    testBrowserPreviewUsesAuthoredUndertowScene(),
   };
 
   int fails = 0;

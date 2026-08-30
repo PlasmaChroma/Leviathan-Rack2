@@ -4,6 +4,7 @@
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
+#include "visual/PlasmaConduit.hpp"
 #include "visual/PreviewSurface.hpp"
 #include "WavePreviewTracer.hpp"
 #include <dsp/minblep.hpp>
@@ -1776,6 +1777,10 @@ struct ProcWidget : ModuleWidget {
 		splitPanel.addCompactLeviathanLogoBranding();
 		visual_assets::addFractalGlassOverlay(
 			this, panelBasePath, splitPanel.panelSurfaceEffectWidget());
+		if (widget::FramebufferWidget* conduits =
+			visual_assets::createPlasmaConduitLayer(panelBasePath, box.size)) {
+			addChild(conduits);
+		}
 		previewBuildTimer.markPanelDone();
 
 		addChild(createWidget<CyanOrbScrew>(Vec(0.f, 0)));

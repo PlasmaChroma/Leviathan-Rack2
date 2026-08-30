@@ -129,8 +129,8 @@
        id="rect1529"
        style="display:none;fill:#101319;fill-opacity:1" />
     <g
-       id="plasma_conduit_candidates_upper"
-       inkscape:label="Plasma Conduit Candidates — Upper">
+       id="plasma_conduit_anchors"
+       inkscape:label="Plasma Conduit Anchors">
       <path
        d="m 8.5369379,17.056614 9.5361381,8.366285"
        stroke="url(#accentGrad)"
@@ -140,6 +140,46 @@
        fill="none"
        id="rate_connector-8"
        style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-linecap:butt;stroke-dasharray:none;stroke-opacity:1"
+       sodipodi:nodetypes="cc" />
+      <path
+       d="m 20.865056,98.898431 0.01805,14.120149"
+       stroke="url(#accentGrad)"
+       stroke-width="0.350551"
+       stroke-linecap="round"
+       opacity="0.55"
+       fill="none"
+       id="rate_connector"
+       style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1"
+       sodipodi:nodetypes="cc" />
+      <path
+       d="m 57.599239,100.22351 0.01805,14.12015"
+       stroke="url(#accentGrad)"
+       stroke-width="0.350551"
+       stroke-linecap="round"
+       opacity="0.55"
+       fill="none"
+       id="freeze_connector"
+       style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1"
+       sodipodi:nodetypes="cc" />
+      <path
+       d="m 44.377488,112.91436 -11.20528,0.0439"
+       stroke="url(#accentGrad)"
+       stroke-width="0.350551"
+       stroke-linecap="round"
+       opacity="0.55"
+       fill="none"
+       id="gate_and_pos_connector"
+       style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1"
+       sodipodi:nodetypes="cc" />
+      <path
+       d="m 45.182363,101.281 -11.20528,0.0439"
+       stroke="url(#accentGrad)"
+       stroke-width="0.350551"
+       stroke-linecap="round"
+       opacity="0.55"
+       fill="none"
+       id="rev_and_rev"
+       style="display:inline;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1;opacity:1"
        sodipodi:nodetypes="cc" />
     </g>
     <rect
@@ -203,20 +243,6 @@
          style="display:inline;opacity:0.33;fill:#553ec1;fill-opacity:1;stroke:none"
          sodipodi:nodetypes="ccccccccccccccccccccc" />
     </g>
-    <g
-       id="plasma_conduit_candidates_rate"
-       inkscape:label="Plasma Conduit Candidates — Rate">
-      <path
-       d="m 20.865056,98.898431 0.01805,14.120149"
-       stroke="url(#accentGrad)"
-       stroke-width="0.350551"
-       stroke-linecap="round"
-       opacity="0.55"
-       fill="none"
-       id="rate_connector"
-       style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1"
-       sodipodi:nodetypes="cc" />
-    </g>
     <path
        d="M 4.186227,9.522227 H 97.413935"
        stroke="url(#accentGrad)"
@@ -226,40 +252,6 @@
        fill="none"
        id="top_horizontal_line"
        style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1" />
-    <g
-       id="plasma_conduit_candidates_transport"
-       inkscape:label="Plasma Conduit Candidates — Transport">
-      <path
-       d="m 57.599239,100.22351 0.01805,14.12015"
-       stroke="url(#accentGrad)"
-       stroke-width="0.350551"
-       stroke-linecap="round"
-       opacity="0.55"
-       fill="none"
-       id="freeze_connector"
-       style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1"
-       sodipodi:nodetypes="cc" />
-    <path
-       d="m 44.377488,112.91436 -11.20528,0.0439"
-       stroke="url(#accentGrad)"
-       stroke-width="0.350551"
-       stroke-linecap="round"
-       opacity="0.55"
-       fill="none"
-       id="gate_and_pos_connector"
-       style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1"
-       sodipodi:nodetypes="cc" />
-    <path
-       d="m 45.182363,101.281 -11.20528,0.0439"
-       stroke="url(#accentGrad)"
-       stroke-width="0.350551"
-       stroke-linecap="round"
-       opacity="0.55"
-       fill="none"
-       id="rev_and_rev"
-       style="display:inline;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1;opacity:1"
-       sodipodi:nodetypes="cc" />
-    </g>
     <g
        id="waves_layer"
        style="display:none;opacity:0.5"

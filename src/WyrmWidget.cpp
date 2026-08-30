@@ -4,6 +4,7 @@
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
+#include "visual/PlasmaConduit.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -975,6 +976,10 @@ struct WyrmWidget : ModuleWidget {
 		splitPanel.addCompactLeviathanLogoBranding();
 		visual_assets::addFractalGlassOverlay(
 			this, panelPath, splitPanel.panelSurfaceEffectWidget());
+		if (widget::FramebufferWidget* conduits =
+			visual_assets::createPlasmaConduitLayer(panelPath, box.size)) {
+			addChild(conduits);
+		}
 		math::Rect titleRasterRectMm(Vec(22.693296f, 0.449446f), Vec(25.733408f, 8.04667f));
 		panel_svg::loadRectFromSvgMm(panelPath, "WYRM_TITLE_RASTER", &titleRasterRectMm);
 		addChild(visual_assets::createAspectFitRasterImageWidget(

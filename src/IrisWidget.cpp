@@ -4,6 +4,7 @@
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
+#include "visual/PlasmaConduit.hpp"
 #include "visual/PreviewSurface.hpp"
 
 #include <algorithm>
@@ -1107,6 +1108,10 @@ struct IrisWidget final : ModuleWidget {
     splitPanel.addCompactLeviathanLogoBranding();
     visual_assets::addFractalGlassOverlay(
       this, panelPath, splitPanel.panelSurfaceEffectWidget());
+    if (widget::FramebufferWidget* conduits =
+        visual_assets::createPlasmaConduitLayer(panelPath, box.size)) {
+      addChild(conduits);
+    }
     addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
     addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0.f)));
     addChild(createWidget<CyanOrbScrew>(

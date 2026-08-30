@@ -2,6 +2,7 @@
 #include "BifurxRenderData.hpp"
 #include "BifurxWorker.hpp"
 #include "DebugTerminalTransport.hpp"
+#include "UndertowShape.hpp"
 
 namespace bifurx {
 
@@ -538,10 +539,71 @@ float previewModelResponseDb(const BifurxPreviewModel& model, float hz) {
 float previewProbeStimulusSample(const BifurxPreviewState& state, int sampleIndex) {
 	if (sampleIndex < 0) return 0.f;
 	const float sampleRate = std::max(state.sampleRate, 1.f);
-	const float phase = 144.f * float(sampleIndex) / sampleRate + 0.125f;
+	const float phase = 261.63f * float(sampleIndex) / sampleRate;
 	const float phase01 = phase - std::floor(phase);
-	return (phase01 < 0.5f) ? 4.f : -4.f;
+	return 5.f * undertow_shape::thresholdFold(phase01, 0.5f, false, 0.5f, false);
 }
+
+namespace {
+
+float undertowPreviewAtan(float x) {
+	const float ax = std::fabs(x);
+	if (ax <= 1.f) {
+		return x * (0.78539816339f + 0.273f * (1.f - ax));
+	}
+	const float inv = 1.f / ax;
+	const float t = inv * (0.78539816339f + 0.273f * (1.f - inv));
+	return (x >= 0.f) ? (1.57079632679f - t) : (-1.57079632679f + t);
+}
+
+float undertowPreviewAnalogCharacter(float x, float env) {
+	const float drive = 1.02f + 0.18f * clamp(env, 0.f, 1.f);
+	const float signDrive = x >= 0.f ? (drive + 0.02f) : (drive - 0.02f);
+	const float norm = std::max(undertowPreviewAtan(signDrive), 1e-6f);
+	return undertowPreviewAtan(x * signDrive) / norm;
+}
+
+void generateUndertowBrowserPreview(float* buffer, int sampleCount, float sampleRate) {
+	if (!buffer || sampleCount <= 0) return;
+	const float sr = std::max(sampleRate, 1.f);
+	const float sampleTime = 1.f / sr;
+	constexpr float baseFrequencyHz = 261.63f;
+	constexpr float linearFmAmount = 0.5f;
+	constexpr float shape = 0.5f;
+	constexpr float edgeHardness = 0.5f;
+	float phase = 0.f;
+	float linearFmHpState = 0.f;
+	float characterEnv = 0.f;
+	bool subHigh = false;
+	const float hpCoeff = clamp(1.f - 2.f * kPi * 4.9f * sampleTime, 0.f, 1.f);
+	const float attackCoeff = clamp(sampleTime / (0.002f + sampleTime), 0.f, 1.f);
+	const float releaseCoeff = clamp(sampleTime / (0.050f + sampleTime), 0.f, 1.f);
+
+	for (int i = 0; i < sampleCount; ++i) {
+		// This mirrors the inspected patch: Undertow Sub self-patches its linear-FM
+		// input at 50%, while Morph (also 50%) feeds Bifurx.
+		const float subVoltage = subHigh ? 5.f : -5.f;
+		const float linearFm = subVoltage - linearFmHpState;
+		linearFmHpState = subVoltage - hpCoeff * linearFm;
+		const float linearBus = linearFm * linearFmAmount * 0.10f;
+		const float frequency = clamp(baseFrequencyHz + baseFrequencyHz * linearBus, 8.f, 20000.f);
+		phase += frequency * sampleTime;
+		if (phase >= 1.f) {
+			phase -= std::floor(phase);
+			subHigh = !subHigh;
+		}
+
+		const float triangle = 4.f * std::fabs(phase - 0.5f) - 1.f;
+		const float sine = undertow_shape::triToSine(triangle);
+		const float shaped = undertow_shape::thresholdFold(phase, shape, false, edgeHardness, false);
+		const float envTarget = 0.5f * (std::fabs(sine) + std::fabs(shaped));
+		const float envCoeff = envTarget > characterEnv ? attackCoeff : releaseCoeff;
+		characterEnv += (envTarget - characterEnv) * envCoeff;
+		buffer[i] = clamp(5.f * undertowPreviewAnalogCharacter(shaped, characterEnv), -5.f, 5.f);
+	}
+}
+
+} // namespace
 
 SvfOutputs processProbeStage(BifurxProbeEngineState& state, int stageIndex, float input, float sampleRate, float cutoff, float damping, float drive, float resoNorm, bool highResonanceSelfOscEnabled) {
 	TptSvf& core = (stageIndex == 0) ? state.svfA : state.svfB;
@@ -553,8 +615,9 @@ void simulatePreviewProbeResponse(const BifurxPreviewState& state, float* inputB
 	BifurxProbeEngineState engine;
 	const float sampleRate = std::max(state.sampleRate, 1.f), freqA = clamp(state.freqA, kFreqMinHz, 0.46f * sampleRate), freqB = clamp(state.freqB, kFreqMinHz, 0.46f * sampleRate), dampingA = clamp(1.f / std::max(state.qA, 0.05f), 0.02f, 2.2f), dampingB = clamp(1.f / std::max(state.qB, 0.05f), 0.02f, 2.2f), lowW = signedWeight(state.balance, false), highW = signedWeight(state.balance, true), norm = 2.f / (lowW + highW), wA = lowW * norm, wB = highW * norm, wideMorph = cascadeWideMorph(state.spanNorm), drive = levelDriveGain(kPreviewProbeLevelKnob);
 	const int mode = clamp(state.mode, 0, kBifurxModeCount - 1);
+	generateUndertowBrowserPreview(inputBuffer, sampleCount, sampleRate);
 	for (int i = 0; i < sampleCount; ++i) {
-		const float rawIn = previewProbeStimulusSample(state, i), excitation = applyLevelInputStage(rawIn, kPreviewProbeLevelKnob);
+		const float rawIn = inputBuffer[i], excitation = applyLevelInputStage(rawIn, kPreviewProbeLevelKnob);
 		const SvfOutputs a = processProbeStage(engine, 0, excitation, sampleRate, freqA, dampingA, drive, state.resoNorm, true);
 		SvfOutputs b; float modeOut = 0.f;
 		switch (mode) {
@@ -1421,22 +1484,23 @@ void BifurxSpectrumBase::initializeStaticPreviewStateIfNeeded() {
 	if (state.hasPreview) return;
 	BifurxPreviewState preview;
 	preview.sampleRate = 48000.f;
-	preview.mode = 0;          // Low + Low
-	constexpr float previewCenterHz = 1440.f;
-	constexpr float previewSpanNorm = 0.33f;
+	preview.mode = kBrowserPreviewMode;
+	const float previewCenterHz = bifurxFrequencyHzFromParam(kBrowserPreviewFrequency);
+	constexpr float previewSpanNorm = kBrowserPreviewSpan;
 	preview.spanOct = 8.f * bifurx::shapedSpan(previewSpanNorm);
 	preview.freqA = previewCenterHz * fastExp2(-0.5f * preview.spanOct);
 	preview.freqB = previewCenterHz * fastExp2(0.5f * preview.spanOct);
-	preview.qA = 1.6f;
-	preview.qB = 1.6f;
-	preview.balance = 0.f;
+	const float baseDamping = resoToDamping(kBrowserPreviewResonance);
+	preview.qA = 1.f / clamp(baseDamping * fastExp(0.48f * kBrowserPreviewBalance), kSvfDampingMin, kSvfDampingMax);
+	preview.qB = 1.f / clamp(baseDamping * fastExp(-0.48f * kBrowserPreviewBalance), kSvfDampingMin, kSvfDampingMax);
+	preview.balance = kBrowserPreviewBalance;
 	preview.balanceTarget = preview.balance;
-	preview.resoNorm = 0.72f;
+	preview.resoNorm = kBrowserPreviewResonance;
 	preview.spanParamNorm = previewSpanNorm;
 	preview.spanCvNorm = 0.f;
 	preview.spanAtten = 0.f;
 	preview.spanNorm = previewSpanNorm;
-	preview.freqParamNorm = bifurxParamFromFrequencyHz(previewCenterHz);
+	preview.freqParamNorm = kBrowserPreviewFrequency;
 	preview.voctCv = 0.f;
 
 	state.previewState = preview;
@@ -1450,9 +1514,9 @@ void BifurxSpectrumBase::initializeStaticPreviewStateIfNeeded() {
 	}
 	state.hasCurveTarget = false;
 
-	// The module browser has no live engine input. Generate a deterministic
-	// 144 Hz square wave, run it through the real filter, and feed both signals through the
-	// same FFT preparation used by an instantiated module.
+	// The module browser has no live engine input. Recreate the authored Undertow
+	// Morph scene, run it through the real filter, and feed both signals through
+	// the same FFT preparation used by an instantiated module.
 	simulatePreviewProbeResponse(preview, fftInputTime, fftOutputTime, kFftSize);
 	for (int i = 0; i < kFftSize; ++i) {
 		fftInputTime[i] *= window[i];

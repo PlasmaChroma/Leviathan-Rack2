@@ -377,8 +377,8 @@
      d="m 2161.9375,6802.2764 -657.9069,-539.492"
      id="linear_line"
      sodipodi:nodetypes="cc" /><g
-     id="plasma_conduit_candidates"
-     inkscape:label="Plasma Conduit Candidates"><path
+     id="plasma_conduit_anchors"
+     inkscape:label="Plasma Conduit Anchors"><path
      style="display:inline;opacity:1;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:58.7818;stroke-dasharray:none;stroke-opacity:1"
      d="m 2982.8495,4194.0677 1264.2608,327.6294"
      id="surge_connector"

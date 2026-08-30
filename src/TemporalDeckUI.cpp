@@ -6,6 +6,7 @@
 #include "NvgGraphicsLifecycle.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
+#include "visual/PlasmaConduit.hpp"
 
 #include <algorithm>
 #include <array>
@@ -3596,6 +3597,10 @@ struct TemporalDeckWidget : ModuleWidget {
     splitPanel.addPerfectWaveBranding();
     visual_assets::addFractalGlassOverlay(
       this, panelPath, splitPanel.panelSurfaceEffectWidget());
+    if (widget::FramebufferWidget* conduits =
+        visual_assets::createPlasmaConduitLayer(panelPath, box.size)) {
+      addChild(conduits);
+    }
     math::Rect leviathanLogoRectMm(Vec(34.44015f, 119.43102f), Vec(32.71933f, 12.24054f));
     panel_svg::loadRectFromSvgMm(
       panelPath, "BRANDING_LEVIATHAN_LOGO_RASTER", &leviathanLogoRectMm);

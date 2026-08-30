@@ -488,6 +488,10 @@ TestResult testPlasmaConduitAnchorConvention() {
     {"res/bifurx.panel.svg", 5u},
     {"res/flux.panel.svg", 8u},
     {"res/undertow.panel.svg", 4u},
+    {"res/deck.panel.svg", 5u},
+    {"res/proc.panel.svg", 2u},
+    {"res/wyrm.panel.svg", 6u},
+    {"res/iris.panel.svg", 4u},
   };
 
   bool pass = true;
@@ -529,58 +533,6 @@ TestResult testPlasmaConduitAnchorConvention() {
   }
 
   return {"Plasma conduit anchor groups provide hidden straight centerlines", pass,
-          "panels=" + std::to_string(sizeof(panels) / sizeof(panels[0])) +
-            " paths=" + std::to_string(totalPaths) +
-            (firstFailure.empty() ? std::string() :
-              " firstFailure=" + firstFailure)};
-}
-
-TestResult testPlasmaConduitCandidateConvention() {
-  struct PanelContract {
-    const char* masterPath;
-    const char* panelPath;
-    size_t expectedPaths;
-  };
-  const PanelContract panels[] = {
-    {"res/deck.svg", "res/deck.panel.svg", 5u},
-    {"res/proc.svg", "res/proc.panel.svg", 2u},
-    {"res/wyrm.svg", "res/wyrm.panel.svg", 6u},
-    {"res/iris.svg", "res/iris.panel.svg", 4u},
-  };
-
-  bool pass = true;
-  size_t totalPaths = 0u;
-  std::string firstFailure;
-  for (const PanelContract& panel : panels) {
-    std::vector<panel_svg::SvgPathMatch> masterPaths;
-    std::vector<panel_svg::SvgPathMatch> runtimePaths;
-    const bool masterOk = panel_svg::findPathsInGroupsWithIdSubstringMm(
-      panel.masterPath, "plasma_conduit_candidates", &masterPaths);
-    const bool runtimeOk = panel_svg::findPathsInGroupsWithIdSubstringMm(
-      panel.panelPath, "plasma_conduit_candidates", &runtimePaths);
-    auto pathIds = [](const std::vector<panel_svg::SvgPathMatch>& paths) {
-      std::vector<std::string> ids;
-      for (const panel_svg::SvgPathMatch& path : paths) ids.push_back(path.id);
-      std::sort(ids.begin(), ids.end());
-      return ids;
-    };
-    const bool straightPaths = std::all_of(masterPaths.begin(), masterPaths.end(),
-      [](const panel_svg::SvgPathMatch& path) {
-        return path.commands.size() == 2u
-          && path.commands[0].type == panel_svg::SvgPathCommand::MoveTo
-          && path.commands[1].type == panel_svg::SvgPathCommand::LineTo;
-      });
-    const bool panelPass = masterOk && runtimeOk
-      && masterPaths.size() == panel.expectedPaths
-      && runtimePaths.size() == panel.expectedPaths
-      && pathIds(masterPaths) == pathIds(runtimePaths)
-      && straightPaths;
-    if (!panelPass && firstFailure.empty()) firstFailure = panel.masterPath;
-    totalPaths += masterPaths.size();
-    pass = pass && panelPass;
-  }
-
-  return {"Plasma conduit candidates remain split-preserved straight centerlines", pass,
           "panels=" + std::to_string(sizeof(panels) / sizeof(panels[0])) +
             " paths=" + std::to_string(totalPaths) +
             (firstFailure.empty() ? std::string() :
@@ -640,7 +592,6 @@ int main() {
   tests.push_back(testPerfectWaveBrandingDeploymentContract());
   tests.push_back(testBifurxGlassPathParses());
   tests.push_back(testPlasmaConduitAnchorConvention());
-  tests.push_back(testPlasmaConduitCandidateConvention());
   tests.push_back(testExactThemeGlassRoles());
 
   int failed = 0;

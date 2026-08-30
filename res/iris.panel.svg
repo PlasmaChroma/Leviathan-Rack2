@@ -31,7 +31,7 @@
       <rect x="3400" y="10630" width="2632" height="1510" rx="117.93464" ry="126" id="iris_output_field" style="display:inline;opacity:0.35;fill:#1cccd9;fill-opacity:0.58;stroke:none;stroke-width:0.967464" />
     </g>
     <rect x="76" y="900" width="5944" height="5408" rx="126" ry="126" id="iris_preview_field" style="display:none;opacity:0.22;fill:#5740bf;fill-opacity:1;stroke:none" />
-    <g id="plasma_conduit_candidates" inkscape:label="Plasma Conduit Candidates">
+    <g id="plasma_conduit_anchors" inkscape:label="Plasma Conduit Anchors" style="display:none">
       <path d="M 1126.72,7760.0522 H 3358.8802" id="iris_freq_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:37.8809;stroke-linecap:round;stroke-opacity:1" />
       <path d="M 2957.0742,9527.9561 H 5534.926" id="iris_scan_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:39.0504;stroke-linecap:round;stroke-opacity:1" />
       <path d="M 668.00081,11195.878 H 1790.0008" id="iris_fm_guide" style="display:inline;opacity:0.72;fill:none;stroke:#5740bf;stroke-width:42;stroke-linecap:round;stroke-opacity:1" />

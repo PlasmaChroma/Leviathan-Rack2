@@ -20,10 +20,10 @@ decorative purple geometry as conduit candidates.
 | `res/bifurx.svg` | Runtime | 5 | `fm_line`, `res_line`, `freq_line`, `bal_line`, `span_line` |
 | `res/flux.svg` | Runtime | 8 | `gen1_attenuvert_line`, `gen4_attenuvert_line`, `surge_connector`, `sink_connector`, `sink_connector_4`, `surge_connector_4`, `input_2_line`, `input_3_line` |
 | `res/undertow.svg` | Runtime | 4 | `freq_line`, `fine_freq_line`, `morph_line`, `lin_fm_line` |
-| `res/deck.svg` | Candidate | 5 | `rate_connector-8`, `rate_connector`, `freeze_connector`, `gate_and_pos_connector`, `rev_and_rev` |
-| `res/proc.svg` | Candidate | 2 | `surge_connector`, `sink_connector` |
-| `res/wyrm.svg` | Candidate | 6 | `sync_line`, `freq_purple_line`, `slither_amp_line`, `slither_speed_line`, `FM_purple_line`, `fold_line` |
-| `res/iris.svg` | Candidate | 4 | `iris_freq_guide`, `iris_scan_guide`, `iris_fm_guide`, `iris_soft_sync_guide` |
+| `res/deck.svg` | Runtime | 5 | `rate_connector-8`, `rate_connector`, `freeze_connector`, `gate_and_pos_connector`, `rev_and_rev` |
+| `res/proc.svg` | Runtime | 2 | `surge_connector`, `sink_connector` |
+| `res/wyrm.svg` | Runtime | 6 | `sync_line`, `freq_purple_line`, `slither_amp_line`, `slither_speed_line`, `FM_purple_line`, `fold_line` |
+| `res/iris.svg` | Runtime | 4 | `iris_freq_guide`, `iris_scan_guide`, `iris_fm_guide`, `iris_soft_sync_guide` |
 
 The remaining panel masters were reviewed and do not currently contain clear
 functional purple connector strokes. In particular, `top_horizontal_line`
@@ -47,6 +47,6 @@ not part of the candidate group, and must not appear when Proc is converted.
 6. Visually verify endpoints, overlays, screens, and controls in Rack before
    removing any legacy fallback treatment.
 
-All current candidates are straight two-point paths supported by the shared
-renderer. Temporal Deck has three candidate groups solely to preserve its
-existing SVG paint order; consolidate them during its runtime conversion.
+All currently classified guides are runtime straight two-point paths supported
+by the shared renderer. New candidates should remain visibly authored until
+their geometry and functional meaning have been reviewed.

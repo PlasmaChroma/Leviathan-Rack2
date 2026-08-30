@@ -533,16 +533,6 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 			if (std::fabs(x01 - layout.markers[0].x / w) < markerGuideClearanceX01 || std::fabs(x01 - layout.markers[1].x / w) < markerGuideClearanceX01) continue;
 			drawExpectedGuideStroke(curveX[i], responseYForDb(state.curveDb[i]), state.curveDb[i]);
 		}
-		
-		for (int i = 0; i < 2; i++) {
-			if (!layout.markers[i].visible) continue;
-			nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY); nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
-			nvgStrokeColor(args.vg, nvgRGBA(6, 8, 12, 210)); nvgStrokeWidth(args.vg, 1.9f); nvgStroke(args.vg);
-			nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY); nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
-			nvgStrokeColor(args.vg, nvgRGBA(249, 236, 190, 248)); nvgStrokeWidth(args.vg, 1.25f); nvgStroke(args.vg);
-			nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f); nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom); nvgStrokeColor(args.vg, nvgRGBA(6, 8, 12, 210)); nvgStrokeWidth(args.vg, 1.9f); nvgStroke(args.vg);
-			nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f); nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom); nvgStrokeColor(args.vg, nvgRGBA(249, 236, 190, 248)); nvgStrokeWidth(args.vg, 1.25f); nvgStroke(args.vg);
-		};
 	}
 	recordDrawSection(uiDrawExpectedCount, uiDrawExpectedNs);
 
@@ -594,6 +584,21 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	}
 	lastDrawVertexCount = uint64_t(refinedPoints.size());
 	recordDrawSection(uiDrawCurveCount, uiDrawCurveNs);
+	// Peak guides are foreground marker geometry. Keep them after the opaque FFT
+	// fill and response curve so the spectrum cannot paint over them.
+	if (!displayOnlyMode) {
+		for (int i = 0; i < 2; i++) {
+			if (!layout.markers[i].visible) continue;
+			nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY); nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
+			nvgStrokeColor(args.vg, nvgRGBA(6, 8, 12, 210)); nvgStrokeWidth(args.vg, 1.9f); nvgStroke(args.vg);
+			nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, spectrumBottomY); nvgLineTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker);
+			nvgStrokeColor(args.vg, nvgRGBA(249, 236, 190, 248)); nvgStrokeWidth(args.vg, 1.25f); nvgStroke(args.vg);
+			nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f); nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom);
+			nvgStrokeColor(args.vg, nvgRGBA(6, 8, 12, 210)); nvgStrokeWidth(args.vg, 1.9f); nvgStroke(args.vg);
+			nvgBeginPath(args.vg); nvgMoveTo(args.vg, layout.markers[i].x, layout.markers[i].yMarker + kPeakMarkerFillRadius + 0.45f); nvgLineTo(args.vg, layout.markers[i].x, layout.guideYBottom);
+			nvgStrokeColor(args.vg, nvgRGBA(249, 236, 190, 248)); nvgStrokeWidth(args.vg, 1.25f); nvgStroke(args.vg);
+		}
+	}
 	nvgRestore(args.vg);
 
 	if (!displayOnlyMode) {
@@ -754,6 +759,7 @@ struct BifurxVisibleFramebufferWidget final : widget::FramebufferWidget {
 };
 
 struct BifurxWidget final : ModuleWidget {
+	std::unique_ptr<Bifurx> browserPreviewModule;
 	widget::FramebufferWidget* spectrumNanoVG = nullptr;
 	Widget* spectrumOpenGL = nullptr;
 	Widget* modernPanelBacking = nullptr;
@@ -832,6 +838,22 @@ struct BifurxWidget final : ModuleWidget {
 
 	explicit BifurxWidget(Bifurx* module) {
 		setModule(module);
+		Bifurx* displayModule = module;
+		if (!displayModule) {
+			browserPreviewModule.reset(new Bifurx());
+			displayModule = browserPreviewModule.get();
+			displayModule->params[Bifurx::MODE_PARAM].setValue(float(kBrowserPreviewMode));
+			displayModule->params[Bifurx::LEVEL_PARAM].setValue(kBrowserPreviewLevel);
+			displayModule->params[Bifurx::FREQ_PARAM].setValue(kBrowserPreviewFrequency);
+			displayModule->params[Bifurx::RESO_PARAM].setValue(kBrowserPreviewResonance);
+			displayModule->params[Bifurx::BALANCE_PARAM].setValue(kBrowserPreviewBalance);
+			displayModule->params[Bifurx::SPAN_PARAM].setValue(kBrowserPreviewSpan);
+			displayModule->params[Bifurx::FM_AMT_PARAM].setValue(kBrowserPreviewFmAmount);
+			displayModule->params[Bifurx::SPAN_CV_ATTEN_PARAM].setValue(kBrowserPreviewSpanAttenuator);
+			displayModule->params[Bifurx::TITO_PARAM].setValue(kBrowserPreviewTito);
+			displayModule->lights[Bifurx::FM_AMT_POS_LIGHT].setBrightness(kBrowserPreviewFmAmount);
+			displayModule->lights[Bifurx::TITO_XM_LIGHT].setBrightness(kBrowserPreviewTito);
+		}
 		PreviewBuildLogTimer previewBuildTimer("Bifurx", module);
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/bifurx.panel.svg");
 		legacySvgPanel = getPanel();
@@ -902,7 +924,7 @@ struct BifurxWidget final : ModuleWidget {
 		const math::Rect sRect = modernSpectrumRectMm;
 		auto addFb = [&](math::Rect r, Widget* w) { widget::FramebufferWidget* fb = new BifurxVisibleFramebufferWidget(); fb->box.pos = mm2px(r.pos); fb->box.size = mm2px(r.size); fb->dirtyOnSubpixelChange = false; w->box.size = fb->box.size; fb->addChild(w); addChild(fb); return fb; };
 		spectrumBackgroundContent = new BifurxSpectrumBackgroundWidget();
-		spectrumBackgroundContent->module = module;
+		spectrumBackgroundContent->module = displayModule;
 		spectrumBackgroundFramebuffer = addFb(sRect, spectrumBackgroundContent);
 		spectrumBackgroundContent->framebuffer = spectrumBackgroundFramebuffer;
 		
@@ -926,7 +948,7 @@ struct BifurxWidget final : ModuleWidget {
 		if (spectrumOpenGL) spectrumOpenGL->setVisible(showGL);
 
 		modeReadout = new BifurxModeReadoutWidget();
-		modeReadout->module = module;
+		modeReadout->module = displayModule;
 		modeReadout->box.pos = mm2px(Vec(sRect.pos.x, sRect.pos.y + sRect.size.y + 0.9f));
 		modeReadout->box.size = mm2px(Vec(sRect.size.x, 4.2f));
 		addChild(modeReadout);
@@ -941,21 +963,27 @@ struct BifurxWidget final : ModuleWidget {
 		}
 		previewBuildTimer.setAtlasStatus(panel_svg::getAtlasStatusLabelForSvg(panelPath));
 		previewBuildTimer.markAnchorsDone();
-		auto* modeMenuButton = createParamCentered<BifurxModeMenuButton>(mm2px(mmP), module, Bifurx::MODE_MENU_PARAM);
-		modeMenuButton->module = module;
-		addParam(modeMenuButton);
-		addParam(createParamCentered<BifurxModeLeftButton>(mm2px(mlP), module, Bifurx::MODE_LEFT_PARAM)); addParam(createParamCentered<BifurxModeRightButton>(mm2px(mrP), module, Bifurx::MODE_RIGHT_PARAM));
+		auto addDisplayParam = [&](ParamWidget* param) {
+			// The authored browser controls read from a private preview module, not
+			// the ModuleWidget's null engine module, so bypass addParam() validation.
+			if (module) addParam(param);
+			else addChild(param);
+		};
+		auto* modeMenuButton = createParamCentered<BifurxModeMenuButton>(mm2px(mmP), displayModule, Bifurx::MODE_MENU_PARAM);
+		modeMenuButton->module = displayModule;
+		addDisplayParam(modeMenuButton);
+		addDisplayParam(createParamCentered<BifurxModeLeftButton>(mm2px(mlP), displayModule, Bifurx::MODE_LEFT_PARAM)); addDisplayParam(createParamCentered<BifurxModeRightButton>(mm2px(mrP), displayModule, Bifurx::MODE_RIGHT_PARAM));
 		const Vec freqCenterPx = mm2px(fP);
-		addParam(createParamCentered<Eclipse2Knob>(mm2px(lP), module, Bifurx::LEVEL_PARAM)); addParam(createParamCentered<LeviathanHaloKnob2>(freqCenterPx, module, Bifurx::FREQ_PARAM)); addParam(createParamCentered<Eclipse2Knob>(mm2px(rP), module, Bifurx::RESO_PARAM));
+		addDisplayParam(createParamCentered<Eclipse2Knob>(mm2px(lP), displayModule, Bifurx::LEVEL_PARAM)); addDisplayParam(createParamCentered<LeviathanHaloKnob2>(freqCenterPx, displayModule, Bifurx::FREQ_PARAM)); addDisplayParam(createParamCentered<Eclipse2Knob>(mm2px(rP), displayModule, Bifurx::RESO_PARAM));
 		{
-			Eclipse2Knob* balanceKnob = createParamCentered<Eclipse2Knob>(mm2px(bP), module, Bifurx::BALANCE_PARAM);
+			Eclipse2Knob* balanceKnob = createParamCentered<Eclipse2Knob>(mm2px(bP), displayModule, Bifurx::BALANCE_PARAM);
 			balanceKnob->setProgressRingBipolar(true);
-			addParam(balanceKnob);
+			addDisplayParam(balanceKnob);
 		}
-		addParam(createParamCentered<Eclipse2Knob>(mm2px(sP), module, Bifurx::SPAN_PARAM)); addParam(createLightParamCentered<LuminSlider>(mm2px(faP), module, Bifurx::FM_AMT_PARAM, Bifurx::FM_AMT_POS_LIGHT));
-		addParam(createLightParamCentered<LuminSlider>(mm2px(saP), module, Bifurx::SPAN_CV_ATTEN_PARAM, Bifurx::SPAN_CV_ATTEN_POS_LIGHT)); addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(tP), module, Bifurx::TITO_PARAM));
-		addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(tP.plus(Vec(-7.0f, 0.f))), module, Bifurx::TITO_SM_LIGHT));
-		addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(tP.plus(Vec(7.0f, 0.f))), module, Bifurx::TITO_XM_LIGHT));
+		addDisplayParam(createParamCentered<Eclipse2Knob>(mm2px(sP), displayModule, Bifurx::SPAN_PARAM)); addDisplayParam(createLightParamCentered<LuminSlider>(mm2px(faP), displayModule, Bifurx::FM_AMT_PARAM, Bifurx::FM_AMT_POS_LIGHT));
+		addDisplayParam(createLightParamCentered<LuminSlider>(mm2px(saP), displayModule, Bifurx::SPAN_CV_ATTEN_PARAM, Bifurx::SPAN_CV_ATTEN_POS_LIGHT)); addDisplayParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(tP), displayModule, Bifurx::TITO_PARAM));
+		addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(tP.plus(Vec(-7.0f, 0.f))), displayModule, Bifurx::TITO_SM_LIGHT));
+		addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(tP.plus(Vec(7.0f, 0.f))), displayModule, Bifurx::TITO_XM_LIGHT));
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(iP), module, Bifurx::IN_INPUT)); addInput(createInputCentered<Magitek2InputJack>(mm2px(vP), module, Bifurx::VOCT_INPUT)); addInput(createInputCentered<Magitek2InputJack>(mm2px(fmP), module, Bifurx::FM_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(rcP), module, Bifurx::RESO_CV_INPUT)); addInput(createInputCentered<Magitek2InputJack>(mm2px(bcP), module, Bifurx::BALANCE_CV_INPUT)); addInput(createInputCentered<Magitek2InputJack>(mm2px(scP), module, Bifurx::SPAN_CV_INPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(oP), module, Bifurx::OUT_OUTPUT));

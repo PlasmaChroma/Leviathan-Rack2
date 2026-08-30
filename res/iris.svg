@@ -156,8 +156,8 @@
        id="iris_preview_field"
        style="display:none;opacity:0.22;fill:#5740bf;fill-opacity:1;stroke:none" />
     <g
-       id="plasma_conduit_candidates"
-       inkscape:label="Plasma Conduit Candidates">
+       id="plasma_conduit_anchors"
+       inkscape:label="Plasma Conduit Anchors">
       <path
        d="M 1126.72,7760.0522 H 3358.8802"
        id="iris_freq_guide"

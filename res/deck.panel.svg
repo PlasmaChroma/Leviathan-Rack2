@@ -20,8 +20,12 @@
   <g id="panel_art" style="display:inline" inkscape:label="panel_art">
     <rect x="0" y="3.5527137e-15" width="101.93" height="128.49995" rx="0" ry="0" fill="url(#bgGrad)" id="black_background" style="display:inline;fill:url(#bgGrad);stroke-width:0.000996894" sodipodi:insensitive="true" />
     <rect fill="#0e1016" height="128.5" rx="0" ry="0" stroke="#23283a" stroke-width="0.8" width="101.6" x="0" y="0" id="rect1529" style="display:none;fill:#101319;fill-opacity:1" />
-    <g id="plasma_conduit_candidates_upper" inkscape:label="Plasma Conduit Candidates — Upper">
+    <g id="plasma_conduit_anchors" inkscape:label="Plasma Conduit Anchors" style="display:none">
       <path d="m 8.5369379,17.056614 9.5361381,8.366285" stroke="url(#accentGrad)" stroke-width="0.350551" stroke-linecap="round" opacity="0.55" fill="none" id="rate_connector-8" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-linecap:butt;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
+      <path d="m 20.865056,98.898431 0.01805,14.120149" stroke="url(#accentGrad)" stroke-width="0.350551" stroke-linecap="round" opacity="0.55" fill="none" id="rate_connector" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
+      <path d="m 57.599239,100.22351 0.01805,14.12015" stroke="url(#accentGrad)" stroke-width="0.350551" stroke-linecap="round" opacity="0.55" fill="none" id="freeze_connector" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
+      <path d="m 44.377488,112.91436 -11.20528,0.0439" stroke="url(#accentGrad)" stroke-width="0.350551" stroke-linecap="round" opacity="0.55" fill="none" id="gate_and_pos_connector" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
+      <path d="m 45.182363,101.281 -11.20528,0.0439" stroke="url(#accentGrad)" stroke-width="0.350551" stroke-linecap="round" opacity="0.55" fill="none" id="rev_and_rev" style="display:inline;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1;opacity:1" sodipodi:nodetypes="cc" />
     </g>
     <rect fill="none" height="125.3" rx="1.6" ry="1.6" stroke="#1a1f2a" stroke-width="0.4" width="98.400002" x="1.6" y="1.6" id="gray_border_inner" style="display:none" />
     <g id="panel_buffer_display" inkscape:label="Buffer Display" style="display:inline">
@@ -32,15 +36,7 @@
       <rect fill="#13233a" height="27.878769" rx="2.2240479" ry="2.3716216" stroke="#47a0ff" stroke-width="0.592526" width="22.812" x="77.14624" y="93.317749" id="outputs" style="display:inline;opacity:0.33;fill:#1cccd9;fill-opacity:0.5;stroke:none;stroke-opacity:1" />
       <path d="M 4.7463355,79.6           H 20.992665           Q 23.5,79.6 23.5,82.2           V 90.482001           Q 23.5,93.082001 26.007335,93.082001           H 61.970663           Q 64.477998,93.082001 64.477998,95.681999           V 118.579           Q 64.477998,121.17887 61.970663,121.17887           H 4.7463355           Q 2.2390001,121.17887 2.2390001,118.579           V 82.2           Q 2.2390001,79.6 4.7463355,79.6           Z" fill="#241935" stroke="#7e50c7" stroke-width="0.441909" id="inputs" style="display:inline;opacity:0.33;fill:#553ec1;fill-opacity:1;stroke:none" sodipodi:nodetypes="ccccccccccccccccccccc" />
     </g>
-    <g id="plasma_conduit_candidates_rate" inkscape:label="Plasma Conduit Candidates — Rate">
-      <path d="m 20.865056,98.898431 0.01805,14.120149" stroke="url(#accentGrad)" stroke-width="0.350551" stroke-linecap="round" opacity="0.55" fill="none" id="rate_connector" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
-    </g>
     <path d="M 4.186227,9.522227 H 97.413935" stroke="url(#accentGrad)" stroke-width="0.498454" stroke-linecap="round" opacity="0.55" fill="none" id="top_horizontal_line" style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1" />
-    <g id="plasma_conduit_candidates_transport" inkscape:label="Plasma Conduit Candidates — Transport">
-      <path d="m 57.599239,100.22351 0.01805,14.12015" stroke="url(#accentGrad)" stroke-width="0.350551" stroke-linecap="round" opacity="0.55" fill="none" id="freeze_connector" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
-      <path d="m 44.377488,112.91436 -11.20528,0.0439" stroke="url(#accentGrad)" stroke-width="0.350551" stroke-linecap="round" opacity="0.55" fill="none" id="gate_and_pos_connector" style="display:inline;opacity:1;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1" sodipodi:nodetypes="cc" />
-      <path d="m 45.182363,101.281 -11.20528,0.0439" stroke="url(#accentGrad)" stroke-width="0.350551" stroke-linecap="round" opacity="0.55" fill="none" id="rev_and_rev" style="display:inline;stroke:#5740bf;stroke-width:0.75;stroke-dasharray:none;stroke-opacity:1;opacity:1" sodipodi:nodetypes="cc" />
-    </g>
     <g id="waves_layer" style="display:none;opacity:0.5" transform="matrix(0.01000001,0,0,0.01,-1.7562905e-5,1.4246172)">
       <g id="branding_wave_left" transform="matrix(1.72,0,0,1.72,2416.9188,11996.75)" style="display:inline">
         <path style="fill:#4995ec" d="m 0,413.249 c 0,0 99.571,-7.286 135.999,-84.999 36.428,-77.713 30.357,-229.499 207.642,-229.499 38.871,0 81.438,18.386 104.731,34.602 116.875,81.362 61.625,248.326 -75.589,205.523 0,0 49.786,-2.125 49.786,-67.697 0,-65.572 -82.091,-75.285 -94.714,-20.643 -8.992,38.927 -3.643,156.643 167.571,162.713" id="path149" />

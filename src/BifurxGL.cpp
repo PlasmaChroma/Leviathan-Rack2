@@ -107,7 +107,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		strokeQuadVertices.reserve(size_t(kCurvePointCount) * 24u);
 		overlayCurvePoints.reserve(refinedPointReserve);
 		expectedCurveLineVertices.reserve(refinedPointReserve);
-		expectedCurveStrokeVertices.reserve((refinedPointReserve - 1u) * 12u + 48u);
+		expectedCurveStrokeVertices.reserve((refinedPointReserve - 1u) * 18u + 72u);
 		curveTexels.resize(size_t(kCurvePointCount) * 4u, 0); // 4 channels per pixel (RGBA16)
 	}
 
@@ -911,11 +911,11 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		for (const BifurxCurvePoint& point : overlayCurvePoints) {
 			expectedCurveLineVertices.push_back({
 				w * point.x01, point.y,
-				6.f / 255.f, 8.f / 255.f, 12.f / 255.f, 210.f / 255.f
+				6.f / 255.f, 8.f / 255.f, 12.f / 255.f, 230.f / 255.f
 			});
 		}
-		appendStrokePolyline(expectedCurveLineVertices, 1.15f, &expectedCurveStrokeVertices);
-		appendGuideLayer(6.f / 255.f, 8.f / 255.f, 12.f / 255.f, 210.f / 255.f, 1.1f);
+		appendStrokePolyline(expectedCurveLineVertices, 1.45f, &expectedCurveStrokeVertices);
+		appendGuideLayer(6.f / 255.f, 8.f / 255.f, 12.f / 255.f, 230.f / 255.f, 1.40f);
 
 		for (GlVertex& point : expectedCurveLineVertices) {
 			point.r = 235.f / 255.f;
@@ -925,6 +925,15 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		}
 		appendStrokePolyline(expectedCurveLineVertices, 0.90f, &expectedCurveStrokeVertices);
 		appendGuideLayer(235.f / 255.f, 204.f / 255.f, 128.f / 255.f, 244.f / 255.f, 0.85f);
+
+		for (GlVertex& point : expectedCurveLineVertices) {
+			point.r = 255.f / 255.f;
+			point.g = 242.f / 255.f;
+			point.b = 202.f / 255.f;
+			point.a = 250.f / 255.f;
+		}
+		appendStrokePolyline(expectedCurveLineVertices, 0.38f, &expectedCurveStrokeVertices);
+		appendGuideLayer(255.f / 255.f, 242.f / 255.f, 202.f / 255.f, 250.f / 255.f, 0.36f);
 
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
