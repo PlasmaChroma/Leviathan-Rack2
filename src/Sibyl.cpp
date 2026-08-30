@@ -2002,7 +2002,7 @@ struct SibylOracleDisplay final : TransparentWidget {
 		const float filledSceneW = progressW * repeatedSceneProgress;
 		if (filledSceneW > 0.f) {
 			NVGpaint scenePaint = nvgLinearGradient(args.vg, progressX, sceneProgressY,
-				progressX + progressW, sceneProgressY, nvgRGBA(125, 95, 224, 255), violet);
+				progressX + progressW, sceneProgressY, nvgRGBA(125, 95, 224, 255), white);
 			nvgBeginPath(args.vg);
 			nvgRoundedRect(args.vg, progressX, sceneProgressY, filledSceneW,
 				sceneProgressH, sceneProgressH * 0.5f);

@@ -252,6 +252,28 @@ struct PreviewFrameEnhancementWidget : TransparentWidget {
 
 		nvgSave(args.vg);
 
+		// The authored frame projects just outside the opaque preview surface.
+		// Use an opaque, directionally shaded foundation to block animated panel
+		// art without flattening the frame into a single black perimeter.
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, x - 0.55f, y - 0.55f, w + 1.1f, h + 1.1f);
+		nvgStrokeWidth(args.vg, 2.2f);
+		nvgStrokePaint(args.vg, nvgLinearGradient(
+			args.vg,
+			x, y,
+			x + w, y + h,
+			nvgRGB(14, 69, 76),
+			nvgRGB(1, 8, 12)));
+		nvgStroke(args.vg);
+
+		// A recessed inner lip restores the separation between the glass surface
+		// and the raised cyan rim while remaining fully opaque over the conduit.
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, x + 0.25f, y + 0.25f, w - 0.5f, h - 0.5f);
+		nvgStrokeWidth(args.vg, 0.75f);
+		nvgStrokeColor(args.vg, nvgRGBA(0, 2, 4, 210));
+		nvgStroke(args.vg);
+
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, x - 0.55f, y - 0.55f, w + 1.1f, h + 1.1f);
 		nvgStrokeWidth(args.vg, 1.0f);

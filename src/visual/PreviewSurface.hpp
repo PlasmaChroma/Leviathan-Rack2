@@ -56,8 +56,22 @@ struct CachedOpaqueGridWidget final : TransparentWidget {
 	}
 };
 
+struct CachedOpaqueGridFramebuffer final : widget::FramebufferWidget {
+	void draw(const DrawArgs& args) override {
+		// Framebuffer textures remain alpha-bearing even when their cached child
+		// fills every pixel. Establish a direct opaque barrier first so animated
+		// panel layers can never leak through transparent edge texels or a cache
+		// compositing path that preserves alpha.
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		nvgFillColor(args.vg, nvgRGB(0, 0, 0));
+		nvgFill(args.vg);
+		widget::FramebufferWidget::draw(args);
+	}
+};
+
 inline widget::FramebufferWidget* createCachedOpaqueGrid(Vec size) {
-	auto* framebuffer = new widget::FramebufferWidget();
+	auto* framebuffer = new CachedOpaqueGridFramebuffer();
 	framebuffer->box.size = size;
 	framebuffer->dirtyOnSubpixelChange = false;
 	auto* surface = new CachedOpaqueGridWidget();

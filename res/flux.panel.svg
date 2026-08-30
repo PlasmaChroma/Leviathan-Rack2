@@ -64,8 +64,6 @@
       </g>
       <rect x="1096.182" y="1107.229" width="9973.2734" height="12667.627" rx="210" ry="210" fill="none" stroke="#ffffff" stroke-opacity="0.1" stroke-width="60" id="gray_outline" style="display:none;stroke:#3c3f42;stroke-opacity:1" />
     </g>
-    <path style="display:inline;opacity:1;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50;stroke-dasharray:none;stroke-opacity:1" d="m 2549.3705,6751.7711 0.039,1898.3974" id="gen1_attenuvert_line" sodipodi:nodetypes="cc" />
-    <path style="display:inline;opacity:1;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.1551;stroke-dasharray:none;stroke-opacity:1" d="m 8607.0685,7768.911 0.492,1899.8774" id="gen4_attenuvert_line" sodipodi:nodetypes="cc" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)" />
     <g id="panel_graphics" style="display:inline" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
       <g id="glass" inkscape:label="Frame" style="display:inline">
         <rect x="1214.5623" y="1936.1384" width="4717.731" height="5832.3184" rx="184.06866" ry="185.70001" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="46.2204" id="frame_left" style="opacity:0.33;fill:#5740bf;fill-opacity:1" />
@@ -74,19 +72,22 @@
         <rect x="6231.5308" y="1936.2898" width="4717.438" height="5831.98" rx="188.23064" ry="183.89819" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="46.5131" id="frame_right" style="opacity:0.33;fill:#5740bf;fill-opacity:1" />
         <rect x="1381.7048" y="10215.551" width="9402.2285" height="2845.8301" rx="182.51744" ry="183.18156" fill="#000000" opacity="0.1" stroke="#ffffff" stroke-opacity="0.06" stroke-width="45.7123" id="outputs" style="opacity:0.33;fill:#1cccd9;fill-opacity:0.5" />
       </g>
-      <g id="lines_gen1_side" style="display:inline">
-        <path style="display:none;opacity:1;fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:#ffffff;stroke-width:50.155;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1" d="m 2382.6694,6060.1029 -657.9069,-539.492" id="linear_line" sodipodi:nodetypes="cc" />
-        <path style="display:inline;opacity:1;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.15508055;stroke-dasharray:none;stroke-opacity:1" d="m 3163.4381,4402.9102 1219.24,198.1277" id="surge_connector" sodipodi:nodetypes="cc" />
-        <path style="display:inline;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.1551;stroke-dasharray:none;stroke-opacity:1" d="m 5213.8539,6337.2177 -928.561,1015.9775" id="sink_connector" sodipodi:nodetypes="cc" transform="translate(1.0410941e-5)" />
-      </g>
-      <g id="lines_gen4_side" style="display:inline">
-        <path style="display:inline;opacity:1;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.1551;stroke-dasharray:none;stroke-opacity:1" d="M 6924.8612,6317.0633 7931.89,7348.7719" id="sink_connector_4" />
-        <path style="display:none;fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:#ffffff;stroke-width:50.155;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1" d="m 10188.853,6060.1026 -657.9071,-539.492" id="linear_connector_4" sodipodi:nodetypes="cc" />
-        <path style="display:inline;opacity:1;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.15508055;stroke-dasharray:none;stroke-opacity:1" d="M 7766.6967,4600.7583 9005.6075,4410.3566" id="surge_connector_4" sodipodi:nodetypes="cc" />
+      <g id="legacy_hidden_connectors" style="display:none">
+        <path style="display:inline;opacity:1;fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:#ffffff;stroke-width:50.155;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1" d="m 2382.6694,6060.1029 -657.9069,-539.492" id="linear_line" sodipodi:nodetypes="cc" />
+        <path style="display:inline;fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:#ffffff;stroke-width:50.155;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1" d="m 10188.853,6060.1026 -657.9071,-539.492" id="linear_connector_4" sodipodi:nodetypes="cc" />
       </g>
     </g>
+    <g id="plasma_conduit_anchors" inkscape:label="Plasma Conduit Anchors" style="display:none">
+      <path style="display:inline;opacity:1;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50;stroke-dasharray:none;stroke-opacity:1" d="m 2549.3705,6751.7711 0.039,1898.3974" id="gen1_attenuvert_line" sodipodi:nodetypes="cc" />
+      <path style="display:inline;opacity:1;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.1551;stroke-dasharray:none;stroke-opacity:1" d="m 8607.0685,7768.911 0.492,1899.8774" id="gen4_attenuvert_line" sodipodi:nodetypes="cc" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)" />
+      <path style="display:inline;opacity:1;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.15508055;stroke-dasharray:none;stroke-opacity:1" d="m 3163.4381,4402.9102 1219.24,198.1277" id="surge_connector" sodipodi:nodetypes="cc" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)" />
+      <path style="display:inline;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.1551;stroke-dasharray:none;stroke-opacity:1" d="m 5213.8539,6337.2177 -928.561,1015.9775" id="sink_connector" sodipodi:nodetypes="cc" transform="matrix(0.99673566,0,0,0.99708035,-982.96276,-994.31744)" />
+      <path style="display:inline;opacity:1;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.1551;stroke-dasharray:none;stroke-opacity:1" d="M 6924.8612,6317.0633 7931.89,7348.7719" id="sink_connector_4" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)" />
+      <path style="display:inline;opacity:1;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.15508055;stroke-dasharray:none;stroke-opacity:1" d="M 7766.6967,4600.7583 9005.6075,4410.3566" id="surge_connector_4" sodipodi:nodetypes="cc" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)" />
+      <path style="display:inline;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.00000054;stroke-dasharray:none;stroke-opacity:1" d="m 4196.7922,8640.9489 1.8623,-1003.405" id="input_2_line" sodipodi:nodetypes="cc" />
+      <path style="display:inline;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.00000054;stroke-dasharray:none;stroke-opacity:1" d="m 5897.6693,8679.7688 -0.098,-1032.1828" id="input_3_line" sodipodi:nodetypes="cc" />
+    </g>
     <path d="m 1406.2,1952.2 h 9353.3" stroke="url(#accentGrad)" stroke-width="50" stroke-linecap="round" opacity="0.55" fill="none" id="top_horizontal_line" style="display:none;opacity:1;stroke:#5740bf;stroke-opacity:1" transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)" />
-    <path style="display:inline;fill:#6240bf;fill-opacity:1;fill-rule:nonzero;stroke:#5740bf;stroke-width:50.00000054;stroke-dasharray:none;stroke-opacity:1" d="m 4196.7922,8640.9489 1.8623,-1003.405 m 1699.0148,1042.2249 -0.098,-1032.1828" id="In2_In3_Lines" sodipodi:nodetypes="cccc" />
   </g>
   <g id="panel_labels_reworked" inkscape:label="Labels Reworked" style="display:none" />
   <g id="shape_mode_glyphs" style="display:none;fill:none;stroke:#ffffff;stroke-width:36;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1">

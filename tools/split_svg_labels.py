@@ -42,6 +42,7 @@ XML_NS = "http://www.w3.org/XML/1998/namespace"
 
 THEME_GLASS_IDS = {"glass_input", "glass_output", "glass_accent"}
 THEME_SUBSTRATE_ATTR = "data-theme-runtime-substrate"
+RUNTIME_ANCHOR_GROUP_IDS = {"plasma_conduit_anchors"}
 
 ET.register_namespace("", SVG_NS)
 ET.register_namespace("inkscape", INKSCAPE_NS)
@@ -215,6 +216,36 @@ def neutralize_semantic_panel_pigment(root: ET.Element) -> int:
     return transformed
 
 
+def set_style_property(style: str, name: str, value: str) -> str:
+    declarations: list[str] = []
+    replaced = False
+    for declaration in style.split(";"):
+        if ":" not in declaration:
+            if declaration:
+                declarations.append(declaration)
+            continue
+        property_name, property_value = declaration.split(":", 1)
+        if property_name.strip().lower() == name.lower():
+            property_value = value
+            replaced = True
+        declarations.append(f"{property_name}:{property_value}")
+    if not replaced:
+        declarations.append(f"{name}:{value}")
+    return ";".join(declarations)
+
+
+def hide_runtime_anchor_groups(root: ET.Element) -> int:
+    """Keep authored geometry available to parsers without drawing its guides."""
+    hidden = 0
+    for elem in root.iter():
+        if local_name(elem.tag) != "g" or get_id(elem) not in RUNTIME_ANCHOR_GROUP_IDS:
+            continue
+        elem.attrib["style"] = set_style_property(
+            elem.attrib.get("style", ""), "display", "none")
+        hidden += 1
+    return hidden
+
+
 def normalize_text_for_outline(root: ET.Element) -> None:
     """
     Avoid feeding pretty-printer indentation into Inkscape as real text.
@@ -369,7 +400,10 @@ def outline_text_with_inkscape(
             ET.indent(outlined_tree, space="  ")
             outlined_tree.write(tmp_output, encoding="utf-8", xml_declaration=True)
 
-        svg_path.write_bytes(tmp_output.read_bytes())
+        # The output lives beside the target, so replace it atomically instead
+        # of reopening a file Windows Inkscape has just read from a WSL mount.
+        # Reopening can fail with EINVAL even after the Inkscape process exits.
+        os.replace(tmp_output, svg_path)
 
 
 def split_svg(
@@ -438,6 +472,7 @@ def split_svg(
     panel_parent.remove(panel_label_group)
 
     neutralize_semantic_panel_pigment(panel_root)
+    hide_runtime_anchor_groups(panel_root)
 
     if strip_panel_text:
         strip_font_text_elements(panel_root)

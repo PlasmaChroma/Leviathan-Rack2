@@ -134,6 +134,22 @@ def downsample_mask(mask: Image.Image) -> Image.Image:
     return mask.resize(SOURCE_SIZE, Image.Resampling.LANCZOS)
 
 
+def resize_linear_rgb(
+    image_linear: np.ndarray,
+    size: tuple[int, int],
+) -> np.ndarray:
+    """Resize floating-point linear RGB without an intervening gamma encode."""
+    channels = []
+    for channel_index in range(3):
+        channel = Image.fromarray(
+            image_linear[:, :, channel_index].astype(np.float32),
+            mode="F",
+        )
+        resized = channel.resize(size, Image.Resampling.LANCZOS)
+        channels.append(np.asarray(resized, dtype=np.float32))
+    return np.clip(np.stack(channels, axis=2), 0.0, 1.0)
+
+
 def build_combined(
     background_path: Path,
     destination: Path,
@@ -149,6 +165,7 @@ def build_combined(
     soft_opacity: float,
     wide_opacity: float,
     colors: int,
+    linear_light_resize: bool,
 ) -> None:
     tight_kernel_radius = max(1, round(tight_radius_px * supersample))
     tight_kernel_size = tight_kernel_radius * 2 + 1
@@ -189,16 +206,23 @@ def build_combined(
     composite_color(combined_linear, halo_color, scale_mask(tight_mask, tight_opacity))
     composite_color(combined_linear, fill_color, scale_mask(fill_mask, 1.0))
 
+    if linear_light_resize:
+        combined_linear = resize_linear_rgb(combined_linear, RUNTIME_SIZE)
     combined_srgb = np.clip(linear_to_srgb(combined_linear), 0.0, 1.0)
     combined = Image.fromarray(
         np.rint(combined_srgb * 255.0).astype(np.uint8), mode="RGB"
     )
-    combined = combined.resize(RUNTIME_SIZE, Image.Resampling.LANCZOS)
+    if not linear_light_resize:
+        combined = combined.resize(RUNTIME_SIZE, Image.Resampling.LANCZOS)
     if colors > 0:
         combined = combined.quantize(colors=colors, method=Image.Quantize.MEDIANCUT)
     destination.parent.mkdir(parents=True, exist_ok=True)
     combined.save(destination, format="PNG", optimize=True)
-    print(f"{background_path} + labels -> {destination} ({RUNTIME_SIZE[0]}x{RUNTIME_SIZE[1]})")
+    resize_mode = "linear-light Lanczos" if linear_light_resize else "sRGB Lanczos"
+    print(
+        f"{background_path} + labels -> {destination} "
+        f"({RUNTIME_SIZE[0]}x{RUNTIME_SIZE[1]}, {resize_mode})"
+    )
 
 
 def main() -> int:
@@ -236,6 +260,11 @@ def main() -> int:
         default=0,
         help="indexed-PNG palette size; 0 preserves full RGB (default: 0)",
     )
+    parser.add_argument(
+        "--linear-light-resize",
+        action="store_true",
+        help="resize floating-point linear RGB before encoding the runtime PNG",
+    )
     args = parser.parse_args()
 
     for source in (args.light_background, args.dark_background, args.labels_svg):
@@ -269,6 +298,7 @@ def main() -> int:
         soft_opacity=0.28,
         wide_opacity=0.13,
         colors=args.colors,
+        linear_light_resize=args.linear_light_resize,
     )
     build_combined(
         args.dark_background,
@@ -285,6 +315,7 @@ def main() -> int:
         soft_opacity=0.28,
         wide_opacity=0.13,
         colors=args.colors,
+        linear_light_resize=args.linear_light_resize,
     )
     return 0
 

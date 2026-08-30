@@ -6,6 +6,7 @@
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
 #include "visual/FractalGlassOverlay.hpp"
+#include "visual/PlasmaConduit.hpp"
 #include "visual/PreviewSurface.hpp"
 #include "WavePreviewTracer.hpp"
 #include <array>
@@ -1805,6 +1806,10 @@ struct IntegralFluxWidget : ModuleWidget {
 		splitPanel.addLabels("res/flux.labels.svg");
 		nautiloidGlass = visual_assets::addFractalGlassOverlay(
 			this, panelBasePath, splitPanel.panelSurfaceEffectWidget());
+		if (widget::FramebufferWidget* conduits =
+			visual_assets::createPlasmaConduitLayer(panelBasePath, box.size)) {
+			addChild(conduits);
+		}
 		{
 			math::Rect dragonRectMm;
 			if (!panel_svg::loadRectFromSvgMm(panelBasePath, "DRAGON_RENDER_AREA", &dragonRectMm)) {
@@ -2031,45 +2036,47 @@ struct IntegralFluxWidget : ModuleWidget {
 		{
 			WavePreviewWidget* ch1Preview = new WavePreviewWidget(module, 1);
 			ch1Preview->edgeInteraction = &ch1EdgeInteraction;
-			math::Rect previewRectMm;
-			if (panel_svg::loadRectFromSvgMm(panelBasePath, "CH1_PREVIEW", &previewRectMm)) {
-				addChild(visual_assets::createPreviewFrameEnhancementWidget(previewRectMm));
-				previewRectMm = insetRectMm(previewRectMm, 0.2f);
-				ch1Preview->box.pos = mm2px(previewRectMm.pos);
-				ch1Preview->box.size = mm2px(previewRectMm.size);
+			math::Rect previewOuterRectMm;
+			if (panel_svg::loadRectFromSvgMm(panelBasePath, "CH1_PREVIEW", &previewOuterRectMm)) {
+				const math::Rect previewInnerRectMm = insetRectMm(previewOuterRectMm, 0.2f);
+				ch1Preview->box.pos = mm2px(previewInnerRectMm.pos);
+				ch1Preview->box.size = mm2px(previewInnerRectMm.size);
 			}
 			else {
-				math::Rect previewFallbackMm(Vec(3.75998355f, 68.96602539f), Vec(20.78393382f, 11.24561948f));
-				addChild(visual_assets::createPreviewFrameEnhancementWidget(previewFallbackMm));
-				previewFallbackMm = insetRectMm(previewFallbackMm, 0.2f);
-				ch1Preview->box.pos = mm2px(previewFallbackMm.pos);
-				ch1Preview->box.size = mm2px(previewFallbackMm.size);
+				previewOuterRectMm = math::Rect(
+					Vec(3.75998355f, 68.96602539f), Vec(20.78393382f, 11.24561948f));
+				const math::Rect previewInnerRectMm = insetRectMm(previewOuterRectMm, 0.2f);
+				ch1Preview->box.pos = mm2px(previewInnerRectMm.pos);
+				ch1Preview->box.size = mm2px(previewInnerRectMm.size);
 			}
-			widget::FramebufferWidget* previewSurface = preview_surface::createCachedOpaqueGrid(ch1Preview->box.size);
-			previewSurface->box.pos = ch1Preview->box.pos;
+			widget::FramebufferWidget* previewSurface = preview_surface::createCachedOpaqueGrid(
+				mm2px(previewOuterRectMm.size));
+			previewSurface->box.pos = mm2px(previewOuterRectMm.pos);
 			addChild(previewSurface);
+			addChild(visual_assets::createPreviewFrameEnhancementWidget(previewOuterRectMm));
 			addChild(ch1Preview);
 		}
 		{
 			WavePreviewWidget* ch4Preview = new WavePreviewWidget(module, 4);
 			ch4Preview->edgeInteraction = &ch4EdgeInteraction;
-			math::Rect previewRectMm;
-			if (panel_svg::loadRectFromSvgMm(panelBasePath, "CH4_PREVIEW", &previewRectMm)) {
-				addChild(visual_assets::createPreviewFrameEnhancementWidget(previewRectMm));
-				previewRectMm = insetRectMm(previewRectMm, 0.2f);
-				ch4Preview->box.pos = mm2px(previewRectMm.pos);
-				ch4Preview->box.size = mm2px(previewRectMm.size);
+			math::Rect previewOuterRectMm;
+			if (panel_svg::loadRectFromSvgMm(panelBasePath, "CH4_PREVIEW", &previewOuterRectMm)) {
+				const math::Rect previewInnerRectMm = insetRectMm(previewOuterRectMm, 0.2f);
+				ch4Preview->box.pos = mm2px(previewInnerRectMm.pos);
+				ch4Preview->box.size = mm2px(previewInnerRectMm.size);
 			}
 			else {
-				math::Rect previewFallbackMm(Vec(77.52500000f, 68.96600100f), Vec(20.78393300f, 11.24562000f));
-				addChild(visual_assets::createPreviewFrameEnhancementWidget(previewFallbackMm));
-				previewFallbackMm = insetRectMm(previewFallbackMm, 0.2f);
-				ch4Preview->box.pos = mm2px(previewFallbackMm.pos);
-				ch4Preview->box.size = mm2px(previewFallbackMm.size);
+				previewOuterRectMm = math::Rect(
+					Vec(77.52500000f, 68.96600100f), Vec(20.78393300f, 11.24562000f));
+				const math::Rect previewInnerRectMm = insetRectMm(previewOuterRectMm, 0.2f);
+				ch4Preview->box.pos = mm2px(previewInnerRectMm.pos);
+				ch4Preview->box.size = mm2px(previewInnerRectMm.size);
 			}
-			widget::FramebufferWidget* previewSurface = preview_surface::createCachedOpaqueGrid(ch4Preview->box.size);
-			previewSurface->box.pos = ch4Preview->box.pos;
+			widget::FramebufferWidget* previewSurface = preview_surface::createCachedOpaqueGrid(
+				mm2px(previewOuterRectMm.size));
+			previewSurface->box.pos = mm2px(previewOuterRectMm.pos);
 			addChild(previewSurface);
+			addChild(visual_assets::createPreviewFrameEnhancementWidget(previewOuterRectMm));
 			addChild(ch4Preview);
 		}
 

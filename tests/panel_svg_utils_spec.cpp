@@ -442,6 +442,61 @@ TestResult testBifurxGlassPathParses() {
             " rounded=" + std::to_string(hasRoundedCurve ? 1 : 0)};
 }
 
+TestResult testPlasmaConduitAnchorConvention() {
+  struct PanelContract {
+    const char* path;
+    size_t expectedPaths;
+  };
+  const PanelContract panels[] = {
+    {"res/bifurx.panel.svg", 5u},
+    {"res/flux.panel.svg", 8u},
+  };
+
+  bool pass = true;
+  size_t totalPaths = 0u;
+  std::string firstFailure;
+  for (const PanelContract& panel : panels) {
+    std::vector<panel_svg::SvgPathMatch> paths;
+    std::string svgText;
+    const bool pathsOk = panel_svg::findPathsInGroupsWithIdSubstringMm(
+      panel.path, "plasma_conduit_anchors", &paths);
+    const bool textOk = readTextFile(panel.path, &svgText);
+    const size_t idPos = svgText.find("id=\"plasma_conduit_anchors\"");
+    const size_t groupStart = idPos == std::string::npos
+      ? std::string::npos : svgText.rfind("<g", idPos);
+    const size_t groupEnd = idPos == std::string::npos
+      ? std::string::npos : svgText.find('>', idPos);
+    const size_t hiddenPos = idPos == std::string::npos
+      ? std::string::npos : svgText.find("display:none", idPos);
+    const bool runtimeHidden = textOk
+      && groupStart != std::string::npos
+      && groupEnd != std::string::npos
+      && hiddenPos != std::string::npos
+      && hiddenPos < groupEnd;
+    const bool straightPaths = std::all_of(
+      paths.begin(), paths.end(), [](const panel_svg::SvgPathMatch& path) {
+        return path.commands.size() == 2u
+          && path.commands[0].type == panel_svg::SvgPathCommand::MoveTo
+          && path.commands[1].type == panel_svg::SvgPathCommand::LineTo;
+      });
+    const bool panelPass = pathsOk
+      && paths.size() == panel.expectedPaths
+      && straightPaths
+      && runtimeHidden;
+    if (!panelPass && firstFailure.empty()) {
+      firstFailure = panel.path;
+    }
+    totalPaths += paths.size();
+    pass = pass && panelPass;
+  }
+
+  return {"Plasma conduit anchor groups provide hidden straight centerlines", pass,
+          "panels=" + std::to_string(sizeof(panels) / sizeof(panels[0])) +
+            " paths=" + std::to_string(totalPaths) +
+            (firstFailure.empty() ? std::string() :
+              " firstFailure=" + firstFailure)};
+}
+
 TestResult testExactThemeGlassRoles() {
   using leviathan::theme::ThemeRole;
   std::vector<panel_svg::SvgRectMatch> rects;
@@ -493,6 +548,7 @@ int main() {
   tests.push_back(testTemporalDeckBrandingRasterAnchors());
   tests.push_back(testPerfectWaveBrandingDeploymentContract());
   tests.push_back(testBifurxGlassPathParses());
+  tests.push_back(testPlasmaConduitAnchorConvention());
   tests.push_back(testExactThemeGlassRoles());
 
   int failed = 0;
