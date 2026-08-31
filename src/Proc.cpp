@@ -238,6 +238,17 @@ struct Proc : Module {
 	static constexpr float PREVIEW_DOT_PUBLISH_INTERVAL = 1.f / 120.f;
 	static constexpr int KNOB_CURVE_LUT_SIZE = 4096;
 	std::array<float, KNOB_CURVE_LUT_SIZE> knobCurveLut {};
+	float cachedInjectSampleTime = -1.f;
+	float cachedInjectAlphaBase = 0.f;
+
+	float injectAlphaBaseForSampleTime(float sampleTime) {
+		if (std::fabs(sampleTime - cachedInjectSampleTime) > 1e-12f) {
+			cachedInjectSampleTime = sampleTime;
+			cachedInjectAlphaBase = SIGNAL_INJECT_GAIN *
+				clamp(1.f - std::exp(-sampleTime / SIGNAL_INJECT_TAU), 0.f, 1.f);
+		}
+		return cachedInjectAlphaBase;
+	}
 
 	static float bothHzFromCv(float v) {
 		float x = BOTH_K_OCT_PER_V * (v - BOTH_V0_V);
@@ -1055,8 +1066,7 @@ struct Proc : Module {
 		const bool bandlimitedSignal = bandlimitedSignalOutputs.load(std::memory_order_relaxed);
 		const bool bandlimitedGate = bandlimitedGateOutputs.load(std::memory_order_relaxed);
 		const bool timingInterpEnabled = timingInterpolate.load(std::memory_order_relaxed);
-		const float injectAlphaBase = SIGNAL_INJECT_GAIN *
-			clamp(1.f - std::exp(-args.sampleTime / SIGNAL_INJECT_TAU), 0.f, 1.f);
+		const float injectAlphaBase = injectAlphaBaseForSampleTime(args.sampleTime);
 		if (timingUpdateDiv > 1) {
 			timingUpdateCounter++;
 			if (timingUpdateCounter >= timingUpdateDiv) {
