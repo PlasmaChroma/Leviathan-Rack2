@@ -32,6 +32,11 @@ class NautiloidGpuPhase7ContractTest(unittest.TestCase):
         self.assertIn("logicalSize.x * maxDensity", SURFACE)
         self.assertIn("((requested + quantum - 1) / quantum) * quantum", SURFACE)
         self.assertIn("policy.maxDensity = 4.f;", WIDGET)
+        self.assertIn("kNautiloidSettledGpuDensity = 2.7f", WIDGET)
+        self.assertIn(
+            "policy.minDensity = interactionActive ? 0.25f : kNautiloidSettledGpuDensity;",
+            WIDGET,
+        )
 
     def test_only_active_prefix_is_rendered_and_sampled(self):
         render = section(WIDGET, "void renderGlContent(", "void drawFramebuffer() override")
@@ -66,6 +71,13 @@ class NautiloidGpuPhase7ContractTest(unittest.TestCase):
             self.assertIn(field, HEADER)
             self.assertIn(field, WIDGET)
         self.assertIn("gpuSurfaceRenders != lastLoggedGpuSurfaceRenders", WIDGET)
+
+    def test_all_fractal_interactions_drive_the_gpu_refinement_policy(self):
+        self.assertIn("gpuInteractionFlags", HEADER)
+        self.assertIn("kNautiloidGpuSliderInteraction", WIDGET)
+        self.assertIn("kNautiloidGpuPanInteraction", WIDGET)
+        self.assertIn("kNautiloidGpuWheelInteraction", WIDGET)
+        self.assertIn("lastInteractionActive && !interactionActive", WIDGET)
 
 
 if __name__ == "__main__":

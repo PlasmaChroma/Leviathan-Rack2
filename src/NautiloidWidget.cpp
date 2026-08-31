@@ -16,6 +16,10 @@ constexpr float kNautiloidWidthMm = 101.6f;
 constexpr float kNautiloidHeightMm = 128.5f;
 constexpr float kNautiloidMaxFractalZoom = nautiloid_location::kMaxZoom;
 constexpr float kNautiloidWheelZoomStep = 0.015f;
+constexpr float kNautiloidSettledGpuDensity = 2.7f;
+constexpr uint32_t kNautiloidGpuSliderInteraction = 1u << 0;
+constexpr uint32_t kNautiloidGpuPanInteraction = 1u << 1;
+constexpr uint32_t kNautiloidGpuWheelInteraction = 1u << 2;
 
 #define NAUTILOID_GLSL_STRINGIFY_DETAIL(x) #x
 #define NAUTILOID_GLSL_STRINGIFY(x) NAUTILOID_GLSL_STRINGIFY_DETAIL(x)
@@ -69,6 +73,15 @@ bool nautiloidRequestDue(double* lastRequestTime, double minIntervalSec) {
     return true;
   }
   return false;
+}
+
+void nautiloidSetGpuInteraction(Nautiloid* module, uint32_t flag, bool active) {
+  if (!module) return;
+  if (active) {
+    module->gpuInteractionFlags.fetch_or(flag, std::memory_order_relaxed);
+  } else {
+    module->gpuInteractionFlags.fetch_and(~flag, std::memory_order_relaxed);
+  }
 }
 
 bool nautiloidVisibleViewOutgrowsCache(Nautiloid* module, float threshold) {
@@ -584,7 +597,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
         dirty = true;
       }
       const bool interactionActive =
-        module->zoomInteractionActive.load(std::memory_order_relaxed);
+        module->gpuInteractionFlags.load(std::memory_order_relaxed) != 0u;
       if (lastInteractionActive && !interactionActive) {
         // If an interaction-density policy is introduced later, this edge
         // guarantees one full current-density refinement at the final state.
@@ -673,6 +686,12 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     // 400% Rack zoom validation range. Keep the shared 2x default for lighter
     // displays, but reserve 4x capacity here; only the active prefix is drawn.
     policy.maxDensity = 4.f;
+    const bool interactionActive =
+      module->gpuInteractionFlags.load(std::memory_order_relaxed) != 0u;
+    // The settled floor closely matches the CPU fallback's 768x512 sampling
+    // density at the module's logical display size. During motion, render at
+    // the current Rack density and refine into the back surface on release.
+    policy.minDensity = interactionActive ? 0.25f : kNautiloidSettledGpuDensity;
     const auto renderStart = std::chrono::steady_clock::now();
     const bool rendered = adaptiveSurface.renderIfNeeded(
       vg, box.size, rackZoom, pixelRatio, policy,
@@ -752,6 +771,7 @@ struct NautiloidDisplay final : OpaqueWidget {
     state.centerX = nautiloidClampDouble(focusX - double(cursorNorm.x * nextHalfSpan.x), -2.0, 2.0);
     state.centerY = nautiloidClampDouble(focusY - double(cursorNorm.y * nextHalfSpan.y), -2.0, 2.0);
     module->setFractalState(state);
+    nautiloidSetGpuInteraction(module, kNautiloidGpuWheelInteraction, true);
 
     const bool recenterCache = nextZoom < previousZoom && nautiloidVisibleViewOutgrowsCache(module, 0.78f);
     module->requestInteractiveZoomPreview(module->fractalCenterX, module->fractalCenterY, recenterCache);
@@ -761,6 +781,8 @@ struct NautiloidDisplay final : OpaqueWidget {
   }
 
   ~NautiloidDisplay() override {
+    nautiloidSetGpuInteraction(module,
+      kNautiloidGpuPanInteraction | kNautiloidGpuWheelInteraction, false);
     nvg_gfx_lifecycle::resetOwnedNvgImage(
       imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
   }
@@ -789,6 +811,7 @@ struct NautiloidDisplay final : OpaqueWidget {
   void onButton(const event::Button& e) override {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS && module) {
       panActive = true;
+      nautiloidSetGpuInteraction(module, kNautiloidGpuPanInteraction, true);
       lastPanLocal = currentLocalMousePos();
       e.consume(this);
       return;
@@ -796,6 +819,7 @@ struct NautiloidDisplay final : OpaqueWidget {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_RELEASE) {
       if (panActive && module) {
         panActive = false;
+        nautiloidSetGpuInteraction(module, kNautiloidGpuPanInteraction, false);
         module->requestRenderWithCenteredCache();
       }
     }
@@ -818,6 +842,7 @@ struct NautiloidDisplay final : OpaqueWidget {
   void onDragStart(const event::DragStart& e) override {
     if (module && e.button == GLFW_MOUSE_BUTTON_LEFT) {
       panActive = true;
+      nautiloidSetGpuInteraction(module, kNautiloidGpuPanInteraction, true);
       lastPanLocal = currentLocalMousePos();
       e.consume(this);
       return;
@@ -863,6 +888,7 @@ struct NautiloidDisplay final : OpaqueWidget {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT && panActive) {
       panActive = false;
       if (module) {
+        nautiloidSetGpuInteraction(module, kNautiloidGpuPanInteraction, false);
         module->requestRenderWithCenteredCache();
       }
       e.consume(this);
@@ -875,6 +901,7 @@ struct NautiloidDisplay final : OpaqueWidget {
     if (module && std::isfinite(wheelFinalRequestTime) &&
         system::getTime() >= wheelFinalRequestTime) {
       wheelFinalRequestTime = -INFINITY;
+      nautiloidSetGpuInteraction(module, kNautiloidGpuWheelInteraction, false);
       module->requestRenderWithCacheCenter(
         module->fractalCenterX,
         module->fractalCenterY,
@@ -1309,12 +1336,17 @@ struct NautiloidZoomSlider final : ui::Slider {
     }
   }
 
+  ~NautiloidZoomSlider() override {
+    nautiloidSetGpuInteraction(module, kNautiloidGpuSliderInteraction, false);
+  }
+
   void onButton(const event::Button& e) override {
     if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
       if (e.action == GLFW_PRESS) {
         zoomActive = true;
         if (module) {
           module->zoomInteractionActive.store(true, std::memory_order_relaxed);
+          nautiloidSetGpuInteraction(module, kNautiloidGpuSliderInteraction, true);
         }
         lastStepTime = system::getTime();
       } else if (e.action == GLFW_RELEASE) {
@@ -1329,6 +1361,7 @@ struct NautiloidZoomSlider final : ui::Slider {
       zoomActive = true;
       if (module) {
         module->zoomInteractionActive.store(true, std::memory_order_relaxed);
+        nautiloidSetGpuInteraction(module, kNautiloidGpuSliderInteraction, true);
       }
       lastStepTime = system::getTime();
     }
@@ -1368,6 +1401,8 @@ struct NautiloidZoomSlider final : ui::Slider {
     const bool interactionActive = zoomActive || (cvConnected && speedActive) || velocityActive;
     if (module) {
       module->zoomInteractionActive.store(interactionActive, std::memory_order_relaxed);
+      nautiloidSetGpuInteraction(
+        module, kNautiloidGpuSliderInteraction, interactionActive);
     }
     if (module && interactionActive) {
       if (!std::isfinite(lastStepTime)) {
@@ -1564,6 +1599,7 @@ struct NautiloidZoomSlider final : ui::Slider {
     lastRenderRequestTime = -INFINITY;
     if (module) {
       module->zoomInteractionActive.store(false, std::memory_order_relaxed);
+      nautiloidSetGpuInteraction(module, kNautiloidGpuSliderInteraction, false);
     }
     if (zoomSpeed) {
       zoomSpeed->setValue(0.5f);

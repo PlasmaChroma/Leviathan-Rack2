@@ -173,6 +173,7 @@ struct Nautiloid final : Module {
   std::atomic<bool> debugGpuPreviewAvailable {false};
   std::atomic<bool> cpuDisplayFallbackRequired {false};
   std::atomic<bool> zoomInteractionActive {false};
+  std::atomic<uint32_t> gpuInteractionFlags {0u};
   std::atomic<bool> displayRenderBusy {false};
   std::atomic<bool> forceIrisSourceSync {false};
   std::atomic<bool> loading {false};

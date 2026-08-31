@@ -53,13 +53,14 @@ It does not require changes to Integral Flux or Proc.
   it; this is accepted for the rarely used fallback path.
 - Phase 7 is complete: the GPU preview now uses the shared adaptive GL surface
   with Nautiloid-specific stable 4x-capacity front/back buffers, 16-pixel
-  active-extent quantization, active-prefix rendering, and context-safe recreation. It keeps
-  full current Rack density during interaction until telemetry demonstrates a
-  benefit from lowering it, and publishes surface render time, density, and
-  active/capacity dimensions to the fractal pipeline log.
+  active-extent quantization, active-prefix rendering, and context-safe
+  recreation. Fractal slider, pan, and wheel interaction render at current
+  Rack density, then refine to at least 2.7x density after settling. It
+  publishes surface render time, density, and active/capacity dimensions to the
+  fractal pipeline log.
 - Focused Phase 4-7 worker, runtime, cache-policy, adaptive-surface, and
-  lifecycle-contract tests
-  and the local Linux plugin build pass. Manual Rack zoom/context validation
+  lifecycle-contract tests and the local Linux plugin build pass. Manual Rack
+  zoom/context validation
   remains part of final acceptance.
   The native MINGW64 `test-fast` suite and authoritative Windows `plugin.dll`
   build passed through the original Phase 3 checkpoint; native validation of
