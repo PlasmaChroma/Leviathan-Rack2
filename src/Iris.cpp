@@ -199,7 +199,7 @@ void Iris::requestOwnedExpanderSource(
   lastExpanderSourceIdentity.store(sourceIdentity, std::memory_order_release);
   WorkerRequest request;
   request.type = REQUEST_EXPANDER_SOURCE;
-  request.ownedSource = std::move(source);
+  request.source = std::move(source);
   request.sourceGeneration = generation;
   request.settings = conversionSettings;
   submitRequest(request);
@@ -211,9 +211,9 @@ void Iris::requestReload() {
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
     if (currentSourceKind == iris::SOURCE_NAUTILOID_FRACTAL &&
-        iris::sourceHasNautiloidFractalParams(snapshotSourceField)) {
+        snapshotSource && iris::sourceHasNautiloidFractalParams(*snapshotSource)) {
       const iris::NautiloidFractalSourceParams params =
-        iris::nautiloidFractalParamsFromSource(snapshotSourceField);
+        iris::nautiloidFractalParamsFromSource(*snapshotSource);
       request.type = REQUEST_NAUTILOID_FRACTAL_SOURCE;
       request.nautiloidFractalMode = params.mode;
       request.nautiloidFractalColorMode = params.colorMode;
@@ -231,13 +231,13 @@ void Iris::requestReload() {
     request.path = path;
     {
       std::lock_guard<std::mutex> lock(snapshotMutex);
-      request.source = snapshotSourceField;
+      request.source = snapshotSource;
     }
   } else {
     std::lock_guard<std::mutex> lock(snapshotMutex);
-    if (!snapshotSourceField.valid()) return;
+    if (!snapshotSource || !snapshotSource->valid()) return;
     request.type = REQUEST_REBUILD_FROM_SOURCE;
-    request.source = snapshotSourceField;
+    request.source = snapshotSource;
   }
   submitRequest(request);
 }
@@ -248,9 +248,9 @@ void Iris::requestRebuild() {
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
     if (currentSourceKind == iris::SOURCE_NAUTILOID_FRACTAL &&
-        iris::sourceHasNautiloidFractalParams(snapshotSourceField)) {
+        snapshotSource && iris::sourceHasNautiloidFractalParams(*snapshotSource)) {
       const iris::NautiloidFractalSourceParams params =
-        iris::nautiloidFractalParamsFromSource(snapshotSourceField);
+        iris::nautiloidFractalParamsFromSource(*snapshotSource);
       request.type = REQUEST_NAUTILOID_FRACTAL_SOURCE;
       request.nautiloidFractalMode = params.mode;
       request.nautiloidFractalColorMode = params.colorMode;
@@ -258,12 +258,12 @@ void Iris::requestRebuild() {
       request.nautiloidFractalCenterX = params.centerX;
       request.nautiloidFractalCenterY = params.centerY;
       request.sourceGeneration = params.generation;
-    } else if (snapshotSourceField.valid()) {
+    } else if (snapshotSource && snapshotSource->valid()) {
       request.type = REQUEST_REBUILD_FROM_SOURCE;
-      request.source = snapshotSourceField;
-    } else if (!snapshotSourceField.sourcePath.empty()) {
+      request.source = snapshotSource;
+    } else if (snapshotSource && !snapshotSource->sourcePath.empty()) {
       request.type = REQUEST_IMPORT_IMAGE_FILE;
-      request.path = snapshotSourceField.sourcePath;
+      request.path = snapshotSource->sourcePath;
     } else if (!snapshotTable.sourcePath.empty()) {
       request.type = REQUEST_IMPORT_IMAGE_FILE;
       request.path = snapshotTable.sourcePath;
@@ -281,30 +281,35 @@ void Iris::clearToDefault() {
   submitRequest(request);
 }
 
-void Iris::publishWorkerResult(WorkerResult& result, int tableIndex) {
+bool Iris::publishWorkerResult(WorkerResult& result, int tableIndex, std::string diagnostic) {
   if (tableIndex < 0 || tableIndex >= int(tableBuffers.size()) || !tableBuffers[size_t(tableIndex)].valid()) {
-    return;
+    return false;
   }
   const iris::ImageWavetable& table = tableBuffers[size_t(tableIndex)];
+  iris::ImageWavetable nextSnapshotTable = table;
+  std::vector<uint8_t> nextPreview;
+  buildPreview(table, &nextPreview);
+  const bool reportFailure = !diagnostic.empty();
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
-    if (result.hasSource) {
-      snapshotSourceField = result.source;
+    if (result.source) {
+      snapshotSource = std::move(result.source);
     } else if (!result.preserveExistingSource) {
-      snapshotSourceField = iris::SourceField();
+      snapshotSource.reset();
     }
     if (!result.preserveExistingSource) {
       currentSourceKind = result.sourceKind;
       activeSourceKind.store(currentSourceKind, std::memory_order_release);
     }
-    snapshotTable = table;
-    buildPreview(snapshotTable, &snapshotPreview);
-    lastError.clear();
+    snapshotTable = std::move(nextSnapshotTable);
+    snapshotPreview = std::move(nextPreview);
+    lastError = std::move(diagnostic);
   }
   pendingTableIndex.store(tableIndex, std::memory_order_release);
   previewGeneration.fetch_add(1u, std::memory_order_release);
   loading.store(false, std::memory_order_release);
-  loadFailed.store(false, std::memory_order_release);
+  loadFailed.store(reportFailure, std::memory_order_release);
+  return true;
 }
 
 void Iris::workerLoop() {
@@ -344,23 +349,26 @@ void Iris::workerLoop() {
         iris::SourceField source;
         ok = iris::loadSourceField(request.path, &source, &error);
         if (ok) {
-          source.sourcePath = request.source.sourcePath;
-          source.sourceName = request.source.sourceName;
-          source.originalWidth = request.source.originalWidth;
-          source.originalHeight = request.source.originalHeight;
-          source.originalChannels = request.source.originalChannels;
+          if (request.source) {
+            source.sourcePath = request.source->sourcePath;
+            source.sourceName = request.source->sourceName;
+            source.originalWidth = request.source->originalWidth;
+            source.originalHeight = request.source->originalHeight;
+            source.originalChannels = request.source->originalChannels;
+          }
           ok = iris::buildWavetableFromSourceField(source, request.settings, buildTable, &error);
-          result.source = std::move(source);
-          result.hasSource = ok;
+          if (ok) result.source = std::make_shared<const iris::SourceField>(std::move(source));
           result.sourceKind = iris::SOURCE_IMAGE;
         }
       } else if (request.type == REQUEST_REBUILD_FROM_SOURCE) {
-        ok = iris::buildWavetableFromSourceField(request.source, request.settings, buildTable, &error);
+        ok = request.source && request.source->valid() &&
+          iris::buildWavetableFromSourceField(*request.source, request.settings, buildTable, &error);
+        if (!request.source || !request.source->valid()) error = "Invalid retained source";
         result.preserveExistingSource = true;
       } else if (request.type == REQUEST_EXPANDER_SOURCE) {
         const iris::SourceField* source = nullptr;
-        if (request.ownedSource && request.ownedSource->valid()) {
-          source = request.ownedSource.get();
+        if (request.source && request.source->valid()) {
+          source = request.source.get();
         } else if (request.sourceSlot &&
                    request.sourceSlot->generation.load(std::memory_order_acquire) == request.sourceGeneration &&
                    request.sourceSlot->source.valid()) {
@@ -368,13 +376,18 @@ void Iris::workerLoop() {
         }
         if (source) {
           ok = iris::buildWavetableFromSourceField(*source, request.settings, buildTable, &error);
-          result.source = *source;
-          result.source.sourcePath.clear();
-          if (result.source.sourceName.empty()) {
-            result.source.sourceName = "Nautiloid";
+          if (ok && request.source && request.source->sourcePath.empty() &&
+              !request.source->sourceName.empty()) {
+            result.source = request.source;
+          } else if (ok) {
+            iris::SourceField publishedSource = *source;
+            publishedSource.sourcePath.clear();
+            if (publishedSource.sourceName.empty()) {
+              publishedSource.sourceName = "Nautiloid";
+            }
+            result.source = std::make_shared<const iris::SourceField>(std::move(publishedSource));
           }
-          result.hasSource = ok;
-          result.sourceKind = iris::sourceHasNautiloidFractalParams(result.source)
+          result.sourceKind = iris::sourceHasNautiloidFractalParams(*source)
             ? iris::SOURCE_NAUTILOID_FRACTAL
             : iris::SOURCE_EXPANDER_IMAGE;
         } else {
@@ -392,8 +405,7 @@ void Iris::workerLoop() {
         ok = iris::makeNautiloidIrisSource(params, &source, &error);
         if (ok) {
           ok = iris::buildWavetableFromSourceField(source, request.settings, buildTable, &error);
-          result.source = std::move(source);
-          result.hasSource = ok;
+          if (ok) result.source = std::make_shared<const iris::SourceField>(std::move(source));
           result.sourceKind = iris::SOURCE_NAUTILOID_FRACTAL;
         }
       } else if (request.type == REQUEST_RELOAD_IMAGE_FILE) {
@@ -401,12 +413,11 @@ void Iris::workerLoop() {
         ok = iris::importImageFileToSourceField(request.path, &source, &error);
         if (ok) {
           ok = iris::buildWavetableFromSourceField(source, request.settings, buildTable, &error);
-          result.source = std::move(source);
-          result.hasSource = ok;
+          if (ok) result.source = std::make_shared<const iris::SourceField>(std::move(source));
           result.sourceKind = iris::SOURCE_IMAGE;
-        } else if (request.source.valid()) {
+        } else if (request.source && request.source->valid()) {
           const std::string reloadError = error;
-          ok = iris::buildWavetableFromSourceField(request.source, request.settings, buildTable, &error);
+          ok = iris::buildWavetableFromSourceField(*request.source, request.settings, buildTable, &error);
           result.preserveExistingSource = true;
           if (ok && !reloadError.empty()) {
             error = reloadError;
@@ -417,8 +428,7 @@ void Iris::workerLoop() {
         ok = iris::importImageFileToSourceField(request.path, &source, &error);
         if (ok) {
           ok = iris::buildWavetableFromSourceField(source, request.settings, buildTable, &error);
-          result.source = std::move(source);
-          result.hasSource = ok;
+          if (ok) result.source = std::make_shared<const iris::SourceField>(std::move(source));
           result.sourceKind = iris::SOURCE_IMAGE;
         }
       } else {
@@ -445,7 +455,8 @@ void Iris::workerLoop() {
           request.type == REQUEST_REBUILD_FROM_SOURCE &&
           requestPending &&
           workerRequest.type == REQUEST_REBUILD_FROM_SOURCE &&
-          request.source.sourcePath == workerRequest.source.sourcePath;
+          request.source && workerRequest.source &&
+          request.source->sourcePath == workerRequest.source->sourcePath;
         const bool publishIntermediateExpander =
           request.type == REQUEST_EXPANDER_SOURCE &&
           requestPending &&
@@ -459,9 +470,13 @@ void Iris::workerLoop() {
         }
       }
     }
-    if (ok) {
+    iris_worker::CompletionKind completion = iris_worker::classifyCompletion(ok, error);
+    if (iris_worker::shouldPublish(completion)) {
       try {
-        publishWorkerResult(result, tableIndex);
+        if (!publishWorkerResult(result, tableIndex, error)) {
+          error = "Worker produced an invalid wavetable";
+          ok = false;
+        }
       } catch (const std::bad_alloc&) {
         error = "Table publication allocation failed";
         ok = false;
@@ -472,16 +487,10 @@ void Iris::workerLoop() {
         error = "Unexpected table publication failure";
         ok = false;
       }
+      completion = iris_worker::classifyCompletion(ok, error);
     }
-    if (!ok) {
-      if (request.type != REQUEST_DEFAULT) {
-        WorkerResult fallback;
-        *buildTable = iris::makeDefaultTable();
-        try {
-          publishWorkerResult(fallback, tableIndex);
-        } catch (...) {
-        }
-      }
+    if (!iris_worker::shouldPublish(completion)) {
+      if (error.empty()) error = "Image worker request failed";
       {
         std::lock_guard<std::mutex> lock(snapshotMutex);
         lastError = error;
@@ -660,9 +669,9 @@ void Iris::onAdd(const AddEvent& e) {
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
     if (currentSourceKind == iris::SOURCE_NAUTILOID_FRACTAL &&
-        iris::sourceHasNautiloidFractalParams(snapshotSourceField)) {
+        snapshotSource && iris::sourceHasNautiloidFractalParams(*snapshotSource)) {
       const iris::NautiloidFractalSourceParams params =
-        iris::nautiloidFractalParamsFromSource(snapshotSourceField);
+        iris::nautiloidFractalParamsFromSource(*snapshotSource);
       request.type = REQUEST_NAUTILOID_FRACTAL_SOURCE;
       request.nautiloidFractalMode = params.mode;
       request.nautiloidFractalColorMode = params.colorMode;
@@ -673,7 +682,7 @@ void Iris::onAdd(const AddEvent& e) {
       submitRequest(request);
       return;
     }
-    request.source = snapshotSourceField;
+    request.source = snapshotSource;
   }
   if (embedSource && !directory.empty()) {
     const std::string sourcePath = system::join(directory, kEmbeddedSourceName);
@@ -684,9 +693,9 @@ void Iris::onAdd(const AddEvent& e) {
       return;
     }
   }
-  if (!request.source.sourcePath.empty()) {
+  if (request.source && !request.source->sourcePath.empty()) {
     request.type = REQUEST_IMPORT_IMAGE_FILE;
-    request.path = request.source.sourcePath;
+    request.path = request.source->sourcePath;
     submitRequest(request);
   }
 }
@@ -708,15 +717,15 @@ void Iris::onSave(const SaveEvent& e) {
     }
   }
   if (!embedSource) return;
-  iris::SourceField source;
+  SourcePtr source;
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
-    source = snapshotSourceField;
+    source = snapshotSource;
   }
-  if (!source.valid()) return;
+  if (!source || !source->valid()) return;
   const std::string directory = createPatchStorageDirectory();
   std::string error;
-  if (!iris::saveSourceField(system::join(directory, kEmbeddedSourceName), source, &error)) {
+  if (!iris::saveSourceField(system::join(directory, kEmbeddedSourceName), *source, &error)) {
     WARN("Iris: failed to save embedded source field: %s", error.c_str());
   }
 }
@@ -726,11 +735,12 @@ json_t* Iris::dataToJson() {
   json_object_set_new(root, "version", json_integer(2));
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
-    const std::string sourcePath = snapshotSourceField.sourcePath.empty() ? snapshotTable.sourcePath : snapshotSourceField.sourcePath;
-    const std::string sourceName = snapshotSourceField.sourceName.empty() ? snapshotTable.sourceName : snapshotSourceField.sourceName;
-    const int sourceWidth = snapshotSourceField.originalWidth > 0 ? snapshotSourceField.originalWidth : snapshotTable.sourceWidth;
-    const int sourceHeight = snapshotSourceField.originalHeight > 0 ? snapshotSourceField.originalHeight : snapshotTable.sourceHeight;
-    const int sourceChannels = snapshotSourceField.originalChannels > 0 ? snapshotSourceField.originalChannels : snapshotTable.sourceChannels;
+    const iris::SourceField* source = snapshotSource.get();
+    const std::string sourcePath = source && !source->sourcePath.empty() ? source->sourcePath : snapshotTable.sourcePath;
+    const std::string sourceName = source && !source->sourceName.empty() ? source->sourceName : snapshotTable.sourceName;
+    const int sourceWidth = source && source->originalWidth > 0 ? source->originalWidth : snapshotTable.sourceWidth;
+    const int sourceHeight = source && source->originalHeight > 0 ? source->originalHeight : snapshotTable.sourceHeight;
+    const int sourceChannels = source && source->originalChannels > 0 ? source->originalChannels : snapshotTable.sourceChannels;
     const bool sourceIsNautiloid =
       currentSourceKind == iris::SOURCE_EXPANDER_IMAGE ||
       currentSourceKind == iris::SOURCE_NAUTILOID_FRACTAL;
@@ -744,21 +754,21 @@ json_t* Iris::dataToJson() {
     json_object_set_new(root, "sourceChannels", json_integer(sourceChannels));
     json_object_set_new(root, "rowCount", json_integer(snapshotTable.rowCount));
     if (currentSourceKind == iris::SOURCE_NAUTILOID_FRACTAL &&
-        iris::sourceHasNautiloidFractalParams(snapshotSourceField)) {
+        source && iris::sourceHasNautiloidFractalParams(*source)) {
       json_object_set_new(root, "nautiloidFractalVersion",
-                          json_integer(snapshotSourceField.generatorVersion));
+                          json_integer(source->generatorVersion));
       json_object_set_new(root, "nautiloidFractalMode",
-                          json_integer(snapshotSourceField.generatorFractalMode));
+                          json_integer(source->generatorFractalMode));
       json_object_set_new(root, "nautiloidFractalZoom",
-                          json_real(snapshotSourceField.generatorFractalZoom));
+                          json_real(source->generatorFractalZoom));
       json_object_set_new(root, "nautiloidFractalCenterX",
-                          json_real(snapshotSourceField.generatorFractalCenterX));
+                          json_real(source->generatorFractalCenterX));
       json_object_set_new(root, "nautiloidFractalCenterY",
-                          json_real(snapshotSourceField.generatorFractalCenterY));
+                          json_real(source->generatorFractalCenterY));
       json_object_set_new(root, "nautiloidFractalColorMode",
-                          json_integer(snapshotSourceField.generatorFractalColorMode));
+                          json_integer(source->generatorFractalColorMode));
       json_object_set_new(root, "nautiloidFractalGeneration",
-                          json_integer(json_int_t(snapshotSourceField.generatorGeneration)));
+                          json_integer(json_int_t(source->generatorGeneration)));
     }
   }
   json_t* conversion = json_object();
@@ -844,52 +854,56 @@ void Iris::dataFromJson(json_t* root) {
   if ((sourcePathJ && json_is_string(sourcePathJ)) || (sourceNameJ && json_is_string(sourceNameJ)) ||
       sourceWidthJ || sourceHeightJ || sourceChannelsJ) {
     std::lock_guard<std::mutex> lock(snapshotMutex);
+    iris::SourceField source = snapshotSource ? *snapshotSource : iris::SourceField();
     if (sourcePathJ && json_is_string(sourcePathJ)) {
       snapshotTable.sourcePath = json_string_value(sourcePathJ);
-      snapshotSourceField.sourcePath = json_string_value(sourcePathJ);
+      source.sourcePath = json_string_value(sourcePathJ);
     }
     if (sourceNameJ && json_is_string(sourceNameJ)) {
       snapshotTable.sourceName = json_string_value(sourceNameJ);
-      snapshotSourceField.sourceName = json_string_value(sourceNameJ);
+      source.sourceName = json_string_value(sourceNameJ);
     }
-    snapshotSourceField.originalWidth = jsonIntegerOr(root, "sourceWidth", 0);
-    snapshotSourceField.originalHeight = jsonIntegerOr(root, "sourceHeight", 0);
-    snapshotSourceField.originalChannels = jsonIntegerOr(root, "sourceChannels", 0);
+    source.originalWidth = jsonIntegerOr(root, "sourceWidth", 0);
+    source.originalHeight = jsonIntegerOr(root, "sourceHeight", 0);
+    source.originalChannels = jsonIntegerOr(root, "sourceChannels", 0);
     if (currentSourceKind == iris::SOURCE_NAUTILOID_FRACTAL) {
-      snapshotSourceField.generatorKind = iris::SOURCE_GENERATOR_NAUTILOID_FRACTAL;
-      snapshotSourceField.generatorVersion =
+      source.generatorKind = iris::SOURCE_GENERATOR_NAUTILOID_FRACTAL;
+      source.generatorVersion =
         jsonIntegerOr(root, "nautiloidFractalVersion", iris::kNautiloidFractalSourceVersion);
-      snapshotSourceField.generatorFractalMode =
+      source.generatorFractalMode =
         jsonIntegerOr(root, "nautiloidFractalMode", iris::FRACTAL_MANDELBROT);
-      snapshotSourceField.generatorFractalZoom =
+      source.generatorFractalZoom =
         clamp(jsonRealOr(root, "nautiloidFractalZoom", 0.f), 0.f, 5.f);
-      snapshotSourceField.generatorFractalCenterX =
+      source.generatorFractalCenterX =
         clamp(jsonRealOr(root, "nautiloidFractalCenterX", 0.f), -2.f, 2.f);
-      snapshotSourceField.generatorFractalCenterY =
+      source.generatorFractalCenterY =
         clamp(jsonRealOr(root, "nautiloidFractalCenterY", 0.f), -2.f, 2.f);
-      snapshotSourceField.generatorFractalColorMode = nautiloid_color::normalize(
+      source.generatorFractalColorMode = nautiloid_color::normalize(
         jsonIntegerOr(root, "nautiloidFractalColorMode", nautiloid_color::PRISM));
       json_t* generationJ = json_object_get(root, "nautiloidFractalGeneration");
       if (generationJ && json_is_integer(generationJ)) {
         const json_int_t generation = json_integer_value(generationJ);
-        snapshotSourceField.generatorGeneration = generation > 0 ? uint64_t(generation) : 0u;
+        source.generatorGeneration = generation > 0 ? uint64_t(generation) : 0u;
       }
-      if (!iris::sourceHasNautiloidFractalParams(snapshotSourceField)) {
+      if (!iris::sourceHasNautiloidFractalParams(source)) {
         currentSourceKind = iris::SOURCE_IMAGE;
         activeSourceKind.store(currentSourceKind, std::memory_order_release);
       }
     }
+    snapshotSource = std::make_shared<const iris::SourceField>(std::move(source));
   }
 }
 
 std::string Iris::sourceName() const {
   std::lock_guard<std::mutex> lock(snapshotMutex);
-  return snapshotSourceField.sourceName.empty() ? snapshotTable.sourceName : snapshotSourceField.sourceName;
+  return !snapshotSource || snapshotSource->sourceName.empty()
+    ? snapshotTable.sourceName : snapshotSource->sourceName;
 }
 
 std::string Iris::sourcePath() const {
   std::lock_guard<std::mutex> lock(snapshotMutex);
-  return snapshotSourceField.sourcePath.empty() ? snapshotTable.sourcePath : snapshotSourceField.sourcePath;
+  return !snapshotSource || snapshotSource->sourcePath.empty()
+    ? snapshotTable.sourcePath : snapshotSource->sourcePath;
 }
 
 int Iris::sourceKind() const {
@@ -906,7 +920,7 @@ std::string Iris::statusText() const {
   std::lock_guard<std::mutex> lock(snapshotMutex);
   if (!lastError.empty()) return "Load failed";
   if (!snapshotTable.valid()) return "No image";
-  if (!snapshotSourceField.valid() && snapshotTable.sourcePath.empty()) return "Default";
+  if ((!snapshotSource || !snapshotSource->valid()) && snapshotTable.sourcePath.empty()) return "Default";
   return std::to_string(snapshotTable.rowCount) + " x " + std::to_string(snapshotTable.frameSize);
 }
 
@@ -934,16 +948,26 @@ void Iris::previewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height
 }
 
 void Iris::sourcePreviewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const {
-  std::lock_guard<std::mutex> lock(snapshotMutex);
-  const size_t previewPixels =
-    size_t(snapshotTable.sourcePreviewWidth) * size_t(snapshotTable.sourcePreviewHeight);
-  if (previewPixels > 0u && snapshotTable.sourcePreviewRgb.size() == previewPixels * 3u) {
-    if (pixels) *pixels = snapshotTable.sourcePreviewRgb;
-    if (width) *width = snapshotTable.sourcePreviewWidth;
-    if (height) *height = snapshotTable.sourcePreviewHeight;
-    return;
+  SourcePtr source;
+  {
+    std::lock_guard<std::mutex> lock(snapshotMutex);
+    const size_t previewPixels =
+      size_t(snapshotTable.sourcePreviewWidth) * size_t(snapshotTable.sourcePreviewHeight);
+    if (previewPixels > 0u && snapshotTable.sourcePreviewRgb.size() == previewPixels * 3u) {
+      if (pixels) *pixels = snapshotTable.sourcePreviewRgb;
+      if (width) *width = snapshotTable.sourcePreviewWidth;
+      if (height) *height = snapshotTable.sourcePreviewHeight;
+      return;
+    }
+    source = snapshotSource;
   }
-  iris::buildDisplayRgb8FromSourceField(snapshotSourceField, pixels, width, height);
+  if (source) {
+    iris::buildDisplayRgb8FromSourceField(*source, pixels, width, height);
+  } else {
+    if (pixels) pixels->clear();
+    if (width) *width = 0;
+    if (height) *height = 0;
+  }
 }
 
 void Iris::waveformSnapshot(float scan, int sampleCount, std::vector<float>* samples) const {

@@ -30,14 +30,14 @@ int main() {
   Coordinator coordinator;
   const uint64_t display1 = coordinator.allocateDisplaySerial();
   check("no consumer rejects ordinary Iris work",
-    coordinator.allocateIrisSerial(InteractionPhase::Final, false, 1000) == 0u);
+    coordinator.allocateIrisSerial(InteractionPhase::Final, false) == 0u);
   const uint64_t display2 = coordinator.allocateDisplaySerial();
   check("display serial advances without advancing Iris", display1 == 1u && display2 == 2u);
 
   check("retained image source is not a consuming Iris",
     !coordinator.setIrisConsumerDemand(IrisConsumerDemand::RetainImageSource) &&
-    coordinator.allocateIrisSerial(InteractionPhase::Final, false, 1000) == 0u);
-  const uint64_t forced = coordinator.allocateIrisSerial(InteractionPhase::Final, true, 1000);
+    coordinator.allocateIrisSerial(InteractionPhase::Final, false) == 0u);
+  const uint64_t forced = coordinator.allocateIrisSerial(InteractionPhase::Final, true);
   check("forced sync bypasses demand gating", forced == 1u);
 
   check("becoming a consumer requests an idle sync",
@@ -45,23 +45,31 @@ int main() {
   check("repeating consuming demand does not request another idle sync",
     !coordinator.setIrisConsumerDemand(IrisConsumerDemand::AcceptUpdates));
 
-  const uint64_t preview1 = coordinator.allocateIrisSerial(InteractionPhase::Preview, false, 2000);
-  const uint64_t suppressedPreview = coordinator.allocateIrisSerial(InteractionPhase::Preview, false, 2100);
-  const uint64_t preview2 = coordinator.allocateIrisSerial(InteractionPhase::Preview, false, 2140);
-  check("interactive Iris previews use the centralized cadence",
-    preview1 == 2u && suppressedPreview == 0u && preview2 == 3u);
+  const uint64_t preview1 = coordinator.allocateIrisSerial(InteractionPhase::Preview, false);
+  check("the worker can activate the first offered preview immediately",
+    preview1 == 2u && coordinator.activateIrisPreviewSerial(preview1));
+  const uint64_t pendingPreview1 = coordinator.allocateIrisSerial(InteractionPhase::Preview, false);
+  const uint64_t pendingPreview2 = coordinator.allocateIrisSerial(InteractionPhase::Preview, false);
+  check("new preview offers do not cancel active work",
+    pendingPreview1 == 3u && pendingPreview2 == 4u &&
+    coordinator.isCurrentIrisSerial(preview1));
+  check("the worker activates the newest coalesced preview after completion",
+    coordinator.activateIrisPreviewSerial(pendingPreview2) &&
+    coordinator.isCurrentIrisSerial(pendingPreview2));
+  check("an overwritten pending preview cannot activate later",
+    !coordinator.activateIrisPreviewSerial(pendingPreview1));
 
-  const uint64_t finalSerial = coordinator.allocateIrisSerial(InteractionPhase::Final, false, 2140);
-  check("final interaction always receives an authoritative serial", finalSerial == 4u);
+  const uint64_t finalSerial = coordinator.allocateIrisSerial(InteractionPhase::Final, false);
+  check("final interaction immediately receives cancellation authority", finalSerial == 5u);
   check("superseded Iris publications are rejected",
-    !coordinator.isNewestIrisSerial(preview2) && coordinator.isNewestIrisSerial(finalSerial));
+    !coordinator.isCurrentIrisSerial(pendingPreview2) && coordinator.isCurrentIrisSerial(finalSerial));
   check("display and Iris serial spaces remain independent",
     coordinator.allocateDisplaySerial() == 3u &&
-    coordinator.allocateIrisSerial(InteractionPhase::Final, false, 2140) == 5u);
-  const uint64_t activeSerial = coordinator.newestIrisSerial();
+    coordinator.allocateIrisSerial(InteractionPhase::Final, false) == 6u);
+  const uint64_t activeSerial = coordinator.currentIrisSerial();
   coordinator.setIrisConsumerDemand(IrisConsumerDemand::RetainImageSource);
   check("ending Iris demand cancels an in-flight ordinary request",
-    !coordinator.isNewestIrisSerial(activeSerial));
+    !coordinator.isCurrentIrisSerial(activeSerial));
 
   const uint64_t activeDisplaySerial = coordinator.allocateDisplaySerial();
   coordinator.invalidateDisplayRequests();

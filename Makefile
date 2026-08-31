@@ -115,6 +115,8 @@ TEST_BINS_NON_RACK := \
 	build/tests/umi_engine_spec \
 	build/tests/aperture_light_transfer_spec \
 	build/tests/iris_wavetable_spec \
+	build/tests/iris_worker_completion_spec \
+	build/tests/iris_module_phase4_spec \
 	build/tests/nautiloid_request_coordinator_spec \
 	build/tests/nautiloid_location_code_spec \
 	build/tests/integral_flux_runtime_spec \
@@ -436,6 +438,8 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/umi_engine_spec)
 	$(call run_test_bin,build/tests/aperture_light_transfer_spec)
 	$(call run_test_bin,build/tests/iris_wavetable_spec)
+	$(call run_test_bin,build/tests/iris_worker_completion_spec)
+	$(call run_rack_test_bin,build/tests/iris_module_phase4_spec)
 	$(call run_test_bin,build/tests/nautiloid_request_coordinator_spec)
 	$(call run_test_bin,build/tests/nautiloid_location_code_spec)
 	$(call run_rack_test_bin,build/tests/integral_flux_runtime_spec)
@@ -628,6 +632,12 @@ build/tests/aperture_light_transfer_spec: tests/aperture_light_transfer_spec.cpp
 
 build/tests/iris_wavetable_spec: tests/iris_wavetable_spec.cpp src/IrisWavetable.hpp src/IrisPolyphony.hpp src/IrisIO.cpp src/IrisIO.hpp src/IrisSourceField.cpp src/IrisSourceField.hpp | build/tests
 	$(CXX) -std=c++11 -O3 -Wall -Wextra -I$(RACK_DIR)/dep/include tests/iris_wavetable_spec.cpp src/IrisIO.cpp src/IrisSourceField.cpp -o $@
+
+build/tests/iris_worker_completion_spec: tests/iris_worker_completion_spec.cpp src/IrisWorkerCompletion.hpp | build/tests
+	$(CXX) -std=c++11 -O3 -Wall -Wextra $< -o $@
+
+build/tests/iris_module_phase4_spec: tests/iris_module_phase4_spec.cpp src/Iris.cpp src/Iris.hpp src/IrisIO.cpp src/IrisSourceField.cpp | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-unused-parameter -DLEVIATHAN_IRIS_PHASE4_TEST=1 -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/iris_module_phase4_spec.cpp src/Iris.cpp src/IrisIO.cpp src/IrisSourceField.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 build/tests/nautiloid_request_coordinator_spec: tests/nautiloid_request_coordinator_spec.cpp src/NautiloidRequestCoordinator.hpp src/NautiloidFractal.hpp | build/tests
 	$(CXX) -std=c++17 -O3 -Wall -Wextra tests/nautiloid_request_coordinator_spec.cpp -o $@

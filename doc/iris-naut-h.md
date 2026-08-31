@@ -20,15 +20,24 @@ It does not require changes to Integral Flux or Proc.
 - Phase 0 instrumentation is in place; the complete manual baseline scenario
   capture remains part of final validation.
 - Phase 1 is complete: display and Iris requests have independent identities,
-  Iris work is demand-gated, interaction updates use the centralized 140 ms
-  cadence, and stale Iris work is cancellable between rows.
+  Iris work is demand-gated, interaction updates use worker-paced one-active/
+  newest-pending coalescing, and final or invalidated Iris work is cancellable
+  between rows.
 - Phase 2 is complete: CPU fallback workers start lazily, park/wake without UI
   thread joins, and join only during module destruction.
 - Phase 3 is complete: Nautiloid follows the shared GL lifecycle pattern,
   forgets stale context-owned names safely, validates ready shader programs,
   and retries initialization after context recreation.
-- The native MINGW64 `test-fast` suite and authoritative Windows `plugin.dll`
-  build pass through Phase 3. Phase 4 is the next implementation phase.
+- Phase 4 is complete: failed Iris worker requests preserve the published
+  table/source/preview, missing-file reloads can rebuild the retained source
+  while keeping the read error visible, preview construction occurs outside
+  the snapshot lock, and rebuild/reload requests share immutable source
+  ownership instead of copying canonical pixels.
+- Focused Phase 4 worker/runtime tests and the local Linux plugin build pass.
+  The native MINGW64 `test-fast` suite and authoritative Windows `plugin.dll`
+  build passed through the original Phase 3 checkpoint; native validation of
+  the worker-paced Phase 1 follow-up and Phase 4 remains pending where the
+  documented Windows bridge is available. Phase 5 is next.
 
 ## Current architecture
 
@@ -167,24 +176,31 @@ Recommended initial behavior:
 
 - GPU/CPU display previews remain responsive at their existing cadence.
 - With no consuming Iris, submit no Iris work during or after interaction.
-- With a consuming Iris, allow intermediate Iris updates at a slower,
-  independent cadence (start with 125-150 ms).
+- With a consuming Iris, offer intermediate states independently of display
+  rendering. Keep at most one active render and one coalesced newest pending
+  state, allowing the worker to begin the pending state immediately when it
+  becomes idle.
 - On drag/slider/wheel completion, always submit one authoritative Iris request
   when Iris demand is active.
 - Color-only changes reuse the canonical uncolored Iris source and publish a
   newly colored source without rerunning the fractal solver.
 
-Centralize this cadence rather than maintaining unrelated timing behavior in
-the slider, wheel, and pan widgets. A module method accepting an interaction
-phase (`Preview` or `Final`) is preferable to each widget deciding whether to
-submit worker work.
+Centralize this scheduling rather than maintaining unrelated timing behavior
+in the slider, wheel, and pan widgets. Preview offers must not cancel the
+single active preview merely because a newer state is pending; otherwise fast
+input can starve a slower renderer. A final request still supersedes active
+preview work immediately. A module method accepting an interaction phase
+(`Preview` or `Final`) is preferable to each widget deciding worker policy.
 
 ### Stale cancellation
 
 Latest-request-wins queuing prevents a backlog but does not stop a source that
 is already rendering. Add a cheap cancellation check at least once per output
 row in the offline fractal generator. The check should compare the request's
-Iris serial with the newest desired serial and also honor module shutdown.
+Iris serial with the current cancellation authority and also honor module
+shutdown. A merely pending preview does not take that authority until the
+worker activates it; a final request or lifecycle invalidation does so
+immediately.
 
 Avoid `std::function` in the inner pixel path. A small cancellation token,
 function pointer plus context, or a dedicated cancellable worker overload is
@@ -196,6 +212,8 @@ iteration.
 - Zooming Nautiloid with no Iris attached produces zero Iris renders.
 - An attached Iris receives monotonic generations.
 - A superseded Iris render cannot publish after a newer result.
+- Continuous movement runs at worker capacity without a fixed producer-side
+  delay or an unbounded request backlog.
 - Interaction end produces the exact final Nautiloid state in Iris.
 - Color changes do not rerun canonical fractal iteration when geometry is
   unchanged.

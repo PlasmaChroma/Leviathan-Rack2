@@ -2,7 +2,6 @@
 
 #include <atomic>
 #include <cstdint>
-#include <limits>
 
 namespace nautiloid_requests {
 
@@ -59,8 +58,6 @@ private:
 // Serial zero is reserved for "not submitted".
 class Coordinator {
 public:
-  static constexpr int64_t kIrisPreviewCadenceMs = 140;
-
   bool setIrisConsumerDemand(IrisConsumerDemand next) {
     int previousValue = irisConsumerDemand.load(std::memory_order_acquire);
     while (previousValue != int(next) && !irisConsumerDemand.compare_exchange_weak(
@@ -95,60 +92,61 @@ public:
 
   uint64_t allocateIrisSerial(
     InteractionPhase phase,
-    bool force,
-    int64_t nowMs) {
+    bool force) {
     if (!force && currentIrisConsumerDemand() != IrisConsumerDemand::AcceptUpdates) {
-      return 0u;
-    }
-    if (phase == InteractionPhase::Preview && !claimPreviewCadence(nowMs)) {
       return 0u;
     }
 
     const uint64_t serial = nextIrisSerial.fetch_add(1u, std::memory_order_acq_rel) + 1u;
-    publishNewestIrisSerial(serial);
+    // Preview offers are only pending states. They must not invalidate the
+    // preview already using the single Iris worker. Final work takes immediate
+    // cancellation authority so interaction completion cannot be delayed by a
+    // superseded preview.
+    if (phase == InteractionPhase::Final) {
+      publishIrisAuthoritySerial(serial);
+    }
     return serial;
+  }
+
+  // Called by the single Iris worker when a coalesced preview actually becomes
+  // active. A newer final request or lifecycle invalidation wins immediately.
+  bool activateIrisPreviewSerial(uint64_t serial) {
+    if (serial == 0u) return false;
+    uint64_t newest = currentIrisAuthoritySerial.load(std::memory_order_acquire);
+    while (newest < serial) {
+      if (currentIrisAuthoritySerial.compare_exchange_weak(
+          newest, serial, std::memory_order_acq_rel, std::memory_order_acquire)) {
+        return true;
+      }
+    }
+    return newest == serial;
   }
 
   void invalidateIrisRequests() {
     const uint64_t serial = nextIrisSerial.fetch_add(1u, std::memory_order_acq_rel) + 1u;
-    publishNewestIrisSerial(serial);
+    publishIrisAuthoritySerial(serial);
   }
 
-  bool isNewestIrisSerial(uint64_t serial) const {
+  bool isCurrentIrisSerial(uint64_t serial) const {
     return serial != 0u &&
-      serial == newestDesiredIrisSerial.load(std::memory_order_acquire);
+      serial == currentIrisAuthoritySerial.load(std::memory_order_acquire);
   }
 
-  uint64_t newestIrisSerial() const {
-    return newestDesiredIrisSerial.load(std::memory_order_acquire);
+  uint64_t currentIrisSerial() const {
+    return currentIrisAuthoritySerial.load(std::memory_order_acquire);
   }
 
 private:
-  void publishNewestIrisSerial(uint64_t serial) {
-    uint64_t newest = newestDesiredIrisSerial.load(std::memory_order_acquire);
-    while (newest < serial && !newestDesiredIrisSerial.compare_exchange_weak(
+  void publishIrisAuthoritySerial(uint64_t serial) {
+    uint64_t newest = currentIrisAuthoritySerial.load(std::memory_order_acquire);
+    while (newest < serial && !currentIrisAuthoritySerial.compare_exchange_weak(
         newest, serial, std::memory_order_acq_rel, std::memory_order_acquire)) {
     }
   }
-  bool claimPreviewCadence(int64_t nowMs) {
-    int64_t previous = lastIrisPreviewMs.load(std::memory_order_acquire);
-    while (true) {
-      if (previous != std::numeric_limits<int64_t>::min() &&
-          nowMs - previous < kIrisPreviewCadenceMs) {
-        return false;
-      }
-      if (lastIrisPreviewMs.compare_exchange_weak(
-          previous, nowMs, std::memory_order_acq_rel, std::memory_order_acquire)) {
-        return true;
-      }
-    }
-  }
-
   std::atomic<int> irisConsumerDemand {int(IrisConsumerDemand::None)};
   std::atomic<uint64_t> nextDisplaySerial {0u};
   std::atomic<uint64_t> nextIrisSerial {0u};
-  std::atomic<uint64_t> newestDesiredIrisSerial {0u};
-  std::atomic<int64_t> lastIrisPreviewMs {std::numeric_limits<int64_t>::min()};
+  std::atomic<uint64_t> currentIrisAuthoritySerial {0u};
 };
 
 } // namespace nautiloid_requests

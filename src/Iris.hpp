@@ -2,6 +2,7 @@
 
 #include "DebugTerminalMetrics.hpp"
 #include "IrisIO.hpp"
+#include "IrisWorkerCompletion.hpp"
 #include "NautiloidIrisExpander.hpp"
 #include "NautiloidColor.hpp"
 #include "plugin.hpp"
@@ -138,6 +139,12 @@ struct Iris final : Module {
   std::atomic<bool> restoredImageSourceMode {false};
 
 private:
+#ifdef LEVIATHAN_IRIS_PHASE4_TEST
+  friend struct IrisPhase4TestAccess;
+#endif
+
+  using SourcePtr = std::shared_ptr<const iris::SourceField>;
+
   enum WorkerRequestType {
     REQUEST_NONE = 0,
     REQUEST_IMPORT_IMAGE_FILE = 1,
@@ -153,8 +160,7 @@ private:
     WorkerRequestType type = REQUEST_NONE;
     std::string path;
     iris::ConversionSettings settings;
-    iris::SourceField source;
-    std::shared_ptr<const iris::SourceField> ownedSource;
+    SourcePtr source;
     const nautiloid_iris_expander::SourceSlot* sourceSlot = nullptr;
     int nautiloidFractalMode = iris::FRACTAL_NONE;
     int nautiloidFractalColorMode = nautiloid_color::PRISM;
@@ -166,8 +172,7 @@ private:
   };
 
   struct WorkerResult {
-    iris::SourceField source;
-    bool hasSource = false;
+    SourcePtr source;
     bool preserveExistingSource = false;
     int sourceKind = iris::SOURCE_IMAGE;
   };
@@ -176,7 +181,7 @@ private:
   void stopWorker();
   void submitRequest(const WorkerRequest& request);
   void workerLoop();
-  void publishWorkerResult(WorkerResult& result, int tableIndex);
+  bool publishWorkerResult(WorkerResult& result, int tableIndex, std::string diagnostic = {});
   static void buildPreview(const iris::ImageWavetable& table, std::vector<uint8_t>* pixels);
 
   std::array<Voice, 16> voices;
@@ -197,7 +202,7 @@ private:
 
   mutable std::mutex snapshotMutex;
   iris::ImageWavetable snapshotTable;
-  iris::SourceField snapshotSourceField;
+  SourcePtr snapshotSource;
   std::vector<uint8_t> snapshotPreview;
   int previewWidth = iris::kSourcePreviewWidth;
   int previewHeight = iris::kSourcePreviewHeight;
