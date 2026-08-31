@@ -48,14 +48,23 @@ It does not require changes to Integral Flux or Proc.
   Interactive pan and zoom previews crop any requested viewport contained by
   the current generation's 3x world coverage before falling back to geometric
   reprojection, and defer speculative zoom-ahead work during drag instead of
-  updating only the independently paced Iris source.
-- Focused Phase 4-6 worker, runtime, cache-policy, and lifecycle-contract tests
+  updating only the independently paced Iris source. Brief tile smearing can
+  still appear during interaction, but the authoritative final render replaces
+  it; this is accepted for the rarely used fallback path.
+- Phase 7 is complete: the GPU preview now uses the shared adaptive GL surface
+  with Nautiloid-specific stable 4x-capacity front/back buffers, 16-pixel
+  active-extent quantization, active-prefix rendering, and context-safe recreation. It keeps
+  full current Rack density during interaction until telemetry demonstrates a
+  benefit from lowering it, and publishes surface render time, density, and
+  active/capacity dimensions to the fractal pipeline log.
+- Focused Phase 4-7 worker, runtime, cache-policy, adaptive-surface, and
+  lifecycle-contract tests
   and the local Linux plugin build pass. Manual Rack zoom/context validation
   remains part of final acceptance.
   The native MINGW64 `test-fast` suite and authoritative Windows `plugin.dll`
   build passed through the original Phase 3 checkpoint; native validation of
-  the worker-paced Phase 1 follow-up and Phases 4-6 remains pending where the
-  documented Windows bridge is available. Phase 7 is next.
+  the worker-paced Phase 1 follow-up and Phases 4-7 remains pending where the
+  documented Windows bridge is available. Phase 8 is next.
 
 ## Current architecture
 

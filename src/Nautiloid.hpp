@@ -160,6 +160,13 @@ struct Nautiloid final : Module {
   std::atomic<uint64_t> fallbackWorkerWakes {0u};
   std::atomic<uint64_t> fallbackWorkerStops {0u};
   std::atomic<uint64_t> fallbackWorkerJoins {0u};
+  std::atomic<uint64_t> gpuSurfaceRenders {0u};
+  std::atomic<float> gpuSurfaceRenderUs {0.f};
+  std::atomic<float> gpuSurfaceDensity {0.f};
+  std::atomic<int> gpuSurfaceActiveWidth {0};
+  std::atomic<int> gpuSurfaceActiveHeight {0};
+  std::atomic<int> gpuSurfaceCapacityWidth {0};
+  std::atomic<int> gpuSurfaceCapacityHeight {0};
   debug_terminal::BaselineModuleMetrics debugMetrics;
   std::atomic<bool> debugFileLoggingEnabled {false};
   std::atomic<bool> debugGpuPreviewEnabled {true};

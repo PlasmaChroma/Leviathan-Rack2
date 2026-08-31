@@ -2,6 +2,7 @@
 #include "GlLifecycleUtils.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
+#include "visual/AdaptiveGlSurface.hpp"
 #include "visual/FractalGlassOverlay.hpp"
 #include "visual/VisualAssets.hpp"
 
@@ -137,7 +138,9 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
   GLuint vertexShader = 0;
   bool vertexShaderInitAttempted = false;
   std::array<ModeProgram, size_t(iris::kLastBuiltinFractalMode) + 1u> modePrograms {};
+  visual_assets::AdaptiveGlSurface adaptiveSurface;
   bool lastEffectiveActive = false;
+  bool lastInteractionActive = false;
   int lastMode = -1;
   float lastZoom = NAN;
   double lastCenterX = NAN;
@@ -151,6 +154,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
       module->setGpuPreviewAvailable(false, false);
     }
     releaseGlResources(false);
+    adaptiveSurface.reset(false);
   }
 
   void onContextDestroy(const ContextDestroyEvent& e) override {
@@ -158,6 +162,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     // The destroy event guarantees that this context is current. Delete only
     // when it is also the context that owns our GL names.
     releaseGlResources(ownerVg != nullptr && ownerVg == e.vg);
+    adaptiveSurface.reset(ownerVg != nullptr && ownerVg == e.vg);
     ownerVg = nullptr;
     if (module) {
       module->setGpuPreviewAvailable(false, false);
@@ -169,6 +174,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     // A module widget can survive a DAW editor replacement and miss the old
     // destroy event. Names from that context must only be forgotten here.
     releaseGlResources(false);
+    adaptiveSurface.reset(false);
     ownerVg = e.vg;
     if (module) {
       module->setGpuPreviewAvailable(false, false);
@@ -182,6 +188,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     // Context identity changed without a matching lifecycle event. The old
     // context may already be gone, so never issue deletion calls for its names.
     releaseGlResources(false);
+    adaptiveSurface.reset(false);
     ownerVg = currentVg;
     if (module) {
       module->setGpuPreviewAvailable(false, false);
@@ -576,18 +583,32 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
         lastColorMode = nautiloidColorMode(module);
         dirty = true;
       }
+      const bool interactionActive =
+        module->zoomInteractionActive.load(std::memory_order_relaxed);
+      if (lastInteractionActive && !interactionActive) {
+        // If an interaction-density policy is introduced later, this edge
+        // guarantees one full current-density refinement at the final state.
+        dirty = true;
+      }
+      lastInteractionActive = interactionActive;
     }
     if (dirty) {
+      adaptiveSurface.markDirty();
       setDirty();
     }
+    renderAdaptiveSurfaceIfNeeded();
   }
 
-  void drawFramebuffer() override {
+  void renderGlContent(Vec fbSize, int viewportY = 0) {
     synchronizeOwnerContext();
-    Vec fbSize = getFramebufferSize();
-    glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
+    const int activeWidth = std::max(1, int(std::lround(fbSize.x)));
+    const int activeHeight = std::max(1, int(std::lround(fbSize.y)));
+    glViewport(0, viewportY, activeWidth, activeHeight);
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(0, viewportY, activeWidth, activeHeight);
     glClearColor(0.f, 0.f, 0.f, 0.f);
     glClear(GL_COLOR_BUFFER_BIT);
+    glDisable(GL_SCISSOR_TEST);
 
     const int mode = module ? int(module->fractalMode) : iris::FRACTAL_NONE;
     if (isExtraGlValidationEnabled()) {
@@ -632,6 +653,52 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     glVertex2f(w, h);
     glEnd();
     glUseProgram(0);
+  }
+
+  void drawFramebuffer() override {
+    renderGlContent(getFramebufferSize());
+  }
+
+  void renderAdaptiveSurfaceIfNeeded() {
+    if (!nautiloidGpuPreviewEnabled(module)) return;
+    NVGcontext* vg = (APP && APP->window) ? APP->window->vg : nullptr;
+    if (!vg) return;
+    float rackZoom = 1.f;
+    if (APP && APP->scene && APP->scene->rackScroll) {
+      rackZoom = std::max(APP->scene->rackScroll->getZoom(), 1e-4f);
+    }
+    const float pixelRatio = (APP && APP->window) ? APP->window->pixelRatio : 1.f;
+    visual_assets::AdaptiveGlSurfacePolicy policy;
+    // Nautiloid's fractal benefits from preserving spatial detail through the
+    // 400% Rack zoom validation range. Keep the shared 2x default for lighter
+    // displays, but reserve 4x capacity here; only the active prefix is drawn.
+    policy.maxDensity = 4.f;
+    const auto renderStart = std::chrono::steady_clock::now();
+    const bool rendered = adaptiveSurface.renderIfNeeded(
+      vg, box.size, rackZoom, pixelRatio, policy,
+      isExtraGlValidationEnabled(),
+      [](void* user, Vec activeSize, int viewportY) {
+        static_cast<NautiloidGlPreview*>(user)->renderGlContent(activeSize, viewportY);
+      },
+      this);
+    if (rendered && module) {
+      const float renderUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now() - renderStart).count()) * 1e-3f;
+      module->gpuSurfaceRenderUs.store(renderUs, std::memory_order_relaxed);
+      module->gpuSurfaceActiveWidth.store(adaptiveSurface.activeWidth(), std::memory_order_relaxed);
+      module->gpuSurfaceActiveHeight.store(adaptiveSurface.activeHeight(), std::memory_order_relaxed);
+      module->gpuSurfaceCapacityWidth.store(adaptiveSurface.capacityWidth(), std::memory_order_relaxed);
+      module->gpuSurfaceCapacityHeight.store(adaptiveSurface.capacityHeight(), std::memory_order_relaxed);
+      const float density = box.size.x > 0.f
+        ? float(adaptiveSurface.activeWidth()) / box.size.x : 0.f;
+      module->gpuSurfaceDensity.store(density, std::memory_order_relaxed);
+      module->gpuSurfaceRenders.fetch_add(1u, std::memory_order_relaxed);
+    }
+  }
+
+  void draw(const DrawArgs& args) override {
+    if (nautiloidGpuPreviewEnabled(module) && adaptiveSurface.draw(args, box.size)) return;
+    widget::FramebufferWidget::draw(args);
   }
 };
 
@@ -1103,6 +1170,7 @@ struct NautiloidDebugCounters final : TransparentWidget {
   double lastLogTime = -INFINITY;
   uint64_t lastLoggedRequests = uint64_t(-1);
   uint64_t lastLoggedIrisGeneration = uint64_t(-1);
+  uint64_t lastLoggedGpuSurfaceRenders = uint64_t(-1);
 
   explicit NautiloidDebugCounters(Nautiloid* module) : module(module) {}
 
@@ -1111,11 +1179,14 @@ struct NautiloidDebugCounters final : TransparentWidget {
       const double now = system::getTime();
       const uint64_t requests = module->renderRequestsSubmitted.load(std::memory_order_relaxed);
       const uint64_t irisGeneration = module->irisPreviewGeneration.load(std::memory_order_relaxed);
+      const uint64_t gpuSurfaceRenders = module->gpuSurfaceRenders.load(std::memory_order_relaxed);
       if ((!std::isfinite(lastLogTime) || now - lastLogTime >= 0.25) &&
-          (requests != lastLoggedRequests || irisGeneration != lastLoggedIrisGeneration)) {
+          (requests != lastLoggedRequests || irisGeneration != lastLoggedIrisGeneration ||
+           gpuSurfaceRenders != lastLoggedGpuSurfaceRenders)) {
         lastLogTime = now;
         lastLoggedRequests = requests;
         lastLoggedIrisGeneration = irisGeneration;
+        lastLoggedGpuSurfaceRenders = gpuSurfaceRenders;
         appendLog(now);
       }
     }
@@ -1138,7 +1209,10 @@ struct NautiloidDebugCounters final : TransparentWidget {
              "zoom_ahead_tiles_rendered,zoom_ahead_l0_tiles,zoom_ahead_l1_tiles,zoom_ahead_l2_tiles,"
              "zoom_ahead_l0_full,zoom_ahead_l1_full,zoom_ahead_l2_full,"
              "iris_requests,iris_done,iris_stale,iris_expander_publishes,"
-             "fallback_starts,fallback_parks,fallback_wakes,fallback_stops,fallback_joins\n";
+             "fallback_starts,fallback_parks,fallback_wakes,fallback_stops,fallback_joins,"
+             "gpu_surface_renders,gpu_surface_render_us,gpu_surface_density,"
+             "gpu_surface_active_w,gpu_surface_active_h,gpu_surface_capacity_w,"
+             "gpu_surface_capacity_h\n";
     }
     Nautiloid::DisplayTileCacheSnapshot tileSnapshot;
     module->displayTileCacheSnapshot(&tileSnapshot);
@@ -1188,6 +1262,14 @@ struct NautiloidDebugCounters final : TransparentWidget {
       << module->fallbackWorkerWakes.load(std::memory_order_relaxed) << ','
       << module->fallbackWorkerStops.load(std::memory_order_relaxed) << ','
       << module->fallbackWorkerJoins.load(std::memory_order_relaxed)
+      << ','
+      << module->gpuSurfaceRenders.load(std::memory_order_relaxed) << ','
+      << module->gpuSurfaceRenderUs.load(std::memory_order_relaxed) << ','
+      << module->gpuSurfaceDensity.load(std::memory_order_relaxed) << ','
+      << module->gpuSurfaceActiveWidth.load(std::memory_order_relaxed) << ','
+      << module->gpuSurfaceActiveHeight.load(std::memory_order_relaxed) << ','
+      << module->gpuSurfaceCapacityWidth.load(std::memory_order_relaxed) << ','
+      << module->gpuSurfaceCapacityHeight.load(std::memory_order_relaxed)
       << '\n';
   }
 };
