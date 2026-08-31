@@ -150,11 +150,16 @@ struct Nautiloid final : Module {
   std::atomic<uint64_t> irisRendersDroppedStale {0u};
   std::atomic<uint64_t> irisExpanderPublishes {0u};
   std::atomic<uint64_t> irisRequestsSubmitted {0u};
+  std::atomic<uint64_t> fallbackWorkerStarts {0u};
+  std::atomic<uint64_t> fallbackWorkerParks {0u};
+  std::atomic<uint64_t> fallbackWorkerWakes {0u};
+  std::atomic<uint64_t> fallbackWorkerStops {0u};
+  std::atomic<uint64_t> fallbackWorkerJoins {0u};
   debug_terminal::BaselineModuleMetrics debugMetrics;
   std::atomic<bool> debugFileLoggingEnabled {false};
   std::atomic<bool> debugGpuPreviewEnabled {true};
   std::atomic<bool> debugGpuPreviewAvailable {false};
-  std::atomic<bool> cpuDisplayFallbackRequired {true};
+  std::atomic<bool> cpuDisplayFallbackRequired {false};
   std::atomic<bool> zoomInteractionActive {false};
   std::atomic<bool> displayRenderBusy {false};
   std::atomic<bool> forceIrisSourceSync {false};
@@ -242,7 +247,9 @@ private:
   void startWorker();
   void stopWorker();
   void ensureFallbackWorkers();
-  void stopFallbackWorkers();
+  void parkFallbackWorkers();
+  void shutdownFallbackWorkers();
+  bool isCpuFallbackActive() const;
   void submitRequest(const DisplayWorkerRequest& request);
   void submitCacheRequest(const DisplayWorkerRequest& request);
   void submitReprojectionRequest(const DisplayWorkerRequest& request);
@@ -268,8 +275,8 @@ private:
   // display/reprojection/cache workers exist only while CPU fallback rendering
   // is required.
   std::mutex fallbackLifecycleMutex;
-  std::condition_variable fallbackLifecycleCv;
-  bool fallbackWorkersStopping = false;
+  nautiloid_requests::FallbackLifecyclePolicy fallbackLifecyclePolicy;
+  std::atomic<bool> fallbackWorkersActive {false};
 
   mutable std::mutex workerMutex;
   std::condition_variable workerCv;

@@ -491,12 +491,23 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     FramebufferWidget::step();
     const bool effectiveActive = nautiloidGpuPreviewEnabled(module);
     bool currentModeReady = false;
+    bool currentModeAttempted = false;
     if (module && iris::isBuiltinFractalMode(module->fractalMode) &&
         module->fractalMode >= 0 && size_t(module->fractalMode) < modePrograms.size()) {
-      currentModeReady = modePrograms[size_t(module->fractalMode)].ready;
+      const ModeProgram& modeProgram = modePrograms[size_t(module->fractalMode)];
+      currentModeReady = modeProgram.ready;
+      currentModeAttempted = modeProgram.initAttempted;
     }
     if (module) {
-      module->setGpuPreviewAvailable(effectiveActive && currentModeReady);
+      if (effectiveActive && !currentModeAttempted) {
+        // The GL renderer has not been probed yet. Keep CPU fallback dormant
+        // until drawFramebuffer() establishes success or failure.
+        module->setGpuPreviewAvailable(false, false);
+      } else {
+        module->setGpuPreviewAvailable(
+          effectiveActive && currentModeReady,
+          !effectiveActive || !currentModeReady);
+      }
     }
     bool dirty = false;
     if (effectiveActive != lastEffectiveActive) {
@@ -1083,7 +1094,8 @@ struct NautiloidDebugCounters final : TransparentWidget {
              "cache_tiles_rendered,cache_tile_aborts,cache_resets,cache_shifts,"
              "zoom_ahead_tiles_rendered,zoom_ahead_l0_tiles,zoom_ahead_l1_tiles,zoom_ahead_l2_tiles,"
              "zoom_ahead_l0_full,zoom_ahead_l1_full,zoom_ahead_l2_full,"
-             "iris_requests,iris_done,iris_stale,iris_expander_publishes\n";
+             "iris_requests,iris_done,iris_stale,iris_expander_publishes,"
+             "fallback_starts,fallback_parks,fallback_wakes,fallback_stops,fallback_joins\n";
     }
     Nautiloid::DisplayTileCacheSnapshot tileSnapshot;
     module->displayTileCacheSnapshot(&tileSnapshot);
@@ -1127,6 +1139,12 @@ struct NautiloidDebugCounters final : TransparentWidget {
       << module->irisRendersDroppedStale.load(std::memory_order_relaxed)
       << ','
       << module->irisExpanderPublishes.load(std::memory_order_relaxed)
+      << ','
+      << module->fallbackWorkerStarts.load(std::memory_order_relaxed) << ','
+      << module->fallbackWorkerParks.load(std::memory_order_relaxed) << ','
+      << module->fallbackWorkerWakes.load(std::memory_order_relaxed) << ','
+      << module->fallbackWorkerStops.load(std::memory_order_relaxed) << ','
+      << module->fallbackWorkerJoins.load(std::memory_order_relaxed)
       << '\n';
   }
 };

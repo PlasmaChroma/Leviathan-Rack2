@@ -879,12 +879,10 @@ void Nautiloid::setGpuPreviewAvailable(bool available, bool requireCpuFallback) 
   const bool fallbackRequired = !available && requireCpuFallback;
   const bool previousFallbackRequired =
     cpuDisplayFallbackRequired.exchange(fallbackRequired, std::memory_order_acq_rel);
-  const bool previous = debugGpuPreviewAvailable.exchange(available, std::memory_order_acq_rel);
-  if (available) {
-    if (!previous || previousFallbackRequired) stopFallbackWorkers();
-  } else if (!fallbackRequired && previousFallbackRequired) {
-    stopFallbackWorkers();
-  } else if (fallbackRequired && !previousFallbackRequired &&
+  debugGpuPreviewAvailable.store(available, std::memory_order_release);
+  if (!fallbackRequired) {
+    parkFallbackWorkers();
+  } else if (!previousFallbackRequired &&
              !stopRequested.load(std::memory_order_acquire)) {
     requestRender();
   }
@@ -1040,7 +1038,7 @@ void Nautiloid::startWorker() {
 
 void Nautiloid::stopWorker() {
   stopRequested.store(true, std::memory_order_release);
-  stopFallbackWorkers();
+  shutdownFallbackWorkers();
   {
     std::lock_guard<std::mutex> lock(irisRequestMutex);
     irisWorkerStop = true;
@@ -1057,7 +1055,14 @@ void Nautiloid::ensureFallbackWorkers() {
       debugGpuPreviewAvailable.load(std::memory_order_acquire) ||
       !cpuDisplayFallbackRequired.load(std::memory_order_acquire)) return;
   std::lock_guard<std::mutex> lifecycleLock(fallbackLifecycleMutex);
-  if (fallbackWorkersStopping || worker.joinable()) return;
+  const nautiloid_requests::FallbackTransition transition =
+    fallbackLifecyclePolicy.requestActive();
+  if (transition == nautiloid_requests::FallbackTransition::None) return;
+  fallbackWorkersActive.store(true, std::memory_order_release);
+  if (transition == nautiloid_requests::FallbackTransition::Wake) {
+    fallbackWorkerWakes.fetch_add(1u, std::memory_order_relaxed);
+    return;
+  }
   {
     std::lock_guard<std::mutex> lock(workerMutex);
     workerStop = false;
@@ -1073,16 +1078,42 @@ void Nautiloid::ensureFallbackWorkers() {
   worker = std::thread([this]() { workerLoop(); });
   cacheWorker = std::thread([this]() { cacheWorkerLoop(); });
   reprojectionWorker = std::thread([this]() { reprojectionWorkerLoop(); });
+  fallbackWorkerStarts.fetch_add(1u, std::memory_order_relaxed);
 }
 
-void Nautiloid::stopFallbackWorkers() {
-  std::thread displayThread;
-  std::thread cacheThread;
-  std::thread reprojectionThread;
+void Nautiloid::parkFallbackWorkers() {
+  if (!fallbackWorkersActive.load(std::memory_order_acquire)) return;
   {
-    std::unique_lock<std::mutex> lifecycleLock(fallbackLifecycleMutex);
-    fallbackLifecycleCv.wait(lifecycleLock, [this]() { return !fallbackWorkersStopping; });
-    fallbackWorkersStopping = true;
+    std::lock_guard<std::mutex> lifecycleLock(fallbackLifecycleMutex);
+    if (fallbackLifecyclePolicy.requestParked() !=
+        nautiloid_requests::FallbackTransition::Park) return;
+    fallbackWorkersActive.store(false, std::memory_order_release);
+    requestCoordinator.invalidateDisplayRequests();
+    {
+      std::lock_guard<std::mutex> lock(workerMutex);
+      requestPending = false;
+    }
+    {
+      std::lock_guard<std::mutex> lock(cacheRequestMutex);
+      cacheRequestPending = false;
+    }
+    {
+      std::lock_guard<std::mutex> lock(reprojectionRequestMutex);
+      reprojectionRequestPending = false;
+    }
+  }
+  displayRenderBusy.store(false, std::memory_order_release);
+  loading.store(false, std::memory_order_release);
+  fallbackWorkerParks.fetch_add(1u, std::memory_order_relaxed);
+}
+
+void Nautiloid::shutdownFallbackWorkers() {
+  bool hadWorkers = false;
+  {
+    std::lock_guard<std::mutex> lifecycleLock(fallbackLifecycleMutex);
+    hadWorkers = fallbackLifecyclePolicy.hasWorkers();
+    fallbackLifecyclePolicy.requestParked();
+    fallbackWorkersActive.store(false, std::memory_order_release);
     {
       std::lock_guard<std::mutex> lock(workerMutex);
       workerStop = true;
@@ -1098,21 +1129,32 @@ void Nautiloid::stopFallbackWorkers() {
       reprojectionWorkerStop = true;
       reprojectionRequestPending = false;
     }
-    displayThread = std::move(worker);
-    cacheThread = std::move(cacheWorker);
-    reprojectionThread = std::move(reprojectionWorker);
   }
   workerCv.notify_one();
   cacheRequestCv.notify_one();
   reprojectionRequestCv.notify_one();
-  if (displayThread.joinable()) displayThread.join();
-  if (cacheThread.joinable()) cacheThread.join();
-  if (reprojectionThread.joinable()) reprojectionThread.join();
-  {
-    std::lock_guard<std::mutex> lifecycleLock(fallbackLifecycleMutex);
-    fallbackWorkersStopping = false;
+  if (worker.joinable()) {
+    worker.join();
+    fallbackWorkerJoins.fetch_add(1u, std::memory_order_relaxed);
   }
-  fallbackLifecycleCv.notify_all();
+  if (cacheWorker.joinable()) {
+    cacheWorker.join();
+    fallbackWorkerJoins.fetch_add(1u, std::memory_order_relaxed);
+  }
+  if (reprojectionWorker.joinable()) {
+    reprojectionWorker.join();
+    fallbackWorkerJoins.fetch_add(1u, std::memory_order_relaxed);
+  }
+  if (hadWorkers) {
+    fallbackWorkerStops.fetch_add(1u, std::memory_order_relaxed);
+  }
+}
+
+bool Nautiloid::isCpuFallbackActive() const {
+  return fallbackWorkersActive.load(std::memory_order_acquire) &&
+    cpuDisplayFallbackRequired.load(std::memory_order_acquire) &&
+    !debugGpuPreviewAvailable.load(std::memory_order_acquire) &&
+    !stopRequested.load(std::memory_order_acquire);
 }
 
 void Nautiloid::submitRequest(const DisplayWorkerRequest& request) {
@@ -1214,6 +1256,8 @@ void Nautiloid::publishAuthoritativeDisplaySource(
 }
 
 bool Nautiloid::publishDisplayReprojection(const DisplayWorkerRequest& request) {
+  if (!isCpuFallbackActive() ||
+      !requestCoordinator.isNewestDisplaySerial(request.serial)) return false;
   iris::SourceField base;
   int baseMode = iris::FRACTAL_NONE;
   float baseZoom = -1.f;
@@ -1297,8 +1341,8 @@ bool Nautiloid::publishDisplayReprojection(const DisplayWorkerRequest& request) 
 
     bool usedAheadForFrame = false;
     for (int y = 0; y < reprojected.height; ++y) {
-      if (stopRequested.load(std::memory_order_acquire) ||
-          debugGpuPreviewAvailable.load(std::memory_order_acquire)) return false;
+      if (!isCpuFallbackActive() ||
+          !requestCoordinator.isNewestDisplaySerial(request.serial)) return false;
       const float ny = (float(y) + 0.5f) / float(reprojected.height) * 2.f - 1.f;
       const double worldY = request.centerY + double(ny) * double(newHalfSpan.y);
       const float oldNormY = float((worldY - baseCenterY) / double(oldHalfSpan.y));
@@ -1372,7 +1416,8 @@ bool Nautiloid::publishDisplayReprojection(const DisplayWorkerRequest& request) 
 
   {
     std::lock_guard<std::mutex> lock(workerMutex);
-    if (!requestCoordinator.isNewestDisplaySerial(request.serial)) {
+    if (!isCpuFallbackActive() ||
+        !requestCoordinator.isNewestDisplaySerial(request.serial)) {
       return false;
     }
   }
@@ -1389,6 +1434,8 @@ bool Nautiloid::publishDisplayCacheComposite(
     const DisplayWorkerRequest& request,
     bool allowPartial,
     bool* completeOut) {
+  if (!isCpuFallbackActive() ||
+      !requestCoordinator.isNewestDisplaySerial(request.serial)) return false;
   iris::SourceField fallback;
   if (allowPartial) {
     std::lock_guard<std::mutex> lock(snapshotMutex);
@@ -1418,7 +1465,8 @@ bool Nautiloid::publishDisplayCacheComposite(
   }
   {
     std::lock_guard<std::mutex> lock(workerMutex);
-    if (!requestCoordinator.isNewestDisplaySerial(request.serial)) {
+    if (!isCpuFallbackActive() ||
+        !requestCoordinator.isNewestDisplaySerial(request.serial)) {
       return false;
     }
   }
@@ -1440,8 +1488,7 @@ bool Nautiloid::publishDisplayCacheComposite(
 
 void Nautiloid::renderZoomAheadCaches(const DisplayWorkerRequest& request) {
   for (int layerIndex = 0; layerIndex < kZoomAheadLayerCount; ++layerIndex) {
-    if (stopRequested.load(std::memory_order_acquire) ||
-        debugGpuPreviewAvailable.load(std::memory_order_acquire)) return;
+    if (!isCpuFallbackActive()) return;
     const float aheadZoom = clamp(
       request.zoom + kZoomAheadLeads[size_t(layerIndex)], 0.f, kNautiloidMaxFractalZoom);
     if (aheadZoom <= request.zoom + 1e-4f) continue;
@@ -1481,8 +1528,7 @@ void Nautiloid::renderZoomAheadCaches(const DisplayWorkerRequest& request) {
       0.5f * float(kZoomAheadWidth),
       0.5f * float(kZoomAheadHeight));
     for (const Vec& tilePos : tileOrder) {
-      if (stopRequested.load(std::memory_order_acquire) ||
-          debugGpuPreviewAvailable.load(std::memory_order_acquire)) return;
+      if (!isCpuFallbackActive()) return;
       const int tileX = int(tilePos.x);
       const int tileY = int(tilePos.y);
       if (tileX >= kZoomAheadWidth || tileY >= kZoomAheadHeight) continue;
@@ -1553,6 +1599,8 @@ void Nautiloid::reprojectionWorkerLoop() {
       request = reprojectionRequest;
       reprojectionRequestPending = false;
     }
+    if (!isCpuFallbackActive() ||
+        !requestCoordinator.isNewestDisplaySerial(request.serial)) continue;
     publishDisplayReprojection(request);
   }
 }
@@ -1567,6 +1615,8 @@ void Nautiloid::workerLoop() {
       request = workerRequest;
       requestPending = false;
     }
+    if (!isCpuFallbackActive() ||
+        !requestCoordinator.isNewestDisplaySerial(request.serial)) continue;
 
     const bool gpuPreviewOwnsDisplay =
       requestGpuPreviewOwnsDisplay(
@@ -1607,6 +1657,20 @@ void Nautiloid::workerLoop() {
     {
       displayCacheMisses.fetch_add(1u, std::memory_order_relaxed);
     }
+    struct DisplayCancellationContext {
+      Nautiloid* module = nullptr;
+      uint64_t serial = 0u;
+    } cancellationContext;
+    cancellationContext.module = this;
+    cancellationContext.serial = request.serial;
+    iris::FractalCancellationToken cancellation;
+    cancellation.context = &cancellationContext;
+    cancellation.isCancelled = [](void* opaque) {
+      DisplayCancellationContext* context = static_cast<DisplayCancellationContext*>(opaque);
+      return !context || !context->module ||
+        !context->module->isCpuFallbackActive() ||
+        !context->module->requestCoordinator.isNewestDisplaySerial(context->serial);
+    };
     ok = iris::makeBuiltinFractalSourceSized(
       request.mode,
       request.zoom,
@@ -1616,10 +1680,12 @@ void Nautiloid::workerLoop() {
       kDisplaySourceHeight,
       1.f,
       &source,
-      &error);
+      &error,
+      &cancellation);
 
-    if (stopRequested.load(std::memory_order_acquire) ||
-        debugGpuPreviewAvailable.load(std::memory_order_acquire)) {
+    if (!isCpuFallbackActive() ||
+        !requestCoordinator.isNewestDisplaySerial(request.serial)) {
+      displayRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
       continue;
     }
     if (!ok) {
@@ -1657,6 +1723,8 @@ void Nautiloid::cacheWorkerLoop() {
       cacheRequestPending = false;
       cacheRequestsDequeued.fetch_add(1u, std::memory_order_relaxed);
     }
+    if (!isCpuFallbackActive() ||
+        !requestCoordinator.isNewestDisplaySerial(request.serial)) continue;
 
     double targetCacheCenterX = request.cacheCenterX;
     double targetCacheCenterY = request.cacheCenterY;
@@ -1780,8 +1848,7 @@ void Nautiloid::cacheWorkerLoop() {
       double(kFractalCacheHeight));
     const std::vector<Vec> tileOrder = makeDisplayTileOrder(visibleCenterX, visibleCenterY);
     for (const Vec& tilePos : tileOrder) {
-      if (stopRequested.load(std::memory_order_acquire) ||
-          debugGpuPreviewAvailable.load(std::memory_order_acquire)) break;
+      if (!isCpuFallbackActive()) break;
       if (skipDisplayTiles) break;
       if (stale) break;
       const int tileX = int(tilePos.x);
@@ -1891,15 +1958,12 @@ void Nautiloid::cacheWorkerLoop() {
           renderedTilesSincePublish = 0;
         }
     }
-    if (renderedAnyTile && !stale &&
-        !stopRequested.load(std::memory_order_acquire) &&
-        !debugGpuPreviewAvailable.load(std::memory_order_acquire)) {
+    if (renderedAnyTile && !stale && isCpuFallbackActive()) {
       displayCacheRendersCompleted.fetch_add(1u, std::memory_order_relaxed);
       publishDisplayCacheComposite(request, true);
     }
 
-    if (stale || stopRequested.load(std::memory_order_acquire) ||
-        debugGpuPreviewAvailable.load(std::memory_order_acquire)) {
+    if (stale || !isCpuFallbackActive()) {
       continue;
     }
 

@@ -22,6 +22,8 @@ bool cancelAfterFirstRow(void* opaque) {
 
 int main() {
   using nautiloid_requests::Coordinator;
+  using nautiloid_requests::FallbackLifecyclePolicy;
+  using nautiloid_requests::FallbackTransition;
   using nautiloid_requests::InteractionPhase;
   using nautiloid_requests::IrisConsumerDemand;
 
@@ -60,6 +62,29 @@ int main() {
   coordinator.setIrisConsumerDemand(IrisConsumerDemand::RetainImageSource);
   check("ending Iris demand cancels an in-flight ordinary request",
     !coordinator.isNewestIrisSerial(activeSerial));
+
+  const uint64_t activeDisplaySerial = coordinator.allocateDisplaySerial();
+  coordinator.invalidateDisplayRequests();
+  check("parking fallback invalidates in-flight display work",
+    !coordinator.isNewestDisplaySerial(activeDisplaySerial));
+
+  FallbackLifecyclePolicy fallback;
+  check("GPU probe pending creates no fallback workers",
+    !fallback.hasWorkers() && !fallback.isActive() &&
+    fallback.requestParked() == FallbackTransition::None);
+  check("first CPU fallback requirement starts workers lazily",
+    fallback.requestActive() == FallbackTransition::Start &&
+    fallback.hasWorkers() && fallback.isActive());
+  check("repeated fallback requirement performs no lifecycle work",
+    fallback.requestActive() == FallbackTransition::None);
+  check("GPU recovery parks rather than destroys fallback workers",
+    fallback.requestParked() == FallbackTransition::Park &&
+    fallback.hasWorkers() && !fallback.isActive());
+  check("repeated GPU frames do not repeatedly park workers",
+    fallback.requestParked() == FallbackTransition::None);
+  check("fallback reactivation wakes the existing workers",
+    fallback.requestActive() == FallbackTransition::Wake &&
+    fallback.hasWorkers() && fallback.isActive());
 
   int cancellationChecks = 0;
   iris::FractalCancellationToken cancellation;

@@ -17,6 +17,44 @@ enum class InteractionPhase : uint8_t {
   Final,
 };
 
+enum class FallbackTransition : uint8_t {
+  None = 0,
+  Start,
+  Park,
+  Wake,
+};
+
+// Control-thread policy only. The module owns the threads and applies these
+// transitions while holding its lifecycle mutex.
+class FallbackLifecyclePolicy {
+public:
+  FallbackTransition requestActive() {
+    if (!workersCreated) {
+      workersCreated = true;
+      active = true;
+      return FallbackTransition::Start;
+    }
+    if (!active) {
+      active = true;
+      return FallbackTransition::Wake;
+    }
+    return FallbackTransition::None;
+  }
+
+  FallbackTransition requestParked() {
+    if (!active) return FallbackTransition::None;
+    active = false;
+    return FallbackTransition::Park;
+  }
+
+  bool hasWorkers() const { return workersCreated; }
+  bool isActive() const { return active; }
+
+private:
+  bool workersCreated = false;
+  bool active = false;
+};
+
 // Rack-independent request policy shared by the module and focused tests.
 // Serial zero is reserved for "not submitted".
 class Coordinator {
@@ -49,6 +87,10 @@ public:
   bool isNewestDisplaySerial(uint64_t serial) const {
     return serial != 0u &&
       serial == nextDisplaySerial.load(std::memory_order_acquire);
+  }
+
+  void invalidateDisplayRequests() {
+    nextDisplaySerial.fetch_add(1u, std::memory_order_acq_rel);
   }
 
   uint64_t allocateIrisSerial(
