@@ -2,6 +2,7 @@
 
 #include "../PanelSvgUtils.hpp"
 
+#include <chrono>
 #include <vector>
 
 namespace visual_assets {
@@ -54,11 +55,24 @@ struct PlasmaConduitWidget final : Widget {
 };
 
 struct VisiblePlasmaConduitFramebuffer final : widget::FramebufferWidget {
+	float* lastDrawUs = nullptr;
+
 	void step() override {
 		if (!isVisible()) {
 			return;
 		}
 		widget::FramebufferWidget::step();
+	}
+
+	void drawFramebuffer() override {
+		if (!lastDrawUs) {
+			widget::FramebufferWidget::drawFramebuffer();
+			return;
+		}
+		const auto start = std::chrono::steady_clock::now();
+		widget::FramebufferWidget::drawFramebuffer();
+		*lastDrawUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
+			std::chrono::steady_clock::now() - start).count()) * 1e-3f;
 	}
 };
 
@@ -94,7 +108,8 @@ bool appendStraightSegments(
 
 widget::FramebufferWidget* createPlasmaConduitLayer(
 	const std::string& panelSvgPath,
-	Vec panelSizePx) {
+	Vec panelSizePx,
+	float* lastDrawUs) {
 	std::vector<panel_svg::SvgPathMatch> paths;
 	if (!panel_svg::findPathsInGroupsWithIdSubstringMm(
 		panelSvgPath, kPlasmaConduitAnchorGroupId, &paths)) {
@@ -112,6 +127,7 @@ widget::FramebufferWidget* createPlasmaConduitLayer(
 
 	VisiblePlasmaConduitFramebuffer* framebuffer =
 		new VisiblePlasmaConduitFramebuffer();
+	framebuffer->lastDrawUs = lastDrawUs;
 	framebuffer->box.size = panelSizePx;
 	framebuffer->dirtyOnSubpixelChange = false;
 	conduits->box.size = panelSizePx;

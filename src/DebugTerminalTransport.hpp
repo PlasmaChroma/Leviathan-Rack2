@@ -106,7 +106,8 @@ void submitBifurxUiMetrics(uint32_t instanceId,
                            float curvePrepUs,
                            float overlayPrepUs,
                            float surfaceRenderUs,
-                           float workerSubmitUs);
+                           float workerSubmitUs,
+                           float conduitDrawUs);
 
 void submitWyrmMetrics(uint32_t instanceId,
                        TimingRangeUs processUs,

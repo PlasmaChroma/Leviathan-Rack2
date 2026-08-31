@@ -14,6 +14,7 @@ extern const char* const kPlasmaConduitAnchorGroupId;
 // split panel SVG. Returns nullptr when the panel has no valid centerlines.
 widget::FramebufferWidget* createPlasmaConduitLayer(
 	const std::string& panelSvgPath,
-	Vec panelSizePx);
+	Vec panelSizePx,
+	float* lastDrawUs = nullptr);
 
 } // namespace visual_assets

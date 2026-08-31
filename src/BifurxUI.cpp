@@ -779,6 +779,7 @@ struct BifurxWidget final : ModuleWidget {
 	int lastRenderMode = -1;
 	debug_terminal::UiTimingRangeAccumulator moduleStepUsRange;
 	debug_terminal::UiTimingRangeAccumulator moduleDrawUsRange;
+	float lastConduitDrawUs = 0.f;
 
 	void applySpectrumRect(const math::Rect& rectMm) {
 		const Vec posPx = mm2px(rectMm.pos);
@@ -952,7 +953,8 @@ struct BifurxWidget final : ModuleWidget {
 		applyPt("MODE_LEFT_PARAM", &mlP); applyPt("MODE_RIGHT_PARAM", &mrP); applyPt("LEVEL_PARAM", &lP); applyPt("RESO_PARAM", &rP); applyPt("FREQ_PARAM", &fP); applyPt("TITO_PARAM", &tP); applyPt("SPAN_PARAM", &sP); applyPt("BALANCE_PARAM", &bP); applyPt("FM_AMT_PARAM", &faP); applyPt("SPAN_CV_ATTEN_PARAM", &saP);
 		applyPt("MODE_MENU_BUTTON", &mmP);
 		applyPt("IN_INPUT", &iP); applyPt("VOCT_INPUT", &vP); applyPt("FM_INPUT", &fmP); applyPt("RESO_CV_INPUT", &rcP); applyPt("BALANCE_CV_INPUT", &bcP); applyPt("SPAN_CV_INPUT", &scP); applyPt("OUT_OUTPUT", &oP);
-		conduitFramebuffer = visual_assets::createPlasmaConduitLayer(panelPath, box.size);
+		conduitFramebuffer = visual_assets::createPlasmaConduitLayer(
+			panelPath, box.size, &lastConduitDrawUs);
 		if (conduitFramebuffer) {
 			addChild(conduitFramebuffer);
 		}
@@ -1061,7 +1063,8 @@ struct BifurxWidget final : ModuleWidget {
 			activeSpectrum ? activeSpectrum->lastCurvePrepUs : 0.f,
 			activeSpectrum ? activeSpectrum->lastOverlayPrepUs : 0.f,
 			fixedSurfaceActive && activeSpectrum ? activeSpectrum->lastSurfaceRenderUs : 0.f,
-			activeSpectrum ? activeSpectrum->lastWorkerSubmitUs : 0.f);
+			activeSpectrum ? activeSpectrum->lastWorkerSubmitUs : 0.f,
+			lastConduitDrawUs);
 	}
 
 	void draw(const DrawArgs& args) override {

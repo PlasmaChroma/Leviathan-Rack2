@@ -505,9 +505,10 @@ void submitBifurxUiMetrics(uint32_t instanceId,
                            float curvePrepUs,
                            float overlayPrepUs,
                            float surfaceRenderUs,
-                           float workerSubmitUs) {
+                           float workerSubmitUs,
+                           float conduitDrawUs) {
   submitUiMetricSchema("Bifurx",
-                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"opengl\",\"label\":\"GL\"},{\"key\":\"curve_prep_us\",\"label\":\"Curve (us)\"},{\"key\":\"overlay_prep_us\",\"label\":\"Overlay (us)\"},{\"key\":\"surface_render_us\",\"label\":\"Surface (us)\"},{\"key\":\"worker_submit_us\",\"label\":\"Worker (us)\"}]");
+                       "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"opengl\",\"label\":\"GL\"},{\"key\":\"curve_prep_us\",\"label\":\"Curve (us)\"},{\"key\":\"overlay_prep_us\",\"label\":\"Overlay (us)\"},{\"key\":\"surface_render_us\",\"label\":\"Surface (us)\"},{\"key\":\"worker_submit_us\",\"label\":\"Worker (us)\"},{\"key\":\"conduit_draw_us\",\"label\":\"Conduit (us)\"}]");
   char dataBuf[512];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
@@ -523,12 +524,13 @@ void submitBifurxUiMetrics(uint32_t instanceId,
   appendRange(dataBuf, sizeof(dataBuf), "draw_us", drawUs);
   std::snprintf(dataBuf + std::strlen(dataBuf),
                 sizeof(dataBuf) - std::strlen(dataBuf),
-                ",\"opengl\":%d,\"curve_prep_us\":%.3f,\"overlay_prep_us\":%.3f,\"surface_render_us\":%.3f,\"worker_submit_us\":%.3f}",
+                ",\"opengl\":%d,\"curve_prep_us\":%.3f,\"overlay_prep_us\":%.3f,\"surface_render_us\":%.3f,\"worker_submit_us\":%.3f,\"conduit_draw_us\":%.3f}",
                 renderOpengl ? 1 : 0,
                 std::max(0.f, curvePrepUs),
                 std::max(0.f, overlayPrepUs),
                 std::max(0.f, surfaceRenderUs),
-                std::max(0.f, workerSubmitUs));
+                std::max(0.f, workerSubmitUs),
+                std::max(0.f, conduitDrawUs));
   double ts = system::getTime();
   transport().submit("Bifurx", instanceId, "ui", "metric", dataBuf, ts);
 }
