@@ -47,6 +47,17 @@ class NautiloidCachePhase6ContractTest(unittest.TestCase):
         cache_worker = section(SOURCE, "void Nautiloid::cacheWorkerLoop()", "void Nautiloid::irisWorkerLoop()")
         self.assertIn("!request.zoomInteractionActive", cache_worker)
 
+    def test_interactive_zoom_can_crop_any_view_contained_by_cache_world_bounds(self):
+        crop = section(
+            SOURCE,
+            "bool cropDisplayCacheGenerationToSize(",
+            "bool displayTileCacheCoversView(",
+        )
+        self.assertIn("requestedHalfSpan", crop)
+        self.assertIn("cacheHalfSpan", crop)
+        self.assertIn("std::fabs(dx) + requestedHalfSpan.x > cacheHalfSpan.x", crop)
+        self.assertNotIn("std::fabs(generation.zoom - zoom)", crop)
+
     def test_partial_composites_use_time_policy_and_final_publish(self):
         cache_worker = section(SOURCE, "void Nautiloid::cacheWorkerLoop()", "void Nautiloid::irisWorkerLoop()")
         self.assertIn("CompositePublishPolicy compositePublishPolicy", cache_worker)

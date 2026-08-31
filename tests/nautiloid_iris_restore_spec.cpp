@@ -139,6 +139,23 @@ bool cacheGenerationsRemainImmutableAcrossRecenter() {
     return false;
   }
 
+  const uint64_t compositesBeforeZoom =
+    naut.displayCacheCompositePublishes.load(std::memory_order_acquire);
+  Nautiloid::FractalState zoomState = naut.fractalStateSnapshot();
+  zoomState.zoom = 0.2f;
+  naut.setFractalState(zoomState);
+  naut.requestInteractiveZoomPreview(zoomState.centerX, zoomState.centerY);
+  const auto zoomDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (std::chrono::steady_clock::now() < zoomDeadline &&
+         naut.displayCacheCompositePublishes.load(std::memory_order_acquire) ==
+           compositesBeforeZoom) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  if (naut.displayCacheCompositePublishes.load(std::memory_order_acquire) ==
+      compositesBeforeZoom) {
+    return false;
+  }
+
   Nautiloid::FractalState state = naut.fractalStateSnapshot();
   state.centerX = 0.25;
   naut.setFractalState(state);
@@ -167,7 +184,7 @@ int main() {
         restoresWithoutFinalRequestStarvation(iris::FRACTAL_SPIDER));
   check("Barnsley reconnect publishes without startup request starvation",
         restoresWithoutFinalRequestStarvation(iris::FRACTAL_BARNSLEY));
-  check("CPU fallback retains immutable generations and serves live pans from cache",
+  check("CPU fallback serves live pan and zoom previews from immutable cache generations",
         cacheGenerationsRemainImmutableAcrossRecenter());
 
   if (failures != 0) {

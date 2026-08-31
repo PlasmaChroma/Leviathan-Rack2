@@ -261,16 +261,24 @@ bool cropDisplayCacheGenerationToSize(
     iris::SourceField* out,
     bool* completeOut) {
   if (!out || !generation.valid() || generation.mode != mode ||
-      std::fabs(generation.zoom - zoom) > 1e-5f || generation.cacheScale <= 1.f ||
-      outWidth <= 1 || outHeight <= 1 || generation.validTileCount() == 0u) {
+      generation.cacheScale <= 1.f || outWidth <= 1 || outHeight <= 1 ||
+      generation.validTileCount() == 0u) {
     return false;
   }
-  const float zoomScale = std::pow(0.05f, clamp(zoom, 0.f, kNautiloidMaxFractalZoom));
-  const Vec halfSpan = nautiloidFractalViewportHalfSpan(mode).mult(zoomScale);
+  const float generationZoomScale =
+    std::pow(0.05f, clamp(generation.zoom, 0.f, kNautiloidMaxFractalZoom));
+  const float requestedZoomScale =
+    std::pow(0.05f, clamp(zoom, 0.f, kNautiloidMaxFractalZoom));
+  const Vec cacheHalfSpan = nautiloidFractalViewportHalfSpan(mode).mult(
+    generationZoomScale).mult(generation.cacheScale);
+  const Vec requestedHalfSpan = nautiloidFractalViewportHalfSpan(mode).mult(
+    requestedZoomScale);
   const float dx = float(centerX - generation.centerX);
   const float dy = float(centerY - generation.centerY);
-  if (std::fabs(dx) > (generation.cacheScale - 1.f) * halfSpan.x ||
-      std::fabs(dy) > (generation.cacheScale - 1.f) * halfSpan.y) {
+  if (cacheHalfSpan.x <= 0.f || cacheHalfSpan.y <= 0.f ||
+      requestedHalfSpan.x <= 0.f || requestedHalfSpan.y <= 0.f ||
+      std::fabs(dx) + requestedHalfSpan.x > cacheHalfSpan.x ||
+      std::fabs(dy) + requestedHalfSpan.y > cacheHalfSpan.y) {
     return false;
   }
 
@@ -290,12 +298,14 @@ bool cropDisplayCacheGenerationToSize(
     ? fallback->rgb8
     : std::vector<uint8_t>(size_t(outWidth) * size_t(outHeight) * 3u, 0u);
 
-  const float cacheHalfX = halfSpan.x * generation.cacheScale;
-  const float cacheHalfY = halfSpan.y * generation.cacheScale;
-  const float cacheCenterX = (0.5f + dx / (2.f * cacheHalfX)) * float(generation.width);
-  const float cacheCenterY = (0.5f + dy / (2.f * cacheHalfY)) * float(generation.height);
-  const float cropWidth = float(generation.width) / generation.cacheScale;
-  const float cropHeight = float(generation.height) / generation.cacheScale;
+  const float cacheCenterX =
+    (0.5f + dx / (2.f * cacheHalfSpan.x)) * float(generation.width);
+  const float cacheCenterY =
+    (0.5f + dy / (2.f * cacheHalfSpan.y)) * float(generation.height);
+  const float cropWidth =
+    float(generation.width) * requestedHalfSpan.x / cacheHalfSpan.x;
+  const float cropHeight =
+    float(generation.height) * requestedHalfSpan.y / cacheHalfSpan.y;
   const float cropLeft = cacheCenterX - 0.5f * cropWidth;
   const float cropTop = cacheCenterY - 0.5f * cropHeight;
   if (cropLeft < -0.01f || cropTop < -0.01f ||

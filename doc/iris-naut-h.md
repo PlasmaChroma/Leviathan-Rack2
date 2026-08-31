@@ -45,9 +45,10 @@ It does not require changes to Integral Flux or Proc.
   across reset/recenter, and lets composite/reprojection readers work outside
   `cacheDataMutex`. Partial composites begin after useful center coverage, are
   limited to one per 60 ms while incomplete, and still publish the final crop.
-  Same-zoom pan previews now crop the current tile generation before falling
-  back to geometric reprojection, and defer speculative zoom-ahead work during
-  drag instead of updating only the independently paced Iris source.
+  Interactive pan and zoom previews crop any requested viewport contained by
+  the current generation's 3x world coverage before falling back to geometric
+  reprojection, and defer speculative zoom-ahead work during drag instead of
+  updating only the independently paced Iris source.
 - Focused Phase 4-6 worker, runtime, cache-policy, and lifecycle-contract tests
   and the local Linux plugin build pass. Manual Rack zoom/context validation
   remains part of final acceptance.
