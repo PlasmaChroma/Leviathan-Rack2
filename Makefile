@@ -410,6 +410,7 @@ test-fast: test-build-fast
 	python3 tests/moirai_panel_contract_spec.py
 	python3 tests/nautiloid_gl_lifecycle_contract_spec.py
 	python3 tests/iris_nautiloid_nvg_phase5_contract_spec.py
+	python3 tests/nautiloid_cache_phase6_contract_spec.py
 	python3 tests/split_svg_labels_spec.py
 	python3 tools/generate_mandelwake_tables.py --check
 	$(call run_test_bin,build/tests/temporaldeck_platter_spec_harness)
@@ -642,7 +643,7 @@ build/tests/iris_worker_completion_spec: tests/iris_worker_completion_spec.cpp s
 build/tests/iris_module_phase4_spec: tests/iris_module_phase4_spec.cpp src/Iris.cpp src/Iris.hpp src/IrisIO.cpp src/IrisSourceField.cpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-unused-parameter -DLEVIATHAN_IRIS_PHASE4_TEST=1 -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/iris_module_phase4_spec.cpp src/Iris.cpp src/IrisIO.cpp src/IrisSourceField.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
-build/tests/nautiloid_request_coordinator_spec: tests/nautiloid_request_coordinator_spec.cpp src/NautiloidRequestCoordinator.hpp src/NautiloidFractal.hpp | build/tests
+build/tests/nautiloid_request_coordinator_spec: tests/nautiloid_request_coordinator_spec.cpp src/NautiloidRequestCoordinator.hpp src/NautiloidCachePolicy.hpp src/NautiloidFractal.hpp | build/tests
 	$(CXX) -std=c++17 -O3 -Wall -Wextra tests/nautiloid_request_coordinator_spec.cpp -o $@
 
 build/tests/nautiloid_location_code_spec: tests/nautiloid_location_code_spec.cpp src/NautiloidLocationCode.cpp src/NautiloidLocationCode.hpp src/NautiloidFractal.hpp | build/tests

@@ -40,13 +40,21 @@ It does not require changes to Integral Flux or Proc.
   presentation snapshots without full-frame UI copies, and no longer wrap the
   primary raster quad in a second framebuffer. Iris's waveform grid/content
   separation remains unchanged.
-- Focused Phase 4/5 worker, runtime, and lifecycle-contract tests and the local
-  Linux plugin build pass. Manual Rack zoom/context validation remains part of
-  final acceptance.
+- Phase 6 is complete: the CPU fallback cache publishes immutable generations
+  composed of shared tile frames, retains the previous generation by pointer
+  across reset/recenter, and lets composite/reprojection readers work outside
+  `cacheDataMutex`. Partial composites begin after useful center coverage, are
+  limited to one per 60 ms while incomplete, and still publish the final crop.
+  Same-zoom pan previews now crop the current tile generation before falling
+  back to geometric reprojection, and defer speculative zoom-ahead work during
+  drag instead of updating only the independently paced Iris source.
+- Focused Phase 4-6 worker, runtime, cache-policy, and lifecycle-contract tests
+  and the local Linux plugin build pass. Manual Rack zoom/context validation
+  remains part of final acceptance.
   The native MINGW64 `test-fast` suite and authoritative Windows `plugin.dll`
   build passed through the original Phase 3 checkpoint; native validation of
-  the worker-paced Phase 1 follow-up and Phases 4-5 remains pending where the
-  documented Windows bridge is available. Phase 6 is next.
+  the worker-paced Phase 1 follow-up and Phases 4-6 remains pending where the
+  documented Windows bridge is available. Phase 7 is next.
 
 ## Current architecture
 

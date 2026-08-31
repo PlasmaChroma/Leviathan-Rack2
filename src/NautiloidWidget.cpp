@@ -773,7 +773,7 @@ struct NautiloidDisplay final : OpaqueWidget {
         state.centerX = nautiloidClampDouble(state.centerX + double(centerDelta.x), -2.0, 2.0);
         state.centerY = nautiloidClampDouble(state.centerY + double(centerDelta.y), -2.0, 2.0);
         module->setFractalState(state);
-        if (nautiloidRequestDue(&lastPanRequestTime, 0.05)) {
+        if (nautiloidRequestDue(&lastPanRequestTime, 0.04)) {
           const float cacheLead = 3.f;
           const float maxLeadX = 0.35f * halfSpan.x;
           const float maxLeadY = 0.35f * halfSpan.y;

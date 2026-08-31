@@ -1,5 +1,6 @@
 #include "Nautiloid.hpp"
 #include "Iris.hpp"
+#include "NautiloidCachePolicy.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -104,137 +105,237 @@ double clampDouble(double value, double minValue, double maxValue) {
   return std::max(minValue, std::min(value, maxValue));
 }
 
-const Nautiloid::DisplayCacheTile* findDisplayTile(
-  const std::vector<const Nautiloid::DisplayCacheTile*>& tileLookup,
-  int columns,
-  int x,
-  int y) {
-  if (columns <= 0 || x < 0 || y < 0) return nullptr;
-  const int column = x / kDisplayTileSize;
-  const int row = y / kDisplayTileSize;
-  const size_t index = size_t(row) * size_t(columns) + size_t(column);
-  if (index >= tileLookup.size()) return nullptr;
-  const Nautiloid::DisplayCacheTile* tile = tileLookup[index];
-  if (!tile || !tile->valid ||
-      x < tile->x || y < tile->y ||
-      x >= tile->x + tile->width ||
-      y >= tile->y + tile->height) {
-    return nullptr;
-  }
-  return tile;
+Nautiloid::DisplayCacheGenerationPtr makeEmptyDisplayCacheGeneration(
+    int mode,
+    float zoom,
+    double centerX,
+    double centerY) {
+  auto generation = std::make_shared<Nautiloid::DisplayCacheGeneration>();
+  generation->mode = mode;
+  generation->zoom = zoom;
+  generation->centerX = centerX;
+  generation->centerY = centerY;
+  generation->width = kFractalCacheWidth;
+  generation->height = kFractalCacheHeight;
+  generation->tileSize = kDisplayTileSize;
+  generation->cacheScale = kFractalCacheScale;
+  generation->tiles.resize(generation->fullTileCount());
+  return generation;
 }
 
-std::vector<const Nautiloid::DisplayCacheTile*> makeDisplayTileLookup(
-  const Nautiloid::DisplayTileCache& cache,
-  int columns,
-  int rows) {
-  std::vector<const Nautiloid::DisplayCacheTile*> tileLookup(size_t(columns) * size_t(rows), nullptr);
-  for (const Nautiloid::DisplayCacheTile& tile : cache.tiles) {
-    if (!tile.valid) continue;
-    const int column = tile.x / kDisplayTileSize;
-    const int row = tile.y / kDisplayTileSize;
-    if (column >= 0 && row >= 0 && column < columns && row < rows) {
-      tileLookup[size_t(row) * size_t(columns) + size_t(column)] = &tile;
+Nautiloid::DisplayCacheGenerationPtr displayCacheGenerationWithTile(
+    const Nautiloid::DisplayCacheGenerationPtr& current,
+    int tileX,
+    int tileY,
+    int tileWidth,
+    int tileHeight,
+    const std::vector<uint8_t>& rgb8) {
+  if (!current || !current->valid() || tileX < 0 || tileY < 0 ||
+      tileWidth <= 0 || tileHeight <= 0 || current->tileSize <= 0 ||
+      rgb8.size() < size_t(tileWidth) * size_t(tileHeight) * 3u) {
+    return current;
+  }
+  const int column = tileX / current->tileSize;
+  const int row = tileY / current->tileSize;
+  if (column < 0 || row < 0 || column >= current->columns() || row >= current->rows()) {
+    return current;
+  }
+  auto next = std::make_shared<Nautiloid::DisplayCacheGeneration>(*current);
+  auto frame = std::make_shared<Nautiloid::DisplayCacheTileFrame>();
+  frame->width = tileWidth;
+  frame->height = tileHeight;
+  frame->rgb8 = std::make_shared<const std::vector<uint8_t>>(
+    rgb8.begin(), rgb8.begin() + size_t(tileWidth) * size_t(tileHeight) * 3u);
+  next->tiles[size_t(row) * size_t(next->columns()) + size_t(column)] = std::move(frame);
+  return next;
+}
+
+Nautiloid::DisplayCacheGenerationPtr shiftDisplayCacheGeneration(
+    const Nautiloid::DisplayCacheGenerationPtr& current,
+    int shiftColumns,
+    int shiftRows,
+    double centerX,
+    double centerY) {
+  if (!current || !current->valid()) return current;
+  auto next = std::make_shared<Nautiloid::DisplayCacheGeneration>(*current);
+  next->centerX = centerX;
+  next->centerY = centerY;
+  std::fill(next->tiles.begin(), next->tiles.end(), nullptr);
+  const int columns = current->columns();
+  const int rows = current->rows();
+  for (int row = 0; row < rows; ++row) {
+    for (int column = 0; column < columns; ++column) {
+      const int nextColumn = column - shiftColumns;
+      const int nextRow = row - shiftRows;
+      if (nextColumn < 0 || nextRow < 0 || nextColumn >= columns || nextRow >= rows) continue;
+      const size_t oldIndex = size_t(row) * size_t(columns) + size_t(column);
+      const size_t nextIndex = size_t(nextRow) * size_t(columns) + size_t(nextColumn);
+      next->tiles[nextIndex] = current->tiles[oldIndex];
     }
   }
-  return tileLookup;
+  return next;
 }
 
-bool cropDisplayTileCacheToSize(
-  const Nautiloid::DisplayTileCache& cache,
-  int mode,
-  float zoom,
-  double centerX,
-  double centerY,
-  float cacheScale,
-  int outWidth,
-  int outHeight,
-  const iris::SourceField* fallback,
-  bool allowPartial,
-  iris::SourceField* out,
-  float* coverageOut = nullptr,
-  bool* completeOut = nullptr) {
-  if (!out || cacheScale <= 1.f || outWidth <= 1 || outHeight <= 1) return false;
-  if (cache.validTileCount() == 0u || cache.mode != mode || std::fabs(cache.zoom - zoom) > 1e-5f) return false;
+const Nautiloid::DisplayCacheTileFrame* displayCacheGenerationTileAt(
+    const Nautiloid::DisplayCacheGeneration& generation,
+    int x,
+    int y) {
+  if (!generation.valid() || x < 0 || y < 0 || x >= generation.width || y >= generation.height) {
+    return nullptr;
+  }
+  const int column = x / generation.tileSize;
+  const int row = y / generation.tileSize;
+  const size_t index = size_t(row) * size_t(generation.columns()) + size_t(column);
+  if (index >= generation.tiles.size()) return nullptr;
+  const auto& frame = generation.tiles[index];
+  return frame && frame->valid() ? frame.get() : nullptr;
+}
+
+bool displayCacheGenerationPixelChannel(
+    const Nautiloid::DisplayCacheGeneration& generation,
+    int x,
+    int y,
+    int channel,
+    float* valueOut) {
+  if (!valueOut || channel < 0 || channel >= 3) return false;
+  const Nautiloid::DisplayCacheTileFrame* frame =
+    displayCacheGenerationTileAt(generation, x, y);
+  if (!frame) return false;
+  const int localX = x % generation.tileSize;
+  const int localY = y % generation.tileSize;
+  if (localX < 0 || localY < 0 || localX >= frame->width || localY >= frame->height) return false;
+  const size_t index =
+    (size_t(localY) * size_t(frame->width) + size_t(localX)) * 3u + size_t(channel);
+  if (!frame->rgb8 || index >= frame->rgb8->size()) return false;
+  *valueOut = float((*frame->rgb8)[index]);
+  return true;
+}
+
+bool bilinearDisplayCacheGenerationRgb(
+    const Nautiloid::DisplayCacheGeneration& generation,
+    float x,
+    float y,
+    uint8_t* r,
+    uint8_t* g,
+    uint8_t* b) {
+  if (!generation.valid() || !r || !g || !b ||
+      x < 0.f || y < 0.f || x > float(generation.width - 1) ||
+      y > float(generation.height - 1)) {
+    return false;
+  }
+  const int x0 = clamp(int(std::floor(x)), 0, generation.width - 1);
+  const int y0 = clamp(int(std::floor(y)), 0, generation.height - 1);
+  const int x1 = std::min(x0 + 1, generation.width - 1);
+  const int y1 = std::min(y0 + 1, generation.height - 1);
+  const float tx = x - float(x0);
+  const float ty = y - float(y0);
+  uint8_t* outputs[3] = {r, g, b};
+  for (int channel = 0; channel < 3; ++channel) {
+    float c00 = 0.f;
+    float c10 = 0.f;
+    float c01 = 0.f;
+    float c11 = 0.f;
+    if (!displayCacheGenerationPixelChannel(generation, x0, y0, channel, &c00) ||
+        !displayCacheGenerationPixelChannel(generation, x1, y0, channel, &c10) ||
+        !displayCacheGenerationPixelChannel(generation, x0, y1, channel, &c01) ||
+        !displayCacheGenerationPixelChannel(generation, x1, y1, channel, &c11)) {
+      return false;
+    }
+    const float a = c00 + (c10 - c00) * tx;
+    const float value = a + ((c01 + (c11 - c01) * tx) - a) * ty;
+    *outputs[channel] = uint8_t(clamp(int(std::round(value)), 0, 255));
+  }
+  return true;
+}
+
+bool cropDisplayCacheGenerationToSize(
+    const Nautiloid::DisplayCacheGeneration& generation,
+    int mode,
+    float zoom,
+    double centerX,
+    double centerY,
+    int outWidth,
+    int outHeight,
+    const iris::SourceField* fallback,
+    bool allowPartial,
+    iris::SourceField* out,
+    bool* completeOut) {
+  if (!out || !generation.valid() || generation.mode != mode ||
+      std::fabs(generation.zoom - zoom) > 1e-5f || generation.cacheScale <= 1.f ||
+      outWidth <= 1 || outHeight <= 1 || generation.validTileCount() == 0u) {
+    return false;
+  }
   const float zoomScale = std::pow(0.05f, clamp(zoom, 0.f, kNautiloidMaxFractalZoom));
   const Vec halfSpan = nautiloidFractalViewportHalfSpan(mode).mult(zoomScale);
-  const float marginX = (cacheScale - 1.f) * halfSpan.x;
-  const float marginY = (cacheScale - 1.f) * halfSpan.y;
-  const float dx = float(centerX - cache.centerX);
-  const float dy = float(centerY - cache.centerY);
-  if (std::fabs(dx) > marginX || std::fabs(dy) > marginY) return false;
+  const float dx = float(centerX - generation.centerX);
+  const float dy = float(centerY - generation.centerY);
+  if (std::fabs(dx) > (generation.cacheScale - 1.f) * halfSpan.x ||
+      std::fabs(dy) > (generation.cacheScale - 1.f) * halfSpan.y) {
+    return false;
+  }
 
   iris::SourceField source;
   source.width = outWidth;
   source.height = outHeight;
   source.channels = iris::kCanonicalSourceChannels;
   source.bitDepth = iris::kCanonicalSourceBitDepth;
-  source.originalWidth = source.width;
-  source.originalHeight = source.height;
+  source.originalWidth = outWidth;
+  source.originalHeight = outHeight;
   source.originalChannels = source.channels;
   source.sourceName = "Fractal tile cache";
-  const bool fallbackUsable =
-    fallback && fallback->valid() && fallback->width == source.width && fallback->height == source.height &&
-    fallback->rgb8.size() == size_t(source.width) * size_t(source.height) * 3u;
-  if (fallbackUsable) {
-    source.rgb8 = fallback->rgb8;
-  } else {
-    source.rgb8.assign(size_t(source.width) * size_t(source.height) * 3u, 0u);
-  }
+  const bool fallbackUsable = fallback && fallback->valid() &&
+    fallback->width == outWidth && fallback->height == outHeight &&
+    fallback->rgb8.size() == size_t(outWidth) * size_t(outHeight) * 3u;
+  source.rgb8 = fallbackUsable
+    ? fallback->rgb8
+    : std::vector<uint8_t>(size_t(outWidth) * size_t(outHeight) * 3u, 0u);
 
-  const float cacheHalfX = halfSpan.x * cacheScale;
-  const float cacheHalfY = halfSpan.y * cacheScale;
-  const float cacheCenterPx = (0.5f + dx / (2.f * cacheHalfX)) * float(kFractalCacheWidth);
-  const float cacheCenterPy = (0.5f + dy / (2.f * cacheHalfY)) * float(kFractalCacheHeight);
-  const float cropW = float(kFractalCacheWidth) / cacheScale;
-  const float cropH = float(kFractalCacheHeight) / cacheScale;
-  const float cropLeft = cacheCenterPx - 0.5f * cropW;
-  const float cropTop = cacheCenterPy - 0.5f * cropH;
+  const float cacheHalfX = halfSpan.x * generation.cacheScale;
+  const float cacheHalfY = halfSpan.y * generation.cacheScale;
+  const float cacheCenterX = (0.5f + dx / (2.f * cacheHalfX)) * float(generation.width);
+  const float cacheCenterY = (0.5f + dy / (2.f * cacheHalfY)) * float(generation.height);
+  const float cropWidth = float(generation.width) / generation.cacheScale;
+  const float cropHeight = float(generation.height) / generation.cacheScale;
+  const float cropLeft = cacheCenterX - 0.5f * cropWidth;
+  const float cropTop = cacheCenterY - 0.5f * cropHeight;
   if (cropLeft < -0.01f || cropTop < -0.01f ||
-      cropLeft + cropW > float(kFractalCacheWidth) + 0.01f ||
-      cropTop + cropH > float(kFractalCacheHeight) + 0.01f) {
+      cropLeft + cropWidth > float(generation.width) + 0.01f ||
+      cropTop + cropHeight > float(generation.height) + 0.01f) {
     return false;
   }
 
-  const int columns = (kFractalCacheWidth + kDisplayTileSize - 1) / kDisplayTileSize;
-  const int rows = (kFractalCacheHeight + kDisplayTileSize - 1) / kDisplayTileSize;
-  const std::vector<const Nautiloid::DisplayCacheTile*> tileLookup = makeDisplayTileLookup(cache, columns, rows);
   size_t coveredPixels = 0u;
-  const size_t totalPixels = size_t(source.width) * size_t(source.height);
-  for (int y = 0; y < source.height; ++y) {
-    const float srcY = cropTop + (float(y) + 0.5f) * cropH / float(source.height) - 0.5f;
-    const int srcYi = clamp(int(std::round(srcY)), 0, kFractalCacheHeight - 1);
-    for (int x = 0; x < source.width; ++x) {
-      const float srcX = cropLeft + (float(x) + 0.5f) * cropW / float(source.width) - 0.5f;
-      const int srcXi = clamp(int(std::round(srcX)), 0, kFractalCacheWidth - 1);
-      const Nautiloid::DisplayCacheTile* tile = findDisplayTile(tileLookup, columns, srcXi, srcYi);
-      if (!tile) {
+  const size_t totalPixels = size_t(outWidth) * size_t(outHeight);
+  for (int y = 0; y < outHeight; ++y) {
+    const float sourceY = cropTop + (float(y) + 0.5f) * cropHeight / float(outHeight) - 0.5f;
+    const int sourceYi = clamp(int(std::round(sourceY)), 0, generation.height - 1);
+    for (int x = 0; x < outWidth; ++x) {
+      const float sourceX = cropLeft + (float(x) + 0.5f) * cropWidth / float(outWidth) - 0.5f;
+      const int sourceXi = clamp(int(std::round(sourceX)), 0, generation.width - 1);
+      const Nautiloid::DisplayCacheTileFrame* frame =
+        displayCacheGenerationTileAt(generation, sourceXi, sourceYi);
+      if (!frame) {
         if (!allowPartial || !fallbackUsable) return false;
         continue;
       }
-      const size_t outBase = (size_t(y) * size_t(source.width) + size_t(x)) * 3u;
-      const size_t inBase = (size_t(srcYi) * size_t(cache.stitchedWidth) + size_t(srcXi)) * 3u;
-      if (cache.stitchedWidth != kFractalCacheWidth ||
-          cache.stitchedHeight != kFractalCacheHeight ||
-          inBase + 2u >= cache.stitchedRgb8.size()) {
+      const int localX = sourceXi % generation.tileSize;
+      const int localY = sourceYi % generation.tileSize;
+      const size_t inputBase =
+        (size_t(localY) * size_t(frame->width) + size_t(localX)) * 3u;
+      const size_t outputBase = (size_t(y) * size_t(outWidth) + size_t(x)) * 3u;
+      if (!frame->rgb8 || inputBase + 2u >= frame->rgb8->size()) {
         if (!allowPartial || !fallbackUsable) return false;
         continue;
       }
-      source.rgb8[outBase + 0u] = cache.stitchedRgb8[inBase + 0u];
-      source.rgb8[outBase + 1u] = cache.stitchedRgb8[inBase + 1u];
-      source.rgb8[outBase + 2u] = cache.stitchedRgb8[inBase + 2u];
+      source.rgb8[outputBase + 0u] = (*frame->rgb8)[inputBase + 0u];
+      source.rgb8[outputBase + 1u] = (*frame->rgb8)[inputBase + 1u];
+      source.rgb8[outputBase + 2u] = (*frame->rgb8)[inputBase + 2u];
       ++coveredPixels;
     }
   }
   const bool complete = coveredPixels == totalPixels;
   if (!complete && (!allowPartial || !fallbackUsable || coveredPixels == 0u)) return false;
-  if (coverageOut) {
-    *coverageOut = totalPixels > 0u ? float(double(coveredPixels) / double(totalPixels)) : 0.f;
-  }
-  if (completeOut) {
-    *completeOut = complete;
-  }
-
+  if (completeOut) *completeOut = complete;
   *out = std::move(source);
   return true;
 }
@@ -378,65 +479,6 @@ uint8_t bilinearChannel(const iris::SourceField& source, float x, float y, int c
   return uint8_t(clamp(int(std::round(a + (b - a) * ty)), 0, 255));
 }
 
-bool displayTileCachePixelChannel(
-  const Nautiloid::DisplayTileCache& cache,
-  const std::vector<const Nautiloid::DisplayCacheTile*>& tileLookup,
-  int columns,
-  int x,
-  int y,
-  int channel,
-  float* valueOut) {
-  if (!valueOut || channel < 0 || channel >= 3) return false;
-  const Nautiloid::DisplayCacheTile* tile = findDisplayTile(tileLookup, columns, x, y);
-  if (!tile) return false;
-  if (cache.stitchedWidth != kFractalCacheWidth ||
-      cache.stitchedHeight != kFractalCacheHeight ||
-      cache.stitchedRgb8.size() != size_t(kFractalCacheWidth) * size_t(kFractalCacheHeight) * 3u) {
-    return false;
-  }
-  const size_t base = (size_t(y) * size_t(cache.stitchedWidth) + size_t(x)) * 3u + size_t(channel);
-  if (base >= cache.stitchedRgb8.size()) return false;
-  *valueOut = float(cache.stitchedRgb8[base]);
-  return true;
-}
-
-bool bilinearDisplayTileCacheRgb(
-  const Nautiloid::DisplayTileCache& cache,
-  const std::vector<const Nautiloid::DisplayCacheTile*>& tileLookup,
-  int columns,
-  float x,
-  float y,
-  uint8_t* r,
-  uint8_t* g,
-  uint8_t* b) {
-  if (!r || !g || !b) return false;
-  if (x < 0.f || y < 0.f || x > float(kFractalCacheWidth - 1) || y > float(kFractalCacheHeight - 1)) {
-    return false;
-  }
-  const int x0 = clamp(int(std::floor(x)), 0, kFractalCacheWidth - 1);
-  const int y0 = clamp(int(std::floor(y)), 0, kFractalCacheHeight - 1);
-  const int x1 = std::min(x0 + 1, kFractalCacheWidth - 1);
-  const int y1 = std::min(y0 + 1, kFractalCacheHeight - 1);
-  const float tx = x - float(x0);
-  const float ty = y - float(y0);
-  uint8_t* outs[3] = {r, g, b};
-  for (int channel = 0; channel < 3; ++channel) {
-    float c00 = 0.f;
-    float c10 = 0.f;
-    float c01 = 0.f;
-    float c11 = 0.f;
-    if (!displayTileCachePixelChannel(cache, tileLookup, columns, x0, y0, channel, &c00) ||
-        !displayTileCachePixelChannel(cache, tileLookup, columns, x1, y0, channel, &c10) ||
-        !displayTileCachePixelChannel(cache, tileLookup, columns, x0, y1, channel, &c01) ||
-        !displayTileCachePixelChannel(cache, tileLookup, columns, x1, y1, channel, &c11)) {
-      return false;
-    }
-    const float a = c00 + (c10 - c00) * tx;
-    const float v = a + ((c01 + (c11 - c01) * tx) - a) * ty;
-    *outs[channel] = uint8_t(clamp(int(std::round(v)), 0, 255));
-  }
-  return true;
-}
 
 bool bilinearPresentationCacheRgb(
   const Nautiloid::PresentationLayer& cache,
@@ -475,6 +517,33 @@ bool bilinearPresentationCacheRgb(
 }
 
 } // namespace
+
+int Nautiloid::DisplayCacheGeneration::columns() const {
+  return tileSize > 0 ? (width + tileSize - 1) / tileSize : 0;
+}
+
+int Nautiloid::DisplayCacheGeneration::rows() const {
+  return tileSize > 0 ? (height + tileSize - 1) / tileSize : 0;
+}
+
+size_t Nautiloid::DisplayCacheGeneration::fullTileCount() const {
+  return columns() > 0 && rows() > 0
+    ? size_t(columns()) * size_t(rows())
+    : 0u;
+}
+
+size_t Nautiloid::DisplayCacheGeneration::validTileCount() const {
+  size_t count = 0u;
+  for (const auto& tile : tiles) {
+    if (tile && tile->valid()) ++count;
+  }
+  return count;
+}
+
+bool Nautiloid::DisplayCacheGeneration::valid() const {
+  return mode != iris::FRACTAL_NONE && zoom >= 0.f && width > 1 && height > 1 &&
+    tileSize > 0 && cacheScale > 1.f && tiles.size() == fullTileCount();
+}
 
 bool Nautiloid::PresentationLayer::valid() const {
   return mode != iris::FRACTAL_NONE &&
@@ -1025,6 +1094,12 @@ void Nautiloid::displayTileCacheSnapshot(DisplayTileCacheSnapshot* snapshot) con
   *snapshot = std::move(next);
 }
 
+Nautiloid::DisplayCacheGenerationPtr Nautiloid::displayCacheGenerationSnapshot(
+    bool retained) const {
+  std::lock_guard<std::mutex> lock(cacheDataMutex);
+  return retained ? retainedDisplayCacheGeneration : displayCacheGeneration;
+}
+
 void Nautiloid::zoomAheadCacheSnapshot(ZoomAheadCacheSnapshot* snapshot) const {
   if (!snapshot) return;
   ZoomAheadCacheSnapshot next;
@@ -1287,9 +1362,6 @@ bool Nautiloid::publishDisplayReprojection(const DisplayWorkerRequest& request) 
   if (!base.valid() || baseMode != request.mode || base.width != kDisplaySourceWidth || base.height != kDisplaySourceHeight) {
     return false;
   }
-  if (std::fabs(request.zoom - baseZoom) <= 1e-5f) {
-    return false;
-  }
   if (std::fabs(request.zoom - baseZoom) > kDisplayReprojectionMaxZoomDelta) {
     return false;
   }
@@ -1302,7 +1374,17 @@ bool Nautiloid::publishDisplayReprojection(const DisplayWorkerRequest& request) 
   }
   const float centerPixelsX = float(std::fabs(request.centerX - baseCenterX) / (2.0 * double(oldHalfSpan.x)) * double(base.width));
   const float centerPixelsY = float(std::fabs(request.centerY - baseCenterY) / (2.0 * double(oldHalfSpan.y)) * double(base.height));
-  if (centerPixelsX > kDisplayReprojectionMaxCenterPixels || centerPixelsY > kDisplayReprojectionMaxCenterPixels) {
+  const bool zoomChanged = std::fabs(request.zoom - baseZoom) > 1e-5f;
+  const bool centerChanged = centerPixelsX > 1e-4f || centerPixelsY > 1e-4f;
+  if (!zoomChanged && !centerChanged) {
+    return false;
+  }
+  // A pure pan can always translate the authoritative frame, with current or
+  // retained cache tiles filling newly exposed pixels before the final render.
+  // Keep the center-distance quality cap for combined zoom reprojection only.
+  if (zoomChanged &&
+      (centerPixelsX > kDisplayReprojectionMaxCenterPixels ||
+       centerPixelsY > kDisplayReprojectionMaxCenterPixels)) {
     return false;
   }
 
@@ -1317,56 +1399,58 @@ bool Nautiloid::publishDisplayReprojection(const DisplayWorkerRequest& request) 
   reprojected.sourceName = "Fractal zoom reprojection";
   reprojected.rgb8.assign(size_t(reprojected.width) * size_t(reprojected.height) * 3u, 0u);
 
+  DisplayCacheGenerationPtr currentCache;
+  DisplayCacheGenerationPtr retainedCache;
+  std::array<PresentationLayer, kZoomAheadLayerCount> aheadLayers;
   {
     std::lock_guard<std::mutex> lock(cacheDataMutex);
-    const std::array<PresentationLayer, kZoomAheadLayerCount> aheadLayers = zoomAheadLayers;
-    const bool cacheUsable =
-      displayTileCache.validTileCount() > 0u &&
-      displayTileCache.mode == request.mode &&
-      displayTileCache.zoom >= 0.f;
-    const PresentationLayer retainedCache = displayPresentationCache;
-    const bool retainedCacheUsable =
-      retainedCache.valid() &&
-      retainedCache.mode == request.mode;
-    const Vec cacheHalfSpan = cacheUsable
-      ? nautiloidFractalViewportHalfSpan(displayTileCache.mode).mult(
-          std::pow(0.05f, clamp(displayTileCache.zoom, 0.f, kNautiloidMaxFractalZoom))).mult(kFractalCacheScale)
-      : Vec();
-    std::array<Vec, kZoomAheadLayerCount> aheadHalfSpans;
-    for (int i = 0; i < kZoomAheadLayerCount; ++i) {
-      const PresentationLayer& layer = aheadLayers[size_t(i)];
-      if (layer.valid() && layer.mode == request.mode &&
-          std::fabs(request.zoom - layer.zoom) <= kZoomAheadLeads[size_t(i)] * 1.35f) {
-        aheadHalfSpans[size_t(i)] = nautiloidFractalViewportHalfSpan(layer.mode).mult(
-          std::pow(0.05f, clamp(layer.zoom, 0.f, kNautiloidMaxFractalZoom))).mult(layer.cacheScale);
-      } else {
-        aheadHalfSpans[size_t(i)] = Vec();
-      }
+    currentCache = displayCacheGeneration;
+    retainedCache = retainedDisplayCacheGeneration;
+    aheadLayers = zoomAheadLayers;
+  }
+  const bool cacheUsable = currentCache && currentCache->valid() &&
+    currentCache->validTileCount() > 0u && currentCache->mode == request.mode;
+  const bool retainedCacheUsable = retainedCache && retainedCache->valid() &&
+    retainedCache->validTileCount() > 0u && retainedCache->mode == request.mode;
+  const Vec cacheHalfSpan = cacheUsable
+    ? nautiloidFractalViewportHalfSpan(currentCache->mode).mult(
+        std::pow(0.05f, clamp(currentCache->zoom, 0.f, kNautiloidMaxFractalZoom))).mult(
+          currentCache->cacheScale)
+    : Vec();
+  std::array<Vec, kZoomAheadLayerCount> aheadHalfSpans;
+  for (int i = 0; i < kZoomAheadLayerCount; ++i) {
+    const PresentationLayer& layer = aheadLayers[size_t(i)];
+    if (layer.valid() && layer.mode == request.mode &&
+        std::fabs(request.zoom - layer.zoom) <= kZoomAheadLeads[size_t(i)] * 1.35f) {
+      aheadHalfSpans[size_t(i)] = nautiloidFractalViewportHalfSpan(layer.mode).mult(
+        std::pow(0.05f, clamp(layer.zoom, 0.f, kNautiloidMaxFractalZoom))).mult(layer.cacheScale);
+    } else {
+      aheadHalfSpans[size_t(i)] = Vec();
     }
-    const Vec retainedCacheHalfSpan = retainedCacheUsable
-      ? nautiloidFractalViewportHalfSpan(retainedCache.mode).mult(
-          std::pow(0.05f, clamp(retainedCache.zoom, 0.f, kNautiloidMaxFractalZoom))).mult(retainedCache.cacheScale)
-      : Vec();
-    const int cacheColumns = (kFractalCacheWidth + kDisplayTileSize - 1) / kDisplayTileSize;
-    const int cacheRows = (kFractalCacheHeight + kDisplayTileSize - 1) / kDisplayTileSize;
-    const std::vector<const DisplayCacheTile*> tileLookup =
-      cacheUsable ? makeDisplayTileLookup(displayTileCache, cacheColumns, cacheRows) : std::vector<const DisplayCacheTile*>();
+  }
+  const Vec retainedCacheHalfSpan = retainedCacheUsable
+    ? nautiloidFractalViewportHalfSpan(retainedCache->mode).mult(
+        std::pow(0.05f, clamp(retainedCache->zoom, 0.f, kNautiloidMaxFractalZoom))).mult(
+          retainedCache->cacheScale)
+    : Vec();
 
-    bool usedAheadForFrame = false;
-    for (int y = 0; y < reprojected.height; ++y) {
-      if (!isCpuFallbackActive() ||
-          !requestCoordinator.isNewestDisplaySerial(request.serial)) return false;
-      const float ny = (float(y) + 0.5f) / float(reprojected.height) * 2.f - 1.f;
-      const double worldY = request.centerY + double(ny) * double(newHalfSpan.y);
-      const float oldNormY = float((worldY - baseCenterY) / double(oldHalfSpan.y));
-      const float srcY = (oldNormY + 1.f) * 0.5f * float(base.height) - 0.5f;
-      const float cacheSrcY = cacheUsable && cacheHalfSpan.y > 0.f
-        ? float((0.5 + (worldY - displayTileCache.centerY) / (2.0 * double(cacheHalfSpan.y))) * double(kFractalCacheHeight) - 0.5)
-        : -1.f;
-      const float retainedSrcY = retainedCacheUsable && retainedCacheHalfSpan.y > 0.f
-        ? float((0.5 + (worldY - retainedCache.centerY) / (2.0 * double(retainedCacheHalfSpan.y))) * double(retainedCache.height) - 0.5)
-        : -1.f;
-      for (int x = 0; x < reprojected.width; ++x) {
+  bool usedAheadForFrame = false;
+  for (int y = 0; y < reprojected.height; ++y) {
+    if (!isCpuFallbackActive() ||
+        !requestCoordinator.isNewestDisplaySerial(request.serial)) return false;
+    const float ny = (float(y) + 0.5f) / float(reprojected.height) * 2.f - 1.f;
+    const double worldY = request.centerY + double(ny) * double(newHalfSpan.y);
+    const float oldNormY = float((worldY - baseCenterY) / double(oldHalfSpan.y));
+    const float srcY = (oldNormY + 1.f) * 0.5f * float(base.height) - 0.5f;
+    const float cacheSrcY = cacheUsable && cacheHalfSpan.y > 0.f
+      ? float((0.5 + (worldY - currentCache->centerY) / (2.0 * double(cacheHalfSpan.y))) *
+          double(currentCache->height) - 0.5)
+      : -1.f;
+    const float retainedSrcY = retainedCacheUsable && retainedCacheHalfSpan.y > 0.f
+      ? float((0.5 + (worldY - retainedCache->centerY) / (2.0 * double(retainedCacheHalfSpan.y))) *
+          double(retainedCache->height) - 0.5)
+      : -1.f;
+    for (int x = 0; x < reprojected.width; ++x) {
         const float nx = (float(x) + 0.5f) / float(reprojected.width) * 2.f - 1.f;
         const double worldX = request.centerX + double(nx) * double(newHalfSpan.x);
         const float oldNormX = float((worldX - baseCenterX) / double(oldHalfSpan.x));
@@ -1376,10 +1460,12 @@ bool Nautiloid::publishDisplayReprojection(const DisplayWorkerRequest& request) 
         uint8_t g = 0u;
         uint8_t b = 0u;
         const float cacheSrcX = cacheUsable && cacheHalfSpan.x > 0.f
-          ? float((0.5 + (worldX - displayTileCache.centerX) / (2.0 * double(cacheHalfSpan.x))) * double(kFractalCacheWidth) - 0.5)
+          ? float((0.5 + (worldX - currentCache->centerX) / (2.0 * double(cacheHalfSpan.x))) *
+              double(currentCache->width) - 0.5)
           : -1.f;
         const float retainedSrcX = retainedCacheUsable && retainedCacheHalfSpan.x > 0.f
-          ? float((0.5 + (worldX - retainedCache.centerX) / (2.0 * double(retainedCacheHalfSpan.x))) * double(retainedCache.width) - 0.5)
+          ? float((0.5 + (worldX - retainedCache->centerX) / (2.0 * double(retainedCacheHalfSpan.x))) *
+              double(retainedCache->width) - 0.5)
           : -1.f;
         bool sampledAhead = false;
         for (int layerIndex = kZoomAheadLayerCount - 1; layerIndex >= 0; --layerIndex) {
@@ -1402,12 +1488,13 @@ bool Nautiloid::publishDisplayReprojection(const DisplayWorkerRequest& request) 
         if (sampledAhead) {
           continue;
         } else if (cacheUsable &&
-            bilinearDisplayTileCacheRgb(displayTileCache, tileLookup, cacheColumns, cacheSrcX, cacheSrcY, &r, &g, &b)) {
+            bilinearDisplayCacheGenerationRgb(*currentCache, cacheSrcX, cacheSrcY, &r, &g, &b)) {
           reprojected.rgb8[outBase + 0u] = r;
           reprojected.rgb8[outBase + 1u] = g;
           reprojected.rgb8[outBase + 2u] = b;
         } else if (retainedCacheUsable &&
-                   bilinearPresentationCacheRgb(retainedCache, retainedSrcX, retainedSrcY, &r, &g, &b)) {
+                   bilinearDisplayCacheGenerationRgb(
+                     *retainedCache, retainedSrcX, retainedSrcY, &r, &g, &b)) {
           reprojected.rgb8[outBase + 0u] = r;
           reprojected.rgb8[outBase + 1u] = g;
           reprojected.rgb8[outBase + 2u] = b;
@@ -1420,11 +1507,10 @@ bool Nautiloid::publishDisplayReprojection(const DisplayWorkerRequest& request) 
           reprojected.rgb8[outBase + 1u] = bilinearChannel(base, srcX, srcY, 1);
           reprojected.rgb8[outBase + 2u] = bilinearChannel(base, srcX, srcY, 2);
         }
-      }
     }
-    if (usedAheadForFrame) {
-      displayReprojectionZoomAheadHits.fetch_add(1u, std::memory_order_relaxed);
-    }
+  }
+  if (usedAheadForFrame) {
+    displayReprojectionZoomAheadHits.fetch_add(1u, std::memory_order_relaxed);
   }
 
   {
@@ -1451,32 +1537,32 @@ bool Nautiloid::publishDisplayCacheComposite(
     bool* completeOut) {
   if (!isCpuFallbackActive() ||
       !requestCoordinator.isNewestDisplaySerial(request.serial)) return false;
-  iris::SourceField fallback;
+  std::shared_ptr<const iris::SourceField> fallback;
   if (allowPartial) {
     std::lock_guard<std::mutex> lock(snapshotMutex);
-    if (previewPublishedSource) fallback = *previewPublishedSource;
+    fallback = previewPublishedSource;
   }
 
   iris::SourceField source;
   bool complete = false;
+  DisplayCacheGenerationPtr generation;
   {
     std::lock_guard<std::mutex> lock(cacheDataMutex);
-    if (!cropDisplayTileCacheToSize(
-          displayTileCache,
-          request.mode,
-          request.zoom,
-          request.centerX,
-          request.centerY,
-          kFractalCacheScale,
-          kDisplaySourceWidth,
-          kDisplaySourceHeight,
-          allowPartial ? &fallback : nullptr,
-          allowPartial,
-          &source,
-          nullptr,
-          &complete)) {
-      return false;
-    }
+    generation = displayCacheGeneration;
+  }
+  if (!generation || !cropDisplayCacheGenerationToSize(
+        *generation,
+        request.mode,
+        request.zoom,
+        request.centerX,
+        request.centerY,
+        kDisplaySourceWidth,
+        kDisplaySourceHeight,
+        allowPartial ? fallback.get() : nullptr,
+        allowPartial,
+        &source,
+        &complete)) {
+    return false;
   }
   {
     std::lock_guard<std::mutex> lock(workerMutex);
@@ -1618,7 +1704,12 @@ void Nautiloid::reprojectionWorkerLoop() {
     }
     if (!isCpuFallbackActive() ||
         !requestCoordinator.isNewestDisplaySerial(request.serial)) continue;
-    publishDisplayReprojection(request);
+    // Small same-zoom pans should normally be served directly from the 3x
+    // immutable tile generation. Fall back to geometric reprojection for zoom
+    // changes, incomplete cache coverage, or startup before the cache exists.
+    if (!publishDisplayCacheComposite(request, true)) {
+      publishDisplayReprojection(request);
+    }
   }
 }
 
@@ -1801,31 +1892,12 @@ void Nautiloid::cacheWorkerLoop() {
       if (!request.forceCacheRecenter && existingCacheCoversView && existingCacheFull && !existingCacheNeedsRecentering) {
         skipDisplayTiles = true;
       }
-    if (displayTileCache.mode != request.mode ||
+      if (displayTileCache.mode != request.mode ||
           std::fabs(displayTileCache.zoom - request.zoom) > 1e-5f ||
           std::fabs(displayTileCache.centerX - targetCacheCenterX) > 1e-5f ||
           std::fabs(displayTileCache.centerY - targetCacheCenterY) > 1e-5f) {
-        if (displayTileCache.validTileCount() > 0u &&
-            displayTileCache.stitchedRgb8.size() == size_t(kFractalCacheWidth) * size_t(kFractalCacheHeight) * 3u) {
-          displayPresentationCache.ensureStorage(
-            displayTileCache.stitchedWidth, displayTileCache.stitchedHeight, kDisplayTileSize);
-          displayPresentationCache.mode = displayTileCache.mode;
-          displayPresentationCache.zoom = displayTileCache.zoom;
-          displayPresentationCache.centerX = displayTileCache.centerX;
-          displayPresentationCache.centerY = displayTileCache.centerY;
-          displayPresentationCache.cacheScale = kFractalCacheScale;
-          displayPresentationCache.rgb8 = displayTileCache.stitchedRgb8;
-          std::fill(displayPresentationCache.tileValid.begin(), displayPresentationCache.tileValid.end(), 0u);
-          const int cols = displayPresentationCache.columns();
-          for (const DisplayCacheTile& tile : displayTileCache.tiles) {
-            if (!tile.valid) continue;
-            const int column = tile.x / kDisplayTileSize;
-            const int row = tile.y / kDisplayTileSize;
-            const size_t index = size_t(row) * size_t(cols) + size_t(column);
-            if (index < displayPresentationCache.tileValid.size()) {
-              displayPresentationCache.tileValid[index] = 1u;
-            }
-          }
+        if (displayCacheGeneration && displayCacheGeneration->validTileCount() > 0u) {
+          retainedDisplayCacheGeneration = displayCacheGeneration;
         }
         const bool canShiftExistingTiles =
           targetTileAligned &&
@@ -1835,6 +1907,12 @@ void Nautiloid::cacheWorkerLoop() {
           shiftDisplayTileCacheTiles(&displayTileCache, shiftColumns, shiftRows);
           displayTileCache.centerX = targetCacheCenterX;
           displayTileCache.centerY = targetCacheCenterY;
+          displayCacheGeneration = shiftDisplayCacheGeneration(
+            displayCacheGeneration,
+            shiftColumns,
+            shiftRows,
+            targetCacheCenterX,
+            targetCacheCenterY);
           displayTileCacheShifts.fetch_add(1u, std::memory_order_relaxed);
         } else {
           displayTileCache.clear();
@@ -1842,6 +1920,8 @@ void Nautiloid::cacheWorkerLoop() {
           displayTileCache.zoom = request.zoom;
           displayTileCache.centerX = targetCacheCenterX;
           displayTileCache.centerY = targetCacheCenterY;
+          displayCacheGeneration = makeEmptyDisplayCacheGeneration(
+            request.mode, request.zoom, targetCacheCenterX, targetCacheCenterY);
           for (PresentationLayer& layer : zoomAheadLayers) {
             if (layer.mode != request.mode || layer.zoom <= request.zoom) {
               layer.clear();
@@ -1849,12 +1929,15 @@ void Nautiloid::cacheWorkerLoop() {
           }
           displayTileCacheResets.fetch_add(1u, std::memory_order_relaxed);
         }
+      } else if (!displayCacheGeneration || !displayCacheGeneration->valid()) {
+        displayCacheGeneration = makeEmptyDisplayCacheGeneration(
+          request.mode, request.zoom, targetCacheCenterX, targetCacheCenterY);
       }
     }
 
     bool stale = false;
     bool renderedAnyTile = false;
-    int renderedTilesSincePublish = 0;
+    nautiloid_cache::CompositePublishPolicy compositePublishPolicy;
     const float visibleCenterX = float((0.5 + (request.centerX - targetCacheCenterX) /
       (2.0 * double(nautiloidFractalViewportHalfSpan(request.mode).mult(
         std::pow(0.05f, clamp(request.zoom, 0.f, kNautiloidMaxFractalZoom))).x) * double(kFractalCacheScale))) *
@@ -1878,6 +1961,7 @@ void Nautiloid::cacheWorkerLoop() {
             break;
           }
         }
+        size_t currentGenerationTileCount = 0u;
         {
           std::lock_guard<std::mutex> lock(cacheDataMutex);
           bool tileCurrent = false;
@@ -1944,35 +2028,24 @@ void Nautiloid::cacheWorkerLoop() {
           std::copy(tileSource.rgb8.begin(), tileSource.rgb8.end(), slot->rgb8.begin());
           slot->valid = true;
           displayTileCache.writeTileToStitched(*slot);
-          if (displayTileCache.validTileCount() > 0u &&
-              displayTileCache.stitchedRgb8.size() == size_t(kFractalCacheWidth) * size_t(kFractalCacheHeight) * 3u) {
-            displayPresentationCache.ensureStorage(
-              displayTileCache.stitchedWidth, displayTileCache.stitchedHeight, kDisplayTileSize);
-            displayPresentationCache.mode = displayTileCache.mode;
-            displayPresentationCache.zoom = displayTileCache.zoom;
-            displayPresentationCache.centerX = displayTileCache.centerX;
-            displayPresentationCache.centerY = displayTileCache.centerY;
-            displayPresentationCache.cacheScale = kFractalCacheScale;
-            displayPresentationCache.rgb8 = displayTileCache.stitchedRgb8;
-            std::fill(displayPresentationCache.tileValid.begin(), displayPresentationCache.tileValid.end(), 0u);
-            const int cols = displayPresentationCache.columns();
-            for (const DisplayCacheTile& tile : displayTileCache.tiles) {
-              if (!tile.valid) continue;
-              const int column = tile.x / kDisplayTileSize;
-              const int row = tile.y / kDisplayTileSize;
-              const size_t index = size_t(row) * size_t(cols) + size_t(column);
-              if (index < displayPresentationCache.tileValid.size()) {
-                displayPresentationCache.tileValid[index] = 1u;
-              }
-            }
-          }
+          displayCacheGeneration = displayCacheGenerationWithTile(
+            displayCacheGeneration,
+            tileX,
+            tileY,
+            tileSource.width,
+            tileSource.height,
+            tileSource.rgb8);
+          currentGenerationTileCount = displayCacheGeneration
+            ? displayCacheGeneration->validTileCount()
+            : 0u;
         }
         renderedAnyTile = true;
         displayCacheTilesRendered.fetch_add(1u, std::memory_order_relaxed);
-        ++renderedTilesSincePublish;
-        if (renderedTilesSincePublish >= 4) {
+        const int64_t nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now().time_since_epoch()).count();
+        if (compositePublishPolicy.shouldPublishPartial(
+              currentGenerationTileCount, nowMs)) {
           publishDisplayCacheComposite(request, true);
-          renderedTilesSincePublish = 0;
         }
     }
     if (renderedAnyTile && !stale && isCpuFallbackActive()) {
@@ -1984,7 +2057,7 @@ void Nautiloid::cacheWorkerLoop() {
       continue;
     }
 
-    if (!gpuPreviewOwnsDisplay) {
+    if (!gpuPreviewOwnsDisplay && !request.zoomInteractionActive) {
       renderZoomAheadCaches(request);
     }
   }

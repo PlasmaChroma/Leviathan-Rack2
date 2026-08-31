@@ -2,6 +2,7 @@
 #include "../src/Iris.hpp"
 
 #include <chrono>
+#include <cmath>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -82,6 +83,83 @@ bool restoresWithoutFinalRequestStarvation(int mode) {
     naut.irisRequestsSubmitted.load(std::memory_order_acquire) == 1u;
 }
 
+bool cacheGenerationsRemainImmutableAcrossRecenter() {
+  Model nautModel;
+  nautModel.slug = "Nautiloid";
+  modelNautiloid = &nautModel;
+
+  Nautiloid naut;
+  naut.model = &nautModel;
+  naut.setGpuPreviewAvailable(false, true);
+
+  Nautiloid::DisplayCacheGenerationPtr first;
+  const auto firstDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(4);
+  while (std::chrono::steady_clock::now() < firstDeadline) {
+    first = naut.displayCacheGenerationSnapshot();
+    if (first && first->validTileCount() >= 4u) break;
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  if (!first || first->validTileCount() < 4u) return false;
+  const size_t firstCount = first->validTileCount();
+
+  Nautiloid::DisplayCacheGenerationPtr later;
+  const auto laterDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(4);
+  while (std::chrono::steady_clock::now() < laterDeadline) {
+    later = naut.displayCacheGenerationSnapshot();
+    if (later && later != first && later->validTileCount() > firstCount) break;
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  if (!later || later == first || later->validTileCount() <= firstCount ||
+      first->validTileCount() != firstCount) {
+    return false;
+  }
+  const auto compositeDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (std::chrono::steady_clock::now() < compositeDeadline &&
+         naut.displayCacheCompositePublishes.load(std::memory_order_acquire) == 0u) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  if (naut.displayCacheCompositePublishes.load(std::memory_order_acquire) == 0u) {
+    return false;
+  }
+
+  const uint64_t compositesBeforePan =
+    naut.displayCacheCompositePublishes.load(std::memory_order_acquire);
+  Nautiloid::FractalState panState = naut.fractalStateSnapshot();
+  panState.centerX = 0.1;
+  naut.setFractalState(panState);
+  naut.requestInteractiveZoomPreview(panState.centerX, panState.centerY);
+  const auto panDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (std::chrono::steady_clock::now() < panDeadline &&
+         naut.displayCacheCompositePublishes.load(std::memory_order_acquire) ==
+           compositesBeforePan) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  if (naut.displayCacheCompositePublishes.load(std::memory_order_acquire) ==
+      compositesBeforePan) {
+    return false;
+  }
+
+  Nautiloid::FractalState state = naut.fractalStateSnapshot();
+  state.centerX = 0.25;
+  naut.setFractalState(state);
+  naut.requestRenderWithCenteredCache();
+
+  Nautiloid::DisplayCacheGenerationPtr retained;
+  Nautiloid::DisplayCacheGenerationPtr recentered;
+  const auto recenterDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(4);
+  while (std::chrono::steady_clock::now() < recenterDeadline) {
+    retained = naut.displayCacheGenerationSnapshot(true);
+    recentered = naut.displayCacheGenerationSnapshot();
+    if (retained && retained->validTileCount() > 0u && recentered &&
+        std::fabs(recentered->centerX - state.centerX) <= 1e-9) {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  return retained && retained->validTileCount() > 0u && recentered &&
+    retained != recentered && first->validTileCount() == firstCount;
+}
+
 } // namespace
 
 int main() {
@@ -89,6 +167,8 @@ int main() {
         restoresWithoutFinalRequestStarvation(iris::FRACTAL_SPIDER));
   check("Barnsley reconnect publishes without startup request starvation",
         restoresWithoutFinalRequestStarvation(iris::FRACTAL_BARNSLEY));
+  check("CPU fallback retains immutable generations and serves live pans from cache",
+        cacheGenerationsRemainImmutableAcrossRecenter());
 
   if (failures != 0) {
     std::cerr << failures << " Nautiloid/Iris restore checks failed\n";

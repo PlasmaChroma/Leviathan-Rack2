@@ -31,6 +31,9 @@ struct NautiloidAtomicValue {
 };
 
 struct Nautiloid final : Module {
+  struct DisplayCacheGeneration;
+  using DisplayCacheGenerationPtr = std::shared_ptr<const DisplayCacheGeneration>;
+
   enum FractalColorMode {
     COLOR_PRISM = nautiloid_color::PRISM,
     COLOR_ABYSS = nautiloid_color::ABYSS,
@@ -106,6 +109,7 @@ struct Nautiloid final : Module {
   };
 
   void displayTileCacheSnapshot(DisplayTileCacheSnapshot* snapshot) const;
+  DisplayCacheGenerationPtr displayCacheGenerationSnapshot(bool retained = false) const;
   struct ZoomAheadCacheSnapshot {
     std::array<size_t, 3> currentTileCount {};
     std::array<size_t, 3> fullTileCount {};
@@ -196,6 +200,35 @@ struct Nautiloid final : Module {
     void ensureStorage(int cacheWidth, int cacheHeight, int tileSize);
     void writeTileToStitched(const DisplayCacheTile& tile);
     size_t validTileCount() const;
+  };
+
+  struct DisplayCacheTileFrame {
+    int width = 0;
+    int height = 0;
+    std::shared_ptr<const std::vector<uint8_t>> rgb8;
+
+    bool valid() const {
+      return width > 0 && height > 0 && rgb8 &&
+        rgb8->size() >= size_t(width) * size_t(height) * 3u;
+    }
+  };
+
+  struct DisplayCacheGeneration {
+    int mode = iris::FRACTAL_NONE;
+    float zoom = -1.f;
+    double centerX = 0.0;
+    double centerY = 0.0;
+    int width = 0;
+    int height = 0;
+    int tileSize = 0;
+    float cacheScale = 1.f;
+    std::vector<std::shared_ptr<const DisplayCacheTileFrame>> tiles;
+
+    int columns() const;
+    int rows() const;
+    size_t fullTileCount() const;
+    size_t validTileCount() const;
+    bool valid() const;
   };
 
   struct PresentationLayer {
@@ -338,7 +371,8 @@ private:
 
   mutable std::mutex cacheDataMutex;
   DisplayTileCache displayTileCache;
-  PresentationLayer displayPresentationCache;
+  DisplayCacheGenerationPtr displayCacheGeneration;
+  DisplayCacheGenerationPtr retainedDisplayCacheGeneration;
   std::array<PresentationLayer, 3> zoomAheadLayers;
 };
 

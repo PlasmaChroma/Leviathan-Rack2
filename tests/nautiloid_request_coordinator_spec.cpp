@@ -1,4 +1,5 @@
 #include "../src/NautiloidRequestCoordinator.hpp"
+#include "../src/NautiloidCachePolicy.hpp"
 #include "../src/NautiloidFractal.hpp"
 
 #include <iostream>
@@ -93,6 +94,15 @@ int main() {
   check("fallback reactivation wakes the existing workers",
     fallback.requestActive() == FallbackTransition::Wake &&
     fallback.hasWorkers() && fallback.isActive());
+
+  nautiloid_cache::CompositePublishPolicy compositePolicy;
+  check("partial cache publication waits for useful center coverage",
+    !compositePolicy.shouldPublishPartial(3u, 1000));
+  check("first useful partial cache generation publishes immediately",
+    compositePolicy.shouldPublishPartial(4u, 1000));
+  check("partial cache publications are time bounded",
+    !compositePolicy.shouldPublishPartial(20u, 1059) &&
+    compositePolicy.shouldPublishPartial(21u, 1060));
 
   int cancellationChecks = 0;
   iris::FractalCancellationToken cancellation;
