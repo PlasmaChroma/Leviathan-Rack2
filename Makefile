@@ -128,6 +128,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/deepcache_archive_spec \
 	build/tests/deepcache_theme_classifier_spec \
 	build/tests/chromatide_spec \
+	build/tests/phonex_engine_spec \
 	build/tests/temporaldeck_longplay_spec
 
 
@@ -159,7 +160,7 @@ ifneq (,$(findstring mingw,$(CXX_MACHINE)))
 MINGW_TEST_CPPFLAGS += -D_USE_MATH_DEFINES
 endif
 
-.PHONY: generate-panel-anchor-atlas generate-mandelwake-tables check-mandelwake-tables validate-plugin-json doorstop-reference-grid doorstop-corpus-audit doorstop-reference-evaluate doorstop-variant-grid doorstop-variant-evaluate doorstop-boing-audition doorstop-v3-paired-audition doorstop-v2-phase-grid doorstop-v2-phase-evaluate
+.PHONY: generate-panel-anchor-atlas generate-mandelwake-tables check-mandelwake-tables validate-plugin-json phonex-phase2-audition doorstop-reference-grid doorstop-corpus-audit doorstop-reference-evaluate doorstop-variant-grid doorstop-variant-evaluate doorstop-boing-audition doorstop-v3-paired-audition doorstop-v2-phase-grid doorstop-v2-phase-evaluate
 generate-panel-anchor-atlas:
 	python3 tools/generate_panel_anchor_atlas.py
 
@@ -171,6 +172,13 @@ check-mandelwake-tables:
 
 validate-plugin-json:
 	python3 tools/validate_plugin_json_tags.py plugin.json
+
+phonex-phase2-audition: build/tools/phonex_render
+	build/tools/phonex_render phonex_phase2.wav
+
+build/tools/phonex_render: tools/phonex_render.cpp src/PhonexEngine.cpp src/PhonexEngine.hpp src/PhonexTypes.hpp | build
+	mkdir -p build/tools
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tools/phonex_render.cpp src/PhonexEngine.cpp -o $@
 
 build/tools/doorstop_reference_render: tools/doorstop_reference_render.cpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/HelicalContinuumEngine.cpp src/HelicalContinuumEngine.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build
 	mkdir -p build/tools
@@ -673,6 +681,9 @@ build/tests/crownstep_spec: tests/crownstep_spec.cpp | build/tests
 
 build/tests/mandelwake_engine_spec: tests/mandelwake_engine_spec.cpp src/MandelwakeEngine.cpp src/MandelwakeEngine.hpp src/MandelwakeFixedPoint.hpp src/MandelwakeTables.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/mandelwake_engine_spec.cpp src/MandelwakeEngine.cpp -o $@
+
+build/tests/phonex_engine_spec: tests/phonex_engine_spec.cpp src/PhonexEngine.cpp src/PhonexEngine.hpp src/PhonexFixtures.cpp src/PhonexFixtures.hpp src/PhonexTypes.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/phonex_engine_spec.cpp src/PhonexEngine.cpp src/PhonexFixtures.cpp -o $@
 
 build/tests/undertow_shape_spec: tests/undertow_shape_spec.cpp src/UndertowShape.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/undertow_shape_spec.cpp -o $@

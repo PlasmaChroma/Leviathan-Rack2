@@ -8,6 +8,30 @@
 
 **Primary sonic target:** the intelligible, nasal, quantized, slightly uncanny character of late-1970s/early-1980s educational speech synthesizers, especially Speak & Spell-era TI speech hardware, without reproducing proprietary speech ROM contents or attempting bit-exact hardware emulation.
 
+## Implementation progress
+
+Last updated: 2026-08-31
+
+| Phase | Status | Notes |
+|---|---|---|
+| 1 — contracts and fixtures | Complete | Fixed frame/sequence types, procedural fixtures, frozen chirp and LFSR, scalar lattice, deterministic generator skeleton, and standalone tests. |
+| 2 — clean DSP and transport | Complete | Forward/reverse/freeze/scrub/frame-step transport, interpolation, retrigger, 1 ms events, 8/10 kHz scheduler, clean/forced/external excitation, lattice synthesis, raw/filtered reconstruction, bounded output, finite recovery, and standalone audition renderer. |
+| 3 — WARP, BEND, GLITCH | Not started | Next implementation phase. |
+| 4 — direct phoneme speech | Not started | First recognizable-speech milestone. |
+| 5–8 | Not started | Typed text, Rack wrapper, panel/UI, and release hardening. |
+
+Current validation commands:
+
+```sh
+python3 tools/generate_phonex_rom.py --check
+make build/tests/phonex_engine_spec
+build/tests/phonex_engine_spec
+make phonex-phase2-audition  # writes phonex_phase2.wav for listening
+```
+
+The Phase 2 audition is a procedural LPC fixture, not a recognizable word. The
+first vocabulary audition remains Phase 4 as specified below.
+
 ---
 
 ## 0. Codex execution contract
