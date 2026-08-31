@@ -948,15 +948,21 @@ void Nautiloid::resetView() {
 }
 
 void Nautiloid::previewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const {
-  std::lock_guard<std::mutex> lock(snapshotMutex);
-  if (width) *width = previewSource.valid() ? previewSource.width : 0;
-  if (height) *height = previewSource.valid() ? previewSource.height : 0;
+  std::shared_ptr<const iris::SourceField> source = previewSourceSnapshot();
+  if (width) *width = source ? source->width : 0;
+  if (height) *height = source ? source->height : 0;
   if (!rgb) return;
-  if (previewSource.valid()) {
-    *rgb = previewSource.rgb8;
+  if (source) {
+    *rgb = source->rgb8;
   } else {
     rgb->clear();
   }
+}
+
+std::shared_ptr<const iris::SourceField> Nautiloid::previewSourceSnapshot() const {
+  std::lock_guard<std::mutex> lock(snapshotMutex);
+  if (!previewPublishedSource || !previewPublishedSource->valid()) return {};
+  return previewPublishedSource;
 }
 
 void Nautiloid::irisPreviewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const {
@@ -1249,8 +1255,10 @@ void Nautiloid::markDisplayRenderFinished(uint64_t serial) {
 void Nautiloid::publishAuthoritativeDisplaySource(
     iris::SourceField source,
     const DisplayWorkerRequest& request) {
+  std::shared_ptr<const iris::SourceField> published =
+    std::make_shared<const iris::SourceField>(source);
   std::lock_guard<std::mutex> lock(snapshotMutex);
-  previewSource = source;
+  previewPublishedSource = std::move(published);
   authoritativeDisplaySource = std::move(source);
   authoritativeDisplayMode = request.mode;
   authoritativeDisplayZoom = request.zoom;
@@ -1425,8 +1433,10 @@ bool Nautiloid::publishDisplayReprojection(const DisplayWorkerRequest& request) 
     }
   }
   {
+    std::shared_ptr<const iris::SourceField> published =
+      std::make_shared<const iris::SourceField>(std::move(reprojected));
     std::lock_guard<std::mutex> lock(snapshotMutex);
-    previewSource = std::move(reprojected);
+    previewPublishedSource = std::move(published);
   }
   previewGeneration.fetch_add(1u, std::memory_order_release);
   displayReprojectionPublishes.fetch_add(1u, std::memory_order_relaxed);
@@ -1442,7 +1452,7 @@ bool Nautiloid::publishDisplayCacheComposite(
   iris::SourceField fallback;
   if (allowPartial) {
     std::lock_guard<std::mutex> lock(snapshotMutex);
-    fallback = previewSource;
+    if (previewPublishedSource) fallback = *previewPublishedSource;
   }
 
   iris::SourceField source;
@@ -1476,8 +1486,10 @@ bool Nautiloid::publishDisplayCacheComposite(
   if (complete) {
     publishAuthoritativeDisplaySource(std::move(source), request);
   } else {
+    std::shared_ptr<const iris::SourceField> published =
+      std::make_shared<const iris::SourceField>(std::move(source));
     std::lock_guard<std::mutex> lock(snapshotMutex);
-    previewSource = std::move(source);
+    previewPublishedSource = std::move(published);
   }
   if (completeOut) {
     *completeOut = complete;

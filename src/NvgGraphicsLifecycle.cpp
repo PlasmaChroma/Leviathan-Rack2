@@ -29,6 +29,39 @@ bool ownedNvgImageSizeMatches(NVGcontext* currentVg, int handle, int expectedWid
   return currentW == expectedWidth && currentH == expectedHeight;
 }
 
+bool updateOwnedNvgImageRgba(NVGcontext*& ownerVg,
+                             int& handle,
+                             int& cachedWidth,
+                             int& cachedHeight,
+                             NVGcontext* currentVg,
+                             int width,
+                             int height,
+                             int imageFlags,
+                             const unsigned char* rgbaPixels) {
+  if (!currentVg || width <= 0 || height <= 0 || !rgbaPixels) {
+    resetOwnedNvgImage(
+      ownerVg, handle, cachedWidth, cachedHeight, currentVg,
+      currentVg && ownerVg == currentVg);
+    return false;
+  }
+  if (ownerVg != currentVg) {
+    resetOwnedNvgImage(ownerVg, handle, cachedWidth, cachedHeight, currentVg, false);
+    ownerVg = currentVg;
+  }
+  if (handle >= 0 && cachedWidth == width && cachedHeight == height &&
+      ownedNvgImageSizeMatches(currentVg, handle, width, height)) {
+    nvgUpdateImage(currentVg, handle, rgbaPixels);
+    return true;
+  }
+  resetOwnedNvgImage(ownerVg, handle, cachedWidth, cachedHeight, currentVg, true);
+  ownerVg = currentVg;
+  handle = nvgCreateImageRGBA(currentVg, width, height, imageFlags, rgbaPixels);
+  if (handle < 0) return false;
+  cachedWidth = width;
+  cachedHeight = height;
+  return true;
+}
+
 bool clearCacheOnContextSwitch(NVGcontext* currentVg, NVGcontext*& activeVg, unsigned long long* useCounter) {
   if (activeVg == currentVg) {
     return false;

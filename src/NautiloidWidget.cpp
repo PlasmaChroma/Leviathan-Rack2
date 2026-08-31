@@ -637,7 +637,6 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
 
 struct NautiloidDisplay final : OpaqueWidget {
   Nautiloid* module = nullptr;
-  widget::FramebufferWidget* framebuffer = nullptr;
   uint64_t generation = uint64_t(-1);
   NVGcontext* imageContext = nullptr;
   int imageHandle = -1;
@@ -645,7 +644,6 @@ struct NautiloidDisplay final : OpaqueWidget {
   int uploadedHeight = 0;
   std::vector<uint8_t> rgba;
   bool panActive = false;
-  bool lastGpuPreviewActive = false;
   int uploadedColorMode = -1;
   Vec lastPanLocal;
   double lastPanRequestTime = -INFINITY;
@@ -711,7 +709,6 @@ struct NautiloidDisplay final : OpaqueWidget {
     nvg_gfx_lifecycle::resetOwnedNvgImage(
       imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
     generation = uint64_t(-1);
-    if (framebuffer) framebuffer->setDirty();
     OpaqueWidget::onContextCreate(e);
   }
 
@@ -817,15 +814,6 @@ struct NautiloidDisplay final : OpaqueWidget {
         wheelFinalRecenterCache);
       wheelFinalRecenterCache = false;
     }
-    const uint64_t currentGeneration =
-      module ? module->previewGeneration.load(std::memory_order_acquire) : 0u;
-    const bool gpuPreviewActive = nautiloidGpuPreviewActive(module);
-    const int colorMode = nautiloidColorMode(module);
-    if ((generation != currentGeneration || gpuPreviewActive != lastGpuPreviewActive ||
-         colorMode != uploadedColorMode) && framebuffer) {
-      framebuffer->setDirty();
-    }
-    lastGpuPreviewActive = gpuPreviewActive;
     OpaqueWidget::step();
   }
 
@@ -850,27 +838,28 @@ struct NautiloidDisplay final : OpaqueWidget {
     }
     if (generation != currentGeneration || uploadedColorMode != colorMode || imageHandle < 0 ||
         !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(args.vg, imageHandle, uploadedWidth, uploadedHeight)) {
-      std::vector<uint8_t> rgb;
+      std::shared_ptr<const iris::SourceField> source;
       int width = 0;
       int height = 0;
       if (module) {
-        module->previewSnapshot(&rgb, &width, &height);
+        source = module->previewSourceSnapshot();
+        if (source) {
+          width = source->width;
+          height = source->height;
+        }
       }
-      rgba.resize(rgb.size() / 3u * 4u);
-      for (size_t i = 0; i + 2u < rgb.size(); i += 3u) {
+      const std::vector<uint8_t>* rgb = source ? &source->rgb8 : nullptr;
+      rgba.resize(rgb ? rgb->size() / 3u * 4u : 0u);
+      for (size_t i = 0; rgb && i + 2u < rgb->size(); i += 3u) {
         const size_t out = (i / 3u) * 4u;
-        nautiloidApplyDisplayPalette(colorMode, rgb[i + 0u], rgb[i + 1u], rgb[i + 2u],
+        nautiloidApplyDisplayPalette(colorMode, (*rgb)[i + 0u], (*rgb)[i + 1u], (*rgb)[i + 2u],
           &rgba[out + 0u], &rgba[out + 1u], &rgba[out + 2u]);
         rgba[out + 3u] = 255u;
       }
-      nvg_gfx_lifecycle::resetOwnedNvgImage(
-        imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, imageContext == args.vg);
-      imageContext = args.vg;
-      if (width > 0 && height > 0 && !rgba.empty()) {
-        imageHandle = nvgCreateImageRGBA(args.vg, width, height, NVG_IMAGE_PREMULTIPLIED, rgba.data());
-        uploadedWidth = width;
-        uploadedHeight = height;
-      }
+      nvg_gfx_lifecycle::updateOwnedNvgImageRgba(
+        imageContext, imageHandle, uploadedWidth, uploadedHeight,
+        args.vg, width, height, NVG_IMAGE_PREMULTIPLIED,
+        rgba.empty() ? nullptr : rgba.data());
       generation = currentGeneration;
       uploadedColorMode = colorMode;
     }
@@ -985,28 +974,29 @@ struct NautiloidIrisMiniDisplay final : OpaqueWidget {
     }
     if (generation != currentGeneration || imageHandle < 0 ||
         !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(args.vg, imageHandle, uploadedWidth, uploadedHeight)) {
-      std::vector<uint8_t> rgb;
+      std::shared_ptr<const iris::SourceField> source;
       int width = 0;
       int height = 0;
       if (module) {
-        module->irisPreviewSnapshot(&rgb, &width, &height);
+        source = module->irisExpanderOwnedSourceSnapshot(nullptr);
+        if (source) {
+          width = source->width;
+          height = source->height;
+        }
       }
-      rgba.resize(rgb.size() / 3u * 4u);
-      for (size_t i = 0; i + 2u < rgb.size(); i += 3u) {
+      const std::vector<uint8_t>* rgb = source ? &source->rgb8 : nullptr;
+      rgba.resize(rgb ? rgb->size() / 3u * 4u : 0u);
+      for (size_t i = 0; rgb && i + 2u < rgb->size(); i += 3u) {
         const size_t out = (i / 3u) * 4u;
-        rgba[out + 0u] = rgb[i + 0u];
-        rgba[out + 1u] = rgb[i + 1u];
-        rgba[out + 2u] = rgb[i + 2u];
+        rgba[out + 0u] = (*rgb)[i + 0u];
+        rgba[out + 1u] = (*rgb)[i + 1u];
+        rgba[out + 2u] = (*rgb)[i + 2u];
         rgba[out + 3u] = 255u;
       }
-      nvg_gfx_lifecycle::resetOwnedNvgImage(
-        imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, imageContext == args.vg);
-      imageContext = args.vg;
-      if (width > 0 && height > 0 && !rgba.empty()) {
-        imageHandle = nvgCreateImageRGBA(args.vg, width, height, NVG_IMAGE_PREMULTIPLIED, rgba.data());
-        uploadedWidth = width;
-        uploadedHeight = height;
-      }
+      nvg_gfx_lifecycle::updateOwnedNvgImageRgba(
+        imageContext, imageHandle, uploadedWidth, uploadedHeight,
+        args.vg, width, height, NVG_IMAGE_PREMULTIPLIED,
+        rgba.empty() ? nullptr : rgba.data());
       generation = currentGeneration;
     }
 
@@ -1828,15 +1818,10 @@ struct NautiloidWidget final : ModuleWidget {
     glPreview->box.pos = mm2px(displayRectMm.pos.plus(Vec(0.4f, 0.4f)));
     glPreview->box.size = mm2px(displayRectMm.size.minus(Vec(0.8f, 0.8f)));
     addChild(glPreview);
-    widget::FramebufferWidget* displayFb = new widget::FramebufferWidget();
-    displayFb->box.pos = mm2px(displayRectMm.pos.plus(Vec(0.4f, 0.4f)));
-    displayFb->box.size = mm2px(displayRectMm.size.minus(Vec(0.8f, 0.8f)));
-    displayFb->dirtyOnSubpixelChange = false;
     NautiloidDisplay* display = new NautiloidDisplay(module);
-    display->framebuffer = displayFb;
-    display->box.size = displayFb->box.size;
-    displayFb->addChild(display);
-    addChild(displayFb);
+    display->box.pos = mm2px(displayRectMm.pos.plus(Vec(0.4f, 0.4f)));
+    display->box.size = mm2px(displayRectMm.size.minus(Vec(0.8f, 0.8f)));
+    addChild(display);
 
     NautiloidZoomReadout* zoomReadout = new NautiloidZoomReadout(module);
     const math::Rect zoomReadoutRectMm = rectMm("ZOOM_READOUT", math::Rect(Vec(24.f, 72.2f), Vec(60.f, 5.2f)));

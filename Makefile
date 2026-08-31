@@ -408,6 +408,7 @@ test-fast: test-build-fast
 	python3 tests/octavia_monitoring_panel_contract_spec.py
 	python3 tests/moirai_panel_contract_spec.py
 	python3 tests/nautiloid_gl_lifecycle_contract_spec.py
+	python3 tests/iris_nautiloid_nvg_phase5_contract_spec.py
 	python3 tests/split_svg_labels_spec.py
 	python3 tools/generate_mandelwake_tables.py --check
 	$(call run_test_bin,build/tests/temporaldeck_platter_spec_harness)

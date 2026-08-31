@@ -101,6 +101,10 @@ int main() {
         module.loadFailed.load(std::memory_order_acquire) && module.statusText() == "Load failed");
   check("partial reload reuses the immutable retained source",
         IrisPhase4TestAccess::snapshotSourceIdentity(module) == retainedSource.get());
+  const auto previewFrame1 = module.previewPixelsSnapshot();
+  const auto previewFrame2 = module.previewPixelsSnapshot();
+  check("UI preview snapshots share one immutable published frame",
+        previewFrame1 && previewFrame1 == previewFrame2 && !previewFrame1->empty());
 
   std::vector<uint8_t> previewBeforeFailure;
   std::vector<float> waveformBeforeFailure;

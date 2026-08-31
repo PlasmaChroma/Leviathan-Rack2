@@ -83,6 +83,7 @@ struct Nautiloid final : Module {
   void serviceIrisConsumerDemand();
   void setGpuPreviewAvailable(bool available, bool requireCpuFallback = true);
   void resetView();
+  std::shared_ptr<const iris::SourceField> previewSourceSnapshot() const;
   void previewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
   void irisPreviewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
   std::shared_ptr<const iris::SourceField> irisExpanderOwnedSourceSnapshot(uint64_t* generation) const;
@@ -309,7 +310,7 @@ private:
   std::atomic<bool> irisDemandSyncPending {false};
 
   mutable std::mutex snapshotMutex;
-  iris::SourceField previewSource;
+  std::shared_ptr<const iris::SourceField> previewPublishedSource;
   iris::SourceField authoritativeDisplaySource;
   int authoritativeDisplayMode = iris::FRACTAL_NONE;
   float authoritativeDisplayZoom = -1.f;

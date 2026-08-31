@@ -272,29 +272,6 @@ NVGcolor irisPreviewConvertedColor(float value) {
     255);
 }
 
-void filterIrisSourcePreview(std::vector<uint8_t>* rgb, int mode) {
-  if (!rgb || rgb->empty()) return;
-  for (size_t i = 0; i + 2u < rgb->size(); i += 3u) {
-    switch (mode) {
-      case iris::IMAGE_CHANNEL_RED:
-        (*rgb)[i + 1u] = 0u;
-        (*rgb)[i + 2u] = 0u;
-        break;
-      case iris::IMAGE_CHANNEL_GREEN:
-        (*rgb)[i] = 0u;
-        (*rgb)[i + 2u] = 0u;
-        break;
-      case iris::IMAGE_CHANNEL_BLUE:
-        (*rgb)[i] = 0u;
-        (*rgb)[i + 1u] = 0u;
-        break;
-      case iris::IMAGE_CHANNEL_ALL:
-      default:
-        break;
-    }
-  }
-}
-
 void irisBrowserWaveformSnapshot(float scan, int sampleCount, std::vector<float>* samples) {
   if (!samples) return;
   sampleCount = std::max(sampleCount, 2);
@@ -307,7 +284,6 @@ void irisBrowserWaveformSnapshot(float scan, int sampleCount, std::vector<float>
 
 struct IrisDisplay final : OpaqueWidget {
   Iris* module = nullptr;
-  widget::FramebufferWidget* framebuffer = nullptr;
   uint64_t generation = uint64_t(-1);
   bool channelPreview = false;
   int channelMode = iris::IMAGE_CHANNEL_ALL;
@@ -335,23 +311,7 @@ struct IrisDisplay final : OpaqueWidget {
     nvg_gfx_lifecycle::resetOwnedNvgImage(
       imageContext, imageHandle, uploadedWidth, uploadedHeight, nullptr, false);
     generation = uint64_t(-1);
-    if (framebuffer) framebuffer->setDirty();
     OpaqueWidget::onContextCreate(e);
-  }
-
-  void step() override {
-    const uint64_t currentGeneration =
-      module ? module->previewGeneration.load(std::memory_order_acquire) : 0u;
-    const bool currentChannelPreview =
-      module ? module->displayChannelPreview.load(std::memory_order_relaxed) : false;
-    const int currentChannelMode =
-      module ? clamp(module->displayImageChannelMode.load(std::memory_order_relaxed), 0, 3)
-             : iris::IMAGE_CHANNEL_ALL;
-    if ((generation != currentGeneration || channelPreview != currentChannelPreview ||
-         channelMode != currentChannelMode) && framebuffer) {
-      framebuffer->setDirty();
-    }
-    OpaqueWidget::step();
   }
 
   void draw(const DrawArgs& args) override {
@@ -376,37 +336,58 @@ struct IrisDisplay final : OpaqueWidget {
     if (generation != currentGeneration || channelPreview != currentChannelPreview ||
         channelMode != currentChannelMode || imageHandle < 0 ||
         !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(args.vg, imageHandle, uploadedWidth, uploadedHeight)) {
-      std::vector<uint8_t> gray;
-      std::vector<uint8_t> rgb;
+      std::shared_ptr<const std::vector<uint8_t>> grayOwned;
+      const std::vector<uint8_t>* gray = nullptr;
+      std::shared_ptr<const iris::SourceField> source;
+      const std::vector<uint8_t>* rgb = nullptr;
       int width = 0;
       int height = 0;
       if (module) {
         if (currentChannelPreview) {
-          module->sourcePreviewSnapshot(&rgb, &width, &height);
+          source = module->sourceFieldSnapshot();
+          if (source) {
+            rgb = &source->rgb8;
+            width = source->width;
+            height = source->height;
+          }
         }
-        if (!currentChannelPreview || rgb.empty()) {
-          module->previewSnapshot(&gray, &width, &height);
+        if (!currentChannelPreview || !rgb || rgb->empty()) {
+          grayOwned = module->previewPixelsSnapshot(&width, &height);
+          gray = grayOwned.get();
         }
       } else {
         const std::vector<uint8_t>& preview = irisBrowserPreviewPixels();
-        gray.assign(preview.begin(), preview.end());
+        gray = &preview;
         width = iris::kSourcePreviewWidth;
         height = iris::kSourcePreviewHeight;
       }
-      if (currentChannelPreview && !rgb.empty()) {
-        filterIrisSourcePreview(&rgb, currentChannelMode);
-        const size_t pixelCount = rgb.size() / 3u;
+      if (currentChannelPreview && rgb && !rgb->empty()) {
+        const size_t pixelCount = rgb->size() / 3u;
         rgba.resize(pixelCount * 4u);
         for (size_t i = 0; i < pixelCount; ++i) {
-          rgba[i * 4u + 0u] = rgb[i * 3u + 0u];
-          rgba[i * 4u + 1u] = rgb[i * 3u + 1u];
-          rgba[i * 4u + 2u] = rgb[i * 3u + 2u];
+          uint8_t red = (*rgb)[i * 3u + 0u];
+          uint8_t green = (*rgb)[i * 3u + 1u];
+          uint8_t blue = (*rgb)[i * 3u + 2u];
+          if (currentChannelMode == iris::IMAGE_CHANNEL_RED) {
+            green = 0u;
+            blue = 0u;
+          } else if (currentChannelMode == iris::IMAGE_CHANNEL_GREEN) {
+            red = 0u;
+            blue = 0u;
+          } else if (currentChannelMode == iris::IMAGE_CHANNEL_BLUE) {
+            red = 0u;
+            green = 0u;
+          }
+          rgba[i * 4u + 0u] = red;
+          rgba[i * 4u + 1u] = green;
+          rgba[i * 4u + 2u] = blue;
           rgba[i * 4u + 3u] = 255u;
         }
       } else {
-        rgba.resize(gray.size() * 4u);
-        for (size_t i = 0; i < gray.size(); ++i) {
-          const float value = float(gray[i]) / 127.5f - 1.f;
+        const size_t graySize = gray ? gray->size() : 0u;
+        rgba.resize(graySize * 4u);
+        for (size_t i = 0; i < graySize; ++i) {
+          const float value = float((*gray)[i]) / 127.5f - 1.f;
           const NVGcolor color = currentChannelPreview
             ? irisPreviewChannelColor(currentChannelMode, value)
             : irisPreviewConvertedColor(value);
@@ -416,14 +397,10 @@ struct IrisDisplay final : OpaqueWidget {
           rgba[i * 4u + 3u] = uint8_t(std::round(clamp(color.a, 0.f, 1.f) * 255.f));
         }
       }
-      nvg_gfx_lifecycle::resetOwnedNvgImage(
-        imageContext, imageHandle, uploadedWidth, uploadedHeight, args.vg, imageContext == args.vg);
-      imageContext = args.vg;
-      if (width > 0 && height > 0 && !rgba.empty()) {
-        imageHandle = nvgCreateImageRGBA(args.vg, width, height, NVG_IMAGE_PREMULTIPLIED, rgba.data());
-        uploadedWidth = width;
-        uploadedHeight = height;
-      }
+      nvg_gfx_lifecycle::updateOwnedNvgImageRgba(
+        imageContext, imageHandle, uploadedWidth, uploadedHeight,
+        args.vg, width, height, NVG_IMAGE_PREMULTIPLIED,
+        rgba.empty() ? nullptr : rgba.data());
       generation = currentGeneration;
       channelPreview = currentChannelPreview;
       channelMode = currentChannelMode;
@@ -1111,15 +1088,10 @@ struct IrisWidget final : ModuleWidget {
 
     math::Rect displayRectMm(Vec(4.3f, 13.2f), Vec(52.36f, 25.9f));
     panel_svg::loadRectFromSvgMm(panelPath, "IRIS_DISPLAY", &displayRectMm);
-    widget::FramebufferWidget* displayFb = new widget::FramebufferWidget();
-    displayFb->box.pos = mm2px(displayRectMm.pos);
-    displayFb->box.size = mm2px(displayRectMm.size);
-    displayFb->dirtyOnSubpixelChange = false;
     IrisDisplay* display = new IrisDisplay(module);
-    display->box.size = displayFb->box.size;
-    display->framebuffer = displayFb;
-    displayFb->addChild(display);
-    addChild(displayFb);
+    display->box.pos = mm2px(displayRectMm.pos);
+    display->box.size = mm2px(displayRectMm.size);
+    addChild(display);
     IrisScanLineOverlay* scanLine = new IrisScanLineOverlay(module);
     scanLine->box.pos = mm2px(displayRectMm.pos);
     scanLine->box.size = mm2px(displayRectMm.size);

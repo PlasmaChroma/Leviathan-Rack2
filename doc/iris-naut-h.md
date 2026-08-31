@@ -33,11 +33,18 @@ It does not require changes to Integral Flux or Proc.
   while keeping the read error visible, preview construction occurs outside
   the snapshot lock, and rebuild/reload requests share immutable source
   ownership instead of copying canonical pixels.
-- Focused Phase 4 worker/runtime tests and the local Linux plugin build pass.
+- Phase 5 implementation is complete: Iris and Nautiloid raster displays reuse
+  validated NanoVG image handles with `nvgUpdateImage()`, acquire immutable
+  presentation snapshots without full-frame UI copies, and no longer wrap the
+  primary raster quad in a second framebuffer. Iris's waveform grid/content
+  separation remains unchanged.
+- Focused Phase 4/5 worker, runtime, and lifecycle-contract tests and the local
+  Linux plugin build pass. Manual Rack zoom/context validation remains part of
+  final acceptance.
   The native MINGW64 `test-fast` suite and authoritative Windows `plugin.dll`
   build passed through the original Phase 3 checkpoint; native validation of
-  the worker-paced Phase 1 follow-up and Phase 4 remains pending where the
-  documented Windows bridge is available. Phase 5 is next.
+  the worker-paced Phase 1 follow-up and Phases 4-5 remains pending where the
+  documented Windows bridge is available. Phase 6 is next.
 
 ## Current architecture
 

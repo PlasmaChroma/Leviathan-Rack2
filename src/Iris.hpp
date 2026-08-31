@@ -114,6 +114,9 @@ struct Iris final : Module {
   std::string statusText() const;
   int sourceKind() const;
   bool consumeRestoredImageSourceMode();
+  std::shared_ptr<const std::vector<uint8_t>> previewPixelsSnapshot(
+    int* width = nullptr, int* height = nullptr) const;
+  std::shared_ptr<const iris::SourceField> sourceFieldSnapshot() const;
   void previewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const;
   void sourcePreviewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const;
   void waveformSnapshot(float scan, int sampleCount, std::vector<float>* samples) const;
@@ -203,7 +206,7 @@ private:
   mutable std::mutex snapshotMutex;
   iris::ImageWavetable snapshotTable;
   SourcePtr snapshotSource;
-  std::vector<uint8_t> snapshotPreview;
+  std::shared_ptr<const std::vector<uint8_t>> snapshotPreview;
   int previewWidth = iris::kSourcePreviewWidth;
   int previewHeight = iris::kSourcePreviewHeight;
   std::string lastError;

@@ -105,7 +105,10 @@ Iris::Iris() {
   workerTableIndex.store(1, std::memory_order_release);
   pendingTableIndex.store(-1, std::memory_order_release);
   snapshotTable = tableBuffers[activeTableIndex];
-  buildPreview(snapshotTable, &snapshotPreview);
+  std::vector<uint8_t> initialPreview;
+  buildPreview(snapshotTable, &initialPreview);
+  snapshotPreview =
+    std::make_shared<const std::vector<uint8_t>>(std::move(initialPreview));
   startWorker();
 }
 
@@ -289,6 +292,8 @@ bool Iris::publishWorkerResult(WorkerResult& result, int tableIndex, std::string
   iris::ImageWavetable nextSnapshotTable = table;
   std::vector<uint8_t> nextPreview;
   buildPreview(table, &nextPreview);
+  std::shared_ptr<const std::vector<uint8_t>> nextPreviewFrame =
+    std::make_shared<const std::vector<uint8_t>>(std::move(nextPreview));
   const bool reportFailure = !diagnostic.empty();
   {
     std::lock_guard<std::mutex> lock(snapshotMutex);
@@ -302,7 +307,7 @@ bool Iris::publishWorkerResult(WorkerResult& result, int tableIndex, std::string
       activeSourceKind.store(currentSourceKind, std::memory_order_release);
     }
     snapshotTable = std::move(nextSnapshotTable);
-    snapshotPreview = std::move(nextPreview);
+    snapshotPreview = std::move(nextPreviewFrame);
     lastError = std::move(diagnostic);
   }
   pendingTableIndex.store(tableIndex, std::memory_order_release);
@@ -941,10 +946,25 @@ void Iris::buildPreview(const iris::ImageWavetable& table, std::vector<uint8_t>*
 }
 
 void Iris::previewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const {
+  std::shared_ptr<const std::vector<uint8_t>> preview = previewPixelsSnapshot(width, height);
+  if (pixels) {
+    if (preview) *pixels = *preview;
+    else pixels->clear();
+  }
+}
+
+std::shared_ptr<const std::vector<uint8_t>> Iris::previewPixelsSnapshot(
+    int* width, int* height) const {
   std::lock_guard<std::mutex> lock(snapshotMutex);
-  if (pixels) *pixels = snapshotPreview;
   if (width) *width = previewWidth;
   if (height) *height = previewHeight;
+  return snapshotPreview;
+}
+
+std::shared_ptr<const iris::SourceField> Iris::sourceFieldSnapshot() const {
+  std::lock_guard<std::mutex> lock(snapshotMutex);
+  if (!snapshotSource || !snapshotSource->valid()) return {};
+  return snapshotSource;
 }
 
 void Iris::sourcePreviewSnapshot(std::vector<uint8_t>* pixels, int* width, int* height) const {
