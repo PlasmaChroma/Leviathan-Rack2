@@ -119,6 +119,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/iris_module_phase4_spec \
 	build/tests/nautiloid_request_coordinator_spec \
 	build/tests/nautiloid_location_code_spec \
+	build/tests/nautiloid_gpu_precision_spec \
 	build/tests/nautiloid_iris_restore_spec \
 	build/tests/integral_flux_runtime_spec \
 	build/tests/proc_runtime_spec \
@@ -412,6 +413,7 @@ test-fast: test-build-fast
 	python3 tests/iris_nautiloid_nvg_phase5_contract_spec.py
 	python3 tests/nautiloid_cache_phase6_contract_spec.py
 	python3 tests/nautiloid_gpu_phase7_contract_spec.py
+	python3 tests/nautiloid_gpu_phase8_contract_spec.py
 	python3 tests/split_svg_labels_spec.py
 	python3 tools/generate_mandelwake_tables.py --check
 	$(call run_test_bin,build/tests/temporaldeck_platter_spec_harness)
@@ -446,6 +448,7 @@ test-fast: test-build-fast
 	$(call run_rack_test_bin,build/tests/iris_module_phase4_spec)
 	$(call run_test_bin,build/tests/nautiloid_request_coordinator_spec)
 	$(call run_test_bin,build/tests/nautiloid_location_code_spec)
+	$(call run_test_bin,build/tests/nautiloid_gpu_precision_spec)
 	$(call run_rack_test_bin,build/tests/nautiloid_iris_restore_spec)
 	$(call run_rack_test_bin,build/tests/integral_flux_runtime_spec)
 	$(call run_rack_test_bin,build/tests/proc_runtime_spec)
@@ -649,6 +652,9 @@ build/tests/nautiloid_request_coordinator_spec: tests/nautiloid_request_coordina
 
 build/tests/nautiloid_location_code_spec: tests/nautiloid_location_code_spec.cpp src/NautiloidLocationCode.cpp src/NautiloidLocationCode.hpp src/NautiloidFractal.hpp | build/tests
 	$(CXX) -std=c++17 -O3 -Wall -Wextra tests/nautiloid_location_code_spec.cpp src/NautiloidLocationCode.cpp -o $@
+
+build/tests/nautiloid_gpu_precision_spec: tests/nautiloid_gpu_precision_spec.cpp src/NautiloidGpuPrecision.hpp | build/tests
+	$(CXX) -std=c++17 -O3 -Wall -Wextra tests/nautiloid_gpu_precision_spec.cpp -o $@
 
 build/tests/nautiloid_iris_restore_spec: tests/nautiloid_iris_restore_spec.cpp src/Nautiloid.cpp src/Nautiloid.hpp src/NautiloidLocationCode.cpp src/Iris.cpp src/Iris.hpp src/IrisIO.cpp src/IrisSourceField.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/nautiloid_iris_restore_spec.cpp src/Nautiloid.cpp src/NautiloidLocationCode.cpp src/Iris.cpp src/IrisIO.cpp src/IrisSourceField.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@

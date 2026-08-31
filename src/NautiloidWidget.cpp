@@ -1,4 +1,5 @@
 #include "Nautiloid.hpp"
+#include "NautiloidGpuPrecision.hpp"
 #include "GlLifecycleUtils.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
@@ -136,14 +137,23 @@ void nautiloidApplyDisplayPalette(int mode, uint8_t r, uint8_t g, uint8_t b,
 }
 
 struct NautiloidGlPreview final : widget::OpenGlWidget {
-  struct ModeProgram {
+  struct ShaderVariant {
     GLuint program = 0;
     GLuint fragmentShader = 0;
     GLint uniformCenter = -1;
     GLint uniformHalfSpan = -1;
+    GLint uniformCenterHi = -1;
+    GLint uniformCenterLo = -1;
+    GLint uniformHalfSpanHi = -1;
+    GLint uniformHalfSpanLo = -1;
     GLint uniformColorMode = -1;
     bool initAttempted = false;
     bool ready = false;
+  };
+
+  struct ModeProgram {
+    ShaderVariant fast;
+    ShaderVariant deep;
   };
 
   Nautiloid* module = nullptr;
@@ -154,6 +164,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
   visual_assets::AdaptiveGlSurface adaptiveSurface;
   bool lastEffectiveActive = false;
   bool lastInteractionActive = false;
+  bool lastDeepPrecisionEnabled = false;
   int lastMode = -1;
   float lastZoom = NAN;
   double lastCenterX = NAN;
@@ -210,12 +221,17 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
   }
 
   void releaseGlResources(bool deleteGlObjects) {
+    if (module) {
+      module->gpuDeepPrecisionActive.store(false, std::memory_order_relaxed);
+    }
     for (ModeProgram& modeProgram : modePrograms) {
-      if (deleteGlObjects && modeProgram.program) {
-        glDeleteProgram(modeProgram.program);
-      }
-      if (deleteGlObjects && modeProgram.fragmentShader) {
-        glDeleteShader(modeProgram.fragmentShader);
+      for (ShaderVariant* variant : {&modeProgram.fast, &modeProgram.deep}) {
+        if (deleteGlObjects && variant->program) {
+          glDeleteProgram(variant->program);
+        }
+        if (deleteGlObjects && variant->fragmentShader) {
+          glDeleteShader(variant->fragmentShader);
+        }
       }
       modeProgram = ModeProgram();
     }
@@ -251,9 +267,13 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
       return;
     }
     const ModeProgram& modeProgram = modePrograms[size_t(mode)];
-    if (modeProgram.ready &&
-        !gl_lifecycle::isValidProgramShaderSet(
-          modeProgram.program, {vertexShader, modeProgram.fragmentShader})) {
+    const bool fastInvalid = modeProgram.fast.ready &&
+      !gl_lifecycle::isValidProgramShaderSet(
+        modeProgram.fast.program, {vertexShader, modeProgram.fast.fragmentShader});
+    const bool deepInvalid = modeProgram.deep.ready &&
+      !gl_lifecycle::isValidProgramShaderSet(
+        modeProgram.deep.program, {vertexShader, modeProgram.deep.fragmentShader});
+    if (fastInvalid || deepInvalid) {
       // The vertex shader is shared by every mode. Reset the complete local
       // graph so the next ensure call reconstructs a coherent set of names.
       releaseGlResources(false);
@@ -264,13 +284,14 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     }
   }
 
-  bool ensureShaderReady(int mode) {
+  bool ensureShaderReady(int mode, bool deepPrecision = false) {
     if (!iris::isBuiltinFractalMode(mode) || mode < 0 || size_t(mode) >= modePrograms.size()) {
       return false;
     }
     ModeProgram& modeProgram = modePrograms[size_t(mode)];
-    if (modeProgram.initAttempted) return modeProgram.ready;
-    modeProgram.initAttempted = true;
+    ShaderVariant& variant = deepPrecision ? modeProgram.deep : modeProgram.fast;
+    if (variant.initAttempted) return variant.ready;
+    variant.initAttempted = true;
 
     static const char* const kVertexShaderSrc = R"GLSL(
       #version 120
@@ -283,8 +304,15 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
 
     static const char* const kFragmentShaderBody = R"GLSL(
       varying vec2 vUv;
+#if NAUTILOID_DEEP_PRECISION
+      uniform vec2 uCenterHi;
+      uniform vec2 uCenterLo;
+      uniform vec2 uHalfSpanHi;
+      uniform vec2 uHalfSpanLo;
+#else
       uniform vec2 uCenter;
       uniform vec2 uHalfSpan;
+#endif
       uniform int uColorMode;
 
       vec3 applyColorMode(vec3 rgb) {
@@ -378,7 +406,215 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
                     (root == 2 ? 1.00 : 0.46 + phase) * v);
       }
 
+#if NAUTILOID_DEEP_PRECISION
+      // A double-single value is (hi, lo). Error-free transforms retain about
+      // 44 useful mantissa bits without optional native-double extensions.
+      vec2 dsRenorm(float hi, float lo) {
+        float sum = hi + lo;
+        return vec2(sum, lo - (sum - hi));
+      }
+
+      vec2 dsAdd(vec2 a, vec2 b) {
+        float sum = a.x + b.x;
+        float v = sum - a.x;
+        float error = (a.x - (sum - v)) + (b.x - v) + a.y + b.y;
+        return dsRenorm(sum, error);
+      }
+
+      vec2 dsNeg(vec2 a) { return vec2(-a.x, -a.y); }
+      vec2 dsSub(vec2 a, vec2 b) { return dsAdd(a, dsNeg(b)); }
+
+      vec2 dsMul(vec2 a, vec2 b) {
+        const float splitter = 4097.0;
+        float product = a.x * b.x;
+        float splitA = splitter * a.x;
+        float aHi = splitA - (splitA - a.x);
+        float aLo = a.x - aHi;
+        float splitB = splitter * b.x;
+        float bHi = splitB - (splitB - b.x);
+        float bLo = b.x - bHi;
+        float error = ((aHi * bHi - product) + aHi * bLo + aLo * bHi) + aLo * bLo;
+        error += a.x * b.y + a.y * b.x;
+        return dsRenorm(product, error);
+      }
+
+      vec2 dsScale(vec2 a, float scale) { return dsMul(a, vec2(scale, 0.0)); }
+      vec2 dsSquare(vec2 a) { return dsMul(a, a); }
+
+      vec2 dsDiv(vec2 a, vec2 b) {
+        float first = a.x / b.x;
+        vec2 remainder = dsSub(a, dsMul(b, vec2(first, 0.0)));
+        float second = (remainder.x + remainder.y) / b.x;
+        return dsAdd(vec2(first, 0.0), vec2(second, 0.0));
+      }
+
+      vec2 dsAbs(vec2 a) {
+        return (a.x < 0.0 || (a.x == 0.0 && a.y < 0.0)) ? dsNeg(a) : a;
+      }
+
+      float dsValue(vec2 a) { return a.x + a.y; }
+
+      vec2 dsPixelCoordinate(vec2 centerParts, vec2 spanParts, float normalized) {
+        return dsAdd(centerParts, dsScale(spanParts, normalized));
+      }
+#endif
+
       void main() {
+#if NAUTILOID_DEEP_PRECISION
+        float normX = vUv.x * 2.0 - 1.0;
+        float normY = vUv.y * 2.0 - 1.0;
+        vec2 pR = dsPixelCoordinate(vec2(uCenterHi.x, uCenterLo.x),
+          vec2(uHalfSpanHi.x, uHalfSpanLo.x), normX);
+        vec2 pI = dsPixelCoordinate(vec2(uCenterHi.y, uCenterLo.y),
+          vec2(uHalfSpanHi.y, uHalfSpanLo.y), normY);
+
+        if (NAUTILOID_MODE == 12 || NAUTILOID_MODE == 13) {
+          vec2 zr = pR;
+          vec2 zi = pI;
+          const int maxRootIter = NAUTILOID_ROOT_MAX_ITER;
+          int iter = 0;
+          for (int i = 0; i < maxRootIter; ++i) {
+            vec2 zr2 = dsSquare(zr);
+            vec2 zi2 = dsSquare(zi);
+            vec2 difference = dsSub(zr2, zi2);
+            vec2 denom = dsScale(dsAdd(dsSquare(difference),
+              dsScale(dsMul(zr2, zi2), 4.0)), 3.0);
+            if (dsValue(denom) < 1.0e-14) {
+              iter = i;
+              break;
+            }
+            vec2 radius2 = dsAdd(zr2, zi2);
+            vec2 nextR = dsDiv(dsAdd(dsScale(dsMul(zr, radius2), 2.0), difference), denom);
+            vec2 nextI = dsDiv(dsSub(dsScale(dsMul(zi, radius2), 2.0),
+              dsScale(dsMul(zr, zi), 2.0)), denom);
+            if (NAUTILOID_MODE == 13) {
+              nextR = dsAdd(nextR, vec2(-0.51999998092651367, -1.90734863e-08));
+              nextI = dsAdd(nextI, vec2(0.37999999523162842, 4.76837158e-09));
+            }
+            vec2 deltaR = dsSub(nextR, zr);
+            vec2 deltaI = dsSub(nextI, zi);
+            zr = nextR;
+            zi = nextI;
+            iter = i;
+            float delta2 = dsValue(dsAdd(dsSquare(deltaR), dsSquare(deltaI)));
+            float magnitude2 = dsValue(dsAdd(dsSquare(zr), dsSquare(zi)));
+            if (delta2 < 1.0e-12 || magnitude2 > 64.0) break;
+          }
+          gl_FragColor = vec4(applyColorMode(rootColor(
+            vec2(dsValue(zr), dsValue(zi)), iter, maxRootIter,
+            NAUTILOID_MODE == 13 ? 0.18 : 0.0)), 1.0);
+          return;
+        }
+
+        vec2 cr = vec2(0.0);
+        vec2 ci = vec2(0.0);
+        vec2 zr = vec2(0.0);
+        vec2 zi = vec2(0.0);
+        vec2 prevR = vec2(0.0);
+        vec2 prevI = vec2(0.0);
+        if (NAUTILOID_MODE == 1) {
+          cr = dsAdd(vec2(-0.75, 0.0), pR);
+          ci = pI;
+        } else if (NAUTILOID_MODE == 2) {
+          cr = pR;
+          ci = pI;
+        } else if (NAUTILOID_MODE == 3) {
+          cr = vec2(-0.18000000715255737, 7.15255738e-09);
+          ci = vec2(0.75999999046325684, 9.53674317e-09);
+          zr = pR;
+          zi = pI;
+        } else if (NAUTILOID_MODE == 4) {
+          cr = vec2(-0.74542999267578125, -7.32421879e-09);
+          ci = vec2(0.11300999671220779, 3.28779221e-09);
+          zr = pR;
+          zi = pI;
+        } else if (NAUTILOID_MODE == 5) {
+          cr = vec2(-0.41999998688697815, -1.31130218e-08);
+          ci = vec2(0.07999999821186066, 1.78813934e-09);
+          zr = pR;
+          zi = pI;
+        } else if (NAUTILOID_MODE == 6) {
+          cr = dsAdd(vec2(-0.50, 0.0), pR);
+          ci = pI;
+        } else if (NAUTILOID_MODE == 7) {
+          cr = dsAdd(vec2(-1.7599999904632568, -9.53674317e-09), pR);
+          ci = dsAdd(vec2(-0.04500000178813934, 1.78813934e-09), pI);
+        } else if (NAUTILOID_MODE == 8) {
+          cr = dsAdd(vec2(-0.25, 0.0), pR);
+          ci = dsAdd(vec2(0.01999999955296516, 4.47034836e-10), pI);
+        } else if (NAUTILOID_MODE == 9) {
+          cr = dsAdd(vec2(-0.57999998331069946, -1.66893005e-08), pR);
+          ci = pI;
+        } else if (NAUTILOID_MODE == 11) {
+          cr = dsAdd(vec2(-0.51999998092651367, -1.90734863e-08), pR);
+          ci = pI;
+        } else if (NAUTILOID_MODE == 14) {
+          cr = pR;
+          ci = pI;
+        } else {
+          cr = dsAdd(vec2(-0.11999999731779099, -2.68220901e-09), pR);
+          ci = pI;
+        }
+
+        float minOrbit = 1.0e9;
+        float mag2 = 0.0;
+        int iter = 0;
+        const int maxIter = NAUTILOID_ESCAPE_MAX_ITER;
+        for (int i = 0; i < maxIter; ++i) {
+          if (NAUTILOID_MODE == 7 || NAUTILOID_MODE == 9) {
+            zr = dsAbs(zr);
+            zi = dsAbs(zi);
+          }
+          vec2 zr2 = dsSquare(zr);
+          vec2 zi2 = dsSquare(zi);
+          minOrbit = min(minOrbit, dsValue(dsAdd(zr2, zi2)));
+          vec2 nextR;
+          vec2 nextI;
+          if (NAUTILOID_MODE == 2 || NAUTILOID_MODE == 3) {
+            nextR = dsAdd(dsMul(zr, dsSub(zr2, dsScale(zi2, 3.0))), cr);
+            nextI = dsAdd(dsMul(zi, dsSub(dsScale(zr2, 3.0), zi2)), ci);
+          } else if (NAUTILOID_MODE == 5 || NAUTILOID_MODE == 6) {
+            vec2 feedback = NAUTILOID_MODE == 5
+              ? vec2(0.47999998927116394, 1.07288361e-08) : vec2(1.0, 0.0);
+            nextR = dsAdd(dsAdd(dsSub(zr2, zi2), cr), dsMul(prevR, feedback));
+            nextI = dsAdd(dsAdd(dsScale(dsMul(zr, zi), 2.0), ci), dsMul(prevI, feedback));
+            prevR = zr;
+            prevI = zi;
+          } else if (NAUTILOID_MODE == 10) {
+            nextR = dsAdd(dsSub(zr2, zi2), cr);
+            nextI = dsAdd(dsScale(dsMul(zr, zi), -2.0), ci);
+          } else if (NAUTILOID_MODE == 8) {
+            nextR = dsAdd(dsAbs(dsSub(zr2, zi2)), cr);
+            nextI = dsAdd(dsScale(dsMul(zr, zi), 2.0), ci);
+          } else if (NAUTILOID_MODE == 9) {
+            nextR = dsAdd(dsAbs(dsSub(zr2, zi2)), cr);
+            nextI = dsAdd(dsAbs(dsScale(dsMul(zr, zi), 2.0)), ci);
+          } else if (NAUTILOID_MODE == 11) {
+            nextR = dsAdd(dsSub(zr2, zi2), cr);
+            nextI = dsAdd(dsScale(dsMul(zr, zi), 2.0), ci);
+            cr = dsAdd(dsScale(cr, 0.5), nextR);
+            ci = dsAdd(dsScale(ci, 0.5), nextI);
+          } else if (NAUTILOID_MODE == 14) {
+            vec2 shiftedR = dsAdd(zr, vec2(
+              (zr.x < 0.0 || (zr.x == 0.0 && zr.y < 0.0)) ? 1.0 : -1.0, 0.0));
+            nextR = dsSub(dsMul(shiftedR, cr), dsMul(zi, ci));
+            nextI = dsAdd(dsMul(shiftedR, ci), dsMul(zi, cr));
+          } else {
+            nextR = dsAdd(dsSub(zr2, zi2), cr);
+            nextI = dsAdd(dsScale(dsMul(zr, zi), 2.0), ci);
+          }
+          zr = nextR;
+          zi = nextI;
+          mag2 = dsValue(dsAdd(dsSquare(zr), dsSquare(zi)));
+          iter = i;
+          if (mag2 > 16.0) break;
+        }
+        if (mag2 <= 16.0) {
+          gl_FragColor = vec4(applyColorMode(vec3(7.0, 4.0, 18.0) / 255.0), 1.0);
+          return;
+        }
+        gl_FragColor = vec4(applyColorMode(escapeColor(iter, maxIter, mag2, minOrbit)), 1.0);
+#else
         vec2 p = uCenter + (vUv * 2.0 - 1.0) * uHalfSpan;
         if (NAUTILOID_MODE == 12 || NAUTILOID_MODE == 13) {
           vec2 z = p;
@@ -494,6 +730,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
           return;
         }
         gl_FragColor = vec4(applyColorMode(escapeColor(iter, maxIter, mag2, minOrbit)), 1.0);
+#endif
       }
     )GLSL";
 
@@ -511,45 +748,57 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
       "#define NAUTILOID_ESCAPE_MAX_ITER " NAUTILOID_GLSL_STRINGIFY(LEVIATHAN_NAUTILOID_ESCAPE_FRACTAL_MAX_ITER) "\n" +
       "#define NAUTILOID_ROOT_MAX_ITER " NAUTILOID_GLSL_STRINGIFY(LEVIATHAN_NAUTILOID_ROOT_FRACTAL_MAX_ITER) "\n" +
       "#define NAUTILOID_MODE " + std::to_string(mode) + "\n" +
+      "#define NAUTILOID_DEEP_PRECISION " + std::string(deepPrecision ? "1\n" : "0\n") +
       kFragmentShaderBody;
-    modeProgram.fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentSource.c_str());
-    if (!modeProgram.fragmentShader) {
+    variant.fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentSource.c_str());
+    if (!variant.fragmentShader) {
       return false;
     }
-    modeProgram.program = glCreateProgram();
-    if (!modeProgram.program) {
-      glDeleteShader(modeProgram.fragmentShader);
-      modeProgram.fragmentShader = 0;
+    variant.program = glCreateProgram();
+    if (!variant.program) {
+      glDeleteShader(variant.fragmentShader);
+      variant.fragmentShader = 0;
       return false;
     }
-    glAttachShader(modeProgram.program, vertexShader);
-    glAttachShader(modeProgram.program, modeProgram.fragmentShader);
-    glLinkProgram(modeProgram.program);
+    glAttachShader(variant.program, vertexShader);
+    glAttachShader(variant.program, variant.fragmentShader);
+    glLinkProgram(variant.program);
     GLint linkOk = GL_FALSE;
-    glGetProgramiv(modeProgram.program, GL_LINK_STATUS, &linkOk);
+    glGetProgramiv(variant.program, GL_LINK_STATUS, &linkOk);
     if (linkOk != GL_TRUE) {
       GLint logLen = 0;
-      glGetProgramiv(modeProgram.program, GL_INFO_LOG_LENGTH, &logLen);
+      glGetProgramiv(variant.program, GL_INFO_LOG_LENGTH, &logLen);
       std::vector<char> logBuf(size_t(std::max(logLen, 1)));
       GLsizei written = 0;
-      glGetProgramInfoLog(modeProgram.program, GLsizei(logBuf.size()), &written, logBuf.data());
-      WARN("Nautiloid GPU preview shader link failed for mode %d: %s", mode, logBuf.data());
-      glDeleteProgram(modeProgram.program);
-      glDeleteShader(modeProgram.fragmentShader);
-      modeProgram.program = 0;
-      modeProgram.fragmentShader = 0;
+      glGetProgramInfoLog(variant.program, GLsizei(logBuf.size()), &written, logBuf.data());
+      WARN("Nautiloid GPU preview %s shader link failed for mode %d: %s",
+        deepPrecision ? "deep" : "fast", mode, logBuf.data());
+      glDeleteProgram(variant.program);
+      glDeleteShader(variant.fragmentShader);
+      variant.program = 0;
+      variant.fragmentShader = 0;
       return false;
     }
-    modeProgram.uniformCenter = glGetUniformLocation(modeProgram.program, "uCenter");
-    modeProgram.uniformHalfSpan = glGetUniformLocation(modeProgram.program, "uHalfSpan");
-    modeProgram.uniformColorMode = glGetUniformLocation(modeProgram.program, "uColorMode");
-    modeProgram.ready = modeProgram.uniformCenter >= 0 && modeProgram.uniformHalfSpan >= 0 &&
-      modeProgram.uniformColorMode >= 0;
-    if (!modeProgram.ready) {
-      glDeleteProgram(modeProgram.program);
-      glDeleteShader(modeProgram.fragmentShader);
-      modeProgram.program = 0;
-      modeProgram.fragmentShader = 0;
+    variant.uniformColorMode = glGetUniformLocation(variant.program, "uColorMode");
+    if (deepPrecision) {
+      variant.uniformCenterHi = glGetUniformLocation(variant.program, "uCenterHi");
+      variant.uniformCenterLo = glGetUniformLocation(variant.program, "uCenterLo");
+      variant.uniformHalfSpanHi = glGetUniformLocation(variant.program, "uHalfSpanHi");
+      variant.uniformHalfSpanLo = glGetUniformLocation(variant.program, "uHalfSpanLo");
+      variant.ready = variant.uniformCenterHi >= 0 && variant.uniformCenterLo >= 0 &&
+        variant.uniformHalfSpanHi >= 0 && variant.uniformHalfSpanLo >= 0 &&
+        variant.uniformColorMode >= 0;
+    } else {
+      variant.uniformCenter = glGetUniformLocation(variant.program, "uCenter");
+      variant.uniformHalfSpan = glGetUniformLocation(variant.program, "uHalfSpan");
+      variant.ready = variant.uniformCenter >= 0 && variant.uniformHalfSpan >= 0 &&
+        variant.uniformColorMode >= 0;
+    }
+    if (!variant.ready) {
+      glDeleteProgram(variant.program);
+      glDeleteShader(variant.fragmentShader);
+      variant.program = 0;
+      variant.fragmentShader = 0;
       return false;
     }
     return true;
@@ -564,8 +813,8 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     if (module && iris::isBuiltinFractalMode(module->fractalMode) &&
         module->fractalMode >= 0 && size_t(module->fractalMode) < modePrograms.size()) {
       const ModeProgram& modeProgram = modePrograms[size_t(module->fractalMode)];
-      currentModeReady = modeProgram.ready;
-      currentModeAttempted = modeProgram.initAttempted;
+      currentModeReady = modeProgram.fast.ready || modeProgram.deep.ready;
+      currentModeAttempted = modeProgram.fast.initAttempted || modeProgram.deep.initAttempted;
     }
     if (module) {
       if (effectiveActive && !currentModeAttempted) {
@@ -604,6 +853,12 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
         dirty = true;
       }
       lastInteractionActive = interactionActive;
+      const bool deepPrecisionEnabled =
+        module->gpuDeepPrecisionEnabled.load(std::memory_order_relaxed);
+      if (deepPrecisionEnabled != lastDeepPrecisionEnabled) {
+        lastDeepPrecisionEnabled = deepPrecisionEnabled;
+        dirty = true;
+      }
     }
     if (dirty) {
       adaptiveSurface.markDirty();
@@ -627,17 +882,40 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     if (isExtraGlValidationEnabled()) {
       validateModeProgramForCurrentContext(mode);
     }
-    if (!nautiloidGpuPreviewEnabled(module) || !ensureShaderReady(mode)) {
+    if (!nautiloidGpuPreviewEnabled(module)) {
       if (module) {
         module->setGpuPreviewAvailable(false);
       }
       return;
     }
-    module->setGpuPreviewAvailable(true);
 
     ModeProgram& modeProgram = modePrograms[size_t(mode)];
-    const float zoomScale = std::pow(0.05f, clamp(module->fractalZoom, 0.f, kNautiloidMaxFractalZoom));
-    const Vec halfSpan = nautiloidFractalViewportHalfSpan(module->fractalMode).mult(zoomScale);
+    const double zoomScale = std::pow(0.05, double(clamp(
+      module->fractalZoom, 0.f, kNautiloidMaxFractalZoom)));
+    const Vec baseHalfSpan = nautiloidFractalViewportHalfSpan(module->fractalMode);
+    const double halfSpanX = double(baseHalfSpan.x) * zoomScale;
+    const double halfSpanY = double(baseHalfSpan.y) * zoomScale;
+    const bool deepPrecisionRequested =
+      module->gpuDeepPrecisionEnabled.load(std::memory_order_relaxed) &&
+      nautiloid_gpu_precision::requiresDeepPrecision(
+        module->fractalCenterX,
+        module->fractalCenterY,
+        halfSpanX,
+        halfSpanY,
+        activeWidth,
+        activeHeight);
+    const bool deepPrecisionReady = deepPrecisionRequested && ensureShaderReady(mode, true);
+    const bool useDeepPrecision = deepPrecisionRequested && deepPrecisionReady;
+    if (!useDeepPrecision && !ensureShaderReady(mode, false)) {
+      module->setGpuPreviewAvailable(false);
+      return;
+    }
+    module->setGpuPreviewAvailable(true);
+    module->gpuDeepPrecisionActive.store(useDeepPrecision, std::memory_order_relaxed);
+    if (useDeepPrecision) {
+      module->gpuDeepPrecisionRenders.fetch_add(1u, std::memory_order_relaxed);
+    }
+    ShaderVariant& variant = useDeepPrecision ? modeProgram.deep : modeProgram.fast;
     const float w = std::max(box.size.x, 1.f);
     const float h = std::max(box.size.y, 1.f);
 
@@ -651,10 +929,26 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_BLEND);
 
-    glUseProgram(modeProgram.program);
-    glUniform2f(modeProgram.uniformCenter, float(module->fractalCenterX), float(module->fractalCenterY));
-    glUniform2f(modeProgram.uniformHalfSpan, halfSpan.x, halfSpan.y);
-    glUniform1i(modeProgram.uniformColorMode, nautiloidColorMode(module));
+    glUseProgram(variant.program);
+    if (useDeepPrecision) {
+      const nautiloid_gpu_precision::FloatPair centerX =
+        nautiloid_gpu_precision::splitDouble(module->fractalCenterX);
+      const nautiloid_gpu_precision::FloatPair centerY =
+        nautiloid_gpu_precision::splitDouble(module->fractalCenterY);
+      const nautiloid_gpu_precision::FloatPair spanX =
+        nautiloid_gpu_precision::splitDouble(halfSpanX);
+      const nautiloid_gpu_precision::FloatPair spanY =
+        nautiloid_gpu_precision::splitDouble(halfSpanY);
+      glUniform2f(variant.uniformCenterHi, centerX.hi, centerY.hi);
+      glUniform2f(variant.uniformCenterLo, centerX.lo, centerY.lo);
+      glUniform2f(variant.uniformHalfSpanHi, spanX.hi, spanY.hi);
+      glUniform2f(variant.uniformHalfSpanLo, spanX.lo, spanY.lo);
+    } else {
+      glUniform2f(variant.uniformCenter,
+        float(module->fractalCenterX), float(module->fractalCenterY));
+      glUniform2f(variant.uniformHalfSpan, float(halfSpanX), float(halfSpanY));
+    }
+    glUniform1i(variant.uniformColorMode, nautiloidColorMode(module));
     glBegin(GL_TRIANGLE_STRIP);
     glTexCoord2f(0.f, 0.f);
     glVertex2f(0.f, 0.f);
@@ -1239,7 +1533,8 @@ struct NautiloidDebugCounters final : TransparentWidget {
              "fallback_starts,fallback_parks,fallback_wakes,fallback_stops,fallback_joins,"
              "gpu_surface_renders,gpu_surface_render_us,gpu_surface_density,"
              "gpu_surface_active_w,gpu_surface_active_h,gpu_surface_capacity_w,"
-             "gpu_surface_capacity_h\n";
+             "gpu_surface_capacity_h,gpu_deep_precision_active,"
+             "gpu_deep_precision_renders\n";
     }
     Nautiloid::DisplayTileCacheSnapshot tileSnapshot;
     module->displayTileCacheSnapshot(&tileSnapshot);
@@ -1296,7 +1591,9 @@ struct NautiloidDebugCounters final : TransparentWidget {
       << module->gpuSurfaceActiveWidth.load(std::memory_order_relaxed) << ','
       << module->gpuSurfaceActiveHeight.load(std::memory_order_relaxed) << ','
       << module->gpuSurfaceCapacityWidth.load(std::memory_order_relaxed) << ','
-      << module->gpuSurfaceCapacityHeight.load(std::memory_order_relaxed)
+      << module->gpuSurfaceCapacityHeight.load(std::memory_order_relaxed) << ','
+      << (module->gpuDeepPrecisionActive.load(std::memory_order_relaxed) ? 1 : 0) << ','
+      << module->gpuDeepPrecisionRenders.load(std::memory_order_relaxed)
       << '\n';
   }
 };
@@ -2096,7 +2393,21 @@ struct NautiloidWidget final : ModuleWidget {
   void appendContextMenu(Menu* menu) override {
     ModuleWidget::appendContextMenu(menu);
     Nautiloid* naut = dynamic_cast<Nautiloid*>(module);
-    if (!naut || !isDragonKingDebugEnabled()) return;
+    if (!naut) return;
+
+    menu->addChild(new MenuSeparator());
+    menu->addChild(createMenuLabel("GPU Rendering"));
+    menu->addChild(createCheckMenuItem(
+      "Deep precision at extreme zoom (experimental)", "",
+      [naut]() {
+        return naut->gpuDeepPrecisionEnabled.load(std::memory_order_relaxed);
+      },
+      [naut]() {
+        const bool current = naut->gpuDeepPrecisionEnabled.load(std::memory_order_relaxed);
+        naut->gpuDeepPrecisionEnabled.store(!current, std::memory_order_relaxed);
+      }));
+
+    if (!isDragonKingDebugEnabled()) return;
 
     menu->addChild(new MenuSeparator());
     menu->addChild(createMenuLabel("Nautiloid Debug"));

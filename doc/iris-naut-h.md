@@ -58,14 +58,23 @@ It does not require changes to Integral Flux or Proc.
   Rack density, then refine to at least 2.7x density after settling. It
   publishes surface render time, density, and active/capacity dimensions to the
   fractal pipeline log.
-- Focused Phase 4-7 worker, runtime, cache-policy, adaptive-surface, and
-  lifecycle-contract tests and the local Linux plugin build pass. Manual Rack
+- Phase 8 implementation is complete: an actual-framebuffer world-pixel test
+  keeps shallow views on the fast float shader and lazily selects per-mode
+  double-single variants for deep views. Center, span, mode constants, and
+  orbit arithmetic retain high/low components; failed deep compilation falls
+  back to the fast GPU shader. The experiment defaults off and is exposed as a
+  per-module context-menu option for direct fast/deep A/B comparison. Live
+  driver compilation and visual comparison against CPU output at maximum zoom
+  remain to be validated in Rack.
+- Focused Phase 4-8 worker, runtime, cache-policy, adaptive-surface,
+  precision-policy, and lifecycle-contract tests and the local Linux plugin
+  build pass. Manual Rack
   zoom/context validation
   remains part of final acceptance.
   The native MINGW64 `test-fast` suite and authoritative Windows `plugin.dll`
   build passed through the original Phase 3 checkpoint; native validation of
-  the worker-paced Phase 1 follow-up and Phases 4-7 remains pending where the
-  documented Windows bridge is available. Phase 8 is next.
+  the worker-paced Phase 1 follow-up and Phases 4-8 remains pending where the
+  documented Windows bridge is available. Phase 8 live validation is next.
 
 ## Current architecture
 

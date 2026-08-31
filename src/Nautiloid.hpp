@@ -167,9 +167,12 @@ struct Nautiloid final : Module {
   std::atomic<int> gpuSurfaceActiveHeight {0};
   std::atomic<int> gpuSurfaceCapacityWidth {0};
   std::atomic<int> gpuSurfaceCapacityHeight {0};
+  std::atomic<bool> gpuDeepPrecisionActive {false};
+  std::atomic<uint64_t> gpuDeepPrecisionRenders {0u};
   debug_terminal::BaselineModuleMetrics debugMetrics;
   std::atomic<bool> debugFileLoggingEnabled {false};
   std::atomic<bool> debugGpuPreviewEnabled {true};
+  std::atomic<bool> gpuDeepPrecisionEnabled {false};
   std::atomic<bool> debugGpuPreviewAvailable {false};
   std::atomic<bool> cpuDisplayFallbackRequired {false};
   std::atomic<bool> zoomInteractionActive {false};

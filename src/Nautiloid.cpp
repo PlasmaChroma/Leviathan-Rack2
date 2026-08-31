@@ -874,6 +874,8 @@ json_t* Nautiloid::dataToJson() {
                       json_boolean(debugFileLoggingEnabled.load(std::memory_order_relaxed)));
   json_object_set_new(root, "debugGpuPreviewEnabled",
                       json_boolean(debugGpuPreviewEnabled.load(std::memory_order_relaxed)));
+  json_object_set_new(root, "gpuDeepPrecisionEnabled",
+                      json_boolean(gpuDeepPrecisionEnabled.load(std::memory_order_relaxed)));
   return root;
 }
 
@@ -892,6 +894,8 @@ void Nautiloid::dataFromJson(json_t* root) {
     jsonBoolOr(root, "debugFileLoggingEnabled", false), std::memory_order_relaxed);
   debugGpuPreviewEnabled.store(
     jsonBoolOr(root, "debugGpuPreviewEnabled", true), std::memory_order_relaxed);
+  gpuDeepPrecisionEnabled.store(
+    jsonBoolOr(root, "gpuDeepPrecisionEnabled", false), std::memory_order_relaxed);
   debugGpuPreviewAvailable.store(false, std::memory_order_relaxed);
   requestRender();
 }
