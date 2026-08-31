@@ -1,10 +1,12 @@
 #pragma once
 
 #include "plugin.hpp"
+#include "DebugTerminalMetrics.hpp"
 #include "NautiloidFractal.hpp"
 #include "NautiloidColor.hpp"
 #include "NautiloidIrisExpander.hpp"
 #include "NautiloidLocationCode.hpp"
+#include "NautiloidRequestCoordinator.hpp"
 
 #include <atomic>
 #include <array>
@@ -78,6 +80,7 @@ struct Nautiloid final : Module {
   void requestRenderWithCenteredCache();
   void requestInteractiveZoomPreview(double cacheCenterX, double cacheCenterY, bool forceCacheRecenter = false);
   void requestIrisSourceSync();
+  void serviceIrisConsumerDemand();
   void setGpuPreviewAvailable(bool available, bool requireCpuFallback = true);
   void resetView();
   void previewSnapshot(std::vector<uint8_t>* rgb, int* width, int* height) const;
@@ -146,6 +149,8 @@ struct Nautiloid final : Module {
   std::atomic<uint64_t> irisRendersCompleted {0u};
   std::atomic<uint64_t> irisRendersDroppedStale {0u};
   std::atomic<uint64_t> irisExpanderPublishes {0u};
+  std::atomic<uint64_t> irisRequestsSubmitted {0u};
+  debug_terminal::BaselineModuleMetrics debugMetrics;
   std::atomic<bool> debugFileLoggingEnabled {false};
   std::atomic<bool> debugGpuPreviewEnabled {true};
   std::atomic<bool> debugGpuPreviewAvailable {false};
@@ -211,7 +216,7 @@ struct Nautiloid final : Module {
   };
 
 private:
-  struct WorkerRequest {
+  struct DisplayWorkerRequest {
     int mode = iris::FRACTAL_MANDELBROT;
     float zoom = 0.f;
     double centerX = 0.0;
@@ -224,23 +229,36 @@ private:
     uint64_t serial = 0u;
   };
 
+  struct IrisWorkerRequest {
+    int mode = iris::FRACTAL_MANDELBROT;
+    float zoom = 0.f;
+    double centerX = 0.0;
+    double centerY = 0.0;
+    int colorMode = COLOR_PRISM;
+    uint64_t serial = 0u;
+    bool authoritative = false;
+  };
+
   void startWorker();
   void stopWorker();
   void ensureFallbackWorkers();
   void stopFallbackWorkers();
-  void submitRequest(const WorkerRequest& request);
-  void submitCacheRequest(const WorkerRequest& request);
-  void submitReprojectionRequest(const WorkerRequest& request);
-  void submitIrisRequest(const WorkerRequest& request);
+  void submitRequest(const DisplayWorkerRequest& request);
+  void submitCacheRequest(const DisplayWorkerRequest& request);
+  void submitReprojectionRequest(const DisplayWorkerRequest& request);
+  bool submitIrisRequest(
+    const DisplayWorkerRequest& request,
+    nautiloid_requests::InteractionPhase phase,
+    bool force = false);
   void markDisplayRenderFinished(uint64_t serial);
   void workerLoop();
   void cacheWorkerLoop();
   void reprojectionWorkerLoop();
   void irisWorkerLoop();
-  bool publishDisplayCacheComposite(const WorkerRequest& request, bool allowPartial, bool* completeOut = nullptr);
-  bool publishDisplayReprojection(const WorkerRequest& request);
-  void publishAuthoritativeDisplaySource(iris::SourceField source, const WorkerRequest& request);
-  void renderZoomAheadCaches(const WorkerRequest& request);
+  bool publishDisplayCacheComposite(const DisplayWorkerRequest& request, bool allowPartial, bool* completeOut = nullptr);
+  bool publishDisplayReprojection(const DisplayWorkerRequest& request);
+  void publishAuthoritativeDisplaySource(iris::SourceField source, const DisplayWorkerRequest& request);
+  void renderZoomAheadCaches(const DisplayWorkerRequest& request);
 
   std::atomic<uint64_t> fractalStateSequence {0u};
   mutable std::mutex fractalStateWriteMutex;
@@ -257,30 +275,31 @@ private:
   std::condition_variable workerCv;
   bool workerStop = false;
   bool requestPending = false;
-  WorkerRequest workerRequest;
-  uint64_t nextRequestSerial = 0u;
+  DisplayWorkerRequest workerRequest;
   std::thread worker;
 
   mutable std::mutex cacheRequestMutex;
   std::condition_variable cacheRequestCv;
   bool cacheWorkerStop = false;
   bool cacheRequestPending = false;
-  WorkerRequest cacheRequest;
+  DisplayWorkerRequest cacheRequest;
   std::thread cacheWorker;
 
   mutable std::mutex reprojectionRequestMutex;
   std::condition_variable reprojectionRequestCv;
   bool reprojectionWorkerStop = false;
   bool reprojectionRequestPending = false;
-  WorkerRequest reprojectionRequest;
+  DisplayWorkerRequest reprojectionRequest;
   std::thread reprojectionWorker;
 
   mutable std::mutex irisRequestMutex;
   std::condition_variable irisRequestCv;
   bool irisWorkerStop = false;
   bool irisRequestPending = false;
-  WorkerRequest irisRequest;
+  IrisWorkerRequest irisRequest;
   std::thread irisWorker;
+  nautiloid_requests::Coordinator requestCoordinator;
+  std::atomic<bool> irisDemandSyncPending {false};
 
   mutable std::mutex snapshotMutex;
   iris::SourceField previewSource;

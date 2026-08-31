@@ -585,6 +585,8 @@ struct NautiloidDisplay final : OpaqueWidget {
   int uploadedColorMode = -1;
   Vec lastPanLocal;
   double lastPanRequestTime = -INFINITY;
+  double wheelFinalRequestTime = -INFINITY;
+  bool wheelFinalRecenterCache = false;
 
   explicit NautiloidDisplay(Nautiloid* module) : module(module) {}
 
@@ -624,7 +626,8 @@ struct NautiloidDisplay final : OpaqueWidget {
 
     const bool recenterCache = nextZoom < previousZoom && nautiloidVisibleViewOutgrowsCache(module, 0.78f);
     module->requestInteractiveZoomPreview(module->fractalCenterX, module->fractalCenterY, recenterCache);
-    module->requestRenderWithCacheCenter(module->fractalCenterX, module->fractalCenterY, recenterCache);
+    wheelFinalRequestTime = system::getTime() + 0.16;
+    wheelFinalRecenterCache = wheelFinalRecenterCache || recenterCache;
     return true;
   }
 
@@ -663,7 +666,10 @@ struct NautiloidDisplay final : OpaqueWidget {
       return;
     }
     if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_RELEASE) {
-      panActive = false;
+      if (panActive && module) {
+        panActive = false;
+        module->requestRenderWithCenteredCache();
+      }
     }
     OpaqueWidget::onButton(e);
   }
@@ -716,7 +722,7 @@ struct NautiloidDisplay final : OpaqueWidget {
           const double cacheCenterY =
             nautiloidClampDouble(
               state.centerY + double(clamp(centerDelta.y * cacheLead, -maxLeadY, maxLeadY)), -2.0, 2.0);
-          module->requestRenderWithCacheCenter(cacheCenterX, cacheCenterY);
+          module->requestInteractiveZoomPreview(cacheCenterX, cacheCenterY);
         }
       }
       e.consume(this);
@@ -738,6 +744,15 @@ struct NautiloidDisplay final : OpaqueWidget {
   }
 
   void step() override {
+    if (module && std::isfinite(wheelFinalRequestTime) &&
+        system::getTime() >= wheelFinalRequestTime) {
+      wheelFinalRequestTime = -INFINITY;
+      module->requestRenderWithCacheCenter(
+        module->fractalCenterX,
+        module->fractalCenterY,
+        wheelFinalRecenterCache);
+      wheelFinalRecenterCache = false;
+    }
     const uint64_t currentGeneration =
       module ? module->previewGeneration.load(std::memory_order_acquire) : 0u;
     const bool gpuPreviewActive = nautiloidGpuPreviewActive(module);
@@ -1068,7 +1083,7 @@ struct NautiloidDebugCounters final : TransparentWidget {
              "cache_tiles_rendered,cache_tile_aborts,cache_resets,cache_shifts,"
              "zoom_ahead_tiles_rendered,zoom_ahead_l0_tiles,zoom_ahead_l1_tiles,zoom_ahead_l2_tiles,"
              "zoom_ahead_l0_full,zoom_ahead_l1_full,zoom_ahead_l2_full,"
-             "iris_done,iris_stale,iris_expander_publishes\n";
+             "iris_requests,iris_done,iris_stale,iris_expander_publishes\n";
     }
     Nautiloid::DisplayTileCacheSnapshot tileSnapshot;
     module->displayTileCacheSnapshot(&tileSnapshot);
@@ -1107,6 +1122,7 @@ struct NautiloidDebugCounters final : TransparentWidget {
       << zoomAheadSnapshot.fullTileCount[0] << ','
       << zoomAheadSnapshot.fullTileCount[1] << ','
       << zoomAheadSnapshot.fullTileCount[2] << ','
+      << module->irisRequestsSubmitted.load(std::memory_order_relaxed) << ','
       << module->irisRendersCompleted.load(std::memory_order_relaxed) << ','
       << module->irisRendersDroppedStale.load(std::memory_order_relaxed)
       << ','
@@ -1132,6 +1148,7 @@ struct NautiloidZoomSlider final : ui::Slider {
   Vec lightOverlayOffset;
   std::shared_ptr<window::Svg> handleSvg;
   bool zoomActive = false;
+  bool lastInteractionActive = false;
   double lastStepTime = -INFINITY;
   double lastPreviewRequestTime = -INFINITY;
   double lastRenderRequestTime = -INFINITY;
@@ -1253,6 +1270,10 @@ struct NautiloidZoomSlider final : ui::Slider {
     } else {
       lastStepTime = -INFINITY;
     }
+    if (module && lastInteractionActive && !interactionActive) {
+      module->requestRenderWithCenteredCache();
+    }
+    lastInteractionActive = interactionActive;
     ui::Slider::step();
 
     const float drawSpeed = clamp(manualSpeed + cvSpeed, -1.f, 1.f);
@@ -1394,6 +1415,7 @@ struct NautiloidZoomSlider final : ui::Slider {
 
   void stopZoom() {
     zoomActive = false;
+    lastInteractionActive = false;
     lastStepTime = -INFINITY;
     lastPreviewRequestTime = -INFINITY;
     lastRenderRequestTime = -INFINITY;
@@ -1700,6 +1722,8 @@ struct NautiloidLocationValidLight final : SmallAperture<GreenApertureLight> {
 } // namespace
 
 struct NautiloidWidget final : ModuleWidget {
+  debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
+
   explicit NautiloidWidget(Nautiloid* module) {
     setModule(module);
     visual_assets::SplitPanelRenderer splitPanel(this, "res/nautiloid.panel.svg");
@@ -1859,6 +1883,40 @@ struct NautiloidWidget final : ModuleWidget {
     counters->box.size = mm2px(countersRectMm.size);
     addChild(counters);
 
+  }
+
+  void step() override {
+    const bool measurePerf = isDragonKingDebugEnabled();
+    const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
+    if (Nautiloid* naut = static_cast<Nautiloid*>(module)) {
+      naut->serviceIrisConsumerDemand();
+    }
+    ModuleWidget::step();
+    if (measurePerf) {
+      debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
+    }
+  }
+
+  void draw(const DrawArgs& args) override {
+    const bool measurePerf = isDragonKingDebugEnabled();
+    const auto drawStart = debug_terminal::debugTimerStart(measurePerf);
+    ModuleWidget::draw(args);
+    Nautiloid* naut = static_cast<Nautiloid*>(module);
+    if (!naut) return;
+
+    if (measurePerf) {
+      debug_terminal::drawDebugInstanceId(args.vg, box.size, naut->debugMetrics.instanceId);
+      debugWidgetMetrics.recordDraw(debug_terminal::elapsedUsSince(drawStart));
+      const double nowSec = system::getTime();
+      if (debug_terminal::baselineSubmitDue("Nautiloid", naut->debugMetrics.instanceId, nowSec)) {
+        debug_terminal::submitBaselineMetrics(
+          "Nautiloid",
+          naut->debugMetrics.instanceId,
+          naut->debugMetrics.consumeProcessRange(),
+          debugWidgetMetrics.consumeStepRange(),
+          debugWidgetMetrics.consumeDrawRange());
+      }
+    }
   }
 
   void appendContextMenu(Menu* menu) override {

@@ -265,6 +265,15 @@ inline float mandelbrotFamilySimdMaxZoom(int mode) {
 
 } // namespace detail
 
+struct FractalCancellationToken {
+  bool (*isCancelled)(void*) = nullptr;
+  void* context = nullptr;
+
+  bool cancelled() const {
+    return isCancelled && isCancelled(context);
+  }
+};
+
 inline bool makeBuiltinFractalSourceSized(
   int mode,
   float zoom,
@@ -278,7 +287,8 @@ inline bool makeBuiltinFractalSourceSized(
   int viewportPixelX,
   int viewportPixelY,
   SourceField* out,
-  std::string* error = nullptr) {
+  std::string* error = nullptr,
+  const FractalCancellationToken* cancellation = nullptr) {
   if (!out) {
     if (error) *error = "Missing fractal output";
     return false;
@@ -315,7 +325,8 @@ inline bool makeBuiltinFractalSourceSized(
   const bool fullViewport = pixelX0 == 0 && pixelY0 == 0 &&
     source.width == fullWidth && source.height == fullHeight;
 #if defined(LEVIATHAN_IRIS_ENABLE_RACK_SIMD)
-  if (fullViewport && detail::kUseSimdFractalRenderer && simdMaxZoom >= 0.f && zoom <= simdMaxZoom) {
+  if (!cancellation && fullViewport && detail::kUseSimdFractalRenderer &&
+      simdMaxZoom >= 0.f && zoom <= simdMaxZoom) {
     detail::renderMandelbrotFamilySimd(
       mode,
       float(zoomScale),
@@ -336,6 +347,10 @@ inline bool makeBuiltinFractalSourceSized(
   (void)fullViewport;
 #endif
   for (int y = 0; y < source.height; ++y) {
+    if (cancellation && cancellation->cancelled()) {
+      if (error) *error = "Fractal render cancelled";
+      return false;
+    }
     const int viewportY = pixelY0 + y;
     const float ny = (float(viewportY) + 0.5f) / float(fullHeight) * 2.f - 1.f;
     for (int x = 0; x < source.width; ++x) {
@@ -521,7 +536,8 @@ inline bool makeBuiltinFractalSourceSized(
   int height,
   float viewportScale,
   SourceField* out,
-  std::string* error = nullptr) {
+  std::string* error = nullptr,
+  const FractalCancellationToken* cancellation = nullptr) {
   return makeBuiltinFractalSourceSized(
     mode,
     zoom,
@@ -535,7 +551,8 @@ inline bool makeBuiltinFractalSourceSized(
     0,
     0,
     out,
-    error);
+    error,
+    cancellation);
 }
 
 inline bool makeBuiltinFractalSource(
@@ -544,7 +561,8 @@ inline bool makeBuiltinFractalSource(
   double centerX,
   double centerY,
   SourceField* out,
-  std::string* error = nullptr) {
+  std::string* error = nullptr,
+  const FractalCancellationToken* cancellation = nullptr) {
   return makeBuiltinFractalSourceSized(
     mode,
     zoom,
@@ -554,7 +572,8 @@ inline bool makeBuiltinFractalSource(
     kCanonicalSourceHeight,
     1.f,
     out,
-    error);
+    error,
+    cancellation);
 }
 
 inline bool makeBuiltinFractalSource(
@@ -567,7 +586,8 @@ inline bool makeBuiltinFractalSource(
 inline bool makeNautiloidIrisSource(
   const NautiloidFractalSourceParams& params,
   SourceField* out,
-  std::string* error = nullptr) {
+  std::string* error = nullptr,
+  const FractalCancellationToken* cancellation = nullptr) {
   if (!out) {
     if (error) *error = "Missing fractal output";
     return false;
@@ -581,7 +601,8 @@ inline bool makeNautiloidIrisSource(
         kCanonicalSourceHeight,
         1.f,
         out,
-        error)) {
+        error,
+        cancellation)) {
     return false;
   }
   out->sourcePath.clear();

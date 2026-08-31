@@ -23,6 +23,7 @@ constexpr float kZoomAheadCacheScale = 1.35f;
 constexpr int kZoomAheadWidth = 768;
 constexpr int kZoomAheadHeight = 512;
 constexpr int kZoomAheadTileSize = 128;
+std::atomic<uint32_t> gNautiloidDebugInstanceCounter {1u};
 
 bool requestCanUseGpuPreview(int mode, bool shaderAvailable) {
   return shaderAvailable &&
@@ -637,6 +638,7 @@ size_t Nautiloid::DisplayTileCache::validTileCount() const {
 }
 
 Nautiloid::Nautiloid() {
+  debugMetrics.assignInstanceId(gNautiloidDebugInstanceCounter);
   config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
   configButton(SOURCE_MENU_PARAM, "Fractal");
   configButton(RESET_VIEW_PARAM, "Reset view");
@@ -653,6 +655,8 @@ Nautiloid::~Nautiloid() {
 }
 
 void Nautiloid::process(const ProcessArgs& args) {
+  const bool measurePerf = isDragonKingDebugEnabled();
+  const auto processStart = debug_terminal::debugTimerStart(measurePerf);
   const bool zoomRateConnected = inputs[ZOOM_RATE_INPUT].isConnected();
   zoomRateCvConnected.store(zoomRateConnected, std::memory_order_relaxed);
   zoomRateCvNorm.store(
@@ -688,29 +692,21 @@ void Nautiloid::process(const ProcessArgs& args) {
   const bool rightIrisUsingNautiloid =
     rightIrisSourceKind == iris::SOURCE_EXPANDER_IMAGE ||
     rightIrisSourceKind == iris::SOURCE_NAUTILOID_FRACTAL;
+  const nautiloid_requests::IrisConsumerDemand irisDemand = !irisConnected
+    ? nautiloid_requests::IrisConsumerDemand::None
+    : (!rightIris || rightIrisSourceKind != iris::SOURCE_IMAGE
+      ? nautiloid_requests::IrisConsumerDemand::AcceptUpdates
+      : nautiloid_requests::IrisConsumerDemand::RetainImageSource);
+  if (requestCoordinator.setIrisConsumerDemand(irisDemand)) {
+    irisDemandSyncPending.store(true, std::memory_order_release);
+  }
   const bool irisAcceptsAutoSync =
     forceIrisSync ||
-    (irisConnected && (!rightIris || rightIrisSourceKind != iris::SOURCE_IMAGE));
+    irisDemand == nautiloid_requests::IrisConsumerDemand::AcceptUpdates;
   bool irisReady = false;
 
   if (irisConnected && generation == 0u && irisAcceptsAutoSync) {
-    if (lastExpanderGenerationSentRight != uint64_t(-1)) {
-      const FractalState state = fractalStateSnapshot();
-      WorkerRequest request;
-      request.mode = state.mode;
-      request.zoom = clamp(state.zoom, 0.f, kNautiloidMaxFractalZoom);
-      request.centerX = clampDouble(state.centerX, -2.0, 2.0);
-      request.centerY = clampDouble(state.centerY, -2.0, 2.0);
-      request.cacheCenterX = request.centerX;
-      request.cacheCenterY = request.centerY;
-      request.zoomInteractionActive = false;
-      {
-        std::lock_guard<std::mutex> lock(workerMutex);
-        request.serial = ++nextRequestSerial;
-      }
-      submitIrisRequest(request);
-      lastExpanderGenerationSentRight = uint64_t(-1);
-    }
+    irisDemandSyncPending.store(true, std::memory_order_release);
   } else if (irisConnected && generation != 0u) {
     if (generation != lastExpanderGenerationSentRight) {
       uint64_t ownedGeneration = 0u;
@@ -739,6 +735,9 @@ void Nautiloid::process(const ProcessArgs& args) {
   rightIrisConnectionObserved = true;
   rightIrisWasConnected = irisConnected;
   lastRightIrisModule = irisConnected ? right : nullptr;
+  if (measurePerf) {
+    debugMetrics.recordProcess(debug_terminal::elapsedNsSince(processStart));
+  }
 }
 
 Nautiloid::FractalState Nautiloid::fractalStateSnapshot() const {
@@ -844,7 +843,7 @@ void Nautiloid::requestRender() {
 
 void Nautiloid::requestRenderWithCacheCenter(double cacheCenterX, double cacheCenterY, bool forceCacheRecenter) {
   const FractalState state = fractalStateSnapshot();
-  WorkerRequest request;
+  DisplayWorkerRequest request;
   request.mode = state.mode;
   request.zoom = clamp(state.zoom, 0.f, kNautiloidMaxFractalZoom);
   request.centerX = clampDouble(state.centerX, -2.0, 2.0);
@@ -858,7 +857,7 @@ void Nautiloid::requestRenderWithCacheCenter(double cacheCenterX, double cacheCe
 
 void Nautiloid::requestInteractiveZoomPreview(double cacheCenterX, double cacheCenterY, bool forceCacheRecenter) {
   const FractalState state = fractalStateSnapshot();
-  WorkerRequest request;
+  DisplayWorkerRequest request;
   request.mode = state.mode;
   request.zoom = clamp(state.zoom, 0.f, kNautiloidMaxFractalZoom);
   request.centerX = clampDouble(state.centerX, -2.0, 2.0);
@@ -867,16 +866,13 @@ void Nautiloid::requestInteractiveZoomPreview(double cacheCenterX, double cacheC
   request.cacheCenterY = clampDouble(cacheCenterY, -2.0, 2.0);
   request.forceCacheRecenter = forceCacheRecenter;
   request.zoomInteractionActive = true;
-  {
-    std::lock_guard<std::mutex> lock(workerMutex);
-    request.serial = nextRequestSerial;
-  }
+  request.serial = requestCoordinator.allocateDisplaySerial();
   if (!debugGpuPreviewAvailable.load(std::memory_order_acquire) &&
       cpuDisplayFallbackRequired.load(std::memory_order_acquire)) {
     submitReprojectionRequest(request);
     submitCacheRequest(request);
   }
-  submitIrisRequest(request);
+  submitIrisRequest(request, nautiloid_requests::InteractionPhase::Preview);
 }
 
 void Nautiloid::setGpuPreviewAvailable(bool available, bool requireCpuFallback) {
@@ -898,8 +894,17 @@ void Nautiloid::requestIrisSourceSync() {
   forceIrisSourceSync.store(true, std::memory_order_release);
   uint64_t generation = 0u;
   std::shared_ptr<const iris::SourceField> source = irisExpanderOwnedSourceSnapshot(&generation);
+  const FractalState state = fractalStateSnapshot();
+  const bool sourceMatchesCurrentState = source &&
+    iris::sourceHasNautiloidFractalParams(*source) &&
+    source->generatorFractalMode == state.mode &&
+    std::fabs(source->generatorFractalZoom - state.zoom) <= 1e-5f &&
+    std::fabs(source->generatorFractalCenterX - state.centerX) <= 1e-12 &&
+    std::fabs(source->generatorFractalCenterY - state.centerY) <= 1e-12 &&
+    source->generatorFractalColorMode == nautiloid_color::normalize(fractalColorMode);
   Module* right = rightExpander.module;
-  if (generation != 0u && source && isIrisModule(right) && right->leftExpander.module == this) {
+  if (generation != 0u && sourceMatchesCurrentState &&
+      isIrisModule(right) && right->leftExpander.module == this) {
     if (Iris* irisModule = dynamic_cast<Iris*>(right)) {
       irisModule->requestOwnedExpanderSource(std::move(source), generation);
       lastExpanderGenerationSentRight = generation;
@@ -908,7 +913,27 @@ void Nautiloid::requestIrisSourceSync() {
       return;
     }
   }
-  requestRenderWithCenteredCache();
+  DisplayWorkerRequest request;
+  request.mode = state.mode;
+  request.zoom = clamp(state.zoom, 0.f, kNautiloidMaxFractalZoom);
+  request.centerX = clampDouble(state.centerX, -2.0, 2.0);
+  request.centerY = clampDouble(state.centerY, -2.0, 2.0);
+  submitIrisRequest(request, nautiloid_requests::InteractionPhase::Final, true);
+}
+
+void Nautiloid::serviceIrisConsumerDemand() {
+  if (!irisDemandSyncPending.exchange(false, std::memory_order_acq_rel)) return;
+  const bool force = forceIrisSourceSync.load(std::memory_order_acquire);
+  if (!force && requestCoordinator.currentIrisConsumerDemand() !=
+      nautiloid_requests::IrisConsumerDemand::AcceptUpdates) return;
+
+  const FractalState state = fractalStateSnapshot();
+  DisplayWorkerRequest request;
+  request.mode = state.mode;
+  request.zoom = clamp(state.zoom, 0.f, kNautiloidMaxFractalZoom);
+  request.centerX = clampDouble(state.centerX, -2.0, 2.0);
+  request.centerY = clampDouble(state.centerY, -2.0, 2.0);
+  submitIrisRequest(request, nautiloid_requests::InteractionPhase::Final, force);
 }
 
 void Nautiloid::requestRenderWithCenteredCache() {
@@ -1090,12 +1115,12 @@ void Nautiloid::stopFallbackWorkers() {
   fallbackLifecycleCv.notify_all();
 }
 
-void Nautiloid::submitRequest(const WorkerRequest& request) {
-  WorkerRequest submittedRequest;
+void Nautiloid::submitRequest(const DisplayWorkerRequest& request) {
+  DisplayWorkerRequest submittedRequest;
   {
     std::lock_guard<std::mutex> lock(workerMutex);
     workerRequest = request;
-    workerRequest.serial = ++nextRequestSerial;
+    workerRequest.serial = requestCoordinator.allocateDisplaySerial();
     submittedRequest = workerRequest;
     renderRequestsSubmitted.fetch_add(1u, std::memory_order_relaxed);
     requestPending =
@@ -1104,7 +1129,11 @@ void Nautiloid::submitRequest(const WorkerRequest& request) {
     displayRenderBusy.store(requestPending, std::memory_order_release);
     loading.store(true, std::memory_order_release);
   }
-  submitIrisRequest(submittedRequest);
+  submitIrisRequest(
+    submittedRequest,
+    submittedRequest.zoomInteractionActive
+      ? nautiloid_requests::InteractionPhase::Preview
+      : nautiloid_requests::InteractionPhase::Final);
   if (debugGpuPreviewAvailable.load(std::memory_order_acquire) ||
       !cpuDisplayFallbackRequired.load(std::memory_order_acquire)) {
     loading.store(false, std::memory_order_release);
@@ -1115,7 +1144,7 @@ void Nautiloid::submitRequest(const WorkerRequest& request) {
   workerCv.notify_one();
 }
 
-void Nautiloid::submitCacheRequest(const WorkerRequest& request) {
+void Nautiloid::submitCacheRequest(const DisplayWorkerRequest& request) {
   if (debugGpuPreviewAvailable.load(std::memory_order_acquire) ||
       !cpuDisplayFallbackRequired.load(std::memory_order_acquire)) return;
   ensureFallbackWorkers();
@@ -1128,7 +1157,7 @@ void Nautiloid::submitCacheRequest(const WorkerRequest& request) {
   cacheRequestCv.notify_one();
 }
 
-void Nautiloid::submitReprojectionRequest(const WorkerRequest& request) {
+void Nautiloid::submitReprojectionRequest(const DisplayWorkerRequest& request) {
   if (debugGpuPreviewAvailable.load(std::memory_order_acquire) ||
       !cpuDisplayFallbackRequired.load(std::memory_order_acquire)) return;
   ensureFallbackWorkers();
@@ -1140,24 +1169,41 @@ void Nautiloid::submitReprojectionRequest(const WorkerRequest& request) {
   reprojectionRequestCv.notify_one();
 }
 
-void Nautiloid::submitIrisRequest(const WorkerRequest& request) {
+bool Nautiloid::submitIrisRequest(
+    const DisplayWorkerRequest& request,
+    nautiloid_requests::InteractionPhase phase,
+    bool force) {
+  const int64_t nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+  const uint64_t serial = requestCoordinator.allocateIrisSerial(phase, force, nowMs);
+  if (serial == 0u) return false;
+
   {
     std::lock_guard<std::mutex> lock(irisRequestMutex);
-    irisRequest = request;
+    irisRequest.mode = request.mode;
+    irisRequest.zoom = request.zoom;
+    irisRequest.centerX = request.centerX;
+    irisRequest.centerY = request.centerY;
     irisRequest.colorMode = nautiloid_color::normalize(fractalColorMode);
+    irisRequest.serial = serial;
+    irisRequest.authoritative = phase == nautiloid_requests::InteractionPhase::Final;
     irisRequestPending = true;
+    irisRequestsSubmitted.fetch_add(1u, std::memory_order_relaxed);
   }
   irisRequestCv.notify_one();
+  return true;
 }
 
 void Nautiloid::markDisplayRenderFinished(uint64_t serial) {
   std::lock_guard<std::mutex> lock(workerMutex);
-  if (serial == nextRequestSerial && !requestPending) {
+  if (requestCoordinator.isNewestDisplaySerial(serial) && !requestPending) {
     displayRenderBusy.store(false, std::memory_order_release);
   }
 }
 
-void Nautiloid::publishAuthoritativeDisplaySource(iris::SourceField source, const WorkerRequest& request) {
+void Nautiloid::publishAuthoritativeDisplaySource(
+    iris::SourceField source,
+    const DisplayWorkerRequest& request) {
   std::lock_guard<std::mutex> lock(snapshotMutex);
   previewSource = source;
   authoritativeDisplaySource = std::move(source);
@@ -1167,7 +1213,7 @@ void Nautiloid::publishAuthoritativeDisplaySource(iris::SourceField source, cons
   authoritativeDisplayCenterY = request.centerY;
 }
 
-bool Nautiloid::publishDisplayReprojection(const WorkerRequest& request) {
+bool Nautiloid::publishDisplayReprojection(const DisplayWorkerRequest& request) {
   iris::SourceField base;
   int baseMode = iris::FRACTAL_NONE;
   float baseZoom = -1.f;
@@ -1326,7 +1372,7 @@ bool Nautiloid::publishDisplayReprojection(const WorkerRequest& request) {
 
   {
     std::lock_guard<std::mutex> lock(workerMutex);
-    if (request.serial != nextRequestSerial) {
+    if (!requestCoordinator.isNewestDisplaySerial(request.serial)) {
       return false;
     }
   }
@@ -1339,7 +1385,10 @@ bool Nautiloid::publishDisplayReprojection(const WorkerRequest& request) {
   return true;
 }
 
-bool Nautiloid::publishDisplayCacheComposite(const WorkerRequest& request, bool allowPartial, bool* completeOut) {
+bool Nautiloid::publishDisplayCacheComposite(
+    const DisplayWorkerRequest& request,
+    bool allowPartial,
+    bool* completeOut) {
   iris::SourceField fallback;
   if (allowPartial) {
     std::lock_guard<std::mutex> lock(snapshotMutex);
@@ -1369,7 +1418,7 @@ bool Nautiloid::publishDisplayCacheComposite(const WorkerRequest& request, bool 
   }
   {
     std::lock_guard<std::mutex> lock(workerMutex);
-    if (request.serial != nextRequestSerial) {
+    if (!requestCoordinator.isNewestDisplaySerial(request.serial)) {
       return false;
     }
   }
@@ -1389,7 +1438,7 @@ bool Nautiloid::publishDisplayCacheComposite(const WorkerRequest& request, bool 
   return true;
 }
 
-void Nautiloid::renderZoomAheadCaches(const WorkerRequest& request) {
+void Nautiloid::renderZoomAheadCaches(const DisplayWorkerRequest& request) {
   for (int layerIndex = 0; layerIndex < kZoomAheadLayerCount; ++layerIndex) {
     if (stopRequested.load(std::memory_order_acquire) ||
         debugGpuPreviewAvailable.load(std::memory_order_acquire)) return;
@@ -1399,7 +1448,7 @@ void Nautiloid::renderZoomAheadCaches(const WorkerRequest& request) {
 
     {
       std::lock_guard<std::mutex> lock(workerMutex);
-      if (request.serial != nextRequestSerial) {
+      if (!requestCoordinator.isNewestDisplaySerial(request.serial)) {
         return;
       }
     }
@@ -1440,7 +1489,7 @@ void Nautiloid::renderZoomAheadCaches(const WorkerRequest& request) {
 
       {
         std::lock_guard<std::mutex> lock(workerMutex);
-        if (request.serial != nextRequestSerial) {
+        if (!requestCoordinator.isNewestDisplaySerial(request.serial)) {
           return;
         }
       }
@@ -1474,7 +1523,7 @@ void Nautiloid::renderZoomAheadCaches(const WorkerRequest& request) {
 
       {
         std::lock_guard<std::mutex> lock(workerMutex);
-        if (request.serial != nextRequestSerial) {
+        if (!requestCoordinator.isNewestDisplaySerial(request.serial)) {
           return;
         }
       }
@@ -1496,7 +1545,7 @@ void Nautiloid::renderZoomAheadCaches(const WorkerRequest& request) {
 
 void Nautiloid::reprojectionWorkerLoop() {
   while (true) {
-    WorkerRequest request;
+    DisplayWorkerRequest request;
     {
       std::unique_lock<std::mutex> lock(reprojectionRequestMutex);
       reprojectionRequestCv.wait(lock, [this]() { return reprojectionWorkerStop || reprojectionRequestPending; });
@@ -1510,7 +1559,7 @@ void Nautiloid::reprojectionWorkerLoop() {
 
 void Nautiloid::workerLoop() {
   while (true) {
-    WorkerRequest request;
+    DisplayWorkerRequest request;
     {
       std::unique_lock<std::mutex> lock(workerMutex);
       workerCv.wait(lock, [this]() { return workerStop || requestPending; });
@@ -1581,7 +1630,7 @@ void Nautiloid::workerLoop() {
 
     {
       std::lock_guard<std::mutex> lock(workerMutex);
-      if (request.serial != nextRequestSerial) {
+      if (!requestCoordinator.isNewestDisplaySerial(request.serial)) {
         displayRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
         continue;
       }
@@ -1599,7 +1648,7 @@ void Nautiloid::workerLoop() {
 
 void Nautiloid::cacheWorkerLoop() {
   while (true) {
-    WorkerRequest request;
+    DisplayWorkerRequest request;
     {
       std::unique_lock<std::mutex> lock(cacheRequestMutex);
       cacheRequestCv.wait(lock, [this]() { return cacheWorkerStop || cacheRequestPending; });
@@ -1739,7 +1788,7 @@ void Nautiloid::cacheWorkerLoop() {
       const int tileY = int(tilePos.y);
         {
           std::lock_guard<std::mutex> lock(workerMutex);
-          if (request.serial != nextRequestSerial) {
+          if (!requestCoordinator.isNewestDisplaySerial(request.serial)) {
             displayCacheTileAborts.fetch_add(1u, std::memory_order_relaxed);
             stale = true;
             break;
@@ -1779,7 +1828,7 @@ void Nautiloid::cacheWorkerLoop() {
 
         {
           std::lock_guard<std::mutex> lock(workerMutex);
-          if (request.serial != nextRequestSerial) {
+          if (!requestCoordinator.isNewestDisplaySerial(request.serial)) {
             displayCacheTileAborts.fetch_add(1u, std::memory_order_relaxed);
             stale = true;
             break;
@@ -1861,10 +1910,10 @@ void Nautiloid::cacheWorkerLoop() {
 }
 
 void Nautiloid::irisWorkerLoop() {
-  WorkerRequest retryRequest;
+  IrisWorkerRequest retryRequest;
   bool retryPending = false;
   while (true) {
-    WorkerRequest request;
+    IrisWorkerRequest request;
     {
       std::unique_lock<std::mutex> lock(irisRequestMutex);
       if (!irisRequestPending && retryPending) {
@@ -1886,6 +1935,10 @@ void Nautiloid::irisWorkerLoop() {
         continue;
       }
     }
+    if (!requestCoordinator.isNewestIrisSerial(request.serial)) {
+      irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
+      continue;
+    }
 
     bool irisCompatibleCurrent = false;
     {
@@ -1899,9 +1952,6 @@ void Nautiloid::irisWorkerLoop() {
         irisCompatibleColorMode == request.colorMode;
     }
     if (irisCompatibleCurrent) {
-      if (irisExpanderOwnedSourceSnapshot(nullptr)) {
-        continue;
-      }
       iris::SourceField cachedSource;
       {
         std::lock_guard<std::mutex> lock(snapshotMutex);
@@ -1923,15 +1973,31 @@ void Nautiloid::irisWorkerLoop() {
       }
       if (slotIndex < 0) {
         irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
-        retryRequest = request;
-        retryPending = true;
+        if (requestCoordinator.isNewestIrisSerial(request.serial)) {
+          retryRequest = request;
+          retryPending = true;
+        }
         continue;
       }
       nautiloid_iris_expander::SourceSlot& slot = irisExpanderSlots[size_t(slotIndex)];
       slot.source = std::move(cachedSource);
+      iris::NautiloidFractalSourceParams cachedParams =
+        iris::nautiloidFractalParamsFromSource(slot.source);
+      cachedParams.generation = request.serial;
+      iris::applyNautiloidFractalParams(&slot.source, cachedParams);
+      if (!requestCoordinator.isNewestIrisSerial(request.serial)) {
+        nautiloid_iris_expander::releaseSourceSlotWrite(&slot);
+        irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
+        continue;
+      }
       slot.generation.store(request.serial, std::memory_order_release);
       {
         std::lock_guard<std::mutex> lock(snapshotMutex);
+        if (!requestCoordinator.isNewestIrisSerial(request.serial)) {
+          nautiloid_iris_expander::releaseSourceSlotWrite(&slot);
+          irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
+          continue;
+        }
         irisExpanderOwnedSource =
           std::make_shared<const iris::SourceField>(std::move(slot.source));
         irisPreviewGeneration.store(request.serial, std::memory_order_release);
@@ -1939,6 +2005,7 @@ void Nautiloid::irisWorkerLoop() {
       irisExpanderWriteSlot = slotIndex;
       nautiloid_iris_expander::releaseSourceSlotWrite(&slot);
       irisExpanderPublishedSlot.store(slotIndex, std::memory_order_release);
+      irisRendersCompleted.fetch_add(1u, std::memory_order_relaxed);
       continue;
     }
 
@@ -1955,8 +2022,10 @@ void Nautiloid::irisWorkerLoop() {
     }
     if (slotIndex < 0) {
       irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
-      retryRequest = request;
-      retryPending = true;
+      if (requestCoordinator.isNewestIrisSerial(request.serial)) {
+        retryRequest = request;
+        retryPending = true;
+      }
       continue;
     }
 
@@ -1984,42 +2053,77 @@ void Nautiloid::irisWorkerLoop() {
     }
     bool irisOk = canonicalCurrent;
     if (!canonicalCurrent) {
+      struct IrisCancellationContext {
+        Nautiloid* module = nullptr;
+        uint64_t serial = 0u;
+      } cancellationContext;
+      cancellationContext.module = this;
+      cancellationContext.serial = request.serial;
+      iris::FractalCancellationToken cancellation;
+      cancellation.context = &cancellationContext;
+      cancellation.isCancelled = [](void* opaque) {
+        IrisCancellationContext* context = static_cast<IrisCancellationContext*>(opaque);
+        return !context || !context->module ||
+          context->module->stopRequested.load(std::memory_order_acquire) ||
+          !context->module->requestCoordinator.isNewestIrisSerial(context->serial);
+      };
       iris::NautiloidFractalSourceParams canonicalParams = sourceParams;
       canonicalParams.colorMode = nautiloid_color::PRISM;
       irisOk = iris::makeNautiloidIrisSource(
-        canonicalParams, &slot.source, &irisError);
+        canonicalParams, &slot.source, &irisError, &cancellation);
       if (irisOk) {
         std::lock_guard<std::mutex> lock(snapshotMutex);
-        irisCanonicalSource = slot.source;
+        if (requestCoordinator.isNewestIrisSerial(request.serial)) {
+          irisCanonicalSource = slot.source;
+        } else {
+          irisOk = false;
+        }
       }
     }
     if (!irisOk) {
       nautiloid_iris_expander::releaseSourceSlotWrite(&slot);
+      if (!requestCoordinator.isNewestIrisSerial(request.serial)) {
+        irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
+      }
+      continue;
+    }
+    if (!requestCoordinator.isNewestIrisSerial(request.serial)) {
+      nautiloid_iris_expander::releaseSourceSlotWrite(&slot);
+      irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
       continue;
     }
     nautiloid_color::applyRgb8(request.colorMode, &slot.source.rgb8);
     iris::applyNautiloidFractalParams(&slot.source, sourceParams);
 
-    if (stopRequested.load(std::memory_order_acquire)) {
+    if (stopRequested.load(std::memory_order_acquire) ||
+        !requestCoordinator.isNewestIrisSerial(request.serial)) {
       nautiloid_iris_expander::releaseSourceSlotWrite(&slot);
+      irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
       continue;
     }
 
     slot.generation.store(request.serial, std::memory_order_release);
-    std::lock_guard<std::mutex> lock(snapshotMutex);
-    irisCompatibleSource = slot.source;
-    irisExpanderOwnedSource =
-      std::make_shared<const iris::SourceField>(std::move(slot.source));
-    irisCompatibleSerial = request.serial;
-    irisCompatibleMode = request.mode;
-    irisCompatibleZoom = request.zoom;
-    irisCompatibleCenterX = request.centerX;
-    irisCompatibleCenterY = request.centerY;
-    irisCompatibleColorMode = request.colorMode;
+    {
+      std::lock_guard<std::mutex> lock(snapshotMutex);
+      if (!requestCoordinator.isNewestIrisSerial(request.serial)) {
+        nautiloid_iris_expander::releaseSourceSlotWrite(&slot);
+        irisRendersDroppedStale.fetch_add(1u, std::memory_order_relaxed);
+        continue;
+      }
+      irisCompatibleSource = slot.source;
+      irisExpanderOwnedSource =
+        std::make_shared<const iris::SourceField>(std::move(slot.source));
+      irisCompatibleSerial = request.serial;
+      irisCompatibleMode = request.mode;
+      irisCompatibleZoom = request.zoom;
+      irisCompatibleCenterX = request.centerX;
+      irisCompatibleCenterY = request.centerY;
+      irisCompatibleColorMode = request.colorMode;
+      irisPreviewGeneration.store(request.serial, std::memory_order_release);
+    }
     irisExpanderWriteSlot = slotIndex;
     nautiloid_iris_expander::releaseSourceSlotWrite(&slot);
     irisExpanderPublishedSlot.store(slotIndex, std::memory_order_release);
-    irisPreviewGeneration.store(request.serial, std::memory_order_release);
     irisRendersCompleted.fetch_add(1u, std::memory_order_relaxed);
   }
 }
