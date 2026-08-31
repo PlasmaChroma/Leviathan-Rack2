@@ -22,7 +22,9 @@ It does not require changes to Integral Flux or Proc.
 - Phase 1 is complete: display and Iris requests have independent identities,
   Iris work is demand-gated, interaction updates use worker-paced one-active/
   newest-pending coalescing, and final or invalidated Iris work is cancellable
-  between rows.
+  between rows. Patch restore queues its initial authoritative Iris render once
+  rather than repeatedly cancelling slower modes while generation zero is
+  pending; Spider and Barnsley restore coverage guards this startup path.
 - Phase 2 is complete: CPU fallback workers start lazily, park/wake without UI
   thread joins, and join only during module destruction.
 - Phase 3 is complete: Nautiloid follows the shared GL lifecycle pattern,

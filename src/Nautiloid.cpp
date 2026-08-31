@@ -705,9 +705,11 @@ void Nautiloid::process(const ProcessArgs& args) {
     irisDemand == nautiloid_requests::IrisConsumerDemand::AcceptUpdates;
   bool irisReady = false;
 
-  if (irisConnected && generation == 0u && irisAcceptsAutoSync) {
-    irisDemandSyncPending.store(true, std::memory_order_release);
-  } else if (irisConnected && generation != 0u) {
+  // The demand transition queues the one initial authoritative render. Do not
+  // re-arm it on every process call while generation zero is still rendering:
+  // each replacement final would cancel the previous request and starve
+  // slower scalar fractals during patch restore.
+  if (irisConnected && generation != 0u) {
     if (generation != lastExpanderGenerationSentRight) {
       uint64_t ownedGeneration = 0u;
       std::shared_ptr<const iris::SourceField> source =

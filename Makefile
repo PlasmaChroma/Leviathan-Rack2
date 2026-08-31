@@ -119,6 +119,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/iris_module_phase4_spec \
 	build/tests/nautiloid_request_coordinator_spec \
 	build/tests/nautiloid_location_code_spec \
+	build/tests/nautiloid_iris_restore_spec \
 	build/tests/integral_flux_runtime_spec \
 	build/tests/proc_runtime_spec \
 	build/tests/wave_preview_simplification_spec \
@@ -443,6 +444,7 @@ test-fast: test-build-fast
 	$(call run_rack_test_bin,build/tests/iris_module_phase4_spec)
 	$(call run_test_bin,build/tests/nautiloid_request_coordinator_spec)
 	$(call run_test_bin,build/tests/nautiloid_location_code_spec)
+	$(call run_rack_test_bin,build/tests/nautiloid_iris_restore_spec)
 	$(call run_rack_test_bin,build/tests/integral_flux_runtime_spec)
 	$(call run_rack_test_bin,build/tests/proc_runtime_spec)
 	$(call run_test_bin,build/tests/wave_preview_simplification_spec)
@@ -645,6 +647,9 @@ build/tests/nautiloid_request_coordinator_spec: tests/nautiloid_request_coordina
 
 build/tests/nautiloid_location_code_spec: tests/nautiloid_location_code_spec.cpp src/NautiloidLocationCode.cpp src/NautiloidLocationCode.hpp src/NautiloidFractal.hpp | build/tests
 	$(CXX) -std=c++17 -O3 -Wall -Wextra tests/nautiloid_location_code_spec.cpp src/NautiloidLocationCode.cpp -o $@
+
+build/tests/nautiloid_iris_restore_spec: tests/nautiloid_iris_restore_spec.cpp src/Nautiloid.cpp src/Nautiloid.hpp src/NautiloidLocationCode.cpp src/Iris.cpp src/Iris.hpp src/IrisIO.cpp src/IrisSourceField.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/nautiloid_iris_restore_spec.cpp src/Nautiloid.cpp src/NautiloidLocationCode.cpp src/Iris.cpp src/IrisIO.cpp src/IrisSourceField.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@
 
 build/tests/integral_flux_runtime_spec: tests/integral_flux_runtime_spec.cpp src/IntegralFlux.cpp src/IntegralFlux.hpp src/MathHelpers.hpp | build/tests
 	$(CXX) -std=c++17 $(INTEGRAL_FLUX_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-subobject-linkage -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/integral_flux_runtime_spec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
