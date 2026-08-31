@@ -117,6 +117,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/iris_wavetable_spec \
 	build/tests/nautiloid_location_code_spec \
 	build/tests/integral_flux_runtime_spec \
+	build/tests/proc_runtime_spec \
 	build/tests/wave_preview_simplification_spec \
 	build/tests/deepcache_planner_spec \
 	build/tests/deepcache_archive_spec \
@@ -435,6 +436,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/iris_wavetable_spec)
 	$(call run_test_bin,build/tests/nautiloid_location_code_spec)
 	$(call run_rack_test_bin,build/tests/integral_flux_runtime_spec)
+	$(call run_rack_test_bin,build/tests/proc_runtime_spec)
 	$(call run_test_bin,build/tests/wave_preview_simplification_spec)
 	$(call run_test_bin,build/tests/deepcache_planner_spec)
 	$(call run_test_bin,build/tests/deepcache_archive_spec)
@@ -629,6 +631,9 @@ build/tests/nautiloid_location_code_spec: tests/nautiloid_location_code_spec.cpp
 
 build/tests/integral_flux_runtime_spec: tests/integral_flux_runtime_spec.cpp src/IntegralFlux.cpp src/IntegralFlux.hpp src/MathHelpers.hpp | build/tests
 	$(CXX) -std=c++17 $(INTEGRAL_FLUX_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-subobject-linkage -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/integral_flux_runtime_spec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+
+build/tests/proc_runtime_spec: tests/proc_runtime_spec.cpp src/Proc.cpp src/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 $(INTEGRAL_FLUX_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-subobject-linkage -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/proc_runtime_spec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 build/tests/temporaldeck_virtual_integration_spec: tests/temporaldeck_virtual_integration_spec.cpp src/TemporalDeckPlatterInput.cpp src/TemporalDeckTransportControl.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@

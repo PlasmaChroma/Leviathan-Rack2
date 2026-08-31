@@ -164,7 +164,8 @@ struct Proc : Module {
 		std::atomic<float> dotYNorm {0.f};
 		std::atomic<uint8_t> dotVisible {0};
 		std::atomic<uint8_t> interactiveRecent {0};
-		std::atomic<uint32_t> version {1};
+		std::atomic<uint32_t> version {2};
+		std::atomic<uint32_t> dotVersion {0};
 	};
 	struct PreviewUpdateState {
 		float timer = 0.f;
@@ -188,6 +189,7 @@ struct Proc : Module {
 	std::atomic<bool> previewTracerEnabled {true};
 	std::atomic<int> previewTracerCacheMode {WAVE_PREVIEW_TRACER_CURVE_CACHE};
 	debug_terminal::BaselineModuleMetrics debugMetrics;
+	uint32_t perfAudioSampleCounter = 0u;
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;
 	float previewDotPublishTimer = 0.f;
@@ -506,18 +508,20 @@ struct Proc : Module {
 	}
 
 	void publishPreviewState(PreviewSharedState& shared, float riseTime, float fallTime, float curveSigned, bool interactiveRecent) {
-		// Batched atomic publish: UI only rebuilds when version increments.
+		shared.version.fetch_add(1u, std::memory_order_acq_rel);
 		shared.riseTime.store(riseTime, std::memory_order_relaxed);
 		shared.fallTime.store(fallTime, std::memory_order_relaxed);
 		shared.curveSigned.store(curveSigned, std::memory_order_relaxed);
 		shared.interactiveRecent.store(interactiveRecent ? uint8_t(1) : uint8_t(0), std::memory_order_relaxed);
-		shared.version.fetch_add(1, std::memory_order_relaxed);
+		shared.version.fetch_add(1u, std::memory_order_release);
 	}
 
 	void publishPreviewDot(PreviewSharedState& shared, bool visible, float xNorm, float yNorm) {
+		shared.dotVersion.fetch_add(1u, std::memory_order_acq_rel);
 		shared.dotXNorm.store(clamp(xNorm, 0.f, 1.f), std::memory_order_relaxed);
 		shared.dotYNorm.store(clamp(yNorm, 0.f, 1.f), std::memory_order_relaxed);
 		shared.dotVisible.store(visible ? uint8_t(1) : uint8_t(0), std::memory_order_relaxed);
+		shared.dotVersion.fetch_add(1u, std::memory_order_release);
 	}
 
 	static bool previewChangedMeaningfully(float riseNow, float risePrev, float fallNow, float fallPrev, float curveNow, float curvePrev) {
@@ -578,14 +582,33 @@ struct Proc : Module {
 	void getPreviewState(float& riseTime, float& fallTime, float& curveSigned, float& dotXNorm, float& dotYNorm,
 		bool& dotVisible, bool& interactiveRecent, uint32_t& version) const {
 		const PreviewSharedState& shared = previewState;
-		riseTime = shared.riseTime.load(std::memory_order_relaxed);
-		fallTime = shared.fallTime.load(std::memory_order_relaxed);
-		curveSigned = shared.curveSigned.load(std::memory_order_relaxed);
-		dotXNorm = shared.dotXNorm.load(std::memory_order_relaxed);
-		dotYNorm = shared.dotYNorm.load(std::memory_order_relaxed);
-		dotVisible = shared.dotVisible.load(std::memory_order_relaxed) != 0;
-		interactiveRecent = shared.interactiveRecent.load(std::memory_order_relaxed) != 0;
-		version = shared.version.load(std::memory_order_relaxed);
+		uint32_t curveBegin = 0u;
+		uint32_t curveEnd = 0u;
+		do {
+			curveBegin = shared.version.load(std::memory_order_acquire);
+			if ((curveBegin & 1u) != 0u) {
+				continue;
+			}
+			riseTime = shared.riseTime.load(std::memory_order_relaxed);
+			fallTime = shared.fallTime.load(std::memory_order_relaxed);
+			curveSigned = shared.curveSigned.load(std::memory_order_relaxed);
+			interactiveRecent = shared.interactiveRecent.load(std::memory_order_relaxed) != 0;
+			curveEnd = shared.version.load(std::memory_order_acquire);
+		} while (curveBegin != curveEnd || (curveEnd & 1u) != 0u);
+		version = curveEnd >> 1u;
+
+		uint32_t dotBegin = 0u;
+		uint32_t dotEnd = 0u;
+		do {
+			dotBegin = shared.dotVersion.load(std::memory_order_acquire);
+			if ((dotBegin & 1u) != 0u) {
+				continue;
+			}
+			dotXNorm = shared.dotXNorm.load(std::memory_order_relaxed);
+			dotYNorm = shared.dotYNorm.load(std::memory_order_relaxed);
+			dotVisible = shared.dotVisible.load(std::memory_order_relaxed) != 0;
+			dotEnd = shared.dotVersion.load(std::memory_order_acquire);
+		} while (dotBegin != dotEnd || (dotEnd & 1u) != 0u);
 	}
 
 	float computeShapeTimeScale(float shape, float logScaleLog2, float expScaleLog2) const {
@@ -1008,7 +1031,8 @@ struct Proc : Module {
 	}
 
 	void process(const ProcessArgs& args) override {
-		const bool measurePerf = isDragonKingDebugEnabled();
+		const bool debugEnabled = isDragonKingDebugEnabled();
+		const bool measurePerf = debugEnabled && ((perfAudioSampleCounter++ & 63u) == 0u);
 		const auto processStart = debug_terminal::debugTimerStart(measurePerf);
 		applyRequestedTimingUpdateDiv();
 		static const ChannelConfig channelConfig {
@@ -1122,6 +1146,7 @@ struct Proc : Module {
 	}
 };
 
+#ifndef PROC_HEADLESS_TEST
 namespace {
 
 struct ProcPreviewEdgeInteraction {
@@ -1151,6 +1176,17 @@ struct WavePreviewWidget : Widget {
 		static constexpr int TRAIL_DRAW_STRIDE = 2;
 		static constexpr int TRAIL_CAPTURE_STRIDE = 1;
 	std::array<Vec, POINT_COUNT> points {};
+	struct SimplifiedPreviewPath {
+		std::array<Vec, POINT_COUNT> points {};
+		int count = 0;
+	};
+	SimplifiedPreviewPath simplifiedFullPath;
+	SimplifiedPreviewPath simplifiedRisePath;
+	SimplifiedPreviewPath simplifiedFallPath;
+	std::array<float, PREVIEW_LUT_SIZE> cachedRiseLut {};
+	std::array<float, PREVIEW_LUT_SIZE> cachedFallLut {};
+	float cachedLutCurveSigned = 0.f;
+	bool cachedLutsValid = false;
 	WavePreviewTracer<POINT_COUNT, TRAIL_FRAME_COUNT> curveTracer;
 	WavePreviewBufferedTracer<POINT_COUNT> frameTracer;
 	Proc* modulePtr = nullptr;
@@ -1192,6 +1228,16 @@ struct WavePreviewWidget : Widget {
 		int i1 = std::min(i0 + 1, PREVIEW_LUT_SIZE - 1);
 		float f = idx - float(i0);
 		return lut[i0] + (lut[i1] - lut[i0]) * f;
+	}
+
+	void ensureSegmentLuts(float curveSigned) {
+		if (cachedLutsValid && curveSigned == cachedLutCurveSigned) {
+			return;
+		}
+		buildSegmentLut(cachedRiseLut, curveSigned, true);
+		buildSegmentLut(cachedFallLut, curveSigned, false);
+		cachedLutCurveSigned = curveSigned;
+		cachedLutsValid = true;
 	}
 
 	int highlightedEdge() const {
@@ -1254,26 +1300,51 @@ struct WavePreviewWidget : Widget {
 			1.f);
 	}
 
-	void drawWaveSegment(const DrawArgs& args, int start, int end, NVGcolor color) {
-		if (!pointsValid) {
-			return;
-		}
+	void rebuildSimplifiedPath(SimplifiedPreviewPath& destination, int start, int end) {
+		destination.count = 0;
 		start = clamp(start, 0, POINT_COUNT - 1);
 		end = clamp(end, 0, POINT_COUNT - 1);
 		const int count = end - start + 1;
 		if (count < 2) {
 			return;
 		}
+		wave_preview::simplifyPath(points.data() + start, count, 1, 0.02f,
+			[&destination](const Vec& pt, bool) {
+				if (destination.count < POINT_COUNT) {
+					destination.points[size_t(destination.count++)] = pt;
+				}
+			});
+	}
+
+	void rebuildSimplifiedPaths() {
+		const int peakIndex = clamp(peakPointIndex, 1, POINT_COUNT - 2);
+		rebuildSimplifiedPath(simplifiedFullPath, 0, POINT_COUNT - 1);
+		rebuildSimplifiedPath(simplifiedRisePath, 0, peakIndex);
+		rebuildSimplifiedPath(simplifiedFallPath, peakIndex, POINT_COUNT - 1);
+	}
+
+	const SimplifiedPreviewPath* simplifiedPathForSegment(int start, int end) const {
+		const int peakIndex = clamp(peakPointIndex, 1, POINT_COUNT - 2);
+		if (start == 0 && end == POINT_COUNT - 1) return &simplifiedFullPath;
+		if (start == 0 && end == peakIndex) return &simplifiedRisePath;
+		if (start == peakIndex && end == POINT_COUNT - 1) return &simplifiedFallPath;
+		return nullptr;
+	}
+
+	void drawWaveSegment(const DrawArgs& args, int start, int end, NVGcolor color) {
+		if (!pointsValid) {
+			return;
+		}
+		const SimplifiedPreviewPath* path = simplifiedPathForSegment(start, end);
+		if (!path || path->count < 2) {
+			return;
+		}
 		NVGcontext* vg = args.vg;
 		nvgBeginPath(vg);
-		wave_preview::simplifyPath(points.data() + start, count, 1, 0.02f, [vg](const Vec& pt, bool isMove) {
-			if (isMove) {
-				nvgMoveTo(vg, pt.x, pt.y);
-			}
-			else {
-				nvgLineTo(vg, pt.x, pt.y);
-			}
-		});
+		nvgMoveTo(vg, path->points[0].x, path->points[0].y);
+		for (int i = 1; i < path->count; ++i) {
+			nvgLineTo(vg, path->points[size_t(i)].x, path->points[size_t(i)].y);
+		}
 		nvgStrokeColor(vg, color);
 		nvgStrokeWidth(vg, WAVE_LINE_WIDTH);
 		nvgLineCap(vg, NVG_BUTT);
@@ -1315,10 +1386,7 @@ struct WavePreviewWidget : Widget {
 		float fallWidth = std::max(right - peakX, 1e-4f);
 		// Reserved hook if we later render interactive-state emphasis.
 		(void) interactiveRecent;
-		std::array<float, PREVIEW_LUT_SIZE> riseLut {};
-		std::array<float, PREVIEW_LUT_SIZE> fallLut {};
-		buildSegmentLut(riseLut, curveSigned, true);
-		buildSegmentLut(fallLut, curveSigned, false);
+		ensureSegmentLuts(curveSigned);
 
 		for (int i = 0; i < POINT_COUNT; ++i) {
 			float xNorm = float(i) / float(POINT_COUNT - 1);
@@ -1326,12 +1394,12 @@ struct WavePreviewWidget : Widget {
 			float y = -1.f;
 			if (x <= peakX) {
 				float t = (x - left) / riseWidth;
-				float v = sampleSegmentLut(riseLut, t);
+				float v = sampleSegmentLut(cachedRiseLut, t);
 				y = -1.f + 2.f * v;
 			}
 			else {
 				float t = (x - peakX) / fallWidth;
-				float v = sampleSegmentLut(fallLut, t);
+				float v = sampleSegmentLut(cachedFallLut, t);
 				y = -1.f + 2.f * v;
 			}
 			float py = top + (0.5f - 0.5f * y) * drawH;
@@ -1348,6 +1416,7 @@ struct WavePreviewWidget : Widget {
 			points.front() = Vec(left, bottom);
 			points.back() = Vec(right, bottom);
 		pointsValid = true;
+		rebuildSimplifiedPaths();
 	}
 
 	void step() override {
@@ -1980,3 +2049,4 @@ struct ProcWidget : ModuleWidget {
 } // namespace
 
 Model* modelProc = createModel<Proc, ProcWidget>("Proc");
+#endif

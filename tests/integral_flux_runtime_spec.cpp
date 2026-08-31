@@ -1,6 +1,7 @@
 #include "../src/plugin.hpp"
 
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
@@ -64,6 +65,17 @@ void connectInput(IntegralFluxImpl& module, int inputId) {
 
 void connectOutput(IntegralFluxImpl& module, int outputId) {
 	module.outputs[outputId].channels = 1;
+}
+
+Module::ProcessArgs processArgs(float sampleRate = 48000.f) {
+	Module::ProcessArgs args;
+	args.sampleRate = sampleRate;
+	args.sampleTime = 1.f / sampleRate;
+	return args;
+}
+
+bool nearlyEqual(float actual, float expected, float tolerance = 1e-4f) {
+	return std::fabs(actual - expected) <= tolerance;
 }
 
 TestResult releasedSchemaIsStable() {
@@ -172,6 +184,115 @@ TestResult previewSnapshotsStayCoherent() {
 		coherent.load(std::memory_order_relaxed) ? "" : "reader observed fields from mixed publications"};
 }
 
+TestResult mixerNormalizationContractIsStable() {
+	IntegralFluxImpl module;
+	connectInput(module, IntegralFlux::INPUT_2_INPUT);
+	connectInput(module, IntegralFlux::INPUT_3_INPUT);
+	connectOutput(module, IntegralFlux::OR_OUT_OUTPUT);
+	connectOutput(module, IntegralFlux::SUM_OUT_OUTPUT);
+	connectOutput(module, IntegralFlux::INV_OUT_OUTPUT);
+	module.params[IntegralFlux::ATTENUATE_2_PARAM].setValue(1.f);
+	module.params[IntegralFlux::ATTENUATE_3_PARAM].setValue(1.f);
+	module.inputs[IntegralFlux::INPUT_2_INPUT].setVoltage(2.f);
+	module.inputs[IntegralFlux::INPUT_3_INPUT].setVoltage(3.f);
+	Module::ProcessArgs args = processArgs();
+
+	module.process(args);
+	const bool normalizedPass = nearlyEqual(module.outputs[IntegralFlux::SUM_OUT_OUTPUT].getVoltage(), 5.f)
+		&& nearlyEqual(module.outputs[IntegralFlux::INV_OUT_OUTPUT].getVoltage(), -5.f)
+		&& nearlyEqual(module.outputs[IntegralFlux::OR_OUT_OUTPUT].getVoltage(), 3.f);
+
+	connectOutput(module, IntegralFlux::OUT_2_OUTPUT);
+	module.process(args);
+	const bool ch2RemovedPass = nearlyEqual(module.outputs[IntegralFlux::SUM_OUT_OUTPUT].getVoltage(), 3.f)
+		&& nearlyEqual(module.outputs[IntegralFlux::INV_OUT_OUTPUT].getVoltage(), -3.f)
+		&& nearlyEqual(module.outputs[IntegralFlux::OR_OUT_OUTPUT].getVoltage(), 3.f);
+
+	connectOutput(module, IntegralFlux::OUT_3_OUTPUT);
+	module.process(args);
+	const bool bothRemovedPass = nearlyEqual(module.outputs[IntegralFlux::SUM_OUT_OUTPUT].getVoltage(), 0.f)
+		&& nearlyEqual(module.outputs[IntegralFlux::INV_OUT_OUTPUT].getVoltage(), 0.f)
+		&& nearlyEqual(module.outputs[IntegralFlux::OR_OUT_OUTPUT].getVoltage(), 0.f);
+	const bool pass = normalizedPass && ch2RemovedPass && bothRemovedPass;
+	return {"mixer normalization removes patched variable outputs", pass,
+		pass ? "" : "SUM/INV/OR normalization contract changed"};
+}
+
+TestResult slewModeTracksSignalWhileIdle() {
+	IntegralFluxImpl module;
+	connectInput(module, IntegralFlux::INPUT_1_INPUT);
+	connectOutput(module, IntegralFlux::CH_1_UNITY_OUTPUT);
+	module.params[IntegralFlux::RISE_1_PARAM].setValue(0.f);
+	module.params[IntegralFlux::FALL_1_PARAM].setValue(0.f);
+	module.params[IntegralFlux::LIN_LOG_1_PARAM].setValue(IntegralFluxImpl::LINEAR_SHAPE);
+	Module::ProcessArgs args = processArgs();
+
+	module.inputs[IntegralFlux::INPUT_1_INPUT].setVoltage(6.f);
+	for (int frame = 0; frame < 1024; ++frame) {
+		args.frame = frame;
+		module.process(args);
+	}
+	const bool roseToTarget = module.ch1.phase == IntegralFluxImpl::OUTER_IDLE
+		&& nearlyEqual(module.ch1.out, 6.f)
+		&& nearlyEqual(module.outputs[IntegralFlux::CH_1_UNITY_OUTPUT].getVoltage(), 6.f);
+
+	module.inputs[IntegralFlux::INPUT_1_INPUT].setVoltage(2.f);
+	for (int frame = 1024; frame < 2048; ++frame) {
+		args.frame = frame;
+		module.process(args);
+	}
+	const bool fellToTarget = module.ch1.phase == IntegralFluxImpl::OUTER_IDLE
+		&& nearlyEqual(module.ch1.out, 2.f)
+		&& nearlyEqual(module.outputs[IntegralFlux::CH_1_UNITY_OUTPUT].getVoltage(), 2.f);
+	const bool pass = roseToTarget && fellToTarget;
+	return {"idle CH1 remains a bidirectional shaped slew", pass,
+		pass ? "" : "slew mode failed to settle at its patched signal target"};
+}
+
+TestResult triggerAndRetriggerContractIsStable() {
+	IntegralFluxImpl module;
+	connectInput(module, IntegralFlux::INPUT_1_TRIG_INPUT);
+	connectOutput(module, IntegralFlux::CH_1_UNITY_OUTPUT);
+	module.params[IntegralFlux::RISE_1_PARAM].setValue(0.25f);
+	module.params[IntegralFlux::FALL_1_PARAM].setValue(0.25f);
+	module.params[IntegralFlux::LIN_LOG_1_PARAM].setValue(IntegralFluxImpl::LINEAR_SHAPE);
+	Module::ProcessArgs args = processArgs();
+	int frame = 0;
+	auto processVoltage = [&](float voltage) {
+		module.inputs[IntegralFlux::INPUT_1_TRIG_INPUT].setVoltage(voltage);
+		args.frame = frame++;
+		module.process(args);
+	};
+
+	processVoltage(0.f);
+	processVoltage(10.f);
+	const bool initialTriggerAccepted = module.ch1.phase == IntegralFluxImpl::OUTER_RISE;
+	processVoltage(0.f);
+	for (int i = 0; i < 32 && module.ch1.phase == IntegralFluxImpl::OUTER_RISE; ++i) {
+		processVoltage(0.f);
+	}
+	const float phaseBeforeRiseRetrigger = module.ch1.phasePos;
+	processVoltage(10.f);
+	const bool riseRetriggerIgnored = module.ch1.phase == IntegralFluxImpl::OUTER_RISE
+		&& module.ch1.phasePos > phaseBeforeRiseRetrigger;
+
+	processVoltage(0.f);
+	for (int i = 0; i < 1000000 && module.ch1.phase != IntegralFluxImpl::OUTER_FALL; ++i) {
+		processVoltage(0.f);
+	}
+	for (int i = 0; i < 32 && module.ch1.phase == IntegralFluxImpl::OUTER_FALL; ++i) {
+		processVoltage(0.f);
+	}
+	const float outputBeforeFallRetrigger = module.ch1.out;
+	processVoltage(10.f);
+	const bool fallRetriggerAccepted = outputBeforeFallRetrigger > 0.f
+		&& module.ch1.phase == IntegralFluxImpl::OUTER_RISE
+		&& module.ch1.out < outputBeforeFallRetrigger;
+	const bool pass = initialTriggerAccepted && riseRetriggerIgnored && fallRetriggerAccepted;
+	return {"trigger ignores RISE and restarts from FALL", pass,
+		pass ? "" : "trigger phase/rearm behavior changed"};
+}
+
 uint64_t renderModulatedTrace(int timingDiv, bool interpolate) {
 	IntegralFluxImpl module;
 	module.bandlimitedSignalOutputs.store(false, std::memory_order_relaxed);
@@ -250,6 +371,65 @@ TestResult modulatedTraceMatchesReleasedBaseline() {
 		"actual /1=" + std::to_string(div1Hash) + ", /8=" + std::to_string(div8Hash)};
 }
 
+uint64_t renderBandlimitedSampleRateTrace(float sampleRate) {
+	IntegralFluxImpl module;
+	module.bandlimitedSignalOutputs.store(true, std::memory_order_relaxed);
+	module.bandlimitedGateOutputs.store(true, std::memory_order_relaxed);
+	module.ch1.cycleLatched = true;
+	module.ch4.cycleLatched = true;
+	for (int inputId : {
+		IntegralFlux::INPUT_1_INPUT,
+		IntegralFlux::INPUT_4_INPUT,
+		IntegralFlux::CH1_BOTH_CV_INPUT,
+		IntegralFlux::CH4_BOTH_CV_INPUT
+	}) {
+		connectInput(module, inputId);
+	}
+	for (int outputId = 0; outputId < IntegralFlux::OUTPUTS_LEN; ++outputId) {
+		connectOutput(module, outputId);
+	}
+	Module::ProcessArgs args = processArgs(sampleRate);
+	uint64_t hash = 1469598103934665603ull;
+	for (int frame = 0; frame < 32768; ++frame) {
+		args.frame = frame;
+		module.params[IntegralFlux::RISE_1_PARAM].setValue(0.03f + float((frame / 2048) % 5) * 0.01f);
+		module.params[IntegralFlux::FALL_1_PARAM].setValue(0.06f + float((frame / 1536) % 5) * 0.01f);
+		module.params[IntegralFlux::RISE_4_PARAM].setValue(0.04f + float((frame / 1792) % 5) * 0.01f);
+		module.params[IntegralFlux::FALL_4_PARAM].setValue(0.05f + float((frame / 2304) % 5) * 0.01f);
+		module.params[IntegralFlux::LIN_LOG_1_PARAM].setValue(float((frame / 1024) % 9) * 0.125f);
+		module.params[IntegralFlux::LIN_LOG_4_PARAM].setValue(float((frame / 1280) % 9) * 0.125f);
+		module.params[IntegralFlux::SHAPE_MODE_1_PARAM].setValue(((frame / 4096) & 1) ? 1.f : 0.f);
+		module.params[IntegralFlux::SHAPE_MODE_4_PARAM].setValue(((frame / 3072) & 1) ? 0.f : 1.f);
+		module.inputs[IntegralFlux::INPUT_1_INPUT].setVoltage(float((frame % 257) - 128) * 0.046875f);
+		module.inputs[IntegralFlux::INPUT_4_INPUT].setVoltage(float((frame % 193) - 96) * -0.052083333f);
+		module.inputs[IntegralFlux::CH1_BOTH_CV_INPUT].setVoltage(float((frame * 17) % 401 - 200) * 0.0125f);
+		module.inputs[IntegralFlux::CH4_BOTH_CV_INPUT].setVoltage(float((frame * 23) % 401 - 200) * 0.0125f);
+		module.process(args);
+		for (int outputId = 0; outputId < IntegralFlux::OUTPUTS_LEN; ++outputId) {
+			hash = hashFloat(hash, module.outputs[outputId].getVoltage());
+		}
+		hash = hashFloat(hash, module.ch1.out);
+		hash = hashFloat(hash, module.ch1.phasePos);
+		hash = hashFloat(hash, module.ch4.out);
+		hash = hashFloat(hash, module.ch4.phasePos);
+	}
+	return hash;
+}
+
+TestResult bandlimitedMultiRateTraceMatchesBaseline() {
+	const uint64_t hash44100 = renderBandlimitedSampleRateTrace(44100.f);
+	const uint64_t hash96000 = renderBandlimitedSampleRateTrace(96000.f);
+	const uint64_t hash192000 = renderBandlimitedSampleRateTrace(192000.f);
+	constexpr uint64_t expected44100 = 559123827560884154ull;
+	constexpr uint64_t expected96000 = 17168946331831202278ull;
+	constexpr uint64_t expected192000 = 1814505707800414429ull;
+	const bool pass = hash44100 == expected44100 && hash96000 == expected96000 && hash192000 == expected192000;
+	return {"bandlimited multi-rate trace remains bit-identical", pass,
+		"actual 44.1k=" + std::to_string(hash44100)
+			+ ", 96k=" + std::to_string(hash96000)
+			+ ", 192k=" + std::to_string(hash192000)};
+}
+
 } // namespace
 
 int main() {
@@ -257,7 +437,11 @@ int main() {
 		releasedSchemaIsStable(),
 		persistedSettingsRoundTrip(),
 		previewSnapshotsStayCoherent(),
+		mixerNormalizationContractIsStable(),
+		slewModeTracksSignalWhileIdle(),
+		triggerAndRetriggerContractIsStable(),
 		modulatedTraceMatchesReleasedBaseline(),
+		bandlimitedMultiRateTraceMatchesBaseline(),
 	};
 	bool allPassed = true;
 	for (const TestResult& result : results) {
