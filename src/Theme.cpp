@@ -3,6 +3,8 @@
 #include "theme/ThemePersistence.hpp"
 #include "theme/ThemePresets.hpp"
 #include "theme/ThemeService.hpp"
+#include "visual/FractalGlassOverlay.hpp"
+#include "visual/VisualAssets.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -34,10 +36,14 @@ ThemeColor colorForRole(const ThemeSnapshot& snapshot, ThemeRole role) {
 	switch (role) {
 		case ThemeRole::Input: return snapshot.colors.input;
 		case ThemeRole::Output: return snapshot.colors.output;
-		case ThemeRole::Accent: return snapshot.colors.accent;
+		case ThemeRole::Text: return snapshot.colors.text;
 		default: return {};
 	}
 }
+
+// Repainting every semantic glass surface is library-wide work. The editor
+// remains locally smooth while global drag publications are limited to 1 Hz.
+constexpr double kThemeGlobalPublishIntervalSec = 1.0;
 
 void rgbToHsv(ThemeColor color, float* hue, float* saturation, float* value) {
 	const float r = color.r / 255.f;
@@ -88,7 +94,9 @@ struct ThemeEditor final : TransparentWidget {
 	enum DragTarget { DragNone, DragSv, DragHue, DragTexture };
 
 	widget::FramebufferWidget* framebuffer = nullptr;
+	visual_assets::FractalGlassOverlay* themePreviewOverlay = nullptr;
 	ThemeRole selectedRole = ThemeRole::Input;
+	ThemeRole textPreviewBackgroundRole = ThemeRole::Input;
 	DragTarget dragTarget = DragNone;
 	std::uint64_t observedGeneration = 0u;
 	bool pickerValid = false;
@@ -98,16 +106,32 @@ struct ThemeEditor final : TransparentWidget {
 	float pickerSaturation = 0.f;
 	float pickerValue = 0.f;
 	float retainedHue[3] = {0.f, 0.f, 0.f};
+	float pickerTextureAmount = 1.f;
+	bool pickerTextureValid = false;
+	bool textureHovered = false;
+	double lastGlobalPublishAt = NAN;
 
 	math::Rect roleRect(int index) const { return math::Rect(Vec(8.f + index * 56.f, 42.f), Vec(52.f, 29.f)); }
 	math::Rect svRect() const { return math::Rect(Vec(9.f, 82.f), Vec(137.f, 124.f)); }
 	math::Rect hueRect() const { return math::Rect(Vec(151.f, 82.f), Vec(20.f, 124.f)); }
-	math::Rect textureRect() const { return math::Rect(Vec(10.f, 239.f), Vec(160.f, 18.f)); }
+	math::Rect textureRect() const {
+		return math::Rect(
+			Vec(10.f, 235.f),
+			Vec(160.f, visual_assets::neonBarSliderAssetHeight(160.f)));
+	}
 	math::Rect presetRect(int index) const {
 		return math::Rect(Vec(9.f + (index % 2) * 82.f, 274.f + (index / 2) * 29.f), Vec(78.f, 24.f));
 	}
-	math::Rect swapRect() const { return math::Rect(Vec(9.f, 337.f), Vec(98.f, 27.f)); }
-	math::Rect resetRect() const { return math::Rect(Vec(112.f, 337.f), Vec(59.f, 27.f)); }
+
+	void onContextCreate(const ContextCreateEvent& e) override {
+		visual_assets::onRasterContextCreate(e.vg);
+		TransparentWidget::onContextCreate(e);
+	}
+
+	void onContextDestroy(const ContextDestroyEvent& e) override {
+		visual_assets::onRasterContextDestroy(e.vg);
+		TransparentWidget::onContextDestroy(e);
+	}
 
 	Vec currentLocalMousePos() const {
 		if (!APP || !APP->scene) return Vec();
@@ -125,7 +149,7 @@ struct ThemeEditor final : TransparentWidget {
 		switch (selectedRole) {
 			case ThemeRole::Input: return 0;
 			case ThemeRole::Output: return 1;
-			case ThemeRole::Accent: return 2;
+			case ThemeRole::Text: return 2;
 			default: return 0;
 		}
 	}
@@ -148,35 +172,61 @@ struct ThemeEditor final : TransparentWidget {
 		pickerValid = true;
 	}
 
+	void publishDragValue(bool force) {
+		if (dragTarget == DragNone) return;
+		const double now = system::getTime();
+		if (!force && std::isfinite(now) && std::isfinite(lastGlobalPublishAt)
+			&& now - lastGlobalPublishAt < kThemeGlobalPublishIntervalSec) {
+			return;
+		}
+		if (dragTarget == DragSv || dragTarget == DragHue)
+			leviathan::theme::setColor(selectedRole, pickerColor);
+		else if (dragTarget == DragTexture && pickerTextureValid)
+			leviathan::theme::setTextureAmount(pickerTextureAmount);
+		lastGlobalPublishAt = now;
+	}
+
 	void applyDrag(Vec pos) {
 		const ThemeSnapshot snapshot = leviathan::theme::read().snapshot;
-		syncPicker(snapshot);
+		if (!pickerValid || pickerRole != selectedRole)
+			syncPicker(snapshot);
 		if (dragTarget == DragSv) {
 			const math::Rect area = svRect();
 			pickerSaturation = clamp((pos.x - area.pos.x) / area.size.x, 0.f, 1.f);
 			pickerValue = 1.f - clamp((pos.y - area.pos.y) / area.size.y, 0.f, 1.f);
 			pickerColor = hsvToRgb(pickerHue, pickerSaturation, pickerValue);
-			leviathan::theme::setColor(selectedRole, pickerColor);
 		}
 		else if (dragTarget == DragHue) {
 			const math::Rect area = hueRect();
 			pickerHue = clamp((pos.y - area.pos.y) / area.size.y, 0.f, 0.999999f);
 			retainedHue[selectedRoleIndex()] = pickerHue;
 			pickerColor = hsvToRgb(pickerHue, pickerSaturation, pickerValue);
-			leviathan::theme::setColor(selectedRole, pickerColor);
 		}
 		else if (dragTarget == DragTexture) {
 			const math::Rect area = textureRect();
-			const float normalized = clamp((pos.x - area.pos.x) / area.size.x, 0.f, 1.f);
-			leviathan::theme::setTextureAmount(normalized * 2.f);
+			const float normalized = visual_assets::neonBarSliderValueFromX(
+				pos.x - area.pos.x, area.size.x);
+			pickerTextureAmount = normalized * 2.f;
+			pickerTextureValid = true;
+			if (themePreviewOverlay)
+				themePreviewOverlay->setTextureAmountPreview(pickerTextureAmount);
 		}
+		publishDragValue(false);
 		dirty();
 	}
 
 	void commitDrag() {
-		if (dragTarget != DragNone)
+		if (dragTarget != DragNone) {
+			// Preserve the exact release position even if it falls between throttled
+			// publications, then persist only that final global value.
+			publishDragValue(true);
 			leviathan::theme::persistence::saveToUserStorage();
+		}
+		if (dragTarget == DragTexture && themePreviewOverlay)
+			themePreviewOverlay->setTextureAmountPreview(NAN);
 		dragTarget = DragNone;
+		pickerTextureValid = false;
+		lastGlobalPublishAt = NAN;
 	}
 
 	void onButton(const event::Button& e) override {
@@ -200,7 +250,9 @@ struct ThemeEditor final : TransparentWidget {
 
 		for (int i = 0; i < 3; ++i) {
 			if (roleRect(i).contains(e.pos)) {
-				selectedRole = i == 0 ? ThemeRole::Input : (i == 1 ? ThemeRole::Output : ThemeRole::Accent);
+				selectedRole = i == 0 ? ThemeRole::Input : (i == 1 ? ThemeRole::Output : ThemeRole::Text);
+				if (selectedRole == ThemeRole::Input || selectedRole == ThemeRole::Output)
+					textPreviewBackgroundRole = selectedRole;
 				pickerValid = false;
 				dirty();
 				e.consume(this);
@@ -211,6 +263,8 @@ struct ThemeEditor final : TransparentWidget {
 		else if (hueRect().contains(e.pos)) dragTarget = DragHue;
 		else if (textureRect().contains(e.pos)) dragTarget = DragTexture;
 		if (dragTarget != DragNone) {
+			lastGlobalPublishAt = NAN;
+			pickerTextureValid = false;
 			applyDrag(e.pos);
 			e.consume(this);
 			return;
@@ -225,21 +279,6 @@ struct ThemeEditor final : TransparentWidget {
 				e.consume(this);
 				return;
 			}
-		}
-		if (swapRect().contains(e.pos)) {
-			ThemeSnapshot snapshot = leviathan::theme::read().snapshot;
-			std::swap(snapshot.colors.input, snapshot.colors.output);
-			leviathan::theme::apply(snapshot);
-			leviathan::theme::persistence::saveToUserStorage();
-			dirty();
-			e.consume(this);
-			return;
-		}
-		if (resetRect().contains(e.pos)) {
-			leviathan::theme::persistence::resetToCanonicalAndSave();
-			dirty();
-			e.consume(this);
-			return;
 		}
 		TransparentWidget::onButton(e);
 	}
@@ -262,6 +301,23 @@ struct ThemeEditor final : TransparentWidget {
 		}
 		commitDrag();
 		e.consume(this);
+	}
+
+	void onHover(const event::Hover& e) override {
+		const bool hovered = textureRect().contains(e.pos);
+		if (textureHovered != hovered) {
+			textureHovered = hovered;
+			dirty();
+		}
+		TransparentWidget::onHover(e);
+	}
+
+	void onLeave(const event::Leave& e) override {
+		if (textureHovered) {
+			textureHovered = false;
+			dirty();
+		}
+		TransparentWidget::onLeave(e);
 	}
 
 	void step() override {
@@ -291,7 +347,8 @@ struct ThemeEditor final : TransparentWidget {
 		nvgText(args.vg, x, y, value, nullptr);
 	}
 
-	void button(const DrawArgs& args, math::Rect rect, const char* label, bool active = false) const {
+	void button(const DrawArgs& args, math::Rect rect, const char* label,
+		bool active = false, NVGcolor labelColor = nvgRGBA(238, 242, 248, 255)) const {
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, rect.pos.x, rect.pos.y, rect.size.x, rect.size.y, 4.f);
 		nvgFillColor(args.vg, active ? nvgRGBA(69, 54, 116, 245) : nvgRGBA(20, 25, 34, 245));
@@ -300,14 +357,53 @@ struct ThemeEditor final : TransparentWidget {
 		nvgStrokeColor(args.vg, active ? nvgRGBA(220, 200, 255, 230) : nvgRGBA(96, 108, 125, 180));
 		nvgStroke(args.vg);
 		text(args, rect.pos.x + rect.size.x * 0.5f, rect.pos.y + rect.size.y * 0.5f,
-			active ? 10.5f : 9.5f, label, nvgRGBA(238, 242, 248, 255));
+			active ? 10.5f : 9.5f, label, labelColor);
+	}
+
+	void themedRoleButton(const DrawArgs& args, math::Rect rect,
+	                     const char* label, bool active,
+	                     ThemeColor previewColor,
+	                     NVGcolor labelColor = nvgRGBA(255, 255, 255, 255)) const {
+		// The live semantic glass and fractal texture are rendered underneath this
+		// editor. This light local wash lets INPUT/OUTPUT follow the picker every
+		// frame without publishing a library-wide theme update; its translucency
+		// preserves the fractal texture and glass treatment underneath.
+		const NVGpaint previewPaint = nvgLinearGradient(
+			args.vg,
+			rect.pos.x, rect.pos.y,
+			rect.pos.x + rect.size.x, rect.pos.y + rect.size.y,
+			nvgThemeColor(previewColor, 104),
+			nvgThemeColor(previewColor, 68));
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg,
+			rect.pos.x + 0.8f, rect.pos.y + 0.8f,
+			rect.size.x - 1.6f, rect.size.y - 1.6f, 3.4f);
+		nvgFillPaint(args.vg, previewPaint);
+		nvgFill(args.vg);
+
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, rect.pos.x, rect.pos.y, rect.size.x, rect.size.y, 4.f);
+		nvgStrokeWidth(args.vg, active ? 1.7f : 0.75f);
+		nvgStrokeColor(args.vg, active ? nvgRGBA(244, 235, 255, 245)
+		                                  : nvgRGBA(154, 170, 188, 150));
+		nvgStroke(args.vg);
+		const float centerX = rect.pos.x + rect.size.x * 0.5f;
+		const float centerY = rect.pos.y + rect.size.y * 0.5f;
+		// Match WYRM's dynamic TRIG/V/OCT label rather than static outlined
+		// panel typography. Selection is expressed by the card, not the text.
+		const float labelHeightPx = mm2px(3.8f);
+		text(args, centerX, centerY, std::max(9.5f, labelHeightPx * 0.72f),
+			label, labelColor);
 	}
 
 	void draw(const DrawArgs& args) override {
 		const leviathan::theme::ThemeState state = leviathan::theme::read();
 		const ThemeSnapshot& snapshot = state.snapshot;
-		const ThemeColor selected = colorForRole(snapshot, selectedRole);
-		syncPicker(snapshot);
+		const bool draggingColor = dragTarget == DragSv || dragTarget == DragHue;
+		if (!draggingColor)
+			syncPicker(snapshot);
+		const ThemeColor selected = draggingColor && pickerValid && pickerRole == selectedRole
+			? pickerColor : colorForRole(snapshot, selectedRole);
 		const float hue = pickerHue;
 		const float saturation = pickerSaturation;
 		const float value = pickerValue;
@@ -315,15 +411,30 @@ struct ThemeEditor final : TransparentWidget {
 		text(args, box.size.x * 0.5f, 17.f, 18.f, "THEME", nvgRGBA(240, 235, 255, 255));
 		text(args, box.size.x * 0.5f, 31.f, 8.5f, "GLOBAL CHROMA FIELD", nvgRGBA(129, 148, 166, 255));
 
-		const char* roleNames[] = {"INPUT", "OUTPUT", "ACCENT"};
-		const ThemeRole roles[] = {ThemeRole::Input, ThemeRole::Output, ThemeRole::Accent};
+		const char* roleNames[] = {"INPUT", "OUTPUT", "TEXT"};
+		const ThemeRole roles[] = {ThemeRole::Input, ThemeRole::Output, ThemeRole::Text};
 		for (int i = 0; i < 3; ++i) {
-			button(args, roleRect(i), roleNames[i], selectedRole == roles[i]);
-			const ThemeColor swatch = colorForRole(snapshot, roles[i]);
-			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, roleRect(i).pos.x + 5.f, roleRect(i).pos.y + 21.f, 42.f, 3.f, 1.5f);
-			nvgFillColor(args.vg, nvgThemeColor(swatch));
-			nvgFill(args.vg);
+			if (roles[i] == ThemeRole::Input || roles[i] == ThemeRole::Output) {
+				ThemeColor previewColor = colorForRole(snapshot, roles[i]);
+				if (draggingColor && selectedRole == roles[i]) {
+					previewColor = pickerColor;
+				}
+				themedRoleButton(
+					args, roleRect(i), roleNames[i], selectedRole == roles[i],
+					previewColor);
+			}
+			else {
+				ThemeColor backgroundColor = colorForRole(
+					snapshot, textPreviewBackgroundRole);
+				if (draggingColor && selectedRole == textPreviewBackgroundRole)
+					backgroundColor = pickerColor;
+				ThemeColor textColor = colorForRole(snapshot, ThemeRole::Text);
+				if (draggingColor && selectedRole == ThemeRole::Text)
+					textColor = pickerColor;
+				themedRoleButton(
+					args, roleRect(i), roleNames[i], selectedRole == roles[i],
+					backgroundColor, nvgThemeColor(textColor));
+			}
 		}
 
 		const math::Rect sv = svRect();
@@ -370,21 +481,18 @@ struct ThemeEditor final : TransparentWidget {
 		text(args, 9.f, 220.f, 11.f, hex, nvgRGBA(235, 240, 247, 255), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 		text(args, 171.f, 220.f, 9.f, "SELECTED ROLE", nvgRGBA(116, 132, 150, 255), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
 
-		text(args, 9.f, 234.f, 8.5f, "TEXTURE", nvgRGBA(150, 165, 181, 255), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 		const math::Rect texture = textureRect();
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, texture.pos.x, texture.pos.y, texture.size.x, texture.size.y, 4.f);
-		nvgFillColor(args.vg, nvgRGBA(19, 24, 32, 255));
-		nvgFill(args.vg);
-		const float textureWidth = texture.size.x * snapshot.surface.textureAmount * 0.5f;
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, texture.pos.x, texture.pos.y, textureWidth, texture.size.y, 4.f);
-		nvgFillColor(args.vg, nvgThemeColor(snapshot.colors.accent));
-		nvgFill(args.vg);
-		char amount[16];
-		std::snprintf(amount, sizeof(amount), "%d%%", int(std::round(snapshot.surface.textureAmount * 100.f)));
-		text(args, texture.pos.x + texture.size.x * 0.5f, texture.pos.y + texture.size.y * 0.5f,
-			9.f, amount, nvgRGBA(245, 247, 251, 255));
+		const float textureAmount = dragTarget == DragTexture && pickerTextureValid
+			? pickerTextureAmount : snapshot.surface.textureAmount;
+		char textureLabel[32];
+		std::snprintf(textureLabel, sizeof(textureLabel), "Texture: %d%%",
+			int(std::round(textureAmount * 100.f)));
+		nvgSave(args.vg);
+		nvgTranslate(args.vg, texture.pos.x, texture.pos.y);
+		visual_assets::drawNeonBarSlider(
+			args, Vec(texture.size.x, 28.f), textureAmount * 0.5f,
+			textureHovered || dragTarget == DragTexture, textureLabel);
+		nvgRestore(args.vg);
 
 		text(args, 9.f, 268.f, 8.5f, "FACTORY FIELDS", nvgRGBA(150, 165, 181, 255), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 		std::size_t presetCount = 0u;
@@ -392,24 +500,37 @@ struct ThemeEditor final : TransparentWidget {
 		for (std::size_t i = 0u; i < presetCount && i < 4u; ++i)
 			button(args, presetRect(int(i)), presets[i].name, state.activePreset == presets[i].id);
 
-		button(args, swapRect(), "SWAP IN / OUT");
-		button(args, resetRect(), "RESET", state.activePreset == "factory:leviathan");
-		text(args, box.size.x * 0.5f, 373.f, 7.5f, "ONE FIELD  ·  EVERY INSTANCE", nvgRGBA(89, 105, 121, 255));
 	}
 };
 
 struct ThemeModuleWidget final : ModuleWidget {
 	ThemeModuleWidget(ThemeModule* module) {
 		setModule(module);
-		setPanel(createPanel(asset::plugin(pluginInstance, "res/Theme.svg")));
+		const std::string panelPath = asset::plugin(pluginInstance, "res/Theme.svg");
+		setPanel(createPanel(panelPath));
+		Widget* panelSurface = visual_assets::createPanelSurfaceEffectWidget(
+			panelPath, box.size, -1.f, this);
+		addChild(panelSurface);
+		auto* themePreviewOverlay = visual_assets::addFractalGlassOverlay(
+			this, panelPath, panelSurface);
 
 		auto* framebuffer = new widget::FramebufferWidget;
 		framebuffer->box.size = box.size;
 		auto* editor = new ThemeEditor;
 		editor->box.size = box.size;
 		editor->framebuffer = framebuffer;
+		editor->themePreviewOverlay = themePreviewOverlay;
 		framebuffer->addChild(editor);
 		addChild(framebuffer);
+
+		visual_assets::addCompactLeviathanLogoBranding(this, panelPath);
+		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
+		addChild(createWidget<CyanOrbScrew>(
+			Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0.f)));
+		addChild(createWidget<CyanOrbScrew>(
+			Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<CyanOrbScrew>(
+			Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 	}
 };
 

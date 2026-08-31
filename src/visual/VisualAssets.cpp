@@ -1,4 +1,6 @@
 #include "VisualAssets.hpp"
+
+#include "../theme/ThemeUiPoller.hpp"
 #include "ApertureLightTransfer.hpp"
 #include "../MathHelpers.hpp"
 #include "../NvgGraphicsLifecycle.hpp"
@@ -160,6 +162,131 @@ std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path) {
 
 namespace {
 
+constexpr float kNeonBarAssetAspect = 726.f / 76.f;
+constexpr float kNeonBarTrackTopFraction = 17.f / 76.f;
+constexpr float kNeonBarTrackBottomFraction = 59.f / 76.f;
+constexpr float kNeonBarFillLeftFraction = 97.f / 726.f;
+constexpr float kNeonBarFillRightFraction = 629.f / 726.f;
+constexpr float kNeonBarSelectorLeftFraction = 113.f / 726.f;
+constexpr float kNeonBarSelectorRightFraction = 613.f / 726.f;
+
+} // namespace
+
+float neonBarSliderAssetHeight(float widthPx) {
+	return std::max(0.f, widthPx) / kNeonBarAssetAspect;
+}
+
+float neonBarSliderSelectorX(float widthPx, float value) {
+	return crossfade(
+		widthPx * kNeonBarSelectorLeftFraction,
+		widthPx * kNeonBarSelectorRightFraction,
+		clamp(value, 0.f, 1.f));
+}
+
+float neonBarSliderValueFromX(float xPx, float widthPx) {
+	const float selectorLeft = widthPx * kNeonBarSelectorLeftFraction;
+	const float selectorRight = widthPx * kNeonBarSelectorRightFraction;
+	return clamp((xPx - selectorLeft) /
+		std::max(selectorRight - selectorLeft, 1.f), 0.f, 1.f);
+}
+
+void drawNeonBarSlider(
+	const Widget::DrawArgs& args,
+	Vec sizePx,
+	float value,
+	bool hovered,
+	const char* label,
+	float secondaryValue) {
+	const float assetWidth = std::max(0.f, sizePx.x);
+	const float assetHeight = neonBarSliderAssetHeight(assetWidth);
+	if (assetWidth <= 0.f || assetHeight <= 0.f) {
+		return;
+	}
+
+	const std::string fullPath = asset::plugin(pluginInstance, "res/icon/NeonBar.png");
+	std::shared_ptr<window::Image> image = APP && APP->window
+		? APP->window->loadImage(fullPath) : nullptr;
+	if (image && image->handle >= 0) {
+		int handle = loadRasterMipmapHandle(args.vg, image, fullPath);
+		if (handle < 0) {
+			handle = image->handle;
+		}
+		NVGpaint assetPaint = nvgImagePattern(
+			args.vg, 0.f, 0.f, assetWidth, assetHeight,
+			0.f, handle, 1.f);
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0.f, 0.f, assetWidth, assetHeight);
+		nvgFillPaint(args.vg, assetPaint);
+		nvgFill(args.vg);
+	}
+
+	value = clamp(value, 0.f, 1.f);
+	const float trackY = assetHeight * kNeonBarTrackTopFraction;
+	const float trackHeight = assetHeight
+		* (kNeonBarTrackBottomFraction - kNeonBarTrackTopFraction);
+	const float fillLeft = assetWidth * kNeonBarFillLeftFraction;
+	const float fillRight = assetWidth * kNeonBarFillRightFraction;
+	const float fillWidth = std::max(fillRight - fillLeft, 1.f);
+	const float selectorX = neonBarSliderSelectorX(assetWidth, value);
+	const auto drawFillTo = [&](float endpoint, NVGcolor color) {
+		const float width = clamp(endpoint - fillLeft, 0.f, fillWidth);
+		if (width <= 0.01f) {
+			return;
+		}
+		nvgSave(args.vg);
+		nvgScissor(args.vg, fillLeft, trackY, width, trackHeight);
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(
+			args.vg, fillLeft, trackY, fillWidth, trackHeight,
+			0.5f * trackHeight);
+		nvgFillColor(args.vg, color);
+		nvgFill(args.vg);
+		nvgRestore(args.vg);
+	};
+	drawFillTo(selectorX, nvgRGBA(155, 72, 224, 190));
+	if (secondaryValue >= 0.f) {
+		drawFillTo(
+			fillLeft + fillWidth * clamp(secondaryValue, 0.f, 1.f),
+			nvgRGBA(35, 222, 235, 145));
+	}
+
+	const float selectorY = trackY + 0.5f * trackHeight;
+	const float selectorRadius = 0.46f * trackHeight;
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, selectorX, selectorY, selectorRadius * 1.35f);
+	nvgFillColor(args.vg, nvgRGBA(66, 224, 255, 45));
+	nvgFill(args.vg);
+	const NVGpaint selectorPaint = nvgRadialGradient(
+		args.vg,
+		selectorX - selectorRadius * 0.32f,
+		selectorY - selectorRadius * 0.38f,
+		selectorRadius * 0.08f,
+		selectorRadius,
+		hovered
+			? nvgRGBA(80, 247, 255, 255)
+			: nvgRGBA(252, 240, 255, 255),
+		hovered
+			? nvgRGBA(4, 104, 156, 255)
+			: nvgRGBA(91, 26, 174, 255));
+	nvgBeginPath(args.vg);
+	nvgCircle(args.vg, selectorX, selectorY, selectorRadius);
+	nvgFillPaint(args.vg, selectorPaint);
+	nvgFill(args.vg);
+	nvgStrokeColor(args.vg, nvgRGBA(94, 231, 255, 235));
+	nvgStrokeWidth(args.vg, 0.75f);
+	nvgStroke(args.vg);
+
+	if (label && label[0] != '\0' && APP && APP->window && APP->window->uiFont) {
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFontSize(args.vg, 8.f);
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
+		nvgFillColor(args.vg, nvgRGB(255, 255, 255));
+		nvgText(args.vg, 0.5f * assetWidth, assetHeight + 1.f, label, nullptr);
+	}
+}
+
+namespace {
+
 struct SvgRect3DEffectWidget : TransparentWidget {
 	float edgeMarginPx = 0.f;
 	NVGcolor baseColor = nvgRGB(87, 64, 191);
@@ -302,6 +429,7 @@ struct PreviewFrameEnhancementWidget : TransparentWidget {
 
 struct PanelSurfaceEffectWidget : TransparentWidget {
 	widget::FramebufferWidget* framebuffer = nullptr;
+	leviathan::theme::ThemeUiPoller themeUiPoller;
 	uint64_t tintGeneration = 0u;
 	uint64_t themeColorGeneration = 0u;
 	bool hasSemanticGlass = false;
@@ -1013,11 +1141,12 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 	void step() override {
 		updatePanelGlassTint();
 		const bool tintChanged = tintGeneration != gPanelGlassTint.generation;
-		const uint64_t currentThemeColorGeneration = hasSemanticGlass
-			? leviathan::theme::colorGeneration()
-			: themeColorGeneration;
-		const bool themeChanged = hasSemanticGlass
-			&& themeColorGeneration != currentThemeColorGeneration;
+		uint64_t currentThemeColorGeneration = themeColorGeneration;
+		bool themeChanged = false;
+		if (hasSemanticGlass && themeUiPoller.shouldPoll()) {
+			currentThemeColorGeneration = leviathan::theme::colorGeneration();
+			themeChanged = themeColorGeneration != currentThemeColorGeneration;
+		}
 		if (tintChanged || themeChanged) {
 			tintGeneration = gPanelGlassTint.generation;
 			themeColorGeneration = currentThemeColorGeneration;
@@ -1376,7 +1505,8 @@ Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, NVGcolor highligh
 Widget* createPanelSurfaceEffectWidget(
 	const std::string& svgPath,
 	Vec panelSizePx,
-	float previewProgressionPhase) {
+	float previewProgressionPhase,
+	const Widget* themePollOwner) {
 	if (svgPath.empty() || panelSizePx.x <= 0.f || panelSizePx.y <= 0.f) {
 		Widget* empty = new Widget();
 		empty->box.size = panelSizePx;
@@ -1395,6 +1525,7 @@ Widget* createPanelSurfaceEffectWidget(
 
 	PanelSurfaceEffectWidget* effect = new PanelSurfaceEffectWidget();
 	effect->framebuffer = fb;
+	effect->themeUiPoller.setOwner(themePollOwner);
 	effect->tintGeneration = gPanelGlassTint.generation;
 	effect->themeColorGeneration = leviathan::theme::colorGeneration();
 	effect->hasSemanticGlass = it->second.hasSemanticGlass;
@@ -1439,9 +1570,86 @@ struct CachedPanelLabelsWidget final : Widget {
 	}
 };
 
+void recolorThemeTextSvg(
+	const std::shared_ptr<window::Svg>& svg,
+	leviathan::theme::ThemeColor color) {
+	if (!svg || !svg->handle) return;
+	const unsigned int rgb = unsigned(color.r)
+		| (unsigned(color.g) << 8u)
+		| (unsigned(color.b) << 16u);
+	for (NSVGshape* shape = svg->handle->shapes; shape; shape = shape->next) {
+		if (shape->fill.type == NSVG_PAINT_COLOR)
+			shape->fill.color = (shape->fill.color & 0xff000000u) | rgb;
+		if (shape->stroke.type == NSVG_PAINT_COLOR)
+			shape->stroke.color = (shape->stroke.color & 0xff000000u) | rgb;
+	}
+}
+
+struct CachedThemeTextWidget final : Widget {
+	widget::FramebufferWidget* fb = nullptr;
+	std::shared_ptr<window::Svg> themeTextSvg;
+	leviathan::theme::ThemeUiPoller themeUiPoller;
+	uint64_t observedColorGeneration = 0u;
+
+	CachedThemeTextWidget(
+		const char* svgPath, Vec panelSizePx, const Widget* themePollOwner) {
+		box.size = panelSizePx;
+		themeUiPoller.setOwner(themePollOwner);
+		observedColorGeneration = leviathan::theme::colorGeneration();
+		fb = new widget::FramebufferWidget();
+		fb->oversample = targetOversample();
+		fb->dirtyOnSubpixelChange = false;
+		fb->box.size = panelSizePx;
+
+		themeTextSvg = loadPluginSvgCached(svgPath);
+		recolorThemeTextSvg(themeTextSvg,
+			leviathan::theme::color(leviathan::theme::ThemeRole::Text));
+		auto* labels = new widget::SvgWidget();
+		labels->setSvg(themeTextSvg);
+		labels->box.size = panelSizePx;
+		fb->addChild(labels);
+		addChild(fb);
+	}
+
+	float targetOversample() const {
+		const float pixelRatio = (APP && APP->window) ? APP->window->pixelRatio : 1.f;
+		return (pixelRatio < 2.f) ? 2.f : 1.f;
+	}
+
+	void step() override {
+		if (!isVisible()) return;
+		if (fb) fb->oversample = targetOversample();
+		if (themeUiPoller.shouldPoll()) {
+			const uint64_t generation = leviathan::theme::colorGeneration();
+			if (generation != observedColorGeneration) {
+				observedColorGeneration = generation;
+				recolorThemeTextSvg(themeTextSvg,
+					leviathan::theme::color(leviathan::theme::ThemeRole::Text));
+				if (fb) fb->setDirty();
+			}
+		}
+		Widget::step();
+	}
+};
+
 Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float oversample) {
 	(void) oversample;
 	return new CachedPanelLabelsWidget(svgPath, panelSizePx);
+}
+
+Widget* createThemedPanelLabelsWidget(
+	const char* labelsAssetPath,
+	const char* themeTextAssetPath,
+	Vec panelSizePx,
+	const Widget* themePollOwner) {
+	auto* layers = new Widget();
+	layers->box.size = panelSizePx;
+	if (labelsAssetPath && labelsAssetPath[0] != '\0')
+		layers->addChild(new CachedPanelLabelsWidget(labelsAssetPath, panelSizePx));
+	if (themeTextAssetPath && themeTextAssetPath[0] != '\0')
+		layers->addChild(new CachedThemeTextWidget(
+			themeTextAssetPath, panelSizePx, themePollOwner));
+	return layers;
 }
 
 SplitPanelRenderer::SplitPanelRenderer(ModuleWidget* parent, const char* panelAssetPath)
@@ -1455,7 +1663,7 @@ SplitPanelRenderer::SplitPanelRenderer(ModuleWidget* parent, const char* panelAs
 	previewProgressionPhase_ = -1.f;
 	parent_->setPanel(createPanel(panelPath_));
 	panelSurfaceEffect_ = createPanelSurfaceEffectWidget(
-		panelPath_, parent_->box.size, previewProgressionPhase_);
+		panelPath_, parent_->box.size, previewProgressionPhase_, parent_);
 	parent_->addChild(panelSurfaceEffect_);
 }
 
@@ -1495,8 +1703,15 @@ SplitPanelRenderer::~SplitPanelRenderer() {
 			parent_, panelPath_, leviathanLogoOpacity_);
 	}
 	if (!labelsAssetPath_.empty()) {
-		parent_->addChild(createPanelLabelsWidget(
-			labelsAssetPath_.c_str(), parent_->box.size));
+		if (themeTextAssetPath_.empty()) {
+			parent_->addChild(createPanelLabelsWidget(
+				labelsAssetPath_.c_str(), parent_->box.size));
+		}
+		else {
+			parent_->addChild(createThemedPanelLabelsWidget(
+				labelsAssetPath_.c_str(), themeTextAssetPath_.c_str(),
+				parent_->box.size, parent_));
+		}
 	}
 }
 
@@ -1505,6 +1720,16 @@ void SplitPanelRenderer::addLabels(const char* labelsAssetPath) {
 		return;
 	}
 	labelsAssetPath_ = labelsAssetPath;
+}
+
+void SplitPanelRenderer::addThemedLabels(
+	const char* labelsAssetPath, const char* themeTextAssetPath) {
+	if (!parent_ || !labelsAssetPath || labelsAssetPath[0] == '\0'
+		|| !themeTextAssetPath || themeTextAssetPath[0] == '\0') {
+		return;
+	}
+	labelsAssetPath_ = labelsAssetPath;
+	themeTextAssetPath_ = themeTextAssetPath;
 }
 
 int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const std::string& idSubstring) {

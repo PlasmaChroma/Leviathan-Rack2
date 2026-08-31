@@ -2350,7 +2350,8 @@ struct SibylWidget : ModuleWidget {
 		PreviewBuildLogTimer previewTimer("Sibyl", module);
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/Sibyl.panel.svg");
 		const std::string& panelPath = splitPanel.panelPath();
-		splitPanel.addLabels("res/Sibyl.labels.svg");
+		splitPanel.addThemedLabels(
+			"res/Sibyl.labels.svg", "res/Sibyl.theme-text.svg");
 		splitPanel.addCompactLeviathanLogoBranding();
 		visual_assets::addFractalGlassOverlay(this, panelPath, splitPanel.panelSurfaceEffectWidget());
 

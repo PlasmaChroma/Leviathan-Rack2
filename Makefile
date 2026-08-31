@@ -116,6 +116,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/aperture_light_transfer_spec \
 	build/tests/iris_wavetable_spec \
 	build/tests/nautiloid_location_code_spec \
+	build/tests/integral_flux_runtime_spec \
 	build/tests/wave_preview_simplification_spec \
 	build/tests/deepcache_planner_spec \
 	build/tests/deepcache_archive_spec \
@@ -139,6 +140,13 @@ TEST_BINS := $(TEST_BINS_NON_RACK) $(TEST_BINS_RACK)
 
 RACK_TEST_WARN_FLAGS := -Wno-unused-parameter
 RACK_TEST_OPT_FLAGS := -O1
+INTEGRAL_FLUX_TEST_OPT_FLAGS := -O3 -funsafe-math-optimizations -fno-omit-frame-pointer
+ifdef ARCH_X64
+INTEGRAL_FLUX_TEST_OPT_FLAGS += -march=nehalem
+endif
+ifdef ARCH_ARM64
+INTEGRAL_FLUX_TEST_OPT_FLAGS += -march=armv8-a+fp+simd
+endif
 CXX_MACHINE := $(shell $(CXX) -dumpmachine 2>/dev/null)
 MINGW_TEST_CPPFLAGS :=
 ifneq (,$(findstring mingw,$(CXX_MACHINE)))
@@ -426,6 +434,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/aperture_light_transfer_spec)
 	$(call run_test_bin,build/tests/iris_wavetable_spec)
 	$(call run_test_bin,build/tests/nautiloid_location_code_spec)
+	$(call run_rack_test_bin,build/tests/integral_flux_runtime_spec)
 	$(call run_test_bin,build/tests/wave_preview_simplification_spec)
 	$(call run_test_bin,build/tests/deepcache_planner_spec)
 	$(call run_test_bin,build/tests/deepcache_archive_spec)
@@ -617,6 +626,9 @@ build/tests/iris_wavetable_spec: tests/iris_wavetable_spec.cpp src/IrisWavetable
 
 build/tests/nautiloid_location_code_spec: tests/nautiloid_location_code_spec.cpp src/NautiloidLocationCode.cpp src/NautiloidLocationCode.hpp src/NautiloidFractal.hpp | build/tests
 	$(CXX) -std=c++17 -O3 -Wall -Wextra tests/nautiloid_location_code_spec.cpp src/NautiloidLocationCode.cpp -o $@
+
+build/tests/integral_flux_runtime_spec: tests/integral_flux_runtime_spec.cpp src/IntegralFlux.cpp src/IntegralFlux.hpp src/MathHelpers.hpp | build/tests
+	$(CXX) -std=c++17 $(INTEGRAL_FLUX_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-subobject-linkage -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/integral_flux_runtime_spec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 build/tests/temporaldeck_virtual_integration_spec: tests/temporaldeck_virtual_integration_spec.cpp src/TemporalDeckPlatterInput.cpp src/TemporalDeckTransportControl.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@

@@ -376,6 +376,13 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 	IntegralFlux* modulePtr = nullptr;
 	IntegralFluxPreviewEdgeInteraction* edgeInteraction = nullptr;
 	std::array<Vec, POINT_COUNT> points {};
+	struct SimplifiedPreviewPath {
+		std::array<Vec, POINT_COUNT> points {};
+		int count = 0;
+	};
+	SimplifiedPreviewPath simplifiedFullPath;
+	SimplifiedPreviewPath simplifiedRisePath;
+	SimplifiedPreviewPath simplifiedFallPath;
 	WavePreviewTracer<POINT_COUNT, TRAIL_FRAME_COUNT> curveTracer;
 	WavePreviewBufferedTracer<POINT_COUNT> frameTracer;
 	std::array<float, PREVIEW_LUT_SIZE> cachedRiseLut {};
@@ -650,29 +657,60 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		drawGlWaveSegment(peakIndex, POINT_COUNT - 1, lineScale, edge == 2 ? highlightColor : waveformColor());
 	}
 
-	void drawNvgWaveSegment(const DrawArgs& args, int start, int end, NVGcolor color, size_t* reducedPointCount) {
-		if (!pointsValid) {
-			return;
-		}
+	void rebuildSimplifiedPath(SimplifiedPreviewPath& destination, int start, int end) {
+		destination.count = 0;
 		start = clamp(start, 0, POINT_COUNT - 1);
 		end = clamp(end, 0, POINT_COUNT - 1);
 		const int count = end - start + 1;
 		if (count < 2) {
 			return;
 		}
+		wave_preview::simplifyPath(points.data() + start, count, 1, 0.02f,
+			[&destination](const Vec& pt, bool) {
+				if (destination.count < POINT_COUNT) {
+					destination.points[size_t(destination.count++)] = pt;
+				}
+			});
+	}
+
+	void rebuildSimplifiedPaths() {
+		const int peakIndex = clamp(peakPointIndex, 1, POINT_COUNT - 2);
+		rebuildSimplifiedPath(simplifiedFullPath, 0, POINT_COUNT - 1);
+		rebuildSimplifiedPath(simplifiedRisePath, 0, peakIndex);
+		rebuildSimplifiedPath(simplifiedFallPath, peakIndex, POINT_COUNT - 1);
+	}
+
+	const SimplifiedPreviewPath* simplifiedPathForSegment(int start, int end) const {
+		const int peakIndex = clamp(peakPointIndex, 1, POINT_COUNT - 2);
+		if (start == 0 && end == POINT_COUNT - 1) {
+			return &simplifiedFullPath;
+		}
+		if (start == 0 && end == peakIndex) {
+			return &simplifiedRisePath;
+		}
+		if (start == peakIndex && end == POINT_COUNT - 1) {
+			return &simplifiedFallPath;
+		}
+		return nullptr;
+	}
+
+	void drawNvgWaveSegment(const DrawArgs& args, int start, int end, NVGcolor color, size_t* reducedPointCount) {
+		if (!pointsValid) {
+			return;
+		}
+		const SimplifiedPreviewPath* path = simplifiedPathForSegment(start, end);
+		if (!path || path->count < 2) {
+			return;
+		}
 		NVGcontext* vg = args.vg;
 		nvgBeginPath(vg);
-		wave_preview::simplifyPath(points.data() + start, count, 1, 0.02f, [vg, reducedPointCount](const Vec& pt, bool isMove) {
-			if (reducedPointCount) {
-				++(*reducedPointCount);
-			}
-			if (isMove) {
-				nvgMoveTo(vg, pt.x, pt.y);
-			}
-			else {
-				nvgLineTo(vg, pt.x, pt.y);
-			}
-		});
+		nvgMoveTo(vg, path->points[0].x, path->points[0].y);
+		for (int i = 1; i < path->count; ++i) {
+			nvgLineTo(vg, path->points[size_t(i)].x, path->points[size_t(i)].y);
+		}
+		if (reducedPointCount) {
+			*reducedPointCount += size_t(path->count);
+		}
 		nvgStrokeColor(vg, color);
 		nvgStrokeWidth(vg, WAVE_LINE_WIDTH);
 		nvgLineCap(vg, NVG_BUTT);
@@ -925,6 +963,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		points.front() = Vec(left, bottom);
 		points.back() = Vec(right, bottom);
 		pointsValid = true;
+		rebuildSimplifiedPaths();
 	}
 
 	void step() override {
@@ -2192,8 +2231,6 @@ struct IntegralFluxWidget : ModuleWidget {
 			const float plasmaSwitchDrawUs = float(gIntegralFluxPlasmaSwitchDrawNsThisFrame) * 1e-3f;
 			plasmaSwitchDrawUsEma = (plasmaSwitchDrawUsEma > 0.f) ? (plasmaSwitchDrawUsEma + (plasmaSwitchDrawUs - plasmaSwitchDrawUsEma) * 0.18f) : plasmaSwitchDrawUs;
 			apertureDrawUsRange.add(float(gIntegralFluxApertureDrawNsThisFrame) * 1e-3f);
-			const float uiMs = std::max(0.f, uiStepMsEma) + std::max(0.f, uiDrawMsEma);
-			flux->setPerfUiRenderMs(uiMs);
 		}
 
 		float debugSubmitUs = 0.f;
@@ -2204,7 +2241,6 @@ struct IntegralFluxWidget : ModuleWidget {
 			double& lastSubmitSec = gIntegralFluxDebugTerminalLastSubmitSec[debugInstanceId];
 			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kIntegralFluxDebugTerminalSubmitIntervalSec) {
 				lastSubmitSec = nowSec;
-				flux->resetAudioPerfSumsForUi();
 				const float ch1CurvePointsReducedAvg = flux->consumeCurveReductionAverageForUi(1);
 				const float ch1TracerExtraPointsReducedAvg = flux->consumeTracerReductionAverageForUi(1);
 				debug_terminal::submitIntegralFluxMetrics(

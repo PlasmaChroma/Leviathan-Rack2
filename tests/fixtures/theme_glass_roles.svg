@@ -12,7 +12,7 @@
     </g>
     <g id="glass_output">
       <rect id="output" x="17" y="1" width="4" height="4" fill="#1cccd9"/>
-      <g id="glass_accent">
+      <g id="glass_text">
         <rect id="nearest_wins" x="22" y="1" width="4" height="4" fill="#5740bf"/>
       </g>
     </g>

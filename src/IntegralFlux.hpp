@@ -98,9 +98,7 @@ struct IntegralFlux : Module {
 	virtual std::atomic<int>& requestedTimingUpdateDivControl() = 0;
 	virtual std::atomic<int>& previewTracerCacheModeControl() = 0;
 	virtual std::atomic<int>& previewRenderModeControl() = 0;
-	virtual void setPerfUiRenderMs(float value) = 0;
 	virtual uint32_t debugInstanceIdForUi() const = 0;
-	virtual void resetAudioPerfSumsForUi() = 0;
 	virtual debug_terminal::TimingRangeUs consumeAudioProcessTimingForUi() = 0;
 	virtual float consumeCurveReductionAverageForUi(int channel) = 0;
 	virtual float consumeTracerReductionAverageForUi(int channel) = 0;

@@ -982,8 +982,9 @@ struct BifurxWidget final : ModuleWidget {
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(iP), module, Bifurx::IN_INPUT)); addInput(createInputCentered<Magitek2InputJack>(mm2px(vP), module, Bifurx::VOCT_INPUT)); addInput(createInputCentered<Magitek2InputJack>(mm2px(fmP), module, Bifurx::FM_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(rcP), module, Bifurx::RESO_CV_INPUT)); addInput(createInputCentered<Magitek2InputJack>(mm2px(bcP), module, Bifurx::BALANCE_CV_INPUT)); addInput(createInputCentered<Magitek2InputJack>(mm2px(scP), module, Bifurx::SPAN_CV_INPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(oP), module, Bifurx::OUT_OUTPUT));
-		legacyLabels = visual_assets::createPanelLabelsWidget(
-			"res/bifurx.labels.svg", box.size);
+		legacyLabels = visual_assets::createThemedPanelLabelsWidget(
+			"res/bifurx.labels.svg", "res/bifurx.theme-text.svg",
+			box.size, this);
 		addChild(legacyLabels);
 		lastLegacyVisuals = module
 			? module->legacyVisuals.load(std::memory_order_relaxed)

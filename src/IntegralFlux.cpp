@@ -157,7 +157,10 @@ struct IntegralFluxImpl : IntegralFlux {
 		std::atomic<float> dotYNorm {0.f};
 		std::atomic<uint8_t> dotVisible {0};
 		std::atomic<uint8_t> interactiveRecent {0};
-		std::atomic<uint32_t> version {1};
+		// Even sequence values are stable; odd values indicate an in-progress
+		// engine-thread publication. UI readers retry rather than mixing frames.
+		std::atomic<uint32_t> version {2};
+		std::atomic<uint32_t> dotVersion {0};
 	};
 	struct PreviewUpdateState {
 		float timer = 0.f;
@@ -177,11 +180,9 @@ struct IntegralFluxImpl : IntegralFlux {
 	PreviewUpdateState previewUpdateCh4;
 	std::atomic<bool> bandlimitedGateOutputs {false};
 	std::atomic<bool> bandlimitedSignalOutputs {true};
-	std::atomic<uint64_t> perfAudioSampledCount {0};
-	std::atomic<uint64_t> perfAudioProcessNs {0};
 	std::atomic<uint64_t> perfAudioProcessMinNs {std::numeric_limits<uint64_t>::max()};
 	std::atomic<uint64_t> perfAudioProcessMaxNs {0};
-	std::atomic<float> perfUiRenderMs {0.f};
+	uint32_t perfAudioSampleCounter = 0u;
 	std::array<std::atomic<uint64_t>, 2> debugCurvePointsReducedTotal {};
 	std::array<std::atomic<uint64_t>, 2> debugCurveReductionSamples {};
 	std::array<std::atomic<uint64_t>, 2> debugTracerExtraPointsReducedTotal {};
@@ -278,17 +279,8 @@ struct IntegralFluxImpl : IntegralFlux {
 		return previewRenderMode;
 	}
 
-	void setPerfUiRenderMs(float value) override {
-		perfUiRenderMs.store(std::max(0.f, value), std::memory_order_relaxed);
-	}
-
 	uint32_t debugInstanceIdForUi() const override {
 		return debugInstanceId;
-	}
-
-	void resetAudioPerfSumsForUi() override {
-		perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
-		perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
 	}
 
 	debug_terminal::TimingRangeUs consumeAudioProcessTimingForUi() override {
@@ -586,19 +578,22 @@ struct IntegralFluxImpl : IntegralFlux {
 
 	void publishPreviewState(PreviewSharedState& shared, float riseTime, float fallTime, float curveSigned,
 		FunctionShapeMode shapeMode, bool interactiveRecent) {
-		// Batched atomic publish: UI only rebuilds when version increments.
+		// Sequence-lock publication keeps all curve fields from one engine update.
+		shared.version.fetch_add(1u, std::memory_order_acq_rel);
 		shared.riseTime.store(riseTime, std::memory_order_relaxed);
 		shared.fallTime.store(fallTime, std::memory_order_relaxed);
 		shared.curveSigned.store(curveSigned, std::memory_order_relaxed);
 		shared.shapeMode.store(int(shapeMode), std::memory_order_relaxed);
 		shared.interactiveRecent.store(interactiveRecent ? uint8_t(1) : uint8_t(0), std::memory_order_relaxed);
-		shared.version.fetch_add(1, std::memory_order_relaxed);
+		shared.version.fetch_add(1u, std::memory_order_release);
 	}
 
 	void publishPreviewDot(PreviewSharedState& shared, bool visible, float xNorm, float yNorm) {
+		shared.dotVersion.fetch_add(1u, std::memory_order_acq_rel);
 		shared.dotXNorm.store(clamp(xNorm, 0.f, 1.f), std::memory_order_relaxed);
 		shared.dotYNorm.store(clamp(yNorm, 0.f, 1.f), std::memory_order_relaxed);
 		shared.dotVisible.store(visible ? uint8_t(1) : uint8_t(0), std::memory_order_relaxed);
+		shared.dotVersion.fetch_add(1u, std::memory_order_release);
 	}
 
 	static bool previewChangedMeaningfully(float riseNow, float risePrev, float fallNow, float fallPrev, float curveNow, float curvePrev) {
@@ -662,15 +657,34 @@ struct IntegralFluxImpl : IntegralFlux {
 	void getPreviewState(int channel, float& riseTime, float& fallTime, float& curveSigned, float& dotXNorm,
 		float& dotYNorm, bool& dotVisible, FunctionShapeMode& shapeMode, bool& interactiveRecent, uint32_t& version) const override {
 		const PreviewSharedState& shared = (channel == 4) ? previewCh4 : previewCh1;
-		riseTime = shared.riseTime.load(std::memory_order_relaxed);
-		fallTime = shared.fallTime.load(std::memory_order_relaxed);
-		curveSigned = shared.curveSigned.load(std::memory_order_relaxed);
-		shapeMode = functionShapeModeFromStoredInt(shared.shapeMode.load(std::memory_order_relaxed));
-		dotXNorm = shared.dotXNorm.load(std::memory_order_relaxed);
-		dotYNorm = shared.dotYNorm.load(std::memory_order_relaxed);
-		dotVisible = shared.dotVisible.load(std::memory_order_relaxed) != 0;
-		interactiveRecent = shared.interactiveRecent.load(std::memory_order_relaxed) != 0;
-		version = shared.version.load(std::memory_order_relaxed);
+		uint32_t curveBegin = 0u;
+		uint32_t curveEnd = 0u;
+		do {
+			curveBegin = shared.version.load(std::memory_order_acquire);
+			if ((curveBegin & 1u) != 0u) {
+				continue;
+			}
+			riseTime = shared.riseTime.load(std::memory_order_relaxed);
+			fallTime = shared.fallTime.load(std::memory_order_relaxed);
+			curveSigned = shared.curveSigned.load(std::memory_order_relaxed);
+			shapeMode = functionShapeModeFromStoredInt(shared.shapeMode.load(std::memory_order_relaxed));
+			interactiveRecent = shared.interactiveRecent.load(std::memory_order_relaxed) != 0;
+			curveEnd = shared.version.load(std::memory_order_acquire);
+		} while (curveBegin != curveEnd || (curveEnd & 1u) != 0u);
+		version = curveEnd >> 1u;
+
+		uint32_t dotBegin = 0u;
+		uint32_t dotEnd = 0u;
+		do {
+			dotBegin = shared.dotVersion.load(std::memory_order_acquire);
+			if ((dotBegin & 1u) != 0u) {
+				continue;
+			}
+			dotXNorm = shared.dotXNorm.load(std::memory_order_relaxed);
+			dotYNorm = shared.dotYNorm.load(std::memory_order_relaxed);
+			dotVisible = shared.dotVisible.load(std::memory_order_relaxed) != 0;
+			dotEnd = shared.dotVersion.load(std::memory_order_acquire);
+		} while (dotBegin != dotEnd || (dotEnd & 1u) != 0u);
 	}
 
 	float computeShapeTimeScale(float shape, FunctionShapeMode mode, float logScaleLog2, float expScaleLog2) const {
@@ -1139,7 +1153,8 @@ struct IntegralFluxImpl : IntegralFlux {
 
 	void process(const ProcessArgs& args) override {
 		using PerfClock = std::chrono::steady_clock;
-		const bool measurePerf = isDragonKingDebugEnabled();
+		const bool debugEnabled = isDragonKingDebugEnabled();
+		const bool measurePerf = debugEnabled && ((perfAudioSampleCounter++ & 63u) == 0u);
 		const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 		const bool bandlimitedSignalEnabled = bandlimitedSignalOutputs.load(std::memory_order_relaxed);
 		const bool bandlimitedGateEnabled = bandlimitedGateOutputs.load(std::memory_order_relaxed);
@@ -1306,13 +1321,12 @@ struct IntegralFluxImpl : IntegralFlux {
 		if (measurePerf) {
 			const uint64_t elapsedNs = (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfStart).count();
-			perfAudioProcessNs.fetch_add(elapsedNs, std::memory_order_relaxed);
-			perfAudioSampledCount.fetch_add(1u, std::memory_order_relaxed);
 			debug_terminal::recordAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs, elapsedNs);
 		}
 	}
 };
 
+#ifndef INTEGRAL_FLUX_HEADLESS_TEST
 // Rack's createModel<> helper requires both concrete types to be complete at
 // the registration site. Keep the UI implementation logically separate while
 // compiling it in this translation unit so registration follows Rack's
@@ -1320,3 +1334,4 @@ struct IntegralFluxImpl : IntegralFlux {
 #include "IntegralFluxUI.inc"
 
 Model* modelIntegralFlux = createModel<IntegralFluxImpl, IntegralFluxWidget>("IntegralFlux");
+#endif

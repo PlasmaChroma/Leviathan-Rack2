@@ -11,7 +11,7 @@ enum class ThemeRole : std::uint8_t {
 	None = 0,
 	Input,
 	Output,
-	Accent
+	Text
 };
 
 struct ThemeColor {
@@ -34,10 +34,10 @@ struct ThemeColor {
 struct ThemeColors {
 	ThemeColor input;
 	ThemeColor output;
-	ThemeColor accent;
+	ThemeColor text;
 
 	bool operator==(const ThemeColors& other) const {
-		return input == other.input && output == other.output && accent == other.accent;
+		return input == other.input && output == other.output && text == other.text;
 	}
 	bool operator!=(const ThemeColors& other) const {
 		return !(*this == other);
@@ -74,7 +74,7 @@ inline ThemeSnapshot canonicalDefault() {
 	ThemeSnapshot snapshot;
 	snapshot.colors.input = {0x57, 0x40, 0xbf};
 	snapshot.colors.output = {0x1c, 0xcc, 0xd9};
-	snapshot.colors.accent = {0x57, 0x40, 0xbf};
+	snapshot.colors.text = {0xff, 0xff, 0xff};
 	snapshot.surface.textureAmount = 1.f;
 	return snapshot;
 }

@@ -3,6 +3,7 @@
 #include "../NvgGraphicsLifecycle.hpp"
 #include "../PanelSvgUtils.hpp"
 #include "../theme/ThemeService.hpp"
+#include "../theme/ThemeUiPoller.hpp"
 
 #include <atomic>
 #include <cmath>
@@ -302,6 +303,8 @@ struct FractalGlassOverlay::Impl {
 	std::atomic<uint64_t> generation {0u};
 	uint64_t observedThemeColorGeneration = 0u;
 	uint64_t observedThemeSurfaceGeneration = 0u;
+	leviathan::theme::ThemeUiPoller themeUiPoller;
+	float textureAmountPreview = NAN;
 	bool hasSemanticRegion = false;
 	bool liveValid = false;
 	iris::NautiloidFractalSourceParams live;
@@ -318,10 +321,11 @@ struct FractalGlassOverlay::Impl {
 
 	Impl(const std::string& panelPath, const std::string& requestedSelectionKey,
 		int requestedRenderWidth, int requestedRenderHeight,
-		bool synchronousFallback)
+		bool synchronousFallback, const Widget* themePollOwner)
 		: selectionKey(requestedSelectionKey)
 		, renderWidth(std::max(2, requestedRenderWidth))
 		, renderHeight(std::max(2, requestedRenderHeight)) {
+		themeUiPoller.setOwner(themePollOwner);
 		std::vector<panel_svg::SvgRectMatch> matches;
 		if (panel_svg::findThemeGlassRectsMm(panelPath, &matches)) {
 			for (const auto& match : matches) {
@@ -395,7 +399,7 @@ struct FractalGlassOverlay::Impl {
 		switch (region.themeRole) {
 			case leviathan::theme::ThemeRole::Input: color = &theme.colors.input; break;
 			case leviathan::theme::ThemeRole::Output: color = &theme.colors.output; break;
-			case leviathan::theme::ThemeRole::Accent: color = &theme.colors.accent; break;
+			case leviathan::theme::ThemeRole::Text: color = &theme.colors.text; break;
 			case leviathan::theme::ThemeRole::None:
 			default: return region.authoredColor;
 		}
@@ -476,9 +480,10 @@ struct FractalGlassOverlay::Impl {
 
 FractalGlassOverlay::FractalGlassOverlay(
 	const std::string& panelPath, const std::string& selectionKey,
-	int renderWidth, int renderHeight, bool synchronousFallback)
+	int renderWidth, int renderHeight, bool synchronousFallback,
+	const Widget* themePollOwner)
 	: impl(new Impl(panelPath, selectionKey, renderWidth, renderHeight,
-		synchronousFallback)) {}
+		synchronousFallback, themePollOwner)) {}
 
 FractalGlassOverlay::~FractalGlassOverlay() {
 	abandonImages();
@@ -506,6 +511,16 @@ void FractalGlassOverlay::onContextCreate(const ContextCreateEvent& e) {
 }
 
 void FractalGlassOverlay::setFramebuffer(widget::FramebufferWidget* framebuffer) { impl->framebuffer = framebuffer; }
+
+void FractalGlassOverlay::setTextureAmountPreview(float amount) {
+	const float next = std::isfinite(amount) ? clamp(amount, 0.f, 2.f) : NAN;
+	const bool unchanged = (std::isfinite(next) && std::isfinite(impl->textureAmountPreview)
+		&& std::fabs(next - impl->textureAmountPreview) <= 1e-6f)
+		|| (!std::isfinite(next) && !std::isfinite(impl->textureAmountPreview));
+	if (unchanged) return;
+	impl->textureAmountPreview = next;
+	if (impl->framebuffer) impl->framebuffer->setDirty();
+}
 
 void FractalGlassOverlay::setLiveParams(const iris::NautiloidFractalSourceParams* params) {
 	impl->liveValid = params != nullptr;
@@ -569,15 +584,17 @@ void FractalGlassOverlay::step() {
 		}
 	}
 	impl->wasLive = impl->liveValid;
-	const uint64_t themeColorGeneration = leviathan::theme::colorGeneration();
-	if (themeColorGeneration != impl->observedThemeColorGeneration) {
-		impl->observedThemeColorGeneration = themeColorGeneration;
-		if (impl->hasSemanticRegion) impl->requestRepalette();
-	}
-	const uint64_t themeSurfaceGeneration = leviathan::theme::surfaceGeneration();
-	if (themeSurfaceGeneration != impl->observedThemeSurfaceGeneration) {
-		impl->observedThemeSurfaceGeneration = themeSurfaceGeneration;
-		if (impl->framebuffer) impl->framebuffer->setDirty();
+	if (impl->themeUiPoller.shouldPoll()) {
+		const uint64_t themeColorGeneration = leviathan::theme::colorGeneration();
+		if (themeColorGeneration != impl->observedThemeColorGeneration) {
+			impl->observedThemeColorGeneration = themeColorGeneration;
+			if (impl->hasSemanticRegion) impl->requestRepalette();
+		}
+		const uint64_t themeSurfaceGeneration = leviathan::theme::surfaceGeneration();
+		if (themeSurfaceGeneration != impl->observedThemeSurfaceGeneration) {
+			impl->observedThemeSurfaceGeneration = themeSurfaceGeneration;
+			if (impl->framebuffer) impl->framebuffer->setDirty();
+		}
 	}
 	const uint64_t generation = impl->generation.load(std::memory_order_acquire);
 	if (impl->framebuffer && generation != impl->observedGeneration) impl->framebuffer->setDirty();
@@ -587,7 +604,9 @@ void FractalGlassOverlay::step() {
 
 void FractalGlassOverlay::draw(const DrawArgs& args) {
 	if (impl->regions.empty()) return;
-	const float textureAmount = leviathan::theme::read().snapshot.surface.textureAmount;
+	const float textureAmount = std::isfinite(impl->textureAmountPreview)
+		? impl->textureAmountPreview
+		: leviathan::theme::read().snapshot.surface.textureAmount;
 	if (textureAmount <= 0.f) return;
 	const float textureOpacity = clamp(kFractalGlassOpacity * textureAmount, 0.f, 1.f);
 	auto resetImages = [&](bool deleteHandles) {
@@ -680,7 +699,7 @@ FractalGlassOverlay* addFractalGlassOverlay(
 		2, kMaxRenderWidth);
 	const bool modulePreview = parent->module == nullptr;
 	auto* overlay = new FractalGlassOverlay(
-		panelPath, selectionKey, renderWidth, renderHeight, modulePreview);
+		panelPath, selectionKey, renderWidth, renderHeight, modulePreview, parent);
 	overlay->box.size = parent->box.size;
 	overlay->setFramebuffer(framebuffer);
 	framebuffer->addChild(overlay);

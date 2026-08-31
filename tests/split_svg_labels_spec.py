@@ -33,16 +33,21 @@ def main() -> int:
       <rect id="output" x="50" y="50" width="40" height="40" fill="rgb(28, 204, 217)"/>
     </g>
   </g>
-  <g id="labels"><text>TEST</text></g>
+  <g id="labels">
+    <text id="static-title">TITLE</text>
+    <g id="theme_text"><text id="functional-label">TEST</text></g>
+  </g>
 </svg>"""
     with tempfile.TemporaryDirectory(prefix="split-svg-spec-") as directory:
         source = Path(directory) / "fixture.svg"
         source.write_text(fixture, encoding="utf-8")
-        panel, _ = splitter.split_svg(
+        panel, labels, theme_text = splitter.split_svg(
             source_path=source,
             label_id="labels",
             panel_suffix=".panel",
             labels_suffix=".labels",
+            theme_text_id="theme_text",
+            theme_text_suffix=".theme-text",
             overwrite=True,
             cleanup=True,
             strip_panel_text=True,
@@ -53,6 +58,8 @@ def main() -> int:
 
         source_root = ET.parse(source).getroot()
         panel_root = ET.parse(panel).getroot()
+        labels_root = ET.parse(labels).getroot()
+        theme_text_root = ET.parse(theme_text).getroot()
         checks = {
             "master preview pigment remains colored": "fill:#5740bf" in by_id(source_root, "input").attrib["style"],
             "semantic style pigment becomes neutral": "fill:#000000" in by_id(panel_root, "input").attrib["style"],
@@ -61,6 +68,10 @@ def main() -> int:
             "generic authored pigment is preserved": by_id(panel_root, "generic").attrib["fill"] == "#c04080",
             "semantic identity is preserved": by_id(panel_root, "glass_input").attrib["data-theme-runtime-substrate"] == "neutral",
             "labels are absent from panel": all(elem.attrib.get("id") != "labels" for elem in panel_root.iter()),
+            "theme text is absent from static labels": all(elem.attrib.get("id") != "theme_text" for elem in labels_root.iter()),
+            "static title remains in labels": by_id(labels_root, "static-title") is not None,
+            "theme text output contains functional labels": by_id(theme_text_root, "functional-label") is not None,
+            "theme text output excludes static title": all(elem.attrib.get("id") != "static-title" for elem in theme_text_root.iter()),
         }
 
     for name, passed in checks.items():

@@ -32,7 +32,13 @@ int main() {
 	check("canonical input color matches classic panel purple",
 		initial.snapshot.colors.input == ThemeColor{0x57, 0x40, 0xbf});
 	check("canonical output color", initial.snapshot.colors.output == ThemeColor{0x1c, 0xcc, 0xd9});
-	check("canonical accent color", initial.snapshot.colors.accent == ThemeColor{0x57, 0x40, 0xbf});
+	check("canonical text color is white", initial.snapshot.colors.text == ThemeColor{0xff, 0xff, 0xff});
+	const FactoryPreset* mono = findFactoryPreset("factory:monochrome");
+	check("Mono preset uses its representative input/output contrast",
+		mono && mono->snapshot.colors.input == ThemeColor{0xba, 0xba, 0xba}
+		&& mono->snapshot.colors.output == ThemeColor{0x32, 0x32, 0x32}
+		&& mono->snapshot.colors.text == ThemeColor{0xff, 0xff, 0xff}
+		&& std::fabs(mono->snapshot.surface.textureAmount - 0.50f) < 1e-6f);
 
 	check("equal apply is a no-op", apply(initial.snapshot) == ChangeNone);
 	const ThemeState afterNoOp = read();

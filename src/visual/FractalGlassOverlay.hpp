@@ -10,11 +10,15 @@ namespace visual_assets {
 class FractalGlassOverlay : public TransparentWidget {
 public:
 	FractalGlassOverlay(const std::string& panelPath, const std::string& selectionKey,
-		int renderWidth, int renderHeight, bool synchronousFallback);
+		int renderWidth, int renderHeight, bool synchronousFallback,
+		const Widget* themePollOwner = nullptr);
 	~FractalGlassOverlay() override;
 
 	void setFramebuffer(widget::FramebufferWidget* framebuffer);
 	void setLiveParams(const iris::NautiloidFractalSourceParams* params);
+	// A local editor may preview texture opacity without publishing a global
+	// theme change. NaN clears the preview and resumes the shared setting.
+	void setTextureAmountPreview(float amount);
 	// Module-preview capture must wait until the asynchronous field has either
 	// produced pixels or established that no fallback selection is available.
 	bool isReadyForCapture() const;

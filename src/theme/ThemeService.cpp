@@ -97,7 +97,7 @@ ThemeColor color(ThemeRole role) {
 	switch (role) {
 		case ThemeRole::Input: return state.snapshot.colors.input;
 		case ThemeRole::Output: return state.snapshot.colors.output;
-		case ThemeRole::Accent: return state.snapshot.colors.accent;
+		case ThemeRole::Text: return state.snapshot.colors.text;
 		case ThemeRole::None:
 		default: return {};
 	}
@@ -109,7 +109,7 @@ ThemeChange setColor(ThemeRole role, ThemeColor value) {
 	switch (role) {
 		case ThemeRole::Input: candidate.colors.input = value; break;
 		case ThemeRole::Output: candidate.colors.output = value; break;
-		case ThemeRole::Accent: candidate.colors.accent = value; break;
+		case ThemeRole::Text: candidate.colors.text = value; break;
 		case ThemeRole::None:
 		default: return ChangeNone;
 	}

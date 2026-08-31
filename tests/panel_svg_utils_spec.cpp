@@ -549,6 +549,7 @@ TestResult testThemeGlassDeploymentContract() {
   const PanelContract panels[] = {
     {"res/bifurx.panel.svg", 1u, 1u},
     {"res/Sibyl.panel.svg", 1u, 1u},
+    {"res/Theme.svg", 1u, 1u},
     {"res/Puffy.panel.svg", 1u, 1u},
     {"res/crownstep.panel.svg", 1u, 1u},
     {"res/deck.panel.svg", 1u, 1u},
@@ -582,11 +583,11 @@ TestResult testThemeGlassDeploymentContract() {
     };
     const size_t inputs = countRole(ThemeRole::Input);
     const size_t outputs = countRole(ThemeRole::Output);
-    const size_t accents = countRole(ThemeRole::Accent);
+    const size_t textRegions = countRole(ThemeRole::Text);
     const size_t generic = countRole(ThemeRole::None);
     const bool panelPass = inputs == panel.expectedInputs
       && outputs == panel.expectedOutputs
-      && accents == 0u
+      && textRegions == 0u
       && generic == 0u;
     if (!panelPass && firstFailure.empty()) {
       firstFailure = panel.path;
@@ -596,7 +597,7 @@ TestResult testThemeGlassDeploymentContract() {
     pass = pass && panelPass;
   }
 
-  return {"Split panels expose semantic THEME input/output glass roles", pass,
+  return {"Theme-aware panels expose semantic input/output glass roles", pass,
           "panels=" + std::to_string(sizeof(panels) / sizeof(panels[0]))
             + " inputs=" + std::to_string(totalInputs)
             + " outputs=" + std::to_string(totalOutputs)
@@ -628,7 +629,7 @@ TestResult testExactThemeGlassRoles() {
     && rectRole("generic", ThemeRole::None)
     && rectRole("input_nested", ThemeRole::Input)
     && rectRole("output", ThemeRole::Output)
-    && rectRole("nearest_wins", ThemeRole::Accent)
+    && rectRole("nearest_wins", ThemeRole::Text)
     && rectRole("label_role", ThemeRole::Output)
     && nearMiss == rects.end()
     && inputPath != paths.end()

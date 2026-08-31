@@ -45,6 +45,16 @@ Widget* createAspectFitRasterImageWidget(
 	math::Rect rectMm,
 	bool flipHorizontal = false,
 	float opacity = 1.f);
+float neonBarSliderAssetHeight(float widthPx);
+float neonBarSliderSelectorX(float widthPx, float value);
+float neonBarSliderValueFromX(float xPx, float widthPx);
+void drawNeonBarSlider(
+	const Widget::DrawArgs& args,
+	Vec sizePx,
+	float value,
+	bool hovered,
+	const char* label,
+	float secondaryValue = -1.f);
 // Installs normal-left and horizontally mirrored-right raster images at SVG
 // rect anchors. Either anchor may be omitted for one-sided art. Returns the
 // number of images installed, allowing callers and tooling to verify rollout.
@@ -76,8 +86,14 @@ int addCompactLeviathanLogoBranding(
 Widget* createPanelSurfaceEffectWidget(
 	const std::string& svgPath,
 	Vec panelSizePx,
-	float previewProgressionPhase = -1.f);
+	float previewProgressionPhase = -1.f,
+	const Widget* themePollOwner = nullptr);
 Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float oversample = 2.0f);
+Widget* createThemedPanelLabelsWidget(
+	const char* labelsAssetPath,
+	const char* themeTextAssetPath,
+	Vec panelSizePx,
+	const Widget* themePollOwner = nullptr);
 
 // Installs the standard static layers for modules with split panel and label SVGs.
 class SplitPanelRenderer final {
@@ -85,6 +101,7 @@ class SplitPanelRenderer final {
 	Widget* panelSurfaceEffect_ = nullptr;
 	std::string panelPath_;
 	std::string labelsAssetPath_;
+	std::string themeTextAssetPath_;
 	float previewProgressionPhase_ = -1.f;
 	float leviathanLogoOpacity_ = 1.f;
 	bool addLeviathanLogo_ = false;
@@ -101,6 +118,7 @@ public:
 	// Labels are inserted when this scoped renderer is destroyed, after the
 	// module constructor has added its controls and dynamic visual layers.
 	void addLabels(const char* labelsAssetPath);
+	void addThemedLabels(const char* labelsAssetPath, const char* themeTextAssetPath);
 };
 
 bool isPanelGlassColorCycleEnabled();

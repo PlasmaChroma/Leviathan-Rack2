@@ -4,7 +4,8 @@ split_svg_labels.py
 
 Split an SVG into:
   - a panel/art SVG with labels removed
-  - a labels-only SVG containing only the chosen label group
+  - a static labels SVG containing the chosen label group
+  - when present, a theme-text SVG containing only <g id="theme_text">
 
 By default, the panel/art SVG strips SVG text elements and the labels-only SVG
 converts text to paths so runtime panels do not depend on locally installed
@@ -12,6 +13,7 @@ fonts. Pass --keep-label-text to keep font-backed text in the labels output.
 
 Expected source convention:
   <g id="labels"> ... </g>
+  <g id="labels"> ... <g id="theme_text"> ... </g> ... </g>
 
 Example:
   python3 split_svg_labels.py res/IntegralFlux.svg
@@ -40,7 +42,7 @@ SODIPODI_NS = "http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
 XLINK_NS = "http://www.w3.org/1999/xlink"
 XML_NS = "http://www.w3.org/XML/1998/namespace"
 
-THEME_GLASS_IDS = {"glass_input", "glass_output", "glass_accent"}
+THEME_GLASS_IDS = {"glass_input", "glass_output", "glass_text"}
 THEME_SUBSTRATE_ATTR = "data-theme-runtime-substrate"
 RUNTIME_ANCHOR_GROUP_IDS = {"plasma_conduit_anchors"}
 
@@ -411,13 +413,15 @@ def split_svg(
     label_id: str,
     panel_suffix: str,
     labels_suffix: str,
+    theme_text_id: str,
+    theme_text_suffix: str,
     overwrite: bool,
     cleanup: bool,
     strip_panel_text: bool,
     outline_label_text: bool,
     inkscape_path: str | None,
     inkscape_timeout_sec: float,
-) -> tuple[Path, Path]:
+) -> tuple[Path, Path, Path | None]:
     tree = ET.parse(source_path)
     root = tree.getroot()
 
@@ -429,9 +433,15 @@ def split_svg(
     stem = source_path.with_suffix("")
     panel_path = Path(f"{stem}{panel_suffix}.svg")
     labels_path = Path(f"{stem}{labels_suffix}.svg")
+    theme_text_path = Path(f"{stem}{theme_text_suffix}.svg")
+
+    _, theme_text_group = find_parent_and_child_by_id(label_group, theme_text_id)
 
     if not overwrite:
-        for out in [panel_path, labels_path]:
+        outputs = [panel_path, labels_path]
+        if theme_text_group is not None:
+            outputs.append(theme_text_path)
+        for out in outputs:
             if out.exists():
                 raise RuntimeError(f"{out} already exists; pass --overwrite")
 
@@ -443,6 +453,10 @@ def split_svg(
 
     labels_layer = copy.deepcopy(label_group)
     labels_layer.attrib["id"] = label_id
+    static_theme_parent, static_theme_group = find_parent_and_child_by_id(
+        labels_layer, theme_text_id)
+    if static_theme_parent is not None and static_theme_group is not None:
+        static_theme_parent.remove(static_theme_group)
     labels_root.append(labels_layer)
 
     if outline_label_text:
@@ -462,6 +476,34 @@ def split_svg(
 
     if outline_label_text:
         outline_text_with_inkscape(labels_path, inkscape_path, inkscape_timeout_sec)
+
+    generated_theme_text_path: Path | None = None
+    if theme_text_group is not None:
+        theme_text_root = copy_svg_shell(root)
+        theme_text_root.attrib["id"] = f"{source_path.stem}-theme-text"
+        copy_defs_and_styles(root, theme_text_root)
+
+        # Preserve transforms and inherited presentation attributes from the
+        # labels group while excluding every static sibling.
+        theme_labels_layer = ET.Element(label_group.tag, dict(label_group.attrib))
+        theme_labels_layer.attrib["id"] = label_id
+        theme_labels_layer.append(copy.deepcopy(theme_text_group))
+        theme_text_root.append(theme_labels_layer)
+
+        if outline_label_text:
+            normalize_text_for_outline(theme_text_root)
+        if cleanup:
+            remove_editor_junk(theme_text_root)
+
+        theme_text_tree = ET.ElementTree(theme_text_root)
+        ET.indent(theme_text_tree, space="  ")
+        if outline_label_text:
+            normalize_text_for_outline(theme_text_root)
+        theme_text_tree.write(theme_text_path, encoding="utf-8", xml_declaration=True)
+        if outline_label_text:
+            outline_text_with_inkscape(
+                theme_text_path, inkscape_path, inkscape_timeout_sec)
+        generated_theme_text_path = theme_text_path
 
     # panel-only SVG
     panel_root = copy.deepcopy(root)
@@ -484,7 +526,7 @@ def split_svg(
     ET.indent(panel_tree, space="  ")
     panel_tree.write(panel_path, encoding="utf-8", xml_declaration=True)
 
-    return panel_path, labels_path
+    return panel_path, labels_path, generated_theme_text_path
 
 
 def collect_svg_files(path: Path, recursive: bool) -> list[Path]:
@@ -521,6 +563,16 @@ def main() -> int:
         "--labels-suffix",
         default=".labels",
         help="Suffix for the labels-only SVG",
+    )
+    parser.add_argument(
+        "--theme-text-id",
+        default="theme_text",
+        help="Optional subgroup within labels to extract as tintable text",
+    )
+    parser.add_argument(
+        "--theme-text-suffix",
+        default=".theme-text",
+        help="Suffix for the optional tintable text SVG",
     )
     parser.add_argument(
         "--recursive",
@@ -569,6 +621,7 @@ def main() -> int:
             p for p in svg_files
             if not p.name.endswith(f"{args.panel_suffix}.svg")
             and not p.name.endswith(f"{args.labels_suffix}.svg")
+            and not p.name.endswith(f"{args.theme_text_suffix}.svg")
         ]
 
         if not svg_files:
@@ -576,11 +629,13 @@ def main() -> int:
             return 0
 
         for svg_path in svg_files:
-            panel_path, labels_path = split_svg(
+            panel_path, labels_path, theme_text_path = split_svg(
                 source_path=svg_path,
                 label_id=args.label_id,
                 panel_suffix=args.panel_suffix,
                 labels_suffix=args.labels_suffix,
+                theme_text_id=args.theme_text_id,
+                theme_text_suffix=args.theme_text_suffix,
                 overwrite=args.overwrite,
                 cleanup=not args.no_cleanup,
                 strip_panel_text=not args.keep_panel_text,
@@ -591,6 +646,8 @@ def main() -> int:
             print(f"{svg_path}")
             print(f"  -> {panel_path}")
             print(f"  -> {labels_path}")
+            if theme_text_path is not None:
+                print(f"  -> {theme_text_path}")
 
         return 0
 

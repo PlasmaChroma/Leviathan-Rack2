@@ -57,7 +57,7 @@ void readSnapshot(json_t* object, ThemeSnapshot* snapshot) {
 	ThemeSnapshot candidate = *snapshot;
 	parseColor(json_object_get(object, "input"), &candidate.colors.input);
 	parseColor(json_object_get(object, "output"), &candidate.colors.output);
-	parseColor(json_object_get(object, "accent"), &candidate.colors.accent);
+	parseColor(json_object_get(object, "text"), &candidate.colors.text);
 	json_t* texture = json_object_get(object, "textureAmount");
 	if (json_is_number(texture)) candidate.surface.textureAmount = float(json_number_value(texture));
 	*snapshot = canonicalize(candidate);
@@ -68,7 +68,7 @@ json_t* snapshotToJson(const ThemeSnapshot& snapshot) {
 	json_t* object = json_object();
 	json_object_set_new(object, "input", json_string(colorText(normalized.colors.input).c_str()));
 	json_object_set_new(object, "output", json_string(colorText(normalized.colors.output).c_str()));
-	json_object_set_new(object, "accent", json_string(colorText(normalized.colors.accent).c_str()));
+	json_object_set_new(object, "text", json_string(colorText(normalized.colors.text).c_str()));
 	json_object_set_new(object, "textureAmount", json_real(normalized.surface.textureAmount));
 	return object;
 }
