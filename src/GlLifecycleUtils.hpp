@@ -6,6 +6,7 @@
 namespace gl_lifecycle {
 
 bool isValidProgramBufferPair(GLuint program, GLuint buffer);
+bool isValidProgramShaderSet(GLuint program, std::initializer_list<GLuint> shaders);
 bool isValidTextureFramebufferPair(GLuint texture, GLuint framebuffer);
 bool areValidTextures(std::initializer_list<GLuint> textures);
 

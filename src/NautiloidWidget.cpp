@@ -1,4 +1,5 @@
 #include "Nautiloid.hpp"
+#include "GlLifecycleUtils.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/FractalGlassOverlay.hpp"
@@ -132,6 +133,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
   };
 
   Nautiloid* module = nullptr;
+  NVGcontext* ownerVg = nullptr;
   GLuint vertexShader = 0;
   bool vertexShaderInitAttempted = false;
   std::array<ModeProgram, size_t(iris::kLastBuiltinFractalMode) + 1u> modePrograms {};
@@ -153,10 +155,38 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
 
   void onContextDestroy(const ContextDestroyEvent& e) override {
     OpenGlWidget::onContextDestroy(e);
-    releaseGlResources(true);
+    // The destroy event guarantees that this context is current. Delete only
+    // when it is also the context that owns our GL names.
+    releaseGlResources(ownerVg != nullptr && ownerVg == e.vg);
+    ownerVg = nullptr;
     if (module) {
       module->setGpuPreviewAvailable(false, false);
     }
+  }
+
+  void onContextCreate(const ContextCreateEvent& e) override {
+    OpenGlWidget::onContextCreate(e);
+    // A module widget can survive a DAW editor replacement and miss the old
+    // destroy event. Names from that context must only be forgotten here.
+    releaseGlResources(false);
+    ownerVg = e.vg;
+    if (module) {
+      module->setGpuPreviewAvailable(false, false);
+    }
+    setDirty();
+  }
+
+  void synchronizeOwnerContext() {
+    NVGcontext* currentVg = (APP && APP->window) ? APP->window->vg : nullptr;
+    if (currentVg == ownerVg) return;
+    // Context identity changed without a matching lifecycle event. The old
+    // context may already be gone, so never issue deletion calls for its names.
+    releaseGlResources(false);
+    ownerVg = currentVg;
+    if (module) {
+      module->setGpuPreviewAvailable(false, false);
+    }
+    setDirty();
   }
 
   void releaseGlResources(bool deleteGlObjects) {
@@ -194,6 +224,24 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
       return 0;
     }
     return shader;
+  }
+
+  void validateModeProgramForCurrentContext(int mode) {
+    if (!iris::isBuiltinFractalMode(mode) || mode < 0 || size_t(mode) >= modePrograms.size()) {
+      return;
+    }
+    const ModeProgram& modeProgram = modePrograms[size_t(mode)];
+    if (modeProgram.ready &&
+        !gl_lifecycle::isValidProgramShaderSet(
+          modeProgram.program, {vertexShader, modeProgram.fragmentShader})) {
+      // The vertex shader is shared by every mode. Reset the complete local
+      // graph so the next ensure call reconstructs a coherent set of names.
+      releaseGlResources(false);
+      if (module) {
+        module->setGpuPreviewAvailable(false, false);
+      }
+      setDirty();
+    }
   }
 
   bool ensureShaderReady(int mode) {
@@ -489,6 +537,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
 
   void step() override {
     FramebufferWidget::step();
+    synchronizeOwnerContext();
     const bool effectiveActive = nautiloidGpuPreviewEnabled(module);
     bool currentModeReady = false;
     bool currentModeAttempted = false;
@@ -534,12 +583,16 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
   }
 
   void drawFramebuffer() override {
+    synchronizeOwnerContext();
     Vec fbSize = getFramebufferSize();
     glViewport(0, 0, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
     glClearColor(0.f, 0.f, 0.f, 0.f);
     glClear(GL_COLOR_BUFFER_BIT);
 
     const int mode = module ? int(module->fractalMode) : iris::FRACTAL_NONE;
+    if (isExtraGlValidationEnabled()) {
+      validateModeProgramForCurrentContext(mode);
+    }
     if (!nautiloidGpuPreviewEnabled(module) || !ensureShaderReady(mode)) {
       if (module) {
         module->setGpuPreviewAvailable(false);

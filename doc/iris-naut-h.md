@@ -15,6 +15,21 @@ This work is scoped to `Iris`, `Nautiloid`, their widgets, their private worker
 pipelines, and shared graphics helpers where the helper is genuinely reusable.
 It does not require changes to Integral Flux or Proc.
 
+## Progress checkpoint (2026-08-31)
+
+- Phase 0 instrumentation is in place; the complete manual baseline scenario
+  capture remains part of final validation.
+- Phase 1 is complete: display and Iris requests have independent identities,
+  Iris work is demand-gated, interaction updates use the centralized 140 ms
+  cadence, and stale Iris work is cancellable between rows.
+- Phase 2 is complete: CPU fallback workers start lazily, park/wake without UI
+  thread joins, and join only during module destruction.
+- Phase 3 is complete: Nautiloid follows the shared GL lifecycle pattern,
+  forgets stale context-owned names safely, validates ready shader programs,
+  and retries initialization after context recreation.
+- The native MINGW64 `test-fast` suite and authoritative Windows `plugin.dll`
+  build pass through Phase 3. Phase 4 is the next implementation phase.
+
 ## Current architecture
 
 Nautiloid currently produces two distinct render products:
