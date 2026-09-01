@@ -99,6 +99,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/crownstep_spec \
 	build/tests/mandelwake_engine_spec \
 	build/tests/undertow_shape_spec \
+	build/tests/undertow_module_spec \
 	build/tests/math_helpers_spec \
 	build/tests/puffy_engine_spec \
 	build/tests/puffy_module_spec \
@@ -474,6 +475,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/crownstep_spec)
 	$(call run_test_bin,build/tests/mandelwake_engine_spec)
 	$(call run_test_bin,build/tests/undertow_shape_spec)
+	$(call run_rack_test_bin,build/tests/undertow_module_spec)
 	$(call run_test_bin,build/tests/math_helpers_spec)
 	$(call run_test_bin,build/tests/puffy_engine_spec)
 	$(call run_rack_test_bin,build/tests/puffy_module_spec)
@@ -728,6 +730,9 @@ build/tests/phonex_engine_spec: tests/phonex_engine_spec.cpp src/PhonexEngine.cp
 
 build/tests/undertow_shape_spec: tests/undertow_shape_spec.cpp src/UndertowShape.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/undertow_shape_spec.cpp -o $@
+
+build/tests/undertow_module_spec: tests/undertow_module_spec.cpp src/Undertow.cpp src/Undertow.hpp src/UndertowShape.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/undertow_module_spec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 build/tests/math_helpers_spec: tests/math_helpers_spec.cpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/math_helpers_spec.cpp src/MathHelpers.cpp -o $@

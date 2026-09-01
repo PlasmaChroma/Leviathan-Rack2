@@ -18,9 +18,8 @@ static constexpr float kAnalogCharacterBaseDrive = 1.02f;
 static constexpr float kAnalogCharacterEnvDriveDepth = 0.18f;
 static constexpr float kAnalogCharacterDriveSkew = 0.02f;
 
-inline float acCoupledLinFm(float x, Undertow::VoiceState* voice, float sampleTime) {
+inline float acCoupledLinFm(float x, Undertow::VoiceState* voice, float hpCoeff) {
   // Minimal one-pole HP for LIN FM DC rejection.
-  const float hpCoeff = clamp(1.f - 2.f * float(M_PI) * kLinHpCutoffHz * sampleTime, 0.f, 1.f);
   float y = x - voice->linHpState;
   voice->linHpState = x - hpCoeff * y;
   return y;
@@ -110,10 +109,10 @@ Undertow::~Undertow() {
   teardownTimer.begin(id);
 }
 
-float Undertow::getShapeAmount() {
+float Undertow::getShapeAmount(int channel) {
   const float shapeKnob = params[SHAPE_PARAM].getValue();
   if (inputs[SHAPE_CV_INPUT].isConnected()) {
-    return undertow_shape::shapeControlTaper(shapeKnob * (inputs[SHAPE_CV_INPUT].getVoltage() / 8.f));
+    return undertow_shape::shapeControlTaper(shapeKnob * (inputs[SHAPE_CV_INPUT].getPolyVoltage(channel) / 8.f));
   }
   return undertow_shape::shapeControlTaper(shapeKnob);
 }
@@ -121,6 +120,18 @@ float Undertow::getShapeAmount() {
 void Undertow::process(const ProcessArgs& args) {
   const bool measurePerf = isDragonKingDebugEnabled();
   const auto processStart = debug_terminal::debugTimerStart(measurePerf);
+
+  int voiceCount = 1;
+  for (int inputId = 0; inputId < INPUTS_LEN; ++inputId) {
+    voiceCount = std::max(voiceCount, inputs[inputId].getChannels());
+  }
+  voiceCount = clamp(voiceCount, 1, PORT_MAX_CHANNELS);
+  if (voiceCount > previousVoiceCount) {
+    for (int channel = previousVoiceCount; channel < voiceCount; ++channel) {
+      voices[channel] = VoiceState {};
+    }
+  }
+
   const bool coarseTuneSteppedNow = params[COARSE_STEP_MODE_PARAM].getValue() > 0.5f;
   float coarseHz = undertowBaseFrequencyFromKnob(params[COARSE_PARAM].getValue());
   if (coarseTuneSteppedNow) {
@@ -129,120 +140,141 @@ void Undertow::process(const ProcessArgs& args) {
     coarseHz = dsp::FREQ_C4 * dsp::approxExp2_taylor5(snappedPitchV);
   }
   const float fineOctaves = params[FINE_PARAM].getValue() / 1200.f;
-  const float vOct = inputs[V_OCT_INPUT].isConnected() ? inputs[V_OCT_INPUT].getVoltage() : 0.f;
-  const float expo = inputs[EXPO_INPUT].isConnected() ? inputs[EXPO_INPUT].getVoltage() : 0.f;
-  const float baseFreq = coarseHz * dsp::approxExp2_taylor5(fineOctaves + vOct + expo);
-  displayFrequencyHz.store(clamp(baseFreq, kMinFreqHz, kMaxFreqHz), std::memory_order_relaxed);
-  const float linIn = inputs[LIN_FM_INPUT].isConnected() ? inputs[LIN_FM_INPUT].getVoltage() : 0.f;
-  const float lin = acCoupledLinFm(linIn, &voice, args.sampleTime);
   const float linAmt = params[LIN_FM_PARAM].getValue();
-  const float linBus = drivenLinFm(lin, linAmt);
-  const float freq = clamp(baseFreq + baseFreq * linBus, kMinFreqHz, kMaxFreqHz);
-  const float phaseInc = freq * args.sampleTime;
-  const float shape = getShapeAmount();
-  displayShapeAmount.store(shape, std::memory_order_relaxed);
+  const float shapeKnob = params[SHAPE_PARAM].getValue();
+  const bool shapeCvPatched = inputs[SHAPE_CV_INPUT].isConnected();
+  const float unmodulatedShape = undertow_shape::shapeControlTaper(shapeKnob);
   const bool entryAsymmetry = shapeEntryAsymmetry.load(std::memory_order_relaxed);
   const bool entryAsymmetryOnRight = shapeEntryAsymmetryOnRight.load(std::memory_order_relaxed);
   const float edgeHardness = params[EDGE_HARDNESS_PARAM].getValue();
   const bool analogCharacterEnabledNow = analogCharacterEnabled.load(std::memory_order_relaxed);
+  const bool sGatePatched = inputs[S_GATE_INPUT].isConnected();
+  const float linHpCoeff = clamp(1.f - 2.f * float(M_PI) * kLinHpCutoffHz * args.sampleTime, 0.f, 1.f);
+  bool anySyncRising = false;
+  bool anyPatchedSGateHigh = false;
 
-  // Precompute "old state" signals for MinBLEP step correction when events force discontinuities.
-  const float phaseBeforeEvents = voice.phase;
-  const float triBeforeEvents = 4.f * std::fabs(phaseBeforeEvents - 0.5f) - 1.f;
-  const float sineBeforeEvents = undertow_shape::triToSine(triBeforeEvents);
-  const float shapedBeforeEvents =
-      undertow_shape::thresholdFold(phaseBeforeEvents, shape, entryAsymmetry, edgeHardness, entryAsymmetryOnRight);
-
-  bool syncRising = voice.syncTrig.process(inputs[SYNC_INPUT].isConnected() ? inputs[SYNC_INPUT].getVoltage() : 0.f);
-  float syncDiscontinuityFrac = 0.5f;
-  if (syncRising) {
-    if (phaseInc > 1e-9f) {
-      syncDiscontinuityFrac = clamp((1.f - phaseBeforeEvents) / phaseInc, 1e-6f, 1.f);
+  for (int channel = 0; channel < voiceCount; ++channel) {
+    VoiceState& voice = voices[channel];
+    const float vOct = inputs[V_OCT_INPUT].getNormalPolyVoltage(0.f, channel);
+    const float expo = inputs[EXPO_INPUT].getNormalPolyVoltage(0.f, channel);
+    const float baseFreq = coarseHz * dsp::approxExp2_taylor5(fineOctaves + vOct + expo);
+    if (channel == 0) {
+      displayFrequencyHz.store(clamp(baseFreq, kMinFreqHz, kMaxFreqHz), std::memory_order_relaxed);
     }
-    voice.phase = 0.f;
-  }
-  const float phaseBeforeAdvance = voice.phase;
-  voice.phase += phaseInc;
-  bool wrapped = false;
-  float wrapDiscontinuityFrac = 1.f;
-  if (voice.phase >= 1.f) {
-    wrapped = true;
-    if (phaseInc > 1e-9f) {
-      wrapDiscontinuityFrac = clamp((1.f - phaseBeforeAdvance) / phaseInc, 1e-6f, 1.f);
+    const float linIn = inputs[LIN_FM_INPUT].getNormalPolyVoltage(0.f, channel);
+    const float lin = acCoupledLinFm(linIn, &voice, linHpCoeff);
+    const float linBus = drivenLinFm(lin, linAmt);
+    const float freq = clamp(baseFreq + baseFreq * linBus, kMinFreqHz, kMaxFreqHz);
+    const float phaseInc = freq * args.sampleTime;
+    const float shape = shapeCvPatched
+                            ? undertow_shape::shapeControlTaper(
+                                  shapeKnob * (inputs[SHAPE_CV_INPUT].getPolyVoltage(channel) / 8.f))
+                            : unmodulatedShape;
+    if (channel == 0) {
+      displayShapeAmount.store(shape, std::memory_order_relaxed);
     }
-    voice.phase -= std::floor(voice.phase);
+
+    // Precompute "old state" signals for MinBLEP step correction when events force discontinuities.
+    const float phaseBeforeEvents = voice.phase;
+    const float triBeforeEvents = 4.f * std::fabs(phaseBeforeEvents - 0.5f) - 1.f;
+    const float sineBeforeEvents = undertow_shape::triToSine(triBeforeEvents);
+    const float shapedBeforeEvents =
+        undertow_shape::thresholdFold(phaseBeforeEvents, shape, entryAsymmetry, edgeHardness, entryAsymmetryOnRight);
+
+    const bool syncRising = voice.syncTrig.process(inputs[SYNC_INPUT].getNormalPolyVoltage(0.f, channel));
+    anySyncRising = anySyncRising || syncRising;
+    float syncDiscontinuityFrac = 0.5f;
+    if (syncRising) {
+      if (phaseInc > 1e-9f) {
+        syncDiscontinuityFrac = clamp((1.f - phaseBeforeEvents) / phaseInc, 1e-6f, 1.f);
+      }
+      voice.phase = 0.f;
+    }
+    const float phaseBeforeAdvance = voice.phase;
+    voice.phase += phaseInc;
+    bool wrapped = false;
+    float wrapDiscontinuityFrac = 1.f;
+    if (voice.phase >= 1.f) {
+      wrapped = true;
+      if (phaseInc > 1e-9f) {
+        wrapDiscontinuityFrac = clamp((1.f - phaseBeforeAdvance) / phaseInc, 1e-6f, 1.f);
+      }
+      voice.phase -= std::floor(voice.phase);
+    }
+
+    const float tri = 4.f * std::fabs(voice.phase - 0.5f) - 1.f;
+    const float sine = undertow_shape::triToSine(tri);
+    const float shaped =
+        undertow_shape::thresholdFold(voice.phase, shape, entryAsymmetry, edgeHardness, entryAsymmetryOnRight);
+    const float analogCharacterEnv =
+        updateAnalogCharacterEnv(0.5f * (std::fabs(sine) + std::fabs(shaped)), &voice, args.sampleTime);
+
+    if (syncRising) {
+      const float sineStep = analogCharacterEnabledNow
+                                 ? analogCharacter(sine, analogCharacterEnv, kAnalogCharacterBaseDrive,
+                                                   kAnalogCharacterDriveSkew) -
+                                       analogCharacter(sineBeforeEvents, analogCharacterEnv, kAnalogCharacterBaseDrive,
+                                                       kAnalogCharacterDriveSkew)
+                                 : sine - sineBeforeEvents;
+      const float shapeStep = analogCharacterEnabledNow
+                                  ? analogCharacter(shaped, analogCharacterEnv, kAnalogCharacterBaseDrive,
+                                                    kAnalogCharacterDriveSkew) -
+                                        analogCharacter(shapedBeforeEvents, analogCharacterEnv,
+                                                        kAnalogCharacterBaseDrive, kAnalogCharacterDriveSkew)
+                                  : shaped - shapedBeforeEvents;
+      insertBlepStep(&voice.sineBlep, sineStep * 5.f, syncDiscontinuityFrac);
+      insertBlepStep(&voice.shapeBlep, shapeStep * 5.f, syncDiscontinuityFrac);
+    }
+
+    const float sGateV = inputs[S_GATE_INPUT].getNormalPolyVoltage(10.f, channel);
+    const bool sGateHigh = sGateV >= 1.f;
+    anyPatchedSGateHigh = anyPatchedSGateHigh || (sGatePatched && sGateHigh);
+    const bool sGateRising = voice.sGateTrig.process(sGateV);
+    const bool sGateFalling = voice.subGateHighLast && !sGateHigh;
+    const float subBeforeGate =
+        (voice.subGateHighLast || !sGatePatched) ? (voice.subFlip ? kSubLevelVolts : -kSubLevelVolts) : 0.f;
+    if (sGateRising) {
+      voice.subFlip = false;
+    }
+
+    float subRaw = voice.subFlip ? 1.f : -1.f;
+    float subBase = (sGatePatched && !sGateHigh) ? 0.f : kSubLevelVolts * subRaw;
+    if (sGateRising || sGateFalling) {
+      insertBlepStep(&voice.subBlep, subBase - subBeforeGate, 0.5f);
+    }
+    voice.subGateHighLast = sGateHigh;
+
+    if (wrapped && (!sGatePatched || sGateHigh)) {
+      const float subOldBase = subBase;
+      voice.subFlip = !voice.subFlip;
+      subRaw = voice.subFlip ? 1.f : -1.f;
+      subBase = kSubLevelVolts * subRaw;
+      insertBlepStep(&voice.subBlep, subBase - subOldBase, wrapDiscontinuityFrac);
+    }
+
+    const float sineOut = analogCharacterEnabledNow
+                              ? analogCharacter(sine, analogCharacterEnv, kAnalogCharacterBaseDrive,
+                                                kAnalogCharacterDriveSkew)
+                              : sine;
+    const float shapeOut = analogCharacterEnabledNow
+                               ? analogCharacter(shaped, analogCharacterEnv, kAnalogCharacterBaseDrive,
+                                                 kAnalogCharacterDriveSkew)
+                               : shaped;
+    outputs[SINE_OUTPUT].setVoltage(5.f * sineOut + voice.sineBlep.process(), channel);
+    outputs[SHAPE_OUTPUT].setVoltage(clamp(5.f * shapeOut + voice.shapeBlep.process(), -5.f, 5.f), channel);
+    // The sub square and S-Gate edges are band-limited with MinBLEP, so the
+    // correction may briefly move around the steady +/-5V rails.
+    const float subOut = clamp(subBase + voice.subBlep.process(), -5.f, 5.f);
+    outputs[SUB_OUTPUT].setVoltage(subOut, channel);
   }
 
-  const float tri = 4.f * std::fabs(voice.phase - 0.5f) - 1.f;
-  const float sine = undertow_shape::triToSine(tri);
-  const float shaped =
-      undertow_shape::thresholdFold(voice.phase, shape, entryAsymmetry, edgeHardness, entryAsymmetryOnRight);
-  const float analogCharacterEnv =
-      updateAnalogCharacterEnv(0.5f * (std::fabs(sine) + std::fabs(shaped)), &voice, args.sampleTime);
+  outputs[SINE_OUTPUT].setChannels(voiceCount);
+  outputs[SHAPE_OUTPUT].setChannels(voiceCount);
+  outputs[SUB_OUTPUT].setChannels(voiceCount);
+  previousVoiceCount = voiceCount;
 
-  if (syncRising) {
-    const float sineStep = analogCharacterEnabledNow
-                               ? analogCharacter(sine, analogCharacterEnv, kAnalogCharacterBaseDrive,
-                                                 kAnalogCharacterDriveSkew) -
-                                     analogCharacter(sineBeforeEvents, analogCharacterEnv, kAnalogCharacterBaseDrive,
-                                                     kAnalogCharacterDriveSkew)
-                               : sine - sineBeforeEvents;
-    const float shapeStep = analogCharacterEnabledNow
-                                ? analogCharacter(shaped, analogCharacterEnv, kAnalogCharacterBaseDrive,
-                                                  kAnalogCharacterDriveSkew) -
-                                      analogCharacter(shapedBeforeEvents, analogCharacterEnv,
-                                                      kAnalogCharacterBaseDrive, kAnalogCharacterDriveSkew)
-                                : shaped - shapedBeforeEvents;
-    insertBlepStep(&voice.sineBlep, sineStep * 5.f, syncDiscontinuityFrac);
-    insertBlepStep(&voice.shapeBlep, shapeStep * 5.f, syncDiscontinuityFrac);
-  }
-
-  bool sGatePatched = inputs[S_GATE_INPUT].isConnected();
-  float sGateV = sGatePatched ? inputs[S_GATE_INPUT].getVoltage() : 10.f;
-  bool sGateHigh = sGateV >= 1.f;
-  bool sGateRising = voice.sGateTrig.process(sGateV);
-  bool sGateFalling = voice.subGateHighLast && !sGateHigh;
-  const float subBeforeGate =
-      (voice.subGateHighLast || !sGatePatched) ? (voice.subFlip ? kSubLevelVolts : -kSubLevelVolts) : 0.f;
-  if (sGateRising) {
-    voice.subFlip = false;
-  }
-
-  float subRaw = voice.subFlip ? 1.f : -1.f;
-  float subBase = (sGatePatched && !sGateHigh) ? 0.f : kSubLevelVolts * subRaw;
-  if (sGateRising || sGateFalling) {
-    insertBlepStep(&voice.subBlep, subBase - subBeforeGate, 0.5f);
-  }
-  voice.subGateHighLast = sGateHigh;
-
-  if (wrapped && (!sGatePatched || sGateHigh)) {
-    const float subOldBase = subBase;
-    voice.subFlip = !voice.subFlip;
-    subRaw = voice.subFlip ? 1.f : -1.f;
-    subBase = kSubLevelVolts * subRaw;
-    insertBlepStep(&voice.subBlep, subBase - subOldBase, wrapDiscontinuityFrac);
-  }
-
-  outputs[SINE_OUTPUT].setChannels(1);
-  outputs[SHAPE_OUTPUT].setChannels(1);
-  outputs[SUB_OUTPUT].setChannels(1);
-  const float sineOut = analogCharacterEnabledNow
-                            ? analogCharacter(sine, analogCharacterEnv, kAnalogCharacterBaseDrive,
-                                              kAnalogCharacterDriveSkew)
-                            : sine;
-  const float shapeOut = analogCharacterEnabledNow
-                             ? analogCharacter(shaped, analogCharacterEnv, kAnalogCharacterBaseDrive,
-                                               kAnalogCharacterDriveSkew)
-                             : shaped;
-  outputs[SINE_OUTPUT].setVoltage(5.f * sineOut + voice.sineBlep.process());
-  outputs[SHAPE_OUTPUT].setVoltage(clamp(5.f * shapeOut + voice.shapeBlep.process(), -5.f, 5.f));
-  // The sub square and S-Gate edges are band-limited with MinBLEP, so the
-  // correction may briefly move around the steady +/-5V rails.
-  const float subOut = clamp(subBase + voice.subBlep.process(), -5.f, 5.f);
-  outputs[SUB_OUTPUT].setVoltage(subOut);
-
-  lights[SYNC_LIGHT].setBrightnessSmooth(syncRising ? 1.f : 0.f, args.sampleTime * 8.f);
-  lights[S_GATE_LIGHT].setBrightnessSmooth((sGatePatched && sGateHigh) ? 1.f : 0.f, args.sampleTime * 8.f);
+  lights[SYNC_LIGHT].setBrightnessSmooth(anySyncRising ? 1.f : 0.f, args.sampleTime * 8.f);
+  lights[S_GATE_LIGHT].setBrightnessSmooth(anyPatchedSGateHigh ? 1.f : 0.f, args.sampleTime * 8.f);
   lights[COARSE_STEP_MODE_LIGHT].setBrightness(coarseTuneSteppedNow ? 0.5f : 0.f);
   if (measurePerf) {
     debugMetrics.recordProcess(debug_terminal::elapsedNsSince(processStart));

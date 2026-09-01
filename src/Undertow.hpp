@@ -2,6 +2,7 @@
 
 #include "DebugTerminalMetrics.hpp"
 #include "plugin.hpp"
+#include <array>
 #include <atomic>
 #include <cmath>
 
@@ -73,7 +74,8 @@ struct Undertow final : Module {
     dsp::MinBlepGenerator<16, 16> subBlep;
   };
 
-  VoiceState voice;
+  std::array<VoiceState, PORT_MAX_CHANNELS> voices {};
+  int previousVoiceCount = 1;
   std::atomic<bool> shapeEntryAsymmetry {false};
   std::atomic<bool> shapeEntryAsymmetryOnRight {false};
   std::atomic<bool> analogCharacterEnabled {true};
@@ -85,7 +87,7 @@ struct Undertow final : Module {
 
   Undertow();
   ~Undertow() override;
-  float getShapeAmount();
+  float getShapeAmount(int channel = 0);
   void process(const ProcessArgs& args) override;
   json_t* dataToJson() override;
   void dataFromJson(json_t* root) override;
