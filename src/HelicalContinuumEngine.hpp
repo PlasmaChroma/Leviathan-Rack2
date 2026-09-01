@@ -7,6 +7,15 @@
 
 namespace doorstop {
 
+enum class HelicalObserverVariant : std::uint8_t {
+	Fixed = 0,
+	Crossing,
+	Bend,
+	Mixed,
+	NoPairs,
+	Count
+};
+
 // Stage-1 Reference V3 surrogate. Every retained family is represented as a
 // split lateral pair so the audible body and the visible fundamental share one
 // two-plane mechanical state. Contact and moving radiation geometry are later
@@ -23,6 +32,7 @@ public:
 	void setBreakIn(float amount);
 	void setBreakInLocked(bool locked);
 	void setSpecimenSeed(std::uint32_t seed);
+	void setObserverVariant(HelicalObserverVariant variant);
 	void strike(float normalizedVelocity);
 	Frame process(float requestedSampleTime);
 
@@ -30,6 +40,7 @@ public:
 	float getBreakIn() const { return breakIn; }
 	bool isBreakInLocked() const { return breakInLocked; }
 	std::uint32_t getSpecimenSeed() const { return specimenSeed; }
+	HelicalObserverVariant getObserverVariant() const { return observerVariant; }
 	float getVisualMaximumDisplacement() const { return 2.f; }
 
 private:
@@ -66,10 +77,14 @@ private:
 
 	std::array<ModalState, MODE_COUNT> modes {};
 	std::array<float, MODE_COUNT> omegaSq {};
+	std::array<float, MODE_COUNT> omega {};
 	std::array<float, MODE_COUNT> damping {};
 	std::array<float, MODE_COUNT> tipParticipation {};
 	std::array<float, MODE_COUNT> radiationWeight {};
+	std::array<float, MODE_COUNT> observerDirectionX {};
+	std::array<float, MODE_COUNT> observerDirectionY {};
 	std::array<float, MODE_COUNT> strainWeight {};
+	HelicalObserverVariant observerVariant = HelicalObserverVariant::Fixed;
 
 	Vec2 capPosition {};
 	Vec2 capVelocity {};

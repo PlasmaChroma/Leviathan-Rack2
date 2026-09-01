@@ -2,6 +2,7 @@
 #include "../src/DoorstopEngineRouter.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
@@ -118,6 +119,47 @@ Result routerReturnsExactV3Frames() {
 		"exact=" + std::to_string(exact)};
 }
 
+Result observerVariantsAreDeterministicAndDistinct() {
+	constexpr float rate = 48000.f;
+	constexpr float dt = 1.f / rate;
+	const std::array<doorstop::HelicalObserverVariant, 5> variants {{
+		doorstop::HelicalObserverVariant::Fixed,
+		doorstop::HelicalObserverVariant::Crossing,
+		doorstop::HelicalObserverVariant::Bend,
+		doorstop::HelicalObserverVariant::Mixed,
+		doorstop::HelicalObserverVariant::NoPairs,
+	}};
+	std::array<double, 5> signatures {};
+	bool pass = true;
+	for (std::size_t variantIndex = 0; variantIndex < variants.size(); ++variantIndex) {
+		doorstop::HelicalContinuumEngine a;
+		doorstop::HelicalContinuumEngine b;
+		for (doorstop::HelicalContinuumEngine* engine : {&a, &b}) {
+			engine->setSampleRate(rate);
+			engine->setSpecimenSeed(0x51a7u);
+			engine->setObserverVariant(variants[variantIndex]);
+			engine->strike(0.8f);
+		}
+		for (int i = 0; i < int(1.5f * rate); ++i) {
+			const float outputA = a.process(dt).outputVolts;
+			const float outputB = b.process(dt).outputVolts;
+			pass = pass && outputA == outputB && std::isfinite(outputA);
+			signatures[variantIndex] += double(i + 1) * outputA;
+		}
+	}
+	for (std::size_t a = 0; a < signatures.size(); ++a) {
+		for (std::size_t b = a + 1; b < signatures.size(); ++b) {
+			pass = pass && std::fabs(signatures[a] - signatures[b]) > 1.0;
+		}
+	}
+	return {"V3 observer variants are deterministic and waveform-distinct",
+		pass, "fixed=" + std::to_string(signatures[0])
+			+ " crossing=" + std::to_string(signatures[1])
+			+ " bend=" + std::to_string(signatures[2])
+			+ " mixed=" + std::to_string(signatures[3])
+			+ " noPairs=" + std::to_string(signatures[4])};
+}
+
 } // namespace
 
 int main() {
@@ -125,6 +167,7 @@ int main() {
 		zeroStateRemainsZero(),
 		supportedRatesAreFiniteAndPairedMotionIsVisible(),
 		specimenPopulationIsDeterministicAndDistinct(),
+		observerVariantsAreDeterministicAndDistinct(),
 		routerReturnsExactV3Frames(),
 	};
 	int failed = 0;

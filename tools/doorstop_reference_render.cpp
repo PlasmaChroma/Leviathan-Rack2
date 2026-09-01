@@ -132,7 +132,9 @@ void usage(const char* executable) {
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
 		<< "  --variant NAME      current, spring-only, modes-only, spring-forward,\n"
 		<< "                      spring-refined, rack-v2, boing-refined,\n"
-		<< "                      or v3-paired-surrogate\n"
+		<< "                      v3-fixed-observer, v3-crossing-observer,\n"
+		<< "                      v3-bend-observer, v3-mixed-observer,\n"
+		<< "                      or v3-no-pairs\n"
 		<< "  --radiation-phase DEG  V2 phase probe: 0=extrema, 90=crossing\n"
 		<< "  --output-tap NAME   module (default) or preconditioned\n"
 #endif
@@ -165,6 +167,8 @@ int main(int argc, char** argv) {
 			doorstop::ReferenceAnalysisOutput::ModuleOutput;
 		float radiationPhaseDegrees = 90.f;
 		bool useHelicalEngine = false;
+		doorstop::HelicalObserverVariant helicalObserverVariant =
+			doorstop::HelicalObserverVariant::Fixed;
 #endif
 		std::vector<Strike> strikes;
 		for (int i = 2; i < argc; ++i) {
@@ -202,8 +206,26 @@ int main(int argc, char** argv) {
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
 			else if (option == "--variant") {
 				const std::string variantName(value);
-				if (variantName == "v3-paired-surrogate") {
+				if (variantName == "v3-paired-surrogate"
+					|| variantName == "v3-fixed-observer") {
 					useHelicalEngine = true;
+				}
+				else if (variantName == "v3-crossing-observer") {
+					useHelicalEngine = true;
+					helicalObserverVariant =
+						doorstop::HelicalObserverVariant::Crossing;
+				}
+				else if (variantName == "v3-bend-observer") {
+					useHelicalEngine = true;
+					helicalObserverVariant = doorstop::HelicalObserverVariant::Bend;
+				}
+				else if (variantName == "v3-mixed-observer") {
+					useHelicalEngine = true;
+					helicalObserverVariant = doorstop::HelicalObserverVariant::Mixed;
+				}
+				else if (variantName == "v3-no-pairs") {
+					useHelicalEngine = true;
+					helicalObserverVariant = doorstop::HelicalObserverVariant::NoPairs;
 				}
 				else if (variantName == "rack-v2"
 					|| variantName == "boing-refined") {
@@ -276,6 +298,9 @@ int main(int argc, char** argv) {
 		helicalEngine.setSampleRate(float(sampleRate));
 		helicalEngine.setSpecimenSeed(seed);
 		helicalEngine.setBreakIn(breakIn);
+#if defined(DOORSTOP_REFERENCE_ANALYSIS)
+		helicalEngine.setObserverVariant(helicalObserverVariant);
+#endif
 		const std::size_t sampleCount =
 			std::size_t(duration * float(sampleRate));
 		std::vector<float> samples;

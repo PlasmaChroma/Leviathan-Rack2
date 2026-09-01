@@ -68,6 +68,12 @@ void HelicalContinuumEngine::setSpecimenSeed(std::uint32_t seed) {
 	updateSpecimenCoefficients();
 }
 
+void HelicalContinuumEngine::setObserverVariant(
+	HelicalObserverVariant variant) {
+	observerVariant = variant < HelicalObserverVariant::Count
+		? variant : HelicalObserverVariant::Fixed;
+}
+
 float HelicalContinuumEngine::specimenUnit(std::uint32_t tag) const {
 	std::uint32_t x = specimenSeed ^ (tag * 0x9e3779b9u);
 	x ^= x >> 16;
@@ -93,14 +99,20 @@ void HelicalContinuumEngine::updateSpecimenCoefficients() {
 		for (int axis = 0; axis < 2; ++axis) {
 			const int index = 2 * pair + axis;
 			const float frequency = center * (1.f + (axis ? split : -split));
-			const float omega = 2.f * PI * frequency;
-			omegaSq[index] = omega * omega;
+			omega[index] = 2.f * PI * frequency;
+			omegaSq[index] = omega[index] * omega[index];
 			damping[index] = 2.f * 6.907755278982137f / std::max(t60, 0.1f);
 			const float orientation = axis == 0 ? 1.f : (0.72f + 0.18f * specimenUnit(60u + pair));
 			tipParticipation[index] = PAIR_TIP[pair] * orientation;
 			const float sign = ((pair + axis) & 1) ? -1.f : 1.f;
 			radiationWeight[index] = PAIR_RADIATION[pair] * sign
 				* (0.82f + 0.30f * specimenUnit(80u + index));
+			const float observerX = 2.f * specimenUnit(120u + index) - 1.f;
+			const float observerY = 2.f * specimenUnit(140u + index) - 1.f;
+			const float observerNorm = std::max(
+				0.001f, std::fabs(observerX) + std::fabs(observerY));
+			observerDirectionX[index] = observerX / observerNorm;
+			observerDirectionY[index] = observerY / observerNorm;
 			strainWeight[index] = pair == 0 ? 1.f : 0.08f / float(pair + 1);
 		}
 	}
@@ -137,7 +149,9 @@ void HelicalContinuumEngine::strike(float normalizedVelocity) {
 	const float durationSeconds = 0.0022f - 0.0015f * magnitude;
 	const int substeps = std::max(4, int(durationSeconds * sampleRate * SUBSTEPS + 0.5f));
 	const float phaseStep = 2.f * PI / float(substeps);
-	const float misalignment = -0.20f + 0.40f * specimenUnit(101u);
+	const bool paired = observerVariant != HelicalObserverVariant::NoPairs;
+	const float misalignment = paired
+		? -0.20f + 0.40f * specimenUnit(101u) : 0.f;
 	const float inverseLength = 1.f / std::sqrt(1.f + misalignment * misalignment);
 	strikePulse.magnitude += 1450.f * magnitude * (0.40f + 0.60f * magnitude);
 	strikePulse.magnitude = std::min(strikePulse.magnitude, 2200.f);
@@ -168,6 +182,7 @@ float HelicalContinuumEngine::calculateEnergy() const {
 }
 
 float HelicalContinuumEngine::processSubstep(float h) {
+	const bool paired = observerVariant != HelicalObserverVariant::NoPairs;
 	float externalX = 0.f;
 	float externalY = 0.f;
 	if (strikePulse.remainingSubsteps > 0) {
@@ -188,9 +203,14 @@ float HelicalContinuumEngine::processSubstep(float h) {
 		const int x = 2 * pair;
 		const int y = x + 1;
 		tipPosition.x += tipParticipation[x] * modes[x].position;
-		tipPosition.y += tipParticipation[y] * modes[y].position;
+		if (paired) tipPosition.y += tipParticipation[y] * modes[y].position;
 		tipVelocity.x += tipParticipation[x] * modes[x].velocity;
-		tipVelocity.y += tipParticipation[y] * modes[y].velocity;
+		if (paired) tipVelocity.y += tipParticipation[y] * modes[y].velocity;
+	}
+	if (!paired) {
+		capPosition.y = 0.f;
+		capVelocity.y = 0.f;
+		externalY = 0.f;
 	}
 
 	const float capOmega = 2.f * PI * 105.f;
@@ -205,10 +225,33 @@ float HelicalContinuumEngine::processSubstep(float h) {
 	capPosition.x += h * capVelocity.x;
 	capPosition.y += h * capVelocity.y;
 
+	float observerX = 0.f;
+	float observerY = 0.f;
+	if (observerVariant == HelicalObserverVariant::Crossing
+		|| observerVariant == HelicalObserverVariant::Mixed) {
+		observerX += modes[0].velocity;
+		observerY += modes[1].velocity;
+	}
+	if (observerVariant == HelicalObserverVariant::Bend
+		|| observerVariant == HelicalObserverVariant::Mixed) {
+		observerX += omega[0] * modes[0].position;
+		observerY += omega[1] * modes[1].position;
+	}
+	const float observerNorm = std::fabs(observerX) + std::fabs(observerY);
+	if (observerNorm > 1.0e-7f) {
+		const float inverseObserverNorm = 1.f / observerNorm;
+		observerX *= inverseObserverNorm;
+		observerY *= inverseObserverNorm;
+	}
+
 	float radiation = 0.f;
 	for (int pair = 0; pair < PAIR_COUNT; ++pair) {
 		for (int axis = 0; axis < 2; ++axis) {
 			const int index = 2 * pair + axis;
+			if (!paired && axis == 1) {
+				modes[index] = {};
+				continue;
+			}
 			const float attachment = axis == 0 ? attachmentX : attachmentY;
 			const float generalizedForce = tipParticipation[index] * attachment;
 			ModalState& mode = modes[index];
@@ -222,7 +265,16 @@ float HelicalContinuumEngine::processSubstep(float h) {
 			// acceleration-dominated transient.
 			const float observedMotion = mode.acceleration
 				+ RADIATION_VELOCITY_COEFFICIENT * mode.velocity;
-			radiation += radiationWeight[index] * observedMotion;
+			float observerGain = 1.f;
+			if (observerVariant == HelicalObserverVariant::Crossing
+				|| observerVariant == HelicalObserverVariant::Bend
+				|| observerVariant == HelicalObserverVariant::Mixed) {
+				const float movingProjection =
+					observerDirectionX[index] * observerX
+					+ observerDirectionY[index] * observerY;
+				observerGain = 0.28f + 1.08f * movingProjection;
+			}
+			radiation += radiationWeight[index] * observerGain * observedMotion;
 		}
 	}
 	return radiation;
