@@ -136,7 +136,8 @@ TEST_BINS_RACK := \
 	build/tests/bifurx_runtime_spec \
 	build/tests/panel_svg_utils_spec \
 	build/tests/crownstep_persistence_spec \
-	build/tests/doorstop_runtime_spec
+	build/tests/doorstop_runtime_spec \
+	build/tests/phonex_module_spec
 
 RUN_CHRONOMAW_WIP_TESTS ?= 0
 ifeq ($(RUN_CHRONOMAW_WIP_TESTS),1)
@@ -156,11 +157,16 @@ INTEGRAL_FLUX_TEST_OPT_FLAGS += -march=armv8-a+fp+simd
 endif
 CXX_MACHINE := $(shell $(CXX) -dumpmachine 2>/dev/null)
 MINGW_TEST_CPPFLAGS :=
+MINGW_TEST_STACK_FLAGS :=
 ifneq (,$(findstring mingw,$(CXX_MACHINE)))
 MINGW_TEST_CPPFLAGS += -D_USE_MATH_DEFINES
+# The Phonex corpus contract deliberately compares several fixed-capacity
+# sequences at once. Windows' default 2 MiB stack is too small for that
+# test-only fixture set; the Rack module itself owns its sequences on the heap.
+MINGW_TEST_STACK_FLAGS += -Wl,--stack,8388608
 endif
 
-.PHONY: generate-panel-anchor-atlas generate-mandelwake-tables check-mandelwake-tables validate-plugin-json phonex-phase2-audition doorstop-reference-grid doorstop-corpus-audit doorstop-reference-evaluate doorstop-variant-grid doorstop-variant-evaluate doorstop-boing-audition doorstop-v3-paired-audition doorstop-v2-phase-grid doorstop-v2-phase-evaluate
+.PHONY: generate-panel-anchor-atlas generate-mandelwake-tables check-mandelwake-tables validate-plugin-json phonex-phase2-audition phonex-phase4-audition phonex-phase8-audition doorstop-reference-grid doorstop-corpus-audit doorstop-reference-evaluate doorstop-variant-grid doorstop-variant-evaluate doorstop-boing-audition doorstop-v3-paired-audition doorstop-v2-phase-grid doorstop-v2-phase-evaluate
 generate-panel-anchor-atlas:
 	python3 tools/generate_panel_anchor_atlas.py
 
@@ -174,11 +180,27 @@ validate-plugin-json:
 	python3 tools/validate_plugin_json_tags.py plugin.json
 
 phonex-phase2-audition: build/tools/phonex_render
-	build/tools/phonex_render phonex_phase2.wav
+	build/tools/phonex_render phonex_phase2.wav --fixture
 
-build/tools/phonex_render: tools/phonex_render.cpp src/PhonexEngine.cpp src/PhonexEngine.hpp src/PhonexTypes.hpp | build
+phonex-phase4-audition: build/tools/phonex_render
+	build/tools/phonex_render phonex_hello.wav 36
+	build/tools/phonex_render phonex_robot.wav 47
+	build/tools/phonex_render phonex_speak.wav 38
+	build/tools/phonex_render phonex_leviathan.wav 62
+	build/tools/phonex_render phonex_phonex.wav 63
+
+phonex-phase8-audition: build/tools/phonex_render
+	build/tools/phonex_render phonex_hello.wav 36
+	build/tools/phonex_render phonex_speak.wav 38
+	build/tools/phonex_render phonex_robot.wav 47
+	build/tools/phonex_render phonex_computer.wav 45
+	build/tools/phonex_render phonex_one_two_three.wav --text "ONE TWO THREE"
+	build/tools/phonex_render phonex_leviathan.wav 62
+	build/tools/phonex_render phonex_phonex.wav 63
+
+build/tools/phonex_render: tools/phonex_render.cpp src/PhonexEngine.cpp src/PhonexEngine.hpp src/PhonexFixtures.cpp src/PhonexFixtures.hpp src/PhonexTypes.hpp src/PhonexRom.cpp src/PhonexRom.hpp src/PhonexRomData.inc src/PhonexSequenceCompiler.cpp src/PhonexSequenceCompiler.hpp src/PhonexPronunciation.cpp src/PhonexPronunciation.hpp | build
 	mkdir -p build/tools
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tools/phonex_render.cpp src/PhonexEngine.cpp -o $@
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tools/phonex_render.cpp src/PhonexEngine.cpp src/PhonexFixtures.cpp src/PhonexRom.cpp src/PhonexSequenceCompiler.cpp src/PhonexPronunciation.cpp -o $@
 
 build/tools/doorstop_reference_render: tools/doorstop_reference_render.cpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/HelicalContinuumEngine.cpp src/HelicalContinuumEngine.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build
 	mkdir -p build/tools
@@ -417,6 +439,7 @@ test-fast: test-build-fast
 	python3 tests/octavia_semantic_contract_spec.py
 	python3 tests/octavia_monitoring_panel_contract_spec.py
 	python3 tests/moirai_panel_contract_spec.py
+	python3 tests/phonex_panel_contract_spec.py
 	python3 tests/nautiloid_gl_lifecycle_contract_spec.py
 	python3 tests/iris_nautiloid_nvg_phase5_contract_spec.py
 	python3 tests/nautiloid_cache_phase6_contract_spec.py
@@ -466,6 +489,8 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/deepcache_theme_classifier_spec)
 	$(call run_rack_test_bin,build/tests/chromatide_spec)
 	$(call run_rack_test_bin,build/tests/temporaldeck_longplay_spec)
+	$(call run_test_bin,build/tests/phonex_engine_spec)
+	python3 tools/generate_phonex_rom.py --check
 
 test-rack: test-build-rack
 	$(call run_rack_test_bin,build/tests/bifurx_runtime_spec)
@@ -477,6 +502,7 @@ endif
 	$(call run_rack_test_bin,build/tests/panel_svg_utils_spec)
 	$(call run_rack_test_bin,build/tests/crownstep_persistence_spec)
 	$(call run_rack_test_bin,build/tests/doorstop_runtime_spec)
+	$(call run_rack_test_bin,build/tests/phonex_module_spec)
 
 test:
 	@fast_rc=0; \
@@ -682,8 +708,8 @@ build/tests/crownstep_spec: tests/crownstep_spec.cpp | build/tests
 build/tests/mandelwake_engine_spec: tests/mandelwake_engine_spec.cpp src/MandelwakeEngine.cpp src/MandelwakeEngine.hpp src/MandelwakeFixedPoint.hpp src/MandelwakeTables.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/mandelwake_engine_spec.cpp src/MandelwakeEngine.cpp -o $@
 
-build/tests/phonex_engine_spec: tests/phonex_engine_spec.cpp src/PhonexEngine.cpp src/PhonexEngine.hpp src/PhonexFixtures.cpp src/PhonexFixtures.hpp src/PhonexTypes.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/phonex_engine_spec.cpp src/PhonexEngine.cpp src/PhonexFixtures.cpp -o $@
+build/tests/phonex_engine_spec: tests/phonex_engine_spec.cpp src/PhonexEngine.cpp src/PhonexEngine.hpp src/PhonexFixtures.cpp src/PhonexFixtures.hpp src/PhonexTypes.hpp src/PhonexRom.cpp src/PhonexRom.hpp src/PhonexRomData.inc src/PhonexSequenceCompiler.cpp src/PhonexSequenceCompiler.hpp src/PhonexPronunciation.cpp src/PhonexPronunciation.hpp src/PhonexSequenceMailbox.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/phonex_engine_spec.cpp src/PhonexEngine.cpp src/PhonexFixtures.cpp src/PhonexRom.cpp src/PhonexSequenceCompiler.cpp src/PhonexPronunciation.cpp $(MINGW_TEST_STACK_FLAGS) -o $@
 
 build/tests/undertow_shape_spec: tests/undertow_shape_spec.cpp src/UndertowShape.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/undertow_shape_spec.cpp -o $@
@@ -758,3 +784,6 @@ build/tests/crownstep_persistence_spec: tests/crownstep_persistence_spec.cpp $(C
 
 build/tests/doorstop_runtime_spec: tests/doorstop_runtime_spec.cpp src/Doorstop.cpp src/DoorstopEngine.cpp src/DoorstopEngineRouter.cpp src/ReferenceSpringEngine.cpp src/HelicalContinuumEngine.cpp src/MathHelpers.cpp | build/tests build/tests/panel_svg_utils_spec
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@
+
+build/tests/phonex_module_spec: tests/phonex_module_spec.cpp src/Phonex.cpp src/Phonex.hpp src/PhonexEngine.cpp src/PhonexEngine.hpp src/PhonexRom.cpp src/PhonexRom.hpp src/PhonexRomData.inc src/PhonexSequenceCompiler.cpp src/PhonexSequenceCompiler.hpp src/PhonexPronunciation.cpp src/PhonexPronunciation.hpp src/PhonexSequenceMailbox.hpp src/PhonexTypes.hpp | build/tests build/tests/doorstop_runtime_spec
+	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/phonex_module_spec.cpp src/Phonex.cpp src/PhonexEngine.cpp src/PhonexRom.cpp src/PhonexSequenceCompiler.cpp src/PhonexPronunciation.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@

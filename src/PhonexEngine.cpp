@@ -18,8 +18,8 @@ float ChirpGenerator::next(float pitchPeriodTicks) {
 	const std::size_t chirpIndex = static_cast<std::size_t>(periodPhase_);
 	const float output = chirpIndex < kChirp.size() ? kChirp[chirpIndex] : 0.f;
 	periodPhase_ += 1.f;
-	if (periodPhase_ >= pitchPeriodTicks)
-		periodPhase_ = std::fmod(periodPhase_, pitchPeriodTicks);
+	while (periodPhase_ >= pitchPeriodTicks)
+		periodPhase_ -= pitchPeriodTicks;
 	return output;
 }
 
@@ -40,17 +40,24 @@ void LatticeFilter::reset() {
 	state_.fill(0.f);
 }
 
+void LatticeFilter::leak(float multiplier) {
+	for (float& value : state_)
+		value *= multiplier;
+}
+
 float LatticeFilter::process(
 	float excitation,
-	const std::array<float, kLpcOrder>& reflection) {
+	const std::array<float, kLpcOrder>& reflection,
+	float coefficientLimit) {
+	coefficientLimit = std::max(0.f, std::min(1.08f, coefficientLimit));
 	std::array<float, kLpcOrder + 1> u{};
 	u[kLpcOrder] = excitation;
 	for (int i = kLpcOrder - 1; i >= 0; --i) {
-		const float k = std::max(-0.995f, std::min(0.995f, reflection[i]));
+		const float k = std::max(-coefficientLimit, std::min(coefficientLimit, reflection[i]));
 		u[i] = u[i + 1] - k * state_[i];
 	}
 	for (int i = kLpcOrder - 1; i >= 1; --i) {
-		const float k = std::max(-0.995f, std::min(0.995f, reflection[i - 1]));
+		const float k = std::max(-coefficientLimit, std::min(coefficientLimit, reflection[i - 1]));
 		state_[i] = state_[i - 1] + k * u[i - 1];
 	}
 	state_[0] = u[0];
@@ -67,7 +74,223 @@ float quietSpeed(float speed) {
 	return std::abs(speed) < 0.025f ? 0.f : clampf(speed, -4.f, 4.f);
 }
 
+float unitFloat(std::uint32_t value) {
+	return static_cast<float>(value >> 8) * (1.f / 16777216.f);
+}
+
+bool sameReflection(const std::array<float, kLpcOrder>& a,
+	const std::array<float, kLpcOrder>& b) {
+	for (int i = 0; i < kLpcOrder; ++i) {
+		if (std::abs(a[i] - b[i]) > 1e-5f)
+			return false;
+	}
+	return true;
+}
+
+float fastTanh(float value) {
+	const float squared = value * value;
+	return clampf(value * (27.f + squared) / (27.f + 9.f * squared), -1.f, 1.f);
+}
+
+float fastExp2(float value) {
+	value = clampf(value, -8.f, 8.f);
+	const int exponent = static_cast<int>(std::floor(value));
+	const float fraction = value - static_cast<float>(exponent);
+	const float polynomial = 1.f + fraction * (0.69314718f
+		+ fraction * (0.24022651f + fraction * (0.05550411f
+		+ fraction * (0.00961813f + fraction * 0.00133336f))));
+	return std::ldexp(polynomial, exponent);
+}
+
+using Predictor = std::array<double, kLpcOrder + 1>;
+
+Predictor reflectionToPredictor(const std::array<float, kLpcOrder>& reflection) {
+	Predictor coefficients{};
+	coefficients[0] = 1.0;
+	for (int order = 1; order <= kLpcOrder; ++order) {
+		const double k = clampf(reflection[order - 1], -0.985f, 0.985f);
+		Predictor next = coefficients;
+		for (int i = 1; i < order; ++i)
+			next[i] = coefficients[i] + k * coefficients[order - i];
+		next[order] = k;
+		coefficients = next;
+	}
+	return coefficients;
+}
+
+bool predictorToReflection(Predictor coefficients,
+	std::array<float, kLpcOrder>& reflection) {
+	if (!std::isfinite(coefficients[0]) || std::abs(coefficients[0]) < 1e-12)
+		return false;
+	for (double& value : coefficients)
+		value /= coefficients[0];
+	for (int order = kLpcOrder; order >= 1; --order) {
+		const double k = coefficients[order];
+		if (!std::isfinite(k) || std::abs(k) >= 0.999)
+			return false;
+		reflection[order - 1] = static_cast<float>(clampf(
+			static_cast<float>(k), -0.985f, 0.985f));
+		const double denominator = 1.0 - k * k;
+		Predictor next{};
+		next[0] = 1.0;
+		for (int i = 1; i < order; ++i)
+			next[i] = (coefficients[i] - k * coefficients[order - i]) / denominator;
+		coefficients = next;
+	}
+	return true;
+}
+
 } // namespace
+
+float tms5100InterpolationMix(float frameFraction) {
+	// The TMS5100 approached each target through eight fixed interpolation
+	// periods. These cumulative mixes are the result of its successive
+	// divide-by-8, divide-by-4, and divide-by-2 parameter updates.
+	constexpr std::array<float, 8> kMix {{
+		0.f,
+		0.125f,
+		0.234375f,
+		0.330078125f,
+		0.497558594f,
+		0.623168945f,
+		0.811584473f,
+		0.905792236f,
+	}};
+	if (!(frameFraction > 0.f))
+		return 0.f;
+	if (frameFraction >= 1.f)
+		return 1.f;
+	const int period = std::min(7, static_cast<int>(frameFraction * 8.f));
+	return kMix[period];
+}
+
+std::array<float, kLpcOrder> formantShiftReflection(
+	const std::array<float, kLpcOrder>& reflection, float amount) {
+	amount = clampf(amount, -1.f, 1.f);
+	if (std::abs(amount) < 1e-5f)
+		return reflection;
+	const double alpha = -0.24 * static_cast<double>(amount);
+	std::array<Predictor, kLpcOrder + 1> numeratorPowers{};
+	std::array<Predictor, kLpcOrder + 1> denominatorPowers{};
+	numeratorPowers[0][0] = 1.0;
+	denominatorPowers[0][0] = 1.0;
+	for (int power = 1; power <= kLpcOrder; ++power) {
+		for (int degree = 0; degree < power; ++degree) {
+			numeratorPowers[power][degree] += -alpha * numeratorPowers[power - 1][degree];
+			numeratorPowers[power][degree + 1] += numeratorPowers[power - 1][degree];
+			denominatorPowers[power][degree] += denominatorPowers[power - 1][degree];
+			denominatorPowers[power][degree + 1] += -alpha * denominatorPowers[power - 1][degree];
+		}
+	}
+	const Predictor source = reflectionToPredictor(reflection);
+	Predictor shifted{};
+	for (int term = 0; term <= kLpcOrder; ++term) {
+		const int denominatorPower = kLpcOrder - term;
+		for (int i = 0; i <= term; ++i)
+			for (int j = 0; j <= denominatorPower; ++j)
+				shifted[i + j] += source[term]
+					* numeratorPowers[term][i] * denominatorPowers[denominatorPower][j];
+	}
+	std::array<float, kLpcOrder> result{};
+	return predictorToReflection(shifted, result) ? result : reflection;
+}
+
+std::uint32_t xorshift32(std::uint32_t& state) {
+	if (state == 0)
+		state = 0x6d2b79f5u;
+	state ^= state << 13;
+	state ^= state >> 17;
+	state ^= state << 5;
+	return state;
+}
+
+std::uint32_t phonexFrameHash(
+	std::uint32_t seed, std::uint32_t frameIndex, std::uint32_t level) {
+	std::uint32_t state = seed
+		^ (frameIndex * 0x9e3779b9u)
+		^ (level * 0x85ebca6bu);
+	if (state == 0)
+		state = 0x27d4eb2du;
+	state ^= state << 13;
+	state ^= state >> 17;
+	state ^= state << 5;
+	return state;
+}
+
+LpcFrame selectGlitchedFrame(const LpcSequence& sequence,
+	std::uint16_t frameIndex, std::uint8_t requestedLevel, std::uint32_t seed) {
+	if (!sequence.valid() || sequence.frameCount == 0)
+		return {};
+	const std::uint8_t level = std::min<std::uint8_t>(requestedLevel, 15);
+	const std::uint16_t last = sequence.frameCount - 1;
+	const std::uint16_t sourceIndex = std::min(frameIndex, last);
+	if (level == 0)
+		return sequence.frames[sourceIndex];
+	const std::uint32_t hash = phonexFrameHash(seed, sourceIndex, level);
+	int selected = sourceIndex;
+	switch (level) {
+		case 1: if ((sourceIndex & 3u) == 3u) selected -= 1; break;
+		case 2: if ((sourceIndex & 3u) == 3u) selected += 1; break;
+		case 3: selected = sourceIndex ^ 1u; break;
+		case 4: selected = sourceIndex ^ 2u; break;
+		case 5: selected += (hash & 1u) ? 2 : -2; break;
+		case 6: selected = (sourceIndex & ~3u) + (3u - (sourceIndex & 3u)); break;
+		case 15: selected = sourceIndex ^ 3u; break;
+		default: break;
+	}
+	selected = std::max(0, std::min<int>(last, selected));
+	LpcFrame frame = sequence.frames[static_cast<std::uint16_t>(selected)];
+	switch (level) {
+		case 7:
+			frame.energy = std::round(frame.energy * 3.f) / 3.f;
+			break;
+		case 8:
+			if (frame.excitation == Excitation::Voiced)
+				frame.pitchPeriod10k = std::round(frame.pitchPeriod10k / 8.f) * 8.f;
+			break;
+		case 9:
+			if (frame.excitation == Excitation::Voiced)
+				frame.pitchPeriod10k *= (hash & 1u) ? 2.f : 0.5f;
+			break;
+		case 10:
+			for (int i = 0; i < kLpcOrder; i += 3)
+				frame.reflection[i] = -frame.reflection[i];
+			break;
+		case 11: {
+			const auto original = frame.reflection;
+			for (int i = 0; i < kLpcOrder; ++i)
+				frame.reflection[(i + 2) % kLpcOrder] = original[i];
+			break;
+		}
+		case 12:
+			for (int i = 1; i < kLpcOrder; i += 2)
+				frame.reflection[i] = 0.f;
+			break;
+		case 13:
+			for (float& coefficient : frame.reflection)
+				coefficient = clampf(std::round(coefficient * 8.f) / 8.f, -0.995f, 0.995f);
+			break;
+		case 14:
+			if (sourceIndex & 1u) {
+				if (frame.excitation == Excitation::Voiced)
+					frame.excitation = Excitation::Unvoiced;
+				else if (frame.excitation == Excitation::Unvoiced)
+					frame.excitation = Excitation::Voiced;
+			}
+			break;
+		case 15:
+			frame.energy = std::round(frame.energy * 3.f) / 3.f;
+			if (frame.excitation == Excitation::Voiced)
+				frame.pitchPeriod10k = std::round(frame.pitchPeriod10k / 8.f) * 8.f;
+			for (int i = 0; i < kLpcOrder; ++i) {
+				if ((hash >> i) & 1u)
+					frame.reflection[i] = -frame.reflection[i];
+			}
+			break;
+		default: break;
+	}
+	return frame;
+}
 
 void Engine::setSequence(const LpcSequence* sequence) {
 	sequence_ = sequence && sequence->valid() ? sequence : nullptr;
@@ -76,6 +299,12 @@ void Engine::setSequence(const LpcSequence* sequence) {
 
 void Engine::setInternalRate(float rateHz) {
 	internalRate_ = rateHz < 9000.f ? 8000.f : 10000.f;
+	reconstructionHostRate_ = 0.f;
+}
+
+void Engine::setSeed(std::uint32_t seed) {
+	seed_ = seed;
+	bendState_ = seed_;
 }
 
 void Engine::clearSynthesis() {
@@ -84,7 +313,39 @@ void Engine::clearSynthesis() {
 	noise_.reset();
 	internalPhase_ = 0.0;
 	heldSample_ = 0.f;
-	filteredSample_ = 0.f;
+	reconstructionZ1_ = 0.f;
+	reconstructionZ2_ = 0.f;
+	jitterScale_ = 1.f;
+	bendState_ = seed_;
+	warpedReflectionValid_ = false;
+}
+
+float Engine::reconstructFiltered(float input, float hostSampleRate) {
+	if (!(hostSampleRate > 0.f) || !std::isfinite(hostSampleRate))
+		return input;
+	if (std::abs(hostSampleRate - reconstructionHostRate_) > 0.5f
+		|| internalRate_ != reconstructionInternalRate_) {
+		// A second-order Butterworth removes zero-order-hold images without the
+		// broad passband droop of the former one-pole smoother. Coefficients are
+		// rebuilt only when a sample rate changes, never per synthesis tick.
+		const float cutoff = std::min(0.45f * internalRate_, 0.45f * hostSampleRate);
+		const float k = std::tan(3.14159265358979323846f * cutoff / hostSampleRate);
+		const float norm = 1.f / (1.f + 1.4142135623730951f * k + k * k);
+		reconstructionB0_ = k * k * norm;
+		reconstructionB1_ = 2.f * reconstructionB0_;
+		reconstructionB2_ = reconstructionB0_;
+		reconstructionA1_ = 2.f * (k * k - 1.f) * norm;
+		reconstructionA2_ = (1.f - 1.4142135623730951f * k + k * k) * norm;
+		reconstructionHostRate_ = hostSampleRate;
+		reconstructionInternalRate_ = internalRate_;
+		reconstructionZ1_ = 0.f;
+		reconstructionZ2_ = 0.f;
+	}
+	const float output = reconstructionB0_ * input + reconstructionZ1_;
+	reconstructionZ1_ = reconstructionB1_ * input - reconstructionA1_ * output
+		+ reconstructionZ2_;
+	reconstructionZ2_ = reconstructionB2_ * input - reconstructionA2_ * output;
+	return output;
 }
 
 void Engine::retrigger(float speed) {
@@ -93,6 +354,7 @@ void Engine::retrigger(float speed) {
 		? static_cast<float>(sequence_->frameCount - 1) : 0.f;
 	observedFrame_ = static_cast<std::uint16_t>(position_);
 	eoxArmed_ = true;
+	playbackComplete_ = false;
 	frameChanged_ = false;
 	eoxEvent_ = false;
 	framePulseRemaining_ = 0;
@@ -107,11 +369,11 @@ LpcFrame Engine::interpolatedFrame() const {
 	const float bounded = clampf(position_, 0.f, last);
 	const std::uint16_t i0 = static_cast<std::uint16_t>(std::floor(bounded));
 	const std::uint16_t i1 = std::min<std::uint16_t>(i0 + 1, sequence_->frameCount - 1);
-	const LpcFrame& a = sequence_->frames[i0];
-	const LpcFrame& b = sequence_->frames[i1];
+	const LpcFrame a = selectGlitchedFrame(*sequence_, i0, activeGlitchLevel_, seed_);
+	const LpcFrame b = selectGlitchedFrame(*sequence_, i1, activeGlitchLevel_, seed_);
 	if (a.excitation != b.excitation || i0 == i1)
 		return a;
-	const float mix = bounded - static_cast<float>(i0);
+	const float mix = tms5100InterpolationMix(bounded - static_cast<float>(i0));
 	result.energy = a.energy + (b.energy - a.energy) * mix;
 	result.pitchPeriod10k = a.pitchPeriod10k + (b.pitchPeriod10k - a.pitchPeriod10k) * mix;
 	for (int i = 0; i < kLpcOrder; ++i)
@@ -145,18 +407,54 @@ void Engine::updateTransport(const EngineControls& controls, bool triggerRise) {
 	frameChanged_ = nextFrame != observedFrame_;
 	observedFrame_ = nextFrame;
 	const bool atEnd = speed < 0.f ? position_ <= 0.f : position_ >= last;
-	if (!atEnd)
+	const bool interactiveTransport = triggerMode_ == TriggerMode::AdvanceOneFrame
+		|| controls.scrubConnected;
+	if (interactiveTransport)
+		playbackComplete_ = false;
+	if (!atEnd) {
 		eoxArmed_ = true;
+		playbackComplete_ = false;
+	}
 	else if (eoxArmed_) {
 		eoxEvent_ = true;
 		eoxArmed_ = false;
+		if (!interactiveTransport && speed != 0.f)
+			playbackComplete_ = true;
 	}
 }
 
-float Engine::synthesizeTick(const LpcFrame& frame, const EngineControls& controls) {
+const std::array<float, kLpcOrder>& Engine::warpedReflection(
+	const LpcFrame& frame, float formant, float warp, float overdrive) {
+	if (!warpedReflectionValid_ || std::abs(formant - cachedFormant_) > 1e-4f
+		|| std::abs(warp - cachedWarp_) > 1e-4f
+		|| std::abs(overdrive - cachedOverdrive_) > 1e-4f
+		|| !sameReflection(frame.reflection, cachedReflection_)) {
+		const std::array<float, kLpcOrder> formantReflection =
+			formantShiftReflection(frame.reflection, formant);
+		for (int i = 0; i < kLpcOrder; ++i) {
+			const float clean = clampf(
+				fastTanh(formantReflection[i] * (1.f + 0.8f * warp)),
+				-0.995f, 0.995f);
+			warpedReflection_[i] = clampf(clean * overdrive, -1.08f, 1.08f);
+		}
+		cachedReflection_ = frame.reflection;
+		cachedFormant_ = formant;
+		cachedWarp_ = warp;
+		cachedOverdrive_ = overdrive;
+		warpedReflectionValid_ = true;
+	}
+	return warpedReflection_;
+}
+
+float Engine::synthesizeTick(const LpcFrame& frame, const EngineControls& controls,
+	float bend, float skipProbability, float leakAmount, float overdrive) {
+	if (bend > 0.f && unitFloat(xorshift32(bendState_)) < skipProbability) {
+		lattice_.leak(1.f - leakAmount);
+		return heldSample_;
+	}
 	float automatic = 0.f;
-	const float pitchScale = std::exp2(clampf(
-		controls.pitchOctaves + controls.voctAttenuverter * controls.voct, -8.f, 8.f));
+	const float pitchScale = fastExp2(
+		controls.pitchOctaves + controls.voct);
 	if (frame.excitation == Excitation::Voiced)
 		automatic = chirp_.next(frame.pitchPeriod10k / pitchScale);
 	else if (frame.excitation == Excitation::Unvoiced)
@@ -178,10 +476,13 @@ float Engine::synthesizeTick(const LpcFrame& frame, const EngineControls& contro
 		carrier = std::isfinite(controls.externalExcitation)
 			? clampf(controls.externalExcitation / 5.f, -2.f, 2.f)
 			: std::numeric_limits<float>::quiet_NaN();
-	return lattice_.process(carrier * clampf(frame.energy, 0.f, 1.f), frame.reflection);
+	return lattice_.process(carrier * clampf(frame.energy, 0.f, 1.f),
+		warpedReflection(frame, smoothedFormant_, smoothedWarp_, overdrive),
+		bend > 0.f ? 1.08f : 0.995f);
 }
 
 EngineOutput Engine::process(const EngineControls& controls) {
+	activeGlitchLevel_ = std::min<std::uint8_t>(controls.glitchLevel, 15);
 	const bool triggerRise = controls.triggerGate && !triggerHigh_;
 	const bool wordPushRise = controls.wordPush && !wordPushHigh_;
 	triggerHigh_ = controls.triggerGate;
@@ -199,30 +500,58 @@ EngineOutput Engine::process(const EngineControls& controls) {
 		if (eoxEvent_)
 			eoxPulseRemaining_ = pulseSamples;
 	}
+	if (eoxEvent_ && playbackComplete_)
+		clearSynthesis();
 	const LpcFrame frame = interpolatedFrame();
 	const float hostRate = controls.hostSampleRate;
-	if (hostRate > 0.f && std::isfinite(hostRate)) {
-		internalPhase_ += static_cast<double>(internalRate_) / static_cast<double>(hostRate);
+	const float targetFormant = clampf(controls.formant, -1.f, 1.f);
+	const float targetWarp = clampf(controls.warp + controls.warpCv / 5.f, -1.f, 1.f);
+	if (!warpSmootherReady_) {
+		smoothedFormant_ = targetFormant;
+		smoothedWarp_ = targetWarp;
+		warpSmootherReady_ = true;
+	}
+	else if (hostRate > 0.f && std::isfinite(hostRate)) {
+		const float alpha = std::min(1.f, 100.f / hostRate);
+		smoothedFormant_ += alpha * (targetFormant - smoothedFormant_);
+		smoothedWarp_ += alpha * (targetWarp - smoothedWarp_);
+	}
+	const float bend = clampf(controls.bend + controls.bendCv / 5.f, 0.f, 1.f);
+	const float slow = bend * bend;
+	const float clockMultiplier = 1.f - 0.55f * slow;
+	const float jitterAmount = 0.12f * clampf((bend - 0.25f) / 0.75f, 0.f, 1.f);
+	const float skipShape = clampf((bend - 0.45f) / 0.55f, 0.f, 1.f);
+	const float skipProbability = 0.30f * skipShape * skipShape;
+	const float leakAmount = 0.04f * clampf((bend - 0.55f) / 0.45f, 0.f, 1.f);
+	const float overdrive = 1.f + 0.10f * clampf((bend - 0.70f) / 0.30f, 0.f, 1.f);
+	if (!playbackComplete_ && hostRate > 0.f && std::isfinite(hostRate)) {
+		internalPhase_ += static_cast<double>(internalRate_ * clockMultiplier * jitterScale_)
+			/ static_cast<double>(hostRate);
 		while (internalPhase_ >= 1.0 - 1e-12) {
-			heldSample_ = synthesizeTick(frame, controls);
+			heldSample_ = synthesizeTick(frame, controls, bend, skipProbability,
+				leakAmount, overdrive);
 			internalPhase_ -= 1.0;
 			if (internalPhase_ < 0.0)
 				internalPhase_ = 0.0;
 			++internalTicks_;
+			if (bend > 0.f)
+				jitterScale_ = 1.f + jitterAmount
+					* (2.f * unitFloat(xorshift32(bendState_)) - 1.f);
+			else
+				jitterScale_ = 1.f;
 		}
 	}
 	float reconstructed = heldSample_;
-	if (reconstructionMode_ == ReconstructionMode::Filtered && hostRate > 0.f) {
-		const float cutoff = std::min(0.45f * internalRate_, 0.45f * hostRate);
-		const float alpha = cutoff / (cutoff + hostRate * 0.1591549431f);
-		filteredSample_ += alpha * (heldSample_ - filteredSample_);
-		reconstructed = filteredSample_;
-	}
-	float voltage = reconstructed * 4.f;
-	voltage = 5.f * voltage / (5.f + std::abs(voltage));
+	if (reconstructionMode_ == ReconstructionMode::Filtered)
+		reconstructed = reconstructFiltered(heldSample_, hostRate);
+	float voltage = playbackComplete_ ? 0.f : reconstructed;
 	if (!std::isfinite(voltage)) {
 		clearSynthesis();
 		voltage = 0.f;
+	}
+	else {
+		voltage = voltage / (0.25f + std::abs(voltage) * 0.2f);
+		voltage = clampf(voltage, -5.f, 5.f);
 	}
 	EngineOutput output;
 	output.audio = voltage;
@@ -234,7 +563,7 @@ EngineOutput Engine::process(const EngineControls& controls) {
 		--framePulseRemaining_;
 	if (eoxPulseRemaining_ > 0)
 		--eoxPulseRemaining_;
-	output.voiced = frame.excitation == Excitation::Voiced;
+	output.voiced = !playbackComplete_ && frame.excitation == Excitation::Voiced;
 	return output;
 }
 

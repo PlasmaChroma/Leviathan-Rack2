@@ -1,9 +1,14 @@
 #include "../src/PhonexEngine.hpp"
+#include "../src/PhonexFixtures.hpp"
+#include "../src/PhonexPronunciation.hpp"
+#include "../src/PhonexRom.hpp"
+#include "../src/PhonexSequenceCompiler.hpp"
 
 #include <algorithm>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <string>
 
 namespace {
 
@@ -18,30 +23,44 @@ void writeU32(std::ofstream& out, std::uint32_t value) {
 	out.write(bytes, 4);
 }
 
-phonex::LpcSequence makeAuditionSequence() {
-	phonex::LpcSequence sequence;
-	sequence.frameCount = 70;
-	for (std::uint16_t i = 0; i < sequence.frameCount; ++i) {
-		auto& frame = sequence.frames[i];
-		if (i < 4 || i >= 65 || (i >= 28 && i < 33))
-			continue;
-		frame.energy = (i < 28 ? 0.58f : 0.48f);
-		frame.pitchPeriod10k = i < 28 ? 82.f : 68.f;
-		frame.excitation = (i >= 52 && i < 58)
-			? phonex::Excitation::Unvoiced : phonex::Excitation::Voiced;
-		const float morph = static_cast<float>(i % 16) / 15.f;
-		frame.reflection = {{0.76f - 0.18f * morph, -0.62f + 0.21f * morph,
-			0.47f, -0.34f, 0.25f, -0.18f, 0.13f, -0.09f, 0.06f, -0.03f}};
-	}
-	return sequence;
-}
-
 } // namespace
 
 int main(int argc, char** argv) {
-	const char* path = argc > 1 ? argv[1] : "phonex_phase2.wav";
+	const char* path = argc > 1 ? argv[1] : "phonex_hello.wav";
+	phonex::LpcSequence sequence;
+	std::string auditionName;
+	if (argc > 2 && std::string(argv[2]) == "--fixture") {
+		sequence = phonex::makeVoicedFixture(18);
+		auditionName = "PHASE 2 VOICED FIXTURE";
+	}
+	else if (argc > 2 && std::string(argv[2]) == "--text") {
+		if (argc < 4) {
+			std::cerr << "Usage: phonex_render OUTPUT --text UTTERANCE\n";
+			return 1;
+		}
+		const phonex::TextCompileResult result = phonex::compileText(argv[3], sequence);
+		if (result.status != phonex::CompileStatus::Ok) {
+			std::cerr << "Could not compile text: " << phonex::compileStatusText(result.status) << '\n';
+			return 1;
+		}
+		auditionName = argv[3];
+	}
+	else {
+		const int phraseIndex = argc > 2 ? std::stoi(argv[2]) : 36;
+		if (phraseIndex < 0 || phraseIndex >= static_cast<int>(phonex::kBundledPhraseCount)) {
+			std::cerr << "Phrase index must be 0..63\n";
+			return 1;
+		}
+		if (phonex::compileBundledPhrase(static_cast<std::uint8_t>(phraseIndex), sequence)
+			!= phonex::CompileStatus::Ok) {
+			std::cerr << "Could not compile bundled phrase " << phraseIndex << '\n';
+			return 1;
+		}
+		const phonex::StringView phraseName = phonex::bundledPhraseName(phraseIndex);
+		auditionName.assign(phraseName.data(), phraseName.size());
+	}
 	constexpr std::uint32_t sampleRate = 48000;
-	constexpr std::uint32_t sampleCount = sampleRate * 2;
+	const std::uint32_t sampleCount = sequence.frameCount * 960u + sampleRate / 4u;
 	std::ofstream out(path, std::ios::binary);
 	if (!out) {
 		std::cerr << "Could not open output: " << path << '\n';
@@ -51,9 +70,9 @@ int main(int argc, char** argv) {
 	out.write("WAVEfmt ", 8); writeU32(out, 16); writeU16(out, 1); writeU16(out, 1);
 	writeU32(out, sampleRate); writeU32(out, sampleRate * 2); writeU16(out, 2); writeU16(out, 16);
 	out.write("data", 4); writeU32(out, sampleCount * 2);
-	const auto sequence = makeAuditionSequence();
 	phonex::Engine engine;
 	engine.setSequence(&sequence);
+	engine.setReconstructionMode(phonex::ReconstructionMode::Filtered);
 	phonex::EngineControls controls;
 	controls.hostSampleRate = static_cast<float>(sampleRate);
 	for (std::uint32_t i = 0; i < sampleCount; ++i) {
@@ -62,6 +81,7 @@ int main(int argc, char** argv) {
 		writeU16(out, static_cast<std::uint16_t>(static_cast<std::int16_t>(normalized * 32767.f)));
 	}
 	if (!out) return 1;
-	std::cout << "Wrote PHONEX Phase 2 audition render: " << path << '\n';
+	std::cout << "Wrote PHONEX audition " << auditionName
+		<< " (" << sequence.frameCount << " frames): " << path << '\n';
 	return 0;
 }

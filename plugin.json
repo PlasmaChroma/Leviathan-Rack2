@@ -272,6 +272,16 @@
         "Polyphonic"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Phonex",
+      "name": "PHONEX",
+      "description": "Voltage-controlled clean-room LPC toy-speech synthesizer with typed text and circuit-bent transport.",
+      "tags": [
+        "Synth voice",
+        "Digital"
+      ],
+      "hidden": false
     }
   ]
 }

@@ -1,6 +1,6 @@
 # PHONEX — Codex Implementation Specification
 
-**Status:** Implementation-ready specification  
+**Status:** v1 implementation complete; human audition and in-host smoke test pending
 **Module:** `LEVIATHAN // PHONEX`  
 **Target:** VCV Rack 2, Windows-first Leviathan build  
 **Form factor:** 14 HP (`71.12 mm × 128.5 mm`)  
@@ -14,23 +14,62 @@ Last updated: 2026-08-31
 
 | Phase | Status | Notes |
 |---|---|---|
-| 1 — contracts and fixtures | Complete | Fixed frame/sequence types, procedural fixtures, frozen chirp and LFSR, scalar lattice, deterministic generator skeleton, and standalone tests. |
+| 1 — contracts and fixtures | Complete | Fixed frame/sequence types, procedural fixtures, TMS5100-informed chirp, frozen LFSR, scalar lattice, deterministic generator skeleton, and standalone tests. |
 | 2 — clean DSP and transport | Complete | Forward/reverse/freeze/scrub/frame-step transport, interpolation, retrigger, 1 ms events, 8/10 kHz scheduler, clean/forced/external excitation, lattice synthesis, raw/filtered reconstruction, bounded output, finite recovery, and standalone audition renderer. |
-| 3 — WARP, BEND, GLITCH | Not started | Next implementation phase. |
-| 4 — direct phoneme speech | Not started | First recognizable-speech milestone. |
-| 5–8 | Not started | Typed text, Rack wrapper, panel/UI, and release hardening. |
+| 3 — WARP, BEND, GLITCH | Complete | Cached coefficient warp, deterministic starvation/bend behavior, all 16 frozen glitch recipes, clean-zero invariants, and randomized finite/bounded testing. |
+| 4 — direct phoneme speech | Implementation complete; audition pending | Frozen 40-phone inventory, deterministic synthetic LPC corpus, direct parser, timing/transitions/stress, 64 bundled entries, provenance, and required phrase WAVs. Human intelligibility remains a listening gate. |
+| 5 — typed text | Complete | Normalization, numbers, immutable dictionary, ordered G2P, spelling fallback, prosody, fixed-capacity compilation, and protected two-slot publication. |
+| 6 — Rack wrapper | Complete | Frozen interface, CV/trigger/output/light behavior, source switching, context settings, schema-v1 persistence, reset, registration, and native Rack-linked contract tests. |
+| 7 — panel/UI | Complete | 14 HP split SVG, generated anchor atlas, dynamic placement, single-line text submission, status display, exact 64-step neon word selector, context menu, and preview-safe construction contract. |
+| 8 — release hardening | In progress | Hot-path transcendental removal and publication race audit complete; native `plugin.dll`, engine/module contracts, manifest, panel, and aggregate tests pass. Human audition and a visual/in-host Rack smoke test remain. |
 
 Current validation commands:
 
 ```sh
 python3 tools/generate_phonex_rom.py --check
+python3 tests/phonex_panel_contract_spec.py
+make validate-plugin-json
 make build/tests/phonex_engine_spec
-build/tests/phonex_engine_spec
-make phonex-phase2-audition  # writes phonex_phase2.wav for listening
+make phonex-phase8-audition
 ```
 
-The Phase 2 audition is a procedural LPC fixture, not a recognizable word. The
-first vocabulary audition remains Phase 4 as specified below.
+`phonex-phase8-audition` writes the seven clean-default WAVs named by the human
+audition gate. The files are test artifacts rather than shipped plugin assets.
+The legacy `phonex-phase2-audition` target still renders its procedural voiced
+fixture for low-level DSP comparison.
+
+The bundled-word control is a full-width discrete selector rather than a
+rotary knob. Clicking or dragging snaps to one of the 64 entries, the mouse
+wheel advances one entry at a time, and the bar identifies the selected index
+and name. With `WORD CV` connected, the stored manual setting remains visible
+while a second cyan indication follows the voltage-selected word.
+
+## Current quality-stretch pass
+
+The 2026-08-31 `tms3` pass builds on the TMS5100 parameter reconstruction work
+without importing speech-ROM data:
+
+- Filtered reconstruction is now the module default. A cached two-pole
+  Butterworth at `min(0.45 * internalRate, 0.45 * hostRate)` replaces the
+  earlier one-pole smoother; Raw Hold remains available for deliberate imaging
+  and grit.
+- `HH` aspiration inherits K1..K4 from the following voiced phone, modeling
+  turbulent airflow through that vowel's tract rather than a context-free
+  noise color.
+- The last frame of an unvoiced consonant quietly approaches the following
+  voiced tract, improving consonant-to-vowel articulation without globally
+  gating or smoothing noise.
+- `DH`, `V`, `Z`, and `ZH` begin with a low-energy unvoiced turbulence frame
+  before their voiced body, improving their distinction from approximants and
+  vowels while staying within the TMS voiced/unvoiced frame model.
+- The immutable dictionary now contains 115 authored entries, including common
+  modular terms such as `OSCILLATOR`, `FILTER`, `RESONANCE`, `MODULATION`,
+  `ATTENUVERTER`, `SEQUENCER`, and `WAVEFORM`.
+
+Objective comparison of the seven `tms2` and `tms3` audition renders shows the
+new reconstruction path removes approximately 7--9 dB of unintended energy
+above 6 kHz while changing full-band RMS by less than about 1 dB. Human
+intelligibility and preference remain the controlling release gates.
 
 ---
 
@@ -258,7 +297,7 @@ Future IDs are appended.
 | ID | Parameter | Range | Default | Meaning |
 |---|---|---:|---:|---|
 | 0 | `PITCH` | -2..+2 oct | 0 | speech pitch transpose |
-| 1 | `VOCT_ATTEN` | -1..+1 | +1 | V/oct attenuverter |
+| 1 | `FORMANT` | -1..+1 | 0 | pitch-independent LPC spectral-envelope shift |
 | 2 | `SPEED` | -4..+4 | +1 | source-frame transport rate |
 | 3 | `WARP` | -1..+1 | 0 | LPC coefficient/vocal-tract warp |
 | 4 | `EXCITE_BLEND` | 0..1 | 0 | automatic → forced excitation |
@@ -284,6 +323,7 @@ SCRUB_CV
 WARP_CV
 BEND_CV
 EXT_EXCITE
+WORD_CV
 ```
 
 Mappings:
@@ -291,11 +331,17 @@ Mappings:
 ```text
 VOCT:
     standard 1 V/oct
-    multiplied by VOCT_ATTEN
+    fixed unity tracking
 
 SCRUB_CV:
     -5 V = start
     +5 V = end
+
+WORD_CV:
+    0 V = bundled word 0
+    10 V = bundled word 63
+    negative voltages clamp to bundled word 0
+    overrides WORD while connected
 
 WARP_CV:
     +/-5 V = +/-1 warp
@@ -597,7 +643,7 @@ When:
 frame[i0].excitation == frame[i1].excitation
 ```
 
-linearly interpolate:
+reconstruct through the TMS5100's eight discrete interpolation periods:
 
 - energy;
 - pitch period;
@@ -607,7 +653,14 @@ When excitation kind differs, suppress interpolation and hold `frame[i0]` until 
 
 The sequence compiler must insert explicit phonetic transition frames where smooth transitions are wanted.
 
-Because interpolation depends only on position rather than direction, reverse speech traverses the same parameter path backwards.
+The cumulative target mixes are:
+
+```text
+0, 0.125, 0.234375, 0.330078125,
+0.497558594, 0.623168945, 0.811584473, 0.905792236
+```
+
+Because interpolation depends only on position rather than direction, reverse speech traverses the same stepped parameter path backwards.
 
 ---
 
@@ -901,6 +954,17 @@ Generated coefficients must be deterministic.
 
 Diphthongs use at least two anchor prototypes.
 
+After phone transitions, stress, and sentence contour are authored, compile
+each sequence through the TMS5100 reconstruction tables:
+
+- 15 usable nonlinear energy levels (`0xf` remains the hardware stop code);
+- 31 voiced pitch periods;
+- K precision of `5/5/4/4/4/4/4/3/3/3` bits;
+- unvoiced frames retain K1..K4 and set K5..K10 to zero.
+
+This happens off the audio thread. The engine continues to consume ordinary
+decoded `LpcFrame` values, and FORMANT/WARP remain post-reconstruction controls.
+
 ---
 
 # 24. Initial vowel anchors
@@ -1064,7 +1128,7 @@ For voiced frames:
 ```text
 pitchOctaves =
     PITCH
-    + VOCT_ATTEN * VOCT
+    + VOCT
 
 pitchScale =
     2 ^ pitchOctaves
@@ -1101,14 +1165,16 @@ Do not call `pow()` every host sample.
 
 # 29. Voiced excitation — LOCKED
 
-Use this PHONEX-authored clean-room chirp:
+Use the public signed 41-sample TMS5100 chirp shape, scaled by `1/128` to
+retain PHONEX's established carrier level. This is synthesizer configuration
+data and contains no speech-ROM content.
 
 ```cpp
-static constexpr float PHONEX_CHIRP[16] = {
-     0.00f,  0.38f,  0.82f,  1.00f,
-     0.68f,  0.32f,  0.04f, -0.22f,
-    -0.40f, -0.34f, -0.26f, -0.18f,
-    -0.11f, -0.06f, -0.02f,  0.00f,
+static constexpr int TMS5100_CHIRP[41] = {
+      0,  42, -44,  50, -78,  18,  37,  20,   2, -31, -59,
+      2,  95,  90,   5,  15,  38,  -4, -91, -91, -42, -35,
+    -36,  -4,  37,  43,  34,  33,  15,  -1,  -8, -18, -19,
+    -17,  -9, -10,  -6,   0,   3,   2,   1,
 };
 ```
 
@@ -1118,15 +1184,13 @@ At the beginning of every pitch period:
 chirpIndex = 0
 ```
 
-The first 16 internal ticks read the table.
+The first 41 internal ticks read the table.
 
 The remaining ticks of the pitch period output zero.
 
-If extreme pitch modulation creates a period shorter than 16 ticks, the next period restart truncates the table.
+If extreme pitch modulation creates a period shorter than 41 ticks, the next period restart truncates the table.
 
-This chirp becomes a release compatibility fixture.
-
-It is intentionally not a copied TI chirp table.
+This chirp becomes a release compatibility fixture for the revised clean core.
 
 ---
 
@@ -1261,7 +1325,20 @@ Standalone tests compare against an independently written double-precision refer
 
 ---
 
-# 34. WARP — LOCKED
+# 34. FORMANT and WARP — LOCKED
+
+`FORMANT` shifts the LPC spectral envelope independently from excitation pitch.
+Positive values produce a smaller/brighter apparent vocal tract; negative
+values produce a larger/darker tract. At zero, the reflection coefficients are
+an exact identity.
+
+The implementation uses a stable first-order all-pass substitution on the
+order-10 LPC predictor polynomial, followed by step-down conversion back to
+reflection coefficients. The transform is cached with the interpolated frame
+and smoothed control value. It performs no pole solving or transcendental math
+in the per-sample synthesis path.
+
+`VOCT` remains fixed at calibrated unity and affects excitation pitch only.
 
 `WARP` is a **stylized LPC coefficient warp**.
 
@@ -1307,8 +1384,8 @@ Clean warped coefficients are clamped to the normal stability limit before `BEND
 Persisted modes:
 
 ```text
-Raw hold — default
-Filtered
+Raw hold
+Filtered — default
 ```
 
 ### Raw hold
@@ -1330,7 +1407,9 @@ min(
 )
 ```
 
-A stable first-order or comparably cheap filter is sufficient.
+A cached second-order Butterworth reconstruction filter is used. Its
+coefficients are recalculated only when the host or internal sample rate
+changes, keeping the per-sample path to five multiply-accumulates.
 
 This filter is not a historical hardware-emulation contract.
 
@@ -1614,7 +1693,8 @@ Levels are **not cumulative**.
 
 `GLITCH = 12` means recipe 12 only.
 
-At level zero there must not be an extra quantization/copy/conversion stage that changes clean output.
+At level zero there must not be an extra glitch quantization/copy/conversion
+stage beyond the core TMS5100 parameter reconstruction.
 
 ---
 
@@ -1656,7 +1736,7 @@ The explicit glitch layer already provides deterministic virtual data/bus corrup
 ```text
 Params:
 PITCH
-VOCT_ATTEN
+FORMANT
 SPEED
 WARP
 EXCITE_BLEND
@@ -1672,6 +1752,7 @@ SCRUB_CV
 WARP_CV
 BEND_CV
 EXT_EXCITE
+WORD_CV
 
 Outputs:
 AUDIO
@@ -2074,7 +2155,8 @@ Required coverage:
 - pitch at 8 kHz;
 - pitch at 10 kHz;
 - PITCH transpose;
-- V/oct attenuation;
+- fixed-unity V/oct tracking;
+- FORMANT zero identity and stable spectral-envelope shifting;
 - scheduler long-run accuracy;
 - fixed 20 ms frame cadence;
 - forward transport;
