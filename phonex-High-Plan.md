@@ -10,7 +10,7 @@ vintage LPC character
 |---|---|---|
 | Q0 harness and baseline | Complete | `q0-complete`: 186 deterministic renders plus post-TMS report |
 | Q0.5 neutral clean path | Complete | `q05-clean-selected`: neutral WARP, linear safety stage, six-pole reconstruction |
-| Q1 corpus | In progress | Q1a `S` accepted; Q1b FIRE/TRUCK pronunciation corrected |
+| Q1 corpus | In progress | Q1a `S` and `SH` accepted; Q1b FIRE/TRUCK pronunciation corrected |
 | Q2 transitions | Waiting on Q1 | Replace universal midpoint with selective policy |
 | Q3 pronunciation | Waiting on stable speech | Add exact-phone tests before new G2P rules |
 | Q4 optional engine work | Deferred | Consider only after measured plateau |
@@ -668,6 +668,9 @@ Maintain a compact decision log here as phases execute:
 | Q0.5 Windows validation | Confirm the selected engine under the authoritative toolchain | Native `test-fast` passed; the PHONEX binary was then force-rebuilt to avoid a stale `.exe` and passed 109748 checks; incremental MINGW64 `plugin.dll` built successfully | Rack audition deferred | Engineering gate passed; proceed to Q1 |
 | `q1a-s-candidate1` | A moderate post-TMS `/s/` target should separate `S` from `SH` without a level boost | `S` centroid 1.94→3.07 kHz and 3–6 kHz energy 1.23%→64.55%; `SH` remained 1.94 kHz/15.05%; isolated `S` remained slightly quieter than `SH`; 26/196 renders changed; deterministic, bounded, unclipped; native 109748-check test and `plugin.dll` build passed | Listening packet ready | Selected as incremental Q1a corpus change |
 | `q1b-fire-truck` | FIRE sounding like FUR is a pronunciation-path defect | Fallback was `F ER EH`; authored result is exactly `F AY1 ER SIL T R AH1 K`; deterministic typed packet and 109749-check native Windows test passed; authoritative `plugin.dll` built | Listening sample ready | Selected; retain as exact dictionary pronunciations |
+| `q1-sh-candidate1` | `SH` should be a clear sibilant between sharp `S` and diffuse `F/TH` without changing its level or duration | `SH` centroid 1.94→2.53 kHz and 3–6 kHz energy 15.05%→56.03%; `S` remained higher at 3.07 kHz/64.55%; only four of 197 renders changed; deterministic, bounded, and unclipped | User reports acceptable enough for the current pass | Selected as incremental Q1 corpus change |
+| `q1-p-candidate1` | Give the short `P` burst a post-TMS tract distinct from continuous `F` while retaining a diffuse labial profile | `P` centroid 2.21→2.15 kHz, sub-1 kHz energy 20.96%→27.71%, and RMS changed only -0.11 dB; 14/197 renders changed; deterministic, bounded, and unclipped | Listening sample ready | Selected; candidates 2 and 3 were rejected for shifting the burst upward to 2.61 and 2.37 kHz |
+| `q1-t-candidate1` | Replace the excessively loud, mid-heavy `T` release with a short alveolar burst distinct from continuous `S` | `T` centroid 2.06→2.54 kHz, 3–6 kHz energy 1.07%→53.63%, RMS fell 5.60 dB into the `K` range, and max step improved 0.168→0.113; 36/197 renders changed; deterministic, bounded, and unclipped | Listening sample ready | Selected; `K` retained because its compact mid-frequency burst already has a coherent profile |
 
 ### Autonomous decision rules
 
@@ -840,7 +843,7 @@ remain intentional, finite, and musically useful.
 
 ## Immediate next pass
 
-Q0, Q0.5, and the first Q1a `/s/` correction are complete. Continue Q1
+Q0, Q0.5, and the first Q1a `/s/` and `/sh/` corrections are complete. Continue Q1
 incrementally:
 
 1. use `q1a-s-candidate1` as the current corpus baseline while retaining
