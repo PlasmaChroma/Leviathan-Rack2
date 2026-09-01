@@ -86,8 +86,9 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	std::vector<uint8_t> bodyTileActive;
 	float bodyTileDomainFraction = 1.f;
 	int activeBodySegmentCount = 0;
-	visual_assets::AdaptiveGlSurface compactSurface;
-	visual_assets::AdaptiveGlSurface expandedSurface;
+	// One surface serves both editor layouts. Its Wyrm-specific policy retains
+	// expanded capacity while the active viewport follows the current layout.
+	visual_assets::AdaptiveGlSurface fixedSurface;
 	NVGcontext* rendererVg = nullptr;
 	bool fixedSurfaceRenderedLastStep = false;
 	uint64_t fixedSurfaceRenderGeneration = 0;
@@ -1058,38 +1059,23 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		// Rack UI. Avoid driver calls from widget teardown; resources are
 		// reclaimed by the editor/context owner.
 		abandonRendererResources();
-		compactSurface.reset(false);
-		expandedSurface.reset(false);
+		fixedSurface.reset(false);
 		clearFixedSurfaceMetrics();
 	}
 
 	void onContextDestroy(const ContextDestroyEvent& e) override {
 		OpenGlWidget::onContextDestroy(e);
 		abandonRendererResources();
-		compactSurface.reset(true);
-		expandedSurface.reset(true);
+		fixedSurface.reset(true);
 		clearFixedSurfaceMetrics();
 	}
 
 	void onContextCreate(const ContextCreateEvent& e) override {
 		OpenGlWidget::onContextCreate(e);
 		abandonRendererResources();
-		compactSurface.reset(false);
-		expandedSurface.reset(false);
+		fixedSurface.reset(false);
 		clearFixedSurfaceMetrics();
 		setDirty();
-	}
-
-	bool compactEditor() const {
-		return box.size.x <= 300.f;
-	}
-
-	visual_assets::AdaptiveGlSurface& activeFixedSurface() {
-		return compactEditor() ? compactSurface : expandedSurface;
-	}
-
-	const visual_assets::AdaptiveGlSurface& activeFixedSurface() const {
-		return compactEditor() ? compactSurface : expandedSurface;
 	}
 
 	void step() override {
@@ -1139,7 +1125,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		redrawStateInitialized = true;
 
 		if (dirty) {
-			activeFixedSurface().markDirty();
+			fixedSurface.markDirty();
 			setDirty();
 		}
 		if (fixedSurfaceEnabled) {
@@ -1157,7 +1143,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			&& module->fixedSurfaceExperiment.load(std::memory_order_relaxed);
 		const bool cacheWasDirty = fixedSurfaceEnabled ? fixedSurfaceRenderedLastStep : dirty;
 		const PerfClock::time_point start = logCsv ? PerfClock::now() : PerfClock::time_point();
-		if (!fixedSurfaceEnabled || !activeFixedSurface().draw(args, box.size)) {
+		if (!fixedSurfaceEnabled || !fixedSurface.draw(args, box.size)) {
 			widget::FramebufferWidget::draw(args);
 		}
 		if (logCsv) {
@@ -1169,13 +1155,19 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	}
 
 	void renderGlContent(Vec fbSize, int viewportY = 0) {
-		glViewport(0, viewportY, std::max(1, int(std::lround(fbSize.x))), std::max(1, int(std::lround(fbSize.y))));
+		const int activeWidth = std::max(1, int(std::lround(fbSize.x)));
+		const int activeHeight = std::max(1, int(std::lround(fbSize.y)));
+		glViewport(0, viewportY, activeWidth, activeHeight);
 		if (isExtraGlValidationEnabled()) {
 			validateGlResourcesForCurrentContext();
 		}
-		glDisable(GL_SCISSOR_TEST);
+		// A compact editor may render into an expanded-capacity retained surface.
+		// Clear only its active prefix rather than the whole backing allocation.
+		glEnable(GL_SCISSOR_TEST);
+		glScissor(0, viewportY, activeWidth, activeHeight);
 		glClearColor(0.f, 0.f, 0.f, 0.f);
 		glClear(GL_COLOR_BUFFER_BIT);
+		glDisable(GL_SCISSOR_TEST);
 
 		if (!module) {
 			return;
@@ -1243,8 +1235,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			// Adaptive surfaces handle only their own context-bound FBO resources.
 			abandonRendererResources();
 			rendererVg = vg;
-			compactSurface.markDirty();
-			expandedSurface.markDirty();
+			fixedSurface.markDirty();
 		}
 		float rackZoom = 1.f;
 		if (APP && APP->scene && APP->scene->rackScroll) {
@@ -1252,8 +1243,9 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		}
 		const float pixelRatio = (APP && APP->window) ? APP->window->pixelRatio : 1.f;
 		visual_assets::AdaptiveGlSurfacePolicy policy;
-		visual_assets::AdaptiveGlSurface& surface = activeFixedSurface();
-		fixedSurfaceRenderedLastStep = surface.renderIfNeeded(
+		policy.maxDensity = 3.f;
+		policy.retainPeakCapacity = true;
+		fixedSurfaceRenderedLastStep = fixedSurface.renderIfNeeded(
 			vg, box.size, rackZoom, pixelRatio, policy,
 			isExtraGlValidationEnabled(),
 			[](void* user, Vec activeSize, int viewportY) {
@@ -1261,8 +1253,8 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 			},
 			this);
 		if (fixedSurfaceRenderedLastStep) ++fixedSurfaceRenderGeneration;
-		module->perfFixedSurfaceWidth.store(surface.activeWidth(), std::memory_order_relaxed);
-		module->perfFixedSurfaceHeight.store(surface.activeHeight(), std::memory_order_relaxed);
+		module->perfFixedSurfaceWidth.store(fixedSurface.activeWidth(), std::memory_order_relaxed);
+		module->perfFixedSurfaceHeight.store(fixedSurface.activeHeight(), std::memory_order_relaxed);
 		module->perfFixedSurfaceGeneration.store(fixedSurfaceRenderGeneration, std::memory_order_relaxed);
 	}
 };

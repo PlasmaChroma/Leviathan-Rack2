@@ -6,6 +6,8 @@ ROOT = Path(__file__).parents[1]
 OCTAVIA = (ROOT / "src" / "Octavia.cpp").read_text(encoding="utf-8")
 INTERFACE = (ROOT / "src" / "OctaviaSemanticControl.hpp").read_text(encoding="utf-8")
 SIBYL = (ROOT / "src" / "SibylControl.hpp").read_text(encoding="utf-8")
+PHONEX = (ROOT / "src" / "PhonexSemantic.cpp").read_text(encoding="utf-8")
+REFERENCE = (ROOT / "MCP" / "skill" / "octavia" / "references" / "semantic.md").read_text(encoding="utf-8")
 
 
 class OctaviaSemanticContractTest(unittest.TestCase):
@@ -37,6 +39,18 @@ class OctaviaSemanticContractTest(unittest.TestCase):
         self.assertIn('return "leviathan.sibyl.composition"', SIBYL)
         self.assertIn("Operation::GET_COMPOSITION", SIBYL)
         self.assertIn("Operation::TRANSPORT", SIBYL)
+
+    def test_phonex_capability_is_machine_self_describing(self):
+        self.assertIn('"requestSchemas"', PHONEX)
+        self.assertIn('"https://json-schema.org/draft/2020-12/schema"', PHONEX)
+        self.assertIn('"oneOf"', PHONEX)
+        self.assertIn('"examples"', PHONEX)
+        self.assertNotIn('"editRequest"', PHONEX)
+
+    def test_skill_treats_live_schemas_as_authoritative(self):
+        self.assertIn("requestSchemas", REFERENCE)
+        self.assertIn("live capability response is the source of truth", REFERENCE)
+        self.assertNotIn("## Phonex word-bank capability", REFERENCE)
 
 
 if __name__ == "__main__":

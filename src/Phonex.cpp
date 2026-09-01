@@ -23,7 +23,7 @@ const phonex::LpcSequence& bundledSequence(int index) {
 }
 
 const char* sourceName(Phonex::ActiveSource source) {
-	return source == Phonex::ActiveSource::Text ? "Text" : "Bundled";
+	return source == Phonex::ActiveSource::User ? "User" : "Bundled";
 }
 
 int wordFromVoltage(float voltage) {
@@ -35,6 +35,10 @@ int wordFromVoltage(float voltage) {
 } // namespace
 
 Phonex::Phonex() {
+	for (int slot = 0; slot < kUserBankSize; ++slot) {
+		userMailboxes[slot].store(nullptr, std::memory_order_relaxed);
+		userSlotAvailable[slot].store(false, std::memory_order_relaxed);
+	}
 	config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 	configParam(PITCH_PARAM, -2.f, 2.f, 0.f, "Pitch", " oct");
 	configParam(FORMANT_PARAM, -1.f, 1.f, 0.f, "Formant");
@@ -48,6 +52,7 @@ Phonex::Phonex() {
 		"K-ROTATE", "K-HOLES", "K-4BIT", "VOICE-FLIP", "BUS-SCRAMBLE"});
 	configSwitch(WORD_PARAM, 0.f, 63.f, 36.f, "Word");
 	configButton(WORD_PUSH_PARAM, "Speak word");
+	configSwitch(BANK_PARAM, 0.f, 1.f, 0.f, "Word bank", {"Stock", "User"});
 	configInput(VOCT_INPUT, "V/oct");
 	configInput(TRIG_GATE_INPUT, "Trigger / gate");
 	configInput(SCRUB_CV_INPUT, "Scrub CV");
@@ -71,17 +76,31 @@ void Phonex::process(const ProcessArgs& args) {
 	const int word = wordCvConnected
 		? wordFromVoltage(inputs[WORD_CV_INPUT].getVoltage())
 		: clamp(int(std::round(params[WORD_PARAM].getValue())), 0, 63);
-	if (word != lastWord || (wordCvConnected
-		&& activeSource.load(std::memory_order_acquire) != ActiveSource::Bundled)) {
-		lastWord = word;
-		selectedWord.store(word, std::memory_order_release);
+	selectedWord.store(word, std::memory_order_release);
+	const bool userBank = params[BANK_PARAM].getValue() >= 0.5f;
+	if (userBank) {
+		phonex::SequenceMailbox* mailbox =
+			userMailboxes[word].load(std::memory_order_acquire);
+		const phonex::LpcSequence* published = mailbox
+			? mailbox->acquire(observedUserGenerations[word]) : nullptr;
+		if (published)
+			userSequences[word] = published;
+		const bool available = userSlotAvailable[word].load(std::memory_order_acquire);
+		if (word != lastWord || !lastUserBank || published
+			|| available != lastUserSlotAvailable) {
+			engine.setSequence(available ? userSequences[word] : nullptr);
+		}
+		activeSource.store(ActiveSource::User, std::memory_order_release);
+		lastUserSlotAvailable = available;
+	}
+	else {
+		if (word != lastWord || lastUserBank)
+			engine.setSequence(&bundledSequence(word));
 		activeSource.store(ActiveSource::Bundled, std::memory_order_release);
-		engine.setSequence(&bundledSequence(word));
+		lastUserSlotAvailable = false;
 	}
-	if (activeSource.load(std::memory_order_acquire) == ActiveSource::Text) {
-		if (const phonex::LpcSequence* sequence = textMailbox.acquire(observedTextGeneration))
-			engine.setSequence(sequence);
-	}
+	lastWord = word;
+	lastUserBank = userBank;
 	const int requestedRate = internalRate.load(std::memory_order_relaxed) < 9000 ? 8000 : 10000;
 	if (requestedRate != appliedInternalRate) {
 		appliedInternalRate = requestedRate;
@@ -135,24 +154,72 @@ void Phonex::process(const ProcessArgs& args) {
 }
 
 phonex::TextCompileResult Phonex::submitText(phonex::StringView text) {
-	phonex::LpcSequence sequence;
-	const phonex::TextCompileResult result = phonex::compileText(text, sequence);
+	const int slot = clamp(selectedWord.load(std::memory_order_acquire), 0, kUserBankSize - 1);
+	const phonex::TextCompileResult result = storeUserText(slot, text);
 	textStatus.store(result.status, std::memory_order_relaxed);
 	unsupportedUnicode.store(result.unsupportedUnicode, std::memory_order_relaxed);
+	if (result.status == phonex::CompileStatus::Ok
+		|| result.status == phonex::CompileStatus::Empty) {
+		if (text.empty())
+			submittedText.clear();
+		else
+			submittedText.assign(text.data(), text.size());
+		params[BANK_PARAM].setValue(1.f);
+		activeSource.store(ActiveSource::User, std::memory_order_release);
+		userBankRevision.fetch_add(1u, std::memory_order_relaxed);
+	}
+	return result;
+}
+
+void Phonex::publishUserSequence(int slot, const phonex::LpcSequence& sequence) {
+	slot = clamp(slot, 0, kUserBankSize - 1);
+	phonex::SequenceMailbox* mailbox = userMailboxes[slot].load(std::memory_order_acquire);
+	if (!mailbox) {
+		std::unique_ptr<phonex::SequenceMailbox> owner(new phonex::SequenceMailbox());
+		mailbox = owner.get();
+		mailbox->publish(sequence);
+		userMailboxOwners[slot] = std::move(owner);
+		userMailboxes[slot].store(mailbox, std::memory_order_release);
+	}
+	else {
+		mailbox->publish(sequence);
+	}
+	userSlotAvailable[slot].store(true, std::memory_order_release);
+}
+
+phonex::TextCompileResult Phonex::storeUserText(int slot, phonex::StringView text) {
+	slot = clamp(slot, 0, kUserBankSize - 1);
+	phonex::LpcSequence sequence;
+	const phonex::TextCompileResult result = phonex::compileText(text, sequence);
+	if (result.status == phonex::CompileStatus::Empty) {
+		userTexts[slot].clear();
+		userSlotAvailable[slot].store(false, std::memory_order_release);
+		return result;
+	}
 	if (result.status != phonex::CompileStatus::Ok)
 		return result;
-	submittedText.assign(text.data(), text.size());
-	activeSource.store(ActiveSource::Text, std::memory_order_release);
-	textMailbox.publish(sequence);
+	userTexts[slot].assign(text.data(), text.size());
+	publishUserSequence(slot, sequence);
 	return result;
 }
 
 std::string Phonex::activeDisplayText() {
-	if (activeSource.load(std::memory_order_relaxed) == ActiveSource::Text)
-		return submittedText;
 	const int word = clamp(selectedWord.load(std::memory_order_acquire), 0, 63);
+	if (activeSource.load(std::memory_order_relaxed) == ActiveSource::User) {
+		const std::string text = userText(word);
+		return text.empty() ? "EMPTY" : text;
+	}
 	const phonex::StringView name = phonex::bundledPhraseName(static_cast<std::uint8_t>(word));
 	return std::string(name.data(), name.size());
+}
+
+std::string Phonex::userText(int slot) const {
+	return userTexts[clamp(slot, 0, kUserBankSize - 1)];
+}
+
+bool Phonex::userSlotPopulated(int slot) const {
+	return userSlotAvailable[clamp(slot, 0, kUserBankSize - 1)].load(
+		std::memory_order_acquire);
 }
 
 void Phonex::onReset(const ResetEvent& event) {
@@ -167,6 +234,7 @@ void Phonex::onReset(const ResetEvent& event) {
 	params[BEND_PARAM].setValue(0.f);
 	params[GLITCH_PARAM].setValue(0.f);
 	params[WORD_PUSH_PARAM].setValue(0.f);
+	params[BANK_PARAM].setValue(0.f);
 	activeSource.store(ActiveSource::Bundled, std::memory_order_relaxed);
 	internalRate.store(10000, std::memory_order_relaxed);
 	reconstructionMode.store(int(phonex::ReconstructionMode::Filtered), std::memory_order_relaxed);
@@ -176,7 +244,14 @@ void Phonex::onReset(const ResetEvent& event) {
 	textStatus.store(phonex::CompileStatus::Empty, std::memory_order_relaxed);
 	unsupportedUnicode.store(false, std::memory_order_relaxed);
 	submittedText.clear();
+	for (int slot = 0; slot < kUserBankSize; ++slot) {
+		userTexts[slot].clear();
+		userSlotAvailable[slot].store(false, std::memory_order_release);
+	}
+	userBankRevision.fetch_add(1u, std::memory_order_relaxed);
 	lastWord = 36;
+	lastUserBank = false;
+	lastUserSlotAvailable = false;
 	selectedWord.store(36, std::memory_order_relaxed);
 	params[WORD_PARAM].setValue(36.f);
 	engine.setSequence(&bundledSequence(36));
@@ -185,7 +260,9 @@ void Phonex::onReset(const ResetEvent& event) {
 
 json_t* Phonex::dataToJson() {
 	json_t* root = json_object();
-	json_object_set_new(root, "schemaVersion", json_integer(1));
+	json_object_set_new(root, "schemaVersion", json_integer(2));
+	json_object_set_new(root, "userBankRevision", json_integer(
+		userBankRevision.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "text", json_stringn(submittedText.data(), submittedText.size()));
 	json_object_set_new(root, "activeSource", json_string(sourceName(
 		activeSource.load(std::memory_order_relaxed))));
@@ -201,6 +278,10 @@ json_t* Phonex::dataToJson() {
 		forcedExcitation.load(std::memory_order_relaxed) == int(phonex::ForcedExcitation::Unvoiced)
 			? "Unvoiced" : "Voiced"));
 	json_object_set_new(root, "seed", json_integer(seed.load(std::memory_order_relaxed)));
+	json_t* bank = json_array();
+	for (const std::string& text : userTexts)
+		json_array_append_new(bank, json_stringn(text.data(), text.size()));
+	json_object_set_new(root, "userBank", bank);
 	return root;
 }
 
@@ -212,6 +293,7 @@ void Phonex::dataFromJson(json_t* root) {
 	int loadedTrigger = int(phonex::TriggerMode::RetriggerPhrase);
 	int loadedForced = int(phonex::ForcedExcitation::Voiced);
 	std::uint32_t loadedSeed = kDefaultSeed;
+	std::uint32_t loadedUserBankRevision = 0;
 	ActiveSource loadedSource = ActiveSource::Bundled;
 	std::string loadedText;
 	json_t* value = json_object_get(root, "internalRate");
@@ -234,10 +316,15 @@ void Phonex::dataFromJson(json_t* root) {
 	value = json_object_get(root, "seed");
 	if (json_is_integer(value))
 		loadedSeed = static_cast<std::uint32_t>(json_integer_value(value));
+	value = json_object_get(root, "userBankRevision");
+	if (json_is_integer(value) && json_integer_value(value) >= 0)
+		loadedUserBankRevision = static_cast<std::uint32_t>(json_integer_value(value));
 	value = json_object_get(root, "activeSource");
-	if (json_is_string(value))
-		loadedSource = std::string(json_string_value(value)) == "Text"
-			? ActiveSource::Text : ActiveSource::Bundled;
+	if (json_is_string(value)) {
+		const std::string source = json_string_value(value);
+		loadedSource = source == "Text" || source == "User"
+			? ActiveSource::User : ActiveSource::Bundled;
+	}
 	value = json_object_get(root, "text");
 	if (json_is_string(value)) {
 		const std::size_t length = std::min<std::size_t>(json_string_length(value),
@@ -249,13 +336,42 @@ void Phonex::dataFromJson(json_t* root) {
 	triggerMode.store(loadedTrigger, std::memory_order_relaxed);
 	forcedExcitation.store(loadedForced, std::memory_order_relaxed);
 	seed.store(loadedSeed, std::memory_order_relaxed);
-	if (loadedSource == ActiveSource::Text && !loadedText.empty()) {
-		const auto result = submitText(loadedText);
-		if (result.status == phonex::CompileStatus::Ok)
-			return;
+	userBankRevision.store(loadedUserBankRevision, std::memory_order_relaxed);
+	for (int slot = 0; slot < kUserBankSize; ++slot) {
+		userTexts[slot].clear();
+		userSlotAvailable[slot].store(false, std::memory_order_release);
 	}
-	activeSource.store(ActiveSource::Bundled, std::memory_order_relaxed);
-	lastWord = clamp(int(std::round(params[WORD_PARAM].getValue())), 0, 63);
+	bool loadedAnyUserSlot = false;
+	value = json_object_get(root, "userBank");
+	if (json_is_array(value)) {
+		const std::size_t count = std::min<std::size_t>(json_array_size(value), kUserBankSize);
+		for (std::size_t slot = 0; slot < count; ++slot) {
+			json_t* textValue = json_array_get(value, slot);
+			if (!json_is_string(textValue) || json_string_length(textValue) == 0)
+				continue;
+			const std::size_t length = std::min<std::size_t>(
+				json_string_length(textValue), phonex::kMaxSubmittedTextBytes);
+			const phonex::TextCompileResult result = storeUserText(
+				int(slot), phonex::StringView(json_string_value(textValue), length));
+			loadedAnyUserSlot = loadedAnyUserSlot
+				|| result.status == phonex::CompileStatus::Ok;
+		}
+	}
+	const int selected = clamp(int(std::round(params[WORD_PARAM].getValue())), 0, 63);
+	if (!loadedAnyUserSlot && loadedSource == ActiveSource::User && !loadedText.empty()) {
+		const auto result = storeUserText(selected, loadedText);
+		loadedAnyUserSlot = result.status == phonex::CompileStatus::Ok;
+	}
+	if (loadedSource == ActiveSource::User && loadedAnyUserSlot)
+		params[BANK_PARAM].setValue(1.f);
+	activeSource.store(params[BANK_PARAM].getValue() >= 0.5f
+		? ActiveSource::User : ActiveSource::Bundled, std::memory_order_relaxed);
+	submittedText = activeSource.load(std::memory_order_relaxed) == ActiveSource::User
+		? userTexts[selected] : loadedText;
+	lastWord = selected;
+	lastUserBank = false;
+	lastUserSlotAvailable = false;
 	selectedWord.store(lastWord, std::memory_order_relaxed);
-	engine.setSequence(&bundledSequence(lastWord));
+	if (activeSource.load(std::memory_order_relaxed) == ActiveSource::Bundled)
+		engine.setSequence(&bundledSequence(lastWord));
 }

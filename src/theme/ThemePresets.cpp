@@ -22,8 +22,8 @@ ThemeSnapshot makeTheme(
 const FactoryPreset kFactoryPresets[] = {
 	{"factory:leviathan", "Leviathan", canonicalDefault()},
 	{"factory:abyssal", "Abyssal", makeTheme(
-		ThemeColor(0x3f, 0x4c, 0x9a), ThemeColor(0x16, 0x7d, 0x8c),
-		ThemeColor(0xff, 0xff, 0xff), 1.35f)},
+		ThemeColor(0x3f, 0x4c, 0x9a), ThemeColor(0xd6, 0x59, 0x8e),
+		ThemeColor(0xff, 0xff, 0xff), 1.33f)},
 	{"factory:monochrome", "Mono", makeTheme(
 		ThemeColor(0xba, 0xba, 0xba), ThemeColor(0x32, 0x32, 0x32),
 		ThemeColor(0xff, 0xff, 0xff), 0.50f)},

@@ -13,12 +13,30 @@ namespace {
 
 struct PhonexUtteranceField final : ui::TextField {
 	Phonex* module = nullptr;
+	int observedWord = -1;
+	bool observedUserBank = false;
 
 	explicit PhonexUtteranceField(Phonex* module) : module(module) {
 		multiline = false;
 		placeholder = "TYPE TEXT OR [PHONEMES]";
 		if (module)
 			setText(module->submittedText);
+	}
+
+	void step() override {
+		ui::TextField::step();
+		if (!module)
+			return;
+		const int word = clamp(module->selectedWord.load(std::memory_order_acquire), 0, 63);
+		const bool userBank = module->params[Phonex::BANK_PARAM].getValue() >= 0.5f;
+		const bool focused = APP && APP->event
+			&& APP->event->getSelectedWidget() == this;
+		if (focused)
+			return;
+		if (word != observedWord || userBank != observedUserBank)
+			setText(userBank ? module->userText(word) : std::string());
+		observedWord = word;
+		observedUserBank = userBank;
 	}
 
 	void onSelectKey(const event::SelectKey& event) override {
@@ -63,7 +81,8 @@ struct PhonexStatusDisplay final : TransparentWidget {
 		nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 		nvgFillColor(args.vg, primaryColor);
 		nvgFontSize(args.vg, 12.f);
-		nvgText(args.vg, 6.f, box.size.y * 0.42f, primary.c_str(), nullptr);
+		const float primaryY = secondary.empty() ? box.size.y * 0.5f : box.size.y * 0.42f;
+		nvgText(args.vg, 6.f, primaryY, primary.c_str(), nullptr);
 		if (!secondary.empty()) {
 			nvgFillColor(args.vg, nvgRGB(185, 164, 112));
 			nvgFontSize(args.vg, 7.f);
@@ -85,9 +104,19 @@ struct PhonexWordTooltip final : ui::Tooltip {
 		Widget* widget = anchor.get();
 		auto* paramWidget = dynamic_cast<ParamWidget*>(widget);
 		const int word = phonexWordIndex(paramWidget);
-		const phonex::StringView name = phonex::bundledPhraseName(std::uint8_t(word));
-		text = "Word " + std::to_string(word) + " — "
-			+ std::string(name.data(), name.size());
+		auto* module = paramWidget ? dynamic_cast<Phonex*>(paramWidget->module) : nullptr;
+		const bool userBank = module
+			&& module->params[Phonex::BANK_PARAM].getValue() >= 0.5f;
+		if (userBank) {
+			const std::string entry = module->userText(word);
+			text = "User " + std::to_string(word) + " — "
+				+ (entry.empty() ? "EMPTY" : entry);
+		}
+		else {
+			const phonex::StringView name = phonex::bundledPhraseName(std::uint8_t(word));
+			text = "Stock " + std::to_string(word) + " — "
+				+ std::string(name.data(), name.size());
+		}
 		ui::Tooltip::step();
 		if (!widget)
 			return;
@@ -223,10 +252,19 @@ struct PhonexWordBar final : ParamWidget {
 		const int activeWord = cvSelected
 			? clamp(phonexModule->selectedWord.load(std::memory_order_relaxed), 0, 63)
 			: settingWord;
-		const phonex::StringView name = phonex::bundledPhraseName(std::uint8_t(activeWord));
 		char label[96]{};
-		std::snprintf(label, sizeof(label), "WORD %02d  %.*s",
-			activeWord, int(name.size()), name.data());
+		const bool userBank = phonexModule
+			&& phonexModule->params[Phonex::BANK_PARAM].getValue() >= 0.5f;
+		if (userBank) {
+			const std::string entry = phonexModule->userText(activeWord);
+			std::snprintf(label, sizeof(label), "USER %02d  %s",
+				activeWord, entry.empty() ? "EMPTY" : entry.c_str());
+		}
+		else {
+			const phonex::StringView name = phonex::bundledPhraseName(std::uint8_t(activeWord));
+			std::snprintf(label, sizeof(label), "STOCK %02d  %.*s",
+				activeWord, int(name.size()), name.data());
+		}
 		visual_assets::drawNeonBarSlider(
 			args, box.size, float(settingWord) / 63.f, isHovered, label,
 			cvSelected ? float(activeWord) / 63.f : -1.f);
@@ -291,9 +329,9 @@ struct PhonexWidget final : ModuleWidget {
 				knob->setProgressRingBipolar(true);
 			addParam(knob);
 		};
-		addMainKnob(Phonex::PITCH_PARAM, "PITCH_PARAM", Vec(12.f, 41.f), true);
-		addMainKnob(Phonex::SPEED_PARAM, "SPEED_PARAM", Vec(35.56f, 41.f), true);
-		addMainKnob(Phonex::WARP_PARAM, "WARP_PARAM", Vec(59.1f, 41.f), true);
+		addMainKnob(Phonex::PITCH_PARAM, "PITCH_PARAM", Vec(9.f, 41.f), true);
+		addMainKnob(Phonex::SPEED_PARAM, "SPEED_PARAM", Vec(27.5f, 41.f), true);
+		addMainKnob(Phonex::WARP_PARAM, "WARP_PARAM", Vec(46.f, 41.f), true);
 		addParam(createParamCentered<BipolarDarkTinyClockworkGearKnob>(mm2px(point("FORMANT_PARAM", Vec(8.8f, 57.f))), module, Phonex::FORMANT_PARAM));
 		addParam(createParamCentered<DarkTinyClockworkGearKnob>(mm2px(point("EXCITE_BLEND_PARAM", Vec(26.8f, 57.f))), module, Phonex::EXCITE_BLEND_PARAM));
 		addParam(createParamCentered<DarkTinyClockworkGearKnob>(mm2px(point("BEND_PARAM", Vec(44.8f, 57.f))), module, Phonex::BEND_PARAM));
@@ -304,7 +342,9 @@ struct PhonexWidget final : ModuleWidget {
 			mm2px(wordSelectorMm.pos), module, Phonex::WORD_PARAM);
 		wordBar->box.size = mm2px(wordSelectorMm.size);
 		addParam(wordBar);
-		addParam(createParamCentered<SmallGoldButton>(mm2px(point("WORD_PUSH_PARAM", Vec(62.4f, 26.85f))), module, Phonex::WORD_PUSH_PARAM));
+		addParam(createParamCentered<PlasmaSwitch>(
+			mm2px(point("BANK_PARAM", Vec(63.f, 73.95f))), module, Phonex::BANK_PARAM));
+		addParam(createParamCentered<SmallGoldButton>(mm2px(point("WORD_PUSH_PARAM", Vec(63.5f, 41.f))), module, Phonex::WORD_PUSH_PARAM));
 
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(point("VOCT_INPUT", Vec(8.5f, 87.5f))), module, Phonex::VOCT_INPUT));
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(point("WORD_CV_INPUT", Vec(27.f, 87.5f))), module, Phonex::WORD_CV_INPUT));
@@ -316,7 +356,7 @@ struct PhonexWidget final : ModuleWidget {
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("AUDIO_OUTPUT", Vec(12.f, 114.5f))), module, Phonex::AUDIO_OUTPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("FRAME_CLK_OUTPUT", Vec(35.56f, 114.5f))), module, Phonex::FRAME_CLK_OUTPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(point("EOX_OUTPUT", Vec(59.1f, 114.5f))), module, Phonex::EOX_OUTPUT));
-		addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(point("VOICED_LIGHT", Vec(67.6f, 26.85f))), module, Phonex::VOICED_LIGHT));
+		addChild(createLightCentered<SmallLight<GreenLight>>(mm2px(point("VOICED_LIGHT", Vec(67.6f, 41.f))), module, Phonex::VOICED_LIGHT));
 		addChild(createLightCentered<SmallLight<BlueLight>>(mm2px(point("FRAME_LIGHT", Vec(31.4f, 110.f))), module, Phonex::FRAME_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(point("EOX_LIGHT", Vec(54.9f, 110.f))), module, Phonex::EOX_LIGHT));
 		addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(point("BEND_LIGHT", Vec(65.2f, 57.f))), module, Phonex::BEND_LIGHT));

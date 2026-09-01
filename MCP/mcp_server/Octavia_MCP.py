@@ -470,6 +470,93 @@ async def vcv_sibyl_transport(params: SibylTransportInput) -> str:
         return _err(e)
 
 
+# ── Generic semantic-document tools ─────────────────────────────────────────
+
+class SemanticModuleInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    module_id: int = Field(..., description="Module ID from vcv_list_modules", ge=0)
+
+
+class SemanticDocumentInput(SemanticModuleInput):
+    view: str = Field("summary", description="Capability-defined document view", min_length=1, max_length=64)
+    id: Optional[str] = Field(None, description="Optional capability-defined document object ID", max_length=256)
+
+
+class SemanticRequestInput(SemanticModuleInput):
+    request: dict = Field(..., description="Opaque request defined by the module's capability response")
+
+
+@mcp.tool(name="vcv_semantic_get_capabilities",
+          annotations={"title": "Get Module Semantic Capabilities", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_semantic_get_capabilities(params: SemanticModuleInput) -> str:
+    """Discover whether a module owns structured semantic state and how to read or edit it."""
+    try:
+        return json.dumps(await _envelope_call(f"semantic/{params.module_id}/capabilities"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_semantic_get_document",
+          annotations={"title": "Get Module Semantic Document", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_semantic_get_document(params: SemanticDocumentInput) -> str:
+    """Read a capability-defined view of a module's structured authored state."""
+    try:
+        query = {"view": params.view}
+        if params.id is not None:
+            query["id"] = params.id
+        return json.dumps(await _envelope_call(
+            f"semantic/{params.module_id}/document?{urlencode(query)}"
+        ), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_semantic_validate",
+          annotations={"title": "Validate Module Semantic Request", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_semantic_validate(params: SemanticRequestInput) -> str:
+    """Validate an opaque candidate or edit request using the target module's own rules."""
+    try:
+        return json.dumps(await _envelope_call(
+            f"semantic/{params.module_id}/validate", "POST", params.request
+        ), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_semantic_edit",
+          annotations={"title": "Edit Module Semantic Document", "readOnlyHint": False, "destructiveHint": False})
+async def vcv_semantic_edit(params: SemanticRequestInput) -> str:
+    """Apply a capability-defined semantic edit as one undoable Rack action."""
+    try:
+        return json.dumps(await _envelope_call(
+            f"semantic/{params.module_id}/edit", "POST", params.request
+        ), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_semantic_get_status",
+          annotations={"title": "Get Module Semantic Status", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_semantic_get_status(params: SemanticModuleInput) -> str:
+    """Read capability-defined revision and runtime status for structured module state."""
+    try:
+        return json.dumps(await _envelope_call(f"semantic/{params.module_id}/status"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_semantic_command",
+          annotations={"title": "Send Module Semantic Command", "readOnlyHint": False, "destructiveHint": False})
+async def vcv_semantic_command(params: SemanticRequestInput) -> str:
+    """Send a capability-defined ephemeral command that does not edit its authored document."""
+    try:
+        return json.dumps(await _envelope_call(
+            f"semantic/{params.module_id}/command", "POST", params.request
+        ), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
 # ── Moirai semantic tools ────────────────────────────────────────────────────
 
 class MoiraiModuleInput(BaseModel):

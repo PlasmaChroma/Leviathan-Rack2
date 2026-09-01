@@ -8,6 +8,9 @@ struct AdaptiveGlSurfacePolicy {
 	float minDensity = 0.25f;
 	float maxDensity = 2.f;
 	int sizeQuantum = 16;
+	// Keep the largest capacity reached in this graphics context while allowing
+	// the active viewport to continue following the current logical size.
+	bool retainPeakCapacity = false;
 };
 
 class AdaptiveGlSurface {

@@ -35,17 +35,18 @@
              350-640 320 330h620" fill="none" stroke="#41cbd2" stroke-width="22" opacity="0.28"/>
     <g id="component_anchors" style="display:none">
       <rect id="PHRASE_DISPLAY" x="360" y="1190" width="6392" height="730"/>
-      <rect id="UTTERANCE_FIELD" x="360" y="2310" width="5340" height="750"/>
-      <rect id="WORD_SELECTOR" x="300" y="6820" width="6512" height="1150"/>
-      <circle id="PITCH_PARAM" cx="1200" cy="4100" r="10"/>
-      <circle id="SPEED_PARAM" cx="3556" cy="4100" r="10"/>
-      <circle id="WARP_PARAM" cx="5910" cy="4100" r="10"/>
+      <rect id="UTTERANCE_FIELD" x="360" y="2310" width="6392" height="750"/>
+      <rect id="WORD_SELECTOR" x="300" y="6820" width="5300" height="1150"/>
+      <circle id="PITCH_PARAM" cx="900" cy="4100" r="10"/>
+      <circle id="SPEED_PARAM" cx="2750" cy="4100" r="10"/>
+      <circle id="WARP_PARAM" cx="4600" cy="4100" r="10"/>
       <circle id="FORMANT_PARAM" cx="880" cy="5700" r="10"/>
       <circle id="EXCITE_BLEND_PARAM" cx="2680" cy="5700" r="10"/>
       <circle id="BEND_PARAM" cx="4480" cy="5700" r="10"/>
       <circle id="GLITCH_PARAM" cx="6280" cy="5700" r="10"/>
       <circle id="WORD_PARAM" cx="3556" cy="7395" r="10"/>
-      <circle id="WORD_PUSH_PARAM" cx="6240" cy="2685" r="10"/>
+      <circle id="WORD_PUSH_PARAM" cx="6350" cy="4100" r="10"/>
+      <circle id="BANK_PARAM" cx="6300" cy="7395" r="10"/>
       <circle id="VOCT_INPUT" cx="850" cy="8750" r="10"/>
       <circle id="WORD_CV_INPUT" cx="2700" cy="8750" r="10"/>
       <circle id="TRIG_GATE_INPUT" cx="4500" cy="8750" r="10"/>
@@ -56,7 +57,7 @@
       <circle id="AUDIO_OUTPUT" cx="1200" cy="11450" r="10"/>
       <circle id="FRAME_CLK_OUTPUT" cx="3556" cy="11450" r="10"/>
       <circle id="EOX_OUTPUT" cx="5910" cy="11450" r="10"/>
-      <circle id="VOICED_LIGHT" cx="6760" cy="2685" r="10"/>
+      <circle id="VOICED_LIGHT" cx="6760" cy="4100" r="10"/>
       <circle id="FRAME_LIGHT" cx="3140" cy="11000" r="10"/>
       <circle id="EOX_LIGHT" cx="5490" cy="11000" r="10"/>
       <circle id="BEND_LIGHT" cx="4880" cy="5700" r="10"/>
@@ -67,15 +68,17 @@
     <text x="3556" y="520" font-size="390" font-weight="700" letter-spacing="85">PHONEX</text>
     <text x="3556" y="780" font-size="130" fill="#52d6dc" letter-spacing="44">LPC VOICE INSTRUMENT</text>
     <text x="3556" y="1080" font-size="125" fill="#d6a455">PHRASE / STATUS</text>
-    <text x="3030" y="2200" font-size="125" fill="#52d6dc">UTTERANCE — ENTER TO SPEAK</text>
-    <text x="6240" y="3270" font-size="145">SPEAK</text>
-    <text x="1200" y="4900" font-size="170">PITCH</text>
-    <text x="3556" y="4900" font-size="170">SPEED</text>
-    <text x="5910" y="4900" font-size="170">WARP</text>
+    <text x="3556" y="2200" font-size="125" fill="#52d6dc">UTTERANCE — ENTER TO SPEAK</text>
+    <text x="6350" y="4900" font-size="145">SPEAK</text>
+    <text x="900" y="4900" font-size="170">PITCH</text>
+    <text x="2750" y="4900" font-size="170">SPEED</text>
+    <text x="4600" y="4900" font-size="170">WARP</text>
     <text x="880" y="6450" font-size="140">FORMANT</text>
     <text x="2680" y="6450" font-size="145">EXCITE</text>
     <text x="4480" y="6450" font-size="150">BEND</text>
     <text x="6280" y="6450" font-size="145">GLITCH</text>
+    <text x="6300" y="6950" font-size="120" fill="#52d6dc">USER</text>
+    <text x="6300" y="8020" font-size="120" fill="#e5b35b">STOCK</text>
     <text x="850" y="9450" font-size="125" fill="#5bd9df">V/OCT</text>
     <text x="2700" y="9450" font-size="125" fill="#5bd9df">WORD CV</text>
     <text x="4500" y="9450" font-size="125" fill="#5bd9df">TRIG/GATE</text>

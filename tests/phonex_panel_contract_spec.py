@@ -26,7 +26,7 @@ class PhonexPanelContractTest(unittest.TestCase):
         params = {
             "PITCH_PARAM", "FORMANT_PARAM", "SPEED_PARAM", "WARP_PARAM",
             "EXCITE_BLEND_PARAM", "BEND_PARAM", "GLITCH_PARAM", "WORD_PARAM",
-            "WORD_PUSH_PARAM",
+            "WORD_PUSH_PARAM", "BANK_PARAM",
         }
         inputs = {
             "VOCT_INPUT", "TRIG_GATE_INPUT", "SCRUB_CV_INPUT", "WARP_CV_INPUT",
@@ -36,7 +36,7 @@ class PhonexPanelContractTest(unittest.TestCase):
         lights = {"VOICED_LIGHT", "FRAME_LIGHT", "EOX_LIGHT", "BEND_LIGHT"}
         regions = {"UTTERANCE_FIELD", "PHRASE_DISPLAY", "WORD_SELECTOR"}
         required = params | inputs | outputs | lights | regions
-        self.assertEqual(len(params), 9)
+        self.assertEqual(len(params), 10)
         self.assertEqual(len(inputs), 7)
         self.assertEqual(len(outputs), 3)
         self.assertEqual(len(lights), 4)
@@ -51,6 +51,42 @@ class PhonexPanelContractTest(unittest.TestCase):
         }
         self.assertEqual(anchors["VOICED_LIGHT"]["cy"], anchors["WORD_PUSH_PARAM"]["cy"])
         self.assertEqual(anchors["VOICED_LIGHT"]["cx"], "6760")
+
+    def test_bank_switch_has_a_dedicated_block_beside_word_selector(self):
+        anchors = {
+            element.attrib["id"]: element.attrib
+            for element in MASTER.iter()
+            if element.attrib.get("id") in {"WORD_SELECTOR", "BANK_PARAM"}
+        }
+        selector_right = int(anchors["WORD_SELECTOR"]["x"]) + int(
+            anchors["WORD_SELECTOR"]["width"]
+        )
+        self.assertLess(selector_right, int(anchors["BANK_PARAM"]["cx"]))
+        labels = {(element.text or "").strip()
+                  for element in MASTER.iter() if element.tag.endswith("text")}
+        self.assertTrue({"STOCK", "USER"} <= labels)
+
+    def test_utterance_and_primary_control_row_use_full_panel_width(self):
+        anchors = {
+            element.attrib["id"]: element.attrib
+            for element in MASTER.iter()
+            if element.attrib.get("id") in {
+                "UTTERANCE_FIELD", "PITCH_PARAM", "SPEED_PARAM",
+                "WARP_PARAM", "WORD_PUSH_PARAM",
+            }
+        }
+        self.assertEqual(anchors["UTTERANCE_FIELD"]["width"], "6392")
+        self.assertEqual(
+            [anchors[name]["cx"] for name in (
+                "PITCH_PARAM", "SPEED_PARAM", "WARP_PARAM", "WORD_PUSH_PARAM"
+            )],
+            ["900", "2750", "4600", "6350"],
+        )
+        self.assertEqual({
+            anchors[name]["cy"] for name in (
+                "PITCH_PARAM", "SPEED_PARAM", "WARP_PARAM", "WORD_PUSH_PARAM"
+            )
+        }, {"4100"})
 
     def test_knob_and_jack_labels_are_below_their_controls(self):
         anchor_ids = {
@@ -92,6 +128,8 @@ class PhonexPanelContractTest(unittest.TestCase):
                         if f'addMainKnob(Phonex::{parameter}' in line)
             self.assertTrue(line.rstrip().endswith("true);"))
         self.assertIn('createParam<PhonexWordBar>', WIDGET)
+        self.assertIn('createParamCentered<PlasmaSwitch>', WIDGET)
+        self.assertIn('point("BANK_PARAM"', WIDGET)
         self.assertIn('std::lround(normalized * 63.f)', WIDGET)
         self.assertNotIn("BefacoTinyKnobWhite", WIDGET)
 

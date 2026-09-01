@@ -24,6 +24,8 @@ Read only the references required for the current task:
   Sibyl when an agent is expected to author music; preserve user-chosen manual sequencers.
 - `references/moirai.md` — reading, validating, editing, or performing with a Moirai
   envelope bank, including revision-conflict and adoption-boundary recovery.
+- `references/semantic.md` — discovering and editing structured module-owned documents
+  through the generic semantic tools, including Phonex user word banks.
 - `references/leviathan.md` — identifying, adding, routing, or recommending Leviathan
   modules and their expander relationships.
 - `references/tables.md` — module selection, patch audits, troubleshooting, layout, levels,

@@ -1221,7 +1221,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		glViewport(0, viewportY, activeWidth, activeHeight);
 		// The adaptive surface keeps a maximum-density backing allocation. Limit
 		// clears to the active zoom-dependent prefix instead of clearing the full
-		// 2x-capacity texture every animated frame.
+		// 3x-capacity texture every animated frame.
 		glEnable(GL_SCISSOR_TEST);
 		glScissor(0, viewportY, activeWidth, activeHeight);
 		glClearColor(0.f, 0.f, 0.f, 0.f);
@@ -1470,6 +1470,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const float pixelRatio = (APP && APP->window)
 			? APP->window->pixelRatio : 1.f;
 		visual_assets::AdaptiveGlSurfacePolicy policy;
+		policy.maxDensity = 3.f;
 		const bool measurePerf = isDragonKingDebugEnabled();
 		const auto renderStart = measurePerf
 			? std::chrono::steady_clock::now()

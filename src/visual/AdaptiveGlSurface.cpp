@@ -72,8 +72,14 @@ bool AdaptiveGlSurface::renderIfNeeded(NVGcontext* targetVg,
 	const float maxDensity = std::max(0.01f, policy.maxDensity);
 	const float minDensity = clamp(policy.minDensity, 0.01f, maxDensity);
 	const int quantum = std::max(1, policy.sizeQuantum);
-	const int capacityWidth = std::max(1, int(std::ceil(logicalSize.x * maxDensity)));
-	const int capacityHeight = std::max(1, int(std::ceil(logicalSize.y * maxDensity)));
+	int capacityWidth = std::max(1, int(std::ceil(logicalSize.x * maxDensity)));
+	int capacityHeight = std::max(1, int(std::ceil(logicalSize.y * maxDensity)));
+	if (policy.retainPeakCapacity) {
+		capacityWidth = std::max(capacityWidth,
+			std::max(frontCapacityWidth, backCapacityWidth));
+		capacityHeight = std::max(capacityHeight,
+			std::max(frontCapacityHeight, backCapacityHeight));
+	}
 	const float pixelRatio = std::max(1.f, std::floor(windowPixelRatio));
 	const float density = clamp(std::max(rackZoom, 1e-4f) * pixelRatio, minDensity, maxDensity);
 	auto quantizedExtent = [quantum](float logicalExtent, int capacity) {

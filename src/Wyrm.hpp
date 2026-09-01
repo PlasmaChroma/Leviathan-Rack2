@@ -271,7 +271,7 @@ struct Wyrm : Module {
 	std::atomic<bool> editorLocked {false};
 	std::atomic<int> renderMode {WYRM_RENDER_OPENGL_SHDR};
 	// Context-owned GL surface prototype. Intentionally not serialized while the
-	// compact/expanded lifecycle is being validated in Rack and DAW editors.
+	// editor-resize lifecycle is being validated in Rack and DAW editors.
 	std::atomic<bool> fixedSurfaceExperiment {true};
 	bool waveCustomized = false;
 	int selectedShape = SHAPE_SINE;

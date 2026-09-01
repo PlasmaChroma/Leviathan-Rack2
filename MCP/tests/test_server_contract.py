@@ -43,6 +43,9 @@ class ServerContractTest(unittest.TestCase):
             "vcv_undo", "vcv_save_patch", "vcv_sibyl_get_capabilities",
             "vcv_sibyl_get_composition", "vcv_sibyl_validate", "vcv_sibyl_edit",
             "vcv_sibyl_get_status", "vcv_sibyl_transport",
+            "vcv_semantic_get_capabilities", "vcv_semantic_get_document",
+            "vcv_semantic_validate", "vcv_semantic_edit",
+            "vcv_semantic_get_status", "vcv_semantic_command",
             "vcv_moirai_get_capabilities", "vcv_moirai_get_bank", "vcv_moirai_get_program",
             "vcv_moirai_validate", "vcv_moirai_edit", "vcv_moirai_get_status", "vcv_moirai_command",
             "vcv_octavia_get_monitors", "vcv_octavia_create_snapshot", "vcv_octavia_get_snapshot",
@@ -105,6 +108,18 @@ class ServerContractTest(unittest.TestCase):
         self.assertIn('Literal["finishCurrent", "restartActive"]', self.source)
         self.assertIn('f"semantic/{params.module_id}/status"', self.source)
         self.assertIn('f"semantic/{params.module_id}/command", "POST"', self.source)
+
+    def test_generic_semantic_tools_are_schema_agnostic_pass_throughs(self):
+        for name in (
+            "vcv_semantic_get_capabilities", "vcv_semantic_get_document",
+            "vcv_semantic_validate", "vcv_semantic_edit",
+            "vcv_semantic_get_status", "vcv_semantic_command",
+        ):
+            self.assertIn(f'name="{name}"', self.source)
+        self.assertIn("class SemanticRequestInput", self.source)
+        self.assertIn("request: dict", self.source)
+        self.assertIn('"POST", params.request', self.source)
+        self.assertNotIn("PhonexSemanticInput", self.source)
 
     def test_snapshot_tools_use_frozen_observation_routes(self):
         for route in (
