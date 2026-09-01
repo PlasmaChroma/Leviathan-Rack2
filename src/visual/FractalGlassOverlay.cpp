@@ -266,6 +266,8 @@ bool deleteEntry(size_t index) {
 } // namespace
 
 struct FractalGlassOverlay::Impl {
+	static constexpr uint32_t kNoColorPreview = 0x01000000u;
+
 	struct Region {
 		math::Rect rect;
 		float radius = 0.f;
@@ -305,6 +307,7 @@ struct FractalGlassOverlay::Impl {
 	uint64_t observedThemeSurfaceGeneration = 0u;
 	leviathan::theme::ThemeUiPoller themeUiPoller;
 	float textureAmountPreview = NAN;
+	std::atomic<uint32_t> colorPreviews[3];
 	bool hasSemanticRegion = false;
 	bool liveValid = false;
 	iris::NautiloidFractalSourceParams live;
@@ -325,6 +328,8 @@ struct FractalGlassOverlay::Impl {
 		: selectionKey(requestedSelectionKey)
 		, renderWidth(std::max(2, requestedRenderWidth))
 		, renderHeight(std::max(2, requestedRenderHeight)) {
+		for (std::atomic<uint32_t>& preview : colorPreviews)
+			preview.store(kNoColorPreview, std::memory_order_relaxed);
 		themeUiPoller.setOwner(themePollOwner);
 		std::vector<panel_svg::SvgRectMatch> matches;
 		if (panel_svg::findThemeGlassRectsMm(panelPath, &matches)) {
@@ -394,7 +399,27 @@ struct FractalGlassOverlay::Impl {
 		requestCv.notify_one();
 	}
 
+	static int colorPreviewIndex(leviathan::theme::ThemeRole role) {
+		switch (role) {
+			case leviathan::theme::ThemeRole::Input: return 0;
+			case leviathan::theme::ThemeRole::Output: return 1;
+			case leviathan::theme::ThemeRole::Text: return 2;
+			case leviathan::theme::ThemeRole::None:
+			default: return -1;
+		}
+	}
+
 	NVGcolor resolvedRegionColor(const Region& region, const leviathan::theme::ThemeSnapshot& theme) const {
+		const int previewIndex = colorPreviewIndex(region.themeRole);
+		if (previewIndex >= 0) {
+			const uint32_t packed = colorPreviews[previewIndex].load(std::memory_order_acquire);
+			if (packed != kNoColorPreview) {
+				return nvgRGB(
+					(packed >> 16u) & 0xffu,
+					(packed >> 8u) & 0xffu,
+					packed & 0xffu);
+			}
+		}
 		const leviathan::theme::ThemeColor* color = nullptr;
 		switch (region.themeRole) {
 			case leviathan::theme::ThemeRole::Input: color = &theme.colors.input; break;
@@ -520,6 +545,27 @@ void FractalGlassOverlay::setTextureAmountPreview(float amount) {
 	if (unchanged) return;
 	impl->textureAmountPreview = next;
 	if (impl->framebuffer) impl->framebuffer->setDirty();
+}
+
+void FractalGlassOverlay::setColorPreview(
+	leviathan::theme::ThemeRole role,
+	leviathan::theme::ThemeColor color) {
+	const int index = Impl::colorPreviewIndex(role);
+	if (index < 0) return;
+	const uint32_t packed = (uint32_t(color.r) << 16u)
+		| (uint32_t(color.g) << 8u) | uint32_t(color.b);
+	if (impl->colorPreviews[index].exchange(packed, std::memory_order_acq_rel) == packed)
+		return;
+	impl->requestRepalette();
+}
+
+void FractalGlassOverlay::clearColorPreview(leviathan::theme::ThemeRole role) {
+	const int index = Impl::colorPreviewIndex(role);
+	if (index < 0) return;
+	if (impl->colorPreviews[index].exchange(
+		Impl::kNoColorPreview, std::memory_order_acq_rel) == Impl::kNoColorPreview)
+		return;
+	impl->requestRepalette();
 }
 
 void FractalGlassOverlay::setLiveParams(const iris::NautiloidFractalSourceParams* params) {

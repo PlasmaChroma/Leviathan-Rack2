@@ -1,0 +1,31 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="60.96mm" height="128.5mm" viewBox="0 0 180 380" version="1.1" id="svg11" sodipodi:docname="Theme.svg" inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)">
+  <defs id="defs5">
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#111722" id="stop1" />
+      <stop offset="0.5" stop-color="#080d14" id="stop2" />
+      <stop offset="1" stop-color="#05080d" id="stop3" />
+    </linearGradient>
+    <radialGradient id="aura" cx="50%" cy="0" r="90%">
+      <stop offset="0" stop-color="#5740bf" stop-opacity="0.22" id="stop4" />
+      <stop offset="1" stop-color="#5740bf" stop-opacity="0" id="stop5" />
+    </radialGradient>
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient22" id="linearGradient500" gradientUnits="userSpaceOnUse" x1="5355.9189" y1="1516.2338" x2="6904.7725" y2="1512.3004" gradientTransform="matrix(0.02948054,0,0,0.02948054,-90.723647,-26.112674)" />
+    <linearGradient id="linearGradient22" inkscape:collect="always">
+      <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop22" />
+      <stop style="stop-color:#1cccd9;stop-opacity:1;" offset="1" id="stop23" />
+    </linearGradient>
+  </defs>
+  <rect width="180" height="380" fill="url(#panel)" id="rect5" />
+  <rect width="180" height="380" fill="url(#aura)" id="rect6" />
+  <g id="glass_input" data-theme-runtime-substrate="neutral">
+    <rect x="8" y="42" width="52" height="29" rx="4" fill="#000000" opacity="0.33" id="rect7" />
+  </g>
+  <g id="glass_output" data-theme-runtime-substrate="neutral">
+    <rect x="64" y="42" width="52" height="29" rx="4" fill="#000000" opacity="0.33" id="rect8" />
+  </g>
+  <g id="glass_text" data-theme-runtime-substrate="neutral">
+    <rect x="120" y="42" width="52" height="29" rx="4" fill="#000000" opacity="0.33" id="rect9" />
+  </g>
+  <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="41.6939" y="353.248" width="96.6122" height="36.1915" fill="none" />
+</svg>

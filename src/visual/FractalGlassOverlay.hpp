@@ -2,6 +2,7 @@
 
 #include "../NautiloidFractal.hpp"
 #include "../plugin.hpp"
+#include "../theme/ThemeTypes.hpp"
 
 #include <memory>
 
@@ -19,6 +20,12 @@ public:
 	// A local editor may preview texture opacity without publishing a global
 	// theme change. NaN clears the preview and resumes the shared setting.
 	void setTextureAmountPreview(float amount);
+	// A local editor may also preview a semantic glass palette without
+	// publishing a library-wide theme change.
+	void setColorPreview(
+		leviathan::theme::ThemeRole role,
+		leviathan::theme::ThemeColor color);
+	void clearColorPreview(leviathan::theme::ThemeRole role);
 	// Module-preview capture must wait until the asynchronous field has either
 	// produced pixels or established that no fallback selection is available.
 	bool isReadyForCapture() const;

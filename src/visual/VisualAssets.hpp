@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../plugin.hpp"
+#include "../theme/ThemeTypes.hpp"
 #include "ApertureLight.hpp"
 #include "PlasmaSwitch.hpp"
 
@@ -88,6 +89,10 @@ Widget* createPanelSurfaceEffectWidget(
 	Vec panelSizePx,
 	float previewProgressionPhase = -1.f,
 	const Widget* themePollOwner = nullptr);
+void setPanelSurfaceColorPreview(
+	Widget* panelSurface,
+	leviathan::theme::ThemeRole role,
+	leviathan::theme::ThemeColor color);
 Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float oversample = 2.0f);
 Widget* createThemedPanelLabelsWidget(
 	const char* labelsAssetPath,

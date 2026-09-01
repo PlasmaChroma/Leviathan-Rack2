@@ -434,6 +434,8 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 	uint64_t themeColorGeneration = 0u;
 	bool hasSemanticGlass = false;
 	float previewProgressionPhase = -1.f;
+	bool colorPreviewValid[3] = {false, false, false};
+	leviathan::theme::ThemeColor colorPreviews[3];
 
 	struct GlassRectArt {
 		math::Rect rectPx;
@@ -477,13 +479,37 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		return nvgRGB(color.r, color.g, color.b);
 	}
 
-	static NVGcolor resolveGlassPigment(
+	static int colorPreviewIndex(leviathan::theme::ThemeRole role) {
+		switch (role) {
+			case leviathan::theme::ThemeRole::Input: return 0;
+			case leviathan::theme::ThemeRole::Output: return 1;
+			case leviathan::theme::ThemeRole::Text: return 2;
+			case leviathan::theme::ThemeRole::None:
+			default: return -1;
+		}
+	}
+
+	NVGcolor resolveGlassPigment(
 		leviathan::theme::ThemeRole role,
-		NVGcolor authoredColor) {
+		NVGcolor authoredColor) const {
 		if (role == leviathan::theme::ThemeRole::None) {
 			return applyPanelGlassTint(authoredColor);
 		}
+		const int previewIndex = colorPreviewIndex(role);
+		if (previewIndex >= 0 && colorPreviewValid[previewIndex])
+			return themeColorNvg(colorPreviews[previewIndex]);
 		return themeColorNvg(leviathan::theme::color(role));
+	}
+
+	void setColorPreview(
+		leviathan::theme::ThemeRole role,
+		leviathan::theme::ThemeColor color) {
+		const int index = colorPreviewIndex(role);
+		if (index < 0) return;
+		if (colorPreviewValid[index] && colorPreviews[index] == color) return;
+		colorPreviews[index] = color;
+		colorPreviewValid[index] = true;
+		if (framebuffer) framebuffer->setDirty();
 	}
 
 	static math::Rect rectIntersection(const math::Rect& a, const math::Rect& b) {
@@ -1537,6 +1563,21 @@ Widget* createPanelSurfaceEffectWidget(
 	effect->screenRectsPx = it->second.screenRectsPx;
 	fb->addChild(effect);
 	return fb;
+}
+
+void setPanelSurfaceColorPreview(
+	Widget* panelSurface,
+	leviathan::theme::ThemeRole role,
+	leviathan::theme::ThemeColor color) {
+	auto* framebuffer = dynamic_cast<widget::FramebufferWidget*>(panelSurface);
+	if (!framebuffer) return;
+	for (Widget* child : framebuffer->children) {
+		auto* effect = dynamic_cast<PanelSurfaceEffectWidget*>(child);
+		if (effect) {
+			effect->setColorPreview(role, color);
+			return;
+		}
+	}
 }
 
 struct CachedPanelLabelsWidget final : Widget {

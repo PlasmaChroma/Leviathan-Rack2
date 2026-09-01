@@ -94,6 +94,7 @@ struct ThemeEditor final : TransparentWidget {
 	enum DragTarget { DragNone, DragSv, DragHue, DragTexture };
 
 	widget::FramebufferWidget* framebuffer = nullptr;
+	Widget* panelSurface = nullptr;
 	visual_assets::FractalGlassOverlay* themePreviewOverlay = nullptr;
 	ThemeRole selectedRole = ThemeRole::Input;
 	ThemeRole textPreviewBackgroundRole = ThemeRole::Input;
@@ -170,6 +171,30 @@ struct ThemeEditor final : TransparentWidget {
 		pickerColor = current;
 		pickerRole = selectedRole;
 		pickerValid = true;
+	}
+
+	void syncGlassColorPreviews(const ThemeSnapshot& snapshot) {
+		if (!themePreviewOverlay) return;
+		const bool draggingColor = dragTarget == DragSv || dragTarget == DragHue;
+		ThemeColor inputColor = snapshot.colors.input;
+		ThemeColor outputColor = snapshot.colors.output;
+		if (draggingColor && pickerValid && pickerRole == ThemeRole::Input)
+			inputColor = pickerColor;
+		if (draggingColor && pickerValid && pickerRole == ThemeRole::Output)
+			outputColor = pickerColor;
+		const ThemeColor textBackgroundColor = textPreviewBackgroundRole == ThemeRole::Output
+			? outputColor : inputColor;
+		themePreviewOverlay->setColorPreview(ThemeRole::Input, inputColor);
+		themePreviewOverlay->setColorPreview(ThemeRole::Output, outputColor);
+		// The TEXT card previews text legibility over the last selected jack role;
+		// its glass palette is therefore a background preview, not the text color.
+		themePreviewOverlay->setColorPreview(ThemeRole::Text, textBackgroundColor);
+		visual_assets::setPanelSurfaceColorPreview(
+			panelSurface, ThemeRole::Input, inputColor);
+		visual_assets::setPanelSurfaceColorPreview(
+			panelSurface, ThemeRole::Output, outputColor);
+		visual_assets::setPanelSurfaceColorPreview(
+			panelSurface, ThemeRole::Text, textBackgroundColor);
 	}
 
 	void publishDragValue(bool force) {
@@ -330,6 +355,7 @@ struct ThemeEditor final : TransparentWidget {
 				commitDrag();
 		}
 		const std::uint64_t current = leviathan::theme::generation();
+		syncGlassColorPreviews(leviathan::theme::read().snapshot);
 		if (current != observedGeneration) {
 			observedGeneration = current;
 			dirty();
@@ -407,9 +433,6 @@ struct ThemeEditor final : TransparentWidget {
 		const float hue = pickerHue;
 		const float saturation = pickerSaturation;
 		const float value = pickerValue;
-
-		text(args, box.size.x * 0.5f, 17.f, 18.f, "THEME", nvgRGBA(240, 235, 255, 255));
-		text(args, box.size.x * 0.5f, 31.f, 8.5f, "GLOBAL CHROMA FIELD", nvgRGBA(129, 148, 166, 255));
 
 		const char* roleNames[] = {"INPUT", "OUTPUT", "TEXT"};
 		const ThemeRole roles[] = {ThemeRole::Input, ThemeRole::Output, ThemeRole::Text};
@@ -506,11 +529,10 @@ struct ThemeEditor final : TransparentWidget {
 struct ThemeModuleWidget final : ModuleWidget {
 	ThemeModuleWidget(ThemeModule* module) {
 		setModule(module);
-		const std::string panelPath = asset::plugin(pluginInstance, "res/Theme.svg");
-		setPanel(createPanel(panelPath));
-		Widget* panelSurface = visual_assets::createPanelSurfaceEffectWidget(
-			panelPath, box.size, -1.f, this);
-		addChild(panelSurface);
+		visual_assets::SplitPanelRenderer splitPanel(this, "res/Theme.panel.svg");
+		const std::string& panelPath = splitPanel.panelPath();
+		splitPanel.addLabels("res/Theme.labels.svg");
+		Widget* panelSurface = splitPanel.panelSurfaceEffectWidget();
 		auto* themePreviewOverlay = visual_assets::addFractalGlassOverlay(
 			this, panelPath, panelSurface);
 
@@ -519,11 +541,12 @@ struct ThemeModuleWidget final : ModuleWidget {
 		auto* editor = new ThemeEditor;
 		editor->box.size = box.size;
 		editor->framebuffer = framebuffer;
+		editor->panelSurface = panelSurface;
 		editor->themePreviewOverlay = themePreviewOverlay;
 		framebuffer->addChild(editor);
 		addChild(framebuffer);
 
-		visual_assets::addCompactLeviathanLogoBranding(this, panelPath);
+		splitPanel.addCompactLeviathanLogoBranding();
 		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
 		addChild(createWidget<CyanOrbScrew>(
 			Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0.f)));
