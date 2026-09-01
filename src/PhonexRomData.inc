@@ -34,7 +34,7 @@ const std::array<PhonePrototype, kPhoneCount> kGeneratedPhonePrototypes {{
 	PhonePrototype{6u, 2u, {{LpcFrame{0.7f, 84.0f, {{-0.896658179f, 0.731940038f, 0.528155199f, 0.273677011f, 0.0630820521f, -0.075958036f, -0.133011615f, 0.00191485554f, 0.325926117f, 0.586213776f}}, Excitation::Voiced}, LpcFrame{0.67f, 78.0f, {{0.371801046f, 0.668766587f, -0.178092964f, -0.328120487f, -0.346956549f, -0.401444679f, -0.137261608f, 0.283685737f, 0.459173281f, 0.586213776f}}, Excitation::Voiced}, LpcFrame{}}}},
 	PhonePrototype{3u, 2u, {{LpcFrame{0.0f, 0.0f, {{0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f}}, Excitation::Silence}, LpcFrame{0.32f, 0.0f, {{-0.08f, 0.16f, -0.22f, 0.3f, -0.35f, 0.28f, -0.2f, 0.13f, -0.07f, 0.03f}}, Excitation::Unvoiced}, LpcFrame{}}}},
 	PhonePrototype{4u, 1u, {{LpcFrame{0.56f, 82.0f, {{-0.761894267f, 0.79866047f, -0.400585257f, -0.352508111f, 0.138985502f, 0.315885078f, 0.0482447724f, -0.0575341393f, 0.22496342f, 0.550514158f}}, Excitation::Voiced}, LpcFrame{}, LpcFrame{}}}},
-	PhonePrototype{4u, 1u, {{LpcFrame{0.34f, 0.0f, {{-0.28f, 0.58f, -0.68f, 0.55f, -0.39f, 0.27f, -0.17f, 0.1f, -0.05f, 0.02f}}, Excitation::Unvoiced}, LpcFrame{}, LpcFrame{}}}},
+	PhonePrototype{4u, 1u, {{LpcFrame{0.34f, 0.0f, {{0.443359375f, -0.546875f, -0.55078125f, -0.001953125f, -0.39f, 0.27f, -0.17f, 0.1f, -0.05f, 0.02f}}, Excitation::Unvoiced}, LpcFrame{}, LpcFrame{}}}},
 	PhonePrototype{4u, 1u, {{LpcFrame{0.36f, 0.0f, {{-0.18f, 0.42f, -0.58f, 0.48f, -0.34f, 0.24f, -0.15f, 0.09f, -0.05f, 0.02f}}, Excitation::Unvoiced}, LpcFrame{}, LpcFrame{}}}},
 	PhonePrototype{3u, 2u, {{LpcFrame{0.0f, 0.0f, {{0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f}}, Excitation::Silence}, LpcFrame{0.34f, 0.0f, {{-0.28f, 0.58f, -0.68f, 0.55f, -0.39f, 0.27f, -0.17f, 0.1f, -0.05f, 0.02f}}, Excitation::Unvoiced}, LpcFrame{}}}},
 	PhonePrototype{4u, 1u, {{LpcFrame{0.27f, 0.0f, {{-0.12f, 0.26f, -0.36f, 0.32f, -0.24f, 0.18f, -0.12f, 0.08f, -0.04f, 0.02f}}, Excitation::Unvoiced}, LpcFrame{}, LpcFrame{}}}},
@@ -116,7 +116,7 @@ const std::array<StringView, kBundledPhraseCount> kGeneratedPhraseScripts {{
 	"L AH V AY1 AH TH AH N",
 	"F OW1 N EH K S"
 }};
-const std::array<StringView, 115> kGeneratedDictionaryWords {{
+const std::array<StringView, 117> kGeneratedDictionaryWords {{
 	"A",
 	"B",
 	"C",
@@ -211,6 +211,7 @@ const std::array<StringView, 115> kGeneratedDictionaryWords {{
 	"CLOCK",
 	"ENVELOPE",
 	"FILTER",
+	"FIRE",
 	"FORMANT",
 	"FREQUENCY",
 	"GATE",
@@ -230,10 +231,11 @@ const std::array<StringView, 115> kGeneratedDictionaryWords {{
 	"SYNTHESIZER",
 	"TEMPO",
 	"TRIGGER",
+	"TRUCK",
 	"VOLT",
 	"WAVEFORM"
 }};
-const std::array<StringView, 115> kGeneratedDictionaryScripts {{
+const std::array<StringView, 117> kGeneratedDictionaryScripts {{
 	"EY1",
 	"B IY1",
 	"S IY1",
@@ -328,6 +330,7 @@ const std::array<StringView, 115> kGeneratedDictionaryScripts {{
 	"K L AA1 K",
 	"EH1 N V AH L OW P",
 	"F IH1 L T ER",
+	"F AY1 ER",
 	"F AO1 R M AH N T",
 	"F R IY1 K W AH N S IY",
 	"G EY1 T",
@@ -347,6 +350,7 @@ const std::array<StringView, 115> kGeneratedDictionaryScripts {{
 	"S IH1 N TH AH S AY Z ER",
 	"T EH1 M P OW",
 	"T R IH1 G ER",
+	"T R AH1 K",
 	"V OW1 L T",
 	"W EY1 V F AO R M"
 }};

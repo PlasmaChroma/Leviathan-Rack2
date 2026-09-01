@@ -708,6 +708,11 @@ void phase5PronunciationContract(Tests& tests) {
 			== phonex::CompileStatus::Ok
 		&& equalSequenceFrames(dictionary, authored),
 		"modular vocabulary uses an authored pronunciation");
+	tests.expect(compile("fire truck", dictionary).status == phonex::CompileStatus::Ok
+		&& phonex::compileDirectPhonemes("F AY1 ER SIL T R AH1 K", authored)
+			== phonex::CompileStatus::Ok
+		&& equalSequenceFrames(dictionary, authored),
+		"FIRE TRUCK uses exact diphthong and stressed-vowel pronunciations");
 
 	phonex::LpcSequence integer;
 	phonex::LpcSequence integerWords;

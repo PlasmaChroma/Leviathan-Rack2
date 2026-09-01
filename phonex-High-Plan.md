@@ -10,7 +10,7 @@ vintage LPC character
 |---|---|---|
 | Q0 harness and baseline | Complete | `q0-complete`: 186 deterministic renders plus post-TMS report |
 | Q0.5 neutral clean path | Complete | `q05-clean-selected`: neutral WARP, linear safety stage, six-pole reconstruction |
-| Q1 corpus | Ready to execute | Correct post-TMS fricative ordering |
+| Q1 corpus | In progress | Q1a `S` accepted; Q1b FIRE/TRUCK pronunciation corrected |
 | Q2 transitions | Waiting on Q1 | Replace universal midpoint with selective policy |
 | Q3 pronunciation | Waiting on stable speech | Add exact-phone tests before new G2P rules |
 | Q4 optional engine work | Deferred | Consider only after measured plateau |
@@ -666,6 +666,8 @@ Maintain a compact decision log here as phases execute:
 | `q05-filter49-4pole` | Four poles may meet both reconstruction targets | 0.480 dB passband ripple; 43.28 dB first-image rejection | Not required | Rejected |
 | `q05-filter49-6pole` / `q05-clean-selected` | Six poles should meet both targets at acceptable cost | 0.170 dB ripple; 55.51 dB rejection; 192 kHz median 49.97 ns/sample versus 46.19 for two poles (+8.2%); 196 deterministic renders passed | Deferred | Selected as runtime default; Q0.5 complete |
 | Q0.5 Windows validation | Confirm the selected engine under the authoritative toolchain | Native `test-fast` passed; the PHONEX binary was then force-rebuilt to avoid a stale `.exe` and passed 109748 checks; incremental MINGW64 `plugin.dll` built successfully | Rack audition deferred | Engineering gate passed; proceed to Q1 |
+| `q1a-s-candidate1` | A moderate post-TMS `/s/` target should separate `S` from `SH` without a level boost | `S` centroid 1.94→3.07 kHz and 3–6 kHz energy 1.23%→64.55%; `SH` remained 1.94 kHz/15.05%; isolated `S` remained slightly quieter than `SH`; 26/196 renders changed; deterministic, bounded, unclipped; native 109748-check test and `plugin.dll` build passed | Listening packet ready | Selected as incremental Q1a corpus change |
+| `q1b-fire-truck` | FIRE sounding like FUR is a pronunciation-path defect | Fallback was `F ER EH`; authored result is exactly `F AY1 ER SIL T R AH1 K`; deterministic typed packet and 109749-check native Windows test passed; authoritative `plugin.dll` built | Listening sample ready | Selected; retain as exact dictionary pronunciations |
 
 ### Autonomous decision rules
 
@@ -838,20 +840,28 @@ remain intentional, finite, and musically useful.
 
 ## Immediate next pass
 
-Q0 and Q0.5 are complete. Execute the first Q1 corpus loop:
+Q0, Q0.5, and the first Q1a `/s/` correction are complete. Continue Q1
+incrementally:
 
-1. use `q05-clean-selected` as the sole clean-path baseline;
-2. add a deterministic offline search/report for the four TMS coefficients that
-   survive in unvoiced frames;
-3. rank candidate `S/SH/F/TH` frames by isolated spectral centroid, 3–6 kHz
-   energy, total energy, and separation from the other three phones;
-4. change only the source phone anchors in `tools/phonex_rom/phonemes.json`,
+1. use `q1a-s-candidate1` as the current corpus baseline while retaining
+   `q05-clean-selected` for pre-Q1 comparison;
+2. audit reported phrases for dictionary/G2P errors before changing acoustics;
+3. review diphthong and rhotic trajectories (`AY/ER`, `EY/IH`, `AO/OW`) in
+   controlled contexts;
+4. review the remaining close vowel pairs (`UH/UW`, `AE/EH`, `AA/AH`) one pair
+   at a time;
+5. collect the user's weak isolated-letter list and map each letter to its phone
+   sequence before changing shared material;
+6. rank any needed `SH/F/TH` or stop-release candidates by isolated spectral
+   centroid, 3–6 kHz energy, total energy, and separation;
+7. change only one source phone or release anchor at a time in
+   `tools/phonex_rom/phonemes.json`,
    regenerate the ROM include, and render a new immutable tag;
-5. require `S` to exceed `SH` in both centroid and 3–6 kHz energy while `F` and
+8. require `S` to exceed `SH` in both centroid and 3–6 kHz energy while `F` and
    `TH` remain lower-energy and diffuse;
-6. reject candidates that materially collapse vowel metrics, introduce clipping
+9. reject candidates that materially collapse vowel metrics, introduce clipping
    or discontinuity outliers, or require a global gain/filter adjustment;
-7. retain the best machine-passing candidate and then move to stop-release
+10. retain the best machine-passing candidate and then move to stop-release
    separation while the randomized Q1 listening packet accumulates.
 
 No further clean-path reconstruction, output-stage, or global noise change is

@@ -104,7 +104,7 @@ def build_cases() -> list[RenderCase]:
                                 ("--phones", script)))
 
     for index, text in enumerate(("HELLO COMPUTER", "SPEAK AGAIN", "READY TO START",
-                                  "VOLTAGE SIGNAL")):
+                                  "VOLTAGE SIGNAL", "FIRE TRUCK")):
         cases.append(RenderCase(f"typed-{index:02d}-{slug(text)}", "typed", text,
                                 ("--text", text)))
     for index, text in enumerate(("MAKE", "YELLOW", "THOSE", "PLAYED", "SYNTHESIZER")):
