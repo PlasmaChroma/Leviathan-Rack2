@@ -166,7 +166,7 @@ MINGW_TEST_CPPFLAGS += -D_USE_MATH_DEFINES
 MINGW_TEST_STACK_FLAGS += -Wl,--stack,8388608
 endif
 
-.PHONY: generate-panel-anchor-atlas generate-mandelwake-tables check-mandelwake-tables validate-plugin-json phonex-phase2-audition phonex-phase4-audition phonex-phase8-audition doorstop-reference-grid doorstop-corpus-audit doorstop-reference-evaluate doorstop-variant-grid doorstop-variant-evaluate doorstop-boing-audition doorstop-v3-paired-audition doorstop-v2-phase-grid doorstop-v2-phase-evaluate
+.PHONY: generate-panel-anchor-atlas generate-mandelwake-tables check-mandelwake-tables validate-plugin-json phonex-quality-audit phonex-quality-compare phonex-phase2-audition phonex-phase4-audition phonex-phase8-audition doorstop-reference-grid doorstop-corpus-audit doorstop-reference-evaluate doorstop-variant-grid doorstop-variant-evaluate doorstop-boing-audition doorstop-v3-paired-audition doorstop-v2-phase-grid doorstop-v2-phase-evaluate
 generate-panel-anchor-atlas:
 	python3 tools/generate_panel_anchor_atlas.py
 
@@ -179,28 +179,43 @@ check-mandelwake-tables:
 validate-plugin-json:
 	python3 tools/validate_plugin_json_tags.py plugin.json
 
-phonex-phase2-audition: build/tools/phonex_render
-	build/tools/phonex_render phonex_phase2.wav --fixture
+PHONEX_QUALITY_TAG ?= working
+PHONEX_QUALITY_VERIFY ?= 1
+PHONEX_QUALITY_RENDERER_ARGS ?=
+PHONEX_QUALITY_BASELINE ?= q0-complete
+PHONEX_QUALITY_CANDIDATE ?= working
+PHONEX_QUALITY_VERIFY_FLAG = $(if $(filter 1,$(PHONEX_QUALITY_VERIFY)),--verify-determinism,)
 
-phonex-phase4-audition: build/tools/phonex_render
-	build/tools/phonex_render phonex_hello.wav 36
-	build/tools/phonex_render phonex_robot.wav 47
-	build/tools/phonex_render phonex_speak.wav 38
-	build/tools/phonex_render phonex_leviathan.wav 62
-	build/tools/phonex_render phonex_phonex.wav 63
+phonex-quality-audit: build/tools/phonex_render build/tools/phonex_corpus_report
+	python3 tools/phonex_quality_audit.py \
+		--renderer build/tools/phonex_render \
+		--corpus-report build/tools/phonex_corpus_report \
+		--tag "$(PHONEX_QUALITY_TAG)" $(PHONEX_QUALITY_VERIFY_FLAG) $(foreach arg,$(PHONEX_QUALITY_RENDERER_ARGS),--renderer-arg=$(arg))
 
-phonex-phase8-audition: build/tools/phonex_render
-	build/tools/phonex_render phonex_hello.wav 36
-	build/tools/phonex_render phonex_speak.wav 38
-	build/tools/phonex_render phonex_robot.wav 47
-	build/tools/phonex_render phonex_computer.wav 45
-	build/tools/phonex_render phonex_one_two_three.wav --text "ONE TWO THREE"
-	build/tools/phonex_render phonex_leviathan.wav 62
-	build/tools/phonex_render phonex_phonex.wav 63
+phonex-quality-compare:
+	python3 tools/phonex_quality_compare.py \
+		"$(PHONEX_QUALITY_BASELINE)" "$(PHONEX_QUALITY_CANDIDATE)"
+
+phonex-phase2-audition:
+	$(MAKE) --no-print-directory phonex-quality-audit PHONEX_QUALITY_TAG=phase2-audition
+
+phonex-phase4-audition:
+	$(MAKE) --no-print-directory phonex-quality-audit PHONEX_QUALITY_TAG=phase4-audition
+
+phonex-phase8-audition:
+	$(MAKE) --no-print-directory phonex-quality-audit PHONEX_QUALITY_TAG=phase8-audition
 
 build/tools/phonex_render: tools/phonex_render.cpp src/PhonexEngine.cpp src/PhonexEngine.hpp src/PhonexFixtures.cpp src/PhonexFixtures.hpp src/PhonexTypes.hpp src/PhonexRom.cpp src/PhonexRom.hpp src/PhonexRomData.inc src/PhonexSequenceCompiler.cpp src/PhonexSequenceCompiler.hpp src/PhonexPronunciation.cpp src/PhonexPronunciation.hpp | build
 	mkdir -p build/tools
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tools/phonex_render.cpp src/PhonexEngine.cpp src/PhonexFixtures.cpp src/PhonexRom.cpp src/PhonexSequenceCompiler.cpp src/PhonexPronunciation.cpp -o $@
+
+build/tools/phonex_corpus_report: tools/phonex_corpus_report.cpp src/PhonexRom.cpp src/PhonexRom.hpp src/PhonexRomData.inc src/PhonexTypes.hpp src/PhonexSequenceCompiler.cpp src/PhonexSequenceCompiler.hpp | build
+	mkdir -p build/tools
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tools/phonex_corpus_report.cpp src/PhonexRom.cpp src/PhonexSequenceCompiler.cpp -o $@
+
+build/tools/phonex_benchmark: tools/phonex_benchmark.cpp src/PhonexEngine.cpp src/PhonexEngine.hpp src/PhonexFixtures.cpp src/PhonexFixtures.hpp src/PhonexTypes.hpp | build
+	mkdir -p build/tools
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tools/phonex_benchmark.cpp src/PhonexEngine.cpp src/PhonexFixtures.cpp -o $@
 
 build/tools/doorstop_reference_render: tools/doorstop_reference_render.cpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/HelicalContinuumEngine.cpp src/HelicalContinuumEngine.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build
 	mkdir -p build/tools

@@ -142,6 +142,21 @@ bool predictorToReflection(Predictor coefficients,
 
 } // namespace
 
+float applyOutputStage(float reconstructed, OutputStage stage) {
+	if (stage == OutputStage::LegacyCurve)
+		return reconstructed / (0.25f + std::abs(reconstructed) * 0.2f);
+	constexpr float kLinearOutputGain = 1.1f;
+	const float linear = reconstructed * kLinearOutputGain;
+	if (stage == OutputStage::CalibratedLinear)
+		return linear;
+	const float magnitude = std::abs(linear);
+	if (magnitude <= 4.5f)
+		return linear;
+	const float excess = magnitude - 4.5f;
+	const float limited = 4.5f + 0.5f * excess / (0.5f + excess);
+	return std::copysign(limited, linear);
+}
+
 float tms5100InterpolationMix(float frameFraction) {
 	// The TMS5100 approached each target through eight fixed interpolation
 	// periods. These cumulative mixes are the result of its successive
@@ -193,6 +208,17 @@ std::array<float, kLpcOrder> formantShiftReflection(
 	}
 	std::array<float, kLpcOrder> result{};
 	return predictorToReflection(shifted, result) ? result : reflection;
+}
+
+std::array<float, kLpcOrder> warpReflectionCoefficients(
+	const std::array<float, kLpcOrder>& reflection, float amount) {
+	if (std::abs(amount) < 1e-6f)
+		return reflection;
+	std::array<float, kLpcOrder> result{};
+	const float scale = 1.f + 0.8f * clampf(amount, -1.f, 1.f);
+	for (int i = 0; i < kLpcOrder; ++i)
+		result[i] = clampf(fastTanh(reflection[i] * scale), -0.995f, 0.995f);
+	return result;
 }
 
 std::uint32_t xorshift32(std::uint32_t& state) {
@@ -313,8 +339,9 @@ void Engine::clearSynthesis() {
 	noise_.reset();
 	internalPhase_ = 0.0;
 	heldSample_ = 0.f;
-	reconstructionZ1_ = 0.f;
-	reconstructionZ2_ = 0.f;
+	lastVoicedPitchPeriod_ = 0.f;
+	reconstructionZ1_.fill(0.f);
+	reconstructionZ2_.fill(0.f);
 	jitterScale_ = 1.f;
 	bendState_ = seed_;
 	warpedReflectionValid_ = false;
@@ -325,26 +352,41 @@ float Engine::reconstructFiltered(float input, float hostSampleRate) {
 		return input;
 	if (std::abs(hostSampleRate - reconstructionHostRate_) > 0.5f
 		|| internalRate_ != reconstructionInternalRate_) {
-		// A second-order Butterworth removes zero-order-hold images without the
-		// broad passband droop of the former one-pole smoother. Coefficients are
-		// rebuilt only when a sample rate changes, never per synthesis tick.
-		const float cutoff = std::min(0.45f * internalRate_, 0.45f * hostSampleRate);
+		// Cascaded Butterworth sections remove zero-order-hold images while
+		// preserving the measured speech passband. Coefficients are rebuilt only
+		// when a sample rate or selected offline-tested order changes.
+		const float cutoff = std::min(0.49f * internalRate_, 0.45f * hostSampleRate);
 		const float k = std::tan(3.14159265358979323846f * cutoff / hostSampleRate);
-		const float norm = 1.f / (1.f + 1.4142135623730951f * k + k * k);
-		reconstructionB0_ = k * k * norm;
-		reconstructionB1_ = 2.f * reconstructionB0_;
-		reconstructionB2_ = reconstructionB0_;
-		reconstructionA1_ = 2.f * (k * k - 1.f) * norm;
-		reconstructionA2_ = (1.f - 1.4142135623730951f * k + k * k) * norm;
+		constexpr std::array<std::array<float, 3>, 3> kButterworthQ {{
+			{{0.7071067812f, 0.f, 0.f}},
+			{{0.5411961001f, 1.306562965f, 0.f}},
+			{{0.5176380902f, 0.7071067812f, 1.931851653f}},
+		}};
+		const int sections = static_cast<int>(reconstructionOrder_);
+		for (int section = 0; section < sections; ++section) {
+			const float inverseQ = 1.f / kButterworthQ[sections - 1][section];
+			const float norm = 1.f / (1.f + inverseQ * k + k * k);
+			reconstructionB0_[section] = k * k * norm;
+			reconstructionB1_[section] = 2.f * reconstructionB0_[section];
+			reconstructionB2_[section] = reconstructionB0_[section];
+			reconstructionA1_[section] = 2.f * (k * k - 1.f) * norm;
+			reconstructionA2_[section] = (1.f - inverseQ * k + k * k) * norm;
+		}
 		reconstructionHostRate_ = hostSampleRate;
 		reconstructionInternalRate_ = internalRate_;
-		reconstructionZ1_ = 0.f;
-		reconstructionZ2_ = 0.f;
+		reconstructionZ1_.fill(0.f);
+		reconstructionZ2_.fill(0.f);
 	}
-	const float output = reconstructionB0_ * input + reconstructionZ1_;
-	reconstructionZ1_ = reconstructionB1_ * input - reconstructionA1_ * output
-		+ reconstructionZ2_;
-	reconstructionZ2_ = reconstructionB2_ * input - reconstructionA2_ * output;
+	float output = input;
+	const int sections = static_cast<int>(reconstructionOrder_);
+	for (int section = 0; section < sections; ++section) {
+		const float next = reconstructionB0_[section] * output + reconstructionZ1_[section];
+		reconstructionZ1_[section] = reconstructionB1_[section] * output
+			- reconstructionA1_[section] * next + reconstructionZ2_[section];
+		reconstructionZ2_[section] = reconstructionB2_[section] * output
+			- reconstructionA2_[section] * next;
+		output = next;
+	}
 	return output;
 }
 
@@ -431,11 +473,11 @@ const std::array<float, kLpcOrder>& Engine::warpedReflection(
 		|| !sameReflection(frame.reflection, cachedReflection_)) {
 		const std::array<float, kLpcOrder> formantReflection =
 			formantShiftReflection(frame.reflection, formant);
+		const std::array<float, kLpcOrder> warpReflection =
+			warpReflectionCoefficients(formantReflection, warp);
 		for (int i = 0; i < kLpcOrder; ++i) {
-			const float clean = clampf(
-				fastTanh(formantReflection[i] * (1.f + 0.8f * warp)),
-				-0.995f, 0.995f);
-			warpedReflection_[i] = clampf(clean * overdrive, -1.08f, 1.08f);
+			warpedReflection_[i] = clampf(
+				warpReflection[i] * overdrive, -1.08f, 1.08f);
 		}
 		cachedReflection_ = frame.reflection;
 		cachedFormant_ = formant;
@@ -455,8 +497,11 @@ float Engine::synthesizeTick(const LpcFrame& frame, const EngineControls& contro
 	float automatic = 0.f;
 	const float pitchScale = fastExp2(
 		controls.pitchOctaves + controls.voct);
-	if (frame.excitation == Excitation::Voiced)
+	if (frame.excitation == Excitation::Voiced) {
+		if (frame.pitchPeriod10k > 0.f && std::isfinite(frame.pitchPeriod10k))
+			lastVoicedPitchPeriod_ = frame.pitchPeriod10k;
 		automatic = chirp_.next(frame.pitchPeriod10k / pitchScale);
+	}
 	else if (frame.excitation == Excitation::Unvoiced)
 		automatic = noise_.next();
 	const float blend = clampf(controls.exciteBlend, 0.f, 1.f);
@@ -464,8 +509,10 @@ float Engine::synthesizeTick(const LpcFrame& frame, const EngineControls& contro
 	if (blend > 0.f) {
 		float forced = 0.f;
 		if (controls.forcedExcitation == ForcedExcitation::Voiced) {
+			const float fallbackPitch = lastVoicedPitchPeriod_ > 0.f
+				? lastVoicedPitchPeriod_ : internalRate_ / 125.f;
 			forced = frame.excitation == Excitation::Voiced
-				? automatic : chirp_.next(frame.pitchPeriod10k / pitchScale);
+				? automatic : chirp_.next(fallbackPitch / pitchScale);
 		}
 		else {
 			forced = frame.excitation == Excitation::Unvoiced ? automatic : noise_.next();
@@ -550,7 +597,7 @@ EngineOutput Engine::process(const EngineControls& controls) {
 		voltage = 0.f;
 	}
 	else {
-		voltage = voltage / (0.25f + std::abs(voltage) * 0.2f);
+		voltage = applyOutputStage(voltage, outputStage_);
 		voltage = clampf(voltage, -5.f, 5.f);
 	}
 	EngineOutput output;

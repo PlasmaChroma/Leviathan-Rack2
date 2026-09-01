@@ -282,6 +282,13 @@ void pitchContract(Tests& tests) {
 }
 
 void schedulerAndSynthesisContract(Tests& tests) {
+	tests.expect(phonex::applyOutputStage(1.f, phonex::OutputStage::LegacyCurve)
+		== 1.f / 0.45f, "legacy output curve remains selectable for comparison");
+	tests.expect(phonex::applyOutputStage(1.f, phonex::OutputStage::CalibratedLinear) == 1.1f,
+		"calibrated linear output is exact below the safety region");
+	tests.expect(phonex::applyOutputStage(1.f, phonex::OutputStage::CalibratedLimited) == 1.1f
+		&& phonex::applyOutputStage(4.f, phonex::OutputStage::CalibratedLimited) < 5.f,
+		"calibrated limiter is transparent below 4.5 V and bounded above it");
 	const auto voiced = phonex::makeVoicedFixture(32);
 	phonex::Engine engine;
 	engine.setSequence(&voiced);
@@ -327,8 +334,8 @@ void schedulerAndSynthesisContract(Tests& tests) {
 	controls.externalExcitation = 2.5f;
 	engine.setReconstructionMode(phonex::ReconstructionMode::RawHold);
 	const auto external = engine.process(controls);
-	tests.expect(std::abs(external.audio - (10.f / 7.f)) < 1e-5f,
-		"external carrier retains frame envelope and output calibration");
+	tests.expect(std::abs(external.audio - 0.55f) < 1e-5f,
+		"external carrier retains frame envelope and neutral output calibration");
 
 	controls.externalExcitation = std::numeric_limits<float>::quiet_NaN();
 	tests.expect(engine.process(controls).audio == 0.f, "nonfinite DSP is contained");
@@ -338,6 +345,20 @@ void schedulerAndSynthesisContract(Tests& tests) {
 	engine.setReconstructionMode(phonex::ReconstructionMode::Filtered);
 	const auto filtered = engine.process(controls);
 	tests.expect(std::isfinite(filtered.audio), "filtered reconstruction is finite");
+
+	const phonex::LpcSequence forcedSequence = phonex::makeUnvoicedFixture(16);
+	phonex::Engine forcedVoiced;
+	forcedVoiced.setSequence(&forcedSequence);
+	phonex::EngineControls forcedControls;
+	forcedControls.hostSampleRate = 10000.f;
+	forcedControls.speed = 0.f;
+	forcedControls.exciteBlend = 1.f;
+	forcedControls.forcedExcitation = phonex::ForcedExcitation::Voiced;
+	float forcedPeak = 0.f;
+	for (int sample = 0; sample < 256; ++sample)
+		forcedPeak = std::max(forcedPeak, std::abs(forcedVoiced.process(forcedControls).audio));
+	tests.expect(forcedPeak > 0.05f,
+		"forced voiced excitation has a deterministic startup pitch on unvoiced frames");
 
 	phonex::Engine rawNyquist;
 	phonex::Engine filteredNyquist;
@@ -359,7 +380,7 @@ void schedulerAndSynthesisContract(Tests& tests) {
 			filteredTail += std::abs(lowPassed);
 		}
 	}
-	tests.expect(rawTail > 100.f && filteredTail < rawTail * 0.05f,
+	tests.expect(rawTail > 50.f && filteredTail < rawTail * 0.05f,
 		"two-pole reconstruction rejects internal-rate Nyquist images");
 
 }
@@ -385,6 +406,8 @@ void phase3Contract(Tests& tests) {
 	const auto formantZero = phonex::formantShiftReflection(sequence.frames[2].reflection, 0.f);
 	const auto formantLow = phonex::formantShiftReflection(sequence.frames[2].reflection, -1.f);
 	const auto formantHigh = phonex::formantShiftReflection(sequence.frames[2].reflection, 1.f);
+	const auto warpZero = phonex::warpReflectionCoefficients(sequence.frames[2].reflection, 0.f);
+	const auto warpHigh = phonex::warpReflectionCoefficients(sequence.frames[2].reflection, 1.f);
 	bool formantDistinct = false;
 	bool formantStable = true;
 	for (int i = 0; i < phonex::kLpcOrder; ++i) {
@@ -396,6 +419,10 @@ void phase3Contract(Tests& tests) {
 	}
 	tests.expect(formantZero == sequence.frames[2].reflection,
 		"FORMANT zero is an exact coefficient identity");
+	tests.expect(warpZero == sequence.frames[2].reflection,
+		"WARP zero is an exact coefficient identity");
+	tests.expect(warpHigh != sequence.frames[2].reflection,
+		"nonzero WARP transforms reflection coefficients");
 	tests.expect(formantDistinct && formantStable,
 		"FORMANT extremes are distinct, finite, and lattice-stable");
 	auto selected = [&](int level, int index) {

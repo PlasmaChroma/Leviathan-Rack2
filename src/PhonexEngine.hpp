@@ -72,6 +72,18 @@ enum class ReconstructionMode : std::uint8_t {
 	Filtered,
 };
 
+enum class OutputStage : std::uint8_t {
+	LegacyCurve = 0,
+	CalibratedLinear,
+	CalibratedLimited,
+};
+
+enum class ReconstructionOrder : std::uint8_t {
+	TwoPole = 1,
+	FourPole = 2,
+	SixPole = 3,
+};
+
 enum class ForcedExcitation : std::uint8_t {
 	Voiced = 0,
 	Unvoiced,
@@ -113,6 +125,11 @@ public:
 	void setInternalRate(float rateHz);
 	void setTriggerMode(TriggerMode mode) { triggerMode_ = mode; }
 	void setReconstructionMode(ReconstructionMode mode) { reconstructionMode_ = mode; }
+	void setOutputStage(OutputStage stage) { outputStage_ = stage; }
+	void setReconstructionOrder(ReconstructionOrder order) {
+		reconstructionOrder_ = order;
+		reconstructionHostRate_ = 0.f;
+	}
 	void setSeed(std::uint32_t seed);
 	void retrigger(float speed);
 	EngineOutput process(const EngineControls& controls);
@@ -135,6 +152,8 @@ private:
 	const LpcSequence* sequence_ = nullptr;
 	TriggerMode triggerMode_ = TriggerMode::RetriggerPhrase;
 	ReconstructionMode reconstructionMode_ = ReconstructionMode::RawHold;
+	OutputStage outputStage_ = OutputStage::CalibratedLimited;
+	ReconstructionOrder reconstructionOrder_ = ReconstructionOrder::SixPole;
 	LatticeFilter lattice_;
 	ChirpGenerator chirp_;
 	NoiseGenerator noise_;
@@ -142,17 +161,18 @@ private:
 	float internalRate_ = 10000.f;
 	double internalPhase_ = 0.0;
 	float heldSample_ = 0.f;
-	float reconstructionZ1_ = 0.f;
-	float reconstructionZ2_ = 0.f;
-	float reconstructionB0_ = 1.f;
-	float reconstructionB1_ = 0.f;
-	float reconstructionB2_ = 0.f;
-	float reconstructionA1_ = 0.f;
-	float reconstructionA2_ = 0.f;
+	std::array<float, 3> reconstructionZ1_{};
+	std::array<float, 3> reconstructionZ2_{};
+	std::array<float, 3> reconstructionB0_{{1.f, 1.f, 1.f}};
+	std::array<float, 3> reconstructionB1_{};
+	std::array<float, 3> reconstructionB2_{};
+	std::array<float, 3> reconstructionA1_{};
+	std::array<float, 3> reconstructionA2_{};
 	float reconstructionHostRate_ = 0.f;
 	float reconstructionInternalRate_ = 0.f;
 	float smoothedFormant_ = 0.f;
 	float smoothedWarp_ = 0.f;
+	float lastVoicedPitchPeriod_ = 0.f;
 	float jitterScale_ = 1.f;
 	std::array<float, kLpcOrder> warpedReflection_{};
 	std::array<float, kLpcOrder> cachedReflection_{};
@@ -183,6 +203,9 @@ LpcFrame selectGlitchedFrame(const LpcSequence& sequence, std::uint16_t frameInd
 	std::uint8_t level, std::uint32_t seed);
 std::array<float, kLpcOrder> formantShiftReflection(
 	const std::array<float, kLpcOrder>& reflection, float amount);
+std::array<float, kLpcOrder> warpReflectionCoefficients(
+	const std::array<float, kLpcOrder>& reflection, float amount);
 float tms5100InterpolationMix(float frameFraction);
+float applyOutputStage(float reconstructed, OutputStage stage);
 
 } // namespace phonex
