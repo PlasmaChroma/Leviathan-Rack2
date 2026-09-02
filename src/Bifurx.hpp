@@ -684,6 +684,7 @@ struct Bifurx : Module {
 	bool cachedLowLatencyVisual = false;
 	bool cachedHighResonanceSelfOscEnabled = false;
 	bool cachedSoftLimitingEnabled = true;
+	bool cachedNonlinearOversamplingEnabled = true;
 	CharacterStageState cachedCharacterState;
 	float cachedCharacterDrive = 0.f;
 	float cachedCharacterResoNorm = 0.f;
@@ -733,6 +734,9 @@ struct Bifurx : Module {
 	std::atomic<int> visualWorkerMode {VISUAL_WORKER_INHERIT};
 	std::atomic<bool> highResonanceSelfOscEnabled {false};
 	std::atomic<bool> softLimitingEnabled {true};
+	// Debug-only A/B control. Production processing forces this on whenever
+	// Dragon King debug functionality is unavailable.
+	std::atomic<bool> nonlinearOversamplingEnabled {true};
 	std::atomic<int> modulationQualityMode {MOD_QUALITY_BALANCED};
 	int controlUpdateDivision = 16;
 	int previewPublishFastDivision = kPreviewPublishFastDivision;

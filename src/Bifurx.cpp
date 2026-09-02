@@ -833,6 +833,7 @@ json_t* Bifurx::dataToJson() {
 	json_object_set_new(root, "perfDebugLogging", json_boolean(perfDebugLogging.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "highResonanceSelfOscEnabled", json_boolean(highResonanceSelfOscEnabled.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "softLimitingEnabled", json_boolean(softLimitingEnabled.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "nonlinearOversamplingEnabled", json_boolean(nonlinearOversamplingEnabled.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "renderMode", json_integer(renderMode));
 	json_object_set_new(root, "createdUnixTimeSec", json_real(createdUnixTimeSec));
 	return root;
@@ -905,6 +906,10 @@ void Bifurx::dataFromJson(json_t* root) {
 	json_t* softLimitingEnabledJ = json_object_get(root, "softLimitingEnabled");
 	if (softLimitingEnabledJ) {
 		softLimitingEnabled.store(json_is_true(softLimitingEnabledJ), std::memory_order_relaxed);
+	}
+	json_t* nonlinearOversamplingEnabledJ = json_object_get(root, "nonlinearOversamplingEnabled");
+	if (nonlinearOversamplingEnabledJ) {
+		nonlinearOversamplingEnabled.store(json_is_true(nonlinearOversamplingEnabledJ), std::memory_order_relaxed);
 	}
 	json_t* createdUnixTimeSecJ = json_object_get(root, "createdUnixTimeSec");
 	if (createdUnixTimeSecJ && json_is_number(createdUnixTimeSecJ)) {
@@ -1207,6 +1212,13 @@ void Bifurx::process(const ProcessArgs& args) {
 		cachedLowLatencyVisual = lowLatencyVisual.load(std::memory_order_relaxed);
 		cachedHighResonanceSelfOscEnabled = highResonanceSelfOscEnabled.load(std::memory_order_relaxed);
 		cachedSoftLimitingEnabled = softLimitingEnabled.load(std::memory_order_relaxed);
+		const bool nextNonlinearOversamplingEnabled = isDragonKingDebugEnabled()
+			? nonlinearOversamplingEnabled.load(std::memory_order_relaxed)
+			: true;
+		if (nextNonlinearOversamplingEnabled != cachedNonlinearOversamplingEnabled) {
+			nonlinearOversampling.reset();
+			cachedNonlinearOversamplingEnabled = nextNonlinearOversamplingEnabled;
+		}
 	}
 	const bool forceAudioRateControls = modulationQualityModeNow == MOD_QUALITY_EXACT;
 	const bool inspectSlowControls =
@@ -1297,7 +1309,9 @@ void Bifurx::process(const ProcessArgs& args) {
 	}
 
 	const float titoModeScale = 1.22f, titoStrength = 2.4f * titoAbs, couplingDepth = titoStrength * titoModeScale * (0.026f + 0.28f * resoNorm * resoNorm);
-	const float drivenIn = nonlinearOversampling.processInput(in, level);
+	const float drivenIn = cachedNonlinearOversamplingEnabled
+		? nonlinearOversampling.processInput(in, level)
+		: applyLevelInputStage(in, level);
 	const bool highResonanceSelfOscEnabledNow = cachedHighResonanceSelfOscEnabled;
 	if (!cachedCharacterStateValid
 		|| drive != cachedCharacterDrive
@@ -1378,7 +1392,10 @@ void Bifurx::process(const ProcessArgs& args) {
 		}
 	}
 
-	const float targetOut = displayOnlyMode ? in : nonlinearOversampling.processOutput(modeOut, level, softLimitingEnabledNow);
+	const float targetOut = displayOnlyMode ? in
+		: (cachedNonlinearOversamplingEnabled
+			? nonlinearOversampling.processOutput(modeOut, level, softLimitingEnabledNow)
+			: applyLevelOutputStage(modeOut, level, softLimitingEnabledNow));
 	const float out = transitionSmoother.apply(targetOut);
 	outputs[OUT_OUTPUT].setVoltage(out);
 	const float llAlpha = llTelemetryAlpha;

@@ -1213,6 +1213,16 @@ struct BifurxWidget final : ModuleWidget {
 				[=]() { bifurx->showModuleResponseOverlay.store(!bifurx->showModuleResponseOverlay.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
 			if (isDragonKingDebugEnabled()) {
 				menu->addChild(new MenuSeparator());
+				menu->addChild(createMenuLabel("Debug Audio"));
+				menu->addChild(createCheckMenuItem(
+					"Selective 2x nonlinear oversampling", "",
+					[=]() { return bifurx->nonlinearOversamplingEnabled.load(std::memory_order_relaxed); },
+					[=]() {
+						bifurx->nonlinearOversamplingEnabled.store(
+							!bifurx->nonlinearOversamplingEnabled.load(std::memory_order_relaxed),
+							std::memory_order_relaxed);
+					}));
+				menu->addChild(new MenuSeparator());
 				menu->addChild(createMenuLabel("Debug Rendering"));
 				menu->addChild(createCheckMenuItem(
 					"Context-owned fixed GL surface", "",

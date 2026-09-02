@@ -14,8 +14,9 @@ Plugin* pluginInstance = nullptr;
 // Bifurx includes the shared DragonKing debug setting from plugin.cpp in the
 // plugin build. The runtime spec includes Bifurx.cpp directly, so keep this
 // test self-contained instead of linking the full plugin translation unit.
+bool testDragonKingDebugEnabled = false;
 bool isDragonKingDebugEnabled() {
-	return false;
+	return testDragonKingDebugEnabled;
 }
 
 bool isModuleTeardownLoggingEnabled() {
@@ -1666,6 +1667,60 @@ TestResult testTwoColorFftGradientMidpointAndJsonRoundTrip() {
   };
 }
 
+TestResult testDebugNonlinearOversamplingTogglePersists() {
+  Bifurx source;
+  source.nonlinearOversamplingEnabled.store(false, std::memory_order_relaxed);
+  json_t* stateJ = source.dataToJson();
+  if (!stateJ) {
+    return {"Debug nonlinear oversampling toggle persists", false, "dataToJson returned null"};
+  }
+
+  Bifurx loaded;
+  loaded.dataFromJson(stateJ);
+  json_decref(stateJ);
+
+  Bifurx legacyDefault;
+  json_t* legacyJ = json_object();
+  legacyDefault.dataFromJson(legacyJ);
+  json_decref(legacyJ);
+
+  const bool restoredDisabled =
+    !loaded.nonlinearOversamplingEnabled.load(std::memory_order_relaxed);
+  const bool legacyDefaultsEnabled =
+    legacyDefault.nonlinearOversamplingEnabled.load(std::memory_order_relaxed);
+  return {
+    "Debug nonlinear oversampling toggle persists",
+    restoredDisabled && legacyDefaultsEnabled,
+    "restoredDisabled=" + std::to_string(int(restoredDisabled)) +
+      " legacyDefaultsEnabled=" + std::to_string(int(legacyDefaultsEnabled))
+  };
+}
+
+TestResult testDebugNonlinearOversamplingToggleIsProductionSafe() {
+  Module::ProcessArgs args;
+  args.sampleRate = 48000.f;
+  args.sampleTime = 1.f / args.sampleRate;
+
+  testDragonKingDebugEnabled = true;
+  Bifurx debugBypass;
+  debugBypass.nonlinearOversamplingEnabled.store(false, std::memory_order_relaxed);
+  for (int i = 0; i < 32; ++i) debugBypass.process(args);
+  const bool debugHonorsBypass = !debugBypass.cachedNonlinearOversamplingEnabled;
+
+  testDragonKingDebugEnabled = false;
+  Bifurx production;
+  production.nonlinearOversamplingEnabled.store(false, std::memory_order_relaxed);
+  for (int i = 0; i < 32; ++i) production.process(args);
+  const bool productionForcesEnabled = production.cachedNonlinearOversamplingEnabled;
+
+  return {
+    "Debug nonlinear oversampling bypass is production-safe",
+    debugHonorsBypass && productionForcesEnabled,
+    "debugHonorsBypass=" + std::to_string(int(debugHonorsBypass)) +
+      " productionForcesEnabled=" + std::to_string(int(productionForcesEnabled))
+  };
+}
+
 TestResult testHiddenResponseLinePreservesFftColorResponse() {
   BifurxUiRenderRequest hiddenRequest;
   hiddenRequest.previewState.sampleRate = 48000.f;
@@ -1776,6 +1831,8 @@ int main() {
     testRuntimeSelfOscFlavorMap(),
     testDisplayOnlyColorSchemeJsonRoundTripAndPassThrough(),
     testTwoColorFftGradientMidpointAndJsonRoundTrip(),
+    testDebugNonlinearOversamplingTogglePersists(),
+    testDebugNonlinearOversamplingToggleIsProductionSafe(),
     testHiddenResponseLinePreservesFftColorResponse(),
     testBrowserPreviewUsesAuthoredUndertowScene(),
   };
