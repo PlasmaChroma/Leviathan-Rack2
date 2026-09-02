@@ -116,7 +116,7 @@
     {
       "slug": "Bifurx",
       "name": "Bifurx",
-      "description": "Dual-peak multimode filter with live response and spectrum preview.",
+      "description": "Dual-peak morphing filter inspired by the Belgrad architecture, featuring coupled resonance modes and real-time active response visualization.",
       "tags": [
         "Filter",
         "Distortion",
