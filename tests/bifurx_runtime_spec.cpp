@@ -11,6 +11,10 @@
 // Provide the plugin global expected by module source.
 Plugin* pluginInstance = nullptr;
 
+std::string leviathanPluginUserRootPath() {
+	return system::join(system::getTempDirectory(), "Leviathan");
+}
+
 // Bifurx includes the shared DragonKing debug setting from plugin.cpp in the
 // plugin build. The runtime spec includes Bifurx.cpp directly, so keep this
 // test self-contained instead of linking the full plugin translation unit.

@@ -337,7 +337,7 @@
    fill="none"
    id="top_horizontal_line"
    style="display:none;opacity:1;stroke:#5740bf;stroke-opacity:1" /></g><path
-   d="m 679.961,11431.042 0.078,-1134.188"
+   d="m 679.961,11431.042 0,-1134.188"
    stroke="url(#accentGrad)"
    stroke-width="40.7084"
    stroke-linecap="round"
@@ -346,7 +346,7 @@
    id="fm_line"
    style="display:inline;opacity:1;stroke:#5740bf;stroke-width:50;stroke-dasharray:none;stroke-opacity:1"
    sodipodi:nodetypes="cc" /><path
-   d="m 6409.9595,11431.042 0.078,-1134.188"
+   d="m 6409.9595,11431.042 0,-1134.188"
    stroke="url(#accentGrad)"
    stroke-width="40.7084"
    stroke-linecap="round"
@@ -355,7 +355,7 @@
    id="span_line"
    style="display:inline;opacity:1;stroke:#5740bf;stroke-width:50;stroke-dasharray:none;stroke-opacity:1"
    sodipodi:nodetypes="cc" /><path
-   d="m 3543.4534,11454.444 0.078,-1134.188"
+   d="m 3543.4534,11454.444 0,-1134.188"
    stroke="url(#accentGrad)"
    stroke-width="40.7084"
    stroke-linecap="round"
@@ -364,7 +364,7 @@
    id="freq_line"
    style="display:inline;opacity:1;stroke:#5740bf;stroke-opacity:1;stroke-width:50.00000025;stroke-dasharray:none"
    sodipodi:nodetypes="cc" /><path
-   d="m 1650.7542,11431.042 0.078,-1134.188"
+   d="m 1650.7542,11431.042 0,-1134.188"
    stroke="url(#accentGrad)"
    stroke-width="40.7084"
    stroke-linecap="round"
@@ -373,7 +373,7 @@
    id="res_line"
    style="display:inline;stroke:#5740bf;stroke-opacity:1;opacity:1;stroke-width:50.00000025;stroke-dasharray:none"
    sodipodi:nodetypes="cc" /><path
-   d="m 5450.7542,11413.942 0.078,-1134.188"
+   d="m 5450.7542,11413.942 0,-1134.188"
    stroke="url(#accentGrad)"
    stroke-width="40.7084"
    stroke-linecap="round"
@@ -760,13 +760,13 @@
    inkscape:label="Plasma Conduit Anchors"
    style="display:inline;fill:none;stroke:#5740bf;stroke-width:50;stroke-linecap:round;stroke-opacity:1"><path
      id="fm_conduit"
-     d="M 679.99866,11389.972 680,9530" /><path
+     d="M 680,11389.972 680,9530" /><path
      id="res_conduit"
-     d="M 1651.4443,10295.81 1634.9987,11389.972" /><path
+     d="M 1651.4443,10295.81 1651.4443,11389.972" /><path
      id="voct_conduit"
-     d="M 3544.9988,11389.972 3546,10160" /><path
+     d="M 3546,11389.972 3546,10160" /><path
      id="balance_conduit"
-     d="M 5451.3232,10295.81 5454.9985,11389.972" /><path
+     d="M 5451.3232,10295.81 5451.3232,11389.972" /><path
      id="span_conduit"
      d="M 6409.9985,11389.972 6409.9985,9530" /></g><g
    id="components"

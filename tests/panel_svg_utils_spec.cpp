@@ -521,9 +521,15 @@ TestResult testPlasmaConduitAnchorConvention() {
           && path.commands[0].type == panel_svg::SvgPathCommand::MoveTo
           && path.commands[1].type == panel_svg::SvgPathCommand::LineTo;
       });
+    const bool bifurxConduitsVertical = std::string(panel.path) != "res/bifurx.panel.svg"
+      || std::all_of(paths.begin(), paths.end(), [](const panel_svg::SvgPathMatch& path) {
+        return path.commands.size() == 2u
+          && std::fabs(path.commands[0].p1.x - path.commands[1].p1.x) <= 1e-6f;
+      });
     const bool panelPass = pathsOk
       && paths.size() == panel.expectedPaths
       && straightPaths
+      && bifurxConduitsVertical
       && runtimeHidden;
     if (!panelPass && firstFailure.empty()) {
       firstFailure = panel.path;

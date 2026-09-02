@@ -927,13 +927,13 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		appendGuideLayer(235.f / 255.f, 204.f / 255.f, 128.f / 255.f, 244.f / 255.f, 0.85f);
 
 		for (GlVertex& point : expectedCurveLineVertices) {
-			point.r = 255.f / 255.f;
+			point.r = 1.f;
 			point.g = 242.f / 255.f;
 			point.b = 202.f / 255.f;
 			point.a = 250.f / 255.f;
 		}
 		appendStrokePolyline(expectedCurveLineVertices, 0.38f, &expectedCurveStrokeVertices);
-		appendGuideLayer(255.f / 255.f, 242.f / 255.f, 202.f / 255.f, 250.f / 255.f, 0.36f);
+		appendGuideLayer(1.f, 242.f / 255.f, 202.f / 255.f, 250.f / 255.f, 0.36f);
 
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
