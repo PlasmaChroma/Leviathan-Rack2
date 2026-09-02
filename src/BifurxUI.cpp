@@ -1135,21 +1135,21 @@ struct BifurxWidget final : ModuleWidget {
 		menu->addChild(new MenuSeparator());
 			menu->addChild(createSubmenuItem("Modulation Quality", "", [=](Menu* submenu) {
 				submenu->addChild(createCheckMenuItem(
-					"Balanced", "",
+					"Balanced — Control rate (/16)", "",
 					[=]() { return bifurx->modulationQualityMode.load(std::memory_order_relaxed) == Bifurx::MOD_QUALITY_BALANCED; },
 					[=]() {
 						bifurx->modulationQualityMode.store(Bifurx::MOD_QUALITY_BALANCED, std::memory_order_relaxed);
 						bifurx->controlFastCacheValid = false;
 					}));
 				submenu->addChild(createCheckMenuItem(
-					"High", "",
+					"High — Control rate (/8)", "",
 					[=]() { return bifurx->modulationQualityMode.load(std::memory_order_relaxed) == Bifurx::MOD_QUALITY_HIGH; },
 					[=]() {
 						bifurx->modulationQualityMode.store(Bifurx::MOD_QUALITY_HIGH, std::memory_order_relaxed);
 						bifurx->controlFastCacheValid = false;
 					}));
 				submenu->addChild(createCheckMenuItem(
-					"Exact", "",
+					"Exact — Audio rate (/1)", "",
 					[=]() { return bifurx->modulationQualityMode.load(std::memory_order_relaxed) == Bifurx::MOD_QUALITY_EXACT; },
 					[=]() {
 						bifurx->modulationQualityMode.store(Bifurx::MOD_QUALITY_EXACT, std::memory_order_relaxed);
