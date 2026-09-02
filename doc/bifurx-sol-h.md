@@ -4,6 +4,14 @@ Date: 2026-08-30
 Scope: the complete current Bifurx implementation (`Bifurx.cpp/.hpp`, UI, NanoVG/OpenGL renderers, render-preparation worker, persistence, and both Bifurx test suites).  
 Priority order: robustness/correctness, performance, then audio quality.
 
+## Current disposition — 2026-09-02
+
+All BFX-01 through BFX-13 findings are resolved through implementation or an explicit tested product decision. No known release blocker remains from this review. The remaining work is optional graphics-lifecycle smoke testing, release-platform validation, and measurement-led optimization.
+
+## Implementation history
+
+The entries below are chronological. Later entries supersede open questions or interim results in earlier entries.
+
 > Implementation follow-up (2026-08-30): BFX-01 through BFX-03 were addressed after this audit with generation-tagged claimed snapshot slots, incrementally built overlapping analysis frames, and comprehensive runtime reset handling. The detailed findings below preserve the original pre-fix evidence and rationale.
 >
 > A second follow-up addressed BFX-05 through BFX-07: frequency entry now uses accurate inverse mapping, rail handling preserves SPAN by shifting the cutoff pair, the nominal response uses the production TPT transfer and invalidates on all model dependencies, and V/Oct follows the patched voltage without an internal glide or deadband. The unambiguous portions of BFX-09 were also reclaimed by removing the historical High+High span-dependent boost, caching self-oscillation coefficients, preparing shared character state once per sample, and moving visual/debug atomics to the control cadence. High+High now exposes the raw unity-gain cascaded high-pass result; its remaining wide-SPAN level offset relative to Low+Low is the TPT/bilinear response rather than a hidden compensator. BFX-04 and the remaining voicing/renderer decisions stay open.
@@ -34,20 +42,21 @@ Priority order: robustness/correctness, performance, then audio quality.
 
 ## Executive assessment
 
-The filter core is fundamentally healthy: its TPT SVFs are bounded defensively, the mode routing is internally consistent, display-only mode is a true pass-through, the 0.80 self-oscillation onset is preserved, and the current native Windows tests pass. The graphics code also follows the repository's current context-loss policy much more carefully than an ordinary Rack display implementation.
+All thirteen audit findings have been addressed or closed by an explicit, tested product decision. No known Bifurx release blocker remains from this review.
 
-I would not yet call the whole module release-robust, however. Two visualization publication mechanisms have C++ data races, the audio thread periodically performs a 48 KiB frame copy in one sample, and Rack's Reset action does not clear Bifurx's DSP state. Those three issues should be fixed before release. There are also meaningful specification gaps around the default soft limiter, the analytical response curve, V/Oct slew, and the duplicated test model.
+The production implementation now has race-safe snapshot publication, incremental subscriber-gated analysis capture, comprehensive reset behavior, an explicit output-stage contract, accurate parameter mapping, production-derived response modeling, unslewed V/Oct, cached control/DSP work, selective 2x nonlinear oversampling, controlled self-oscillation amplitude, mode/limiter transitions, bounded worker transport, and consistent debug/configuration behavior. Live auditioning established that the staged self-oscillation toggle does not justify additional transition machinery. The SM-specific TITO DC servo and the 96 kHz oversampling decision were additional follow-ups discovered during live validation.
 
-Recommended disposition:
+The only remaining work listed by this review is optional validation or future optimization:
 
-1. Fix findings BFX-01 through BFX-03 before release.
-2. Resolve the intended soft-limiter contract and the preview/test drift in BFX-04 through BFX-06.
-3. Reclaim the straightforward hot-path work in BFX-08 and BFX-09 before considering a visual frame-rate cap.
-4. Treat the remaining audio-quality items as deliberate voicing decisions, not automatic rewrites.
+1. Exercise context destroy/recreate, NanoVG/OpenGL switching, and both fixed-surface settings in a live Rack/DAW graphics smoke test.
+2. Profile worst-case audio and UI timing before making further performance changes.
+3. Revisit the two-framebuffer fixed surface only if multi-instance GPU memory or allocation failures become measurable concerns.
 
-## Findings
+## Historical findings — all resolved
 
-### BFX-01 — High: the audio/UI snapshot handoffs are not race-free
+The sections below preserve the original pre-fix evidence and recommendations for engineering history. They do **not** describe the current implementation state; the dated follow-up record above is authoritative.
+
+### BFX-01 — Resolved: the audio/UI snapshot handoffs were not race-free
 
 The preview and low-latency telemetry publishers write an ordinary struct into the nominally inactive half of a two-slot array, then release-store its index ([`Bifurx.cpp:801`](src/Bifurx.cpp#L801), [`Bifurx.hpp:631`](src/Bifurx.hpp#L631)). UI readers acquire the sequence and index and then copy the ordinary struct ([`Bifurx.cpp:1246`](src/Bifurx.cpp#L1246), [`BifurxUI.cpp:391`](src/BifurxUI.cpp#L391)). The analysis frames use the same scheme with much larger arrays ([`Bifurx.cpp:803`](src/Bifurx.cpp#L803), [`Bifurx.cpp:1375`](src/Bifurx.cpp#L1375), [`Bifurx.cpp:1581`](src/Bifurx.cpp#L1581)).
 
@@ -57,7 +66,7 @@ Impact ranges from a visually torn state to rare crashes or optimizer-dependent 
 
 Recommendation: solve all three publications with one proven SPSC snapshot primitive. A three-slot latest-value buffer with explicit reader ownership/acknowledgement is a good fit; a bounded SPSC queue with overwrite detection is also reasonable. The writer must never reuse a slot claimed by a reader. Publish the payload identity and sequence as one coherent record. Add a forced-preemption stress test and run it under ThreadSanitizer in a Linux test harness.
 
-### BFX-02 — High: visualization creates a periodic audio-thread latency spike
+### BFX-02 — Resolved: visualization created a periodic audio-thread latency spike
 
 Every sample is written into three 4096-sample histories. Every 2048 samples, [`pushAnalysisSample()`](src/Bifurx.cpp#L803) copies all three histories into a published frame in a single `process()` call: 3 × 4096 × 4 bytes = 48 KiB. This occurs about 23.4 times/second at 48 kHz and 93.8 times/second at 192 kHz. Average bandwidth is not alarming; concentrating the whole copy into one audio sample is.
 
@@ -67,7 +76,7 @@ Recommendation: build 50%-overlapped FFT frames incrementally rather than rotati
 
 This is the first performance change I would make. It targets worst-case audio latency rather than merely lowering an average.
 
-### BFX-03 — High: Rack Reset does not reset Bifurx's circuit state
+### BFX-03 — Resolved: Rack Reset did not reset Bifurx's circuit state
 
 `resetCircuitStates()` exists ([`Bifurx.cpp:670`](src/Bifurx.cpp#L670)) but Bifurx does not override `onReset()`, and production code never calls the helper. The only call outside its definition is an explicit call in one test helper. Consequently Rack's Reset action resets parameters through the base class but leaves both integrator states, analysis history, telemetry, preview smoothing, TITO coefficient caches, and trigger/cache state alive.
 
@@ -75,7 +84,7 @@ This can produce a tail, discontinuity, stale preview, or self-oscillation state
 
 Recommendation: implement `onReset()` and centralize a comprehensive runtime reset. Besides the two SVF states, clear/invalidate TITO and normal coefficient caches, V/Oct and preview smoothers, analysis fill/publication state, telemetry, triggers/dividers as appropriate, and visual sequence state. Do not clear user-persistent menu choices unless Rack's reset contract for this module explicitly says to. Add a test that excites both cores, calls `onReset()`, and verifies silent/finite first output plus fresh analysis/preview state.
 
-### BFX-04 — Medium-high: the default soft limiter, response overlay, and tests disagree
+### BFX-04 — Resolved: the default soft limiter, response overlay, and tests disagreed
 
 Production defaults `softLimitingEnabled` to true ([`Bifurx.hpp:715`](src/Bifurx.hpp#L715)) and applies `10 * tanhLegacy(out / 10)` to every non-display-only sample ([`Bifurx.cpp:84`](src/Bifurx.cpp#L84)). This is an always-active saturator, not a transparent limiter with a knee near ±10 V. Measured static gains are:
 
@@ -97,7 +106,7 @@ Recommendation: make an explicit product decision:
 
 Whichever contract wins, remove the dead `levelOutputClipWet()`/makeup remnants and use `tanhAudio()` explicitly if mathematical tanh is desired. Bifurx is unreleased, so now is the inexpensive time to settle this behavior.
 
-### BFX-05 — Medium: `fastLog2()` is unsuitable for inverse mapping and range-boundary decisions
+### BFX-05 — Resolved: `fastLog2()` was unsuitable for inverse mapping and range-boundary decisions
 
 The bit-level approximation in [`Bifurx.hpp:105`](src/Bifurx.hpp#L105) is fast but biased: `fastLog2(1)` is approximately 0.057305 octave, or 68.8 cents. Differences of two calls cancel much of that fixed bias, which makes it acceptable for coarse visual motion detection. Direct uses do not.
 
@@ -110,7 +119,7 @@ Recommendation: use `std::log2` in parameter display/inverse conversion; this is
 
 The `fastTan()` approximation does not present the same concern: the diagnostic sweep found its worst cutoff realization error at the 0.46 × sample-rate ceiling to be about -7.1 cents, which is reasonable for this design.
 
-### BFX-06 — Medium: expected-curve publication can go stale and is not the runtime transfer function
+### BFX-06 — Resolved: expected-curve publication could go stale and was not the runtime transfer function
 
 `previewStatesDiffer()` considers mode, sample rate, smoothed balance, frequency, and Q, but not `spanNorm` ([`Bifurx.cpp:475`](src/Bifurx.cpp#L475)). `makePreviewModel()` directly uses `spanNorm` to compute the High+High wide-span compensation ([`Bifurx.cpp:486`](src/Bifurx.cpp#L486)). If SPAN changes while the cutoff pair is held at the same clamped frequencies, the audio compensation changes but no preview state is published, leaving the expected curve stale. `resoNorm` is also omitted even though it is carried into the model, making future dependence easy to break silently.
 
@@ -118,13 +127,13 @@ More broadly, the gold curve uses RBJ biquads ([`Bifurx.cpp:427`](src/Bifurx.cpp
 
 Recommendation: include every field that affects `makePreviewModel()` in the publication predicate, beginning with `spanNorm`. Prefer deriving the analytical response from the same TPT coefficients and mode combiner used by production. Define the gold line as “nominal linear filter response,” and separately define the measured response overlay as the complete module transfer if that is the intended UI meaning.
 
-### BFX-07 — Medium, audio quality: V/Oct is intentionally slewed by about 5.5 ms (10–90%)
+### BFX-07 — Resolved: V/Oct was slewed by about 5.5 ms (10–90%)
 
 The V/Oct input is low-pass filtered with a 2.5 ms time constant before pitch mapping ([`Bifurx.hpp:81`](src/Bifurx.hpp#L81), [`Bifurx.cpp:881`](src/Bifurx.cpp#L881)). A one-pole with that time constant takes roughly 5.5 ms to move from 10% to 90% after a pitch step. This adds a short glide to keyboard/sequencer pitch changes and blunts fast exponential modulation. FM bypasses this smoothing, which makes the two pitch paths behave differently. A 1 mV deadband adds a much smaller approximately 1.2-cent discontinuity around zero.
 
 Recommendation: if the glide is part of the sound, document it or make it optional. If the goal was zipper suppression, smooth/interpolate coefficients or use a much shorter bounded slew rather than filtering the calibrated V/Oct signal. Add production-runtime tests for settled ±1 V octave ratios, pitch-step settling time, and fast V/Oct versus FM modulation.
 
-### BFX-08 — Medium, performance/audio quality: control-rate modes can either alias CV or recompute unchanged nonlinear mappings
+### BFX-08 — Resolved: control-rate modes could recompute unchanged nonlinear mappings
 
 Balanced mode samples RES, BAL, and SPAN CV every 16 samples; High uses every 8 samples when those CVs are connected; Exact uses every sample ([`Bifurx.cpp:895`](src/Bifurx.cpp#L895), [`Bifurx.cpp:933`](src/Bifurx.cpp#L933)). At 48 kHz those are 3 kHz and 6 kHz zero-order-held control streams. They are appropriate for knobs and envelopes, but audio-rate RES/BAL/SPAN modulation can zipper or alias unless the user selects Exact.
 
@@ -132,7 +141,7 @@ Exact mode then recalculates `shapedSpan()` and `cascadeWideMorph()` with `std::
 
 Recommendation: retain the user-facing quality choices, but separate “must inspect the source every sample” from “must recompute the derived value.” Cache the last sanitized CV/parameter values and only rebuild derived values when they change beyond an appropriate threshold; interpolate coefficients where necessary. Document that Balanced/High are envelope-rate modes and Exact is required for audio-rate timbral CV.
 
-### BFX-09 — Medium, performance: several avoidable expensive operations remain in the hot DSP path
+### BFX-09 — Resolved: avoidable expensive operations remained in the hot DSP path
 
 The clearest cases are:
 
@@ -142,7 +151,7 @@ The clearest cases are:
 
 Recommendation: cache HH compensation with the SPAN cache; compute self-oscillation onset/heat/drive once per sample or control update and pass a prepared character-state object into both stages; reuse cached self-osc coefficients when cutoff/damping are unchanged. Move visual/debug setting snapshots to the existing control divider where an immediate reaction is unnecessary.
 
-### BFX-10 — Medium, audio-quality review: nonlinear paths are un-oversampled and the self-oscillator gets quieter at maximum RES
+### BFX-10 — Resolved: nonlinear paths were un-oversampled and self-oscillation fell at maximum RES
 
 Both the upper LEVEL input drive and default output soft clip are memoryless nonlinearities at the host sample rate. They will generate aliases on bright material. Production also uses the legacy rational tanh compatibility alias even though the shared math layer asks new DSP to choose `tanhLegacy()` or `tanhAudio()` explicitly ([`MathHelpers.hpp:89`](src/MathHelpers.hpp#L89)).
 
@@ -150,13 +159,13 @@ The native runtime test measured self-oscillation RMS of 2.101 V at RES=0.90 and
 
 Recommendation: audition `tanhAudio()` first because it is essentially a free accuracy improvement using the existing LUT. If aliasing is audible, selectively 2× oversample only when LEVEL drive is active, output limiting is materially engaged, or self-oscillation is enabled; do not oversample the whole clean filter by default. Retune self-oscillation amplitude damping so the RES=0.80 onset remains intact while RMS is monotonic or intentionally plateaus toward RES=1.00. Add harmonic/alias and amplitude-versus-RES sweeps before choosing.
 
-### BFX-11 — Low-medium, audio quality: topology and nonlinear-option changes are instantaneous
+### BFX-11 — Resolved: topology and nonlinear-option changes were instantaneous
 
 Mode changes immediately select another routing topology while reusing the existing two core states ([`Bifurx.cpp:1029`](src/Bifurx.cpp#L1029)). Soft Limiting and High Resonance Self-Osc are also atomically toggled without a transition. These changes can click, especially with resonant material or when toggling the output saturator at high amplitude.
 
 Recommendation: use a short equal-power or linear crossfade for mode changes and short ramps for menu-controlled nonlinear options. Because Bifurx is unreleased, a small fixed transition can become the defined behavior without compatibility cost.
 
-### BFX-12 — Low-medium, UI performance/memory: both renderer stacks stay fully allocated and worker requests are copy-heavy
+### BFX-12 — Resolved: renderer storage and worker requests were unnecessarily heavy
 
 The module owns about 144 KiB of analysis float storage. Each `BifurxSpectrumBase` owns roughly another 176 KiB of FFT scratch before curve/state storage, and the widget constructs both NanoVG and OpenGL spectrum bases ([`Bifurx.hpp:380`](src/Bifurx.hpp#L380), [`BifurxUI.cpp:918`](src/BifurxUI.cpp#L918)). A normal live widget therefore sits around half a MiB of Bifurx-specific analysis/display storage before GL vectors/textures and worker snapshots.
 
@@ -166,7 +175,7 @@ The render-preparation worker also calculates raw-input/response FFTs whenever t
 
 Recommendation: share one analysis/animation state between renderer front ends, lazily allocate renderer-specific scratch, and explicitly release the inactive renderer's worker registration on mode switch. Move large request payloads through owned buffers/pool slots rather than repeated struct assignment. Carry `showModuleResponseOverlay` into render preparation and skip the two unused FFTs when it is off.
 
-### BFX-13 — Low: a few configuration/debug contracts are internally inconsistent
+### BFX-13 — Resolved: configuration/debug contracts were internally inconsistent
 
 - `setBifurxVisualWorkerDefaultMode(int)` ignores its argument and always stores ON ([`BifurxWorker.cpp:229`](src/BifurxWorker.cpp#L229)). It is currently unused, but its API contract is false.
 - Debug logging flags are serialized and loaded even outside Dragon King debug mode ([`Bifurx.cpp:671`](src/Bifurx.cpp#L671)). File recording is correctly stopped by the debug gate, but a loaded `perfDebugLogging=true` still enables NanoVG `chrono` instrumentation ([`BifurxUI.cpp:323`](src/BifurxUI.cpp#L323)).
@@ -174,7 +183,7 @@ Recommendation: share one analysis/animation state between renderer front ends, 
 
 These are not current crash risks, but cleaning them up will make later debugging and lifecycle work less ambiguous.
 
-## What is already done well
+## Strengths recorded by the original audit
 
 - The TPT SVF update is compact and conventional, and cutoff is bounded below the Nyquist singularity ([`Bifurx.cpp:276`](src/Bifurx.cpp#L276), [`Bifurx.cpp:315`](src/Bifurx.cpp#L315)).
 - Input non-finites are sanitized, output non-finites are contained, and core state is periodically checked/clamped. The self-oscillation path has an explicit finite fallback ([`Bifurx.cpp:365`](src/Bifurx.cpp#L365), [`Bifurx.cpp:404`](src/Bifurx.cpp#L404)).
@@ -183,42 +192,25 @@ These are not current crash risks, but cleaning them up will make later debuggin
 - The worker is latest-value/bounded per display rather than an unbounded job queue. Registration, unregistration, completion, and plugin shutdown are mutex/condition-variable coordinated, with explicit plugin-lifecycle shutdown ([`BifurxWorker.cpp:42`](src/BifurxWorker.cpp#L42), [`plugin.cpp:220`](src/plugin.cpp#L220)).
 - The OpenGL widget avoids destructor-time GL deletion and resets resources on context recreation/destruction, consistent with the repository lifecycle standard ([`BifurxGL.cpp:197`](src/BifurxGL.cpp#L197)). The fixed surface is context-owned and rebuilt lazily.
 - UI dirtying is data/animation driven; hidden NanoVG and OpenGL paths avoid ordinary stepping/drawing work.
-- The process path performs no allocation or locking. The principal real-time problem is the bounded-but-bursty copy in BFX-02, not heap/mutex use.
+- The process path performed no allocation or locking. At audit time its principal real-time concern was BFX-02's bounded-but-bursty copy; the incremental capture follow-up subsequently removed that spike.
 
 ## Test and validation assessment
 
-Validation performed against the current working tree:
+Current validation after the implementation follow-ups:
 
-- Authoritative native MINGW64 `make -j10 test-fast` with the installed Rack 2 Pro runtime: passed (exit 0).
-- Native Rack-linked `bifurx_runtime_spec`: 26/26 passed.
-- Native `bifurx_filter_spec`: 31/31 passed.
-- Incremental authoritative Windows `plugin.dll` compile and link: passed.
-- Cutoff approximation diagnostic: maximum measured realized-cutoff error was approximately -7.1 cents at 0.46 × sample rate.
+- The focused native Bifurx runtime suite passes all 39 tests.
+- The complete native Linux `test-fast` suite passes 109,948 checks with zero failures.
+- The current native Linux `plugin.so` compiles and links successfully.
+- An earlier authoritative native MINGW64 pass built `plugin.dll` and ran the Windows Rack-linked tests successfully. The most recent documentation/debug-menu restoration was subsequently compile-validated on Linux; repeat the Windows build as part of normal release validation.
+- Live Rack/Octavia measurements cover the output limiter, selective oversampling at 44.1/48 and 96 kHz, self-oscillation switching, and the SM-specific TITO DC correction without a material Vpp loss.
 
-The existing test coverage is useful but has an important structural weakness: `bifurx_filter_spec` tests a duplicated model in `tests/bifurx_filter_test_model.hpp`. Production has already diverged from it in both saturation curves and the output stage, demonstrating that mirrored implementation tests can stay green while the actual module changes.
+The original audit's highest-value automated additions—snapshot ownership, reset behavior, production output-stage behavior, frequency/span boundaries, worker transport, modulation caching, transitions, self-oscillation amplitude, and selective oversampling—are now covered. A live context destroy/recreate smoke test remains useful because compilation and unit tests cannot reproduce every driver/context lifecycle.
 
-Highest-value additions:
+## Remaining optional follow-up
 
-1. Race/preemption tests for preview, telemetry, and analysis snapshot publication; ThreadSanitizer coverage for a Rack-independent snapshot primitive.
-2. Reset-after-excitation and reset-during-self-oscillation tests.
-3. Production output-stage golden tests with Soft Limiting both on and off, including the response-overlay definition.
-4. Actual port-level RES/BAL/SPAN CV scaling and V/Oct/FM tests at 44.1, 48, 96, and 192 kHz.
-5. SPAN behavior at both frequency rails and a regression test proving HH preview invalidation when only `spanNorm` changes.
-6. A process-time spike benchmark that records maximum, not only average, with analysis publication enabled/disabled.
-7. A context destroy/recreate Rack smoke test for both GL variants and renderer switching. Compilation alone cannot validate driver/context behavior.
-8. Alias/harmonic sweeps for LEVEL drive, output limiting, TITO, and self-oscillation; amplitude-versus-RES sweeps across modes.
+1. Run the live graphics lifecycle smoke test described in the current executive assessment.
+2. Repeat the authoritative Windows build and Rack-linked suite for release validation.
+3. Add broader multi-rate port-level CV and nonlinear spectral sweeps only when a concrete regression or voicing question justifies them.
+4. Profile before changing the current oversampling, worker, renderer, or framebuffer designs.
 
-Where practical, move pure DSP helpers into one production header/library used by both the module and tests. Keep higher-level golden/reference tests independent so they can still catch shared implementation mistakes.
-
-## Recommended implementation sequence
-
-1. Introduce one reusable reader-owned triple-buffer/SPSC snapshot primitive and migrate preview, telemetry, and analysis publication.
-2. Replace the audio-thread frame rotation with incremental overlapped capture and a visual subscriber gate.
-3. Implement comprehensive `onReset()` and its tests.
-4. Decide whether Soft Limiting is a transparent protector or an always-on saturator; align production, overlay, naming, preview assumptions, and tests.
-5. Replace direct `fastLog2()` uses in inverse/range math and fix the preview dependency predicate.
-6. Cache HH compensation and prepared self-oscillation state/coefficients; avoid recomputing unchanged Exact-mode controls.
-7. Consolidate renderer state/scratch and remove unused FFT work when module response is hidden.
-8. Audition V/Oct slew, self-oscillation amplitude, `tanhAudio()`, selective oversampling, and short topology crossfades as a focused audio-quality pass.
-
-The original audit was report-only. The production follow-up changes completed afterward are summarized at the top of this document.
+The original audit evidence is intentionally retained above, but its recommendations have been superseded by the implementation follow-ups and current disposition.
