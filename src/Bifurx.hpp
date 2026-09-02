@@ -708,6 +708,7 @@ struct Bifurx : Module {
 	float titoCoeffDampingB = 0.f;
 	float titoCoeffSampleRateA = 0.f;
 	float titoCoeffSampleRateB = 0.f;
+	float titoSmDcCorrection = 0.f;
 	BifurxAnalysisFrame analysisFrames[kAnalysisFrameSlotCount];
 	uint32_t analysisFrameSeqs[kAnalysisFrameSlotCount] = {};
 	std::atomic<uint32_t> analysisFrameReaders[kAnalysisFrameSlotCount] {};

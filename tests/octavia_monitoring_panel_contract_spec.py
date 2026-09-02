@@ -65,6 +65,10 @@ class OctaviaMonitoringPanelContractTest(unittest.TestCase):
         self.assertIn("Octavia::MONITOR_A_INPUT + monitor", SOURCE)
         self.assertIn("Octavia::MONITOR_A_LIGHT + monitor", SOURCE)
 
+    def test_server_auto_start_uses_ui_lifecycle_and_atomic_single_attempt(self):
+        self.assertIn("if (module) module->startServer();", SOURCE)
+        self.assertIn("serverRunning.compare_exchange_strong", SOURCE)
+
     def test_phase_one_led_baseline_is_off_or_dim_connected(self):
         self.assertIn("inputs[MONITOR_A_INPUT + monitor].isConnected()", SOURCE)
         self.assertIn("const float idle = connected ? 0.12f : 0.f", SOURCE)

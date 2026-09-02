@@ -775,6 +775,7 @@ void Bifurx::resetCircuitStates() {
 	titoCoeffDampingB = 0.f;
 	titoCoeffSampleRateA = 0.f;
 	titoCoeffSampleRateB = 0.f;
+	titoSmDcCorrection = 0.f;
 	selfOscCoeffsA = SvfCoeffs {};
 	selfOscCoeffsB = SvfCoeffs {};
 	selfOscCoeffFreqA = 0.f;
@@ -1392,12 +1393,29 @@ void Bifurx::process(const ProcessArgs& args) {
 		}
 	}
 
+	// Exponential self-modulation can rectify a zero-mean signal into a large
+	// operating-point shift. Apply a slow correction before the limiter, while
+	// measuring the final audible output below so limiter asymmetry is included.
+	// Neutral TITO and XM retain their existing output exactly.
+	const float titoSmDcMix = displayOnlyMode ? 0.f : clamp((-tito - 0.02f) / 0.98f, 0.f, 1.f);
+	const float dcCorrectedModeOut = modeOut - titoSmDcMix * titoSmDcCorrection;
+
 	const float targetOut = displayOnlyMode ? in
 		: (cachedNonlinearOversamplingEnabled
-			? nonlinearOversampling.processOutput(modeOut, level, softLimitingEnabledNow)
-			: applyLevelOutputStage(modeOut, level, softLimitingEnabledNow));
+			? nonlinearOversampling.processOutput(dcCorrectedModeOut, level, softLimitingEnabledNow)
+			: applyLevelOutputStage(dcCorrectedModeOut, level, softLimitingEnabledNow));
 	const float out = transitionSmoother.apply(targetOut);
 	outputs[OUT_OUTPUT].setVoltage(out);
+	constexpr float kTitoSmDcServoHz = 1.f;
+	const float titoSmDcAlpha = std::min(2.f * kPi * kTitoSmDcServoHz * args.sampleTime, 1.f);
+	if (titoSmDcMix > 0.f) {
+		titoSmDcCorrection += titoSmDcAlpha * out;
+	}
+	else {
+		titoSmDcCorrection += titoSmDcAlpha * (0.f - titoSmDcCorrection);
+	}
+	if (!std::isfinite(titoSmDcCorrection)) titoSmDcCorrection = 0.f;
+	titoSmDcCorrection = clamp(titoSmDcCorrection, -10.f, 10.f);
 	const float llAlpha = llTelemetryAlpha;
 	if (audioMode == 0) { llTelemetryExcitationSq += llAlpha * (llExc * llExc - llTelemetryExcitationSq); llTelemetryStageALpSq += llAlpha * (llA * llA - llTelemetryStageALpSq); llTelemetryStageBLpSq += llAlpha * (llB * llB - llTelemetryStageBLpSq); llTelemetryOutputSq += llAlpha * (out * out - llTelemetryOutputSq); }
 	else { llTelemetryExcitationSq += llAlpha * (0.f - llTelemetryExcitationSq); llTelemetryStageALpSq += llAlpha * (0.f - llTelemetryStageALpSq); llTelemetryStageBLpSq += llAlpha * (0.f - llTelemetryStageBLpSq); llTelemetryOutputSq += llAlpha * (out * out - llTelemetryOutputSq); }

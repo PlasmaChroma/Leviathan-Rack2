@@ -234,6 +234,9 @@ float measureRuntimeGainDb(
 struct TitoOutputCapture {
   bool finite = true;
   float rms = 0.f;
+  float mean = 0.f;
+  float minimum = INFINITY;
+  float maximum = -INFINITY;
   std::vector<float> samples;
 };
 
@@ -271,12 +274,13 @@ TitoOutputCapture captureTitoOutput(
   args.sampleRate = 48000.f;
   args.sampleTime = 1.f / args.sampleRate;
 
-  const int settleSamples = 4096;
-  const int measureSamples = 4096;
+  const int settleSamples = 48000;
+  const int measureSamples = 48000;
   TitoOutputCapture capture;
   capture.samples.reserve(measureSamples);
 
   float outSq = 0.f;
+  float outSum = 0.f;
   for (int n = 0; n < settleSamples + measureSamples; ++n) {
     const float t = float(n) / args.sampleRate;
     module.inputs[Bifurx::IN_INPUT].setVoltage(titoStimulusSample(t, n));
@@ -286,11 +290,50 @@ TitoOutputCapture captureTitoOutput(
     if (n >= settleSamples) {
       capture.samples.push_back(out);
       outSq += out * out;
+      outSum += out;
+      capture.minimum = std::min(capture.minimum, out);
+      capture.maximum = std::max(capture.maximum, out);
     }
   }
 
   capture.rms = std::sqrt(std::max(outSq / float(std::max(1, measureSamples)), 0.f));
-  capture.finite = capture.finite && std::isfinite(capture.rms);
+  capture.mean = outSum / float(std::max(1, measureSamples));
+  capture.finite = capture.finite && std::isfinite(capture.rms) && std::isfinite(capture.mean);
+  return capture;
+}
+
+TitoOutputCapture captureTitoFullScaleSine(float tito, float reso, float sourceHz) {
+  Bifurx module;
+  module.onReset();
+  configureBaseParams(module, 5, freqNormForCenterHz(900.f), 0.58f, reso, 0.f);
+  module.params[Bifurx::LEVEL_PARAM].setValue(0.5f);
+  module.params[Bifurx::TITO_PARAM].setValue(tito);
+  clearCvInputs(module);
+
+  Module::ProcessArgs args;
+  args.sampleRate = 48000.f;
+  args.sampleTime = 1.f / args.sampleRate;
+  constexpr int settleSamples = 48000;
+  constexpr int measureSamples = 48000;
+  TitoOutputCapture capture;
+  float outSq = 0.f;
+  float outSum = 0.f;
+  for (int n = 0; n < settleSamples + measureSamples; ++n) {
+    const float in = 5.f * std::sin(2.f * kRuntimePi * sourceHz * float(n) * args.sampleTime);
+    module.inputs[Bifurx::IN_INPUT].setVoltage(in);
+    module.process(args);
+    const float out = module.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+    capture.finite = capture.finite && std::isfinite(out);
+    if (n >= settleSamples) {
+      outSq += out * out;
+      outSum += out;
+      capture.minimum = std::min(capture.minimum, out);
+      capture.maximum = std::max(capture.maximum, out);
+    }
+  }
+  capture.rms = std::sqrt(std::max(outSq / float(measureSamples), 0.f));
+  capture.mean = outSum / float(measureSamples);
+  capture.finite = capture.finite && std::isfinite(capture.rms) && std::isfinite(capture.mean);
   return capture;
 }
 
@@ -1028,6 +1071,7 @@ TestResult testResetClearsRuntimeState() {
     && module.coreB.ic1eq == 0.f && module.coreB.ic2eq == 0.f;
   const bool cachesCleared = !module.controlFastCacheValid
     && module.titoCoeffFreqA == 0.f && module.titoCoeffFreqB == 0.f
+    && module.titoSmDcCorrection == 0.f
     && module.selfOscCoeffFreqA == 0.f && module.selfOscCoeffFreqB == 0.f
     && module.cachedFrequencyRangeSampleRate == 0.f
     && module.cachedPitchSampleRate == 0.f
@@ -1376,6 +1420,8 @@ TestResult testRuntimeTitoProducesFiniteContrastAcrossModes() {
   float bestXmDistance = 0.f;
   int worstSmMode = -1;
   int worstXmMode = -1;
+  float worstSmDc = 0.f;
+  int worstSmDcMode = -1;
   std::string weakCases;
 
   for (int mode = 0; mode < 10; ++mode) {
@@ -1389,7 +1435,14 @@ TestResult testRuntimeTitoProducesFiniteContrastAcrossModes() {
       && std::isfinite(xmDistance) && std::isfinite(smDistance)
       && std::isfinite(clean.rms) && std::isfinite(xm.rms) && std::isfinite(sm.rms);
     const bool audibleContrast = (xmDistance > 0.012f) || (smDistance > 0.012f);
-    pass = pass && finite && audibleContrast;
+    const float smDcDelta = std::fabs(sm.mean - clean.mean);
+    const bool smDcControlled = smDcDelta < 0.15f;
+    pass = pass && finite && audibleContrast && smDcControlled;
+
+    if (smDcDelta > worstSmDc) {
+      worstSmDc = smDcDelta;
+      worstSmDcMode = mode;
+    }
 
     if (smDistance < worstSmDistance) {
       worstSmDistance = smDistance;
@@ -1417,9 +1470,35 @@ TestResult testRuntimeTitoProducesFiniteContrastAcrossModes() {
     "worstXm=m" + std::to_string(worstXmMode) + ":" + std::to_string(worstXmDistance) +
       " worstSm=m" + std::to_string(worstSmMode) +
       ":" + std::to_string(worstSmDistance) +
+      " worstSmDc=m" + std::to_string(worstSmDcMode) +
+      ":" + std::to_string(worstSmDc) +
       " bestXm=" + std::to_string(bestXmDistance) +
       " bestSm=" + std::to_string(bestSmDistance) +
       " weak=" + weakCases
+  };
+}
+
+TestResult testRuntimeTitoSmRejectsFullScaleDcWithoutLosingVpp() {
+  bool pass = true;
+  float worstDc = 0.f;
+  float minimumVpp = INFINITY;
+  std::string detail;
+  for (float sourceHz : {261.6256f, 4186.009f}) {
+    for (float reso : {0.75f, 0.85f}) {
+      const TitoOutputCapture sm = captureTitoFullScaleSine(-1.f, reso, sourceHz);
+      const float vpp = sm.maximum - sm.minimum;
+      worstDc = std::max(worstDc, std::fabs(sm.mean));
+      minimumVpp = std::min(minimumVpp, vpp);
+      pass = pass && sm.finite && std::fabs(sm.mean) < 0.10f
+        && vpp > 9.5f && vpp <= 10.001f;
+      detail += " f=" + std::to_string(sourceHz) + " r=" + std::to_string(reso)
+        + " dc=" + std::to_string(sm.mean) + " vpp=" + std::to_string(vpp);
+    }
+  }
+  return {
+    "Runtime full-scale SM rejects DC while retaining rail-to-rail Vpp",
+    pass,
+    "worstDc=" + std::to_string(worstDc) + " minimumVpp=" + std::to_string(minimumVpp) + detail
   };
 }
 
@@ -1826,6 +1905,7 @@ int main() {
     testRuntimePreviewPublishesHighQBeyondLegacyClamp(),
     testRuntimePreviewMarkerGainTracksBandHeavyModes(),
     testRuntimeTitoProducesFiniteContrastAcrossModes(),
+    testRuntimeTitoSmRejectsFullScaleDcWithoutLosingVpp(),
     testRuntimeSelfOscSoftOnsetRamp(),
     testRuntimeSelfOscHighResBounded(),
     testRuntimeSelfOscFlavorMap(),

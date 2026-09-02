@@ -3258,8 +3258,9 @@ struct Octavia : Module {
     }
 
     void startServer() {
-        if (serverRunning) return;
-        serverRunning=true;
+        bool expected = false;
+        if (!serverRunning.compare_exchange_strong(expected, true,
+                std::memory_order_acq_rel, std::memory_order_acquire)) return;
         serverThread=std::thread([this](){ svr.listen("127.0.0.1", octaviaPort()); serverRunning=false; });
         serverThread.detach();
     }
@@ -3456,6 +3457,9 @@ struct OctaviaWidget : ModuleWidget {
 
     OctaviaWidget(Octavia* module) {
         setModule(module);
+        // Start from the UI lifecycle so loading a patch does not require a manual
+        // button press and thread creation never occurs as automatic audio-thread work.
+        if (module) module->startServer();
         const std::string panelPath = asset::plugin(pluginInstance,"res/Octavia.svg");
         setPanel(createPanel(panelPath));
         addChild(createWidget<CyanOrbScrew>(Vec(0, 0)));
