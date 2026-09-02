@@ -1368,7 +1368,7 @@ void saveSettings() {
 	json_array_append_new(strokeJ, json_real(gPanelGlassTint.currentCrystalStrokeColor.b));
 	json_object_set_new(rootJ, "currentCrystalStrokeColor", strokeJ);
 
-	const std::string dir = system::join(asset::user(), "Leviathan");
+	const std::string dir = leviathanPluginUserRootPath();
 	system::createDirectories(dir);
 	const std::string path = system::join(dir, "settings.json");
 	FILE* file = std::fopen(path.c_str(), "w");
@@ -1380,7 +1380,7 @@ void saveSettings() {
 }
 
 void loadSettings() {
-	const std::string dir = system::join(asset::user(), "Leviathan");
+	const std::string dir = leviathanPluginUserRootPath();
 	const std::string path = system::join(dir, "settings.json");
 	FILE* file = std::fopen(path.c_str(), "r");
 	if (!file) {
@@ -2307,7 +2307,7 @@ struct ClockworkDragDebugRecorder {
 	uint64_t gestureSequence = 0;
 
 	std::string userRootPath() {
-		return system::join(asset::user(), "Leviathan/UI");
+		return system::join(leviathanPluginUserRootPath(), "UI");
 	}
 
 	bool ensureOpen() {

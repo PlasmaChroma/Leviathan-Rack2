@@ -25,6 +25,13 @@ static std::atomic<bool> gExtraGlValidationEnabled{false};
 static std::atomic<bool> gUserFractalParamsEnabled{false};
 static std::mutex gModuleTeardownLogMutex;
 
+std::string leviathanPluginUserRootPath() {
+	const std::string slug = (pluginInstance && !pluginInstance->slug.empty())
+		? pluginInstance->slug
+		: "Leviathan";
+	return system::join(asset::user(), slug);
+}
+
 void refreshDragonKingDebugEnabled() {
 	gDragonKingDebugEnabled.store(false, std::memory_order_relaxed);
 	gDragonKingPreviewWidgetOptionsEnabled.store(false, std::memory_order_relaxed);
@@ -44,7 +51,7 @@ void refreshDragonKingDebugEnabled() {
 	// This is optional per-user developer configuration, not a distributable
 	// plugin asset. Keeping it under Rack's user directory also prevents a
 	// locally enabled debug file from being included in a release package.
-	const std::string flagPath = system::join(asset::user(), "Leviathan/dragonking.txt");
+	const std::string flagPath = system::join(leviathanPluginUserRootPath(), "dragonking.txt");
 	std::ifstream flagFile(flagPath);
 	if (!flagFile.good()) {
 		return;
@@ -155,7 +162,7 @@ ModuleTeardownTimer::~ModuleTeardownTimer() {
 	}
 	const auto endedAt = std::chrono::steady_clock::now();
 	const double elapsedMs = std::chrono::duration_cast<std::chrono::microseconds>(endedAt - startedAt).count() * 1e-3;
-	const std::string dir = system::join(asset::user(), "Leviathan");
+	const std::string dir = leviathanPluginUserRootPath();
 	system::createDirectories(dir);
 	const std::string path = system::join(dir, "module_teardown.csv");
 

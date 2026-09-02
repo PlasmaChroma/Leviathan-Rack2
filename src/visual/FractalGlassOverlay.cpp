@@ -28,7 +28,8 @@ constexpr float kFractalGlassContrast = 1.35f;
 
 std::string libraryPath() {
 	if (isDragonKingUserFractalParamsEnabled()) {
-		return system::join(asset::user(), "Leviathan/IntegralFlux/FractalParams.json");
+		return system::join(
+			leviathanPluginUserRootPath(), "IntegralFlux/FractalParams.json");
 	}
 	return pluginInstance
 		? asset::plugin(pluginInstance, "res/FractalParams.json")

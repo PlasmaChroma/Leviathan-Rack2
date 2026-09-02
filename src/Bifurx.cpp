@@ -148,7 +148,7 @@ const char* const kBifurxModeLabels[kBifurxModeCount] = {
 };
 
 std::string bifurxUserRootPath() {
-	return system::join(asset::user(), "Leviathan/Bifurx");
+	return system::join(leviathanPluginUserRootPath(), "Bifurx");
 }
 
 float shapedSpan(float value) {

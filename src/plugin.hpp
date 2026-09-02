@@ -13,11 +13,17 @@
 
 #include <rack.hpp>
 #include <chrono>
+#include <string>
 
 using namespace rack;
 
 // Declare the Plugin, defined in plugin.cpp
 extern Plugin* pluginInstance;
+
+// Plugin-scoped writable storage. Deriving this from Rack's loaded manifest
+// keeps sibling editions such as Leviathan-Pro independent without teaching
+// shared module code about either slug.
+std::string leviathanPluginUserRootPath();
 
 // Declare each Model, defined in each module source file
 // extern Model* modelMyModule;
@@ -53,7 +59,7 @@ extern Model* modelPhonex;
 struct BefacoTinyKnobWhite : BefacoTinyKnob {};
 
 // Runtime feature flags loaded from Rack's user directory at
-// `Leviathan/dragonking.txt`.
+// `<plugin slug>/dragonking.txt`.
 bool isDragonKingDebugEnabled();
 bool isDragonKingPreviewWidgetOptionsEnabled();
 bool isCrownstepAddMoveEnabled();
