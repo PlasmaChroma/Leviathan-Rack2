@@ -58,6 +58,10 @@ SOURCE_FILES = (
     "src/UndertowShape.hpp",
     "src/theme/ThemeService.cpp",
     "src/theme/ThemeService.hpp",
+    "src/theme/ThemePersistence.cpp",
+    "src/theme/ThemePersistence.hpp",
+    "src/theme/ThemePresets.cpp",
+    "src/theme/ThemePresets.hpp",
     "src/theme/ThemeTypes.hpp",
     "src/theme/ThemeUiPoller.hpp",
     "src/visual/AdaptiveGlSurface.cpp",
@@ -280,6 +284,7 @@ struct PreviewBuildLogTimer {
 
 PLUGIN_CPP = r"""#include "plugin.hpp"
 #include "BifurxWorker.hpp"
+#include "theme/ThemePersistence.hpp"
 #include "visual/VisualAssets.hpp"
 
 #include <atomic>
@@ -387,6 +392,7 @@ void init(Plugin* p) {
 	pluginInstance = p;
 	refreshDragonKingDebugEnabled();
 	visual_assets::loadSettings();
+	leviathan::theme::persistence::initializeFromUserStorage();
 	p->addModel(modelBifurx);
 }
 

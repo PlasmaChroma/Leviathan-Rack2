@@ -88,6 +88,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/moirai_engine_spec \
 	build/tests/moirai_module_spec \
 	build/tests/theme_service_spec \
+	build/tests/theme_persistence_spec \
 	build/tests/temporaldeck_platter_spec_harness \
 	build/tests/temporaldeck_arc_lights_spec \
 	build/tests/temporaldeck_engine_spec \
@@ -453,6 +454,7 @@ test-fast: test-build-fast
 	$(call run_rack_test_bin,build/tests/moirai_json_spec)
 	$(call run_test_bin,build/tests/moirai_engine_spec)
 	$(call run_rack_test_bin,build/tests/moirai_module_spec)
+	$(call run_rack_test_bin,build/tests/theme_persistence_spec)
 	python3 tests/octavia_sibyl_contract_spec.py
 	python3 tests/octavia_semantic_contract_spec.py
 	python3 tests/octavia_monitoring_panel_contract_spec.py
@@ -756,6 +758,9 @@ build/tests/cantor_culture_engine_spec: tests/cantor_culture_engine_spec.cpp src
 
 build/tests/theme_service_spec: tests/theme_service_spec.cpp src/theme/ThemeService.cpp src/theme/ThemeService.hpp src/theme/ThemeTypes.hpp src/theme/ThemePresets.cpp src/theme/ThemePresets.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/theme_service_spec.cpp src/theme/ThemeService.cpp src/theme/ThemePresets.cpp -o $@
+
+build/tests/theme_persistence_spec: tests/theme_persistence_spec.cpp src/theme/ThemePersistence.cpp src/theme/ThemePersistence.hpp src/theme/ThemeService.cpp src/theme/ThemeService.hpp src/theme/ThemePresets.cpp src/theme/ThemePresets.hpp src/theme/ThemeTypes.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/theme_persistence_spec.cpp src/theme/ThemePersistence.cpp src/theme/ThemeService.cpp src/theme/ThemePresets.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 build/tests/cantor_module_spec: tests/cantor_module_spec.cpp src/Cantor.cpp src/Cantor.hpp src/CantorCultureEngine.cpp src/CantorCultureEngine.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/cantor_module_spec.cpp src/Cantor.cpp src/CantorCultureEngine.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@

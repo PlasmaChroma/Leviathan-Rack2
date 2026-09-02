@@ -6,8 +6,18 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <jansson.h>
+#include <sys/stat.h>
+
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace leviathan {
 namespace theme {
@@ -16,9 +26,79 @@ namespace {
 
 ThemeDocument gDocument = defaultDocument();
 bool gMayOverwriteDocument = true;
+double gNextExternalThemeCheckAt = -1.0;
+
+struct FileStamp {
+	bool exists = false;
+	std::uint64_t size = 0u;
+	std::uint64_t modifiedLow = 0u;
+	std::uint64_t modifiedHigh = 0u;
+
+	bool operator==(const FileStamp& other) const {
+		return exists == other.exists && size == other.size
+			&& modifiedLow == other.modifiedLow
+			&& modifiedHigh == other.modifiedHigh;
+	}
+	bool operator!=(const FileStamp& other) const { return !(*this == other); }
+};
+
+FileStamp gObservedThemeStamp;
+bool gObservedThemeStampValid = false;
+
+constexpr double kExternalThemeCheckPeriodSec = 0.25;
 
 std::string userThemePath() {
 	return system::join(asset::user(), "Leviathan/theme.json");
+}
+
+bool followsExternalThemeDocument() {
+	return pluginInstance && pluginInstance->slug == "Leviathan-Pro";
+}
+
+FileStamp fileStamp(const std::string& path) {
+	FileStamp stamp;
+#if defined(_WIN32)
+	WIN32_FILE_ATTRIBUTE_DATA data = {};
+	const std::wstring widePath = string::UTF8toUTF16(path);
+	if (!GetFileAttributesExW(widePath.c_str(), GetFileExInfoStandard, &data)
+		|| (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+		return stamp;
+	}
+	stamp.exists = true;
+	stamp.size = (std::uint64_t(data.nFileSizeHigh) << 32u) | data.nFileSizeLow;
+	stamp.modifiedLow = data.ftLastWriteTime.dwLowDateTime;
+	stamp.modifiedHigh = data.ftLastWriteTime.dwHighDateTime;
+#else
+	struct stat data = {};
+	if (::stat(path.c_str(), &data) != 0 || !S_ISREG(data.st_mode)) return stamp;
+	stamp.exists = true;
+	stamp.size = std::uint64_t(data.st_size);
+	stamp.modifiedLow = std::uint64_t(data.st_mtime);
+#if defined(__APPLE__)
+	stamp.modifiedHigh = std::uint64_t(data.st_mtimespec.tv_nsec);
+#else
+	stamp.modifiedHigh = std::uint64_t(data.st_mtim.tv_nsec);
+#endif
+#endif
+	return stamp;
+}
+
+void initializeDocument(LoadStatus status, ThemeDocument document) {
+	gDocument = status == LoadStatus::Loaded ? document : defaultDocument();
+	gMayOverwriteDocument = status != LoadStatus::FutureSchema;
+	// Factory preset IDs describe the current built-in preset, not a frozen copy
+	// of its colors from the plugin version that last wrote theme.json. Refresh
+	// those snapshots on startup while preserving modified and user presets.
+	if (status == LoadStatus::Loaded) {
+		if (const FactoryPreset* preset = findFactoryPreset(gDocument.activePreset.c_str())) {
+			gDocument.active = preset->snapshot;
+		}
+	}
+	if (status == LoadStatus::Invalid && isDragonKingDebugEnabled())
+		WARN("Leviathan Theme: invalid theme.json; using canonical defaults");
+	if (status == LoadStatus::FutureSchema && isDragonKingDebugEnabled())
+		WARN("Leviathan Theme: future theme.json schema preserved; using canonical defaults");
+	initialize(gDocument.active, gDocument.activePreset.c_str());
 }
 
 int hexNibble(char c) {
@@ -135,7 +215,7 @@ LoadStatus loadDocument(const std::string& path, ThemeDocument* document) {
 
 bool saveDocumentAtomic(const std::string& path, const ThemeDocument& document) {
 	const std::string directory = system::getDirectory(path);
-	if (!system::createDirectories(directory)) return false;
+	if (!system::createDirectories(directory) && !system::isDirectory(directory)) return false;
 	const std::string temporary = path + ".tmp";
 	json_t* root = json_object();
 	json_object_set_new(root, "schemaVersion", json_integer(kThemeSchemaVersion));
@@ -169,22 +249,34 @@ bool saveDocumentAtomic(const std::string& path, const ThemeDocument& document) 
 }
 
 void initializeFromUserStorage() {
-	gDocument = defaultDocument();
-	const LoadStatus status = loadDocument(userThemePath(), &gDocument);
-	gMayOverwriteDocument = status != LoadStatus::FutureSchema;
-	// Factory preset IDs describe the current built-in preset, not a frozen copy
-	// of its colors from the plugin version that last wrote theme.json. Refresh
-	// those snapshots on startup while preserving modified and user presets.
-	if (status == LoadStatus::Loaded) {
-		if (const FactoryPreset* preset = findFactoryPreset(gDocument.activePreset.c_str())) {
-			gDocument.active = preset->snapshot;
-		}
+	ThemeDocument document = defaultDocument();
+	const std::string path = userThemePath();
+	const LoadStatus status = loadDocument(path, &document);
+	initializeDocument(status, document);
+	gObservedThemeStamp = fileStamp(path);
+	gObservedThemeStampValid = true;
+	gNextExternalThemeCheckAt = -1.0;
+}
+
+void refreshExternalThemeIfChanged() {
+	if (!followsExternalThemeDocument()) return;
+	const double now = system::getTime();
+	if (std::isfinite(now) && gNextExternalThemeCheckAt >= 0.0
+		&& now < gNextExternalThemeCheckAt) {
+		return;
 	}
-	if (status == LoadStatus::Invalid && isDragonKingDebugEnabled())
-		WARN("Leviathan Theme: invalid theme.json; using canonical defaults");
-	if (status == LoadStatus::FutureSchema && isDragonKingDebugEnabled())
-		WARN("Leviathan Theme: future theme.json schema preserved; using canonical defaults");
-	initialize(gDocument.active, gDocument.activePreset.c_str());
+	gNextExternalThemeCheckAt = std::isfinite(now)
+		? now + kExternalThemeCheckPeriodSec : -1.0;
+
+	const std::string path = userThemePath();
+	const FileStamp stamp = fileStamp(path);
+	if (gObservedThemeStampValid && stamp == gObservedThemeStamp) return;
+	gObservedThemeStamp = stamp;
+	gObservedThemeStampValid = true;
+
+	ThemeDocument document = defaultDocument();
+	const LoadStatus status = loadDocument(path, &document);
+	initializeDocument(status, document);
 }
 
 void saveToUserStorage() {

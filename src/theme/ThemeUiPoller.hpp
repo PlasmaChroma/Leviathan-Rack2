@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../plugin.hpp"
+#include "ThemePersistence.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -28,6 +29,7 @@ public:
 	bool shouldPoll() {
 		const double now = system::getTime();
 		if (!std::isfinite(now)) {
+			persistence::refreshExternalThemeIfChanged();
 			return true;
 		}
 
@@ -46,6 +48,7 @@ public:
 
 		const double periodsElapsed = std::floor((now - nextPollAt_) / period) + 1.0;
 		nextPollAt_ += periodsElapsed * period;
+		persistence::refreshExternalThemeIfChanged();
 		return true;
 	}
 
