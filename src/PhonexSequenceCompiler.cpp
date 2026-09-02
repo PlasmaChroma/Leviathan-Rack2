@@ -226,7 +226,7 @@ CompileStatus compilePhoneScript(const PhoneScript& script, LpcSequence& output)
 					// /h/ is turbulent airflow through the following vowel's tract.
 					// Carrying that tract context in K1..K4 is far clearer than a
 					// single generic aspiration spectrum.
-					shapeUnvoicedTowardVowel(frame, nextVowel, 0.88f, 1.f);
+					shapeUnvoicedTowardVowel(frame, nextVowel, 0.68f, 1.f);
 				}
 				else if (frameIndex + 1 == prototype.durationFrames) {
 					// Use only the final 20 ms of an unvoiced consonant as a quiet

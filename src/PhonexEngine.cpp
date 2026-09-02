@@ -433,6 +433,7 @@ void Engine::updateTransport(const EngineControls& controls, bool triggerRise) {
 		return;
 	}
 	const float last = static_cast<float>(sequence_->frameCount - 1);
+	const float forwardEnd = static_cast<float>(sequence_->frameCount);
 	const float speed = quietSpeed(controls.speed);
 	if (triggerMode_ == TriggerMode::AdvanceOneFrame) {
 		if (triggerRise) {
@@ -443,14 +444,22 @@ void Engine::updateTransport(const EngineControls& controls, bool triggerRise) {
 		position_ = clampf((controls.scrubVoltage + 5.f) * 0.1f, 0.f, 1.f) * last;
 	}
 	else if (controls.hostSampleRate > 0.f && std::isfinite(controls.hostSampleRate)) {
-		position_ = clampf(position_ + speed * 50.f / controls.hostSampleRate, 0.f, last);
+		// A sequence of N 20 ms frames occupies transport time [0, N]. Keep
+		// rendering the final frame over [N - 1, N) instead of completing as
+		// soon as its index is first reached.
+		position_ = clampf(position_ + speed * 50.f / controls.hostSampleRate,
+			0.f, speed < 0.f ? last : forwardEnd);
+		if (speed > 0.f && forwardEnd - position_ < 1e-5f)
+			position_ = forwardEnd;
 	}
-	const std::uint16_t nextFrame = static_cast<std::uint16_t>(std::floor(position_));
+	const std::uint16_t nextFrame = std::min<std::uint16_t>(
+		static_cast<std::uint16_t>(std::floor(position_)), sequence_->frameCount - 1);
 	frameChanged_ = nextFrame != observedFrame_;
 	observedFrame_ = nextFrame;
-	const bool atEnd = speed < 0.f ? position_ <= 0.f : position_ >= last;
 	const bool interactiveTransport = triggerMode_ == TriggerMode::AdvanceOneFrame
 		|| controls.scrubConnected;
+	const bool atEnd = speed < 0.f ? position_ <= 0.f
+		: position_ >= (interactiveTransport ? last : forwardEnd);
 	if (interactiveTransport)
 		playbackComplete_ = false;
 	if (!atEnd) {
@@ -602,7 +611,7 @@ EngineOutput Engine::process(const EngineControls& controls) {
 	}
 	EngineOutput output;
 	output.audio = voltage;
-	output.position = position_;
+	output.position = position();
 	output.frameIndex = observedFrame_;
 	output.framePulse = framePulseRemaining_ > 0;
 	output.eoxPulse = eoxPulseRemaining_ > 0;

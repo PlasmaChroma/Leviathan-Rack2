@@ -212,15 +212,18 @@ void transportContract(Tests& tests) {
 	controls = {};
 	controls.hostSampleRate = 1000.f;
 	bool audibleBeforeEox = false;
+	int samplesThroughEox = 0;
 	for (int i = 0; i < 80; ++i) {
 		output = completionEngine.process(controls);
+		++samplesThroughEox;
 		if (!output.eoxPulse)
 			audibleBeforeEox = audibleBeforeEox || std::abs(output.audio) > 1e-5f;
 		if (output.eoxPulse)
 			break;
 	}
-	tests.expect(audibleBeforeEox && output.eoxPulse && output.audio == 0.f,
-		"free-running utterance mutes exactly when EOX is reached");
+	tests.expect(audibleBeforeEox && output.eoxPulse && output.audio == 0.f
+		&& samplesThroughEox == 80,
+		"free-running utterance renders all four 20 ms frames before EOX");
 	bool silentAfterEox = true;
 	for (int i = 0; i < 100; ++i)
 		silentAfterEox = silentAfterEox && completionEngine.process(controls).audio == 0.f;
@@ -579,6 +582,26 @@ void phase4CorpusAndCompilerContract(Tests& tests) {
 			}
 		}
 	}
+	for (phonex::Phone stop : {phonex::Phone::B, phonex::Phone::D, phonex::Phone::G}) {
+		const auto& prototype = phonex::phonePrototype(stop);
+		tests.expect(prototype.anchorCount == 3
+			&& prototype.anchors[0].excitation == phonex::Excitation::Silence
+			&& prototype.anchors[1].excitation == phonex::Excitation::Unvoiced
+			&& prototype.anchors[2].excitation == phonex::Excitation::Voiced,
+			"voiced stop has closure, burst, and voiced release");
+	}
+	const auto& affricate = phonex::phonePrototype(phonex::Phone::JH);
+	tests.expect(affricate.anchorCount == 3
+		&& affricate.anchors[0].excitation == phonex::Excitation::Silence
+		&& affricate.anchors[1].excitation == phonex::Excitation::Unvoiced
+		&& affricate.anchors[2].excitation == phonex::Excitation::Voiced,
+		"JH has closure, frication, and voiced release");
+	tests.expect(phonex::phonePrototype(phonex::Phone::P).durationFrames == 4,
+		"P closure remains distinct in an S-P consonant cluster");
+	tests.expect(phonex::phonePrototype(phonex::Phone::HH).anchors[0].energy >= 0.27f,
+		"HH aspiration has a distinct authored energy floor");
+	tests.expect(phonex::dictionaryPronunciation("VOLTAGE") == "V OW1 L T IH JH",
+		"voltage uses the audible unstressed IH vowel");
 
 	phonex::PhoneScript script;
 	tests.expect(phonex::parseDirectPhonemes("[HH EH1 L OW0]", script)

@@ -4,6 +4,8 @@
 #include "MathHelpers.hpp"
 #include "BifurxInputStage.hpp"
 #include "BifurxOutputStage.hpp"
+#include "BifurxOversampling.hpp"
+#include "BifurxTransitionSmoother.hpp"
 #include "PanelSvgUtils.hpp"
 
 #include <algorithm>
@@ -616,6 +618,8 @@ struct Bifurx : Module {
 
 	TptSvf coreA;
 	TptSvf coreB;
+	BifurxNonlinearOversampling2x nonlinearOversampling;
+	BifurxTransitionSmoother transitionSmoother;
 	RenderMode renderMode = RENDER_OPENGL;
 	// Production context-owned fixed GL surface. The debug menu may disable it
 	// temporarily for diagnostics, but enabled is the supported default path.

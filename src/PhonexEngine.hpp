@@ -2,6 +2,7 @@
 
 #include "PhonexTypes.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 
@@ -134,7 +135,11 @@ public:
 	void retrigger(float speed);
 	EngineOutput process(const EngineControls& controls);
 
-	float position() const { return position_; }
+	float position() const {
+		return sequence_ && sequence_->frameCount > 0
+			? std::min(position_, static_cast<float>(sequence_->frameCount - 1))
+			: 0.f;
+	}
 	std::uint16_t frameIndex() const { return observedFrame_; }
 	std::uint64_t internalTickCount() const { return internalTicks_; }
 	LpcFrame currentFrame() const { return interpolatedFrame(); }

@@ -709,6 +709,300 @@ TestResult testProductionOutputSafetyStageContract() {
   };
 }
 
+template <typename NonlinearFn>
+std::vector<float> renderNonlinearSine(
+  NonlinearFn&& nonlinear,
+  bool oversampled,
+  float sampleRate,
+  int coherentBin,
+  int measuredFrames
+) {
+  constexpr int factor = 2;
+  constexpr int quality = 8;
+  constexpr int warmupFrames = 4096;
+  dsp::Upsampler<factor, quality> upsampler;
+  dsp::Decimator<factor, quality> decimator;
+  std::vector<float> output(measuredFrames);
+  const float phaseStep = 2.f * kRuntimePi * float(coherentBin) / float(measuredFrames);
+  for (int n = -warmupFrames; n < measuredFrames; ++n) {
+    const float input = 5.f * std::sin(phaseStep * float(n));
+    float sample = 0.f;
+    if (oversampled) {
+      float lanes[factor] {};
+      upsampler.process(input, lanes);
+      for (float& lane : lanes) {
+        lane = nonlinear(lane);
+      }
+      sample = decimator.process(lanes);
+    }
+    else {
+      sample = nonlinear(input);
+    }
+    if (n >= 0) {
+      output[n] = sample;
+    }
+  }
+  (void) sampleRate;
+  return output;
+}
+
+float coherentAmplitude(const std::vector<float>& samples, int bin) {
+  double real = 0.0;
+  double imag = 0.0;
+  const int count = int(samples.size());
+  for (int n = 0; n < count; ++n) {
+    const double phase = 2.0 * double(kRuntimePi) * double(bin) * double(n) / double(count);
+    real += double(samples[n]) * std::cos(phase);
+    imag -= double(samples[n]) * std::sin(phase);
+  }
+  return float(2.0 * std::sqrt(real * real + imag * imag) / double(count));
+}
+
+int foldedBin(int harmonic, int fundamentalBin, int frameCount) {
+  int bin = (harmonic * fundamentalBin) % frameCount;
+  if (bin > frameCount / 2) {
+    bin = frameCount - bin;
+  }
+  return bin;
+}
+
+TestResult testTwoTimesOversamplingSuppressesDrivenLevelAliases() {
+  constexpr float sampleRate = 48000.f;
+  constexpr int measuredFrames = 16384;
+  constexpr int fundamentalBin = 1428; // 4183.594 Hz, matching the live Octavia probe.
+  const auto nonlinear = [](float input) {
+    return applyLevelInputStage(input, 1.f);
+  };
+  const std::vector<float> hostRate = renderNonlinearSine(
+    nonlinear, false, sampleRate, fundamentalBin, measuredFrames);
+  const std::vector<float> twoTimes = renderNonlinearSine(
+    nonlinear, true, sampleRate, fundamentalBin, measuredFrames);
+
+  double hostAliasSq = 0.0;
+  double twoTimesAliasSq = 0.0;
+  std::string bins;
+  for (int harmonic : {7, 9, 11, 13}) {
+    const int bin = foldedBin(harmonic, fundamentalBin, measuredFrames);
+    const float hostAmplitude = coherentAmplitude(hostRate, bin);
+    const float twoTimesAmplitude = coherentAmplitude(twoTimes, bin);
+    hostAliasSq += double(hostAmplitude) * double(hostAmplitude);
+    twoTimesAliasSq += double(twoTimesAmplitude) * double(twoTimesAmplitude);
+    bins += " [h" + std::to_string(harmonic) + "=" + std::to_string(bin) +
+      " host=" + std::to_string(hostAmplitude) + " 2x=" + std::to_string(twoTimesAmplitude) + "]";
+  }
+  const float reductionDb = 10.f * std::log10(float(
+    std::max(hostAliasSq, 1e-20) / std::max(twoTimesAliasSq, 1e-20)));
+  const float hostFundamental = coherentAmplitude(hostRate, fundamentalBin);
+  const float twoTimesFundamental = coherentAmplitude(twoTimes, fundamentalBin);
+  const float fundamentalDeltaDb = 20.f * std::log10(std::max(twoTimesFundamental, 1e-20f) /
+    std::max(hostFundamental, 1e-20f));
+  return {
+    "Selective 2x processing suppresses folded LEVEL-drive harmonics",
+    reductionDb > 12.f && std::fabs(fundamentalDeltaDb) < 1.f,
+    "aliasReductionDb=" + std::to_string(reductionDb) +
+      " fundamentalDeltaDb=" + std::to_string(fundamentalDeltaDb) + bins
+  };
+}
+
+TestResult testTwoTimesOversamplingSuppressesSoftLimiterAliases() {
+  constexpr float sampleRate = 48000.f;
+  constexpr int measuredFrames = 16384;
+  constexpr int fundamentalBin = 1428;
+  const auto nonlinear = [](float input) {
+    return applyLevelOutputStage(input, 0.5f, true);
+  };
+  const std::vector<float> hostRate = renderNonlinearSine(
+    nonlinear, false, sampleRate, fundamentalBin, measuredFrames);
+  const std::vector<float> twoTimes = renderNonlinearSine(
+    nonlinear, true, sampleRate, fundamentalBin, measuredFrames);
+
+  double hostAliasSq = 0.0;
+  double twoTimesAliasSq = 0.0;
+  for (int harmonic : {7, 9, 11, 13}) {
+    const int bin = foldedBin(harmonic, fundamentalBin, measuredFrames);
+    const float hostAmplitude = coherentAmplitude(hostRate, bin);
+    const float twoTimesAmplitude = coherentAmplitude(twoTimes, bin);
+    hostAliasSq += double(hostAmplitude) * double(hostAmplitude);
+    twoTimesAliasSq += double(twoTimesAmplitude) * double(twoTimesAmplitude);
+  }
+  const float reductionDb = 10.f * std::log10(float(
+    std::max(hostAliasSq, 1e-20) / std::max(twoTimesAliasSq, 1e-20)));
+  const float hostFundamental = coherentAmplitude(hostRate, fundamentalBin);
+  const float twoTimesFundamental = coherentAmplitude(twoTimes, fundamentalBin);
+  const float fundamentalDeltaDb = 20.f * std::log10(std::max(twoTimesFundamental, 1e-20f) /
+    std::max(hostFundamental, 1e-20f));
+  return {
+    "Selective 2x processing suppresses folded soft-limiter harmonics",
+    reductionDb > 12.f && std::fabs(fundamentalDeltaDb) < 1.f,
+    "aliasReductionDb=" + std::to_string(reductionDb) +
+      " fundamentalDeltaDb=" + std::to_string(fundamentalDeltaDb)
+  };
+}
+
+TestResult testOversampledLimiterPreservesFiveVoltBoundary() {
+  BifurxNonlinearOversampling2x oversampling;
+  constexpr int frames = 32768;
+  constexpr float phaseStep = 2.f * kRuntimePi * 1428.f / 16384.f;
+  float peak = 0.f;
+  bool finite = true;
+  for (int n = 0; n < frames; ++n) {
+    const float input = 8.f * std::sin(phaseStep * float(n));
+    const float output = oversampling.processOutput(input, 0.5f, true);
+    finite = finite && std::isfinite(output);
+    peak = std::max(peak, std::fabs(output));
+  }
+  return {
+    "Oversampled soft limiter preserves the physical five-volt boundary",
+    finite && peak <= kOutputSoftLimitCeilingVolts,
+    "peak=" + std::to_string(peak)
+  };
+}
+
+TestResult testTransitionSmootherIsTransparentAndSampleRateIndependent() {
+  constexpr float sampleRates[] = {44100.f, 48000.f, 96000.f, 192000.f};
+  bool pass = true;
+  float worstStep = 0.f;
+  float worstDurationErrorMs = 0.f;
+  for (float sampleRate : sampleRates) {
+    BifurxTransitionSmoother smoother;
+    smoother.prepare(0, false, sampleRate);
+    const float initial = smoother.apply(4.f);
+    smoother.prepare(1, false, sampleRate);
+    const float first = smoother.apply(4.f);
+    float previous = first;
+    int transitionFrames = 1;
+    const int guardFrames = int(sampleRate * 0.02f);
+    while (!smoother.isStable() && transitionFrames < guardFrames) {
+      smoother.prepare(1, false, sampleRate);
+      const float target = smoother.activeMode == 0 ? 4.f : -4.f;
+      const float output = smoother.apply(target);
+      worstStep = std::max(worstStep, std::fabs(output - previous));
+      previous = output;
+      transitionFrames++;
+    }
+    const float transparent = smoother.apply(1.25f);
+    const float durationMs = 1000.f * float(transitionFrames) / sampleRate;
+    worstDurationErrorMs = std::max(
+      worstDurationErrorMs,
+      std::fabs(durationMs - 1000.f * kBifurxTransitionSeconds)
+    );
+    pass = pass && initial == 4.f && first == 4.f
+      && smoother.isStable() && smoother.activeMode == 1
+      && std::fabs(previous + 4.f) < 1e-6f
+      && transparent == 1.25f && worstStep < 0.15f
+      && worstDurationErrorMs < 0.06f;
+  }
+
+  BifurxTransitionSmoother limiterToggle;
+  limiterToggle.prepare(0, false, 48000.f);
+  limiterToggle.apply(7.f);
+  limiterToggle.prepare(0, true, 48000.f);
+  float limiterPeak = 0.f;
+  for (int n = 0; n < 512 && !limiterToggle.isStable(); ++n) {
+    limiterToggle.prepare(0, true, 48000.f);
+    const float target = limiterToggle.activeSoftLimitingEnabled ? 5.f : 7.f;
+    limiterPeak = std::max(limiterPeak, std::fabs(limiterToggle.apply(target)));
+  }
+  pass = pass && limiterToggle.activeSoftLimitingEnabled
+    && limiterToggle.isStable() && limiterPeak <= 7.f;
+
+  return {
+    "Transition smoother is transparent and switches at a silent midpoint",
+    pass,
+    "worstStep=" + std::to_string(worstStep) +
+      " durationErrorMs=" + std::to_string(worstDurationErrorMs)
+  };
+}
+
+TestResult testRuntimeModeAndLimiterChangesPreserveContinuity() {
+  constexpr float sampleRates[] = {44100.f, 48000.f, 96000.f, 192000.f};
+  bool finite = true;
+  bool completed = true;
+  float worstModeStep = 0.f;
+  float worstLimiterStep = 0.f;
+  float worstLimiterSettledPeak = 0.f;
+
+  for (float sampleRate : sampleRates) {
+    Module::ProcessArgs args;
+    args.sampleRate = sampleRate;
+    args.sampleTime = 1.f / sampleRate;
+    for (int phaseIndex = 0; phaseIndex < 24; ++phaseIndex) {
+      Bifurx module;
+      module.onReset();
+      configureBaseParams(module, 9, freqNormForCenterHz(1200.f), 0.33f, 0.35f, 0.f);
+      module.softLimitingEnabled.store(false, std::memory_order_relaxed);
+      clearCvInputs(module);
+      const float phase = 2.f * kRuntimePi * float(phaseIndex) / 24.f;
+      const int settleSamples = int(0.20f * sampleRate);
+      float previous = 0.f;
+      for (int n = 0; n < settleSamples; ++n) {
+        module.inputs[Bifurx::IN_INPUT].setVoltage(
+          4.f * std::sin(2.f * kRuntimePi * 220.f * float(n) / sampleRate + phase));
+        module.process(args);
+        previous = module.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+      }
+      module.params[Bifurx::MODE_PARAM].setValue(8.f);
+      const int transitionGuard = int(sampleRate * 0.02f);
+      bool armed = false;
+      for (int n = 0; n < transitionGuard; ++n) {
+        const int sampleIndex = settleSamples + n;
+        module.inputs[Bifurx::IN_INPUT].setVoltage(
+          4.f * std::sin(2.f * kRuntimePi * 220.f * float(sampleIndex) / sampleRate + phase));
+        module.process(args);
+        const float output = module.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+        worstModeStep = std::max(worstModeStep, std::fabs(output - previous));
+        previous = output;
+        finite = finite && std::isfinite(output);
+        armed = armed || !module.transitionSmoother.isStable();
+        if (armed && module.transitionSmoother.isStable()) break;
+      }
+      completed = completed && armed && module.transitionSmoother.isStable()
+        && module.transitionSmoother.activeMode == 8;
+    }
+
+    Bifurx limiterModule;
+    limiterModule.onReset();
+    configureBaseParams(limiterModule, 0, freqNormForCenterHz(1200.f), 0.33f, 0.35f, 0.f);
+    limiterModule.params[Bifurx::LEVEL_PARAM].setValue(1.f);
+    limiterModule.softLimitingEnabled.store(false, std::memory_order_relaxed);
+    clearCvInputs(limiterModule);
+    const int settleSamples = int(0.10f * sampleRate);
+    float previous = 0.f;
+    for (int n = 0; n < settleSamples; ++n) {
+      limiterModule.inputs[Bifurx::IN_INPUT].setVoltage(8.f);
+      limiterModule.process(args);
+      previous = limiterModule.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+    }
+    limiterModule.softLimitingEnabled.store(true, std::memory_order_relaxed);
+    const int transitionGuard = int(sampleRate * 0.02f);
+    bool armed = false;
+    for (int n = 0; n < transitionGuard; ++n) {
+      limiterModule.process(args);
+      const float output = limiterModule.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+      worstLimiterStep = std::max(worstLimiterStep, std::fabs(output - previous));
+      previous = output;
+      finite = finite && std::isfinite(output);
+      armed = armed || !limiterModule.transitionSmoother.isStable();
+      if (armed && limiterModule.transitionSmoother.isStable()) break;
+    }
+    const float settled = limiterModule.outputs[Bifurx::OUT_OUTPUT].getVoltage();
+    worstLimiterSettledPeak = std::max(worstLimiterSettledPeak, std::fabs(settled));
+    completed = completed && armed && limiterModule.transitionSmoother.isStable()
+      && limiterModule.transitionSmoother.activeSoftLimitingEnabled;
+  }
+
+  const bool pass = finite && completed
+    && worstModeStep < 0.20f && worstLimiterStep < 0.20f
+    && worstLimiterSettledPeak <= kOutputSoftLimitCeilingVolts;
+  return {
+    "Runtime mode and limiter transitions suppress click-sized steps",
+    pass,
+    "modeStep=" + std::to_string(worstModeStep) +
+      " limiterStep=" + std::to_string(worstLimiterStep) +
+      " limiterSettledPeak=" + std::to_string(worstLimiterSettledPeak)
+  };
+}
+
 TestResult testResetClearsRuntimeState() {
   Bifurx module;
   configureBaseParams(module, 5, freqNormForCenterHz(900.f), 0.58f, 0.75f, 0.f);
@@ -736,7 +1030,8 @@ TestResult testResetClearsRuntimeState() {
     && module.cachedFrequencyRangeSampleRate == 0.f
     && module.cachedPitchSampleRate == 0.f
     && !module.cachedCharacterStateValid
-    && !module.previewFilterInitialized;
+    && !module.previewFilterInitialized
+    && !module.transitionSmoother.initialized;
   const bool analysisCleared = module.analysisCaptureSlots[0] < 0
     && module.analysisCaptureSlots[1] < 0 && module.analysisCaptureCountdown == 0;
 
@@ -1380,6 +1675,11 @@ int main() {
     testSynchronousFftScratchIsLazyAndThreadLocalReusable(),
     testWorkerLatestRequestRetainsOwnedAnalysisPayload(),
     testProductionOutputSafetyStageContract(),
+    testTwoTimesOversamplingSuppressesDrivenLevelAliases(),
+    testTwoTimesOversamplingSuppressesSoftLimiterAliases(),
+    testOversampledLimiterPreservesFiveVoltBoundary(),
+    testTransitionSmootherIsTransparentAndSampleRateIndependent(),
+    testRuntimeModeAndLimiterChangesPreserveContinuity(),
     testResetClearsRuntimeState(),
     testVoctStepsImmediatelyWithoutImplicitGlide(),
     testSpanIsPreservedAtFrequencyRails(),
