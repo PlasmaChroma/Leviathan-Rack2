@@ -199,6 +199,10 @@ private:
 	bool eoxEvent_ = false;
 	std::uint32_t framePulseRemaining_ = 0;
 	std::uint32_t eoxPulseRemaining_ = 0;
+	std::uint32_t completionTailRemaining_ = 0;
+	std::uint32_t completionRampRemaining_ = 0;
+	std::uint32_t completionRampTotal_ = 0;
+	float completionHeldSample_ = 0.f;
 };
 
 std::uint32_t xorshift32(std::uint32_t& state);

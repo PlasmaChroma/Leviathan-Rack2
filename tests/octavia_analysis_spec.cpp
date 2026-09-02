@@ -94,6 +94,25 @@ int main() {
 		stableResonance |= resonance.stable;
 	check(stableResonance, "FFT resonance candidates carry frozen-window stability");
 
+	octavia::FrozenObservation extended;
+	extended.sampleRate = 48000.f;
+	extended.requestedMask = extended.anyConnectedMask = extended.allConnectedMask = 1u << 2;
+	for (size_t i = 0; i < 32768; ++i) {
+		const float hz = i < 16384 ? 1000.f : 3000.f;
+		extended.samples[2].push_back(std::sin(
+			2.f * 3.14159265358979323846f * hz * float(i) / extended.sampleRate));
+	}
+	octavia::GroupAnalysis extendedResult;
+	check(engine.tryAnalyze(extended, mono, true, true, &extendedResult, &error),
+		"long-window detailed analysis succeeds");
+	float earlyToneDb = -140.f, lateToneDb = -140.f;
+	for (const auto& bin : extendedResult.mono.spectrum) {
+		if (std::fabs(bin.hz - 1000.f) < 15.f) earlyToneDb = std::max(earlyToneDb, bin.db);
+		if (std::fabs(bin.hz - 3000.f) < 15.f) lateToneDb = std::max(lateToneDb, bin.db);
+	}
+	check(earlyToneDb > -30.f && lateToneDb > -30.f,
+		"multi-window spectrum represents events from both halves of an extended capture");
+
 	std::cout << "[TEST SUMMARY] failures=" << failures << "\n";
 	return failures ? 1 : 0;
 }

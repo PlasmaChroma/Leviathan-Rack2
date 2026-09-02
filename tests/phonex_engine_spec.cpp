@@ -221,13 +221,40 @@ void transportContract(Tests& tests) {
 		if (output.eoxPulse)
 			break;
 	}
-	tests.expect(audibleBeforeEox && output.eoxPulse && output.audio == 0.f
+	tests.expect(audibleBeforeEox && output.eoxPulse
 		&& samplesThroughEox == 80,
 		"free-running utterance renders all four 20 ms frames before EOX");
 	bool silentAfterEox = true;
 	for (int i = 0; i < 100; ++i)
 		silentAfterEox = silentAfterEox && completionEngine.process(controls).audio == 0.f;
 	tests.expect(silentAfterEox, "completed free-running utterance remains silent");
+
+	phonex::LpcSequence deClickSequence;
+	deClickSequence.frameCount = 1;
+	deClickSequence.frames[0].energy = 1.f;
+	deClickSequence.frames[0].pitchPeriod10k = 80.f;
+	deClickSequence.frames[0].excitation = phonex::Excitation::Voiced;
+	phonex::Engine deClickEngine;
+	deClickEngine.setSequence(&deClickSequence);
+	deClickEngine.setReconstructionMode(phonex::ReconstructionMode::Filtered);
+	deClickEngine.setOutputStage(phonex::OutputStage::CalibratedLinear);
+	phonex::EngineControls deClickControls;
+	deClickControls.hostSampleRate = 48000.f;
+	deClickControls.externalConnected = true;
+	deClickControls.externalExcitation = 5.f;
+	float beforeEox = 0.f;
+	phonex::EngineOutput deClickOutput;
+	for (int sample = 0; sample < 2000 && !deClickOutput.eoxPulse; ++sample) {
+		beforeEox = deClickOutput.audio;
+		deClickOutput = deClickEngine.process(deClickControls);
+	}
+	tests.expect(deClickOutput.eoxPulse && beforeEox > 0.5f
+		&& std::abs(deClickOutput.audio - beforeEox) < 0.1f,
+		"filtered EOX discharges reconstruction state without a hard-zero click");
+	for (int sample = 0; sample < 480; ++sample)
+		deClickOutput = deClickEngine.process(deClickControls);
+	tests.expect(deClickOutput.audio == 0.f,
+		"filtered EOX discharge settles to exact silence within 10 ms");
 	controls.scrubConnected = true;
 	controls.scrubVoltage = 5.f;
 	bool audibleScrubEndpoint = false;

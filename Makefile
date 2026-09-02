@@ -66,6 +66,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/octavia_analysis_spec \
 	build/tests/octavia_measurement_spec \
 	build/tests/octavia_observation_spec \
+	build/tests/octavia_recording_spec \
 	build/tests/octavia_job_control_spec \
 	build/tests/octavia_semantic_control_spec \
 	build/tests/octavia_action_validation_spec \
@@ -431,6 +432,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/octavia_analysis_spec)
 	$(call run_test_bin,build/tests/octavia_measurement_spec)
 	$(call run_test_bin,build/tests/octavia_observation_spec)
+	$(call run_test_bin,build/tests/octavia_recording_spec)
 	$(call run_test_bin,build/tests/octavia_job_control_spec)
 	$(call run_test_bin,build/tests/octavia_semantic_control_spec)
 	$(call run_test_bin,build/tests/octavia_action_validation_spec)
@@ -583,6 +585,9 @@ build/tests/octavia_job_control_spec: tests/octavia_job_control_spec.cpp src/Oct
 
 build/tests/octavia_observation_spec: tests/octavia_observation_spec.cpp src/OctaviaObservation.cpp src/OctaviaObservation.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_observation_spec.cpp src/OctaviaObservation.cpp -o $@
+
+build/tests/octavia_recording_spec: tests/octavia_recording_spec.cpp src/OctaviaRecording.cpp src/OctaviaRecording.hpp src/OctaviaAnalysis.cpp src/OctaviaAnalysis.hpp src/OctaviaObservation.cpp src/OctaviaObservation.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_recording_spec.cpp src/OctaviaRecording.cpp src/OctaviaAnalysis.cpp src/OctaviaObservation.cpp -o $@
 
 build/tests/octavia_analysis_spec: tests/octavia_analysis_spec.cpp src/OctaviaAnalysis.cpp src/OctaviaAnalysis.hpp src/OctaviaObservation.cpp src/OctaviaObservation.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_analysis_spec.cpp src/OctaviaAnalysis.cpp src/OctaviaObservation.cpp -o $@

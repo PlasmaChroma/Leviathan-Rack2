@@ -689,6 +689,18 @@ class SnapshotIdInput(BaseModel):
     snapshot_id: int = Field(..., ge=1)
 
 
+class RecordingInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    monitors: Optional[list[MonitorName]] = Field(None, min_length=1)
+    seconds: float = Field(..., ge=0.1, le=30.0)
+    label: str = Field("", max_length=256)
+
+
+class RecordingIdInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    recording_id: int = Field(..., ge=1)
+
+
 class AnalysisGroupInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     channels: Optional[list[MonitorName]] = Field(None, min_length=1, max_length=1)
@@ -707,6 +719,25 @@ class CompareSnapshotInput(SnapshotIdInput):
     target: AnalysisGroupInput
     detail: Literal["basic", "detailed"] = "detailed"
     include_spectrum: bool = Field(False, alias="includeSpectrum")
+
+
+class AnalysisCaptureInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    monitors: Optional[list[MonitorName]] = Field(None, min_length=1)
+    seconds: float = Field(..., ge=0.1, le=30.0)
+    channels: Optional[list[MonitorName]] = Field(None, min_length=1, max_length=1)
+    stereo: Optional[dict[Literal["left", "right"], MonitorName]] = None
+    reference: Optional[AnalysisGroupInput] = None
+    target: Optional[AnalysisGroupInput] = None
+    detail: Literal["basic", "detailed"] = "detailed"
+    include_spectrum: bool = Field(False, alias="includeSpectrum")
+    save: bool = False
+    label: str = Field("", max_length=256)
+
+
+class CaptureIdInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    capture_id: int = Field(..., ge=1)
 
 
 @mcp.tool(name="vcv_octavia_get_monitors",
@@ -736,6 +767,48 @@ async def vcv_octavia_get_snapshot(params: SnapshotIdInput) -> str:
     """Poll an existing immutable snapshot without recapturing audio."""
     try:
         return json.dumps(await _envelope_call(f"audio/snapshot/{params.snapshot_id}"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_octavia_start_recording",
+          annotations={"title": "Start Bounded Audio Recording", "readOnlyHint": False, "destructiveHint": False})
+async def vcv_octavia_start_recording(params: RecordingInput) -> str:
+    """Record 0.1-30 seconds of selected physical monitors as float32 Rack volts."""
+    try:
+        payload = params.model_dump(exclude_none=True)
+        return json.dumps(await _envelope_call("audio/recording", "POST", payload), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_octavia_get_recording",
+          annotations={"title": "Get Audio Recording", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_octavia_get_recording(params: RecordingIdInput) -> str:
+    """Poll a bounded recording while its background export completes."""
+    try:
+        return json.dumps(await _envelope_call(f"audio/recording/{params.recording_id}"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_octavia_start_analysis_capture",
+          annotations={"title": "Start Ephemeral Analysis Capture", "readOnlyHint": False, "destructiveHint": False})
+async def vcv_octavia_start_analysis_capture(params: AnalysisCaptureInput) -> str:
+    """Capture and analyze 0.1-30 seconds; save defaults false so no files are written."""
+    try:
+        payload = params.model_dump(by_alias=True, exclude_none=True)
+        return json.dumps(await _envelope_call("audio/capture", "POST", payload), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_octavia_get_analysis_capture",
+          annotations={"title": "Get Analysis Capture", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_octavia_get_analysis_capture(params: CaptureIdInput) -> str:
+    """Poll an ephemeral or optionally archived analysis capture for its result."""
+    try:
+        return json.dumps(await _envelope_call(f"audio/capture/{params.capture_id}"), indent=2)
     except Exception as e:
         return _err(e)
 

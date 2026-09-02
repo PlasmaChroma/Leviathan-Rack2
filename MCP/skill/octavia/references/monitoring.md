@@ -21,7 +21,11 @@ Choose the least expensive observation that answers the question:
 2. Use a snapshot for repeatable RMS, peak, crest, DC, clipping, or spectrum analysis.
 3. Capture every comparison point in one snapshot for an identical frame window.
 4. Use a triggered measurement for multi-second loudness, clipping, RMS, or correlation.
-5. Request raw spectrum only when exact corrective frequencies matter.
+5. Use an ephemeral bounded analysis capture when a longer window is useful but no
+   archival file is needed.
+6. Use a bounded recording, or analysis capture with `save: true`, when exact evidence
+   must be retained for reproducible external analysis.
+7. Request raw spectrum only when exact corrective frequencies matter.
 
 ## Snapshot and analysis workflow
 
@@ -51,6 +55,34 @@ stereo(A,B) and stereo(C,D). Never assume A/B are a pair from their names.
 Legacy `/audio/0` and `/audio/1` remain Master L/R. Their analyzers use the frozen backend.
 Legacy loudness reset → play → read arms an explicit Master measurement rather than reading
 an unbounded always-running accumulator.
+
+## Bounded analysis and recording workflow
+
+```text
+POST /audio/capture         {channels or stereo, seconds, detail, includeSpectrum, save, label}
+POST /audio/capture         {reference, target, seconds, detail, includeSpectrum, save, label}
+GET /audio/capture/{id}     poll until complete or failed
+POST /audio/recording       {monitors, seconds, label}
+GET /audio/recording/{id}   poll until complete or failed
+```
+
+`seconds` is required and bounded to 0.1–30.0. Analysis captures are ephemeral by default:
+the audio thread fills a preallocated buffer, a dedicated worker analyzes it, and the raw
+samples are released without creating files. Set `save: true` only when the identical
+analyzed frames should also be archived. Omitted `monitors` are derived from the requested
+analysis groups. Explicit monitors must include every analyzed channel.
+
+The recording route remains explicitly archival. Omitted recording monitors default to
+Master L/R; otherwise select only the physical Master/A-D inputs needed for the experiment.
+One bounded capture can be active at a time. Saved captures export an interleaved IEEE
+float32 WAV and JSON sidecar under the Rack user directory at
+`Leviathan/Octavia/Recordings`.
+
+WAV samples are raw Rack volts, not normalized audio. The sidecar preserves sample rate,
+exact first and last Rack engine frames, channel order, and connection masks. A sample-rate
+change during capture fails the recording rather than producing mislabeled data. Use the
+returned paths for offline spectrum, harmonic, alias, and transition analysis; do not infer
+access to any signal that was not physically cabled to a selected Octavia monitor.
 
 ## Sibyl-triggered observation
 

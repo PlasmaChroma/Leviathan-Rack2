@@ -27,6 +27,7 @@
 #include "OctaviaActionValidation.hpp"
 #include "OctaviaJobControl.hpp"
 #include "OctaviaObservation.hpp"
+#include "OctaviaRecording.hpp"
 #include "OctaviaMeasurement.hpp"
 #include "OctaviaAnalysis.hpp"
 #include "OctaviaObservationBus.hpp"
@@ -307,6 +308,7 @@ struct Octavia : Module {
     octavia::ObservationHistory observationHistory;
     octavia::ObservationSnapshotPool snapshotPool;
     octavia::AnalysisEngine analysisEngine;
+    octavia::RecordingEngine recordingEngine;
     std::atomic<uint64_t> observationBusCursor{0};
     std::atomic<uint64_t> droppedObservationTriggers{0};
     struct TriggeredSnapshot {
@@ -432,7 +434,7 @@ struct Octavia : Module {
 
     dsp::BooleanTrigger startTrig;
 
-    Octavia() : snapshotPool(&observationHistory) {
+    Octavia() : snapshotPool(&observationHistory), recordingEngine(&analysisEngine) {
         observationBusCursor.store(octavia::observationBus().latestSequence(),
             std::memory_order_relaxed);
         for (auto& count : monitorAnalysisCount)
@@ -483,6 +485,8 @@ struct Octavia : Module {
         }
         observationHistory.publish(static_cast<uint64_t>(args.frame), args.sampleRate,
             observationVolts, connectedMask, observationChannels);
+        recordingEngine.process(static_cast<uint64_t>(args.frame), args.sampleRate,
+            observationVolts, connectedMask);
 
         // Minimal live Master meter (normalized: 5V = 0 dBFS).
         if (lm.filterSampleRate != args.sampleRate) {
@@ -1593,6 +1597,78 @@ struct Octavia : Module {
         return body;
     }
 
+    static std::string recordingJson(const octavia::RecordingStatus& recording) {
+        std::string body = "{";
+        body += jStr("captureId") + ":" + std::to_string(recording.id) + ",";
+        body += jStr("recordingId") + ":" + std::to_string(recording.id) + ",";
+        body += jStr("state") + ":" + jStr(octavia::recordingStateName(recording.state)) + ",";
+        body += jStr("disposition") + ":" +
+            jStr(octavia::captureDispositionName(recording.disposition)) + ",";
+        body += jStr("sampleRate") + ":" + jNum(recording.sampleRate) + ",";
+        body += jStr("targetFrames") + ":" + std::to_string(recording.targetFrames) + ",";
+        body += jStr("writtenFrames") + ":" + std::to_string(recording.writtenFrames) + ",";
+        body += jStr("startFrame") + ":" + std::to_string(recording.startFrame) + ",";
+        body += jStr("endFrame") + ":" + std::to_string(recording.endFrame) + ",";
+        body += jStr("durationSeconds") + ":" + jNum(recording.sampleRate > 0.f
+            ? static_cast<float>(recording.targetFrames / recording.sampleRate) : 0.f) + ",";
+        body += jStr("label") + ":" + jStr(recording.label) + ",";
+        body += jStr("channels") + ":[";
+        for (size_t channel = 0; channel < recording.channelCount; ++channel) {
+            if (channel) body += ",";
+            body += jStr(octavia::observeChannelName(recording.channelOrder[channel]));
+        }
+        body += "],";
+        body += jStr("allConnectedMask") + ":" + std::to_string(recording.allConnectedMask) + ",";
+        body += jStr("anyConnectedMask") + ":" + std::to_string(recording.anyConnectedMask);
+        if (recording.state == octavia::RecordingState::Complete
+                && !recording.wavPath.empty()) {
+            body += "," + jStr("wavPath") + ":" + jStr(recording.wavPath);
+            body += "," + jStr("metadataPath") + ":" + jStr(recording.metadataPath);
+        }
+        if (recording.analysisAvailable) {
+            body += "," + jStr("analysisKind") + ":" +
+                jStr(octavia::captureAnalysisKindName(recording.analysisKind));
+            body += "," + jStr(recording.analysisKind ==
+                octavia::CaptureAnalysisKind::Comparison ? "comparison" : "result") + ":";
+            body += recording.analysisKind == octavia::CaptureAnalysisKind::Comparison
+                ? comparisonJson(recording.comparisonAnalysis, recording.includeSpectrum)
+                : groupAnalysisJson(recording.groupAnalysis, recording.includeSpectrum);
+        }
+        if (!recording.error.empty()) body += "," + jStr("error") + ":" + jStr(recording.error);
+        body += "}";
+        return body;
+    }
+
+    static bool parseMonitorMask(json_t* root, uint8_t defaultMask,
+            uint8_t* requestedMask, std::string* error) {
+        if (!json_is_object(root) || !requestedMask) {
+            if (error) *error = "body must be a JSON object";
+            return false;
+        }
+        json_t* monitors = json_object_get(root, "monitors");
+        if (!monitors) {
+            *requestedMask = defaultMask;
+            return true;
+        }
+        if (!json_is_array(monitors) || json_array_size(monitors) == 0) {
+            if (error) *error = "monitors must be a non-empty string array";
+            return false;
+        }
+        uint8_t mask = 0;
+        size_t index; json_t* value;
+        json_array_foreach(monitors, index, value) {
+            octavia::ObserveChannel channel;
+            if (!json_is_string(value)
+                    || !octavia::parseObserveChannel(json_string_value(value), &channel)) {
+                if (error) *error = "unknown monitor name";
+                return false;
+            }
+            mask |= octavia::observeChannelBit(channel);
+        }
+        *requestedMask = mask;
+        return true;
+    }
+
     static bool parseAnalysisGroup(json_t* value, octavia::AnalysisGroup* group,
             std::string* error) {
         if (!json_is_object(value) || !group) {
@@ -2201,6 +2277,179 @@ struct Octavia : Module {
             res.set_content(body, "application/json");
         });
 
+        // Bounded, frame-exact capture from selected physical monitor ports.
+        // Allocation happens in this HTTP handler; process() only fills the
+        // preallocated buffer. A dedicated worker exports completed captures.
+        svr.Post("/audio/capture", [this](const httplib::Request& r,
+                httplib::Response& res){
+            json_error_t jsonError;
+            json_t* root = json_loads(r.body.c_str(), 0, &jsonError);
+            if (!json_is_object(root)) {
+                if (root) json_decref(root);
+                res.status = 400;
+                res.set_content("{\"error\":\"body must be a JSON object\"}",
+                    "application/json");
+                return;
+            }
+
+            octavia::CaptureAnalysisRequest analysisRequest;
+            std::string error;
+            json_t* referenceValue = json_object_get(root, "reference");
+            json_t* targetValue = json_object_get(root, "target");
+            if (referenceValue || targetValue) {
+                analysisRequest.kind = octavia::CaptureAnalysisKind::Comparison;
+                if (!parseAnalysisGroup(referenceValue, &analysisRequest.reference, &error)
+                        || !parseAnalysisGroup(targetValue, &analysisRequest.target, &error)) {
+                    json_decref(root); res.status = 400;
+                    res.set_content("{" + jStr("error") + ":" + jStr(error) + "}",
+                        "application/json");
+                    return;
+                }
+            } else {
+                analysisRequest.kind = octavia::CaptureAnalysisKind::Group;
+                if (!parseAnalysisGroup(root, &analysisRequest.group, &error)) {
+                    json_decref(root); res.status = 400;
+                    res.set_content("{" + jStr("error") + ":" + jStr(error) + "}",
+                        "application/json");
+                    return;
+                }
+            }
+            json_t* detailValue = json_object_get(root, "detail");
+            const std::string detail = json_is_string(detailValue)
+                ? json_string_value(detailValue) : "detailed";
+            if (detail != "basic" && detail != "detailed") {
+                json_decref(root); res.status = 400;
+                res.set_content("{\"error\":\"detail must be basic or detailed\"}",
+                    "application/json");
+                return;
+            }
+            analysisRequest.detailed = detail == "detailed";
+            analysisRequest.includeSpectrum = json_is_true(
+                json_object_get(root, "includeSpectrum"));
+            auto groupMask = [](const octavia::AnalysisGroup& group) {
+                return static_cast<uint8_t>(octavia::observeChannelBit(group.first)
+                    | (group.stereo ? octavia::observeChannelBit(group.second) : 0));
+            };
+            const uint8_t analysisMask = analysisRequest.kind ==
+                    octavia::CaptureAnalysisKind::Comparison
+                ? static_cast<uint8_t>(groupMask(analysisRequest.reference)
+                    | groupMask(analysisRequest.target))
+                : groupMask(analysisRequest.group);
+            uint8_t requestedMask = 0;
+            if (!parseMonitorMask(root, analysisMask, &requestedMask, &error)) {
+                json_decref(root); res.status = 400;
+                res.set_content("{" + jStr("error") + ":" + jStr(error) + "}",
+                    "application/json");
+                return;
+            }
+            json_t* secondsValue = json_object_get(root, "seconds");
+            json_t* labelValue = json_object_get(root, "label");
+            const double seconds = json_is_number(secondsValue)
+                ? json_number_value(secondsValue) : -1.0;
+            const std::string label = json_is_string(labelValue)
+                ? json_string_value(labelValue) : "";
+            const bool save = json_is_true(json_object_get(root, "save"));
+            json_decref(root);
+
+            std::string directory;
+            if (save) {
+                directory = system::join(asset::user(), "Leviathan/Octavia/Recordings");
+                if (!system::createDirectories(directory) && !system::isDirectory(directory)) {
+                    res.status = 500;
+                    res.set_content("{\"error\":\"could_not_create_recording_directory\"}",
+                        "application/json");
+                    return;
+                }
+            }
+            octavia::RecordingStatus capture;
+            if (!recordingEngine.armCapture(requestedMask, seconds,
+                    observationHistory.currentSampleRate(), label,
+                    save ? octavia::CaptureDisposition::AnalyzeAndRecord
+                        : octavia::CaptureDisposition::Analyze,
+                    analysisRequest, directory, &capture, &error)) {
+                res.status = error == "recording_busy" ? 429 : 400;
+                res.set_content("{" + jStr("error") + ":" + jStr(error) + "}",
+                    "application/json");
+                return;
+            }
+            observationHistory.markSnapshotRequested(requestedMask);
+            res.status = 202;
+            res.set_content(recordingJson(capture), "application/json");
+        });
+
+        svr.Post("/audio/recording", [this](const httplib::Request& r,
+                httplib::Response& res){
+            json_error_t jsonError;
+            json_t* root = json_loads(r.body.c_str(), 0, &jsonError);
+            uint8_t requestedMask = 0;
+            std::string error;
+            const uint8_t defaultMask =
+                octavia::observeChannelBit(octavia::ObserveChannel::MasterL)
+                | octavia::observeChannelBit(octavia::ObserveChannel::MasterR);
+            if (!parseMonitorMask(root, defaultMask, &requestedMask, &error)) {
+                if (root) json_decref(root);
+                res.status = 400;
+                res.set_content("{" + jStr("error") + ":" + jStr(error) + "}",
+                    "application/json");
+                return;
+            }
+            json_t* secondsValue = json_object_get(root, "seconds");
+            json_t* labelValue = json_object_get(root, "label");
+            const double seconds = json_is_number(secondsValue)
+                ? json_number_value(secondsValue) : -1.0;
+            const std::string label = json_is_string(labelValue)
+                ? json_string_value(labelValue) : "";
+            json_decref(root);
+
+            const std::string directory = system::join(asset::user(),
+                "Leviathan/Octavia/Recordings");
+            if (!system::createDirectories(directory) && !system::isDirectory(directory)) {
+                res.status = 500;
+                res.set_content("{\"error\":\"could_not_create_recording_directory\"}",
+                    "application/json");
+                return;
+            }
+            octavia::RecordingStatus recording;
+            if (!recordingEngine.arm(requestedMask, seconds,
+                    observationHistory.currentSampleRate(), label, directory,
+                    &recording, &error)) {
+                res.status = error == "recording_busy" ? 429 : 400;
+                res.set_content("{" + jStr("error") + ":" + jStr(error) + "}",
+                    "application/json");
+                return;
+            }
+            observationHistory.markSnapshotRequested(requestedMask);
+            res.status = 202;
+            res.set_content(recordingJson(recording), "application/json");
+        });
+
+        auto getBoundedCapture = [this](const httplib::Request& r,
+                httplib::Response& res){
+            uint64_t id = 0;
+            try { id = std::stoull(r.matches[1].str()); }
+            catch (...) {
+                res.status = 400;
+                res.set_content("{\"error\":\"invalid recording ID\"}", "application/json");
+                return;
+            }
+            octavia::RecordingStatus recording;
+            if (!recordingEngine.get(id, &recording)) {
+                res.status = 404;
+                res.set_content("{\"error\":\"recording_expired\"}", "application/json");
+                return;
+            }
+            if (recording.state == octavia::RecordingState::Armed
+                    || recording.state == octavia::RecordingState::Capturing
+                    || recording.state == octavia::RecordingState::Captured
+                    || recording.state == octavia::RecordingState::Processing)
+                res.status = 202;
+            else if (recording.state == octavia::RecordingState::Failed)
+                res.status = 409;
+            res.set_content(recordingJson(recording), "application/json");
+        };
+        svr.Get(R"(/audio/recording/(\d+))", getBoundedCapture);
+        svr.Get(R"(/audio/capture/(\d+))", getBoundedCapture);
+
         svr.Post("/audio/snapshot", [this](const httplib::Request& r, httplib::Response& res){
             json_error_t jsonError;
             json_t* root = json_loads(r.body.c_str(), 0, &jsonError);
@@ -2212,28 +2461,16 @@ struct Octavia : Module {
             }
 
             uint8_t requestedMask = 0;
-            json_t* monitors = json_object_get(root, "monitors");
-            if (!monitors) {
-                requestedMask = octavia::observeChannelBit(octavia::ObserveChannel::MasterL)
-                    | octavia::observeChannelBit(octavia::ObserveChannel::MasterR);
-            } else if (!json_is_array(monitors) || json_array_size(monitors) == 0) {
+            std::string monitorError;
+            const uint8_t defaultMask =
+                octavia::observeChannelBit(octavia::ObserveChannel::MasterL)
+                | octavia::observeChannelBit(octavia::ObserveChannel::MasterR);
+            if (!parseMonitorMask(root, defaultMask, &requestedMask, &monitorError)) {
                 json_decref(root);
                 res.status = 400;
-                res.set_content("{\"error\":\"monitors must be a non-empty string array\"}", "application/json");
+                res.set_content("{" + jStr("error") + ":" + jStr(monitorError) + "}",
+                    "application/json");
                 return;
-            } else {
-                size_t index; json_t* value;
-                json_array_foreach(monitors, index, value) {
-                    octavia::ObserveChannel channel;
-                    if (!json_is_string(value)
-                            || !octavia::parseObserveChannel(json_string_value(value), &channel)) {
-                        json_decref(root);
-                        res.status = 400;
-                        res.set_content("{\"error\":\"unknown monitor name\"}", "application/json");
-                        return;
-                    }
-                    requestedMask |= octavia::observeChannelBit(channel);
-                }
             }
 
             const float sr = observationHistory.currentSampleRate();

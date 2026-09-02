@@ -449,7 +449,10 @@ CharacterStageState prepareCharacterStageState(float drive, float resoNorm, bool
 	character.selfOscillating = true;
 	character.oscOnset = std::sqrt(oscNorm);
 	const float oscHeat = levi_math::smoothstep01((r - kSelfOscHeatStart) / (1.f - kSelfOscHeatStart));
-	const float levelScale = mixf(0.85f, 1.35f, levi_math::clamp01((drive - 1.f) / 2.f));
+	// Keep the free-running oscillator's level stable across LEVEL. External
+	// signals still acquire the full input-stage drive character; this small
+	// damping tilt only tightens the oscillator slightly at hot settings.
+	const float levelScale = mixf(0.98f, 1.04f, levi_math::clamp01((drive - 1.f) / 2.f));
 	// Match nonlinear damping to the growing negative-resistance push so the
 	// established onset rises naturally and then settles into a controlled
 	// plateau. Heat adds only a small trim instead of the former ~24x increase.

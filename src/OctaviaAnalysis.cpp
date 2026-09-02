@@ -73,6 +73,32 @@ std::vector<SpectrumBin> fftSpectrum(const std::vector<float>& samples, size_t s
 	return spectrum;
 }
 
+std::vector<SpectrumBin> averagedSpectrum(const std::vector<float>& samples,
+		size_t n, float sampleRate) {
+	if (!n || samples.size() < n) return {};
+	const size_t availableStarts = samples.size() - n;
+	const size_t possibleWindows = availableStarts ? 1 + availableStarts / std::max<size_t>(1, n / 2) : 1;
+	const size_t windowCount = std::min<size_t>(32, possibleWindows);
+	std::vector<SpectrumBin> result;
+	std::vector<double> powers;
+	for (size_t window = 0; window < windowCount; ++window) {
+		const size_t start = windowCount == 1 ? availableStarts
+			: availableStarts * window / (windowCount - 1);
+		const std::vector<SpectrumBin> spectrum = fftSpectrum(samples, start, n, sampleRate);
+		if (result.empty()) {
+			result = spectrum;
+			powers.assign(spectrum.size(), 0.0);
+		}
+		const size_t count = std::min(result.size(), spectrum.size());
+		for (size_t bin = 0; bin < count; ++bin)
+			powers[bin] += std::pow(10.0, spectrum[bin].db / 10.0);
+	}
+	for (size_t bin = 0; bin < result.size(); ++bin)
+		result[bin].db = powers[bin] > 1e-14
+			? float(10.0 * std::log10(powers[bin] / windowCount)) : kFloorDb;
+	return result;
+}
+
 float goertzelDb(const std::vector<float>& samples, size_t start, size_t count,
 		float sampleRate, float hz) {
 	if (!count || sampleRate <= 0.f || hz >= sampleRate * 0.5f) return kFloorDb;
@@ -101,9 +127,8 @@ void spectralAnalysis(const std::vector<float>& samples, float sampleRate,
 		bool includeSpectrum, ChannelAnalysis* result) {
 	const size_t n = fftSizeFor(samples.size());
 	if (!n || sampleRate <= 0.f) return;
-	const size_t latestStart = samples.size() - n;
-	const std::vector<SpectrumBin> latest = fftSpectrum(samples, latestStart, n, sampleRate);
-	if (latest.empty()) return;
+	const std::vector<SpectrumBin> aggregate = averagedSpectrum(samples, n, sampleRate);
+	if (aggregate.empty()) return;
 	const size_t temporalN = fftSizeFor(samples.size() / 2);
 	const size_t temporalLatestStart = samples.size() - temporalN;
 	const size_t desiredSeparation = static_cast<size_t>(std::round(sampleRate * 0.120f));
@@ -117,7 +142,7 @@ void spectralAnalysis(const std::vector<float>& samples, float sampleRate,
 	std::array<double, 7> powers{};
 	std::array<uint32_t, 7> counts{};
 	std::vector<float> floorBins;
-	for (const SpectrumBin& bin : latest) {
+	for (const SpectrumBin& bin : aggregate) {
 		const float amplitude = 5.f * std::pow(10.f, bin.db / 20.f);
 		floorBins.push_back(bin.db);
 		for (size_t band = 0; band < 7; ++band) {
@@ -140,22 +165,22 @@ void spectralAnalysis(const std::vector<float>& samples, float sampleRate,
 
 	// FFT-local maxima provide broad candidates; stability is evaluated from
 	// two disjoint windows in this same frozen capture, never by sleeping.
-	for (size_t i = 2; i + 2 < latest.size(); ++i) {
-		if (latest[i].db <= latest[i - 1].db || latest[i].db < latest[i + 1].db) continue;
+	for (size_t i = 2; i + 2 < aggregate.size(); ++i) {
+		if (aggregate[i].db <= aggregate[i - 1].db || aggregate[i].db < aggregate[i + 1].db) continue;
 		float neighborhood = 0.f;
 		int count = 0;
 		for (int offset = -6; offset <= 6; ++offset) {
 			if (offset >= -1 && offset <= 1) continue;
 			const int index = int(i) + offset;
-			if (index < 0 || index >= int(latest.size())) continue;
-			neighborhood += latest[index].db; count++;
+			if (index < 0 || index >= int(aggregate.size())) continue;
+			neighborhood += aggregate[index].db; count++;
 		}
-		const float prominence = latest[i].db - neighborhood / std::max(count, 1);
-		if (prominence < 8.f || latest[i].db < result->noiseFloorDb + 6.f
-				|| latest[i].db < -80.f) continue;
+		const float prominence = aggregate[i].db - neighborhood / std::max(count, 1);
+		if (prominence < 8.f || aggregate[i].db < result->noiseFloorDb + 6.f
+				|| aggregate[i].db < -80.f) continue;
 		ResonanceCandidate candidate;
-		candidate.hz = latest[i].hz;
-		candidate.db = latest[i].db;
+		candidate.hz = aggregate[i].hz;
+		candidate.db = aggregate[i].db;
 		candidate.prominenceDb = prominence;
 		candidate.stable = std::fabs(nearestDb(early, candidate.hz)
 			- nearestDb(temporalLatest, candidate.hz)) <= 3.f;
@@ -224,7 +249,7 @@ void spectralAnalysis(const std::vector<float>& samples, float sampleRate,
 		result->issues.push_back("rumble");
 	if (result->bandsDb[5] > result->bandsDb[3] + 6.f && result->bandsDb[5] > -60.f)
 		result->issues.push_back("sibilance");
-	if (includeSpectrum) result->spectrum = latest;
+	if (includeSpectrum) result->spectrum = aggregate;
 }
 
 ChannelAnalysis analyzeChannel(const FrozenObservation& snapshot, ObserveChannel channel,

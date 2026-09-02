@@ -342,6 +342,10 @@ void Engine::clearSynthesis() {
 	lastVoicedPitchPeriod_ = 0.f;
 	reconstructionZ1_.fill(0.f);
 	reconstructionZ2_.fill(0.f);
+	completionTailRemaining_ = 0;
+	completionRampRemaining_ = 0;
+	completionRampTotal_ = 0;
+	completionHeldSample_ = 0.f;
 	jitterScale_ = 1.f;
 	bendState_ = seed_;
 	warpedReflectionValid_ = false;
@@ -538,6 +542,7 @@ float Engine::synthesizeTick(const LpcFrame& frame, const EngineControls& contro
 }
 
 EngineOutput Engine::process(const EngineControls& controls) {
+	const float hostRate = controls.hostSampleRate;
 	activeGlitchLevel_ = std::min<std::uint8_t>(controls.glitchLevel, 15);
 	const bool triggerRise = controls.triggerGate && !triggerHigh_;
 	const bool wordPushRise = controls.wordPush && !wordPushHigh_;
@@ -556,10 +561,26 @@ EngineOutput Engine::process(const EngineControls& controls) {
 		if (eoxEvent_)
 			eoxPulseRemaining_ = pulseSamples;
 	}
-	if (eoxEvent_ && playbackComplete_)
-		clearSynthesis();
+	if (eoxEvent_ && playbackComplete_) {
+		// Stop driving the zero-order hold, but let the default reconstruction
+		// filter discharge naturally. Hard-resetting its state here produced a
+		// broadband push-to-talk/squelch click at the end of phrases.
+		completionHeldSample_ = heldSample_;
+		internalPhase_ = 0.0;
+		completionTailRemaining_ = reconstructionMode_ == ReconstructionMode::Filtered
+			&& hostRate > 0.f && std::isfinite(hostRate)
+			? std::max<std::uint32_t>(1u, static_cast<std::uint32_t>(
+				std::ceil(static_cast<double>(hostRate) * 0.005)))
+			: 0u;
+		completionRampTotal_ = completionTailRemaining_ > 0
+			? std::max<std::uint32_t>(1u, static_cast<std::uint32_t>(
+				std::ceil(static_cast<double>(hostRate) * 0.002)))
+			: 0u;
+		completionRampRemaining_ = completionRampTotal_;
+		if (completionTailRemaining_ == 0)
+			clearSynthesis();
+	}
 	const LpcFrame frame = interpolatedFrame();
-	const float hostRate = controls.hostSampleRate;
 	const float targetFormant = clampf(controls.formant, -1.f, 1.f);
 	const float targetWarp = clampf(controls.warp + controls.warpCv / 5.f, -1.f, 1.f);
 	if (!warpSmootherReady_) {
@@ -597,10 +618,21 @@ EngineOutput Engine::process(const EngineControls& controls) {
 				jitterScale_ = 1.f;
 		}
 	}
+	else if (completionRampRemaining_ > 0) {
+		heldSample_ = completionHeldSample_
+			* static_cast<float>(completionRampRemaining_)
+			/ static_cast<float>(completionRampTotal_);
+		--completionRampRemaining_;
+	}
+	else if (playbackComplete_) {
+		heldSample_ = 0.f;
+	}
 	float reconstructed = heldSample_;
-	if (reconstructionMode_ == ReconstructionMode::Filtered)
+	if (reconstructionMode_ == ReconstructionMode::Filtered
+		&& (!playbackComplete_ || completionTailRemaining_ > 0))
 		reconstructed = reconstructFiltered(heldSample_, hostRate);
-	float voltage = playbackComplete_ ? 0.f : reconstructed;
+	float voltage = playbackComplete_ && completionTailRemaining_ == 0
+		? 0.f : reconstructed;
 	if (!std::isfinite(voltage)) {
 		clearSynthesis();
 		voltage = 0.f;
@@ -609,6 +641,8 @@ EngineOutput Engine::process(const EngineControls& controls) {
 		voltage = applyOutputStage(voltage, outputStage_);
 		voltage = clampf(voltage, -5.f, 5.f);
 	}
+	if (completionTailRemaining_ > 0 && --completionTailRemaining_ == 0)
+		clearSynthesis();
 	EngineOutput output;
 	output.audio = voltage;
 	output.position = position();

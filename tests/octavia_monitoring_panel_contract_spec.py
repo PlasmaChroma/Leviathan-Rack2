@@ -11,6 +11,8 @@ SOURCE = (ROOT / "src" / "Octavia.cpp").read_text(encoding="utf-8")
 OBSERVATION = (ROOT / "src" / "OctaviaObservation.hpp").read_text(encoding="utf-8")
 MEASUREMENT = (ROOT / "src" / "OctaviaMeasurement.hpp").read_text(encoding="utf-8")
 MEASUREMENT_IMPL = (ROOT / "src" / "OctaviaMeasurement.cpp").read_text(encoding="utf-8")
+RECORDING = (ROOT / "src" / "OctaviaRecording.hpp").read_text(encoding="utf-8")
+MCP_SOURCE = (ROOT / "MCP" / "mcp_server" / "Octavia_MCP.py").read_text(encoding="utf-8")
 PANEL_PATH = ROOT / "res" / "Octavia.svg"
 PANEL = ET.parse(PANEL_PATH).getroot()
 
@@ -106,6 +108,31 @@ class OctaviaMonitoringPanelContractTest(unittest.TestCase):
         self.assertIn("masterMeasurement.arm(0, true", SOURCE)
         self.assertIn("measurement_busy", MEASUREMENT_IMPL)
         self.assertIn("requestedDurationFrames_", MEASUREMENT)
+
+    def test_bounded_recording_stays_on_physical_observation_ports(self):
+        self.assertIn('#include "OctaviaRecording.hpp"', SOURCE)
+        self.assertIn("recordingEngine.process", SOURCE)
+        self.assertIn('svr.Post("/audio/recording"', SOURCE)
+        self.assertIn('/audio/recording/(\\d+)', SOURCE)
+        self.assertIn("RECORDING_MIN_SECONDS = 0.1", RECORDING)
+        self.assertIn("RECORDING_MAX_SECONDS = 30.0", RECORDING)
+        self.assertIn("preallocated planar storage", RECORDING)
+
+    def test_recording_is_exposed_as_start_and_poll_mcp_tools(self):
+        self.assertIn('name="vcv_octavia_start_recording"', MCP_SOURCE)
+        self.assertIn('name="vcv_octavia_get_recording"', MCP_SOURCE)
+        self.assertIn('ge=0.1, le=30.0', MCP_SOURCE)
+        self.assertIn('_envelope_call("audio/recording", "POST", payload)', MCP_SOURCE)
+
+    def test_analysis_capture_is_ephemeral_by_default(self):
+        self.assertIn('svr.Post("/audio/capture"', SOURCE)
+        self.assertIn('/audio/capture/(\\d+)', SOURCE)
+        self.assertIn("CaptureDisposition::AnalyzeAndRecord", SOURCE)
+        self.assertIn("CaptureDisposition::Analyze", SOURCE)
+        self.assertIn('name="vcv_octavia_start_analysis_capture"', MCP_SOURCE)
+        self.assertIn('name="vcv_octavia_get_analysis_capture"', MCP_SOURCE)
+        self.assertIn("save: bool = False", MCP_SOURCE)
+        self.assertIn('_envelope_call("audio/capture", "POST", payload)', MCP_SOURCE)
 
 
 if __name__ == "__main__":

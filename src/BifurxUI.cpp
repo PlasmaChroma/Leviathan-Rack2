@@ -815,8 +815,10 @@ struct BifurxWidget final : ModuleWidget {
 		if (modernBottomRaster) modernBottomRaster->setVisible(!legacy && !dark);
 		if (modernBottomRasterDark) modernBottomRasterDark->setVisible(!legacy && dark);
 		if (conduitFramebuffer) {
-			conduitFramebuffer->setVisible(true);
-			conduitFramebuffer->setDirty();
+			// Modern raster assets contain the static conduits. Retain the cached
+			// NanoVG layer only as a compatibility treatment for the legacy panel.
+			conduitFramebuffer->setVisible(legacy);
+			if (legacy) conduitFramebuffer->setDirty();
 		}
 		if (modernPanelBorder) modernPanelBorder->setVisible(!legacy);
 		if (legacyTitleRaster) legacyTitleRaster->setVisible(legacy);

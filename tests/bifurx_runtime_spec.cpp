@@ -318,14 +318,15 @@ ZeroInputCapture captureZeroInputOutput(
   float balance,
   float level,
   int settleSamples,
-  int measureSamples
+  int measureSamples,
+  float tito = 0.f
 ) {
   Bifurx module;
   module.onReset();
 
   configureBaseParams(module, mode, freqNormForCenterHz(centerHz), spanNorm, reso, balance);
   module.params[Bifurx::LEVEL_PARAM].setValue(level);
-  module.params[Bifurx::TITO_PARAM].setValue(0.f);
+  module.params[Bifurx::TITO_PARAM].setValue(tito);
   module.highResonanceSelfOscEnabled = true;
   clearCvInputs(module);
 
@@ -1461,6 +1462,84 @@ TestResult testRuntimeSelfOscHighResBounded() {
   };
 }
 
+TestResult testRuntimeSelfOscFlavorMap() {
+  constexpr float resonancePoints[] = {0.82f, 0.84f, 0.86f, 0.90f, 0.95f, 1.00f};
+  constexpr int resonanceCount = int(sizeof(resonancePoints) / sizeof(resonancePoints[0]));
+  float modeRms[kBifurxDisplayOnlyMode][resonanceCount] = {};
+  bool finite = true;
+  bool bounded = true;
+  std::string modes;
+  for (int mode = 0; mode < kBifurxDisplayOnlyMode; ++mode) {
+    modes += " m" + std::to_string(mode) + "=";
+    for (int point = 0; point < resonanceCount; ++point) {
+      const ZeroInputCapture capture = captureZeroInputOutput(
+        mode, 900.f, 0.58f, resonancePoints[point], 0.f, 0.5f, 24000, 12000);
+      modeRms[mode][point] = capture.rms;
+      finite = finite && capture.finite;
+      bounded = bounded && capture.peakAbs <= kOutputSoftLimitCeilingVolts;
+      modes += std::to_string(capture.rms) + ",";
+    }
+  }
+
+  constexpr int regularModes[] = {0, 1, 2, 4, 5, 6, 8, 9};
+  bool stagedOnset = true;
+  bool controlledPlateau = true;
+  for (int mode : regularModes) {
+    stagedOnset = stagedOnset
+      && modeRms[mode][0] < 0.05f
+      && modeRms[mode][1] < 0.05f
+      && modeRms[mode][2] > 0.4f
+      && modeRms[mode][3] > 1.7f * modeRms[mode][2];
+    const float plateauMin = std::min(modeRms[mode][3], std::min(modeRms[mode][4], modeRms[mode][5]));
+    const float plateauMax = std::max(modeRms[mode][3], std::max(modeRms[mode][4], modeRms[mode][5]));
+    controlledPlateau = controlledPlateau
+      && plateauMin > 1.f
+      && plateauMax / std::max(plateauMin, 1e-6f) < 1.12f;
+  }
+  const bool topologyContrast = modeRms[3][4] < 0.2f
+    && modeRms[7][4] > 1.f;
+
+  constexpr float levelPoints[] = {0.2f, 0.5f, 0.8f, 1.0f};
+  float levelMin = INFINITY;
+  float levelMax = 0.f;
+  std::string levels;
+  for (float level : levelPoints) {
+    const ZeroInputCapture capture = captureZeroInputOutput(
+      5, 900.f, 0.58f, 0.95f, 0.f, level, 24000, 12000);
+    finite = finite && capture.finite;
+    bounded = bounded && capture.peakAbs <= kOutputSoftLimitCeilingVolts;
+    levelMin = std::min(levelMin, capture.rms);
+    levelMax = std::max(levelMax, capture.rms);
+    levels += " l" + std::to_string(level) + "=" + std::to_string(capture.rms);
+  }
+  const float levelRatio = levelMax / std::max(levelMin, 1e-6f);
+  const bool levelStable = levelMin > 1.f && levelRatio < 1.08f;
+
+  float titoMin = INFINITY;
+  float titoMax = 0.f;
+  std::string tito;
+  for (float amount : {-1.f, 0.f, 1.f}) {
+    const ZeroInputCapture capture = captureZeroInputOutput(
+      5, 900.f, 0.58f, 0.95f, 0.f, 0.5f, 24000, 12000, amount);
+    finite = finite && capture.finite;
+    bounded = bounded && capture.peakAbs <= kOutputSoftLimitCeilingVolts;
+    titoMin = std::min(titoMin, capture.rms);
+    titoMax = std::max(titoMax, capture.rms);
+    tito += " t" + std::to_string(amount) + "=" + std::to_string(capture.rms);
+  }
+  const float titoRatio = titoMax / std::max(titoMin, 1e-6f);
+  const bool titoLevelStable = titoMin > 1.f && titoRatio < 1.05f;
+
+  const bool pass = finite && bounded && stagedOnset && controlledPlateau
+    && topologyContrast && levelStable && titoLevelStable;
+  return {
+    "Runtime self-oscillation preserves staged onset, mode contrast, and LEVEL stability",
+    pass,
+    "levelRatio=" + std::to_string(levelRatio) +
+      " titoRatio=" + std::to_string(titoRatio) + modes + levels + tito
+  };
+}
+
 TestResult testDisplayOnlyColorSchemeJsonRoundTripAndPassThrough() {
   bool pass = true;
   std::string detail;
@@ -1694,6 +1773,7 @@ int main() {
     testRuntimeTitoProducesFiniteContrastAcrossModes(),
     testRuntimeSelfOscSoftOnsetRamp(),
     testRuntimeSelfOscHighResBounded(),
+    testRuntimeSelfOscFlavorMap(),
     testDisplayOnlyColorSchemeJsonRoundTripAndPassThrough(),
     testTwoColorFftGradientMidpointAndJsonRoundTrip(),
     testHiddenResponseLinePreservesFftColorResponse(),
