@@ -17,13 +17,12 @@ enum class HelicalObserverVariant : std::uint8_t {
 	Count
 };
 
-// Stage-1 Reference V3 surrogate. Every retained family is represented as a
-// split lateral pair so the audible body and the visible fundamental share one
-// two-plane mechanical state. Contact and moving radiation geometry are later
-// stages; this engine deliberately contains no global amplitude gate.
+// Reference V3 paired helical-continuum surrogate. A compliant cap drives one
+// shared two-plane structural state; bend, audible body, contact, and radiation
+// are projections of that state rather than parallel synthesized voices.
 class HelicalContinuumEngine {
 public:
-	static constexpr int PAIR_COUNT = 7;
+	static constexpr int PAIR_COUNT = 12;
 	static constexpr int MODE_COUNT = 2 * PAIR_COUNT;
 
 	void reset();
@@ -85,6 +84,7 @@ private:
 	std::array<float, MODE_COUNT> observerDirectionX {};
 	std::array<float, MODE_COUNT> observerDirectionY {};
 	std::array<float, MODE_COUNT> strainWeight {};
+	std::array<float, MODE_COUNT> contactParticipation {};
 	HelicalObserverVariant observerVariant = HelicalObserverVariant::Fixed;
 
 	Vec2 capPosition {};
@@ -101,6 +101,13 @@ private:
 	float visualEnvelopeDecay = 0.f;
 	float quietTime = 0.f;
 	bool sleeping = true;
+
+	// Hard-strike coil contact. The force closes the mechanical loop through the
+	// low bend pair; its onset delta supplies a small broadband modal drive.
+	float gapClearance = 0.0016f;
+	float contactStiffness = 1.8e7f;
+	float contactDamping = 180.f;
+	float previousContactForce = 0.f;
 
 	void updateCoefficients();
 	void updateSpecimenCoefficients();
