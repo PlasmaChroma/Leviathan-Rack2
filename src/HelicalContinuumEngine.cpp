@@ -183,6 +183,8 @@ float HelicalContinuumEngine::calculateEnergy() const {
 
 float HelicalContinuumEngine::processSubstep(float h) {
 	const bool paired = observerVariant != HelicalObserverVariant::NoPairs;
+	const bool lobedRadiation =
+		observerVariant == HelicalObserverVariant::LobedRadiation;
 	float externalX = 0.f;
 	float externalY = 0.f;
 	if (strikePulse.remainingSubsteps > 0) {
@@ -276,6 +278,19 @@ float HelicalContinuumEngine::processSubstep(float h) {
 			}
 			radiation += radiationWeight[index] * observerGain * observedMotion;
 		}
+	}
+	if (lobedRadiation) {
+		// Expose the continuously ringing metallic body primarily as the
+		// fundamental pair crosses center. Squaring the normalized speed makes
+		// the first diagnostic deliberately pulse-shaped, while the floor keeps
+		// the spring audible between boings. This changes radiation only: it does
+		// not inject energy into the modes or replay the strike.
+		const float lowPairSpeed =
+			std::fabs(modes[0].velocity) + std::fabs(modes[1].velocity);
+		const float normalizedSpeed = std::min(1.f, lowPairSpeed * 4.f);
+		constexpr float RADIATION_FLOOR = 0.08f;
+		const float lobe = normalizedSpeed * normalizedSpeed;
+		radiation *= RADIATION_FLOOR + (1.f - RADIATION_FLOOR) * lobe;
 	}
 	return radiation;
 }

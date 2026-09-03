@@ -13,6 +13,7 @@ enum class HelicalObserverVariant : std::uint8_t {
 	Bend,
 	Mixed,
 	NoPairs,
+	LobedRadiation,
 	Count
 };
 

@@ -998,6 +998,9 @@ struct DoorstopWidget final : ModuleWidget {
 					addObserverVariant(
 						"Mixed motion",
 						doorstop::HelicalObserverVariant::Mixed);
+					addObserverVariant(
+						"Lobed radiation (boing probe)",
+						doorstop::HelicalObserverVariant::LobedRadiation);
 					observerMenu->addChild(new MenuSeparator());
 					addObserverVariant(
 						"No paired plane (ablation)",

@@ -122,14 +122,15 @@ Result routerReturnsExactV3Frames() {
 Result observerVariantsAreDeterministicAndDistinct() {
 	constexpr float rate = 48000.f;
 	constexpr float dt = 1.f / rate;
-	const std::array<doorstop::HelicalObserverVariant, 5> variants {{
+	const std::array<doorstop::HelicalObserverVariant, 6> variants {{
 		doorstop::HelicalObserverVariant::Fixed,
 		doorstop::HelicalObserverVariant::Crossing,
 		doorstop::HelicalObserverVariant::Bend,
 		doorstop::HelicalObserverVariant::Mixed,
 		doorstop::HelicalObserverVariant::NoPairs,
+		doorstop::HelicalObserverVariant::LobedRadiation,
 	}};
-	std::array<double, 5> signatures {};
+	std::array<double, 6> signatures {};
 	bool pass = true;
 	for (std::size_t variantIndex = 0; variantIndex < variants.size(); ++variantIndex) {
 		doorstop::HelicalContinuumEngine a;
@@ -157,7 +158,8 @@ Result observerVariantsAreDeterministicAndDistinct() {
 			+ " crossing=" + std::to_string(signatures[1])
 			+ " bend=" + std::to_string(signatures[2])
 			+ " mixed=" + std::to_string(signatures[3])
-			+ " noPairs=" + std::to_string(signatures[4])};
+			+ " noPairs=" + std::to_string(signatures[4])
+			+ " lobed=" + std::to_string(signatures[5])};
 }
 
 } // namespace

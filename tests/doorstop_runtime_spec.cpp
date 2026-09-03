@@ -140,7 +140,7 @@ Result jsonRoundTripAndReset() {
 	source.engineMode.store(int(doorstop::EngineMode::Legacy), std::memory_order_relaxed);
 	source.soundModel.store(int(doorstop::SoundModel::DispersiveSpring), std::memory_order_relaxed);
 	source.referenceV3ObserverVariant.store(
-		int(doorstop::HelicalObserverVariant::Mixed), std::memory_order_relaxed);
+		int(doorstop::HelicalObserverVariant::LobedRadiation), std::memory_order_relaxed);
 	source.specimenSeed.store(0x12345678u, std::memory_order_relaxed);
 	source.serializedBreakIn.store(0.37f, std::memory_order_relaxed);
 	source.breakInLocked.store(true, std::memory_order_relaxed);
@@ -156,9 +156,9 @@ Result jsonRoundTripAndReset() {
 		&& loaded.soundModel.load(std::memory_order_relaxed)
 			== int(doorstop::SoundModel::DispersiveSpring)
 		&& loaded.referenceV3ObserverVariant.load(std::memory_order_relaxed)
-			== int(doorstop::HelicalObserverVariant::Mixed)
+			== int(doorstop::HelicalObserverVariant::LobedRadiation)
 		&& loaded.engine.getReferenceV3ObserverVariant()
-			== doorstop::HelicalObserverVariant::Mixed
+			== doorstop::HelicalObserverVariant::LobedRadiation
 		&& loaded.specimenSeed.load(std::memory_order_relaxed) == 0x12345678u
 		&& loaded.engine.getEngineMode() == doorstop::EngineMode::Legacy
 		&& loaded.engine.getSoundModel() == doorstop::SoundModel::DispersiveSpring

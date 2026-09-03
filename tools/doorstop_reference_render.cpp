@@ -134,7 +134,7 @@ void usage(const char* executable) {
 		<< "                      spring-refined, rack-v2, boing-refined,\n"
 		<< "                      v3-fixed-observer, v3-crossing-observer,\n"
 		<< "                      v3-bend-observer, v3-mixed-observer,\n"
-		<< "                      or v3-no-pairs\n"
+		<< "                      v3-lobed-radiation, or v3-no-pairs\n"
 		<< "  --radiation-phase DEG  V2 phase probe: 0=extrema, 90=crossing\n"
 		<< "  --output-tap NAME   module (default) or preconditioned\n"
 #endif
@@ -222,6 +222,11 @@ int main(int argc, char** argv) {
 				else if (variantName == "v3-mixed-observer") {
 					useHelicalEngine = true;
 					helicalObserverVariant = doorstop::HelicalObserverVariant::Mixed;
+				}
+				else if (variantName == "v3-lobed-radiation") {
+					useHelicalEngine = true;
+					helicalObserverVariant =
+						doorstop::HelicalObserverVariant::LobedRadiation;
 				}
 				else if (variantName == "v3-no-pairs") {
 					useHelicalEngine = true;

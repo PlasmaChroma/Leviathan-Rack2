@@ -34,6 +34,7 @@ const char* helicalObserverVariantName(doorstop::HelicalObserverVariant variant)
 		case doorstop::HelicalObserverVariant::Bend: return "bend";
 		case doorstop::HelicalObserverVariant::Mixed: return "mixed";
 		case doorstop::HelicalObserverVariant::NoPairs: return "noPairs";
+		case doorstop::HelicalObserverVariant::LobedRadiation: return "lobedRadiation";
 		default: return "fixed";
 	}
 }
@@ -81,6 +82,9 @@ bool parseHelicalObserverVariant(json_t* value,
 	else if (name == "bend") *variant = doorstop::HelicalObserverVariant::Bend;
 	else if (name == "mixed") *variant = doorstop::HelicalObserverVariant::Mixed;
 	else if (name == "noPairs") *variant = doorstop::HelicalObserverVariant::NoPairs;
+	else if (name == "lobedRadiation") {
+		*variant = doorstop::HelicalObserverVariant::LobedRadiation;
+	}
 	else return false;
 	return true;
 }
