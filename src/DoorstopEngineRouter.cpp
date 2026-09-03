@@ -112,11 +112,6 @@ void DoorstopEngineRouter::setSoundModel(SoundModel newModel) {
 	legacy.setSoundModel(newModel);
 }
 
-void DoorstopEngineRouter::setReferenceV3ObserverVariant(
-	HelicalObserverVariant variant) {
-	referenceV3.setObserverVariant(variant);
-}
-
 void DoorstopEngineRouter::setBreakIn(float amount) {
 	if (!std::isfinite(amount)) {
 		return;

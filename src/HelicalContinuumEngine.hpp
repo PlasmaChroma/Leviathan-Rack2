@@ -7,16 +7,6 @@
 
 namespace doorstop {
 
-enum class HelicalObserverVariant : std::uint8_t {
-	Fixed = 0,
-	Crossing,
-	Bend,
-	Mixed,
-	NoPairs,
-	LobedRadiation,
-	Count
-};
-
 // Reference V3 paired helical-continuum surrogate. A compliant cap drives one
 // shared two-plane structural state; bend, audible body, contact, and radiation
 // are projections of that state rather than parallel synthesized voices.
@@ -32,7 +22,6 @@ public:
 	void setBreakIn(float amount);
 	void setBreakInLocked(bool locked);
 	void setSpecimenSeed(std::uint32_t seed);
-	void setObserverVariant(HelicalObserverVariant variant);
 	void strike(float normalizedVelocity);
 	Frame process(float requestedSampleTime);
 
@@ -40,7 +29,6 @@ public:
 	float getBreakIn() const { return breakIn; }
 	bool isBreakInLocked() const { return breakInLocked; }
 	std::uint32_t getSpecimenSeed() const { return specimenSeed; }
-	HelicalObserverVariant getObserverVariant() const { return observerVariant; }
 	float getVisualMaximumDisplacement() const { return 2.f; }
 
 private:
@@ -85,7 +73,6 @@ private:
 	std::array<float, MODE_COUNT> observerDirectionY {};
 	std::array<float, MODE_COUNT> strainWeight {};
 	std::array<float, MODE_COUNT> contactParticipation {};
-	HelicalObserverVariant observerVariant = HelicalObserverVariant::Fixed;
 
 	Vec2 capPosition {};
 	Vec2 capVelocity {};

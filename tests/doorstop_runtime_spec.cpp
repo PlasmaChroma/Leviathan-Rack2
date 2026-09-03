@@ -139,8 +139,6 @@ Result jsonRoundTripAndReset() {
 	source.allowVisualOverflow.store(false, std::memory_order_relaxed);
 	source.engineMode.store(int(doorstop::EngineMode::Legacy), std::memory_order_relaxed);
 	source.soundModel.store(int(doorstop::SoundModel::DispersiveSpring), std::memory_order_relaxed);
-	source.referenceV3ObserverVariant.store(
-		int(doorstop::HelicalObserverVariant::LobedRadiation), std::memory_order_relaxed);
 	source.specimenSeed.store(0x12345678u, std::memory_order_relaxed);
 	source.serializedBreakIn.store(0.37f, std::memory_order_relaxed);
 	source.breakInLocked.store(true, std::memory_order_relaxed);
@@ -155,10 +153,6 @@ Result jsonRoundTripAndReset() {
 			== int(doorstop::EngineMode::Legacy)
 		&& loaded.soundModel.load(std::memory_order_relaxed)
 			== int(doorstop::SoundModel::DispersiveSpring)
-		&& loaded.referenceV3ObserverVariant.load(std::memory_order_relaxed)
-			== int(doorstop::HelicalObserverVariant::LobedRadiation)
-		&& loaded.engine.getReferenceV3ObserverVariant()
-			== doorstop::HelicalObserverVariant::LobedRadiation
 		&& loaded.specimenSeed.load(std::memory_order_relaxed) == 0x12345678u
 		&& loaded.engine.getEngineMode() == doorstop::EngineMode::Legacy
 		&& loaded.engine.getSoundModel() == doorstop::SoundModel::DispersiveSpring
@@ -172,8 +166,6 @@ Result jsonRoundTripAndReset() {
 			== int(doorstop::EngineMode::ReferenceV1)
 		&& loaded.soundModel.load(std::memory_order_relaxed)
 			== int(doorstop::SoundModel::ProbabilisticMix)
-		&& loaded.referenceV3ObserverVariant.load(std::memory_order_relaxed)
-			== int(doorstop::HelicalObserverVariant::Fixed)
 		&& loaded.engine.isSleeping()
 		&& loaded.engine.getBreakIn() == 0.f
 		&& !loaded.engine.isBreakInLocked()
@@ -241,14 +233,11 @@ Result malformedBreakInJsonIsSafe() {
 	json_t* wrongJ = json_object();
 	json_object_set_new(wrongJ, "breakIn", json_string("old"));
 	json_object_set_new(wrongJ, "breakInLocked", json_integer(1));
-	json_object_set_new(wrongJ, "referenceV3Observer", json_string("unknown"));
 	wrongTypes.dataFromJson(wrongJ);
 	json_decref(wrongJ);
 	wrongTypes.process(args);
 	const bool wrongTypesDefault = wrongTypes.engine.getBreakIn() == 0.f
-		&& !wrongTypes.engine.isBreakInLocked()
-		&& wrongTypes.engine.getReferenceV3ObserverVariant()
-			== doorstop::HelicalObserverVariant::Fixed;
+		&& !wrongTypes.engine.isBreakInLocked();
 
 	Doorstop nullRoot;
 	nullRoot.engine.setBreakIn(0.8f);
@@ -342,8 +331,6 @@ Result schemaMigrationMapsEveryLegacyModel() {
 	referenceV3.engineMode.store(
 		int(doorstop::EngineMode::ReferenceV3), std::memory_order_relaxed);
 	referenceV3.specimenSeed.store(0x10293847u, std::memory_order_relaxed);
-	referenceV3.referenceV3ObserverVariant.store(
-		int(doorstop::HelicalObserverVariant::Bend), std::memory_order_relaxed);
 	json_t* referenceV3J = referenceV3.dataToJson();
 	Doorstop loadedV3;
 	loadedV3.dataFromJson(referenceV3J);
@@ -351,9 +338,7 @@ Result schemaMigrationMapsEveryLegacyModel() {
 	loadedV3.process(args);
 	const bool referenceV3Restored =
 		loadedV3.engine.getEngineMode() == doorstop::EngineMode::ReferenceV3
-		&& loadedV3.engine.getSpecimenSeed() == 0x10293847u
-		&& loadedV3.engine.getReferenceV3ObserverVariant()
-			== doorstop::HelicalObserverVariant::Bend;
+		&& loadedV3.engine.getSpecimenSeed() == 0x10293847u;
 	return {"Schema migration maps legacy models and all Reference engines",
 		pass && referenceRestored && referenceV2Restored && referenceV3Restored,
 		"legacy=" + std::to_string(pass)

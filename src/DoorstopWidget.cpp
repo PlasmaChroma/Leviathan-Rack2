@@ -908,7 +908,7 @@ struct DoorstopWidget final : ModuleWidget {
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createSubmenuItem("Sound engine", "", [m](Menu* engineMenu) {
 			engineMenu->addChild(createCheckMenuItem(
-				"Reference V3 - Paired helical surrogate", "",
+				"Reference V3 - Boing probe", "",
 				[m]() {
 					return m->engineMode.load(std::memory_order_relaxed)
 						== int(doorstop::EngineMode::ReferenceV3);
@@ -968,45 +968,6 @@ struct DoorstopWidget final : ModuleWidget {
 						"Dispersive spring", doorstop::SoundModel::DispersiveSpring);
 				}));
 		}));
-		if (isDragonKingDebugEnabled()) {
-			menu->addChild(createSubmenuItem(
-				"Experimental V3 observer", "", [m](Menu* observerMenu) {
-					auto addObserverVariant = [m, observerMenu](
-						const char* label, doorstop::HelicalObserverVariant variant) {
-						observerMenu->addChild(createCheckMenuItem(label, "",
-							[m, variant]() {
-								return m->referenceV3ObserverVariant.load(
-									std::memory_order_relaxed) == int(variant);
-							},
-							[m, variant]() {
-								m->referenceV3ObserverVariant.store(
-									int(variant), std::memory_order_relaxed);
-								m->engineMode.store(
-									int(doorstop::EngineMode::ReferenceV3),
-									std::memory_order_release);
-							}));
-					};
-					addObserverVariant(
-						"Fixed observer (baseline)",
-						doorstop::HelicalObserverVariant::Fixed);
-					addObserverVariant(
-						"Crossing / velocity",
-						doorstop::HelicalObserverVariant::Crossing);
-					addObserverVariant(
-						"Maximum bend / displacement",
-						doorstop::HelicalObserverVariant::Bend);
-					addObserverVariant(
-						"Mixed motion",
-						doorstop::HelicalObserverVariant::Mixed);
-					addObserverVariant(
-						"Lobed radiation (boing probe)",
-						doorstop::HelicalObserverVariant::LobedRadiation);
-					observerMenu->addChild(new MenuSeparator());
-					addObserverVariant(
-						"No paired plane (ablation)",
-						doorstop::HelicalObserverVariant::NoPairs);
-				}));
-		}
 		const int breakInPercent = int(std::round(
 			clamp01(m->serializedBreakIn.load(std::memory_order_relaxed)) * 100.f));
 		menu->addChild(new MenuSeparator());

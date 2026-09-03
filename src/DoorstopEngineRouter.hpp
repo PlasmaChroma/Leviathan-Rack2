@@ -26,7 +26,6 @@ public:
 	void setSampleRate(float newSampleRate);
 	void setEngineMode(EngineMode newMode);
 	void setSoundModel(SoundModel newModel);
-	void setReferenceV3ObserverVariant(HelicalObserverVariant variant);
 	void setBreakIn(float amount);
 	void setBreakInLocked(bool locked);
 	void setSpecimenSeed(std::uint32_t seed);
@@ -36,9 +35,6 @@ public:
 	bool isSleeping() const;
 	EngineMode getEngineMode() const { return selectedMode; }
 	SoundModel getSoundModel() const { return selectedLegacyModel; }
-	HelicalObserverVariant getReferenceV3ObserverVariant() const {
-		return referenceV3.getObserverVariant();
-	}
 	SoundModel getLastStrikeModel() const;
 	float getBreakIn() const { return breakIn; }
 	bool isBreakInLocked() const { return breakInLocked; }

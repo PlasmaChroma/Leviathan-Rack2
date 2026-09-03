@@ -35,8 +35,6 @@ struct Doorstop final : Module {
 	std::atomic<bool> allowVisualOverflow {true};
 	std::atomic<int> engineMode {int(doorstop::EngineMode::ReferenceV1)};
 	std::atomic<int> soundModel {int(doorstop::SoundModel::ProbabilisticMix)};
-	std::atomic<int> referenceV3ObserverVariant {
-		int(doorstop::HelicalObserverVariant::Fixed)};
 	std::atomic<std::uint32_t> specimenSeed {1u};
 	std::atomic<std::uint32_t> pendingSpecimenSeed {1u};
 	std::atomic<bool> specimenStatePending {false};

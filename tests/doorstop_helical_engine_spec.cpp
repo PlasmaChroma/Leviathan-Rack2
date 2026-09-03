@@ -92,6 +92,33 @@ Result specimenPopulationIsDeterministicAndDistinct() {
 			+ " distinct=" + std::to_string(distinct)};
 }
 
+float peakMeterEnergy(float velocity) {
+	constexpr float rate = 48000.f;
+	constexpr float dt = 1.f / rate;
+	doorstop::HelicalContinuumEngine engine;
+	engine.setSampleRate(rate);
+	engine.setSpecimenSeed(1u);
+	engine.strike(velocity);
+	float peak = 0.f;
+	for (int i = 0; i < int(rate); ++i) {
+		peak = std::max(peak, engine.process(dt).energy);
+	}
+	return peak;
+}
+
+Result v3EnergyMeterHasUsefulStrikeRange() {
+	const float gentle = peakMeterEnergy(0.25f);
+	const float medium = peakMeterEnergy(0.50f);
+	const float strong = peakMeterEnergy(0.80f);
+	const bool pass = gentle >= 0.05f && gentle <= 0.20f
+		&& medium >= gentle * 2.f && medium <= 0.60f
+		&& strong >= medium * 1.5f && strong <= 0.95f;
+	return {"V3 energy meter distinguishes gentle, medium, and strong strikes",
+		pass, "gentle=" + std::to_string(gentle)
+			+ " medium=" + std::to_string(medium)
+			+ " strong=" + std::to_string(strong)};
+}
+
 Result routerReturnsExactV3Frames() {
 	constexpr float rate = 48000.f;
 	constexpr float dt = 1.f / rate;
@@ -119,49 +146,6 @@ Result routerReturnsExactV3Frames() {
 		"exact=" + std::to_string(exact)};
 }
 
-Result observerVariantsAreDeterministicAndDistinct() {
-	constexpr float rate = 48000.f;
-	constexpr float dt = 1.f / rate;
-	const std::array<doorstop::HelicalObserverVariant, 6> variants {{
-		doorstop::HelicalObserverVariant::Fixed,
-		doorstop::HelicalObserverVariant::Crossing,
-		doorstop::HelicalObserverVariant::Bend,
-		doorstop::HelicalObserverVariant::Mixed,
-		doorstop::HelicalObserverVariant::NoPairs,
-		doorstop::HelicalObserverVariant::LobedRadiation,
-	}};
-	std::array<double, 6> signatures {};
-	bool pass = true;
-	for (std::size_t variantIndex = 0; variantIndex < variants.size(); ++variantIndex) {
-		doorstop::HelicalContinuumEngine a;
-		doorstop::HelicalContinuumEngine b;
-		for (doorstop::HelicalContinuumEngine* engine : {&a, &b}) {
-			engine->setSampleRate(rate);
-			engine->setSpecimenSeed(0x51a7u);
-			engine->setObserverVariant(variants[variantIndex]);
-			engine->strike(0.8f);
-		}
-		for (int i = 0; i < int(1.5f * rate); ++i) {
-			const float outputA = a.process(dt).outputVolts;
-			const float outputB = b.process(dt).outputVolts;
-			pass = pass && outputA == outputB && std::isfinite(outputA);
-			signatures[variantIndex] += double(i + 1) * outputA;
-		}
-	}
-	for (std::size_t a = 0; a < signatures.size(); ++a) {
-		for (std::size_t b = a + 1; b < signatures.size(); ++b) {
-			pass = pass && std::fabs(signatures[a] - signatures[b]) > 1.0;
-		}
-	}
-	return {"V3 observer variants are deterministic and waveform-distinct",
-		pass, "fixed=" + std::to_string(signatures[0])
-			+ " crossing=" + std::to_string(signatures[1])
-			+ " bend=" + std::to_string(signatures[2])
-			+ " mixed=" + std::to_string(signatures[3])
-			+ " noPairs=" + std::to_string(signatures[4])
-			+ " lobed=" + std::to_string(signatures[5])};
-}
-
 } // namespace
 
 int main() {
@@ -169,7 +153,7 @@ int main() {
 		zeroStateRemainsZero(),
 		supportedRatesAreFiniteAndPairedMotionIsVisible(),
 		specimenPopulationIsDeterministicAndDistinct(),
-		observerVariantsAreDeterministicAndDistinct(),
+		v3EnergyMeterHasUsefulStrikeRange(),
 		routerReturnsExactV3Frames(),
 	};
 	int failed = 0;

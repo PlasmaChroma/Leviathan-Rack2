@@ -169,7 +169,7 @@ MINGW_TEST_CPPFLAGS += -D_USE_MATH_DEFINES
 MINGW_TEST_STACK_FLAGS += -Wl,--stack,8388608
 endif
 
-.PHONY: generate-panel-anchor-atlas generate-mandelwake-tables check-mandelwake-tables validate-plugin-json phonex-quality-audit phonex-quality-compare phonex-phase2-audition phonex-phase4-audition phonex-phase8-audition doorstop-reference-grid doorstop-corpus-audit doorstop-reference-evaluate doorstop-variant-grid doorstop-variant-evaluate doorstop-boing-audition doorstop-v3-paired-audition doorstop-v2-phase-grid doorstop-v2-phase-evaluate
+.PHONY: generate-panel-anchor-atlas generate-mandelwake-tables check-mandelwake-tables validate-plugin-json phonex-quality-audit phonex-quality-compare phonex-phase2-audition phonex-phase4-audition phonex-phase8-audition doorstop-reference-grid doorstop-corpus-audit doorstop-reference-evaluate doorstop-variant-grid doorstop-variant-evaluate doorstop-boing-audition doorstop-v3-boing-audition doorstop-v2-phase-grid doorstop-v2-phase-evaluate
 generate-panel-anchor-atlas:
 	python3 tools/generate_panel_anchor_atlas.py
 
@@ -226,7 +226,7 @@ build/tools/doorstop_reference_render: tools/doorstop_reference_render.cpp src/R
 
 DOORSTOP_REFERENCE_VELOCITIES ?= 0.5 0.75 1.0
 DOORSTOP_REFERENCE_SEEDS ?= 1 77 7331 65537 104729 999983 2654435761 305419896 610839776 195948557 271828183 314159265 3735928559 324508639 4277009102 4294967291
-DOORSTOP_REFERENCE_VARIANTS ?= current spring-only modes-only spring-forward spring-refined rack-v2 boing-refined v3-paired-surrogate
+DOORSTOP_REFERENCE_VARIANTS ?= current spring-only modes-only spring-forward spring-refined rack-v2 boing-refined v3-boing-probe
 DOORSTOP_BOING_AUDITION_DIR ?= Samples/Doorstop/Auditions/reference-v2-vs-boing-refined
 DOORSTOP_V2_PHASES ?= 0 15 30 45 60 75 90
 
@@ -271,13 +271,13 @@ doorstop-boing-audition: build/tools/doorstop_reference_render
 		--variants current rack-v2 boing-refined \
 		--output-dir $(DOORSTOP_BOING_AUDITION_DIR)
 
-doorstop-v3-paired-audition: build/tools/doorstop_reference_render
-	$(MAKE) DOORSTOP_REFERENCE_VARIANTS="rack-v2 v3-paired-surrogate" doorstop-variant-grid
+doorstop-v3-boing-audition: build/tools/doorstop_reference_render
+	$(MAKE) DOORSTOP_REFERENCE_VARIANTS="rack-v2 v3-boing-probe" doorstop-variant-grid
 	python3 tools/compare_doorstop_variants.py \
-		--variants rack-v2 v3-paired-surrogate \
+		--variants rack-v2 v3-boing-probe \
 		--variant-root build/doorstop-variant-renders \
 		--baseline rack-v2 --blind \
-		--output-dir build/doorstop-v3-paired-analysis
+		--output-dir build/doorstop-v3-boing-analysis
 
 # Stage 0 phase probe. Each phase gets the bounded Rack output and the exact
 # signal presented to tanh so saturation can be evaluated independently.

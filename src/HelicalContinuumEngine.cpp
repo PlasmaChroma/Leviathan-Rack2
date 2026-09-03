@@ -6,23 +6,29 @@
 namespace doorstop {
 namespace {
 
+// Keep the retained body centered in the doorstop's boing range. The upper
+// pairs are radiation detail rather than a second, long-lived bell voice.
 constexpr std::array<float, HelicalContinuumEngine::PAIR_COUNT> PAIR_FREQUENCIES {{
-	30.5f, 82.f, 190.f, 310.f, 377.f, 592.f, 775.f, 1020.f, 1270.f, 1580.f, 2530.f, 4200.f
+	28.f, 75.f, 175.f, 285.f, 347.f, 545.f, 713.f, 938.f, 1168.f, 1454.f, 2328.f, 3864.f
 }};
 constexpr std::array<float, HelicalContinuumEngine::PAIR_COUNT> PAIR_SPLITS {{
 	0.010f, 0.0055f, 0.0050f, 0.0045f, 0.0040f, 0.0035f, 0.0030f, 0.0028f, 0.0025f, 0.0022f, 0.0018f, 0.0015f
 }};
 constexpr std::array<float, HelicalContinuumEngine::PAIR_COUNT> PAIR_T60 {{
-	3.2f, 0.22f, 3.2f, 4.0f, 5.5f, 7.0f, 6.5f, 5.8f, 4.8f, 3.8f, 2.6f, 1.4f
+	3.2f, 0.22f, 3.2f, 4.0f, 5.5f, 7.0f, 6.5f, 5.8f, 3.6f, 2.6f, 1.4f, 0.65f
 }};
 constexpr std::array<float, HelicalContinuumEngine::PAIR_COUNT> PAIR_OUTPUT {{
-	0.002f, 0.03f, 0.04f, 0.06f, 0.12f, 0.50f, 0.55f, 0.48f, 1.00f, 0.92f, 0.56f, 0.60f
+	0.002f, 0.03f, 0.04f, 0.06f, 0.12f, 0.50f, 0.55f, 0.48f, 0.85f, 0.65f, 0.25f, 0.12f
 }};
 constexpr std::array<float, HelicalContinuumEngine::PAIR_COUNT> PAIR_TIP {{
 	1.f, 0.34f, -0.31f, 0.29f, -0.27f, 0.24f, -0.21f, 0.18f, -0.15f, 0.12f, -0.09f, 0.06f
 }};
 constexpr float RADIATION_VELOCITY_COEFFICIENT =
 	2.f * 3.14159265358979323846f * 140.f;
+// Representative modal-plus-cap energy from a strong V3 strike. This is a
+// visual reference ceiling, not a dynamics limiter: harder/retriggered motion
+// may exceed it and simply fills the meter.
+constexpr float VISUAL_ENERGY_REFERENCE = 0.16f;
 
 float clamp01(float value) {
 	return std::max(0.f, std::min(value, 1.f));
@@ -67,11 +73,6 @@ void HelicalContinuumEngine::setBreakInLocked(bool locked) {
 void HelicalContinuumEngine::setSpecimenSeed(std::uint32_t seed) {
 	specimenSeed = seed ? seed : 1u;
 	updateSpecimenCoefficients();
-}
-
-void HelicalContinuumEngine::setObserverVariant(HelicalObserverVariant variant) {
-	observerVariant = variant < HelicalObserverVariant::Count
-		? variant : HelicalObserverVariant::Fixed;
 }
 
 float HelicalContinuumEngine::specimenUnit(std::uint32_t tag) const {
@@ -162,9 +163,7 @@ void HelicalContinuumEngine::strike(float normalizedVelocity) {
 	const float durationSeconds = 0.0022f - 0.0015f * magnitude;
 	const int substeps = std::max(4, int(durationSeconds * sampleRate * SUBSTEPS + 0.5f));
 	const float phaseStep = 2.f * PI / float(substeps);
-	const bool paired = observerVariant != HelicalObserverVariant::NoPairs;
-	const float misalignment = paired
-		? (-0.20f + 0.40f * specimenUnit(101u)) : 0.f;
+	const float misalignment = -0.20f + 0.40f * specimenUnit(101u);
 	const float inverseLength = 1.f / std::sqrt(1.f + misalignment * misalignment);
 
 	strikePulse.magnitude += 1450.f * magnitude * (0.40f + 0.60f * magnitude);
@@ -197,7 +196,6 @@ float HelicalContinuumEngine::calculateEnergy() const {
 }
 
 float HelicalContinuumEngine::processSubstep(float h) {
-	const bool paired = observerVariant != HelicalObserverVariant::NoPairs;
 	float externalX = 0.f;
 	float externalY = 0.f;
 	if (strikePulse.remainingSubsteps > 0) {
@@ -219,15 +217,8 @@ float HelicalContinuumEngine::processSubstep(float h) {
 		const int y = x + 1;
 		tipPosition.x += tipParticipation[x] * modes[x].position;
 		tipVelocity.x += tipParticipation[x] * modes[x].velocity;
-		if (paired) {
-			tipPosition.y += tipParticipation[y] * modes[y].position;
-			tipVelocity.y += tipParticipation[y] * modes[y].velocity;
-		}
-	}
-	if (!paired) {
-		capPosition.y = 0.f;
-		capVelocity.y = 0.f;
-		externalY = 0.f;
+		tipPosition.y += tipParticipation[y] * modes[y].position;
+		tipVelocity.y += tipParticipation[y] * modes[y].velocity;
 	}
 
 	const float capOmega = 2.f * PI * 105.f;
@@ -273,18 +264,12 @@ float HelicalContinuumEngine::processSubstep(float h) {
 	const float crossingPhase = motionSum > 1.0e-8f
 		? crossingMotion / motionSum : 0.f;
 	const float crossingLobe = crossingPhase * crossingPhase;
-	const float bendPhase = 1.f - crossingPhase;
-	const float bendLobe = bendPhase * bendPhase;
 	const float direction = modes[0].velocity < 0.f ? -1.f : 1.f;
 
 	float radiation = 0.f;
 	for (int pair = 0; pair < PAIR_COUNT; ++pair) {
 		for (int axis = 0; axis < 2; ++axis) {
 			const int index = 2 * pair + axis;
-			if (!paired && axis == 1) {
-				modes[index] = {};
-				continue;
-			}
 			ModalState& mode = modes[index];
 			const float attachment = axis == 0 ? attachmentX : attachmentY;
 			const float capTransmission = axis == 0 ? externalX : externalY;
@@ -313,27 +298,14 @@ float HelicalContinuumEngine::processSubstep(float h) {
 
 			const float observedMotion = mode.acceleration
 				+ RADIATION_VELOCITY_COEFFICIENT * mode.velocity;
-			float observerGain = 1.f;
-			if (observerVariant != HelicalObserverVariant::Fixed
-				&& observerVariant != HelicalObserverVariant::NoPairs) {
-				const float stationDepth = 0.82f + 0.16f
-					* std::fabs(observerDirectionX[index]);
-				float lobe = crossingLobe;
-				float floor = 0.18f;
-				if (observerVariant == HelicalObserverVariant::Bend) {
-					lobe = bendLobe;
-				}
-				else if (observerVariant == HelicalObserverVariant::Mixed) {
-					lobe = 0.68f * crossingLobe + 0.32f * bendLobe;
-				}
-				else if (observerVariant == HelicalObserverVariant::LobedRadiation) {
-					lobe *= lobe;
-					floor = 0.08f;
-				}
-				observerGain = floor + stationDepth * (1.f - floor) * lobe;
-				observerGain *= 1.f + 0.045f * direction
-					* observerDirectionY[index];
-			}
+			const float stationDepth = 0.82f + 0.16f
+				* std::fabs(observerDirectionX[index]);
+			const float lobedRadiation = crossingLobe * crossingLobe;
+			constexpr float radiationFloor = 0.08f;
+			float observerGain = radiationFloor
+				+ stationDepth * (1.f - radiationFloor) * lobedRadiation;
+			observerGain *= 1.f + 0.045f * direction
+				* observerDirectionY[index];
 			radiation += radiationWeight[index] * observerGain * observedMotion;
 		}
 	}
@@ -395,7 +367,7 @@ Frame HelicalContinuumEngine::process(float requestedSampleTime) {
 	visualAudibleEnvelope = std::max(
 		audibleVisualTarget, visualAudibleEnvelope * visualEnvelopeDecay);
 	const float energy = calculateEnergy();
-	const float normalizedEnergy = std::min(1.f, energy * 0.000015f);
+	const float normalizedEnergy = std::min(1.f, energy / VISUAL_ENERGY_REFERENCE);
 	strikeLight *= strikeLightDecay;
 
 	// The retained body contains intentionally quiet, high-Q coordinates. Do
