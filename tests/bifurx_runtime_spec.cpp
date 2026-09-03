@@ -1734,18 +1734,18 @@ TestResult testTwoColorFftGradientMidpointAndJsonRoundTrip() {
   json_t* legacyJ = json_object();
   legacyDefault.dataFromJson(legacyJ);
   json_decref(legacyJ);
-  const bool threeColorDefaultDisabled = !legacyDefault.threeColorFftGradient.load(std::memory_order_relaxed);
+  const bool threeColorDefaultEnabled = legacyDefault.threeColorFftGradient.load(std::memory_order_relaxed);
   const bool modernVisualsDefault = !legacyDefault.legacyVisuals.load(std::memory_order_relaxed);
 
   pass = pass && authoredMiddleDiffers && roundTripEnabled && legacyVisualsRoundTrip
-    && threeColorDefaultDisabled && modernVisualsDefault;
+    && threeColorDefaultEnabled && modernVisualsDefault;
   return {
-    "Two-color FFT gradient uses endpoint midpoint and persists",
+    "Three-color FFT gradient defaults on and persists",
     pass,
     "authoredMiddleDiffers=" + std::to_string(int(authoredMiddleDiffers)) +
       " roundTripEnabled=" + std::to_string(int(roundTripEnabled)) +
       " legacyVisualsRoundTrip=" + std::to_string(int(legacyVisualsRoundTrip)) +
-      " threeColorDefaultDisabled=" + std::to_string(int(threeColorDefaultDisabled)) +
+      " threeColorDefaultEnabled=" + std::to_string(int(threeColorDefaultEnabled)) +
       " modernVisualsDefault=" + std::to_string(int(modernVisualsDefault))
   };
 }

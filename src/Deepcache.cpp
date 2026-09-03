@@ -5,6 +5,7 @@
 #include "DeepcacheThemeClassifier.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
+#include "third_party/qoi.h"
 #include "visual/ApertureLight.hpp"
 #include "visual/FractalGlassOverlay.hpp"
 #include "visual/VisualAssets.hpp"
@@ -28,6 +29,9 @@
 #include <widget/FramebufferWidget.hpp>
 #include <widget/TransparentWidget.hpp>
 #include <widget/ZoomWidget.hpp>
+
+#include <osdialog.h>
+#include <stb_image_write.h>
 
 #include <algorithm>
 #include <cctype>
@@ -107,6 +111,57 @@ std::string lowercase(std::string value) {
 		return static_cast<char>(std::tolower(c));
 	});
 	return value;
+}
+
+std::string deepcacheImageFilename(const plugin::Model* model) {
+	std::string filename;
+	if (model && model->plugin && !model->plugin->brand.empty())
+		filename = model->plugin->brand + " - ";
+	filename += model && !model->name.empty() ? model->name : "Module";
+	for (char& c : filename) {
+		const unsigned char value = static_cast<unsigned char>(c);
+		if (value < 32 || c == '<' || c == '>' || c == ':' || c == '"' ||
+		    c == '/' || c == '\\' || c == '|' || c == '?' || c == '*')
+			c = '_';
+	}
+	while (!filename.empty() && (filename.back() == ' ' || filename.back() == '.'))
+		filename.pop_back();
+	return (filename.empty() ? "Module" : filename) + ".png";
+}
+
+std::string deepcacheImageExtension(const std::string& path) {
+	const std::size_t separator = path.find_last_of("/\\");
+	const std::size_t dot = path.find_last_of('.');
+	if (dot == std::string::npos || (separator != std::string::npos && dot < separator))
+		return std::string();
+	return lowercase(path.substr(dot));
+}
+
+std::string ensureDeepcacheImageExtension(std::string path) {
+	const std::string extension = deepcacheImageExtension(path);
+	if (extension != ".png" && extension != ".qoi" && extension != ".tga" && extension != ".bmp")
+		path += ".png";
+	return path;
+}
+
+bool writeDeepcacheImage(const std::string& path, const std::uint8_t* pixels,
+	                     int width, int height) {
+	const std::string extension = deepcacheImageExtension(path);
+	if (extension == ".png")
+		return stbi_write_png(path.c_str(), width, height, 4, pixels, width * 4) != 0;
+	if (extension == ".tga")
+		return stbi_write_tga(path.c_str(), width, height, 4, pixels) != 0;
+	if (extension == ".bmp")
+		return stbi_write_bmp(path.c_str(), width, height, 4, pixels) != 0;
+	if (extension == ".qoi") {
+		qoi_desc desc = {};
+		desc.width = static_cast<unsigned int>(width);
+		desc.height = static_cast<unsigned int>(height);
+		desc.channels = 4;
+		desc.colorspace = QOI_SRGB;
+		return qoi_write(path.c_str(), pixels, &desc) != 0;
+	}
+	return false;
 }
 
 bool rackModelIsDisplayEligible(const plugin::Model* model) {
@@ -319,6 +374,44 @@ struct DeepcacheRasterWidget : widget::TransparentWidget {
 		NVGcontext* current = APP && APP->window ? APP->window->vg : nullptr;
 		nvg_gfx_lifecycle::resetOwnedNvgImage(ownerVg, imageHandle, imageWidth, imageHeight,
 		                                         current, ownerVg == current);
+	}
+
+	bool copyPixels(std::vector<std::uint8_t>& pixels) const {
+		if (width <= 0 || height <= 0 ||
+		    static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height) * 4ull >
+		        128ull * 1024ull * 1024ull)
+			return false;
+		const std::size_t byteCount = static_cast<std::size_t>(width) *
+		                              static_cast<std::size_t>(height) * 4u;
+		if (rgba && rgba->size() >= byteCount) {
+			pixels.assign(rgba->begin(), rgba->begin() + byteCount);
+			return true;
+		}
+
+		NVGcontext* currentVg = APP && APP->window ? APP->window->vg : nullptr;
+		if (!currentVg || ownerVg != currentVg || imageHandle < 0 ||
+		    !nvg_gfx_lifecycle::ownedNvgImageSizeMatches(currentVg, imageHandle, width, height))
+			return false;
+		const GLuint texture = nvglImageHandleGL2(currentVg, imageHandle);
+		if (texture == 0)
+			return false;
+
+		pixels.resize(byteCount);
+		GLint previousTexture = 0;
+		GLint previousAlignment = 4;
+		while (glGetError() != GL_NO_ERROR) {}
+		glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
+		glGetIntegerv(GL_PACK_ALIGNMENT, &previousAlignment);
+		glPixelStorei(GL_PACK_ALIGNMENT, 1);
+		glBindTexture(GL_TEXTURE_2D, texture);
+		glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+		glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTexture));
+		glPixelStorei(GL_PACK_ALIGNMENT, previousAlignment);
+		if (glGetError() != GL_NO_ERROR) {
+			pixels.clear();
+			return false;
+		}
+		return true;
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -2649,6 +2742,32 @@ void DeepcacheModelBox::createContextMenu() {
 	menu->addChild(createMenuLabel(model->name));
 	menu->addChild(createMenuLabel(model->plugin->brand));
 	model->appendContextMenu(menu, true);
+	menu->addChild(new ui::MenuSeparator);
+	menu->addChild(createMenuLabel("Image"));
+	DeepcacheModelBox* modelBox = this;
+	DeepcacheBrowser* browser = getAncestorOfType<DeepcacheBrowser>();
+	const std::weak_ptr<int> browserLifetime = browser ? browser->lifetimeToken : std::weak_ptr<int>();
+	menu->addChild(createMenuItem("Save image…", "PNG", [modelBox, browserLifetime]() {
+		if (browserLifetime.expired() || !modelBox || !modelBox->rasterWidget)
+			return;
+		osdialog_filters* filters = osdialog_filters_parse(
+			"PNG image:png,PNG;QOI image:qoi,QOI;TGA image:tga,TGA;Bitmap image:bmp,BMP");
+		const std::string filename = deepcacheImageFilename(modelBox->model);
+		char* pathC = osdialog_file(OSDIALOG_SAVE, nullptr, filename.c_str(), filters);
+		osdialog_filters_free(filters);
+		if (!pathC)
+			return;
+		const std::string path = ensureDeepcacheImageExtension(pathC);
+		std::free(pathC);
+
+		std::vector<std::uint8_t> pixels;
+		DeepcacheRasterWidget* raster = modelBox->rasterWidget;
+		if (!raster->copyPixels(pixels) ||
+		    !writeDeepcacheImage(path, pixels.data(), raster->width, raster->height)) {
+			osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK,
+			                 "Deepcache could not save the module image.");
+		}
+	}, !rasterWidget));
 	if (state == deepcache::PreviewEntryState::FAILED) {
 		menu->addChild(new ui::MenuSeparator);
 		PreviewCacheManager* manager = cacheManager;

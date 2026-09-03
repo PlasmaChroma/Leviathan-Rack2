@@ -728,7 +728,7 @@ struct Bifurx : Module {
 	std::atomic<bool> fftScaleDynamic {true};
 	std::atomic<bool> showModuleResponseOverlay {false};
 	ColorScheme colorScheme = SCHEME_DEFAULT;
-	std::atomic<bool> threeColorFftGradient {false};
+	std::atomic<bool> threeColorFftGradient {true};
 	std::atomic<bool> legacyVisuals {false};
 	std::atomic<bool> useGlShaderRenderer {true};
 	std::atomic<bool> lowLatencyVisual {false};
