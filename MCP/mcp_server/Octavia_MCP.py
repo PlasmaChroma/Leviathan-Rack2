@@ -937,48 +937,6 @@ async def vcv_get_signal_levels() -> str:
         return _err(e)
 
 
-class AnalyzeAudioInput(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    mode: Literal["spectrum", "loudness"] = Field(
-        "spectrum",
-        description="'spectrum' for real-time frequency bands/resonances/issues; 'loudness' for EBU R128-style momentary, short-term, and integrated LUFS plus crest factor and stereo correlation."
-    )
-    port: int = Field(0, description="For spectrum mode: 0 for Left input, 1 for Right input. Defaults to 0.", ge=0, le=1)
-    include_spectrum: bool = Field(False, description="For spectrum mode: include raw 1/12-octave frequency bins. This produces a much larger response.")
-
-
-@mcp.tool(
-    name="vcv_analyze_audio",
-    annotations={"title": "Analyze Audio", "readOnlyHint": True, "destructiveHint": False}
-)
-async def vcv_analyze_audio(params: AnalyzeAudioInput = AnalyzeAudioInput()) -> str:
-    """Analyze real-time audio fed into Octavia's Audio Analyze inputs.
-
-    Supports:
-    - 'spectrum': real-time snapshot of frequency bands (sub/bass/mid/air), standing resonances, DC offset, hum, and feedback.
-    - 'loudness': momentary (400 ms), short-term (3 s), and dual-gated integrated LUFS, plus L/R sample peak/crest factor, stereo phase correlation, and Mid/Side balance.
-    """
-    try:
-        if params.mode == "loudness":
-            return json.dumps(await _call("audio/loudness"), indent=2)
-        query = "?spectrum=1" if params.include_spectrum else ""
-        return json.dumps(await _call(f"audio/{params.port}/analyze{query}"), indent=2)
-    except Exception as e:
-        return _err(e)
-
-
-@mcp.tool(
-    name="vcv_reset_loudness",
-    annotations={"title": "Reset Loudness Meter", "readOnlyHint": False, "destructiveHint": False}
-)
-async def vcv_reset_loudness() -> str:
-    """Start a fresh loudness measurement window for Octavia's Analyze L/R inputs."""
-    try:
-        return json.dumps(await _call("audio/loudness/reset", "POST"), indent=2)
-    except Exception as e:
-        return _err(e)
-
-
 class TemporalDeckTransportInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     module_id: int
@@ -995,8 +953,8 @@ class TemporalDeckTransportInput(BaseModel):
 async def vcv_temporal_deck_transport(params: TemporalDeckTransportInput) -> str:
     """Load and control a Temporal Deck sample without changing its user interface.
 
-    Use status after load until loaded=true, then stop_rewind, reset Octavia's
-    loudness meter, play, and measure. This is intended for repeatable local
+    Use status after load until loaded=true, then stop_rewind, start a bounded
+    Octavia analysis capture, play, and measure. This is intended for repeatable local
     reference-audio tests as well as normal transport control.
     """
     try:

@@ -75,6 +75,38 @@ int main() {
 	check(std::fabs(comparison.normalizedSpectralDeltaDb[3]) < 0.1f,
 		"level-normalized spectral delta removes a pure gain change");
 
+	octavia::FrozenObservation parity;
+	parity.sampleRate = 48000.f;
+	parity.requestedMask = parity.anyConnectedMask = parity.allConnectedMask = 0x3f;
+	for (size_t i = 0; i < 48000; ++i) {
+		const float sample = 2.f * std::sin(
+			2.f * 3.14159265358979323846f * 440.f * float(i) / parity.sampleRate);
+		for (size_t channel = 0; channel < octavia::OBSERVATION_CHANNELS; ++channel)
+			parity.samples[channel].push_back(sample);
+	}
+	float referenceRmsDb = 0.f;
+	float referenceLufs = 0.f;
+	bool channelParity = true;
+	for (size_t channel = 0; channel < octavia::OBSERVATION_CHANNELS; ++channel) {
+		octavia::AnalysisGroup selected;
+		selected.first = static_cast<octavia::ObserveChannel>(channel);
+		octavia::GroupAnalysis analyzed;
+		channelParity = channelParity
+			&& engine.tryAnalyze(parity, selected, true, false, &analyzed, &error)
+			&& analyzed.mono.loudnessAvailable
+			&& analyzed.mono.loudnessBlocks == 10;
+		if (channel == 0) {
+			referenceRmsDb = analyzed.mono.rmsDb;
+			referenceLufs = analyzed.mono.integratedLufs;
+		} else {
+			channelParity = channelParity
+				&& std::fabs(analyzed.mono.rmsDb - referenceRmsDb) < 1e-5f
+				&& std::fabs(analyzed.mono.integratedLufs - referenceLufs) < 1e-5f;
+		}
+	}
+	check(channelParity,
+		"Master L/R and probes A-D share identical detailed and loudness analysis");
+
 	octavia::FrozenObservation diagnostic;
 	diagnostic.sampleRate = 48000.f;
 	diagnostic.requestedMask = diagnostic.anyConnectedMask = diagnostic.allConnectedMask = 1u << 2;

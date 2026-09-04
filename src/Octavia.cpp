@@ -28,7 +28,6 @@
 #include "OctaviaJobControl.hpp"
 #include "OctaviaObservation.hpp"
 #include "OctaviaRecording.hpp"
-#include "OctaviaMeasurement.hpp"
 #include "OctaviaAnalysis.hpp"
 #include "OctaviaObservationBus.hpp"
 #include "DebugTerminalTransport.hpp"
@@ -86,20 +85,7 @@ static std::string octaviaToken() {
     return e ? std::string(e) : std::string();
 }
 
-// ── Note name from frequency ──────────────────────────────────────────────────
-static std::string freqToNote(float freq) {
-    if (freq <= 0.f) return "?";
-    static const char* names[] = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
-    float midi = 12.0f * log2f(freq / 440.0f) + 69.0f;
-    int m = (int)roundf(midi);
-    int oct = m / 12 - 1;
-    int n   = ((m % 12) + 12) % 12;
-    return std::string(names[n]) + std::to_string(oct);
-}
-
-// Legacy analysis window size. Samples now come from the shared six-channel,
-// frame-addressed observation history rather than independent ring heads.
-static const int AUDIO_BUF = 4096;  // power of 2, ~93ms @ 44100 Hz
+static const int DEFAULT_SNAPSHOT_FRAMES = 4096;
 static const int MASTER_METER_BLOCKS = 32; // 3.2 s of live 100 ms meter blocks
 
 // ── Oscilloscope voltage tracking ─────────────────────────────────────────────
@@ -345,9 +331,8 @@ struct Octavia : Module {
     std::mutex feedbackMtx;
 
     // ── Minimal always-on Master meter ────────────────────────────────────────
-    // Only live K-weighted blocks and recent peaks run continuously. Integrated
-    // loudness, raw RMS, clipping, and stereo metrics live in masterMeasurement
-    // and incur per-sample work only while explicitly armed.
+    // Only live K-weighted blocks and recent peaks run continuously. Bounded
+    // analysis for every observation input lives in the shared analysis engine.
     // K-weighting: ITU BS.1770 biquads, recalculated for Rack's sample rate
     // from the standard's analog prototypes.
     struct LoudnessMeter {
@@ -369,7 +354,6 @@ struct Octavia : Module {
             }
         }
     } lm;
-    octavia::MasterMeasurement masterMeasurement;
 
     static LoudnessMeter::Coeffs makeHighPass(float fs, float hz, float q) {
         const double k = tan(M_PI * hz / fs);
@@ -535,11 +519,8 @@ struct Octavia : Module {
                 lm.meterPeak[j].store(0.f, std::memory_order_relaxed);
             }
         }
-        std::array<double, 2> normalized{{}};
-        std::array<double, 2> kPower{{}};
         for (int j = 0; j < 2; j++) {
             const double in = ch[j] * 0.2;
-            normalized[j] = in;
             lm.meterBlockPeak[j] = std::max(lm.meterBlockPeak[j], std::fabs(in));
             const double y1 = lm.shelf.b0*in + lm.z[j][0];
             lm.z[j][0] = lm.shelf.b1*in - lm.shelf.a1*y1 + lm.z[j][1];
@@ -547,8 +528,7 @@ struct Octavia : Module {
             const double y2 = lm.highPass.b0*y1 + lm.z[j][2];
             lm.z[j][2] = lm.highPass.b1*y1 - lm.highPass.a1*y2 + lm.z[j][3];
             lm.z[j][3] = lm.highPass.b2*y1 - lm.highPass.a2*y2;
-            kPower[j] = y2 * y2;
-            lm.blockKSum[j] += kPower[j];
+            lm.blockKSum[j] += y2 * y2;
         }
         if (++lm.blockFrames >= lm.blockTarget) {
             const uint64_t block = lm.blockTotal.load(std::memory_order_relaxed);
@@ -562,8 +542,6 @@ struct Octavia : Module {
             lm.blockTotal.store(block + 1, std::memory_order_release);
             lm.blockFrames = 0;
         }
-        masterMeasurement.process(static_cast<uint64_t>(args.frame), args.sampleRate,
-            normalized, kPower);
 
         bool on = serverRunning;
         lights[STATUS_R_LIGHT].setBrightness(on ? 0.f  : 0.8f);
@@ -1900,6 +1878,14 @@ struct Octavia : Module {
         body += jStr("crestDb") + ":" + jNum(analysis.crestDb) + ",";
         body += jStr("dcOffset") + ":" + jNum(analysis.dcOffset) + ",";
         body += jStr("clippedSamples") + ":" + std::to_string(analysis.clippedSamples) + ",";
+        body += jStr("loudness") + ":";
+        if (analysis.loudnessAvailable) {
+            body += "{" + jStr("integratedLufs") + ":" + jNum(analysis.integratedLufs) + ","
+                + jStr("momentaryLufs") + ":" + jNum(analysis.momentaryLufs) + ","
+                + jStr("shortTermLufs") + ":" + jNum(analysis.shortTermLufs) + ","
+                + jStr("kWeightedDbfsEstimate") + ":" + jNum(analysis.kWeightedDbfsEstimate) + ","
+                + jStr("blocks") + ":" + std::to_string(analysis.loudnessBlocks) + "},";
+        } else body += "null,";
         body += jStr("noiseFloorDb") + ":" + jNum(analysis.noiseFloorDb) + ",";
         body += jStr("temporalSeparationFrames") + ":" +
             std::to_string(analysis.temporalSeparationFrames) + ",";
@@ -1992,162 +1978,6 @@ struct Octavia : Module {
         return body + "}}}";
     }
 
-    bool analyzeLatestMaster(int port, uint32_t frames, bool includeSpectrum,
-            octavia::ObservationSnapshot* snapshot, octavia::ChannelAnalysis* analysis,
-            std::string* error) {
-        if (port < 0 || port > 1 || frames < 64) {
-            if (error) *error = "invalid_legacy_analysis_request";
-            return false;
-        }
-        const octavia::ObserveChannel channel = static_cast<octavia::ObserveChannel>(port);
-        if (!snapshotPool.create(frames - 1, 0, octavia::observeChannelBit(channel),
-                "legacy-master-analysis", snapshot, error)) return false;
-        if (snapshot->state != octavia::SnapshotState::Complete) {
-            if (error) *error = snapshot->error.empty()
-                ? octavia::snapshotStateName(snapshot->state) : snapshot->error;
-            return false;
-        }
-        octavia::AnalysisGroup group;
-        group.first = channel;
-        octavia::GroupAnalysis result;
-        if (!analysisEngine.tryAnalyze(snapshot->observation, group, true,
-                includeSpectrum, &result, error)) return false;
-        *analysis = result.mono;
-        return true;
-    }
-
-    static std::string legacyTimingJson(const octavia::ObservationSnapshot& snapshot) {
-        const auto& frozen = snapshot.observation;
-        return jStr("snapshotId") + ":" + std::to_string(frozen.id) + ","
-            + jStr("triggerFrame") + ":" + std::to_string(frozen.triggerFrame) + ","
-            + jStr("startFrame") + ":" + std::to_string(frozen.startFrame) + ","
-            + jStr("endFrame") + ":" + std::to_string(frozen.endFrame) + ","
-            + jStr("sampleRate") + ":" + jNum(frozen.sampleRate);
-    }
-
-    static std::string legacyBasicAnalysisJson(int port,
-            const octavia::ObservationSnapshot& snapshot,
-            const octavia::ChannelAnalysis& analysis) {
-        float dominantHz = 0.f;
-        float dominantDb = -140.f;
-        for (const auto& bin : analysis.spectrum) {
-            if (bin.hz > 2000.f) break;
-            if (bin.db > dominantDb) { dominantDb = bin.db; dominantHz = bin.hz; }
-        }
-        std::string body = "{";
-        body += jStr("port") + ":" + std::to_string(port) + ",";
-        body += jStr("rms") + ":" + jNum(analysis.rms) + ",";
-        body += jStr("peak") + ":" + jNum(analysis.peak) + ",";
-        body += jStr("dominantHz") + ":" + jNum(dominantHz) + ",";
-        body += jStr("dominantNote") + ":" + jStr(freqToNote(dominantHz)) + ",";
-        body += legacyTimingJson(snapshot) + "," + jStr("spectrum") + ":[";
-        bool first = true;
-        for (const auto& bin : analysis.spectrum) {
-            if (bin.hz > 2000.f) break;
-            if (!first) body += ",";
-            first = false;
-            const float magnitude = 5.f * std::pow(10.f, bin.db / 20.f);
-            body += "{" + jStr("hz") + ":" + jNum(bin.hz) + ","
-                + jStr("mag") + ":" + jNum(magnitude) + "}";
-        }
-        return body + "]}";
-    }
-
-    static std::string legacyDetailedAnalysisJson(int port,
-            const octavia::ObservationSnapshot& snapshot,
-            const octavia::ChannelAnalysis& analysis, bool includeSpectrum) {
-        std::string full = channelAnalysisJson(analysis, includeSpectrum);
-        // Preserve legacy top-level fields while reusing the canonical analyzer
-        // serialization. Removing the outer braces makes the result additive.
-        if (full.size() >= 2) full = full.substr(1, full.size() - 2);
-        return "{" + jStr("port") + ":" + std::to_string(port) + ","
-            + jStr("inputConnected") + ":" + (analysis.connected ? "true" : "false") + ","
-            + legacyTimingJson(snapshot) + "," + full + ","
-            + jStr("inharmonicHighPeaks") + ":[]}";
-    }
-
-    static std::string measurementJson(const octavia::MeasurementResult& measured,
-            bool leftConnected, bool rightConnected) {
-        const double n = static_cast<double>(measured.measuredFrames);
-        auto db = [](double power) { return 10.0 * log10(power + 1e-12); };
-        auto lufs = [&](double power) { return -0.691 + db(power); };
-        auto windowLufs = [&](size_t blocks) -> double {
-            if (measured.blockPowers.size() < blocks) return -std::numeric_limits<double>::infinity();
-            double sum = 0.0;
-            for (size_t i = measured.blockPowers.size() - blocks;
-                    i < measured.blockPowers.size(); ++i) sum += measured.blockPowers[i];
-            return lufs(sum / blocks);
-        };
-        std::vector<double> absoluteGated;
-        for (size_t i = 0; i < measured.blockPowers.size(); ++i) {
-            const double power = measured.blockPowers[i];
-            if (lufs(power) > -70.0) absoluteGated.push_back(power);
-        }
-        double absoluteMean = 0.0;
-        for (size_t i = 0; i < absoluteGated.size(); ++i) absoluteMean += absoluteGated[i];
-        absoluteMean /= std::max<size_t>(1, absoluteGated.size());
-        const double relativeGate = lufs(absoluteMean) - 10.0;
-        double gatedSum = 0.0; int gatedCount = 0;
-        for (size_t i = 0; i < absoluteGated.size(); ++i) {
-            if (lufs(absoluteGated[i]) > relativeGate) {
-                gatedSum += absoluteGated[i]; ++gatedCount;
-            }
-        }
-        const double integratedLufs = gatedCount ? lufs(gatedSum / gatedCount)
-            : -std::numeric_limits<double>::infinity();
-        const double rmsL = db(measured.rawSum[0] / std::max(1.0, n));
-        const double rmsR = db(measured.rawSum[1] / std::max(1.0, n));
-        const double peakL = 20.0 * log10(measured.peak[0] + 1e-12);
-        const double peakR = 20.0 * log10(measured.peak[1] + 1e-12);
-        const double correlation = measured.sumLR /
-            (sqrt(measured.rawSum[0] * measured.rawSum[1]) + 1e-12);
-        const double balance = 0.5 * (db(measured.rawSum[0]) - db(measured.rawSum[1]));
-        const double mid = (measured.rawSum[0] + 2.0 * measured.sumLR
-            + measured.rawSum[1]) / (4.0 * std::max(1.0, n));
-        const double side = (measured.rawSum[0] - 2.0 * measured.sumLR
-            + measured.rawSum[1]) / (4.0 * std::max(1.0, n));
-        std::string body = "{";
-        body += jStr("measurementId") + ":" + std::to_string(measured.id) + ",";
-        body += jStr("state") + ":" + jStr(octavia::measurementStateName(measured.state)) + ",";
-        body += jStr("startFrame") + ":" + std::to_string(measured.startFrame) + ",";
-        body += jStr("endFrame") + ":" + std::to_string(measured.endFrame) + ",";
-        body += jStr("framesMeasured") + ":" + std::to_string(measured.measuredFrames) + ",";
-        body += jStr("secondsMeasured") + ":" + jNum(measured.sampleRate > 0.f
-            ? static_cast<float>(n / measured.sampleRate) : 0.f) + ",";
-        body += jStr("inputs") + ":{" + jStr("leftConnected") + ":" +
-            (leftConnected ? "true" : "false") + "," + jStr("rightConnected") + ":" +
-            (rightConnected ? "true" : "false") + "},";
-        body += jStr("integratedLufs") + ":" + jNum((float)integratedLufs) + ",";
-        body += jStr("momentaryLufs") + ":" + jNum((float)windowLufs(4)) + ",";
-        body += jStr("shortTermLufs") + ":" + jNum((float)windowLufs(30)) + ",";
-        body += jStr("gatedBlocks") + ":" + std::to_string(gatedCount) + ",";
-        body += jStr("blockHistoryTruncated") + ":" +
-            (measured.blockHistoryTruncated ? "true" : "false") + ",";
-        body += jStr("kWeightedDbfsEstimate") + ":" + jNum((float)lufs(
-            (measured.kSum[0] + measured.kSum[1]) / std::max(1.0, n))) + ",";
-        body += jStr("left") + ":{" + jStr("kWeightedDbfsEstimate") + ":" +
-            jNum((float)lufs(measured.kSum[0] / std::max(1.0, n))) + "," +
-            jStr("rmsDb") + ":" + jNum((float)rmsL) + "," + jStr("peakDb") + ":" +
-            jNum((float)peakL) + "," + jStr("crestDb") + ":" +
-            jNum((float)(peakL - rmsL)) + "," + jStr("clippedSamples") + ":" +
-            std::to_string(measured.clipped[0]) + "},";
-        body += jStr("right") + ":{" + jStr("kWeightedDbfsEstimate") + ":" +
-            jNum((float)lufs(measured.kSum[1] / std::max(1.0, n))) + "," +
-            jStr("rmsDb") + ":" + jNum((float)rmsR) + "," + jStr("peakDb") + ":" +
-            jNum((float)peakR) + "," + jStr("crestDb") + ":" +
-            jNum((float)(peakR - rmsR)) + "," + jStr("clippedSamples") + ":" +
-            std::to_string(measured.clipped[1]) + "},";
-        body += jStr("stereo") + ":{" + jStr("available") + ":" +
-            (leftConnected && rightConnected ? "true" : "false");
-        if (leftConnected && rightConnected) {
-            body += "," + jStr("correlation") + ":" + jNum((float)correlation) + "," +
-                jStr("balanceDb") + ":" + jNum((float)balance) + "," +
-                jStr("sideMidDb") + ":" + jNum((float)(db(side) - db(mid)));
-        }
-        body += "}}";
-        return body;
-    }
-
     void setupRoutes() {
         // Optional shared-secret auth: set OCTAVIA_TOKEN in the environment
         // (both for VCV Rack and the MCP server) to require it on every request.
@@ -2165,7 +1995,7 @@ struct Octavia : Module {
             return httplib::Server::HandlerResponse::Unhandled;
         });
         svr.Get("/status", [this](const httplib::Request&, httplib::Response& res) {
-            std::string b = "{"+jStr("running")+": "+(serverRunning?"true":"false")+", "+jStr("port")+": "+std::to_string(octaviaPort())+", "+jStr("version")+": "+jStr("2.11.0")+"}";
+            std::string b = "{"+jStr("running")+": "+(serverRunning?"true":"false")+", "+jStr("port")+": "+std::to_string(octaviaPort())+", "+jStr("version")+": "+jStr("2.12.0")+"}";
             res.set_content(b,"application/json");
         });
 
@@ -2678,7 +2508,7 @@ struct Octavia : Module {
             }
 
             const float sr = observationHistory.currentSampleRate();
-            double preMs = sr > 0.f ? 1000.0 * (AUDIO_BUF - 1) / sr : 0.0;
+            double preMs = sr > 0.f ? 1000.0 * (DEFAULT_SNAPSHOT_FRAMES - 1) / sr : 0.0;
             double postMs = 0.0;
             json_t* pre = json_object_get(root, "preMs");
             json_t* post = json_object_get(root, "postMs");
@@ -2870,78 +2700,6 @@ struct Octavia : Module {
                 + jStr("endFrame") + ":" + std::to_string(snapshot.observation.endFrame) + ","
                 + jStr("sampleRate") + ":" + jNum(snapshot.observation.sampleRate) + ","
                 + jStr("comparison") + ":" + comparisonJson(comparison, includeSpectrum) + "}", "application/json");
-        });
-
-        // Legacy numeric contracts now freeze Master history and use the same
-        // analyzer as named snapshot requests.
-        svr.Get(R"(/audio/(\d+))", [this](const httplib::Request& r, httplib::Response& res){
-            const int port = std::stoi(r.matches[1].str());
-            if (port < 0 || port > 1) {
-                res.status = 400;
-                res.set_content("{\"error\":\"port must be 0 (L) or 1 (R)\"}", "application/json");
-                return;
-            }
-            octavia::ObservationSnapshot snapshot;
-            octavia::ChannelAnalysis analysis;
-            std::string error;
-            if (!analyzeLatestMaster(port, AUDIO_BUF, true, &snapshot, &analysis, &error)) {
-                res.status = error == "analysis_busy" ? 429 : 409;
-                res.set_content("{" + jStr("error") + ":" + jStr(error) + "}", "application/json");
-                return;
-            }
-            res.set_content(legacyBasicAnalysisJson(port, snapshot, analysis), "application/json");
-        });
-
-        svr.Get(R"(/audio/(\d+)/analyze)", [this](const httplib::Request& r,
-                httplib::Response& res){
-            const int port = std::stoi(r.matches[1].str());
-            if (port < 0 || port > 1) {
-                res.status = 400;
-                res.set_content("{\"error\":\"port must be 0 (L) or 1 (R)\"}", "application/json");
-                return;
-            }
-            const bool includeSpectrum = r.has_param("spectrum")
-                && r.get_param_value("spectrum") != "0";
-            octavia::ObservationSnapshot snapshot;
-            octavia::ChannelAnalysis analysis;
-            std::string error;
-            // Enough frozen context for two 4096-frame windows separated by
-            // the analyzer's deterministic 120 ms stability interval.
-            const float sr = std::max(1.f, observationHistory.currentSampleRate());
-            const uint32_t frames = static_cast<uint32_t>(std::min<double>(
-                octavia::OBSERVATION_HISTORY_FRAMES, std::max<double>(16384.0, sr * 0.35)));
-            if (!analyzeLatestMaster(port, frames, includeSpectrum,
-                    &snapshot, &analysis, &error)) {
-                res.status = error == "analysis_busy" ? 429 : 409;
-                res.set_content("{" + jStr("error") + ":" + jStr(error) + "}", "application/json");
-                return;
-            }
-            res.set_content(legacyDetailedAnalysisJson(port, snapshot, analysis,
-                includeSpectrum), "application/json");
-        });
-
-        // Retained temporarily as non-compiled reference code while compatibility
-        // output is validated; Phase 5 traffic uses the routes above.
-        // Legacy reset/read workflow backed by an explicitly armed measurement session.
-        svr.Get("/audio/loudness", [this](const httplib::Request&, httplib::Response& res){
-            const octavia::MeasurementResult measured = masterMeasurement.read();
-            if (measured.state == octavia::MeasurementState::Idle || measured.id == 0) {
-                res.status = 409;
-                res.set_content("{\"state\":\"idle\",\"error\":\"no measurement armed; POST /audio/loudness/reset first\"}",
-                    "application/json");
-                return;
-            }
-            res.set_content(measurementJson(measured,
-                audioInputConnected[0].load(std::memory_order_relaxed),
-                audioInputConnected[1].load(std::memory_order_relaxed)), "application/json");
-        });
-
-        svr.Post("/audio/loudness/reset", [this](const httplib::Request&, httplib::Response& res){
-            uint64_t id = 0; std::string error;
-            masterMeasurement.arm(0, true, &id, &error);
-            res.status = 202;
-            res.set_content("{\"ok\":true,\"state\":\"pending\",\"measurementId\":" +
-                std::to_string(id) + "}", "application/json");
         });
 
         svr.Get(R"(/modules/(\d+)/params/(\d+))",
@@ -3189,44 +2947,6 @@ struct Octavia : Module {
               } }
             b += "]}";
             res.set_content(b, "application/json");
-        });
-
-        // Convenience route backed by exact engine-frame session boundaries.
-        svr.Get("/audio/measure", [this](const httplib::Request& r, httplib::Response& res){
-            int seconds = 15;
-            try { if (r.has_param("seconds")) seconds = std::stoi(r.get_param_value("seconds")); }
-            catch (...) {
-                res.status = 400;
-                res.set_content("{\"error\":\"seconds must be an integer\"}", "application/json");
-                return;
-            }
-            seconds = std::max(1, std::min(60, seconds));
-            const float sr = sampleRate.load(std::memory_order_relaxed);
-            uint64_t id = 0; std::string error;
-            if (!masterMeasurement.arm(static_cast<uint64_t>(std::llround(seconds * sr)),
-                    false, &id, &error)) {
-                res.status = 409;
-                res.set_content("{" + jStr("error") + ":" + jStr(error) + "}", "application/json");
-                return;
-            }
-            const auto deadline = std::chrono::steady_clock::now()
-                + std::chrono::milliseconds(seconds * 1000 + 1500);
-            octavia::MeasurementResult measured;
-            do {
-                measured = masterMeasurement.read();
-                if (measured.id == id && (measured.state == octavia::MeasurementState::Complete
-                        || measured.state == octavia::MeasurementState::Cancelled)) break;
-                std::this_thread::sleep_for(std::chrono::milliseconds(5));
-            } while (std::chrono::steady_clock::now() < deadline);
-            if (measured.id != id || measured.state != octavia::MeasurementState::Complete) {
-                res.status = measured.state == octavia::MeasurementState::Cancelled ? 409 : 503;
-                res.set_content("{\"error\":\"measurement did not complete on engine frames\"}",
-                    "application/json");
-                return;
-            }
-            res.set_content(measurementJson(measured,
-                audioInputConnected[0].load(std::memory_order_relaxed),
-                audioInputConnected[1].load(std::memory_order_relaxed)), "application/json");
         });
 
         svr.Get("/perf", [this](const httplib::Request&, httplib::Response& res){

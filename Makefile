@@ -64,7 +64,6 @@ build/src/Mandelwake.cpp.o build/src/MandelwakeEngine.cpp.o: FLAGS += -fno-fast-
 TEST_BINS_NON_RACK := \
 	build/tests/octavia_observation_bus_spec \
 	build/tests/octavia_analysis_spec \
-	build/tests/octavia_measurement_spec \
 	build/tests/octavia_observation_spec \
 	build/tests/octavia_recording_spec \
 	build/tests/octavia_job_control_spec \
@@ -425,13 +424,9 @@ test-octavia-observation-tsan: build/tests/octavia_observation_tsan_spec
 test-octavia-observation-bus-tsan: build/tests/octavia_observation_bus_tsan_spec
 	@TSAN_OPTIONS=halt_on_error=1 build/tests/octavia_observation_bus_tsan_spec
 
-test-octavia-measurement-tsan: build/tests/octavia_measurement_tsan_spec
-	@TSAN_OPTIONS=halt_on_error=1 build/tests/octavia_measurement_tsan_spec
-
 test-fast: test-build-fast
 	$(call run_test_bin,build/tests/octavia_observation_bus_spec)
 	$(call run_test_bin,build/tests/octavia_analysis_spec)
-	$(call run_test_bin,build/tests/octavia_measurement_spec)
 	$(call run_test_bin,build/tests/octavia_observation_spec)
 	$(call run_test_bin,build/tests/octavia_recording_spec)
 	$(call run_test_bin,build/tests/octavia_job_control_spec)
@@ -602,12 +597,6 @@ build/tests/octavia_observation_bus_spec: tests/octavia_observation_bus_spec.cpp
 
 build/tests/octavia_observation_bus_tsan_spec: tests/octavia_observation_bus_spec.cpp src/OctaviaObservationBus.cpp src/OctaviaObservationBus.hpp | build/tests
 	$(CXX) -std=c++17 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer -Isrc tests/octavia_observation_bus_spec.cpp src/OctaviaObservationBus.cpp -o $@
-
-build/tests/octavia_measurement_spec: tests/octavia_measurement_spec.cpp src/OctaviaMeasurement.cpp src/OctaviaMeasurement.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc tests/octavia_measurement_spec.cpp src/OctaviaMeasurement.cpp -o $@
-
-build/tests/octavia_measurement_tsan_spec: tests/octavia_measurement_spec.cpp src/OctaviaMeasurement.cpp src/OctaviaMeasurement.hpp | build/tests
-	$(CXX) -std=c++17 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer -Isrc tests/octavia_measurement_spec.cpp src/OctaviaMeasurement.cpp -o $@
 
 build/tests/octavia_observation_tsan_spec: tests/octavia_observation_spec.cpp src/OctaviaObservation.cpp src/OctaviaObservation.hpp | build/tests
 	$(CXX) -std=c++17 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer -Isrc tests/octavia_observation_spec.cpp src/OctaviaObservation.cpp -o $@

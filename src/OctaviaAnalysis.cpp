@@ -20,6 +20,93 @@ float ratioDb(float numerator, float denominator) {
 	return 20.f * std::log10(std::max(numerator, 1e-7f) / std::max(denominator, 1e-7f));
 }
 
+struct BiquadCoefficients {
+	double b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
+};
+
+BiquadCoefficients makeHighPass(double sampleRate, double hz, double q) {
+	const double k = std::tan(double(kPi) * hz / sampleRate);
+	const double a0 = 1.0 + k / q + k * k;
+	BiquadCoefficients result;
+	result.b0 = 1.0 / a0;
+	result.b1 = -2.0 / a0;
+	result.b2 = result.b0;
+	result.a1 = 2.0 * (k * k - 1.0) / a0;
+	result.a2 = (1.0 - k / q + k * k) / a0;
+	return result;
+}
+
+BiquadCoefficients makeHighShelf(double sampleRate, double hz, double gainDb) {
+	constexpr double q = 0.7071752369554196;
+	const double k = std::tan(double(kPi) * hz / sampleRate);
+	const double vh = std::pow(10.0, gainDb / 20.0);
+	const double vb = std::pow(vh, 0.4996667741545416);
+	const double a0 = 1.0 + k / q + k * k;
+	BiquadCoefficients result;
+	result.b0 = (vh + vb * k / q + k * k) / a0;
+	result.b1 = 2.0 * (k * k - vh) / a0;
+	result.b2 = (vh - vb * k / q + k * k) / a0;
+	result.a1 = 2.0 * (k * k - 1.0) / a0;
+	result.a2 = (1.0 - k / q + k * k) / a0;
+	return result;
+}
+
+void loudnessAnalysis(const std::vector<float>& samples, float sampleRate,
+		ChannelAnalysis* result) {
+	if (!result || samples.empty() || sampleRate <= 0.f) return;
+	const BiquadCoefficients shelf = makeHighShelf(sampleRate, 1681.974450955533, 3.999843853973347);
+	const BiquadCoefficients highPass = makeHighPass(sampleRate, 38.13547087602444, 0.5003270373238773);
+	double shelfZ1 = 0.0, shelfZ2 = 0.0, highPassZ1 = 0.0, highPassZ2 = 0.0;
+	const size_t blockFrames = std::max<size_t>(1, size_t(std::llround(sampleRate * 0.1)));
+	std::vector<double> blocks;
+	blocks.reserve((samples.size() + blockFrames - 1) / blockFrames);
+	double blockSum = 0.0, totalSum = 0.0;
+	size_t blockCount = 0;
+	for (float volts : samples) {
+		const double input = double(volts) * 0.2;
+		const double y1 = shelf.b0 * input + shelfZ1;
+		shelfZ1 = shelf.b1 * input - shelf.a1 * y1 + shelfZ2;
+		shelfZ2 = shelf.b2 * input - shelf.a2 * y1;
+		const double y2 = highPass.b0 * y1 + highPassZ1;
+		highPassZ1 = highPass.b1 * y1 - highPass.a1 * y2 + highPassZ2;
+		highPassZ2 = highPass.b2 * y1 - highPass.a2 * y2;
+		blockSum += y2 * y2;
+		totalSum += y2 * y2;
+		if (++blockCount == blockFrames) {
+			blocks.push_back(blockSum / blockCount);
+			blockSum = 0.0;
+			blockCount = 0;
+		}
+	}
+	if (blockCount) blocks.push_back(blockSum / blockCount);
+	auto lufs = [](double power) {
+		return power > 1e-14 ? float(-0.691 + 10.0 * std::log10(power)) : kFloorDb;
+	};
+	auto recent = [&](size_t count) {
+		if (blocks.size() < count) return kFloorDb;
+		double sum = 0.0;
+		for (size_t i = blocks.size() - count; i < blocks.size(); ++i) sum += blocks[i];
+		return lufs(sum / count);
+	};
+	std::vector<double> absoluteGated;
+	for (double power : blocks) if (lufs(power) > -70.f) absoluteGated.push_back(power);
+	double absoluteMean = 0.0;
+	for (double power : absoluteGated) absoluteMean += power;
+	if (!absoluteGated.empty()) absoluteMean /= absoluteGated.size();
+	const float relativeGate = lufs(absoluteMean) - 10.f;
+	double gatedSum = 0.0;
+	uint32_t gatedCount = 0;
+	for (double power : absoluteGated) {
+		if (lufs(power) > relativeGate) { gatedSum += power; ++gatedCount; }
+	}
+	result->loudnessAvailable = true;
+	result->integratedLufs = gatedCount ? lufs(gatedSum / gatedCount) : kFloorDb;
+	result->momentaryLufs = recent(4);
+	result->shortTermLufs = recent(30);
+	result->kWeightedDbfsEstimate = lufs(totalSum / samples.size());
+	result->loudnessBlocks = static_cast<uint32_t>(blocks.size());
+}
+
 size_t fftSizeFor(size_t available) {
 	size_t size = 1;
 	while (size <= available / 2 && size < 4096) size <<= 1;
@@ -274,7 +361,10 @@ ChannelAnalysis analyzeChannel(const FrozenObservation& snapshot, ObserveChannel
 	result.rmsDb = toDb(result.rms);
 	result.peakDb = toDb(result.peak);
 	result.crestDb = ratioDb(result.peak, result.rms);
-	if (detailed) spectralAnalysis(samples, snapshot.sampleRate, includeSpectrum, &result);
+	if (detailed) {
+		loudnessAnalysis(samples, snapshot.sampleRate, &result);
+		spectralAnalysis(samples, snapshot.sampleRate, includeSpectrum, &result);
+	}
 	return result;
 }
 

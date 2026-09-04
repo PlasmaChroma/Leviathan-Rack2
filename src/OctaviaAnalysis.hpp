@@ -40,6 +40,12 @@ struct ChannelAnalysis {
 	float crestDb = 0.f;
 	float dcOffset = 0.f;
 	uint64_t clippedSamples = 0;
+	bool loudnessAvailable = false;
+	float integratedLufs = -140.f;
+	float momentaryLufs = -140.f;
+	float shortTermLufs = -140.f;
+	float kWeightedDbfsEstimate = -140.f;
+	uint32_t loudnessBlocks = 0;
 	float noiseFloorDb = -140.f;
 	std::array<float, 7> bandsDb{{-140.f, -140.f, -140.f, -140.f, -140.f, -140.f, -140.f}};
 	uint64_t temporalSeparationFrames = 0;

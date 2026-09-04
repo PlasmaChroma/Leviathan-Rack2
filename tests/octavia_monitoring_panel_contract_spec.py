@@ -9,8 +9,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / "src" / "Octavia.cpp").read_text(encoding="utf-8")
 OBSERVATION = (ROOT / "src" / "OctaviaObservation.hpp").read_text(encoding="utf-8")
-MEASUREMENT = (ROOT / "src" / "OctaviaMeasurement.hpp").read_text(encoding="utf-8")
-MEASUREMENT_IMPL = (ROOT / "src" / "OctaviaMeasurement.cpp").read_text(encoding="utf-8")
 RECORDING = (ROOT / "src" / "OctaviaRecording.hpp").read_text(encoding="utf-8")
 MCP_SOURCE = (ROOT / "MCP" / "mcp_server" / "Octavia_MCP.py").read_text(encoding="utf-8")
 PANEL_PATH = ROOT / "res" / "Octavia.svg"
@@ -101,9 +99,10 @@ class OctaviaMonitoringPanelContractTest(unittest.TestCase):
         self.assertIn("levelNormalizedBandsDb", SOURCE)
         self.assertIn('jStr("activeAnalysisUsers")', SOURCE)
         self.assertIn('jStr("snapshotGeneration")', SOURCE)
-        self.assertIn("analyzeLatestMaster", SOURCE)
-        self.assertEqual(SOURCE.count('svr.Get(R"(/audio/(\\d+))"'), 1)
-        self.assertEqual(SOURCE.count('svr.Get(R"(/audio/(\\d+)/analyze)"'), 1)
+        self.assertNotIn("analyzeLatestMaster", SOURCE)
+        self.assertNotIn('svr.Get(R"(/audio/(\\d+))"', SOURCE)
+        self.assertNotIn('svr.Get(R"(/audio/(\\d+)/analyze)"', SOURCE)
+        self.assertNotIn('svr.Get("/audio/loudness"', SOURCE)
         self.assertNotIn("/retired/audio/", SOURCE)
         self.assertIn('#include "OctaviaObservationBus.hpp"', SOURCE)
         self.assertIn('svr.Get("/audio/triggered-snapshots"', SOURCE)
@@ -121,12 +120,14 @@ class OctaviaMonitoringPanelContractTest(unittest.TestCase):
         self.assertIn("MASTER_METER_BLOCKS = 32", SOURCE)
         for removed in ("resetFlag", "pKSum", "pRawSum", "pClipped", "pSumLR", "pN"):
             self.assertNotIn(removed, SOURCE)
-        self.assertIn("masterMeasurement.process", SOURCE)
+        self.assertNotIn("masterMeasurement", SOURCE)
 
-    def test_phase_three_legacy_routes_arm_triggered_sessions(self):
-        self.assertIn("masterMeasurement.arm(0, true", SOURCE)
-        self.assertIn("measurement_busy", MEASUREMENT_IMPL)
-        self.assertIn("requestedDurationFrames_", MEASUREMENT)
+    def test_all_named_inputs_share_the_modern_analysis_surface(self):
+        self.assertIn('MonitorName = Literal["masterL", "masterR", "A", "B", "C", "D"]', MCP_SOURCE)
+        self.assertIn('name="vcv_octavia_analyze_snapshot"', MCP_SOURCE)
+        self.assertIn('name="vcv_octavia_start_analysis_capture"', MCP_SOURCE)
+        self.assertNotIn('name="vcv_analyze_audio"', MCP_SOURCE)
+        self.assertNotIn('name="vcv_reset_loudness"', MCP_SOURCE)
 
     def test_bounded_recording_stays_on_physical_observation_ports(self):
         self.assertIn('#include "OctaviaRecording.hpp"', SOURCE)

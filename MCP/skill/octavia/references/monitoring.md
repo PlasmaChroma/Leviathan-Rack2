@@ -45,16 +45,19 @@ side-to-mid ratio. Negative correlation describes only the selected pair.
 
 Snapshots are immutable: repeated analysis of one ID must not recapture audio. Frame
 metadata identifies what was heard. Post-roll completes outside the audio thread.
-`analysis_busy` and `measurement_busy` indicate bounded work; wait or reduce the request
-instead of flooding retries. The bounded snapshot pool can expire old IDs.
+`analysis_busy` indicates bounded heavyweight work; wait or reduce the request instead of
+flooding retries. The bounded snapshot pool can expire old IDs.
+
+Detailed analysis applies the same RMS, peak, crest, DC, clipping, K-weighted loudness,
+spectrum, resonance, hum, and issue detection to every named input. The Master-only panel
+meters are a separate lightweight continuous display and do not define analysis behavior.
 
 For before/after work, cable reference and target simultaneously—A before a filter and B
 after it, for example—and compare one snapshot. For stereo, use two explicit pairs such as
 stereo(A,B) and stereo(C,D). Never assume A/B are a pair from their names.
 
-Legacy `/audio/0` and `/audio/1` remain Master L/R. Their analyzers use the frozen backend.
-Legacy loudness reset → play → read arms an explicit Master measurement rather than reading
-an unbounded always-running accumulator.
+All six named inputs use the same snapshot and bounded-capture analysis engine. Master L/R
+remain special only as the persistent meter source and as the default recording pair.
 
 ## Bounded analysis and recording workflow
 

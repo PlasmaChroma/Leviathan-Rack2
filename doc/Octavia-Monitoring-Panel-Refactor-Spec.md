@@ -834,23 +834,22 @@ or:
 }
 ```
 
-### 12.5 Triggered measurement
+### 12.5 Bounded analysis capture
 
-Provide an interval-measurement operation suitable for loudness and other long-window metrics.
-
-A simple first contract may remain synchronous for duration-based measurements:
+Use the asynchronous bounded capture operation for loudness and other long-window metrics:
 
 ```text
-POST /audio/measure
+POST /audio/capture
+GET /audio/capture/{id}
 ```
 
-with a body such as:
+with a request such as:
 
 ```json
 {
-  "channels": ["masterL", "masterR"],
+  "stereo": {"left": "masterL", "right": "masterR"},
   "seconds": 10,
-  "metrics": ["loudness", "rms", "peak", "correlation"]
+  "detail": "detailed"
 }
 ```
 
@@ -858,44 +857,12 @@ Internally, start and end the measurement on engine-frame boundaries rather than
 
 ---
 
-## 13. Legacy Route Compatibility
+## 13. Unified Named Analysis Surface
 
-Existing clients should not break unnecessarily.
-
-### 13.1 `/audio/0` and `/audio/1`
-
-Continue to interpret:
-
-```text
-0 = Master L
-1 = Master R
-```
-
-Route these requests through the new snapshot/analyzer substrate.
-
-### 13.2 `/audio/{port}/analyze`
-
-Continue supporting port 0/1 as Master L/R.
-
-The response may gain timing metadata but should preserve currently useful fields where practical.
-
-### 13.3 `/audio/loudness/reset`
-
-Change its internal meaning from “clear an always-running hour-long accumulator” to:
-
-> arm/reset a triggered Master L/R loudness measurement session.
-
-This preserves the old reset → play → read workflow without paying the full measurement cost at all times.
-
-### 13.4 `/audio/loudness`
-
-Return the state/results of the current or most recently completed legacy Master measurement session.
-
-If no session has been armed, return an explicit state/error rather than pretending an idle continuous integrated measurement exists.
-
-### 13.5 `/audio/measure?seconds=N`
-
-Keep the convenience endpoint if current MCP/tooling depends on it, but implement it using the new triggered measurement session rather than reset + server wall-clock sleep as the authoritative timing mechanism.
+Octavia is unreleased, so the numeric Master-only routes and reset/read measurement session
+were removed before release. All six inputs use the named snapshot and bounded-capture
+analysis API. Master L/R remain distinct only as the persistent panel-meter source and the
+default recording pair; A-D remain conventionally assigned diagnostic probes.
 
 ---
 
@@ -1115,8 +1082,6 @@ src/OctaviaObservation.hpp
 src/OctaviaObservation.cpp
 src/OctaviaAnalysis.hpp
 src/OctaviaAnalysis.cpp
-src/OctaviaMeasurement.hpp
-src/OctaviaMeasurement.cpp
 src/OctaviaObservationBus.hpp        // future Sibyl/internal trigger interface
 ```
 
@@ -1139,12 +1104,6 @@ Possible responsibilities:
 - resonance/problem detection;
 - group/stereo analysis;
 - comparison/delta generation.
-
-### `OctaviaMeasurement`
-
-- triggered long-window accumulators;
-- loudness sessions;
-- interval timing and results.
 
 ### `OctaviaObservationBus`
 
@@ -1260,14 +1219,14 @@ Synthetic fixtures should cover:
 
 **Exit condition:** an agent can explicitly compare arbitrary patch observation points without continuous detailed DSP.
 
-### Phase 5 — Legacy route migration
+### Phase 5 — Unified analysis surface
 
-1. Route `/audio/0`, `/audio/1`, and detailed legacy Master analysis through the new backend.
-2. Reinterpret loudness reset/read as triggered measurement state.
-3. Replace wall-clock authoritative measurement timing with frame-based sessions.
-4. Validate MCP/tool compatibility.
+1. Remove numeric and Master-only analysis routes before release.
+2. Route all six named inputs through the same snapshot and bounded-capture analyzer.
+3. Keep only the lightweight continuous Master panel meters separate.
+4. Validate parity across Master L/R and A-D.
 
-**Exit condition:** current clients continue to function while the internal architecture is trigger-driven.
+**Exit condition:** every named observation input receives identical offline analysis.
 
 ### Phase 6 — Sibyl observation hook
 
