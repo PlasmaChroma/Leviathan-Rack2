@@ -9,10 +9,34 @@
    inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
   <defs
-     id="defs1" />
+     id="defs1">
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient22"
+       id="linearGradient36"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(0.00996908,0,0,0.00996908,-35.580841,-8.7190724)"
+       x1="5153.5303"
+       y1="1496.1719"
+       x2="7077.3545"
+       y2="1489.1353" />
+    <linearGradient
+       id="linearGradient22"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#7a5cff;stop-opacity:1;"
+         offset="0"
+         id="stop22" />
+      <stop
+         style="stop-color:#1cccd9;stop-opacity:1;"
+         offset="1"
+         id="stop23" />
+    </linearGradient>
+  </defs>
   <sodipodi:namedview
      id="namedview1"
      pagecolor="#ffffff"
@@ -25,7 +49,7 @@
      inkscape:document-units="mm"
      inkscape:zoom="2.4193418"
      inkscape:cx="21.906785"
-     inkscape:cy="242.42131"
+     inkscape:cy="248.208"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -43,114 +67,251 @@
   <g
      id="components"
      aria-label="Component anchors"
+     inkscape:label="Components"
      style="display:none">
-    <circle
-       id="TITLE_LABEL"
-       cx="25.4"
-       cy="7.5"
-       r="1"
-       style="fill:#306928;fill-opacity:1" />
     <rect
        id="OCTOPUS_STATUS"
-       x="0.74000001"
-       y="10.5"
-       width="36.5"
-       height="36"
-       style="fill:#306928;fill-opacity:1" />
+       x="1.25"
+       y="8.6999998"
+       width="48.299999"
+       height="47.63839"
+       style="fill:#306928;fill-opacity:1;stroke-width:1.32332" />
     <circle
        id="READ_ACTIVITY_LIGHT"
-       cx="11"
-       cy="48.599998"
+       cx="30.357019"
+       cy="63.199986"
        r="1.27"
        style="fill:#306928;fill-opacity:1" />
     <circle
        id="WRITE_ACTIVITY_LIGHT"
-       cx="19"
-       cy="48.599998"
+       cx="30.592339"
+       cy="73.133324"
        r="1.27"
        style="fill:#306928;fill-opacity:1" />
     <circle
-       id="READ_ACTIVITY_LABEL"
-       cx="11"
-       cy="53.599998"
-       r="1"
-       style="fill:#306928;fill-opacity:1" />
-    <circle
-       id="WRITE_ACTIVITY_LABEL"
-       cx="19"
-       cy="53.599998"
-       r="1"
-       style="fill:#306928;fill-opacity:1" />
-    <circle
-       id="PORT_LABEL"
-       cx="8.5"
-       cy="59.700001"
-       r="1"
-       style="fill:#306928;fill-opacity:1" />
-    <circle
        id="PORT_VALUE_LABEL"
-       cx="23"
+       cx="20.9"
        cy="59.700001"
-       r="1"
-       style="fill:#306928;fill-opacity:1" />
-    <circle
-       id="START_LABEL"
-       cx="8.5"
-       cy="66"
        r="1"
        style="fill:#306928;fill-opacity:1" />
     <circle
        id="START_PARAM"
-       cx="23"
+       cx="20.9"
        cy="66"
        r="2.3800001"
        style="fill:#306928;fill-opacity:1" />
     <rect
-       id="LOUDNESS_METERS"
-       x="3.5"
+       id="LUFS_METER"
+       x="4.3000002"
        y="72"
-       width="31"
-       height="29"
-       style="fill:#306928;fill-opacity:1" />
+       width="8"
+       height="31.6"
+       style="fill:#306928;fill-opacity:1;stroke-width:1.04387" />
+    <rect
+       id="DBFS_METER"
+       x="16.533333"
+       y="72"
+       width="8"
+       height="31.6"
+       style="fill:#306928;fill-opacity:1;stroke-width:1.04387" />
     <circle
        id="MASTER_L_INPUT"
-       cx="10.5"
+       cx="8.3000002"
        cy="110"
        r="3.75"
        style="fill:#306928;fill-opacity:1" />
     <circle
        id="MASTER_R_INPUT"
-       cx="27.5"
+       cx="20.533333"
        cy="110"
        r="3.75"
        style="fill:#306928;fill-opacity:1" />
     <circle
-       id="MASTER_L_LABEL"
-       cx="10.5"
-       cy="120.5"
-       r="1"
+       id="MONITOR_A_INPUT"
+       cx="44"
+       cy="63.199986"
+       r="3.75"
        style="fill:#306928;fill-opacity:1" />
     <circle
-       id="MASTER_R_LABEL"
-       cx="27.5"
-       cy="120.5"
-       r="1"
+       id="MONITOR_B_INPUT"
+       cx="44"
+       cy="73.133324"
+       r="3.75"
        style="fill:#306928;fill-opacity:1" />
-    <circle id="MONITOR_A_INPUT" cx="44" cy="27" r="3.75" style="fill:#306928;fill-opacity:1" />
-    <circle id="MONITOR_B_INPUT" cx="44" cy="49" r="3.75" style="fill:#306928;fill-opacity:1" />
-    <circle id="MONITOR_C_INPUT" cx="44" cy="71" r="3.75" style="fill:#306928;fill-opacity:1" />
-    <circle id="MONITOR_D_INPUT" cx="44" cy="93" r="3.75" style="fill:#306928;fill-opacity:1" />
-    <circle id="MONITOR_A_LIGHT" cx="37.5" cy="27" r="1.27" style="fill:#306928;fill-opacity:1" />
-    <circle id="MONITOR_B_LIGHT" cx="37.5" cy="49" r="1.27" style="fill:#306928;fill-opacity:1" />
-    <circle id="MONITOR_C_LIGHT" cx="37.5" cy="71" r="1.27" style="fill:#306928;fill-opacity:1" />
-    <circle id="MONITOR_D_LIGHT" cx="37.5" cy="93" r="1.27" style="fill:#306928;fill-opacity:1" />
-    <circle id="MONITOR_A_LABEL" cx="44" cy="19.5" r="1" style="fill:#306928;fill-opacity:1" />
-    <circle id="MONITOR_B_LABEL" cx="44" cy="41.5" r="1" style="fill:#306928;fill-opacity:1" />
-    <circle id="MONITOR_C_LABEL" cx="44" cy="63.5" r="1" style="fill:#306928;fill-opacity:1" />
-    <circle id="MONITOR_D_LABEL" cx="44" cy="85.5" r="1" style="fill:#306928;fill-opacity:1" />
-    <circle id="CONTROL_A_OUTPUT" cx="37" cy="110" r="3.75" style="fill:#306928;fill-opacity:1" />
-    <circle id="CONTROL_B_OUTPUT" cx="45" cy="110" r="3.75" style="fill:#306928;fill-opacity:1" />
-    <circle id="CONTROL_A_LABEL" cx="37" cy="102.5" r="1" style="fill:#306928;fill-opacity:1" />
-    <circle id="CONTROL_B_LABEL" cx="45" cy="102.5" r="1" style="fill:#306928;fill-opacity:1" />
+    <circle
+       id="MONITOR_C_INPUT"
+       cx="44"
+       cy="83.066658"
+       r="3.75"
+       style="fill:#306928;fill-opacity:1" />
+    <circle
+       id="MONITOR_D_INPUT"
+       cx="44"
+       cy="93"
+       r="3.75"
+       style="fill:#306928;fill-opacity:1" />
+    <circle
+       id="MONITOR_A_LIGHT"
+       cx="37.5"
+       cy="63.199986"
+       r="1.27"
+       style="fill:#306928;fill-opacity:1" />
+    <circle
+       id="MONITOR_B_LIGHT"
+       cx="37.5"
+       cy="73.133324"
+       r="1.27"
+       style="fill:#306928;fill-opacity:1" />
+    <circle
+       id="MONITOR_C_LIGHT"
+       cx="37.5"
+       cy="83.066658"
+       r="1.27"
+       style="fill:#306928;fill-opacity:1" />
+    <circle
+       id="MONITOR_D_LIGHT"
+       cx="37.5"
+       cy="93"
+       r="1.27"
+       style="fill:#306928;fill-opacity:1" />
+    <circle
+       id="CONTROL_A_OUTPUT"
+       cx="32.766666"
+       cy="104.3"
+       r="3.75"
+       style="fill:#306928;fill-opacity:1" />
+    <circle
+       id="CONTROL_B_OUTPUT"
+       cx="45"
+       cy="104.3"
+       r="3.75"
+       style="fill:#306928;fill-opacity:1" />
+  </g>
+  <g
+     id="labels"
+     inkscape:label="Labels"
+     style="font-weight:400;font-family:Rubik;dominant-baseline:middle;text-anchor:middle;fill:#ffffff">
+    <text
+       id="READ_ACTIVITY_LABEL"
+       x="30.357019"
+       y="67.300232"
+       font-size="1.97556px"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan5"
+         x="30.357019"
+         y="67.300232">RD</tspan></text>
+    <text
+       id="WRITE_ACTIVITY_LABEL"
+       x="30.592339"
+       y="77.220383"
+       font-size="1.97556px"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan6"
+         x="30.592339"
+         y="77.220383">WR</tspan></text>
+    <text
+       id="PORT_LABEL"
+       x="8.5"
+       y="59.700001"
+       font-size="2.257778"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">Port</text>
+    <text
+       id="START_LABEL"
+       x="8.5"
+       y="66"
+       font-size="1.975556"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">Start</text>
+    <text
+       id="MASTER_L_LABEL"
+       x="8.3000002"
+       y="117"
+       font-size="1.975556"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan3"
+         x="8.3000002"
+         y="117">MON L</tspan></text>
+    <text
+       id="MASTER_R_LABEL"
+       x="20.488882"
+       y="117"
+       font-size="1.97556px"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan4"
+         x="20.488882"
+         y="117">MON R</tspan></text>
+    <text
+       id="MONITOR_A_LABEL"
+       x="37.5"
+       y="67.300232"
+       font-size="1.97556px"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">A</text>
+    <text
+       id="MONITOR_B_LABEL"
+       x="37.5"
+       y="77.220383"
+       font-size="1.97556px"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">B</text>
+    <text
+       id="MONITOR_C_LABEL"
+       x="37.5"
+       y="87.160286"
+       font-size="1.97556px"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">C</text>
+    <text
+       id="MONITOR_D_LABEL"
+       x="37.5"
+       y="97.100197"
+       font-size="1.97556px"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">D</text>
+    <text
+       id="CONTROL_A_LABEL"
+       x="32.735622"
+       y="110.80051"
+       font-size="1.55222px"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">CTRL A</text>
+    <text
+       id="CONTROL_B_LABEL"
+       x="44.99612"
+       y="110.80051"
+       font-size="1.55222px"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">CTRL B</text>
+    <text
+       id="LUFS_LABEL"
+       x="8.3000002"
+       y="102.3"
+       font-size="2.257778"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">LUFS</text>
+    <text
+       id="DBFS_LABEL"
+       x="20.533333"
+       y="102.3"
+       font-size="2.25778px"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">dBFS</text>
+    <text
+       id="reworked_module_title_text"
+       x="25.381479"
+       y="4.6363811"
+       style="display:inline;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.29167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;fill:url(#linearGradient36);stroke-width:0.281347"
+       xml:space="preserve"><tspan
+         sodipodi:role="line"
+         id="tspan1"
+         style="fill:url(#linearGradient36)"
+         x="25.381479"
+         y="4.6363811">Octavia</tspan></text>
+    <text
+       id="reworked_module_description"
+       x="25.36825"
+       y="7.2525024"
+       style="display:inline;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.11667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff;stroke-width:0.01"
+       xml:space="preserve"><tspan
+         sodipodi:role="line"
+         id="tspan2"
+         x="25.36825"
+         y="7.2525024"
+         style="stroke-width:0.01">sequencer</tspan></text>
   </g>
 </svg>

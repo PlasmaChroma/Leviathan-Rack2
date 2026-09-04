@@ -3232,11 +3232,11 @@ struct OctaviaStatusWidget : TransparentWidget {
 
 struct OctaviaMeterWidget : TransparentWidget {
     Octavia* module = nullptr;
-    float displayedLufs[2] = {};
-    float displayedDbfs[2] = {};
+    bool showDbfs = false;
+    float displayedLevels[2] = {};
 
-    explicit OctaviaMeterWidget(Octavia* module)
-        : module(module) {}
+    OctaviaMeterWidget(Octavia* module, bool showDbfs)
+        : module(module), showDbfs(showDbfs) {}
 
     static float normalizedDb(float db) {
         return std::max(0.f, std::min(1.f, (db + 60.f) / 60.f));
@@ -3253,22 +3253,23 @@ struct OctaviaMeterWidget : TransparentWidget {
             ? module->lm.blockTotal.load(std::memory_order_acquire) : 0;
         const int count = (int)std::min<uint64_t>(total, 4);
         for (int j = 0; j < 2; ++j) {
-            float lufsTarget = 0.f;
-            float dbfsTarget = 0.f;
+            float target = 0.f;
             const bool connected = module
                 && module->audioInputConnected[j].load(std::memory_order_relaxed);
             if (connected && count > 0) {
-                double power = 0.0;
-                for (uint64_t i = total - count; i < total; ++i)
-                    power += module->lm.blocks[j][i % MASTER_METER_BLOCKS].load(std::memory_order_relaxed);
-                const float momentaryLufs = -0.691f
-                    + 10.f * std::log10((float)(power / count) + 1e-12f);
-                lufsTarget = normalizedDb(momentaryLufs);
-                const float peak = module->lm.meterPeak[j].load(std::memory_order_relaxed);
-                dbfsTarget = normalizedDb(20.f * std::log10(peak + 1e-12f));
+                if (showDbfs) {
+                    const float peak = module->lm.meterPeak[j].load(std::memory_order_relaxed);
+                    target = normalizedDb(20.f * std::log10(peak + 1e-12f));
+                } else {
+                    double power = 0.0;
+                    for (uint64_t i = total - count; i < total; ++i)
+                        power += module->lm.blocks[j][i % MASTER_METER_BLOCKS].load(std::memory_order_relaxed);
+                    const float momentaryLufs = -0.691f
+                        + 10.f * std::log10((float)(power / count) + 1e-12f);
+                    target = normalizedDb(momentaryLufs);
+                }
             }
-            displayedLufs[j] = follow(displayedLufs[j], lufsTarget);
-            displayedDbfs[j] = follow(displayedDbfs[j], dbfsTarget);
+            displayedLevels[j] = follow(displayedLevels[j], target);
         }
     }
 
@@ -3314,21 +3315,10 @@ struct OctaviaMeterWidget : TransparentWidget {
     }
 
     void draw(const DrawArgs& args) override {
-        const float barWidth = mm2px(8.f);
+        const float barWidth = box.size.x;
         const float barHeight = box.size.y - mm2px(4.5f);
-        const float leftX = mm2px(0.8f);
-        const float rightX = box.size.x - leftX - barWidth;
-        drawBar(args.vg, math::Rect(Vec(leftX, 0.f), Vec(barWidth, barHeight)), displayedLufs);
-        drawBar(args.vg, math::Rect(Vec(rightX, 0.f), Vec(barWidth, barHeight)), displayedDbfs);
+        drawBar(args.vg, math::Rect(Vec(0.f, 0.f), Vec(barWidth, barHeight)), displayedLevels);
 
-        if (!APP || !APP->window || !APP->window->uiFont) return;
-        nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-        nvgFontSize(args.vg, 8.f);
-        nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-        nvgFillColor(args.vg, WHITE);
-        const float labelY = box.size.y - mm2px(1.7f);
-        nvgText(args.vg, leftX + 0.5f * barWidth, labelY, "LUFS", NULL);
-        nvgText(args.vg, rightX + 0.5f * barWidth, labelY, "dBFS", NULL);
     }
 };
 
@@ -3338,18 +3328,7 @@ struct OctaviaWidget : ModuleWidget {
     widget::FramebufferWidget* statusFramebuffer = nullptr;
     bool statusFramebufferStateInitialized = false;
     bool lastStatusFramebufferServerRunning = false;
-    Vec titleLabelMm{19.05f, 7.5f};
-    Vec portLabelMm{4.5f, 55.5f};
     Vec portValueLabelMm{26.f, 55.5f};
-    Vec readActivityLabelMm{11.f, 56.f};
-    Vec writeActivityLabelMm{19.f, 56.f};
-    Vec startLabelMm{4.5f, 66.f};
-    Vec masterLabelLMm{11.f, 120.5f};
-    Vec masterLabelRMm{28.f, 120.5f};
-    std::array<Vec, 4> monitorLabelMm{{
-        Vec(44.f, 20.f), Vec(44.f, 42.f), Vec(44.f, 64.f), Vec(44.f, 86.f)
-    }};
-    std::array<Vec, 2> controlLabelMm{{Vec(37.f, 102.5f), Vec(45.f, 102.5f)}};
 
     void step() override {
         ModuleWidget::step();
@@ -3385,8 +3364,9 @@ struct OctaviaWidget : ModuleWidget {
         // Start from the UI lifecycle so loading a patch does not require a manual
         // button press and thread creation never occurs as automatic audio-thread work.
         if (module) module->startServer();
-        const std::string panelPath = asset::plugin(pluginInstance,"res/Octavia.svg");
-        setPanel(createPanel(panelPath));
+        visual_assets::SplitPanelRenderer splitPanel(this, "res/Octavia.panel.svg");
+        const std::string& panelPath = splitPanel.panelPath();
+        splitPanel.addLabels("res/Octavia.labels.svg");
         addChild(createWidget<CyanOrbScrew>(Vec(0, 0)));
         addChild(createWidget<CyanOrbScrew>(Vec(0, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
         addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - RACK_GRID_WIDTH, 0)));
@@ -3406,21 +3386,7 @@ struct OctaviaWidget : ModuleWidget {
                 result = fallbackMm;
             return result;
         };
-        titleLabelMm = anchorPoint("TITLE_LABEL", titleLabelMm);
-        portLabelMm = anchorPoint("PORT_LABEL", portLabelMm);
         portValueLabelMm = anchorPoint("PORT_VALUE_LABEL", portValueLabelMm);
-        readActivityLabelMm = anchorPoint("READ_ACTIVITY_LABEL", readActivityLabelMm);
-        writeActivityLabelMm = anchorPoint("WRITE_ACTIVITY_LABEL", writeActivityLabelMm);
-        startLabelMm = anchorPoint("START_LABEL", startLabelMm);
-        masterLabelLMm = anchorPointWithLegacy("MASTER_L_LABEL", "AUDIO_LABEL_L", masterLabelLMm);
-        masterLabelRMm = anchorPointWithLegacy("MASTER_R_LABEL", "AUDIO_LABEL_R", masterLabelRMm);
-        static const char* monitorLabelAnchors[] = {
-            "MONITOR_A_LABEL", "MONITOR_B_LABEL", "MONITOR_C_LABEL", "MONITOR_D_LABEL"
-        };
-        for (int monitor = 0; monitor < 4; ++monitor)
-            monitorLabelMm[monitor] = anchorPoint(monitorLabelAnchors[monitor], monitorLabelMm[monitor]);
-        controlLabelMm[0] = anchorPoint("CONTROL_A_LABEL", controlLabelMm[0]);
-        controlLabelMm[1] = anchorPoint("CONTROL_B_LABEL", controlLabelMm[1]);
 
         math::Rect statusRectMm(Vec(0.74f, 13.5f), Vec(29.f, 36.f));
         panel_svg::loadRectFromSvgMm(panelPath, "OCTOPUS_STATUS", &statusRectMm);
@@ -3437,12 +3403,15 @@ struct OctaviaWidget : ModuleWidget {
         addChild(createLightCentered<SmallAperture<RedApertureLight>>(
             mm2px(anchorPoint("WRITE_ACTIVITY_LIGHT", Vec(19.f, 51.f))), module, Octavia::WRITE_ACTIVITY_LIGHT));
 
-        OctaviaMeterWidget* meter = new OctaviaMeterWidget(module);
-        math::Rect meterRectMm(Vec(3.f, 72.f), Vec(24.48f, 29.f));
-        panel_svg::loadRectFromSvgMm(panelPath, "LOUDNESS_METERS", &meterRectMm);
-        meter->box.pos = mm2px(meterRectMm.pos);
-        meter->box.size = mm2px(meterRectMm.size);
-        addChild(meter);
+        const char* meterAnchors[] = {"LUFS_METER", "DBFS_METER"};
+        for (int i = 0; i < 2; ++i) {
+            auto* meter = new OctaviaMeterWidget(module, i == 1);
+            math::Rect meterRectMm(Vec(i == 0 ? 4.3f : 25.7f, 72.f), Vec(8.f, 29.f));
+            panel_svg::loadRectFromSvgMm(panelPath, meterAnchors[i], &meterRectMm);
+            meter->box.pos = mm2px(meterRectMm.pos);
+            meter->box.size = mm2px(meterRectMm.size);
+            addChild(meter);
+        }
 
         addParam(createParamCentered<SmallGoldButton>(
             mm2px(anchorPoint("START_PARAM", Vec(23.f, 66.f))), module, Octavia::START_PARAM));
@@ -3482,46 +3451,18 @@ struct OctaviaWidget : ModuleWidget {
     void draw(const DrawArgs& args) override {
         ModuleWidget::draw(args);
 
-        const float cx = mm2px(titleLabelMm).x;
-
-        // ── Zone 1: Identity ──────────────────────────────────────────────────
+        // Static captions come from the split SVG labels; only the active
+        // server port is runtime text.
         if (!APP || !APP->window || !APP->window->uiFont) return;
         nvgFontFaceId(args.vg, APP->window->uiFont->handle);
         nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
 
-        nvgFontSize(args.vg,18.f); nvgFillColor(args.vg,WHITE);
-        nvgText(args.vg, cx, mm2px(titleLabelMm).y, "Octavia", NULL);
-
-        // ── Zone 2: Server controls ───────────────────────────────────────────
         nvgFontSize(args.vg,8.f);
         nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
         nvgFillColor(args.vg,WHITE);
-        nvgText(args.vg, mm2px(portLabelMm).x, mm2px(portLabelMm).y, "Port", NULL);
         const std::string portText = std::to_string(octaviaPort());
         nvgText(args.vg, mm2px(portValueLabelMm).x, mm2px(portValueLabelMm).y, portText.c_str(), NULL);
 
-        nvgFontSize(args.vg,7.f);
-        nvgText(args.vg, mm2px(readActivityLabelMm).x, mm2px(readActivityLabelMm).y, "READ", NULL);
-        nvgText(args.vg, mm2px(writeActivityLabelMm).x, mm2px(writeActivityLabelMm).y, "WRITE", NULL);
-
-        nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
-        nvgFillColor(args.vg,WHITE);
-        nvgText(args.vg, mm2px(startLabelMm).x, mm2px(startLabelMm).y, "Start", NULL);
-
-        // ── Zone 3: Master and independent monitor labels ────────────────────
-        nvgFontSize(args.vg,7.f); nvgFillColor(args.vg,WHITE);
-        nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
-        nvgText(args.vg, mm2px(masterLabelLMm).x, mm2px(masterLabelLMm).y, "MASTER L", NULL);
-        nvgText(args.vg, mm2px(masterLabelRMm).x, mm2px(masterLabelRMm).y, "MASTER R", NULL);
-        static const char* monitorLabels[] = {"A", "B", "C", "D"};
-        for (int monitor = 0; monitor < 4; ++monitor)
-            nvgText(args.vg, mm2px(monitorLabelMm[monitor]).x,
-                mm2px(monitorLabelMm[monitor]).y, monitorLabels[monitor], NULL);
-        nvgFontSize(args.vg, 5.5f);
-        nvgText(args.vg, mm2px(controlLabelMm[0]).x, mm2px(controlLabelMm[0]).y,
-            "CTRL A", NULL);
-        nvgText(args.vg, mm2px(controlLabelMm[1]).x, mm2px(controlLabelMm[1]).y,
-            "CTRL B", NULL);
     }
 };
 
