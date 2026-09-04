@@ -407,12 +407,9 @@ void drawSpringScene(NVGcontext* vg, const DoorstopOverlayLink& link,
 
 void drawEnergyMeter(NVGcontext* vg, const math::Rect& bounds, float energy) {
 	energy = clamp01(energy);
-	// Preserve the engine's physical 0..1 energy scale while expanding the
-	// visually useful low end. The endpoints remain exact: silence is empty
-	// and the configured energy ceiling fills the meter.
-	constexpr float displayCurve = 63.f;
-	const float displayEnergy =
-		std::log1p(displayCurve * energy) / std::log1p(displayCurve);
+	// The published value is already a perceptual trigger/settling envelope.
+	// Display it directly so a small retained tail cannot resemble a full bar.
+	const float displayEnergy = energy;
 	const float radius = std::min(0.5f * bounds.size.y, 2.5f);
 	nvgBeginPath(vg);
 	nvgRoundedRect(vg, bounds.pos.x, bounds.pos.y, bounds.size.x, bounds.size.y, radius);

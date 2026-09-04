@@ -1,4 +1,5 @@
 #include "../src/DoorstopEngine.hpp"
+#include "../src/DoorstopVisualFeedback.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -626,6 +627,58 @@ Result abusiveRetriggerStability() {
 	return {"Random abusive retriggers remain bounded", pass, detail};
 }
 
+Result visualEnergyIsTriggerChargedAndMonotonic() {
+	constexpr float dt = 1.f / 48000.f;
+	float energy = doorstop::updateVisualEnergyEnvelope(
+		0.f, 0.65f, true, true, false, dt);
+	const bool chargedByTrigger = closeEnough(energy, 0.65f);
+	bool monotonicallyDecaying = true;
+	for (int i = 0; i < 48000; ++i) {
+		const float previous = energy;
+		// Resonator activity is deliberately erratic: it must not recharge the bar.
+		const float activity = (i & 1) ? 1.f : 0.05f;
+		energy = doorstop::updateVisualEnergyEnvelope(
+			energy, activity, false, true, false, dt);
+		monotonicallyDecaying = monotonicallyDecaying && energy <= previous;
+	}
+	const bool smoothlyDecayed = energy > 0.f && energy < 0.25f;
+	float settledEnergy = 0.65f;
+	for (int i = 0; i < 24000; ++i) {
+		settledEnergy = doorstop::updateVisualEnergyEnvelope(
+			settledEnergy, 0.f, false, true, false, dt);
+	}
+	const bool settledSpringPullsBarDown = settledEnergy < 0.02f;
+	const float beforeLowerTrigger = energy;
+	energy = doorstop::updateVisualEnergyEnvelope(
+		energy, beforeLowerTrigger * 0.5f, true, true, false, dt);
+	const bool lowerTriggerDoesNotReduce = closeEnough(energy, beforeLowerTrigger);
+	energy = doorstop::updateVisualEnergyEnvelope(
+		energy, 0.9f, true, true, false, dt);
+	const bool strongerTriggerRaises = closeEnough(energy, 0.9f);
+	energy = doorstop::updateVisualEnergyEnvelope(
+		energy, 1.f, false, true, true, dt);
+	const bool sleepingClears = closeEnough(energy, 0.f);
+	return {"Visual energy rises only on triggers and otherwise decays",
+		chargedByTrigger && monotonicallyDecaying && smoothlyDecayed
+			&& settledSpringPullsBarDown
+			&& lowerTriggerDoesNotReduce && strongerTriggerRaises && sleepingClears,
+		"after1s=" + std::to_string(beforeLowerTrigger)
+			+ " settled=" + std::to_string(settledEnergy)};
+}
+
+Result visualEnergyPreservesEarlierModelScale() {
+	const float raw = 0.01f;
+	const float earlier = doorstop::shapeVisualEnergyActivity(raw, true);
+	const float v3 = doorstop::shapeVisualEnergyActivity(raw, false);
+	constexpr float dt = 1.f / 48000.f;
+	const float earlierAfterOneSample = doorstop::updateVisualEnergyEnvelope(
+		earlier, 0.f, false, false, false, dt);
+	return {"Earlier models retain their expanded low-energy meter scale",
+		earlier > 0.1f && closeEnough(v3, raw)
+			&& earlierAfterOneSample > earlier * 0.999f,
+		"earlier=" + std::to_string(earlier) + " v3=" + std::to_string(v3)};
+}
+
 } // namespace
 
 int main() {
@@ -648,6 +701,8 @@ int main() {
 	results.push_back(probabilisticMixModel());
 	results.push_back(probabilisticMixDistribution());
 	results.push_back(abusiveRetriggerStability());
+	results.push_back(visualEnergyIsTriggerChargedAndMonotonic());
+	results.push_back(visualEnergyPreservesEarlierModelScale());
 
 	int failed = 0;
 	std::cout << "Doorstop Engine Spec\n";

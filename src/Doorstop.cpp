@@ -112,15 +112,10 @@ void Doorstop::publishVisualState(const doorstop::Frame& frame) {
 		? clamp(frame.displacement, -maximumDisplacement, maximumDisplacement)
 		: 0.f;
 	const float velocity = std::isfinite(frame.velocity) ? clamp(frame.velocity, -1.f, 1.f) : 0.f;
-	const float physicalEnergy = std::isfinite(frame.energy)
-		? clamp(frame.energy, 0.f, 1.f) : 0.f;
-	const float perceptualActivity = std::isfinite(frame.visualActivity)
-		? clamp(frame.visualActivity, 0.f, 1.f) : 0.f;
 	const float strike = std::isfinite(frame.strikeLight) ? clamp(frame.strikeLight, 0.f, 1.f) : 0.f;
 	visualDisplacement.store(displacement, std::memory_order_relaxed);
 	visualVelocity.store(velocity, std::memory_order_relaxed);
-	visualEnergy.store(
-		std::max(physicalEnergy, perceptualActivity), std::memory_order_relaxed);
+	visualEnergy.store(visualEnergyEnvelope, std::memory_order_relaxed);
 	visualStrike.store(strike, std::memory_order_relaxed);
 }
 
@@ -202,6 +197,17 @@ void Doorstop::process(const ProcessArgs& args) {
 	}
 
 	const doorstop::Frame frame = engine.process(args.sampleTime);
+	const float rawVisualEnergy = std::max(
+		frame.strikeLight, std::max(frame.energy, frame.visualActivity));
+	const bool usesV3VisualTracking =
+		engine.getEngineMode() == doorstop::EngineMode::ReferenceV3;
+	const float trackedVisualEnergy = appliedStrike
+		? doorstop::shapeVisualEnergyActivity(
+			rawVisualEnergy, !usesV3VisualTracking)
+		: rawVisualEnergy;
+	visualEnergyEnvelope = doorstop::updateVisualEnergyEnvelope(
+		visualEnergyEnvelope, trackedVisualEnergy, appliedStrike,
+		usesV3VisualTracking, frame.sleeping, args.sampleTime);
 	outputs[AUDIO_OUTPUT].setChannels(1);
 	outputs[AUDIO_OUTPUT].setVoltage(frame.outputVolts);
 
@@ -227,6 +233,7 @@ void Doorstop::onReset(const ResetEvent& e) {
 	trigTrigger.reset();
 	manualTrigger.reset();
 	engine.reset();
+	visualEnergyEnvelope = 0.f;
 	allowVisualOverflow.store(true, std::memory_order_relaxed);
 	engineMode.store(int(doorstop::EngineMode::ReferenceV1), std::memory_order_relaxed);
 	soundModel.store(int(doorstop::SoundModel::ProbabilisticMix), std::memory_order_relaxed);
