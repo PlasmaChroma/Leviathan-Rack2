@@ -9,11 +9,11 @@
   </defs>
   <rect width="50.8" height="128.5" fill="#080808" id="rect1" />
   <g id="components" aria-label="Component anchors" inkscape:label="Components" style="display:none">
-    <rect id="OCTOPUS_STATUS" x="1.25" y="8.6999998" width="48.299999" height="47.63839" style="fill:#306928;fill-opacity:1;stroke-width:1.32332" />
+    <rect id="OCTOPUS_STATUS" x="1.25" y="9.3999996" width="48.299999" height="47.237999" style="fill:#306928;fill-opacity:1;stroke-width:1.31775" />
     <circle id="READ_ACTIVITY_LIGHT" cx="30.357019" cy="63.199986" r="1.27" style="fill:#306928;fill-opacity:1" />
     <circle id="WRITE_ACTIVITY_LIGHT" cx="30.592339" cy="73.133324" r="1.27" style="fill:#306928;fill-opacity:1" />
-    <circle id="PORT_VALUE_LABEL" cx="20.9" cy="59.700001" r="1" style="fill:#306928;fill-opacity:1" />
-    <circle id="START_PARAM" cx="20.9" cy="66" r="2.3800001" style="fill:#306928;fill-opacity:1" />
+    <circle id="PORT_VALUE_LABEL" cx="20.9" cy="60.499996" r="1" style="fill:#306928;fill-opacity:1" />
+    <circle id="START_PARAM" cx="20.9" cy="66.799988" r="2.3800001" style="fill:#306928;fill-opacity:1" />
     <rect id="LUFS_METER" x="4.3000002" y="72" width="8" height="31.6" style="fill:#306928;fill-opacity:1;stroke-width:1.04387" />
     <rect id="DBFS_METER" x="16.533333" y="72" width="8" height="31.6" style="fill:#306928;fill-opacity:1;stroke-width:1.04387" />
     <circle id="MASTER_L_INPUT" cx="8.3000002" cy="110" r="3.75" style="fill:#306928;fill-opacity:1" />

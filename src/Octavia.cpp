@@ -287,6 +287,7 @@ struct Octavia : Module {
         "Octavia monitor light IDs are append-only");
 
     std::atomic<bool> serverRunning{false};
+    std::atomic<bool> serverTogglePending{false};
     std::atomic<uint64_t> readActivityGeneration{0};
     std::atomic<uint64_t> writeActivityGeneration{0};
     uint64_t seenReadActivityGeneration = 0;
@@ -436,7 +437,7 @@ struct Octavia : Module {
         for (auto& channels : controlOutputChannels)
             channels.store(0, std::memory_order_relaxed);
         config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-        configButton(START_PARAM, "Start Octavia Server");
+        configButton(START_PARAM, "Start / Stop Octavia Server");
         configInput(MASTER_L_INPUT, "Master L");
         configInput(MASTER_R_INPUT, "Master R");
         configInput(MONITOR_A_INPUT, "Monitor A");
@@ -457,7 +458,8 @@ struct Octavia : Module {
 
     // ── Audio thread: sample inputs into ring buffers ─────────────────────────
     void process(const ProcessArgs& args) override {
-        if (startTrig.process(params[START_PARAM].getValue() > 0.f)) startServer();
+        if (startTrig.process(params[START_PARAM].getValue() > 0.f))
+            serverTogglePending.store(true, std::memory_order_release);
 
         sampleRate.store(args.sampleRate, std::memory_order_relaxed);
 
@@ -3188,7 +3190,21 @@ struct Octavia : Module {
         serverThread=std::thread([this](){ svr.listen("127.0.0.1", octaviaPort()); serverRunning=false; });
         serverThread.detach();
     }
-    void stopServer() { if (!serverRunning) return; svr.stop(); serverRunning=false; }
+    void stopServer() {
+        if (!serverRunning) return;
+        svr.stop();
+        // The listener clears serverRunning when it has actually exited. A
+        // subsequent click must not start a second listener during shutdown.
+    }
+
+    void processServerToggle() {
+        // HTTP start/stop belongs to the UI thread, never the audio callback.
+        // A click during startup waits until httplib can accept stop().
+        if (serverRunning.load(std::memory_order_acquire) && !svr.is_running()) return;
+        if (!serverTogglePending.exchange(false, std::memory_order_acq_rel)) return;
+        if (serverRunning.load(std::memory_order_acquire)) stopServer();
+        else startServer();
+    }
 };
 
 // ── Colors ────────────────────────────────────────────────────────────────────
@@ -3196,36 +3212,20 @@ static const NVGcolor WHITE = nvgRGB(255,255,255);
 
 struct OctaviaStatusWidget : TransparentWidget {
     Octavia* module = nullptr;
-    std::shared_ptr<window::Svg> octopusSvg;
-
-    explicit OctaviaStatusWidget(Octavia* module)
+    OctaviaStatusWidget(Octavia* module, Vec sizeMm)
         : module(module) {
-        if (APP && APP->window) {
-            octopusSvg = APP->window->loadSvg(
-                asset::plugin(pluginInstance, "res/icon/Octopus-V.svg"));
-        }
+        // The shared raster widget owns mipmap/context handling and fits the
+        // image into the SVG anchor without stretching its aspect ratio.
+        addChild(visual_assets::createAspectFitRasterImageWidget(
+            "res/icon/Octavia-33.png", math::Rect(Vec(0.f, 0.f), sizeMm)));
     }
 
     void draw(const DrawArgs& args) override {
         const bool serverRunning = module
             && module->serverRunning.load(std::memory_order_relaxed);
-        if (!octopusSvg || !octopusSvg->handle) {
-            return;
-        }
-
-        const Vec svgSize = octopusSvg->getSize();
-        if (svgSize.x <= 0.f || svgSize.y <= 0.f) {
-            return;
-        }
-
-        const float scale = std::min(box.size.x / svgSize.x, box.size.y / svgSize.y);
-        const Vec fittedSize = svgSize.mult(scale);
-        const Vec offset = box.size.minus(fittedSize).div(2.f);
         nvgSave(args.vg);
         nvgGlobalAlpha(args.vg, serverRunning ? 1.f : 0.28f);
-        nvgTranslate(args.vg, offset.x, offset.y);
-        nvgScale(args.vg, scale, scale);
-        octopusSvg->draw(args.vg);
+        TransparentWidget::draw(args);
         nvgRestore(args.vg);
     }
 };
@@ -3334,6 +3334,7 @@ struct OctaviaWidget : ModuleWidget {
         ModuleWidget::step();
         if (!module) return;
         Octavia* m = static_cast<Octavia*>(module);
+        m->processServerToggle();
         const bool serverRunning = m->serverRunning.load(std::memory_order_relaxed);
         if (!statusFramebufferStateInitialized
                 || serverRunning != lastStatusFramebufferServerRunning) {
@@ -3393,7 +3394,7 @@ struct OctaviaWidget : ModuleWidget {
         statusFramebuffer = new widget::FramebufferWidget;
         statusFramebuffer->box.pos = mm2px(statusRectMm.pos);
         statusFramebuffer->box.size = mm2px(statusRectMm.size);
-        OctaviaStatusWidget* status = new OctaviaStatusWidget(module);
+        OctaviaStatusWidget* status = new OctaviaStatusWidget(module, statusRectMm.size);
         status->box.size = statusFramebuffer->box.size;
         statusFramebuffer->addChild(status);
         addChild(statusFramebuffer);

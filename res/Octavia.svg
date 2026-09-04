@@ -49,7 +49,7 @@
      inkscape:document-units="mm"
      inkscape:zoom="2.4193418"
      inkscape:cx="21.906785"
-     inkscape:cy="248.208"
+     inkscape:cy="215.14116"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -72,10 +72,10 @@
     <rect
        id="OCTOPUS_STATUS"
        x="1.25"
-       y="8.6999998"
+       y="9.3999996"
        width="48.299999"
-       height="47.63839"
-       style="fill:#306928;fill-opacity:1;stroke-width:1.32332" />
+       height="47.237999"
+       style="fill:#306928;fill-opacity:1;stroke-width:1.31775" />
     <circle
        id="READ_ACTIVITY_LIGHT"
        cx="30.357019"
@@ -91,13 +91,13 @@
     <circle
        id="PORT_VALUE_LABEL"
        cx="20.9"
-       cy="59.700001"
+       cy="60.499996"
        r="1"
        style="fill:#306928;fill-opacity:1" />
     <circle
        id="START_PARAM"
        cx="20.9"
-       cy="66"
+       cy="66.799988"
        r="2.3800001"
        style="fill:#306928;fill-opacity:1" />
     <rect
@@ -214,15 +214,19 @@
     <text
        id="PORT_LABEL"
        x="8.5"
-       y="59.700001"
+       y="60.499996"
        font-size="2.257778"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">Port</text>
     <text
        id="START_LABEL"
        x="8.5"
-       y="66"
+       y="66.799988"
        font-size="1.975556"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">Start</text>
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan7"
+         x="8.5"
+         y="66.799988">Toggle</tspan></text>
     <text
        id="MASTER_L_LABEL"
        x="8.3000002"
@@ -305,13 +309,12 @@
     <text
        id="reworked_module_description"
        x="25.36825"
-       y="7.2525024"
-       style="display:inline;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.11667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff;stroke-width:0.01"
+       y="8.1524353"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.11667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff;stroke-width:0.01"
        xml:space="preserve"><tspan
          sodipodi:role="line"
-         id="tspan2"
+         id="tspan8"
          x="25.36825"
-         y="7.2525024"
-         style="stroke-width:0.01">sequencer</tspan></text>
+         y="8.1524353">mcp orchestration server</tspan></text>
   </g>
 </svg>
