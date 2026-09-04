@@ -32,6 +32,7 @@ struct DoorstopVisualSnapshot {
 struct SpringPathGeometry {
 	std::array<Vec, SPRING_POINTS> points {};
 	float tipTravel = 0.f;
+	float tipY = -mm2px(SPRING_LENGTH_MM);
 	float tipAngle = 0.f;
 };
 
@@ -155,6 +156,10 @@ void buildSpringGeometry(SpringPathGeometry& geometry, float displacement) {
 		const Vec normal(tangentCosine, tangentSine);
 		geometry.points[i] = Vec(centerX, centerY).plus(
 			normal.mult(point.coilOffset));
+		if (i == SPRING_POINTS - 1) {
+			geometry.tipTravel = centerX;
+			geometry.tipY = centerY;
+		}
 
 		const float nextSine = tangentSine * stepCosine
 			+ tangentCosine * stepSine;
@@ -162,7 +167,6 @@ void buildSpringGeometry(SpringPathGeometry& geometry, float displacement) {
 			- tangentSine * stepSine;
 		tangentSine = nextSine;
 	}
-	geometry.tipTravel = geometry.points.back().x;
 	geometry.tipAngle = tipAngle;
 }
 
@@ -315,10 +319,10 @@ void drawSpringBody(NVGcontext* vg, const SpringPathGeometry& geometry,
 	nvgStroke(vg);
 
 	appendClippedSpringPath(vg, geometry, baseX, baseY, clip);
-	NVGpaint metal = nvgLinearGradient(vg, baseX - 4.f, 0.f, baseX + 6.f, 0.f,
-		nvgRGBA(78, 92, 105, int(255.f * alpha)),
-		nvgRGBA(224, 238, 241, int(255.f * alpha)));
-	nvgStrokePaint(vg, metal);
+	// A screen-anchored gradient made rightward bends bright and leftward
+	// bends dark. Use a neutral body stroke; the offset highlight below still
+	// describes the wire's rounded surface without choosing a travel direction.
+	nvgStrokeColor(vg, nvgRGBA(145, 166, 176, int(255.f * alpha)));
 	nvgStrokeWidth(vg, 3.1f);
 	nvgLineCap(vg, NVG_ROUND);
 	nvgStroke(vg);
@@ -332,7 +336,7 @@ void drawSpringBody(NVGcontext* vg, const SpringPathGeometry& geometry,
 		return;
 	}
 	const float tipX = baseX + geometry.tipTravel;
-	const float tipY = baseY - mm2px(SPRING_LENGTH_MM);
+	const float tipY = baseY + geometry.tipY;
 	const float motion = clamp01(std::fabs(velocity));
 
 	nvgSave(vg);
@@ -365,10 +369,7 @@ void drawSpringTrail(NVGcontext* vg, const SpringPathGeometry& geometry,
 	float baseX, float baseY, float alpha, const SpringPathClip& clip = {}) {
 	alpha = clamp01(alpha);
 	appendClippedSpringPath(vg, geometry, baseX, baseY, clip);
-	const NVGpaint trailMetal = nvgLinearGradient(vg, baseX - 4.f, 0.f, baseX + 6.f, 0.f,
-		nvgRGBA(72, 86, 102, int(220.f * alpha)),
-		nvgRGBA(213, 239, 245, int(245.f * alpha)));
-	nvgStrokePaint(vg, trailMetal);
+	nvgStrokeColor(vg, nvgRGBA(132, 158, 172, int(235.f * alpha)));
 	nvgStrokeWidth(vg, 3.2f);
 	nvgLineCap(vg, NVG_ROUND);
 	nvgLineJoin(vg, NVG_ROUND);

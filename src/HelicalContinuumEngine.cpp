@@ -491,6 +491,7 @@ Frame HelicalContinuumEngine::process(float requestedSampleTime) {
 	frame.velocity = std::max(-1.f, std::min(
 		modes[0].velocity * VISUAL_VELOCITY_GAIN * visualAudibleEnvelope, 1.f));
 	frame.energy = normalizedEnergy;
+	frame.visualActivity = visualAudibleEnvelope;
 	frame.strikeLight = strikeLight;
 	frame.sleeping = sleeping;
 	frame.enteredSleep = !wasSleeping && sleeping;

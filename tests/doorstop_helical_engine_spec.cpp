@@ -24,7 +24,8 @@ Result zeroStateRemainsZero() {
 	for (int i = 0; i < 48000; ++i) {
 		const doorstop::Frame frame = engine.process(1.f / 48000.f);
 		exact = exact && frame.outputVolts == 0.f && frame.displacement == 0.f
-			&& frame.velocity == 0.f && frame.energy == 0.f && frame.sleeping;
+			&& frame.velocity == 0.f && frame.energy == 0.f
+			&& frame.visualActivity == 0.f && frame.sleeping;
 	}
 	return {"V3 zero state remains exactly silent", exact,
 		"exact=" + std::to_string(exact)};
@@ -339,6 +340,7 @@ Result deepSwingAudibleTailMatchesVisualSettling() {
 	bool pass = true;
 	float largestAudibleTail = 0.f;
 	float largestAudibleVisual = 0.f;
+	float largestAudibleActivity = 0.f;
 	float largestSettledPeak = 0.f;
 	float largestSettledVisual = 0.f;
 	for (std::uint32_t seed : {1u, 3076668551u}) {
@@ -354,6 +356,8 @@ Result deepSwingAudibleTailMatchesVisualSettling() {
 					largestAudibleTail, std::fabs(frame.outputVolts));
 				largestAudibleVisual = std::max(
 					largestAudibleVisual, std::fabs(frame.displacement));
+				largestAudibleActivity = std::max(
+					largestAudibleActivity, frame.visualActivity);
 			}
 			else if (i >= int(3.f * rate)) {
 				largestSettledPeak = std::max(
@@ -364,10 +368,12 @@ Result deepSwingAudibleTailMatchesVisualSettling() {
 		}
 	}
 	pass = largestAudibleTail > 0.02f && largestAudibleVisual > 0.04f
+		&& largestAudibleActivity > 0.02f
 		&& largestSettledPeak < 0.02f && largestSettledVisual < 0.01f;
 	return {"Deep Swing audible tail remains visible until both settle",
 		pass, "audibleTail=" + std::to_string(largestAudibleTail)
 			+ " audibleVisual=" + std::to_string(largestAudibleVisual)
+			+ " audibleActivity=" + std::to_string(largestAudibleActivity)
 			+ " settledPeak=" + std::to_string(largestSettledPeak)
 			+ " settledVisual=" + std::to_string(largestSettledVisual)};
 }
@@ -465,7 +471,8 @@ Result routerReturnsExactV3Frames() {
 		const doorstop::Frame b = routed.process(dt);
 		exact = exact && a.outputVolts == b.outputVolts
 			&& a.displacement == b.displacement && a.velocity == b.velocity
-			&& a.energy == b.energy && a.strikeLight == b.strikeLight
+			&& a.energy == b.energy && a.visualActivity == b.visualActivity
+			&& a.strikeLight == b.strikeLight
 			&& a.sleeping == b.sleeping && a.enteredSleep == b.enteredSleep;
 		if (!exact) break;
 	}

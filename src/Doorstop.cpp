@@ -112,11 +112,15 @@ void Doorstop::publishVisualState(const doorstop::Frame& frame) {
 		? clamp(frame.displacement, -maximumDisplacement, maximumDisplacement)
 		: 0.f;
 	const float velocity = std::isfinite(frame.velocity) ? clamp(frame.velocity, -1.f, 1.f) : 0.f;
-	const float energy = std::isfinite(frame.energy) ? clamp(frame.energy, 0.f, 1.f) : 0.f;
+	const float physicalEnergy = std::isfinite(frame.energy)
+		? clamp(frame.energy, 0.f, 1.f) : 0.f;
+	const float perceptualActivity = std::isfinite(frame.visualActivity)
+		? clamp(frame.visualActivity, 0.f, 1.f) : 0.f;
 	const float strike = std::isfinite(frame.strikeLight) ? clamp(frame.strikeLight, 0.f, 1.f) : 0.f;
 	visualDisplacement.store(displacement, std::memory_order_relaxed);
 	visualVelocity.store(velocity, std::memory_order_relaxed);
-	visualEnergy.store(energy, std::memory_order_relaxed);
+	visualEnergy.store(
+		std::max(physicalEnergy, perceptualActivity), std::memory_order_relaxed);
 	visualStrike.store(strike, std::memory_order_relaxed);
 }
 

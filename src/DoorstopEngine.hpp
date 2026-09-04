@@ -103,6 +103,9 @@ struct Frame {
 	float displacement = 0.f;
 	float velocity = 0.f;
 	float energy = 0.f;
+	// Perceptual activity for UI feedback. Physical energy remains available
+	// separately for diagnostics and engine behavior.
+	float visualActivity = 0.f;
 	float strikeLight = 0.f;
 	bool sleeping = true;
 	bool enteredSleep = false;
