@@ -226,7 +226,7 @@ build/tools/doorstop_reference_render: tools/doorstop_reference_render.cpp src/R
 
 DOORSTOP_REFERENCE_VELOCITIES ?= 0.5 0.75 1.0
 DOORSTOP_REFERENCE_SEEDS ?= 1 77 7331 65537 104729 999983 2654435761 305419896 610839776 195948557 271828183 314159265 3735928559 324508639 4277009102 4294967291
-DOORSTOP_REFERENCE_VARIANTS ?= current spring-only modes-only spring-forward spring-refined rack-v2 boing-refined v3-boing-probe
+DOORSTOP_REFERENCE_VARIANTS ?= current spring-only modes-only spring-forward spring-refined rack-v2 boing-refined v3-boing-probe v3-dark-boing v3-deep-swing
 DOORSTOP_BOING_AUDITION_DIR ?= Samples/Doorstop/Auditions/reference-v2-vs-boing-refined
 DOORSTOP_V2_PHASES ?= 0 15 30 45 60 75 90
 
@@ -272,11 +272,11 @@ doorstop-boing-audition: build/tools/doorstop_reference_render
 		--output-dir $(DOORSTOP_BOING_AUDITION_DIR)
 
 doorstop-v3-boing-audition: build/tools/doorstop_reference_render
-	$(MAKE) DOORSTOP_REFERENCE_VARIANTS="rack-v2 v3-boing-probe" doorstop-variant-grid
+	$(MAKE) DOORSTOP_REFERENCE_VARIANTS="v3-boing-probe v3-dark-boing v3-deep-swing" doorstop-variant-grid
 	python3 tools/compare_doorstop_variants.py \
-		--variants rack-v2 v3-boing-probe \
+		--variants v3-boing-probe v3-dark-boing v3-deep-swing \
 		--variant-root build/doorstop-variant-renders \
-		--baseline rack-v2 --blind \
+		--baseline v3-boing-probe --blind \
 		--output-dir build/doorstop-v3-boing-analysis
 
 # Stage 0 phase probe. Each phase gets the bounded Rack output and the exact

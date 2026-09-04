@@ -36,6 +36,10 @@ class OctaviaMonitoringPanelContractTest(unittest.TestCase):
             required.update({
                 f"MONITOR_{name}_INPUT", f"MONITOR_{name}_LIGHT", f"MONITOR_{name}_LABEL"
             })
+        required.update({
+            "CONTROL_A_OUTPUT", "CONTROL_B_OUTPUT",
+            "CONTROL_A_LABEL", "CONTROL_B_LABEL",
+        })
         for anchor in required:
             self.assertEqual(element_by_id(anchor).attrib["id"], anchor)
 
@@ -55,6 +59,17 @@ class OctaviaMonitoringPanelContractTest(unittest.TestCase):
         self.assertIn("MONITOR_A_LIGHT == 5", SOURCE)
         self.assertIn("MONITOR_D_LIGHT == 8", SOURCE)
         self.assertIn("LIGHTS_LEN == 9", SOURCE)
+
+    def test_control_outputs_are_append_only_polyphonic_ports(self):
+        self.assertIn("CONTROL_A_OUTPUT == 0", SOURCE)
+        self.assertIn("CONTROL_B_OUTPUT == 1", SOURCE)
+        self.assertIn("OUTPUTS_LEN == 2", SOURCE)
+        self.assertIn('configOutput(CONTROL_A_OUTPUT, "Control A (16-channel polyphonic)")', SOURCE)
+        self.assertIn('configOutput(CONTROL_B_OUTPUT, "Control B (16-channel polyphonic)")', SOURCE)
+        self.assertIn("ControlOutputFrame controlOutput", SOURCE)
+        self.assertIn("setChannels(channels)", SOURCE)
+        self.assertIn('jStr("controls")', SOURCE)
+        self.assertIn("controlOutputConnected[port]", SOURCE)
 
     def test_all_ports_and_lights_are_configured_and_instantiated(self):
         for name in "ABCD":
@@ -127,6 +142,9 @@ class OctaviaMonitoringPanelContractTest(unittest.TestCase):
         self.assertIn('name="vcv_octavia_get_recording"', MCP_SOURCE)
         self.assertIn('ge=0.1, le=30.0', MCP_SOURCE)
         self.assertIn('_envelope_call("audio/recording", "POST", payload)', MCP_SOURCE)
+        self.assertIn("class ControlProgramInput", MCP_SOURCE)
+        self.assertIn("class ControlEventInput", MCP_SOURCE)
+        self.assertIn("control: Optional[ControlProgramInput]", MCP_SOURCE)
 
     def test_analysis_capture_is_ephemeral_by_default(self):
         self.assertIn('svr.Post("/audio/capture"', SOURCE)

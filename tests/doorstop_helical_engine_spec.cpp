@@ -119,6 +119,141 @@ Result v3EnergyMeterHasUsefulStrikeRange() {
 			+ " strong=" + std::to_string(strong)};
 }
 
+struct StrikeResponse {
+	float peakEnergy = 0.f;
+	float peakDisplacement = 0.f;
+	float peakOutput = 0.f;
+};
+
+StrikeResponse measureStrikeResponse(
+	doorstop::HelicalTuningVariant tuning, float velocity) {
+	constexpr float rate = 48000.f;
+	constexpr float dt = 1.f / rate;
+	doorstop::HelicalContinuumEngine engine;
+	engine.setSampleRate(rate);
+	engine.setSpecimenSeed(1u);
+	engine.setTuningVariant(tuning);
+	engine.strike(velocity);
+	StrikeResponse response;
+	for (int i = 0; i < int(rate); ++i) {
+		const doorstop::Frame frame = engine.process(dt);
+		response.peakEnergy = std::max(response.peakEnergy, frame.energy);
+		response.peakDisplacement = std::max(
+			response.peakDisplacement, std::fabs(frame.displacement));
+		response.peakOutput = std::max(
+			response.peakOutput, std::fabs(frame.outputVolts));
+	}
+	return response;
+}
+
+Result velocityResponseStaysMonotonicThroughMaximum() {
+	bool pass = true;
+	float smallestEnergyStep = 1.f;
+	float smallestDisplacementStep = 1.f;
+	float smallestOutputStep = 1.f;
+	for (doorstop::HelicalTuningVariant tuning : {
+		doorstop::HelicalTuningVariant::BoingProbe,
+		doorstop::HelicalTuningVariant::DarkBoing,
+		doorstop::HelicalTuningVariant::DeepSwing}) {
+		StrikeResponse previous = measureStrikeResponse(tuning, 0.80f);
+		for (float velocity : {0.85f, 0.90f, 0.95f, 1.00f}) {
+			const StrikeResponse current = measureStrikeResponse(tuning, velocity);
+			const float energyStep = current.peakEnergy - previous.peakEnergy;
+			const float displacementStep =
+				current.peakDisplacement - previous.peakDisplacement;
+			const float outputStep = current.peakOutput - previous.peakOutput;
+			smallestEnergyStep = std::min(smallestEnergyStep, energyStep);
+			smallestDisplacementStep = std::min(
+				smallestDisplacementStep, displacementStep);
+			smallestOutputStep = std::min(smallestOutputStep, outputStep);
+			// Energy and displacement telemetry are bounded at 1 and 2, while
+			// output peak remains unsaturated in this strike range.
+			pass = pass && energyStep >= 0.f && displacementStep >= 0.f
+				&& outputStep > 0.f;
+			previous = current;
+		}
+	}
+	return {"V3 velocity response remains monotonic from 80% through maximum",
+		pass, "smallestEnergyStep=" + std::to_string(smallestEnergyStep)
+			+ " smallestDisplacementStep="
+			+ std::to_string(smallestDisplacementStep)
+			+ " smallestOutputStep=" + std::to_string(smallestOutputStep)};
+}
+
+struct TuningTrace {
+	int displacementCrossings = 0;
+	int initialCrossings = 0;
+	float peakDisplacement = 0.f;
+	double signature = 0.0;
+};
+
+TuningTrace renderTuningTrace(
+	doorstop::HelicalTuningVariant tuning, float velocity = 0.8f) {
+	constexpr float rate = 48000.f;
+	constexpr float dt = 1.f / rate;
+	doorstop::HelicalContinuumEngine engine;
+	engine.setSampleRate(rate);
+	engine.setSpecimenSeed(77u);
+	engine.setTuningVariant(tuning);
+	engine.strike(velocity);
+	TuningTrace trace;
+	float previous = 0.f;
+	for (int i = 0; i < int(2.f * rate); ++i) {
+		const doorstop::Frame frame = engine.process(dt);
+		if (i > int(0.020f * rate)
+			&& ((previous < 0.f && frame.displacement >= 0.f)
+				|| (previous > 0.f && frame.displacement <= 0.f))) {
+			++trace.displacementCrossings;
+			if (i < int(0.60f * rate)) ++trace.initialCrossings;
+		}
+		previous = frame.displacement;
+		trace.peakDisplacement = std::max(
+			trace.peakDisplacement, std::fabs(frame.displacement));
+		trace.signature += double(i + 1) * frame.outputVolts;
+	}
+	return trace;
+}
+
+Result deepSwingTargetsHardStrikeDeformation() {
+	const TuningTrace gentleDark = renderTuningTrace(
+		doorstop::HelicalTuningVariant::DarkBoing, 0.50f);
+	const TuningTrace gentleDeep = renderTuningTrace(
+		doorstop::HelicalTuningVariant::DeepSwing, 0.50f);
+	const TuningTrace hardDark = renderTuningTrace(
+		doorstop::HelicalTuningVariant::DarkBoing, 1.f);
+	const TuningTrace hardDeep = renderTuningTrace(
+		doorstop::HelicalTuningVariant::DeepSwing, 1.f);
+	const bool gentleUnchanged = gentleDark.signature == gentleDeep.signature
+		&& gentleDark.peakDisplacement == gentleDeep.peakDisplacement;
+	const bool hardSlower = hardDeep.initialCrossings < hardDark.initialCrossings;
+	const bool hardWider = hardDeep.peakDisplacement
+		> 1.25f * hardDark.peakDisplacement;
+	return {"Deep swing softens and widens only hard initial strikes",
+		gentleUnchanged && hardSlower && hardWider,
+		"gentleExact=" + std::to_string(gentleUnchanged)
+			+ " initialCrossings=" + std::to_string(hardDark.initialCrossings)
+			+ "/" + std::to_string(hardDeep.initialCrossings)
+			+ " peakDisplacement=" + std::to_string(hardDark.peakDisplacement)
+			+ "/" + std::to_string(hardDeep.peakDisplacement)};
+}
+
+Result darkTuningIsLowerAndWaveformDistinct() {
+	const TuningTrace reference = renderTuningTrace(
+		doorstop::HelicalTuningVariant::BoingProbe);
+	const TuningTrace dark = renderTuningTrace(
+		doorstop::HelicalTuningVariant::DarkBoing);
+	const bool lower = dark.displacementCrossings
+		< int(0.90f * float(reference.displacementCrossings))
+		&& dark.displacementCrossings
+		> int(0.70f * float(reference.displacementCrossings));
+	const bool distinct = std::fabs(reference.signature - dark.signature) > 100.0;
+	return {"Dark V3 tuning is lower and waveform-distinct", lower && distinct,
+		"crossings=" + std::to_string(reference.displacementCrossings)
+			+ "/" + std::to_string(dark.displacementCrossings)
+			+ " signatureDelta="
+			+ std::to_string(std::fabs(reference.signature - dark.signature))};
+}
+
 Result routerReturnsExactV3Frames() {
 	constexpr float rate = 48000.f;
 	constexpr float dt = 1.f / rate;
@@ -154,6 +289,9 @@ int main() {
 		supportedRatesAreFiniteAndPairedMotionIsVisible(),
 		specimenPopulationIsDeterministicAndDistinct(),
 		v3EnergyMeterHasUsefulStrikeRange(),
+		velocityResponseStaysMonotonicThroughMaximum(),
+		darkTuningIsLowerAndWaveformDistinct(),
+		deepSwingTargetsHardStrikeDeformation(),
 		routerReturnsExactV3Frames(),
 	};
 	int failed = 0;

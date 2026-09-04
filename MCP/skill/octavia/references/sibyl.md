@@ -11,6 +11,10 @@ step sequencer, Sibyl exposes semantic objects—tracks, patterns, scenes, macro
 and transport—through validation, revision-guarded atomic edits, and musical adoption
 boundaries.
 
+Do not substitute Octavia's `Control A` or `Control B` outputs for Sibyl when authoring
+musical material. Those outputs are reserved for temporary, bounded diagnostic stimuli
+that require exact alignment with an Octavia recording or analysis capture.
+
 Each step can author three independent modulation lanes: `mod` (panel MOD1), `mod2`, and
 `mod3`. Schema v2 expresses every lane directly in modular volts from -10 V to +10 V;
 there is no track-level range transform. Use separate lanes when a composition should

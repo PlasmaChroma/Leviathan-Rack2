@@ -19,6 +19,9 @@ namespace octavia {
 static constexpr double RECORDING_MIN_SECONDS = 0.1;
 static constexpr double RECORDING_MAX_SECONDS = 30.0;
 static constexpr size_t RECORDING_STATUS_LIMIT = 16;
+static constexpr size_t CONTROL_PORTS = 2;
+static constexpr size_t CONTROL_CHANNELS = 16;
+static constexpr size_t CONTROL_MAX_EVENTS = 64;
 
 enum class RecordingState : uint8_t {
 	Armed,
@@ -56,6 +59,30 @@ struct CaptureAnalysisRequest {
 	bool includeSpectrum = false;
 };
 
+struct ControlEvent {
+	uint8_t port = 0;
+	uint8_t channel = 0;
+	uint64_t offsetFrames = 0;
+	uint64_t durationFrames = 0;
+	float voltage = 0.f;
+};
+
+// A bounded stimulus program is prepared on the HTTP thread and consumed
+// sample-by-sample with the recording on the Rack audio timeline.
+struct ControlProgram {
+	bool enabled = false;
+	uint64_t settleFrames = 0;
+	std::array<std::array<float, CONTROL_CHANNELS>, CONTROL_PORTS> staticVolts{{}};
+	std::array<uint8_t, CONTROL_PORTS> channels{{}};
+	std::array<ControlEvent, CONTROL_MAX_EVENTS> events{{}};
+	size_t eventCount = 0;
+};
+
+struct ControlOutputFrame {
+	std::array<std::array<float, CONTROL_CHANNELS>, CONTROL_PORTS> volts{{}};
+	std::array<uint8_t, CONTROL_PORTS> channels{{}};
+};
+
 struct RecordingStatus {
 	uint64_t id = 0;
 	RecordingState state = RecordingState::Failed;
@@ -70,6 +97,7 @@ struct RecordingStatus {
 	uint64_t writtenFrames = 0;
 	uint64_t startFrame = 0;
 	uint64_t endFrame = 0;
+	uint64_t controlStartFrame = 0;
 	float sampleRate = 0.f;
 	std::string label;
 	std::string wavPath;
@@ -78,6 +106,9 @@ struct RecordingStatus {
 	bool includeSpectrum = false;
 	GroupAnalysis groupAnalysis;
 	ComparisonAnalysis comparisonAnalysis;
+	ControlProgram controlProgram;
+	uint8_t allControlConnectedMask = 0;
+	uint8_t anyControlConnectedMask = 0;
 	std::string error;
 };
 
@@ -92,14 +123,27 @@ public:
 	bool arm(uint8_t requestedMask, double durationSeconds, float sampleRate,
 		const std::string& label, const std::string& outputDirectory,
 		RecordingStatus* result, std::string* error);
+	bool armControlled(uint8_t requestedMask, double durationSeconds, float sampleRate,
+		const std::string& label, const std::string& outputDirectory,
+		const ControlProgram& controlProgram,
+		RecordingStatus* result, std::string* error);
 	bool armCapture(uint8_t requestedMask, double durationSeconds, float sampleRate,
 		const std::string& label, CaptureDisposition disposition,
 		const CaptureAnalysisRequest& analysisRequest,
 		const std::string& outputDirectory, RecordingStatus* result,
 		std::string* error);
+	bool armCaptureControlled(uint8_t requestedMask, double durationSeconds,
+		float sampleRate, const std::string& label, CaptureDisposition disposition,
+		const CaptureAnalysisRequest& analysisRequest,
+		const std::string& outputDirectory, const ControlProgram& controlProgram,
+		RecordingStatus* result, std::string* error);
 	void process(uint64_t frame, float sampleRate,
 		const std::array<float, OBSERVATION_CHANNELS>& volts,
 		uint8_t connectedMask) noexcept;
+	void process(uint64_t frame, float sampleRate,
+		const std::array<float, OBSERVATION_CHANNELS>& volts,
+		uint8_t connectedMask, uint8_t controlConnectedMask,
+		ControlOutputFrame* controlOutput) noexcept;
 	bool get(uint64_t id, RecordingStatus* result) const;
 	bool busy() const noexcept;
 

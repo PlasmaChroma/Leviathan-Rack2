@@ -148,5 +148,9 @@
     <circle id="MONITOR_B_LABEL" cx="44" cy="41.5" r="1" style="fill:#306928;fill-opacity:1" />
     <circle id="MONITOR_C_LABEL" cx="44" cy="63.5" r="1" style="fill:#306928;fill-opacity:1" />
     <circle id="MONITOR_D_LABEL" cx="44" cy="85.5" r="1" style="fill:#306928;fill-opacity:1" />
+    <circle id="CONTROL_A_OUTPUT" cx="37" cy="110" r="3.75" style="fill:#306928;fill-opacity:1" />
+    <circle id="CONTROL_B_OUTPUT" cx="45" cy="110" r="3.75" style="fill:#306928;fill-opacity:1" />
+    <circle id="CONTROL_A_LABEL" cx="37" cy="102.5" r="1" style="fill:#306928;fill-opacity:1" />
+    <circle id="CONTROL_B_LABEL" cx="45" cy="102.5" r="1" style="fill:#306928;fill-opacity:1" />
   </g>
 </svg>

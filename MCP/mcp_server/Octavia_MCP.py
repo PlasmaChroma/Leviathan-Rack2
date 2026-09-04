@@ -674,6 +674,23 @@ async def vcv_moirai_command(params: MoiraiCommandInput) -> str:
 # ── Frozen Octavia observation tools ─────────────────────────────────────────
 
 MonitorName = Literal["masterL", "masterR", "A", "B", "C", "D"]
+ControlPortName = Literal["A", "B"]
+
+
+class ControlEventInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    port: ControlPortName
+    channel: int = Field(..., ge=0, le=15)
+    offset_ms: float = Field(..., ge=0, alias="offsetMs")
+    duration_ms: float = Field(..., gt=0, alias="durationMs")
+    voltage: float = Field(..., ge=-10, le=10)
+
+
+class ControlProgramInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    settle_ms: float = Field(0, ge=0, le=5000, alias="settleMs")
+    static: Optional[dict[ControlPortName, list[float]]] = None
+    events: list[ControlEventInput] = Field(default_factory=list, max_length=64)
 
 
 class SnapshotInput(BaseModel):
@@ -694,6 +711,7 @@ class RecordingInput(BaseModel):
     monitors: Optional[list[MonitorName]] = Field(None, min_length=1)
     seconds: float = Field(..., ge=0.1, le=30.0)
     label: str = Field("", max_length=256)
+    control: Optional[ControlProgramInput] = None
 
 
 class RecordingIdInput(BaseModel):
@@ -733,6 +751,7 @@ class AnalysisCaptureInput(BaseModel):
     include_spectrum: bool = Field(False, alias="includeSpectrum")
     save: bool = False
     label: str = Field("", max_length=256)
+    control: Optional[ControlProgramInput] = None
 
 
 class CaptureIdInput(BaseModel):
@@ -774,9 +793,9 @@ async def vcv_octavia_get_snapshot(params: SnapshotIdInput) -> str:
 @mcp.tool(name="vcv_octavia_start_recording",
           annotations={"title": "Start Bounded Audio Recording", "readOnlyHint": False, "destructiveHint": False})
 async def vcv_octavia_start_recording(params: RecordingInput) -> str:
-    """Record 0.1-30 seconds of selected physical monitors as float32 Rack volts."""
+    """Record physical monitors, optionally driving frame-synchronized Control A/B outputs."""
     try:
-        payload = params.model_dump(exclude_none=True)
+        payload = params.model_dump(by_alias=True, exclude_none=True)
         return json.dumps(await _envelope_call("audio/recording", "POST", payload), indent=2)
     except Exception as e:
         return _err(e)
@@ -795,7 +814,7 @@ async def vcv_octavia_get_recording(params: RecordingIdInput) -> str:
 @mcp.tool(name="vcv_octavia_start_analysis_capture",
           annotations={"title": "Start Ephemeral Analysis Capture", "readOnlyHint": False, "destructiveHint": False})
 async def vcv_octavia_start_analysis_capture(params: AnalysisCaptureInput) -> str:
-    """Capture and analyze 0.1-30 seconds; save defaults false so no files are written."""
+    """Capture/analyze 0.1-30 seconds with optional frame-synchronized control output."""
     try:
         payload = params.model_dump(by_alias=True, exclude_none=True)
         return json.dumps(await _envelope_call("audio/capture", "POST", payload), indent=2)

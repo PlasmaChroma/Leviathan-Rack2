@@ -907,16 +907,34 @@ struct DoorstopWidget final : ModuleWidget {
 		}
 		menu->addChild(new MenuSeparator());
 		menu->addChild(createSubmenuItem("Sound engine", "", [m](Menu* engineMenu) {
-			engineMenu->addChild(createCheckMenuItem(
-				"Reference V3 - Boing probe", "",
-				[m]() {
-					return m->engineMode.load(std::memory_order_relaxed)
-						== int(doorstop::EngineMode::ReferenceV3);
-				},
-				[m]() {
-					m->engineMode.store(
-						int(doorstop::EngineMode::ReferenceV3),
-						std::memory_order_release);
+			engineMenu->addChild(createSubmenuItem(
+				"Reference V3 family", "", [m](Menu* tuningMenu) {
+					auto addV3Tuning = [m, tuningMenu](
+						const char* label, doorstop::HelicalTuningVariant tuning) {
+						tuningMenu->addChild(createCheckMenuItem(label, "",
+							[m, tuning]() {
+								return m->engineMode.load(std::memory_order_relaxed)
+										== int(doorstop::EngineMode::ReferenceV3)
+									&& m->referenceV3Tuning.load(std::memory_order_relaxed)
+										== int(tuning);
+							},
+							[m, tuning]() {
+								m->referenceV3Tuning.store(
+									int(tuning), std::memory_order_relaxed);
+								m->engineMode.store(
+									int(doorstop::EngineMode::ReferenceV3),
+									std::memory_order_release);
+							}));
+					};
+					addV3Tuning(
+						"Boing probe (reference)",
+						doorstop::HelicalTuningVariant::BoingProbe);
+					addV3Tuning(
+						"Dark boing",
+						doorstop::HelicalTuningVariant::DarkBoing);
+					addV3Tuning(
+						"Deep swing (hard strike)",
+						doorstop::HelicalTuningVariant::DeepSwing);
 				}));
 			engineMenu->addChild(createCheckMenuItem(
 				"Dark spring physical model (Reference V2)", "",

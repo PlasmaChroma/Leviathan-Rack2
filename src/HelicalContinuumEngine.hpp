@@ -7,6 +7,13 @@
 
 namespace doorstop {
 
+enum class HelicalTuningVariant : std::uint8_t {
+	BoingProbe = 0,
+	DarkBoing,
+	DeepSwing,
+	Count
+};
+
 // Reference V3 paired helical-continuum surrogate. A compliant cap drives one
 // shared two-plane structural state; bend, audible body, contact, and radiation
 // are projections of that state rather than parallel synthesized voices.
@@ -22,6 +29,7 @@ public:
 	void setBreakIn(float amount);
 	void setBreakInLocked(bool locked);
 	void setSpecimenSeed(std::uint32_t seed);
+	void setTuningVariant(HelicalTuningVariant variant);
 	void strike(float normalizedVelocity);
 	Frame process(float requestedSampleTime);
 
@@ -29,6 +37,7 @@ public:
 	float getBreakIn() const { return breakIn; }
 	bool isBreakInLocked() const { return breakInLocked; }
 	std::uint32_t getSpecimenSeed() const { return specimenSeed; }
+	HelicalTuningVariant getTuningVariant() const { return tuningVariant; }
 	float getVisualMaximumDisplacement() const { return 2.f; }
 
 private:
@@ -62,6 +71,7 @@ private:
 	float breakIn = 0.f;
 	bool breakInLocked = false;
 	std::uint32_t specimenSeed = 1u;
+	HelicalTuningVariant tuningVariant = HelicalTuningVariant::BoingProbe;
 
 	std::array<ModalState, MODE_COUNT> modes {};
 	std::array<float, MODE_COUNT> omegaSq {};
@@ -86,6 +96,8 @@ private:
 	float strikeLightDecay = 0.f;
 	float visualAudibleEnvelope = 0.f;
 	float visualEnvelopeDecay = 0.f;
+	float hardStrikeDrive = 0.f;
+	float hardStrikeDecay = 0.f;
 	float quietTime = 0.f;
 	bool sleeping = true;
 

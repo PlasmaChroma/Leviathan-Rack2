@@ -90,6 +90,13 @@ const char* failureText(RecordingFailure failure) {
 } // namespace
 
 struct RecordingEngine::Session {
+	struct ControlTransition {
+		uint64_t offsetFrames = 0;
+		uint8_t port = 0;
+		uint8_t channel = 0;
+		uint8_t priority = 0;
+		float voltage = 0.f;
+	};
 	uint64_t id = 0;
 	uint8_t requestedMask = 0;
 	std::array<ObserveChannel, OBSERVATION_CHANNELS> channelOrder{{}};
@@ -110,8 +117,18 @@ struct RecordingEngine::Session {
 	std::atomic<uint64_t> writtenFrames{0};
 	std::atomic<uint64_t> startFrame{0};
 	std::atomic<uint64_t> endFrame{0};
+	std::atomic<uint64_t> controlStartFrame{0};
+	std::atomic<bool> controlStarted{false};
 	std::atomic<uint8_t> allConnectedMask{0};
 	std::atomic<uint8_t> anyConnectedMask{0};
+	ControlProgram controlProgram;
+	std::array<ControlTransition, CONTROL_MAX_EVENTS * 2> controlTransitions{{}};
+	size_t controlTransitionCount = 0;
+	size_t nextControlTransition = 0;
+	std::array<std::array<float, CONTROL_CHANNELS>, CONTROL_PORTS> currentControlVolts{{}};
+	uint8_t requestedControlMask = 0;
+	std::atomic<uint8_t> allControlConnectedMask{0};
+	std::atomic<uint8_t> anyControlConnectedMask{0};
 };
 
 const char* recordingStateName(RecordingState state) {
@@ -162,9 +179,19 @@ bool RecordingEngine::arm(uint8_t requestedMask, double durationSeconds,
 		float sampleRate, const std::string& label,
 		const std::string& outputDirectory, RecordingStatus* result,
 		std::string* error) {
+	ControlProgram noControl;
+	return armControlled(requestedMask, durationSeconds, sampleRate, label,
+		outputDirectory, noControl, result, error);
+}
+
+bool RecordingEngine::armControlled(uint8_t requestedMask, double durationSeconds,
+		float sampleRate, const std::string& label,
+		const std::string& outputDirectory, const ControlProgram& controlProgram,
+		RecordingStatus* result, std::string* error) {
 	CaptureAnalysisRequest noAnalysis;
-	return armCapture(requestedMask, durationSeconds, sampleRate, label,
-		CaptureDisposition::Record, noAnalysis, outputDirectory, result, error);
+	return armCaptureControlled(requestedMask, durationSeconds, sampleRate, label,
+		CaptureDisposition::Record, noAnalysis, outputDirectory, controlProgram,
+		result, error);
 }
 
 bool RecordingEngine::armCapture(uint8_t requestedMask, double durationSeconds,
@@ -173,6 +200,17 @@ bool RecordingEngine::armCapture(uint8_t requestedMask, double durationSeconds,
 		const CaptureAnalysisRequest& analysisRequest,
 		const std::string& outputDirectory, RecordingStatus* result,
 		std::string* error) {
+	ControlProgram noControl;
+	return armCaptureControlled(requestedMask, durationSeconds, sampleRate, label,
+		disposition, analysisRequest, outputDirectory, noControl, result, error);
+}
+
+bool RecordingEngine::armCaptureControlled(uint8_t requestedMask,
+		double durationSeconds, float sampleRate, const std::string& label,
+		CaptureDisposition disposition,
+		const CaptureAnalysisRequest& analysisRequest,
+		const std::string& outputDirectory, const ControlProgram& controlProgram,
+		RecordingStatus* result, std::string* error) {
 	const bool analyze = disposition == CaptureDisposition::Analyze
 		|| disposition == CaptureDisposition::AnalyzeAndRecord;
 	const bool save = disposition == CaptureDisposition::Record
@@ -218,6 +256,50 @@ bool RecordingEngine::armCapture(uint8_t requestedMask, double durationSeconds,
 		return false;
 	}
 	session->targetFrames = static_cast<uint64_t>(frames);
+	uint8_t requestedControlMask = 0;
+	if (controlProgram.enabled) {
+		if (controlProgram.eventCount > CONTROL_MAX_EVENTS) {
+			if (error) *error = "invalid_control_program";
+			return false;
+		}
+		for (size_t port = 0; port < CONTROL_PORTS; ++port) {
+			if (controlProgram.channels[port] > CONTROL_CHANNELS) {
+				if (error) *error = "invalid_control_program";
+				return false;
+			}
+			if (controlProgram.channels[port]) requestedControlMask |= uint8_t(1u << port);
+			for (size_t channel = 0; channel < controlProgram.channels[port]; ++channel) {
+				const float voltage = controlProgram.staticVolts[port][channel];
+				if (!std::isfinite(voltage) || voltage < -10.f || voltage > 10.f) {
+					if (error) *error = "invalid_control_program";
+					return false;
+				}
+			}
+		}
+		for (size_t index = 0; index < controlProgram.eventCount; ++index) {
+			const ControlEvent& event = controlProgram.events[index];
+			if (event.port >= CONTROL_PORTS || event.channel >= CONTROL_CHANNELS
+					|| event.durationFrames == 0
+					|| event.offsetFrames >= session->targetFrames
+					|| event.durationFrames > session->targetFrames - event.offsetFrames
+					|| !std::isfinite(event.voltage)
+					|| event.voltage < -10.f || event.voltage > 10.f) {
+				if (error) *error = "invalid_control_program";
+				return false;
+			}
+			for (size_t priorIndex = 0; priorIndex < index; ++priorIndex) {
+				const ControlEvent& prior = controlProgram.events[priorIndex];
+				const bool overlaps = event.port == prior.port && event.channel == prior.channel
+					&& event.offsetFrames < prior.offsetFrames + prior.durationFrames
+					&& prior.offsetFrames < event.offsetFrames + event.durationFrames;
+				if (overlaps) {
+					if (error) *error = "overlapping_control_events";
+					return false;
+				}
+			}
+			requestedControlMask |= uint8_t(1u << event.port);
+		}
+	}
 	if (session->targetFrames > std::numeric_limits<size_t>::max() / sizeof(float)) {
 		if (error) *error = "recording_too_large";
 		return false;
@@ -238,6 +320,34 @@ bool RecordingEngine::armCapture(uint8_t requestedMask, double durationSeconds,
 	session->observation.sampleRate = sampleRate;
 	session->observation.label = label;
 	session->allConnectedMask.store(requestedMask, std::memory_order_relaxed);
+	session->controlProgram = controlProgram;
+	session->currentControlVolts = controlProgram.staticVolts;
+	for (size_t index = 0; index < controlProgram.eventCount; ++index) {
+		const ControlEvent& event = controlProgram.events[index];
+		Session::ControlTransition& begin =
+			session->controlTransitions[session->controlTransitionCount++];
+		begin.offsetFrames = event.offsetFrames;
+		begin.port = event.port;
+		begin.channel = event.channel;
+		begin.priority = 1;
+		begin.voltage = event.voltage;
+		Session::ControlTransition& end =
+			session->controlTransitions[session->controlTransitionCount++];
+		end.offsetFrames = event.offsetFrames + event.durationFrames;
+		end.port = event.port;
+		end.channel = event.channel;
+		end.priority = 0;
+		end.voltage = controlProgram.staticVolts[event.port][event.channel];
+	}
+	std::stable_sort(session->controlTransitions.begin(),
+		session->controlTransitions.begin() + session->controlTransitionCount,
+		[](const Session::ControlTransition& a, const Session::ControlTransition& b) {
+			return a.offsetFrames < b.offsetFrames
+				|| (a.offsetFrames == b.offsetFrames && a.priority < b.priority);
+		});
+	session->requestedControlMask = requestedControlMask;
+	session->allControlConnectedMask.store(requestedControlMask,
+		std::memory_order_relaxed);
 
 	std::lock_guard<std::mutex> lock(mutex_);
 	if (busy()) {
@@ -267,15 +377,59 @@ bool RecordingEngine::armCapture(uint8_t requestedMask, double durationSeconds,
 void RecordingEngine::process(uint64_t frame, float sampleRate,
 		const std::array<float, OBSERVATION_CHANNELS>& volts,
 		uint8_t connectedMask) noexcept {
+	process(frame, sampleRate, volts, connectedMask, 0, nullptr);
+}
+
+void RecordingEngine::process(uint64_t frame, float sampleRate,
+		const std::array<float, OBSERVATION_CHANNELS>& volts,
+		uint8_t connectedMask, uint8_t controlConnectedMask,
+		ControlOutputFrame* controlOutput) noexcept {
+	if (controlOutput) *controlOutput = ControlOutputFrame{};
 	Session* session = active_.load(std::memory_order_acquire);
 	if (!session) return;
 	RecordingState state = session->state.load(std::memory_order_relaxed);
 	if (state == RecordingState::Armed) {
-		session->startFrame.store(frame, std::memory_order_relaxed);
-		session->observation.triggerFrame = frame;
-		session->observation.startFrame = frame;
-		session->state.store(RecordingState::Capturing, std::memory_order_relaxed);
+		uint64_t controlStart = session->controlStartFrame.load(std::memory_order_relaxed);
+		if (!session->controlStarted.exchange(true, std::memory_order_relaxed)) {
+			controlStart = frame;
+			session->controlStartFrame.store(frame, std::memory_order_relaxed);
+		}
+		const uint64_t captureStart = controlStart + session->controlProgram.settleFrames;
+		if (frame >= captureStart) {
+			session->startFrame.store(frame, std::memory_order_relaxed);
+			session->observation.triggerFrame = frame;
+			session->observation.startFrame = frame;
+			session->state.store(RecordingState::Capturing, std::memory_order_relaxed);
+			state = RecordingState::Capturing;
+		}
 	} else if (state != RecordingState::Capturing) return;
+
+	if (session->controlProgram.enabled && controlOutput) {
+		controlOutput->channels = session->controlProgram.channels;
+		const uint64_t captureStart = session->startFrame.load(std::memory_order_relaxed);
+		if (captureStart && frame >= captureStart) {
+			const uint64_t offset = frame - captureStart;
+			while (session->nextControlTransition < session->controlTransitionCount
+					&& session->controlTransitions[session->nextControlTransition].offsetFrames
+						<= offset) {
+				const Session::ControlTransition& transition =
+					session->controlTransitions[session->nextControlTransition++];
+				session->currentControlVolts[transition.port][transition.channel] =
+					transition.voltage;
+			}
+		}
+		controlOutput->volts = session->currentControlVolts;
+	}
+	if (session->requestedControlMask) {
+		session->allControlConnectedMask.store(
+			session->allControlConnectedMask.load(std::memory_order_relaxed)
+				& controlConnectedMask & session->requestedControlMask,
+			std::memory_order_relaxed);
+			session->anyControlConnectedMask.store(
+			session->anyControlConnectedMask.load(std::memory_order_relaxed)
+				| (controlConnectedMask & session->requestedControlMask),
+			std::memory_order_relaxed);
+	}
 	if (std::fabs(sampleRate - session->sampleRate) > 0.5f) {
 		session->endFrame.store(frame, std::memory_order_relaxed);
 		session->failure.store(RecordingFailure::SampleRateChanged, std::memory_order_relaxed);
@@ -283,6 +437,7 @@ void RecordingEngine::process(uint64_t frame, float sampleRate,
 		active_.store(nullptr, std::memory_order_release);
 		return;
 	}
+	if (state == RecordingState::Armed) return;
 
 	const uint64_t written = session->writtenFrames.load(std::memory_order_relaxed);
 	if (written >= session->targetFrames) return;
@@ -333,6 +488,7 @@ void RecordingEngine::fillStatus(const Session& session, RecordingStatus* result
 	result->writtenFrames = session.writtenFrames.load(std::memory_order_acquire);
 	result->startFrame = session.startFrame.load(std::memory_order_relaxed);
 	result->endFrame = session.endFrame.load(std::memory_order_relaxed);
+	result->controlStartFrame = session.controlStartFrame.load(std::memory_order_relaxed);
 	result->sampleRate = session.sampleRate;
 	result->label = session.label;
 	result->wavPath = session.wavPath;
@@ -340,6 +496,11 @@ void RecordingEngine::fillStatus(const Session& session, RecordingStatus* result
 	result->analysisAvailable = result->state == RecordingState::Complete
 		&& session.analysisRequest.kind != CaptureAnalysisKind::None;
 	result->includeSpectrum = session.analysisRequest.includeSpectrum;
+	result->controlProgram = session.controlProgram;
+	result->allControlConnectedMask = session.allControlConnectedMask.load(
+		std::memory_order_relaxed);
+	result->anyControlConnectedMask = session.anyControlConnectedMask.load(
+		std::memory_order_relaxed);
 	if (result->analysisAvailable) {
 		result->groupAnalysis = session.groupAnalysis;
 		result->comparisonAnalysis = session.comparisonAnalysis;
@@ -420,7 +581,48 @@ bool RecordingEngine::writeFiles(Session& session, std::string* error) {
 		if (channel) metadata << ", ";
 		metadata << jsonString(observeChannelName(session.channelOrder[channel]));
 	}
-	metadata << "]\n}\n";
+	metadata << "],\n  \"control\": ";
+	if (!session.controlProgram.enabled) {
+		metadata << "null\n";
+	} else {
+		metadata << "{\n    \"settleFrames\": " << session.controlProgram.settleFrames
+			<< ",\n    \"controlStartFrame\": "
+			<< session.controlStartFrame.load(std::memory_order_relaxed)
+			<< ",\n    \"captureStartFrame\": "
+			<< session.startFrame.load(std::memory_order_relaxed)
+			<< ",\n    \"allConnectedMask\": "
+			<< static_cast<unsigned>(session.allControlConnectedMask.load(
+				std::memory_order_relaxed))
+			<< ",\n    \"anyConnectedMask\": "
+			<< static_cast<unsigned>(session.anyControlConnectedMask.load(
+				std::memory_order_relaxed))
+			<< ",\n    \"ports\": {";
+		for (size_t port = 0; port < CONTROL_PORTS; ++port) {
+			if (port) metadata << ",";
+			metadata << "\n      " << jsonString(port == 0 ? "A" : "B") << ": [";
+			for (size_t channel = 0; channel < session.controlProgram.channels[port];
+					++channel) {
+				if (channel) metadata << ", ";
+				metadata << session.controlProgram.staticVolts[port][channel];
+			}
+			metadata << "]";
+		}
+		metadata << "\n    },\n    \"events\": [";
+		const uint64_t captureStart = session.startFrame.load(std::memory_order_relaxed);
+		for (size_t index = 0; index < session.controlProgram.eventCount; ++index) {
+			const ControlEvent& event = session.controlProgram.events[index];
+			if (index) metadata << ",";
+			metadata << "\n      {\"port\": " << jsonString(event.port == 0 ? "A" : "B")
+				<< ", \"channel\": " << static_cast<unsigned>(event.channel)
+				<< ", \"offsetFrames\": " << event.offsetFrames
+				<< ", \"durationFrames\": " << event.durationFrames
+				<< ", \"voltage\": " << event.voltage
+				<< ", \"executedFrame\": " << captureStart + event.offsetFrames << "}";
+		}
+		if (session.controlProgram.eventCount) metadata << "\n    ";
+		metadata << "]\n  }\n";
+	}
+	metadata << "}\n";
 	metadata.close();
 	if (!metadata) {
 		std::remove(session.wavPath.c_str());

@@ -51,6 +51,7 @@ void DoorstopEngineRouter::applyConditionTo(EngineMode mode) {
 		legacy.setBreakInLocked(breakInLocked);
 	}
 	else if (mode == EngineMode::ReferenceV3) {
+		referenceV3.setTuningVariant(selectedV3Tuning);
 		referenceV3.setBreakIn(breakIn);
 		referenceV3.setBreakInLocked(breakInLocked);
 		referenceV3.setSpecimenSeed(specimenSeed);
@@ -110,6 +111,15 @@ void DoorstopEngineRouter::setSoundModel(SoundModel newModel) {
 	}
 	selectedLegacyModel = newModel;
 	legacy.setSoundModel(newModel);
+}
+
+void DoorstopEngineRouter::setReferenceV3TuningVariant(
+	HelicalTuningVariant variant) {
+	if (variant >= HelicalTuningVariant::Count) {
+		variant = HelicalTuningVariant::BoingProbe;
+	}
+	selectedV3Tuning = variant;
+	referenceV3.setTuningVariant(variant);
 }
 
 void DoorstopEngineRouter::setBreakIn(float amount) {
@@ -230,6 +240,7 @@ void DoorstopEngineRouter::reset() {
 	breakInLocked = false;
 	selectedMode = EngineMode::ReferenceV1;
 	selectedLegacyModel = SoundModel::ProbabilisticMix;
+	selectedV3Tuning = HelicalTuningVariant::BoingProbe;
 	legacy.reset();
 	legacy.setSoundModel(selectedLegacyModel);
 	reference.reset();

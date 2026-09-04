@@ -132,7 +132,7 @@ void usage(const char* executable) {
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
 		<< "  --variant NAME      current, spring-only, modes-only, spring-forward,\n"
 		<< "                      spring-refined, rack-v2, boing-refined,\n"
-		<< "                      or v3-boing-probe\n"
+		<< "                      v3-boing-probe, v3-dark-boing, or v3-deep-swing\n"
 		<< "  --radiation-phase DEG  V2 phase probe: 0=extrema, 90=crossing\n"
 		<< "  --output-tap NAME   module (default) or preconditioned\n"
 #endif
@@ -165,6 +165,8 @@ int main(int argc, char** argv) {
 			doorstop::ReferenceAnalysisOutput::ModuleOutput;
 		float radiationPhaseDegrees = 90.f;
 		bool useHelicalEngine = false;
+		doorstop::HelicalTuningVariant helicalTuning =
+			doorstop::HelicalTuningVariant::BoingProbe;
 #endif
 		std::vector<Strike> strikes;
 		for (int i = 2; i < argc; ++i) {
@@ -206,6 +208,14 @@ int main(int argc, char** argv) {
 					|| variantName == "v3-lobed-radiation"
 					|| variantName == "v3-paired-surrogate") {
 					useHelicalEngine = true;
+				}
+				else if (variantName == "v3-dark-boing") {
+					useHelicalEngine = true;
+					helicalTuning = doorstop::HelicalTuningVariant::DarkBoing;
+				}
+				else if (variantName == "v3-deep-swing") {
+					useHelicalEngine = true;
+					helicalTuning = doorstop::HelicalTuningVariant::DeepSwing;
 				}
 				else if (variantName == "rack-v2"
 					|| variantName == "boing-refined") {
@@ -278,6 +288,9 @@ int main(int argc, char** argv) {
 		helicalEngine.setSampleRate(float(sampleRate));
 		helicalEngine.setSpecimenSeed(seed);
 		helicalEngine.setBreakIn(breakIn);
+#if defined(DOORSTOP_REFERENCE_ANALYSIS)
+		helicalEngine.setTuningVariant(helicalTuning);
+#endif
 		const std::size_t sampleCount =
 			std::size_t(duration * float(sampleRate));
 		std::vector<float> samples;

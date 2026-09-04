@@ -17,7 +17,7 @@ Octavia is the live control and observation bridge. Its default HTTP endpoint is
 Read only the references required for the current task:
 
 - `references/monitoring.md` — snapshots, comparison, spectrum, loudness, physical
-  observation points, or Sibyl-triggered captures.
+  observation points, frame-synchronized diagnostic control, or Sibyl-triggered captures.
 - `references/console.md` — only when the user explicitly asks to arm, listen to, or use
   the in-Rack Octavia Console.
 - `references/sibyl.md` — composing, sequencing, arranging, or controlling Sibyl. Prefer
@@ -49,6 +49,15 @@ Octavia hears only signals physically cabled to its monitor inputs. Never imply 
 can hear an arbitrary unpatched module output or substitute hidden reads for monitor
 cables. `masterL`/`masterR` are the persistent Master pair; A-D are independent probes with
 meaning assigned by each request. Read `references/monitoring.md` before audio analysis.
+
+## Diagnostic Control Boundary
+
+Octavia's `Control A` and `Control B` outputs are temporary, frame-synchronized test
+stimuli for bounded sanity checks and measurements where exact alignment with an Octavia
+capture matters. Do not use them to author musical sequences, clocks, arrangements,
+generative patterns, or persistent patch behavior. Use Sibyl when the agent is expected to
+create or revise a sequence, while preserving an explicit user-chosen sequencer. Read
+`references/monitoring.md` before using the Control outputs.
 
 ## Editing Workflow
 

@@ -27,6 +27,15 @@ const char* soundModelName(doorstop::SoundModel model) {
 	}
 }
 
+const char* helicalTuningName(doorstop::HelicalTuningVariant variant) {
+	switch (variant) {
+		case doorstop::HelicalTuningVariant::BoingProbe: return "boingProbe";
+		case doorstop::HelicalTuningVariant::DarkBoing: return "darkBoing";
+		case doorstop::HelicalTuningVariant::DeepSwing: return "deepSwing";
+		default: return "boingProbe";
+	}
+}
+
 bool parseEngineMode(json_t* value, doorstop::EngineMode* mode) {
 	if (!json_is_string(value) || !mode) return false;
 	const std::string name = json_string_value(value);
@@ -57,6 +66,23 @@ bool parseSoundModel(json_t* value, doorstop::SoundModel* model) {
 	else if (name == "coilContact") *model = doorstop::SoundModel::CoilContact;
 	else if (name == "dispersiveSpring") *model = doorstop::SoundModel::DispersiveSpring;
 	else if (name == "probabilisticMix") *model = doorstop::SoundModel::ProbabilisticMix;
+	else return false;
+	return true;
+}
+
+bool parseHelicalTuning(json_t* value,
+	doorstop::HelicalTuningVariant* variant) {
+	if (!json_is_string(value) || !variant) return false;
+	const std::string name = json_string_value(value);
+	if (name == "boingProbe") {
+		*variant = doorstop::HelicalTuningVariant::BoingProbe;
+	}
+	else if (name == "darkBoing") {
+		*variant = doorstop::HelicalTuningVariant::DarkBoing;
+	}
+	else if (name == "deepSwing") {
+		*variant = doorstop::HelicalTuningVariant::DeepSwing;
+	}
 	else return false;
 	return true;
 }
@@ -140,6 +166,12 @@ void Doorstop::process(const ProcessArgs& args) {
 		int(doorstop::SoundModel::Classic),
 		int(doorstop::SoundModel::Count) - 1);
 	engine.setSoundModel(static_cast<doorstop::SoundModel>(requestedModel));
+	const int requestedV3Tuning = clamp(
+		referenceV3Tuning.load(std::memory_order_relaxed),
+		int(doorstop::HelicalTuningVariant::BoingProbe),
+		int(doorstop::HelicalTuningVariant::Count) - 1);
+	engine.setReferenceV3TuningVariant(
+		static_cast<doorstop::HelicalTuningVariant>(requestedV3Tuning));
 	const bool externalStrike = trigTrigger.process(inputs[TRIG_INPUT].getVoltage(0), 0.1f, 1.f);
 	const bool manualStrike = manualTrigger.process(params[MANUAL_PARAM].getValue(), 0.f, 1.f);
 	bool appliedStrike = false;
@@ -194,6 +226,8 @@ void Doorstop::onReset(const ResetEvent& e) {
 	allowVisualOverflow.store(true, std::memory_order_relaxed);
 	engineMode.store(int(doorstop::EngineMode::ReferenceV1), std::memory_order_relaxed);
 	soundModel.store(int(doorstop::SoundModel::ProbabilisticMix), std::memory_order_relaxed);
+	referenceV3Tuning.store(
+		int(doorstop::HelicalTuningVariant::BoingProbe), std::memory_order_relaxed);
 	specimenStatePending.store(false, std::memory_order_relaxed);
 	newSpecimenRequested.store(false, std::memory_order_relaxed);
 	pendingSpecimenSeed.store(specimenSeed.load(std::memory_order_relaxed), std::memory_order_relaxed);
@@ -232,6 +266,12 @@ json_t* Doorstop::dataToJson() {
 		json_string(soundModelName(savedModel)));
 	json_object_set_new(rootJ, "soundModel",
 		json_integer(int(savedModel)));
+	const auto savedV3Tuning = static_cast<doorstop::HelicalTuningVariant>(clamp(
+		referenceV3Tuning.load(std::memory_order_relaxed),
+		int(doorstop::HelicalTuningVariant::BoingProbe),
+		int(doorstop::HelicalTuningVariant::Count) - 1));
+	json_object_set_new(rootJ, "referenceV3Tuning",
+		json_string(helicalTuningName(savedV3Tuning)));
 	json_object_set_new(rootJ, "specimenSeed",
 		json_integer(specimenSeed.load(std::memory_order_relaxed)));
 	json_object_set_new(rootJ, "breakIn",
@@ -249,6 +289,8 @@ void Doorstop::dataFromJson(json_t* rootJ) {
 	bool loadedOverflow = true;
 	doorstop::EngineMode loadedEngineMode = doorstop::EngineMode::Legacy;
 	int loadedModel = int(doorstop::SoundModel::ProbabilisticMix);
+	doorstop::HelicalTuningVariant loadedV3Tuning =
+		doorstop::HelicalTuningVariant::BoingProbe;
 	float loadedBreakIn = 0.f;
 	bool loadedLocked = false;
 	std::uint32_t loadedSeed = specimenSeed.load(std::memory_order_relaxed);
@@ -275,6 +317,8 @@ void Doorstop::dataFromJson(json_t* rootJ) {
 		if (parseSoundModel(json_object_get(rootJ, "legacySoundModel"), &parsedModel)) {
 			loadedModel = int(parsedModel);
 		}
+		parseHelicalTuning(
+			json_object_get(rootJ, "referenceV3Tuning"), &loadedV3Tuning);
 		json_t* seedJ = json_object_get(rootJ, "specimenSeed");
 		if (json_is_integer(seedJ)) {
 			const json_int_t value = json_integer_value(seedJ);
@@ -300,6 +344,7 @@ void Doorstop::dataFromJson(json_t* rootJ) {
 	allowVisualOverflow.store(loadedOverflow, std::memory_order_relaxed);
 	engineMode.store(int(loadedEngineMode), std::memory_order_relaxed);
 	soundModel.store(loadedModel, std::memory_order_relaxed);
+	referenceV3Tuning.store(int(loadedV3Tuning), std::memory_order_relaxed);
 	specimenSeed.store(loadedSeed, std::memory_order_relaxed);
 	pendingSpecimenSeed.store(loadedSeed, std::memory_order_relaxed);
 	specimenStatePending.store(true, std::memory_order_release);

@@ -191,6 +191,78 @@ void testAnalyzeAndRecordUsesIdenticalFrames() {
 	std::remove(status.metadataPath.c_str());
 }
 
+void testFrameScheduledPolyControl() {
+	octavia::RecordingEngine engine;
+	octavia::ControlProgram control;
+	control.enabled = true;
+	control.settleFrames = 10;
+	control.channels[0] = 4;
+	control.channels[1] = 1;
+	control.staticVolts[0][0] = 5.f;
+	control.staticVolts[0][1] = 8.f;
+	control.staticVolts[0][2] = 9.f;
+	control.staticVolts[0][3] = 10.f;
+	control.eventCount = 1;
+	control.events[0].port = 1;
+	control.events[0].channel = 0;
+	control.events[0].offsetFrames = 20;
+	control.events[0].durationFrames = 2;
+	control.events[0].voltage = 10.f;
+
+	octavia::RecordingStatus status;
+	std::string error;
+	const uint8_t selected = octavia::observeChannelBit(octavia::ObserveChannel::A);
+	check(engine.armControlled(selected, 0.1, 1000.f, "controlled",
+		"build/tests", control, &status, &error),
+		"frame-scheduled control program arms with a pre-capture settling phase");
+	const uint64_t id = status.id;
+	bool staticHeldDuringSettle = true;
+	bool pulseWasExact = true;
+	for (uint64_t frame = 1000; frame < 1110; ++frame) {
+		std::array<float, octavia::OBSERVATION_CHANNELS> volts{{}};
+		octavia::ControlOutputFrame output;
+		engine.process(frame, 1000.f, volts, selected, 0x3, &output);
+		staticHeldDuringSettle = staticHeldDuringSettle
+			&& output.channels[0] == 4 && output.channels[1] == 1
+			&& output.volts[0][0] == 5.f && output.volts[0][1] == 8.f
+			&& output.volts[0][2] == 9.f && output.volts[0][3] == 10.f;
+		const bool expectedPulse = frame == 1030 || frame == 1031;
+		pulseWasExact = pulseWasExact
+			&& (output.volts[1][0] == (expectedPulse ? 10.f : 0.f));
+	}
+	check(staticHeldDuringSettle,
+		"Control A holds four independent poly voltages before and during capture");
+	check(pulseWasExact,
+		"Control B pulse executes only on the requested capture-relative frames");
+	check(engine.get(id, &status) && status.startFrame == 1010
+		&& status.endFrame == 1109 && status.controlStartFrame == 1000
+		&& status.allControlConnectedMask == 0x3
+		&& status.anyControlConnectedMask == 0x3,
+		"status identifies control start, capture bounds, and physical output connections");
+
+	octavia::ControlOutputFrame idleOutput;
+	std::array<float, octavia::OBSERVATION_CHANNELS> volts{{}};
+	engine.process(1110, 1000.f, volts, selected, 0x3, &idleOutput);
+	check(idleOutput.channels[0] == 0 && idleOutput.channels[1] == 0,
+		"control outputs return to zero channels after the bounded session");
+	for (int attempt = 0; attempt < 1000; ++attempt) {
+		engine.get(id, &status);
+		if (status.state == octavia::RecordingState::Complete
+				|| status.state == octavia::RecordingState::Failed) break;
+		std::this_thread::sleep_for(std::chrono::milliseconds(2));
+	}
+	std::ifstream metadata(status.metadataPath.c_str());
+	const std::string json((std::istreambuf_iterator<char>(metadata)),
+		std::istreambuf_iterator<char>());
+	check(status.state == octavia::RecordingState::Complete
+		&& json.find("\"controlStartFrame\": 1000") != std::string::npos
+		&& json.find("\"captureStartFrame\": 1010") != std::string::npos
+		&& json.find("\"executedFrame\": 1030") != std::string::npos,
+		"sidecar preserves the requested control program and executed event frame");
+	std::remove(status.wavPath.c_str());
+	std::remove(status.metadataPath.c_str());
+}
+
 } // namespace
 
 int main() {
@@ -198,6 +270,7 @@ int main() {
 	testSampleRateChangeFailsSafely();
 	testEphemeralAnalysisSkipsDisk();
 	testAnalyzeAndRecordUsesIdenticalFrames();
+	testFrameScheduledPolyControl();
 	std::cout << (failures ? "FAIL" : "PASS") << ": octavia recording contract\n";
 	return failures ? 1 : 0;
 }

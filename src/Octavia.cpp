@@ -272,7 +272,11 @@ struct Octavia : Module {
         MONITOR_D_INPUT,
         INPUTS_LEN
     };
-    enum OutputId { OUTPUTS_LEN };
+    enum OutputId {
+        CONTROL_A_OUTPUT = 0,
+        CONTROL_B_OUTPUT,
+        OUTPUTS_LEN
+    };
     enum LightId  {
         STATUS_R_LIGHT, STATUS_G_LIGHT, STATUS_B_LIGHT,
         READ_ACTIVITY_LIGHT, WRITE_ACTIVITY_LIGHT,
@@ -287,6 +291,8 @@ struct Octavia : Module {
     static_assert(MONITOR_A_INPUT == 2 && MONITOR_B_INPUT == 3 &&
         MONITOR_C_INPUT == 4 && MONITOR_D_INPUT == 5 && INPUTS_LEN == 6,
         "Octavia monitor input IDs are append-only");
+    static_assert(CONTROL_A_OUTPUT == 0 && CONTROL_B_OUTPUT == 1 && OUTPUTS_LEN == 2,
+        "Octavia control output IDs are append-only");
     static_assert(STATUS_R_LIGHT == 0 && STATUS_G_LIGHT == 1 && STATUS_B_LIGHT == 2 &&
         READ_ACTIVITY_LIGHT == 3 && WRITE_ACTIVITY_LIGHT == 4,
         "Octavia legacy light IDs must remain patch-compatible");
@@ -325,6 +331,8 @@ struct Octavia : Module {
     std::array<uint64_t, 4> seenMonitorSnapshotGeneration{{0, 0, 0, 0}};
     std::array<float, 4> monitorActivityEnvelope{{0.f, 0.f, 0.f, 0.f}};
     std::array<std::atomic<uint32_t>, 4> monitorAnalysisCount;
+    std::array<std::atomic<bool>, octavia::CONTROL_PORTS> controlOutputConnected;
+    std::array<std::atomic<uint8_t>, octavia::CONTROL_PORTS> controlOutputChannels;
 
     // Feedback needs a trend across independent requests. Keeping only the
     // strongest candidate per channel gives useful confirmation without
@@ -439,6 +447,10 @@ struct Octavia : Module {
             std::memory_order_relaxed);
         for (auto& count : monitorAnalysisCount)
             count.store(0, std::memory_order_relaxed);
+        for (auto& connected : controlOutputConnected)
+            connected.store(false, std::memory_order_relaxed);
+        for (auto& channels : controlOutputChannels)
+            channels.store(0, std::memory_order_relaxed);
         config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
         configButton(START_PARAM, "Start Octavia Server");
         configInput(MASTER_L_INPUT, "Master L");
@@ -447,6 +459,8 @@ struct Octavia : Module {
         configInput(MONITOR_B_INPUT, "Monitor B");
         configInput(MONITOR_C_INPUT, "Monitor C");
         configInput(MONITOR_D_INPUT, "Monitor D");
+        configOutput(CONTROL_A_OUTPUT, "Control A (16-channel polyphonic)");
+        configOutput(CONTROL_B_OUTPUT, "Control B (16-channel polyphonic)");
         configLight(READ_ACTIVITY_LIGHT, "HTTP read activity");
         configLight(WRITE_ACTIVITY_LIGHT, "HTTP write activity");
         configLight(MONITOR_A_LIGHT, "Monitor A attention");
@@ -485,8 +499,26 @@ struct Octavia : Module {
         }
         observationHistory.publish(static_cast<uint64_t>(args.frame), args.sampleRate,
             observationVolts, connectedMask, observationChannels);
+        uint8_t controlConnectedMask = 0;
+        for (size_t port = 0; port < octavia::CONTROL_PORTS; ++port) {
+            const bool connected = outputs[CONTROL_A_OUTPUT + port].isConnected();
+            controlOutputConnected[port].store(connected, std::memory_order_relaxed);
+            if (connected)
+                controlConnectedMask |= static_cast<uint8_t>(1u << port);
+        }
+        octavia::ControlOutputFrame controlOutput;
         recordingEngine.process(static_cast<uint64_t>(args.frame), args.sampleRate,
-            observationVolts, connectedMask);
+            observationVolts, connectedMask, controlConnectedMask, &controlOutput);
+        for (size_t port = 0; port < octavia::CONTROL_PORTS; ++port) {
+            const int channels = std::min<int>(controlOutput.channels[port],
+                static_cast<int>(octavia::CONTROL_CHANNELS));
+            outputs[CONTROL_A_OUTPUT + port].setChannels(channels);
+            controlOutputChannels[port].store(static_cast<uint8_t>(channels),
+                std::memory_order_relaxed);
+            for (int channel = 0; channel < channels; ++channel)
+                outputs[CONTROL_A_OUTPUT + port].setVoltage(
+                    controlOutput.volts[port][channel], channel);
+        }
 
         // Minimal live Master meter (normalized: 5V = 0 dBFS).
         if (lm.filterSampleRate != args.sampleRate) {
@@ -1620,6 +1652,43 @@ struct Octavia : Module {
         body += "],";
         body += jStr("allConnectedMask") + ":" + std::to_string(recording.allConnectedMask) + ",";
         body += jStr("anyConnectedMask") + ":" + std::to_string(recording.anyConnectedMask);
+        if (recording.controlProgram.enabled) {
+            body += "," + jStr("control") + ":{";
+            body += jStr("settleFrames") + ":" +
+                std::to_string(recording.controlProgram.settleFrames) + ",";
+            body += jStr("controlStartFrame") + ":" +
+                std::to_string(recording.controlStartFrame) + ",";
+            body += jStr("captureStartFrame") + ":" +
+                std::to_string(recording.startFrame) + ",";
+            body += jStr("allConnectedMask") + ":" +
+                std::to_string(recording.allControlConnectedMask) + ",";
+            body += jStr("anyConnectedMask") + ":" +
+                std::to_string(recording.anyControlConnectedMask) + ",";
+            body += jStr("ports") + ":{";
+            for (size_t port = 0; port < octavia::CONTROL_PORTS; ++port) {
+                if (port) body += ",";
+                body += jStr(port == 0 ? "A" : "B") + ":[";
+                for (size_t channel = 0;
+                        channel < recording.controlProgram.channels[port]; ++channel) {
+                    if (channel) body += ",";
+                    body += jNum(recording.controlProgram.staticVolts[port][channel]);
+                }
+                body += "]";
+            }
+            body += "}," + jStr("events") + ":[";
+            for (size_t index = 0; index < recording.controlProgram.eventCount; ++index) {
+                if (index) body += ",";
+                const octavia::ControlEvent& event = recording.controlProgram.events[index];
+                body += "{" + jStr("port") + ":" + jStr(event.port == 0 ? "A" : "B") + ",";
+                body += jStr("channel") + ":" + std::to_string(event.channel) + ",";
+                body += jStr("offsetFrames") + ":" + std::to_string(event.offsetFrames) + ",";
+                body += jStr("durationFrames") + ":" + std::to_string(event.durationFrames) + ",";
+                body += jStr("voltage") + ":" + jNum(event.voltage) + ",";
+                body += jStr("executedFrame") + ":" + (recording.startFrame
+                    ? std::to_string(recording.startFrame + event.offsetFrames) : "null") + "}";
+            }
+            body += "]}";
+        }
         if (recording.state == octavia::RecordingState::Complete
                 && !recording.wavPath.empty()) {
             body += "," + jStr("wavPath") + ":" + jStr(recording.wavPath);
@@ -1666,6 +1735,115 @@ struct Octavia : Module {
             mask |= octavia::observeChannelBit(channel);
         }
         *requestedMask = mask;
+        return true;
+    }
+
+    static bool parseControlProgram(json_t* root, float sampleRate,
+            octavia::ControlProgram* program, std::string* error) {
+        if (!program) return false;
+        *program = octavia::ControlProgram{};
+        json_t* control = json_is_object(root) ? json_object_get(root, "control") : nullptr;
+        if (!control) return true;
+        if (!json_is_object(control) || !std::isfinite(sampleRate) || sampleRate <= 0.f) {
+            if (error) *error = "control must be an object with a valid sample rate";
+            return false;
+        }
+        program->enabled = true;
+        json_t* settleValue = json_object_get(control, "settleMs");
+        const double settleMs = settleValue && json_is_number(settleValue)
+            ? json_number_value(settleValue) : 0.0;
+        if (!std::isfinite(settleMs) || settleMs < 0.0 || settleMs > 5000.0) {
+            if (error) *error = "control settleMs must be between 0 and 5000";
+            return false;
+        }
+        program->settleFrames = static_cast<uint64_t>(std::llround(
+            settleMs * static_cast<double>(sampleRate) / 1000.0));
+
+        bool hasContent = false;
+        json_t* staticValues = json_object_get(control, "static");
+        if (staticValues) {
+            if (!json_is_object(staticValues)) {
+                if (error) *error = "control static must be an object";
+                return false;
+            }
+            for (size_t port = 0; port < octavia::CONTROL_PORTS; ++port) {
+                json_t* values = json_object_get(staticValues, port == 0 ? "A" : "B");
+                if (!values) continue;
+                if (!json_is_array(values)
+                        || json_array_size(values) > octavia::CONTROL_CHANNELS) {
+                    if (error) *error = "control static ports must contain at most 16 voltages";
+                    return false;
+                }
+                program->channels[port] = static_cast<uint8_t>(json_array_size(values));
+                size_t channel; json_t* value;
+                json_array_foreach(values, channel, value) {
+                    const double voltage = json_is_number(value) ? json_number_value(value)
+                        : std::numeric_limits<double>::quiet_NaN();
+                    if (!std::isfinite(voltage) || voltage < -10.0 || voltage > 10.0) {
+                        if (error) *error = "control voltages must be finite and within +/-10V";
+                        return false;
+                    }
+                    program->staticVolts[port][channel] = static_cast<float>(voltage);
+                }
+                hasContent = hasContent || program->channels[port] != 0;
+            }
+        }
+
+        json_t* events = json_object_get(control, "events");
+        if (events) {
+            if (!json_is_array(events)
+                    || json_array_size(events) > octavia::CONTROL_MAX_EVENTS) {
+                if (error) *error = "control events must be an array of at most 64 events";
+                return false;
+            }
+            size_t index; json_t* value;
+            json_array_foreach(events, index, value) {
+                json_t* portValue = json_is_object(value)
+                    ? json_object_get(value, "port") : nullptr;
+                json_t* channelValue = json_is_object(value)
+                    ? json_object_get(value, "channel") : nullptr;
+                json_t* offsetValue = json_is_object(value)
+                    ? json_object_get(value, "offsetMs") : nullptr;
+                json_t* durationValue = json_is_object(value)
+                    ? json_object_get(value, "durationMs") : nullptr;
+                json_t* voltageValue = json_is_object(value)
+                    ? json_object_get(value, "voltage") : nullptr;
+                const std::string portName = json_is_string(portValue)
+                    ? json_string_value(portValue) : "";
+                const json_int_t channel = json_is_integer(channelValue)
+                    ? json_integer_value(channelValue) : -1;
+                const double offsetMs = json_is_number(offsetValue)
+                    ? json_number_value(offsetValue) : -1.0;
+                const double durationMs = json_is_number(durationValue)
+                    ? json_number_value(durationValue) : -1.0;
+                const double voltage = json_is_number(voltageValue)
+                    ? json_number_value(voltageValue)
+                    : std::numeric_limits<double>::quiet_NaN();
+                if ((portName != "A" && portName != "B") || channel < 0
+                        || channel >= static_cast<json_int_t>(octavia::CONTROL_CHANNELS)
+                        || !std::isfinite(offsetMs) || offsetMs < 0.0
+                        || !std::isfinite(durationMs) || durationMs <= 0.0
+                        || !std::isfinite(voltage) || voltage < -10.0 || voltage > 10.0) {
+                    if (error) *error = "invalid control event";
+                    return false;
+                }
+                octavia::ControlEvent& event = program->events[program->eventCount++];
+                event.port = static_cast<uint8_t>(portName == "A" ? 0 : 1);
+                event.channel = static_cast<uint8_t>(channel);
+                event.offsetFrames = static_cast<uint64_t>(std::llround(
+                    offsetMs * static_cast<double>(sampleRate) / 1000.0));
+                event.durationFrames = std::max<uint64_t>(1, static_cast<uint64_t>(
+                    std::llround(durationMs * static_cast<double>(sampleRate) / 1000.0)));
+                program->channels[event.port] = std::max<uint8_t>(
+                    program->channels[event.port], event.channel + 1);
+                event.voltage = static_cast<float>(voltage);
+                hasContent = true;
+            }
+        }
+        if (!hasContent) {
+            if (error) *error = "control requires static voltages or events";
+            return false;
+        }
         return true;
     }
 
@@ -1987,7 +2165,7 @@ struct Octavia : Module {
             return httplib::Server::HandlerResponse::Unhandled;
         });
         svr.Get("/status", [this](const httplib::Request&, httplib::Response& res) {
-            std::string b = "{"+jStr("running")+": "+(serverRunning?"true":"false")+", "+jStr("port")+": "+std::to_string(octaviaPort())+", "+jStr("version")+": "+jStr("2.10.0")+"}";
+            std::string b = "{"+jStr("running")+": "+(serverRunning?"true":"false")+", "+jStr("port")+": "+std::to_string(octaviaPort())+", "+jStr("version")+": "+jStr("2.11.0")+"}";
             res.set_content(b,"application/json");
         });
 
@@ -2250,6 +2428,16 @@ struct Octavia : Module {
                 body += jStr("activity") + ":" + jStr(activeUsers ? "analyzing"
                     : ((connectedMask & (1u << channel)) ? "rolling" : "disconnected")) + "}";
             }
+            body += "]," + jStr("controls") + ":[";
+            for (size_t port = 0; port < octavia::CONTROL_PORTS; ++port) {
+                if (port) body += ",";
+                body += "{" + jStr("id") + ":" + jStr(port == 0 ? "A" : "B") + ",";
+                body += jStr("connected") + ":" +
+                    (controlOutputConnected[port].load(std::memory_order_relaxed)
+                        ? "true" : "false") + ",";
+                body += jStr("channels") + ":" + std::to_string(
+                    controlOutputChannels[port].load(std::memory_order_relaxed)) + "}";
+            }
             body += "]}";
             res.set_content(body, "application/json");
         });
@@ -2349,6 +2537,14 @@ struct Octavia : Module {
             const std::string label = json_is_string(labelValue)
                 ? json_string_value(labelValue) : "";
             const bool save = json_is_true(json_object_get(root, "save"));
+            const float captureSampleRate = observationHistory.currentSampleRate();
+            octavia::ControlProgram controlProgram;
+            if (!parseControlProgram(root, captureSampleRate, &controlProgram, &error)) {
+                json_decref(root); res.status = 400;
+                res.set_content("{" + jStr("error") + ":" + jStr(error) + "}",
+                    "application/json");
+                return;
+            }
             json_decref(root);
 
             std::string directory;
@@ -2362,11 +2558,11 @@ struct Octavia : Module {
                 }
             }
             octavia::RecordingStatus capture;
-            if (!recordingEngine.armCapture(requestedMask, seconds,
-                    observationHistory.currentSampleRate(), label,
+            if (!recordingEngine.armCaptureControlled(requestedMask, seconds,
+                    captureSampleRate, label,
                     save ? octavia::CaptureDisposition::AnalyzeAndRecord
                         : octavia::CaptureDisposition::Analyze,
-                    analysisRequest, directory, &capture, &error)) {
+                    analysisRequest, directory, controlProgram, &capture, &error)) {
                 res.status = error == "recording_busy" ? 429 : 400;
                 res.set_content("{" + jStr("error") + ":" + jStr(error) + "}",
                     "application/json");
@@ -2399,6 +2595,14 @@ struct Octavia : Module {
                 ? json_number_value(secondsValue) : -1.0;
             const std::string label = json_is_string(labelValue)
                 ? json_string_value(labelValue) : "";
+            const float captureSampleRate = observationHistory.currentSampleRate();
+            octavia::ControlProgram controlProgram;
+            if (!parseControlProgram(root, captureSampleRate, &controlProgram, &error)) {
+                json_decref(root); res.status = 400;
+                res.set_content("{" + jStr("error") + ":" + jStr(error) + "}",
+                    "application/json");
+                return;
+            }
             json_decref(root);
 
             const std::string directory = system::join(asset::user(),
@@ -2410,8 +2614,8 @@ struct Octavia : Module {
                 return;
             }
             octavia::RecordingStatus recording;
-            if (!recordingEngine.arm(requestedMask, seconds,
-                    observationHistory.currentSampleRate(), label, directory,
+            if (!recordingEngine.armControlled(requestedMask, seconds,
+                    captureSampleRate, label, directory, controlProgram,
                     &recording, &error)) {
                 res.status = error == "recording_busy" ? 429 : 400;
                 res.set_content("{" + jStr("error") + ":" + jStr(error) + "}",
@@ -3425,6 +3629,7 @@ struct OctaviaWidget : ModuleWidget {
     std::array<Vec, 4> monitorLabelMm{{
         Vec(44.f, 20.f), Vec(44.f, 42.f), Vec(44.f, 64.f), Vec(44.f, 86.f)
     }};
+    std::array<Vec, 2> controlLabelMm{{Vec(37.f, 102.5f), Vec(45.f, 102.5f)}};
 
     void step() override {
         ModuleWidget::step();
@@ -3494,6 +3699,8 @@ struct OctaviaWidget : ModuleWidget {
         };
         for (int monitor = 0; monitor < 4; ++monitor)
             monitorLabelMm[monitor] = anchorPoint(monitorLabelAnchors[monitor], monitorLabelMm[monitor]);
+        controlLabelMm[0] = anchorPoint("CONTROL_A_LABEL", controlLabelMm[0]);
+        controlLabelMm[1] = anchorPoint("CONTROL_B_LABEL", controlLabelMm[1]);
 
         math::Rect statusRectMm(Vec(0.74f, 13.5f), Vec(29.f, 36.f));
         panel_svg::loadRectFromSvgMm(panelPath, "OCTOPUS_STATUS", &statusRectMm);
@@ -3544,6 +3751,12 @@ struct OctaviaWidget : ModuleWidget {
                 mm2px(anchorPoint(monitorLightAnchors[monitor], Vec(37.5f, y))), module,
                 Octavia::MONITOR_A_LIGHT + monitor));
         }
+        addOutput(createOutputCentered<Magitek2OutputJack>(
+            mm2px(anchorPoint("CONTROL_A_OUTPUT", Vec(37.f, 110.f))), module,
+            Octavia::CONTROL_A_OUTPUT));
+        addOutput(createOutputCentered<Magitek2OutputJack>(
+            mm2px(anchorPoint("CONTROL_B_OUTPUT", Vec(45.f, 110.f))), module,
+            Octavia::CONTROL_B_OUTPUT));
     }
 
     void draw(const DrawArgs& args) override {
@@ -3584,6 +3797,11 @@ struct OctaviaWidget : ModuleWidget {
         for (int monitor = 0; monitor < 4; ++monitor)
             nvgText(args.vg, mm2px(monitorLabelMm[monitor]).x,
                 mm2px(monitorLabelMm[monitor]).y, monitorLabels[monitor], NULL);
+        nvgFontSize(args.vg, 5.5f);
+        nvgText(args.vg, mm2px(controlLabelMm[0]).x, mm2px(controlLabelMm[0]).y,
+            "CTRL A", NULL);
+        nvgText(args.vg, mm2px(controlLabelMm[1]).x, mm2px(controlLabelMm[1]).y,
+            "CTRL B", NULL);
     }
 };
 

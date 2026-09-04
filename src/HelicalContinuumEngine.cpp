@@ -20,6 +20,12 @@ constexpr std::array<float, HelicalContinuumEngine::PAIR_COUNT> PAIR_T60 {{
 constexpr std::array<float, HelicalContinuumEngine::PAIR_COUNT> PAIR_OUTPUT {{
 	0.002f, 0.03f, 0.04f, 0.06f, 0.12f, 0.50f, 0.55f, 0.48f, 0.85f, 0.65f, 0.25f, 0.12f
 }};
+constexpr std::array<float, HelicalContinuumEngine::PAIR_COUNT> DARK_OUTPUT_SCALE {{
+	1.10f, 1.10f, 1.05f, 1.08f, 1.12f, 1.30f, 1.20f, 0.95f, 0.65f, 0.40f, 0.18f, 0.06f
+}};
+constexpr std::array<float, HelicalContinuumEngine::PAIR_COUNT> DARK_T60_SCALE {{
+	1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 0.92f, 0.78f, 0.65f, 0.48f, 0.35f
+}};
 constexpr std::array<float, HelicalContinuumEngine::PAIR_COUNT> PAIR_TIP {{
 	1.f, 0.34f, -0.31f, 0.29f, -0.27f, 0.24f, -0.21f, 0.18f, -0.15f, 0.12f, -0.09f, 0.06f
 }};
@@ -28,7 +34,7 @@ constexpr float RADIATION_VELOCITY_COEFFICIENT =
 // Representative modal-plus-cap energy from a strong V3 strike. This is a
 // visual reference ceiling, not a dynamics limiter: harder/retriggered motion
 // may exceed it and simply fills the meter.
-constexpr float VISUAL_ENERGY_REFERENCE = 0.16f;
+constexpr float VISUAL_ENERGY_REFERENCE = 0.25f;
 
 float clamp01(float value) {
 	return std::max(0.f, std::min(value, 1.f));
@@ -39,6 +45,7 @@ float clamp01(float value) {
 void HelicalContinuumEngine::reset() {
 	breakIn = 0.f;
 	breakInLocked = false;
+	tuningVariant = HelicalTuningVariant::BoingProbe;
 	updateSpecimenCoefficients();
 	clearDynamicState();
 }
@@ -75,6 +82,16 @@ void HelicalContinuumEngine::setSpecimenSeed(std::uint32_t seed) {
 	updateSpecimenCoefficients();
 }
 
+void HelicalContinuumEngine::setTuningVariant(HelicalTuningVariant variant) {
+	if (variant >= HelicalTuningVariant::Count) {
+		variant = HelicalTuningVariant::BoingProbe;
+	}
+	if (variant == tuningVariant) return;
+	tuningVariant = variant;
+	updateSpecimenCoefficients();
+	clearDynamicState();
+}
+
 float HelicalContinuumEngine::specimenUnit(std::uint32_t tag) const {
 	std::uint32_t x = specimenSeed ^ (tag * 0x9e3779b9u);
 	x ^= x >> 16;
@@ -86,6 +103,8 @@ float HelicalContinuumEngine::specimenUnit(std::uint32_t tag) const {
 }
 
 void HelicalContinuumEngine::updateSpecimenCoefficients() {
+	const bool dark = tuningVariant != HelicalTuningVariant::BoingProbe;
+	const float tuningFrequencyScale = dark ? 0.82f : 1.f;
 	const float stiffnessTrait = 0.96f + 0.08f * specimenUnit(1u);
 	const float dampingTrait = 0.88f + 0.24f * specimenUnit(2u);
 	const float wearStiffness = 1.f - 0.025f * breakIn;
@@ -97,10 +116,12 @@ void HelicalContinuumEngine::updateSpecimenCoefficients() {
 	for (int pair = 0; pair < PAIR_COUNT; ++pair) {
 		const float pairVariation = 0.985f + 0.030f * specimenUnit(20u + pair);
 		const float splitVariation = 0.75f + 0.50f * specimenUnit(40u + pair);
-		const float center = PAIR_FREQUENCIES[pair] * stiffnessTrait
+		const float center = PAIR_FREQUENCIES[pair] * tuningFrequencyScale * stiffnessTrait
 			* wearStiffness * pairVariation;
 		const float split = PAIR_SPLITS[pair] * splitVariation;
-		const float t60 = PAIR_T60[pair] * dampingTrait * wearDamping;
+		const float t60 = PAIR_T60[pair]
+			* (dark ? DARK_T60_SCALE[pair] : 1.f)
+			* dampingTrait * wearDamping;
 
 		for (int axis = 0; axis < 2; ++axis) {
 			const int index = 2 * pair + axis;
@@ -113,7 +134,8 @@ void HelicalContinuumEngine::updateSpecimenCoefficients() {
 			tipParticipation[index] = PAIR_TIP[pair] * orientation;
 
 			const float sign = ((pair + axis) & 1) ? -1.f : 1.f;
-			radiationWeight[index] = PAIR_OUTPUT[pair] * sign
+			radiationWeight[index] = PAIR_OUTPUT[pair]
+				* (dark ? DARK_OUTPUT_SCALE[pair] : 1.f) * sign
 				* (0.85f + 0.30f * specimenUnit(80u + index));
 
 			contactParticipation[index] = pair == 0 ? 1.f
@@ -136,6 +158,7 @@ void HelicalContinuumEngine::updateCoefficients() {
 	dcPole = std::exp(-2.f * PI * 8.f / sampleRate);
 	strikeLightDecay = std::exp(-1.f / (0.075f * sampleRate));
 	visualEnvelopeDecay = std::exp(-1.f / (0.18f * sampleRate));
+	hardStrikeDecay = std::exp(-1.f / (1.4f * sampleRate));
 }
 
 void HelicalContinuumEngine::clearDynamicState() {
@@ -149,6 +172,7 @@ void HelicalContinuumEngine::clearDynamicState() {
 	dcPreviousOutput = 0.f;
 	strikeLight = 0.f;
 	visualAudibleEnvelope = 0.f;
+	hardStrikeDrive = 0.f;
 	quietTime = 0.f;
 	previousContactForce = 0.f;
 	sleeping = true;
@@ -165,8 +189,16 @@ void HelicalContinuumEngine::strike(float normalizedVelocity) {
 	const float phaseStep = 2.f * PI / float(substeps);
 	const float misalignment = -0.20f + 0.40f * specimenUnit(101u);
 	const float inverseLength = 1.f / std::sqrt(1.f + misalignment * misalignment);
+	// Pulse duration continues to shorten for a brighter hard impact, but above
+	// 80% it previously shortened faster than force grew. Compensate only that
+	// top region so total impulse and stored motion do not fold back before max.
+	const float maximumRange = clamp01((magnitude - 0.80f) / 0.20f);
+	const float maximumBlend = maximumRange * maximumRange
+		* (3.f - 2.f * maximumRange);
+	const float maximumImpulseBoost = 1.f + 0.35f * maximumBlend;
 
-	strikePulse.magnitude += 1450.f * magnitude * (0.40f + 0.60f * magnitude);
+	strikePulse.magnitude += 1450.f * magnitude
+		* (0.40f + 0.60f * magnitude) * maximumImpulseBoost;
 	strikePulse.magnitude = std::min(strikePulse.magnitude, 2200.f);
 	strikePulse.directionX = (velocity < 0.f ? -1.f : 1.f) * inverseLength;
 	strikePulse.directionY = misalignment * inverseLength;
@@ -177,6 +209,10 @@ void HelicalContinuumEngine::strike(float normalizedVelocity) {
 	strikePulse.remainingSubsteps = substeps;
 
 	strikeLight = std::max(strikeLight, magnitude);
+	if (tuningVariant == HelicalTuningVariant::DeepSwing) {
+		const float hardAmount = clamp01((magnitude - 0.65f) / 0.35f);
+		hardStrikeDrive = std::max(hardStrikeDrive, hardAmount * hardAmount);
+	}
 	sleeping = false;
 	quietTime = 0.f;
 	if (!breakInLocked) {
@@ -290,8 +326,14 @@ float HelicalContinuumEngine::processSubstep(float h) {
 			const float warpDepth = pair == 0 ? 0.10f
 				: 0.010f + 0.0025f * float(pair % 5);
 			const float localStiffness = stiffnessScale
-				* (1.f + warpDepth * normalizedBend);
-			mode.acceleration = generalizedForce - damping[index] * mode.velocity
+				* (1.f + warpDepth * normalizedBend)
+				* ((tuningVariant == HelicalTuningVariant::DeepSwing && pair == 0)
+					? (1.f - 0.45f * hardStrikeDrive) : 1.f);
+			const float dampingScale =
+				(tuningVariant == HelicalTuningVariant::DeepSwing && pair == 0)
+					? (1.f - 0.65f * hardStrikeDrive) : 1.f;
+			mode.acceleration = generalizedForce
+				- dampingScale * damping[index] * mode.velocity
 				- localStiffness * omegaSq[index] * mode.position;
 			mode.velocity += h * mode.acceleration;
 			mode.position += h * mode.velocity;
@@ -326,7 +368,8 @@ bool HelicalContinuumEngine::allFinite() const {
 		if (!std::isfinite(mode.position) || !std::isfinite(mode.velocity)
 			|| !std::isfinite(mode.acceleration)) return false;
 	}
-	return std::isfinite(dcPreviousOutput) && std::isfinite(previousContactForce);
+	return std::isfinite(dcPreviousOutput) && std::isfinite(previousContactForce)
+		&& std::isfinite(hardStrikeDrive);
 }
 
 void HelicalContinuumEngine::recoverFromNonFinite() {
@@ -369,6 +412,7 @@ Frame HelicalContinuumEngine::process(float requestedSampleTime) {
 	const float energy = calculateEnergy();
 	const float normalizedEnergy = std::min(1.f, energy / VISUAL_ENERGY_REFERENCE);
 	strikeLight *= strikeLightDecay;
+	hardStrikeDrive *= hardStrikeDecay;
 
 	// The retained body contains intentionally quiet, high-Q coordinates. Do
 	// not truncate them merely because their mechanical units are small.
@@ -387,8 +431,11 @@ Frame HelicalContinuumEngine::process(float requestedSampleTime) {
 	// fundamental back into the panel's visual coordinate system.
 	constexpr float VISUAL_DISPLACEMENT_GAIN = 450.f;
 	constexpr float VISUAL_VELOCITY_GAIN = 1.625f;
+	const float deepSwingVisualScale = tuningVariant == HelicalTuningVariant::DeepSwing
+		? 1.f + 0.55f * hardStrikeDrive : 1.f;
 	frame.displacement = std::max(-2.f, std::min(
-		modes[0].position * VISUAL_DISPLACEMENT_GAIN * visualAudibleEnvelope, 2.f));
+		modes[0].position * VISUAL_DISPLACEMENT_GAIN * visualAudibleEnvelope
+			* deepSwingVisualScale, 2.f));
 	frame.velocity = std::max(-1.f, std::min(
 		modes[0].velocity * VISUAL_VELOCITY_GAIN * visualAudibleEnvelope, 1.f));
 	frame.energy = normalizedEnergy;

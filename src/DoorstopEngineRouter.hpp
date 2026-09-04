@@ -26,6 +26,7 @@ public:
 	void setSampleRate(float newSampleRate);
 	void setEngineMode(EngineMode newMode);
 	void setSoundModel(SoundModel newModel);
+	void setReferenceV3TuningVariant(HelicalTuningVariant variant);
 	void setBreakIn(float amount);
 	void setBreakInLocked(bool locked);
 	void setSpecimenSeed(std::uint32_t seed);
@@ -35,6 +36,9 @@ public:
 	bool isSleeping() const;
 	EngineMode getEngineMode() const { return selectedMode; }
 	SoundModel getSoundModel() const { return selectedLegacyModel; }
+	HelicalTuningVariant getReferenceV3TuningVariant() const {
+		return referenceV3.getTuningVariant();
+	}
 	SoundModel getLastStrikeModel() const;
 	float getBreakIn() const { return breakIn; }
 	bool isBreakInLocked() const { return breakInLocked; }
@@ -63,6 +67,7 @@ private:
 	HelicalContinuumEngine referenceV3;
 	EngineMode selectedMode = EngineMode::ReferenceV1;
 	SoundModel selectedLegacyModel = SoundModel::ProbabilisticMix;
+	HelicalTuningVariant selectedV3Tuning = HelicalTuningVariant::BoingProbe;
 	float sampleRate = 44100.f;
 	float breakIn = 0.f;
 	bool breakInLocked = false;

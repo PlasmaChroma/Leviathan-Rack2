@@ -84,6 +84,48 @@ change during capture fails the recording rather than producing mislabeled data.
 returned paths for offline spectrum, harmonic, alias, and transition analysis; do not infer
 access to any signal that was not physically cabled to a selected Octavia monitor.
 
+### Frame-synchronized control outputs
+
+Octavia exposes two independent 16-channel polyphonic outputs, `Control A` and
+`Control B`. They are diagnostic instruments, not general-purpose sequencers: use them
+only for a temporary, bounded sanity check or measurement whose stimulus must align
+exactly with an Octavia capture. Defer authored musical sequences, clocks, arrangements,
+and persistent automation to Sibyl, or preserve the user's explicitly chosen sequencer.
+
+A bounded recording or analysis capture may include a `control` program:
+
+```json
+{
+  "monitors": ["A", "B", "C", "D"],
+  "seconds": 6,
+  "label": "four-way-response",
+  "control": {
+    "settleMs": 100,
+    "static": {"A": [5, 8, 9, 10]},
+    "events": [
+      {"port": "B", "channel": 0, "offsetMs": 1000,
+       "durationMs": 1, "voltage": 10}
+    ]
+  }
+}
+```
+
+Static voltages are asserted on the audio thread before capture. `settleMs` is the
+bounded pre-capture interval during which downstream modules can stabilize. Event offsets
+are relative to the exact first recorded Rack frame and are converted to integer frames
+when the request is armed. Values are raw Rack volts and must remain within +/-10 V.
+
+Use a polyphonic splitter when different Control channels must reach separate monophonic
+inputs. A common trigger may be fanned physically from one Control channel. The response
+and saved sidecar report the control-start frame, capture-start frame, requested event
+offsets, executed event frames, static channel vectors, and Control-output connection
+masks. A scheduled output is still meaningful only when physically cabled into the patch.
+Monitor discovery includes a `controls` array with each output's live connection state and
+active polyphonic channel count; verify it before arming a stimulus-driven capture.
+Control outputs return to their idle state when the bounded session ends. Treat their
+cables and any helper modules as a disposable test harness: do not save them into the
+patch, and do not remove pre-existing modules or cables without the user's authorization.
+
 ## Sibyl-triggered observation
 
 A Sibyl event can request a capture at its exact sounding onset:
