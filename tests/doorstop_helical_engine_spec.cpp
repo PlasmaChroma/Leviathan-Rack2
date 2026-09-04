@@ -277,6 +277,101 @@ Result deepSwingPeriodicMaximumBeatsMidrange() {
 			+ " smallestRmsRatio=" + std::to_string(smallestRmsRatio)};
 }
 
+struct BodyBellEnergy {
+	double body = 0.0;
+	double bell = 0.0;
+};
+
+BodyBellEnergy measureDeepSwingBodyBellEnergy(
+		float velocity, std::uint32_t seed) {
+	constexpr float rate = 48000.f;
+	constexpr float dt = 1.f / rate;
+	const float low250Coefficient = 1.f
+		- std::exp(-2.f * 3.14159265358979323846f * 250.f / rate);
+	const float low400Coefficient = 1.f
+		- std::exp(-2.f * 3.14159265358979323846f * 400.f / rate);
+	const float low1500Coefficient = 1.f
+		- std::exp(-2.f * 3.14159265358979323846f * 1500.f / rate);
+	doorstop::HelicalContinuumEngine engine;
+	engine.setSampleRate(rate);
+	engine.setSpecimenSeed(seed);
+	engine.setTuningVariant(doorstop::HelicalTuningVariant::DeepSwing);
+	engine.strike(velocity);
+	float low250 = 0.f;
+	float low400 = 0.f;
+	float low1500 = 0.f;
+	BodyBellEnergy energy;
+	for (int i = 0; i < int(rate); ++i) {
+		const float output = engine.process(dt).outputVolts;
+		low250 += low250Coefficient * (output - low250);
+		low400 += low400Coefficient * (output - low400);
+		low1500 += low1500Coefficient * (output - low1500);
+		const float bell = low1500 - low400;
+		energy.body += double(low250) * low250;
+		energy.bell += double(bell) * bell;
+	}
+	return energy;
+}
+
+Result deepSwingHardStrikeKeepsItsLowBody() {
+	bool pass = true;
+	float smallestBodyGain = 1e30f;
+	float smallestRatioGain = 1e30f;
+	for (std::uint32_t seed : {1u, 3076668551u}) {
+		const BodyBellEnergy medium = measureDeepSwingBodyBellEnergy(0.5f, seed);
+		const BodyBellEnergy hard = measureDeepSwingBodyBellEnergy(1.f, seed);
+		const float bodyGain = float(hard.body / std::max(medium.body, 1e-12));
+		const float mediumRatio = float(medium.body / std::max(medium.bell, 1e-12));
+		const float hardRatio = float(hard.body / std::max(hard.bell, 1e-12));
+		const float ratioGain = hardRatio / std::max(mediumRatio, 1e-12f);
+		smallestBodyGain = std::min(smallestBodyGain, bodyGain);
+		smallestRatioGain = std::min(smallestRatioGain, ratioGain);
+		pass = pass && bodyGain > 1.f && ratioGain > 1.f;
+	}
+	return {"Deep Swing hard strikes favor low body instead of becoming a bell",
+		pass, "smallestBodyGain=" + std::to_string(smallestBodyGain)
+			+ " smallestBodyToBellGain=" + std::to_string(smallestRatioGain)};
+}
+
+Result deepSwingAudibleTailMatchesVisualSettling() {
+	constexpr float rate = 48000.f;
+	constexpr float dt = 1.f / rate;
+	bool pass = true;
+	float largestAudibleTail = 0.f;
+	float largestAudibleVisual = 0.f;
+	float largestSettledPeak = 0.f;
+	float largestSettledVisual = 0.f;
+	for (std::uint32_t seed : {1u, 3076668551u}) {
+		doorstop::HelicalContinuumEngine engine;
+		engine.setSampleRate(rate);
+		engine.setSpecimenSeed(seed);
+		engine.setTuningVariant(doorstop::HelicalTuningVariant::DeepSwing);
+		engine.strike(1.f);
+		for (int i = 0; i < int(4.f * rate); ++i) {
+			const doorstop::Frame frame = engine.process(dt);
+			if (i >= int(2.f * rate) && i < int(3.f * rate)) {
+				largestAudibleTail = std::max(
+					largestAudibleTail, std::fabs(frame.outputVolts));
+				largestAudibleVisual = std::max(
+					largestAudibleVisual, std::fabs(frame.displacement));
+			}
+			else if (i >= int(3.f * rate)) {
+				largestSettledPeak = std::max(
+					largestSettledPeak, std::fabs(frame.outputVolts));
+				largestSettledVisual = std::max(
+					largestSettledVisual, std::fabs(frame.displacement));
+			}
+		}
+	}
+	pass = largestAudibleTail > 0.02f && largestAudibleVisual > 0.04f
+		&& largestSettledPeak < 0.02f && largestSettledVisual < 0.01f;
+	return {"Deep Swing audible tail remains visible until both settle",
+		pass, "audibleTail=" + std::to_string(largestAudibleTail)
+			+ " audibleVisual=" + std::to_string(largestAudibleVisual)
+			+ " settledPeak=" + std::to_string(largestSettledPeak)
+			+ " settledVisual=" + std::to_string(largestSettledVisual)};
+}
+
 struct TuningTrace {
 	int displacementCrossings = 0;
 	int initialCrossings = 0;
@@ -389,6 +484,8 @@ int main() {
 		velocityResponseStaysMonotonicThroughMaximum(),
 		deepSwingHardRetriggerRemainsLouderAcrossPhase(),
 		deepSwingPeriodicMaximumBeatsMidrange(),
+		deepSwingHardStrikeKeepsItsLowBody(),
+		deepSwingAudibleTailMatchesVisualSettling(),
 		darkTuningIsLowerAndWaveformDistinct(),
 		deepSwingTargetsHardStrikeDeformation(),
 		routerReturnsExactV3Frames(),

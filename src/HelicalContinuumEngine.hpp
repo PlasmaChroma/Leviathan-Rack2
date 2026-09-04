@@ -38,7 +38,7 @@ public:
 	bool isBreakInLocked() const { return breakInLocked; }
 	std::uint32_t getSpecimenSeed() const { return specimenSeed; }
 	HelicalTuningVariant getTuningVariant() const { return tuningVariant; }
-	float getVisualMaximumDisplacement() const { return 2.f; }
+	float getVisualMaximumDisplacement() const { return 2.75f; }
 
 private:
 	static constexpr float PI = 3.14159265358979323846f;
