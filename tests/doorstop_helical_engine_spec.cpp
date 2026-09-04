@@ -123,6 +123,7 @@ struct StrikeResponse {
 	float peakEnergy = 0.f;
 	float peakDisplacement = 0.f;
 	float peakOutput = 0.f;
+	float rms400ms = 0.f;
 };
 
 StrikeResponse measureStrikeResponse(
@@ -135,6 +136,7 @@ StrikeResponse measureStrikeResponse(
 	engine.setTuningVariant(tuning);
 	engine.strike(velocity);
 	StrikeResponse response;
+	double sum400ms = 0.0;
 	for (int i = 0; i < int(rate); ++i) {
 		const doorstop::Frame frame = engine.process(dt);
 		response.peakEnergy = std::max(response.peakEnergy, frame.energy);
@@ -142,7 +144,27 @@ StrikeResponse measureStrikeResponse(
 			response.peakDisplacement, std::fabs(frame.displacement));
 		response.peakOutput = std::max(
 			response.peakOutput, std::fabs(frame.outputVolts));
+		if (i < int(0.4f * rate))
+			sum400ms += double(frame.outputVolts) * frame.outputVolts;
 	}
+	response.rms400ms = std::sqrt(float(sum400ms / (0.4f * rate)));
+	return response;
+}
+
+StrikeResponse measureStrikeFromState(
+		doorstop::HelicalContinuumEngine engine, float velocity) {
+	constexpr float rate = 48000.f;
+	constexpr float dt = 1.f / rate;
+	engine.strike(velocity);
+	StrikeResponse response;
+	double sum = 0.0;
+	for (int i = 0; i < int(0.4f * rate); ++i) {
+		const doorstop::Frame frame = engine.process(dt);
+		response.peakOutput = std::max(
+			response.peakOutput, std::fabs(frame.outputVolts));
+		sum += double(frame.outputVolts) * frame.outputVolts;
+	}
+	response.rms400ms = std::sqrt(float(sum / (0.4f * rate)));
 	return response;
 }
 
@@ -178,6 +200,81 @@ Result velocityResponseStaysMonotonicThroughMaximum() {
 			+ " smallestDisplacementStep="
 			+ std::to_string(smallestDisplacementStep)
 			+ " smallestOutputStep=" + std::to_string(smallestOutputStep)};
+}
+
+Result deepSwingHardRetriggerRemainsLouderAcrossPhase() {
+	constexpr float rate = 48000.f;
+	constexpr float dt = 1.f / rate;
+	bool pass = true;
+	float smallestPeakMargin = 100.f;
+	float smallestRmsMargin = 100.f;
+	for (std::uint32_t seed : {1u, 3076668551u}) {
+		doorstop::HelicalContinuumEngine base;
+		base.setSampleRate(rate);
+		base.setSpecimenSeed(seed);
+		base.setTuningVariant(doorstop::HelicalTuningVariant::DeepSwing);
+		base.strike(0.7f);
+		for (int phase = 0; phase <= 20; ++phase) {
+			doorstop::HelicalContinuumEngine state = base;
+			for (int i = 0; i < phase * 1200; ++i) state.process(dt);
+			const StrikeResponse medium = measureStrikeFromState(state, 0.5f);
+			const StrikeResponse hard = measureStrikeFromState(state, 1.f);
+			const float peakMargin = hard.peakOutput - medium.peakOutput;
+			const float rmsMargin = hard.rms400ms - medium.rms400ms;
+			smallestPeakMargin = std::min(smallestPeakMargin, peakMargin);
+			smallestRmsMargin = std::min(smallestRmsMargin, rmsMargin);
+			pass = pass && peakMargin > 0.f && rmsMargin > 0.f;
+		}
+	}
+	return {"Deep Swing 10 V retrigger stays louder than 5 V across retained phases",
+		pass, "smallestPeakMargin=" + std::to_string(smallestPeakMargin)
+			+ " smallestRmsMargin=" + std::to_string(smallestRmsMargin)};
+}
+
+StrikeResponse measurePeriodicRetrigger(float velocity, float intervalSeconds) {
+	constexpr float rate = 48000.f;
+	constexpr float dt = 1.f / rate;
+	doorstop::HelicalContinuumEngine engine;
+	engine.setSampleRate(rate);
+	engine.setSpecimenSeed(3076668551u);
+	engine.setBreakIn(0.0239455067f);
+	engine.setTuningVariant(doorstop::HelicalTuningVariant::DeepSwing);
+	const int intervalFrames = int(intervalSeconds * rate);
+	StrikeResponse response;
+	double sum = 0.0;
+	for (int frame = 0; frame < 6 * intervalFrames; ++frame) {
+		if (frame % intervalFrames == 0) engine.strike(velocity);
+		const float output = engine.process(dt).outputVolts;
+		if (frame >= 5 * intervalFrames) {
+			response.peakOutput = std::max(response.peakOutput, std::fabs(output));
+			sum += double(output) * output;
+		}
+	}
+	response.rms400ms = std::sqrt(float(sum / intervalFrames));
+	return response;
+}
+
+Result deepSwingPeriodicMaximumBeatsMidrange() {
+	bool pass = true;
+	float smallestPeakRatio = 100.f;
+	float smallestRmsRatio = 100.f;
+	for (float interval : {0.5f, 1.f, 2.f}) {
+		const StrikeResponse hard = measurePeriodicRetrigger(1.f, interval);
+		for (float mediumVelocity : {0.5f, 0.55f}) {
+			const StrikeResponse medium = measurePeriodicRetrigger(
+				mediumVelocity, interval);
+			const float peakRatio = hard.peakOutput
+				/ std::max(medium.peakOutput, 1e-6f);
+			const float rmsRatio = hard.rms400ms
+				/ std::max(medium.rms400ms, 1e-6f);
+			smallestPeakRatio = std::min(smallestPeakRatio, peakRatio);
+			smallestRmsRatio = std::min(smallestRmsRatio, rmsRatio);
+			pass = pass && peakRatio > 1.f && rmsRatio > 1.f;
+		}
+	}
+	return {"Deep Swing periodic 10 V strikes stay louder than the midrange",
+		pass, "smallestPeakRatio=" + std::to_string(smallestPeakRatio)
+			+ " smallestRmsRatio=" + std::to_string(smallestRmsRatio)};
 }
 
 struct TuningTrace {
@@ -290,6 +387,8 @@ int main() {
 		specimenPopulationIsDeterministicAndDistinct(),
 		v3EnergyMeterHasUsefulStrikeRange(),
 		velocityResponseStaysMonotonicThroughMaximum(),
+		deepSwingHardRetriggerRemainsLouderAcrossPhase(),
+		deepSwingPeriodicMaximumBeatsMidrange(),
 		darkTuningIsLowerAndWaveformDistinct(),
 		deepSwingTargetsHardStrikeDeformation(),
 		routerReturnsExactV3Frames(),

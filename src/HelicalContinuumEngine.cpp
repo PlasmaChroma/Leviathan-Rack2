@@ -343,7 +343,13 @@ float HelicalContinuumEngine::processSubstep(float h) {
 			const float stationDepth = 0.82f + 0.16f
 				* std::fabs(observerDirectionX[index]);
 			const float lobedRadiation = crossingLobe * crossingLobe;
-			constexpr float radiationFloor = 0.08f;
+			// Deep Swing deliberately spends more of a hard hit near maximum bend.
+			// Raise its omnidirectional radiation floor with the same hard-strike
+			// drive so greater mechanical excitation cannot disappear merely because
+			// the observer happens to be between crossing lobes.
+			const float radiationFloor = 0.08f
+				+ (tuningVariant == HelicalTuningVariant::DeepSwing
+					? 0.85f * hardStrikeDrive : 0.f);
 			float observerGain = radiationFloor
 				+ stationDepth * (1.f - radiationFloor) * lobedRadiation;
 			observerGain *= 1.f + 0.045f * direction

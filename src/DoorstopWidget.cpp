@@ -95,8 +95,6 @@ float bendProfile(float t) {
 }
 
 struct SpringPointTemplate {
-	float bend = 0.f;
-	float bendDerivative = 0.f;
 	float y = 0.f;
 	float coilOffset = 0.f;
 };
@@ -108,10 +106,9 @@ const std::array<SpringPointTemplate, SPRING_POINTS>& springPointTemplates() {
 		for (int i = 0; i < SPRING_POINTS; ++i) {
 			const float t = float(i) / float(SPRING_POINTS - 1);
 			SpringPointTemplate& point = result[i];
-			point.bend = bendProfile(t);
-			point.bendDerivative = 6.f * t * (1.f - t);
+			const float bend = bendProfile(t);
 			point.y = -springLength * t;
-			const float coilRadius = 4.4f + (3.15f - 4.4f) * point.bend;
+			const float coilRadius = 4.4f + (3.15f - 4.4f) * bend;
 			point.coilOffset = coilRadius
 				* std::sin(2.f * float(M_PI) * SPRING_TURNS * t);
 		}
@@ -124,19 +121,49 @@ void buildSpringGeometry(SpringPathGeometry& geometry, float displacement) {
 	const float travel = visualTipTravel(displacement);
 	const float springLength = mm2px(SPRING_LENGTH_MM);
 	const auto& templates = springPointTemplates();
+	const float travelRatio = std::fabs(travel) / springLength;
+	float tipAngle = 0.f;
+	if (travelRatio > 1e-6f) {
+		// Solve x/L = (1 - cos(theta)) / theta for a constant-length
+		// circular arc. The visual travel range keeps theta well below pi/2,
+		// so this small fixed Newton solve is stable and only runs on UI updates.
+		tipAngle = 2.f * travelRatio;
+		for (int iteration = 0; iteration < 3; ++iteration) {
+			const float sine = std::sin(tipAngle);
+			const float cosine = std::cos(tipAngle);
+			const float numerator = 1.f - cosine;
+			const float function = numerator / tipAngle - travelRatio;
+			const float derivative = (tipAngle * sine - numerator)
+				/ (tipAngle * tipAngle);
+			tipAngle -= function / std::max(derivative, 1e-6f);
+		}
+		if (travel < 0.f) tipAngle = -tipAngle;
+	}
+
+	const float angleStep = tipAngle / float(SPRING_POINTS - 1);
+	const float stepSine = std::sin(angleStep);
+	const float stepCosine = std::cos(angleStep);
+	float tangentSine = 0.f;
+	float tangentCosine = 1.f;
+	const float radius = std::fabs(tipAngle) > 1e-6f
+		? springLength / tipAngle : 0.f;
 	for (int i = 0; i < SPRING_POINTS; ++i) {
 		const SpringPointTemplate& point = templates[i];
-		const float centerX = travel * point.bend;
-		const float dxdt = travel * point.bendDerivative;
-		const float dydt = -springLength;
-		const float invLength = 1.f / std::max(std::sqrt(dxdt * dxdt + dydt * dydt), 1e-6f);
-		const Vec normal(-dydt * invLength, dxdt * invLength);
-		geometry.points[i] = Vec(centerX, point.y).plus(normal.mult(point.coilOffset));
+		const float centerX = radius * (1.f - tangentCosine);
+		const float centerY = std::fabs(tipAngle) > 1e-6f
+			? -radius * tangentSine : point.y;
+		const Vec normal(tangentCosine, tangentSine);
+		geometry.points[i] = Vec(centerX, centerY).plus(
+			normal.mult(point.coilOffset));
+
+		const float nextSine = tangentSine * stepCosine
+			+ tangentCosine * stepSine;
+		tangentCosine = tangentCosine * stepCosine
+			- tangentSine * stepSine;
+		tangentSine = nextSine;
 	}
-	geometry.tipTravel = travel;
-	const float tangentT = 0.90f;
-	const float dxdt = travel * 6.f * tangentT * (1.f - tangentT);
-	geometry.tipAngle = std::atan2(-springLength, dxdt) + 0.5f * float(M_PI);
+	geometry.tipTravel = geometry.points.back().x;
+	geometry.tipAngle = tipAngle;
 }
 
 struct HorizontalBounds {
