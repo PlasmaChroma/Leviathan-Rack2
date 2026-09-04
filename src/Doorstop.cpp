@@ -33,6 +33,9 @@ const char* helicalTuningName(doorstop::HelicalTuningVariant variant) {
 		case doorstop::HelicalTuningVariant::DarkBoing: return "darkBoing";
 		case doorstop::HelicalTuningVariant::DeepSwing: return "deepSwing";
 		case doorstop::HelicalTuningVariant::DeepContinuum: return "deepContinuum";
+		case doorstop::HelicalTuningVariant::DeepShortTail: return "deepShortTail";
+		case doorstop::HelicalTuningVariant::DeepBodyBend: return "deepBodyBend";
+		case doorstop::HelicalTuningVariant::DeepThickSpring: return "deepThickSpring";
 		default: return "boingProbe";
 	}
 }
@@ -86,6 +89,15 @@ bool parseHelicalTuning(json_t* value,
 	}
 	else if (name == "deepContinuum") {
 		*variant = doorstop::HelicalTuningVariant::DeepContinuum;
+	}
+	else if (name == "deepShortTail") {
+		*variant = doorstop::HelicalTuningVariant::DeepShortTail;
+	}
+	else if (name == "deepBodyBend") {
+		*variant = doorstop::HelicalTuningVariant::DeepBodyBend;
+	}
+	else if (name == "deepThickSpring") {
+		*variant = doorstop::HelicalTuningVariant::DeepThickSpring;
 	}
 	else return false;
 	return true;

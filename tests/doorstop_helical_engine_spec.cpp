@@ -128,12 +128,12 @@ struct StrikeResponse {
 };
 
 StrikeResponse measureStrikeResponse(
-	doorstop::HelicalTuningVariant tuning, float velocity) {
+	doorstop::HelicalTuningVariant tuning, float velocity, std::uint32_t seed = 1u) {
 	constexpr float rate = 48000.f;
 	constexpr float dt = 1.f / rate;
 	doorstop::HelicalContinuumEngine engine;
 	engine.setSampleRate(rate);
-	engine.setSpecimenSeed(1u);
+	engine.setSpecimenSeed(seed);
 	engine.setTuningVariant(tuning);
 	engine.strike(velocity);
 	StrikeResponse response;
@@ -202,6 +202,30 @@ Result velocityResponseStaysMonotonicThroughMaximum() {
 			+ " smallestDisplacementStep="
 			+ std::to_string(smallestDisplacementStep)
 			+ " smallestOutputStep=" + std::to_string(smallestOutputStep)};
+}
+
+Result bodyBendVelocityRetainsPresence() {
+	bool pass = true;
+	float smallestRetention = 1.f;
+	for (auto tuning : {doorstop::HelicalTuningVariant::DeepBodyBend,
+		doorstop::HelicalTuningVariant::DeepThickSpring}) {
+		for (std::uint32_t seed : {1u, 77u, 3076668551u}) {
+			const auto maximum = measureStrikeResponse(tuning, 1.f, seed);
+			const auto eightVolts = measureStrikeResponse(tuning, 0.8f, seed);
+			const float retention = eightVolts.rms400ms / maximum.rms400ms;
+			smallestRetention = std::min(smallestRetention, retention);
+			pass = pass && retention > 0.45f && retention < 1.f;
+			float previousRms = 0.f;
+			for (float velocity : {0.3f, 0.5f, 0.65f, 0.8f, 0.9f, 1.f}) {
+				const auto response = measureStrikeResponse(tuning, velocity, seed);
+				pass = pass && std::isfinite(response.rms400ms)
+					&& response.rms400ms > previousRms && response.peakOutput <= 5.0001f;
+				previousRms = response.rms400ms;
+			}
+		}
+	}
+	return {"Body bending retains 8 V presence with progressive strike dynamics", pass,
+		"smallest8Vto10VRms=" + std::to_string(smallestRetention)};
 }
 
 Result deepSwingHardRetriggerRemainsLouderAcrossPhase() {
@@ -411,6 +435,103 @@ Result deepContinuumIsAReactionBodyRevision() {
 			+ " signatureDelta=" + std::to_string(signatureDelta)};
 }
 
+Result deepContinuumRetainsDeepBendAfterAttack() {
+	// Measure the actual deep band separately from the 92 Hz mount/body.
+	// A broad low-pass energy test can pass while that resonance masks the bend.
+	constexpr int rate = 48000;
+	constexpr int count = 36000;
+	constexpr double pi = 3.14159265358979323846;
+	double smallestShare = 1.0;
+	bool pass = true;
+	for (std::uint32_t seed : {1u, 77u, 3076668551u}) {
+		doorstop::HelicalContinuumEngine engine;
+		engine.setSampleRate(float(rate));
+		engine.setSpecimenSeed(seed);
+		engine.setTuningVariant(doorstop::HelicalTuningVariant::DeepContinuum);
+		engine.strike(1.f);
+		for (int i = 0; i < rate / 5; ++i) engine.process(1.f / rate);
+		std::vector<double> samples(count);
+		double energy = 0.0;
+		for (int i = 0; i < count; ++i) {
+			samples[i] = engine.process(1.f / rate).outputVolts
+				* (0.5 - 0.5 * std::cos(2.0 * pi * i / (count - 1)));
+			energy += samples[i] * samples[i];
+		}
+		double deepEnergy = 0.0;
+		for (int bin = 8; bin <= 60; ++bin) { // 10.67–80 Hz, 1.33 Hz bins
+			const double coefficient = 2.0 * std::cos(2.0 * pi * bin / count);
+			double previous = 0.0;
+			double previous2 = 0.0;
+			for (double sample : samples) {
+				const double current = sample + coefficient * previous - previous2;
+				previous2 = previous;
+				previous = current;
+			}
+			deepEnergy += previous * previous + previous2 * previous2
+				- coefficient * previous * previous2;
+		}
+		const double share = 2.0 * deepEnergy / std::max(count * energy, 1e-12);
+		smallestShare = std::min(smallestShare, share);
+		pass = pass && std::isfinite(share) && share > 0.015 && share < 0.15;
+	}
+	return {"Deep Continuum retains deep bend energy after the attack", pass,
+		"smallestDeepBandShare=" + std::to_string(smallestShare)};
+}
+
+Result thickSpringExperimentsAreDistinctAndBounded() {
+	bool pass = true;
+	double smallestDifference = 1e30;
+	for (float rate : {44100.f, 48000.f, 96000.f, 192000.f}) {
+		std::array<doorstop::HelicalContinuumEngine, 4> engines;
+		const std::array<doorstop::HelicalTuningVariant, 4> variants {{
+			doorstop::HelicalTuningVariant::DeepContinuum,
+			doorstop::HelicalTuningVariant::DeepShortTail,
+			doorstop::HelicalTuningVariant::DeepBodyBend,
+			doorstop::HelicalTuningVariant::DeepThickSpring
+		}};
+		for (int j = 0; j < 4; ++j) {
+			engines[j].setSampleRate(rate);
+			engines[j].setSpecimenSeed(77u);
+			engines[j].setTuningVariant(variants[j]);
+			engines[j].strike(1.f);
+		}
+		std::array<double, 4> tail {};
+		std::array<double, 6> differences {};
+		for (int i = 0; i < int(3.f * rate); ++i) {
+			std::array<float, 4> outputs {};
+			for (int j = 0; j < 4; ++j) {
+				outputs[j] = engines[j].process(1.f / rate).outputVolts;
+				pass = pass && std::isfinite(outputs[j]) && std::fabs(outputs[j]) <= 5.0001f;
+				if (i >= int(rate)) tail[j] += double(outputs[j]) * outputs[j];
+			}
+			int comparison = 0;
+			for (int a = 0; a < 4; ++a) {
+				for (int b = a + 1; b < 4; ++b) {
+					differences[comparison++] += std::fabs(outputs[a] - outputs[b]);
+				}
+			}
+		}
+		pass = pass && tail[1] < tail[0] * 0.7 && tail[3] < tail[2] * 0.7;
+		for (double difference : differences) {
+			smallestDifference = std::min(smallestDifference, difference / rate);
+			pass = pass && difference / rate > 0.001;
+		}
+		// Retrigger already-ringing modes with alternating maximum impulses.
+		for (int i = 0; i < int(rate); ++i) {
+			for (auto& engine : engines) {
+				if (i % int(rate / 100.f) == 0) {
+					engine.strike((i / int(rate / 100.f)) % 2 ? -1.f : 1.f);
+				}
+				const auto frame = engine.process(1.f / rate);
+				pass = pass && std::isfinite(frame.outputVolts)
+					&& std::fabs(frame.outputVolts) <= 5.0001f && !frame.sleeping;
+			}
+		}
+	}
+	return {"Thick spring experiments differ, shorten tails, and tolerate retriggers", pass,
+		"smallestDifference=" + std::to_string(smallestDifference)};
+}
+
 Result deepSwingAudibleTailMatchesVisualSettling() {
 	constexpr float rate = 48000.f;
 	constexpr float dt = 1.f / rate;
@@ -566,11 +687,14 @@ int main() {
 		specimenPopulationIsDeterministicAndDistinct(),
 		v3EnergyMeterHasUsefulStrikeRange(),
 		velocityResponseStaysMonotonicThroughMaximum(),
+		bodyBendVelocityRetainsPresence(),
 		deepSwingHardRetriggerRemainsLouderAcrossPhase(),
 		deepSwingPeriodicMaximumBeatsMidrange(),
 		deepContinuumPeriodicMaximumBeatsMidrange(),
 		deepSwingHardStrikeKeepsItsLowBody(),
 		deepContinuumIsAReactionBodyRevision(),
+		deepContinuumRetainsDeepBendAfterAttack(),
+		thickSpringExperimentsAreDistinctAndBounded(),
 		deepSwingAudibleTailMatchesVisualSettling(),
 		darkTuningIsLowerAndWaveformDistinct(),
 		deepSwingTargetsHardStrikeDeformation(),

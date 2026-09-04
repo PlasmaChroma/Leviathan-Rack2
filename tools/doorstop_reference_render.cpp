@@ -132,7 +132,9 @@ void usage(const char* executable) {
 #if defined(DOORSTOP_REFERENCE_ANALYSIS)
 		<< "  --variant NAME      current, spring-only, modes-only, spring-forward,\n"
 		<< "                      spring-refined, rack-v2, boing-refined,\n"
-		<< "                      v3-boing-probe, v3-dark-boing, or v3-deep-swing\n"
+		<< "                      v3-boing-probe, v3-dark-boing, v3-deep-swing,\n"
+		<< "                      v3-deep-continuum, v3-deep-short-tail,\n"
+		<< "                      v3-deep-body-bend, or v3-deep-thick-spring\n"
 		<< "  --radiation-phase DEG  V2 phase probe: 0=extrema, 90=crossing\n"
 		<< "  --output-tap NAME   module (default) or preconditioned\n"
 #endif
@@ -216,6 +218,22 @@ int main(int argc, char** argv) {
 				else if (variantName == "v3-deep-swing") {
 					useHelicalEngine = true;
 					helicalTuning = doorstop::HelicalTuningVariant::DeepSwing;
+				}
+				else if (variantName == "v3-deep-continuum") {
+					useHelicalEngine = true;
+					helicalTuning = doorstop::HelicalTuningVariant::DeepContinuum;
+				}
+				else if (variantName == "v3-deep-short-tail") {
+					useHelicalEngine = true;
+					helicalTuning = doorstop::HelicalTuningVariant::DeepShortTail;
+				}
+				else if (variantName == "v3-deep-body-bend") {
+					useHelicalEngine = true;
+					helicalTuning = doorstop::HelicalTuningVariant::DeepBodyBend;
+				}
+				else if (variantName == "v3-deep-thick-spring") {
+					useHelicalEngine = true;
+					helicalTuning = doorstop::HelicalTuningVariant::DeepThickSpring;
 				}
 				else if (variantName == "rack-v2"
 					|| variantName == "boing-refined") {

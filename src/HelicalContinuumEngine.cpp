@@ -130,7 +130,12 @@ void HelicalContinuumEngine::updateSpecimenCoefficients() {
 		const float center = PAIR_FREQUENCIES[pair] * tuningFrequencyScale * stiffnessTrait
 			* wearStiffness * pairVariation;
 		const float split = PAIR_SPLITS[pair] * splitVariation;
-		const float t60 = PAIR_T60[pair]
+		// The short-tail experiment lets the deep pairs outlive the metallic
+		// body. Apply this at every velocity, independently of hard-hit decay.
+		const float baseT60 = usesShortTail() && pair >= 3
+			? std::min(PAIR_T60[pair], pair <= 5 ? 1.6f : 0.9f)
+			: PAIR_T60[pair];
+		const float t60 = baseT60
 			* (dark ? DARK_T60_SCALE[pair] : 1.f)
 			* dampingTrait * wearDamping;
 
@@ -235,10 +240,17 @@ void HelicalContinuumEngine::strike(float normalizedVelocity) {
 	strikePulse.remainingSubsteps = substeps;
 
 	strikeLight = std::max(strikeLight, magnitude);
-	if (tuningVariant == HelicalTuningVariant::DeepSwing
-		|| tuningVariant == HelicalTuningVariant::DeepContinuum) {
+	if (usesDeepSwing()) {
 		const float hardAmount = clamp01((magnitude - 0.65f) / 0.35f);
-		hardStrikeDrive = std::max(hardStrikeDrive, hardAmount * hardAmount);
+		float characterDrive = hardAmount * hardAmount;
+		if (usesBodyBend()) {
+			// Body bending is the voice's character, not a maximum-hit effect.
+			// Spread its onset across the playable velocity range: 8 V retains
+			// 84% of the drive instead of 18%, while 10 V remains unchanged.
+			const float bodyAmount = clamp01((magnitude - 0.20f) / 0.80f);
+			characterDrive = bodyAmount * bodyAmount * (3.f - 2.f * bodyAmount);
+		}
+		hardStrikeDrive = std::max(hardStrikeDrive, characterDrive);
 	}
 	sleeping = false;
 	quietTime = 0.f;
@@ -263,10 +275,8 @@ float HelicalContinuumEngine::calculateEnergy() const {
 }
 
 float HelicalContinuumEngine::processSubstep(float h) {
-	const bool deepSwing = tuningVariant == HelicalTuningVariant::DeepSwing
-		|| tuningVariant == HelicalTuningVariant::DeepContinuum;
-	const bool deepContinuum =
-		tuningVariant == HelicalTuningVariant::DeepContinuum;
+	const bool deepSwing = usesDeepSwing();
+	const bool deepContinuum = usesContinuum();
 	float externalX = 0.f;
 	float externalY = 0.f;
 	if (strikePulse.remainingSubsteps > 0) {
@@ -333,6 +343,10 @@ float HelicalContinuumEngine::processSubstep(float h) {
 	const float r2 = modes[0].position * modes[0].position + modes[1].position * modes[1].position;
 	const float bendStrain = 18000.f * r2;
 	const float normalizedBend = bendStrain / (1.f + bendStrain);
+	// Actual two-plane deformation drives the experiment's audible pitch
+	// motion. The bounded strain keeps the added stiffness positive and finite.
+	const float bodyBend = usesBodyBend()
+		? 8.f * bendStrain / (1.f + 8.f * bendStrain) : 0.f;
 
 	const float bendMotion = omega[0] * std::fabs(modes[0].position)
 		+ omega[1] * std::fabs(modes[1].position);
@@ -374,8 +388,10 @@ float HelicalContinuumEngine::processSubstep(float h) {
 			// sweep while retaining twice-per-cycle helical stress motion.
 			const float warpDepth = pair == 0 ? 0.10f
 				: 0.010f + 0.0025f * float(pair % 5);
+			const float bodyWarp = pair >= 1 && pair <= 6
+				? bodyBend * (0.90f - 0.12f * float(pair - 1)) : 0.f;
 			const float localStiffness = stiffnessScale
-				* (1.f + warpDepth * normalizedBend)
+				* (1.f + warpDepth * normalizedBend + bodyWarp)
 				* ((deepSwing && pair == 0)
 					? (1.f - 0.58f * hardStrikeDrive) : 1.f);
 			float dampingScale = 1.f;
@@ -437,7 +453,28 @@ float HelicalContinuumEngine::processSubstep(float h) {
 					/ (std::fabs(modes[0].position)
 						+ std::fabs(modes[1].position) + 1.0e-8f);
 				observerGain = 0.10f + localPhase + 0.18f * directional;
-				if (pair > 3) observerGain *= 1.f - 0.82f * hardStrikeDrive;
+				// Preserve the deep bend's audible weight on hard hits. The
+				// directional observer alone loses the persistent low radiation
+				// that makes Deep Swing's softened fundamental read as a boing.
+				if (pair <= 2) {
+					observerGain += hardStrikeDrive
+						* std::max(0.f, radiationFloor - observerGain);
+					// The fundamental needs its own weight; boosting all low
+					// pairs mostly reinforces the cap/body resonance above it.
+					if (pair == 0) observerGain *= 1.f + 2.f * hardStrikeDrive;
+				}
+				else {
+					// Retain a broad continuum floor between the sharper crossing
+					// lobes; the body can twang without disappearing between them.
+					const float crossingObserver = 0.08f
+						+ 0.92f * stationDepth * lobedRadiation;
+					observerGain += 0.65f * hardStrikeDrive
+						* (crossingObserver - observerGain);
+				}
+				if (pair > 3) observerGain *= 1.f - 0.50f * hardStrikeDrive;
+				// Keep metallic suppression after the hard-hit drive has faded;
+				// otherwise surviving partials become exposed late in the decay.
+				if (usesShortTail() && pair > 3) observerGain *= 0.65f;
 			}
 			observerGain *= 1.f + 0.045f * direction
 				* observerDirectionY[index];
@@ -460,7 +497,9 @@ float HelicalContinuumEngine::processSubstep(float h) {
 			- mountOmega * mountOmega * mountPosition;
 		mountVelocity += h * mountAcceleration;
 		mountPosition += h * mountVelocity;
-		radiation += 0.46f * mountAcceleration + 12.f * mountVelocity;
+		// Keep the mount supportive: a dominant 92 Hz reaction masks the
+		// deeper bend and the articulated wire, especially after RMS matching.
+		radiation += 0.16f * mountAcceleration + 4.f * mountVelocity;
 	}
 	// Recover the overall hard-strike level after the body-weighted projection.
 	// This gain follows the already-shaped modal sum, so it does not restore the
@@ -561,8 +600,7 @@ Frame HelicalContinuumEngine::process(float requestedSampleTime) {
 	// fundamental back into the panel's visual coordinate system.
 	constexpr float VISUAL_DISPLACEMENT_GAIN = 450.f;
 	constexpr float VISUAL_VELOCITY_GAIN = 1.625f;
-	const bool deepSwing = tuningVariant == HelicalTuningVariant::DeepSwing
-		|| tuningVariant == HelicalTuningVariant::DeepContinuum;
+	const bool deepSwing = usesDeepSwing();
 	const float deepSwingVisualScale = deepSwing
 		? 1.f + 0.55f * hardStrikeDrive : 1.f;
 	const float rawVisualDisplacement = modes[0].position

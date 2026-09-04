@@ -12,6 +12,9 @@ enum class HelicalTuningVariant : std::uint8_t {
 	DarkBoing,
 	DeepSwing,
 	DeepContinuum,
+	DeepShortTail,
+	DeepBodyBend,
+	DeepThickSpring,
 	Count
 };
 
@@ -124,6 +127,21 @@ private:
 	float processSubstep(float h);
 	float processDcBlocker(float input);
 	bool allFinite() const;
+	bool usesContinuum() const {
+		return tuningVariant >= HelicalTuningVariant::DeepContinuum
+			&& tuningVariant < HelicalTuningVariant::Count;
+	}
+	bool usesDeepSwing() const {
+		return tuningVariant == HelicalTuningVariant::DeepSwing || usesContinuum();
+	}
+	bool usesShortTail() const {
+		return tuningVariant == HelicalTuningVariant::DeepShortTail
+			|| tuningVariant == HelicalTuningVariant::DeepThickSpring;
+	}
+	bool usesBodyBend() const {
+		return tuningVariant == HelicalTuningVariant::DeepBodyBend
+			|| tuningVariant == HelicalTuningVariant::DeepThickSpring;
+	}
 };
 
 } // namespace doorstop

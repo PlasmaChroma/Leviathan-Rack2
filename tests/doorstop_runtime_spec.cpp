@@ -134,6 +134,27 @@ Result manualStrikeHeightControlsVelocity() {
 			+ " intense=" + std::to_string(intenseDisplacement)};
 }
 
+Result experimentalV3TuningsRoundTrip() {
+	bool pass = true;
+	for (auto tuning : {doorstop::HelicalTuningVariant::DeepShortTail,
+		doorstop::HelicalTuningVariant::DeepBodyBend,
+		doorstop::HelicalTuningVariant::DeepThickSpring}) {
+		Doorstop source;
+		source.engineMode.store(int(doorstop::EngineMode::ReferenceV3));
+		source.referenceV3Tuning.store(int(tuning));
+		json_t* saved = source.dataToJson();
+		Doorstop loaded;
+		loaded.dataFromJson(saved);
+		json_decref(saved);
+		loaded.process(processArgs());
+		pass = pass && loaded.referenceV3Tuning.load() == int(tuning)
+			&& loaded.engine.getReferenceV3TuningVariant() == tuning
+			&& loaded.engine.getEngineMode() == doorstop::EngineMode::ReferenceV3;
+	}
+	return {"Experimental V3 menu choices survive patch reload", pass,
+		"restored=" + std::to_string(pass)};
+}
+
 Result jsonRoundTripAndReset() {
 	Doorstop source;
 	source.allowVisualOverflow.store(false, std::memory_order_relaxed);
@@ -373,6 +394,7 @@ int main() {
 	results.push_back(manualStrikeWorks());
 	results.push_back(manualStrikeHeightControlsVelocity());
 	results.push_back(jsonRoundTripAndReset());
+	results.push_back(experimentalV3TuningsRoundTrip());
 	results.push_back(oldPatchAndRestoreCommand());
 	results.push_back(malformedBreakInJsonIsSafe());
 	results.push_back(newModuleAndSpecimenSemantics());
