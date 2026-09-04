@@ -11,6 +11,7 @@ enum class HelicalTuningVariant : std::uint8_t {
 	BoingProbe = 0,
 	DarkBoing,
 	DeepSwing,
+	DeepContinuum,
 	Count
 };
 
@@ -83,6 +84,9 @@ private:
 	std::array<float, MODE_COUNT> observerDirectionY {};
 	std::array<float, MODE_COUNT> strainWeight {};
 	std::array<float, MODE_COUNT> contactParticipation {};
+	std::array<float, PAIR_COUNT> stiffnessXX {};
+	std::array<float, PAIR_COUNT> stiffnessXY {};
+	std::array<float, PAIR_COUNT> stiffnessYY {};
 
 	Vec2 capPosition {};
 	Vec2 capVelocity {};
@@ -107,6 +111,9 @@ private:
 	float contactStiffness = 1.8e7f;
 	float contactDamping = 180.f;
 	float previousContactForce = 0.f;
+	float mountPosition = 0.f;
+	float mountVelocity = 0.f;
+	float mountAcceleration = 0.f;
 
 	void updateCoefficients();
 	void updateSpecimenCoefficients();

@@ -960,6 +960,9 @@ struct DoorstopWidget final : ModuleWidget {
 					addV3Tuning(
 						"Deep swing (hard strike)",
 						doorstop::HelicalTuningVariant::DeepSwing);
+					addV3Tuning(
+						"Deep continuum (reaction body)",
+						doorstop::HelicalTuningVariant::DeepContinuum);
 				}));
 			engineMenu->addChild(createCheckMenuItem(
 				"Dark spring physical model (Reference V2)", "",

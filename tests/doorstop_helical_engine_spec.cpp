@@ -177,7 +177,8 @@ Result velocityResponseStaysMonotonicThroughMaximum() {
 	for (doorstop::HelicalTuningVariant tuning : {
 		doorstop::HelicalTuningVariant::BoingProbe,
 		doorstop::HelicalTuningVariant::DarkBoing,
-		doorstop::HelicalTuningVariant::DeepSwing}) {
+		doorstop::HelicalTuningVariant::DeepSwing,
+		doorstop::HelicalTuningVariant::DeepContinuum}) {
 		StrikeResponse previous = measureStrikeResponse(tuning, 0.80f);
 		for (float velocity : {0.85f, 0.90f, 0.95f, 1.00f}) {
 			const StrikeResponse current = measureStrikeResponse(tuning, velocity);
@@ -232,14 +233,16 @@ Result deepSwingHardRetriggerRemainsLouderAcrossPhase() {
 			+ " smallestRmsMargin=" + std::to_string(smallestRmsMargin)};
 }
 
-StrikeResponse measurePeriodicRetrigger(float velocity, float intervalSeconds) {
+StrikeResponse measurePeriodicRetrigger(
+		doorstop::HelicalTuningVariant tuning,
+		float velocity, float intervalSeconds) {
 	constexpr float rate = 48000.f;
 	constexpr float dt = 1.f / rate;
 	doorstop::HelicalContinuumEngine engine;
 	engine.setSampleRate(rate);
 	engine.setSpecimenSeed(3076668551u);
 	engine.setBreakIn(0.0239455067f);
-	engine.setTuningVariant(doorstop::HelicalTuningVariant::DeepSwing);
+	engine.setTuningVariant(tuning);
 	const int intervalFrames = int(intervalSeconds * rate);
 	StrikeResponse response;
 	double sum = 0.0;
@@ -260,9 +263,11 @@ Result deepSwingPeriodicMaximumBeatsMidrange() {
 	float smallestPeakRatio = 100.f;
 	float smallestRmsRatio = 100.f;
 	for (float interval : {0.5f, 1.f, 2.f}) {
-		const StrikeResponse hard = measurePeriodicRetrigger(1.f, interval);
+		const StrikeResponse hard = measurePeriodicRetrigger(
+			doorstop::HelicalTuningVariant::DeepSwing, 1.f, interval);
 		for (float mediumVelocity : {0.5f, 0.55f}) {
 			const StrikeResponse medium = measurePeriodicRetrigger(
+				doorstop::HelicalTuningVariant::DeepSwing,
 				mediumVelocity, interval);
 			const float peakRatio = hard.peakOutput
 				/ std::max(medium.peakOutput, 1e-6f);
@@ -278,12 +283,38 @@ Result deepSwingPeriodicMaximumBeatsMidrange() {
 			+ " smallestRmsRatio=" + std::to_string(smallestRmsRatio)};
 }
 
+Result deepContinuumPeriodicMaximumBeatsMidrange() {
+	bool pass = true;
+	float smallestPeakRatio = 100.f;
+	float smallestRmsRatio = 100.f;
+	for (float interval : {0.5f, 1.f, 2.f}) {
+		const StrikeResponse hard = measurePeriodicRetrigger(
+			doorstop::HelicalTuningVariant::DeepContinuum, 1.f, interval);
+		for (float mediumVelocity : {0.5f, 0.55f}) {
+			const StrikeResponse medium = measurePeriodicRetrigger(
+				doorstop::HelicalTuningVariant::DeepContinuum,
+				mediumVelocity, interval);
+			const float peakRatio = hard.peakOutput
+				/ std::max(medium.peakOutput, 1e-6f);
+			const float rmsRatio = hard.rms400ms
+				/ std::max(medium.rms400ms, 1e-6f);
+			smallestPeakRatio = std::min(smallestPeakRatio, peakRatio);
+			smallestRmsRatio = std::min(smallestRmsRatio, rmsRatio);
+			pass = pass && peakRatio > 1.f && rmsRatio > 1.f;
+		}
+	}
+	return {"Deep Continuum periodic 10 V strikes stay above the midrange",
+		pass, "smallestPeakRatio=" + std::to_string(smallestPeakRatio)
+			+ " smallestRmsRatio=" + std::to_string(smallestRmsRatio)};
+}
+
 struct BodyBellEnergy {
 	double body = 0.0;
 	double bell = 0.0;
 };
 
-BodyBellEnergy measureDeepSwingBodyBellEnergy(
+BodyBellEnergy measureBodyBellEnergy(
+		doorstop::HelicalTuningVariant tuning,
 		float velocity, std::uint32_t seed) {
 	constexpr float rate = 48000.f;
 	constexpr float dt = 1.f / rate;
@@ -296,7 +327,7 @@ BodyBellEnergy measureDeepSwingBodyBellEnergy(
 	doorstop::HelicalContinuumEngine engine;
 	engine.setSampleRate(rate);
 	engine.setSpecimenSeed(seed);
-	engine.setTuningVariant(doorstop::HelicalTuningVariant::DeepSwing);
+	engine.setTuningVariant(tuning);
 	engine.strike(velocity);
 	float low250 = 0.f;
 	float low400 = 0.f;
@@ -319,8 +350,10 @@ Result deepSwingHardStrikeKeepsItsLowBody() {
 	float smallestBodyGain = 1e30f;
 	float smallestRatioGain = 1e30f;
 	for (std::uint32_t seed : {1u, 3076668551u}) {
-		const BodyBellEnergy medium = measureDeepSwingBodyBellEnergy(0.5f, seed);
-		const BodyBellEnergy hard = measureDeepSwingBodyBellEnergy(1.f, seed);
+		const BodyBellEnergy medium = measureBodyBellEnergy(
+			doorstop::HelicalTuningVariant::DeepSwing, 0.5f, seed);
+		const BodyBellEnergy hard = measureBodyBellEnergy(
+			doorstop::HelicalTuningVariant::DeepSwing, 1.f, seed);
 		const float bodyGain = float(hard.body / std::max(medium.body, 1e-12));
 		const float mediumRatio = float(medium.body / std::max(medium.bell, 1e-12));
 		const float hardRatio = float(hard.body / std::max(hard.bell, 1e-12));
@@ -332,6 +365,50 @@ Result deepSwingHardStrikeKeepsItsLowBody() {
 	return {"Deep Swing hard strikes favor low body instead of becoming a bell",
 		pass, "smallestBodyGain=" + std::to_string(smallestBodyGain)
 			+ " smallestBodyToBellGain=" + std::to_string(smallestRatioGain)};
+}
+
+Result deepContinuumIsAReactionBodyRevision() {
+	bool pass = true;
+	float smallestBodyGain = 1e30f;
+	float smallestBodyRatio = 1e30f;
+	for (std::uint32_t seed : {1u, 3076668551u}) {
+		const BodyBellEnergy deepSwing = measureBodyBellEnergy(
+			doorstop::HelicalTuningVariant::DeepSwing, 1.f, seed);
+		const BodyBellEnergy continuum = measureBodyBellEnergy(
+			doorstop::HelicalTuningVariant::DeepContinuum, 1.f, seed);
+		const float bodyGain = float(
+			continuum.body / std::max(deepSwing.body, 1e-12));
+		const float deepRatio = float(
+			deepSwing.body / std::max(deepSwing.bell, 1e-12));
+		const float continuumRatio = float(
+			continuum.body / std::max(continuum.bell, 1e-12));
+		const float ratioGain = continuumRatio / std::max(deepRatio, 1e-12f);
+		smallestBodyGain = std::min(smallestBodyGain, bodyGain);
+		smallestBodyRatio = std::min(smallestBodyRatio, ratioGain);
+		pass = pass && bodyGain > 0.65f && ratioGain > 1.f;
+	}
+	doorstop::HelicalContinuumEngine deepSwing;
+	doorstop::HelicalContinuumEngine continuum;
+	deepSwing.setSampleRate(48000.f);
+	continuum.setSampleRate(48000.f);
+	deepSwing.setSpecimenSeed(77u);
+	continuum.setSpecimenSeed(77u);
+	deepSwing.setTuningVariant(doorstop::HelicalTuningVariant::DeepSwing);
+	continuum.setTuningVariant(doorstop::HelicalTuningVariant::DeepContinuum);
+	deepSwing.strike(1.f);
+	continuum.strike(1.f);
+	double signatureDelta = 0.0;
+	for (int i = 0; i < 48000; ++i) {
+		signatureDelta += std::fabs(
+			deepSwing.process(1.f / 48000.f).outputVolts
+			- continuum.process(1.f / 48000.f).outputVolts);
+	}
+	const bool distinct = signatureDelta > 100.0;
+	return {"Deep Continuum is a distinct reaction-body revision",
+		pass && distinct,
+		"bodyGain=" + std::to_string(smallestBodyGain)
+			+ " bodyToBellGain=" + std::to_string(smallestBodyRatio)
+			+ " signatureDelta=" + std::to_string(signatureDelta)};
 }
 
 Result deepSwingAudibleTailMatchesVisualSettling() {
@@ -491,7 +568,9 @@ int main() {
 		velocityResponseStaysMonotonicThroughMaximum(),
 		deepSwingHardRetriggerRemainsLouderAcrossPhase(),
 		deepSwingPeriodicMaximumBeatsMidrange(),
+		deepContinuumPeriodicMaximumBeatsMidrange(),
 		deepSwingHardStrikeKeepsItsLowBody(),
+		deepContinuumIsAReactionBodyRevision(),
 		deepSwingAudibleTailMatchesVisualSettling(),
 		darkTuningIsLowerAndWaveformDistinct(),
 		deepSwingTargetsHardStrikeDeformation(),

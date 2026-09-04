@@ -161,6 +161,18 @@ void HelicalContinuumEngine::updateSpecimenCoefficients() {
 
 			strainWeight[index] = pair == 0 ? 1.f : 0.06f / float(pair + 1);
 		}
+
+		// The earlier variants integrate the split axes as principal modes. The
+		// continuum revision rotates those principal axes into the panel plane,
+		// producing genuine cross-plane restoring force and precession.
+		const float angle = 0.20f + 1.05f * specimenUnit(180u + pair);
+		const float sine = std::sin(angle);
+		const float cosine = std::cos(angle);
+		const float k0 = omegaSq[2 * pair];
+		const float k1 = omegaSq[2 * pair + 1];
+		stiffnessXX[pair] = cosine * cosine * k0 + sine * sine * k1;
+		stiffnessYY[pair] = sine * sine * k0 + cosine * cosine * k1;
+		stiffnessXY[pair] = sine * cosine * (k0 - k1);
 	}
 	updateCoefficients();
 }
@@ -186,6 +198,9 @@ void HelicalContinuumEngine::clearDynamicState() {
 	hardStrikeDrive = 0.f;
 	quietTime = 0.f;
 	previousContactForce = 0.f;
+	mountPosition = 0.f;
+	mountVelocity = 0.f;
+	mountAcceleration = 0.f;
 	sleeping = true;
 }
 
@@ -220,7 +235,8 @@ void HelicalContinuumEngine::strike(float normalizedVelocity) {
 	strikePulse.remainingSubsteps = substeps;
 
 	strikeLight = std::max(strikeLight, magnitude);
-	if (tuningVariant == HelicalTuningVariant::DeepSwing) {
+	if (tuningVariant == HelicalTuningVariant::DeepSwing
+		|| tuningVariant == HelicalTuningVariant::DeepContinuum) {
 		const float hardAmount = clamp01((magnitude - 0.65f) / 0.35f);
 		hardStrikeDrive = std::max(hardStrikeDrive, hardAmount * hardAmount);
 	}
@@ -239,10 +255,18 @@ float HelicalContinuumEngine::calculateEnergy() const {
 	}
 	energy += 0.5 * double(capVelocity.x) * capVelocity.x
 		+ 0.5 * double(capVelocity.y) * capVelocity.y;
+	const float mountOmega = 2.f * PI * 92.f;
+	energy += 0.5 * double(mountVelocity) * mountVelocity
+		+ 0.5 * double(mountOmega * mountOmega)
+			* mountPosition * mountPosition;
 	return float(std::min(energy, 1.0e12));
 }
 
 float HelicalContinuumEngine::processSubstep(float h) {
+	const bool deepSwing = tuningVariant == HelicalTuningVariant::DeepSwing
+		|| tuningVariant == HelicalTuningVariant::DeepContinuum;
+	const bool deepContinuum =
+		tuningVariant == HelicalTuningVariant::DeepContinuum;
 	float externalX = 0.f;
 	float externalY = 0.f;
 	if (strikePulse.remainingSubsteps > 0) {
@@ -285,7 +309,14 @@ float HelicalContinuumEngine::processSubstep(float h) {
 	// A unilateral coil force opposes excessive bend and therefore feeds back
 	// into the low mechanical state. Its change at contact onset is the small
 	// broadband drive; sustained force is not treated as a repeating impact.
-	const float bend = modes[0].position;
+	float bend = modes[0].position;
+	if (deepContinuum) {
+		// A small distributed gap reconstruction makes contact a property of the
+		// deformed helix rather than one privileged scalar coordinate.
+		bend += 0.28f * modes[1].position
+			+ 0.16f * modes[2].position + 0.08f * modes[3].position
+			- 0.06f * modes[4].position;
+	}
 	const float penetration = std::max(0.f, std::fabs(bend) - gapClearance);
 	float contactForce = 0.f;
 	if (penetration > 0.f) {
@@ -311,10 +342,15 @@ float HelicalContinuumEngine::processSubstep(float h) {
 	const float crossingPhase = motionSum > 1.0e-8f
 		? crossingMotion / motionSum : 0.f;
 	const float crossingLobe = crossingPhase * crossingPhase;
+	const float bendPhase = 1.f - crossingPhase;
+	const float bendLobe = bendPhase * bendPhase;
 	const float direction = modes[0].velocity < 0.f ? -1.f : 1.f;
 
 	float radiation = 0.f;
+	float baseReaction = 0.f;
 	for (int pair = 0; pair < PAIR_COUNT; ++pair) {
+		const float pairPositionX = modes[2 * pair].position;
+		const float pairPositionY = modes[2 * pair + 1].position;
 		for (int axis = 0; axis < 2; ++axis) {
 			const int index = 2 * pair + axis;
 			ModalState& mode = modes[index];
@@ -326,9 +362,11 @@ float HelicalContinuumEngine::processSubstep(float h) {
 			// brick-wall low-pass filter.
 			float generalizedForce = tipParticipation[index]
 				* (attachment + 0.08f * capTransmission);
-			if (axis == 0) {
-				generalizedForce -= contactParticipation[index] * contactForce;
-				if (pair > 0) {
+			if (axis == 0 || deepContinuum) {
+				const float contactProjection = contactParticipation[index]
+					* (axis == 0 ? 1.f : 0.28f);
+				generalizedForce -= contactProjection * contactForce;
+				if (!deepContinuum && axis == 0 && pair > 0) {
 					generalizedForce -= 0.30f * contactParticipation[index] * contactOnset;
 				}
 			}
@@ -338,10 +376,10 @@ float HelicalContinuumEngine::processSubstep(float h) {
 				: 0.010f + 0.0025f * float(pair % 5);
 			const float localStiffness = stiffnessScale
 				* (1.f + warpDepth * normalizedBend)
-				* ((tuningVariant == HelicalTuningVariant::DeepSwing && pair == 0)
+				* ((deepSwing && pair == 0)
 					? (1.f - 0.58f * hardStrikeDrive) : 1.f);
 			float dampingScale = 1.f;
-			if (tuningVariant == HelicalTuningVariant::DeepSwing) {
+			if (deepSwing) {
 				if (pair == 0) {
 					dampingScale = 1.f - 0.78f * hardStrikeDrive;
 				}
@@ -350,11 +388,23 @@ float HelicalContinuumEngine::processSubstep(float h) {
 					dampingScale += hardStrikeDrive * (1.f / hardT60 - 1.f);
 				}
 			}
+			float restoringForce = omegaSq[index] * mode.position;
+			if (deepContinuum) {
+				restoringForce = axis == 0
+					? stiffnessXX[pair] * pairPositionX
+						+ stiffnessXY[pair] * pairPositionY
+					: stiffnessXY[pair] * pairPositionX
+						+ stiffnessYY[pair] * pairPositionY;
+			}
 			mode.acceleration = generalizedForce
 				- dampingScale * damping[index] * mode.velocity
-				- localStiffness * omegaSq[index] * mode.position;
+				- localStiffness * restoringForce;
 			mode.velocity += h * mode.acceleration;
 			mode.position += h * mode.velocity;
+			if (deepContinuum && pair <= 3) {
+				baseReaction -= tipParticipation[index] * mode.acceleration
+					/ float(pair + 1);
+			}
 
 			const float observedMotion = mode.acceleration
 				+ RADIATION_VELOCITY_COEFFICIENT * mode.velocity;
@@ -370,14 +420,29 @@ float HelicalContinuumEngine::processSubstep(float h) {
 			// bank of continuously radiating bell partials.
 			const float hardRadiationShare = pair <= 2 ? 1.f : 0.f;
 			const float radiationFloor = 0.08f
-				+ (tuningVariant == HelicalTuningVariant::DeepSwing
+				+ (deepSwing
 					? 0.85f * hardStrikeDrive * hardRadiationShare : 0.f);
 			float observerGain = radiationFloor
 				+ stationDepth * (1.f - radiationFloor) * lobedRadiation;
+			if (deepContinuum) {
+				// Low coordinates radiate through both curvature and base motion;
+				// higher coordinates retain directional crossing articulation without
+				// sharing a single narrow gate across the whole spectrum.
+				const float localPhase = pair <= 2
+					? 0.38f * crossingLobe + 0.42f * bendLobe
+					: 0.58f * crossingLobe + 0.12f * bendLobe;
+				const float directional = std::fabs(
+					observerDirectionX[index] * modes[0].position
+					+ observerDirectionY[index] * modes[1].position)
+					/ (std::fabs(modes[0].position)
+						+ std::fabs(modes[1].position) + 1.0e-8f);
+				observerGain = 0.10f + localPhase + 0.18f * directional;
+				if (pair > 3) observerGain *= 1.f - 0.82f * hardStrikeDrive;
+			}
 			observerGain *= 1.f + 0.045f * direction
 				* observerDirectionY[index];
 			const float hardOutputScale =
-				tuningVariant == HelicalTuningVariant::DeepSwing
+				deepSwing
 					? 1.f + hardStrikeDrive
 						* (DEEP_HARD_OUTPUT_SCALE[pair] - 1.f)
 					: 1.f;
@@ -385,15 +450,34 @@ float HelicalContinuumEngine::processSubstep(float h) {
 				* observerGain * observedMotion;
 		}
 	}
+	if (deepContinuum) {
+		// The mount is driven continuously from spring reaction, never kicked by
+		// the trigger. Its short, damped response supplies causal low body.
+		const float mountOmega = 2.f * PI * 92.f;
+		const float mountDamping = 2.f * 0.22f * mountOmega;
+		mountAcceleration = 0.12f * baseReaction
+			- mountDamping * mountVelocity
+			- mountOmega * mountOmega * mountPosition;
+		mountVelocity += h * mountAcceleration;
+		mountPosition += h * mountVelocity;
+		radiation += 0.46f * mountAcceleration + 12.f * mountVelocity;
+	}
 	// Recover the overall hard-strike level after the body-weighted projection.
 	// This gain follows the already-shaped modal sum, so it does not restore the
 	// upper bell emphasis removed above.
-	if (tuningVariant == HelicalTuningVariant::DeepSwing) {
+	if (deepSwing) {
 		radiation *= 1.f + 0.50f * hardStrikeDrive;
+		if (deepContinuum) {
+			// Restore level after deliberately suppressing persistent upper-pair
+			// radiation. This acts on the already body-weighted observation, so it
+			// cannot reintroduce the bell balance removed above.
+			radiation *= 1.f + 1.40f * hardStrikeDrive;
+		}
 		// A harder cap hit has a stronger prompt attack even when the upper
 		// structural pairs remain crossing-gated. Keep this tied to the bounded
 		// strike pulse so it cannot turn into another sustained pitched voice.
-		radiation += 0.10f * hardStrikeDrive * externalX;
+		radiation += (deepContinuum ? 0.04f : 0.10f)
+			* hardStrikeDrive * externalX;
 	}
 	return radiation;
 }
@@ -413,6 +497,8 @@ bool HelicalContinuumEngine::allFinite() const {
 			|| !std::isfinite(mode.acceleration)) return false;
 	}
 	return std::isfinite(dcPreviousOutput) && std::isfinite(previousContactForce)
+		&& std::isfinite(mountPosition) && std::isfinite(mountVelocity)
+		&& std::isfinite(mountAcceleration)
 		&& std::isfinite(hardStrikeDrive);
 }
 
@@ -475,13 +561,15 @@ Frame HelicalContinuumEngine::process(float requestedSampleTime) {
 	// fundamental back into the panel's visual coordinate system.
 	constexpr float VISUAL_DISPLACEMENT_GAIN = 450.f;
 	constexpr float VISUAL_VELOCITY_GAIN = 1.625f;
-	const float deepSwingVisualScale = tuningVariant == HelicalTuningVariant::DeepSwing
+	const bool deepSwing = tuningVariant == HelicalTuningVariant::DeepSwing
+		|| tuningVariant == HelicalTuningVariant::DeepContinuum;
+	const float deepSwingVisualScale = deepSwing
 		? 1.f + 0.55f * hardStrikeDrive : 1.f;
 	const float rawVisualDisplacement = modes[0].position
 		* VISUAL_DISPLACEMENT_GAIN * visualAudibleEnvelope * deepSwingVisualScale;
 	// Preserve visible low-body motion below the large-swing range instead of
 	// letting the panel appear parked while the same bend mode is still audible.
-	const float visualDetailGain = tuningVariant == HelicalTuningVariant::DeepSwing
+	const float visualDetailGain = deepSwing
 		? 1.f + 8.f * hardStrikeDrive
 			* (1.f - std::min(std::fabs(rawVisualDisplacement) * 0.5f, 1.f))
 		: 1.f;
