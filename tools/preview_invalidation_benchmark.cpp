@@ -1,6 +1,7 @@
 // Native Rack-linked CPU microbenchmark; does not measure rendering or FPS.
 #include "WavePreviewGeometryKey.hpp"
 #include "WavePreviewTracer.hpp"
+#include "visual/SettledContourFramebuffer.hpp"
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -41,6 +42,19 @@ static void bench(const char* label, F fn) {
 }
 
 int main() {
+	visual_assets::ContourSettlement settlement;
+	std::array<float, 14> contourKey{};
+	require(settlement.observe(contourKey, 1.0), "initial contour dirties cache");
+	require(!settlement.settled(1.05), "moving contour draws directly");
+	require(!settlement.observe(contourKey, 1.05), "unchanged contour retains settling clock");
+	require(settlement.settled(1.11), "stable contour eligible after 100 ms");
+	for (size_t i = 0; i < contourKey.size(); ++i) {
+		contourKey[i] += 1.f;
+		require(settlement.observe(contourKey, 2.0 + i), "each geometry/appearance/scale component invalidates");
+		require(!settlement.settled(2.05 + i), "changed contour returns to direct drawing");
+	}
+	settlement.valid = false;
+	require(!settlement.settled(100.0), "context reset requires fresh settlement");
 	wave_preview::GeometryKey key;
 	require(key.accept(1.f, 3.f, 0.f, 106.f, 48.f), "initial geometry accepted");
 	for (int i = 1; i <= 12000; ++i) {

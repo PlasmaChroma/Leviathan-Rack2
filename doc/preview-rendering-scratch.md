@@ -87,3 +87,109 @@ export PATH="/c/Program Files/VCV/Rack2Pro":/mingw64/bin:/usr/bin
 
 Next: measure actual Proc preview work separately, then compare direct and retained
 contour rendering. No new contour cache or phosphor scheduling change in this pass.
+
+### Checkpoint feedback
+
+The user tested this pass in Rack, noticed no behavior changes, and reported a
+possible performance improvement. This is qualitative evidence, not a measured
+speedup. The user committed the baseline before the next experiment.
+
+### Actual contour benchmark — 2026-09-05
+
+Moved the existing eight geometry/stroke methods into `ProcPreviewGeometry.hpp`.
+The live widget and benchmark use the same implementation and Proc's own shape
+math. Verified extracted arithmetic and NanoVG drawing calls against the checkpoint.
+The production rendering backend is still direct NanoVG.
+
+`tools/proc_preview_render_benchmark.cpp` creates a hidden native Windows GL
+context and uses Rack's NanoVG GL2 implementation with antialiasing and stencil
+strokes. It compares direct strokes with independently allocated retained contour
+surfaces, one per simulated instance. Both render into the same output target.
+Scenarios: 1 and 16 contours, 1× and 4× raster scale, stationary and changing rise
+ratio. The render fixture uses shape=0.6; it is not an exhaustive shape sweep.
+
+Each scenario discards 100 warm-up frames and measures 500 frames. CPU timings
+include NanoVG frame submission and framebuffer switching; GPU elapsed queries
+cover that rendering work and are collected asynchronously. Geometry generation,
+allocations, query polling, glFlush, and pixel readback are outside CPU render
+timings. No glFinish is used. All 500 GPU samples were obtained in every scenario
+in both final runs. GPU timing shows quantization at these small durations.
+
+RTX 3090, NVIDIA 560.94, native MINGW64 O3/fast-math. Representative first-run
+medians in microseconds (CPU and GPU are distinct measurements, not additive):
+
+| Workload | Direct CPU | Cached CPU | Direct GPU | Cached GPU |
+| --- | ---: | ---: | ---: | ---: |
+| Stationary, 1 contour, 1× | 11.3 | 0.7 | 6.144 | 5.120 |
+| Changing, 1 contour, 1× | 11.5 | 12.2 | 6.144 | 16.384 |
+| Stationary, 16 contours, 1× | 169.6 | 4.5 | 32.768 | 8.192 |
+| Changing, 16 contours, 1× | 172.0 | 188.4 | 32.768 | 153.600 |
+| Stationary, 1 contour, 4× | 11.2 | 0.6 | 7.168 | 6.144 |
+| Changing, 1 contour, 4× | 11.4 | 12.1 | 6.144 | 17.408 |
+
+Separate geometry benchmark, median batch-average microseconds:
+0.490 for simplification alone, 1.407 for ratio rebuild with warm LUTs, and 12.241
+for shape rebuild including LUTs. Fifty measured batches of 1,000 operations after
+five warm-up batches. These operations overlap: do not add them together.
+
+The repeat run preserved the tradeoff: stationary single-contour CPU 12.2 vs 0.7 µs;
+changing single-contour GPU 6.144 vs 16.384 µs. Full distributions (median/p95),
+sample counts, hardware identity, and pixel errors are in
+[run 1](benchmarks/proc-preview-contour-run1.txt) and
+[run 2](benchmarks/proc-preview-contour-run2.txt).
+
+Outside timing, compare each scenario's final cached output against direct output.
+All single-contour cases matched byte-for-byte; the 16-contour cases differed by
+at most 1 in an 8-bit channel. GL error checks passed. This covers the sampled
+contours and aligned scales, not highlights, fractional zoom, themes, or DAW reopen.
+
+Interpretation: a retained contour is promising after geometry/appearance settles.
+Continuously rebuilding it is counterproductive, particularly on the GPU. Next
+candidate: optional settle-then-cache behavior with direct drawing while geometry,
+highlight color, or resolution changes. Keep marker, text, and history independent.
+Do not infer Rack frame-time gains from this isolated, unpaced offscreen workload:
+widget traversal, shared NanoVG batching, live marker/text, history, grid, surface
+lifecycle, and application frame pacing are not included. Preview-specific live
+telemetry remains pending; existing Process / Step / Draw metrics are unchanged.
+
+Validation: native plugin.dll build and all 10 Proc runtime tests passed. No cache
+backend has been enabled in the live widget by this measurement pass.
+
+Reproduce inside native MINGW64:
+
+```sh
+make -j10 build/tools/proc_preview_render_benchmark
+export PATH="/c/Program Files/VCV/Rack2Pro":/mingw64/bin:/usr/bin
+./build/tools/proc_preview_render_benchmark.exe
+```
+
+### Adaptive contour cache in Proc — 2026-09-05
+
+Implemented automatic direct-while-changing / cached-when-settled rendering in
+the live widget. After 100 ms with unchanged geometry, highlight selection/color,
+dimensions, transform scale, and display density, the contour renders once into
+a Rack FramebufferWidget. Changes immediately bypass that cache and restart the
+settlement interval. No menu setting or saved-state change is required.
+
+The contour surface is drawn explicitly after history and before marker/text.
+Its normal tree draw does nothing; normal stepping/context events still propagate.
+The marker, frequency, grid and history do not invalidate it. Nested framebuffer
+draws and rotated/skewed transforms use the direct path. Raster resolution follows
+Rack's current scale after settlement, rather than allocating repeatedly during zoom.
+
+Rack owns the framebuffer resources and context events; cached images are checked
+through the shared NanoVG lifecycle helper before reuse. Context events restart
+settlement. A missing image falls back to direct drawing. A settled dirty image is
+rendered before compositing to avoid displaying stale geometry if Rack would defer
+the update. Rack's bypass/deferred-render behavior was checked against its
+[FramebufferWidget implementation](https://github.com/VCVRack/Rack/blob/v2/src/widget/FramebufferWidget.cpp).
+
+Validation: native Windows plugin.dll linked, all 10 Proc runtime tests passed,
+and settlement checks passed for initial draw, unchanged keys, all key components,
+100 ms eligibility, return to direct drawing, and context reset. The previous
+synthetic rendering timings establish the hypothesis, not this integration's speed.
+
+Next live check: slow/fast knob and CV changes, release then wait, hover highlights,
+moving marker on a stable shape, normal/fractional/high zoom, and DAW close/reopen.
+Look for any flash or contour shift when the cache becomes active; compare Draw
+timings for stationary and continuously changing contours. Not installed by Codex.

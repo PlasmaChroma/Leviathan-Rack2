@@ -7,8 +7,10 @@
 #include "visual/PlasmaConduit.hpp"
 #include "visual/PreviewSurface.hpp"
 #include "visual/PhosphorPreview.hpp"
+#include "visual/SettledContourFramebuffer.hpp"
 #include "WavePreviewTracer.hpp"
 #include "WavePreviewGeometryKey.hpp"
+#include "ProcPreviewGeometry.hpp"
 #include <dsp/minblep.hpp>
 #include <array>
 #include <cstdio>
@@ -1188,13 +1190,9 @@ struct ProcPreviewEdgeInteraction {
 	bool curveDragging = false;
 };
 
-struct WavePreviewWidget : Widget {
+struct WavePreviewWidget : Widget, ProcPreviewGeometry<Proc> {
 	// Small preview box: lower geometry density reduces UI cost while staying smooth.
-	static constexpr int POINT_COUNT = 128;
-	static constexpr int PREVIEW_LUT_SIZE = 512;
 	static constexpr float CENTER_LINE_WIDTH = 1.0f;
-	static constexpr float WAVE_LINE_WIDTH = 1.4f;
-	static constexpr float WAVE_EDGE_PAD = 1.0f;
 	static constexpr float DOT_RADIUS = 2.1f;
 	static constexpr float DOT_SHOW_MAX_HZ = 2.0f;
 	static constexpr float DOT_HIDE_MIN_HZ = 2.4f;
@@ -1205,18 +1203,6 @@ struct WavePreviewWidget : Widget {
 		static constexpr float TRAIL_LINE_WIDTH = 1.15f;
 		static constexpr int TRAIL_DRAW_STRIDE = 2;
 		static constexpr int TRAIL_CAPTURE_STRIDE = 1;
-	std::array<Vec, POINT_COUNT> points {};
-	struct SimplifiedPreviewPath {
-		std::array<Vec, POINT_COUNT> points {};
-		int count = 0;
-	};
-	SimplifiedPreviewPath simplifiedFullPath;
-	SimplifiedPreviewPath simplifiedRisePath;
-	SimplifiedPreviewPath simplifiedFallPath;
-	std::array<float, PREVIEW_LUT_SIZE> cachedRiseLut {};
-	std::array<float, PREVIEW_LUT_SIZE> cachedFallLut {};
-	float cachedLutCurveSigned = 0.f;
-	bool cachedLutsValid = false;
 	WavePreviewTracer<POINT_COUNT, TRAIL_FRAME_COUNT> curveTracer;
 	WavePreviewBufferedTracer<POINT_COUNT> frameTracer;
 	visual_assets::PhosphorPreview<POINT_COUNT>* phosphor = nullptr;
@@ -1226,54 +1212,25 @@ struct WavePreviewWidget : Widget {
 	ProcPreviewEdgeInteraction* edgeInteraction = nullptr;
 	wave_preview::GeometryKey geometryKey;
 	int activeTracerBackend = -1;
-	bool pointsValid = false;
-	int peakPointIndex = POINT_COUNT / 2;
 	float lastFreqHz = 100.f;
 	float dotXNorm = 0.f;
 	float dotYNorm = 0.f;
 	bool dotVisible = false;
+	visual_assets::SettledContourFramebuffer* contourCache = nullptr;
+	struct ContourLayer : TransparentWidget {
+		WavePreviewWidget* preview = nullptr;
+		void draw(const DrawArgs& args) override { preview->drawWaveform(args); }
+	};
+	ContourLayer* contourLayer = nullptr;
 
 	explicit WavePreviewWidget(Proc* module) : modulePtr(module) {
 		phosphor = new visual_assets::PhosphorPreview<POINT_COUNT>();
 		addChild(phosphor);
-	}
-
-	static void buildSegmentLut(std::array<float, PREVIEW_LUT_SIZE>& lut, float curveSigned, bool rising) {
-		// Build once per preview update. Midpoint integration reduces visual artifacts at extreme curve asymmetry.
-		float scale = Proc::slopeWarpScale(curveSigned);
-		float dp = 1.f / float(PREVIEW_LUT_SIZE - 1);
-		float x = rising ? 0.f : 1.f;
-		lut[0] = x;
-		for (int i = 1; i < PREVIEW_LUT_SIZE; ++i) {
-			float k1 = Proc::slopeWarp(x, curveSigned) * scale;
-			float xMid = rising ? (x + 0.5f * dp * k1) : (x - 0.5f * dp * k1);
-			xMid = clamp(xMid, 0.f, 1.f);
-			float k2 = Proc::slopeWarp(xMid, curveSigned) * scale;
-			x += rising ? (dp * k2) : (-dp * k2);
-			x = clamp(x, 0.f, 1.f);
-			lut[i] = x;
-		}
-		lut.front() = rising ? 0.f : 1.f;
-		lut.back() = rising ? 1.f : 0.f;
-	}
-
-	static float sampleSegmentLut(const std::array<float, PREVIEW_LUT_SIZE>& lut, float t) {
-		t = clamp(t, 0.f, 1.f);
-		float idx = t * float(PREVIEW_LUT_SIZE - 1);
-		int i0 = int(idx);
-		int i1 = std::min(i0 + 1, PREVIEW_LUT_SIZE - 1);
-		float f = idx - float(i0);
-		return lut[i0] + (lut[i1] - lut[i0]) * f;
-	}
-
-	void ensureSegmentLuts(float curveSigned) {
-		if (cachedLutsValid && curveSigned == cachedLutCurveSigned) {
-			return;
-		}
-		buildSegmentLut(cachedRiseLut, curveSigned, true);
-		buildSegmentLut(cachedFallLut, curveSigned, false);
-		cachedLutCurveSigned = curveSigned;
-		cachedLutsValid = true;
+		contourCache = new visual_assets::SettledContourFramebuffer();
+		contourLayer = new ContourLayer();
+		contourLayer->preview = this;
+		contourCache->addChild(contourLayer);
+		addChild(contourCache);
 	}
 
 	int highlightedEdge() const {
@@ -1336,126 +1293,25 @@ struct WavePreviewWidget : Widget {
 			1.f);
 	}
 
-	void rebuildSimplifiedPath(SimplifiedPreviewPath& destination, int start, int end) {
-		destination.count = 0;
-		start = clamp(start, 0, POINT_COUNT - 1);
-		end = clamp(end, 0, POINT_COUNT - 1);
-		const int count = end - start + 1;
-		if (count < 2) {
-			return;
-		}
-		wave_preview::simplifyPath(points.data() + start, count, 1, 0.02f,
-			[&destination](const Vec& pt, bool) {
-				if (destination.count < POINT_COUNT) {
-					destination.points[size_t(destination.count++)] = pt;
-				}
-			});
-	}
-
-	void rebuildSimplifiedPaths() {
-		const int peakIndex = clamp(peakPointIndex, 1, POINT_COUNT - 2);
-		rebuildSimplifiedPath(simplifiedFullPath, 0, POINT_COUNT - 1);
-		rebuildSimplifiedPath(simplifiedRisePath, 0, peakIndex);
-		rebuildSimplifiedPath(simplifiedFallPath, peakIndex, POINT_COUNT - 1);
-	}
-
-	const SimplifiedPreviewPath* simplifiedPathForSegment(int start, int end) const {
-		const int peakIndex = clamp(peakPointIndex, 1, POINT_COUNT - 2);
-		if (start == 0 && end == POINT_COUNT - 1) return &simplifiedFullPath;
-		if (start == 0 && end == peakIndex) return &simplifiedRisePath;
-		if (start == peakIndex && end == POINT_COUNT - 1) return &simplifiedFallPath;
-		return nullptr;
-	}
-
-	void drawWaveSegment(const DrawArgs& args, int start, int end, NVGcolor color) {
-		if (!pointsValid) {
-			return;
-		}
-		const SimplifiedPreviewPath* path = simplifiedPathForSegment(start, end);
-		if (!path || path->count < 2) {
-			return;
-		}
-		NVGcontext* vg = args.vg;
-		nvgBeginPath(vg);
-		nvgMoveTo(vg, path->points[0].x, path->points[0].y);
-		for (int i = 1; i < path->count; ++i) {
-			nvgLineTo(vg, path->points[size_t(i)].x, path->points[size_t(i)].y);
-		}
-		nvgStrokeColor(vg, color);
-		nvgStrokeWidth(vg, WAVE_LINE_WIDTH);
-		nvgLineCap(vg, NVG_BUTT);
-		nvgLineJoin(vg, NVG_ROUND);
-		nvgStroke(vg);
-	}
-
 	void drawWaveform(const DrawArgs& args) {
 		const int edge = highlightedEdge();
 		if (edge == 0) {
-			drawWaveSegment(args, 0, POINT_COUNT - 1, waveformColor());
+			drawWaveSegment(args.vg, 0, POINT_COUNT - 1, waveformColor());
 			return;
 		}
 		if (edge == 3) {
-			drawWaveSegment(args, 0, POINT_COUNT - 1, activeCurveColor());
+			drawWaveSegment(args.vg, 0, POINT_COUNT - 1, activeCurveColor());
 			return;
 		}
 		const int peakIndex = clamp(peakPointIndex, 1, POINT_COUNT - 2);
 		const NVGcolor highlightColor = activeEdgeColor(edge);
-		drawWaveSegment(args, 0, peakIndex, edge == 1 ? highlightColor : waveformColor());
-		drawWaveSegment(args, peakIndex, POINT_COUNT - 1, edge == 2 ? highlightColor : waveformColor());
-	}
-
-	void rebuildPoints(float riseTime, float fallTime, float curveSigned, bool interactiveRecent) {
-		float w = std::max(box.size.x, 1.f);
-		float h = std::max(box.size.y, 1.f);
-		float drawPad = 0.5f * WAVE_LINE_WIDTH + WAVE_EDGE_PAD;
-		float left = drawPad;
-		float top = drawPad;
-		float right = std::max(left + 1.f, w - drawPad);
-		float bottom = std::max(top + 1.f, h - drawPad);
-		float drawW = right - left;
-		float drawH = bottom - top;
-		// The preview always shows exactly one full rise+fall cycle across widget width.
-		float totalTime = std::max(riseTime + fallTime, 1e-6f);
-		float riseRatio = riseTime / totalTime;
-		float peakX = left + riseRatio * drawW;
-		float riseWidth = std::max(peakX - left, 1e-4f);
-		float fallWidth = std::max(right - peakX, 1e-4f);
-		// Reserved hook if we later render interactive-state emphasis.
-		(void) interactiveRecent;
-		ensureSegmentLuts(curveSigned);
-
-		for (int i = 0; i < POINT_COUNT; ++i) {
-			float xNorm = float(i) / float(POINT_COUNT - 1);
-			float x = left + xNorm * drawW;
-			float y = -1.f;
-			if (x <= peakX) {
-				float t = (x - left) / riseWidth;
-				float v = sampleSegmentLut(cachedRiseLut, t);
-				y = -1.f + 2.f * v;
-			}
-			else {
-				float t = (x - peakX) / fallWidth;
-				float v = sampleSegmentLut(cachedFallLut, t);
-				y = -1.f + 2.f * v;
-			}
-			float py = top + (0.5f - 0.5f * y) * drawH;
-			py = clamp(py, top, bottom);
-			points[i] = Vec(x, py);
-		}
-
-			// Preserve full crest height without flattening the apex into a
-			// two-point plateau when the true peak falls between sample columns.
-			float peakIndexF = riseRatio * float(POINT_COUNT - 1);
-			int peakIndex = std::max(1, std::min(POINT_COUNT - 2, int(std::round(peakIndexF))));
-			peakPointIndex = peakIndex;
-			points[peakIndex] = Vec(peakX, top);
-			points.front() = Vec(left, bottom);
-			points.back() = Vec(right, bottom);
-		pointsValid = true;
-		rebuildSimplifiedPaths();
+		drawWaveSegment(args.vg, 0, peakIndex, edge == 1 ? highlightColor : waveformColor());
+		drawWaveSegment(args.vg, peakIndex, POINT_COUNT - 1, edge == 2 ? highlightColor : waveformColor());
 	}
 
 	void step() override {
+		contourCache->box.size = box.size;
+		contourLayer->box.size = box.size;
 		const bool usePhosphor = modulePtr
 			&& modulePtr->previewTracerEnabled.load(std::memory_order_relaxed)
 			&& modulePtr->previewPhosphorEnabled.load(std::memory_order_relaxed);
@@ -1472,7 +1328,7 @@ struct WavePreviewWidget : Widget {
 		Widget::step();
 		if (!modulePtr) {
 			if (geometryKey.accept(0.01f, 0.01f, 0.f, box.size.x, box.size.y) || !pointsValid) {
-				rebuildPoints(0.01f, 0.01f, 0.f, false);
+				rebuildPoints(box.size, 0.01f, 0.01f, 0.f, false);
 			}
 			return;
 		}
@@ -1536,7 +1392,7 @@ struct WavePreviewWidget : Widget {
 					frameTracer.capture(points, nowSec, box.size, style);
 				}
 			}
-			rebuildPoints(riseTime, fallTime, curveSigned, interactiveRecent);
+			rebuildPoints(box.size, riseTime, fallTime, curveSigned, interactiveRecent);
 		}
 		if (phosphorActive && pointsValid) {
 			if (!phosphorReferenceValid) {
@@ -1587,7 +1443,18 @@ struct WavePreviewWidget : Widget {
 					frameTracer.draw(args.vg, nowSec, box.size, style);
 				}
 			}
-			drawWaveform(args);
+			float transform[6];
+			nvgCurrentTransform(args.vg, transform);
+			const int edge = highlightedEdge();
+			const NVGcolor color = edge == 3 ? activeCurveColor()
+				: edge ? activeEdgeColor(edge) : waveformColor();
+			// Geometry, highlight appearance and raster scale invalidate the
+			// contour. Live marker, period and fading history do not.
+			const std::array<float, 14> key{{geometryKey.riseFraction, geometryKey.shape,
+				box.size.x, box.size.y, float(edge), color.r, color.g, color.b, color.a,
+				transform[0], transform[3], transform[1], transform[2],
+				APP && APP->window ? APP->window->pixelRatio : 1.f}};
+			contourCache->drawContour(args, key, nowSec);
 		}
 		if (pointsValid && dotVisible) {
 			float w = std::max(box.size.x, 1.f);
