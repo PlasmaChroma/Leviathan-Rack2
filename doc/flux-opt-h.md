@@ -105,7 +105,7 @@ Separating curve and dot counters prevents high-frequency dot updates from inval
 
 ### 4.2 Integral Flux preview UI
 
-Implementation: `src/IntegralFluxUI.inc`
+Implementation: `src/IntegralFluxWidget.cpp`
 
 #### Segment LUT cache
 
@@ -315,7 +315,7 @@ For every subsequent Integral Flux or Proc optimization:
 | File | Responsibility |
 | --- | --- |
 | `src/IntegralFlux.cpp` | Integral Flux DSP, state, preview publication, audio telemetry |
-| `src/IntegralFluxUI.inc` | Integral Flux preview generation and drawing |
+| `src/IntegralFluxWidget.cpp` | Integral Flux preview generation and drawing |
 | `src/Proc.cpp` | Proc DSP, state, preview, UI, and telemetry |
 | `tests/integral_flux_runtime_spec.cpp` | Integral Flux compatibility and cross-platform stress tests |
 | `tests/proc_runtime_spec.cpp` | Proc compatibility and cross-platform stress tests |

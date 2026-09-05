@@ -16,7 +16,7 @@ Modules currently using the labels helper include:
 - `src/BifurxUI.cpp`
 - `src/WyrmWidget.cpp`
 - `src/Proc.cpp`
-- `src/IntegralFluxUI.cpp`
+- `src/IntegralFluxWidget.cpp`
 - `src/UndertowWidget.cpp`
 - `src/TemporalDeckUI.cpp`
 

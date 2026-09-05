@@ -2456,3 +2456,5 @@ struct IntegralFluxWidget : ModuleWidget {
 };
 
 } // namespace
+
+Model* modelIntegralFlux = createModel<IntegralFlux, IntegralFluxWidget>("IntegralFlux");

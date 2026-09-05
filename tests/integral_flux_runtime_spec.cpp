@@ -37,8 +37,7 @@ void ModuleTeardownTimer::begin(int moduleId) {
 ModuleTeardownTimer::~ModuleTeardownTimer() {
 }
 
-#define INTEGRAL_FLUX_HEADLESS_TEST 1
-#include "../src/IntegralFlux.cpp"
+#include "../src/IntegralFlux.hpp"
 
 namespace {
 
@@ -84,11 +83,11 @@ uint64_t hashFloat(uint64_t hash, float value) {
 	return hash;
 }
 
-void connectInput(IntegralFluxImpl& module, int inputId) {
+void connectInput(IntegralFlux& module, int inputId) {
 	module.inputs[inputId].channels = 1;
 }
 
-void connectOutput(IntegralFluxImpl& module, int outputId) {
+void connectOutput(IntegralFlux& module, int outputId) {
 	module.outputs[outputId].channels = 1;
 }
 
@@ -121,7 +120,7 @@ TestResult releasedSchemaIsStable() {
 }
 
 TestResult persistedSettingsRoundTrip() {
-	IntegralFluxImpl source;
+	IntegralFlux source;
 	source.ch1.cycleLatched = true;
 	source.ch4.cycleLatched = false;
 	source.bandlimitedGateOutputs.store(true, std::memory_order_relaxed);
@@ -133,7 +132,7 @@ TestResult persistedSettingsRoundTrip() {
 	source.previewRenderMode.store(1, std::memory_order_relaxed);
 
 	json_t* state = source.dataToJson();
-	IntegralFluxImpl restored;
+	IntegralFlux restored;
 	restored.dataFromJson(state);
 	json_decref(state);
 
@@ -151,7 +150,7 @@ TestResult persistedSettingsRoundTrip() {
 }
 
 TestResult previewSnapshotsStayCoherent() {
-	IntegralFluxImpl module;
+	IntegralFlux module;
 	std::atomic<bool> ready {false};
 	std::atomic<bool> done {false};
 	std::atomic<bool> coherent {true};
@@ -210,7 +209,7 @@ TestResult previewSnapshotsStayCoherent() {
 }
 
 TestResult mixerNormalizationContractIsStable() {
-	IntegralFluxImpl module;
+	IntegralFlux module;
 	connectInput(module, IntegralFlux::INPUT_2_INPUT);
 	connectInput(module, IntegralFlux::INPUT_3_INPUT);
 	connectOutput(module, IntegralFlux::OR_OUT_OUTPUT);
@@ -244,12 +243,12 @@ TestResult mixerNormalizationContractIsStable() {
 }
 
 TestResult slewModeTracksSignalWhileIdle() {
-	IntegralFluxImpl module;
+	IntegralFlux module;
 	connectInput(module, IntegralFlux::INPUT_1_INPUT);
 	connectOutput(module, IntegralFlux::CH_1_UNITY_OUTPUT);
 	module.params[IntegralFlux::RISE_1_PARAM].setValue(0.f);
 	module.params[IntegralFlux::FALL_1_PARAM].setValue(0.f);
-	module.params[IntegralFlux::LIN_LOG_1_PARAM].setValue(IntegralFluxImpl::LINEAR_SHAPE);
+	module.params[IntegralFlux::LIN_LOG_1_PARAM].setValue(IntegralFlux::LINEAR_SHAPE);
 	Module::ProcessArgs args = processArgs();
 
 	module.inputs[IntegralFlux::INPUT_1_INPUT].setVoltage(6.f);
@@ -257,7 +256,7 @@ TestResult slewModeTracksSignalWhileIdle() {
 		args.frame = frame;
 		module.process(args);
 	}
-	const bool roseToTarget = module.ch1.phase == IntegralFluxImpl::OUTER_IDLE
+	const bool roseToTarget = module.ch1.phase == IntegralFlux::OUTER_IDLE
 		&& nearlyEqual(module.ch1.out, 6.f)
 		&& nearlyEqual(module.outputs[IntegralFlux::CH_1_UNITY_OUTPUT].getVoltage(), 6.f);
 
@@ -266,7 +265,7 @@ TestResult slewModeTracksSignalWhileIdle() {
 		args.frame = frame;
 		module.process(args);
 	}
-	const bool fellToTarget = module.ch1.phase == IntegralFluxImpl::OUTER_IDLE
+	const bool fellToTarget = module.ch1.phase == IntegralFlux::OUTER_IDLE
 		&& nearlyEqual(module.ch1.out, 2.f)
 		&& nearlyEqual(module.outputs[IntegralFlux::CH_1_UNITY_OUTPUT].getVoltage(), 2.f);
 	const bool pass = roseToTarget && fellToTarget;
@@ -275,12 +274,12 @@ TestResult slewModeTracksSignalWhileIdle() {
 }
 
 TestResult triggerAndRetriggerContractIsStable() {
-	IntegralFluxImpl module;
+	IntegralFlux module;
 	connectInput(module, IntegralFlux::INPUT_1_TRIG_INPUT);
 	connectOutput(module, IntegralFlux::CH_1_UNITY_OUTPUT);
 	module.params[IntegralFlux::RISE_1_PARAM].setValue(0.25f);
 	module.params[IntegralFlux::FALL_1_PARAM].setValue(0.25f);
-	module.params[IntegralFlux::LIN_LOG_1_PARAM].setValue(IntegralFluxImpl::LINEAR_SHAPE);
+	module.params[IntegralFlux::LIN_LOG_1_PARAM].setValue(IntegralFlux::LINEAR_SHAPE);
 	Module::ProcessArgs args = processArgs();
 	int frame = 0;
 	auto processVoltage = [&](float voltage) {
@@ -291,27 +290,27 @@ TestResult triggerAndRetriggerContractIsStable() {
 
 	processVoltage(0.f);
 	processVoltage(10.f);
-	const bool initialTriggerAccepted = module.ch1.phase == IntegralFluxImpl::OUTER_RISE;
+	const bool initialTriggerAccepted = module.ch1.phase == IntegralFlux::OUTER_RISE;
 	processVoltage(0.f);
-	for (int i = 0; i < 32 && module.ch1.phase == IntegralFluxImpl::OUTER_RISE; ++i) {
+	for (int i = 0; i < 32 && module.ch1.phase == IntegralFlux::OUTER_RISE; ++i) {
 		processVoltage(0.f);
 	}
 	const float phaseBeforeRiseRetrigger = module.ch1.phasePos;
 	processVoltage(10.f);
-	const bool riseRetriggerIgnored = module.ch1.phase == IntegralFluxImpl::OUTER_RISE
+	const bool riseRetriggerIgnored = module.ch1.phase == IntegralFlux::OUTER_RISE
 		&& module.ch1.phasePos > phaseBeforeRiseRetrigger;
 
 	processVoltage(0.f);
-	for (int i = 0; i < 1000000 && module.ch1.phase != IntegralFluxImpl::OUTER_FALL; ++i) {
+	for (int i = 0; i < 1000000 && module.ch1.phase != IntegralFlux::OUTER_FALL; ++i) {
 		processVoltage(0.f);
 	}
-	for (int i = 0; i < 32 && module.ch1.phase == IntegralFluxImpl::OUTER_FALL; ++i) {
+	for (int i = 0; i < 32 && module.ch1.phase == IntegralFlux::OUTER_FALL; ++i) {
 		processVoltage(0.f);
 	}
 	const float outputBeforeFallRetrigger = module.ch1.out;
 	processVoltage(10.f);
 	const bool fallRetriggerAccepted = outputBeforeFallRetrigger > 0.f
-		&& module.ch1.phase == IntegralFluxImpl::OUTER_RISE
+		&& module.ch1.phase == IntegralFlux::OUTER_RISE
 		&& module.ch1.out < outputBeforeFallRetrigger;
 	const bool pass = initialTriggerAccepted && riseRetriggerIgnored && fallRetriggerAccepted;
 	return {"trigger ignores RISE and restarts from FALL", pass,
@@ -319,7 +318,7 @@ TestResult triggerAndRetriggerContractIsStable() {
 }
 
 uint64_t renderModulatedTrace(int timingDiv, bool interpolate) {
-	IntegralFluxImpl module;
+	IntegralFlux module;
 	module.bandlimitedSignalOutputs.store(false, std::memory_order_relaxed);
 	module.bandlimitedGateOutputs.store(false, std::memory_order_relaxed);
 	module.requestTimingUpdateDiv(timingDiv);
@@ -396,7 +395,7 @@ TestResult modulatedTraceSatisfiesContract() {
 }
 
 uint64_t renderBandlimitedSampleRateTrace(float sampleRate) {
-	IntegralFluxImpl module;
+	IntegralFlux module;
 	module.bandlimitedSignalOutputs.store(true, std::memory_order_relaxed);
 	module.bandlimitedGateOutputs.store(true, std::memory_order_relaxed);
 	module.ch1.cycleLatched = true;
