@@ -47,9 +47,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="2.4193418"
-     inkscape:cx="21.906785"
-     inkscape:cy="248.208"
+     inkscape:zoom="3.421466"
+     inkscape:cx="54.362662"
+     inkscape:cy="293.87988"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -63,6 +63,46 @@
      height="128.5"
      fill="#080808"
      id="rect1" />
+  <g
+     id="glass_input">
+    <rect
+       id="MASTER_INPUT_GLASS"
+       x="0.4"
+       y="105"
+       width="26.4"
+       height="14.4"
+       rx="1.2675517"
+       fill="#5740bf"
+       fill-opacity="1"
+       opacity="0.33"
+       stroke="none" />
+    <rect
+       id="MONITOR_INPUT_GLASS"
+       x="33.599998"
+       y="58.200001"
+       width="16.799999"
+       height="46.200001"
+       rx="1.223843"
+       fill="#5740bf"
+       fill-opacity="1"
+       opacity="0.33"
+       stroke="none"
+       style="stroke-width:0.982608" />
+  </g>
+  <g
+     id="glass_output">
+    <rect
+       id="CONTROL_OUTPUT_GLASS"
+       x="27.4"
+       y="105"
+       width="23"
+       height="14.4"
+       rx="1.2675517"
+       fill="#1cccd9"
+       fill-opacity="0.5"
+       opacity="0.33"
+       stroke="none" />
+  </g>
   <!-- START ring (green tint) -->
   <g
      id="components"
@@ -90,14 +130,14 @@
        style="fill:#306928;fill-opacity:1;stroke-width:1.31775" />
     <circle
        id="READ_ACTIVITY_LIGHT"
-       cx="30.357019"
-       cy="63.199986"
+       cx="29.057079"
+       cy="74.933327"
        r="1.27"
        style="fill:#306928;fill-opacity:1" />
     <circle
        id="WRITE_ACTIVITY_LIGHT"
-       cx="30.592339"
-       cy="73.133324"
+       cx="29.292398"
+       cy="86.666664"
        r="1.27"
        style="fill:#306928;fill-opacity:1" />
     <circle
@@ -205,24 +245,24 @@
      style="font-weight:400;font-family:Rubik;dominant-baseline:middle;text-anchor:middle;fill:#ffffff">
     <text
        id="READ_ACTIVITY_LABEL"
-       x="30.357019"
-       y="67.300232"
+       x="29.057079"
+       y="79.014748"
        font-size="1.97556px"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
          sodipodi:role="line"
          id="tspan5"
-         x="30.357019"
-         y="67.300232">RD</tspan></text>
+         x="29.057079"
+         y="79.014748">RD</tspan></text>
     <text
        id="WRITE_ACTIVITY_LABEL"
-       x="30.592339"
-       y="77.220383"
+       x="29.292398"
+       y="90.757484"
        font-size="1.97556px"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
          sodipodi:role="line"
          id="tspan6"
-         x="30.592339"
-         y="77.220383">WR</tspan></text>
+         x="29.292398"
+         y="90.757484">WR</tspan></text>
     <text
        id="PORT_LABEL"
        x="10.155671"

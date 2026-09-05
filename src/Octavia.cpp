@@ -19,6 +19,7 @@
 #include "plugin.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
+#include "visual/FractalGlassOverlay.hpp"
 #include "TemporalDeck.hpp"
 #include "SibylControl.hpp"
 #include "OctaviaSemanticControl.hpp"
@@ -3360,6 +3361,7 @@ struct OctaviaWidget : ModuleWidget {
         visual_assets::SplitPanelRenderer splitPanel(this, "res/Octavia.panel.svg");
         const std::string& panelPath = splitPanel.panelPath();
         splitPanel.addLabels("res/Octavia.labels.svg");
+        visual_assets::addFractalGlassOverlay(this, panelPath, splitPanel.panelSurfaceEffectWidget());
         // Preserve the standard logo's rendered height, with equal outer margins
         // inside the bottom screws and a smaller chip centered beside it.
         math::Rect leviathanLogoRectMm(Vec(5.08f, 120.34594f), Vec(32.71933f, 10.41070f));
