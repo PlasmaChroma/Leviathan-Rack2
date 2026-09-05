@@ -47,9 +47,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="3.421466"
-     inkscape:cx="54.362662"
-     inkscape:cy="293.87988"
+     inkscape:zoom="2.4193418"
+     inkscape:cx="23.973463"
+     inkscape:cy="277.14149"
      inkscape:window-width="2560"
      inkscape:window-height="1377"
      inkscape:window-x="-8"
@@ -67,15 +67,16 @@
      id="glass_input">
     <rect
        id="MASTER_INPUT_GLASS"
-       x="0.4"
+       x="0.40000001"
        y="105"
-       width="26.4"
+       width="24.799999"
        height="14.4"
-       rx="1.2675517"
+       rx="1.1907305"
        fill="#5740bf"
        fill-opacity="1"
        opacity="0.33"
-       stroke="none" />
+       stroke="none"
+       style="stroke-width:0.969224" />
     <rect
        id="MONITOR_INPUT_GLASS"
        x="33.599998"
@@ -93,22 +94,23 @@
      id="glass_output">
     <rect
        id="CONTROL_OUTPUT_GLASS"
-       x="27.4"
+       x="25.700001"
        y="105"
-       width="23"
+       width="24.799999"
        height="14.4"
-       rx="1.2675517"
+       rx="1.3667514"
        fill="#1cccd9"
        fill-opacity="0.5"
        opacity="0.33"
-       stroke="none" />
+       stroke="none"
+       style="stroke-width:1.03839" />
   </g>
   <!-- START ring (green tint) -->
   <g
      id="components"
      aria-label="Component anchors"
      inkscape:label="Components"
-     style="display:none">
+     style="display:inline">
     <rect
        id="BRANDING_LEVIATHAN_LOGO_RASTER"
        x="5.0799999"
@@ -142,39 +144,39 @@
        style="fill:#306928;fill-opacity:1" />
     <circle
        id="PORT_VALUE_LABEL"
-       cx="20.9"
+       cx="18.043377"
        cy="60.445999"
        r="1"
        style="fill:#306928;fill-opacity:1" />
     <circle
        id="START_PARAM"
-       cx="20.9"
-       cy="66.745987"
+       cx="29.057079"
+       cy="60.445999"
        r="2.3800001"
        style="fill:#306928;fill-opacity:1" />
     <rect
        id="LUFS_METER"
-       x="4.3000002"
+       x="2.5444441"
        y="72"
        width="8"
        height="31.6"
        style="fill:#306928;fill-opacity:1;stroke-width:1.04387" />
     <rect
        id="DBFS_METER"
-       x="16.533333"
+       x="15.055555"
        y="72"
        width="8"
        height="31.6"
        style="fill:#306928;fill-opacity:1;stroke-width:1.04387" />
     <circle
        id="MASTER_L_INPUT"
-       cx="8.3000002"
+       cx="6.5444441"
        cy="110"
        r="3.75"
        style="fill:#306928;fill-opacity:1" />
     <circle
        id="MASTER_R_INPUT"
-       cx="20.533333"
+       cx="19.055555"
        cy="110"
        r="3.75"
        style="fill:#306928;fill-opacity:1" />
@@ -228,13 +230,13 @@
        style="fill:#306928;fill-opacity:1" />
     <circle
        id="CONTROL_A_OUTPUT"
-       cx="32.766666"
+       cx="31.844444"
        cy="110"
        r="3.75"
        style="fill:#306928;fill-opacity:1" />
     <circle
        id="CONTROL_B_OUTPUT"
-       cx="45"
+       cx="44.355556"
        cy="110"
        r="3.75"
        style="fill:#306928;fill-opacity:1" />
@@ -265,43 +267,33 @@
          y="90.757484">WR</tspan></text>
     <text
        id="PORT_LABEL"
-       x="10.155671"
+       x="5.8895702"
        y="60.699997"
        font-size="2.257778"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
          sodipodi:role="line"
          id="tspan2"
-         x="10.155671"
+         x="5.8895702"
          y="60.699997">PORT</tspan></text>
     <text
-       id="START_LABEL"
-       x="8.5"
-       y="66.999985"
-       font-size="1.975556"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
-         sodipodi:role="line"
-         id="tspan7"
-         x="8.5"
-         y="66.999985">TOGGLE</tspan></text>
-    <text
        id="MASTER_L_LABEL"
-       x="8.3000002"
+       x="6.4513106"
        y="117"
        font-size="1.975556"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
          sodipodi:role="line"
          id="tspan3"
-         x="8.3000002"
+         x="6.4513106"
          y="117">MON L</tspan></text>
     <text
        id="MASTER_R_LABEL"
-       x="20.488882"
+       x="18.992056"
        y="117"
        font-size="1.97556px"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
          sodipodi:role="line"
          id="tspan4"
-         x="20.488882"
+         x="18.992056"
          y="117">MON R</tspan></text>
     <text
        id="MONITOR_A_LABEL"
@@ -329,25 +321,25 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">D</text>
     <text
        id="CONTROL_A_LABEL"
-       x="32.735622"
+       x="31.788002"
        y="117"
        font-size="1.55222px"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">CTRL A</text>
     <text
        id="CONTROL_B_LABEL"
-       x="44.99612"
+       x="44.348499"
        y="117"
        font-size="1.55222px"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">CTRL B</text>
     <text
        id="LUFS_LABEL"
-       x="8.3000002"
+       x="6.5444441"
        y="102.3"
        font-size="2.257778"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">LUFS</text>
     <text
        id="DBFS_LABEL"
-       x="20.533333"
+       x="19.055555"
        y="102.3"
        font-size="2.25778px"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">dBFS</text>
