@@ -15,7 +15,7 @@
   <g id="glass_output" data-theme-runtime-substrate="neutral">
     <rect id="CONTROL_OUTPUT_GLASS" x="25.700001" y="105" width="24.799999" height="14.4" rx="1.3667514" fill="#000000" fill-opacity="0.5" opacity="0.33" stroke="none" style="stroke-width:1.03839" />
   </g>
-  <g id="components" aria-label="Component anchors" inkscape:label="Components" style="display:inline">
+  <g id="components" aria-label="Component anchors" inkscape:label="Components" style="display:none">
     <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="5.0799999" y="120.34594" width="32.71933" height="10.4107" />
     <rect id="BRANDING_AI_CHIP_RASTER" x="39.119999" y="122.25129" width="6.5999999" height="6.5999999" />
     <rect id="OCTOPUS_STATUS" x="1.25" y="9.3999996" width="48.299999" height="47.237999" style="fill:#306928;fill-opacity:1;stroke-width:1.31775" />
@@ -23,8 +23,8 @@
     <circle id="WRITE_ACTIVITY_LIGHT" cx="29.292398" cy="86.666664" r="1.27" style="fill:#306928;fill-opacity:1" />
     <circle id="PORT_VALUE_LABEL" cx="18.043377" cy="60.445999" r="1" style="fill:#306928;fill-opacity:1" />
     <circle id="START_PARAM" cx="29.057079" cy="60.445999" r="2.3800001" style="fill:#306928;fill-opacity:1" />
-    <rect id="LUFS_METER" x="2.5444441" y="72" width="8" height="31.6" style="fill:#306928;fill-opacity:1;stroke-width:1.04387" />
-    <rect id="DBFS_METER" x="15.055555" y="72" width="8" height="31.6" style="fill:#306928;fill-opacity:1;stroke-width:1.04387" />
+    <rect id="LUFS_METER" x="2.5444441" y="64.699997" width="8" height="38.599998" style="fill:#306928;fill-opacity:1;stroke-width:1.15373" />
+    <rect id="DBFS_METER" x="15.055555" y="64.699997" width="8" height="38.599998" style="fill:#306928;fill-opacity:1;stroke-width:1.15373" />
     <circle id="MASTER_L_INPUT" cx="6.5444441" cy="110" r="3.75" style="fill:#306928;fill-opacity:1" />
     <circle id="MASTER_R_INPUT" cx="19.055555" cy="110" r="3.75" style="fill:#306928;fill-opacity:1" />
     <circle id="MONITOR_A_INPUT" cx="44" cy="63.199986" r="3.75" style="fill:#306928;fill-opacity:1" />

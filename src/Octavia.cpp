@@ -3226,6 +3226,7 @@ struct OctaviaStatusWidget : TransparentWidget {
 struct OctaviaMeterWidget : TransparentWidget {
     Octavia* module = nullptr;
     bool showDbfs = false;
+    bool hasConnectedInput = false;
     float displayedLevels[2] = {};
 
     OctaviaMeterWidget(Octavia* module, bool showDbfs)
@@ -3245,10 +3246,12 @@ struct OctaviaMeterWidget : TransparentWidget {
         const uint64_t total = module
             ? module->lm.blockTotal.load(std::memory_order_acquire) : 0;
         const int count = (int)std::min<uint64_t>(total, 4);
+        bool connectedInput = false;
         for (int j = 0; j < 2; ++j) {
             float target = 0.f;
             const bool connected = module
                 && module->audioInputConnected[j].load(std::memory_order_relaxed);
+            connectedInput |= connected;
             if (connected && count > 0) {
                 if (showDbfs) {
                     const float peak = module->lm.meterPeak[j].load(std::memory_order_relaxed);
@@ -3264,6 +3267,7 @@ struct OctaviaMeterWidget : TransparentWidget {
             }
             displayedLevels[j] = follow(displayedLevels[j], target);
         }
+        hasConnectedInput = connectedInput;
     }
 
     static void drawBar(NVGcontext* vg, const math::Rect& bounds, const float levels[2]) {
@@ -3308,10 +3312,24 @@ struct OctaviaMeterWidget : TransparentWidget {
     }
 
     void draw(const DrawArgs& args) override {
+        const float readoutHeight = mm2px(4.5f);
         const float barWidth = box.size.x;
-        const float barHeight = box.size.y - mm2px(4.5f);
-        drawBar(args.vg, math::Rect(Vec(0.f, 0.f), Vec(barWidth, barHeight)), displayedLevels);
+        const float barHeight = std::max(0.f, box.size.y - 2.f * readoutHeight);
+        drawBar(args.vg,
+            math::Rect(Vec(0.f, readoutHeight), Vec(barWidth, barHeight)), displayedLevels);
 
+        if (APP && APP->window && APP->window->uiFont) {
+            char levelText[16] = "--";
+            if (hasConnectedInput) {
+                const float level = std::max(displayedLevels[0], displayedLevels[1]);
+                std::snprintf(levelText, sizeof(levelText), "%.1f", level * 60.f - 60.f);
+            }
+            nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+            nvgFontSize(args.vg, 9.5f);
+            nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+            nvgFillColor(args.vg, WHITE);
+            nvgText(args.vg, 0.5f * box.size.x, 0.5f * readoutHeight, levelText, nullptr);
+        }
     }
 };
 

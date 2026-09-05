@@ -110,7 +110,7 @@
      id="components"
      aria-label="Component anchors"
      inkscape:label="Components"
-     style="display:inline">
+     style="display:none">
     <rect
        id="BRANDING_LEVIATHAN_LOGO_RASTER"
        x="5.0799999"
@@ -157,17 +157,17 @@
     <rect
        id="LUFS_METER"
        x="2.5444441"
-       y="72"
+       y="64.699997"
        width="8"
-       height="31.6"
-       style="fill:#306928;fill-opacity:1;stroke-width:1.04387" />
+       height="38.599998"
+       style="fill:#306928;fill-opacity:1;stroke-width:1.15373" />
     <rect
        id="DBFS_METER"
        x="15.055555"
-       y="72"
+       y="64.699997"
        width="8"
-       height="31.6"
-       style="fill:#306928;fill-opacity:1;stroke-width:1.04387" />
+       height="38.599998"
+       style="fill:#306928;fill-opacity:1;stroke-width:1.15373" />
     <circle
        id="MASTER_L_INPUT"
        cx="6.5444441"
