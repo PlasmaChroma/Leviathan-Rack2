@@ -153,6 +153,37 @@ TestResult legacyCycleStateStillLoads() {
 		module.channel.cycleLatched ? "" : "ch1CycleLatched compatibility was lost"};
 }
 
+TestResult phosphorSettingsAreOptInAndPersisted() {
+	Proc source;
+	const bool optIn = !source.previewPhosphorEnabled.load();
+	source.previewPhosphorEnabled.store(true);
+	source.previewPhosphorPersistence.store(2);
+	source.previewPhosphorStrength.store(0);
+	source.previewPhosphorAdditive.store(false);
+	json_t* state = source.dataToJson();
+	Proc restored;
+	restored.dataFromJson(state);
+	const bool roundTrip = restored.previewPhosphorEnabled.load()
+		&& restored.previewPhosphorPersistence.load() == 2
+		&& restored.previewPhosphorStrength.load() == 0
+		&& !restored.previewPhosphorAdditive.load();
+	json_object_set_new(state, "previewPhosphorPersistence", json_integer(999));
+	json_object_set_new(state, "previewPhosphorStrength", json_integer(-999));
+	restored.dataFromJson(state);
+	const bool bounded = restored.previewPhosphorPersistence.load() == 2
+		&& restored.previewPhosphorStrength.load() == 0;
+	json_decref(state);
+	state = json_object();
+	restored.dataFromJson(state);
+	json_decref(state);
+	const bool legacy = !restored.previewPhosphorEnabled.load()
+		&& restored.previewPhosphorPersistence.load() == 1
+		&& restored.previewPhosphorStrength.load() == 1
+		&& restored.previewPhosphorAdditive.load();
+	return {"phosphor settings are opt-in, bounded, and preserve legacy defaults",
+		optIn && roundTrip && bounded && legacy, ""};
+}
+
 TestResult previewSnapshotsStayCoherent() {
 	Proc module;
 	std::atomic<bool> ready {false};
@@ -416,6 +447,7 @@ int main() {
 		releasedSchemaIsStable(),
 		persistedSettingsRoundTrip(),
 		legacyCycleStateStillLoads(),
+		phosphorSettingsAreOptInAndPersisted(),
 		previewSnapshotsStayCoherent(),
 		slewModeTracksSignalWhileIdle(),
 		triggerAndRetriggerContractIsStable(),

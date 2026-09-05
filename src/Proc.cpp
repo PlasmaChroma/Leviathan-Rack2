@@ -6,6 +6,7 @@
 #include "visual/FractalGlassOverlay.hpp"
 #include "visual/PlasmaConduit.hpp"
 #include "visual/PreviewSurface.hpp"
+#include "visual/PhosphorPreview.hpp"
 #include "WavePreviewTracer.hpp"
 #include <dsp/minblep.hpp>
 #include <array>
@@ -188,6 +189,10 @@ struct Proc : Module {
 	std::atomic<bool> timingInterpolate {true};
 	std::atomic<bool> previewTracerEnabled {true};
 	std::atomic<int> previewTracerCacheMode {WAVE_PREVIEW_TRACER_CURVE_CACHE};
+	std::atomic<bool> previewPhosphorEnabled {false};
+	std::atomic<int> previewPhosphorPersistence {1};
+	std::atomic<int> previewPhosphorStrength {1};
+	std::atomic<bool> previewPhosphorAdditive {true};
 	debug_terminal::BaselineModuleMetrics debugMetrics;
 	uint32_t perfAudioSampleCounter = 0u;
 	// UI light updates are rate-limited to reduce engine overhead.
@@ -992,6 +997,10 @@ struct Proc : Module {
 		json_object_set_new(rootJ, "timingInterpolate", json_boolean(timingInterpolate.load(std::memory_order_relaxed)));
 		json_object_set_new(rootJ, "previewTracerEnabled", json_boolean(previewTracerEnabled.load(std::memory_order_relaxed)));
 		json_object_set_new(rootJ, "previewTracerCacheMode", json_integer(previewTracerCacheMode.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "previewPhosphorEnabled", json_boolean(previewPhosphorEnabled.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "previewPhosphorPersistence", json_integer(previewPhosphorPersistence.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "previewPhosphorStrength", json_integer(previewPhosphorStrength.load(std::memory_order_relaxed)));
+		json_object_set_new(rootJ, "previewPhosphorAdditive", json_boolean(previewPhosphorAdditive.load(std::memory_order_relaxed)));
 		return rootJ;
 	}
 
@@ -1039,6 +1048,16 @@ struct Proc : Module {
 		if (!isDragonKingPreviewWidgetOptionsEnabled()) {
 			previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed);
 		}
+		// Old patches always retain the original tracer, including when restored
+		// over an instance that previously had the experiment enabled.
+		previewPhosphorEnabled.store(json_is_true(json_object_get(rootJ, "previewPhosphorEnabled")));
+		auto readPhosphorChoice = [&](const char* key) {
+			json_t* value = json_object_get(rootJ, key);
+			return json_is_integer(value) ? int(std::max<json_int_t>(0, std::min<json_int_t>(2, json_integer_value(value)))) : 1;
+		};
+		previewPhosphorPersistence.store(readPhosphorChoice("previewPhosphorPersistence"));
+		previewPhosphorStrength.store(readPhosphorChoice("previewPhosphorStrength"));
+		previewPhosphorAdditive.store(!json_is_false(json_object_get(rootJ, "previewPhosphorAdditive")));
 	}
 
 	void process(const ProcessArgs& args) override {
@@ -1199,6 +1218,9 @@ struct WavePreviewWidget : Widget {
 	bool cachedLutsValid = false;
 	WavePreviewTracer<POINT_COUNT, TRAIL_FRAME_COUNT> curveTracer;
 	WavePreviewBufferedTracer<POINT_COUNT> frameTracer;
+	visual_assets::PhosphorPreview<POINT_COUNT>* phosphor = nullptr;
+	std::array<Vec, POINT_COUNT> phosphorReference{};
+	bool phosphorReferenceValid = false;
 	Proc* modulePtr = nullptr;
 	ProcPreviewEdgeInteraction* edgeInteraction = nullptr;
 	uint32_t lastVersion = 0;
@@ -1210,6 +1232,8 @@ struct WavePreviewWidget : Widget {
 	bool dotVisible = false;
 
 	explicit WavePreviewWidget(Proc* module) : modulePtr(module) {
+		phosphor = new visual_assets::PhosphorPreview<POINT_COUNT>();
+		addChild(phosphor);
 	}
 
 	static void buildSegmentLut(std::array<float, PREVIEW_LUT_SIZE>& lut, float curveSigned, bool rising) {
@@ -1430,6 +1454,19 @@ struct WavePreviewWidget : Widget {
 	}
 
 	void step() override {
+		const bool usePhosphor = modulePtr
+			&& modulePtr->previewTracerEnabled.load(std::memory_order_relaxed)
+			&& modulePtr->previewPhosphorEnabled.load(std::memory_order_relaxed);
+		if (usePhosphor != phosphor->enabled) phosphorReferenceValid = false;
+		phosphor->setEnabled(usePhosphor);
+		phosphor->box.size = box.size;
+		if (modulePtr) {
+			static const float decay[] = {0.2f, 0.6f, 1.2f};
+			static const float deposit[] = {0.15f, 0.3f, 0.5f};
+			phosphor->persistence = decay[clamp(modulePtr->previewPhosphorPersistence.load(), 0, 2)];
+			phosphor->strength = deposit[clamp(modulePtr->previewPhosphorStrength.load(), 0, 2)];
+			phosphor->additive = modulePtr->previewPhosphorAdditive.load();
+		}
 		Widget::step();
 		if (!modulePtr) {
 			if (!pointsValid) {
@@ -1463,7 +1500,8 @@ struct WavePreviewWidget : Widget {
 		const double nowSec = system::getTime();
 		const bool tracerEnabled = modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
 		const int tracerMode = modulePtr->previewTracerCacheMode.load(std::memory_order_relaxed);
-		if (!tracerEnabled) {
+		const bool phosphorActive = usePhosphor && !phosphor->failed;
+		if (!tracerEnabled || phosphorActive) {
 			curveTracer.clear();
 			frameTracer.clear();
 		}
@@ -1475,7 +1513,7 @@ struct WavePreviewWidget : Widget {
 			curveTracer.clear();
 		}
 		if (!pointsValid || version != lastVersion) {
-			if (tracerEnabled && pointsValid) {
+			if (tracerEnabled && pointsValid && !phosphorActive) {
 				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
 					curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC, TRAIL_CAPTURE_STRIDE);
 				}
@@ -1492,9 +1530,26 @@ struct WavePreviewWidget : Widget {
 			rebuildPoints(riseTime, fallTime, curveSigned, interactiveRecent);
 			lastVersion = version;
 		}
+		if (phosphorActive && pointsValid) {
+			if (!phosphorReferenceValid) {
+				phosphorReference = points;
+				phosphorReferenceValid = true;
+			}
+			else {
+				// Compare against the last accepted shape, so slow movement still
+				// accumulates. Common rate changes with identical geometry do not.
+				bool moved = false;
+				for (int i = 0; i < POINT_COUNT; ++i) {
+					const Vec delta = points[i].minus(phosphorReference[i]);
+					if (delta.x * delta.x + delta.y * delta.y > 0.0625f) { moved = true; break; }
+				}
+				if (moved && phosphor->capture(phosphorReference, nowSec)) phosphorReference = points;
+			}
+		}
 	}
 
 	void draw(const DrawArgs& args) override {
+		Widget::draw(args);
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 		if (pointsValid) {
@@ -1502,7 +1557,7 @@ struct WavePreviewWidget : Widget {
 			Proc* modulePtr = moduleWidget ? moduleWidget->getModule<Proc>() : nullptr;
 			const double nowSec = system::getTime();
 			const bool tracerEnabled = modulePtr && modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
-			if (tracerEnabled) {
+			if (tracerEnabled && !(phosphor->enabled && !phosphor->failed)) {
 				const int tracerMode = modulePtr->previewTracerCacheMode.load(std::memory_order_relaxed);
 				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
 					WavePreviewTracerStyle style;
@@ -2018,6 +2073,33 @@ struct ProcWidget : ModuleWidget {
 				[=]() { return proc->previewTracerEnabled.load(std::memory_order_relaxed); },
 				[=]() { proc->previewTracerEnabled.store(!proc->previewTracerEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }
 			));
+			if (isDragonKingDebugEnabled()) {
+				menu->addChild(createCheckMenuItem("Phosphor tracer (experimental)", "",
+					[=]() { return proc->previewPhosphorEnabled.load(); },
+					[=]() {
+						const bool enabled = !proc->previewPhosphorEnabled.load();
+						proc->previewPhosphorEnabled.store(enabled);
+						if (enabled) proc->previewTracerEnabled.store(true);
+					}
+				));
+				menu->addChild(createSubmenuItem("Phosphor settings", "", [=](Menu* submenu) {
+					submenu->addChild(createMenuLabel("Persistence"));
+					const char* decayNames[] = {"Short (0.2 s)", "Medium (0.6 s)", "Long (1.2 s)"};
+					const char* strengthNames[] = {"Soft", "Medium", "Bright"};
+					for (int i = 0; i < 3; ++i)
+						submenu->addChild(createCheckMenuItem(decayNames[i], "",
+							[=]() { return proc->previewPhosphorPersistence.load() == i; },
+							[=]() { proc->previewPhosphorPersistence.store(i); }));
+					submenu->addChild(createMenuLabel("Deposit strength"));
+					for (int i = 0; i < 3; ++i)
+						submenu->addChild(createCheckMenuItem(strengthNames[i], "",
+							[=]() { return proc->previewPhosphorStrength.load() == i; },
+							[=]() { proc->previewPhosphorStrength.store(i); }));
+					submenu->addChild(createCheckMenuItem("Additive buildup", "",
+						[=]() { return proc->previewPhosphorAdditive.load(); },
+						[=]() { proc->previewPhosphorAdditive.store(!proc->previewPhosphorAdditive.load()); }));
+				}));
+			}
 			if (isDragonKingPreviewWidgetOptionsEnabled()) {
 				menu->addChild(createSubmenuItem("Tracer Quality", "",
 					[=](Menu* submenu) {
