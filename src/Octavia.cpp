@@ -3461,7 +3461,7 @@ struct OctaviaWidget : ModuleWidget {
         nvgFontFaceId(args.vg, APP->window->uiFont->handle);
         nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
 
-        nvgFontSize(args.vg,8.f);
+        nvgFontSize(args.vg,9.5f);
         nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
         nvgFillColor(args.vg,WHITE);
         const std::string portText = std::to_string(octaviaPort());
