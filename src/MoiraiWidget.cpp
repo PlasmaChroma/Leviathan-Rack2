@@ -80,8 +80,15 @@ struct MoiraiDisplay final : TransparentWidget {
 			nvgFillColor(args.vg, nvgRGBA(23, 37, 52, 245));
 			nvgFill(args.vg);
 			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, barX, y, barW * moirai::clamp01(values[index]), 6.f, 3.f);
-			nvgFillColor(args.vg, index == lane ? nvgRGBA(90, 234, 238, 255) : nvgRGBA(138, 111, 225, 210));
+			const float filledW = barW * moirai::clamp01(values[index]);
+			nvgRoundedRect(args.vg, barX, y, filledW, 6.f, 3.f);
+			const bool selected = index == lane;
+			const NVGcolor startColor = selected
+				? nvgRGBA(255, 255, 255, 255) : nvgRGBA(138, 111, 225, 210);
+			const NVGcolor endColor = selected
+				? nvgRGBA(90, 234, 238, 255) : nvgRGBA(255, 255, 255, 210);
+			nvgFillPaint(args.vg, nvgLinearGradient(args.vg,
+				barX, y, barX + std::max(filledW, 1.f), y, startColor, endColor));
 			nvgFill(args.vg);
 			if (APP && APP->window && APP->window->uiFont) {
 				nvgFontFaceId(args.vg, APP->window->uiFont->handle);
@@ -124,11 +131,11 @@ struct MoiraiWidget final : ModuleWidget {
 		addChild(display);
 
 		addParam(createParamCentered<SmallGoldButton>(anchor("LANE_PARAM"), module, Moirai::LANE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(anchor("CHANNEL_PARAM"), module, Moirai::CHANNEL_PARAM));
+		addParam(createParamCentered<Eclipse2Knob>(anchor("CHANNEL_PARAM"), module, Moirai::CHANNEL_PARAM));
 		addParam(createParamCentered<SmallGoldButton>(anchor("MANUAL_TRIGGER_PARAM"), module, Moirai::MANUAL_TRIGGER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(anchor("TIME_PARAM"), module, Moirai::TIME_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(anchor("CURVE_PARAM"), module, Moirai::CURVE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(anchor("LEVEL_PARAM"), module, Moirai::LEVEL_PARAM));
+		addParam(createParamCentered<Eclipse2Knob>(anchor("TIME_PARAM"), module, Moirai::TIME_PARAM));
+		addParam(createParamCentered<Eclipse2Knob>(anchor("CURVE_PARAM"), module, Moirai::CURVE_PARAM));
+		addParam(createParamCentered<Eclipse2Knob>(anchor("LEVEL_PARAM"), module, Moirai::LEVEL_PARAM));
 		addChild(createLightCentered<SmallLight<GreenLight>>(anchor("LANE_A_LIGHT"), module, Moirai::LANE_A_LIGHT));
 		addChild(createLightCentered<SmallLight<BlueLight>>(anchor("LANE_B_LIGHT"), module, Moirai::LANE_B_LIGHT));
 

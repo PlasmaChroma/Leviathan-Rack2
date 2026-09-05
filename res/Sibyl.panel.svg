@@ -36,6 +36,8 @@
     </g>
   </g>
   <g id="components" inkscape:label="Component anchors" style="display:inline">
+    <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="1524" y="11943.102" width="3271.933" height="1224.054" style="display:none" />
+    <rect id="BRANDING_AI_CHIP_RASTER" x="4928" y="12225.129" width="660" height="660" style="display:none" />
     <rect id="SIBYL_DISPLAY" x="135.00006" y="930" width="6842" height="5000" rx="126.08105" style="fill:#0e3736;fill-opacity:0.75;stroke-width:1.04617" />
     <circle id="CLOCK_INPUT" cx="781.00006" cy="8850" r="400" />
     <circle id="RUN_INPUT" cx="1861" cy="6900" r="400" />

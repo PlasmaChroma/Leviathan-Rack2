@@ -32,6 +32,7 @@
 #include "OctaviaObservationBus.hpp"
 #include "DebugTerminalTransport.hpp"
 #include "third_party/httplib.h"
+#include "OctaviaServerLifecycle.hpp"
 #include <thread>
 #include <atomic>
 #include <mutex>
@@ -295,7 +296,7 @@ struct Octavia : Module {
     float readActivityEnvelope = 0.f;
     float writeActivityEnvelope = 0.f;
     httplib::Server   svr;
-    std::thread       serverThread;
+    octavia::ServerLifecycle serverLifecycle{svr, serverRunning};
 
     // Audio observation — one coherent Rack-frame timeline for Master L/R and A-D.
     octavia::ObservationHistory observationHistory;
@@ -454,7 +455,7 @@ struct Octavia : Module {
         configLight(MONITOR_D_LIGHT, "Monitor D attention");
         setupRoutes();
     }
-    ~Octavia() { stopServer(); }
+    ~Octavia() { serverLifecycle.shutdown(); }
 
     // ── Audio thread: sample inputs into ring buffers ─────────────────────────
     void process(const ProcessArgs& args) override {
@@ -3184,25 +3185,16 @@ struct Octavia : Module {
     }
 
     void startServer() {
-        bool expected = false;
-        if (!serverRunning.compare_exchange_strong(expected, true,
-                std::memory_order_acq_rel, std::memory_order_acquire)) return;
-        serverThread=std::thread([this](){ svr.listen("127.0.0.1", octaviaPort()); serverRunning=false; });
-        serverThread.detach();
+        serverLifecycle.start(octaviaPort());
     }
     void stopServer() {
-        if (!serverRunning) return;
-        svr.stop();
-        // The listener clears serverRunning when it has actually exited. A
-        // subsequent click must not start a second listener during shutdown.
+        serverLifecycle.stop();
     }
 
     void processServerToggle() {
         // HTTP start/stop belongs to the UI thread, never the audio callback.
-        // A click during startup waits until httplib can accept stop().
-        if (serverRunning.load(std::memory_order_acquire) && !svr.is_running()) return;
         if (!serverTogglePending.exchange(false, std::memory_order_acq_rel)) return;
-        if (serverRunning.load(std::memory_order_acquire)) stopServer();
+        if (serverLifecycle.isActive()) stopServer();
         else startServer();
     }
 };
@@ -3368,6 +3360,17 @@ struct OctaviaWidget : ModuleWidget {
         visual_assets::SplitPanelRenderer splitPanel(this, "res/Octavia.panel.svg");
         const std::string& panelPath = splitPanel.panelPath();
         splitPanel.addLabels("res/Octavia.labels.svg");
+        // Preserve the standard logo's rendered height, with equal outer margins
+        // inside the bottom screws and a smaller chip centered beside it.
+        math::Rect leviathanLogoRectMm(Vec(5.08f, 120.34594f), Vec(32.71933f, 10.41070f));
+        panel_svg::loadRectFromSvgMm(
+            panelPath, "BRANDING_LEVIATHAN_LOGO_RASTER", &leviathanLogoRectMm);
+        addChild(visual_assets::createAspectFitRasterImageWidget(
+            "res/icon/Leviathan_Logo_S2.png", leviathanLogoRectMm));
+        math::Rect aiChipRectMm(Vec(39.12f, 122.25129f), Vec(6.6f, 6.6f));
+        panel_svg::loadRectFromSvgMm(panelPath, "BRANDING_AI_CHIP_RASTER", &aiChipRectMm);
+        addChild(visual_assets::createAspectFitRasterImageWidget(
+            "res/icon/AI-Chip-Sm.png", aiChipRectMm));
         addChild(createWidget<CyanOrbScrew>(Vec(0, 0)));
         addChild(createWidget<CyanOrbScrew>(Vec(0, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
         addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - RACK_GRID_WIDTH, 0)));

@@ -339,6 +339,20 @@
      inkscape:label="Component anchors"
      style="display:inline">
     <rect
+       id="BRANDING_LEVIATHAN_LOGO_RASTER"
+       x="1524"
+       y="11943.102"
+       width="3271.933"
+       height="1224.054"
+       style="display:none" />
+    <rect
+       id="BRANDING_AI_CHIP_RASTER"
+       x="4928"
+       y="12225.129"
+       width="660"
+       height="660"
+       style="display:none" />
+    <rect
        id="SIBYL_DISPLAY"
        x="135.00006"
        y="930"

@@ -2354,6 +2354,16 @@ struct SibylWidget : ModuleWidget {
 			"res/Sibyl.labels.svg", "res/Sibyl.theme-text.svg");
 		splitPanel.addCompactLeviathanLogoBranding();
 		visual_assets::addFractalGlassOverlay(this, panelPath, splitPanel.panelSurfaceEffectWidget());
+		// Center the branding pair using Octavia's logo-to-chip spacing and height.
+		math::Rect aiChipRectMm(Vec(49.28f, 122.25129f), Vec(6.6f, 6.6f));
+		panel_svg::loadRectFromSvgMm(panelPath, "BRANDING_AI_CHIP_RASTER", &aiChipRectMm);
+		addChild(visual_assets::createAspectFitRasterImageWidget(
+			"res/icon/AI-Chip-Sm.png", aiChipRectMm));
+		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, 0.f)));
+		addChild(createWidget<CyanOrbScrew>(Vec(box.size.x - 2.f * RACK_GRID_WIDTH, 0.f)));
+		addChild(createWidget<CyanOrbScrew>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<CyanOrbScrew>(Vec(
+			box.size.x - 2.f * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 		math::Rect displayMm(Vec(2.4f, 13.f), Vec(46.f, 24.f));
 		panel_svg::loadRectFromSvgMm(panelPath, "SIBYL_DISPLAY", &displayMm);

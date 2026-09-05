@@ -70,6 +70,18 @@
      inkscape:label="Components"
      style="display:none">
     <rect
+       id="BRANDING_LEVIATHAN_LOGO_RASTER"
+       x="5.08"
+       y="120.34594"
+       width="32.71933"
+       height="10.41070" />
+    <rect
+       id="BRANDING_AI_CHIP_RASTER"
+       x="39.12"
+       y="122.25129"
+       width="6.6"
+       height="6.6" />
+    <rect
        id="OCTOPUS_STATUS"
        x="1.25"
        y="9.3999996"

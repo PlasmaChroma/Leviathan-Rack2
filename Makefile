@@ -67,6 +67,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/octavia_observation_spec \
 	build/tests/octavia_recording_spec \
 	build/tests/octavia_job_control_spec \
+	build/tests/octavia_server_lifecycle_spec \
 	build/tests/octavia_semantic_control_spec \
 	build/tests/octavia_action_validation_spec \
 	build/tests/octavia_cable_validation_spec \
@@ -430,6 +431,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/octavia_observation_spec)
 	$(call run_test_bin,build/tests/octavia_recording_spec)
 	$(call run_test_bin,build/tests/octavia_job_control_spec)
+	$(call run_test_bin,build/tests/octavia_server_lifecycle_spec)
 	$(call run_test_bin,build/tests/octavia_semantic_control_spec)
 	$(call run_test_bin,build/tests/octavia_action_validation_spec)
 	$(call run_test_bin,build/tests/octavia_cable_validation_spec)
@@ -759,6 +761,9 @@ build/tests/wyrm_envelope_spec: tests/wyrm_envelope_spec.cpp src/Wyrm.cpp src/Wy
 
 build/tests/temporaldeck_longplay_spec: tests/temporaldeck_longplay_spec.cpp src/LongPlayStreamEngine.cpp src/LongPlayStreamEngine.hpp src/codec.cpp src/codec.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/temporaldeck_longplay_spec.cpp src/LongPlayStreamEngine.cpp src/codec.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@
+
+build/tests/octavia_server_lifecycle_spec: tests/octavia_server_lifecycle_spec.cpp src/OctaviaServerLifecycle.hpp src/third_party/httplib.h | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -D_WIN32_WINNT=0x0A00 -DWINVER=0x0A00 $< -o $@ $(if $(filter win,$(ARCH_OS)),-lws2_32)
 
 build/tests/doorstop_engine_spec: tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/DoorstopVisualFeedback.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_engine_spec.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@

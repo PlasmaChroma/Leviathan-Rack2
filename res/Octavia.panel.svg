@@ -9,6 +9,8 @@
   </defs>
   <rect width="50.8" height="128.5" fill="#080808" id="rect1" />
   <g id="components" aria-label="Component anchors" inkscape:label="Components" style="display:none">
+    <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="5.08" y="120.34594" width="32.71933" height="10.41070" />
+    <rect id="BRANDING_AI_CHIP_RASTER" x="39.12" y="122.25129" width="6.6" height="6.6" />
     <rect id="OCTOPUS_STATUS" x="1.25" y="9.3999996" width="48.299999" height="47.237999" style="fill:#306928;fill-opacity:1;stroke-width:1.31775" />
     <circle id="READ_ACTIVITY_LIGHT" cx="30.357019" cy="63.199986" r="1.27" style="fill:#306928;fill-opacity:1" />
     <circle id="WRITE_ACTIVITY_LIGHT" cx="30.592339" cy="73.133324" r="1.27" style="fill:#306928;fill-opacity:1" />
