@@ -170,6 +170,9 @@ struct WavePreviewBufferedTracer {
 	}
 
 	void clearPixels() {
+		// Preserve an outstanding upload of cleared pixels, but do not dirty
+		// or refill storage that is already transparent.
+		if (!hasVisiblePixels) return;
 		std::fill(pixels.begin(), pixels.end(), 0u);
 		pixelsDirty = true;
 		hasVisiblePixels = false;

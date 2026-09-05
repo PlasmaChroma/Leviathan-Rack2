@@ -8,6 +8,7 @@
 #include "visual/PreviewSurface.hpp"
 #include "visual/PhosphorPreview.hpp"
 #include "WavePreviewTracer.hpp"
+#include "WavePreviewGeometryKey.hpp"
 #include <dsp/minblep.hpp>
 #include <array>
 #include <cstdio>
@@ -1223,7 +1224,8 @@ struct WavePreviewWidget : Widget {
 	bool phosphorReferenceValid = false;
 	Proc* modulePtr = nullptr;
 	ProcPreviewEdgeInteraction* edgeInteraction = nullptr;
-	uint32_t lastVersion = 0;
+	wave_preview::GeometryKey geometryKey;
+	int activeTracerBackend = -1;
 	bool pointsValid = false;
 	int peakPointIndex = POINT_COUNT / 2;
 	float lastFreqHz = 100.f;
@@ -1469,7 +1471,7 @@ struct WavePreviewWidget : Widget {
 		}
 		Widget::step();
 		if (!modulePtr) {
-			if (!pointsValid) {
+			if (geometryKey.accept(0.01f, 0.01f, 0.f, box.size.x, box.size.y) || !pointsValid) {
 				rebuildPoints(0.01f, 0.01f, 0.f, false);
 			}
 			return;
@@ -1501,19 +1503,26 @@ struct WavePreviewWidget : Widget {
 		const bool tracerEnabled = modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
 		const int tracerMode = modulePtr->previewTracerCacheMode.load(std::memory_order_relaxed);
 		const bool phosphorActive = usePhosphor && !phosphor->failed;
-		if (!tracerEnabled || phosphorActive) {
+		const int backend = !tracerEnabled ? -1 : phosphorActive ? 2 : tracerMode;
+		if (backend != activeTracerBackend) {
 			curveTracer.clear();
 			frameTracer.clear();
+			activeTracerBackend = backend;
 		}
-		else if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+		if (backend == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
 			curveTracer.expire(nowSec, TRAIL_FADE_SEC);
-			frameTracer.clear();
 		}
-		else {
+		const bool resized = geometryKey.valid
+			&& (geometryKey.width != std::max(box.size.x, 1.f) || geometryKey.height != std::max(box.size.y, 1.f));
+		if (resized) {
 			curveTracer.clear();
+			frameTracer.clear();
+			phosphorReferenceValid = false;
+			phosphor->pending = false;
+			phosphor->resetPending = true;
 		}
-		if (!pointsValid || version != lastVersion) {
-			if (tracerEnabled && pointsValid && !phosphorActive) {
+		if (geometryKey.accept(riseTime, fallTime, curveSigned, box.size.x, box.size.y) || !pointsValid) {
+			if (tracerEnabled && pointsValid && !phosphorActive && !resized) {
 				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
 					curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC, TRAIL_CAPTURE_STRIDE);
 				}
@@ -1528,7 +1537,6 @@ struct WavePreviewWidget : Widget {
 				}
 			}
 			rebuildPoints(riseTime, fallTime, curveSigned, interactiveRecent);
-			lastVersion = version;
 		}
 		if (phosphorActive && pointsValid) {
 			if (!phosphorReferenceValid) {
