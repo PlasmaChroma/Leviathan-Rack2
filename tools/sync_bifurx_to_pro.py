@@ -105,7 +105,9 @@ SOURCE_FILES = (
     "res/icon/gear_knob_tiny.svg",
     "res/icon/gear_knob_tiny_dark.svg",
     "res/icon/magitek2_input_rackfinal_256.png",
+    "res/icon/magitek2_input_shadow_340.png",
     "res/icon/magitek2_output_rackfinal_256.png",
+    "res/icon/magitek2_output_shadow_340.png",
 )
 
 MAKEFILE = r"""# Standalone Bifurx VCV Rack plugin build.

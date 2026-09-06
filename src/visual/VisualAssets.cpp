@@ -2727,24 +2727,37 @@ static float magitek2JackAnimationDirection(Magitek2JackAnimationStyle animation
 	}
 }
 
-Magitek2RasterJack::Magitek2RasterJack(const char* imagePath, Magitek2JackAnimationStyle animationStyle) {
+Magitek2RasterJack::Magitek2RasterJack(
+	const char* imagePath, const char* shadowBakedImagePath, Magitek2JackAnimationStyle animationStyle) {
 	box.size = Vec(kMagitekPortSizePx, kMagitekPortSizePx);
 	this->animationStyle = animationStyle;
 
-	shadowFb = new widget::FramebufferWidget();
-	shadowFb->dirtyOnSubpixelChange = false;
 	const Vec bleed(8.f, 8.f);
-	shadowFb->box.pos = bleed.mult(-0.5f);
-	shadowFb->box.size = box.size.plus(bleed);
-	Magitek2JackShadow* shadow = new Magitek2JackShadow;
-	shadow->box.size = shadowFb->box.size;
-	shadowFb->addChild(shadow);
-	addChild(shadowFb);
+	const bool rotating = magitek2JackAnimationIsRotation(animationStyle);
+	const bool useBakedShadow = !rotating && shadowBakedImagePath && shadowBakedImagePath[0];
+	if (!useBakedShadow) {
+		// Keep the procedural path for nondefault rotating styles so their body
+		// can rotate without moving the fixed panel shadow.
+		shadowFb = new widget::FramebufferWidget();
+		shadowFb->dirtyOnSubpixelChange = false;
+		shadowFb->box.pos = bleed.mult(-0.5f);
+		shadowFb->box.size = box.size.plus(bleed);
+		Magitek2JackShadow* shadow = new Magitek2JackShadow;
+		shadow->box.size = shadowFb->box.size;
+		shadowFb->addChild(shadow);
+		addChild(shadowFb);
+	}
 
-	MagitekRasterImage* image = new MagitekRasterImage(imagePath ? imagePath : "");
-	image->box.size = box.size;
-	if (magitek2JackAnimationIsRotation(animationStyle)) {
-		image->rotationRad = &hoverSpinRad;
+	MagitekRasterImage* image = new MagitekRasterImage(
+		useBakedShadow ? shadowBakedImagePath : (imagePath ? imagePath : ""));
+	if (!useBakedShadow) {
+		image->box.size = box.size;
+		if (rotating)
+			image->rotationRad = &hoverSpinRad;
+	}
+	else {
+		image->box.pos = bleed.mult(-0.5f);
+		image->box.size = box.size.plus(bleed);
 	}
 	addChild(image);
 
@@ -2759,11 +2772,13 @@ Magitek2RasterJack::Magitek2RasterJack(const char* imagePath, Magitek2JackAnimat
 }
 
 Magitek2InputJack::Magitek2InputJack(Magitek2JackAnimationStyle animationStyle)
-	: Magitek2RasterJack("res/icon/magitek2_input_rackfinal_256.png", animationStyle) {
+	: Magitek2RasterJack("res/icon/magitek2_input_rackfinal_256.png",
+		"res/icon/magitek2_input_shadow_340.png", animationStyle) {
 }
 
 Magitek2OutputJack::Magitek2OutputJack(Magitek2JackAnimationStyle animationStyle)
-	: Magitek2RasterJack("res/icon/magitek2_output_rackfinal_256.png", animationStyle) {
+	: Magitek2RasterJack("res/icon/magitek2_output_rackfinal_256.png",
+		"res/icon/magitek2_output_shadow_340.png", animationStyle) {
 }
 
 void Magitek2RasterJack::onEnter(const event::Enter& e) {

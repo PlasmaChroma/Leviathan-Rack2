@@ -180,7 +180,8 @@ enum class Magitek2JackAnimationStyle {
 };
 
 struct Magitek2RasterJack : app::PortWidget {
-	explicit Magitek2RasterJack(const char* imagePath, Magitek2JackAnimationStyle animationStyle = Magitek2JackAnimationStyle::ClockwiseRotation);
+	explicit Magitek2RasterJack(const char* imagePath, const char* shadowBakedImagePath,
+		Magitek2JackAnimationStyle animationStyle = Magitek2JackAnimationStyle::ClockwiseRotation);
 	void step() override;
 	void onEnter(const event::Enter& e) override;
 	void onLeave(const event::Leave& e) override;
