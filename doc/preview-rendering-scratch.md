@@ -274,3 +274,21 @@ Median combined preview CPU time: 28.0 µs / 110.8 µs, using NanoVG with stock
 tracing. The step-derived counters have cross-instance attribution problems and
 capture counts represent attempts; correct these before relying on them to verify
 invalidation. Draw timings remain useful for the before/after comparison.
+
+### Shared stock history investigation: Flux component logging
+
+Undertow's idle/morph captures identify history submission as the dominant
+modulated-preview cost; see [Undertow baseline](undertow-preview-baseline.md).
+Flux now appends per-channel and combined history/contour CPU timings plus
+submitted trail/point counts, preserving the earlier totals and rendering.
+[Capture instructions and metric scope](integral-flux-draw-logging.md).
+Next: capture idle, shape modulation, and fade-out in Flux, then decide on a
+shared history experiment using Flux as a proxy for Proc. No new history backend
+or capture policy is introduced by this instrumentation.
+
+Flux's 21:39 component capture confirms the stock history bottleneck: with both
+channels at six trails, median history 88.3 µs out of 114.7 µs preview, versus
+17.3 µs current contour. CH4 history drops to 0.2 µs after expiration while
+CH1 remains active. See the updated Integral Flux baseline for captured rows
+and limitations. Next candidate is a retained snapshot history experiment,
+measured against stock vectors before adoption.

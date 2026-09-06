@@ -37,6 +37,13 @@ thread_local uint64_t gIntegralFluxApertureDrawNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxLinearPointDrawNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxShapeGlyphDrawNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxPlasmaSwitchDrawNsThisFrame = 0u;
+struct IntegralFluxPreviewBreakdown {
+	uint64_t historyNs = 0;
+	uint64_t contourNs = 0;
+	WavePreviewTracerDrawStats history;
+};
+thread_local IntegralFluxPreviewBreakdown gIntegralFluxPreviewBreakdown[5] {};
+
 thread_local uint64_t gIntegralFluxPreviewDrawNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxPreviewDrawNsByChannel[5] {};
 thread_local uint64_t gIntegralFluxPreviewFramebufferNsThisFrame = 0u;
@@ -845,7 +852,10 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		                      ? std::sqrt(framebufferScale)
 		                      : 1.f / (1.f + (framebufferScale - 1.f) * GL_HIGH_ZOOM_WIDTH_TAPER);
 		const bool tracerEnabled = modulePtr && modulePtr->previewTracerEnabledControl().load(std::memory_order_relaxed);
+		const bool logPreview = isDragonKingDebugEnabled() && isIntegralFluxDrawLoggingEnabled();
+		auto& breakdown = gIntegralFluxPreviewBreakdown[clamp(channel, 0, 4)];
 		if (tracerEnabled) {
+			IntegralFluxScopedDrawTimer historyTimer(breakdown.historyNs, logPreview);
 			for (const auto& frame : curveTracer.frames) {
 				if (!frame.active) {
 					continue;
@@ -854,11 +864,18 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 				if (age < 0.f || age >= TRAIL_FADE_SEC) {
 					continue;
 				}
+				if (logPreview && frame.pointCount >= 2) {
+					++breakdown.history.trails;
+					breakdown.history.points += frame.pointCount;
+				}
 				const float fade = 1.f - age / TRAIL_FADE_SEC;
 				drawGlRibbonPoints(frame.points.data(), int(frame.pointCount), 1, GL_TRAIL_LINE_WIDTH * lineScale, tracerColorWithAlpha(118.f * fade));
 			}
 		}
-		drawGlWaveform(lineScale);
+		{
+			IntegralFluxScopedDrawTimer contourTimer(breakdown.contourNs, logPreview);
+			drawGlWaveform(lineScale);
+		}
 		if (modulePtr) {
 			modulePtr->recordCurvePointReduction(channel, POINT_COUNT, POINT_COUNT);
 		}
@@ -1073,10 +1090,13 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		if (pointsValid) {
 			const double nowSec = system::getTime();
 			const bool tracerEnabled = modulePtr && modulePtr->previewTracerEnabledControl().load(std::memory_order_relaxed);
+			const bool logPreview = isDragonKingDebugEnabled() && isIntegralFluxDrawLoggingEnabled();
+			auto& breakdown = gIntegralFluxPreviewBreakdown[clamp(channel, 0, 4)];
 			if (tracerEnabled) {
+				IntegralFluxScopedDrawTimer historyTimer(breakdown.historyNs, logPreview);
 				const int tracerMode = modulePtr->previewTracerCacheModeControl().load(std::memory_order_relaxed);
 				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
-					curveTracer.draw(args.vg, nowSec, curveTracerStyle());
+					curveTracer.draw(args.vg, nowSec, curveTracerStyle(), logPreview ? &breakdown.history : nullptr);
 				}
 				else {
 					frameTracer.draw(args.vg, nowSec, box.size, bufferedTracerStyle(TRAIL_DRAW_STRIDE));
@@ -1093,7 +1113,10 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 				box.size.x, box.size.y, float(edge), color.r, color.g, color.b,
 				float(cachedLutShapeMode), transform[0], transform[3], transform[1], transform[2],
 				APP && APP->window ? APP->window->pixelRatio : 1.f}};
-			contourCache->drawContour(args, key, nowSec);
+			{
+				IntegralFluxScopedDrawTimer contourTimer(breakdown.contourNs, logPreview);
+				contourCache->drawContour(args, key, nowSec);
+			}
 			const size_t reducedPointCount = (edge == 1 || edge == 2)
 				? size_t(simplifiedRisePath.count + simplifiedFallPath.count)
 				: size_t(simplifiedFullPath.count);
@@ -1696,6 +1719,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		uint32_t haloNanoVgSurfaceDraws = 0u;
 		uint32_t haloCenterFramebufferDraws = 0u;
 		uint32_t haloCapReflectionFramebufferDraws = 0u;
+		IntegralFluxPreviewBreakdown previewBreakdown[5] {};
 		float uiStepEmaUs = 0.f;
 		float uiDrawEmaUs = 0.f;
 	};
@@ -1766,7 +1790,10 @@ struct IntegralFluxWidget : ModuleWidget {
 			<< "halo_center_framebuffer_us,halo_cap_reflection_framebuffer_us,"
 			<< "halo_gl_surface_framebuffer_draws,halo_nanovg_surface_draws,halo_center_framebuffer_draws,"
 			<< "halo_cap_reflection_framebuffer_draws,"
-			<< "ui_step_ema_us,ui_draw_ema_us,preview_tracer_accepted_captures\n";
+			<< "ui_step_ema_us,ui_draw_ema_us,preview_tracer_accepted_captures,"
+			<< "history_draw_us,contour_draw_us,history_trails,history_submitted_points,"
+			<< "ch1_history_draw_us,ch1_contour_draw_us,ch1_history_trails,ch1_history_submitted_points,"
+			<< "ch4_history_draw_us,ch4_contour_draw_us,ch4_history_trails,ch4_history_submitted_points\n";
 	}
 
 	void writeDrawLogRow(const DrawLogRow& row) {
@@ -1825,7 +1852,14 @@ struct IntegralFluxWidget : ModuleWidget {
 			<< row.haloCapReflectionFramebufferDraws << ','
 			<< row.uiStepEmaUs << ','
 			<< row.uiDrawEmaUs << ','
-			<< row.previewTracerAcceptedCaptures << '\n';
+			<< row.previewTracerAcceptedCaptures;
+		for (int channel : {0, 1, 4}) {
+			const auto& part = row.previewBreakdown[channel];
+			drawLogFile << ',' << double(part.historyNs) * 1e-3
+				<< ',' << double(part.contourNs) * 1e-3
+				<< ',' << part.history.trails << ',' << part.history.points;
+		}
+		drawLogFile << '\n';
 		if ((row.row & 31u) == 0u) {
 			drawLogFile.flush();
 		}
@@ -2223,6 +2257,9 @@ struct IntegralFluxWidget : ModuleWidget {
 			gIntegralFluxLinearPointDrawNsThisFrame = 0u;
 			gIntegralFluxShapeGlyphDrawNsThisFrame = 0u;
 			gIntegralFluxPlasmaSwitchDrawNsThisFrame = 0u;
+			for (auto& part : gIntegralFluxPreviewBreakdown) {
+				part = {};
+			}
 			gIntegralFluxPreviewDrawNsThisFrame = 0u;
 			for (uint64_t& value : gIntegralFluxPreviewDrawNsByChannel) {
 				value = 0u;
@@ -2341,6 +2378,15 @@ struct IntegralFluxWidget : ModuleWidget {
 			logRow.linearPointDrawUs = float(gIntegralFluxLinearPointDrawNsThisFrame) * 1e-3f;
 			logRow.shapeGlyphDrawUs = float(gIntegralFluxShapeGlyphDrawNsThisFrame) * 1e-3f;
 			logRow.plasmaSwitchDrawUs = float(gIntegralFluxPlasmaSwitchDrawNsThisFrame) * 1e-3f;
+			for (int channel : {1, 4}) {
+				const auto& part = gIntegralFluxPreviewBreakdown[channel];
+				logRow.previewBreakdown[channel] = part;
+				auto& total = logRow.previewBreakdown[0];
+				total.historyNs += part.historyNs;
+				total.contourNs += part.contourNs;
+				total.history.trails += part.history.trails;
+				total.history.points += part.history.points;
+			}
 			logRow.previewDrawUs = float(gIntegralFluxPreviewDrawNsThisFrame) * 1e-3f;
 			logRow.ch1PreviewDrawUs = float(gIntegralFluxPreviewDrawNsByChannel[1]) * 1e-3f;
 			logRow.ch4PreviewDrawUs = float(gIntegralFluxPreviewDrawNsByChannel[4]) * 1e-3f;

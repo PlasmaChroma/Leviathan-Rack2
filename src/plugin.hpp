@@ -68,6 +68,7 @@ bool isTemporalDeckLifetimeLoggingEnabled();
 bool isModuleTeardownLoggingEnabled();
 bool isScopeDrawLoggingEnabled();
 bool isIntegralFluxDrawLoggingEnabled();
+bool isUndertowDrawLoggingEnabled();
 bool isPuffyDrawLoggingEnabled();
 bool isWyrmDrawLoggingEnabled();
 bool isExtraGlValidationEnabled();

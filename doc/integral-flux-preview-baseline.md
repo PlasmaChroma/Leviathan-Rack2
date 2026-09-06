@@ -163,3 +163,38 @@ Instance 2 reports 2,229 rebuilds, 2,227 capture attempts and 860 accepted captu
 Version-based invalidation remains a separate possible optimization; these counts
 alone do not establish whether actual geometry changed. No further code changes
 were made while analyzing this capture.
+
+## Stock history component capture — 2026-09-05 21:39
+
+Raw CSV snapshots and computed medians/p95 are in
+[benchmarks/flux-history-20260905](benchmarks/flux-history-20260905/summary.json).
+Instance 1 has 1,912 complete rows; instance 2 has 1,981. Both use NanoVG,
+stock tracing enabled. All new component columns are present.
+
+| Workload | Rows | Preview median | History median | Contour median |
+| --- | ---: | ---: | ---: | ---: |
+| Instance 1, stable, both channels | 1,912 | 11.5 µs | 0.4 µs | 2.3 µs |
+| Instance 2, both channels submitting six trails each | 1,634 | 114.7 µs | 88.3 µs | 17.3 µs |
+| Instance 2, CH4 expired while CH1 traces, CH4 only | 267 | 4.3 µs | 0.2 µs | 1.4 µs |
+
+With both histories full, combined history has p95 103.6 µs and a median
+525 submitted polyline points across 12 trails. Median per-row history share
+of combined preview CPU time is 76.8%. CH4's full-history medians are
+62.05 µs preview, 49.1 µs history, and 9.3 µs contour.
+
+CH4 submits no history in rows 1406–1672, while CH1 keeps six trails. History
+returns afterward. The stable reference instance never submits a trail.
+These observations corroborate Undertow's history-dominated modulation result
+and distinguish the history work from the already settled current contour.
+The logs measure CPU submission, not GPU completion; no zoom metadata is
+recorded here, so this is a within-capture comparison, not a normalized
+cross-module speed comparison. Rare contour spikes remain (up to 1.28 ms in
+the stable instance); their cause cannot be assigned from these fields alone.
+
+Next candidate: an optional retained snapshot history experiment in the shared
+tracer infrastructure. Rasterize each accepted snapshot once, composite with
+its existing age-based opacity, and reuse expired slots. Preserve capture
+cadence, ordering, color and lifetime. Benchmark capture cost plus steady-state
+compositing against current vector history before adopting it. Use Flux as the
+initial live test and verify Proc/Undertow afterward. This capture justifies the
+experiment; it does not establish that a raster backend will be faster.

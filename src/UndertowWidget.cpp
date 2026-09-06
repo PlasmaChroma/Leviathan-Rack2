@@ -1,4 +1,5 @@
 #include "Undertow.hpp"
+#include "UndertowDrawLog.hpp"
 #include "UndertowShape.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
@@ -55,6 +56,8 @@ struct UndertowShapePreviewWidget final : Widget {
   bool lastAsymEnabled = false;
   bool lastAsymOnRight = false;
   Vec lastPointSize;
+  UndertowPreviewDrawMetrics metrics;
+  bool logging() const { return module && isDragonKingDebugEnabled() && isUndertowDrawLoggingEnabled(); }
 
   explicit UndertowShapePreviewWidget(Undertow* module) : module(module) {
     refreshSamples(DEFAULT_SHAPE_AMOUNT, DEFAULT_EDGE_HARDNESS, false, false);
@@ -80,15 +83,20 @@ struct UndertowShapePreviewWidget final : Widget {
   }
 
   void refreshSamples(float shapeAmount, float edgeHardness, bool asymEnabled, bool asymOnRight) {
+    const bool measure = logging();
+    const auto started = debug_terminal::debugTimerStart(measure);
     for (int i = 0; i < PREVIEW_POINT_COUNT; ++i) {
       const float phase = float(i) / float(PREVIEW_POINT_COUNT - 1);
       const float folded = undertow_shape::thresholdFold(phase, shapeAmount, asymEnabled, edgeHardness, asymOnRight);
       samples[size_t(i)] = clamp(folded, -1.f, 1.f) * 5.f;
     }
     samplesInitialized = true;
+    if (measure) { ++metrics.sampleRebuilds; metrics.samplesUs += debug_terminal::elapsedUsSince(started); }
   }
 
   void rebuildPoints() {
+    const bool measure = logging();
+    const auto started = debug_terminal::debugTimerStart(measure);
     const float w = std::max(box.size.x, 1.f);
     const float h = std::max(box.size.y, 1.f);
     const float drawPad = 0.5f * WAVE_LINE_WIDTH + WAVE_EDGE_PAD;
@@ -106,6 +114,7 @@ struct UndertowShapePreviewWidget final : Widget {
     }
     pointsInitialized = true;
     lastPointSize = box.size;
+    if (measure) { ++metrics.pointRebuilds; metrics.pointsUs += debug_terminal::elapsedUsSince(started); }
   }
 
   void step() override {
@@ -139,7 +148,8 @@ struct UndertowShapePreviewWidget final : Widget {
       if (curveChanged) {
         if (tracerEnabled && pointsInitialized) {
           if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
-            curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC, TRAIL_CAPTURE_STRIDE);
+            const auto stats = curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC, TRAIL_CAPTURE_STRIDE);
+            if (logging()) { ++metrics.attempts; metrics.captures += stats.captured; }
           }
           else {
             WavePreviewBufferedTracerStyle style;
@@ -148,7 +158,8 @@ struct UndertowShapePreviewWidget final : Widget {
             style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
             style.maxAlpha = 104.f;
             style.drawStride = TRAIL_CAPTURE_STRIDE;
-            frameTracer.capture(points, nowSec, box.size, style);
+            const auto stats = frameTracer.capture(points, nowSec, box.size, style);
+            if (logging()) { ++metrics.attempts; metrics.captures += stats.captured; }
           }
         }
         refreshSamples(shapeAmount, edgeHardness, asymEnabled, asymOnRight);
@@ -173,6 +184,8 @@ struct UndertowShapePreviewWidget final : Widget {
   }
 
   void draw(const DrawArgs& args) override {
+    const bool measure = logging();
+    const auto previewStart = debug_terminal::debugTimerStart(measure);
     if (!samplesInitialized) {
       refreshSamples(DEFAULT_SHAPE_AMOUNT, DEFAULT_EDGE_HARDNESS, false, false);
     }
@@ -198,6 +211,7 @@ struct UndertowShapePreviewWidget final : Widget {
     nvgStrokeWidth(args.vg, 0.65f);
     nvgStroke(args.vg);
 
+    const auto historyStart = debug_terminal::debugTimerStart(measure);
     if (module && module->previewTracerEnabled.load(std::memory_order_relaxed)) {
       const int tracerMode = module->previewTracerCacheMode.load(std::memory_order_relaxed);
       if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
@@ -221,20 +235,26 @@ struct UndertowShapePreviewWidget final : Widget {
       }
     }
 
+    if (measure) metrics.historyUs += debug_terminal::elapsedUsSince(historyStart);
+    const auto simplifyStart = debug_terminal::debugTimerStart(measure);
     auto vg = args.vg;
     nvgBeginPath(vg);
-    wave_preview::simplifyPath(points.data(), PREVIEW_POINT_COUNT, 1, 0.02f, [vg](const Vec& pt, bool isMove) {
+    wave_preview::simplifyPath(points.data(), PREVIEW_POINT_COUNT, 1, 0.02f, [vg, this, measure](const Vec& pt, bool isMove) {
+      if (measure) ++metrics.simplifiedPoints;
       if (isMove) {
         nvgMoveTo(vg, pt.x, pt.y);
       } else {
         nvgLineTo(vg, pt.x, pt.y);
       }
     });
+    if (measure) metrics.simplifySubmitUs += debug_terminal::elapsedUsSince(simplifyStart);
+    const auto strokeStart = debug_terminal::debugTimerStart(measure);
     nvgStrokeColor(args.vg, nvgRGBA(230, 230, 220, 255));
     nvgStrokeWidth(args.vg, WAVE_LINE_WIDTH);
     nvgLineCap(args.vg, NVG_BUTT);
     nvgLineJoin(args.vg, NVG_ROUND);
     nvgStroke(args.vg);
+    if (measure) metrics.strokeSubmitUs += debug_terminal::elapsedUsSince(strokeStart);
 
     nvgResetScissor(args.vg);
     nvgRestore(args.vg);
@@ -246,17 +266,22 @@ struct UndertowShapePreviewWidget final : Widget {
         displayHz = undertowBaseFrequencyFromKnob(module->params[Undertow::COARSE_PARAM].getValue());
       }
     }
+    const auto labelStart = debug_terminal::debugTimerStart(measure);
     const std::string freqText = formatFrequencyText(displayHz);
     nvgFontSize(args.vg, LABEL_FONT_SIZE);
     nvgFontFaceId(args.vg, APP->window->uiFont->handle);
     nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
     nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
     nvgText(args.vg, box.size.x * 0.5f, box.size.y + 1.5f, freqText.c_str(), nullptr);
+    if (measure) { metrics.labelUs += debug_terminal::elapsedUsSince(labelStart); metrics.drawUs += debug_terminal::elapsedUsSince(previewStart); }
   }
 };
 
 struct UndertowWidget final : ModuleWidget {
   debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
+  UndertowDrawLog drawLog;
+  UndertowShapePreviewWidget* loggedPreview = nullptr;
+  float lastStepUs = 0.f;
 
   explicit UndertowWidget(Undertow* module) {
     setModule(module);
@@ -331,6 +356,7 @@ struct UndertowWidget final : ModuleWidget {
         previewRectMm = insetRectMm(previewRectMm, 0.2f);
         auto* previewWidget = new UndertowShapePreviewWidget(module);
         previewWidget->box.pos = mm2px(previewRectMm.pos);
+        loggedPreview = previewWidget;
         previewWidget->box.size = mm2px(previewRectMm.size);
         widget::FramebufferWidget* previewSurface = preview_surface::createCachedOpaqueGrid(previewWidget->box.size);
         previewSurface->box.pos = previewWidget->box.pos;
@@ -373,14 +399,20 @@ struct UndertowWidget final : ModuleWidget {
     const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
     ModuleWidget::step();
     if (measurePerf) {
-      debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
+      lastStepUs = debug_terminal::elapsedUsSince(stepStart);
+      debugWidgetMetrics.recordStep(lastStepUs);
     }
   }
 
   void draw(const DrawArgs& args) override {
     const bool measurePerf = isDragonKingDebugEnabled();
+    auto* owner = static_cast<Undertow*>(module);
+    const bool logDraw = owner && measurePerf && isUndertowDrawLoggingEnabled();
+    drawLog.sync(logDraw, owner ? owner->debugMetrics.instanceId : 0);
     const auto drawStart = debug_terminal::debugTimerStart(measurePerf);
+    const auto subtreeStart = debug_terminal::debugTimerStart(logDraw);
     ModuleWidget::draw(args);
+    const float subtreeUs = logDraw ? debug_terminal::elapsedUsSince(subtreeStart) : 0.f;
     auto* undertow = static_cast<Undertow*>(module);
     if (!undertow) {
       return;
@@ -390,9 +422,24 @@ struct UndertowWidget final : ModuleWidget {
       debug_terminal::drawDebugInstanceId(args.vg, box.size, undertow->debugMetrics.instanceId);
     }
 
-    if (measurePerf) {
-      debugWidgetMetrics.recordDraw(debug_terminal::elapsedUsSince(drawStart));
+    const float drawUs = measurePerf ? debug_terminal::elapsedUsSince(drawStart) : 0.f;
+    if (measurePerf) debugWidgetMetrics.recordDraw(drawUs);
+    if (logDraw && drawLog.file && loggedPreview) {
+      const auto& m = loggedPreview->metrics;
+      float transform[6]; nvgCurrentTransform(args.vg, transform);
+      drawLog.file << drawLog.row++ << "," << undertow->id << "," << undertow->debugMetrics.instanceId
+        << "," << system::getTime() << "," << lastStepUs << "," << drawUs << "," << subtreeUs
+        << "," << m.drawUs << "," << m.samplesUs << "," << m.pointsUs << "," << m.historyUs
+        << "," << m.simplifySubmitUs << "," << m.strokeSubmitUs << "," << m.labelUs
+        << "," << m.sampleRebuilds << "," << m.pointRebuilds << "," << m.attempts << "," << m.captures << "," << m.simplifiedPoints
+        << "," << undertow->previewTracerEnabled.load() << "," << undertow->previewTracerCacheMode.load()
+        << "," << loggedPreview->lastShapeAmount << "," << loggedPreview->lastEdgeHardness
+        << "," << loggedPreview->lastAsymEnabled << "," << loggedPreview->lastAsymOnRight
+        << "," << undertow->displayFrequencyHz.load() << "," << transform[0] << "," << transform[3]
+        << "," << (APP && APP->window ? APP->window->pixelRatio : 1.f) << "\n";
+      if ((drawLog.row & 31u) == 0u) drawLog.file.flush();
     }
+    if (loggedPreview) loggedPreview->metrics = {};
 
     if (measurePerf) {
       const double nowSec = system::getTime();

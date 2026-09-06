@@ -33,6 +33,12 @@ struct WavePreviewBufferedTracerStyle {
 	int lineRadiusPx = 1;
 };
 
+// Optional CPU submission counters; accumulated by draw(), never a GPU measurement.
+struct WavePreviewTracerDrawStats {
+	size_t trails = 0;
+	size_t points = 0;
+};
+
 struct WavePreviewTracerCaptureStats {
 	bool captured = false;
 	size_t simplifiedPointCount = 0;
@@ -112,7 +118,8 @@ struct WavePreviewTracer {
 		return false;
 	}
 
-	void draw(NVGcontext* vg, double nowSec, const WavePreviewTracerStyle& style) const {
+	void draw(NVGcontext* vg, double nowSec, const WavePreviewTracerStyle& style,
+	          WavePreviewTracerDrawStats* stats = nullptr) const {
 		const float fadeSec = std::max(style.fadeSec, 1e-6f);
 		for (const Frame& frame : frames) {
 			if (!frame.active) {
@@ -126,6 +133,10 @@ struct WavePreviewTracer {
 			const int alpha = clamp(int(style.maxAlpha * fade), 0, 255);
 			if (alpha <= 0) {
 				continue;
+			}
+			if (stats) {
+				++stats->trails;
+				stats->points += frame.pointCount;
 			}
 			NVGcolor color = style.color;
 			color.a *= float(alpha) / 255.f;
