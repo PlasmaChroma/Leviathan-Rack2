@@ -198,3 +198,42 @@ cadence, ordering, color and lifetime. Benchmark capture cost plus steady-state
 compositing against current vector history before adopting it. Use Flux as the
 initial live test and verify Proc/Undertow afterward. This capture justifies the
 experiment; it does not establish that a raster backend will be faster.
+
+## Retained snapshots live capture — 2026-09-05 21:52
+
+Preserved both the 21:52:18 mode-switch captures and 21:52:40 snapshot captures
+(two instances each) in
+[benchmarks/flux-snapshots-20260905](benchmarks/flux-snapshots-20260905/summary.json).
+Compare instance 2 rows with six trails per channel (12 total), so the stopped
+CH4 section does not artificially reduce the snapshot modulation result.
+
+| Capture / mode | Rows | Preview median / p95 | History median / p95 | Contour median |
+| --- | ---: | ---: | ---: | ---: |
+| 21:52:18 vector | 598 | 111.8 / 129.0 µs | 86.6 / 102.2 µs | 17.0 µs |
+| 21:52:18 snapshot | 691 | 42.3 / 66.9 µs | 17.3 / 40.8 µs | 17.8 µs |
+| 21:52:40 snapshot | 1,410 | 31.6 / 53.6 µs | 7.0 / 28.3 µs | 17.3 µs |
+
+The within-capture switch lowers median preview CPU time by 62% and history
+by 80%. The later run is faster again, but these logs cannot identify why;
+use the within-capture comparison as the stronger evidence. Median represented
+point counts are 510, 532 and 512 respectively, so snapshot savings do not
+come from a smaller source polyline workload.
+
+In the later run, the 518 full-history rows that rasterize snapshots have
+43.8 / 59.7 µs preview median / p95 and 19.15 / 31.5 µs history. The 892
+reuse-only rows have 30.3 / 40.0 µs preview and 6.5 / 9.0 µs history. Thus
+snapshot creation remains included in the aggregate comparison and does not
+erase the observed CPU gain.
+
+All 1,712 rows in the later modulated instance contain exactly 862 accepted
+captures and 862 history rasterizations. During CH4 release, its trail count
+falls from six to zero across rows 746–763, with zero CH4 rasterizations in
+that interval. History cost decreases with the remaining composites. The
+255 rows with CH4 history expired and CH1 still at six trails have CH4 preview
+median 4.9 µs and history median 0.2 µs.
+
+Conclusion: retained snapshots deliver a clear live CPU improvement on this
+workload and exhibit the intended capture-only rasterization schedule. This
+is not a GPU-completion measurement or a visual/context-lifecycle validation.
+Next: confirm appearance and zoom/editor reopen behavior, checkpoint the Flux
+experiment, then reuse the helper in Proc and Undertow with local verification.

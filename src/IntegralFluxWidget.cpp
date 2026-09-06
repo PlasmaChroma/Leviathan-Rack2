@@ -9,6 +9,7 @@
 #include "visual/PlasmaConduit.hpp"
 #include "visual/PreviewSurface.hpp"
 #include "visual/SettledContourFramebuffer.hpp"
+#include "visual/SnapshotHistory.hpp"
 #include "WavePreviewTracer.hpp"
 #include <array>
 #include <atomic>
@@ -409,6 +410,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 	};
 	ContourFramebuffer* contourCache = nullptr;
 	ContourLayer* contourLayer = nullptr;
+	visual_assets::SnapshotHistory<POINT_COUNT, 6>* snapshotHistory = nullptr;
 
 	WavePreviewWidget(IntegralFlux* module, int channel) {
 		modulePtr = module;
@@ -419,6 +421,8 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		contourLayer->preview = this;
 		contourCache->addChild(contourLayer);
 		addChild(contourCache);
+		snapshotHistory = new visual_assets::SnapshotHistory<POINT_COUNT, 6>;
+		addChild(snapshotHistory);
 	}
 
 	bool useOpenGlRenderer() const {
@@ -998,6 +1002,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 	void step() override {
 		const bool openGlRenderer = useOpenGlRenderer();
 		contourCache->box.size = box.size;
+		snapshotHistory->box.size = box.size;
 		contourLayer->box.size = box.size;
 		if (!openGlRenderer) {
 			Widget::step();
@@ -1041,7 +1046,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			curveTracer.clear();
 			frameTracer.clear();
 		}
-		else if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+		else if (tracerMode != WAVE_PREVIEW_TRACER_FRAME_CACHE) {
 			curveTracer.expire(nowSec, TRAIL_FADE_SEC);
 			frameTracer.clear();
 		}
@@ -1050,7 +1055,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		}
 		if (!pointsValid || version != lastVersion) {
 			if (tracerEnabled && pointsValid) {
-				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+				if (tracerMode != WAVE_PREVIEW_TRACER_FRAME_CACHE) {
 					const WavePreviewTracerCaptureStats stats =
 						curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC, TRAIL_CAPTURE_STRIDE);
 					modulePtr->recordTracerExtraPointReduction(channel, stats);
@@ -1095,8 +1100,11 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			if (tracerEnabled) {
 				IntegralFluxScopedDrawTimer historyTimer(breakdown.historyNs, logPreview);
 				const int tracerMode = modulePtr->previewTracerCacheModeControl().load(std::memory_order_relaxed);
-				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
-					curveTracer.draw(args.vg, nowSec, curveTracerStyle(), logPreview ? &breakdown.history : nullptr);
+				if (tracerMode != WAVE_PREVIEW_TRACER_FRAME_CACHE) {
+					if (tracerMode == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE)
+						snapshotHistory->drawHistory(args, curveTracer, nowSec, curveTracerStyle(), logPreview ? &breakdown.history : nullptr);
+					else
+						curveTracer.draw(args.vg, nowSec, curveTracerStyle(), logPreview ? &breakdown.history : nullptr);
 				}
 				else {
 					frameTracer.draw(args.vg, nowSec, box.size, bufferedTracerStyle(TRAIL_DRAW_STRIDE));
@@ -1793,7 +1801,7 @@ struct IntegralFluxWidget : ModuleWidget {
 			<< "ui_step_ema_us,ui_draw_ema_us,preview_tracer_accepted_captures,"
 			<< "history_draw_us,contour_draw_us,history_trails,history_submitted_points,"
 			<< "ch1_history_draw_us,ch1_contour_draw_us,ch1_history_trails,ch1_history_submitted_points,"
-			<< "ch4_history_draw_us,ch4_contour_draw_us,ch4_history_trails,ch4_history_submitted_points\n";
+			<< "ch4_history_draw_us,ch4_contour_draw_us,ch4_history_trails,ch4_history_submitted_points,history_rasterizations,ch1_history_rasterizations,ch4_history_rasterizations\n";
 	}
 
 	void writeDrawLogRow(const DrawLogRow& row) {
@@ -1859,6 +1867,7 @@ struct IntegralFluxWidget : ModuleWidget {
 				<< ',' << double(part.contourNs) * 1e-3
 				<< ',' << part.history.trails << ',' << part.history.points;
 		}
+		for (int channel : {0, 1, 4}) drawLogFile << ',' << row.previewBreakdown[channel].history.rasterizations;
 		drawLogFile << '\n';
 		if ((row.row & 31u) == 0u) {
 			drawLogFile.flush();
@@ -2384,6 +2393,7 @@ struct IntegralFluxWidget : ModuleWidget {
 				auto& total = logRow.previewBreakdown[0];
 				total.historyNs += part.historyNs;
 				total.contourNs += part.contourNs;
+				total.history.rasterizations += part.history.rasterizations;
 				total.history.trails += part.history.trails;
 				total.history.points += part.history.points;
 			}
@@ -2477,6 +2487,12 @@ struct IntegralFluxWidget : ModuleWidget {
 							[=]() { return maths->previewTracerCacheModeControl().load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_CURVE_CACHE; },
 							[=]() { maths->previewTracerCacheModeControl().store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed); }
 						));
+						if (isDragonKingDebugEnabled()) {
+							submenu->addChild(createCheckMenuItem("Snapshot cache (experimental)", "",
+								[=]() { return maths->previewTracerCacheModeControl().load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE; },
+								[=]() { maths->previewTracerCacheModeControl().store(WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE, std::memory_order_relaxed); }
+							));
+						}
 						submenu->addChild(createCheckMenuItem("Frame cache", "",
 							[=]() { return maths->previewTracerCacheModeControl().load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_FRAME_CACHE; },
 							[=]() { maths->previewTracerCacheModeControl().store(WAVE_PREVIEW_TRACER_FRAME_CACHE, std::memory_order_relaxed); }

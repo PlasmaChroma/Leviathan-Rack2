@@ -826,3 +826,7 @@ build/tests/doorstop_runtime_spec: tests/doorstop_runtime_spec.cpp src/Doorstop.
 
 build/tests/phonex_module_spec: tests/phonex_module_spec.cpp src/Phonex.cpp src/PhonexSemantic.cpp src/Phonex.hpp src/PhonexEngine.cpp src/PhonexEngine.hpp src/PhonexRom.cpp src/PhonexRom.hpp src/PhonexRomData.inc src/PhonexSequenceCompiler.cpp src/PhonexSequenceCompiler.hpp src/PhonexPronunciation.cpp src/PhonexPronunciation.hpp src/PhonexSequenceMailbox.hpp src/PhonexTypes.hpp src/OctaviaSemanticControl.hpp | build/tests build/tests/doorstop_runtime_spec
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/phonex_module_spec.cpp src/Phonex.cpp src/PhonexSemantic.cpp src/PhonexEngine.cpp src/PhonexRom.cpp src/PhonexSequenceCompiler.cpp src/PhonexPronunciation.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@
+
+build/tools/snapshot_history_benchmark: tools/snapshot_history_benchmark.cpp tools/preview_benchmark_utils.hpp src/visual/SnapshotHistory.hpp src/WavePreviewTracer.hpp src/Proc.cpp src/ProcPreviewGeometry.hpp | build
+	@mkdir -p build/tools
+	$(CXX) -std=c++17 $(INTEGRAL_FLUX_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/snapshot_history_benchmark.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@

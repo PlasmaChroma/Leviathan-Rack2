@@ -292,3 +292,34 @@ channels at six trails, median history 88.3 µs out of 114.7 µs preview, versus
 CH1 remains active. See the updated Integral Flux baseline for captured rows
 and limitations. Next candidate is a retained snapshot history experiment,
 measured against stock vectors before adoption.
+
+### Retained stock snapshots — Flux experiment
+
+Implemented `visual/SnapshotHistory.hpp` as a reusable widget with six retained
+slots, sharing the stock vector capture ring. Integrated only into Flux as the
+Dragon King **Snapshot cache (experimental)** option (appended mode 2). The
+vector and buffered choices remain available. This preserves discrete linear
+trail fading rather than phosphor accumulation.
+
+`tools/snapshot_history_benchmark.cpp` uses Proc geometry, the shared snapshot
+path drawing code, and native offscreen NanoVG/GL. It includes capture render
+passes and NanoVG flushes but excludes Rack widget traversal, image validation,
+allocation warmup and geometry generation. It tests 60 Hz presentation with a
+20 Hz capture cadence, six slots, then fade and expiry at 1x/4x resolution.
+Therefore its timings are backend evidence, not predictions of live Flux gains.
+GPU timings cover all phases, including expired history. Image comparisons
+sample modulation, fade and expiry; rasterization can differ slightly at edges.
+
+Native results are saved in `benchmarks/snapshot-history-offline.txt`.
+Next live test: same Flux workload, switch from Curve cache to Snapshot cache,
+release CH4 modulation, and compare the CSV's history time and rasterization
+counts. Also inspect zoom, mode switches and context recreation. No rollout to
+Proc or Undertow until the Flux experiment is assessed.
+
+Flux snapshot live validation: the 21:52:18 within-capture vector→snapshot
+switch lowers full-history combined preview median from 111.8 to 42.3 µs.
+The subsequent 21:52:40 run measures 31.6 µs; its 862 rasterizations match
+862 captures, with no CH4 rasterization during release/fade. Detailed grouped
+results are in the Integral Flux baseline. CPU benefit is established for
+this workload; appearance, zoom and context recreation remain live checks
+before rollout to the other previews.

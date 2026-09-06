@@ -11,6 +11,7 @@
 enum WavePreviewTracerCacheMode {
 	WAVE_PREVIEW_TRACER_CURVE_CACHE = 0,
 	WAVE_PREVIEW_TRACER_FRAME_CACHE = 1,
+	WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE = 2,
 };
 
 struct WavePreviewTracerStyle {
@@ -35,6 +36,7 @@ struct WavePreviewBufferedTracerStyle {
 
 // Optional CPU submission counters; accumulated by draw(), never a GPU measurement.
 struct WavePreviewTracerDrawStats {
+	size_t rasterizations = 0;
 	size_t trails = 0;
 	size_t points = 0;
 };

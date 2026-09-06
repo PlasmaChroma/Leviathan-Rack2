@@ -136,7 +136,7 @@ TestResult persistedSettingsRoundTrip() {
 	restored.dataFromJson(state);
 	json_decref(state);
 
-	const bool pass = restored.ch1.cycleLatched
+	bool pass = restored.ch1.cycleLatched
 		&& !restored.ch4.cycleLatched
 		&& restored.bandlimitedGateOutputs.load(std::memory_order_relaxed)
 		&& !restored.bandlimitedSignalOutputs.load(std::memory_order_relaxed)
@@ -145,6 +145,13 @@ TestResult persistedSettingsRoundTrip() {
 		&& !restored.previewTracerEnabled.load(std::memory_order_relaxed)
 		&& restored.previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_FRAME_CACHE
 		&& restored.previewRenderMode.load(std::memory_order_relaxed) == 1;
+	for (int mode : {WAVE_PREVIEW_TRACER_CURVE_CACHE, WAVE_PREVIEW_TRACER_FRAME_CACHE, WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE}) {
+		source.previewTracerCacheMode.store(mode, std::memory_order_relaxed);
+		state = source.dataToJson();
+		restored.dataFromJson(state);
+		json_decref(state);
+		pass = pass && restored.previewTracerCacheMode.load(std::memory_order_relaxed) == mode;
+	}
 	return {"persisted Integral Flux settings round-trip", pass,
 		pass ? "" : "serialized settings did not round-trip exactly"};
 }

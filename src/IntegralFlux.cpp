@@ -959,7 +959,8 @@ void IntegralFlux::dataFromJson(json_t* rootJ) {
 	json_t* previewTracerModeJ = json_object_get(rootJ, "previewTracerCacheMode");
 	if (previewTracerModeJ) {
 		const int mode = int(json_integer_value(previewTracerModeJ));
-		previewTracerCacheMode.store(mode == WAVE_PREVIEW_TRACER_CURVE_CACHE ? WAVE_PREVIEW_TRACER_CURVE_CACHE : WAVE_PREVIEW_TRACER_FRAME_CACHE,
+		previewTracerCacheMode.store(mode == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE ? WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE :
+			(mode == WAVE_PREVIEW_TRACER_CURVE_CACHE ? WAVE_PREVIEW_TRACER_CURVE_CACHE : WAVE_PREVIEW_TRACER_FRAME_CACHE),
 		                             std::memory_order_relaxed);
 	}
 
