@@ -970,6 +970,7 @@ void IntegralFlux::dataFromJson(json_t* rootJ) {
 		previewRenderMode.store(json_integer_value(previewRenderModeJ) == 1 ? 1 : 0, std::memory_order_relaxed);
 	}
 	if (!isDragonKingPreviewWidgetOptionsEnabled()) {
+		previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE, std::memory_order_relaxed);
 		previewRenderMode.store(0, std::memory_order_relaxed);
 	}
 }

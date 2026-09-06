@@ -1061,6 +1061,10 @@ struct Proc : Module {
 		previewPhosphorPersistence.store(readPhosphorChoice("previewPhosphorPersistence"));
 		previewPhosphorStrength.store(readPhosphorChoice("previewPhosphorStrength"));
 		previewPhosphorAdditive.store(!json_is_false(json_object_get(rootJ, "previewPhosphorAdditive")));
+		if (!isDragonKingPreviewWidgetOptionsEnabled()) {
+			previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE, std::memory_order_relaxed);
+			previewPhosphorEnabled.store(false, std::memory_order_relaxed);
+		}
 	}
 
 	void process(const ProcessArgs& args) override {

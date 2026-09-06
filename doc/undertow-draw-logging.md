@@ -2,7 +2,9 @@
 
 Snapshot history is now the default for new instances and patches without a
 saved tracer mode in Proc, Integral Flux, and Undertow. Explicit saved modes
-remain intact, including with Dragon King preview options disabled. The menu
+remain intact when Dragon King preview options are enabled. When
+`PreviewWidgetOptions` is disabled, loading forces snapshot cache; Proc also
+disables phosphor and Flux uses its existing NanoVG fallback. The menu
 labels this choice **Snapshot cache (default)**. Earlier experiment notes below
 record the rollout history.
 

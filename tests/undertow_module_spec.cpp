@@ -648,7 +648,7 @@ TestResult previewModesRoundTrip() {
     source.previewTracerCacheMode.store(mode);
     json_t* state = source.dataToJson();
     restored.dataFromJson(state);
-    pass = pass && restored.previewTracerCacheMode.load() == mode;
+    pass = pass && restored.previewTracerCacheMode.load() == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE;
     json_object_del(state, "previewTracerCacheMode");
     restored.previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE);
     restored.dataFromJson(state);

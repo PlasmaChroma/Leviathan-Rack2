@@ -319,6 +319,9 @@ void Undertow::dataFromJson(json_t* root) {
       : (mode == WAVE_PREVIEW_TRACER_CURVE_CACHE ? WAVE_PREVIEW_TRACER_CURVE_CACHE : WAVE_PREVIEW_TRACER_FRAME_CACHE),
                                  std::memory_order_relaxed);
   }
+  if (!isDragonKingPreviewWidgetOptionsEnabled()) {
+    previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE, std::memory_order_relaxed);
+  }
   if (json_t* edgeHardnessJ = json_object_get(root, "shapeEdgeHardness")) {
     params[EDGE_HARDNESS_PARAM].setValue(clamp(float(json_number_value(edgeHardnessJ)), 0.f, 1.f));
   }

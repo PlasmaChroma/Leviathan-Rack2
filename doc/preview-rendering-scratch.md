@@ -366,3 +366,12 @@ its existing vector history. Default NanoVG rendering uses snapshots.
 Tests cover new defaults, explicit saved modes, and missing-mode loads with
 preview options disabled. This promotes the validated backend without migrating
 explicit tracer choices in existing patches.
+
+### PreviewWidgetOptions policy update
+
+When `PreviewWidgetOptions` is disabled, all three modules now force snapshot
+cache while loading, overriding saved vector/buffered choices. Proc also clears
+its saved phosphor enable flag so it cannot override snapshot rendering; Flux
+retains its existing forced NanoVG renderer behavior. When options are enabled,
+explicit saved choices still round-trip. New instances already use snapshots.
+This supersedes the preceding preservation policy for disabled preview options.

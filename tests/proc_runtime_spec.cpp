@@ -148,16 +148,19 @@ TestResult persistedSettingsRoundTrip() {
 		pass = pass && restored.previewTracerCacheMode.load() == mode;
 	}
 	previewOptionsEnabled = false;
+	source.previewPhosphorEnabled.store(true);
 	Proc fresh;
 	pass = pass && fresh.previewTracerCacheMode.load() == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE;
 	for (int mode : {WAVE_PREVIEW_TRACER_CURVE_CACHE, WAVE_PREVIEW_TRACER_FRAME_CACHE, WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE}) {
 		source.previewTracerCacheMode.store(mode);
 		state = source.dataToJson();
 		restored.dataFromJson(state);
-		pass = pass && restored.previewTracerCacheMode.load() == mode;
+		pass = pass && !restored.previewPhosphorEnabled.load();
+		pass = pass && restored.previewTracerCacheMode.load() == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE;
 		json_object_del(state, "previewTracerCacheMode");
 		restored.previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE);
 		restored.dataFromJson(state);
+		pass = pass && !restored.previewPhosphorEnabled.load();
 		pass = pass && restored.previewTracerCacheMode.load() == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE;
 		json_decref(state);
 	}
