@@ -1663,7 +1663,6 @@ struct IntegralFluxWidget : ModuleWidget {
 	float eclipseDrawUsEma = 0.f;
 	float linearPointDrawUsEma = 0.f;
 	float shapeGlyphDrawUsEma = 0.f;
-	float plasmaSwitchDrawUsEma = 0.f;
 	debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
 	debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
 	debug_terminal::UiTimingRangeAccumulator apertureDrawUsRange;
@@ -2305,8 +2304,6 @@ struct IntegralFluxWidget : ModuleWidget {
 			linearPointDrawUsEma = (linearPointDrawUsEma > 0.f) ? (linearPointDrawUsEma + (linearPointDrawUs - linearPointDrawUsEma) * 0.18f) : linearPointDrawUs;
 			const float shapeGlyphDrawUs = float(gIntegralFluxShapeGlyphDrawNsThisFrame) * 1e-3f;
 			shapeGlyphDrawUsEma = (shapeGlyphDrawUsEma > 0.f) ? (shapeGlyphDrawUsEma + (shapeGlyphDrawUs - shapeGlyphDrawUsEma) * 0.18f) : shapeGlyphDrawUs;
-			const float plasmaSwitchDrawUs = float(gIntegralFluxPlasmaSwitchDrawNsThisFrame) * 1e-3f;
-			plasmaSwitchDrawUsEma = (plasmaSwitchDrawUsEma > 0.f) ? (plasmaSwitchDrawUsEma + (plasmaSwitchDrawUs - plasmaSwitchDrawUsEma) * 0.18f) : plasmaSwitchDrawUs;
 			apertureDrawUsRange.add(float(gIntegralFluxApertureDrawNsThisFrame) * 1e-3f);
 		}
 
@@ -2341,8 +2338,6 @@ struct IntegralFluxWidget : ModuleWidget {
 			if (APP && APP->window && APP->window->uiFont) {
 				char debugIdLabel[32];
 				std::snprintf(debugIdLabel, sizeof(debugIdLabel), "ID:%u", debugInstanceId);
-				char plasmaSwitchLabel[32];
-				std::snprintf(plasmaSwitchLabel, sizeof(plasmaSwitchLabel), "PSW:%.1fus", plasmaSwitchDrawUsEma);
 				const float x = box.size.x - mm2px(0.9f);
 				const float y = mm2px(2.5f);
 				nvgSave(args.vg);
@@ -2353,11 +2348,6 @@ struct IntegralFluxWidget : ModuleWidget {
 				nvgText(args.vg, x + 0.45f, y + 0.45f, debugIdLabel, nullptr);
 				nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 230));
 				nvgText(args.vg, x, y, debugIdLabel, nullptr);
-				nvgFontSize(args.vg, 6.2f);
-				nvgFillColor(args.vg, nvgRGBA(8, 10, 14, 210));
-				nvgText(args.vg, x + 0.45f, y + mm2px(2.0f) + 0.45f, plasmaSwitchLabel, nullptr);
-				nvgFillColor(args.vg, nvgRGBA(190, 235, 255, 225));
-				nvgText(args.vg, x, y + mm2px(2.0f), plasmaSwitchLabel, nullptr);
 				nvgRestore(args.vg);
 			}
 			if (logDraw) {

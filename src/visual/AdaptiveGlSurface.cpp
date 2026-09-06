@@ -113,6 +113,13 @@ bool AdaptiveGlSurface::renderIfNeeded(NVGcontext* targetVg,
 	glPushMatrix();
 
 	nvgluBindFramebuffer(back);
+	// The active image can occupy only a prefix of a retained larger texture.
+	// Clear the whole target so linear filtering at that boundary cannot sample
+	// pixels left behind by a previous, larger active render.
+	glDisable(GL_SCISSOR_TEST);
+	glViewport(0, 0, backCapacityWidth, backCapacityHeight);
+	glClearColor(0.f, 0.f, 0.f, 0.f);
+	glClear(GL_COLOR_BUFFER_BIT);
 	// NVGLU marks framebuffer images FLIPY for NanoVG. Rendering against the
 	// top edge makes the active prefix addressable with a larger image pattern.
 	callback(user, Vec(float(activeWidth), float(activeHeight)), capacityHeight - activeHeight);
