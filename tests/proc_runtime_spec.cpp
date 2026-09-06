@@ -147,6 +147,16 @@ TestResult persistedSettingsRoundTrip() {
 		json_decref(state);
 		pass = pass && restored.previewTracerCacheMode.load() == mode;
 	}
+	// Legacy mode 0 was the automatically saved default, including templates.
+	for (int mode : {WAVE_PREVIEW_TRACER_CURVE_CACHE, WAVE_PREVIEW_TRACER_FRAME_CACHE, WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE}) {
+		source.previewTracerCacheMode.store(mode);
+		state = source.dataToJson();
+		json_object_del(state, "previewTracerCacheVersion");
+		restored.dataFromJson(state);
+		pass = pass && restored.previewTracerCacheMode.load() ==
+			(mode == WAVE_PREVIEW_TRACER_CURVE_CACHE ? WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE : mode);
+		json_decref(state);
+	}
 	previewOptionsEnabled = false;
 	source.previewPhosphorEnabled.store(true);
 	Proc fresh;

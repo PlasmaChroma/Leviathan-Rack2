@@ -915,6 +915,7 @@ json_t* IntegralFlux::dataToJson() {
 	json_object_set_new(rootJ, "timingUpdateDiv", json_integer(requestedTimingUpdateDiv.load(std::memory_order_relaxed)));
 	json_object_set_new(rootJ, "timingInterpolate", json_boolean(timingInterpolate.load(std::memory_order_relaxed)));
 	json_object_set_new(rootJ, "previewTracerEnabled", json_boolean(previewTracerEnabled.load(std::memory_order_relaxed)));
+	json_object_set_new(rootJ, "previewTracerCacheVersion", json_integer(1));
 	json_object_set_new(rootJ, "previewTracerCacheMode", json_integer(previewTracerCacheMode.load(std::memory_order_relaxed)));
 	json_object_set_new(rootJ, "previewRenderMode", json_integer(previewRenderMode.load(std::memory_order_relaxed)));
 	return rootJ;
@@ -959,7 +960,13 @@ void IntegralFlux::dataFromJson(json_t* rootJ) {
 	json_t* previewTracerModeJ = json_object_get(rootJ, "previewTracerCacheMode");
 	previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE, std::memory_order_relaxed);
 	if (previewTracerModeJ) {
-		const int mode = int(json_integer_value(previewTracerModeJ));
+		int mode = int(json_integer_value(previewTracerModeJ));
+		// Before snapshots became the default, mode 0 was also saved automatically.
+		// Migrate that legacy default; versioned saves retain deliberate choices.
+		if (mode == WAVE_PREVIEW_TRACER_CURVE_CACHE
+		    && json_integer_value(json_object_get(rootJ, "previewTracerCacheVersion")) < 1) {
+		  mode = WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE;
+		}
 		previewTracerCacheMode.store(mode == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE ? WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE :
 			(mode == WAVE_PREVIEW_TRACER_CURVE_CACHE ? WAVE_PREVIEW_TRACER_CURVE_CACHE : WAVE_PREVIEW_TRACER_FRAME_CACHE),
 		                             std::memory_order_relaxed);

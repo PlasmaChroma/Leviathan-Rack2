@@ -1,6 +1,7 @@
 #include "VisualAssets.hpp"
 
 #include "../GlLifecycleUtils.hpp"
+#include "AdaptiveGlSurface.hpp"
 
 #include <nanovg_gl.h>
 #include <nanosvgrast.h>
@@ -324,6 +325,16 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 	GLint uniformCapRotation = -1;
 	bool shaderFailed = false;
 	bool forceNanoVg = false;
+	visual_assets::AdaptiveGlSurface fixedSurface;
+
+	void invalidateSurface() {
+		fixedSurface.markDirty();
+		setDirty();
+	}
+
+	bool isSurfaceDirty() const {
+		return fixedSurface.isDirty() || dirty;
+	}
 
 	explicit HaloGlSurface(
 		Config config,
@@ -367,6 +378,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 	}
 
 	void onContextDestroy(const ContextDestroyEvent& e) override {
+		fixedSurface.reset(true);
 		OpenGlWidget::onContextDestroy(e);
 		releaseGlResources(true);
 		shaderFailed = false;
@@ -375,6 +387,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 
 	void onContextCreate(const ContextCreateEvent& e) override {
 		OpenGlWidget::onContextCreate(e);
+		fixedSurface.reset(false);
 		// A Rack module widget can outlive the DAW editor scene. In that case it
 		// may miss the old scene's ContextDestroyEvent but later receive the new
 		// context event with nonzero GL names from the previous context. Those
@@ -383,7 +396,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		releaseGlResources(false);
 		shaderFailed = false;
 		bypassed = forceNanoVg;
-		setDirty();
+		invalidateSurface();
 	}
 
 	void releaseGlResources(bool deleteObjects) {
@@ -405,14 +418,38 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		// OpenGlWidget::step() dirties every frame. Halo surfaces are explicitly
 		// invalidated so their framebuffer remains a single idle composite.
 		bypassed = forceNanoVg || shaderFailed;
+		if (!bypassed && APP && APP->window) {
+			float rackZoom = 1.f;
+			if (APP->scene && APP->scene->rackScroll) {
+				rackZoom = std::max(APP->scene->rackScroll->getZoom(), 1e-4f);
+			}
+			visual_assets::AdaptiveGlSurfacePolicy policy;
+			policy.maxDensity = 3.f;
+			policy.retainPeakCapacity = true;
+			if (fixedSurface.renderIfNeeded(
+				APP->window->vg, box.size, rackZoom, APP->window->pixelRatio, policy,
+				isExtraGlValidationEnabled(),
+				[](void* user, Vec activeSize, int viewportY) {
+					static_cast<HaloGlSurface*>(user)->renderGlContent(activeSize, viewportY);
+				}, this)) {
+				// The adaptive surface now owns the current image. Prevent Rack's
+				// dormant per-widget framebuffer from remaining logically dirty.
+				setDirty(false);
+			}
+		}
 		FramebufferWidget::step();
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (!bypassed && fixedSurface.draw(args, box.size)) return;
+		widget::FramebufferWidget::draw(args);
 	}
 
 	void setForceNanoVg(bool force) {
 		if (forceNanoVg == force) return;
 		forceNanoVg = force;
 		bypassed = forceNanoVg || shaderFailed;
-		if (!bypassed) setDirty();
+		if (!bypassed) invalidateSurface();
 	}
 
 	void setVisualState(float value, float bloom) {
@@ -425,13 +462,13 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		if (std::fabs(value - valueNorm) <= 1e-6f && std::fabs(bloom - bloomAmount) <= 1e-4f) return;
 		valueNorm = value;
 		bloomAmount = bloom;
-		setDirty();
+		invalidateSurface();
 	}
 
 	void setCenterLit(bool lit) {
 		if (centerLit == lit) return;
 		centerLit = lit;
-		if (!bypassed) setDirty();
+		if (!bypassed) invalidateSurface();
 	}
 
 	bool ensureCapTextureReady() {
@@ -766,13 +803,17 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		glEnd();
 	}
 
-	void drawFramebuffer() override {
+	void renderGlContent(Vec framebufferSize, int viewportY = 0) {
 		const bool measure = isDragonKingDebugEnabled();
 		const auto profileStart = measure ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
-		Vec framebufferSize = getFramebufferSize();
-		glViewport(0, 0, std::max(1, int(std::lround(framebufferSize.x))), std::max(1, int(std::lround(framebufferSize.y))));
+		const int activeWidth = std::max(1, int(std::lround(framebufferSize.x)));
+		const int activeHeight = std::max(1, int(std::lround(framebufferSize.y)));
+		glViewport(0, viewportY, activeWidth, activeHeight);
+		glEnable(GL_SCISSOR_TEST);
+		glScissor(0, viewportY, activeWidth, activeHeight);
 		glClearColor(0.f, 0.f, 0.f, 0.f);
 		glClear(GL_COLOR_BUFFER_BIT);
+		glDisable(GL_SCISSOR_TEST);
 		const float w = std::max(box.size.x, 1.f);
 		const float h = std::max(box.size.y, 1.f);
 		glMatrixMode(GL_PROJECTION);
@@ -870,6 +911,10 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 			gHaloKnob2DrawMetrics.glSurfaceFramebufferNs += haloElapsedNs(profileStart);
 			++gHaloKnob2DrawMetrics.glSurfaceFramebufferDraws;
 		}
+	}
+
+	void drawFramebuffer() override {
+		renderGlContent(getFramebufferSize());
 	}
 };
 
@@ -1028,7 +1073,7 @@ void LeviathanHaloKnob2::onChange(const ChangeEvent& e) {
 }
 
 bool LeviathanHaloKnob2::isVisualDirty() const {
-	return (glSurface && glSurface->dirty)
+	return (glSurface && glSurface->isSurfaceDirty())
 		|| (backLayer && backLayer->cachedSvgFb && backLayer->cachedSvgFb->dirty);
 }
 

@@ -642,6 +642,16 @@ TestResult previewModesRoundTrip() {
     if (restored.previewTracerCacheMode.load() != mode)
       return {"preview modes preserve defaults and round-trip", false, "mode changed on load"};
   }
+  for (int mode : {WAVE_PREVIEW_TRACER_CURVE_CACHE, WAVE_PREVIEW_TRACER_FRAME_CACHE, WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE}) {
+    source.previewTracerCacheMode.store(mode);
+    json_t* state = source.dataToJson();
+    json_object_del(state, "previewTracerCacheVersion");
+    restored.dataFromJson(state);
+    json_decref(state);
+    const int expected = mode == WAVE_PREVIEW_TRACER_CURVE_CACHE ? WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE : mode;
+    if (restored.previewTracerCacheMode.load() != expected)
+      return {"preview modes preserve defaults and round-trip", false, "legacy default migration failed"};
+  }
   previewOptionsEnabled = false;
   bool pass = true;
   for (int mode : {WAVE_PREVIEW_TRACER_CURVE_CACHE, WAVE_PREVIEW_TRACER_FRAME_CACHE, WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE}) {

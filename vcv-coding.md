@@ -187,13 +187,13 @@ ModuleNameWidget(ModuleName* module) : ModuleWidget(module) {
     ));
     
     // Create input jack
-    addInput(InputWidget::create<MagitekInputJack>(
+    addInput(InputWidget::create<Magitek2InputJack>(
         panel_svg::loadPointFromSvgMm(panelSvg, "INPUT_A"),
         module, ModuleName::INPUT_A
     ));
     
     // Create output jack
-    addOutput(OutputWidget::create<MagitekOutputJack>(
+    addOutput(OutputWidget::create<Magitek2OutputJack>(
         panel_svg::loadPointFromSvgMm(panelSvg, "OUTPUT_A"),
         module, ModuleName::OUTPUT_A
     ));
@@ -336,10 +336,8 @@ struct LeviathanHaloKnob2 : app::SvgKnob {
 
 **Jacks:**
 ```cpp
-struct MagitekInputJack : app::SvgPort {
-    MagitekInputJack() {
-        setSvg(Svg::load("res/magitek_input.svg"));
-    }
+struct Magitek2InputJack : Magitek2RasterJack {
+    Magitek2InputJack();
 };
 ```
 

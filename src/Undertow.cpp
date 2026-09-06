@@ -290,6 +290,7 @@ json_t* Undertow::dataToJson() {
                       json_boolean(analogCharacterEnabled.load(std::memory_order_relaxed)));
   json_object_set_new(root, "previewTracerEnabled",
                       json_boolean(previewTracerEnabled.load(std::memory_order_relaxed)));
+  json_object_set_new(root, "previewTracerCacheVersion", json_integer(1));
   json_object_set_new(root, "previewTracerCacheMode",
                       json_integer(previewTracerCacheMode.load(std::memory_order_relaxed)));
   json_object_set_new(root, "shapeEdgeHardness", json_real(params[EDGE_HARDNESS_PARAM].getValue()));
@@ -314,7 +315,13 @@ void Undertow::dataFromJson(json_t* root) {
   }
   previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE, std::memory_order_relaxed);
   if (json_t* previewTracerModeJ = json_object_get(root, "previewTracerCacheMode")) {
-    const int mode = int(json_integer_value(previewTracerModeJ));
+    int mode = int(json_integer_value(previewTracerModeJ));
+    // Before snapshots became the default, mode 0 was also saved automatically.
+    // Migrate that legacy default; versioned saves retain deliberate choices.
+    if (mode == WAVE_PREVIEW_TRACER_CURVE_CACHE
+        && json_integer_value(json_object_get(root, "previewTracerCacheVersion")) < 1) {
+      mode = WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE;
+    }
     previewTracerCacheMode.store(mode == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE ? WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE
       : (mode == WAVE_PREVIEW_TRACER_CURVE_CACHE ? WAVE_PREVIEW_TRACER_CURVE_CACHE : WAVE_PREVIEW_TRACER_FRAME_CACHE),
                                  std::memory_order_relaxed);

@@ -24,6 +24,7 @@ public:
 
 	void reset(bool deleteGlObjects);
 	void markDirty() { dirty = true; }
+	bool isDirty() const { return dirty; }
 
 	bool renderIfNeeded(NVGcontext* vg,
 		Vec logicalSize,

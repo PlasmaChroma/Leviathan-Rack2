@@ -489,7 +489,7 @@ Modules use SVG panels with specially tagged elements that define anchor points 
 ```cpp
 // In module constructor or UI setup
 panelSvg = visual_assets::loadPluginSvgCached("res/TemporalDeck.svg");
-magitekInputjack = addParam(ParamWidget::create<MagitekInputJack>(
+magitekInputjack = addInput(InputWidget::create<Magitek2InputJack>(
     panel_svg::loadPointFromSvgMm(panelSvg, "jack_IN1"), 
     module, TemporalDeck::INPUT_L_INPUT));
 ```
@@ -514,7 +514,6 @@ The `PanelAnchorAtlas` system caches parsed anchors to avoid repeated SVG parsin
 - `ClockworkGearKnob` / `BigClockworkGearKnob` - Dual cogwheel effect
 
 **Custom Jacks:**
-- `MagitekInputJack` / `MagitekOutputJack` - Simple SVG ports
 - `Magitek2InputJack` / `Magitek2OutputJack` - Animated jack with hover spin
 
 **Custom Lights:**

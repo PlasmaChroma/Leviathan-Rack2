@@ -375,3 +375,24 @@ its saved phosphor enable flag so it cannot override snapshot rendering; Flux
 retains its existing forced NanoVG renderer behavior. When options are enabled,
 explicit saved choices still round-trip. New instances already use snapshots.
 This supersedes the preceding preservation policy for disabled preview options.
+
+### Legacy saved default migration
+
+The enabled-options loader previously restored legacy mode 0, overriding the
+snapshot constructor default in old patches/templates. All three loaders now
+migrate unversioned Curve cache settings to snapshots. New saves include
+`previewTracerCacheVersion=1`, allowing explicit vector choices made after this
+migration to survive reload when PreviewWidgetOptions is enabled. Legacy frame
+and snapshot modes remain intact; disabled options still force snapshots.
+Tests cover legacy migration and versioned mode round-trips.
+
+### HaloKnob2 adaptive surface
+
+HaloKnob2 now uses the shared `AdaptiveGlSurface` for its shader result. Each
+46 x 46 knob reserves a quantized backing surface up to 3x density, retains
+that capacity for the graphics context, and changes its active viewport as Rack
+zoom changes. Normal value, bloom, and hover-state invalidation still redraws
+the shader. The NanoVG browser/shader-failure fallback and context reset path
+remain intact. This targets the many-per-module framebuffer reallocations seen
+during zoom changes; live zoom profiling is still required to quantify the
+reduction and check transient image quality.

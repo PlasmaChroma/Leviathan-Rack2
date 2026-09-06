@@ -1931,43 +1931,6 @@ struct OrbScrewStaticLayer : TransparentWidget {
 	}
 };
 
-void setSvgPortSizePx(app::SvgPort* port, float px, float rotationRad = 0.f) {
-	if (!port) {
-		return;
-	}
-	const Vec size(px, px);
-	if (port->fb && port->sw) {
-		const Vec svgSize = port->sw->box.size;
-		const float svgMax = std::max(svgSize.x, svgSize.y);
-		if (svgMax > 0.f) {
-			const float scale = px / svgMax;
-			port->fb->removeChild(port->sw);
-			port->sw->box.pos = Vec(0.f, 0.f);
-			TransformWidget* scaleTw = new TransformWidget();
-			scaleTw->addChild(port->sw);
-			scaleTw->scale(Vec(scale, scale));
-			scaleTw->box.size = svgSize.mult(scale);
-			if (std::fabs(rotationRad) > 1e-6f) {
-				TransformWidget* rotateTw = new TransformWidget();
-				rotateTw->addChild(scaleTw);
-				rotateTw->rotate(rotationRad, size.div(2.f));
-				rotateTw->box.size = size;
-				port->fb->addChild(rotateTw);
-			}
-			else {
-				port->fb->addChild(scaleTw);
-			}
-		}
-	}
-	port->box.size = size;
-	if (port->fb) {
-		port->fb->box.size = size;
-	}
-	if (port->shadow) {
-		port->shadow->box.size = size;
-	}
-}
-
 TransformWidget* setSvgSwitchSizePx(app::SvgSwitch* button, float px) {
 	if (!button) {
 		return nullptr;
@@ -2003,7 +1966,7 @@ constexpr float kGoldButtonSizePx = 24.f;
 constexpr float kSmallGoldButtonSizePx = 18.f;
 constexpr float kSmallGoldButtonShadowBleedPx = 12.f;
 
-struct MagitekInputShadow : TransparentWidget {
+struct Magitek2JackShadow : TransparentWidget {
 	void draw(const DrawArgs& args) override {
 		const Vec center = box.size.div(2.f).plus(Vec(1.6f, 2.5f));
 		const float outerRadius = std::min(box.size.x, box.size.y) * 0.43f;
@@ -2019,40 +1982,6 @@ struct MagitekInputShadow : TransparentWidget {
 		nvgCircle(args.vg, center.x, center.y, outerRadius);
 		nvgFillPaint(args.vg, paint);
 		nvgFill(args.vg);
-	}
-};
-
-struct MagitekOutputShadow : TransparentWidget {
-	float rotationRad = 0.f;
-
-	explicit MagitekOutputShadow(float rotationRad)
-		: rotationRad(rotationRad) {
-	}
-
-	void drawHex(const DrawArgs& args, float radius, NVGcolor color) {
-		const Vec center = box.size.div(2.f).plus(Vec(0.55f, 0.95f));
-		nvgBeginPath(args.vg);
-		for (int i = 0; i < 6; ++i) {
-			const float angle = rotationRad - 0.5f * M_PI + float(i) * (M_PI / 3.f);
-			const float x = center.x + std::cos(angle) * radius;
-			const float y = center.y + std::sin(angle) * radius;
-			if (i == 0) {
-				nvgMoveTo(args.vg, x, y);
-			}
-			else {
-				nvgLineTo(args.vg, x, y);
-			}
-		}
-		nvgClosePath(args.vg);
-		nvgFillColor(args.vg, color);
-		nvgFill(args.vg);
-	}
-
-	void draw(const DrawArgs& args) override {
-		const float radius = kMagitekPortSizePx * 0.46f;
-		drawHex(args, radius * 1.22f, nvgRGBA(0, 0, 0, 28));
-		drawHex(args, radius * 1.04f, nvgRGBA(0, 0, 0, 62));
-		drawHex(args, radius * 0.86f, nvgRGBA(0, 0, 0, 132));
 	}
 };
 
@@ -2262,42 +2191,6 @@ struct GoldButtonPressOverlay : TransparentWidget {
 		nvgFill(args.vg);
 	}
 };
-
-void installMagitekShadow(app::SvgPort* port, Widget* customShadow) {
-	if (!port || !customShadow) {
-		delete customShadow;
-		return;
-	}
-	if (port->shadow) {
-		port->shadow->opacity = 0.f;
-	}
-	const bool inputShadow = dynamic_cast<MagitekInputShadow*>(customShadow) != nullptr;
-	const bool outputShadow = dynamic_cast<MagitekOutputShadow*>(customShadow) != nullptr;
-	widget::FramebufferWidget* shadowFb = new widget::FramebufferWidget();
-	shadowFb->dirtyOnSubpixelChange = false;
-	if (inputShadow) {
-		const Vec bleed(8.f, 8.f);
-		shadowFb->box.pos = bleed.mult(-0.5f);
-		shadowFb->box.size = port->box.size.plus(bleed);
-	}
-	else if (outputShadow) {
-		const Vec bleed(10.f, 10.f);
-		shadowFb->box.pos = bleed.mult(-0.5f);
-		shadowFb->box.size = port->box.size.plus(bleed);
-	}
-	else {
-		shadowFb->box.size = port->box.size;
-	}
-	customShadow->box.pos = Vec(0.f, 0.f);
-	customShadow->box.size = shadowFb->box.size;
-	shadowFb->addChild(customShadow);
-	if (port->fb) {
-		port->addChildBelow(shadowFb, port->fb);
-	}
-	else {
-		port->addChildBottom(shadowFb);
-	}
-}
 
 struct ClockworkDragDebugRecorder {
 	std::ofstream file;
@@ -2822,20 +2715,6 @@ void LuminSlider::onButton(const event::Button& e) {
 	VCVLightSlider<LeviathanCyanPurpleLight>::onButton(e);
 }
 
-MagitekInputJack::MagitekInputJack() {
-	constexpr float rotationRad = float(M_PI) / 4.f;
-	setSvg(APP->window->loadSvg(asset::plugin(pluginInstance, "res/icon/magitek_input.svg")));
-	setSvgPortSizePx(this, kMagitekPortSizePx, rotationRad);
-	installMagitekShadow(this, new MagitekInputShadow);
-}
-
-MagitekOutputJack::MagitekOutputJack() {
-	constexpr float rotationRad = float(M_PI) / 6.f;
-	setSvg(APP->window->loadSvg(asset::plugin(pluginInstance, "res/icon/magitek_output.svg")));
-	setSvgPortSizePx(this, kMagitekPortSizePx, rotationRad);
-	installMagitekShadow(this, new MagitekOutputShadow(rotationRad));
-}
-
 static float magitek2JackAnimationDirection(Magitek2JackAnimationStyle animationStyle) {
 	switch (animationStyle) {
 		case Magitek2JackAnimationStyle::CounterClockwiseRotation:
@@ -2857,7 +2736,7 @@ Magitek2RasterJack::Magitek2RasterJack(const char* imagePath, Magitek2JackAnimat
 	const Vec bleed(8.f, 8.f);
 	shadowFb->box.pos = bleed.mult(-0.5f);
 	shadowFb->box.size = box.size.plus(bleed);
-	MagitekInputShadow* shadow = new MagitekInputShadow;
+	Magitek2JackShadow* shadow = new Magitek2JackShadow;
 	shadow->box.size = shadowFb->box.size;
 	shadowFb->addChild(shadow);
 	addChild(shadowFb);

@@ -171,14 +171,6 @@ HaloKnob2DrawMetrics getHaloKnob2DrawMetrics();
 
 } // namespace visual_assets
 
-struct MagitekInputJack : app::SvgPort {
-	MagitekInputJack();
-};
-
-struct MagitekOutputJack : app::SvgPort {
-	MagitekOutputJack();
-};
-
 enum class Magitek2JackAnimationStyle {
 	None,
 	CounterClockwiseRotation,
