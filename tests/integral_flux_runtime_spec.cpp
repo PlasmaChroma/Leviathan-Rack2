@@ -452,11 +452,34 @@ TestResult bandlimitedMultiRateTraceSatisfiesContract() {
 		pass ? "" : "trace lost activity, exceeded bounds, or sample-rate scenarios collapsed"};
 }
 
+TestResult uiDiagnosticsStayPerInstance() {
+	IntegralFlux first;
+	IntegralFlux second;
+	WavePreviewTracer<2, 6> tracer;
+	std::array<Vec, 2> points{{Vec(0.f, 0.f), Vec(1.f, 1.f)}};
+	first.uiStepDiagnostics.previewPointRebuilds += 2;
+	second.uiStepDiagnostics.previewPointRebuilds += 3;
+	first.uiStepDiagnostics.recordCapture(tracer.capture(points, 1.0, 0.04f, 1).captured);
+	first.uiStepDiagnostics.recordCapture(tracer.capture(points, 1.01, 0.04f, 1).captured);
+	second.uiStepDiagnostics.recordCapture(true);
+	const auto secondRow = second.uiStepDiagnostics.consume();
+	const auto firstRow = first.uiStepDiagnostics.consume();
+	const auto emptyRow = first.uiStepDiagnostics.consume();
+	const bool pass = firstRow.previewPointRebuilds == 2 && secondRow.previewPointRebuilds == 3
+		&& firstRow.previewTracerCaptures == 2 && firstRow.previewTracerAcceptedCaptures == 1
+		&& secondRow.previewTracerCaptures == 1 && secondRow.previewTracerAcceptedCaptures == 1
+		&& emptyRow.previewPointRebuilds == 0 && emptyRow.previewTracerCaptures == 0
+		&& emptyRow.previewTracerAcceptedCaptures == 0;
+	return {"UI diagnostics isolate instances and distinguish throttled capture attempts", pass,
+		pass ? "" : "draw consumption crossed instances or counted a rejected capture"};
+}
+
 } // namespace
 
 int main() {
 	const std::vector<TestResult> results {
 		releasedSchemaIsStable(),
+		uiDiagnosticsStayPerInstance(),
 		persistedSettingsRoundTrip(),
 		previewSnapshotsStayCoherent(),
 		mixerNormalizationContractIsStable(),

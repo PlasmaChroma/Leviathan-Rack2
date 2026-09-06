@@ -11,12 +11,16 @@ for more restrained source-over blending. Existing patches default to the old
 tracer. All new choices are saved per module.
 
 The shared `visual/PhosphorPreview.hpp` component alternates two GPU textures:
-decay the previous texture into the next, then deposit a historical curve when
-the preview has moved visibly. Deposits are limited to at most 24 per second.
+only when depositing, decay the previous texture into the next and add the
+historical curve. Between deposits, history remains untouched; its elapsed fade
+is applied while drawing the presentation surface. Deposits are limited to at
+most 24 per second. The presentation framebuffer still redraws while fading.
 The fixed-size CPU geometry is uploaded through GL drawing only when depositing;
 there is no CPU image rasterization, pixel decay loop, or per-frame image upload.
 The crisp waveform, grid, highlights, frequency text, and dot stay separate.
 After the trail expires the transparent framebuffer stops requesting redraws.
+Changing persistence adjusts future decay without an instantaneous brightness
+jump. Avoiding repeated RGBA8 rounding can alter the faint tail slightly.
 
 Phosphor uses soft-edged amber ribbons. Repeated paths accumulate brightness;
 stationary shapes and common rate changes that preserve geometry do not deposit.

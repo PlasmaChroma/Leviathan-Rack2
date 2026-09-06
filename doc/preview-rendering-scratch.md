@@ -193,3 +193,84 @@ Next live check: slow/fast knob and CV changes, release then wait, hover highlig
 moving marker on a stable shape, normal/fractional/high zoom, and DAW close/reopen.
 Look for any flash or contour shift when the cache becomes active; compare Draw
 timings for stationary and continuously changing contours. Not installed by Codex.
+
+### Phosphor history updates only on deposits — 2026-09-05
+
+Adaptive contour caching was checkpointed after the user reported no visible
+problems in Rack; a ~10 µs effect was hard to discern in whole-module telemetry.
+The following experiment is independent of that cache.
+
+Phosphor now retains history textures between captures and applies exponential
+gain when drawing the existing presentation framebuffer. On a deposit, it folds
+elapsed decay into the destination history texture and stamps the outgoing curve.
+Both premultiplied RGB and alpha receive the same gain. Resource arrangement,
+stroke ribbons, capture cadence and context protections remain unchanged.
+
+Presentation still renders during visible fading. This removes the history
+update pass, not all offscreen work. Idle expiry still stops dirtying. Accumulated
+decay age integrates with the previously observed persistence; changing settings
+affects future decay without jumping current brightness. Faint tails can differ
+from the previous implementation because history no longer rounds to RGBA8 every
+frame. Expiry follows accumulated decay age rather than retroactively applying a
+new persistence to the entire time since the last deposit.
+
+`tools/proc_phosphor_benchmark.cpp` compares the actual old/new renderHistory
+paths using Proc's sampled contour, in the same hidden Windows GL context. The old
+header is generated into build/tools from immutable Git blob
+`2d1930c16b7db916ccc53bd05cec91430b7d5457`, avoiding a maintained duplicate renderer.
+The new common benchmark utility retains asynchronous GPU-query collection.
+
+RTX 3090 / NVIDIA 560.94 / native O3-fast-math, 100 warm-up and 500 measured
+frames per case. Two runs, 1/16 instances, 1×/4× resolution, fade-only or 20 Hz
+deposits on a simulated 60 Hz presentation timeline. Fade-only intervals are
+seeded outside timing once per simulated second; persistence is 1.2 s for both
+renderers. All GPU samples were retrieved in both runs.
+
+Representative first-run medians (microseconds):
+
+| Workload | Old CPU | New CPU | Old GPU | New GPU |
+| --- | ---: | ---: | ---: | ---: |
+| Fade-only, 1 instance, 1× | 7.8 | 7.3 | 8.192 | 3.072 |
+| 20 Hz deposits, 1 instance, 1× | 9.1 | 8.8 | 8.192 | 4.096 |
+| Fade-only, 16 instances, 1× | 420.5 | 229.3 | 122.880 | 28.672 |
+
+Repeat single-instance fade-only medians: CPU 8.3 → 7.5 µs, GPU 8.192 → 3.072 µs.
+Fade-only history swaps: 500 → 0 per measured instance. With 20 Hz deposits:
+500 → 166. Deposit-heavy p95 timings are mixed; do not claim every workload is
+faster. Full median/p95/sample counts are in
+[run 1](benchmarks/proc-phosphor-lazy-run1.txt) and
+[run 2](benchmarks/proc-phosphor-lazy-run2.txt).
+
+CPU scope includes renderHistory and binding its target, but excludes capture,
+query collection, flush, and readback. GPU scope covers the history/presentation
+passes, not Rack's final NanoVG composite or complete module draw. Instances use
+independent history resources and sequentially render to a shared test target;
+this is not a live Rack frame-time measurement or a comparison against stock tracer.
+
+GPU checks passed: byte-identical retained history during passive fade; decreasing
+presentation brightness; persistence continuity; throttling; deposit accumulation;
+stale capture rejection; expiry; toggles; resize; resource reset; source-over blend;
+target binding restoration and no GL errors. The second run also verifies equal
+elapsed decay across 1, 9, 18 and 43 presentation steps within one byte/channel.
+Native plugin.dll and all 10 Proc runtime tests passed.
+
+Reproduce in native MINGW64 (requires the baseline blob in local Git history):
+
+```sh
+make -j10 build/tools/proc_phosphor_benchmark
+export PATH="/c/Program Files/VCV/Rack2Pro":/mingw64/bin:/usr/bin
+./build/tools/proc_phosphor_benchmark.exe
+```
+
+Ready for live phosphor checks: release a changing curve and inspect the fade,
+change persistence mid-tail, switch blend modes, zoom, and reopen a DAW editor.
+Dragon King menu gating and saved settings are unchanged. Built, not installed.
+
+### Integral Flux live baseline
+
+The user's two-instance draw capture is preserved and analyzed in
+[integral-flux-preview-baseline.md](integral-flux-preview-baseline.md).
+Median combined preview CPU time: 28.0 µs / 110.8 µs, using NanoVG with stock
+tracing. The step-derived counters have cross-instance attribution problems and
+capture counts represent attempts; correct these before relying on them to verify
+invalidation. Draw timings remain useful for the before/after comparison.

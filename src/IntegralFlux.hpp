@@ -10,6 +10,25 @@
 #include <limits>
 
 struct IntegralFlux : Module {
+	// UI-thread only. Each module owns the work accumulated between its draws.
+	struct UiStepDiagnostics {
+		uint32_t previewDirtyRequests = 0;
+		uint32_t previewPointRebuilds = 0;
+		uint32_t previewTracerCaptures = 0; // Legacy CSV field: capture attempts.
+		uint32_t previewTracerAcceptedCaptures = 0;
+		uint32_t linearPointDirtyRequests = 0;
+		uint32_t shapeGlyphDirtyRequests = 0;
+		void recordCapture(bool accepted) {
+			++previewTracerCaptures;
+			if (accepted) ++previewTracerAcceptedCaptures;
+		}
+		UiStepDiagnostics consume() {
+			const UiStepDiagnostics result = *this;
+			*this = UiStepDiagnostics{};
+			return result;
+		}
+	};
+	UiStepDiagnostics uiStepDiagnostics;
 	enum ParamId {
 		ATTENUATE_1_PARAM,
 		CYCLE_1_PARAM,

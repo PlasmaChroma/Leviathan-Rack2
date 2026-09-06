@@ -21,6 +21,8 @@ struct PhosphorPreview : widget::OpenGlWidget {
 	double lastCapture = -1.0;
 	double lastRender = -1.0;
 	double lastDeposit = -1.0;
+	float decayAge = 0.f; // Integrated elapsed time / persistence since the last deposit.
+	float decayPersistence = 0.6f;
 	GLuint textures[2]{};
 	GLuint framebuffers[2]{};
 	int width = 0, height = 0, front = 0;
@@ -35,6 +37,8 @@ struct PhosphorPreview : widget::OpenGlWidget {
 		history = false;
 		resetPending = true;
 		lastRender = lastDeposit = -1.0;
+		decayAge = 0.f;
+		decayPersistence = persistence;
 		failed = false;
 	}
 
@@ -55,6 +59,8 @@ struct PhosphorPreview : widget::OpenGlWidget {
 		pending = history = false;
 		resetPending = true;
 		lastCapture = lastRender = lastDeposit = -1.0;
+		decayAge = 0.f;
+		decayPersistence = persistence;
 		failed = false;
 		setDirty();
 	}
@@ -196,28 +202,35 @@ struct PhosphorPreview : widget::OpenGlWidget {
 		glClearColor(0.f, 0.f, 0.f, 0.f);
 		glViewport(0, 0, std::max(1, int(size.x)), std::max(1, int(size.y)));
 		if (enabled && ensureResources(context, std::max(1, int(size.x)), std::max(1, int(size.y)))) {
-			const bool stale = lastDeposit < 0.0 || now - lastDeposit > persistence * 1.5;
-			const int back = 1 - front;
-			glBindFramebuffer(GL_FRAMEBUFFER, framebuffers[back]);
-			glClear(GL_COLOR_BUFFER_BIT);
-			if (!resetPending && history && !stale) {
-				// One exponential per rendered frame, never per pixel or audio sample.
-				const float dt = float(std::max(0.0, now - lastRender));
-				const float fade = std::exp(-4.6051702f * dt / std::max(persistence, 0.01f));
-				texturedQuad(textures[front], fade);
-			}
-			if (resetPending || stale) history = false;
+			// Integrate with the previously observed persistence, so changing the
+			// setting changes the future fade rate without a brightness jump.
+			if (resetPending || !history) decayAge = 0.f;
+			else if (lastRender >= 0.0)
+				decayAge += float(std::max(0.0, now - lastRender)) / std::max(decayPersistence, 0.01f);
+			decayPersistence = persistence;
+			if (resetPending || decayAge > 1.5f) history = false;
+			float fade = history ? std::exp(-4.6051702f * decayAge) : 0.f;
 			if (pending && now - lastCapture < 0.1) {
+				// Only deposits modify history textures. Fold their elapsed decay
+				// into this update, then establish a fresh presentation reference.
+				const int back = 1 - front;
+				glBindFramebuffer(GL_FRAMEBUFFER, framebuffers[back]);
+				glClear(GL_COLOR_BUFFER_BIT);
+				if (history) texturedQuad(textures[front], fade);
 				stampCurve();
+				front = back;
 				lastDeposit = now;
+				decayAge = 0.f;
 				history = true;
+				fade = 1.f;
 			}
 			pending = resetPending = false;
 			lastRender = now;
-			front = back;
 			glBindFramebuffer(GL_FRAMEBUFFER, GLuint(target));
 			glClear(GL_COLOR_BUFFER_BIT);
-			if (history) texturedQuad(textures[front], 1.f);
+			// Passive fading touches only the presentation surface. Premultiplied
+			// RGB and alpha receive the same gain; stored history stays unchanged.
+			if (history) texturedQuad(textures[front], fade);
 		}
 		else {
 			glBindFramebuffer(GL_FRAMEBUFFER, GLuint(target));

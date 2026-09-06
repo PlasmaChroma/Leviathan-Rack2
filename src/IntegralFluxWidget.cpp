@@ -8,6 +8,7 @@
 #include "visual/FractalGlassOverlay.hpp"
 #include "visual/PlasmaConduit.hpp"
 #include "visual/PreviewSurface.hpp"
+#include "visual/SettledContourFramebuffer.hpp"
 #include "WavePreviewTracer.hpp"
 #include <array>
 #include <atomic>
@@ -40,11 +41,6 @@ thread_local uint64_t gIntegralFluxPreviewDrawNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxPreviewDrawNsByChannel[5] {};
 thread_local uint64_t gIntegralFluxPreviewFramebufferNsThisFrame = 0u;
 thread_local uint64_t gIntegralFluxPreviewFramebufferNsByChannel[5] {};
-thread_local uint32_t gIntegralFluxPreviewDirtyRequestsThisFrame = 0u;
-thread_local uint32_t gIntegralFluxPreviewPointRebuildsThisFrame = 0u;
-thread_local uint32_t gIntegralFluxPreviewTracerCapturesThisFrame = 0u;
-thread_local uint32_t gIntegralFluxLinearPointDirtyRequestsThisFrame = 0u;
-thread_local uint32_t gIntegralFluxShapeGlyphDirtyRequestsThisFrame = 0u;
 thread_local uint32_t gIntegralFluxHaloDirtyDrawCountThisFrame = 0u;
 thread_local uint32_t gIntegralFluxHaloActiveDrawCountThisFrame = 0u;
 thread_local uint32_t gIntegralFluxHaloDraggingDrawCountThisFrame = 0u;
@@ -142,13 +138,7 @@ struct IntegralFluxScopedDrawTimer {
 	}
 };
 
-void resetIntegralFluxStepDiagnosticsForNextDraw() {
-	gIntegralFluxPreviewDirtyRequestsThisFrame = 0u;
-	gIntegralFluxPreviewPointRebuildsThisFrame = 0u;
-	gIntegralFluxPreviewTracerCapturesThisFrame = 0u;
-	gIntegralFluxLinearPointDirtyRequestsThisFrame = 0u;
-	gIntegralFluxShapeGlyphDirtyRequestsThisFrame = 0u;
-}
+
 
 struct IntegralFluxFittedSvgWidget final : TransparentWidget {
 	std::shared_ptr<window::Svg> svg;
@@ -397,10 +387,31 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 	float dotXNorm = 0.f;
 	float dotYNorm = 0.f;
 	bool dotVisible = false;
+	float contourRiseRatio = 0.5f;
+	struct ContourFramebuffer : visual_assets::SettledContourFramebuffer {
+		int channel = 1;
+		void drawFramebuffer() override {
+			IntegralFluxScopedDrawTimer timer(gIntegralFluxPreviewFramebufferNsThisFrame, isDragonKingDebugEnabled());
+			IntegralFluxScopedDrawTimer channelTimer(gIntegralFluxPreviewFramebufferNsByChannel[clamp(channel, 0, 4)], isDragonKingDebugEnabled());
+			widget::FramebufferWidget::drawFramebuffer();
+		}
+	};
+	struct ContourLayer : TransparentWidget {
+		WavePreviewWidget* preview = nullptr;
+		void draw(const DrawArgs& args) override { preview->drawNvgWaveform(args); }
+	};
+	ContourFramebuffer* contourCache = nullptr;
+	ContourLayer* contourLayer = nullptr;
 
 	WavePreviewWidget(IntegralFlux* module, int channel) {
 		modulePtr = module;
 		this->channel = channel;
+		contourCache = new ContourFramebuffer();
+		contourCache->channel = channel;
+		contourLayer = new ContourLayer();
+		contourLayer->preview = this;
+		contourCache->addChild(contourLayer);
+		addChild(contourCache);
 	}
 
 	bool useOpenGlRenderer() const {
@@ -928,6 +939,7 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		// The preview always shows exactly one full rise+fall cycle across widget width.
 		float totalTime = std::max(riseTime + fallTime, 1e-6f);
 		float riseRatio = riseTime / totalTime;
+		contourRiseRatio = riseRatio;
 		float peakX = left + riseRatio * drawW;
 		float riseWidth = std::max(peakX - left, 1e-4f);
 		float fallWidth = std::max(right - peakX, 1e-4f);
@@ -968,6 +980,8 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 
 	void step() override {
 		const bool openGlRenderer = useOpenGlRenderer();
+		contourCache->box.size = box.size;
+		contourLayer->box.size = box.size;
 		if (!openGlRenderer) {
 			Widget::step();
 		}
@@ -1023,22 +1037,22 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 					const WavePreviewTracerCaptureStats stats =
 						curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC, TRAIL_CAPTURE_STRIDE);
 					modulePtr->recordTracerExtraPointReduction(channel, stats);
-					++gIntegralFluxPreviewTracerCapturesThisFrame;
+					if (isDragonKingDebugEnabled()) modulePtr->uiStepDiagnostics.recordCapture(stats.captured);
 				}
 				else {
 					const WavePreviewBufferedTracerStyle style =
 						bufferedTracerStyle(TRAIL_CAPTURE_STRIDE);
 					const WavePreviewTracerCaptureStats stats = frameTracer.capture(points, nowSec, box.size, style);
 					modulePtr->recordTracerExtraPointReduction(channel, stats);
-					++gIntegralFluxPreviewTracerCapturesThisFrame;
+					if (isDragonKingDebugEnabled()) modulePtr->uiStepDiagnostics.recordCapture(stats.captured);
 				}
 			}
-			++gIntegralFluxPreviewPointRebuildsThisFrame;
+			if (modulePtr && isDragonKingDebugEnabled()) ++modulePtr->uiStepDiagnostics.previewPointRebuilds;
 			rebuildPoints(riseTime, fallTime, curveSigned, shapeMode, interactiveRecent);
 			lastVersion = version;
 		}
 		if (openGlRenderer) {
-			++gIntegralFluxPreviewDirtyRequestsThisFrame;
+			if (modulePtr && isDragonKingDebugEnabled()) ++modulePtr->uiStepDiagnostics.previewDirtyRequests;
 			setDirty();
 			FramebufferWidget::step();
 		}
@@ -1068,7 +1082,21 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 					frameTracer.draw(args.vg, nowSec, box.size, bufferedTracerStyle(TRAIL_DRAW_STRIDE));
 				}
 			}
-			size_t reducedPointCount = drawNvgWaveform(args);
+			float transform[6];
+			nvgCurrentTransform(args.vg, transform);
+			const int edge = highlightedEdge();
+			const NVGcolor color = edge == 3 ? activeCurveColor()
+				: edge ? activeEdgeColor(edge) : waveformColor();
+			// These contour colors are opaque. Include shape mode explicitly:
+			// identical signed shape values can produce different mode geometry.
+			const std::array<float, 14> key{{contourRiseRatio, cachedLutCurveSigned,
+				box.size.x, box.size.y, float(edge), color.r, color.g, color.b,
+				float(cachedLutShapeMode), transform[0], transform[3], transform[1], transform[2],
+				APP && APP->window ? APP->window->pixelRatio : 1.f}};
+			contourCache->drawContour(args, key, nowSec);
+			const size_t reducedPointCount = (edge == 1 || edge == 2)
+				? size_t(simplifiedRisePath.count + simplifiedFallPath.count)
+				: size_t(simplifiedFullPath.count);
 			if (modulePtr) {
 				modulePtr->recordCurvePointReduction(channel, POINT_COUNT, reducedPointCount);
 			}
@@ -1378,7 +1406,7 @@ struct IntegralFluxLinearPointOverlay : TransparentWidget {
 			dirty = std::fabs(linearValue - previous) > 1e-5f;
 		}
 		if (dirty && framebuffer) {
-			++gIntegralFluxLinearPointDirtyRequestsThisFrame;
+			if (module && isDragonKingDebugEnabled()) ++module->uiStepDiagnostics.linearPointDirtyRequests;
 			framebuffer->setDirty();
 		}
 	}
@@ -1472,7 +1500,7 @@ struct IntegralFluxShapeModeGlyphOverlay : TransparentWidget {
 		const IntegralFlux::FunctionShapeMode shapeMode = IntegralFlux::functionShapeModeFromStoredInt(lastMode);
 		svgWidget->setSvg(shapeMode == IntegralFlux::FUNCTION_SHAPE_SHARK_FIN ? sharkSvg : mirrorSvg);
 		svgWidget->box.size = framebuffer->box.size;
-		++gIntegralFluxShapeGlyphDirtyRequestsThisFrame;
+		if (module && isDragonKingDebugEnabled()) ++module->uiStepDiagnostics.shapeGlyphDirtyRequests;
 		framebuffer->setDirty();
 	}
 };
@@ -1653,6 +1681,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		uint32_t previewDirtyRequests = 0u;
 		uint32_t previewPointRebuilds = 0u;
 		uint32_t previewTracerCaptures = 0u;
+		uint32_t previewTracerAcceptedCaptures = 0u;
 		uint32_t linearPointDirtyRequests = 0u;
 		uint32_t shapeGlyphDirtyRequests = 0u;
 		uint32_t haloDirtyDrawCount = 0u;
@@ -1737,7 +1766,7 @@ struct IntegralFluxWidget : ModuleWidget {
 			<< "halo_center_framebuffer_us,halo_cap_reflection_framebuffer_us,"
 			<< "halo_gl_surface_framebuffer_draws,halo_nanovg_surface_draws,halo_center_framebuffer_draws,"
 			<< "halo_cap_reflection_framebuffer_draws,"
-			<< "ui_step_ema_us,ui_draw_ema_us\n";
+			<< "ui_step_ema_us,ui_draw_ema_us,preview_tracer_accepted_captures\n";
 	}
 
 	void writeDrawLogRow(const DrawLogRow& row) {
@@ -1795,7 +1824,8 @@ struct IntegralFluxWidget : ModuleWidget {
 			<< row.haloCenterFramebufferDraws << ','
 			<< row.haloCapReflectionFramebufferDraws << ','
 			<< row.uiStepEmaUs << ','
-			<< row.uiDrawEmaUs << '\n';
+			<< row.uiDrawEmaUs << ','
+			<< row.previewTracerAcceptedCaptures << '\n';
 		if ((row.row & 31u) == 0u) {
 			drawLogFile.flush();
 		}
@@ -2182,6 +2212,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		using PerfClock = std::chrono::steady_clock;
 		IntegralFlux* flux = static_cast<IntegralFlux*>(module);
 		const uint32_t debugInstanceId = flux ? flux->debugInstanceIdForUi() : 0u;
+		const auto stepDiagnostics = flux ? flux->uiStepDiagnostics.consume() : IntegralFlux::UiStepDiagnostics{};
 		const bool logDraw = flux && isDragonKingDebugEnabled() && isIntegralFluxDrawLoggingEnabled();
 		syncDrawLog(logDraw, debugInstanceId);
 		const bool measurePerf = isDragonKingDebugEnabled();
@@ -2325,11 +2356,12 @@ struct IntegralFluxWidget : ModuleWidget {
 			logRow.plasmaSwitchImageCreates = switchMetrics.imageCreates;
 			logRow.plasmaSwitchImageFallbacks = switchMetrics.imageFallbacks;
 			logRow.plasmaSwitchContextResets = switchMetrics.contextResets;
-			logRow.previewDirtyRequests = gIntegralFluxPreviewDirtyRequestsThisFrame;
-			logRow.previewPointRebuilds = gIntegralFluxPreviewPointRebuildsThisFrame;
-			logRow.previewTracerCaptures = gIntegralFluxPreviewTracerCapturesThisFrame;
-			logRow.linearPointDirtyRequests = gIntegralFluxLinearPointDirtyRequestsThisFrame;
-			logRow.shapeGlyphDirtyRequests = gIntegralFluxShapeGlyphDirtyRequestsThisFrame;
+			logRow.previewDirtyRequests = stepDiagnostics.previewDirtyRequests;
+			logRow.previewPointRebuilds = stepDiagnostics.previewPointRebuilds;
+			logRow.previewTracerCaptures = stepDiagnostics.previewTracerCaptures;
+			logRow.previewTracerAcceptedCaptures = stepDiagnostics.previewTracerAcceptedCaptures;
+			logRow.linearPointDirtyRequests = stepDiagnostics.linearPointDirtyRequests;
+			logRow.shapeGlyphDirtyRequests = stepDiagnostics.shapeGlyphDirtyRequests;
 			logRow.haloDirtyDrawCount = gIntegralFluxHaloDirtyDrawCountThisFrame;
 			logRow.haloActiveDrawCount = gIntegralFluxHaloActiveDrawCountThisFrame;
 			logRow.haloDraggingDrawCount = gIntegralFluxHaloDraggingDrawCountThisFrame;
@@ -2346,9 +2378,6 @@ struct IntegralFluxWidget : ModuleWidget {
 			logRow.uiStepEmaUs = uiStepMsEma * 1000.f;
 			logRow.uiDrawEmaUs = uiDrawMsEma * 1000.f;
 			writeDrawLogRow(logRow);
-		}
-		if (measurePerf) {
-			resetIntegralFluxStepDiagnosticsForNextDraw();
 		}
 	}
 
