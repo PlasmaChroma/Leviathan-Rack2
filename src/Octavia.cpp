@@ -3214,8 +3214,9 @@ struct OctaviaStatusWidget : TransparentWidget {
     }
 
     void draw(const DrawArgs& args) override {
-        const bool serverRunning = module
-            && module->serverRunning.load(std::memory_order_relaxed);
+        // Browser previews have no module instance; show the octopus fully lit.
+        const bool serverRunning = !module
+            || module->serverRunning.load(std::memory_order_relaxed);
         nvgSave(args.vg);
         nvgGlobalAlpha(args.vg, serverRunning ? 1.f : 0.28f);
         TransparentWidget::draw(args);
