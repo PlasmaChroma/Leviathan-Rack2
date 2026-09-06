@@ -1,10 +1,12 @@
 #pragma once
 #include "plugin.hpp"
+#include "WavePreviewTracer.hpp"
 #include <fstream>
 #include <iomanip>
 #include <ctime>
 
 struct UndertowPreviewDrawMetrics {
+  WavePreviewTracerDrawStats history;
   double drawUs = 0, samplesUs = 0, pointsUs = 0, historyUs = 0;
   double simplifySubmitUs = 0, strokeSubmitUs = 0, labelUs = 0;
   uint32_t sampleRebuilds = 0, pointRebuilds = 0, attempts = 0, captures = 0, simplifiedPoints = 0;
@@ -45,6 +47,6 @@ struct UndertowDrawLog {
     file << "row,module_id,instance_id,time_sec,step_us,draw_us,module_widget_draw_us,preview_draw_us,"
       "sample_rebuild_us,point_rebuild_us,history_draw_us,simplify_path_submit_us,stroke_submit_us,label_us,"
       "sample_rebuilds,point_rebuilds,capture_attempts,accepted_captures,simplified_points,"
-      "tracer_enabled,tracer_mode,shape,edge_hardness,asym_enabled,asym_right,frequency_hz,scale_x,scale_y,pixel_ratio\n";
+      "tracer_enabled,tracer_mode,shape,edge_hardness,asym_enabled,asym_right,frequency_hz,scale_x,scale_y,pixel_ratio,history_trails,history_source_points,history_rasterizations\n";
   }
 };

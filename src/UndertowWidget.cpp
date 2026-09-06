@@ -7,6 +7,7 @@
 #include "visual/PlasmaConduit.hpp"
 #include "visual/PreviewSurface.hpp"
 #include "WavePreviewTracer.hpp"
+#include "visual/SnapshotHistory.hpp"
 #include <array>
 
 namespace {
@@ -48,6 +49,7 @@ struct UndertowShapePreviewWidget final : Widget {
   std::array<Vec, PREVIEW_POINT_COUNT> points {};
   WavePreviewTracer<PREVIEW_POINT_COUNT, TRAIL_FRAME_COUNT> curveTracer;
   WavePreviewBufferedTracer<PREVIEW_POINT_COUNT> frameTracer;
+  visual_assets::SnapshotHistory<PREVIEW_POINT_COUNT, TRAIL_FRAME_COUNT>* snapshotHistory = nullptr;
   bool samplesInitialized = false;
   bool pointsInitialized = false;
   bool hasLastPreviewState = false;
@@ -60,6 +62,8 @@ struct UndertowShapePreviewWidget final : Widget {
   bool logging() const { return module && isDragonKingDebugEnabled() && isUndertowDrawLoggingEnabled(); }
 
   explicit UndertowShapePreviewWidget(Undertow* module) : module(module) {
+    snapshotHistory = new visual_assets::SnapshotHistory<PREVIEW_POINT_COUNT, TRAIL_FRAME_COUNT>;
+    addChild(snapshotHistory);
     refreshSamples(DEFAULT_SHAPE_AMOUNT, DEFAULT_EDGE_HARDNESS, false, false);
   }
 
@@ -118,6 +122,7 @@ struct UndertowShapePreviewWidget final : Widget {
   }
 
   void step() override {
+    snapshotHistory->box.size = box.size;
     Widget::step();
     const double nowSec = system::getTime();
     if (module) {
@@ -138,7 +143,7 @@ struct UndertowShapePreviewWidget final : Widget {
         curveTracer.clear();
         frameTracer.clear();
       }
-      else if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+      else if (tracerMode != WAVE_PREVIEW_TRACER_FRAME_CACHE) {
         curveTracer.expire(nowSec, TRAIL_FADE_SEC);
         frameTracer.clear();
       }
@@ -147,7 +152,7 @@ struct UndertowShapePreviewWidget final : Widget {
       }
       if (curveChanged) {
         if (tracerEnabled && pointsInitialized) {
-          if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+          if (tracerMode != WAVE_PREVIEW_TRACER_FRAME_CACHE) {
             const auto stats = curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC, TRAIL_CAPTURE_STRIDE);
             if (logging()) { ++metrics.attempts; metrics.captures += stats.captured; }
           }
@@ -214,7 +219,7 @@ struct UndertowShapePreviewWidget final : Widget {
     const auto historyStart = debug_terminal::debugTimerStart(measure);
     if (module && module->previewTracerEnabled.load(std::memory_order_relaxed)) {
       const int tracerMode = module->previewTracerCacheMode.load(std::memory_order_relaxed);
-      if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+      if (tracerMode != WAVE_PREVIEW_TRACER_FRAME_CACHE) {
         WavePreviewTracerStyle style;
         style.color = nvgRGBA(255, 190, 80, 255);
         style.lineWidth = TRAIL_LINE_WIDTH;
@@ -222,7 +227,10 @@ struct UndertowShapePreviewWidget final : Widget {
         style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
         style.maxAlpha = 104.f;
         style.drawStride = TRAIL_DRAW_STRIDE;
-        curveTracer.draw(args.vg, system::getTime(), style);
+        if (tracerMode == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE)
+          snapshotHistory->drawHistory(args, curveTracer, system::getTime(), style, measure ? &metrics.history : nullptr);
+        else
+          curveTracer.draw(args.vg, system::getTime(), style, measure ? &metrics.history : nullptr);
       }
       else {
         WavePreviewBufferedTracerStyle style;
@@ -436,7 +444,8 @@ struct UndertowWidget final : ModuleWidget {
         << "," << loggedPreview->lastShapeAmount << "," << loggedPreview->lastEdgeHardness
         << "," << loggedPreview->lastAsymEnabled << "," << loggedPreview->lastAsymOnRight
         << "," << undertow->displayFrequencyHz.load() << "," << transform[0] << "," << transform[3]
-        << "," << (APP && APP->window ? APP->window->pixelRatio : 1.f) << "\n";
+        << "," << (APP && APP->window ? APP->window->pixelRatio : 1.f)
+        << "," << m.history.trails << "," << m.history.points << "," << m.history.rasterizations << "\n";
       if ((drawLog.row & 31u) == 0u) drawLog.file.flush();
     }
     if (loggedPreview) loggedPreview->metrics = {};
@@ -513,6 +522,10 @@ struct UndertowWidget final : ModuleWidget {
           "Curve cache", "",
           [m]() { return m->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_CURVE_CACHE; },
           [m]() { m->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed); }));
+        submenu->addChild(createCheckMenuItem(
+          "Snapshot cache (default)", "",
+          [m]() { return m->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE; },
+          [m]() { m->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE, std::memory_order_relaxed); }));
         submenu->addChild(createCheckMenuItem(
           "Frame cache", "",
           [m]() { return m->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_FRAME_CACHE; },

@@ -1,5 +1,11 @@
 # Integral Flux preview history logging
 
+Snapshot history is now the default for new instances and patches without a
+saved tracer mode in Proc, Integral Flux, and Undertow. Explicit saved modes
+remain intact, including with Dragon King preview options disabled. The menu
+labels this choice **Snapshot cache (default)**. Earlier experiment notes below
+record the rollout history.
+
 Enable `"debug": true` and `"IntegralFluxDrawLogging": true` in the existing
 `Leviathan/dragonking.txt` configuration and restart Rack with the rebuilt plugin. CSVs are written under
 `%LOCALAPPDATA%/Rack2/Leviathan/IntegralFlux/`, one file per module instance.

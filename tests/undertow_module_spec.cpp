@@ -17,8 +17,9 @@ bool isDragonKingDebugEnabled() {
   return false;
 }
 
+static bool previewOptionsEnabled = true;
 bool isDragonKingPreviewWidgetOptionsEnabled() {
-  return true;
+  return previewOptionsEnabled;
 }
 
 bool isModuleTeardownLoggingEnabled() {
@@ -629,6 +630,35 @@ TestResult sixteenChannelStressRemainsFiniteAndBounded() {
   return {"sixteen-channel randomized stress remains finite and bounded", true, ""};
 }
 
+TestResult previewModesRoundTrip() {
+  Undertow source, restored;
+  if (source.previewTracerCacheMode.load() != WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE)
+    return {"preview modes preserve defaults and round-trip", false, "default changed"};
+  for (int mode : {WAVE_PREVIEW_TRACER_CURVE_CACHE, WAVE_PREVIEW_TRACER_FRAME_CACHE, WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE}) {
+    source.previewTracerCacheMode.store(mode);
+    json_t* state = source.dataToJson();
+    restored.dataFromJson(state);
+    json_decref(state);
+    if (restored.previewTracerCacheMode.load() != mode)
+      return {"preview modes preserve defaults and round-trip", false, "mode changed on load"};
+  }
+  previewOptionsEnabled = false;
+  bool pass = true;
+  for (int mode : {WAVE_PREVIEW_TRACER_CURVE_CACHE, WAVE_PREVIEW_TRACER_FRAME_CACHE, WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE}) {
+    source.previewTracerCacheMode.store(mode);
+    json_t* state = source.dataToJson();
+    restored.dataFromJson(state);
+    pass = pass && restored.previewTracerCacheMode.load() == mode;
+    json_object_del(state, "previewTracerCacheMode");
+    restored.previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE);
+    restored.dataFromJson(state);
+    pass = pass && restored.previewTracerCacheMode.load() == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE;
+    json_decref(state);
+  }
+  previewOptionsEnabled = true;
+  return {"preview modes preserve defaults and round-trip", pass, ""};
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -649,6 +679,7 @@ int main(int argc, char** argv) {
 
   const std::vector<TestResult> results {
       releasedSchemaIsStable(),
+      previewModesRoundTrip(),
       tracesAreHealthy(traces),
       monophonicReferenceIsStable(traces),
       monophonicWaveformFingerprintsAreStable(traces),

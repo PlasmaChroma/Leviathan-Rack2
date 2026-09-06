@@ -2,6 +2,7 @@
 
 #include "DebugTerminalMetrics.hpp"
 #include "plugin.hpp"
+#include "WavePreviewTracer.hpp"
 #include <array>
 #include <atomic>
 #include <cmath>
@@ -80,7 +81,7 @@ struct Undertow final : Module {
   std::atomic<bool> shapeEntryAsymmetryOnRight {false};
   std::atomic<bool> analogCharacterEnabled {true};
   std::atomic<bool> previewTracerEnabled {true};
-  std::atomic<int> previewTracerCacheMode {0};
+  std::atomic<int> previewTracerCacheMode {WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE};
   std::atomic<float> displayFrequencyHz {0.f};
   std::atomic<float> displayShapeAmount {0.f};
   debug_terminal::BaselineModuleMetrics debugMetrics;

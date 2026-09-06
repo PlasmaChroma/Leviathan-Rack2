@@ -1,5 +1,11 @@
 # Undertow draw logging
 
+Snapshot history is now the default for new instances and patches without a
+saved tracer mode in Proc, Integral Flux, and Undertow. Explicit saved modes
+remain intact, including with Dragon King preview options disabled. The menu
+labels this choice **Snapshot cache (default)**. Earlier experiment notes below
+record the rollout history.
+
 Add `"UndertowDrawLogging": true` alongside `"debug": true` in the existing
 Rack user configuration `Leviathan/dragonking.txt`, then restart Rack. On this
 Windows setup that is `%LOCALAPPDATA%/Rack2/Leviathan/dragonking.txt`.
@@ -50,3 +56,27 @@ reports existing monophonic summary/fingerprint mismatches, reproduced both with
 its previously built executable and after rebuilding. That harness includes the
 unchanged Undertow.cpp DSP, not this widget/logger or plugin.cpp. No reference
 expectations were changed. A live logging capture remains to be checked.
+
+## Snapshot history comparison
+
+With Dragon King preview options enabled, choose **Tracer Quality → Snapshot
+cache (experimental)**. Mode 2 is snapshots; mode 0 remains stock vectors and
+mode 1 remains the buffered frame cache. The default remains stock vectors.
+
+Three appended CSV columns describe history workload:
+
+- `history_trails`: number of visible stock-ring paths represented this draw.
+- `history_source_points`: their total source polyline points. For snapshots,
+  these describe image contents, not resubmitted vector geometry.
+- `history_rasterizations`: actual snapshot slot framebuffer renders this draw.
+
+The existing `history_draw_us` includes snapshot creation and compositing.
+Compare rows with and without rasterizations, and include both in overall
+median/p95. Buffered history has zero path/point counts because it is a raster
+accumulation rather than a collection of discrete paths. Process/Step/Draw
+retain their module-level meanings.
+
+Capture Curve cache and Snapshot cache in the same patch at fixed zoom, with
+morph modulation active, followed by a release and complete fade. Snapshot
+rasterizations should stop during passive fade unless size, style, viewport or
+context changes. Check the faint tail, zoom and DAW editor reopen visually.

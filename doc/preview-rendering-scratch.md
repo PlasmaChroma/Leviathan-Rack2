@@ -323,3 +323,46 @@ The subsequent 21:52:40 run measures 31.6 µs; its 862 rasterizations match
 results are in the Integral Flux baseline. CPU benefit is established for
 this workload; appearance, zoom and context recreation remain live checks
 before rollout to the other previews.
+
+### Proc and Undertow snapshot ports
+
+Both now offer the shared **Snapshot cache (experimental)** option under
+Dragon King Tracer Quality. Existing defaults and mode IDs 0/1 remain intact;
+mode 2 round-trips in each module. Proc uses a separate internal phosphor
+backend identifier and disables phosphor when snapshots are selected, avoiding
+an ambiguous selection. Proc retains its geometry-change capture policy;
+Undertow retains its own shape-change capture policy and line style.
+
+Undertow adds visible trail/source-point/rasterization counts to its existing
+CSV. Its history timing includes both slot creation and image reuse. The
+current contour renderer is unchanged, so the new capture isolates the history
+experiment. Next: a same-patch Undertow vector/snapshot comparison with morph
+modulation and release, plus a Proc visual check of snapshots/phosphor switching,
+zoom and context recreation.
+
+Port validation: authoritative Windows plugin.dll link passed. Proc runtime
+10/10 and Undertow shape 4/4 passed. Undertow module checks pass 12/14,
+including the new default/mode round-trip check; the same two previously
+identified monophonic summary/fingerprint baseline failures remain. No DSP
+changes were made in this port. Built, not installed; live results pending.
+
+Undertow live snapshot capture 22:07:58 independently confirms the port:
+six-trail preview median 76.2→25.3 µs; history 60.0→9.0 µs. Fade has no
+rasterizations. Mode selection initially caches six existing trails and costs
+2.7 ms, so first-use behavior is a remaining caveat. Module-level outliers
+outside preview prevent a whole-module tail-latency claim. Full analysis and
+raw CSV are linked in the Undertow baseline.
+
+### Snapshot history promoted to default
+
+Proc, Integral Flux and Undertow now initialize to snapshot mode 2. Loading a
+patch without `previewTracerCacheMode` selects snapshots even on an existing
+instance. Explicit saved modes 0/1/2 remain intact; disabling Dragon King
+preview options no longer forces vector history during load. The quality menu
+remains a developer option, with snapshots labeled **Snapshot cache (default)**.
+Proc phosphor stays separately opt-in; Flux's optional GL renderer still uses
+its existing vector history. Default NanoVG rendering uses snapshots.
+
+Tests cover new defaults, explicit saved modes, and missing-mode loads with
+preview options disabled. This promotes the validated backend without migrating
+explicit tracer choices in existing patches.

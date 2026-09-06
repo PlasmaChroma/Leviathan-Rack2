@@ -957,6 +957,7 @@ void IntegralFlux::dataFromJson(json_t* rootJ) {
 	}
 
 	json_t* previewTracerModeJ = json_object_get(rootJ, "previewTracerCacheMode");
+	previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE, std::memory_order_relaxed);
 	if (previewTracerModeJ) {
 		const int mode = int(json_integer_value(previewTracerModeJ));
 		previewTracerCacheMode.store(mode == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE ? WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE :
@@ -969,7 +970,6 @@ void IntegralFlux::dataFromJson(json_t* rootJ) {
 		previewRenderMode.store(json_integer_value(previewRenderModeJ) == 1 ? 1 : 0, std::memory_order_relaxed);
 	}
 	if (!isDragonKingPreviewWidgetOptionsEnabled()) {
-		previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed);
 		previewRenderMode.store(0, std::memory_order_relaxed);
 	}
 }

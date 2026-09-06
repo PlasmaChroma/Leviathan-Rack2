@@ -15,8 +15,9 @@ bool isDragonKingDebugEnabled() {
 	return false;
 }
 
+static bool previewOptionsEnabled = true;
 bool isDragonKingPreviewWidgetOptionsEnabled() {
-	return true;
+	return previewOptionsEnabled;
 }
 
 bool isModuleTeardownLoggingEnabled() {
@@ -132,13 +133,35 @@ TestResult persistedSettingsRoundTrip() {
 	Proc restored;
 	restored.dataFromJson(state);
 	json_decref(state);
-	const bool pass = restored.channel.cycleLatched
+	bool pass = restored.channel.cycleLatched
 		&& restored.bandlimitedGateOutputs.load(std::memory_order_relaxed)
 		&& !restored.bandlimitedSignalOutputs.load(std::memory_order_relaxed)
 		&& restored.requestedTimingUpdateDiv.load(std::memory_order_relaxed) == 16
 		&& !restored.timingInterpolate.load(std::memory_order_relaxed)
 		&& !restored.previewTracerEnabled.load(std::memory_order_relaxed)
 		&& restored.previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_FRAME_CACHE;
+	for (int mode : {WAVE_PREVIEW_TRACER_CURVE_CACHE, WAVE_PREVIEW_TRACER_FRAME_CACHE, WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE}) {
+		source.previewTracerCacheMode.store(mode);
+		state = source.dataToJson();
+		restored.dataFromJson(state);
+		json_decref(state);
+		pass = pass && restored.previewTracerCacheMode.load() == mode;
+	}
+	previewOptionsEnabled = false;
+	Proc fresh;
+	pass = pass && fresh.previewTracerCacheMode.load() == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE;
+	for (int mode : {WAVE_PREVIEW_TRACER_CURVE_CACHE, WAVE_PREVIEW_TRACER_FRAME_CACHE, WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE}) {
+		source.previewTracerCacheMode.store(mode);
+		state = source.dataToJson();
+		restored.dataFromJson(state);
+		pass = pass && restored.previewTracerCacheMode.load() == mode;
+		json_object_del(state, "previewTracerCacheMode");
+		restored.previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_FRAME_CACHE);
+		restored.dataFromJson(state);
+		pass = pass && restored.previewTracerCacheMode.load() == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE;
+		json_decref(state);
+	}
+	previewOptionsEnabled = true;
 	return {"persisted Proc settings round-trip", pass,
 		pass ? "" : "serialized Proc settings did not round-trip exactly"};
 }

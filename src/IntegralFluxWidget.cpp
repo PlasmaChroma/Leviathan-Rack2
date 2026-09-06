@@ -2487,12 +2487,10 @@ struct IntegralFluxWidget : ModuleWidget {
 							[=]() { return maths->previewTracerCacheModeControl().load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_CURVE_CACHE; },
 							[=]() { maths->previewTracerCacheModeControl().store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed); }
 						));
-						if (isDragonKingDebugEnabled()) {
-							submenu->addChild(createCheckMenuItem("Snapshot cache (experimental)", "",
-								[=]() { return maths->previewTracerCacheModeControl().load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE; },
-								[=]() { maths->previewTracerCacheModeControl().store(WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE, std::memory_order_relaxed); }
-							));
-						}
+						submenu->addChild(createCheckMenuItem("Snapshot cache (default)", "",
+							[=]() { return maths->previewTracerCacheModeControl().load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE; },
+							[=]() { maths->previewTracerCacheModeControl().store(WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE, std::memory_order_relaxed); }
+						));
 						submenu->addChild(createCheckMenuItem("Frame cache", "",
 							[=]() { return maths->previewTracerCacheModeControl().load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_FRAME_CACHE; },
 							[=]() { maths->previewTracerCacheModeControl().store(WAVE_PREVIEW_TRACER_FRAME_CACHE, std::memory_order_relaxed); }

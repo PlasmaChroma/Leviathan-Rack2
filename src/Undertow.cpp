@@ -312,14 +312,12 @@ void Undertow::dataFromJson(json_t* root) {
   if (json_t* previewTracerEnabledJ = json_object_get(root, "previewTracerEnabled")) {
     previewTracerEnabled.store(json_boolean_value(previewTracerEnabledJ), std::memory_order_relaxed);
   }
+  previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE, std::memory_order_relaxed);
   if (json_t* previewTracerModeJ = json_object_get(root, "previewTracerCacheMode")) {
     const int mode = int(json_integer_value(previewTracerModeJ));
-    previewTracerCacheMode.store(mode == WAVE_PREVIEW_TRACER_CURVE_CACHE ? WAVE_PREVIEW_TRACER_CURVE_CACHE
-                                                                          : WAVE_PREVIEW_TRACER_FRAME_CACHE,
+    previewTracerCacheMode.store(mode == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE ? WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE
+      : (mode == WAVE_PREVIEW_TRACER_CURVE_CACHE ? WAVE_PREVIEW_TRACER_CURVE_CACHE : WAVE_PREVIEW_TRACER_FRAME_CACHE),
                                  std::memory_order_relaxed);
-  }
-  if (!isDragonKingPreviewWidgetOptionsEnabled()) {
-    previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed);
   }
   if (json_t* edgeHardnessJ = json_object_get(root, "shapeEdgeHardness")) {
     params[EDGE_HARDNESS_PARAM].setValue(clamp(float(json_number_value(edgeHardnessJ)), 0.f, 1.f));

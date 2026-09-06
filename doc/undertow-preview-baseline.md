@@ -52,3 +52,39 @@ and collect another matched log before selecting a new history backend.
 
 Whole-module draw timing has additional variability (modulated p95 ~439 µs while
 preview p95 is ~79 µs). Avoid attributing that entire tail to the preview.
+
+## Snapshot comparison — 2026-09-05 22:07:58
+
+[Raw capture and grouped statistics](benchmarks/undertow-snapshots-20260905/summary.json).
+1,765 complete rows over 26.154 seconds. Mode switches from vector (0) to
+snapshot (2) at row 875. Transform scale stays 1.682 on both axes and pixel
+ratio stays 1.0. Compare six-trail rows to exclude the final idle section.
+
+| Mode, six trails | Rows | Preview median / p95 | History median / p95 | Source points median |
+| --- | ---: | ---: | ---: | ---: |
+| Vector | 822 | 76.2 / 83.8 µs | 60.0 / 66.1 µs | 351 |
+| Snapshot | 520 | 25.3 / 40.3 µs | 9.0 / 23.2 µs | 348 |
+
+Median preview CPU time drops 66.8%; history drops 85%. Source complexity is
+similar. Snapshot creation is included: 164 full-history build rows measure
+37.55 / 43.9 µs preview median / p95, while 356 reuse rows measure
+24.6 / 30.4 µs. The remaining direct contour is still rendered as before.
+
+Snapshot mode records 163 accepted captures and 169 rasterizations. The six
+extra renders occur at row 875, caching the existing six trails when switching
+modes. That first-use row costs 2,710.7 µs history and 2,729.5 µs preview, a
+real initialization hitch retained in the statistics. Subsequent passive fade
+from rows 1395–1409 has zero captures/rasterizations as five trails become zero.
+The 356 expired-history rows measure median 11.8 µs preview and 0.3 µs history.
+
+Whole-module draw median falls from 130.15 to 80.2 µs among six-trail rows,
+but p95 rises from 165.9 to 3,064.4 µs. Several spikes occur outside the preview
+(e.g. row 937: module 3,154.2 µs, preview 27.0 µs); similar external spikes
+also occur earlier in the vector phase. These fields cannot identify their
+cause. Do not infer improved whole-module tail latency or completed GPU time
+from the preview improvement.
+
+This independently confirms the shared snapshot backend's steady-state CPU
+benefit in Undertow. Remaining work is visual/context validation and, if the
+mode-switch hitch matters in normal use, a separate initialization experiment.
+No renderer changes were made while analyzing this capture.

@@ -237,7 +237,7 @@ struct IntegralFlux : Module {
 	std::atomic<int> requestedTimingUpdateDiv {1};
 	std::atomic<bool> timingInterpolate {true};
 	std::atomic<bool> previewTracerEnabled {true};
-	std::atomic<int> previewTracerCacheMode {WAVE_PREVIEW_TRACER_CURVE_CACHE};
+	std::atomic<int> previewTracerCacheMode {WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE};
 	std::atomic<int> previewRenderMode {0};
 	// UI light updates are rate-limited to reduce engine overhead.
 	float lightUpdateTimer = 0.f;

@@ -8,6 +8,7 @@
 #include "visual/PreviewSurface.hpp"
 #include "visual/PhosphorPreview.hpp"
 #include "visual/SettledContourFramebuffer.hpp"
+#include "visual/SnapshotHistory.hpp"
 #include "WavePreviewTracer.hpp"
 #include "WavePreviewGeometryKey.hpp"
 #include "ProcPreviewGeometry.hpp"
@@ -191,7 +192,7 @@ struct Proc : Module {
 	std::atomic<int> requestedTimingUpdateDiv {1};
 	std::atomic<bool> timingInterpolate {true};
 	std::atomic<bool> previewTracerEnabled {true};
-	std::atomic<int> previewTracerCacheMode {WAVE_PREVIEW_TRACER_CURVE_CACHE};
+	std::atomic<int> previewTracerCacheMode {WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE};
 	std::atomic<bool> previewPhosphorEnabled {false};
 	std::atomic<int> previewPhosphorPersistence {1};
 	std::atomic<int> previewPhosphorStrength {1};
@@ -1043,15 +1044,14 @@ struct Proc : Module {
 		}
 
 		json_t* previewTracerModeJ = json_object_get(rootJ, "previewTracerCacheMode");
+		previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE, std::memory_order_relaxed);
 		if (previewTracerModeJ) {
 			const int mode = int(json_integer_value(previewTracerModeJ));
-			previewTracerCacheMode.store(mode == WAVE_PREVIEW_TRACER_CURVE_CACHE ? WAVE_PREVIEW_TRACER_CURVE_CACHE : WAVE_PREVIEW_TRACER_FRAME_CACHE,
+			previewTracerCacheMode.store(mode == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE ? WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE :
+				(mode == WAVE_PREVIEW_TRACER_CURVE_CACHE ? WAVE_PREVIEW_TRACER_CURVE_CACHE : WAVE_PREVIEW_TRACER_FRAME_CACHE),
 			                             std::memory_order_relaxed);
 		}
-		if (!isDragonKingPreviewWidgetOptionsEnabled()) {
-			previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed);
-		}
-		// Old patches always retain the original tracer, including when restored
+		// Old patches keep phosphor disabled, including when restored
 		// over an instance that previously had the experiment enabled.
 		previewPhosphorEnabled.store(json_is_true(json_object_get(rootJ, "previewPhosphorEnabled")));
 		auto readPhosphorChoice = [&](const char* key) {
@@ -1222,6 +1222,7 @@ struct WavePreviewWidget : Widget, ProcPreviewGeometry<Proc> {
 		void draw(const DrawArgs& args) override { preview->drawWaveform(args); }
 	};
 	ContourLayer* contourLayer = nullptr;
+	visual_assets::SnapshotHistory<POINT_COUNT, TRAIL_FRAME_COUNT>* snapshotHistory = nullptr;
 
 	explicit WavePreviewWidget(Proc* module) : modulePtr(module) {
 		phosphor = new visual_assets::PhosphorPreview<POINT_COUNT>();
@@ -1231,6 +1232,8 @@ struct WavePreviewWidget : Widget, ProcPreviewGeometry<Proc> {
 		contourLayer->preview = this;
 		contourCache->addChild(contourLayer);
 		addChild(contourCache);
+		snapshotHistory = new visual_assets::SnapshotHistory<POINT_COUNT, TRAIL_FRAME_COUNT>;
+		addChild(snapshotHistory);
 	}
 
 	int highlightedEdge() const {
@@ -1311,6 +1314,7 @@ struct WavePreviewWidget : Widget, ProcPreviewGeometry<Proc> {
 
 	void step() override {
 		contourCache->box.size = box.size;
+		snapshotHistory->box.size = box.size;
 		contourLayer->box.size = box.size;
 		const bool usePhosphor = modulePtr
 			&& modulePtr->previewTracerEnabled.load(std::memory_order_relaxed)
@@ -1359,13 +1363,13 @@ struct WavePreviewWidget : Widget, ProcPreviewGeometry<Proc> {
 		const bool tracerEnabled = modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
 		const int tracerMode = modulePtr->previewTracerCacheMode.load(std::memory_order_relaxed);
 		const bool phosphorActive = usePhosphor && !phosphor->failed;
-		const int backend = !tracerEnabled ? -1 : phosphorActive ? 2 : tracerMode;
+		const int backend = !tracerEnabled ? -1 : phosphorActive ? 3 : tracerMode;
 		if (backend != activeTracerBackend) {
 			curveTracer.clear();
 			frameTracer.clear();
 			activeTracerBackend = backend;
 		}
-		if (backend == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+		if (backend == WAVE_PREVIEW_TRACER_CURVE_CACHE || backend == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE) {
 			curveTracer.expire(nowSec, TRAIL_FADE_SEC);
 		}
 		const bool resized = geometryKey.valid
@@ -1379,7 +1383,7 @@ struct WavePreviewWidget : Widget, ProcPreviewGeometry<Proc> {
 		}
 		if (geometryKey.accept(riseTime, fallTime, curveSigned, box.size.x, box.size.y) || !pointsValid) {
 			if (tracerEnabled && pointsValid && !phosphorActive && !resized) {
-				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+				if (tracerMode != WAVE_PREVIEW_TRACER_FRAME_CACHE) {
 					curveTracer.capture(points, nowSec, TRAIL_MIN_CAPTURE_INTERVAL_SEC, TRAIL_CAPTURE_STRIDE);
 				}
 				else {
@@ -1423,7 +1427,7 @@ struct WavePreviewWidget : Widget, ProcPreviewGeometry<Proc> {
 			const bool tracerEnabled = modulePtr && modulePtr->previewTracerEnabled.load(std::memory_order_relaxed);
 			if (tracerEnabled && !(phosphor->enabled && !phosphor->failed)) {
 				const int tracerMode = modulePtr->previewTracerCacheMode.load(std::memory_order_relaxed);
-				if (tracerMode == WAVE_PREVIEW_TRACER_CURVE_CACHE) {
+				if (tracerMode != WAVE_PREVIEW_TRACER_FRAME_CACHE) {
 					WavePreviewTracerStyle style;
 					style.color = nvgRGBA(255, 190, 80, 255);
 					style.lineWidth = TRAIL_LINE_WIDTH;
@@ -1431,7 +1435,10 @@ struct WavePreviewWidget : Widget, ProcPreviewGeometry<Proc> {
 					style.minCaptureIntervalSec = TRAIL_MIN_CAPTURE_INTERVAL_SEC;
 					style.maxAlpha = 118.f;
 					style.drawStride = TRAIL_DRAW_STRIDE;
-					curveTracer.draw(args.vg, nowSec, style);
+					if (tracerMode == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE)
+						snapshotHistory->drawHistory(args, curveTracer, nowSec, style, nullptr);
+					else
+						curveTracer.draw(args.vg, nowSec, style);
 				}
 				else {
 					WavePreviewBufferedTracerStyle style;
@@ -1981,6 +1988,10 @@ struct ProcWidget : ModuleWidget {
 						submenu->addChild(createCheckMenuItem("Curve cache", "",
 							[=]() { return proc->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_CURVE_CACHE; },
 							[=]() { proc->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_CURVE_CACHE, std::memory_order_relaxed); }
+						));
+						submenu->addChild(createCheckMenuItem("Snapshot cache (default)", "",
+							[=]() { return !proc->previewPhosphorEnabled.load() && proc->previewTracerCacheMode.load() == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE; },
+							[=]() { proc->previewPhosphorEnabled.store(false); proc->previewTracerCacheMode.store(WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE); }
 						));
 						submenu->addChild(createCheckMenuItem("Frame cache", "",
 							[=]() { return proc->previewTracerCacheMode.load(std::memory_order_relaxed) == WAVE_PREVIEW_TRACER_FRAME_CACHE; },
