@@ -149,6 +149,8 @@ struct TemporalDeck final : Module {
   float getUiSampleRate() const;
   debug_terminal::TimingRangeUs consumeAudioProcessUs();
   uint32_t getDebugInstanceId() const;
+  // UI-thread service for diagnostic records produced by process().
+  void drainLifetimeLoadingLogEvents();
   float getUiDrawCostUs() const;
   void setUiDrawCostUs(float costUs);
   float getUiScopePreviewCostUs() const;

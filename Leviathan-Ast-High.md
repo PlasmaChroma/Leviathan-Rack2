@@ -53,7 +53,7 @@ The expanded [snapshot suite](tests/spsc_latest_snapshot_spec.cpp) passed 6/6 on
 | F03 | P1 | Crownstep | New-game/debug-move processing performs game/UI mutation and dynamic work on audio thread | Source-confirmed |
 | F04 | P1 | Sil | Limiter deque still allocates/frees after its purported preallocation | Probe-confirmed container behavior |
 | F05 | P1 before release | Chronomaw, Bulkhead | UI directly edits non-atomic state consumed by audio | Source-confirmed |
-| F06 | P2 | Temporal Deck | Lifetime logging performs synchronous I/O from `process()` | Source-confirmed; logging enabled |
+| F06 | P2 | Temporal Deck | Lifetime logging performs synchronous I/O from `process()` | Fixed 7 Sep 2026; Rack smoke check passed |
 | F07 | P2 | Shared GL surfaces | Ordinary widget removal abandons resources and FBO wrappers | Source-confirmed lifetime paths |
 | F08 | P2 | Flux / HaloKnob2 | Draw logging resets away the shader work performed during step | Source-confirmed |
 | F09 | P2 | AdaptiveGlSurface | Allocation precedes state guard; full clear inherits color-write mask | Source-confirmed contract gaps |
@@ -147,6 +147,10 @@ Impact: diagnostic runs can introduce the stalls they are intended to investigat
 Recommended fix: capture fixed-size event fields into a bounded audio-to-worker/UI log queue. Resolve paths, format strings, and write files outside `process()`. Account for dropped diagnostic events instead of blocking. Retain timing scopes around the actual install, excluding export.
 
 Verification: enable lifetime logging and exercise repeated sample installs with an artificially slow log consumer. Audio must continue without filesystem calls, mutex acquisition, or string allocation.
+
+Resolution (7 Sep 2026): the three audio-side loading events now publish fixed-size records through a bounded SPSC queue. `TemporalDeckWidget::step()` drains that queue and performs the lifecycle snapshots, CSV formatting, directory creation, locking, and file writes on the UI thread. The queue drops records rather than blocking when full and reports the dropped count from the consumer. The existing CSV fields and event names remain unchanged; path and lifecycle-memory fields are snapshots taken when the queued event is drained.
+
+Rack smoke check (7 Sep 2026): lifetime logging was enabled and exercised successfully with no observed behavioral problem.
 
 ### F07 — Context-loss safety currently trades away ordinary widget reclamation
 

@@ -3860,6 +3860,7 @@ struct TemporalDeckWidget : ModuleWidget {
     auto stepStart = measurePerf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
     TemporalDeck *deckModule = static_cast<TemporalDeck *>(module);
     if (deckModule) {
+      deckModule->drainLifetimeLoadingLogEvents();
       syncScopeDragTraceCaptureState();
       drainScopeDragTraceEvents(deckModule);
     } else {

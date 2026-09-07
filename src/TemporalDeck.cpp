@@ -318,6 +318,26 @@ static void appendTemporalDeckLifetimeLoadingLog(uint32_t debugInstanceId,
       << csvString(note ? note : "") << '\n';
 }
 
+struct LifetimeLoadingEvent {
+  enum Type { INSTALL_PREPARED, DEFER_STATE_APPLY, REQUEST_REBUILD } type = INSTALL_PREPARED;
+  uint64_t requestSerial = 0u;
+  int requestType = 0;
+  float sampleRate = 0.f;
+  int bufferMode = 0;
+  int sourceFrames = 0;
+  int sourceChannels = 0;
+  int preparedFrames = 0;
+  size_t engineSampleBytes = 0u;
+  bool decodedAvailable = false;
+  bool buildInProgress = false;
+  double workerDecodeMs = 0.0;
+  double workerPrepMs = 0.0;
+  double workerTotalMs = 0.0;
+  double processResetMs = 0.0;
+  double processInstallMs = 0.0;
+  double processTotalMs = 0.0;
+};
+
 struct ScopeInteractionRequest {
   bool valid = false;
   uint32_t requestedScopeFormat = temporaldeck_expander::SCOPE_FORMAT_MONO;
@@ -1083,6 +1103,30 @@ struct TemporalDeck::Impl {
   std::atomic<uint32_t> scopeDragTraceQueueRead{0u};
   std::atomic<uint32_t> scopeDragTraceDropped{0u};
   bool pendingSampleStateApplyDeferralLogged = false;
+  static constexpr uint32_t lifetimeLogQueueCapacity = 32u;
+  std::array<LifetimeLoadingEvent, lifetimeLogQueueCapacity> lifetimeLogQueue;
+  std::atomic<uint32_t> lifetimeLogQueueWrite{0u};
+  std::atomic<uint32_t> lifetimeLogQueueRead{0u};
+  std::atomic<uint32_t> lifetimeLogDropped{0u};
+
+  void pushLifetimeLogEvent(const LifetimeLoadingEvent &event) {
+    const uint32_t write = lifetimeLogQueueWrite.load(std::memory_order_relaxed);
+    const uint32_t next = (write + 1u) % lifetimeLogQueueCapacity;
+    if (next == lifetimeLogQueueRead.load(std::memory_order_acquire)) {
+      lifetimeLogDropped.fetch_add(1u, std::memory_order_relaxed);
+      return;
+    }
+    lifetimeLogQueue[write] = event;
+    lifetimeLogQueueWrite.store(next, std::memory_order_release);
+  }
+
+  bool popLifetimeLogEvent(LifetimeLoadingEvent *event) {
+    const uint32_t read = lifetimeLogQueueRead.load(std::memory_order_relaxed);
+    if (read == lifetimeLogQueueWrite.load(std::memory_order_acquire)) return false;
+    *event = lifetimeLogQueue[read];
+    lifetimeLogQueueRead.store((read + 1u) % lifetimeLogQueueCapacity, std::memory_order_release);
+    return true;
+  }
   int cartridgeCharacter = TemporalDeck::CARTRIDGE_CLEAN;
   std::atomic<int> bufferDurationMode{TemporalDeck::BUFFER_DURATION_10S};
   int lastRamBufferDurationMode = TemporalDeck::BUFFER_DURATION_10S;
@@ -1210,6 +1254,7 @@ TemporalDeck::~TemporalDeck() {
     return;
   }
 
+  drainLifetimeLoadingLogEvents();
   const bool lifetimeLogging = isTemporalDeckLifetimeLoggingEnabled();
   const auto shutdownStart = std::chrono::steady_clock::now();
   uint32_t debugInstanceId = 0u;
@@ -1551,13 +1596,6 @@ void TemporalDeck::process(const ProcessArgs &args) {
   bool installedPreparedSampleThisFrame = false;
   if (PreparedSampleData *preparedPtr = impl->sampleLifecycle.consumePendingPreparedSample()) {
     PreparedSampleData &prepared = *preparedPtr;
-    std::string samplePath;
-    size_t lifecycleDecodedBytes = 0u;
-    size_t lifecyclePreparedBytes = 0u;
-    if (isTemporalDeckLifetimeLoggingEnabled()) {
-      impl->sampleLifecycle.sampleJsonSnapshot(&samplePath);
-      impl->sampleLifecycle.sampleMemorySnapshot(&lifecycleDecodedBytes, &lifecyclePreparedBytes);
-    }
     const auto processInstallStart = std::chrono::steady_clock::now();
     impl->cachedSampleRate = prepared.sampleRate;
     impl->bufferDurationMode.store(prepared.bufferMode, std::memory_order_relaxed);
@@ -1586,27 +1624,28 @@ void TemporalDeck::process(const ProcessArgs &args) {
     if (paramQuantities[BUFFER_PARAM]) {
       paramQuantities[BUFFER_PARAM]->displayMultiplier = float(impl->engine.sampleFrames) / std::max(prepared.sampleRate, 1.f);
     }
-    appendTemporalDeckLifetimeLoadingLog(impl->debugInstanceId,
-                                         "process_install_prepared",
-                                         samplePath,
-                                         prepared.buildSerial,
-                                         prepared.buildRequestType,
-                                         prepared.sampleRate,
-                                         prepared.bufferMode,
-                                         prepared.sourceFrames,
-                                         prepared.sourceChannels,
-                                         prepared.frames,
-                                         (impl->engine.buffer.left.capacity() + impl->engine.buffer.right.capacity()) * sizeof(float),
-                                         lifecycleDecodedBytes,
-                                         lifecyclePreparedBytes,
-                                         impl->sampleLifecycle.decodedSampleAvailable(),
-                                         impl->sampleLifecycle.sampleBuildInProgress(),
-                                         prepared.workerDecodeMs,
-                                         prepared.workerPrepMs,
-                                         prepared.workerTotalMs,
-                                         elapsedMs(resetStart, resetEnd),
-                                         elapsedMs(installStart, installEnd),
-                                         elapsedMs(processInstallStart, std::chrono::steady_clock::now()));
+    if (isTemporalDeckLifetimeLoggingEnabled()) {
+      LifetimeLoadingEvent event;
+      event.type = LifetimeLoadingEvent::INSTALL_PREPARED;
+      event.requestSerial = prepared.buildSerial;
+      event.requestType = prepared.buildRequestType;
+      event.sampleRate = prepared.sampleRate;
+      event.bufferMode = prepared.bufferMode;
+      event.sourceFrames = prepared.sourceFrames;
+      event.sourceChannels = prepared.sourceChannels;
+      event.preparedFrames = prepared.frames;
+      event.engineSampleBytes =
+        (impl->engine.buffer.left.capacity() + impl->engine.buffer.right.capacity()) * sizeof(float);
+      event.decodedAvailable = impl->sampleLifecycle.decodedSampleAvailable();
+      event.buildInProgress = impl->sampleLifecycle.sampleBuildInProgress();
+      event.workerDecodeMs = prepared.workerDecodeMs;
+      event.workerPrepMs = prepared.workerPrepMs;
+      event.workerTotalMs = prepared.workerTotalMs;
+      event.processResetMs = elapsedMs(resetStart, resetEnd);
+      event.processInstallMs = elapsedMs(installStart, installEnd);
+      event.processTotalMs = elapsedMs(processInstallStart, std::chrono::steady_clock::now());
+      impl->pushLifetimeLogEvent(event);
+    }
     impl->sampleLifecycle.retirePreparedSampleFromAudio(preparedPtr);
   }
 
@@ -1646,33 +1685,15 @@ void TemporalDeck::process(const ProcessArgs &args) {
   bool shouldApplyWithoutDecoded = !decodedAvailable && (bufferModeChanged || sampleRateChanged || sampleStateApplyRequested);
   if (shouldApplyWithoutDecoded && sampleBuildInProgress) {
     if (isTemporalDeckLifetimeLoggingEnabled() && !impl->pendingSampleStateApplyDeferralLogged) {
-      std::string samplePath;
-      size_t lifecycleDecodedBytes = 0u;
-      size_t lifecyclePreparedBytes = 0u;
-      impl->sampleLifecycle.sampleJsonSnapshot(&samplePath);
-      impl->sampleLifecycle.sampleMemorySnapshot(&lifecycleDecodedBytes, &lifecyclePreparedBytes);
-      appendTemporalDeckLifetimeLoadingLog(impl->debugInstanceId,
-                                           "defer_sample_state_apply",
-                                           samplePath,
-                                           0u,
-                                           0,
-                                           args.sampleRate,
-                                           requestedBufferMode,
-                                           0,
-                                           0,
-                                           0,
-                                           (impl->engine.buffer.left.capacity() + impl->engine.buffer.right.capacity()) * sizeof(float),
-                                           lifecycleDecodedBytes,
-                                           lifecyclePreparedBytes,
-                                           decodedAvailable,
-                                           sampleBuildInProgress,
-                                           0.0,
-                                           0.0,
-                                           0.0,
-                                           0.0,
-                                           0.0,
-                                           0.0,
-                                           "sample worker active; deferring restored live-buffer allocation");
+      LifetimeLoadingEvent event;
+      event.type = LifetimeLoadingEvent::DEFER_STATE_APPLY;
+      event.sampleRate = args.sampleRate;
+      event.bufferMode = requestedBufferMode;
+      event.engineSampleBytes =
+        (impl->engine.buffer.left.capacity() + impl->engine.buffer.right.capacity()) * sizeof(float);
+      event.decodedAvailable = decodedAvailable;
+      event.buildInProgress = sampleBuildInProgress;
+      impl->pushLifetimeLogEvent(event);
       impl->pendingSampleStateApplyDeferralLogged = true;
     }
     impl->sampleLifecycle.setPendingSampleStateApply();
@@ -1696,27 +1717,19 @@ void TemporalDeck::process(const ProcessArgs &args) {
     request.requestedBufferMode = requestedBufferMode;
     uint64_t requestSerial = impl->sampleLifecycle.requestAsyncRuntimeBuild(
       request.type, request.targetSampleRate, request.requestedBufferMode);
-    appendTemporalDeckLifetimeLoadingLog(impl->debugInstanceId,
-                                         "request_rebuild_from_decoded",
-                                         impl->sampleLifecycle.samplePath(),
-                                         requestSerial,
-                                         request.type,
-                                         request.targetSampleRate,
-                                         request.requestedBufferMode,
-                                         0,
-                                         0,
-                                         0,
-                                         (impl->engine.buffer.left.capacity() + impl->engine.buffer.right.capacity()) * sizeof(float),
-                                         0u,
-                                         0u,
-                                         decodedAvailable,
-                                         true,
-                                         0.0,
-                                         0.0,
-                                         0.0,
-                                         0.0,
-                                         0.0,
-                                         0.0);
+    if (isTemporalDeckLifetimeLoggingEnabled()) {
+      LifetimeLoadingEvent event;
+      event.type = LifetimeLoadingEvent::REQUEST_REBUILD;
+      event.requestSerial = requestSerial;
+      event.requestType = request.type;
+      event.sampleRate = request.targetSampleRate;
+      event.bufferMode = request.requestedBufferMode;
+      event.engineSampleBytes =
+        (impl->engine.buffer.left.capacity() + impl->engine.buffer.right.capacity()) * sizeof(float);
+      event.decodedAvailable = decodedAvailable;
+      event.buildInProgress = true;
+      impl->pushLifetimeLogEvent(event);
+    }
   }
 
   if (impl->pendingLiveToSampleConvert.exchange(false, std::memory_order_relaxed)) {
@@ -2536,6 +2549,58 @@ float TemporalDeck::getUiDrawCostUs() const {
 
 uint32_t TemporalDeck::getDebugInstanceId() const {
   return impl->debugInstanceId;
+}
+
+void TemporalDeck::drainLifetimeLoadingLogEvents() {
+  if (!impl) {
+    return;
+  }
+
+  const uint32_t dropped = impl->lifetimeLogDropped.exchange(0u, std::memory_order_acq_rel);
+  if (dropped > 0u) {
+    WARN("TemporalDeck: dropped %u lifetime loading log events", dropped);
+  }
+
+  LifetimeLoadingEvent event;
+  while (impl->popLifetimeLogEvent(&event)) {
+    std::string samplePath;
+    size_t lifecycleDecodedBytes = 0u;
+    size_t lifecyclePreparedBytes = 0u;
+    impl->sampleLifecycle.sampleJsonSnapshot(&samplePath);
+    impl->sampleLifecycle.sampleMemorySnapshot(&lifecycleDecodedBytes, &lifecyclePreparedBytes);
+
+    const char *eventName = "process_install_prepared";
+    const char *note = "";
+    if (event.type == LifetimeLoadingEvent::DEFER_STATE_APPLY) {
+      eventName = "defer_sample_state_apply";
+      note = "sample worker active; deferring restored live-buffer allocation";
+    } else if (event.type == LifetimeLoadingEvent::REQUEST_REBUILD) {
+      eventName = "request_rebuild_from_decoded";
+    }
+
+    appendTemporalDeckLifetimeLoadingLog(impl->debugInstanceId,
+                                         eventName,
+                                         samplePath,
+                                         event.requestSerial,
+                                         event.requestType,
+                                         event.sampleRate,
+                                         event.bufferMode,
+                                         event.sourceFrames,
+                                         event.sourceChannels,
+                                         event.preparedFrames,
+                                         event.engineSampleBytes,
+                                         lifecycleDecodedBytes,
+                                         lifecyclePreparedBytes,
+                                         event.decodedAvailable,
+                                         event.buildInProgress,
+                                         event.workerDecodeMs,
+                                         event.workerPrepMs,
+                                         event.workerTotalMs,
+                                         event.processResetMs,
+                                         event.processInstallMs,
+                                         event.processTotalMs,
+                                         note);
+  }
 }
 
 void TemporalDeck::setUiDrawCostUs(float costUs) {
