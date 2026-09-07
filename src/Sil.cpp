@@ -3,13 +3,13 @@
 #include "visual/VisualAssets.hpp"
 #include "SilRepairBuffer.hpp"
 #include "SilRepairKernel.hpp"
+#include "SilLimiterPeakWindow.hpp"
 #include "DebugTerminalMetrics.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include <vector>
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <deque>
 #include <cstdint>
 #include <cstdio>
 #include <ctime>
@@ -347,12 +347,7 @@ struct Sil : Module {
 	static constexpr int kLimiterTruePeakQuality = 8;
 	dsp::Upsampler<kLimiterTruePeakOversample, kLimiterTruePeakQuality> limiterTruePeakUpsamplerL;
 	dsp::Upsampler<kLimiterTruePeakOversample, kLimiterTruePeakQuality> limiterTruePeakUpsamplerR;
-	struct LimiterPeakWindowEntry {
-		uint64_t sampleIndex = 0;
-		float peak = 0.f;
-	};
-	std::deque<LimiterPeakWindowEntry> limiterPeakWindow;
-	uint64_t limiterDetectorSampleIndex = 0;
+	sil::LimiterPeakWindow limiterPeakWindow;
 	struct RemoveMudState {
 		dsp::RCFilter mudHp;
 		dsp::RCFilter mudLp;
@@ -613,7 +608,7 @@ struct Sil : Module {
 	static constexpr float kRepairLookaheadSeconds = 0.0005f;
 	static constexpr float kLimiterLookaheadSeconds = 0.0005f;
 	static constexpr float kMasteringCrossfadeSeconds = 0.010f;
-	static constexpr int kMaxLimiterLookaheadSamples = 512;
+	static constexpr int kMaxLimiterLookaheadSamples = sil::LimiterPeakWindow::kMaximumLookaheadSamples;
 	static constexpr float kLimiterRepairKneeLeadDb = 0.75f;
 	static constexpr float kLimiterRepairKneeDepthDb = 0.20f;
 	static constexpr float kLimiterMetricAttackSec = 0.020f;
@@ -937,7 +932,6 @@ struct Sil : Module {
 		limiterTruePeakUpsamplerL.reset();
 		limiterTruePeakUpsamplerR.reset();
 		limiterPeakWindow.clear();
-		limiterDetectorSampleIndex = 0;
 		micropeakActivity = 0.f;
 		micropeakActivityHoldSamples = 0;
 		micropeakActivityHoldLevel = 0.f;
@@ -961,11 +955,7 @@ struct Sil : Module {
 			limiterPrevSatR2 = 0.f;
 			limiterTruePeakUpsamplerL.reset();
 			limiterTruePeakUpsamplerR.reset();
-			// Pre-grow deque storage so per-sample limiter window updates avoid
-			// runtime growth allocations up to max lookahead.
-			limiterPeakWindow.resize(size_t(kMaxLimiterLookaheadSamples));
 			limiterPeakWindow.clear();
-			limiterDetectorSampleIndex = 0;
 		}
 
 	int saturatorPeakToHistIndex(float peak) const {
@@ -2036,20 +2026,7 @@ struct Sil : Module {
 					detectorPeakR = std::max(detectorPeakR, std::fabs(truePeakSamplesR[i]));
 				}
 				const float detectorPeakNow = std::max(detectorPeakL, detectorPeakR);
-				const uint64_t sampleIndex = limiterDetectorSampleIndex++;
-				const uint64_t maxAge = uint64_t(std::max(1, limiterLookaheadSamples));
-				while (!limiterPeakWindow.empty() && limiterPeakWindow.back().peak <= detectorPeakNow) {
-					limiterPeakWindow.pop_back();
-				}
-				LimiterPeakWindowEntry peakEntry;
-				peakEntry.sampleIndex = sampleIndex;
-				peakEntry.peak = detectorPeakNow;
-				limiterPeakWindow.push_back(peakEntry);
-				const uint64_t minValidIndex = (sampleIndex + 1u > maxAge) ? (sampleIndex + 1u - maxAge) : 0u;
-				while (!limiterPeakWindow.empty() && limiterPeakWindow.front().sampleIndex < minValidIndex) {
-					limiterPeakWindow.pop_front();
-				}
-				const float detectorPeak = limiterPeakWindow.empty() ? detectorPeakNow : limiterPeakWindow.front().peak;
+				const float detectorPeak = limiterPeakWindow.push(detectorPeakNow, limiterLookaheadSamples);
 
 			const int delayLen = std::max(1, limiterLookaheadSamples);
 			const float delayedL = limiterDelayL[size_t(limiterDelayWrite)];

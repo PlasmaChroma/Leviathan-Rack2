@@ -2,6 +2,7 @@
 
 #include "DebugTerminalTransport.hpp"
 #include "PanelSvgUtils.hpp"
+#include "SpscLatestSnapshot.hpp"
 #include "TemporalDeckExpanderProtocol.hpp"
 #include "TemporalDeckTest.hpp"
 #include "plugin.hpp"
@@ -59,9 +60,8 @@ struct TDScope final : Module {
   };
 
   std::array<temporaldeck_expander::HostToDisplay, 2> leftMessages;
-  std::array<temporaldeck_expander::HostToDisplay, 2> uiSnapshots;
-  std::atomic<uint32_t> uiSnapshotFrontIndex {0};
-  std::atomic<uint64_t> uiSnapshotPublishGen {0};
+  // Audio publishes; all snapshot reads/copies are serialized on Rack's UI thread.
+  snapshot_transport::SpscLatestSnapshot<temporaldeck_expander::HostToDisplay> uiSnapshots;
   std::atomic<bool> uiLinkActive {false};
   std::atomic<bool> uiPreviewValid {false};
   std::atomic<uint64_t> uiLastPublishSeq {0};
@@ -152,8 +152,6 @@ struct TDScope final : Module {
     //   leftExpander.module), and TemporalDeck consumes via rightExpander.consumerMessage.
     leftExpander.producerMessage = &leftMessages[0];
     leftExpander.consumerMessage = &leftMessages[1];
-    uiSnapshots[0] = temporaldeck_expander::HostToDisplay();
-    uiSnapshots[1] = temporaldeck_expander::HostToDisplay();
   }
 
   ~TDScope() override {
@@ -362,11 +360,7 @@ struct TDScope final : Module {
   }
 
   void publishSnapshotToUi(const temporaldeck_expander::HostToDisplay &msg) {
-    uint32_t frontIndex = uiSnapshotFrontIndex.load(std::memory_order_relaxed) & 1u;
-    uint32_t backIndex = frontIndex ^ 1u;
-    uiSnapshots[backIndex] = msg;
-    uiSnapshotFrontIndex.store(backIndex, std::memory_order_release);
-    uiSnapshotPublishGen.fetch_add(1u, std::memory_order_release);
+    uiSnapshots.publish(msg);
     uiLastPublishSeq.store(msg.publishSeq, std::memory_order_release);
   }
 
@@ -374,21 +368,12 @@ struct TDScope final : Module {
     if (!out) {
       return false;
     }
-    // Bounded retries reduce chance of tearing between front-index and payload
-    // under concurrent publish, while keeping UI reads deterministic and cheap.
-    for (int i = 0; i < 3; ++i) {
-      uint64_t gen0 = uiSnapshotPublishGen.load(std::memory_order_acquire);
-      uint32_t frontIndex0 = uiSnapshotFrontIndex.load(std::memory_order_acquire) & 1u;
-      *out = uiSnapshots[frontIndex0];
-      uint32_t frontIndex1 = uiSnapshotFrontIndex.load(std::memory_order_acquire) & 1u;
-      uint64_t gen1 = uiSnapshotPublishGen.load(std::memory_order_acquire);
-      if (frontIndex0 == frontIndex1 && gen0 == gen1) {
-        return out->magic == temporaldeck_expander::MAGIC &&
-               out->version == temporaldeck_expander::VERSION &&
-               out->size == sizeof(temporaldeck_expander::HostToDisplay);
-      }
-    }
-    return false;
+    // The consumer owns this slot until its next read; publication cannot
+    // recycle it during this ordinary payload copy, even if the UI is paused.
+    *out = uiSnapshots.readLatest();
+    return out->magic == temporaldeck_expander::MAGIC &&
+           out->version == temporaldeck_expander::VERSION &&
+           out->size == sizeof(temporaldeck_expander::HostToDisplay);
   }
 
   void setLagDragRequest(bool active, float normalizedOffset, float normalizedVelocity = 0.f, bool stationaryHold = false,

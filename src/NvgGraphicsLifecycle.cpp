@@ -1,5 +1,5 @@
-#include "plugin.hpp"
 #include "NvgGraphicsLifecycle.hpp"
+#include <nanovg.h>
 
 namespace nvg_gfx_lifecycle {
 
@@ -9,7 +9,7 @@ bool resetOwnedNvgImage(NVGcontext*& ownerVg,
                         int& cachedHeight,
                         NVGcontext* currentVg,
                         bool deleteCurrentHandle) {
-  if (deleteCurrentHandle && currentVg && ownerVg == currentVg && handle >= 0) {
+  if (deleteCurrentHandle && currentVg && ownerVg == currentVg && handle > 0) {
     nvgDeleteImage(currentVg, handle);
   }
   ownerVg = nullptr;
@@ -20,7 +20,7 @@ bool resetOwnedNvgImage(NVGcontext*& ownerVg,
 }
 
 bool ownedNvgImageSizeMatches(NVGcontext* currentVg, int handle, int expectedWidth, int expectedHeight) {
-  if (!currentVg || handle < 0) {
+  if (!currentVg || handle <= 0) {
     return false;
   }
   int currentW = 0;
@@ -48,7 +48,7 @@ bool updateOwnedNvgImageRgba(NVGcontext*& ownerVg,
     resetOwnedNvgImage(ownerVg, handle, cachedWidth, cachedHeight, currentVg, false);
     ownerVg = currentVg;
   }
-  if (handle >= 0 && cachedWidth == width && cachedHeight == height &&
+  if (handle > 0 && cachedWidth == width && cachedHeight == height &&
       ownedNvgImageSizeMatches(currentVg, handle, width, height)) {
     nvgUpdateImage(currentVg, handle, rgbaPixels);
     return true;
@@ -56,7 +56,12 @@ bool updateOwnedNvgImageRgba(NVGcontext*& ownerVg,
   resetOwnedNvgImage(ownerVg, handle, cachedWidth, cachedHeight, currentVg, true);
   ownerVg = currentVg;
   handle = nvgCreateImageRGBA(currentVg, width, height, imageFlags, rgbaPixels);
-  if (handle < 0) return false;
+  if (handle <= 0) {
+    // NanoVG returns zero on creation failure. Keep the shared invalid
+    // sentinel so callers neither draw this handle nor treat it as uploaded.
+    handle = -1;
+    return false;
+  }
   cachedWidth = width;
   cachedHeight = height;
   return true;

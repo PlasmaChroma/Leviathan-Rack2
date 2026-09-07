@@ -93,6 +93,8 @@ TEST_BINS_NON_RACK := \
 	build/tests/temporaldeck_arc_lights_spec \
 	build/tests/temporaldeck_engine_spec \
 	build/tests/temporaldeck_expander_preview_spec \
+	build/tests/spsc_latest_snapshot_spec \
+	build/tests/nvg_graphics_lifecycle_spec \
 	build/tests/temporaldeck_menu_utils_spec \
 	build/tests/temporaldeck_frame_input_spec \
 	build/tests/temporaldeck_platter_input_spec \
@@ -114,6 +116,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/doorstop_helical_engine_spec \
 	build/tests/bifurx_filter_spec \
 	build/tests/sil_repair_spec \
+	build/tests/sil_limiter_peak_window_spec \
 	build/tests/bulkhead_geometry_spec \
 	build/tests/umi_engine_spec \
 	build/tests/aperture_light_transfer_spec \
@@ -410,6 +413,7 @@ CROWNSTEP_MODULE_SOURCES := \
 	src/DebugTerminalTransport.cpp
 
 .PHONY: test test-fast test-rack test-build test-build-fast test-build-rack test-odr test-sibyl-tsan test-octavia-observation-tsan test-octavia-observation-bus-tsan test-octavia-measurement-tsan
+.PHONY: test-spsc-snapshot-tsan
 test-build: $(TEST_BINS)
 test-build-fast: $(TEST_BINS_NON_RACK)
 test-build-rack: $(TEST_BINS_RACK)
@@ -424,6 +428,9 @@ test-octavia-observation-tsan: build/tests/octavia_observation_tsan_spec
 
 test-octavia-observation-bus-tsan: build/tests/octavia_observation_bus_tsan_spec
 	@TSAN_OPTIONS=halt_on_error=1 build/tests/octavia_observation_bus_tsan_spec
+
+test-spsc-snapshot-tsan: build/tests/spsc_latest_snapshot_tsan_spec
+	@TSAN_OPTIONS=halt_on_error=1 build/tests/spsc_latest_snapshot_tsan_spec
 
 test-fast: test-build-fast
 	$(call run_test_bin,build/tests/octavia_observation_bus_spec)
@@ -468,6 +475,8 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/temporaldeck_arc_lights_spec)
 	$(call run_test_bin,build/tests/temporaldeck_engine_spec)
 	$(call run_test_bin,build/tests/temporaldeck_expander_preview_spec)
+	$(call run_test_bin,build/tests/spsc_latest_snapshot_spec)
+	$(call run_test_bin,build/tests/nvg_graphics_lifecycle_spec)
 	$(call run_test_bin,build/tests/temporaldeck_menu_utils_spec)
 	$(call run_test_bin,build/tests/temporaldeck_frame_input_spec)
 	$(call run_test_bin,build/tests/temporaldeck_platter_input_spec)
@@ -489,6 +498,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/doorstop_helical_engine_spec)
 	$(call run_test_bin,build/tests/bifurx_filter_spec)
 	$(call run_test_bin,build/tests/sil_repair_spec)
+	$(call run_test_bin,build/tests/sil_limiter_peak_window_spec)
 	$(call run_test_bin,build/tests/bulkhead_geometry_spec)
 	$(call run_test_bin,build/tests/umi_engine_spec)
 	$(call run_test_bin,build/tests/aperture_light_transfer_spec)
@@ -606,6 +616,15 @@ build/tests/octavia_observation_tsan_spec: tests/octavia_observation_spec.cpp sr
 build/tests/temporaldeck_platter_spec_harness: tests/platter_spec_main.cpp tests/platter_spec_cases.cpp tests/platter_trace_replay.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
+build/tests/spsc_latest_snapshot_spec: tests/spsc_latest_snapshot_spec.cpp src/SpscLatestSnapshot.hpp src/TemporalDeckExpanderProtocol.hpp | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread $< -o $@
+
+build/tests/spsc_latest_snapshot_tsan_spec: tests/spsc_latest_snapshot_spec.cpp src/SpscLatestSnapshot.hpp src/TemporalDeckExpanderProtocol.hpp | build/tests
+	$(CXX) -std=c++11 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer $< -o $@
+
+build/tests/nvg_graphics_lifecycle_spec: tests/nvg_graphics_lifecycle_spec.cpp src/NvgGraphicsLifecycle.cpp src/NvgGraphicsLifecycle.hpp | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -I$(RACK_DIR)/dep/include $(filter %.cpp,$^) -o $@
+
 build/tests/sibyl_json_spec: tests/sibyl_json_spec.cpp src/SibylJSON.cpp src/SibylJSON.hpp src/SibylTypes.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_json_spec.cpp src/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
@@ -677,6 +696,9 @@ build/tests/temporaldeck_sample_prep_spec: tests/temporaldeck_sample_prep_spec.c
 
 build/tests/sil_repair_spec: tests/sil_repair_spec.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(MINGW_TEST_CPPFLAGS) $^ -o $@
+
+build/tests/sil_limiter_peak_window_spec: tests/sil_limiter_peak_window_spec.cpp src/SilLimiterPeakWindow.hpp | build/tests
+	$(CXX) -std=c++11 -O3 -Wall -Wextra $< -o $@
 
 build/tests/bulkhead_geometry_spec: tests/bulkhead_geometry_spec.cpp src/BulkheadGeometry.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@

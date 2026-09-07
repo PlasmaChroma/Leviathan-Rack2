@@ -121,19 +121,26 @@ void Cantor::process(const ProcessArgs& args) {
 		for (int voice = 0; voice < channelCount; ++voice) {
 			const int pitchChannel = pitchChannels == 1 ? 0 : voice;
 			const float request = inputs[PITCH_INPUT].getVoltage(pitchChannel);
-			const bool changed = !staticInitialized[size_t(voice)]
-				|| !std::isfinite(staticRequests[size_t(voice)])
-				|| !std::isfinite(request)
-				|| std::fabs(request - staticRequests[size_t(voice)])
-					>= (1.f / 1200.f);
-			if (!staticInitialized[size_t(voice)]
-				|| (staticDivider == 0u && changed)) {
-				const cantor::CultureDecision decision =
-					culture.quantizeStatic(request, settings);
-				heldOutputs[size_t(voice)] = decision.selectedPitch;
-				staticRequests[size_t(voice)] = request;
-				staticInitialized[size_t(voice)] = true;
-				publishDecision(decision);
+			if (!staticInitialized[size_t(voice)] || staticDivider == 0u) {
+				// Compare with this voice's last accepted settings, including voices
+				// returning after a channel-count change. Interpret is ignored by
+				// quantizeStatic(), so it does not invalidate the static result.
+				const auto& previous = staticSettings[size_t(voice)];
+				const bool changed = !staticInitialized[size_t(voice)]
+					|| settings.intent != previous.intent
+					|| settings.coherence != previous.coherence
+					|| settings.field != previous.field
+					|| !std::isfinite(staticRequests[size_t(voice)])
+					|| !std::isfinite(request)
+					|| std::fabs(request - staticRequests[size_t(voice)]) >= (1.f / 1200.f);
+				if (changed) {
+					const cantor::CultureDecision decision = culture.quantizeStatic(request, settings);
+					heldOutputs[size_t(voice)] = decision.selectedPitch;
+					staticRequests[size_t(voice)] = request;
+					staticSettings[size_t(voice)] = settings;
+					staticInitialized[size_t(voice)] = true;
+					publishDecision(decision);
+				}
 			}
 			outputs[PITCH_OUTPUT].setVoltage(heldOutputs[size_t(voice)], voice);
 		}

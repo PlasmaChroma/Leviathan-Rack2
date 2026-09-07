@@ -36,6 +36,7 @@ struct Cantor final : Module {
 	std::array<float, cantor::kMaximumVoices> heldOutputs {};
 	std::array<float, cantor::kMaximumVoices> staticRequests {};
 	std::array<bool, cantor::kMaximumVoices> staticInitialized {};
+	std::array<cantor::CultureSettings, cantor::kMaximumVoices> staticSettings {};
 	bool gateWasConnected = false;
 	std::uint32_t staticDivider = 0u;
 
