@@ -4007,6 +4007,7 @@ struct CrownstepWidget final : ModuleWidget {
 		ModuleWidget::step();
 		Crownstep* crownstepModule = dynamic_cast<Crownstep*>(module);
 		if (crownstepModule) {
+			crownstepModule->serviceGameActionsFromUiThread();
 			crownstepModule->serviceAiTurnFromUiThread();
 		}
 	}

@@ -256,10 +256,17 @@ void Crownstep::process(const ProcessArgs& args) {
 	}
 
 	if (newGameTrigger.process(params[NEW_GAME_PARAM].getValue())) {
-		startNewGame();
+		debugMovesRequested.store(false, std::memory_order_relaxed);
+		newGameRequested.fetch_add(1u, std::memory_order_release);
+		resetPlaybackFromAudio();
 	}
 	if (debugAddMovesTrigger.process(params[DEBUG_ADD_MOVES_PARAM].getValue())) {
-		appendDebugRandomMoves(10);
+		debugMovesRequested.store(true, std::memory_order_release);
+	}
+	const bool waitingForNewGame = newGameRequested.load(std::memory_order_relaxed)
+		!= newGameCompleted.load(std::memory_order_acquire);
+	if (playbackResetRequested.exchange(false, std::memory_order_acq_rel)) {
+		resetPlaybackFromAudio();
 	}
 
 	if (resetTrigger.process(inputs[RESET_INPUT].getVoltage())) {
@@ -271,7 +278,7 @@ void Crownstep::process(const ProcessArgs& args) {
 		eocActivityPulseRemainingSeconds = 0.f;
 	}
 
-	if (clockTrigger.process(inputs[CLOCK_INPUT].getVoltage())) {
+	if (clockTrigger.process(inputs[CLOCK_INPUT].getVoltage()) && !waitingForNewGame) {
 		// Hold EoC high until the next clock edge, then clear before
 		// advancing so non-wrap steps read low.
 		eocGateHigh = false;
@@ -297,7 +304,7 @@ void Crownstep::process(const ProcessArgs& args) {
 		cachedPitchRangeParam = effectivePitchRangeParam;
 		refreshHeldPitchForCurrentStep();
 	}
-	if (heldPitchRefreshRequested.exchange(false, std::memory_order_acq_rel)) {
+	if (!waitingForNewGame && heldPitchRefreshRequested.exchange(false, std::memory_order_acq_rel)) {
 		applyHeldPitchRefreshFromSnapshot();
 	}
 
@@ -305,7 +312,7 @@ void Crownstep::process(const ProcessArgs& args) {
 	if (requestedActivityPulses > 0) {
 		eocActivityPulseQueued += requestedActivityPulses;
 	}
-	bool sequenceLengthOneMode = (currentSequenceCap() == 1);
+	bool sequenceLengthOneMode = !waitingForNewGame && (currentSequenceCap() == 1);
 	if (!sequenceLengthOneMode) {
 		eocActivityPulseQueued = 0;
 		eocActivityPulseRemainingSeconds = 0.f;

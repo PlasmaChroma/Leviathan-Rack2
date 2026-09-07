@@ -329,6 +329,10 @@ Crownstep::Crownstep() {
 	randomizeBoardValueLayout();
 	setGameMode(GAME_MODE_CHECKERS, true);
 	publishPlaybackSnapshot();
+	// Construction is not concurrent with processing; do not leave a reset
+	// queued that could overwrite a subsequently restored patch playhead.
+	resetPlaybackFromAudio();
+	playbackResetRequested.store(false, std::memory_order_relaxed);
 }
 
 Crownstep::~Crownstep() {
@@ -638,6 +642,12 @@ void Crownstep::onReset() {
 }
 
 void Crownstep::resetPlayback() {
+	playbackResetRequested.store(true, std::memory_order_release);
+	cancelAiTurnWork();
+	resetMoveAnimation();
+}
+
+void Crownstep::resetPlaybackFromAudio() {
 	playhead = 0;
 	displayedStep = 0;
 	heldPitch = NO_SEQUENCE_PITCH_VOLTS;
@@ -649,8 +659,22 @@ void Crownstep::resetPlayback() {
 	eocActivityPulseQueued = 0;
 	eocActivityPulseRemainingSeconds = 0.f;
 	cachedRootSemitoneValid = false;
-	cancelAiTurnWork();
-	resetMoveAnimation();
+}
+
+void Crownstep::serviceGameActionsFromUiThread() {
+	const uint32_t requested = newGameRequested.load(std::memory_order_acquire);
+	const bool newGame = requested != newGameCompleted.load(std::memory_order_relaxed);
+	if (newGame) {
+		startNewGame();
+	}
+	// Developer button presses coalesce while UI service is paused; no growing
+	// queue or game-history work is permitted in the audio callback.
+	if (debugMovesRequested.exchange(false, std::memory_order_acq_rel)) {
+		appendDebugRandomMoves(10);
+	}
+	if (newGame) {
+		newGameCompleted.store(requested, std::memory_order_release);
+	}
 }
 
 void Crownstep::armDelayedAiTurnAfterHumanMove() {

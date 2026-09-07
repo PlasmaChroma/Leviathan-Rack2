@@ -87,7 +87,11 @@ void Crownstep::dataFromJson(json_t* rootJ) {
 	if (!rootJ) {
 		return;
 	}
-
+	// Rack serializes state restoration against processing. Pending actions
+	// from the previous state must not overwrite the restored game/playhead.
+	newGameCompleted.store(newGameRequested.load(std::memory_order_relaxed), std::memory_order_relaxed);
+	debugMovesRequested.store(false, std::memory_order_relaxed);
+	playbackResetRequested.store(false, std::memory_order_relaxed);
 	json_t* gameModeJ = json_object_get(rootJ, "gameMode");
 	int loadedGameMode = GAME_MODE_CHECKERS;
 	if (gameModeJ) {

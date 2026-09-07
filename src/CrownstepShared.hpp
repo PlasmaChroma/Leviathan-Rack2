@@ -164,6 +164,10 @@ struct Crownstep : Module {
 	dsp::SchmittTrigger resetTrigger;
 	dsp::SchmittTrigger newGameTrigger;
 	dsp::SchmittTrigger debugAddMovesTrigger;
+	std::atomic<uint32_t> newGameRequested {0u};
+	std::atomic<uint32_t> newGameCompleted {0u};
+	std::atomic<bool> debugMovesRequested {false};
+	std::atomic<bool> playbackResetRequested {false};
 	bool eocGateHigh = false;
 	std::atomic<int> eocActivityPulseRequests {0};
 	int eocActivityPulseQueued = 0;
@@ -287,6 +291,8 @@ struct Crownstep : Module {
 
 	void onReset() override;
 	void resetPlayback();
+	void resetPlaybackFromAudio();
+	void serviceGameActionsFromUiThread();
 	void armDelayedAiTurnAfterHumanMove();
 	void advanceUiAnimationClock(double nowSeconds);
 
