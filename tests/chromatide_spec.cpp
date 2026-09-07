@@ -79,7 +79,7 @@ static void testStampAndUndo() {
     dirty.reset();
 
     ChromatideUndoRecord record;
-    canvas.beginStrokeTransaction(dirty, record);
+    canvas.beginStrokeTransaction(record);
 
     canvas.stampAtRaster(500.0f, 100.0f, brush, &dirty);
     assert(dirty.valid());
@@ -100,6 +100,59 @@ static void testStampAndUndo() {
     canvas.sample(500, 100, r, g, b);
     assert(r > 200);
     std::cout << "[PASS] testStampAndUndo" << std::endl;
+}
+
+static void testStrokeHistoryPreservesArtwork() {
+    Chromatide module;
+    for (int y = 0; y < ChromatideCanvas::HEIGHT; ++y) {
+        for (int x = 0; x < ChromatideCanvas::WIDTH; ++x) {
+            module.canvas.setPixel(x, y, uint8_t(1 + x % 254),
+                uint8_t(1 + y % 254), uint8_t(1 + (x + y) % 254));
+        }
+    }
+    const std::vector<uint8_t> original(module.canvas.pixels.begin(), module.canvas.pixels.end());
+    module.params[Chromatide::BRUSH_SIZE_PARAM].setValue(24.f);
+    module.params[Chromatide::BRUSH_OPACITY_PARAM].setValue(0.6f);
+    module.beginStroke(0.2f, 0.2f);
+    module.updateStroke(0.7f, 0.75f);
+    module.endStroke();
+    const std::vector<uint8_t> painted(module.canvas.pixels.begin(), module.canvas.pixels.end());
+    assert(painted != original);
+    assert(module.undoStack.back().beforeRgb.size() < ChromatideCanvas::BUFFER_SIZE);
+    assert(module.undo());
+    assert(std::equal(original.begin(), original.end(), module.canvas.pixels.begin()));
+    const auto published = std::atomic_load(&module.irisPublishedSource);
+    assert(published->rgb8 == original);
+    assert(module.redo());
+    assert(std::equal(painted.begin(), painted.end(), module.canvas.pixels.begin()));
+
+    // Grow in the opposite direction and clip both canvas edges, over existing paint.
+    module.params[Chromatide::TOOL_PARAM].setValue(1.f);
+    module.params[Chromatide::BRUSH_SIZE_PARAM].setValue(64.f);
+    module.brushState.background = ChromatideColor(17, 43, 89);
+    module.beginStroke(1.f, 1.f);
+    module.updateStroke(0.f, 0.f);
+    module.endStroke();
+    const std::vector<uint8_t> erased(module.canvas.pixels.begin(), module.canvas.pixels.end());
+    assert(erased != painted);
+    assert(module.undo());
+    assert(std::equal(painted.begin(), painted.end(), module.canvas.pixels.begin()));
+    assert(module.undo());
+    assert(std::equal(original.begin(), original.end(), module.canvas.pixels.begin()));
+    assert(module.redo());
+    assert(std::equal(painted.begin(), painted.end(), module.canvas.pixels.begin()));
+    assert(module.redo());
+    assert(std::equal(erased.begin(), erased.end(), module.canvas.pixels.begin()));
+
+    module.clearCanvas();
+    assert(module.undo());
+    assert(std::equal(erased.begin(), erased.end(), module.canvas.pixels.begin()));
+    assert(module.redo());
+    for (size_t i = 0; i < module.canvas.pixels.size(); i += 3) {
+        assert(module.canvas.pixels[i] == 17 && module.canvas.pixels[i + 1] == 43
+            && module.canvas.pixels[i + 2] == 89);
+    }
+    std::cout << "[PASS] testStrokeHistoryPreservesArtwork" << std::endl;
 }
 
 static void testModuleAndMemoryCap() {
@@ -175,6 +228,7 @@ int main() {
     testBase64();
     testQoiBase64Serialization();
     testStampAndUndo();
+    testStrokeHistoryPreservesArtwork();
     testModuleAndMemoryCap();
     testModuleJsonRoundTrip();
     testPublishedSnapshotOwnership();

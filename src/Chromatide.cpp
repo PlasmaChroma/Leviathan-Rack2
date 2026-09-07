@@ -72,18 +72,7 @@ void Chromatide::beginStroke(float u, float v) {
     float rx = 0.0f, ry = 0.0f;
     canvas.normalizedToRaster(u, v, rx, ry);
 
-    float size = clampVal(brushState.size, 1.0f, 128.0f);
-    float Ry = size * 0.5f;
-    float Rx = (size * 0.5f) * (4.0f / ChromatideCanvas::VIEWPORT_ASPECT_RATIO);
-
-    RectI initialBounds;
-    initialBounds.minX = clampVal(static_cast<int>(std::floor(rx - Rx - 2.0f)), 0, ChromatideCanvas::WIDTH - 1);
-    initialBounds.maxX = clampVal(static_cast<int>(std::ceil(rx + Rx + 2.0f)), 0, ChromatideCanvas::WIDTH - 1);
-    initialBounds.minY = clampVal(static_cast<int>(std::floor(ry - Ry - 2.0f)), 0, ChromatideCanvas::HEIGHT - 1);
-    initialBounds.maxY = clampVal(static_cast<int>(std::ceil(ry + Ry + 2.0f)), 0, ChromatideCanvas::HEIGHT - 1);
-
-
-    canvas.beginStrokeTransaction(initialBounds, activeStrokeUndoRecord);
+    canvas.beginStrokeTransaction(activeStrokeUndoRecord);
     canvas.stampAtRaster(rx, ry, brushState, &activeStrokeDirty);
 }
 
@@ -98,7 +87,7 @@ void Chromatide::endStroke() {
     if (!strokeActive) return;
     strokeActive = false;
     canvas.finalizeStrokeTransaction(activeStrokeDirty, activeStrokeUndoRecord);
-    pushUndoRecord(activeStrokeUndoRecord);
+    pushUndoRecord(std::move(activeStrokeUndoRecord));
     canvas.revision++;
     publishToIris();
 }
@@ -110,8 +99,7 @@ void Chromatide::cancelStroke() {
 
 void Chromatide::clearCanvas() {
     ChromatideUndoRecord record;
-    RectI fullCanvas(0, 0, ChromatideCanvas::WIDTH - 1, ChromatideCanvas::HEIGHT - 1);
-    canvas.beginStrokeTransaction(fullCanvas, record);
+    canvas.beginStrokeTransaction(record);
     RectI dirty;
     dirty.reset();
     canvas.clear(brushState.background.r, brushState.background.g, brushState.background.b, &dirty);

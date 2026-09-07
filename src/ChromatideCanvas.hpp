@@ -130,7 +130,8 @@ public:
     void strokeToNormalized(float uPrev, float vPrev, float uCurr, float vCurr, const ChromatideBrushState& brush, RectI* dirtyOut = nullptr);
 
     // Undo / Redo history management
-    void beginStrokeTransaction(const RectI& initialBounds, ChromatideUndoRecord& recordOut) const;
+    // Capture before painting; finalization crops this temporary full snapshot.
+    void beginStrokeTransaction(ChromatideUndoRecord& recordOut) const;
     void finalizeStrokeTransaction(const RectI& dirtyBounds, ChromatideUndoRecord& recordInOut);
     void applyUndoRecord(const ChromatideUndoRecord& record, bool isUndo);
 

@@ -120,57 +120,33 @@ void ChromatideCanvas::strokeToNormalized(float uPrev, float vPrev, float uCurr,
     }
 }
 
-void ChromatideCanvas::beginStrokeTransaction(const RectI& initialBounds, ChromatideUndoRecord& recordOut) const {
-    recordOut.bounds = initialBounds;
-    recordOut.beforeRgb.clear();
+void ChromatideCanvas::beginStrokeTransaction(ChromatideUndoRecord& recordOut) const {
+    recordOut.bounds = RectI(0, 0, WIDTH - 1, HEIGHT - 1);
+    recordOut.beforeRgb.assign(pixels.begin(), pixels.end());
     recordOut.afterRgb.clear();
-
-    if (!initialBounds.valid()) return;
-
-    size_t count = static_cast<size_t>(initialBounds.width() * initialBounds.height() * CHANNELS);
-    recordOut.beforeRgb.resize(count);
-
-    size_t idx = 0;
-    for (int y = initialBounds.minY; y <= initialBounds.maxY; ++y) {
-        for (int x = initialBounds.minX; x <= initialBounds.maxX; ++x) {
-            size_t off = pixelOffset(x, y);
-            recordOut.beforeRgb[idx + 0] = pixels[off + 0];
-            recordOut.beforeRgb[idx + 1] = pixels[off + 1];
-            recordOut.beforeRgb[idx + 2] = pixels[off + 2];
-            idx += CHANNELS;
-        }
-    }
 }
 
 void ChromatideCanvas::finalizeStrokeTransaction(const RectI& dirtyBounds, ChromatideUndoRecord& recordInOut) {
-    if (!dirtyBounds.valid()) {
-        recordInOut.bounds = dirtyBounds;
+    if (!dirtyBounds.valid() || recordInOut.beforeRgb.size() != BUFFER_SIZE) {
+        recordInOut.bounds.reset();
         recordInOut.beforeRgb.clear();
         recordInOut.afterRgb.clear();
         return;
     }
 
-    // Capture before pixels if recordInOut was initialized empty
-    if (recordInOut.beforeRgb.empty() || recordInOut.bounds != dirtyBounds) {
-        recordInOut.bounds = dirtyBounds;
-        size_t count = static_cast<size_t>(dirtyBounds.width() * dirtyBounds.height() * CHANNELS);
-        recordInOut.beforeRgb.resize(count);
-        // Note: caller should have initiated beforeRgb prior to stamp applications if bounds were unknown.
-    }
-
-    size_t count = static_cast<size_t>(dirtyBounds.width() * dirtyBounds.height() * CHANNELS);
+    const size_t count = static_cast<size_t>(dirtyBounds.width() * dirtyBounds.height() * CHANNELS);
+    std::vector<uint8_t> before(count);
     recordInOut.afterRgb.resize(count);
-
-    size_t idx = 0;
+    const size_t rowBytes = static_cast<size_t>(dirtyBounds.width() * CHANNELS);
+    size_t destination = 0;
     for (int y = dirtyBounds.minY; y <= dirtyBounds.maxY; ++y) {
-        for (int x = dirtyBounds.minX; x <= dirtyBounds.maxX; ++x) {
-            size_t off = pixelOffset(x, y);
-            recordInOut.afterRgb[idx + 0] = pixels[off + 0];
-            recordInOut.afterRgb[idx + 1] = pixels[off + 1];
-            recordInOut.afterRgb[idx + 2] = pixels[off + 2];
-            idx += CHANNELS;
-        }
+        const size_t source = pixelOffset(dirtyBounds.minX, y);
+        std::copy_n(recordInOut.beforeRgb.begin() + source, rowBytes, before.begin() + destination);
+        std::copy_n(pixels.begin() + source, rowBytes, recordInOut.afterRgb.begin() + destination);
+        destination += rowBytes;
     }
+    recordInOut.beforeRgb.swap(before);
+    recordInOut.bounds = dirtyBounds;
 }
 
 void ChromatideCanvas::applyUndoRecord(const ChromatideUndoRecord& record, bool isUndo) {
