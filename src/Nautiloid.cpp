@@ -1,4 +1,5 @@
 #include "Nautiloid.hpp"
+#include "UiExpanderUtils.hpp"
 #include "Iris.hpp"
 #include "NautiloidCachePolicy.hpp"
 
@@ -752,11 +753,24 @@ void Nautiloid::process(const ProcessArgs& args) {
     yVelocityConnected ? clamp(inputs[Y_VELOCITY_INPUT].getVoltage() / 10.f, -1.f, 1.f) : 0.f,
     std::memory_order_relaxed);
 
-  const uint64_t generation = irisPreviewGeneration.load(std::memory_order_acquire);
   Module* right = rightExpander.module;
   const bool irisConnected = isIrisModule(right) && right->leftExpander.module == this;
-  const bool integralFluxConnected =
-    isIntegralFluxModule(right) && right->leftExpander.module == this;
+  const bool irisReady = irisConnected && irisSourceReady.load(std::memory_order_acquire);
+  const bool integralFluxConnected = isIntegralFluxModule(right) && right->leftExpander.module == this;
+  lights[IRIS_LINK_LIGHT].setBrightness(irisConnected && !irisReady ? 1.f : 0.f);
+  lights[IRIS_READY_LIGHT].setBrightness(irisReady ? 1.f : 0.f);
+  lights[INTEGRAL_FLUX_LINK_LIGHT].setBrightness(integralFluxConnected ? 1.f : 0.f);
+  lights[LOCATION_CODE_VALID_LIGHT].setBrightness(
+    locationCodeInputValid.load(std::memory_order_relaxed) ? 1.f : 0.f);
+  if (measurePerf) {
+    debugMetrics.recordProcess(debug_terminal::elapsedNsSince(processStart));
+  }
+}
+
+void Nautiloid::serviceIrisSource() {
+  const uint64_t generation = irisPreviewGeneration.load(std::memory_order_acquire);
+  Module* right = ui_expander::neighbor(this, true);
+  const bool irisConnected = isIrisModule(right);
   Iris* rightIris = irisConnected ? dynamic_cast<Iris*>(right) : nullptr;
   const bool irisJustAttached =
     rightIrisConnectionObserved && irisConnected &&
@@ -789,11 +803,11 @@ void Nautiloid::process(const ProcessArgs& args) {
   // each replacement final would cancel the previous request and starve
   // slower scalar fractals during patch restore.
   if (irisConnected && generation != 0u) {
-    if (generation != lastExpanderGenerationSentRight) {
+    if (generation != lastExpanderGenerationSentRight && irisAcceptsAutoSync) {
       uint64_t ownedGeneration = 0u;
       std::shared_ptr<const iris::SourceField> source =
         irisExpanderOwnedSourceSnapshot(&ownedGeneration);
-      if (source && ownedGeneration == generation && irisAcceptsAutoSync) {
+      if (source && ownedGeneration == generation) {
         if (Iris* irisModule = dynamic_cast<Iris*>(right)) {
           irisModule->requestOwnedExpanderSource(std::move(source), generation);
           lastExpanderGenerationSentRight = generation;
@@ -807,18 +821,10 @@ void Nautiloid::process(const ProcessArgs& args) {
     lastExpanderGenerationSentRight = 0u;
   }
 
-  lastExpanderGenerationSentLeft = 0u;
-  lights[IRIS_LINK_LIGHT].setBrightness(irisConnected && !irisReady ? 1.f : 0.f);
-  lights[IRIS_READY_LIGHT].setBrightness(irisReady ? 1.f : 0.f);
-  lights[INTEGRAL_FLUX_LINK_LIGHT].setBrightness(integralFluxConnected ? 1.f : 0.f);
-  lights[LOCATION_CODE_VALID_LIGHT].setBrightness(
-    locationCodeInputValid.load(std::memory_order_relaxed) ? 1.f : 0.f);
+  irisSourceReady.store(irisReady, std::memory_order_release);
   rightIrisConnectionObserved = true;
   rightIrisWasConnected = irisConnected;
   lastRightIrisModule = irisConnected ? right : nullptr;
-  if (measurePerf) {
-    debugMetrics.recordProcess(debug_terminal::elapsedNsSince(processStart));
-  }
 }
 
 Nautiloid::FractalState Nautiloid::fractalStateSnapshot() const {
@@ -985,9 +991,8 @@ void Nautiloid::requestIrisSourceSync() {
     std::fabs(source->generatorFractalCenterX - state.centerX) <= 1e-12 &&
     std::fabs(source->generatorFractalCenterY - state.centerY) <= 1e-12 &&
     source->generatorFractalColorMode == nautiloid_color::normalize(fractalColorMode);
-  Module* right = rightExpander.module;
-  if (generation != 0u && sourceMatchesCurrentState &&
-      isIrisModule(right) && right->leftExpander.module == this) {
+  Module* right = ui_expander::neighbor(this, true);
+  if (generation != 0u && sourceMatchesCurrentState && isIrisModule(right)) {
     if (Iris* irisModule = dynamic_cast<Iris*>(right)) {
       irisModule->requestOwnedExpanderSource(std::move(source), generation);
       lastExpanderGenerationSentRight = generation;

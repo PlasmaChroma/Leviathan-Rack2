@@ -485,6 +485,13 @@ ChromatideWidget::~ChromatideWidget() {
     }
 }
 
+void ChromatideWidget::step() {
+    ModuleWidget::step();
+    if (auto* canvasModule = static_cast<Chromatide*>(module)) {
+        canvasModule->serviceIrisSource();
+    }
+}
+
 void ChromatideWidget::openExpandedEditor() {
     if (isEditorExpanded() || !module || !APP || !APP->scene || !editorDock || !editorSurface) {
         return;

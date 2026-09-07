@@ -83,6 +83,8 @@ struct Nautiloid final : Module {
   void requestRenderWithCenteredCache();
   void requestInteractiveZoomPreview(double cacheCenterX, double cacheCenterY, bool forceCacheRecenter = false);
   void requestIrisSourceSync();
+  // UI-thread service: source ownership and Iris conversion settings stay off audio.
+  void serviceIrisSource();
   void serviceIrisConsumerDemand();
   void setGpuPreviewAvailable(bool available, bool requireCpuFallback = true);
   void resetView();
@@ -374,7 +376,8 @@ private:
   double irisCompatibleCenterX = 0.0;
   double irisCompatibleCenterY = 0.0;
   int irisCompatibleColorMode = COLOR_PRISM;
-  uint64_t lastExpanderGenerationSentLeft = 0u;
+  std::atomic<bool> irisSourceReady {false};
+  // UI-owned delivery/attachment state.
   uint64_t lastExpanderGenerationSentRight = 0u;
   bool rightIrisConnectionObserved = false;
   bool rightIrisWasConnected = false;

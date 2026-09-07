@@ -1,4 +1,5 @@
 #include "Chromatide.hpp"
+#include "UiExpanderUtils.hpp"
 #include <algorithm>
 
 Chromatide::Chromatide() {
@@ -16,16 +17,18 @@ Chromatide::Chromatide() {
 
 void Chromatide::process(const ProcessArgs& args) {
     (void)args;
+}
+
+void Chromatide::serviceIrisSource() {
     const uint64_t generation = irisPreviewGeneration.load(std::memory_order_acquire);
     const bool force = forceIrisSync.exchange(false, std::memory_order_acq_rel);
     if (generation == 0u || (!force && generation == lastExpanderGenerationSent)) return;
 
-    std::shared_ptr<const iris::SourceField> source =
-        std::atomic_load_explicit(&irisPublishedSource, std::memory_order_acquire);
-    if (!source) return;
-
-    Module* right = rightExpander.module;
-    if (right && right->model == modelIris && right->leftExpander.module == this) {
+    Module* right = ui_expander::neighbor(this, true);
+    if (right && right->model == modelIris) {
+        std::shared_ptr<const iris::SourceField> source =
+            std::atomic_load_explicit(&irisPublishedSource, std::memory_order_acquire);
+        if (!source) return;
         Iris* irisModule = static_cast<Iris*>(right);
         irisModule->requestOwnedExpanderSource(std::move(source), generation);
         lastExpanderGenerationSent = generation;

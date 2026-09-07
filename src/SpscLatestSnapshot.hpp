@@ -18,7 +18,15 @@ class SpscLatestSnapshot {
 public:
   // Producer only. Fixed storage, one payload copy, one atomic exchange.
   void publish(const T& value) {
-    slots[producerIndex] = value;
+    publishWith([&value](T& destination) { destination = value; });
+  }
+
+  // Producer only. Fill the owned slot directly to avoid an extra large
+  // payload copy. The callback must finish synchronously and not retain the
+  // reference or recursively publish. If it throws, nothing is published.
+  template <typename Fill>
+  void publishWith(Fill&& fill) {
+    fill(slots[producerIndex]);
     producerIndex = middle.exchange(producerIndex | kReady, std::memory_order_acq_rel) & kIndexMask;
   }
 

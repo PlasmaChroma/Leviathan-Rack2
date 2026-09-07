@@ -42,6 +42,7 @@ struct ChromatideWidget final : ModuleWidget {
 
     explicit ChromatideWidget(Chromatide* module);
     ~ChromatideWidget() override;
+    void step() override;
 
     void appendContextMenu(Menu* menu) override;
     void openExpandedEditor();

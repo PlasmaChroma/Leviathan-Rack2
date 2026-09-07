@@ -4,6 +4,8 @@
 #include "SilRepairBuffer.hpp"
 #include "SilRepairKernel.hpp"
 #include "SilLimiterPeakWindow.hpp"
+#include "SilSpectrumSnapshot.hpp"
+#include "SpscLatestSnapshot.hpp"
 #include "DebugTerminalMetrics.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include <vector>
@@ -176,7 +178,7 @@ struct Sil : Module {
 	} hist;
 
 	static constexpr int SPEC_FREQ_BINS = 128;
-	static constexpr int FFT_SIZE = 2048;
+	static constexpr int FFT_SIZE = sil::SpectrumSnapshot::kFftSize;
 
 	struct SpectrumData {
 		float magnitudesL[SPEC_FREQ_BINS] = {};
@@ -198,12 +200,8 @@ struct Sil : Module {
 
 		float smoothedPeakDb = 0.f;
 	} spec;
-	struct SpectrumSnapshot {
-		alignas(16) float mid[FFT_SIZE] = {};
-		alignas(16) float side[FFT_SIZE] = {};
-	};
-	SpectrumSnapshot specSnapshots[2];
-	std::atomic<int> specSnapshotIndex {0};
+	using SpectrumSnapshot = sil::SpectrumSnapshot;
+	snapshot_transport::SpscLatestSnapshot<SpectrumSnapshot> specSnapshots;
 	std::atomic<uint32_t> specSnapshotSeq {0u};
 	uint32_t specUiLastSeq = 0u;
 	struct SpectrumBinMapEntry {
@@ -780,8 +778,10 @@ struct Sil : Module {
 			return;
 		}
 
-		const int snapshotIndex = specSnapshotIndex.load(std::memory_order_acquire);
-		const SpectrumSnapshot& snapshot = specSnapshots[snapshotIndex];
+		// Only the left spectrum widget consumes, on Rack's UI thread. Its
+		// owned slot remains stable throughout windowing and FFT processing.
+		const SpectrumSnapshot& snapshot = specSnapshots.readLatest();
+		if (snapshot.sequence == specUiLastSeq) return;
 
 		for (int i = 0; i < FFT_SIZE; ++i) {
 			spec.fftInL[i] = snapshot.mid[i] * spec.window[i];
@@ -840,7 +840,7 @@ struct Sil : Module {
 			spec.displayNormR[i] = clamp((dbR - floorDb) * dbSpanInv, 0.f, 1.f);
 		}
 
-		specUiLastSeq = latestSeq;
+		specUiLastSeq = snapshot.sequence;
 	}
 
 	void updateDynamicsCoefficients(float sampleRate) {
@@ -2154,19 +2154,12 @@ struct Sil : Module {
 		spec.writePtr = (spec.writePtr + 1) % FFT_SIZE;
 
 		if (specDivider.process()) {
-			const int writeIndex = 1 - specSnapshotIndex.load(std::memory_order_relaxed);
-			SpectrumSnapshot& snapshot = specSnapshots[writeIndex];
-			int outIdx = 0;
-			for (int idx = spec.writePtr; idx < FFT_SIZE; ++idx, ++outIdx) {
-				snapshot.mid[outIdx] = spec.bufferL[idx];
-				snapshot.side[outIdx] = spec.bufferR[idx];
-			}
-			for (int idx = 0; idx < spec.writePtr; ++idx, ++outIdx) {
-				snapshot.mid[outIdx] = spec.bufferL[idx];
-				snapshot.side[outIdx] = spec.bufferR[idx];
-			}
-			specSnapshotIndex.store(writeIndex, std::memory_order_release);
-			specSnapshotSeq.fetch_add(1u, std::memory_order_release);
+			const uint32_t sequence = specSnapshotSeq.load(std::memory_order_relaxed) + 1u;
+			specSnapshots.publishWith([&](SpectrumSnapshot& snapshot) {
+				snapshot.capture(spec.bufferL, spec.bufferR, spec.writePtr, sequence);
+			});
+			// Keep the existing framebuffer invalidation and logging signal.
+			specSnapshotSeq.store(sequence, std::memory_order_release);
 		}
 
 		if (measurePerf) {

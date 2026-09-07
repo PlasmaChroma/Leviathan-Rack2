@@ -57,7 +57,7 @@ struct Chromatide : Module {
 
     // Published canvas snapshots are immutable and shared with Iris's worker.
     // Use the C++17 atomic shared_ptr free functions to exchange this between
-    // the UI/state thread and Rack's engine thread.
+    // the state loader and UI delivery service; audio never acquires ownership.
     std::shared_ptr<const iris::SourceField> irisPublishedSource;
     std::atomic<uint64_t> irisPreviewGeneration {0u};
     std::atomic<bool> forceIrisSync {true};
@@ -66,6 +66,7 @@ struct Chromatide : Module {
     Chromatide();
 
     void process(const ProcessArgs& args) override;
+    void serviceIrisSource(); // UI thread only
     void onExpanderChange(const ExpanderChangeEvent& e) override;
 
 

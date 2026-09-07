@@ -1,4 +1,5 @@
 #include "Iris.hpp"
+#include "UiExpanderUtils.hpp"
 #include "IrisPolyphony.hpp"
 #include "Nautiloid.hpp"
 #include "NautiloidFractal.hpp"
@@ -27,6 +28,12 @@ bool hasLeftNautiloid(const Iris* module) {
           left->model == modelChromatide || slug == "Chromatide");
 }
 
+bool hasLeftSourceForUi(const Iris* module) {
+  const auto* left = ui_expander::neighbor(module, false);
+  return left && left->model &&
+    (left->model == modelNautiloid || left->model->slug == "Nautiloid" ||
+     left->model == modelChromatide || left->model->slug == "Chromatide");
+}
 
 float acCoupledLinFm(float x, Iris::Voice* voice, float sampleTime) {
   const float hpCoeff = clamp(1.f - 2.f * float(M_PI) * kLinHpCutoffHz * sampleTime, 0.f, 1.f);
@@ -162,7 +169,7 @@ void Iris::requestImageLoad(const std::string& path) {
 }
 
 void Iris::requestExpanderSource(const nautiloid_iris_expander::SourceSlot* sourceSlot, uint64_t generation) {
-  if (!hasLeftNautiloid(this)) return;
+  if (!hasLeftSourceForUi(this)) return;
   restoredImageSourceMode.store(false, std::memory_order_release);
   if (!nautiloid_iris_expander::acquireSourceSlot(sourceSlot, generation)) return;
   const uintptr_t sourceIdentity = reinterpret_cast<uintptr_t>(sourceSlot);
@@ -187,7 +194,7 @@ void Iris::requestExpanderSource(const nautiloid_iris_expander::SourceSlot* sour
 
 void Iris::requestOwnedExpanderSource(
     std::shared_ptr<const iris::SourceField> source, uint64_t generation) {
-  if (!hasLeftNautiloid(this) || !source || !source->valid() || generation == 0u) return;
+  if (!hasLeftSourceForUi(this) || !source || !source->valid() || generation == 0u) return;
   restoredImageSourceMode.store(false, std::memory_order_release);
   const uintptr_t sourceIdentity = reinterpret_cast<uintptr_t>(source.get());
   if (generation == lastExpanderSourceGeneration.load(std::memory_order_acquire) &&

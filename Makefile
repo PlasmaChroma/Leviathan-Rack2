@@ -616,10 +616,10 @@ build/tests/octavia_observation_tsan_spec: tests/octavia_observation_spec.cpp sr
 build/tests/temporaldeck_platter_spec_harness: tests/platter_spec_main.cpp tests/platter_spec_cases.cpp tests/platter_trace_replay.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $^ -o $@
 
-build/tests/spsc_latest_snapshot_spec: tests/spsc_latest_snapshot_spec.cpp src/SpscLatestSnapshot.hpp src/TemporalDeckExpanderProtocol.hpp | build/tests
+build/tests/spsc_latest_snapshot_spec: tests/spsc_latest_snapshot_spec.cpp src/SpscLatestSnapshot.hpp src/TemporalDeckExpanderProtocol.hpp src/SilSpectrumSnapshot.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread $< -o $@
 
-build/tests/spsc_latest_snapshot_tsan_spec: tests/spsc_latest_snapshot_spec.cpp src/SpscLatestSnapshot.hpp src/TemporalDeckExpanderProtocol.hpp | build/tests
+build/tests/spsc_latest_snapshot_tsan_spec: tests/spsc_latest_snapshot_spec.cpp src/SpscLatestSnapshot.hpp src/TemporalDeckExpanderProtocol.hpp src/SilSpectrumSnapshot.hpp | build/tests
 	$(CXX) -std=c++11 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer $< -o $@
 
 build/tests/nvg_graphics_lifecycle_spec: tests/nvg_graphics_lifecycle_spec.cpp src/NvgGraphicsLifecycle.cpp src/NvgGraphicsLifecycle.hpp | build/tests
@@ -727,8 +727,8 @@ build/tests/nautiloid_location_code_spec: tests/nautiloid_location_code_spec.cpp
 build/tests/nautiloid_gpu_precision_spec: tests/nautiloid_gpu_precision_spec.cpp src/NautiloidGpuPrecision.hpp | build/tests
 	$(CXX) -std=c++17 -O3 -Wall -Wextra tests/nautiloid_gpu_precision_spec.cpp -o $@
 
-build/tests/nautiloid_iris_restore_spec: tests/nautiloid_iris_restore_spec.cpp src/Nautiloid.cpp src/Nautiloid.hpp src/NautiloidLocationCode.cpp src/Iris.cpp src/Iris.hpp src/IrisIO.cpp src/IrisSourceField.cpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/nautiloid_iris_restore_spec.cpp src/Nautiloid.cpp src/NautiloidLocationCode.cpp src/Iris.cpp src/IrisIO.cpp src/IrisSourceField.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@
+build/tests/nautiloid_iris_restore_spec: tests/nautiloid_iris_restore_spec.cpp src/Nautiloid.cpp src/Nautiloid.hpp src/NautiloidLocationCode.cpp src/Iris.cpp src/Iris.hpp src/IrisIO.cpp src/IrisSourceField.cpp src/Chromatide.cpp src/ChromatideCanvas.cpp src/UiExpanderUtils.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $(filter %.cpp,$^) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@
 
 build/tests/integral_flux_runtime_spec: tests/integral_flux_runtime_spec.cpp src/IntegralFlux.cpp src/IntegralFlux.hpp src/MathHelpers.hpp | build/tests
 	$(CXX) -std=c++17 $(INTEGRAL_FLUX_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Wno-subobject-linkage -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/integral_flux_runtime_spec.cpp src/IntegralFlux.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@

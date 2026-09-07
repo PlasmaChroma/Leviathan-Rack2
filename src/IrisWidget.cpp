@@ -1,4 +1,5 @@
 #include "Iris.hpp"
+#include "UiExpanderUtils.hpp"
 #include "Nautiloid.hpp"
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
@@ -123,7 +124,7 @@ Nautiloid* spawnNautiloidLeftOfIris(ModuleWidget* irisWidget) {
     return nullptr;
   }
 
-  Module* left = irisWidget->module->leftExpander.module;
+  Module* left = ui_expander::neighbor(irisWidget->module, false);
   if (isNautiloidModule(left)) {
     return dynamic_cast<Nautiloid*>(left);
   }
@@ -180,7 +181,7 @@ Nautiloid* spawnNautiloidLeftOfIris(ModuleWidget* irisWidget) {
 
 void selectNautiloidSourceForIris(ModuleWidget* irisWidget, Iris* iris) {
   if (!irisWidget || !iris) return;
-  Module* left = iris->leftExpander.module;
+  Module* left = ui_expander::neighbor(iris, false);
   if (!isNautiloidModule(left)) {
     if (Nautiloid* naut = spawnNautiloidLeftOfIris(irisWidget)) {
       naut->requestIrisSourceSync();
@@ -834,7 +835,7 @@ struct IrisSourceMenuButton final : TL1105 {
     menu->addChild(createCheckMenuItem(
       "Nautiloid", "",
       [this]() {
-        if (!module || !isNautiloidModule(module->leftExpander.module)) return false;
+        if (!module || !isNautiloidModule(ui_expander::neighbor(module, false))) return false;
         const int kind = module->sourceKind();
         return kind == iris::SOURCE_EXPANDER_IMAGE || kind == iris::SOURCE_NAUTILOID_FRACTAL;
       },

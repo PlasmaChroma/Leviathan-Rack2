@@ -1,5 +1,6 @@
 #include "../src/SpscLatestSnapshot.hpp"
 #include "../src/TemporalDeckExpanderProtocol.hpp"
+#include "../src/SilSpectrumSnapshot.hpp"
 
 #include <atomic>
 #include <cstdio>
@@ -156,6 +157,71 @@ void testHeapFreeLifecycle() {
   trackHeap = false;
   require(allocations == 0 && releases == 0, "construction, exchange, reads and destruction are heap-free");
 }
+
+void fillSpectrumRings(float* mid, float* side, uint32_t sequence) {
+  for (int i = 0; i < sil::SpectrumSnapshot::kFftSize; ++i) {
+    mid[i] = float(sequence) + float(i) / 4096.f;
+    side[i] = -mid[i];
+  }
+}
+
+bool spectrumMatches(const sil::SpectrumSnapshot& snapshot, uint32_t sequence, int writePosition) {
+  if (snapshot.sequence != sequence) return false;
+  for (int i = 0; i < sil::SpectrumSnapshot::kFftSize; ++i) {
+    const int index = (writePosition + i) % sil::SpectrumSnapshot::kFftSize;
+    const float expected = float(sequence) + float(index) / 4096.f;
+    if (snapshot.mid[i] != expected || snapshot.side[i] != -expected) return false;
+  }
+  return true;
+}
+
+void testSilChronology() {
+  sil::SpectrumSnapshot snapshot;
+  float mid[sil::SpectrumSnapshot::kFftSize], side[sil::SpectrumSnapshot::kFftSize];
+  fillSpectrumRings(mid, side, 17);
+  for (int position = 0; position < sil::SpectrumSnapshot::kFftSize; ++position) {
+    snapshot.capture(mid, side, position, 17);
+    require(spectrumMatches(snapshot, 17, position), "Sil preserves both rings at every wrap position");
+  }
+}
+
+void testSilConcurrentCapture() {
+  using Spectrum = sil::SpectrumSnapshot;
+  snapshot_transport::SpscLatestSnapshot<Spectrum> mailbox;
+  float mid[Spectrum::kFftSize], side[Spectrum::kFftSize];
+  fillSpectrumRings(mid, side, 1);
+  mailbox.publishWith([&](Spectrum& snapshot) { snapshot.capture(mid, side, 1, 1); });
+  const Spectrum& held = mailbox.readLatest();
+  std::atomic<uint32_t> published{1};
+  std::thread producer([&] {
+    float audioMid[Spectrum::kFftSize], audioSide[Spectrum::kFftSize];
+    trackHeap = true;
+    for (uint32_t seq = 2; seq <= 10000; ++seq) {
+      fillSpectrumRings(audioMid, audioSide, seq);
+      mailbox.publishWith([&](Spectrum& snapshot) {
+        snapshot.capture(audioMid, audioSide, int(seq % Spectrum::kFftSize), seq);
+      });
+      published.store(seq, std::memory_order_release);
+    }
+    trackHeap = false;
+    require(allocations == 0 && releases == 0, "Sil direct capture does not allocate or free");
+  });
+  do {
+    require(spectrumMatches(held, 1, 1), "Sil reader retains its old spectrum while audio advances");
+    std::this_thread::yield();
+  } while (published.load(std::memory_order_acquire) < 1000);
+  uint32_t last = 1;
+  do {
+    const Spectrum& snapshot = mailbox.readLatest();
+    require(snapshot.sequence >= last, "Sil spectrum sequence does not regress");
+    require(spectrumMatches(snapshot, snapshot.sequence, int(snapshot.sequence % Spectrum::kFftSize)),
+        "Sil samples and sequence stay coherent throughout a read");
+    last = snapshot.sequence;
+  } while (published.load(std::memory_order_acquire) != 10000);
+  producer.join();
+  require(spectrumMatches(mailbox.readLatest(), 10000, 10000 % Spectrum::kFftSize),
+      "Sil consumer receives final capture");
+}
 }
 
 int main() {
@@ -163,5 +229,7 @@ int main() {
   testPausedReader();
   testConcurrentCopies();
   testHeapFreeLifecycle();
-  std::puts("SPSC latest snapshot: 4/4 passed (real TD.Scope payload; zero tracked heap operations)");
+  testSilChronology();
+  testSilConcurrentCapture();
+  std::puts("SPSC latest snapshot: 6/6 passed (TD.Scope and Sil payloads; zero tracked heap operations)");
 }

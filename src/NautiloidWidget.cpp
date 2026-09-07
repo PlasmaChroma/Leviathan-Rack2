@@ -2360,6 +2360,7 @@ struct NautiloidWidget final : ModuleWidget {
     const bool measurePerf = isDragonKingDebugEnabled();
     const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
     if (Nautiloid* naut = static_cast<Nautiloid*>(module)) {
+      naut->serviceIrisSource();
       naut->serviceIrisConsumerDemand();
     }
     ModuleWidget::step();

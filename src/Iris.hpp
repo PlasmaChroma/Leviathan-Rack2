@@ -104,6 +104,7 @@ struct Iris final : Module {
 
   void requestImageLoad(const std::string& path);
   void requestExpanderSource(const nautiloid_iris_expander::SourceSlot* sourceSlot, uint64_t generation);
+  // UI-thread APIs: copy conversion settings and submit owned work off audio.
   void requestOwnedExpanderSource(
     std::shared_ptr<const iris::SourceField> source, uint64_t generation);
   void requestReload();
