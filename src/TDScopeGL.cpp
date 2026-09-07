@@ -3362,6 +3362,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     }
     const float pixelRatio = (APP && APP->window) ? APP->window->pixelRatio : 1.f;
     visual_assets::AdaptiveGlSurfacePolicy policy;
+    policy.vertexAttributeCount = 4;
     adaptiveSurface.renderIfNeeded(
       vg, box.size, rackZoom, pixelRatio, policy,
       isExtraGlValidationEnabled(),

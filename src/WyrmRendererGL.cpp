@@ -1054,16 +1054,28 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 		rendererVg = nullptr;
 	}
 
+	gl_lifecycle::ContextLease resourceContext;
+	void retireRendererResources() {
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Program, waveShaderProgram);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Program, bodyShaderProgram);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Texture, waveColumnTexture);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Texture, curveTexture);
+		for (const auto& slot : gpuTimerSlots) {
+			gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Query, slot.waveQuery);
+			gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Query, slot.bodyQuery);
+		}
+	}
+
 	~WyrmGlRendererWidget() override {
-		// DAW plugin editors can destroy/recreate their GL context around the
-		// Rack UI. Avoid driver calls from widget teardown; resources are
-		// reclaimed by the editor/context owner.
+		retireRendererResources();
+		// Retire names without issuing driver calls from widget destruction.
 		abandonRendererResources();
 		fixedSurface.reset(false);
 		clearFixedSurfaceMetrics();
 	}
 
 	void onContextDestroy(const ContextDestroyEvent& e) override {
+		retireRendererResources();
 		OpenGlWidget::onContextDestroy(e);
 		abandonRendererResources();
 		fixedSurface.reset(true);
@@ -1071,6 +1083,7 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	}
 
 	void onContextCreate(const ContextCreateEvent& e) override {
+		resourceContext.reset();
 		OpenGlWidget::onContextCreate(e);
 		abandonRendererResources();
 		fixedSurface.reset(false);
@@ -1155,6 +1168,13 @@ struct WyrmGlRendererWidget final : widget::OpenGlWidget {
 	}
 
 	void renderGlContent(Vec fbSize, int viewportY = 0) {
+		NVGcontext* currentResourceVg = (APP && APP->window) ? APP->window->vg : nullptr;
+		if (!gl_lifecycle::resourceContextMatches(resourceContext, currentResourceVg)) {
+			abandonRendererResources();
+			resourceContext = gl_lifecycle::acquireResourceContext(currentResourceVg);
+			rendererVg = currentResourceVg;
+		}
+
 		const int activeWidth = std::max(1, int(std::lround(fbSize.x)));
 		const int activeHeight = std::max(1, int(std::lround(fbSize.y)));
 		glViewport(0, viewportY, activeWidth, activeHeight);

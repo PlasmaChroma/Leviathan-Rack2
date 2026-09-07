@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../plugin.hpp"
+#include "../GlResourceRetirement.hpp"
 
 namespace visual_assets {
 
@@ -8,6 +9,8 @@ struct AdaptiveGlSurfacePolicy {
 	float minDensity = 0.25f;
 	float maxDensity = 2.f;
 	int sizeQuantum = 16;
+	// Number of generic vertex attributes the callback mutates (0..4).
+	int vertexAttributeCount = 0;
 	// Keep the largest capacity reached in this graphics context while allowing
 	// the active viewport to continue following the current logical size.
 	bool retainPeakCapacity = false;
@@ -15,6 +18,8 @@ struct AdaptiveGlSurfacePolicy {
 
 class AdaptiveGlSurface {
 public:
+	// Callbacks may use compatibility texture units and generic attributes 0..3.
+	// Set policy.vertexAttributeCount to cover the attributes they mutate.
 	using RenderCallback = void (*)(void* user, Vec activeSize, int viewportY);
 
 	AdaptiveGlSurface() = default;
@@ -50,6 +55,7 @@ private:
 	NVGLUframebuffer* front = nullptr;
 	NVGLUframebuffer* back = nullptr;
 	NVGcontext* vg = nullptr;
+	gl_lifecycle::ContextLease resourceContext;
 	int frontCapacityWidth = 0;
 	int frontCapacityHeight = 0;
 	int backCapacityWidth = 0;

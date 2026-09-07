@@ -173,7 +173,19 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
 
   explicit NautiloidGlPreview(Nautiloid* module) : module(module) {}
 
+  gl_lifecycle::ContextLease resourceContext;
+  void retireRendererResources() {
+    gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Shader, vertexShader);
+    for (const auto& mode : modePrograms) {
+      for (const ShaderVariant* variant : {&mode.fast, &mode.deep}) {
+        gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Program, variant->program);
+        gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Shader, variant->fragmentShader);
+      }
+    }
+  }
+
   ~NautiloidGlPreview() override {
+    retireRendererResources();
     if (module) {
       module->setGpuPreviewAvailable(false, false);
     }
@@ -194,6 +206,7 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
   }
 
   void onContextCreate(const ContextCreateEvent& e) override {
+    resourceContext.reset();
     OpenGlWidget::onContextCreate(e);
     // A module widget can survive a DAW editor replacement and miss the old
     // destroy event. Names from that context must only be forgotten here.
@@ -868,6 +881,12 @@ struct NautiloidGlPreview final : widget::OpenGlWidget {
   }
 
   void renderGlContent(Vec fbSize, int viewportY = 0) {
+    NVGcontext* currentResourceVg = (APP && APP->window) ? APP->window->vg : nullptr;
+    if (!gl_lifecycle::resourceContextMatches(resourceContext, currentResourceVg)) {
+      releaseGlResources(false);
+      resourceContext = gl_lifecycle::acquireResourceContext(currentResourceVg);
+    }
+
     synchronizeOwnerContext();
     const int activeWidth = std::max(1, int(std::lround(fbSize.x)));
     const int activeHeight = std::max(1, int(std::lround(fbSize.y)));

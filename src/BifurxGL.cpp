@@ -203,21 +203,44 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		rendererVg = nullptr;
 	}
 
+	gl_lifecycle::ContextLease resourceContext;
+	void retireRendererResources() {
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Program, program);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Program, shaderProgram);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Program, strokeShaderProgram);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Program, markerShaderProgram);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Program, textureProgram);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Shader, shaderVertex);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Shader, shaderFragment);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Shader, strokeShaderVertex);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Shader, strokeShaderFragment);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Shader, markerShaderVertex);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Shader, markerShaderFragment);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Shader, textureVertex);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Shader, textureFragment);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Buffer, vbo);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Buffer, shaderVbo);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Buffer, strokeShaderVbo);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Buffer, textureVbo);
+		for (GLuint name : curveTextures)
+			gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Texture, name);
+	}
+
 	~BifurxSpectrumGLWidget() {
-		// DAW plugin editors can destroy/recreate their GL context around the
-		// Rack UI. Avoid driver calls from widget teardown; the context owner
-		// reclaims these resources when the editor context is destroyed.
+		retireRendererResources();
+		// Retire names without issuing driver calls from widget destruction.
 		releaseRendererResources(false);
 		fixedSurface.reset(false);
 	}
 
 	void onContextDestroy(const ContextDestroyEvent& e) override {
 		OpenGlWidget::onContextDestroy(e);
-		releaseRendererResources(true);
+		releaseRendererResources(gl_lifecycle::resourceContextIsCurrent(resourceContext));
 		fixedSurface.reset(true);
 	}
 
 	void onContextCreate(const ContextCreateEvent& e) override {
+		resourceContext.reset();
 		OpenGlWidget::onContextCreate(e);
 		// Rack module widgets can survive a DAW editor replacement and miss the
 		// old scene's destroy event. Never carry GL names into the new context:
@@ -1206,6 +1229,13 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	}
 
 	void renderGlContent(Vec fbSize, int viewportY = 0) {
+		NVGcontext* currentResourceVg = (APP && APP->window) ? APP->window->vg : nullptr;
+		if (!gl_lifecycle::resourceContextMatches(resourceContext, currentResourceVg)) {
+			releaseRendererResources(false);
+			resourceContext = gl_lifecycle::acquireResourceContext(currentResourceVg);
+			rendererVg = currentResourceVg;
+		}
+
 		using PerfClock = std::chrono::steady_clock;
 		const bool measurePerf = isDragonKingDebugEnabled();
 		const PerfClock::time_point perfDrawStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
@@ -1470,6 +1500,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const float pixelRatio = (APP && APP->window)
 			? APP->window->pixelRatio : 1.f;
 		visual_assets::AdaptiveGlSurfacePolicy policy;
+		policy.vertexAttributeCount = 4;
 		policy.maxDensity = 3.f;
 		const bool measurePerf = isDragonKingDebugEnabled();
 		const auto renderStart = measurePerf

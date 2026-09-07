@@ -852,3 +852,12 @@ build/tests/phonex_module_spec: tests/phonex_module_spec.cpp src/Phonex.cpp src/
 build/tools/snapshot_history_benchmark: tools/snapshot_history_benchmark.cpp tools/preview_benchmark_utils.hpp src/visual/SnapshotHistory.hpp src/WavePreviewTracer.hpp src/Proc.cpp src/ProcPreviewGeometry.hpp | build
 	@mkdir -p build/tools
 	$(CXX) -std=c++17 $(INTEGRAL_FLUX_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/snapshot_history_benchmark.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+
+# Real-driver lifecycle regression. Explicit opt-in: requires a window system,
+# but creates only an invisible GLFW window (no live Rack patch required).
+.PHONY: test-gl-lifecycle
+test-gl-lifecycle: build/tests/gl_surface_lifecycle_spec
+	$(call run_rack_test_bin,build/tests/gl_surface_lifecycle_spec)
+
+build/tests/gl_surface_lifecycle_spec: tests/gl_surface_lifecycle_spec.cpp src/visual/AdaptiveGlSurface.cpp src/visual/AdaptiveGlSurface.hpp src/GlResourceRetirement.cpp src/GlResourceRetirement.hpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) $(MINGW_TEST_CPPFLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/gl_surface_lifecycle_spec.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter win,$(ARCH_OS)),-lopengl32,-lGL) -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@

@@ -373,19 +373,30 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		fallbackRoot->addChild(fallbackCapReflection);
 	}
 
+	gl_lifecycle::ContextLease resourceContext;
+	void retireRendererResources() {
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Program, program);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Shader, vertexShader);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Shader, fragmentShader);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Buffer, vbo);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Texture, capTexture);
+	}
+
 	~HaloGlSurface() override {
+		retireRendererResources();
 		releaseGlResources(false);
 	}
 
 	void onContextDestroy(const ContextDestroyEvent& e) override {
 		fixedSurface.reset(true);
 		OpenGlWidget::onContextDestroy(e);
-		releaseGlResources(true);
+		releaseGlResources(gl_lifecycle::resourceContextIsCurrent(resourceContext));
 		shaderFailed = false;
 		bypassed = forceNanoVg;
 	}
 
 	void onContextCreate(const ContextCreateEvent& e) override {
+		resourceContext.reset();
 		OpenGlWidget::onContextCreate(e);
 		fixedSurface.reset(false);
 		// A Rack module widget can outlive the DAW editor scene. In that case it
@@ -424,6 +435,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 				rackZoom = std::max(APP->scene->rackScroll->getZoom(), 1e-4f);
 			}
 			visual_assets::AdaptiveGlSurfacePolicy policy;
+			policy.vertexAttributeCount = 1;
 			policy.maxDensity = 3.f;
 			policy.retainPeakCapacity = true;
 			if (fixedSurface.renderIfNeeded(
@@ -804,6 +816,12 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 	}
 
 	void renderGlContent(Vec framebufferSize, int viewportY = 0) {
+		NVGcontext* currentResourceVg = (APP && APP->window) ? APP->window->vg : nullptr;
+		if (!gl_lifecycle::resourceContextMatches(resourceContext, currentResourceVg)) {
+			releaseGlResources(false);
+			resourceContext = gl_lifecycle::acquireResourceContext(currentResourceVg);
+		}
+
 		const bool measure = isDragonKingDebugEnabled();
 		const auto profileStart = measure ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
 		const int activeWidth = std::max(1, int(std::lround(framebufferSize.x)));
