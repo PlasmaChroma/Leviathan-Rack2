@@ -163,7 +163,7 @@ Bulkhead::Bulkhead() {
 	configOutput(OUT_L_OUTPUT, "Out L");
 	configOutput(OUT_R_OUTPUT, "Out R");
 
-	sampleRate = APP->engine->getSampleRate();
+	sampleRate = APP && APP->engine ? APP->engine->getSampleRate() : 44100.f;
 	initDsp();
 }
 
@@ -185,6 +185,36 @@ void Bulkhead::resetSceneDefaults() {
 	listenerYawRadians = 0.5f * M_PI;
 	speakerLeftYawRadians = std::atan2(listener.y - speakerLeft.y, listener.x - speakerLeft.x);
 	speakerRightYawRadians = std::atan2(listener.y - speakerRight.y, listener.x - speakerRight.x);
+	publishGeometry();
+	displayGeometry.room = room;
+	displayGeometry.listener = listener;
+	displayGeometry.speakerLeft = speakerLeft;
+	displayGeometry.speakerRight = speakerRight;
+	displayGeometry.listenerYawRadians = listenerYawRadians;
+	displayGeometry.speakerLeftYawRadians = speakerLeftYawRadians;
+	displayGeometry.speakerRightYawRadians = speakerRightYawRadians;
+	displayGeometry.directGeoDryEnabled = directGeoDryEnabled;
+	displayGeometry.valid = true;
+}
+
+void Bulkhead::publishGeometry() {
+	GeometryState value;
+	value.room = room;
+	value.listener = listener;
+	value.speakerLeft = speakerLeft;
+	value.speakerRight = speakerRight;
+	value.listenerYawRadians = listenerYawRadians;
+	value.speakerLeftYawRadians = speakerLeftYawRadians;
+	value.speakerRightYawRadians = speakerRightYawRadians;
+	value.directGeoDryEnabled = directGeoDryEnabled;
+	value.valid = true;
+	authoredGeometry.publish(value);
+}
+
+void Bulkhead::serviceGeometryUi() {
+	publishGeometry();
+	const auto& view = effectiveGeometry.readLatest();
+	if (view.valid) displayGeometry = view;
 }
 
 void Bulkhead::initDsp() {
@@ -214,7 +244,7 @@ void Bulkhead::initDsp() {
 }
 
 void Bulkhead::onSampleRateChange() {
-	sampleRate = APP->engine->getSampleRate();
+	sampleRate = APP && APP->engine ? APP->engine->getSampleRate() : 44100.f;
 	initDsp();
 }
 
@@ -222,7 +252,16 @@ void Bulkhead::onReset() {
 	resetSceneDefaults();
 }
 
-void Bulkhead::process(const ProcessArgs&) {
+void Bulkhead::process(const ProcessArgs& args) {
+	const GeometryState& authored = authoredGeometry.readLatest();
+	auto room = authored.room;
+	auto listener = authored.listener;
+	auto speakerLeft = authored.speakerLeft;
+	auto speakerRight = authored.speakerRight;
+	auto speakerLeftYawRadians = authored.speakerLeftYawRadians;
+	auto speakerRightYawRadians = authored.speakerRightYawRadians;
+	auto directGeoDryEnabled = authored.directGeoDryEnabled;
+
 	const float inL = inputs[IN_L_INPUT].getVoltage();
 	const float inR = inputs[IN_R_INPUT].isConnected() ? inputs[IN_R_INPUT].getVoltage() : inL;
 
@@ -244,6 +283,15 @@ void Bulkhead::process(const ProcessArgs&) {
 	room.right = std::max(room.right + rightMod, listener.x + minWallGap);
 	room.top = std::max(room.top + frontMod, listener.y + minWallGap);
 	room.bottom = std::min(room.bottom + backMod, listener.y - minWallGap);
+
+	geometryDisplayElapsed += args.sampleTime;
+	if (geometryDisplayElapsed >= 1.f / 60.f) {
+		geometryDisplayElapsed = 0.f;
+		GeometryState view = authored;
+		view.room = room;
+		view.listener = listener;
+		effectiveGeometry.publish(view);
+	}
 
 	const float decaySec = params[DECAY_PARAM].getValue();
 	const float diffuse = params[DIFFUSE_PARAM].getValue();
@@ -408,4 +456,5 @@ void Bulkhead::dataFromJson(json_t* rootJ) {
 	speakerLeftYawRadians = jsonFloatOr(rootJ, "speakerLeftYawRadians", speakerLeftYawRadians);
 	speakerRightYawRadians = jsonFloatOr(rootJ, "speakerRightYawRadians", speakerRightYawRadians);
 	directGeoDryEnabled = jsonBoolOr(rootJ, "directGeoDryEnabled", true);
+	publishGeometry();
 }

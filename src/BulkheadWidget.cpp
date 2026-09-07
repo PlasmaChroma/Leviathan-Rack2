@@ -122,12 +122,12 @@ struct BulkheadRoomCanvasWidget : TransparentWidget {
 			return DRAG_NONE;
 		}
 		const auto world = worldBounds(box.size);
-		const Vec listenerPx = roomToCanvas(world, module->listener, box.size);
-		const Vec leftPx = roomToCanvas(world, module->speakerLeft, box.size);
-		const Vec rightPx = roomToCanvas(world, module->speakerRight, box.size);
-		const bulkhead::geometry::Vec2 rTL = makeVec2(module->room.left, module->room.top);
-		const bulkhead::geometry::Vec2 rTR = makeVec2(module->room.right, module->room.top);
-		const bulkhead::geometry::Vec2 rBL = makeVec2(module->room.left, module->room.bottom);
+		const Vec listenerPx = roomToCanvas(world, module->displayGeometry.listener, box.size);
+		const Vec leftPx = roomToCanvas(world, module->displayGeometry.speakerLeft, box.size);
+		const Vec rightPx = roomToCanvas(world, module->displayGeometry.speakerRight, box.size);
+		const bulkhead::geometry::Vec2 rTL = makeVec2(module->displayGeometry.room.left, module->displayGeometry.room.top);
+		const bulkhead::geometry::Vec2 rTR = makeVec2(module->displayGeometry.room.right, module->displayGeometry.room.top);
+		const bulkhead::geometry::Vec2 rBL = makeVec2(module->displayGeometry.room.left, module->displayGeometry.room.bottom);
 		const Vec roomTL = roomToCanvas(world, rTL, box.size);
 		const Vec roomTR = roomToCanvas(world, rTR, box.size);
 		const Vec roomBL = roomToCanvas(world, rBL, box.size);
@@ -316,13 +316,13 @@ struct BulkheadRoomCanvasWidget : TransparentWidget {
 		Vec roomBR = roomToCanvas(world, makeVec2(4.f, -2.5f), box.size);
 
 		if (module) {
-			leftSpeakerPx = roomToCanvas(world, module->speakerLeft, box.size);
-			rightSpeakerPx = roomToCanvas(world, module->speakerRight, box.size);
-			listenerPx = roomToCanvas(world, module->listener, box.size);
-			const bulkhead::geometry::Vec2 rTL = makeVec2(module->room.left, module->room.top);
-			const bulkhead::geometry::Vec2 rTR = makeVec2(module->room.right, module->room.top);
-			const bulkhead::geometry::Vec2 rBL = makeVec2(module->room.left, module->room.bottom);
-			const bulkhead::geometry::Vec2 rBR = makeVec2(module->room.right, module->room.bottom);
+			leftSpeakerPx = roomToCanvas(world, module->displayGeometry.speakerLeft, box.size);
+			rightSpeakerPx = roomToCanvas(world, module->displayGeometry.speakerRight, box.size);
+			listenerPx = roomToCanvas(world, module->displayGeometry.listener, box.size);
+			const bulkhead::geometry::Vec2 rTL = makeVec2(module->displayGeometry.room.left, module->displayGeometry.room.top);
+			const bulkhead::geometry::Vec2 rTR = makeVec2(module->displayGeometry.room.right, module->displayGeometry.room.top);
+			const bulkhead::geometry::Vec2 rBL = makeVec2(module->displayGeometry.room.left, module->displayGeometry.room.bottom);
+			const bulkhead::geometry::Vec2 rBR = makeVec2(module->displayGeometry.room.right, module->displayGeometry.room.bottom);
 			roomTL = roomToCanvas(world, rTL, box.size);
 			roomTR = roomToCanvas(world, rTR, box.size);
 			roomBL = roomToCanvas(world, rBL, box.size);
@@ -407,8 +407,8 @@ struct BulkheadRoomCanvasWidget : TransparentWidget {
 			drawSpeaker(pos, pos.plus(directionFromYaw(yawRadians)));
 		};
 		if (module) {
-			drawSpeakerYaw(leftSpeakerPx, module->speakerLeftYawRadians);
-			drawSpeakerYaw(rightSpeakerPx, module->speakerRightYawRadians);
+			drawSpeakerYaw(leftSpeakerPx, module->displayGeometry.speakerLeftYawRadians);
+			drawSpeakerYaw(rightSpeakerPx, module->displayGeometry.speakerRightYawRadians);
 		} else {
 			drawSpeaker(leftSpeakerPx, listenerPx);
 			drawSpeaker(rightSpeakerPx, listenerPx);
@@ -421,7 +421,7 @@ struct BulkheadRoomCanvasWidget : TransparentWidget {
 
 		nvgBeginPath(args.vg);
 		nvgMoveTo(args.vg, listenerPx.x, listenerPx.y);
-		const Vec listenerDir = module ? directionFromYaw(module->listenerYawRadians) : Vec(0.f, -1.f);
+		const Vec listenerDir = module ? directionFromYaw(module->displayGeometry.listenerYawRadians) : Vec(0.f, -1.f);
 		nvgLineTo(args.vg, listenerPx.x + listenerDir.x * 14.f, listenerPx.y + listenerDir.y * 14.f);
 		nvgStrokeColor(args.vg, nvgRGBA(132, 104, 255, 220));
 		nvgStrokeWidth(args.vg, 1.5f);
@@ -502,6 +502,11 @@ BulkheadWidget::BulkheadWidget(Bulkhead* module) {
 	addOutputPort(Bulkhead::OUT_R_OUTPUT, "out_r_output", Vec(72.28f, 113.5f));
 
 	previewBuildTimer.markAnchorsDone();
+}
+
+void BulkheadWidget::step() {
+	ModuleWidget::step();
+	if (auto* bulkhead = static_cast<Bulkhead*>(module)) bulkhead->serviceGeometryUi();
 }
 
 void BulkheadWidget::appendContextMenu(Menu* menu) {

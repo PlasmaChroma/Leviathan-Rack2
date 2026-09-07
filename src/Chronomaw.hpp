@@ -2,6 +2,7 @@
 
 #include "ChronomawEngine.hpp"
 #include "plugin.hpp"
+#include "SpscLatestSnapshot.hpp"
 #include <atomic>
 
 struct Chronomaw : Module {
@@ -59,7 +60,23 @@ struct Chronomaw : Module {
 		LIGHTS_LEN
 	};
 
+	// Authored outputs, banks and editor state are owned by the UI thread.
 	chronomaw::ModuleState state;
+	struct Configuration {
+		chronomaw::LiveState live;
+		uint64_t revision = 0;
+		uint64_t resetRevision = 0;
+	};
+	snapshot_transport::SpscLatestSnapshot<Configuration> configurations;
+	uint64_t uiRevision = 0, uiResetRevision = 0;
+	uint64_t audioRevision = 0, audioResetRevision = 0;
+	chronomaw::LiveState audioLive;
+	std::atomic<uint64_t> publishedTransport {0}; // reset epoch plus engine-owned Run latch
+	// Latest bank action of each kind while the UI is paused; never grows.
+	std::atomic<int> pendingSaveBank {-1}, pendingLoadBank {-1};
+	void publishConfiguration(bool resetTransport = false);
+	void serviceUi();
+	void resetAudioTimeline();
 	chronomaw::Engine engine;
 	chronomaw::FrameOutputs frameOut;
 	std::array<std::array<std::atomic<float>, kTimelineHistorySize>, chronomaw::kNumOutputs> timelineInternalHistory {};
@@ -100,6 +117,7 @@ struct Chronomaw : Module {
 struct ChronomawWidget : ModuleWidget {
 	explicit ChronomawWidget(Chronomaw* module);
 	void appendContextMenu(Menu* menu) override;
+	void step() override;
 };
 
 extern Model* modelChronomaw;

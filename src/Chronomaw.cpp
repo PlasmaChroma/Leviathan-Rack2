@@ -137,14 +137,54 @@ Chronomaw::Chronomaw() {
 			timelineFutureOutput[size_t(ch)][size_t(i)].store(0.f, std::memory_order_relaxed);
 		}
 	}
+	publishConfiguration(true);
 }
 
 Chronomaw::~Chronomaw() {
 	teardownTimer.begin(id);
 }
 
+void Chronomaw::publishConfiguration(bool resetTransport) {
+	if (resetTransport) {
+		++uiResetRevision;
+		pendingSaveBank.store(-1, std::memory_order_relaxed);
+		pendingLoadBank.store(-1, std::memory_order_relaxed);
+	}
+	Configuration value;
+	value.live = state.live;
+	value.revision = ++uiRevision;
+	value.resetRevision = uiResetRevision;
+	configurations.publish(value);
+}
+
+void Chronomaw::serviceUi() {
+	state.live.bpm = params[BPM_PARAM].getValue();
+	state.live.activeBank = clamp(int(std::lround(params[ACTIVE_BANK_PARAM].getValue())), 0, chronomaw::kNumBanks - 1);
+	state.ui.selectedOutput = clamp(int(std::lround(params[SELECTED_OUTPUT_PARAM].getValue())) - 1, 0, chronomaw::kNumOutputs - 1);
+	state.live.density = chronomaw::DensityMode::Monitor;
+	const uint64_t transport = publishedTransport.load(std::memory_order_acquire);
+	if ((transport >> 1) == uiResetRevision)
+		state.live.running = (transport & 1u) != 0;
+	const int save = pendingSaveBank.exchange(-1, std::memory_order_acq_rel);
+	const int load = pendingLoadBank.exchange(-1, std::memory_order_acq_rel);
+	if (save >= 0) {
+		state.banks[size_t(save)].bpm = state.live.bpm;
+		state.banks[size_t(save)].outputs = state.live.outputs;
+	}
+	if (load >= 0) {
+		state.live.bpm = state.banks[size_t(load)].bpm;
+		state.live.outputs = state.banks[size_t(load)].outputs;
+		params[BPM_PARAM].setValue(state.live.bpm);
+	}
+	publishConfiguration();
+}
+
 void Chronomaw::onReset() {
 	state = chronomaw::ModuleState();
+	publishConfiguration(true);
+}
+
+void Chronomaw::resetAudioTimeline() {
 	engine.reset();
 	timelineWritePos.store(0, std::memory_order_relaxed);
 	timelinePhaseBeats.store(0.f, std::memory_order_relaxed);
@@ -177,25 +217,31 @@ void Chronomaw::onReset() {
 }
 
 void Chronomaw::process(const ProcessArgs& args) {
-	if (runButtonEdge.process(params[RUN_PARAM].getValue())) {
-		state.live.running = !state.live.running;
+	const Configuration& config = configurations.readLatest();
+	if (config.revision != audioRevision) {
+		const bool running = audioLive.running;
+		audioLive = config.live;
+		if (config.resetRevision != audioResetRevision) {
+			resetAudioTimeline();
+			audioResetRevision = config.resetRevision;
+		} else {
+			audioLive.running = running;
+		}
+		audioRevision = config.revision;
 	}
-	state.live.bpm = params[BPM_PARAM].getValue();
-	state.live.activeBank = clamp(int(std::lround(params[ACTIVE_BANK_PARAM].getValue())), 0, chronomaw::kNumBanks - 1);
-	state.ui.selectedOutput = clamp(int(std::lround(params[SELECTED_OUTPUT_PARAM].getValue())) - 1, 0, chronomaw::kNumOutputs - 1);
-	state.live.density = chronomaw::DensityMode::Monitor;
-	params[DENSITY_MODE_PARAM].setValue(0.f);
 
-	const int bank = state.live.activeBank;
-	if (saveBankEdge.process(params[SAVE_BANK_PARAM].getValue())) {
-		state.banks[size_t(bank)].bpm = state.live.bpm;
-		state.banks[size_t(bank)].outputs = state.live.outputs;
+	if (runButtonEdge.process(params[RUN_PARAM].getValue())) {
+		audioLive.running = !audioLive.running;
 	}
-	if (loadBankEdge.process(params[LOAD_BANK_PARAM].getValue())) {
-		state.live.bpm = state.banks[size_t(bank)].bpm;
-		state.live.outputs = state.banks[size_t(bank)].outputs;
-		params[BPM_PARAM].setValue(state.live.bpm);
-	}
+	audioLive.bpm = params[BPM_PARAM].getValue();
+	audioLive.activeBank = clamp(int(std::lround(params[ACTIVE_BANK_PARAM].getValue())), 0, chronomaw::kNumBanks - 1);
+	audioLive.density = chronomaw::DensityMode::Monitor;
+
+	const int bank = audioLive.activeBank;
+	if (saveBankEdge.process(params[SAVE_BANK_PARAM].getValue()))
+		pendingSaveBank.store(bank, std::memory_order_release);
+	if (loadBankEdge.process(params[LOAD_BANK_PARAM].getValue()))
+		pendingLoadBank.store(bank, std::memory_order_release);
 
 	chronomaw::FrameInputs in;
 	in.sampleTime = args.sampleTime;
@@ -205,11 +251,12 @@ void Chronomaw::process(const ProcessArgs& args) {
 	in.runVoltage = inputs[RUN_INPUT].getVoltage();
 	in.resetConnected = inputs[RESET_INPUT].isConnected();
 	in.resetVoltage = inputs[RESET_INPUT].getVoltage();
-	engine.process(in, state.live, &frameOut);
+	engine.process(in, audioLive, &frameOut);
 	timelinePhaseBeats.store(frameOut.phaseBeats, std::memory_order_relaxed);
-	timelineBpm.store(state.live.bpm, std::memory_order_relaxed);
+	timelineBpm.store(audioLive.bpm, std::memory_order_relaxed);
 	timelineCycleCount.store(frameOut.cycleCount, std::memory_order_relaxed);
 	timelineRunning.store(frameOut.running, std::memory_order_relaxed);
+	publishedTransport.store((audioResetRevision << 1) | uint64_t(audioLive.running), std::memory_order_release);
 	for (int i = 0; i < chronomaw::kNumOutputs; ++i) {
 		timelineTimingPhaseOffsets[size_t(i)].store(float(frameOut.timingPhaseOffsets[size_t(i)]), std::memory_order_relaxed);
 	}
@@ -260,7 +307,7 @@ void Chronomaw::process(const ProcessArgs& args) {
 		timelineWritePos.store((writePos + 1) % kTimelineHistorySize, std::memory_order_relaxed);
 	}
 
-	lights[RUN_LIGHT].setBrightness(state.live.running ? 1.f : 0.f);
+	lights[RUN_LIGHT].setBrightness(audioLive.running ? 1.f : 0.f);
 	lights[SYNC_LIGHT].setBrightness(inputs[CLK_INPUT].isConnected() ? 0.6f : 0.f);
 	for (int i = 0; i < chronomaw::kNumOutputs; ++i) {
 		float v = frameOut.outVolts[size_t(i)];
@@ -269,6 +316,9 @@ void Chronomaw::process(const ProcessArgs& args) {
 }
 
 json_t* Chronomaw::dataToJson() {
+	const uint64_t transport = publishedTransport.load(std::memory_order_acquire);
+	if ((transport >> 1) == uiResetRevision)
+		state.live.running = (transport & 1u) != 0;
 	json_t* rootJ = json_object();
 	json_object_set_new(rootJ, "schemaVersion", json_integer(chronomaw::ModuleState::kSchemaVersion));
 
@@ -337,4 +387,5 @@ void Chronomaw::dataFromJson(json_t* rootJ) {
 	params[ACTIVE_BANK_PARAM].setValue(float(state.live.activeBank));
 	params[SELECTED_OUTPUT_PARAM].setValue(float(state.ui.selectedOutput + 1));
 	params[DENSITY_MODE_PARAM].setValue(0.f);
+	publishConfiguration(true);
 }

@@ -2,6 +2,7 @@
 
 #include "BulkheadGeometry.hpp"
 #include "plugin.hpp"
+#include "SpscLatestSnapshot.hpp"
 #include <array>
 #include <vector>
 
@@ -38,6 +39,8 @@ struct Bulkhead : Module {
 		LIGHTS_LEN
 	};
 
+	// Authored geometry is UI-owned. Audio derives CV-modulated geometry from
+	// a coherent fixed-size publication and never writes these controls back.
 	bulkhead::geometry::RoomBounds room;
 	bulkhead::geometry::Vec2 listener;
 	bulkhead::geometry::Vec2 speakerLeft;
@@ -46,6 +49,23 @@ struct Bulkhead : Module {
 	float speakerLeftYawRadians = 0.f;
 	float speakerRightYawRadians = 0.f;
 	bool directGeoDryEnabled = true;
+	struct GeometryState {
+	bulkhead::geometry::RoomBounds room;
+	bulkhead::geometry::Vec2 listener;
+	bulkhead::geometry::Vec2 speakerLeft;
+	bulkhead::geometry::Vec2 speakerRight;
+	float listenerYawRadians = 0.f;
+	float speakerLeftYawRadians = 0.f;
+	float speakerRightYawRadians = 0.f;
+	bool directGeoDryEnabled = true;
+		bool valid = false;
+	};
+	snapshot_transport::SpscLatestSnapshot<GeometryState> authoredGeometry;
+	snapshot_transport::SpscLatestSnapshot<GeometryState> effectiveGeometry;
+	GeometryState displayGeometry;
+	float geometryDisplayElapsed = 0.f;
+	void publishGeometry();
+	void serviceGeometryUi();
 	float sampleRate = 44100.f;
 
 	struct DelayLine {
@@ -96,6 +116,7 @@ struct Bulkhead : Module {
 struct BulkheadWidget : ModuleWidget {
 	explicit BulkheadWidget(Bulkhead* module);
 	void appendContextMenu(Menu* menu) override;
+	void step() override;
 };
 
 extern Model* modelBulkhead;

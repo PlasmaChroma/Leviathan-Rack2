@@ -237,26 +237,57 @@ std::string ChromatideCanvas::serializeQoiBase64() const {
     return b64;
 }
 
-bool ChromatideCanvas::deserializeQoiBase64(const std::string& b64Data) {
-    std::vector<uint8_t> qoiBytes;
-    if (!base64Decode(b64Data, qoiBytes) || qoiBytes.empty()) {
-        clear(0, 0, 0, nullptr);
-        return false;
+namespace {
+// QOI may use a five-byte RGBA opcode even with a three-channel header.
+constexpr size_t maxCanvasQoiBytes = 14u + size_t(ChromatideCanvas::WIDTH)
+    * ChromatideCanvas::HEIGHT * 5u + 8u;
+constexpr size_t maxCanvasBase64Bytes = ((maxCanvasQoiBytes + 2u) / 3u) * 4u;
+
+bool validCanvasQoi(const std::vector<uint8_t>& bytes) {
+    if (bytes.size() < 22u || bytes.size() > maxCanvasQoiBytes) return false;
+    auto read32 = [&](size_t p) {
+        return (uint32_t(bytes[p]) << 24) | (uint32_t(bytes[p + 1]) << 16)
+            | (uint32_t(bytes[p + 2]) << 8) | uint32_t(bytes[p + 3]);
+    };
+    if (read32(0) != 0x716f6966u || read32(4) != ChromatideCanvas::WIDTH
+        || read32(8) != ChromatideCanvas::HEIGHT
+        || bytes[12] != ChromatideCanvas::CHANNELS || bytes[13] > 1) return false;
+    const size_t end = bytes.size() - 8u;
+    for (size_t i = end; i < bytes.size(); ++i)
+        if (bytes[i] != (i == bytes.size() - 1u ? 1 : 0)) return false;
+
+    // The bundled decoder tolerates incomplete streams. Validate opcode lengths
+    // and exact pixel coverage before allocating or replacing the canvas.
+    size_t pixelsLeft = size_t(ChromatideCanvas::WIDTH) * ChromatideCanvas::HEIGHT;
+    size_t pos = 14;
+    while (pos < end && pixelsLeft) {
+        const uint8_t op = bytes[pos++];
+        size_t extra = 0, count = 1;
+        if (op == 0xfe) extra = 3;
+        else if (op == 0xff) extra = 4;
+        else if ((op & 0xc0) == 0x80) extra = 1;
+        else if ((op & 0xc0) == 0xc0) count = (op & 0x3f) + 1u;
+        if (extra > end - pos || count > pixelsLeft) return false;
+        pos += extra;
+        pixelsLeft -= count;
     }
+    return pixelsLeft == 0 && pos == end;
+}
+}
+
+bool ChromatideCanvas::deserializeQoiBase64(const std::string& b64Data) {
+    if (b64Data.size() > maxCanvasBase64Bytes) return false;
+    std::vector<uint8_t> qoiBytes;
+    if (!base64Decode(b64Data, qoiBytes) || !validCanvasQoi(qoiBytes)) return false;
 
     qoi_desc desc {};
+    // maxCanvasQoiBytes is below INT_MAX, so the checked size safely fits int.
     void* rawPixels = qoi_decode(qoiBytes.data(), static_cast<int>(qoiBytes.size()), &desc, CHANNELS);
-    if (!rawPixels) {
-        clear(0, 0, 0, nullptr);
-        return false;
-    }
-
+    if (!rawPixels) return false;
     if (desc.width != WIDTH || desc.height != HEIGHT || desc.channels != CHANNELS) {
         std::free(rawPixels);
-        clear(0, 0, 0, nullptr);
         return false;
     }
-
     std::memcpy(pixels.data(), rawPixels, BUFFER_SIZE);
     std::free(rawPixels);
     revision++;

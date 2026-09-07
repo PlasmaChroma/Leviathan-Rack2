@@ -1,4 +1,5 @@
 #pragma once
+#include "HaloKnob2Metrics.hpp"
 
 #include "../plugin.hpp"
 #include "../theme/ThemeTypes.hpp"
@@ -155,16 +156,6 @@ void resetEclipseShadowDrawMetrics();
 uint64_t eclipseShadowDrawNs();
 uint64_t eclipseShadowDrawCount();
 
-struct HaloKnob2DrawMetrics {
-	uint64_t glSurfaceFramebufferNs = 0u;
-	uint64_t nanoVgSurfaceDrawNs = 0u;
-	uint64_t centerFramebufferNs = 0u;
-	uint64_t capReflectionFramebufferNs = 0u;
-	uint32_t glSurfaceFramebufferDraws = 0u;
-	uint32_t nanoVgSurfaceDraws = 0u;
-	uint32_t centerFramebufferDraws = 0u;
-	uint32_t capReflectionFramebufferDraws = 0u;
-};
 
 void resetHaloKnob2DrawMetrics();
 HaloKnob2DrawMetrics getHaloKnob2DrawMetrics();

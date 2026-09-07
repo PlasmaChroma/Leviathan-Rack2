@@ -1671,6 +1671,11 @@ ChronomawWidget::ChronomawWidget(Chronomaw* module) {
 	addChild(createLightCentered<SmallLight<YellowLight>>(mm2px(syncLightPos), module, Chronomaw::SYNC_LIGHT));
 }
 
+void ChronomawWidget::step() {
+	if (auto* chronomaw = static_cast<Chronomaw*>(module)) chronomaw->serviceUi();
+	ModuleWidget::step();
+}
+
 void ChronomawWidget::appendContextMenu(Menu* menu) {
 	ModuleWidget::appendContextMenu(menu);
 	auto* chronomaw = dynamic_cast<Chronomaw*>(module);

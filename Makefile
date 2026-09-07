@@ -62,6 +62,9 @@ build/src/doom/%.c.o: CFLAGS += $(DOOM_LEGACY_WARN_FLAGS)
 build/src/Mandelwake.cpp.o build/src/MandelwakeEngine.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 
 TEST_BINS_NON_RACK := \
+	build/tests/review_state_handoff_spec \
+	build/tests/halo_metrics_scope_spec \
+	build/tests/chromatide_qoi_preflight_spec \
 	build/tests/octavia_observation_bus_spec \
 	build/tests/octavia_analysis_spec \
 	build/tests/octavia_observation_spec \
@@ -433,6 +436,9 @@ test-spsc-snapshot-tsan: build/tests/spsc_latest_snapshot_tsan_spec
 	@TSAN_OPTIONS=halt_on_error=1 build/tests/spsc_latest_snapshot_tsan_spec
 
 test-fast: test-build-fast
+	$(call run_test_bin,build/tests/halo_metrics_scope_spec)
+	$(call run_test_bin,build/tests/chromatide_qoi_preflight_spec)
+	$(call run_rack_test_bin,build/tests/review_state_handoff_spec)
 	$(call run_test_bin,build/tests/octavia_observation_bus_spec)
 	$(call run_test_bin,build/tests/octavia_analysis_spec)
 	$(call run_test_bin,build/tests/octavia_observation_spec)
@@ -861,3 +867,13 @@ test-gl-lifecycle: build/tests/gl_surface_lifecycle_spec
 
 build/tests/gl_surface_lifecycle_spec: tests/gl_surface_lifecycle_spec.cpp src/visual/AdaptiveGlSurface.cpp src/visual/AdaptiveGlSurface.hpp src/GlResourceRetirement.cpp src/GlResourceRetirement.hpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) $(MINGW_TEST_CPPFLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/gl_surface_lifecycle_spec.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter win,$(ARCH_OS)),-lopengl32,-lGL) -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+
+
+build/tests/halo_metrics_scope_spec: tests/halo_metrics_scope_spec.cpp src/visual/HaloKnob2Metrics.hpp | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra $< -o $@
+
+build/tests/chromatide_qoi_preflight_spec: tests/chromatide_qoi_preflight_spec.cpp src/ChromatideCanvas.cpp src/ChromatideCanvas.hpp | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -I$(RACK_DIR)/dep/include $(filter %.cpp,$^) -o $@
+
+build/tests/review_state_handoff_spec: tests/review_state_handoff_spec.cpp src/Bulkhead.cpp src/BulkheadGeometry.cpp src/Chronomaw.cpp src/ChronomawEngine.cpp src/Bulkhead.hpp src/Chronomaw.hpp src/SpscLatestSnapshot.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) $(MINGW_TEST_CPPFLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $(filter %.cpp,$^) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@

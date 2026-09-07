@@ -26,8 +26,8 @@ class OctaviaMonitoringPanelContractTest(unittest.TestCase):
 
     def test_master_and_monitor_semantic_anchors_exist(self):
         required = {
-            "TITLE_LABEL", "OCTOPUS_STATUS", "READ_ACTIVITY_LIGHT",
-            "WRITE_ACTIVITY_LIGHT", "START_PARAM", "LOUDNESS_METERS",
+            "PORT_VALUE_LABEL", "OCTOPUS_STATUS", "READ_ACTIVITY_LIGHT",
+            "WRITE_ACTIVITY_LIGHT", "START_PARAM", "LUFS_METER", "DBFS_METER",
             "MASTER_L_INPUT", "MASTER_R_INPUT", "MASTER_L_LABEL", "MASTER_R_LABEL",
         }
         for name in "ABCD":
@@ -78,9 +78,11 @@ class OctaviaMonitoringPanelContractTest(unittest.TestCase):
         self.assertIn("Octavia::MONITOR_A_INPUT + monitor", SOURCE)
         self.assertIn("Octavia::MONITOR_A_LIGHT + monitor", SOURCE)
 
-    def test_server_auto_start_uses_ui_lifecycle_and_atomic_single_attempt(self):
+    def test_server_auto_start_delegates_to_tested_lifecycle(self):
         self.assertIn("if (module) module->startServer();", SOURCE)
-        self.assertIn("serverRunning.compare_exchange_strong", SOURCE)
+        self.assertIn("serverLifecycle.start(octaviaPort());", SOURCE)
+        # Single-attempt concurrency is exercised by octavia_server_lifecycle_spec.
+        self.assertIn("octavia::ServerLifecycle serverLifecycle{svr, serverRunning}", SOURCE)
 
     def test_phase_one_led_baseline_is_off_or_dim_connected(self):
         self.assertIn("inputs[MONITOR_A_INPUT + monitor].isConnected()", SOURCE)

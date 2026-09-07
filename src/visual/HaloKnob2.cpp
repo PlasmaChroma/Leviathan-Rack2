@@ -15,7 +15,7 @@
 
 namespace {
 
-thread_local visual_assets::HaloKnob2DrawMetrics gHaloKnob2DrawMetrics;
+
 
 constexpr int kHaloCapRasterScale = 4;
 
@@ -75,8 +75,8 @@ struct HaloNanoVgFallbackWidget final : TransparentWidget {
 		const auto start = measure ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
 		Widget::draw(args);
 		if (measure) {
-			gHaloKnob2DrawMetrics.nanoVgSurfaceDrawNs += haloElapsedNs(start);
-			++gHaloKnob2DrawMetrics.nanoVgSurfaceDraws;
+			visual_assets::haloKnob2DrawMetrics().nanoVgSurfaceDrawNs += haloElapsedNs(start);
+			++visual_assets::haloKnob2DrawMetrics().nanoVgSurfaceDraws;
 		}
 	}
 };
@@ -143,11 +143,11 @@ void uploadHaloColorArray(GLint location, const NVGcolor* colors, size_t count) 
 namespace visual_assets {
 
 void resetHaloKnob2DrawMetrics() {
-	gHaloKnob2DrawMetrics = {};
+	visual_assets::haloKnob2DrawMetrics() = {};
 }
 
 HaloKnob2DrawMetrics getHaloKnob2DrawMetrics() {
-	return gHaloKnob2DrawMetrics;
+	return visual_assets::haloKnob2DrawMetrics();
 }
 
 } // namespace visual_assets
@@ -438,12 +438,15 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 			policy.vertexAttributeCount = 1;
 			policy.maxDensity = 3.f;
 			policy.retainPeakCapacity = true;
+			const bool measureSurface = isDragonKingDebugEnabled();
+			const auto surfaceStart = measureSurface ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
 			if (fixedSurface.renderIfNeeded(
 				APP->window->vg, box.size, rackZoom, APP->window->pixelRatio, policy,
 				isExtraGlValidationEnabled(),
 				[](void* user, Vec activeSize, int viewportY) {
 					static_cast<HaloGlSurface*>(user)->renderGlContent(activeSize, viewportY);
 				}, this)) {
+				if (measureSurface) visual_assets::haloKnob2DrawMetrics().stepSurfaceNs += haloElapsedNs(surfaceStart);
 				// The adaptive surface now owns the current image. Prevent Rack's
 				// dormant per-widget framebuffer from remaining logically dirty.
 				setDirty(false);
@@ -859,8 +862,8 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 			drawFixedFallback(w, h);
 			glDisable(GL_BLEND);
 			if (measure) {
-				gHaloKnob2DrawMetrics.glSurfaceFramebufferNs += haloElapsedNs(profileStart);
-				++gHaloKnob2DrawMetrics.glSurfaceFramebufferDraws;
+				visual_assets::haloKnob2DrawMetrics().glSurfaceFramebufferNs += haloElapsedNs(profileStart);
+				++visual_assets::haloKnob2DrawMetrics().glSurfaceFramebufferDraws;
 			}
 			return;
 		}
@@ -926,8 +929,8 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		glUseProgram(0);
 		glDisable(GL_BLEND);
 		if (measure) {
-			gHaloKnob2DrawMetrics.glSurfaceFramebufferNs += haloElapsedNs(profileStart);
-			++gHaloKnob2DrawMetrics.glSurfaceFramebufferDraws;
+			visual_assets::haloKnob2DrawMetrics().glSurfaceFramebufferNs += haloElapsedNs(profileStart);
+			++visual_assets::haloKnob2DrawMetrics().glSurfaceFramebufferDraws;
 		}
 	}
 

@@ -1718,6 +1718,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		uint32_t haloActiveDrawCount = 0u;
 		uint32_t haloDraggingDrawCount = 0u;
 		int haloNanoVgForced = 0;
+		float haloStepSurfaceUs = 0.f;
 		float haloGlSurfaceFramebufferUs = 0.f;
 		float haloNanoVgSurfaceDrawUs = 0.f;
 		float haloCenterFramebufferUs = 0.f;
@@ -1800,7 +1801,7 @@ struct IntegralFluxWidget : ModuleWidget {
 			<< "ui_step_ema_us,ui_draw_ema_us,preview_tracer_accepted_captures,"
 			<< "history_draw_us,contour_draw_us,history_trails,history_submitted_points,"
 			<< "ch1_history_draw_us,ch1_contour_draw_us,ch1_history_trails,ch1_history_submitted_points,"
-			<< "ch4_history_draw_us,ch4_contour_draw_us,ch4_history_trails,ch4_history_submitted_points,history_rasterizations,ch1_history_rasterizations,ch4_history_rasterizations\n";
+			<< "ch4_history_draw_us,ch4_contour_draw_us,ch4_history_trails,ch4_history_submitted_points,history_rasterizations,ch1_history_rasterizations,ch4_history_rasterizations,halo_step_surface_us\n";
 	}
 
 	void writeDrawLogRow(const DrawLogRow& row) {
@@ -1867,7 +1868,7 @@ struct IntegralFluxWidget : ModuleWidget {
 				<< ',' << part.history.trails << ',' << part.history.points;
 		}
 		for (int channel : {0, 1, 4}) drawLogFile << ',' << row.previewBreakdown[channel].history.rasterizations;
-		drawLogFile << '\n';
+		drawLogFile << ',' << row.haloStepSurfaceUs << '\n';
 		if ((row.row & 31u) == 0u) {
 			drawLogFile.flush();
 		}
@@ -1878,6 +1879,8 @@ struct IntegralFluxWidget : ModuleWidget {
 		const uint64_t sampleCount = samples.exchange(0u, std::memory_order_acq_rel);
 		return sampleCount > 0u ? float(double(totalValue) / double(sampleCount)) : 0.f;
 	}
+
+	visual_assets::HaloKnob2DrawMetrics pendingHaloStepMetrics;
 
 	void step() override {
 		using PerfClock = std::chrono::steady_clock;
@@ -1896,6 +1899,8 @@ struct IntegralFluxWidget : ModuleWidget {
 				nautiloidGlass->setLiveParams(nullptr);
 			}
 		}
+		pendingHaloStepMetrics = {};
+		visual_assets::ScopedHaloKnob2Metrics haloScope(pendingHaloStepMetrics);
 		ModuleWidget::step();
 		if (measurePerf) {
 			const float stepMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -2281,8 +2286,10 @@ struct IntegralFluxWidget : ModuleWidget {
 			gIntegralFluxHaloDraggingDrawCountThisFrame = 0u;
 			resetPlasmaSwitchDrawMetrics();
 			visual_assets::resetEclipseShadowDrawMetrics();
-			visual_assets::resetHaloKnob2DrawMetrics();
 		}
+		visual_assets::HaloKnob2DrawMetrics haloMetrics = pendingHaloStepMetrics;
+		pendingHaloStepMetrics = {};
+		visual_assets::ScopedHaloKnob2Metrics haloScope(haloMetrics);
 		DrawLogRow logRow;
 		const PerfClock::time_point totalStart = logDraw ? PerfClock::now() : PerfClock::time_point();
 		const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
@@ -2293,7 +2300,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		}
 		if (measurePerf) {
 			const float drawMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
-				afterModuleDraw - perfStart).count()) * 1e-6f;
+				afterModuleDraw - perfStart).count() + haloMetrics.stepSurfaceNs) * 1e-6f;
 			uiDrawMsEma = (uiDrawMsEma > 0.f) ? (uiDrawMsEma + (drawMs - uiDrawMsEma) * 0.18f) : drawMs;
 			uiDrawUsRange.add(drawMs * 1000.f);
 			const float gearDrawUs = float(gIntegralFluxGearDrawNsThisFrame) * 1e-3f;
@@ -2411,8 +2418,8 @@ struct IntegralFluxWidget : ModuleWidget {
 			logRow.haloDirtyDrawCount = gIntegralFluxHaloDirtyDrawCountThisFrame;
 			logRow.haloActiveDrawCount = gIntegralFluxHaloActiveDrawCountThisFrame;
 			logRow.haloDraggingDrawCount = gIntegralFluxHaloDraggingDrawCountThisFrame;
+			logRow.haloStepSurfaceUs = float(haloMetrics.stepSurfaceNs) * 1e-3f;
 			logRow.haloNanoVgForced = forceHaloNanoVg ? 1 : 0;
-			const visual_assets::HaloKnob2DrawMetrics haloMetrics = visual_assets::getHaloKnob2DrawMetrics();
 			logRow.haloGlSurfaceFramebufferUs = float(haloMetrics.glSurfaceFramebufferNs) * 1e-3f;
 			logRow.haloNanoVgSurfaceDrawUs = float(haloMetrics.nanoVgSurfaceDrawNs) * 1e-3f;
 			logRow.haloCenterFramebufferUs = float(haloMetrics.centerFramebufferNs) * 1e-3f;

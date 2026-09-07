@@ -10,13 +10,24 @@ The most consequential findings are unsafe reuse of UI snapshot buffers, blockin
 
 ## Follow-up repair status
 
+**7 September 2026 — remaining repairs: F05, F08, F12, F13.** The original findings below describe the review baseline; this section records their resolution.
+
+- **F05:** Bulkhead's authored scene and Chronomaw's authored output/bank state now belong to the UI. Fixed-size, three-slot snapshots deliver settings to audio; audio keeps its own working state. Bulkhead publishes effective CV geometry back at 60 Hz. Constant wall CV now offsets the authored wall instead of integrating into it every sample, and patch saving preserves the authored geometry. Chronomaw's audio-side bank buttons post bounded requests serviced on the next UI step; repeated requests of each kind coalesce while UI stepping is paused. Audio continues with its current configuration during that pause. Reset/restore publish a transport reset epoch instead of resetting the audio engine from UI; returned Run state carries that epoch so stale pre-reset telemetry cannot overwrite restoration. The existing Run-CV override behavior is preserved. No process-side mutex, allocation, or bank-container mutation was introduced.
+- **F08:** HaloKnob2 metrics use scoped owner sinks, so Flux retains its own step-time surface work until draw instead of resetting global counters. Component totals combine step and draw work, and CSV appends `halo_step_surface_us`. Macro `Draw` includes that step-time rendering; `Step` remains the inclusive total UI-step cost. These metrics intentionally overlap and must not be summed. Existing CSV draw-phase timings retain their meaning; this is CPU accounting, not GPU timing.
+- **F12:** Chromatide bounds Base64 size and preflights QOI dimensions, channels, colorspace, terminator, opcode lengths, and exact pixel coverage before calling the allocating decoder. Rejected data preserves the current canvas. The preflight test substitutes a counting decoder to prove malformed/oversized input never reaches allocation; the existing real-QOI suite covers round trips and undo.
+- **F13:** Octavia's panel contract now checks the actual port-value and separate LUFS/dBFS anchors. Its startup contract recognizes delegation to the separately tested lifecycle helper. Undertow's original six trace summaries and hashes match Linux unchanged. Windows Rack generates a different MinBLEP impulse: substituting the Linux table into the Windows harness reproduced all six original traces and fingerprints exactly. The test now keeps strict platform-specific references, without changing Undertow DSP or widening tolerances. The independent sync-stress bound remains unchanged (Windows 12.3529453 V; Linux 12.3484449 V).
+
+Focused validation: state-handoff, scoped-metrics, and QOI preflight tests pass on Linux and native Windows. The real-module concurrent state test passes ThreadSanitizer using `setarch x86_64 -R` (the default sanitizer launch failed before producing diagnostics). Rack's linked library itself is not sanitizer-instrumented. The final native `make -j10 test-fast plugin.dll RACK_APP_RUNTIME_DIR="/c/Program Files/VCV/Rack2Pro"` completed with exit status 0, with no ignored failures; the Windows DLL compiled and linked successfully. Undertow also passes all 14 module checks on Linux. Final native output is in `/mnt/c/msys64/tmp/lev-review-final.log`.
+
+Rack checks still needed for these new repairs: edit Bulkhead positions/walls with CV attached and disconnected; edit Chronomaw outputs, save/load banks, toggle Run, and save/reload a patch; check Flux logging with an active Halo shader and another idle Flux instance. DAW editor close/reopen for F07/F09 remains explicitly deferred to the user's final check.
+
 **7 September 2026 — F07 and F09 fixed together in the working tree.** [The shared retirement service](src/GlResourceRetirement.cpp) is owned by the Rack scene, independently of module widgets. Adaptive surfaces and the HaloKnob2, Wyrm, Bifurx, and Nautiloid renderer owners now queue their persistent resources on ordinary removal. Maintenance waits for a strictly later Rack frame and checks the owning GLFW context before deletion, preserving queued NanoVG presentations even after the last affected module is removed. Context-create/destroy events invalidate lifetime leases, including when context pointers are reused. Lost-context paths free the malloc-owned framebuffer wrappers without issuing GL or NanoVG calls against the replacement context. Cold-path counters expose pending/deleted objects and freed wrappers. This covers the owners named in F07; it does not replace Rack's own `FramebufferWidget` resource ownership.
 
 [AdaptiveGlSurface](src/visual/AdaptiveGlSurface.cpp) now guards allocation and failure returns as well as rendering. It restores texture/unpack state (including the unpack buffer), renderbuffer and separate read/draw framebuffer bindings, and the generic vertex attributes declared by each callback. HaloKnob2 declares one attribute; Bifurx and TD.Scope declare four; the other callers need none. Full-target clears explicitly enable every color channel. Real-driver testing also exposed invalid draw-buffer restoration while the offscreen target was still bound; the guard now restores the original framebuffer bindings before popping saved draw/read-buffer selections.
 
 Validation: native MINGW64 `make test-gl-lifecycle RACK_APP_RUNTIME_DIR="/c/Program Files/VCV/Rack2Pro"` passed **549 checks** using an invisible GLFW window, actual NanoVG/GL objects, the production surface/retirement implementation, and a substituted Rack host fixture/frame clock. Coverage includes 119% zoom, growth/shrink/reuse, restrictive color masks, vertex and texture state, separate read/draw FBOs, unpack buffers, an injected allocation failure and recovery, a queued NanoVG presentation surviving widget removal, 100 render/remove cycles with zero outstanding queued wrappers, every supported raw-object type, missing current context, simulated context loss, pointer reuse, and context-destroy draining. Driver errors are checked. The existing Nautiloid lifecycle contracts passed 4/4, and the authoritative Windows `plugin.dll` compile/link passed. This opt-in test requires a window system and is intentionally separate from `test-fast`.
 
-Pending live smoke check: zoom HaloKnob2 controls and the Wyrm/Bifurx/Nautiloid previews, remove/re-add modules (including removing the last such module), and close/reopen the DAW editor. The harness verifies shared resource accounting; a full Rack/DAW GPU-memory measurement and complete fast-suite rerun were not performed.
+Rack smoke checks passed per user: zoom HaloKnob2 controls and the Wyrm/Bifurx/Nautiloid previews, and remove/re-add modules. DAW editor close/reopen is explicitly deferred until after the remaining review repairs. The harness verifies shared resource accounting; a full Rack/DAW GPU-memory measurement and complete fast-suite rerun were not performed.
 
 **7 September 2026 — F03 fixed in the working tree.** Crownstep's New Game and debug-move parameter edges now publish atomic requests instead of mutating game/history/UI state from `process()`. The existing UI service performs the actions before servicing AI turns. New Game resets audio-owned outputs immediately and suppresses old-sequence clock/refresh work until UI completion; clock edges consumed during that wait are not replayed. Reset handling separates audio-owned playback state from AI cancellation and animation cleanup. Repeated developer-button presses coalesce while UI service is paused, so the pending action storage cannot grow. State restoration discards queued actions from the previous state and retains the saved playhead.
 
@@ -56,19 +67,19 @@ The expanded [snapshot suite](tests/spsc_latest_snapshot_spec.cpp) passed 6/6 on
 
 | ID | Priority | Area | Finding | Evidence |
 |---|---|---|---|---|
-| F01 | P1 | TD.Scope, Sil | Double-buffer publication does not protect a reader from slot reuse | Source-confirmed |
-| F02 | P1 | Nautiloid / Chromatide / Iris | Audio processing reaches locks and ownership-changing worker submission | Source-confirmed |
-| F03 | P1 | Crownstep | New-game/debug-move processing performs game/UI mutation and dynamic work on audio thread | Source-confirmed |
-| F04 | P1 | Sil | Limiter deque still allocates/frees after its purported preallocation | Probe-confirmed container behavior |
-| F05 | P1 before release | Chronomaw, Bulkhead | UI directly edits non-atomic state consumed by audio | Source-confirmed |
+| F01 | P1 | TD.Scope, Sil | Double-buffer publication does not protect a reader from slot reuse | Fixed; see follow-up repair status |
+| F02 | P1 | Nautiloid / Chromatide / Iris | Audio processing reaches locks and ownership-changing worker submission | Fixed; see follow-up repair status |
+| F03 | P1 | Crownstep | New-game/debug-move processing performs game/UI mutation and dynamic work on audio thread | Fixed; see follow-up repair status |
+| F04 | P1 | Sil | Limiter deque still allocates/frees after its purported preallocation | Fixed; see follow-up repair status |
+| F05 | P1 before release | Chronomaw, Bulkhead | UI directly edits non-atomic state consumed by audio | Fixed; see follow-up repair status |
 | F06 | P2 | Temporal Deck | Lifetime logging performs synchronous I/O from `process()` | Fixed 7 Sep 2026; Rack smoke check passed |
 | F07 | P2 | Shared GL surfaces | Ordinary widget removal abandons resources and FBO wrappers | Fixed 7 Sep 2026; native GL regression passed |
-| F08 | P2 | Flux / HaloKnob2 | Draw logging resets away the shader work performed during step | Source-confirmed |
+| F08 | P2 | Flux / HaloKnob2 | Draw logging resets away the shader work performed during step | Fixed; see follow-up repair status |
 | F09 | P2 | AdaptiveGlSurface | Allocation precedes state guard; full clear inherits color-write mask | Fixed 7 Sep 2026; native GL regression passed |
-| F10 | P2 | Shared NanoVG helper | Image creation failure handle `0` is reported as success | Source-confirmed against bundled backend |
-| F11 | P2 | Cantor | Static-pitch cache ignores settings changes | Probe-confirmed with real module/engine |
-| F12 | P2 | Chromatide persistence | QOI dimensions are checked after decoder allocation | Source-confirmed |
-| F13 | P2 | Test baseline | Native `test-fast` is currently red in two recipe steps | Reproduced |
+| F10 | P2 | Shared NanoVG helper | Image creation failure handle `0` is reported as success | Fixed; see follow-up repair status |
+| F11 | P2 | Cantor | Static-pitch cache ignores settings changes | Fixed; see follow-up repair status |
+| F12 | P2 | Chromatide persistence | QOI dimensions are checked after decoder allocation | Fixed; see follow-up repair status |
+| F13 | P2 | Test baseline | Native `test-fast` is currently red in two recipe steps | Fixed; see follow-up repair status |
 
 ## Findings
 
