@@ -137,13 +137,42 @@ void processingContract(Tests& tests) {
 		&& module.activeDisplayText() == "SPEAK", "turning WORD selects Bundled");
 
 	module.inputs[Phonex::WORD_CV_INPUT].channels = 1;
+	for (int i = 0; i < 500; ++i)
+		module.process(processArgs);
+	const float positionBeforeWordCvChange = module.engine.position();
 	module.inputs[Phonex::WORD_CV_INPUT].setVoltage(10.f);
 	module.process(processArgs);
 	tests.expect(module.activeSource.load() == Phonex::ActiveSource::Bundled
 		&& module.activeDisplayText() == "PHONEX"
-		&& module.params[Phonex::WORD_PARAM].getValue() == 38.f,
-		"WORD CV maps 10 V directly to word 63 without moving the knob");
+		&& module.params[Phonex::WORD_PARAM].getValue() == 38.f
+		&& module.engine.position() >= positionBeforeWordCvChange,
+		"WORD CV changes selection without moving the knob or retriggering");
+	module.inputs[Phonex::TRIG_GATE_INPUT].channels = 1;
+	module.inputs[Phonex::TRIG_GATE_INPUT].setVoltage(10.f);
+	module.process(processArgs);
+	module.inputs[Phonex::TRIG_GATE_INPUT].setVoltage(0.f);
+	module.process(processArgs);
+	for (int i = 0; i < 500; ++i)
+		module.process(processArgs);
 	module.inputs[Phonex::WORD_CV_INPUT].setVoltage(0.f);
+	module.process(processArgs);
+	tests.expect(module.activeDisplayText() == "A"
+		&& module.engine.position() < 0.1f,
+		"WORD CV restarts a gate-started utterance when its selection changes");
+
+	// Test legato retrigger: gate continuously held at 10V while Word CV changes
+	module.inputs[Phonex::TRIG_GATE_INPUT].setVoltage(10.f);
+	module.process(processArgs);
+	for (int i = 0; i < 500; ++i)
+		module.process(processArgs);
+	const float positionDuringGateHold = module.engine.position();
+	tests.expect(positionDuringGateHold > 0.1f, "phrase advances while gate is held");
+	module.inputs[Phonex::WORD_CV_INPUT].setVoltage(1.f / 6.3f); // select word 1 ("AFTER")
+	module.process(processArgs);
+	tests.expect(module.activeDisplayText() == "AFTER"
+		&& module.engine.position() < 0.1f,
+		"WORD CV restarts phrase from frame zero when gate is held high (legato)");
+	module.inputs[Phonex::TRIG_GATE_INPUT].setVoltage(0.f);
 	module.process(processArgs);
 	tests.expect(module.activeDisplayText() == "A",
 		"WORD CV maps 0 V directly to word 0");
@@ -155,6 +184,14 @@ void processingContract(Tests& tests) {
 	module.process(processArgs);
 	tests.expect(module.activeDisplayText() == "SPEAK",
 		"disconnecting WORD CV restores knob selection");
+	for (int i = 0; i < 500; ++i)
+		module.process(processArgs);
+	module.params[Phonex::WORD_PARAM].setValue(39.f);
+	module.requestWordBarTrigger();
+	module.process(processArgs);
+	tests.expect(module.activeDisplayText() == "SPELL"
+		&& module.engine.position() < 0.1f,
+		"manual WORD bar changes select and retrigger the phrase");
 
 	module.params[Phonex::SPEED_PARAM].setValue(0.f);
 	module.params[Phonex::WORD_PUSH_PARAM].setValue(0.f);

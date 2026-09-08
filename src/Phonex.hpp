@@ -73,6 +73,7 @@ struct Phonex final : Module, OctaviaSemanticControl {
 	std::atomic<bool> unsupportedUnicode{false};
 	std::atomic<int> selectedWord{36};
 	std::atomic<std::uint32_t> userBankRevision{0};
+	std::atomic<std::uint32_t> wordBarTriggerRequests{0};
 	std::string submittedText;
 	std::array<std::string, kUserBankSize> userTexts;
 
@@ -86,6 +87,9 @@ struct Phonex final : Module, OctaviaSemanticControl {
 	std::string activeDisplayText();
 	std::string userText(int slot) const;
 	bool userSlotPopulated(int slot) const;
+	void requestWordBarTrigger() {
+		wordBarTriggerRequests.fetch_add(1u, std::memory_order_release);
+	}
 	const char* semanticCapabilityId() const noexcept override {
 		return "leviathan.phonex.word-bank";
 	}
@@ -106,6 +110,9 @@ private:
 	int lastWord = 36;
 	bool lastUserBank = false;
 	bool lastUserSlotAvailable = false;
+	bool triggerGateHigh = false;
+	bool gateStartedUtteranceActive = false;
+	std::uint32_t observedWordBarTriggerRequests = 0;
 
 	void publishUserSequence(int slot, const phonex::LpcSequence& sequence);
 	phonex::TextCompileResult storeUserText(int slot, phonex::StringView text);

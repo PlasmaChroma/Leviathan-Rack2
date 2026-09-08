@@ -122,7 +122,7 @@ struct EngineOutput {
 
 class Engine {
 public:
-	void setSequence(const LpcSequence* sequence);
+	void setSequence(const LpcSequence* sequence, bool retrigger = true);
 	void setInternalRate(float rateHz);
 	void setTriggerMode(TriggerMode mode) { triggerMode_ = mode; }
 	void setReconstructionMode(ReconstructionMode mode) { reconstructionMode_ = mode; }

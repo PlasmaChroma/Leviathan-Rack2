@@ -161,15 +161,25 @@ struct PhonexWordBar final : ParamWidget {
 
 	void setFromX(float x) {
 		const float normalized = visual_assets::neonBarSliderValueFromX(x, box.size.x);
-		if (ParamQuantity* quantity = getParamQuantity())
-			quantity->setValue(float(std::lround(normalized * 63.f)));
+		if (ParamQuantity* quantity = getParamQuantity()) {
+			const float value = float(std::lround(normalized * 63.f));
+			if (value != quantity->getValue()) {
+				quantity->setValue(value);
+				if (Phonex* phonexModule = getPhonexModule())
+					phonexModule->requestWordBarTrigger();
+			}
+		}
 	}
 
 	void nudge(int direction) {
 		if (ParamQuantity* quantity = getParamQuantity()) {
 			const int word = clamp(
 				int(std::lround(quantity->getValue())) + direction, 0, 63);
-			quantity->setValue(float(word));
+			if (float(word) != quantity->getValue()) {
+				quantity->setValue(float(word));
+				if (Phonex* phonexModule = getPhonexModule())
+					phonexModule->requestWordBarTrigger();
+			}
 		}
 	}
 

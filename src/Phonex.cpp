@@ -76,6 +76,10 @@ void Phonex::process(const ProcessArgs& args) {
 	const int word = wordCvConnected
 		? wordFromVoltage(inputs[WORD_CV_INPUT].getVoltage())
 		: clamp(int(std::round(params[WORD_PARAM].getValue())), 0, 63);
+	const bool wordCvChanged = wordCvConnected && word != lastWord;
+	const bool triggerGate = inputs[TRIG_GATE_INPUT].getVoltage() >= 1.f;
+	const bool triggerRise = triggerGate && !triggerGateHigh;
+	triggerGateHigh = triggerGate;
 	selectedWord.store(word, std::memory_order_release);
 	const bool userBank = params[BANK_PARAM].getValue() >= 0.5f;
 	if (userBank) {
@@ -88,19 +92,21 @@ void Phonex::process(const ProcessArgs& args) {
 		const bool available = userSlotAvailable[word].load(std::memory_order_acquire);
 		if (word != lastWord || !lastUserBank || published
 			|| available != lastUserSlotAvailable) {
-			engine.setSequence(available ? userSequences[word] : nullptr);
+			engine.setSequence(available ? userSequences[word] : nullptr, false);
 		}
 		activeSource.store(ActiveSource::User, std::memory_order_release);
 		lastUserSlotAvailable = available;
 	}
 	else {
 		if (word != lastWord || lastUserBank)
-			engine.setSequence(&bundledSequence(word));
+			engine.setSequence(&bundledSequence(word), false);
 		activeSource.store(ActiveSource::Bundled, std::memory_order_release);
 		lastUserSlotAvailable = false;
 	}
 	lastWord = word;
 	lastUserBank = userBank;
+	if (wordCvChanged && (gateStartedUtteranceActive || triggerGate))
+		engine.retrigger(params[SPEED_PARAM].getValue());
 	const int requestedRate = internalRate.load(std::memory_order_relaxed) < 9000 ? 8000 : 10000;
 	if (requestedRate != appliedInternalRate) {
 		appliedInternalRate = requestedRate;
@@ -141,9 +147,17 @@ void Phonex::process(const ProcessArgs& args) {
 	controls.scrubVoltage = inputs[SCRUB_CV_INPUT].getVoltage();
 	controls.externalConnected = inputs[EXT_EXCITE_INPUT].isConnected();
 	controls.externalExcitation = inputs[EXT_EXCITE_INPUT].getVoltage();
-	controls.triggerGate = inputs[TRIG_GATE_INPUT].getVoltage() >= 1.f;
-	controls.wordPush = params[WORD_PUSH_PARAM].getValue() >= 0.5f;
+	controls.triggerGate = triggerGate;
+	const std::uint32_t wordBarRequests = wordBarTriggerRequests.load(
+		std::memory_order_acquire);
+	const bool wordBarTrigger = wordBarRequests != observedWordBarTriggerRequests;
+	observedWordBarTriggerRequests = wordBarRequests;
+	controls.wordPush = params[WORD_PUSH_PARAM].getValue() >= 0.5f || wordBarTrigger;
 	const phonex::EngineOutput frame = engine.process(controls);
+	if (triggerRise)
+		gateStartedUtteranceActive = true;
+	if (frame.eoxPulse)
+		gateStartedUtteranceActive = false;
 	outputs[AUDIO_OUTPUT].setVoltage(frame.audio);
 	outputs[FRAME_CLK_OUTPUT].setVoltage(frame.framePulse ? 10.f : 0.f);
 	outputs[EOX_OUTPUT].setVoltage(frame.eoxPulse ? 10.f : 0.f);
@@ -252,7 +266,11 @@ void Phonex::onReset(const ResetEvent& event) {
 	lastWord = 36;
 	lastUserBank = false;
 	lastUserSlotAvailable = false;
+	triggerGateHigh = false;
+	gateStartedUtteranceActive = false;
 	selectedWord.store(36, std::memory_order_relaxed);
+	observedWordBarTriggerRequests = wordBarTriggerRequests.load(
+		std::memory_order_relaxed);
 	params[WORD_PARAM].setValue(36.f);
 	engine.setSequence(&bundledSequence(36));
 	engine.setSeed(kDefaultSeed);

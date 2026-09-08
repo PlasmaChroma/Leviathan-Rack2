@@ -318,9 +318,15 @@ LpcFrame selectGlitchedFrame(const LpcSequence& sequence,
 	return frame;
 }
 
-void Engine::setSequence(const LpcSequence* sequence) {
+void Engine::setSequence(const LpcSequence* sequence, bool shouldRetrigger) {
 	sequence_ = sequence && sequence->valid() ? sequence : nullptr;
-	retrigger(1.f);
+	if (shouldRetrigger) {
+		retrigger(1.f);
+	}
+	else if (playbackComplete_) {
+		position_ = 0.f;
+		observedFrame_ = 0;
+	}
 }
 
 void Engine::setInternalRate(float rateHz) {
@@ -436,6 +442,11 @@ void Engine::updateTransport(const EngineControls& controls, bool triggerRise) {
 		observedFrame_ = 0;
 		return;
 	}
+	const bool interactiveTransport = triggerMode_ == TriggerMode::AdvanceOneFrame
+		|| controls.scrubConnected;
+	if (playbackComplete_ && !interactiveTransport) {
+		return;
+	}
 	const float last = static_cast<float>(sequence_->frameCount - 1);
 	const float forwardEnd = static_cast<float>(sequence_->frameCount);
 	const float speed = quietSpeed(controls.speed);
@@ -460,8 +471,6 @@ void Engine::updateTransport(const EngineControls& controls, bool triggerRise) {
 		static_cast<std::uint16_t>(std::floor(position_)), sequence_->frameCount - 1);
 	frameChanged_ = nextFrame != observedFrame_;
 	observedFrame_ = nextFrame;
-	const bool interactiveTransport = triggerMode_ == TriggerMode::AdvanceOneFrame
-		|| controls.scrubConnected;
 	const bool atEnd = speed < 0.f ? position_ <= 0.f
 		: position_ >= (interactiveTransport ? last : forwardEnd);
 	if (interactiveTransport)

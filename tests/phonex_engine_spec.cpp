@@ -229,6 +229,23 @@ void transportContract(Tests& tests) {
 		silentAfterEox = silentAfterEox && completionEngine.process(controls).audio == 0.f;
 	tests.expect(silentAfterEox, "completed free-running utterance remains silent");
 
+	phonex::LpcSequence longerSequence;
+	longerSequence.frameCount = 8;
+	for (int i = 0; i < 8; ++i) {
+		longerSequence.frames[i].energy = 1.f;
+		longerSequence.frames[i].pitchPeriod10k = 80.f;
+		longerSequence.frames[i].excitation = phonex::Excitation::Voiced;
+	}
+	completionEngine.setSequence(&longerSequence, false);
+	tests.expect(completionEngine.position() == 0.f,
+		"loading new sequence into completed engine pre-arms position to zero");
+	bool remainsSilentWithoutTrigger = true;
+	for (int i = 0; i < 50; ++i)
+		remainsSilentWithoutTrigger = remainsSilentWithoutTrigger
+			&& completionEngine.process(controls).audio == 0.f;
+	tests.expect(remainsSilentWithoutTrigger && completionEngine.position() == 0.f,
+		"pre-armed sequence in completed engine remains silent until triggered");
+
 	phonex::LpcSequence deClickSequence;
 	deClickSequence.frameCount = 1;
 	deClickSequence.frames[0].energy = 1.f;
