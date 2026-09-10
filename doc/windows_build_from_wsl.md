@@ -36,6 +36,13 @@ x86_64-w64-mingw32
 The generic MSYS environment is insufficient: it reports `MSYSTEM=MSYS` and
 does not expose `g++` until MINGW64 and its `PATH` are selected.
 
+On the integrated-graphics laptop, MSYS2 is installed at `C:\tools\msys64`.
+Use `/mnt/c/tools/msys64/usr/bin/bash.exe` instead of the executable path above;
+the MINGW64 environment, `/home/Plasm/Leviathan` working directory, and Rack runtime
+arguments remain the same. This bridge linked the Flux preview pilot on
+2026-09-09 with GCC 15.2.0. Its focused tests passed; the full fast suite encountered
+an unrelated theme-persistence SIMD-header compilation failure.
+
 ## Incremental versus clean builds
 
 Normal development builds should preserve the object cache:

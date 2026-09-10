@@ -1,0 +1,1522 @@
+{
+  "full": {
+    "schema_version": 1,
+    "source": "/mnt/c/tools/msys64/home/Plasm/Leviathan/doc/benchmarks/flux-laptop-20260909/integral_flux_draw_1_20260909_172652_0.csv",
+    "sha256": "090b61b7d51f7be6a2e0f77406b197ef008babdbe9284ac969de0de1b0b59c08",
+    "module_id": "1979052068",
+    "instance_id": "1",
+    "selection": {
+      "start_row_inclusive": 0,
+      "end_row_exclusive": null,
+      "first_row": 0,
+      "last_row": 5304,
+      "rows": 5305
+    },
+    "settings": {
+      "preview_render_mode": [
+        0.0
+      ],
+      "preview_tracer_enabled": [
+        1.0
+      ],
+      "preview_tracer_mode": [
+        2.0
+      ],
+      "halo_nanovg_forced": [
+        0.0
+      ]
+    },
+    "cpu_timings_us": {
+      "total_draw_us": {
+        "samples": 5305,
+        "p50": 289.9,
+        "p95": 506.78000000000003,
+        "p99": 695.0720000000001,
+        "max": 36622.602
+      },
+      "module_widget_draw_us": {
+        "samples": 5305,
+        "p50": 282.1,
+        "p95": 497.96000000000004,
+        "p99": 682.4800000000001,
+        "max": 36618.801
+      },
+      "debug_submit_us": {
+        "samples": 5305,
+        "p50": 0.5,
+        "p95": 0.7,
+        "p99": 29.58800000000001,
+        "max": 141.1
+      },
+      "debug_overlay_us": {
+        "samples": 5305,
+        "p50": 6.3,
+        "p95": 7.9,
+        "p99": 11.9,
+        "max": 104.1
+      },
+      "gear_draw_us": {
+        "samples": 5305,
+        "p50": 16.8,
+        "p95": 21.360000000000035,
+        "p99": 38.4,
+        "max": 1512.9
+      },
+      "eclipse_draw_us": {
+        "samples": 5305,
+        "p50": 5.1,
+        "p95": 6.7,
+        "p99": 10.296000000000005,
+        "max": 4038.8
+      },
+      "eclipse_shadow_us": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "aperture_draw_us": {
+        "samples": 5305,
+        "p50": 24.1,
+        "p95": 92.38000000000002,
+        "p99": 111.5,
+        "max": 1936.4
+      },
+      "linear_point_draw_us": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 5.8
+      },
+      "shape_glyph_draw_us": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 87.6
+      },
+      "plasma_switch_draw_us": {
+        "samples": 5305,
+        "p50": 4.9,
+        "p95": 75.7,
+        "p99": 101.69600000000001,
+        "max": 2060.3
+      },
+      "preview_draw_us": {
+        "samples": 5305,
+        "p50": 32.7,
+        "p95": 172.48000000000002,
+        "p99": 241.168,
+        "max": 6231.6
+      },
+      "ch1_preview_draw_us": {
+        "samples": 5305,
+        "p50": 21.2,
+        "p95": 93.46000000000004,
+        "p99": 135.74000000000007,
+        "max": 6210.9
+      },
+      "ch4_preview_draw_us": {
+        "samples": 5305,
+        "p50": 9.8,
+        "p95": 80.0,
+        "p99": 107.69200000000001,
+        "max": 735.2
+      },
+      "preview_framebuffer_us": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 66.0
+      },
+      "ch1_preview_framebuffer_us": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 60.3
+      },
+      "ch4_preview_framebuffer_us": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 65.7
+      },
+      "plasma_switch_shadow_us": {
+        "samples": 5305,
+        "p50": 2.1,
+        "p95": 2.7,
+        "p99": 3.8,
+        "max": 553.6
+      },
+      "plasma_switch_image_ensure_us": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 1.3,
+        "p99": 1.6,
+        "max": 1153.2
+      },
+      "plasma_switch_image_paint_us": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 3.1,
+        "p99": 3.6,
+        "max": 38.9
+      },
+      "plasma_switch_body_us": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 6.8,
+        "p99": 8.4,
+        "max": 49.8
+      },
+      "plasma_switch_orb_us": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 15.1,
+        "p99": 19.1,
+        "max": 49.5
+      },
+      "halo_gl_surface_framebuffer_us": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 10.9,
+        "p99": 17.696,
+        "max": 14507.501
+      },
+      "halo_nanovg_surface_draw_us": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_center_framebuffer_us": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_cap_reflection_framebuffer_us": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "history_draw_us": {
+        "samples": 5305,
+        "p50": 0.7,
+        "p95": 81.0,
+        "p99": 126.28800000000001,
+        "max": 696.6
+      },
+      "contour_draw_us": {
+        "samples": 5305,
+        "p50": 3.2,
+        "p95": 64.8,
+        "p99": 77.4,
+        "max": 368.4
+      },
+      "ch1_history_draw_us": {
+        "samples": 5305,
+        "p50": 0.5,
+        "p95": 42.08000000000002,
+        "p99": 78.78000000000002,
+        "max": 549.4
+      },
+      "ch1_contour_draw_us": {
+        "samples": 5305,
+        "p50": 2.1,
+        "p95": 32.4,
+        "p99": 38.3,
+        "max": 355.2
+      },
+      "ch4_history_draw_us": {
+        "samples": 5305,
+        "p50": 0.2,
+        "p95": 39.5,
+        "p99": 56.384000000000015,
+        "max": 696.1
+      },
+      "ch4_contour_draw_us": {
+        "samples": 5305,
+        "p50": 1.2,
+        "p95": 32.6,
+        "p99": 38.7,
+        "max": 311.3
+      },
+      "halo_step_surface_us": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 191.02000000000007,
+        "p99": 317.39599999999996,
+        "max": 17034.0
+      }
+    },
+    "smoothed_timings_us": {
+      "ui_step_ema_us": {
+        "samples": 5305,
+        "p50": 50.918,
+        "p95": 253.54660000000015,
+        "p99": 345.56228,
+        "max": 17233.102
+      },
+      "ui_draw_ema_us": {
+        "samples": 5305,
+        "p50": 298.055,
+        "p95": 542.778,
+        "p99": 647.4516400000001,
+        "max": 28721.621
+      }
+    },
+    "counters": {
+      "preview_dirty_requests": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "preview_point_rebuilds": {
+        "total": 2250,
+        "rows_with_work": 1284
+      },
+      "preview_tracer_captures": {
+        "total": 2248,
+        "rows_with_work": 1283
+      },
+      "preview_tracer_accepted_captures": {
+        "total": 1121,
+        "rows_with_work": 642
+      },
+      "history_rasterizations": {
+        "total": 1121,
+        "rows_with_work": 642
+      },
+      "ch1_history_rasterizations": {
+        "total": 533,
+        "rows_with_work": 533
+      },
+      "ch4_history_rasterizations": {
+        "total": 588,
+        "rows_with_work": 588
+      },
+      "halo_gl_surface_framebuffer_draws": {
+        "total": 319,
+        "rows_with_work": 312
+      },
+      "halo_nanovg_surface_draws": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "halo_center_framebuffer_draws": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "halo_cap_reflection_framebuffer_draws": {
+        "total": 0,
+        "rows_with_work": 0
+      }
+    },
+    "gauges": {
+      "history_trails": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 12.0,
+        "p99": 12.0,
+        "max": 12.0
+      },
+      "ch1_history_trails": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 6.0,
+        "p99": 6.0,
+        "max": 6.0
+      },
+      "ch4_history_trails": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 6.0,
+        "p99": 6.0,
+        "max": 6.0
+      },
+      "history_submitted_points": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 598.0,
+        "p99": 606.0,
+        "max": 608.0
+      },
+      "halo_dirty_draw_count": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 6.0
+      },
+      "halo_active_draw_count": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 1.0,
+        "p99": 1.0,
+        "max": 1.0
+      },
+      "halo_dragging_draw_count": {
+        "samples": 5305,
+        "p50": 0.0,
+        "p95": 1.0,
+        "p99": 1.0,
+        "max": 1.0
+      }
+    },
+    "missing_columns": [],
+    "warnings": [
+      "CPU submission observations only; host frame time, GPU time, source age, and capture duration are unavailable.",
+      "Timing scopes are nested; do not add component percentiles or EMA timings.",
+      "CSV writing/flush overhead is not fully represented by draw timers; compare equally instrumented runs."
+    ]
+  },
+  "quiet_early": {
+    "schema_version": 1,
+    "source": "/mnt/c/tools/msys64/home/Plasm/Leviathan/doc/benchmarks/flux-laptop-20260909/integral_flux_draw_1_20260909_172652_0.csv",
+    "sha256": "090b61b7d51f7be6a2e0f77406b197ef008babdbe9284ac969de0de1b0b59c08",
+    "module_id": "1979052068",
+    "instance_id": "1",
+    "selection": {
+      "start_row_inclusive": 750,
+      "end_row_exclusive": 1750,
+      "first_row": 750,
+      "last_row": 1749,
+      "rows": 1000
+    },
+    "settings": {
+      "preview_render_mode": [
+        0.0
+      ],
+      "preview_tracer_enabled": [
+        1.0
+      ],
+      "preview_tracer_mode": [
+        2.0
+      ],
+      "halo_nanovg_forced": [
+        0.0
+      ]
+    },
+    "cpu_timings_us": {
+      "total_draw_us": {
+        "samples": 1000,
+        "p50": 212.85,
+        "p95": 292.3,
+        "p99": 359.76399999999995,
+        "max": 453.6
+      },
+      "module_widget_draw_us": {
+        "samples": 1000,
+        "p50": 202.2,
+        "p95": 281.43999999999994,
+        "p99": 351.56899999999996,
+        "max": 444.0
+      },
+      "debug_submit_us": {
+        "samples": 1000,
+        "p50": 0.5,
+        "p95": 0.7,
+        "p99": 30.601,
+        "max": 50.5
+      },
+      "debug_overlay_us": {
+        "samples": 1000,
+        "p50": 6.5,
+        "p95": 7.704999999999996,
+        "p99": 22.604,
+        "max": 86.2
+      },
+      "gear_draw_us": {
+        "samples": 1000,
+        "p50": 15.6,
+        "p95": 17.6,
+        "p99": 26.0,
+        "max": 35.1
+      },
+      "eclipse_draw_us": {
+        "samples": 1000,
+        "p50": 4.7,
+        "p95": 5.6,
+        "p99": 8.001,
+        "max": 56.3
+      },
+      "eclipse_shadow_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "aperture_draw_us": {
+        "samples": 1000,
+        "p50": 12.8,
+        "p95": 19.3,
+        "p99": 35.125999999999976,
+        "max": 58.8
+      },
+      "linear_point_draw_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "shape_glyph_draw_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "plasma_switch_draw_us": {
+        "samples": 1000,
+        "p50": 2.8,
+        "p95": 57.40999999999999,
+        "p99": 72.606,
+        "max": 183.2
+      },
+      "preview_draw_us": {
+        "samples": 1000,
+        "p50": 20.1,
+        "p95": 28.1,
+        "p99": 39.50999999999999,
+        "max": 64.8
+      },
+      "ch1_preview_draw_us": {
+        "samples": 1000,
+        "p50": 19.6,
+        "p95": 26.3,
+        "p99": 38.80199999999999,
+        "max": 56.7
+      },
+      "ch4_preview_draw_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 7.6,
+        "max": 45.7
+      },
+      "preview_framebuffer_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 36.5
+      },
+      "ch1_preview_framebuffer_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "ch4_preview_framebuffer_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 36.3
+      },
+      "plasma_switch_shadow_us": {
+        "samples": 1000,
+        "p50": 1.2,
+        "p95": 1.6,
+        "p99": 2.3,
+        "max": 97.6
+      },
+      "plasma_switch_image_ensure_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 1.1,
+        "p99": 1.4,
+        "max": 5.6
+      },
+      "plasma_switch_image_paint_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 2.2,
+        "p99": 3.000999999999999,
+        "max": 12.8
+      },
+      "plasma_switch_body_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 6.0,
+        "p99": 8.3,
+        "max": 11.9
+      },
+      "plasma_switch_orb_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 9.9,
+        "p99": 14.504999999999995,
+        "max": 22.1
+      },
+      "halo_gl_surface_framebuffer_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_nanovg_surface_draw_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_center_framebuffer_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_cap_reflection_framebuffer_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "history_draw_us": {
+        "samples": 1000,
+        "p50": 0.4,
+        "p95": 0.7,
+        "p99": 0.9,
+        "max": 1.8
+      },
+      "contour_draw_us": {
+        "samples": 1000,
+        "p50": 2.1,
+        "p95": 2.7,
+        "p99": 3.8,
+        "max": 40.7
+      },
+      "ch1_history_draw_us": {
+        "samples": 1000,
+        "p50": 0.4,
+        "p95": 0.7,
+        "p99": 0.9,
+        "max": 1.8
+      },
+      "ch1_contour_draw_us": {
+        "samples": 1000,
+        "p50": 2.1,
+        "p95": 2.6,
+        "p99": 3.2,
+        "max": 20.0
+      },
+      "ch4_history_draw_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.2,
+        "max": 0.3
+      },
+      "ch4_contour_draw_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 1.2,
+        "max": 38.8
+      },
+      "halo_step_surface_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      }
+    },
+    "smoothed_timings_us": {
+      "ui_step_ema_us": {
+        "samples": 1000,
+        "p50": 51.114999999999995,
+        "p95": 57.4038,
+        "p99": 61.30974,
+        "max": 66.848
+      },
+      "ui_draw_ema_us": {
+        "samples": 1000,
+        "p50": 214.8665,
+        "p95": 236.83995,
+        "p99": 253.16808999999995,
+        "max": 275.956
+      }
+    },
+    "counters": {
+      "preview_dirty_requests": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "preview_point_rebuilds": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "preview_tracer_captures": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "preview_tracer_accepted_captures": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "history_rasterizations": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "ch1_history_rasterizations": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "ch4_history_rasterizations": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "halo_gl_surface_framebuffer_draws": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "halo_nanovg_surface_draws": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "halo_center_framebuffer_draws": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "halo_cap_reflection_framebuffer_draws": {
+        "total": 0,
+        "rows_with_work": 0
+      }
+    },
+    "gauges": {
+      "history_trails": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "ch1_history_trails": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "ch4_history_trails": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "history_submitted_points": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_dirty_draw_count": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_active_draw_count": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_dragging_draw_count": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      }
+    },
+    "missing_columns": [],
+    "warnings": [
+      "CPU submission observations only; host frame time, GPU time, source age, and capture duration are unavailable.",
+      "Timing scopes are nested; do not add component percentiles or EMA timings.",
+      "CSV writing/flush overhead is not fully represented by draw timers; compare equally instrumented runs."
+    ]
+  },
+  "quiet_later": {
+    "schema_version": 1,
+    "source": "/mnt/c/tools/msys64/home/Plasm/Leviathan/doc/benchmarks/flux-laptop-20260909/integral_flux_draw_1_20260909_172652_0.csv",
+    "sha256": "090b61b7d51f7be6a2e0f77406b197ef008babdbe9284ac969de0de1b0b59c08",
+    "module_id": "1979052068",
+    "instance_id": "1",
+    "selection": {
+      "start_row_inclusive": 2750,
+      "end_row_exclusive": 3250,
+      "first_row": 2750,
+      "last_row": 3249,
+      "rows": 500
+    },
+    "settings": {
+      "preview_render_mode": [
+        0.0
+      ],
+      "preview_tracer_enabled": [
+        1.0
+      ],
+      "preview_tracer_mode": [
+        2.0
+      ],
+      "halo_nanovg_forced": [
+        0.0
+      ]
+    },
+    "cpu_timings_us": {
+      "total_draw_us": {
+        "samples": 500,
+        "p50": 345.6,
+        "p95": 422.53,
+        "p99": 468.03199999999987,
+        "max": 630.2
+      },
+      "module_widget_draw_us": {
+        "samples": 500,
+        "p50": 337.45000000000005,
+        "p95": 410.8949999999999,
+        "p99": 456.22999999999996,
+        "max": 620.9
+      },
+      "debug_submit_us": {
+        "samples": 500,
+        "p50": 0.5,
+        "p95": 0.7,
+        "p99": 29.31199999999999,
+        "max": 35.0
+      },
+      "debug_overlay_us": {
+        "samples": 500,
+        "p50": 6.8,
+        "p95": 7.604999999999995,
+        "p99": 9.200999999999999,
+        "max": 25.3
+      },
+      "gear_draw_us": {
+        "samples": 500,
+        "p50": 18.1,
+        "p95": 20.609999999999992,
+        "p99": 32.86099999999994,
+        "max": 106.4
+      },
+      "eclipse_draw_us": {
+        "samples": 500,
+        "p50": 5.7,
+        "p95": 6.4,
+        "p99": 8.905999999999995,
+        "max": 23.0
+      },
+      "eclipse_shadow_us": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "aperture_draw_us": {
+        "samples": 500,
+        "p50": 53.349999999999994,
+        "p95": 103.00999999999999,
+        "p99": 114.801,
+        "max": 155.9
+      },
+      "linear_point_draw_us": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "shape_glyph_draw_us": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "plasma_switch_draw_us": {
+        "samples": 500,
+        "p50": 5.1,
+        "p95": 77.26499999999994,
+        "p99": 92.58699999999992,
+        "max": 188.6
+      },
+      "preview_draw_us": {
+        "samples": 500,
+        "p50": 34.1,
+        "p95": 50.2,
+        "p99": 67.62099999999998,
+        "max": 111.8
+      },
+      "ch1_preview_draw_us": {
+        "samples": 500,
+        "p50": 22.5,
+        "p95": 29.48499999999992,
+        "p99": 52.004999999999995,
+        "max": 98.5
+      },
+      "ch4_preview_draw_us": {
+        "samples": 500,
+        "p50": 10.9,
+        "p95": 13.939999999999964,
+        "p99": 29.710999999999988,
+        "max": 52.2
+      },
+      "preview_framebuffer_us": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "ch1_preview_framebuffer_us": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "ch4_preview_framebuffer_us": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "plasma_switch_shadow_us": {
+        "samples": 500,
+        "p50": 2.4,
+        "p95": 2.9,
+        "p99": 4.1,
+        "max": 83.8
+      },
+      "plasma_switch_image_ensure_us": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 1.4,
+        "p99": 1.6,
+        "max": 2.0
+      },
+      "plasma_switch_image_paint_us": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 3.2,
+        "p99": 3.500999999999999,
+        "max": 4.8
+      },
+      "plasma_switch_body_us": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 6.9,
+        "p99": 8.200999999999999,
+        "max": 10.6
+      },
+      "plasma_switch_orb_us": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 15.5,
+        "p99": 20.003999999999998,
+        "max": 45.7
+      },
+      "halo_gl_surface_framebuffer_us": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_nanovg_surface_draw_us": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_center_framebuffer_us": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_cap_reflection_framebuffer_us": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "history_draw_us": {
+        "samples": 500,
+        "p50": 0.6,
+        "p95": 0.9,
+        "p99": 1.1,
+        "max": 1.3
+      },
+      "contour_draw_us": {
+        "samples": 500,
+        "p50": 3.1,
+        "p95": 3.7,
+        "p99": 4.902999999999998,
+        "max": 24.7
+      },
+      "ch1_history_draw_us": {
+        "samples": 500,
+        "p50": 0.4,
+        "p95": 0.6,
+        "p99": 0.8,
+        "max": 0.9
+      },
+      "ch1_contour_draw_us": {
+        "samples": 500,
+        "p50": 1.8,
+        "p95": 2.3,
+        "p99": 2.801999999999998,
+        "max": 6.4
+      },
+      "ch4_history_draw_us": {
+        "samples": 500,
+        "p50": 0.2,
+        "p95": 0.3,
+        "p99": 0.4,
+        "max": 0.5
+      },
+      "ch4_contour_draw_us": {
+        "samples": 500,
+        "p50": 1.2,
+        "p95": 1.4,
+        "p99": 2.0,
+        "max": 22.7
+      },
+      "halo_step_surface_us": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      }
+    },
+    "smoothed_timings_us": {
+      "ui_step_ema_us": {
+        "samples": 500,
+        "p50": 50.009,
+        "p95": 54.0699,
+        "p99": 56.098349999999996,
+        "max": 61.046
+      },
+      "ui_draw_ema_us": {
+        "samples": 500,
+        "p50": 330.6775,
+        "p95": 371.28810000000004,
+        "p99": 378.29614999999995,
+        "max": 409.142
+      }
+    },
+    "counters": {
+      "preview_dirty_requests": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "preview_point_rebuilds": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "preview_tracer_captures": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "preview_tracer_accepted_captures": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "history_rasterizations": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "ch1_history_rasterizations": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "ch4_history_rasterizations": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "halo_gl_surface_framebuffer_draws": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "halo_nanovg_surface_draws": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "halo_center_framebuffer_draws": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "halo_cap_reflection_framebuffer_draws": {
+        "total": 0,
+        "rows_with_work": 0
+      }
+    },
+    "gauges": {
+      "history_trails": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "ch1_history_trails": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "ch4_history_trails": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "history_submitted_points": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_dirty_draw_count": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_active_draw_count": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_dragging_draw_count": {
+        "samples": 500,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      }
+    },
+    "missing_columns": [],
+    "warnings": [
+      "CPU submission observations only; host frame time, GPU time, source age, and capture duration are unavailable.",
+      "Timing scopes are nested; do not add component percentiles or EMA timings.",
+      "CSV writing/flush overhead is not fully represented by draw timers; compare equally instrumented runs."
+    ]
+  },
+  "active_previews": {
+    "schema_version": 1,
+    "source": "/mnt/c/tools/msys64/home/Plasm/Leviathan/doc/benchmarks/flux-laptop-20260909/integral_flux_draw_1_20260909_172652_0.csv",
+    "sha256": "090b61b7d51f7be6a2e0f77406b197ef008babdbe9284ac969de0de1b0b59c08",
+    "module_id": "1979052068",
+    "instance_id": "1",
+    "selection": {
+      "start_row_inclusive": 4250,
+      "end_row_exclusive": 5250,
+      "first_row": 4250,
+      "last_row": 5249,
+      "rows": 1000
+    },
+    "settings": {
+      "preview_render_mode": [
+        0.0
+      ],
+      "preview_tracer_enabled": [
+        1.0
+      ],
+      "preview_tracer_mode": [
+        2.0
+      ],
+      "halo_nanovg_forced": [
+        0.0
+      ]
+    },
+    "cpu_timings_us": {
+      "total_draw_us": {
+        "samples": 1000,
+        "p50": 420.65,
+        "p95": 661.2549999999997,
+        "p99": 784.7469999999998,
+        "max": 855.7
+      },
+      "module_widget_draw_us": {
+        "samples": 1000,
+        "p50": 412.25,
+        "p95": 647.6499999999999,
+        "p99": 770.9089999999999,
+        "max": 841.0
+      },
+      "debug_submit_us": {
+        "samples": 1000,
+        "p50": 0.5,
+        "p95": 0.8,
+        "p99": 31.200999999999997,
+        "max": 68.6
+      },
+      "debug_overlay_us": {
+        "samples": 1000,
+        "p50": 6.8,
+        "p95": 11.0,
+        "p99": 13.503999999999996,
+        "max": 104.1
+      },
+      "gear_draw_us": {
+        "samples": 1000,
+        "p50": 17.9,
+        "p95": 27.804999999999996,
+        "p99": 38.702,
+        "max": 79.7
+      },
+      "eclipse_draw_us": {
+        "samples": 1000,
+        "p50": 5.7,
+        "p95": 9.4,
+        "p99": 10.8,
+        "max": 45.2
+      },
+      "eclipse_shadow_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "aperture_draw_us": {
+        "samples": 1000,
+        "p50": 50.9,
+        "p95": 104.93499999999997,
+        "p99": 120.04199999999996,
+        "max": 144.5
+      },
+      "linear_point_draw_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "shape_glyph_draw_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "plasma_switch_draw_us": {
+        "samples": 1000,
+        "p50": 5.0,
+        "p95": 91.41499999999999,
+        "p99": 108.702,
+        "max": 127.0
+      },
+      "preview_draw_us": {
+        "samples": 1000,
+        "p50": 115.6,
+        "p95": 225.92499999999998,
+        "p99": 274.512,
+        "max": 314.2
+      },
+      "ch1_preview_draw_us": {
+        "samples": 1000,
+        "p50": 63.3,
+        "p95": 125.92499999999998,
+        "p99": 164.306,
+        "max": 225.2
+      },
+      "ch4_preview_draw_us": {
+        "samples": 1000,
+        "p50": 50.0,
+        "p95": 102.4,
+        "p99": 119.00399999999999,
+        "max": 170.1
+      },
+      "preview_framebuffer_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "ch1_preview_framebuffer_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "ch4_preview_framebuffer_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "plasma_switch_shadow_us": {
+        "samples": 1000,
+        "p50": 2.4,
+        "p95": 3.2,
+        "p99": 4.1,
+        "max": 23.5
+      },
+      "plasma_switch_image_ensure_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 1.4,
+        "p99": 1.7,
+        "max": 19.5
+      },
+      "plasma_switch_image_paint_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 3.3049999999999953,
+        "p99": 4.0,
+        "max": 19.3
+      },
+      "plasma_switch_body_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 7.304999999999995,
+        "p99": 9.301,
+        "max": 49.8
+      },
+      "plasma_switch_orb_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 16.1,
+        "p99": 22.500999999999998,
+        "max": 46.5
+      },
+      "halo_gl_surface_framebuffer_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_nanovg_surface_draw_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_center_framebuffer_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_cap_reflection_framebuffer_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "history_draw_us": {
+        "samples": 1000,
+        "p50": 18.1,
+        "p95": 114.80999999999999,
+        "p99": 151.908,
+        "max": 205.7
+      },
+      "contour_draw_us": {
+        "samples": 1000,
+        "p50": 60.0,
+        "p95": 76.81499999999998,
+        "p99": 90.01499999999999,
+        "max": 153.8
+      },
+      "ch1_history_draw_us": {
+        "samples": 1000,
+        "p50": 9.8,
+        "p95": 68.34499999999996,
+        "p99": 95.005,
+        "max": 114.0
+      },
+      "ch1_contour_draw_us": {
+        "samples": 1000,
+        "p50": 29.7,
+        "p95": 37.60999999999999,
+        "p99": 53.202,
+        "max": 71.9
+      },
+      "ch4_history_draw_us": {
+        "samples": 1000,
+        "p50": 8.1,
+        "p95": 52.0,
+        "p99": 60.8,
+        "max": 123.0
+      },
+      "ch4_contour_draw_us": {
+        "samples": 1000,
+        "p50": 30.1,
+        "p95": 37.605,
+        "p99": 50.800999999999995,
+        "max": 123.9
+      },
+      "halo_step_surface_us": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      }
+    },
+    "smoothed_timings_us": {
+      "ui_step_ema_us": {
+        "samples": 1000,
+        "p50": 59.6815,
+        "p95": 82.74895,
+        "p99": 87.89237,
+        "max": 97.924
+      },
+      "ui_draw_ema_us": {
+        "samples": 1000,
+        "p50": 412.576,
+        "p95": 569.5842999999999,
+        "p99": 619.81685,
+        "max": 661.728
+      }
+    },
+    "counters": {
+      "preview_dirty_requests": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "preview_point_rebuilds": {
+        "total": 1480,
+        "rows_with_work": 740
+      },
+      "preview_tracer_captures": {
+        "total": 1480,
+        "rows_with_work": 740
+      },
+      "preview_tracer_accepted_captures": {
+        "total": 734,
+        "rows_with_work": 367
+      },
+      "history_rasterizations": {
+        "total": 734,
+        "rows_with_work": 367
+      },
+      "ch1_history_rasterizations": {
+        "total": 367,
+        "rows_with_work": 367
+      },
+      "ch4_history_rasterizations": {
+        "total": 367,
+        "rows_with_work": 367
+      },
+      "halo_gl_surface_framebuffer_draws": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "halo_nanovg_surface_draws": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "halo_center_framebuffer_draws": {
+        "total": 0,
+        "rows_with_work": 0
+      },
+      "halo_cap_reflection_framebuffer_draws": {
+        "total": 0,
+        "rows_with_work": 0
+      }
+    },
+    "gauges": {
+      "history_trails": {
+        "samples": 1000,
+        "p50": 12.0,
+        "p95": 12.0,
+        "p99": 12.0,
+        "max": 12.0
+      },
+      "ch1_history_trails": {
+        "samples": 1000,
+        "p50": 6.0,
+        "p95": 6.0,
+        "p99": 6.0,
+        "max": 6.0
+      },
+      "ch4_history_trails": {
+        "samples": 1000,
+        "p50": 6.0,
+        "p95": 6.0,
+        "p99": 6.0,
+        "max": 6.0
+      },
+      "history_submitted_points": {
+        "samples": 1000,
+        "p50": 591.0,
+        "p95": 606.0,
+        "p99": 608.0,
+        "max": 608.0
+      },
+      "halo_dirty_draw_count": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_active_draw_count": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "halo_dragging_draw_count": {
+        "samples": 1000,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      }
+    },
+    "missing_columns": [],
+    "warnings": [
+      "CPU submission observations only; host frame time, GPU time, source age, and capture duration are unavailable.",
+      "Timing scopes are nested; do not add component percentiles or EMA timings.",
+      "CSV writing/flush overhead is not fully represented by draw timers; compare equally instrumented runs."
+    ]
+  }
+}

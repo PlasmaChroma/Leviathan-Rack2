@@ -1,9 +1,13 @@
 # Leviathan Render — “Lumen”
-## RFC 0.2: An additive, latency-conscious rendering runtime for Leviathan Rack modules
+## RFC 0.3: An additive, latency-conscious rendering runtime for Leviathan Rack modules
 
-**Date:** 6 September 2026
+**Date:** 9 September 2026
 
 **Status:** Proposed architecture, refined against current source and existing experiment records. This revision changes documentation only; it implements and benchmarks no Lumen runtime.
+
+**Revision 0.3 decision:** Proceed with the host integration spike and bounded performance pilots. Broader migration depends on measured benefit over the current optimized renderer, acceptable framework overhead, and preserved visual/interaction behavior. Shared code and safer ownership are valuable outcomes, but do not establish a rendering speedup.
+
+**Primary performance target:** The current development machine is the user's laptop with integrated graphics. Establish pilot gates on this machine first; a faster discrete GPU cannot substitute for passing those gates. The GPU model, driver, available memory, and measured bottlenecks remain to be recorded. Integrated graphics is a target constraint, not proof that a particular pass is bandwidth- or shader-bound.
 
 **Source basis:** Local plugin checkout at `b18d37bb85632677dfff63b71c32498561d957cb`, including the retained-capacity edge clear; public Rack v2 and NanoVG source. Implementation must also record the exact Rack SDK, host, driver, and supported platform builds. Branch links in the references are navigation aids, not immutable evidence; resolve plugin sources at this full commit when reproducing the review.
 
@@ -71,6 +75,23 @@ Existing evidence establishes useful local improvements, not a speedup attributa
 | HaloKnob2 edge report at 119% and shared capacity clear | A source-level remedy for undefined/stale texels outside the active rectangle; Windows build passed | Live confirmation of the remedy at every zoom or every adaptive-surface user |
 
 Use the [experiment tracker](preview-rendering-scratch.md), [Flux analysis](integral-flux-preview-baseline.md), and [Undertow analysis](undertow-preview-baseline.md) as the evidence index. Their dated entries are chronological; later policy entries supersede earlier defaults. The screenshot report motivates the regression in section 14, not a claim of completed GPU image validation.
+
+### 2.2 Remaining performance hypotheses
+
+Settled contours, snapshot trails, and retained surface capacity are part of the baseline. Their historical gains cannot be counted again as Lumen gains. The runtime must either remove additional work or make a specific remaining operation cheaper; moving the same work behind a recipe is an overhead experiment first.
+
+| Cost to investigate | Candidate mechanism | Evidence required before adoption |
+|---|---|---|
+| Redundant geometry or raster updates | Separate semantic revisions and derived-data caches | Fewer builds/uploads/passes for the same visible changes; unchanged source age |
+| Repeated host-state boundaries | Group eligible private-target updates within a module | Fewer guards and lower total submission time, including grouping overhead; correct state restoration |
+| Repeated cold shader/resource creation | Share programs and immutable assets within a verified context epoch | Lower creation/reopen cost and resource counts across repeated controls; report warm cost separately |
+| Continuously changing curves/displays | Bounded geometry, retained derived representations, smaller uploads | Lower preparation/submission or GPU time under continuous change at matched fidelity |
+| Excess pixel work | Tighter effect bounds, fewer passes, admitted raster density | Lower shaded/cleared area and GPU cost; alpha, filtering, and glow comparisons pass |
+| Extra presentation work | Direct history composition where semantics permit | Fewer presentation passes without changing fade, ordering, or recording lifetime |
+
+These are hypotheses, not diagnosed bottlenecks. `AdaptiveGlSurface` already returns before its state guard on an unchanged cache hit; guard consolidation targets updates. Its full-capacity clear remains part of update cost even when active shading is smaller. HaloKnob2 owns shader programs per surface, making shared programs a cold-cost candidate; unchanged knobs already reuse cached pixels. [S1, S8]
+
+Every adopted optimization gets a short result record: named workload, suspected cost, proposed mechanism, operation counts before/after, CPU/GPU/frame/source-age results, memory change, fidelity checks, and disposition. An inconclusive result stays inconclusive. Use section 14's comparison protocol to separate framework overhead from the optimization itself.
 
 ---
 
@@ -379,6 +400,8 @@ Reserve admission capacity for current interaction. Prefer the newest relevant s
 
 A single long shader cannot be preempted by this scheduler after submission. Bound pass complexity, covered area, geometry size, and upload volume. Scheduling is not a cure for an unbounded fragment loop or driver compilation stall.
 
+For continuously changing content, each pilot recipe must record its maximum geometry size, upload bytes per update, pass count, active and cleared pixel extents, and supported update cadence. Identify the policy used when demand exceeds those limits. First reduce the cost of necessary work; cadence reduction is a separate quality-policy experiment. Current feedback retains the direct or bounded fallback required by LR-02. A scheduler that merely postpones the same work must be assessed against source age as well as frame time.
+
 As an initial experiment, an editor-wide target might reserve approximately 1 ms of CPU preparation/submission and 2 ms of GPU work for Leviathan at 60 Hz. These are admission-planning values, not a guarantee, per-module allowance, or measured budget. They must adapt to actual hardware and competing host work.
 
 ### 9.2 Preparation service
@@ -541,6 +564,8 @@ For scale: one 512 × 256 RGBA8 texture is 0.5 MiB; a pair is 1 MiB. An RGBA16F 
 
 An initial experimental per-editor budget might be 128 MiB, configurable over a range such as 64–256 MiB. This is a starting point for measurement, not an appropriate universal limit for all machines or patches.
 
+On the primary laptop, derive the initial admitted capacity from measured patch behavior and memory pressure rather than adopting 128 MiB as a reservation. Account for retained capacity and transient peaks even when the active viewport is small. Test lower density/effect-cost policies explicitly; any appearance reduction remains a separately reported quality choice, not a matched-fidelity speedup.
+
 Admit visible current controls/curves first. Reclaim unused scratch storage, hidden caches, and cold high-resolution capacity before degrading current interaction. History has its own bounded allowance; it cannot consume the entire device budget.
 
 ### 13.2 Quality model
@@ -566,6 +591,8 @@ Reject zero, non-finite, overflowing, or unsupported dimensions before resource 
 Detailed timings, diagnostic rings, A/B controls, and debug-terminal export follow `isDragonKingDebugEnabled()` and the relevant logging option. Keep only the bounded bookkeeping required for normal scheduling/accounting always active. Measure diagnostics-on and diagnostics-off runs so timer/query overhead is visible.
 
 Per surface and aggregated per device, report geometry builds, mesh builds, offscreen passes, composites, upload bytes, capacity bytes, allocations/reallocations, compile/link attempts, cache hits, deferred/discarded work, source age, CPU preparation time, and CPU submission time.
+
+Also count host-state boundaries, submitted geometry, active shaded-area estimates, and cleared pixels. Area counters describe submitted extents, not hardware fragment counts. Separate framework bookkeeping (revision checks, admission, lease/retirement maintenance) from recipe preparation, state setup/restoration, uploads, and pass submission. Include shared maintenance even on frames with no dirty surfaces. Measure aggregate cache-hit traversal so per-surface instrumentation does not dominate the operation being measured.
 
 Record the reason for every update: source, geometry, material, layout, resolution promotion, history deposit, context recreation, or explicit reset. Explainable invalidation is a core debugging feature.
 
@@ -609,9 +636,57 @@ Extend the existing [contour benchmark](../tools/proc_preview_render_benchmark.c
 
 Record p50, p95, p99, maximum frame durations, source age, CPU preparation/submission, GPU execution where available, and allocation counts. Compare identical patches, viewports, quality settings, host versions, and driver environments. Include cold creation/first-use separately from warm behavior.
 
-A useful initial shipping criterion is no material p95/p99 regression in any representative supported case and a measurable reduction in the original problem cases. Choose the numerical improvement gate only after the baseline is captured; this document does not claim a percentage speedup.
+Before implementing the measured optimization, capture repeated baseline runs and record numerical gates in its experiment record: minimum useful improvement in the named bottleneck, maximum acceptable framework overhead, p95/p99 frame-time regression tolerance, source-age allowance, and memory ceiling. Specify absolute units as well as relative changes where useful, the run duration/repetition count, and observed run-to-run variation. Choose tolerances from the baseline and the intended interaction/frame budget; do not choose them afterward to fit the result. This RFC claims no percentage speedup.
+
+Broader migration requires a repeatable improvement exceeding baseline variation in at least one named target workload, with no material p95/p99 frame-duration or source-age regression across the representative cases. Framework-only cache-hit and continuous-update overhead must remain within the predeclared limits at the largest tested population. A CPU submission improvement can qualify as that specific benefit when host pacing is unchanged, but must not be reported as an FPS or GPU gain. Code reduction alone does not pass the performance gate.
 
 Windows/MSYS2, Linux, and supported Intel/Apple-silicon macOS builds need their own evidence. A fast result on one developer GPU does not validate the plugin-wide default.
+
+Run the first complete pilot on the integrated-graphics laptop. Record GPU/driver identity, display resolution/scaling, power source, power mode, and thermal conditions with each comparison. Match those conditions between configurations and include a sustained run long enough to expose performance changes after warm-up. Use a representative audio-active patch and record audio settings and observed underruns/dropouts alongside rendering measurements; preparation workers must not buy UI throughput at the expense of audio stability. Keep comparisons with other hardware separate.
+
+### 14.4 Controlled comparisons and pilot workloads
+
+Use three comparison configurations at identical visual quality and instrumentation:
+
+| Configuration | Purpose |
+|---|---|
+| A: Current optimized renderer | Baseline, including existing snapshot and settled-contour policies |
+| B: Same rendering algorithm through the minimum Lumen adapter | Isolate framework/ownership overhead while keeping geometry, pass structure, resolution, and cadence equivalent |
+| C: B plus one named optimization | Establish the incremental benefit of that mechanism; also compare net cost against A |
+
+If a lifecycle or interop requirement forces B to change pass structure, document the difference and measure its cost separately; do not describe that result as pure bookkeeping overhead. Repeat matched runs, alternate comparison order, and separate cold/warm intervals. Record patch files, deterministic modulation inputs where possible, source/build identifiers, backend/settings, viewport, zoom/DPI, host frame-rate/vsync settings, driver/hardware, and diagnostics state with the results.
+
+Run the following cases at 1, 8, 32, and 64 affected displays where practical. Record both module and surface/control counts: one module can own many surfaces. Include a representative mixed patch so isolated improvements are checked against competing host work.
+
+| Workload | Main question |
+|---|---|
+| Warm static display | Does the framework preserve zero rebuild/upload/offscreen work with acceptable traversal and maintenance cost? |
+| Marker-only animation | Is current feedback fresh while curve/history storage stays unchanged? |
+| Continuous shape modulation with full history | Does the pilot help when settlement never occurs, including capture and upload costs? |
+| Integral Flux's six HaloKnob2 controls alongside its previews | Does the framework preserve optimized knob caching and independent invalidation while previews update? |
+| Zoom/pan and high DPI | Are allocations bounded and tail costs acceptable at large pixel extents and tier transitions? |
+| Cold creation, first history capture, and editor reopen | Are initialization bursts, memory peaks, and time to first valid presentation improved or within the agreed limit? |
+| Warm cached images with live overlays | How much cost remains in normal composition after offscreen updates disappear? |
+
+Record actual host frame intervals with the measurement method stated, alongside module CPU timing and delayed GPU execution timing where supported. Include time outside instrumented module draws: deferred host NanoVG execution and presentation can remain expensive even when those draws appear cheap. Do not infer host frame time by summing overlapping module timers. If a required measurement is unavailable, record the gap and limit the conclusion; a hidden-context benchmark cannot substitute for host pacing evidence.
+
+For a pixel-cost investigation, sweep admitted density and effect bounds while holding source workload fixed. For a geometry/upload investigation, vary bounded source complexity at fixed raster size. For a boundary/composition investigation, vary surface count with comparable total pixel area where feasible. Keep deliberate quality reductions separate from matched-fidelity results. These controlled changes help select the next optimization without treating CPU and GPU durations as a simple additive frame-cost equation.
+
+### 14.5 First targeted test — Integral Flux
+
+The [pilot capture and analysis guide](integral-flux-lumen-pilot.md) documents the existing logger, offline analyzer, and measurement gaps. Tool readiness does not establish a baseline or certify the host bridge.
+
+Start with one Integral Flux instance on the primary laptop: its six HaloKnob2 controls plus the preview widgets, using the current default renderer and snapshot history. HaloKnob2 is already optimized; its role here is to check framework correctness and overhead in a mixed module. The previews supply the changing-content workload. Do not require a knob optimization to make this test useful.
+
+Compare A and B from section 14.4 first, preserving current rendering algorithms, quality, and update policies. Use fixed zoom/DPI and the same audio-active patch, and repeat these intervals:
+
+1. Observe cold creation separately, then hold contour shapes steady for 30 seconds with live markers active. Verify that marker motion causes no curve rebuilds or knob redraws after settlement.
+2. Apply repeatable shape modulation to the preview channels for 30 seconds with snapshot history enabled. Measure geometry preparation, accepted captures, rasterizations, composition, and module-level frame/source-age behavior. Knob updates must follow their own actual input changes, not preview invalidation.
+3. Stop modulation and allow histories to expire. Verify return to settled caches and no continuing offscreen work for unchanged content.
+
+Follow with a short manual knob-interaction, zoom, and editor-reopen check for immediate response, independent invalidation, correct edges, and resource recreation. Keep these transition observations separate from fixed-condition timing intervals. Preserve module-level `Process`, `Step`, and `Draw`; append knob, preview, and framework components without double counting.
+
+**Initial pass:** equivalent visuals and interaction, correct lifetime/invalidation behavior, and framework overhead within the predeclared limits. A speedup is not required for this correctness/overhead test. Broader migration still requires section 14.3's measured benefit. Use the results to select one preview optimization for configuration C; increase module count and run the full matrix only after this local test passes. The 30-second intervals are an initial check, not a substitute for sustained thermal or frame-tail validation.
 
 ---
 
@@ -623,29 +698,39 @@ Pin the source/SDK revisions. Build a small two-surface integration harness with
 
 Capture baselines for Proc, Integral Flux, HaloKnob2, Bifurx, and Wyrm before changing their implementation. Audit production-path `glIs*` calls separately; do not attribute an improvement from removing them to the new architecture as a whole.
 
+Start with the targeted Integral Flux test in section 14.5, then add Proc or Undertow as the second curve adapter. Expand to the section 14.4 workloads after the local correctness/overhead test passes; defer detailed heavy-display experiments until their migration is proposed. Create an experiment record with the section 14.3 numerical gates before optimizing. This keeps baseline collection useful without making migration of every renderer a prerequisite for learning anything.
+
 Use snapshots and settled contours as the default preview comparison, with phosphor measured separately. Include Undertow when choosing it as the second adapter. Reuse the native Windows harnesses and [documented MINGW64 build](windows_build_from_wsl.md); Linux-only compilation does not validate `plugin.dll`. Do not require an editor-wide scheduler, worker pool, or resource aliasing to complete the first local integration spike.
 
-**Exit:** the host bridge is trustworthy, measurements are reproducible, and unresolved Pro/capture assumptions are written down or tested.
+**Exit:** the bridge is proven for the pilot destinations, measurements are reproducible, and numerical performance gates are recorded. Unproven Pro/capture destinations remain on the documented local/fallback path; listing an unresolved assumption does not certify it.
 
 ### Phase 1 — Extract ownership and surface policies
 
 Adapt `AdaptiveGlSurface` behind the new resource/surface interface. Keep current visuals and conservative boundary clearing. Add capacity accounting, explicit epochs, retirement, failure handling, and diagnostics. Avoid new visual features in this phase.
 
-**Exit:** same output, demonstrably bounded lifetimes, and correct warm zoom behavior.
+Compare A and B from section 14.4 before adding optimizations. Include cache-hit traversal, continuous updates, retirement maintenance, and cold memory peaks. Keep the minimum adapter small enough that a failed overhead gate can be resolved by removing machinery.
+
+**Exit:** same output, demonstrably bounded lifetimes, correct warm zoom behavior, and framework overhead within the predeclared limits.
 
 ### Phase 2 — Prove one portable curve recipe
 
-Migrate Proc's grid/current contour/history/marker separation using snapshot history first. Port that recipe to Integral Flux or Undertow with a second source adapter before adding scheduling machinery. Preserve Proc's existing phosphor option through its legacy path until the separate direct-composition phosphor change passes its own visual/performance comparison.
+Migrate Integral Flux's grid/current contour/history/marker separation using snapshot history first. Port that recipe to Proc or Undertow with a second source adapter before adding scheduling machinery. Preserve existing optional renderers through their legacy paths until their own visual/performance comparisons pass, including Integral Flux's raw GL preview and Proc's phosphor option if Proc is selected.
 
 The second module is essential: it prevents a supposedly generic interface from becoming Proc-specific state hidden behind new names. Preserve legacy fallback and an A/B switch until visual and performance gates pass.
 
 For released modules, preserve parameter/input/output/light ordering and existing JSON fields, mode IDs, defaults, and legacy migrations. Renderer caches, resource epochs, and quality-admission state are ephemeral; do not serialize them into patches. A new persisted setting needs an explicit versioned compatibility policy. Developer backend selection stays under the existing Dragon King/preview-options gates.
 
-**Exit:** independent marker updates, shared geometry preparation, correct temporal behavior, and materially less duplicated client code.
+**Exit:** independent marker updates, shared geometry preparation, correct temporal behavior, and materially less duplicated client code. The curve pilot must also pass sections 14.3–14.4 against the existing optimized renderer, including continuous modulation, host frame tails, source age, memory, and cache-hit overhead. If no useful curve optimization remains, retain the experiment and narrow the extraction; do not use a control-only gain to justify broad curve migration.
+
+### Optional control experiment — Shared Halo resources
+
+After the Integral Flux correctness/overhead test, consider a bounded HaloKnob2 sharing experiment only if measurements justify it. It is not the first required optimization or a prerequisite for the curve pilot. Compare per-surface programs with context-owned shared programs while retaining independent knob caches, existing shader mathematics, and appearance. Measure cold creation/reopen, compile/link counts, resident resources, and warm static/changing controls separately. This experiment does not require the complete `HaloControl` recipe or editor-wide scheduling.
+
+If state-boundary measurements identify material update overhead, test module-local private-target grouping as a separate change after the sharing comparison. Count guards and include grouping/bookkeeping cost; preserve presentation order and local invalidation. Adopt either mechanism only if its own comparison passes. Shared programs may improve cold behavior without improving steady-state rendering, and that is the scope of the claim.
 
 ### Phase 3 — Consolidate controls and heavy displays
 
-Move HaloKnob2 onto shared lifecycle/material resources while preserving independent per-knob caches. Migrate Bifurx’s preparation/upload mechanisms and Wyrm’s derived-geometry/material requirements without combining their distinct visual semantics.
+Use any accepted control-experiment results when moving HaloKnob2 onto shared lifecycle/material resources while preserving independent per-knob caches. Migrate Bifurx’s preparation/upload mechanisms and Wyrm’s derived-geometry/material requirements without combining their distinct visual semantics. Each heavy display needs its own cost hypothesis, bounded continuous-update contract, and section 14 performance comparison before its default changes; curve/control results do not establish its benefit.
 
 A renderer migration is not permission to alter DSP or remove a working backend before comparison.
 
@@ -658,6 +743,8 @@ Only then consider optional modern-GL acceleration, immutable control atlases, m
 ### Stop conditions
 
 Pause broader migration if the bridge requires undocumented host patching, the second source adapter needs substantial renderer duplication, or the pilot adds latency/memory without improving the measured problem. Simplify the abstraction rather than defending its existence.
+
+Also pause expansion when framework overhead exceeds its gate, continuous-update or host-composition costs erase the targeted benefit, or apparent frame improvements come from older displayed data or unapproved quality reductions. Record a failed/inconclusive experiment and choose the next measured bottleneck. Do not add an editor-wide scheduler, worker pool, or resource aliasing to rescue an unproven local cost model.
 
 ---
 
@@ -684,6 +771,8 @@ src/render/
 Treat this as a responsibility map, not a requirement to create every file before the first pilot. Existing `visual/` components can temporarily forward to these implementations. Delete replaced ownership/invalidation code rather than maintaining two competing systems indefinitely.
 
 The first implementation backlog should be narrow: typed context/resource identities; a private-target GL scope; NanoVG image borrowing with presentation leases; one bounded RGBA8 surface pool; fixed and adaptive resolution policies; dirty-reason counters; and one curve recipe with a live marker. Add the global preparation pool and complex scheduling only when the pilot demonstrates the need.
+
+The first reviewable deliverables are the host-contract result, baseline/threshold record, A/B adapter-overhead comparison, and individual curve/control optimization results. Create only the runtime pieces needed to obtain those results; the directory map is not an implementation checklist. Keep the existing renderer selectable through the established developer gates until the relevant performance and visual comparisons pass.
 
 The guiding principle is: **shared infrastructure should remove repeated decisions from module code, while keeping the actual visual mathematics easy to inspect and change.**
 

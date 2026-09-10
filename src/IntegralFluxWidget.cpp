@@ -10,6 +10,7 @@
 #include "visual/PreviewSurface.hpp"
 #include "visual/SettledContourFramebuffer.hpp"
 #include "visual/SnapshotHistory.hpp"
+#include "render/LegacyCurvePreview.hpp"
 #include "WavePreviewTracer.hpp"
 #include <array>
 #include <atomic>
@@ -411,18 +412,27 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 	ContourFramebuffer* contourCache = nullptr;
 	ContourLayer* contourLayer = nullptr;
 	visual_assets::SnapshotHistory<POINT_COUNT, 6>* snapshotHistory = nullptr;
+	using PreviewRecipe = leviathan::render::LegacyCurvePreview<POINT_COUNT, TRAIL_FRAME_COUNT, ContourFramebuffer>;
+	PreviewRecipe* previewRecipe = nullptr;
 
-	WavePreviewWidget(IntegralFlux* module, int channel) {
+	WavePreviewWidget(IntegralFlux* module, int channel, bool lumenPreviewAdapter) {
 		modulePtr = module;
 		this->channel = channel;
 		contourCache = new ContourFramebuffer();
 		contourCache->channel = channel;
 		contourLayer = new ContourLayer();
 		contourLayer->preview = this;
-		contourCache->addChild(contourLayer);
-		addChild(contourCache);
-		snapshotHistory = new visual_assets::SnapshotHistory<POINT_COUNT, 6>;
-		addChild(snapshotHistory);
+		if (lumenPreviewAdapter) {
+			previewRecipe = new PreviewRecipe(contourCache, contourLayer);
+			snapshotHistory = previewRecipe->history;
+			addChild(previewRecipe);
+		}
+		else {
+			contourCache->addChild(contourLayer);
+			addChild(contourCache);
+			snapshotHistory = new visual_assets::SnapshotHistory<POINT_COUNT, 6>;
+			addChild(snapshotHistory);
+		}
 	}
 
 	bool useOpenGlRenderer() const {
@@ -1001,9 +1011,12 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 
 	void step() override {
 		const bool openGlRenderer = useOpenGlRenderer();
-		contourCache->box.size = box.size;
-		snapshotHistory->box.size = box.size;
-		contourLayer->box.size = box.size;
+		if (previewRecipe) previewRecipe->setExtent(box.size);
+		else {
+			contourCache->box.size = box.size;
+			snapshotHistory->box.size = box.size;
+			contourLayer->box.size = box.size;
+		}
 		if (!openGlRenderer) {
 			Widget::step();
 		}
@@ -1101,8 +1114,12 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 				IntegralFluxScopedDrawTimer historyTimer(breakdown.historyNs, logPreview);
 				const int tracerMode = modulePtr->previewTracerCacheModeControl().load(std::memory_order_relaxed);
 				if (tracerMode != WAVE_PREVIEW_TRACER_FRAME_CACHE) {
-					if (tracerMode == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE)
-						snapshotHistory->drawHistory(args, curveTracer, nowSec, curveTracerStyle(), logPreview ? &breakdown.history : nullptr);
+					if (tracerMode == WAVE_PREVIEW_TRACER_SNAPSHOT_CACHE) {
+						if (previewRecipe)
+							previewRecipe->drawHistory(args, curveTracer, nowSec, curveTracerStyle(), logPreview ? &breakdown.history : nullptr);
+						else
+							snapshotHistory->drawHistory(args, curveTracer, nowSec, curveTracerStyle(), logPreview ? &breakdown.history : nullptr);
+					}
 					else
 						curveTracer.draw(args.vg, nowSec, curveTracerStyle(), logPreview ? &breakdown.history : nullptr);
 				}
@@ -1123,7 +1140,8 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 				APP && APP->window ? APP->window->pixelRatio : 1.f}};
 			{
 				IntegralFluxScopedDrawTimer contourTimer(breakdown.contourNs, logPreview);
-				contourCache->drawContour(args, key, nowSec);
+				if (previewRecipe) previewRecipe->drawContour(args, key, nowSec);
+				else contourCache->drawContour(args, key, nowSec);
 			}
 			const size_t reducedPointCount = (edge == 1 || edge == 2)
 				? size_t(simplifiedRisePath.count + simplifiedFallPath.count)
@@ -1655,6 +1673,7 @@ struct IntegralFluxTimedApertureLight : TBase {
 };
 
 struct IntegralFluxWidget : ModuleWidget {
+	const bool lumenPreviewAdapter = isIntegralFluxLumenPreviewEnabled();
 	std::vector<IntegralFluxHalo2Knob*> haloKnobs;
 	bool forceHaloNanoVg = false;
 	float uiStepMsEma = 0.f;
@@ -1801,7 +1820,7 @@ struct IntegralFluxWidget : ModuleWidget {
 			<< "ui_step_ema_us,ui_draw_ema_us,preview_tracer_accepted_captures,"
 			<< "history_draw_us,contour_draw_us,history_trails,history_submitted_points,"
 			<< "ch1_history_draw_us,ch1_contour_draw_us,ch1_history_trails,ch1_history_submitted_points,"
-			<< "ch4_history_draw_us,ch4_contour_draw_us,ch4_history_trails,ch4_history_submitted_points,history_rasterizations,ch1_history_rasterizations,ch4_history_rasterizations,halo_step_surface_us\n";
+			<< "ch4_history_draw_us,ch4_contour_draw_us,ch4_history_trails,ch4_history_submitted_points,history_rasterizations,ch1_history_rasterizations,ch4_history_rasterizations,halo_step_surface_us,lumen_preview_adapter\n";
 	}
 
 	void writeDrawLogRow(const DrawLogRow& row) {
@@ -1868,7 +1887,7 @@ struct IntegralFluxWidget : ModuleWidget {
 				<< ',' << part.history.trails << ',' << part.history.points;
 		}
 		for (int channel : {0, 1, 4}) drawLogFile << ',' << row.previewBreakdown[channel].history.rasterizations;
-		drawLogFile << ',' << row.haloStepSurfaceUs << '\n';
+		drawLogFile << ',' << row.haloStepSurfaceUs << ',' << (lumenPreviewAdapter ? 1 : 0) << '\n';
 		if ((row.row & 31u) == 0u) {
 			drawLogFile.flush();
 		}
@@ -2150,7 +2169,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		addParam(createParamCentered<IntegralFluxPlasmaSwitch>(mm2px(shapeMode1SwitchPos), module, IntegralFlux::SHAPE_MODE_1_PARAM));
 		addParam(createParamCentered<IntegralFluxPlasmaSwitch>(mm2px(shapeMode4SwitchPos), module, IntegralFlux::SHAPE_MODE_4_PARAM));
 		{
-			WavePreviewWidget* ch1Preview = new WavePreviewWidget(module, 1);
+			WavePreviewWidget* ch1Preview = new WavePreviewWidget(module, 1, lumenPreviewAdapter);
 			ch1Preview->edgeInteraction = &ch1EdgeInteraction;
 			math::Rect previewOuterRectMm;
 			if (panel_svg::loadRectFromSvgMm(panelBasePath, "CH1_PREVIEW", &previewOuterRectMm)) {
@@ -2173,7 +2192,7 @@ struct IntegralFluxWidget : ModuleWidget {
 			addChild(ch1Preview);
 		}
 		{
-			WavePreviewWidget* ch4Preview = new WavePreviewWidget(module, 4);
+			WavePreviewWidget* ch4Preview = new WavePreviewWidget(module, 4, lumenPreviewAdapter);
 			ch4Preview->edgeInteraction = &ch4EdgeInteraction;
 			math::Rect previewOuterRectMm;
 			if (panel_svg::loadRectFromSvgMm(panelBasePath, "CH4_PREVIEW", &previewOuterRectMm)) {

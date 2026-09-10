@@ -19,6 +19,7 @@ static std::atomic<bool> gTemporalDeckLifetimeLoggingEnabled{false};
 static std::atomic<bool> gModuleTeardownLoggingEnabled{false};
 static std::atomic<bool> gScopeDrawLoggingEnabled{false};
 static std::atomic<bool> gIntegralFluxDrawLoggingEnabled{false};
+static std::atomic<bool> gIntegralFluxLumenPreviewEnabled{false};
 static std::atomic<bool> gUndertowDrawLoggingEnabled{false};
 static std::atomic<bool> gPuffyDrawLoggingEnabled{false};
 static std::atomic<bool> gWyrmDrawLoggingEnabled{false};
@@ -42,6 +43,7 @@ void refreshDragonKingDebugEnabled() {
 	gModuleTeardownLoggingEnabled.store(false, std::memory_order_relaxed);
 	gScopeDrawLoggingEnabled.store(false, std::memory_order_relaxed);
 	gIntegralFluxDrawLoggingEnabled.store(false, std::memory_order_relaxed);
+	gIntegralFluxLumenPreviewEnabled.store(false, std::memory_order_relaxed);
 	gUndertowDrawLoggingEnabled.store(false, std::memory_order_relaxed);
 	gPuffyDrawLoggingEnabled.store(false, std::memory_order_relaxed);
 	gWyrmDrawLoggingEnabled.store(false, std::memory_order_relaxed);
@@ -73,6 +75,7 @@ void refreshDragonKingDebugEnabled() {
 		json_t* moduleTeardownLoggingJ = json_object_get(root, "moduleTeardownLogging");
 		json_t* scopeDrawLoggingJ = json_object_get(root, "ScopeDrawLogging");
 		json_t* integralFluxDrawLoggingJ = json_object_get(root, "IntegralFluxDrawLogging");
+		json_t* integralFluxLumenPreviewJ = json_object_get(root, "IntegralFluxLumenPreview");
 		json_t* undertowDrawLoggingJ = json_object_get(root, "UndertowDrawLogging");
 		json_t* puffyDrawLoggingJ = json_object_get(root, "PuffyDrawLogging");
 		json_t* wyrmDrawLoggingJ = json_object_get(root, "WyrmDrawLogging");
@@ -89,6 +92,7 @@ void refreshDragonKingDebugEnabled() {
 		gModuleTeardownLoggingEnabled.store(json_boolean_value(moduleTeardownLoggingJ), std::memory_order_relaxed);
 		gScopeDrawLoggingEnabled.store(json_boolean_value(scopeDrawLoggingJ), std::memory_order_relaxed);
 		gIntegralFluxDrawLoggingEnabled.store(json_boolean_value(integralFluxDrawLoggingJ), std::memory_order_relaxed);
+		gIntegralFluxLumenPreviewEnabled.store(json_is_true(integralFluxLumenPreviewJ), std::memory_order_relaxed);
 		gUndertowDrawLoggingEnabled.store(json_boolean_value(undertowDrawLoggingJ), std::memory_order_relaxed);
 		gPuffyDrawLoggingEnabled.store(json_boolean_value(puffyDrawLoggingJ), std::memory_order_relaxed);
 		gWyrmDrawLoggingEnabled.store(json_boolean_value(wyrmDrawLoggingJ), std::memory_order_relaxed);
@@ -128,6 +132,11 @@ bool isScopeDrawLoggingEnabled() {
 
 bool isIntegralFluxDrawLoggingEnabled() {
 	return gIntegralFluxDrawLoggingEnabled.load(std::memory_order_relaxed);
+}
+
+bool isIntegralFluxLumenPreviewEnabled() {
+	return isDragonKingDebugEnabled()
+		&& gIntegralFluxLumenPreviewEnabled.load(std::memory_order_relaxed);
 }
 
 bool isUndertowDrawLoggingEnabled() {
