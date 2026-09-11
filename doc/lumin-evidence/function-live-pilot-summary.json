@@ -1,0 +1,43 @@
+{
+  "status": "Opt-in live A/B candidate built and packaged; not installed or live-tested",
+  "date": "2026-09-10",
+  "toggle": "Flux context menu > Preview Visual > Analytic contour pilot (session only)",
+  "default_enabled": false,
+  "scope": "Current contour only, per-preview protected surface; existing points, trails, tracer ball, labels and module metrics remain",
+  "validation": [
+    "Native plugin.dll full link and dist succeeded",
+    "Pilot cache/same-frame write protection/fallback/context epoch/alignment assertions pass",
+    "Adaptive batch mixed-state tests pass",
+    "GL surface lifecycle 549 checks pass",
+    "Analytic optimization comparison 300 cases, max one-byte error",
+    "CSV analyzer 9 tests pass"
+  ],
+  "profile_initial_median_us": {
+    "capture": 43.5,
+    "restore": 31.9,
+    "shader": 2.8,
+    "total": 85.5
+  },
+  "profile_final_median_us": {
+    "capture": 57.1,
+    "restore": 42.8,
+    "shader": 3.6,
+    "total": 112.7
+  },
+  "notes": [
+    "Timing varies, do not sum medians",
+    "Declared-only attribute guard trial did not improve timing and was reverted",
+    "Instrumentation optional, enabled in live pilot only when Flux CSV logging is enabled",
+    "Previous analytic-vs-NanoVG appearance failures remain; live user inspection outstanding",
+    "No staging or committing; Rack settings not changed"
+  ],
+  "sha256": {
+    "src/render/FunctionCurve.hpp": "1be276c7af3492328302dd30ef0e1d24120a6dd02e0174b0a11cc343002c5b9f",
+    "src/render/FunctionContourPilot.hpp": "185308f3275bf1808da0940cdf1e29b1c66aee8c0506153a920d6ac39793bb3f",
+    "src/visual/AdaptiveGlSurface.hpp": "0bfd09d862fbf2652fab33939f7413a9e4b0ff4dd0fa45e7374af7f04a420888",
+    "src/visual/AdaptiveGlSurface.cpp": "8c338b721552f79a5b414c2dd6d4a5959dc3e0bc1c04baa4b572447dc71bec51",
+    "src/IntegralFluxWidget.cpp": "b27821a2fe176634ddc2007229f73045b7745aed063d9adbd5b134d5b92df1e1",
+    "plugin.dll": "876bb85c1023086b2dc2ef19471fc10d02ba6aaeb63cd5f99c853cf99f2fe600",
+    "dist/Leviathan-2.9.1-win-x64.vcvplugin": "b8a1750d18eb1e8f618d45c469e9a04624c9d34f76179759926c31d33b9e1198"
+  }
+}

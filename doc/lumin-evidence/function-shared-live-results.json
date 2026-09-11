@@ -1,0 +1,408 @@
+{
+  "date": "2026-09-10",
+  "installed_matches_candidate_sha256": "695ddcdbe219542eb79e2bbe44c6a5938c57522a28c0217a0003df0073523414",
+  "filter": "Exclude first 120 rows of each CSV; classify by pilot requested and exact preview_point_rebuilds. Separate runs, not deterministic replay.",
+  "files": [
+    {
+      "file": "integral_flux_draw_1_20260910_191113_0.csv",
+      "sha256": "d627c2a7e2208ed97d1c380981be98ca3065db55fe47f6b62187652c66958ba8",
+      "rows": 2051,
+      "fallbacks": 0,
+      "cohorts": [
+        {
+          "pilot": 0,
+          "rebuilds": 0,
+          "n": 1190,
+          "metrics": {
+            "module_widget_draw_us": {
+              "median": 244.35,
+              "p95": 413.7
+            },
+            "preview_draw_us": {
+              "median": 34.4,
+              "p95": 86.5
+            },
+            "contour_draw_us": {
+              "median": 3.1,
+              "p95": 38.8
+            },
+            "history_draw_us": {
+              "median": 0.6,
+              "p95": 15.0
+            },
+            "history_trails": {
+              "median": 0.0,
+              "p95": 12.0
+            },
+            "history_submitted_points": {
+              "median": 0.0,
+              "p95": 379.0
+            },
+            "batch_capture_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_setup_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_target_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_shader_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_restore_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_state_us": {
+              "median": 0.0,
+              "p95": 0.0
+            }
+          }
+        },
+        {
+          "pilot": 0,
+          "rebuilds": 1,
+          "n": 361,
+          "metrics": {
+            "module_widget_draw_us": {
+              "median": 340.4,
+              "p95": 633.6
+            },
+            "preview_draw_us": {
+              "median": 72.7,
+              "p95": 168.7
+            },
+            "contour_draw_us": {
+              "median": 24.8,
+              "p95": 39.6
+            },
+            "history_draw_us": {
+              "median": 14.9,
+              "p95": 86.4
+            },
+            "history_trails": {
+              "median": 6.0,
+              "p95": 6.0
+            },
+            "history_submitted_points": {
+              "median": 256.0,
+              "p95": 311.0
+            },
+            "batch_capture_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_setup_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_target_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_shader_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_restore_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_state_us": {
+              "median": 0.0,
+              "p95": 0.0
+            }
+          }
+        },
+        {
+          "pilot": 0,
+          "rebuilds": 2,
+          "n": 380,
+          "metrics": {
+            "module_widget_draw_us": {
+              "median": 376.1,
+              "p95": 523.7
+            },
+            "preview_draw_us": {
+              "median": 98.3,
+              "p95": 190.6
+            },
+            "contour_draw_us": {
+              "median": 37.55,
+              "p95": 53.9
+            },
+            "history_draw_us": {
+              "median": 23.4,
+              "p95": 101.1
+            },
+            "history_trails": {
+              "median": 12.0,
+              "p95": 12.0
+            },
+            "history_submitted_points": {
+              "median": 378.0,
+              "p95": 458.0
+            },
+            "batch_capture_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_setup_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_target_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_shader_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_restore_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_state_us": {
+              "median": 0.0,
+              "p95": 0.0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "file": "integral_flux_draw_1_20260910_191159_0.csv",
+      "sha256": "00addaa255c59db6938cbe11cdf3b2f8aca37357744655b49c5c41e6dad01c80",
+      "rows": 1817,
+      "fallbacks": 0,
+      "cohorts": [
+        {
+          "pilot": 0,
+          "rebuilds": 0,
+          "n": 112,
+          "metrics": {
+            "module_widget_draw_us": {
+              "median": 123.45,
+              "p95": 330.9
+            },
+            "preview_draw_us": {
+              "median": 15.350000000000001,
+              "p95": 38.1
+            },
+            "contour_draw_us": {
+              "median": 1.5,
+              "p95": 3.6
+            },
+            "history_draw_us": {
+              "median": 0.3,
+              "p95": 0.7
+            },
+            "history_trails": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "history_submitted_points": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_capture_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_setup_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_target_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_shader_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_restore_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_state_us": {
+              "median": 0.0,
+              "p95": 0.0
+            }
+          }
+        },
+        {
+          "pilot": 1,
+          "rebuilds": 0,
+          "n": 998,
+          "metrics": {
+            "module_widget_draw_us": {
+              "median": 272.85,
+              "p95": 406.4
+            },
+            "preview_draw_us": {
+              "median": 42.45,
+              "p95": 64.2
+            },
+            "contour_draw_us": {
+              "median": 9.45,
+              "p95": 12.7
+            },
+            "history_draw_us": {
+              "median": 0.5,
+              "p95": 15.6
+            },
+            "history_trails": {
+              "median": 0.0,
+              "p95": 12.0
+            },
+            "history_submitted_points": {
+              "median": 0.0,
+              "p95": 396.0
+            },
+            "batch_capture_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_setup_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_target_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_shader_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_restore_us": {
+              "median": 0.0,
+              "p95": 0.0
+            },
+            "batch_state_us": {
+              "median": 0.0,
+              "p95": 0.0
+            }
+          }
+        },
+        {
+          "pilot": 1,
+          "rebuilds": 1,
+          "n": 230,
+          "metrics": {
+            "module_widget_draw_us": {
+              "median": 573.3,
+              "p95": 781.8
+            },
+            "preview_draw_us": {
+              "median": 325.4,
+              "p95": 442.6
+            },
+            "contour_draw_us": {
+              "median": 263.3,
+              "p95": 352.8
+            },
+            "history_draw_us": {
+              "median": 14.45,
+              "p95": 57.2
+            },
+            "history_trails": {
+              "median": 6.0,
+              "p95": 6.0
+            },
+            "history_submitted_points": {
+              "median": 254.0,
+              "p95": 309.0
+            },
+            "batch_capture_us": {
+              "median": 20.9,
+              "p95": 59.5
+            },
+            "batch_setup_us": {
+              "median": 6.6,
+              "p95": 8.5
+            },
+            "batch_target_us": {
+              "median": 18.35,
+              "p95": 24.8
+            },
+            "batch_shader_us": {
+              "median": 33.05,
+              "p95": 46.7
+            },
+            "batch_restore_us": {
+              "median": 166.39999999999998,
+              "p95": 219.7
+            },
+            "batch_state_us": {
+              "median": 191.55,
+              "p95": 273.1
+            }
+          }
+        },
+        {
+          "pilot": 1,
+          "rebuilds": 2,
+          "n": 357,
+          "metrics": {
+            "module_widget_draw_us": {
+              "median": 675.0,
+              "p95": 870.0
+            },
+            "preview_draw_us": {
+              "median": 398.1,
+              "p95": 523.4
+            },
+            "contour_draw_us": {
+              "median": 327.1,
+              "p95": 419.0
+            },
+            "history_draw_us": {
+              "median": 27.2,
+              "p95": 81.5
+            },
+            "history_trails": {
+              "median": 12.0,
+              "p95": 12.0
+            },
+            "history_submitted_points": {
+              "median": 382.0,
+              "p95": 458.0
+            },
+            "batch_capture_us": {
+              "median": 21.7,
+              "p95": 46.4
+            },
+            "batch_setup_us": {
+              "median": 7.9,
+              "p95": 10.0
+            },
+            "batch_target_us": {
+              "median": 114.0,
+              "p95": 147.9
+            },
+            "batch_shader_us": {
+              "median": 43.7,
+              "p95": 56.0
+            },
+            "batch_restore_us": {
+              "median": 122.0,
+              "p95": 151.6
+            },
+            "batch_state_us": {
+              "median": 146.2,
+              "p95": 190.7
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,750 @@
+{
+  "date": "2026-09-10",
+  "status": "Offline analytic function shader; not installed or integrated",
+  "measurements": [
+    {
+      "probe": "benchmark",
+      "mode": "host-nanovg",
+      "count": 2,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 23.3,
+      "p95_us": 28.5
+    },
+    {
+      "probe": "benchmark",
+      "mode": "host-nanovg",
+      "count": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 30.212,
+      "p95_us": 43.368
+    },
+    {
+      "probe": "benchmark",
+      "mode": "function-shader",
+      "count": 2,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 45.2,
+      "p95_us": 70.6
+    },
+    {
+      "probe": "benchmark",
+      "mode": "function-shader",
+      "count": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 55.328,
+      "p95_us": 69.056
+    },
+    {
+      "probe": "benchmark",
+      "mode": "function-shader",
+      "count": 2,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 52.1,
+      "p95_us": 75.3
+    },
+    {
+      "probe": "benchmark",
+      "mode": "function-shader",
+      "count": 2,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 42.588,
+      "p95_us": 60.736
+    },
+    {
+      "probe": "benchmark",
+      "mode": "host-nanovg",
+      "count": 2,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 22.7,
+      "p95_us": 30.4
+    },
+    {
+      "probe": "benchmark",
+      "mode": "host-nanovg",
+      "count": 2,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 15.756,
+      "p95_us": 31.096
+    },
+    {
+      "probe": "benchmark",
+      "mode": "host-nanovg",
+      "count": 2,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 22.6,
+      "p95_us": 27.1
+    },
+    {
+      "probe": "benchmark",
+      "mode": "host-nanovg",
+      "count": 2,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 15.08,
+      "p95_us": 16.848
+    },
+    {
+      "probe": "benchmark",
+      "mode": "function-shader",
+      "count": 2,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 46.9,
+      "p95_us": 66.8
+    },
+    {
+      "probe": "benchmark",
+      "mode": "function-shader",
+      "count": 2,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 29.588,
+      "p95_us": 33.28
+    },
+    {
+      "probe": "benchmark",
+      "mode": "host-nanovg",
+      "count": 8,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 88.4,
+      "p95_us": 107.2
+    },
+    {
+      "probe": "benchmark",
+      "mode": "host-nanovg",
+      "count": 8,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 24.024,
+      "p95_us": 28.444
+    },
+    {
+      "probe": "benchmark",
+      "mode": "function-shader",
+      "count": 8,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 55.6,
+      "p95_us": 82.0
+    },
+    {
+      "probe": "benchmark",
+      "mode": "function-shader",
+      "count": 8,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 44.356,
+      "p95_us": 48.516
+    },
+    {
+      "probe": "benchmark",
+      "mode": "function-shader",
+      "count": 8,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 57.1,
+      "p95_us": 74.4
+    },
+    {
+      "probe": "benchmark",
+      "mode": "function-shader",
+      "count": 8,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 44.564,
+      "p95_us": 57.252
+    },
+    {
+      "probe": "benchmark",
+      "mode": "host-nanovg",
+      "count": 8,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 86.7,
+      "p95_us": 93.5
+    },
+    {
+      "probe": "benchmark",
+      "mode": "host-nanovg",
+      "count": 8,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 26.572,
+      "p95_us": 28.496
+    },
+    {
+      "probe": "benchmark",
+      "mode": "host-nanovg",
+      "count": 8,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 91.6,
+      "p95_us": 123.8
+    },
+    {
+      "probe": "benchmark",
+      "mode": "host-nanovg",
+      "count": 8,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 26.624,
+      "p95_us": 40.04
+    },
+    {
+      "probe": "benchmark",
+      "mode": "function-shader",
+      "count": 8,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 55.2,
+      "p95_us": 73.1
+    },
+    {
+      "probe": "benchmark",
+      "mode": "function-shader",
+      "count": 8,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 49.452,
+      "p95_us": 64.48
+    },
+    {
+      "probe": "benchmark",
+      "mode": "host-nanovg",
+      "count": 32,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 345.9,
+      "p95_us": 401.2
+    },
+    {
+      "probe": "benchmark",
+      "mode": "host-nanovg",
+      "count": 32,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 75.452,
+      "p95_us": 88.92
+    },
+    {
+      "probe": "benchmark",
+      "mode": "function-shader",
+      "count": 32,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 101.3,
+      "p95_us": 132.8
+    },
+    {
+      "probe": "benchmark",
+      "mode": "function-shader",
+      "count": 32,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 113.308,
+      "p95_us": 150.176
+    },
+    {
+      "probe": "benchmark",
+      "mode": "function-shader",
+      "count": 32,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 146.5,
+      "p95_us": 252.6
+    },
+    {
+      "probe": "benchmark",
+      "mode": "function-shader",
+      "count": 32,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 104.208,
+      "p95_us": 119.496
+    },
+    {
+      "probe": "benchmark",
+      "mode": "host-nanovg",
+      "count": 32,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 344.6,
+      "p95_us": 374.7
+    },
+    {
+      "probe": "benchmark",
+      "mode": "host-nanovg",
+      "count": 32,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 60.112,
+      "p95_us": 66.716
+    },
+    {
+      "probe": "benchmark",
+      "mode": "host-nanovg",
+      "count": 32,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 345.3,
+      "p95_us": 407.1
+    },
+    {
+      "probe": "benchmark",
+      "mode": "host-nanovg",
+      "count": 32,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 70.304,
+      "p95_us": 77.272
+    },
+    {
+      "probe": "benchmark",
+      "mode": "function-shader",
+      "count": 32,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 109.2,
+      "p95_us": 144.5
+    },
+    {
+      "probe": "benchmark",
+      "mode": "function-shader",
+      "count": 32,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 128.284,
+      "p95_us": 142.688
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "host-nanovg",
+      "count": 2,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 58.3,
+      "p95_us": 71.3
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "host-nanovg",
+      "count": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 30.056,
+      "p95_us": 44.824
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "function-shader",
+      "count": 2,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 49.9,
+      "p95_us": 70.5
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "function-shader",
+      "count": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 56.628,
+      "p95_us": 59.696
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "function-shader",
+      "count": 2,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 52.0,
+      "p95_us": 73.8
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "function-shader",
+      "count": 2,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 47.944,
+      "p95_us": 60.892
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "host-nanovg",
+      "count": 2,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 60.8,
+      "p95_us": 71.2
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "host-nanovg",
+      "count": 2,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 24.284,
+      "p95_us": 30.94
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "host-nanovg",
+      "count": 2,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 66.5,
+      "p95_us": 72.6
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "host-nanovg",
+      "count": 2,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 24.076,
+      "p95_us": 25.168
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "function-shader",
+      "count": 2,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 52.4,
+      "p95_us": 102.3
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "function-shader",
+      "count": 2,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 47.996,
+      "p95_us": 63.232
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "host-nanovg",
+      "count": 8,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 230.3,
+      "p95_us": 267.7
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "host-nanovg",
+      "count": 8,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 43.992,
+      "p95_us": 46.384
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "function-shader",
+      "count": 8,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 57.0,
+      "p95_us": 95.9
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "function-shader",
+      "count": 8,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 80.756,
+      "p95_us": 95.264
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "function-shader",
+      "count": 8,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 72.2,
+      "p95_us": 101.8
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "function-shader",
+      "count": 8,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 53.3,
+      "p95_us": 66.3
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "host-nanovg",
+      "count": 8,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 228.5,
+      "p95_us": 237.0
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "host-nanovg",
+      "count": 8,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 23.036,
+      "p95_us": 24.752
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "host-nanovg",
+      "count": 8,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 227.5,
+      "p95_us": 250.4
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "host-nanovg",
+      "count": 8,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 23.504,
+      "p95_us": 26.988
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "function-shader",
+      "count": 8,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 53.5,
+      "p95_us": 71.4
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "function-shader",
+      "count": 8,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 41.756,
+      "p95_us": 51.324
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "host-nanovg",
+      "count": 32,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 841.1,
+      "p95_us": 919.8
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "host-nanovg",
+      "count": 32,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 92.664,
+      "p95_us": 118.82
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "function-shader",
+      "count": 32,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 120.1,
+      "p95_us": 185.4
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "function-shader",
+      "count": 32,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 107.796,
+      "p95_us": 234.0
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "function-shader",
+      "count": 32,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 106.3,
+      "p95_us": 138.3
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "function-shader",
+      "count": 32,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 104.468,
+      "p95_us": 116.428
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "host-nanovg",
+      "count": 32,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 838.6,
+      "p95_us": 919.1
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "host-nanovg",
+      "count": 32,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 98.072,
+      "p95_us": 126.932
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "host-nanovg",
+      "count": 32,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 835.2,
+      "p95_us": 1022.3
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "host-nanovg",
+      "count": 32,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 123.5,
+      "p95_us": 137.852
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "function-shader",
+      "count": 32,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 154.9,
+      "p95_us": 198.7
+    },
+    {
+      "probe": "end-to-end",
+      "mode": "function-shader",
+      "count": 32,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 121.316,
+      "p95_us": 222.56
+    }
+  ],
+  "production_image_screen": {
+    "cases": 288,
+    "failed": 187,
+    "max_relative_error": 0.15578365,
+    "max_byte": 255
+  },
+  "dense_analytic_image_screen": {
+    "cases": 288,
+    "failed": 168,
+    "max_relative_error": 0.01093709,
+    "max_byte": 180
+  },
+  "model": {
+    "proc_flux_maths_exact_fixture_agreement": true,
+    "max_phase_difference": 0.00095481,
+    "equivalent_x_at_102_6px": 0.09796
+  },
+  "limitations": [
+    "Shared target assumed; no live admission/scheduling",
+    "End-to-end assumes geometry is avoidable; history may still need points",
+    "Two-preview p95 not consistently improved",
+    "Images not accepted; dense reference only diagnoses differences",
+    "Final change makes failed image screen return nonzero; timing algorithm unchanged"
+  ]
+}

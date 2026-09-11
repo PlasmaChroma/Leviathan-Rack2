@@ -1,0 +1,1946 @@
+{
+  "date": "2026-09-10",
+  "status": "Offline history variants; no consistent total CPU win over cached production history",
+  "parameter_history_bytes": 208,
+  "point_history_bytes": 6304,
+  "measurements": [
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 146.1,
+      "p95_us": 193.3
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 38.9,
+      "p95_us": 46.4
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 106.3,
+      "p95_us": 152.7
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 53.04,
+      "p95_us": 86.476
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 121.5,
+      "p95_us": 191.0
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.7,
+      "p95_us": 1.4
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 120.7,
+      "p95_us": 189.6
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 75.66,
+      "p95_us": 83.72
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 140.5,
+      "p95_us": 186.3
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.7,
+      "p95_us": 1.3
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 139.7,
+      "p95_us": 185.4
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 75.14,
+      "p95_us": 90.844
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 82.2,
+      "p95_us": 135.2
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 38.7,
+      "p95_us": 60.3
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 38.7,
+      "p95_us": 90.8
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 49.14,
+      "p95_us": 80.34
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 71.0,
+      "p95_us": 110.3
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 36.5,
+      "p95_us": 42.3
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 34.5,
+      "p95_us": 69.3
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 48.828,
+      "p95_us": 76.752
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 119.2,
+      "p95_us": 188.7
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.7,
+      "p95_us": 1.1
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 118.5,
+      "p95_us": 187.6
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 69.992,
+      "p95_us": 85.124
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 86.7,
+      "p95_us": 181.8
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 36.7,
+      "p95_us": 42.0
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 49.1,
+      "p95_us": 144.8
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 76.44,
+      "p95_us": 102.18
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 94.1,
+      "p95_us": 151.2
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.6,
+      "p95_us": 0.8
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 93.4,
+      "p95_us": 150.2
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 72.02,
+      "p95_us": 114.4
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 98.8,
+      "p95_us": 174.5
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.7,
+      "p95_us": 1.1
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 98.1,
+      "p95_us": 171.7
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 58.448,
+      "p95_us": 73.06
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 79.7,
+      "p95_us": 132.7
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 36.8,
+      "p95_us": 40.3
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 43.2,
+      "p95_us": 96.6
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 39.676,
+      "p95_us": 54.236
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 74.7,
+      "p95_us": 104.7
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 36.3,
+      "p95_us": 41.1
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 38.0,
+      "p95_us": 67.7
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 39.364,
+      "p95_us": 55.64
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 95.1,
+      "p95_us": 131.7
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.6,
+      "p95_us": 1.1
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 94.4,
+      "p95_us": 130.1
+    },
+    {
+      "run": "history-benchmark",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 61.932,
+      "p95_us": 71.968
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 100.0,
+      "p95_us": 155.6
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 37.8,
+      "p95_us": 44.1
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 61.1,
+      "p95_us": 108.6
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 52.832,
+      "p95_us": 81.38
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 102.5,
+      "p95_us": 152.4
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.7,
+      "p95_us": 0.8
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 101.7,
+      "p95_us": 151.7
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 80.444,
+      "p95_us": 102.388
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 102.5,
+      "p95_us": 154.6
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.6,
+      "p95_us": 0.8
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 101.8,
+      "p95_us": 153.8
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 49.816,
+      "p95_us": 61.984
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 72.1,
+      "p95_us": 97.0
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 39.0,
+      "p95_us": 42.4
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 33.7,
+      "p95_us": 57.2
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 27.092,
+      "p95_us": 41.548
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 89.5,
+      "p95_us": 128.0
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 37.6,
+      "p95_us": 59.1
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 47.8,
+      "p95_us": 87.5
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 27.092,
+      "p95_us": 41.704
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 85.8,
+      "p95_us": 125.4
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.6,
+      "p95_us": 0.8
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 85.2,
+      "p95_us": 124.7
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 49.504,
+      "p95_us": 56.576
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 71.8,
+      "p95_us": 99.7
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 36.9,
+      "p95_us": 40.2
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 35.2,
+      "p95_us": 61.1
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 38.896,
+      "p95_us": 50.804
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 97.6,
+      "p95_us": 121.8
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.7,
+      "p95_us": 1.0
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 96.9,
+      "p95_us": 120.7
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 71.344,
+      "p95_us": 83.356
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 78.1,
+      "p95_us": 90.0
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.6,
+      "p95_us": 0.7
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 77.4,
+      "p95_us": 89.3
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 70.044,
+      "p95_us": 82.368
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 71.2,
+      "p95_us": 93.8
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 37.3,
+      "p95_us": 40.3
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 34.2,
+      "p95_us": 53.9
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 38.948,
+      "p95_us": 51.168
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 72.4,
+      "p95_us": 101.0
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 37.5,
+      "p95_us": 40.6
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 35.0,
+      "p95_us": 61.6
+    },
+    {
+      "run": "history-batched",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 39.728,
+      "p95_us": 53.82
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 91.4,
+      "p95_us": 119.5
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.6,
+      "p95_us": 0.9
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 90.6,
+      "p95_us": 118.5
+    },
+    {
+      "run": "history-batched",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 71.084,
+      "p95_us": 84.292
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 104.7,
+      "p95_us": 162.9
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 38.2,
+      "p95_us": 57.5
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 63.9,
+      "p95_us": 120.2
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 53.404,
+      "p95_us": 82.888
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 95.4,
+      "p95_us": 177.3
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.7,
+      "p95_us": 1.2
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 94.6,
+      "p95_us": 176.6
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 79.092,
+      "p95_us": 107.484
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 95.0,
+      "p95_us": 123.2
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.6,
+      "p95_us": 0.7
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 94.2,
+      "p95_us": 122.6
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 43.68,
+      "p95_us": 65.832
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 85.2,
+      "p95_us": 128.3
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.7,
+      "p95_us": 1.2
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 84.5,
+      "p95_us": 127.3
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 50.024,
+      "p95_us": 62.036
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 96.6,
+      "p95_us": 128.6
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.6,
+      "p95_us": 0.8
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 95.9,
+      "p95_us": 127.9
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 44.304,
+      "p95_us": 65.468
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 70.7,
+      "p95_us": 93.8
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 37.0,
+      "p95_us": 40.5
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 34.1,
+      "p95_us": 55.7
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 26.884,
+      "p95_us": 41.444
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 92.0,
+      "p95_us": 118.2
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.6,
+      "p95_us": 0.7
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 91.4,
+      "p95_us": 117.4
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 43.836,
+      "p95_us": 66.664
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 80.9,
+      "p95_us": 130.4
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 37.2,
+      "p95_us": 58.7
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 39.9,
+      "p95_us": 80.1
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 27.352,
+      "p95_us": 41.964
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 75.9,
+      "p95_us": 131.3
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.6,
+      "p95_us": 0.8
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 75.1,
+      "p95_us": 130.5
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 49.556,
+      "p95_us": 57.616
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 97.7,
+      "p95_us": 133.1
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 42.8,
+      "p95_us": 57.4
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 54.2,
+      "p95_us": 87.7
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 39.26,
+      "p95_us": 54.704
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 78.7,
+      "p95_us": 120.0
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.7,
+      "p95_us": 0.9
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 77.9,
+      "p95_us": 118.0
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 69.94,
+      "p95_us": 83.564
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 104.6,
+      "p95_us": 138.1
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.6,
+      "p95_us": 0.8
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 103.8,
+      "p95_us": 137.1
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 59.176,
+      "p95_us": 95.836
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 86.6,
+      "p95_us": 127.5
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.7,
+      "p95_us": 1.1
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 85.7,
+      "p95_us": 126.6
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 71.24,
+      "p95_us": 84.24
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 102.1,
+      "p95_us": 131.6
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.7,
+      "p95_us": 1.0
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 101.2,
+      "p95_us": 130.9
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 58.812,
+      "p95_us": 88.972
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 72.5,
+      "p95_us": 110.6
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 37.5,
+      "p95_us": 51.9
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 35.2,
+      "p95_us": 62.2
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 38.896,
+      "p95_us": 50.076
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 91.8,
+      "p95_us": 122.2
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.6,
+      "p95_us": 0.7
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 91.1,
+      "p95_us": 121.6
+    },
+    {
+      "run": "history-cached",
+      "mode": "cached-function-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 58.136,
+      "p95_us": 87.048
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 71.3,
+      "p95_us": 98.5
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 36.8,
+      "p95_us": 40.6
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 34.8,
+      "p95_us": 62.5
+    },
+    {
+      "run": "history-cached",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 39.052,
+      "p95_us": 50.128
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-total",
+      "samples": 360,
+      "median_us": 79.8,
+      "p95_us": 102.7
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-preview-step",
+      "samples": 360,
+      "median_us": 0.7,
+      "p95_us": 0.8
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "CPU-preview-draw",
+      "samples": 360,
+      "median_us": 78.9,
+      "p95_us": 101.7
+    },
+    {
+      "run": "history-cached",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 69.992,
+      "p95_us": 82.316
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 80,
+      "median_us": 116.0,
+      "p95_us": 156.6
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 80,
+      "median_us": 38.7,
+      "p95_us": 45.7
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 80,
+      "median_us": 75.1,
+      "p95_us": 116.4
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "snapshot-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 80,
+      "median_us": 30.316,
+      "p95_us": 47.58
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 80,
+      "median_us": 122.2,
+      "p95_us": 147.7
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 80,
+      "median_us": 1.2,
+      "p95_us": 1.4
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 80,
+      "median_us": 120.7,
+      "p95_us": 145.1
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 80,
+      "median_us": 71.344,
+      "p95_us": 85.488
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "cached-function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 80,
+      "median_us": 112.5,
+      "p95_us": 203.7
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "cached-function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 80,
+      "median_us": 0.7,
+      "p95_us": 1.1
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "cached-function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 80,
+      "median_us": 111.7,
+      "p95_us": 201.5
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "cached-function-history",
+      "density": 1,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 80,
+      "median_us": 58.656,
+      "p95_us": 99.268
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 80,
+      "median_us": 97.9,
+      "p95_us": 138.7
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 80,
+      "median_us": 36.9,
+      "p95_us": 40.6
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 80,
+      "median_us": 60.4,
+      "p95_us": 98.6
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "snapshot-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 80,
+      "median_us": 61.256,
+      "p95_us": 83.72
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 80,
+      "median_us": 114.0,
+      "p95_us": 136.8
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 80,
+      "median_us": 0.6,
+      "p95_us": 1.2
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 80,
+      "median_us": 113.3,
+      "p95_us": 135.5
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 80,
+      "median_us": 106.288,
+      "p95_us": 115.752
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "cached-function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-total",
+      "samples": 80,
+      "median_us": 109.1,
+      "p95_us": 168.2
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "cached-function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-step",
+      "samples": 80,
+      "median_us": 0.6,
+      "p95_us": 1.0
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "cached-function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "CPU-preview-draw",
+      "samples": 80,
+      "median_us": 108.5,
+      "p95_us": 167.4
+    },
+    {
+      "run": "history-cached-images",
+      "mode": "cached-function-history",
+      "density": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 80,
+      "median_us": 76.388,
+      "p95_us": 120.432
+    }
+  ],
+  "contracts": "120 simulated frames match production capture cadence, slot order, timestamps, expiry and quantized fade",
+  "baseline_cache": {
+    "rasterizations": 306,
+    "presented_trails": 5418
+  },
+  "images": {
+    "single_curve_cases": 288,
+    "failures": 187,
+    "max_relative": 0.15578365,
+    "max_byte": 255,
+    "history_review": "8 static frames across 1x and 2x generated; 4 pairs at 1x inspected as contact sheet; no temporal/live acceptance"
+  },
+  "scope": "Two different modulated previews, six fading frames, Maths/Shark switch every 90 frames. Excludes tracer ball, labels, module/audio work; common target admission assumed.",
+  "source_sha256": {
+    "tools\\experiments\\lumin\\function_curve_candidate.hpp": "d5af9cc6f1f433b335477eea2164d47580d87663d4f737940cb23851a6687548",
+    "tools\\experiments\\lumin\\function_history.hpp": "66797da324cbd0c4766574cdd259cb996299da70027c0db510a69c6069176af5",
+    "tests\\lumin_function_history_spec.cpp": "f1a13f20566f09805a6164bb9146ee9c662db268507fd69d6b78c9bd008f65fe"
+  }
+}

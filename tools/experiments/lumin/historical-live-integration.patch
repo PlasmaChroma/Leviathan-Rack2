@@ -1,0 +1,177 @@
+diff --git a/src/IntegralFluxWidget.cpp b/src/IntegralFluxWidget.cpp
+index fa0dfd5..064ee4c 100644
+--- a/src/IntegralFluxWidget.cpp
++++ b/src/IntegralFluxWidget.cpp
+@@ -11,6 +11,7 @@
+ #include "visual/SettledContourFramebuffer.hpp"
+ #include "visual/SnapshotHistory.hpp"
+ #include "render/LegacyCurvePreview.hpp"
++#include "render/ExperimentalRoundStroke.hpp"
+ #include "WavePreviewTracer.hpp"
+ #include <array>
+ #include <atomic>
+@@ -47,6 +48,9 @@ struct IntegralFluxPreviewBreakdown {
+ thread_local IntegralFluxPreviewBreakdown gIntegralFluxPreviewBreakdown[5] {};
+ 
+ thread_local uint64_t gIntegralFluxPreviewDrawNsThisFrame = 0u;
++thread_local uint64_t gIntegralFluxRoundStrokeNs = 0u;
++thread_local uint32_t gIntegralFluxRoundStrokeDraws = 0u;
++thread_local uint32_t gIntegralFluxRoundStrokeFallbacks = 0u;
+ thread_local uint64_t gIntegralFluxPreviewDrawNsByChannel[5] {};
+ thread_local uint64_t gIntegralFluxPreviewFramebufferNsThisFrame = 0u;
+ thread_local uint64_t gIntegralFluxPreviewFramebufferNsByChannel[5] {};
+@@ -407,8 +411,38 @@ struct WavePreviewWidget : widget::OpenGlWidget {
+ 	};
+ 	struct ContourLayer : TransparentWidget {
+ 		WavePreviewWidget* preview = nullptr;
+-		void draw(const DrawArgs& args) override { preview->drawNvgWaveform(args); }
++		void draw(const DrawArgs& args) override {
++			if (!preview->drawExperimentalContour(args)) preview->drawNvgWaveform(args);
++		}
+ 	};
++	const bool roundStrokeEnabled = isIntegralFluxRoundStrokeEnabled();
++	leviathan::render::ExperimentalRoundStroke roundStroke;
++	bool drawExperimentalContour(const DrawArgs& args) {
++		if (!roundStrokeEnabled || !modulePtr || !pointsValid) return false;
++		IntegralFluxScopedDrawTimer timer(gIntegralFluxRoundStrokeNs, isDragonKingDebugEnabled());
++		using namespace leviathan::render;
++		std::array<ContourPoint, POINT_COUNT> copied[2];
++		ContourSegment segments[2];
++		const int edge = highlightedEdge();
++		const int count = (edge == 1 || edge == 2) ? 2 : 1;
++		for (int i=0; i<count; ++i) {
++			const auto& path = count == 1 ? simplifiedFullPath : i == 0 ? simplifiedRisePath : simplifiedFallPath;
++			for (int j=0; j<path.count; ++j) copied[i][size_t(j)] = {path.points[size_t(j)].x, path.points[size_t(j)].y};
++			const NVGcolor color = edge == 3 ? activeCurveColor()
++				: count == 2 && edge == i+1 ? activeEdgeColor(edge) : waveformColor();
++			segments[i] = {copied[i].data(), path.count, color};
++		}
++		const bool drawn = roundStroke.draw(args, box.size, segments, count);
++		if (drawn) ++gIntegralFluxRoundStrokeDraws;
++		else ++gIntegralFluxRoundStrokeFallbacks;
++		return drawn;
++	}
++	void onContextCreate(const ContextCreateEvent& e) override {
++		roundStroke.reset(); widget::OpenGlWidget::onContextCreate(e);
++	}
++	void onContextDestroy(const ContextDestroyEvent& e) override {
++		roundStroke.reset(); widget::OpenGlWidget::onContextDestroy(e);
++	}
+ 	ContourFramebuffer* contourCache = nullptr;
+ 	ContourLayer* contourLayer = nullptr;
+ 	visual_assets::SnapshotHistory<POINT_COUNT, 6>* snapshotHistory = nullptr;
+@@ -1674,6 +1708,7 @@ struct IntegralFluxTimedApertureLight : TBase {
+ 
+ struct IntegralFluxWidget : ModuleWidget {
+ 	const bool lumenPreviewAdapter = isIntegralFluxLumenPreviewEnabled();
++	const bool roundStrokeEnabled = isIntegralFluxRoundStrokeEnabled();
+ 	std::vector<IntegralFluxHalo2Knob*> haloKnobs;
+ 	bool forceHaloNanoVg = false;
+ 	float uiStepMsEma = 0.f;
+@@ -1738,6 +1773,8 @@ struct IntegralFluxWidget : ModuleWidget {
+ 		uint32_t haloDraggingDrawCount = 0u;
+ 		int haloNanoVgForced = 0;
+ 		float haloStepSurfaceUs = 0.f;
++		uint32_t roundStrokeDraws = 0, roundStrokeFallbacks = 0;
++		float roundStrokeUs = 0.f;
+ 		float haloGlSurfaceFramebufferUs = 0.f;
+ 		float haloNanoVgSurfaceDrawUs = 0.f;
+ 		float haloCenterFramebufferUs = 0.f;
+@@ -1820,7 +1857,7 @@ struct IntegralFluxWidget : ModuleWidget {
+ 			<< "ui_step_ema_us,ui_draw_ema_us,preview_tracer_accepted_captures,"
+ 			<< "history_draw_us,contour_draw_us,history_trails,history_submitted_points,"
+ 			<< "ch1_history_draw_us,ch1_contour_draw_us,ch1_history_trails,ch1_history_submitted_points,"
+-			<< "ch4_history_draw_us,ch4_contour_draw_us,ch4_history_trails,ch4_history_submitted_points,history_rasterizations,ch1_history_rasterizations,ch4_history_rasterizations,halo_step_surface_us,lumen_preview_adapter\n";
++			<< "ch4_history_draw_us,ch4_contour_draw_us,ch4_history_trails,ch4_history_submitted_points,history_rasterizations,ch1_history_rasterizations,ch4_history_rasterizations,halo_step_surface_us,lumen_preview_adapter,round_stroke_enabled,round_stroke_private_draws,round_stroke_fallbacks,round_stroke_surface_us\n";
+ 	}
+ 
+ 	void writeDrawLogRow(const DrawLogRow& row) {
+@@ -1887,7 +1924,9 @@ struct IntegralFluxWidget : ModuleWidget {
+ 				<< ',' << part.history.trails << ',' << part.history.points;
+ 		}
+ 		for (int channel : {0, 1, 4}) drawLogFile << ',' << row.previewBreakdown[channel].history.rasterizations;
+-		drawLogFile << ',' << row.haloStepSurfaceUs << ',' << (lumenPreviewAdapter ? 1 : 0) << '\n';
++		drawLogFile << ',' << row.haloStepSurfaceUs << ',' << (lumenPreviewAdapter ? 1 : 0)
++			<< ',' << (roundStrokeEnabled ? 1 : 0) << ',' << row.roundStrokeDraws
++			<< ',' << row.roundStrokeFallbacks << ',' << row.roundStrokeUs << '\n';
+ 		if ((row.row & 31u) == 0u) {
+ 			drawLogFile.flush();
+ 		}
+@@ -2293,6 +2332,8 @@ struct IntegralFluxWidget : ModuleWidget {
+ 				part = {};
+ 			}
+ 			gIntegralFluxPreviewDrawNsThisFrame = 0u;
++			gIntegralFluxRoundStrokeNs = 0u;
++			gIntegralFluxRoundStrokeDraws = gIntegralFluxRoundStrokeFallbacks = 0u;
+ 			for (uint64_t& value : gIntegralFluxPreviewDrawNsByChannel) {
+ 				value = 0u;
+ 			}
+@@ -2438,6 +2479,9 @@ struct IntegralFluxWidget : ModuleWidget {
+ 			logRow.haloActiveDrawCount = gIntegralFluxHaloActiveDrawCountThisFrame;
+ 			logRow.haloDraggingDrawCount = gIntegralFluxHaloDraggingDrawCountThisFrame;
+ 			logRow.haloStepSurfaceUs = float(haloMetrics.stepSurfaceNs) * 1e-3f;
++			logRow.roundStrokeDraws = gIntegralFluxRoundStrokeDraws;
++			logRow.roundStrokeFallbacks = gIntegralFluxRoundStrokeFallbacks;
++			logRow.roundStrokeUs = float(gIntegralFluxRoundStrokeNs) * 1e-3f;
+ 			logRow.haloNanoVgForced = forceHaloNanoVg ? 1 : 0;
+ 			logRow.haloGlSurfaceFramebufferUs = float(haloMetrics.glSurfaceFramebufferNs) * 1e-3f;
+ 			logRow.haloNanoVgSurfaceDrawUs = float(haloMetrics.nanoVgSurfaceDrawNs) * 1e-3f;
+diff --git a/src/plugin.cpp b/src/plugin.cpp
+index 435e76b..3415fc1 100644
+--- a/src/plugin.cpp
++++ b/src/plugin.cpp
+@@ -20,6 +20,7 @@ static std::atomic<bool> gModuleTeardownLoggingEnabled{false};
+ static std::atomic<bool> gScopeDrawLoggingEnabled{false};
+ static std::atomic<bool> gIntegralFluxDrawLoggingEnabled{false};
+ static std::atomic<bool> gIntegralFluxLumenPreviewEnabled{false};
++static std::atomic<bool> gIntegralFluxRoundStrokeEnabled{false};
+ static std::atomic<bool> gUndertowDrawLoggingEnabled{false};
+ static std::atomic<bool> gPuffyDrawLoggingEnabled{false};
+ static std::atomic<bool> gWyrmDrawLoggingEnabled{false};
+@@ -44,6 +45,7 @@ void refreshDragonKingDebugEnabled() {
+ 	gScopeDrawLoggingEnabled.store(false, std::memory_order_relaxed);
+ 	gIntegralFluxDrawLoggingEnabled.store(false, std::memory_order_relaxed);
+ 	gIntegralFluxLumenPreviewEnabled.store(false, std::memory_order_relaxed);
++	gIntegralFluxRoundStrokeEnabled.store(false, std::memory_order_relaxed);
+ 	gUndertowDrawLoggingEnabled.store(false, std::memory_order_relaxed);
+ 	gPuffyDrawLoggingEnabled.store(false, std::memory_order_relaxed);
+ 	gWyrmDrawLoggingEnabled.store(false, std::memory_order_relaxed);
+@@ -76,6 +78,7 @@ void refreshDragonKingDebugEnabled() {
+ 		json_t* scopeDrawLoggingJ = json_object_get(root, "ScopeDrawLogging");
+ 		json_t* integralFluxDrawLoggingJ = json_object_get(root, "IntegralFluxDrawLogging");
+ 		json_t* integralFluxLumenPreviewJ = json_object_get(root, "IntegralFluxLumenPreview");
++		json_t* integralFluxRoundStrokeJ = json_object_get(root, "IntegralFluxRoundStroke");
+ 		json_t* undertowDrawLoggingJ = json_object_get(root, "UndertowDrawLogging");
+ 		json_t* puffyDrawLoggingJ = json_object_get(root, "PuffyDrawLogging");
+ 		json_t* wyrmDrawLoggingJ = json_object_get(root, "WyrmDrawLogging");
+@@ -93,6 +96,7 @@ void refreshDragonKingDebugEnabled() {
+ 		gScopeDrawLoggingEnabled.store(json_boolean_value(scopeDrawLoggingJ), std::memory_order_relaxed);
+ 		gIntegralFluxDrawLoggingEnabled.store(json_boolean_value(integralFluxDrawLoggingJ), std::memory_order_relaxed);
+ 		gIntegralFluxLumenPreviewEnabled.store(json_is_true(integralFluxLumenPreviewJ), std::memory_order_relaxed);
++		gIntegralFluxRoundStrokeEnabled.store(json_is_true(integralFluxRoundStrokeJ), std::memory_order_relaxed);
+ 		gUndertowDrawLoggingEnabled.store(json_boolean_value(undertowDrawLoggingJ), std::memory_order_relaxed);
+ 		gPuffyDrawLoggingEnabled.store(json_boolean_value(puffyDrawLoggingJ), std::memory_order_relaxed);
+ 		gWyrmDrawLoggingEnabled.store(json_boolean_value(wyrmDrawLoggingJ), std::memory_order_relaxed);
+@@ -143,6 +147,10 @@ bool isUndertowDrawLoggingEnabled() {
+ 	return gUndertowDrawLoggingEnabled.load(std::memory_order_relaxed);
+ }
+ 
++bool isIntegralFluxRoundStrokeEnabled() {
++	return isDragonKingDebugEnabled() && gIntegralFluxRoundStrokeEnabled.load(std::memory_order_relaxed);
++}
++
+ bool isPuffyDrawLoggingEnabled() {
+ 	return gPuffyDrawLoggingEnabled.load(std::memory_order_relaxed);
+ }
+diff --git a/src/plugin.hpp b/src/plugin.hpp
+index fd4d3ea..3b96a11 100644
+--- a/src/plugin.hpp
++++ b/src/plugin.hpp
+@@ -69,6 +69,7 @@ bool isModuleTeardownLoggingEnabled();
+ bool isScopeDrawLoggingEnabled();
+ bool isIntegralFluxDrawLoggingEnabled();
+ bool isIntegralFluxLumenPreviewEnabled();
++bool isIntegralFluxRoundStrokeEnabled();
+ bool isUndertowDrawLoggingEnabled();
+ bool isPuffyDrawLoggingEnabled();
+ bool isWyrmDrawLoggingEnabled();

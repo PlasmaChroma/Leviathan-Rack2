@@ -1,0 +1,1194 @@
+{
+  "status": "Opt-in shared surface execution implemented; not integrated into live module traversal. Shader remains slower than host baseline.",
+  "final_simple_shader_measurements": [
+    {
+      "backend": "separate",
+      "count": 1,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 75.6,
+      "p95_us": 134.1
+    },
+    {
+      "backend": "separate",
+      "count": 1,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 36.192,
+      "p95_us": 48.152
+    },
+    {
+      "backend": "grouped",
+      "count": 1,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 47.1,
+      "p95_us": 82.0
+    },
+    {
+      "backend": "grouped",
+      "count": 1,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 36.192,
+      "p95_us": 48.776
+    },
+    {
+      "backend": "grouped",
+      "count": 1,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 51.0,
+      "p95_us": 74.6
+    },
+    {
+      "backend": "grouped",
+      "count": 1,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 35.984,
+      "p95_us": 49.348
+    },
+    {
+      "backend": "separate",
+      "count": 1,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 53.6,
+      "p95_us": 76.2
+    },
+    {
+      "backend": "separate",
+      "count": 1,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 35.62,
+      "p95_us": 49.348
+    },
+    {
+      "backend": "separate",
+      "count": 1,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 38.1,
+      "p95_us": 64.0
+    },
+    {
+      "backend": "separate",
+      "count": 1,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 35.36,
+      "p95_us": 46.8
+    },
+    {
+      "backend": "grouped",
+      "count": 1,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 42.4,
+      "p95_us": 68.8
+    },
+    {
+      "backend": "grouped",
+      "count": 1,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 35.932,
+      "p95_us": 49.452
+    },
+    {
+      "backend": "separate",
+      "count": 2,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 77.0,
+      "p95_us": 134.2
+    },
+    {
+      "backend": "separate",
+      "count": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 50.96,
+      "p95_us": 65.936
+    },
+    {
+      "backend": "grouped",
+      "count": 2,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 58.6,
+      "p95_us": 94.4
+    },
+    {
+      "backend": "grouped",
+      "count": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 49.4,
+      "p95_us": 58.76
+    },
+    {
+      "backend": "grouped",
+      "count": 2,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 45.9,
+      "p95_us": 76.3
+    },
+    {
+      "backend": "grouped",
+      "count": 2,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 47.424,
+      "p95_us": 51.324
+    },
+    {
+      "backend": "separate",
+      "count": 2,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 80.5,
+      "p95_us": 129.1
+    },
+    {
+      "backend": "separate",
+      "count": 2,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 47.268,
+      "p95_us": 61.464
+    },
+    {
+      "backend": "separate",
+      "count": 2,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 75.6,
+      "p95_us": 127.0
+    },
+    {
+      "backend": "separate",
+      "count": 2,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 46.904,
+      "p95_us": 60.788
+    },
+    {
+      "backend": "grouped",
+      "count": 2,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 49.8,
+      "p95_us": 100.9
+    },
+    {
+      "backend": "grouped",
+      "count": 2,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 46.02,
+      "p95_us": 57.2
+    },
+    {
+      "backend": "separate",
+      "count": 8,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 287.5,
+      "p95_us": 482.2
+    },
+    {
+      "backend": "separate",
+      "count": 8,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 133.276,
+      "p95_us": 149.292
+    },
+    {
+      "backend": "grouped",
+      "count": 8,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 84.6,
+      "p95_us": 131.9
+    },
+    {
+      "backend": "grouped",
+      "count": 8,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 115.804,
+      "p95_us": 145.652
+    },
+    {
+      "backend": "grouped",
+      "count": 8,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 85.2,
+      "p95_us": 150.2
+    },
+    {
+      "backend": "grouped",
+      "count": 8,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 68.64,
+      "p95_us": 87.204
+    },
+    {
+      "backend": "separate",
+      "count": 8,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 296.8,
+      "p95_us": 470.8
+    },
+    {
+      "backend": "separate",
+      "count": 8,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 80.392,
+      "p95_us": 95.576
+    },
+    {
+      "backend": "separate",
+      "count": 8,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 287.9,
+      "p95_us": 408.0
+    },
+    {
+      "backend": "separate",
+      "count": 8,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 106.236,
+      "p95_us": 123.916
+    },
+    {
+      "backend": "grouped",
+      "count": 8,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 79.3,
+      "p95_us": 126.1
+    },
+    {
+      "backend": "grouped",
+      "count": 8,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 115.492,
+      "p95_us": 134.888
+    },
+    {
+      "backend": "separate",
+      "count": 32,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 1099.2,
+      "p95_us": 1766.9
+    },
+    {
+      "backend": "separate",
+      "count": 32,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 373.464,
+      "p95_us": 491.452
+    },
+    {
+      "backend": "grouped",
+      "count": 32,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 231.2,
+      "p95_us": 358.2
+    },
+    {
+      "backend": "grouped",
+      "count": 32,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 270.452,
+      "p95_us": 309.816
+    },
+    {
+      "backend": "grouped",
+      "count": 32,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 227.5,
+      "p95_us": 351.4
+    },
+    {
+      "backend": "grouped",
+      "count": 32,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 248.248,
+      "p95_us": 289.12
+    },
+    {
+      "backend": "separate",
+      "count": 32,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 1120.2,
+      "p95_us": 1635.2
+    },
+    {
+      "backend": "separate",
+      "count": 32,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 298.272,
+      "p95_us": 422.968
+    },
+    {
+      "backend": "separate",
+      "count": 32,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 1095.9,
+      "p95_us": 1687.4
+    },
+    {
+      "backend": "separate",
+      "count": 32,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 478.14,
+      "p95_us": 525.616
+    },
+    {
+      "backend": "grouped",
+      "count": 32,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 232.9,
+      "p95_us": 390.0
+    },
+    {
+      "backend": "grouped",
+      "count": 32,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 278.876,
+      "p95_us": 500.656
+    },
+    {
+      "backend": "separate",
+      "count": 64,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 2234.3,
+      "p95_us": 3431.6
+    },
+    {
+      "backend": "separate",
+      "count": 64,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 924.196,
+      "p95_us": 1034.592
+    },
+    {
+      "backend": "grouped",
+      "count": 64,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 423.7,
+      "p95_us": 774.7
+    },
+    {
+      "backend": "grouped",
+      "count": 64,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 507.052,
+      "p95_us": 617.604
+    },
+    {
+      "backend": "grouped",
+      "count": 64,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 440.2,
+      "p95_us": 765.9
+    },
+    {
+      "backend": "grouped",
+      "count": 64,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 496.496,
+      "p95_us": 572.936
+    },
+    {
+      "backend": "separate",
+      "count": 64,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 2231.8,
+      "p95_us": 3216.6
+    },
+    {
+      "backend": "separate",
+      "count": 64,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 934.7,
+      "p95_us": 1022.788
+    },
+    {
+      "backend": "separate",
+      "count": 64,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 2230.5,
+      "p95_us": 3202.5
+    },
+    {
+      "backend": "separate",
+      "count": 64,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 939.172,
+      "p95_us": 1468.584
+    },
+    {
+      "backend": "grouped",
+      "count": 64,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 418.2,
+      "p95_us": 750.7
+    },
+    {
+      "backend": "grouped",
+      "count": 64,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 482.456,
+      "p95_us": 573.3
+    }
+  ],
+  "final_screening": [
+    {
+      "count": 1,
+      "repeat": 0,
+      "median_gain_percent": 37.69841269841269,
+      "p95_change_percent": -38.851603281133485,
+      "median_overhead_us": -28.499999999999993,
+      "screen_pass": true
+    },
+    {
+      "count": 1,
+      "repeat": 1,
+      "median_gain_percent": 4.850746268656714,
+      "p95_change_percent": -2.09973753280841,
+      "median_overhead_us": -2.6000000000000014,
+      "screen_pass": true
+    },
+    {
+      "count": 1,
+      "repeat": 2,
+      "median_gain_percent": -11.286089238845133,
+      "p95_change_percent": 7.499999999999996,
+      "median_overhead_us": 4.299999999999997,
+      "screen_pass": true
+    },
+    {
+      "count": 2,
+      "repeat": 0,
+      "median_gain_percent": 23.89610389610389,
+      "p95_change_percent": -29.657228017883742,
+      "median_overhead_us": -18.4,
+      "screen_pass": null
+    },
+    {
+      "count": 2,
+      "repeat": 1,
+      "median_gain_percent": 42.98136645962734,
+      "p95_change_percent": -40.898528272656854,
+      "median_overhead_us": -34.6,
+      "screen_pass": null
+    },
+    {
+      "count": 2,
+      "repeat": 2,
+      "median_gain_percent": 34.12698412698413,
+      "p95_change_percent": -20.551181102362204,
+      "median_overhead_us": -25.799999999999997,
+      "screen_pass": null
+    },
+    {
+      "count": 8,
+      "repeat": 0,
+      "median_gain_percent": 70.57391304347827,
+      "p95_change_percent": -72.64620489423476,
+      "median_overhead_us": -202.9,
+      "screen_pass": true
+    },
+    {
+      "count": 8,
+      "repeat": 1,
+      "median_gain_percent": 71.29380053908356,
+      "p95_change_percent": -68.09685641461343,
+      "median_overhead_us": -211.60000000000002,
+      "screen_pass": true
+    },
+    {
+      "count": 8,
+      "repeat": 2,
+      "median_gain_percent": 72.45571378951024,
+      "p95_change_percent": -69.09313725490196,
+      "median_overhead_us": -208.59999999999997,
+      "screen_pass": true
+    },
+    {
+      "count": 32,
+      "repeat": 0,
+      "median_gain_percent": 78.96652110625911,
+      "p95_change_percent": -79.72720584073801,
+      "median_overhead_us": -868.0,
+      "screen_pass": true
+    },
+    {
+      "count": 32,
+      "repeat": 1,
+      "median_gain_percent": 79.69112658453848,
+      "p95_change_percent": -78.51027397260275,
+      "median_overhead_us": -892.7,
+      "screen_pass": true
+    },
+    {
+      "count": 32,
+      "repeat": 2,
+      "median_gain_percent": 78.74806095446665,
+      "p95_change_percent": -76.88751926040062,
+      "median_overhead_us": -863.0000000000001,
+      "screen_pass": true
+    },
+    {
+      "count": 64,
+      "repeat": 0,
+      "median_gain_percent": 81.03656626236405,
+      "p95_change_percent": -77.4245250029141,
+      "median_overhead_us": -1810.6000000000001,
+      "screen_pass": true
+    },
+    {
+      "count": 64,
+      "repeat": 1,
+      "median_gain_percent": 80.2760103951967,
+      "p95_change_percent": -76.18914381645216,
+      "median_overhead_us": -1791.6000000000001,
+      "screen_pass": true
+    },
+    {
+      "count": 64,
+      "repeat": 2,
+      "median_gain_percent": 81.25084061869536,
+      "p95_change_percent": -76.55893832943012,
+      "median_overhead_us": -1812.3,
+      "screen_pass": true
+    }
+  ],
+  "first_run": "first.log preserves initial single-update median overhead failure (9.3 us); final cached-uniform run is separate",
+  "flux_shader_measurements": [
+    {
+      "backend": "host-nanovg",
+      "count": 2,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 23.0,
+      "p95_us": 31.2
+    },
+    {
+      "backend": "host-nanovg",
+      "count": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 30.368,
+      "p95_us": 44.876
+    },
+    {
+      "backend": "separate-shader",
+      "count": 2,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 138.3,
+      "p95_us": 243.9
+    },
+    {
+      "backend": "separate-shader",
+      "count": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 144.248,
+      "p95_us": 167.7
+    },
+    {
+      "backend": "grouped-shader",
+      "count": 2,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 97.9,
+      "p95_us": 165.9
+    },
+    {
+      "backend": "grouped-shader",
+      "count": 2,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 81.432,
+      "p95_us": 133.588
+    },
+    {
+      "backend": "separate-shader",
+      "count": 2,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 111.6,
+      "p95_us": 181.4
+    },
+    {
+      "backend": "separate-shader",
+      "count": 2,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 76.336,
+      "p95_us": 81.588
+    },
+    {
+      "backend": "grouped-shader",
+      "count": 2,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 81.0,
+      "p95_us": 116.3
+    },
+    {
+      "backend": "grouped-shader",
+      "count": 2,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 76.856,
+      "p95_us": 88.868
+    },
+    {
+      "backend": "host-nanovg",
+      "count": 2,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 22.5,
+      "p95_us": 30.2
+    },
+    {
+      "backend": "host-nanovg",
+      "count": 2,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 15.444,
+      "p95_us": 22.62
+    },
+    {
+      "backend": "grouped-shader",
+      "count": 2,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 78.9,
+      "p95_us": 119.0
+    },
+    {
+      "backend": "grouped-shader",
+      "count": 2,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 87.36,
+      "p95_us": 98.748
+    },
+    {
+      "backend": "host-nanovg",
+      "count": 2,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 23.4,
+      "p95_us": 30.0
+    },
+    {
+      "backend": "host-nanovg",
+      "count": 2,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 17.368,
+      "p95_us": 19.188
+    },
+    {
+      "backend": "separate-shader",
+      "count": 2,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 113.9,
+      "p95_us": 187.1
+    },
+    {
+      "backend": "separate-shader",
+      "count": 2,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 88.816,
+      "p95_us": 102.492
+    },
+    {
+      "backend": "host-nanovg",
+      "count": 8,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 87.2,
+      "p95_us": 104.5
+    },
+    {
+      "backend": "host-nanovg",
+      "count": 8,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 26.364,
+      "p95_us": 40.144
+    },
+    {
+      "backend": "separate-shader",
+      "count": 8,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 445.4,
+      "p95_us": 849.7
+    },
+    {
+      "backend": "separate-shader",
+      "count": 8,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 351.676,
+      "p95_us": 393.12
+    },
+    {
+      "backend": "grouped-shader",
+      "count": 8,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 215.3,
+      "p95_us": 422.0
+    },
+    {
+      "backend": "grouped-shader",
+      "count": 8,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 258.284,
+      "p95_us": 331.656
+    },
+    {
+      "backend": "separate-shader",
+      "count": 8,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 441.2,
+      "p95_us": 724.5
+    },
+    {
+      "backend": "separate-shader",
+      "count": 8,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 267.904,
+      "p95_us": 302.224
+    },
+    {
+      "backend": "grouped-shader",
+      "count": 8,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 214.0,
+      "p95_us": 335.2
+    },
+    {
+      "backend": "grouped-shader",
+      "count": 8,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 253.448,
+      "p95_us": 285.584
+    },
+    {
+      "backend": "host-nanovg",
+      "count": 8,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 86.4,
+      "p95_us": 98.5
+    },
+    {
+      "backend": "host-nanovg",
+      "count": 8,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 22.516,
+      "p95_us": 26.52
+    },
+    {
+      "backend": "grouped-shader",
+      "count": 8,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 199.9,
+      "p95_us": 364.2
+    },
+    {
+      "backend": "grouped-shader",
+      "count": 8,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 258.18,
+      "p95_us": 306.332
+    },
+    {
+      "backend": "host-nanovg",
+      "count": 8,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 87.0,
+      "p95_us": 105.2
+    },
+    {
+      "backend": "host-nanovg",
+      "count": 8,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 22.828,
+      "p95_us": 27.352
+    },
+    {
+      "backend": "separate-shader",
+      "count": 8,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 439.4,
+      "p95_us": 735.4
+    },
+    {
+      "backend": "separate-shader",
+      "count": 8,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 262.392,
+      "p95_us": 302.172
+    },
+    {
+      "backend": "host-nanovg",
+      "count": 32,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 343.0,
+      "p95_us": 387.7
+    },
+    {
+      "backend": "host-nanovg",
+      "count": 32,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 65.832,
+      "p95_us": 80.236
+    },
+    {
+      "backend": "separate-shader",
+      "count": 32,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 1763.1,
+      "p95_us": 2921.8
+    },
+    {
+      "backend": "separate-shader",
+      "count": 32,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 1223.144,
+      "p95_us": 1672.268
+    },
+    {
+      "backend": "grouped-shader",
+      "count": 32,
+      "repeat": 0,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 715.8,
+      "p95_us": 2212.4
+    },
+    {
+      "backend": "grouped-shader",
+      "count": 32,
+      "repeat": 0,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 967.824,
+      "p95_us": 1505.452
+    },
+    {
+      "backend": "separate-shader",
+      "count": 32,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 1697.8,
+      "p95_us": 2686.8
+    },
+    {
+      "backend": "separate-shader",
+      "count": 32,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 1314.872,
+      "p95_us": 1892.332
+    },
+    {
+      "backend": "grouped-shader",
+      "count": 32,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 717.2,
+      "p95_us": 1612.0
+    },
+    {
+      "backend": "grouped-shader",
+      "count": 32,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 981.136,
+      "p95_us": 1501.344
+    },
+    {
+      "backend": "host-nanovg",
+      "count": 32,
+      "repeat": 1,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 342.5,
+      "p95_us": 423.0
+    },
+    {
+      "backend": "host-nanovg",
+      "count": 32,
+      "repeat": 1,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 79.508,
+      "p95_us": 98.384
+    },
+    {
+      "backend": "grouped-shader",
+      "count": 32,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 709.5,
+      "p95_us": 1672.6
+    },
+    {
+      "backend": "grouped-shader",
+      "count": 32,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 985.14,
+      "p95_us": 1531.452
+    },
+    {
+      "backend": "host-nanovg",
+      "count": 32,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 342.4,
+      "p95_us": 410.1
+    },
+    {
+      "backend": "host-nanovg",
+      "count": 32,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 63.284,
+      "p95_us": 75.14
+    },
+    {
+      "backend": "separate-shader",
+      "count": 32,
+      "repeat": 2,
+      "metric": "CPU",
+      "samples": 360,
+      "median_us": 1729.1,
+      "p95_us": 2610.6
+    },
+    {
+      "backend": "separate-shader",
+      "count": 32,
+      "repeat": 2,
+      "metric": "GPU",
+      "samples": 360,
+      "median_us": 1243.58,
+      "p95_us": 1804.764
+    }
+  ],
+  "images": {
+    "grouped_vs_separate_shader_cases": 1140,
+    "maximum_channel_difference": 0,
+    "comparison": "Same experimental shader in both; not parity with NanoVG"
+  },
+  "checks": [
+    "mixed-state isolation and host restoration",
+    "unchanged batch zero host guards/callbacks",
+    "independent dirty update",
+    "duplicate/invalid request preflight rejection",
+    "existing 549 GL surface lifecycle checks",
+    "native plugin link"
+  ],
+  "limitations": [
+    "Hidden GLFW context, not live Rack pacing",
+    "Only shader callbacks using unit 0 and generic attributes 0..3 are eligible",
+    "No module registration/visibility/capture scheduler yet",
+    "No retained PolylineStroke primitive yet; archived shader used as workload",
+    "Single-surface timings variable; first run failed initial overhead screen",
+    "Archived shader vs NanoVG visual differences remain unresolved"
+  ],
+  "hashes": {
+    "src/visual/AdaptiveGlSurface.cpp": "07028a5dc855ba05449b4529bc0d0b0831cfc5ad8f83487da4e9b8a51bc7cda4",
+    "src/visual/AdaptiveGlSurface.hpp": "6f647421f28090418ec784a95a656ec9a116eb00251ff20fff383faf1e06020b",
+    "tests/adaptive_gl_batch_spec.cpp": "f6a5b2f09d8c6fc5eb25458be5650cb263a34b246d03ddb99b21b51558252c0c",
+    "tools/experiments/lumin/flux_shader_surface_spec.cpp": "5d30605ad879e5cf6a0137f8b757ac30ec32e3c63b3abe934edb5ebf3a334562",
+    "doc\\benchmarks\\lumin-batch-20260910\\first.log": "e368edd74897ffdf0cf24366fa6d2b3df2a5413cd97c7a0965f51bd98096becc",
+    "doc\\benchmarks\\lumin-batch-20260910\\final.log": "b1112d0c114b1602e4ef6da4b899dbf71409206f66a0e445693f3b5599b75e44",
+    "doc\\benchmarks\\lumin-batch-20260910\\flux-shader.log": "210b1c136cfb1fe502b500a6be8cbb4935364f5d52f4d80d9034f2a6266ea0f7",
+    "doc\\benchmarks\\lumin-batch-20260910\\grouped-images.log": "822aac675867a044c2813e18c1225cd45c9e973800685fbb0ed11de3c4d84726"
+  },
+  "final_validation_note": "After the recorded benchmark, added a current-Rack-context preflight and a missing-context rejection test. Batch test, 549 lifecycle checks and native link passed again. Performance was not rerun for that defensive check.",
+  "final_validation_hashes": {
+    "src/visual/AdaptiveGlSurface.cpp": "a2eb83a1da9596e03fc99784079f1d5d8443db056cc94dff285d23d4d05a9d46",
+    "src/visual/AdaptiveGlSurface.hpp": "6f647421f28090418ec784a95a656ec9a116eb00251ff20fff383faf1e06020b",
+    "tests/adaptive_gl_batch_spec.cpp": "0f026cd0dd7d71ecf97cb6bebd40e622cc1a6e746d04e4d5f772925c47e83146",
+    "plugin.dll": "f1fb4d25e942330a9e93749466189fd9add17e96f1fc2015b49ed57feb814fb8"
+  }
+}

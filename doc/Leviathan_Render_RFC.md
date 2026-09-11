@@ -13,6 +13,16 @@
 
 **API status:** All `lr::` names and interfaces below are proposed. They are not existing plugin APIs.
 
+**10 September direction update:** The user selected plugin-wide rendering
+optimization and close perceptual parity as the target. The subsequent Flux
+experiments have not demonstrated a live speedup. The
+[shared execution investigation](lumen-plugin-wide-execution.md) records the
+cross-plugin source inventory and next controlled experiment: attribute surface
+costs, then compare multiple eligible updates under one host-state scope while
+enforcing state isolation between passes. This is not an implemented runtime or
+a commitment to migrate every renderer. It prioritizes the boundary-grouping
+hypothesis without requiring shader-program sharing to be completed first.
+
 ---
 
 ## 1. Decision
@@ -333,6 +343,12 @@ surface.invalidate(lr::DirtyReason::Source);
 Slot identifiers are typed/cached bindings, not string lookups in the hot path. A material declares required capabilities, alpha/color semantics, uniforms, read resources, output format, and fallback.
 
 ### 7.4 Scoped raw GL
+
+The proposed first-class [Lumin PolylineStroke](lumin-polyline-stroke.md) supplies
+a retained shader-based line primitive inside these passes. It owns bounded
+geometry and material state, not a framebuffer per line. Its specification covers
+shared submission, local coverage, perceptual parity, fallback and complete-path
+performance gates; no production implementation is implied by this API proposal.
 
 ```cpp
 void drawCustom(lr::GlPassContext& pass) {

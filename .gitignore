@@ -8,6 +8,7 @@
 *.dylib
 *.dll
 /build
+/work
 /dep
 /dist
 

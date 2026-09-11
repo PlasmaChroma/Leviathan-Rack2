@@ -748,7 +748,36 @@ build/tools/preview_invalidation_benchmark: tools/preview_invalidation_benchmark
 	mkdir -p build/tools
 	$(CXX) -std=c++17 $(INTEGRAL_FLUX_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/preview_invalidation_benchmark.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
-build/tools/proc_preview_render_benchmark: tools/proc_preview_render_benchmark.cpp tools/preview_benchmark_utils.hpp src/Proc.cpp src/ProcPreviewGeometry.hpp src/WavePreviewSimplifier.hpp | build
+# Explicit offline experiments only; not dependencies of the plugin or test-fast.
+build/tests/adaptive_gl_batch_spec: tests/adaptive_gl_batch_spec.cpp src/visual/AdaptiveGlSurface.cpp src/visual/AdaptiveGlSurface.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/adaptive_gl_batch_spec.cpp src/visual/AdaptiveGlSurface.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
+
+build/tests/bounded_polyline_spec: tools/experiments/lumin/bounded_polyline_spec.cpp tools/experiments/lumin/BoundedPolyline.hpp | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra $< -o $@
+
+build/tests/round_join_candidate_spec: tools/experiments/lumin/round_join_candidate_spec.cpp tools/experiments/lumin/round_join_candidate.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra $< -o $@
+
+build/tools/flux_shader/flux_geometry.hpp: tools/experiments/lumin/prepare_flux_shader_geometry.py src/IntegralFluxWidget.cpp src/IntegralFlux.cpp
+	python3 tools/experiments/lumin/prepare_flux_shader_geometry.py
+
+build/tests/flux_shader_surface_spec: tools/experiments/lumin/flux_shader_surface_spec.cpp tools/experiments/lumin/flux_shader_candidate.hpp tools/experiments/lumin/experimental_shader_stroke.hpp src/visual/AdaptiveGlSurface.cpp tools/experiments/lumin/PrivateContourEngine.cpp build/tools/flux_shader/flux_geometry.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -Ibuild/tools/flux_shader -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/experiments/lumin/flux_shader_surface_spec.cpp tools/experiments/lumin/PrivateContourEngine.cpp src/visual/AdaptiveGlSurface.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
+
+build/tests/round_stroke_surface_spec: tools/experiments/lumin/round_stroke_surface_spec.cpp tools/experiments/lumin/PrivateContourEngine.cpp tools/experiments/lumin/ExperimentalRoundStroke.hpp src/visual/AdaptiveGlSurface.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/experiments/lumin/round_stroke_surface_spec.cpp tools/experiments/lumin/PrivateContourEngine.cpp src/visual/AdaptiveGlSurface.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
+
+# Offline only: pinned NanoVG inputs must first be placed in work/nanovg.
+build/tools/round_stroke/private.cpp: tools/experiments/lumin/prepare_round_stroke.py src/IntegralFluxWidget.cpp src/IntegralFlux.cpp work/nanovg/nanovg.c work/nanovg/nanovg.h work/nanovg/nanovg_gl.h work/nanovg/fontstash.h work/nanovg/stb_truetype.h work/nanovg/stb_image.h | build
+	python3 tools/experiments/lumin/prepare_round_stroke.py
+
+build/tools/round_stroke_benchmark: tools/experiments/lumin/round_stroke_benchmark.cpp tools/experiments/lumin/private_stroke_api.hpp build/tools/round_stroke/private.cpp | build
+	$(CXX) -std=c++17 -O3 -march=nehalem -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -Itools/experiments/lumin -Ibuild/tools/round_stroke -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/experiments/lumin/round_stroke_benchmark.cpp build/tools/round_stroke/private.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
+
+build/tools/callback_bridge_spec: tools/experiments/lumin/callback_bridge_spec.cpp tools/experiments/lumin/callback_bridge.cpp tools/experiments/lumin/callback_bridge.hpp build/tools/round_stroke/private.cpp | build
+	$(CXX) -std=c++17 -O3 -march=nehalem -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -Itools/experiments/lumin -Ibuild/tools/round_stroke -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/experiments/lumin/callback_bridge_spec.cpp tools/experiments/lumin/callback_bridge.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
+
+build/tools/proc_preview_render_benchmark: tools/proc_preview_render_benchmark.cpp tools/preview_benchmark_utils.hpp tools/experiments/lumin/round_join_candidate.hpp src/Proc.cpp src/ProcPreviewGeometry.hpp src/WavePreviewSimplifier.hpp tools/experiments/lumin/BoundedPolyline.hpp | build
 	mkdir -p build/tools
 	$(CXX) -std=c++17 $(INTEGRAL_FLUX_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/proc_preview_render_benchmark.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
@@ -882,3 +911,22 @@ build/tests/chromatide_qoi_preflight_spec: tests/chromatide_qoi_preflight_spec.c
 
 build/tests/review_state_handoff_spec: tests/review_state_handoff_spec.cpp src/Bulkhead.cpp src/BulkheadGeometry.cpp src/Chronomaw.cpp src/ChronomawEngine.cpp src/Bulkhead.hpp src/Chronomaw.hpp src/SpscLatestSnapshot.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) $(MINGW_TEST_CPPFLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $(filter %.cpp,$^) -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -pthread -o $@
+
+# Explicit retained shader candidate; not enabled in live modules.
+build/tests/lumin_polyline_spec: tests/lumin_polyline_spec.cpp src/render/PolylineStroke.hpp tools/experiments/lumin/retained_polyline_adapter.hpp tools/experiments/lumin/flux_shader_surface_spec.cpp build/tools/flux_shader/flux_geometry.hpp src/visual/AdaptiveGlSurface.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -Ibuild/tools/flux_shader -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/lumin_polyline_spec.cpp tools/experiments/lumin/PrivateContourEngine.cpp src/visual/AdaptiveGlSurface.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
+
+build/tests/lumin_function_curve_spec: tests/lumin_function_curve_spec.cpp tools/experiments/lumin/function_curve_candidate.hpp src/render/FunctionCurve.hpp tools/experiments/lumin/flux_shader_surface_spec.cpp src/visual/AdaptiveGlSurface.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp build/tools/flux_shader/flux_geometry.hpp build/tools/flux_shader/proc_shape.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -Ibuild/tools/flux_shader -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/lumin_function_curve_spec.cpp tools/experiments/lumin/PrivateContourEngine.cpp src/visual/AdaptiveGlSurface.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
+
+build/tools/flux_shader/proc_shape.hpp: tools/experiments/lumin/prepare_proc_shape.py src/Proc.cpp src/ProcPreviewGeometry.hpp
+	python3 tools/experiments/lumin/prepare_proc_shape.py
+
+build/tests/lumin_function_history_spec: tests/lumin_function_history_spec.cpp tests/lumin_function_curve_spec.cpp tools/experiments/lumin/function_curve_candidate.hpp src/render/FunctionCurve.hpp tools/experiments/lumin/function_history.hpp src/visual/SnapshotHistory.hpp src/visual/AdaptiveGlSurface.cpp build/tools/flux_shader/flux_geometry.hpp build/tools/flux_shader/proc_shape.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -Ibuild/tools/flux_shader -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/lumin_function_history_spec.cpp tools/experiments/lumin/PrivateContourEngine.cpp src/visual/AdaptiveGlSurface.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
+
+build/tests/lumin_shader_timing_spec: tests/lumin_shader_timing_spec.cpp tests/lumin_function_curve_spec.cpp tools/experiments/lumin/function_curve_candidate.hpp src/render/FunctionCurve.hpp src/visual/AdaptiveGlSurface.cpp build/tools/flux_shader/flux_geometry.hpp build/tools/flux_shader/proc_shape.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -Ibuild/tools/flux_shader -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/lumin_shader_timing_spec.cpp tools/experiments/lumin/PrivateContourEngine.cpp src/visual/AdaptiveGlSurface.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
+
+build/tests/lumin_function_pilot_spec: tests/lumin_function_pilot_spec.cpp tests/lumin_function_curve_spec.cpp src/render/FunctionContourPilot.hpp src/render/FunctionCurve.hpp src/visual/AdaptiveGlSurface.cpp build/tools/flux_shader/flux_geometry.hpp build/tools/flux_shader/proc_shape.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -Ibuild/tools/flux_shader -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/lumin_function_pilot_spec.cpp tools/experiments/lumin/PrivateContourEngine.cpp src/visual/AdaptiveGlSurface.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@

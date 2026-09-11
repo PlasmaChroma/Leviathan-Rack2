@@ -1,5 +1,68 @@
 # Integral Flux Lumen pilot
 
+## Current checkpoint — 10 September 2026
+
+New implementation checkpoint: [shared surface execution](lumin-batch-experiment.md)
+reduces complete surface submission costs in the harness, with 1,140 identical
+grouped/separate shader images. It is opt-in infrastructure; no module uses it
+live yet, and the archived Flux shader still loses to host NanoVG. PolylineStroke
+itself and live scheduling remain to be implemented.
+
+First PolylineStroke consumer: the two Integral Flux previews, as selected by the
+user. The [feature's test-bed contract](lumin-polyline-stroke.md#first-consumer-integral-flux-preview-widgets)
+defines the source seam, preserved behavior, distinct backend comparisons and
+required counters. This is the implementation target, not an enabled new backend.
+
+Scope update: [plugin-wide shared execution](lumen-plugin-wide-execution.md) is
+the architectural target; Flux remains a diagnostic workload. Close perceptual
+parity is the visual objective, with localized defects and motion checked
+explicitly. Earlier numerical screening failures remain recorded as failures.
+
+- Design: [Render RFC](Leviathan_Render_RFC.md), still a proposed broader runtime.
+- Implemented: minimal preview ownership/layout adapter, checkpoint `d9a524c`.
+  Initial live capture is recorded below; matched repeated A/B validation remains
+  pending and no live speedup is established.
+- [Bounded contour reduction](flux-contour-reduction-experiment.md) failed its
+  consistent CPU benefit gate and remains offline.
+- [Stroke attribution](flux-stroke-profile-experiment.md) identified frontend
+  stroke work as dominant; the subsequent [join comparison](flux-join-profile-experiment.md)
+  isolates a large round-join preparation cost despite near-equal round/bevel
+  vertex counts. Alternative joins visibly change crests and are not adopted.
+- [Round-arc endpoint candidate](flux-round-arc-candidate.md) passes numerical
+  checks; [complete-stroke validation](flux-full-stroke-candidate.md) now confirms
+  a large offline CPU benefit with pixel-identical sampled Flux images. Matching
+  NanoVG source is available and the private baseline matches installed Rack.
+- [Historical live integration](flux-round-stroke-live-pilot.md) failed the
+  performance gate and has been removed from the normal plugin build. Its source,
+  vendor license and probes are archived under `tools/experiments/lumin`; the old
+  local flag is false. Existing pruning and the committed adapter remain intact.
+- Target direction: a [custom shader adapted from WYRM](flux-shader-candidate.md).
+  An offline segment-distance prototype now exists, with existing pruning intact.
+  Its complete surface path is still slower, and localized image differences fail
+  screening. An empty-surface control also exceeds host stroke cost; next work
+  must address render submission alongside shader coverage. No new live install.
+
+## Cleanup checkpoint
+
+Normal Flux rendering and plugin settings have returned to checkpoint `d9a524c`.
+The aligned surface presentation helper and analyzer support for historical
+experimental CSV fields remain. No PolylineStroke backend is enabled. Native
+`plugin.dll` linking and focused baseline/lifecycle/analyzer checks passed; the
+archived shader probe retains its known image-gate failure. The full fast suite
+was not rerun because of the previously recorded unrelated theme compilation
+issue. [Cleanup validation](lumin-evidence/cleanup-validation.json) records scope.
+[Durable result summaries](lumin-evidence/README.md) are outside ignored folders;
+[offline experiments](../tools/experiments/lumin/README.md) document reproduction.
+`calibration.cpp` is absent as requested. Nothing was staged or committed.
+
+## Pilot status
+
+Latest baseline refresh: [10 September reinstall capture](#reinstall-baseline--10-september-2026)
+has the existing adapter enabled, with clean quiet/settled work counters. It is
+not a capture of the round-join candidate. The subsequent
+[enabled round-stroke capture](flux-round-stroke-live-pilot.md#first-enabled-run--10-september-2026)
+confirms private draws and a substantial live regression; the failed integration is now archived outside the runtime.
+
 Status: exploratory and controlled laptop captures analyzed below; minimal adapter
 implemented with native focused tests and an initial live B capture. Matched,
 repeated A/B overhead validation remains pending. No measured
@@ -48,7 +111,8 @@ independence, and teardown using probe layers without a GL context. All nine Flu
 runtime checks and the seven analyzer tests passed. Full native `test-fast` was
 attempted but stopped compiling the unrelated `theme_persistence_spec` with
 SIMDe/intrinsics redefinition errors on this laptop's GCC 15.2; this is not a full
-suite pass. No live adapter capture has been collected yet.
+suite pass. An initial live adapter capture was subsequently collected; see
+the first adapter capture section below.
 
 ### Workload
 
@@ -230,6 +294,10 @@ or performance claims; no new runtime has been benchmarked here.
 
 ## First adapter capture — 9 September 2026, 20:29:48 filename timestamp
 
+The subsequent [contour-reduction experiment](flux-contour-reduction-experiment.md)
+was tested offline after this checkpoint and did not pass its CPU admission gate.
+The live adapter remains unchanged by that experiment.
+
 The capture contains 7,902 complete rows, with `lumen_preview_adapter=1` throughout.
 Other recorded settings match the earlier capture: NanoVG previews, enabled
 snapshot tracing, Halo fallback not forced. The user reports the same general
@@ -274,3 +342,80 @@ certify visual parity, browser/capture/reopen behavior, GPU cost, host frame
 pacing, or source freshness. Preserve this result without expanding the runtime
 on the strength of a claimed speedup: no optimization was introduced, and none
 is established by this capture.
+
+## Reinstall baseline — 10 September 2026
+
+The user reinstalled and recorded a similar workload. Two new complete CSVs were
+preserved locally in `benchmarks/flux-laptop-reinstalled-20260910`: the 07:06:23
+file has 4,252 rows and substantial knob interaction; the 07:07:47 file has 5,429
+rows and a clear quiet/modulated/settled sequence. Filename timestamps do not
+establish elapsed duration. Both retain `lumen_preview_adapter=1`, NanoVG mode 0,
+snapshot tracer mode 2, and no forced Halo fallback.
+
+The on-disk installed plugin matches `dist/Leviathan/plugin.dll` by SHA-256:
+`d542897491b0a6645f318ad8443a3970ce51b1fbe6f78bb7f49f77c140615d19`.
+The unstripped root DLL has a different hash, as expected from packaging's strip
+step. At this baseline checkpoint no production round-join candidate existed in
+the checkout. The on-disk
+comparison does not independently prove which binary an already-running process
+loaded; the reinstall is user-reported.
+
+For the latest capture, select rows 500–3000 (steady), 3500–4500 (modulated), and
+5000–5429 (settled), with exclusive ends. These are post-hoc counter-based
+selections, not externally timestamped phases. The [saved summary](benchmarks/flux-laptop-reinstalled-20260910/summary.json)
+records source hashes and exact selections.
+
+| Phase | Prior adapter preview median / p95 | New preview median / p95 | New module subtree median / p95 |
+|---|---|---|---|
+| Steady | 32.4 / 45.4 us | 35.8 / 47.2 us | 325.25 / 416.85 us |
+| Modulated | 109.3 / 209.5 us | 63.75 / 120.93 us | 300.8 / 452.89 us |
+| Settled | 32.6 / 46.2 us | 20.5 / 37.66 us | 174.6 / 361.22 us |
+
+Steady and settled intervals have zero point rebuilds, captures, history
+rasterizations, preview framebuffer work and knob surface work. The modulated
+selection contains 1,408 point rebuilds and 702 accepted captures, matched by
+702 history rasterizations, with no knob dragging or knob surface work. After
+the initial interaction, shape changes start at row 3409; the final rebuild is
+4730, contour refresh 4735, and final visible history 4746.
+
+Current-contour median CPU time during modulation is 18.9 us versus the prior
+adapter capture's 59.8 us; history is 16.9 us versus 18.1 us. These lower times
+are observations of the existing renderer, not evidence of the offline candidate
+running in Rack. Shape/workload details, zoom/DPI, power/thermal conditions and
+audio settings are not recorded. The substantial difference between quiet and
+settled module timings also argues against attributing the delta to one renderer
+change. Preserve this as a fresh baseline for future matched live tests.
+
+## Retained shader checkpoint (10 September 2026)
+
+See [retained PolylineStroke experiment](lumin-retained-polyline-experiment.md).
+The primitive exists as an opt-in monotone-X shader implementation, but it still
+loses to NanoVG and fails the historical image screen. Flux remains unchanged.
+
+## Specialized function-curve alternative
+
+The [analytic function shader probe](lumin-function-curve-experiment.md) supports
+the shared Flux/Proc equation without point generation or segment uploads. It
+shows a modest two-preview CPU median benefit when geometry generation can be
+omitted, but visual acceptance, tail latency and live integration remain open.
+
+## Full history follow-up
+
+The [parameter history experiment](lumin-function-history-experiment.md) now tests
+Maths/Shark modulation against production cached history. Preparation/storage
+shrink, but no consistent total CPU benefit survives the rendering costs. The
+contour-only timing above is not a complete-preview result. Live code is unchanged.
+
+## Shader timing follow-up
+
+The [fast-math and draw-path probe](lumin-shader-timing-experiment.md) validates
+precomputed constants, a fast atan and a two-iteration solver against the current
+shader. Two iterations give a modest isolated GPU benefit; full-history CPU
+adoption still fails. A draw-disabled control shows substantial execution and
+presentation cost outside fragment evaluation. No live renderer change.
+
+## Opt-in live candidate now prepared
+
+The [current-contour live pilot](lumin-function-live-pilot.md) is built and
+packaged, off by default. It preserves existing points/history/ball and adds
+per-preview phase/candidate telemetry. No installation or live result yet.

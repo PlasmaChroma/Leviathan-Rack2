@@ -45,11 +45,32 @@ class FluxAnalysisTests(unittest.TestCase):
         self.assertIn("ui_draw_ema_us", result["smoothed_timings_us"])
         self.assertEqual(analysis.summarize(self.path)["cpu_timings_us"]["module_widget_draw_us"]["max"], 1000)
 
+    def test_function_pilot_counters_and_phases(self):
+        self.write(lambda rows: [row.update(ch1_function_requested=1,
+            ch1_function_used=1, ch1_function_updated=1, ch1_function_cache_hit=0,
+            ch1_function_fallback=0, ch1_function_capture_us=7) for row in rows])
+        result = analysis.summarize(self.path, 1, 4)
+        self.assertEqual(result["settings"]["ch1_function_requested"], [1])
+        self.assertEqual(result["counters"]["ch1_function_updated"]["total"], 3)
+        self.assertEqual(result["cpu_timings_us"]["ch1_function_capture_us"]["p50"], 7)
+
     def test_missing_counters_are_not_zero(self):
         self.write()
         result = analysis.summarize(self.path)
         self.assertIn("halo_gl_surface_framebuffer_draws", result["missing_columns"])
         self.assertNotIn("halo_gl_surface_framebuffer_draws", result["counters"])
+
+    def test_round_stroke_selection_is_distinct_from_actual_work(self):
+        def experiment(rows):
+            for i, row in enumerate(rows):
+                row.update(round_stroke_enabled=1, round_stroke_private_draws=2 if i == 1 else 0,
+                           round_stroke_fallbacks=1 if i == 2 else 0, round_stroke_surface_us=i)
+        self.write(experiment)
+        result = analysis.summarize(self.path)
+        self.assertEqual(result["settings"]["round_stroke_enabled"], [1])
+        self.assertEqual(result["counters"]["round_stroke_private_draws"]["total"], 2)
+        self.assertEqual(result["counters"]["round_stroke_fallbacks"]["total"], 1)
+        self.assertIn("round_stroke_surface_us", result["cpu_timings_us"])
 
     def test_mixed_modes_warn(self):
         self.write(lambda rows: rows[2].update(preview_tracer_mode=0))

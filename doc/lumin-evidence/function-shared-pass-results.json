@@ -1,0 +1,135 @@
+{
+  "date": "2026-09-10",
+  "scope": "Offline real GL2, two 106x48 previews at 1x; current contours only; includes host image submission and NanoVG flush. Not live Rack timings.",
+  "modes": {
+    "0": "Separate full guards, independent shader programs",
+    "1": "Grouped full guard, shared shader program",
+    "2": "Grouped restricted guard, shared shader program"
+  },
+  "measurements": [
+    {
+      "label": "pair/mode0/repeat0/complete",
+      "n": 360,
+      "median_us": 105.2,
+      "p95_us": 161.5
+    },
+    {
+      "label": "pair/mode0/repeat0/state",
+      "n": 360,
+      "median_us": 93.0,
+      "p95_us": 142.2
+    },
+    {
+      "label": "pair/mode1/repeat0/complete",
+      "n": 360,
+      "median_us": 74.2,
+      "p95_us": 85.1
+    },
+    {
+      "label": "pair/mode1/repeat0/state",
+      "n": 360,
+      "median_us": 55.8,
+      "p95_us": 63.5
+    },
+    {
+      "label": "pair/mode2/repeat0/complete",
+      "n": 360,
+      "median_us": 69.7,
+      "p95_us": 90.1
+    },
+    {
+      "label": "pair/mode2/repeat0/state",
+      "n": 360,
+      "median_us": 50.2,
+      "p95_us": 66.5
+    },
+    {
+      "label": "pair/mode1/repeat1/complete",
+      "n": 360,
+      "median_us": 91.0,
+      "p95_us": 113.3
+    },
+    {
+      "label": "pair/mode1/repeat1/state",
+      "n": 360,
+      "median_us": 60.9,
+      "p95_us": 86.1
+    },
+    {
+      "label": "pair/mode2/repeat1/complete",
+      "n": 360,
+      "median_us": 75.5,
+      "p95_us": 105.1
+    },
+    {
+      "label": "pair/mode2/repeat1/state",
+      "n": 360,
+      "median_us": 53.6,
+      "p95_us": 74.4
+    },
+    {
+      "label": "pair/mode0/repeat1/complete",
+      "n": 360,
+      "median_us": 104.8,
+      "p95_us": 161.8
+    },
+    {
+      "label": "pair/mode0/repeat1/state",
+      "n": 360,
+      "median_us": 92.7,
+      "p95_us": 145.3
+    },
+    {
+      "label": "pair/mode2/repeat2/complete",
+      "n": 360,
+      "median_us": 61.8,
+      "p95_us": 75.8
+    },
+    {
+      "label": "pair/mode2/repeat2/state",
+      "n": 360,
+      "median_us": 44.0,
+      "p95_us": 57.0
+    },
+    {
+      "label": "pair/mode0/repeat2/complete",
+      "n": 360,
+      "median_us": 104.3,
+      "p95_us": 123.2
+    },
+    {
+      "label": "pair/mode0/repeat2/state",
+      "n": 360,
+      "median_us": 92.2,
+      "p95_us": 110.2
+    },
+    {
+      "label": "pair/mode1/repeat2/complete",
+      "n": 360,
+      "median_us": 73.6,
+      "p95_us": 86.4
+    },
+    {
+      "label": "pair/mode1/repeat2/state",
+      "n": 360,
+      "median_us": 55.2,
+      "p95_us": 66.5
+    }
+  ],
+  "validation": [
+    "Native Windows plugin.dll link and dist package passed",
+    "Pilot integration tests passed",
+    "Batch restricted/full/mixed state restoration and pixel equivalence passed"
+  ],
+  "hashes": {
+    "src/IntegralFluxWidget.cpp": "9e5e3a20e9d24a077f63a27523cf645793253ee309d7987bdfca8887eccb951d",
+    "src/render/FunctionContourPilot.hpp": "0c8f9379eef89c92d9b262edce7402d9f8d6f9a3bf01cbac9792c50a07017b3a",
+    "src/render/FunctionCurve.hpp": "1be276c7af3492328302dd30ef0e1d24120a6dd02e0174b0a11cc343002c5b9f",
+    "src/visual/AdaptiveGlSurface.cpp": "c63ee59489ac72dd5c16a856821216be3b523925e59f78bd240d3082fc2363f3",
+    "src/visual/AdaptiveGlSurface.hpp": "ae5acd5cca6cbb6f91ae182819d210df01965d4da225939d0eb5afc087ea607d",
+    "tests/lumin_function_pilot_spec.cpp": "b454449cce05baa9993fa856f7f618d3c1ee648b94db7e9dc545ddc67e9bf230",
+    "tests/adaptive_gl_batch_spec.cpp": "009a42ef69fe9eb5aaa624df9aa81d537d124fad930d1b15f5b83dae03f8eed2",
+    "plugin.dll": "ab8d3d9d94c9689fcb138beea94fe7a5a437ebb77ee2a75e2d027b45fbff5282",
+    "dist/Leviathan-2.9.1-win-x64.vcvplugin": "4ef9d6326a770c1bd3dce16f7a830265a1d005618e9e8db3c2ecf87ae75bf604"
+  }
+}

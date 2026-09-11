@@ -1,0 +1,27 @@
+{
+  "reinstall-baseline-summary.json": {
+    "historical_source": "doc/benchmarks/flux-laptop-reinstalled-20260910/summary.json",
+    "sha256": "6689b82dd1970578c2372a7d2f31b0eb7004543ac4b9275b23e48d38d5d423a7",
+    "bytes": 37473
+  },
+  "private-nanovg-live-summary.json": {
+    "historical_source": "doc/benchmarks/flux-live-round-stroke-20260910/summary.json",
+    "sha256": "bb8d5046498bfeb96c0a1412d707e0ab28b365ae174e28c9ccce4b76b3399110",
+    "bytes": 38712
+  },
+  "historical-installation.json": {
+    "historical_source": "doc/benchmarks/flux-live-round-stroke-20260910/installation.json",
+    "sha256": "93cad148c04381bf155d9d690171af572f460cca4a4673387e6becb580856195",
+    "bytes": 1150
+  },
+  "shader-prototype-summary.json": {
+    "historical_source": "doc/benchmarks/flux-shader-prototype-20260910/summary.json",
+    "sha256": "6e93ed932ba1ad34a4526259f6b1a077d138c8c4d2ec5ad70e30e99e32fa825a",
+    "bytes": 17161
+  },
+  "full-stroke-summary.json": {
+    "historical_source": "doc/benchmarks/flux-full-stroke-20260910/summary.json",
+    "sha256": "765be72594c4bb21672a4fc42ca07ec3a124d779e837fd1d21a27645609e7093",
+    "bytes": 43683
+  }
+}

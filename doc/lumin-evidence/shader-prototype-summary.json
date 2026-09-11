@@ -1,0 +1,673 @@
+{
+  "status": "Offline prototype only; performance and image gate fail; not installed",
+  "image_cases": 1140,
+  "image_failures": 154,
+  "max_alpha_normalized_error": 0.01259119,
+  "max_channel_byte_error": 255.0,
+  "screening_gate": {
+    "aggregate_less_than": 0.05,
+    "max_byte_at_most": 64
+  },
+  "image_fixtures": "One synthetic sharp-join path plus 18 current production-pruned Flux shapes, full/split colors, 5 densities, 3 offsets, 2 global alpha levels.",
+  "lifecycle": "Fallback, framebuffer restore, deferred destruction, reused-context checks passed before final image gate rejection",
+  "benchmark": [
+    {
+      "backend": "host-nanovg",
+      "density": "1.00x",
+      "repeat": "0",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "27.800",
+      "p95_us": "41.200"
+    },
+    {
+      "backend": "host-nanovg",
+      "density": "1.00x",
+      "repeat": "0",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "24.500",
+      "p95_us": "31.100"
+    },
+    {
+      "backend": "host-nanovg",
+      "density": "1.00x",
+      "repeat": "0",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "30.472",
+      "p95_us": "48.412"
+    },
+    {
+      "backend": "private-nanovg",
+      "density": "1.00x",
+      "repeat": "0",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "115.300",
+      "p95_us": "188.600"
+    },
+    {
+      "backend": "private-nanovg",
+      "density": "1.00x",
+      "repeat": "0",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "113.700",
+      "p95_us": "186.400"
+    },
+    {
+      "backend": "private-nanovg",
+      "density": "1.00x",
+      "repeat": "0",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "69.160",
+      "p95_us": "84.708"
+    },
+    {
+      "backend": "shader",
+      "density": "1.00x",
+      "repeat": "0",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "181.400",
+      "p95_us": "304.100"
+    },
+    {
+      "backend": "shader",
+      "density": "1.00x",
+      "repeat": "0",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "178.700",
+      "p95_us": "301.300"
+    },
+    {
+      "backend": "shader",
+      "density": "1.00x",
+      "repeat": "0",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "159.224",
+      "p95_us": "201.448"
+    },
+    {
+      "backend": "surface-only-control",
+      "density": "1.00x",
+      "repeat": "0",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "85.000",
+      "p95_us": "131.100"
+    },
+    {
+      "backend": "surface-only-control",
+      "density": "1.00x",
+      "repeat": "0",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "83.000",
+      "p95_us": "128.900"
+    },
+    {
+      "backend": "surface-only-control",
+      "density": "1.00x",
+      "repeat": "0",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "46.748",
+      "p95_us": "51.324"
+    },
+    {
+      "backend": "private-nanovg",
+      "density": "1.00x",
+      "repeat": "1",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "125.500",
+      "p95_us": "169.100"
+    },
+    {
+      "backend": "private-nanovg",
+      "density": "1.00x",
+      "repeat": "1",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "123.500",
+      "p95_us": "166.200"
+    },
+    {
+      "backend": "private-nanovg",
+      "density": "1.00x",
+      "repeat": "1",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "69.472",
+      "p95_us": "73.632"
+    },
+    {
+      "backend": "shader",
+      "density": "1.00x",
+      "repeat": "1",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "165.900",
+      "p95_us": "320.800"
+    },
+    {
+      "backend": "shader",
+      "density": "1.00x",
+      "repeat": "1",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "162.800",
+      "p95_us": "317.900"
+    },
+    {
+      "backend": "shader",
+      "density": "1.00x",
+      "repeat": "1",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "155.064",
+      "p95_us": "176.384"
+    },
+    {
+      "backend": "surface-only-control",
+      "density": "1.00x",
+      "repeat": "1",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "106.400",
+      "p95_us": "170.200"
+    },
+    {
+      "backend": "surface-only-control",
+      "density": "1.00x",
+      "repeat": "1",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "103.000",
+      "p95_us": "165.500"
+    },
+    {
+      "backend": "surface-only-control",
+      "density": "1.00x",
+      "repeat": "1",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "46.956",
+      "p95_us": "52.000"
+    },
+    {
+      "backend": "host-nanovg",
+      "density": "1.00x",
+      "repeat": "1",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "44.400",
+      "p95_us": "82.200"
+    },
+    {
+      "backend": "host-nanovg",
+      "density": "1.00x",
+      "repeat": "1",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "41.000",
+      "p95_us": "73.700"
+    },
+    {
+      "backend": "host-nanovg",
+      "density": "1.00x",
+      "repeat": "1",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "30.056",
+      "p95_us": "32.968"
+    },
+    {
+      "backend": "shader",
+      "density": "1.00x",
+      "repeat": "2",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "165.200",
+      "p95_us": "273.300"
+    },
+    {
+      "backend": "shader",
+      "density": "1.00x",
+      "repeat": "2",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "162.900",
+      "p95_us": "268.500"
+    },
+    {
+      "backend": "shader",
+      "density": "1.00x",
+      "repeat": "2",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "155.584",
+      "p95_us": "177.736"
+    },
+    {
+      "backend": "surface-only-control",
+      "density": "1.00x",
+      "repeat": "2",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "98.800",
+      "p95_us": "145.200"
+    },
+    {
+      "backend": "surface-only-control",
+      "density": "1.00x",
+      "repeat": "2",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "96.800",
+      "p95_us": "142.100"
+    },
+    {
+      "backend": "surface-only-control",
+      "density": "1.00x",
+      "repeat": "2",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "46.280",
+      "p95_us": "62.140"
+    },
+    {
+      "backend": "host-nanovg",
+      "density": "1.00x",
+      "repeat": "2",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "44.800",
+      "p95_us": "81.900"
+    },
+    {
+      "backend": "host-nanovg",
+      "density": "1.00x",
+      "repeat": "2",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "41.000",
+      "p95_us": "77.400"
+    },
+    {
+      "backend": "host-nanovg",
+      "density": "1.00x",
+      "repeat": "2",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "29.952",
+      "p95_us": "32.552"
+    },
+    {
+      "backend": "private-nanovg",
+      "density": "1.00x",
+      "repeat": "2",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "133.200",
+      "p95_us": "240.300"
+    },
+    {
+      "backend": "private-nanovg",
+      "density": "1.00x",
+      "repeat": "2",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "131.500",
+      "p95_us": "237.600"
+    },
+    {
+      "backend": "private-nanovg",
+      "density": "1.00x",
+      "repeat": "2",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "69.628",
+      "p95_us": "83.772"
+    },
+    {
+      "backend": "host-nanovg",
+      "density": "2.00x",
+      "repeat": "0",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "27.700",
+      "p95_us": "60.500"
+    },
+    {
+      "backend": "host-nanovg",
+      "density": "2.00x",
+      "repeat": "0",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "24.600",
+      "p95_us": "53.000"
+    },
+    {
+      "backend": "host-nanovg",
+      "density": "2.00x",
+      "repeat": "0",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "27.092",
+      "p95_us": "44.876"
+    },
+    {
+      "backend": "private-nanovg",
+      "density": "2.00x",
+      "repeat": "0",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "133.600",
+      "p95_us": "242.200"
+    },
+    {
+      "backend": "private-nanovg",
+      "density": "2.00x",
+      "repeat": "0",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "131.300",
+      "p95_us": "238.700"
+    },
+    {
+      "backend": "private-nanovg",
+      "density": "2.00x",
+      "repeat": "0",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "82.784",
+      "p95_us": "105.196"
+    },
+    {
+      "backend": "shader",
+      "density": "2.00x",
+      "repeat": "0",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "165.100",
+      "p95_us": "266.000"
+    },
+    {
+      "backend": "shader",
+      "density": "2.00x",
+      "repeat": "0",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "162.800",
+      "p95_us": "262.500"
+    },
+    {
+      "backend": "shader",
+      "density": "2.00x",
+      "repeat": "0",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "143.364",
+      "p95_us": "167.752"
+    },
+    {
+      "backend": "surface-only-control",
+      "density": "2.00x",
+      "repeat": "0",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "73.400",
+      "p95_us": "94.100"
+    },
+    {
+      "backend": "surface-only-control",
+      "density": "2.00x",
+      "repeat": "0",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "71.500",
+      "p95_us": "91.800"
+    },
+    {
+      "backend": "surface-only-control",
+      "density": "2.00x",
+      "repeat": "0",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "58.448",
+      "p95_us": "63.388"
+    },
+    {
+      "backend": "private-nanovg",
+      "density": "2.00x",
+      "repeat": "1",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "112.900",
+      "p95_us": "166.000"
+    },
+    {
+      "backend": "private-nanovg",
+      "density": "2.00x",
+      "repeat": "1",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "111.700",
+      "p95_us": "163.600"
+    },
+    {
+      "backend": "private-nanovg",
+      "density": "2.00x",
+      "repeat": "1",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "87.828",
+      "p95_us": "97.396"
+    },
+    {
+      "backend": "shader",
+      "density": "2.00x",
+      "repeat": "1",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "138.600",
+      "p95_us": "217.700"
+    },
+    {
+      "backend": "shader",
+      "density": "2.00x",
+      "repeat": "1",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "136.700",
+      "p95_us": "213.700"
+    },
+    {
+      "backend": "shader",
+      "density": "2.00x",
+      "repeat": "1",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "135.356",
+      "p95_us": "150.696"
+    },
+    {
+      "backend": "surface-only-control",
+      "density": "2.00x",
+      "repeat": "1",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "72.800",
+      "p95_us": "119.600"
+    },
+    {
+      "backend": "surface-only-control",
+      "density": "2.00x",
+      "repeat": "1",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "71.000",
+      "p95_us": "117.500"
+    },
+    {
+      "backend": "surface-only-control",
+      "density": "2.00x",
+      "repeat": "1",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "58.916",
+      "p95_us": "63.440"
+    },
+    {
+      "backend": "host-nanovg",
+      "density": "2.00x",
+      "repeat": "1",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "23.100",
+      "p95_us": "47.000"
+    },
+    {
+      "backend": "host-nanovg",
+      "density": "2.00x",
+      "repeat": "1",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "21.300",
+      "p95_us": "43.300"
+    },
+    {
+      "backend": "host-nanovg",
+      "density": "2.00x",
+      "repeat": "1",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "27.872",
+      "p95_us": "31.304"
+    },
+    {
+      "backend": "shader",
+      "density": "2.00x",
+      "repeat": "2",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "138.900",
+      "p95_us": "214.500"
+    },
+    {
+      "backend": "shader",
+      "density": "2.00x",
+      "repeat": "2",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "136.900",
+      "p95_us": "210.800"
+    },
+    {
+      "backend": "shader",
+      "density": "2.00x",
+      "repeat": "2",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "136.032",
+      "p95_us": "144.560"
+    },
+    {
+      "backend": "surface-only-control",
+      "density": "2.00x",
+      "repeat": "2",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "72.800",
+      "p95_us": "97.100"
+    },
+    {
+      "backend": "surface-only-control",
+      "density": "2.00x",
+      "repeat": "2",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "71.200",
+      "p95_us": "94.300"
+    },
+    {
+      "backend": "surface-only-control",
+      "density": "2.00x",
+      "repeat": "2",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "58.188",
+      "p95_us": "61.204"
+    },
+    {
+      "backend": "host-nanovg",
+      "density": "2.00x",
+      "repeat": "2",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "23.500",
+      "p95_us": "41.400"
+    },
+    {
+      "backend": "host-nanovg",
+      "density": "2.00x",
+      "repeat": "2",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "21.300",
+      "p95_us": "26.100"
+    },
+    {
+      "backend": "host-nanovg",
+      "density": "2.00x",
+      "repeat": "2",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "27.768",
+      "p95_us": "42.588"
+    },
+    {
+      "backend": "private-nanovg",
+      "density": "2.00x",
+      "repeat": "2",
+      "metric": "CPU-complete",
+      "samples": "360",
+      "median_us": "123.400",
+      "p95_us": "173.300"
+    },
+    {
+      "backend": "private-nanovg",
+      "density": "2.00x",
+      "repeat": "2",
+      "metric": "CPU-before-host-flush",
+      "samples": "360",
+      "median_us": "121.300",
+      "p95_us": "171.100"
+    },
+    {
+      "backend": "private-nanovg",
+      "density": "2.00x",
+      "repeat": "2",
+      "metric": "GPU",
+      "samples": "360",
+      "median_us": "86.112",
+      "p95_us": "106.444"
+    }
+  ],
+  "benchmark_scope": "Two current contours; includes surface setup and host nvgEndFrame; 100 warmup + 360 timed frames, three rotated-order repetitions, densities 1 and 2. No history, labels, module or Rack host scheduling. GPU queries enabled in every backend. Surface-only control draws transparent textures with no strokes; not equivalent visual output.",
+  "source_sha256": {
+    "tools/flux_shader_candidate.hpp": "cbf826cda09a873d72d7a18ea8e2d9df0b916e0638e438c7881e4bf39fa3a072",
+    "tools/experimental_shader_stroke.hpp": "93dcd136ec309708e3492f5d27577b1a48c79769d35f7806df3636c23c4e68b3",
+    "tests/flux_shader_surface_spec.cpp": "35746548dbc415a796925e7e437db6d993dadb0ecd0a3d7347ba3e58fa6809c7",
+    "tools/prepare_flux_shader_geometry.py": "010acb410f0a5c749dc289ea685c9bc75d3b48ec81c793f1c0fbec6d3edea0f9",
+    "src/IntegralFluxWidget.cpp": "cc13773fdc7305cb7bd1b8233f3500d2454ae75ea99ded010e1e0dd85b317de9",
+    "src/IntegralFlux.cpp": "17d4ed2f56804cc78c5c7a8e21703cc39e8efef4d8b77a6032853cb0249104e5",
+    "src/WyrmRendererGL.cpp": "0e460ebf10f67df3134f48a9d19852430d775f9f4f36be9723764936800742eb"
+  }
+}

@@ -4,10 +4,19 @@
 #include "../NvgGraphicsLifecycle.hpp"
 
 #include <nanovg_gl.h>
+#include <new>
+#include <chrono>
 
 namespace visual_assets {
 
 namespace {
+struct PhaseTimer {
+    using Clock = std::chrono::steady_clock;
+    uint64_t* total;
+    Clock::time_point start;
+    explicit PhaseTimer(uint64_t* value):total(value),start(value?Clock::now():Clock::time_point()){}
+    ~PhaseTimer(){if(total)*total+=uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now()-start).count());}
+};
 // Compatibility GL2 state plus the generic vertex inputs used by our callbacks.
 struct SurfaceStateGuard {
 	GLint previousFramebuffer = 0;
@@ -23,7 +32,9 @@ struct SurfaceStateGuard {
 	GLint texture0 = 0;
 	GLint unpackBuffer = 0;
 	int attributeCount = 0;
-	SurfaceStateGuard(int count) : attributeCount(clamp(count, 0, 4)) {
+	bool shaderOnly = false;
+	SurfaceStateGuard(int count, bool restricted = false) : attributeCount(count < 0 ? -1 : clamp(count, 0, 4)), shaderOnly(restricted) {
+		if (attributeCount < 0) return;
 		glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
 		glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
 		glGetIntegerv(GL_RENDERBUFFER_BINDING, &previousRenderbuffer);
@@ -31,13 +42,15 @@ struct SurfaceStateGuard {
 		glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previousArrayBuffer);
 		glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
 		glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture2d);
-		glGetIntegerv(GL_MATRIX_MODE, &previousMatrixMode);
-		glPushAttrib(GL_ALL_ATTRIB_BITS);
-		glPushClientAttrib(GL_CLIENT_ALL_ATTRIB_BITS);
+		if (!shaderOnly) glGetIntegerv(GL_MATRIX_MODE, &previousMatrixMode);
+		glPushAttrib(shaderOnly ? (GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_VIEWPORT_BIT | GL_POLYGON_BIT | GL_SCISSOR_BIT) : GL_ALL_ATTRIB_BITS);
+		glPushClientAttrib(shaderOnly ? GL_CLIENT_PIXEL_STORE_BIT : GL_CLIENT_ALL_ATTRIB_BITS);
+		if (!shaderOnly) {
 		glMatrixMode(GL_PROJECTION);
 		glPushMatrix();
 		glMatrixMode(GL_MODELVIEW);
 		glPushMatrix();
+		}
 
 		glActiveTexture(GL_TEXTURE0);
 		glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture0);
@@ -55,6 +68,7 @@ struct SurfaceStateGuard {
 		}
 	}
 	~SurfaceStateGuard() {
+		if (attributeCount < 0) return;
 		for (GLuint i = 0; i < GLuint(attributeCount); ++i) {
 			const Attribute& a = attributes[i];
 			glBindBuffer(GL_ARRAY_BUFFER, GLuint(a.buffer));
@@ -64,11 +78,13 @@ struct SurfaceStateGuard {
 		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, GLuint(unpackBuffer));
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, GLuint(texture0));
+		if (!shaderOnly) {
 		glMatrixMode(GL_MODELVIEW);
 		glPopMatrix();
 		glMatrixMode(GL_PROJECTION);
 		glPopMatrix();
 		glMatrixMode(GLenum(previousMatrixMode));
+		}
 		glPopClientAttrib();
 		// Saved draw/read-buffer selections belong to the incoming FBOs.
 		// Restoring them while our offscreen FBO is bound is invalid (e.g. GL_BACK).
@@ -83,8 +99,49 @@ struct SurfaceStateGuard {
 
 	}
 };
+
+// Batch callbacks use texture unit 0 and generic attributes 0..3. They must not
+// mutate matrix stack depth or other texture units. Legacy callbacks retain the
+// independently guarded API. Explicit state avoids leaking one pass into another.
+void beginShaderPass(bool shaderOnly) {
+	glUseProgram(0);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+	glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+	glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+	glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+	glPixelStorei(GL_UNPACK_SWAP_BYTES, GL_FALSE);
+	glPixelStorei(GL_UNPACK_LSB_FIRST, GL_FALSE);
+	for (GLuint i = 0; i < 4; ++i) glDisableVertexAttribArray(i);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_STENCIL_TEST);
+	glDisable(GL_CULL_FACE);
+	glDisable(GL_SCISSOR_TEST);
+	glDisable(GL_ALPHA_TEST);
+	glEnable(GL_BLEND);
+	glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+	glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+	if (!shaderOnly) {
+	glMatrixMode(GL_PROJECTION); glLoadIdentity();
+	glMatrixMode(GL_MODELVIEW); glLoadIdentity();
+	}
+}
 }
 
+
+struct AdaptiveGlSurface::BatchScope {
+	alignas(SurfaceStateGuard) unsigned char storage[sizeof(SurfaceStateGuard)];
+	SurfaceStateGuard* guard = nullptr;
+	BatchStats* stats;
+    bool shaderOnly;
+    explicit BatchScope(BatchStats* value, bool restricted):stats(value),shaderOnly(restricted){}
+    void enter() { if (!guard) { PhaseTimer timer(stats?&stats->captureNs:nullptr); guard = new (storage) SurfaceStateGuard(4, shaderOnly); } }
+    ~BatchScope() { if (guard) { PhaseTimer timer(stats?&stats->restoreNs:nullptr); guard->~SurfaceStateGuard(); } }
+};
 
 AdaptiveGlSurface::~AdaptiveGlSurface() {
 	// Widget teardown is not guaranteed to run with the owning context current.
@@ -147,6 +204,45 @@ bool AdaptiveGlSurface::renderIfNeeded(NVGcontext* targetVg,
 	bool validate,
 	RenderCallback callback,
 	void* user) {
+	return renderImpl(targetVg, logicalSize, rackZoom, windowPixelRatio, policy,
+		validate, callback, user, nullptr);
+}
+
+bool AdaptiveGlSurface::renderBatch(NVGcontext* targetVg, Update* updates, size_t count, BatchStats* stats) {
+	if (stats) *stats = {};
+	if (!targetVg || (!updates && count) || count > 64) return false;
+	if (count && (!APP || !APP->scene || !APP->window || !APP->window->win
+		|| (targetVg != APP->window->vg && targetVg != APP->window->fbVg)
+		|| glfwGetCurrentContext() != APP->window->win)) return false;
+	for (size_t i = 0; i < count; ++i) updates[i].rendered = false;
+	for (size_t i = 0; i < count; ++i) {
+		const auto& u = updates[i];
+		if (!u.surface || !u.callback || !std::isfinite(u.logicalSize.x)
+			|| !std::isfinite(u.logicalSize.y) || u.logicalSize.x <= 0 || u.logicalSize.y <= 0
+			|| !std::isfinite(u.zoom) || !std::isfinite(u.pixelRatio)
+			|| !std::isfinite(u.policy.minDensity) || !std::isfinite(u.policy.maxDensity)
+			|| u.policy.maxDensity < .01f || u.policy.sizeQuantum < 1 || u.policy.sizeQuantum > 16384
+			|| double(u.logicalSize.x) * u.policy.maxDensity > 16384
+			|| double(u.logicalSize.y) * u.policy.maxDensity > 16384
+			|| u.policy.vertexAttributeCount < 0 || u.policy.vertexAttributeCount > 4) return false;
+		for (size_t j = 0; j < i; ++j) if (updates[j].surface == u.surface) return false;
+	}
+	bool restricted = count > 0;
+	for (size_t i = 0; i < count; ++i) restricted = restricted && updates[i].policy.shaderOnlyState;
+	BatchScope scope(stats, restricted);
+	for (size_t i = 0; i < count; ++i) {
+		auto& u = updates[i];
+		u.rendered = u.surface->renderImpl(targetVg, u.logicalSize, u.zoom, u.pixelRatio,
+			u.policy, u.validate, u.callback, u.user, &scope);
+		if (stats && u.rendered) ++stats->updates;
+	}
+	if (stats) stats->hostBoundaries = scope.guard ? 1 : 0;
+	return true;
+}
+
+bool AdaptiveGlSurface::renderImpl(NVGcontext* targetVg, Vec logicalSize,
+	float rackZoom, float windowPixelRatio, const AdaptiveGlSurfacePolicy& policy,
+	bool validate, RenderCallback callback, void* user, BatchScope* sharedScope) {
 	if (!targetVg || !callback || logicalSize.x <= 0.f || logicalSize.y <= 0.f) return false;
 	if (vg != targetVg || !gl_lifecycle::resourceContextMatches(resourceContext, targetVg)) {
 		reset(false);
@@ -176,8 +272,13 @@ bool AdaptiveGlSurface::renderIfNeeded(NVGcontext* targetVg,
 	const int activeHeight = quantizedExtent(logicalSize.y * density, capacityHeight);
 	const bool resolutionGrowth = activeWidth > frontActiveWidth || activeHeight > frontActiveHeight;
 	if (!dirty && !resolutionGrowth) return false;
-	SurfaceStateGuard stateGuard(policy.vertexAttributeCount);
-	if (!ensureBackSurface(targetVg, capacityWidth, capacityHeight, validate)) return false;
+	if (sharedScope) sharedScope->enter();
+	SurfaceStateGuard stateGuard(sharedScope ? -1 : policy.vertexAttributeCount);
+	auto* timing = sharedScope ? sharedScope->stats : nullptr;
+    { PhaseTimer timer(timing?&timing->setupNs:nullptr); if (sharedScope) beginShaderPass(sharedScope->shaderOnly); }
+    {
+    PhaseTimer timer(timing?&timing->targetNs:nullptr);
+    if (!ensureBackSurface(targetVg, capacityWidth, capacityHeight, validate)) return false;
 
 	nvgluBindFramebuffer(back);
 	// The active image can occupy only a prefix of a retained larger texture.
@@ -190,7 +291,9 @@ bool AdaptiveGlSurface::renderIfNeeded(NVGcontext* targetVg,
 	glClear(GL_COLOR_BUFFER_BIT);
 	// NVGLU marks framebuffer images FLIPY for NanoVG. Rendering against the
 	// top edge makes the active prefix addressable with a larger image pattern.
-	callback(user, Vec(float(activeWidth), float(activeHeight)), capacityHeight - activeHeight);
+    }
+    { PhaseTimer timer(timing?&timing->callbackNs:nullptr);
+      callback(user, Vec(float(activeWidth), float(activeHeight)), capacityHeight - activeHeight); }
 
 
 	std::swap(front, back);
@@ -200,6 +303,22 @@ bool AdaptiveGlSurface::renderIfNeeded(NVGcontext* targetVg,
 	frontActiveHeight = activeHeight;
 	dirty = false;
 	++surfaceGeneration;
+	return true;
+}
+
+bool AdaptiveGlSurface::imageValid() const {
+    return vg && gl_lifecycle::resourceContextMatches(resourceContext, vg) && front && front->image>0
+        && nvg_gfx_lifecycle::ownedNvgImageSizeMatches(vg,front->image,frontCapacityWidth,frontCapacityHeight);
+}
+
+bool AdaptiveGlSurface::drawAligned(const Widget::DrawArgs& args, Vec logicalSize, float density, Vec pixelOffset) const {
+	if (args.vg != vg || !gl_lifecycle::resourceContextMatches(resourceContext, vg)
+		|| !front || front->image <= 0 || !(density > 0.f)) return false;
+	nvgBeginPath(args.vg);
+	nvgRect(args.vg, 0.f, 0.f, logicalSize.x, logicalSize.y);
+	nvgFillPaint(args.vg, nvgImagePattern(args.vg, -pixelOffset.x / density, -pixelOffset.y / density,
+		float(frontCapacityWidth) / density, float(frontCapacityHeight) / density, 0.f, front->image, 1.f));
+	nvgFill(args.vg);
 	return true;
 }
 

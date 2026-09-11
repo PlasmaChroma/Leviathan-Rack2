@@ -13,14 +13,18 @@ from pathlib import Path
 SETTINGS = (
     "preview_render_mode", "preview_tracer_enabled", "preview_tracer_mode",
     "halo_nanovg_forced", "lumen_preview_adapter",
+    "round_stroke_enabled", "ch1_function_requested", "ch4_function_requested",
 )
 COUNTERS = (
+    "round_stroke_private_draws", "round_stroke_fallbacks",
     "preview_dirty_requests", "preview_point_rebuilds", "preview_tracer_captures",
     "preview_tracer_accepted_captures", "history_rasterizations",
     "ch1_history_rasterizations", "ch4_history_rasterizations",
     "halo_gl_surface_framebuffer_draws", "halo_nanovg_surface_draws",
     "halo_center_framebuffer_draws", "halo_cap_reflection_framebuffer_draws",
 )
+COUNTERS += tuple(f"ch{channel}_function_{field}" for channel in (1, 4)
+                  for field in ("used", "updated", "cache_hit", "fallback"))
 GAUGES = (
     "history_trails", "ch1_history_trails", "ch4_history_trails",
     "history_submitted_points", "halo_dirty_draw_count", "halo_active_draw_count",
