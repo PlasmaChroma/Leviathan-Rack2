@@ -8,6 +8,7 @@
 #include "visual/PreviewSurface.hpp"
 #include "visual/PhosphorPreview.hpp"
 #include "visual/SettledContourFramebuffer.hpp"
+#include "render/HostStrokeBridge.hpp"
 #include "visual/SnapshotHistory.hpp"
 #include "WavePreviewTracer.hpp"
 #include "WavePreviewGeometryKey.hpp"
@@ -1202,6 +1203,20 @@ struct ProcPreviewEdgeInteraction {
 };
 
 struct WavePreviewWidget : Widget, ProcPreviewGeometry<Proc> {
+    std::unique_ptr<lumin::HostStrokeBridge> hostStroke;
+
+    void drawWaveSegment(NVGcontext* vg, int start, int end, NVGcolor color) {
+        const auto* path = pointsValid ? simplifiedPathForSegment(start, end) : nullptr;
+        if (!path || path->count < 2) return;
+        nvgStrokeColor(vg, color);
+        nvgStrokeWidth(vg, WAVE_LINE_WIDTH);
+        nvgLineCap(vg, NVG_BUTT);
+        nvgLineJoin(vg, NVG_ROUND);
+        if (!hostStroke) hostStroke.reset(new lumin::HostStrokeBridge);
+        if (!hostStroke->stroke(vg, path->points.data(), path->count))
+            ProcPreviewGeometry<Proc>::drawWaveSegment(vg, start, end, color);
+    }
+
 	// Small preview box: lower geometry density reduces UI cost while staying smooth.
 	static constexpr float CENTER_LINE_WIDTH = 1.0f;
 	static constexpr float DOT_RADIUS = 2.1f;

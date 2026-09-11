@@ -1,3 +1,4 @@
+#include "render/HostStrokeBridge.hpp"
 #include "Undertow.hpp"
 #include "UndertowDrawLog.hpp"
 #include "UndertowShape.hpp"
@@ -44,6 +45,7 @@ struct UndertowShapePreviewWidget final : Widget {
   static constexpr float TRAIL_LINE_WIDTH = 1.05f;
   static constexpr int TRAIL_DRAW_STRIDE = 2;
   static constexpr int TRAIL_CAPTURE_STRIDE = 1;
+  std::unique_ptr<lumin::HostStrokeBridge> hostStroke;
   Undertow* module = nullptr;
   std::array<float, PREVIEW_POINT_COUNT> samples {};
   std::array<Vec, PREVIEW_POINT_COUNT> points {};
@@ -246,22 +248,28 @@ struct UndertowShapePreviewWidget final : Widget {
     if (measure) metrics.historyUs += debug_terminal::elapsedUsSince(historyStart);
     const auto simplifyStart = debug_terminal::debugTimerStart(measure);
     auto vg = args.vg;
-    nvgBeginPath(vg);
-    wave_preview::simplifyPath(points.data(), PREVIEW_POINT_COUNT, 1, 0.02f, [vg, this, measure](const Vec& pt, bool isMove) {
-      if (measure) ++metrics.simplifiedPoints;
-      if (isMove) {
-        nvgMoveTo(vg, pt.x, pt.y);
-      } else {
-        nvgLineTo(vg, pt.x, pt.y);
-      }
-    });
+    std::array<Vec, PREVIEW_POINT_COUNT> contour;
+    int contourCount = 0;
+    wave_preview::simplifyPath(points.data(), PREVIEW_POINT_COUNT, 1, 0.02f,
+      [&](const Vec& pt, bool) { contour[contourCount++] = pt; });
+    if (measure) metrics.simplifiedPoints += contourCount;
     if (measure) metrics.simplifySubmitUs += debug_terminal::elapsedUsSince(simplifyStart);
     const auto strokeStart = debug_terminal::debugTimerStart(measure);
     nvgStrokeColor(args.vg, nvgRGBA(230, 230, 220, 255));
     nvgStrokeWidth(args.vg, WAVE_LINE_WIDTH);
     nvgLineCap(args.vg, NVG_BUTT);
     nvgLineJoin(args.vg, NVG_ROUND);
-    nvgStroke(args.vg);
+    if (!hostStroke) hostStroke.reset(new lumin::HostStrokeBridge);
+    const bool usedBridge = hostStroke->stroke(vg, contour.data(), contourCount);
+    if (measure) { metrics.bridgeStrokes += usedBridge; metrics.bridgeFallbacks += !usedBridge; }
+    if (!usedBridge) {
+      nvgBeginPath(vg);
+      for (int i = 0; i < contourCount; ++i) {
+        if (i == 0) nvgMoveTo(vg, contour[i].x, contour[i].y);
+        else nvgLineTo(vg, contour[i].x, contour[i].y);
+      }
+      nvgStroke(vg);
+    }
     if (measure) metrics.strokeSubmitUs += debug_terminal::elapsedUsSince(strokeStart);
 
     nvgResetScissor(args.vg);
@@ -445,7 +453,7 @@ struct UndertowWidget final : ModuleWidget {
         << "," << loggedPreview->lastAsymEnabled << "," << loggedPreview->lastAsymOnRight
         << "," << undertow->displayFrequencyHz.load() << "," << transform[0] << "," << transform[3]
         << "," << (APP && APP->window ? APP->window->pixelRatio : 1.f)
-        << "," << m.history.trails << "," << m.history.points << "," << m.history.rasterizations << "\n";
+        << "," << m.history.trails << "," << m.history.points << "," << m.history.rasterizations << "," << m.bridgeStrokes << "," << m.bridgeFallbacks << "\n";
       if ((drawLog.row & 31u) == 0u) drawLog.file.flush();
     }
     if (loggedPreview) loggedPreview->metrics = {};
