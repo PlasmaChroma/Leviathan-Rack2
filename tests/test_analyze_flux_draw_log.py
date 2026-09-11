@@ -54,6 +54,18 @@ class FluxAnalysisTests(unittest.TestCase):
         self.assertEqual(result["counters"]["ch1_function_updated"]["total"], 3)
         self.assertEqual(result["cpu_timings_us"]["ch1_function_capture_us"]["p50"], 7)
 
+    def test_host_bridge_backend_and_actual_strokes(self):
+        def update(rows):
+            for i, row in enumerate(rows):
+                row.update(contour_backend=2, ch1_bridge_strokes=2 if i == 1 else 0,
+                           ch1_bridge_fallbacks=1 if i == 2 else 0, ch1_bridge_us=3)
+        self.write(update)
+        result = analysis.summarize(self.path)
+        self.assertEqual(result["settings"]["contour_backend"], [2])
+        self.assertEqual(result["counters"]["ch1_bridge_strokes"]["total"], 2)
+        self.assertEqual(result["counters"]["ch1_bridge_fallbacks"]["total"], 1)
+        self.assertEqual(result["cpu_timings_us"]["ch1_bridge_us"]["p50"], 3)
+
     def test_missing_counters_are_not_zero(self):
         self.write()
         result = analysis.summarize(self.path)

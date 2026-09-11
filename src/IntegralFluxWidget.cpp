@@ -11,7 +11,7 @@
 #include "visual/SettledContourFramebuffer.hpp"
 #include "visual/SnapshotHistory.hpp"
 #include "render/LegacyCurvePreview.hpp"
-#include "render/FunctionContourPilot.hpp"
+#include "render/HostStrokeBridge.hpp"
 #include "WavePreviewTracer.hpp"
 #include <array>
 #include <atomic>
@@ -44,8 +44,7 @@ struct IntegralFluxPreviewBreakdown {
 	uint64_t historyNs = 0;
 	uint64_t contourNs = 0;
     WavePreviewTracerDrawStats history;
-    uint64_t pilotRequested=0,pilotUsed=0,pilotUpdated=0,pilotCacheHit=0,pilotFallback=0;
-    visual_assets::AdaptiveGlSurface::BatchStats pilotPhases;
+    uint64_t bridgeUsed=0,bridgeFallback=0,bridgeNs=0;
 
 };
 thread_local IntegralFluxPreviewBreakdown gIntegralFluxPreviewBreakdown[5] {};
@@ -355,9 +354,7 @@ struct IntegralFluxKnobTooltipState {
 };
 
 struct WavePreviewWidget : widget::OpenGlWidget {
-    bool* functionPilotEnabled = nullptr;
-    lumin::FunctionCurve* functionRenderer = nullptr;
-    std::unique_ptr<lumin::FunctionContourPilot> functionPilot;
+    std::unique_ptr<lumin::HostStrokeBridge> hostStroke;
 	// Preview boxes are small; this density materially lowers per-frame NanoVG work
 	// while remaining visually smooth at current panel scale.
 	static constexpr int POINT_COUNT = 128;
@@ -742,19 +739,24 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 			return;
 		}
 		NVGcontext* vg = args.vg;
-		nvgBeginPath(vg);
-		nvgMoveTo(vg, path->points[0].x, path->points[0].y);
-		for (int i = 1; i < path->count; ++i) {
-			nvgLineTo(vg, path->points[size_t(i)].x, path->points[size_t(i)].y);
-		}
-		if (reducedPointCount) {
-			*reducedPointCount += size_t(path->count);
-		}
-		nvgStrokeColor(vg, color);
-		nvgStrokeWidth(vg, WAVE_LINE_WIDTH);
-		nvgLineCap(vg, NVG_BUTT);
-		nvgLineJoin(vg, NVG_ROUND);
-		nvgStroke(vg);
+		if (reducedPointCount) *reducedPointCount += size_t(path->count);
+        nvgStrokeColor(vg, color);nvgStrokeWidth(vg, WAVE_LINE_WIDTH);
+        nvgLineCap(vg, NVG_BUTT);nvgLineJoin(vg, NVG_ROUND);
+        { // Prefer optimized CPU geometry; unsupported hosts use the ordinary stroke below.
+            const bool measure = isDragonKingDebugEnabled() && isIntegralFluxDrawLoggingEnabled();
+            auto& breakdown = gIntegralFluxPreviewBreakdown[clamp(channel, 0, 4)];
+            bool used = false;
+            {
+                IntegralFluxScopedDrawTimer bridgeTimer(breakdown.bridgeNs, measure);
+                if (!hostStroke) hostStroke.reset(new lumin::HostStrokeBridge);
+                used = hostStroke->stroke(vg, path->points.data(), path->count);
+            }
+            if (measure) { breakdown.bridgeUsed += used; breakdown.bridgeFallback += !used; }
+            if (used) return;
+        }
+        nvgBeginPath(vg);nvgMoveTo(vg, path->points[0].x, path->points[0].y);
+        for (int i=1;i<path->count;++i)nvgLineTo(vg,path->points[size_t(i)].x,path->points[size_t(i)].y);
+        nvgStroke(vg);
 	}
 
 	size_t drawNvgWaveform(const DrawArgs& args) {
@@ -1100,17 +1102,6 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		}
 	}
 
-    visual_assets::AdaptiveGlSurface::Update* prepareFunctionContour(const DrawArgs& args) {
-        if (!pointsValid || useOpenGlRenderer()) return nullptr;
-        if (!functionPilot) functionPilot.reset(new lumin::FunctionContourPilot(functionRenderer));
-        const int edge = highlightedEdge();
-        const auto base = waveformColor();
-        const auto color = edge == 3 ? activeCurveColor() : edge ? activeEdgeColor(edge) : base;
-        return functionPilot->prepare(args, box.size, contourRiseRatio, cachedLutCurveSigned,
-            cachedLutShapeMode == IntegralFlux::FUNCTION_SHAPE_SHARK_FIN,
-            edge == 1 || edge == 3 ? color : base, edge == 2 || edge == 3 ? color : base,
-            edge == 1 || edge == 2);
-    }
 
 	void draw(const DrawArgs& args) override {
 		IntegralFluxScopedDrawTimer timer(
@@ -1159,24 +1150,8 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 				APP && APP->window ? APP->window->pixelRatio : 1.f}};
 			{
 				IntegralFluxScopedDrawTimer contourTimer(breakdown.contourNs, logPreview);
-				bool usedPilot = false;
-                if (isDragonKingDebugEnabled() && functionPilotEnabled && *functionPilotEnabled) {
-                    if (!functionPilot) functionPilot.reset(new lumin::FunctionContourPilot(functionRenderer));
-                    const auto base = waveformColor();
-                    const auto rise = edge==1 || edge==3 ? color : base;
-                    const auto fall = edge==2 || edge==3 ? color : base;
-                    auto result = functionPilot->draw(args,box.size,contourRiseRatio,cachedLutCurveSigned,
-                        cachedLutShapeMode==IntegralFlux::FUNCTION_SHAPE_SHARK_FIN,rise,fall,edge==1||edge==2,logPreview);
-                    usedPilot=result.presented;
-                    if(logPreview){++breakdown.pilotRequested;breakdown.pilotUsed+=result.presented;breakdown.pilotUpdated+=result.updated;
-                        breakdown.pilotCacheHit+=result.cacheHit;breakdown.pilotFallback+=!result.presented;auto& phases=breakdown.pilotPhases;const auto& measured=result.phases;
-                        phases.captureNs+=measured.captureNs;phases.setupNs+=measured.setupNs;phases.targetNs+=measured.targetNs;
-                        phases.callbackNs+=measured.callbackNs;phases.restoreNs+=measured.restoreNs;}
-                }
-                if (!usedPilot) {
-                    if (previewRecipe) previewRecipe->drawContour(args, key, nowSec);
-                    else contourCache->drawContour(args, key, nowSec);
-                }
+                if (previewRecipe) previewRecipe->drawContour(args, key, nowSec);
+                else contourCache->drawContour(args, key, nowSec);
 			}
 			const size_t reducedPointCount = (edge == 1 || edge == 2)
 				? size_t(simplifiedRisePath.count + simplifiedFallPath.count)
@@ -1711,9 +1686,6 @@ struct IntegralFluxWidget : ModuleWidget {
 	const bool lumenPreviewAdapter = isIntegralFluxLumenPreviewEnabled();
 	std::vector<IntegralFluxHalo2Knob*> haloKnobs;
 	bool forceHaloNanoVg = false;
-    bool functionContourPilot = false; // UI-session only; never serialized.
-    WavePreviewWidget* functionPreviews[2]{};
-    lumin::FunctionCurve functionRenderer{lumin::FunctionCurve::Kernel::TwoStep};
 	float uiStepMsEma = 0.f;
 	float uiDrawMsEma = 0.f;
 	float gearDrawUsEma = 0.f;
@@ -1859,8 +1831,7 @@ struct IntegralFluxWidget : ModuleWidget {
 			<< "history_draw_us,contour_draw_us,history_trails,history_submitted_points,"
 			<< "ch1_history_draw_us,ch1_contour_draw_us,ch1_history_trails,ch1_history_submitted_points,"
 			<< "ch4_history_draw_us,ch4_contour_draw_us,ch4_history_trails,ch4_history_submitted_points,history_rasterizations,ch1_history_rasterizations,ch4_history_rasterizations,halo_step_surface_us,lumen_preview_adapter";
-        for(int channel : {1,4}) for(const char* field : {"requested","used","updated","cache_hit","fallback","capture_us","setup_us","target_us","shader_us","restore_us"})
-            drawLogFile << ",ch" << channel << "_function_" << field;
+        drawLogFile << ",contour_backend,ch1_bridge_strokes,ch1_bridge_fallbacks,ch1_bridge_us,ch4_bridge_strokes,ch4_bridge_fallbacks,ch4_bridge_us";
         drawLogFile << '\n';
 	}
 
@@ -1929,11 +1900,9 @@ struct IntegralFluxWidget : ModuleWidget {
 		}
 		for (int channel : {0, 1, 4}) drawLogFile << ',' << row.previewBreakdown[channel].history.rasterizations;
 		drawLogFile << ',' << row.haloStepSurfaceUs << ',' << (lumenPreviewAdapter ? 1 : 0);
-        for(int channel : {1,4}) {
-            const auto& p=row.previewBreakdown[channel];const auto& t=p.pilotPhases;
-            drawLogFile << ',' << p.pilotRequested << ',' << p.pilotUsed << ',' << p.pilotUpdated << ',' << p.pilotCacheHit << ',' << p.pilotFallback
-                << ',' << t.captureNs*1e-3 << ',' << t.setupNs*1e-3 << ',' << t.targetNs*1e-3 << ',' << t.callbackNs*1e-3 << ',' << t.restoreNs*1e-3;
-        }
+        drawLogFile << ',' << 2; // Preferred backend; bridge counters record actual use/fallback.
+        for(int channel:{1,4}) { const auto& p=row.previewBreakdown[channel];
+            drawLogFile << ',' << p.bridgeUsed << ',' << p.bridgeFallback << ',' << p.bridgeNs*1e-3; }
         drawLogFile << '\n';
 		if ((row.row & 31u) == 0u) {
 			drawLogFile.flush();
@@ -2217,9 +2186,6 @@ struct IntegralFluxWidget : ModuleWidget {
 		addParam(createParamCentered<IntegralFluxPlasmaSwitch>(mm2px(shapeMode4SwitchPos), module, IntegralFlux::SHAPE_MODE_4_PARAM));
 		{
 			WavePreviewWidget* ch1Preview = new WavePreviewWidget(module, 1, lumenPreviewAdapter);
-            ch1Preview->functionPilotEnabled = &functionContourPilot;
-            functionPreviews[0] = ch1Preview;
-            ch1Preview->functionRenderer = &functionRenderer;
 			ch1Preview->edgeInteraction = &ch1EdgeInteraction;
 			math::Rect previewOuterRectMm;
 			if (panel_svg::loadRectFromSvgMm(panelBasePath, "CH1_PREVIEW", &previewOuterRectMm)) {
@@ -2243,9 +2209,6 @@ struct IntegralFluxWidget : ModuleWidget {
 		}
 		{
 			WavePreviewWidget* ch4Preview = new WavePreviewWidget(module, 4, lumenPreviewAdapter);
-            ch4Preview->functionPilotEnabled = &functionContourPilot;
-            functionPreviews[1] = ch4Preview;
-            ch4Preview->functionRenderer = &functionRenderer;
 			ch4Preview->edgeInteraction = &ch4EdgeInteraction;
 			math::Rect previewOuterRectMm;
 			if (panel_svg::loadRectFromSvgMm(panelBasePath, "CH4_PREVIEW", &previewOuterRectMm)) {
@@ -2365,38 +2328,6 @@ struct IntegralFluxWidget : ModuleWidget {
 		DrawLogRow logRow;
 		const PerfClock::time_point totalStart = logDraw ? PerfClock::now() : PerfClock::time_point();
 		const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
-        if (measurePerf && functionContourPilot && !args.fb) {
-            visual_assets::AdaptiveGlSurface::Update updates[2];
-            WavePreviewWidget* owners[2]{};
-            size_t count = 0;
-            const auto prepareStart = PerfClock::now();
-            for (auto* preview : functionPreviews) {
-                if (!preview || !preview->visible || !preview->box.intersects(args.clipBox)) continue;
-                nvgSave(args.vg);
-                nvgTranslate(args.vg, preview->box.pos.x, preview->box.pos.y);
-                if (auto* update = preview->prepareFunctionContour(args)) {
-                    updates[count] = *update;
-                    owners[count++] = preview;
-                }
-                nvgRestore(args.vg);
-            }
-            visual_assets::AdaptiveGlSurface::BatchStats phases;
-            if (count) {
-                visual_assets::AdaptiveGlSurface::renderBatch(args.vg, updates, count, logDraw ? &phases : nullptr);
-                for (size_t i = 0; i < count; ++i) owners[i]->functionPilot->complete(updates[i].rendered);
-            }
-            // Charge the shared preparation once, to the first dirty channel (CH1
-            // when both change). Module Draw already includes this entire scope.
-            const int chargedChannel = count ? owners[0]->channel : 1;
-            const auto prepareNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - prepareStart).count());
-            gIntegralFluxPreviewDrawNsThisFrame += prepareNs;
-            gIntegralFluxPreviewDrawNsByChannel[chargedChannel] += prepareNs;
-            if (logDraw) {
-                auto& breakdown = gIntegralFluxPreviewBreakdown[chargedChannel];
-                breakdown.contourNs += prepareNs;
-                breakdown.pilotPhases = phases;
-            }
-        }
 		ModuleWidget::draw(args);
 		const PerfClock::time_point afterModuleDraw = (measurePerf || logDraw) ? PerfClock::now() : PerfClock::time_point();
 		if (!flux) {
@@ -2563,13 +2494,6 @@ struct IntegralFluxWidget : ModuleWidget {
 				[=]() { maths->bandlimitedSignalOutputsControl().store(!maths->bandlimitedSignalOutputsControl().load(std::memory_order_relaxed), std::memory_order_relaxed); }
 			));
 			menu->addChild(createMenuLabel("Preview Visual"));
-            if (isDragonKingDebugEnabled()) {
-                menu->addChild(createCheckMenuItem("Analytic contour pilot (session only)", "",
-                    [=]() { return functionContourPilot; },
-                    [=]() { functionContourPilot = !functionContourPilot;
-                        if(functionContourPilot) maths->previewRenderModeControl().store(0,std::memory_order_relaxed); }
-                ));
-            }
 			if (isDragonKingPreviewWidgetOptionsEnabled()) {
 				menu->addChild(createSubmenuItem("Render", "",
 					[=](Menu* submenu) {

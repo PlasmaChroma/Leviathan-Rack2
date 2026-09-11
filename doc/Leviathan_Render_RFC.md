@@ -1,4 +1,6 @@
 # Leviathan Render — “Lumen”
+
+> Current measured status and decisions: [Lumin status](lumin-status.md). This document preserves its original design or checkpoint context; later live results supersede earlier next-step recommendations.
 ## RFC 0.3: An additive, latency-conscious rendering runtime for Leviathan Rack modules
 
 **Date:** 9 September 2026

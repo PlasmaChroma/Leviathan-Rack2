@@ -13,7 +13,7 @@ from pathlib import Path
 SETTINGS = (
     "preview_render_mode", "preview_tracer_enabled", "preview_tracer_mode",
     "halo_nanovg_forced", "lumen_preview_adapter",
-    "round_stroke_enabled", "ch1_function_requested", "ch4_function_requested",
+    "round_stroke_enabled", "ch1_function_requested", "ch4_function_requested", "contour_backend",
 )
 COUNTERS = (
     "round_stroke_private_draws", "round_stroke_fallbacks",
@@ -25,6 +25,10 @@ COUNTERS = (
 )
 COUNTERS += tuple(f"ch{channel}_function_{field}" for channel in (1, 4)
                   for field in ("used", "updated", "cache_hit", "fallback"))
+COUNTERS += tuple(f"ch{channel}_bridge_{field}" for channel in (1, 4)
+                  for field in ("strokes", "fallbacks"))
+COUNTERS += tuple(f"ch{channel}_native_{field}" for channel in (1, 4)
+                  for field in ("requested", "used", "updated", "cache_hit", "fallback"))
 GAUGES = (
     "history_trails", "ch1_history_trails", "ch4_history_trails",
     "history_submitted_points", "halo_dirty_draw_count", "halo_active_draw_count",

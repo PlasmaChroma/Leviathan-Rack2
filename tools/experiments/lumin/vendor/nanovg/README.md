@@ -18,7 +18,11 @@ Local changes:
 - The owning translation unit redirects GL object deletion to the plugin's
   existing context-lease retirement service. Image decoding is disabled.
 
-This code is now used only by explicitly built offline experiments. The failed
+The CPU core is also used by `src/render/HostStrokeBridge.cpp`, the preferred
+Flux contour path with standard NanoVG fallback. That adapter has no private GL
+backend; see [current status](../../../../../doc/lumin-status.md) for its scoped
+host callback contract and validation limits.
+The private GL backend remains confined to explicitly built offline experiments. The failed
 Integral Flux live integration was removed from the normal plugin build.
 Private rendering occurs inside `AdaptiveGlSurface`'s state guard and managed
 framebuffers. It is not a general replacement for Rack's NanoVG API.

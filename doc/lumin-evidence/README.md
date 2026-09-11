@@ -1,7 +1,6 @@
 # Preserved Lumin evidence
 
-These JSON files are byte-for-byte copies of selected historical summaries and
-the installation record. `manifest.json` records their original local paths,
+The original historical JSON summaries and installation record are byte-for-byte copies. `manifest.json` covers that original set and records their local paths,
 sizes and SHA-256 hashes. Historical source paths, flags and installed binary
 hashes describe the runs at that time, not the current cleaned checkout.
 
@@ -21,3 +20,7 @@ It records the rebuilt baseline, focused checks and preserved experimental failu
 `batch-execution-summary.json` records the subsequent shared-pass experiment:
 identical grouped/separate shader images and reduced surface CPU submission cost.
 It does not establish a live Rack gain or shader parity with NanoVG.
+
+## Subsequent live findings
+
+The subsequent host-stroke and native-framebuffer findings, validation limits, comparison method and capture hashes are consolidated in [Lumin status](../lumin-status.md). Detailed untracked per-run reports and JSON results were moved to ignored local `work/lumin-result-archive/`; they are intentionally not part of this evidence directory or its historical manifest. The already committed historical evidence above is retained.

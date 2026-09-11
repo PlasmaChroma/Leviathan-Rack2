@@ -1,5 +1,7 @@
 # Lumin PolylineStroke
 
+> Current measured status and decisions: [Lumin status](lumin-status.md). This document preserves its original design or checkpoint context; later live results supersede earlier next-step recommendations.
+
 Feature specification 0.1 — 10 September 2026
 
 Status: proposed first-class library feature, ready to guide implementation.

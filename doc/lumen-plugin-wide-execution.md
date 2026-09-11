@@ -1,5 +1,7 @@
 # Lumen: plugin-wide execution direction
 
+> Current measured status and decisions: [Lumin status](lumin-status.md). This document preserves its original design or checkpoint context; later live results supersede earlier next-step recommendations.
+
 Decision recorded 10 September 2026: optimize rendering across the plugin, using
 shared execution infrastructure where measurements support it. Flux is a probe,
 not the limit of the design. The user accepts close perceptual parity; exact

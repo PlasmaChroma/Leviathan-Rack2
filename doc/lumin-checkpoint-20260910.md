@@ -1,5 +1,7 @@
 # Lumin checkpoint and research review — 10 September 2026
 
+> Current measured status and decisions: [Lumin status](lumin-status.md). This document preserves its original design or checkpoint context; later live results supersede earlier next-step recommendations.
+
 ## Checkpoint scope
 
 Last commit at review: `d9a524c` — `Integral flux preview adapter`.
