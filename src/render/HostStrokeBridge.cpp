@@ -14,7 +14,16 @@ const auto hostStroke=nvgStroke;
 #include "../../tools/experiments/lumin/vendor/nanovg/declarations.inc"
 #define STBTT_STATIC
 #define NVG_NO_STB
+// Fontstash includes the full static stb_truetype API; unused entry points are
+// expected. Keep this warning suppression local to the bundled implementation.
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
 #include "../../tools/experiments/lumin/vendor/nanovg/nanovg.inc"
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
 namespace lumin {
 namespace {
