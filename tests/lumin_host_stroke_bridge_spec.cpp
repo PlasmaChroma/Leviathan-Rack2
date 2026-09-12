@@ -4,6 +4,8 @@
 #include "callback_bridge.hpp"
 #include "flux_geometry.hpp"
 #include <cstring>
+#include "UndertowShape.hpp"
+#include "WavePreviewSimplifier.hpp"
 
 static lumin::HostStrokeBridge* liveBridge=nullptr;
 using Points=std::vector<Vec>;
@@ -90,6 +92,33 @@ static void inherited(NVGcontext* vg,CallbackBridge* bridge){
  }
  nvgluBindFramebuffer(nullptr);nvgluDeleteFramebuffer(target);std::puts("PASS: 60 inherited-state comparisons exact");
 }
+static void undertowContours(NVGcontext* vg) {
+ int cases=0;
+ for(float density:{1.f,1.19f,2.f,4.f}) {
+  int w=int(std::ceil(110*density)),h=int(std::ceil(52*density));
+  auto* target=nvgluCreateFramebuffer(vg,w,h,0);require(target,"Undertow target");
+  std::vector<unsigned char> reference(w*h*4),actual(reference.size());
+  for(float shape:{0.f,.1f,.5f,.9f,1.f})for(float hardness:{0.f,.5f,1.f})for(int asym=0;asym<3;++asym) {
+   std::array<Vec,256> source;Points contour;
+   for(int i=0;i<256;++i){float phase=float(i)/255;
+    float v=clamp(undertow_shape::thresholdFold(phase,shape,asym!=0,hardness,asym==2),-1.f,1.f);
+    source[i]=Vec(1.625f+phase*102.75f,1.625f+(.5f-.5f*v)*44.75f);
+   }
+   wave_preview::simplifyPath(source.data(),source.size(),1,.02f,[&](const Vec& p,bool){contour.push_back(p);});
+   for(int mode=0;mode<2;++mode){
+    nvgluBindFramebuffer(target);glViewport(0,0,w,h);glDisable(GL_SCISSOR_TEST);glColorMask(1,1,1,1);glClearColor(0,0,0,0);glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
+    nvgBeginFrame(vg,110,52,density);nvgTranslate(vg,.37f,.81f);nvgScissor(vg,0,0,106,48);
+    nvgStrokeColor(vg,nvgRGBA(230,230,220,255));nvgStrokeWidth(vg,1.25f);nvgLineCap(vg,NVG_BUTT);nvgLineJoin(vg,NVG_ROUND);
+    if(mode)require(liveBridge->stroke(vg,contour.data(),int(contour.size())),"Undertow bridge admitted");
+    else{nvgBeginPath(vg);for(size_t i=0;i<contour.size();++i)(i?nvgLineTo:nvgMoveTo)(vg,contour[i].x,contour[i].y);nvgStroke(vg);}
+    nvgEndFrame(vg);glReadPixels(0,0,w,h,GL_RGBA,GL_UNSIGNED_BYTE,actual.data());
+    if(!mode)reference=actual;else{require(reference==actual,"Undertow contour exact");++cases;}
+   }
+  }
+  nvgluBindFramebuffer(nullptr);nvgluDeleteFramebuffer(target);
+ }
+ std::printf("PASS: %d Undertow folded/asymmetric contour comparisons exact\n",cases);
+}
 int main(){
  require(glfwInit(),"GLFW");glfwWindowHint(GLFW_VISIBLE,GLFW_FALSE);
  auto* window=glfwCreateWindow(256,128,"Callback bridge",nullptr,nullptr);require(window,"window");
@@ -135,6 +164,7 @@ int main(){
   }
  }
  inherited(vg,bridge);
+ undertowContours(vg);
  // Reuse the CPU bridge after replacing the host NanoVG context. It must not
  // retain the old backend or own any of its resources.
  nvgDeleteGL2(vg);vg=nvgCreateGL2(NVG_ANTIALIAS|NVG_STENCIL_STROKES);require(vg,"replacement host");

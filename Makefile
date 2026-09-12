@@ -933,8 +933,14 @@ build/tests/lumin_function_pilot_spec: tests/lumin_function_pilot_spec.cpp tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -Ibuild/tools/flux_shader -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/lumin_function_pilot_spec.cpp tools/experiments/lumin/PrivateContourEngine.cpp src/visual/AdaptiveGlSurface.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
 
 
-build/tests/lumin_host_stroke_bridge_spec: tests/lumin_host_stroke_bridge_spec.cpp src/render/HostStrokeBridge.cpp src/render/HostStrokeBridge.hpp tools/experiments/lumin/callback_bridge.cpp build/tools/round_stroke/private.cpp | build/tests
+build/tests/lumin_host_stroke_bridge_spec: tests/lumin_host_stroke_bridge_spec.cpp src/UndertowShape.hpp src/WavePreviewSimplifier.hpp src/render/HostStrokeBridge.cpp src/render/HostStrokeBridge.hpp tools/experiments/lumin/callback_bridge.cpp build/tools/round_stroke/private.cpp | build/tests
 	$(CXX) -std=c++17 -O3 -march=nehalem -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -Itools/experiments/lumin -Ibuild/tools/round_stroke -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/lumin_host_stroke_bridge_spec.cpp src/render/HostStrokeBridge.cpp tools/experiments/lumin/callback_bridge.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
 
 build/tests/lumin_native_function_spec: tests/lumin_native_function_spec.cpp tests/lumin_function_curve_spec.cpp src/render/NativeFunctionContour.hpp src/render/FunctionCurve.hpp src/visual/AdaptiveGlSurface.cpp build/tools/flux_shader/flux_geometry.hpp build/tools/flux_shader/proc_shape.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -Ibuild/tools/flux_shader -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/lumin_native_function_spec.cpp tools/experiments/lumin/PrivateContourEngine.cpp src/visual/AdaptiveGlSurface.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
+
+build/tests/aperture_light_settling_spec: tests/aperture_light_settling_spec.cpp src/visual/ApertureLight.cpp src/visual/ApertureLight.hpp src/NvgGraphicsLifecycle.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Isrc -Itools -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/aperture_light_settling_spec.cpp src/visual/ApertureLight.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
+
+build/tests/aperture_light_layers_spec: tests/aperture_light_layers_spec.cpp src/visual/ApertureLight.cpp src/visual/ApertureLight.hpp src/NvgGraphicsLifecycle.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Isrc -Itools -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/aperture_light_layers_spec.cpp src/visual/ApertureLight.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@

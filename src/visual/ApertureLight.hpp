@@ -32,6 +32,8 @@ struct LeviathanApertureLight : app::ModuleLightWidget {
 	void drawBackground(const DrawArgs& args) override;
 	void drawLight(const DrawArgs& args) override;
 	void drawHalo(const DrawArgs& args) override;
+	void onContextCreate(const ContextCreateEvent& e) override;
+	void onContextDestroy(const ContextDestroyEvent& e) override;
 
 private:
 	struct StaticBackgroundWidget;
@@ -50,6 +52,8 @@ private:
 	float lightGlow = 0.f;
 	float lightCore = 0.f;
 	float lightHot = 0.f;
+	double normalChangedAt = 0.0;
+	double bloomChangedAt = 0.0;
 	float normalCacheBrightness = -1.f;
 	NVGcolor normalCacheColor = nvgRGBA(0, 0, 0, 0);
 
@@ -66,7 +70,6 @@ private:
 	void drawBloom(NVGcontext* vg, float cx, float cy, float glow);
 	void drawCore(NVGcontext* vg, float cx, float cy, float core, float hot);
 	void drawSpecular(NVGcontext* vg, float cx, float cy, float hot);
-	void drawCrescent(NVGcontext* vg, float cx, float cy, float amount);
 };
 
 struct TinyApertureLight : LeviathanApertureLight {

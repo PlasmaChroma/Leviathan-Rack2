@@ -1,9 +1,44 @@
 #include "ApertureLight.hpp"
 #include "ApertureLightTransfer.hpp"
+#include "../NvgGraphicsLifecycle.hpp"
 
 #include <cmath>
 
 namespace {
+
+// Keep changing pixels in the host queue; build a texture only after 100ms
+// without a material source change. Each dynamic layer settles independently.
+void drawSettledLayer(widget::FramebufferWidget* fb, const widget::Widget::DrawArgs& args,
+                      double changedAt, double now) {
+ float transform[6];
+ nvgCurrentTransform(args.vg, transform);
+ const NVGcolor tint = nvgGetGlobalTint(args.vg);
+ // Fading/tinting individual overlapping screen-blended shapes is not the
+ // same as fading/tinting their flattened image. Preserve the cached route
+ // under inherited tint/alpha, even while its source changes.
+ const bool untinted = tint.r == 1.f && tint.g == 1.f && tint.b == 1.f && tint.a == 1.f;
+ fb->bypassed = (untinted && (now < changedAt || now - changedAt < 0.1)) || args.fb
+  || transform[1] != 0.f || transform[2] != 0.f;
+ if (!fb->bypassed) {
+  if (auto* image = fb->getFramebuffer()) {
+   if (image->ctx != args.vg) fb->bypassed = true;
+   else {
+    const Vec size = fb->getFramebufferSize();
+    if (!nvg_gfx_lifecycle::ownedNvgImageSizeMatches(args.vg, image->image, int(size.x), int(size.y))) {
+     fb->deleteFramebuffer();
+     fb->setDirty();
+    }
+   }
+  }
+ }
+ if (!fb->bypassed && fb->dirty) {
+  // Do not let Rack's frame budget present an old cached brightness on settling.
+  const Vec offset(transform[4], transform[5]);
+  fb->render(Vec(transform[0], transform[3]), offset.minus(offset.floor()), args.clipBox);
+ }
+ if (!fb->bypassed && !fb->getFramebuffer()) fb->bypassed = true;
+ fb->draw(args);
+}
 
 NVGcolor mixNvgColor(NVGcolor a, NVGcolor b, float t, float alphaScale = 1.f) {
 	t = clamp(t, 0.f, 1.f);
@@ -168,6 +203,7 @@ void LeviathanApertureLight::invalidateStaticBackgroundCache() {
 
 void LeviathanApertureLight::invalidateBloomCache() {
 	bloomCacheGlow = -1.f;
+	bloomChangedAt = system::getTime();
 	if (bloomFb) {
 		bloomFb->setDirty();
 	}
@@ -201,6 +237,7 @@ void LeviathanApertureLight::syncBloomCache() {
 }
 
 void LeviathanApertureLight::syncNormalLightCache() {
+	normalChangedAt = system::getTime();
 	if (!normalLightFb || !normalLightWidget) {
 		return;
 	}
@@ -232,7 +269,8 @@ void LeviathanApertureLight::drawNormalLight(NVGcontext* vg) {
 	nvgSave(vg);
 	nvgGlobalCompositeBlendFunc(vg, NVG_ONE_MINUS_DST_COLOR, NVG_ONE);
 	drawCore(vg, cx, cy, lightCore, lightHot);
-	drawCrescent(vg, cx, cy, lightCore);
+	// A black crescent under screen blending contributes no visible color.
+	// Omit its two-circle hole geometry; the cached and direct pixels agree.
 	nvgRestore(vg);
 }
 
@@ -275,11 +313,13 @@ void LeviathanApertureLight::refreshLightState() {
 }
 
 void LeviathanApertureLight::drawBackground(const DrawArgs& args) {
+	const double now = system::getTime();
 	refreshLightState();
 	const float colorDelta = std::fabs(activeColor.r - normalCacheColor.r) +
 	                         std::fabs(activeColor.g - normalCacheColor.g) +
 	                         std::fabs(activeColor.b - normalCacheColor.b);
 	if (std::fabs(lightBrightness - normalCacheBrightness) > 0.0005f || colorDelta > 0.001f) {
+		normalChangedAt = now;
 		normalCacheBrightness = lightBrightness;
 		normalCacheColor = activeColor;
 		if (normalLightFb) {
@@ -304,7 +344,7 @@ void LeviathanApertureLight::drawBackground(const DrawArgs& args) {
 		}
 		nvgSave(args.vg);
 		nvgGlobalCompositeBlendFunc(args.vg, NVG_ONE_MINUS_DST_COLOR, NVG_ONE);
-		normalLightFb->draw(args);
+		drawSettledLayer(normalLightFb, args, normalChangedAt, now);
 		nvgRestore(args.vg);
 	}
 	nvgSave(args.vg);
@@ -319,6 +359,11 @@ void LeviathanApertureLight::drawLight(const DrawArgs& args) {
 	const float cy = box.size.y * 0.5f;
 	refreshLightState();
 	const float bloom = apertureBloomAmount();
+	const double now = system::getTime();
+	if (lightBrightness <= 0.001f || bloom <= 0.f) {
+		if (bloomCacheGlow >= 0.f) invalidateBloomCache();
+		return;
+	}
 
 	if (lightBrightness > 0.001f && bloom > 0.f) {
 		const float effectiveBloom = lightGlow * bloom;
@@ -330,19 +375,32 @@ void LeviathanApertureLight::drawLight(const DrawArgs& args) {
 			                         std::fabs(activeColor.g - bloomCacheColor.g) +
 			                         std::fabs(activeColor.b - bloomCacheColor.b);
 			if (std::fabs(effectiveBloom - bloomCacheGlow) > 0.0005f || colorDelta > 0.001f) {
+				bloomChangedAt = now;
 				bloomCacheGlow = effectiveBloom;
 				bloomCacheColor = activeColor;
 				bloomFb->setDirty();
 			}
 			nvgSave(vg);
 			nvgTranslate(vg, -bloomCacheBleedPx, -bloomCacheBleedPx);
-			bloomFb->draw(args);
+			drawSettledLayer(bloomFb, args, bloomChangedAt, now);
 			nvgRestore(vg);
 		}
 		else {
 			drawBloom(vg, cx, cy, effectiveBloom);
 		}
 	}
+}
+
+void LeviathanApertureLight::onContextCreate(const ContextCreateEvent& e) {
+ normalCacheBrightness = -1.f;
+ invalidateBloomCache();
+ app::ModuleLightWidget::onContextCreate(e);
+}
+
+void LeviathanApertureLight::onContextDestroy(const ContextDestroyEvent& e) {
+ normalCacheBrightness = -1.f;
+ invalidateBloomCache();
+ app::ModuleLightWidget::onContextDestroy(e);
 }
 
 void LeviathanApertureLight::drawHalo(const DrawArgs& args) {
@@ -517,18 +575,6 @@ void LeviathanApertureLight::drawSpecular(NVGcontext* vg, float cx, float cy, fl
 	nvgFill(vg);
 }
 
-void LeviathanApertureLight::drawCrescent(NVGcontext* vg, float cx, float cy, float amount) {
-	const float alpha = 0.20f * clamp(amount, 0.f, 1.f);
-	if (alpha <= 0.001f) {
-		return;
-	}
-	nvgBeginPath(vg);
-	nvgCircle(vg, cx + lensRadius * 0.20f, cy + lensRadius * 0.20f, lensRadius * 0.88f);
-	nvgCircle(vg, cx - lensRadius * 0.02f, cy - lensRadius * 0.04f, lensRadius * 0.86f);
-	nvgPathWinding(vg, NVG_HOLE);
-	nvgFillColor(vg, nvgRGBAf(0.f, 0.f, 0.f, alpha));
-	nvgFill(vg);
-}
 
 TinyApertureLight::TinyApertureLight() {
 	applySize(ApertureLightSize::Tiny);
