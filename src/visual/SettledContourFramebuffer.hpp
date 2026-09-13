@@ -2,6 +2,7 @@
 
 #include "../plugin.hpp"
 #include "../NvgGraphicsLifecycle.hpp"
+#include "../render/AdaptiveVisualUpdate.hpp"
 #include <array>
 
 namespace visual_assets {
@@ -28,15 +29,36 @@ struct ContourSettlement {
 // explicitly by the preview between its history and live marker layers.
 struct SettledContourFramebuffer : widget::FramebufferWidget {
 	ContourSettlement settlement;
+	// Opt-in: other users retain the original settlement behavior.
+	int adaptivePressure = 0;
+	leviathan::render::VisualUpdatePolicy updatePolicy;
+	leviathan::render::VisualUpdateGate updateGate;
+	bool pendingContour = false;
 
 	SettledContourFramebuffer() { dirtyOnSubpixelChange = false; }
 	void draw(const DrawArgs&) override {}
 
 	void drawContour(const DrawArgs& args, const std::array<float, 14>& key, double now) {
-		if (settlement.observe(key, now)) setDirty();
+		bool force = !settlement.valid;
+		// Geometry may be stale briefly; styling, highlight, size and transform may not.
+		for (size_t i = 2; i < key.size(); ++i)
+			if (i != 8 && key[i] != settlement.key[i]) force = true;
+		const bool changed = settlement.observe(key, now);
+		pendingContour = pendingContour || changed;
+		const bool adaptive = adaptivePressure > 0;
+		if (!adaptive) {
+			if (pendingContour) setDirty();
+			pendingContour = false;
+		}
+		else if (force || !getFramebuffer()
+			|| (pendingContour && (key[4] != 0.f
+				|| updateGate.due(now, updatePolicy.interval(adaptivePressure))))) {
+			setDirty();
+			pendingContour = false;
+		}
 		float transform[6];
 		nvgCurrentTransform(args.vg, transform);
-		bypassed = !settlement.settled(now) || args.fb != nullptr
+		bypassed = (!adaptive && !settlement.settled(now)) || args.fb != nullptr
 			|| transform[1] != 0.f || transform[2] != 0.f;
 		if (!bypassed) {
 			if (auto* framebuffer = getFramebuffer()) {

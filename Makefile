@@ -420,7 +420,7 @@ CROWNSTEP_MODULE_SOURCES := \
 .PHONY: test test-fast test-rack test-build test-build-fast test-build-rack test-odr test-sibyl-tsan test-octavia-observation-tsan test-octavia-observation-bus-tsan test-octavia-measurement-tsan
 .PHONY: test-spsc-snapshot-tsan
 test-build: $(TEST_BINS)
-test-build-fast: $(TEST_BINS_NON_RACK)
+test-build-fast: $(TEST_BINS_NON_RACK) build/tests/adaptive_visual_update_spec
 test-build-rack: $(TEST_BINS_RACK)
 
 test-sibyl-tsan: build/tests/sibyl_module_tsan_spec
@@ -438,6 +438,7 @@ test-spsc-snapshot-tsan: build/tests/spsc_latest_snapshot_tsan_spec
 	@TSAN_OPTIONS=halt_on_error=1 build/tests/spsc_latest_snapshot_tsan_spec
 
 test-fast: test-build-fast
+	$(call run_test_bin,build/tests/adaptive_visual_update_spec)
 	$(call run_test_bin,build/tests/halo_metrics_scope_spec)
 	$(call run_test_bin,build/tests/chromatide_qoi_preflight_spec)
 	$(call run_rack_test_bin,build/tests/review_state_handoff_spec)
@@ -932,6 +933,9 @@ build/tests/lumin_shader_timing_spec: tests/lumin_shader_timing_spec.cpp tests/l
 build/tests/lumin_function_pilot_spec: tests/lumin_function_pilot_spec.cpp tests/lumin_function_curve_spec.cpp src/render/FunctionContourPilot.hpp src/render/FunctionCurve.hpp src/visual/AdaptiveGlSurface.cpp build/tools/flux_shader/flux_geometry.hpp build/tools/flux_shader/proc_shape.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -Ibuild/tools/flux_shader -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/lumin_function_pilot_spec.cpp tools/experiments/lumin/PrivateContourEngine.cpp src/visual/AdaptiveGlSurface.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
 
+
+build/tests/adaptive_visual_update_spec: tests/adaptive_visual_update_spec.cpp src/render/AdaptiveVisualUpdate.hpp | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra $< -o $@
 
 build/tests/lumin_host_stroke_bridge_spec: tests/lumin_host_stroke_bridge_spec.cpp src/UndertowShape.hpp src/WavePreviewSimplifier.hpp src/render/HostStrokeBridge.cpp src/render/HostStrokeBridge.hpp tools/experiments/lumin/callback_bridge.cpp build/tools/round_stroke/private.cpp | build/tests
 	$(CXX) -std=c++17 -O3 -march=nehalem -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Isrc -Itools -Itools/experiments/lumin -Ibuild/tools/round_stroke -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/lumin_host_stroke_bridge_spec.cpp src/render/HostStrokeBridge.cpp tools/experiments/lumin/callback_bridge.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@

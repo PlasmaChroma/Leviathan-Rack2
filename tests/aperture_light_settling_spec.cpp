@@ -21,6 +21,21 @@ static void run(NVGcontext* vg){
  widget::Widget::DrawArgs args;args.vg=vg;args.clipBox=Rect(Vec(-100,-100),Vec(400,400));
  auto begin=[&](){nvgluBindFramebuffer(nullptr);glViewport(0,0,256,128);glDisable(GL_SCISSOR_TEST);glColorMask(1,1,1,1);glClearColor(.12f,.09f,.16f,1);glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);nvgBeginFrame(vg,256,128,1);nvgTranslate(vg,40,40);};
  auto end=[&](){glViewport(0,0,256,128);nvgEndFrame(vg);};
+ // Off lights must never allocate an empty dynamic image, even after settling.
+ light.staticBackgroundFb->render(Vec(1,1),Vec(0,0),Rect::inf());
+ begin();light.drawBackground(args);light.drawLight(args);end();
+ light.normalChangedAt-=1;light.bloomChangedAt-=1;
+ begin();light.drawBackground(args);light.drawLight(args);end();
+ require(!light.normalLightFb->getFramebuffer()&&!light.bloomFb->getFramebuffer(),"off layers allocate no framebuffer");
+ // Compare the single-color shortcut with the weighted route using a dark second channel.
+ TealApertureLight single;single.module=&module;single.firstLightId=0;
+ TealApertureLight weighted;weighted.module=&module;weighted.firstLightId=0;weighted.addBaseColor(nvgRGB(255,0,0));
+ for(float brightness:{-1.f,0.f,1e-7f,1e-6f,2e-6f,.001f,.05f,.4f,1.f,2.f}){
+  module.lights[0].setBrightness(brightness);single.refreshLightState();weighted.refreshLightState();
+  require(single.lightBrightness==weighted.lightBrightness&&single.lightGlow==weighted.lightGlow&&single.lightCore==weighted.lightCore&&single.lightHot==weighted.lightHot,"single-color transfer agrees");
+  require(std::fabs(single.activeColor.r-weighted.activeColor.r)<1e-6f&&std::fabs(single.activeColor.g-weighted.activeColor.g)<1e-6f&&std::fabs(single.activeColor.b-weighted.activeColor.b)<1e-6f&&single.activeColor.a==weighted.activeColor.a,"single-color mixing agrees");
+ }
+ single.module=nullptr;single.refreshLightState();require(single.lightBrightness==0,"unattached single-color light is off");
  module.lights[0].setBrightness(.7f);
  light.staticBackgroundFb->render(Vec(1,1),Vec(0,0),Rect::inf());
  begin();light.drawBackground(args);light.drawLight(args);end();
@@ -33,6 +48,8 @@ static void run(NVGcontext* vg){
  require(light.normalLightFb->getFramebuffer()&&light.bloomFb->getFramebuffer(),"settled layers build caches");
  begin();light.drawBackground(args);light.drawLight(args);end();
  require(!light.normalLightFb->dirty&&!light.bloomFb->dirty&&!light.normalLightFb->bypassed&&!light.bloomFb->bypassed,"settled caches reused");
+ settings::haloBrightness=0;begin();light.drawLight(args);end();require(light.bloomCacheGlow<0,"disabled bloom invalidates settled source");
+ settings::haloBrightness=.5f;begin();light.drawLight(args);end();require(light.bloomFb->bypassed&&light.bloomCacheGlow>0,"reenabled bloom resumes direct with current source");
  module.lights[0].setBrightness(.3f);begin();light.drawBackground(args);light.drawLight(args);end();
  require(light.normalLightFb->bypassed&&light.bloomFb->bypassed&&light.normalLightFb->dirty&&light.bloomFb->dirty,"change returns to direct without stale cache");
  light.normalChangedAt-=1;light.bloomChangedAt-=1;
@@ -40,6 +57,8 @@ static void run(NVGcontext* vg){
  settings::haloBrightness=.9f;begin();light.drawBackground(args);light.drawLight(args);end();
  require(!light.normalLightFb->bypassed&&light.bloomFb->bypassed,"bloom setting settles independently");
  module.lights[0].setBrightness(0);begin();light.drawBackground(args);light.drawLight(args);end();require(light.bloomCacheGlow<0,"off resets bloom settling");
+ light.normalChangedAt-=1;begin();light.drawBackground(args);end();require(light.normalLightFb->dirty,"off does not rebuild an existing normal cache");
+ module.lights[0].setBrightness(.8f);begin();light.drawBackground(args);light.drawLight(args);end();require(light.normalLightFb->bypassed&&light.bloomFb->bypassed,"relit layers resume direct without stale pixels");
  int cases=0,maxByte=0;double maxMean=0;
  std::vector<unsigned char> reference(256*128*4),actual(reference.size());
  for(auto size:{ApertureLightSize::Tiny,ApertureLightSize::Small,ApertureLightSize::Medium,ApertureLightSize::Large})

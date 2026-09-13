@@ -12,6 +12,7 @@
 #include "visual/SnapshotHistory.hpp"
 #include "render/LegacyCurvePreview.hpp"
 #include "render/HostStrokeBridge.hpp"
+#include "render/RackVisualFramePressure.hpp"
 #include "WavePreviewTracer.hpp"
 #include <array>
 #include <atomic>
@@ -29,6 +30,10 @@
 #include <utility>
 
 namespace {
+
+// Session-only pilot switch, shared by all Flux instances on the UI thread.
+bool gFluxAdaptiveContourPilot = false;
+
 
 constexpr double kIntegralFluxDebugTerminalSubmitIntervalSec = debug_terminal::kTimingRangeSubmitIntervalSec;
 constexpr int kIntegralFluxNautiloidGlassRenderWidth = 384;
@@ -423,6 +428,8 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 		modulePtr = module;
 		this->channel = channel;
 		contourCache = new ContourFramebuffer();
+		static unsigned contourSequence = 0;
+		contourCache->updateGate.phase = (++contourSequence % 17) / 17.0;
 		contourCache->channel = channel;
 		contourLayer = new ContourLayer();
 		contourLayer->preview = this;
@@ -1150,6 +1157,8 @@ struct WavePreviewWidget : widget::OpenGlWidget {
 				APP && APP->window ? APP->window->pixelRatio : 1.f}};
 			{
 				IntegralFluxScopedDrawTimer contourTimer(breakdown.contourNs, logPreview);
+				contourCache->adaptivePressure = gFluxAdaptiveContourPilot
+					? leviathan::render::rackVisualFramePressure().level : 0;
                 if (previewRecipe) previewRecipe->drawContour(args, key, nowSec);
                 else contourCache->drawContour(args, key, nowSec);
 			}
@@ -2494,6 +2503,17 @@ struct IntegralFluxWidget : ModuleWidget {
 				[=]() { maths->bandlimitedSignalOutputsControl().store(!maths->bandlimitedSignalOutputsControl().load(std::memory_order_relaxed), std::memory_order_relaxed); }
 			));
 			menu->addChild(createMenuLabel("Preview Visual"));
+			if (isDragonKingDebugEnabled()) {
+				menu->addChild(createCheckMenuItem("Adaptive contour updates (all Flux, pilot)", "",
+					[]() { return gFluxAdaptiveContourPilot; },
+					[]() { gFluxAdaptiveContourPilot = !gFluxAdaptiveContourPilot; }
+				));
+				if (gFluxAdaptiveContourPilot) {
+					const auto& pressure = leviathan::render::rackVisualFramePressure();
+					menu->addChild(createMenuLabel(string::f("Contour pilot: %.1f FPS, pressure %d/3",
+						pressure.average > 0.0 ? 1.0 / pressure.average : 0.0, pressure.level)));
+				}
+			}
 			if (isDragonKingPreviewWidgetOptionsEnabled()) {
 				menu->addChild(createSubmenuItem("Render", "",
 					[=](Menu* submenu) {

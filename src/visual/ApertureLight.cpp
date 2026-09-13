@@ -290,6 +290,18 @@ void LeviathanApertureLight::drawBloomCache(NVGcontext* vg) {
 }
 
 void LeviathanApertureLight::refreshLightState() {
+	if (baseColors.size() == 1) {
+		engine::Light* light = getLight(0);
+		lightBrightness = clamp(light ? light->getBrightness() : 0.f, 0.f, 1.f);
+		activeColor = lightBrightness > 1e-6f
+			? nvgRGBAf(baseColors[0].r, baseColors[0].g, baseColors[0].b, 1.f)
+			: baseColor;
+		const aperture_light::Transfer transfer = aperture_light::transferFromBrightness(lightBrightness);
+		lightGlow = transfer.glow;
+		lightCore = transfer.core;
+		lightHot = transfer.hot;
+		return;
+	}
 	lightBrightness = 0.f;
 	float colorWeight = 0.f;
 	NVGcolor mixedColor = nvgRGBAf(0.f, 0.f, 0.f, 1.f);
@@ -334,6 +346,10 @@ void LeviathanApertureLight::drawBackground(const DrawArgs& args) {
 		syncStaticBackgroundCache();
 	}
 	staticBackgroundFb->draw(args);
+	// An off core has no pixels; leave its dirty cache pending until relit.
+	if (lightBrightness <= 0.001f) {
+		return;
+	}
 
 	if (!normalLightFb || !normalLightWidget) {
 		drawNormalLight(args.vg);
@@ -354,11 +370,15 @@ void LeviathanApertureLight::drawBackground(const DrawArgs& args) {
 }
 
 void LeviathanApertureLight::drawLight(const DrawArgs& args) {
+	const float bloom = apertureBloomAmount();
+	if (bloom <= 0.f) {
+		if (bloomCacheGlow >= 0.f) invalidateBloomCache();
+		return;
+	}
 	NVGcontext* vg = args.vg;
 	const float cx = box.size.x * 0.5f;
 	const float cy = box.size.y * 0.5f;
 	refreshLightState();
-	const float bloom = apertureBloomAmount();
 	const double now = system::getTime();
 	if (lightBrightness <= 0.001f || bloom <= 0.f) {
 		if (bloomCacheGlow >= 0.f) invalidateBloomCache();
