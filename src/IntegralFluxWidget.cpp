@@ -1699,8 +1699,6 @@ struct IntegralFluxWidget : ModuleWidget {
 	float uiDrawMsEma = 0.f;
 	float gearDrawUsEma = 0.f;
 	float eclipseDrawUsEma = 0.f;
-	float linearPointDrawUsEma = 0.f;
-	float shapeGlyphDrawUsEma = 0.f;
 	debug_terminal::UiTimingRangeAccumulator uiStepUsRange;
 	debug_terminal::UiTimingRangeAccumulator uiDrawUsRange;
 	debug_terminal::UiTimingRangeAccumulator apertureDrawUsRange;
@@ -2351,10 +2349,6 @@ struct IntegralFluxWidget : ModuleWidget {
 			gearDrawUsEma = (gearDrawUsEma > 0.f) ? (gearDrawUsEma + (gearDrawUs - gearDrawUsEma) * 0.18f) : gearDrawUs;
 			const float eclipseDrawUs = float(gIntegralFluxEclipseDrawNsThisFrame) * 1e-3f;
 			eclipseDrawUsEma = (eclipseDrawUsEma > 0.f) ? (eclipseDrawUsEma + (eclipseDrawUs - eclipseDrawUsEma) * 0.18f) : eclipseDrawUs;
-			const float linearPointDrawUs = float(gIntegralFluxLinearPointDrawNsThisFrame) * 1e-3f;
-			linearPointDrawUsEma = (linearPointDrawUsEma > 0.f) ? (linearPointDrawUsEma + (linearPointDrawUs - linearPointDrawUsEma) * 0.18f) : linearPointDrawUs;
-			const float shapeGlyphDrawUs = float(gIntegralFluxShapeGlyphDrawNsThisFrame) * 1e-3f;
-			shapeGlyphDrawUsEma = (shapeGlyphDrawUsEma > 0.f) ? (shapeGlyphDrawUsEma + (shapeGlyphDrawUs - shapeGlyphDrawUsEma) * 0.18f) : shapeGlyphDrawUs;
 			apertureDrawUsRange.add(float(gIntegralFluxApertureDrawNsThisFrame) * 1e-3f);
 		}
 
@@ -2366,8 +2360,9 @@ struct IntegralFluxWidget : ModuleWidget {
 			double& lastSubmitSec = gIntegralFluxDebugTerminalLastSubmitSec[debugInstanceId];
 			if (lastSubmitSec <= 0.0 || (nowSec - lastSubmitSec) >= kIntegralFluxDebugTerminalSubmitIntervalSec) {
 				lastSubmitSec = nowSec;
-				const float ch1CurvePointsReducedAvg = flux->consumeCurveReductionAverageForUi(1);
-				const float ch1TracerExtraPointsReducedAvg = flux->consumeTracerReductionAverageForUi(1);
+				// Continue draining diagnostic accumulators without publishing columns.
+				flux->consumeCurveReductionAverageForUi(1);
+				flux->consumeTracerReductionAverageForUi(1);
 				debug_terminal::submitIntegralFluxMetrics(
 					debugInstanceId,
 					flux->consumeAudioProcessTimingForUi(),
@@ -2375,11 +2370,7 @@ struct IntegralFluxWidget : ModuleWidget {
 					uiDrawUsRange.consume(),
 					apertureDrawUsRange.consume(),
 					gearDrawUsEma,
-					eclipseDrawUsEma,
-					linearPointDrawUsEma,
-					shapeGlyphDrawUsEma,
-					ch1CurvePointsReducedAvg,
-					ch1TracerExtraPointsReducedAvg);
+					eclipseDrawUsEma);
 			}
 			if (logDraw) {
 				debugSubmitUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
