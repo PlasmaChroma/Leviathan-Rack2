@@ -15,6 +15,12 @@ enum class ApertureLightSize {
 	Large
 };
 
+// Shared masks are the global default. Flux's debug menu provides a session-only
+// baseline override; outside debug mode the optimized path is always enabled.
+bool isApertureBloomMasksEnabled();
+void setApertureBloomMasksEnabled(bool enabled);
+std::string apertureBloomStatus();
+
 struct LeviathanApertureLight : app::ModuleLightWidget {
 	NVGcolor baseColor = nvgRGB(42, 246, 255);
 	NVGcolor activeColor = nvgRGB(42, 246, 255);

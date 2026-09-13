@@ -1,5 +1,6 @@
 #include "plugin.hpp"
 #include "preview_benchmark_utils.hpp"
+bool isDragonKingDebugEnabled() { return true; }
 #define private public
 #include "visual/ApertureLight.hpp"
 #undef private
@@ -16,6 +17,7 @@ bool& Window::fbDirtyOnSubpixelChange(){static bool enabled=false;return enabled
 }
 }
 static void run(NVGcontext* vg){
+ setApertureBloomMasksEnabled(false); // Exercise the retained baseline route.
  engine::Module module;module.config(0,0,0,3);
  AmberGreenVioletApertureLight light;light.module=&module;light.firstLightId=0;
  widget::Widget::DrawArgs args;args.vg=vg;args.clipBox=Rect(Vec(-100,-100),Vec(400,400));

@@ -1,10 +1,50 @@
 #include "ApertureLight.hpp"
 #include "ApertureLightTransfer.hpp"
+#include "ApertureBloomMasks.hpp"
 #include "../NvgGraphicsLifecycle.hpp"
 
 #include <cmath>
 
 namespace {
+
+bool bloomMasksEnabled=true;
+struct BloomTiming {
+ double frame=-1, total=0, lastTotal=0;
+ unsigned draws=0,masks=0,lastDraws=0,lastMasks=0;
+} bloomTiming;
+struct BloomTimer {
+ double start=0;
+ BloomTimer() {
+  if(!isDragonKingDebugEnabled()||!APP||!APP->window)return;
+  const double frame=APP->window->getFrameTime();
+  if(frame!=bloomTiming.frame){
+   bloomTiming.lastTotal=bloomTiming.total;bloomTiming.lastDraws=bloomTiming.draws;bloomTiming.lastMasks=bloomTiming.masks;
+   bloomTiming.frame=frame;bloomTiming.total=0;bloomTiming.draws=0;bloomTiming.masks=0;
+  }
+  ++bloomTiming.draws;start=system::getTime();
+ }
+ ~BloomTimer(){if(start>0)bloomTiming.total+=(system::getTime()-start)*1e6;}
+};
+
+bool drawBloomMasks(const widget::Widget::DrawArgs& args,float cx,float cy,
+                    float coreRadius,float lensRadius,float bloomRadius,float alpha,NVGcolor color) {
+ if(!isApertureBloomMasksEnabled()||args.fb||!APP||!APP->window||args.vg!=APP->window->vg)return false;
+ const auto tint=nvgGetGlobalTint(args.vg);
+ if(tint.r!=1||tint.g!=1||tint.b!=1||tint.a!=1)return false;
+ float t[6];nvgCurrentTransform(args.vg,t);
+ for(float v:t)if(!std::isfinite(v))return false;
+ const float density=t[0]*APP->window->pixelRatio;
+ if(t[1]!=0||t[2]!=0||t[0]!=t[3]||density<.75f||density>2.f)return false;
+ auto* cache=aperture_bloom::findCache(args.vg,true);
+ if(!cache)return false;
+ const auto* outer=cache->get(args.vg,std::max(.5f,coreRadius*.70f),bloomRadius*1.35f);
+ const auto* inner=cache->get(args.vg,coreRadius*.35f,lensRadius*1.7f);
+ if(!outer||!inner)return false;
+ color.a=clamp(alpha*.95f,0.f,1.f);aperture_bloom::draw(args.vg,*outer,cx,cy,color);
+ color.a=clamp(alpha*.34f,0.f,1.f);aperture_bloom::draw(args.vg,*inner,cx,cy,color);
+ if(isDragonKingDebugEnabled())++bloomTiming.masks;
+ return true;
+}
 
 // Keep changing pixels in the host queue; build a texture only after 100ms
 // without a material source change. Each dynamic layer settles independently.
@@ -78,6 +118,13 @@ void setApertureBaseColor(LeviathanApertureLight* light, NVGcolor color) {
 }
 
 } // namespace
+
+bool isApertureBloomMasksEnabled(){return bloomMasksEnabled||!isDragonKingDebugEnabled();}
+void setApertureBloomMasksEnabled(bool enabled){if(isDragonKingDebugEnabled())bloomMasksEnabled=enabled;}
+std::string apertureBloomStatus(){
+ return string::f("Bloom: %.1f us, masks %u/%u, images %u",bloomTiming.lastTotal,
+  bloomTiming.lastMasks,bloomTiming.lastDraws,aperture_bloom::imageCount());
+}
 
 struct LeviathanApertureLight::StaticBackgroundWidget : Widget {
 	LeviathanApertureLight* owner = nullptr;
@@ -370,6 +417,7 @@ void LeviathanApertureLight::drawBackground(const DrawArgs& args) {
 }
 
 void LeviathanApertureLight::drawLight(const DrawArgs& args) {
+	BloomTimer timer;
 	const float bloom = apertureBloomAmount();
 	if (bloom <= 0.f) {
 		if (bloomCacheGlow >= 0.f) invalidateBloomCache();
@@ -400,6 +448,8 @@ void LeviathanApertureLight::drawLight(const DrawArgs& args) {
 				bloomCacheColor = activeColor;
 				bloomFb->setDirty();
 			}
+			if((now<bloomChangedAt||now-bloomChangedAt<.1)
+			   &&drawBloomMasks(args,cx,cy,coreRadius,lensRadius,bloomRadius,bloomAlpha*effectiveBloom,activeColor))return;
 			nvgSave(vg);
 			nvgTranslate(vg, -bloomCacheBleedPx, -bloomCacheBleedPx);
 			drawSettledLayer(bloomFb, args, bloomChangedAt, now);
@@ -412,12 +462,14 @@ void LeviathanApertureLight::drawLight(const DrawArgs& args) {
 }
 
 void LeviathanApertureLight::onContextCreate(const ContextCreateEvent& e) {
+ if(auto* cache=aperture_bloom::findCache(e.vg,false))cache->clear(e.vg,false);
  normalCacheBrightness = -1.f;
  invalidateBloomCache();
  app::ModuleLightWidget::onContextCreate(e);
 }
 
 void LeviathanApertureLight::onContextDestroy(const ContextDestroyEvent& e) {
+ if(auto* cache=aperture_bloom::findCache(e.vg,false))cache->clear(e.vg,true);
  normalCacheBrightness = -1.f;
  invalidateBloomCache();
  app::ModuleLightWidget::onContextDestroy(e);

@@ -2578,6 +2578,10 @@ struct IntegralFluxWidget : ModuleWidget {
 				const bool hasNautiloid = leftNautiloidForIntegralFlux(maths) != nullptr;
 				menu->addChild(new MenuSeparator());
 				menu->addChild(createMenuLabel("Integral Flux Debug"));
+				menu->addChild(createCheckMenuItem("Shared aperture bloom masks (all modules)", "",
+					[](){return isApertureBloomMasksEnabled();},
+					[](){setApertureBloomMasksEnabled(!isApertureBloomMasksEnabled());}));
+				menu->addChild(createMenuLabel(apertureBloomStatus()));
 				if (hasNautiloid) {
 					menu->addChild(createMenuItem("Save Nautiloid Fractal Parameters", "", [=]() {
 						appendIntegralFluxFractalParamsCapture(maths);

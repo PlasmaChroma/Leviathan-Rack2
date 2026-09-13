@@ -1,5 +1,6 @@
 #include "plugin.hpp"
 #include "preview_benchmark_utils.hpp"
+bool isDragonKingDebugEnabled() { return true; }
 #define private public
 #include "visual/ApertureLight.hpp"
 #undef private

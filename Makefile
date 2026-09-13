@@ -948,3 +948,12 @@ build/tests/aperture_light_settling_spec: tests/aperture_light_settling_spec.cpp
 
 build/tests/aperture_light_layers_spec: tests/aperture_light_layers_spec.cpp src/visual/ApertureLight.cpp src/visual/ApertureLight.hpp src/NvgGraphicsLifecycle.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Isrc -Itools -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/aperture_light_layers_spec.cpp src/visual/ApertureLight.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
+
+# Explicit offline aperture candidates; not part of plugin or test-fast.
+build/tests/aperture_light_settling_spec build/tests/aperture_light_layers_spec build/tests/aperture_candidates: src/visual/ApertureBloomMasks.hpp
+
+build/tests/aperture_bloom_pilot_spec: tests/aperture_bloom_pilot_spec.cpp tests/aperture_bloom_pilot_run.inc src/visual/ApertureLight.cpp src/visual/ApertureLight.hpp src/visual/ApertureBloomMasks.hpp src/NvgGraphicsLifecycle.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Isrc -Itools -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/aperture_bloom_pilot_spec.cpp src/visual/ApertureLight.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
+
+build/tests/aperture_candidates: tools/experiments/aperture/aperture_candidates.cpp tools/experiments/aperture/candidates.inc tools/experiments/aperture/run.inc src/visual/ApertureLight.cpp src/visual/ApertureLight.hpp src/visual/ApertureLightTransfer.hpp src/NvgGraphicsLifecycle.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Isrc -Itools -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/experiments/aperture/aperture_candidates.cpp src/visual/ApertureLight.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
