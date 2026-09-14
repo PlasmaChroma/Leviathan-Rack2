@@ -1,6 +1,7 @@
 #pragma once
 
 #include "plugin.hpp"
+#include "DebugTerminalTransport.hpp"
 #include "MathHelpers.hpp"
 
 #include <array>
@@ -288,6 +289,7 @@ struct Wyrm : Module {
 	std::atomic<uint64_t> perfAudioSampledCount {0};
 	std::atomic<uint64_t> perfAudioProcessNs {0};
 	std::atomic<uint64_t> perfAudioProcessMinNs {std::numeric_limits<uint64_t>::max()};
+	debug_terminal::AtomicTimingAverage perfAudioProcessAverage;
 	std::atomic<uint64_t> perfAudioProcessMaxNs {0};
 	std::atomic<int> perfChannels {1};
 	std::atomic<bool> perfFmConnected {false};
@@ -296,14 +298,19 @@ struct Wyrm : Module {
 	std::atomic<bool> perfLfoMode {false};
 	std::atomic<bool> perfWavetableRebuilt {false};
 	std::atomic<uint64_t> perfModuleStepMinNs {std::numeric_limits<uint64_t>::max()};
+	debug_terminal::AtomicTimingAverage perfModuleStepAverage;
 	std::atomic<uint64_t> perfModuleStepMaxNs {0};
 	std::atomic<uint64_t> perfExpandedStepMinNs {std::numeric_limits<uint64_t>::max()};
+	debug_terminal::AtomicTimingAverage perfExpandedStepAverage;
 	std::atomic<uint64_t> perfExpandedStepMaxNs {0};
 	std::atomic<uint64_t> perfModuleDrawMinNs {std::numeric_limits<uint64_t>::max()};
+	debug_terminal::AtomicTimingAverage perfModuleDrawAverage;
 	std::atomic<uint64_t> perfModuleDrawMaxNs {0};
 	std::atomic<uint64_t> perfExpandedDrawMinNs {std::numeric_limits<uint64_t>::max()};
+	debug_terminal::AtomicTimingAverage perfExpandedDrawAverage;
 	std::atomic<uint64_t> perfExpandedDrawMaxNs {0};
 	std::atomic<uint64_t> perfEditorCacheDrawMinNs {std::numeric_limits<uint64_t>::max()};
+	debug_terminal::AtomicTimingAverage perfEditorCacheDrawAverage;
 	std::atomic<uint64_t> perfEditorCacheDrawMaxNs {0};
 	std::atomic<uint64_t> perfEditorCacheLastNs {0};
 	std::atomic<uint64_t> perfCsvEditorCacheDrawNs {0};
@@ -328,6 +335,7 @@ struct Wyrm : Module {
 	std::atomic<int> perfCsvGpuBodySegmentCount {0};
 	std::atomic<bool> perfCsvGpuSampleValid {false};
 	std::atomic<uint64_t> perfOverlayDrawMinNs {std::numeric_limits<uint64_t>::max()};
+	debug_terminal::AtomicTimingAverage perfOverlayDrawAverage;
 	std::atomic<uint64_t> perfOverlayDrawMaxNs {0};
 	std::atomic<uint64_t> perfBodySampleCacheHits {0};
 	std::atomic<uint64_t> perfBodySampleCacheMisses {0};

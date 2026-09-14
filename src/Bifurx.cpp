@@ -1482,7 +1482,7 @@ void Bifurx::process(const ProcessArgs& args) {
 		const uint64_t prNS = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(perfAnalysisStart - perfPreviewStart).count();
 		const uint64_t aNS = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(pE - perfAnalysisStart).count(), pNS = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(pE - perfStart).count();
 		perfAudioSampledCount.fetch_add(1, std::memory_order_relaxed); perfAudioProcessNs.fetch_add(pNS, std::memory_order_relaxed);
-		debug_terminal::recordAudioProcessTiming(perfAudioProcessRangeMinNs, perfAudioProcessRangeMaxNs, pNS);
+		debug_terminal::recordAudioProcessTiming(perfAudioProcessRangeMinNs, perfAudioProcessRangeMaxNs, pNS, &perfAudioProcessRangeAverage);
 		perfAudioControlsNs.fetch_add(cNS, std::memory_order_relaxed); perfAudioCoreNs.fetch_add(crNS, std::memory_order_relaxed);
 		perfAudioPreviewNs.fetch_add(prNS, std::memory_order_relaxed); perfAudioAnalysisNs.fetch_add(aNS, std::memory_order_relaxed);
 		uint64_t pM = perfAudioProcessMaxNs.load(std::memory_order_relaxed);

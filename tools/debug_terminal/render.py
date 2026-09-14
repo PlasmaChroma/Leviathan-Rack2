@@ -2,6 +2,13 @@ import shutil
 import sys
 import time
 import threading
+import math
+import re
+
+try:
+    import msvcrt
+except ImportError:
+    msvcrt = None
 
 try:
     import termios
@@ -31,6 +38,7 @@ KEY_TOGGLE = "toggle"
 KEY_COLLAPSE_ALL = "collapse_all"
 KEY_EXPAND_ALL = "expand_all"
 KEY_QUIT = "quit"
+KEY_AVERAGE = "average"
 
 
 class ModuleViewState(object):
@@ -39,6 +47,7 @@ class ModuleViewState(object):
         self._module_order = []
         self._selected_module = None
         self._collapsed = set()
+        self._average = False
 
     def update_modules(self, module_names):
         module_names = list(module_names)
@@ -52,6 +61,9 @@ class ModuleViewState(object):
 
     def handle_key(self, key):
         with self._lock:
+            if key == KEY_AVERAGE:
+                self._average = not self._average
+                return
             if not self._module_order:
                 return
             if self._selected_module not in self._module_order:
@@ -77,6 +89,21 @@ class ModuleViewState(object):
     def snapshot(self):
         with self._lock:
             return self._selected_module, set(self._collapsed)
+
+    def average_mode(self):
+        with self._lock:
+            return self._average
+
+
+def _metric_cell(data, key, average=False):
+    value = data.get(key)
+    is_range = isinstance(value, str) and re.fullmatch(r"\d+(?:\.\d+)?-\d+(?:\.\d+)?", value)
+    if average and (key + "_avg" in data or (key.endswith("_us") and is_range)):
+        value = data.get(key + "_avg")
+        # Older plugin packets have no mean. Never invent one from the extrema.
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            return "-"
+    return _format_metric(value)
 
 
 def _format_metric(value):
@@ -137,7 +164,7 @@ def _module_title(module_name, row_count, selected=False, collapsed=False):
     return title
 
 
-def build_module_table(module_name, rows, selected=False, collapsed=False):
+def build_module_table(module_name, rows, selected=False, collapsed=False, average=False):
     if collapsed:
         if Text is None:
             return _module_title(module_name, len(rows), selected=selected, collapsed=True)
@@ -161,7 +188,7 @@ def build_module_table(module_name, rows, selected=False, collapsed=False):
             if module_name == "Bifurx" and key == "vw_mode":
                 cells.append(_format_bifurx_vw_mode(metrics.get(key)))
             else:
-                cells.append(_format_metric(metrics.get(key)))
+                cells.append(_metric_cell(metrics, key, average))
         cells.append("%.2fs" % row["age_sec"])
         table.add_row(*cells)
 
@@ -211,6 +238,9 @@ def build_table(snapshot, host, port, view_state=None):
     else:
         selected_module = None
         collapsed_modules = set()
+    average = view_state.average_mode() if view_state else False
+    timing_control = "[A: Timing = %s]  (Range / Average)" % ("Average" if average else "Range")
+    renderables.append(Text(timing_control, style="bold cyan") if Text is not None else timing_control)
 
     for module_name in module_names:
         renderables.append(
@@ -219,6 +249,7 @@ def build_table(snapshot, host, port, view_state=None):
                 grouped[module_name],
                 selected=(module_name == selected_module),
                 collapsed=(module_name in collapsed_modules),
+                average=average,
             )
         )
     if not module_names:
@@ -261,7 +292,7 @@ def _truncate(text, width):
     return text[: width - 3] + "..."
 
 
-def _plain_module_lines(module_name, rows):
+def _plain_module_lines(module_name, rows, average=False):
     columns = _module_columns(rows)
     header = ["ID"] + [label for _, label in columns] + ["Age"]
     table_rows = []
@@ -269,7 +300,7 @@ def _plain_module_lines(module_name, rows):
         data = row["data"]
         values = [row["instance"]]
         for key, _ in columns:
-            values.append(_format_metric(data.get(key)))
+            values.append(_metric_cell(data, key, average))
         values.append("%.2fs" % row["age_sec"])
         table_rows.append(values)
 
@@ -299,7 +330,8 @@ def _plain_module_lines(module_name, rows):
     return lines
 
 
-def build_plain_text(snapshot, host, port):
+def build_plain_text(snapshot, host, port, view_state=None):
+    average = view_state.average_mode() if view_state else False
     lines = [
         "Debug Terminal %s:%d" % (host, port),
         "clients=%d  rows=%d  schemas=%d  events=%d  parse_errors=%d  eps=%.1f"
@@ -319,8 +351,9 @@ def build_plain_text(snapshot, host, port):
     if not module_names:
         lines.append("Waiting for schema...")
     for module_name in module_names:
-        lines.extend(_plain_module_lines(module_name, grouped[module_name]))
+        lines.extend(_plain_module_lines(module_name, grouped[module_name], average))
         lines.append("")
+    lines.insert(2, "[A: Timing = %s]  (Range / Average)" % ("Average" if average else "Range"))
     lines.append("")
 
     width = shutil.get_terminal_size((120, 40)).columns
@@ -330,12 +363,22 @@ def build_plain_text(snapshot, host, port):
 def _read_key_nonblocking():
     if not sys.stdin.isatty():
         return None
-    if select is not None:
+    if msvcrt is not None:
+        if not msvcrt.kbhit():
+            return None
+        ch = msvcrt.getwch()
+        if ch in ("\x00", "\xe0"):
+            return {"H": KEY_UP, "P": KEY_DOWN}.get(msvcrt.getwch())
+    elif select is not None:
         ready, _, _ = select.select([sys.stdin], [], [], 0.0)
         if not ready:
             return None
-    ch = sys.stdin.read(1)
+        ch = sys.stdin.read(1)
+    else:
+        return None
     if ch == "\x1b":
+        if msvcrt is not None:
+            return None
         # Arrow keys arrive as ESC [ A/B
         if select is not None:
             ready, _, _ = select.select([sys.stdin], [], [], 0.0)
@@ -366,16 +409,19 @@ def _read_key_nonblocking():
         return KEY_EXPAND_ALL
     if ch in ("q", "Q"):
         return KEY_QUIT
+    if ch in ("a", "A"):
+        return KEY_AVERAGE
     return None
 
 
 def _keyboard_loop(stop_event, view_state, render_event=None):
-    if termios is None or tty is None or not sys.stdin.isatty():
+    if not sys.stdin.isatty() or (msvcrt is None and (termios is None or tty is None)):
         return
-    fd = sys.stdin.fileno()
-    old = termios.tcgetattr(fd)
+    fd = sys.stdin.fileno() if termios is not None else None
+    old = termios.tcgetattr(fd) if termios is not None else None
     try:
-        tty.setcbreak(fd)
+        if tty is not None:
+            tty.setcbreak(fd)
         while not stop_event.is_set():
             key = _read_key_nonblocking()
             if key is None:
@@ -390,7 +436,8 @@ def _keyboard_loop(stop_event, view_state, render_event=None):
             if render_event is not None:
                 render_event.set()
     finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        if termios is not None:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 
 def run_live_renderer(state, host, port, refresh_hz, stop_event):
@@ -419,12 +466,16 @@ def run_live_renderer(state, host, port, refresh_hz, stop_event):
 def run_plain_renderer(state, host, port, refresh_hz, stop_event):
     interval_sec = 1.0 / max(1.0, float(refresh_hz))
     use_ansi = sys.stdout.isatty()
+    view_state = ModuleViewState()
+    render_event = threading.Event()
+    key_thread = threading.Thread(target=_keyboard_loop, args=(stop_event, view_state, render_event), daemon=True)
+    key_thread.start()
     if use_ansi:
         sys.stdout.write("\x1b[?25l\x1b[2J")
         sys.stdout.flush()
     try:
         while not stop_event.is_set():
-            frame = build_plain_text(state.snapshot(), host, port)
+            frame = build_plain_text(state.snapshot(), host, port, view_state)
             if use_ansi:
                 sys.stdout.write("\x1b[H\x1b[J")
                 sys.stdout.write(frame)
@@ -432,7 +483,8 @@ def run_plain_renderer(state, host, port, refresh_hz, stop_event):
             else:
                 sys.stdout.write(frame)
                 sys.stdout.flush()
-            stop_event.wait(interval_sec)
+            render_event.wait(interval_sec)
+            render_event.clear()
     finally:
         if use_ansi:
             sys.stdout.write("\x1b[?25h")

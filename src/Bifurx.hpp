@@ -1,6 +1,7 @@
 #pragma once
 
 #include "plugin.hpp"
+#include "DebugTerminalTransport.hpp"
 #include "MathHelpers.hpp"
 #include "BifurxInputStage.hpp"
 #include "BifurxOutputStage.hpp"
@@ -747,6 +748,7 @@ struct Bifurx : Module {
 	std::atomic<uint64_t> perfAudioSampledCount{0};
 	std::atomic<uint64_t> perfAudioProcessNs{0};
 	std::atomic<uint64_t> perfAudioProcessRangeMinNs{std::numeric_limits<uint64_t>::max()};
+	debug_terminal::AtomicTimingAverage perfAudioProcessRangeAverage;
 	std::atomic<uint64_t> perfAudioProcessRangeMaxNs{0};
 	std::atomic<uint64_t> perfAudioControlsNs{0};
 	std::atomic<uint64_t> perfAudioCoreNs{0};

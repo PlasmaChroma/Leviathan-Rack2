@@ -592,31 +592,32 @@ struct WyrmWaveEditor : TransparentWidget {
 						if (a.max <= 0.f) return b;
 						a.min += b.min;
 						a.max += b.max;
+						a.average += b.average;
 						return a;
 					};
 					debug_terminal::TimingRangeUs moduleStepUs =
 						debug_terminal::consumeAudioProcessTiming(
-							module->perfModuleStepMinNs, module->perfModuleStepMaxNs);
+							module->perfModuleStepMinNs, module->perfModuleStepMaxNs, &module->perfModuleStepAverage);
 					moduleStepUs = addTimingRanges(moduleStepUs,
 						debug_terminal::consumeAudioProcessTiming(
-							module->perfExpandedStepMinNs, module->perfExpandedStepMaxNs));
+							module->perfExpandedStepMinNs, module->perfExpandedStepMaxNs, &module->perfExpandedStepAverage));
 					debug_terminal::TimingRangeUs moduleDrawUs =
 						debug_terminal::consumeAudioProcessTiming(
-							module->perfModuleDrawMinNs, module->perfModuleDrawMaxNs);
+							module->perfModuleDrawMinNs, module->perfModuleDrawMaxNs, &module->perfModuleDrawAverage);
 					moduleDrawUs = addTimingRanges(moduleDrawUs,
 						debug_terminal::consumeAudioProcessTiming(
-							module->perfExpandedDrawMinNs, module->perfExpandedDrawMaxNs));
+							module->perfExpandedDrawMinNs, module->perfExpandedDrawMaxNs, &module->perfExpandedDrawAverage));
 					lastSubmitSec = nowSec;
 					debug_terminal::submitWyrmMetrics(
 						debugId,
-						debug_terminal::consumeAudioProcessTiming(module->perfAudioProcessMinNs, module->perfAudioProcessMaxNs),
+						debug_terminal::consumeAudioProcessTiming(module->perfAudioProcessMinNs, module->perfAudioProcessMaxNs, &module->perfAudioProcessAverage),
 						moduleStepUs,
 						moduleDrawUs,
 						stepUsRange.consume(),
 						debug_terminal::consumeAudioProcessTiming(
-							module->perfEditorCacheDrawMinNs, module->perfEditorCacheDrawMaxNs),
+							module->perfEditorCacheDrawMinNs, module->perfEditorCacheDrawMaxNs, &module->perfEditorCacheDrawAverage),
 						debug_terminal::consumeAudioProcessTiming(
-							module->perfOverlayDrawMinNs, module->perfOverlayDrawMaxNs),
+							module->perfOverlayDrawMinNs, module->perfOverlayDrawMaxNs, &module->perfOverlayDrawAverage),
 						float(module->perfEditorCacheLastNs.load(std::memory_order_relaxed)) * 0.001f,
 						module->perfChannels.load(std::memory_order_relaxed),
 						lastBodySampleCount,
@@ -1260,7 +1261,7 @@ struct WyrmEditorAnimationOverlay final : TransparentWidget {
 			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfStart).count());
 			debug_terminal::recordAudioProcessTiming(
-				module->perfOverlayDrawMinNs, module->perfOverlayDrawMaxNs, elapsedNs);
+				module->perfOverlayDrawMinNs, module->perfOverlayDrawMaxNs, elapsedNs, &module->perfOverlayDrawAverage);
 			if (isWyrmDrawLoggingEnabled()) {
 				module->perfCsvOverlayDrawNs.store(elapsedNs, std::memory_order_relaxed);
 			}

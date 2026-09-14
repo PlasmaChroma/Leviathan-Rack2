@@ -19,8 +19,7 @@ struct ProcessTimingStats {
 };
 
 struct BaselineModuleMetrics {
-  std::atomic<uint64_t> sampledCount {0};
-  std::atomic<uint64_t> processNs {0};
+  AtomicTimingAverage processAverage;
   std::atomic<uint64_t> processMinNs {std::numeric_limits<uint64_t>::max()};
   std::atomic<uint64_t> processMaxNs {0};
   uint32_t instanceId = 0u;
@@ -30,18 +29,14 @@ struct BaselineModuleMetrics {
   }
 
   void recordProcess(uint64_t elapsedNs) {
-    sampledCount.fetch_add(1u, std::memory_order_relaxed);
-    processNs.fetch_add(elapsedNs, std::memory_order_relaxed);
-    recordAudioProcessTiming(processMinNs, processMaxNs, elapsedNs);
+    recordAudioProcessTiming(processMinNs, processMaxNs, elapsedNs, &processAverage);
   }
 
   ProcessTimingStats consumeProcessStats() {
     ProcessTimingStats stats;
-    stats.samples = sampledCount.exchange(0, std::memory_order_acq_rel);
-    const uint64_t totalNs = processNs.exchange(0, std::memory_order_acq_rel);
     stats.range = consumeAudioProcessTiming(processMinNs, processMaxNs);
-    if (stats.samples > 0)
-      stats.meanUs = float(double(totalNs) * 0.001 / double(stats.samples));
+    stats.range.average = processAverage.consume(&stats.samples);
+    if (stats.samples > 0) stats.meanUs = stats.range.average;
     return stats;
   }
 

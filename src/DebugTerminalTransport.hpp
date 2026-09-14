@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <cmath>
 #include <limits>
 #include <string>
 
@@ -13,6 +14,7 @@ static constexpr double kTimingRangeSubmitIntervalSec = 1.0;
 struct TimingRangeUs {
   float min = 0.f;
   float max = 0.f;
+  float average = std::numeric_limits<float>::quiet_NaN();
 
   TimingRangeUs() = default;
   TimingRangeUs(float minValue, float maxValue) : min(minValue), max(maxValue) {
@@ -23,9 +25,14 @@ struct UiTimingRangeAccumulator {
   bool hasSamples = false;
   float minUs = 0.f;
   float maxUs = 0.f;
+  double totalUs = 0.0;
+  uint64_t samples = 0;
 
   void add(float valueUs) {
     valueUs = std::max(0.f, valueUs);
+    if (!std::isfinite(valueUs)) return;
+    totalUs += valueUs;
+    ++samples;
     if (!hasSamples) {
       minUs = valueUs;
       maxUs = valueUs;
@@ -41,11 +48,45 @@ struct UiTimingRangeAccumulator {
     if (hasSamples) {
       range.min = minUs;
       range.max = maxUs;
+      range.average = float(totalUs / double(samples));
     }
     hasSamples = false;
     minUs = 0.f;
     maxUs = 0.f;
+    totalUs = 0.0;
+    samples = 0;
     return range;
+  }
+};
+
+// One timing producer, one UI consumer. Publish cumulative totals atomically,
+// so consuming a mean never splits a sample's duration from its sample count.
+// The producer never waits; the consumer gives up after four bounded attempts.
+struct AtomicTimingAverage {
+  std::atomic<uint64_t> version {0}, total {0}, count {0};
+  uint64_t writerVersion = 0, writerTotal = 0, writerCount = 0;
+  uint64_t consumedTotal = 0, consumedCount = 0;
+  void add(uint64_t ns) {
+    version.store(++writerVersion);
+    writerTotal += ns;
+    total.store(writerTotal);
+    count.store(++writerCount);
+    version.store(++writerVersion);
+  }
+  float consume(uint64_t* sampleCount = nullptr) {
+    if (sampleCount) *sampleCount = 0;
+    for (int attempt = 0; attempt < 4; ++attempt) {
+      const auto first = version.load();
+      if (first & 1u) continue;
+      const auto ns = total.load(), samples = count.load();
+      if (first != version.load()) continue;
+      const auto deltaNs = ns - consumedTotal, deltaCount = samples - consumedCount;
+      consumedTotal = ns; consumedCount = samples;
+      if (sampleCount) *sampleCount = deltaCount;
+      if (deltaCount) return float(double(deltaNs) * .001 / double(deltaCount));
+      break;
+    }
+    return std::numeric_limits<float>::quiet_NaN();
   }
 };
 
@@ -63,19 +104,25 @@ inline void atomicMax(std::atomic<uint64_t>& target, uint64_t value) {
 
 inline void recordAudioProcessTiming(std::atomic<uint64_t>& minNs,
                                      std::atomic<uint64_t>& maxNs,
-                                     uint64_t elapsedNs) {
+                                     uint64_t elapsedNs,
+                                     AtomicTimingAverage* average = nullptr) {
   atomicMin(minNs, elapsedNs);
   atomicMax(maxNs, elapsedNs);
+  if (average) average->add(elapsedNs);
 }
 
 inline TimingRangeUs consumeAudioProcessTiming(std::atomic<uint64_t>& minNs,
-                                               std::atomic<uint64_t>& maxNs) {
+                                               std::atomic<uint64_t>& maxNs,
+                                               AtomicTimingAverage* average = nullptr) {
   const uint64_t minValue = minNs.exchange(std::numeric_limits<uint64_t>::max(), std::memory_order_acq_rel);
   const uint64_t maxValue = maxNs.exchange(0u, std::memory_order_acq_rel);
-  if (minValue == std::numeric_limits<uint64_t>::max() || maxValue == 0u) {
-    return {};
+  TimingRangeUs result;
+  if (minValue != std::numeric_limits<uint64_t>::max()) {
+    result.min = float(double(minValue) * .001);
+    result.max = float(double(maxValue) * .001);
   }
-  return TimingRangeUs(float(double(minValue) * 0.001), float(double(maxValue) * 0.001));
+  if (average) result.average = average->consume();
+  return result;
 }
 
 void submitTDScopeUiMetrics(uint32_t instanceId,

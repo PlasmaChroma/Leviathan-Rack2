@@ -566,7 +566,7 @@ struct WyrmEditorFramebuffer final : widget::FramebufferWidget {
 				PerfClock::now() - perfStart).count());
 			if (debugEnabled && cacheWasDirty) {
 				debug_terminal::recordAudioProcessTiming(
-					module->perfEditorCacheDrawMinNs, module->perfEditorCacheDrawMaxNs, elapsedNs);
+					module->perfEditorCacheDrawMinNs, module->perfEditorCacheDrawMaxNs, elapsedNs, &module->perfEditorCacheDrawAverage);
 				module->perfEditorCacheLastNs.store(elapsedNs, std::memory_order_relaxed);
 			}
 			if (logCsv) {
@@ -902,7 +902,7 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfStart).count());
 			debug_terminal::recordAudioProcessTiming(
-				module->perfExpandedStepMinNs, module->perfExpandedStepMaxNs, elapsedNs);
+				module->perfExpandedStepMinNs, module->perfExpandedStepMaxNs, elapsedNs, &module->perfExpandedStepAverage);
 		}
 	}
 
@@ -942,7 +942,7 @@ struct WyrmExpandedEditorOverlay final : widget::OpaqueWidget {
 			elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfStart).count());
 			debug_terminal::recordAudioProcessTiming(
-				module->perfExpandedDrawMinNs, module->perfExpandedDrawMaxNs, elapsedNs);
+				module->perfExpandedDrawMinNs, module->perfExpandedDrawMaxNs, elapsedNs, &module->perfExpandedDrawAverage);
 		}
 		if (logCsv && link && link->drawCsvRecorder) {
 			link->drawCsvRecorder->write(
@@ -1286,7 +1286,7 @@ struct WyrmWidget : ModuleWidget {
 			const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfStart).count());
 			debug_terminal::recordAudioProcessTiming(
-				wyrm->perfModuleStepMinNs, wyrm->perfModuleStepMaxNs, elapsedNs);
+				wyrm->perfModuleStepMinNs, wyrm->perfModuleStepMaxNs, elapsedNs, &wyrm->perfModuleStepAverage);
 		}
 	}
 
@@ -1346,7 +1346,7 @@ struct WyrmWidget : ModuleWidget {
 			elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfStart).count());
 			debug_terminal::recordAudioProcessTiming(
-				wyrm->perfModuleDrawMinNs, wyrm->perfModuleDrawMaxNs, elapsedNs);
+				wyrm->perfModuleDrawMinNs, wyrm->perfModuleDrawMaxNs, elapsedNs, &wyrm->perfModuleDrawAverage);
 		}
 		if (logCsv && drawCsvRecorder) {
 			drawCsvRecorder->write(

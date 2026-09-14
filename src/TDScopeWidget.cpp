@@ -328,7 +328,7 @@ struct TDScopeWidget : ModuleWidget {
         uint64_t drawCalls = scopeModule->uiDebugScopeDrawCalls.load(std::memory_order_relaxed);
         debug_terminal::submitTDScopeUiMetrics(scopeModule->debugInstanceId,
                                                debug_terminal::consumeAudioProcessTiming(scopeModule->perfAudioProcessMinNs,
-                                                                                         scopeModule->perfAudioProcessMaxNs),
+                                                                                         scopeModule->perfAudioProcessMaxNs, &scopeModule->perfAudioProcessAverage),
                                                uiStepUsRange.consume(),
                                                uiDrawUsRange.consume(),
                                                densityRows,

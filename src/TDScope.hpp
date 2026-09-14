@@ -77,6 +77,7 @@ struct TDScope final : Module {
   std::atomic<float> uiDebugScopeDensityPct {100.f};
   std::atomic<int> uiDebugScopeDensityRows {0};
   std::atomic<uint64_t> perfAudioProcessMinNs {std::numeric_limits<uint64_t>::max()};
+  debug_terminal::AtomicTimingAverage perfAudioProcessAverage;
   std::atomic<uint64_t> perfAudioProcessMaxNs {0};
   uint32_t debugInstanceId = 0u;
   double uiDebugTerminalLastSubmitSec = -1.0;
@@ -560,7 +561,7 @@ struct TDScope final : Module {
     if (measurePerf) {
       const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::steady_clock::now() - processStart).count());
-      debug_terminal::recordAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs, elapsedNs);
+      debug_terminal::recordAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs, elapsedNs, &perfAudioProcessAverage);
     }
   }
 };

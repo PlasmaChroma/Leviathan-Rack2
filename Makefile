@@ -63,6 +63,7 @@ build/src/doom/%.c.o: CFLAGS += $(DOOM_LEGACY_WARN_FLAGS)
 build/src/Mandelwake.cpp.o build/src/MandelwakeEngine.cpp.o: FLAGS += -fno-fast-math -fno-unsafe-math-optimizations
 
 TEST_BINS_NON_RACK := \
+	build/tests/debug_terminal_timing_spec \
 	build/tests/review_state_handoff_spec \
 	build/tests/halo_metrics_scope_spec \
 	build/tests/chromatide_qoi_preflight_spec \
@@ -438,6 +439,7 @@ test-spsc-snapshot-tsan: build/tests/spsc_latest_snapshot_tsan_spec
 	@TSAN_OPTIONS=halt_on_error=1 build/tests/spsc_latest_snapshot_tsan_spec
 
 test-fast: test-build-fast
+	$(call run_test_bin,build/tests/debug_terminal_timing_spec)
 	$(call run_test_bin,build/tests/adaptive_visual_update_spec)
 	$(call run_test_bin,build/tests/halo_metrics_scope_spec)
 	$(call run_test_bin,build/tests/chromatide_qoi_preflight_spec)
@@ -904,6 +906,9 @@ test-gl-lifecycle: build/tests/gl_surface_lifecycle_spec
 build/tests/gl_surface_lifecycle_spec: tests/gl_surface_lifecycle_spec.cpp src/visual/AdaptiveGlSurface.cpp src/visual/AdaptiveGlSurface.hpp src/GlResourceRetirement.cpp src/GlResourceRetirement.hpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) $(MINGW_TEST_CPPFLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/gl_surface_lifecycle_spec.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter win,$(ARCH_OS)),-lopengl32,-lGL) -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
+
+build/tests/debug_terminal_timing_spec: tests/debug_terminal_timing_spec.cpp src/DebugTerminalTransport.hpp | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc $< -pthread -o $@
 
 build/tests/halo_metrics_scope_spec: tests/halo_metrics_scope_spec.cpp src/visual/HaloKnob2Metrics.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra $< -o $@

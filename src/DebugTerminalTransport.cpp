@@ -386,7 +386,7 @@ static void submitUiMetricSchema(const char *module, const char *columnsJson) {
   if (!shouldSubmitSchema(module, "ui")) {
     return;
   }
-  char dataBuf[1024];
+  char dataBuf[2048];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
                 "{\"schema\":1,\"target_kind\":\"metric\",\"columns\":%s}",
@@ -405,6 +405,12 @@ static void appendRange(char *buf, size_t size, const char *key, TimingRangeUs r
                 key ? key : "",
                 std::max(0.f, range.min),
                 std::max(0.f, range.max));
+  const size_t rangeEnd = std::strlen(buf);
+  if (std::isfinite(range.average))
+    std::snprintf(buf + rangeEnd, size - rangeEnd, ",\"%s_avg\":%.3f",
+                  key ? key : "", std::max(0.f, range.average));
+  else
+    std::snprintf(buf + rangeEnd, size - rangeEnd, ",\"%s_avg\":null", key ? key : "");
 }
 
 } // namespace
@@ -422,7 +428,7 @@ void submitTDScopeUiMetrics(uint32_t instanceId,
                             uint64_t drawCalls) {
   submitUiMetricSchema("TDScope",
                        "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"rows\",\"label\":\"Rows\"},{\"key\":\"density_pct\",\"label\":\"Density%\"},{\"key\":\"zoom\",\"label\":\"Zoom\"},{\"key\":\"thickness\",\"label\":\"Thickness\"},{\"key\":\"publish_seq\",\"label\":\"Publish\"},{\"key\":\"draw_seq\",\"label\":\"Draw Seq\"},{\"key\":\"draw_calls\",\"label\":\"Calls\"}]");
-  char dataBuf[320];
+  char dataBuf[2048];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
                 "{");
@@ -458,7 +464,7 @@ void submitTemporalDeckUiMetrics(uint32_t instanceId,
                                  bool scopeMetricValid) {
   submitUiMetricSchema("TemporalDeck",
                        "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"scope_preview_us\",\"label\":\"Scope (us)\"},{\"key\":\"scope_stride\",\"label\":\"Stride\"},{\"key\":\"scope_metric_valid\",\"label\":\"Scope OK\"}]");
-  char dataBuf[320];
+  char dataBuf[2048];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
                 "{");
@@ -509,7 +515,7 @@ void submitBifurxUiMetrics(uint32_t instanceId,
                            float conduitDrawUs) {
   submitUiMetricSchema("Bifurx",
                        "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"opengl\",\"label\":\"GL\"},{\"key\":\"curve_prep_us\",\"label\":\"Curve (us)\"},{\"key\":\"overlay_prep_us\",\"label\":\"Overlay (us)\"},{\"key\":\"surface_render_us\",\"label\":\"Surface (us)\"},{\"key\":\"worker_submit_us\",\"label\":\"Worker (us)\"},{\"key\":\"conduit_draw_us\",\"label\":\"Conduit (us)\"}]");
-  char dataBuf[512];
+  char dataBuf[2048];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
                 "{");
@@ -553,7 +559,7 @@ void submitWyrmMetrics(uint32_t instanceId,
                        uint64_t fixedSurfaceGeneration) {
   submitUiMetricSchema("Wyrm",
                        "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"editor_step_us\",\"label\":\"Ed Step (us)\"},{\"key\":\"cached_editor_us\",\"label\":\"Cache (us)\"},{\"key\":\"overlay_us\",\"label\":\"Overlay (us)\"},{\"key\":\"ed_us\",\"label\":\"CL.us\"},{\"key\":\"ch\",\"label\":\"Ch\"},{\"key\":\"body\",\"label\":\"Body\"},{\"key\":\"body_cache_hit\",\"label\":\"BHit\"},{\"key\":\"body_cache_miss\",\"label\":\"BMiss\"},{\"key\":\"fixed_surface\",\"label\":\"Fixed\"},{\"key\":\"surface_w\",\"label\":\"Surf W\"},{\"key\":\"surface_h\",\"label\":\"Surf H\"},{\"key\":\"surface_gen\",\"label\":\"Gen\"}]");
-  char dataBuf[512];
+  char dataBuf[2048];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
                 "{");
@@ -603,7 +609,7 @@ void submitIntegralFluxMetrics(uint32_t instanceId,
                                float eclipseUs) {
   submitUiMetricSchema("IntegralFlux",
                        "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"aperture_us\",\"label\":\"Aperture (us)\"},{\"key\":\"gear_us\",\"label\":\"Halo2 (us)\"},{\"key\":\"eclipse_us\",\"label\":\"E2 (us)\"}]");
-  char dataBuf[640];
+  char dataBuf[2048];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
                 "{");
@@ -637,7 +643,7 @@ void submitBaselineMetrics(const char* moduleName,
   const char* safeModuleName = moduleName ? moduleName : "";
   submitUiMetricSchema(safeModuleName,
                        "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"}]");
-  char dataBuf[160];
+  char dataBuf[2048];
   std::snprintf(dataBuf,
                 sizeof(dataBuf),
                 "{");
@@ -669,7 +675,7 @@ void submitSibylMetrics(uint32_t instanceId,
                         int nvgPathOps) {
   submitUiMetricSchema("Sibyl",
                        "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"snapshot_us\",\"label\":\"Snap (us)\"},{\"key\":\"oracle_us\",\"label\":\"Oracle (us)\"},{\"key\":\"nvg_path_ops\",\"label\":\"NVG Paths\"}]");
-  char dataBuf[320];
+  char dataBuf[2048];
   std::snprintf(dataBuf, sizeof(dataBuf), "{");
   appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
   std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");
@@ -726,7 +732,7 @@ void submitDoorstopMetrics(uint32_t instanceId,
                            bool trailsActive) {
   submitUiMetricSchema("Doorstop",
                        "[{\"key\":\"process_us\",\"label\":\"Pro (us)\"},{\"key\":\"step_us\",\"label\":\"Step (us)\"},{\"key\":\"draw_us\",\"label\":\"Draw (us)\"},{\"key\":\"geometry_idle_us\",\"label\":\"Geo I (us)\"},{\"key\":\"geometry_trail_us\",\"label\":\"Geo T (us)\"},{\"key\":\"panel_idle_us\",\"label\":\"Panel I (us)\"},{\"key\":\"panel_trail_us\",\"label\":\"Panel T (us)\"},{\"key\":\"overflow_idle_us\",\"label\":\"Over I (us)\"},{\"key\":\"overflow_trail_us\",\"label\":\"Over T (us)\"},{\"key\":\"trails_active\",\"label\":\"Trails\"}]");
-  char dataBuf[640];
+  char dataBuf[2048];
   std::snprintf(dataBuf, sizeof(dataBuf), "{");
   appendRange(dataBuf, sizeof(dataBuf), "process_us", processUs);
   std::snprintf(dataBuf + std::strlen(dataBuf), sizeof(dataBuf) - std::strlen(dataBuf), ",");

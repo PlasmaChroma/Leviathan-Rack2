@@ -16,6 +16,19 @@ python3 tools/debug_terminal/server.py --host 127.0.0.1 --port 8765 --refresh-hz
 
 ## Protocol
 
+Press **A** to toggle the displayed **Range / Average** timing control. This
+applies to all timing ranges, including module Process, Step, and Draw, in both
+the Rich and plain terminal views. Keyboard controls work in native Windows and
+POSIX terminals. The default is Range; the selection lasts for this terminal session.
+
+The plugin sends measured arithmetic means alongside its existing range strings:
+`"draw_us":"1.00-10.00","draw_us_avg":4.0`. Means use the recorded timing samples
+since the previous telemetry submission (normally one second), rather than the
+midpoint of the extrema. Empty intervals send `null`; Average mode displays `-`
+for unavailable means, including packets from older plugins. Existing scalar
+metrics keep their original meaning and display. Restart the terminal and load
+the rebuilt plugin to use the new fields.
+
 Each line must be one JSON object.
 
 Example:

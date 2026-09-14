@@ -1038,6 +1038,7 @@ struct TemporalDeck::Impl {
   std::atomic<uint64_t> perfAudioSampledCount{0u};
   std::atomic<uint64_t> perfAudioProcessNs{0u};
   std::atomic<uint64_t> perfAudioProcessMinNs{std::numeric_limits<uint64_t>::max()};
+  debug_terminal::AtomicTimingAverage perfAudioProcessAverage;
   std::atomic<uint64_t> perfAudioProcessMaxNs{0u};
   uint32_t debugInstanceId = 0u;
   std::atomic<float> uiDrawCostUs{0.f};
@@ -2497,7 +2498,7 @@ void TemporalDeck::process(const ProcessArgs &args) {
       uint64_t(std::max<int64_t>(0, std::chrono::duration_cast<std::chrono::nanoseconds>(processEnd - processStart).count()));
     impl->perfAudioProcessNs.fetch_add(elapsedNs, std::memory_order_relaxed);
     impl->perfAudioSampledCount.fetch_add(1u, std::memory_order_relaxed);
-    debug_terminal::recordAudioProcessTiming(impl->perfAudioProcessMinNs, impl->perfAudioProcessMaxNs, elapsedNs);
+    debug_terminal::recordAudioProcessTiming(impl->perfAudioProcessMinNs, impl->perfAudioProcessMaxNs, elapsedNs, &impl->perfAudioProcessAverage);
   }
 }
 
@@ -2536,7 +2537,7 @@ float TemporalDeck::getUiSampleRate() const {
 debug_terminal::TimingRangeUs TemporalDeck::consumeAudioProcessUs() {
   impl->perfAudioSampledCount.exchange(0u, std::memory_order_acq_rel);
   impl->perfAudioProcessNs.exchange(0u, std::memory_order_acq_rel);
-  return debug_terminal::consumeAudioProcessTiming(impl->perfAudioProcessMinNs, impl->perfAudioProcessMaxNs);
+  return debug_terminal::consumeAudioProcessTiming(impl->perfAudioProcessMinNs, impl->perfAudioProcessMaxNs, &impl->perfAudioProcessAverage);
 }
 
 float TemporalDeck::getUiScopePreviewCostUs() const {

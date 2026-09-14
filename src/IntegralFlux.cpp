@@ -119,7 +119,7 @@ uint32_t IntegralFlux::debugInstanceIdForUi() const {
 }
 
 debug_terminal::TimingRangeUs IntegralFlux::consumeAudioProcessTimingForUi() {
-	return debug_terminal::consumeAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs);
+	return debug_terminal::consumeAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs, &perfAudioProcessAverage);
 }
 
 float IntegralFlux::consumeCurveReductionAverageForUi(int channel) {
@@ -1152,6 +1152,6 @@ void IntegralFlux::process(const ProcessArgs& args) {
 	if (measurePerf) {
 		const uint64_t elapsedNs = (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
 			PerfClock::now() - perfStart).count();
-		debug_terminal::recordAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs, elapsedNs);
+		debug_terminal::recordAudioProcessTiming(perfAudioProcessMinNs, perfAudioProcessMaxNs, elapsedNs, &perfAudioProcessAverage);
 	}
 }

@@ -1058,7 +1058,7 @@ struct BifurxWidget final : ModuleWidget {
 		debug_terminal::submitBifurxUiMetrics(
 			bifurx->debugInstanceId,
 			debug_terminal::consumeAudioProcessTiming(
-				bifurx->perfAudioProcessRangeMinNs, bifurx->perfAudioProcessRangeMaxNs),
+				bifurx->perfAudioProcessRangeMinNs, bifurx->perfAudioProcessRangeMaxNs, &bifurx->perfAudioProcessRangeAverage),
 			moduleStepUsRange.consume(),
 			moduleDrawUsRange.consume(),
 			showGL,
