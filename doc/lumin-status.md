@@ -177,3 +177,28 @@ The useful cache combination is integrated as a second independent, session-only
 The ring probe exercises the actual live candidate across 200 image cases (five zooms, five values, four bloom settings, unipolar/bipolar), plus packaged bake parity, baseline/fallback pixel parity, debug gating, context sharing, invalid-image recovery and context events. Maximum channel difference was 31/255 for the combined cache and 190/255 for the offline shader; neither is claimed pixel-equivalent. See the experiment README for reproduction and static-track asset regeneration.
 
 Final reproduction passed with 112-121 us cached-ring medians versus 136-172 us baseline and 290-311 us batched shader. Windows plugin link and all 109,950 test-fast checks passed. The installed archive matches dist, including the track bake; restart Rack to load the two independent A/B switches. No staging or commits.
+
+
+## Eclipse2 one-time runtime baking
+
+Removed the packaged cap and track RGBA assets. Each is now rendered once on first
+enabled use into shared CPU pixels at 4x logical resolution. The cap uses the loaded
+SVG; the track shares its drawing function with the baseline, so source changes no
+longer require an offline asset regeneration. CPU pixels survive context recreation;
+existing context-owned image caches continue to upload/rebuild lazily.
+
+A private temporary NanoVG recorder inside AdaptiveGlSurface's state guard isolates
+the cold bake from Rack's active main or nested drawing. No host recorder is begun
+or ended by the bake. Temporary GL resources are released in the current context,
+and no persistent GL objects live in the CPU bake state. First-use work remains
+inside Draw, preserving existing telemetry. Both A/B switches retain their defaults.
+
+Native probes matched both runtime bakes exactly to the prior reference rendering,
+verified a single bake across context events, and checked active main/nested host
+recordings plus pixel-pack state restoration. The initial first-use measurements
+were about 5.5 ms cap and 3.4 ms track; steady drawing reuses the existing pixels.
+
+Windows plugin linking, both native rendering probes and all 109,950 test-fast
+checks passed without the RGBA assets present. Installed the rebuilt package;
+archive integrity passed and its contents contain neither RGBA file. The installed
+archive hash matches dist. Restart Rack to load it. Existing staging was left alone.
