@@ -160,6 +160,36 @@ void processOneSample(SibylModule& module) {
 }
 
 int main() {
+	for (bool resetInput : {false, true}) for (bool externalClock : {false, true}) {
+		SibylModule module;
+		module.acceptComposition(makeComposition(1, false), sibyl::ApplyAt::IMMEDIATE,
+			sibyl::PhasePolicy::RESTART_ALL);
+		if (externalClock) module.inputs[SibylModule::CLOCK_INPUT].channels = 1;
+		processOneSample(module);
+		if (resetInput) {
+			module.inputs[SibylModule::RESET_INPUT].channels = 1;
+			module.inputs[SibylModule::RESET_INPUT].setVoltage(10.f);
+		} else module.params[SibylModule::RESET_BUTTON_PARAM].setValue(1.f);
+		processOneSample(module);
+		check(module.outputs[SibylModule::EOC_OUTPUT].getVoltage() == 0.f,
+			"reset request does not pulse EoC before its clock boundary");
+		if (externalClock) module.inputs[SibylModule::CLOCK_INPUT].setVoltage(10.f);
+		else module.m_clockBoundaryPhaseBeats = 1.0 - 1e-6;
+		processOneSample(module);
+		check(module.m_pendingHardwareAction == SibylModule::HardwareAction::NONE &&
+			module.outputs[SibylModule::EOC_OUTPUT].getVoltage() == 10.f &&
+			module.outputs[SibylModule::SCENE_OUTPUT].getVoltage() == 10.f &&
+			module.outputs[SibylModule::CLOCK_OUTPUT].getVoltage() == 10.f,
+			"button/input reset pulses EoC with Scene and Clock when applied");
+		int highSamples = 1;
+		for (int sample = 0; sample < 100; ++sample) {
+			processOneSample(module);
+			if (module.outputs[SibylModule::EOC_OUTPUT].getVoltage() == 10.f) ++highSamples;
+		}
+		check(highSamples >= 48 && highSamples <= 49 &&
+			module.outputs[SibylModule::EOC_OUTPUT].getVoltage() == 0.f,
+			"reset EoC lasts 1ms and a held reset does not retrigger");
+	}
 	{
 		SibylModule module;
 		std::shared_ptr<sibyl::Composition> composition = std::const_pointer_cast<sibyl::Composition>(

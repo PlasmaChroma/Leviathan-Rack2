@@ -950,6 +950,15 @@ build/tests/aperture_light_layers_spec: tests/aperture_light_layers_spec.cpp src
 	$(CXX) -std=c++17 -O2 -Isrc -Itools -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/aperture_light_layers_spec.cpp src/visual/ApertureLight.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
 
 # Explicit offline aperture candidates; not part of plugin or test-fast.
+build/tools/eclipse2/ring: tools/experiments/eclipse2/ring.cpp tools/experiments/eclipse2/fixture.hpp tools/experiments/eclipse2/main.inc build/tools/eclipse2/reference.inc tools/experiments/eclipse2/Eclipse2RingShader.hpp tools/experiments/eclipse2/Eclipse2RingExperiment.hpp src/visual/Eclipse2RingCache.hpp
+	$(CXX) -std=c++17 -O2 -Isrc -Itools -Ibuild/tools/eclipse2 -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/experiments/eclipse2/ring.cpp src/visual/AdaptiveGlSurface.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
+
+build/tools/eclipse2/reference.inc: tools/experiments/eclipse2/generate_reference.py src/visual/VisualAssets.cpp
+	python3 tools/experiments/eclipse2/generate_reference.py
+
+build/tools/eclipse2/components: tools/experiments/eclipse2/components.cpp tools/experiments/eclipse2/fixture.hpp tools/experiments/eclipse2/main.inc build/tools/eclipse2/reference.inc src/visual/VisualAssets.hpp src/visual/Eclipse2RetainedCap.hpp src/NvgGraphicsLifecycle.cpp res/icon/Eclipse2Knob.svg
+	$(CXX) -std=c++17 -O2 -Isrc -Itools -Ibuild/tools/eclipse2 -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/experiments/eclipse2/components.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -o $@
+
 build/tests/aperture_light_settling_spec build/tests/aperture_light_layers_spec build/tests/aperture_candidates: src/visual/ApertureBloomMasks.hpp
 
 build/tests/aperture_bloom_pilot_spec: tests/aperture_bloom_pilot_spec.cpp tests/aperture_bloom_pilot_run.inc src/visual/ApertureLight.cpp src/visual/ApertureLight.hpp src/visual/ApertureBloomMasks.hpp src/NvgGraphicsLifecycle.cpp | build/tests

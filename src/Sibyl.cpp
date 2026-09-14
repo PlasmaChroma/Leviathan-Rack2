@@ -919,6 +919,8 @@ struct SibylModule : Module, SibylControl {
 			enterScene(composition, 0, request);
 			m_randomnessEpoch = 0;
 			realignOutputClock(true);
+			// Reset downstream cycle-dependent state at the applied reset boundary.
+			m_eocPulse.trigger(1e-3f);
 		} else {
 			enterScene(composition, m_pendingHardwareScene, request);
 		}

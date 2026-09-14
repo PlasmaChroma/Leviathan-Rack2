@@ -1,4 +1,7 @@
 #include "VisualAssets.hpp"
+#include "Eclipse2RetainedCap.hpp"
+#include "Eclipse2RingCache.hpp"
+#include "Eclipse2Track.hpp"
 
 #include "../theme/ThemeUiPoller.hpp"
 #include "ApertureLightTransfer.hpp"
@@ -4045,41 +4048,7 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 
 	nvgSave(args.vg);
 
-	// 1. Draw Recessed Dark Track Ring
-	const float startArcAngle = minAngle - 0.5f * M_PI;
-	const float endArcAngle = maxAngle - 0.5f * M_PI;
-
-	// Subtle outer drop shadow for track depth
-	nvgBeginPath(args.vg);
-	nvgArc(args.vg, center.x, center.y, radiusPx, startArcAngle, endArcAngle, NVG_CW);
-	nvgStrokeColor(args.vg, nvgRGBA(3, 2, 2, 96));
-	nvgStrokeWidth(args.vg, largeRadiusPx * 4.4f);
-	nvgLineCap(args.vg, NVG_ROUND);
-	nvgStroke(args.vg);
-
-	// Sharp black border stroke around the track (thickened and slightly transparent)
-	nvgBeginPath(args.vg);
-	nvgArc(args.vg, center.x, center.y, radiusPx, startArcAngle, endArcAngle, NVG_CW);
-	nvgStrokeColor(args.vg, nvgRGBA(0, 0, 0, 245));
-	nvgStrokeWidth(args.vg, largeRadiusPx * 3.4f);
-	nvgLineCap(args.vg, NVG_ROUND);
-	nvgStroke(args.vg);
-
-	// Core dark track channel
-	nvgBeginPath(args.vg);
-	nvgArc(args.vg, center.x, center.y, radiusPx, startArcAngle, endArcAngle, NVG_CW);
-	nvgStrokeColor(args.vg, nvgRGBA(14, 12, 11, 230));
-	nvgStrokeWidth(args.vg, largeRadiusPx * 2.4f);
-	nvgLineCap(args.vg, NVG_ROUND);
-	nvgStroke(args.vg);
-
-	// Light specular accent inside the track (warm bronze glint)
-	nvgBeginPath(args.vg);
-	nvgArc(args.vg, center.x, center.y, radiusPx, startArcAngle, endArcAngle, NVG_CW);
-	nvgStrokeColor(args.vg, nvgRGBA(255, 220, 150, 16));
-	nvgStrokeWidth(args.vg, largeRadiusPx * 1.8f);
-	nvgLineCap(args.vg, NVG_ROUND);
-	nvgStroke(args.vg);
+	eclipse2_track::draw(args, center, radiusPx, largeRadiusPx, minAngle, maxAngle);
 
 	// Active track background glow (linking the active LEDs together)
 	const float activeStartAngle = (minAngle + minLitNorm * (maxAngle - minAngle)) - 0.5f * M_PI;
@@ -4256,7 +4225,7 @@ Eclipse2Knob::Eclipse2Knob() {
 	shadowLayer->valueNorm = normalizedParamValue();
 	fb->addChild(shadowLayer);
 
-	progressRing = new ProgressLedRingWidget();
+	progressRing = new eclipse2_ring_cache::Ring();
 	progressRing->box.size = box.size;
 	progressRing->minAngle = minAngle;
 	progressRing->maxAngle = maxAngle;
@@ -4267,6 +4236,16 @@ Eclipse2Knob::Eclipse2Knob() {
 }
 
 void Eclipse2Knob::step() {
+	const bool ringCacheEnabled = eclipse2_ring_cache::enabled();
+	if (lastRingCacheEnabled != ringCacheEnabled) {
+		lastRingCacheEnabled = ringCacheEnabled;
+		if (fb) fb->setDirty();
+	}
+	const bool retainedCapEnabled = eclipse2_cap::enabled();
+	if (lastRetainedCapEnabled != retainedCapEnabled) {
+		lastRetainedCapEnabled = retainedCapEnabled;
+		if (fb) fb->setDirty();
+	}
 	app::SvgKnob::step();
 	const float bloomAmount = settings::haloBrightness;
 	if (std::fabs(bloomAmount - lastBloomAmount) > 1e-4f) {
@@ -4297,7 +4276,9 @@ void Eclipse2Knob::onChange(const ChangeEvent& e) {
 void Eclipse2Knob::setBackSvg(std::shared_ptr<window::Svg> svg) {
 	if (!svg || !fb) return;
 	if (!backLayer) {
-		backLayer = new EclipseKnob::SvgLayer();
+		auto* retainedLayer = new eclipse2_cap::Layer();
+		retainedLayer->bakedSvg = visual_assets::loadPluginSvgCached("res/icon/Eclipse2Knob.svg");
+		backLayer = retainedLayer;
 		backLayer->minAngle = minAngle;
 		backLayer->maxAngle = maxAngle;
 		backLayer->valueNorm = normalizedParamValue();
@@ -4307,6 +4288,7 @@ void Eclipse2Knob::setBackSvg(std::shared_ptr<window::Svg> svg) {
 	}
 	backLayer->setSvg(svg);
 	backLayer->box.size = box.size;
+	fb->setDirty();
 }
 
 float Eclipse2Knob::normalizedParamValue() {

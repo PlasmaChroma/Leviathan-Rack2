@@ -5,6 +5,8 @@
 #include "NvgGraphicsLifecycle.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/VisualAssets.hpp"
+#include "visual/Eclipse2RetainedCap.hpp"
+#include "visual/Eclipse2RingCache.hpp"
 #include "visual/FractalGlassOverlay.hpp"
 #include "visual/PlasmaConduit.hpp"
 #include "visual/PreviewSurface.hpp"
@@ -2573,6 +2575,12 @@ struct IntegralFluxWidget : ModuleWidget {
 					[](){return isApertureBloomMasksEnabled();},
 					[](){setApertureBloomMasksEnabled(!isApertureBloomMasksEnabled());}));
 				menu->addChild(createMenuLabel(apertureBloomStatus()));
+				menu->addChild(createCheckMenuItem("Eclipse2 retained cap A/B (all modules)", "",
+					[](){ return eclipse2_cap::enabled(); },
+					[](){ eclipse2_cap::setEnabled(!eclipse2_cap::enabled()); }));
+				menu->addChild(createCheckMenuItem("Eclipse2 cached ring A/B (all modules)", "",
+					[](){ return eclipse2_ring_cache::enabled(); },
+					[](){ eclipse2_ring_cache::setEnabled(!eclipse2_ring_cache::enabled()); }));
 				if (hasNautiloid) {
 					menu->addChild(createMenuItem("Save Nautiloid Fractal Parameters", "", [=]() {
 						appendIntegralFluxFractalParamsCapture(maths);

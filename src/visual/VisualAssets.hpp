@@ -487,6 +487,8 @@ struct Eclipse2Knob : app::SvgKnob {
 	ShadowWidget* shadowLayer = nullptr;
 	EclipseKnob::SvgLayer* backLayer = nullptr;
 	float lastBloomAmount = -1.f;
+	bool lastRetainedCapEnabled = false;
+	bool lastRingCacheEnabled = false;
 
 	Eclipse2Knob();
 	void step() override;
