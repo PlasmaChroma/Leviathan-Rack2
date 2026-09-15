@@ -921,7 +921,12 @@ build/tools/snapshot_history_benchmark: tools/snapshot_history_benchmark.cpp too
 
 # Real-driver lifecycle regression. Explicit opt-in: requires a window system,
 # but creates only an invisible GLFW window (no live Rack patch required).
-.PHONY: test-gl-lifecycle
+.PHONY: test-gl-lifecycle test-gl-batch test-render
+test-render: test-gl-lifecycle test-gl-batch
+
+test-gl-batch: build/tests/adaptive_gl_batch_spec
+	$(call run_rack_test_bin,build/tests/adaptive_gl_batch_spec)
+
 test-gl-lifecycle: build/tests/gl_surface_lifecycle_spec
 	$(call run_rack_test_bin,build/tests/gl_surface_lifecycle_spec)
 

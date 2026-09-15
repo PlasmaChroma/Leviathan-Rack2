@@ -55,7 +55,7 @@ struct DrawCapture {
   int calls = 0;
   bool paddingClear = false;
 };
-static void render(void* user, rack::math::Vec size, int) {
+static void render(void* user, rack::math::Vec size, int viewportY) {
   auto& capture = *static_cast<DrawCapture*>(user);
   ++capture.calls;
   check(glGetError() == GL_NO_ERROR, "allocation and guard entry have no GL errors");
@@ -64,9 +64,12 @@ static void render(void* user, rack::math::Vec size, int) {
   glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
     GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &texture);
   capture.texture = GLuint(texture);
-  // Test full-capacity clear before the callback changes state/pixels.
+  // Only the active rectangle and its sampling border must be transparent.
+  // This callback poisons the entire retained target after checking the border,
+  // so reuse of either backing buffer exercises stale-pixel clearing.
   unsigned char pixel[4] = {255,255,255,255};
-  glReadPixels(63, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+  GLint backingViewport[4];glGetIntegerv(GL_VIEWPORT,backingViewport);
+  glReadPixels(std::min(int(size.x),backingViewport[2]-1), std::max(0, viewportY - 1), 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
   capture.paddingClear = pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0 && pixel[3] == 0;
   glViewport(0, 0, int(size.x), int(size.y));
   glClearColor(1, 0, 1, 1);
@@ -161,13 +164,13 @@ int main() {
   };
   check(glGetError() == GL_NO_ERROR, "setup has no GL errors");
   check(surface->renderIfNeeded(vg, {32,32}, 1.19f, 1, policy, true, render, &capture), "initial 119% render");
-  check(capture.paddingClear, "all padding channels cleared despite restrictive mask");
+  check(capture.paddingClear, "sampling border cleared despite restrictive mask");
   verifyState();
   check(!surface->renderIfNeeded(vg, {32,32}, 1.19f, 1, policy, true, render, &capture), "idle surface reuses image");
   for (float zoom : {1.9f, 0.5f, 1.19f}) {
     surface->markDirty();
     check(surface->renderIfNeeded(vg, {32,32}, zoom, 1, policy, true, render, &capture), "growth/shrink render");
-    check(capture.paddingClear, "reused target fully cleared");
+    check(capture.paddingClear, "reused target sampling border cleared");
     verifyState();
   }
   expectedRead = GLint(splitRead->fbo); expectedRenderbuffer = GLint(splitRead->rbo);

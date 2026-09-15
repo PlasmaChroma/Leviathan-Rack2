@@ -53,7 +53,11 @@ static void paint(void* user,Vec size,int y){
  glUseProgram(p.program);glUniform1f(p.tone,p.color);
  glBindBuffer(GL_ARRAY_BUFFER,p.vbo);glEnableVertexAttribArray(0);glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,0,nullptr);glDrawArrays(GL_TRIANGLES,0,3);
  if(p.poison){glEnable(GL_DEPTH_TEST);glEnable(GL_STENCIL_TEST);glEnable(GL_CULL_FACE);glEnable(GL_SCISSOR_TEST);glScissor(0,0,1,1);
-  glBlendFunc(GL_ZERO,GL_ZERO);glPixelStorei(GL_UNPACK_ROW_LENGTH,99);glEnableVertexAttribArray(3);}
+  glBlendFunc(GL_ZERO,GL_ZERO);glPixelStorei(GL_UNPACK_ROW_LENGTH,99);glEnableVertexAttribArray(3);
+  glColorMask(GL_FALSE,GL_FALSE,GL_FALSE,GL_FALSE);glClearColor(.1f,.2f,.3f,.4f);
+  glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);glEnable(GL_ALPHA_TEST);
+  glPixelStorei(GL_PACK_ALIGNMENT,1);glPixelStorei(GL_PACK_ROW_LENGTH,0);
+  glPixelStorei(GL_PACK_SKIP_ROWS,0);glPixelStorei(GL_PACK_SKIP_PIXELS,0);}
 }
 int main(int argc,char** argv){
  require(glfwInit(),"GLFW");glfwWindowHint(GLFW_VISIBLE,GLFW_FALSE);
@@ -69,6 +73,7 @@ int main(int argc,char** argv){
  GLint linked=0;glGetProgramiv(program,GL_LINK_STATUS,&linked);require(linked,"link");glDeleteShader(vs);glDeleteShader(fs);
  GLuint vbo=0;glGenBuffers(1,&vbo);glBindBuffer(GL_ARRAY_BUFFER,vbo);float triangle[]={-1,-1,3,-1,-1,3};glBufferData(GL_ARRAY_BUFFER,sizeof(triangle),triangle,GL_STATIC_DRAW);glBindBuffer(GL_ARRAY_BUFFER,0);
  if(argc>1&&std::strcmp(argv[1],"--benchmark")==0){
+  std::printf("GL vendor=%s; renderer=%s; version=%s\n",glGetString(GL_VENDOR),glGetString(GL_RENDERER),glGetString(GL_VERSION));
   for(int count:{1,2,8,32,64})for(int repeat=0;repeat<3;++repeat)for(int order=0;order<2;++order){
    bool grouped=(order+repeat)%2;Surface surfaces[64];Surface::Update updates[64];Paint jobs[64];
    auto* target=nvgluCreateFramebuffer(vg,106*count,48,0);require(target,"target");
@@ -94,27 +99,78 @@ int main(int argc,char** argv){
    auto& u=updates[i];u.surface=&surfaces[i];u.logicalSize={106,48};u.policy.minDensity=u.policy.maxDensity=1;u.policy.vertexAttributeCount=4;u.callback=paint;u.user=&jobs[i];}
   auto* target=nvgluCreateFramebuffer(vg,220,54,0);require(target,"image target");
   std::vector<unsigned char> reference;
-  for(int mode=0;mode<4;++mode){service();nvgluBindFramebuffer(target);glViewport(0,0,220,54);glDisable(GL_SCISSOR_TEST);glClearColor(0,0,0,0);glClear(GL_COLOR_BUFFER_BIT);
+  for(int mode=0;mode<5;++mode){service();nvgluBindFramebuffer(target);glViewport(0,0,220,54);glDisable(GL_SCISSOR_TEST);glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);glClearColor(0,0,0,0);glClear(GL_COLOR_BUFFER_BIT);
    glUseProgram(program);glBindBuffer(GL_ARRAY_BUFFER,vbo);glPixelStorei(GL_UNPACK_ROW_LENGTH,17);glEnable(GL_SCISSOR_TEST);glScissor(2,3,19,23);
+   glPixelStorei(GL_PACK_ALIGNMENT,8);glPixelStorei(GL_PACK_ROW_LENGTH,23);
+   glPixelStorei(GL_PACK_SKIP_ROWS,2);glPixelStorei(GL_PACK_SKIP_PIXELS,3);
+   glColorMask(GL_FALSE,GL_TRUE,GL_FALSE,GL_TRUE);glClearColor(.25f,.5f,.75f,1.f);
+   glEnable(GL_ALPHA_TEST);glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
+   glVertexAttribPointer(0,3,GL_FLOAT,GL_TRUE,16,reinterpret_cast<void*>(4));glDisableVertexAttribArray(0);
    for(auto& s:surfaces)s.markDirty();
-   updates[0].policy.shaderOnlyState=mode>=2;updates[1].policy.shaderOnlyState=mode==2;
+   updates[0].policy.shaderOnlyState=mode>=2;updates[1].policy.shaderOnlyState=mode==2||mode==4;
    glMatrixMode(GL_PROJECTION);glLoadIdentity();glTranslatef(3,4,0);
    glMatrixMode(GL_TEXTURE);glLoadIdentity();glTranslatef(5,6,0);
    Surface::BatchStats stats;
-   if(mode){for(auto& j:jobs)j.checkState=true;require(Surface::renderBatch(vg,updates,2,&stats),"group admitted");require(stats.updates==2&&stats.hostBoundaries==1,"one boundary");}
-   else for(auto& u:updates)require(u.surface->renderIfNeeded(vg,u.logicalSize,1,1,u.policy,false,u.callback,u.user),"independent admitted");
+   if(mode && mode!=4){for(auto& j:jobs)j.checkState=true;require(Surface::renderBatch(vg,updates,2,&stats),"group admitted");require(stats.updates==2&&stats.hostBoundaries==1,"one boundary");}
+   else {for(auto& j:jobs)j.checkState=false;for(auto& u:updates)require(u.surface->renderIfNeeded(vg,u.logicalSize,1,1,u.policy,false,u.callback,u.user),"independent admitted");}
    require(get(GL_FRAMEBUFFER_BINDING)==int(target->fbo)&&get(GL_CURRENT_PROGRAM)==int(program)&&get(GL_ARRAY_BUFFER_BINDING)==int(vbo),"host bindings restored");
-   require(glIsEnabled(GL_SCISSOR_TEST)&&get(GL_UNPACK_ROW_LENGTH)==17,"host scissor/upload restored");
+   require(glIsEnabled(GL_SCISSOR_TEST),"host scissor enable restored");
+   require(get(GL_UNPACK_ROW_LENGTH)==17,"host upload row length restored");
+   require(get(GL_PACK_ALIGNMENT)==8&&get(GL_PACK_ROW_LENGTH)==23&&get(GL_PACK_SKIP_ROWS)==2&&get(GL_PACK_SKIP_PIXELS)==3,"host readback layout restored");
+   GLboolean mask[4];glGetBooleanv(GL_COLOR_WRITEMASK,mask);require(!mask[0]&&mask[1]&&!mask[2]&&mask[3],"host color mask restored");
+   GLfloat clear[4];glGetFloatv(GL_COLOR_CLEAR_VALUE,clear);require(clear[0]==.25f&&clear[1]==.5f&&clear[2]==.75f&&clear[3]==1.f,"host clear color restored");
+   GLint polygon[2];glGetIntegerv(GL_POLYGON_MODE,polygon);require(polygon[0]==GL_FILL&&polygon[1]==GL_FILL&&glIsEnabled(GL_ALPHA_TEST),"host polygon and alpha state restored");
+   GLint attribute=0;void* pointer=nullptr;
+   glGetVertexAttribiv(0,GL_VERTEX_ATTRIB_ARRAY_SIZE,&attribute);require(attribute==3,"host attribute size restored");
+   glGetVertexAttribiv(0,GL_VERTEX_ATTRIB_ARRAY_STRIDE,&attribute);require(attribute==16,"host attribute stride restored");
+   glGetVertexAttribiv(0,GL_VERTEX_ATTRIB_ARRAY_NORMALIZED,&attribute);require(attribute==GL_TRUE,"host attribute normalization restored");
+   glGetVertexAttribiv(0,GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING,&attribute);require(attribute==int(vbo),"host attribute buffer restored");
+   glGetVertexAttribPointerv(0,GL_VERTEX_ATTRIB_ARRAY_POINTER,&pointer);require(pointer==reinterpret_cast<void*>(4),"host attribute pointer restored");
    GLint scissor[4];glGetIntegerv(GL_SCISSOR_BOX,scissor);require(scissor[0]==2&&scissor[1]==3&&scissor[2]==19&&scissor[3]==23,"scissor box restored");
    require(get(GL_MATRIX_MODE)==GL_TEXTURE,"matrix mode preserved");
    GLfloat matrix[16];glGetFloatv(GL_PROJECTION_MATRIX,matrix);require(matrix[12]==3&&matrix[13]==4,"projection preserved");
    glGetFloatv(GL_TEXTURE_MATRIX,matrix);require(matrix[12]==5&&matrix[13]==6,"texture matrix preserved");
    glPixelStorei(GL_UNPACK_ROW_LENGTH,0);glDisable(GL_SCISSOR_TEST);
+   glPixelStorei(GL_PACK_ALIGNMENT,4);glPixelStorei(GL_PACK_ROW_LENGTH,0);glPixelStorei(GL_PACK_SKIP_ROWS,0);glPixelStorei(GL_PACK_SKIP_PIXELS,0);
+   glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);glDisable(GL_ALPHA_TEST);
    nvgBeginFrame(vg,220,54,1);Widget::DrawArgs args;args.vg=vg;args.clipBox=Rect(Vec(0,0),Vec(106,48));
    nvgGlobalAlpha(vg,.7f);nvgScissor(vg,7,4,203,44);
    for(int i=0;i<2;++i){nvgSave(vg);nvgTranslate(vg,110.f*i+.37f,.37f);require(surfaces[i].drawAligned(args,{106,48},1,{0,0}),"image present");nvgRestore(vg);}
    nvgEndFrame(vg);std::vector<unsigned char> image(220*54*4);glReadPixels(0,0,220,54,GL_RGBA,GL_UNSIGNED_BYTE,image.data());
    if(!mode)reference=image;else require(image==reference,"grouped pixels identical to separate");
+  }
+  // General callback matching Eclipse2's private NanoVG recorder/readback path.
+  // A restricted shader callback cannot claim this wider stencil-state contract.
+  {
+   Surface nested;Surface::Update u;u.surface=&nested;u.logicalSize={32,32};u.policy.minDensity=u.policy.maxDensity=1;u.policy.vertexAttributeCount=2;
+   bool readback=false;u.user=&readback;
+   u.callback=[](void* user,Vec size,int y){
+    auto* recorder=nvgCreateGL2(NVG_ANTIALIAS|NVG_STENCIL_STROKES);require(recorder,"nested NanoVG recorder");
+    glViewport(0,y,int(size.x),int(size.y));glDisable(GL_SCISSOR_TEST);glStencilMask(~0u);glClear(GL_STENCIL_BUFFER_BIT);
+    nvgBeginFrame(recorder,size.x,size.y,1);nvgBeginPath(recorder);nvgRect(recorder,4,4,24,24);nvgFillColor(recorder,nvgRGBA(255,0,0,255));nvgFill(recorder);
+    nvgStrokeWidth(recorder,2);nvgStrokeColor(recorder,nvgRGBA(255,255,255,255));nvgStroke(recorder);nvgEndFrame(recorder);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER,0);glPixelStorei(GL_PACK_ALIGNMENT,1);glPixelStorei(GL_PACK_ROW_LENGTH,0);glPixelStorei(GL_PACK_SKIP_ROWS,0);glPixelStorei(GL_PACK_SKIP_PIXELS,0);
+    unsigned char pixel[4]={};glReadPixels(16,y+16,1,1,GL_RGBA,GL_UNSIGNED_BYTE,pixel);
+    *static_cast<bool*>(user)=pixel[0]==255&&pixel[1]==0&&pixel[2]==0&&pixel[3]==255;
+    nvgDeleteGL2(recorder);
+   };
+   GLuint pack=0;glGenBuffers(1,&pack);glBindBuffer(GL_PIXEL_PACK_BUFFER,pack);glBufferData(GL_PIXEL_PACK_BUFFER,512,nullptr,GL_STREAM_READ);
+   glPixelStorei(GL_PACK_ALIGNMENT,8);glPixelStorei(GL_PACK_ROW_LENGTH,23);glPixelStorei(GL_PACK_SKIP_ROWS,2);glPixelStorei(GL_PACK_SKIP_PIXELS,3);
+   glStencilMaskSeparate(GL_FRONT,0x35);glStencilMaskSeparate(GL_BACK,0x53);
+   glStencilFuncSeparate(GL_FRONT,GL_EQUAL,3,0x7f);glStencilOpSeparate(GL_FRONT,GL_KEEP,GL_INCR,GL_DECR);
+   glStencilFuncSeparate(GL_BACK,GL_NOTEQUAL,5,0x3f);glStencilOpSeparate(GL_BACK,GL_REPLACE,GL_KEEP,GL_INVERT);
+   for(int grouped=0;grouped<2;++grouped){
+    nested.markDirty();readback=false;
+    require(grouped?Surface::renderBatch(vg,&u,1):nested.renderIfNeeded(vg,u.logicalSize,1,1,u.policy,true,u.callback,u.user),"nested rendering accepted");
+    require(readback,"nested NanoVG image readback");
+    require(get(GL_PIXEL_PACK_BUFFER_BINDING)==int(pack)&&get(GL_PACK_ALIGNMENT)==8&&get(GL_PACK_ROW_LENGTH)==23&&get(GL_PACK_SKIP_ROWS)==2&&get(GL_PACK_SKIP_PIXELS)==3,"nested host pack state restored");
+    require(get(GL_STENCIL_WRITEMASK)==0x35&&get(GL_STENCIL_BACK_WRITEMASK)==0x53,"nested host stencil masks restored");
+    require(get(GL_STENCIL_FUNC)==GL_EQUAL&&get(GL_STENCIL_REF)==3&&get(GL_STENCIL_VALUE_MASK)==0x7f&&get(GL_STENCIL_PASS_DEPTH_FAIL)==GL_INCR&&get(GL_STENCIL_PASS_DEPTH_PASS)==GL_DECR,"nested front stencil restored");
+    require(get(GL_STENCIL_BACK_FUNC)==GL_NOTEQUAL&&get(GL_STENCIL_BACK_REF)==5&&get(GL_STENCIL_BACK_VALUE_MASK)==0x3f&&get(GL_STENCIL_BACK_FAIL)==GL_REPLACE&&get(GL_STENCIL_BACK_PASS_DEPTH_PASS)==GL_INVERT,"nested back stencil restored");
+    require(glGetError()==GL_NO_ERROR,"nested recorder and restoration have no GL errors");
+   }
+   glBindBuffer(GL_PIXEL_PACK_BUFFER,0);glDeleteBuffers(1,&pack);glPixelStorei(GL_PACK_ALIGNMENT,4);glPixelStorei(GL_PACK_ROW_LENGTH,0);glPixelStorei(GL_PACK_SKIP_ROWS,0);glPixelStorei(GL_PACK_SKIP_PIXELS,0);
+   glStencilMask(~0u);glStencilFunc(GL_ALWAYS,0,~0u);glStencilOp(GL_KEEP,GL_KEEP,GL_KEEP);
   }
   Surface::BatchStats stats;int before=calls;require(Surface::renderBatch(vg,updates,2,&stats),"cached batch admitted");require(stats.hostBoundaries==0&&stats.updates==0&&calls==before,"cached batch no guard or render");
   surfaces[1].markDirty();require(Surface::renderBatch(vg,updates,2,&stats)&&stats.updates==1&&stats.hostBoundaries==1,"independent dirty surface");

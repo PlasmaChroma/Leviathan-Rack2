@@ -1,91 +1,158 @@
-# Lumin-Render Graphics Optimization Tag & Architecture Log
+# Lumin-Render: implementation plan and review
 
-## 1. Overview & Context
+## Objective and current status
 
-This document captures the evaluation, refinement, and implementation roadmap for the graphics rendering pipeline optimizations on the `lumin-render` branch of Leviathan.
+Reduce rendering cost while preserving host GL state, image quality, and graphics-context recovery. Performance claims need measurements on the native Windows toolchain and the actual GPU; fewer source-level calls alone do not establish a speedup.
 
-The initiative addresses three core rendering bottlenecks identified across the OpenGL surface caching pipeline (`AdaptiveGlSurface`), state isolation guards (`SurfaceStateGuard`), and background spectral preparation (`BifurxRenderPrep`).
+This plan supersedes the earlier completed checklist. The first implementation pass repairs the confirmed state-restoration regression; the later optimization stages remain pending.
 
----
+| Area | Current evidence | Next action |
+| --- | --- | --- |
+| `SurfaceStateGuard` repair | Strengthened GL tests, both Windows builds and routine suite pass; batching measured | Manual Rack/editor-recreation check remains |
+| Scissored surface clear | Active region plus a one-pixel border is implemented | Verify retained-buffer pixels and measure GPU cost |
+| Pressure-dependent density | Policy field and calculation exist; no producer sets this policy field | Add one explicit pilot after state tests pass |
+| Bifurx log approximation | Implemented in both render-preparation paths | Share implementation; verify float error and benchmark |
+| Dynamic ceiling shortcut | Compares peak against previous ceiling minus 6 dB | Replace with a policy that accounts for spectrum shape |
+| Build and routine tests | Earlier Windows builds and `test-fast` passed | Use the new `test-render` target as well; routine tests do not cover GL state |
 
-## 2. Evaluation of Muse's Recommendations & Architectural Refinements
+## 1. Repair GL state isolation before further optimization
 
-### Optimization 1: Modernize `SurfaceStateGuard` & Eliminate `glPushAttrib`
-* **Original Suggestion**:
-  Replace `glPushAttrib(GL_ALL_ATTRIB_BITS)` / `glPopAttrib`, `glPushClientAttrib`, and query calls with an explicit save/restore of only the mutated states.
-* **Codebase Audit**:
-  * `SurfaceStateGuard` currently issues **37 synchronous OpenGL driver queries** per batch:
-    * 9 `glGetIntegerv` queries (FBOs, program, array buffer, active texture, etc.)
-    * 4 vertex attributes $\times 7$ queries per attribute = **28 synchronous queries** (`GL_VERTEX_ATTRIB_ARRAY_ENABLED`, `SIZE`, `TYPE`, `STRIDE`, `BUFFER_BINDING`, `POINTER`).
-    * Plus `glPushAttrib(GL_ALL_ATTRIB_BITS)` and `glPushClientAttrib`.
-  * `glPushAttrib` is deprecated legacy OpenGL (1.1/2.x) that modern desktop drivers (NVIDIA, AMD, Intel on Windows) emulate inefficiently in software.
-  * Synchronous `glGetVertexAttribPointerv` calls can trigger pipeline synchronization bubbles.
-  * NanoVG re-specifies its own vertex attribute pointers and buffer bindings on every draw pass, making saving pointer addresses and strides completely redundant.
-* **Refined Implementation**:
-  * Remove `glPushAttrib`, `glPopAttrib`, `glPushClientAttrib`, `glPopClientAttrib`.
-  * Remove all 28 vertex attribute query calls.
-  * Explicitly store and restore only the active state mutated by our shaders:
-    * Framebuffers (`GL_DRAW_FRAMEBUFFER_BINDING`, `GL_READ_FRAMEBUFFER_BINDING`, `GL_RENDERBUFFER_BINDING`)
-    * Shader Program (`GL_CURRENT_PROGRAM`)
-    * Buffers (`GL_ARRAY_BUFFER_BINDING`, `GL_PIXEL_UNPACK_BUFFER_BINDING`)
-    * Textures (`GL_ACTIVE_TEXTURE`, `GL_TEXTURE_BINDING_2D` on Texture 0)
-    * Enabled states of Vertex Attributes 0..3 (queried directly via `glIsEnabled(GL_VERTEX_ATTRIB_ARRAY_ENABLED)`)
-    * Viewport and Scissor rects + Scissor enable state.
+Files: `src/visual/AdaptiveGlSurface.cpp`, `.hpp`, `src/visual/Eclipse2RuntimeBake.cpp`, and their focused GL tests.
 
----
+### Implementation direction
 
-### Optimization 2: Worker CPU in `BifurxRenderPrep`
-* **Original Suggestion**:
-  Fast `log10` approximation/LUT, skip the second (raw-input) FFT when module-response overlay is hidden, and throttle prep through `VisualUpdateGate`.
-* **Codebase Audit & Crucial Corrections**:
-  1. **Thread Context**: `prepareCurveSnapshot` runs in `BifurxWorker.cpp` on an **asynchronous background worker thread (`BifurxUiRenderService`)**, not on the main NanoVG UI draw thread. Optimizing it saves background CPU cycles and battery, but does not directly block frame rendering.
-  2. **The Second FFT Is Visually Required**:
-     * Line 198 of `src/BifurxRenderPrep.cpp` explicitly specifies:
-       ```cpp
-       // Normal module rendering uses measured response for the FFT fill colors
-       // even when the response line itself is hidden. Browser/display-only views
-       // are the only path whose gradient is independent of the input spectrum.
-       ```
-     * Skipping the raw-input FFT when only the response curve line is hidden would corrupt the response-driven spectral fill gradient! The second FFT must remain active.
-  3. **Heavy Transcendental Call Count**:
-     * `std::log10(...)` is called twice per bin across 513 bins ($>1000$ evaluations per snapshot).
-     * Being in double precision, this incurs heavy conversion and transcendental libc overhead.
-* **Refined Implementation**:
-  * Implement a single-precision branchless float approximation `fast_log10f(x)` based on IEEE 754 mantissa extraction:
-    $$\log_{10}(x) \approx 0.301029995664\text{f} \times \log_2(x)$$
-  * Keep the second FFT intact to preserve spectral fill rendering.
-  * Cache `p95` dynamic ceiling and only execute `std::nth_element` when `framePeakDbfs` moves by $>0.5\text{ dB}$.
+1. Write a state-ownership table beside the guard contract. Audit mutations in `beginShaderPass`, framebuffer creation, `renderImpl`, and every callback. Include nested NanoVG rendering and readback in Eclipse2 baking. Each state must be restored by the shared boundary, restored locally by its owner, or explicitly forbidden by a restricted callback contract.
+2. Restore the compatibility path's prior coverage first. Retaining the previous attribute-stack guard for general callbacks is an acceptable recovery step. Keep capture/restore once per batch and preserve the zero-GL-work cache-hit path. Removing `glPushAttrib` is not itself an acceptance criterion.
+3. Keep a smaller explicit guard only for audited, opt-in shader callbacks. A mixed batch must use the general contract. Honor the selected contract consistently for single and batched rendering; do not silently weaken existing callers.
+4. Cover the actual mutated state, including:
+   - Draw/read framebuffer and renderbuffer bindings; restore framebuffer-dependent selections against their owning framebuffer.
+   - Program, array buffers, vertex-attribute enables and pointer/buffer descriptors for the declared indices. Do not assume the next host operation is a NanoVG flush that repairs them.
+   - Active texture unit and bindings on every permitted texture unit.
+   - Pixel pack/unpack buffer bindings and modified pixel-store values: alignment, row length, skipped rows/pixels, byte swapping and bit order where applicable. Eclipse2 changes pack state and currently expects the outer guard to restore it.
+   - Color write mask, clear color, blend factors/equations, scissor box and viewport.
+   - Alpha/depth/stencil/cull enables, polygon mode, and callback-modified stencil functions/masks/operations. General NanoVG callbacks require more than the restricted shader subset.
+   - Matrix mode and affected matrices on compatibility paths; callbacks must balance matrix stack depth.
+5. Define the neutral state between callbacks separately from the host restoration contract. A batch callback that changes upload state must not contaminate the next callback, even when the outer host state is restored correctly at batch exit.
 
----
+### Required verification
 
-### Optimization 3: Retained Surfaces Under Pressure (`AdaptiveGlSurface`)
-* **Original Suggestion**:
-  Scissor `glClear` to active rect + 1px, only validate GL queries on context change, and wire `VisualFramePressure` to `AdaptiveGlSurfacePolicy::maxDensity`.
-* **Codebase Audit**:
-  * `renderImpl` currently un-scissors and clears the full `backCapacityWidth * backCapacityHeight` framebuffer. With `retainPeakCapacity = true`, zooming out leaves a large buffer where dead texture space is continually cleared every frame.
-  * NVGLU framebuffers are flipped vertically (`FLIPY`). The active content sits in $X \in [0, \text{activeWidth}]$ and $Y \in [\text{backCapacityHeight} - \text{activeHeight}, \text{backCapacityHeight}]$.
-  * Scissoring the clear to this active region plus a 1-pixel border satisfies linear filtering clamp while saving substantial GPU fill rate.
-  * `VisualFramePressure` currently only throttles update frequency; tying it to `maxDensity` directly reduces pixel count ($O(N^2)$).
-* **Refined Implementation**:
-  * Restrict `glClear(GL_COLOR_BUFFER_BIT)` via `glScissor(0, backCapacityHeight - clearHeight, clearWidth, clearHeight)`.
-  * Add `int adaptivePressure = 0` to `AdaptiveGlSurfacePolicy` to dynamically scale `maxDensity` under load.
+- Extend `tests/adaptive_gl_batch_spec.cpp` to seed non-default host state, invoke single, restricted, general, and mixed batches, and compare the promised state afterward.
+- Keep the existing poisoned first callback test. Assert upload row length explicitly so its failure is distinguishable from scissor failure.
+- Add meaningful coverage for color masks, pack/unpack settings, attribute descriptors, and a nested NanoVG/readback callback representative of Eclipse2.
+- Exercise early returns and allocation failure, not just successful draws.
+- Retain grouped-versus-independent pixel comparisons and cache-hit assertions.
+- Use `GlLifecycleUtils.hpp`, `NvgGraphicsLifecycle.hpp`, and the existing deferred-retirement helpers. Keep context ownership checks and lazy recovery; do not replace them with a context-pointer-only assumption.
 
----
+**Exit condition:** focused state and lifecycle tests pass with no GL errors, including the previously failing upload-state assertion. Benchmark only after this contract is restored.
 
-## 3. Implementation Status & Validation
+## 2. Validate scissored clears independently
 
-- [x] **Architecture & Evaluation**: Formulated, critiqued, and refined against VCV Rack & GL specs.
-- [x] **Task 1: Modernize `SurfaceStateGuard` (`src/visual/AdaptiveGlSurface.cpp`)**:
-  - Eliminated `glPushAttrib`, `glPopAttrib`, `glPushClientAttrib`, `glPopClientAttrib`.
-  - Eliminated all 28 synchronous `glGetVertexAttrib*` and pointer address queries.
-  - Implemented explicit save/restore for FBOs, Program, Array/Unpack buffers, Texture 0, attribute enables 0..3, and Viewport/Scissor/Blend state.
-- [x] **Task 2: Retained Surfaces Under Pressure (`src/visual/AdaptiveGlSurface.hpp` & `.cpp`)**:
-  - Implemented exact scissored clear `glScissor(0, clearY, clearWidth, clearHeight)` in `renderImpl` covering active rect + 1px border in FLIPY coordinate space.
-  - Added `int adaptivePressure = 0` to `AdaptiveGlSurfacePolicy` with smooth quadratic pixel-count reduction ($1 / \sqrt{1 + \text{pressure}}$) under high load.
-- [x] **Task 3: Worker Prep Optimization (`src/BifurxRenderPrep.cpp` & `src/Bifurx.cpp`)**:
-  - Implemented branchless IEEE-754 mantissa approximation `fast_10log10f` ($<0.085\text{ dB}$ error, ~15x faster than libc `std::log10`).
-  - Added $0.5\text{ dB}$ hysteresis to `computeDisplayTopTargetDbfs` to skip redundant `std::nth_element` sorting when peak levels are steady.
-  - Preserved the second (raw-input) FFT to maintain accurate response-tinted spectral fill rendering.
-- [x] **Task 4: Build & Test Validation**:
-  - Full native MINGW64 authoritative build (`plugin.dll`): **Clean compile & link (0 errors, 0 warnings in modified files)**.
-  - Full native Rack-linked test suite (`make test-fast` with Rack runtime): **109,950 checks passed, 0 failures**.
+Files: `src/visual/AdaptiveGlSurface.cpp`, `tests/gl_surface_lifecycle_spec.cpp`, and the batch image test.
+
+- Keep the current active-viewport-plus-border approach as a candidate. Derive the clear rectangle from the same actual backing capacity and viewport origin used by the draw callback.
+- Test grow/shrink/grow cycles with retained capacity and both front/back buffers. Seed unused pixels with a conspicuous color, then verify they never enter the sampled image.
+- Cover fractional zoom, pixel ratio, quantum rounding, alpha, non-square surfaces, and active sizes touching capacity boundaries.
+- Compare visible output against a full-clear reference. The unused texture interior need not be transparent; the sampled boundary must be correct.
+- Measure full and scissored clears at identical backing sizes, active sizes, and callback workloads. Partial clears can have driver-dependent costs; keep the faster verified option for the measured workload.
+
+**Exit condition:** no old-pixel fringe or changed alpha at supported presentation scales, with recorded CPU/GPU timings. Avoid claiming a fill-rate improvement before this comparison.
+
+## 3. Make worker optimizations correct and measurable
+
+Files: `src/BifurxRenderPrep.cpp`, the matching helpers in `src/Bifurx.cpp`, and focused render-preparation tests.
+
+### Shared logarithm approximation
+
+- Factor the duplicate approximation into one small inline Bifurx helper so worker and fallback paths stay identical.
+- Preserve both FFTs for ordinary module rendering: the measured response still colors the spectral fill when its response line is hidden. Preserve the existing display-only exception.
+- Use a defined bit-copy operation such as `memcpy` for float representation access; confirm optimized native compilation removes copy overhead.
+- Specify the supported input domain and the existing low-energy floor. Verify behavior at powers of two, near the floor, across actual energy/ratio ranges, and for invalid values according to an explicit policy.
+- Add an actual float implementation sweep against `10.f * std::log10(x)`. A preliminary mathematical mantissa sweep found about **0.085253 dB** maximum error, so the old `<0.085 dB` claim is too strict. A provisional **0.09 dB** normal-domain budget is reasonable, subject to the float sweep; below-floor clamping is a separate intentional behavior.
+- Benchmark complete preparation snapshots as well as the helper. Keep representative quiet, tonal, broadband and changing spectra, warm-up, repeated trials, and consumed outputs so the compiler cannot remove the work.
+
+### Dynamic ceiling policy
+
+- Remove the current early return as the correctness baseline. `previousTopTargetDbfs - 6.f` is not a saved previous peak: the ceiling also depends on the spectrum percentile, peak headroom and clamps.
+- A previous-peak cache alone is insufficient. A tone and broadband signal can have the same peak but different percentiles; a peak-only shortcut can hold the wrong scale indefinitely.
+- Measure percentile selection cost first. If it is material, use a bounded refresh interval with immediate refresh on first frame, configuration changes and significant peak growth. This bounds the stale percentile even when the peak stays constant.
+- Apply peak headroom and range clamps on every snapshot. Document attack/release behavior and a maximum refresh delay. Start with an explicit provisional delay budget of 50 ms and validate it visually before adopting it.
+- Test constant peak with changing spectral distribution, rising/falling levels, silence, scale-mode toggles and floor/ceiling transitions. Compare the optimized target trajectory with the unskipped baseline.
+
+**Exit condition:** both preparation paths agree, approximation error meets its stated budget, ceiling response remains bounded, and end-to-end timing justifies the extra logic.
+
+## 4. Connect adaptive resolution through one pilot
+
+Files: `src/visual/AdaptiveGlSurface.hpp`, `.cpp`, one selected caller, and its existing pressure/update policy.
+
+- Leave the default pressure at zero. Select one opt-in surface that presents through `draw()` for the first pilot. `drawAligned()` assumes the supplied density matches the raster; audit and update that contract before enabling pressure on aligned contours.
+- Feed a stabilized level from the existing `VisualFramePressure` mechanism at preparation time. The similarly named field in `SettledContourFramebuffer` is a different policy and does not connect this new setting automatically.
+- Use a four-entry density-factor table for levels 0..3: approximately `1.0`, `0.7071`, `0.5774`, `0.5`, avoiding a per-preparation square root. Retain the caller's minimum legible density.
+- Change only the effective maximum. Below that cap, requested density should remain unchanged. The ideal pixel-area factors are `1`, `1/2`, `1/3`, `1/4` before minimum-density and extent rounding effects.
+- Add hysteresis and slower recovery to the pressure producer. Do not rebuild or oscillate allocations on every frame. Reuse retained backing capacity while reducing active raster dimensions.
+- Schedule redraw when the effective raster dimensions change; the current clean-cache early return only responds to growth. Avoid invalidating when a pressure-level change produces the same dimensions.
+- Verify text/line legibility, transitions, zoom recovery, context recreation, and absence of stale pixels. Do not silently enable reduced quality on released modules before these checks.
+
+**Exit condition:** the pilot actually receives nonzero pressure, reduces measured rendering cost under load, and returns to full quality without thrashing or misaligned presentation.
+
+## 5. Validation and measurement protocol
+
+### Commands available now
+
+Run inside native MSYS2 MINGW64 with the installed Rack runtime first in the test process path:
+
+```sh
+make build/tests/adaptive_gl_batch_spec
+PATH="/c/Program Files/VCV/Rack2Pro:$PATH" ./build/tests/adaptive_gl_batch_spec
+make test-render RACK_APP_RUNTIME_DIR="/c/Program Files/VCV/Rack2Pro"
+make -j10 test-fast RACK_APP_RUNTIME_DIR="/c/Program Files/VCV/Rack2Pro"
+make -j10 plugin.dll
+```
+
+`test-gl-batch` now uses the existing `run_rack_test_bin` helper. The opt-in `test-render` target groups it with `test-gl-lifecycle`. Do not imply that `test-fast` exercises real GL state restoration.
+
+### Benchmark and rollout requirements
+
+- Use `adaptive_gl_batch_spec --benchmark` after correctness passes, comparing a correct baseline and each optimization separately. Record revision, compiler flags, GPU/driver, Rack version, surface count, active/backing sizes, zoom and pressure.
+- Preserve module-level `Process`, `Step`, and `Draw` telemetry semantics. Report capture, setup, target, callback and restore timings as additional component metrics. Gate live debug reporting through `isDragonKingDebugEnabled`.
+- Report CPU median/p95 and GPU timings separately. Use delayed GPU query collection; do not add synchronous waits to production rendering. Include static cache hits, one dirty surface, and larger dirty batches.
+- Run a manual Rack check for Bifurx, Eclipse2 consumers and TD.Scope, including zoom, module removal, and editor/context recreation where supported. A successful build is not this visual check.
+- Keep the implementation stages separately reviewable: state repair; clear optimization; worker changes; adaptive pilot. Sync shared changes into Pro only after the relevant validation, then build both Windows plugins.
+- Do not retain a claimed speedup whose change is within run-to-run noise. Record actual results and unresolved limitations here when each stage completes.
+
+## Review corrections to the previous narrative
+
+- Current Bifurx uses a 4096-point FFT and **2049 bins**, not 513.
+- The previous float expressions select the float `std::log10` overload; the document supplied no evidence of double-precision conversion overhead.
+- The guard still queries four attribute enables in a batch. Attribute enables use `glGetVertexAttribiv`, not `glIsEnabled(GL_VERTEX_ATTRIB_ARRAY_ENABLED)`.
+- The approximation contains a floor branch. The earlier **15x** speedup is unverified in this review.
+- Broad claims about GL driver software emulation or guaranteed query stalls are hypotheses to measure on the target machine, not demonstrated causes.
+- Earlier successful builds and routine tests did not detect the GL regression; the focused graphics tests are now a separate required validation step.
+
+## Implementation record: state restoration
+
+- Reproduced the original native test failure before changing the guard.
+- Restored full compatibility attribute/client coverage for general callbacks and the narrower attribute groups for restricted shader callbacks. Explicitly preserve generic vertex descriptors and pack/unpack buffer bindings. Mixed batches retain the general contract; single calls now honor `shaderOnlyState` too.
+- Preserved one host boundary per dirty batch and zero capture/render work for clean batches. The scissored clear remains in place.
+- Expanded the batch regression test across independent general/restricted calls, general/restricted/mixed batches, poisoned callback state, and a private NanoVG recorder with pixel readback matching Eclipse2's usage. Verify distinct front/back stencil settings, pixel-store layout, color state and generic inputs, plus identical output pixels.
+- Updated the lifecycle test to check the sampled clear border, including poisoned/reused buffers, rather than requiring unused texture interiors to be cleared. Existing allocation-failure, context-loss and retirement checks remain active.
+- Native results so far: GL lifecycle **549 checks passed**; expanded GL batch test **passed**, including nested NanoVG/readback and no GL errors.
+- This is a correctness repair with batching preserved. It does not establish that the restored guard is faster than the incomplete guard it replaces.
+- Both normal Leviathan and synced Leviathan-Pro Windows DLL builds passed. Native `test-fast`: **109,950 checks, zero failures**. Diff whitespace checks passed in both repositories. Nothing installed or committed as part of this implementation pass.
+
+### Corrected-renderer batching measurements
+
+Native MINGW64 `-O2` test binary, NVIDIA GeForce RTX 3090, GL 4.6 driver 560.94. Current worktree based on `24d64a0` with the state repair above. Raw output: `build/render-state-benchmark.log` (local build artifact). Validation logs: `build/render-state-validation.log` and `build/render-state-pro-build.log`.
+
+Each configuration uses 460 frames, discards 100 warm-up frames, and repeats three times with alternating execution order. Surfaces are 106x48 at density 1, all dirty, with a simple shader and NanoVG presentation. The table reports the median of the three per-trial medians in microseconds; it is not a whole-module frame benchmark.
+
+| Surfaces | Separate CPU | Grouped CPU | Separate GPU | Grouped GPU |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 23.9 | 24.4 | 9.216 | 9.216 |
+| 2 | 85.0 | 25.5 | 17.408 | 14.336 |
+| 8 | 448.7 | 33.3 | 53.248 | 33.792 |
+| 32 | 977.1 | 441.1 | 673.792 | 111.616 |
+| 64 | 1994.0 | 901.6 | 1664.000 | 494.592 |
+
+At 64 surfaces, median trial CPU p95 was 2311.5 us separate versus 1057.7 us grouped; GPU p95 was 2455.552 versus 974.848 us. The full output includes every trial's median and p95. Single-surface results show no useful improvement; larger batches benefit in this fixture. Timing is not smoothly proportional to count, so do not extrapolate these ratios to Rack workloads or claim a guard-specific speedup. Both sides use the repaired guard; no comparison against the state-leaking implementation is presented as a valid optimization win.
+
+The next performance experiment should compare full versus scissored clears at fixed backing/active extents on this correct baseline, then assess whether any additional guard optimization is worth its complexity. Real Rack zoom and editor-recreation checks remain manual follow-up work.

@@ -17,8 +17,15 @@ struct PhaseTimer {
     explicit PhaseTimer(uint64_t* value):total(value),start(value?Clock::now():Clock::time_point()){}
     ~PhaseTimer(){if(total)*total+=uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now()-start).count());}
 };
-// Lightweight state guard capturing only what our shader passes mutate,
-// avoiding deprecated glPushAttrib and synchronous vertex attribute pointer queries.
+// Host boundary ownership:
+// - Attribute stacks: compatibility enables, blend/color/stencil/polygon state,
+//   viewport/scissor, and client pack/unpack state. Restricted batches omit
+//   compatibility state they promise not to mutate (including stencil settings).
+// - Explicit saves: FBOs, program, buffers, unit-zero texture and generic inputs.
+// - General callbacks: projection/modelview stacks; texture matrices and other
+//   stack depths remain callback-owned. Restricted callbacks never touch matrices.
+// Capture once per dirty batch, never on a cache hit. Do not remove restoration
+// based on assumptions about the next host draw rebuilding its vertex inputs.
 struct SurfaceStateGuard {
 	GLint previousFramebuffer = 0;
 	GLint previousReadFramebuffer = 0;
@@ -29,25 +36,13 @@ struct SurfaceStateGuard {
 	GLint previousTexture2d = 0;
 	GLint previousMatrixMode = GL_MODELVIEW;
 
+	struct Attribute { GLint enabled, size, type, normalized, stride, buffer; void* pointer; } attributes[4];
 	GLint texture0 = 0;
 	GLint unpackBuffer = 0;
-	GLint unpackAlignment = 4;
-	GLint previousViewport[4] = {0, 0, 0, 0};
-	GLint previousScissor[4] = {0, 0, 0, 0};
-	GLint previousBlendSrcRgb = GL_ONE, previousBlendDstRgb = GL_ZERO;
-	GLint previousBlendSrcAlpha = GL_ONE, previousBlendDstAlpha = GL_ZERO;
-	GLint previousBlendEqRgb = GL_FUNC_ADD, previousBlendEqAlpha = GL_FUNC_ADD;
-	GLboolean previousScissorEnabled = GL_FALSE;
-	GLboolean previousBlendEnabled = GL_FALSE;
-	GLboolean previousDepthEnabled = GL_FALSE;
-	GLboolean previousStencilEnabled = GL_FALSE;
-	GLboolean previousCullEnabled = GL_FALSE;
-	GLint attributeEnabled[4] = {0, 0, 0, 0};
+	GLint packBuffer = 0;
 	int attributeCount = 0;
 	bool shaderOnly = false;
-
-	SurfaceStateGuard(int count, bool restricted = false)
-		: attributeCount(count < 0 ? -1 : clamp(count, 0, 4)), shaderOnly(restricted) {
+	SurfaceStateGuard(int count, bool restricted = false) : attributeCount(count < 0 ? -1 : clamp(count, 0, 4)), shaderOnly(restricted) {
 		if (attributeCount < 0) return;
 		glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
 		glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
@@ -57,87 +52,63 @@ struct SurfaceStateGuard {
 		glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
 		glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture2d);
 		if (!shaderOnly) glGetIntegerv(GL_MATRIX_MODE, &previousMatrixMode);
-
-		glGetIntegerv(GL_VIEWPORT, previousViewport);
-		glGetIntegerv(GL_SCISSOR_BOX, previousScissor);
-		previousScissorEnabled = glIsEnabled(GL_SCISSOR_TEST);
-		previousBlendEnabled = glIsEnabled(GL_BLEND);
-		previousDepthEnabled = glIsEnabled(GL_DEPTH_TEST);
-		previousStencilEnabled = glIsEnabled(GL_STENCIL_TEST);
-		previousCullEnabled = glIsEnabled(GL_CULL_FACE);
-
-		glGetIntegerv(GL_BLEND_SRC_RGB, &previousBlendSrcRgb);
-		glGetIntegerv(GL_BLEND_DST_RGB, &previousBlendDstRgb);
-		glGetIntegerv(GL_BLEND_SRC_ALPHA, &previousBlendSrcAlpha);
-		glGetIntegerv(GL_BLEND_DST_ALPHA, &previousBlendDstAlpha);
-		glGetIntegerv(GL_BLEND_EQUATION_RGB, &previousBlendEqRgb);
-		glGetIntegerv(GL_BLEND_EQUATION_ALPHA, &previousBlendEqAlpha);
-
-		glGetIntegerv(GL_UNPACK_ALIGNMENT, &unpackAlignment);
-		glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &unpackBuffer);
-		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-
+		glPushAttrib(shaderOnly ? (GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_VIEWPORT_BIT | GL_POLYGON_BIT | GL_SCISSOR_BIT) : GL_ALL_ATTRIB_BITS);
+		glPushClientAttrib(shaderOnly ? GL_CLIENT_PIXEL_STORE_BIT : GL_CLIENT_ALL_ATTRIB_BITS);
 		if (!shaderOnly) {
-			glMatrixMode(GL_PROJECTION);
-			glPushMatrix();
-			glMatrixMode(GL_MODELVIEW);
-			glPushMatrix();
+		glMatrixMode(GL_PROJECTION);
+		glPushMatrix();
+		glMatrixMode(GL_MODELVIEW);
+		glPushMatrix();
 		}
 
 		glActiveTexture(GL_TEXTURE0);
 		glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture0);
-
+		glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &unpackBuffer);
+		glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, &packBuffer);
+		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 		for (GLuint i = 0; i < GLuint(attributeCount); ++i) {
-			glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &attributeEnabled[i]);
+			Attribute& a = attributes[i];
+			glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &a.enabled);
+			glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_SIZE, &a.size);
+			glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_TYPE, &a.type);
+			glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_NORMALIZED, &a.normalized);
+			glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_STRIDE, &a.stride);
+			glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING, &a.buffer);
+			glGetVertexAttribPointerv(i, GL_VERTEX_ATTRIB_ARRAY_POINTER, &a.pointer);
 		}
 	}
-
 	~SurfaceStateGuard() {
 		if (attributeCount < 0) return;
 		for (GLuint i = 0; i < GLuint(attributeCount); ++i) {
-			if (attributeEnabled[i]) {
-				glEnableVertexAttribArray(i);
-			} else {
-				glDisableVertexAttribArray(i);
-			}
+			const Attribute& a = attributes[i];
+			glBindBuffer(GL_ARRAY_BUFFER, GLuint(a.buffer));
+			glVertexAttribPointer(i, a.size, GLenum(a.type), GLboolean(a.normalized), a.stride, a.pointer);
+			if (a.enabled) glEnableVertexAttribArray(i); else glDisableVertexAttribArray(i);
 		}
-
 		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, GLuint(unpackBuffer));
-		glPixelStorei(GL_UNPACK_ALIGNMENT, unpackAlignment);
-
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, GLuint(texture0));
-		if (previousActiveTexture != GL_TEXTURE0) {
-			glActiveTexture(GLenum(previousActiveTexture));
-			glBindTexture(GL_TEXTURE_2D, GLuint(previousTexture2d));
-		}
-
 		if (!shaderOnly) {
-			glMatrixMode(GL_MODELVIEW);
-			glPopMatrix();
-			glMatrixMode(GL_PROJECTION);
-			glPopMatrix();
-			glMatrixMode(GLenum(previousMatrixMode));
+		glMatrixMode(GL_MODELVIEW);
+		glPopMatrix();
+		glMatrixMode(GL_PROJECTION);
+		glPopMatrix();
+		glMatrixMode(GLenum(previousMatrixMode));
 		}
-
+		glPopClientAttrib();
+		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, GLuint(unpackBuffer));
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, GLuint(packBuffer));
+		// Saved draw/read-buffer selections belong to the incoming FBOs.
+		// Restoring them while our offscreen FBO is bound is invalid (e.g. GL_BACK).
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, GLuint(previousFramebuffer));
 		glBindFramebuffer(GL_READ_FRAMEBUFFER, GLuint(previousReadFramebuffer));
 		glBindRenderbuffer(GL_RENDERBUFFER, GLuint(previousRenderbuffer));
-
+		glPopAttrib();
 		glUseProgram(GLuint(previousProgram));
 		glBindBuffer(GL_ARRAY_BUFFER, GLuint(previousArrayBuffer));
+		glActiveTexture(GLenum(previousActiveTexture));
+		glBindTexture(GL_TEXTURE_2D, GLuint(previousTexture2d));
 
-		if (previousBlendEnabled) glEnable(GL_BLEND); else glDisable(GL_BLEND);
-		glBlendFuncSeparate(previousBlendSrcRgb, previousBlendDstRgb, previousBlendSrcAlpha, previousBlendDstAlpha);
-		glBlendEquationSeparate(previousBlendEqRgb, previousBlendEqAlpha);
-
-		if (previousScissorEnabled) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
-		if (previousDepthEnabled) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
-		if (previousStencilEnabled) glEnable(GL_STENCIL_TEST); else glDisable(GL_STENCIL_TEST);
-		if (previousCullEnabled) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
-
-		glViewport(previousViewport[0], previousViewport[1], previousViewport[2], previousViewport[3]);
-		glScissor(previousScissor[0], previousScissor[1], previousScissor[2], previousScissor[3]);
 	}
 };
 
@@ -319,7 +290,7 @@ bool AdaptiveGlSurface::renderImpl(NVGcontext* targetVg, Vec logicalSize,
 	const bool resolutionGrowth = activeWidth > frontActiveWidth || activeHeight > frontActiveHeight;
 	if (!dirty && !resolutionGrowth) return false;
 	if (sharedScope) sharedScope->enter();
-	SurfaceStateGuard stateGuard(sharedScope ? -1 : policy.vertexAttributeCount);
+	SurfaceStateGuard stateGuard(sharedScope ? -1 : policy.vertexAttributeCount, policy.shaderOnlyState);
 	auto* timing = sharedScope ? sharedScope->stats : nullptr;
     { PhaseTimer timer(timing?&timing->setupNs:nullptr); if (sharedScope) beginShaderPass(sharedScope->shaderOnly); }
     {
