@@ -449,8 +449,9 @@ def main() -> int:
     parser.add_argument(
         "--labels-svg",
         type=Path,
-        default=REPO_ROOT / "res" / "bifurx.theme-text.svg",
-        help="runtime theme-text SVG containing the functional panel labels",
+        nargs="+",
+        default=[REPO_ROOT / "res" / f"bifurx.theme-text-{role}.svg" for role in ("input", "output")],
+        help="runtime theme-text SVG layers containing the functional panel labels",
     )
     parser.add_argument(
         "--master-svg",
@@ -527,7 +528,7 @@ def main() -> int:
         )
     else:
         sources.extend(
-            (args.light_background, args.dark_background, args.labels_svg)
+            (args.light_background, args.dark_background, *args.labels_svg)
         )
     for source in sources:
         if not source.is_file():
@@ -570,7 +571,11 @@ def main() -> int:
         SOURCE_SIZE[0] * args.supersample,
         SOURCE_SIZE[1] * args.supersample,
     )
-    label_mask = render_label_mask(args.labels_svg, mask_size, args.inkscape_path)
+    label_mask = render_label_mask(args.labels_svg[0], mask_size, args.inkscape_path)
+    for labels_svg in args.labels_svg[1:]:
+        from PIL import ImageChops
+        label_mask = ImageChops.lighter(
+            label_mask, render_label_mask(labels_svg, mask_size, args.inkscape_path))
     output_size = SOURCE_SIZE if args.native_resolution else RUNTIME_SIZE
     dark_conduit_layers = feather_dark_conduit_bloom(
         conduit_layers, conduit_target_size

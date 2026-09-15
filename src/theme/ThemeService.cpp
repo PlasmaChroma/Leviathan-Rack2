@@ -97,7 +97,9 @@ ThemeColor color(ThemeRole role) {
 	switch (role) {
 		case ThemeRole::Input: return state.snapshot.colors.input;
 		case ThemeRole::Output: return state.snapshot.colors.output;
-		case ThemeRole::Text: return state.snapshot.colors.text;
+		case ThemeRole::TextInput: return state.snapshot.colors.textInput;
+		case ThemeRole::TextOutput: return state.snapshot.colors.textOutput;
+		case ThemeRole::Background: return state.snapshot.colors.background;
 		case ThemeRole::None:
 		default: return {};
 	}
@@ -109,10 +111,22 @@ ThemeChange setColor(ThemeRole role, ThemeColor value) {
 	switch (role) {
 		case ThemeRole::Input: candidate.colors.input = value; break;
 		case ThemeRole::Output: candidate.colors.output = value; break;
-		case ThemeRole::Text: candidate.colors.text = value; break;
+		case ThemeRole::TextInput: candidate.colors.textInput = value; break;
+		case ThemeRole::TextOutput: candidate.colors.textOutput = value; break;
+		case ThemeRole::Background:
+			candidate.colors.background = value;
+			candidate.colors.backgroundEnabled = true;
+			break;
 		case ThemeRole::None:
 		default: return ChangeNone;
 	}
+	return applyLocked(candidate, "modified", false);
+}
+
+ThemeChange setBackgroundEnabled(bool enabled) {
+	std::lock_guard<std::mutex> lock(gThemeMutex);
+	ThemeSnapshot candidate = gThemeState.snapshot;
+	candidate.colors.backgroundEnabled = enabled;
 	return applyLocked(candidate, "modified", false);
 }
 

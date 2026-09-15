@@ -39,6 +39,25 @@ DISTRIBUTABLES += $(wildcard presets)
 # Include the Rack plugin Makefile framework
 include $(RACK_DIR)/plugin.mk
 
+# Premium validation uses Pro's bootstrap and identity with the CURRENT shared
+# Bifurx sources. Nothing is installed or written into the Pro source checkout.
+PREMIUM_PRO_DIR ?= ../Leviathan-Pro
+PREMIUM_DRM_DIR ?= $(PREMIUM_PRO_DIR)/DRM
+.PHONY: premium-prepare premium-build premium-dist test-premium
+premium-prepare:
+	python3 tools/prepare_bifurx_premium.py --pro-root "$(PREMIUM_PRO_DIR)" --drm-dir "$(PREMIUM_DRM_DIR)" --rack-dir "$(RACK_DIR)"
+
+premium-build: premium-prepare
+	$(MAKE) -C build/premium-validation RACK_DIR="$(abspath $(RACK_DIR))" DRM_DIR="$(abspath $(PREMIUM_DRM_DIR))" all
+
+premium-dist: premium-prepare
+	$(MAKE) -C build/premium-validation RACK_DIR="$(abspath $(RACK_DIR))" DRM_DIR="$(abspath $(PREMIUM_DRM_DIR))" dist
+
+# Deliberately outside test-fast: normal development does not require DRM.
+test-premium: premium-prepare
+	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) $(if $(ARCH_X64),-march=nehalem,) $(RACK_TEST_WARN_FLAGS) -Wno-subobject-linkage -DLEVIATHAN_PRO_DRM=1 -I"$(PREMIUM_DRM_DIR)" -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_license_spec.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/MathHelpers.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o build/premium-validation/bifurx_license_spec
+	$(call run_rack_test_bin,build/premium-validation/bifurx_license_spec)
+
 # Rack SDK 2.5 adds this Clang-only option globally. GCC emits a note for it
 # on every translation unit, so remove it after the SDK has assembled FLAGS.
 FLAGS := $(filter-out -Wno-vla-extension,$(FLAGS))
@@ -469,6 +488,7 @@ test-fast: test-build-fast
 	$(call run_rack_test_bin,build/tests/moirai_json_spec)
 	$(call run_test_bin,build/tests/moirai_engine_spec)
 	$(call run_rack_test_bin,build/tests/moirai_module_spec)
+	$(call run_test_bin,build/tests/theme_service_spec)
 	$(call run_rack_test_bin,build/tests/theme_persistence_spec)
 	python3 tests/octavia_sibyl_contract_spec.py
 	python3 tests/octavia_semantic_contract_spec.py
@@ -481,6 +501,7 @@ test-fast: test-build-fast
 	python3 tests/nautiloid_gpu_phase7_contract_spec.py
 	python3 tests/nautiloid_gpu_phase8_contract_spec.py
 	python3 tests/split_svg_labels_spec.py
+	python3 tests/premium_staging_spec.py
 	python3 tools/generate_mandelwake_tables.py --check
 	$(call run_test_bin,build/tests/temporaldeck_platter_spec_harness)
 	$(call run_test_bin,build/tests/temporaldeck_arc_lights_spec)
@@ -832,7 +853,8 @@ build/tests/theme_service_spec: tests/theme_service_spec.cpp src/theme/ThemeServ
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/theme_service_spec.cpp src/theme/ThemeService.cpp src/theme/ThemePresets.cpp -o $@
 
 build/tests/theme_persistence_spec: tests/theme_persistence_spec.cpp src/theme/ThemePersistence.cpp src/theme/ThemePersistence.hpp src/theme/ThemeService.cpp src/theme/ThemeService.hpp src/theme/ThemePresets.cpp src/theme/ThemePresets.hpp src/theme/ThemeTypes.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/theme_persistence_spec.cpp src/theme/ThemePersistence.cpp src/theme/ThemeService.cpp src/theme/ThemePresets.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
+	# Match the plugin's SIMD target to avoid Rack SIMDe/native intrinsic alias conflicts.
+	$(CXX) -std=c++17 -O2 -march=nehalem -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/theme_persistence_spec.cpp src/theme/ThemePersistence.cpp src/theme/ThemeService.cpp src/theme/ThemePresets.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
 build/tests/cantor_module_spec: tests/cantor_module_spec.cpp src/Cantor.cpp src/Cantor.hpp src/CantorCultureEngine.cpp src/CantorCultureEngine.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/cantor_module_spec.cpp src/Cantor.cpp src/CantorCultureEngine.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@

@@ -137,7 +137,16 @@ void readSnapshot(json_t* object, ThemeSnapshot* snapshot) {
 	ThemeSnapshot candidate = *snapshot;
 	parseColor(json_object_get(object, "input"), &candidate.colors.input);
 	parseColor(json_object_get(object, "output"), &candidate.colors.output);
-	parseColor(json_object_get(object, "text"), &candidate.colors.text);
+	// V1's single text color seeds both roles; explicit V2 fields win.
+	ThemeColor legacyText = candidate.colors.textInput;
+	if (parseColor(json_object_get(object, "text"), &legacyText))
+		candidate.colors.textInput = candidate.colors.textOutput = legacyText;
+	parseColor(json_object_get(object, "textInput"), &candidate.colors.textInput);
+	parseColor(json_object_get(object, "textOutput"), &candidate.colors.textOutput);
+	parseColor(json_object_get(object, "background"), &candidate.colors.background);
+	json_t* backgroundEnabled = json_object_get(object, "backgroundEnabled");
+	if (json_is_boolean(backgroundEnabled))
+		candidate.colors.backgroundEnabled = json_is_true(backgroundEnabled);
 	json_t* texture = json_object_get(object, "textureAmount");
 	if (json_is_number(texture)) candidate.surface.textureAmount = float(json_number_value(texture));
 	*snapshot = canonicalize(candidate);
@@ -148,7 +157,10 @@ json_t* snapshotToJson(const ThemeSnapshot& snapshot) {
 	json_t* object = json_object();
 	json_object_set_new(object, "input", json_string(colorText(normalized.colors.input).c_str()));
 	json_object_set_new(object, "output", json_string(colorText(normalized.colors.output).c_str()));
-	json_object_set_new(object, "text", json_string(colorText(normalized.colors.text).c_str()));
+	json_object_set_new(object, "textInput", json_string(colorText(normalized.colors.textInput).c_str()));
+	json_object_set_new(object, "textOutput", json_string(colorText(normalized.colors.textOutput).c_str()));
+	json_object_set_new(object, "background", json_string(colorText(normalized.colors.background).c_str()));
+	json_object_set_new(object, "backgroundEnabled", json_boolean(normalized.colors.backgroundEnabled));
 	json_object_set_new(object, "textureAmount", json_real(normalized.surface.textureAmount));
 	return object;
 }

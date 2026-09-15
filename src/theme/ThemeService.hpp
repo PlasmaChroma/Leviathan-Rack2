@@ -32,6 +32,7 @@ std::uint64_t surfaceGeneration();
 std::uint64_t presetGeneration();
 ThemeColor color(ThemeRole role);
 ThemeChange setColor(ThemeRole role, ThemeColor value);
+ThemeChange setBackgroundEnabled(bool enabled);
 ThemeChange setTextureAmount(float amount);
 ThemeChange apply(const ThemeSnapshot& snapshot);
 // Applies a named preset snapshot. The preset domain advances when its stable

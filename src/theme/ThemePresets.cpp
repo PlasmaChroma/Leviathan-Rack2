@@ -14,7 +14,7 @@ ThemeSnapshot makeTheme(
 	ThemeSnapshot snapshot = canonicalDefault();
 	snapshot.colors.input = input;
 	snapshot.colors.output = output;
-	snapshot.colors.text = text;
+	snapshot.colors.textInput = snapshot.colors.textOutput = text;
 	snapshot.surface.textureAmount = textureAmount;
 	return snapshot;
 }

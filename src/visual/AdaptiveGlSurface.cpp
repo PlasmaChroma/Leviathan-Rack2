@@ -17,7 +17,8 @@ struct PhaseTimer {
     explicit PhaseTimer(uint64_t* value):total(value),start(value?Clock::now():Clock::time_point()){}
     ~PhaseTimer(){if(total)*total+=uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now()-start).count());}
 };
-// Compatibility GL2 state plus the generic vertex inputs used by our callbacks.
+// Lightweight state guard capturing only what our shader passes mutate,
+// avoiding deprecated glPushAttrib and synchronous vertex attribute pointer queries.
 struct SurfaceStateGuard {
 	GLint previousFramebuffer = 0;
 	GLint previousReadFramebuffer = 0;
@@ -28,12 +29,25 @@ struct SurfaceStateGuard {
 	GLint previousTexture2d = 0;
 	GLint previousMatrixMode = GL_MODELVIEW;
 
-	struct Attribute { GLint enabled, size, type, normalized, stride, buffer; void* pointer; } attributes[4];
 	GLint texture0 = 0;
 	GLint unpackBuffer = 0;
+	GLint unpackAlignment = 4;
+	GLint previousViewport[4] = {0, 0, 0, 0};
+	GLint previousScissor[4] = {0, 0, 0, 0};
+	GLint previousBlendSrcRgb = GL_ONE, previousBlendDstRgb = GL_ZERO;
+	GLint previousBlendSrcAlpha = GL_ONE, previousBlendDstAlpha = GL_ZERO;
+	GLint previousBlendEqRgb = GL_FUNC_ADD, previousBlendEqAlpha = GL_FUNC_ADD;
+	GLboolean previousScissorEnabled = GL_FALSE;
+	GLboolean previousBlendEnabled = GL_FALSE;
+	GLboolean previousDepthEnabled = GL_FALSE;
+	GLboolean previousStencilEnabled = GL_FALSE;
+	GLboolean previousCullEnabled = GL_FALSE;
+	GLint attributeEnabled[4] = {0, 0, 0, 0};
 	int attributeCount = 0;
 	bool shaderOnly = false;
-	SurfaceStateGuard(int count, bool restricted = false) : attributeCount(count < 0 ? -1 : clamp(count, 0, 4)), shaderOnly(restricted) {
+
+	SurfaceStateGuard(int count, bool restricted = false)
+		: attributeCount(count < 0 ? -1 : clamp(count, 0, 4)), shaderOnly(restricted) {
 		if (attributeCount < 0) return;
 		glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
 		glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
@@ -43,60 +57,87 @@ struct SurfaceStateGuard {
 		glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
 		glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture2d);
 		if (!shaderOnly) glGetIntegerv(GL_MATRIX_MODE, &previousMatrixMode);
-		glPushAttrib(shaderOnly ? (GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_VIEWPORT_BIT | GL_POLYGON_BIT | GL_SCISSOR_BIT) : GL_ALL_ATTRIB_BITS);
-		glPushClientAttrib(shaderOnly ? GL_CLIENT_PIXEL_STORE_BIT : GL_CLIENT_ALL_ATTRIB_BITS);
+
+		glGetIntegerv(GL_VIEWPORT, previousViewport);
+		glGetIntegerv(GL_SCISSOR_BOX, previousScissor);
+		previousScissorEnabled = glIsEnabled(GL_SCISSOR_TEST);
+		previousBlendEnabled = glIsEnabled(GL_BLEND);
+		previousDepthEnabled = glIsEnabled(GL_DEPTH_TEST);
+		previousStencilEnabled = glIsEnabled(GL_STENCIL_TEST);
+		previousCullEnabled = glIsEnabled(GL_CULL_FACE);
+
+		glGetIntegerv(GL_BLEND_SRC_RGB, &previousBlendSrcRgb);
+		glGetIntegerv(GL_BLEND_DST_RGB, &previousBlendDstRgb);
+		glGetIntegerv(GL_BLEND_SRC_ALPHA, &previousBlendSrcAlpha);
+		glGetIntegerv(GL_BLEND_DST_ALPHA, &previousBlendDstAlpha);
+		glGetIntegerv(GL_BLEND_EQUATION_RGB, &previousBlendEqRgb);
+		glGetIntegerv(GL_BLEND_EQUATION_ALPHA, &previousBlendEqAlpha);
+
+		glGetIntegerv(GL_UNPACK_ALIGNMENT, &unpackAlignment);
+		glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &unpackBuffer);
+		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+
 		if (!shaderOnly) {
-		glMatrixMode(GL_PROJECTION);
-		glPushMatrix();
-		glMatrixMode(GL_MODELVIEW);
-		glPushMatrix();
+			glMatrixMode(GL_PROJECTION);
+			glPushMatrix();
+			glMatrixMode(GL_MODELVIEW);
+			glPushMatrix();
 		}
 
 		glActiveTexture(GL_TEXTURE0);
 		glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture0);
-		glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &unpackBuffer);
-		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+
 		for (GLuint i = 0; i < GLuint(attributeCount); ++i) {
-			Attribute& a = attributes[i];
-			glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &a.enabled);
-			glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_SIZE, &a.size);
-			glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_TYPE, &a.type);
-			glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_NORMALIZED, &a.normalized);
-			glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_STRIDE, &a.stride);
-			glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING, &a.buffer);
-			glGetVertexAttribPointerv(i, GL_VERTEX_ATTRIB_ARRAY_POINTER, &a.pointer);
+			glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &attributeEnabled[i]);
 		}
 	}
+
 	~SurfaceStateGuard() {
 		if (attributeCount < 0) return;
 		for (GLuint i = 0; i < GLuint(attributeCount); ++i) {
-			const Attribute& a = attributes[i];
-			glBindBuffer(GL_ARRAY_BUFFER, GLuint(a.buffer));
-			glVertexAttribPointer(i, a.size, GLenum(a.type), GLboolean(a.normalized), a.stride, a.pointer);
-			if (a.enabled) glEnableVertexAttribArray(i); else glDisableVertexAttribArray(i);
+			if (attributeEnabled[i]) {
+				glEnableVertexAttribArray(i);
+			} else {
+				glDisableVertexAttribArray(i);
+			}
 		}
+
 		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, GLuint(unpackBuffer));
+		glPixelStorei(GL_UNPACK_ALIGNMENT, unpackAlignment);
+
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, GLuint(texture0));
-		if (!shaderOnly) {
-		glMatrixMode(GL_MODELVIEW);
-		glPopMatrix();
-		glMatrixMode(GL_PROJECTION);
-		glPopMatrix();
-		glMatrixMode(GLenum(previousMatrixMode));
+		if (previousActiveTexture != GL_TEXTURE0) {
+			glActiveTexture(GLenum(previousActiveTexture));
+			glBindTexture(GL_TEXTURE_2D, GLuint(previousTexture2d));
 		}
-		glPopClientAttrib();
-		// Saved draw/read-buffer selections belong to the incoming FBOs.
-		// Restoring them while our offscreen FBO is bound is invalid (e.g. GL_BACK).
+
+		if (!shaderOnly) {
+			glMatrixMode(GL_MODELVIEW);
+			glPopMatrix();
+			glMatrixMode(GL_PROJECTION);
+			glPopMatrix();
+			glMatrixMode(GLenum(previousMatrixMode));
+		}
+
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, GLuint(previousFramebuffer));
 		glBindFramebuffer(GL_READ_FRAMEBUFFER, GLuint(previousReadFramebuffer));
 		glBindRenderbuffer(GL_RENDERBUFFER, GLuint(previousRenderbuffer));
-		glPopAttrib();
+
 		glUseProgram(GLuint(previousProgram));
 		glBindBuffer(GL_ARRAY_BUFFER, GLuint(previousArrayBuffer));
-		glActiveTexture(GLenum(previousActiveTexture));
-		glBindTexture(GL_TEXTURE_2D, GLuint(previousTexture2d));
 
+		if (previousBlendEnabled) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+		glBlendFuncSeparate(previousBlendSrcRgb, previousBlendDstRgb, previousBlendSrcAlpha, previousBlendDstAlpha);
+		glBlendEquationSeparate(previousBlendEqRgb, previousBlendEqAlpha);
+
+		if (previousScissorEnabled) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
+		if (previousDepthEnabled) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+		if (previousStencilEnabled) glEnable(GL_STENCIL_TEST); else glDisable(GL_STENCIL_TEST);
+		if (previousCullEnabled) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
+
+		glViewport(previousViewport[0], previousViewport[1], previousViewport[2], previousViewport[3]);
+		glScissor(previousScissor[0], previousScissor[1], previousScissor[2], previousScissor[3]);
 	}
 };
 
@@ -250,7 +291,12 @@ bool AdaptiveGlSurface::renderImpl(NVGcontext* targetVg, Vec logicalSize,
 		resourceContext = gl_lifecycle::acquireResourceContext(targetVg);
 	}
 
-	const float maxDensity = std::max(0.01f, policy.maxDensity);
+	float effectiveMaxDensity = policy.maxDensity;
+	if (policy.adaptivePressure > 0) {
+		const float pressureScale = 1.f / std::sqrt(float(1 + clamp(policy.adaptivePressure, 0, 3)));
+		effectiveMaxDensity = std::max(policy.minDensity, policy.maxDensity * pressureScale);
+	}
+	const float maxDensity = std::max(0.01f, effectiveMaxDensity);
 	const float minDensity = clamp(policy.minDensity, 0.01f, maxDensity);
 	const int quantum = std::max(1, policy.sizeQuantum);
 	int capacityWidth = std::max(1, int(std::ceil(logicalSize.x * maxDensity)));
@@ -281,16 +327,22 @@ bool AdaptiveGlSurface::renderImpl(NVGcontext* targetVg, Vec logicalSize,
     if (!ensureBackSurface(targetVg, capacityWidth, capacityHeight, validate)) return false;
 
 	nvgluBindFramebuffer(back);
-	// The active image can occupy only a prefix of a retained larger texture.
-	// Clear the whole target so linear filtering at that boundary cannot sample
-	// pixels left behind by a previous, larger active render.
-	glDisable(GL_SCISSOR_TEST);
+	// NVGLU marks framebuffer images FLIPY for NanoVG. Rendering against the
+	// top edge makes the active prefix addressable with a larger image pattern.
+	// Scissor the clear to the active region plus a 1px border so linear filtering
+	// at the boundary cannot sample pixels left behind by an earlier, larger render,
+	// without clearing the entire peak-capacity texture space every frame.
+	const int viewportY = capacityHeight - activeHeight;
+	const int clearY = std::max(0, viewportY - 1);
+	const int clearWidth = std::min(backCapacityWidth, activeWidth + 1);
+	const int clearHeight = backCapacityHeight - clearY;
+	glEnable(GL_SCISSOR_TEST);
+	glScissor(0, clearY, clearWidth, clearHeight);
 	glViewport(0, 0, backCapacityWidth, backCapacityHeight);
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	glClearColor(0.f, 0.f, 0.f, 0.f);
 	glClear(GL_COLOR_BUFFER_BIT);
-	// NVGLU marks framebuffer images FLIPY for NanoVG. Rendering against the
-	// top edge makes the active prefix addressable with a larger image pattern.
+	glDisable(GL_SCISSOR_TEST);
     }
     { PhaseTimer timer(timing?&timing->callbackNs:nullptr);
       callback(user, Vec(float(activeWidth), float(activeHeight)), capacityHeight - activeHeight); }

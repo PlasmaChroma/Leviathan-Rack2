@@ -788,6 +788,9 @@ struct Bifurx : Module {
 	// this deprecated hook for module-specific runtime state.
 	void onReset() override;
 	void process(const ProcessArgs& args) override;
+#if defined(LEVIATHAN_PRO_DRM) && LEVIATHAN_PRO_DRM
+	void processBypass(const ProcessArgs& args) override;
+#endif
 };
 
 struct BifurxColors {

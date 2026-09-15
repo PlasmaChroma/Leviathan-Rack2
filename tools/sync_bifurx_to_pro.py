@@ -28,6 +28,7 @@ GENERATED_ATLAS_PATH = "src/PanelAnchorAtlas.cpp"
 SOURCE_FILES = (
     "src/Bifurx.cpp",
     "src/Bifurx.hpp",
+    "src/BifurxLicense.hpp",
     "src/BifurxGL.cpp",
     "src/BifurxInputStage.hpp",
     "src/BifurxOutputStage.hpp",
@@ -43,6 +44,8 @@ SOURCE_FILES = (
     "src/DebugTerminalTransport.hpp",
     "src/GlLifecycleUtils.cpp",
     "src/GlLifecycleUtils.hpp",
+    "src/GlResourceRetirement.cpp",
+    "src/GlResourceRetirement.hpp",
     "src/IrisSourceField.hpp",
     "src/IrisWavetable.hpp",
     "src/MathHelpers.cpp",
@@ -69,9 +72,16 @@ SOURCE_FILES = (
     "src/visual/ApertureLight.cpp",
     "src/visual/ApertureLight.hpp",
     "src/visual/ApertureLightTransfer.hpp",
+    "src/visual/ApertureBloomMasks.hpp",
+    "src/visual/Eclipse2RetainedCap.hpp",
+    "src/visual/Eclipse2RingCache.hpp",
+    "src/visual/Eclipse2RuntimeBake.cpp",
+    "src/visual/Eclipse2RuntimeBake.hpp",
+    "src/visual/Eclipse2Track.hpp",
     "src/visual/FractalGlassOverlay.cpp",
     "src/visual/FractalGlassOverlay.hpp",
     "src/visual/HaloKnob2.cpp",
+    "src/visual/HaloKnob2Metrics.hpp",
     "src/visual/PlasmaConduit.cpp",
     "src/visual/PlasmaConduit.hpp",
     "src/visual/PlasmaSwitch.cpp",
@@ -82,7 +92,9 @@ SOURCE_FILES = (
     "res/FractalParams.json",
     "res/bifurx.labels.svg",
     "res/bifurx.panel.svg",
-    "res/bifurx.theme-text.svg",
+    "res/bifurx.background.svg",
+    "res/bifurx.theme-text-input.svg",
+    "res/bifurx.theme-text-output.svg",
     "res/bifurx/Bifurx-DB.png",
     "res/bifurx/Bifurx-DT.png",
     "res/bifurx/Bifurx-LB.png",
@@ -113,7 +125,12 @@ SOURCE_FILES = (
 MAKEFILE = r"""# Standalone Bifurx VCV Rack plugin build.
 RACK_DIR ?= ../Rack-SDK
 
-FLAGS +=
+# Vendored VCV DRM is required for every Pro build.
+DRM_DIR ?= DRM
+ifeq ($(shell test -f "$(DRM_DIR)/drm.hpp" && echo yes),)
+$(error Missing VCV DRM header at $(DRM_DIR)/drm.hpp; set DRM_DIR to its directory)
+endif
+FLAGS += -DLEVIATHAN_PRO_DRM=1 -I"$(DRM_DIR)"
 CFLAGS +=
 CXXFLAGS +=
 LDFLAGS +=
@@ -130,6 +147,9 @@ include $(RACK_DIR)/plugin.mk
 # Rack SDK 2.5 adds this Clang-only option globally. Avoid a GCC note for every
 # translation unit while retaining the SDK's remaining flags.
 FLAGS := $(filter-out -Wno-vla-extension,$(FLAGS))
+
+# A bootstrap/build-flag change must also refresh existing Pro objects.
+$(OBJECTS): Makefile
 
 CXX_MACHINE := $(shell $(CXX) -dumpmachine 2>/dev/null)
 ifneq (,$(findstring mingw,$(CXX_MACHINE)))
@@ -285,6 +305,7 @@ struct PreviewBuildLogTimer {
 """
 
 PLUGIN_CPP = r"""#include "plugin.hpp"
+#include "BifurxLicense.hpp"
 #include "BifurxWorker.hpp"
 #include "theme/ThemePersistence.hpp"
 #include "visual/VisualAssets.hpp"
@@ -296,7 +317,12 @@ PLUGIN_CPP = r"""#include "plugin.hpp"
 #include <iomanip>
 #include <mutex>
 
+#if !defined(LEVIATHAN_PRO_DRM) || !LEVIATHAN_PRO_DRM
+#error "Leviathan Pro must be built with VCV DRM enabled"
+#endif
+
 Plugin* pluginInstance = nullptr;
+drm::Context* leviathanDrmContext = nullptr;
 
 namespace {
 std::atomic<bool> dragonKingDebugEnabled {false};
@@ -396,11 +422,14 @@ void init(Plugin* p) {
 	visual_assets::loadSettings();
 	leviathan::theme::persistence::initializeFromUserStorage();
 	p->addModel(modelBifurx);
+	leviathanDrmContext = new drm::Context("Leviathan-Pro", p);
 }
 
 void destroy() {
 	visual_assets::saveSettings();
 	bifurx::shutdownBifurxRenderService();
+	delete leviathanDrmContext;
+	leviathanDrmContext = nullptr;
 }
 """
 

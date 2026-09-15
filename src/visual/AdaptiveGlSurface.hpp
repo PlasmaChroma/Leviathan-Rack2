@@ -18,6 +18,9 @@ struct AdaptiveGlSurfacePolicy {
 	// unpack state, framebuffer bindings, enables, blend/color, viewport and polygon
 	// state only. No matrices, legacy client arrays, or other compatibility state.
 	bool shaderOnlyState = false;
+	// Adaptive frame pressure level (0 = normal, 1..3 = degraded). When > 0,
+	// maxDensity scales down dynamically to relieve GPU fill-rate pressure.
+	int adaptivePressure = 0;
 };
 
 class AdaptiveGlSurface {

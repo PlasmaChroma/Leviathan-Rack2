@@ -1,4 +1,5 @@
 #include "Bifurx.hpp"
+#include "BifurxLicense.hpp"
 #include "DebugTerminalTransport.hpp"
 #include "BifurxWorker.hpp"
 #include "visual/VisualAssets.hpp"
@@ -728,7 +729,27 @@ struct BifurxModeReadoutWidget final : Widget {
 		if (!APP || !APP->window || !APP->window->uiFont) return;
 		int m = module ? clamp(int(std::round(module->params[Bifurx::MODE_PARAM].getValue())), 0, kBifurxUiModeCount - 1) : 0;
 		char label[24]; std::snprintf(label, sizeof(label), "Mode (%d): %s", m + 1, kBifurxModeLabels[m]);
-		nvgFontSize(args.vg, std::max(9.5f, box.size.y * 0.72f)); nvgFontFaceId(args.vg, APP->window->uiFont->handle); nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255)); nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE); nvgText(args.vg, 0.5f * box.size.x, 0.5f * box.size.y, label, nullptr);
+		nvgFontSize(args.vg, std::max(9.5f, box.size.y * 0.72f));
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		const float centerX = 0.5f * box.size.x;
+		const float centerY = 0.5f * box.size.y;
+		float bounds[4];
+		nvgTextBounds(args.vg, centerX, centerY, label, nullptr, bounds);
+		const float x = bounds[0] - 4.f;
+		const float y = bounds[1] - 1.5f;
+		const float width = bounds[2] - bounds[0] + 8.f;
+		const float height = bounds[3] - bounds[1] + 3.f;
+		// One softly edged black capsule keeps the readout legible on light panels.
+		const float radius = height * 0.5f;
+		const NVGpaint halo = nvgBoxGradient(args.vg, x, y, width, height, radius, 1.5f,
+			nvgRGBA(0, 0, 0, 230), nvgRGBA(0, 0, 0, 0));
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, x - 1.5f, y - 1.5f, width + 3.f, height + 3.f);
+		nvgFillPaint(args.vg, halo);
+		nvgFill(args.vg);
+		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 255));
+		nvgText(args.vg, centerX, centerY, label, nullptr);
 	}
 };
 
@@ -760,6 +781,8 @@ struct BifurxWidget final : ModuleWidget {
 	Widget* modernBottomRasterDark = nullptr;
 	widget::FramebufferWidget* conduitFramebuffer = nullptr;
 	Widget* legacySvgPanel = nullptr;
+	Widget* legacyPanelSurface = nullptr;
+	Widget* legacyGlassFramebuffer = nullptr;
 	Widget* modernPanelBorder = nullptr;
 	Widget* legacyTitleRaster = nullptr;
 	Widget* legacyLabels = nullptr;
@@ -801,7 +824,7 @@ struct BifurxWidget final : ModuleWidget {
 			spectrumOpenGL->box.size = sizePx;
 		}
 		if (modeReadout) {
-			modeReadout->box.pos = mm2px(Vec(rectMm.pos.x, rectMm.pos.y + rectMm.size.y + 0.9f));
+			modeReadout->box.pos = mm2px(Vec(rectMm.pos.x, rectMm.pos.y + rectMm.size.y + 0.6f));
 			modeReadout->box.size = mm2px(Vec(rectMm.size.x, 4.2f));
 		}
 	}
@@ -809,6 +832,8 @@ struct BifurxWidget final : ModuleWidget {
 	void applyLegacyVisuals(bool legacy) {
 		const bool dark = settings::preferDarkPanels;
 		if (legacySvgPanel) legacySvgPanel->setVisible(legacy);
+		if (legacyPanelSurface) legacyPanelSurface->setVisible(legacy);
+		if (legacyGlassFramebuffer) legacyGlassFramebuffer->setVisible(legacy);
 		if (modernPanelBacking) modernPanelBacking->setVisible(!legacy);
 		if (modernTopRaster) modernTopRaster->setVisible(!legacy && !dark);
 		if (modernTopRasterDark) modernTopRasterDark->setVisible(!legacy && dark);
@@ -853,7 +878,7 @@ struct BifurxWidget final : ModuleWidget {
 			displayModule->lights[Bifurx::TITO_XM_LIGHT].setBrightness(kBrowserPreviewTito);
 		}
 		PreviewBuildLogTimer previewBuildTimer("Bifurx", module);
-		visual_assets::SplitPanelRenderer splitPanel(this, "res/bifurx.panel.svg");
+		visual_assets::SplitPanelRenderer splitPanel(this, "res/bifurx.panel.svg", "res/bifurx.background.svg");
 		legacySvgPanel = getPanel();
 		const std::string& panelPath = splitPanel.panelPath();
 		previewBuildTimer.markPanelDone();
@@ -868,8 +893,9 @@ struct BifurxWidget final : ModuleWidget {
 			addChildBottom(modernPanelBacking);
 		}
 		splitPanel.addPerfectWaveBranding();
-		visual_assets::addFractalGlassOverlay(
-			this, panelPath, splitPanel.panelSurfaceEffectWidget());
+		legacyPanelSurface = splitPanel.panelSurfaceEffectWidget();
+		auto* legacyGlass = visual_assets::addFractalGlassOverlay(this, panelPath, legacyPanelSurface);
+		legacyGlassFramebuffer = legacyGlass ? legacyGlass->parent : nullptr;
 		math::Rect topRasterRectMm(
 			Vec(0.f, 0.f), Vec(71.12f, 71.12f / (2141.f / 285.f)));
 		panel_svg::loadRectFromSvgMm(panelPath, "BIFURX_TOP_RASTER", &topRasterRectMm);
@@ -947,7 +973,7 @@ struct BifurxWidget final : ModuleWidget {
 
 		modeReadout = new BifurxModeReadoutWidget();
 		modeReadout->module = displayModule;
-		modeReadout->box.pos = mm2px(Vec(sRect.pos.x, sRect.pos.y + sRect.size.y + 0.9f));
+		modeReadout->box.pos = mm2px(Vec(sRect.pos.x, sRect.pos.y + sRect.size.y + 0.6f));
 		modeReadout->box.size = mm2px(Vec(sRect.size.x, 4.2f));
 		addChild(modeReadout);
 		Vec mlP(10.9f, 22.f), mrP(15.9f, 22.f), mmP(8.9f, 22.f), lP(13.4f, 41.f), rP(13.4f, 60.f), fP(35.56f, 46.5f), tP(57.7f, 22.f), sP(57.7f, 41.f), bP(57.7f, 60.f), faP(25.3f, 45.f), saP(45.82f, 45.f);
@@ -987,7 +1013,7 @@ struct BifurxWidget final : ModuleWidget {
 		addInput(createInputCentered<Magitek2InputJack>(mm2px(rcP), module, Bifurx::RESO_CV_INPUT)); addInput(createInputCentered<Magitek2InputJack>(mm2px(bcP), module, Bifurx::BALANCE_CV_INPUT)); addInput(createInputCentered<Magitek2InputJack>(mm2px(scP), module, Bifurx::SPAN_CV_INPUT));
 		addOutput(createOutputCentered<Magitek2OutputJack>(mm2px(oP), module, Bifurx::OUT_OUTPUT));
 		legacyLabels = visual_assets::createThemedPanelLabelsWidget(
-			"res/bifurx.labels.svg", "res/bifurx.theme-text.svg",
+			"res/bifurx.labels.svg", "res/bifurx.theme-text-input.svg", "res/bifurx.theme-text-output.svg",
 			box.size, this);
 		addChild(legacyLabels);
 		lastLegacyVisuals = module
@@ -995,6 +1021,12 @@ struct BifurxWidget final : ModuleWidget {
 			: false;
 		lastPreferDarkPanels = settings::preferDarkPanels;
 		applyLegacyVisuals(lastLegacyVisuals);
+#if defined(LEVIATHAN_PRO_DRM) && LEVIATHAN_PRO_DRM
+		// Added last so the official license overlay covers all interactive controls.
+		auto* licenseOverlay = new drm::ModuleOverlay;
+		licenseOverlay->setContext(leviathanDrmContext);
+		addChild(licenseOverlay);
+#endif
 	}
 
 	~BifurxWidget() override {

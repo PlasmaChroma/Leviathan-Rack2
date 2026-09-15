@@ -437,8 +437,8 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 	uint64_t themeColorGeneration = 0u;
 	bool hasSemanticGlass = false;
 	float previewProgressionPhase = -1.f;
-	bool colorPreviewValid[3] = {false, false, false};
-	leviathan::theme::ThemeColor colorPreviews[3];
+	bool colorPreviewValid[4] = {};
+	leviathan::theme::ThemeColor colorPreviews[4];
 
 	struct GlassRectArt {
 		math::Rect rectPx;
@@ -486,7 +486,8 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		switch (role) {
 			case leviathan::theme::ThemeRole::Input: return 0;
 			case leviathan::theme::ThemeRole::Output: return 1;
-			case leviathan::theme::ThemeRole::Text: return 2;
+			case leviathan::theme::ThemeRole::TextInput: return 2;
+			case leviathan::theme::ThemeRole::TextOutput: return 3;
 			case leviathan::theme::ThemeRole::None:
 			default: return -1;
 		}
@@ -1631,12 +1632,12 @@ void recolorThemeTextSvg(
 
 struct CachedThemeTextWidget final : Widget {
 	widget::FramebufferWidget* fb = nullptr;
-	std::shared_ptr<window::Svg> themeTextSvg;
+	std::shared_ptr<window::Svg> themeTextSvgs[2];
 	leviathan::theme::ThemeUiPoller themeUiPoller;
 	uint64_t observedColorGeneration = 0u;
 
 	CachedThemeTextWidget(
-		const char* svgPath, Vec panelSizePx, const Widget* themePollOwner) {
+		const char* inputPath, const char* outputPath, Vec panelSizePx, const Widget* themePollOwner) {
 		box.size = panelSizePx;
 		themeUiPoller.setOwner(themePollOwner);
 		observedColorGeneration = leviathan::theme::colorGeneration();
@@ -1645,13 +1646,17 @@ struct CachedThemeTextWidget final : Widget {
 		fb->dirtyOnSubpixelChange = false;
 		fb->box.size = panelSizePx;
 
-		themeTextSvg = loadPluginSvgCached(svgPath);
-		recolorThemeTextSvg(themeTextSvg,
-			leviathan::theme::color(leviathan::theme::ThemeRole::Text));
-		auto* labels = new widget::SvgWidget();
-		labels->setSvg(themeTextSvg);
-		labels->box.size = panelSizePx;
-		fb->addChild(labels);
+		const char* paths[] = {inputPath, outputPath};
+		const auto colors = leviathan::theme::read().snapshot.colors;
+		for (int i = 0; i < 2; ++i) {
+			if (!paths[i] || !paths[i][0]) continue;
+			themeTextSvgs[i] = loadPluginSvgCached(paths[i]);
+			recolorThemeTextSvg(themeTextSvgs[i], i == 0 ? colors.textInput : colors.textOutput);
+			auto* labels = new widget::SvgWidget();
+			labels->setSvg(themeTextSvgs[i]);
+			labels->box.size = panelSizePx;
+			fb->addChild(labels);
+		}
 		addChild(fb);
 	}
 
@@ -1667,8 +1672,9 @@ struct CachedThemeTextWidget final : Widget {
 			const uint64_t generation = leviathan::theme::colorGeneration();
 			if (generation != observedColorGeneration) {
 				observedColorGeneration = generation;
-				recolorThemeTextSvg(themeTextSvg,
-					leviathan::theme::color(leviathan::theme::ThemeRole::Text));
+				const auto colors = leviathan::theme::read().snapshot.colors;
+				recolorThemeTextSvg(themeTextSvgs[0], colors.textInput);
+				recolorThemeTextSvg(themeTextSvgs[1], colors.textOutput);
 				if (fb) fb->setDirty();
 			}
 		}
@@ -1683,20 +1689,73 @@ Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float over
 
 Widget* createThemedPanelLabelsWidget(
 	const char* labelsAssetPath,
-	const char* themeTextAssetPath,
+	const char* themeTextInputAssetPath,
+	const char* themeTextOutputAssetPath,
 	Vec panelSizePx,
 	const Widget* themePollOwner) {
 	auto* layers = new Widget();
 	layers->box.size = panelSizePx;
 	if (labelsAssetPath && labelsAssetPath[0] != '\0')
 		layers->addChild(new CachedPanelLabelsWidget(labelsAssetPath, panelSizePx));
-	if (themeTextAssetPath && themeTextAssetPath[0] != '\0')
+	if ((themeTextInputAssetPath && themeTextInputAssetPath[0])
+		|| (themeTextOutputAssetPath && themeTextOutputAssetPath[0]))
 		layers->addChild(new CachedThemeTextWidget(
-			themeTextAssetPath, panelSizePx, themePollOwner));
+			themeTextInputAssetPath, themeTextOutputAssetPath, panelSizePx, themePollOwner));
 	return layers;
 }
 
-SplitPanelRenderer::SplitPanelRenderer(ModuleWidget* parent, const char* panelAssetPath)
+// Both the original background and its theme replacement live inside the panel
+// framebuffer. Hiding a legacy panel also hides its entire background treatment.
+struct ThemeBackgroundWidget final : widget::SvgWidget {
+	leviathan::theme::ThemeColors colors;
+
+	void draw(const DrawArgs& args) override {
+		if (!colors.backgroundEnabled) {
+			SvgWidget::draw(args);
+			return;
+		}
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		nvgFillColor(args.vg, nvgRGB(colors.background.r, colors.background.g, colors.background.b));
+		nvgFill(args.vg);
+	}
+};
+
+struct ThemeBackgroundPanel final : app::SvgPanel {
+	ThemeBackgroundWidget* background = nullptr;
+	leviathan::theme::ThemeUiPoller poller;
+	uint64_t observedColorGeneration = 0u;
+
+	ThemeBackgroundPanel(const std::string& panelPath, const char* originalPath, const Widget* owner) {
+		setBackground(window::Svg::load(panelPath));
+		background = new ThemeBackgroundWidget;
+		background->setSvg(loadPluginSvgCached(originalPath));
+		background->box.size = box.size;
+		const auto state = leviathan::theme::read();
+		background->colors = state.snapshot.colors;
+		observedColorGeneration = state.colorGeneration;
+		poller.setOwner(owner);
+		fb->addChildBottom(background);
+		fb->setDirty();
+	}
+
+	void step() override {
+		if (!isVisible()) return;
+		if (poller.shouldPoll() && observedColorGeneration != leviathan::theme::colorGeneration()) {
+			const auto state = leviathan::theme::read();
+			const auto& colors = state.snapshot.colors;
+			if (background->colors.backgroundEnabled != colors.backgroundEnabled
+				|| (colors.backgroundEnabled && background->colors.background != colors.background))
+				fb->setDirty();
+			background->colors = colors;
+			observedColorGeneration = state.colorGeneration;
+		}
+		SvgPanel::step();
+	}
+};
+
+SplitPanelRenderer::SplitPanelRenderer(ModuleWidget* parent, const char* panelAssetPath,
+	const char* originalBackgroundAssetPath)
 	: parent_(parent) {
 	if (!parent_ || !panelAssetPath || panelAssetPath[0] == '\0') {
 		return;
@@ -1705,7 +1764,9 @@ SplitPanelRenderer::SplitPanelRenderer(ModuleWidget* parent, const char* panelAs
 	// Browser previews and live modules should share the same crystal color
 	// state instead of assigning every preview a random progression phase.
 	previewProgressionPhase_ = -1.f;
-	parent_->setPanel(createPanel(panelPath_));
+	parent_->setPanel(originalBackgroundAssetPath && originalBackgroundAssetPath[0]
+		? new ThemeBackgroundPanel(panelPath_, originalBackgroundAssetPath, parent_)
+		: createPanel(panelPath_));
 	panelSurfaceEffect_ = createPanelSurfaceEffectWidget(
 		panelPath_, parent_->box.size, previewProgressionPhase_, parent_);
 	parent_->addChild(panelSurfaceEffect_);
@@ -1747,13 +1808,13 @@ SplitPanelRenderer::~SplitPanelRenderer() {
 			parent_, panelPath_, leviathanLogoOpacity_);
 	}
 	if (!labelsAssetPath_.empty()) {
-		if (themeTextAssetPath_.empty()) {
+		if (themeTextInputAssetPath_.empty() && themeTextOutputAssetPath_.empty()) {
 			parent_->addChild(createPanelLabelsWidget(
 				labelsAssetPath_.c_str(), parent_->box.size));
 		}
 		else {
 			parent_->addChild(createThemedPanelLabelsWidget(
-				labelsAssetPath_.c_str(), themeTextAssetPath_.c_str(),
+				labelsAssetPath_.c_str(), themeTextInputAssetPath_.c_str(), themeTextOutputAssetPath_.c_str(),
 				parent_->box.size, parent_));
 		}
 	}
@@ -1767,13 +1828,13 @@ void SplitPanelRenderer::addLabels(const char* labelsAssetPath) {
 }
 
 void SplitPanelRenderer::addThemedLabels(
-	const char* labelsAssetPath, const char* themeTextAssetPath) {
-	if (!parent_ || !labelsAssetPath || labelsAssetPath[0] == '\0'
-		|| !themeTextAssetPath || themeTextAssetPath[0] == '\0') {
+	const char* labelsAssetPath, const char* inputTextAssetPath, const char* outputTextAssetPath) {
+	if (!parent_ || !labelsAssetPath || labelsAssetPath[0] == '\0') {
 		return;
 	}
 	labelsAssetPath_ = labelsAssetPath;
-	themeTextAssetPath_ = themeTextAssetPath;
+	themeTextInputAssetPath_ = inputTextAssetPath ? inputTextAssetPath : "";
+	themeTextOutputAssetPath_ = outputTextAssetPath ? outputTextAssetPath : "";
 }
 
 int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const std::string& idSubstring) {

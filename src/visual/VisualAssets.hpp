@@ -97,7 +97,8 @@ void setPanelSurfaceColorPreview(
 Widget* createPanelLabelsWidget(const char* svgPath, Vec panelSizePx, float oversample = 2.0f);
 Widget* createThemedPanelLabelsWidget(
 	const char* labelsAssetPath,
-	const char* themeTextAssetPath,
+	const char* themeTextInputAssetPath,
+	const char* themeTextOutputAssetPath,
 	Vec panelSizePx,
 	const Widget* themePollOwner = nullptr);
 
@@ -107,13 +108,15 @@ class SplitPanelRenderer final {
 	Widget* panelSurfaceEffect_ = nullptr;
 	std::string panelPath_;
 	std::string labelsAssetPath_;
-	std::string themeTextAssetPath_;
+	std::string themeTextInputAssetPath_;
+	std::string themeTextOutputAssetPath_;
 	float previewProgressionPhase_ = -1.f;
 	float leviathanLogoOpacity_ = 1.f;
 	bool addLeviathanLogo_ = false;
 
 public:
-	SplitPanelRenderer(ModuleWidget* parent, const char* panelAssetPath);
+	SplitPanelRenderer(ModuleWidget* parent, const char* panelAssetPath,
+		const char* originalBackgroundAssetPath = nullptr);
 	~SplitPanelRenderer();
 	const std::string& panelPath() const;
 	Widget* panelSurfaceEffectWidget() const;
@@ -124,7 +127,7 @@ public:
 	// Labels are inserted when this scoped renderer is destroyed, after the
 	// module constructor has added its controls and dynamic visual layers.
 	void addLabels(const char* labelsAssetPath);
-	void addThemedLabels(const char* labelsAssetPath, const char* themeTextAssetPath);
+	void addThemedLabels(const char* labelsAssetPath, const char* inputTextAssetPath, const char* outputTextAssetPath);
 };
 
 bool isPanelGlassColorCycleEnabled();

@@ -36,7 +36,9 @@ ThemeColor colorForRole(const ThemeSnapshot& snapshot, ThemeRole role) {
 	switch (role) {
 		case ThemeRole::Input: return snapshot.colors.input;
 		case ThemeRole::Output: return snapshot.colors.output;
-		case ThemeRole::Text: return snapshot.colors.text;
+		case ThemeRole::TextInput: return snapshot.colors.textInput;
+		case ThemeRole::TextOutput: return snapshot.colors.textOutput;
+		case ThemeRole::Background: return snapshot.colors.background;
 		default: return {};
 	}
 }
@@ -97,7 +99,6 @@ struct ThemeEditor final : TransparentWidget {
 	Widget* panelSurface = nullptr;
 	visual_assets::FractalGlassOverlay* themePreviewOverlay = nullptr;
 	ThemeRole selectedRole = ThemeRole::Input;
-	ThemeRole textPreviewBackgroundRole = ThemeRole::Input;
 	DragTarget dragTarget = DragNone;
 	std::uint64_t observedGeneration = 0u;
 	bool pickerValid = false;
@@ -106,15 +107,19 @@ struct ThemeEditor final : TransparentWidget {
 	float pickerHue = 0.f;
 	float pickerSaturation = 0.f;
 	float pickerValue = 0.f;
-	float retainedHue[3] = {0.f, 0.f, 0.f};
+	float retainedHue[5] = {};
 	float pickerTextureAmount = 1.f;
 	bool pickerTextureValid = false;
 	bool textureHovered = false;
 	double lastGlobalPublishAt = NAN;
 
-	math::Rect roleRect(int index) const { return math::Rect(Vec(8.f + index * 56.f, 42.f), Vec(52.f, 29.f)); }
-	math::Rect svRect() const { return math::Rect(Vec(9.f, 82.f), Vec(137.f, 124.f)); }
-	math::Rect hueRect() const { return math::Rect(Vec(151.f, 82.f), Vec(20.f, 124.f)); }
+	math::Rect roleRect(int index) const {
+		if (index == 4) return math::Rect(Vec(8.f, 82.f), Vec(104.f, 20.f));
+		return math::Rect(Vec(8.f + (index % 2) * 84.f, 36.f + (index / 2) * 23.f), Vec(80.f, 20.f));
+	}
+	math::Rect originalBackgroundRect() const { return math::Rect(Vec(116.f, 82.f), Vec(56.f, 20.f)); }
+	math::Rect svRect() const { return math::Rect(Vec(9.f, 112.f), Vec(137.f, 94.f)); }
+	math::Rect hueRect() const { return math::Rect(Vec(151.f, 112.f), Vec(20.f, 94.f)); }
 	math::Rect textureRect() const {
 		return math::Rect(
 			Vec(10.f, 235.f),
@@ -150,7 +155,9 @@ struct ThemeEditor final : TransparentWidget {
 		switch (selectedRole) {
 			case ThemeRole::Input: return 0;
 			case ThemeRole::Output: return 1;
-			case ThemeRole::Text: return 2;
+			case ThemeRole::TextInput: return 2;
+			case ThemeRole::TextOutput: return 3;
+			case ThemeRole::Background: return 4;
 			default: return 0;
 		}
 	}
@@ -182,19 +189,13 @@ struct ThemeEditor final : TransparentWidget {
 			inputColor = pickerColor;
 		if (draggingColor && pickerValid && pickerRole == ThemeRole::Output)
 			outputColor = pickerColor;
-		const ThemeColor textBackgroundColor = textPreviewBackgroundRole == ThemeRole::Output
-			? outputColor : inputColor;
-		themePreviewOverlay->setColorPreview(ThemeRole::Input, inputColor);
-		themePreviewOverlay->setColorPreview(ThemeRole::Output, outputColor);
-		// The TEXT card previews text legibility over the last selected jack role;
-		// its glass palette is therefore a background preview, not the text color.
-		themePreviewOverlay->setColorPreview(ThemeRole::Text, textBackgroundColor);
-		visual_assets::setPanelSurfaceColorPreview(
-			panelSurface, ThemeRole::Input, inputColor);
-		visual_assets::setPanelSurfaceColorPreview(
-			panelSurface, ThemeRole::Output, outputColor);
-		visual_assets::setPanelSurfaceColorPreview(
-			panelSurface, ThemeRole::Text, textBackgroundColor);
+		const ThemeRole roles[] = {ThemeRole::Input, ThemeRole::Output,
+			ThemeRole::TextInput, ThemeRole::TextOutput};
+		for (int i = 0; i < 4; ++i) {
+			const ThemeColor background = (i % 2) == 0 ? inputColor : outputColor;
+			themePreviewOverlay->setColorPreview(roles[i], background);
+			visual_assets::setPanelSurfaceColorPreview(panelSurface, roles[i], background);
+		}
 	}
 
 	void publishDragValue(bool force) {
@@ -273,11 +274,17 @@ struct ThemeEditor final : TransparentWidget {
 			return;
 		}
 
-		for (int i = 0; i < 3; ++i) {
+		if (originalBackgroundRect().contains(e.pos)) {
+			leviathan::theme::setBackgroundEnabled(!leviathan::theme::read().snapshot.colors.backgroundEnabled);
+			leviathan::theme::persistence::saveToUserStorage();
+			dirty();
+			e.consume(this);
+			return;
+		}
+		for (int i = 0; i < 5; ++i) {
 			if (roleRect(i).contains(e.pos)) {
-				selectedRole = i == 0 ? ThemeRole::Input : (i == 1 ? ThemeRole::Output : ThemeRole::Text);
-				if (selectedRole == ThemeRole::Input || selectedRole == ThemeRole::Output)
-					textPreviewBackgroundRole = selectedRole;
+				const ThemeRole roles[] = {ThemeRole::Input, ThemeRole::Output, ThemeRole::TextInput, ThemeRole::TextOutput, ThemeRole::Background};
+				selectedRole = roles[i];
 				pickerValid = false;
 				dirty();
 				e.consume(this);
@@ -434,10 +441,10 @@ struct ThemeEditor final : TransparentWidget {
 		const float saturation = pickerSaturation;
 		const float value = pickerValue;
 
-		const char* roleNames[] = {"INPUT", "OUTPUT", "TEXT"};
-		const ThemeRole roles[] = {ThemeRole::Input, ThemeRole::Output, ThemeRole::Text};
-		for (int i = 0; i < 3; ++i) {
-			if (roles[i] == ThemeRole::Input || roles[i] == ThemeRole::Output) {
+		const char* roleNames[] = {"INPUT", "OUTPUT", "TEXT", "TEXT", "BACKGROUND"};
+		const ThemeRole roles[] = {ThemeRole::Input, ThemeRole::Output, ThemeRole::TextInput, ThemeRole::TextOutput, ThemeRole::Background};
+		for (int i = 0; i < 5; ++i) {
+			if (roles[i] == ThemeRole::Input || roles[i] == ThemeRole::Output || roles[i] == ThemeRole::Background) {
 				ThemeColor previewColor = colorForRole(snapshot, roles[i]);
 				if (draggingColor && selectedRole == roles[i]) {
 					previewColor = pickerColor;
@@ -447,12 +454,12 @@ struct ThemeEditor final : TransparentWidget {
 					previewColor);
 			}
 			else {
-				ThemeColor backgroundColor = colorForRole(
-					snapshot, textPreviewBackgroundRole);
-				if (draggingColor && selectedRole == textPreviewBackgroundRole)
+				const ThemeRole backgroundRole = roles[i] == ThemeRole::TextInput ? ThemeRole::Input : ThemeRole::Output;
+				ThemeColor backgroundColor = colorForRole(snapshot, backgroundRole);
+				if (draggingColor && selectedRole == backgroundRole)
 					backgroundColor = pickerColor;
-				ThemeColor textColor = colorForRole(snapshot, ThemeRole::Text);
-				if (draggingColor && selectedRole == ThemeRole::Text)
+				ThemeColor textColor = colorForRole(snapshot, roles[i]);
+				if (draggingColor && selectedRole == roles[i])
 					textColor = pickerColor;
 				themedRoleButton(
 					args, roleRect(i), roleNames[i], selectedRole == roles[i],
@@ -460,6 +467,7 @@ struct ThemeEditor final : TransparentWidget {
 			}
 		}
 
+		button(args, originalBackgroundRect(), "ORIGINAL", !snapshot.colors.backgroundEnabled);
 		const math::Rect sv = svRect();
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, sv.pos.x, sv.pos.y, sv.size.x, sv.size.y);
@@ -529,7 +537,7 @@ struct ThemeEditor final : TransparentWidget {
 struct ThemeModuleWidget final : ModuleWidget {
 	ThemeModuleWidget(ThemeModule* module) {
 		setModule(module);
-		visual_assets::SplitPanelRenderer splitPanel(this, "res/Theme.panel.svg");
+		visual_assets::SplitPanelRenderer splitPanel(this, "res/Theme.panel.svg", "res/Theme.background.svg");
 		const std::string& panelPath = splitPanel.panelPath();
 		splitPanel.addLabels("res/Theme.labels.svg");
 		Widget* panelSurface = splitPanel.panelSurfaceEffectWidget();

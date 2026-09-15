@@ -34,10 +34,21 @@ void fillAxisForSampleRate(float sampleRate, float* curveHz, float* curveBinPos,
 	}
 }
 
+inline float fast_10log10f(float x) {
+	if (x <= 1e-12f) return -120.f;
+	union { float f; uint32_t i; } u = {x};
+	const int exp = int((u.i >> 23) & 0xFF) - 127;
+	u.i = (u.i & 0x7FFFFFu) | 0x3F800000u;
+	const float m = u.f - 1.f;
+	const float log2 = float(exp) + m * (1.44269504f - 0.44269504f * m);
+	return log2 * 3.01029995664f;
+}
+
 float computeDisplayTopTargetDbfs(
 	const float* frameSmoothedOutputDbfs,
 	const float* overlayTargetOutputDbfs,
-	bool fftScaleDynamic
+	bool fftScaleDynamic,
+	float previousTopTargetDbfs = kDisplayTopDbfsCeiling
 ) {
 	if (!fftScaleDynamic) {
 		return kDisplayTopDbfsCeiling;
@@ -46,6 +57,10 @@ float computeDisplayTopTargetDbfs(
 	float framePeakDbfs = kOverlayDbfsFloor;
 	for (int i = 0; i < kCurvePointCount; ++i) {
 		framePeakDbfs = std::max(framePeakDbfs, overlayTargetOutputDbfs[i]);
+	}
+
+	if (previousTopTargetDbfs > kDisplayTopDbfsFloor && std::fabs(framePeakDbfs - (previousTopTargetDbfs - 6.f)) < 0.5f) {
+		return previousTopTargetDbfs;
 	}
 
 	float sortedOutputDbfs[kCurvePointCount];
@@ -106,10 +121,10 @@ void prepareOverlayTargetsFromSpectra(
 			}
 		}
 		binModuleDeltaDb[bin] = moduleResponseEnabled
-			? 10.f * std::log10((responseOutputEnergy + 1e-12f) / (rawInputEnergy + 1e-12f))
+			? fast_10log10f((responseOutputEnergy + 1e-12f) / (rawInputEnergy + 1e-12f))
 			: 0.f;
 		outputEnergy += 1e-12f;
-		binOutputDbfs[bin] = clamp(10.f * std::log10(outputEnergy / 25.f + 1e-12f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
+		binOutputDbfs[bin] = clamp(fast_10log10f(outputEnergy * 0.04f + 1e-12f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
 	}
 
 	float sampledOutputDbfs[kCurvePointCount];
@@ -141,7 +156,7 @@ void prepareOverlayTargetsFromSpectra(
 		overlayTargetOutputDbfs[i] = mixf(overlayTargetOutputDbfs[i], smoothOutputDbfs, targetSmoothing);
 	}
 
-	*displayTopTargetDbfs = computeDisplayTopTargetDbfs(frameSmoothedOutputDbfs, overlayTargetOutputDbfs, fftScaleDynamic);
+	*displayTopTargetDbfs = computeDisplayTopTargetDbfs(frameSmoothedOutputDbfs, overlayTargetOutputDbfs, fftScaleDynamic, *displayTopTargetDbfs);
 }
 
 } // namespace

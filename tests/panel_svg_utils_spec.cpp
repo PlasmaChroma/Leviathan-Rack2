@@ -589,7 +589,7 @@ TestResult testThemeGlassDeploymentContract() {
     };
     const size_t inputs = countRole(ThemeRole::Input);
     const size_t outputs = countRole(ThemeRole::Output);
-    const size_t textRegions = countRole(ThemeRole::Text);
+    const size_t textRegions = countRole(ThemeRole::TextInput) + countRole(ThemeRole::TextOutput);
     const size_t generic = countRole(ThemeRole::None);
     const bool panelPass = inputs == panel.expectedInputs
       && outputs == panel.expectedOutputs
@@ -635,7 +635,9 @@ TestResult testExactThemeGlassRoles() {
     && rectRole("generic", ThemeRole::None)
     && rectRole("input_nested", ThemeRole::Input)
     && rectRole("output", ThemeRole::Output)
-    && rectRole("nearest_wins", ThemeRole::Text)
+    && rectRole("nearest_wins", ThemeRole::TextInput)
+    && rectRole("input_text", ThemeRole::TextInput)
+    && rectRole("output_text", ThemeRole::TextOutput)
     && rectRole("label_role", ThemeRole::Output)
     && nearMiss == rects.end()
     && inputPath != paths.end()

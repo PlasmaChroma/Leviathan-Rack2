@@ -23,4 +23,10 @@
   <g id="editor-generated" inkscape:label="glass_output">
     <rect id="label_role" x="32" y="1" width="4" height="4" fill="#1cccd9"/>
   </g>
+  <g id="glass_text_input">
+    <rect id="input_text" x="1" y="10" width="4" height="4" fill="#ffffff"/>
+  </g>
+  <g id="glass_text_output">
+    <rect id="output_text" x="7" y="10" width="4" height="4" fill="#ffffff"/>
+  </g>
 </svg>

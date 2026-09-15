@@ -308,7 +308,7 @@ struct FractalGlassOverlay::Impl {
 	uint64_t observedThemeSurfaceGeneration = 0u;
 	leviathan::theme::ThemeUiPoller themeUiPoller;
 	float textureAmountPreview = NAN;
-	std::atomic<uint32_t> colorPreviews[3];
+	std::atomic<uint32_t> colorPreviews[4];
 	bool hasSemanticRegion = false;
 	bool liveValid = false;
 	iris::NautiloidFractalSourceParams live;
@@ -404,7 +404,8 @@ struct FractalGlassOverlay::Impl {
 		switch (role) {
 			case leviathan::theme::ThemeRole::Input: return 0;
 			case leviathan::theme::ThemeRole::Output: return 1;
-			case leviathan::theme::ThemeRole::Text: return 2;
+			case leviathan::theme::ThemeRole::TextInput: return 2;
+			case leviathan::theme::ThemeRole::TextOutput: return 3;
 			case leviathan::theme::ThemeRole::None:
 			default: return -1;
 		}
@@ -425,7 +426,8 @@ struct FractalGlassOverlay::Impl {
 		switch (region.themeRole) {
 			case leviathan::theme::ThemeRole::Input: color = &theme.colors.input; break;
 			case leviathan::theme::ThemeRole::Output: color = &theme.colors.output; break;
-			case leviathan::theme::ThemeRole::Text: color = &theme.colors.text; break;
+			case leviathan::theme::ThemeRole::TextInput: color = &theme.colors.textInput; break;
+			case leviathan::theme::ThemeRole::TextOutput: color = &theme.colors.textOutput; break;
 			case leviathan::theme::ThemeRole::None:
 			default: return region.authoredColor;
 		}

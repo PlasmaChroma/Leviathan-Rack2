@@ -32,12 +32,12 @@ int main() {
 	check("canonical input color matches classic panel purple",
 		initial.snapshot.colors.input == ThemeColor{0x57, 0x40, 0xbf});
 	check("canonical output color", initial.snapshot.colors.output == ThemeColor{0x1c, 0xcc, 0xd9});
-	check("canonical text color is white", initial.snapshot.colors.text == ThemeColor{0xff, 0xff, 0xff});
+	check("canonical text color is white", initial.snapshot.colors.textInput == ThemeColor{0xff, 0xff, 0xff});
 	const FactoryPreset* mono = findFactoryPreset("factory:monochrome");
 	check("Mono preset uses its representative input/output contrast",
 		mono && mono->snapshot.colors.input == ThemeColor{0xba, 0xba, 0xba}
 		&& mono->snapshot.colors.output == ThemeColor{0x32, 0x32, 0x32}
-		&& mono->snapshot.colors.text == ThemeColor{0xff, 0xff, 0xff}
+		&& mono->snapshot.colors.textInput == ThemeColor{0xff, 0xff, 0xff}
 		&& std::fabs(mono->snapshot.surface.textureAmount - 0.50f) < 1e-6f);
 
 	check("equal apply is a no-op", apply(initial.snapshot) == ChangeNone);
@@ -107,6 +107,35 @@ int main() {
 
 	resetToDefault();
 	check("reset restores canonical snapshot", read().snapshot == canonicalDefault());
+	const ThemeState beforeText = read();
+	setColor(ThemeRole::TextInput, red);
+	check("input text changes independently", color(ThemeRole::TextInput) == red
+		&& color(ThemeRole::TextOutput) == beforeText.snapshot.colors.textOutput
+		&& read().colorGeneration == beforeText.colorGeneration + 1u);
+	const ThemeColor blue{0x10, 0x20, 0xff};
+	setColor(ThemeRole::TextOutput, blue);
+	check("output text changes independently", color(ThemeRole::TextInput) == red
+		&& color(ThemeRole::TextOutput) == blue
+		&& read().snapshot.colors.input == beforeText.snapshot.colors.input
+		&& read().snapshot.colors.output == beforeText.snapshot.colors.output
+		&& read().surfaceGeneration == beforeText.surfaceGeneration);
+	const ThemeState beforeBackground = read();
+	check("authored background is the default", !beforeBackground.snapshot.colors.backgroundEnabled);
+	setColor(ThemeRole::Background, blue);
+	check("background edit enables a custom color without changing text or texture",
+		read().snapshot.colors.backgroundEnabled && color(ThemeRole::Background) == blue
+		&& color(ThemeRole::TextInput) == red && color(ThemeRole::TextOutput) == blue
+		&& read().colorGeneration == beforeBackground.colorGeneration + 1u
+		&& read().surfaceGeneration == beforeBackground.surfaceGeneration);
+	setBackgroundEnabled(false);
+	check("original background restores independently and retains the custom color",
+		!read().snapshot.colors.backgroundEnabled && color(ThemeRole::Background) == blue
+		&& read().colorGeneration == beforeBackground.colorGeneration + 2u);
+	check("restoring original again is a no-op", setBackgroundEnabled(false) == ChangeNone);
+	setBackgroundEnabled(true);
+	check("custom background can be re-enabled", read().snapshot.colors.backgroundEnabled);
+	resetToDefault();
+	check("reset restores the authored background", !read().snapshot.colors.backgroundEnabled);
 
 	if (failures) {
 		std::cerr << failures << " theme service test(s) failed\n";

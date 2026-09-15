@@ -1260,8 +1260,12 @@ bool exactGlassGroupRole(const std::string& value, leviathan::theme::ThemeRole* 
 		*role = leviathan::theme::ThemeRole::Output;
 		return true;
 	}
-	if (value == "glass_text") {
-		*role = leviathan::theme::ThemeRole::Text;
+	if (value == "glass_text" || value == "glass_text_input") {
+		*role = leviathan::theme::ThemeRole::TextInput;
+		return true;
+	}
+	if (value == "glass_text_output") {
+		*role = leviathan::theme::ThemeRole::TextOutput;
 		return true;
 	}
 	return false;

@@ -5,13 +5,15 @@
 namespace leviathan {
 namespace theme {
 
-constexpr std::uint32_t kThemeSchemaVersion = 1u;
+constexpr std::uint32_t kThemeSchemaVersion = 3u;
 
 enum class ThemeRole : std::uint8_t {
 	None = 0,
 	Input,
 	Output,
-	Text
+	TextInput,
+	TextOutput,
+	Background
 };
 
 struct ThemeColor {
@@ -34,10 +36,15 @@ struct ThemeColor {
 struct ThemeColors {
 	ThemeColor input;
 	ThemeColor output;
-	ThemeColor text;
+	ThemeColor textInput;
+	ThemeColor textOutput;
+	ThemeColor background = {0x08, 0x0d, 0x14};
+	bool backgroundEnabled = false;
 
 	bool operator==(const ThemeColors& other) const {
-		return input == other.input && output == other.output && text == other.text;
+		return input == other.input && output == other.output
+			&& textInput == other.textInput && textOutput == other.textOutput
+			&& background == other.background && backgroundEnabled == other.backgroundEnabled;
 	}
 	bool operator!=(const ThemeColors& other) const {
 		return !(*this == other);
@@ -74,7 +81,7 @@ inline ThemeSnapshot canonicalDefault() {
 	ThemeSnapshot snapshot;
 	snapshot.colors.input = {0x57, 0x40, 0xbf};
 	snapshot.colors.output = {0x1c, 0xcc, 0xd9};
-	snapshot.colors.text = {0xff, 0xff, 0xff};
+	snapshot.colors.textInput = snapshot.colors.textOutput = {0xff, 0xff, 0xff};
 	snapshot.surface.textureAmount = 1.f;
 	return snapshot;
 }

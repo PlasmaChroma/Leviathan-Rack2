@@ -24,6 +24,10 @@ def by_id(root: ET.Element, wanted: str) -> ET.Element:
 def main() -> int:
     fixture = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
   <g id="panel_art">
+    <g id="background-transform" transform="translate(2 3)" opacity="0.8">
+      <g id="theme_background"><rect id="base-fill" width="100" height="100" fill="#102030"/></g>
+      <path id="background-highlight" d="M 0 0 L 20 20" stroke="white"/>
+    </g>
     <rect id="generic" width="100" height="100" fill="#c04080"/>
     <g id="glass_input">
       <path id="input" d="M 1 1 H 40 V 40 H 1 Z" style="opacity:0.33;fill:#5740bf;fill-opacity:1"/>
@@ -36,6 +40,11 @@ def main() -> int:
   <g id="labels">
     <text id="static-title">TITLE</text>
     <g id="theme_text"><text id="functional-label">TEST</text></g>
+    <g id="ancestor" transform="translate(3 4)" opacity="0.5">
+      <g id="theme_text_input"><text id="in-label">IN</text>
+        <g id="theme_text_output"><text id="out-label">OUT</text></g>
+      </g>
+    </g>
   </g>
 </svg>"""
     with tempfile.TemporaryDirectory(prefix="split-svg-spec-") as directory:
@@ -59,8 +68,20 @@ def main() -> int:
         source_root = ET.parse(source).getroot()
         panel_root = ET.parse(panel).getroot()
         labels_root = ET.parse(labels).getroot()
-        theme_text_root = ET.parse(theme_text).getroot()
+        theme_text_root = ET.parse(theme_text["legacy"]).getroot()
+        input_root = ET.parse(theme_text["input"]).getroot()
+        output_root = ET.parse(theme_text["output"]).getroot()
+        background_root = ET.parse(theme_text["background"]).getroot()
         checks = {
+            "both directional text assets and original background are generated": set(theme_text) == {"legacy", "input", "output", "background"},
+            "background fill is stripped from panel only": all(e.get("id") != "base-fill" for e in panel_root.iter()) and by_id(source_root, "base-fill").get("fill") == "#102030",
+            "original background preserves authored fill": by_id(background_root, "base-fill").get("fill") == "#102030",
+            "background extraction preserves ancestor transform and opacity": by_id(background_root, "background-transform").get("transform") == "translate(2 3)" and by_id(background_root, "background-transform").get("opacity") == "0.8",
+            "background shading remains in foreground artwork": by_id(panel_root, "background-highlight") is not None and all(e.get("id") != "background-highlight" for e in background_root.iter()),
+            "input text stays in input layer": by_id(input_root, "in-label") is not None and all(e.get("id") != "out-label" for e in input_root.iter()),
+            "nested output role overrides input role": by_id(output_root, "out-label") is not None and all(e.get("id") != "in-label" for e in output_root.iter()),
+            "text ancestry retains transform and opacity": by_id(output_root, "ancestor").get("transform") == "translate(3 4)" and by_id(output_root, "ancestor").get("opacity") == "0.5",
+            "directional labels do not leak into static labels": all(e.get("id") not in ("in-label", "out-label") for e in labels_root.iter()),
             "master preview pigment remains colored": "fill:#5740bf" in by_id(source_root, "input").attrib["style"],
             "semantic style pigment becomes neutral": "fill:#000000" in by_id(panel_root, "input").attrib["style"],
             "semantic attribute pigment becomes neutral": by_id(panel_root, "output").attrib["fill"] == "#000000",

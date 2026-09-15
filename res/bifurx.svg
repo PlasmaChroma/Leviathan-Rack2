@@ -266,7 +266,7 @@
    id="Background_Rect"
    style="display:inline"
    transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
-      <rect
+      <g id="theme_background"><rect
    x="986.18201"
    y="997.229"
    width="7135.2925"
@@ -276,7 +276,7 @@
    fill="url(#bgGrad)"
    id="black_background"
    style="display:inline;fill:url(#bgGrad);stroke-width:23.6122"
-   sodipodi:insensitive="true" />
+   sodipodi:insensitive="true" /></g>
       <g
    id="waves_layer"
    style="display:none;opacity:0.5"
@@ -653,9 +653,8 @@
      id="tspan2"
      x="3555.2595"
      y="815.19421">filter</tspan></text>
-        <g
-   id="theme_text"
-   inkscape:label="Theme Text"><text
+        <g id="theme_text_input">
+<text
    id="signal_in"
    x="2591.3838"
    y="11995.578"
@@ -664,7 +663,8 @@
      sodipodi:role="line"
      id="tspan45"
      x="2591.3838"
-     y="11995.578">IN</tspan></text><text
+     y="11995.578">IN</tspan></text>
+<text
    id="reso_cv_label"
    x="1634.9987"
    y="11995.578"
@@ -673,7 +673,8 @@
      sodipodi:role="line"
      id="tspan44"
      x="1634.9987"
-     y="11995.578">RES</tspan></text><text
+     y="11995.578">RES</tspan></text>
+<text
    id="level_lbl"
    x="1646.7407"
    y="9375.2188"
@@ -682,7 +683,8 @@
      sodipodi:role="line"
      id="tspan43"
      x="1646.7407"
-     y="9375.2188">LEVEL</tspan></text><text
+     y="9375.2188">LEVEL</tspan></text>
+<text
    id="span_lbl"
    x="5450.1885"
    y="9378"
@@ -691,7 +693,8 @@
      sodipodi:role="line"
      id="tspan50"
      x="5450.1885"
-     y="9378">SPAN</tspan></text><text
+     y="9378">SPAN</tspan></text>
+<text
    id="fm_cv_label"
    x="679.99829"
    y="11995.578"
@@ -700,7 +703,8 @@
      sodipodi:role="line"
      id="tspan_fm"
      x="679.99829"
-     y="11995.578">FM</tspan></text><text
+     y="11995.578">FM</tspan></text>
+<text
    id="voct_label"
    x="3544.9988"
    y="11995.578"
@@ -709,7 +713,8 @@
      sodipodi:role="line"
      id="tspan46"
      x="3544.9988"
-     y="11995.578">V/OCT</tspan></text><text
+     y="11995.578">V/OCT</tspan></text>
+<text
    id="span_cv_label"
    x="6409.9985"
    y="11995.578"
@@ -718,7 +723,8 @@
      sodipodi:role="line"
      id="tspan49"
      x="6409.9985"
-     y="11995.578">SPAN</tspan></text><text
+     y="11995.578">SPAN</tspan></text>
+<text
    id="balance_cv_label"
    x="5454.9985"
    y="11995.578"
@@ -727,16 +733,8 @@
      sodipodi:role="line"
      id="tspan48"
      x="5454.9985"
-     y="11995.578">BAL</tspan></text><text
-   id="signal_out"
-   x="4509.9985"
-   y="11995.578"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
-   xml:space="preserve"><tspan
-     sodipodi:role="line"
-     id="tspan47"
-     x="4509.9985"
-     y="11995.578">OUT</tspan></text><text
+     y="11995.578">BAL</tspan></text>
+<text
    id="sm_lbl"
    x="2846.76"
    y="9016.75"
@@ -745,7 +743,8 @@
      sodipodi:role="line"
      id="tspan60"
      x="2846.76"
-     y="9016.75">SM</tspan></text><text
+     y="9016.75">SM</tspan></text>
+<text
    id="xm_lbl"
    x="4254.6919"
    y="9019.8945"
@@ -754,7 +753,20 @@
      sodipodi:role="line"
      id="tspan61"
      x="4254.6919"
-     y="9019.8945">XM</tspan></text></g>
+     y="9019.8945">XM</tspan></text>
+</g>
+<g id="theme_text_output">
+<text
+   id="signal_out"
+   x="4509.9985"
+   y="11995.578"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan47"
+     x="4509.9985"
+     y="11995.578">OUT</tspan></text>
+</g>
       </g><g
    id="plasma_conduit_anchors"
    inkscape:label="Plasma Conduit Anchors"

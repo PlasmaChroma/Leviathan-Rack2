@@ -194,31 +194,73 @@
        x="3556"
        y="815.19421"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:211.667px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff">polyphonic oracle</text>
-    <g
-       id="theme_text"
-       inkscape:label="Theme Text">
-    <text
+    <g id="theme_text_input">
+<text
        x="781.00006"
        y="7660.0259"
        font-size="180"
        font-weight="600"
        id="text18"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">TRIG</text>
-    <text
+<text
        x="1861"
        y="7660.0259"
        font-size="180"
        font-weight="600"
        id="text19"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">RUN</text>
-    <text
+<text
        x="2941"
        y="7660.0259"
        font-size="180"
        font-weight="600"
        id="text20"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">RST</text>
-    <text
+<text
+       x="781.00006"
+       y="9610.0264"
+       font-size="180"
+       font-weight="600"
+       id="text24"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">CLK</text>
+<text
+       x="1861"
+       y="9610.0264"
+       font-size="180"
+       font-weight="600"
+       id="text25"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">S.CV</text>
+<text
+       x="2941"
+       y="9610.0264"
+       font-size="180"
+       font-weight="600"
+       id="text26"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">M1</text>
+<text
+       x="781.00006"
+       y="11560.026"
+       font-size="180"
+       font-weight="600"
+       id="text30"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">M2</text>
+<text
+       x="1861"
+       y="11560.026"
+       font-size="180"
+       font-weight="600"
+       id="text31"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">M3</text>
+<text
+       x="2941"
+       y="11560.026"
+       font-size="180"
+       font-weight="600"
+       id="text32"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">M4</text>
+</g>
+<g id="theme_text_output">
+<text
        x="4109.6953"
        y="7660.0259"
        font-size="180"
@@ -226,7 +268,7 @@
        fill="#e2d4fd"
        id="text21"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">V/OCT</text>
-    <text
+<text
        x="5239.6953"
        y="7660.0259"
        font-size="180"
@@ -234,7 +276,7 @@
        fill="#e2d4fd"
        id="text22"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">GATE</text>
-    <text
+<text
        x="6369.6953"
        y="7660.0259"
        font-size="180"
@@ -242,28 +284,7 @@
        fill="#e2d4fd"
        id="text23"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">VEL</text>
-    <text
-       x="781.00006"
-       y="9610.0264"
-       font-size="180"
-       font-weight="600"
-       id="text24"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">CLK</text>
-    <text
-       x="1861"
-       y="9610.0264"
-       font-size="180"
-       font-weight="600"
-       id="text25"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">S.CV</text>
-    <text
-       x="2941"
-       y="9610.0264"
-       font-size="180"
-       font-weight="600"
-       id="text26"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">M1</text>
-    <text
+<text
        x="4109.6953"
        y="9610.0264"
        font-size="180"
@@ -271,7 +292,7 @@
        fill="#e2d4fd"
        id="text27"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">MOD1</text>
-    <text
+<text
        x="5239.6953"
        y="9610.0264"
        font-size="180"
@@ -279,7 +300,7 @@
        fill="#e2d4fd"
        id="text28"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">MOD2</text>
-    <text
+<text
        x="6369.6953"
        y="9610.0264"
        font-size="180"
@@ -287,28 +308,7 @@
        fill="#e2d4fd"
        id="text29"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">MOD3</text>
-    <text
-       x="781.00006"
-       y="11560.026"
-       font-size="180"
-       font-weight="600"
-       id="text30"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">M2</text>
-    <text
-       x="1861"
-       y="11560.026"
-       font-size="180"
-       font-weight="600"
-       id="text31"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">M3</text>
-    <text
-       x="2941"
-       y="11560.026"
-       font-size="180"
-       font-weight="600"
-       id="text32"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">M4</text>
-    <text
+<text
        x="4109.6953"
        y="11560.026"
        font-size="180"
@@ -316,7 +316,7 @@
        fill="#e2d4fd"
        id="text33"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">CLK</text>
-    <text
+<text
        x="5239.6953"
        y="11560.026"
        font-size="180"
@@ -324,7 +324,7 @@
        fill="#e2d4fd"
        id="text34"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">SCENE</text>
-    <text
+<text
        x="6369.6953"
        y="11560.026"
        font-size="180"
@@ -332,7 +332,7 @@
        fill="#e2d4fd"
        id="text35"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.22199689px;font-family:Rubik, sans-serif;-inkscape-font-specification:'Rubik, sans-serif, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">EOC</text>
-    </g>
+</g>
   </g>
   <g
      id="components"

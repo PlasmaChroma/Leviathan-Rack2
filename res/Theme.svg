@@ -91,6 +91,7 @@
          id="stop23" />
     </linearGradient>
   </defs>
+  <g id="theme_background">
   <rect
      width="180"
      height="380"
@@ -101,42 +102,11 @@
      height="380"
      fill="url(#aura)"
      id="rect6" />
-  <g
-     id="glass_input">
-    <rect
-       x="8"
-       y="42"
-       width="52"
-       height="29"
-       rx="4"
-       fill="#000000"
-       opacity="0.33"
-       id="rect7" />
   </g>
-  <g
-     id="glass_output">
-    <rect
-       x="64"
-       y="42"
-       width="52"
-       height="29"
-       rx="4"
-       fill="#000000"
-       opacity="0.33"
-       id="rect8" />
-  </g>
-  <g
-     id="glass_text">
-    <rect
-       x="120"
-       y="42"
-       width="52"
-       height="29"
-       rx="4"
-       fill="#000000"
-       opacity="0.33"
-       id="rect9" />
-  </g>
+  <g id="glass_input"><rect x="8" y="36" width="80" height="20" rx="4" fill="#000000" opacity="0.33" id="rect7" /></g>
+  <g id="glass_output"><rect x="92" y="36" width="80" height="20" rx="4" fill="#000000" opacity="0.33" id="rect8" /></g>
+  <g id="glass_text_output"><rect x="92" y="59" width="80" height="20" rx="4" fill="#000000" opacity="0.33" id="text_output_card" /></g>
+    <g id="glass_text_input"><rect x="8" y="59" width="80" height="20" rx="4" fill="#000000" opacity="0.33" id="rect9" /></g>
   <rect
      id="BRANDING_LEVIATHAN_LOGO_RASTER"
      x="41.6939"

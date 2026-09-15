@@ -1,5 +1,54 @@
 # Leviathan Theme Module — Implementation Specification v0.2
 
+## Implemented revision: optional SVG panel background (schema 3)
+
+Schema 3 adds `background` (RGB hex) and `backgroundEnabled` (boolean) to active
+and user-preset palettes. V1/V2 documents and factory defaults keep the authored
+background. Editing BACKGROUND enables its custom color; the ORIGINAL toggle
+restores the authored background while retaining the selected custom color.
+
+The pilot panels are THEME and Bifurx's legacy SVG mode. A master SVG's explicit
+`theme_background` group is extracted into `.background.svg` with its ancestor
+transforms/styles and removed from `.panel.svg`. Highlights and other artwork
+remain above the background. `SplitPanelRenderer` opts in with an explicit
+background asset path; unmigrated panels retain their existing rendering.
+Original artwork or the solid custom color is drawn inside the existing panel
+framebuffer and refreshed only when the background changes. Bifurx's PNG mode
+hides the entire legacy panel and its theme glass/text layers. Its PNG artwork
+does not participate in background theming. Bifurx sync includes its background
+SVG and the shared code; sync and rebuild Pro to consume schema 3.
+
+## Implemented revision: separate input/output text (schema 2)
+
+This revision supersedes the single Text/Accent descriptions below for the
+implemented theme editor, rendering, and persistence contract.
+
+- Four color roles: `Input`, `Output`, `TextInput`, and `TextOutput`.
+- THEME uses two columns: INPUT and OUTPUT above their matching TEXT selectors.
+  Text previews use their corresponding input/output pigment as the background.
+- The shared theme document writes `schemaVersion: 2`. Both `active` and each
+  occupied user preset contain `input`, `output`, `textInput`, `textOutput`, and
+  `textureAmount`. Loading a V1 `text` seeds both text colors; valid explicit V2
+  fields override that fallback. Factory presets initialize both text colors
+  to their previous single text color.
+- Master SVG groups `theme_text_input` and `theme_text_output` produce
+  `.theme-text-input.svg` and `.theme-text-output.svg`. Extraction preserves
+  ancestor transforms/styles and uses the nearest semantic group. Static
+  labels and branding stay in `.labels.svg`. Legacy `theme_text` extraction
+  remains available to tooling during migration.
+- Bifurx assigns OUT to output text and its other functional labels to input
+  text. Sibyl assigns its nine output-jack labels to output text and its nine
+  input-jack labels to input text. Both text layers share one cached framebuffer.
+- THEME's preview glass uses `glass_text_input` and `glass_text_output`;
+  the parser accepts legacy `glass_text` as input text.
+- Bifurx sync manages both generated text SVGs and the shared schema/service/
+  renderer sources. Sync and rebuild Leviathan Pro alongside the main plugin;
+  older consumers reject schema 2 as a future schema.
+
+After editing master SVGs, regenerate with `tools/split_svg_labels.py` and
+`make generate-panel-anchor-atlas`. The older single-text generated SVGs are
+retired for migrated modules.
+
 ## Status and normative language
 
 This document defines Theme V1. Sections explicitly marked **Future** are

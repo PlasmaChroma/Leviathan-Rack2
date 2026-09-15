@@ -2353,7 +2353,7 @@ struct SibylWidget : ModuleWidget {
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/Sibyl.panel.svg");
 		const std::string& panelPath = splitPanel.panelPath();
 		splitPanel.addThemedLabels(
-			"res/Sibyl.labels.svg", "res/Sibyl.theme-text.svg");
+			"res/Sibyl.labels.svg", "res/Sibyl.theme-text-input.svg", "res/Sibyl.theme-text-output.svg");
 		splitPanel.addCompactLeviathanLogoBranding();
 		visual_assets::addFractalGlassOverlay(this, panelPath, splitPanel.panelSurfaceEffectWidget());
 		// Center the branding pair using Octavia's logo-to-chip spacing and height.

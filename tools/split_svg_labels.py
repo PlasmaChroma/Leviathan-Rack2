@@ -5,7 +5,9 @@ split_svg_labels.py
 Split an SVG into:
   - a panel/art SVG with labels removed
   - a static labels SVG containing the chosen label group
-  - when present, a theme-text SVG containing only <g id="theme_text">
+  - separate theme-text-input/output SVGs for their semantic text groups
+  - a legacy theme-text SVG when the old theme_text group is present
+  - an optional background SVG preserving the authored theme_background group
 
 By default, the panel/art SVG strips SVG text elements and the labels-only SVG
 converts text to paths so runtime panels do not depend on locally installed
@@ -13,7 +15,10 @@ fonts. Pass --keep-label-text to keep font-backed text in the labels output.
 
 Expected source convention:
   <g id="labels"> ... </g>
-  <g id="labels"> ... <g id="theme_text"> ... </g> ... </g>
+  <g id="labels">
+    <g id="theme_text_input"> ... </g>
+    <g id="theme_text_output"> ... </g>
+  </g>
 
 Example:
   python3 split_svg_labels.py res/IntegralFlux.svg
@@ -42,7 +47,7 @@ SODIPODI_NS = "http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
 XLINK_NS = "http://www.w3.org/1999/xlink"
 XML_NS = "http://www.w3.org/XML/1998/namespace"
 
-THEME_GLASS_IDS = {"glass_input", "glass_output", "glass_text"}
+THEME_GLASS_IDS = {"glass_input", "glass_output", "glass_text", "glass_text_input", "glass_text_output"}
 THEME_SUBSTRATE_ATTR = "data-theme-runtime-substrate"
 RUNTIME_ANCHOR_GROUP_IDS = {"plasma_conduit_anchors"}
 
@@ -421,7 +426,7 @@ def split_svg(
     outline_label_text: bool,
     inkscape_path: str | None,
     inkscape_timeout_sec: float,
-) -> tuple[Path, Path, Path | None]:
+) -> tuple[Path, Path, dict[str, Path]]:
     tree = ET.parse(source_path)
     root = tree.getroot()
 
@@ -433,14 +438,37 @@ def split_svg(
     stem = source_path.with_suffix("")
     panel_path = Path(f"{stem}{panel_suffix}.svg")
     labels_path = Path(f"{stem}{labels_suffix}.svg")
-    theme_text_path = Path(f"{stem}{theme_text_suffix}.svg")
+    theme_ids = {theme_text_id: "legacy", f"{theme_text_id}_input": "input",
+                 f"{theme_text_id}_output": "output"}
+    theme_paths = {
+        role: Path(f"{stem}{theme_text_suffix}{'' if role == 'legacy' else '-' + role}.svg")
+        for group_id, role in theme_ids.items()
+        if any(elem.get("id") == group_id for elem in label_group.iter())
+    }
+    background_path = Path(f"{stem}.background.svg")
+    _, background_group = find_parent_and_child_by_id(root, "theme_background")
 
-    _, theme_text_group = find_parent_and_child_by_id(label_group, theme_text_id)
+    def select_layer(element, wanted, inherited=None):
+        # Retain every ancestor's transform/style. The nearest recognized group
+        # determines a shape's role, including nested semantic groups.
+        role = theme_ids.get(element.get("id"), inherited)
+        children = list(element)
+        if not children:
+            return copy.deepcopy(element) if role == wanted else None
+        result = ET.Element(element.tag, dict(element.attrib))
+        result.text = element.text
+        result.tail = element.tail
+        for child in children:
+            selected = select_layer(child, wanted, role)
+            if selected is not None:
+                result.append(selected)
+        return result if len(result) or role == wanted else None
 
     if not overwrite:
         outputs = [panel_path, labels_path]
-        if theme_text_group is not None:
-            outputs.append(theme_text_path)
+        outputs.extend(theme_paths.values())
+        if background_group is not None:
+            outputs.append(background_path)
         for out in outputs:
             if out.exists():
                 raise RuntimeError(f"{out} already exists; pass --overwrite")
@@ -451,13 +479,9 @@ def split_svg(
 
     copy_defs_and_styles(root, labels_root)
 
-    labels_layer = copy.deepcopy(label_group)
-    labels_layer.attrib["id"] = label_id
-    static_theme_parent, static_theme_group = find_parent_and_child_by_id(
-        labels_layer, theme_text_id)
-    if static_theme_parent is not None and static_theme_group is not None:
-        static_theme_parent.remove(static_theme_group)
-    labels_root.append(labels_layer)
+    labels_layer = select_layer(label_group, None)
+    if labels_layer is not None:
+        labels_root.append(labels_layer)
 
     if outline_label_text:
         normalize_text_for_outline(labels_root)
@@ -477,18 +501,16 @@ def split_svg(
     if outline_label_text:
         outline_text_with_inkscape(labels_path, inkscape_path, inkscape_timeout_sec)
 
-    generated_theme_text_path: Path | None = None
-    if theme_text_group is not None:
+    for role, theme_text_path in theme_paths.items():
         theme_text_root = copy_svg_shell(root)
-        theme_text_root.attrib["id"] = f"{source_path.stem}-theme-text"
+        theme_text_root.attrib["id"] = f"{source_path.stem}-theme-text-{role}"
         copy_defs_and_styles(root, theme_text_root)
 
         # Preserve transforms and inherited presentation attributes from the
         # labels group while excluding every static sibling.
-        theme_labels_layer = ET.Element(label_group.tag, dict(label_group.attrib))
-        theme_labels_layer.attrib["id"] = label_id
-        theme_labels_layer.append(copy.deepcopy(theme_text_group))
-        theme_text_root.append(theme_labels_layer)
+        theme_labels_layer = select_layer(label_group, role)
+        if theme_labels_layer is not None:
+            theme_text_root.append(theme_labels_layer)
 
         if outline_label_text:
             normalize_text_for_outline(theme_text_root)
@@ -503,7 +525,6 @@ def split_svg(
         if outline_label_text:
             outline_text_with_inkscape(
                 theme_text_path, inkscape_path, inkscape_timeout_sec)
-        generated_theme_text_path = theme_text_path
 
     # panel-only SVG
     panel_root = copy.deepcopy(root)
@@ -512,6 +533,36 @@ def split_svg(
         raise RuntimeError(f"{source_path}: internal error removing labels")
 
     panel_parent.remove(panel_label_group)
+
+    if background_group is not None:
+        background_root = copy_svg_shell(root)
+        background_root.attrib["id"] = f"{source_path.stem}-background"
+        copy_defs_and_styles(root, background_root)
+
+        def background_branch(element):
+            if element.get("id") == "theme_background":
+                return copy.deepcopy(element)
+            branch = ET.Element(element.tag, dict(element.attrib))
+            for child in element:
+                selected = background_branch(child)
+                if selected is not None:
+                    branch.append(selected)
+            return branch if len(branch) else None
+
+        for child in root:
+            branch = background_branch(child)
+            if branch is not None:
+                background_root.append(branch)
+        if cleanup:
+            remove_editor_junk(background_root)
+        background_tree = ET.ElementTree(background_root)
+        ET.indent(background_tree, space="  ")
+        background_tree.write(background_path, encoding="utf-8", xml_declaration=True)
+        theme_paths["background"] = background_path
+        background_parent, panel_background = find_parent_and_child_by_id(panel_root, "theme_background")
+        if background_parent is None or panel_background is None:
+            raise RuntimeError("theme_background must be in the panel artwork, outside labels")
+        background_parent.remove(panel_background)
 
     neutralize_semantic_panel_pigment(panel_root)
     hide_runtime_anchor_groups(panel_root)
@@ -526,7 +577,7 @@ def split_svg(
     ET.indent(panel_tree, space="  ")
     panel_tree.write(panel_path, encoding="utf-8", xml_declaration=True)
 
-    return panel_path, labels_path, generated_theme_text_path
+    return panel_path, labels_path, theme_paths
 
 
 def collect_svg_files(path: Path, recursive: bool) -> list[Path]:
@@ -621,7 +672,9 @@ def main() -> int:
             p for p in svg_files
             if not p.name.endswith(f"{args.panel_suffix}.svg")
             and not p.name.endswith(f"{args.labels_suffix}.svg")
-            and not p.name.endswith(f"{args.theme_text_suffix}.svg")
+            and not p.name.endswith(".background.svg")
+            and not any(p.name.endswith(f"{args.theme_text_suffix}{suffix}.svg")
+                        for suffix in ("", "-input", "-output"))
         ]
 
         if not svg_files:
@@ -629,7 +682,7 @@ def main() -> int:
             return 0
 
         for svg_path in svg_files:
-            panel_path, labels_path, theme_text_path = split_svg(
+            panel_path, labels_path, theme_text_paths = split_svg(
                 source_path=svg_path,
                 label_id=args.label_id,
                 panel_suffix=args.panel_suffix,
@@ -646,7 +699,7 @@ def main() -> int:
             print(f"{svg_path}")
             print(f"  -> {panel_path}")
             print(f"  -> {labels_path}")
-            if theme_text_path is not None:
+            for theme_text_path in theme_text_paths.values():
                 print(f"  -> {theme_text_path}")
 
         return 0
