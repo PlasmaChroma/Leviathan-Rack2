@@ -1,6 +1,7 @@
 #include "Bifurx.hpp"
 #include "BifurxLicense.hpp"
 #include "BifurxRenderData.hpp"
+#include "BifurxRenderPrep.hpp"
 #include "BifurxWorker.hpp"
 #include "DebugTerminalTransport.hpp"
 #include "UndertowShape.hpp"
@@ -1523,122 +1524,6 @@ inline void prepareCurveTargets(const BifurxPreviewModel& model, const float* cu
 		const float db = previewModelResponseDb(model, curveHz[i]);
 		curveTargetDb[i] = clamp(db, kResponseMinDb, kResponseMaxDb);
 	}
-}
-
-inline float fast_10log10f(float x) {
-	if (x <= 1e-12f) return -120.f;
-	union { float f; uint32_t i; } u = {x};
-	const int exp = int((u.i >> 23) & 0xFF) - 127;
-	u.i = (u.i & 0x7FFFFFu) | 0x3F800000u;
-	const float m = u.f - 1.f;
-	const float log2 = float(exp) + m * (1.44269504f - 0.44269504f * m);
-	return log2 * 3.01029995664f;
-}
-
-inline float computeDisplayTopTargetDbfs(
-	const float* frameSmoothedOutputDbfs,
-	const float* overlayTargetOutputDbfs,
-	bool fftScaleDynamic,
-	float previousTopTargetDbfs = kDisplayTopDbfsCeiling
-) {
-	if (!fftScaleDynamic) {
-		return kDisplayTopDbfsCeiling;
-	}
-
-	float framePeakDbfs = kOverlayDbfsFloor;
-	for (int i = 0; i < kCurvePointCount; ++i) {
-		framePeakDbfs = std::max(framePeakDbfs, overlayTargetOutputDbfs[i]);
-	}
-
-	if (previousTopTargetDbfs > kDisplayTopDbfsFloor && std::fabs(framePeakDbfs - (previousTopTargetDbfs - 6.f)) < 0.5f) {
-		return previousTopTargetDbfs;
-	}
-
-	float sortedOutputDbfs[kCurvePointCount];
-	for (int i = 0; i < kCurvePointCount; i++) sortedOutputDbfs[i] = frameSmoothedOutputDbfs[i];
-	const int p95Index = int(0.95f * float(kCurvePointCount - 1));
-	std::nth_element(sortedOutputDbfs, sortedOutputDbfs + p95Index, sortedOutputDbfs + kCurvePointCount);
-	const float robustTopRefDbfs = std::max(sortedOutputDbfs[p95Index], framePeakDbfs - 18.f);
-	return clamp(
-		std::max(robustTopRefDbfs + 6.f, framePeakDbfs + kDisplayPeakHeadroomDb),
-		kDisplayTopDbfsFloor,
-		kDisplayTopDynamicCeilingDbfs
-	);
-}
-
-inline void prepareOverlayTargetsFromSpectra(
-	float sampleRate,
-	const float* curveBinPos,
-	const float* fftOutputFreq,
-	const float* fftRawInputFreq,
-	bool moduleResponseEnabled,
-	bool hasOverlayTarget,
-	bool fftScaleDynamic,
-	float* overlayTargetModuleDb,
-	float* overlayTargetOutputDbfs,
-	float* displayTopTargetDbfs
-) {
-	float binOutputDbfs[kFftBinCount];
-	float binOutputPower[kFftBinCount];
-	float binRawInputPower[kFftBinCount];
-	float binModuleDeltaDb[kFftBinCount];
-	const float amplitudeScale = 4.f / float(kFftSize);
-	const float amplitudeScaleSq = amplitudeScale * amplitudeScale;
-	for (int bin = 0; bin < kFftBinCount; ++bin) {
-		const float binHz = (float(bin) * sampleRate) / float(kFftSize);
-		const float subsonicWeight = levi_math::clamp01((binHz - kOverlaySubsonicCutHz) / (kOverlaySubsonicFadeHz - kOverlaySubsonicCutHz));
-		const float weightedPowerScale = subsonicWeight * subsonicWeight * amplitudeScaleSq;
-		binOutputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftOutputFreq, bin);
-		if (moduleResponseEnabled) {
-			binRawInputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftRawInputFreq, bin);
-		}
-	}
-
-	constexpr int kOverlayBandRadius = 2;
-	constexpr float kOverlayBandKernel[5] = {0.08f, 0.24f, 0.36f, 0.24f, 0.08f};
-	for (int bin = 0; bin < kFftBinCount; ++bin) {
-		float outputEnergy = 0.f;
-		float responseOutputEnergy = 0.f;
-		float rawInputEnergy = 0.f;
-		for (int k = -kOverlayBandRadius; k <= kOverlayBandRadius; ++k) {
-			const int sampleBin = clamp(bin + k, 0, kFftBinCount - 1);
-			const float w = kOverlayBandKernel[k + kOverlayBandRadius];
-			outputEnergy += w * binOutputPower[sampleBin];
-			if (moduleResponseEnabled) {
-				responseOutputEnergy += w * binOutputPower[sampleBin];
-				rawInputEnergy += w * binRawInputPower[sampleBin];
-			}
-		}
-		binModuleDeltaDb[bin] = moduleResponseEnabled
-			? fast_10log10f((responseOutputEnergy + 1e-12f) / (rawInputEnergy + 1e-12f))
-			: 0.f;
-		outputEnergy += 1e-12f;
-		binOutputDbfs[bin] = clamp(fast_10log10f(outputEnergy * 0.04f + 1e-12f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
-	}
-
-	float sampledOutputDbfs[kCurvePointCount];
-	float sampledModuleDeltaDb[kCurvePointCount];
-	for (int i = 0; i < kCurvePointCount; ++i) {
-		const float binPos = curveBinPos[i];
-		const int binA = std::max(2, int(std::floor(binPos)));
-		const int binB = std::min(binA + 1, kFftSize / 2);
-		const float frac = binPos - float(binA);
-		sampledOutputDbfs[i] = mixf(binOutputDbfs[binA], binOutputDbfs[binB], frac);
-		sampledModuleDeltaDb[i] = mixf(binModuleDeltaDb[binA], binModuleDeltaDb[binB], frac);
-	}
-
-	float frameSmoothedOutputDbfs[kCurvePointCount];
-	const float targetSmoothing = hasOverlayTarget ? 0.45f : 1.f;
-	for (int i = 0; i < kCurvePointCount; ++i) {
-		const int left = std::max(0, i - 1), right = std::min(kCurvePointCount - 1, i + 1);
-		const float smoothOutputDbfs = 0.12f * sampledOutputDbfs[left] + 0.76f * sampledOutputDbfs[i] + 0.12f * sampledOutputDbfs[right];
-		frameSmoothedOutputDbfs[i] = smoothOutputDbfs;
-		const float smoothModuleDeltaDb = 0.12f * sampledModuleDeltaDb[left] + 0.76f * sampledModuleDeltaDb[i] + 0.12f * sampledModuleDeltaDb[right];
-		overlayTargetModuleDb[i] = mixf(overlayTargetModuleDb[i], smoothModuleDeltaDb, targetSmoothing);
-		overlayTargetOutputDbfs[i] = mixf(overlayTargetOutputDbfs[i], smoothOutputDbfs, targetSmoothing);
-	}
-
-	*displayTopTargetDbfs = computeDisplayTopTargetDbfs(frameSmoothedOutputDbfs, overlayTargetOutputDbfs, fftScaleDynamic, *displayTopTargetDbfs);
 }
 
 } // namespace
