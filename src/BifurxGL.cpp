@@ -925,7 +925,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 	void drawExpectedCurveShader(float w, float h) {
 		expectedCurveShaderActiveLastFrame = false;
-		if (!state.hasPreview || !ensureStrokeShaderReady()) return;
+		if (!state.hasCurve || !ensureStrokeShaderReady()) return;
 
 		calculateRefinedCurvePoints(&overlayCurvePoints, w, h);
 		if (overlayCurvePoints.size() < 2u) return;
@@ -988,7 +988,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 	void drawMarkerCirclesShader(float w, float h) {
 		markerShaderActiveLastFrame = false;
-		if (!state.hasPreview || !ensureMarkerShaderReady()) return;
+		if (!state.hasCurve || !ensureMarkerShaderReady()) return;
 		BifurxMarkerLayout layout;
 		getCachedMarkerLayout(&layout, w, h);
 		bool hasVisibleMarker = false;
@@ -1182,7 +1182,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const bool useGlShaderRendererNow = module->useGlShaderRenderer.load(std::memory_order_relaxed);
 		const int colorSchemeNow = int(module->colorScheme);
 		const bool fixedSurfaceEnabledNow = module->fixedGlSurfaceEnabled.load(std::memory_order_relaxed);
-		bool contentDirty = tick.previewUpdated || tick.analysisUpdated || tick.animationActive;
+		bool contentDirty = tick.contentChanged;
 
 		// Shared dirty policy with NanoVG path: redraw on new data or active animation.
 		if (showModuleResponseOverlayNow != lastShowModuleResponseOverlay) {
@@ -1521,7 +1521,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 	void drawNanoVG(const DrawArgs& args) override {
 		if (!module || module->renderMode != Bifurx::RENDER_OPENGL) return;
-		if (!state.hasPreview) return;
+		if (!state.hasCurve) return;
 		
 		const float w = box.size.x, h = box.size.y;
 		const bool displayOnlyMode = isBifurxDisplayOnlyMode(state.previewState.mode);

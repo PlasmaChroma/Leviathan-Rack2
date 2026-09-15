@@ -1550,20 +1550,23 @@ void BifurxSpectrumBase::syncBase() {
 		state.previewPublishTimeSec = previewPublishTimeSec;
 		state.hasPreview = true;
 		state.lastPreviewSeq = previewSeq;
-		if (!useWorkerCurve) {
-			updateAxisCache();
-			const bool measurePrep = isDragonKingDebugEnabled();
-			const auto curvePrepStart = measurePrep ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
-			updateCurveCache();
-			if (measurePrep) {
-				lastCurvePrepUs = float(std::chrono::duration_cast<std::chrono::microseconds>(
-					std::chrono::steady_clock::now() - curvePrepStart).count());
-			}
+	}
+	// Also catch up if worker mode was disabled with a preview still in flight.
+	if (!useWorkerCurve && state.hasPreview
+		&& (!state.hasCurve || state.curvePreviewSeq != state.lastPreviewSeq)) {
+		updateAxisCache();
+		const bool measurePrep = isDragonKingDebugEnabled();
+		const auto curvePrepStart = measurePrep ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
+		updateCurveCache();
+		if (measurePrep) {
+			lastCurvePrepUs = float(std::chrono::duration_cast<std::chrono::microseconds>(
+				std::chrono::steady_clock::now() - curvePrepStart).count());
 		}
 	}
 
 	const uint32_t analysisSeq = module->analysisPublishSeq.load(std::memory_order_acquire);
-	if (analysisSeq != state.lastAnalysisSeq) {
+	if (analysisSeq != state.lastAnalysisSeq
+		|| (!useWorkerCurve && analysisSeq != state.overlayAnalysisSeq)) {
 		if (!useWorkerCurve) {
 			const bool measurePrep = isDragonKingDebugEnabled();
 			const auto overlayPrepStart = measurePrep ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
@@ -1575,6 +1578,7 @@ void BifurxSpectrumBase::syncBase() {
 			}
 			if (copiedAnalysis) {
 				state.lastAnalysisSeq = copiedAnalysisSeq;
+				state.overlayAnalysisSeq = copiedAnalysisSeq;
 				state.hasOverlay = true;
 			}
 		}
@@ -1707,7 +1711,8 @@ void BifurxSpectrumBase::submitWorkerCurveRequest() {
 	request.requestSubmittedAtSec = system::getTime();
 	request.sourcePreviewTimeSec = state.previewPublishTimeSec;
 	request.previewState = state.previewState;
-	request.fftScaleDynamic = module->fftScaleDynamic.load(std::memory_order_relaxed);
+	// Always retain the dynamic reference so scale toggles work without new audio.
+	request.fftScaleDynamic = true;
 	request.showModuleResponseOverlay = module->showModuleResponseOverlay.load(std::memory_order_relaxed);
 	const bool analysisChangedSinceSubmit =
 		(state.lastAnalysisSeq != 0) && (state.lastAnalysisSeq != workerLastSubmittedAnalysisSeq);
@@ -1722,7 +1727,7 @@ void BifurxSpectrumBase::submitWorkerCurveRequest() {
 				&copiedAnalysisSeq
 			);
 			if (copiedAnalysis) {
-				payload->hasOverlayTarget = state.hasOverlayTarget;
+				payload->hasOverlayTarget = state.hasOverlay;
 				std::memcpy(
 					payload->previousOverlayTargetModuleDb,
 					state.overlayTargetModuleDb,
@@ -1764,23 +1769,27 @@ bool BifurxSpectrumBase::adoptWorkerCurveSnapshot() {
 	// Do not reject snapshots solely for being older than the latest submitted seq.
 	// Under heavy load this can cause a module to repeatedly drop usable snapshots
 	// and appear permanently behind.
-	for (int i = 0; i < kCurvePointCount; ++i) {
-		state.curveHz[i] = workerSnapshotCache->curveHz[i];
-		state.curveBinPos[i] = workerSnapshotCache->curveBinPos[i];
-		state.curveTargetDb[i] = workerSnapshotCache->curveTargetDb[i];
-	}
-	state.cachedAxisSampleRate = workerSnapshotCache->cachedAxisSampleRate;
-	if (!state.hasCurveTarget) {
+	// Analysis-only snapshots carry the same curve. Keep its animation and
+	// layout caches instead of re-adopting identical data on every FFT frame.
+	if (!state.hasCurve || workerSnapshotCache->previewSeq != state.curvePreviewSeq) {
 		for (int i = 0; i < kCurvePointCount; ++i) {
-			state.curveDb[i] = state.curveTargetDb[i];
+			state.curveHz[i] = workerSnapshotCache->curveHz[i];
+			state.curveBinPos[i] = workerSnapshotCache->curveBinPos[i];
+			state.curveTargetDb[i] = workerSnapshotCache->curveTargetDb[i];
 		}
+		state.cachedAxisSampleRate = workerSnapshotCache->cachedAxisSampleRate;
+		if (!state.hasCurve) {
+			for (int i = 0; i < kCurvePointCount; ++i) {
+				state.curveDb[i] = state.curveTargetDb[i];
+			}
+		}
+		if (!state.hasCurve) ++state.curveRevision;
+		state.curvePreviewSeq = workerSnapshotCache->previewSeq;
+		state.hasCurve = true;
+		state.hasCurveTarget = true;
+		cachedMarkerLayoutValid = false;
+		refinedCurveTemplateValid = false;
 	}
-	state.hasCurveTarget = true;
-	// Force marker/layout recompute after worker-provided curve adoption.
-	// Without this, first-frame VW spawns can retain stale marker Y positions
-	// from pre-adoption cache state until another parameter change occurs.
-	cachedMarkerLayoutValid = false;
-	refinedCurveTemplateValid = false;
 	lastCurvePrepUs = workerSnapshotCache->curvePrepUs;
 	if (workerSnapshotCache->hasOverlayTarget &&
 		workerSnapshotCache->analysisSeq >= workerLastAppliedAnalysisSeq) {
@@ -1788,17 +1797,18 @@ bool BifurxSpectrumBase::adoptWorkerCurveSnapshot() {
 			state.overlayTargetModuleDb[i] = workerSnapshotCache->overlayTargetModuleDb[i];
 			state.overlayTargetOutputDbfs[i] = workerSnapshotCache->overlayTargetOutputDbfs[i];
 		}
-		state.displayTopTargetDbfs = workerSnapshotCache->displayTopTargetDbfs;
-		if (!state.hasOverlayTarget) {
+		state.dynamicTopTargetDbfs = workerSnapshotCache->displayTopTargetDbfs;
+		if (!state.hasOverlay) {
 			for (int i = 0; i < kCurvePointCount; ++i) {
 				state.overlayModuleDb[i] = state.overlayTargetModuleDb[i];
 				state.overlayOutputDbfs[i] = state.overlayTargetOutputDbfs[i];
 			}
-			state.hasOverlayTarget = true;
 		}
+		state.hasOverlayTarget = true;
 		state.hasOverlay = true;
 		lastOverlayPrepUs = workerSnapshotCache->overlayPrepUs;
 		workerLastAppliedAnalysisSeq = workerSnapshotCache->analysisSeq;
+		state.overlayAnalysisSeq = workerSnapshotCache->analysisSeq;
 	}
 	workerLastAppliedRequestSeq = workerSnapshotCache->requestSeq;
 	workerLastAppliedPreviewSeq = workerSnapshotCache->previewSeq;
@@ -1869,6 +1879,7 @@ void BifurxSpectrumBase::initializeStaticPreviewStateIfNeeded() {
 	state.hasOverlay = true;
 	state.hasOverlayTarget = false;
 	state.displayTopDbfs = state.displayTopTargetDbfs;
+	state.dynamicTopTargetDbfs = state.displayTopTargetDbfs;
 }
 
 void BifurxSpectrumBase::updateAxisCache() {
@@ -1889,10 +1900,13 @@ void BifurxSpectrumBase::updateCurveCache() {
 	updateAxisCache();
 	const BifurxPreviewModel& model = getOrUpdateModel();
 	prepareCurveTargets(model, state.curveHz, state.curveTargetDb);
-	if (!state.hasCurveTarget) {
+	if (!state.hasCurve) {
 		for (int i = 0; i < kCurvePointCount; i++) state.curveDb[i] = state.curveTargetDb[i];
-		state.hasCurveTarget = true;
+		++state.curveRevision;
 	}
+	state.curvePreviewSeq = state.lastPreviewSeq;
+	state.hasCurve = true;
+	state.hasCurveTarget = true;
 }
 
 const BifurxPreviewModel& BifurxSpectrumBase::getOrUpdateModel() const {
@@ -1907,9 +1921,9 @@ bool BifurxSpectrumBase::updateOverlayCache(uint32_t* copiedSeq) {
 	if (!state.hasPreview || !module) return false;
 	updateAxisCache();
 	SynchronousOverlayScratch& scratch = synchronousOverlayScratch();
-	uint32_t frameSeq = state.lastAnalysisSeq;
+	uint32_t frameSeq = state.overlayAnalysisSeq;
 	if (!module->copyAnalysisFrame(
-		state.lastAnalysisSeq,
+		state.overlayAnalysisSeq,
 		scratch.fftInputTime,
 		scratch.fftOutputTime,
 		&frameSeq
@@ -1931,35 +1945,36 @@ bool BifurxSpectrumBase::updateOverlayCache(uint32_t* copiedSeq) {
 		}
 		scratch.fft.rfft(scratch.fftInputTime, scratch.fftRawInputFreq);
 	}
-	const bool fftScaleDynamic = module ? module->fftScaleDynamic.load(std::memory_order_relaxed) : true;
 	prepareOverlayTargetsFromSpectra(
 		state.previewState.sampleRate,
 		state.curveBinPos,
 		scratch.fftOutputFreq,
 		scratch.fftRawInputFreq,
 		moduleResponseEnabled,
-		state.hasOverlayTarget,
-		fftScaleDynamic,
+		state.hasOverlay,
+		true,
 		state.overlayTargetModuleDb,
 		state.overlayTargetOutputDbfs,
-		&state.displayTopTargetDbfs
+		&state.dynamicTopTargetDbfs
 	);
 
-	if (!state.hasOverlayTarget) {
+	if (!state.hasOverlay) {
 		for (int i = 0; i < kCurvePointCount; i++) {
 			state.overlayModuleDb[i] = state.overlayTargetModuleDb[i];
 			state.overlayOutputDbfs[i] = state.overlayTargetOutputDbfs[i];
 		}
-		state.hasOverlayTarget = true;
 	}
+	state.hasOverlayTarget = true;
 	if (copiedSeq) {
 		*copiedSeq = frameSeq;
 	}
 	return true;
 }
 
-bool BifurxSpectrumBase::updateAnimation(float dt) {
+bool BifurxSpectrumBase::updateAnimation(float dt, bool* contentChanged) {
 	bool animationActive = false;
+	bool changed = false;
+	bool curveChanged = false;
 	constexpr float kCurveEpsilonDb = 0.01f;
 	constexpr float kOverlayEpsilonDb = 0.02f;
 	constexpr float kTopEpsilonDbfs = 0.02f;
@@ -1969,6 +1984,7 @@ bool BifurxSpectrumBase::updateAnimation(float dt) {
 		float maxCurveResidualDb = 0.f;
 		for (int i = 0; i < kCurvePointCount; ++i) {
 			const float prev = state.curveDb[i];
+			curveChanged |= prev != state.curveTargetDb[i];
 			float delta = state.curveTargetDb[i] - prev;
 			delta = clamp(delta, -curveMaxStepDb, curveMaxStepDb);
 			state.curveDb[i] = prev + delta;
@@ -1985,11 +2001,15 @@ bool BifurxSpectrumBase::updateAnimation(float dt) {
 		}
 	}
 
+	if (curveChanged) ++state.curveRevision;
+	changed |= curveChanged;
 	if (state.hasOverlayTarget) {
 		const float overlayDbSmoothing = 0.22f;
 		const float overlayLevelSmoothing = 0.20f;
 		float maxOverlayResidualDb = 0.f;
 		for (int i = 0; i < kCurvePointCount; ++i) {
+			changed |= state.overlayModuleDb[i] != state.overlayTargetModuleDb[i]
+				|| state.overlayOutputDbfs[i] != state.overlayTargetOutputDbfs[i];
 			state.overlayModuleDb[i] = mixf(state.overlayModuleDb[i], state.overlayTargetModuleDb[i], overlayDbSmoothing);
 			state.overlayOutputDbfs[i] = mixf(state.overlayOutputDbfs[i], state.overlayTargetOutputDbfs[i], overlayLevelSmoothing);
 			const float moduleResidual = std::fabs(state.overlayTargetModuleDb[i] - state.overlayModuleDb[i]);
@@ -1998,6 +2018,7 @@ bool BifurxSpectrumBase::updateAnimation(float dt) {
 		}
 
 		const float prevTop = state.displayTopDbfs;
+		changed |= prevTop != state.displayTopTargetDbfs;
 		float topSmoothing = (state.displayTopTargetDbfs > prevTop) ? 0.22f : 0.10f;
 		if (module && module->fftScaleDynamic.load(std::memory_order_relaxed) && state.displayTopTargetDbfs > prevTop) {
 			topSmoothing = 0.70f;
@@ -2018,6 +2039,7 @@ bool BifurxSpectrumBase::updateAnimation(float dt) {
 		}
 	}
 
+	if (contentChanged) *contentChanged = changed;
 	return animationActive;
 }
 
@@ -2025,12 +2047,23 @@ BifurxRenderTickResult BifurxSpectrumBase::runRenderTick(float dt) {
 	BifurxRenderTickResult result;
 	const uint32_t prevPreviewSeq = state.lastPreviewSeq;
 	const uint32_t prevAnalysisSeq = state.lastAnalysisSeq;
+	const uint32_t prevOverlaySeq = state.overlayAnalysisSeq;
+	const uint64_t prevCurveRevision = state.curveRevision;
 
 	syncBase();
 	const bool workerAdopted = adoptWorkerCurveSnapshot();
 	result.previewUpdated = (state.lastPreviewSeq != prevPreviewSeq) || workerAdopted;
-	result.analysisUpdated = (state.lastAnalysisSeq != prevAnalysisSeq);
-	result.animationActive = updateAnimation(dt);
+	result.analysisUpdated = (state.lastAnalysisSeq != prevAnalysisSeq) || state.overlayAnalysisSeq != prevOverlaySeq;
+	const bool dynamic = module ? module->fftScaleDynamic.load(std::memory_order_relaxed) : true;
+	const bool scaleChanged = dynamic != state.fftScaleDynamic;
+	state.fftScaleDynamic = dynamic;
+	state.displayTopTargetDbfs = dynamic ? state.dynamicTopTargetDbfs : kDisplayTopDbfsCeiling;
+	if (scaleChanged && !dynamic) state.displayTopDbfs = kDisplayTopDbfsCeiling;
+	if (state.hasOverlay && state.displayTopDbfs != state.displayTopTargetDbfs) state.hasOverlayTarget = true;
+	bool animationChanged = false;
+	result.animationActive = updateAnimation(dt, &animationChanged);
+	result.contentChanged = result.previewUpdated || result.analysisUpdated || workerAdopted || scaleChanged || animationChanged
+		|| state.curveRevision != prevCurveRevision;
 	result.curvePrepUs = (result.previewUpdated || workerAdopted) ? lastCurvePrepUs : 0.f;
 	result.overlayPrepUs = result.analysisUpdated ? lastOverlayPrepUs : 0.f;
 	return result;
@@ -2114,7 +2147,7 @@ void BifurxSpectrumBase::getCachedMarkerLayout(BifurxMarkerLayout* layout, float
 	rebuild = rebuild || std::fabs(cachedMarkerLayoutH - h) > 1e-4f;
 	rebuild = rebuild || std::fabs(cachedMarkerLayoutSampleRate - state.previewState.sampleRate) > 0.5f;
 	rebuild = rebuild || cachedMarkerLayoutPreviewSeq != state.lastPreviewSeq;
-	rebuild = rebuild || state.hasCurveTarget;
+	rebuild = rebuild || cachedMarkerLayoutCurveRevision != state.curveRevision;
 	rebuild = rebuild || std::fabs(cachedMarkerLayoutAnchorX01[0] - anchors[0].x01) > 1e-7f;
 	rebuild = rebuild || std::fabs(cachedMarkerLayoutAnchorX01[1] - anchors[1].x01) > 1e-7f;
 	rebuild = rebuild || cachedMarkerLayoutMarkerPinned[0] != markerPinned[0];
@@ -2126,6 +2159,7 @@ void BifurxSpectrumBase::getCachedMarkerLayout(BifurxMarkerLayout* layout, float
 		cachedMarkerLayoutH = h;
 		cachedMarkerLayoutSampleRate = state.previewState.sampleRate;
 		cachedMarkerLayoutPreviewSeq = state.lastPreviewSeq;
+		cachedMarkerLayoutCurveRevision = state.curveRevision;
 		cachedMarkerLayoutAnchorX01[0] = anchors[0].x01;
 		cachedMarkerLayoutAnchorX01[1] = anchors[1].x01;
 		cachedMarkerLayoutMarkerPinned[0] = markerPinned[0];

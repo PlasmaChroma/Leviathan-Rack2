@@ -56,6 +56,151 @@ struct TestResult {
   std::string detail;
 };
 
+bool adoptPublishedRenderTargets(BifurxSpectrumBase& display) {
+  display.syncBase();
+  if (!display.shouldUseVisualWorker()) return display.state.hasCurve;
+  for (int attempt = 0; attempt < 2000; ++attempt) {
+    if (display.adoptWorkerCurveSnapshot()) return true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  return false;
+}
+
+TestResult testRendererInitializesOnceAndSlewsSubsequentCurves() {
+  bool pass = true;
+  for (int mode : {Bifurx::VISUAL_WORKER_OFF, Bifurx::VISUAL_WORKER_ON}) {
+    Bifurx module;
+    module.visualWorkerMode.store(mode);
+    BifurxSpectrumBase display;
+    display.module = &module;
+    pass &= !display.state.hasCurve;
+    BifurxPreviewState preview;
+    preview.sampleRate = 48000.f;
+    preview.freqA = preview.freqB = 100.f;
+    module.publishPreviewState(preview);
+    if (!adoptPublishedRenderTargets(display)) return {"Curve initialization and slew", false, "initial adoption timed out"};
+    pass &= display.state.hasCurve;
+    for (int i = 0; i < kCurvePointCount; ++i) pass &= display.state.curveDb[i] == display.state.curveTargetDb[i];
+    display.runRenderTick(1.f / 60.f);
+    pass &= !display.state.hasCurveTarget;
+    float before[kCurvePointCount];
+    std::copy(display.state.curveDb, display.state.curveDb + kCurvePointCount, before);
+    preview.freqA = preview.freqB = 5000.f;
+    module.publishPreviewState(preview);
+    if (!adoptPublishedRenderTargets(display)) return {"Curve initialization and slew", false, "second adoption timed out"};
+    for (int i = 0; i < kCurvePointCount; ++i) pass &= display.state.curveDb[i] == before[i];
+    auto tick = display.runRenderTick(1.f / 60.f);
+    pass &= tick.animationActive && tick.contentChanged;
+    for (int i = 0; i < kCurvePointCount; ++i)
+      pass &= std::fabs(display.state.curveDb[i] - before[i]) <= kCurveVisualSlewDbPerSec / 60.f + 1e-4f;
+    BifurxMarkerLayout layout;
+    for (int frame = 0; frame < 100 && tick.animationActive; ++frame) {
+      display.getCachedMarkerLayout(&layout, 240.f, 100.f);
+      tick = display.runRenderTick(1.f / 60.f);
+    }
+    pass &= !tick.animationActive && tick.contentChanged;
+    display.getCachedMarkerLayout(&layout, 240.f, 100.f);
+    pass &= display.cachedMarkerLayoutCurveRevision == display.state.curveRevision;
+    pass &= !display.runRenderTick(1.f / 60.f).contentChanged;
+  }
+  return {"Both render paths initialize once, slew later curves, and present the final frame", pass, ""};
+}
+
+TestResult testFinalOverlayFrameIsDirtyThenIdles() {
+  BifurxSpectrumBase display;
+  display.state.hasOverlay = true;
+  display.state.hasOverlayTarget = true;
+  for (int i = 0; i < kCurvePointCount; ++i) {
+    display.state.overlayOutputDbfs[i] = -30.024f;
+    display.state.overlayTargetOutputDbfs[i] = -30.f;
+  }
+  const auto finalTick = display.runRenderTick(1.f / 60.f);
+  const bool settled = !finalTick.animationActive && finalTick.contentChanged
+    && display.state.overlayOutputDbfs[0] == -30.f;
+  return {"FFT settling frame redraws once and then idles", settled && !display.runRenderTick(1.f / 60.f).contentChanged, ""};
+}
+
+TestResult testScaleToggleUsesCachedAnalysisAndKeepsCurveCaches() {
+  bool pass = true;
+  for (int mode : {Bifurx::VISUAL_WORKER_OFF, Bifurx::VISUAL_WORKER_ON}) {
+    Bifurx module;
+    module.visualWorkerMode.store(mode);
+    module.fftScaleDynamic.store(false);
+    module.subscribeAnalysisVisual();
+    BifurxPreviewState preview;
+    preview.sampleRate = 48000.f;
+    module.publishPreviewState(preview);
+    BifurxSpectrumBase display;
+    display.module = &module;
+    if (!adoptPublishedRenderTargets(display)) return {"Cached scale toggle", false, "initial adoption timed out"};
+    display.runRenderTick(1.f / 60.f);
+    BifurxMarkerLayout layout;
+    std::vector<BifurxCurvePoint> curve;
+    display.getCachedMarkerLayout(&layout, 240.f, 100.f);
+    display.calculateRefinedCurvePoints(&curve, 240.f, 100.f);
+    const auto curveRevision = display.state.curveRevision;
+    for (int i = 0; i < 2 * kFftSize; ++i) {
+      const float sample = .05f * std::sin(2.f * kRuntimePi * 440.f * float(i) / 48000.f);
+      module.pushAnalysisSample(sample, sample);
+    }
+    if (!adoptPublishedRenderTargets(display)) return {"Cached scale toggle", false, "FFT adoption timed out"};
+    pass &= display.cachedMarkerLayoutValid && display.refinedCurveTemplateValid
+      && display.state.curveRevision == curveRevision;
+    display.runRenderTick(1.f / 60.f);
+    pass &= display.state.hasOverlay && display.state.displayTopDbfs == kDisplayTopDbfsCeiling
+      && display.state.dynamicTopTargetDbfs < kDisplayTopDbfsCeiling - 1.f;
+    const auto requestSeq = display.workerRequestSeq;
+    const auto analysisSeq = display.state.lastAnalysisSeq;
+    // No further audio samples or preview publications: both toggles must work.
+    module.fftScaleDynamic.store(true);
+    auto tick = display.runRenderTick(1.f / 60.f);
+    pass &= tick.contentChanged && display.state.displayTopTargetDbfs == display.state.dynamicTopTargetDbfs
+      && display.state.displayTopDbfs < kDisplayTopDbfsCeiling;
+    module.fftScaleDynamic.store(false);
+    tick = display.runRenderTick(1.f / 60.f);
+    pass &= tick.contentChanged && display.state.displayTopDbfs == kDisplayTopDbfsCeiling
+      && display.state.displayTopTargetDbfs == kDisplayTopDbfsCeiling
+      && display.workerRequestSeq == requestSeq && display.state.lastAnalysisSeq == analysisSeq;
+    float previousOutput[kCurvePointCount];
+    std::copy(display.state.overlayOutputDbfs, display.state.overlayOutputDbfs + kCurvePointCount, previousOutput);
+    for (int i = 0; i < 2 * kFftSize; ++i) {
+      const float sample = .5f * std::sin(2.f * kRuntimePi * 440.f * float(i) / 48000.f);
+      module.pushAnalysisSample(sample, sample);
+    }
+    if (!adoptPublishedRenderTargets(display)) return {"Cached scale toggle", false, "second FFT adoption timed out"};
+    float targetMotion = 0.f;
+    for (int i = 0; i < kCurvePointCount; ++i) {
+      pass &= display.state.overlayOutputDbfs[i] == previousOutput[i];
+      targetMotion = std::max(targetMotion, std::fabs(display.state.overlayTargetOutputDbfs[i] - previousOutput[i]));
+    }
+    pass &= targetMotion > 1.f && display.runRenderTick(1.f / 60.f).animationActive;
+    module.unsubscribeAnalysisVisual();
+  }
+  return {"Paused scale toggles reuse analysis; FFT-only updates preserve curve caches and interpolate", pass, ""};
+}
+
+TestResult testDisablingWorkerCatchesUpPendingPreviewAndAnalysis() {
+  Bifurx module;
+  module.visualWorkerMode.store(Bifurx::VISUAL_WORKER_ON);
+  module.subscribeAnalysisVisual();
+  BifurxPreviewState preview;
+  preview.sampleRate = 48000.f;
+  module.publishPreviewState(preview);
+  for (int i = 0; i < 2 * kFftSize; ++i) module.pushAnalysisSample(.1f, .1f);
+  BifurxSpectrumBase display;
+  display.module = &module;
+  // Consume publications and submit, but deliberately do not adopt the result.
+  display.syncBase();
+  const bool pending = display.state.hasPreview && !display.state.hasCurve && !display.state.hasOverlay;
+  module.visualWorkerMode.store(Bifurx::VISUAL_WORKER_OFF);
+  const auto tick = display.runRenderTick(1.f / 60.f);
+  const bool caughtUp = display.state.hasCurve && display.state.hasOverlay
+    && display.state.curvePreviewSeq == display.state.lastPreviewSeq
+    && display.state.overlayAnalysisSeq == display.state.lastAnalysisSeq;
+  module.unsubscribeAnalysisVisual();
+  return {"Disabling worker catches up an unadopted preview and FFT without new audio", pending && caughtUp && tick.contentChanged, ""};
+}
+
 TestResult testSpanShapeLutTracksReferenceCurve() {
   float maxError = 0.f;
   bool monotonic = true;
@@ -1880,6 +2025,10 @@ TestResult testBrowserPreviewUsesAuthoredUndertowScene() {
 
 int main() {
   const std::vector<TestResult> tests = {
+    testDisablingWorkerCatchesUpPendingPreviewAndAnalysis(),
+    testRendererInitializesOnceAndSlewsSubsequentCurves(),
+    testFinalOverlayFrameIsDirtyThenIdles(),
+    testScaleToggleUsesCachedAnalysisAndKeepsCurveCaches(),
     testSpanShapeLutTracksReferenceCurve(),
     testResonanceCurveUsesFullControlTravel(),
     testFrequencyQuantityRoundTripsAccurately(),
