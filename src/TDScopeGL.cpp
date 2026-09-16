@@ -1,6 +1,7 @@
 #include "TDScope.hpp"
 #include "TDScopeShared.hpp"
 #include "GlLifecycleUtils.hpp"
+#include "GlResourceRetirement.hpp"
 #include "visual/AdaptiveGlSurface.hpp"
 #include <nanovg_gl.h>
 
@@ -263,7 +264,7 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   int redrawLastRenderMode = -1;
   bool fallbackRendererActive = false;
   visual_assets::AdaptiveGlSurface adaptiveSurface;
-  NVGcontext *rendererVg = nullptr;
+  gl_lifecycle::ContextLease resourceContext;
   bool redrawLastAdaptiveSurfaceEnabled = false;
   std::vector<float> rowX0;
   std::vector<float> rowX1;
@@ -390,10 +391,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   GLsizeiptr segmentShaderVboCapacityBytes = 0;
   std::vector<GlLineVertex> fillScratchVerts;
 
-  static bool hasCurrentRackGlContext() {
-    return APP && APP->window && APP->window->win && glfwGetCurrentContext() == APP->window->win;
-  }
-
   static std::string scopeDrawLogRootPath() {
     return system::join(asset::user(), "Leviathan/TD.Scope");
   }
@@ -506,76 +503,41 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     }
   }
 
-  void releaseGlResources(bool deleteGlObjects) {
-    if (deleteGlObjects && shaderVbo) {
-      glDeleteBuffers(1, &shaderVbo);
-    }
-    if (deleteGlObjects && shaderProgram) {
-      glDeleteProgram(shaderProgram);
-    }
-    if (deleteGlObjects && shaderVertex) {
-      glDeleteShader(shaderVertex);
-    }
-    if (deleteGlObjects && shaderFragment) {
-      glDeleteShader(shaderFragment);
-    }
+  void releaseGlResources() {
+    // Queue deletion against the creating context, never the context that
+    // happens to be current during widget teardown or editor replacement.
+    for (GLuint name : {shaderVbo, segmentShaderVbo, fieldShaderVbo})
+      gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Buffer, name);
+    for (GLuint name : {shaderProgram, segmentShaderProgram, fieldShaderProgram})
+      gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Program, name);
+    for (GLuint name : {shaderVertex, shaderFragment, segmentShaderVertex,
+                        segmentShaderFragment, fieldShaderVertex, fieldShaderFragment})
+      gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Shader, name);
+    for (GLuint name : fieldRowTextures)
+      gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Texture, name);
+    gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Texture, fieldColorLutTexture);
     resetLineShaderState();
-
-    if (deleteGlObjects && segmentShaderVbo) {
-      glDeleteBuffers(1, &segmentShaderVbo);
-    }
-    if (deleteGlObjects && segmentShaderProgram) {
-      glDeleteProgram(segmentShaderProgram);
-    }
-    if (deleteGlObjects && segmentShaderVertex) {
-      glDeleteShader(segmentShaderVertex);
-    }
-    if (deleteGlObjects && segmentShaderFragment) {
-      glDeleteShader(segmentShaderFragment);
-    }
     resetSegmentShaderState();
-
-    if (deleteGlObjects && fieldShaderVbo) {
-      glDeleteBuffers(1, &fieldShaderVbo);
-    }
-    if (deleteGlObjects && fieldShaderProgram) {
-      glDeleteProgram(fieldShaderProgram);
-    }
-    if (deleteGlObjects && fieldShaderVertex) {
-      glDeleteShader(fieldShaderVertex);
-    }
-    if (deleteGlObjects && fieldShaderFragment) {
-      glDeleteShader(fieldShaderFragment);
-    }
-    if (deleteGlObjects) {
-      glDeleteTextures(GLsizei(fieldRowTextures.size()), fieldRowTextures.data());
-      glDeleteTextures(1, &fieldColorLutTexture);
-    }
     resetFieldShaderState();
     fallbackRendererActive = false;
-    rendererVg = nullptr;
+    resourceContext.reset();
   }
 
   ~TDScopeGlWidget() override {
     stopScopeDrawLog();
-    // Widget teardown can happen after the host/editor has already disturbed the
-    // GL context. Only issue driver calls when Rack's window context is
-    // definitely current; otherwise fall back to state invalidation only.
-    releaseGlResources(hasCurrentRackGlContext());
-    adaptiveSurface.reset(hasCurrentRackGlContext());
+    releaseGlResources();
+    adaptiveSurface.reset(false);
   }
 
   void onContextDestroy(const ContextDestroyEvent &e) override {
     OpenGlWidget::onContextDestroy(e);
-    releaseGlResources(hasCurrentRackGlContext());
-    adaptiveSurface.reset(hasCurrentRackGlContext());
+    releaseGlResources();
+    adaptiveSurface.reset(false);
   }
 
   void onContextCreate(const ContextCreateEvent &e) override {
     OpenGlWidget::onContextCreate(e);
-    // A module widget can survive a DAW editor/context replacement. Forget all
-    // names from the old context and rebuild lazily in the new one.
-    releaseGlResources(false);
+    releaseGlResources();
     adaptiveSurface.reset(false);
     adaptiveSurface.markDirty();
     setDirty();
@@ -759,6 +721,13 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
   }
 
   void renderGlContent(math::Vec requestedFbSize, int viewportY = 0) {
+    NVGcontext *vg = (APP && APP->window) ? APP->window->vg : nullptr;
+    if (!gl_lifecycle::resourceContextMatches(resourceContext, vg)) {
+      releaseGlResources();
+      resourceContext = gl_lifecycle::acquireResourceContext(vg);
+    }
+    if (!gl_lifecycle::resourceContextIsCurrent(resourceContext)) return;
+
     const bool measurePerf = module && isDragonKingDebugEnabled();
     const bool logScopeDraw = module && isDragonKingDebugEnabled() && isScopeDrawLoggingEnabled();
     syncScopeDrawLog(logScopeDraw);
@@ -3347,13 +3316,6 @@ struct TDScopeGlWidget final : widget::OpenGlWidget {
     NVGcontext *vg = (APP && APP->window) ? APP->window->vg : nullptr;
     if (!vg) {
       return;
-    }
-    if (rendererVg != vg) {
-      // Renderer-owned programs, buffers, and textures are context-bound too.
-      // The adaptive surface independently detects and replaces its FBO state.
-      releaseGlResources(false);
-      rendererVg = vg;
-      adaptiveSurface.markDirty();
     }
 
     float rackZoom = 1.f;
