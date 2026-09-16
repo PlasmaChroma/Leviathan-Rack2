@@ -488,24 +488,24 @@ SvfOutputs processCharacterStagePrepared(
 	return out;
 }
 
-std::complex<float> DisplayBiquad::response(float omega) const {
-	const std::complex<float> z1 = std::exp(std::complex<float>(0.f, -omega));
+std::complex<double> DisplayBiquad::response(double omega) const {
+	const std::complex<double> z1 = std::exp(std::complex<double>(0.f, -omega));
 	return response(z1, z1 * z1);
 }
 
-std::complex<float> DisplayBiquad::response(std::complex<float> z1, std::complex<float> z2) const {
-	const std::complex<float> numerator = b0 + b1 * z1 + b2 * z2;
-	const std::complex<float> denominator = 1.f + a1 * z1 + a2 * z2;
+std::complex<double> DisplayBiquad::response(std::complex<double> z1, std::complex<double> z2) const {
+	const std::complex<double> numerator = b0 + b1 * z1 + b2 * z2;
+	const std::complex<double> denominator = 1.0 + a1 * z1 + a2 * z2;
 	return numerator / denominator;
 }
 
 DisplayBiquad makeDisplayBiquad(float sampleRate, float cutoff, float q, int type) {
 	const float damping = 1.f / std::max(q, 1.f / kSvfDampingMax);
 	const SvfCoeffs coeffs = makeSvfCoeffs(sampleRate, cutoff, damping);
-	const float g = coeffs.g;
-	const float g2 = g * g;
-	const float k = coeffs.k;
-	const float a = coeffs.a1;
+	const double g = coeffs.g;
+	const double g2 = g * g;
+	const double k = coeffs.k;
+	const double a = 1.0 / (1.0 + g * (g + k));
 
 	// Exact z-domain transfer functions of TptSvf::processWithCoeffs(). This
 	// keeps the nominal gold curve aligned with the production linear core.
@@ -538,7 +538,7 @@ DisplayBiquad makeDisplayBiquad(float sampleRate, float cutoff, float q, int typ
 }
 
 bool previewStatesDiffer(const BifurxPreviewState& a, const BifurxPreviewState& b) {
-	if (a.mode != b.mode) return true;
+	if (a.mode != b.mode || a.boundary != b.boundary) return true;
 	if (std::fabs(a.sampleRate - b.sampleRate) > 0.5f) return true;
 	if (std::fabs(a.balance - b.balance) > 1e-3f) return true;
 	if (std::fabs(fastLog2(std::max(a.freqA, 1.f)) - fastLog2(std::max(b.freqA, 1.f))) > 1e-3f) return true;
@@ -573,6 +573,7 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 	model.qB = qB;
 	model.resoNorm = state.resoNorm;
 	model.mode = state.mode;
+	model.boundary = state.boundary;
 
 	const float lowW = signedWeight(state.balance, false);
 	const float highW = signedWeight(state.balance, true);
@@ -582,19 +583,42 @@ BifurxPreviewModel makePreviewModel(const BifurxPreviewState& state) {
 	return model;
 }
 
-std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float hz) {
-	const float omega = 2.f * kPi * clamp(hz, 4.f, 0.49f * model.sampleRate) / std::max(model.sampleRate, 1.f);
-	const std::complex<float> z1 = std::exp(std::complex<float>(0.f, -omega));
-	const std::complex<float> z2 = z1 * z1;
+namespace {
+template<typename Boundary> const std::array<float, 128>& boundaryImpulse() {
+	static const auto impulse = [] {
+		std::array<float, 128> samples{};
+		Boundary filter;
+		for (size_t i = 0; i < samples.size(); ++i)
+			samples[i] = filter.processOutput(filter.processInput(i == 0 ? 1.f : 0.f, 0.5f), 0.5f, false);
+		return samples;
+	}();
+	return impulse;
+}
+std::complex<float> linearBoundaryResponse(int boundary, double omega) {
+	if (boundary == 0) return {1.f, 0.f};
+	const auto& impulse = boundary == 1 ? boundaryImpulse<BifurxLegacyOversampling2x>() : boundaryImpulse<BifurxNonlinearOversampling2x>();
+	const std::complex<double> z = std::exp(std::complex<double>(0., -omega));
+	std::complex<double> response(0., 0.), power(1., 0.);
+	const int extent = boundary == 1 ? 32 : 128;
+	for (int i = 0; i < extent; ++i) { response += double(impulse[i]) * power; power *= z; }
+	return std::complex<float>(response);
+}
+}
 
-	std::complex<float> lpA = model.lowA.response(z1, z2);
-	std::complex<float> bpA = model.bandA.response(z1, z2);
-	std::complex<float> hpA = model.highA.response(z1, z2);
-	std::complex<float> lpB = model.lowB.response(z1, z2);
-	std::complex<float> bpB = model.bandB.response(z1, z2);
-	std::complex<float> hpB = model.highB.response(z1, z2);
+std::complex<float> previewModelResponse(const BifurxPreviewModel& model, float hz) {
+	if (isBifurxDisplayOnlyMode(model.mode)) return {1.f, 0.f};
+	const double omega = 6.28318530717958647692 * clamp(hz, 4.f, 0.49f * model.sampleRate) / std::max(model.sampleRate, 1.f);
+	const std::complex<double> z1 = std::exp(std::complex<double>(0.f, -omega));
+	const std::complex<double> z2 = z1 * z1;
+
+	std::complex<float> lpA(model.lowA.response(z1, z2));
+	std::complex<float> bpA(model.bandA.response(z1, z2));
+	std::complex<float> hpA(model.highA.response(z1, z2));
+	std::complex<float> lpB(model.lowB.response(z1, z2));
+	std::complex<float> bpB(model.bandB.response(z1, z2));
+	std::complex<float> hpB(model.highB.response(z1, z2));
 	const std::complex<float> ntA = lpA + hpA, ntB = lpB + hpB, cascadeLp = lpB * lpA, cascadeNotch = ntB * ntA, cascadeNotchToLow = lpB * ntA, cascadeHpToLp = lpB * hpA, cascadeHighToNotch = ntB * hpA, cascadeHpToHp = hpB * hpA;
-	return combineModeResponse<std::complex<float>>(model.mode, lpA, bpA, hpA, ntA, lpB, bpB, hpB, ntB, cascadeLp, cascadeNotch, cascadeNotchToLow, cascadeHpToLp, cascadeHighToNotch, cascadeHpToHp, model.wA, model.wB);
+	return linearBoundaryResponse(model.boundary, omega) * combineModeResponse<std::complex<float>>(model.mode, lpA, bpA, hpA, ntA, lpB, bpB, hpB, ntB, cascadeLp, cascadeNotch, cascadeNotchToLow, cascadeHpToLp, cascadeHighToNotch, cascadeHpToHp, model.wA, model.wB);
 }
 
 float previewModelResponseDb(const BifurxPreviewModel& model, float hz) {
@@ -763,9 +787,12 @@ void Bifurx::unsubscribeAnalysisVisual() {
 }
 
 void Bifurx::resetCircuitStates() {
+	analysisPublishedToken.store(0, std::memory_order_release);
+	analysisGeneration.fetch_add(1, std::memory_order_release);
 	coreA = TptSvf {};
 	coreB = TptSvf {};
 	nonlinearOversampling.reset();
+	legacyOversampling.reset();
 	transitionSmoother.reset();
 	cachedCoeffsA = SvfCoeffs {};
 	cachedCoeffsB = SvfCoeffs {};
@@ -807,7 +834,6 @@ void Bifurx::resetCircuitStates() {
 	previewTargetMotionInitialized = false;
 	previewTargetStillSamples = 0;
 	previewSampleAccum = 0;
-	previewAdaptiveCooldown = 0;
 	hasLastPreviewState = false;
 	modeLeftTrigger.reset();
 	modeRightTrigger.reset();
@@ -835,6 +861,7 @@ json_t* Bifurx::dataToJson() {
 	json_object_set_new(root, "curveDebugLogging", json_boolean(curveDebugLogging.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "perfDebugLogging", json_boolean(perfDebugLogging.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "highResonanceSelfOscEnabled", json_boolean(highResonanceSelfOscEnabled.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "legacyBoundaryResampling", json_boolean(legacyBoundaryResampling.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "softLimitingEnabled", json_boolean(softLimitingEnabled.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "nonlinearOversamplingEnabled", json_boolean(nonlinearOversamplingEnabled.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "renderMode", json_integer(renderMode));
@@ -847,6 +874,7 @@ void Bifurx::dataFromJson(json_t* root) {
 		return;
 	}
 	Module::dataFromJson(root);
+	legacyBoundaryResampling.store(json_is_true(json_object_get(root, "legacyBoundaryResampling")), std::memory_order_relaxed);
 	json_t* fftScaleDynamicJ = json_object_get(root, "fftScaleDynamic");
 	if (fftScaleDynamicJ) {
 		fftScaleDynamic.store(json_is_true(fftScaleDynamicJ), std::memory_order_relaxed);
@@ -883,7 +911,6 @@ void Bifurx::dataFromJson(json_t* root) {
 	json_t* modulationQualityModeJ = json_object_get(root, "modulationQualityMode");
 	if (modulationQualityModeJ) {
 		modulationQualityMode.store(clamp(int(json_integer_value(modulationQualityModeJ)), MOD_QUALITY_BALANCED, MOD_QUALITY_COUNT - 1), std::memory_order_relaxed);
-		controlFastCacheValid = false;
 	}
 	else {
 		// Backward compatibility with old two-state control update mode.
@@ -891,7 +918,6 @@ void Bifurx::dataFromJson(json_t* root) {
 		if (controlUpdateModeJ) {
 			const int legacyMode = int(json_integer_value(controlUpdateModeJ));
 			modulationQualityMode.store((legacyMode <= 0) ? MOD_QUALITY_BALANCED : MOD_QUALITY_EXACT, std::memory_order_relaxed);
-			controlFastCacheValid = false;
 		}
 	}
 	json_t* curveDebugLoggingJ = json_object_get(root, "curveDebugLogging");
@@ -955,7 +981,6 @@ void Bifurx::dataFromJson(json_t* root) {
 		// Intentionally ignored.
 	}
 }
-void Bifurx::resetPerfStats() { perfAudioSampledCount.store(0, std::memory_order_release); perfAudioProcessNs.store(0, std::memory_order_release); perfAudioProcessRangeMinNs.store(std::numeric_limits<uint64_t>::max(), std::memory_order_release); perfAudioProcessRangeMaxNs.store(0, std::memory_order_release); perfAudioControlsNs.store(0, std::memory_order_release); perfAudioCoreNs.store(0, std::memory_order_release); perfAudioPreviewNs.store(0, std::memory_order_release); perfAudioAnalysisNs.store(0, std::memory_order_release); perfAudioProcessMaxNs.store(0, std::memory_order_release); }
 void Bifurx::publishPreviewState(const BifurxPreviewState& state) {
 	const int writeIndex = findWritableSlot(previewPublishedToken, previewStateReaders);
 	if (writeIndex < 0) {
@@ -1057,7 +1082,8 @@ bool Bifurx::copyAnalysisFrame(
 }
 
 void Bifurx::pushAnalysisSample(float rawInputSample, float outputSample) {
-	if (analysisVisualSubscribers.load(std::memory_order_acquire) == 0u) {
+	if (analysisVisualSubscribers.load(std::memory_order_acquire) == 0u
+		|| (visualWatchdogEnabled.load(std::memory_order_relaxed) && visualLeaseSamples == 0)) {
 		if (analysisCaptureSlots[0] >= 0 || analysisCaptureSlots[1] >= 0 || analysisCaptureCountdown != 0) {
 			resetAnalysisCapture();
 		}
@@ -1108,6 +1134,9 @@ void Bifurx::pushAnalysisSample(float rawInputSample, float outputSample) {
 	analysisCaptureCountdown--;
 }
 void Bifurx::onSampleRateChange(const SampleRateChangeEvent& e) {
+	analysisPublishedToken.store(0, std::memory_order_release);
+	analysisGeneration.fetch_add(1, std::memory_order_release);
+	hasLastPreviewState = false;
 	controlFastCacheValid = false;
 	cachedFrequencyRangeSampleRate = 0.f;
 	cachedPitchSampleRate = 0.f;
@@ -1150,18 +1179,21 @@ std::string BifurxSpanQuantity::getDisplayValueString() {
 	return string::f("%.1f st", getDisplayValue());
 }
 
-#if defined(LEVIATHAN_PRO_DRM) && LEVIATHAN_PRO_DRM
 void Bifurx::processBypass(const ProcessArgs& args) {
+#if defined(LEVIATHAN_PRO_DRM) && LEVIATHAN_PRO_DRM
 	if (!isLicenseVerified()) {
 		outputs[OUT_OUTPUT].setChannels(1);
 		outputs[OUT_OUTPUT].setVoltage(0.f);
 		return;
 	}
-	Module::processBypass(args);
-}
 #endif
+	(void)args;
+	outputs[OUT_OUTPUT].setChannels(1);
+	outputs[OUT_OUTPUT].setVoltage(bifurx::sanitizeFinite(inputs[IN_INPUT].getVoltage()));
+}
 
 void Bifurx::process(const ProcessArgs& args) {
+	outputs[OUT_OUTPUT].setChannels(1);
 #if defined(LEVIATHAN_PRO_DRM) && LEVIATHAN_PRO_DRM
 	if (!isLicenseVerified()) {
 		// Clear a previous sample/polyphonic bypass result rather than holding it.
@@ -1173,8 +1205,17 @@ void Bifurx::process(const ProcessArgs& args) {
 	using PerfClock = std::chrono::steady_clock;
 	const bool measurePerf = isDragonKingDebugEnabled() && perfMeasureDivider.process();
 	const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
-	PerfClock::time_point perfCoreStart, perfPreviewStart, perfAnalysisStart;
 
+	if (visualWatchdogEnabled.load(std::memory_order_relaxed)) {
+		const uint32_t heartbeat = visualHeartbeat.load(std::memory_order_relaxed);
+		if (heartbeat != audioVisualHeartbeat) {
+			audioVisualHeartbeat = heartbeat;
+			visualLeaseSamples = int(args.sampleRate * 0.25f);
+		}
+		if (visualLeaseSamples > 0) --visualLeaseSamples;
+	}
+	const bool visualDemand = analysisVisualSubscribers.load(std::memory_order_acquire) > 0
+		&& (!visualWatchdogEnabled.load(std::memory_order_relaxed) || visualLeaseSamples > 0);
 	const float in = bifurx::sanitizeFinite(inputs[IN_INPUT].getVoltage()), level = params[LEVEL_PARAM].getValue(), drive = levelDriveGain(level);
 	const float tito = clamp(params[TITO_PARAM].getValue(), -1.f, 1.f);
 	const float titoAbs = std::fabs(tito);
@@ -1183,12 +1224,12 @@ void Bifurx::process(const ProcessArgs& args) {
 	const bool voctConnected = inputs[VOCT_INPUT].isConnected();
 	// V/Oct is a calibrated pitch input, so follow it directly. Any glide is an
 	// explicit patching choice rather than an undocumented module behavior.
-	const float voctCv = voctConnected ? clamp(inputs[VOCT_INPUT].getVoltage(), -10.f, 10.f) : 0.f;
+	const float voctCv = voctConnected ? clamp(bifurx::sanitizeFinite(inputs[VOCT_INPUT].getVoltage()), -10.f, 10.f) : 0.f;
 	const bool fmConnected = inputs[FM_INPUT].isConnected();
 	const bool resoCvConnected = inputs[RESO_CV_INPUT].isConnected();
 	const bool balanceCvConnected = inputs[BALANCE_CV_INPUT].isConnected();
 	const bool spanCvConnected = inputs[SPAN_CV_INPUT].isConnected();
-	const float fmAmt = clamp(params[FM_AMT_PARAM].getValue(), -1.f, 1.f), fmCv = fmConnected ? clamp(inputs[FM_INPUT].getVoltage(), -10.f, 10.f) : 0.f, fm = fmCv * fmAmt;
+	const float fmAmt = clamp(params[FM_AMT_PARAM].getValue(), -1.f, 1.f), fmCv = fmConnected ? clamp(bifurx::sanitizeFinite(inputs[FM_INPUT].getVoltage()), -10.f, 10.f) : 0.f, fm = fmCv * fmAmt;
 	const bool slowCvConnected = resoCvConnected || balanceCvConnected || spanCvConnected;
 	const bool audioRateControlsActive = voctConnected || fmConnected;
 	const bool fastPathEligible = titoNeutral && !voctConnected && !fmConnected && !slowCvConnected;
@@ -1196,6 +1237,10 @@ void Bifurx::process(const ProcessArgs& args) {
 	float titoCoeffRelativeThreshold = kTitoCoeffRelativeUpdateThreshold;
 	float titoCoeffAbsoluteThresholdHz = kTitoCoeffAbsoluteUpdateThresholdHz;
 	const int modulationQualityModeNow = modulationQualityMode.load(std::memory_order_relaxed);
+	if (modulationQualityModeNow != audioQualityMode) {
+		audioQualityMode = modulationQualityModeNow;
+		controlFastCacheValid = false;
+	}
 	switch (modulationQualityModeNow) {
 		case MOD_QUALITY_HIGH:
 			targetControlDivision = slowCvConnected ? 8 : 16;
@@ -1237,10 +1282,7 @@ void Bifurx::process(const ProcessArgs& args) {
 		const bool nextNonlinearOversamplingEnabled = isDragonKingDebugEnabled()
 			? nonlinearOversamplingEnabled.load(std::memory_order_relaxed)
 			: true;
-		if (nextNonlinearOversamplingEnabled != cachedNonlinearOversamplingEnabled) {
-			nonlinearOversampling.reset();
-			cachedNonlinearOversamplingEnabled = nextNonlinearOversamplingEnabled;
-		}
+		cachedNonlinearOversamplingEnabled = nextNonlinearOversamplingEnabled;
 	}
 	const bool forceAudioRateControls = modulationQualityModeNow == MOD_QUALITY_EXACT;
 	const bool inspectSlowControls =
@@ -1255,13 +1297,13 @@ void Bifurx::process(const ProcessArgs& args) {
 	float resoNorm = cachedResoNorm, balanceNorm = cachedBalanceNorm, spanParamNorm = cachedSpanParamNorm, spanCvNorm = cachedSpanCvNorm, spanAtten = cachedSpanAtten, spanNorm = cachedSpanNorm, spanOct = cachedSpanOct;
 	bool slowDerivedStateChanged = false;
 	if (inspectSlowControls) {
-		const float resoCvNorm = resoCvConnected ? clamp(inputs[RESO_CV_INPUT].getVoltage(), 0.f, 8.f) / 8.f : 0.f;
+		const float resoCvNorm = resoCvConnected ? clamp(bifurx::sanitizeFinite(inputs[RESO_CV_INPUT].getVoltage()), 0.f, 8.f) / 8.f : 0.f;
 		const float nextResoNorm = clamp(params[RESO_PARAM].getValue() + resoCvNorm, 0.f, 1.f);
-		const float balanceCvNorm = balanceCvConnected ? clamp(inputs[BALANCE_CV_INPUT].getVoltage(), -5.f, 5.f) / 5.f : 0.f;
+		const float balanceCvNorm = balanceCvConnected ? clamp(bifurx::sanitizeFinite(inputs[BALANCE_CV_INPUT].getVoltage()), -5.f, 5.f) / 5.f : 0.f;
 		const float nextBalanceNorm = clamp(params[BALANCE_PARAM].getValue() + balanceCvNorm, -1.f, 1.f);
 		const float nextSpanParamNorm = clamp(params[SPAN_PARAM].getValue(), 0.f, 1.f);
 		const float nextSpanAtten = clamp(params[SPAN_CV_ATTEN_PARAM].getValue(), -1.f, 1.f);
-		const float nextSpanCvNorm = spanCvConnected ? clamp(inputs[SPAN_CV_INPUT].getVoltage(), -10.f, 10.f) / 5.f : 0.f;
+		const float nextSpanCvNorm = spanCvConnected ? clamp(bifurx::sanitizeFinite(inputs[SPAN_CV_INPUT].getVoltage()), -10.f, 10.f) / 5.f : 0.f;
 		const float nextSpanNorm = clamp(nextSpanParamNorm + 0.5f * nextSpanAtten * nextSpanCvNorm, 0.f, 1.f);
 		const bool slowSourcesChanged = initializeControlState
 			|| nextResoNorm != cachedResoNorm
@@ -1330,16 +1372,28 @@ void Bifurx::process(const ProcessArgs& args) {
 		controlFastCacheValid = true;
 	}
 
+	const int requestedBoundary = !cachedNonlinearOversamplingEnabled ? 0
+		: legacyBoundaryResampling.load(std::memory_order_relaxed) ? 1 : 2;
+	const bool primeBoundary = requestedBoundary != transitionSmoother.activeBoundary
+		|| (isBifurxDisplayOnlyMode(transitionSmoother.activeMode) && !isBifurxDisplayOnlyMode(mode));
+	transitionSmoother.prepare(mode, cachedSoftLimitingEnabled, args.sampleRate, requestedBoundary, primeBoundary);
+	const int boundary = transitionSmoother.activeBoundary;
+	if (boundary != audioBoundary) {
+		nonlinearOversampling.reset();
+		legacyOversampling.reset();
+		audioBoundary = boundary;
+	}
 	const float titoModeScale = 1.22f, titoStrength = 2.4f * titoAbs, couplingDepth = titoStrength * titoModeScale * (0.026f + 0.28f * resoNorm * resoNorm);
-	const float drivenIn = cachedNonlinearOversamplingEnabled
-		? nonlinearOversampling.processInput(in, level)
+	const float drivenIn = isBifurxDisplayOnlyMode(transitionSmoother.activeMode) ? in
+		: boundary == 2 ? nonlinearOversampling.processInput(in, level)
+		: boundary == 1 ? legacyOversampling.processInput(in, level)
 		: applyLevelInputStage(in, level);
 	const bool highResonanceSelfOscEnabledNow = cachedHighResonanceSelfOscEnabled;
-	if (!cachedCharacterStateValid
+	if (!isBifurxDisplayOnlyMode(transitionSmoother.activeMode) && (!cachedCharacterStateValid
 		|| drive != cachedCharacterDrive
 		|| resoNorm != cachedCharacterResoNorm
 		|| highResonanceSelfOscEnabledNow != cachedCharacterHighResEnabled
-	) {
+	)) {
 		cachedCharacterState = prepareCharacterStageState(drive, resoNorm, highResonanceSelfOscEnabledNow);
 		cachedCharacterDrive = drive;
 		cachedCharacterResoNorm = resoNorm;
@@ -1357,7 +1411,7 @@ void Bifurx::process(const ProcessArgs& args) {
 	float cutoffA = freqA0, cutoffB = freqB0;
 	const SvfCoeffs* coeffsAForSample = &cachedCoeffsA;
 	const SvfCoeffs* coeffsBForSample = &cachedCoeffsB;
-	if (!titoNeutral) {
+	if (!isBifurxDisplayOnlyMode(transitionSmoother.activeMode) && !titoNeutral) {
 		const float depthScaled = couplingDepth * 0.2f;
 		float modA = 0.f, modB = 0.f;
 		if (tito < 0.f) { modA = depthScaled * coreA.ic1eq; modB = depthScaled * coreB.ic1eq; }
@@ -1370,7 +1424,7 @@ void Bifurx::process(const ProcessArgs& args) {
 	}
 	const SvfCoeffs* selfOscCoeffsAForSample = nullptr;
 	const SvfCoeffs* selfOscCoeffsBForSample = nullptr;
-	if (character.selfOscillating) {
+	if (!isBifurxDisplayOnlyMode(transitionSmoother.activeMode) && character.selfOscillating) {
 		const float selfDampingA = mixf(dampingA, kSvfSelfOscDampingMin, character.oscOnset);
 		const float selfDampingB = mixf(dampingB, kSvfSelfOscDampingMin, character.oscOnset);
 		// Preserve sample-accurate pitch modulation in the otherwise static
@@ -1382,7 +1436,6 @@ void Bifurx::process(const ProcessArgs& args) {
 		selfOscCoeffsAForSample = &selfOscCoeffsA;
 		selfOscCoeffsBForSample = &selfOscCoeffsB;
 	}
-	if (measurePerf) perfCoreStart = PerfClock::now();
 	float modeOut = 0.f, llExc = 0.f, llA = 0.f, llB = 0.f;
 	auto pA = [&](float s) {
 		return processCharacterStagePrepared(coreA, s, *coeffsAForSample, selfOscCoeffsAForSample, character);
@@ -1391,7 +1444,6 @@ void Bifurx::process(const ProcessArgs& args) {
 		return processCharacterStagePrepared(coreB, s, *coeffsBForSample, selfOscCoeffsBForSample, character);
 	};
 
-	transitionSmoother.prepare(mode, cachedSoftLimitingEnabled, args.sampleRate);
 	const int audioMode = transitionSmoother.activeMode;
 	const bool softLimitingEnabledNow = transitionSmoother.activeSoftLimitingEnabled;
 	const bool displayOnlyMode = isBifurxDisplayOnlyMode(audioMode);
@@ -1422,8 +1474,9 @@ void Bifurx::process(const ProcessArgs& args) {
 	const float dcCorrectedModeOut = modeOut - titoSmDcMix * titoSmDcCorrection;
 
 	const float targetOut = displayOnlyMode ? in
-		: (cachedNonlinearOversamplingEnabled
+		: (boundary == 2
 			? nonlinearOversampling.processOutput(dcCorrectedModeOut, level, softLimitingEnabledNow)
+			: boundary == 1 ? legacyOversampling.processOutput(dcCorrectedModeOut, level, softLimitingEnabledNow)
 			: applyLevelOutputStage(dcCorrectedModeOut, level, softLimitingEnabledNow));
 	const float out = transitionSmoother.apply(targetOut);
 	outputs[OUT_OUTPUT].setVoltage(out);
@@ -1437,56 +1490,66 @@ void Bifurx::process(const ProcessArgs& args) {
 	}
 	if (!std::isfinite(titoSmDcCorrection)) titoSmDcCorrection = 0.f;
 	titoSmDcCorrection = clamp(titoSmDcCorrection, -10.f, 10.f);
+	const bool diagnosticsActive = isDragonKingDebugEnabled() && curveDebugLogging.load(std::memory_order_relaxed);
 	const float llAlpha = llTelemetryAlpha;
-	if (audioMode == 0) { llTelemetryExcitationSq += llAlpha * (llExc * llExc - llTelemetryExcitationSq); llTelemetryStageALpSq += llAlpha * (llA * llA - llTelemetryStageALpSq); llTelemetryStageBLpSq += llAlpha * (llB * llB - llTelemetryStageBLpSq); llTelemetryOutputSq += llAlpha * (out * out - llTelemetryOutputSq); }
-	else { llTelemetryExcitationSq += llAlpha * (0.f - llTelemetryExcitationSq); llTelemetryStageALpSq += llAlpha * (0.f - llTelemetryStageALpSq); llTelemetryStageBLpSq += llAlpha * (0.f - llTelemetryStageBLpSq); llTelemetryOutputSq += llAlpha * (out * out - llTelemetryOutputSq); }
-	if (measurePerf) perfPreviewStart = PerfClock::now();
-
-	const bool pPitchCvConn = voctConnected || fmConnected;
-	if (previewAdaptiveCooldown > 0) previewAdaptiveCooldown--;
-	const bool lowLatencyVisualNow = cachedLowLatencyVisual;
-	const int targetFastPreviewDivision = lowLatencyVisualNow ? 64 : bifurx::kPreviewPublishFastDivision;
-	const int targetSlowPreviewDivision = lowLatencyVisualNow ? 128 : bifurx::kPreviewPublishSlowDivision;
-	if (targetFastPreviewDivision != previewPublishFastDivision) {
-		previewPublishFastDivision = targetFastPreviewDivision;
-		previewPublishDivider.setDivision(previewPublishFastDivision);
+	if (diagnosticsActive) {
+		if (audioMode == 0) { llTelemetryExcitationSq += llAlpha * (llExc * llExc - llTelemetryExcitationSq); llTelemetryStageALpSq += llAlpha * (llA * llA - llTelemetryStageALpSq); llTelemetryStageBLpSq += llAlpha * (llB * llB - llTelemetryStageBLpSq); llTelemetryOutputSq += llAlpha * (out * out - llTelemetryOutputSq); }
+		else { llTelemetryExcitationSq += llAlpha * (0.f - llTelemetryExcitationSq); llTelemetryStageALpSq += llAlpha * (0.f - llTelemetryStageALpSq); llTelemetryStageBLpSq += llAlpha * (0.f - llTelemetryStageBLpSq); llTelemetryOutputSq += llAlpha * (out * out - llTelemetryOutputSq); }
 	}
-	if (targetSlowPreviewDivision != previewPublishSlowDivision) {
-		previewPublishSlowDivision = targetSlowPreviewDivision;
-		previewPublishSlowDivider.setDivision(previewPublishSlowDivision);
-	}
-	const bool perTick = pPitchCvConn ? previewPublishSlowDivider.process() : previewPublishDivider.process();
-	previewSampleAccum++;
-	const bool shouldUpdatePreviewState = perTick || !hasLastPreviewState;
-	if (shouldUpdatePreviewState) {
-		const int elapsedSamples = std::max(previewSampleAccum, 1);
-		previewSampleAccum = 0;
-		const float pTFqA = clamp(freqA0, 4.f, 0.46f * args.sampleRate), pTFqB = clamp(freqB0, 4.f, 0.46f * args.sampleRate), pTQA = 1.f / clamp(dampingA, kSvfDampingMin, kSvfDampingMax), pTQB = 1.f / clamp(dampingB, kSvfDampingMin, kSvfDampingMax), pTBal = balance;
-		const float pSmAlpha = pPitchCvConn ? previewFilterAlphaSlow : previewFilterAlpha;
-		const float oneMinusAlpha = clamp(1.f - pSmAlpha, 0.f, 1.f);
-		const float effectiveAlpha = 1.f - std::pow(oneMinusAlpha, float(elapsedSamples));
-		if (!previewTargetMotionInitialized) { previewPrevTargetFreqA = pTFqA; previewPrevTargetFreqB = pTFqB; previewTargetStillSamples = 0; previewTargetMotionInitialized = true; }
-		const float tMAOct = std::fabs(fastLog2(std::max(pTFqA, 1.f)) - fastLog2(std::max(previewPrevTargetFreqA, 1.f)));
-		const float tMBOct = std::fabs(fastLog2(std::max(pTFqB, 1.f)) - fastLog2(std::max(previewPrevTargetFreqB, 1.f)));
-		const float tMOct = std::max(tMAOct, tMBOct);
-		if (tMOct <= kPreviewInstantSettleMotionOctThreshold) previewTargetStillSamples += elapsedSamples; else previewTargetStillSamples = 0;
-		const bool pInstSettle = (previewTargetStillSamples >= kPreviewInstantSettleHoldSamples);
-		previewPrevTargetFreqA = pTFqA; previewPrevTargetFreqB = pTFqB;
-		if (!previewFilterInitialized || pInstSettle) { previewFreqAFiltered = pTFqA; previewFreqBFiltered = pTFqB; previewQAFiltered = pTQA; previewQBFiltered = pTQB; previewBalanceFiltered = pTBal; previewFilterInitialized = true; }
-		else { const float a = effectiveAlpha; previewFreqAFiltered += a * (pTFqA - previewFreqAFiltered); previewFreqBFiltered += a * (pTFqB - previewFreqBFiltered); previewQAFiltered += a * (pTQA - previewQAFiltered); previewQBFiltered += a * (pTQB - previewQBFiltered); previewBalanceFiltered += a * (pTBal - previewBalanceFiltered); }
 
-		BifurxPreviewState pS; pS.sampleRate = args.sampleRate; pS.freqA = previewFreqAFiltered; pS.freqB = previewFreqBFiltered; pS.qA = previewQAFiltered; pS.qB = previewQBFiltered; pS.mode = mode; pS.balance = previewBalanceFiltered; pS.balanceTarget = balanceNorm; pS.resoNorm = resoNorm; pS.spanParamNorm = spanParamNorm; pS.spanCvNorm = spanCvNorm; pS.spanAtten = spanAtten; pS.spanNorm = spanNorm; pS.spanOct = spanOct; pS.freqParamNorm = freqParamNorm; pS.voctCv = voctCv;
-		bool adpTick = false;
-		if (hasLastPreviewState && previewAdaptiveCooldown <= 0 && perTick) {
-			const float fMA = std::fabs(fastLog2(std::max(pS.freqA, 1.f)) - fastLog2(std::max(lastPreviewState.freqA, 1.f))), fMB = std::fabs(fastLog2(std::max(pS.freqB, 1.f)) - fastLog2(std::max(lastPreviewState.freqB, 1.f))), sMO = std::fabs(pS.spanOct - lastPreviewState.spanOct), qMA = std::fabs(pS.qA - lastPreviewState.qA), qMB = std::fabs(pS.qB - lastPreviewState.qB), bM = std::fabs(pS.balance - lastPreviewState.balance);
-			if (fMA > kPreviewAdaptiveOctaveThreshold || fMB > kPreviewAdaptiveOctaveThreshold || sMO > kPreviewAdaptiveSpanOctThreshold || qMA > kPreviewAdaptiveQThreshold || qMB > kPreviewAdaptiveQThreshold || bM > kPreviewAdaptiveBalanceThreshold) { adpTick = true; previewAdaptiveCooldown = kPreviewAdaptiveCooldownSamples; }
+	const bool previewDemand = visualDemand || diagnosticsActive;
+	if (previewDemand) {
+		if (!previewDemandWasActive) {
+			hasLastPreviewState = false;
+			previewFilterInitialized = false;
+			previewTargetMotionInitialized = false;
+			previewTargetStillSamples = 0;
+			previewSampleAccum = 0;
 		}
-		if (!hasLastPreviewState || ((perTick || adpTick) && previewStatesDiffer(pS, lastPreviewState))) publishPreviewState(pS);
-		if (perTick || adpTick) { BifurxLlTelemetryState llTS; llTS.active = (mode == 0); llTS.excitationRms = std::sqrt(std::max(llTelemetryExcitationSq, 0.f)); llTS.stageALpRms = std::sqrt(std::max(llTelemetryStageALpSq, 0.f)); llTS.stageBLpRms = std::sqrt(std::max(llTelemetryStageBLpSq, 0.f)); llTS.outputRms = std::sqrt(std::max(llTelemetryOutputSq, 0.f)); llTS.stageBLpOverALpDb = amplitudeRatioDb(llTS.stageBLpRms, llTS.stageALpRms); llTS.outputOverInputDb = amplitudeRatioDb(llTS.outputRms, llTS.excitationRms); publishLlTelemetryState(llTS); }
+		const bool pPitchCvConn = voctConnected || fmConnected;
+		const bool lowLatencyVisualNow = cachedLowLatencyVisual;
+		const int targetFastPreviewDivision = lowLatencyVisualNow ? 64 : bifurx::kPreviewPublishFastDivision;
+		const int targetSlowPreviewDivision = lowLatencyVisualNow ? 128 : bifurx::kPreviewPublishSlowDivision;
+		if (targetFastPreviewDivision != previewPublishFastDivision) {
+			previewPublishFastDivision = targetFastPreviewDivision;
+			previewPublishDivider.setDivision(previewPublishFastDivision);
+		}
+		if (targetSlowPreviewDivision != previewPublishSlowDivision) {
+			previewPublishSlowDivision = targetSlowPreviewDivision;
+			previewPublishSlowDivider.setDivision(previewPublishSlowDivision);
+		}
+		const bool perTick = pPitchCvConn ? previewPublishSlowDivider.process() : previewPublishDivider.process();
+		previewSampleAccum++;
+		const bool shouldUpdatePreviewState = perTick || !hasLastPreviewState;
+		if (shouldUpdatePreviewState) {
+			const int elapsedSamples = std::max(previewSampleAccum, 1);
+			previewSampleAccum = 0;
+			const float pTFqA = clamp(freqA0, 4.f, 0.46f * args.sampleRate), pTFqB = clamp(freqB0, 4.f, 0.46f * args.sampleRate), pTQA = 1.f / clamp(dampingA, kSvfDampingMin, kSvfDampingMax), pTQB = 1.f / clamp(dampingB, kSvfDampingMin, kSvfDampingMax), pTBal = balance;
+			const float pSmAlpha = pPitchCvConn ? previewFilterAlphaSlow : previewFilterAlpha;
+			const float oneMinusAlpha = clamp(1.f - pSmAlpha, 0.f, 1.f);
+			if (!previewTargetMotionInitialized) { previewPrevTargetFreqA = pTFqA; previewPrevTargetFreqB = pTFqB; previewTargetStillSamples = 0; previewTargetMotionInitialized = true; }
+			const float tMAOct = std::fabs(fastLog2(std::max(pTFqA, 1.f)) - fastLog2(std::max(previewPrevTargetFreqA, 1.f)));
+			const float tMBOct = std::fabs(fastLog2(std::max(pTFqB, 1.f)) - fastLog2(std::max(previewPrevTargetFreqB, 1.f)));
+			const float tMOct = std::max(tMAOct, tMBOct);
+			if (tMOct <= kPreviewInstantSettleMotionOctThreshold) {
+				const int held = clamp(previewTargetStillSamples, 0, kPreviewInstantSettleHoldSamples);
+				previewTargetStillSamples = held + std::min(elapsedSamples, kPreviewInstantSettleHoldSamples - held);
+			}
+			else previewTargetStillSamples = 0;
+			const bool pInstSettle = (previewTargetStillSamples >= kPreviewInstantSettleHoldSamples);
+			previewPrevTargetFreqA = pTFqA; previewPrevTargetFreqB = pTFqB;
+			if (!previewFilterInitialized || pInstSettle) { previewFreqAFiltered = pTFqA; previewFreqBFiltered = pTFqB; previewQAFiltered = pTQA; previewQBFiltered = pTQB; previewBalanceFiltered = pTBal; previewFilterInitialized = true; }
+			else { const float a = 1.f - std::pow(oneMinusAlpha, float(elapsedSamples)); previewFreqAFiltered += a * (pTFqA - previewFreqAFiltered); previewFreqBFiltered += a * (pTFqB - previewFreqBFiltered); previewQAFiltered += a * (pTQA - previewQAFiltered); previewQBFiltered += a * (pTQB - previewQBFiltered); previewBalanceFiltered += a * (pTBal - previewBalanceFiltered); }
+
+			BifurxPreviewState pS; pS.sampleRate = args.sampleRate; pS.freqA = previewFreqAFiltered; pS.freqB = previewFreqBFiltered; pS.qA = previewQAFiltered; pS.qB = previewQBFiltered; pS.mode = mode; pS.boundary = boundary; pS.balance = previewBalanceFiltered; pS.balanceTarget = balanceNorm; pS.resoNorm = resoNorm; pS.spanParamNorm = spanParamNorm; pS.spanCvNorm = spanCvNorm; pS.spanAtten = spanAtten; pS.spanNorm = spanNorm; pS.spanOct = spanOct; pS.freqParamNorm = freqParamNorm; pS.voctCv = voctCv;
+			if (!hasLastPreviewState || (perTick && previewStatesDiffer(pS, lastPreviewState))) publishPreviewState(pS);
+			if (perTick && diagnosticsActive) { BifurxLlTelemetryState llTS; llTS.active = (mode == 0); llTS.excitationRms = std::sqrt(std::max(llTelemetryExcitationSq, 0.f)); llTS.stageALpRms = std::sqrt(std::max(llTelemetryStageALpSq, 0.f)); llTS.stageBLpRms = std::sqrt(std::max(llTelemetryStageBLpSq, 0.f)); llTS.outputRms = std::sqrt(std::max(llTelemetryOutputSq, 0.f)); llTS.stageBLpOverALpDb = amplitudeRatioDb(llTS.stageBLpRms, llTS.stageALpRms); llTS.outputOverInputDb = amplitudeRatioDb(llTS.outputRms, llTS.excitationRms); publishLlTelemetryState(llTS); }
+		}
 	}
-	if (measurePerf) perfAnalysisStart = PerfClock::now();
+	previewDemandWasActive = previewDemand;
 	// The measured module-response overlay represents the complete audible
 	// transfer, including the optional output safety stage.
+
 	pushAnalysisSample(in, out);
 
 	if (controlDividerTick) {
@@ -1497,17 +1560,8 @@ void Bifurx::process(const ProcessArgs& args) {
 	}
 
 	if (measurePerf) {
-		const PerfClock::time_point pE = PerfClock::now();
-		const uint64_t cNS = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(perfCoreStart - perfStart).count();
-		const uint64_t crNS = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(perfPreviewStart - perfCoreStart).count();
-		const uint64_t prNS = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(perfAnalysisStart - perfPreviewStart).count();
-		const uint64_t aNS = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(pE - perfAnalysisStart).count(), pNS = (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(pE - perfStart).count();
-		perfAudioSampledCount.fetch_add(1, std::memory_order_relaxed); perfAudioProcessNs.fetch_add(pNS, std::memory_order_relaxed);
-		debug_terminal::recordAudioProcessTiming(perfAudioProcessRangeMinNs, perfAudioProcessRangeMaxNs, pNS, &perfAudioProcessRangeAverage);
-		perfAudioControlsNs.fetch_add(cNS, std::memory_order_relaxed); perfAudioCoreNs.fetch_add(crNS, std::memory_order_relaxed);
-		perfAudioPreviewNs.fetch_add(prNS, std::memory_order_relaxed); perfAudioAnalysisNs.fetch_add(aNS, std::memory_order_relaxed);
-		uint64_t pM = perfAudioProcessMaxNs.load(std::memory_order_relaxed);
-		while (pNS > pM && !perfAudioProcessMaxNs.compare_exchange_weak(pM, pNS, std::memory_order_relaxed));
+		const uint64_t elapsedNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(PerfClock::now() - perfStart).count());
+		debug_terminal::recordAudioProcessTiming(perfAudioProcessRangeMinNs, perfAudioProcessRangeMaxNs, elapsedNs, &perfAudioProcessRangeAverage);
 	}
 }
 
@@ -1530,6 +1584,17 @@ inline void prepareCurveTargets(const BifurxPreviewModel& model, const float* cu
 
 void BifurxSpectrumBase::syncBase() {
 	if (!module) return;
+	const uint32_t generation = module->analysisGeneration.load(std::memory_order_acquire);
+	if (generation != lastAnalysisGeneration) {
+		lastAnalysisGeneration = generation;
+		releaseWorkerRegistration();
+		state.hasOverlay = state.hasOverlayTarget = false;
+		state.lastAnalysisSeq = state.overlayAnalysisSeq = module->analysisPublishSeq.load(std::memory_order_acquire);
+		for (int i = 0; i < kCurvePointCount; ++i) {
+			state.overlayOutputDbfs[i] = state.overlayTargetOutputDbfs[i] = kOverlayDbfsFloor;
+			state.overlayModuleDb[i] = state.overlayTargetModuleDb[i] = 0.f;
+		}
+	}
 	const bool useWorkerCurve = shouldUseVisualWorker();
 	if (useWorkerCurve) {
 		ensureWorkerRegistration();
@@ -1631,8 +1696,8 @@ float BifurxSpectrumBase::workerSnapshotAgeMs() const {
 		return 0.f;
 	}
 	// Report age only when the rendered snapshot is behind the most recent published state.
-	const bool previewBehind = workerLastAppliedPreviewSeq < state.lastPreviewSeq;
-	const bool analysisBehind = workerLastAppliedAnalysisSeq < state.lastAnalysisSeq;
+	const bool previewBehind = workerLastAppliedPreviewSeq != state.lastPreviewSeq;
+	const bool analysisBehind = workerLastAppliedAnalysisSeq != state.lastAnalysisSeq;
 	if (!previewBehind && !analysisBehind) {
 		return 0.f;
 	}
@@ -1715,7 +1780,7 @@ void BifurxSpectrumBase::submitWorkerCurveRequest() {
 	request.fftScaleDynamic = true;
 	request.showModuleResponseOverlay = module->showModuleResponseOverlay.load(std::memory_order_relaxed);
 	const bool analysisChangedSinceSubmit =
-		(state.lastAnalysisSeq != 0) && (state.lastAnalysisSeq != workerLastSubmittedAnalysisSeq);
+		(module->analysisPublishedToken.load(std::memory_order_acquire) != 0) && (state.lastAnalysisSeq != workerLastSubmittedAnalysisSeq);
 	if (analysisChangedSinceSubmit) {
 		std::shared_ptr<BifurxUiRenderPayload> payload = acquireWorkerAnalysisFrame();
 		if (payload) {
@@ -1728,6 +1793,7 @@ void BifurxSpectrumBase::submitWorkerCurveRequest() {
 			);
 			if (copiedAnalysis) {
 				payload->hasOverlayTarget = state.hasOverlay;
+				payload->previousDisplayTopTargetDbfs = state.dynamicTopTargetDbfs;
 				std::memcpy(
 					payload->previousOverlayTargetModuleDb,
 					state.overlayTargetModuleDb,
@@ -1784,6 +1850,7 @@ bool BifurxSpectrumBase::adoptWorkerCurveSnapshot() {
 			}
 		}
 		if (!state.hasCurve) ++state.curveRevision;
+		state.displayedPreviewState = workerSnapshotCache->previewState;
 		state.curvePreviewSeq = workerSnapshotCache->previewSeq;
 		state.hasCurve = true;
 		state.hasCurveTarget = true;
@@ -1792,7 +1859,7 @@ bool BifurxSpectrumBase::adoptWorkerCurveSnapshot() {
 	}
 	lastCurvePrepUs = workerSnapshotCache->curvePrepUs;
 	if (workerSnapshotCache->hasOverlayTarget &&
-		workerSnapshotCache->analysisSeq >= workerLastAppliedAnalysisSeq) {
+		(!state.hasOverlay || workerSnapshotCache->analysisSeq != workerLastAppliedAnalysisSeq)) {
 		for (int i = 0; i < kCurvePointCount; ++i) {
 			state.overlayTargetModuleDb[i] = workerSnapshotCache->overlayTargetModuleDb[i];
 			state.overlayTargetOutputDbfs[i] = workerSnapshotCache->overlayTargetOutputDbfs[i];
@@ -1898,6 +1965,8 @@ void BifurxSpectrumBase::updateAxisCache() {
 void BifurxSpectrumBase::updateCurveCache() {
 	if (!state.hasPreview) return;
 	updateAxisCache();
+	state.displayedPreviewState = state.previewState;
+	state.curvePreviewSeq = state.lastPreviewSeq;
 	const BifurxPreviewModel& model = getOrUpdateModel();
 	prepareCurveTargets(model, state.curveHz, state.curveTargetDb);
 	if (!state.hasCurve) {
@@ -1910,9 +1979,9 @@ void BifurxSpectrumBase::updateCurveCache() {
 }
 
 const BifurxPreviewModel& BifurxSpectrumBase::getOrUpdateModel() const {
-	if (state.lastPreviewSeq != lastModelUpdateSeq) {
-		cachedModel = makePreviewModel(state.previewState);
-		const_cast<BifurxSpectrumBase*>(this)->lastModelUpdateSeq = state.lastPreviewSeq;
+	if (state.curvePreviewSeq != lastModelUpdateSeq) {
+		cachedModel = makePreviewModel(state.displayedPreviewState);
+		const_cast<BifurxSpectrumBase*>(this)->lastModelUpdateSeq = state.curvePreviewSeq;
 	}
 	return cachedModel;
 }
@@ -2004,8 +2073,8 @@ bool BifurxSpectrumBase::updateAnimation(float dt, bool* contentChanged) {
 	if (curveChanged) ++state.curveRevision;
 	changed |= curveChanged;
 	if (state.hasOverlayTarget) {
-		const float overlayDbSmoothing = 0.22f;
-		const float overlayLevelSmoothing = 0.20f;
+		const float overlayDbSmoothing = 1.f - std::pow(0.78f, std::max(0.f, dt) * 60.f);
+		const float overlayLevelSmoothing = 1.f - std::pow(0.80f, std::max(0.f, dt) * 60.f);
 		float maxOverlayResidualDb = 0.f;
 		for (int i = 0; i < kCurvePointCount; ++i) {
 			changed |= state.overlayModuleDb[i] != state.overlayTargetModuleDb[i]
@@ -2023,7 +2092,7 @@ bool BifurxSpectrumBase::updateAnimation(float dt, bool* contentChanged) {
 		if (module && module->fftScaleDynamic.load(std::memory_order_relaxed) && state.displayTopTargetDbfs > prevTop) {
 			topSmoothing = 0.70f;
 		}
-		state.displayTopDbfs = mixf(prevTop, state.displayTopTargetDbfs, topSmoothing);
+		state.displayTopDbfs = mixf(prevTop, state.displayTopTargetDbfs, 1.f - std::pow(1.f - topSmoothing, std::max(0.f, dt) * 60.f));
 		const float topResidualDbfs = std::fabs(state.displayTopTargetDbfs - state.displayTopDbfs);
 
 		if (maxOverlayResidualDb <= kOverlayEpsilonDb && topResidualDbfs <= kTopEpsilonDbfs) {
@@ -2055,6 +2124,9 @@ BifurxRenderTickResult BifurxSpectrumBase::runRenderTick(float dt) {
 	result.previewUpdated = (state.lastPreviewSeq != prevPreviewSeq) || workerAdopted;
 	result.analysisUpdated = (state.lastAnalysisSeq != prevAnalysisSeq) || state.overlayAnalysisSeq != prevOverlaySeq;
 	const bool dynamic = module ? module->fftScaleDynamic.load(std::memory_order_relaxed) : true;
+	const float colorShape = module ? module->params[Bifurx::FM_AMT_PARAM].getValue() : 0.f;
+	const bool shapeChanged = colorShape != state.colorShape;
+	state.colorShape = colorShape;
 	const bool scaleChanged = dynamic != state.fftScaleDynamic;
 	state.fftScaleDynamic = dynamic;
 	state.displayTopTargetDbfs = dynamic ? state.dynamicTopTargetDbfs : kDisplayTopDbfsCeiling;
@@ -2062,7 +2134,7 @@ BifurxRenderTickResult BifurxSpectrumBase::runRenderTick(float dt) {
 	if (state.hasOverlay && state.displayTopDbfs != state.displayTopTargetDbfs) state.hasOverlayTarget = true;
 	bool animationChanged = false;
 	result.animationActive = updateAnimation(dt, &animationChanged);
-	result.contentChanged = result.previewUpdated || result.analysisUpdated || workerAdopted || scaleChanged || animationChanged
+	result.contentChanged = result.previewUpdated || result.analysisUpdated || workerAdopted || scaleChanged || shapeChanged || animationChanged
 		|| state.curveRevision != prevCurveRevision;
 	result.curvePrepUs = (result.previewUpdated || workerAdopted) ? lastCurvePrepUs : 0.f;
 	result.overlayPrepUs = result.analysisUpdated ? lastOverlayPrepUs : 0.f;
@@ -2074,7 +2146,7 @@ void BifurxSpectrumBase::calculateMarkerLayout(BifurxMarkerLayout* layout, float
 	const float padY = std::max(4.f, h * 0.035f);
 	const float labelBandHeight = std::max(5.2f, h * 0.072f), labelBandTop = h - labelBandHeight;
 	const float spectrumTopY = padY * 0.35f, spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
-	const float minHz = 10.f, maxHz = std::min(20000.f, 0.46f * state.previewState.sampleRate);
+	const float minHz = 10.f, maxHz = std::min(20000.f, 0.46f * state.displayedPreviewState.sampleRate);
 	const float markerOuterRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius + 0.5f * kPeakMarkerOutlineStrokeWidth;
 	const float markerBottomLaneY = spectrumBottomY - markerOuterRadius - kPeakMarkerBottomLanePadding;
 	const BifurxPreviewModel& model = getOrUpdateModel();
@@ -2092,7 +2164,7 @@ void BifurxSpectrumBase::calculateMarkerLayout(BifurxMarkerLayout* layout, float
 		m.x = mX;
 		m.yCurve = curveYAtX01(anchor.x01, spectrumBottomY, spectrumTopY);
 		const float mMinY = spectrumTopY + markerOuterRadius + kPeakMarkerEdgePadding, mMaxY = spectrumBottomY - markerOuterRadius - kPeakMarkerEdgePadding;
-		const bool allowBottomCurveMarker = state.previewState.mode == 0 || state.previewState.mode == 9;
+		const bool allowBottomCurveMarker = state.displayedPreviewState.mode == 0 || state.displayedPreviewState.mode == 9;
 		m.yMarker = markerPinnedToBottomLane(mIdx)
 			? markerBottomLaneY
 			: (allowBottomCurveMarker && m.yCurve > mMaxY)
@@ -2131,7 +2203,7 @@ void BifurxSpectrumBase::calculateMarkerLayout(BifurxMarkerLayout* layout, float
 void BifurxSpectrumBase::getCachedMarkerLayout(BifurxMarkerLayout* layout, float w, float h) const {
 	if (!layout) return;
 	const float minHz = 10.f;
-	const float maxHz = std::min(20000.f, 0.46f * state.previewState.sampleRate);
+	const float maxHz = std::min(20000.f, 0.46f * state.displayedPreviewState.sampleRate);
 	const BifurxPreviewModel& model = getOrUpdateModel();
 	const DisplayAnchor anchors[2] = {
 		displayAnchorForMarker(0, model.markerFreqA, minHz, maxHz),
@@ -2145,8 +2217,8 @@ void BifurxSpectrumBase::getCachedMarkerLayout(BifurxMarkerLayout* layout, float
 	bool rebuild = !cachedMarkerLayoutValid;
 	rebuild = rebuild || std::fabs(cachedMarkerLayoutW - w) > 1e-4f;
 	rebuild = rebuild || std::fabs(cachedMarkerLayoutH - h) > 1e-4f;
-	rebuild = rebuild || std::fabs(cachedMarkerLayoutSampleRate - state.previewState.sampleRate) > 0.5f;
-	rebuild = rebuild || cachedMarkerLayoutPreviewSeq != state.lastPreviewSeq;
+	rebuild = rebuild || std::fabs(cachedMarkerLayoutSampleRate - state.displayedPreviewState.sampleRate) > 0.5f;
+	rebuild = rebuild || cachedMarkerLayoutPreviewSeq != state.curvePreviewSeq;
 	rebuild = rebuild || cachedMarkerLayoutCurveRevision != state.curveRevision;
 	rebuild = rebuild || std::fabs(cachedMarkerLayoutAnchorX01[0] - anchors[0].x01) > 1e-7f;
 	rebuild = rebuild || std::fabs(cachedMarkerLayoutAnchorX01[1] - anchors[1].x01) > 1e-7f;
@@ -2157,8 +2229,8 @@ void BifurxSpectrumBase::getCachedMarkerLayout(BifurxMarkerLayout* layout, float
 		calculateMarkerLayout(&cachedMarkerLayout, w, h);
 		cachedMarkerLayoutW = w;
 		cachedMarkerLayoutH = h;
-		cachedMarkerLayoutSampleRate = state.previewState.sampleRate;
-		cachedMarkerLayoutPreviewSeq = state.lastPreviewSeq;
+		cachedMarkerLayoutSampleRate = state.displayedPreviewState.sampleRate;
+		cachedMarkerLayoutPreviewSeq = state.curvePreviewSeq;
 		cachedMarkerLayoutCurveRevision = state.curveRevision;
 		cachedMarkerLayoutAnchorX01[0] = anchors[0].x01;
 		cachedMarkerLayoutAnchorX01[1] = anchors[1].x01;
@@ -2176,10 +2248,8 @@ void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoin
 	const float padY = std::max(4.f, h * 0.035f);
 	const float labelBandHeight = std::max(5.2f, h * 0.072f), labelBandTop = h - labelBandHeight;
 	const float spectrumTopY = padY * 0.35f, spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
-	const float minHz = 10.f, maxHz = std::min(20000.f, 0.46f * state.previewState.sampleRate);
+	const float minHz = 10.f, maxHz = std::min(20000.f, 0.46f * state.displayedPreviewState.sampleRate);
 	const BifurxPreviewModel& model = getOrUpdateModel();
-	const float markerOuterRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius + 0.5f * kPeakMarkerOutlineStrokeWidth;
-	const float markerBottomLaneY = spectrumBottomY - markerOuterRadius - kPeakMarkerBottomLanePadding;
 	const DisplayAnchor anchors[2] = {
 		displayAnchorForMarker(0, model.markerFreqA, minHz, maxHz),
 		displayAnchorForMarker(1, model.markerFreqB, minHz, maxHz)
@@ -2192,7 +2262,7 @@ void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoin
 	bool rebuildTemplate = !refinedCurveTemplateValid;
 	rebuildTemplate = rebuildTemplate || std::fabs(w - refinedCurveTemplateW) > 1e-4f;
 	rebuildTemplate = rebuildTemplate || std::fabs(h - refinedCurveTemplateH) > 1e-4f;
-	rebuildTemplate = rebuildTemplate || std::fabs(state.previewState.sampleRate - refinedCurveTemplateSampleRate) > 0.5f;
+	rebuildTemplate = rebuildTemplate || std::fabs(state.displayedPreviewState.sampleRate - refinedCurveTemplateSampleRate) > 0.5f;
 	rebuildTemplate = rebuildTemplate || std::fabs(anchors[0].x01 - refinedCurveTemplateAnchorX01[0]) > 1e-7f;
 	rebuildTemplate = rebuildTemplate || std::fabs(anchors[1].x01 - refinedCurveTemplateAnchorX01[1]) > 1e-7f;
 	rebuildTemplate = rebuildTemplate || markerPinned[0] != refinedCurveTemplateMarkerPinned[0];
@@ -2229,7 +2299,7 @@ void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoin
 
 		refinedCurveTemplateW = w;
 		refinedCurveTemplateH = h;
-		refinedCurveTemplateSampleRate = state.previewState.sampleRate;
+		refinedCurveTemplateSampleRate = state.displayedPreviewState.sampleRate;
 		refinedCurveTemplateAnchorX01[0] = anchors[0].x01;
 		refinedCurveTemplateAnchorX01[1] = anchors[1].x01;
 		refinedCurveTemplateMarkerPinned[0] = markerPinned[0];
@@ -2246,15 +2316,6 @@ void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoin
 	// Evaluate Y coordinates for all final points from live curve data.
 	for (auto& p : *points) {
 		p.y = curveYAtX01(p.x01, spectrumBottomY, spectrumTopY);
-	}
-	for (int markerIndex = 0; markerIndex < 2; ++markerIndex) {
-		if (!markerPinned[markerIndex]) continue;
-		const DisplayAnchor& anchor = anchors[markerIndex];
-		for (auto& p : *points) {
-			if (p.priority == 2 && std::fabs(p.x01 - anchor.x01) < 1e-7f) {
-				p.y = markerBottomLaneY;
-			}
-		}
 	}
 }
 

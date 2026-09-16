@@ -18,11 +18,16 @@ struct BifurxTransitionSmoother {
 	enum Phase {
 		STABLE,
 		FADE_OUT,
+		WARM_UP,
 		FADE_IN
 	};
 
 	int activeMode = 0;
 	int requestedMode = 0;
+	int activeBoundary = 0;
+	int requestedBoundary = 0;
+	int warmupSamples = 0;
+	int requestedWarmupSamples = 0;
 	bool activeSoftLimitingEnabled = true;
 	bool requestedSoftLimitingEnabled = true;
 	Phase phase = STABLE;
@@ -33,6 +38,7 @@ struct BifurxTransitionSmoother {
 	void reset() {
 		activeMode = 0;
 		requestedMode = 0;
+		activeBoundary = requestedBoundary = 0;
 		activeSoftLimitingEnabled = true;
 		requestedSoftLimitingEnabled = true;
 		phase = STABLE;
@@ -41,17 +47,20 @@ struct BifurxTransitionSmoother {
 		initialized = false;
 	}
 
-	void prepare(int mode, bool softLimitingEnabled, float sampleRate) {
+	void prepare(int mode, bool softLimitingEnabled, float sampleRate, int boundary = 0, bool primeBoundary = false) {
 		requestedMode = mode;
+		requestedBoundary = boundary;
+		requestedWarmupSamples = boundary == 2 ? (primeBoundary ? 64 : 32) : (boundary == 1 && primeBoundary ? 16 : 0);
 		requestedSoftLimitingEnabled = softLimitingEnabled;
 		if (!initialized) {
 			initialized = true;
 			activeMode = mode;
+			activeBoundary = boundary;
 			activeSoftLimitingEnabled = softLimitingEnabled;
 			return;
 		}
 		if (phase == STABLE && (
-			mode != activeMode || softLimitingEnabled != activeSoftLimitingEnabled
+			mode != activeMode || boundary != activeBoundary || softLimitingEnabled != activeSoftLimitingEnabled
 		)) {
 			halfTransitionSamples = std::max(
 				1,
@@ -63,6 +72,12 @@ struct BifurxTransitionSmoother {
 	}
 
 	float apply(float target) {
+		// The wide FIR's output boundary delays the topology switch by 31
+		// samples. Keep its settling edge in the silent part of the transition.
+		if (phase == WARM_UP) {
+			if (++phasePosition >= warmupSamples) { phasePosition = 0; phase = FADE_IN; }
+			return 0.f;
+		}
 		if (phase == STABLE) {
 			return target;
 		}
@@ -75,9 +90,11 @@ struct BifurxTransitionSmoother {
 		if (phasePosition > halfTransitionSamples) {
 			phasePosition = 0;
 			if (phase == FADE_OUT) {
+				warmupSamples = requestedWarmupSamples;
 				activeMode = requestedMode;
+				activeBoundary = requestedBoundary;
 				activeSoftLimitingEnabled = requestedSoftLimitingEnabled;
-				phase = FADE_IN;
+				phase = warmupSamples > 0 ? WARM_UP : FADE_IN;
 			}
 			else {
 				phase = STABLE;

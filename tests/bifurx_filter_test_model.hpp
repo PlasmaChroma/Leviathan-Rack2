@@ -1,3 +1,5 @@
+// Independent ideal-math reference: no boundary resampling or production tangent approximation.
+// Full production contracts live in bifurx_runtime_spec.cpp.
 #pragma once
 
 #include "../src/BifurxInputStage.hpp"
@@ -148,7 +150,7 @@ inline T combineModeResponse(
     case 7:
       return T(1.04f) * cascadeHighToNotch;
     case 8:
-      return T(1.18f) * T(wA) * bpA + T(0.94f) * T(wB) * hpB - T(0.14f) * (hpA + bpB);
+      return T(1.18f) * T(wA) * bpA + T(0.92f) * T(wB) * hpB - T(0.16f) * (bpA + bpB);
     case 9:
       return cascadeHpToHp;
     default:

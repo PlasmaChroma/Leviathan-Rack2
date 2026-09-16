@@ -10,6 +10,7 @@ namespace bifurx {
 struct BifurxUiRenderPayload {
 	BifurxAnalysisFrame analysisFrame;
 	bool hasOverlayTarget = false;
+	float previousDisplayTopTargetDbfs = kDisplayTopDbfsCeiling;
 	float previousOverlayTargetModuleDb[kCurvePointCount] = {};
 	float previousOverlayTargetOutputDbfs[kCurvePointCount] = {};
 };
@@ -34,6 +35,7 @@ struct BifurxUiRenderRequest {
 static_assert(sizeof(BifurxUiRenderRequest) < 256, "Bifurx worker requests must not embed FFT or curve payload arrays.");
 
 struct BifurxUiRenderSnapshot {
+	BifurxPreviewState previewState;
 	uint64_t displayId = 0;
 	uint64_t requestSeq = 0;
 	uint32_t previewSeq = 0;

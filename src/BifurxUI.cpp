@@ -76,6 +76,7 @@ struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 	BifurxLlTelemetryState llTelemetryState;
 	bool hasLlTelemetry = false;
 	uint32_t lastLlTelemetrySeq = 0;
+	uint32_t lastRecordedPreviewSeq = 0, lastRecordedAnalysisSeq = 0;
 	
 	CurveDebugRecorder curveDebugRecorder;
 	PerfDebugRecorder perfDebugRecorder;
@@ -175,17 +176,11 @@ struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 		perfDebugRecorder.path = system::join(bifurxUserRootPath(), "perf_debug_" + std::to_string(std::time(nullptr)) + ".csv");
 		perfDebugRecorder.file.open(perfDebugRecorder.path);
 		if (perfDebugRecorder.file.is_open()) {
-			perfDebugRecorder.file << "sequence,mode,fastPath,pitchCvConnected,"
-				<< "audioSampleRate,audioSampledCount,"
-				<< "audioProcessAvgNs,audioControlsAvgNs,audioCoreAvgNs,audioPreviewAvgNs,audioAnalysisAvgNs,audioProcessMaxNs,"
-				<< "uiStepCount,uiStepAvgNs,uiDrawCount,uiDrawAvgNs,"
-				<< "uiCurveUpdateCount,uiCurveUpdateAvgNs,uiOverlayUpdateCount,uiOverlayUpdateAvgNs,"
-				<< "uiDrawSetupAvgNs,uiDrawBackgroundAvgNs,uiDrawExpectedAvgNs,uiDrawOverlayAvgNs,uiDrawCurveAvgNs,uiDrawMarkersAvgNs\n";
+			perfDebugRecorder.file << "Process,Step,Draw,ProcessMin,ProcessMax,StepMin,StepMax,DrawMin,DrawMax,CurvePrep,OverlayPrep,Surface,WorkerSubmit,Renderer\n";
 			perfDebugRecorder.active = true;
 			perfDebugRecorder.startTimeSec = system::getTime();
 			perfDebugRecorder.sequence = 0;
 			perfDebugRecorder.lastLogTimeSec = -1.0;
-			if (module) module->resetPerfStats();
 			uiStepCount = 0; uiStepNs = 0; uiStepMaxNs = 0;
 			uiDrawCount = 0; uiDrawNs = 0; uiDrawMaxNs = 0;
 			uiCurveUpdateCount = 0; uiCurveUpdateNs = 0;
@@ -233,45 +228,19 @@ struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 			<< uiFrameMs << "\n";
 	}
 
-	void logPerfDebugSample() {
-		if (!perfDebugRecorder.active || !module) return;
-		const uint64_t audioSampledCount = module->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
-		const double audioScale = (audioSampledCount > 0) ? (1.0 / double(audioSampledCount)) : 0.0;
-		const uint64_t audioProcessNs = module->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
-		const uint64_t audioControlsNs = module->perfAudioControlsNs.exchange(0, std::memory_order_acq_rel);
-		const uint64_t audioCoreNs = module->perfAudioCoreNs.exchange(0, std::memory_order_acq_rel);
-		const uint64_t audioPreviewNs = module->perfAudioPreviewNs.exchange(0, std::memory_order_acq_rel);
-		const uint64_t audioAnalysisNs = module->perfAudioAnalysisNs.exchange(0, std::memory_order_acq_rel);
-		const uint64_t audioProcessMaxNs = module->perfAudioProcessMaxNs.exchange(0, std::memory_order_acq_rel);
-
-		auto avg = [](uint64_t total, uint64_t count) { return (count > 0) ? (double(total) / double(count)) : 0.0; };
-
-		perfDebugRecorder.file << perfDebugRecorder.sequence++ << ","
-			<< module->perfMode.load() << ","
-			<< (module->perfFastPathEligible.load() ? 1 : 0) << "," << (module->perfPreviewPitchCvConnected.load() ? 1 : 0) << ","
-			<< module->perfSampleRate.load() << "," << audioSampledCount << ","
-			<< (double(audioProcessNs) * audioScale) << "," << (double(audioControlsNs) * audioScale) << ","
-			<< (double(audioCoreNs) * audioScale) << "," << (double(audioPreviewNs) * audioScale) << ","
-			<< (double(audioAnalysisNs) * audioScale) << "," << audioProcessMaxNs << ","
-			<< uiStepCount << "," << avg(uiStepNs, uiStepCount) << ","
-			<< uiDrawCount << "," << avg(uiDrawNs, uiDrawCount) << ","
-			<< uiCurveUpdateCount << "," << avg(uiCurveUpdateNs, uiCurveUpdateCount) << ","
-			<< uiOverlayUpdateCount << "," << avg(uiOverlayUpdateNs, uiOverlayUpdateCount) << ","
-			<< avg(uiDrawSetupNs, uiDrawSetupCount) << "," << avg(uiDrawBackgroundNs, uiDrawBackgroundCount) << ","
-			<< avg(uiDrawExpectedNs, uiDrawExpectedCount) << "," << avg(uiDrawOverlayNs, uiDrawOverlayCount) << ","
-			<< avg(uiDrawCurveNs, uiDrawCurveCount) << "," << avg(uiDrawMarkersNs, uiDrawMarkersCount) << "\n";
-
-		uiStepCount = 0; uiStepNs = 0; uiStepMaxNs = 0;
-		uiDrawCount = 0; uiDrawNs = 0; uiDrawMaxNs = 0;
-		uiCurveUpdateCount = 0; uiCurveUpdateNs = 0;
-		uiOverlayUpdateCount = 0; uiOverlayUpdateNs = 0;
-		uiDrawSetupCount = 0; uiDrawSetupNs = 0;
-		uiDrawBackgroundCount = 0; uiDrawBackgroundNs = 0;
-		uiDrawExpectedCount = 0; uiDrawExpectedNs = 0;
-		uiDrawOverlayCount = 0; uiDrawOverlayNs = 0;
-		uiDrawCurveCount = 0; uiDrawCurveNs = 0;
-		uiDrawMarkersCount = 0; uiDrawMarkersNs = 0;
+	// One module-owned interval is shared with Debug Terminal. Values are CPU
+	// microseconds; Step includes step-time surfaces and overlaps Draw there.
+	void logPerfDebugSample(const debug_terminal::TimingRangeUs& process,
+		const debug_terminal::TimingRangeUs& step, const debug_terminal::TimingRangeUs& draw,
+		const BifurxSpectrumBase* active, bool gl) {
+		if (!isDragonKingDebugEnabled() || !perfDebugRecorder.active || !active) return;
+		perfDebugRecorder.file << process.average << "," << step.average << "," << draw.average << ","
+			<< process.min << "," << process.max << "," << step.min << "," << step.max << ","
+			<< draw.min << "," << draw.max << "," << active->lastCurvePrepUs << ","
+			<< active->lastOverlayPrepUs << "," << active->lastSurfaceRenderUs << ","
+			<< active->lastWorkerSubmitUs << "," << (gl ? "OpenGL" : "NanoVG") << "\n";
 	}
+	void recordCurveDebug(BifurxSpectrumBase& source);
 
 	void updateCurveXCache(float plotX, float usableW) {
 		if (std::fabs(cachedCurveXPlotX - plotX) < 1e-4f && std::fabs(cachedCurveXUsableW - usableW) < 1e-4f) return;
@@ -320,66 +289,13 @@ float BifurxSpectrumWidget::getTopLabelReservedWidth(const DrawArgs& args, float
 	return topLabelReservedWidth;
 }
 
-void BifurxSpectrumWidget::step() {
-	using PerfClock = std::chrono::steady_clock;
-	const bool debugEnabled = isDragonKingDebugEnabled();
-	const bool perfLoggingActive = debugEnabled && module && module->perfDebugLogging.load(std::memory_order_relaxed);
-	const bool measurePerf = debugEnabled;
-	const PerfClock::time_point perfStepStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
-	Widget::step();
-	syncCurveDebugCaptureState();
-	syncPerfDebugCaptureState();
-	if (!module) {
-		const bool hadPreview = state.hasPreview;
-		initializeStaticPreviewStateIfNeeded();
-		if (!hadPreview && framebuffer) {
-			framebuffer->dirty = true;
-		}
-		return;
-	}
-	if (module->renderMode != Bifurx::RENDER_NANOVG) return;
-
-	bool dirty = false;
-	bool previewUpdated = false;
-	bool analysisUpdated = false;
-
-	const bool showModuleResponseOverlayNow = module->showModuleResponseOverlay.load(std::memory_order_relaxed);
-	if (showModuleResponseOverlayNow != lastShowModuleResponseOverlay) {
-		lastShowModuleResponseOverlay = showModuleResponseOverlayNow;
-		dirty = true;
-	}
-	const int colorSchemeNow = int(module->colorScheme);
-	if (colorSchemeNow != lastColorScheme) {
-		lastColorScheme = colorSchemeNow;
-		dirty = true;
-	}
-	const bool threeColorFftGradientNow = module->threeColorFftGradient.load(std::memory_order_relaxed);
-	if (threeColorFftGradientNow != lastThreeColorFftGradient) {
-		lastThreeColorFftGradient = threeColorFftGradientNow;
-		dirty = true;
-	}
-
-	float uiFrameSec = 1.f / 60.f;
-	if (APP && APP->window) {
-		const float frameSec = float(APP->window->getLastFrameDuration());
-		if (std::isfinite(frameSec) && frameSec > 0.f) {
-			uiFrameSec = clamp(frameSec, 1.f / 240.f, 1.f / 20.f);
-		}
-	}
-
-	const BifurxRenderTickResult tick = runRenderTick(uiFrameSec);
-	previewUpdated = tick.previewUpdated;
-	analysisUpdated = tick.analysisUpdated;
-	if (tick.curvePrepUs > 0.f) {
-		lastCurvePrepUs = tick.curvePrepUs;
-	}
-	if (tick.overlayPrepUs > 0.f) {
-		lastOverlayPrepUs = tick.overlayPrepUs;
-	}
-	if (tick.contentChanged) {
-		dirty = true;
-	}
-
+void BifurxSpectrumWidget::recordCurveDebug(BifurxSpectrumBase& source) {
+	if (!module || !isDragonKingDebugEnabled() || !curveDebugRecorder.active) return;
+	const auto& state = source.state;
+	const bool previewUpdated = state.curvePreviewSeq != lastRecordedPreviewSeq;
+	const bool analysisUpdated = state.lastAnalysisSeq != lastRecordedAnalysisSeq;
+	lastRecordedPreviewSeq = state.curvePreviewSeq;
+	lastRecordedAnalysisSeq = state.lastAnalysisSeq;
 	uint32_t llTelemetrySeq = lastLlTelemetrySeq;
 	BifurxLlTelemetryState telemetryState;
 	if (module->readLlTelemetryState(lastLlTelemetrySeq, &telemetryState, &llTelemetrySeq)) {
@@ -406,22 +322,22 @@ void BifurxSpectrumWidget::step() {
 			float peakBX = NAN, peakBYCurve = NAN, peakBYMarker = NAN;
 			const float w = box.size.x, h = box.size.y;
 			if (w > 0.f && h > 0.f) {
-				const BifurxPreviewModel& model = getOrUpdateModel();
+				const BifurxPreviewModel& model = source.getOrUpdateModel();
 				const float padY = std::max(4.f, h * 0.035f);
 				const float plotX = 0.f, usableW = std::max(1.f, w - plotX);
-				const float minHz = 10.f, maxHz = std::min(20000.f, 0.46f * state.previewState.sampleRate);
+				const float minHz = 10.f, maxHz = std::min(20000.f, 0.46f * state.displayedPreviewState.sampleRate);
 				const float labelBandHeight = std::max(5.2f, h * 0.072f), labelBandTop = h - labelBandHeight;
 				const float spectrumTopY = padY * 0.35f, spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
 				auto responseYForDb = [&](float db) { return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY); };
 				auto evalPeak = [&](int idx, float targetHz, float* outX, float* outYCurve, float* outYMarker) {
-					const auto anchor = displayAnchorForMarker(idx, targetHz, minHz, maxHz);
+					const auto anchor = source.displayAnchorForMarker(idx, targetHz, minHz, maxHz);
 					const float markerRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius + 0.5f * kPeakMarkerOutlineStrokeWidth;
 					const float curveIndex = anchor.x01 * float(kCurvePointCount - 1);
 					const int i0 = clamp(int(std::floor(curveIndex)), 0, kCurvePointCount - 1), i1 = std::min(i0 + 1, kCurvePointCount - 1);
 					const float curveDbAtHz = mixf(state.curveDb[i0], state.curveDb[i1], curveIndex - float(i0));
 					const float yCurve = responseYForDb(curveDbAtHz), markerX = plotX + usableW * anchor.x01;
 					const float markerMinY = spectrumTopY + markerRadius + kPeakMarkerEdgePadding, markerMaxY = spectrumBottomY - markerRadius - kPeakMarkerEdgePadding;
-					const float yMarker = markerPinnedToBottomLane(idx) ? (spectrumBottomY - markerRadius - kPeakMarkerBottomLanePadding) : clamp(yCurve, markerMinY, markerMaxY);
+					const float yMarker = source.markerPinnedToBottomLane(idx) ? (spectrumBottomY - markerRadius - kPeakMarkerBottomLanePadding) : clamp(yCurve, markerMinY, markerMaxY);
 					*outX = clamp(markerX, plotX + markerRadius + kPeakMarkerEdgePadding, plotX + usableW - markerRadius - kPeakMarkerEdgePadding);
 					*outYCurve = yCurve; *outYMarker = yMarker;
 				};
@@ -429,21 +345,69 @@ void BifurxSpectrumWidget::step() {
 				evalPeak(1, model.markerFreqB, &peakBX, &peakBYCurve, &peakBYMarker);
 			}
 
-			logCurveDebugSample(state.previewState, hasLlTelemetry ? llTelemetryState : BifurxLlTelemetryState{}, peakAX, peakAYCurve, peakAYMarker, peakBX, peakBYCurve, peakBYMarker, uiFrameMs, state.lastPreviewSeq, previewUpdated, state.lastAnalysisSeq, analysisUpdated);
+			logCurveDebugSample(state.displayedPreviewState, hasLlTelemetry ? llTelemetryState : BifurxLlTelemetryState{}, peakAX, peakAYCurve, peakAYMarker, peakBX, peakBYCurve, peakBYMarker, uiFrameMs, state.curvePreviewSeq, previewUpdated, state.lastAnalysisSeq, analysisUpdated);
 		}
 	}
 	else if (lastCurveDebugLogTimeSec >= 0.0) {
 		lastCurveDebugLogTimeSec = -1.0;
 	}
 
-	if (isDragonKingDebugEnabled() && perfDebugRecorder.active) {
-		const double nowSec = system::getTime();
-		const double minIntervalSec = 0.5;
-		if (perfDebugRecorder.lastLogTimeSec < 0.0 || (nowSec - perfDebugRecorder.lastLogTimeSec) >= minIntervalSec) {
-			perfDebugRecorder.lastLogTimeSec = nowSec;
-			logPerfDebugSample();
+}
+
+void BifurxSpectrumWidget::step() {
+	using PerfClock = std::chrono::steady_clock;
+	const bool debugEnabled = isDragonKingDebugEnabled();
+	const bool perfLoggingActive = debugEnabled && module && module->perfDebugLogging.load(std::memory_order_relaxed);
+	const bool measurePerf = debugEnabled;
+	const PerfClock::time_point perfStepStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
+	Widget::step();
+	if (!module) {
+		const bool hadPreview = state.hasPreview;
+		initializeStaticPreviewStateIfNeeded();
+		if (!hadPreview && framebuffer) {
+			framebuffer->dirty = true;
+		}
+		return;
+	}
+	if (module->renderMode != Bifurx::RENDER_NANOVG) return;
+
+	bool dirty = false;
+
+	const bool showModuleResponseOverlayNow = module->showModuleResponseOverlay.load(std::memory_order_relaxed);
+	if (showModuleResponseOverlayNow != lastShowModuleResponseOverlay) {
+		lastShowModuleResponseOverlay = showModuleResponseOverlayNow;
+		dirty = true;
+	}
+	const int colorSchemeNow = int(module->colorScheme);
+	if (colorSchemeNow != lastColorScheme) {
+		lastColorScheme = colorSchemeNow;
+		dirty = true;
+	}
+	const bool threeColorFftGradientNow = module->threeColorFftGradient.load(std::memory_order_relaxed);
+	if (threeColorFftGradientNow != lastThreeColorFftGradient) {
+		lastThreeColorFftGradient = threeColorFftGradientNow;
+		dirty = true;
+	}
+
+	float uiFrameSec = 1.f / 60.f;
+	if (APP && APP->window) {
+		const float frameSec = float(APP->window->getLastFrameDuration());
+		if (std::isfinite(frameSec) && frameSec > 0.f) {
+			uiFrameSec = clamp(frameSec, 1.f / 240.f, 1.f / 20.f);
 		}
 	}
+
+	const BifurxRenderTickResult tick = runRenderTick(uiFrameSec);
+	if (tick.curvePrepUs > 0.f) {
+		lastCurvePrepUs = tick.curvePrepUs;
+	}
+	if (tick.overlayPrepUs > 0.f) {
+		lastOverlayPrepUs = tick.overlayPrepUs;
+	}
+	if (tick.contentChanged) {
+		dirty = true;
+	}
+
 
 	if (dirty && framebuffer) framebuffer->setDirty();
 
@@ -480,7 +444,7 @@ void BifurxSpectrumWidget::draw(const DrawArgs& args) {
 	const float displayMaxDbfs = state.displayTopDbfs, displayMinDbfs = displayMaxDbfs - kDisplayDbfsSpan;
 	auto responseYForDb = [&](float db) { return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY); };
 	updateCurveXCache(plotX, usableW);
-	const bool displayOnlyMode = isBifurxDisplayOnlyMode(state.previewState.mode);
+	const bool displayOnlyMode = isBifurxDisplayOnlyMode(state.displayedPreviewState.mode);
 	
 	if (!displayOnlyMode) {
 		calculateRefinedCurvePoints(&refinedPoints, w, h);
@@ -671,8 +635,41 @@ void drawModeStepTriangle(const Widget::DrawArgs& args, const Vec& size, bool po
 	nvgClosePath(args.vg); nvgFillColor(args.vg, nvgRGBA(225, 232, 240, 244)); nvgFill(args.vg);
 }
 
-struct BifurxModeLeftButton final : TL1105 { void draw(const DrawArgs& args) override { TL1105::draw(args); drawModeStepTriangle(args, box.size, false); } };
-struct BifurxModeRightButton final : TL1105 { void draw(const DrawArgs& args) override { TL1105::draw(args); drawModeStepTriangle(args, box.size, true); } };
+static void setBifurxModeWithHistory(Bifurx* module, int mode) {
+	if (!module) return;
+	const float before = module->params[Bifurx::MODE_PARAM].getValue();
+	if (before == float(mode)) return;
+	module->params[Bifurx::MODE_PARAM].setValue(float(mode));
+	if (APP && APP->history) {
+		auto* h = new history::ParamChange;
+		h->name = "change Bifurx mode";
+		h->moduleId = module->id; h->paramId = Bifurx::MODE_PARAM;
+		h->oldValue = before; h->newValue = float(mode);
+		APP->history->push(h);
+	}
+}
+
+template<int Direction> struct BifurxModeButton : TL1105 {
+	void onDragStart(const DragStartEvent& e) override {
+		if (e.button != GLFW_MOUSE_BUTTON_LEFT) return;
+		auto* m = dynamic_cast<Bifurx*>(module);
+		if (m) setBifurxModeWithHistory(m, (int(std::round(m->params[Bifurx::MODE_PARAM].getValue())) + kBifurxUiModeCount + Direction) % kBifurxUiModeCount);
+	}
+	void onDragEnd(const DragEndEvent&) override {}
+	void draw(const DrawArgs& args) override { TL1105::draw(args); drawModeStepTriangle(args, box.size, Direction > 0); }
+};
+using BifurxModeLeftButton = BifurxModeButton<-1>;
+using BifurxModeRightButton = BifurxModeButton<1>;
+
+template<typename T> static void setBifurxSettingWithHistory(Bifurx* module, std::atomic<T>& setting, T value, const char* name) {
+	const T before = setting.load(std::memory_order_relaxed);
+	if (before == value) return;
+	auto* h = (APP && APP->history) ? new history::ModuleChange : nullptr;
+	if (h) { h->name = name; h->moduleId = module->id; h->oldModuleJ = module->toJson(); }
+	setting.store(value, std::memory_order_relaxed);
+	if (h) { h->newModuleJ = module->toJson(); APP->history->push(h); }
+}
+
 struct BifurxModeMenuButton final : TL1105 {
 	Bifurx* module = nullptr;
 
@@ -688,7 +685,7 @@ struct BifurxModeMenuButton final : TL1105 {
 			menu->addChild(createCheckMenuItem(
 				kBifurxModeLabels[mode], "",
 				[=]() { return int(std::round(module->params[Bifurx::MODE_PARAM].getValue())) == mode; },
-				[=]() { module->params[Bifurx::MODE_PARAM].setValue(float(mode)); }
+				[=]() { setBifurxModeWithHistory(module, mode); }
 			));
 		}
 		e.consume(this);
@@ -850,6 +847,7 @@ struct BifurxWidget final : ModuleWidget {
 		if (module) {
 			analysisSubscriptionModule = module;
 			analysisSubscriptionModule->subscribeAnalysisVisual();
+			module->visualWatchdogEnabled.store(true, std::memory_order_relaxed);
 		}
 		Bifurx* displayModule = module;
 		if (!displayModule) {
@@ -1036,6 +1034,15 @@ struct BifurxWidget final : ModuleWidget {
 			lastPreferDarkPanels = preferDarkPanelsNow;
 			applyLegacyVisuals(lastLegacyVisuals);
 		}
+		const Rect viewport = getViewport(Rect(Vec(), box.size));
+		const bool windowActive = !APP || !APP->window || !APP->window->win
+			|| (glfwGetWindowAttrib(APP->window->win, GLFW_VISIBLE) && !glfwGetWindowAttrib(APP->window->win, GLFW_ICONIFIED));
+		const bool visualActive = isVisible() && viewport.size.x > 0.f && viewport.size.y > 0.f && windowActive;
+		if (bifurx) {
+			if (visualActive) bifurx->visualHeartbeat.fetch_add(1, std::memory_order_relaxed);
+			if (visualActive && !analysisSubscriptionModule) { analysisSubscriptionModule = bifurx; bifurx->subscribeAnalysisVisual(); }
+			else if (!visualActive && analysisSubscriptionModule) { analysisSubscriptionModule->unsubscribeAnalysisVisual(); analysisSubscriptionModule = nullptr; }
+		}
 		bool showGL = false;
 		if (bifurx) {
 			const bool legacyVisualsNow = bifurx->legacyVisuals.load(std::memory_order_relaxed);
@@ -1053,7 +1060,21 @@ struct BifurxWidget final : ModuleWidget {
 				if (!showGL && spectrumOpenGLBase) spectrumOpenGLBase->releaseWorkerRegistration();
 			}
 		}
+		if (bifurx) {
+			if (spectrumNanoVG) spectrumNanoVG->setVisible(visualActive && !showGL);
+			if (spectrumOpenGL) spectrumOpenGL->setVisible(visualActive && showGL);
+			if (!visualActive) {
+				if (spectrumNanoVGContent) spectrumNanoVGContent->releaseWorkerRegistration();
+				if (spectrumOpenGLBase) spectrumOpenGLBase->releaseWorkerRegistration();
+			}
+		}
 		ModuleWidget::step();
+		BifurxSpectrumBase* activeSpectrum = showGL ? spectrumOpenGLBase : static_cast<BifurxSpectrumBase*>(spectrumNanoVGContent);
+		if (spectrumNanoVGContent) {
+			spectrumNanoVGContent->syncCurveDebugCaptureState();
+			spectrumNanoVGContent->syncPerfDebugCaptureState();
+			if (measurePerf && activeSpectrum) spectrumNanoVGContent->recordCurveDebug(*activeSpectrum);
+		}
 		if (!measurePerf) return;
 
 		const float stepUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -1065,24 +1086,18 @@ struct BifurxWidget final : ModuleWidget {
 			return;
 
 		lastSubmitSec = nowSec;
-		bifurx->perfAudioSampledCount.exchange(0, std::memory_order_acq_rel);
-		bifurx->perfAudioProcessNs.exchange(0, std::memory_order_acq_rel);
-		bifurx->perfAudioControlsNs.store(0, std::memory_order_release);
-		bifurx->perfAudioCoreNs.store(0, std::memory_order_release);
-		bifurx->perfAudioPreviewNs.store(0, std::memory_order_release);
-		bifurx->perfAudioAnalysisNs.store(0, std::memory_order_release);
-		bifurx->perfAudioProcessMaxNs.store(0, std::memory_order_release);
-		BifurxSpectrumBase* activeSpectrum = showGL
-			? spectrumOpenGLBase
-			: static_cast<BifurxSpectrumBase*>(spectrumNanoVGContent);
 		const bool fixedSurfaceActive = showGL
 			&& bifurx->fixedGlSurfaceEnabled.load(std::memory_order_relaxed);
+		const auto processRange = debug_terminal::consumeAudioProcessTiming(
+			bifurx->perfAudioProcessRangeMinNs, bifurx->perfAudioProcessRangeMaxNs, &bifurx->perfAudioProcessRangeAverage);
+		const auto stepRange = moduleStepUsRange.consume();
+		const auto drawRange = moduleDrawUsRange.consume();
+		if (spectrumNanoVGContent) spectrumNanoVGContent->logPerfDebugSample(processRange, stepRange, drawRange, activeSpectrum, showGL);
 		debug_terminal::submitBifurxUiMetrics(
 			bifurx->debugInstanceId,
-			debug_terminal::consumeAudioProcessTiming(
-				bifurx->perfAudioProcessRangeMinNs, bifurx->perfAudioProcessRangeMaxNs, &bifurx->perfAudioProcessRangeAverage),
-			moduleStepUsRange.consume(),
-			moduleDrawUsRange.consume(),
+			processRange,
+			stepRange,
+			drawRange,
 			showGL,
 			activeSpectrum ? activeSpectrum->lastCurvePrepUs : 0.f,
 			activeSpectrum ? activeSpectrum->lastOverlayPrepUs : 0.f,
@@ -1123,7 +1138,9 @@ struct BifurxWidget final : ModuleWidget {
 		if (bifurx && measurePerf) {
 			const float drawMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfDrawStart).count()) * 1e-6f;
-			moduleDrawUsRange.add(drawMs * 1000.f);
+			const float surfaceUs = spectrumOpenGLBase ? spectrumOpenGLBase->pendingSurfaceRenderUs : 0.f;
+			moduleDrawUsRange.add(drawMs * 1000.f + surfaceUs);
+			if (spectrumOpenGLBase) spectrumOpenGLBase->pendingSurfaceRenderUs = 0.f;
 			const float prevMs = bifurx->perfUiRenderMs.load(std::memory_order_relaxed);
 			const float emaMs = (prevMs > 0.f) ? (prevMs + (drawMs - prevMs) * 0.18f) : drawMs;
 			bifurx->perfUiRenderMs.store(std::max(0.f, emaMs), std::memory_order_relaxed);
@@ -1160,22 +1177,19 @@ struct BifurxWidget final : ModuleWidget {
 					"Balanced — Control rate (/16)", "",
 					[=]() { return bifurx->modulationQualityMode.load(std::memory_order_relaxed) == Bifurx::MOD_QUALITY_BALANCED; },
 					[=]() {
-						bifurx->modulationQualityMode.store(Bifurx::MOD_QUALITY_BALANCED, std::memory_order_relaxed);
-						bifurx->controlFastCacheValid = false;
+						setBifurxSettingWithHistory<int>(bifurx, bifurx->modulationQualityMode, Bifurx::MOD_QUALITY_BALANCED, "change modulation quality");
 					}));
 				submenu->addChild(createCheckMenuItem(
 					"High — Control rate (/8)", "",
 					[=]() { return bifurx->modulationQualityMode.load(std::memory_order_relaxed) == Bifurx::MOD_QUALITY_HIGH; },
 					[=]() {
-						bifurx->modulationQualityMode.store(Bifurx::MOD_QUALITY_HIGH, std::memory_order_relaxed);
-						bifurx->controlFastCacheValid = false;
+						setBifurxSettingWithHistory<int>(bifurx, bifurx->modulationQualityMode, Bifurx::MOD_QUALITY_HIGH, "change modulation quality");
 					}));
 				submenu->addChild(createCheckMenuItem(
 					"Exact — Audio rate (/1)", "",
 					[=]() { return bifurx->modulationQualityMode.load(std::memory_order_relaxed) == Bifurx::MOD_QUALITY_EXACT; },
 					[=]() {
-						bifurx->modulationQualityMode.store(Bifurx::MOD_QUALITY_EXACT, std::memory_order_relaxed);
-						bifurx->controlFastCacheValid = false;
+						setBifurxSettingWithHistory<int>(bifurx, bifurx->modulationQualityMode, Bifurx::MOD_QUALITY_EXACT, "change modulation quality");
 					}));
 			}));
 			menu->addChild(createSubmenuItem("Color Scheme", "", [=](Menu* submenu) {
@@ -1221,12 +1235,16 @@ struct BifurxWidget final : ModuleWidget {
 				[=]() { return bifurx->renderMode == Bifurx::RENDER_OPENGL && bifurx->useGlShaderRenderer.load(std::memory_order_relaxed); },
 				[=]() { setRenderStateWithHistory(Bifurx::RENDER_OPENGL, true); }));
 			}));
+			menu->addChild(createCheckMenuItem("A/B: Legacy dark boundary FIR (temporary)", "",
+				[=]() { return bifurx->legacyBoundaryResampling.load(std::memory_order_relaxed); },
+				[=]() { setBifurxSettingWithHistory(bifurx, bifurx->legacyBoundaryResampling,
+					!bifurx->legacyBoundaryResampling.load(std::memory_order_relaxed), "compare boundary resampling"); }));
 			menu->addChild(createCheckMenuItem("High Resonance Self-Osc", "",
 				[=]() { return bifurx->highResonanceSelfOscEnabled.load(std::memory_order_relaxed); },
-				[=]() { bifurx->highResonanceSelfOscEnabled.store(!bifurx->highResonanceSelfOscEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
+				[=]() { setBifurxSettingWithHistory(bifurx, bifurx->highResonanceSelfOscEnabled, !bifurx->highResonanceSelfOscEnabled.load(std::memory_order_relaxed), "change self-oscillation"); }));
 			menu->addChild(createCheckMenuItem("Soft Limiting", "",
 				[=]() { return bifurx->softLimitingEnabled.load(std::memory_order_relaxed); },
-				[=]() { bifurx->softLimitingEnabled.store(!bifurx->softLimitingEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed); }));
+				[=]() { setBifurxSettingWithHistory(bifurx, bifurx->softLimitingEnabled, !bifurx->softLimitingEnabled.load(std::memory_order_relaxed), "change limiting"); }));
 			menu->addChild(createCheckMenuItem("Dynamic FFT Scale", "",
 				[=]() { return bifurx->fftScaleDynamic.load(std::memory_order_relaxed); },
 				[=]() { bifurx->fftScaleDynamic.store(!bifurx->fftScaleDynamic.load(std::memory_order_relaxed), std::memory_order_relaxed); }));

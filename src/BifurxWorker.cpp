@@ -95,6 +95,11 @@ struct BifurxUiRenderService::Impl {
 			}
 
 			auto snapshot = std::make_shared<BifurxUiRenderSnapshot>();
+			if (previousSnapshot && previousSnapshot->cachedAxisSampleRate == request.previewState.sampleRate) {
+				snapshot->cachedAxisSampleRate = previousSnapshot->cachedAxisSampleRate;
+				std::copy_n(previousSnapshot->curveHz, kCurvePointCount, snapshot->curveHz);
+				std::copy_n(previousSnapshot->curveBinPos, kCurvePointCount, snapshot->curveBinPos);
+			}
 			if (previousSnapshot && previousSnapshot->previewSeq == request.previewSeq && previousSnapshot->hasCurveTarget) {
 				request.skipCurvePrep = true;
 				snapshot->cachedAxisSampleRate = previousSnapshot->cachedAxisSampleRate;
@@ -104,6 +109,16 @@ struct BifurxUiRenderService::Impl {
 					snapshot->curveBinPos[i] = previousSnapshot->curveBinPos[i];
 					snapshot->curveTargetDb[i] = previousSnapshot->curveTargetDb[i];
 				}
+			}
+			// A newer curve must carry the last completed analysis even when no
+			// new FFT payload accompanies it (including an in-flight predecessor).
+			if (!request.payload && previousSnapshot && previousSnapshot->hasOverlayTarget
+				&& previousSnapshot->cachedAxisSampleRate == request.previewState.sampleRate) {
+				request.analysisSeq = previousSnapshot->analysisSeq;
+				snapshot->hasOverlayTarget = true;
+				snapshot->displayTopTargetDbfs = previousSnapshot->displayTopTargetDbfs;
+				std::copy_n(previousSnapshot->overlayTargetModuleDb, kCurvePointCount, snapshot->overlayTargetModuleDb);
+				std::copy_n(previousSnapshot->overlayTargetOutputDbfs, kCurvePointCount, snapshot->overlayTargetOutputDbfs);
 			}
 			prepareCurveSnapshot(request, snapshot.get());
 			snapshot->completedAtSec = system::getTime();
@@ -201,6 +216,11 @@ void BifurxUiRenderService::submitLatest(BifurxUiRenderRequest request) {
 		// Replacing a pending request only transfers its pool-slot lease. The
 		// superseded lease is released automatically and can be reused by its
 		// display producer once no in-flight request retains it.
+		if (!request.payload && slot.hasPending && slot.pending.payload
+			&& slot.pending.previewState.sampleRate == request.previewState.sampleRate) {
+			request.payload = slot.pending.payload;
+			request.analysisSeq = slot.pending.analysisSeq;
+		}
 		slot.pending = std::move(request);
 		slot.hasPending = true;
 		if (!slot.inFlight && !slot.queued) {

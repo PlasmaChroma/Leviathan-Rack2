@@ -23,6 +23,7 @@ struct WorkerOverlayScratch {
 
 void fillAxisForSampleRate(float sampleRate, float* curveHz, float* curveBinPos, float* cachedAxisSampleRate) {
 	const float safeSampleRate = std::max(1000.f, sampleRate);
+	if (*cachedAxisSampleRate == safeSampleRate) return;
 	*cachedAxisSampleRate = safeSampleRate;
 	const float minHz = 10.f;
 	const float maxHz = std::min(20000.f, 0.46f * safeSampleRate);
@@ -34,15 +35,6 @@ void fillAxisForSampleRate(float sampleRate, float* curveHz, float* curveBinPos,
 	}
 }
 
-inline float fast_10log10f(float x) {
-	if (x <= 1e-12f) return -120.f;
-	union { float f; uint32_t i; } u = {x};
-	const int exp = int((u.i >> 23) & 0xFF) - 127;
-	u.i = (u.i & 0x7FFFFFu) | 0x3F800000u;
-	const float m = u.f - 1.f;
-	const float log2 = float(exp) + m * (1.44269504f - 0.44269504f * m);
-	return log2 * 3.01029995664f;
-}
 
 float computeDisplayTopTargetDbfs(
 	const float* frameSmoothedOutputDbfs,
@@ -95,8 +87,9 @@ void prepareOverlayTargetsFromSpectra(
 	float binOutputPower[kFftBinCount];
 	float binRawInputPower[kFftBinCount];
 	float binModuleDeltaDb[kFftBinCount];
-	const float amplitudeScale = 4.f / float(kFftSize);
-	const float amplitudeScaleSq = amplitudeScale * amplitudeScale;
+	// Tone-equivalent peak power: Hann coherent gain and ENBW (1.5 bins).
+	// Sum the main lobe, rather than averaging it with a frequency-dependent loss.
+	const float amplitudeScaleSq = 16.f / (1.5f * float(kFftSize) * float(kFftSize - 1));
 	for (int bin = 0; bin < kFftBinCount; ++bin) {
 		const float binHz = (float(bin) * sampleRate) / float(kFftSize);
 		const float subsonicWeight = levi_math::clamp01((binHz - kOverlaySubsonicCutHz) / (kOverlaySubsonicFadeHz - kOverlaySubsonicCutHz));
@@ -108,14 +101,15 @@ void prepareOverlayTargetsFromSpectra(
 	}
 
 	constexpr int kOverlayBandRadius = 2;
-	constexpr float kOverlayBandKernel[5] = {0.08f, 0.24f, 0.36f, 0.24f, 0.08f};
+
 	for (int bin = 0; bin < kFftBinCount; ++bin) {
 		float outputEnergy = 0.f;
 		float responseOutputEnergy = 0.f;
 		float rawInputEnergy = 0.f;
 		for (int k = -kOverlayBandRadius; k <= kOverlayBandRadius; ++k) {
-			const int sampleBin = clamp(bin + k, 0, kFftBinCount - 1);
-			const float w = kOverlayBandKernel[k + kOverlayBandRadius];
+			const int sampleBin = bin + k;
+			if (sampleBin < 0 || sampleBin >= kFftBinCount) continue;
+			const float w = 1.f;
 			outputEnergy += w * binOutputPower[sampleBin];
 			if (moduleResponseEnabled) {
 				responseOutputEnergy += w * binOutputPower[sampleBin];
@@ -123,20 +117,25 @@ void prepareOverlayTargetsFromSpectra(
 			}
 		}
 		binModuleDeltaDb[bin] = moduleResponseEnabled
-			? fast_10log10f((responseOutputEnergy + 1e-12f) / (rawInputEnergy + 1e-12f))
+			? (rawInputEnergy / (rawInputEnergy + 2.5e-7f)) * 10.f * std::log10((responseOutputEnergy + 1e-12f) / (rawInputEnergy + 1e-12f))
 			: 0.f;
 		outputEnergy += 1e-12f;
-		binOutputDbfs[bin] = clamp(fast_10log10f(outputEnergy * 0.04f + 1e-12f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
+		binOutputDbfs[bin] = clamp(10.f * std::log10(outputEnergy * 0.04f + 1e-12f), kOverlayDbfsFloor, kOverlayDbfsCeiling);
 	}
 
 	float sampledOutputDbfs[kCurvePointCount];
 	float sampledModuleDeltaDb[kCurvePointCount];
 	for (int i = 0; i < kCurvePointCount; ++i) {
-		const float binPos = curveBinPos[i];
-		const int binA = std::max(2, int(std::floor(binPos)));
+		const float binPos = clamp(curveBinPos[i], 0.f, float(kFftBinCount - 1));
+		const int binA = int(std::floor(binPos));
 		const int binB = std::min(binA + 1, kFftSize / 2);
 		const float frac = binPos - float(binA);
-		sampledOutputDbfs[i] = mixf(binOutputDbfs[binA], binOutputDbfs[binB], frac);
+		// Max-hold within the plotted log-frequency cell preserves narrow tones
+		// between sparse high-frequency points. Units are tone peak dBFS, not PSD.
+		const int leftBin = clamp(int(std::ceil(i ? 0.5f * (curveBinPos[i-1] + binPos) : binPos)), 0, kFftBinCount - 1);
+		const int rightBin = clamp(int(std::floor(i + 1 < kCurvePointCount ? 0.5f * (curveBinPos[i+1] + binPos) : binPos)), 0, kFftBinCount - 1);
+		sampledOutputDbfs[i] = std::max(binOutputDbfs[binA], binOutputDbfs[binB]);
+		for (int bin = leftBin; bin <= rightBin; ++bin) sampledOutputDbfs[i] = std::max(sampledOutputDbfs[i], binOutputDbfs[bin]);
 		sampledModuleDeltaDb[i] = mixf(binModuleDeltaDb[binA], binModuleDeltaDb[binB], frac);
 	}
 
@@ -146,9 +145,7 @@ void prepareOverlayTargetsFromSpectra(
 		const int left = std::max(0, i - 1);
 		const int right = std::min(kCurvePointCount - 1, i + 1);
 		const float smoothOutputDbfs =
-			0.12f * sampledOutputDbfs[left] +
-			0.76f * sampledOutputDbfs[i] +
-			0.12f * sampledOutputDbfs[right];
+			sampledOutputDbfs[i];
 		frameSmoothedOutputDbfs[i] = smoothOutputDbfs;
 		const float smoothModuleDeltaDb =
 			0.12f * sampledModuleDeltaDb[left] +
@@ -167,6 +164,7 @@ void prepareCurveSnapshot(const BifurxUiRenderRequest& request, BifurxUiRenderSn
 	}
 	const bool measurePrep = isDragonKingDebugEnabled();
 	const auto prepStart = measurePrep ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
+	snapshot->previewState = request.previewState;
 	snapshot->displayId = request.displayId;
 	snapshot->requestSeq = request.requestSeq;
 	snapshot->previewSeq = request.previewSeq;
@@ -229,6 +227,7 @@ void prepareCurveSnapshot(const BifurxUiRenderRequest& request, BifurxUiRenderSn
 		snapshot->overlayTargetModuleDb[i] = payload.previousOverlayTargetModuleDb[i];
 		snapshot->overlayTargetOutputDbfs[i] = payload.previousOverlayTargetOutputDbfs[i];
 	}
+	snapshot->displayTopTargetDbfs = payload.previousDisplayTopTargetDbfs;
 	prepareOverlayTargetsFromSpectra(
 		request.previewState.sampleRate,
 		snapshot->curveBinPos,

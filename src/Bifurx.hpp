@@ -63,11 +63,6 @@ constexpr int kAnalysisFrameSlotCount = 4;
 constexpr int kPreviewPublishFastDivision = 128;
 constexpr int kPreviewPublishSlowDivision = 256;
 constexpr int kPerfMeasureDivision = 17;
-constexpr int kPreviewAdaptiveCooldownSamples = 64;
-constexpr float kPreviewAdaptiveOctaveThreshold = 0.015f;
-constexpr float kPreviewAdaptiveSpanOctThreshold = 0.04f;
-constexpr float kPreviewAdaptiveQThreshold = 0.05f;
-constexpr float kPreviewAdaptiveBalanceThreshold = 0.015f;
 constexpr float kLlTelemetryTauSeconds = 0.05f;
 constexpr float kPreviewInstantSettleMotionOctThreshold = 2e-5f;
 constexpr int kPreviewInstantSettleHoldSamples = 96;
@@ -229,14 +224,14 @@ SvfOutputs processCharacterStagePrepared(
 );
 
 struct DisplayBiquad {
-	float b0 = 0.f;
-	float b1 = 0.f;
-	float b2 = 0.f;
-	float a1 = 0.f;
-	float a2 = 0.f;
+	double b0 = 0.f;
+	double b1 = 0.f;
+	double b2 = 0.f;
+	double a1 = 0.f;
+	double a2 = 0.f;
 
-	std::complex<float> response(float omega) const;
-	std::complex<float> response(std::complex<float> z1, std::complex<float> z2) const;
+	std::complex<double> response(double omega) const;
+	std::complex<double> response(std::complex<double> z1, std::complex<double> z2) const;
 };
 
 DisplayBiquad makeDisplayBiquad(float sampleRate, float cutoff, float q, int type);
@@ -293,6 +288,7 @@ struct BifurxPreviewState {
 	float freqParamNorm = 0.5f;
 	float voctCv = 0.f;
 	int mode = 0;
+	int boundary = 2;
 };
 
 struct BifurxLlTelemetryState {
@@ -323,6 +319,7 @@ struct BifurxPreviewModel {
 	float wA = 1.f;
 	float wB = 1.f;
 	int mode = 0;
+	int boundary = 2;
 };
 
 struct BifurxAnalysisFrame {
@@ -344,6 +341,7 @@ struct BifurxSpectrumState {
 	// Keep the dynamic reference even in fixed mode; toggles need no new FFT.
 	float dynamicTopTargetDbfs = kDisplayTopDbfsCeiling;
 	bool fftScaleDynamic = true;
+	float colorShape = 0.f;
 	uint64_t curveRevision = 0;
 	uint32_t curvePreviewSeq = 0;
 	uint32_t overlayAnalysisSeq = 0;
@@ -357,6 +355,7 @@ struct BifurxSpectrumState {
 	bool hasCurveTarget = false; // Curve interpolation is active.
 	bool hasOverlayTarget = false; // Spectrum or scale interpolation is active.
 	BifurxPreviewState previewState;
+	BifurxPreviewState displayedPreviewState;
 };
 
 struct BifurxCurvePoint {
@@ -408,8 +407,10 @@ struct BifurxSpectrumBase {
 	size_t workerAnalysisFramePoolCursor = 0;
 	float lastWorkerSubmitUs = 0.f;
 	float lastSurfaceRenderUs = 0.f;
+	float pendingSurfaceRenderUs = 0.f;
 
 	uint32_t lastModelUpdateSeq = 0;
+	uint32_t lastAnalysisGeneration = 0;
 	mutable BifurxPreviewModel cachedModel;
 	float lastCurvePrepUs = 0.f;
 	float lastOverlayPrepUs = 0.f;
@@ -463,7 +464,7 @@ struct BifurxSpectrumBase {
 	virtual void drawNanoVG(const rack::widget::Widget::DrawArgs& args) {}
 
 	int markerAnchorKind(int markerIndex) const {
-		switch (state.previewState.mode) {
+		switch (state.displayedPreviewState.mode) {
 			case 2: return (markerIndex == 0) ? -1 : 1;
 			case 3: return -1;
 			case 7: return (markerIndex == 1) ? -1 : 1;
@@ -472,7 +473,7 @@ struct BifurxSpectrumBase {
 	}
 
 	bool markerPinnedToBottomLane(int markerIndex) const {
-		switch (state.previewState.mode) {
+		switch (state.displayedPreviewState.mode) {
 			case 2: return markerIndex == 0; // Notch + Low
 			case 3: return true;            // Notch + Notch
 			case 7: return markerIndex == 1; // High + Notch
@@ -484,22 +485,7 @@ struct BifurxSpectrumBase {
 	DisplayAnchor displayAnchorForMarker(int markerIndex, float targetHz, float minHz, float maxHz) const {
 		const float clampedHz = clamp(targetHz, minHz, maxHz);
 		DisplayAnchor anchor; anchor.x01 = logPosition(clampedHz, minHz, maxHz); anchor.hz = clampedHz;
-		const int anchorKind = markerAnchorKind(markerIndex);
-		if (anchorKind == 0) return anchor;
-		if ((state.previewState.mode == 2 || state.previewState.mode == 7) &&
-			std::fabs(std::log2(std::max(state.previewState.freqB, 1e-6f) / std::max(state.previewState.freqA, 1e-6f))) < 0.08f) {
-			return anchor;
-		}
-		const int centerIndex = clamp(int(std::round(anchor.x01 * float(kCurvePointCount - 1))), 0, kCurvePointCount - 1);
-		int bestIndex = centerIndex;
-		float bestScore = (anchorKind < 0) ? state.curveDb[centerIndex] : -state.curveDb[centerIndex];
-		for (int i = std::max(0, centerIndex - 18); i <= std::min(kCurvePointCount - 1, centerIndex + 18); ++i) {
-			const float base = (anchorKind < 0) ? state.curveDb[i] : -state.curveDb[i];
-			const float score = base + 0.22f * std::fabs(float(i - centerIndex));
-			if (score < bestScore) { bestScore = score; bestIndex = i; }
-		}
-		anchor.x01 = float(bestIndex) / float(kCurvePointCount - 1);
-		anchor.hz = logFrequencyAt(anchor.x01, minHz, maxHz);
+		(void)markerIndex;
 		return anchor;
 	}
 
@@ -629,6 +615,9 @@ struct Bifurx : Module {
 	TptSvf coreA;
 	TptSvf coreB;
 	BifurxNonlinearOversampling2x nonlinearOversampling;
+	BifurxLegacyOversampling2x legacyOversampling;
+	std::atomic<bool> legacyBoundaryResampling{false};
+	int audioBoundary = -1;
 	BifurxTransitionSmoother transitionSmoother;
 	RenderMode renderMode = RENDER_OPENGL;
 	// Production context-owned fixed GL surface. The debug menu may disable it
@@ -669,8 +658,9 @@ struct Bifurx : Module {
 	bool previewTargetMotionInitialized = false;
 	int previewTargetStillSamples = 0;
 	int previewSampleAccum = 0;
-	int previewAdaptiveCooldown = 0;
 	bool controlFastCacheValid = false;
+	bool previewDemandWasActive = false;
+	int audioQualityMode = -1;
 	float cachedDampingA = 0.7f;
 	float cachedDampingB = 0.7f;
 	float cachedWA = 1.f;
@@ -735,6 +725,11 @@ struct Bifurx : Module {
 	dsp::SchmittTrigger modeRightTrigger;
 	std::atomic<uint32_t> analysisPublishSeq{0};
 	std::atomic<uint32_t> analysisVisualSubscribers{0};
+	std::atomic<uint32_t> analysisGeneration{0};
+	std::atomic<bool> visualWatchdogEnabled{false};
+	std::atomic<uint32_t> visualHeartbeat{0};
+	uint32_t audioVisualHeartbeat = 0;
+	int visualLeaseSamples = 0;
 	std::atomic<bool> fftScaleDynamic {true};
 	std::atomic<bool> showModuleResponseOverlay {false};
 	ColorScheme colorScheme = SCHEME_DEFAULT;
@@ -754,16 +749,9 @@ struct Bifurx : Module {
 	int previewPublishSlowDivision = kPreviewPublishSlowDivision;
 	std::atomic<bool> curveDebugLogging {false};
 	std::atomic<bool> perfDebugLogging {false};
-	std::atomic<uint64_t> perfAudioSampledCount{0};
-	std::atomic<uint64_t> perfAudioProcessNs{0};
 	std::atomic<uint64_t> perfAudioProcessRangeMinNs{std::numeric_limits<uint64_t>::max()};
 	debug_terminal::AtomicTimingAverage perfAudioProcessRangeAverage;
 	std::atomic<uint64_t> perfAudioProcessRangeMaxNs{0};
-	std::atomic<uint64_t> perfAudioControlsNs{0};
-	std::atomic<uint64_t> perfAudioCoreNs{0};
-	std::atomic<uint64_t> perfAudioPreviewNs{0};
-	std::atomic<uint64_t> perfAudioAnalysisNs{0};
-	std::atomic<uint64_t> perfAudioProcessMaxNs{0};
 	std::atomic<float> perfSampleRate{0.f};
 	std::atomic<float> perfUiRenderMs{0.f};
 	std::atomic<int> perfMode{0};
@@ -777,7 +765,6 @@ struct Bifurx : Module {
 	void resetCircuitStates();
 	json_t* dataToJson() override;
 	void dataFromJson(json_t* root) override;
-	void resetPerfStats();
 	void publishPreviewState(const BifurxPreviewState& state);
 	void publishLlTelemetryState(const BifurxLlTelemetryState& state);
 	bool readPreviewState(uint32_t lastSeq, BifurxPreviewState* state, double* publishTimeSec, uint32_t* seq);
@@ -797,9 +784,7 @@ struct Bifurx : Module {
 	// this deprecated hook for module-specific runtime state.
 	void onReset() override;
 	void process(const ProcessArgs& args) override;
-#if defined(LEVIATHAN_PRO_DRM) && LEVIATHAN_PRO_DRM
 	void processBypass(const ProcessArgs& args) override;
-#endif
 };
 
 struct BifurxColors {

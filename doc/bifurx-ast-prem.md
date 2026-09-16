@@ -9,6 +9,8 @@ This is a fresh review of the current implementation, not a restatement of the r
 
 The review is complete within the scope below. Release qualification is not complete: successful paid activation, real DAW editor lifecycle testing, listening approval, and other supported operating systems require further evidence. Those are explicitly identified as release gates rather than represented as tests that passed.
 
+Implementation follow-up (2026-09-16): see [the implementation and audition record](bifurx-premium-implementation.md) for current fixes, candidate A/B behavior, Linux evidence, and remaining gates. The findings below describe the reviewed revision and are retained as historical evidence. DRM is explicitly deferred until a test key is available; the mono contract now includes bypass.
+
 ## 1. Scope, evidence, and severity
 
 Reviewed the complete Bifurx source family: `Bifurx.cpp/.hpp`, input/output stages, oversampling, transition smoothing, UI, OpenGL renderer, render data/preparation, worker service, and licensing wrapper. Followed its directly relevant dependencies into the Rack SDK resamplers/ports/math, shared GL surface and resource retirement, NanoVG ownership, raster loading, panel anchors, premium staging/synchronization, Pro bootstrap/manifest, and vendored DRM integration. Reviewed both Bifurx DSP test suites, the license tests, relevant staging/lifecycle tests, the earlier engineering review, development documentation, and the local public-manual source and panel screenshot in `../Leviathan-Pages/manuals/`.

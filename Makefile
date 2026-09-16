@@ -138,7 +138,8 @@ TEST_BINS_NON_RACK := \
 	build/tests/doorstop_engine_spec \
 	build/tests/doorstop_reference_engine_spec \
 	build/tests/doorstop_helical_engine_spec \
-	build/tests/bifurx_filter_spec \
+	build/tests/$(ARCH_NAME)/bifurx_filter_spec$(if $(ARCH_WIN),.exe,) \
+	build/tests/$(ARCH_NAME)/bifurx_runtime_spec$(if $(ARCH_WIN),.exe,) \
 	build/tests/sil_repair_spec \
 	build/tests/sil_limiter_peak_window_spec \
 	build/tests/bulkhead_geometry_spec \
@@ -164,7 +165,6 @@ TEST_BINS_NON_RACK := \
 
 
 TEST_BINS_RACK := \
-	build/tests/bifurx_runtime_spec \
 	build/tests/panel_svg_utils_spec \
 	build/tests/crownstep_persistence_spec \
 	build/tests/doorstop_runtime_spec \
@@ -528,7 +528,8 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/doorstop_engine_spec)
 	$(call run_test_bin,build/tests/doorstop_reference_engine_spec)
 	$(call run_test_bin,build/tests/doorstop_helical_engine_spec)
-	$(call run_test_bin,build/tests/bifurx_filter_spec)
+	$(call run_rack_test_bin,build/tests/$(ARCH_NAME)/bifurx_runtime_spec$(if $(ARCH_WIN),.exe,))
+	$(call run_test_bin,build/tests/$(ARCH_NAME)/bifurx_filter_spec$(if $(ARCH_WIN),.exe,))
 	$(call run_test_bin,build/tests/sil_repair_spec)
 	$(call run_test_bin,build/tests/sil_limiter_peak_window_spec)
 	$(call run_test_bin,build/tests/bulkhead_geometry_spec)
@@ -554,7 +555,6 @@ test-fast: test-build-fast
 	python3 tools/generate_phonex_rom.py --check
 
 test-rack: test-build-rack
-	$(call run_rack_test_bin,build/tests/bifurx_runtime_spec)
 ifeq ($(RUN_CHRONOMAW_WIP_TESTS),1)
 	$(call run_rack_test_bin,build/tests/chronomaw_serialization_spec)
 else
@@ -877,7 +877,8 @@ build/tests/doorstop_reference_engine_spec: tests/doorstop_reference_engine_spec
 build/tests/doorstop_helical_engine_spec: tests/doorstop_helical_engine_spec.cpp src/HelicalContinuumEngine.cpp src/HelicalContinuumEngine.hpp src/ReferenceSpringEngine.cpp src/ReferenceSpringEngine.hpp src/DoorstopEngineRouter.cpp src/DoorstopEngineRouter.hpp src/DoorstopEngine.cpp src/DoorstopEngine.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/doorstop_helical_engine_spec.cpp src/HelicalContinuumEngine.cpp src/ReferenceSpringEngine.cpp src/DoorstopEngineRouter.cpp src/DoorstopEngine.cpp src/MathHelpers.cpp -o $@
 
-build/tests/bifurx_filter_spec: tests/bifurx_filter_spec.cpp tests/bifurx_filter_test_model.hpp src/BifurxInputStage.hpp src/BifurxOutputStage.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
+build/tests/$(ARCH_NAME)/bifurx_filter_spec$(if $(ARCH_WIN),.exe,): tests/bifurx_filter_spec.cpp tests/bifurx_filter_test_model.hpp src/BifurxInputStage.hpp src/BifurxOutputStage.hpp src/MathHelpers.cpp src/MathHelpers.hpp | build/tests
+	@mkdir -p $(dir $@)
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/bifurx_filter_spec.cpp src/MathHelpers.cpp -o $@
 
 build/tests/wave_preview_simplification_spec: tests/wave_preview_simplification_spec.cpp src/WavePreviewSimplifier.hpp | build/tests
@@ -895,15 +896,18 @@ build/tests/deepcache_theme_classifier_spec: tests/deepcache_theme_classifier_sp
 build/tests/chromatide_spec: tests/chromatide_spec.cpp src/ChromatideCanvas.cpp src/Chromatide.cpp src/IrisSourceField.cpp src/DeepcacheQoi.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chromatide_spec.cpp src/ChromatideCanvas.cpp src/Chromatide.cpp src/IrisSourceField.cpp src/DeepcacheQoi.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@
 
-build/tests/bifurx_runtime_spec: tests/bifurx_runtime_spec.cpp src/Bifurx.cpp src/BifurxInputStage.hpp src/BifurxOutputStage.hpp src/BifurxOversampling.hpp src/BifurxTransitionSmoother.hpp src/BifurxRenderData.hpp src/BifurxWorker.hpp src/BifurxWorker.cpp src/BifurxRenderPrep.hpp src/BifurxRenderPrep.cpp src/MathHelpers.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp | build/tests
-	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra -Wno-subobject-linkage $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/MathHelpers.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@
+BIFURX_TEST_OPT_FLAGS ?= -O3 -funsafe-math-optimizations $(if $(ARCH_X64),-march=nehalem,)
+build/tests/$(ARCH_NAME)/bifurx_runtime_spec$(if $(ARCH_WIN),.exe,): tests/bifurx_runtime_spec.cpp src/Bifurx.cpp src/Bifurx.hpp src/BifurxInputStage.hpp src/BifurxOutputStage.hpp src/BifurxOversampling.hpp src/BifurxTransitionSmoother.hpp src/BifurxRenderData.hpp src/BifurxWorker.hpp src/BifurxWorker.cpp src/BifurxRenderPrep.hpp src/BifurxRenderPrep.cpp src/MathHelpers.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp | build/tests
+	@mkdir -p $(dir $@)
+	$(CXX) -std=c++17 $(BIFURX_TEST_OPT_FLAGS) -Wall -Wextra -Wno-subobject-linkage $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/MathHelpers.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(abspath $(RACK_DIR)) -o $@
+	$(CXX) -std=c++17 $(BIFURX_TEST_OPT_FLAGS) -MM -MP -MT "$@" -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_runtime_spec.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/MathHelpers.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp > $@.d
 
 build/tests/chronomaw_serialization_spec: tests/chronomaw_serialization_spec.cpp src/Chronomaw.cpp src/ChronomawEngine.cpp | build/tests
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chronomaw_serialization_spec.cpp src/Chronomaw.cpp src/ChronomawEngine.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@
 
 # Rack-linked tests are heavy C++ translation units under MSYS/MinGW. Chain
 # them to avoid concurrent peak-memory spikes when users invoke `make -jN`.
-build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp | build/tests build/tests/bifurx_runtime_spec
+build/tests/panel_svg_utils_spec: tests/panel_svg_utils_spec.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp | build/tests build/tests/$(ARCH_NAME)/bifurx_runtime_spec$(if $(ARCH_WIN),.exe,)
 	$(CXX) -std=c++17 $(RACK_TEST_OPT_FLAGS) -Wall -Wextra $(RACK_TEST_WARN_FLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $^ -L$(RACK_DIR) -lRack -Wl,-rpath,/tmp/Rack2 -o $@
 
 build/tests/crownstep_persistence_spec: tests/crownstep_persistence_spec.cpp $(CROWNSTEP_MODULE_SOURCES) | build/tests build/tests/panel_svg_utils_spec
@@ -1001,3 +1005,16 @@ build/tests/aperture_candidates: tools/experiments/aperture/aperture_candidates.
 
 # Runtime baking is shared by both native Eclipse2 probes.
 build/tools/eclipse2/components build/tools/eclipse2/ring: src/visual/Eclipse2RuntimeBake.cpp src/visual/Eclipse2RuntimeBake.hpp src/visual/Eclipse2Track.hpp src/visual/Eclipse2RetainedCap.hpp src/visual/Eclipse2RingCache.hpp tools/experiments/eclipse2/runtime_checks.inc
+
+.PHONY: test-bifurx-gl
+test-bifurx-gl: build/tests/$(ARCH_NAME)/bifurx_gl_spec$(if $(ARCH_WIN),.exe,)
+	$(call run_rack_test_bin,$<)
+
+build/tests/$(ARCH_NAME)/bifurx_gl_spec$(if $(ARCH_WIN),.exe,): tests/bifurx_gl_spec.cpp tests/bifurx_runtime_spec.cpp tests/gl_surface_lifecycle_spec.cpp $(wildcard src/Bifurx*) src/visual/AdaptiveGlSurface.cpp | build/tests
+	@mkdir -p $(dir $@)
+	$(CXX) -std=c++17 -O2 -Wno-subobject-linkage $(MINGW_TEST_CPPFLAGS) -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include $< src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/MathHelpers.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(ARCH_WIN),-lopengl32,-lGL) -Wl,-rpath,$(abspath $(RACK_DIR)) -o $@
+
+	$(CXX) -std=c++17 -O2 $(MINGW_TEST_CPPFLAGS) -MM -MP -MT "$@" -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/bifurx_gl_spec.cpp src/BifurxWorker.cpp src/BifurxRenderPrep.cpp src/MathHelpers.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp src/GlResourceRetirement.cpp src/GlLifecycleUtils.cpp src/NvgGraphicsLifecycle.cpp > $@.d
+# Each translation unit contributes prerequisites to the same test target.
+-include build/tests/$(ARCH_NAME)/bifurx_runtime_spec$(if $(ARCH_WIN),.exe,).d
+-include build/tests/$(ARCH_NAME)/bifurx_gl_spec$(if $(ARCH_WIN),.exe,).d

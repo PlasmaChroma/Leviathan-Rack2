@@ -6,17 +6,22 @@
 namespace bifurx {
 
 // Keep the stateful TPT filter core at the host rate while running only the
-// two memoryless nonlinear boundaries at 2x. Rack's polyphase helpers provide
-// the reconstruction/anti-alias filtering that a naive midpoint evaluation
-// would omit.
-struct BifurxNonlinearOversampling2x {
+// two memoryless nonlinear boundaries at 2x. The 64-tap FIR candidate keeps
+// the audible passband flat; the 16-tap legacy chain remains for listening A/B.
+// Both paths run continuously while selected (no signal-dependent bypass).
+template<int Quality>
+struct BifurxBoundaryResampling2x {
 	static constexpr int kFactor = 2;
-	static constexpr int kQuality = 8;
+	static constexpr int kQuality = Quality;
 
 	dsp::Upsampler<kFactor, kQuality> inputUpsampler;
 	dsp::Decimator<kFactor, kQuality> inputDecimator;
 	dsp::Upsampler<kFactor, kQuality> outputUpsampler;
 	dsp::Decimator<kFactor, kQuality> outputDecimator;
+
+	BifurxBoundaryResampling2x()
+		: inputUpsampler(Quality == 8 ? 0.9f : 1.f), inputDecimator(Quality == 8 ? 0.9f : 1.f),
+		  outputUpsampler(Quality == 8 ? 0.9f : 1.f), outputDecimator(Quality == 8 ? 0.9f : 1.f) {}
 
 	void reset() {
 		inputUpsampler.reset();
@@ -52,5 +57,8 @@ struct BifurxNonlinearOversampling2x {
 			std::min(kOutputSoftLimitCeilingVolts, output));
 	}
 };
+
+using BifurxNonlinearOversampling2x = BifurxBoundaryResampling2x<32>;
+using BifurxLegacyOversampling2x = BifurxBoundaryResampling2x<8>;
 
 } // namespace bifurx
