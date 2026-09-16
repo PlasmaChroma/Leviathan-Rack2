@@ -77,6 +77,8 @@ float computeDisplayTopTargetDbfs(
 	);
 }
 
+} // namespace
+
 void prepareOverlayTargetsFromSpectra(
 	float sampleRate,
 	const float* curveBinPos,
@@ -158,8 +160,6 @@ void prepareOverlayTargetsFromSpectra(
 
 	*displayTopTargetDbfs = computeDisplayTopTargetDbfs(frameSmoothedOutputDbfs, overlayTargetOutputDbfs, fftScaleDynamic, *displayTopTargetDbfs);
 }
-
-} // namespace
 
 void prepareCurveSnapshot(const BifurxUiRenderRequest& request, BifurxUiRenderSnapshot* snapshot) {
 	if (!snapshot) {

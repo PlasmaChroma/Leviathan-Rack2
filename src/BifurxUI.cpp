@@ -64,7 +64,6 @@ struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 	int cachedTopLabelFontHandle = -1;
 	float cachedTopLabelFontSize = NAN;
 	float cachedTopLabelReservedWidth = 0.f;
-	bool lastFftScaleDynamic = true;
 	bool lastShowModuleResponseOverlay = false;
 	int lastColorScheme = -1;
 	bool lastThreeColorFftGradient = false;
@@ -344,15 +343,6 @@ void BifurxSpectrumWidget::step() {
 	bool previewUpdated = false;
 	bool analysisUpdated = false;
 
-	const bool fftScaleDynamicNow = module->fftScaleDynamic.load(std::memory_order_relaxed);
-	if (fftScaleDynamicNow != lastFftScaleDynamic) {
-		lastFftScaleDynamic = fftScaleDynamicNow;
-		if (!fftScaleDynamicNow) {
-			state.displayTopDbfs = kDisplayTopDbfsCeiling;
-			state.displayTopTargetDbfs = kDisplayTopDbfsCeiling;
-		}
-		dirty = true;
-	}
 	const bool showModuleResponseOverlayNow = module->showModuleResponseOverlay.load(std::memory_order_relaxed);
 	if (showModuleResponseOverlayNow != lastShowModuleResponseOverlay) {
 		lastShowModuleResponseOverlay = showModuleResponseOverlayNow;
@@ -386,7 +376,7 @@ void BifurxSpectrumWidget::step() {
 	if (tick.overlayPrepUs > 0.f) {
 		lastOverlayPrepUs = tick.overlayPrepUs;
 	}
-	if (previewUpdated || analysisUpdated || tick.animationActive) {
+	if (tick.contentChanged) {
 		dirty = true;
 	}
 
@@ -470,7 +460,7 @@ void BifurxSpectrumWidget::step() {
 }
 
 void BifurxSpectrumWidget::draw(const DrawArgs& args) {
-	if (!state.hasPreview) return;
+	if (!state.hasCurve) return;
 	const float w = box.size.x, h = box.size.y;
 	if (!(w > 0.f && h > 0.f)) return;
 	using PerfClock = std::chrono::steady_clock;

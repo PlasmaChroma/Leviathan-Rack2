@@ -21,12 +21,17 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		float radius;
 	};
 
+	struct StrokeJoin {
+		Vec normal;
+		float miterDenom;
+		bool severe;
+	};
+	std::vector<StrokeJoin> expectedCurveJoins;
+
 	// Persistent buffers to avoid per-frame allocations
 	std::vector<GlVertex> fillVertices;
 	std::vector<GlVertex> fillSoftCapVertices;
 	std::vector<GlVertex> fillCrestLineVertices;
-	std::vector<GlStrokeQuadVertex> fillCrestStrokeVertices;
-	std::vector<GlStrokeQuadVertex> strokeQuadVertices;
 	std::vector<BifurxCurvePoint> overlayCurvePoints;
 	std::vector<GlVertex> expectedCurveLineVertices;
 	std::vector<GlStrokeQuadVertex> expectedCurveStrokeVertices;
@@ -36,6 +41,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	GLuint textureVertex = 0;
 	GLuint textureFragment = 0;
 	GLuint textureVbo = 0;
+	float textureGeometryW = NAN;
+	float textureGeometryH = NAN;
 	std::array<GLuint, kCurveTextureRingSize> curveTextures {};
 	size_t curveTextureIndex = kCurveTextureRingSize - 1u;
 	bool textureShaderInitAttempted = false;
@@ -103,10 +110,9 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		fillVertices.reserve(overlaySegmentCount * 6);
 		fillSoftCapVertices.reserve(overlaySegmentCount * 12);
 		fillCrestLineVertices.reserve(overlaySegmentCount * 2);
-		fillCrestStrokeVertices.reserve(overlaySegmentCount * 6);
-		strokeQuadVertices.reserve(size_t(kCurvePointCount) * 24u);
 		overlayCurvePoints.reserve(refinedPointReserve);
 		expectedCurveLineVertices.reserve(refinedPointReserve);
+		expectedCurveJoins.reserve(refinedPointReserve);
 		expectedCurveStrokeVertices.reserve((refinedPointReserve - 1u) * 18u + 72u);
 		curveTexels.resize(size_t(kCurvePointCount) * 4u, 0); // 4 channels per pixel (RGBA16)
 	}
@@ -775,6 +781,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		textureUniformPlotHeight = glGetUniformLocation(textureProgram, "uPlotHeight");
 
 		glGenBuffers(1, &textureVbo);
+		textureGeometryW = textureGeometryH = NAN;
 		glGenTextures(GLsizei(curveTextures.size()), curveTextures.data());
 
 		for (GLuint curveTexture : curveTextures) {
@@ -792,16 +799,11 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		return true;
 	}
 
-	void appendStrokePolyline(const std::vector<GlVertex>& lineVerts, float radius, std::vector<GlStrokeQuadVertex>* out) {
-		if (!out) return;
-		if (lineVerts.size() < 2) return;
-
-		const float pad = std::max(radius * 3.f, 0.75f);
-		struct StrokePair {
-			GlStrokeQuadVertex left;
-			GlStrokeQuadVertex right;
-		};
-
+	// Geometry is shared by all three stroke widths within this render. Rebuild
+	// from live points every time so UI interpolation and marker motion stay exact.
+	void prepareStrokeJoins(const std::vector<GlVertex>& lineVerts) {
+		expectedCurveJoins.clear();
+		if (lineVerts.size() < 2u) return;
 		auto normalized = [](float x, float y) {
 			const float lenSq = x * x + y * y;
 			if (lenSq <= 1e-12f) {
@@ -835,10 +837,9 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			return prevDir.x * nextDir.x + prevDir.y * nextDir.y < 0.25f;
 		};
 
-		auto makeStrokePair = [&](size_t i) {
-			const GlVertex& p = lineVerts[i];
+		for (size_t i = 0; i < lineVerts.size(); ++i) {
 			Vec normal(0.f, -1.f);
-			float miterScale = pad;
+			float miterDenom = 1.f;
 			if (i == 0) {
 				normal = leftNormal(lineVerts[0], lineVerts[1]);
 			}
@@ -865,13 +866,33 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				}
 				if (useBevelFallback) {
 					normal = nextNormal;
-					miterScale = pad;
+					miterDenom = 1.f;
 				}
 				else {
 					normal = miter;
-					miterScale = std::min(pad / denom, pad * 1.55f);
+					miterDenom = denom;
 				}
 			}
+
+			expectedCurveJoins.push_back({normal, miterDenom, isSevereJoin(i)});
+		}
+	}
+
+	void appendStrokePolyline(const std::vector<GlVertex>& lineVerts, float radius, std::vector<GlStrokeQuadVertex>* out) {
+		if (!out) return;
+		if (lineVerts.size() < 2) return;
+
+		const float pad = std::max(radius * 3.f, 0.75f);
+		struct StrokePair {
+			GlStrokeQuadVertex left;
+			GlStrokeQuadVertex right;
+		};
+
+		auto makeStrokePair = [&](size_t i) {
+			const GlVertex& p = lineVerts[i];
+			const StrokeJoin& join = expectedCurveJoins[i];
+			const Vec& normal = join.normal;
+			const float miterScale = std::min(pad / join.miterDenom, pad * 1.55f);
 
 			const float ox = normal.x * miterScale;
 			const float oy = normal.y * miterScale;
@@ -883,7 +904,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 		StrokePair a = makeStrokePair(0u);
 		for (size_t i = 1; i < lineVerts.size(); ++i) {
-			if (isSevereJoin(i)) {
+			if (expectedCurveJoins[i].severe) {
 				// A tight notch can reverse direction over less than one screen pixel.
 				// Connecting the opposing side pairs folds the miter strip across
 				// itself, so terminate the incoming segment and restart at the cusp.
@@ -904,7 +925,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 	void drawExpectedCurveShader(float w, float h) {
 		expectedCurveShaderActiveLastFrame = false;
-		if (!state.hasPreview || !ensureStrokeShaderReady()) return;
+		if (!state.hasCurve || !ensureStrokeShaderReady()) return;
 
 		calculateRefinedCurvePoints(&overlayCurvePoints, w, h);
 		if (overlayCurvePoints.size() < 2u) return;
@@ -937,6 +958,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				6.f / 255.f, 8.f / 255.f, 12.f / 255.f, 230.f / 255.f
 			});
 		}
+		prepareStrokeJoins(expectedCurveLineVertices);
 		appendStrokePolyline(expectedCurveLineVertices, 1.45f, &expectedCurveStrokeVertices);
 		appendGuideLayer(6.f / 255.f, 8.f / 255.f, 12.f / 255.f, 230.f / 255.f, 1.40f);
 
@@ -966,7 +988,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 	void drawMarkerCirclesShader(float w, float h) {
 		markerShaderActiveLastFrame = false;
-		if (!state.hasPreview || !ensureMarkerShaderReady()) return;
+		if (!state.hasCurve || !ensureMarkerShaderReady()) return;
 		BifurxMarkerLayout layout;
 		getCachedMarkerLayout(&layout, w, h);
 		bool hasVisibleMarker = false;
@@ -1047,34 +1069,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		glDrawArrays(GL_TRIANGLES, 0, GLsizei(verts.size()));
 		glDisableVertexAttribArray(3);
 		glDisableVertexAttribArray(2);
-		glDisableVertexAttribArray(1);
-		glDisableVertexAttribArray(0);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-		glUseProgram(0);
-	}
-
-	void drawVertsShader(const std::vector<GlVertex>& verts, GLenum primitive, float lineWidth, float w, float h) {
-		if (!shaderReady || verts.empty()) return;
-		glUseProgram(shaderProgram);
-		glUniform2f(shaderUniformViewport, std::max(w, 1.f), std::max(h, 1.f));
-		glBindBuffer(GL_ARRAY_BUFFER, shaderVbo);
-		const GLsizeiptr bytes = GLsizeiptr(verts.size() * sizeof(GlVertex));
-		if (bytes > shaderVboCapacityBytes) {
-			glBufferData(GL_ARRAY_BUFFER, bytes, verts.data(), GL_DYNAMIC_DRAW);
-			shaderVboCapacityBytes = bytes;
-		}
-		else {
-			glBufferData(GL_ARRAY_BUFFER, shaderVboCapacityBytes, nullptr, GL_DYNAMIC_DRAW);
-			glBufferSubData(GL_ARRAY_BUFFER, 0, bytes, verts.data());
-		}
-		glEnableVertexAttribArray(0);
-		glEnableVertexAttribArray(1);
-		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(GlVertex), (const GLvoid*) offsetof(GlVertex, x));
-		glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(GlVertex), (const GLvoid*) offsetof(GlVertex, r));
-		if (primitive == GL_LINE_STRIP || primitive == GL_LINES) {
-			glLineWidth(std::max(1.f, lineWidth));
-		}
-		glDrawArrays(primitive, 0, GLsizei(verts.size()));
 		glDisableVertexAttribArray(1);
 		glDisableVertexAttribArray(0);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -1188,7 +1182,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const bool useGlShaderRendererNow = module->useGlShaderRenderer.load(std::memory_order_relaxed);
 		const int colorSchemeNow = int(module->colorScheme);
 		const bool fixedSurfaceEnabledNow = module->fixedGlSurfaceEnabled.load(std::memory_order_relaxed);
-		bool contentDirty = tick.previewUpdated || tick.analysisUpdated || tick.animationActive;
+		bool contentDirty = tick.contentChanged;
 
 		// Shared dirty policy with NanoVG path: redraw on new data or active animation.
 		if (showModuleResponseOverlayNow != lastShowModuleResponseOverlay) {
@@ -1286,7 +1280,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		fillVertices.clear();
 		fillSoftCapVertices.clear();
 		fillCrestLineVertices.clear();
-		fillCrestStrokeVertices.clear();
 		expectedCurveStrokeVertices.clear();
 		const float displayOnlyShapeControl = module ? clamp(module->params[Bifurx::FM_AMT_PARAM].getValue(), -1.f, 1.f) : 0.f;
 
@@ -1314,8 +1307,11 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 				// 3. Set up uniforms and program
 				glUseProgram(textureProgram);
-				glUniform2f(textureUniformViewport, std::max(w, 1.f), std::max(h, 1.f));
-				glUniform1i(textureUniformCurveTex, 0);
+				const bool geometryChanged = textureGeometryW != w || textureGeometryH != h;
+				if (geometryChanged) {
+					glUniform2f(textureUniformViewport, std::max(w, 1.f), std::max(h, 1.f));
+					glUniform1i(textureUniformCurveTex, 0);
+				}
 
 				const BifurxColors palette = BifurxColors::get(
 					module ? module->colorScheme : Bifurx::SCHEME_DEFAULT,
@@ -1325,10 +1321,12 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				glUniform4f(textureUniformExpectedPurple, palette.low.r, palette.low.g, palette.low.b, palette.low.a);
 				glUniform1f(textureUniformDisplayOnlyMode, displayOnlyMode ? 1.f : 0.f);
 				glUniform1f(textureUniformDisplayOnlyShapeControl, displayOnlyShapeControl);
-				glUniform1f(textureUniformSpectrumTopY, spectrumTopY);
-				glUniform1f(textureUniformSpectrumBottomY, spectrumBottomY);
-				glUniform1f(textureUniformPlotWidth, w);
-				glUniform1f(textureUniformPlotHeight, h);
+				if (geometryChanged) {
+					glUniform1f(textureUniformSpectrumTopY, spectrumTopY);
+					glUniform1f(textureUniformSpectrumBottomY, spectrumBottomY);
+					glUniform1f(textureUniformPlotWidth, w);
+					glUniform1f(textureUniformPlotHeight, h);
+				}
 
 				// 4. Draw quad
 				struct SimpleVertex {
@@ -1342,9 +1340,11 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				}};
 
 				glBindBuffer(GL_ARRAY_BUFFER, textureVbo);
-				// Orphan VBO before upload
-				glBufferData(GL_ARRAY_BUFFER, sizeof(quadVerts), nullptr, GL_DYNAMIC_DRAW);
-				glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(quadVerts), quadVerts.data());
+				if (geometryChanged) {
+					glBufferData(GL_ARRAY_BUFFER, sizeof(quadVerts), quadVerts.data(), GL_STATIC_DRAW);
+					textureGeometryW = w;
+					textureGeometryH = h;
+				}
 
 				glEnableVertexAttribArray(0);
 				glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(SimpleVertex), (const GLvoid*)0);
@@ -1362,6 +1362,9 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		}
 		else {
 			// CPU geometry generation logic fallback
+			const BifurxColors palette = BifurxColors::get(
+				module ? module->colorScheme : Bifurx::SCHEME_DEFAULT,
+				module ? module->threeColorFftGradient.load(std::memory_order_relaxed) : false);
 			if (state.hasOverlay) {
 				for (int i = 0; i < kCurvePointCount - 1; i++) {
 					const float avgD = 0.5f * (state.overlayModuleDb[i] + state.overlayModuleDb[i + 1]);
@@ -1370,9 +1373,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 					if (energy <= 0.005f) continue;
 					
 					float posA = levi_math::clamp01(avgD / 18.f), negA = levi_math::clamp01(-avgD / 18.f);
-					const BifurxColors palette = BifurxColors::get(
-						module ? module->colorScheme : Bifurx::SCHEME_DEFAULT,
-						module ? module->threeColorFftGradient.load(std::memory_order_relaxed) : false);
+
 					NVGcolor expectedWhite = palette.white;
 					NVGcolor expectedCyan = palette.high;
 					NVGcolor expectedPurple = palette.low;
@@ -1420,16 +1421,9 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 					fillSoftCapVertices.push_back({x0, y0 - featherPxFar, fill.r, fill.g, fill.b, 0.0f});
 
 					const float crestAlpha = clamp(0.16f + 0.18f * energy, 0.f, 0.34f);
-					const float crestRadius = 1.05f + 0.45f * energy;
 					const NVGcolor crest = mixColor(fill, nvgRGB(236, 244, 250), 0.18f);
 					fillCrestLineVertices.push_back({x0, y0, crest.r, crest.g, crest.b, crestAlpha});
 					fillCrestLineVertices.push_back({x1, y1, crest.r, crest.g, crest.b, crestAlpha});
-					appendStrokeSegment(
-						{x0, y0, crest.r, crest.g, crest.b, crestAlpha},
-						{x1, y1, crest.r, crest.g, crest.b, crestAlpha},
-						crestRadius,
-						&fillCrestStrokeVertices
-					);
 				}
 			}
 
@@ -1468,7 +1462,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			lastDrawVertexCount = (state.hasOverlay ? 4u : 0u) + uint64_t(expectedCurveStrokeVertices.size());
 		}
 		else {
-			lastDrawVertexCount = uint64_t(fillVertices.size() + fillSoftCapVertices.size() + fillCrestLineVertices.size() + fillCrestStrokeVertices.size());
+			lastDrawVertexCount = uint64_t(fillVertices.size() + fillSoftCapVertices.size() + fillCrestLineVertices.size());
 		}
 
 		if (measurePerf) {
@@ -1527,7 +1521,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 	void drawNanoVG(const DrawArgs& args) override {
 		if (!module || module->renderMode != Bifurx::RENDER_OPENGL) return;
-		if (!state.hasPreview) return;
+		if (!state.hasCurve) return;
 		
 		const float w = box.size.x, h = box.size.y;
 		const bool displayOnlyMode = isBifurxDisplayOnlyMode(state.previewState.mode);

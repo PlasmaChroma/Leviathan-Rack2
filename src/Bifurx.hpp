@@ -341,14 +341,21 @@ struct BifurxSpectrumState {
 	float overlayTargetOutputDbfs[kCurvePointCount];
 	float displayTopDbfs = kDisplayTopDbfsCeiling;
 	float displayTopTargetDbfs = kDisplayTopDbfsCeiling;
+	// Keep the dynamic reference even in fixed mode; toggles need no new FFT.
+	float dynamicTopTargetDbfs = kDisplayTopDbfsCeiling;
+	bool fftScaleDynamic = true;
+	uint64_t curveRevision = 0;
+	uint32_t curvePreviewSeq = 0;
+	uint32_t overlayAnalysisSeq = 0;
 	float cachedAxisSampleRate = 0.f;
 	uint32_t lastPreviewSeq = 0;
 	uint32_t lastAnalysisSeq = 0;
 	double previewPublishTimeSec = 0.0;
 	bool hasPreview = false;
 	bool hasOverlay = false;
-	bool hasCurveTarget = false;
-	bool hasOverlayTarget = false;
+	bool hasCurve = false; // First valid curve has arrived; independent of animation.
+	bool hasCurveTarget = false; // Curve interpolation is active.
+	bool hasOverlayTarget = false; // Spectrum or scale interpolation is active.
 	BifurxPreviewState previewState;
 };
 
@@ -379,6 +386,7 @@ struct BifurxRenderTickResult {
 	bool previewUpdated = false;
 	bool analysisUpdated = false;
 	bool animationActive = false;
+	bool contentChanged = false; // Includes the last step, when animationActive becomes false.
 	float curvePrepUs = 0.f;
 	float overlayPrepUs = 0.f;
 };
@@ -418,6 +426,7 @@ struct BifurxSpectrumBase {
 	mutable float cachedMarkerLayoutH = 0.f;
 	mutable float cachedMarkerLayoutSampleRate = 0.f;
 	mutable uint32_t cachedMarkerLayoutPreviewSeq = 0;
+	mutable uint64_t cachedMarkerLayoutCurveRevision = 0;
 	mutable float cachedMarkerLayoutAnchorX01[2] = {0.f, 0.f};
 	mutable bool cachedMarkerLayoutMarkerPinned[2] = {false, false};
 
@@ -449,7 +458,7 @@ struct BifurxSpectrumBase {
 	void updateCurveCache();
 	const BifurxPreviewModel& getOrUpdateModel() const;
 	bool updateOverlayCache(uint32_t* copiedSeq = nullptr);
-	bool updateAnimation(float dt);
+	bool updateAnimation(float dt, bool* contentChanged = nullptr);
 	BifurxRenderTickResult runRenderTick(float dt);
 	virtual void drawNanoVG(const rack::widget::Widget::DrawArgs& args) {}
 
