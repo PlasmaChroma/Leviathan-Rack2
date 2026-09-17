@@ -566,7 +566,7 @@ struct Octavia : Module {
             seenWriteActivityGeneration = writeGeneration;
             writeActivityEnvelope = 1.f;
         }
-        constexpr float activityDecaySeconds = 0.18f;
+        constexpr float activityDecaySeconds = 0.4f;
         const float activityDecay = args.sampleTime / activityDecaySeconds;
         readActivityEnvelope = std::max(0.f, readActivityEnvelope - activityDecay);
         writeActivityEnvelope = std::max(0.f, writeActivityEnvelope - activityDecay);

@@ -79,7 +79,8 @@ out-of-range leases, and malformed bodies are rejected with 400. Bodies over
 
 The artwork follows the brighter RD/WR LED with a subtle additive brightness
 pulse, up to 18% additional RGB at full activity. It uses the existing LED
-brightness and decay, including while an explicit presence override is latched.
+brightness and 400 ms linear decay, including while an explicit presence override
+is latched. Each new request refreshes its RD or WR light to full brightness.
 The overlay reuses the currently crossfading cells, adds no tint, and preserves
 image alpha. Simultaneous reads and writes do not double the boost. At rest the
 artwork returns to normal brightness and remains cached.
