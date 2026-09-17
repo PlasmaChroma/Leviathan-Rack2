@@ -302,22 +302,35 @@ TestResult testPremiumFrameRateIndependentAnimation() {
   return {"Premium overlay smoothing uses elapsed seconds", std::fabs(results[0]-results[1]) < 0.001f && std::fabs(results[1]-results[2]) < 0.001f, "30/60/120 FPS at 200 ms"};
 }
 
-TestResult testPremiumMarkerDoesNotBendCurve() {
+TestResult testNotchCurveReachesDisplayFloor() {
   bool pass = true;
-  for (int mode : {2, 3, 7}) {
-    BifurxSpectrumBase display;
-    display.state.hasPreview = true; display.state.previewState.mode = mode;
-    display.state.previewState.freqA = 100.f; display.state.previewState.freqB = 1000.f;
-    display.state.lastPreviewSeq = display.state.curvePreviewSeq = 1;
-    display.state.displayedPreviewState = display.state.previewState;
-    for (int i = 0; i < kCurvePointCount; ++i) display.state.curveDb[i] = 0.f;
-    auto anchor = display.displayAnchorForMarker(0, 100.f, 10.f, 20000.f);
-    pass &= anchor.hz == 100.f;
-    std::vector<BifurxCurvePoint> points;
-    display.calculateRefinedCurvePoints(&points, 200.f, 100.f);
-    for (const auto& p : points) pass &= std::fabs(p.y - points.front().y) < 0.0001f;
+  for (int mode : {0, 2, 3, 7, 9}) {
+    for (float rate : {44100.f, 48000.f, 96000.f}) {
+      BifurxSpectrumBase display;
+      display.state.hasPreview = true; display.state.previewState.mode = mode;
+      display.state.previewState.sampleRate = rate;
+      display.state.previewState.freqA = 311.f; display.state.previewState.freqB = 2200.f;
+      display.state.lastPreviewSeq = display.state.curvePreviewSeq = 1;
+      display.state.displayedPreviewState = display.state.previewState;
+      const auto model = makePreviewModel(display.state.previewState);
+      for (int i = 0; i < kCurvePointCount; ++i)
+        display.state.curveDb[i] = clamp(previewModelResponseDb(model, logFrequencyAt(float(i) / (kCurvePointCount - 1), 10.f, 20000.f)), kResponseMinDb, kResponseMaxDb);
+      std::vector<BifurxCurvePoint> points;
+      display.calculateRefinedCurvePoints(&points, 200.f, 100.f);
+      int nulls = 0;
+      for (const auto& p : points) {
+        if (p.priority == 3) { ++nulls; pass &= std::fabs(p.y - 92.72f) < .001f; }
+        else pass &= std::fabs(p.y - display.curveYAtX01(p.x01, 92.72f, 1.4f)) < .001f;
+      }
+      pass &= nulls == (mode == 3 ? 2 : (mode == 2 || mode == 7 ? 1 : 0));
+      // Cached geometry must retain the same floor extensions.
+      std::vector<BifurxCurvePoint> cached;
+      display.calculateRefinedCurvePoints(&cached, 200.f, 100.f);
+      pass &= cached.size() == points.size();
+      for (size_t i = 0; i < points.size(); ++i) pass &= cached[i].y == points[i].y;
+    }
   }
-  return {"Premium core-frequency markers preserve response geometry", pass, "all notch modes with flat response data"};
+  return {"Notch curve nulls reach the floor without moving surrounding response", pass, "N+L, N+N, H+N and non-notch controls at three rates"};
 }
 
 TestResult testRendererInitializesOnceAndSlewsSubsequentCurves() {
@@ -2397,7 +2410,7 @@ int main() {
     testPremiumCounterAndQualityOwnership(),
     testPremiumLowFrequencyResponse(),
     testPremiumFrameRateIndependentAnimation(),
-    testPremiumMarkerDoesNotBendCurve(),
+    testNotchCurveReachesDisplayFloor(),
     testDisablingWorkerCatchesUpPendingPreviewAndAnalysis(),
     testRendererInitializesOnceAndSlewsSubsequentCurves(),
     testFinalOverlayFrameIsDirtyThenIdles(),

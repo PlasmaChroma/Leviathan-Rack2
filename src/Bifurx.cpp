@@ -2264,8 +2264,8 @@ void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoin
 		displayAnchorForMarker(1, model.markerFreqB, minHz, maxHz)
 	};
 	const bool markerPinned[2] = {
-		markerPinnedToBottomLane(0),
-		markerPinnedToBottomLane(1)
+		markerPinnedToBottomLane(0) && model.markerFreqA >= minHz && model.markerFreqA <= maxHz,
+		markerPinnedToBottomLane(1) && model.markerFreqB >= minHz && model.markerFreqB <= maxHz
 	};
 
 	bool rebuildTemplate = !refinedCurveTemplateValid;
@@ -2288,15 +2288,15 @@ void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoin
 			refinedCurveTemplate.push_back({float(i) / float(kCurvePointCount - 1), 0.f, 0});
 		}
 
-		auto addRefinement = [&](const DisplayAnchor& anchor) {
+		auto addRefinement = [&](const DisplayAnchor& anchor, bool notch) {
 			const float dx = 0.35f / float(kCurvePointCount - 1);
 			refinedCurveTemplate.push_back({clamp(anchor.x01 - dx, 0.f, 1.f), 0.f, 1});
-			refinedCurveTemplate.push_back({clamp(anchor.x01, 0.f, 1.f), 0.f, 2});
+			refinedCurveTemplate.push_back({clamp(anchor.x01, 0.f, 1.f), 0.f, notch ? 3 : 2});
 			refinedCurveTemplate.push_back({clamp(anchor.x01 + dx, 0.f, 1.f), 0.f, 1});
 		};
 
-		addRefinement(anchors[0]);
-		addRefinement(anchors[1]);
+		addRefinement(anchors[0], markerPinned[0]);
+		addRefinement(anchors[1], markerPinned[1]);
 
 		std::sort(refinedCurveTemplate.begin(), refinedCurveTemplate.end(), [](const BifurxCurvePoint& a, const BifurxCurvePoint& b) {
 			if (std::fabs(a.x01 - b.x01) > 1e-7f) return a.x01 < b.x01;
@@ -2322,9 +2322,11 @@ void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoin
 	}
 	points->insert(points->end(), refinedCurveTemplate.begin(), refinedCurveTemplate.end());
 
-	// Evaluate Y coordinates for all final points from live curve data.
+	// Notch nulls fall between the sampled bins. Preserve their exact center
+	// at the floor instead of interpolating a shallow minimum across the null.
+	// Other points continue to follow the animated curve.
 	for (auto& p : *points) {
-		p.y = curveYAtX01(p.x01, spectrumBottomY, spectrumTopY);
+		p.y = p.priority == 3 ? spectrumBottomY : curveYAtX01(p.x01, spectrumBottomY, spectrumTopY);
 	}
 }
 
