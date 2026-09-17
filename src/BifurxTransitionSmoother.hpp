@@ -50,7 +50,7 @@ struct BifurxTransitionSmoother {
 	void prepare(int mode, bool softLimitingEnabled, float sampleRate, int boundary = 0, bool primeBoundary = false) {
 		requestedMode = mode;
 		requestedBoundary = boundary;
-		requestedWarmupSamples = boundary == 2 ? (primeBoundary ? 64 : 32) : (boundary == 1 && primeBoundary ? 16 : 0);
+		requestedWarmupSamples = boundary == 3 ? (primeBoundary ? 64 : 32) : boundary == 2 ? (primeBoundary ? 64 : 32) : (boundary == 1 && primeBoundary ? 16 : 0);
 		requestedSoftLimitingEnabled = softLimitingEnabled;
 		if (!initialized) {
 			initialized = true;

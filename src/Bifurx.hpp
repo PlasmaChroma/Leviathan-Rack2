@@ -616,7 +616,9 @@ struct Bifurx : Module {
 	TptSvf coreB;
 	BifurxNonlinearOversampling2x nonlinearOversampling;
 	BifurxLegacyOversampling2x legacyOversampling;
-	std::atomic<bool> legacyBoundaryResampling{false};
+	BifurxIirOversampling2x iirOversampling;
+	// 1 = legacy dark FIR, 2 = current FIR, 3 = low-latency IIR4.
+	std::atomic<int> boundaryResampling{2};
 	int audioBoundary = -1;
 	BifurxTransitionSmoother transitionSmoother;
 	RenderMode renderMode = RENDER_OPENGL;

@@ -596,7 +596,8 @@ template<typename Boundary> const std::array<float, 128>& boundaryImpulse() {
 }
 std::complex<float> linearBoundaryResponse(int boundary, double omega) {
 	if (boundary == 0) return {1.f, 0.f};
-	const auto& impulse = boundary == 1 ? boundaryImpulse<BifurxLegacyOversampling2x>() : boundaryImpulse<BifurxNonlinearOversampling2x>();
+	const auto& impulse = boundary == 3 ? boundaryImpulse<BifurxIirOversampling2x>()
+		: boundary == 1 ? boundaryImpulse<BifurxLegacyOversampling2x>() : boundaryImpulse<BifurxNonlinearOversampling2x>();
 	const std::complex<double> z = std::exp(std::complex<double>(0., -omega));
 	std::complex<double> response(0., 0.), power(1., 0.);
 	const int extent = boundary == 1 ? 32 : 128;
@@ -793,6 +794,7 @@ void Bifurx::resetCircuitStates() {
 	coreB = TptSvf {};
 	nonlinearOversampling.reset();
 	legacyOversampling.reset();
+	iirOversampling.reset();
 	transitionSmoother.reset();
 	cachedCoeffsA = SvfCoeffs {};
 	cachedCoeffsB = SvfCoeffs {};
@@ -861,7 +863,8 @@ json_t* Bifurx::dataToJson() {
 	json_object_set_new(root, "curveDebugLogging", json_boolean(curveDebugLogging.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "perfDebugLogging", json_boolean(perfDebugLogging.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "highResonanceSelfOscEnabled", json_boolean(highResonanceSelfOscEnabled.load(std::memory_order_relaxed)));
-	json_object_set_new(root, "legacyBoundaryResampling", json_boolean(legacyBoundaryResampling.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "boundaryResampling", json_integer(boundaryResampling.load(std::memory_order_relaxed)));
+	json_object_set_new(root, "legacyBoundaryResampling", json_boolean(boundaryResampling.load(std::memory_order_relaxed) == 1));
 	json_object_set_new(root, "softLimitingEnabled", json_boolean(softLimitingEnabled.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "nonlinearOversamplingEnabled", json_boolean(nonlinearOversamplingEnabled.load(std::memory_order_relaxed)));
 	json_object_set_new(root, "renderMode", json_integer(renderMode));
@@ -874,7 +877,10 @@ void Bifurx::dataFromJson(json_t* root) {
 		return;
 	}
 	Module::dataFromJson(root);
-	legacyBoundaryResampling.store(json_is_true(json_object_get(root, "legacyBoundaryResampling")), std::memory_order_relaxed);
+	const json_t* boundaryJ = json_object_get(root, "boundaryResampling");
+	const int savedBoundary = json_is_integer(boundaryJ) ? int(json_integer_value(boundaryJ))
+		: json_is_true(json_object_get(root, "legacyBoundaryResampling")) ? 1 : 2;
+	boundaryResampling.store(savedBoundary >= 1 && savedBoundary <= 3 ? savedBoundary : 2, std::memory_order_relaxed);
 	json_t* fftScaleDynamicJ = json_object_get(root, "fftScaleDynamic");
 	if (fftScaleDynamicJ) {
 		fftScaleDynamic.store(json_is_true(fftScaleDynamicJ), std::memory_order_relaxed);
@@ -1373,7 +1379,7 @@ void Bifurx::process(const ProcessArgs& args) {
 	}
 
 	const int requestedBoundary = !cachedNonlinearOversamplingEnabled ? 0
-		: legacyBoundaryResampling.load(std::memory_order_relaxed) ? 1 : 2;
+		: boundaryResampling.load(std::memory_order_relaxed);
 	const bool primeBoundary = requestedBoundary != transitionSmoother.activeBoundary
 		|| (isBifurxDisplayOnlyMode(transitionSmoother.activeMode) && !isBifurxDisplayOnlyMode(mode));
 	transitionSmoother.prepare(mode, cachedSoftLimitingEnabled, args.sampleRate, requestedBoundary, primeBoundary);
@@ -1381,10 +1387,12 @@ void Bifurx::process(const ProcessArgs& args) {
 	if (boundary != audioBoundary) {
 		nonlinearOversampling.reset();
 		legacyOversampling.reset();
+		iirOversampling.reset();
 		audioBoundary = boundary;
 	}
 	const float titoModeScale = 1.22f, titoStrength = 2.4f * titoAbs, couplingDepth = titoStrength * titoModeScale * (0.026f + 0.28f * resoNorm * resoNorm);
 	const float drivenIn = isBifurxDisplayOnlyMode(transitionSmoother.activeMode) ? in
+		: boundary == 3 ? iirOversampling.processInput(in, level)
 		: boundary == 2 ? nonlinearOversampling.processInput(in, level)
 		: boundary == 1 ? legacyOversampling.processInput(in, level)
 		: applyLevelInputStage(in, level);
@@ -1476,6 +1484,7 @@ void Bifurx::process(const ProcessArgs& args) {
 	const float targetOut = displayOnlyMode ? in
 		: (boundary == 2
 			? nonlinearOversampling.processOutput(dcCorrectedModeOut, level, softLimitingEnabledNow)
+			: boundary == 3 ? iirOversampling.processOutput(dcCorrectedModeOut, level, softLimitingEnabledNow)
 			: boundary == 1 ? legacyOversampling.processOutput(dcCorrectedModeOut, level, softLimitingEnabledNow)
 			: applyLevelOutputStage(dcCorrectedModeOut, level, softLimitingEnabledNow));
 	const float out = transitionSmoother.apply(targetOut);

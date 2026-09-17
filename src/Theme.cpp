@@ -114,10 +114,9 @@ struct ThemeEditor final : TransparentWidget {
 	double lastGlobalPublishAt = NAN;
 
 	math::Rect roleRect(int index) const {
-		if (index == 4) return math::Rect(Vec(8.f, 82.f), Vec(104.f, 20.f));
 		return math::Rect(Vec(8.f + (index % 2) * 84.f, 36.f + (index / 2) * 23.f), Vec(80.f, 20.f));
 	}
-	math::Rect originalBackgroundRect() const { return math::Rect(Vec(116.f, 82.f), Vec(56.f, 20.f)); }
+	math::Rect originalBackgroundRect() const { return roleRect(5); }
 	math::Rect svRect() const { return math::Rect(Vec(9.f, 112.f), Vec(137.f, 94.f)); }
 	math::Rect hueRect() const { return math::Rect(Vec(151.f, 112.f), Vec(20.f, 94.f)); }
 	math::Rect textureRect() const {

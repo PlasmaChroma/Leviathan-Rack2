@@ -1235,10 +1235,6 @@ struct BifurxWidget final : ModuleWidget {
 				[=]() { return bifurx->renderMode == Bifurx::RENDER_OPENGL && bifurx->useGlShaderRenderer.load(std::memory_order_relaxed); },
 				[=]() { setRenderStateWithHistory(Bifurx::RENDER_OPENGL, true); }));
 			}));
-			menu->addChild(createCheckMenuItem("A/B: Legacy dark boundary FIR (temporary)", "",
-				[=]() { return bifurx->legacyBoundaryResampling.load(std::memory_order_relaxed); },
-				[=]() { setBifurxSettingWithHistory(bifurx, bifurx->legacyBoundaryResampling,
-					!bifurx->legacyBoundaryResampling.load(std::memory_order_relaxed), "compare boundary resampling"); }));
 			menu->addChild(createCheckMenuItem("High Resonance Self-Osc", "",
 				[=]() { return bifurx->highResonanceSelfOscEnabled.load(std::memory_order_relaxed); },
 				[=]() { setBifurxSettingWithHistory(bifurx, bifurx->highResonanceSelfOscEnabled, !bifurx->highResonanceSelfOscEnabled.load(std::memory_order_relaxed), "change self-oscillation"); }));
@@ -1262,6 +1258,14 @@ struct BifurxWidget final : ModuleWidget {
 							!bifurx->nonlinearOversamplingEnabled.load(std::memory_order_relaxed),
 							std::memory_order_relaxed);
 					}));
+				menu->addChild(createSubmenuItem("Oversampling boundary", "", [=](Menu* submenu) {
+					const char* labels[] = {"Legacy dark boundary FIR", "Flat-passband FIR", "Low-latency IIR4"};
+					for (int boundary = 1; boundary <= 3; ++boundary) {
+						submenu->addChild(createCheckMenuItem(labels[boundary - 1], "",
+							[=]() { return bifurx->boundaryResampling.load(std::memory_order_relaxed) == boundary; },
+							[=]() { setBifurxSettingWithHistory(bifurx, bifurx->boundaryResampling, boundary, "change oversampling boundary"); }));
+					}
+				}));
 				menu->addChild(new MenuSeparator());
 				menu->addChild(createMenuLabel("Debug Rendering"));
 				menu->addChild(createCheckMenuItem(
