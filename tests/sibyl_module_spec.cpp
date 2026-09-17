@@ -160,6 +160,54 @@ void processOneSample(SibylModule& module) {
 }
 
 int main() {
+	{
+		auto composition = std::const_pointer_cast<sibyl::Composition>(makeComposition(1, false));
+		auto& pattern = composition->patterns["first"];
+		pattern.evolution.velocity = .2f;
+		pattern.evolution.gate = .2f;
+		pattern.evolution.glideMs = 40.f;
+		pattern.evolution.mod[0] = .5f;
+		pattern.evolution.mod[1] = .5f;
+		pattern.evolution.mod[2] = .5f;
+		pattern.steps[0].mod = 0.f;
+		pattern.steps[0].mod2 = 0.f;
+		pattern.steps[0].mod3 = 0.f;
+		composition->tracks[0].defaultVelocity = .6f;
+		composition->arrangement[0].lengthBeats = 1.f;
+		composition->arrangement[0].repeats = 2;
+		SibylModule module;
+		module.acceptComposition(composition, sibyl::ApplyAt::IMMEDIATE, sibyl::PhasePolicy::RESTART_ALL);
+		processOneSample(module);
+		check(module.m_trackStates[0].evolution.pass == 0 && module.m_trackStates[0].currentVel == 6.f
+			&& module.m_trackStates[0].currentMod[0] == 0.f, "evolution first traversal is exactly authored");
+		gAllocationCount = 0;
+		gTrackAllocations = true;
+		for (int i = 0; i < 25000; ++i) processOneSample(module);
+		gTrackAllocations = false;
+		const auto second = module.m_trackStates[0];
+		check(gAllocationCount == 0 && second.evolution.pass == 1 && second.currentVel != 6.f
+			&& second.currentMod[0] != 0.f && second.targetPitch == 1.f,
+			"scene repeat evolves expression without pitch changes or audio allocations");
+		for (int i = 0; i < 25000; ++i) processOneSample(module);
+		check(module.m_trackStates[0].evolution.pass == 2,
+			"automatic arrangement loop advances evolution despite pattern-phase restart");
+		module.publishTelemetry(false, 120.f);
+		std::string response, error;
+		module.handleSibylRequest(SibylControl::Operation::GET_STATUS, "{}", response, error);
+		check(response.find("\"evolutionPasses\":{\"voice\":2}") != std::string::npos,
+			"status publishes coherent per-track evolution pass");
+		check(module.handleSibylRequest(SibylControl::Operation::TRANSPORT,
+			R"({"action":"restart","target":"arrangement","apply_at":"immediate"})", response, error),
+			"evolution replay reset accepted");
+		processOneSample(module);
+		check(module.m_trackStates[0].evolution.pass == 0 && module.m_trackStates[0].currentVel == 6.f,
+			"explicit arrangement restart restores authored first pass");
+		for (int i = 0; i < 25000; ++i) processOneSample(module);
+		check(module.m_trackStates[0].currentVel == second.currentVel
+			&& module.m_trackStates[0].currentMod[0] == second.currentMod[0]
+			&& module.m_trackStates[0].activeEventGate == second.activeEventGate,
+			"restart reproduces the same second-pass expression");
+	}
 	for (bool resetInput : {false, true}) for (bool externalClock : {false, true}) {
 		SibylModule module;
 		module.acceptComposition(makeComposition(1, false), sibyl::ApplyAt::IMMEDIATE,

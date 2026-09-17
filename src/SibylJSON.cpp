@@ -174,7 +174,17 @@ static void validateCompositionSchema(json_t* root, ParseResult& res) {
             patternIds.insert(patternId);
             if (!validId(patternId)) addError(res, path, "Pattern id must be 1-64 characters");
             if (!json_is_object(pattern)) { addError(res, path, "Expected object"); continue; }
-            warnUnknownFields(pattern, path, {"length", "resolution", "steps"}, res);
+            warnUnknownFields(pattern, path, {"length", "resolution", "steps", "evolution"}, res);
+            if (requireObjectIfPresent(pattern, "evolution", path, res)) {
+                json_t* evolution = json_object_get(pattern, "evolution");
+                const std::string ep = path + ".evolution";
+                warnUnknownFields(evolution, ep, {"velocity", "gate", "glideMs", "mod", "mod2", "mod3"}, res);
+                validateNumberField(evolution, "velocity", ep, 0.0, 1.0, res);
+                validateNumberField(evolution, "gate", ep, 0.0, 1024.0, res);
+                validateNumberField(evolution, "glideMs", ep, 0.0, 3600000.0, res);
+                for (const char* lane : {"mod", "mod2", "mod3"})
+                    validateNumberField(evolution, lane, ep, 0.0, 20.0, res);
+            }
             validateIntegerField(pattern, "length", path, 1, 1024, res);
             validateStringField(pattern, "resolution", path, 5, res);
             json_t* resolution = json_object_get(pattern, "resolution");
@@ -190,7 +200,7 @@ static void validateCompositionSchema(json_t* root, ParseResult& res) {
             json_array_foreach(steps, stepIndex, step) {
                 std::string stepPath = path + ".steps[" + std::to_string(stepIndex) + "]";
                 if (!json_is_object(step)) { addError(res, stepPath, "Expected object"); continue; }
-                warnUnknownFields(step, stepPath, {"step", "pitchV", "degree", "note", "octave", "gate", "velocity", "mod", "mod2", "mod3", "probability", "tie", "glideMs", "microshift", "ratchets", "observation"}, res);
+                warnUnknownFields(step, stepPath, {"step", "pitchV", "degree", "note", "octave", "gate", "velocity", "mod", "mod2", "mod3", "probability", "tie", "glideMs", "microshift", "ratchets", "observation", "evolve"}, res);
                 validateIntegerField(step, "step", stepPath, 0, std::max(0, length - 1), res);
                 json_t* stepNumber = json_object_get(step, "step");
                 if (!stepNumber) addError(res, stepPath + ".step", "Required field is missing");
@@ -211,6 +221,7 @@ static void validateCompositionSchema(json_t* root, ParseResult& res) {
                 validateNumberField(step, "mod3", stepPath, -10.0, 10.0, res);
                 validateNumberField(step, "probability", stepPath, 0.0, 1.0, res);
                 validateBooleanField(step, "tie", stepPath, res);
+                validateBooleanField(step, "evolve", stepPath, res);
                 validateNumberField(step, "glideMs", stepPath, 0.0, 3600000.0, res);
                 validateNumberField(step, "microshift", stepPath, -0.499999999, 0.499999999, res);
                 validateIntegerField(step, "ratchets", stepPath, 1, 16, res);
@@ -616,6 +627,13 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
             p.resolutionStr = getString(val, "resolution", "1/16");
             p.resolutionBeats = parseResolution(p.resolutionStr, res, "patterns." + std::string(key) + ".resolution");
             
+            json_t* evolutionJ = json_object_get(val, "evolution");
+            p.evolution.velocity = getNumber(evolutionJ, "velocity", 0.f);
+            p.evolution.gate = getNumber(evolutionJ, "gate", 0.f);
+            p.evolution.glideMs = getNumber(evolutionJ, "glideMs", 0.f);
+            p.evolution.mod[0] = getNumber(evolutionJ, "mod", 0.f);
+            p.evolution.mod[1] = getNumber(evolutionJ, "mod2", 0.f);
+            p.evolution.mod[2] = getNumber(evolutionJ, "mod3", 0.f);
             json_t* stepsJ = json_object_get(val, "steps");
 			if (stepsJ && json_is_array(stepsJ)) {
                 size_t idx; json_t* stepJ;
@@ -623,6 +641,7 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
                 json_array_foreach(stepsJ, idx, stepJ) {
                     StepEvent e;
                     e.step = getInteger(stepJ, "step", 0);
+                    e.evolve = getBoolean(stepJ, "evolve", true);
                     std::string path = "patterns." + std::string(key) + ".steps[" + std::to_string(idx) + "]";
                     
                     if (e.step < 0 || e.step >= p.length) addError(res, path, "Step index out of bounds: " + std::to_string(e.step));
@@ -827,10 +846,21 @@ static json_t* patternToJson(const Pattern& pat) {
     json_t* patJ = json_object();
     json_object_set_new(patJ, "length", json_integer(pat.length));
     json_object_set_new(patJ, "resolution", json_string(pat.resolutionStr.c_str()));
+    if (pat.evolution.enabled()) {
+        json_t* evolutionJ = json_object();
+        json_object_set_new(evolutionJ, "velocity", json_real(pat.evolution.velocity));
+        json_object_set_new(evolutionJ, "gate", json_real(pat.evolution.gate));
+        json_object_set_new(evolutionJ, "glideMs", json_real(pat.evolution.glideMs));
+        const char* lanes[] = {"mod", "mod2", "mod3"};
+        for (int i = 0; i < 3; ++i)
+            json_object_set_new(evolutionJ, lanes[i], json_real(pat.evolution.mod[i]));
+        json_object_set_new(patJ, "evolution", evolutionJ);
+    }
     json_t* stepsJ = json_array();
     for (const auto& ev : pat.steps) {
         json_t* evJ = json_object();
         json_object_set_new(evJ, "step", json_integer(ev.step));
+        if (!ev.evolve) json_object_set_new(evJ, "evolve", json_false());
         if (ev.pitchType == PitchType::PITCH_V) {
             json_object_set_new(evJ, "pitchV", json_real(ev.pitchV));
         } else if (ev.pitchType == PitchType::DEGREE) {

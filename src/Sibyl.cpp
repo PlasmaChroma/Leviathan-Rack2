@@ -5,6 +5,7 @@
 #include "SibylEdit.hpp"
 #include "SibylHardwareControl.hpp"
 #include "SibylJSON.hpp"
+#include "SibylEvolution.hpp"
 #include "SibylTiming.hpp"
 #include "SibylTransport.hpp"
 #include "OctaviaObservationBus.hpp"
@@ -114,6 +115,7 @@ struct SibylModule : Module, SibylControl {
 	std::atomic<bool> m_telemetryExternalClock{false};
 	std::atomic<double> m_telemetryEstimatedBpm{120.0};
 	std::array<std::atomic<double>, 16> m_telemetryTrackPhase;
+	std::array<std::atomic<uint64_t>, 16> m_telemetryEvolutionPass;
 	int m_telemetryPublishCountdown = 0;
 
 	struct TelemetrySnapshot {
@@ -124,6 +126,7 @@ struct SibylModule : Module, SibylControl {
 		bool externalClock = false;
 		double estimatedBpm = 120.0;
 		std::array<double, 16> trackPhase {};
+		std::array<uint64_t, 16> evolutionPass {};
 	};
 
 	struct DisplaySnapshot {
@@ -215,6 +218,7 @@ struct SibylModule : Module, SibylControl {
 	};
 
 	struct TrackState {
+		sibyl::EvolutionCursor evolution;
 		double patternPhaseBeats = 0.0;
 		int lastFiredStep = -1;
 		float currentPitch = 0.0f;
@@ -313,6 +317,7 @@ struct SibylModule : Module, SibylControl {
 		m_acceptedCompositionPtr = comp.get();
 		m_activeCompositionPtr.store(comp.get(), std::memory_order_release);
 		for (auto& phase : m_telemetryTrackPhase) phase.store(0.0, std::memory_order_relaxed);
+		for (auto& pass : m_telemetryEvolutionPass) pass.store(0, std::memory_order_relaxed);
 	}
 
 	~SibylModule() override {
@@ -394,8 +399,10 @@ struct SibylModule : Module, SibylControl {
 		m_telemetryGateMask.store(gateMask, std::memory_order_relaxed);
 		m_telemetryExternalClock.store(externalClock, std::memory_order_relaxed);
 		m_telemetryEstimatedBpm.store(estimatedBpm, std::memory_order_relaxed);
-		for (int channel = 0; channel < 16; ++channel)
+		for (int channel = 0; channel < 16; ++channel) {
 			m_telemetryTrackPhase[channel].store(m_trackStates[channel].patternPhaseBeats, std::memory_order_relaxed);
+			m_telemetryEvolutionPass[channel].store(m_trackStates[channel].evolution.pass, std::memory_order_relaxed);
+		}
 		m_telemetrySequence.fetch_add(1, std::memory_order_release);
 	}
 
@@ -425,8 +432,10 @@ struct SibylModule : Module, SibylControl {
 			snapshot.gateMask = m_telemetryGateMask.load(std::memory_order_relaxed);
 			snapshot.externalClock = m_telemetryExternalClock.load(std::memory_order_relaxed);
 			snapshot.estimatedBpm = m_telemetryEstimatedBpm.load(std::memory_order_relaxed);
-			for (int channel = 0; channel < 16; ++channel)
+			for (int channel = 0; channel < 16; ++channel) {
 				snapshot.trackPhase[channel] = m_telemetryTrackPhase[channel].load(std::memory_order_relaxed);
+				snapshot.evolutionPass[channel] = m_telemetryEvolutionPass[channel].load(std::memory_order_relaxed);
+			}
 			if (before == m_telemetrySequence.load(std::memory_order_acquire)) return snapshot;
 		}
 	}
@@ -832,9 +841,11 @@ struct SibylModule : Module, SibylControl {
 				m_trackStates[channel].glideRatePerSample = 0.0f;
 			}
 			if (action.restartPhase) {
+				m_trackStates[channel].evolution = {};
 				m_trackStates[channel].patternPhaseBeats = 0.0;
 				m_trackStates[channel].lastFiredStep = -1;
 			} else if (changed && destinationScene) {
+				m_trackStates[channel].evolution.rebase = true;
 				for (const auto& track : replacement.tracks) {
 					if (track.channel != channel) continue;
 					auto assignment = destinationScene->tracks.find(track.id);
@@ -875,6 +886,7 @@ struct SibylModule : Module, SibylControl {
 	void applyPatternPhase(sibyl::PhaseMode mode) {
 		if (mode == sibyl::PhaseMode::CONTINUE) return;
 		for (auto& state : m_trackStates) {
+			state.evolution = {};
 			state.patternPhaseBeats = mode == sibyl::PhaseMode::ALIGN_GLOBAL ? m_globalPhaseBeats : 0.0;
 			state.lastFiredStep = -1;
 		}
@@ -890,6 +902,7 @@ struct SibylModule : Module, SibylControl {
 				? request->phaseMode : sibyl::destinationTrackPhaseMode(scene, track.id);
 			if (mode == sibyl::PhaseMode::CONTINUE) continue;
 			auto& state = m_trackStates[track.channel];
+			state.evolution.newTraversal = true;
 			state.patternPhaseBeats = mode == sibyl::PhaseMode::ALIGN_GLOBAL ? m_globalPhaseBeats : 0.0;
 			state.lastFiredStep = -1;
 		}
@@ -898,6 +911,7 @@ struct SibylModule : Module, SibylControl {
 	void enterScene(const sibyl::Composition& composition, int sceneIndex,
 			const sibyl::TransportRequest& request) {
 		if (composition.arrangement.empty()) return;
+		for (auto& state : m_trackStates) state.evolution = {};
 		m_sceneIndex = std::max(0, std::min(sceneIndex, (int)composition.arrangement.size() - 1));
 		m_sceneRepeat = 0;
 		m_scenePhase = 0.0;
@@ -984,6 +998,7 @@ struct SibylModule : Module, SibylControl {
 						realignOutputClock(true);
 						break;
 					case sibyl::RestartTarget::RANDOMNESS:
+						for (auto& state : m_trackStates) state.evolution = {};
 						m_randomnessEpoch = 0;
 						break;
 					case sibyl::RestartTarget::NONE: break;
@@ -1379,11 +1394,16 @@ struct SibylModule : Module, SibylControl {
 					++captureEvaluatedEvents;
 #endif
 
+					auto& evolution = m_trackStates[ch].evolution;
+					evolution.observe(nominalStep, pat.length);
+					const auto expression = sibyl::evolveExpression(pat, *matchedEvent, trackDef,
+						comp->meta.seed ^ (m_randomnessEpoch * 11400714819323198485ULL), evolution.pass, ch);
+
 					m_trackStates[ch].lastFiredStep = eventStep;
 					m_trackStates[ch].activeEventStep = eventStep;
 					m_trackStates[ch].activeNominalStep = nominalStep;
 					m_trackStates[ch].activeEventOnsetBeats = scheduledBeat;
-					m_trackStates[ch].activeEventGate = matchedEvent->hasGate ? matchedEvent->gate : trackDef.defaultGate;
+					m_trackStates[ch].activeEventGate = expression.gate;
 					m_trackStates[ch].activeEventRatchets = std::max(1, matchedEvent->ratchets);
 					m_trackStates[ch].activeEventTie = matchedEvent->tie;
 
@@ -1414,9 +1434,9 @@ struct SibylModule : Module, SibylControl {
 							m_trackStates[ch].currentGate = 10.0f;
 						}
 						// Glide or Instant pitch
-						if (matchedEvent->glideMs > 0.0f) {
+						if (expression.glideMs > 0.0f) {
 							m_trackStates[ch].targetPitch = matchedEvent->compiledPitchV;
-							float numSamples = (matchedEvent->glideMs * 0.001f) * args.sampleRate;
+							float numSamples = (expression.glideMs * 0.001f) * args.sampleRate;
 							if (numSamples > 1.0f) {
 								m_trackStates[ch].glideRatePerSample = (m_trackStates[ch].targetPitch - m_trackStates[ch].currentPitch) / numSamples;
 							} else {
@@ -1429,15 +1449,12 @@ struct SibylModule : Module, SibylControl {
 							m_trackStates[ch].glideRatePerSample = 0.0f;
 						}
 
-						float baseVel = matchedEvent->hasVelocity ? matchedEvent->velocity : trackDef.defaultVelocity;
+						float baseVel = expression.velocity;
 						float effVel = clamp(baseVel + globalVelMacro + trackVelMacro[ch], 0.0f, 1.0f);
 						m_trackStates[ch].currentVel = effVel * 10.0f;
-						const float authoredMod[3] {matchedEvent->mod, matchedEvent->mod2, matchedEvent->mod3};
-						const bool hasMod[3] {matchedEvent->hasMod, matchedEvent->hasMod2, matchedEvent->hasMod3};
 						for (int lane = 0; lane < 3; ++lane) {
-							const float authoredVoltage = hasMod[lane] ? authoredMod[lane] : 0.0f;
 							m_trackStates[ch].currentMod[lane] = clamp(
-								authoredVoltage + trackModMacro[lane][ch], -10.0f, 10.0f);
+								expression.mod[lane] + trackModMacro[lane][ch], -10.0f, 10.0f);
 						}
 					} else {
 						m_trackStates[ch].currentGate = 0.0f;
@@ -1545,7 +1562,7 @@ struct SibylModule : Module, SibylControl {
 			return true;
 #endif
 		} else if (operation == Operation::CAPABILITIES) {
-			responseJson = "{\"ok\":true,\"capabilities\":{\"sibyl\":{\"apiVersion\":1,\"schemaVersion\":2,\"revision\":" + std::to_string(m_acceptedRevision) + ",\"operations\":[\"get_composition\",\"validate\",\"edit\",\"get_status\",\"transport\"]}}}";
+			responseJson = "{\"ok\":true,\"capabilities\":{\"sibyl\":{\"apiVersion\":1,\"schemaVersion\":2,\"repeatEvolution\":{\"version\":1,\"patternField\":\"evolution\",\"stepOptOut\":\"evolve\",\"fields\":[\"velocity\",\"gate\",\"glideMs\",\"mod\",\"mod2\",\"mod3\"]},\"revision\":" + std::to_string(m_acceptedRevision) + ",\"operations\":[\"get_composition\",\"validate\",\"edit\",\"get_status\",\"transport\"]}}}";
 			return true;
 		} else if (operation == Operation::GET_COMPOSITION) {
 			const sibyl::Composition* comp = m_acceptedCompositionPtr;
@@ -1626,6 +1643,12 @@ struct SibylModule : Module, SibylControl {
 			}
 			json_object_set_new(stJ, "sceneRepeat", json_integer(sceneRepeat));
 			json_object_set_new(stJ, "beat", json_real(beat));
+			json_t* passesJ = json_object();
+			if (comp) for (const auto& track : comp->tracks) {
+				if (track.channel >= 0 && track.channel < 16)
+					json_object_set_new(passesJ, track.id.c_str(), json_integer(telemetry.evolutionPass[track.channel]));
+			}
+			json_object_set_new(stJ, "evolutionPasses", passesJ);
 			if (m_lastError.empty()) json_object_set_new(stJ, "lastError", json_null());
 			else json_object_set_new(stJ, "lastError", json_string(m_lastError.c_str()));
 			json_t* warningsJ = json_array();

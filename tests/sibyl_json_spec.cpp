@@ -1,4 +1,6 @@
 #include "SibylJSON.hpp"
+#include <jansson.h>
+#include <cstdlib>
 
 #include <cmath>
 #include <iostream>
@@ -76,6 +78,24 @@ int main() {
     check(serialized.find("\"observation\"") != std::string::npos
           && serialized.find("filter transition") != std::string::npos,
           "observation marker survives portable composition serialization");
+
+    auto evolving = sibyl::parseCompositionJson(R"({"patterns":{"p":{"length":4,"evolution":{"velocity":0.2,"gate":0.1,"glideMs":40,"mod":0.5,"mod2":1,"mod3":2},"steps":[{"step":0,"note":"E2","evolve":false}]}}})", 1);
+    check(evolving.valid && evolving.warnings.empty(), "repeat evolution validates without ignored fields");
+    if (evolving.valid) {
+        const auto& original = evolving.composition->patterns.at("p");
+        json_t* envelope = json_loads(sibyl::serializeFullCompositionJson(*evolving.composition).c_str(), 0, nullptr);
+        char* body = json_dumps(json_object_get(envelope, "composition"), JSON_COMPACT);
+        auto roundTrip = sibyl::parseCompositionJson(body, 2);
+        std::free(body);
+        json_decref(envelope);
+        check(roundTrip.valid && roundTrip.composition->patterns.at("p").evolution == original.evolution
+              && !roundTrip.composition->patterns.at("p").steps[0].evolve,
+              "evolution depths and protected events survive serialization");
+    }
+    expectInvalid(R"({"patterns":{"p":{"evolution":[]}}})", "patterns.p.evolution", "evolution must be an object");
+    expectInvalid(R"({"patterns":{"p":{"evolution":{"velocity":-0.1}}}})", "patterns.p.evolution.velocity", "negative evolution depth rejected");
+    expectInvalid(R"({"patterns":{"p":{"evolution":{"mod3":21}}}})", "patterns.p.evolution.mod3", "unbounded modulation depth rejected");
+    expectInvalid(R"({"patterns":{"p":{"length":1,"steps":[{"step":0,"note":"C3","evolve":1}]}}})", "patterns.p.steps[0].evolve", "event protection requires a boolean");
 
     auto forwardCompatible = sibyl::parseCompositionJson(R"({"meta":{"bpm":120,"futureColor":"violet"},"futureTop":7})", 1);
     check(forwardCompatible.valid && hasPath(forwardCompatible.warnings, "meta.futureColor") && hasPath(forwardCompatible.warnings, "futureTop"),

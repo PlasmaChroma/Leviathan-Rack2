@@ -59,7 +59,7 @@ double preservedPatternPhase(double elapsedBeats, double replacementDurationBeat
 }
 
 static bool sameEvent(const StepEvent& a, const StepEvent& b) {
-	return a.step == b.step && a.pitchType == b.pitchType && a.pitchV == b.pitchV &&
+	return a.evolve == b.evolve && a.step == b.step && a.pitchType == b.pitchType && a.pitchV == b.pitchV &&
 		a.degree == b.degree && a.note == b.note && a.octave == b.octave &&
 		a.hasGate == b.hasGate && a.gate == b.gate &&
 		a.hasVelocity == b.hasVelocity && a.velocity == b.velocity &&
@@ -72,7 +72,7 @@ static bool sameEvent(const StepEvent& a, const StepEvent& b) {
 }
 
 static bool samePattern(const Pattern& a, const Pattern& b) {
-	if (a.length != b.length || a.resolutionStr != b.resolutionStr || a.steps.size() != b.steps.size()) return false;
+	if (!(a.evolution == b.evolution) || a.length != b.length || a.resolutionStr != b.resolutionStr || a.steps.size() != b.steps.size()) return false;
 	for (size_t i = 0; i < a.steps.size(); ++i) if (!sameEvent(a.steps[i], b.steps[i])) return false;
 	return true;
 }

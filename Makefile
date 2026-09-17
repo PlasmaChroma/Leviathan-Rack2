@@ -98,6 +98,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/octavia_presence_spec \
 	build/tests/octavia_presence_routes_spec \
 	build/tests/octavia_console_mailbox_spec \
+	build/tests/sibyl_evolution_spec \
 	build/tests/sibyl_adoption_spec \
 	build/tests/sibyl_clock_estimator_spec \
 	build/tests/sibyl_hardware_control_spec \
@@ -477,6 +478,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/octavia_action_validation_spec)
 	$(call run_test_bin,build/tests/octavia_cable_validation_spec)
 	$(call run_test_bin,build/tests/octavia_console_mailbox_spec)
+	$(call run_test_bin,build/tests/sibyl_evolution_spec)
 	$(call run_test_bin,build/tests/sibyl_adoption_spec)
 	$(call run_test_bin,build/tests/sibyl_clock_estimator_spec)
 	$(call run_test_bin,build/tests/sibyl_hardware_control_spec)
@@ -683,10 +685,10 @@ build/tests/sibyl_transport_spec: tests/sibyl_transport_spec.cpp src/SibylTransp
 build/tests/sibyl_timing_spec: tests/sibyl_timing_spec.cpp src/SibylTiming.cpp src/SibylTiming.hpp src/SibylTypes.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/sibyl_timing_spec.cpp src/SibylTiming.cpp -o $@
 
-build/tests/sibyl_module_spec: tests/sibyl_module_spec.cpp src/Sibyl.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp | build/tests
+build/tests/sibyl_module_spec: tests/sibyl_module_spec.cpp src/Sibyl.cpp src/SibylEvolution.hpp src/SibylTypes.hpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_module_spec.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
-build/tests/sibyl_module_tsan_spec: tests/sibyl_module_spec.cpp src/Sibyl.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp | build/tests
+build/tests/sibyl_module_tsan_spec: tests/sibyl_module_spec.cpp src/Sibyl.cpp src/SibylEvolution.hpp src/SibylTypes.hpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp | build/tests
 	$(CXX) -std=c++17 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_module_spec.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
 build/tests/moirai_curves_spec: tests/moirai_curves_spec.cpp src/MoiraiCurves.hpp src/MoiraiTypes.hpp | build/tests
@@ -1028,3 +1030,6 @@ build/tests/octavia_presence_spec: tests/octavia_presence_spec.cpp src/OctaviaPr
 
 build/tests/octavia_presence_routes_spec: tests/octavia_presence_routes_spec.cpp src/OctaviaPresence.hpp src/OctaviaPresenceRoutes.hpp src/OctaviaServerLifecycle.hpp src/third_party/httplib.h | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -D_WIN32_WINNT=0x0A00 -DWINVER=0x0A00 -I$(RACK_DIR)/dep/include $< -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@ $(if $(filter win,$(ARCH_OS)),-lws2_32)
+
+build/tests/sibyl_evolution_spec: tests/sibyl_evolution_spec.cpp src/SibylEvolution.hpp src/SibylTypes.hpp | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc $< -o $@

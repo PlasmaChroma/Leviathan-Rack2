@@ -90,6 +90,85 @@ another scene boundary. Use `nextBeat` for responsive musical edits and `immedia
 emergency or explicitly requested changes. Default to `preserve` phase policy unless the
 musical intent requires changed patterns or the entire arrangement to restart.
 
+## Evolving Repeats (Expression Only)
+
+Check `capabilities.sibyl.repeatEvolution.version == 1` before authoring this
+extension; older builds can warn and ignore unknown fields. It is opt-in on each
+pattern and does not change pitches, event positions, probability, ties, or
+ratchet counts. Existing compositions retain their previous playback behavior.
+
+Add an `evolution` object to a full pattern supplied through `upsert_pattern`:
+
+```json
+{
+  "op": "upsert_pattern",
+  "id": "acid",
+  "pattern": {
+    "length": 16,
+    "resolution": "1/16",
+    "evolution": {
+      "velocity": 0.12,
+      "gate": 0.15,
+      "glideMs": 35,
+      "mod": 0.35,
+      "mod2": 0.5,
+      "mod3": 0
+    },
+    "steps": [
+      {"step": 0, "note": "E2", "gate": 0.6, "velocity": 0.9, "evolve": false},
+      {"step": 3, "note": "G2", "gate": 0.7, "velocity": 0.75},
+      {"step": 7, "note": "B2", "gate": 0.65, "glideMs": 60},
+      {"step": 11, "note": "D3", "gate": 0.5, "mod": 1.5}
+    ]
+  }
+}
+```
+
+This is a complete illustrative pattern, not a partial update. To enhance an
+existing pattern, read it first and preserve its events, resolution and length
+when adding `evolution`. Validate the candidate, use the latest revision, then
+verify the accepted pattern. Use `restartChanged` if the user wants to hear the
+authored first pass before evolution begins; otherwise prefer `preserve`.
+
+Each depth is the maximum **plus/minus offset** from its authored value, not a
+cumulative mutation. Omitted/zero depths disable that lane. Ranges are velocity
+0–1, gate 0–1024 steps, glideMs 0–3600000 ms, and each modulation depth 0–20 V.
+Use small musical depths; these are bounds, not recommended defaults.
+Velocity, gate and glide vary independently per event and pass. Each modulation
+lane uses one offset across the pass, preserving its relative authored contour.
+Results clamp to valid output ranges; ratcheted gates never exceed one step and
+authored zero-length gates remain zero. Existing macro modulation applies after
+evolution. An absent modulation value has a 0 V base and can still evolve.
+A zero authored glide can become a slide; negative results clamp to 0 ms.
+Set `evolve:false` on anchor events to preserve all of their authored expression
+(their normal macro inputs still apply).
+
+The first scheduled traversal after reset is authored. Subsequent traversals use
+seeded variation derived from `meta.seed`, randomness epoch, track channel, pass,
+event and lane. No new notes are generated and probability behavior is unchanged.
+These expressive values affect sound only where their Sibyl outputs are patched;
+for example, velocity needs a velocity-sensitive destination.
+
+`status.evolutionPasses` maps track IDs to zero-based runtime pass counters. A pass
+advances when the next scheduled event belongs to a new pattern cycle, or when an
+automatic scene entry restarts/realigns that track's phase. Scene repeats and
+arrangement loops therefore keep moving, including a one-scene looping patch.
+Continue-phase scene entries retain the ongoing pattern traversal. Empty/muted
+tracks have no scheduled events and do not advance. Counters belong to channels,
+not individual pattern IDs, so an automatic scene change does not reset them.
+A changed-length replacement under `preserve` rebases phase without inventing an
+extra variation pass.
+
+Explicit stop/reset, scene selection/restart, pattern restart, randomness restart,
+and adoption with `restartChanged`/`restartAll` reset the affected evolution
+cursors; pause/play preserves them. Full arrangement reset also resets the
+randomness epoch. With restart-phase tracks, this reproduces the same phrase and
+variation sequence; continue/alignGlobal phase policies retain their existing
+timing semantics. Reseed changes the
+variation seed without restarting phase. Runtime counters are not saved: reload
+starts from the authored first traversal. An early microshifted event belongs to
+its nominal pattern cycle, even when scheduled before that cycle's grid boundary.
+
 ## Composition State Versus Runtime State
 
 These controls are intentionally distinct:

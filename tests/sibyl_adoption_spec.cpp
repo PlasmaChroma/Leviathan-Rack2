@@ -81,6 +81,12 @@ int main() {
 	eventChanged.patterns["line"].steps[0].gate = 0.75f;
 	eventChanged.patterns["line"].steps[0].hasGate = true;
 	check(sibyl::changedTrackChannelMask(original, eventChanged) == (1u << 3), "pattern edits mark only their track channel");
+	auto evolved = original;
+	evolved.patterns["line"].evolution.velocity = .1f;
+	check(sibyl::changedTrackChannelMask(original, evolved) == (1u << 3), "evolution edits participate in restartChanged");
+	evolved = original;
+	evolved.patterns["line"].steps[0].evolve = false;
+	check(sibyl::changedTrackChannelMask(original, evolved) == (1u << 3), "event protection edits participate in restartChanged");
 	auto unrelated = original;
 	sibyl::TrackDef second; second.id = "lead"; second.channel = 7;
 	unrelated.tracks.push_back(second);

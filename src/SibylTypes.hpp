@@ -63,8 +63,25 @@ struct ObservationMarker {
 	std::string label;
 };
 
+// Symmetric maximum deviations from authored values; zero disables a lane.
+struct RepeatEvolution {
+	float velocity = 0.f;
+	float gate = 0.f; // pattern steps
+	float glideMs = 0.f;
+	float mod[3] {};
+	bool enabled() const {
+		return velocity != 0.f || gate != 0.f || glideMs != 0.f
+			|| mod[0] != 0.f || mod[1] != 0.f || mod[2] != 0.f;
+	}
+	bool operator==(const RepeatEvolution& b) const {
+		return velocity == b.velocity && gate == b.gate && glideMs == b.glideMs
+			&& mod[0] == b.mod[0] && mod[1] == b.mod[1] && mod[2] == b.mod[2];
+	}
+};
+
 struct StepEvent {
 	int step = 0;
+	bool evolve = true; // false protects this event from repeat evolution
 	PitchType pitchType = PitchType::PITCH_V;
 	float pitchV = 0.0f;
 	int degree = 0;
@@ -96,6 +113,7 @@ struct Pattern {
 	// rational tick representation (e.g. 1/16 = 1 beat / 4)
 	double resolutionBeats = 0.25; 
 	std::vector<StepEvent> steps;
+	RepeatEvolution evolution;
 	// Compiled O(1) sparse-event lookup for the realtime scheduler. Entries are
 	// indices into steps, or -1 for rests.
 	std::vector<int> eventIndexByStep;
