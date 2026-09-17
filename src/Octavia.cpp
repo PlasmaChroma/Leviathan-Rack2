@@ -3220,6 +3220,7 @@ static const NVGcolor WHITE = nvgRGB(255,255,255);
 struct OctaviaStatusWidget : TransparentWidget {
     Octavia* module = nullptr;
     OctaviaPresenceFade fade;
+    float activityGlow = 0.f;
     const std::string atlasPath;
 
     explicit OctaviaStatusWidget(Octavia* module) : module(module),
@@ -3239,7 +3240,15 @@ struct OctaviaStatusWidget : TransparentWidget {
             module->serverRunning.load(std::memory_order_relaxed),
             module->presenceStartupFailed.load(std::memory_order_relaxed), now)
             : OctaviaPresenceState::Idle;
-        if (fade.update(next, now)) {
+        // Read the same brightness values as the RD/WR widgets, so the
+        // artwork follows their existing envelope without audio-thread work.
+        const float nextGlow = module ? clamp(std::max(
+            module->lights[Octavia::READ_ACTIVITY_LIGHT].getBrightness(),
+            module->lights[Octavia::WRITE_ACTIVITY_LIGHT].getBrightness()), 0.f, 1.f) : 0.f;
+        const bool glowChanged = nextGlow != activityGlow;
+        activityGlow = nextGlow;
+        const bool fadeChanged = fade.update(next, now);
+        if (fadeChanged || glowChanged) {
             if (auto* framebuffer = dynamic_cast<widget::FramebufferWidget*>(parent))
                 framebuffer->setDirty();
         }
@@ -3262,15 +3271,24 @@ struct OctaviaStatusWidget : TransparentWidget {
         // regions retain brightness rather than dipping at the midpoint.
         nvgGlobalCompositeOperation(args.vg, NVG_LIGHTER);
         const auto& weights = fade.weights();
-        for (int cell = 0; cell < 6; ++cell) {
-            if (weights[cell] <= 0.f) continue;
-            const auto paint = nvgImagePattern(args.vg,
-                x - (cell % 3) * side, y - (cell / 3) * side,
-                side * 3.f, side * 2.f, 0.f, handle, weights[cell]);
-            nvgBeginPath(args.vg);
-            nvgRect(args.vg, x, y, side, side);
-            nvgFillPaint(args.vg, paint);
-            nvgFill(args.vg);
+        auto drawCells = [&](float opacity) {
+            for (int cell = 0; cell < 6; ++cell) {
+                if (weights[cell] <= 0.f) continue;
+                const auto paint = nvgImagePattern(args.vg,
+                    x - (cell % 3) * side, y - (cell / 3) * side,
+                    side * 3.f, side * 2.f, 0.f, handle, weights[cell] * opacity);
+                nvgBeginPath(args.vg);
+                nvgRect(args.vg, x, y, side, side);
+                nvgFillPaint(args.vg, paint);
+                nvgFill(args.vg);
+            }
+        };
+        drawCells(1.f);
+        if (activityGlow > 0.f) {
+            // Add the image's own RGB (up to +18%) without increasing alpha:
+            // transparent edges stay transparent and no colored tint is added.
+            nvgGlobalCompositeBlendFuncSeparate(args.vg, NVG_ONE, NVG_ONE, NVG_ZERO, NVG_ONE);
+            drawCells(0.18f * activityGlow);
         }
         nvgRestore(args.vg);
     }

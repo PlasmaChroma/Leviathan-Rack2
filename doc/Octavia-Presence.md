@@ -75,11 +75,20 @@ States are lowercase. Unknown fields/states, duplicate JSON keys, noninteger or
 out-of-range leases, and malformed bodies are rejected with 400. Bodies over
 1,024 bytes are rejected with 413. Rejected writes preserve the existing lease.
 
+## Read/write brightness overlay
+
+The artwork follows the brighter RD/WR LED with a subtle additive brightness
+pulse, up to 18% additional RGB at full activity. It uses the existing LED
+brightness and decay, including while an explicit presence override is latched.
+The overlay reuses the currently crossfading cells, adds no tint, and preserves
+image alpha. Simultaneous reads and writes do not double the boost. At rest the
+artwork returns to normal brightness and remains cached.
+
 ## Rendering and validation
 
 All cells share the existing raster mipmap cache and its NanoVG lifecycle
 helpers. The widget retains no raw context-owned image handles. Weighted atlas
-cells are added into the dedicated transparent status framebuffer. Only fades
+cells are added into the dedicated transparent status framebuffer. Only fades and active RD/WR brightness changes
 invalidate it repeatedly; the finished image remains cached. State selection and
 blending run on the UI thread, with no extra audio-thread work.
 
