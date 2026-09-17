@@ -48,6 +48,7 @@ class ServerContractTest(unittest.TestCase):
             "vcv_semantic_get_status", "vcv_semantic_command",
             "vcv_moirai_get_capabilities", "vcv_moirai_get_bank", "vcv_moirai_get_program",
             "vcv_moirai_validate", "vcv_moirai_edit", "vcv_moirai_get_status", "vcv_moirai_command",
+            "vcv_octavia_get_presence", "vcv_octavia_set_presence",
             "vcv_octavia_get_monitors", "vcv_octavia_create_snapshot", "vcv_octavia_get_snapshot",
             "vcv_octavia_start_recording", "vcv_octavia_get_recording",
             "vcv_octavia_start_analysis_capture", "vcv_octavia_get_analysis_capture",

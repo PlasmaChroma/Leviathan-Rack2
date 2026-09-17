@@ -37,6 +37,40 @@ BRIDGE_TOKEN = os.environ.get("OCTAVIA_TOKEN", "")
 BRIDGE_HEADERS = {"X-Octavia-Token": BRIDGE_TOKEN} if BRIDGE_TOKEN else {}
 
 
+# Presence describes the agent's task, not the individual HTTP request.
+class PresenceInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    state: Literal["auto", "idle", "inspecting", "thinking", "working", "error", "sleeping"] = Field(
+        ..., description="thinking: planning/preparation; working: actively editing Rack; inspecting: examining patch/signals; auto: release override")
+    lease_ms: int = Field(30000, ge=1000, le=300000, strict=True,
+                          description="Override lifetime in milliseconds. Renew by setting again; expires back to automatic.")
+
+
+@mcp.tool(name="vcv_octavia_get_presence",
+          annotations={"title": "Get Octavia Presence", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_octavia_get_presence() -> str:
+    """Read the target state, automatic state, and remaining override lease."""
+    try:
+        return json.dumps(await _envelope_call("presence"), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool(name="vcv_octavia_set_presence",
+          annotations={"title": "Set Octavia Presence", "readOnlyHint": False, "destructiveHint": False})
+async def vcv_octavia_set_presence(params: PresenceInput) -> str:
+    """Latch task presence across calls: thinking for planning, working for Rack edits,
+    inspecting for examination. Renew with another set; state='auto' releases early.
+    Runtime-only, no patch save or undo entry. Latest setter wins; expires automatically.
+    """
+    try:
+        return json.dumps(await _envelope_call("presence", "POST", {
+            "state": params.state, "leaseMs": params.lease_ms,
+        }), indent=2)
+    except Exception as e:
+        return _err(e)
+
+
 # ── Shared helpers ────────────────────────────────────────────────────────────
 
 async def _normalize_endpoint(endpoint: str) -> str:

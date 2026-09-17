@@ -80,7 +80,7 @@ class OctaviaMonitoringPanelContractTest(unittest.TestCase):
 
     def test_server_auto_start_delegates_to_tested_lifecycle(self):
         self.assertIn("if (module) module->startServer();", SOURCE)
-        self.assertIn("serverLifecycle.start(octaviaPort());", SOURCE)
+        self.assertIn("presenceStartupFailed = serverLifecycle.start(octaviaPort()) < 0;", SOURCE)
         # Single-attempt concurrency is exercised by octavia_server_lifecycle_spec.
         self.assertIn("octavia::ServerLifecycle serverLifecycle{svr, serverRunning}", SOURCE)
 

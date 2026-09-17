@@ -95,6 +95,8 @@ TEST_BINS_NON_RACK := \
 	build/tests/octavia_semantic_control_spec \
 	build/tests/octavia_action_validation_spec \
 	build/tests/octavia_cable_validation_spec \
+	build/tests/octavia_presence_spec \
+	build/tests/octavia_presence_routes_spec \
 	build/tests/octavia_console_mailbox_spec \
 	build/tests/sibyl_adoption_spec \
 	build/tests/sibyl_clock_estimator_spec \
@@ -458,6 +460,8 @@ test-spsc-snapshot-tsan: build/tests/spsc_latest_snapshot_tsan_spec
 	@TSAN_OPTIONS=halt_on_error=1 build/tests/spsc_latest_snapshot_tsan_spec
 
 test-fast: test-build-fast
+	$(call run_test_bin,build/tests/octavia_presence_spec)
+	$(call run_rack_test_bin,build/tests/octavia_presence_routes_spec)
 	$(call run_test_bin,build/tests/debug_terminal_timing_spec)
 	$(call run_test_bin,build/tests/adaptive_visual_update_spec)
 	$(call run_test_bin,build/tests/halo_metrics_scope_spec)
@@ -1018,3 +1022,9 @@ build/tests/$(ARCH_NAME)/bifurx_gl_spec$(if $(ARCH_WIN),.exe,): tests/bifurx_gl_
 # Each translation unit contributes prerequisites to the same test target.
 -include build/tests/$(ARCH_NAME)/bifurx_runtime_spec$(if $(ARCH_WIN),.exe,).d
 -include build/tests/$(ARCH_NAME)/bifurx_gl_spec$(if $(ARCH_WIN),.exe,).d
+
+build/tests/octavia_presence_spec: tests/octavia_presence_spec.cpp src/OctaviaPresence.hpp | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread -Isrc $< -o $@
+
+build/tests/octavia_presence_routes_spec: tests/octavia_presence_routes_spec.cpp src/OctaviaPresence.hpp src/OctaviaPresenceRoutes.hpp src/OctaviaServerLifecycle.hpp src/third_party/httplib.h | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -D_WIN32_WINNT=0x0A00 -DWINVER=0x0A00 -I$(RACK_DIR)/dep/include $< -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@ $(if $(filter win,$(ARCH_OS)),-lws2_32)

@@ -43,6 +43,45 @@ actual cables. Summary fields are investigative signals: zero output can be inte
 polyphony can originate upstream, bypass behavior varies, and unpatched ports are not
 automatically defects.
 
+## Task Presence
+
+When the connected build exposes `vcv_octavia_set_presence`, use it to hold the
+panel icon for a meaningful phase of work rather than following every HTTP call:
+
+- `inspecting`: examining the patch, routing, or physically monitored signals.
+- `thinking`: planning or preparing actions to execute later.
+- `working`: actively editing Rack.
+
+Call with `state` and optional `lease_ms` (default 30000; range 1000–300000).
+Choose enough time for asynchronous work; repeat to renew or change state. Use
+`state="auto"` when finished to release early. The lease otherwise expires back
+to automatic, and server stop clears it. `vcv_octavia_get_presence` reports the
+target and remaining lease. These are agent-authored task labels, not automatic
+observation of model reasoning. Presence changes do not save or alter musical
+patch state. The latest setter wins; coordinate agents rather than competing for
+this single display. Older bridges may lack the tools/routes; continue the task
+without them rather than treating presence as required infrastructure.
+
+Example for a user-requested patch enhancement (tool-call pseudocode):
+
+```text
+vcv_get_status()
+vcv_octavia_set_presence(params={"state":"inspecting","lease_ms":60000})
+  Read modules, cables, and the relevant musical state.
+vcv_octavia_set_presence(params={"state":"thinking","lease_ms":60000})
+  Plan the changes and validate the proposed sequence.
+vcv_octavia_set_presence(params={"state":"working","lease_ms":60000})
+  Apply the authorized edits; keep Working through incidental readbacks.
+vcv_octavia_set_presence(params={"state":"inspecting","lease_ms":30000})
+  Verify playback and physically monitored output.
+vcv_octavia_set_presence(params={"state":"auto"})
+  Return to automatic presence before reporting completion.
+```
+
+Set each state before doing that work; do not rapidly cycle the calls as a demo.
+Skip phases the task does not need. If work outlasts its lease, renew the same
+state before expiry. Release on an early exit too, when the bridge is reachable.
+
 ## Physical Observation Boundary
 
 Octavia hears only signals physically cabled to its monitor inputs. Never imply that it

@@ -34,6 +34,8 @@
 #include "DebugTerminalTransport.hpp"
 #include "third_party/httplib.h"
 #include "OctaviaServerLifecycle.hpp"
+#include "OctaviaPresence.hpp"
+#include "OctaviaPresenceRoutes.hpp"
 #include <thread>
 #include <atomic>
 #include <mutex>
@@ -288,6 +290,8 @@ struct Octavia : Module {
         MONITOR_C_LIGHT == 7 && MONITOR_D_LIGHT == 8 && LIGHTS_LEN == 9,
         "Octavia monitor light IDs are append-only");
 
+    OctaviaPresence presence;
+    std::atomic<bool> presenceStartupFailed{false};
     std::atomic<bool> serverRunning{false};
     std::atomic<bool> serverTogglePending{false};
     std::atomic<uint64_t> readActivityGeneration{0};
@@ -1996,12 +2000,19 @@ struct Octavia : Module {
                 readActivityGeneration.fetch_add(1, std::memory_order_relaxed);
             else
                 writeActivityGeneration.fetch_add(1, std::memory_order_relaxed);
+            presence.pulse(OctaviaPresence::activity(req.method, req.path));
             return httplib::Server::HandlerResponse::Unhandled;
+        });
+        svr.set_logger([this](const httplib::Request& req, const httplib::Response& res) {
+            presence.pulse(res.status >= 400 ? OctaviaPresenceState::Error
+                : OctaviaPresence::activity(req.method, req.path));
         });
         svr.Get("/status", [this](const httplib::Request&, httplib::Response& res) {
             std::string b = "{"+jStr("running")+": "+(serverRunning?"true":"false")+", "+jStr("port")+": "+std::to_string(octaviaPort())+", "+jStr("version")+": "+jStr("2.12.0")+"}";
             res.set_content(b,"application/json");
         });
+
+        octavia::registerPresenceRoutes(svr, presence, serverRunning, presenceStartupFailed);
 
         // ── Octavia Console mailbox ─────────────────────────────────────────
         // Text exchange is control/UI work only. The audio thread never reads
@@ -3186,9 +3197,12 @@ struct Octavia : Module {
     }
 
     void startServer() {
-        serverLifecycle.start(octaviaPort());
+        presence.reset();
+        presenceStartupFailed = serverLifecycle.start(octaviaPort()) < 0;
     }
     void stopServer() {
+        presence.reset();
+        presenceStartupFailed = false;
         serverLifecycle.stop();
     }
 
@@ -3205,21 +3219,59 @@ static const NVGcolor WHITE = nvgRGB(255,255,255);
 
 struct OctaviaStatusWidget : TransparentWidget {
     Octavia* module = nullptr;
-    OctaviaStatusWidget(Octavia* module, Vec sizeMm)
-        : module(module) {
-        // The shared raster widget owns mipmap/context handling and fits the
-        // image into the SVG anchor without stretching its aspect ratio.
-        addChild(visual_assets::createAspectFitRasterImageWidget(
-            "res/icon/Octavia-33.png", math::Rect(Vec(0.f, 0.f), sizeMm)));
-    }
+    OctaviaPresenceFade fade;
+    const std::string atlasPath;
 
+    explicit OctaviaStatusWidget(Octavia* module) : module(module),
+        atlasPath(asset::plugin(pluginInstance, "res/icon/Octavia_6_States_256.png")) {}
+
+    void onContextCreate(const ContextCreateEvent& e) override {
+        visual_assets::onRasterContextCreate(e.vg);
+        TransparentWidget::onContextCreate(e);
+    }
+    void onContextDestroy(const ContextDestroyEvent& e) override {
+        visual_assets::onRasterContextDestroy(e.vg);
+        TransparentWidget::onContextDestroy(e);
+    }
+    void step() override {
+        const auto now = OctaviaPresence::nowMs();
+        const auto next = module ? module->presence.state(
+            module->serverRunning.load(std::memory_order_relaxed),
+            module->presenceStartupFailed.load(std::memory_order_relaxed), now)
+            : OctaviaPresenceState::Idle;
+        if (fade.update(next, now)) {
+            if (auto* framebuffer = dynamic_cast<widget::FramebufferWidget*>(parent))
+                framebuffer->setDirty();
+        }
+        TransparentWidget::step();
+    }
     void draw(const DrawArgs& args) override {
-        // Browser previews have no module instance; show the octopus fully lit.
-        const bool serverRunning = !module
-            || module->serverRunning.load(std::memory_order_relaxed);
+        const float side = std::min(box.size.x, box.size.y);
+        if (side <= 1.f || !APP || !APP->window) return;
+        // Shared cache validates image dimensions/owner context and recreates
+        // lazily. No raw image handle is retained by this widget.
+        auto image = APP->window->loadImage(atlasPath);
+        const int handle = visual_assets::loadRasterMipmapHandle(args.vg, image, atlasPath);
+        if (handle < 0) return;
+        const float x = (box.size.x - side) * 0.5f;
+        const float y = (box.size.y - side) * 0.5f;
         nvgSave(args.vg);
-        nvgGlobalAlpha(args.vg, serverRunning ? 1.f : 0.28f);
-        TransparentWidget::draw(args);
+        nvgIntersectScissor(args.vg, x, y, side, side);
+        // The containing framebuffer is transparent and owns only this art.
+        // Add weighted premultiplied pixels for a true dissolve: shared opaque
+        // regions retain brightness rather than dipping at the midpoint.
+        nvgGlobalCompositeOperation(args.vg, NVG_LIGHTER);
+        const auto& weights = fade.weights();
+        for (int cell = 0; cell < 6; ++cell) {
+            if (weights[cell] <= 0.f) continue;
+            const auto paint = nvgImagePattern(args.vg,
+                x - (cell % 3) * side, y - (cell / 3) * side,
+                side * 3.f, side * 2.f, 0.f, handle, weights[cell]);
+            nvgBeginPath(args.vg);
+            nvgRect(args.vg, x, y, side, side);
+            nvgFillPaint(args.vg, paint);
+            nvgFill(args.vg);
+        }
         nvgRestore(args.vg);
     }
 };
@@ -3418,7 +3470,7 @@ struct OctaviaWidget : ModuleWidget {
         statusFramebuffer = new widget::FramebufferWidget;
         statusFramebuffer->box.pos = mm2px(statusRectMm.pos);
         statusFramebuffer->box.size = mm2px(statusRectMm.size);
-        OctaviaStatusWidget* status = new OctaviaStatusWidget(module, statusRectMm.size);
+        OctaviaStatusWidget* status = new OctaviaStatusWidget(module);
         status->box.size = statusFramebuffer->box.size;
         statusFramebuffer->addChild(status);
         addChild(statusFramebuffer);
