@@ -1,5 +1,6 @@
 #include "SibylEdit.hpp"
 #include "SibylNoteEdit.hpp"
+#include "SibylAssignmentEdit.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -91,12 +92,31 @@ bool applyOperation(json_t*& working, json_t* op, size_t index, EditResult& resu
 
     if (isNoteOperation(name)) return applyNoteOperation(working, op, index, result);
     const std::string operationName = name;
-    if (operationName == "upsert_automation" || operationName == "delete_automation" ||
-        operationName == "upsert_progression" || operationName == "delete_progression" ||
+    if (operationName == "set_scene_assignment" || operationName == "update_scene_assignment")
+        return applyAssignmentOperation(working, op, index, result);
+    if (operationName == "upsert_progression" || operationName == "delete_progression" ||
         operationName == "set_default_harmony" || operationName == "set_scene_harmony" ||
-        operationName == "inherit_scene_harmony" || operationName == "voice_progression" ||
-        operationName == "set_scene_assignment" || operationName == "update_scene_assignment") {
+        operationName == "inherit_scene_harmony" || operationName == "voice_progression") {
         return fail(result, "unsupported_feature", path + ".op", "Operation belongs to a later milestone.");
+    }
+    if (operationName == "upsert_automation" || operationName == "delete_automation") {
+        const bool upsert=operationName=="upsert_automation";
+        const char* key; json_t* value;
+        json_object_foreach(op,key,value) if(std::string(key)!="op" && std::string(key)!="id" && (!upsert || std::string(key)!="automation"))
+            return fail(result,"invalid_operation",path+"."+key,"Unknown automation operation field");
+        const char* id=requiredString(op,"id");
+        if(!id || !*id || std::string(id).size()>64)return fail(result,"invalid_operation",path+".id","Expected automation ID");
+        json_t* definitions=json_object_get(working,"automation");
+        if(!definitions){definitions=json_object();json_object_set_new(working,"automation",definitions);}
+        if(upsert){
+            json_t* curve=requiredObject(op,"automation");
+            if(!curve)return fail(result,"invalid_operation",path+".automation","Expected complete curve object");
+            json_object_set(definitions,id,curve);
+        }else{
+            if(!json_object_get(definitions,id))return fail(result,"object_not_found",path+".id","Automation not found");
+            json_object_del(definitions,id);
+        }
+        return true;
     }
 	if (std::string(name) == "replace_composition") {
 		json_t* composition = requiredObject(op, "composition");
@@ -208,6 +228,9 @@ bool applyOperation(json_t*& working, json_t* op, size_t index, EditResult& resu
 		json_t* scene = json_array_get(arrangement, size_t(found));
 		json_t* sceneTracks = json_object_get(scene, "tracks");
 		if (!sceneTracks || !json_is_object(sceneTracks)) return fail(result, "invalid_composition", path, "Scene tracks must be an object.");
+		json_t* previous = json_object_get(sceneTracks, trackId);
+		if (json_is_object(previous) && (json_object_get(previous, "phaseMode") || json_object_get(previous, "overrides")))
+			result.warnings.push_back({path, "assignment_attributes_cleared: legacy set_scene_track discarded phase/override attributes", "assignment_attributes_cleared"});
 		if (json_is_null(patternJ)) json_object_del(sceneTracks, trackId);
 		else json_object_set(sceneTracks, trackId, patternJ);
 		return true;

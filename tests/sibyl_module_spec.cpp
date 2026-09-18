@@ -161,9 +161,13 @@ void processOneSample(SibylModule& module) {
 }
 
 #include "sibyl_condition_cases.hpp"
+#include "sibyl_override_cases.hpp"
+#include "sibyl_automation_cases.hpp"
 
 int main() {
     testConditions();
+    testOverrides();
+    testAutomation();
     {
         auto parsed = sibyl::parseCompositionJson(R"({"tracks":[{"id":"v","channel":0}],"patterns":{"p":{"steps":[{"step":0,"note":"C3","gate":4}]}},"arrangement":[{"id":"s","tracks":{"v":"p"}}]})", 1);
         check(parsed.valid, "P1 fixture compiles");

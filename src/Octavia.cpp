@@ -3050,7 +3050,7 @@ struct Octavia : Module {
             for (const char* key : {"pattern_id", "cursor"})
                 if (r.has_param(key)) request+=","+jStr(key)+":"+jStr(r.get_param_value(key));
             // Forward typed JSON query values; musical interpretation stays in Sibyl.
-            for (const char* key : {"selector", "fields", "page_size"}) if (r.has_param(key)) {
+            for (const char* key : {"selector", "fields", "page_size", "sample_beats"}) if (r.has_param(key)) {
                 json_error_t error {};
                 json_t* value = json_loads(r.get_param_value(key).c_str(), JSON_DECODE_ANY, &error);
                 if (!value) { res.status = 400; res.set_content("{\"ok\":false,\"error\":{\"code\":\"invalid_request\",\"message\":\"Invalid JSON query value\"}}", "application/json"); return; }
@@ -3087,7 +3087,7 @@ struct Octavia : Module {
             for (const char* key : {"pattern_id", "cursor"})
                 if (r.has_param(key)) request+=","+jStr(key)+":"+jStr(r.get_param_value(key));
             // Forward typed JSON query values; musical interpretation stays in Sibyl.
-            for (const char* key : {"selector", "fields", "page_size"}) if (r.has_param(key)) {
+            for (const char* key : {"selector", "fields", "page_size", "sample_beats"}) if (r.has_param(key)) {
                 json_error_t error {};
                 json_t* value = json_loads(r.get_param_value(key).c_str(), JSON_DECODE_ANY, &error);
                 if (!value) { res.status = 400; res.set_content("{\"ok\":false,\"error\":{\"code\":\"invalid_request\",\"message\":\"Invalid JSON query value\"}}", "application/json"); return; }

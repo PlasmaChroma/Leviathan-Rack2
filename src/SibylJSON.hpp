@@ -31,6 +31,6 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision);
 std::string serializeSummaryJson(const Composition& comp);
 std::string serializeFullCompositionJson(const Composition& comp);
 std::string serializePatternViewJson(const Composition& comp, const std::string& patternId);
-std::string serializeSceneViewJson(const Composition& comp, const std::string& sceneId);
+std::string serializeSceneViewJson(const Composition& comp, const std::string& sceneId, bool effectiveExpressions = false);
 
 } // namespace sibyl

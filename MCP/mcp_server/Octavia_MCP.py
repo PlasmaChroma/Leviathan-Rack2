@@ -401,10 +401,11 @@ async def vcv_octavia_console_respond(params: OctaviaConsoleResponseInput) -> st
 
 
 class SibylCompositionInput(SibylModuleInput):
-    view: Literal["summary", "full", "pattern", "scene", "notes"] = Field(
+    view: Literal["summary", "full", "pattern", "scene", "notes", "automation"] = Field(
         "summary", description="Compact summary, full composition, or one named pattern/scene"
     )
     id: Optional[str] = Field(None, description="Pattern or scene ID; required by pattern and scene views")
+    sample_beats: Optional[list[float]] = Field(None, max_length=256)
     pattern_id: Optional[str] = None
     selector: Optional[dict] = None
     fields: Optional[list[str] | Literal["full"]] = None
@@ -461,10 +462,10 @@ async def vcv_sibyl_get_composition(params: SibylCompositionInput) -> str:
         query = {"view": params.view}
         if params.id is not None:
             query["id"] = params.id
-        for field in ("pattern_id", "selector", "fields", "page_size", "cursor"):
+        for field in ("pattern_id", "selector", "fields", "page_size", "cursor", "sample_beats"):
             value = getattr(params, field)
             if value is not None:
-                query[field] = json.dumps(value, separators=(",", ":")) if field in ("selector", "fields") else value
+                query[field] = json.dumps(value, separators=(",", ":")) if field in ("selector", "fields", "sample_beats") else value
         return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/composition?{urlencode(query)}"), indent=2)
     except Exception as e:
         return _err(e)

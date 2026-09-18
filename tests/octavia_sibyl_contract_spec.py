@@ -9,6 +9,12 @@ MCP_ADAPTER = (ROOT / "MCP" / "mcp_server" / "Octavia_MCP.py").read_text(encodin
 
 
 class OctaviaSibylContractTest(unittest.TestCase):
+    def test_automation_samples_use_typed_query_forwarding(self):
+        self.assertIn('"notes", "automation"', MCP_ADAPTER)
+        self.assertIn('sample_beats: Optional[list[float]]', MCP_ADAPTER)
+        self.assertIn('("selector", "fields", "sample_beats")', MCP_ADAPTER)
+        self.assertGreaterEqual(OCTAVIA.count('"sample_beats"'), 2)
+
     def test_all_semantic_routes_are_present(self):
         for route in ("capabilities", "composition", "validate", "edit", "status", "transport"):
             self.assertIn(f'/sibyl/(\\d+)/{route}', OCTAVIA)

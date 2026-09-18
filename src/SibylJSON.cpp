@@ -1,4 +1,5 @@
 #include "SibylJSON.hpp"
+#include "SibylAutomationJSON.hpp"
 #include <jansson.h>
 #include <cmath>
 #include <set>
@@ -94,6 +95,37 @@ static void validateEnumField(json_t* object, const char* key, const std::string
 }
 
 static bool validId(const std::string& value) { return !value.empty() && value.size() <= 64; }
+
+static AssignmentOverrides parseOverrides(json_t* object, const std::string& path, ParseResult& res) {
+    AssignmentOverrides result;
+    if (!object) return result;
+    result.present = true;
+    if (!json_is_object(object)) { addError(res, path, "Expected overrides object", "invalid_override"); return result; }
+    const char* key; json_t* value;
+    json_object_foreach(object, key, value) {
+        const int field = overrideFieldIndex(key);
+        if (field < 0) { addError(res, path + "." + key, "Unknown override field", "invalid_override"); continue; }
+        const auto& info = overrideFields()[field];
+        const double number = json_number_value(value);
+        if (!json_is_number(value) || (field == TRANSPOSE && !json_is_integer(value)) ||
+                !std::isfinite(number) || number < info.minimum || number > info.maximum) {
+            addError(res, path + "." + key, "Override has invalid type or value outside authored bounds", "invalid_override");
+            continue;
+        }
+        result.fields |= uint16_t(1u << field);
+        result.values[field] = float(number);
+    }
+    return result;
+}
+
+static json_t* overridesToJson(const AssignmentOverrides& overrides) {
+    json_t* object = json_object();
+    for (int field = 0; field < OVERRIDE_COUNT; ++field) if (overrides.fields & (1u << field)) {
+        json_object_set_new(object, overrideFields()[field].name, field == TRANSPOSE ?
+            json_integer(int(overrides.values[field])) : json_real(overrides.values[field]));
+    }
+    return object;
+}
 
 static Condition parseCondition(json_t* object, const std::string& path, ParseResult& res) {
     Condition result;
@@ -264,7 +296,7 @@ json_t* normalizeComposition(json_t* input, ParseResult& res) {
                 version != 3 ? "schema_version_required" : "unsupported_feature"); valid = false;
         }
     };
-    feature(source, "automation", "", false); feature(source, "harmony", "", false);
+    feature(source, "automation", "", true); feature(source, "harmony", "", false);
     const char* key; json_t* pattern;
     json_object_foreach(json_object_get(source, "patterns"), key, pattern) {
         const std::string path = "patterns." + std::string(key);
@@ -282,7 +314,7 @@ json_t* normalizeComposition(json_t* input, ParseResult& res) {
         feature(scene, "harmony", path, false);
         json_t* assignment;
         json_object_foreach(json_object_get(scene, "tracks"), key, assignment)
-            feature(assignment, "overrides", path + ".tracks." + key, false);
+            feature(assignment, "overrides", path + ".tracks." + key, true);
     }
     if (!valid) return nullptr;
     json_t* normalized = json_deep_copy(source);
@@ -309,7 +341,7 @@ static uint8_t observationMonitorBit(const std::string& name) {
 
 static void validateCompositionSchema(json_t* root, ParseResult& res) {
     if (!json_is_object(root)) { addError(res, "$", "Composition must be a JSON object"); return; }
-    warnUnknownFields(root, "", {"schemaVersion", "meta", "clock", "transport", "tracks", "patterns", "arrangement", "macros"}, res);
+    warnUnknownFields(root, "", {"schemaVersion", "meta", "clock", "transport", "tracks", "patterns", "arrangement", "macros", "automation"}, res);
 
     if (requireObjectIfPresent(root, "meta", "", res)) {
         json_t* meta = json_object_get(root, "meta");
@@ -512,12 +544,21 @@ static void validateCompositionSchema(json_t* root, ParseResult& res) {
                 std::string assignedPattern;
                 if (json_is_string(assignment)) assignedPattern = json_string_value(assignment);
                 else if (json_is_object(assignment)) {
-                    warnUnknownFields(assignment, assignmentPath, {"pattern", "phaseMode"}, res);
+                    warnUnknownFields(assignment, assignmentPath, {"pattern", "phaseMode", "overrides"}, res);
+                    if (json_object_get(assignment, "overrides")) {
+                        const char* attribute; json_t* attributeValue;
+                        json_object_foreach(assignment, attribute, attributeValue)
+                            if (!isOneOf(attribute, {"pattern", "phaseMode", "overrides"}))
+                                addError(res, assignmentPath + "." + attribute, "Unknown assignment field", "invalid_override");
+                    }
+                    parseOverrides(json_object_get(assignment, "overrides"), assignmentPath + ".overrides", res);
                     validateStringField(assignment, "pattern", assignmentPath, 64, res);
                     validateEnumField(assignment, "phaseMode", assignmentPath, {"restart", "continue", "alignGlobal"}, res);
                     json_t* assigned = json_object_get(assignment, "pattern");
                     if (!assigned) addError(res, assignmentPath + ".pattern", "Required field is missing");
                     else if (json_is_string(assigned)) assignedPattern = json_string_value(assigned);
+                    if (json_object_get(assignment,"overrides") && assignedPattern.empty())
+                        addError(res, assignmentPath + ".pattern", "Overrides require a nonempty pattern reference", "invalid_override");
                 } else if (!json_is_null(assignment)) addError(res, assignmentPath, "Expected pattern id, assignment object, or null");
                 if (!assignedPattern.empty() && !patternIds.count(assignedPattern)) addError(res, assignmentPath, "Undefined pattern referenced: " + assignedPattern);
             }
@@ -946,6 +987,7 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
             s.name = getString(val, "name");
             s.description = getString(val, "description");
             s.lengthBeats = getNumber(val, "lengthBeats", 16.0f);
+            s.authoredLengthBeats = json_object_get(val,"lengthBeats") ? json_number_value(json_object_get(val,"lengthBeats")) : 16.;
             s.repeats = getInteger(val, "repeats", 1);
             s.phaseMode = parsePhaseMode(getString(val, "phaseMode", "restart"));
             
@@ -958,6 +1000,8 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
                         ta.patternId = json_string_value(tv);
                     } else if (json_is_object(tv)) {
                         ta.patternId = getString(tv, "pattern");
+                        ta.overrides = parseOverrides(json_object_get(tv, "overrides"),
+                            "arrangement[" + std::to_string(idx) + "].tracks." + tk + ".overrides", res);
                         json_t* pmJ = json_object_get(tv, "phaseMode");
                         if (pmJ) {
                             ta.hasPhaseModeOverride = true;
@@ -970,6 +1014,13 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
                     }
                     if (!ta.patternId.empty() && comp.patterns.find(ta.patternId) == comp.patterns.end()) {
                         addError(res, "arrangement[" + std::to_string(idx) + "].tracks." + tk, "Undefined pattern referenced: " + ta.patternId);
+                    }
+                    auto assigned = comp.patterns.find(ta.patternId);
+                    if (assigned != comp.patterns.end()) for (const auto& event : assigned->second.steps) {
+                        const float pitch = ta.overrides.pitch(event.compiledPitchV);
+                        if (pitch < -10.f || pitch > 10.f)
+                            addError(res, "arrangement[" + std::to_string(idx) + "].tracks." + tk + ".overrides.transposeSemitones",
+                                "Assigned note pitch is outside -10 to 10 V", "pitch_out_of_range");
                     }
                     s.tracks[tk] = ta;
                 }
@@ -1006,6 +1057,7 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
         }
     }
 
+    if (res.errors.empty()) compileAutomation(root, comp, res);
     json_decref(root);
     
     // Validate bounds
@@ -1135,17 +1187,20 @@ static json_t* sceneToJson(const Scene& sc) {
     json_object_set_new(scJ, "id", json_string(sc.id.c_str()));
     if (!sc.name.empty()) json_object_set_new(scJ, "name", json_string(sc.name.c_str()));
     if (!sc.description.empty()) json_object_set_new(scJ, "description", json_string(sc.description.c_str()));
-    json_object_set_new(scJ, "lengthBeats", json_real(sc.lengthBeats));
+    json_object_set_new(scJ, "lengthBeats", json_real(sceneTimelineLength(sc)));
     json_object_set_new(scJ, "repeats", json_integer(sc.repeats));
     json_object_set_new(scJ, "phaseMode", json_string(phaseModeToString(sc.phaseMode)));
     json_t* tracksJ = json_object();
     for (const auto& kv : sc.tracks) {
         if (kv.second.patternId.empty()) {
             json_object_set_new(tracksJ, kv.first.c_str(), json_null());
-        } else if (kv.second.hasPhaseModeOverride) {
+        } else if (kv.second.hasPhaseModeOverride || kv.second.overrides.present) {
             json_t* overrideJ = json_object();
             json_object_set_new(overrideJ, "pattern", json_string(kv.second.patternId.c_str()));
-            json_object_set_new(overrideJ, "phaseMode", json_string(phaseModeToString(kv.second.phaseModeOverride)));
+            if (kv.second.hasPhaseModeOverride)
+                json_object_set_new(overrideJ, "phaseMode", json_string(phaseModeToString(kv.second.phaseModeOverride)));
+            if (kv.second.overrides.present)
+                json_object_set_new(overrideJ, "overrides", overridesToJson(kv.second.overrides));
             json_object_set_new(tracksJ, kv.first.c_str(), overrideJ);
         } else {
             json_object_set_new(tracksJ, kv.first.c_str(), json_string(kv.second.patternId.c_str()));
@@ -1157,6 +1212,11 @@ static json_t* sceneToJson(const Scene& sc) {
 
 static json_t* compositionToJson(const Composition& comp) {
     json_t* root = json_object();
+    if (!comp.automation.empty()) {
+        json_t* automation=json_object();
+        for(const auto& curve:comp.automation)json_object_set_new(automation,curve.id.c_str(),automationToJson(curve));
+        json_object_set_new(root,"automation",automation);
+    }
     json_object_set_new(root, "schemaVersion", json_integer(3));
 
     // Meta
@@ -1241,6 +1301,12 @@ static std::string dumpAndFree(json_t* root) {
 
 std::string serializeSummaryJson(const Composition& comp) {
     json_t* root = json_object();
+    json_t* automation=json_array();
+    for(const auto& curve:comp.automation)json_array_append_new(automation,json_pack("{s:s,s:s,s:s,s:b,s:i}",
+        "id",curve.id.c_str(),"track",curve.trackId.c_str(),"lane",curve.lane==0?"mod":curve.lane==1?"mod2":"mod3",
+        "enabled",curve.enabled,"pointCount",int(curve.points.size())));
+    json_object_set_new(root,"automationCount",json_integer(comp.automation.size()));
+    json_object_set_new(root,"automation",automation);
     json_object_set_new(root, "ok", json_true());
     json_object_set_new(root, "revision", json_integer(comp.revision));
     json_object_set_new(root, "schemaVersion", json_integer(3));
@@ -1350,7 +1416,7 @@ std::string serializePatternViewJson(const Composition& comp, const std::string&
     return dumpAndFree(root);
 }
 
-std::string serializeSceneViewJson(const Composition& comp, const std::string& sceneId) {
+std::string serializeSceneViewJson(const Composition& comp, const std::string& sceneId, bool effectiveExpressions) {
     const Scene* found = nullptr;
     for (const auto& sc : comp.arrangement) {
         if (sc.id == sceneId) { found = &sc; break; }
@@ -1375,6 +1441,35 @@ std::string serializeSceneViewJson(const Composition& comp, const std::string& s
     json_t* derivedJ = json_object();
     json_object_set_new(derivedJ, "durationBeats", json_real(found->lengthBeats));
     json_object_set_new(derivedJ, "totalBeats", json_real(found->lengthBeats * found->repeats));
+    if (effectiveExpressions) {
+    // Static scene-instance projection. Authored pattern/scene data stays separate;
+    // these are pass-zero values before probability decisions and live macros.
+    json_object_set_new(derivedJ, "expressionContext", json_string("authoredBeforeEvolutionAndMacros"));
+    json_t* assignedNotes = json_object();
+    for (const auto& track : comp.tracks) {
+        auto assignment = found->tracks.find(track.id);
+        if (assignment == found->tracks.end()) continue;
+        auto pattern = comp.patterns.find(assignment->second.patternId);
+        if (pattern == comp.patterns.end()) continue;
+        const auto& ov = assignment->second.overrides;
+        json_t* notes = json_array();
+        for (const auto& event : pattern->second.steps) {
+            auto clampValue = [](float v, float lo, float hi) { return std::max(lo, std::min(hi, v)); };
+            float gate = ov.scaled(event.hasGate ? event.gate : track.defaultGate, GATE_SCALE, GATE_OFFSET);
+            gate = ov.gateTransform() && gate <= 0.f ? 0.f : clampValue(gate, .01f, event.ratchets > 1 ? 1.f : 1024.f);
+            json_t* note = json_pack("{s:s,s:i,s:f,s:f,s:f,s:f}", "id", event.id.c_str(), "step", event.step,
+                "pitchV", double(ov.pitch(event.compiledPitchV)), "gate", double(gate),
+                "velocity", double(clampValue(ov.scaled(event.hasVelocity ? event.velocity : track.defaultVelocity, VELOCITY_SCALE, VELOCITY_OFFSET),0.f,1.f)),
+                "probability", double(clampValue(ov.scaled(event.hasProbability ? event.probability : 1.f, PROBABILITY_SCALE, PROBABILITY_OFFSET),0.f,1.f)));
+            json_object_set_new(note,"mod",json_real(clampValue((event.hasMod ? event.mod : 0.f)+ov.values[MOD_OFFSET],-10.f,10.f)));
+            json_object_set_new(note,"mod2",json_real(clampValue((event.hasMod2 ? event.mod2 : 0.f)+ov.values[MOD2_OFFSET],-10.f,10.f)));
+            json_object_set_new(note,"mod3",json_real(clampValue((event.hasMod3 ? event.mod3 : 0.f)+ov.values[MOD3_OFFSET],-10.f,10.f)));
+            json_array_append_new(notes,note);
+        }
+        json_object_set_new(assignedNotes,track.id.c_str(),notes);
+    }
+    json_object_set_new(derivedJ,"assignmentNotes",assignedNotes);
+    }
     json_object_set_new(root, "derived", derivedJ);
 
     json_object_set_new(root, "warnings", json_array());

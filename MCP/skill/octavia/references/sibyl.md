@@ -255,8 +255,8 @@ Check `capabilities.sibyl.noteEditing.version == 1`. Sibyl accepts schema 2 and 
 migrates old notes to stable pattern-local IDs, and saves canonical schema 3.
 A new binary loads old compositions without altering playback; old binaries are
 not guaranteed to understand new documents. The proposed full v3 example in
-`doc/` also uses later features: scene overrides, automation, harmony,
-and voicing remain unsupported at this milestone and must not be authored yet.
+`doc/` also uses later features: harmony and voicing remain unsupported
+through P4 and must not be authored yet.
 Probability evolution is retained from schema 2.
 
 Read `view="notes"` with `pattern_id`, optional `selector`, `fields` (`"full"`
@@ -350,3 +350,97 @@ increments arrangementLoop; arrangement reset/stop returns it to 1.
 
 Evolution still observes every scheduled event, including condition-rejected
 events. Conditions do not replace its counter, threshold variation or RNG key.
+
+
+## Scene assignment variations (P3)
+
+Check `capabilities.sibyl.sceneOverrides.version == 1`. Reuse a shared pattern
+with scene-local `overrides` rather than cloning or rewriting its notes:
+
+```json
+{"op":"update_scene_assignment","scene_id":"chorus","track_id":"bass",
+ "set":{"overrides":{"transposeSemitones":12,"velocityScale":1.15}}}
+```
+
+`update_scene_assignment` edits an existing assignment. A legacy string is
+promoted to an object; `set.pattern` and `set.phaseMode` replace only those fields.
+Named `set.overrides` leaves merge with existing leaves. Use `unset:["phaseMode"]`,
+`unset:["overrides"]`, or a leaf such as `unset:["overrides.velocityScale"]` to
+restore defaults. Setting and unsetting overlapping fields is rejected.
+
+`set_scene_assignment` takes `assignment` as a complete object, pattern-ID string,
+or null (remove the route). Use it for creation or intentional full replacement.
+Both operations require `scene_id` and `track_id`, accept only documented fields,
+and participate in normal revision-guarded EDIT / nonmutating VALIDATE preview.
+The legacy `set_scene_track` still replaces the whole assignment; its warning
+contains `assignment_attributes_cleared` if phase/override attributes were lost.
+
+Override fields and bounds:
+- `transposeSemitones`: integer -120 to 120, added to event transpose; effective
+  assigned pitches must remain within -10 to 10 V.
+- `velocityScale`, `probabilityScale`, `gateScale`: 0 to 4, default 1.
+- `velocityOffset`, `probabilityOffset`: -1 to 1, default 0.
+- `gateOffset`: -1024 to 1024 pattern steps, default 0.
+- `modOffset`, `mod2Offset`, `mod3Offset`: -20 to 20 V, default 0.
+
+Evolution runs first, then scene scale/offset, then sampled performance macros.
+Velocity/probability clamp to 0-1 and MOD lanes to -10 to 10 V. Gate retains live
+macro timing and existing ratchet/non-ratchet bounds. A nonidentity gate transform
+with nonpositive gate after the live macro remains silent, including ties and
+ratchets. Absent/identity overrides preserve the legacy zero-gate minimum pulse.
+Conditions remain an independent eligibility stage and cannot be bypassed.
+
+Pattern and ordinary scene reads stay authored and compact. For a static scene
+projection, GET `view:"scene"`, `id:"chorus"`, `fields:["effectiveExpressions"]`.
+`derived.assignmentNotes` maps track IDs to note IDs/steps and effective pitch,
+velocity, probability, gate duration and MOD values. These are authored/pass-zero
+values with scene overrides, before evolution and live macros, without predicting
+condition/probability outcomes. Full scene data remains under `scene` separately.
+Time-specific harmony context inspection belongs to P5.
+
+
+## Independent MOD automation (P4)
+
+Check `capabilities.sibyl.automation.version == 1`. Schema 3 accepts an
+`automation` map keyed by stable IDs. Use `upsert_automation` with `id` and a
+complete `automation` object; `delete_automation` takes `id`. Both participate
+in revision-guarded edits and nonmutating VALIDATE previews.
+
+```json
+{"op":"upsert_automation","id":"rise","automation":{
+  "target":{"track":"bass","lane":"mod"},
+  "scope":{"scene":"chorus"},"clock":"sceneVisit",
+  "mode":"replace","transitionMs":20,
+  "points":[{"beat":0,"value":0},{"beat":32,"value":5}]}}
+```
+
+Targets are existing tracks and `mod`, `mod2`, or `mod3`. Patternless tracks
+can drive automation. Scene clocks use `sceneRepeat` (resets each repeat) or
+`sceneVisit` (spans all repeats). An arrangement curve uses
+`scope:{"arrangement":true}` and `clock:"arrangement"`; its position follows the
+score, including manual scene jumps. Scene curves override arrangement curves
+for their entire visit. Duplicate enabled owners at the same specificity fail.
+
+Points use finite beats and volts (-10 to 10), beginning at beat zero in strictly
+increasing order through the scope endpoint. Left-point `shape` selects `step`,
+`linear` (default), or `smoothstep`. A single point is constant; the final value
+holds. A nondefault final shape produces an unused-field warning.
+
+`replace` (default) uses curve + scene offset + live macro. `add` includes the
+held authored/evolved event MOD base once. Rejected notes leave that base alone;
+new routes/restarts clear it and continuing the same route preserves it. Curves
+keep moving through skipped notes. Pause/external hold freezes their coordinate,
+while owned-lane macros remain live. Unowned lanes retain note-latched behavior.
+
+`enabled` defaults true. `transitionMs` defaults zero and accepts 0-1000 ms.
+Incoming ownership/edit transitions blend from the last emitted voltage toward
+the moving target; removal uses the outgoing duration. Automation-only edits
+preserve note gates and current musical position under phase preservation.
+
+GET `view:"automation"`, `id:"rise"`, with optional
+`sample_beats:[0,8,16,24,32]` returns authored data and separate derived samples,
+duration and segment count. Samples are curve values, before event bases,
+scene offsets, macros and output limiting. Summary reads include automation
+counts and targets. Limits: 512 curves, 1024 points per curve, 16384 total points,
+48 output lanes and 256 requested sample coordinates. Read current capabilities
+for limits rather than assuming future versions retain them.

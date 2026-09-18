@@ -14,6 +14,8 @@ struct AdoptionRequest {
 	ApplyAt applyAt = ApplyAt::NEXT_BEAT;
 	PhasePolicy phasePolicy = PhasePolicy::PRESERVE;
 	uint16_t restartChannelMask = 0;
+	std::vector<uint64_t> automationChangeMasks;
+	std::vector<uint16_t> rawModResetMasks;
 };
 
 struct ChannelAdoptionAction {
@@ -39,6 +41,7 @@ const char* phasePolicyName(PhasePolicy value);
 // deliberately conservative: a channel restarts if its declaration, any scene
 // assignment, or any pattern it may play changed.
 uint16_t changedTrackChannelMask(const Composition& previous, const Composition& next);
+void prepareAutomationAdoption(const Composition* previous, const Composition& next, AdoptionRequest& request);
 
 struct BoundaryState {
 	bool step = false;

@@ -6,6 +6,38 @@
 
 namespace sibyl {
 
+void prepareAutomationAdoption(const Composition* previous, const Composition& next, AdoptionRequest& request) {
+    size_t count=std::max(size_t(1),std::max(previous?previous->arrangement.size():size_t(0),next.arrangement.size()));
+    request.automationChangeMasks.assign(count,0);request.rawModResetMasks.assign(count,0);
+    auto curve=[](const Composition* comp,size_t scene,int lane)->const AutomationCurve* {
+        if(!comp || scene>=comp->automationRoutes.size())return nullptr;
+        int index=comp->automationRoutes[scene][lane];return index<0?nullptr:&comp->automation[index];
+    };
+    auto pattern=[](const Composition* comp,size_t scene,int channel)->std::string {
+        if(!comp || scene>=comp->arrangement.size())return {};
+        for(const auto& track:comp->tracks)if(track.channel==channel){
+            auto assignment=comp->arrangement[scene].tracks.find(track.id);
+            if(assignment!=comp->arrangement[scene].tracks.end())return assignment->second.patternId;
+        }
+        return {};
+    };
+    for(size_t scene=0;scene<count;++scene) {
+        for(int channel=0;channel<16;++channel)
+            if(pattern(previous,scene,channel)!=pattern(&next,scene,channel))request.rawModResetMasks[scene]|=uint16_t(1u<<channel);
+        for(int lane=0;lane<48;++lane) {
+            const auto* a=curve(previous,scene,lane);const auto* b=curve(&next,scene,lane);
+            bool changed=(a==nullptr)!=(b==nullptr) || (a && b && !a->audibleEquals(*b));
+            if(a && b && previous && scene<previous->arrangement.size() && scene<next.arrangement.size()) {
+                changed |= sceneTimelineLength(previous->arrangement[scene])!=sceneTimelineLength(next.arrangement[scene]) ||
+                    previous->arrangement[scene].repeats!=next.arrangement[scene].repeats;
+                if(b->clock==AutomationClock::ARRANGEMENT)
+                    changed |= previous->sceneBeatPrefixes[scene]!=next.sceneBeatPrefixes[scene];
+            }
+            if(changed)request.automationChangeMasks[scene]|=uint64_t(1)<<lane;
+        }
+    }
+}
+
 bool parseApplyAtName(const std::string& name, ApplyAt& value) {
 	if (name == "immediate") value = ApplyAt::IMMEDIATE;
 	else if (name == "nextStep") value = ApplyAt::NEXT_STEP;
@@ -83,14 +115,12 @@ static bool sameTrack(const TrackDef& a, const TrackDef& b) {
 }
 
 static void collectAssignments(const Composition& composition, const std::string& trackId,
-		std::unordered_map<std::string, std::string>& assignments, std::set<std::string>& patterns) {
+		std::unordered_map<std::string, TrackAssignment>& assignments, std::set<std::string>& patterns) {
 	for (const Scene& scene : composition.arrangement) {
 		auto found = scene.tracks.find(trackId);
-		std::string value;
+		TrackAssignment value;
 		if (found != scene.tracks.end()) {
-			value = found->second.patternId;
-			if (found->second.hasPhaseModeOverride)
-				value += "#" + std::to_string(static_cast<int>(found->second.phaseModeOverride));
+			value = found->second;
 			if (!found->second.patternId.empty()) patterns.insert(found->second.patternId);
 		}
 		assignments[scene.id] = value;
@@ -114,8 +144,8 @@ uint16_t changedTrackChannelMask(const Composition& previous, const Composition&
 		auto oldTrack = previousTracks.find(entry.first);
 		if (oldTrack == previousTracks.end() || !sameTrack(*oldTrack->second, nextTrack)) changed = true;
 
-		std::unordered_map<std::string, std::string> oldAssignments;
-		std::unordered_map<std::string, std::string> newAssignments;
+		std::unordered_map<std::string, TrackAssignment> oldAssignments;
+		std::unordered_map<std::string, TrackAssignment> newAssignments;
 		std::set<std::string> oldPatterns;
 		std::set<std::string> newPatterns;
 		collectAssignments(previous, entry.first, oldAssignments, oldPatterns);

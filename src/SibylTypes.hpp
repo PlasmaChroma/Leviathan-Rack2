@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include <cstdint>
 #include "SibylCondition.hpp"
+#include "SibylOverrides.hpp"
+#include "SibylAutomation.hpp"
 
 namespace sibyl {
 
@@ -126,9 +128,14 @@ struct Pattern {
 };
 
 struct TrackAssignment {
+	AssignmentOverrides overrides;
 	std::string patternId;
 	bool hasPhaseModeOverride = false;
 	PhaseMode phaseModeOverride = PhaseMode::RESTART;
+	bool operator==(const TrackAssignment& b) const {
+		return patternId == b.patternId && hasPhaseModeOverride == b.hasPhaseModeOverride &&
+			phaseModeOverride == b.phaseModeOverride && overrides == b.overrides;
+	}
 };
 
 struct Scene {
@@ -136,6 +143,7 @@ struct Scene {
 	std::string name;
 	std::string description;
 	float lengthBeats = 16.0f;
+	double authoredLengthBeats = 0.; // New timelines retain JSON double precision; legacy DSP stays float.
 	int repeats = 1;
 	PhaseMode phaseMode = PhaseMode::RESTART;
 	std::unordered_map<std::string, TrackAssignment> tracks; // key: track id
@@ -150,6 +158,11 @@ struct Macro {
 	float clampMax = 1.0f;
 };
 
+inline double sceneTimelineLength(const Scene& scene) {
+	return scene.authoredLengthBeats > 0. && float(scene.authoredLengthBeats) == scene.lengthBeats
+		? scene.authoredLengthBeats : double(scene.lengthBeats);
+}
+
 // Represents an immutable snapshot of the entire compiled composition
 struct Composition {
 	int revision = 0;
@@ -161,6 +174,10 @@ struct Composition {
 	std::unordered_map<std::string, Pattern> patterns;
 	std::vector<Scene> arrangement;
 	std::unordered_map<std::string, Macro> macros;
+	std::vector<AutomationCurve> automation; // Stable ID order, including disabled definitions.
+	std::vector<AutomationRoute> automationRoutes;
+	std::vector<double> sceneBeatPrefixes;
+	double arrangementDuration = 0.;
 };
 
 using CompositionPtr = std::shared_ptr<const Composition>;

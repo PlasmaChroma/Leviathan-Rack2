@@ -6,6 +6,7 @@
 #include "SibylNoteEdit.hpp"
 #include "SibylHardwareControl.hpp"
 #include "SibylJSON.hpp"
+#include "SibylAutomationJSON.hpp"
 #include "SibylEvolution.hpp"
 #include "SibylTiming.hpp"
 #include "SibylTransport.hpp"
@@ -235,15 +236,23 @@ struct SibylModule : Module, SibylControl {
 		float currentGate = 0.0f;
 		float currentVel = 0.0f;
 		float currentMod[3] {};
+		float rawEventMod[3] {};
 		int activeEventStep = -1;
 		int64_t activeNominalStep = 0;
 		double activeEventOnsetBeats = 0.0;
 		float activeEventGate = 0.5f;
+		bool activeGateOverride = false;
 		int activeEventRatchets = 1;
 		bool activeEventTie = false;
 		bool activeEventPlayed = false;
 	};
 	TrackState m_trackStates[16];
+	std::array<sibyl::AutomationLaneState,48> m_automationLanes;
+	float m_automationOutput[16][3] {};
+	bool m_automationProcessing = false;
+	uint64_t m_changedAutomationLanes = 0;
+	uint64_t m_automationSceneSerial = 1, m_automationArrangementSerial = 1;
+
 
 	// Immutable composition routing is resolved only when the sounding revision or
 	// scene changes. The audio-rate path then walks fixed arrays instead of hashing
@@ -251,6 +260,7 @@ struct SibylModule : Module, SibylControl {
 	struct CachedTrackRoute {
 		const sibyl::TrackDef* track = nullptr;
 		const sibyl::Pattern* pattern = nullptr;
+		const sibyl::AssignmentOverrides* overrides = nullptr;
 	};
 	enum class CachedMacroTarget : uint8_t {
 		NONE, GLOBAL_PROBABILITY, GLOBAL_VELOCITY, GLOBAL_SWING,
@@ -618,6 +628,7 @@ struct SibylModule : Module, SibylControl {
 		request->phasePolicy = phasePolicy;
 		request->restartChannelMask = sounding
 			? sibyl::changedTrackChannelMask(*sounding, *composition) : uint16_t(0xffffu);
+		sibyl::prepareAutomationAdoption(sounding, *composition, *request);
 		const sibyl::AdoptionRequest* requestPtr = request.get();
 		m_adoptionOwners.emplace_back(request.release());
 		m_acceptedCompositionPtr = composition.get();
@@ -738,12 +749,14 @@ struct SibylModule : Module, SibylControl {
 			if (track.channel < 0 || track.channel >= 16) continue;
 			m_cachedOutputChannels = std::max(m_cachedOutputChannels, track.channel + 1);
 			if (!scene) continue;
+			m_cachedTrackRoutes[track.channel].track = &track;
 			auto assignment = scene->tracks.find(track.id);
 			if (assignment == scene->tracks.end() || assignment->second.patternId.empty()) continue;
 			auto pattern = composition.patterns.find(assignment->second.patternId);
 			if (pattern == composition.patterns.end()) continue;
 			m_cachedTrackRoutes[track.channel].track = &track;
 			m_cachedTrackRoutes[track.channel].pattern = &pattern->second;
+			m_cachedTrackRoutes[track.channel].overrides = &assignment->second.overrides;
 		}
 
 		static const char* const macroIds[4] {"1", "2", "3", "4"};
@@ -812,11 +825,17 @@ struct SibylModule : Module, SibylControl {
 	void adoptPendingIfReady(const sibyl::BoundaryState& boundary, const sibyl::AdoptionRequest* request) {
 		if (!request || !request->composition || !sibyl::adoptionBoundaryReached(request->applyAt, boundary)) return;
 		const sibyl::Composition& replacement = *request->composition;
+		if (m_sceneIndex >= 0 && size_t(m_sceneIndex) < request->automationChangeMasks.size())
+			m_changedAutomationLanes |= request->automationChangeMasks[m_sceneIndex];
+		const uint16_t rawReset = m_sceneIndex >= 0 && size_t(m_sceneIndex) < request->rawModResetMasks.size()
+			? request->rawModResetMasks[m_sceneIndex] : uint16_t(0xffffu);
 		const sibyl::Scene* destinationScene = m_sceneIndex >= 0 && m_sceneIndex < (int)replacement.arrangement.size()
 			? &replacement.arrangement[m_sceneIndex] : nullptr;
 		for (int channel = 0; channel < 16; ++channel) {
 			bool changed = (request->restartChannelMask & (1u << channel)) != 0;
 			sibyl::ChannelAdoptionAction action = sibyl::channelAdoptionAction(request->phasePolicy, changed);
+			if (action.restartPhase || (rawReset & (1u << channel)))
+				for (float& value : m_trackStates[channel].rawEventMod) value = 0.f;
 			if (action.closeGate) m_trackStates[channel].currentGate = 0.0f;
 			if (action.closeGate) m_trackStates[channel].activeEventPlayed = false;
 			if (action.cancelGlide) {
@@ -873,6 +892,38 @@ struct SibylModule : Module, SibylControl {
 			repeat, scene.repeats, m_arrangementLoop);
 	}
 
+	void renderAutomation(const sibyl::Composition& comp, double sampleRate, const float (&macros)[3][16]) {
+		const bool hasScene = m_sceneIndex >= 0 && size_t(m_sceneIndex) < comp.arrangement.size();
+		double phase=0.,visit=0.,position=0.;
+		if(hasScene) {
+			const auto& scene=comp.arrangement[m_sceneIndex];
+			const double length=sibyl::sceneTimelineLength(scene);
+			const bool terminal=m_scenePhase>=scene.lengthBeats;
+			phase=terminal?length:std::max(0.,std::min(length,m_scenePhase));
+			visit=double(m_sceneRepeat)*length+phase;
+			position=(size_t(m_sceneIndex)<comp.sceneBeatPrefixes.size()?comp.sceneBeatPrefixes[m_sceneIndex]:0.)+visit;
+		}
+		bool active=false;
+		for(int channel=0;channel<16;++channel)for(int lane=0;lane<3;++lane) {
+			const int index=channel*3+lane;
+			const int owner=hasScene && size_t(m_sceneIndex)<comp.automationRoutes.size()?comp.automationRoutes[m_sceneIndex][index]:-1;
+			const auto* curve=owner<0?nullptr:&comp.automation[owner];
+			const auto& route=m_cachedTrackRoutes[channel];
+			double coordinate=curve && curve->clock==sibyl::AutomationClock::ARRANGEMENT?position:
+				curve && curve->clock==sibyl::AutomationClock::SCENE_VISIT?visit:phase;
+			double offset=route.overrides?route.overrides->values[sibyl::MOD_OFFSET+lane]:0.;
+			double base=route.pattern?m_trackStates[channel].rawEventMod[lane]:0.;
+			double legacy=hasScene?m_trackStates[channel].currentMod[lane]:0.;
+			const int output=lane==0?MOD_OUTPUT:lane==1?MOD_2_OUTPUT:MOD_3_OUTPUT;
+			m_automationOutput[channel][lane]=float(m_automationLanes[index].process(curve,owner,comp.revision,
+				(m_changedAutomationLanes & (uint64_t(1)<<index))!=0,coordinate,base,offset+macros[lane][channel],
+				legacy,outputs[output].getVoltage(channel),sampleRate,
+				curve && curve->clock==sibyl::AutomationClock::ARRANGEMENT?m_automationArrangementSerial:m_automationSceneSerial));
+			active |= owner>=0 || m_automationLanes[index].blending;
+		}
+		m_changedAutomationLanes=0;m_automationProcessing=active;
+	}
+
 	void closeAllGates() {
 		for (auto& state : m_trackStates) {
 			state.currentGate = 0.0f;
@@ -891,6 +942,7 @@ struct SibylModule : Module, SibylControl {
 		for (auto& state : m_trackStates) {
 			state.evolution = {};
 			state.condition = {};
+			for (float& value : state.rawEventMod) value = 0.f;
 			state.patternPhaseBeats = mode == sibyl::PhaseMode::ALIGN_GLOBAL ? m_globalPhaseBeats : 0.0;
 			state.lastFiredStep = -1;
 		}
@@ -911,11 +963,14 @@ struct SibylModule : Module, SibylControl {
 			const auto* previous = m_cachedTrackRoutes[track.channel].pattern;
 			const double duration = pattern.length * pattern.resolutionBeats;
 			if (mode == sibyl::PhaseMode::CONTINUE) {
-				if (!previous || previous->id != pattern.id)
+				if (!previous || previous->id != pattern.id) {
 					state.condition.rebase(state.patternPhaseBeats, duration, 1);
+					for (float& value : state.rawEventMod) value = 0.f;
+				}
 				continue;
 			}
 			state.evolution.newTraversal = true;
+			for (float& value : state.rawEventMod) value = 0.f;
 			state.patternPhaseBeats = mode == sibyl::PhaseMode::ALIGN_GLOBAL ? m_globalPhaseBeats : 0.0;
 			state.condition.rebase(state.patternPhaseBeats, duration,
 				mode == sibyl::PhaseMode::ALIGN_GLOBAL ? sibyl::conditionCycle(m_globalPhaseBeats, duration) + 1 : 1);
@@ -927,6 +982,7 @@ struct SibylModule : Module, SibylControl {
 			const sibyl::TransportRequest& request, bool restartConditions = false) {
 		if (composition.arrangement.empty()) return;
 		for (auto& state : m_trackStates) state.evolution = {};
+		m_automationSceneSerial = sibyl::conditionOrdinal(m_automationSceneSerial + 1);
 		m_sceneIndex = std::max(0, std::min(sceneIndex, (int)composition.arrangement.size() - 1));
 		m_sceneRepeat = 0;
 		m_scenePhase = 0.0;
@@ -959,6 +1015,7 @@ struct SibylModule : Module, SibylControl {
 		if (m_pendingHardwareAction == HardwareAction::RESET_ARRANGEMENT) {
 			enterScene(composition, 0, request, true);
 			m_arrangementLoop = 1;
+			m_automationArrangementSerial = sibyl::conditionOrdinal(m_automationArrangementSerial + 1);
 			m_randomnessEpoch = 0;
 			realignOutputClock(true);
 			// Reset downstream cycle-dependent state at the applied reset boundary.
@@ -984,6 +1041,7 @@ struct SibylModule : Module, SibylControl {
 				m_runtimeRunning.store(false, std::memory_order_release);
 				enterScene(composition, 0, *request, true);
 				m_arrangementLoop = 1;
+				m_automationArrangementSerial = sibyl::conditionOrdinal(m_automationArrangementSerial + 1);
 				m_randomnessEpoch = 0;
 				realignOutputClock(false);
 				break;
@@ -1019,6 +1077,7 @@ struct SibylModule : Module, SibylControl {
 					case sibyl::RestartTarget::ARRANGEMENT:
 						enterScene(composition, 0, *request, true);
 						m_arrangementLoop = 1;
+						m_automationArrangementSerial = sibyl::conditionOrdinal(m_automationArrangementSerial + 1);
 						m_randomnessEpoch = 0;
 						realignOutputClock(true);
 						break;
@@ -1245,6 +1304,7 @@ struct SibylModule : Module, SibylControl {
 #endif
 			return;
 		}
+		refreshRealtimeRouting(*comp);
 		applyPendingTransportIfReady(adoptionBoundary, *comp, pendingTransport);
 		m_transportHazard.store(nullptr, std::memory_order_release);
 		applyPendingHardwareIfReady(adoptionBoundary, *comp, inputs[CLOCK_INPUT].isConnected(), clockTick);
@@ -1273,12 +1333,14 @@ struct SibylModule : Module, SibylControl {
 
 		if (comp->arrangement.empty()) {
 			applyOutputChannels(1);
+			const bool automationRendered = !comp->automation.empty() || m_automationProcessing;
+			if (automationRendered) { float macros[3][16] {}; renderAutomation(*comp, args.sampleRate, macros); }
 			outputs[V_OCT_OUTPUT].setVoltage(0.f, 0);
 			outputs[GATE_OUTPUT].setVoltage(0.f, 0);
 			outputs[VELOCITY_OUTPUT].setVoltage(0.f, 0);
-			outputs[MOD_OUTPUT].setVoltage(0.f, 0);
-			outputs[MOD_2_OUTPUT].setVoltage(0.f, 0);
-			outputs[MOD_3_OUTPUT].setVoltage(0.f, 0);
+			outputs[MOD_OUTPUT].setVoltage(automationRendered ? m_automationOutput[0][0] : 0.f, 0);
+			outputs[MOD_2_OUTPUT].setVoltage(automationRendered ? m_automationOutput[0][1] : 0.f, 0);
+			outputs[MOD_3_OUTPUT].setVoltage(automationRendered ? m_automationOutput[0][2] : 0.f, 0);
 			outputs[CLOCK_OUTPUT].setVoltage(m_clockPulse.process(args.sampleTime) ? 10.0f : 0.0f);
 			outputs[SCENE_OUTPUT].setVoltage(m_scenePulse.process(args.sampleTime) ? 10.0f : 0.0f);
 			outputs[EOC_OUTPUT].setVoltage(m_eocPulse.process(args.sampleTime) ? 10.0f : 0.0f);
@@ -1318,6 +1380,7 @@ struct SibylModule : Module, SibylControl {
 					if (looping) {
 						m_sceneIndex = 0;
 						m_arrangementLoop = sibyl::conditionOrdinal(m_arrangementLoop + 1);
+						m_automationArrangementSerial = sibyl::conditionOrdinal(m_automationArrangementSerial + 1);
 						m_eocPulse.trigger(1e-3f);
 					} else {
 						enteredScene = false;
@@ -1332,6 +1395,7 @@ struct SibylModule : Module, SibylControl {
 					}
 				}
 				if (enteredScene) {
+					m_automationSceneSerial = sibyl::conditionOrdinal(m_automationSceneSerial + 1);
 					closeAllGates();
 					applyDestinationScenePhases(*comp, m_sceneIndex);
 				}
@@ -1394,6 +1458,7 @@ struct SibylModule : Module, SibylControl {
 				continue;
 			}
 			const sibyl::Pattern& pat = *route.pattern;
+			const sibyl::AssignmentOverrides& overrides = *route.overrides;
 
 			if (pat.resolutionBeats <= 0) continue;
 
@@ -1437,7 +1502,8 @@ struct SibylModule : Module, SibylControl {
 					m_trackStates[ch].activeEventStep = eventStep;
 					m_trackStates[ch].activeNominalStep = nominalStep;
 					m_trackStates[ch].activeEventOnsetBeats = scheduledBeat;
-					m_trackStates[ch].activeEventGate = expression.gate;
+					m_trackStates[ch].activeEventGate = overrides.scaled(expression.gate, sibyl::GATE_SCALE, sibyl::GATE_OFFSET);
+					m_trackStates[ch].activeGateOverride = overrides.gateTransform();
 					m_trackStates[ch].activeEventRatchets = std::max(1, matchedEvent->ratchets);
 					m_trackStates[ch].activeEventTie = matchedEvent->tie;
 					const bool eligible = eventConditionEligible(*comp, ch, pat, *matchedEvent, nominalStep,
@@ -1451,7 +1517,7 @@ struct SibylModule : Module, SibylControl {
 					bool play = false;
 					if (eligible) {
 						// Deterministic Probability Check + Macro Modulation
-						float baseProb = expression.probability;
+						float baseProb = overrides.scaled(expression.probability, sibyl::PROBABILITY_SCALE, sibyl::PROBABILITY_OFFSET);
 						float effProb = clamp(baseProb + globalProbMacro + trackProbMacro[ch], 0.0f, 1.0f);
 						uint64_t hash = comp->meta.seed ^ (m_randomnessEpoch * 11400714819323198485ULL) ^
 							(m_sceneIndex * 73856093ULL) ^ (ch * 19349663ULL) ^ (eventStep * 83492791ULL);
@@ -1483,26 +1549,27 @@ struct SibylModule : Module, SibylControl {
 						}
 						// Glide or Instant pitch
 						if (expression.glideMs > 0.0f) {
-							m_trackStates[ch].targetPitch = matchedEvent->compiledPitchV;
+							m_trackStates[ch].targetPitch = overrides.pitch(matchedEvent->compiledPitchV);
 							float numSamples = (expression.glideMs * 0.001f) * args.sampleRate;
 							if (numSamples > 1.0f) {
 								m_trackStates[ch].glideRatePerSample = (m_trackStates[ch].targetPitch - m_trackStates[ch].currentPitch) / numSamples;
 							} else {
-								m_trackStates[ch].currentPitch = matchedEvent->compiledPitchV;
+								m_trackStates[ch].currentPitch = overrides.pitch(matchedEvent->compiledPitchV);
 								m_trackStates[ch].glideRatePerSample = 0.0f;
 							}
 						} else {
-							m_trackStates[ch].currentPitch = matchedEvent->compiledPitchV;
-							m_trackStates[ch].targetPitch = matchedEvent->compiledPitchV;
+							m_trackStates[ch].currentPitch = overrides.pitch(matchedEvent->compiledPitchV);
+							m_trackStates[ch].targetPitch = overrides.pitch(matchedEvent->compiledPitchV);
 							m_trackStates[ch].glideRatePerSample = 0.0f;
 						}
 
-						float baseVel = expression.velocity;
+						float baseVel = overrides.scaled(expression.velocity, sibyl::VELOCITY_SCALE, sibyl::VELOCITY_OFFSET);
 						float effVel = clamp(baseVel + globalVelMacro + trackVelMacro[ch], 0.0f, 1.0f);
 						m_trackStates[ch].currentVel = effVel * 10.0f;
 						for (int lane = 0; lane < 3; ++lane) {
+							m_trackStates[ch].rawEventMod[lane] = expression.mod[lane];
 							m_trackStates[ch].currentMod[lane] = clamp(
-								expression.mod[lane] + trackModMacro[lane][ch], -10.0f, 10.0f);
+								expression.mod[lane] + overrides.values[sibyl::MOD_OFFSET + lane] + trackModMacro[lane][ch], -10.0f, 10.0f);
 						}
 					} else {
 						m_trackStates[ch].currentGate = 0.0f;
@@ -1512,7 +1579,11 @@ struct SibylModule : Module, SibylControl {
 
 			// Gate and ratchet timing are measured from the shifted event onset,
 			// rather than from the unshifted integer grid position.
-			if (m_trackStates[ch].activeEventStep >= 0 && m_trackStates[ch].activeEventPlayed &&
+			if (m_trackStates[ch].activeGateOverride &&
+					m_trackStates[ch].activeEventGate + trackGateMacro[ch] <= 0.f) {
+				// This opt-in branch also covers ties, with no minimum-width pulse.
+				m_trackStates[ch].currentGate = 0.f;
+			} else if (m_trackStates[ch].activeEventStep >= 0 && m_trackStates[ch].activeEventPlayed &&
 					!m_trackStates[ch].activeEventTie) {
 				double elapsed = currentPatternPhase - m_trackStates[ch].activeEventOnsetBeats;
 				int64_t nextNominalStep = m_trackStates[ch].activeNominalStep + 1;
@@ -1541,6 +1612,9 @@ struct SibylModule : Module, SibylControl {
 		}
 
 		// Write Polyphonic outputs
+		const bool automationRendered = !comp->automation.empty() || m_automationProcessing;
+		if (automationRendered) renderAutomation(*comp, args.sampleRate, trackModMacro);
+
 		int numChannels = m_cachedOutputChannels;
 		applyOutputChannels(numChannels);
 
@@ -1548,9 +1622,9 @@ struct SibylModule : Module, SibylControl {
 			outputs[V_OCT_OUTPUT].setVoltage(m_trackStates[c].currentPitch, c);
 			outputs[GATE_OUTPUT].setVoltage(m_trackStates[c].currentGate, c);
 			outputs[VELOCITY_OUTPUT].setVoltage(m_trackStates[c].currentVel, c);
-			outputs[MOD_OUTPUT].setVoltage(m_trackStates[c].currentMod[0], c);
-			outputs[MOD_2_OUTPUT].setVoltage(m_trackStates[c].currentMod[1], c);
-			outputs[MOD_3_OUTPUT].setVoltage(m_trackStates[c].currentMod[2], c);
+			outputs[MOD_OUTPUT].setVoltage(automationRendered ? m_automationOutput[c][0] : m_trackStates[c].currentMod[0], c);
+			outputs[MOD_2_OUTPUT].setVoltage(automationRendered ? m_automationOutput[c][1] : m_trackStates[c].currentMod[1], c);
+			outputs[MOD_3_OUTPUT].setVoltage(automationRendered ? m_automationOutput[c][2] : m_trackStates[c].currentMod[2], c);
 		}
 
 		// Write Pulse triggers
@@ -1610,7 +1684,7 @@ struct SibylModule : Module, SibylControl {
 			return true;
 #endif
 		} else if (operation == Operation::CAPABILITIES) {
-			responseJson = "{\"ok\":true,\"capabilities\":{\"sibyl\":{\"apiVersion\":1,\"schemaVersion\":3,\"supportedSchemaVersions\":[2,3],\"conditions\":{\"version\":1,\"scopes\":[\"patternPass\",\"sceneRepeat\",\"arrangementLoop\"],\"maxTests\":8,\"ordinalCeiling\":4503599627370495},\"noteEditing\":{\"version\":1,\"stableIds\":true,\"previewViaValidate\":true},\"views\":[\"summary\",\"full\",\"pattern\",\"scene\",\"notes\"],\"limits\":{\"operations\":256,\"selectedEvents\":1024,\"notesPage\":256,\"reportIdsDefault\":128,\"reportIdsMax\":1024},\"editOperations\":[\"replace_composition\",\"set_meta\",\"set_clock\",\"upsert_track\",\"delete_track\",\"upsert_pattern\",\"delete_pattern\",\"upsert_macro\",\"delete_macro\",\"upsert_scene\",\"delete_scene\",\"set_scene_track\",\"reorder_scenes\",\"update_notes\",\"insert_notes\",\"delete_notes\",\"transpose_notes\",\"rotate_notes\",\"duplicate_notes\"],\"repeatEvolution\":{\"version\":1,\"patternField\":\"evolution\",\"stepOptOut\":\"evolve\",\"fields\":[\"probability\",\"velocity\",\"gate\",\"glideMs\",\"mod\",\"mod2\",\"mod3\"]},\"revision\":" + std::to_string(m_acceptedRevision) + ",\"operations\":[\"get_composition\",\"validate\",\"edit\",\"get_status\",\"transport\"]}}}";
+			responseJson = "{\"ok\":true,\"capabilities\":{\"sibyl\":{\"apiVersion\":1,\"schemaVersion\":3,\"supportedSchemaVersions\":[2,3],\"automation\":{\"version\":1,\"lanes\":[\"mod\",\"mod2\",\"mod3\"],\"maxCurves\":512,\"maxPointsPerCurve\":1024,\"maxTotalPoints\":16384,\"maxSamples\":256,\"maxDrivenLanes\":48,\"maxCompiledBytes\":33554432},\"sceneOverrides\":{\"version\":1,\"partialAssignmentEdits\":true,\"staticPreviewView\":\"scene\"},\"conditions\":{\"version\":1,\"scopes\":[\"patternPass\",\"sceneRepeat\",\"arrangementLoop\"],\"maxTests\":8,\"ordinalCeiling\":4503599627370495},\"noteEditing\":{\"version\":1,\"stableIds\":true,\"previewViaValidate\":true},\"views\":[\"summary\",\"full\",\"pattern\",\"scene\",\"notes\",\"automation\"],\"limits\":{\"operations\":256,\"selectedEvents\":1024,\"notesPage\":256,\"reportIdsDefault\":128,\"reportIdsMax\":1024},\"editOperations\":[\"replace_composition\",\"set_meta\",\"set_clock\",\"upsert_track\",\"delete_track\",\"upsert_pattern\",\"delete_pattern\",\"upsert_macro\",\"delete_macro\",\"upsert_scene\",\"delete_scene\",\"set_scene_track\",\"set_scene_assignment\",\"update_scene_assignment\",\"reorder_scenes\",\"upsert_automation\",\"delete_automation\",\"update_notes\",\"insert_notes\",\"delete_notes\",\"transpose_notes\",\"rotate_notes\",\"duplicate_notes\"],\"repeatEvolution\":{\"version\":1,\"patternField\":\"evolution\",\"stepOptOut\":\"evolve\",\"fields\":[\"probability\",\"velocity\",\"gate\",\"glideMs\",\"mod\",\"mod2\",\"mod3\"]},\"revision\":" + std::to_string(m_acceptedRevision) + ",\"operations\":[\"get_composition\",\"validate\",\"edit\",\"get_status\",\"transport\"]}}}";
 			return true;
 		} else if (operation == Operation::GET_COMPOSITION) {
 			const sibyl::Composition* comp = m_acceptedCompositionPtr;
@@ -1619,17 +1693,34 @@ struct SibylModule : Module, SibylControl {
 				return false;
 			}
 			std::string view = "summary";
+			bool effectiveExpressions = false;
 			std::string id = "";
 			json_error_t jerror;
 			json_t* reqJ = json_loads(requestJson.c_str(), 0, &jerror);
 			if (reqJ) {
 				json_t* viewJ = json_object_get(reqJ, "view");
 				if (viewJ && json_is_string(viewJ)) view = json_string_value(viewJ);
+                if (view == "automation") {
+                    responseJson = sibyl::serializeAutomationView(*comp, reqJ);
+                    json_decref(reqJ);
+                    return true;
+                }
                 if (view == "notes") {
                     responseJson = sibyl::serializeNotesView(*comp, reqJ);
                     json_decref(reqJ);
                     return true;
                 }
+				if (view == "scene" && json_object_get(reqJ, "fields")) {
+					json_t* fields = json_object_get(reqJ, "fields");
+					json_t* field = json_array_get(fields, 0);
+					effectiveExpressions = json_is_array(fields) && json_array_size(fields) == 1 &&
+						json_is_string(field) && std::string(json_string_value(field)) == "effectiveExpressions";
+					if (!effectiveExpressions) {
+						json_decref(reqJ);
+						responseJson = "{\"ok\":false,\"error\":{\"code\":\"invalid_request\",\"path\":\"fields\",\"message\":\"Scene fields must be [effectiveExpressions]\"}}";
+						return true;
+					}
+				}
 				json_t* idJ = json_object_get(reqJ, "id");
 				if (idJ && json_is_string(idJ)) id = json_string_value(idJ);
 				json_decref(reqJ);
@@ -1639,7 +1730,7 @@ struct SibylModule : Module, SibylControl {
 			} else if (view == "pattern") {
 				responseJson = sibyl::serializePatternViewJson(*comp, id);
 			} else if (view == "scene") {
-				responseJson = sibyl::serializeSceneViewJson(*comp, id);
+				responseJson = sibyl::serializeSceneViewJson(*comp, id, effectiveExpressions);
 			} else {
 				responseJson = sibyl::serializeSummaryJson(*comp);
 			}
