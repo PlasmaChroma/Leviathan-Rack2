@@ -59,14 +59,14 @@ double preservedPatternPhase(double elapsedBeats, double replacementDurationBeat
 }
 
 static bool sameEvent(const StepEvent& a, const StepEvent& b) {
-	return a.evolve == b.evolve && a.step == b.step && a.pitchType == b.pitchType && a.pitchV == b.pitchV &&
+	return a.condition == b.condition && a.evolve == b.evolve && a.step == b.step && a.pitchType == b.pitchType && a.pitchV == b.pitchV &&
 		a.degree == b.degree && a.note == b.note && a.octave == b.octave &&
 		a.hasGate == b.hasGate && a.gate == b.gate &&
 		a.hasVelocity == b.hasVelocity && a.velocity == b.velocity &&
 		a.hasMod == b.hasMod && a.mod == b.mod &&
 		a.hasMod2 == b.hasMod2 && a.mod2 == b.mod2 &&
 		a.hasMod3 == b.hasMod3 && a.mod3 == b.mod3 &&
-		a.hasProbability == b.hasProbability && a.probability == b.probability &&
+		a.transposeSemitones == b.transposeSemitones && a.hasProbability == b.hasProbability && a.probability == b.probability &&
 		a.tie == b.tie && a.glideMs == b.glideMs && a.microshift == b.microshift &&
 		a.ratchets == b.ratchets && a.compiledPitchV == b.compiledPitchV;
 }

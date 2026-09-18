@@ -1,4 +1,5 @@
 #include "SibylEdit.hpp"
+#include "SibylNoteEdit.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -88,11 +89,24 @@ bool applyOperation(json_t*& working, json_t* op, size_t index, EditResult& resu
 	const char* name = requiredString(op, "op");
 	if (!name) return fail(result, "invalid_operation", path + ".op", "Operation requires a string op.");
 
+    if (isNoteOperation(name)) return applyNoteOperation(working, op, index, result);
+    const std::string operationName = name;
+    if (operationName == "upsert_automation" || operationName == "delete_automation" ||
+        operationName == "upsert_progression" || operationName == "delete_progression" ||
+        operationName == "set_default_harmony" || operationName == "set_scene_harmony" ||
+        operationName == "inherit_scene_harmony" || operationName == "voice_progression" ||
+        operationName == "set_scene_assignment" || operationName == "update_scene_assignment") {
+        return fail(result, "unsupported_feature", path + ".op", "Operation belongs to a later milestone.");
+    }
 	if (std::string(name) == "replace_composition") {
 		json_t* composition = requiredObject(op, "composition");
 		if (!composition) return fail(result, "invalid_operation", path + ".composition", "replace_composition requires an object composition.");
-		json_t* replacement = json_deep_copy(composition);
-		if (!replacement) return fail(result, "internal_error", path, "Could not copy replacement composition.");
+		ParseResult normalized; normalized.valid = true;
+        json_t* replacement = normalizeComposition(composition, normalized);
+        if (!replacement) {
+            const auto& issue = normalized.errors.front();
+            return fail(result, issue.code, issue.path, issue.message);
+        }
 		json_decref(working);
 		working = replacement;
 		return true;
@@ -145,6 +159,16 @@ bool applyOperation(json_t*& working, json_t* op, size_t index, EditResult& resu
 		json_t* value = requiredObject(op, isPattern ? "pattern" : "macro");
 		if (!id || !value || !json_is_object(target)) return fail(result, "invalid_operation", path, std::string(name) + " requires id and object value.");
 		json_t* copy = json_deep_copy(value);
+        if (isPattern) {
+            if (!json_object_get(copy, "length")) json_object_set_new(copy, "length", json_integer(16));
+            if (!json_object_get(copy, "resolution")) json_object_set_new(copy, "resolution", json_string("1/16"));
+            ParseResult normalized; normalized.valid = true;
+            if (!normalizeNoteIds(copy, "patterns." + std::string(id), normalized, json_object_get(target, id))) {
+                json_decref(copy);
+                const auto& issue = normalized.errors.front();
+                return fail(result, issue.code, issue.path, issue.message);
+            }
+        }
 		json_object_del(copy, "id");
 		json_object_set_new(target, id, copy);
 		return true;
@@ -214,8 +238,8 @@ bool applyOperation(json_t*& working, json_t* op, size_t index, EditResult& resu
 
 EditResult applyCompositionEdit(const Composition& base, json_t* operations, int revision) {
 	EditResult result;
-	if (!operations || !json_is_array(operations) || json_array_size(operations) == 0) {
-		fail(result, "invalid_request", "operations", "operations must be a non-empty array.");
+	if (!operations || !json_is_array(operations) || json_array_size(operations) == 0 || json_array_size(operations) > 256) {
+		fail(result, "invalid_request", "operations", "operations must contain 1–256 entries.");
 		return result;
 	}
 	json_error_t error;
@@ -242,9 +266,9 @@ EditResult applyCompositionEdit(const Composition& base, json_t* operations, int
 	result.valid = parsed.valid;
 	result.composition = parsed.composition;
 	result.errors = parsed.errors;
-	result.warnings = parsed.warnings;
+	result.warnings.insert(result.warnings.end(), parsed.warnings.begin(), parsed.warnings.end());
 	if (!parsed.valid) {
-		result.errorCode = "validation_failed";
+		result.errorCode = parsed.errors.empty() ? "validation_failed" : parsed.errors.front().code;
 		if (!parsed.errors.empty()) {
 			result.errorPath = parsed.errors.front().path;
 			result.errorMessage = parsed.errors.front().message;

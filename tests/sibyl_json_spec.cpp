@@ -79,7 +79,7 @@ int main() {
           && serialized.find("filter transition") != std::string::npos,
           "observation marker survives portable composition serialization");
 
-    auto evolving = sibyl::parseCompositionJson(R"({"patterns":{"p":{"length":4,"evolution":{"velocity":0.2,"gate":0.1,"glideMs":40,"mod":0.5,"mod2":1,"mod3":2},"steps":[{"step":0,"note":"E2","evolve":false}]}}})", 1);
+    auto evolving = sibyl::parseCompositionJson(R"({"patterns":{"p":{"length":4,"evolution":{"probability":0.2,"velocity":0.2,"gate":0.1,"glideMs":40,"mod":0.5,"mod2":1,"mod3":2},"steps":[{"step":0,"note":"E2","evolve":false}]}}})", 1);
     check(evolving.valid && evolving.warnings.empty(), "repeat evolution validates without ignored fields");
     if (evolving.valid) {
         const auto& original = evolving.composition->patterns.at("p");
@@ -92,6 +92,8 @@ int main() {
               && !roundTrip.composition->patterns.at("p").steps[0].evolve,
               "evolution depths and protected events survive serialization");
     }
+    expectInvalid(R"({"patterns":{"p":{"evolution":{"probability":-0.1}}}})", "patterns.p.evolution.probability", "negative probability depth rejected");
+    expectInvalid(R"({"patterns":{"p":{"evolution":{"probability":1.1}}}})", "patterns.p.evolution.probability", "probability depth above one rejected");
     expectInvalid(R"({"patterns":{"p":{"evolution":[]}}})", "patterns.p.evolution", "evolution must be an object");
     expectInvalid(R"({"patterns":{"p":{"evolution":{"velocity":-0.1}}}})", "patterns.p.evolution.velocity", "negative evolution depth rejected");
     expectInvalid(R"({"patterns":{"p":{"evolution":{"mod3":21}}}})", "patterns.p.evolution.mod3", "unbounded modulation depth rejected");

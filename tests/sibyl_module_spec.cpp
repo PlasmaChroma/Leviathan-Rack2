@@ -16,6 +16,7 @@
 namespace {
 bool gTrackAllocations = false;
 std::size_t gAllocationCount = 0;
+std::size_t gDeallocationCount = 0;
 }
 
 void* operator new(std::size_t size) {
@@ -28,10 +29,10 @@ void* operator new[](std::size_t size) {
 	return ::operator new(size);
 }
 
-void operator delete(void* memory) noexcept { std::free(memory); }
-void operator delete[](void* memory) noexcept { std::free(memory); }
-void operator delete(void* memory, std::size_t) noexcept { std::free(memory); }
-void operator delete[](void* memory, std::size_t) noexcept { std::free(memory); }
+void operator delete(void* memory) noexcept { if (gTrackAllocations && memory) ++gDeallocationCount; std::free(memory); }
+void operator delete[](void* memory) noexcept { if (gTrackAllocations && memory) ++gDeallocationCount; std::free(memory); }
+void operator delete(void* memory, std::size_t) noexcept { if (gTrackAllocations && memory) ++gDeallocationCount; std::free(memory); }
+void operator delete[](void* memory, std::size_t) noexcept { if (gTrackAllocations && memory) ++gDeallocationCount; std::free(memory); }
 
 Plugin* pluginInstance = nullptr;
 
@@ -159,7 +160,119 @@ void processOneSample(SibylModule& module) {
 }
 }
 
+#include "sibyl_condition_cases.hpp"
+
 int main() {
+    testConditions();
+    {
+        auto parsed = sibyl::parseCompositionJson(R"({"tracks":[{"id":"v","channel":0}],"patterns":{"p":{"steps":[{"step":0,"note":"C3","gate":4}]}},"arrangement":[{"id":"s","tracks":{"v":"p"}}]})", 1);
+        check(parsed.valid, "P1 fixture compiles");
+        SibylModule module;
+        module.acceptComposition(parsed.composition, sibyl::ApplyAt::IMMEDIATE, sibyl::PhasePolicy::RESTART_ALL);
+        processOneSample(module);
+        json_t* undoState = module.dataToJson();
+        std::string response, error;
+        const std::string operations = R"([{"op":"insert_notes","pattern_id":"p","notes":[{"step":4,"note":"E3"}]},{"op":"transpose_notes","pattern_id":"p","selector":{"ids":["n2"]},"semitones":12}])";
+        std::string preview = "{\"expected_revision\":1,\"operations\":" + operations + "}";
+        auto* accepted = module.m_acceptedCompositionPtr;
+        auto* pending = module.m_pendingAdoptionPtr.load();
+        check(module.handleSibylRequest(SibylControl::Operation::VALIDATE, preview, response, error)
+            && response.find("\"valid\":true") != std::string::npos
+            && response.find("n2") != std::string::npos
+            && module.m_acceptedCompositionPtr == accepted && module.m_pendingAdoptionPtr.load() == pending
+            && module.m_acceptedRevision == 1 && accepted->patterns.at("p").nextNoteId == 2,
+            "operation preview consumes no revision, ID, or pending adoption");
+        json_error_t e;
+        json_t* previewResult = json_loads(response.c_str(), 0, &e);
+        std::string commit = "{\"expected_revision\":1,\"apply_at\":\"nextScene\",\"operations\":" + operations + "}";
+        check(module.handleSibylRequest(SibylControl::Operation::EDIT, commit, response, error), "targeted transaction accepted");
+        json_t* editResult = json_loads(response.c_str(), 0, &e);
+        check(json_equal(json_object_get(previewResult,"changes"), json_object_get(editResult,"changes"))
+            && module.m_acceptedRevision == 2 && module.m_activeRevision.load() == 1,
+            "preview and commit have identical IDs/reports while accepted edit remains pending");
+        json_decref(previewResult); json_decref(editResult);
+        pending = module.m_pendingAdoptionPtr.load();
+        check(!module.handleSibylRequest(SibylControl::Operation::VALIDATE, preview, response, error)
+            && response.find("revision_conflict") != std::string::npos && module.m_pendingAdoptionPtr.load() == pending,
+            "stale preview is rejected against accepted rather than active revision");
+        check(module.handleSibylRequest(SibylControl::Operation::EDIT,
+            R"({"expected_revision":2,"operations":[{"op":"update_notes","pattern_id":"p","selector":{"ids":["n2"]},"set":{"velocity":0.8}}]})", response, error)
+            && module.m_acceptedCompositionPtr->patterns.at("p").steps.size() == 2,
+            "new edit includes earlier accepted-but-pending note insertion");
+        accepted = module.m_acceptedCompositionPtr; pending = module.m_pendingAdoptionPtr.load();
+        check(module.handleSibylRequest(SibylControl::Operation::VALIDATE,
+            R"({"expected_revision":3,"operations":[{"op":"insert_notes","pattern_id":"p","notes":[{"step":0,"note":"G3"}]}]})", response, error)
+            && response.find("\"valid\":false") != std::string::npos && response.find("step_collision") != std::string::npos
+            && module.m_acceptedCompositionPtr == accepted && module.m_pendingAdoptionPtr.load() == pending,
+            "failed candidate preview returns valid:false without mutation");
+        check(!module.handleSibylRequest(SibylControl::Operation::VALIDATE,
+            R"({"expected_revision":3,"operations":[],"candidate":{}})", response, error), "mixed preview modes are malformed");
+        check(module.handleSibylRequest(SibylControl::Operation::GET_COMPOSITION,
+            R"({"view":"notes","pattern_id":"p","selector":{"ids":["n2"]},"fields":["id","note","effectivePitchV"]})", response, error)
+            && response.find("derived") != std::string::npos && response.find("n2") != std::string::npos,
+            "notes view returns selected authored and separately derived fields");
+        json_t* redoState = module.dataToJson();
+        module.dataFromJson(undoState);
+        check(module.m_acceptedCompositionPtr->patterns.at("p").steps.size() == 1, "undo state restores original notes and allocator");
+        module.dataFromJson(redoState);
+        check(module.m_acceptedCompositionPtr->patterns.at("p").steps[1].id == "n2"
+            && module.m_acceptedCompositionPtr->patterns.at("p").steps[1].transposeSemitones == 12,
+            "redo state restores IDs and transpose through canonical patch codec");
+        accepted = module.m_acceptedCompositionPtr;
+        json_object_set_new(redoState,"schemaVersion",json_integer(99));
+        json_object_set_new(redoState,"loopOverride",json_integer(0));
+        const int loopBefore = module.m_loopOverride.load();
+        module.dataFromJson(redoState);
+        check(module.m_acceptedCompositionPtr == accepted && module.m_loopOverride.load() == loopBefore,
+            "future patch schema cannot partially change composition or runtime preferences");
+        json_decref(undoState); json_decref(redoState);
+        gAllocationCount = gDeallocationCount = 0;
+        gTrackAllocations = true;
+        for (int frame = 0; frame < 100000; ++frame) processOneSample(module);
+        gTrackAllocations = false;
+        check(gAllocationCount == 0 && gDeallocationCount == 0,
+            "P1 adoption and repeated playback allocate and free no audio-thread objects");
+    }
+    for (int mode = 0; mode < 3; ++mode) {
+        auto composition = std::const_pointer_cast<sibyl::Composition>(makeComposition(1, false));
+        auto& pattern = composition->patterns["first"];
+        pattern.evolution.probability = mode == 0 ? 0.f : .2f;
+        pattern.steps[0].hasProbability = true;
+        pattern.steps[0].probability = .5f;
+        pattern.steps[0].evolve = mode != 2;
+        composition->arrangement[0].lengthBeats = 1.f;
+        SibylModule module;
+        module.acceptComposition(composition, sibyl::ApplyAt::IMMEDIATE, sibyl::PhasePolicy::RESTART_ALL);
+        std::array<bool, 32> played {};
+        bool sawPlay = false, sawSkip = false;
+        for (int replay = 0; replay < 2; ++replay) {
+            if (replay) {
+                std::string response, error;
+                check(module.handleSibylRequest(SibylControl::Operation::TRANSPORT,
+                    R"({"action":"restart","target":"arrangement","apply_at":"immediate"})", response, error),
+                    "probability replay reset accepted");
+            }
+            processOneSample(module);
+            for (size_t pass = 0; pass < played.size(); ++pass) {
+                for (int sample = 0; sample < 30000 && module.m_trackStates[0].evolution.pass < pass; ++sample)
+                    processOneSample(module);
+                if (module.m_trackStates[0].evolution.pass != pass) {
+                    check(false, "probability traversal reaches the next repeat");
+                    break;
+                }
+                bool value = module.m_trackStates[0].activeEventPlayed;
+                if (replay) check(value == played[pass], "probability decisions replay after reset");
+                else played[pass] = value;
+                sawPlay |= value; sawSkip |= !value;
+                if (mode != 1) check(value == played[0], "disabled and protected probability retain legacy draws");
+            }
+        }
+        if (mode == 1) check(sawPlay && sawSkip, "probability evolution produces sounding and skipped repeats");
+        std::string response, error;
+        module.handleSibylRequest(SibylControl::Operation::CAPABILITIES, "{}", response, error);
+        check(response.find("probability") != std::string::npos, "capabilities advertise probability evolution");
+    }
+
 	{
 		auto composition = std::const_pointer_cast<sibyl::Composition>(makeComposition(1, false));
 		auto& pattern = composition->patterns["first"];
@@ -770,7 +883,7 @@ int main() {
 		check(saved && json_is_object(saved) &&
 			json_is_string(json_object_get(saved, "format")) &&
 			std::string(json_string_value(json_object_get(saved, "format"))) == "Leviathan.SibylComposition" &&
-			json_integer_value(json_object_get(saved, "schemaVersion")) == 2 &&
+			json_integer_value(json_object_get(saved, "schemaVersion")) == 3 &&
 			json_is_object(json_object_get(saved, "composition")),
 			"portable composition envelope is versioned and self-identifying");
 		if (saved) json_decref(saved);

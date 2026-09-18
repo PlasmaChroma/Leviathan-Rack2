@@ -401,19 +401,27 @@ async def vcv_octavia_console_respond(params: OctaviaConsoleResponseInput) -> st
 
 
 class SibylCompositionInput(SibylModuleInput):
-    view: Literal["summary", "full", "pattern", "scene"] = Field(
+    view: Literal["summary", "full", "pattern", "scene", "notes"] = Field(
         "summary", description="Compact summary, full composition, or one named pattern/scene"
     )
     id: Optional[str] = Field(None, description="Pattern or scene ID; required by pattern and scene views")
+    pattern_id: Optional[str] = None
+    selector: Optional[dict] = None
+    fields: Optional[list[str] | Literal["full"]] = None
+    page_size: Optional[int] = Field(None, ge=1, le=256)
+    cursor: Optional[str] = None
 
 
 class SibylValidateInput(SibylModuleInput):
-    candidate: dict = Field(..., description="Candidate composition, pattern, scene, or edit payload to validate")
+    candidate: Optional[dict] = Field(None, description="Candidate composition or legacy validation payload")
+    operations: Optional[list[dict]] = Field(None, min_length=1, max_length=256)
+    expected_revision: Optional[int] = Field(None, ge=0)
+    return_changes: bool = True
 
 
 class SibylEditInput(SibylModuleInput):
     expected_revision: int = Field(..., description="Last accepted revision read from Sibyl", ge=0)
-    operations: list[dict] = Field(..., description="Atomic semantic edit operations", min_length=1)
+    operations: list[dict] = Field(..., description="Atomic semantic edit operations", min_length=1, max_length=256)
     apply_at: Optional[Literal["immediate", "nextStep", "nextBeat", "nextScene"]] = Field(
         None, description="Optional adoption boundary; otherwise use the composition default"
     )
@@ -453,6 +461,10 @@ async def vcv_sibyl_get_composition(params: SibylCompositionInput) -> str:
         query = {"view": params.view}
         if params.id is not None:
             query["id"] = params.id
+        for field in ("pattern_id", "selector", "fields", "page_size", "cursor"):
+            value = getattr(params, field)
+            if value is not None:
+                query[field] = json.dumps(value, separators=(",", ":")) if field in ("selector", "fields") else value
         return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/composition?{urlencode(query)}"), indent=2)
     except Exception as e:
         return _err(e)
@@ -463,7 +475,16 @@ async def vcv_sibyl_get_composition(params: SibylCompositionInput) -> str:
 async def vcv_sibyl_validate(params: SibylValidateInput) -> str:
     """Validate a candidate with Sibyl's own musical rules without changing playback."""
     try:
-        return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/validate", "POST", params.candidate), indent=2)
+        if params.operations is not None:
+            if params.candidate is not None or params.expected_revision is None:
+                return _err("Operation preview requires expected_revision and no candidate")
+            payload = {"operations": params.operations, "expected_revision": params.expected_revision,
+                       "return_changes": params.return_changes}
+        elif params.candidate is not None:
+            payload = params.candidate
+        else:
+            return _err("Supply candidate or operations")
+        return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/validate", "POST", payload), indent=2)
     except Exception as e:
         return _err(e)
 

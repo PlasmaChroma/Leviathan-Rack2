@@ -41,6 +41,7 @@ inline float evolutionSigned(uint64_t seed, uint64_t pass, int channel, int step
 }
 
 struct EvolvedExpression {
+    float probability = 1.f;
     float gate = 0.f;
     float velocity = 0.f;
     float glideMs = 0.f;
@@ -50,6 +51,7 @@ struct EvolvedExpression {
 inline EvolvedExpression evolveExpression(const Pattern& pattern, const StepEvent& event,
         const TrackDef& track, uint64_t seed, uint64_t pass, int channel) {
     EvolvedExpression result;
+    result.probability = event.hasProbability ? event.probability : 1.f;
     result.gate = event.hasGate ? event.gate : track.defaultGate;
     result.velocity = event.hasVelocity ? event.velocity : track.defaultVelocity;
     result.glideMs = event.glideMs;
@@ -62,6 +64,7 @@ inline EvolvedExpression evolveExpression(const Pattern& pattern, const StepEven
         if (depth == 0.f) return base;
         return std::max(low, std::min(high, base + depth * evolutionSigned(seed, pass, channel, step, lane)));
     };
+    result.probability = vary(result.probability, amount.probability, 6, 0.f, 1.f, event.step);
     result.velocity = vary(result.velocity, amount.velocity, 0, 0.f, 1.f, event.step);
     // Keep zero-length authored gates zero; do not turn a silent event into a note.
     if (result.gate > 0.f)

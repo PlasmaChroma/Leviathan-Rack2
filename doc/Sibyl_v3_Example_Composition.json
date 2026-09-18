@@ -1,0 +1,381 @@
+{
+  "format": "Leviathan.SibylComposition",
+  "schemaVersion": 3,
+  "composition": {
+    "schemaVersion": 3,
+    "meta": {
+      "title": "Sibyl Expressive Composition — Integration Fixture",
+      "prompt": "Exercise relative harmony, repeat conditions, scene overrides, and independent MOD curves.",
+      "bpm": 120,
+      "root": "C",
+      "rootOctave": 3,
+      "scale": "major",
+      "swing": 0,
+      "seed": 1234
+    },
+    "clock": {
+      "externalPpqn": 24,
+      "outputPpqn": 24,
+      "externalTimeoutMs": 2000,
+      "onExternalStop": "hold"
+    },
+    "transport": {
+      "running": false,
+      "loop": true,
+      "defaultApplyAt": "nextBeat"
+    },
+    "tracks": [
+      {
+        "id": "bass",
+        "channel": 0,
+        "defaultGate": 0.65,
+        "defaultVelocity": 0.7
+      },
+      {
+        "id": "kick",
+        "channel": 1,
+        "defaultGate": 0.2,
+        "defaultVelocity": 1.0
+      },
+      {
+        "id": "hats",
+        "channel": 2,
+        "defaultGate": 0.2,
+        "defaultVelocity": 0.4
+      },
+      {
+        "id": "filter_only",
+        "channel": 3,
+        "defaultGate": 0.5,
+        "defaultVelocity": 0.5
+      }
+    ],
+    "patterns": {
+      "bass_main": {
+        "length": 16,
+        "resolution": "1/16",
+        "nextNoteId": 9,
+        "steps": [
+          {
+            "id": "n1",
+            "step": 0,
+            "harmonic": {
+              "kind": "tone",
+              "index": 0,
+              "octave": -1
+            },
+            "mod": 0.5
+          },
+          {
+            "id": "n2",
+            "step": 2,
+            "harmonic": {
+              "kind": "tone",
+              "index": 0,
+              "octave": -1
+            },
+            "mod": 0.5
+          },
+          {
+            "id": "n3",
+            "step": 4,
+            "harmonic": {
+              "kind": "tone",
+              "index": 0,
+              "octave": -1
+            },
+            "mod": 0.5
+          },
+          {
+            "id": "n4",
+            "step": 6,
+            "harmonic": {
+              "kind": "tone",
+              "index": 0,
+              "octave": -1
+            },
+            "mod": 0.5
+          },
+          {
+            "id": "n5",
+            "step": 8,
+            "harmonic": {
+              "kind": "tone",
+              "index": 0,
+              "octave": -1
+            },
+            "mod": 0.5
+          },
+          {
+            "id": "n6",
+            "step": 10,
+            "harmonic": {
+              "kind": "tone",
+              "index": 0,
+              "octave": -1
+            },
+            "mod": 0.5
+          },
+          {
+            "id": "n7",
+            "step": 12,
+            "harmonic": {
+              "kind": "tone",
+              "index": 0,
+              "octave": -1
+            },
+            "mod": 0.5
+          },
+          {
+            "id": "n8",
+            "step": 14,
+            "harmonic": {
+              "kind": "tone",
+              "index": 0,
+              "octave": -1
+            },
+            "mod": 0.5,
+            "velocity": 0.9,
+            "condition": {
+              "all": [
+                {
+                  "scope": "patternPass",
+                  "every": 4,
+                  "offset": 4
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "kick_main": {
+        "length": 16,
+        "resolution": "1/16",
+        "nextNoteId": 5,
+        "steps": [
+          {
+            "id": "n1",
+            "step": 0,
+            "pitchV": 0
+          },
+          {
+            "id": "n2",
+            "step": 4,
+            "pitchV": 0
+          },
+          {
+            "id": "n3",
+            "step": 8,
+            "pitchV": 0
+          },
+          {
+            "id": "n4",
+            "step": 12,
+            "pitchV": 0
+          }
+        ]
+      },
+      "hats_main": {
+        "length": 16,
+        "resolution": "1/16",
+        "nextNoteId": 5,
+        "evolution": {
+          "probability": 0.2
+        },
+        "steps": [
+          {
+            "id": "n1",
+            "step": 2,
+            "note": "C5",
+            "probability": 0.65
+          },
+          {
+            "id": "n2",
+            "step": 6,
+            "note": "C5",
+            "probability": 0.65
+          },
+          {
+            "id": "n3",
+            "step": 10,
+            "note": "C5",
+            "probability": 0.65
+          },
+          {
+            "id": "n4",
+            "step": 14,
+            "note": "C5",
+            "probability": 1,
+            "evolve": false,
+            "velocity": 0.8,
+            "ratchets": 2,
+            "condition": {
+              "all": [
+                {
+                  "scope": "sceneRepeat",
+                  "is": "last"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "arrangement": [
+      {
+        "id": "build",
+        "name": "Four-repeat build",
+        "lengthBeats": 8,
+        "repeats": 4,
+        "phaseMode": "restart",
+        "tracks": {
+          "bass": "bass_main",
+          "kick": "kick_main",
+          "hats": "hats_main"
+        }
+      },
+      {
+        "id": "chorus",
+        "name": "Octave-up chorus",
+        "lengthBeats": 16,
+        "repeats": 1,
+        "phaseMode": "continue",
+        "tracks": {
+          "bass": {
+            "pattern": "bass_main",
+            "overrides": {
+              "transposeSemitones": 12,
+              "velocityScale": 1.15,
+              "probabilityScale": 0.85
+            }
+          },
+          "kick": "kick_main",
+          "hats": "hats_main"
+        }
+      }
+    ],
+    "macros": {},
+    "harmony": {
+      "progressions": {
+        "main_changes": {
+          "lengthBeats": 16,
+          "chords": [
+            {
+              "id": "c1",
+              "beat": 0,
+              "root": "C3",
+              "intervals": [
+                0,
+                4,
+                7
+              ]
+            },
+            {
+              "id": "c2",
+              "beat": 4,
+              "root": "A2",
+              "intervals": [
+                0,
+                3,
+                7
+              ]
+            },
+            {
+              "id": "c3",
+              "beat": 8,
+              "root": "F2",
+              "intervals": [
+                0,
+                4,
+                7
+              ]
+            },
+            {
+              "id": "c4",
+              "beat": 12,
+              "root": "G2",
+              "intervals": [
+                0,
+                4,
+                7
+              ]
+            }
+          ]
+        }
+      },
+      "default": {
+        "progression": "main_changes",
+        "clock": "arrangement",
+        "loop": true
+      }
+    },
+    "automation": {
+      "bass_filter_rise": {
+        "target": {
+          "track": "bass",
+          "lane": "mod"
+        },
+        "scope": {
+          "scene": "build"
+        },
+        "clock": "sceneVisit",
+        "mode": "replace",
+        "points": [
+          {
+            "beat": 0,
+            "value": 0,
+            "shape": "linear"
+          },
+          {
+            "beat": 32,
+            "value": 5
+          }
+        ]
+      },
+      "patternless_sweep": {
+        "target": {
+          "track": "filter_only",
+          "lane": "mod2"
+        },
+        "scope": {
+          "scene": "build"
+        },
+        "clock": "sceneVisit",
+        "mode": "replace",
+        "points": [
+          {
+            "beat": 0,
+            "value": -2,
+            "shape": "smoothstep"
+          },
+          {
+            "beat": 32,
+            "value": 2
+          }
+        ]
+      },
+      "arrangement_motion": {
+        "target": {
+          "track": "bass",
+          "lane": "mod3"
+        },
+        "scope": {
+          "arrangement": true
+        },
+        "clock": "arrangement",
+        "mode": "replace",
+        "points": [
+          {
+            "beat": 0,
+            "value": 0,
+            "shape": "linear"
+          },
+          {
+            "beat": 48,
+            "value": 4
+          }
+        ]
+      }
+    }
+  }
+}

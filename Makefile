@@ -99,6 +99,9 @@ TEST_BINS_NON_RACK := \
 	build/tests/octavia_presence_routes_spec \
 	build/tests/octavia_console_mailbox_spec \
 	build/tests/sibyl_evolution_spec \
+	build/tests/sibyl_codec_spec \
+	build/tests/sibyl_note_edit_spec \
+	build/tests/sibyl_legacy_golden_spec \
 	build/tests/sibyl_adoption_spec \
 	build/tests/sibyl_clock_estimator_spec \
 	build/tests/sibyl_hardware_control_spec \
@@ -479,6 +482,9 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/octavia_cable_validation_spec)
 	$(call run_test_bin,build/tests/octavia_console_mailbox_spec)
 	$(call run_test_bin,build/tests/sibyl_evolution_spec)
+	$(call run_rack_test_bin,build/tests/sibyl_codec_spec)
+	$(call run_rack_test_bin,build/tests/sibyl_note_edit_spec)
+	$(call run_rack_test_bin,build/tests/sibyl_legacy_golden_spec)
 	$(call run_test_bin,build/tests/sibyl_adoption_spec)
 	$(call run_test_bin,build/tests/sibyl_clock_estimator_spec)
 	$(call run_test_bin,build/tests/sibyl_hardware_control_spec)
@@ -664,32 +670,32 @@ build/tests/spsc_latest_snapshot_tsan_spec: tests/spsc_latest_snapshot_spec.cpp 
 build/tests/nvg_graphics_lifecycle_spec: tests/nvg_graphics_lifecycle_spec.cpp src/NvgGraphicsLifecycle.cpp src/NvgGraphicsLifecycle.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -I$(RACK_DIR)/dep/include $(filter %.cpp,$^) -o $@
 
-build/tests/sibyl_json_spec: tests/sibyl_json_spec.cpp src/SibylJSON.cpp src/SibylJSON.hpp src/SibylTypes.hpp | build/tests
+build/tests/sibyl_json_spec: tests/sibyl_json_spec.cpp src/SibylJSON.cpp src/SibylJSON.hpp src/SibylTypes.hpp src/SibylCondition.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_json_spec.cpp src/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
-build/tests/sibyl_adoption_spec: tests/sibyl_adoption_spec.cpp src/SibylAdoption.cpp src/SibylAdoption.hpp src/SibylTypes.hpp | build/tests
+build/tests/sibyl_adoption_spec: tests/sibyl_adoption_spec.cpp src/SibylAdoption.cpp src/SibylAdoption.hpp src/SibylTypes.hpp src/SibylCondition.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/sibyl_adoption_spec.cpp src/SibylAdoption.cpp -o $@
 
-build/tests/sibyl_clock_estimator_spec: tests/sibyl_clock_estimator_spec.cpp src/SibylClockEstimator.cpp src/SibylClockEstimator.hpp src/SibylTypes.hpp | build/tests
+build/tests/sibyl_clock_estimator_spec: tests/sibyl_clock_estimator_spec.cpp src/SibylClockEstimator.cpp src/SibylClockEstimator.hpp src/SibylTypes.hpp src/SibylCondition.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/sibyl_clock_estimator_spec.cpp src/SibylClockEstimator.cpp -o $@
 
-build/tests/sibyl_hardware_control_spec: tests/sibyl_hardware_control_spec.cpp src/SibylHardwareControl.cpp src/SibylHardwareControl.hpp src/SibylAdoption.hpp src/SibylTypes.hpp | build/tests
+build/tests/sibyl_hardware_control_spec: tests/sibyl_hardware_control_spec.cpp src/SibylHardwareControl.cpp src/SibylHardwareControl.hpp src/SibylAdoption.hpp src/SibylTypes.hpp src/SibylCondition.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/sibyl_hardware_control_spec.cpp src/SibylHardwareControl.cpp -o $@
 
-build/tests/sibyl_edit_spec: tests/sibyl_edit_spec.cpp src/SibylEdit.cpp src/SibylEdit.hpp src/SibylJSON.cpp src/SibylJSON.hpp src/SibylTypes.hpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_edit_spec.cpp src/SibylEdit.cpp src/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+build/tests/sibyl_edit_spec: tests/sibyl_edit_spec.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylNoteEdit.hpp src/SibylEdit.hpp src/SibylJSON.cpp src/SibylJSON.hpp src/SibylTypes.hpp src/SibylCondition.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_edit_spec.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
-build/tests/sibyl_transport_spec: tests/sibyl_transport_spec.cpp src/SibylTransport.cpp src/SibylTransport.hpp src/SibylAdoption.cpp src/SibylAdoption.hpp src/SibylTypes.hpp | build/tests
+build/tests/sibyl_transport_spec: tests/sibyl_transport_spec.cpp src/SibylTransport.cpp src/SibylTransport.hpp src/SibylAdoption.cpp src/SibylAdoption.hpp src/SibylTypes.hpp src/SibylCondition.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_transport_spec.cpp src/SibylTransport.cpp src/SibylAdoption.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
-build/tests/sibyl_timing_spec: tests/sibyl_timing_spec.cpp src/SibylTiming.cpp src/SibylTiming.hpp src/SibylTypes.hpp | build/tests
+build/tests/sibyl_timing_spec: tests/sibyl_timing_spec.cpp src/SibylTiming.cpp src/SibylTiming.hpp src/SibylTypes.hpp src/SibylCondition.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/sibyl_timing_spec.cpp src/SibylTiming.cpp -o $@
 
-build/tests/sibyl_module_spec: tests/sibyl_module_spec.cpp src/Sibyl.cpp src/SibylEvolution.hpp src/SibylTypes.hpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_module_spec.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+build/tests/sibyl_module_spec: tests/sibyl_module_spec.cpp tests/sibyl_condition_cases.hpp src/Sibyl.cpp src/SibylEvolution.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_module_spec.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
-build/tests/sibyl_module_tsan_spec: tests/sibyl_module_spec.cpp src/Sibyl.cpp src/SibylEvolution.hpp src/SibylTypes.hpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp | build/tests
-	$(CXX) -std=c++17 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_module_spec.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+build/tests/sibyl_module_tsan_spec: tests/sibyl_module_spec.cpp tests/sibyl_condition_cases.hpp src/Sibyl.cpp src/SibylEvolution.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp | build/tests
+	$(CXX) -std=c++17 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_module_spec.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
 build/tests/moirai_curves_spec: tests/moirai_curves_spec.cpp src/MoiraiCurves.hpp src/MoiraiTypes.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/moirai_curves_spec.cpp -o $@
@@ -1031,5 +1037,16 @@ build/tests/octavia_presence_spec: tests/octavia_presence_spec.cpp src/OctaviaPr
 build/tests/octavia_presence_routes_spec: tests/octavia_presence_routes_spec.cpp src/OctaviaPresence.hpp src/OctaviaPresenceRoutes.hpp src/OctaviaServerLifecycle.hpp src/third_party/httplib.h | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -D_WIN32_WINNT=0x0A00 -DWINVER=0x0A00 -I$(RACK_DIR)/dep/include $< -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_RUNTIME_DIR) -o $@ $(if $(filter win,$(ARCH_OS)),-lws2_32)
 
-build/tests/sibyl_evolution_spec: tests/sibyl_evolution_spec.cpp src/SibylEvolution.hpp src/SibylTypes.hpp | build/tests
+build/tests/sibyl_evolution_spec: tests/sibyl_evolution_spec.cpp src/SibylEvolution.hpp src/SibylTypes.hpp src/SibylCondition.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc $< -o $@
+
+build/tests/sibyl_legacy_golden_spec: tests/sibyl_legacy_golden_spec.cpp src/Sibyl.cpp src/SibylEvolution.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_legacy_golden_spec.cpp src/SibylAdoption.cpp src/SibylClockEstimator.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylHardwareControl.cpp src/SibylJSON.cpp src/SibylTiming.cpp src/SibylTransport.cpp src/OctaviaObservationBus.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+
+
+build/tests/sibyl_codec_spec: tests/sibyl_codec_spec.cpp src/SibylJSON.cpp src/SibylJSON.hpp src/SibylTypes.hpp src/SibylCondition.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_codec_spec.cpp src/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+
+
+build/tests/sibyl_note_edit_spec: tests/sibyl_note_edit_spec.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylNoteEdit.hpp src/SibylEdit.hpp src/SibylAdoption.cpp src/SibylJSON.cpp src/SibylJSON.hpp src/SibylTypes.hpp src/SibylCondition.hpp | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_note_edit_spec.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylAdoption.cpp src/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@

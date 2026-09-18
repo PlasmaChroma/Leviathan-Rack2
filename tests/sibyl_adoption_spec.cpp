@@ -85,6 +85,9 @@ int main() {
 	evolved.patterns["line"].evolution.velocity = .1f;
 	check(sibyl::changedTrackChannelMask(original, evolved) == (1u << 3), "evolution edits participate in restartChanged");
 	evolved = original;
+	evolved.patterns["line"].evolution.probability = .2f;
+	check(sibyl::changedTrackChannelMask(original, evolved) == (1u << 3), "probability evolution edits participate in restartChanged");
+	evolved = original;
 	evolved.patterns["line"].steps[0].evolve = false;
 	check(sibyl::changedTrackChannelMask(original, evolved) == (1u << 3), "event protection edits participate in restartChanged");
 	auto unrelated = original;

@@ -5,16 +5,17 @@
 #include <regex>
 #include <limits>
 #include <unordered_set>
+#include <algorithm>
 
 namespace sibyl {
 
-static void addError(ParseResult& res, const std::string& path, const std::string& msg) {
-    res.errors.push_back({path, msg});
+static void addError(ParseResult& res, const std::string& path, const std::string& msg, const std::string& code = "validation_failed") {
+    res.errors.push_back({path, msg, code});
     res.valid = false;
 }
 
 static void addWarning(ParseResult& res, const std::string& path, const std::string& msg) {
-    res.warnings.push_back({path, msg});
+    res.warnings.push_back({path, msg, "unknown_field"});
 }
 
 static std::string childPath(const std::string& parent, const std::string& key) {
@@ -94,6 +95,208 @@ static void validateEnumField(json_t* object, const char* key, const std::string
 
 static bool validId(const std::string& value) { return !value.empty() && value.size() <= 64; }
 
+static Condition parseCondition(json_t* object, const std::string& path, ParseResult& res) {
+    Condition result;
+    if (!object) return result;
+    result.present = true;
+    auto fail = [&](const std::string& p, const char* message) {
+        addError(res, p, message, "invalid_condition");
+    };
+    if (!json_is_object(object)) { fail(path, "Expected condition object"); return result; }
+    const char* key; json_t* value;
+    json_object_foreach(object, key, value)
+        if (std::string(key) != "all") fail(path + "." + key, "Unknown condition field");
+    json_t* all = json_object_get(object, "all");
+    if (!json_is_array(all) || json_array_size(all) > 8) {
+        fail(path + ".all", "Expected array of at most eight tests"); return result;
+    }
+    size_t i; json_t* test;
+    json_array_foreach(all, i, test) {
+        const std::string p = path + ".all[" + std::to_string(i) + "]";
+        if (!json_is_object(test)) { fail(p, "Expected test object"); continue; }
+        json_object_foreach(test, key, value)
+            if (!isOneOf(key, {"scope", "every", "offset", "is"})) fail(p + "." + key, "Unknown test field");
+        ConditionTest compiled;
+        json_t* scope = json_object_get(test, "scope");
+        if (!json_is_string(scope) || !isOneOf(json_string_value(scope), {"patternPass", "sceneRepeat", "arrangementLoop"}))
+            fail(p + ".scope", "Expected patternPass, sceneRepeat, or arrangementLoop");
+        else if (std::string(json_string_value(scope)) == "sceneRepeat") compiled.scope = ConditionScope::SCENE_REPEAT;
+        else if (std::string(json_string_value(scope)) == "arrangementLoop") compiled.scope = ConditionScope::ARRANGEMENT_LOOP;
+        json_t* is = json_object_get(test, "is");
+        json_t* every = json_object_get(test, "every");
+        json_t* offset = json_object_get(test, "offset");
+        if (is) {
+            if (every || offset) fail(p, "Use is or every/offset, never both");
+            if (!json_is_string(is) || !isOneOf(json_string_value(is), {"first", "last"})) fail(p + ".is", "Expected first or last");
+            else {
+                compiled.kind = std::string(json_string_value(is)) == "first" ? ConditionTestKind::FIRST : ConditionTestKind::LAST;
+                if (compiled.kind == ConditionTestKind::LAST && compiled.scope != ConditionScope::SCENE_REPEAT)
+                    fail(p + ".is", "last is only valid for sceneRepeat");
+            }
+        } else {
+            if (!json_is_integer(every) || json_integer_value(every) < 1 || json_integer_value(every) > 1024)
+                fail(p + ".every", "Expected integer 1 through 1024");
+            else compiled.every = int(json_integer_value(every));
+            if (offset) {
+                if (!json_is_integer(offset) || json_integer_value(offset) < 1 || json_integer_value(offset) > compiled.every)
+                    fail(p + ".offset", "Expected integer 1 through every");
+                else compiled.offset = int(json_integer_value(offset));
+            }
+        }
+        result.tests[result.count++] = compiled;
+    }
+    return result;
+}
+
+static json_t* conditionToJson(const Condition& condition) {
+    json_t* object = json_object();
+    json_t* all = json_array();
+    for (unsigned i = 0; i < condition.count; ++i) {
+        const auto& test = condition.tests[i];
+        json_t* item = json_object();
+        const char* scope = test.scope == ConditionScope::PATTERN_PASS ? "patternPass" :
+            test.scope == ConditionScope::SCENE_REPEAT ? "sceneRepeat" : "arrangementLoop";
+        json_object_set_new(item, "scope", json_string(scope));
+        if (test.kind == ConditionTestKind::EVERY) {
+            json_object_set_new(item, "every", json_integer(test.every));
+            json_object_set_new(item, "offset", json_integer(test.offset));
+        } else json_object_set_new(item, "is", json_string(test.kind == ConditionTestKind::FIRST ? "first" : "last"));
+        json_array_append_new(all, item);
+    }
+    json_object_set_new(object, "all", all);
+    return object;
+}
+
+bool normalizeNoteIds(json_t* pattern, const std::string& path, ParseResult& res, json_t* previous) {
+    if (!json_object_get(pattern, "length")) json_object_set_new(pattern, "length", json_integer(16));
+    if (!json_object_get(pattern, "resolution")) json_object_set_new(pattern, "resolution", json_string("1/16"));
+    json_t* steps = json_object_get(pattern, "steps");
+    if (steps && !json_is_array(steps)) return true; // Schema validator diagnoses this.
+    json_int_t next = 1;
+    json_t* counter = json_object_get(pattern, "nextNoteId");
+    if (counter && (!json_is_integer(counter) || json_integer_value(counter) < 1 || json_integer_value(counter) > INT32_MAX)) {
+        addError(res, path + ".nextNoteId", "Expected positive integer through INT32_MAX"); return false;
+    }
+    if (counter) next = json_integer_value(counter);
+    if (previous) next = std::max(next, json_integer_value(json_object_get(previous, "nextNoteId")));
+    std::vector<json_t*> ordered;
+    size_t i; json_t* note;
+    json_array_foreach(steps, i, note) {
+        if (json_is_object(note)) ordered.push_back(note);
+    }
+    std::stable_sort(ordered.begin(), ordered.end(), [](json_t* a, json_t* b) {
+        return json_integer_value(json_object_get(a, "step")) < json_integer_value(json_object_get(b, "step"));
+    });
+    std::set<std::string> used;
+    for (auto* n : ordered) {
+        json_t* id = json_object_get(n, "id");
+        if (!id) continue;
+        bool valid = json_is_string(id) && json_string_length(id) > 0 && json_string_length(id) <= 64;
+        if (valid) for (size_t c = 0; c < json_string_length(id); ++c) {
+            unsigned char ch = json_string_value(id)[c];
+            if (ch < 32 || ch == 127 || (ch == 0xc2 && c + 1 < json_string_length(id)
+                    && (unsigned char)json_string_value(id)[c + 1] >= 0x80 && (unsigned char)json_string_value(id)[c + 1] <= 0x9f)) valid = false;
+        }
+        if (!valid) { addError(res, path + ".steps.id", "Note ID must be 1–64 UTF-8 bytes without controls"); return false; }
+        if (!used.insert(json_string_value(id)).second) {
+            addError(res, path + ".steps.id", "Duplicate note ID", "duplicate_note_id"); return false;
+        }
+    }
+    // Older full-pattern clients retain identity at unchanged occupied steps.
+    if (previous) for (auto* n : ordered) if (!json_object_get(n, "id")) {
+        json_t* old;
+        json_array_foreach(json_object_get(previous, "steps"), i, old) {
+            json_t* id = json_object_get(old, "id");
+            if (json_is_string(id) && json_equal(json_object_get(n, "step"), json_object_get(old, "step"))
+                    && used.insert(json_string_value(id)).second) {
+                json_object_set(n, "id", id); break;
+            }
+        }
+    }
+    auto skipOccupied = [&]() {
+        while (used.count("n" + std::to_string(next))) {
+            if (next == INT32_MAX) return false;
+            ++next;
+        }
+        return true;
+    };
+    for (auto* n : ordered) if (!json_object_get(n, "id")) {
+        if (!skipOccupied() || next == INT32_MAX) {
+            addError(res, path + ".nextNoteId", "Automatic note ID counter exhausted", "capacity_exceeded"); return false;
+        }
+        std::string id = "n" + std::to_string(next++);
+        used.insert(id); json_object_set_new(n, "id", json_string(id.c_str()));
+    }
+    if (!skipOccupied()) { addError(res, path + ".nextNoteId", "Automatic note ID counter exhausted", "capacity_exceeded"); return false; }
+    json_object_set_new(pattern, "nextNoteId", json_integer(next));
+    // Only sort a structurally valid array; never erase a malformed event.
+    if (steps && ordered.size() == json_array_size(steps)) {
+        json_t* sorted = json_array();
+        for (auto* n : ordered) json_array_append(sorted, n);
+        json_object_set_new(pattern, "steps", sorted);
+    }
+    return true;
+}
+
+json_t* normalizeComposition(json_t* input, ParseResult& res) {
+    if (!json_is_object(input)) { addError(res, "$", "Composition must be an object"); return nullptr; }
+    json_t* inner = json_object_get(input, "composition");
+    json_t* format = json_object_get(input, "format");
+    if (format && (!json_is_string(format) || std::string(json_string_value(format)) != "Leviathan.SibylComposition" || !inner)) {
+        addError(res, "format", "Unsupported composition envelope", "unsupported_schema"); return nullptr;
+    }
+    json_t* source = inner ? inner : input;
+    if (!json_is_object(source)) { addError(res, "composition", "Expected object"); return nullptr; }
+    json_t* outerVersion = inner ? json_object_get(input, "schemaVersion") : nullptr;
+    json_t* innerVersion = json_object_get(source, "schemaVersion");
+    for (auto* v : {outerVersion, innerVersion}) if (v && (!json_is_integer(v) || (json_integer_value(v) != 2 && json_integer_value(v) != 3))) {
+        addError(res, "schemaVersion", "Supported schema versions are 2 and 3", "unsupported_schema"); return nullptr;
+    }
+    if (outerVersion && innerVersion && !json_equal(outerVersion, innerVersion)) {
+        addError(res, "schemaVersion", "Envelope and composition versions disagree", "unsupported_schema"); return nullptr;
+    }
+    int version = innerVersion ? json_integer_value(innerVersion) : outerVersion ? json_integer_value(outerVersion) : 2;
+    bool valid = true;
+    auto feature = [&](json_t* obj, const char* key, const std::string& path, bool implemented) {
+        if (!json_object_get(obj, key)) return;
+        if (version != 3 || !implemented) {
+            addError(res, childPath(path, key), version != 3 ? "This field requires schemaVersion 3" : "Feature is not implemented in this milestone",
+                version != 3 ? "schema_version_required" : "unsupported_feature"); valid = false;
+        }
+    };
+    feature(source, "automation", "", false); feature(source, "harmony", "", false);
+    const char* key; json_t* pattern;
+    json_object_foreach(json_object_get(source, "patterns"), key, pattern) {
+        const std::string path = "patterns." + std::string(key);
+        feature(pattern, "nextNoteId", path, true);
+        size_t index; json_t* note;
+        json_array_foreach(json_object_get(pattern, "steps"), index, note) {
+            std::string np = path + ".steps[" + std::to_string(index) + "]";
+            feature(note, "id", np, true); feature(note, "transposeSemitones", np, true);
+            feature(note, "condition", np, true); feature(note, "harmonic", np, false);
+        }
+    }
+    size_t index; json_t* scene;
+    json_array_foreach(json_object_get(source, "arrangement"), index, scene) {
+        std::string path = "arrangement[" + std::to_string(index) + "]";
+        feature(scene, "harmony", path, false);
+        json_t* assignment;
+        json_object_foreach(json_object_get(scene, "tracks"), key, assignment)
+            feature(assignment, "overrides", path + ".tracks." + key, false);
+    }
+    if (!valid) return nullptr;
+    json_t* normalized = json_deep_copy(source);
+    json_object_set_new(normalized, "schemaVersion", json_integer(3));
+    for (const char* section : {"meta", "clock", "transport", "patterns", "macros"})
+        if (!json_object_get(normalized, section)) json_object_set_new(normalized, section, json_object());
+    for (const char* section : {"tracks", "arrangement"})
+        if (!json_object_get(normalized, section)) json_object_set_new(normalized, section, json_array());
+    json_object_foreach(json_object_get(normalized, "patterns"), key, pattern) {
+        if (!normalizeNoteIds(pattern, "patterns." + std::string(key), res)) { json_decref(normalized); return nullptr; }
+    }
+    return normalized;
+}
+
 static uint8_t observationMonitorBit(const std::string& name) {
 	if (name == "masterL") return 1u << 0;
 	if (name == "masterR") return 1u << 1;
@@ -106,7 +309,7 @@ static uint8_t observationMonitorBit(const std::string& name) {
 
 static void validateCompositionSchema(json_t* root, ParseResult& res) {
     if (!json_is_object(root)) { addError(res, "$", "Composition must be a JSON object"); return; }
-    warnUnknownFields(root, "", {"meta", "clock", "transport", "tracks", "patterns", "arrangement", "macros"}, res);
+    warnUnknownFields(root, "", {"schemaVersion", "meta", "clock", "transport", "tracks", "patterns", "arrangement", "macros"}, res);
 
     if (requireObjectIfPresent(root, "meta", "", res)) {
         json_t* meta = json_object_get(root, "meta");
@@ -174,11 +377,12 @@ static void validateCompositionSchema(json_t* root, ParseResult& res) {
             patternIds.insert(patternId);
             if (!validId(patternId)) addError(res, path, "Pattern id must be 1-64 characters");
             if (!json_is_object(pattern)) { addError(res, path, "Expected object"); continue; }
-            warnUnknownFields(pattern, path, {"length", "resolution", "steps", "evolution"}, res);
+            warnUnknownFields(pattern, path, {"nextNoteId", "length", "resolution", "steps", "evolution"}, res);
             if (requireObjectIfPresent(pattern, "evolution", path, res)) {
                 json_t* evolution = json_object_get(pattern, "evolution");
                 const std::string ep = path + ".evolution";
-                warnUnknownFields(evolution, ep, {"velocity", "gate", "glideMs", "mod", "mod2", "mod3"}, res);
+                warnUnknownFields(evolution, ep, {"probability", "velocity", "gate", "glideMs", "mod", "mod2", "mod3"}, res);
+                validateNumberField(evolution, "probability", ep, 0.0, 1.0, res);
                 validateNumberField(evolution, "velocity", ep, 0.0, 1.0, res);
                 validateNumberField(evolution, "gate", ep, 0.0, 1024.0, res);
                 validateNumberField(evolution, "glideMs", ep, 0.0, 3600000.0, res);
@@ -200,7 +404,9 @@ static void validateCompositionSchema(json_t* root, ParseResult& res) {
             json_array_foreach(steps, stepIndex, step) {
                 std::string stepPath = path + ".steps[" + std::to_string(stepIndex) + "]";
                 if (!json_is_object(step)) { addError(res, stepPath, "Expected object"); continue; }
-                warnUnknownFields(step, stepPath, {"step", "pitchV", "degree", "note", "octave", "gate", "velocity", "mod", "mod2", "mod3", "probability", "tie", "glideMs", "microshift", "ratchets", "observation", "evolve"}, res);
+                warnUnknownFields(step, stepPath, {"condition", "id", "transposeSemitones", "step", "pitchV", "degree", "note", "octave", "gate", "velocity", "mod", "mod2", "mod3", "probability", "tie", "glideMs", "microshift", "ratchets", "observation", "evolve"}, res);
+                parseCondition(json_object_get(step, "condition"), stepPath + ".condition", res);
+                validateIntegerField(step, "transposeSemitones", stepPath, -120, 120, res);
                 validateIntegerField(step, "step", stepPath, 0, std::max(0, length - 1), res);
                 json_t* stepNumber = json_object_get(step, "step");
                 if (!stepNumber) addError(res, stepPath + ".step", "Required field is missing");
@@ -494,14 +700,14 @@ static float degreeToPitchV(int degree, int octaveOffset, ScaleType scale, const
     int numDegrees = (int)intervals.size();
     if (numDegrees == 0) return 0.0f;
 
-    int octaveWrap = (degree >= 0) ? (degree / numDegrees) : ((degree - numDegrees + 1) / numDegrees);
+    int64_t octaveWrap = (degree >= 0) ? (degree / numDegrees) : ((int64_t(degree) - numDegrees + 1) / numDegrees);
     int degreeInScale = degree - octaveWrap * numDegrees;
     if (degreeInScale < 0) degreeInScale += numDegrees;
 
     int semitoneInScale = intervals[degreeInScale];
     int rootPc = rootPitchClassFromName(rootName);
-    int totalOctave = rootOctave + octaveOffset + octaveWrap;
-    int totalSemitones = rootPc + semitoneInScale + (totalOctave - 4) * 12;
+    int64_t totalOctave = int64_t(rootOctave) + octaveOffset + octaveWrap;
+    int64_t totalSemitones = rootPc + semitoneInScale + (totalOctave - 4) * 12;
     return totalSemitones / 12.0f;
 }
 
@@ -552,6 +758,10 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
         return res;
     }
 
+    json_t* normalized = normalizeComposition(root, res);
+    json_decref(root);
+    if (!normalized) return res;
+    root = normalized;
     validateCompositionSchema(root, res);
     if (!res.valid) {
         json_decref(root);
@@ -623,11 +833,13 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
         json_object_foreach(patternsJ, key, val) {
             Pattern p;
             p.id = key;
+            p.nextNoteId = getInteger(val, "nextNoteId", 1);
             p.length = getInteger(val, "length", 16);
             p.resolutionStr = getString(val, "resolution", "1/16");
             p.resolutionBeats = parseResolution(p.resolutionStr, res, "patterns." + std::string(key) + ".resolution");
             
             json_t* evolutionJ = json_object_get(val, "evolution");
+            p.evolution.probability = getNumber(evolutionJ, "probability", 0.f);
             p.evolution.velocity = getNumber(evolutionJ, "velocity", 0.f);
             p.evolution.gate = getNumber(evolutionJ, "gate", 0.f);
             p.evolution.glideMs = getNumber(evolutionJ, "glideMs", 0.f);
@@ -640,9 +852,12 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
                 std::set<int> seenSteps;
                 json_array_foreach(stepsJ, idx, stepJ) {
                     StepEvent e;
+                    e.id = getString(stepJ, "id");
+                    e.transposeSemitones = getInteger(stepJ, "transposeSemitones", 0);
                     e.step = getInteger(stepJ, "step", 0);
                     e.evolve = getBoolean(stepJ, "evolve", true);
                     std::string path = "patterns." + std::string(key) + ".steps[" + std::to_string(idx) + "]";
+                    e.condition = parseCondition(json_object_get(stepJ, "condition"), path + ".condition", res);
                     
                     if (e.step < 0 || e.step >= p.length) addError(res, path, "Step index out of bounds: " + std::to_string(e.step));
                     if (seenSteps.count(e.step)) addError(res, path, "Duplicate step index: " + std::to_string(e.step));
@@ -672,6 +887,9 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
                         }
                     }
                     
+                    if (e.transposeSemitones != 0) e.compiledPitchV += e.transposeSemitones / 12.f;
+                    if (e.compiledPitchV < -10.f || e.compiledPitchV > 10.f)
+                        addError(res, path, "Effective pitch is outside -10 to 10 V", "pitch_out_of_range");
                     json_t* gateJ = json_object_get(stepJ, "gate");
                     if (gateJ) { e.hasGate = true; e.gate = json_number_value(gateJ); }
                     json_t* velJ = json_object_get(stepJ, "velocity");
@@ -844,10 +1062,12 @@ static const char* onExternalStopToString(OnExternalStop o) {
 
 static json_t* patternToJson(const Pattern& pat) {
     json_t* patJ = json_object();
+    json_object_set_new(patJ, "nextNoteId", json_integer(pat.nextNoteId));
     json_object_set_new(patJ, "length", json_integer(pat.length));
     json_object_set_new(patJ, "resolution", json_string(pat.resolutionStr.c_str()));
     if (pat.evolution.enabled()) {
         json_t* evolutionJ = json_object();
+        json_object_set_new(evolutionJ, "probability", json_real(pat.evolution.probability));
         json_object_set_new(evolutionJ, "velocity", json_real(pat.evolution.velocity));
         json_object_set_new(evolutionJ, "gate", json_real(pat.evolution.gate));
         json_object_set_new(evolutionJ, "glideMs", json_real(pat.evolution.glideMs));
@@ -857,8 +1077,15 @@ static json_t* patternToJson(const Pattern& pat) {
         json_object_set_new(patJ, "evolution", evolutionJ);
     }
     json_t* stepsJ = json_array();
-    for (const auto& ev : pat.steps) {
+    std::vector<const StepEvent*> ordered;
+    for (const auto& ev : pat.steps) ordered.push_back(&ev);
+    std::sort(ordered.begin(), ordered.end(), [](const StepEvent* a, const StepEvent* b) { return a->step < b->step; });
+    for (const auto* event : ordered) {
+        const auto& ev = *event;
         json_t* evJ = json_object();
+        if (!ev.id.empty()) json_object_set_new(evJ, "id", json_string(ev.id.c_str()));
+        if (ev.transposeSemitones != 0) json_object_set_new(evJ, "transposeSemitones", json_integer(ev.transposeSemitones));
+        if (ev.condition.present) json_object_set_new(evJ, "condition", conditionToJson(ev.condition));
         json_object_set_new(evJ, "step", json_integer(ev.step));
         if (!ev.evolve) json_object_set_new(evJ, "evolve", json_false());
         if (ev.pitchType == PitchType::PITCH_V) {
@@ -930,6 +1157,7 @@ static json_t* sceneToJson(const Scene& sc) {
 
 static json_t* compositionToJson(const Composition& comp) {
     json_t* root = json_object();
+    json_object_set_new(root, "schemaVersion", json_integer(3));
 
     // Meta
     json_t* metaJ = json_object();
@@ -1015,7 +1243,7 @@ std::string serializeSummaryJson(const Composition& comp) {
     json_t* root = json_object();
     json_object_set_new(root, "ok", json_true());
     json_object_set_new(root, "revision", json_integer(comp.revision));
-    json_object_set_new(root, "schemaVersion", json_integer(2));
+    json_object_set_new(root, "schemaVersion", json_integer(3));
     json_object_set_new(root, "view", json_string("summary"));
 
     // Meta
@@ -1087,7 +1315,7 @@ std::string serializeFullCompositionJson(const Composition& comp) {
     json_t* root = json_object();
     json_object_set_new(root, "ok", json_true());
     json_object_set_new(root, "revision", json_integer(comp.revision));
-    json_object_set_new(root, "schemaVersion", json_integer(2));
+    json_object_set_new(root, "schemaVersion", json_integer(3));
     json_object_set_new(root, "view", json_string("full"));
     json_object_set_new(root, "composition", compositionToJson(comp));
     json_object_set_new(root, "warnings", json_array());
@@ -1108,7 +1336,7 @@ std::string serializePatternViewJson(const Composition& comp, const std::string&
     json_t* root = json_object();
     json_object_set_new(root, "ok", json_true());
     json_object_set_new(root, "revision", json_integer(comp.revision));
-    json_object_set_new(root, "schemaVersion", json_integer(2));
+    json_object_set_new(root, "schemaVersion", json_integer(3));
     json_object_set_new(root, "view", json_string("pattern"));
     json_object_set_new(root, "id", json_string(patternId.c_str()));
     json_object_set_new(root, "pattern", patternToJson(it->second));
@@ -1139,7 +1367,7 @@ std::string serializeSceneViewJson(const Composition& comp, const std::string& s
     json_t* root = json_object();
     json_object_set_new(root, "ok", json_true());
     json_object_set_new(root, "revision", json_integer(comp.revision));
-    json_object_set_new(root, "schemaVersion", json_integer(2));
+    json_object_set_new(root, "schemaVersion", json_integer(3));
     json_object_set_new(root, "view", json_string("scene"));
     json_object_set_new(root, "id", json_string(sceneId.c_str()));
     json_object_set_new(root, "scene", sceneToJson(*found));

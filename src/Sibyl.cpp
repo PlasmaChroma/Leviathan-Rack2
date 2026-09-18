@@ -3,6 +3,7 @@
 #include "SibylAdoption.hpp"
 #include "SibylClockEstimator.hpp"
 #include "SibylEdit.hpp"
+#include "SibylNoteEdit.hpp"
 #include "SibylHardwareControl.hpp"
 #include "SibylJSON.hpp"
 #include "SibylEvolution.hpp"
@@ -102,6 +103,7 @@ struct SibylModule : Module, SibylControl {
 	double m_outputClockPhaseBeats = 0.0;
 	int m_sceneIndex = 0;
 	int m_sceneRepeat = 0;
+	int64_t m_arrangementLoop = 1;
 	double m_scenePhase = 0.0;
 
 	// A sequence-guarded set of atomics gives the control/UI thread one coherent
@@ -116,6 +118,8 @@ struct SibylModule : Module, SibylControl {
 	std::atomic<double> m_telemetryEstimatedBpm{120.0};
 	std::array<std::atomic<double>, 16> m_telemetryTrackPhase;
 	std::array<std::atomic<uint64_t>, 16> m_telemetryEvolutionPass;
+	std::array<std::atomic<int64_t>, 16> m_telemetryConditionPass;
+	std::atomic<int64_t> m_telemetryArrangementLoop{1};
 	int m_telemetryPublishCountdown = 0;
 
 	struct TelemetrySnapshot {
@@ -127,6 +131,8 @@ struct SibylModule : Module, SibylControl {
 		double estimatedBpm = 120.0;
 		std::array<double, 16> trackPhase {};
 		std::array<uint64_t, 16> evolutionPass {};
+		std::array<int64_t, 16> conditionPass {};
+		int64_t arrangementLoop = 1;
 	};
 
 	struct DisplaySnapshot {
@@ -219,6 +225,8 @@ struct SibylModule : Module, SibylControl {
 
 	struct TrackState {
 		sibyl::EvolutionCursor evolution;
+		sibyl::ConditionCursor condition;
+		bool nextTieConditionEligible = true;
 		double patternPhaseBeats = 0.0;
 		int lastFiredStep = -1;
 		float currentPitch = 0.0f;
@@ -318,6 +326,7 @@ struct SibylModule : Module, SibylControl {
 		m_activeCompositionPtr.store(comp.get(), std::memory_order_release);
 		for (auto& phase : m_telemetryTrackPhase) phase.store(0.0, std::memory_order_relaxed);
 		for (auto& pass : m_telemetryEvolutionPass) pass.store(0, std::memory_order_relaxed);
+		for (auto& pass : m_telemetryConditionPass) pass.store(1, std::memory_order_relaxed);
 	}
 
 	~SibylModule() override {
@@ -395,6 +404,7 @@ struct SibylModule : Module, SibylControl {
 			if (m_trackStates[channel].currentGate > 0.0f) gateMask |= uint16_t(1u << channel);
 		m_telemetrySceneIndex.store(m_sceneIndex, std::memory_order_relaxed);
 		m_telemetrySceneRepeat.store(m_sceneRepeat, std::memory_order_relaxed);
+		m_telemetryArrangementLoop.store(m_arrangementLoop, std::memory_order_relaxed);
 		m_telemetryScenePhase.store(m_scenePhase, std::memory_order_relaxed);
 		m_telemetryGateMask.store(gateMask, std::memory_order_relaxed);
 		m_telemetryExternalClock.store(externalClock, std::memory_order_relaxed);
@@ -402,6 +412,7 @@ struct SibylModule : Module, SibylControl {
 		for (int channel = 0; channel < 16; ++channel) {
 			m_telemetryTrackPhase[channel].store(m_trackStates[channel].patternPhaseBeats, std::memory_order_relaxed);
 			m_telemetryEvolutionPass[channel].store(m_trackStates[channel].evolution.pass, std::memory_order_relaxed);
+			m_telemetryConditionPass[channel].store(m_trackStates[channel].condition.pass, std::memory_order_relaxed);
 		}
 		m_telemetrySequence.fetch_add(1, std::memory_order_release);
 	}
@@ -428,6 +439,7 @@ struct SibylModule : Module, SibylControl {
 			if (before & 1u) continue;
 			snapshot.sceneIndex = m_telemetrySceneIndex.load(std::memory_order_relaxed);
 			snapshot.sceneRepeat = m_telemetrySceneRepeat.load(std::memory_order_relaxed);
+			snapshot.arrangementLoop = m_telemetryArrangementLoop.load(std::memory_order_relaxed);
 			snapshot.scenePhase = m_telemetryScenePhase.load(std::memory_order_relaxed);
 			snapshot.gateMask = m_telemetryGateMask.load(std::memory_order_relaxed);
 			snapshot.externalClock = m_telemetryExternalClock.load(std::memory_order_relaxed);
@@ -435,6 +447,7 @@ struct SibylModule : Module, SibylControl {
 			for (int channel = 0; channel < 16; ++channel) {
 				snapshot.trackPhase[channel] = m_telemetryTrackPhase[channel].load(std::memory_order_relaxed);
 				snapshot.evolutionPass[channel] = m_telemetryEvolutionPass[channel].load(std::memory_order_relaxed);
+				snapshot.conditionPass[channel] = m_telemetryConditionPass[channel].load(std::memory_order_relaxed);
 			}
 			if (before == m_telemetrySequence.load(std::memory_order_acquire)) return snapshot;
 		}
@@ -633,7 +646,7 @@ struct SibylModule : Module, SibylControl {
 
 		json_t* envelope = json_object();
 		json_object_set_new(envelope, "format", json_string("Leviathan.SibylComposition"));
-		json_object_set_new(envelope, "schemaVersion", json_integer(2));
+		json_object_set_new(envelope, "schemaVersion", json_integer(3));
 		json_object_set(envelope, "composition", composition);
 		char* pretty = json_dumps(envelope, JSON_INDENT(2));
 		json_decref(envelope);
@@ -688,38 +701,8 @@ struct SibylModule : Module, SibylControl {
 			if (errorOut) *errorOut = message;
 			return false;
 		}
-		json_t* formatJ = json_object_get(root, "format");
-		const bool hasEnvelope = formatJ != nullptr;
-		if (hasEnvelope && (!json_is_string(formatJ) ||
-			std::string(json_string_value(formatJ)) != "Leviathan.SibylComposition")) {
-			json_decref(root);
-			m_lastError = "This JSON file is not a supported Sibyl composition.";
-			if (errorOut) *errorOut = m_lastError;
-			return false;
-		}
-		json_t* schemaJ = json_object_get(root, "schemaVersion");
-		if (hasEnvelope && (!json_is_integer(schemaJ) || json_integer_value(schemaJ) != 2)) {
-			json_decref(root);
-			m_lastError = "This Sibyl composition uses an unsupported schema version.";
-			if (errorOut) *errorOut = m_lastError;
-			return false;
-		}
-
-		json_t* composition = json_object_get(root, "composition");
-		if (!composition && !hasEnvelope) composition = root;
-		if (!json_is_object(composition)) {
-			json_decref(root);
-			m_lastError = "The Sibyl file's composition field must be a JSON object.";
-			if (errorOut) *errorOut = m_lastError;
-			return false;
-		}
-		char* compact = json_dumps(composition, JSON_COMPACT);
+		char* compact = json_dumps(root, JSON_COMPACT);
 		json_decref(root);
-		if (!compact) {
-			m_lastError = "Could not decode the Sibyl composition.";
-			if (errorOut) *errorOut = m_lastError;
-			return false;
-		}
 
 		const int revision = m_acceptedRevision + 1;
 		sibyl::ParseResult parsed = sibyl::parseCompositionJson(compact, revision);
@@ -842,6 +825,7 @@ struct SibylModule : Module, SibylControl {
 			}
 			if (action.restartPhase) {
 				m_trackStates[channel].evolution = {};
+				m_trackStates[channel].condition = {};
 				m_trackStates[channel].patternPhaseBeats = 0.0;
 				m_trackStates[channel].lastFiredStep = -1;
 			} else if (changed && destinationScene) {
@@ -855,6 +839,8 @@ struct SibylModule : Module, SibylControl {
 					double duration = pattern->second.length * pattern->second.resolutionBeats;
 					m_trackStates[channel].patternPhaseBeats = sibyl::preservedPatternPhase(
 						m_trackStates[channel].patternPhaseBeats, duration);
+					m_trackStates[channel].condition.rebase(m_trackStates[channel].patternPhaseBeats,
+						duration, m_trackStates[channel].condition.pass);
 					break;
 				}
 			}
@@ -868,6 +854,23 @@ struct SibylModule : Module, SibylControl {
 			m_sceneRepeat = 0;
 			m_scenePhase = 0.0;
 		}
+	}
+
+	bool eventConditionEligible(const sibyl::Composition& composition, int channel,
+			const sibyl::Pattern& pattern, const sibyl::StepEvent& event,
+			int64_t nominalStep, double onsetFromNow) const {
+		if (!event.condition.present || event.condition.count == 0) return true;
+		const auto& scene = composition.arrangement[m_sceneIndex];
+		// Project tie look-ahead within this visit. A new scene closes the old
+		// gate, so it cannot promise a conditioned continuation in that context.
+		const int64_t repeatDelta = sibyl::conditionCycle(m_scenePhase + onsetFromNow, scene.lengthBeats);
+		// At a destination entry, the scheduler already chose the new scene.
+		// Within a visit, retain the earlier repeat for a sub-sample onset.
+		const int64_t repeat = std::max(int64_t(1), int64_t(m_sceneRepeat) + 1 + repeatDelta);
+		if (repeat > scene.repeats) return false;
+		return sibyl::conditionEligible(event.condition,
+			m_trackStates[channel].condition.eventPass(nominalStep, pattern.length),
+			repeat, scene.repeats, m_arrangementLoop);
 	}
 
 	void closeAllGates() {
@@ -887,6 +890,7 @@ struct SibylModule : Module, SibylControl {
 		if (mode == sibyl::PhaseMode::CONTINUE) return;
 		for (auto& state : m_trackStates) {
 			state.evolution = {};
+			state.condition = {};
 			state.patternPhaseBeats = mode == sibyl::PhaseMode::ALIGN_GLOBAL ? m_globalPhaseBeats : 0.0;
 			state.lastFiredStep = -1;
 		}
@@ -900,16 +904,27 @@ struct SibylModule : Module, SibylControl {
 			if (track.channel < 0 || track.channel >= 16 || !scene.tracks.count(track.id)) continue;
 			sibyl::PhaseMode mode = request && request->hasPhaseModeOverride
 				? request->phaseMode : sibyl::destinationTrackPhaseMode(scene, track.id);
-			if (mode == sibyl::PhaseMode::CONTINUE) continue;
 			auto& state = m_trackStates[track.channel];
+			const auto found = composition.patterns.find(scene.tracks.at(track.id).patternId);
+			if (found == composition.patterns.end()) continue;
+			const auto& pattern = found->second;
+			const auto* previous = m_cachedTrackRoutes[track.channel].pattern;
+			const double duration = pattern.length * pattern.resolutionBeats;
+			if (mode == sibyl::PhaseMode::CONTINUE) {
+				if (!previous || previous->id != pattern.id)
+					state.condition.rebase(state.patternPhaseBeats, duration, 1);
+				continue;
+			}
 			state.evolution.newTraversal = true;
 			state.patternPhaseBeats = mode == sibyl::PhaseMode::ALIGN_GLOBAL ? m_globalPhaseBeats : 0.0;
+			state.condition.rebase(state.patternPhaseBeats, duration,
+				mode == sibyl::PhaseMode::ALIGN_GLOBAL ? sibyl::conditionCycle(m_globalPhaseBeats, duration) + 1 : 1);
 			state.lastFiredStep = -1;
 		}
 	}
 
 	void enterScene(const sibyl::Composition& composition, int sceneIndex,
-			const sibyl::TransportRequest& request) {
+			const sibyl::TransportRequest& request, bool restartConditions = false) {
 		if (composition.arrangement.empty()) return;
 		for (auto& state : m_trackStates) state.evolution = {};
 		m_sceneIndex = std::max(0, std::min(sceneIndex, (int)composition.arrangement.size() - 1));
@@ -917,6 +932,18 @@ struct SibylModule : Module, SibylControl {
 		m_scenePhase = 0.0;
 		closeAllGates();
 		applyDestinationScenePhases(composition, m_sceneIndex, &request);
+		if (restartConditions) {
+			const auto& scene = composition.arrangement[m_sceneIndex];
+			for (const auto& track : composition.tracks) {
+				auto assignment = scene.tracks.find(track.id);
+				if (assignment == scene.tracks.end()) continue;
+				auto pattern = composition.patterns.find(assignment->second.patternId);
+				if (pattern == composition.patterns.end()) continue;
+				auto& state = m_trackStates[track.channel];
+				state.condition.rebase(state.patternPhaseBeats,
+					pattern->second.length * pattern->second.resolutionBeats, 1);
+			}
+		}
 		m_scenePulse.trigger(1e-3f);
 	}
 
@@ -930,7 +957,8 @@ struct SibylModule : Module, SibylControl {
 
 		sibyl::TransportRequest request;
 		if (m_pendingHardwareAction == HardwareAction::RESET_ARRANGEMENT) {
-			enterScene(composition, 0, request);
+			enterScene(composition, 0, request, true);
+			m_arrangementLoop = 1;
 			m_randomnessEpoch = 0;
 			realignOutputClock(true);
 			// Reset downstream cycle-dependent state at the applied reset boundary.
@@ -954,7 +982,8 @@ struct SibylModule : Module, SibylControl {
 				break;
 			case sibyl::TransportAction::STOP:
 				m_runtimeRunning.store(false, std::memory_order_release);
-				enterScene(composition, 0, *request);
+				enterScene(composition, 0, *request, true);
+				m_arrangementLoop = 1;
 				m_randomnessEpoch = 0;
 				realignOutputClock(false);
 				break;
@@ -984,11 +1013,12 @@ struct SibylModule : Module, SibylControl {
 			case sibyl::TransportAction::RESTART:
 				switch (request->target) {
 					case sibyl::RestartTarget::SCENE:
-						enterScene(composition, m_sceneIndex, *request);
+						enterScene(composition, m_sceneIndex, *request, true);
 						realignOutputClock(true);
 						break;
 					case sibyl::RestartTarget::ARRANGEMENT:
-						enterScene(composition, 0, *request);
+						enterScene(composition, 0, *request, true);
+						m_arrangementLoop = 1;
 						m_randomnessEpoch = 0;
 						realignOutputClock(true);
 						break;
@@ -1011,7 +1041,7 @@ struct SibylModule : Module, SibylControl {
 
 	json_t* dataToJson() override {
 		json_t* rootJ = json_object();
-		json_object_set_new(rootJ, "schemaVersion", json_integer(2));
+		json_object_set_new(rootJ, "schemaVersion", json_integer(3));
 		json_object_set_new(rootJ, "revision", json_integer(m_acceptedRevision));
 		json_object_set_new(rootJ, "loopOverride",
 			json_integer(m_loopOverride.load(std::memory_order_acquire)));
@@ -1044,26 +1074,28 @@ struct SibylModule : Module, SibylControl {
 
 	void dataFromJson(json_t* rootJ) override {
 		if (!rootJ || !json_is_object(rootJ)) return;
-		json_t* loopOverrideJ = json_object_get(rootJ, "loopOverride");
-		if (loopOverrideJ && json_is_integer(loopOverrideJ)) {
-			const int loopOverride = static_cast<int>(json_integer_value(loopOverrideJ));
-			m_loopOverride.store(loopOverride < 0 ? -1 : (loopOverride != 0 ? 1 : 0),
-				std::memory_order_release);
-		}
 
 		json_t* compJ = json_object_get(rootJ, "composition");
 		json_t* revJ = json_object_get(rootJ, "revision");
 		int savedRevision = revJ && json_is_integer(revJ) ? json_integer_value(revJ) : 0;
 		int revision = (!m_seenAuthoritativeLoad && m_acceptedRevision == 0)
 			? std::max(0, savedRevision) : m_acceptedRevision + 1;
-		m_seenAuthoritativeLoad = true;
+
 
 		if (compJ) {
-			char* str = json_dumps(compJ, JSON_COMPACT);
+			char* str = json_dumps(rootJ, JSON_COMPACT);
 			if (str) {
 				sibyl::ParseResult res = sibyl::parseCompositionJson(str, revision);
 				free(str);
 				if (res.valid && res.composition) {
+                    m_seenAuthoritativeLoad = true;
+                    json_t* loopOverrideJ = json_object_get(rootJ, "loopOverride");
+                    if (json_is_integer(loopOverrideJ)) {
+                        const json_int_t loopOverride = json_integer_value(loopOverrideJ);
+                        m_loopOverride.store(loopOverride < 0 ? -1 : (loopOverride != 0 ? 1 : 0),
+                            std::memory_order_release);
+                    }
+
 					m_runtimeRunning.store(res.composition->transport.running, std::memory_order_release);
 					acceptComposition(res.composition, sibyl::ApplyAt::IMMEDIATE,
 						sibyl::PhasePolicy::RESTART_ALL, res.warnings);
@@ -1285,6 +1317,7 @@ struct SibylModule : Module, SibylControl {
 					const bool looping = loopOverride >= 0 ? loopOverride != 0 : comp->transport.loop;
 					if (looping) {
 						m_sceneIndex = 0;
+						m_arrangementLoop = sibyl::conditionOrdinal(m_arrangementLoop + 1);
 						m_eocPulse.trigger(1e-3f);
 					} else {
 						enteredScene = false;
@@ -1367,6 +1400,7 @@ struct SibylModule : Module, SibylControl {
 			double previousPatternPhase = m_trackStates[ch].patternPhaseBeats;
 			m_trackStates[ch].patternPhaseBeats += beatDelta;
 			double currentPatternPhase = m_trackStates[ch].patternPhaseBeats;
+			m_trackStates[ch].condition.advance(currentPatternPhase, pat.length * pat.resolutionBeats);
 			double effectiveSwing = clamp(comp->meta.swing + globalSwingMacro + trackSwingMacro[ch], 0.0f, 0.49f);
 
 			// Linear Glide interpolation
@@ -1406,14 +1440,28 @@ struct SibylModule : Module, SibylControl {
 					m_trackStates[ch].activeEventGate = expression.gate;
 					m_trackStates[ch].activeEventRatchets = std::max(1, matchedEvent->ratchets);
 					m_trackStates[ch].activeEventTie = matchedEvent->tie;
+					const bool eligible = eventConditionEligible(*comp, ch, pat, *matchedEvent, nominalStep,
+						scheduledBeat - currentPatternPhase);
+					// Conditioned tie look-ahead is latched once, never per sample/ratchet.
+					const auto* next = sibyl::eventAtStep(pat, sibyl::wrappedStep(nominalStep + 1, pat.length));
+					m_trackStates[ch].nextTieConditionEligible = !next || !next->tie || !next->condition.present ||
+						eventConditionEligible(*comp, ch, pat, *next, nominalStep + 1,
+							sibyl::scheduledEventBeat(pat, nominalStep + 1, *next, effectiveSwing) - currentPatternPhase);
 
-					// Deterministic Probability Check + Macro Modulation
-					float baseProb = matchedEvent->hasProbability ? matchedEvent->probability : 1.0f;
-					float effProb = clamp(baseProb + globalProbMacro + trackProbMacro[ch], 0.0f, 1.0f);
-					uint64_t hash = comp->meta.seed ^ (m_randomnessEpoch * 11400714819323198485ULL) ^
-						(m_sceneIndex * 73856093ULL) ^ (ch * 19349663ULL) ^ (eventStep * 83492791ULL);
-					float randVal = (float)((hash % 10000ULL) / 10000.0);
-					bool play = randVal < effProb;
+					bool play = false;
+					if (eligible) {
+						// Deterministic Probability Check + Macro Modulation
+						float baseProb = expression.probability;
+						float effProb = clamp(baseProb + globalProbMacro + trackProbMacro[ch], 0.0f, 1.0f);
+						uint64_t hash = comp->meta.seed ^ (m_randomnessEpoch * 11400714819323198485ULL) ^
+							(m_sceneIndex * 73856093ULL) ^ (ch * 19349663ULL) ^ (eventStep * 83492791ULL);
+						// Opt-in probability evolution renews the draw per traversal. Keep
+						// legacy draws on pass zero, disabled lanes, and protected events.
+						if (pat.evolution.probability > 0.f && matchedEvent->evolve && evolution.pass > 0)
+							hash = sibyl::evolutionHash(hash ^ sibyl::evolutionHash(evolution.pass) ^ 0x70726f62ULL);
+						float randVal = (float)((hash % 10000ULL) / 10000.0);
+						play = randVal < effProb;
+					}
 					m_trackStates[ch].activeEventPlayed = play;
 
 					if (play) {
@@ -1471,7 +1519,7 @@ struct SibylModule : Module, SibylControl {
 				const sibyl::StepEvent* nextEvent = sibyl::eventAtStep(pat,
 					sibyl::wrappedStep(nextNominalStep, pat.length));
 				bool awaitingTie = false;
-				if (nextEvent && nextEvent->tie) {
+				if (nextEvent && nextEvent->tie && m_trackStates[ch].nextTieConditionEligible) {
 					double tieOnset = sibyl::scheduledEventBeat(pat, nextNominalStep, *nextEvent, effectiveSwing);
 					awaitingTie = currentPatternPhase <= tieOnset;
 				}
@@ -1562,7 +1610,7 @@ struct SibylModule : Module, SibylControl {
 			return true;
 #endif
 		} else if (operation == Operation::CAPABILITIES) {
-			responseJson = "{\"ok\":true,\"capabilities\":{\"sibyl\":{\"apiVersion\":1,\"schemaVersion\":2,\"repeatEvolution\":{\"version\":1,\"patternField\":\"evolution\",\"stepOptOut\":\"evolve\",\"fields\":[\"velocity\",\"gate\",\"glideMs\",\"mod\",\"mod2\",\"mod3\"]},\"revision\":" + std::to_string(m_acceptedRevision) + ",\"operations\":[\"get_composition\",\"validate\",\"edit\",\"get_status\",\"transport\"]}}}";
+			responseJson = "{\"ok\":true,\"capabilities\":{\"sibyl\":{\"apiVersion\":1,\"schemaVersion\":3,\"supportedSchemaVersions\":[2,3],\"conditions\":{\"version\":1,\"scopes\":[\"patternPass\",\"sceneRepeat\",\"arrangementLoop\"],\"maxTests\":8,\"ordinalCeiling\":4503599627370495},\"noteEditing\":{\"version\":1,\"stableIds\":true,\"previewViaValidate\":true},\"views\":[\"summary\",\"full\",\"pattern\",\"scene\",\"notes\"],\"limits\":{\"operations\":256,\"selectedEvents\":1024,\"notesPage\":256,\"reportIdsDefault\":128,\"reportIdsMax\":1024},\"editOperations\":[\"replace_composition\",\"set_meta\",\"set_clock\",\"upsert_track\",\"delete_track\",\"upsert_pattern\",\"delete_pattern\",\"upsert_macro\",\"delete_macro\",\"upsert_scene\",\"delete_scene\",\"set_scene_track\",\"reorder_scenes\",\"update_notes\",\"insert_notes\",\"delete_notes\",\"transpose_notes\",\"rotate_notes\",\"duplicate_notes\"],\"repeatEvolution\":{\"version\":1,\"patternField\":\"evolution\",\"stepOptOut\":\"evolve\",\"fields\":[\"probability\",\"velocity\",\"gate\",\"glideMs\",\"mod\",\"mod2\",\"mod3\"]},\"revision\":" + std::to_string(m_acceptedRevision) + ",\"operations\":[\"get_composition\",\"validate\",\"edit\",\"get_status\",\"transport\"]}}}";
 			return true;
 		} else if (operation == Operation::GET_COMPOSITION) {
 			const sibyl::Composition* comp = m_acceptedCompositionPtr;
@@ -1577,6 +1625,11 @@ struct SibylModule : Module, SibylControl {
 			if (reqJ) {
 				json_t* viewJ = json_object_get(reqJ, "view");
 				if (viewJ && json_is_string(viewJ)) view = json_string_value(viewJ);
+                if (view == "notes") {
+                    responseJson = sibyl::serializeNotesView(*comp, reqJ);
+                    json_decref(reqJ);
+                    return true;
+                }
 				json_t* idJ = json_object_get(reqJ, "id");
 				if (idJ && json_is_string(idJ)) id = json_string_value(idJ);
 				json_decref(reqJ);
@@ -1649,6 +1702,13 @@ struct SibylModule : Module, SibylControl {
 					json_object_set_new(passesJ, track.id.c_str(), json_integer(telemetry.evolutionPass[track.channel]));
 			}
 			json_object_set_new(stJ, "evolutionPasses", passesJ);
+			json_t* conditionPassesJ = json_object();
+			if (comp) for (const auto& track : comp->tracks) {
+				if (track.channel >= 0 && track.channel < 16)
+					json_object_set_new(conditionPassesJ, track.id.c_str(), json_integer(telemetry.conditionPass[track.channel]));
+			}
+			json_object_set_new(stJ, "conditionPasses", conditionPassesJ);
+			json_object_set_new(stJ, "arrangementLoop", json_integer(telemetry.arrangementLoop));
 			if (m_lastError.empty()) json_object_set_new(stJ, "lastError", json_null());
 			else json_object_set_new(stJ, "lastError", json_string(m_lastError.c_str()));
 			json_t* warningsJ = json_array();
@@ -1660,37 +1720,53 @@ struct SibylModule : Module, SibylControl {
 			if (dumped) free(dumped);
 			json_decref(stJ);
 			return true;
-		} else if (operation == Operation::VALIDATE) {
-			json_error_t jerror;
-			json_t* root = json_loads(requestJson.c_str(), 0, &jerror);
-			if (!root) {
-				error = std::string("Invalid JSON: ") + jerror.text;
-				return false;
-			}
-			json_t* candJ = json_object_get(root, "candidate");
-			char* candStr = json_dumps(candJ ? candJ : root, JSON_COMPACT);
-			sibyl::ParseResult res = sibyl::parseCompositionJson(candStr ? candStr : "{}", m_acceptedRevision);
-			if (candStr) free(candStr);
-			json_decref(root);
-
-			json_t* respJ = json_object();
-			json_object_set_new(respJ, "ok", json_true());
-			json_object_set_new(respJ, "revision", json_integer(m_acceptedRevision));
-			json_object_set_new(respJ, "valid", json_boolean(res.valid));
-			json_t* errsJ = json_array();
-			for (const auto& issue : res.errors) {
-				json_t* issueJ = json_object();
-				json_object_set_new(issueJ, "path", json_string(issue.path.c_str()));
-				json_object_set_new(issueJ, "message", json_string(issue.message.c_str()));
-				json_array_append_new(errsJ, issueJ);
-			}
-			json_object_set_new(respJ, "errors", errsJ);
-			json_object_set_new(respJ, "warnings", json_array());
-			char* dumped = json_dumps(respJ, JSON_COMPACT);
-			responseJson = dumped ? dumped : "{}";
-			if (dumped) free(dumped);
-			json_decref(respJ);
-			return true;
+        } else if (operation == Operation::VALIDATE) {
+            json_error_t jerror {};
+            json_t* root = json_loads(requestJson.c_str(), 0, &jerror);
+            auto requestError = [&](const char* code, const char* path, const char* message) {
+                json_t* response = json_pack("{s:b,s:{s:s,s:s,s:s}}", "ok", 0, "error", "code", code, "path", path, "message", message);
+                char* text = json_dumps(response, JSON_COMPACT); responseJson = text ? text : "{}";
+                free(text); json_decref(response); json_decref(root); error = message; return false;
+            };
+            if (!json_is_object(root)) return requestError("invalid_request", "$", "Expected request object");
+            json_t* candidate = json_object_get(root, "candidate");
+            json_t* operations = json_object_get(root, "operations");
+            if (candidate && operations) return requestError("invalid_request", "$", "Supply candidate or operations, not both");
+            sibyl::ParseResult parsed;
+            sibyl::EditResult edit;
+            if (operations) {
+                const char* key; json_t* value;
+                json_object_foreach(root, key, value) {
+                    std::string field = key;
+                    if (field != "operations" && field != "expected_revision" && field != "return_changes")
+                        return requestError("invalid_request", key, "Unknown preview field");
+                }
+                json_t* expected = json_object_get(root, "expected_revision");
+                if (!json_is_integer(expected)) return requestError("invalid_request", "expected_revision", "Preview requires integer expected_revision");
+                if (json_integer_value(expected) != m_acceptedRevision) return requestError("revision_conflict", "expected_revision", "Preview revision is stale");
+                if (!json_is_array(operations) || !json_array_size(operations) || json_array_size(operations) > 256)
+                    return requestError("invalid_request", "operations", "Expected 1–256 operations");
+                json_t* changes = json_object_get(root, "return_changes");
+                if (changes && !json_is_boolean(changes)) return requestError("invalid_request", "return_changes", "Expected boolean");
+                if (!m_acceptedCompositionPtr) return requestError("invalid_request", "$", "No composition loaded");
+                edit = sibyl::applyCompositionEdit(*m_acceptedCompositionPtr, operations, m_acceptedRevision + 1);
+                parsed.valid = edit.valid; parsed.errors = edit.errors; parsed.warnings = edit.warnings;
+                if (!edit.valid && parsed.errors.empty()) parsed.errors.push_back({edit.errorPath, edit.errorMessage, edit.errorCode});
+            } else {
+                char* text = json_dumps(candidate ? candidate : root, JSON_COMPACT);
+                parsed = sibyl::parseCompositionJson(text ? text : "{}", m_acceptedRevision); free(text);
+            }
+            json_t* response = json_pack("{s:b,s:i,s:b}", "ok", 1, "revision", m_acceptedRevision, "valid", int(parsed.valid));
+            auto issues = [&](const char* name, const std::vector<sibyl::ValidationIssue>& list) {
+                json_t* array = json_array();
+                for (const auto& issue : list) json_array_append_new(array, json_pack("{s:s,s:s,s:s}", "path", issue.path.c_str(), "message", issue.message.c_str(), "code", issue.code.c_str()));
+                json_object_set_new(response, name, array);
+            };
+            issues("errors", parsed.errors); issues("warnings", parsed.warnings);
+            if (operations && edit.valid && !json_is_false(json_object_get(root, "return_changes")))
+                json_object_set_new(response, "changes", sibyl::editChangesJson(edit));
+            char* text = json_dumps(response, JSON_COMPACT); responseJson = text ? text : "{}";
+            free(text); json_decref(response); json_decref(root); return true;
 		} else if (operation == Operation::TRANSPORT) {
 			reclaimPublishedObjects();
 			json_error_t jerror;
@@ -1760,7 +1836,7 @@ struct SibylModule : Module, SibylControl {
 				error = "Missing or invalid expected_revision";
 				return false;
 			}
-			int expectedRev = json_integer_value(expectedRevJ);
+			json_int_t expectedRev = json_integer_value(expectedRevJ);
 			if (expectedRev != m_acceptedRevision) {
 				json_decref(root);
 				error = "Revision conflict";
@@ -1828,7 +1904,10 @@ struct SibylModule : Module, SibylControl {
 			json_object_set_new(respJ, "ok", json_true());
 			json_object_set_new(respJ, "revision", json_integer(m_acceptedRevision));
 			json_object_set_new(respJ, "activeRevision", json_integer(activeRevision));
-			json_object_set_new(respJ, "pendingRevision", json_integer(m_acceptedRevision));
+			const sibyl::AdoptionRequest* pending = m_pendingAdoptionPtr.load(std::memory_order_acquire);
+            json_object_set_new(respJ, "pendingRevision", pending && pending->composition && pending->composition->revision != activeRevision
+                ? json_integer(pending->composition->revision) : json_null());
+            json_object_set_new(respJ, "changes", sibyl::editChangesJson(edit));
 			json_object_set_new(respJ, "applyAt", json_string(sibyl::applyAtName(applyAt)));
 			json_object_set_new(respJ, "phasePolicy", json_string(sibyl::phasePolicyName(phasePolicy)));
 			json_t* warningsJ = json_array();
@@ -1836,6 +1915,7 @@ struct SibylModule : Module, SibylControl {
 				json_t* issueJ = json_object();
 				json_object_set_new(issueJ, "path", json_string(warning.path.c_str()));
 				json_object_set_new(issueJ, "message", json_string(warning.message.c_str()));
+                json_object_set_new(issueJ, "code", json_string(warning.code.c_str()));
 				json_array_append_new(warningsJ, issueJ);
 			}
 			json_object_set_new(respJ, "warnings", warningsJ);

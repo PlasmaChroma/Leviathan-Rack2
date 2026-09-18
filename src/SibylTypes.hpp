@@ -5,6 +5,7 @@
 #include <memory>
 #include <unordered_map>
 #include <cstdint>
+#include "SibylCondition.hpp"
 
 namespace sibyl {
 
@@ -65,21 +66,25 @@ struct ObservationMarker {
 
 // Symmetric maximum deviations from authored values; zero disables a lane.
 struct RepeatEvolution {
+	float probability = 0.f;
 	float velocity = 0.f;
 	float gate = 0.f; // pattern steps
 	float glideMs = 0.f;
 	float mod[3] {};
 	bool enabled() const {
-		return velocity != 0.f || gate != 0.f || glideMs != 0.f
+		return probability != 0.f || velocity != 0.f || gate != 0.f || glideMs != 0.f
 			|| mod[0] != 0.f || mod[1] != 0.f || mod[2] != 0.f;
 	}
 	bool operator==(const RepeatEvolution& b) const {
-		return velocity == b.velocity && gate == b.gate && glideMs == b.glideMs
+		return probability == b.probability && velocity == b.velocity && gate == b.gate && glideMs == b.glideMs
 			&& mod[0] == b.mod[0] && mod[1] == b.mod[1] && mod[2] == b.mod[2];
 	}
 };
 
 struct StepEvent {
+	Condition condition;
+	std::string id;
+	int transposeSemitones = 0;
 	int step = 0;
 	bool evolve = true; // false protects this event from repeat evolution
 	PitchType pitchType = PitchType::PITCH_V;
@@ -107,6 +112,7 @@ struct StepEvent {
 };
 
 struct Pattern {
+	int nextNoteId = 1;
 	std::string id;
 	int length = 16;
 	std::string resolutionStr = "1/16";

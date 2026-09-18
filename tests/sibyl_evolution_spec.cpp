@@ -47,6 +47,36 @@ int main() {
         auto value = sibyl::evolveExpression(p, e, t, 42, pass, 0);
         assert(value.gate >= .01f && value.gate <= 1.f);
     }
+    // Probability-only evolution enables the pattern and stays bounded/replayable.
+    p.evolution = {};
+    p.evolution.probability = .2f;
+    e.hasProbability = true; e.probability = .7f;
+    assert(p.evolution.enabled());
+    assert(sibyl::evolveExpression(p, e, t, 303, 0, 0).probability == .7f);
+    bool below = false, above = false;
+    for (uint64_t pass = 1; pass < 1000; ++pass) {
+        float value = sibyl::evolveExpression(p, e, t, 303, pass, 0).probability;
+        assert(value >= .5f && value <= .9f);
+        assert(value == sibyl::evolveExpression(p, e, t, 303, pass, 0).probability);
+        below |= value < .7f; above |= value > .7f;
+    }
+    assert(below && above);
+    e.evolve = false;
+    assert(sibyl::evolveExpression(p, e, t, 303, 42, 0).probability == .7f);
+    e.evolve = true;
+    p.evolution.probability = 1.f;
+    for (float base : {0.f, 1.f}) {
+        e.probability = base;
+        bool clamped = false;
+        for (uint64_t pass = 1; pass < 100; ++pass) {
+            float value = sibyl::evolveExpression(p, e, t, 303, pass, 0).probability;
+            assert(value >= 0.f && value <= 1.f);
+            clamped |= value == base;
+        }
+        assert(clamped);
+    }
+    e.hasProbability = false;
+    assert(sibyl::evolveExpression(p, e, t, 303, 0, 0).probability == 1.f);
     sibyl::EvolutionCursor cursor;
     cursor.observe(-1, 16); assert(cursor.pass == 0);
     cursor.observe(0, 16); assert(cursor.pass == 1);

@@ -3,12 +3,14 @@
 #include "SibylTypes.hpp"
 #include <string>
 #include <vector>
+#include <jansson.h>
 
 namespace sibyl {
 
 struct ValidationIssue {
     std::string path;
     std::string message;
+    std::string code;
 };
 
 struct ParseResult {
@@ -17,6 +19,10 @@ struct ParseResult {
     std::vector<ValidationIssue> errors;
     std::vector<ValidationIssue> warnings;
 };
+
+// Returns a new normalized composition object, or null with errors.
+json_t* normalizeComposition(json_t* input, ParseResult& result);
+bool normalizeNoteIds(json_t* pattern, const std::string& path, ParseResult& result, json_t* previous = nullptr);
 
 // Parses a complete JSON composition payload and compiles it into an immutable snapshot.
 ParseResult parseCompositionJson(const std::string& jsonString, int revision);

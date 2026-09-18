@@ -90,11 +90,11 @@ another scene boundary. Use `nextBeat` for responsive musical edits and `immedia
 emergency or explicitly requested changes. Default to `preserve` phase policy unless the
 musical intent requires changed patterns or the entire arrangement to restart.
 
-## Evolving Repeats (Expression Only)
+## Evolving Repeats
 
 Check `capabilities.sibyl.repeatEvolution.version == 1` before authoring this
 extension; older builds can warn and ignore unknown fields. It is opt-in on each
-pattern and does not change pitches, event positions, probability, ties, or
+pattern and does not change pitches, event positions, ties, or
 ratchet counts. Existing compositions retain their previous playback behavior.
 
 Add an `evolution` object to a full pattern supplied through `upsert_pattern`:
@@ -107,6 +107,7 @@ Add an `evolution` object to a full pattern supplied through `upsert_pattern`:
     "length": 16,
     "resolution": "1/16",
     "evolution": {
+      "probability": 0.2,
       "velocity": 0.12,
       "gate": 0.15,
       "glideMs": 35,
@@ -116,7 +117,7 @@ Add an `evolution` object to a full pattern supplied through `upsert_pattern`:
     },
     "steps": [
       {"step": 0, "note": "E2", "gate": 0.6, "velocity": 0.9, "evolve": false},
-      {"step": 3, "note": "G2", "gate": 0.7, "velocity": 0.75},
+      {"step": 3, "note": "G2", "gate": 0.7, "velocity": 0.75, "probability": 0.7},
       {"step": 7, "note": "B2", "gate": 0.65, "glideMs": 60},
       {"step": 11, "note": "D3", "gate": 0.5, "mod": 1.5}
     ]
@@ -131,10 +132,10 @@ verify the accepted pattern. Use `restartChanged` if the user wants to hear the
 authored first pass before evolution begins; otherwise prefer `preserve`.
 
 Each depth is the maximum **plus/minus offset** from its authored value, not a
-cumulative mutation. Omitted/zero depths disable that lane. Ranges are velocity
+cumulative mutation. Omitted/zero depths disable that lane. Ranges are probability and velocity
 0â€“1, gate 0â€“1024 steps, glideMs 0â€“3600000 ms, and each modulation depth 0â€“20 V.
 Use small musical depths; these are bounds, not recommended defaults.
-Velocity, gate and glide vary independently per event and pass. Each modulation
+Probability, velocity, gate and glide vary independently per event and pass. Each modulation
 lane uses one offset across the pass, preserving its relative authored contour.
 Results clamp to valid output ranges; ratcheted gates never exceed one step and
 authored zero-length gates remain zero. Existing macro modulation applies after
@@ -145,7 +146,7 @@ Set `evolve:false` on anchor events to preserve all of their authored expression
 
 The first scheduled traversal after reset is authored. Subsequent traversals use
 seeded variation derived from `meta.seed`, randomness epoch, track channel, pass,
-event and lane. No new notes are generated and probability behavior is unchanged.
+event and lane. No new notes are generated.
 These expressive values affect sound only where their Sibyl outputs are patched;
 for example, velocity needs a velocity-sensitive destination.
 
@@ -225,3 +226,127 @@ explicitly tell the user what state remains. Never save the Rack patch without p
 - Playback stops at the final scene: `transport.loop` is false.
 - Playhead freezes with CLOCK patched: inspect external timeout policy and clock signal.
 - API play appears ineffective with RUN patched low: hardware RUN has precedence.
+
+### Probability evolution
+
+Before authoring `evolution.probability`, check that
+`capabilities.sibyl.repeatEvolution.fields` contains `probability` (version 1
+alone does not guarantee this extension). A step's `probability` is its trigger
+chance from 0 to 1, defaulting to 1. Pattern `evolution.probability` is a maximum
+plus/minus offset from that chance, from 0 to 1. For example, a step probability
+of 0.7 and evolution depth of 0.2 vary the threshold between 0.5 and 0.9.
+
+The first traversal uses the authored threshold and original seeded draw.
+Subsequent traversals with positive probability depth use independent seeded
+threshold variation and a fresh seeded trigger draw. Automatic scene repeats and
+arrangement loops therefore vary note presence; restart reproduces the sequence.
+Macro probability offsets apply after evolution, clamped to 0–1. One draw governs
+the entire event, including its ratchets and observation marker.
+
+Omitted/zero probability depth retains the previous trigger decisions, even when
+other expression lanes evolve. `evolve:false` preserves both the authored chance
+and original draw (macro offsets still apply). Use probability 1 with this flag
+for dependable anchors. Evolving probability 0 can become audible, and evolving
+probability 1 can skip; use zero gate or event protection for deliberate silence.
+
+## Schema 3 note editing (P0–P1)
+
+Check `capabilities.sibyl.noteEditing.version == 1`. Sibyl accepts schema 2 and 3,
+migrates old notes to stable pattern-local IDs, and saves canonical schema 3.
+A new binary loads old compositions without altering playback; old binaries are
+not guaranteed to understand new documents. The proposed full v3 example in
+`doc/` also uses later features: scene overrides, automation, harmony,
+and voicing remain unsupported at this milestone and must not be authored yet.
+Probability evolution is retained from schema 2.
+
+Read `view="notes"` with `pattern_id`, optional `selector`, `fields` (`"full"`
+or a list), `page_size` (1–256), and returned `cursor`. Default selection is all
+notes. Cursors bind the accepted revision and query; re-read after any edit.
+`effectivePitchV` in a field list adds a separate `derived` object for static
+pitch including event transpose. Full fields return authored values only.
+
+Use the latest accepted revision and `expect_count` for targeted changes:
+
+```json
+{
+  "expected_revision": 42,
+  "operations": [{
+    "op": "transpose_notes",
+    "pattern_id": "bass",
+    "selector": {"order": "stepDesc", "limit": 4},
+    "expect_count": 4,
+    "semitones": -12
+  }],
+  "return_changes": true
+}
+```
+
+Send this through VALIDATE for preview. The MCP wrapper accepts `operations`,
+`expected_revision`, and `return_changes` directly, or preserves the old
+`candidate` payload form. Preview consumes no IDs, revision, or undo unit.
+Submit the same operations through EDIT, omitting `return_changes` and supplying
+the desired `apply_at`/`phase_policy`; a valid edit remains one undo unit.
+
+Available operations: `update_notes` (`set`, `unset`, numeric `adjust`),
+`insert_notes`, `delete_notes`, `transpose_notes` (semitones or degree-only
+`degrees`), `rotate_notes`, and `duplicate_notes`. Semitone transpose adds an
+offset and preserves the original note/degree/voltage representation.
+Selectors intersect IDs, steps, `[start,end)` step ranges, and typed predicates;
+`all:true` explicitly selects the whole pattern. No unrestricted expression DSL.
+
+For ghost notes use `where:{"velocity":{"lt":0.4}}` and
+`adjust:{"probability":{"multiply":0.6}}`. Missing velocity/gate do not match
+numeric predicates. Adjusting those inherited values requires
+`resolve_defaults_for_track`. `unset` restores inheritance/defaults.
+
+Rotation preserves IDs; duplication generates new IDs. Both reject collisions
+unless `collision:"replace"` is explicit. Duplicates default to no wrapping;
+use `wrap:true` deliberately. Duplicating observation markers emits a warning;
+`copy_observations:false` strips them. Request `return_id_mapping:true` for the
+source-to-created mapping. Reports bound IDs to 128 by default; operation
+`report_id_limit` allows 1–1024. Entire transactions are limited to 256 operations.
+Use `changes` counts and truncated-ID totals to verify edits without rereading a
+whole composition. Expected empty mutation selections fail unless
+`allow_empty:true` is explicit. Numeric clamping requires `clamp:true`.
+
+
+## Deterministic repeat conditions (P2)
+
+Check `capabilities.sibyl.conditions.version == 1` before authoring conditions.
+Schema 3 events accept `condition:{"all":[...]}`: an AND of at most eight tests.
+An absent condition or an empty `all` array is always eligible. Each test has a
+`scope` (`patternPass`, `sceneRepeat`, or `arrangementLoop`) and either `every`
+(integer 1-1024) with optional `offset` (1-every, default 1), or `is:"first"`.
+`is:"last"` is available only for sceneRepeat and means the final authored repeat.
+Unknown keys, mixed test forms and non-integer counts are rejected.
+
+For an accent on passes 4, 8, 12:
+```json
+{"op":"update_notes","pattern_id":"hats","selector":{"ids":["n4"]},
+ "set":{"condition":{"all":[{"scope":"patternPass","every":4,"offset":4}]}}}
+```
+For a protected final-repeat fill, set both
+`condition:{"all":[{"scope":"sceneRepeat","is":"last"}]}` and `evolve:false`.
+Conditions still apply to protected events. Use `unset:["condition"]` to remove
+eligibility restrictions. Insert, duplicate, full/notes reads and portable/patch
+serialization preserve conditions through the normal composition codec.
+
+`conditionPasses` and `arrangementLoop` in status are one-based; existing
+`evolutionPasses` and `sceneRepeat` retain their original numbering. Counters
+saturate at 4503599627370495. Pattern passes advance with musical time even for
+empty or silent patterns. Negative microshift uses the event's nominal pattern
+traversal but the scene repeat containing its scheduled onset. Conditions gate
+the entire event (including ratchets and observation); macros cannot bypass
+them. Rejected ties do not extend a previous note or resurrect a closed gate.
+
+Ordinary scene repeats keep pattern time. Destination restart starts pass 1;
+continue retains the same pattern's pass, or rebases a different pattern's
+current partial traversal to pass 1. alignGlobal uses the global nominal cycle.
+Explicit pattern/scene/arrangement restarts reset condition passes. Preserve
+adoption retains the current pass while rebasing timing; restartChanged and
+restartAll reset affected phases and passes. Pause/external hold freezes them;
+reseed/randomness restart does not reset them. Only automatic arrangement wrap
+increments arrangementLoop; arrangement reset/stop returns it to 1.
+
+Evolution still observes every scheduled event, including condition-rejected
+events. Conditions do not replace its counter, threshold variation or RNG key.
