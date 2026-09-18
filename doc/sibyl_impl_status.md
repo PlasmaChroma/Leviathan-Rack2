@@ -1,14 +1,25 @@
 # Sibyl – Implementation Status & Release-Hardening Roadmap
 
-*Last updated: 2026-08-25*
+*Last updated: 2026-09-18*
 
-This document tracks Sibyl against the current schema-v2 specification in
-[`doc/sibyl.md`](./sibyl.md). It describes the state of the module now; completed
-development history is summarized rather than left mixed into the remaining plan.
+Schema 3 expressive composition is implemented through P6: stable note editing,
+repeat conditions, scene overrides, independent MOD curves, relative harmony,
+and deterministic fixed-note `voice_progression` generation. Schema 2 documents
+remain readable. The native Windows build and offline combined integration tests
+pass. Live P5/P6 semantic and physically recorded CV/gate checks pass. The output
+reconnection defect discovered during integration is fixed and verified in both
+native regression tests and the refreshed Rack build. Listening, patch-file
+save/reopen and actual Rack UI undo/redo remain separate acceptance items. See [the live report](./Sibyl_P5_P6_Live_Integration_Report.md). See [the P6 report](./Sibyl_P6_Implementation_Report.md),
+[the expressive spec](./Sibyl_Expressive_Composition_Codex_Spec.md), and
+[the current authoring guide](../MCP/skill/octavia/references/sibyl.md).
+
+The remainder below records the earlier schema-2 release-hardening baseline
+against [`doc/sibyl.md`](./sibyl.md). Its historical live/sanitizer acceptance does
+not constitute live/sanitizer acceptance of the new expressive features.
 
 ---
 
-## 1. Completion Assessment
+## 1. Historical Schema-2 Completion Assessment
 
 Sibyl's planned functional architecture is **implemented end to end**. It is no longer
 best described as a prototype: it is a functional AI-first polyphonic sequencer and

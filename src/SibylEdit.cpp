@@ -1,6 +1,8 @@
 #include "SibylEdit.hpp"
 #include "SibylNoteEdit.hpp"
 #include "SibylAssignmentEdit.hpp"
+#include "SibylHarmonyEdit.hpp"
+#include "SibylVoicingEdit.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -94,11 +96,8 @@ bool applyOperation(json_t*& working, json_t* op, size_t index, EditResult& resu
     const std::string operationName = name;
     if (operationName == "set_scene_assignment" || operationName == "update_scene_assignment")
         return applyAssignmentOperation(working, op, index, result);
-    if (operationName == "upsert_progression" || operationName == "delete_progression" ||
-        operationName == "set_default_harmony" || operationName == "set_scene_harmony" ||
-        operationName == "inherit_scene_harmony" || operationName == "voice_progression") {
-        return fail(result, "unsupported_feature", path + ".op", "Operation belongs to a later milestone.");
-    }
+    if (isHarmonyOperation(operationName)) return applyHarmonyOperation(working,op,index,result);
+    if (operationName == "voice_progression") return applyVoicingOperation(working,op,index,result);
     if (operationName == "upsert_automation" || operationName == "delete_automation") {
         const bool upsert=operationName=="upsert_automation";
         const char* key; json_t* value;

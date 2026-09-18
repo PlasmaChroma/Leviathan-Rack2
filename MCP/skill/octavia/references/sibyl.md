@@ -255,8 +255,7 @@ Check `capabilities.sibyl.noteEditing.version == 1`. Sibyl accepts schema 2 and 
 migrates old notes to stable pattern-local IDs, and saves canonical schema 3.
 A new binary loads old compositions without altering playback; old binaries are
 not guaranteed to understand new documents. The proposed full v3 example in
-`doc/` also uses later features: harmony and voicing remain unsupported
-through P4 and must not be authored yet.
+`doc/` is supported through P6. Deterministic edit-time voicing materialization is available.
 Probability evolution is retained from schema 2.
 
 Read `view="notes"` with `pattern_id`, optional `selector`, `fields` (`"full"`
@@ -396,7 +395,7 @@ projection, GET `view:"scene"`, `id:"chorus"`, `fields:["effectiveExpressions"]`
 velocity, probability, gate duration and MOD values. These are authored/pass-zero
 values with scene overrides, before evolution and live macros, without predicting
 condition/probability outcomes. Full scene data remains under `scene` separately.
-Time-specific harmony context inspection belongs to P5.
+For time-specific harmonic pitches use `view:"effective_context"` as described below.
 
 
 ## Independent MOD automation (P4)
@@ -444,3 +443,118 @@ scene offsets, macros and output limiting. Summary reads include automation
 counts and targets. Limits: 512 curves, 1024 points per curve, 16384 total points,
 48 output lanes and 256 requested sample coordinates. Read current capabilities
 for limits rather than assuming future versions retain them.
+
+
+## Harmonic progressions and relative pitches (P5)
+
+Check `capabilities.sibyl.harmony.version == 1`. A schema-3 `harmony` object
+contains a keyed `progressions` map and optional `default` binding. Progressions
+have positive `lengthBeats` and 1-128 ordered `chords`, each with a unique `id`,
+`beat`, scientific-note `root`, and sorted `intervals`. First beat is zero; the
+last marker precedes the endpoint. Intervals start at zero, contain 1-8 integers
+from 0 to 36, and cannot repeat a pitch class.
+
+```json
+{"op":"upsert_progression","id":"changes","progression":{
+  "lengthBeats":8,"chords":[
+    {"id":"c","beat":0,"root":"C3","intervals":[0,4,7]},
+    {"id":"a","beat":4,"root":"A2","intervals":[0,3,7]}]}}
+```
+
+`set_default_harmony` takes `binding:{"progression":"changes",
+"clock":"arrangement","loop":true}`. A null binding removes the default.
+`set_scene_harmony` takes `scene_id` and a binding using `sceneRepeat` or
+`sceneVisit`; null explicitly disables harmony in that scene.
+`inherit_scene_harmony` takes `scene_id` and removes the scene field to restore
+inheritance. `delete_progression` requires references to have been detached by
+prior operations in the same transaction. `loop` defaults true; false holds the
+final chord. All operations use ordinary revision-guarded EDIT/VALIDATE.
+
+Each event has exactly one of note, degree, pitchV or harmonic. Relative examples:
+
+```json
+{"step":0,"harmonic":{"kind":"tone","index":0,"octave":0}}
+{"step":4,"harmonic":{"kind":"tone","role":"third","octave":1}}
+{"step":8,"harmonic":{"kind":"nearest","reference":{"note":"D3"},
+ "range":{"min":"C3","max":"C5"},"tieBreak":"lower"}}
+```
+
+Tone requires exactly one index (0-7, no wrapping) or role (root, third, fifth).
+Third means a unique pitch class 3/4; fifth means a unique 6/7/8. Missing or
+ambiguous roles fail. Octave defaults zero and accepts -10 to 10 subject to final
+pitch bounds. Nearest considers chord pitch classes in the inclusive register,
+uses a static note/degree/pitchV reference, and resolves equal distances with
+lower (default) or higher. Selection does not depend on prior probability draws.
+Event and scene transposition happen after selection.
+
+Harmony is selected at the scheduled sounding onset, including microshift/swing,
+and latched through sustains, glides and ratchets. A subsequent tied event can
+select a new pitch. Assigned relative patterns require valid effective harmony;
+unassigned bank patterns are retained with `unbound_harmony_pattern` warnings.
+Static percussion retains its compiled pitch path and is excluded from purely
+harmonic dependency changes.
+
+GET `view:"progression", id:"changes"` returns the authored progression plus
+chord intervals, pitch classes and resolvable roles. GET
+`view:"effective_context", scene_id:"chorus", scene_repeat:0, beat:2` returns
+current binding/chord and up to 256 authored note projections. Repeat is zero-based
+and beat is in `[0, scene.lengthBeats)`. `selectedPitchV` precedes transposition;
+`effectivePitchV` includes event and assignment transposition. These projections
+are context values, not predictions of event eligibility or physical macros.
+They include `totalNotes` and `truncated` when the bound is reached. Note
+projections also include authored gate, velocity and probability after scene
+overrides. `derived.automation` lists active curve values and scene offsets;
+add-mode event bases and live macros are deliberately not inferred. Ordinary
+note/static-scene projections mark relative pitches `requiresContext` rather than
+inventing a universal voltage. The voicing popup labels its current scene/time
+harmony projection.
+
+Limits: 128 progressions, 128 chords per progression, 4096 total markers,
+1048576 interned expression/chord pitch entries, and a combined 32 MiB compiled
+storage budget with automation. Unsupported/unrepresentable timelines fail
+explicitly. `voice_progression` provides fixed-note materialization as described below.
+
+
+### P6: generate fixed chord voices
+
+Use `voice_progression` in the ordinary `sibyl_edit` operations array, or preview
+that array with `sibyl_validate` and `expected_revision`:
+
+```json
+{"op":"voice_progression","progression_id":"main_changes","scene_id":"chorus",
+ "resolution":"1/16","gate_ratio":0.95,"write_policy":"createOnly",
+ "voices":[
+   {"track_id":"chord_low","pattern_id":"chorus_low","min":"C2","max":"C3"},
+   {"track_id":"chord_mid","pattern_id":"chorus_mid","min":"C3","max":"C4"},
+   {"track_id":"chord_high","pattern_id":"chorus_high","min":"C4","max":"C5"}]}
+```
+
+Supply 1-8 distinct existing tracks and distinct destination patterns in
+low-to-high voice order. Registers are inclusive scientific note names. Overlap
+is allowed; generated pitches never cross. Scene and progression lengths must
+match, markers must lie exactly on the requested grid, and the resulting pattern
+must contain 1-1024 steps. Grid mismatches return `off_grid_harmony`.
+
+`gate_ratio` defaults to 0.95 and accepts 0-1. Events have one ratchet and gates
+proportional to the chord interval; legacy minimum gate behavior still applies.
+`write_policy` defaults to `createOnly`, which rejects an existing destination
+pattern or any existing destination assignment. Explicit `replace` overwrites
+those patterns and replaces target assignments with restart assignments, clearing
+their previous overrides. Other scenes' assignment objects remain unchanged,
+but references to a replaced bank pattern hear the new notes. Preview reports
+these references (up to 128 plus total/truncation), destination counts, and search
+cost. Replacement retains stable note IDs at matching steps.
+
+The named `voice_progression_v1` algorithm prioritizes chord-tone coverage,
+smallest maximum leap, absolute movement, squared movement, initial distance from
+register midpoints, then lexicographic pitches. Root coverage is required; a
+unique third is required with two or more voices. The last-to-first loop seam is
+not optimized, and the report says so explicitly. Impossible registers/coverage
+return `voicing_unsatisfiable`; exceeding 200,000 visited partial assignments,
+2,048 candidates per chord, or 2,000,000 total DP transitions per request returns
+`capacity_exceeded`. No partially optimized result is committed.
+
+Generated events are ordinary **fixed pitches**. Later progression edits do not
+rewrite them. Rerun with `replace` to revoice, or author `harmonic` events when
+automatic harmonic following is desired. Preview consumes no IDs/revision; all
+generated patterns and assignments participate in the same atomic edit and undo.

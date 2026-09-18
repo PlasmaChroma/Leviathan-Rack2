@@ -9,6 +9,13 @@ MCP_ADAPTER = (ROOT / "MCP" / "mcp_server" / "Octavia_MCP.py").read_text(encodin
 
 
 class OctaviaSibylContractTest(unittest.TestCase):
+    def test_harmony_context_query_is_forwarded(self):
+        self.assertIn('"progression", "effective_context"', MCP_ADAPTER)
+        self.assertIn('scene_repeat: Optional[int]', MCP_ADAPTER)
+        self.assertIn('beat: Optional[float]', MCP_ADAPTER)
+        self.assertGreaterEqual(OCTAVIA.count('"pattern_id", "cursor", "scene_id"'), 2)
+        self.assertGreaterEqual(OCTAVIA.count('"sample_beats", "scene_repeat", "beat"'), 2)
+
     def test_automation_samples_use_typed_query_forwarding(self):
         self.assertIn('"notes", "automation"', MCP_ADAPTER)
         self.assertIn('sample_beats: Optional[list[float]]', MCP_ADAPTER)

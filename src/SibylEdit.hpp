@@ -20,6 +20,9 @@ struct EditResult {
 	bool valid = false;
 	CompositionPtr composition;
 	std::vector<NoteChange> changes;
+    // Control-side serialized reports only; no JSON ownership crosses into DSP.
+    std::vector<std::string> voicingChanges;
+    size_t voicingPartials = 0, voicingTransitions = 0;
 	std::vector<ValidationIssue> errors;
 	std::vector<ValidationIssue> warnings;
 	std::string errorCode;

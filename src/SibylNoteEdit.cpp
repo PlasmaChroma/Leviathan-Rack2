@@ -196,7 +196,6 @@ bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r
         auto setAllowed=eventFields;setAllowed.erase("id");setAllowed.erase("step");
         if(set&&!fields(set,setAllowed,r,path+".set")) return false;
         if (set) {
-            for (const char* f : {"harmonic"}) if (json_object_get(set,f)) return fail(r,"unsupported_feature",path+".set."+f,"Feature belongs to a later milestone");
             const char* f; json_t* v;
             json_object_foreach(set,f,v) {
                 double low,high;std::string field=f;
@@ -279,7 +278,6 @@ bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r
             size_t i;json_t* n;
             json_array_foreach(notes,i,n) {
                 if(!fields(n,eventFields,r,path+".notes["+std::to_string(i)+"]")) return false;
-                for (const char* f : {"harmonic"}) if (json_object_get(n,f)) return fail(r,"unsupported_feature",path+".notes["+std::to_string(i)+"]."+f,"Feature belongs to a later milestone");
                 json_array_append_new(copies.p,json_deep_copy(n));
             }
         } else {
@@ -350,6 +348,13 @@ json_t* editChangesJson(const EditResult& r) {
             json_t* a=json_array();for(size_t i=0;i<std::min(c.createdIds.size(),c.idLimit);++i) json_array_append_new(a,json_pack("{s:s,s:s}","source",c.createdIds[i].first.c_str(),"created",c.createdIds[i].second.c_str()));json_object_set_new(o,"createdIds",a);
         }
     }
+    for(const auto& encoded:r.voicingChanges) {
+        json_error_t error;json_t* report=json_loads(encoded.c_str(),0,&error);
+        if(!report)continue;
+        const json_int_t index=json_integer_value(json_object_get(report,"operationIndex"));
+        size_t at=0;while(at<json_array_size(changes)&&json_integer_value(json_object_get(json_array_get(changes,at),"operationIndex"))<=index)++at;
+        json_array_insert_new(changes,at,report);
+    }
     return changes;
 }
 
@@ -369,7 +374,7 @@ std::string serializeNotesView(const Composition& comp,json_t* request) {
     json_t* selector=json_object_get(request,"selector");if(!selector)selector=defaultSelector.p;
     std::vector<json_t*> selected;if(!selectNotes(pattern,selector,selected,r,"selector")) return error();
     json_t* projection=json_object_get(request,"fields");bool full=str(projection)=="full";
-    std::set<std::string> projectionFields={"id","step","note","degree","octave","pitchV","transposeSemitones","velocity","probability","condition"};
+    std::set<std::string> projectionFields={"id","step","note","degree","octave","pitchV","transposeSemitones","velocity","probability","condition","harmonic"};
     if(projection&&!full) {
         if(!json_is_array(projection)||json_array_size(projection)==0||json_array_size(projection)>eventFields.size()) {fail(r,"invalid_request","fields","Expected full or nonempty field list");return error();}
         projectionFields.clear();size_t i;json_t* v;json_array_foreach(projection,i,v) if(!json_is_string(v)||(!eventFields.count(str(v)) && str(v)!="effectivePitchV")||!projectionFields.insert(str(v)).second) {fail(r,"invalid_request","fields","Unknown or repeated projection field");return error();}
@@ -400,7 +405,7 @@ std::string serializeNotesView(const Composition& comp,json_t* request) {
             const int step=json_integer_value(json_object_get(selected[i],"step"));
             const auto& compiled=comp.patterns.at(id);
             for(const auto& event:compiled.steps) if(event.step==step)
-                json_object_set_new(n,"derived",json_pack("{s:f}","effectivePitchV",double(event.compiledPitchV)));
+                json_object_set_new(n,"derived",event.pitchType==PitchType::HARMONIC ? json_pack("{s:b}","requiresContext",1) : json_pack("{s:f}","effectivePitchV",double(event.compiledPitchV)));
         }
         json_array_append_new(notes,n);
     }

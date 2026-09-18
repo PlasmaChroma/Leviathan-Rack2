@@ -8,6 +8,7 @@
 #include "SibylCondition.hpp"
 #include "SibylOverrides.hpp"
 #include "SibylAutomation.hpp"
+#include "SibylHarmonyTypes.hpp"
 
 namespace sibyl {
 
@@ -56,7 +57,7 @@ struct TrackDef {
 	float defaultVelocity = 0.5f;
 };
 
-enum class PitchType { PITCH_V, DEGREE, NOTE };
+enum class PitchType { PITCH_V, DEGREE, NOTE, HARMONIC };
 
 struct ObservationMarker {
 	int64_t octaviaModuleId = -1;
@@ -84,6 +85,8 @@ struct RepeatEvolution {
 };
 
 struct StepEvent {
+	std::string harmonic;
+	int harmonicExpression = -1;
 	Condition condition;
 	std::string id;
 	int transposeSemitones = 0;
@@ -139,6 +142,7 @@ struct TrackAssignment {
 };
 
 struct Scene {
+	HarmonyBinding harmony;
 	std::string id;
 	std::string name;
 	std::string description;
@@ -166,6 +170,11 @@ inline double sceneTimelineLength(const Scene& scene) {
 // Represents an immutable snapshot of the entire compiled composition
 struct Composition {
 	int revision = 0;
+	bool harmonyPresent = false;
+	HarmonyBinding defaultHarmony;
+	std::vector<HarmonyProgression> progressions;
+	std::vector<HarmonicExpression> harmonicExpressions;
+	size_t harmonicPitchEntries = 0;
 	Meta meta;
 	Clock clock;
 	Transport transport;

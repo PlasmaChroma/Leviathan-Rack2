@@ -401,10 +401,13 @@ async def vcv_octavia_console_respond(params: OctaviaConsoleResponseInput) -> st
 
 
 class SibylCompositionInput(SibylModuleInput):
-    view: Literal["summary", "full", "pattern", "scene", "notes", "automation"] = Field(
-        "summary", description="Compact summary, full composition, or one named pattern/scene"
+    view: Literal["summary", "full", "pattern", "scene", "notes", "automation", "progression", "effective_context"] = Field(
+        "summary", description="Summary, authored document, targeted notes/curve/progression, or scene/time effective context"
     )
-    id: Optional[str] = Field(None, description="Pattern or scene ID; required by pattern and scene views")
+    id: Optional[str] = Field(None, description="ID required by pattern, scene, automation and progression views")
+    scene_id: Optional[str] = None
+    scene_repeat: Optional[int] = Field(None, ge=0)
+    beat: Optional[float] = Field(None, ge=0)
     sample_beats: Optional[list[float]] = Field(None, max_length=256)
     pattern_id: Optional[str] = None
     selector: Optional[dict] = None
@@ -462,7 +465,7 @@ async def vcv_sibyl_get_composition(params: SibylCompositionInput) -> str:
         query = {"view": params.view}
         if params.id is not None:
             query["id"] = params.id
-        for field in ("pattern_id", "selector", "fields", "page_size", "cursor", "sample_beats"):
+        for field in ("pattern_id", "selector", "fields", "page_size", "cursor", "sample_beats", "scene_id", "scene_repeat", "beat"):
             value = getattr(params, field)
             if value is not None:
                 query[field] = json.dumps(value, separators=(",", ":")) if field in ("selector", "fields", "sample_beats") else value

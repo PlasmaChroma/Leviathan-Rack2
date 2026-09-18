@@ -163,11 +163,44 @@ void processOneSample(SibylModule& module) {
 #include "sibyl_condition_cases.hpp"
 #include "sibyl_override_cases.hpp"
 #include "sibyl_automation_cases.hpp"
+#include "sibyl_harmony_cases.hpp"
+#include "sibyl_voicing_cases.hpp"
+#include "sibyl_combined_cases.hpp"
 
 int main() {
     testConditions();
     testOverrides();
     testAutomation();
+    testHarmony();
+    testVoicing();
+    testCombinedComposition();
+    {
+        auto composition=std::const_pointer_cast<sibyl::Composition>(makeComposition(1,false));
+        composition->tracks[0].channel=6;
+        SibylModule module;
+        module.acceptComposition(composition,sibyl::ApplyAt::IMMEDIATE,sibyl::PhasePolicy::RESTART_ALL);
+        processOneSample(module);
+        bool channelsCorrect=true;
+        gAllocationCount=gDeallocationCount=0;
+        for(int port:{SibylModule::V_OCT_OUTPUT,SibylModule::GATE_OUTPUT,SibylModule::VELOCITY_OUTPUT,
+                      SibylModule::MOD_OUTPUT,SibylModule::MOD_2_OUTPUT,SibylModule::MOD_3_OUTPUT}) {
+            // Simulate Rack Engine's connection state and callback; setChannels()
+            // intentionally does nothing on an unconnected SDK Output.
+            module.outputs[port].channels=1;
+            rack::engine::Module::PortChangeEvent event{true,rack::engine::Port::OUTPUT,port};
+            module.onPortChange(event);
+            gTrackAllocations=true;processOneSample(module);gTrackAllocations=false;
+            channelsCorrect &= module.outputs[port].getChannels()==7;
+            module.outputs[port].channels=0;event.connecting=false;module.onPortChange(event);
+            processOneSample(module);
+            module.outputs[port].channels=1;event.connecting=true;module.onPortChange(event);
+            gTrackAllocations=true;processOneSample(module);gTrackAllocations=false;
+            channelsCorrect &= module.outputs[port].getChannels()==7;
+        }
+        check(channelsCorrect,"live regression: late connection/reconnection restores all six polyphonic output widths");
+        check(gAllocationCount==0&&gDeallocationCount==0,"live regression: output reconnection uses no audio allocations or frees");
+    }
+
     {
         auto parsed = sibyl::parseCompositionJson(R"({"tracks":[{"id":"v","channel":0}],"patterns":{"p":{"steps":[{"step":0,"note":"C3","gate":4}]}},"arrangement":[{"id":"s","tracks":{"v":"p"}}]})", 1);
         check(parsed.valid, "P1 fixture compiles");

@@ -1,5 +1,6 @@
 #include "SibylJSON.hpp"
 #include "SibylAutomationJSON.hpp"
+#include "SibylHarmonyJSON.hpp"
 #include <jansson.h>
 #include <cmath>
 #include <set>
@@ -296,7 +297,7 @@ json_t* normalizeComposition(json_t* input, ParseResult& res) {
                 version != 3 ? "schema_version_required" : "unsupported_feature"); valid = false;
         }
     };
-    feature(source, "automation", "", true); feature(source, "harmony", "", false);
+    feature(source, "automation", "", true); feature(source, "harmony", "", true);
     const char* key; json_t* pattern;
     json_object_foreach(json_object_get(source, "patterns"), key, pattern) {
         const std::string path = "patterns." + std::string(key);
@@ -305,13 +306,13 @@ json_t* normalizeComposition(json_t* input, ParseResult& res) {
         json_array_foreach(json_object_get(pattern, "steps"), index, note) {
             std::string np = path + ".steps[" + std::to_string(index) + "]";
             feature(note, "id", np, true); feature(note, "transposeSemitones", np, true);
-            feature(note, "condition", np, true); feature(note, "harmonic", np, false);
+            feature(note, "condition", np, true); feature(note, "harmonic", np, true);
         }
     }
     size_t index; json_t* scene;
     json_array_foreach(json_object_get(source, "arrangement"), index, scene) {
         std::string path = "arrangement[" + std::to_string(index) + "]";
-        feature(scene, "harmony", path, false);
+        feature(scene, "harmony", path, true);
         json_t* assignment;
         json_object_foreach(json_object_get(scene, "tracks"), key, assignment)
             feature(assignment, "overrides", path + ".tracks." + key, true);
@@ -341,7 +342,7 @@ static uint8_t observationMonitorBit(const std::string& name) {
 
 static void validateCompositionSchema(json_t* root, ParseResult& res) {
     if (!json_is_object(root)) { addError(res, "$", "Composition must be a JSON object"); return; }
-    warnUnknownFields(root, "", {"schemaVersion", "meta", "clock", "transport", "tracks", "patterns", "arrangement", "macros", "automation"}, res);
+    warnUnknownFields(root, "", {"schemaVersion", "meta", "clock", "transport", "tracks", "patterns", "arrangement", "macros", "automation", "harmony"}, res);
 
     if (requireObjectIfPresent(root, "meta", "", res)) {
         json_t* meta = json_object_get(root, "meta");
@@ -436,15 +437,15 @@ static void validateCompositionSchema(json_t* root, ParseResult& res) {
             json_array_foreach(steps, stepIndex, step) {
                 std::string stepPath = path + ".steps[" + std::to_string(stepIndex) + "]";
                 if (!json_is_object(step)) { addError(res, stepPath, "Expected object"); continue; }
-                warnUnknownFields(step, stepPath, {"condition", "id", "transposeSemitones", "step", "pitchV", "degree", "note", "octave", "gate", "velocity", "mod", "mod2", "mod3", "probability", "tie", "glideMs", "microshift", "ratchets", "observation", "evolve"}, res);
+                warnUnknownFields(step, stepPath, {"harmonic", "condition", "id", "transposeSemitones", "step", "pitchV", "degree", "note", "octave", "gate", "velocity", "mod", "mod2", "mod3", "probability", "tie", "glideMs", "microshift", "ratchets", "observation", "evolve"}, res);
                 parseCondition(json_object_get(step, "condition"), stepPath + ".condition", res);
                 validateIntegerField(step, "transposeSemitones", stepPath, -120, 120, res);
                 validateIntegerField(step, "step", stepPath, 0, std::max(0, length - 1), res);
                 json_t* stepNumber = json_object_get(step, "step");
                 if (!stepNumber) addError(res, stepPath + ".step", "Required field is missing");
                 else if (json_is_integer(stepNumber) && !seenSteps.insert((int)json_integer_value(stepNumber)).second) addError(res, stepPath + ".step", "Duplicate step index");
-                int pitchCount = (json_object_get(step, "pitchV") ? 1 : 0) + (json_object_get(step, "degree") ? 1 : 0) + (json_object_get(step, "note") ? 1 : 0);
-                if (pitchCount != 1) addError(res, stepPath, "Exactly one of pitchV, degree, or note is required");
+                int pitchCount = (json_object_get(step, "pitchV") ? 1 : 0) + (json_object_get(step, "degree") ? 1 : 0) + (json_object_get(step, "note") ? 1 : 0) + (json_object_get(step, "harmonic") ? 1 : 0);
+                if (pitchCount != 1) addError(res, stepPath, "Exactly one of pitchV, degree, note, or harmonic is required");
                 validateNumberField(step, "pitchV", stepPath, -10.0, 10.0, res);
                 validateIntegerField(step, "degree", stepPath, INT32_MIN, INT32_MAX, res);
                 validateIntegerField(step, "octave", stepPath, INT32_MIN, INT32_MAX, res);
@@ -524,7 +525,7 @@ static void validateCompositionSchema(json_t* root, ParseResult& res) {
         json_array_foreach(arrangement, index, scene) {
             std::string path = "arrangement[" + std::to_string(index) + "]";
             if (!json_is_object(scene)) { addError(res, path, "Expected object"); continue; }
-            warnUnknownFields(scene, path, {"id", "name", "description", "lengthBeats", "repeats", "phaseMode", "tracks"}, res);
+            warnUnknownFields(scene, path, {"id", "name", "description", "lengthBeats", "repeats", "phaseMode", "tracks", "harmony"}, res);
             validateStringField(scene, "id", path, 64, res);
             validateStringField(scene, "name", path, 64, res);
             validateStringField(scene, "description", path, 512, res);
@@ -736,7 +737,7 @@ static const std::vector<int>& getScaleIntervals(ScaleType scale) {
     }
 }
 
-static float degreeToPitchV(int degree, int octaveOffset, ScaleType scale, const std::string& rootName, int rootOctave) {
+float degreeToPitchV(int degree, int octaveOffset, ScaleType scale, const std::string& rootName, int rootOctave) {
     const auto& intervals = getScaleIntervals(scale);
     int numDegrees = (int)intervals.size();
     if (numDegrees == 0) return 0.0f;
@@ -752,7 +753,7 @@ static float degreeToPitchV(int degree, int octaveOffset, ScaleType scale, const
     return totalSemitones / 12.0f;
 }
 
-static float noteToPitchV(const std::string& noteStr, ParseResult& res, const std::string& path) {
+float noteToPitchV(const std::string& noteStr, ParseResult& res, const std::string& path) {
     // Basic scientific pitch parser. C4 = 0V. 1V/Octave.
     if (noteStr.empty()) return 0.0f;
     char name = noteStr[0];
@@ -908,11 +909,15 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
                     json_t* degreeJ = json_object_get(stepJ, "degree");
                     json_t* noteJ = json_object_get(stepJ, "note");
                     
-                    int pitchDefs = (pitchVJ ? 1 : 0) + (degreeJ ? 1 : 0) + (noteJ ? 1 : 0);
+                    json_t* harmonicJ = json_object_get(stepJ, "harmonic");
+                    int pitchDefs = (pitchVJ ? 1 : 0) + (degreeJ ? 1 : 0) + (noteJ ? 1 : 0) + (harmonicJ ? 1 : 0);
                     if (pitchDefs != 1) {
-                        addError(res, path, "Exactly one of pitchV, degree, or note is required");
+                        addError(res, path, "Exactly one of pitchV, degree, note, or harmonic is required");
                     } else {
-                        if (pitchVJ) {
+                        if (harmonicJ) {
+                            e.pitchType = PitchType::HARMONIC;
+                            e.harmonic = harmony_json::dump(harmonicJ);
+                        } else if (pitchVJ) {
                             e.pitchType = PitchType::PITCH_V;
                             e.pitchV = json_number_value(pitchVJ);
                             e.compiledPitchV = e.pitchV;
@@ -928,7 +933,7 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
                         }
                     }
                     
-                    if (e.transposeSemitones != 0) e.compiledPitchV += e.transposeSemitones / 12.f;
+                    if (e.pitchType != PitchType::HARMONIC && e.transposeSemitones != 0) e.compiledPitchV += e.transposeSemitones / 12.f;
                     if (e.compiledPitchV < -10.f || e.compiledPitchV > 10.f)
                         addError(res, path, "Effective pitch is outside -10 to 10 V", "pitch_out_of_range");
                     json_t* gateJ = json_object_get(stepJ, "gate");
@@ -1017,6 +1022,7 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
                     }
                     auto assigned = comp.patterns.find(ta.patternId);
                     if (assigned != comp.patterns.end()) for (const auto& event : assigned->second.steps) {
+                        if (event.pitchType == PitchType::HARMONIC) continue;
                         const float pitch = ta.overrides.pitch(event.compiledPitchV);
                         if (pitch < -10.f || pitch > 10.f)
                             addError(res, "arrangement[" + std::to_string(idx) + "].tracks." + tk + ".overrides.transposeSemitones",
@@ -1058,6 +1064,7 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision) {
     }
 
     if (res.errors.empty()) compileAutomation(root, comp, res);
+    if (res.errors.empty()) compileHarmony(root, comp, res);
     json_decref(root);
     
     // Validate bounds
@@ -1140,7 +1147,10 @@ static json_t* patternToJson(const Pattern& pat) {
         if (ev.condition.present) json_object_set_new(evJ, "condition", conditionToJson(ev.condition));
         json_object_set_new(evJ, "step", json_integer(ev.step));
         if (!ev.evolve) json_object_set_new(evJ, "evolve", json_false());
-        if (ev.pitchType == PitchType::PITCH_V) {
+        if (ev.pitchType == PitchType::HARMONIC) {
+            json_error_t error;
+            json_object_set_new(evJ,"harmonic",json_loads(ev.harmonic.c_str(),0,&error));
+        } else if (ev.pitchType == PitchType::PITCH_V) {
             json_object_set_new(evJ, "pitchV", json_real(ev.pitchV));
         } else if (ev.pitchType == PitchType::DEGREE) {
             json_object_set_new(evJ, "degree", json_integer(ev.degree));
@@ -1184,6 +1194,7 @@ static json_t* patternToJson(const Pattern& pat) {
 
 static json_t* sceneToJson(const Scene& sc) {
     json_t* scJ = json_object();
+    if(sc.harmony.present)json_object_set_new(scJ,"harmony",harmony_json::bindingJson(sc.harmony));
     json_object_set_new(scJ, "id", json_string(sc.id.c_str()));
     if (!sc.name.empty()) json_object_set_new(scJ, "name", json_string(sc.name.c_str()));
     if (!sc.description.empty()) json_object_set_new(scJ, "description", json_string(sc.description.c_str()));
@@ -1212,6 +1223,13 @@ static json_t* sceneToJson(const Scene& sc) {
 
 static json_t* compositionToJson(const Composition& comp) {
     json_t* root = json_object();
+    if(comp.harmonyPresent || !comp.progressions.empty() || comp.defaultHarmony.present){
+        json_t* harmony=json_object();json_t* progressions=json_object();
+        for(const auto& p:comp.progressions)json_object_set_new(progressions,p.id.c_str(),harmony_json::progressionJson(p));
+        json_object_set_new(harmony,"progressions",progressions);
+        if(comp.defaultHarmony.present)json_object_set_new(harmony,"default",harmony_json::bindingJson(comp.defaultHarmony));
+        json_object_set_new(root,"harmony",harmony);
+    }
     if (!comp.automation.empty()) {
         json_t* automation=json_object();
         for(const auto& curve:comp.automation)json_object_set_new(automation,curve.id.c_str(),automationToJson(curve));
@@ -1301,6 +1319,8 @@ static std::string dumpAndFree(json_t* root) {
 
 std::string serializeSummaryJson(const Composition& comp) {
     json_t* root = json_object();
+    json_object_set_new(root,"progressionCount",json_integer(comp.progressions.size()));
+    json_object_set_new(root,"harmonicPitchEntries",json_integer(comp.harmonicPitchEntries));
     json_t* automation=json_array();
     for(const auto& curve:comp.automation)json_array_append_new(automation,json_pack("{s:s,s:s,s:s,s:b,s:i}",
         "id",curve.id.c_str(),"track",curve.trackId.c_str(),"lane",curve.lane==0?"mod":curve.lane==1?"mod2":"mod3",
@@ -1350,6 +1370,7 @@ std::string serializeSummaryJson(const Composition& comp) {
     json_t* scenesJ = json_array();
     for (const auto& sc : comp.arrangement) {
         json_t* scJ = json_object();
+    if(sc.harmony.present)json_object_set_new(scJ,"harmony",harmony_json::bindingJson(sc.harmony));
         json_object_set_new(scJ, "id", json_string(sc.id.c_str()));
         if (!sc.name.empty()) json_object_set_new(scJ, "name", json_string(sc.name.c_str()));
         if (!sc.description.empty()) json_object_set_new(scJ, "description", json_string(sc.description.c_str()));
@@ -1461,6 +1482,7 @@ std::string serializeSceneViewJson(const Composition& comp, const std::string& s
                 "pitchV", double(ov.pitch(event.compiledPitchV)), "gate", double(gate),
                 "velocity", double(clampValue(ov.scaled(event.hasVelocity ? event.velocity : track.defaultVelocity, VELOCITY_SCALE, VELOCITY_OFFSET),0.f,1.f)),
                 "probability", double(clampValue(ov.scaled(event.hasProbability ? event.probability : 1.f, PROBABILITY_SCALE, PROBABILITY_OFFSET),0.f,1.f)));
+            if(event.pitchType==PitchType::HARMONIC){json_object_set_new(note,"pitchV",json_null());json_object_set_new(note,"requiresContext",json_true());}
             json_object_set_new(note,"mod",json_real(clampValue((event.hasMod ? event.mod : 0.f)+ov.values[MOD_OFFSET],-10.f,10.f)));
             json_object_set_new(note,"mod2",json_real(clampValue((event.hasMod2 ? event.mod2 : 0.f)+ov.values[MOD2_OFFSET],-10.f,10.f)));
             json_object_set_new(note,"mod3",json_real(clampValue((event.hasMod3 ? event.mod3 : 0.f)+ov.values[MOD3_OFFSET],-10.f,10.f)));
