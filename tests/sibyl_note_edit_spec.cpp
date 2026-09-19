@@ -13,7 +13,63 @@ CompositionPtr base() {
 }
 #include "sibyl_pitch_edit_cases.hpp"
 #include "sibyl_native_pitch_cases.hpp"
+void noteBatchCases() {
+    auto b = base();
+    // 1. Basic columnar batch insert with defaults and expect_count
+    auto batch1 = edit(*b, R"([{"op":"insert_note_batch","pattern_id":"dest","encoding":"columns_v1","columns":["step","degree","velocity","gate"],"rows":[[1,0,0.7,0.5],[3,2,0.8,0.6],[5,4,0.9,0.7]],"defaults":{"probability":0.85},"expect_count":3}])");
+    assert(batch1.valid && batch1.changes.size() == 1);
+    assert(batch1.changes[0].inserted == 3);
+    assert(batch1.composition->patterns.at("dest").steps.size() == 3);
+    assert(batch1.composition->patterns.at("dest").steps[0].step == 1);
+    assert(batch1.composition->patterns.at("dest").steps[0].degree == 0);
+    assert(batch1.composition->patterns.at("dest").steps[0].velocity == 0.7f);
+    assert(batch1.composition->patterns.at("dest").steps[0].gate == 0.5f);
+    assert(batch1.composition->patterns.at("dest").steps[0].probability == 0.85f);
+
+    // 2. Collision replacement with batch
+    auto batch2 = edit(*batch1.composition, R"([{"op":"insert_note_batch","pattern_id":"dest","encoding":"columns_v1","columns":["step","note"],"rows":[[1,"E4"],[7,"G4"]],"collision":"replace"}])");
+    assert(batch2.valid && batch2.changes[0].inserted == 2 && batch2.changes[0].deleted == 1);
+    assert(batch2.changes[0].displacedIds.size() == 1);
+    assert(batch2.composition->patterns.at("dest").steps.size() == 4);
+
+    // 3. Null cells inherit defaults
+    auto batch3 = edit(*b, R"([{"op":"insert_note_batch","pattern_id":"dest","encoding":"columns_v1","columns":["step","degree","velocity"],"rows":[[0,0,null],[2,1,0.5]],"defaults":{"velocity":0.65,"probability":1.0}}])");
+    assert(batch3.valid && batch3.changes[0].inserted == 2);
+    assert(batch3.composition->patterns.at("dest").steps[0].velocity == 0.65f);
+    assert(batch3.composition->patterns.at("dest").steps[1].velocity == 0.5f);
+
+    // 4. Invalid operation: invalid encoding
+    auto badEncoding = edit(*b, R"([{"op":"insert_note_batch","pattern_id":"dest","encoding":"columns_v0","columns":["step","degree"],"rows":[[0,1]]}])");
+    assert(!badEncoding.valid && badEncoding.errorCode == "invalid_operation");
+
+    // 5. Invalid operation: row length mismatch
+    auto badRow = edit(*b, R"([{"op":"insert_note_batch","pattern_id":"dest","encoding":"columns_v1","columns":["step","degree","velocity"],"rows":[[0,1]]}])");
+    assert(!badRow.valid && badRow.errorCode == "invalid_operation");
+
+    // 6. Duplicate or conflicting column
+    auto dupCol = edit(*b, R"([{"op":"insert_note_batch","pattern_id":"dest","encoding":"columns_v1","columns":["step","degree","degree"],"rows":[[0,1,2]]}])");
+    assert(!dupCol.valid && dupCol.errorCode == "duplicate_or_conflicting_column");
+
+    auto confCol = edit(*b, R"([{"op":"insert_note_batch","pattern_id":"dest","encoding":"columns_v1","columns":["step","tuned","tuned.step"],"rows":[[0,{},1]]}])");
+    assert(!confCol.valid && confCol.errorCode == "duplicate_or_conflicting_column");
+
+    // 7. Expect count mismatch
+    auto badCount = edit(*b, R"([{"op":"insert_note_batch","pattern_id":"dest","encoding":"columns_v1","columns":["step","degree"],"rows":[[0,1]],"expect_count":2}])");
+    assert(!badCount.valid && badCount.errorCode == "selection_count_mismatch");
+
+    // 8. Step collision within batch
+    auto batchCollision = edit(*b, R"([{"op":"insert_note_batch","pattern_id":"dest","encoding":"columns_v1","columns":["step","degree"],"rows":[[2,1],[2,3]]}])");
+    assert(!batchCollision.valid && batchCollision.errorCode == "step_collision");
+
+    // 9. Step collision with existing pattern (default collision: "error")
+    auto existCollision = edit(*b, R"([{"op":"insert_note_batch","pattern_id":"p","encoding":"columns_v1","columns":["step","note"],"rows":[[0,"C4"]]}])");
+    assert(!existCollision.valid && existCollision.errorCode == "step_collision");
+
+    std::cout << "PASS: P8B insert_note_batch columnar event batch tests\n";
+}
+
 int main() {
+    noteBatchCases();
     pitchEditCases();
     nativePitchCases();
     auto b=base(); auto original=serializeFullCompositionJson(*b);

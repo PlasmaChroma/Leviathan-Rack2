@@ -143,15 +143,16 @@ bool selectNotes(json_t* pattern, json_t* selector, std::vector<json_t*>& select
 }
 
 bool isNoteOperation(const std::string& name) {
-    return name=="retune_notes" || name=="update_notes" || name=="insert_notes" || name=="delete_notes" || name=="transpose_notes" || name=="rotate_notes" || name=="duplicate_notes";
+    return name=="retune_notes" || name=="update_notes" || name=="insert_notes" || name=="insert_note_batch" || name=="delete_notes" || name=="transpose_notes" || name=="rotate_notes" || name=="duplicate_notes";
 }
 
 bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r) {
     const std::string path="operations["+std::to_string(index)+"]", name=str(json_object_get(op,"op"));
     std::set<std::string> allowed={"op","pattern_id","report_id_limit"};
-    if(name!="insert_notes") for(const char* f:{"selector","expect_count","allow_empty"}) allowed.insert(f);
+    if(name!="insert_notes" && name!="insert_note_batch") for(const char* f:{"selector","expect_count","allow_empty"}) allowed.insert(f);
     if(name=="update_notes") for(const char* f:{"set","unset","adjust","clamp","resolve_defaults_for_track"}) allowed.insert(f);
     if(name=="insert_notes") for(const char* f:{"notes","collision"}) allowed.insert(f);
+    if(name=="insert_note_batch") for(const char* f:{"encoding","columns","rows","defaults","collision","expect_count"}) allowed.insert(f);
     if(name=="transpose_notes") {allowed.insert("semitones");allowed.insert("degrees");allowed.insert("interval");}
     if(name=="retune_notes") for(const char* f:{"target_context","mode","target","tie_break","max_error_cents"}) allowed.insert(f);
     if(name=="rotate_notes") {allowed.insert("steps");allowed.insert("collision");}
@@ -171,10 +172,10 @@ bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r
     if(reportLimit && !integer(reportLimit,1,1024)) return fail(r,"invalid_operation",path+".report_id_limit","Expected integer 1–1024");
     if(reportLimit) change.idLimit=json_integer_value(reportLimit);
     std::vector<json_t*> selected;
-    if(name!="insert_notes" && !selectNotes(pattern,json_object_get(op,"selector"),selected,r,path+".selector")) return false;
+    if(name!="insert_notes" && name!="insert_note_batch" && !selectNotes(pattern,json_object_get(op,"selector"),selected,r,path+".selector")) return false;
     change.matched=selected.size();
-    if(count && selected.size()!=size_t(json_integer_value(count))) return fail(r,"selection_count_mismatch",path+".expect_count","Selected count differs from expected count");
-    if(name!="insert_notes" && selected.empty() && !json_is_true(json_object_get(op,"allow_empty"))) return fail(r,"selection_empty",path+".selector","Selection is empty");
+    if(name!="insert_note_batch" && count && selected.size()!=size_t(json_integer_value(count))) return fail(r,"selection_count_mismatch",path+".expect_count","Selected count differs from expected count");
+    if(name!="insert_notes" && name!="insert_note_batch" && selected.empty() && !json_is_true(json_object_get(op,"allow_empty"))) return fail(r,"selection_empty",path+".selector","Selection is empty");
     for(auto* n:selected) change.noteIds.push_back(str(json_object_get(n,"id")));
     json_t* events=json_object_get(pattern,"steps");
     if(!events) {events=json_array();json_object_set_new(pattern,"steps",events);}
@@ -297,7 +298,7 @@ bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r
             if(!json_equal(n,before.p)) ++change.updated;
         }
     } else {
-        const bool duplicate=name=="duplicate_notes",insert=name=="insert_notes";
+        const bool duplicate=name=="duplicate_notes",insert=name=="insert_notes"||name=="insert_note_batch";
         const auto policy=json_object_get(op,"pitch_context_policy")?str(json_object_get(op,"pitch_context_policy")):"source";
         if(policy!="source" && policy!="destination") return fail(r,"invalid_operation",path+".pitch_context_policy","Expected source or destination");
         json_t* destination=pattern;
@@ -319,12 +320,179 @@ bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r
         if(length<1||length>1024) return fail(r,"validation_failed",path,"Invalid destination length");
         Owned copies(json_array());std::vector<std::string> sourceIds;
         if(insert) {
-            json_t* notes=json_object_get(op,"notes");
-            if(!json_is_array(notes)||json_array_size(notes)<1||json_array_size(notes)>1024) return fail(r,"invalid_operation",path+".notes","Expected 1–1024 notes");
-            size_t i;json_t* n;
-            json_array_foreach(notes,i,n) {
-                if(!fields(n,eventFields,r,path+".notes["+std::to_string(i)+"]")) return false;
-                json_array_append_new(copies.p,json_deep_copy(n));
+            if(name=="insert_note_batch") {
+                json_t* encodingJ=json_object_get(op,"encoding");
+                if(!encodingJ || !json_is_string(encodingJ) || std::string(json_string_value(encodingJ))!="columns_v1")
+                    return fail(r,"invalid_operation",path+".encoding","Expected encoding columns_v1");
+                json_t* columns=json_object_get(op,"columns");
+                if(!json_is_array(columns)||json_array_size(columns)<1||json_array_size(columns)>1024)
+                    return fail(r,"invalid_operation",path+".columns","Expected 1–1024 columns");
+                json_t* rows=json_object_get(op,"rows");
+                if(!json_is_array(rows)||json_array_size(rows)<1||json_array_size(rows)>1024)
+                    return fail(r,"invalid_operation",path+".rows","Expected 1–1024 rows");
+                if(count && json_array_size(rows)!=size_t(json_integer_value(count)))
+                    return fail(r,"selection_count_mismatch",path+".expect_count","Selected count differs from expected count");
+
+                struct ColDef {
+                    std::string raw;
+                    std::string parent;
+                    std::string child;
+                    bool isDotted = false;
+                };
+                std::vector<ColDef> colDefs;
+                std::set<std::string> seenCols;
+                bool hasTopTuned = false, hasSubTuned = false;
+                bool hasTopHarmonic = false, hasSubHarmonic = false;
+                const std::set<std::string> validTunedFields = {"context","step","degree","cents","ratio","periods","scale"};
+                const std::set<std::string> validHarmonicFields = {"role","toneId","periods","reference","range","condition","voicing","retune","kind"};
+
+                size_t cIdx; json_t* colVal;
+                json_array_foreach(columns, cIdx, colVal) {
+                    if(!json_is_string(colVal))
+                        return fail(r, "invalid_operation", path+".columns["+std::to_string(cIdx)+"]", "Column name must be a string");
+                    std::string cname = json_string_value(colVal);
+                    if(cname.empty())
+                        return fail(r, "invalid_operation", path+".columns["+std::to_string(cIdx)+"]", "Column name cannot be empty");
+                    if(!seenCols.insert(cname).second)
+                        return fail(r, "duplicate_or_conflicting_column", path+".columns", "Duplicate column: " + cname);
+                    
+                    size_t dotPos = cname.find('.');
+                    ColDef def;
+                    def.raw = cname;
+                    if(dotPos != std::string::npos) {
+                        if(cname.find('.', dotPos + 1) != std::string::npos)
+                            return fail(r, "invalid_operation", path+".columns", "Nested column paths beyond depth 1 unsupported: " + cname);
+                        def.parent = cname.substr(0, dotPos);
+                        def.child = cname.substr(dotPos + 1);
+                        def.isDotted = true;
+                        if(def.parent == "tuned") {
+                            hasSubTuned = true;
+                            if(validTunedFields.find(def.child) == validTunedFields.end())
+                                return fail(r, "invalid_operation", path+".columns", "Unknown tuned field: " + def.child);
+                        } else if(def.parent == "harmonic") {
+                            hasSubHarmonic = true;
+                            if(validHarmonicFields.find(def.child) == validHarmonicFields.end())
+                                return fail(r, "invalid_operation", path+".columns", "Unknown harmonic field: " + def.child);
+                        } else {
+                            return fail(r, "invalid_operation", path+".columns", "Unsupported nested column parent: " + def.parent);
+                        }
+                    } else {
+                        def.parent = cname;
+                        if(cname == "tuned") hasTopTuned = true;
+                        else if(cname == "harmonic") hasTopHarmonic = true;
+                        if(eventFields.find(cname) == eventFields.end())
+                            return fail(r, "invalid_operation", path+".columns", "Unknown column: " + cname);
+                    }
+                    colDefs.push_back(std::move(def));
+                }
+                if((hasTopTuned && hasSubTuned) || (hasTopHarmonic && hasSubHarmonic))
+                    return fail(r, "duplicate_or_conflicting_column", path+".columns", "Conflicting top-level and sub-object columns");
+
+                json_t* defaultsJ = json_object_get(op, "defaults");
+                if(defaultsJ && !json_is_object(defaultsJ))
+                    return fail(r, "invalid_operation", path+".defaults", "Expected object defaults");
+                if(defaultsJ) {
+                    const char* dKey; json_t* dVal;
+                    json_object_foreach(defaultsJ, dKey, dVal) {
+                        std::string dk = dKey;
+                        size_t dDot = dk.find('.');
+                        if(dDot != std::string::npos) {
+                            std::string p = dk.substr(0, dDot);
+                            std::string c = dk.substr(dDot + 1);
+                            if(p == "tuned") {
+                                if(validTunedFields.find(c) == validTunedFields.end())
+                                    return fail(r, "invalid_operation", path+".defaults."+dk, "Unknown tuned field in defaults");
+                            } else if(p == "harmonic") {
+                                if(validHarmonicFields.find(c) == validHarmonicFields.end())
+                                    return fail(r, "invalid_operation", path+".defaults."+dk, "Unknown harmonic field in defaults");
+                            } else {
+                                return fail(r, "invalid_operation", path+".defaults."+dk, "Unsupported nested defaults parent");
+                            }
+                        } else {
+                            if(eventFields.find(dk) == eventFields.end())
+                                return fail(r, "invalid_operation", path+".defaults."+dk, "Unknown default field");
+                        }
+                    }
+                }
+
+                auto applyDefaultsToNote = [&](json_t* noteObj) {
+                    if(!defaultsJ) return;
+                    const char* dKey; json_t* dVal;
+                    json_object_foreach(defaultsJ, dKey, dVal) {
+                        std::string dk = dKey;
+                        size_t dDot = dk.find('.');
+                        if(dDot != std::string::npos) {
+                            std::string p = dk.substr(0, dDot);
+                            std::string c = dk.substr(dDot + 1);
+                            json_t* parentObj = json_object_get(noteObj, p.c_str());
+                            if(!parentObj) {
+                                parentObj = json_object();
+                                json_object_set_new(noteObj, p.c_str(), parentObj);
+                            }
+                            json_object_set(parentObj, c.c_str(), dVal);
+                        } else {
+                            if(json_is_object(dVal) && (dk == "tuned" || dk == "harmonic")) {
+                                json_t* existing = json_object_get(noteObj, dk.c_str());
+                                if(existing && json_is_object(existing)) {
+                                    const char* subKey; json_t* subVal;
+                                    json_object_foreach(dVal, subKey, subVal) {
+                                        if(!json_object_get(existing, subKey))
+                                            json_object_set(existing, subKey, subVal);
+                                    }
+                                } else {
+                                    json_object_set(noteObj, dk.c_str(), dVal);
+                                }
+                            } else {
+                                json_object_set(noteObj, dk.c_str(), dVal);
+                            }
+                        }
+                    }
+                };
+
+                size_t rIdx; json_t* rowJ;
+                json_array_foreach(rows, rIdx, rowJ) {
+                    if(!json_is_array(rowJ))
+                        return fail(r, "invalid_operation", path+".rows["+std::to_string(rIdx)+"]", "Expected row array");
+                    if(json_array_size(rowJ) != colDefs.size())
+                        return fail(r, "invalid_operation", path+".rows["+std::to_string(rIdx)+"]", "Row length does not match columns length");
+                    
+                    json_t* noteObj = json_object();
+                    applyDefaultsToNote(noteObj);
+
+                    for(size_t c = 0; c < colDefs.size(); ++c) {
+                        json_t* cellVal = json_array_get(rowJ, c);
+                        if(!cellVal || json_is_null(cellVal)) continue;
+                        const auto& def = colDefs[c];
+                        if(def.isDotted) {
+                            json_t* parentObj = json_object_get(noteObj, def.parent.c_str());
+                            if(!parentObj || !json_is_object(parentObj)) {
+                                parentObj = json_object();
+                                json_object_set_new(noteObj, def.parent.c_str(), parentObj);
+                            }
+                            json_object_set(parentObj, def.child.c_str(), cellVal);
+                        } else {
+                            json_object_set(noteObj, def.parent.c_str(), cellVal);
+                        }
+                    }
+
+                    if(!json_object_get(noteObj, "step")) {
+                        json_decref(noteObj);
+                        return fail(r, "invalid_operation", path+".rows["+std::to_string(rIdx)+"]", "Missing required step field");
+                    }
+                    if(!fields(noteObj, eventFields, r, path+".rows["+std::to_string(rIdx)+"]")) {
+                        json_decref(noteObj);
+                        return false;
+                    }
+                    json_array_append_new(copies.p, noteObj);
+                }
+            } else {
+                json_t* notes=json_object_get(op,"notes");
+                if(!json_is_array(notes)||json_array_size(notes)<1||json_array_size(notes)>1024) return fail(r,"invalid_operation",path+".notes","Expected 1–1024 notes");
+                size_t i;json_t* n;
+                json_array_foreach(notes,i,n) {
+                    if(!fields(n,eventFields,r,path+".notes["+std::to_string(i)+"]")) return false;
+                    json_array_append_new(copies.p,json_deep_copy(n));
+                }
             }
         } else {
             const char* offsetField=duplicate?"offset_steps":"steps";json_t* offset=json_object_get(op,offsetField);

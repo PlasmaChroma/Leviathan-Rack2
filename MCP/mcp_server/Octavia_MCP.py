@@ -584,6 +584,16 @@ async def vcv_sibyl_edit(params: SibylEditInput) -> str:
             }
             if "changes" in res and isinstance(res["changes"], dict):
                 receipt["changes"] = {k: v for k, v in res["changes"].items() if v}
+            elif "changes" in res and isinstance(res["changes"], list):
+                summary = {}
+                for c in res["changes"]:
+                    if isinstance(c, dict):
+                        for k in ("inserted", "updated", "deleted", "clamped"):
+                            val = c.get(k, 0)
+                            if val:
+                                summary[k] = summary.get(k, 0) + val
+                if summary:
+                    receipt["changes"] = summary
             return _dump_json(receipt)
         return _dump_json(res)
     except Exception as e:
