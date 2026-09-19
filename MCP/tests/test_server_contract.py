@@ -123,7 +123,7 @@ class ServerContractTest(unittest.TestCase):
             return {"ok": True}
 
         namespace = {"json": json, "urlencode": urlencode, "_sibyl_call": call,
-                     "_err": lambda error: str(error)}
+                     "_dump_json": json.dumps, "_err": lambda error: str(error)}
         exec(compile(ast.Module(body=[node], type_ignores=[]), str(SERVER_PATH), "exec"), namespace)
         params = SimpleNamespace(module_id=123, view="map_intervals", id=None,
                                  context_id="53 EDO", intervals=[{"ratio": "3/2"}, {"cents": 700.25}],

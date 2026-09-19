@@ -1,10 +1,12 @@
 # Sibyl P8 — Token-Lean Composition Pipeline
 
-**Status:** design proposal for review; not implemented functionality.  
-**Baseline inspected:** `4115c0d396f47fc3ab4e37719d47d6f8535559ab`, with P1–P6 implemented and P7 specified separately.  
+**Status:** design proposal for review; refined with live empirical baselines, two-tier architecture, and Python composition toolkit specification.  
+**Baseline inspected:** `4115c0d396f47fc3ab4e37719d47d6f8535559ab`, with P1–P6 implemented, P7D microtonal engine active, and live Rack baselines established.  
 **Objective:** reduce total agent context and interaction cost for composing and revising music without reducing musical control, correctness, or inspectability.
 
-## 1. Product decision
+---
+
+## 1. Product Decision
 
 Make the common musical operation concise, while preserving an exact event-level escape hatch. Optimize the complete loop: discover capabilities, understand the score, author, preview, commit, verify, listen, revise, and resume later.
 
@@ -12,188 +14,278 @@ Do not replace the score with an opaque generative prompt. Do not require a new 
 
 The agent should spend tokens deciding the music, not repeating JSON keys, reconstructing unchanged sections, calculating tuning voltages, or reading irrelevant state. Compact authoring is optional; every supported expressive field remains available through ordinary event objects and semantic edits.
 
-## 2. What already exists, and where to improve
+---
 
-These findings are from local source and documentation, not measured token benchmarks.
+## 2. Two-Tier Architecture and Division of Responsibilities
+
+Sibyl's agent interface is structured as a two-tier system. Token-lean optimization must exploit the strengths of each tier rather than treating the bridge as a monolithic black box.
+
+```
+┌──────────────────────────────────────────────────────────┐
+│      AI Coding Agent (Antigravity / Codex / Claude)      │
+└────────────────────────────┬─────────────────────────────┘
+                             │  MCP Protocol (JSON-RPC over stdio)
+                             ▼
+┌──────────────────────────────────────────────────────────┐
+│  Tier 1: Python MCP Server & Composition Layer           │
+│  - Model-facing tool schemas and parameter exposure      │
+│  - Serialization formatting (compact separators, no-indent)│
+│  - Static fact and module ID caching (zero discovery tax)│
+│  - Python Composition Toolkit (`sibyl_composer.py`):     │
+│    * Euclidean & rhythmic shorthand generators           │
+│    * P7 microtonal interval & chord builder (38/53-EDO)  │
+│    * Deterministic compilation to canonical operations   │
+│  - Client-side response projection and filtering         │
+└────────────────────────────┬─────────────────────────────┘
+                             │  Local HTTP REST (`http://127.0.0.1:34570`)
+                             ▼
+┌──────────────────────────────────────────────────────────┐
+│  Tier 2: VCV Rack Embedded C++ Bridge (`Octavia.cpp` /   │
+│          `Sibyl*.cpp`)                                   │
+│  - Real-time audio engine safety (zero hot-path work)    │
+│  - Canonical validation, revision guards, undo units     │
+│  - Native columnar expansion (`columns_v1`) & cloning    │
+│  - Microtonal pitch systems (P7D) and voicing solver     │
+│  - Physical signal monitoring and status reporting       │
+└──────────────────────────────────────────────────────────┘
+```
+
+### 2.1 Division of Responsibilities Matrix
+
+| Responsibility Area | Tier 1: Python MCP & Helper Tier (`Octavia_MCP.py` / `sibyl_composer.py`) | Tier 2: Embedded C++ (`Octavia.cpp` / `Sibyl*.cpp`) |
+|---|---|---|
+| **Model Context Serialization** | Strips `indent=2` whitespace tax; formats compact JSON (`separators=(',', ':')`) or tabular readbacks | Emits compact, unpadded JSON text on local HTTP socket |
+| **Tool Schemas & Discovery** | Exposes consolidated/progressive schemas; suppresses 56-tool system-prompt flood | Serves machine-level capabilities and feature limits |
+| **Rack Discovery Caching** | Caches module IDs, tuning catalogs, and static limits to eliminate large `/modules` scans | Answers targeted module and status queries |
+| **Response Profiles** | Strips redundant empty collections, nulls, and unrequested fields before LLM ingestion | Emits bounded `receipt`, `summary`, or `full` payloads |
+| **Musical Lifting & Shorthand** | Generates Euclidean patterns, P7 EDO chords, arpeggios, and automation envelopes | Executes canonical operations without needing procedural generative code |
+| **Batch Expansion** | Validates rectangular array shapes and compiles shorthands | Executes canonical `insert_note_batch` expansion in control thread |
+| **Score State & Audio** | Completely detached from audio thread; purely handles data synthesis & wire protocol | Owns canonical score, revision lock, undo stack, and real-time DSP |
+
+---
+
+## 3. What Already Exists, and Where to Improve
 
 | Pipeline stage | Existing support | P8 opportunity |
 |---|---|---|
-| Discovery | Capability document lists features, operations, limits, and revision | Small feature manifest; fetch detailed contracts only when needed |
+| Discovery | Capability document lists features, operations, limits, and revision | Small feature manifest; fetch detailed contracts only when needed; cache module identity |
 | Orientation | Composition summary, pattern/scene/progression views | Bounded arrangement map and dependency-aware object summaries |
-| Reading notes | Selectors, field projection, revision-bound pagination | Preserve and promote these; do not invent a second selector language |
-| Authoring | Full patterns, insert/update/duplicate/rotate notes, track defaults | Compact event batches and edit-time phrase reuse |
+| Reading notes | Selectors, field projection, revision-bound pagination | Preserve and promote these; strip indentation whitespace; compact tabular projection |
+| Authoring | Full patterns, insert/update/duplicate/rotate notes, track defaults | Columnar event batches (`columns_v1`) and Python composition helpers |
 | Arrangement | Shared patterns, scene repeats and assignment overrides | Safe pattern/scene cloning and partial pattern-property edits |
-| Expression | Conditions, evolution, automation curves, relative harmony | Teach reuse of these features instead of spelling out each repetition |
-| Harmony | `voice_progression` materializes fixed notes | Reuse it; extend to P7 contexts rather than generating note lists in the agent |
+| Expression | Conditions, evolution, automation curves, relative harmony | Python envelope contours; reusable pattern condition templates |
+| Harmony & P7 | `voice_progression` and P7D microtonal pitch systems | Python EDO chord builders (38/53-EDO); ratio exception helpers; voicing orchestration |
 | Preview | VALIDATE accepts operations and can return changes | Optional prepared transaction avoids resending a large validated payload |
 | Commit | Revision guard, atomic edit, bounded change reports | Concise receipts with drill-down details; avoid redundant full readback |
 | Verification | Accepted/active/pending revisions; focused reads; physical monitoring | Separate structural verification from adoption and audible verification |
 | Continuation | Persisted canonical composition and semantic views | Concise, reconstructible orientation after context loss |
 
-Current source pointers: `MCP/skill/octavia/references/sibyl.md`, `MCP/mcp_server/Octavia_MCP.py`, `src/Sibyl.cpp`, `src/SibylEdit.cpp`, `src/SibylNoteEdit.cpp`, `src/SibylAssignmentEdit.hpp`, `src/SibylVoicingEdit.hpp`, and `src/SibylJSON.cpp`.
+---
 
-The present MCP wrappers return JSON text. Measure the actual model-visible serialization before changing the wrapper: escaped envelopes or duplicate structured/text renderings can erase application-level savings. Do not assume either duplication or savings without a captured trace.
-
-## 3. Non-negotiable invariants
+## 4. Non-Negotiable Invariants
 
 1. Existing APIs and full canonical reads remain available. New request/response formats require capability negotiation; existing clients retain their defaults.
 2. Compression must not quantize pitch, timing, velocity, probability, modulation, or automation. Preserve omitted versus explicit values, exact authored ratios, pitch representation, and inheritance.
-3. All compact inputs expand on the control side. No new parsing, allocation, recursive recipe evaluation, or search in the audio thread.
+3. All compact inputs expand on the control side (in Python adapter/helper or C++ control thread). No new parsing, allocation, recursive recipe evaluation, or search in the audio thread.
 4. Every mutation retains revision checking, atomic validation, collision checks, one undo unit, and the chosen adoption/phase policy. Compact requests do not bypass limits.
 5. Stable IDs, conditions, seeded probability, and evolution remain unchanged for equivalent edits. Reuse must have explicit ID and randomness semantics.
 6. Reports must distinguish authored, derived, accepted, pending, and actually sounding state. A successful edit is not proof of audible output.
 7. No silent truncation. Every bounded list has a total and explicit continuation or omission information. Errors and material warnings cannot disappear in a compact response.
-8. P7 native steps, scale degrees, cents, ratios, periods, and legacy semitones remain distinct. Neither 38-EDO nor 53-EDO requires the agent to compute voltages.
+8. P7 native steps, scale degrees, cents, ratios, periods, and legacy semitones remain distinct. Neither 38-EDO nor 53-EDO requires the agent to compute voltages manually.
+9. Persistent score schema integrity: P8 is primarily an API/authoring extension. Do not bump the persistent score schema solely to add a wire encoding or temporary preview handle.
 
-P8 is primarily an API/authoring extension. Do not bump the persistent score schema solely to add a wire encoding or temporary preview handle. If implementation introduces persistent fields, version those deliberately and document migration separately.
+---
 
-## 4. Measure the entire task first
+## 5. Measured Baseline Ground Truth
 
-Create replayable baseline workflows using the best existing semantic APIs, not intentionally verbose whole-score replacements. Compare equivalent initial/final scores, expressive behavior, and verification confidence.
+Baselines were measured against a live VCV Rack testbed (`v2.12.0`, Sibyl module `2984289508820114`, P7D active) using `tools/measure_sibyl_p8_baselines.py`. See [`doc/Sibyl_P8_Baseline_Measurement_Report.md`](Sibyl_P8_Baseline_Measurement_Report.md) for full traces.
 
-Required scenarios:
+### 5.1 Empirical Baseline Metrics
 
-- Compose an eight-track, multi-section piece using reused patterns, independent automation, probability/evolution, and relative harmony.
-- Change the final four notes of a phrase, including a conflict/recovery case.
-- Build a chorus from a verse with a changed bass register, denser percussion, and a final-repeat fill.
-- Create and revise both 38-EDO and 53-EDO material through P7, including exact-ratio exceptions and native voicing.
-- Resume an unfamiliar existing composition after context loss and make one focused edit.
-- Diagnose a sounding mismatch without fetching every note or dumping raw audio/monitor data.
-- Author an irregular, highly expressive passage with little repetition; compact mode must not constrain it.
+| Stage / Scenario | Calls | Outbound (Bytes) | Inbound (Bytes) | Est. In Tokens | Cumulative Latency | Key Finding |
+|---|:---:|:---:|:---:|:---:|:---:|---|
+| **Discovery & Handshake** | 2 | 0 | 56,045 | ~14,011 | 50.7 ms | `GET /modules` dumped 55.6KB just to locate Sibyl |
+| **Scenario 1: 8-Track Multi-Section Comp** | 6 | 5,781 | 5,730 | ~1,432 | 216.9 ms | Key boilerplate (`step`, `gate`, etc.) accounted for >50% of payload |
+| **Scenario 2: Phrase Revision & Conflict** | 6 | 567 | 2,902 | ~726 | 209.4 ms | Rejection was compact (104B); recovery status/read was 2.9KB |
+| **Scenario 3: Verse to Chorus Transformation** | 4 | 2,515 | 7,648 | ~1,912 | 165.0 ms | Inbound scene verification read alone consumed 6,452B |
+| **Scenario 4: P7 38-EDO / 53-EDO Microtonality** | 7 | 1,807 | 4,934 | ~1,234 | 249.6 ms | Native retuning report was 1,325B; tuning math held exact |
+| **Scenario 5: Context Loss Resume & Edit** | 6 | 203 | 6,368 | ~1,592 | 249.3 ms | Re-orientation consumed 5,705B before a 203B edit |
+| **Scenario 6: Sounding Mismatch Diagnosis** | 3 | 0 | 11,649 | ~2,912 | 83.7 ms | Effective context (7.1KB) + voltages (3.8KB) dominated |
+| **Scenario 7: Irregular Expressive Passage** | 4 | 1,523 | 14,544 | ~3,636 | 135.3 ms | Full note readback (`fields: ["full"]`) was 13.5KB |
+| **TOTAL** | **38** | **12,396** | **109,820** | **~27,455** | **1,357.7 ms** | **Inbound context is >8.8x larger than outbound authoring** |
 
-Record separately: tool schema/reference context, outbound arguments, inbound results, exposed intermediate text, call count, retries, latency, and resulting score size. If provider usage includes cached input or reasoning, report those separately; do not infer hidden usage from JSON length. Record tokenizer and version when available. Bytes/characters are useful fallback measurements but must not be labeled tokens.
+*Canonical score size in memory after full workflow:* **25,825 bytes**.
 
-Provisional acceptance targets, to revisit once a baseline exists: at least 50% less tool payload token volume for repetitive initial authoring, and at least 30% less total model-visible context for the multi-section and resume/edit workflows. These are targets, not measured claims. Report each scenario and regressions; an average must not hide a more expensive common task. Correctness and expressive equivalence are release gates even if a percentage target needs revision.
+---
 
-## 5. P8A — Smaller reads, receipts, and documentation
+## 6. P8A — Smaller Reads, Receipts, Serialization, and Discovery
 
-### 5.1 Progressive discovery
+### 6.1 Progressive Discovery and Schema Compression
+- **Problem:** Currently, the agent receives schemas for 56 distinct MCP tools on every prompt turn, and re-queries full capabilities (2,722B) on reconnect.
+- **Specification:**
+  - Introduce a lightweight manifest entry point (`vcv_sibyl_manifest`) returning only API version, schema version, feature flags, and contract fingerprints (<300 bytes).
+  - Detailed parameter schemas for specialized subsystems (`pitch_systems`, `voicing`, `automation`, `conditions`) are fetched by topic on demand.
+  - Python MCP adapter caches contracts by server instance and contract fingerprint. Reconnect or fingerprint change invalidates cache.
 
-Add a negotiated compact capability manifest with API/schema versions, feature versions, limits needed for safe requests, and a contract fingerprint. Detailed operation schemas and examples are requested by feature/topic. Cache contracts by server instance/build and fingerprint, never by module ID alone; reconnect, build changes, or an unknown fingerprint invalidate the cache. Revisions and runtime status are not cached as capability facts.
+### 6.2 Targeted Module Lookup (Zero Discovery Tax)
+- **Problem:** In the baseline, `GET /modules` cost **55,661 bytes** simply to find Sibyl.
+- **Specification:**
+  - Python MCP adapter caches the resolved Sibyl module ID across turns for the lifetime of the session.
+  - Expose a direct targeted endpoint `/sibyl/resolve` or allow tool calls to omit `module_id` when exactly one Sibyl module exists in the patch, resolving it internally in Python without roundtripping whole-patch inventories to the model.
 
-Split the agent reference into a short composing entry point and focused references for note edits, conditions/evolution, arrangement, automation, harmony/voicing, pitch systems, and recovery. Keep a single authoritative definition per contract. The entry point should explain when to load each reference rather than embed every example.
+### 6.3 Whitespace and Serialization Standard
+- **Problem:** Python `json.dumps(..., indent=2)` consumes 30% to 45% of inbound tokens in indentation spaces and newlines.
+- **Specification:**
+  - Mandate unindented JSON serialization (`separators=(',', ':')`) for all model-visible responses by default.
+  - For high-density array reads (`view="notes"`), offer an optional compact columnar or tabular projection format.
 
-### 5.2 Arrangement and object summaries
+### 6.4 Arrangement and Object Summaries
+- **Specification:**
+  - Provide a bounded arrangement view containing scene order/duration/repeats, track-to-pattern assignments, overrides, and referenced automation/pitch context IDs.
+  - Exclude note arrays by default. Include pattern note counts, resolutions, and reference counts.
+  - Summary views provide an orientation packet for context recovery without re-reading hundreds of individual event objects.
 
-Provide a bounded arrangement view containing scene order/duration/repeats, track-to-pattern assignments and overrides, harmony bindings, and referenced automation/pitch-context IDs. Include note counts, lengths/resolutions, and reference counts for patterns. Do not include note arrays by default.
+### 6.5 Response Profiles (`receipt` | `summary` | `full`)
+- **Specification:**
+  - Negotiate `response_profile: "receipt" | "summary" | "full"`.
+  - `receipt`: Returns status (`ok: true`), accepted/active revisions, apply boundary, operation counts, and affected object IDs (<150 bytes).
+  - Detailed before/after values and event-ID mappings are opt-in.
+  - Edit responses prove structural acceptance directly; no follow-up read is required merely to confirm that accepted changes were stored.
 
-Offer field projection and pagination for large object inventories using the existing revision-bound cursor approach. Describe inherited versus explicit bindings unambiguously. A summary is an orientation aid, not a substitute for an exact event read when editing an unfamiliar detail.
+---
 
-### 5.3 Response profiles
+## 7. P8B — Compact Exact Authoring
 
-Negotiate `response_profile: "receipt" | "summary" | "full"` for new clients; preserve old response defaults. Receipt includes success/error, accepted/active/pending revisions, apply boundary, phase policy, per-operation counts, affected object IDs, warnings, and explicit omission totals. Event-ID mappings and detailed before/after values are opt-in or fetched through bounded revision-bound report pages.
+### 7.1 Columnar Event Batches (`columns_v1`)
 
-An edit response may already prove that a targeted structural change was accepted. Do not require a second full pattern read merely to repeat that fact. Focused readback remains necessary for derived results not covered by the receipt or when diagnosing a mismatch. Adoption status and audible checks remain separate.
-
-Report retrieval must not depend on an unbounded history. Return an explicit expired-report error when bounded retention no longer contains it, with recovery through current focused views. Full output is still subject to hard limits and pagination, not an unlimited response mode.
-
-## 6. P8B — Compact exact authoring
-
-### 6.1 Columnar event batches
-
-Add a versioned batch encoding to note insertion/pattern creation. The proposed shape below is illustrative, not a currently callable operation:
+Add a versioned columnar batch encoding for note insertion and pattern authoring:
 
 ```json
 {
   "op": "insert_note_batch",
   "pattern_id": "lead",
   "encoding": "columns_v1",
-  "columns": ["step", "tuned.degree", "velocity"],
-  "rows": [[0,0,0.8], [3,2,0.65], [6,4,0.9], [10,3,0.7]],
-  "defaults": {"gate": 1.5},
+  "columns": ["step", "note", "velocity", "gate"],
+  "rows": [
+    [0, "C3", 0.9, 1.0],
+    [3, "Eb3", 0.75, 0.8],
+    [6, "G3", 0.8, 0.8],
+    [10, "Bb3", 0.85, 1.2]
+  ],
+  "defaults": {"gate": 0.8, "velocity": 0.8},
   "expect_count": 4
 }
 ```
 
-Column names come from an explicit versioned allowlist, not unrestricted JSON paths. All rows have exactly the declared width; duplicate/conflicting columns reject. A column may carry a complete typed object (such as `harmonic`, `tuned`, `condition`, or `observation`) where that is clearer than flattened fields. No overloading plain integers to mean both notes and degrees.
+- **Allowlist & Typing:** Column names come from a versioned allowlist (`step`, `note`, `gate`, `velocity`, `probability`, `ratchets`, `glideMs`, `mod`, `mod2`, `mod3`, `tuned.step`, `tuned.degree`, `tuned.ratio`, `harmonic`).
+- **Expansion Mechanics:**
+  - Expansion order: batch defaults $\rightarrow$ row values $\rightarrow$ sparse overrides.
+  - Native C++ engine implements `insert_note_batch` atomically in the control thread.
+  - Python MCP adapter validates rectangular array dimensions and provides optional client-side expansion fallback for legacy Rack builds.
+- **Escape Hatch:** Any unsupported field or irregular event falls back to canonical event objects without penalty.
 
-Expansion order: batch defaults, row fields, then explicitly indexed sparse row overrides. Defaults are authoring shorthand materialized into the inserted events, not a new live inheritance layer. Omitted fields continue to use existing score inheritance. Reject overlapping representations and conflicting parent/child fields rather than guessing. Null is not a new omission marker; reject it wherever the existing field contract rejects it. For irregular omissions use sparse overrides or ordinary object events.
+### 7.2 Typed Rhythmic Repetition
+- Support an optional bounded arithmetic onset series (`start`, `spacing`, `count`) paired with a cyclic expression array.
+- Expands to ordinary events at edit time on the control side.
+- No dynamic pattern generators in the audio thread.
 
-The canonical event object remains the escape hatch for every supported field. Unsupported future fields are rejected precisely until the encoding advertises them, never dropped. Error paths identify the source row/column and canonical field. An optional expansion preview returns selected rows only; a full expansion should not be the normal response.
+---
 
-Use existing ID allocation rules; preview consumes no IDs. Deterministic expansion order is row order, with the same ordering/duplicate-step constraints as canonical insertion. Apply existing per-pattern, per-transaction, and compiled-state limits to expanded output, with preflight checks before large allocations.
+## 8. P8C — Safe Phrase and Section Reuse
 
-### 6.2 Typed rhythmic repetition
+Exploit existing structural primitives before authoring repetitive event lists:
 
-Support an optional bounded arithmetic onset series (`start`, `spacing`, `count`) paired with an explicit pitch/expression cycle. Units are pattern steps; count and cycle length are explicit. Cycle repetition is opt-in, never inferred from mismatched array lengths. Reject off-grid positions, overflow, collisions, and out-of-pattern events using existing contracts.
+- **Partial Pattern Property Edits:** Update length, resolution, evolution, or pitch context without retransmitting notes. Shrinking a pattern never silently deletes out-of-bounds notes.
+- **Pattern Cloning:** Clone a pattern into a new destination with explicit source revision and optional transform operations (e.g., transpose, rotate).
+- **Scene Cloning (`share` vs. `copy`):**
+  - `patterns: "share"`: Reuses pattern IDs across scenes with scene assignment overrides for variation.
+  - `patterns: "copy"`: Clones underlying patterns with a documented destination ID mapping.
+- **Materialization Policy:** All reuse operations materialize into self-contained canonical score state. No complex, fragile runtime motif dependency graphs.
 
-Expand to ordinary events at edit time. Do not add an audio-thread pattern generator. Euclidean rhythms or other musical generators can be added later only with versioned deterministic algorithms and evidence of token savings; they are not required to deliver P8.
+---
 
-## 7. P8C — Reuse phrases and sections safely
+## 9. P8D — Python Composition Toolkit and P7 Integration
 
-First exploit existing shared patterns, scene assignment overrides, conditions, evolution, automation, and relative harmony. A repeated section with different intensity often needs only an assignment override or condition, not another note list.
+To maximize agent efficiency beyond the wire protocol, P8 introduces a dedicated Python composition library (`tools/sibyl_composer.py`). This toolkit is completely decoupled from the FastMCP server infrastructure, allowing it to be used either through direct agent scratch scripting or via high-level macro tools.
 
-Add the missing structural conveniences:
+### 9.1 Design Philosophy & Two Consumption Modes
+1. **Agent Scratch Scripting Mode:**
+   - Instead of emitting thousands of JSON characters across multiple chat turns, the model writes a concise 5-to-10 line Python script utilizing `sibyl_composer.py`.
+   - The script runs locally in milliseconds, compiles high-level musical intent into canonical atomic edit operations, and submits them directly to Rack.
+   - Prompt context drops from ~6,000 characters of raw JSON to ~250 characters of expressive Python code.
+2. **MCP Macro Mode:**
+   - The MCP server exposes concise macro endpoints (e.g., `vcv_sibyl_compose_progression`, `vcv_sibyl_compose_pattern`) that delegate to `sibyl_composer.py` internally.
 
-- Partial pattern-property updates for length/resolution, evolution, and P7 pitch context, with existing notes preserved and revalidated. Shrinking a pattern never silently deletes notes.
-- Clone a pattern into a new destination, with explicit source revision and transform operations. Preserve source context by default under P7's copy rules; destination retuning is explicit.
-- Clone a scene with `patterns: "share" | "copy"` explicitly selected. Shared patterns remain shared; copy requires a complete destination ID mapping. Report all affected references before replacement.
-- Apply a bounded series of existing transforms to a copied/selected phrase in one transaction. Reuse current selector, transposition, rotation, expression, and collision semantics.
+### 9.2 Generative & Musical Shorthands
+- **Euclidean Rhythm Generator:**
+  - `PatternBuilder.euclidean(pulses, steps, fill_note, ...)`: Deterministically distributes rhythmic pulses across a pattern grid using Bjorklund's algorithm, with support for rotation, velocities, and ratchet accents.
+- **Cyclic Chord Tone / Arpeggio Generator:**
+  - Generates arpeggiator patterns over active harmonic degrees or tone roles (`[root, third, fifth, octave]`) with user-specified contours (up, down, ping-pong, random walk).
+- **Automation Contours:**
+  - `AutomationBuilder.envelope(start_beat, end_beat, start_v, peak_v, end_v, shape="smoothstep")`: Generates smooth parametric curves for filter sweeps, resonance, and modulation depth.
+- **Arrangement Scaffolding:**
+  - Assembles multi-track scene progressions (e.g., Intro $\rightarrow$ Verse $\rightarrow$ Chorus $\rightarrow$ Outro) with automated track-to-pattern assignment mappings and scene-level register/velocity overrides.
 
-These are edit-time conveniences, not a persistent graph of dependent motifs. The result is self-contained canonical state. Later source edits do not change a materialized copy; shared pattern references do. This distinction must appear in the preview/receipt.
+### 9.3 Deep Integration with P7 Microtonal Pitch Systems
+The toolkit lifts the computational and theoretical burden of microtonality off the agent while compiling into exact P7 structures:
 
-Cloning copies musical fields and handles observation markers according to explicit copy policy with the existing warnings. Pattern-local note IDs and allocation counters follow a documented deterministic rule; new duplicate events receive fresh IDs. Report that different pattern/track identities can alter seeded variation: identical copied notes are not a promise of identical random playback across tracks.
+- **$N$-EDO Interval & Step Derivation:**
+  - Translates acoustic musical intervals (unisons, fifths, major/minor thirds, subminor thirds, harmonic sevenths) into exact step indices for arbitrary equal temperaments (e.g., 38-EDO, 53-EDO, 19-EDO, 31-EDO) and non-octave periods.
+  - *Example:* For 53-EDO, automatically maps a septimal dominant chord to `{root: 0, third: 17, fifth: 31, seventh: 43}` plus exact ratio exceptions (`ratio: "7/4"`).
+- **P7 Native Progression Builder:**
+  - Assembles valid P7 `upsert_progression` structures complete with lattice `rootPitch`, typed tone roles (`root`, `third`, `fifth`, `seventh`, `extension`), and step/cents/ratio intervals.
+- **P7 Native Voicing Orchestration:**
+  - Interfaces directly with Sibyl's C++ `voice_progression` DP solver (`voice_progression_micro_v1`), configuring target register extrema (`min`/`max` voltage intervals) and voice spread across assigned tracks.
 
-Persistent linked motif derivation is deferred. It creates dependency propagation, local-override, identity, adoption, and debugging costs that may exceed its token savings. Consider it only after measuring the materialized approach.
+### 9.4 Deterministic Compilation Guarantee
+- The toolkit contains zero stochastic hallucination: every helper method deterministically compiles into 100% valid, atomic canonical Sibyl operations (`upsert_pattern`, `insert_note_batch`, `upsert_progression`, `upsert_scene`, `update_scene_assignment`).
+- Full unit-test coverage ensures that the generated operations adhere strictly to Sibyl schema version 4 and pass all C++ validator rules.
 
-## 8. P8D — Prepare once, commit by handle
+---
 
-For large or solver-heavy edits, add optional prepared transactions:
+## 10. P8E — Prepared Transactions (Two-Phase Commit)
 
-1. Prepare sends operations once with `expected_revision` and requested adoption/phase policy.
-2. Server expands and validates the candidate and returns a bounded preview plus an opaque handle, base revision, expiry, and contract/build identity.
-3. Commit sends the handle and the same expected revision. It atomically accepts exactly that prepared candidate as one undo unit.
+For large or solver-heavy edits:
 
-The handle binds the complete transaction and policies. It is not permission for unspecified later edits and cannot be combined with additional operations at commit. Preview does not advance revisions, publish a snapshot, allocate persistent IDs, or create undo state. Prepared candidates reserve no authority over later user edits.
+1. **Prepare:** Agent sends operations with `expected_revision`. Server validates candidate and returns a bounded preview + opaque handle + expiry TTL.
+2. **Commit:** Agent sends handle + `expected_revision`. Server atomically commits the prepared candidate as one undo unit.
+3. **Idempotence & Recovery:** Retrying an already-committed handle returns the original receipt while retained. Stale revisions or expired handles reject cleanly without side effects.
 
-Reject stale revision, expired handle, changed module instance/build, or incompatible policy without any partial mutation. Do not automatically rebase or silently recompute a different result. If the client loses the commit response, querying/retrying that handle must distinguish committed from uncommitted and return the original receipt while retained; never apply twice. After retention expires, report unknown/expired and require current-state inspection, not blind replay.
+---
 
-Bound handle count, total retained bytes, TTL, and solver/expansion work; publish limits. Prepared state lives on the control side and is not serialized into a Rack patch. Account for candidate and diagnostic storage separately from the audio snapshot budget. Restart invalidates handles. Legacy direct EDIT remains the inexpensive route for small, well-understood changes.
+## 11. Whole-Pipeline Operating Policy
 
-## 9. Whole-pipeline operating policy
+Recommended agent operating loop under P8:
 
-Recommended negotiated workflow:
+1. **Discover & Orient:** Fetch compact manifest; verify cached module ID. Read arrangement summary and runtime status.
+2. **Reuse First:** Prefer shared patterns, scene overrides, conditions, or evolution before spelling out repeated note arrays.
+3. **Shorthand & Composition Lifting:** Use `sibyl_composer.py` or `insert_note_batch` for complex phrases, Euclidean rhythms, and P7 microtonal chord progressions.
+4. **Atomic Commit:** Submit single transaction with `response_profile: "receipt"`.
+5. **Verify Acceptance:** Use receipt for structural confirmation; inspect focused projections or physical signals only when diagnosing mismatches.
+6. **Continuation:** On context loss, reconstruct state from the arrangement summary and runtime status without dumping full score JSON.
 
-1. Connect and discover the exact module. Fetch a compact manifest once per instance/build, loading only relevant feature references.
-2. Read arrangement summary and accepted/active status. Fetch exact objects or projected notes only where needed.
-3. Choose shared arrangement references, overrides, conditions, evolution, curves, or voicing before spelling out repeated events.
-4. Send one coherent atomic edit. Use prepare/commit for a substantial candidate that benefits from inspection; direct EDIT still performs validation.
-5. Use the receipt to verify accepted structural changes. For quantized adoption, use bounded status checks; never spin until a stopped transport reaches an impossible boundary.
-6. Inspect focused effective context when derived harmony/tuning needs checking. For audible verification, use physically connected monitor inputs and bounded observations; summaries cannot prove signal routing or sound quality.
-7. Revise the selected events/objects rather than retransmitting the piece.
+---
 
-After revision conflicts, fetch the changed objects or fresh summary and reconsider. Do not reuse stale selectors, handles, or cached values by assuming unrelated changes. A future delta endpoint may help, but P8 does not require an unbounded event log.
+## 12. Validation Gates and Target Baselines
 
-For continuation after context loss, reconstruct an orientation packet from canonical state: title/intent, arrangement, track roles if authored, relevant feature versions, object IDs, and accepted/active state. Do not pretend inferred musical intent is authored fact. Avoid duplicating the entire composition into a separate persistent prose memory.
+| Milestone | Target Area | Measured Baseline | P8 Acceptance Gate |
+|---|---|---|---|
+| **P8A** | Module Discovery Tax | 55,661 bytes | $\le 150$ bytes (via targeted lookup / caching) |
+| **P8A** | Context Loss Orientation (Sc. 5) | 5,705 bytes inbound | $\le 1,600$ bytes (>70% context reduction) |
+| **P8A** | Serialization Whitespace | Indented (`indent=2`) | Unindented (`separators=(',', ':')`) |
+| **P8A** | Verification Receipts (Sc. 2) | 2,902 bytes inbound | $\le 500$ bytes |
+| **P8B** | Initial Authoring (Sc. 1) | 5,781 bytes outbound | $\le 2,800$ bytes (>50% payload reduction) |
+| **P8C** | Section Variation (Sc. 3) | 10,163 bytes total (out+in) | $\le 5,000$ bytes (>50% context reduction) |
+| **P8D** | Python Composition Lifting | Manual JSON authoring | Shorthand script $\le 300$ bytes; 100% P7 compilation |
+| **All** | Audio Thread & DSP Integrity | Zero audio-thread overhead | Invariant: zero allocations or parsing in audio thread |
+| **All** | P7 Microtonal Fidelity | Exact ratios & native steps | Invariant: 38-EDO/53-EDO precision completely preserved |
 
-## 10. Validation and release gates
+---
 
-| Area | Required evidence |
-|---|---|
-| Expressive equivalence | Compact and canonical inputs yield equivalent normalized events, IDs where applicable, and playback traces; cover ties, ratchets, microshift, probability, conditions, evolution, all MOD lanes, automation, and observations |
-| P7 fidelity | Native steps/degrees/periods, exact ratios/cents, context inheritance, detuning, scene transforms, and native voicing remain distinct; include 38-EDO and 53-EDO |
-| Error behavior | Invalid widths, conflicting pitches, unknown columns, invalid defaults, expansion overflow, bad clones, and collisions reject atomically with useful source paths |
-| Reuse | Shared versus copied behavior, copy contexts, observation policy, IDs, and seeded variation are explicit and tested |
-| Prepared edits | No preview side effects; stale/expired/restarted handle failure; duplicate commit recovery; unchanged undo/adoption semantics; bounded memory |
-| Reads and reports | Projection and paging preserve exact fields; stale cursors fail; all truncation is visible; compact reports retain warnings and revision state |
-| Compatibility | Old request defaults and schema imports remain supported; capability negotiation prevents use against older builds |
-| Performance | No added hot-path work; bounded expansion/report/preparation memory; native Windows build and relevant existing suites pass |
-| Token savings | Replayed whole-workflow traces, tokenizer/configuration, per-scenario results, retries, call count, latency, and limitations are published |
+## 13. Phased Delivery Order
 
-Use meaningful equivalence/property tests against canonical operations, not only examples that mirror the encoder. Retain legacy golden tests and P7 integration coverage. Live testing must distinguish semantic acceptance, actual adoption, output voltages, and physically monitored audio.
-
-## 11. Delivery order and scope decisions
-
-**P8A:** baseline measurement, reference splitting, compact discovery, arrangement views, response profiles. Useful independently of P7 and likely the lowest-risk savings.
-
-**P8B:** compact event batches and bounded onset repetition; canonical expansion and equivalence coverage.
-
-**P8C:** partial pattern edits, explicit cloning, and transform composition; integrate P7 copy/context semantics.
-
-**P8D:** prepared transactions and recovery; whole-workflow benchmark and live verification.
-
-Implement against the actual P7 contract when available. Do not invent a temporary 12-TET-only compact pitch syntax that must be replaced immediately afterward. Keep optional features only when measurements justify their maintenance and cognitive cost.
-
-Not required: arbitrary scripting/eval, natural-language interpretation inside Rack, hidden random generation, base64/compressed score blobs for the agent to decipher, shortened aliases for every field, or a second playback engine. Dense notation that creates more mistakes and retries is not a successful token optimization.
-
-**Review decision:** prioritize semantic reuse and smaller context first, exact compact authoring second, and transaction payload reuse third. Preserve an intelligible canonical score throughout.
+1. **P8A:** Compact serialization (strip `indent=2`), module lookup caching, compact manifest discovery, arrangement summary view, `receipt` response profile.
+2. **P8B:** Columnar event batches (`insert_note_batch` with `columns_v1`), row defaults, arithmetic onset expansion.
+3. **P8C:** Partial pattern property updates, pattern cloning, scene cloning (`share` vs `copy`), and composite transform pipelines.
+4. **P8D:** Python Composition Toolkit (`tools/sibyl_composer.py`), Euclidean generators, P7 microtonal chord & progression builders, and deterministic compilation test harness.
+5. **P8E:** Prepared transactions (`prepare` $\rightarrow$ handle $\rightarrow$ `commit`), handle TTL, and idempotent retry recovery.

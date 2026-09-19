@@ -6,6 +6,7 @@ Connects MCP-compatible agents to VCV Rack through the Octavia module.
 
 import json
 import os
+import time
 import re
 import warnings
 from urllib.parse import urlencode
@@ -51,7 +52,7 @@ class PresenceInput(BaseModel):
 async def vcv_octavia_get_presence() -> str:
     """Read the target state, automatic state, and remaining override lease."""
     try:
-        return json.dumps(await _envelope_call("presence"), indent=2)
+        return _dump_json(await _envelope_call("presence"))
     except Exception as e:
         return _err(e)
 
@@ -64,14 +65,52 @@ async def vcv_octavia_set_presence(params: PresenceInput) -> str:
     Runtime-only, no patch save or undo entry. Latest setter wins; expires automatically.
     """
     try:
-        return json.dumps(await _envelope_call("presence", "POST", {
+        return _dump_json(await _envelope_call("presence", "POST", {
             "state": params.state, "leaseMs": params.lease_ms,
-        }), indent=2)
+        }))
     except Exception as e:
         return _err(e)
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
+
+# ── Module Inventory Caching ──────────────────────────────────────────────────
+
+_MODULE_CACHE: dict[str, Any] = {"timestamp": 0.0, "modules": []}
+_RESOLVED_MODULE_IDS: dict[int, int] = {}
+MODULE_CACHE_TTL_SEC = 10.0
+
+
+def _invalidate_module_cache() -> None:
+    global _MODULE_CACHE, _RESOLVED_MODULE_IDS
+    _MODULE_CACHE = {"timestamp": 0.0, "modules": []}
+    _RESOLVED_MODULE_IDS = {}
+
+
+async def _get_cached_modules(force_refresh: bool = False) -> list[dict]:
+    now = time.monotonic()
+    if not force_refresh and _MODULE_CACHE["modules"] and (now - _MODULE_CACHE["timestamp"]) < MODULE_CACHE_TTL_SEC:
+        return _MODULE_CACHE["modules"]
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(f"{BRIDGE_URL}/modules/summary", headers=BRIDGE_HEADERS)
+            if r.status_code == 200:
+                mods = r.json()
+                if isinstance(mods, list):
+                    _MODULE_CACHE["timestamp"] = now
+                    _MODULE_CACHE["modules"] = mods
+                    return mods
+    except Exception:
+        pass
+    return _MODULE_CACHE.get("modules", [])
+
+
+def _dump_json(payload: Any, compact: bool = True) -> str:
+    """Format model-visible responses with compact delimiters to avoid whitespace token bloat."""
+    if compact and os.environ.get("OCTAVIA_COMPACT_JSON", "1") not in ("0", "false", "False"):
+        return json.dumps(payload, separators=(",", ":"))
+    return json.dumps(payload, indent=2)
+
 
 async def _normalize_endpoint(endpoint: str) -> str:
     """Resolve module_id in endpoints to protect against client JSON float precision truncation."""
@@ -81,13 +120,14 @@ async def _normalize_endpoint(endpoint: str) -> str:
     prefix, mid_str, suffix = m.group(1), m.group(2), m.group(3) or ""
     try:
         req_id = int(mid_str)
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            r = await client.get(f"{BRIDGE_URL}/modules", headers=BRIDGE_HEADERS)
-            if r.status_code == 200:
-                for mod in r.json():
-                    actual_id = mod.get("id")
-                    if actual_id is not None and (actual_id == req_id or abs(int(actual_id) - req_id) <= 64):
-                        return f"{prefix}{actual_id}{suffix}"
+        if req_id in _RESOLVED_MODULE_IDS:
+            return f"{prefix}{_RESOLVED_MODULE_IDS[req_id]}{suffix}"
+        mods = await _get_cached_modules()
+        for mod in mods:
+            actual_id = mod.get("id")
+            if actual_id is not None and (actual_id == req_id or abs(int(actual_id) - req_id) <= 64):
+                _RESOLVED_MODULE_IDS[req_id] = actual_id
+                return f"{prefix}{actual_id}{suffix}"
     except Exception:
         pass
     return endpoint
@@ -229,7 +269,7 @@ async def vcv_get_status() -> str:
             status["patch"] = await _call("patch")
         except Exception:
             pass
-        return json.dumps(status, indent=2)
+        return _dump_json(status)
     except Exception as e:
         return _err(e)
 
@@ -244,7 +284,7 @@ async def vcv_get_perf() -> str:
     Returns sample rate, block size, block duration, module/cable counts, and process CPU time.
     """
     try:
-        return json.dumps(await _call("perf"), indent=2)
+        return _dump_json(await _call("perf"))
     except Exception as e:
         return _err(e)
 
@@ -266,7 +306,7 @@ async def vcv_get_debug_metrics(params: DebugMetricsInput) -> str:
     profiling captures or CSV data.
     """
     try:
-        return json.dumps(await _call(f"debug/metrics/{params.module_id}"), indent=2)
+        return _dump_json(await _call(f"debug/metrics/{params.module_id}"))
     except Exception as e:
         return _err(e)
 
@@ -296,9 +336,9 @@ async def vcv_debug_capture(params: DebugCaptureInput) -> str:
         "duration_seconds": params.duration_seconds,
     }
     try:
-        return json.dumps(await _sibyl_call(
+        return _dump_json(await _sibyl_call(
             f"debug/capture/{params.module_id}", "POST", payload
-        ), indent=2)
+        ))
     except Exception as e:
         return _err(e)
 
@@ -315,7 +355,7 @@ async def vcv_list_modules() -> str:
     Use vcv_get_module(module_id) to inspect parameters and ports for a specific module.
     """
     try:
-        return json.dumps(await _call("modules/summary"), indent=2)
+        return _dump_json(await _call("modules/summary"))
     except Exception as e:
         return _err(e)
 
@@ -334,7 +374,7 @@ async def vcv_get_module(params: GetModuleInput) -> str:
     input ports (id, name, voltage, connected), and output ports.
     """
     try:
-        return json.dumps(await _call(f"modules/{params.module_id}"), indent=2)
+        return _dump_json(await _call(f"modules/{params.module_id}"))
     except Exception as e:
         return _err(e)
 
@@ -367,7 +407,7 @@ class OctaviaConsoleResponseInput(OctaviaConsoleInput):
 async def vcv_octavia_console_status(params: OctaviaConsoleInput) -> str:
     """Read mailbox state and prompt/response generations for an Octavia Console module."""
     try:
-        return json.dumps(await _console_call(f"console/{params.module_id}/status"), indent=2)
+        return _dump_json(await _console_call(f"console/{params.module_id}/status"))
     except Exception as e:
         return _err(e)
 
@@ -384,7 +424,7 @@ async def vcv_octavia_console_wait(params: OctaviaConsoleWaitInput) -> str:
         query = urlencode({"after": params.after_prompt_id, "waitMs": params.wait_ms})
         payload = await _console_call(f"console/{params.module_id}/prompt?{query}",
                                       timeout=max(5.0, params.wait_ms / 1000.0 + 5.0))
-        return json.dumps(payload, indent=2)
+        return _dump_json(payload)
     except Exception as e:
         return _err(e)
 
@@ -395,7 +435,7 @@ async def vcv_octavia_console_respond(params: OctaviaConsoleResponseInput) -> st
     """Post the final response for a Rack-submitted prompt to the Octavia Console display."""
     try:
         payload = {"promptId": params.prompt_id, "text": params.text, "error": params.error}
-        return json.dumps(await _console_call(f"console/{params.module_id}/response", "POST", payload), indent=2)
+        return _dump_json(await _console_call(f"console/{params.module_id}/response", "POST", payload))
     except Exception as e:
         return _err(e)
 
@@ -435,6 +475,9 @@ class SibylEditInput(SibylModuleInput):
     phase_policy: Literal["preserve", "restartChanged", "restartAll"] = Field(
         "preserve", description="How pattern phases respond when the revision becomes active"
     )
+    response_profile: Optional[Literal["receipt", "summary", "full"]] = Field(
+        "full", description="Response profile: receipt returns compact confirmation (<150B); full returns complete change details"
+    )
 
 
 class SibylTransportInput(SibylModuleInput):
@@ -450,12 +493,36 @@ class SibylTransportInput(SibylModuleInput):
     seed: Optional[int] = Field(None, description="Optional deterministic seed for reseed")
 
 
+class SibylCapabilitiesInput(SibylModuleInput):
+    compact: bool = Field(False, description="Return compact feature manifest (<300B) instead of full contract schema")
+
+
 @mcp.tool(name="vcv_sibyl_get_capabilities",
           annotations={"title": "Get Sibyl Capabilities", "readOnlyHint": True, "destructiveHint": False})
-async def vcv_sibyl_get_capabilities(params: SibylModuleInput) -> str:
+async def vcv_sibyl_get_capabilities(params: SibylCapabilitiesInput) -> str:
     """Discover the Sibyl API/schema versions and semantic operations supported by a module."""
     try:
-        return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/capabilities"), indent=2)
+        caps = await _sibyl_call(f"sibyl/{params.module_id}/capabilities")
+        if getattr(params, "compact", False) and isinstance(caps, dict) and "capabilities" in caps:
+            sib = caps["capabilities"].get("sibyl", {})
+            manifest = {
+                "ok": True,
+                "apiVersion": sib.get("apiVersion"),
+                "schemaVersion": sib.get("schemaVersion"),
+                "revision": sib.get("revision"),
+                "pitchStage": sib.get("pitchSystems", {}).get("stage"),
+                "views": sib.get("views", []),
+                "operations": sib.get("operations", []),
+                "features": {
+                    "harmony": sib.get("harmony", {}).get("version"),
+                    "automation": sib.get("automation", {}).get("version"),
+                    "voicing": sib.get("voicing", {}).get("version"),
+                    "conditions": sib.get("conditions", {}).get("version"),
+                    "repeatEvolution": sib.get("repeatEvolution", {}).get("version")
+                }
+            }
+            return _dump_json(manifest)
+        return _dump_json(caps)
     except Exception as e:
         return _err(e)
 
@@ -472,7 +539,7 @@ async def vcv_sibyl_get_composition(params: SibylCompositionInput) -> str:
             value = getattr(params, field)
             if value is not None:
                 query[field] = json.dumps(value, separators=(",", ":")) if field in ("selector", "fields", "sample_beats", "intervals") else value
-        return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/composition?{urlencode(query)}"), indent=2)
+        return _dump_json(await _sibyl_call(f"sibyl/{params.module_id}/composition?{urlencode(query)}"))
     except Exception as e:
         return _err(e)
 
@@ -491,7 +558,7 @@ async def vcv_sibyl_validate(params: SibylValidateInput) -> str:
             payload = params.candidate
         else:
             return _err("Supply candidate or operations")
-        return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/validate", "POST", payload), indent=2)
+        return _dump_json(await _sibyl_call(f"sibyl/{params.module_id}/validate", "POST", payload))
     except Exception as e:
         return _err(e)
 
@@ -506,7 +573,19 @@ async def vcv_sibyl_edit(params: SibylEditInput) -> str:
                    "operations": params.operations}
         if params.apply_at is not None:
             payload["apply_at"] = params.apply_at
-        return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/edit", "POST", payload), indent=2)
+        res = await _sibyl_call(f"sibyl/{params.module_id}/edit", "POST", payload)
+        if params.response_profile == "receipt" and isinstance(res, dict) and res.get("ok"):
+            receipt = {
+                "ok": True,
+                "revision": res.get("revision"),
+                "activeRevision": res.get("activeRevision"),
+                "appliedOperations": len(params.operations),
+                "warnings": res.get("warnings", [])
+            }
+            if "changes" in res and isinstance(res["changes"], dict):
+                receipt["changes"] = {k: v for k, v in res["changes"].items() if v}
+            return _dump_json(receipt)
+        return _dump_json(res)
     except Exception as e:
         return _err(e)
 
@@ -516,7 +595,7 @@ async def vcv_sibyl_edit(params: SibylEditInput) -> str:
 async def vcv_sibyl_get_status(params: SibylModuleInput) -> str:
     """Read runtime transport, scene, clock, active revision, and pending apply state."""
     try:
-        return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/status"), indent=2)
+        return _dump_json(await _sibyl_call(f"sibyl/{params.module_id}/status"))
     except Exception as e:
         return _err(e)
 
@@ -527,7 +606,7 @@ async def vcv_sibyl_transport(params: SibylTransportInput) -> str:
     """Control Sibyl performance state without creating an undo entry."""
     try:
         payload = params.model_dump(exclude={"module_id"}, exclude_none=True)
-        return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/transport", "POST", payload), indent=2)
+        return _dump_json(await _sibyl_call(f"sibyl/{params.module_id}/transport", "POST", payload))
     except Exception as e:
         return _err(e)
 
@@ -553,7 +632,7 @@ class SemanticRequestInput(SemanticModuleInput):
 async def vcv_semantic_get_capabilities(params: SemanticModuleInput) -> str:
     """Discover whether a module owns structured semantic state and how to read or edit it."""
     try:
-        return json.dumps(await _envelope_call(f"semantic/{params.module_id}/capabilities"), indent=2)
+        return _dump_json(await _envelope_call(f"semantic/{params.module_id}/capabilities"))
     except Exception as e:
         return _err(e)
 
@@ -566,9 +645,9 @@ async def vcv_semantic_get_document(params: SemanticDocumentInput) -> str:
         query = {"view": params.view}
         if params.id is not None:
             query["id"] = params.id
-        return json.dumps(await _envelope_call(
+        return _dump_json(await _envelope_call(
             f"semantic/{params.module_id}/document?{urlencode(query)}"
-        ), indent=2)
+        ))
     except Exception as e:
         return _err(e)
 
@@ -578,9 +657,9 @@ async def vcv_semantic_get_document(params: SemanticDocumentInput) -> str:
 async def vcv_semantic_validate(params: SemanticRequestInput) -> str:
     """Validate an opaque candidate or edit request using the target module's own rules."""
     try:
-        return json.dumps(await _envelope_call(
+        return _dump_json(await _envelope_call(
             f"semantic/{params.module_id}/validate", "POST", params.request
-        ), indent=2)
+        ))
     except Exception as e:
         return _err(e)
 
@@ -590,9 +669,9 @@ async def vcv_semantic_validate(params: SemanticRequestInput) -> str:
 async def vcv_semantic_edit(params: SemanticRequestInput) -> str:
     """Apply a capability-defined semantic edit as one undoable Rack action."""
     try:
-        return json.dumps(await _envelope_call(
+        return _dump_json(await _envelope_call(
             f"semantic/{params.module_id}/edit", "POST", params.request
-        ), indent=2)
+        ))
     except Exception as e:
         return _err(e)
 
@@ -602,7 +681,7 @@ async def vcv_semantic_edit(params: SemanticRequestInput) -> str:
 async def vcv_semantic_get_status(params: SemanticModuleInput) -> str:
     """Read capability-defined revision and runtime status for structured module state."""
     try:
-        return json.dumps(await _envelope_call(f"semantic/{params.module_id}/status"), indent=2)
+        return _dump_json(await _envelope_call(f"semantic/{params.module_id}/status"))
     except Exception as e:
         return _err(e)
 
@@ -612,9 +691,9 @@ async def vcv_semantic_get_status(params: SemanticModuleInput) -> str:
 async def vcv_semantic_command(params: SemanticRequestInput) -> str:
     """Send a capability-defined ephemeral command that does not edit its authored document."""
     try:
-        return json.dumps(await _envelope_call(
+        return _dump_json(await _envelope_call(
             f"semantic/{params.module_id}/command", "POST", params.request
-        ), indent=2)
+        ))
     except Exception as e:
         return _err(e)
 
@@ -653,7 +732,7 @@ class MoiraiCommandInput(MoiraiModuleInput):
 async def vcv_moirai_get_capabilities(params: MoiraiModuleInput) -> str:
     """Discover the Moirai envelope-bank schema, limits, policies, and operations."""
     try:
-        return json.dumps(await _envelope_call(f"semantic/{params.module_id}/capabilities"), indent=2)
+        return _dump_json(await _envelope_call(f"semantic/{params.module_id}/capabilities"))
     except Exception as e:
         return _err(e)
 
@@ -667,7 +746,7 @@ async def vcv_moirai_get_bank(params: MoiraiBankInput) -> str:
         if params.id is not None:
             query["id"] = params.id
         endpoint = f"semantic/{params.module_id}/document?{urlencode(query)}"
-        return json.dumps(await _envelope_call(endpoint), indent=2)
+        return _dump_json(await _envelope_call(endpoint))
     except Exception as e:
         return _err(e)
 
@@ -680,7 +759,7 @@ async def vcv_moirai_get_program(params: MoiraiBankInput) -> str:
         if not params.id:
             raise ValueError("id is required for a Moirai program view")
         query = urlencode({"view": "program", "id": params.id})
-        return json.dumps(await _envelope_call(f"semantic/{params.module_id}/document?{query}"), indent=2)
+        return _dump_json(await _envelope_call(f"semantic/{params.module_id}/document?{query}"))
     except Exception as e:
         return _err(e)
 
@@ -690,9 +769,9 @@ async def vcv_moirai_get_program(params: MoiraiBankInput) -> str:
 async def vcv_moirai_validate(params: MoiraiValidateInput) -> str:
     """Validate and compile a candidate bank without changing accepted state or playback."""
     try:
-        return json.dumps(await _envelope_call(
+        return _dump_json(await _envelope_call(
             f"semantic/{params.module_id}/validate", "POST", {"candidate": params.candidate}
-        ), indent=2)
+        ))
     except Exception as e:
         return _err(e)
 
@@ -703,9 +782,9 @@ async def vcv_moirai_edit(params: MoiraiEditInput) -> str:
     """Apply one revision-guarded atomic bank transaction and preserve rejection envelopes."""
     try:
         payload = params.model_dump(exclude={"module_id"})
-        return json.dumps(await _envelope_call(
+        return _dump_json(await _envelope_call(
             f"semantic/{params.module_id}/edit", "POST", payload
-        ), indent=2)
+        ))
     except Exception as e:
         return _err(e)
 
@@ -715,7 +794,7 @@ async def vcv_moirai_edit(params: MoiraiEditInput) -> str:
 async def vcv_moirai_get_status(params: MoiraiModuleInput) -> str:
     """Read accepted, active, and pending revisions plus runtime envelope telemetry."""
     try:
-        return json.dumps(await _envelope_call(f"semantic/{params.module_id}/status"), indent=2)
+        return _dump_json(await _envelope_call(f"semantic/{params.module_id}/status"))
     except Exception as e:
         return _err(e)
 
@@ -726,9 +805,9 @@ async def vcv_moirai_command(params: MoiraiCommandInput) -> str:
     """Trigger/reset Moirai or select its inspected voice without creating an undo entry."""
     try:
         payload = params.model_dump(exclude={"module_id"}, exclude_none=True)
-        return json.dumps(await _envelope_call(
+        return _dump_json(await _envelope_call(
             f"semantic/{params.module_id}/command", "POST", payload
-        ), indent=2)
+        ))
     except Exception as e:
         return _err(e)
 
@@ -826,7 +905,7 @@ class CaptureIdInput(BaseModel):
 async def vcv_octavia_get_monitors() -> str:
     """Discover physically cabled monitor inputs and observation-history state."""
     try:
-        return json.dumps(await _envelope_call("audio/monitors"), indent=2)
+        return _dump_json(await _envelope_call("audio/monitors"))
     except Exception as e:
         return _err(e)
 
@@ -837,7 +916,7 @@ async def vcv_octavia_create_snapshot(params: SnapshotInput) -> str:
     """Freeze one frame-aligned window from explicitly selected physical monitors."""
     try:
         payload = params.model_dump(by_alias=True, exclude_none=True)
-        return json.dumps(await _envelope_call("audio/snapshot", "POST", payload), indent=2)
+        return _dump_json(await _envelope_call("audio/snapshot", "POST", payload))
     except Exception as e:
         return _err(e)
 
@@ -847,7 +926,7 @@ async def vcv_octavia_create_snapshot(params: SnapshotInput) -> str:
 async def vcv_octavia_get_snapshot(params: SnapshotIdInput) -> str:
     """Poll an existing immutable snapshot without recapturing audio."""
     try:
-        return json.dumps(await _envelope_call(f"audio/snapshot/{params.snapshot_id}"), indent=2)
+        return _dump_json(await _envelope_call(f"audio/snapshot/{params.snapshot_id}"))
     except Exception as e:
         return _err(e)
 
@@ -858,7 +937,7 @@ async def vcv_octavia_start_recording(params: RecordingInput) -> str:
     """Record physical monitors, optionally driving frame-synchronized Control A/B outputs."""
     try:
         payload = params.model_dump(by_alias=True, exclude_none=True)
-        return json.dumps(await _envelope_call("audio/recording", "POST", payload), indent=2)
+        return _dump_json(await _envelope_call("audio/recording", "POST", payload))
     except Exception as e:
         return _err(e)
 
@@ -868,7 +947,7 @@ async def vcv_octavia_start_recording(params: RecordingInput) -> str:
 async def vcv_octavia_get_recording(params: RecordingIdInput) -> str:
     """Poll a bounded recording while its background export completes."""
     try:
-        return json.dumps(await _envelope_call(f"audio/recording/{params.recording_id}"), indent=2)
+        return _dump_json(await _envelope_call(f"audio/recording/{params.recording_id}"))
     except Exception as e:
         return _err(e)
 
@@ -879,7 +958,7 @@ async def vcv_octavia_start_analysis_capture(params: AnalysisCaptureInput) -> st
     """Capture/analyze 0.1-30 seconds with optional frame-synchronized control output."""
     try:
         payload = params.model_dump(by_alias=True, exclude_none=True)
-        return json.dumps(await _envelope_call("audio/capture", "POST", payload), indent=2)
+        return _dump_json(await _envelope_call("audio/capture", "POST", payload))
     except Exception as e:
         return _err(e)
 
@@ -889,7 +968,7 @@ async def vcv_octavia_start_analysis_capture(params: AnalysisCaptureInput) -> st
 async def vcv_octavia_get_analysis_capture(params: CaptureIdInput) -> str:
     """Poll an ephemeral or optionally archived analysis capture for its result."""
     try:
-        return json.dumps(await _envelope_call(f"audio/capture/{params.capture_id}"), indent=2)
+        return _dump_json(await _envelope_call(f"audio/capture/{params.capture_id}"))
     except Exception as e:
         return _err(e)
 
@@ -901,7 +980,7 @@ async def vcv_octavia_analyze_snapshot(params: AnalyzeSnapshotInput) -> str:
     try:
         payload = params.model_dump(by_alias=True, exclude_none=True)
         payload["snapshotId"] = payload.pop("snapshot_id")
-        return json.dumps(await _envelope_call("audio/analyze", "POST", payload), indent=2)
+        return _dump_json(await _envelope_call("audio/analyze", "POST", payload))
     except Exception as e:
         return _err(e)
 
@@ -913,7 +992,7 @@ async def vcv_octavia_compare_snapshot(params: CompareSnapshotInput) -> str:
     try:
         payload = params.model_dump(by_alias=True, exclude_none=True)
         payload["snapshotId"] = payload.pop("snapshot_id")
-        return json.dumps(await _envelope_call("audio/compare", "POST", payload), indent=2)
+        return _dump_json(await _envelope_call("audio/compare", "POST", payload))
     except Exception as e:
         return _err(e)
 
@@ -923,7 +1002,7 @@ async def vcv_octavia_compare_snapshot(params: CompareSnapshotInput) -> str:
 async def vcv_octavia_get_triggered_snapshots() -> str:
     """Map semantic observation request IDs to resulting snapshot IDs and failures."""
     try:
-        return json.dumps(await _envelope_call("audio/triggered-snapshots"), indent=2)
+        return _dump_json(await _envelope_call("audio/triggered-snapshots"))
     except Exception as e:
         return _err(e)
 
@@ -954,7 +1033,7 @@ async def vcv_list_library(params: ListLibraryInput) -> str:
             payload = r.json()
             if isinstance(payload, dict) and "error" in payload:
                 raise OctaviaBridgeError(str(payload["error"]))
-            return json.dumps(payload, indent=2)
+            return _dump_json(payload)
     except Exception as e:
         return _err(e)
 
@@ -976,7 +1055,7 @@ async def vcv_list_cables(params: ListCablesInput = ListCablesInput()) -> str:
             mid = params.module_id
             cables = [c for c in cables
                       if c.get("outputModuleId") == mid or c.get("inputModuleId") == mid]
-        return json.dumps(cables, indent=2)
+        return _dump_json(cables)
     except Exception as e:
         return _err(e)
 
@@ -994,7 +1073,7 @@ async def vcv_get_signal_levels() -> str:
     (peak >= 5V), or silent sections.
     """
     try:
-        return json.dumps(await _call("modules/voltages"), indent=2)
+        return _dump_json(await _call("modules/voltages"))
     except Exception as e:
         return _err(e)
 
@@ -1030,7 +1109,7 @@ async def vcv_temporal_deck_transport(params: TemporalDeckTransportInput) -> str
         if params.path is not None: payload["path"] = params.path
         if params.position is not None: payload["position"] = params.position
         if params.enabled is not None: payload["enabled"] = params.enabled
-        return json.dumps(await _call(f"temporal-deck/{params.module_id}/transport", "POST", payload), indent=2)
+        return _dump_json(await _call(f"temporal-deck/{params.module_id}/transport", "POST", payload))
     except Exception as e:
         return _err(e)
 
@@ -1077,7 +1156,7 @@ async def vcv_find_unpatched() -> str:
                     entry["unconnectedOutputs"] = uncon_out
                 result.append(entry)
 
-        return json.dumps(result, indent=2)
+        return _dump_json(result)
     except Exception as e:
         return _err(e)
 
@@ -1097,9 +1176,10 @@ class AddModuleInput(BaseModel):
 async def vcv_add_module(params: AddModuleInput) -> str:
     """Add a module to the current patch. Search with vcv_list_library first for exact slugs."""
     try:
-        return json.dumps(await _call("modules", "POST", {
+        _invalidate_module_cache()
+        return _dump_json(await _call("modules", "POST", {
             "plugin": params.plugin, "model": params.model
-        }), indent=2)
+        }))
     except Exception as e:
         return _err(e)
 
@@ -1116,7 +1196,8 @@ class DeleteModuleInput(BaseModel):
 async def vcv_delete_module(params: DeleteModuleInput) -> str:
     """Permanently delete a module and its cables. Obtain explicit user confirmation first."""
     try:
-        return json.dumps(await _call(f"modules/{params.module_id}", "DELETE"), indent=2)
+        _invalidate_module_cache()
+        return _dump_json(await _call(f"modules/{params.module_id}", "DELETE"))
     except Exception as e:
         return _err(e)
 
@@ -1156,12 +1237,12 @@ async def vcv_update_module(params: UpdateModuleInput) -> str:
             )
             applied.append("position")
         except Exception as e:
-            return json.dumps({
+            return _dump_json({
                 "ok": False,
                 "applied": applied,
                 "failedOperation": "position",
                 "error": _error_message(e),
-            }, indent=2)
+            })
     if params.bypassed is not None:
         try:
             results["bypass"] = await _call(
@@ -1169,13 +1250,13 @@ async def vcv_update_module(params: UpdateModuleInput) -> str:
             )
             applied.append("bypass")
         except Exception as e:
-            return json.dumps({
+            return _dump_json({
                 "ok": False,
                 "applied": applied,
                 "failedOperation": "bypass",
                 "error": _error_message(e),
-            }, indent=2)
-    return json.dumps({"ok": True, "applied": applied, "results": results}, indent=2)
+            })
+    return _dump_json({"ok": True, "applied": applied, "results": results})
 
 
 class LayoutChange(BaseModel):
@@ -1207,7 +1288,7 @@ async def vcv_layout_modules(params: LayoutModulesInput) -> str:
         for change in params.changes
     ]
     try:
-        return json.dumps(await _call("modules/layout", "POST", {"changes": changes}), indent=2)
+        return _dump_json(await _call("modules/layout", "POST", {"changes": changes}))
     except Exception as e:
         return _err(e)
 
@@ -1241,7 +1322,7 @@ async def vcv_set_parameters(params: SetParamsInput) -> str:
     try:
         changes = [{"moduleId": c.module_id, "paramId": c.param_id, "value": c.value}
                    for c in params.changes]
-        return json.dumps(await _call("params/bulk", "POST", {"changes": changes}), indent=2)
+        return _dump_json(await _call("params/bulk", "POST", {"changes": changes}))
     except Exception as e:
         return _err(e)
 
@@ -1285,9 +1366,9 @@ async def vcv_set_module_state(params: SetModuleStateInput) -> str:
         state = json.loads(params.state_json)
         if not isinstance(state, dict):
             raise ValueError("state_json must contain a JSON object")
-        return json.dumps(await _call(
+        return _dump_json(await _call(
             f"modules/{params.module_id}/state", "POST", state
-        ), indent=2)
+        ))
     except Exception as e:
         return _err(e)
 
@@ -1339,14 +1420,14 @@ async def vcv_connect_cables(params: ConnectCablesInput) -> str:
                 payload["color"] = c.color
             result = await _call("cables", "POST", payload)
             applied.append(index)
-        return json.dumps({"ok": True, "applied": len(applied)}, indent=2)
+        return _dump_json({"ok": True, "applied": len(applied)})
     except Exception as e:
-        return json.dumps({
+        return _dump_json({
             "ok": False,
             "applied": len(applied),
             "failedIndex": failed_index,
             "error": _error_message(e),
-        }, indent=2)
+        })
 
 
 class DisconnectCableInput(BaseModel):
@@ -1366,15 +1447,15 @@ async def vcv_disconnect_cable(params: DisconnectCableInput) -> str:
     try:
         port = await _resolve_port(params.module_id, params.direction, params.port_id, params.port_name)
         if params.direction == "input":
-            return json.dumps(await _call("cables/disconnect", "POST", {
+            return _dump_json(await _call("cables/disconnect", "POST", {
                 "inputModuleId": params.module_id,
                 "inputPortId": port,
-            }), indent=2)
+            }))
         else:
-            return json.dumps(await _call("cables/disconnect-output", "POST", {
+            return _dump_json(await _call("cables/disconnect-output", "POST", {
                 "outputModuleId": params.module_id,
                 "outputPortId": port,
-            }), indent=2)
+            }))
     except Exception as e:
         return _err(e)
 
@@ -1397,8 +1478,8 @@ async def vcv_undo(params: UndoInput = UndoInput()) -> str:
     """
     try:
         if params.status_only:
-            return json.dumps(await _call("undo/status"), indent=2)
-        return json.dumps(await _call("undo", "POST"), indent=2)
+            return _dump_json(await _call("undo/status"))
+        return _dump_json(await _call("undo", "POST"))
     except Exception as e:
         return _err(e)
 
@@ -1410,7 +1491,7 @@ async def vcv_undo(params: UndoInput = UndoInput()) -> str:
 async def vcv_save_patch() -> str:
     """Save the current patch to its existing file path. Obtain explicit user confirmation first."""
     try:
-        return json.dumps(await _call("patch/save", "POST"), indent=2)
+        return _dump_json(await _call("patch/save", "POST"))
     except Exception as e:
         return _err(e)
 
