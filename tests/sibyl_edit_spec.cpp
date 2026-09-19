@@ -93,6 +93,60 @@ int main() {
 		"set_meta rejects paths outside its semantic contract");
 	check(parsed.composition->meta.title == "Base" && parsed.composition->patterns.count("old") == 1,
 		"editing never mutates the accepted base snapshot");
+	// --- P8C Structural Reuse Tests ---
+	// 1. update_pattern: partial property update without retransmitting notes
+	auto updPat = edit(*changed.composition, R"JSON([
+	  {"op":"update_pattern","id":"leadline","set":{"length":32,"evolution":{"probability":0.25}}}
+	])JSON");
+	check(updPat.valid && updPat.composition && updPat.composition->patterns.at("leadline").length == 32 &&
+		updPat.composition->patterns.at("leadline").steps.size() == changed.composition->patterns.at("leadline").steps.size(),
+		"update_pattern updates properties while preserving existing notes");
+
+	// 1b. update_pattern: shrinking length below active note step is rejected
+	auto withLateNote = edit(*changed.composition, R"JSON([
+	  {"op":"insert_notes","pattern_id":"leadline","notes":[{"step":4,"note":"G4"}]}
+	])JSON");
+	check(withLateNote.valid, "inserted note at step 4 into leadline");
+	auto shrinkBad = withLateNote.composition ? edit(*withLateNote.composition, R"JSON([
+	  {"op":"update_pattern","id":"leadline","set":{"length":4}}
+	])JSON") : sibyl::EditResult{};
+	check(!shrinkBad.valid && shrinkBad.errorCode == "invalid_operation",
+		"update_pattern rejects shrinking length below active note step");
+
+	// 2. clone_pattern: clones pattern with overrides and fresh IDs
+	auto clonePat = edit(*changed.composition, R"JSON([
+	  {"op":"clone_pattern","source_id":"leadline","id":"lead_chorus","overrides":{"length":32}}
+	])JSON");
+	check(clonePat.valid && clonePat.composition && clonePat.composition->patterns.count("lead_chorus") == 1 &&
+		clonePat.composition->patterns.at("lead_chorus").length == 32 &&
+		clonePat.composition->patterns.at("lead_chorus").steps.size() == changed.composition->patterns.at("leadline").steps.size() &&
+		clonePat.composition->patterns.at("lead_chorus").steps[0].id == "n1",
+		"clone_pattern clones pattern with overrides and fresh sequential IDs");
+
+	auto clonePatDup = edit(*changed.composition, R"JSON([
+	  {"op":"clone_pattern","source_id":"leadline","id":"leadline"}
+	])JSON");
+	check(!clonePatDup.valid && clonePatDup.errorCode == "invalid_operation",
+		"clone_pattern rejects duplicate destination ID");
+
+	// 3. clone_scene: share vs copy
+	auto cloneSceneShare = edit(*changed.composition, R"JSON([
+	  {"op":"clone_scene","source_id":"bridge","id":"bridge_var","patterns":"share","track_overrides":{"lead":null},"position":"after_source","repeats":2}
+	])JSON");
+	check(cloneSceneShare.valid && cloneSceneShare.composition && cloneSceneShare.composition->arrangement.size() == 4 &&
+		cloneSceneShare.composition->arrangement[1].id == "bridge_var" &&
+		cloneSceneShare.composition->arrangement[1].repeats == 2 &&
+		cloneSceneShare.composition->arrangement[1].tracks.count("lead") == 0,
+		"clone_scene with patterns:share applies track_overrides and after_source position");
+
+	auto cloneSceneCopy = edit(*changed.composition, R"JSON([
+	  {"op":"clone_scene","source_id":"verse","id":"chorus","patterns":"copy"}
+	])JSON");
+	check(cloneSceneCopy.valid && cloneSceneCopy.composition && cloneSceneCopy.composition->arrangement.back().id == "chorus" &&
+		cloneSceneCopy.composition->patterns.count("leadline_chorus") == 1 &&
+		cloneSceneCopy.composition->arrangement.back().tracks.at("lead").patternId == "leadline_chorus",
+		"clone_scene with patterns:copy clones referenced patterns and remaps track assignments");
+
 
 	std::cout << "[SUMMARY] sibyl_edit_spec: " << (failures ? "FAILED" : "passed") << "\n";
 	return failures == 0 ? 0 : 1;

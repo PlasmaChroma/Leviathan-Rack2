@@ -206,6 +206,125 @@ bool applyOperation(json_t*& working, json_t* op, size_t index, EditResult& resu
 		json_object_del(target, id);
 		return true;
 	}
+	if (std::string(name) == "update_pattern") {
+		if (!id || !json_is_object(patterns)) return fail(result, "invalid_operation", path, "update_pattern requires id.");
+		json_t* pattern = json_object_get(patterns, id);
+		if (!pattern) return fail(result, "object_not_found", path, "Pattern '" + std::string(id) + "' does not exist.");
+		
+		json_t* setJ = json_object_get(op, "set");
+		json_t* unsetJ = json_object_get(op, "unset");
+		if (!setJ && !unsetJ) return fail(result, "invalid_operation", path, "update_pattern requires set or unset.");
+		if (setJ && !json_is_object(setJ)) return fail(result, "invalid_operation", path + ".set", "Expected object set.");
+		if (unsetJ && !json_is_array(unsetJ)) return fail(result, "invalid_operation", path + ".unset", "Expected array unset.");
+
+		const std::set<std::string> allowedProps = {"length", "resolution", "evolution", "pitchContext", "macroBindings", "steps"};
+		if (setJ) {
+			const char* k; json_t* v;
+			json_object_foreach(setJ, k, v) {
+				if (!allowedProps.count(k))
+					return fail(result, "invalid_operation", path + ".set." + k, "Unknown pattern property: " + std::string(k));
+			}
+			// Safe truncation check: shrinking length must not truncate existing active notes
+			if (json_t* newLenJ = json_object_get(setJ, "length")) {
+				if (!json_is_integer(newLenJ) || json_integer_value(newLenJ) < 1 || json_integer_value(newLenJ) > 1024)
+					return fail(result, "invalid_operation", path + ".set.length", "Expected length integer 1–1024.");
+				int64_t newLen = json_integer_value(newLenJ);
+				json_t* steps = json_object_get(pattern, "steps");
+				if (json_is_array(steps)) {
+					size_t sIdx; json_t* note;
+					json_array_foreach(steps, sIdx, note) {
+						json_t* stepJ = json_object_get(note, "step");
+						if (stepJ && json_integer_value(stepJ) >= newLen) {
+							return fail(result, "invalid_operation", path + ".set.length",
+								"Cannot shrink pattern length below active note step " + std::to_string(json_integer_value(stepJ)) + "; delete notes explicitly first.");
+						}
+					}
+				}
+			}
+			json_object_foreach(setJ, k, v) {
+				json_object_set(pattern, k, v);
+			}
+		}
+		if (unsetJ) {
+			size_t uIdx; json_t* uKey;
+			json_array_foreach(unsetJ, uIdx, uKey) {
+				if (!json_is_string(uKey)) return fail(result, "invalid_operation", path + ".unset", "Unset keys must be strings.");
+				std::string uk = json_string_value(uKey);
+				if (uk == "length" || uk == "resolution" || uk == "steps")
+					return fail(result, "invalid_operation", path + ".unset", "Cannot unset mandatory pattern property '" + uk + "'.");
+				json_object_del(pattern, uk.c_str());
+			}
+		}
+		ParseResult normalized; normalized.valid = true;
+		if (!normalizeNoteIds(pattern, "patterns." + std::string(id), normalized)) {
+			const auto& issue = normalized.errors.front();
+			return fail(result, issue.code, issue.path, issue.message);
+		}
+		return true;
+	}
+	if (std::string(name) == "clone_pattern") {
+		const char* srcId = requiredString(op, "source_id");
+		if (!id || !srcId || !json_is_object(patterns)) return fail(result, "invalid_operation", path, "clone_pattern requires source_id and id.");
+		json_t* srcPattern = json_object_get(patterns, srcId);
+		if (!srcPattern) return fail(result, "object_not_found", path + ".source_id", "Source pattern '" + std::string(srcId) + "' does not exist.");
+		if (json_object_get(patterns, id)) return fail(result, "invalid_operation", path + ".id", "Pattern '" + std::string(id) + "' already exists.");
+
+		json_t* cloned = json_deep_copy(srcPattern);
+		json_t* overrides = json_object_get(op, "overrides");
+		if (overrides) {
+			if (!json_is_object(overrides)) {
+				json_decref(cloned);
+				return fail(result, "invalid_operation", path + ".overrides", "Expected object overrides.");
+			}
+			const std::set<std::string> allowedProps = {"length", "resolution", "evolution", "pitchContext", "macroBindings", "steps"};
+			const char* k; json_t* v;
+			json_object_foreach(overrides, k, v) {
+				if (!allowedProps.count(k)) {
+					json_decref(cloned);
+					return fail(result, "invalid_operation", path + ".overrides." + k, "Unknown pattern override property: " + std::string(k));
+				}
+			}
+			if (json_t* newLenJ = json_object_get(overrides, "length")) {
+				if (!json_is_integer(newLenJ) || json_integer_value(newLenJ) < 1 || json_integer_value(newLenJ) > 1024) {
+					json_decref(cloned);
+					return fail(result, "invalid_operation", path + ".overrides.length", "Expected length integer 1–1024.");
+				}
+			int64_t newLen = json_integer_value(newLenJ);
+				json_t* steps = json_object_get(cloned, "steps");
+				if (json_is_array(steps)) {
+					size_t sIdx; json_t* note;
+					json_array_foreach(steps, sIdx, note) {
+						json_t* stepJ = json_object_get(note, "step");
+						if (stepJ && json_integer_value(stepJ) >= newLen) {
+							json_decref(cloned);
+							return fail(result, "invalid_operation", path + ".overrides.length",
+								"Cannot shrink pattern length below active note step " + std::to_string(json_integer_value(stepJ)) + "; delete notes explicitly first.");
+						}
+					}
+				}
+			}
+			json_object_foreach(overrides, k, v) {
+				json_object_set(cloned, k, v);
+			}
+		}
+		// Reset IDs on cloned notes so they receive fresh sequential identifiers in the new pattern
+		json_t* steps = json_object_get(cloned, "steps");
+		if (json_is_array(steps)) {
+			size_t sIdx; json_t* note;
+			json_array_foreach(steps, sIdx, note) {
+				json_object_del(note, "id");
+			}
+		}
+		json_object_del(cloned, "nextNoteId");
+		ParseResult normalized; normalized.valid = true;
+		if (!normalizeNoteIds(cloned, "patterns." + std::string(id), normalized, nullptr)) {
+			json_decref(cloned);
+			const auto& issue = normalized.errors.front();
+			return fail(result, issue.code, issue.path, issue.message);
+		}
+		json_object_set_new(patterns, id, cloned);
+		return true;
+	}
 	if (std::string(name) == "upsert_scene") {
 		json_t* value = requiredObject(op, "scene");
 		if (!id || !value || !json_is_array(arrangement)) return fail(result, "invalid_operation", path, "upsert_scene requires id and scene.");
@@ -218,6 +337,115 @@ bool applyOperation(json_t*& working, json_t* op, size_t index, EditResult& resu
 		json_array_remove(arrangement, size_t(found));
 		return true;
 	}
+	if (std::string(name) == "clone_scene") {
+		const char* srcId = requiredString(op, "source_id");
+		if (!id || !srcId || !json_is_array(arrangement)) return fail(result, "invalid_operation", path, "clone_scene requires source_id and id.");
+		int srcIdx = findArrayObject(arrangement, srcId);
+		if (srcIdx < 0) return fail(result, "object_not_found", path + ".source_id", "Source scene '" + std::string(srcId) + "' does not exist.");
+		if (findArrayObject(arrangement, id) >= 0) return fail(result, "invalid_operation", path + ".id", "Scene '" + std::string(id) + "' already exists.");
+
+		json_t* srcScene = json_array_get(arrangement, size_t(srcIdx));
+		json_t* cloned = json_deep_copy(srcScene);
+		json_object_set_new(cloned, "id", json_string(id));
+
+		if (json_t* rep = json_object_get(op, "repeats")) {
+			if (!json_is_integer(rep) || json_integer_value(rep) < 1 || json_integer_value(rep) > 1024) {
+				json_decref(cloned);
+				return fail(result, "invalid_operation", path + ".repeats", "Expected repeats integer 1–1024.");
+			}
+			json_object_set(cloned, "repeats", rep);
+		}
+		if (json_t* lb = json_object_get(op, "lengthBeats")) {
+			if (!json_is_number(lb) || json_number_value(lb) <= 0. || !std::isfinite(json_number_value(lb))) {
+				json_decref(cloned);
+				return fail(result, "invalid_operation", path + ".lengthBeats", "Expected positive finite lengthBeats.");
+			}
+			json_object_set(cloned, "lengthBeats", lb);
+		}
+		if (json_t* harm = json_object_get(op, "harmony")) {
+			if (json_is_null(harm)) json_object_del(cloned, "harmony");
+			else json_object_set(cloned, "harmony", harm);
+		}
+
+		// Handle patterns: "share" (default) vs "copy"
+		json_t* patPolicyJ = json_object_get(op, "patterns");
+		std::string patPolicy = patPolicyJ && json_is_string(patPolicyJ) ? json_string_value(patPolicyJ) : "share";
+		if (patPolicy != "share" && patPolicy != "copy") {
+			json_decref(cloned);
+			return fail(result, "invalid_operation", path + ".patterns", "Expected patterns 'share' or 'copy'.");
+		}
+
+		json_t* tracksObj = json_object_get(cloned, "tracks");
+		if (tracksObj && json_is_object(tracksObj)) {
+			if (patPolicy == "copy") {
+				json_t* idMapping = json_object_get(op, "pattern_id_mapping");
+				const char* tKey; json_t* tVal;
+				json_object_foreach(tracksObj, tKey, tVal) {
+					std::string origPatternId;
+					if (json_is_string(tVal)) origPatternId = json_string_value(tVal);
+					else if (json_is_object(tVal) && json_object_get(tVal, "pattern"))
+						origPatternId = json_string_value(json_object_get(tVal, "pattern"));
+					if (!origPatternId.empty()) {
+						std::string targetPatternId;
+						if (idMapping && json_is_object(idMapping) && json_object_get(idMapping, origPatternId.c_str())) {
+							targetPatternId = json_string_value(json_object_get(idMapping, origPatternId.c_str()));
+						} else {
+							targetPatternId = origPatternId + "_" + std::string(id);
+						}
+						// If target pattern does not exist, clone it now
+						if (!json_object_get(patterns, targetPatternId.c_str())) {
+							json_t* origPat = json_object_get(patterns, origPatternId.c_str());
+							if (origPat) {
+								json_t* patCopy = json_deep_copy(origPat);
+								json_t* pSteps = json_object_get(patCopy, "steps");
+							if (json_is_array(pSteps)) {
+								size_t sI; json_t* pNote;
+								json_array_foreach(pSteps, sI, pNote) json_object_del(pNote, "id");
+							}
+							json_object_del(patCopy, "nextNoteId");
+							ParseResult norm; norm.valid = true;
+							normalizeNoteIds(patCopy, "patterns." + targetPatternId, norm, nullptr);
+							json_object_set_new(patterns, targetPatternId.c_str(), patCopy);
+						}
+					}
+					if (json_is_string(tVal)) json_object_set_new(tracksObj, tKey, json_string(targetPatternId.c_str()));
+					else json_object_set_new(tVal, "pattern", json_string(targetPatternId.c_str()));
+				}
+			}
+		}
+
+		// Apply track_overrides
+		json_t* trackOverrides = json_object_get(op, "track_overrides");
+		if (trackOverrides) {
+			if (!json_is_object(trackOverrides)) {
+				json_decref(cloned);
+				return fail(result, "invalid_operation", path + ".track_overrides", "Expected object track_overrides.");
+			}
+			const char* oTrack; json_t* oVal;
+			json_object_foreach(trackOverrides, oTrack, oVal) {
+				if (json_is_null(oVal)) {
+					json_object_del(tracksObj, oTrack);
+				} else if (json_is_string(oVal)) {
+					json_object_set(tracksObj, oTrack, oVal);
+				} else if (json_is_object(oVal)) {
+					json_object_set(tracksObj, oTrack, oVal);
+				} else {
+					json_decref(cloned);
+					return fail(result, "invalid_operation", path + ".track_overrides." + oTrack, "Expected string, object, or null.");
+				}
+			}
+		}
+	}
+
+	json_t* posJ = json_object_get(op, "position");
+	std::string pos = posJ && json_is_string(posJ) ? json_string_value(posJ) : "end";
+	if (pos == "after_source") {
+		json_array_insert_new(arrangement, size_t(srcIdx + 1), cloned);
+	} else {
+		json_array_append_new(arrangement, cloned);
+	}
+	return true;
+}
 	if (std::string(name) == "set_scene_track") {
 		const char* sceneId = requiredString(op, "scene_id");
 		const char* trackId = requiredString(op, "track_id");
