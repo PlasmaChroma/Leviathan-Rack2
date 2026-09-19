@@ -379,6 +379,18 @@ bool applyOperation(json_t*& working, json_t* op, size_t index, EditResult& resu
 		if (tracksObj && json_is_object(tracksObj)) {
 			if (patPolicy == "copy") {
 				json_t* idMapping = json_object_get(op, "pattern_id_mapping");
+                if (idMapping && !json_is_object(idMapping)) {
+                    json_decref(cloned);
+                    return fail(result, "invalid_operation", path + ".pattern_id_mapping", "Expected destination ID map.");
+                }
+                const char* mappingKey; json_t* mappingValue;
+                json_object_foreach(idMapping, mappingKey, mappingValue) {
+                    if (!json_is_string(mappingValue) || !*json_string_value(mappingValue)) {
+                        json_decref(cloned);
+                        return fail(result, "invalid_operation", path + ".pattern_id_mapping." + mappingKey, "Expected nonempty destination ID.");
+                    }
+                }
+                std::map<std::string, std::string> copiedDestinations;
 				const char* tKey; json_t* tVal;
 				json_object_foreach(tracksObj, tKey, tVal) {
 					std::string origPatternId;
@@ -392,7 +404,14 @@ bool applyOperation(json_t*& working, json_t* op, size_t index, EditResult& resu
 						} else {
 							targetPatternId = origPatternId + "_" + std::string(id);
 						}
-						// If target pattern does not exist, clone it now
+                        auto copied = copiedDestinations.find(targetPatternId);
+                        if ((copied != copiedDestinations.end() && copied->second != origPatternId)
+                                || (copied == copiedDestinations.end() && json_object_get(patterns, targetPatternId.c_str()))) {
+                            json_decref(cloned);
+                            return fail(result, "invalid_operation", path + ".pattern_id_mapping", "Copy destination already exists or aliases another source: " + targetPatternId);
+                        }
+                        copiedDestinations[targetPatternId] = origPatternId;
+                        // Reuse only copies made for this source in this operation.
 						if (!json_object_get(patterns, targetPatternId.c_str())) {
 							json_t* origPat = json_object_get(patterns, origPatternId.c_str());
 							if (origPat) {
@@ -498,8 +517,8 @@ EditResult applyCompositionEdit(const Composition& base, json_t* operations, int
 	json_t* serialized = json_loads(serializeFullCompositionJson(base).c_str(), 0, &error);
 	json_t* serializedComposition = serialized ? json_object_get(serialized, "composition") : nullptr;
 	json_t* working = serializedComposition ? json_deep_copy(serializedComposition) : nullptr;
-	if (serialized) json_decref(serialized);
 	if (!working) {
+        if (serialized) json_decref(serialized);
 		fail(result, "internal_error", "", "Could not serialize the accepted composition.");
 		return result;
 	}
@@ -508,9 +527,44 @@ EditResult applyCompositionEdit(const Composition& base, json_t* operations, int
 	json_array_foreach(operations, index, op) {
 		if (!applyOperation(working, op, index, result)) {
 			json_decref(working);
+            json_decref(serialized);
 			return result;
 		}
 	}
+    // Compare authored objects while the two control-side JSON snapshots exist.
+    auto recordMap = [&](json_t* before, json_t* after, const std::string& prefix) {
+        std::set<std::string> keys;
+        const char* key; json_t* value;
+        json_object_foreach(before, key, value) keys.insert(key);
+        json_object_foreach(after, key, value) keys.insert(key);
+        for (const auto& id : keys)
+            if (!json_equal(json_object_get(before, id.c_str()), json_object_get(after, id.c_str())))
+                result.affectedObjects.push_back(prefix + "/" + id);
+    };
+    for (const char* key : {"meta", "clock", "transport"})
+        if (!json_equal(json_object_get(serializedComposition,key), json_object_get(working,key)))
+            result.affectedObjects.push_back(key);
+    for (const char* key : {"patterns", "macros", "automation"})
+        recordMap(json_object_get(serializedComposition,key), json_object_get(working,key), key);
+    for (const char* key : {"tracks", "arrangement"}) {
+        json_t* before = json_object(); json_t* after = json_object();
+        size_t i; json_t* object;
+        json_array_foreach(json_object_get(serializedComposition,key),i,object) {
+            const char* id = json_string_value(json_object_get(object,"id"));
+            if(id) json_object_set(before,id,object);
+        }
+        json_array_foreach(json_object_get(working,key),i,object) {
+            const char* id = json_string_value(json_object_get(object,"id"));
+            if(id) json_object_set(after,id,object);
+        }
+        recordMap(before,after,key);
+        json_decref(before); json_decref(after);
+        if (std::string(key)=="arrangement" && !json_equal(json_object_get(serializedComposition,key),json_object_get(working,key)))
+            result.affectedObjects.push_back("arrangement");
+    }
+    for (const char* key : {"pitchSystems", "harmony"})
+        recordMap(json_object_get(serializedComposition,key), json_object_get(working,key), key);
+    json_decref(serialized);
 	char* encoded = json_dumps(working, JSON_COMPACT);
 	json_decref(working);
 	ParseResult parsed = parseCompositionJson(encoded ? encoded : "{}", revision);
@@ -527,6 +581,17 @@ EditResult applyCompositionEdit(const Composition& base, json_t* operations, int
 		} else result.errorMessage = "Composition validation failed.";
 	}
 	return result;
+}
+
+json_t* editAffectedObjectsJson(const EditResult& result) {
+    json_t* out = json_object();
+    json_t* ids = json_array();
+    const size_t count = std::min(size_t(32), result.affectedObjects.size());
+    for (size_t i=0;i<count;++i) json_array_append_new(ids,json_string(result.affectedObjects[i].c_str()));
+    json_object_set_new(out,"ids",ids);
+    json_object_set_new(out,"total",json_integer(result.affectedObjects.size()));
+    json_object_set_new(out,"omitted",json_integer(result.affectedObjects.size()-count));
+    return out;
 }
 
 } // namespace sibyl

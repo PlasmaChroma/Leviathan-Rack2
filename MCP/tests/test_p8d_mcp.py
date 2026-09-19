@@ -1,4 +1,5 @@
 import json
+from p8_test_support import MODERN_CAPS
 import sys
 import unittest
 from pathlib import Path
@@ -18,7 +19,8 @@ class P8DMacroTest(unittest.IsolatedAsyncioTestCase):
             "warnings": []
         }
 
-        with patch.object(server, "_sibyl_call", AsyncMock(return_value=mock_response)) as mock_call:
+        with patch.object(server, "_get_sibyl_contract", AsyncMock(return_value=MODERN_CAPS)), \
+                patch.object(server, "_sibyl_call", AsyncMock(return_value=mock_response)) as mock_call:
             params = server.SibylComposeEuclideanInput(
                 module_id=123456789,
                 pattern_id="euclid_kick",
@@ -59,7 +61,8 @@ class P8DMacroTest(unittest.IsolatedAsyncioTestCase):
             "warnings": []
         }
 
-        with patch.object(server, "_sibyl_call", AsyncMock(return_value=mock_response)) as mock_call:
+        with patch.object(server, "_get_sibyl_contract", AsyncMock(return_value=MODERN_CAPS)), \
+                patch.object(server, "_sibyl_call", AsyncMock(return_value=mock_response)) as mock_call:
             params = server.SibylComposeProgressionInput(
                 module_id=123456789,
                 progression_id="changes_38",
@@ -86,8 +89,9 @@ class P8DMacroTest(unittest.IsolatedAsyncioTestCase):
             # Chord 0: root_step 0, septimal_dom7 intervals resolved to [0, 13, 22, 31]
             c0 = op["progression"]["chords"][0]
             self.assertEqual(c0["rootPitch"], {"tuned": {"step": 0}})
-            self.assertIn(22, c0["intervals"])  # P5 in 38-EDO is 22
-            self.assertIn(31, c0["intervals"])  # septimal 7th in 38-EDO is 31
+            self.assertNotIn("intervals", c0)
+            self.assertIn(22, [t["interval"]["steps"] for t in c0["tones"]])
+            self.assertIn(31, [t["interval"]["steps"] for t in c0["tones"]])
 
             self.assertTrue(receipt["ok"])
 

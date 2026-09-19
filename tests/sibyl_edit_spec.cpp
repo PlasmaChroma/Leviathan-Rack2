@@ -130,6 +130,11 @@ int main() {
 		"clone_pattern rejects duplicate destination ID");
 
 	// 3. clone_scene: share vs copy
+	for (const char* mapping : {R"({"old":"old"})", R"({"old":42})", R"({"old":null})", R"([])"}) {
+        std::string operation = std::string(R"([{"op":"clone_scene","source_id":"verse","id":"copy","patterns":"copy","pattern_id_mapping":)") + mapping + "}]";
+        auto rejected = edit(*parsed.composition, operation.c_str());
+        check(!rejected.valid, "scene copy rejects occupied and malformed destination mappings");
+    }
 	auto cloneSceneShare = edit(*changed.composition, R"JSON([
 	  {"op":"clone_scene","source_id":"bridge","id":"bridge_var","patterns":"share","track_overrides":{"lead":null},"position":"after_source","repeats":2}
 	])JSON");

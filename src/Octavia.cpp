@@ -1486,6 +1486,12 @@ struct Octavia : Module {
             job->error="semantic capability returned an empty response";
         }
         if (job->success && job->operation == OctaviaSemanticControl::Operation::EDIT && !oldState.empty()) {
+            // Applies to both the legacy and generic semantic Sibyl routes.
+            auto* editedSibyl = dynamic_cast<SibylControl*>(module);
+            if (editedSibyl && !editedSibyl->lastSibylEditChangedState()) {
+                job->done=true;
+                return;
+            }
             UndoAction undo; undo.type=UndoAction::STATE; undo.moduleId=job->moduleId;
             undo.oldState=std::move(oldState);
             undo.label=(job->legacySibyl ? "edit Sibyl composition on module "
@@ -3041,13 +3047,19 @@ struct Octavia : Module {
         // Sibyl semantic API. Payloads are passed opaquely to the target module,
         // which is the sole authority for the composition schema and validation.
         svr.Get(R"(/sibyl/(\d+)/capabilities)", [this](const httplib::Request& r, httplib::Response& res){
-            dispatchSibyl(res, std::stoll(r.matches[1].str()), SibylControl::Operation::CAPABILITIES, "{}");
+            std::string query="{";
+            for(const char* key:{"format","topic"}) if(r.has_param(key)) {
+                if(query.size()>1) query+=",";
+                query+=jStr(key)+":"+jStr(r.get_param_value(key));
+            }
+            query+="}";
+            dispatchSibyl(res, std::stoll(r.matches[1].str()), SibylControl::Operation::CAPABILITIES, query);
         });
         svr.Get(R"(/sibyl/(\d+)/composition)", [this](const httplib::Request& r, httplib::Response& res){
             std::string view=r.has_param("view") ? r.get_param_value("view") : "summary";
             std::string request="{\"view\":"+jStr(view);
             if (r.has_param("id")) request+=",\"id\":"+jStr(r.get_param_value("id"));
-            for (const char* key : {"pattern_id", "cursor", "scene_id", "context_id", "tie_break"})
+            for (const char* key : {"pattern_id", "cursor", "scene_id", "context_id", "tie_break", "encoding"})
                 if (r.has_param(key)) request+=","+jStr(key)+":"+jStr(r.get_param_value(key));
             // Forward typed JSON query values; musical interpretation stays in Sibyl.
             for (const char* key : {"selector", "fields", "page_size", "sample_beats", "scene_repeat", "beat", "intervals"}) if (r.has_param(key)) {
@@ -3078,13 +3090,19 @@ struct Octavia : Module {
         // Octavia supplies UI-thread dispatch, response validation, timeout,
         // cancellation, request limits, and edit-only undo.
         svr.Get(R"(/semantic/(\d+)/capabilities)", [this](const httplib::Request& r, httplib::Response& res){
-            dispatchSemantic(res, std::stoll(r.matches[1].str()), OctaviaSemanticControl::Operation::CAPABILITIES, "{}");
+            std::string query="{";
+            for(const char* key:{"format","topic"}) if(r.has_param(key)) {
+                if(query.size()>1) query+=",";
+                query+=jStr(key)+":"+jStr(r.get_param_value(key));
+            }
+            query+="}";
+            dispatchSemantic(res, std::stoll(r.matches[1].str()), OctaviaSemanticControl::Operation::CAPABILITIES, query);
         });
         svr.Get(R"(/semantic/(\d+)/document)", [this](const httplib::Request& r, httplib::Response& res){
             std::string view=r.has_param("view") ? r.get_param_value("view") : "summary";
             std::string request="{\"view\":"+jStr(view);
             if (r.has_param("id")) request+=",\"id\":"+jStr(r.get_param_value("id"));
-            for (const char* key : {"pattern_id", "cursor", "scene_id", "context_id", "tie_break"})
+            for (const char* key : {"pattern_id", "cursor", "scene_id", "context_id", "tie_break", "encoding"})
                 if (r.has_param(key)) request+=","+jStr(key)+":"+jStr(r.get_param_value(key));
             // Forward typed JSON query values; musical interpretation stays in Sibyl.
             for (const char* key : {"selector", "fields", "page_size", "sample_beats", "scene_repeat", "beat", "intervals"}) if (r.has_param(key)) {

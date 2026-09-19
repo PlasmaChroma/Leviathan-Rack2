@@ -49,8 +49,8 @@ class SibylComposerTest(unittest.TestCase):
         edo53 = sc.EdoTuning(53)
         # P5 (700 cents) in 53-EDO: round(53 * 700 / 1200) = round(30.916) = 31
         self.assertEqual(edo53.step_from_interval("P5"), 31)
-        # M3 in 53-EDO: round(53 * 400 / 1200) = round(17.66) = 18
-        self.assertEqual(edo53.step_from_interval("M3"), 18)
+        self.assertEqual(edo53.step_from_interval("M3"), 17)
+        self.assertEqual(edo53.chord_steps("septimal_dom7"), [0, 17, 31, 43])
 
     def test_pattern_builder_euclidean_and_batch(self):
         pb = sc.PatternBuilder(length=16)
@@ -96,6 +96,32 @@ class SibylComposerTest(unittest.TestCase):
         self.assertEqual(op["id"], "blues_prog")
         self.assertEqual(op["progression"]["pitchContext"], "arch_38")
         self.assertEqual(len(op["progression"]["chords"]), 4)
+        chord = op["progression"]["chords"][0]
+        self.assertNotIn("intervals", chord)
+        self.assertEqual(chord["tones"][1]["interval"], {"steps": 10})
+
+    def test_compact_preserves_expression(self):
+        pattern = sc.PatternBuilder(pitch_context="c", evolution={"velocity": 0.2})
+        condition = {"all": [{"scope": "patternPass", "every": 2, "offset": 1}]}
+        pattern.add_note(0, tuned_step=17, condition=condition, ratchets=1, glide_ms=0)
+        operations = sc.SibylScore().add_pattern("p", pattern).compile()
+        self.assertEqual(operations[2]["pattern"]["evolution"], {"velocity": 0.2})
+        self.assertEqual(operations[2]["pattern"]["pitchContext"], "c")
+        self.assertEqual(operations[3]["defaults"]["condition"], condition)
+        self.assertEqual(operations[3]["defaults"]["ratchets"], 1)
+        self.assertEqual(operations[3]["defaults"]["glideMs"], 0)
+
+    def test_native_arpeggio_uses_native_period(self):
+        pattern = sc.PatternBuilder(length=4, pitch_context="c")
+        pattern.arpeggiate([0, 17], step_interval=1, octave_range=2, period_steps=53)
+        self.assertEqual([ev["tuned"]["step"] for ev in pattern.events.values()], [0, 17, 53, 70])
+        self.assertTrue(all("degree" not in ev for ev in pattern.events.values()))
+        with self.assertRaises(ValueError):
+            pattern.arpeggiate([0], step_interval=0)
+        with self.assertRaises(ValueError):
+            pattern.arpeggiate([0], octave_range=2)
+        notes = sc.PatternBuilder(length=4).arpeggiate(["C3", "Eb3"], step_interval=1, octave_range=2)
+        self.assertEqual([ev["note"] for ev in notes.events.values()], ["C3", "Eb3", "C4", "Eb4"])
 
     def test_automation_builder(self):
         ab = sc.AutomationBuilder(track_id="v0", lane="mod")

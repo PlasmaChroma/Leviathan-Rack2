@@ -20,6 +20,7 @@ struct EditResult {
 	bool valid = false;
 	CompositionPtr composition;
 	std::vector<NoteChange> changes;
+    std::vector<std::string> affectedObjects;
     // Control-side serialized reports only; no JSON ownership crosses into DSP.
     std::vector<std::string> voicingChanges, pitchChanges;
     size_t voicingPartials = 0, voicingTransitions = 0;
@@ -33,5 +34,6 @@ struct EditResult {
 // Applies ordered semantic operations to a private JSON copy, then validates and
 // compiles the complete composition exactly once. The base snapshot is untouched.
 EditResult applyCompositionEdit(const Composition& base, json_t* operations, int revision);
+json_t* editAffectedObjectsJson(const EditResult& result);
 
 } // namespace sibyl

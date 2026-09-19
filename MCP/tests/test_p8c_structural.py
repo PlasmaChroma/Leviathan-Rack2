@@ -1,4 +1,5 @@
 import json
+from p8_test_support import MODERN_CAPS
 import os
 import sys
 import unittest
@@ -25,7 +26,8 @@ class P8CStructuralTest(unittest.IsolatedAsyncioTestCase):
             "set": {"length": 32, "evolution": {"probability": 0.2}}
         }
 
-        with patch.object(server, "_sibyl_call", AsyncMock(return_value=mock_response)) as mock_call:
+        with patch.object(server, "_get_sibyl_contract", AsyncMock(return_value=MODERN_CAPS)), \
+                patch.object(server, "_sibyl_call", AsyncMock(return_value=mock_response)) as mock_call:
             params = server.SibylEditInput(
                 module_id=123456789,
                 expected_revision=14,
@@ -59,7 +61,8 @@ class P8CStructuralTest(unittest.IsolatedAsyncioTestCase):
             "overrides": {"length": 32}
         }
 
-        with patch.object(server, "_sibyl_call", AsyncMock(return_value=mock_response)) as mock_call:
+        with patch.object(server, "_get_sibyl_contract", AsyncMock(return_value=MODERN_CAPS)), \
+                patch.object(server, "_sibyl_call", AsyncMock(return_value=mock_response)) as mock_call:
             params = server.SibylEditInput(
                 module_id=123456789,
                 expected_revision=15,
@@ -95,7 +98,8 @@ class P8CStructuralTest(unittest.IsolatedAsyncioTestCase):
             "repeats": 2
         }
 
-        with patch.object(server, "_sibyl_call", AsyncMock(return_value=mock_response)) as mock_call:
+        with patch.object(server, "_get_sibyl_contract", AsyncMock(return_value=MODERN_CAPS)), \
+                patch.object(server, "_sibyl_call", AsyncMock(return_value=mock_response)) as mock_call:
             params = server.SibylEditInput(
                 module_id=123456789,
                 expected_revision=16,

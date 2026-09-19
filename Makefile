@@ -106,6 +106,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/sibyl_clock_estimator_spec \
 	build/tests/sibyl_hardware_control_spec \
 	build/tests/sibyl_edit_spec \
+	build/tests/sibyl_composer_validation \
 	build/tests/sibyl_json_spec \
 	build/tests/sibyl_module_spec \
 	build/tests/sibyl_timing_spec \
@@ -489,6 +490,9 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/sibyl_clock_estimator_spec)
 	$(call run_test_bin,build/tests/sibyl_hardware_control_spec)
 	$(call run_rack_test_bin,build/tests/sibyl_edit_spec)
+	python3 -B tests/sibyl_composer_fixtures.py > build/tests/sibyl_composer_fixtures.jsonl
+	$(call run_rack_test_bin,build/tests/sibyl_composer_validation) < build/tests/sibyl_composer_fixtures.jsonl
+	python3 -B -m unittest discover -s MCP/tests -p test_sibyl_composer.py
 	$(call run_rack_test_bin,build/tests/sibyl_json_spec)
 	$(call run_rack_test_bin,build/tests/sibyl_module_spec)
 	$(call run_test_bin,build/tests/sibyl_timing_spec)
@@ -684,6 +688,9 @@ build/tests/sibyl_hardware_control_spec: tests/sibyl_hardware_control_spec.cpp s
 
 build/tests/sibyl_edit_spec: tests/sibyl_edit_spec.cpp src/SibylEdit.cpp src/SibylAssignmentEdit.hpp src/SibylNoteEdit.cpp src/SibylNoteEdit.hpp src/SibylEdit.hpp src/SibylJSON.cpp src/SibylJSON.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylOverrides.hpp src/SibylAutomation.hpp src/SibylAutomationJSON.hpp src/SibylHarmonyTypes.hpp src/SibylHarmony.hpp src/SibylHarmonyJSON.hpp src/SibylHarmonyView.hpp src/SibylHarmonyEdit.hpp src/SibylVoicing.hpp src/SibylVoicingEdit.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_edit_spec.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+
+build/tests/sibyl_composer_validation: tests/sibyl_composer_validation.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylJSON.cpp $(wildcard src/Sibyl*.hpp) | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_composer_validation.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
 
 build/tests/sibyl_transport_spec: tests/sibyl_transport_spec.cpp src/SibylTransport.cpp src/SibylTransport.hpp src/SibylAdoption.cpp src/SibylAdoption.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylOverrides.hpp src/SibylAutomation.hpp src/SibylAutomationJSON.hpp src/SibylHarmonyTypes.hpp src/SibylHarmony.hpp src/SibylHarmonyJSON.hpp src/SibylHarmonyView.hpp src/SibylHarmonyEdit.hpp src/SibylVoicing.hpp src/SibylVoicingEdit.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_transport_spec.cpp src/SibylTransport.cpp src/SibylAdoption.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@

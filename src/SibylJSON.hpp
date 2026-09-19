@@ -29,6 +29,7 @@ ParseResult parseCompositionJson(const std::string& jsonString, int revision);
 
 // Serializers for SibylControl GET_COMPOSITION views
 std::string serializeSummaryJson(const Composition& comp);
+std::string serializeArrangementViewJson(const Composition& comp, json_t* request);
 std::string serializeFullCompositionJson(const Composition& comp);
 std::string serializePatternViewJson(const Composition& comp, const std::string& patternId);
 std::string serializeSceneViewJson(const Composition& comp, const std::string& sceneId, bool effectiveExpressions = false);

@@ -1,4 +1,5 @@
 import json
+from p8_test_support import MODERN_CAPS
 import os
 import sys
 import unittest
@@ -23,7 +24,8 @@ class P8EPreparedTransactionsTest(unittest.IsolatedAsyncioTestCase):
             "changes": {"notesInserted": 4}
         }
 
-        with patch.object(server, "_sibyl_call", AsyncMock(return_value=mock_val_resp)) as mock_call:
+        with patch.object(server, "_get_sibyl_contract", AsyncMock(return_value=MODERN_CAPS)), \
+                patch.object(server, "_sibyl_call", AsyncMock(return_value=mock_val_resp)) as mock_call:
             params = server.SibylValidateInput(
                 module_id=123456,
                 expected_revision=3,
@@ -52,11 +54,14 @@ class P8EPreparedTransactionsTest(unittest.IsolatedAsyncioTestCase):
             "activeRevision": 3,
             "applyAt": "nextBeat",
             "phasePolicy": "preserve",
+            "pendingRevision": 4,
+            "appliedOperations": 7,
             "changes": {"notesInserted": 4},
             "warnings": []
         }
 
-        with patch.object(server, "_sibyl_call", AsyncMock(return_value=mock_edit_resp)) as mock_call:
+        with patch.object(server, "_get_sibyl_contract", AsyncMock(return_value=MODERN_CAPS)), \
+                patch.object(server, "_sibyl_call", AsyncMock(return_value=mock_edit_resp)) as mock_call:
             params = server.SibylEditInput(
                 module_id=123456,
                 handle="prep_rev3_1",
@@ -66,7 +71,9 @@ class P8EPreparedTransactionsTest(unittest.IsolatedAsyncioTestCase):
             res = json.loads(raw)
             self.assertTrue(res["ok"])
             self.assertEqual(res["revision"], 4)
-            self.assertEqual(res["appliedOperations"], 1)
+            self.assertEqual(res["appliedOperations"], 7)
+            self.assertEqual(res["pendingRevision"], 4)
+            self.assertEqual(res["applyAt"], "nextBeat")
 
             mock_call.assert_called_once()
             called_endpoint, called_method, called_payload = mock_call.call_args[0]
@@ -112,7 +119,8 @@ class P8EComposerClientTest(unittest.TestCase):
             "expiresInSeconds": 60
         }
 
-        with patch("urllib.request.urlopen") as mock_urlopen:
+        with patch.object(client, "capabilities", return_value=MODERN_CAPS["capabilities"]["sibyl"]), \
+                patch("urllib.request.urlopen") as mock_urlopen:
             mock_cm = mock_urlopen.return_value.__enter__.return_value
             mock_cm.read.return_value = json.dumps(mock_resp).encode("utf-8")
 

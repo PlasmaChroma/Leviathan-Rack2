@@ -152,7 +152,7 @@ bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r
     if(name!="insert_notes" && name!="insert_note_batch") for(const char* f:{"selector","expect_count","allow_empty"}) allowed.insert(f);
     if(name=="update_notes") for(const char* f:{"set","unset","adjust","clamp","resolve_defaults_for_track"}) allowed.insert(f);
     if(name=="insert_notes") for(const char* f:{"notes","collision"}) allowed.insert(f);
-    if(name=="insert_note_batch") for(const char* f:{"encoding","columns","rows","defaults","collision","expect_count"}) allowed.insert(f);
+    if(name=="insert_note_batch") for(const char* f:{"encoding","columns","rows","defaults","collision","expect_count","onsets","overrides"}) allowed.insert(f);
     if(name=="transpose_notes") {allowed.insert("semitones");allowed.insert("degrees");allowed.insert("interval");}
     if(name=="retune_notes") for(const char* f:{"target_context","mode","target","tie_break","max_error_cents"}) allowed.insert(f);
     if(name=="rotate_notes") {allowed.insert("steps");allowed.insert("collision");}
@@ -325,13 +325,56 @@ bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r
                 if(!encodingJ || !json_is_string(encodingJ) || std::string(json_string_value(encodingJ))!="columns_v1")
                     return fail(r,"invalid_operation",path+".encoding","Expected encoding columns_v1");
                 json_t* columns=json_object_get(op,"columns");
-                if(!json_is_array(columns)||json_array_size(columns)<1||json_array_size(columns)>1024)
+                if(!json_is_array(columns)||(!json_object_get(op,"onsets") && json_array_size(columns)<1)||json_array_size(columns)>1024)
                     return fail(r,"invalid_operation",path+".columns","Expected 1–1024 columns");
                 json_t* rows=json_object_get(op,"rows");
                 if(!json_is_array(rows)||json_array_size(rows)<1||json_array_size(rows)>1024)
                     return fail(r,"invalid_operation",path+".rows","Expected 1–1024 rows");
+                Owned expandedRows(json_array()), expandedColumns(json_array());
+                if (json_t* onsets=json_object_get(op,"onsets")) {
+                    if(!fields(onsets,{"start","spacing","count"},r,path+".onsets")
+                            || !integer(json_object_get(onsets,"start"),0,1023)
+                            || !integer(json_object_get(onsets,"spacing"),1,1024)
+                            || !integer(json_object_get(onsets,"count"),1,1024))
+                        return fail(r,"invalid_operation",path+".onsets","Expected bounded integer start, positive spacing and count");
+                    const json_int_t start=json_integer_value(json_object_get(onsets,"start"));
+                    const json_int_t spacing=json_integer_value(json_object_get(onsets,"spacing"));
+                    const size_t n=size_t(json_integer_value(json_object_get(onsets,"count")));
+                    if(start+spacing*json_int_t(n-1)>=length || json_array_size(rows)>n)
+                        return fail(r,"invalid_operation",path+".onsets","Onsets exceed pattern or leave unused expression rows");
+                    json_array_append_new(expandedColumns.p,json_string("step"));
+                    size_t c; json_t* column;
+                    json_array_foreach(columns,c,column) {
+                        if(str(column)=="step") return fail(r,"invalid_operation",path+".columns","onsets supplies step; omit the step column");
+                        json_array_append(expandedColumns.p,column);
+                    }
+                    for(size_t row=0;row<n;++row) {
+                        json_t* cycle=json_array_get(rows,row%json_array_size(rows));
+                        if(!json_is_array(cycle) || json_array_size(cycle)!=json_array_size(columns))
+                            return fail(r,"invalid_operation",path+".rows","Row length does not match columns length");
+                        json_t* expanded=json_array();
+                        json_array_append_new(expanded,json_integer(start+spacing*row));
+                        size_t c; json_t* cell;
+                        json_array_foreach(cycle,c,cell) json_array_append(expanded,cell);
+                        json_array_append_new(expandedRows.p,expanded);
+                    }
+                    columns=expandedColumns.p;
+                    rows=expandedRows.p;
+                }
                 if(count && json_array_size(rows)!=size_t(json_integer_value(count)))
                     return fail(r,"selection_count_mismatch",path+".expect_count","Selected count differs from expected count");
+                json_t* overrides=json_object_get(op,"overrides");
+                if(overrides) {
+                    if(!json_is_object(overrides)) return fail(r,"invalid_operation",path+".overrides","Expected row-index map");
+                    const char* key; json_t* value;
+                    json_object_foreach(overrides,key,value) {
+                        const std::string index=key;
+                        if(index.empty() || index.size()>4 || index.find_first_not_of("0123456789")!=std::string::npos
+                                || (index.size()>1 && index[0]=='0') || std::stoul(index)>=json_array_size(rows))
+                            return fail(r,"invalid_operation",path+".overrides","Override row index is invalid");
+                        if(!fields(value,eventFields,r,path+".overrides."+index)) return false;
+                    }
+                }
 
                 struct ColDef {
                     std::string raw;
@@ -429,7 +472,7 @@ bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r
                                 parentObj = json_object();
                                 json_object_set_new(noteObj, p.c_str(), parentObj);
                             }
-                            json_object_set(parentObj, c.c_str(), dVal);
+                            json_object_set_new(parentObj, c.c_str(), json_deep_copy(dVal));
                         } else {
                             if(json_is_object(dVal) && (dk == "tuned" || dk == "harmonic")) {
                                 json_t* existing = json_object_get(noteObj, dk.c_str());
@@ -437,13 +480,13 @@ bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r
                                     const char* subKey; json_t* subVal;
                                     json_object_foreach(dVal, subKey, subVal) {
                                         if(!json_object_get(existing, subKey))
-                                            json_object_set(existing, subKey, subVal);
+                                            json_object_set_new(existing, subKey, json_deep_copy(subVal));
                                     }
                                 } else {
-                                    json_object_set(noteObj, dk.c_str(), dVal);
+                                    json_object_set_new(noteObj, dk.c_str(), json_deep_copy(dVal));
                                 }
                             } else {
-                                json_object_set(noteObj, dk.c_str(), dVal);
+                                json_object_set_new(noteObj, dk.c_str(), json_deep_copy(dVal));
                             }
                         }
                     }
@@ -475,6 +518,10 @@ bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r
                         }
                     }
 
+                    if(json_t* overrideRow=json_object_get(overrides,std::to_string(rIdx).c_str())) {
+                        const char* key; json_t* value;
+                        json_object_foreach(overrideRow,key,value) json_object_set_new(noteObj,key,json_deep_copy(value));
+                    }
                     if(!json_object_get(noteObj, "step")) {
                         json_decref(noteObj);
                         return fail(r, "invalid_operation", path+".rows["+std::to_string(rIdx)+"]", "Missing required step field");
@@ -591,7 +638,9 @@ std::string serializeNotesView(const Composition& comp,json_t* request) {
         Owned out(json_pack("{s:b,s:{s:s,s:s,s:s}}","ok",0,"error","code",r.errorCode.c_str(),"path",r.errorPath.c_str(),"message",r.errorMessage.c_str()));
         char* encoded=json_dumps(out.p,JSON_COMPACT);std::string result=encoded;free(encoded);return result;
     };
-    if(!fields(request,{"view","pattern_id","selector","fields","page_size","cursor"},r,"request","invalid_request")) return error();
+    if(!fields(request,{"view","pattern_id","selector","fields","page_size","cursor","encoding"},r,"request","invalid_request")) return error();
+    json_t* encoding=json_object_get(request,"encoding");
+    if(encoding && str(encoding)!="columns_v1") {fail(r,"invalid_request","encoding","Expected columns_v1");return error();}
     std::string id=str(json_object_get(request,"pattern_id"));
     if(id.empty()||!comp.patterns.count(id)) {fail(r,"object_not_found","pattern_id","Pattern not found");return error();}
     json_error_t e;
@@ -611,6 +660,7 @@ std::string serializeNotesView(const Composition& comp,json_t* request) {
     size_t size=sizeJ?json_integer_value(sizeJ):128,offset=0;
     // Stable opaque fingerprint binds page cursors to the complete selection and projection.
     Owned binding(json_pack("{s:s,s:O,s:O,s:i}","pattern",id.c_str(),"selector",selector,"fields",projection?projection:json_null(),"size",int(size)));
+    if(encoding) json_object_set(binding.p,"encoding",encoding);
     char* canonical=json_dumps(binding.p,JSON_COMPACT|JSON_SORT_KEYS);uint64_t hash=1469598103934665603ULL;
     for(const unsigned char* c=(unsigned char*)canonical;*c;++c) hash=(hash^*c)*1099511628211ULL;
     free(canonical);
@@ -639,6 +689,33 @@ std::string serializeNotesView(const Composition& comp,json_t* request) {
     if(end<selected.size()) {
         std::string token="1:"+std::to_string(comp.revision)+":"+std::to_string(hash)+":"+std::to_string(end);json_object_set_new(out.p,"cursor",json_string(token.c_str()));
     } else json_object_set_new(out.p,"cursor",json_null());
+    if(encoding) {
+        std::set<std::string> names;
+        size_t i; json_t* note;
+        json_array_foreach(notes,i,note) {
+            const char* key; json_t* value;
+            json_object_foreach(note,key,value) names.insert(key);
+        }
+        json_t* columns=json_array(); json_t* rows=json_array(); json_t* missing=json_object();
+        for(const auto& name:names) json_array_append_new(columns,json_string(name.c_str()));
+        json_array_foreach(notes,i,note) {
+            json_t* row=json_array(); json_t* absent=json_array();
+            size_t col=0;
+            for(const auto& name:names) {
+                json_t* value=json_object_get(note,name.c_str());
+                json_array_append(row,value ? value : json_null());
+                if(!value) json_array_append_new(absent,json_integer(col));
+                ++col;
+            }
+            json_array_append_new(rows,row);
+            if(json_array_size(absent)) json_object_set_new(missing,std::to_string(i).c_str(),absent);
+            else json_decref(absent);
+        }
+        json_object_set(out.p,"encoding",encoding);
+        json_object_set_new(out.p,"columns",columns); json_object_set_new(out.p,"rows",rows);
+        json_object_set_new(out.p,"missing",missing);
+        json_object_del(out.p,"notes");
+    }
     char* encoded=json_dumps(out.p,JSON_COMPACT);std::string result=encoded;free(encoded);return result;
 }
 }

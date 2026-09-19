@@ -1,4 +1,5 @@
 import json
+from p8_test_support import MODERN_CAPS
 import os
 import sys
 import unittest
@@ -53,7 +54,8 @@ class P8BBatchTest(unittest.IsolatedAsyncioTestCase):
             "collision": "replace"
         }
 
-        with patch.object(server, "_sibyl_call", AsyncMock(return_value=mock_response)) as mock_call:
+        with patch.object(server, "_get_sibyl_contract", AsyncMock(return_value=MODERN_CAPS)), \
+                patch.object(server, "_sibyl_call", AsyncMock(return_value=mock_response)) as mock_call:
             params = server.SibylEditInput(
                 module_id=123456789,
                 expected_revision=10,

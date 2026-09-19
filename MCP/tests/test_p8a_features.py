@@ -10,6 +10,16 @@ from mcp_server import Octavia_MCP as server
 
 
 class P8AFeaturesTest(unittest.IsolatedAsyncioTestCase):
+    async def test_resolve_does_not_choose_among_multiple_sibyls(self):
+        modules = [{"id": i, "plugin": "Leviathan", "model": "Sibyl"} for i in (1, 2)]
+        with patch.object(server, "_get_cached_modules", AsyncMock(return_value=modules)):
+            response = json.loads(await server.vcv_sibyl_resolve())
+            self.assertEqual(response["error"], "ambiguous_sibyl")
+        with patch.object(server, "_get_cached_modules", AsyncMock(return_value=modules[:1])):
+            response = await server.vcv_sibyl_resolve()
+            self.assertLessEqual(len(response.encode()), 150)
+            self.assertEqual(json.loads(response)["module_id"], 1)
+
     def test_dump_json_compact_default(self):
         sample = {"a": 1, "b": [1, 2, 3], "c": {"d": "test"}}
         res = server._dump_json(sample)
@@ -102,6 +112,13 @@ class P8AFeaturesTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(res["schemaVersion"], 4)
             self.assertEqual(res["pitchStage"], "P7D")
             self.assertNotIn("large_unneeded_limits_tree", res)
+            self.assertLess(len(server._dump_json(res).encode()), 300)
+            fingerprint = res["fingerprint"]
+            full_caps["capabilities"]["sibyl"]["revision"] += 1
+            self.assertEqual(json.loads(await server.vcv_sibyl_get_capabilities(params))["fingerprint"], fingerprint)
+            topic = json.loads(await server.vcv_sibyl_get_capabilities(
+                server.SibylCapabilitiesInput(module_id=123, topic="pitchSystems")))
+            self.assertEqual(topic["contract"], {"stage": "P7D", "version": 1})
 
 
 if __name__ == "__main__":

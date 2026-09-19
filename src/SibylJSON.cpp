@@ -1514,6 +1514,71 @@ std::string serializeFullCompositionJson(const Composition& comp) {
     return dumpAndFree(root);
 }
 
+std::string serializeArrangementViewJson(const Composition& comp, json_t* request) {
+    auto error = [](const char* code, const char* message) {
+        return dumpAndFree(json_pack("{s:b,s:{s:s,s:s}}", "ok", 0, "error", "code", code, "message", message));
+    };
+    json_t* sizeJ = json_object_get(request, "page_size");
+    if (sizeJ && (!json_is_integer(sizeJ) || json_integer_value(sizeJ)<1 || json_integer_value(sizeJ)>32))
+        return error("invalid_request", "Arrangement page_size must be 1-32");
+    const size_t pageSize = sizeJ ? size_t(json_integer_value(sizeJ)) : 8;
+    size_t offset=0;
+    if (json_t* cursor = json_object_get(request,"cursor")) {
+        if (!json_is_string(cursor)) return error("invalid_request","Invalid arrangement cursor");
+        std::string token=json_string_value(cursor);
+        const std::string prefix=std::to_string(comp.revision)+":";
+        if (token.compare(0,prefix.size(),prefix)!=0) return error("revision_conflict","Arrangement cursor is stale");
+        const std::string position=token.substr(prefix.size());
+        if (position.empty() || position.size()>6 || position.find_first_not_of("0123456789")!=std::string::npos)
+            return error("invalid_request","Invalid arrangement cursor");
+        offset=size_t(std::stoul(position));
+        if (offset>comp.arrangement.size()) return error("invalid_request","Arrangement cursor is out of range");
+    }
+    json_t* root=json_pack("{s:b,s:i,s:s,s:i}","ok",1,"revision",comp.revision,"view","arrangement","total",int(comp.arrangement.size()));
+    json_t* scenes=json_array(); json_t* patterns=json_object();
+    const size_t end=std::min(offset+pageSize,comp.arrangement.size());
+    std::map<std::string,size_t> references;
+    for (const auto& scene:comp.arrangement)
+        for (const auto& assignment:scene.tracks) ++references[assignment.second.patternId];
+    for (size_t i=offset;i<end;++i) {
+        const auto& scene=comp.arrangement[i];
+        json_array_append_new(scenes,sceneToJson(scene));
+        for (const auto& assignment:scene.tracks) {
+            const auto found=comp.patterns.find(assignment.second.patternId);
+            if(found==comp.patterns.end() || json_object_get(patterns,found->first.c_str())) continue;
+            const auto& pattern=found->second;
+            json_t* summary=json_pack("{s:i,s:s,s:i,s:i}","length",pattern.length,"resolution",pattern.resolutionStr.c_str(),
+                "eventCount",int(pattern.steps.size()),"referenceCount",int(references[found->first]));
+            // Reuse authored property serialization, never include event arrays.
+            json_t* authored=patternToJson(pattern);
+            for(const char* key:{"pitchContext","evolution"})
+                if(json_t* value=json_object_get(authored,key)) json_object_set(summary,key,value);
+            json_decref(authored);
+            json_object_set_new(patterns,found->first.c_str(),summary);
+        }
+    }
+    json_object_set_new(root,"scenes",scenes);
+    json_object_set_new(root,"patterns",patterns);
+    json_t* automation=json_array();
+    size_t automationTotal=0;
+    for(const auto& curve:comp.automation) {
+        bool relevant=curve.sceneId.empty();
+        for(size_t i=offset;i<end;++i) relevant |= curve.sceneId==comp.arrangement[i].id;
+        if(!relevant) continue;
+        ++automationTotal;
+        if(json_array_size(automation)<32) json_array_append_new(automation,json_string(curve.id.c_str()));
+    }
+    json_object_set_new(root,"automation",json_pack("{s:o,s:i,s:i}","ids",automation,
+        "total",int(automationTotal),"omitted",int(automationTotal-json_array_size(automation))));
+    if(!comp.pitchSystems.defaultContext.empty())
+        json_object_set_new(root,"defaultPitchContext",json_string(comp.pitchSystems.defaultContext.c_str()));
+    if(comp.defaultHarmony.present)
+        json_object_set_new(root,"defaultHarmony",harmony_json::bindingJson(comp.defaultHarmony));
+    json_object_set_new(root,"nextCursor",end<comp.arrangement.size()
+        ? json_string((std::to_string(comp.revision)+":"+std::to_string(end)).c_str()) : json_null());
+    return dumpAndFree(root);
+}
+
 std::string serializePatternViewJson(const Composition& comp, const std::string& patternId) {
     auto it = comp.patterns.find(patternId);
     if (it == comp.patterns.end()) {

@@ -168,8 +168,10 @@ void processOneSample(SibylModule& module) {
 #include "sibyl_combined_cases.hpp"
 #include "sibyl_tuning_module_cases.hpp"
 #include "sibyl_native_module_cases.hpp"
+#include "sibyl_p8_cases.hpp"
 
 int main() {
+    testP8Protocol();
     testTunedPlayback();
     testNativeHarmonyPlayback();
     testConditions();
@@ -270,12 +272,31 @@ int main() {
             && module.m_acceptedCompositionPtr->patterns.at("p").steps.size() == 3,
             "edit with prepared handle atomically commits candidate to revision 4");
         std::string firstCommitResp = response;
+        check(module.lastSibylEditChangedState(), "prepared commit records one state mutation for undo");
 
         // Idempotent replay with same handle
         check(module.handleSibylRequest(SibylControl::Operation::EDIT, handleEdit, response, error)
             && response == firstCommitResp
             && module.m_acceptedRevision == 4,
             "retrying committed handle returns identical receipt idempotently");
+        check(!module.lastSibylEditChangedState(), "prepared replay must not create another undo entry");
+
+        // A supplied current revision must not override the candidate's base revision.
+        check(module.handleSibylRequest(SibylControl::Operation::VALIDATE,
+            R"({"expected_revision":4,"prepare":true,"operations":[{"op":"set_meta","path":"title","value":"stale"}]})",
+            response, error), "prepare stale-base regression candidate");
+        prepObj = json_loads(response.c_str(), 0, &pErr);
+        std::string staleHandle = json_string_value(json_object_get(prepObj, "handle"));
+        json_decref(prepObj);
+        check(module.handleSibylRequest(SibylControl::Operation::EDIT,
+            R"({"expected_revision":4,"operations":[{"op":"set_meta","path":"title","value":"newer"}]})",
+            response, error), "intervening edit accepted");
+        auto newer = module.m_acceptedCompositionPtr;
+        check(!module.handleSibylRequest(SibylControl::Operation::EDIT,
+            "{\"handle\":\"" + staleHandle + "\",\"expected_revision\":5}", response, error)
+            && response.find("revision_conflict") != std::string::npos
+            && module.m_acceptedCompositionPtr == newer && !module.lastSibylEditChangedState(),
+            "current expected revision cannot commit a stale prepared candidate");
 
         // Non-existent or invalid handle
         check(!module.handleSibylRequest(SibylControl::Operation::EDIT, R"({"handle":"prep_nonexistent"})", response, error)

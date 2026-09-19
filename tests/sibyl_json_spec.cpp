@@ -51,6 +51,22 @@ int main() {
     auto valid = sibyl::parseCompositionJson(validComposition, 42);
     check(valid.valid && valid.errors.empty(), "complete v2 composition compiles");
     check(valid.composition && valid.composition->revision == 42, "compiler assigns requested revision");
+    {
+        json_error_t error;
+        json_t* request=json_pack("{s:s,s:i}","view","arrangement","page_size",1);
+        const std::string packet=sibyl::serializeArrangementViewJson(*valid.composition,request);
+        json_t* response=json_loads(packet.c_str(),0,&error);
+        check(json_integer_value(json_object_get(response,"total"))==1
+            && json_array_size(json_object_get(response,"scenes"))==1
+            && packet.find("bassline")!=std::string::npos && packet.find("steps")==std::string::npos
+            && packet.find("referenceCount")!=std::string::npos,
+            "arrangement orientation includes assignments and reference counts without notes");
+        json_decref(response);
+        json_object_set_new(request,"cursor",json_string("41:0"));
+        check(sibyl::serializeArrangementViewJson(*valid.composition,request).find("revision_conflict")!=std::string::npos,
+            "arrangement pagination rejects stale revision");
+        json_decref(request);
+    }
     check(valid.composition && valid.composition->macros.size() == 2, "macros compile into immutable snapshot");
     check(valid.composition && valid.composition->arrangement[0].description ==
           "A restrained opening that establishes the bass ritual.",

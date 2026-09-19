@@ -5,6 +5,8 @@ Connects MCP-compatible agents to VCV Rack through the Octavia module.
 """
 
 import json
+import hashlib
+import copy
 import os
 import time
 import re
@@ -84,6 +86,7 @@ async def vcv_octavia_set_presence(params: PresenceInput) -> str:
 
 _MODULE_CACHE: dict[str, Any] = {"timestamp": 0.0, "modules": []}
 _RESOLVED_MODULE_IDS: dict[int, int] = {}
+_SIBYL_CONTRACTS: dict[tuple, dict] = {}
 MODULE_CACHE_TTL_SEC = 10.0
 
 
@@ -103,12 +106,19 @@ async def _get_cached_modules(force_refresh: bool = False) -> list[dict]:
             if r.status_code == 200:
                 mods = r.json()
                 if isinstance(mods, list):
+                    if mods != _MODULE_CACHE["modules"]:
+                        _RESOLVED_MODULE_IDS.clear()
+                        _SIBYL_CONTRACTS.clear()
                     _MODULE_CACHE["timestamp"] = now
                     _MODULE_CACHE["modules"] = mods
                     return mods
     except Exception:
-        pass
-    return _MODULE_CACHE.get("modules", [])
+        _invalidate_module_cache()
+        _SIBYL_CONTRACTS.clear()
+        raise
+    _invalidate_module_cache()
+    _SIBYL_CONTRACTS.clear()
+    raise RuntimeError("Could not refresh module inventory")
 
 
 def _dump_json(payload: Any, compact: bool = True) -> str:
@@ -126,14 +136,13 @@ async def _normalize_endpoint(endpoint: str) -> str:
     prefix, mid_str, suffix = m.group(1), m.group(2), m.group(3) or ""
     try:
         req_id = int(mid_str)
-        if req_id in _RESOLVED_MODULE_IDS:
-            return f"{prefix}{_RESOLVED_MODULE_IDS[req_id]}{suffix}"
         mods = await _get_cached_modules()
-        for mod in mods:
-            actual_id = mod.get("id")
-            if actual_id is not None and (actual_id == req_id or abs(int(actual_id) - req_id) <= 64):
-                _RESOLVED_MODULE_IDS[req_id] = actual_id
-                return f"{prefix}{actual_id}{suffix}"
+        ids = [int(mod["id"]) for mod in mods if mod.get("id") is not None]
+        if req_id in ids:
+            return endpoint
+        nearby = [mid for mid in ids if abs(mid - req_id) <= 64]
+        if len(nearby) == 1:
+            return f"{prefix}{nearby[0]}{suffix}"
     except Exception:
         pass
     return endpoint
@@ -157,19 +166,37 @@ async def _call(endpoint: str, method: str = "GET", data: dict = None) -> dict:
 
 async def _sibyl_call(endpoint: str, method: str = "GET", data: dict = None) -> dict:
     """Keep handled Sibyl rejection envelopes intact for agent recovery."""
-    endpoint = await _normalize_endpoint(endpoint)
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        if method == "GET":
-            r = await client.get(f"{BRIDGE_URL}/{endpoint}", headers=BRIDGE_HEADERS)
-        else:
-            r = await client.post(f"{BRIDGE_URL}/{endpoint}", json=data or {}, headers=BRIDGE_HEADERS)
-        r.raise_for_status()
-        payload = r.json()
-        if not isinstance(payload, dict):
-            raise OctaviaBridgeError("Sibyl bridge returned a non-object response")
-        if "ok" not in payload and "error" in payload:
-            raise OctaviaBridgeError(str(payload["error"]))
-        return payload
+    return await _envelope_call(endpoint, method, data)
+
+
+async def _get_sibyl_contract(module_id: int, compact: bool = False) -> dict:
+    """Probe the small manifest every time; cache contracts only for that instance/hash."""
+    key_prefix = (BRIDGE_URL, module_id)
+    try:
+        manifest = await _sibyl_call(f"sibyl/{module_id}/capabilities?format=manifest")
+        if not manifest.get("ok"):
+            _SIBYL_CONTRACTS.clear()
+            return manifest
+        if "capabilities" in manifest:  # Legacy server: no cache without instance identity.
+            return manifest
+        if not manifest.get("instance") or not manifest.get("fingerprint"):
+            return manifest
+        if compact:
+            return manifest
+        key = key_prefix + (manifest["instance"], manifest["fingerprint"])
+        if key not in _SIBYL_CONTRACTS:
+            _SIBYL_CONTRACTS.clear()  # Bounded, conservatively invalidates reconnects/module changes.
+            full = await _sibyl_call(f"sibyl/{module_id}/capabilities")
+            if (full.get("instance"), full.get("fingerprint")) != key[-2:]:
+                raise OctaviaBridgeError("Sibyl instance changed during contract discovery; retry discovery")
+            _SIBYL_CONTRACTS[key] = full
+        result = copy.deepcopy(_SIBYL_CONTRACTS[key])
+        result["capabilities"]["sibyl"]["revision"] = manifest.get("revision")
+        return result
+    except Exception:
+        _SIBYL_CONTRACTS.clear()
+        _invalidate_module_cache()
+        raise
 
 
 async def _envelope_call(endpoint: str, method: str = "GET", data: dict = None) -> dict:
@@ -249,8 +276,10 @@ def _error_message(e: Exception) -> str:
     return f"Error: {type(e).__name__}: {e}"
 
 
-def _err(e: Exception) -> None:
+def _err(e: Exception | str) -> None:
     """Raise a tool failure so MCP clients receive an error result, not success text."""
+    if isinstance(e, str):
+        raise RuntimeError(e)
     raise RuntimeError(_error_message(e)) from e
 
 
@@ -447,7 +476,7 @@ async def vcv_octavia_console_respond(params: OctaviaConsoleResponseInput) -> st
 
 
 class SibylCompositionInput(SibylModuleInput):
-    view: Literal["summary", "full", "pattern", "scene", "notes", "automation", "progression", "effective_context", "pitch_systems", "pitch_context", "tuning_catalog", "map_intervals", "export_tuning_scl"] = Field(
+    view: Literal["arrangement", "summary", "full", "pattern", "scene", "notes", "automation", "progression", "effective_context", "pitch_systems", "pitch_context", "tuning_catalog", "map_intervals", "export_tuning_scl"] = Field(
         "summary", description="Summary, authored document, targeted notes/curve/progression, or scene/time effective context"
     )
     id: Optional[str] = Field(None, description="ID for pattern, scene, automation, progression or pitch_context; pitch_systems group: tunings/scales/contexts")
@@ -463,6 +492,7 @@ class SibylCompositionInput(SibylModuleInput):
     fields: Optional[list[str] | Literal["full"]] = None
     page_size: Optional[int] = Field(None, ge=1, le=256)
     cursor: Optional[str] = None
+    encoding: Optional[Literal["columns_v1"]] = None
 
 
 class SibylValidateInput(SibylModuleInput):
@@ -504,6 +534,22 @@ class SibylTransportInput(SibylModuleInput):
 
 class SibylCapabilitiesInput(SibylModuleInput):
     compact: bool = Field(False, description="Return compact feature manifest (<300B) instead of full contract schema")
+    topic: Optional[Literal["pitchSystems", "voicing", "automation", "conditions", "limits", "editOperations", "p8", "toolSchemas"]] = None
+
+
+@mcp.tool(name="vcv_sibyl_resolve",
+          annotations={"title": "Resolve Sibyl", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_sibyl_resolve() -> str:
+    """Resolve exactly one Sibyl without exposing the whole patch inventory."""
+    try:
+        modules = await _get_cached_modules(force_refresh=True)
+        ids = [m["id"] for m in modules if m.get("plugin") == "Leviathan" and m.get("model") == "Sibyl"]
+        if len(ids) == 1:
+            return _dump_json({"ok": True, "module_id": ids[0]})
+        return _dump_json({"ok": False, "error": "ambiguous_sibyl" if ids else "sibyl_not_found",
+                           "ids": ids[:16], "total": len(ids), "omitted": max(0, len(ids)-16)})
+    except Exception as e:
+        return _err(e)
 
 
 @mcp.tool(name="vcv_sibyl_get_capabilities",
@@ -511,17 +557,23 @@ class SibylCapabilitiesInput(SibylModuleInput):
 async def vcv_sibyl_get_capabilities(params: SibylCapabilitiesInput) -> str:
     """Discover the Sibyl API/schema versions and semantic operations supported by a module."""
     try:
-        caps = await _sibyl_call(f"sibyl/{params.module_id}/capabilities")
+        if params.topic == "toolSchemas":
+            return _dump_json({"ok": True, "contracts": {action: model.model_json_schema()
+                              for action, (model, _) in _sibyl_actions().items()}})
+        caps = await _get_sibyl_contract(params.module_id, compact=params.compact and params.topic is None)
+        if params.topic is not None and isinstance(caps, dict) and "capabilities" in caps:
+            sib = caps["capabilities"].get("sibyl", {})
+            return _dump_json({"ok": True, "topic": params.topic, "contract": sib.get(params.topic)})
         if getattr(params, "compact", False) and isinstance(caps, dict) and "capabilities" in caps:
             sib = caps["capabilities"].get("sibyl", {})
             manifest = {
                 "ok": True,
                 "apiVersion": sib.get("apiVersion"),
                 "schemaVersion": sib.get("schemaVersion"),
-                "revision": sib.get("revision"),
                 "pitchStage": sib.get("pitchSystems", {}).get("stage"),
-                "views": sib.get("views", []),
-                "operations": sib.get("operations", []),
+                "fingerprint": hashlib.sha256(json.dumps(
+                    {k: v for k, v in sib.items() if k != "revision"},
+                    sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:16],
                 "features": {
                     "harmony": sib.get("harmony", {}).get("version"),
                     "automation": sib.get("automation", {}).get("version"),
@@ -545,7 +597,7 @@ async def vcv_sibyl_get_composition(params: SibylCompositionInput) -> str:
         query = {"view": params.view}
         if params.id is not None:
             query["id"] = params.id
-        for field in ("pattern_id", "selector", "fields", "page_size", "cursor", "sample_beats", "scene_id", "scene_repeat", "beat", "context_id", "intervals", "tie_break"):
+        for field in ("pattern_id", "selector", "fields", "page_size", "cursor", "sample_beats", "scene_id", "scene_repeat", "beat", "context_id", "intervals", "tie_break", "encoding"):
             value = getattr(params, field)
             if value is not None:
                 query[field] = json.dumps(value, separators=(",", ":")) if field in ("selector", "fields", "sample_beats", "intervals") else value
@@ -562,7 +614,12 @@ async def vcv_sibyl_validate(params: SibylValidateInput) -> str:
         if params.operations is not None:
             if params.candidate is not None or params.expected_revision is None:
                 return _err("Operation preview requires expected_revision and no candidate")
-            payload = {"operations": params.operations, "expected_revision": params.expected_revision,
+            from tools.sibyl_composer import negotiate_operations
+            capabilities = await _get_sibyl_contract(params.module_id)
+            if not capabilities.get("ok"):
+                return _dump_json(capabilities)
+            contract = capabilities.get("capabilities", {}).get("sibyl", {})
+            payload = {"operations": negotiate_operations(params.operations, contract), "expected_revision": params.expected_revision,
                        "return_changes": params.return_changes}
             if params.prepare:
                 payload["prepare"] = True
@@ -586,6 +643,11 @@ async def vcv_sibyl_validate(params: SibylValidateInput) -> str:
 async def vcv_sibyl_edit(params: SibylEditInput) -> str:
     """Apply semantic operations atomically. A successful transaction creates one vcv_undo entry."""
     try:
+        from tools.sibyl_composer import negotiate_operations
+        capabilities = await _get_sibyl_contract(params.module_id)
+        if not capabilities.get("ok"):
+            return _dump_json(capabilities)
+        contract = capabilities.get("capabilities", {}).get("sibyl", {})
         if params.handle is not None:
             payload = {"handle": params.handle, "phase_policy": params.phase_policy}
             if params.expected_revision is not None:
@@ -597,32 +659,15 @@ async def vcv_sibyl_edit(params: SibylEditInput) -> str:
                 return _err("Must supply either 'handle' or both 'expected_revision' and 'operations'")
             payload = {"expected_revision": params.expected_revision,
                        "phase_policy": params.phase_policy,
-                       "operations": params.operations}
+                       "operations": negotiate_operations(params.operations, contract)}
             if params.apply_at is not None:
                 payload["apply_at"] = params.apply_at
+        if (params.response_profile or "full") in contract.get("p8", {}).get("responseProfiles", []):
+            payload["response_profile"] = params.response_profile or "full"
         res = await _sibyl_call(f"sibyl/{params.module_id}/edit", "POST", payload)
-        if params.response_profile == "receipt" and isinstance(res, dict) and res.get("ok"):
-            receipt = {
-                "ok": True,
-                "revision": res.get("revision"),
-                "activeRevision": res.get("activeRevision"),
-                "appliedOperations": len(params.operations) if params.operations is not None else 1,
-                "warnings": res.get("warnings", [])
-            }
-            if "changes" in res and isinstance(res["changes"], dict):
-                receipt["changes"] = {k: v for k, v in res["changes"].items() if v}
-            elif "changes" in res and isinstance(res["changes"], list):
-                summary = {}
-                for c in res["changes"]:
-                    if isinstance(c, dict):
-                        for k in ("inserted", "updated", "deleted", "clamped"):
-                            val = c.get(k, 0)
-                            if val:
-                                summary[k] = summary.get(k, 0) + val
-                if summary:
-                    receipt["changes"] = summary
-            return _dump_json(receipt)
-        return _dump_json(res)
+        from tools.sibyl_composer import project_edit_response
+        return _dump_json(project_edit_response(res, params.response_profile or "full",
+                         len(params.operations) if params.operations is not None else None))
     except Exception as e:
         return _err(e)
 
@@ -1653,5 +1698,46 @@ async def vcv_save_patch() -> str:
         return _err(e)
 
 
+def _sibyl_actions():
+    return {
+        "capabilities": (SibylCapabilitiesInput, vcv_sibyl_get_capabilities),
+        "composition": (SibylCompositionInput, vcv_sibyl_get_composition),
+        "validate": (SibylValidateInput, vcv_sibyl_validate),
+        "edit": (SibylEditInput, vcv_sibyl_edit),
+        "status": (SibylModuleInput, vcv_sibyl_get_status),
+        "transport": (SibylTransportInput, vcv_sibyl_transport),
+        "compose_euclidean": (SibylComposeEuclideanInput, vcv_sibyl_compose_euclidean),
+        "compose_progression": (SibylComposeProgressionInput, vcv_sibyl_compose_progression),
+    }
+
+
+class SibylRequestInput(SibylModuleInput):
+    action: Literal["capabilities", "composition", "validate", "edit", "status", "transport", "compose_euclidean", "compose_progression"]
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+@mcp.tool(name="vcv_sibyl_request",
+          annotations={"title": "Sibyl Request", "readOnlyHint": False, "destructiveHint": False})
+async def vcv_sibyl_request(params: SibylRequestInput) -> str:
+    """Compact dispatch with the same typed validators. Fetch topic=toolSchemas for detailed contracts."""
+    try:
+        if "module_id" in params.parameters:
+            return _err("module_id belongs outside parameters")
+        model, handler = _sibyl_actions()[params.action]
+        return await handler(model(module_id=params.module_id, **params.parameters))
+    except Exception as e:
+        return _err(e)
+
+
+def configure_sibyl_toolset(toolset: str) -> None:
+    if toolset not in ("full", "compact"):
+        raise ValueError("OCTAVIA_SIBYL_TOOLSET must be full or compact")
+    if toolset == "compact":
+        for action, (_, handler) in _sibyl_actions().items():
+            if action != "capabilities":
+                mcp.remove_tool(handler.__name__)
+
+
 if __name__ == "__main__":
+    configure_sibyl_toolset(os.environ.get("OCTAVIA_SIBYL_TOOLSET", "full"))
     mcp.run()

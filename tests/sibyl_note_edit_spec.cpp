@@ -14,7 +14,41 @@ CompositionPtr base() {
 #include "sibyl_pitch_edit_cases.hpp"
 #include "sibyl_native_pitch_cases.hpp"
 void noteBatchCases() {
+    auto native = parseCompositionJson(nativeHarmonyFixture(), 1);
+    assert(native.valid);
+    auto isolated = edit(*native.composition, R"([{"op":"insert_note_batch","pattern_id":"dest","encoding":"columns_v1","columns":["step","tuned.step"],"rows":[[0,0],[1,17],[2,31]],"defaults":{"tuned":{"context":"c"}}}])");
+    assert(isolated.valid);
+    const auto& isolatedNotes = isolated.composition->patterns.at("dest").steps;
+    assert(isolatedNotes.size() == 3);
+    assert(isolatedNotes[0].nativePitch.index == 0);
+    assert(isolatedNotes[1].nativePitch.index == 17);
+    assert(isolatedNotes[2].nativePitch.index == 31);
     auto b = base();
+    auto series=edit(*b,R"([{"op":"insert_note_batch","pattern_id":"dest","encoding":"columns_v1","columns":["degree","velocity"],"rows":[[0,0.8],[4,0.6]],"onsets":{"start":1,"spacing":3,"count":4},"defaults":{"gate":0.5},"overrides":{"3":{"degree":2,"gate":0}},"expect_count":4}])");
+    auto exact=edit(*b,R"([{"op":"insert_notes","pattern_id":"dest","notes":[{"step":1,"degree":0,"velocity":0.8,"gate":0.5},{"step":4,"degree":4,"velocity":0.6,"gate":0.5},{"step":7,"degree":0,"velocity":0.8,"gate":0.5},{"step":10,"degree":2,"velocity":0.6,"gate":0}]}])");
+    assert(series.valid && exact.valid && serializeFullCompositionJson(*series.composition)==serializeFullCompositionJson(*exact.composition));
+    for(const char* invalid:{R"({"-1":{"gate":1}})",R"({"04":{"gate":1}})",R"({"4":{"gate":1}})",R"({"0":{"unknown":1}})"}) {
+        std::string request=std::string(R"([{"op":"insert_note_batch","pattern_id":"dest","encoding":"columns_v1","columns":["degree"],"rows":[[0]],"onsets":{"start":0,"spacing":4,"count":4},"overrides":)")+invalid+"}]";
+        assert(!edit(*b,request.c_str()).valid);
+    }
+    auto readRequest=decode(R"({"view":"notes","pattern_id":"p","fields":"full","encoding":"columns_v1"})");
+    auto columnar=decode(serializeNotesView(*b,readRequest).c_str());
+    json_object_del(readRequest,"encoding");
+    auto objects=decode(serializeNotesView(*b,readRequest).c_str());
+    json_t* rows=json_object_get(columnar,"rows"), *columns=json_object_get(columnar,"columns");
+    assert(json_array_size(rows)==5);
+    for(size_t i=0;i<json_array_size(rows);++i) {
+        json_t* reconstructed=json_object();
+        json_t* absent=json_object_get(json_object_get(columnar,"missing"),std::to_string(i).c_str());
+        for(size_t c=0;c<json_array_size(columns);++c) {
+            bool missing=false;
+            size_t j; json_t* v;json_array_foreach(absent,j,v) missing |= json_integer_value(v)==json_int_t(c);
+            if(!missing) json_object_set(reconstructed,json_string_value(json_array_get(columns,c)),json_array_get(json_array_get(rows,i),c));
+        }
+        assert(json_equal(reconstructed,json_array_get(json_object_get(objects,"notes"),i)));
+        json_decref(reconstructed);
+    }
+    json_decref(readRequest);json_decref(columnar);json_decref(objects);
     // 1. Basic columnar batch insert with defaults and expect_count
     auto batch1 = edit(*b, R"([{"op":"insert_note_batch","pattern_id":"dest","encoding":"columns_v1","columns":["step","degree","velocity","gate"],"rows":[[1,0,0.7,0.5],[3,2,0.8,0.6],[5,4,0.9,0.7]],"defaults":{"probability":0.85},"expect_count":3}])");
     assert(batch1.valid && batch1.changes.size() == 1);

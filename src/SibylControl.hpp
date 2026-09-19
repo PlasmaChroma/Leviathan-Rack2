@@ -26,14 +26,16 @@ struct SibylControl : OctaviaSemanticControl {
     // object following Sibyl's public response contract. A rejected request may
     // put its structured {ok:false,error:{...}} envelope in responseJson; error
     // is the fallback diagnostic when no structured response is available.
-    // EDIT must return true only after accepting a mutation; Octavia interprets
-    // that value as the commit point and records exactly one undo snapshot.
+    // Successful EDIT may replay a retained receipt. The bridge consults
+    // lastSibylEditChangedState() before recording an undo snapshot.
     // The opaque v1 request contract includes EDIT phasePolicy and TRANSPORT
     // restart target/phaseMode fields; Sibyl validates their combinations.
     virtual bool handleSibylRequest(Operation operation,
                                     const std::string& requestJson,
                                     std::string& responseJson,
                                     std::string& error) = 0;
+
+    virtual bool lastSibylEditChangedState() const { return true; }
 
     const char* semanticCapabilityId() const noexcept override {
         return "leviathan.sibyl.composition";
