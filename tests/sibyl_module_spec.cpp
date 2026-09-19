@@ -166,8 +166,12 @@ void processOneSample(SibylModule& module) {
 #include "sibyl_harmony_cases.hpp"
 #include "sibyl_voicing_cases.hpp"
 #include "sibyl_combined_cases.hpp"
+#include "sibyl_tuning_module_cases.hpp"
+#include "sibyl_native_module_cases.hpp"
 
 int main() {
+    testTunedPlayback();
+    testNativeHarmonyPlayback();
     testConditions();
     testOverrides();
     testAutomation();
@@ -920,7 +924,7 @@ int main() {
 		check(saved && json_is_object(saved) &&
 			json_is_string(json_object_get(saved, "format")) &&
 			std::string(json_string_value(json_object_get(saved, "format"))) == "Leviathan.SibylComposition" &&
-			json_integer_value(json_object_get(saved, "schemaVersion")) == 3 &&
+			json_integer_value(json_object_get(saved, "schemaVersion")) == 4 &&
 			json_is_object(json_object_get(saved, "composition")),
 			"portable composition envelope is versioned and self-identifying");
 		if (saved) json_decref(saved);

@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <cstdint>
 #include "SibylCondition.hpp"
+#include "SibylTuning.hpp"
 #include "SibylOverrides.hpp"
 #include "SibylAutomation.hpp"
 #include "SibylHarmonyTypes.hpp"
@@ -57,7 +58,7 @@ struct TrackDef {
 	float defaultVelocity = 0.5f;
 };
 
-enum class PitchType { PITCH_V, DEGREE, NOTE, HARMONIC };
+enum class PitchType { PITCH_V, DEGREE, NOTE, HARMONIC, TUNED };
 
 struct ObservationMarker {
 	int64_t octaviaModuleId = -1;
@@ -85,6 +86,9 @@ struct RepeatEvolution {
 };
 
 struct StepEvent {
+	std::string tuned;
+	PitchOffsets pitchOffsets;
+	NativePitch nativePitch;
 	std::string harmonic;
 	int harmonicExpression = -1;
 	Condition condition;
@@ -117,6 +121,7 @@ struct StepEvent {
 };
 
 struct Pattern {
+	std::string pitchContext;
 	int nextNoteId = 1;
 	std::string id;
 	int length = 16;
@@ -131,12 +136,14 @@ struct Pattern {
 };
 
 struct TrackAssignment {
+	std::shared_ptr<const std::vector<HarmonicRoutePitch>> harmonicPitches;
+	std::shared_ptr<const std::vector<float>> compiledPitches; // Indexed by temporal step, allocated only for native transforms.
 	AssignmentOverrides overrides;
 	std::string patternId;
 	bool hasPhaseModeOverride = false;
 	PhaseMode phaseModeOverride = PhaseMode::RESTART;
 	bool operator==(const TrackAssignment& b) const {
-		return patternId == b.patternId && hasPhaseModeOverride == b.hasPhaseModeOverride &&
+		return ((!harmonicPitches && !b.harmonicPitches) || (harmonicPitches && b.harmonicPitches && *harmonicPitches==*b.harmonicPitches)) && ((!compiledPitches && !b.compiledPitches) || (compiledPitches && b.compiledPitches && *compiledPitches==*b.compiledPitches)) && patternId == b.patternId && hasPhaseModeOverride == b.hasPhaseModeOverride &&
 			phaseModeOverride == b.phaseModeOverride && overrides == b.overrides;
 	}
 };
@@ -169,6 +176,8 @@ inline double sceneTimelineLength(const Scene& scene) {
 
 // Represents an immutable snapshot of the entire compiled composition
 struct Composition {
+	PitchSystems pitchSystems;
+	size_t pitchStorageBytes = 0, staticPitchEntries = 0;
 	int revision = 0;
 	bool harmonyPresent = false;
 	HarmonyBinding defaultHarmony;
@@ -188,6 +197,15 @@ struct Composition {
 	std::vector<double> sceneBeatPrefixes;
 	double arrangementDuration = 0.;
 };
+
+inline float assignedPitch(const StepEvent& event, const TrackAssignment& assignment, float eventPitch) {
+    if (assignment.compiledPitches!=nullptr && event.pitchType!=PitchType::HARMONIC)
+        return (*assignment.compiledPitches)[size_t(event.step)];
+    float pitch=assignment.overrides.pitch(eventPitch);
+    const auto& offset=assignment.overrides.pitchOffsets;
+    if(offset.fields) pitch=float(double(pitch)+double(offset.periods)+offset.cents/1200.);
+    return pitch;
+}
 
 using CompositionPtr = std::shared_ptr<const Composition>;
 

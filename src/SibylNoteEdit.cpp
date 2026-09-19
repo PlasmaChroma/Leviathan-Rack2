@@ -1,4 +1,6 @@
 #include "SibylNoteEdit.hpp"
+#include "SibylRetune.hpp"
+#include "SibylPitchView.hpp"
 #include <algorithm>
 #include <cmath>
 #include <set>
@@ -32,8 +34,8 @@ bool boolField(json_t* o, const char* key, EditResult& r, const std::string& pat
     json_t* v = json_object_get(o,key);
     return !v || json_is_boolean(v) || fail(r,"invalid_operation",path+"."+key,"Expected boolean");
 }
-const std::set<std::string> eventFields = {"id","step","pitchV","note","degree","octave","transposeSemitones","gate","velocity","probability","mod","mod2","mod3","glideMs","microshift","ratchets","tie","evolve","observation","condition","harmonic"};
-const std::set<std::string> optionalFields = {"octave","transposeSemitones","gate","velocity","probability","mod","mod2","mod3","glideMs","microshift","ratchets","tie","evolve","observation","condition"};
+const std::set<std::string> eventFields = {"id","step","pitchV","note","degree","octave","transposeSemitones","transposeSteps","transposePeriods","transposeCents","gate","velocity","probability","mod","mod2","mod3","glideMs","microshift","ratchets","tie","evolve","observation","condition","harmonic","tuned"};
+const std::set<std::string> optionalFields = {"octave","transposeSemitones","transposeSteps","transposePeriods","transposeCents","gate","velocity","probability","mod","mod2","mod3","glideMs","microshift","ratchets","tie","evolve","observation","condition"};
 bool expressionRange(const std::string& key, double& lo, double& hi) {
     lo = 0;
     if (key == "gate") hi = 1024;
@@ -141,7 +143,7 @@ bool selectNotes(json_t* pattern, json_t* selector, std::vector<json_t*>& select
 }
 
 bool isNoteOperation(const std::string& name) {
-    return name=="update_notes" || name=="insert_notes" || name=="delete_notes" || name=="transpose_notes" || name=="rotate_notes" || name=="duplicate_notes";
+    return name=="retune_notes" || name=="update_notes" || name=="insert_notes" || name=="delete_notes" || name=="transpose_notes" || name=="rotate_notes" || name=="duplicate_notes";
 }
 
 bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r) {
@@ -150,9 +152,10 @@ bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r
     if(name!="insert_notes") for(const char* f:{"selector","expect_count","allow_empty"}) allowed.insert(f);
     if(name=="update_notes") for(const char* f:{"set","unset","adjust","clamp","resolve_defaults_for_track"}) allowed.insert(f);
     if(name=="insert_notes") for(const char* f:{"notes","collision"}) allowed.insert(f);
-    if(name=="transpose_notes") {allowed.insert("semitones");allowed.insert("degrees");}
+    if(name=="transpose_notes") {allowed.insert("semitones");allowed.insert("degrees");allowed.insert("interval");}
+    if(name=="retune_notes") for(const char* f:{"target_context","mode","target","tie_break","max_error_cents"}) allowed.insert(f);
     if(name=="rotate_notes") {allowed.insert("steps");allowed.insert("collision");}
-    if(name=="duplicate_notes") for(const char* f:{"offset_steps","collision","wrap","destination_pattern_id","copy_observations","return_id_mapping"}) allowed.insert(f);
+    if(name=="duplicate_notes") for(const char* f:{"offset_steps","collision","wrap","destination_pattern_id","copy_observations","return_id_mapping","pitch_context_policy"}) allowed.insert(f);
     if(!fields(op,allowed,r,path)) return false;
     std::string id=str(json_object_get(op,"pattern_id"));
     json_t* patterns=json_object_get(working,"patterns"),*pattern=json_object_get(patterns,id.c_str());
@@ -175,19 +178,55 @@ bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r
     for(auto* n:selected) change.noteIds.push_back(str(json_object_get(n,"id")));
     json_t* events=json_object_get(pattern,"steps");
     if(!events) {events=json_array();json_object_set_new(pattern,"steps",events);}
-    if(name=="delete_notes") {
+    if(name=="retune_notes") {
+        if(!retuneSelected(working,pattern,selected,op,r,change,path)) return false;
+    } else if(name=="delete_notes") {
         removeByIds(events,std::set<std::string>(change.noteIds.begin(),change.noteIds.end()));change.deleted=selected.size();
     } else if(name=="transpose_notes") {
         json_t* semis=json_object_get(op,"semitones"),*degrees=json_object_get(op,"degrees");
+        json_t* interval=json_object_get(op,"interval");
+        if(interval) {
+            if(semis || degrees || !fields(interval,{"steps","periods","cents","ratio"},r,path+".interval") || json_object_size(interval)!=1)
+                return fail(r,"invalid_operation",path,"Exactly one transposition unit is required");
+            const char* field=json_object_get(interval,"steps")?"transposeSteps":json_object_get(interval,"periods")?"transposePeriods":"transposeCents";
+            const bool continuous=std::string(field)=="transposeCents";
+            json_t* amount=json_object_get(interval,continuous?"cents":std::string(field)=="transposeSteps"?"steps":"periods");
+            double cents=0.;
+            if(continuous) {
+                if(json_t* ratio=json_object_get(interval,"ratio")) {
+                    ParseResult parsed;parsed.valid=true;double volts=0.;
+                    Owned copy(json_deep_copy(ratio));
+                    if(!tuning_json::ratio(copy.p,volts,parsed,path+".interval.ratio")) return parseFailure(parsed,r);
+                    cents=volts*1200.;
+                    Owned report(json_pack("{s:I,s:s,s:s,s:f}","operationIndex",json_int_t(index),"operation","transpose_notes","requestedRatio",str(ratio).c_str(),"resolvedCents",cents));
+            r.pitchChanges.push_back(harmony_json::dump(report.p));
+                } else if(!finite(amount)) return fail(r,"invalid_operation",path,"Expected finite cents");
+                else cents=json_number_value(amount);
+            } else if(!integer(amount,INT32_MIN,INT32_MAX)) return fail(r,"invalid_operation",path,"Expected integer interval");
+            for(auto* n:selected) {
+                if(continuous) {
+                    double value=json_number_value(json_object_get(n,field))+cents;
+                    if(!std::isfinite(value)||std::abs(value)>24000.) return fail(r,"pitch_out_of_range",path,"Cent offset exceeds bounds");
+                    json_object_set_new(n,field,json_real(value));
+                } else {
+                    int64_t value=json_integer_value(json_object_get(n,field))+json_integer_value(amount);
+                    if(value<INT32_MIN||value>INT32_MAX) return fail(r,"pitch_out_of_range",path,"Integer offset overflow");
+                    json_object_set_new(n,field,json_integer(value));
+                }
+                ++change.updated;
+            }
+        } else {
         if(bool(semis)==bool(degrees) || !integer(semis?semis:degrees,INT32_MIN,INT32_MAX)) return fail(r,"invalid_operation",path,"Exactly one integer semitones or degrees is required");
         for(auto* n:selected) {
             const char* field=semis?"transposeSemitones":"degree";
-            if(degrees && !json_object_get(n,"degree")) return fail(r,"unsupported_pitch_transform",path+".degrees","Degree transpose requires only degree events");
-            json_t* current=json_object_get(n,field);
+            json_t* pitchObject=degrees && json_object_get(n,"tuned") ? json_object_get(n,"tuned") : n;
+            if(degrees && !json_object_get(pitchObject,"degree")) return fail(r,"unsupported_pitch_transform",path+".degrees","Degree transpose requires only degree events");
+            json_t* current=json_object_get(pitchObject,field);
             if(current && !integer(current,semis?-120:INT32_MIN,semis?120:INT32_MAX)) return fail(r,"pitch_out_of_range",path,"Existing pitch offset is invalid");
             int64_t value=json_integer_value(current)+json_integer_value(semis?semis:degrees);
             if(value<(semis?-120:INT32_MIN) || value>(semis?120:INT32_MAX)) return fail(r,"pitch_out_of_range",path,"Transpose exceeds supported range");
-            if(json_integer_value(semis?semis:degrees)!=0) {json_object_set_new(n,field,json_integer(value));++change.updated;}
+            if(json_integer_value(semis?semis:degrees)!=0) {json_object_set_new(pitchObject,field,json_integer(value));++change.updated;}
+        }
         }
     } else if(name=="update_notes") {
         json_t* set=json_object_get(op,"set"),*unset=json_object_get(op,"unset"),*adjust=json_object_get(op,"adjust");
@@ -221,7 +260,7 @@ bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r
             if(!expressionRange(key,lo,hi)||!touched.insert(key).second||!fields(value,{"multiply","add"},r,path+".adjust."+key)) return fail(r,"invalid_operation",path+".adjust."+key,"Invalid or overlapping adjustment");
             for(const char* f:{"multiply","add"}) if(json_object_get(value,f)&&!finite(json_object_get(value,f))) return fail(r,"invalid_operation",path+".adjust."+key+"."+f,"Expected finite number");
         }
-        int pitches=0;for(const char* f:{"note","degree","pitchV","harmonic"}) pitches+=json_object_get(set,f)!=nullptr;
+        int pitches=0;for(const char* f:{"note","degree","pitchV","harmonic","tuned"}) pitches+=json_object_get(set,f)!=nullptr;
         if(pitches>1) return fail(r,"invalid_operation",path+".set","Set only one pitch representation");
         json_t* defaults=nullptr;json_t* trackJ=json_object_get(op,"resolve_defaults_for_track");
         if(trackJ) {
@@ -232,7 +271,7 @@ bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r
         for(auto* n:selected) {
             Owned before(json_deep_copy(n));
             if(pitches) {
-                for(const char* f:{"note","degree","pitchV","harmonic"}) if(!json_object_get(set,f)) json_object_del(n,f);
+                for(const char* f:{"note","degree","pitchV","harmonic","tuned"}) if(!json_object_get(set,f)) json_object_del(n,f);
                 if(!json_object_get(set,"degree")) json_object_del(n,"octave");
             }
             json_object_foreach(set,key,value) json_object_set(n,key,value);
@@ -259,6 +298,8 @@ bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r
         }
     } else {
         const bool duplicate=name=="duplicate_notes",insert=name=="insert_notes";
+        const auto policy=json_object_get(op,"pitch_context_policy")?str(json_object_get(op,"pitch_context_policy")):"source";
+        if(policy!="source" && policy!="destination") return fail(r,"invalid_operation",path+".pitch_context_policy","Expected source or destination");
         json_t* destination=pattern;
         json_t* destId=json_object_get(op,"destination_pattern_id");
         if(destId) {
@@ -266,6 +307,11 @@ bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r
             if(!json_is_string(destId)||!destination) return fail(r,"object_not_found",path+".destination_pattern_id","Destination pattern not found");
             if(!json_equal(json_object_get(destination,"resolution"),json_object_get(pattern,"resolution"))) return fail(r,"invalid_operation",path+".destination_pattern_id","Pattern resolutions must match");
             change.patternId=str(destId);
+        }
+        if(duplicate && destination!=pattern && std::any_of(selected.begin(),selected.end(),[](json_t* n){return json_object_get(n,"tuned")!=nullptr || json_object_get(n,"harmonic")!=nullptr;})) {
+            Owned report(json_pack("{s:I,s:s,s:s,s:s,s:s}","operationIndex",json_int_t(index),"operation","duplicate_notes","sourcePattern",id.c_str(),"destinationPattern",change.patternId.c_str(),"pitchContextPolicy",policy.c_str()));
+            json_object_set_new(report.p,"harmonicBindingPolicy",json_string("destination"));
+            r.pitchChanges.push_back(harmony_json::dump(report.p));
         }
         json_t* destEvents=json_object_get(destination,"steps");
         if(!destEvents) {destEvents=json_array();json_object_set_new(destination,"steps",destEvents);}
@@ -290,6 +336,19 @@ bool applyNoteOperation(json_t* working, json_t* op, size_t index, EditResult& r
                 int64_t step=json_integer_value(json_object_get(n,"step"))+json_integer_value(offset);
                 if(!duplicate||json_is_true(json_object_get(op,"wrap"))) step=(step%length+length)%length;
                 json_object_set_new(copy,"step",json_integer(step));
+                if(duplicate && destination!=pattern) {
+                    json_t* harmonic=json_object_get(copy,"harmonic");json_t* range=json_object_get(harmonic,"range");
+                    for(json_t* endpoint:{copy,json_object_get(harmonic,"reference"),json_object_get(range,"min"),json_object_get(range,"max")}) {
+                        json_t* tuned=json_object_get(endpoint,"tuned");if(!tuned)continue;
+                        if(policy=="destination")json_object_del(tuned,"context");
+                        else if(!json_object_get(tuned,"context")) {
+                            json_t* context=json_object_get(pattern,"pitchContext");
+                            if(!context)context=json_object_get(json_object_get(working,"pitchSystems"),"defaultContext");
+                            if(!json_is_string(context))return fail(r,"unresolved_pitch_context",path,"Source native reference has no context");
+                            json_object_set(tuned,"context",context);
+                        }
+                    }
+                }
                 if(duplicate) {
                     sourceIds.push_back(str(json_object_get(n,"id")));json_object_del(copy,"id");
                     if(json_is_false(json_object_get(op,"copy_observations"))) json_object_del(copy,"observation");
@@ -348,7 +407,7 @@ json_t* editChangesJson(const EditResult& r) {
             json_t* a=json_array();for(size_t i=0;i<std::min(c.createdIds.size(),c.idLimit);++i) json_array_append_new(a,json_pack("{s:s,s:s}","source",c.createdIds[i].first.c_str(),"created",c.createdIds[i].second.c_str()));json_object_set_new(o,"createdIds",a);
         }
     }
-    for(const auto& encoded:r.voicingChanges) {
+    for(const auto* reports : {&r.voicingChanges,&r.pitchChanges}) for(const auto& encoded:*reports) {
         json_error_t error;json_t* report=json_loads(encoded.c_str(),0,&error);
         if(!report)continue;
         const json_int_t index=json_integer_value(json_object_get(report,"operationIndex"));
@@ -374,10 +433,10 @@ std::string serializeNotesView(const Composition& comp,json_t* request) {
     json_t* selector=json_object_get(request,"selector");if(!selector)selector=defaultSelector.p;
     std::vector<json_t*> selected;if(!selectNotes(pattern,selector,selected,r,"selector")) return error();
     json_t* projection=json_object_get(request,"fields");bool full=str(projection)=="full";
-    std::set<std::string> projectionFields={"id","step","note","degree","octave","pitchV","transposeSemitones","velocity","probability","condition","harmonic"};
+    std::set<std::string> projectionFields={"id","step","note","degree","octave","pitchV","transposeSemitones","velocity","probability","condition","harmonic","tuned"};
     if(projection&&!full) {
         if(!json_is_array(projection)||json_array_size(projection)==0||json_array_size(projection)>eventFields.size()) {fail(r,"invalid_request","fields","Expected full or nonempty field list");return error();}
-        projectionFields.clear();size_t i;json_t* v;json_array_foreach(projection,i,v) if(!json_is_string(v)||(!eventFields.count(str(v)) && str(v)!="effectivePitchV")||!projectionFields.insert(str(v)).second) {fail(r,"invalid_request","fields","Unknown or repeated projection field");return error();}
+        projectionFields.clear();size_t i;json_t* v;json_array_foreach(projection,i,v) if(!json_is_string(v)||(!eventFields.count(str(v)) && str(v)!="effectivePitchV" && str(v)!="pitchDetails")||!projectionFields.insert(str(v)).second) {fail(r,"invalid_request","fields","Unknown or repeated projection field");return error();}
     }
     json_t* sizeJ=json_object_get(request,"page_size");
     if(sizeJ&&!integer(sizeJ,1,256)) {fail(r,"invalid_request","page_size","Expected integer 1–256");return error();}
@@ -395,17 +454,17 @@ std::string serializeNotesView(const Composition& comp,json_t* request) {
         if(fingerprint!=hash||position>selected.size()) {fail(r,"invalid_request","cursor","Cursor does not match this query");return error();}
         offset=position;
     }
-    Owned out(json_pack("{s:b,s:i,s:i,s:s,s:s,s:i}","ok",1,"revision",comp.revision,"schemaVersion",3,"view","notes","patternId",id.c_str(),"total",int(selected.size())));
+    Owned out(json_pack("{s:b,s:i,s:i,s:s,s:s,s:i}","ok",1,"revision",comp.revision,"schemaVersion",4,"view","notes","patternId",id.c_str(),"total",int(selected.size())));
     json_t* notes=json_array();json_object_set_new(out.p,"notes",notes);
     size_t end=std::min(offset+size,selected.size());
     for(size_t i=offset;i<end;++i) {
         json_t* n=full?json_deep_copy(selected[i]):json_object();
         if(!full) for(const auto& f:projectionFields) if(json_t* v=json_object_get(selected[i],f.c_str())) json_object_set(n,f.c_str(),v);
-        if(projectionFields.count("effectivePitchV") && !full) {
+        if((projectionFields.count("effectivePitchV") || projectionFields.count("pitchDetails")) && !full) {
             const int step=json_integer_value(json_object_get(selected[i],"step"));
             const auto& compiled=comp.patterns.at(id);
             for(const auto& event:compiled.steps) if(event.step==step)
-                json_object_set_new(n,"derived",event.pitchType==PitchType::HARMONIC ? json_pack("{s:b}","requiresContext",1) : json_pack("{s:f}","effectivePitchV",double(event.compiledPitchV)));
+                json_object_set_new(n,"derived",event.pitchType==PitchType::HARMONIC ? json_pack("{s:b}","requiresContext",1) : (projectionFields.count("pitchDetails")?nativePitchDetails(comp,event,event.compiledPitchV):json_pack("{s:f}","effectivePitchV",double(event.compiledPitchV))));
         }
         json_array_append_new(notes,n);
     }

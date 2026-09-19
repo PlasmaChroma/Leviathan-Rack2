@@ -1,4 +1,8 @@
 import ast
+import asyncio
+import json
+from types import SimpleNamespace
+from urllib.parse import parse_qs, urlencode, urlsplit
 import unittest
 from pathlib import Path
 
@@ -101,6 +105,37 @@ class ServerContractTest(unittest.TestCase):
         self.assertIn('await _sibyl_call(f"sibyl/{params.module_id}/transport", "POST"', self.source)
         self.assertIn('Literal["scene", "arrangement", "patterns", "randomness"]', self.source)
         self.assertIn('payload = params.model_dump(exclude={"module_id"}, exclude_none=True)', self.source)
+
+    def test_sibyl_native_pitch_queries_are_exposed(self):
+        self.assertIn('"pitch_systems", "pitch_context", "tuning_catalog", "map_intervals", "export_tuning_scl"] = Field', self.source)
+        self.assertIn('query["id"] = params.id', self.source)
+        self.assertIn('"page_size", "cursor"', self.source)
+
+    def test_sibyl_interval_mapping_forwards_typed_query(self):
+        node = next(n for n in ast.parse(self.source).body
+                    if isinstance(n, ast.AsyncFunctionDef) and n.name == "vcv_sibyl_get_composition")
+        node.decorator_list = []
+        node.args.args[0].annotation = None
+        called = []
+
+        async def call(endpoint):
+            called.append(endpoint)
+            return {"ok": True}
+
+        namespace = {"json": json, "urlencode": urlencode, "_sibyl_call": call,
+                     "_err": lambda error: str(error)}
+        exec(compile(ast.Module(body=[node], type_ignores=[]), str(SERVER_PATH), "exec"), namespace)
+        params = SimpleNamespace(module_id=123, view="map_intervals", id=None,
+                                 context_id="53 EDO", intervals=[{"ratio": "3/2"}, {"cents": 700.25}],
+                                 tie_break="higher", pattern_id=None, selector=None, fields=None,
+                                 page_size=None, cursor=None, sample_beats=None, scene_id=None,
+                                 scene_repeat=None, beat=None)
+        result = asyncio.run(namespace["vcv_sibyl_get_composition"](params))
+        self.assertTrue(json.loads(result)["ok"])
+        query = parse_qs(urlsplit(called[0]).query)
+        self.assertEqual(query["context_id"], ["53 EDO"])
+        self.assertEqual(json.loads(query["intervals"][0]), params.intervals)
+        self.assertEqual(query["tie_break"], ["higher"])
 
     def test_moirai_tools_use_generic_routes_and_forward_revision_policies(self):
         self.assertIn('f"semantic/{params.module_id}/document?', self.source)

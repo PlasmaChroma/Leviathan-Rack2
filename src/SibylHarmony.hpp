@@ -56,7 +56,21 @@ inline float harmonicSelectedPitch(const Composition &comp, const StepEvent &eve
 }
 inline float contextualPitch(const Composition &comp, const StepEvent &event, size_t scene, int repeat, double beat) {
   return event.pitchType == PitchType::HARMONIC
-           ? harmonicSelectedPitch(comp, event, scene, repeat, beat) + event.transposeSemitones / 12.f
+           ? (event.pitchOffsets.fields ? float(double(harmonicSelectedPitch(comp,event,scene,repeat,beat))+double(event.transposeSemitones)/12.+event.pitchOffsets.periods+event.pitchOffsets.cents/1200.) : harmonicSelectedPitch(comp, event, scene, repeat, beat) + event.transposeSemitones / 12.f)
            : event.compiledPitchV;
+}
+// Assignment-specific native results include every event and scene transform.
+inline float sceneEventPitch(const Composition& comp,const StepEvent& event,const TrackAssignment& assignment,size_t scene,int repeat,double beat) {
+  if(event.pitchType==PitchType::HARMONIC && assignment.harmonicPitches) {
+    const auto* binding=effectiveHarmony(comp,scene);
+    if(!binding) return std::numeric_limits<float>::quiet_NaN();
+    const auto& p=comp.progressions[binding->compiledProgression];
+    int chord=p.chords[harmonyChordIndex(p,harmonyCoordinate(comp,scene,repeat,beat,*binding),binding->loop)].definition;
+    const auto& table=*assignment.harmonicPitches;
+    HarmonicRoutePitch key{event.step,chord,0.f};
+    auto it=std::lower_bound(table.begin(),table.end(),key,[](const HarmonicRoutePitch& a,const HarmonicRoutePitch& b){return a.step==b.step?a.chord<b.chord:a.step<b.step;});
+    if(it!=table.end()&&it->step==event.step&&it->chord==chord) return it->volts;
+  }
+  return assignedPitch(event,assignment,contextualPitch(comp,event,scene,repeat,beat));
 }
 } // namespace sibyl

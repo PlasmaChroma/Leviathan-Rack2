@@ -34,7 +34,7 @@ inline void compileAutomation(json_t* root, Composition& comp, ParseResult& resu
         ids.emplace_back(key);totalPoints+=json_array_size(json_object_get(value,"points"));
     }
     if(totalPoints>16384) {error("automation","Maximum 16384 total points","capacity_exceeded");return;}
-    const size_t bytes=ids.size()*(sizeof(AutomationCurve)+192)+totalPoints*(sizeof(AutomationPoint)+sizeof(AutomationSegment))+
+    const size_t bytes=comp.pitchStorageBytes+ids.size()*(sizeof(AutomationCurve)+192)+totalPoints*(sizeof(AutomationPoint)+sizeof(AutomationSegment))+
         comp.arrangement.size()*(sizeof(AutomationRoute)+sizeof(double));
     if(bytes>32u*1024u*1024u) {error("automation","Compiled storage exceeds 32 MiB","capacity_exceeded");return;}
     std::sort(ids.begin(),ids.end());comp.automation.reserve(ids.size());
@@ -148,7 +148,7 @@ inline std::string serializeAutomationView(const Composition& comp,json_t* reque
     size_t i;json_t* beat;json_array_foreach(beats,i,beat)
         if(!json_is_number(beat)||!std::isfinite(json_number_value(beat))||json_number_value(beat)<0.||json_number_value(beat)>curve->duration)
             return fail("Sample coordinate outside curve scope");
-    json_t* root=json_pack("{s:b,s:i,s:i,s:s,s:s}","ok",1,"revision",comp.revision,"schemaVersion",3,"view","automation","id",curve->id.c_str());
+    json_t* root=json_pack("{s:b,s:i,s:i,s:s,s:s}","ok",1,"revision",comp.revision,"schemaVersion",4,"view","automation","id",curve->id.c_str());
     json_object_set_new(root,"automation",automationToJson(*curve));
     json_t* derived=json_pack("{s:f,s:i}","durationBeats",curve->duration,"segmentCount",int(curve->segments.size()));
     json_t* samples=json_array();size_t cursor=0;

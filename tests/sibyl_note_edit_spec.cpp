@@ -11,7 +11,11 @@ CompositionPtr base() {
     auto p=parseCompositionJson(R"({"meta":{"scale":"major"},"tracks":[{"id":"v","channel":0,"defaultVelocity":0.8,"defaultGate":0.6}],"patterns":{"p":{"length":16,"steps":[{"step":0,"degree":0,"velocity":0.2,"probability":0.5,"mod":1,"mod2":2,"mod3":3,"evolve":false},{"step":4,"note":"C4","velocity":0.35},{"step":8,"pitchV":1,"velocity":0.8},{"step":12,"degree":4},{"step":15,"note":"G4"}],"evolution":{"probability":0.2}},"dest":{"length":16,"steps":[]}},"arrangement":[{"id":"s","tracks":{"v":"p"}}]})",1);
     assert(p.valid);return p.composition;
 }
+#include "sibyl_pitch_edit_cases.hpp"
+#include "sibyl_native_pitch_cases.hpp"
 int main() {
+    pitchEditCases();
+    nativePitchCases();
     auto b=base(); auto original=serializeFullCompositionJson(*b);
     auto trans=edit(*b,R"([{"op":"transpose_notes","pattern_id":"p","selector":{"order":"stepDesc","limit":4},"expect_count":4,"semitones":-12}])");
     assert(trans.valid && trans.changes[0].updated==4);

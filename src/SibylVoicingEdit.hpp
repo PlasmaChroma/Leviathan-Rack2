@@ -45,6 +45,38 @@ inline bool applyVoicingOperation(json_t *working, json_t *op, size_t operationI
   json_t *list = json_object_get(op, "voices");
   if (!json_is_array(list) || json_array_size(list) < 1 || json_array_size(list) > 8)
     return fail("invalid_operation", ".voices", "Expected 1-8 voices in low-to-high order");
+  // Compile only the requested progression and grid here. Other operations in
+  // this transaction may temporarily detach/repair unrelated score references.
+  json_t *isolated =
+      json_pack("{s:i,s:{s:{s:O}},s:{s:{s:i,s:s}}}", "schemaVersion", 4, "harmony", "progressions",
+                progressionId.c_str(), progression, "patterns", "grid", "length", 1, "resolution", resolution.c_str());
+  if(json_object_get(progression,"pitchContext")) {
+    json_t* all=json_object_get(working,"pitchSystems");json_t* subset=json_pack("{s:{},s:{},s:{}}","tunings","scales","contexts");
+    std::set<std::string> contextIds{string(json_object_get(progression,"pitchContext"))};
+    size_t vi;json_t* voice;json_array_foreach(list,vi,voice) for(const char* endpoint:{"min","max"}) {
+      json_t* context=json_object_get(json_object_get(json_object_get(voice,endpoint),"tuned"),"context");if(context)contextIds.insert(string(context));
+    }
+    for(const auto& contextId:contextIds) {
+      json_t* context=json_object_get(json_object_get(all,"contexts"),contextId.c_str());
+      if(!context)continue;
+      json_object_set(json_object_get(subset,"contexts"),contextId.c_str(),context);
+      auto tuningId=string(json_object_get(context,"tuning")),scaleId=string(json_object_get(context,"scale"));
+      json_object_set(json_object_get(subset,"tunings"),tuningId.c_str(),json_object_get(json_object_get(all,"tunings"),tuningId.c_str()));
+      if(!scaleId.empty())json_object_set(json_object_get(subset,"scales"),scaleId.c_str(),json_object_get(json_object_get(all,"scales"),scaleId.c_str()));
+    }
+    json_object_set_new(isolated,"pitchSystems",subset);
+  }
+  auto compiled = parseCompositionJson(dump(isolated), 0);
+  json_decref(isolated);
+  if (!compiled.valid) {
+    if (compiled.errors.empty())
+      return fail("invalid_operation", ".progression_id", "Invalid progression/grid");
+    const auto &issue = compiled.errors.front();
+    return fail(issue.code.empty() ? "invalid_operation" : issue.code,
+                issue.path.find("patterns.grid") == 0 ? ".resolution" : ".progression_id", issue.message);
+  }
+  const auto &source = compiled.composition->progressions.front();
+  const bool native=!source.pitchContext.empty();
   std::vector<VoicingVoice> voices;
   std::set<std::string> tracks, patterns;
   json_t *bank = json_object_get(working, "patterns");
@@ -66,7 +98,13 @@ inline bool applyVoicingOperation(json_t *working, json_t *op, size_t operationI
         string(json_object_get(track, "id")) == voice.track;
     if (!exists)
       return fail("object_not_found", ".voices", "Target track does not exist: " + voice.track);
-    if (!note(json_object_get(value, "min"), voice.minimum, validation, vp + ".min") ||
+    if(native) {
+      NativePitch lo,hi;
+      if(!staticPitch(json_object_get(value,"min"),source.pitchContext,*compiled.composition,lo,validation,vp+".min",true) ||
+         !staticPitch(json_object_get(value,"max"),source.pitchContext,*compiled.composition,hi,validation,vp+".max",true) || lo.baseV>hi.baseV)
+        return fail("invalid_operation",".voices","Expected ordered precise static register");
+      voice.minimumV=lo.baseV;voice.maximumV=hi.baseV;voice.minimum=voicingTick(lo.baseV);voice.maximum=voicingTick(hi.baseV);
+    } else if (!note(json_object_get(value, "min"), voice.minimum, validation, vp + ".min") ||
         !note(json_object_get(value, "max"), voice.maximum, validation, vp + ".max") || voice.minimum > voice.maximum)
       return fail("invalid_operation", ".voices", "Expected ordered inclusive scientific-note register");
     if (policy == "createOnly" &&
@@ -74,21 +112,6 @@ inline bool applyVoicingOperation(json_t *working, json_t *op, size_t operationI
       return fail("object_in_use", ".voices", "createOnly requires unused patterns and unassigned destination tracks");
     voices.push_back(std::move(voice));
   }
-  // Compile only the requested progression and grid here. Other operations in
-  // this transaction may temporarily detach/repair unrelated score references.
-  json_t *isolated =
-      json_pack("{s:i,s:{s:{s:O}},s:{s:{s:i,s:s}}}", "schemaVersion", 3, "harmony", "progressions",
-                progressionId.c_str(), progression, "patterns", "grid", "length", 1, "resolution", resolution.c_str());
-  auto compiled = parseCompositionJson(dump(isolated), 0);
-  json_decref(isolated);
-  if (!compiled.valid) {
-    if (compiled.errors.empty())
-      return fail("invalid_operation", ".progression_id", "Invalid progression/grid");
-    const auto &issue = compiled.errors.front();
-    return fail(issue.code.empty() ? "invalid_operation" : issue.code,
-                issue.path.find("patterns.grid") == 0 ? ".resolution" : ".progression_id", issue.message);
-  }
-  const auto &source = compiled.composition->progressions.front();
   double grid = compiled.composition->patterns.at("grid").resolutionBeats;
   json_t *sceneLengthJ = json_object_get(scene, "lengthBeats");
   double sceneLength = sceneLengthJ ? json_number_value(sceneLengthJ) : 16.;
@@ -106,7 +129,7 @@ inline bool applyVoicingOperation(json_t *working, json_t *op, size_t operationI
   VoicingBudget budget;
   budget.partials = result.voicingPartials;
   budget.transitions = result.voicingTransitions;
-  auto solution = voiceProgression(source, voices, budget);
+  auto solution = native ? voiceNativeProgression(source,voices,budget) : voiceProgression(source, voices, budget);
   result.voicingPartials = budget.partials;
   result.voicingTransitions = budget.transitions;
   if (!solution.valid)
@@ -116,7 +139,7 @@ inline bool applyVoicingOperation(json_t *working, json_t *op, size_t operationI
 
   json_t *report =
       json_pack("{s:i,s:s,s:s,s:s,s:s,s:b,s:b,s:i,s:i}", "operationIndex", int(operationIndex), "operation",
-                "voice_progression", "algorithm", "voice_progression_v1", "progressionId", progressionId.c_str(),
+                "voice_progression", "algorithm", native ? "voice_progression_micro_v1" : "voice_progression_v1", "progressionId", progressionId.c_str(),
                 "sceneId", sceneId.c_str(), "materializesNotes", 1, "optimizesLoopSeam", 0, "visitedPartials",
                 int(budget.partials), "evaluatedTransitions", int(budget.transitions));
   json_t *references = json_array();
@@ -140,11 +163,23 @@ inline bool applyVoicingOperation(json_t *working, json_t *op, size_t operationI
   json_object_set_new(report, "affectedReferences", references);
   json_object_set_new(report, "affectedReferencesTotal", json_integer(referencesTotal));
   json_object_set_new(report, "referencesTruncated", json_boolean(referencesTotal > 128));
-  json_object_set_new(report, "objective",
+  if(!native) json_object_set_new(report, "objective",
                       json_pack("{s:i,s:i,s:I,s:I,s:f}", "missingPitchClasses", solution.missing, "maximumLeap",
                                 solution.maximumLeap, "totalMovement", json_int_t(solution.movement), "squaredMovement",
                                 json_int_t(solution.squaredMovement), "initialDisplacement",
                                 solution.initialDisplacementTwice * .5));
+  if(native) {
+    json_object_set_new(report,"objective",json_pack("{s:i,s:i,s:I,s:I,s:f}","missingTones",solution.missing,"maximumLeapMilliCents",solution.maximumLeap,"totalMovementMilliCents",json_int_t(solution.movement),"squaredMovementMilliCents2",json_int_t(solution.squaredMovement),"initialDisplacementMilliCents",solution.initialDisplacementTwice*.5));
+    json_object_set_new(report,"scoringResolutionCents",json_real(.001));
+    json_object_set_new(report,"pitchContext",json_string(source.pitchContext.c_str()));
+    json_object_set_new(report,"tuning",json_string(compiled.composition->pitchSystems.contexts.at(source.pitchContext).tuning.c_str()));
+    json_t* provenance=json_array();
+    for(size_t c=0;c<source.chords.size();++c) for(size_t v=0;v<voices.size();++v) {
+      const auto& chosen=solution.selected[c];
+      json_array_append_new(provenance,json_pack("{s:s,s:s,s:s,s:I,s:f,s:f}","chordId",source.chords[c].id.c_str(),"trackId",voices[v].track.c_str(),"toneId",source.chords[c].tones[chosen.toneIndices[v]].id.c_str(),"periods",json_int_t(chosen.periods[v]),"pitchV",chosen.volts[v],"cents",chosen.volts[v]*1200.));
+    }
+    json_object_set_new(report,"provenance",provenance);
+  }
   json_t *destinations = json_array();
   if (!assignments) {
     assignments = json_object();
@@ -158,7 +193,7 @@ inline bool applyVoicingOperation(json_t *working, json_t *op, size_t operationI
       double gate = ((end - source.chords[chord].beat) / grid) * ratio;
       json_array_append_new(steps,
                             json_pack("{s:i,s:f,s:f,s:i}", "step", int(std::round(source.chords[chord].beat / grid)),
-                                      "pitchV", solution.pitches[chord][v] / 12., "gate", gate, "ratchets", 1));
+                                      "pitchV", native ? solution.selected[chord].volts[v] : solution.pitches[chord][v] / 12., "gate", gate, "ratchets", 1));
     }
     json_t *pattern = json_pack("{s:i,s:s,s:o}", "length", int(std::round(source.length / grid)), "resolution",
                                 resolution.c_str(), "steps", steps);

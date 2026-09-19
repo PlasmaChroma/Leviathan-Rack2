@@ -1,74 +1,12 @@
 #pragma once
 #include "SibylHarmony.hpp"
-#include "SibylJSON.hpp"
+#include "SibylJSONUtils.hpp"
+#include "SibylNativeHarmony.hpp"
 #include <climits>
 #include <map>
 #include <set>
 
-namespace sibyl {
-float degreeToPitchV(int, int, ScaleType, const std::string &, int);
-float noteToPitchV(const std::string &, ParseResult &, const std::string &);
-namespace harmony_json {
-inline std::string dump(json_t *value) {
-  char *text = json_dumps(value, JSON_COMPACT | JSON_SORT_KEYS | JSON_ENCODE_ANY);
-  std::string result = text ? text : "null";
-  free(text);
-  return result;
-}
-inline std::string string(json_t *value) {
-  return json_is_string(value) ? std::string(json_string_value(value), json_string_length(value)) : std::string();
-}
-inline bool error(ParseResult &result, const std::string &path, const std::string &message,
-                  const char *code = "invalid_harmony") {
-  result.errors.push_back({path, message, code});
-  result.valid = false;
-  return false;
-}
-inline bool fields(json_t *object, std::initializer_list<const char *> names, ParseResult &r, const std::string &path) {
-  if (!json_is_object(object))
-    return error(r, path, "Expected object");
-  const char *key;
-  json_t *value;
-  json_object_foreach(object, key, value) {
-    bool allowed = false;
-    for (const char *name : names)
-      allowed |= std::string(key) == name;
-    if (!allowed)
-      return error(r, path + "." + key, "Unknown field");
-  }
-  return true;
-}
-inline bool id(const std::string &value) {
-  return !value.empty() && value.size() <= 64 &&
-         std::none_of(value.begin(), value.end(), [](unsigned char c) { return c < 32 || c == 127; });
-}
-inline bool number(json_t *value, double lo, double hi) {
-  return json_is_number(value) && std::isfinite(json_number_value(value)) && json_number_value(value) >= lo &&
-         json_number_value(value) <= hi;
-}
-inline bool integer(json_t *value, int lo, int hi) { return json_is_integer(value) && number(value, lo, hi); }
-inline bool note(json_t *value, int &semitone, ParseResult &r, const std::string &path) {
-  std::string text = string(value);
-  size_t i = 1;
-  if (text.empty() || text[0] < 'A' || text[0] > 'G')
-    return error(r, path, "Expected scientific note");
-  if (i < text.size() && (text[i] == '#' || text[i] == 'b'))
-    ++i;
-  if (i < text.size() && text[i] == '-')
-    ++i;
-  if (i == text.size())
-    return error(r, path, "Expected scientific-note octave");
-  for (; i < text.size(); ++i)
-    if (text[i] < '0' || text[i] > '9')
-      return error(r, path, "Invalid scientific note");
-  if (text.size() > 8)
-    return error(r, path, "Note outside supported domain", "pitch_out_of_range");
-  float v = noteToPitchV(text, r, path);
-  if (!std::isfinite(v) || v < -10 || v > 10)
-    return error(r, path, "Note outside -10 to 10 V", "pitch_out_of_range");
-  semitone = int(std::lround(v * 12.));
-  return true;
-}
+namespace sibyl { namespace harmony_json {
 inline HarmonyBinding binding(json_t *value, bool scene, ParseResult &r, const std::string &path) {
   HarmonyBinding b;
   b.present = value != nullptr;
@@ -221,8 +159,10 @@ inline json_t *bindingJson(const HarmonyBinding &b) {
 }
 inline json_t *progressionJson(const HarmonyProgression &p) {
   json_t *out = json_pack("{s:f}", "lengthBeats", p.length);
+  if(!p.pitchContext.empty()) json_object_set_new(out,"pitchContext",json_string(p.pitchContext.c_str()));
   json_t *chords = json_array();
   for (const auto &c : p.chords) {
+    if(!c.authored.empty()) { json_error_t je; json_array_append_new(chords,json_loads(c.authored.c_str(),0,&je)); continue; }
     json_t *chord = json_pack("{s:s,s:f,s:s}", "id", c.id.c_str(), "beat", c.beat, "root", c.root.c_str());
     json_t *intervals = json_array();
     for (int i : c.intervals)
@@ -269,15 +209,18 @@ inline void compileHarmony(json_t *root, Composition &comp, ParseResult &r) {
   }
   std::sort(ids.begin(), ids.end());
   std::map<std::vector<int>, int> chordDefinitions;
+  int nextChordDefinition=0;
   for (const auto &name : ids) {
     std::string path = "harmony.progressions." + name;
     value = json_object_get(definitions, name.c_str());
-    if (!id(name) || !fields(value, {"lengthBeats", "chords"}, r, path)) {
+    if (!id(name) || !fields(value, {"lengthBeats", "chords", "pitchContext"}, r, path)) {
       error(r, path, "Invalid progression");
       continue;
     }
     HarmonyProgression p;
     p.id = name;
+    p.pitchContext=string(json_object_get(value,"pitchContext"));
+    if(json_object_get(value,"pitchContext") && !comp.pitchSystems.contexts.count(p.pitchContext)) { error(r,path,"Undefined pitch context","unresolved_pitch_context"); continue; }
     p.length = json_number_value(json_object_get(value, "lengthBeats"));
     if (!number(json_object_get(value, "lengthBeats"), 0, std::numeric_limits<double>::max()) || p.length <= 0) {
       error(r, path + ".lengthBeats", "Expected positive finite length");
@@ -294,7 +237,7 @@ inline void compileHarmony(json_t *root, Composition &comp, ParseResult &r) {
     json_array_foreach(chords, i, chord) {
       std::string cp = path + ".chords[" + std::to_string(i) + "]";
       HarmonyChord c;
-      if (!fields(chord, {"id", "beat", "root", "intervals"}, r, cp))
+      if (!fields(chord, {"id", "beat", "root", "intervals", "rootPitch", "tones"}, r, cp))
         continue;
       c.id = string(json_object_get(chord, "id"));
       c.root = string(json_object_get(chord, "root"));
@@ -306,6 +249,14 @@ inline void compileHarmony(json_t *root, Composition &comp, ParseResult &r) {
       if (!number(json_object_get(chord, "beat"), 0, p.length) || c.beat >= p.length ||
           (i == 0 ? c.beat != 0 : (!p.chords.empty() && c.beat <= p.chords.back().beat))) {
         error(r, cp + ".beat", "Expected ordered markers starting at zero, before endpoint");
+        continue;
+      }
+      const bool native=json_object_get(chord,"rootPitch") || json_object_get(chord,"tones");
+      if(native != !p.pitchContext.empty() || (native && (json_object_get(chord,"root")||json_object_get(chord,"intervals")))) {
+        error(r,cp,"A progression must contain only native chords with pitchContext, or only legacy chords"); continue;
+      }
+      if(native) {
+        if(nativeChord(chord,p.pitchContext,comp,c,r,cp)) { c.definition=nextChordDefinition++;p.chords.push_back(std::move(c)); }
         continue;
       }
       if (!note(json_object_get(chord, "root"), c.rootSemitone, r, cp + ".root"))
@@ -336,7 +287,8 @@ inline void compileHarmony(json_t *root, Composition &comp, ParseResult &r) {
       }
       auto signature = c.intervals;
       signature.insert(signature.begin(), c.rootSemitone);
-      auto inserted = chordDefinitions.emplace(signature, int(chordDefinitions.size()));
+      auto inserted = chordDefinitions.emplace(signature, nextChordDefinition);
+      if(inserted.second) ++nextChordDefinition;
       c.definition = inserted.first->second;
       p.chords.push_back(std::move(c));
     }
@@ -366,7 +318,8 @@ inline void compileHarmony(json_t *root, Composition &comp, ParseResult &r) {
   for (const auto &name : patterns)
     for (auto &event : comp.patterns[name].steps)
       if (event.pitchType == PitchType::HARMONIC) {
-        auto found = expressions.find(event.harmonic);
+        const std::string expressionKey=event.harmonic+"\n"+comp.patterns[name].pitchContext;
+        auto found = expressions.find(expressionKey);
         if (found != expressions.end()) {
           event.harmonicExpression = found->second;
           continue;
@@ -374,11 +327,17 @@ inline void compileHarmony(json_t *root, Composition &comp, ParseResult &r) {
         json_error_t je;
         json_t *authored = json_loads(event.harmonic.c_str(), 0, &je);
         HarmonicExpression e;
-        bool valid = expression(authored, e, comp.meta, r, "patterns." + name + ".notes." + event.id + ".harmonic");
+        json_t* ref=json_object_get(authored,"reference"), *range=json_object_get(authored,"range");
+        const auto role=string(json_object_get(authored,"role"));
+        bool extended=json_object_get(authored,"periods") || json_object_get(authored,"toneId") || json_object_get(ref,"tuned") ||
+          json_is_object(json_object_get(range,"min")) || json_is_object(json_object_get(range,"max")) ||
+          (!role.empty() && role!="root" && role!="third" && role!="fifth");
+        const auto path="patterns."+name+".notes."+event.id+".harmonic";
+        bool valid=extended ? nativeExpression(authored,e,comp,comp.patterns[name].pitchContext,r,path) : expression(authored,e,comp.meta,r,path);
         json_decref(authored);
         if (valid) {
           event.harmonicExpression = int(comp.harmonicExpressions.size());
-          expressions[event.harmonic] = event.harmonicExpression;
+          expressions[expressionKey] = event.harmonicExpression;
           comp.harmonicExpressions.push_back(std::move(e));
         }
       }
@@ -401,19 +360,22 @@ inline void compileHarmony(json_t *root, Composition &comp, ParseResult &r) {
   }
   std::set<std::string> assigned;
   std::vector<std::map<int, float>> tables(comp.harmonicExpressions.size());
-  size_t storage = comp.progressions.capacity() * sizeof(HarmonyProgression) +
+  size_t storage = comp.pitchStorageBytes + comp.progressions.capacity() * sizeof(HarmonyProgression) +
                    comp.harmonicExpressions.capacity() * sizeof(HarmonicExpression);
   for (const auto &progression : comp.progressions) {
-    storage += progression.id.capacity() + 1 + progression.chords.capacity() * sizeof(HarmonyChord);
+    storage += progression.id.capacity() + progression.pitchContext.capacity() + 2 + progression.chords.capacity() * sizeof(HarmonyChord);
     for (const auto &chord : progression.chords)
-      storage += chord.id.capacity() + chord.root.capacity() + 2 + chord.intervals.capacity() * sizeof(int);
+      {
+      storage += chord.id.capacity() + chord.root.capacity() + chord.context.capacity()+chord.authored.capacity()+4 + chord.intervals.capacity() * sizeof(int)+chord.tones.capacity()*sizeof(NativeChordTone);
+      for(const auto& tone:chord.tones) { storage+=tone.id.capacity()+tone.pitch.context.capacity()+2+tone.roles.capacity()*sizeof(std::string); for(const auto& role:tone.roles) storage+=role.capacity()+1; }
+    }
   }
   for (const auto &curve : comp.automation)
     storage += sizeof(AutomationCurve) + 192 + curve.points.size() * sizeof(AutomationPoint) +
                curve.segments.size() * sizeof(AutomationSegment);
   storage += comp.arrangement.size() * (sizeof(AutomationRoute) + sizeof(double));
   for (const auto &e : comp.harmonicExpressions)
-    storage += e.authored.capacity() + 1;
+    storage += e.authored.capacity() + e.roleName.capacity() + e.toneId.capacity() + 3;
   for (const auto &pattern : comp.patterns)
     for (const auto &event : pattern.second.steps)
       if (event.pitchType == PitchType::HARMONIC)
@@ -422,8 +384,9 @@ inline void compileHarmony(json_t *root, Composition &comp, ParseResult &r) {
     error(r, "harmony", "Compiled storage exceeds 32 MiB", "capacity_exceeded");
     return;
   }
+  std::map<std::string,std::shared_ptr<const std::vector<HarmonicRoutePitch>>> routePrograms;
   for (size_t s = 0; s < comp.arrangement.size(); ++s) {
-    const auto &sc = comp.arrangement[s];
+    auto &sc = comp.arrangement[s];
     const auto *b = effectiveHarmony(comp, s);
     std::vector<size_t> reachable;
     if (b) {
@@ -452,11 +415,20 @@ inline void compileHarmony(json_t *root, Composition &comp, ParseResult &r) {
         }
       }
     }
-    for (const auto &assignment : sc.tracks) {
+    for (auto &assignment : sc.tracks) {
+      std::shared_ptr<std::vector<HarmonicRoutePitch>> route(new std::vector<HarmonicRoutePitch>);
       auto pat = comp.patterns.find(assignment.second.patternId);
       if (pat == comp.patterns.end())
         continue;
       assigned.insert(pat->first);
+      std::string routeKey=pat->first;routeKey.push_back(0);
+      auto appendKey=[&](const void* data,size_t bytes){routeKey.append(static_cast<const char*>(data),bytes);};
+      const auto& offsets=assignment.second.overrides.pitchOffsets;
+      appendKey(&offsets.fields,sizeof(offsets.fields));appendKey(&offsets.steps,sizeof(offsets.steps));appendKey(&offsets.periods,sizeof(offsets.periods));appendKey(&offsets.cents,sizeof(offsets.cents));
+      appendKey(&assignment.second.overrides.values[TRANSPOSE],sizeof(float));
+      if(b) for(size_t ci:reachable) {int definition=comp.progressions[b->compiledProgression].chords[ci].definition;appendKey(&definition,sizeof(definition));}
+      auto cached=routePrograms.find(routeKey);
+      if(cached!=routePrograms.end())assignment.second.harmonicPitches=cached->second;
       for (const auto &event : pat->second.steps)
         if (event.pitchType == PitchType::HARMONIC) {
           std::string path = "arrangement." + sc.id + ".tracks." + assignment.first + ".notes." + event.id;
@@ -468,10 +440,38 @@ inline void compileHarmony(json_t *root, Composition &comp, ParseResult &r) {
           const auto &p = comp.progressions[b->compiledProgression];
           for (size_t ci : reachable) {
             const auto &chord = p.chords[ci];
+            if(!chord.tones.empty() || comp.harmonicExpressions[event.harmonicExpression].extended) {
+              if(cached!=routePrograms.end())continue;
+              HarmonyChord converted;
+              const HarmonyChord* nativeChord=&chord;
+              if(chord.tones.empty()) {
+                if(!comp.harmonicExpressions[event.harmonicExpression].toneId.empty()) {error(r,path,"toneId requires native harmony","unresolved_harmony");continue;}
+                converted.periodV=1.;
+                for(size_t i=0;i<chord.intervals.size();++i) {
+                  NativeChordTone tone;tone.id=std::to_string(i);tone.pitch.baseV=(chord.rootSemitone+chord.intervals[i])/12.;
+                  for(int role=1;role<=3;++role) {HarmonicExpression probe;probe.role=role;float v=0.;if(resolve(probe,chord,v)&&std::abs(double(v)-tone.pitch.baseV)<1e-6)tone.roles.push_back(role==1?"root":role==2?"third":"fifth");}
+                  converted.tones.push_back(std::move(tone));
+                }
+                nativeChord=&converted;
+              }
+              const size_t needed=table.count(chord.definition)?1u:2u;
+              if(comp.harmonicPitchEntries+comp.staticPitchEntries>1048576-needed || storage+sizeof(HarmonicRoutePitch)*2+(needed-1)*sizeof(HarmonicExpression::Pitch)>32u*1024u*1024u) { error(r,path,"Native harmonic pitch capacity exceeded","capacity_exceeded"); return; }
+              NativePitch selected;
+              if(!resolveNative(comp.harmonicExpressions[event.harmonicExpression],*nativeChord,comp.pitchSystems,selected)) { error(r,path,"Cannot resolve native tone against chord "+chord.id,"unresolved_harmony"); continue; }
+              StepEvent transformedEvent=event; transformedEvent.nativePitch=selected;
+              double voltage=0.;
+              if(!tuning_json::transformed(transformedEvent,comp.pitchSystems,&assignment.second.overrides,voltage,r,path)) continue;
+              route->push_back({event.step,chord.definition,float(voltage)});
+              if(!table.count(chord.definition)) { table[chord.definition]=float(selected.baseV); ++comp.harmonicPitchEntries; storage+=sizeof(HarmonicExpression::Pitch); }
+              ++comp.harmonicPitchEntries; storage+=sizeof(HarmonicRoutePitch)*2;
+              continue;
+            }
+            if((event.pitchOffsets.fields|assignment.second.overrides.pitchOffsets.fields)&1) { error(r,path,"Legacy harmony has no native lattice","unsupported_pitch_transform"); continue; }
+            if(comp.harmonicExpressions[event.harmonicExpression].extended) { error(r,path,"Native harmonic expression requires native harmony","unresolved_harmony"); continue; }
             auto found = table.find(chord.definition);
             float pitch = 0.;
             if (found == table.end()) {
-              if (comp.harmonicPitchEntries >= 1048576 ||
+              if (comp.harmonicPitchEntries + comp.staticPitchEntries >= 1048576 ||
                   storage + sizeof(HarmonicExpression::Pitch) > 32u * 1024u * 1024u) {
                 error(r, path, "Pitch table capacity exceeded; entries=" + std::to_string(comp.harmonicPitchEntries),
                       "capacity_exceeded");
@@ -486,11 +486,18 @@ inline void compileHarmony(json_t *root, Composition &comp, ParseResult &r) {
               storage += sizeof(HarmonicExpression::Pitch);
             } else
               pitch = found->second;
-            float final = assignment.second.overrides.pitch(pitch + event.transposeSemitones / 12.f);
-            if (final < -10.f || final > 10.f)
+            float final = assignedPitch(event,assignment.second,event.pitchOffsets.fields ? float(double(pitch)+double(event.transposeSemitones)/12.+event.pitchOffsets.periods+event.pitchOffsets.cents/1200.) : pitch + event.transposeSemitones / 12.f);
+            const auto& offset=assignment.second.overrides.pitchOffsets;
+            const bool nativeOffsets=event.pitchOffsets.fields || offset.fields;
+            const double checkedFinal=nativeOffsets ? double(pitch)+double(event.transposeSemitones)/12.+event.pitchOffsets.periods+event.pitchOffsets.cents/1200.+double(assignment.second.overrides.values[TRANSPOSE])/12.+offset.periods+offset.cents/1200. : double(final);
+            if (!pitchInDomain(checkedFinal))
               error(r, path, "Resolved/transposed pitch outside -10 to 10 V", "pitch_out_of_range");
           }
         }
+      if(!route->empty()) {
+        std::sort(route->begin(),route->end(),[](const HarmonicRoutePitch& a,const HarmonicRoutePitch& b) { return a.step==b.step?a.chord<b.chord:a.step<b.step; });
+        assignment.second.harmonicPitches=route;routePrograms.emplace(std::move(routeKey),route);
+      }
     }
   }
   if (storage > 32u * 1024u * 1024u) {

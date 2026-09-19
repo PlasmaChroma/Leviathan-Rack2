@@ -558,3 +558,141 @@ Generated events are ordinary **fixed pitches**. Later progression edits do not
 rewrite them. Rerun with `replace` to revoice, or author `harmonic` events when
 automatic harmonic following is desired. Preview consumes no IDs/revision; all
 generated patterns and assignments participate in the same atomic edit and undo.
+
+
+## P7A: native static pitch systems (schema 4)
+
+Check `capabilities.sibyl.pitchSystems.staticTunedNotes` and its `stage` before
+using this extension. P7A imports schema 2/3/4 and writes schema 4. Schema support
+alone does not imply native harmony, native scene transforms, retuning, Scala
+interchange, or preset queries; those are later P7 milestones.
+
+Composition-owned `pitchSystems` contains `tunings`, `scales`, `contexts`, and an
+optional `defaultContext`. Equal tunings accept divisions 1-1024 and a period
+interval (ratio or cents). Table tunings accept 1-1024 increasing positions,
+starting at unison and excluding the repeated endpoint. A scale selects native
+steps; a context binds a tuning, optional scale, and one anchor: conventional
+`note`, `pitchV`, or positive `frequencyHz`.
+
+Use exactly one event pitch representation. Native examples are
+`"tuned":{"step":31}`, `"tuned":{"degree":4}`, or
+`"tuned":{"ratio":"3/2"}`. Optional `periods` repeats the tuning period, which
+need not be an octave. Context resolution is explicit `tuned.context`, then
+pattern `pitchContext`, then composition `defaultContext`. Conventional `note`,
+legacy degree, and `pitchV` ignore that chain. A semitone remains 100 cents.
+
+In 53-EDO, step 31 is approximately a pure fifth; an authored 3/2 ratio remains
+exact and is not snapped. In 38-EDO, step 22 approximates that fifth. Full/pattern/
+note reads preserve authored coordinates. Request `effectivePitchV` in projected
+note fields for the compiled static value. Pattern-bank duplication pins an
+inherited source native context when copying into a different pattern.
+
+Until later milestones, create definitions through a full schema-4 composition
+and author native notes through existing pattern/note operations. Do not invent
+P7 edit operation names merely because they appear in the implementation spec.
+
+
+## P7B: native pitch editing and scene transforms
+
+Check `pitchSystems.stage == "P7B"` (or a later advertised feature set),
+`nativeTransforms`, `retuneNotes`, and `definitionEditing`. Native harmony and
+voicing remain separate capabilities. All operations use normal revision-guarded
+EDIT/VALIDATE, one atomic transaction, and the existing adoption policies.
+
+Definition operations: `upsert_tuning {id,tuning}`, `delete_tuning {id}`,
+`upsert_pitch_scale {id,scale}`, `delete_pitch_scale {id}`,
+`upsert_pitch_context {id,context}`, `delete_pitch_context {id}`,
+`set_default_pitch_context {context_id}`, and
+`set_pattern_pitch_context {pattern_id,context_id}`. Null context_id removes the
+binding. Related definition/reference edits validate against the final graph;
+read-dependent operations such as retuning require their definitions beforehand.
+
+`transpose_notes` accepts exactly one of existing `semitones`, existing `degrees`,
+or `interval` containing exactly one `steps`, `periods`, `cents`, or `ratio`.
+Steps require native step/degree identity. Periods use the native context period,
+or an octave for legacy pitches. Cents/semitones remain absolute intervals.
+Ratio transposition intentionally becomes an accumulated cents offset and reports
+the requested ratio. Degree transposition changes a degree coordinate only.
+
+Authored note and scene-assignment fields `transposeSteps`, `transposePeriods`,
+and `transposeCents` preserve presence and types through partial edits. Existing
+`update_scene_assignment` can set/unset these leaves. Unsupported step shifts
+reject even for notes with probability zero. Changing pitch representation retains
+offsets unless explicitly unset, so incompatible retained steps reject.
+
+`retune_notes` uses the normal pattern/selector/expect_count fields plus required
+`target_context`, `mode` (nearest, preserve, reinterpret), and `target` (tuning,
+scale). Optional `tie_break` is lower/higher, default lower; `max_error_cents`
+limits source-to-grid error even in preserve mode. Nearest snaps; preserve writes
+an explicit residual cents offset; reinterpret retains native coordinates while
+changing context. Source pitches include event offsets but exclude scene offsets.
+Dynamic harmonic events reject. Reports include bounded per-note before/after,
+grid error, residual, total and truncation information.
+
+Cross-pattern duplication defaults to pinning the source native context. Explicit
+`pitch_context_policy:"destination"` removes copied context binding so destination
+inheritance applies. Time rotation still affects only temporal steps.
+
+Read `view:"pitch_systems"` with `id:"tunings"|"scales"|"contexts"` (default tunings)
+and page_size 1-128 (default 16). Reuse the returned cursor with the same revision
+and query. `view:"pitch_context",id:<context>` returns that context and its tuning/
+scale definitions. Add `pitchDetails` to a notes field projection for context,
+unit, authored coordinates, effective voltage, nominal frequency and conventional
+note deviation. These labels never quantize playback. `effective_context` reports
+scene-transformed voltage; raw note projections are before scene overrides.
+
+
+### P7C/D: native harmony and interchange
+
+Capabilities now advertise `pitchSystems.stage:"P7D"`, native harmony and Scala
+interchange. Native progression example (requires an existing context `c`):
+
+```json
+{"pitchContext":"c","lengthBeats":4,"chords":[
+  {"id":"I","beat":0,"rootPitch":{"tuned":{"step":0}},"tones":[
+    {"id":"r","interval":{"steps":0},"roles":["root"]},
+    {"id":"m","interval":{"steps":17},"roles":["third"]},
+    {"id":"f","interval":{"steps":31},"roles":["fifth"]}
+  ]}
+]}
+```
+
+The 0/17/31 example is a 53-EDO major triad. Roles are explicit, unique and
+case-sensitive. Native/legacy markers cannot mix within one progression.
+Step intervals require a lattice root; ratio/cents tones remain off-grid.
+Select a harmonic tone by exactly one `index`, `role` or `toneId`. Optional
+`periods` repeats the context period; `octave` remains an absolute octave and
+cannot coexist with `periods`. Nearest references and range endpoints accept
+`{"tuned":{...}}`, `{"note":"C4"}` or `{"pitchV":0}`; conventional string register
+endpoints still work. Event-pattern/default context inheritance applies to tuned
+references, while the progression context determines chord tones.
+
+`voice_progression` retains the existing operation shape. For native progressions,
+voice `min`/`max` accept precise static endpoints as above. The report algorithm is
+`voice_progression_micro_v1`, scoring uses 0.001 cent, and provenance names source
+context/tuning, chord/tone IDs and period displacement. Output notes are fixed
+absolute voltages: later tuning changes do not retune materialized notes. Root
+coverage is required; explicit third coverage is required with at least two voices.
+Capacity failures are errors, never a silently truncated voicing.
+
+Use these bounded read-only views through `vcv_sibyl_get_composition`:
+
+- `view:"tuning_catalog"`: all 15 factory definitions; optional `id` selects one,
+  e.g. `53edo`, `38edo`, `13edt`, or `just7`.
+- `view:"map_intervals",context_id:"c",intervals:[{"ratio":"5/4"},{"ratio":"3/2"}]`:
+  steps, signed errors and collision diagnostics. Optional `tie_break` is
+  `lower` (default) or `higher`. At most 1024 requested intervals. A collision
+  returns `ok:false`, `scale_mapping_collision`, and diagnostics; no edits occur.
+- `view:"export_tuning_scl",id:"t"`: normalized Scala text for an authored tuning.
+
+`{"op":"import_tuning_scl","id":"t","text":"description\n2\n3/2\n2/1\n"}`
+imports a table with positions 1/1 and 3/2 and period 2/1. Optional `name` supplies
+metadata. The text limit is 256 KiB; descriptions must fit 2048 bytes and names
+256 bytes. Comments, CRLF, empty descriptions, cents, ratios and bare integer
+ratios are supported. The last entry is the period, not a duplicate table position.
+Errors distinguish `invalid_scala` from `unsupported_tuning_shape`; nothing is
+silently sorted or octave-normalized. Anchors remain separate context definitions.
+
+Copying harmonic notes uses destination harmony. Inherited tuned nearest
+references/range endpoints are pinned to the source context by default; explicit
+`pitch_context_policy:"destination"` makes them inherit the destination context.

@@ -1,5 +1,6 @@
 #include "SibylEdit.hpp"
 #include "SibylNoteEdit.hpp"
+#include "SibylPitchEdit.hpp"
 #include "SibylAssignmentEdit.hpp"
 #include "SibylHarmonyEdit.hpp"
 #include "SibylVoicingEdit.hpp"
@@ -92,6 +93,7 @@ bool applyOperation(json_t*& working, json_t* op, size_t index, EditResult& resu
 	const char* name = requiredString(op, "op");
 	if (!name) return fail(result, "invalid_operation", path + ".op", "Operation requires a string op.");
 
+    if (isPitchDefinitionOperation(name)) return applyPitchDefinitionOperation(working,op,index,result);
     if (isNoteOperation(name)) return applyNoteOperation(working, op, index, result);
     const std::string operationName = name;
     if (operationName == "set_scene_assignment" || operationName == "update_scene_assignment")

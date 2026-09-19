@@ -1,5 +1,6 @@
 #pragma once
 
+#include "SibylTuning.hpp"
 #include <array>
 #include <cstdint>
 #include <string>
@@ -27,12 +28,13 @@ inline int overrideFieldIndex(const std::string& name) {
     return -1;
 }
 struct AssignmentOverrides {
+    PitchOffsets pitchOffsets;
     bool present = false;
     uint16_t fields = 0; // Authored presence is retained through partial edits.
     std::array<float, OVERRIDE_COUNT> values {{0,1,0,1,0,1,0,0,0,0}};
     bool gateTransform() const { return values[GATE_SCALE] != 1.f || values[GATE_OFFSET] != 0.f; }
     bool operator==(const AssignmentOverrides& b) const {
-        return present == b.present && fields == b.fields && values == b.values;
+        return pitchOffsets == b.pitchOffsets && present == b.present && fields == b.fields && values == b.values;
     }
     float pitch(float base) const { return values[TRANSPOSE] == 0.f ? base : base + values[TRANSPOSE] / 12.f; }
     float scaled(float base, int scale, int offset) const {

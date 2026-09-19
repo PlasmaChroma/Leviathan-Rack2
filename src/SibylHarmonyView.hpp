@@ -5,6 +5,12 @@ inline json_t *chordContextJson(const HarmonyProgression &p, size_t index) {
   const auto &c = p.chords[index];
   json_t *out = json_pack("{s:s,s:f,s:f,s:s}", "id", c.id.c_str(), "beginBeat", c.beat, "endBeat",
                           index + 1 < p.chords.size() ? p.chords[index + 1].beat : p.length, "root", c.root.c_str());
+  if(!c.tones.empty()) {
+    json_object_del(out,"root");json_object_set_new(out,"pitchContext",json_string(c.context.c_str()));json_object_set_new(out,"periodCents",json_real(c.periodV*1200.));
+    json_t* tones=json_array();json_t* roles=json_object();
+    for(const auto& tone:c.tones) { json_array_append_new(tones,json_pack("{s:s,s:f}","id",tone.id.c_str(),"pitchV",tone.pitch.baseV)); for(const auto& role:tone.roles) json_object_set_new(roles,role.c_str(),json_real(tone.pitch.baseV)); }
+    json_object_set_new(out,"tones",tones);json_object_set_new(out,"rolesPitchV",roles);return out;
+  }
   json_t *pcs = json_array();
   json_t *roles = json_object();
   for (int interval : c.intervals)
@@ -87,13 +93,12 @@ inline std::string serializeHarmonyView(const Composition &comp, json_t *request
         ++total;
         if (json_array_size(notes) >= 256)
           continue;
-        float pitch = contextualPitch(comp, event, s, repeat, beat);
         float selected = event.pitchType == PitchType::HARMONIC
                              ? harmonicSelectedPitch(comp, event, s, repeat, beat)
-                             : event.compiledPitchV - event.transposeSemitones / 12.f;
+                             : float(event.nativePitch.baseV);
         json_t *projection = json_pack("{s:s,s:s,s:i,s:f,s:f}", "track", track.id.c_str(), "noteId", event.id.c_str(),
                                        "step", event.step, "selectedPitchV", double(selected), "effectivePitchV",
-                                       double(assignment->second.overrides.pitch(pitch)));
+                                       double(sceneEventPitch(comp,event,assignment->second,s,repeat,beat)));
         const auto &ov = assignment->second.overrides;
         auto unit = [](float v) { return std::max(0.f, std::min(1.f, v)); };
         json_object_set_new(projection, "velocity",
@@ -137,7 +142,7 @@ inline std::string serializeHarmonyView(const Composition &comp, json_t *request
         }
     json_object_set_new(derived, "automation", automation);
   }
-  json_object_set_new(out, "schemaVersion", json_integer(3));
+  json_object_set_new(out, "schemaVersion", json_integer(4));
   std::string result = dump(out);
   json_decref(out);
   return result;

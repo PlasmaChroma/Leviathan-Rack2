@@ -8,6 +8,8 @@
 #include "SibylJSON.hpp"
 #include "SibylAutomationJSON.hpp"
 #include "SibylHarmonyView.hpp"
+#include "SibylPitchView.hpp"
+#include "SibylTuningCatalog.hpp"
 #include "SibylEvolution.hpp"
 #include "SibylTiming.hpp"
 #include "SibylTransport.hpp"
@@ -263,6 +265,7 @@ struct SibylModule : Module, SibylControl {
 		const sibyl::TrackDef* track = nullptr;
 		const sibyl::Pattern* pattern = nullptr;
 		const sibyl::AssignmentOverrides* overrides = nullptr;
+        const sibyl::TrackAssignment* assignment = nullptr;
 	};
 	enum class CachedMacroTarget : uint8_t {
 		NONE, GLOBAL_PROBABILITY, GLOBAL_VELOCITY, GLOBAL_SWING,
@@ -612,8 +615,7 @@ struct SibylModule : Module, SibylControl {
 					row.pitches.reserve(pattern->second.steps.size());
 					for (const sibyl::StepEvent& event : pattern->second.steps) {
                         voicing.harmonicContext |= event.pitchType==sibyl::PitchType::HARMONIC;
-						row.pitches.push_back(event.pitchType==sibyl::PitchType::HARMONIC ? assignment->second.overrides.pitch(
-                            sibyl::contextualPitch(*composition,event,telemetry.sceneIndex,telemetry.sceneRepeat,std::min(telemetry.scenePhase,std::nextafter(sibyl::sceneTimelineLength(scene),0.)))) : event.compiledPitchV);
+						row.pitches.push_back(sibyl::sceneEventPitch(*composition,event,assignment->second,telemetry.sceneIndex,telemetry.sceneRepeat,std::min(telemetry.scenePhase,std::nextafter(sibyl::sceneTimelineLength(scene),0.))));
                     }
 				}
 				voicing.rows.push_back(std::move(row));
@@ -663,7 +665,7 @@ struct SibylModule : Module, SibylControl {
 
 		json_t* envelope = json_object();
 		json_object_set_new(envelope, "format", json_string("Leviathan.SibylComposition"));
-		json_object_set_new(envelope, "schemaVersion", json_integer(3));
+		json_object_set_new(envelope, "schemaVersion", json_integer(4));
 		json_object_set(envelope, "composition", composition);
 		char* pretty = json_dumps(envelope, JSON_INDENT(2));
 		json_decref(envelope);
@@ -763,6 +765,7 @@ struct SibylModule : Module, SibylControl {
 			m_cachedTrackRoutes[track.channel].track = &track;
 			m_cachedTrackRoutes[track.channel].pattern = &pattern->second;
 			m_cachedTrackRoutes[track.channel].overrides = &assignment->second.overrides;
+            m_cachedTrackRoutes[track.channel].assignment = &assignment->second;
 		}
 
 		static const char* const macroIds[4] {"1", "2", "3", "4"};
@@ -1116,7 +1119,7 @@ struct SibylModule : Module, SibylControl {
 
 	json_t* dataToJson() override {
 		json_t* rootJ = json_object();
-		json_object_set_new(rootJ, "schemaVersion", json_integer(3));
+		json_object_set_new(rootJ, "schemaVersion", json_integer(4));
 		json_object_set_new(rootJ, "revision", json_integer(m_acceptedRevision));
 		json_object_set_new(rootJ, "loopOverride",
 			json_integer(m_loopOverride.load(std::memory_order_acquire)));
@@ -1547,9 +1550,7 @@ struct SibylModule : Module, SibylControl {
 					m_trackStates[ch].activeEventPlayed = play;
 
 					if (play) {
-                        const float resolvedPitch = matchedEvent->pitchType==sibyl::PitchType::HARMONIC
-                            ? sibyl::contextualPitch(*comp,*matchedEvent,m_sceneIndex,m_sceneRepeat,m_scenePhase+(scheduledBeat-currentPatternPhase))
-                            : matchedEvent->compiledPitchV;
+                        const float resolvedPitch = sibyl::sceneEventPitch(*comp,*matchedEvent,*route.assignment,m_sceneIndex,m_sceneRepeat,m_scenePhase+(scheduledBeat-currentPatternPhase));
 #ifndef SIBYL_MODULE_TEST
 						captureWorkFlags |= sibyl_debug::PROCESS_EVENT_FIRED;
 						++captureFiredEvents;
@@ -1568,17 +1569,17 @@ struct SibylModule : Module, SibylControl {
 						}
 						// Glide or Instant pitch
 						if (expression.glideMs > 0.0f) {
-							m_trackStates[ch].targetPitch = overrides.pitch(resolvedPitch);
+							m_trackStates[ch].targetPitch = resolvedPitch;
 							float numSamples = (expression.glideMs * 0.001f) * args.sampleRate;
 							if (numSamples > 1.0f) {
 								m_trackStates[ch].glideRatePerSample = (m_trackStates[ch].targetPitch - m_trackStates[ch].currentPitch) / numSamples;
 							} else {
-								m_trackStates[ch].currentPitch = overrides.pitch(resolvedPitch);
+								m_trackStates[ch].currentPitch = resolvedPitch;
 								m_trackStates[ch].glideRatePerSample = 0.0f;
 							}
 						} else {
-							m_trackStates[ch].currentPitch = overrides.pitch(resolvedPitch);
-							m_trackStates[ch].targetPitch = overrides.pitch(resolvedPitch);
+							m_trackStates[ch].currentPitch = resolvedPitch;
+							m_trackStates[ch].targetPitch = resolvedPitch;
 							m_trackStates[ch].glideRatePerSample = 0.0f;
 						}
 
@@ -1703,7 +1704,7 @@ struct SibylModule : Module, SibylControl {
 			return true;
 #endif
 		} else if (operation == Operation::CAPABILITIES) {
-			responseJson = "{\"ok\":true,\"capabilities\":{\"sibyl\":{\"apiVersion\":1,\"schemaVersion\":3,\"supportedSchemaVersions\":[2,3],\"voicing\":{\"version\":1,\"algorithm\":\"voice_progression_v1\",\"materializesNotes\":true,\"maxVoices\":8,\"maxVisitedPartials\":200000,\"maxCandidatesPerChord\":2048,\"maxDpTransitions\":2000000,\"optimizesLoopSeam\":false},\"harmony\":{\"version\":1,\"relativePitch\":true,\"maxProgressions\":128,\"maxChordsPerProgression\":128,\"maxChordMarkers\":4096,\"maxPitchEntries\":1048576,\"maxContextNotes\":256,\"maxCompiledBytes\":33554432},\"automation\":{\"version\":1,\"lanes\":[\"mod\",\"mod2\",\"mod3\"],\"maxCurves\":512,\"maxPointsPerCurve\":1024,\"maxTotalPoints\":16384,\"maxSamples\":256,\"maxDrivenLanes\":48,\"maxCompiledBytes\":33554432},\"sceneOverrides\":{\"version\":1,\"partialAssignmentEdits\":true,\"staticPreviewView\":\"scene\"},\"conditions\":{\"version\":1,\"scopes\":[\"patternPass\",\"sceneRepeat\",\"arrangementLoop\"],\"maxTests\":8,\"ordinalCeiling\":4503599627370495},\"noteEditing\":{\"version\":1,\"stableIds\":true,\"previewViaValidate\":true},\"views\":[\"summary\",\"full\",\"pattern\",\"scene\",\"notes\",\"automation\",\"progression\",\"effective_context\"],\"limits\":{\"operations\":256,\"selectedEvents\":1024,\"notesPage\":256,\"reportIdsDefault\":128,\"reportIdsMax\":1024},\"editOperations\":[\"replace_composition\",\"set_meta\",\"set_clock\",\"upsert_track\",\"delete_track\",\"upsert_pattern\",\"delete_pattern\",\"upsert_macro\",\"delete_macro\",\"upsert_scene\",\"delete_scene\",\"set_scene_track\",\"set_scene_assignment\",\"update_scene_assignment\",\"reorder_scenes\",\"voice_progression\",\"upsert_progression\",\"delete_progression\",\"set_default_harmony\",\"set_scene_harmony\",\"inherit_scene_harmony\",\"upsert_automation\",\"delete_automation\",\"update_notes\",\"insert_notes\",\"delete_notes\",\"transpose_notes\",\"rotate_notes\",\"duplicate_notes\"],\"repeatEvolution\":{\"version\":1,\"patternField\":\"evolution\",\"stepOptOut\":\"evolve\",\"fields\":[\"probability\",\"velocity\",\"gate\",\"glideMs\",\"mod\",\"mod2\",\"mod3\"]},\"revision\":" + std::to_string(m_acceptedRevision) + ",\"operations\":[\"get_composition\",\"validate\",\"edit\",\"get_status\",\"transport\"]}}}";
+			responseJson = "{\"ok\":true,\"capabilities\":{\"sibyl\":{\"apiVersion\":1,\"schemaVersion\":4,\"supportedSchemaVersions\":[2,3,4],\"pitchSystems\":{\"version\":1,\"stage\":\"P7D\",\"staticTunedNotes\":true,\"nativeTransforms\":true,\"retuneNotes\":true,\"definitionEditing\":true,\"nativeHarmony\":true,\"scalaInterchange\":true,\"nativeVoicingAlgorithm\":\"voice_progression_micro_v1\",\"maxDivisions\":1024},\"voicing\":{\"version\":1,\"algorithm\":\"voice_progression_v1\",\"materializesNotes\":true,\"maxVoices\":8,\"maxVisitedPartials\":200000,\"maxCandidatesPerChord\":2048,\"maxDpTransitions\":2000000,\"optimizesLoopSeam\":false},\"harmony\":{\"version\":1,\"relativePitch\":true,\"maxProgressions\":128,\"maxChordsPerProgression\":128,\"maxChordMarkers\":4096,\"maxPitchEntries\":1048576,\"maxContextNotes\":256,\"maxCompiledBytes\":33554432},\"automation\":{\"version\":1,\"lanes\":[\"mod\",\"mod2\",\"mod3\"],\"maxCurves\":512,\"maxPointsPerCurve\":1024,\"maxTotalPoints\":16384,\"maxSamples\":256,\"maxDrivenLanes\":48,\"maxCompiledBytes\":33554432},\"sceneOverrides\":{\"version\":1,\"partialAssignmentEdits\":true,\"staticPreviewView\":\"scene\"},\"conditions\":{\"version\":1,\"scopes\":[\"patternPass\",\"sceneRepeat\",\"arrangementLoop\"],\"maxTests\":8,\"ordinalCeiling\":4503599627370495},\"noteEditing\":{\"version\":1,\"stableIds\":true,\"previewViaValidate\":true},\"views\":[\"summary\",\"full\",\"pattern\",\"scene\",\"notes\",\"automation\",\"progression\",\"effective_context\",\"pitch_systems\",\"pitch_context\",\"tuning_catalog\",\"map_intervals\",\"export_tuning_scl\"],\"limits\":{\"operations\":256,\"selectedEvents\":1024,\"notesPage\":256,\"reportIdsDefault\":128,\"reportIdsMax\":1024},\"editOperations\":[\"import_tuning_scl\",\"upsert_tuning\",\"delete_tuning\",\"upsert_pitch_scale\",\"delete_pitch_scale\",\"upsert_pitch_context\",\"delete_pitch_context\",\"set_default_pitch_context\",\"set_pattern_pitch_context\",\"retune_notes\",\"replace_composition\",\"set_meta\",\"set_clock\",\"upsert_track\",\"delete_track\",\"upsert_pattern\",\"delete_pattern\",\"upsert_macro\",\"delete_macro\",\"upsert_scene\",\"delete_scene\",\"set_scene_track\",\"set_scene_assignment\",\"update_scene_assignment\",\"reorder_scenes\",\"voice_progression\",\"upsert_progression\",\"delete_progression\",\"set_default_harmony\",\"set_scene_harmony\",\"inherit_scene_harmony\",\"upsert_automation\",\"delete_automation\",\"update_notes\",\"insert_notes\",\"delete_notes\",\"transpose_notes\",\"rotate_notes\",\"duplicate_notes\"],\"repeatEvolution\":{\"version\":1,\"patternField\":\"evolution\",\"stepOptOut\":\"evolve\",\"fields\":[\"probability\",\"velocity\",\"gate\",\"glideMs\",\"mod\",\"mod2\",\"mod3\"]},\"revision\":" + std::to_string(m_acceptedRevision) + ",\"operations\":[\"get_composition\",\"validate\",\"edit\",\"get_status\",\"transport\"]}}}";
 			return true;
 		} else if (operation == Operation::GET_COMPOSITION) {
 			const sibyl::Composition* comp = m_acceptedCompositionPtr;
@@ -1719,6 +1720,8 @@ struct SibylModule : Module, SibylControl {
 			if (reqJ) {
 				json_t* viewJ = json_object_get(reqJ, "view");
 				if (viewJ && json_is_string(viewJ)) view = json_string_value(viewJ);
+                if(view=="tuning_catalog" || view=="map_intervals" || view=="export_tuning_scl") {responseJson=sibyl::serializeTuningAssistance(*comp,reqJ);json_decref(reqJ);return true;}
+                if(view=="pitch_systems" || view=="pitch_context") { responseJson=sibyl::serializePitchView(*comp,reqJ);json_decref(reqJ);return true; }
                 if (view == "progression" || view == "effective_context") {
                     responseJson = sibyl::serializeHarmonyView(*comp,reqJ);json_decref(reqJ);return true;
                 }
@@ -2416,7 +2419,7 @@ struct SibylVoicingMenuButton final : TL1105 {
 		return value >= 0 ? value / 12 : -((-value + 11) / 12);
 	}
 
-	static std::string noteNameForCents(int centsFromC4) {
+	static std::string noteNameForCents(double centsFromC4) {
 		static const char* names[12] = {
 			"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
 		};
@@ -2424,9 +2427,9 @@ struct SibylVoicingMenuButton final : TL1105 {
 		const int midi = 60 + semitone;
 		const int pitchClass = ((midi % 12) + 12) % 12;
 		const int octave = floorDiv12(midi) - 1;
-		const int residualCents = centsFromC4 - semitone * 100;
+		const double residualCents = centsFromC4 - semitone * 100;
 		std::string label = names[pitchClass] + std::to_string(octave);
-		if (residualCents != 0) label += string::f("%+dc", residualCents);
+		if (std::abs(residualCents) >= .05) label += string::f("%+.1fc", residualCents);
 		return label;
 	}
 
@@ -2435,7 +2438,7 @@ struct SibylVoicingMenuButton final : TL1105 {
 		std::vector<int> cents;
 		cents.reserve(pitches.size());
 		for (float pitch : pitches)
-			cents.push_back(static_cast<int>(std::lround(pitch * 1200.f)));
+			cents.push_back(static_cast<int>(std::lround(pitch * 12000.f)));
 		std::sort(cents.begin(), cents.end());
 		cents.erase(std::unique(cents.begin(), cents.end()), cents.end());
 		constexpr size_t kVisiblePitchCount = 6;
@@ -2443,7 +2446,7 @@ struct SibylVoicingMenuButton final : TL1105 {
 		const size_t visible = std::min(cents.size(), kVisiblePitchCount);
 		for (size_t index = 0; index < visible; ++index) {
 			if (!summary.empty()) summary += " ";
-			summary += noteNameForCents(cents[index]);
+			summary += noteNameForCents(cents[index] / 10.);
 		}
 		if (visible < cents.size()) summary += "  +" + std::to_string(cents.size() - visible);
 		return summary;

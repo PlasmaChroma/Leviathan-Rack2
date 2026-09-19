@@ -1,6 +1,19 @@
 # Sibyl – Implementation Status & Release-Hardening Roadmap
 
-*Last updated: 2026-09-18*
+*Last updated: 2026-09-19*
+
+P7 implementation is complete through P7D: schema-4 tunings and composing edits,
+native harmony/voicing, tuning discovery, interval mapping, and Scala interchange.
+Generic 1-1024 divisions include both 38/53-EDO; unequal/non-octave tunings retain
+their periods. Schema-2/3 import and legacy playback remain intact. Windows build,
+full fast suite and native Rack-linked tests pass. Live P7 semantic, bridge undo,
+preset restoration and physically recorded 38/53-EDO and unequal-tritave CV/gate
+checks now pass; see the [live report](./Sibyl_P7_Live_Integration_Report.md).
+Listening and manual patch-file/UI acceptance remain separate. See the
+[P7C/D implementation and validation report](./Sibyl_P7CD_Implementation_Report.md),
+[53-EDO fixture](./Sibyl_P7CD_Example_Composition.json),
+[P7A report](./Sibyl_P7A_Implementation_Report.md), and
+[P7B report](./Sibyl_P7B_Implementation_Report.md).
 
 Schema 3 expressive composition is implemented through P6: stable note editing,
 repeat conditions, scene overrides, independent MOD curves, relative harmony,

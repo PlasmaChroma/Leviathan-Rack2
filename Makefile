@@ -1055,3 +1055,14 @@ build/tests/sibyl_codec_spec: tests/sibyl_codec_spec.cpp src/SibylJSON.cpp src/S
 
 build/tests/sibyl_note_edit_spec: tests/sibyl_note_edit_spec.cpp src/SibylEdit.cpp src/SibylAssignmentEdit.hpp src/SibylNoteEdit.cpp src/SibylNoteEdit.hpp src/SibylEdit.hpp src/SibylAdoption.cpp src/SibylJSON.cpp src/SibylJSON.hpp src/SibylTypes.hpp src/SibylCondition.hpp src/SibylOverrides.hpp src/SibylAutomation.hpp src/SibylAutomationJSON.hpp src/SibylHarmonyTypes.hpp src/SibylHarmony.hpp src/SibylHarmonyJSON.hpp src/SibylHarmonyView.hpp src/SibylHarmonyEdit.hpp src/SibylVoicing.hpp src/SibylVoicingEdit.hpp | build/tests
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/sibyl_note_edit_spec.cpp src/SibylEdit.cpp src/SibylNoteEdit.cpp src/SibylAdoption.cpp src/SibylJSON.cpp -L$(RACK_DIR) -lRack -Wl,-rpath,$(RACK_DIR) -o $@
+
+# Pitch codec/math headers participate in incremental Sibyl regression builds.
+build/tests/sibyl_codec_spec: tests/sibyl_tuning_cases.hpp src/SibylTuning.hpp src/SibylTuningJSON.hpp
+build/tests/sibyl_module_spec build/tests/sibyl_legacy_golden_spec: src/SibylTuning.hpp src/SibylTuningJSON.hpp
+build/tests/sibyl_module_spec: tests/sibyl_tuning_module_cases.hpp
+
+# P7 control-side pitch editing and query contracts.
+build/tests/sibyl_note_edit_spec build/tests/sibyl_module_spec build/tests/sibyl_legacy_golden_spec: src/SibylPitchEdit.hpp src/SibylRetune.hpp src/SibylPitchView.hpp src/SibylTuning.hpp src/SibylTuningJSON.hpp
+build/tests/sibyl_note_edit_spec: tests/sibyl_pitch_edit_cases.hpp
+
+build/tests/sibyl_codec_spec build/tests/sibyl_note_edit_spec build/tests/sibyl_module_spec build/tests/sibyl_legacy_golden_spec: $(wildcard src/Sibyl*.hpp) $(wildcard tests/sibyl_*cases.hpp) tests/sibyl_native_fixture.hpp

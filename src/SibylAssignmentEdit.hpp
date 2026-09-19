@@ -35,7 +35,7 @@ inline bool applyAssignmentOperation(json_t* working, json_t* op, size_t index, 
     auto overrides = [&](json_t* object, const std::string& at) {
         if (!json_is_object(object)) return fail(at,"Expected overrides object");
         const char* key; json_t* value;
-        json_object_foreach(object,key,value) if(overrideFieldIndex(key)<0) return fail(at+"."+key,"Unknown override field");
+        json_object_foreach(object,key,value) if(overrideFieldIndex(key)<0 && pitchOffsetField(key)<0) return fail(at+"."+key,"Unknown override field");
         return true;
     };
     auto patternReference = [&](json_t* value, const std::string& at) {
@@ -70,7 +70,7 @@ inline bool applyAssignmentOperation(json_t* working, json_t* op, size_t index, 
     json_array_foreach(unset,i,item) {
         if(!json_is_string(item)) return fail(".unset","Expected field name");
         const std::string field=json_string_value(item);
-        const bool leaf=field.compare(0,10,"overrides.")==0 && overrideFieldIndex(field.substr(10))>=0;
+        const bool leaf=field.compare(0,10,"overrides.")==0 && (overrideFieldIndex(field.substr(10))>=0 || pitchOffsetField(field.substr(10))>=0);
         if(field!="phaseMode" && field!="overrides" && !leaf) return fail(".unset","Unsupported field removal");
         if(!removals.insert(field).second) return fail(".unset","Duplicate removal");
         if(json_object_get(set,field.c_str()) || (leaf && json_object_get(ov,field.substr(10).c_str())))

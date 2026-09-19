@@ -1,0 +1,125 @@
+{
+  "format": "Leviathan.SibylComposition",
+  "schemaVersion": 4,
+  "composition": {
+    "schemaVersion": 4,
+    "meta": {
+      "title": "53-EDO fifths and exact ratios",
+      "bpm": 90,
+      "seed": 53
+    },
+    "transport": {
+      "running": false,
+      "loop": true
+    },
+    "pitchSystems": {
+      "tunings": {
+        "edo53": {
+          "kind": "equal",
+          "divisions": 53,
+          "period": {
+            "ratio": "2/1"
+          }
+        }
+      },
+      "scales": {
+        "ji_major": {
+          "tuning": "edo53",
+          "steps": [
+            0,
+            9,
+            17,
+            22,
+            31,
+            39,
+            48
+          ]
+        }
+      },
+      "contexts": {
+        "C4": {
+          "tuning": "edo53",
+          "scale": "ji_major",
+          "anchor": {
+            "note": "C4"
+          }
+        }
+      },
+      "defaultContext": "C4"
+    },
+    "tracks": [
+      {
+        "id": "lead",
+        "channel": 0,
+        "defaultGate": 0.8,
+        "defaultVelocity": 0.8
+      }
+    ],
+    "patterns": {
+      "phrase": {
+        "length": 8,
+        "resolution": "1/4",
+        "steps": [
+          {
+            "step": 0,
+            "tuned": {
+              "step": 0
+            }
+          },
+          {
+            "step": 1,
+            "tuned": {
+              "step": 17
+            }
+          },
+          {
+            "step": 2,
+            "tuned": {
+              "step": 31
+            }
+          },
+          {
+            "step": 3,
+            "tuned": {
+              "step": 53
+            }
+          },
+          {
+            "step": 4,
+            "tuned": {
+              "degree": -1
+            }
+          },
+          {
+            "step": 5,
+            "tuned": {
+              "ratio": "5/4"
+            }
+          },
+          {
+            "step": 6,
+            "tuned": {
+              "ratio": "3/2"
+            }
+          },
+          {
+            "step": 7,
+            "tuned": {
+              "cents": 25
+            }
+          }
+        ]
+      }
+    },
+    "arrangement": [
+      {
+        "id": "listen",
+        "lengthBeats": 8,
+        "repeats": 1,
+        "tracks": {
+          "lead": "phrase"
+        }
+      }
+    ]
+  }
+}

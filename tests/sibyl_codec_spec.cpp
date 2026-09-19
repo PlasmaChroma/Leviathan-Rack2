@@ -1,7 +1,9 @@
 #include "../src/SibylJSON.hpp"
 #include <cassert>
 #include <iostream>
+#include "sibyl_tuning_cases.hpp"
 int main() {
+    tuningCases();
     const std::string legacy = R"({"patterns":{"p":{"length":16,"steps":[{"step":8,"note":"C3"},{"step":0,"degree":0}]}}})";
     auto p = sibyl::parseCompositionJson(legacy, 1);
     assert(p.valid);
@@ -11,7 +13,7 @@ int main() {
     assert(again.valid && again.composition->patterns.at("p").steps[1].id == "n2");
     for (const char* doc : {R"({"schemaVersion":2,"composition":{}})", R"({"schemaVersion":3,"composition":{"schemaVersion":3}})", R"({"schemaVersion":3})"})
         assert(sibyl::parseCompositionJson(doc, 1).valid);
-    for (const char* doc : {R"({"schemaVersion":4})", R"({"schemaVersion":2,"composition":{"schemaVersion":3}})", R"({"patterns":{"p":{"steps":[{"step":0,"note":"C3","condition":{}}]}}})", R"({"schemaVersion":2,"harmony":{}})"})
+    for (const char* doc : {R"({"schemaVersion":5})", R"({"schemaVersion":2,"composition":{"schemaVersion":3}})", R"({"patterns":{"p":{"steps":[{"step":0,"note":"C3","condition":{}}]}}})", R"({"schemaVersion":2,"harmony":{}})"})
         assert(!sibyl::parseCompositionJson(doc, 1).valid);
     auto transposed = sibyl::parseCompositionJson(R"({"schemaVersion":3,"patterns":{"p":{"steps":[{"step":0,"note":"C3","transposeSemitones":-12}]}}})",1);
     assert(transposed.valid && transposed.composition->patterns.at("p").steps[0].compiledPitchV == -2.f);

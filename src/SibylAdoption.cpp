@@ -92,7 +92,7 @@ double preservedPatternPhase(double elapsedBeats, double replacementDurationBeat
 }
 
 static bool sameEvent(const StepEvent& a, const StepEvent& b) {
-	return a.condition == b.condition && a.evolve == b.evolve && a.step == b.step && a.pitchType == b.pitchType && a.pitchV == b.pitchV &&
+	return a.pitchOffsets == b.pitchOffsets && a.condition == b.condition && a.evolve == b.evolve && a.step == b.step && a.pitchType == b.pitchType && a.pitchV == b.pitchV &&
 		a.harmonic == b.harmonic && a.degree == b.degree && a.note == b.note && a.octave == b.octave &&
 		a.hasGate == b.hasGate && a.gate == b.gate &&
 		a.hasVelocity == b.hasVelocity && a.velocity == b.velocity &&
@@ -147,7 +147,7 @@ static std::vector<std::string> harmonyDependencies(const Composition& comp,cons
         std::string key=scene.id;
         appendHarmonyScalar(key,b->clock);appendHarmonyScalar(key,b->loop);appendHarmonyScalar(key,progression.length);double length=sceneTimelineLength(scene);appendHarmonyScalar(key,length);appendHarmonyScalar(key,scene.repeats);
         if(b->clock==AutomationClock::ARRANGEMENT)appendHarmonyScalar(key,comp.sceneBeatPrefixes[s]);
-        for(const auto& c:progression.chords){appendHarmonyScalar(key,c.beat);appendHarmonyScalar(key,c.rootSemitone);size_t n=c.intervals.size();appendHarmonyScalar(key,n);for(int interval:c.intervals)appendHarmonyScalar(key,interval);}
+        for(const auto& c:progression.chords){appendHarmonyScalar(key,c.periodV); for(const auto& tone:c.tones) { key+=tone.id;key.push_back(0);appendHarmonyScalar(key,tone.pitch.baseV); for(const auto& role:tone.roles) { key+=role;key.push_back(0); } } appendHarmonyScalar(key,c.beat);appendHarmonyScalar(key,c.rootSemitone);size_t n=c.intervals.size();appendHarmonyScalar(key,n);for(int interval:c.intervals)appendHarmonyScalar(key,interval);}
         for(const auto& e:p->second.steps)if(e.pitchType==PitchType::HARMONIC){const auto& expression=comp.harmonicExpressions[e.harmonicExpression];appendHarmonyScalar(key,expression.reference);}
         result.push_back(std::move(key));
     }

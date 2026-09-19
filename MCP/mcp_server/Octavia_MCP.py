@@ -10,7 +10,7 @@ import re
 import warnings
 from urllib.parse import urlencode
 import httpx
-from typing import Optional, Literal
+from typing import Optional, Literal, Any
 from pydantic import BaseModel, Field, ConfigDict
 
 warnings.filterwarnings("ignore")
@@ -401,13 +401,16 @@ async def vcv_octavia_console_respond(params: OctaviaConsoleResponseInput) -> st
 
 
 class SibylCompositionInput(SibylModuleInput):
-    view: Literal["summary", "full", "pattern", "scene", "notes", "automation", "progression", "effective_context"] = Field(
+    view: Literal["summary", "full", "pattern", "scene", "notes", "automation", "progression", "effective_context", "pitch_systems", "pitch_context", "tuning_catalog", "map_intervals", "export_tuning_scl"] = Field(
         "summary", description="Summary, authored document, targeted notes/curve/progression, or scene/time effective context"
     )
-    id: Optional[str] = Field(None, description="ID required by pattern, scene, automation and progression views")
+    id: Optional[str] = Field(None, description="ID for pattern, scene, automation, progression or pitch_context; pitch_systems group: tunings/scales/contexts")
     scene_id: Optional[str] = None
     scene_repeat: Optional[int] = Field(None, ge=0)
     beat: Optional[float] = Field(None, ge=0)
+    context_id: Optional[str] = Field(None, description="Pitch context for interval mapping")
+    intervals: Optional[list[dict[str, Any]]] = Field(None, max_length=1024, description="Ratio/cents targets for map_intervals")
+    tie_break: Optional[Literal["lower", "higher"]] = None
     sample_beats: Optional[list[float]] = Field(None, max_length=256)
     pattern_id: Optional[str] = None
     selector: Optional[dict] = None
@@ -465,10 +468,10 @@ async def vcv_sibyl_get_composition(params: SibylCompositionInput) -> str:
         query = {"view": params.view}
         if params.id is not None:
             query["id"] = params.id
-        for field in ("pattern_id", "selector", "fields", "page_size", "cursor", "sample_beats", "scene_id", "scene_repeat", "beat"):
+        for field in ("pattern_id", "selector", "fields", "page_size", "cursor", "sample_beats", "scene_id", "scene_repeat", "beat", "context_id", "intervals", "tie_break"):
             value = getattr(params, field)
             if value is not None:
-                query[field] = json.dumps(value, separators=(",", ":")) if field in ("selector", "fields", "sample_beats") else value
+                query[field] = json.dumps(value, separators=(",", ":")) if field in ("selector", "fields", "sample_beats", "intervals") else value
         return json.dumps(await _sibyl_call(f"sibyl/{params.module_id}/composition?{urlencode(query)}"), indent=2)
     except Exception as e:
         return _err(e)
