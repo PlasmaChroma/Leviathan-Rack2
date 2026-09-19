@@ -26,11 +26,13 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <cstdio>
 #include <fstream>
 #include <sstream>
+#include <unordered_map>
 
 using namespace rack;
 
@@ -95,6 +97,44 @@ struct SibylModule : Module, SibylControl {
 	std::atomic<int> m_loopOverride{-1};
 	bool m_previousEffectiveRunning = true;
 	uint64_t m_randomnessEpoch = 0;
+
+	struct PreparedTransaction {
+		std::string handle;
+		int baseRevision = 0;
+		int targetRevision = 0;
+		sibyl::CompositionPtr candidate;
+		std::vector<sibyl::ValidationIssue> warnings;
+		sibyl::EditResult editResult;
+		std::chrono::steady_clock::time_point expiresAt;
+		bool committed = false;
+		int committedRevision = 0;
+		std::string cachedReceiptJson;
+	};
+
+	uint64_t m_prepareCounter = 0;
+	std::unordered_map<std::string, PreparedTransaction> m_preparedTransactions;
+
+	void pruneExpiredPreparedTransactions() {
+		const auto now = std::chrono::steady_clock::now();
+		for (auto it = m_preparedTransactions.begin(); it != m_preparedTransactions.end(); ) {
+			if (now > it->second.expiresAt) {
+				it = m_preparedTransactions.erase(it);
+			} else {
+				++it;
+			}
+		}
+		if (m_preparedTransactions.size() > 32) {
+			auto oldest = m_preparedTransactions.begin();
+			for (auto it = m_preparedTransactions.begin(); it != m_preparedTransactions.end(); ++it) {
+				if (it->second.expiresAt < oldest->second.expiresAt) {
+					oldest = it;
+				}
+			}
+			if (oldest != m_preparedTransactions.end()) {
+				m_preparedTransactions.erase(oldest);
+			}
+		}
+	}
 
 	enum class HardwareAction { NONE, RESET_ARRANGEMENT, SELECT_SCENE };
 	HardwareAction m_pendingHardwareAction = HardwareAction::NONE;
@@ -1152,6 +1192,7 @@ struct SibylModule : Module, SibylControl {
 
 	void dataFromJson(json_t* rootJ) override {
 		if (!rootJ || !json_is_object(rootJ)) return;
+		m_preparedTransactions.clear();
 
 		json_t* compJ = json_object_get(rootJ, "composition");
 		json_t* revJ = json_object_get(rootJ, "revision");
@@ -1704,7 +1745,7 @@ struct SibylModule : Module, SibylControl {
 			return true;
 #endif
 		} else if (operation == Operation::CAPABILITIES) {
-			responseJson = "{\"ok\":true,\"capabilities\":{\"sibyl\":{\"apiVersion\":1,\"schemaVersion\":4,\"supportedSchemaVersions\":[2,3,4],\"pitchSystems\":{\"version\":1,\"stage\":\"P7D\",\"staticTunedNotes\":true,\"nativeTransforms\":true,\"retuneNotes\":true,\"definitionEditing\":true,\"nativeHarmony\":true,\"scalaInterchange\":true,\"nativeVoicingAlgorithm\":\"voice_progression_micro_v1\",\"maxDivisions\":1024},\"voicing\":{\"version\":1,\"algorithm\":\"voice_progression_v1\",\"materializesNotes\":true,\"maxVoices\":8,\"maxVisitedPartials\":200000,\"maxCandidatesPerChord\":2048,\"maxDpTransitions\":2000000,\"optimizesLoopSeam\":false},\"harmony\":{\"version\":1,\"relativePitch\":true,\"maxProgressions\":128,\"maxChordsPerProgression\":128,\"maxChordMarkers\":4096,\"maxPitchEntries\":1048576,\"maxContextNotes\":256,\"maxCompiledBytes\":33554432},\"automation\":{\"version\":1,\"lanes\":[\"mod\",\"mod2\",\"mod3\"],\"maxCurves\":512,\"maxPointsPerCurve\":1024,\"maxTotalPoints\":16384,\"maxSamples\":256,\"maxDrivenLanes\":48,\"maxCompiledBytes\":33554432},\"sceneOverrides\":{\"version\":1,\"partialAssignmentEdits\":true,\"staticPreviewView\":\"scene\"},\"conditions\":{\"version\":1,\"scopes\":[\"patternPass\",\"sceneRepeat\",\"arrangementLoop\"],\"maxTests\":8,\"ordinalCeiling\":4503599627370495},\"noteEditing\":{\"version\":1,\"stableIds\":true,\"previewViaValidate\":true},\"views\":[\"summary\",\"full\",\"pattern\",\"scene\",\"notes\",\"automation\",\"progression\",\"effective_context\",\"pitch_systems\",\"pitch_context\",\"tuning_catalog\",\"map_intervals\",\"export_tuning_scl\"],\"limits\":{\"operations\":256,\"selectedEvents\":1024,\"notesPage\":256,\"reportIdsDefault\":128,\"reportIdsMax\":1024},\"editOperations\":[\"import_tuning_scl\",\"upsert_tuning\",\"delete_tuning\",\"upsert_pitch_scale\",\"delete_pitch_scale\",\"upsert_pitch_context\",\"delete_pitch_context\",\"set_default_pitch_context\",\"set_pattern_pitch_context\",\"retune_notes\",\"replace_composition\",\"set_meta\",\"set_clock\",\"upsert_track\",\"delete_track\",\"upsert_pattern\",\"update_pattern\",\"clone_pattern\",\"delete_pattern\",\"upsert_macro\",\"delete_macro\",\"upsert_scene\",\"clone_scene\",\"delete_scene\",\"set_scene_track\",\"set_scene_assignment\",\"update_scene_assignment\",\"reorder_scenes\",\"voice_progression\",\"upsert_progression\",\"delete_progression\",\"set_default_harmony\",\"set_scene_harmony\",\"inherit_scene_harmony\",\"upsert_automation\",\"delete_automation\",\"update_notes\",\"insert_notes\",\"insert_note_batch\",\"delete_notes\",\"transpose_notes\",\"rotate_notes\",\"duplicate_notes\"],\"repeatEvolution\":{\"version\":1,\"patternField\":\"evolution\",\"stepOptOut\":\"evolve\",\"fields\":[\"probability\",\"velocity\",\"gate\",\"glideMs\",\"mod\",\"mod2\",\"mod3\"]},\"revision\":" + std::to_string(m_acceptedRevision) + ",\"operations\":[\"get_composition\",\"validate\",\"edit\",\"get_status\",\"transport\"]}}}";
+			responseJson = "{\"ok\":true,\"capabilities\":{\"sibyl\":{\"apiVersion\":1,\"schemaVersion\":4,\"supportedSchemaVersions\":[2,3,4],\"pitchSystems\":{\"version\":1,\"stage\":\"P7D\",\"staticTunedNotes\":true,\"nativeTransforms\":true,\"retuneNotes\":true,\"definitionEditing\":true,\"nativeHarmony\":true,\"scalaInterchange\":true,\"nativeVoicingAlgorithm\":\"voice_progression_micro_v1\",\"maxDivisions\":1024},\"voicing\":{\"version\":1,\"algorithm\":\"voice_progression_v1\",\"materializesNotes\":true,\"maxVoices\":8,\"maxVisitedPartials\":200000,\"maxCandidatesPerChord\":2048,\"maxDpTransitions\":2000000,\"optimizesLoopSeam\":false},\"harmony\":{\"version\":1,\"relativePitch\":true,\"maxProgressions\":128,\"maxChordsPerProgression\":128,\"maxChordMarkers\":4096,\"maxPitchEntries\":1048576,\"maxContextNotes\":256,\"maxCompiledBytes\":33554432},\"automation\":{\"version\":1,\"lanes\":[\"mod\",\"mod2\",\"mod3\"],\"maxCurves\":512,\"maxPointsPerCurve\":1024,\"maxTotalPoints\":16384,\"maxSamples\":256,\"maxDrivenLanes\":48,\"maxCompiledBytes\":33554432},\"sceneOverrides\":{\"version\":1,\"partialAssignmentEdits\":true,\"staticPreviewView\":\"scene\"},\"conditions\":{\"version\":1,\"scopes\":[\"patternPass\",\"sceneRepeat\",\"arrangementLoop\"],\"maxTests\":8,\"ordinalCeiling\":4503599627370495},\"noteEditing\":{\"version\":1,\"stableIds\":true,\"previewViaValidate\":true,\"preparedTransactions\":true},\"preparedTransactions\":true,\"views\":[\"summary\",\"full\",\"pattern\",\"scene\",\"notes\",\"automation\",\"progression\",\"effective_context\",\"pitch_systems\",\"pitch_context\",\"tuning_catalog\",\"map_intervals\",\"export_tuning_scl\"],\"limits\":{\"operations\":256,\"selectedEvents\":1024,\"notesPage\":256,\"reportIdsDefault\":128,\"reportIdsMax\":1024},\"editOperations\":[\"import_tuning_scl\",\"upsert_tuning\",\"delete_tuning\",\"upsert_pitch_scale\",\"delete_pitch_scale\",\"upsert_pitch_context\",\"delete_pitch_context\",\"set_default_pitch_context\",\"set_pattern_pitch_context\",\"retune_notes\",\"replace_composition\",\"set_meta\",\"set_clock\",\"upsert_track\",\"delete_track\",\"upsert_pattern\",\"update_pattern\",\"clone_pattern\",\"delete_pattern\",\"upsert_macro\",\"delete_macro\",\"upsert_scene\",\"clone_scene\",\"delete_scene\",\"set_scene_track\",\"set_scene_assignment\",\"update_scene_assignment\",\"reorder_scenes\",\"voice_progression\",\"upsert_progression\",\"delete_progression\",\"set_default_harmony\",\"set_scene_harmony\",\"inherit_scene_harmony\",\"upsert_automation\",\"delete_automation\",\"update_notes\",\"insert_notes\",\"insert_note_batch\",\"delete_notes\",\"transpose_notes\",\"rotate_notes\",\"duplicate_notes\"],\"repeatEvolution\":{\"version\":1,\"patternField\":\"evolution\",\"stepOptOut\":\"evolve\",\"fields\":[\"probability\",\"velocity\",\"gate\",\"glideMs\",\"mod\",\"mod2\",\"mod3\"]},\"revision\":" + std::to_string(m_acceptedRevision) + ",\"operations\":[\"get_composition\",\"validate\",\"edit\",\"get_status\",\"transport\"]}}}";
 			return true;
 		} else if (operation == Operation::GET_COMPOSITION) {
 			const sibyl::Composition* comp = m_acceptedCompositionPtr;
@@ -1854,7 +1895,7 @@ struct SibylModule : Module, SibylControl {
                 const char* key; json_t* value;
                 json_object_foreach(root, key, value) {
                     std::string field = key;
-                    if (field != "operations" && field != "expected_revision" && field != "return_changes")
+                    if (field != "operations" && field != "expected_revision" && field != "return_changes" && field != "prepare" && field != "ttl_seconds")
                         return requestError("invalid_request", key, "Unknown preview field");
                 }
                 json_t* expected = json_object_get(root, "expected_revision");
@@ -1881,6 +1922,32 @@ struct SibylModule : Module, SibylControl {
             issues("errors", parsed.errors); issues("warnings", parsed.warnings);
             if (operations && edit.valid && !json_is_false(json_object_get(root, "return_changes")))
                 json_object_set_new(response, "changes", sibyl::editChangesJson(edit));
+
+            bool shouldPrepare = json_is_true(json_object_get(root, "prepare"));
+            if (shouldPrepare && parsed.valid) {
+                pruneExpiredPreparedTransactions();
+                int ttl = 60;
+                json_t* ttlJ = json_object_get(root, "ttl_seconds");
+                if (ttlJ && json_is_integer(ttlJ)) {
+                    ttl = (int)json_integer_value(ttlJ);
+                    if (ttl < 5) ttl = 5;
+                    if (ttl > 300) ttl = 300;
+                }
+                std::string handle = "prep_rev" + std::to_string(m_acceptedRevision) + "_" + std::to_string(++m_prepareCounter);
+                PreparedTransaction prep;
+                prep.handle = handle;
+                prep.baseRevision = m_acceptedRevision;
+                prep.targetRevision = m_acceptedRevision + 1;
+                prep.candidate = operations ? edit.composition : parsed.composition;
+                prep.warnings = parsed.warnings;
+                prep.editResult = edit;
+                prep.expiresAt = std::chrono::steady_clock::now() + std::chrono::seconds(ttl);
+                m_preparedTransactions[handle] = std::move(prep);
+
+                json_object_set_new(response, "handle", json_string(handle.c_str()));
+                json_object_set_new(response, "expiresInSeconds", json_integer(ttl));
+            }
+
             char* text = json_dumps(response, JSON_COMPACT); responseJson = text ? text : "{}";
             free(text); json_decref(response); json_decref(root); return true;
 		} else if (operation == Operation::TRANSPORT) {
@@ -1946,6 +2013,100 @@ struct SibylModule : Module, SibylControl {
 				error = std::string("Invalid JSON: ") + jerror.text;
 				return false;
 			}
+			auto requestError = [&](const char* code, const char* path, const char* message) {
+				json_t* response = json_pack("{s:b,s:{s:s,s:s,s:s}}", "ok", 0, "error", "code", code, "path", path, "message", message);
+				char* text = json_dumps(response, JSON_COMPACT); responseJson = text ? text : "{}";
+				free(text); json_decref(response); json_decref(root); error = message; return false;
+			};
+
+			json_t* handleJ = json_object_get(root, "handle");
+			if (handleJ) {
+				if (!json_is_string(handleJ)) return requestError("invalid_request", "handle", "Expected string handle");
+				std::string handle = json_string_value(handleJ);
+				pruneExpiredPreparedTransactions();
+				auto it = m_preparedTransactions.find(handle);
+				if (it == m_preparedTransactions.end()) {
+					return requestError("handle_not_found", "handle", "Prepared transaction handle not found or expired");
+				}
+				auto& prep = it->second;
+				const auto now = std::chrono::steady_clock::now();
+				if (now > prep.expiresAt) {
+					m_preparedTransactions.erase(it);
+					return requestError("handle_expired", "handle", "Prepared transaction handle has expired");
+				}
+				if (prep.committed) {
+					// Idempotent replay: return cached receipt
+					responseJson = prep.cachedReceiptJson;
+					json_decref(root);
+					return true;
+				}
+				json_t* expectedRevJ = json_object_get(root, "expected_revision");
+				if (expectedRevJ) {
+					if (!json_is_integer(expectedRevJ)) return requestError("invalid_request", "expected_revision", "Expected integer revision");
+					if (json_integer_value(expectedRevJ) != m_acceptedRevision) {
+						return requestError("revision_conflict", "expected_revision", "Revision conflict: expected revision does not match current");
+					}
+				} else {
+					if (prep.baseRevision != m_acceptedRevision) {
+						return requestError("revision_conflict", "expected_revision", "Revision conflict: prepared base revision is stale");
+					}
+				}
+
+				sibyl::ApplyAt applyAt = sibyl::ApplyAt::NEXT_BEAT;
+				json_t* applyAtJ = json_object_get(root, "apply_at");
+				if (!applyAtJ) applyAtJ = json_object_get(root, "applyAt");
+				if (applyAtJ) {
+					if (!json_is_string(applyAtJ) || !sibyl::parseApplyAtName(json_string_value(applyAtJ), applyAt)) {
+						return requestError("invalid_request", "apply_at", "Unsupported apply boundary");
+					}
+				} else if (prep.candidate) {
+					applyAt = prep.candidate->transport.defaultApplyAt;
+				}
+
+				sibyl::PhasePolicy phasePolicy = sibyl::PhasePolicy::PRESERVE;
+				json_t* phasePolicyJ = json_object_get(root, "phase_policy");
+				if (!phasePolicyJ) phasePolicyJ = json_object_get(root, "phasePolicy");
+				if (phasePolicyJ && (!json_is_string(phasePolicyJ) ||
+						!sibyl::parsePhasePolicyName(json_string_value(phasePolicyJ), phasePolicy))) {
+					return requestError("invalid_request", "phase_policy", "Unsupported phase policy");
+				}
+
+				acceptComposition(prep.candidate, applyAt, phasePolicy, prep.warnings);
+				int activeRevision = m_activeRevision.load(std::memory_order_acquire);
+				json_t* respJ = json_object();
+				json_object_set_new(respJ, "ok", json_true());
+				json_object_set_new(respJ, "revision", json_integer(m_acceptedRevision));
+				json_object_set_new(respJ, "activeRevision", json_integer(activeRevision));
+				const sibyl::AdoptionRequest* pending = m_pendingAdoptionPtr.load(std::memory_order_acquire);
+				json_object_set_new(respJ, "pendingRevision", pending && pending->composition && pending->composition->revision != activeRevision
+					? json_integer(pending->composition->revision) : json_null());
+				json_object_set_new(respJ, "changes", sibyl::editChangesJson(prep.editResult));
+				json_object_set_new(respJ, "applyAt", json_string(sibyl::applyAtName(applyAt)));
+				json_object_set_new(respJ, "phasePolicy", json_string(sibyl::phasePolicyName(phasePolicy)));
+				json_t* warningsJ = json_array();
+				for (const auto& warning : prep.warnings) {
+					json_t* issueJ = json_object();
+					json_object_set_new(issueJ, "path", json_string(warning.path.c_str()));
+					json_object_set_new(issueJ, "message", json_string(warning.message.c_str()));
+					json_object_set_new(issueJ, "code", json_string(warning.code.c_str()));
+					json_array_append_new(warningsJ, issueJ);
+				}
+				json_object_set_new(respJ, "warnings", warningsJ);
+				char* dumped = json_dumps(respJ, JSON_COMPACT);
+				responseJson = dumped ? dumped : "{}";
+				if (dumped) free(dumped);
+				json_decref(respJ);
+
+				// Cache receipt for idempotent replay
+				prep.committed = true;
+				prep.committedRevision = m_acceptedRevision;
+				prep.cachedReceiptJson = responseJson;
+				prep.expiresAt = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+
+				json_decref(root);
+				return true;
+			}
+
 			json_t* expectedRevJ = json_object_get(root, "expected_revision");
 			if (!expectedRevJ || !json_is_integer(expectedRevJ)) {
 				json_decref(root);

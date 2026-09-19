@@ -567,6 +567,71 @@ class SibylClient:
                 }
             return res
 
+    def validate(self, operations: List[dict], expected_revision: Optional[int] = None,
+                 prepare: bool = False, ttl_seconds: int = 60) -> dict:
+        """Validates operations preview without modifying playback. If prepare=True, caches candidate."""
+        mid = self.get_module_id()
+        if expected_revision is None:
+            st = self.get_status()
+            expected_revision = st.get("revision", 0)
+
+        payload = {
+            "expected_revision": expected_revision,
+            "operations": operations,
+            "return_changes": True
+        }
+        if prepare:
+            payload["prepare"] = True
+            payload["ttl_seconds"] = ttl_seconds
+
+        data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}/sibyl/{mid}/validate",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=5.0) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    def commit_prepared(self, handle: str, expected_revision: Optional[int] = None,
+                        response_profile: str = "receipt") -> dict:
+        """Commits a previously prepared transaction by opaque handle."""
+        mid = self.get_module_id()
+        payload = {"handle": handle}
+        if expected_revision is not None:
+            payload["expected_revision"] = expected_revision
+
+        data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}/sibyl/{mid}/edit",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=5.0) as resp:
+            res = json.loads(resp.read().decode("utf-8"))
+            if response_profile == "receipt" and res.get("ok"):
+                return {
+                    "ok": True,
+                    "revision": res.get("revision"),
+                    "activeRevision": res.get("activeRevision"),
+                    "appliedOperations": 1,
+                    "warnings": res.get("warnings", [])
+                }
+            return res
+
+    def two_phase_commit(self, operations: List[dict], expected_revision: Optional[int] = None,
+                         response_profile: str = "receipt") -> dict:
+        """Two-phase commit: validates with prepare=True, then commits via opaque handle."""
+        val = self.validate(operations, expected_revision=expected_revision, prepare=True)
+        if not val.get("valid"):
+            return {"ok": False, "error": "validation_failed", "details": val}
+        handle = val.get("handle")
+        if not handle:
+            return {"ok": False, "error": "no_handle_returned", "details": val}
+        return self.commit_prepared(handle, expected_revision=val.get("revision"), response_profile=response_profile)
+
 
 class SibylScore:
     """
@@ -627,3 +692,11 @@ class SibylScore:
         """Directly executes the compiled score against VCV Rack."""
         c = client or SibylClient()
         return c.edit(self.compile(), expected_revision=expected_revision)
+
+    def two_phase_commit(self, client: Optional[SibylClient] = None,
+                         expected_revision: Optional[int] = None,
+                         response_profile: str = "receipt") -> dict:
+        """Two-phase commit: validates with prepare=True, then commits via opaque handle."""
+        c = client or SibylClient()
+        return c.two_phase_commit(self.compile(), expected_revision=expected_revision,
+                                  response_profile=response_profile)

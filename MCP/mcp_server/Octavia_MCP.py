@@ -470,11 +470,14 @@ class SibylValidateInput(SibylModuleInput):
     operations: Optional[list[dict]] = Field(None, min_length=1, max_length=256)
     expected_revision: Optional[int] = Field(None, ge=0)
     return_changes: bool = True
+    prepare: bool = Field(False, description="If true, cache valid candidate in-memory and return opaque commit handle")
+    ttl_seconds: Optional[int] = Field(60, description="Prepared transaction TTL in seconds (5-300)")
 
 
 class SibylEditInput(SibylModuleInput):
-    expected_revision: int = Field(..., description="Last accepted revision read from Sibyl", ge=0)
-    operations: list[dict] = Field(..., description="Atomic semantic edit operations", min_length=1, max_length=256)
+    expected_revision: Optional[int] = Field(None, description="Last accepted revision read from Sibyl", ge=0)
+    operations: Optional[list[dict]] = Field(None, description="Atomic semantic edit operations", min_length=1, max_length=256)
+    handle: Optional[str] = Field(None, description="Opaque handle from prepared validation transaction; avoids resending operations")
     apply_at: Optional[Literal["immediate", "nextStep", "nextBeat", "nextScene"]] = Field(
         None, description="Optional adoption boundary; otherwise use the composition default"
     )
@@ -524,7 +527,8 @@ async def vcv_sibyl_get_capabilities(params: SibylCapabilitiesInput) -> str:
                     "automation": sib.get("automation", {}).get("version"),
                     "voicing": sib.get("voicing", {}).get("version"),
                     "conditions": sib.get("conditions", {}).get("version"),
-                    "repeatEvolution": sib.get("repeatEvolution", {}).get("version")
+                    "repeatEvolution": sib.get("repeatEvolution", {}).get("version"),
+                    "preparedTransactions": sib.get("preparedTransactions", False)
                 }
             }
             return _dump_json(manifest)
@@ -560,8 +564,16 @@ async def vcv_sibyl_validate(params: SibylValidateInput) -> str:
                 return _err("Operation preview requires expected_revision and no candidate")
             payload = {"operations": params.operations, "expected_revision": params.expected_revision,
                        "return_changes": params.return_changes}
+            if params.prepare:
+                payload["prepare"] = True
+                if params.ttl_seconds is not None:
+                    payload["ttl_seconds"] = params.ttl_seconds
         elif params.candidate is not None:
-            payload = params.candidate
+            payload = dict(params.candidate)
+            if params.prepare:
+                payload["prepare"] = True
+                if params.ttl_seconds is not None:
+                    payload["ttl_seconds"] = params.ttl_seconds
         else:
             return _err("Supply candidate or operations")
         return _dump_json(await _sibyl_call(f"sibyl/{params.module_id}/validate", "POST", payload))
@@ -574,18 +586,27 @@ async def vcv_sibyl_validate(params: SibylValidateInput) -> str:
 async def vcv_sibyl_edit(params: SibylEditInput) -> str:
     """Apply semantic operations atomically. A successful transaction creates one vcv_undo entry."""
     try:
-        payload = {"expected_revision": params.expected_revision,
-                   "phase_policy": params.phase_policy,
-                   "operations": params.operations}
-        if params.apply_at is not None:
-            payload["apply_at"] = params.apply_at
+        if params.handle is not None:
+            payload = {"handle": params.handle, "phase_policy": params.phase_policy}
+            if params.expected_revision is not None:
+                payload["expected_revision"] = params.expected_revision
+            if params.apply_at is not None:
+                payload["apply_at"] = params.apply_at
+        else:
+            if params.operations is None or params.expected_revision is None:
+                return _err("Must supply either 'handle' or both 'expected_revision' and 'operations'")
+            payload = {"expected_revision": params.expected_revision,
+                       "phase_policy": params.phase_policy,
+                       "operations": params.operations}
+            if params.apply_at is not None:
+                payload["apply_at"] = params.apply_at
         res = await _sibyl_call(f"sibyl/{params.module_id}/edit", "POST", payload)
         if params.response_profile == "receipt" and isinstance(res, dict) and res.get("ok"):
             receipt = {
                 "ok": True,
                 "revision": res.get("revision"),
                 "activeRevision": res.get("activeRevision"),
-                "appliedOperations": len(params.operations),
+                "appliedOperations": len(params.operations) if params.operations is not None else 1,
                 "warnings": res.get("warnings", [])
             }
             if "changes" in res and isinstance(res["changes"], dict):

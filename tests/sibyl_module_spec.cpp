@@ -248,6 +248,39 @@ int main() {
             "failed candidate preview returns valid:false without mutation");
         check(!module.handleSibylRequest(SibylControl::Operation::VALIDATE,
             R"({"expected_revision":3,"operations":[],"candidate":{}})", response, error), "mixed preview modes are malformed");
+
+        // P8E: Two-phase commit with prepared transaction
+        std::string prepPreview = R"({"expected_revision":3,"prepare":true,"operations":[{"op":"insert_notes","pattern_id":"p","notes":[{"step":8,"note":"A3"}]}]})";
+        check(module.handleSibylRequest(SibylControl::Operation::VALIDATE, prepPreview, response, error)
+            && response.find(R"___("valid":true)___") != std::string::npos
+            && response.find(R"___("handle":)___") != std::string::npos
+            && response.find(R"___("expiresInSeconds":60)___") != std::string::npos
+            && module.m_acceptedRevision == 3,
+            "validate with prepare:true returns opaque handle without mutating state");
+        json_error_t pErr;
+        json_t* prepObj = json_loads(response.c_str(), 0, &pErr);
+        std::string handleStr = json_string_value(json_object_get(prepObj, "handle"));
+        json_decref(prepObj);
+
+        // Commit via handle
+        std::string handleEdit = "{\"handle\":\"" + handleStr + "\"}";
+        check(module.handleSibylRequest(SibylControl::Operation::EDIT, handleEdit, response, error)
+            && response.find(R"___("ok":true)___") != std::string::npos
+            && module.m_acceptedRevision == 4
+            && module.m_acceptedCompositionPtr->patterns.at("p").steps.size() == 3,
+            "edit with prepared handle atomically commits candidate to revision 4");
+        std::string firstCommitResp = response;
+
+        // Idempotent replay with same handle
+        check(module.handleSibylRequest(SibylControl::Operation::EDIT, handleEdit, response, error)
+            && response == firstCommitResp
+            && module.m_acceptedRevision == 4,
+            "retrying committed handle returns identical receipt idempotently");
+
+        // Non-existent or invalid handle
+        check(!module.handleSibylRequest(SibylControl::Operation::EDIT, R"({"handle":"prep_nonexistent"})", response, error)
+            && response.find("handle_not_found") != std::string::npos,
+            "unknown prepared handle is rejected with handle_not_found");
         check(module.handleSibylRequest(SibylControl::Operation::GET_COMPOSITION,
             R"({"view":"notes","pattern_id":"p","selector":{"ids":["n2"]},"fields":["id","note","effectivePitchV"]})", response, error)
             && response.find("derived") != std::string::npos && response.find("n2") != std::string::npos,
