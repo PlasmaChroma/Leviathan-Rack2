@@ -47,6 +47,7 @@ class ServerContractTest(unittest.TestCase):
             "vcv_undo", "vcv_save_patch", "vcv_sibyl_get_capabilities",
             "vcv_sibyl_get_composition", "vcv_sibyl_validate", "vcv_sibyl_edit",
             "vcv_sibyl_get_status", "vcv_sibyl_transport",
+            "vcv_sibyl_compose_euclidean", "vcv_sibyl_compose_progression",
             "vcv_semantic_get_capabilities", "vcv_semantic_get_document",
             "vcv_semantic_validate", "vcv_semantic_edit",
             "vcv_semantic_get_status", "vcv_semantic_command",

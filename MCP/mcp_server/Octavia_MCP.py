@@ -16,6 +16,12 @@ from pydantic import BaseModel, Field, ConfigDict
 
 warnings.filterwarnings("ignore")
 
+import sys
+from pathlib import Path
+_repo_root = Path(__file__).resolve().parents[2]
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
+
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("vcv_rack_mcp")
@@ -617,6 +623,126 @@ async def vcv_sibyl_transport(params: SibylTransportInput) -> str:
     try:
         payload = params.model_dump(exclude={"module_id"}, exclude_none=True)
         return _dump_json(await _sibyl_call(f"sibyl/{params.module_id}/transport", "POST", payload))
+    except Exception as e:
+        return _err(e)
+
+
+# ── P8D Generative Composition Macro Tools ────────────────────────────────────
+
+class SibylComposeEuclideanInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    module_id: int = Field(..., description="Sibyl module ID from vcv_list_modules", ge=0)
+    pattern_id: str = Field(..., description="Target pattern ID to populate or create")
+    pulses: int = Field(..., description="Number of active pulses", ge=1, le=1024)
+    steps: int = Field(16, description="Total step count in pattern", ge=1, le=1024)
+    note: Optional[str] = Field(None, description="Standard note name, e.g. 'C2', 'F#3'")
+    degree: Optional[int] = Field(None, description="Scale degree integer")
+    tuned_step: Optional[int] = Field(None, description="P7 N-EDO tuning step integer")
+    velocity: float = Field(0.8, description="Base velocity", ge=0.0, le=1.0)
+    gate: float = Field(0.5, description="Gate length ratio", ge=0.0, le=10.0)
+    rotation: int = Field(0, description="Step rotation offset")
+    accent_interval: Optional[int] = Field(None, description="Accent every Nth pulse", ge=1)
+    accent_velocity: float = Field(0.95, description="Velocity on accented pulses", ge=0.0, le=1.0)
+    ratchets: Optional[int] = Field(None, description="Ratchets on accented pulses", ge=1, le=16)
+    expected_revision: Optional[int] = Field(None, description="Concurrency check")
+    response_profile: str = Field("receipt", description="Receipt or full edit response")
+
+
+@mcp.tool(name="vcv_sibyl_compose_euclidean",
+          annotations={"title": "Compose Euclidean Pattern", "readOnlyHint": False, "destructiveHint": False})
+async def vcv_sibyl_compose_euclidean(params: SibylComposeEuclideanInput) -> str:
+    """Generates an algorithmic Euclidean rhythm using Bjorklund's algorithm and commits it as an optimized columnar batch."""
+    try:
+        from tools import sibyl_composer as sc
+        pb = sc.PatternBuilder(length=params.steps)
+        pb.euclidean(
+            pulses=params.pulses,
+            steps=params.steps,
+            note=params.note,
+            degree=params.degree,
+            tuned_step=params.tuned_step,
+            velocity=params.velocity,
+            gate=params.gate,
+            rotation=params.rotation,
+            accent_interval=params.accent_interval,
+            accent_velocity=params.accent_velocity,
+            ratchets=params.ratchets
+        )
+        ops = [
+            {
+                "op": "upsert_pattern",
+                "id": params.pattern_id,
+                "pattern": {"length": params.steps, "resolution": "1/16", "steps": []}
+            },
+            pb.to_columnar_batch(params.pattern_id, collision="replace")
+        ]
+        exp_rev = params.expected_revision
+        if exp_rev is None:
+            st = await _sibyl_call(f"sibyl/{params.module_id}/status")
+            exp_rev = st.get("revision", 0)
+        edit_params = SibylEditInput(
+            module_id=params.module_id,
+            expected_revision=exp_rev,
+            operations=ops,
+            response_profile=params.response_profile
+        )
+        return await vcv_sibyl_edit(edit_params)
+    except Exception as e:
+        return _err(e)
+
+
+class SibylComposeProgressionInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    module_id: int = Field(..., description="Sibyl module ID from vcv_list_modules", ge=0)
+    progression_id: str = Field(..., description="Progression ID to upsert")
+    pitch_context: Optional[str] = Field(None, description="Pitch context ID (e.g. 'arch_38')")
+    length_beats: float = Field(16.0, description="Progression loop length in beats", gt=0.0)
+    chords: list[dict[str, Any]] = Field(..., description="List of chord definitions with 'beat', 'root_step'/'root_ratio'/'root', and 'intervals'/'chord_type'")
+    divisions: Optional[int] = Field(None, description="N-EDO divisions for resolving chord_type to steps")
+    expected_revision: Optional[int] = Field(None, description="Concurrency check")
+    response_profile: str = Field("receipt", description="Receipt or full edit response")
+
+
+@mcp.tool(name="vcv_sibyl_compose_progression",
+          annotations={"title": "Compose Harmony Progression", "readOnlyHint": False, "destructiveHint": False})
+async def vcv_sibyl_compose_progression(params: SibylComposeProgressionInput) -> str:
+    """Generates a P7 microtonal or relative harmony progression and commits it in a single transaction."""
+    try:
+        from tools import sibyl_composer as sc
+        tuning = sc.EdoTuning(params.divisions) if params.divisions else None
+        pb = sc.ProgressionBuilder(pitch_context=params.pitch_context, length_beats=params.length_beats)
+        for c in params.chords:
+            beat = c.get("beat", 0.0)
+            cid = c.get("id")
+            root_note = c.get("root")
+            root_step = c.get("root_step")
+            root_ratio = c.get("root_ratio")
+            intervals = c.get("intervals")
+            chord_type = c.get("chord_type")
+            tones = c.get("tones")
+            if chord_type and tuning and intervals is None:
+                intervals = tuning.chord_steps(chord_type, root_step=0)
+            pb.chord(
+                beat=beat,
+                chord_id=cid,
+                root_note=root_note,
+                root_step=root_step,
+                root_ratio=root_ratio,
+                intervals=intervals,
+                tones=tones
+            )
+        ops = [pb.to_upsert_op(params.progression_id)]
+        exp_rev = params.expected_revision
+        if exp_rev is None:
+            st = await _sibyl_call(f"sibyl/{params.module_id}/status")
+            exp_rev = st.get("revision", 0)
+        edit_params = SibylEditInput(
+            module_id=params.module_id,
+            expected_revision=exp_rev,
+            operations=ops,
+            response_profile=params.response_profile
+        )
+        return await vcv_sibyl_edit(edit_params)
     except Exception as e:
         return _err(e)
 
