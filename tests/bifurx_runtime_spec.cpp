@@ -1291,6 +1291,8 @@ TestResult testPremiumVisualWatchdogAndWorkerMetadata() {
 }
 
 TestResult testPremiumBoundarySwitchContinuity() {
+  const bool previousDebug = testDragonKingDebugEnabled;
+  testDragonKingDebugEnabled = true;
   bool pass=true;float worst=0.f;
   for(float rate : {44100.f,48000.f,96000.f,192000.f}) {
     Bifurx m;configureBaseParams(m,9,freqNormForCenterHz(20.f),0.f,0.f,0.f);
@@ -1310,6 +1312,7 @@ TestResult testPremiumBoundarySwitchContinuity() {
     }
     pass &= m.transitionSmoother.isStable();
   }
+  testDragonKingDebugEnabled = previousDebug;
   return {"Premium boundary A/B and Display Only exit transitions",pass && worst<.2f,"worst adjacent step="+std::to_string(worst)+" V for 1 V peak / 220 Hz"};
 }
 
@@ -2297,27 +2300,48 @@ TestResult testDebugNonlinearOversamplingTogglePersists() {
 }
 
 TestResult testDebugNonlinearOversamplingToggleIsProductionSafe() {
-  Module::ProcessArgs args;
+  Module::ProcessArgs args{};
   args.sampleRate = 48000.f;
   args.sampleTime = 1.f / args.sampleRate;
+  const bool previousDebug = testDragonKingDebugEnabled;
+  bool pass = true;
 
-  testDragonKingDebugEnabled = true;
-  Bifurx debugBypass;
-  debugBypass.nonlinearOversamplingEnabled.store(false, std::memory_order_relaxed);
-  for (int i = 0; i < 32; ++i) debugBypass.process(args);
-  const bool debugHonorsBypass = !debugBypass.cachedNonlinearOversamplingEnabled;
+  for (int savedBoundary : {1, 2, 3}) for (bool savedEnabled : {false, true}) {
+    json_t* state = json_object();
+    json_object_set_new(state, "boundaryResampling", json_integer(savedBoundary));
+    json_object_set_new(state, "nonlinearOversamplingEnabled", json_boolean(savedEnabled));
+    Bifurx module;
+    module.dataFromJson(state);
+    json_decref(state);
 
-  testDragonKingDebugEnabled = false;
-  Bifurx production;
-  production.nonlinearOversamplingEnabled.store(false, std::memory_order_relaxed);
-  for (int i = 0; i < 32; ++i) production.process(args);
-  const bool productionForcesEnabled = production.cachedNonlinearOversamplingEnabled;
+    auto settle = [&]() {
+      for (int i = 0; i < 512; ++i) module.process(args);
+      pass &= module.transitionSmoother.isStable();
+    };
+    auto checkProduction = [&]() {
+      pass &= module.cachedNonlinearOversamplingEnabled;
+      pass &= module.audioBoundary == 3;
+      pass &= module.transitionSmoother.activeBoundary == 3;
+    };
 
+    testDragonKingDebugEnabled = false;
+    settle();
+    checkProduction();
+    testDragonKingDebugEnabled = true;
+    settle();
+    pass &= module.audioBoundary == (savedEnabled ? savedBoundary : 0);
+    testDragonKingDebugEnabled = false;
+    settle();
+    checkProduction();
+    // Runtime enforcement must not erase the saved developer preferences.
+    pass &= module.boundaryResampling.load() == savedBoundary;
+    pass &= module.nonlinearOversamplingEnabled.load() == savedEnabled;
+  }
+  testDragonKingDebugEnabled = previousDebug;
   return {
-    "Debug nonlinear oversampling bypass is production-safe",
-    debugHonorsBypass && productionForcesEnabled,
-    "debugHonorsBypass=" + std::to_string(int(debugHonorsBypass)) +
-      " productionForcesEnabled=" + std::to_string(int(productionForcesEnabled))
+    "Debug audio settings cannot override production 2x IIR4",
+    pass,
+    "All six saved boundary/enable combinations; production load and live debug on/off"
   };
 }
 

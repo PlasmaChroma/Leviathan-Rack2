@@ -1378,7 +1378,10 @@ void Bifurx::process(const ProcessArgs& args) {
 		controlFastCacheValid = true;
 	}
 
-	const int requestedBoundary = !cachedNonlinearOversamplingEnabled ? 0
+	// Production always uses the 2x IIR4 path, irrespective of saved debug settings.
+	// Keep boundary changes on the existing click-free transition path.
+	const int requestedBoundary = !isDragonKingDebugEnabled() ? 3
+		: !cachedNonlinearOversamplingEnabled ? 0
 		: boundaryResampling.load(std::memory_order_relaxed);
 	const bool primeBoundary = requestedBoundary != transitionSmoother.activeBoundary
 		|| (isBifurxDisplayOnlyMode(transitionSmoother.activeMode) && !isBifurxDisplayOnlyMode(mode));
