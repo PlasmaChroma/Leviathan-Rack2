@@ -77,7 +77,7 @@ class ServerContractTest(unittest.TestCase):
         self.assertIn('name="vcv_debug_capture"', self.source)
         self.assertIn('f"debug/capture/{params.module_id}"', self.source)
         self.assertIn("ge=1.0, le=10.0", self.source)
-        self.assertIn("stable extensible diagnostics surface", self.source)
+        self.assertIn("poll status until complete", self.source)
 
     def test_tool_errors_are_raised(self):
         error_helper = next(

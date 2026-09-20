@@ -2213,6 +2213,10 @@ struct Octavia : Module {
         });
 
         svr.Get("/modules",  [this](const httplib::Request&, httplib::Response& res){ std::unique_lock<std::mutex> lk(cacheMtx); res.set_content(moduleListJson,"application/json"); });
+        svr.Get("/modules/slim", [this](const httplib::Request&, httplib::Response& res){
+            std::unique_lock<std::mutex> lk(cacheMtx);
+            res.set_content(slimModuleJson(moduleListJson), "application/json");
+        });
         svr.Get("/modules/summary", [this](const httplib::Request&, httplib::Response& res){ std::unique_lock<std::mutex> lk(cacheMtx); res.set_content(moduleSummaryJson,"application/json"); });
         svr.Get(R"(/modules/(\d+)$)", [this](const httplib::Request& r, httplib::Response& res){
             int64_t modId = std::stoll(r.matches[1].str());

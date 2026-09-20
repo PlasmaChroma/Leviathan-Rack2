@@ -50,7 +50,7 @@ BRIDGE_HEADERS = {"X-Octavia-Token": BRIDGE_TOKEN} if BRIDGE_TOKEN else {}
 class PresenceInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     state: Literal["auto", "idle", "inspecting", "thinking", "working", "error", "sleeping"] = Field(
-        ..., description="thinking: planning/preparation; working: actively editing Rack; inspecting: examining patch/signals; auto: release override")
+        ..., description="Task presence; auto releases the override")
     lease_ms: int = Field(30000, ge=1000, le=300000, strict=True,
                           description="Override lifetime in milliseconds. Renew by setting again; expires back to automatic.")
 
@@ -237,19 +237,26 @@ async def _console_call(endpoint: str, method: str = "GET", data: dict = None,
 
 
 async def _resolve_port(module_id: int, port_kind: str,
-                        port_id: Optional[int], port_name: Optional[str]) -> int:
+                        port_id: Optional[int], port_name: Optional[str],
+                        module_cache: Optional[dict[int, dict]] = None) -> int:
     """Resolve an input/output port by index or case-insensitive display name."""
     if port_id is not None:
         return port_id
     if not port_name:
         raise ValueError(f"Provide {port_kind}_port_id or {port_kind}_port_name")
 
-    module = await _call(f"modules/{module_id}")
+    module = module_cache.get(module_id) if module_cache is not None else None
+    if module is None:
+        module = await _call(f"modules/{module_id}?slim=1")
+        if module_cache is not None:
+            module_cache[module_id] = module
     ports = module.get(f"{port_kind}s", [])
     wanted = port_name.casefold()
     matches = [p for p in ports if str(p.get("name", "")).casefold() == wanted]
     if not matches:
-        available = ", ".join(f'{p.get("id")}: {p.get("name")}' for p in ports)
+        available = ", ".join(f'{p.get("id")}: {p.get("name")}' for p in ports[:5])
+        if len(ports) > 5:
+            available += f", ... ({len(ports)} total)"
         raise ValueError(
             f"No {port_kind} named {port_name!r} on module {module_id}. "
             f"Available: {available or 'none'}"
@@ -272,7 +279,11 @@ def _error_message(e: Exception) -> str:
     if isinstance(e, httpx.TimeoutException):
         return "Error: VCV Rack timed out. Check that the Octavia module is active."
     if isinstance(e, httpx.HTTPStatusError):
-        return f"Error: VCV Rack returned HTTP {e.response.status_code}: {e.response.text}"
+        body = e.response.text
+        if "html" in e.response.headers.get("content-type", "").lower():
+            body = re.sub(r"<[^>]*>", " ", body)
+            body = " ".join(body.split())
+        return f"Error: VCV Rack returned HTTP {e.response.status_code}: {body[:200]}"
     return f"Error: {type(e).__name__}: {e}"
 
 
@@ -290,14 +301,7 @@ def _err(e: Exception | str) -> None:
     annotations={"title": "Get Octavia Status", "readOnlyHint": True, "destructiveHint": False}
 )
 async def vcv_get_status() -> str:
-    """Get the current status of the Octavia bridge in VCV Rack and the current patch file info.
-
-    Returns whether the bridge is running, its configured port, API version, and patch file path.
-    Use this first to verify the connection before calling other tools.
-
-    Returns:
-        str: JSON with running (bool), port (int), version (str), patch {path, hasSavePath}
-    """
+    """Read bridge availability and the current patch path."""
     try:
         status = await _call("status")
         try:
@@ -359,12 +363,7 @@ class DebugCaptureInput(BaseModel):
     annotations={"title": "Control Detailed Debug Capture", "readOnlyHint": False, "destructiveHint": False}
 )
 async def vcv_debug_capture(params: DebugCaptureInput) -> str:
-    """Start or inspect an explicitly armed detailed module debug capture.
-
-    Sibyl process captures are bounded to 1–10 seconds, record into preallocated audio-thread
-    storage, and write CSV off the audio thread. Use action=status until state is complete.
-    The action and capture_kind strings intentionally form a stable extensible diagnostics surface.
-    """
+    """Start or inspect a bounded module debug capture; poll status until complete."""
     payload = {
         "action": params.action,
         "capture_kind": params.capture_kind,
@@ -398,6 +397,7 @@ async def vcv_list_modules() -> str:
 class GetModuleInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     module_id: int = Field(..., description="Module ID from vcv_list_modules", ge=0)
+    include_voltages: bool = Field(False, description="Include instantaneous port voltages and peaks")
 
 
 @mcp.tool(
@@ -405,11 +405,10 @@ class GetModuleInput(BaseModel):
     annotations={"title": "Get Module Detail", "readOnlyHint": True, "destructiveHint": False}
 )
 async def vcv_get_module(params: GetModuleInput) -> str:
-    """Get full details for a single module: all parameters (id, name, value, min, max, unit),
-    input ports (id, name, voltage, connected), and output ports.
-    """
+    """Get module parameters and ports; opt in to instantaneous voltages."""
     try:
-        return _dump_json(await _call(f"modules/{params.module_id}"))
+        suffix = "" if params.include_voltages else "?slim=1"
+        return _dump_json(await _call(f"modules/{params.module_id}{suffix}"))
     except Exception as e:
         return _err(e)
 
@@ -515,7 +514,7 @@ class SibylEditInput(SibylModuleInput):
         "preserve", description="How pattern phases respond when the revision becomes active"
     )
     response_profile: Optional[Literal["receipt", "summary", "full"]] = Field(
-        "full", description="Response profile: receipt returns compact confirmation (<150B); full returns complete change details"
+        "receipt", description="Receipt preserves acceptance and warnings; full returns detailed changes"
     )
 
 
@@ -533,7 +532,7 @@ class SibylTransportInput(SibylModuleInput):
 
 
 class SibylCapabilitiesInput(SibylModuleInput):
-    compact: bool = Field(False, description="Return compact feature manifest (<300B) instead of full contract schema")
+    compact: bool = Field(True, description="Return compact feature manifest; set false for the full contract")
     topic: Optional[Literal["pitchSystems", "voicing", "automation", "conditions", "limits", "editOperations", "p8", "toolSchemas"]] = None
 
 
@@ -662,11 +661,11 @@ async def vcv_sibyl_edit(params: SibylEditInput) -> str:
                        "operations": negotiate_operations(params.operations, contract)}
             if params.apply_at is not None:
                 payload["apply_at"] = params.apply_at
-        if (params.response_profile or "full") in contract.get("p8", {}).get("responseProfiles", []):
-            payload["response_profile"] = params.response_profile or "full"
+        if (params.response_profile or "receipt") in contract.get("p8", {}).get("responseProfiles", []):
+            payload["response_profile"] = params.response_profile or "receipt"
         res = await _sibyl_call(f"sibyl/{params.module_id}/edit", "POST", payload)
         from tools.sibyl_composer import project_edit_response
-        return _dump_json(project_edit_response(res, params.response_profile or "full",
+        return _dump_json(project_edit_response(res, params.response_profile or "receipt",
                          len(params.operations) if params.operations is not None else None))
     except Exception as e:
         return _err(e)
@@ -1264,18 +1263,22 @@ async def vcv_list_cables(params: ListCablesInput = ListCablesInput()) -> str:
 
 # ── Signal & Patch Diagnostics ────────────────────────────────────────────────
 
+class SignalLevelsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    module_id: Optional[int] = Field(None, description="Only return this module", ge=0)
+
+
 @mcp.tool(
     name="vcv_get_signal_levels",
     annotations={"title": "Get Signal Levels", "readOnlyHint": True, "destructiveHint": False}
 )
-async def vcv_get_signal_levels() -> str:
-    """Get a voltage and peak snapshot for all module outputs in the patch.
-
-    Use this to identify active signal chains, Octavia full-scale overrange
-    (peak >= 5V), or silent sections.
-    """
+async def vcv_get_signal_levels(params: SignalLevelsInput = SignalLevelsInput()) -> str:
+    """Get output voltage and peak snapshots, optionally for one module."""
     try:
-        return _dump_json(await _call("modules/voltages"))
+        levels = await _call("modules/voltages")
+        if params.module_id is not None:
+            levels = [m for m in levels if m.get("id") == params.module_id]
+        return _dump_json(levels)
     except Exception as e:
         return _err(e)
 
@@ -1294,12 +1297,7 @@ class TemporalDeckTransportInput(BaseModel):
     annotations={"title": "Control Temporal Deck Sample Transport", "readOnlyHint": False, "destructiveHint": False}
 )
 async def vcv_temporal_deck_transport(params: TemporalDeckTransportInput) -> str:
-    """Load and control a Temporal Deck sample without changing its user interface.
-
-    Use status after load until loaded=true, then stop_rewind, start a bounded
-    Octavia analysis capture, play, and measure. This is intended for repeatable local
-    reference-audio tests as well as normal transport control.
-    """
+    """Load and control a Temporal Deck sample."""
     try:
         if params.action == "load" and not params.path:
             raise ValueError("path is required for action='load'")
@@ -1323,7 +1321,7 @@ async def vcv_temporal_deck_transport(params: TemporalDeckTransportInput) -> str
 async def vcv_find_unpatched() -> str:
     """Find modules with unconnected ports, including port names and smart generator filtering."""
     try:
-        modules_full = await _call("modules")
+        modules_full = await _call("modules/slim")
         cables       = await _call("cables")
 
         connected_in:  set = set()
@@ -1478,13 +1476,7 @@ class LayoutModulesInput(BaseModel):
     annotations={"title": "Layout Modules", "readOnlyHint": False, "destructiveHint": False}
 )
 async def vcv_layout_modules(params: LayoutModulesInput) -> str:
-    """Atomically arrange modules across rack rows as one undoable operation.
-
-    The bridge validates all modules and target rectangles before moving anything.
-    Collisions reject the whole operation. The response reports resolved positions.
-    Use separate rows when functional lanes improve readability, such as sequencing,
-    drums, melodic voices, and mixing/effects, with signal flow left-to-right per row.
-    """
+    """Atomically arrange modules across rack rows as one undoable operation."""
     changes = [
         {"moduleId": change.module_id, "hp": change.hp, "row": change.row}
         for change in params.changes
@@ -1547,7 +1539,7 @@ async def vcv_get_module_state(params: ModuleStateInput) -> str:
             payload = r.json()
             if isinstance(payload, dict) and "error" in payload:
                 raise OctaviaBridgeError(str(payload["error"]))
-            return r.text
+            return _dump_json(payload)
     except Exception as e:
         return _err(e)
 
@@ -1607,13 +1599,14 @@ async def vcv_connect_cables(params: ConnectCablesInput) -> str:
     """
     applied = []
     failed_index = None
+    module_cache: dict[int, dict] = {}
     try:
         for index, c in enumerate(params.connections):
             failed_index = index
             out_port = await _resolve_port(c.output_module_id, "output",
-                                           c.output_port_id, c.output_port_name)
+                                           c.output_port_id, c.output_port_name, module_cache)
             in_port = await _resolve_port(c.input_module_id, "input",
-                                          c.input_port_id, c.input_port_name)
+                                          c.input_port_id, c.input_port_name, module_cache)
             payload = {
                 "outputModuleId": c.output_module_id, "outputPortId": out_port,
                 "inputModuleId": c.input_module_id, "inputPortId": in_port,
@@ -1736,6 +1729,8 @@ def configure_sibyl_toolset(toolset: str) -> None:
         for action, (_, handler) in _sibyl_actions().items():
             if action != "capabilities":
                 mcp.remove_tool(handler.__name__)
+    else:
+        mcp.remove_tool("vcv_sibyl_request")
 
 
 if __name__ == "__main__":
