@@ -49,9 +49,9 @@ def diagram(number: int, name: str, topology: str, a: str, b: str) -> str:
     ax = 10 + (-focus_offset - log_min) / (log_max - log_min) * 200
     bx = 10 + (focus_offset - log_min) / (log_max - log_min) * 200
     if topology == "cascade":
-        flow = f'<text x="22" y="105">IN</text><path d="M42 101h27m46 0h17m46 0h10"/><rect x="69" y="90" width="46" height="22" rx="5"/><rect x="132" y="90" width="46" height="22" rx="5"/><text x="92" y="105" text-anchor="middle">A {a}</text><text x="155" y="105" text-anchor="middle">B {b}</text><text x="188" y="105">OUT</text>'
+        flow = f'<text x="22" y="105">IN</text><path d="M42 101H60 M106 101H124 M170 101H188"/><rect x="60" y="90" width="46" height="22" rx="5"/><rect x="124" y="90" width="46" height="22" rx="5"/><text x="83" y="105" text-anchor="middle">A {a}</text><text x="147" y="105" text-anchor="middle">B {b}</text><text x="196" y="105">OUT</text>'
     else:
-        flow = f'<text x="22" y="105">IN</text><path d="M42 101h16m0 0V91h19m-19 10v11h19m46-21h42m-42 21h42m0-21v21m0-11h23"/><rect x="77" y="80" width="46" height="22" rx="5"/><rect x="77" y="102" width="46" height="22" rx="5"/><text x="100" y="95" text-anchor="middle">A {a}</text><text x="100" y="117" text-anchor="middle">B {b}</text><text x="188" y="105">OUT</text>'
+        flow = f'<text x="22" y="105">IN</text><path d="M42 101H58V91H77 M58 101V112H97 M123 91H165V112 M143 112H165 M165 101H188"/><rect x="77" y="80" width="46" height="22" rx="5"/><rect x="97" y="102" width="46" height="22" rx="5"/><text x="100" y="95" text-anchor="middle">A {a}</text><text x="120" y="117" text-anchor="middle">B {b}</text><text x="196" y="105">OUT</text>'
     return (
         f'<svg class="mode-diagram" viewBox="0 0 230 128" role="img" '
         f'aria-label="{name}: {topology} response and signal route" xmlns="http://www.w3.org/2000/svg">'
@@ -66,7 +66,7 @@ def diagram(number: int, name: str, topology: str, a: str, b: str) -> str:
 
 
 def display_diagram() -> str:
-    return '<svg class="mode-diagram" viewBox="0 0 230 128" role="img" aria-label="Display Only: direct pass-through" xmlns="http://www.w3.org/2000/svg"><title>Display Only: direct pass-through</title><path class="axis" d="M10 55H210"/><path class="response" d="M10 55H210"/><g class="flow"><text x="22" y="105">IN</text><path d="M42 101h146"/><text x="188" y="105">OUT</text></g></svg>'
+    return '<svg class="mode-diagram" viewBox="0 0 230 128" role="img" aria-label="Display Only: direct pass-through" xmlns="http://www.w3.org/2000/svg"><title>Display Only: direct pass-through</title><path class="axis" d="M10 55H210"/><path class="response" d="M10 55H210"/><g class="flow"><text x="22" y="105">IN</text><path d="M42 101h146"/><text x="196" y="105">OUT</text></g></svg>'
 
 
 def main() -> None:
