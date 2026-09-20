@@ -407,14 +407,21 @@ struct BifurxSpectrumBase {
 	size_t workerAnalysisFramePoolCursor = 0;
 	float lastWorkerSubmitUs = 0.f;
 	float lastSurfaceRenderUs = 0.f;
-	float pendingSurfaceRenderUs = 0.f;
 
 	uint32_t lastModelUpdateSeq = 0;
 	uint32_t lastAnalysisGeneration = 0;
 	mutable BifurxPreviewModel cachedModel;
 	float lastCurvePrepUs = 0.f;
 	float lastOverlayPrepUs = 0.f;
-	mutable std::vector<BifurxCurvePoint> refinedCurveTemplate;
+	struct RefinedCurveTemplatePoint {
+		float x01 = 0.f;
+		int priority = 0;
+		int gridIndex = -1;
+
+		RefinedCurveTemplatePoint() = default;
+		RefinedCurveTemplatePoint(float x, int p, int g = -1) : x01(x), priority(p), gridIndex(g) {}
+	};
+	mutable std::vector<RefinedCurveTemplatePoint> refinedCurveTemplate;
 	mutable bool refinedCurveTemplateValid = false;
 	mutable float refinedCurveTemplateW = 0.f;
 	mutable float refinedCurveTemplateH = 0.f;

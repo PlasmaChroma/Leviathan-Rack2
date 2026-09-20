@@ -2288,24 +2288,24 @@ void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoin
 
 		// Initial grid points
 		for (int i = 0; i < kCurvePointCount; ++i) {
-			refinedCurveTemplate.push_back({float(i) / float(kCurvePointCount - 1), 0.f, 0});
+			refinedCurveTemplate.push_back({float(i) / float(kCurvePointCount - 1), 0, i});
 		}
 
 		auto addRefinement = [&](const DisplayAnchor& anchor, bool notch) {
 			const float dx = 0.35f / float(kCurvePointCount - 1);
-			refinedCurveTemplate.push_back({clamp(anchor.x01 - dx, 0.f, 1.f), 0.f, 1});
-			refinedCurveTemplate.push_back({clamp(anchor.x01, 0.f, 1.f), 0.f, notch ? 3 : 2});
-			refinedCurveTemplate.push_back({clamp(anchor.x01 + dx, 0.f, 1.f), 0.f, 1});
+			refinedCurveTemplate.push_back({clamp(anchor.x01 - dx, 0.f, 1.f), 1, -1});
+			refinedCurveTemplate.push_back({clamp(anchor.x01, 0.f, 1.f), notch ? 3 : 2, -1});
+			refinedCurveTemplate.push_back({clamp(anchor.x01 + dx, 0.f, 1.f), 1, -1});
 		};
 
 		addRefinement(anchors[0], markerPinned[0]);
 		addRefinement(anchors[1], markerPinned[1]);
 
-		std::sort(refinedCurveTemplate.begin(), refinedCurveTemplate.end(), [](const BifurxCurvePoint& a, const BifurxCurvePoint& b) {
+		std::sort(refinedCurveTemplate.begin(), refinedCurveTemplate.end(), [](const RefinedCurveTemplatePoint& a, const RefinedCurveTemplatePoint& b) {
 			if (std::fabs(a.x01 - b.x01) > 1e-7f) return a.x01 < b.x01;
 			return a.priority > b.priority;
 		});
-		refinedCurveTemplate.erase(std::unique(refinedCurveTemplate.begin(), refinedCurveTemplate.end(), [](const BifurxCurvePoint& a, const BifurxCurvePoint& b) {
+		refinedCurveTemplate.erase(std::unique(refinedCurveTemplate.begin(), refinedCurveTemplate.end(), [](const RefinedCurveTemplatePoint& a, const RefinedCurveTemplatePoint& b) {
 			return std::fabs(a.x01 - b.x01) < 1e-7f;
 		}), refinedCurveTemplate.end());
 
@@ -2323,13 +2323,22 @@ void BifurxSpectrumBase::calculateRefinedCurvePoints(std::vector<BifurxCurvePoin
 	if (points->capacity() < refinedCurveTemplate.size()) {
 		points->reserve(refinedCurveTemplate.size());
 	}
-	points->insert(points->end(), refinedCurveTemplate.begin(), refinedCurveTemplate.end());
 
 	// Notch nulls fall between the sampled bins. Preserve their exact center
 	// at the floor instead of interpolating a shallow minimum across the null.
-	// Other points continue to follow the animated curve.
-	for (auto& p : *points) {
-		p.y = p.priority == 3 ? spectrumBottomY : curveYAtX01(p.x01, spectrumBottomY, spectrumTopY);
+	// Surviving regular grid points evaluate directly from state.curveDb without interpolation.
+	// Non-grid refinement points continue to interpolate along the animated curve.
+	auto responseYForDb = [&](float db) { return responseYForDbDisplay(db, kResponseMinDb, kResponseMaxDb, spectrumBottomY, spectrumTopY); };
+	for (const auto& pt : refinedCurveTemplate) {
+		float y = 0.f;
+		if (pt.priority == 3) {
+			y = spectrumBottomY;
+		} else if (pt.gridIndex >= 0) {
+			y = responseYForDb(state.curveDb[pt.gridIndex]);
+		} else {
+			y = curveYAtX01(pt.x01, spectrumBottomY, spectrumTopY);
+		}
+		points->push_back({pt.x01, y, pt.priority});
 	}
 }
 

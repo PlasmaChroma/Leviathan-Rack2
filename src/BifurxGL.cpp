@@ -61,11 +61,9 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	GLint textureUniformDisplayOnlyShapeControl = -1;
 	GLint textureUniformSpectrumTopY = -1;
 	GLint textureUniformSpectrumBottomY = -1;
-	GLint textureUniformPlotWidth = -1;
 	GLint textureUniformPlotHeight = -1;
 
 	GLuint program = 0; // Legacy unused in fixed-path but kept for struct shape
-	GLuint vbo = 0;
 	bool shaderInitAttempted = false;
 	bool shaderReady = false;
 	GLuint shaderProgram = 0;
@@ -87,6 +85,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	GLuint markerShaderProgram = 0;
 	GLuint markerShaderVertex = 0;
 	GLuint markerShaderFragment = 0;
+	GLuint markerShaderVbo = 0;
+	GLint markerUniformViewport = -1;
 	GLint markerUniformFillRadius = -1;
 	GLint markerUniformOutlineRadius = -1;
 	GLint markerUniformOutlineHalfWidth = -1;
@@ -200,6 +200,11 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		markerUniformFillRadius = -1;
 		markerUniformOutlineRadius = -1;
 		markerUniformOutlineHalfWidth = -1;
+		markerUniformViewport = -1;
+		if (deleteGlObjects && markerShaderVbo) {
+			glDeleteBuffers(1, &markerShaderVbo);
+		}
+		markerShaderVbo = 0;
 		markerShaderReady = false;
 		markerShaderInitAttempted = false;
 		textureShaderReady = false;
@@ -207,10 +212,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 	}
 
 	void releaseRendererResources(bool deleteGlObjects) {
-		if (deleteGlObjects && vbo) {
-			glDeleteBuffers(1, &vbo);
-		}
-		vbo = 0;
 		releaseShaderResources(deleteGlObjects);
 		rendererVg = nullptr;
 	}
@@ -230,9 +231,9 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Shader, markerShaderFragment);
 		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Shader, textureVertex);
 		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Shader, textureFragment);
-		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Buffer, vbo);
 		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Buffer, shaderVbo);
 		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Buffer, strokeShaderVbo);
+		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Buffer, markerShaderVbo);
 		gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Buffer, textureVbo);
 		for (GLuint name : curveTextures)
 			gl_lifecycle::retireObject(resourceContext, gl_lifecycle::ObjectKind::Texture, name);
@@ -534,10 +535,14 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 		static const char* const kVertexShaderSrc = R"GLSL(
 			#version 120
+			attribute vec2 aPos;
+			attribute vec2 aLocal;
+			uniform vec2 uViewport;
 			varying vec2 vLocal;
 			void main() {
-				gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
-				vLocal = gl_MultiTexCoord0.xy;
+				vec2 ndc = vec2((aPos.x / uViewport.x) * 2.0 - 1.0, 1.0 - (aPos.y / uViewport.y) * 2.0);
+				gl_Position = vec4(ndc, 0.0, 1.0);
+				vLocal = aLocal;
 			}
 		)GLSL";
 		static const char* const kFragmentShaderSrc = R"GLSL(
@@ -584,22 +589,51 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 
 		markerShaderVertex = compileShader(GL_VERTEX_SHADER, kVertexShaderSrc);
 		markerShaderFragment = compileShader(GL_FRAGMENT_SHADER, kFragmentShaderSrc);
-		if (!markerShaderVertex || !markerShaderFragment) return false;
+		if (!markerShaderVertex || !markerShaderFragment) {
+			if (markerShaderVertex) { glDeleteShader(markerShaderVertex); markerShaderVertex = 0; }
+			if (markerShaderFragment) { glDeleteShader(markerShaderFragment); markerShaderFragment = 0; }
+			return false;
+		}
 		markerShaderProgram = glCreateProgram();
-		if (!markerShaderProgram) return false;
+		if (!markerShaderProgram) {
+			glDeleteShader(markerShaderVertex); markerShaderVertex = 0;
+			glDeleteShader(markerShaderFragment); markerShaderFragment = 0;
+			return false;
+		}
 		glAttachShader(markerShaderProgram, markerShaderVertex);
 		glAttachShader(markerShaderProgram, markerShaderFragment);
+		glBindAttribLocation(markerShaderProgram, 0, "aPos");
+		glBindAttribLocation(markerShaderProgram, 1, "aLocal");
 		glLinkProgram(markerShaderProgram);
 		GLint linked = GL_FALSE;
 		glGetProgramiv(markerShaderProgram, GL_LINK_STATUS, &linked);
-		if (linked != GL_TRUE) return false;
+		if (linked != GL_TRUE) {
+			glDeleteProgram(markerShaderProgram); markerShaderProgram = 0;
+			glDeleteShader(markerShaderVertex); markerShaderVertex = 0;
+			glDeleteShader(markerShaderFragment); markerShaderFragment = 0;
+			return false;
+		}
+		markerUniformViewport = glGetUniformLocation(markerShaderProgram, "uViewport");
 		markerUniformFillRadius = glGetUniformLocation(markerShaderProgram, "uFillRadius");
 		markerUniformOutlineRadius = glGetUniformLocation(markerShaderProgram, "uOutlineRadius");
 		markerUniformOutlineHalfWidth = glGetUniformLocation(markerShaderProgram, "uOutlineHalfWidth");
-		markerShaderReady = markerUniformFillRadius >= 0
-			&& markerUniformOutlineRadius >= 0
-			&& markerUniformOutlineHalfWidth >= 0;
-		return markerShaderReady;
+		if (markerUniformViewport < 0 || markerUniformFillRadius < 0 || markerUniformOutlineRadius < 0 || markerUniformOutlineHalfWidth < 0) {
+			glDeleteProgram(markerShaderProgram); markerShaderProgram = 0;
+			glDeleteShader(markerShaderVertex); markerShaderVertex = 0;
+			glDeleteShader(markerShaderFragment); markerShaderFragment = 0;
+			return false;
+		}
+
+		glGenBuffers(1, &markerShaderVbo);
+		if (!markerShaderVbo) {
+			glDeleteProgram(markerShaderProgram); markerShaderProgram = 0;
+			glDeleteShader(markerShaderVertex); markerShaderVertex = 0;
+			glDeleteShader(markerShaderFragment); markerShaderFragment = 0;
+			return false;
+		}
+
+		markerShaderReady = true;
+		return true;
 	}
 
 	bool ensureTextureShaderReady() {
@@ -613,16 +647,19 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			attribute vec2 aPos;
 			uniform vec2 uViewport;
 			varying vec2 vLocalPos;
+			varying float vTexX;
 			void main() {
 				vec2 ndc = vec2((aPos.x / uViewport.x) * 2.0 - 1.0, 1.0 - (aPos.y / uViewport.y) * 2.0);
 				gl_Position = vec4(ndc, 0.0, 1.0);
 				vLocalPos = aPos;
+				vTexX = clamp(aPos.x / uViewport.x, 0.0, 1.0);
 			}
 		)GLSL";
 
 		static const char* const kFragmentShaderSrc = R"GLSL(
 			#version 120
 			varying vec2 vLocalPos;
+			varying float vTexX;
 			uniform sampler2D uCurveTex;
 			uniform vec4 uExpectedWhite;
 			uniform vec4 uExpectedCyan;
@@ -631,7 +668,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			uniform float uDisplayOnlyShapeControl;
 			uniform float uSpectrumTopY;
 			uniform float uSpectrumBottomY;
-			uniform float uPlotWidth;
 			uniform float uPlotHeight;
 
 			vec4 mixColor(vec4 c1, vec4 c2, float t) {
@@ -645,8 +681,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			}
 
 			void main() {
-				float x01 = clamp(vLocalPos.x / uPlotWidth, 0.0, 1.0);
-				vec4 texColor = texture2D(uCurveTex, vec2(x01, 0.5));
+				vec4 texColor = texture2D(uCurveTex, vec2(vTexX, 0.5));
 				float curveY = texColor.r * uPlotHeight;
 				float avgD = texColor.g * 36.0 - 18.0;
 				float energy = texColor.b;
@@ -783,7 +818,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		textureUniformDisplayOnlyShapeControl = glGetUniformLocation(textureProgram, "uDisplayOnlyShapeControl");
 		textureUniformSpectrumTopY = glGetUniformLocation(textureProgram, "uSpectrumTopY");
 		textureUniformSpectrumBottomY = glGetUniformLocation(textureProgram, "uSpectrumBottomY");
-		textureUniformPlotWidth = glGetUniformLocation(textureProgram, "uPlotWidth");
 		textureUniformPlotHeight = glGetUniformLocation(textureProgram, "uPlotHeight");
 
 		glGenBuffers(1, &textureVbo);
@@ -1015,23 +1049,43 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const float outlineRadius = kPeakMarkerFillRadius + kPeakMarkerOutlineExtraRadius;
 		const float outlineHalfWidth = 0.5f * kPeakMarkerOutlineStrokeWidth;
 		const float extent = outlineRadius + outlineHalfWidth + 0.65f;
-		glEnable(GL_BLEND);
-		glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-		glUseProgram(markerShaderProgram);
-		glUniform1f(markerUniformFillRadius, kPeakMarkerFillRadius);
-		glUniform1f(markerUniformOutlineRadius, outlineRadius);
-		glUniform1f(markerUniformOutlineHalfWidth, outlineHalfWidth);
-		glBegin(GL_QUADS);
+
+		struct MarkerVertex {
+			float x, y;
+			float u, v;
+		};
+		std::array<MarkerVertex, 12> markerVerts;
+		size_t vertCount = 0;
 		for (int i = 0; i < 2; ++i) {
 			if (!layout.markers[i].visible) continue;
 			const float x = layout.markers[i].x;
 			const float y = layout.markers[i].yMarker;
-			glTexCoord2f(-extent, -extent); glVertex2f(x - extent, y - extent);
-			glTexCoord2f( extent, -extent); glVertex2f(x + extent, y - extent);
-			glTexCoord2f( extent,  extent); glVertex2f(x + extent, y + extent);
-			glTexCoord2f(-extent,  extent); glVertex2f(x - extent, y + extent);
+			markerVerts[vertCount++] = {x - extent, y - extent, -extent, -extent};
+			markerVerts[vertCount++] = {x + extent, y - extent,  extent, -extent};
+			markerVerts[vertCount++] = {x + extent, y + extent,  extent,  extent};
+			markerVerts[vertCount++] = {x - extent, y - extent, -extent, -extent};
+			markerVerts[vertCount++] = {x + extent, y + extent,  extent,  extent};
+			markerVerts[vertCount++] = {x - extent, y + extent, -extent,  extent};
 		}
-		glEnd();
+		if (vertCount == 0) return;
+
+		glEnable(GL_BLEND);
+		glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+		glUseProgram(markerShaderProgram);
+		glUniform2f(markerUniformViewport, std::max(w, 1.f), std::max(h, 1.f));
+		glUniform1f(markerUniformFillRadius, kPeakMarkerFillRadius);
+		glUniform1f(markerUniformOutlineRadius, outlineRadius);
+		glUniform1f(markerUniformOutlineHalfWidth, outlineHalfWidth);
+		glBindBuffer(GL_ARRAY_BUFFER, markerShaderVbo);
+		glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(vertCount * sizeof(MarkerVertex)), markerVerts.data(), GL_DYNAMIC_DRAW);
+		glEnableVertexAttribArray(0);
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(MarkerVertex), (const GLvoid*) offsetof(MarkerVertex, x));
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(MarkerVertex), (const GLvoid*) offsetof(MarkerVertex, u));
+		glDrawArrays(GL_TRIANGLES, 0, GLsizei(vertCount));
+		glDisableVertexAttribArray(1);
+		glDisableVertexAttribArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		glUseProgram(0);
 		markerShaderActiveLastFrame = true;
 	}
@@ -1113,10 +1167,13 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			strokeShaderReady = false;
 			strokeShaderInitAttempted = false;
 		}
-		if (markerShaderReady && (markerShaderProgram == 0 || !glIsProgram(markerShaderProgram))) {
+		if (markerShaderReady &&
+			!gl_lifecycle::isValidProgramBufferPair(markerShaderProgram, markerShaderVbo)) {
 			markerShaderProgram = 0;
+			markerShaderVbo = 0;
 			markerShaderVertex = 0;
 			markerShaderFragment = 0;
+			markerUniformViewport = -1;
 			markerUniformFillRadius = -1;
 			markerUniformOutlineRadius = -1;
 			markerUniformOutlineHalfWidth = -1;
@@ -1280,7 +1337,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		glDisable(GL_TEXTURE_2D);
 		glDisable(GL_TEXTURE_3D);
 		glDisable(GL_TEXTURE_CUBE_MAP);
-		if (!vbo) glGenBuffers(1, &vbo);
 		validateShaderResourcesForCurrentContext();
 
 		const int activeWidth = std::max(1, int(std::lround(fbSize.x)));
@@ -1298,14 +1354,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		const float w = box.size.x, h = box.size.y;
 		if (!(w > 0.f && h > 0.f)) return;
 
-		glMatrixMode(GL_PROJECTION);
-		glLoadIdentity();
-		glOrtho(0.0, w, h, 0.0, -1.0, 1.0);
-		glMatrixMode(GL_MODELVIEW);
-		glLoadIdentity();
-
-		glDisable(GL_DEPTH_TEST);
-		glDisable(GL_CULL_FACE);
 		const float padY = std::max(4.f, h * 0.035f);
 		const float labelBandHeight = std::max(5.2f, h * 0.072f), labelBandTop = h - labelBandHeight;
 		const float spectrumTopY = padY * 0.35f, spectrumBottomY = std::max(spectrumTopY + 1.f, labelBandTop - std::max(0.05f, h * 0.0008f));
@@ -1328,11 +1376,14 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		if (useShaderRenderer) {
 			if (state.hasOverlay) {
 				// 1. Fill persistent texel buffer (no heap allocation)
+				const float invSpan = 1.f / (displayMaxDbfs - displayMinDbfs);
+				const float invH = (h > 0.f) ? (1.f / h) : 0.f;
+				const float inv36 = 1.f / 36.f;
 				for (int i = 0; i < kCurvePointCount; ++i) {
-					const float y = spectrumYForDbfs(state.overlayOutputDbfs[i]);
-					const float normY   = clamp(y / h, 0.f, 1.f);
-					const float normD   = clamp((state.overlayModuleDb[i] + 18.f) / 36.f, 0.f, 1.f);
-					const float energy  = clamp((state.overlayOutputDbfs[i] - displayMinDbfs) / (displayMaxDbfs - displayMinDbfs), 0.f, 1.f);
+					const float energy  = clamp((state.overlayOutputDbfs[i] - displayMinDbfs) * invSpan, 0.f, 1.f);
+					const float y       = mixf(spectrumBottomY, spectrumTopY, energy);
+					const float normY   = clamp(y * invH, 0.f, 1.f);
+					const float normD   = clamp((state.overlayModuleDb[i] + 18.f) * inv36, 0.f, 1.f);
 					const size_t base = size_t(i) * 4u;
 					curveTexels[base + 0] = static_cast<uint16_t>(normY  * 65535.f + 0.5f);
 					curveTexels[base + 1] = static_cast<uint16_t>(normD  * 65535.f + 0.5f);
@@ -1366,7 +1417,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				if (geometryChanged) {
 					glUniform1f(textureUniformSpectrumTopY, spectrumTopY);
 					glUniform1f(textureUniformSpectrumBottomY, spectrumBottomY);
-					glUniform1f(textureUniformPlotWidth, w);
 					glUniform1f(textureUniformPlotHeight, h);
 				}
 
@@ -1375,8 +1425,8 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 					float x, y;
 				};
 				std::array<SimpleVertex, 4> quadVerts = {{
-					{0.f, 0.f},
-					{w, 0.f},
+					{0.f, spectrumTopY},
+					{w, spectrumTopY},
 					{0.f, spectrumBottomY},
 					{w, spectrumBottomY}
 				}};
@@ -1403,6 +1453,12 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			}
 		}
 		else {
+			glMatrixMode(GL_PROJECTION);
+			glLoadIdentity();
+			glOrtho(0.0, w, h, 0.0, -1.0, 1.0);
+			glMatrixMode(GL_MODELVIEW);
+			glLoadIdentity();
+
 			// A failed shader setup may have changed bindings. CPU pointers below
 			// must always be interpreted as pointers, never host VBO offsets.
 			glUseProgram(0);
@@ -1568,7 +1624,6 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		if (rendered && measurePerf) {
 			lastSurfaceRenderUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				std::chrono::steady_clock::now() - renderStart).count()) * 1e-3f;
-			pendingSurfaceRenderUs += lastSurfaceRenderUs;
 		}
 	}
 
@@ -1601,27 +1656,29 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 			overlayCurvePoints.clear();
 		}
 
-		nvgSave(args.vg);
-		nvgScissor(args.vg, 0.f, 0.f, std::max(1.f, w), std::max(1.f, spectrumBottomY + 1.f));
+		const bool showModuleOverlay = state.hasOverlay && module->showModuleResponseOverlay.load(std::memory_order_relaxed);
+		const bool needScissoredNanoVg = !displayOnlyMode && (showModuleOverlay || !expectedCurveShaderActiveLastFrame);
+		if (needScissoredNanoVg) {
+			nvgSave(args.vg);
+			nvgScissor(args.vg, 0.f, 0.f, std::max(1.f, w), std::max(1.f, spectrumBottomY + 1.f));
 
-		if (!displayOnlyMode && state.hasOverlay && module->showModuleResponseOverlay.load(std::memory_order_relaxed)) {
-			NVGcolor ml = mixColor(nvgRGB(206, 210, 216), nvgRGB(28, 204, 217), 0.35f);
-			ml.a = 0.95f;
-			nvgBeginPath(args.vg);
-			for (int i = 0; i < kCurvePointCount; ++i) {
-				const float x = w * (float(i) / float(kCurvePointCount - 1));
-				const float y = responseYForDb(state.overlayModuleDb[i]);
-				if (i == 0) nvgMoveTo(args.vg, x, y);
-				else nvgLineTo(args.vg, x, y);
+			if (showModuleOverlay) {
+				NVGcolor ml = mixColor(nvgRGB(206, 210, 216), nvgRGB(28, 204, 217), 0.35f);
+				ml.a = 0.95f;
+				nvgBeginPath(args.vg);
+				for (int i = 0; i < kCurvePointCount; ++i) {
+					const float x = w * (float(i) / float(kCurvePointCount - 1));
+					const float y = responseYForDb(state.overlayModuleDb[i]);
+					if (i == 0) nvgMoveTo(args.vg, x, y);
+					else nvgLineTo(args.vg, x, y);
+				}
+				nvgLineJoin(args.vg, NVG_ROUND);
+				nvgLineCap(args.vg, NVG_ROUND);
+				nvgStrokeWidth(args.vg, 1.4f);
+				nvgStrokeColor(args.vg, ml);
+				nvgStroke(args.vg);
 			}
-			nvgLineJoin(args.vg, NVG_ROUND);
-			nvgLineCap(args.vg, NVG_ROUND);
-			nvgStrokeWidth(args.vg, 1.4f);
-			nvgStrokeColor(args.vg, ml);
-			nvgStroke(args.vg);
-		}
 
-		if (!displayOnlyMode) {
 			if (!expectedCurveShaderActiveLastFrame) {
 				for (int i = 0; i < 2; i++) {
 					if (!layout.markers[i].visible) continue;
@@ -1650,9 +1707,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 					nvgStrokeWidth(args.vg, 1.7f);
 					nvgStroke(args.vg);
 				}
-			}
 
-			if (!expectedCurveShaderActiveLastFrame) {
 				nvgBeginPath(args.vg);
 				for (size_t i = 0; i < overlayCurvePoints.size(); ++i) {
 					const float x = w * overlayCurvePoints[i].x01;
@@ -1678,9 +1733,10 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 				nvgStrokeColor(args.vg, nvgRGBA(235, 204, 128, 244));
 				nvgStroke(args.vg);
 			}
+
+			nvgResetScissor(args.vg);
+			nvgRestore(args.vg);
 		}
-		nvgResetScissor(args.vg);
-		nvgRestore(args.vg);
 
 		// 1. Vertical Guide Lines
 		if (!displayOnlyMode) {

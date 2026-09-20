@@ -89,8 +89,10 @@ void prepareOverlayTargetsFromSpectra(
 	float binModuleDeltaDb[kFftBinCount];
 	const float amplitudeScale = 4.f / float(kFftSize);
 	const float amplitudeScaleSq = amplitudeScale * amplitudeScale;
-	for (int bin = 0; bin < kFftBinCount; ++bin) {
-		const float binHz = (float(bin) * sampleRate) / float(kFftSize);
+	const float safeSampleRate = std::max(1000.f, sampleRate);
+	const int fadeEndBin = clamp(int(std::ceil((kOverlaySubsonicFadeHz * float(kFftSize)) / safeSampleRate)), 0, kFftBinCount);
+	for (int bin = 0; bin < fadeEndBin; ++bin) {
+		const float binHz = (float(bin) * safeSampleRate) / float(kFftSize);
 		const float subsonicWeight = levi_math::clamp01((binHz - kOverlaySubsonicCutHz) / (kOverlaySubsonicFadeHz - kOverlaySubsonicCutHz));
 		const float weightedPowerScale = subsonicWeight * subsonicWeight * amplitudeScaleSq;
 		binOutputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftOutputFreq, bin);
@@ -98,24 +100,28 @@ void prepareOverlayTargetsFromSpectra(
 			binRawInputPower[bin] = weightedPowerScale * orderedSpectrumPower(fftRawInputFreq, bin);
 		}
 	}
+	for (int bin = fadeEndBin; bin < kFftBinCount; ++bin) {
+		binOutputPower[bin] = amplitudeScaleSq * orderedSpectrumPower(fftOutputFreq, bin);
+		if (moduleResponseEnabled) {
+			binRawInputPower[bin] = amplitudeScaleSq * orderedSpectrumPower(fftRawInputFreq, bin);
+		}
+	}
 
 	constexpr int kOverlayBandRadius = 2;
 	constexpr float kOverlayBandKernel[5] = {0.08f, 0.24f, 0.36f, 0.24f, 0.08f};
 	for (int bin = 0; bin < kFftBinCount; ++bin) {
 		float outputEnergy = 0.f;
-		float responseOutputEnergy = 0.f;
 		float rawInputEnergy = 0.f;
 		for (int k = -kOverlayBandRadius; k <= kOverlayBandRadius; ++k) {
 			const int sampleBin = clamp(bin + k, 0, kFftBinCount - 1);
 			const float w = kOverlayBandKernel[k + kOverlayBandRadius];
 			outputEnergy += w * binOutputPower[sampleBin];
 			if (moduleResponseEnabled) {
-				responseOutputEnergy += w * binOutputPower[sampleBin];
 				rawInputEnergy += w * binRawInputPower[sampleBin];
 			}
 		}
 		binModuleDeltaDb[bin] = moduleResponseEnabled
-			? (rawInputEnergy / (rawInputEnergy + 2.5e-7f)) * 10.f * std::log10((responseOutputEnergy + 1e-12f) / (rawInputEnergy + 1e-12f))
+			? (rawInputEnergy / (rawInputEnergy + 2.5e-7f)) * 10.f * std::log10((outputEnergy + 1e-12f) / (rawInputEnergy + 1e-12f))
 			: 0.f;
 		outputEnergy += 1e-12f;
 		binOutputDbfs[bin] = clamp(10.f * std::log10(outputEnergy * 0.04f + 1e-12f), kOverlayDbfsFloor, kOverlayDbfsCeiling);

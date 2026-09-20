@@ -229,7 +229,8 @@ struct BifurxSpectrumWidget final : Widget, BifurxSpectrumBase {
 	}
 
 	// One module-owned interval is shared with Debug Terminal. Values are CPU
-	// microseconds; Step includes step-time surfaces and overlaps Draw there.
+	// microseconds; Step includes step-time surface rendering, while Draw measures
+	// only BifurxWidget::draw(). Surface is also reported separately.
 	void logPerfDebugSample(const debug_terminal::TimingRangeUs& process,
 		const debug_terminal::TimingRangeUs& step, const debug_terminal::TimingRangeUs& draw,
 		const BifurxSpectrumBase* active, bool gl) {
@@ -712,21 +713,56 @@ struct BifurxModeMenuButton final : TL1105 {
 
 struct BifurxModeReadoutWidget final : Widget {
 	Module* module = nullptr;
+	NVGcontext* cachedVg = nullptr;
+	int cachedFontHandle = -1;
+	float cachedFontSize = -1.f;
+	int cachedMode = -1;
+	float cachedLocalMinX = 0.f;
+	float cachedLocalMinY = 0.f;
+	float cachedLocalWidth = 0.f;
+	float cachedLocalHeight = 0.f;
+
 	void draw(const DrawArgs& args) override {
 		if (!APP || !APP->window || !APP->window->uiFont) return;
 		int m = module ? clamp(int(std::round(module->params[Bifurx::MODE_PARAM].getValue())), 0, kBifurxUiModeCount - 1) : 0;
-		char label[24]; std::snprintf(label, sizeof(label), "Mode (%d): %s", m + 1, kBifurxModeLabels[m]);
-		nvgFontSize(args.vg, std::max(9.5f, box.size.y * 0.72f));
-		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		const float fontSize = std::max(9.5f, box.size.y * 0.72f);
+		const int fontHandle = APP->window->uiFont->handle;
+
+		static char sModeLabels[kBifurxUiModeCount][32];
+		static bool sModeLabelsInit = false;
+		if (!sModeLabelsInit) {
+			for (int i = 0; i < kBifurxUiModeCount; ++i) {
+				std::snprintf(sModeLabels[i], sizeof(sModeLabels[i]), "Mode (%d): %s", i + 1, kBifurxModeLabels[i]);
+			}
+			sModeLabelsInit = true;
+		}
+		const char* label = (m >= 0 && m < kBifurxUiModeCount) ? sModeLabels[m] : "";
+
+		if (args.vg != cachedVg || fontHandle != cachedFontHandle || std::fabs(fontSize - cachedFontSize) > 1e-4f || m != cachedMode) {
+			nvgFontSize(args.vg, fontSize);
+			nvgFontFaceId(args.vg, fontHandle);
+			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+			float bounds[4];
+			nvgTextBounds(args.vg, 0.f, 0.f, label, nullptr, bounds);
+			cachedLocalMinX = bounds[0] - 4.f;
+			cachedLocalMinY = bounds[1] - 1.5f;
+			cachedLocalWidth = bounds[2] - bounds[0] + 8.f;
+			cachedLocalHeight = bounds[3] - bounds[1] + 3.f;
+			cachedVg = args.vg;
+			cachedFontHandle = fontHandle;
+			cachedFontSize = fontSize;
+			cachedMode = m;
+		}
+
+		nvgFontSize(args.vg, fontSize);
+		nvgFontFaceId(args.vg, fontHandle);
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 		const float centerX = 0.5f * box.size.x;
 		const float centerY = 0.5f * box.size.y;
-		float bounds[4];
-		nvgTextBounds(args.vg, centerX, centerY, label, nullptr, bounds);
-		const float x = bounds[0] - 4.f;
-		const float y = bounds[1] - 1.5f;
-		const float width = bounds[2] - bounds[0] + 8.f;
-		const float height = bounds[3] - bounds[1] + 3.f;
+		const float x = centerX + cachedLocalMinX;
+		const float y = centerY + cachedLocalMinY;
+		const float width = cachedLocalWidth;
+		const float height = cachedLocalHeight;
 		// One softly edged black capsule keeps the readout legible on light panels.
 		const float radius = height * 0.5f;
 		const NVGpaint halo = nvgBoxGradient(args.vg, x, y, width, height, radius, 1.5f,
@@ -1115,8 +1151,8 @@ struct BifurxWidget final : ModuleWidget {
 		if (bifurx && bifurx->renderMode == Bifurx::RENDER_OPENGL && spectrumOpenGL && spectrumOpenGL->visible) {
 			nvgSave(args.vg);
 			nvgTranslate(args.vg, spectrumOpenGL->box.pos.x, spectrumOpenGL->box.pos.y);
-			if (auto* base = dynamic_cast<BifurxSpectrumBase*>(spectrumOpenGL)) {
-				base->drawNanoVG(args);
+			if (spectrumOpenGLBase) {
+				spectrumOpenGLBase->drawNanoVG(args);
 			}
 			nvgRestore(args.vg);
 		}
@@ -1138,9 +1174,7 @@ struct BifurxWidget final : ModuleWidget {
 		if (bifurx && measurePerf) {
 			const float drawMs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 				PerfClock::now() - perfDrawStart).count()) * 1e-6f;
-			const float surfaceUs = spectrumOpenGLBase ? spectrumOpenGLBase->pendingSurfaceRenderUs : 0.f;
-			moduleDrawUsRange.add(drawMs * 1000.f + surfaceUs);
-			if (spectrumOpenGLBase) spectrumOpenGLBase->pendingSurfaceRenderUs = 0.f;
+			moduleDrawUsRange.add(drawMs * 1000.f);
 			const float prevMs = bifurx->perfUiRenderMs.load(std::memory_order_relaxed);
 			const float emaMs = (prevMs > 0.f) ? (prevMs + (drawMs - prevMs) * 0.18f) : drawMs;
 			bifurx->perfUiRenderMs.store(std::max(0.f, emaMs), std::memory_order_relaxed);
