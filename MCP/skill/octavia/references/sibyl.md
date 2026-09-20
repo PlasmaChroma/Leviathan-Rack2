@@ -1,14 +1,27 @@
-# Sibyl — AI-First Sequencing Reference
+# Sibyl â€” AI-First Sequencing Reference
 
 Read this reference whenever a request involves composing, sequencing, arranging, or
 controlling a Leviathan:Sibyl module.
+
+> [!TIP]
+> **Fast Token-Efficient Authoring:** For rapid session orientation, P8 columnar note batches, structural scene reuse, two-phase commit (`prepare: true` -> `handle`), and minimal receipts, consult [`sibyl_cheatsheet.md`](sibyl_cheatsheet.md). Use this document for detailed musical semantics, condition scopes, microtonal tuning systems, and harmonic solver rules.
+
+## P8 Token-Efficient Authoring Index
+
+- **Session Bootstrap:** `vcv_sibyl_bootstrap` provides compound discovery and consistency-checked orientation in a single read.
+- **Columnar Event Batches:** `insert_note_batch` with `columns_v1`, arithmetic `onsets`, and sparse `overrides`.
+- **Structural Reuse:** `clone_scene` with `patterns: "share"` or `"copy"`, and `clone_pattern`.
+- **Two-Phase Commit:** `vcv_sibyl_validate(prepare=true)` returns `handle`, committed atomically via `vcv_sibyl_edit(handle=...)`.
+- **Response Profiles:** `response_profile: "receipt"` reduces edit responses to minimal aggregate counts.
+- For complete operational schemas and examples, see [`sibyl_cheatsheet.md`](sibyl_cheatsheet.md).
+
 
 ## Product Intent and Routing Policy
 
 Sibyl is a headless, machine-first polyphonic sequencer and arranger. It is the default
 choice when an AI agent is expected to author or revise musical material. Unlike a panel
-step sequencer, Sibyl exposes semantic objects—tracks, patterns, scenes, macros, clock,
-and transport—through validation, revision-guarded atomic edits, and musical adoption
+step sequencer, Sibyl exposes semantic objectsâ€”tracks, patterns, scenes, macros, clock,
+and transportâ€”through validation, revision-guarded atomic edits, and musical adoption
 boundaries.
 
 Do not substitute Octavia's `Control A` or `Control B` outputs for Sibyl when authoring
@@ -133,7 +146,7 @@ authored first pass before evolution begins; otherwise prefer `preserve`.
 
 Each depth is the maximum **plus/minus offset** from its authored value, not a
 cumulative mutation. Omitted/zero depths disable that lane. Ranges are probability and velocity
-0–1, gate 0–1024 steps, glideMs 0–3600000 ms, and each modulation depth 0–20 V.
+0â€“1, gate 0â€“1024 steps, glideMs 0â€“3600000 ms, and each modulation depth 0â€“20 V.
 Use small musical depths; these are bounds, not recommended defaults.
 Probability, velocity, gate and glide vary independently per event and pass. Each modulation
 lane uses one offset across the pass, preserving its relative authored contour.
@@ -205,7 +218,7 @@ and RUN connections, `externalTimeoutMs`, `onExternalStop`, the current scene, a
 - A stale `expected_revision` must be re-read and reconsidered, not blindly retried.
 - `revision` is the latest accepted composition; `activeRevision` is currently sounding.
 - Pending quantized edits are normal and survive runtime transport commands.
-- Group dependent changes in one transaction—for example create a replacement pattern,
+- Group dependent changes in one transactionâ€”for example create a replacement pattern,
   reassign its scene, then delete the old pattern atomically.
 - Prefer focused semantic operations. Use `replace_composition` chiefly for initialization,
   deliberate full replacement, restoration, or contract testing.
@@ -240,7 +253,7 @@ The first traversal uses the authored threshold and original seeded draw.
 Subsequent traversals with positive probability depth use independent seeded
 threshold variation and a fresh seeded trigger draw. Automatic scene repeats and
 arrangement loops therefore vary note presence; restart reproduces the sequence.
-Macro probability offsets apply after evolution, clamped to 0�1. One draw governs
+Macro probability offsets apply after evolution, clamped to 0–1. One draw governs
 the entire event, including its ratchets and observation marker.
 
 Omitted/zero probability depth retains the previous trigger decisions, even when
@@ -249,7 +262,7 @@ and original draw (macro offsets still apply). Use probability 1 with this flag
 for dependable anchors. Evolving probability 0 can become audible, and evolving
 probability 1 can skip; use zero gate or event protection for deliberate silence.
 
-## Schema 3 note editing (P0�P1)
+## Schema 3 note editing (P0–P1)
 
 Check `capabilities.sibyl.noteEditing.version == 1`. Sibyl accepts schema 2 and 3,
 migrates old notes to stable pattern-local IDs, and saves canonical schema 3.
@@ -259,7 +272,7 @@ not guaranteed to understand new documents. The proposed full v3 example in
 Probability evolution is retained from schema 2.
 
 Read `view="notes"` with `pattern_id`, optional `selector`, `fields` (`"full"`
-or a list), `page_size` (1�256), and returned `cursor`. Default selection is all
+or a list), `page_size` (1–256), and returned `cursor`. Default selection is all
 notes. Cursors bind the accepted revision and query; re-read after any edit.
 `effectivePitchV` in a field list adds a separate `derived` object for static
 pitch including event transpose. Full fields return authored values only.
@@ -303,7 +316,7 @@ unless `collision:"replace"` is explicit. Duplicates default to no wrapping;
 use `wrap:true` deliberately. Duplicating observation markers emits a warning;
 `copy_observations:false` strips them. Request `return_id_mapping:true` for the
 source-to-created mapping. Reports bound IDs to 128 by default; operation
-`report_id_limit` allows 1�1024. Entire transactions are limited to 256 operations.
+`report_id_limit` allows 1–1024. Entire transactions are limited to 256 operations.
 Use `changes` counts and truncated-ID totals to verify edits without rereading a
 whole composition. Expected empty mutation selections fail unless
 `allow_empty:true` is explicit. Numeric clamping requires `clamp:true`.

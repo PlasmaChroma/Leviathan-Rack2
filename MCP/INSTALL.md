@@ -227,7 +227,22 @@ supports compatible skills, install the entire directory according to that
 client's current documentation. Otherwise, use `SKILL.md` as project guidance
 and keep its `references/` directory alongside it.
 
-Restart the agent session after installing or updating any skill or project
+> [!IMPORTANT]
+> **Skill Source of Truth:** `MCP/skill/octavia/` in this repository is the editable source of truth. Installed copies (such as `~/.codex/skills/octavia/`) are deployment outputs. Always edit files in `MCP/skill/octavia/`, run tests, and then deploy the directory to your target client directory.
+
+### Schema Export & Synchronization (for Antigravity and file-based clients)
+
+For clients that read static tool schema files (such as Antigravity in `~/.gemini/antigravity/mcp/vcv-rack/`):
+
+```powershell
+# Stage and check full schemas locally
+MCP\.venv\Scripts\python tools\sync_mcp_schemas.py --toolset full --output build\mcp-schemas\full --check
+
+# Deploy full schemas atomically to Antigravity
+MCP\.venv\Scripts\python tools\sync_mcp_schemas.py --toolset full --output "$env:USERPROFILE\.gemini\antigravity\mcp\vcv-rack"
+```
+
+Restart the agent session after installing or updating any skill, project guidance, or MCP schemas.
 guidance.
 
 ---

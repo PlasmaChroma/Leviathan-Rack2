@@ -11,6 +11,7 @@ import os
 import time
 import re
 import warnings
+import asyncio
 from urllib.parse import urlencode
 import httpx
 from typing import Optional, Literal, Any
@@ -534,6 +535,217 @@ class SibylTransportInput(SibylModuleInput):
 class SibylCapabilitiesInput(SibylModuleInput):
     compact: bool = Field(True, description="Return compact feature manifest; set false for the full contract")
     topic: Optional[Literal["pitchSystems", "voicing", "automation", "conditions", "limits", "editOperations", "p8", "toolSchemas"]] = None
+
+
+class SibylBootstrapInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    module_id: Optional[int] = Field(None, description="Optional Sibyl module ID; resolved automatically when omitted", ge=0)
+    page_size: int = Field(8, description="Bounded arrangement page size", ge=1, le=32)
+
+
+@mcp.tool(name="vcv_sibyl_bootstrap",
+          annotations={"title": "Bootstrap Sibyl Session", "readOnlyHint": True, "destructiveHint": False})
+async def vcv_sibyl_bootstrap(params: SibylBootstrapInput = SibylBootstrapInput()) -> str:
+    """Bootstrap orientation for a Sibyl session in a single bounded, consistency-checked read.
+
+    Verifies the bridge, discovers or verifies the Sibyl module ID, fetches compact capabilities,
+    the initial arrangement page, and runtime status, verifying revision consistency across components.
+    """
+    try:
+        try:
+            status = await _call("status")
+        except Exception as e:
+            return _dump_json({
+                "ok": False,
+                "error": "bridge_unavailable",
+                "detail": _error_message(e),
+                "action": "Check that VCV Rack is running with the Octavia module and bridge active"
+            })
+        patch_info = None
+        try:
+            patch_info = await _call("patch")
+        except Exception:
+            pass
+        bridge_info = {"running": status.get("running", True)}
+        if isinstance(patch_info, dict):
+            bridge_info["patch"] = patch_info
+
+        try:
+            modules = await _get_cached_modules(force_refresh=True)
+        except Exception as e:
+            return _dump_json({"ok": False, "error": "inventory_unavailable", "detail": _error_message(e)})
+
+        if params.module_id is not None:
+            target_id = params.module_id
+            matching = [m for m in modules if m.get("id") == target_id]
+            if not matching:
+                return _dump_json({"ok": False, "error": "module_not_found", "module_id": target_id})
+            if matching[0].get("plugin") != "Leviathan" or matching[0].get("model") != "Sibyl":
+                return _dump_json({
+                    "ok": False,
+                    "error": "module_is_not_sibyl",
+                    "module_id": target_id,
+                    "plugin": matching[0].get("plugin"),
+                    "model": matching[0].get("model")
+                })
+            mid = target_id
+        else:
+            sibyl_mods = [m for m in modules if m.get("plugin") == "Leviathan" and m.get("model") == "Sibyl"]
+            ids = [m["id"] for m in sibyl_mods if m.get("id") is not None]
+            if len(ids) == 0:
+                return _dump_json({"ok": False, "error": "sibyl_not_found", "total": 0})
+            if len(ids) > 1:
+                return _dump_json({
+                    "ok": False,
+                    "error": "ambiguous_sibyl",
+                    "ids": ids[:16],
+                    "total": len(ids),
+                    "omitted": max(0, len(ids) - 16)
+                })
+            mid = ids[0]
+
+        try:
+            caps_raw = await _sibyl_call(f"sibyl/{mid}/capabilities?format=manifest")
+        except Exception as e:
+            return _dump_json({
+                "ok": False,
+                "error": "component_read_failed",
+                "phase": "capabilities",
+                "detail": _error_message(e)
+            })
+        if not isinstance(caps_raw, dict) or not caps_raw.get("ok"):
+            return _dump_json({
+                "ok": False,
+                "error": "component_read_failed",
+                "phase": "capabilities",
+                "detail": caps_raw.get("error") if isinstance(caps_raw, dict) else "invalid_manifest"
+            })
+
+        arrangement_fut = _sibyl_call(f"sibyl/{mid}/composition?view=arrangement&page_size={params.page_size}")
+        status_fut = _sibyl_call(f"sibyl/{mid}/status")
+        arr_res, status_res = await asyncio.gather(arrangement_fut, status_fut, return_exceptions=True)
+
+        if isinstance(arr_res, Exception):
+            return _dump_json({
+                "ok": False,
+                "error": "component_read_failed",
+                "phase": "arrangement",
+                "detail": _error_message(arr_res)
+            })
+        if not isinstance(arr_res, dict) or not arr_res.get("ok"):
+            detail = arr_res.get("error") if isinstance(arr_res, dict) else "invalid_arrangement_response"
+            return _dump_json({
+                "ok": False,
+                "error": "component_read_failed",
+                "phase": "arrangement",
+                "detail": detail
+            })
+
+        if isinstance(status_res, Exception):
+            return _dump_json({
+                "ok": False,
+                "error": "component_read_failed",
+                "phase": "runtime",
+                "detail": _error_message(status_res)
+            })
+        if not isinstance(status_res, dict) or not status_res.get("ok"):
+            detail = status_res.get("error") if isinstance(status_res, dict) else "invalid_status_response"
+            return _dump_json({
+                "ok": False,
+                "error": "component_read_failed",
+                "phase": "runtime",
+                "detail": detail
+            })
+
+        try:
+            post_raw = await _sibyl_call(f"sibyl/{mid}/capabilities?format=manifest")
+        except Exception as e:
+            return _dump_json({
+                "ok": False,
+                "error": "component_read_failed",
+                "phase": "post_capabilities",
+                "detail": _error_message(e)
+            })
+
+        if isinstance(caps_raw, dict) and "capabilities" in caps_raw:
+            sib = caps_raw["capabilities"].get("sibyl", {})
+            rev_caps = sib.get("revision")
+            inst_pre = None
+            caps_clean = {
+                "apiVersion": sib.get("apiVersion"),
+                "schemaVersion": sib.get("schemaVersion"),
+                "pitchStage": sib.get("pitchSystems", {}).get("stage"),
+                "features": {
+                    "harmony": sib.get("harmony", {}).get("version"),
+                    "automation": sib.get("automation", {}).get("version"),
+                    "voicing": sib.get("voicing", {}).get("version"),
+                    "conditions": sib.get("conditions", {}).get("version"),
+                    "repeatEvolution": sib.get("repeatEvolution", {}).get("version"),
+                    "preparedTransactions": sib.get("preparedTransactions", False)
+                }
+            }
+        else:
+            rev_caps = caps_raw.get("revision")
+            inst_pre = caps_raw.get("instance")
+            caps_clean = {k: v for k, v in caps_raw.items() if k not in ("ok", "revision")}
+
+        if isinstance(post_raw, dict) and "capabilities" in post_raw:
+            rev_post = post_raw["capabilities"].get("sibyl", {}).get("revision")
+            inst_post = None
+        elif isinstance(post_raw, dict):
+            rev_post = post_raw.get("revision")
+            inst_post = post_raw.get("instance")
+        else:
+            rev_post = None
+            inst_post = None
+
+        rev_arr = arr_res.get("revision")
+        rev_status = status_res.get("revision")
+
+        if inst_pre is not None and inst_post is not None and inst_pre != inst_post:
+            return _dump_json({
+                "ok": False,
+                "error": "inconsistent_read",
+                "detail": "instance_changed",
+                "instance_pre": inst_pre,
+                "instance_post": inst_post,
+                "retry": "Sibyl instance was replaced during bootstrap; retry orientation."
+            })
+
+        observed_revs = {
+            "capabilities": rev_caps,
+            "arrangement": rev_arr,
+            "runtime": rev_status,
+            "post_capabilities": rev_post
+        }
+        valid_revs = [r for r in observed_revs.values() if r is not None]
+        if len(set(valid_revs)) > 1:
+            return _dump_json({
+                "ok": False,
+                "error": "inconsistent_read",
+                "detail": "revision_mismatch",
+                "observed_revisions": observed_revs,
+                "retry": "Accepted revision changed during bootstrap; retry orientation or wait for pending transactions to complete."
+            })
+
+        accepted_rev = rev_arr if rev_arr is not None else rev_caps
+        arr_clean = {k: v for k, v in arr_res.items() if k != "ok"}
+        status_clean = {k: v for k, v in status_res.items() if k != "ok"}
+
+        return _dump_json({
+            "ok": True,
+            "bridge": bridge_info,
+            "module_id": mid,
+            "capabilities": caps_clean,
+            "arrangement": arr_clean,
+            "runtime": status_clean,
+            "consistency": {
+                "consistent": True,
+                "acceptedRevision": accepted_rev
+            }
+        })
+    except Exception as e:
+        return _err(e)
 
 
 @mcp.tool(name="vcv_sibyl_resolve",

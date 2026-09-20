@@ -20,8 +20,10 @@ Read only the references required for the current task:
   observation points, frame-synchronized diagnostic control, or Sibyl-triggered captures.
 - `references/console.md` — only when the user explicitly asks to arm, listen to, or use
   the in-Rack Octavia Console.
-- `references/sibyl.md` — composing, sequencing, arranging, or controlling Sibyl. Prefer
-  Sibyl when an agent is expected to author music; preserve user-chosen manual sequencers.
+- `references/sibyl_cheatsheet.md` — rapid Sibyl session bootstrap, P8 columnar note batches,
+  structural scene reuse, two-phase commit, receipts, and scratchpad scripting. Start here for Sibyl tasks.
+- `references/sibyl.md` — detailed musical reference: repeat conditions, probability evolution,
+  microtonal N-EDO/Scala systems, relative harmony, and chord voicing.
 - `references/moirai.md` — reading, validating, editing, or performing with a Moirai
   envelope bank, including revision-conflict and adoption-boundary recovery.
 - `references/semantic.md` — discovering and editing structured module-owned documents
@@ -33,15 +35,18 @@ Read only the references required for the current task:
 
 ## Connect First
 
-Start an Octavia task with `vcv_get_status`. A healthy result reports `running: true` and
-the active port and patch state. If it fails, tell the user to check the Octavia module and
-press START; do not retry automatically.
+Start an Octavia task with `vcv_get_status` (or `vcv_sibyl_bootstrap` for Sibyl
+tasks when advertised, which checks bridge availability, resolves module ID, and gathers
+session orientation in one step). A healthy result reports `running: true` and the active
+port and patch state. If it fails, tell the user to check the Octavia module and press
+START; do not retry automatically.
 
-For an unknown patch, use `vcv_list_modules` and `vcv_list_cables` before inspecting
-individual modules. Treat module position as a layout hint, never proof of routing. Trace
-actual cables. Summary fields are investigative signals: zero output can be intentional,
-polyphony can originate upstream, bypass behavior varies, and unpatched ports are not
-automatically defects.
+For an unknown patch audit, use `vcv_list_modules` and `vcv_list_cables` before inspecting
+individual modules. For targeted work on known modules, query scoped cables with
+`vcv_list_cables(params={"module_id": ...})` to avoid dumping whole-patch graphs. Treat
+module position as a layout hint, never proof of routing. Trace actual cables. Summary
+fields are investigative signals: zero output can be intentional, polyphony can originate
+upstream, bypass behavior varies, and unpatched ports are not automatically defects.
 
 ## Task Presence
 
@@ -66,21 +71,16 @@ Example for a user-requested patch enhancement (tool-call pseudocode):
 
 ```text
 vcv_get_status()
-vcv_octavia_set_presence(params={"state":"inspecting","lease_ms":60000})
-  Read modules, cables, and the relevant musical state.
-vcv_octavia_set_presence(params={"state":"thinking","lease_ms":60000})
-  Plan the changes and validate the proposed sequence.
 vcv_octavia_set_presence(params={"state":"working","lease_ms":60000})
-  Apply the authorized edits; keep Working through incidental readbacks.
-vcv_octavia_set_presence(params={"state":"inspecting","lease_ms":30000})
-  Verify playback and physically monitored output.
+  Apply authorized edits; renew before expiry if work is ongoing.
 vcv_octavia_set_presence(params={"state":"auto"})
   Return to automatic presence before reporting completion.
 ```
 
-Set each state before doing that work; do not rapidly cycle the calls as a demo.
-Skip phases the task does not need. If work outlasts its lease, renew the same
-state before expiry. Release on an early exit too, when the bridge is reachable.
+Presence states are coarse-grained task labels (`inspecting`, `thinking`, `working`),
+not mandatory micro-steps. Skip phases the task does not need, and avoid rapid presence
+cycling for quick or single-action tasks. If work outlasts its lease, renew the same
+state before expiry. Release with `state="auto"` on early exit when bridge is reachable.
 
 ## Physical Observation Boundary
 
@@ -103,13 +103,17 @@ create or revise a sequence, while preserving an explicit user-chosen sequencer.
 When the user asks to change the patch:
 
 1. Inspect the exact target immediately before editing with `vcv_get_module`,
-   `vcv_list_cables`, or a focused `vcv_list_library` query.
+   scoped `vcv_list_cables(params={"module_id": ...})`, or a focused `vcv_list_library` query.
 2. Resolve concrete module, parameter, input, and output IDs from live data. Never guess an
    ID, range, or plugin/model slug.
 3. Make the smallest coherent reversible change. Prefer one `vcv_set_parameters` call for
-   related values and semantic Sibyl or Temporal Deck tools for their specialized state.
-4. Check for errors, failed indices, and partial cable application.
-5. Verify through the cheapest relevant read and report exactly what changed. If
+   related values, two-phase commit with `response_profile="receipt"` for Sibyl edits,
+   and Temporal Deck tools for sample playback.
+4. For algorithmic, Euclidean, microtonal, or multi-track sequencing, write and execute a
+   local scratch script using `tools/sibyl_composer.py` (`SibylScore`, `PatternBuilder`,
+   `two_phase_commit`) via terminal rather than emitting massive multi-turn JSON payloads.
+5. Check for errors, failed indices, and partial cable application.
+6. Verify through the cheapest relevant read and report exactly what changed. If
    verification fails, stop further writes and offer or use `vcv_undo` as appropriate.
 
 Common writes include module addition, parameter changes, cable connection/disconnection,

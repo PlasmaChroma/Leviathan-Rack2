@@ -44,7 +44,7 @@ class ServerContractTest(unittest.TestCase):
             "vcv_find_unpatched", "vcv_temporal_deck_transport", "vcv_add_module", "vcv_delete_module",
             "vcv_update_module", "vcv_layout_modules", "vcv_set_parameters", "vcv_connect_cables",
             "vcv_disconnect_cable", "vcv_get_module_state", "vcv_set_module_state",
-            "vcv_undo", "vcv_save_patch", "vcv_sibyl_get_capabilities", "vcv_sibyl_resolve", "vcv_sibyl_request",
+            "vcv_undo", "vcv_save_patch", "vcv_sibyl_bootstrap", "vcv_sibyl_get_capabilities", "vcv_sibyl_resolve", "vcv_sibyl_request",
             "vcv_sibyl_get_composition", "vcv_sibyl_validate", "vcv_sibyl_edit",
             "vcv_sibyl_get_status", "vcv_sibyl_transport",
             "vcv_sibyl_compose_euclidean", "vcv_sibyl_compose_progression",

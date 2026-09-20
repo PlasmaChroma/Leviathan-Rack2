@@ -25,7 +25,10 @@ Choose the least expensive observation that answers the question:
    archival file is needed.
 6. Use a bounded recording, or analysis capture with `save: true`, when exact evidence
    must be retained for reproducible external analysis.
-7. Request raw spectrum only when exact corrective frequencies matter.
+7. Recommend explicit `detail="basic"` for level/silence checks and `includeSpectrum=false`
+   (Python model field `include_spectrum`) when raw FFT bins are unnecessary. Raw spectrum
+   is opt-in; named band summaries already exist. Retain detailed analysis (`detail="detailed"`)
+   for loudness, hum, resonance, and corrective frequency diagnostics.
 
 ## Snapshot and analysis workflow
 
@@ -33,7 +36,7 @@ Choose the least expensive observation that answers the question:
 GET /audio/monitors
 POST /audio/snapshot       {monitors, preMs, postMs, label}
 GET /audio/snapshot/{id}   poll only while post-roll is pending
-POST /audio/analyze        {snapshotId, channels or stereo, detail, includeSpectrum}
+POST /audio/analyze        {snapshotId, channels or stereo, detail: "basic", includeSpectrum: false}
 POST /audio/compare        {snapshotId, reference, target, detail}
 ```
 
