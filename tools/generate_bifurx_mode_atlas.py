@@ -31,23 +31,24 @@ def response(kind: str, frequency: float, focus: float) -> complex:
 
 
 def diagram(number: int, name: str, topology: str, a: str, b: str) -> str:
-    # Show a tighter log-frequency window with the foci 1.7 octaves apart.
-    # This gives each response feature more room without widening the table.
+    # Show five octaves in a compact plot with the foci 1.7 octaves apart.
+    # Equal side margins keep the response centered above the signal route.
     focus_offset = 0.85
-    log_min, log_max = -2.0, 2.0
+    log_min, log_max = -2.5, 2.5
+    plot_left, plot_right = 10.0, 220.0
     points = []
     for index in range(101):
-        x = 10 + index * 2
+        x = plot_left + index * (plot_right - plot_left) / 100
         frequency = 2 ** (log_min + index * (log_max - log_min) / 100)
         ra = response(a, frequency, 2 ** -focus_offset)
         rb = response(b, frequency, 2 ** focus_offset)
         amplitude = ra * rb if topology == "cascade" else (ra + rb) / 2
         db = 20 * math.log10(max(abs(amplitude), 1e-5))
         y = 55 - max(-30, min(18, db)) * 1.15
-        points.append(f"{x},{y:.1f}")
+        points.append(f"{x:.1f},{y:.1f}")
     curve = " ".join(points)
-    ax = 10 + (-focus_offset - log_min) / (log_max - log_min) * 200
-    bx = 10 + (focus_offset - log_min) / (log_max - log_min) * 200
+    ax = plot_left + (-focus_offset - log_min) / (log_max - log_min) * (plot_right - plot_left)
+    bx = plot_left + (focus_offset - log_min) / (log_max - log_min) * (plot_right - plot_left)
     if topology == "cascade":
         flow = f'<text x="22" y="105">IN</text><path d="M42 101H60 M106 101H124 M170 101H188"/><rect x="60" y="90" width="46" height="22" rx="5"/><rect x="124" y="90" width="46" height="22" rx="5"/><text x="83" y="105" text-anchor="middle">A {a}</text><text x="147" y="105" text-anchor="middle">B {b}</text><text x="196" y="105">OUT</text>'
     else:
@@ -56,7 +57,7 @@ def diagram(number: int, name: str, topology: str, a: str, b: str) -> str:
         f'<svg class="mode-diagram" viewBox="0 0 230 128" role="img" '
         f'aria-label="{name}: {topology} response and signal route" xmlns="http://www.w3.org/2000/svg">'
         f'<title>{name}: {topology} response</title>'
-        '<path class="axis" d="M10 55H210"/>'
+        '<path class="axis" d="M10 55H220"/>'
         f'<path class="focus-a" d="M{ax:.1f} 12V84"/><path class="focus-b" d="M{bx:.1f} 12V84"/>'
         f'<text class="focus-label-a" x="{ax:.1f}" y="11" text-anchor="middle">A</text>'
         f'<text class="focus-label-b" x="{bx:.1f}" y="11" text-anchor="middle">B</text>'
@@ -66,7 +67,7 @@ def diagram(number: int, name: str, topology: str, a: str, b: str) -> str:
 
 
 def display_diagram() -> str:
-    return '<svg class="mode-diagram" viewBox="0 0 230 128" role="img" aria-label="Display Only: direct pass-through" xmlns="http://www.w3.org/2000/svg"><title>Display Only: direct pass-through</title><path class="axis" d="M10 55H210"/><path class="response" d="M10 55H210"/><g class="flow"><text x="22" y="105">IN</text><path d="M42 101h146"/><text x="196" y="105">OUT</text></g></svg>'
+    return '<svg class="mode-diagram" viewBox="0 0 230 128" role="img" aria-label="Display Only: direct pass-through" xmlns="http://www.w3.org/2000/svg"><title>Display Only: direct pass-through</title><path class="axis" d="M10 55H220"/><path class="response" d="M10 55H220"/><g class="flow"><text x="22" y="105">IN</text><path d="M42 101h146"/><text x="196" y="105">OUT</text></g></svg>'
 
 
 def main() -> None:
