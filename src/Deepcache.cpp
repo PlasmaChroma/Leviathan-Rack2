@@ -3473,16 +3473,10 @@ void DeepcacheBrandButton::onAction(const ActionEvent& e) {
 
 void DeepcacheBrandButton::step() {
 	text = string::translate("Browser.brand");
-	if (!browser->brands.empty()) {
-		text += ": ";
-		bool first = true;
-		for (const std::string& brand : browser->brands) {
-			if (!first)
-				text += ", ";
-			text += brand;
-			first = false;
-		}
-	}
+	if (browser->brands.size() == 1)
+		text += ": " + *browser->brands.begin();
+	else if (browser->brands.size() > 1)
+		text += ": " + std::to_string(browser->brands.size()) + " Selected";
 	ui::ChoiceButton::step();
 }
 
