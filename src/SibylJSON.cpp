@@ -1653,7 +1653,7 @@ std::string serializeSceneViewJson(const Composition& comp, const std::string& s
                 "velocity", double(clampValue(ov.scaled(event.hasVelocity ? event.velocity : track.defaultVelocity, VELOCITY_SCALE, VELOCITY_OFFSET),0.f,1.f)),
                 "probability", double(clampValue(ov.scaled(event.hasProbability ? event.probability : 1.f, PROBABILITY_SCALE, PROBABILITY_OFFSET),0.f,1.f)));
             if(event.pitchType==PitchType::HARMONIC){json_object_set_new(note,"pitchV",json_null());json_object_set_new(note,"requiresContext",json_true());}
-            json_object_set_new(note,"mod",json_real(clampValue((event.hasMod ? event.mod : 0.f)+ov.values[MOD_OFFSET],-10.f,10.f)));
+            json_object_set_new(note,"mod",json_real(clampValue((event.hasMod ? event.mod : 0.f)+ov.values[MOD_1_OFFSET],-10.f,10.f)));
             json_object_set_new(note,"mod2",json_real(clampValue((event.hasMod2 ? event.mod2 : 0.f)+ov.values[MOD2_OFFSET],-10.f,10.f)));
             json_object_set_new(note,"mod3",json_real(clampValue((event.hasMod3 ? event.mod3 : 0.f)+ov.values[MOD3_OFFSET],-10.f,10.f)));
             json_array_append_new(notes,note);

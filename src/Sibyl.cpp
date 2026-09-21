@@ -976,7 +976,7 @@ struct SibylModule : Module, SibylControl {
 			const auto& route=m_cachedTrackRoutes[channel];
 			double coordinate=curve && curve->clock==sibyl::AutomationClock::ARRANGEMENT?position:
 				curve && curve->clock==sibyl::AutomationClock::SCENE_VISIT?visit:phase;
-			double offset=route.overrides?route.overrides->values[sibyl::MOD_OFFSET+lane]:0.;
+			double offset=route.overrides?route.overrides->values[sibyl::MOD_1_OFFSET+lane]:0.;
 			double base=route.pattern?m_trackStates[channel].rawEventMod[lane]:0.;
 			double legacy=hasScene?m_trackStates[channel].currentMod[lane]:0.;
 			const int output=lane==0?MOD_OUTPUT:lane==1?MOD_2_OUTPUT:MOD_3_OUTPUT;
@@ -1636,7 +1636,7 @@ struct SibylModule : Module, SibylControl {
 						for (int lane = 0; lane < 3; ++lane) {
 							m_trackStates[ch].rawEventMod[lane] = expression.mod[lane];
 							m_trackStates[ch].currentMod[lane] = clamp(
-								expression.mod[lane] + overrides.values[sibyl::MOD_OFFSET + lane] + trackModMacro[lane][ch], -10.0f, 10.0f);
+								expression.mod[lane] + overrides.values[sibyl::MOD_1_OFFSET + lane] + trackModMacro[lane][ch], -10.0f, 10.0f);
 						}
 					} else {
 						m_trackStates[ch].currentGate = 0.0f;
@@ -1915,7 +1915,7 @@ struct SibylModule : Module, SibylControl {
                 if (!json_is_integer(expected)) return requestError("invalid_request", "expected_revision", "Preview requires integer expected_revision");
                 if (json_integer_value(expected) != m_acceptedRevision) return requestError("revision_conflict", "expected_revision", "Preview revision is stale");
                 if (!json_is_array(operations) || !json_array_size(operations) || json_array_size(operations) > 256)
-                    return requestError("invalid_request", "operations", "Expected 1–256 operations");
+                    return requestError("invalid_request", "operations", "Expected 1-256 operations");
                 json_t* changes = json_object_get(root, "return_changes");
                 if (changes && !json_is_boolean(changes)) return requestError("invalid_request", "return_changes", "Expected boolean");
                 if (!m_acceptedCompositionPtr) return requestError("invalid_request", "$", "No composition loaded");

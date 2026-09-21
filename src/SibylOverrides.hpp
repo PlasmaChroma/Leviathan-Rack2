@@ -8,7 +8,7 @@
 namespace sibyl {
 enum OverrideField {
     TRANSPOSE, VELOCITY_SCALE, VELOCITY_OFFSET, PROBABILITY_SCALE,
-    PROBABILITY_OFFSET, GATE_SCALE, GATE_OFFSET, MOD_OFFSET, MOD2_OFFSET,
+    PROBABILITY_OFFSET, GATE_SCALE, GATE_OFFSET, MOD_1_OFFSET, MOD2_OFFSET,
     MOD3_OFFSET, OVERRIDE_COUNT
 };
 struct OverrideFieldInfo { const char* name; float minimum; float maximum; };

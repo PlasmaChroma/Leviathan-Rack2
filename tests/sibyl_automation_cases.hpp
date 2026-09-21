@@ -119,7 +119,7 @@ void testAutomation() {
     {
         auto parsed=parse(automationCurve(R"([{"beat":0,"value":2}])","sceneVisit","add"));
         auto comp=std::const_pointer_cast<Composition>(parsed.composition);auto& ov=comp->arrangement[0].tracks["v"].overrides;
-        ov.present=true;ov.fields=1u<<MOD_OFFSET;ov.values[MOD_OFFSET]=.5f;
+        ov.present=true;ov.fields=1u<<MOD_1_OFFSET;ov.values[MOD_1_OFFSET]=.5f;
         Macro macro;macro.id="1";macro.target="track.v.mod";macro.amount=.25f;comp->macros["1"]=macro;
         SibylModule module;module.inputs[SibylModule::MACRO_1_INPUT].channels=1;module.inputs[SibylModule::MACRO_1_INPUT].setVoltage(10.f);
         module.acceptComposition(comp,ApplyAt::IMMEDIATE,PhasePolicy::RESTART_ALL);tick(module);

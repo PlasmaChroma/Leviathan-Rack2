@@ -134,7 +134,7 @@ inline std::string serializeHarmonyView(const Composition &comp, json_t *request
                                   : curve.clock == AutomationClock::SCENE_VISIT ? visit : beat;
           double value = sampleAutomation(curve, coordinate, cursor);
           auto assignment = scene.tracks.find(track.id);
-          double offset = assignment == scene.tracks.end() ? 0 : assignment->second.overrides.values[MOD_OFFSET + lane];
+          double offset = assignment == scene.tracks.end() ? 0 : assignment->second.overrides.values[MOD_1_OFFSET + lane];
           json_array_append_new(automation, json_pack("{s:s,s:s,s:s,s:f,s:f,s:s}", "track", track.id.c_str(), "lane",
                                                       lane == 0 ? "mod" : lane == 1 ? "mod2" : "mod3", "id",
                                                       curve.id.c_str(), "curveValue", value, "curvePlusSceneOffset",
