@@ -227,7 +227,7 @@ bool applyOperation(json_t*& working, json_t* op, size_t index, EditResult& resu
 			// Safe truncation check: shrinking length must not truncate existing active notes
 			if (json_t* newLenJ = json_object_get(setJ, "length")) {
 				if (!json_is_integer(newLenJ) || json_integer_value(newLenJ) < 1 || json_integer_value(newLenJ) > 1024)
-					return fail(result, "invalid_operation", path + ".set.length", "Expected length integer 1–1024.");
+					return fail(result, "invalid_operation", path + ".set.length", "Expected length integer 1-1024.");
 				int64_t newLen = json_integer_value(newLenJ);
 				json_t* steps = json_object_get(pattern, "steps");
 				if (json_is_array(steps)) {
@@ -287,7 +287,7 @@ bool applyOperation(json_t*& working, json_t* op, size_t index, EditResult& resu
 			if (json_t* newLenJ = json_object_get(overrides, "length")) {
 				if (!json_is_integer(newLenJ) || json_integer_value(newLenJ) < 1 || json_integer_value(newLenJ) > 1024) {
 					json_decref(cloned);
-					return fail(result, "invalid_operation", path + ".overrides.length", "Expected length integer 1–1024.");
+					return fail(result, "invalid_operation", path + ".overrides.length", "Expected length integer 1-1024.");
 				}
 			int64_t newLen = json_integer_value(newLenJ);
 				json_t* steps = json_object_get(cloned, "steps");
@@ -351,7 +351,7 @@ bool applyOperation(json_t*& working, json_t* op, size_t index, EditResult& resu
 		if (json_t* rep = json_object_get(op, "repeats")) {
 			if (!json_is_integer(rep) || json_integer_value(rep) < 1 || json_integer_value(rep) > 1024) {
 				json_decref(cloned);
-				return fail(result, "invalid_operation", path + ".repeats", "Expected repeats integer 1–1024.");
+				return fail(result, "invalid_operation", path + ".repeats", "Expected repeats integer 1-1024.");
 			}
 			json_object_set(cloned, "repeats", rep);
 		}
@@ -510,7 +510,7 @@ bool applyOperation(json_t*& working, json_t* op, size_t index, EditResult& resu
 EditResult applyCompositionEdit(const Composition& base, json_t* operations, int revision) {
 	EditResult result;
 	if (!operations || !json_is_array(operations) || json_array_size(operations) == 0 || json_array_size(operations) > 256) {
-		fail(result, "invalid_request", "operations", "operations must contain 1–256 entries.");
+		fail(result, "invalid_request", "operations", "operations must contain 1-256 entries.");
 		return result;
 	}
 	json_error_t error;
