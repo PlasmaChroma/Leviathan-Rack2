@@ -125,6 +125,7 @@ TEST_BINS_NON_RACK := \
 	build/tests/temporaldeck_engine_spec \
 	build/tests/temporaldeck_expander_preview_spec \
 	build/tests/spsc_latest_snapshot_spec \
+	build/tests/shared_svg_cache_spec \
 	build/tests/nvg_graphics_lifecycle_spec \
 	build/tests/temporaldeck_menu_utils_spec \
 	build/tests/temporaldeck_frame_input_spec \
@@ -524,6 +525,7 @@ test-fast: test-build-fast
 	$(call run_test_bin,build/tests/temporaldeck_engine_spec)
 	$(call run_test_bin,build/tests/temporaldeck_expander_preview_spec)
 	$(call run_test_bin,build/tests/spsc_latest_snapshot_spec)
+	$(call run_test_bin,build/tests/shared_svg_cache_spec)
 	$(call run_test_bin,build/tests/nvg_graphics_lifecycle_spec)
 	$(call run_test_bin,build/tests/temporaldeck_menu_utils_spec)
 	$(call run_test_bin,build/tests/temporaldeck_frame_input_spec)
@@ -670,6 +672,9 @@ build/tests/spsc_latest_snapshot_spec: tests/spsc_latest_snapshot_spec.cpp src/S
 
 build/tests/spsc_latest_snapshot_tsan_spec: tests/spsc_latest_snapshot_spec.cpp src/SpscLatestSnapshot.hpp src/TemporalDeckExpanderProtocol.hpp src/SilSpectrumSnapshot.hpp | build/tests
 	$(CXX) -std=c++11 -O1 -g -Wall -Wextra -pthread -fsanitize=thread -fno-omit-frame-pointer $< -o $@
+
+build/tests/shared_svg_cache_spec: tests/shared_svg_cache_spec.cpp src/visual/SharedSvgCacheState.hpp | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra $< -o $@
 
 build/tests/nvg_graphics_lifecycle_spec: tests/nvg_graphics_lifecycle_spec.cpp src/NvgGraphicsLifecycle.cpp src/NvgGraphicsLifecycle.hpp | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -I$(RACK_DIR)/dep/include $(filter %.cpp,$^) -o $@

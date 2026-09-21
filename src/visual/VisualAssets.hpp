@@ -436,6 +436,7 @@ struct EclipseKnob : app::SvgKnob {
 		SvgLayer();
 		void setSvg(std::shared_ptr<window::Svg> svg);
 		void draw(const DrawArgs& args) override;
+		void onContextDestroy(const ContextDestroyEvent& e) override;
 	};
 
 	struct ShadowWidget : TransparentWidget {
@@ -450,6 +451,7 @@ struct EclipseKnob : app::SvgKnob {
 		ShadowWidget();
 		void setSvg(std::shared_ptr<window::Svg> svg);
 		void draw(const DrawArgs& args) override;
+		void onContextDestroy(const ContextDestroyEvent& e) override;
 	};
 
 	ProgressRingWidget* progressRing = nullptr;

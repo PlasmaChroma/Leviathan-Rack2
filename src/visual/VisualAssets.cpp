@@ -1,4 +1,5 @@
 #include "VisualAssets.hpp"
+#include "SharedSvgCache.hpp"
 #include "Eclipse2RetainedCap.hpp"
 #include "Eclipse2RingCache.hpp"
 #include "Eclipse2Track.hpp"
@@ -3919,6 +3920,17 @@ void EclipseKnob::SvgLayer::draw(const DrawArgs& args) {
 	const Vec center = box.size.mult(0.5f);
 	const float angle = rotateWithValue ? crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f)) : 0.f;
 
+	if (!rotateWithValue) {
+		const float drawW = svgSize.x * scale;
+		const float drawH = svgSize.y * scale;
+		const float drawX = center.x - 0.5f * drawW;
+		const float drawY = center.y - 0.5f * drawH;
+		if (visual_assets::shared_svg_cache::drawSharedSvg(args.vg, svg, drawX, drawY, drawW, drawH, 1.0f)) {
+			if (cachedSvgFb) cachedSvgFb->bypassed = true;
+			return;
+		}
+	}
+
 	nvgSave(args.vg);
 	nvgTranslate(args.vg, center.x, center.y);
 	nvgRotate(args.vg, angle);
@@ -3926,6 +3938,11 @@ void EclipseKnob::SvgLayer::draw(const DrawArgs& args) {
 	nvgTranslate(args.vg, -0.5f * svgSize.x, -0.5f * svgSize.y);
 	Widget::draw(args);
 	nvgRestore(args.vg);
+}
+
+void EclipseKnob::SvgLayer::onContextDestroy(const ContextDestroyEvent& e) {
+	visual_assets::shared_svg_cache::onContextDestroy(e.vg);
+	Widget::onContextDestroy(e);
 }
 
 EclipseKnob::ShadowWidget::ShadowWidget() {
@@ -3969,6 +3986,31 @@ void EclipseKnob::ShadowWidget::draw(const DrawArgs& args) {
 		{0.90f, 1.18f, 1.018f, 58.f / 255.f},
 	};
 
+	const int shadowHandle = visual_assets::shared_svg_cache::getSharedSvgImage(args.vg, svg, svgSize.x, svgSize.y);
+	if (shadowHandle > 0) {
+		if (cachedSvgFb) cachedSvgFb->bypassed = true;
+		for (const ShadowPass& pass : passes) {
+			nvgSave(args.vg);
+			nvgTranslate(args.vg, center.x + pass.offsetX * scaleFactor, center.y + pass.offsetY * scaleFactor);
+			nvgRotate(args.vg, angle);
+			nvgScale(args.vg, scale * pass.scaleMul, scale * pass.scaleMul);
+			const float w = svgSize.x;
+			const float h = svgSize.y;
+			NVGpaint paint = nvgImagePattern(args.vg, -0.5f * w, -0.5f * h, w, h, 0.f, shadowHandle, pass.alpha);
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, -0.5f * w, -0.5f * h, w, h);
+			nvgFillPaint(args.vg, paint);
+			nvgFill(args.vg);
+			nvgRestore(args.vg);
+		}
+		if (measure) {
+			visual_assets::gEclipseShadowDrawNs += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+				std::chrono::steady_clock::now() - start).count());
+			visual_assets::gEclipseShadowDrawCount++;
+		}
+		return;
+	}
+
 	for (const ShadowPass& pass : passes) {
 		nvgSave(args.vg);
 		nvgGlobalAlpha(args.vg, pass.alpha);
@@ -3984,6 +4026,11 @@ void EclipseKnob::ShadowWidget::draw(const DrawArgs& args) {
 			std::chrono::steady_clock::now() - start).count());
 		visual_assets::gEclipseShadowDrawCount++;
 	}
+}
+
+void EclipseKnob::ShadowWidget::onContextDestroy(const ContextDestroyEvent& e) {
+	visual_assets::shared_svg_cache::onContextDestroy(e.vg);
+	Widget::onContextDestroy(e);
 }
 
 EclipseKnob::EclipseKnob() {

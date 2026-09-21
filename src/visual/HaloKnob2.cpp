@@ -1016,6 +1016,9 @@ LeviathanHaloKnob2::LeviathanHaloKnob2(Config config) : config(std::move(config)
 	backLayer->setSvg(backSvg);
 	backLayer->box.size = box.size;
 	backLayer->rotateWithValue = false;
+	if (backLayer->cachedSvgFb) {
+		backLayer->cachedSvgFb->bypassed = true;
+	}
 	addChild(backLayer);
 
 	centerLayer = new EclipseKnob::SvgLayer();
