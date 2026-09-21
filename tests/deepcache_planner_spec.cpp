@@ -281,7 +281,7 @@ std::vector<deepcache::BrowserModelRecord> browserRecords() {
 TestResult testBrowserFilterParity() {
 	const auto records = browserRecords();
 	deepcache::BrowserFilter filter;
-	filter.brand = "Alpha Brand";
+	filter.brands = {"Alpha Brand"};
 	filter.tagIds = {1, 2};
 	filter.favoritesOnly = true;
 	deepcache::normalizeBrowserFilter(filter);
@@ -299,6 +299,30 @@ TestResult testBrowserFilterParity() {
 	return {"browser combines brand, tags, favorites, hidden, and search fields",
 	        combined && tagAliasSearch && descriptionSearch,
 	        "combined=" + std::to_string(combined) + " tagAlias=" + std::to_string(tagAliasSearch)};
+}
+
+TestResult testBrowserMultiBrandFilter() {
+	const auto records = browserRecords();
+	deepcache::BrowserFilter filter;
+	const bool allBrands = deepcache::browserModelMatches(records[0], filter) &&
+	                       deepcache::browserModelMatches(records[1], filter) &&
+	                       deepcache::browserModelMatches(records[2], filter);
+	filter.brands = {"Alpha Brand", "Zeta Brand"};
+	const bool selectedBrands = deepcache::browserModelMatches(records[0], filter) &&
+	                            deepcache::browserModelMatches(records[1], filter) &&
+	                            deepcache::browserModelMatches(records[2], filter);
+	filter.brands.erase("Alpha Brand");
+	const bool uncheckedBrand = !deepcache::browserModelMatches(records[0], filter) &&
+	                            !deepcache::browserModelMatches(records[1], filter) &&
+	                            deepcache::browserModelMatches(records[2], filter);
+	filter.brands.clear();
+	const bool clearedToAll = deepcache::browserModelMatches(records[0], filter) &&
+	                          deepcache::browserModelMatches(records[1], filter) &&
+	                          deepcache::browserModelMatches(records[2], filter);
+	return {"browser supports inclusive multi-brand filtering with empty meaning all",
+	        allBrands && selectedBrands && uncheckedBrand && clearedToAll,
+	        "all=" + std::to_string(allBrands) + " selected=" + std::to_string(selectedBrands) +
+	          " unchecked=" + std::to_string(uncheckedBrand) + " cleared=" + std::to_string(clearedToAll)};
 }
 
 TestResult testDisplayEligibilityIsFilterIndependent() {
@@ -369,6 +393,7 @@ int main() {
 		testMemoryBackendLifecycle(),
 		testWorkerPauseAndReplacement(),
 		testBrowserFilterParity(),
+		testBrowserMultiBrandFilter(),
 		testDisplayEligibilityIsFilterIndependent(),
 		testBrowserUnhideIncludesUnavailableModels(),
 		testBrowserSortParity(),

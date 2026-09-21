@@ -61,7 +61,7 @@ bool browserModelMatches(const BrowserModelRecord& record, const BrowserFilter& 
 		return false;
 	if (filter.favoritesOnly && !record.favorite)
 		return false;
-	if (!filter.brand.empty() && record.pluginBrand != filter.brand)
+	if (!filter.brands.empty() && filter.brands.count(record.pluginBrand) == 0)
 		return false;
 	for (int tagId : filter.tagIds) {
 		if (std::find(record.tagIds.begin(), record.tagIds.end(), tagId) == record.tagIds.end())

@@ -605,7 +605,7 @@ struct DeepcacheBrowser : widget::OpaqueWidget {
 	std::vector<deepcache::ModelDescriptor> modelDescriptors;
 	std::vector<deepcache::BrowserModelRecord> browserRecords;
 	std::string search;
-	std::string brand;
+	std::set<std::string> brands;
 	std::set<int> tagIds;
 	bool favoritesOnly = false;
 	bool unhide = false;
@@ -3027,7 +3027,7 @@ void DeepcacheBrowser::refresh() {
 	modelScroll->offset = math::Vec();
 	deepcache::BrowserFilter filter;
 	filter.search = string::trim(search);
-	filter.brand = brand;
+	filter.brands = brands;
 	filter.tagIds = tagIds;
 	filter.favoritesOnly = favoritesOnly;
 	filter.unhide = unhide;
@@ -3053,7 +3053,7 @@ void DeepcacheBrowser::refresh() {
 void DeepcacheBrowser::clearFilters() {
 	search.clear();
 	searchField->setText("");
-	brand.clear();
+	brands.clear();
 	tagIds.clear();
 	favoritesOnly = false;
 	const bool eligibilityChanged = unhide;
@@ -3401,8 +3401,18 @@ void DeepcacheSingleLineChoiceButton::draw(const DrawArgs& args) {
 void DeepcacheBrandItem::onAction(const ActionEvent& e) {
 	if (!browser || browserLifetime.expired())
 		return;
-	browser->brand = browser->brand == brand ? "" : brand;
+	if (brand.empty()) {
+		browser->brands.clear();
+	}
+	else {
+		const auto selected = browser->brands.find(brand);
+		if (selected == browser->brands.end())
+			browser->brands.insert(brand);
+		else
+			browser->brands.erase(selected);
+	}
 	browser->refresh();
+	e.unconsume();
 }
 
 void DeepcacheBrandItem::step() {
@@ -3417,7 +3427,8 @@ void DeepcacheBrandItem::step() {
 		rightText = "A: " + std::to_string(availableModelCount) + "/" +
 		            std::to_string(registeredModelCount);
 	}
-	if (browser->brand == brand) {
+	const bool checked = brand.empty() ? browser->brands.empty() : browser->brands.count(brand) != 0;
+	if (checked) {
 		if (!rightText.empty())
 			rightText += "  ";
 		rightText += CHECKMARK(true);
@@ -3462,8 +3473,16 @@ void DeepcacheBrandButton::onAction(const ActionEvent& e) {
 
 void DeepcacheBrandButton::step() {
 	text = string::translate("Browser.brand");
-	if (!browser->brand.empty())
-		text += ": " + browser->brand;
+	if (!browser->brands.empty()) {
+		text += ": ";
+		bool first = true;
+		for (const std::string& brand : browser->brands) {
+			if (!first)
+				text += ", ";
+			text += brand;
+			first = false;
+		}
+	}
 	ui::ChoiceButton::step();
 }
 

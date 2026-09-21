@@ -46,7 +46,7 @@ struct BrowserModelRecord {
 struct BrowserFilter {
 	std::string search;
 	std::string normalizedSearch;
-	std::string brand;
+	std::set<std::string> brands;
 	std::set<int> tagIds;
 	bool favoritesOnly = false;
 	bool unhide = false;
