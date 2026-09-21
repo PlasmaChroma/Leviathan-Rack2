@@ -221,23 +221,6 @@ void init(Plugin* p) {
 	p->addModel(modelIris);
 	p->addModel(modelNautiloid);
     p->addModel(modelPuffy);
-	p->addModel(modelCrownstep);
-	p->addModel(modelBifurx);
-	p->addModel(modelWyrm);
-	p->addModel(modelSil);
-	p->addModel(modelChronomaw);
-	p->addModel(modelBulkhead);
-	p->addModel(modelUmi);
-	p->addModel(modelDoorstop);
-	p->addModel(modelChromatide);
-	p->addModel(modelMandelwake);
-	p->addModel(modelCantor);
-	p->addModel(modelTheme);
-	p->addModel(modelOctavia);
-	p->addModel(modelOctaviaConsole);
-	p->addModel(modelSibyl);
-	p->addModel(modelMoirai);
-	p->addModel(modelPhonex);
 	// Any other plugin initialization may go here.
 	// As an alternative, consider lazy-loading assets and lookup tables when your module is created to reduce startup times of Rack.
 }
