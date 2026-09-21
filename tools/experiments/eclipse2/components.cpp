@@ -15,6 +15,7 @@ static void run(NVGcontext* vg){
  app::Scene scene;APP->scene=&scene;
  runtimeRecordingChecks(vg);
  Eclipse2Knob::ShadowWidget shadow;shadow.box.size=Vec(34,34);
+ auto shadowSvg=window::Svg::load("res/icon/Eclipse2KnobShadow.svg");require(shadowSvg&&shadowSvg->handle,"shadow SVG");shadow.setSvg(shadowSvg);
  Eclipse2Knob::ProgressLedRingWidget ring;ring.box.size=Vec(34,34);
  EclipseKnob::SvgLayer cap;cap.box.size=Vec(34,34);cap.scaleFactor=.70f;
  auto svg=window::Svg::load("res/icon/Eclipse2Knob.svg");require(svg&&svg->handle,"SVG");cap.setSvg(svg);

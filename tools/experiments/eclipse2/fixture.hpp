@@ -4,6 +4,7 @@ static bool debugEnabled = true;
 bool isDragonKingDebugEnabled() { return debugEnabled; }
 
 #include "visual/VisualAssets.hpp"
+#include "visual/SharedSvgCache.hpp"
 #include "visual/Eclipse2Track.hpp"
 #include "Eclipse2RingExperiment.hpp"
 

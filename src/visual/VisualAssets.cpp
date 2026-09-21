@@ -4255,6 +4255,10 @@ void Eclipse2Knob::ProgressLedRingWidget::draw(const DrawArgs& args) {
 }
 
 void Eclipse2Knob::ShadowWidget::draw(const DrawArgs& args) {
+	if (svg && visual_assets::shared_svg_cache::drawSharedSvg(args.vg, svg, 0.f, 0.f, box.size.x, box.size.y, 1.0f)) {
+		return;
+	}
+
 	const float diameterPx = std::min(box.size.x, box.size.y);
 	if (diameterPx <= 1.f) return;
 
@@ -4308,6 +4312,11 @@ void Eclipse2Knob::ShadowWidget::draw(const DrawArgs& args) {
 	nvgRestore(args.vg);
 }
 
+void Eclipse2Knob::ShadowWidget::onContextDestroy(const ContextDestroyEvent& e) {
+	visual_assets::shared_svg_cache::onContextDestroy(e.vg);
+	Widget::onContextDestroy(e);
+}
+
 Eclipse2Knob::Eclipse2Knob() {
 	minAngle = -0.83 * M_PI;
 	maxAngle = 0.83 * M_PI;
@@ -4327,6 +4336,7 @@ Eclipse2Knob::Eclipse2Knob() {
 	lastBloomAmount = settings::haloBrightness;
 
 	shadowLayer = new ShadowWidget();
+	shadowLayer->setSvg(visual_assets::loadPluginSvgCached("res/icon/Eclipse2KnobShadow.svg"));
 	shadowLayer->box.size = box.size;
 	shadowLayer->minAngle = minAngle;
 	shadowLayer->maxAngle = maxAngle;

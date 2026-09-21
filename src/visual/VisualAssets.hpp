@@ -470,11 +470,14 @@ struct EclipseKnob : app::SvgKnob {
 
 struct Eclipse2Knob : app::SvgKnob {
 	struct ShadowWidget : TransparentWidget {
+		std::shared_ptr<window::Svg> svg;
 		float valueNorm = 0.5f;
 		float minAngle = -0.83f * M_PI;
 		float maxAngle = 0.83f * M_PI;
 
+		void setSvg(std::shared_ptr<window::Svg> svg) { this->svg = svg; }
 		void draw(const DrawArgs& args) override;
+		void onContextDestroy(const ContextDestroyEvent& e) override;
 	};
 
 	struct ProgressLedRingWidget : TransparentWidget {
