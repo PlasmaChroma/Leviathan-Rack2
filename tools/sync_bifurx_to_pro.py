@@ -426,8 +426,8 @@ void init(Plugin* p) {
 }
 
 void destroy() {
-	visual_assets::saveSettings();
 	bifurx::shutdownBifurxRenderService();
+	visual_assets::saveSettings();
 	delete leviathanDrmContext;
 	leviathanDrmContext = nullptr;
 }

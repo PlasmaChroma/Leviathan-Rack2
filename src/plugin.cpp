@@ -244,7 +244,7 @@ void init(Plugin* p) {
 
 void destroy() {
 	// Explicit plugin-lifecycle shutdown avoids static-destruction order hazards across TUs.
+	bifurx::shutdownBifurxRenderService();
 	leviathan::theme::persistence::saveToUserStorage();
 	visual_assets::saveSettings();
-	bifurx::shutdownBifurxRenderService();
 }

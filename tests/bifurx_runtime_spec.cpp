@@ -2,7 +2,11 @@
 
 #include <cmath>
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <iostream>
+#include <limits>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <utility>
@@ -55,6 +59,58 @@ struct TestResult {
   bool pass = false;
   std::string detail;
 };
+
+#if defined(BIFURX_WORKER_TEST_HOOKS)
+struct WorkerGate {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool entered = false;
+  bool open = false;
+  uint64_t enteredId = 0;
+  uint64_t enteredSeq = 0;
+
+  void block(uint64_t id, uint64_t seq) {
+    std::unique_lock<std::mutex> lock(mutex);
+    enteredId = id;
+    enteredSeq = seq;
+    entered = true;
+    cv.notify_all();
+    cv.wait(lock, [&]() { return open; });
+  }
+  bool waitEntered() {
+    std::unique_lock<std::mutex> lock(mutex);
+    return cv.wait_for(lock, std::chrono::seconds(5), [&]() { return entered; });
+  }
+  void release() {
+    std::lock_guard<std::mutex> lock(mutex);
+    open = true;
+    cv.notify_all();
+  }
+  ~WorkerGate() { release(); }
+};
+
+BifurxUiRenderRequest workerRequest(uint64_t id, uint64_t requestSeq, float sampleRate = 48000.f) {
+  BifurxUiRenderRequest request;
+  request.displayId = id;
+  request.requestSeq = requestSeq;
+  request.previewSeq = uint32_t(requestSeq);
+  request.previewState.sampleRate = sampleRate;
+  request.previewState.mode = 0;
+  request.previewState.freqA = 200.f;
+  request.previewState.freqB = 1200.f;
+  return request;
+}
+
+std::shared_ptr<const BifurxUiRenderSnapshot> waitWorkerSnapshot(
+  BifurxUiRenderService& service, uint64_t id, uint64_t seq) {
+  for (int attempt = 0; attempt < 5000; ++attempt) {
+    auto snapshot = service.getLatestSnapshot(id);
+    if (snapshot && snapshot->requestSeq == seq) return snapshot;
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  return nullptr;
+}
+#endif
 
 bool adoptPublishedRenderTargets(BifurxSpectrumBase& display) {
   display.syncBase();
@@ -1082,6 +1138,271 @@ TestResult testSynchronousFftScratchIsLazyAndThreadLocalReusable() {
       " reused=" + std::to_string(int(sameArenaReused))
   };
 }
+
+#if defined(BIFURX_WORKER_TEST_HOOKS)
+TestResult testWorkerAdmissionRestartAndTerminalShutdown() {
+  BifurxUiRenderService service;
+  bool pass = service.registerDisplay() == 0 && !service.submitLatest(workerRequest(1, 1));
+  service.failNextStartForTest();
+  pass &= !service.start() && service.registerDisplay() == 0;
+  pass &= service.start() && service.start();
+  const uint64_t first = service.registerDisplay();
+  pass &= first != 0 && service.submitLatest(workerRequest(first, 1));
+  auto retained = waitWorkerSnapshot(service, first, 1);
+  pass &= bool(retained);
+  service.unregisterDisplay(first);
+  pass &= retained && retained->displayId == first && !service.getLatestSnapshot(first);
+  service.stop();
+  pass &= service.registerDisplay() == 0 && !service.submitLatest(workerRequest(first, 2));
+  pass &= service.start();
+  const uint64_t second = service.registerDisplay();
+  pass &= second > first && !service.getLatestSnapshot(first);
+  pass &= service.submitLatest(workerRequest(second, 1));
+  pass &= bool(waitWorkerSnapshot(service, second, 1));
+  service.shutdown();
+  pass &= !service.start() && service.registerDisplay() == 0
+    && !service.submitLatest(workerRequest(second, 2)) && !service.getLatestSnapshot(second);
+  BifurxUiRenderService separate;
+  pass &= separate.start() && separate.registerDisplay() != 0;
+  separate.stop();
+  return {"Worker admission, restart, terminal closure, and local isolation", pass, ""};
+}
+
+TestResult testWorkerQueuedChurnAndFairness() {
+  BifurxUiRenderService service;
+  WorkerGate gate;
+  std::mutex claimsMutex;
+  std::vector<uint64_t> claims;
+  service.setTestHooks([&](uint64_t id, uint64_t seq) {
+    { std::lock_guard<std::mutex> lock(claimsMutex); claims.push_back(id); }
+    if (seq == 1 && claims.size() == 1) gate.block(id, seq);
+  }, {});
+  bool pass = service.start();
+  const uint64_t a = service.registerDisplay();
+  pass &= service.submitLatest(workerRequest(a, 1)) && gate.waitEntered();
+  for (uint64_t seq = 2; seq <= 40; ++seq) pass &= service.submitLatest(workerRequest(a, seq));
+  const uint64_t b = service.registerDisplay();
+  const uint64_t c = service.registerDisplay();
+  pass &= service.submitLatest(workerRequest(b, 1)) && service.submitLatest(workerRequest(c, 1));
+  for (uint64_t seq = 2; seq <= 20; ++seq) pass &= service.submitLatest(workerRequest(b, seq));
+  for (int i = 0; i < 300; ++i) {
+    const uint64_t transient = service.registerDisplay();
+    pass &= service.submitLatest(workerRequest(transient, 1));
+    service.unregisterDisplay(transient);
+  }
+  const auto stateA = service.testState(a);
+  const auto stateB = service.testState(b);
+  pass &= stateA.claimedId == a && stateA.pendingRequestSeq == 40;
+  pass &= stateB.pendingRequestSeq == 20;
+  pass &= stateA.queuedIds.size() == 2 && stateA.queuedIds[0] == b && stateA.queuedIds[1] == c;
+  gate.release();
+  pass &= bool(waitWorkerSnapshot(service, b, 20));
+  pass &= bool(waitWorkerSnapshot(service, c, 1));
+  pass &= bool(waitWorkerSnapshot(service, a, 40));
+  service.stop();
+  { std::lock_guard<std::mutex> lock(claimsMutex);
+    pass &= claims.size() >= 3 && claims[0] == a && claims[1] == b && claims[2] == c;
+  }
+  return {"Worker queue remains bounded during churn and a flooded display yields", pass, ""};
+}
+
+TestResult testWorkerUnregisterInFlightAndStopJoin() {
+  BifurxUiRenderService service;
+  WorkerGate gate;
+  service.setTestHooks({}, [&](uint64_t id, uint64_t seq) { if (seq == 1) gate.block(id, seq); });
+  bool pass = service.start();
+  const uint64_t first = service.registerDisplay();
+  pass &= service.submitLatest(workerRequest(first, 1)) && gate.waitEntered();
+  service.unregisterDisplay(first);
+  const uint64_t next = service.registerDisplay();
+  pass &= next > first && !service.getLatestSnapshot(first);
+  pass &= service.submitLatest(workerRequest(next, 2));
+  gate.release();
+  auto nextSnapshot = waitWorkerSnapshot(service, next, 2);
+  pass &= nextSnapshot && nextSnapshot->displayId == next && service.testState().discarded >= 1;
+  service.stop();
+
+  WorkerGate stopGate;
+  std::atomic<int> claimCount{0};
+  service.setTestHooks([&](uint64_t id, uint64_t seq) {
+    claimCount.fetch_add(1);
+    stopGate.block(id, seq);
+  }, {});
+  pass &= service.start();
+  const uint64_t stoppedId = service.registerDisplay();
+  pass &= service.submitLatest(workerRequest(stoppedId, 1)) && stopGate.waitEntered();
+  pass &= service.submitLatest(workerRequest(stoppedId, 2));
+  const uint64_t queuedId = service.registerDisplay();
+  pass &= service.submitLatest(workerRequest(queuedId, 1));
+  std::atomic<int> finished{0};
+  std::thread firstStop([&]() { service.stop(); finished.fetch_add(1); });
+  for (int i = 0; i < 5000 && service.testState().runState != 2; ++i)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  pass &= service.testState().runState == 2 && !service.start()
+    && service.registerDisplay() == 0 && !service.submitLatest(workerRequest(stoppedId, 2));
+  std::thread secondStop([&]() { service.stop(); finished.fetch_add(1); });
+  std::thread terminal([&]() { service.shutdown(); finished.fetch_add(1); });
+  for (int i = 0; i < 5000 && service.testState().stopWaiters < 2; ++i)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  pass &= service.testState().stopWaiters == 2 && finished.load() == 0;
+  stopGate.release();
+  firstStop.join(); secondStop.join(); terminal.join();
+  pass &= finished.load() == 3 && claimCount.load() == 1
+    && service.testState().permanentlyClosed && !service.start();
+  return {"Unregister discards in-flight work; concurrent stop and shutdown await join", pass, ""};
+}
+
+TestResult testWorkerPayloadInheritanceAndRateValidity() {
+  BifurxUiRenderService service;
+  WorkerGate gate;
+  service.setTestHooks([&](uint64_t id, uint64_t seq) { if (seq == 1) gate.block(id, seq); }, {});
+  bool pass = service.start();
+  const uint64_t blocker = service.registerDisplay();
+  pass &= service.submitLatest(workerRequest(blocker, 1)) && gate.waitEntered();
+  const uint64_t target = service.registerDisplay();
+  auto analysis = workerRequest(target, 1);
+  analysis.analysisSeq = 71;
+  auto payload = std::make_shared<BifurxUiRenderPayload>();
+  payload->analysisFrame.rawInput[kFftSize / 2] = 10.f;
+  payload->analysisFrame.output[kFftSize / 2] = 30.f;
+  analysis.payload = payload;
+  pass &= service.submitLatest(std::move(analysis));
+  pass &= service.submitLatest(workerRequest(target, 2));
+  auto state = service.testState(target);
+  pass &= state.pendingHasPayload && state.pendingAnalysisSeq == 71 && state.pendingRequestSeq == 2;
+  gate.release();
+  auto snapshot = waitWorkerSnapshot(service, target, 2);
+  pass &= snapshot && snapshot->hasOverlayTarget && snapshot->analysisSeq == 71;
+  if (snapshot) {
+    float maxDb = -1000.f;
+    for (float db : snapshot->overlayTargetModuleDb) maxDb = std::max(maxDb, db);
+    pass &= std::fabs(maxDb - 20.f * std::log10(3.f)) < .05f;
+  }
+  auto changedRate = workerRequest(target, 3, 96000.f);
+  changedRate.previewSeq = 2; // Equal preview sequence must not reuse the old-rate curve.
+  pass &= service.submitLatest(std::move(changedRate));
+  auto newRate = waitWorkerSnapshot(service, target, 3);
+  pass &= newRate && newRate->cachedAxisSampleRate == 96000.f && !newRate->hasOverlayTarget;
+  service.stop();
+  return {"Worker payload inheritance and completed-target rate validity", pass, ""};
+}
+
+TestResult testWorkerQueuedUnregisterRetiresLeaseOutsideLock() {
+  BifurxUiRenderService service;
+  WorkerGate gate;
+  service.setTestHooks([&](uint64_t id, uint64_t seq) { if (seq == 1) gate.block(id, seq); }, {});
+  bool pass = service.start();
+  const uint64_t blocker = service.registerDisplay();
+  pass &= service.submitLatest(workerRequest(blocker, 1)) && gate.waitEntered();
+  const uint64_t queued = service.registerDisplay();
+  std::atomic<bool> retired{false};
+  auto payload = std::shared_ptr<BifurxUiRenderPayload>(new BifurxUiRenderPayload,
+    [&](BifurxUiRenderPayload* p) {
+      // A destructor reached under the service mutex would deadlock here.
+      retired.store(service.testState().displayCount >= 1);
+      delete p;
+    });
+  auto request = workerRequest(queued, 1);
+  request.payload = payload;
+  pass &= service.submitLatest(std::move(request));
+  payload.reset();
+  service.unregisterDisplay(queued);
+  pass &= retired.load() && !service.getLatestSnapshot(queued);
+  pass &= service.testState().queuedIds.empty();
+  gate.release();
+  pass &= bool(waitWorkerSnapshot(service, blocker, 1));
+  service.stop();
+  return {"Queued unregister retires payload outside the scheduling mutex", pass, ""};
+}
+
+TestResult testWorkerInFlightCarryForwardAndRateMismatch() {
+  BifurxUiRenderService service;
+  WorkerGate gate;
+  service.setTestHooks([&](uint64_t id, uint64_t seq) { if (seq == 1) gate.block(id, seq); }, {});
+  bool pass = service.start();
+  const uint64_t display = service.registerDisplay();
+  auto analysis = workerRequest(display, 1);
+  analysis.analysisSeq = 41;
+  auto payload = std::make_shared<BifurxUiRenderPayload>();
+  payload->analysisFrame.rawInput[kFftSize / 2] = 10.f;
+  payload->analysisFrame.output[kFftSize / 2] = 20.f;
+  analysis.payload = payload;
+  pass &= service.submitLatest(std::move(analysis)) && gate.waitEntered();
+  pass &= service.submitLatest(workerRequest(display, 2));
+  pass &= !service.testState(display).pendingHasPayload;
+  gate.release();
+  auto carried = waitWorkerSnapshot(service, display, 2);
+  pass &= carried && carried->hasOverlayTarget && carried->analysisSeq == 41;
+  if (carried) {
+    float peak = -1000.f;
+    for (float db : carried->overlayTargetModuleDb) peak = std::max(peak, db);
+    pass &= std::fabs(peak - 20.f * std::log10(2.f)) < .05f;
+  }
+  service.stop();
+
+  WorkerGate rateGate;
+  service.setTestHooks([&](uint64_t id, uint64_t seq) { if (seq == 1) rateGate.block(id, seq); }, {});
+  pass &= service.start();
+  const uint64_t blocker = service.registerDisplay();
+  pass &= service.submitLatest(workerRequest(blocker, 1)) && rateGate.waitEntered();
+  const uint64_t target = service.registerDisplay();
+  auto oldRate = workerRequest(target, 1);
+  oldRate.analysisSeq = 91;
+  oldRate.payload = payload;
+  pass &= service.submitLatest(std::move(oldRate));
+  pass &= service.submitLatest(workerRequest(target, 2, 96000.f));
+  pass &= !service.testState(target).pendingHasPayload;
+  rateGate.release();
+  auto newRate = waitWorkerSnapshot(service, target, 2);
+  pass &= newRate && newRate->cachedAxisSampleRate == 96000.f
+    && !newRate->hasOverlayTarget && newRate->analysisSeq != 91;
+  service.stop();
+  return {"In-flight overlay carries forward; queued payload cannot cross sample rates", pass, ""};
+}
+
+TestResult testWorkerLateAdmissionAndIdExhaustion() {
+  BifurxUiRenderService service;
+  bool pass = service.start();
+  const uint64_t existing = service.registerDisplay();
+  pass &= existing != 0;
+  WorkerGate registerGate;
+  service.setAdmissionTestHook([&](uint64_t id, uint64_t seq) {
+    if (id == 0) registerGate.block(id, seq);
+  });
+  uint64_t lateId = 99;
+  std::thread registerThread([&]() { lateId = service.registerDisplay(); });
+  pass &= registerGate.waitEntered();
+  service.shutdown();
+  registerGate.release();
+  registerThread.join();
+  pass &= lateId == 0;
+
+  BifurxUiRenderService submitService;
+  pass &= submitService.start();
+  const uint64_t submitId = submitService.registerDisplay();
+  WorkerGate submitGate;
+  submitService.setAdmissionTestHook([&](uint64_t id, uint64_t seq) {
+    if (id == submitId && seq == 1) submitGate.block(id, seq);
+  });
+  bool accepted = true;
+  std::thread submitThread([&]() { accepted = submitService.submitLatest(workerRequest(submitId, 1)); });
+  pass &= submitGate.waitEntered();
+  submitService.shutdown();
+  submitGate.release();
+  submitThread.join();
+  pass &= !accepted;
+
+  BifurxUiRenderService exhausted;
+  exhausted.setNextDisplayIdForTest(std::numeric_limits<uint64_t>::max());
+  pass &= exhausted.start();
+  const uint64_t last = exhausted.registerDisplay();
+  pass &= last == std::numeric_limits<uint64_t>::max() && exhausted.registerDisplay() == 0;
+  exhausted.stop();
+  pass &= exhausted.start() && exhausted.registerDisplay() == 0;
+  exhausted.stop();
+  return {"Shutdown defeats late admission and display IDs never wrap", pass, ""};
+}
+#endif
 
 TestResult testWorkerLatestRequestRetainsOwnedAnalysisPayload() {
   BifurxUiRenderService service;
@@ -2449,6 +2770,15 @@ int main() {
     testVisualWorkerDefaultSetterHonorsMode(),
     testWorkerAnalysisFramePoolIsBoundedAndReusable(),
     testSynchronousFftScratchIsLazyAndThreadLocalReusable(),
+#if defined(BIFURX_WORKER_TEST_HOOKS)
+    testWorkerAdmissionRestartAndTerminalShutdown(),
+    testWorkerQueuedChurnAndFairness(),
+    testWorkerUnregisterInFlightAndStopJoin(),
+    testWorkerPayloadInheritanceAndRateValidity(),
+    testWorkerQueuedUnregisterRetiresLeaseOutsideLock(),
+    testWorkerInFlightCarryForwardAndRateMismatch(),
+    testWorkerLateAdmissionAndIdExhaustion(),
+#endif
     testWorkerLatestRequestRetainsOwnedAnalysisPayload(),
     testProductionOutputSafetyStageContract(),
     testTwoTimesOversamplingSuppressesDrivenLevelAliases(),

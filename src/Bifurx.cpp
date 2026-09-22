@@ -1209,7 +1209,8 @@ void Bifurx::process(const ProcessArgs& args) {
 	}
 #endif
 	using PerfClock = std::chrono::steady_clock;
-	const bool measurePerf = isDragonKingDebugEnabled() && perfMeasureDivider.process();
+	const bool debugEnabled = isDragonKingDebugEnabled();
+	const bool measurePerf = debugEnabled && perfMeasureDivider.process();
 	const PerfClock::time_point perfStart = measurePerf ? PerfClock::now() : PerfClock::time_point();
 
 	if (visualWatchdogEnabled.load(std::memory_order_relaxed)) {
@@ -1285,7 +1286,7 @@ void Bifurx::process(const ProcessArgs& args) {
 		cachedLowLatencyVisual = lowLatencyVisual.load(std::memory_order_relaxed);
 		cachedHighResonanceSelfOscEnabled = highResonanceSelfOscEnabled.load(std::memory_order_relaxed);
 		cachedSoftLimitingEnabled = softLimitingEnabled.load(std::memory_order_relaxed);
-		const bool nextNonlinearOversamplingEnabled = isDragonKingDebugEnabled()
+		const bool nextNonlinearOversamplingEnabled = debugEnabled
 			? nonlinearOversamplingEnabled.load(std::memory_order_relaxed)
 			: true;
 		cachedNonlinearOversamplingEnabled = nextNonlinearOversamplingEnabled;
@@ -1380,7 +1381,7 @@ void Bifurx::process(const ProcessArgs& args) {
 
 	// Production always uses the 2x IIR4 path, irrespective of saved debug settings.
 	// Keep boundary changes on the existing click-free transition path.
-	const int requestedBoundary = !isDragonKingDebugEnabled() ? 3
+	const int requestedBoundary = !debugEnabled ? 3
 		: !cachedNonlinearOversamplingEnabled ? 0
 		: boundaryResampling.load(std::memory_order_relaxed);
 	const bool primeBoundary = requestedBoundary != transitionSmoother.activeBoundary
@@ -1502,7 +1503,7 @@ void Bifurx::process(const ProcessArgs& args) {
 	}
 	if (!std::isfinite(titoSmDcCorrection)) titoSmDcCorrection = 0.f;
 	titoSmDcCorrection = clamp(titoSmDcCorrection, -10.f, 10.f);
-	const bool diagnosticsActive = isDragonKingDebugEnabled() && curveDebugLogging.load(std::memory_order_relaxed);
+	const bool diagnosticsActive = debugEnabled && curveDebugLogging.load(std::memory_order_relaxed);
 	const float llAlpha = llTelemetryAlpha;
 	if (diagnosticsActive) {
 		if (audioMode == 0) { llTelemetryExcitationSq += llAlpha * (llExc * llExc - llTelemetryExcitationSq); llTelemetryStageALpSq += llAlpha * (llA * llA - llTelemetryStageALpSq); llTelemetryStageBLpSq += llAlpha * (llB * llB - llTelemetryStageBLpSq); llTelemetryOutputSq += llAlpha * (out * out - llTelemetryOutputSq); }
@@ -1607,9 +1608,9 @@ void BifurxSpectrumBase::syncBase() {
 			state.overlayModuleDb[i] = state.overlayTargetModuleDb[i] = 0.f;
 		}
 	}
-	const bool useWorkerCurve = shouldUseVisualWorker();
+	bool useWorkerCurve = shouldUseVisualWorker();
 	if (useWorkerCurve) {
-		ensureWorkerRegistration();
+		useWorkerCurve = ensureWorkerRegistration();
 	}
 	else {
 		releaseWorkerRegistration();
@@ -1665,7 +1666,23 @@ void BifurxSpectrumBase::syncBase() {
 	}
 
 	if (useWorkerCurve) {
-		submitWorkerCurveRequest();
+		if (!submitWorkerCurveRequest()) {
+			// Admission can fail during plugin shutdown or a service stop. An active
+			// display still needs the latest published targets on this UI tick.
+			releaseWorkerRegistration();
+			if (state.hasPreview && (!state.hasCurve || state.curvePreviewSeq != state.lastPreviewSeq)) {
+				updateAxisCache();
+				updateCurveCache();
+			}
+			if (state.hasPreview && state.overlayAnalysisSeq != state.lastAnalysisSeq) {
+				uint32_t copiedAnalysisSeq = state.overlayAnalysisSeq;
+				if (updateOverlayCache(&copiedAnalysisSeq)) {
+					state.lastAnalysisSeq = copiedAnalysisSeq;
+					state.overlayAnalysisSeq = copiedAnalysisSeq;
+					state.hasOverlay = true;
+				}
+			}
+		}
 	}
 }
 
@@ -1725,13 +1742,14 @@ float BifurxSpectrumBase::workerQueueLatencyMs() const {
 	return float(queueSec * 1000.0);
 }
 
-void BifurxSpectrumBase::ensureWorkerRegistration() {
+bool BifurxSpectrumBase::ensureWorkerRegistration() {
 	if (workerDisplayId != 0) {
-		return;
+		return true;
 	}
 	BifurxUiRenderService& service = bifurxRenderService();
-	service.start();
+	if (!service.start()) return false;
 	workerDisplayId = service.registerDisplay();
+	return workerDisplayId != 0;
 }
 
 void BifurxSpectrumBase::releaseWorkerRegistration() {
@@ -1768,13 +1786,13 @@ std::shared_ptr<BifurxUiRenderPayload> BifurxSpectrumBase::acquireWorkerAnalysis
 	return nullptr;
 }
 
-void BifurxSpectrumBase::submitWorkerCurveRequest() {
+bool BifurxSpectrumBase::submitWorkerCurveRequest() {
 	if (!module || workerDisplayId == 0 || !state.hasPreview) {
-		return;
+		return true;
 	}
 	if (workerLastSubmittedPreviewSeq == state.lastPreviewSeq &&
 		workerLastSubmittedAnalysisSeq == state.lastAnalysisSeq) {
-		return;
+		return true;
 	}
 	const bool measurePerf = isDragonKingDebugEnabled();
 	const auto submitStart = measurePerf
@@ -1821,13 +1839,15 @@ void BifurxSpectrumBase::submitWorkerCurveRequest() {
 			}
 		}
 	}
+	const uint32_t acceptedAnalysisSeq = request.analysisSeq;
+	if (!bifurxRenderService().submitLatest(std::move(request))) return false;
 	workerLastSubmittedPreviewSeq = state.lastPreviewSeq;
-	workerLastSubmittedAnalysisSeq = request.analysisSeq;
-	bifurxRenderService().submitLatest(std::move(request));
+	workerLastSubmittedAnalysisSeq = acceptedAnalysisSeq;
 	if (measurePerf) {
 		lastWorkerSubmitUs = float(std::chrono::duration_cast<std::chrono::nanoseconds>(
 			std::chrono::steady_clock::now() - submitStart).count()) * 1e-3f;
 	}
+	return true;
 }
 
 bool BifurxSpectrumBase::adoptWorkerCurveSnapshot() {

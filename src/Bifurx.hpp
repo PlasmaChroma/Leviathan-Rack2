@@ -456,10 +456,10 @@ struct BifurxSpectrumBase {
 	int effectiveVisualWorkerMode() const;
 	float workerSnapshotAgeMs() const;
 	float workerQueueLatencyMs() const;
-	void ensureWorkerRegistration();
+	bool ensureWorkerRegistration();
 	void releaseWorkerRegistration();
 	std::shared_ptr<BifurxUiRenderPayload> acquireWorkerAnalysisFrame();
-	void submitWorkerCurveRequest();
+	bool submitWorkerCurveRequest();
 	bool adoptWorkerCurveSnapshot();
 	void initializeStaticPreviewStateIfNeeded();
 	void updateAxisCache();
