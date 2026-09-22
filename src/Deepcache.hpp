@@ -43,6 +43,7 @@ struct DeepcacheModule : rack::engine::Module {
 	std::atomic<bool> browserStandby {false};
 	std::atomic<bool> duplicateInstance {false};
 	std::atomic<bool> browserOwnershipConflict {false};
+	std::atomic<bool> multiBrandFiltersEnabled {true};
 	std::atomic<int> uiBudgetMicros {2000};
 
 	DeepcacheModule();

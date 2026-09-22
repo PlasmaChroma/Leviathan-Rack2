@@ -680,6 +680,10 @@ public:
 		return deepcachePreviewCacheResolutionPercent();
 	}
 
+	bool multiBrandFiltersEnabled() const {
+		return module_ && module_->multiBrandFiltersEnabled.load(std::memory_order_relaxed);
+	}
+
 	void setPreviewCacheResolutionPercent(int percent) {
 		if (!module_ || stopped_)
 			return;
@@ -3404,6 +3408,9 @@ void DeepcacheBrandItem::onAction(const ActionEvent& e) {
 	if (brand.empty()) {
 		browser->brands.clear();
 	}
+	else if (!browser->cacheManager || !browser->cacheManager->multiBrandFiltersEnabled()) {
+		browser->brands = {brand};
+	}
 	else {
 		const auto selected = browser->brands.find(brand);
 		if (selected == browser->brands.end())
@@ -3412,7 +3419,8 @@ void DeepcacheBrandItem::onAction(const ActionEvent& e) {
 			browser->brands.erase(selected);
 	}
 	browser->refresh();
-	e.unconsume();
+	if (browser->cacheManager && browser->cacheManager->multiBrandFiltersEnabled())
+		e.unconsume();
 }
 
 void DeepcacheBrandItem::step() {
@@ -3828,6 +3836,8 @@ void DeepcacheModule::process(const ProcessArgs& args) {
 json_t* DeepcacheModule::dataToJson() {
 	json_t* root = json_object();
 	json_object_set_new(root, "uiBudgetMs", json_real(uiBudgetMicros.load(std::memory_order_relaxed) / 1000.0));
+	json_object_set_new(root, "multiBrandFiltersEnabled",
+	                    json_boolean(multiBrandFiltersEnabled.load(std::memory_order_relaxed)));
 	return root;
 }
 
@@ -3836,6 +3846,8 @@ void DeepcacheModule::dataFromJson(json_t* root) {
 		const double budget = std::max(0.5, std::min(8.0, json_number_value(value)));
 		uiBudgetMicros.store(static_cast<int>(std::round(budget * 1000.0)), std::memory_order_relaxed);
 	}
+	if (json_t* value = json_object_get(root, "multiBrandFiltersEnabled"))
+		multiBrandFiltersEnabled.store(json_is_true(value), std::memory_order_relaxed);
 }
 
 struct DeepcacheWidget::Internal {
@@ -4059,6 +4071,24 @@ void DeepcacheWidget::appendContextMenu(ui::Menu* menu) {
 	PreviewCacheManager* manager = internal_->cacheManager;
 	const std::weak_ptr<int> lifetime = manager->lifetimeToken();
 	menu->addChild(createMenuItem("Rebuild cache", "", [manager, lifetime]() { if (!lifetime.expired()) manager->rebuild(); }));
+	DeepcacheModule* deepcacheModule = internal_->module;
+	DeepcacheBrowser* browser = internal_->overlay ? internal_->overlay->browser : nullptr;
+	menu->addChild(createCheckMenuItem("Enable multi-brand filters", "",
+		[deepcacheModule, lifetime]() {
+			return !lifetime.expired() &&
+			       deepcacheModule->multiBrandFiltersEnabled.load(std::memory_order_relaxed);
+		},
+		[deepcacheModule, browser, lifetime]() {
+			if (lifetime.expired())
+				return;
+			const bool enabled = deepcacheModule->multiBrandFiltersEnabled.load(std::memory_order_relaxed);
+			deepcacheModule->multiBrandFiltersEnabled.store(!enabled, std::memory_order_relaxed);
+			if (enabled && browser && browser->brands.size() > 1) {
+				const std::string retainedBrand = *browser->brands.begin();
+				browser->brands = {retainedBrand};
+				browser->refresh();
+			}
+		}));
 	menu->addChild(createSubmenuItem("Cache resolution", "", [manager, lifetime](ui::Menu* child) {
 		if (lifetime.expired()) {
 			child->addChild(createMenuLabel("Deepcache is no longer available"));
@@ -4076,7 +4106,6 @@ void DeepcacheWidget::appendContextMenu(ui::Menu* menu) {
 		}
 	}));
 	menu->addChild(new ui::MenuSeparator);
-	DeepcacheModule* deepcacheModule = internal_->module;
 	menu->addChild(createSubmenuItem("UI work budget", "", [deepcacheModule, lifetime](ui::Menu* child) {
 		if (lifetime.expired()) {
 			child->addChild(createMenuLabel("Deepcache is no longer available"));
