@@ -624,7 +624,7 @@ struct DeepcacheBrowser : widget::OpaqueWidget {
 	void onContextDestroy(const ContextDestroyEvent& e) override;
 	void onContextCreate(const ContextCreateEvent& e) override;
 	void onButton(const ButtonEvent& e) override;
-	void refresh();
+	void refresh(bool resetScroll = true);
 	void clearFilters();
 	void sortModels();
 	deepcache::BrowserModelRecord makeBrowserRecord(const DeepcacheModelBox* box) const;
@@ -2209,7 +2209,7 @@ struct DeepcacheBrowserOverlay : ui::MenuOverlay {
 
 	void onShow(const ShowEvent& e) override {
 		if (browser)
-			browser->refresh();
+			browser->refresh(false);
 		ui::MenuOverlay::onShow(e);
 	}
 };
@@ -3027,8 +3027,9 @@ void DeepcacheBrowser::onButton(const ButtonEvent& e) {
 		e.consume(this);
 }
 
-void DeepcacheBrowser::refresh() {
-	modelScroll->offset = math::Vec();
+void DeepcacheBrowser::refresh(bool resetScroll) {
+	if (resetScroll)
+		modelScroll->offset = math::Vec();
 	deepcache::BrowserFilter filter;
 	filter.search = string::trim(search);
 	filter.brands = brands;
