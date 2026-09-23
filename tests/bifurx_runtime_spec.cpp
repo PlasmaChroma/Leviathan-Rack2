@@ -45,6 +45,8 @@ void ModuleTeardownTimer::begin(int moduleId) {
 ModuleTeardownTimer::~ModuleTeardownTimer() {
 }
 
+#include "../src/Bifurx.hpp"
+#include "../src/BifurxWorker.hpp"
 #include "../src/Bifurx.cpp"
 #include "../src/BifurxRenderPrep.hpp"
 
@@ -137,7 +139,7 @@ TestResult testIirBoundaryIntegration() {
     for (int n = 0; n < 256; ++n)
       response += double(impulse[n]) * std::exp(std::complex<double>(0., -6.283185307179586 * hz * n / 48000.));
     pass &= std::fabs(20. * std::log10(std::abs(response))) < .01;
-    pass &= std::abs(response - std::complex<double>(linearBoundaryResponse(3, 6.283185307179586 * hz / 48000.))) < .001;
+    pass &= std::abs(response - std::complex<double>(linearBoundaryResponseForTest(3, 6.283185307179586 * hz / 48000.))) < .001;
   }
   filter.reset();
   for (int n = 0; n < 256; ++n)
@@ -472,7 +474,7 @@ TestResult testScaleToggleUsesCachedAnalysisAndKeepsCurveCaches() {
     display.runRenderTick(1.f / 60.f);
     pass &= display.state.hasOverlay && display.state.displayTopDbfs == kDisplayTopDbfsCeiling
       && display.state.dynamicTopTargetDbfs < kDisplayTopDbfsCeiling - 1.f;
-    const auto requestSeq = display.workerRequestSeq;
+    const auto requestSeq = display.renderClient.requestSeq();
     const auto analysisSeq = display.state.lastAnalysisSeq;
     // No further audio samples or preview publications: both toggles must work.
     module.fftScaleDynamic.store(true);
@@ -483,7 +485,7 @@ TestResult testScaleToggleUsesCachedAnalysisAndKeepsCurveCaches() {
     tick = display.runRenderTick(1.f / 60.f);
     pass &= tick.contentChanged && display.state.displayTopDbfs == kDisplayTopDbfsCeiling
       && display.state.displayTopTargetDbfs == kDisplayTopDbfsCeiling
-      && display.workerRequestSeq == requestSeq && display.state.lastAnalysisSeq == analysisSeq;
+      && display.renderClient.requestSeq() == requestSeq && display.state.lastAnalysisSeq == analysisSeq;
     float previousOutput[kCurvePointCount];
     std::copy(display.state.overlayOutputDbfs, display.state.overlayOutputDbfs + kCurvePointCount, previousOutput);
     for (int i = 0; i < 2 * kFftSize; ++i) {
@@ -522,6 +524,29 @@ TestResult testDisablingWorkerCatchesUpPendingPreviewAndAnalysis() {
     && display.state.overlayAnalysisSeq == display.state.lastAnalysisSeq;
   module.unsubscribeAnalysisVisual();
   return {"Disabling worker catches up an unadopted preview and FFT without new audio", pending && caughtUp && tick.contentChanged, ""};
+}
+
+TestResult testInactivePresentationReleasesWorkerWithoutPreparingTargets() {
+  Bifurx module;
+  module.visualWorkerMode.store(Bifurx::VISUAL_WORKER_ON);
+  BifurxPreviewState preview;
+  preview.sampleRate = 48000.f;
+  module.publishPreviewState(preview);
+  BifurxSpectrumBase display;
+  display.module = &module;
+  display.presentationActive = false;
+  const auto hiddenTick = display.runRenderTick(1.f / 60.f);
+  const bool hiddenIdle = !hiddenTick.contentChanged && !display.state.hasPreview
+    && display.renderClient.displayId() == 0;
+  display.presentationActive = true;
+  display.syncBase();
+  const bool activeRegistered = display.state.hasPreview && display.renderClient.displayId() != 0;
+  display.presentationActive = false;
+  const auto releasedTick = display.runRenderTick(1.f / 60.f);
+  const bool released = !releasedTick.contentChanged && display.renderClient.displayId() == 0
+    && display.state.hasPreview;
+  return {"Inactive presentation releases the worker and skips target preparation",
+    hiddenIdle && activeRegistered && released, ""};
 }
 
 TestResult testSpanShapeLutTracksReferenceCurve() {
@@ -1075,14 +1100,12 @@ TestResult testVisualWorkerDefaultSetterHonorsMode() {
 
 TestResult testWorkerAnalysisFramePoolIsBoundedAndReusable() {
   BifurxSpectrumBase display;
-  const bool lazyBeforeUse = !display.workerAnalysisFramePool[0]
-    && !display.workerAnalysisFramePool[1]
-    && !display.workerAnalysisFramePool[2];
+  const bool lazyBeforeUse = display.renderClient.allocatedPayloadSlots() == 0;
 
-  auto first = display.acquireWorkerAnalysisFrame();
-  auto second = display.acquireWorkerAnalysisFrame();
-  auto third = display.acquireWorkerAnalysisFrame();
-  auto exhausted = display.acquireWorkerAnalysisFrame();
+  auto first = display.renderClient.tryAcquirePayload();
+  auto second = display.renderClient.tryAcquirePayload();
+  auto third = display.renderClient.tryAcquirePayload();
+  auto exhausted = display.renderClient.tryAcquirePayload();
   BifurxUiRenderPayload* const firstAddress = first.get();
   const bool threeDistinctSlots = first && second && third
     && first.get() != second.get()
@@ -1091,7 +1114,7 @@ TestResult testWorkerAnalysisFramePoolIsBoundedAndReusable() {
   const bool bounded = !exhausted;
 
   first.reset();
-  auto recycled = display.acquireWorkerAnalysisFrame();
+  auto recycled = display.renderClient.tryAcquirePayload();
   const bool reusesReleasedSlot = recycled && recycled.get() == firstAddress;
   const bool compactRequest = sizeof(BifurxUiRenderRequest) < 256;
 
@@ -1112,18 +1135,18 @@ TestResult testSynchronousFftScratchIsLazyAndThreadLocalReusable() {
   int64_t firstUseUs = 0;
 
   std::thread probe([&]() {
-    startsUnallocated = !synchronousOverlayScratchAllocatedForCurrentThread();
+    startsUnallocated = !synchronousOverlayScratchAllocatedForCurrentThreadForTest();
     BifurxSpectrumBase firstDisplay;
     BifurxSpectrumBase secondDisplay;
-    baseConstructionStaysLazy = !synchronousOverlayScratchAllocatedForCurrentThread();
+    baseConstructionStaysLazy = !synchronousOverlayScratchAllocatedForCurrentThreadForTest();
     const auto firstUseStart = std::chrono::steady_clock::now();
-    SynchronousOverlayScratch* const firstArena = &synchronousOverlayScratch();
+    const void* const firstArena = synchronousOverlayScratchIdentityForTest();
     firstUseUs = std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::steady_clock::now() - firstUseStart
     ).count();
-    SynchronousOverlayScratch* const secondArena = &synchronousOverlayScratch();
+    const void* const secondArena = synchronousOverlayScratchIdentityForTest();
     sameArenaReused = firstArena == secondArena;
-    allocatedAfterUse = synchronousOverlayScratchAllocatedForCurrentThread();
+    allocatedAfterUse = synchronousOverlayScratchAllocatedForCurrentThreadForTest();
   });
   probe.join();
 
@@ -1132,7 +1155,7 @@ TestResult testSynchronousFftScratchIsLazyAndThreadLocalReusable() {
     "Synchronous FFT scratch is lazy and reused once per calling thread",
     startsUnallocated && baseConstructionStaysLazy && sameArenaReused && allocatedAfterUse && compactBase,
     "baseBytes=" + std::to_string(sizeof(BifurxSpectrumBase)) +
-      " scratchBytes=" + std::to_string(sizeof(SynchronousOverlayScratch)) +
+      " scratchBytes=" + std::to_string(synchronousOverlayScratchBytesForTest()) +
       " firstUseUs=" + std::to_string(firstUseUs) +
       " lazy=" + std::to_string(int(baseConstructionStaysLazy)) +
       " reused=" + std::to_string(int(sameArenaReused))
@@ -1166,6 +1189,69 @@ TestResult testWorkerAdmissionRestartAndTerminalShutdown() {
   pass &= separate.start() && separate.registerDisplay() != 0;
   separate.stop();
   return {"Worker admission, restart, terminal closure, and local isolation", pass, ""};
+}
+
+TestResult testModuleRebindingReleasesOldWorkerSession() {
+  Bifurx first;
+  Bifurx second;
+  first.visualWorkerMode.store(Bifurx::VISUAL_WORKER_ON);
+  second.visualWorkerMode.store(Bifurx::VISUAL_WORKER_ON);
+  BifurxPreviewState preview;
+  preview.sampleRate = 48000.f;
+  preview.freqA = 250.f;
+  first.publishPreviewState(preview);
+  preview.freqA = 2500.f;
+  second.publishPreviewState(preview);
+  BifurxSpectrumBase display;
+  display.module = &first;
+  display.syncBase();
+  const uint64_t firstId = display.renderClient.displayId();
+  display.module = &second;
+  display.syncBase();
+  const bool rebound = firstId != 0 && display.renderClient.displayId() != 0
+    && display.renderClient.displayId() != firstId
+    && display.state.hasPreview && display.state.previewState.freqA == 2500.f
+    && !display.state.hasCurve;
+  return {"Module rebinding releases the old worker session and presentation", rebound, ""};
+}
+
+TestResult testPreviewRateChangeReconcilesSynchronously() {
+  Bifurx module;
+  module.visualWorkerMode.store(Bifurx::VISUAL_WORKER_ON);
+  BifurxPreviewState preview;
+  preview.sampleRate = 48000.f;
+  module.publishPreviewState(preview);
+  BifurxSpectrumBase display;
+  display.module = &module;
+  display.syncBase();
+  const uint64_t firstId = display.renderClient.displayId();
+  preview.sampleRate = 96000.f;
+  module.publishPreviewState(preview);
+  display.syncBase();
+  const bool reconciled = firstId != 0 && display.renderClient.displayId() == 0
+    && display.state.hasCurve && display.state.cachedAxisSampleRate == 96000.f;
+  return {"Preview rate change releases worker and installs synchronous curve", reconciled, ""};
+}
+
+TestResult testRenderClientOwnsAndReleasesLocalServiceRegistration() {
+  BifurxUiRenderService service;
+  BifurxRenderClient client(service);
+  const bool initiallyUnregistered = client.displayId() == 0;
+  const bool registered = client.ensureRegistered();
+  const uint64_t id = client.displayId();
+  const bool stableRegistration = registered && id != 0 && client.ensureRegistered()
+    && client.displayId() == id;
+  auto payload = client.tryAcquirePayload();
+  payload.reset();
+  const bool poolAllocated = client.allocatedPayloadSlots() == 1;
+  client.release();
+  client.release();
+  const bool released = client.displayId() == 0 && client.requestSeq() == 0
+    && client.allocatedPayloadSlots() == 0 && !service.getLatestSnapshot(id);
+  service.shutdown();
+  const bool terminalAdmissionRejected = !client.ensureRegistered() && client.displayId() == 0;
+  return {"Render client releases registration and payloads through one path",
+    initiallyUnregistered && stableRegistration && poolAllocated && released && terminalAdmissionRejected, ""};
 }
 
 TestResult testWorkerQueuedChurnAndFairness() {
@@ -1601,13 +1687,13 @@ TestResult testPremiumVisualWatchdogAndWorkerMetadata() {
   m.visualWorkerMode.store(Bifurx::VISUAL_WORKER_ON);
   BifurxSpectrumBase display; display.module=&m;
   pass &= adoptPublishedRenderTargets(display);
-  pass &= display.state.displayedPreviewState.freqA == display.workerSnapshotCache->previewState.freqA;
+  pass &= display.state.displayedPreviewState.freqA == display.renderClient.snapshot()->previewState.freqA;
   m.params[Bifurx::FREQ_PARAM].setValue(.9f);
   for (int i=0; i<256; ++i) m.process(args);
   display.syncBase();
   pass &= display.state.displayedPreviewState.freqA != display.state.previewState.freqA;
   pass &= adoptPublishedRenderTargets(display);
-  pass &= display.state.displayedPreviewState.freqA == display.workerSnapshotCache->previewState.freqA;
+  pass &= display.state.displayedPreviewState.freqA == display.renderClient.snapshot()->previewState.freqA;
   return {"Premium visual lease sleeps and displayed metadata follows worker", pass, "250 ms lease; fresh frame within 4096 samples"};
 }
 
@@ -2757,6 +2843,7 @@ int main() {
     testPremiumFrameRateIndependentAnimation(),
     testNotchCurveReachesDisplayFloor(),
     testDisablingWorkerCatchesUpPendingPreviewAndAnalysis(),
+    testInactivePresentationReleasesWorkerWithoutPreparingTargets(),
     testRendererInitializesOnceAndSlewsSubsequentCurves(),
     testFinalOverlayFrameIsDirtyThenIdles(),
     testScaleToggleUsesCachedAnalysisAndKeepsCurveCaches(),
@@ -2771,6 +2858,9 @@ int main() {
     testWorkerAnalysisFramePoolIsBoundedAndReusable(),
     testSynchronousFftScratchIsLazyAndThreadLocalReusable(),
 #if defined(BIFURX_WORKER_TEST_HOOKS)
+    testModuleRebindingReleasesOldWorkerSession(),
+    testPreviewRateChangeReconcilesSynchronously(),
+    testRenderClientOwnsAndReleasesLocalServiceRegistration(),
     testWorkerAdmissionRestartAndTerminalShutdown(),
     testWorkerQueuedChurnAndFairness(),
     testWorkerUnregisterInFlightAndStopJoin(),

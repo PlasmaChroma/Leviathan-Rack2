@@ -1,5 +1,6 @@
 #include "BifurxWorker.hpp"
 #include "BifurxRenderPrep.hpp"
+#include "plugin.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -118,7 +119,7 @@ struct BifurxUiRenderService::Impl {
 				std::copy_n(previousSnapshot->overlayTargetOutputDbfs, kCurvePointCount, snapshot->overlayTargetOutputDbfs);
 			}
 			prepareCurveSnapshot(request, snapshot.get());
-			snapshot->completedAtSec = system::getTime();
+			snapshot->completedAtSec = rack::system::getTime();
 #if defined(BIFURX_WORKER_TEST_HOOKS)
 			if (beforePublishHook) beforePublishHook(request.displayId, request.requestSeq);
 #endif

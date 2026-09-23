@@ -1234,6 +1234,7 @@ struct BifurxSpectrumGLWidget final : widget::OpenGlWidget, BifurxSpectrumBase {
 		// amplify framebuffer resize stalls.
 		widget::FramebufferWidget::step();
 		if (!module) return;
+		if (!presentationActive) return;
 		if (module->renderMode != Bifurx::RENDER_OPENGL) return;
 
 		float uiFrameSec = 1.f / 60.f;

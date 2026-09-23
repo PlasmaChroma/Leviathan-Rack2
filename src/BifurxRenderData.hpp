@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Bifurx.hpp"
+#include "BifurxTypes.hpp"
 
 #include <cstdint>
 #include <memory>

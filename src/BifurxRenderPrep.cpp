@@ -1,4 +1,6 @@
 #include "BifurxRenderPrep.hpp"
+#include "BifurxPreview.hpp"
+#include "MathHelpers.hpp"
 
 #include <chrono>
 
