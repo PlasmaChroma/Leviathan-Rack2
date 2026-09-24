@@ -83,5 +83,46 @@ int main() {
         settledDc = conditioned.step(input(5.f, 5.f)).audio.l;
     need(firstDc > 0.99f && std::fabs(settledDc) < 0.0001f,
          "default input and output 5 Hz DC conditioning");
+
+    chimera::Reel tagged(1, 1);
+    for (int i = 0; i < 16; ++i)
+        need(tagged.write(i, chimera::StereoFrame{float(i), float(i)}, i), "tagged playback fill");
+    chimera::Slice playback(&tagged);
+    playback.setConditioning(false);
+    for (int i = 0; i < 1000; ++i) playback.step(input(0.f, 0.f, 1.f));
+    playback.setPlay(false);
+    for (int i = 0; i < 48; ++i) playback.step(input(0.f, 0.f, 1.f));
+    playback.setPlay(true);
+    need(near(playback.step(input(0.f, 0.f, 1.f)).audio.l, 0.f),
+         "Play rise restarts forward full-Splice at origin");
+    playback.setPlay(false);
+    for (int i = 0; i < 1000; ++i) playback.step(input(0.f, 0.f, 1.f, 1.f/6.f));
+    playback.setPlay(true);
+    need(near(playback.step(input(0.f, 0.f, 1.f, 1.f/6.f)).audio.l, 15.f/48.f, 0.002f),
+         "Play rise restarts reverse full-Splice at wrapped origin minus one");
+
+    const float rateKnobs[] = {5.f/6.f, 1.f};
+    const int expectedTravelFrames[] = {16, 8};
+    for (int caseIndex = 0; caseIndex < 2; ++caseIndex) {
+        chimera::Slice cycle(&tagged);
+        cycle.setConditioning(false);
+        cycle.setPlay(false);
+        const float knob = rateKnobs[caseIndex];
+        for (int i = 0; i < 2000; ++i) cycle.step(input(0.f, 0.f, 1.f, knob));
+        cycle.setPlay(true);
+        for (int i = 0; i < expectedTravelFrames[caseIndex]; ++i)
+            need(!cycle.step(input(0.f, 0.f, 1.f, knob)).naturalBoundary,
+                 "full-Splice completion not early");
+        need(cycle.step(input(0.f, 0.f, 1.f, knob)).naturalBoundary,
+             "full-Splice completion reported at next frame entry");
+        need(!cycle.step(input(0.f, 0.f, 1.f, knob)).naturalBoundary,
+             "one completion per traversal");
+    }
+    chimera::Slice stopped(&tagged);
+    stopped.setPlay(false);
+    need(stopped.startCurrent(), "stopped writer starts");
+    for (int i = 0; i < 32; ++i)
+        need(!stopped.step(input(0.f, 0.f, 0.f, 0.5f)).naturalBoundary,
+             "record wraps and Vari-Speed Stop do not emit natural completions");
     std::puts("PASS: Chimera 48 kHz slice initial capture, Current, Append, and TLA");
 }

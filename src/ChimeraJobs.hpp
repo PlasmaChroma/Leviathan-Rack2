@@ -14,8 +14,13 @@ namespace chimera {
 struct JobGeneration {
     std::atomic<std::uint64_t> value;
     std::atomic<std::uint32_t> outstanding;
-    JobGeneration() : value(1), outstanding(0) {}
+    std::atomic<bool> closed;
+    JobGeneration() : value(1), outstanding(0), closed(false) {}
     void invalidate() { value.fetch_add(1, std::memory_order_acq_rel); }
+    void close() {
+        closed.store(true, std::memory_order_release);
+        invalidate();
+    }
 };
 
 class IoService {
@@ -57,7 +62,7 @@ public:
         return submit(std::move(job));
     }
     Status retire(const std::shared_ptr<JobGeneration>& token,
-                  std::uint64_t requestId, std::unique_ptr<Reel> payload) {
+                  std::uint64_t requestId, std::unique_ptr<Reel>& payload) {
         if (!token || !payload) return Failed;
         Job job;
         job.kind = Retire;
@@ -65,20 +70,46 @@ public:
         job.generation = token->value.load(std::memory_order_acquire);
         job.requestId = requestId;
         job.payload = std::move(payload);
-        return submit(std::move(job));
+        const Status status = submit(std::move(job));
+        if (status != Accepted) payload = std::move(job.payload);
+        return status;
     }
     bool poll(Result& out) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (results_.empty()) return false;
-        out = std::move(results_.front().result);
-        if (out.generation != results_.front().token->value.load(std::memory_order_acquire)) {
-            out.prepared.reset(); // Poll is service/control side, never audio.
-            out.status = Stale;
-        }
-        results_.front().token->outstanding.fetch_sub(1, std::memory_order_relaxed);
-        results_.pop_front();
-        --outstanding_;
+        takeResult(results_.begin(), out);
         return true;
+    }
+    // A module's control dispatcher must not consume another module's result.
+    bool pollFor(const std::shared_ptr<JobGeneration>& token, Result& out) {
+        if (!token) return false;
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (std::deque<Completion>::iterator it = results_.begin(); it != results_.end(); ++it)
+            if (it->token == token) { takeResult(it, out); return true; }
+        return false;
+    }
+    // Called off audio on module removal. Queued payloads and completed stores
+    // are destroyed here; an in-flight worker sees closed and self-retires.
+    void cancel(const std::shared_ptr<JobGeneration>& token) {
+        if (!token) return;
+        token->close();
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (std::deque<Job>::iterator it = jobs_.begin(); it != jobs_.end();) {
+            if (it->token == token) {
+                it = jobs_.erase(it);
+                token->outstanding.fetch_sub(1, std::memory_order_relaxed);
+                --outstanding_;
+            }
+            else ++it;
+        }
+        for (std::deque<Completion>::iterator it = results_.begin(); it != results_.end();) {
+            if (it->token == token) {
+                it = results_.erase(it);
+                token->outstanding.fetch_sub(1, std::memory_order_relaxed);
+                --outstanding_;
+            }
+            else ++it;
+        }
     }
     void shutdown() {
         {
@@ -118,9 +149,20 @@ private:
         Completion(const Completion&) = delete;
         Completion& operator=(const Completion&) = delete;
     };
+    void takeResult(std::deque<Completion>::iterator it, Result& out) {
+        out = std::move(it->result);
+        if (out.generation != it->token->value.load(std::memory_order_acquire)) {
+            out.prepared.reset(); // Poll is service/control side, never audio.
+            out.status = Stale;
+        }
+        it->token->outstanding.fetch_sub(1, std::memory_order_relaxed);
+        results_.erase(it);
+        --outstanding_;
+    }
     Status submit(Job&& job) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (closing_) return Closed;
+        if (job.token->closed.load(std::memory_order_acquire)) return Closed;
         if (outstanding_ >= 64 || job.token->outstanding.load(std::memory_order_relaxed) >= 16)
             return Busy;
         job.token->outstanding.fetch_add(1, std::memory_order_relaxed);
@@ -161,7 +203,11 @@ private:
                 }
             }
             std::lock_guard<std::mutex> lock(mutex_);
-            results_.push_back(std::move(completion));
+            if (job.token->closed.load(std::memory_order_acquire)) {
+                job.token->outstanding.fetch_sub(1, std::memory_order_relaxed);
+                --outstanding_;
+            }
+            else results_.push_back(std::move(completion));
         }
     }
 

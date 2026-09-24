@@ -478,7 +478,7 @@ test-chimera-phase1-sanitize: | build/tests
 
 .PHONY: test-chimera-phase2 test-chimera-phase2-sanitize test-chimera-phase3 test-chimera-phase3-sanitize test-chimera-module
 test-chimera-module: | build/tests
-	$(CXX) -std=c++11 -O1 -g -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_module_spec.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_module_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O1 -g -Wall -Wextra -Wno-unused-parameter -Wno-mismatched-new-delete -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_module_spec.cpp src/ChimeraService.cpp -L$(RACK_DIR) -lRack -pthread -o build/tests/chimera_module_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_module_spec$(if $(ARCH_WIN),.exe,))
 
 test-chimera-phase3: | build/tests

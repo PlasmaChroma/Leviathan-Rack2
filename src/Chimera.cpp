@@ -1,6 +1,7 @@
 #include "plugin.hpp"
 #include "ChimeraSlice.hpp"
 #include "ChimeraOwnership.hpp"
+#include "ChimeraService.hpp"
 #include <atomic>
 #include <memory>
 
@@ -71,6 +72,14 @@ struct Chimera : Module {
     chimera::AudioToService completions;
     chimera::Reel* reel = nullptr; // Borrowed from the off-audio registry.
     chimera::Slice slice;
+    std::shared_ptr<chimera::IoService> service;
+    std::shared_ptr<chimera::JobGeneration> generation{new chimera::JobGeneration};
+    std::uint64_t nextRequestId = 2, pendingRequestId = 0, retirementRequestId = 0;
+    std::uint32_t nextHandle = 2, awaitingHandle = 1, retiringHandle = 0;
+    std::unique_ptr<chimera::Reel> retiringPayload; // Control-side until worker accepts it.
+    std::uint32_t audioActiveHandle = 0; // Audio callback only.
+    bool readyForPrepare = false; // Control dispatcher only.
+    std::atomic<bool> ioBusy{false}, ioError{false};
     std::atomic<int> menuCommand{0};
     std::atomic<bool> inopSetting{false};
     bool lastRec = false;
@@ -117,6 +126,90 @@ struct Chimera : Module {
         configBypass(AUDIO_L_INPUT, AUDIO_L_OUTPUT);
         configBypass(AUDIO_R_INPUT, AUDIO_R_OUTPUT);
     }
+    ~Chimera() override {
+        if (service) service->cancel(generation); // No worker carries this Module pointer.
+        else generation->close();
+    }
+
+    chimera::IoService::Status requestPreparedStore(std::uint32_t pages,
+                                                     std::uint32_t reservePages) {
+        // Only the non-RT control dispatcher calls this and serviceStep().
+        if (!readyForPrepare || pendingRequestId || awaitingHandle || retiringHandle)
+            return chimera::IoService::Busy;
+        if (!service) service = chimera::chimeraIoService();
+        if (!service) return chimera::IoService::Closed;
+        const std::uint64_t requestId = nextRequestId++;
+        const chimera::IoService::Status status =
+            service->prepare(generation, requestId, pages, reservePages);
+        if (status == chimera::IoService::Accepted) {
+            pendingRequestId = requestId;
+            ioBusy.store(true, std::memory_order_release);
+        }
+        else ioError.store(true, std::memory_order_release);
+        return status;
+    }
+    void serviceStep() {
+        chimera::AudioCompletion ack{};
+        while (completions.tryPop(ack)) {
+            if (ack.kind != 1 || ack.moduleGeneration != generation->value.load(std::memory_order_acquire))
+                continue;
+            if (ack.handle != awaitingHandle) continue;
+            stores.transition(ack.handle, chimera::StoreBudget::Active);
+            if (ack.status) {
+                stores.transition(ack.status, chimera::StoreBudget::Retired);
+                retiringHandle = ack.status;
+                retiringPayload = stores.detachRetired(retiringHandle);
+            }
+            awaitingHandle = 0;
+            readyForPrepare = true;
+            ioBusy.store(retiringHandle != 0, std::memory_order_release);
+        }
+        if (!service) return;
+        if (retiringHandle && retiringPayload && !retirementRequestId) {
+            const std::uint64_t requestId = nextRequestId++;
+            const chimera::IoService::Status status =
+                service->retire(generation, requestId, retiringPayload);
+            if (status == chimera::IoService::Accepted) retirementRequestId = requestId;
+            else if (status != chimera::IoService::Busy)
+                ioError.store(true, std::memory_order_release);
+        }
+        chimera::IoService::Result result;
+        if (!service->pollFor(generation, result)) return;
+        if (result.requestId == retirementRequestId) {
+            if (result.status != chimera::IoService::Retired)
+                ioError.store(true, std::memory_order_release);
+            stores.releaseOffAudio(retiringHandle);
+            retiringHandle = 0;
+            retirementRequestId = 0;
+            ioBusy.store(false, std::memory_order_release);
+            return;
+        }
+        if (!pendingRequestId) return;
+        if (result.requestId != pendingRequestId || result.status != chimera::IoService::Ready ||
+            !result.prepared) {
+            pendingRequestId = 0;
+            ioBusy.store(false, std::memory_order_release);
+            ioError.store(true, std::memory_order_release);
+            return;
+        }
+        const std::uint32_t handle = nextHandle++;
+        if (!stores.accept(handle, result.prepared, chimera::StoreBudget::Prepared)) {
+            pendingRequestId = 0;
+            ioBusy.store(false, std::memory_order_release);
+            ioError.store(true, std::memory_order_release);
+            return;
+        }
+        const chimera::AudioCommand adopt = {generation->value.load(std::memory_order_acquire),
+                                             pendingRequestId, 0, 1, handle, stores.lookup(handle)};
+        pendingRequestId = 0;
+        if (!commands.tryPush(adopt)) {
+            stores.releaseOffAudio(handle);
+            ioBusy.store(false, std::memory_order_release);
+            ioError.store(true, std::memory_order_release);
+            return;
+        }
+        awaitingHandle = handle;
+    }
 
     json_t* dataToJson() override {
         json_t* root = json_object();
@@ -132,10 +225,15 @@ struct Chimera : Module {
 
     void process(const ProcessArgs& args) override {
         chimera::AudioCommand transfer{};
-        if (commands.tryPop(transfer) && transfer.kind == 1 && transfer.moduleGeneration == 1 &&
-            transfer.handle == 1 && transfer.prepared == reel) {
+        if (commands.tryPop(transfer) && transfer.kind == 1 &&
+            transfer.moduleGeneration == generation->value.load(std::memory_order_acquire) &&
+            transfer.prepared) {
+            const std::uint32_t oldHandle = audioActiveHandle;
+            audioActiveHandle = transfer.handle;
+            reel = transfer.prepared;
             slice.setReel(transfer.prepared);
-            const chimera::AudioCompletion ack = {1, transfer.requestId, 1, transfer.handle, 0};
+            const chimera::AudioCompletion ack = {transfer.moduleGeneration, transfer.requestId,
+                                                  1, transfer.handle, oldHandle};
             completions.tryPushCritical(ack);
         }
         const float l = inputs[AUDIO_L_INPUT].isConnected() ?
@@ -190,7 +288,8 @@ struct Chimera : Module {
         lights[REC_LIGHT].setBrightness(out.recording ? 1.f : 0.f);
         lights[PLAY_LIGHT].setBrightness(inputs[PLAY_INPUT].isConnected() && inputs[PLAY_INPUT].getVoltage() < 2.5f ? 0.f : 1.f);
         lights[CLIP_LIGHT].setBrightness(slice.overloaded() ? 1.f : 0.f);
-        lights[ERROR_LIGHT].setBrightness(out.full ? 1.f : 0.f);
+        lights[IO_BUSY_LIGHT].setBrightness(ioBusy.load(std::memory_order_acquire) ? 1.f : 0.f);
+        lights[ERROR_LIGHT].setBrightness(out.full || ioError.load(std::memory_order_acquire) ? 1.f : 0.f);
     }
 };
 
@@ -206,6 +305,10 @@ struct ChimeraWidget : ModuleWidget {
         addInput(createInputCentered<PJ301MPort>(mm2px(Vec(53, 70)), module, Chimera::AUDIO_R_INPUT));
         addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(89, 70)), module, Chimera::AUDIO_L_OUTPUT));
         addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(117, 70)), module, Chimera::AUDIO_R_OUTPUT));
+    }
+    void step() override {
+        if (Chimera* m = dynamic_cast<Chimera*>(module)) m->serviceStep();
+        ModuleWidget::step();
     }
     void appendContextMenu(Menu* menu) override {
         Chimera* m = dynamic_cast<Chimera*>(module);

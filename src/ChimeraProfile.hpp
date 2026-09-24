@@ -62,6 +62,9 @@ inline double classicRateFromCoordinate(double x) {
     x = clamp(x, -1.0, 1.0);
     const double magnitude = std::fabs(x);
     if (magnitude <= kStopEpsilon) return 0.0;
+    // Rack parameters are float32. Snap their nominal 1x anchor so a full
+    // traversal at the default 5/6 knob does not gain a frame over time.
+    if (std::fabs(magnitude - 2.0/3.0) < 1e-7) return x < 0.0 ? -1.0 : 1.0;
     const double q = (magnitude - kStopEpsilon) / (1.0 - kStopEpsilon);
     const double qUnity = (2.0 / 3.0 - kStopEpsilon) / (1.0 - kStopEpsilon);
     const double gamma = std::log(0.5) / std::log(qUnity);

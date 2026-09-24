@@ -131,7 +131,7 @@ int main() {
         need(registry.transition(101, StoreBudget::Retired),
              "audio acknowledgment marks prior store retired");
         std::unique_ptr<Reel> retiring(new Reel(2, 2));
-        need(service.retire(token, 22, std::move(retiring)) == IoService::Accepted,
+        need(service.retire(token, 22, retiring) == IoService::Accepted && !retiring,
              "retirement sent to worker");
         IoService::Result retired;
         while (!service.poll(retired) && std::chrono::steady_clock::now() < deadline)
@@ -141,6 +141,32 @@ int main() {
         need(registry.releaseOffAudio(101) && registry.chargedBytes() == 0,
              "retired handle releases payload credit only after off-audio destruction");
         service.shutdown();
+    }
+    {
+        IoService service(1);
+        std::shared_ptr<JobGeneration> first(new JobGeneration);
+        std::shared_ptr<JobGeneration> second(new JobGeneration);
+        need(service.prepare(first, 31, 2, 2) == IoService::Accepted &&
+             service.prepare(second, 32, 2, 2) == IoService::Accepted,
+             "two modules can submit to one worker");
+        IoService::Result result;
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (!service.pollFor(second, result) && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::yield();
+        need(result.status == IoService::Ready && result.requestId == 32 && result.prepared,
+             "module-specific poll never steals first module's result");
+        need(service.pollFor(first, result) && result.requestId == 31 && result.prepared,
+             "first module still receives its result");
+        for (int i = 0; i < 8; ++i)
+            need(service.prepare(first, 40+i, 2, 2) == IoService::Accepted,
+                 "queued module jobs accepted before removal");
+        service.cancel(first);
+        need(service.prepare(first, 99, 2, 2) == IoService::Closed,
+             "removed module token cannot resubmit");
+        service.shutdown();
+        need(first->outstanding.load() == 0 && second->outstanding.load() == 0 &&
+             service.outstanding() == 0 && !service.pollFor(first, result),
+             "module removal retires queued, running, and completed work");
     }
     std::puts("PASS: Chimera core ownership, bounded queues/budget, stale jobs, worker preparation/retirement");
 }

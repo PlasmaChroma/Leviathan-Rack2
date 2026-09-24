@@ -195,6 +195,14 @@ public:
         }
         return false;
     }
+    // Move a retired allocation to the worker while retaining its budget
+    // charge. releaseOffAudio(handle) is called only after worker completion.
+    std::unique_ptr<Reel> detachRetired(std::uint32_t handle) {
+        for (int i = 0; i < 3; ++i)
+            if (entries_[i].handle == handle && entries_[i].role == StoreBudget::Retired)
+                return std::move(entries_[i].payload);
+        return std::unique_ptr<Reel>();
+    }
     bool releaseOffAudio(std::uint32_t handle) {
         if (!budget_.destroyOffAudio(handle)) return false;
         for (int i = 0; i < 3; ++i) if (entries_[i].handle == handle) {
