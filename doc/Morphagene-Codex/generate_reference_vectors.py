@@ -79,9 +79,40 @@ def window(n: int, age: int, smooth: bool) -> float:
     return 0.5 - 0.5 * math.cos(math.pi * phase)
 
 
+def envelope_anchors() -> dict[str, Any]:
+    """Offline recurrence oracle, bypassing audio DC blockers and SRC."""
+    attack = 1 - math.exp(-1 / (0.005 * FS))
+    release = 1 - math.exp(-1 / (0.08 * FS))
+    state = 0.0
+    tail = []
+    for frame in range(2 * FS):
+        value = math.sin(2 * math.pi * (frame % 48) / 48)
+        energy = value * value  # identical or opposite-polarity stereo
+        state += (attack if energy > state else release) * (energy - state)
+        if frame >= FS:
+            tail.append(8 * math.sqrt(state))
+    mean = sum(tail) / len(tail)
+    if not mean > 8 / math.sqrt(2) + 0.5:
+        raise ValueError('Asymmetric follower must not be mistaken for a true RMS meter')
+    return {
+        'conditioningBypassed': True,
+        'initialEnergy': 0.0,
+        'attackSeconds': 0.005,
+        'releaseSeconds': 0.08,
+        'sine': {'frequencyHz': 1000, 'peakPerChannel': 1.0,
+                 'renderFrames': 2 * FS, 'summaryStartFrame': FS,
+                 'meanVolts': mean, 'minVolts': min(tail), 'maxVolts': max(tail)},
+        'unitEnergyStep': [
+            {'updates': n, 'risingFromZeroVolts': 8 * math.sqrt(1 - math.exp(-n / (0.005 * FS))),
+             'fallingFromUnityVolts': 8 * math.sqrt(math.exp(-n / (0.08 * FS)))}
+            for n in [1, 240, 3840, 48000]
+        ],
+    }
+
+
 def build_vectors() -> dict[str, Any]:
     vectors: dict[str, Any] = {
-        'schema': 'leviathan.morphagene.reference-vectors',
+        'schema': 'leviathan.chimera.reference-vectors',
         'schemaVersion': 1,
         'dspProfile': 1,
         'purpose': 'Mathematical anchors for the proposed software design; not hardware captures or implementation test results.',
@@ -165,6 +196,7 @@ def build_vectors() -> dict[str, Any]:
     vectors['inputGain'] = [{'decibels': db, 'linearGain': 10**(db/20)} for db in [-3, 0, 6, 12]]
     vectors['onePole'] = [{'tauSeconds': tau, 'alphaAt48k': 1-math.exp(-1/(tau*FS))}
                           for tau in [0.00025, 0.001, 0.002, 0.005, 0.01, 0.08]]
+    vectors['envelopeFollower'] = envelope_anchors()
     vectors['slotFilenames'] = [f'mg{i}.wav' for i in range(1, 10)] + [f'mg{chr(c)}.wav' for c in range(ord('a'), ord('w')+1)]
     vectors['timingAnchors'] = {
         'finiteGeneBorn100Length480': {'firstFrame': 100, 'lastFrame': 579, 'completionFrame': 580},
@@ -198,8 +230,14 @@ def check_equivalent(expected: Any, actual: Any, path: str = '$') -> None:
             raise ValueError(f'{path}: list shape differs')
         for i, (a, b) in enumerate(zip(expected, actual)):
             check_equivalent(a, b, f'{path}[{i}]')
+    elif isinstance(expected, bool):
+        if type(actual) is not bool or expected != actual:
+            raise ValueError(f'{path}: expected boolean {expected!r}, got {actual!r}')
+    elif isinstance(expected, int):
+        if type(actual) is not int or expected != actual:
+            raise ValueError(f'{path}: expected integer {expected!r}, got {actual!r}')
     elif isinstance(expected, float):
-        if not isinstance(actual, (int, float)) or not math.isclose(expected, actual, rel_tol=1e-12, abs_tol=1e-12):
+        if type(actual) not in (int, float) or not math.isfinite(actual) or not math.isclose(expected, actual, rel_tol=1e-12, abs_tol=1e-12):
             raise ValueError(f'{path}: {expected!r} != {actual!r}')
     elif expected != actual:
         raise ValueError(f'{path}: {expected!r} != {actual!r}')

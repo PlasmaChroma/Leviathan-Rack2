@@ -1,14 +1,16 @@
-# Leviathan Morphagene — Gated Implementation Plan
+# Leviathan Chimera — Gated Implementation Plan
 
 Read the main specification and `ACCEPTANCE_TESTS.md` first. This plan sequences one complete module, not a set of independent optional prototypes. Preserve the current checkout and its uncommitted work. Do not change branch, globally restructure rendering, or replace unrelated modules to make integration easier.
 
-Each phase ends with a reviewable build/test checkpoint. Record real results and unresolved issues in `docs/morphagene/IMPLEMENTATION_STATUS.md` or the repository's established equivalent. Do not report tests as passed without running them. A failed prerequisite blocks dependent phases; an environment limitation is recorded explicitly with the exact command and output.
+Each phase ends with a reviewable build/test checkpoint. Record real results and unresolved issues in `doc/Morphagene-Codex/IMPLEMENTATION_STATUS.md`. Do not report tests as passed without running them. A failed prerequisite blocks dependent phases; an environment limitation is recorded explicitly with the exact command and output. `REVIEW_NOTES.md` records revision-2 design corrections and outstanding integration proofs; it is not implementation status.
 
 ## Phase 0 — Inspect and establish the integration baseline
 
 Read `AGENTS.md`, `Makefile`, manifest/model registration, plugin edition handling, existing test infrastructure, Octavia semantic dispatch, panel/label anchors, sample loaders, SRC dependency, patch asset hooks, executor shutdown, and snapshot utility contracts. Resolve the actual working branch/commit rather than assuming the researched `expander` files still match.
 
 Produce a short integration note containing the existing paths/types to reuse, available decoder and Speex linkage, compiler standard/math flags, how non-RT jobs are dispatched, who calls `onSave` and `dataToJson`, how module duplication obtains assets, and how the plugin drains workers. Compare the assumptions in the specification against this checkout; explain necessary adaptations without silently changing behavior.
+
+Prototype save failure and serialization paths early: Save/Save As, autosave without onSave, shutdown, stopped/bypassed saves, and same-process duplication of unsaved audio. The void save hook is not proof of host-level cancellation. Verify the section 20.3 fallback and record the runtime's behavior; never assume throwing is safe in every caller. Prove queue event-history capacity at 768 kHz and account for leased retired stores in memory admission before freezing the architecture.
 
 **Deliver:** baseline build results; proposed new files; frozen-ID fixture; a dependency/lifecycle map; no destructive checkout operations.
 
@@ -22,7 +24,7 @@ Implement the reference-vector test reader or port the supplied vectors into the
 
 **Deliver:** engine skeleton; profile math and independent tests; explicit rounding and onset/expiry conventions.
 
-**Exit gate:** CTL-003..011 and isolated DSP-001/002/005/006/011/013 pass; no Rack headers in the DSP layer; IDs match section 3.
+**Exit gate:** CTL-003..011/013 and isolated DSP-001/002/005/006/011/013 pass; no Rack headers in the DSP layer; IDs match section 3.
 
 ## Phase 2 — Reel ownership, snapshots, and background service foundation
 
@@ -32,7 +34,7 @@ Implement service/control-dispatch queues with exactly documented producers and 
 
 **Deliver:** `Reel`, `Jobs`, ownership diagram, synthetic immutable snapshot encoder, active/prepared/retired handle tracking.
 
-**Exit gate:** IO-001..006 and IO-011 on synthetic data pass; no worker reads mutable sample pages; module removal cannot leave a worker holding a dangling module pointer. Instrumented callbacks show zero allocations.
+**Exit gate:** IO-001..006/011/016..018 on synthetic data pass; no worker reads mutable sample pages; module removal cannot leave a worker holding a dangling module pointer. Instrumented callbacks show zero allocations.
 
 ## Phase 3 — First audible vertical slice: full-Splice playback and recording
 
@@ -42,7 +44,7 @@ Use tiny buffers to prove the TLA recurrence, one-frame read/write ordering, ini
 
 **Deliver:** useful record/loop/reverse/overdub instrument at 48 kHz; no granular or clock shortcuts hidden in the writer.
 
-**Exit gate:** REC-001..006/009/010/016 and DSP-004/016 pass. Recorded frame count is independent of pitch and Play state. This is a milestone, not completion of the requested module.
+**Exit gate:** REC-001..006/009/010/016/017 and DSP-004/016 pass (snapshot reload portions complete in Phase 7). Recorded frame count is independent of pitch and Play state. This is a milestone, not completion of the requested module.
 
 ## Phase 4 — Finite Genes, Morph, Dynamic Enveloping, and derived outputs
 
@@ -52,7 +54,7 @@ Test finite-duration invariance against speed and source travel at full-Splice s
 
 **Deliver:** complete unclocked granular playback; all profile primitives remain isolated and versioned.
 
-**Exit gate:** DSP-003..018 and OUT-001..005 pass; at most eight readers; no secondary voice controls the primary selection cycle; no generic Hann-grain engine standing in for the specified model.
+**Exit gate:** DSP-003..020, OUT-001..005/009, and REC-018 pass; at most eight readers; no secondary voice controls the primary selection cycle; no generic Hann-grain engine standing in for the specified model.
 
 ## Phase 5 — Transport arbitration, Clock, buttons, and remaining firmware options
 
@@ -72,7 +74,7 @@ Instrument queue bounds, maximum work per callback, SRC delay, and converter own
 
 **Deliver:** host-rate-independent 48 kHz Reel engine, predictable event alignment, zero-allocation callbacks.
 
-**Exit gate:** RT-001..010 pass at required rates; delays are measured rather than assumed; audio timing and event timing remain coupled through SRC. Record any performance-target miss separately from functional failures.
+**Exit gate:** RT-001..011 pass at required rates; delays are measured rather than assumed; audio timing and event timing remain coupled through SRC. Record any performance-target miss separately from functional failures.
 
 ## Phase 7 — WAV/banks, portable patches, destructive editing, and undo
 
@@ -92,9 +94,11 @@ Register the actual model and manifest entry if not already done with a temporar
 
 Build waveform peaks off audio, incrementally publish record changes, and avoid scanning all samples from `draw()` or rebuilding textures every frame. Respect current GL context ownership; no bespoke shader system is required.
 
+Author `res/Chimera.svg` and regenerate both split assets plus the anchor atlas. Use the shared NanoVG/GL lifecycle helpers and preserve module-total Process/Step/Draw telemetry behind the existing debug gate.
+
 **Deliver:** polished original light/dark-compatible module, user documentation, no placeholder ports or silent options.
 
-**Exit gate:** GUI-001..004 pass; instrument actual frame costs under max markers/voices and offscreen transitions; existing modules' rendering is unaffected.
+**Exit gate:** GUI-001..005 pass; instrument actual frame costs under max markers/voices and offscreen/context transitions; existing modules' rendering is unaffected.
 
 ## Phase 9 — Octavia semantic integration and transaction safety
 
@@ -108,7 +112,7 @@ Exercise complete agent workflows: import → choose Splice → set grain/pitch/
 
 ## Phase 10 — Regression, packaging, calibration ledger, and release review
 
-Run the entire fast/Rack-linked/slow/sanitizer suite. Measure core, SRC, snapshot, memory, and GUI costs on named hardware. Perform a manual patch/session across record, Shift, reverse, finite grain, overlap, clock stretch, TLA, PM, export, reload, duplication, undo, and module deletion.
+Run the repository's required `test-fast` suite and module-specific integration/slow/sanitizer tests. Follow `AGENTS.md`: native MINGW64 `plugin.dll` is authoritative on Windows; native Rack-linked tests use `make -j10 test-fast RACK_APP_RUNTIME_DIR="/c/Program Files/VCV/Rack2Pro"`. `test-rack` remains work in progress and is not a blanket prerequisite; run relevant cases only when intentionally targeted, documenting pre-existing failures. Run ASan/UBSan/TSAN in supported configurations (a separate compatible Linux harness may be needed), without substituting a Linux link for Windows validation. Measure core, SRC, snapshot, memory, and GUI costs on named hardware. Perform a manual patch/session across record, Shift, reverse, finite grain, overlap, clock stretch, TLA, PM, export, reload, duplication, undo, and module deletion. Do not stage or commit files.
 
 Publish a conformance checklist, known limitations, exact behavior of every option, source-derived versus software-defined calibration ledger, and public attribution/naming status. No claim of recovered firmware, unknown hardware gain/window/interpolation fidelity, or byte-identical markers is allowed without new evidence.
 

@@ -1,16 +1,16 @@
-# Leviathan Morphagene — Codex Implementation Specification
+# Leviathan Chimera — Codex Implementation Specification
 
-**Status:** implementation-ready design, not recovered firmware  
-**Specification revision:** 1  
+**Status:** reviewed design; Phase 0 integration proofs required, not recovered firmware<br>
+**Specification revision:** 4 (Phase 0 event-history bound; unreleased DSP profile remains 1)<br>
 **Prepared:** 2026-09-23  
 **Target:** a new stereo module inside the existing Leviathan VCV Rack 2 plugin  
-**Working model slug:** `Morphagene`  
+**Working model slug:** `Chimera`<br>
 **Primary behavioral source:** the supplied `Morphagene_Tech_Brief.md`  
 **Companion documents:** `ACCEPTANCE_TESTS.md`, `IMPLEMENTATION_PLAN.md`, `CODEX_START.md`, `reference_vectors.json`
 
 ## 0. Read this before implementing
 
-Implement an independent, Morphagene-style **shared-Reel, independent-record-head, multi-playback-head instrument**. Do not implement a generic granular effect and rename its controls. The sound-memory feedback topology, full-Splice endpoint, clocked origin movement, queued selection, and separation of playback rate from finite Gene duration are essential.
+Implement **Chimera**, an independent, Morphagene-inspired **shared-Reel, independent-record-head, multi-playback-head instrument**. Do not implement a generic granular effect and rename its controls. The sound-memory feedback topology, full-Splice endpoint, clocked origin movement, queued selection, and separation of playback rate from finite Gene duration are essential.
 
 This specification makes deliberate numerical choices where the source brief does not establish the hardware implementation. Those choices are normative for **this software implementation**, not assertions about Make Noise firmware. Matching this specification is not evidence of bit-exact or perceptually indistinguishable hardware emulation.
 
@@ -45,7 +45,7 @@ The brief's A–D categories and its uncertainty must remain visible in develope
 
 No proprietary firmware execution; no firmware download; no Make Noise logo or copied panel artwork; no bundled third-party Reel recordings; no new standalone plugin; no FFT/phase-vocoder replacement for granular transport; no sixteen-channel duplication of the sample store; no SD/FAT32 device emulation; no networking or inference engine inside the module; no wholesale refactor of Temporal Deck, Iris, Octavia, or the renderer.
 
-Use `Morphagene` as the requested working name. Before public distribution, settle the product name, attribution text, and original panel artwork. Keep public identity configuration separate from DSP types so that naming does not require an engine rewrite. This is a product boundary, not a claim of permission or legal clearance.
+Use **Chimera** as the Leviathan working title, panel/manifest name, and model slug. Morphagene identifies the source hardware and behavioral inspiration only. Before public distribution, finalize attribution text and original panel artwork. Keep public identity configuration separate from DSP types so that naming does not require an engine rewrite. This is a product boundary, not a claim of permission or legal clearance.
 
 ## 1. Behavioral contract and traceability
 
@@ -83,33 +83,36 @@ The inspected `Makefile` includes `src/*.cpp`, selected subdirectories, and sepa
 Keep translation units top-level to fit the current build glob. These are proposed new files, not claims that they already exist.
 
 ```text
-src/Morphagene.hpp                 Rack class, frozen IDs, thin API, PImpl declaration
-src/Morphagene.cpp                 configuration, lifecycle, process adapter
-src/MorphageneTypes.hpp            fixed PODs, enums, handles, capacities
-src/MorphageneProfile.hpp          profile-v1 numerical constants and transfer laws
-src/MorphageneEngine.hpp/.cpp      rack-independent core coordinator
-src/MorphageneControls.hpp/.cpp    normalization, smoothers, event resolution
-src/MorphageneTransport.hpp/.cpp   primary cycle, selection, clock, Play state
-src/MorphageneGrains.hpp/.cpp      scheduler, readers, windows, stereo accumulation
-src/MorphageneRecorder.hpp/.cpp    recording and marker insertion state machines
-src/MorphageneReel.hpp/.cpp        paged audio storage, bounds, immutable snapshots
-src/MorphageneRateBridge.hpp/.cpp  host/core SRC and event timestamp mapping
-src/MorphageneJobs.hpp/.cpp        non-RT service, file jobs, cancellation, retirement
-src/MorphageneWav.hpp/.cpp         canonical WAV/markers/options import and export
-src/MorphageneState.hpp/.cpp       patch schema, save snapshots, migration, history
-src/MorphageneSemantic.hpp/.cpp    Octavia document/commands/status adapter
-src/MorphageneWidget.cpp           controls, context menus, model definition
-src/MorphageneDisplay.hpp/.cpp     waveform cache and bounded dynamic overlays
-res/Morphagene.panel.svg           original panel and named anchor geometry
-res/Morphagene.labels.svg          normal text overlay, except raster-baked title
-res/Morphagene/...                 original optional raster assets
-presets/Morphagene/...             parameter presets; no unlicensed audio
-manual/Morphagene.md               user documentation; adapt directory to repo
+src/Chimera.hpp                 Rack class, frozen IDs, thin API, PImpl declaration
+src/Chimera.cpp                 configuration, lifecycle, process adapter
+src/ChimeraTypes.hpp            fixed PODs, enums, handles, capacities
+src/ChimeraProfile.hpp          profile-v1 numerical constants and transfer laws
+src/ChimeraEngine.hpp/.cpp      rack-independent core coordinator
+src/ChimeraControls.hpp/.cpp    normalization, smoothers, event resolution
+src/ChimeraTransport.hpp/.cpp   primary cycle, selection, clock, Play state
+src/ChimeraGrains.hpp/.cpp      scheduler, readers, windows, stereo accumulation
+src/ChimeraRecorder.hpp/.cpp    recording and marker insertion state machines
+src/ChimeraReel.hpp/.cpp        paged audio storage, bounds, immutable snapshots
+src/ChimeraRateBridge.hpp/.cpp  host/core SRC and event timestamp mapping
+src/ChimeraJobs.hpp/.cpp        non-RT service, file jobs, cancellation, retirement
+src/ChimeraWav.hpp/.cpp         canonical WAV/markers/options import and export
+src/ChimeraState.hpp/.cpp       patch schema, save snapshots, migration, history
+src/ChimeraSemantic.hpp/.cpp    Octavia document/commands/status adapter
+src/ChimeraWidget.cpp           controls, context menus, model definition
+src/ChimeraDisplay.hpp/.cpp     waveform cache and bounded dynamic overlays
+res/Chimera.svg                 editable master, labels and hidden component anchors
+res/Chimera.panel.svg           generated runtime panel; never edit directly
+res/Chimera.labels.svg          generated runtime labels; never edit directly
+res/Chimera/...                 original optional raster assets
+presets/Chimera/...             parameter presets; no unlicensed audio
+manual/Chimera.md               user documentation; adapt directory to repo
 ```
 
 A small responsibility may share a file with its closest neighbor when that improves clarity, but DSP, filesystem code, serialization, and widget drawing MUST remain separate. Target approximately 200–700 lines per substantive `.cpp`; a file approaching 900 lines triggers a responsibility review, not arbitrary splitting.
 
-Register exactly one `modelMorphagene`, one manifest entry, and one `createModel<Morphagene, MorphageneWidget>("Morphagene")`. Preserve all existing module IDs, ordering-sensitive data, JSON keys, and model registrations. New enums become append-only at first release. Do not alter sibling edition identity or premium packaging unless the current checkout explicitly requires it.
+Register exactly one `modelChimera`, one manifest entry, and one `createModel<Chimera, ChimeraWidget>("Chimera")`. Preserve all existing module IDs, ordering-sensitive data, JSON keys, and model registrations. New enums become append-only at first release. Do not alter sibling edition identity or premium packaging unless the current checkout explicitly requires it.
+
+Edit artwork and anchors only in `res/Chimera.svg`; regenerate with `python3 tools/split_svg_labels.py res/Chimera.svg --overwrite`, then `make generate-panel-anchor-atlas`. Follow the checkout's `AGENTS.md` if its pipeline changes.
 
 ### 2.3 Dependency rule
 
@@ -181,7 +184,7 @@ Add compile-time ID assertions and a manifest/schema golden test.
 ## 4. Units, numerical safety, and invariants
 
 ```cpp
-namespace morphagene {
+namespace chimera {
 constexpr uint32_t kCoreRate = 48000;
 constexpr uint32_t kMaxReelFrames = 8352000;
 constexpr uint16_t kMaxSplices = 300;
@@ -241,6 +244,8 @@ DC blocker: `y[n] = x[n] - x[n-1] + R*y[n-1]`, `R=exp(-2*pi*5/48000)`. Provide a
 
 Input gain choices are `-3 dB`, `0 dB (modular)`, `+6 dB`, `+12 dB`. The software interprets “modular level” as 0 dB; the brief does not establish its exact analog gain. Smooth gain changes over 5 ms. Do not claim to reproduce codec PGA noise behavior.
 
+Unless a cosine window or one-pole is explicitly specified, a K-frame fade/crossfade is linear: frame j=0..K-1 uses blend `(j+1)/K`, reaching the target on the Kth frame. Use K=48 for 1 ms and K=240 for 5 ms. An interrupted fade restarts from its current gain/value; no stack of fade jobs is created. This applies to gain, record-source routing, PM routing, stop tails, and store-swap fades.
+
 ## 6. Host sample-rate bridge
 
 ### 6.1 Required behavior
@@ -265,6 +270,8 @@ Priming zeros are allowed before the first real input. Do not discard real sampl
 
 Detect gate transitions at the host rate so short host pulses are not missed. Maintain host-frame timestamps, including plug/unplug events. Obtain the input SRC group delay from its API and verify it with an impulse. If the delay expressed in core frames is `dIn`, an edge at host frame `h` maps to:
 
+For bounded event admission, represent a changed jack by one record per jack per host frame containing its connection state and gate level/edge; a connection and edge changing together do not create two queue entries. Continuous control samples use a separate timestamped history. At the supported maximum 768 kHz, 16 host frames map to one 48 kHz frame, so even all 13 inputs changing on each host frame produce at most 208 jack records per core interval, below the 256-event processing cap. Reserve at least 16,384 jack-event entries for input SRC delay history. The installed quality-5 Speex probe measured a maximum 640-host-frame input latency at 768 kHz; `13*640=8,320` delayed jack records, leaving capacity for scheduling margin. Re-measure if converter quality or implementation changes; reject an unsupported configuration whose measured bound exceeds the prepared queue instead of dropping events.
+
 ```text
 coreEventFrame = ceil(h * 48000 / hostRate + dIn)
 ```
@@ -277,7 +284,7 @@ The clocked recorder's pulse-to-audio relationship must remain invariant after s
 
 ## 7. Controls and profile-v1 transfer laws
 
-All formulas below are **D** unless their behavioral intent is tagged B-A. For nonnegative frame counts, `round(x)` means `floor(x+0.5)`, matching C++ `std::round`, not Python ties-to-even rounding. Put their constants in `MorphageneProfile`, serialize `dspProfile=1`, and do not change the sound of saved profile-1 patches when tuning a later profile.
+All formulas below are **D** unless their behavioral intent is tagged B-A. For nonnegative frame counts, `round(x)` means `floor(x+0.5)`, matching C++ `std::round`, not Python ties-to-even rounding. Put their constants in `ChimeraProfile`, serialize `dspProfile=1`, and do not change the sound of saved profile-1 patches when tuning a later profile.
 
 ### 7.1 Normalization and smoothing
 
@@ -293,7 +300,7 @@ Raw negative voltages on nominally unipolar inputs are accepted by the software'
 
 Use 48 kHz one-pole smoothing `x += (1-exp(-1/(tau*48000)))*(target-x)`: S.O.S. 1 ms; Gene control 2 ms; classic rate-control coordinate 1 ms; exponential pitch CV 0.25 ms; Morph 2 ms. Slide has the explicit slew in section 10. Organize uses hysteresis rather than a time smoother. No ordinary gate or PM signal passes through these control smoothers.
 
-Settle a smoother exactly to an unchanged target when its normalized error falls below `1e-7`; Stop and full-Splice endpoints use explicit hysteretic state, not asymptotic equality checks. In tests, evaluate both raw transfer functions and runtime smoothed behavior.
+Settle a smoother exactly to an unchanged target when its normalized error falls below `1e-7`. Full-Splice uses the hysteresis in section 7.5; Stop uses the exact deadband in sections 7.3/7.4, without an additional unspecified hysteresis. Initialize smoothers to the first sanitized control observation. In pitch modes smooth the knob coordinate with 1 ms and attenuated/clamped pitch volts with 0.25 ms before rate mapping. In tests, evaluate both raw transfer functions and runtime smoothed behavior.
 
 ### 7.2 S.O.S.
 
@@ -394,6 +401,8 @@ For envelope evaluation, estimate the current full-Splice wall duration from `L/
 
 At other densities, use the estimated full-Splice wall duration `L/max(abs(baseRate),1e-6)` as the scheduler's duration estimate; musical slots complete by source-travel distance. Clip only the scheduler estimate, not actual read position. Stop mode prevents spontaneous long-lived voice accumulation.
 
+Clamp that scheduling duration estimate to `[1, L/1e-6]` core frames. Each full-Splice musical voice expires after its own absolute effective-rate travel reaches its retained region length; one expiring voice emits one completion, even if its last increment crosses multiple wraps. The independent primary cycle uses base-rate travel, retains modulo-L remainder, and resolves at most one boundary transition per core frame. Multiple source wraps within one frame cannot create extra sample-time onsets. At base-rate Stop, suspend full-Splice launches as well as travel; active PM may continue reading retained stationary cursors.
+
 ### 8.4 Stop, reversal, and transition cursors
 
 When the effective base rate is zero and PM is inactive, fade wet playback to zero over 48 core frames while preserving cursor coordinates. Finite Gene timers and external clock interpretation may continue; full-Splice natural boundary generation does not. Recording and live monitoring are independent and continue. With PM active, stationary-cursor address modulation may remain audible; this is explicitly a D behavior.
@@ -411,7 +420,7 @@ unityBlend = gnsm == 0 ? clamp01(1 - abs(density-1)/0.025) : 0
 effectiveWindow = (1-unityBlend)*w + unityBlend
 ```
 
-This weight exists only during a voice's actual lifetime. Therefore D<1 still has its scheduled gap, while exactly D=1 and `gnsm=0` has a unity plateau. Use `effectiveWindow` in both the sample weight and the common normalization denominator. `gnsm=1` intentionally retains its audible edge fades, including at D=1. Smooth changes in `unityBlend` over 48 core frames when switching the window option; ordinary Morph smoothing already covers density motion.
+This weight exists only during a voice's actual lifetime. Therefore D<1 still has its scheduled gap, while exactly D=1 and `gnsm=0` has a unity plateau. Use `effectiveWindow` in both the sample weight and the common normalization denominator. `gnsm=1` intentionally retains its audible edge fades, including at D=1. Each voice latches `gnsm`, including its unity-blend eligibility, at onset; existing voices retain their window policy when the option changes. Ordinary Morph smoothing covers density motion. The boundary residual uses the incoming primary cycle's window policy.
 
 At a natural boundary/onset in this near-unity region, compensate the remaining address discontinuity **after** stereo accumulation and normalization, before S.O.S. Let `newRaw` be the first newly rendered stereo playback frame without this correction and `previous` the last emitted wet frame, including any prior correction. Set `residual = previous-newRaw`; for ages `j=0..E-1` add:
 
@@ -423,6 +432,8 @@ correction = unityBlend * residual * (1 - (0.5 - 0.5*cos(pi*j/E)))
 At j=E the correction is zero. Disable this correction for E<1. Starting from silence uses `previous=0`. A new qualifying boundary replaces the residual from the currently emitted frame; it never stacks an unbounded number of residuals. Natural unity boundaries use this correction instead of a simultaneous transition-cursor crossfade, so two separate de-click methods do not compound. Forced retriggers use section 8.4; `omod=1` bypasses both. No source samples are read before their scheduled onset.
 
 This is a bounded, causal **software Dynamic Enveloping approximation**, not an asserted hardware algorithm. A constant source at D=1 must have no periodic amplitude hole after startup; a discontinuous loop is continuous at its boundary sample and approaches the new source over E frames. A changing source can still have a derivative or timbral transition. Do not claim mathematical reconstruction of a smooth loop from arbitrary source material.
+
+Clear the residual whenever no musical voice contributes, including scheduled D<1 gaps and a stopped transport. Do not use this correction to fill a no-voice gap. A new onset following a gap uses `previous=0`.
 
 ## 9. Morph scheduler and stereo behavior
 
@@ -443,6 +454,8 @@ Starting/retriggering a nonempty transport emits one onset immediately, starts t
 At density 1 and `gnsm=0`, apply section 8.5 rather than placing two zero-ended windows back-to-back. For D<1, preserve actual no-voice gaps. For D>1, overlap musical slots; do not create an extra always-on dry Reel voice.
 
 Primary cycle and musical slot identity are different concepts. The primary cycle supplies Organize/Play commitment and CV ramp timing. **Do not commit a pending Splice at whichever high-ratio secondary voice happens to finish first.**
+
+Maintain a non-reading primary cursor for marker capture and the main playhead. At each primary-cycle start, initialize it to that cycle's Slide/trajectory origin (reverse uses `wrap(origin-1)`); advance by base rate after rendering and apply Slide delta once. It retains the primary region, excludes PM and chord ratios, and holds its last address while transport is stopped. It adds no audio voice. At an ordinary finite primary boundary it resets to the current origin even when the Morph onset schedule is between onsets.
 
 ### 9.2 Chord ratios and deterministic randomness
 
@@ -525,6 +538,8 @@ The brief establishes mode roles but not exact source stride, estimator, phase c
 ### 12.1 Estimator
 
 Keep `lastEdgeFrame`, `periodFrames`, `havePeriod`, and connection state. First edge establishes phase. Second edge establishes period. Each subsequent valid period replaces the old period immediately; no automatic half/double-tempo correction. Ignore intervals shorter than two core frames with a diagnostic. Use a supported period range of 2..2,880,000 core frames (up to 60 seconds). No audio-rate smoothing of Clock edges. A Clock event does not itself start a Play-stopped transport.
+
+An interval above 2,880,000 resets `havePeriod`; that edge becomes a new first edge and still performs recording/Gene Shift actions once. An interval below two frames is rejected by the playback estimator/Gene Shift action without moving its last accepted edge. Recording quantization still responds to each detected rising edge. Timeout before any period exists is 48,000 frames after connection/first edge. These are separate estimator and record-event policies.
 
 Connected is not the same as running. Recording remains clock-armed while the cable is connected, even if the clock has stopped. Playback stretch reports `clockWaiting` after `max(2*period, 48000)` frames without an edge; freeze its source trajectory rather than silently switch to free mode. On a new edge, re-lock. Disconnecting Clock cancels armed record changes without starting or stopping recording; playback returns to free trajectory mode with a short transition.
 
@@ -614,9 +629,13 @@ The writer may overlap a playback cursor. Read-before-write ordering is mandator
 
 Append begins at the current `validFrames`. Reserve the prospective new Splice slot before arming so capacity errors are reported before recording starts. While appending, newly written frames extend `validFrames` one at a time; unwritten capacity is never playable audio. On an empty Reel, there is no Reel playback until at least one valid frame exists; initial monitoring uses the S.O.S. live path.
 
+Freeze pre-Append playback region ends at the previous valid length, including newly launched readers of those existing Splices. Appended audio is not eligible for playback until finalization, including initial recording into an empty Reel. This avoids a growing one-frame loop feeding back into its first recording. A snapshot during Append includes the captured new frames and a provisional start marker at the Append start (zero for initial recording), plus written staged markers, so it reloads as a valid stopped Reel without resuming recording.
+
 While appending to an existing Reel, existing playback continues independently. Playback is not forced onto the growing destination. When finalizing a nonempty appended segment, commit its boundary and request it as the next Splice; on initial recording it becomes current immediately. Existing playback uses normal `omod` commitment. This auto-request is D.
 
 A zero-frame canceled recording creates no marker or empty region. At capacity, include the last available frame, finalize, clear pending stop, and signal `reelFull` once. At 300 existing Splices, starting another Append is rejected; Current/TLA remains available. A finalization must not append a duplicate marker at frame zero.
+
+Count the reserved Append-start marker against the 300-region limit for every subsequent marker insertion, including while armed. Additional markers inside the appended segment consume the remaining slots and stay staged until their addressed frame is written. Reject excess markers without stopping recording; finalization must always have its reserved slot. Canceling a zero-frame start releases the reservation. Finalization selects the appended segment's first stable marker ID and commits all written staged markers without duplicates.
 
 ### 13.5 Splice markers during playback and recording
 
@@ -673,9 +692,9 @@ Deleting a Splice remaps subsequent marker positions by the removed length, pres
 
 ### 15.1 Envelope follower (`cvop=0`)
 
-Use `energy = 0.5*(L*L + R*R)` on the conditioned core output. Smooth energy with attack 5 ms and release 80 ms, selecting the coefficient according to whether the new energy exceeds the stored value. Output `clamp(8*sqrt(max(energyState,0)),0,8)` volts. Thus an internal full-scale constant stereo value has an 8 V target in the filter-bypassed test harness; a unit-peak sine targets approximately 5.657 V in steady state.
+Use `energy = 0.5*(L*L + R*R)` on the conditioned core output in internal units (Rack volts divided by 5). Starting from zero, update `energyState += alpha*(energy-energyState)`, with `alpha=1-exp(-1/(tau*48000))`, attack tau 5 ms when energy exceeds state and release tau 80 ms otherwise. Output `clamp(8*sqrt(max(energyState,0)),0,8)` volts. An internal full-scale constant stereo value tends to 8 V in the filter-bypassed test harness. This asymmetric energy follower is not a true RMS meter: a unit-peak sine does not generally settle to `8/sqrt(2)`. Use the recurrence-based sine/step anchors in `reference_vectors.json`, with conditioning bypassed, to test its actual calibration.
 
-These detector, time constants, and calibration are D. A squaring detector is chosen to avoid cancellation of anti-phase L/R content; do not sum the waveforms and rectify the sum. Do not use the pre-S.O.S. Reel alone as the envelope source.
+These detector, time constants, and calibration are D. A squaring detector is chosen to avoid cancellation of anti-phase L/R content; do not sum the waveforms and rectify the sum. Do not use the pre-S.O.S. Reel alone as the envelope source. Precompute filter coefficients; use a measured fast square-root approximation if needed, keeping CV error within 1 mV over 0–8 V. No per-sample exponential is required.
 
 ### 15.2 Ramp (`cvop=1`)
 
@@ -695,7 +714,7 @@ Return pulses on the audio-aligned host timeline. Zero the output when no pulse 
 
 Use an input-presence state machine, not simply `isConnected(L)`:
 
-- Compute left-only raw normalized RMS with 10 ms smoothing.
+- Compute `leftEnergy += alpha10ms*(rawLeftNormalized^2-leftEnergy)`, initialized to zero, with one symmetric 10 ms coefficient; RMS is its square root. Compare energy to squared thresholds to avoid a per-frame square root.
 - Enter PM when right input is connected and left RMS is below 0.001 for 3 consecutive seconds.
 - Exit when left RMS exceeds 0.002 for 16 core frames, R is unplugged, or `pmin` is disabled.
 - Crossfade PM depth and right-audio routing over 5 ms on state transitions.
@@ -713,7 +732,7 @@ This equals a 10 ms source displacement at +5 V, a deliberately chosen calibrati
 
 ## 16. Firmware-style options and compatibility profile
 
-Expose a clearly labeled “Morphagene behavior” context submenu. Descriptive labels are primary; show option keys in tooltips or an advanced view. All option defaults are zero except ratios 2,3,4 and input gain 0 dB.
+Expose a clearly labeled “Chimera behavior” context submenu. Descriptive labels are primary; show option keys in tooltips or an advanced view. All option defaults are zero except ratios 2,3,4 and input gain 0 dB.
 
 | Key | Type / accepted values | Adoption rule |
 |---|---|---|
@@ -770,7 +789,11 @@ Each following core frame captures up to **eight** previously uncaptured page re
 
 Publish the frozen snapshot to the service only after every valid page reference is captured. The worker can then read only those immutable pages. At full length, scanning eight references per core frame takes about 85 ms of core time; this is not audio latency. The worst extra audio work is one 2 KiB page copy per first write to a shared page, plus eight pointer/tag operations. No data-dependent full-Reel loop runs in `process()`.
 
+The cut occurs before that frame's events/render/write and covers writes strictly before the cut frame; serialize the last included frame/write count explicitly. Capture only `ceil(snapshotValidFrames/256)` pages, not a moving valid-length target. Post-cut Append pages outside that bound need no COW; a partially filled last snapshot page does. Publish/release handles with acquire/release synchronization. A logical page is protected only while its snapshot reference is captured and still retained; epoch equality alone is insufficient during reclamation.
+
 On worker release, reclaim snapshot-only pages incrementally, eight entries per core frame. Do not start a new snapshot until reclamation is complete. Active pages are never returned to the free pool. Epoch wraparound is handled by a stopped/off-thread rebuild, not an audio-thread table clear.
+
+All consumers sharing a cut are service-side readers of one lease; release to the core only after the last consumer finishes. Reclamation clears each reference's retained flag before allowing further writes to treat the active page as unshared. No page can be freed twice or cloned against a recycled snapshot page ID.
 
 If the reserve is exhausted because of an invariant violation, stop recording safely and report the invariant error; never reuse a leased page or allocate on the audio thread. With one lease and a full reserve, one clone per logical page is sufficient regardless of how many TLA passes occur.
 
@@ -780,19 +803,23 @@ A patch save must not wait forever for audio callbacks that are not running. Int
 
 After at least 250 ms without module heartbeat advancement, a save-side maintenance path may attempt an Idle→Maintenance acquire. The atomic ownership claim, not the heartbeat guess, provides safety. While owned, it may establish a snapshot cut and finish capturing page references/metadata without advancing musical time, then release. It never performs file I/O while owning the core. This bounded metadata operation is permitted outside `process()`.
 
+Maintenance also drains completed lease releases and finishes prior reclamation before starting a newer cut. It can resume an in-progress capture. It never revokes a lease from a worker still reading. Bypassed modules must permit this path: heartbeat means progress of core snapshot maintenance, not merely entry into Rack's bypass callback. Ownership transfer serializes the sole producer/consumer roles of affected queues; maintenance and audio must never publish concurrently into an SPSC channel.
+
 If the host resumes during this rare maintenance interval, its callback does not wait or access the owned core: it holds/ramps output toward zero using bridge-local state, records a timing discontinuity, and re-primes timestamp alignment after ownership returns. Do not claim sample-perfect continuity across a stopped-host restart. During continuously running live saves, the normal incremental path must have zero ownership misses and zero missing recorded frames.
 
-If ownership or job completion cannot be obtained within a bounded save timeout (default 10 seconds), fail the save visibly and preserve the last committed assets. Do not silently save an older recording while claiming the current revision was saved. Never call an engine API that upgrades Rack's save-hook lock from inside `onSave`.
+If ownership or job completion cannot be obtained within a bounded save timeout (default 10 seconds), mark the module save failed visibly and preserve the last committed assets, following section 20.3's host failure policy. Do not silently save an older recording while claiming the current revision was saved. Never call an engine API that upgrades Rack's save-hook lock from inside `onSave`.
 
 ### 17.5 Resource budgets
 
 Default audio payload budget per populated module: one active+reserve store, about 127.44 MiB. A prepared replacement may temporarily double that; maximum raw audio payload is **256 MiB** per module, plus explicitly measured metadata, SRC state, and waveform caches. Decode directly into the prepared store rather than create an additional full temporary float vector.
 
+Retired stores with outstanding leases count toward this same budget. Before admitting another prepared store, wait for retirement or return `busy`; never permit active + prepared + leased retired full stores. Cancellation does not release payload credit until destruction actually occurs off-thread.
+
 A 32-slot bank does not keep 32 full mutable Reels in memory. Inactive Reels are immutable cached files plus small metadata. Only active and one prepared replacement are resident. Expose a memory estimate in diagnostics. Browser previews and truly empty modules remain lightweight.
 
 ## 18. Worker service, queues, and lifecycle
 
-Prefer a plugin-scoped service following the current explicit plugin lifecycle pattern, with at most two workers globally. Do not reuse a graphics-only worker for blocking disk work. A new `MorphageneIoService` may be initialized lazily and shut down from the existing plugin `destroy()` path after current ownership rules are verified. [R3]
+Prefer a plugin-scoped service following the current explicit plugin lifecycle pattern, with at most two workers globally. Do not reuse a graphics-only worker for blocking disk work. A new `ChimeraIoService` may be initialized lazily and shut down from the existing plugin `destroy()` path after current ownership rules are verified. [R3]
 
 Operations include Prepare Store, Decode Reel, Snapshot Encode, Patch Asset Commit, Build Waveform, Apply Heavy Edit, Prepare Rate Bridge, and Retire Store. Prioritize patch-save and record-readiness work above optional waveform updates. A long decode may be cancelled at bounded chunk boundaries.
 
@@ -883,7 +910,7 @@ Rack parameters remain in Rack's parameter serialization. Additional state uses 
   },
   "storage": {
     "mode": "embedded",
-    "manifest": "morphagene/bank.json",
+    "manifest": "chimera/bank-bundle42.json",
     "savedDocumentRevision": "42",
     "savedAudioRevision": "1203"
   },
@@ -902,6 +929,10 @@ Do not serialize armed recording, active record state, pressed buttons, live job
 A save must first settle or explicitly exclude pending metadata/reel edits. Fence the control dispatcher, capture a coherent `SaveBundle` containing options, bank selection, markers, exact audio snapshot, and both revisions, then serialize **that bundle**. New live changes after the cut are permitted but belong to a newer unsaved revision. Do not serialize newest marker metadata against older audio.
 
 `onSave` requests/coalesces the needed immutable snapshot and waits on the non-RT side for its files to be committed. The worker writes temporary files, flushes/closes them, and renames to revision-specific final names; the manifest is committed last. `dataToJson()` returns the corresponding saved bundle metadata for that save transaction. Serialization for clipboard/history outside a save returns a safe authored snapshot, never a direct scan of audio-owned state.
+
+Use revision-specific manifests as well as audio filenames: write `chimera/bank-<bundleId>.json` and publish that path only after all referenced assets exist. Ordinary `dataToJson()` calls also occur without `onSave` (autosave/history); they must identify their actual durable audio cut and must not serialize newer marker bounds over older audio. Keep unsaved authored state separately where necessary, with an explicit recovery warning.
+
+**Host failure policy / Phase 0 proof:** the installed SDK declares `onSave()` as `void`. The local Rack source also calls it during patch-manager destruction, so blindly throwing from every failed hook is not safe. Do not promise that a module error automatically cancels Rack's patch archive or preserves an existing `.vcv` file. On failure retain the last coherent bundle, keep dirty/error state visible, and serialize a `saveFailure` diagnostic identifying the unsaved revision; with no prior bundle, serialize a missing-audio state rather than reference partial assets. Successful saves still require the exact requested cut. Phase 0 must test Save, Save As, periodic autosave, duplication, and shutdown on the supported runtime and record whether safe host-level cancellation exists. Do not add an unverified exception/engine-lock workaround. Whole-patch atomicity is a host integration limitation, separate from atomic module-owned assets.
 
 Rack's documented save contract requires assets ready in `onSave`; the inspected patch manager calls save preparation before archiving. Simply queueing a future WAV write and returning is incorrect. [R9–R10] Do not assume save preparation excludes engine processing; inspect the working SDK locking contract and retain the ownership protocol even if a particular host happens to pause. [R13] Report any timeout, disk-full, permission, or rename failure; preserve the last valid checkpoint and old assets. Never return success with a partially written referenced asset.
 
@@ -931,7 +962,7 @@ Do not make every live-recorded frame a history action. Provide “Restore pre-r
 
 Implement the current in-process `OctaviaSemanticControl` interface, after checking the working tree. The inspected interface defines `CAPABILITIES`, `GET_DOCUMENT`, `VALIDATE`, `EDIT`, `GET_STATUS`, and `COMMAND`; implementations own their schema and semantics. [R12] Do not create a new HTTP server, require an external AI provider, or hardcode an Octavia module ID.
 
-Capability identifier: **`leviathan.morphagene.reel-engine`**. Schema version: 1. The semantic adapter routes through the same transaction service used by UI actions. It never directly writes the Reel, advances a playback cursor, or makes filesystem calls from `process()`.
+Capability identifier: **`leviathan.chimera.reel-engine`**. Schema version: 1. The semantic adapter routes through the same transaction service used by UI actions. It never directly writes the Reel, advances a playback cursor, or makes filesystem calls from `process()`.
 
 ### 21.1 Authored document versus telemetry
 
@@ -1006,6 +1037,8 @@ For commands that replace/delete existing audio, move/remove existing markers, c
 
 Return `requestId`, `status` (`accepted`, `armed`, `preparing`, `applied`, `rejected`, `cancelled`), relevant revisions, and an application frame when known. Assign idempotency keys so a retried network request does not start and then stop a recording or duplicate a marker. The bounded deduplication cache belongs off-thread; use the last 256 command IDs per module generation.
 
+Async jobs may additionally report `running` and terminal `failed`; use `cancelled` consistently. Deduplication is guaranteed only while a key remains cached in the same generation; expose that scope and reject a cached key reused with a different payload. Explicit `quantize:none` bypasses cable quantization; `quantize:clock` requires a connected Clock and otherwise rejects with `clock_not_connected`. Panel/gate toggles retain section 13's automatic cable policy. Repeated explicit start for the same active/armed destination is a no-op; a different destination is `recording_busy`. Explicit stop while ArmedStart cancels the start; stop while Idle is a no-op. `record.stop` with `quantize:none` overrides an existing armed stop immediately. EDIT operations that move/remove markers carry the same destructive acknowledgement and revision preconditions specified above; validation and actual adoption both recheck the preconditions.
+
 ### 21.4 Completion examples
 
 A complete agent operation is: import request → preparation status → applied audio revision → select/retrigger → confirm audible transport/mix status. Merely returning an accepted job is not completion.
@@ -1050,6 +1083,8 @@ Static panel and waveform geometry are cached. Playheads, record indicators, and
 
 Do not rescan WAV data, rebuild a framebuffer, upload an entire waveform texture, allocate a full path, or run an FFT every UI frame. Default v1 drawing may use cached NanoVG geometry; no custom GL renderer is required. Any adopted existing GL path must follow the repository's context-create/context-destroy and deferred resource-retirement rules.
 
+Use `NvgGraphicsLifecycle.hpp` for persistent NanoVG image ownership/validation and `GlLifecycleUtils.hpp` for applicable GL resource checks. Invalidate on context change, validate before reuse, and rebuild lazily. Never delete an image from a foreign context or perform destructor-time GL cleanup. Test DAW window close/reopen as well as widget removal.
+
 A browser widget with `module==nullptr` shows a small deterministic static placeholder, instantiates no audio service, opens no files, and allocates no Reel. UI callbacks and workers never access audio-owned cursor structs or mutable pages directly.
 
 ## 23. Performance, thread safety, and instrumentation
@@ -1058,7 +1093,7 @@ A browser widget with `module==nullptr` shows a small deterministic static place
 
 After preparation, `process()` performs no heap allocation/free, filesystem operation, mutex wait, condition-variable wait, thread creation/join, JSON parse/encode, string formatting, logging, directory traversal, or full-Reel scan. A realtime shared-pointer decrement that can destroy a payload counts as a forbidden free.
 
-Work is bounded by four musical slots, four transition readers, a fixed number of commands/events, eight snapshot page references, and at most one recording-page copy for a core frame. Cap non-event audio commands consumed at four per core frame. Host edge processing is capped at 64 events per core frame; supported-ratio event bursts must fit that bound. Queue overflow latches a visible transport error and cancels recording requests safely, never silently drops a sequence of REC toggles.
+Work is bounded by four musical slots, four transition readers, a fixed number of commands/events, eight snapshot scan references (plus one write-barrier capture), and at most one recording-page copy for a core frame. Cap non-event audio commands consumed at four per core frame. Host edge/connection processing is capped at 256 events per core frame. At 768 kHz, 16 host frames map to one core interval and five gate inputs alone can produce 80 transitions, so the former 64-event budget was insufficient. Include connection changes in the bound; size the event queue for the entire prepared input-delay history at the worst supported rate, not merely one interval. Queue overflow latches a visible transport error, immediately stops active recording and cancels arms, and requires an explicit fresh start after recovery; never silently drop REC toggles and continue writing.
 
 Only begin optional snapshot work when the core store is ready. Correctness does not depend on widget visibility or service scheduling latency. Backpressure may delay loading/saving; it must not delay the next audio sample.
 
@@ -1073,6 +1108,8 @@ Report host-rate SRC overhead separately from core cost. Test 44.1/96/192 kHz an
 ### 23.3 Instrumentation
 
 Provide inexpensive counters for onset/completion count, active readers, COW page copies, snapshot capture progress, pool availability, callback allocations, FIFO high-water marks, stale-job discard count, accepted/applied revisions, queue errors, and peak resident memory. Timing instrumentation is behind the existing debug/profile conventions, not an always-on clock call around every individual sample.
+
+Gate developer/debug-terminal output with `isDragonKingDebugEnabled`. Preserve the first three Debug Terminal metrics as module-total `Process`, `Step`, and `Draw`, including work split across overlays/caches/backends; component timings follow those metrics.
 
 Mandatory tools: allocation trap around test callbacks; ASan/UBSan for bounds/lifetime; TSAN for service/core/UI exchanges; long offline renders to detect NaN and integer wrap hazards. Run both relaxed optimization and release-equivalent math flags. A TSAN success does not prove latency; allocation/lifecycle/performance tests are separate.
 
@@ -1106,7 +1143,7 @@ Keep these profile-v1 decisions in one developer table and a hardware comparison
 | Clock stride/timeout | One nominal Gene of source per edge; last-period estimator. | Known marker grid and measured Clock/Vari-Speed matrix. |
 | Pitch-mode summing | Knob chooses base/direction, exponential CV changes magnitude. | Center/negative/over-range pitch-CV tests. |
 | PM | 96 source frames/V; RMS presence detector and 3 s activation. | DC/audio PM sensitivity and cable/signal-presence tests. |
-| CV envelope | RMS energy, 5/80 ms attack/release. | Amplitude steps and L/R anti-phase fixtures. |
+| CV envelope | Asymmetric squared-energy follower, 5/80 ms attack/release; not true-RMS calibration. | Amplitude steps and L/R anti-phase fixtures. |
 | EOSG width | Adaptive up to 5 ms. | Oscilloscope capture across Gene/Morph settings. |
 | Mono normal / gain reference | Copy L to R; modular gain = 0 dB. | Single-channel patch and amplitude sweep. |
 | Marker RIFF layout | Software `cue `/labels profile. | Export a real hardware Reel; inspect and round-trip exact chunks. |

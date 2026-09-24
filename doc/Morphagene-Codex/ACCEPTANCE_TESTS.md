@@ -1,4 +1,4 @@
-# Leviathan Morphagene — Acceptance Tests
+# Leviathan Chimera — Acceptance Tests
 
 This document is normative with `Leviathan_Morphagene_Codex_Spec.md`. Test IDs are stable. The cases below are **requirements to implement and execute**, not a claim that an implementation already exists or has passed them.
 
@@ -28,6 +28,7 @@ Exact integer expectations apply to counts, addresses, IDs, revisions, PRNG stat
 | CTL-010 | Step each smoothed control from 0 to 1 with known tau. | One-pole response matches formula; eventually lands exactly on unchanged target; gates and PM are not smoothed through this path. |
 | CTL-011 | Sweep Gene control through 0.0001..0.0002 in both directions. | Hysteretic full/finite state; no chatter or dependence on approximate floating equality. |
 | CTL-012 | Load a Reel while S.O.S.=0; set exact unity/Stop context actions in each speed mode. | Loading never changes the mix; context actions select the mode-appropriate knob coordinates. |
+| CTL-013 | Initialize controls and change gain/routing during an existing fade. | First finite observation initializes smoothers; non-window fades use `(j+1)/K`, land on frame K, and restart from current value without stacked jobs. |
 
 ## B. Reader, windows, and scheduler — MG-001, MG-002, MG-004, MG-012
 
@@ -51,6 +52,8 @@ Exact integer expectations apply to counts, addresses, IDs, revisions, PRNG stat
 | DSP-016 | Cross Vari-Speed through zero during playback and recording, PM disabled. | Wet fades to zero over 48 ticks, cursor is retained, writer/live path continue, full-Splice natural boundary does not fire at Stop. |
 | DSP-017 | Repeat Stop with finite Genes and separately with active PM. | Finite timer behavior remains defined; PM can sound a stationary address; no divide-by-zero in full-Splice scheduler estimate. |
 | DSP-018 | Queue a Splice change while high-ratio secondary full-Splice voices expire early. | Only the primary cycle governs queued selection/Play commitment; secondary completion still contributes EOSG events. |
+| DSP-019 | Change gnsm mid-voice at D=1, then enter a D<1 gap near unity. | Existing voices retain latched window/unity policy; new voices use new policy; residual is zero whenever no musical voice contributes. |
+| DSP-020 | Full-Splice L=1/2/3 with base rate 32 and ratios up to 16; then Stop with PM enabled. | Musical expiry counts once per voice; primary remainder stays modulo L with one boundary transition per frame; no catch-up onset loop or launches accumulating at Stop. |
 
 ## C. Position, selection, Play, and Clock — MG-007, MG-008, MG-009
 
@@ -77,6 +80,7 @@ Exact integer expectations apply to counts, addresses, IDs, revisions, PRNG stat
 | TRN-019 | Disconnect stopped/running Clock while record state is armed or active. | Armed changes cancel without starting/stopping actual recording; playback returns to defined free behavior; no fabricated Clock edge. |
 | TRN-020 | Natural primary completion and Shift/Play/REC/Clock events share a timestamp. | Ordering matches section 13.2; due natural completion counted once, requested selection resolved before boundary commit, no double onset. |
 | TRN-021 | Pending Splice or pmod=0 boundary-stop followed by a Gene Shift Clock edge before natural expiry. | Clock resolves the explicit primary boundary first; commits/stops once, does not emit a fabricated completion, and does not restart stopped playback. |
+| TRN-022 | Clock interval above 60 seconds, too-fast repeated edges, and no second edge after connection. | Overlong interval becomes new first edge; too-fast playback edges leave last accepted timestamp unchanged; record quantization remains independent; waiting state has a defined initial timeout. |
 
 ## D. Recording and marker editing — MG-001, MG-005, MG-006, MG-007
 
@@ -98,6 +102,8 @@ Exact integer expectations apply to counts, addresses, IDs, revisions, PRNG stat
 | REC-014 | Remove/move markers while voices retain old region; edit with stable selected ID. | Voice bounds remain safe until retirement; selection follows stable identity, not shifted array position. |
 | REC-015 | Erase region, Delete Splice, and Clear Reel, then undo/redo. | Erase preserves length; Delete compacts and rebases markers; Clear is explicit; checkpoint-based undo restores exact audio/metadata or reports unavailable. |
 | REC-016 | Full-volume/high-Morph feedback for extended run; inject nonfinite stored sample fixture. | Defined finite guards activate with telemetry; no NaN propagation, crash, or silent data pointer corruption. |
+| REC-017 | Append at 298/299 regions; fill markers while armed/recording; save mid-Append; initial empty record with S.O.S. above zero. | Reserved start marker cannot be consumed by other insertions; prior playback bounds remain fixed; initial wet stays silent until finalize; mid-Append snapshot reloads captured frames/markers as valid Idle state. |
+| REC-018 | Capture playback marker during overlapping/chord Genes, a density gap, and stopped playback. | Address follows the independent base-rate primary cursor, never slot 0 reuse or a secondary chord rate; Slide applies once and PM never enters marker address. |
 
 ## E. Buttons, options, and derived outputs — MG-009, MG-010, MG-012
 
@@ -109,7 +115,7 @@ Exact integer expectations apply to counts, addresses, IDs, revisions, PRNG stat
 | OPT-004 | Reel Mode entry, Organize knob/CV, confirm/cancel, and active/armed recording. | Knob selects 32 candidates; CV does not; no unintended playback selection; confirm loads asynchronously; busy record operations reject switch. |
 | OPT-005 | Set every ckop/vsop/inop/pmin/omod/gnsm/rsop/pmod/cvop and signed mcr limits; save/reload. | Accepted values persist; zero/out-of-range/nonfinite mcr rejected; each option has actual DSP/state behavior, not UI-only storage. |
 | OPT-006 | Import options with whitespace/comments, duplicate keys, unknown keys, malformed values. | Whole-file validation; duplicate/malformed rejects without partial application; unknown safe keys warn/retain extras; no file execution. |
-| OUT-001 | Unit internal peak stereo sine, long enough to settle default follower. | RMS detector settles near `8/sqrt(2)` V; declare ripple tolerance; attack/release follow 5/80 ms laws; clamp 0..8 V. |
+| OUT-001 | Identical unit-peak 1 kHz stereo sine; bypass conditioning; render 96,000 frames from zero and summarize frames 48,000..95,999. | Asymmetric energy follower matches reference mean/min/max (mean about 7.390832 V), within 1 mV; do not expect true-RMS `8/sqrt(2)` calibration. |
 | OUT-002 | L-only/R-only energy and post-S.O.S. changes. | Follower measures specified stereo bus, not only L/input/pre-S.O.S.; routing and normalization tests remain distinct. |
 | OUT-003 | `cvop=1`, finite primary Ng=480 and overlapping secondary voices. | One rising primary-cycle ramp, reset at primary boundary; secondary overlaps do not spuriously reset it; reverse still rises. |
 | OUT-004 | Full-Splice ramp under varying rate and Stop. | Ramp follows primary traveled distance; Stop holds full-cycle phase, while an actual stopped transport reports the defined zero. |
@@ -117,6 +123,7 @@ Exact integer expectations apply to counts, addresses, IDs, revisions, PRNG stat
 | OUT-006 | `pmin=1`, R connected, L below/above detector thresholds for controlled times. | 3-second absence entry and 16-tick presence exit use specified raw-L RMS; cable state alone is not the audio-presence detector. |
 | OUT-007 | Active PM with ±1 V and ±20 V right input, stopped/moving heads. | 96 source frames/V, raw PM clamp ±10 V; common offset on every head; writer/marker/phase timing unchanged. |
 | OUT-008 | PM activates/deactivates while R carries audio. | R leaves/returns to live record-monitor path with 5 ms transition; no unintended gain-normalization or L→R copying while PM active. |
+| OUT-009 | Step stereo energy 0→1 from zero, then 1→0 from independently initialized unity state; opposite-polarity stereo sine. | Step samples match recurrence vectors within 1 mV; anti-phase stereo matches identical-phase energy; production detector uses internal units and clamps 0..8 V. |
 
 ## F. Sample-rate bridge and realtime behavior — MG-001, MG-009, MG-012
 
@@ -132,6 +139,7 @@ Exact integer expectations apply to counts, addresses, IDs, revisions, PRNG stat
 | RT-008 | Saturate command/completion/event queues while recording. | Busy/error visible, accepted jobs reach result, reserved retire capacity works; no silent dropped REC edge or leaked handle. |
 | RT-009 | Four-voice maximum density + active PM + record + waveform updates; repeat during full snapshot. | Record hardware/compiler/settings, median/p95/p99 callback cost and UI timings; check target budgets separately from correctness. Do not mark PASS from estimates. |
 | RT-010 | Process bypass on/off with REC held, all Play modes, live input present. | Bypass stops record/freezes core, supplies defined normalized dry path, zeroes CV/EOSG; unbypass does not synthesize a held-REC rise. |
+| RT-011 | Host 768 kHz, five gates changing every host frame, connection changes, and maximum prepared SRC input delay. | All mapped events fit proven queue/history capacity and 256-event per-core budget; induced overflow stops writes/cancels arms visibly and requires fresh start. |
 
 ## G. Snapshot, assets, and lifecycle — MG-001, MG-011, MG-012
 
@@ -152,6 +160,10 @@ Exact integer expectations apply to counts, addresses, IDs, revisions, PRNG stat
 | IO-013 | Continuous record with autosave checkpoints; crash simulation before/after atomic commit. | Recover last completed checkpoint; never claim uncommitted latest samples survived; checkpoint cadence and durable-write assumptions reported. |
 | IO-014 | Reset versus Clear Reel; absent asset on restore. | Reset preserves recorded content while resetting controls/options/transients; Clear requires explicit command; missing content error remains visible with live monitoring usable. |
 | IO-015 | Empty unprepared module; first audio-input connection/record.prepare; REC before and after readiness. | Capacity prepared off audio; early start rejected visibly with no delayed auto-record; a fresh ready-state start has exact frame timing. |
+| IO-016 | Save while host is stopped/bypassed, release lease, then save a newer cut without resuming audio. | Maintenance finishes prior capture/reclamation and makes progress on second save; no expired heartbeat assumption causes concurrent core/SPSC access. |
+| IO-017 | Snapshot partial last page during Append, then append into new pages and overwrite retained pages during incremental reclamation. | Snapshot length/page count remain fixed at cut; partial page is protected, post-cut pages need no capture, reclaimed entries cannot clone/free recycled IDs. |
+| IO-018 | Multiple consumers share one cut; rapid replacement loads with old snapshot encoder still active. | Lease releases only after last reader; retired payload remains charged; active + prepared + retired stores never exceed the 256 MiB payload ceiling. |
+| IO-019 | Failed save with/without prior bundle; periodic serialization without onSave; normal save and shutdown paths on supported Rack runtime. | No unsafe hook exception; old coherent bundle or explicit missing-audio/saveFailure state; no newer markers over old audio; report actual host cancellation behavior and do not claim whole-patch atomicity. |
 
 ## H. WAV and state validation — MG-011, MG-012
 
@@ -174,16 +186,17 @@ Exact integer expectations apply to counts, addresses, IDs, revisions, PRNG stat
 | API-001 | Discover capabilities/document/status. | Existing Octavia interface used; correct capability/polyphony/limits; compact state contains no audio arrays or per-sample trace. |
 | API-002 | Validate and apply options/marker transaction with expectedRevision. | Validate makes no mutation; edit is atomic, acknowledged only after actual adoption; stale revision rejects with current revision. |
 | API-003 | Retry same idempotency key for record start, import, and destructive command. | Same result/job returned; no double toggle, duplicate import, or second destruction; conflicting payload with same key rejects. |
-| API-004 | Explicit start Current/Append with quantization, explicit stop, cancel arm, Play stop/retrigger. | Commands are stateful/idempotent, not synthetic button toggles; semantic stop latch survives held Play until defined restart. |
+| API-004 | Explicit start Current/Append with quantization, repeated start, disconnected Clock, stop while armed/Idle, cancel arm, Play stop/retrigger. | `none` overrides cable; `clock` without cable rejects; same-destination start is no-op; stop cancels ArmedStart and is safe while Idle; semantic stop latch survives held Play until defined restart. |
 | API-005 | Concurrent UI and semantic writes; unauthorized path, overwrite, destructive action, revision conflict. | One control dispatcher preserves SPSC ownership; existing authorization scope respected; every rejected/accepted action has truthful result. |
-| API-006 | Long load/export accepted, then canceled/module deleted; poll status. | Distinguish accepted/running/applied/failed/canceled; no success before store swap/file completion; generation prevents stale adoption. |
+| API-006 | Long load/export accepted, then cancelled/module deleted; poll status. | Distinguish accepted/running/applied/failed/cancelled; no success before store swap/file completion; generation prevents stale adoption. |
 | GUI-001 | Light/dark panels, module browser, normal/min/max zoom and high DPI. | All labels/jacks accessible, no overlap/cutoff, readable state independent of color, title-only baked raster convention respected. |
 | GUI-002 | Full Reel, many markers, moving four heads while recording. | Waveform built off audio/UI hot path; bounded cached draw; no every-frame full-Reel scan or mutex held over NanoVG draw. |
 | GUI-003 | Hide/offscreen module, destroy/reopen widget while sound continues. | No change to audio/record behavior; telemetry ownership remains valid; display cache and jobs safe across widget lifetime. |
 | GUI-004 | Full interactive smoke sequence: record, splice, scrub, reverse, overlap, clock stretch, TLA, export, save/reload. | No placeholder controls; workflow documented with observed errors and edge cases; human listening notes separated from numerical/hardware claims. |
+| GUI-005 | Regenerate assets from master; close/reopen DAW window and switch graphics contexts with cached display active. | Split assets/atlas match master; shared lifecycle helpers invalidate and rebuild safely; Debug Terminal preserves module-total Process/Step/Draw and debug gating. |
 
 ## Execution gates and reporting
 
 Fast CI runs mapping/state/reader tests on small buffers. Rack-linked CI covers host hooks, JSON/patch assets, semantic control, and actual parameter wiring. Slow/nightly tests cover full capacity, parser fuzzing, prolonged feedback, 32-slot banks, lifecycle stress, and sanitizer concurrency. A manual pass covers panel/readability/listening; a separate optional hardware worksheet covers the brief's unknown primitives.
 
-Record test ID, pass/fail/not-run, build commit, operating system, compiler/flags, Rack version, fixture version, measured values/tolerance, and attached failure artifact path. Save failures must include the original patch untouched. A complete release has no unexplained NOT RUN entries for mandatory acceptance cases. Physical-unit comparisons may remain pending, but then public documentation must not claim matched hardware behavior for the corresponding primitives.
+Record test ID, pass/fail/not-run, build commit, operating system, compiler/flags, Rack version, fixture version, measured values/tolerance, and attached failure artifact path. For save-failure tests keep an untouched fixture copy and report whether the host changed its destination; module-owned asset consistency does not establish host archive atomicity. A complete release has no unexplained NOT RUN entries for mandatory acceptance cases. Physical-unit comparisons may remain pending, but then public documentation must not claim matched hardware behavior for the corresponding primitives.

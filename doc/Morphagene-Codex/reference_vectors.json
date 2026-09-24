@@ -1,5 +1,5 @@
 {
-  "schema": "leviathan.morphagene.reference-vectors",
+  "schema": "leviathan.chimera.reference-vectors",
   "schemaVersion": 1,
   "dspProfile": 1,
   "purpose": "Mathematical anchors for the proposed software design; not hardware captures or implementation test results.",
@@ -1398,7 +1398,7 @@
     },
     {
       "pan": 1,
-      "gainL": 8.659560562354934e-17,
+      "gainL": 8.659274570719355e-17,
       "gainR": 1.4142135623730951
     }
   ],
@@ -1446,6 +1446,43 @@
       "alphaAt48k": 0.0002603827611897813
     }
   ],
+  "envelopeFollower": {
+    "conditioningBypassed": true,
+    "initialEnergy": 0.0,
+    "attackSeconds": 0.005,
+    "releaseSeconds": 0.08,
+    "sine": {
+      "frequencyHz": 1000,
+      "peakPerChannel": 1.0,
+      "renderFrames": 96000,
+      "summaryStartFrame": 48000,
+      "meanVolts": 7.390832249895503,
+      "minVolts": 7.385726544253625,
+      "maxVolts": 7.395930369732668
+    },
+    "unitEnergyStep": [
+      {
+        "updates": 1,
+        "risingFromZeroVolts": 0.5158603317885206,
+        "fallingFromUnityVolts": 7.99895840114723
+      },
+      {
+        "updates": 240,
+        "risingFromZeroVolts": 6.360480780965201,
+        "fallingFromUnityVolts": 7.753865875810753
+      },
+      {
+        "updates": 3840,
+        "risingFromZeroVolts": 7.999999549859289,
+        "fallingFromUnityVolts": 4.852245277701067
+      },
+      {
+        "updates": 48000,
+        "risingFromZeroVolts": 8.0,
+        "fallingFromUnityVolts": 0.015443633089821674
+      }
+    ]
+  },
   "slotFilenames": [
     "mg1.wav",
     "mg2.wav",

@@ -1,21 +1,33 @@
-# Package validation performed
+# Package validation — document revision 4
 
-Date: 2026-09-23.
+Date: 2026-09-23. Scope: the reviewed documentation package and offline mathematical artifacts.
 
-The following checks were executed while assembling this specification package:
+Run from the repository root (the native Python used for this review is shown):
 
-- The supplied brief is byte-for-byte identical to its package copy. SHA-256: `9cd32340a3781acd1a4d720214f0199e226121cf3c84aecd8754b0a3a3524407`.
-- The standalone main specification and packaged copy are byte-for-byte identical.
-- The acceptance matrix contains **125 unique, contiguous case IDs** across its test families.
-- The plan contains **11 phases**, numbered 0 through 10.
-- Generated Markdown code fences are balanced. The supplied original brief was preserved rather than rewritten.
-- All **2 JSON examples** in generated Markdown parse successfully.
-- The reference-vector generator parses as Python and executes successfully with the standard library.
-- Its anchor assertions and regenerated reference-vector comparison pass.
-- Package checksums were generated and the ZIP archive was checked for corruption after assembly.
+```powershell
+& C:/msys64/mingw64/bin/python.exe doc/Morphagene-Codex/generate_reference_vectors.py --check doc/Morphagene-Codex/reference_vectors.json
+& C:/msys64/mingw64/bin/python.exe doc/Morphagene-Codex/validate_package.py
+git diff --check
+```
 
-## What these checks do not establish
+Checks executed for revision 4:
 
-No module implementation was created or compiled as part of this task. None of the 125 module acceptance cases has been executed against a real engine. Rack integration, actual audio output, save-hook behavior, full-capacity memory cost, allocation tracing, sanitizers, GUI performance, and physical Morphagene comparison still require implementation and testing. The design's numerical choices and target budgets must not be described as measured hardware behavior or achieved performance.
+- Source brief unchanged, byte-for-byte equal to `doc/Morphagene_Tech_Brief.md`; SHA-256 `9cd32340a3781acd1a4d720214f0199e226121cf3c84aecd8754b0a3a3524407`.
+- 138 unique acceptance IDs, contiguous within every family; original 125 IDs preserved.
+- 11 implementation phases, numbered 0 through 10.
+- Balanced code fences in authored Markdown (source brief intentionally preserved).
+- Both JSON examples parse successfully.
+- Both Python scripts parse; reference generator/checker and package validator execute with the standard library.
+- Mathematical anchors regenerate and compare successfully, including the corrected asymmetric energy-follower sine/step expectations.
+- Vector checker rejects boolean/integer type substitutions and non-finite float comparisons.
+- Exact-byte SHA-256 manifest covers all 12 fixed package files other than the checksum manifest itself. The live `IMPLEMENTATION_STATUS.md` is intentionally excluded.
+- Working diff passes whitespace validation.
+- Chimera identity is consistent across proposed registration, source/assets, namespace, semantic capability and reference-vector schema; source-hardware references remain Morphagene.
 
-The main specification contains approximately **15,361 whitespace-delimited words**. It is intentionally accompanied by a separate test matrix and phased plan so an implementation agent can work in smaller contexts.
+`validate_package.py --refresh-checksums` refreshes the manifest after reviewed edits and performs the same structural/vector checks. Run the normal validator afterward to verify the saved manifest.
+
+## Limits
+
+These checks validate document structure and the supplied reference math, not a DSP implementation. None of the 138 module acceptance cases has run against an implemented module. No plugin build, live Rack session, sanitizer, GUI/performance measurement or physical-hardware comparison was performed in this documentation-only review.
+
+The original assembly reported ZIP integrity and equality with a standalone specification copy. This review does not regenerate or validate an external ZIP or standalone copy; the files in this directory are the reviewed package. `REVIEW_NOTES.md` identifies the selected checkout/SDK/source inspection and the remaining runtime integration proofs. Memory/performance budgets and hardware hypotheses remain targets and design choices, not achieved measurements.

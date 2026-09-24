@@ -437,6 +437,26 @@ test-build: $(TEST_BINS)
 test-build-fast: $(TEST_BINS_NON_RACK) build/tests/adaptive_visual_update_spec
 test-build-rack: $(TEST_BINS_RACK)
 
+# Chimera Phase 0 proves a native, Rack-independent C++17 harness before the
+# engine types and reference-vector runner arrive in Phase 1.
+.PHONY: test-chimera-phase0
+test-chimera-phase0: | build/tests
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/chimera_phase0_smoke.cpp -o build/tests/chimera_phase0_smoke$(if $(ARCH_WIN),.exe,)
+	build/tests/chimera_phase0_smoke$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/chimera_phase0_capacity_spec.cpp -o build/tests/chimera_phase0_capacity_spec$(if $(ARCH_WIN),.exe,)
+	build/tests/chimera_phase0_capacity_spec$(if $(ARCH_WIN),.exe,)
+
+# Test-only internal SDK headers allow a stack Engine without Rack's GUI host.
+.PHONY: test-chimera-rack-contract
+test-chimera-rack-contract: | build/tests
+	$(CXX) -std=gnu++17 -O2 -Wall -Wextra -Wno-unused-parameter -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_rack_save_contract_spec.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_rack_save_contract_spec$(if $(ARCH_WIN),.exe,)
+	$(call run_rack_test_bin,build/tests/chimera_rack_save_contract_spec)
+
+.PHONY: test-chimera-rack-save
+test-chimera-rack-save: | build/tests
+	$(CXX) -std=gnu++17 -O2 -Wall -Wextra -Wno-unused-parameter -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_rack_patch_save_spec.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_rack_patch_save_spec$(if $(ARCH_WIN),.exe,)
+	$(call run_rack_test_bin,build/tests/chimera_rack_patch_save_spec)
+
 test-sibyl-tsan: build/tests/sibyl_module_tsan_spec
 	@TSAN_OPTIONS=halt_on_error=1 \
 	LD_LIBRARY_PATH="$(RACK_RUNTIME_DIR):$$LD_LIBRARY_PATH" \
