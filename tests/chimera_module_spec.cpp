@@ -33,6 +33,7 @@ void operator delete[](void* p) noexcept {
 
 Plugin* pluginInstance = nullptr;
 bool isDragonKingDebugEnabled() { return false; }
+std::string leviathanPluginUserRootPath() { return "build/tests/chimera_module_cache"; }
 #include "../src/Chimera.cpp"
 
 static void need(bool ok, const char* what) {
@@ -40,6 +41,31 @@ static void need(bool ok, const char* what) {
 }
 int main() {
     need(modelChimera && modelChimera->slug == "Chimera", "registered model slug");
+    {
+        Chimera future;
+        json_t* state = json_object();
+        json_object_set_new(state, "schemaVersion", json_integer(2));
+        json_object_set_new(state, "inop", json_true());
+        future.dataFromJson(state);
+        need(future.ioError.load() && !future.inopSetting.load(),
+             "unknown future schema refuses authored state without partial migration");
+        json_object_set_new(state, "schemaVersion", json_integer(1));
+        json_object_set_new(state, "dspProfile", json_integer(2));
+        future.ioError.store(false);
+        future.dataFromJson(state);
+        need(future.ioError.load() && !future.inopSetting.load(),
+             "future DSP profile does not silently retune profile 1");
+        json_decref(state);
+        json_t* traversal = json_object();
+        json_t* storage = json_object();
+        json_object_set_new(storage, "manifest", json_string("chimera/../outside.json"));
+        json_object_set_new(traversal, "storage", storage);
+        Chimera rejectedPath;
+        rejectedPath.dataFromJson(traversal);
+        need(rejectedPath.ioError.load() && rejectedPath.committedManifest.empty(),
+             "patch JSON traversal is rejected before module storage lookup");
+        json_decref(traversal);
+    }
     Chimera module;
     need(module.getNumParams() == 12 && module.getNumInputs() == 13 &&
          module.getNumOutputs() == 4 && module.getNumLights() == 9,

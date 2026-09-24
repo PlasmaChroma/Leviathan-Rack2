@@ -5,6 +5,7 @@
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -74,6 +75,20 @@ public:
         if (status != Accepted) payload = std::move(job.payload);
         return status;
     }
+    // Bounded off-audio operation with caller-owned completion state. A task
+    // captures no Module pointer; it publishes completion before its owner
+    // releases any Reel snapshot lease.
+    Status execute(const std::shared_ptr<JobGeneration>& token,
+                   std::uint64_t requestId, std::function<void()> operation) {
+        if (!token || !operation) return Failed;
+        Job job;
+        job.kind = External;
+        job.token = token;
+        job.generation = token->value.load(std::memory_order_acquire);
+        job.requestId = requestId;
+        job.operation = std::move(operation);
+        return submit(std::move(job));
+    }
     bool poll(Result& out) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (results_.empty()) return false;
@@ -127,13 +142,14 @@ public:
     }
 
 private:
-    enum Kind { Prepare, Retire };
+    enum Kind { Prepare, Retire, External };
     struct Job {
         Kind kind;
         std::shared_ptr<JobGeneration> token;
         std::uint64_t generation, requestId;
         std::uint32_t pages, reserve;
         std::unique_ptr<Reel> payload;
+        std::function<void()> operation;
         Job() : kind(Prepare), generation(0), requestId(0), pages(0), reserve(0) {}
         Job(Job&&) = default;
         Job& operator=(Job&&) = default;
@@ -180,6 +196,17 @@ private:
                 if (jobs_.empty()) return;
                 job = std::move(jobs_.front());
                 jobs_.pop_front();
+            }
+            if (job.kind == External) {
+                if (job.generation == job.token->value.load(std::memory_order_acquire) &&
+                    !job.token->closed.load(std::memory_order_acquire)) {
+                    try { job.operation(); }
+                    catch (...) { /* The task publishes its own error state. */ }
+                }
+                std::lock_guard<std::mutex> lock(mutex_);
+                job.token->outstanding.fetch_sub(1, std::memory_order_relaxed);
+                --outstanding_;
+                continue;
             }
             Completion completion;
             completion.token = job.token;

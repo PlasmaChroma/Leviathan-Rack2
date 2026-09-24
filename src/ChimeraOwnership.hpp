@@ -106,6 +106,7 @@ struct AudioCommand {
     std::uint64_t moduleGeneration, requestId, expectedDocumentRevision;
     std::uint32_t kind, handle;
     Reel* prepared; // Registry-owned; producer retains lifetime through audio ack.
+    std::uint64_t expectedAudioRevision; // Only checked for fenced heavy edit adoption.
 };
 struct AudioCompletion {
     std::uint64_t moduleGeneration, requestId;

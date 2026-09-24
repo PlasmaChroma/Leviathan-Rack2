@@ -7,6 +7,7 @@
 
 Plugin* pluginInstance = nullptr;
 bool isDragonKingDebugEnabled() { return false; }
+std::string leviathanPluginUserRootPath() { return "build/tests/chimera_bench_cache"; }
 #include "../src/Chimera.cpp"
 
 // Offline Rack-linked callback benchmark, intentionally outside test-fast.

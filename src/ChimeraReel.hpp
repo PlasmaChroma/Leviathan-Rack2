@@ -56,6 +56,13 @@ public:
     std::uint32_t capacityFrames() const { return capacityFrames_; }
     std::uint32_t validFrames() const { return validFrames_; }
     std::uint16_t markerCount() const { return markerCount_; }
+    std::uint64_t documentRevision() const { return documentRevision_; } // Core owner only.
+    std::uint64_t audioRevision() const { return audioRevision_; } // Core owner only.
+    void restoreRevisions(std::uint64_t document, std::uint64_t audio) {
+        // Loading owns this newly decoded Reel off audio, before adoption.
+        documentRevision_ = document;
+        audioRevision_ = audio;
+    }
     std::uint32_t markerId(std::uint16_t index) const {
         return index < markerCount_ ? markers_[index].id : 0;
     }
@@ -125,6 +132,27 @@ public:
         for (std::uint16_t i = markerCount_; i > at; --i) markers_[i] = markers_[i - 1];
         markers_[at] = Marker{frame, nextMarkerId_++};
         ++markerCount_;
+        ++documentRevision_;
+        return true;
+    }
+
+    // Off-audio import/restore path. Validate the complete table before
+    // replacing the active marker identity and ordering.
+    bool replaceMarkers(const Marker* markers, std::uint16_t count) {
+        if (!validFrames_ || !markers || !count || count > kMaxSplices ||
+            markers[0].frame != 0) return false;
+        std::uint32_t greatestId = 0;
+        for (std::uint16_t i = 0; i < count; ++i) {
+            if (!markers[i].id || markers[i].frame >= validFrames_ ||
+                (i && markers[i].frame <= markers[i - 1].frame)) return false;
+            for (std::uint16_t j = 0; j < i; ++j)
+                if (markers[i].id == markers[j].id) return false;
+            if (markers[i].id > greatestId) greatestId = markers[i].id;
+        }
+        if (greatestId == UINT32_MAX) return false;
+        for (std::uint16_t i = 0; i < count; ++i) markers_[i] = markers[i];
+        markerCount_ = count;
+        nextMarkerId_ = greatestId + 1;
         ++documentRevision_;
         return true;
     }

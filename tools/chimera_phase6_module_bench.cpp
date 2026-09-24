@@ -9,6 +9,7 @@
 
 Plugin* pluginInstance = nullptr;
 bool isDragonKingDebugEnabled() { return false; }
+std::string leviathanPluginUserRootPath() { return "build/tests/chimera_bench_cache"; }
 #include "../src/Chimera.cpp"
 
 // Rack-linked optimized callback benchmark. Includes the prepared host-rate
