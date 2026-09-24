@@ -441,7 +441,7 @@ test-build-rack: $(TEST_BINS_RACK)
 # engine types and reference-vector runner arrive in Phase 1.
 .PHONY: test-chimera-phase0
 test-chimera-phase0: | build/tests
-	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/chimera_phase0_smoke.cpp -o build/tests/chimera_phase0_smoke$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -Isrc tests/chimera_phase0_smoke.cpp -o build/tests/chimera_phase0_smoke$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_phase0_smoke$(if $(ARCH_WIN),.exe,)
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/chimera_phase0_capacity_spec.cpp -o build/tests/chimera_phase0_capacity_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_phase0_capacity_spec$(if $(ARCH_WIN),.exe,)
@@ -456,6 +456,24 @@ test-chimera-rack-contract: | build/tests
 test-chimera-rack-save: | build/tests
 	$(CXX) -std=gnu++17 -O2 -Wall -Wextra -Wno-unused-parameter -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_rack_patch_save_spec.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_rack_patch_save_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_rack_patch_save_spec)
+
+# Phase 1 math and deterministic control core have no Rack dependency.
+.PHONY: test-chimera-phase1 test-chimera-phase1-fast test-chimera-phase1-sanitize
+test-chimera-phase1: | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -pedantic -Isrc tests/chimera_phase1_spec.cpp -o build/tests/chimera_phase1_spec$(if $(ARCH_WIN),.exe,)
+	build/tests/chimera_phase1_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -pedantic -Isrc tests/chimera_profile_probe.cpp -o build/tests/chimera_profile_probe$(if $(ARCH_WIN),.exe,)
+	python3 tools/chimera_phase1_vectors.py build/tests/chimera_profile_probe$(if $(ARCH_WIN),.exe,)
+
+test-chimera-phase1-fast: | build/tests
+	$(CXX) -std=c++11 -O3 $(if $(ARCH_X64),-march=nehalem,) -funsafe-math-optimizations -ffast-math -Wall -Wextra -Isrc tests/chimera_phase1_spec.cpp -o build/tests/chimera_phase1_fast_spec$(if $(ARCH_WIN),.exe,)
+	build/tests/chimera_phase1_fast_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O3 $(if $(ARCH_X64),-march=nehalem,) -funsafe-math-optimizations -ffast-math -Wall -Wextra -Isrc tests/chimera_profile_probe.cpp -o build/tests/chimera_profile_fast_probe$(if $(ARCH_WIN),.exe,)
+	python3 tools/chimera_phase1_vectors.py build/tests/chimera_profile_fast_probe$(if $(ARCH_WIN),.exe,)
+
+test-chimera-phase1-sanitize: | build/tests
+	$(CXX) -std=c++11 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -Isrc tests/chimera_phase1_spec.cpp -o build/tests/chimera_phase1_sanitize_spec$(if $(ARCH_WIN),.exe,)
+	build/tests/chimera_phase1_sanitize_spec$(if $(ARCH_WIN),.exe,)
 
 test-sibyl-tsan: build/tests/sibyl_module_tsan_spec
 	@TSAN_OPTIONS=halt_on_error=1 \
