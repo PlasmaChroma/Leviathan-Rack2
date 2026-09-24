@@ -1067,7 +1067,7 @@ Initial anchor plan, in millimeters, is a fit-check starting point:
 | Gate row y=107 | CLK, PLAY, REC, SPLICE, SHIFT at x=12,36,60,84,108. |
 | Audio/output row y=119 | IN L, IN R, OUT L, OUT R, CV OUT, EOSG at x=12,36,60,84,108,132. |
 
-Control dimensions, labels, ports, screws, and tooltip hitboxes must be measured in the actual theme. Adjust this proposed geometry before freezing assets; do not change numerical IDs. A 28 HP original design is preferred over a cramped imitation that makes the recording state hard to read.
+Control dimensions, labels, ports, screws, and tooltip hitboxes must be measured in the actual theme. Adjust this proposed geometry before freezing assets; do not change numerical IDs. The provisional display is only 17 mm high: fit the layered Reel concept below at normal/minimum/maximum Rack zoom and high DPI before fixing that height. Enlarge or reflow the display and neighboring controls if recording state, markers, and four voices cannot remain legible together. A 28 HP original design is preferred over a cramped imitation that makes the recording state hard to read.
 
 Use the existing split panel/labels and SVG anchor pipeline demonstrated in Phonex, or its current successor in the working tree. [R8] Keep normal labels as text/vector overlays and the title as the optional raster exception. Support the current dark/light theme behavior without maintaining two unrelated coordinate layouts.
 
@@ -1075,9 +1075,24 @@ Use the existing split panel/labels and SVG anchor pipeline demonstrated in Phon
 
 Show the active Reel's stereo envelope overview, current Splice shading, pending Splice outline, primary play position, record position when recording, and up to four small Gene indicators. Main status text shows Reel/Splice number, record/armed state, and an error/busy indication. A simple frame/time readout is more valuable than a costly animated tape simulation.
 
+**Visual direction — the living Reel.** Make the display Chimera's central custom widget: a stable map of recorded material with visible cuts, new material grafting into it, and the actual Gene readers branching across it. Motion must describe engine state, so a stopped transport holds its cursor and a density gap shows no invented active Gene. Give the independent primary transport cursor a distinct shape from the musical reader traces. This is an original Leviathan visual metaphor, not a claim about the physical Morphagene display.
+
+| Layer or view | Visual meaning and required distinction |
+|---|---|
+| Stereo Reel base | Two legible L/R min/max lanes share one time axis. Solid marker cuts delimit Splices; the selected region has a restrained fill and a pending selection has a distinct outline. At 300 markers, cluster or thin labels/ticks without changing marker positions or hiding the selected boundary. |
+| Playback/Gene overlay | A prominent primary transport cursor and up to four finer Gene reader traces use true source positions, direction, age, and envelope to communicate overlap and Morph density. A short fading trace may indicate each active reader's recent motion; its geometry is UI-only and never drives audio. Natural completions may create a brief local accent, while forced aborts do not impersonate an EOSG event. |
+| Recording graft | A separate write head and bounded recent-peak overlay reveal audio written since the cached overview. Current overwrite and Append growth need distinct edge/shading treatments. When the worker publishes a new overview, reconcile the bright overlay into the base without an apparent jump in audio position. Text distinguishes live unsaved audio, a committed checkpoint, armed recording, and a save error; brightness alone must not imply durability. |
+| Reel-bank view | An alternate compact overview shows all 32 slots as empty/occupied/active/queued/missing, with the chosen Reel name or number and relevant error text. It reads slot summaries and cached thumbnails only; switching views must not decode 32 WAVs or prepare 32 mutable stores. |
+
+Prefer one coherent display with modes and overlays over several tiny competing animations. Keep ordinary controls and cable endpoints readable; decorative accents around S.O.S., Morph, or a Splice control may echo the display's state but must not be the sole indicator of recording, pending edits, clipping, or errors. Use text, shape, and contrast as well as color in dark and light themes.
+
 Display click can request a seek/Slide change; dragging a marker performs a preview and submits a metadata edit only on release. A stationary playhead display must not enqueue repeated seek commands. Distinguish edits to a selected region from arbitrary pixel positions outside audio.
 
 The waveform does not draw every sample. Use worker-built stereo min/max bins, default 1,024 bins, with min/max pyramids for zoom. Build from immutable snapshots. Rebuild a stopped/imported Reel once per audio revision. During recording, publish bounded peak summaries for written pages/blocks and overlay them over the latest completed overview; do not snapshot the entire Reel at 30 Hz merely to animate its waveform.
+
+Define the display's data handoff before Phase 4 voice work is frozen. A bounded latest-value telemetry packet carries valid length, selected/pending region identity, primary transport position, up to four actual reader positions/ages/envelopes/directions, writer frame/mode, and record/armed/busy/error flags. Marker tables, bank summaries, and waveform bins change by revision and arrive as separate immutable results, rather than being copied into every UI tick. The display consumes these at the rates in section 22.3; it never reads a mutable Reel page or an audio-owned cursor directly.
+
+Before final panel artwork, review mock states for empty/not-ready, full Reel with dense markers, Current and Append recording, four simultaneous Genes, pending selection, bank view, and missing/save-failed audio. Include `module==nullptr` browser preview and dark/light/high-DPI layouts. These states are the layout fit check for the 28 HP display, not just cosmetic variants.
 
 ### 22.3 Rendering contract
 
