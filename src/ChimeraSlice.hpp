@@ -13,13 +13,19 @@ namespace chimera {
 class Slice {
 public:
     enum RecordState { Idle, Current, Append };
-    struct Output { StereoFrame audio; bool recording; bool full; bool naturalBoundary; };
+    struct Output {
+        StereoFrame audio;
+        float cv;
+        bool recording, full, naturalBoundary, eosg;
+    };
 
     explicit Slice(Reel* reel = 0) : reel_(reel), state_(Idle), play_(true), retrigger_(false),
         inop_(false), currentRegion_(0), writer_(0), appendStart_(0),
         position_(0.0), slide_(0.0), travel_(0.0), boundaryPending_(false),
         wetGain_(1.f), sourceBlend_(0.f),
-        frame_(0), overloaded_(false), conditioning_(true) {}
+        frame_(0), lastBoundaryFrame_(0), eosgRemaining_(0), hadBoundary_(false),
+        energyState_(0.f),
+        overloaded_(false), conditioning_(true) {}
 
     void setReel(Reel* reel) {
         reel_ = reel;
@@ -27,6 +33,8 @@ public:
         currentRegion_ = 0;
         position_ = slide_ = travel_ = 0.0;
         boundaryPending_ = false;
+        eosgRemaining_ = 0;
+        hadBoundary_ = false;
     }
     void setPlay(bool play) {
         if (play && !play_) retrigger_ = true;
@@ -48,6 +56,15 @@ public:
     std::uint32_t writerPosition() const { return writer_; }
     std::uint64_t frame() const { return frame_; }
     bool overloaded() const { return overloaded_; }
+    bool selectRegion(std::uint16_t index) {
+        if (!reel_ || index >= reel_->markerCount()) return false;
+        currentRegion_ = index;
+        const Region selected = reel_->region(index);
+        position_ = selected.begin;
+        slide_ = travel_ = 0.0;
+        boundaryPending_ = false;
+        return true;
+    }
 
     bool startCurrent() {
         if (!reel_ || state_ != Idle) return false;
@@ -112,6 +129,8 @@ public:
             if (position_ < region.begin || position_ >= region.end)
                 position_ = region.begin + slide_;
             wet = read(region, position_);
+            wet.l = guard(wet.l);
+            wet.r = guard(wet.r);
         }
         const float gainTarget = canRead && c.rate != 0.f ? 1.f : 0.f;
         wetGain_ += profile1::clamp(gainTarget - wetGain_, -1.f/48.f, 1.f/48.f);
@@ -151,14 +170,46 @@ public:
                 travel_ = std::fmod(travel_, length); // Retain fractional excess.
             }
         }
+        // A natural completion starts a core-timed pulse. Keep it shorter than
+        // half the expected interval so rapid traversals remain distinguishable.
+        if (naturalBoundary && canRead && c.rate != 0.f) {
+            double interval = length / std::fabs(c.rate);
+            if (hadBoundary_) {
+                const std::uint64_t spacing = frame_ - lastBoundaryFrame_;
+                if (spacing && spacing < interval) interval = double(spacing);
+            }
+            const double boundedWidth = profile1::clamp(interval * 0.45, 1.0, 240.0);
+            eosgRemaining_ = static_cast<std::uint16_t>(boundedWidth);
+            lastBoundaryFrame_ = frame_;
+            hadBoundary_ = true;
+        }
+        if (!canRead || c.rate == 0.f) eosgRemaining_ = 0;
+        const bool eosg = eosgRemaining_ != 0;
+        if (eosg) --eosgRemaining_;
         if (reel_) reel_->maintenanceTick();
         ++frame_;
         const StereoFrame heard = conditioning_ ?
             StereoFrame{outputDc_[0].step(bus.l), outputDc_[1].step(bus.r)} : bus;
-        return Output{heard, state_ != Idle, full, naturalBoundary};
+        const float energy = 0.5f * (heard.l * heard.l + heard.r * heard.r);
+        const float alpha = energy > energyState_ ? 0.00415799815f : 0.00026038276f;
+        energyState_ += alpha * (energy - energyState_);
+        const float cv = 8.f * fastSqrt(energyState_ < 1.f ? energyState_ : 1.f);
+        return Output{heard, cv, state_ != Idle, full, naturalBoundary, eosg};
     }
 
 private:
+    static float fastSqrt(float x) {
+        if (x <= 0.f) return 0.f;
+        std::uint32_t bits;
+        std::memcpy(&bits, &x, sizeof(bits));
+        bits = 0x5f3759dfu - (bits >> 1);
+        float inverse;
+        std::memcpy(&inverse, &bits, sizeof(inverse));
+        const float half = 0.5f * x;
+        inverse *= 1.5f - half * inverse * inverse;
+        inverse *= 1.5f - half * inverse * inverse;
+        return x * inverse;
+    }
     struct DcBlocker {
         float oldInput = 0.f;
         float oldOutput = 0.f;
@@ -198,6 +249,10 @@ private:
     bool boundaryPending_;
     float wetGain_, sourceBlend_;
     std::uint64_t frame_;
+    std::uint64_t lastBoundaryFrame_;
+    std::uint16_t eosgRemaining_;
+    bool hadBoundary_;
+    float energyState_;
     bool overloaded_;
     bool conditioning_;
     DcBlocker inputDc_[2], outputDc_[2];

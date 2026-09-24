@@ -3,9 +3,20 @@
 #include "ChimeraOwnership.hpp"
 #include "ChimeraService.hpp"
 #include <atomic>
+#include <chrono>
 #include <memory>
 
 struct Chimera : Module {
+    struct Gate {
+        bool high = false;
+        bool update(float voltage) {
+            if (high) {
+                if (voltage <= 1.f) high = false;
+            }
+            else if (voltage >= 2.5f) high = true;
+            return high;
+        }
+    };
     enum ParamIds {
         SOS_PARAM, GENE_SIZE_PARAM, VARISPEED_PARAM, MORPH_PARAM,
         SLIDE_PARAM, ORGANIZE_PARAM, GENE_ATT_PARAM, VARISPEED_ATT_PARAM,
@@ -70,29 +81,38 @@ struct Chimera : Module {
     chimera::StoreRegistry stores;
     chimera::ServiceToAudio commands;
     chimera::AudioToService completions;
+    chimera::CoreOwnership ownership;
+    chimera::SnapshotReaders snapshotReaders;
     chimera::Reel* reel = nullptr; // Borrowed from the off-audio registry.
     chimera::Slice slice;
     std::shared_ptr<chimera::IoService> service;
     std::shared_ptr<chimera::JobGeneration> generation{new chimera::JobGeneration};
-    std::uint64_t nextRequestId = 2, pendingRequestId = 0, retirementRequestId = 0;
-    std::uint32_t nextHandle = 2, awaitingHandle = 1, retiringHandle = 0;
+    std::uint64_t nextRequestId = 1, pendingRequestId = 0, retirementRequestId = 0;
+    std::uint32_t nextHandle = 1, awaitingHandle = 0, retiringHandle = 0;
     std::unique_ptr<chimera::Reel> retiringPayload; // Control-side until worker accepts it.
     std::uint32_t audioActiveHandle = 0; // Audio callback only.
-    bool readyForPrepare = false; // Control dispatcher only.
-    std::atomic<bool> ioBusy{false}, ioError{false};
+    std::uint32_t controlActiveHandle = 0; // Control dispatcher only.
+    std::uint64_t snapshotRequestId = 0; // Control dispatcher only.
+    std::uint64_t coreSnapshotRequestId = 0, coreReleaseRequestId = 0; // Core owner only.
+    bool coreSnapshotReadySent = false; // Core owner only.
+    bool snapshotReady = false; // Control dispatcher only.
+    bool snapshotReleasePending = false; // Control dispatcher only.
+    chimera::Reel* snapshotReel = nullptr; // Protected by snapshot lease.
+    std::uint64_t audioHeartbeatNs = 0; // Audio callback only.
+    std::uint32_t heartbeatDivider = 0; // Audio callback only.
+    bool readyForPrepare = true; // Control dispatcher only.
+    std::atomic<bool> ioBusy{false}, ioError{false}, recordNotReady{false};
+    std::atomic<bool> prepareRequested{false};
     std::atomic<int> menuCommand{0};
     std::atomic<bool> inopSetting{false};
     bool lastRec = false;
     bool lastRecJack = false;
+    bool lastClock = false;
+    enum ArmState { NoArm, ArmCurrent, ArmAppend, ArmStop };
+    ArmState recordArm = NoArm;
+    Gate playGate, recGate, clockGate;
 
     Chimera() : slice(nullptr) {
-        std::unique_ptr<chimera::Reel> prepared(new chimera::Reel(chimera::kMaxPages, chimera::kMaxPages));
-        if (!stores.accept(1, prepared, chimera::StoreBudget::Prepared))
-            throw std::bad_alloc();
-        reel = stores.lookup(1);
-        stores.transition(1, chimera::StoreBudget::Active);
-        const chimera::AudioCommand adopt = {1, 1, 0, 1, 1, reel};
-        if (!commands.tryPush(adopt)) throw std::bad_alloc();
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
         configParam(SOS_PARAM, 0.f, 1.f, 0.f, "S.O.S.");
         configParam(GENE_SIZE_PARAM, 0.f, 1.f, 0.f, "Gene Size");
@@ -130,11 +150,11 @@ struct Chimera : Module {
         if (service) service->cancel(generation); // No worker carries this Module pointer.
         else generation->close();
     }
-
     chimera::IoService::Status requestPreparedStore(std::uint32_t pages,
                                                      std::uint32_t reservePages) {
         // Only the non-RT control dispatcher calls this and serviceStep().
-        if (!readyForPrepare || pendingRequestId || awaitingHandle || retiringHandle)
+        if (!readyForPrepare || pendingRequestId || awaitingHandle || retiringHandle ||
+            snapshotRequestId || snapshotReaders.count())
             return chimera::IoService::Busy;
         if (!service) service = chimera::chimeraIoService();
         if (!service) return chimera::IoService::Closed;
@@ -148,12 +168,143 @@ struct Chimera : Module {
         else ioError.store(true, std::memory_order_release);
         return status;
     }
+    bool requestSnapshot() {
+        // One control dispatcher is the SPSC producer. No worker touches the
+        // live page table; a ready cut keeps its store resident until release.
+        if (!controlActiveHandle || pendingRequestId || awaitingHandle || retiringHandle ||
+            snapshotRequestId || snapshotReaders.count()) return false;
+        const std::uint64_t id = nextRequestId++;
+        const chimera::AudioCommand command = {
+            generation->value.load(std::memory_order_acquire), id, 0, 2,
+            controlActiveHandle, nullptr};
+        if (!commands.tryPush(command)) return false;
+        snapshotRequestId = id;
+        snapshotReel = stores.lookup(controlActiveHandle);
+        return true;
+    }
+    bool finishSnapshotReader() {
+        if (!snapshotReady || !snapshotReaders.count()) return false;
+        if (!snapshotReaders.finish()) return true; // Other readers retain it.
+        snapshotReady = false;
+        snapshotReleasePending = true;
+        return true;
+    }
+    void enqueueSnapshotRelease() {
+        if (!snapshotReleasePending) return;
+        const chimera::AudioCommand command = {
+            generation->value.load(std::memory_order_acquire), snapshotRequestId,
+            0, 3, controlActiveHandle, nullptr};
+        if (commands.tryPushCritical(command)) snapshotReleasePending = false;
+    }
+    static std::uint64_t steadyNs() {
+        return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count());
+    }
+    void coreCommands() {
+        chimera::AudioCommand command{};
+        for (int i = 0; i < 4 && commands.tryPop(command); ++i) {
+            if (command.moduleGeneration != generation->value.load(std::memory_order_acquire))
+                continue;
+            if (command.kind == 1 && command.prepared) {
+                const std::uint32_t oldHandle = audioActiveHandle;
+                audioActiveHandle = command.handle;
+                reel = command.prepared;
+                slice.setReel(command.prepared);
+                recordArm = NoArm;
+                const chimera::AudioCompletion ack = {command.moduleGeneration, command.requestId,
+                                                      1, command.handle, oldHandle};
+                completions.tryPushCritical(ack);
+            }
+            else if (command.kind == 2) {
+                const bool accepted = reel && reel->beginSnapshot(slice.frame());
+                if (accepted) {
+                    coreSnapshotRequestId = command.requestId;
+                    coreSnapshotReadySent = false;
+                }
+                const chimera::AudioCompletion ack = {command.moduleGeneration, command.requestId,
+                                                      2, command.handle, accepted ? 1u : 0u};
+                completions.tryPushCritical(ack);
+            }
+            else if (command.kind == 3) {
+                const bool released = reel && reel->beginRelease();
+                if (released) coreReleaseRequestId = command.requestId;
+                const chimera::AudioCompletion ack = {command.moduleGeneration, command.requestId,
+                                                      3, command.handle, released ? 1u : 0u};
+                completions.tryPushCritical(ack);
+            }
+        }
+    }
+    void coreSnapshotProgress() {
+        if (!reel) return;
+        const std::uint64_t generationValue = generation->value.load(std::memory_order_acquire);
+        if (coreSnapshotRequestId && !coreSnapshotReadySent && reel->readyForWorker()) {
+            const chimera::AudioCompletion ready = {generationValue, coreSnapshotRequestId,
+                                                    4, audioActiveHandle, 1};
+            coreSnapshotReadySent = completions.tryPushCritical(ready);
+        }
+        if (coreReleaseRequestId && reel->state() == chimera::Reel::Idle) {
+            const chimera::AudioCompletion done = {generationValue, coreReleaseRequestId,
+                                                   5, audioActiveHandle, 1};
+            if (completions.tryPushCritical(done)) {
+                coreReleaseRequestId = 0;
+                coreSnapshotRequestId = 0;
+                coreSnapshotReadySent = false;
+            }
+        }
+    }
+    void maintenanceStep() {
+        if (!commands.size() && !snapshotRequestId) return;
+        const std::uint64_t now = steadyNs();
+        if (!ownership.tryMaintenance(now)) return;
+        coreCommands();
+        // Metadata-only progress while Rack's audio callbacks are stopped.
+        // The owner token excludes a concurrent audio callback throughout.
+        if (reel) {
+            while (reel->state() == chimera::Reel::Capturing ||
+                   reel->state() == chimera::Reel::Reclaiming)
+                reel->maintenanceTick();
+        }
+        coreSnapshotProgress();
+        ownership.releaseMaintenance(now);
+    }
     void serviceStep() {
+        if (prepareRequested.exchange(false, std::memory_order_acq_rel) &&
+            !ioError.load(std::memory_order_acquire) &&
+            !controlActiveHandle && !pendingRequestId && !awaitingHandle &&
+            requestPreparedStore(chimera::kMaxPages, chimera::kMaxPages) !=
+                chimera::IoService::Accepted)
+            ioError.store(true, std::memory_order_release);
+        enqueueSnapshotRelease();
+        maintenanceStep();
         chimera::AudioCompletion ack{};
         while (completions.tryPop(ack)) {
-            if (ack.kind != 1 || ack.moduleGeneration != generation->value.load(std::memory_order_acquire))
+            if (ack.moduleGeneration != generation->value.load(std::memory_order_acquire))
                 continue;
+            if (ack.kind == 2 && ack.requestId == snapshotRequestId) {
+                if (!ack.status) {
+                    snapshotRequestId = 0;
+                    snapshotReel = nullptr;
+                    ioError.store(true, std::memory_order_release);
+                }
+                continue;
+            }
+            if (ack.kind == 4 && ack.requestId == snapshotRequestId) {
+                snapshotReady = snapshotReaders.begin();
+                if (!snapshotReady) ioError.store(true, std::memory_order_release);
+                continue;
+            }
+            if (ack.kind == 3 && ack.requestId == snapshotRequestId) {
+                if (!ack.status) ioError.store(true, std::memory_order_release);
+                continue;
+            }
+            if (ack.kind == 5 && ack.requestId == snapshotRequestId) {
+                snapshotRequestId = 0;
+                snapshotReel = nullptr;
+                continue;
+            }
+            if (ack.kind != 1) continue;
             if (ack.handle != awaitingHandle) continue;
+            controlActiveHandle = ack.handle;
             stores.transition(ack.handle, chimera::StoreBudget::Active);
             if (ack.status) {
                 stores.transition(ack.status, chimera::StoreBudget::Retired);
@@ -224,18 +375,26 @@ struct Chimera : Module {
     }
 
     void process(const ProcessArgs& args) override {
-        chimera::AudioCommand transfer{};
-        if (commands.tryPop(transfer) && transfer.kind == 1 &&
-            transfer.moduleGeneration == generation->value.load(std::memory_order_acquire) &&
-            transfer.prepared) {
-            const std::uint32_t oldHandle = audioActiveHandle;
-            audioActiveHandle = transfer.handle;
-            reel = transfer.prepared;
-            slice.setReel(transfer.prepared);
-            const chimera::AudioCompletion ack = {transfer.moduleGeneration, transfer.requestId,
-                                                  1, transfer.handle, oldHandle};
-            completions.tryPushCritical(ack);
+        if (!ownership.tryAudio()) {
+            outputs[AUDIO_L_OUTPUT].setVoltage(0.f);
+            outputs[AUDIO_R_OUTPUT].setVoltage(0.f);
+            outputs[CV_OUTPUT].setVoltage(0.f);
+            outputs[EOSG_OUTPUT].setVoltage(0.f);
+            return;
         }
+        coreCommands();
+        processOwned(args);
+        coreSnapshotProgress();
+        if (!audioHeartbeatNs || ++heartbeatDivider == 256) {
+            audioHeartbeatNs = steadyNs();
+            heartbeatDivider = 0;
+        }
+        ownership.releaseAudio(audioHeartbeatNs);
+    }
+    void processOwned(const ProcessArgs& args) {
+        if (!reel && (inputs[AUDIO_L_INPUT].isConnected() ||
+                      inputs[AUDIO_R_INPUT].isConnected()))
+            prepareRequested.store(true, std::memory_order_release);
         const float l = inputs[AUDIO_L_INPUT].isConnected() ?
             chimera::profile1::audio(inputs[AUDIO_L_INPUT].getVoltage()) : 0.f;
         const float r = inputs[AUDIO_R_INPUT].isConnected() ?
@@ -243,22 +402,62 @@ struct Chimera : Module {
         // The host-rate converter arrives in Phase 6. Do not record 48 kHz
         // Reel frames at an incorrect host rate in this development slice.
         if (args.sampleRate != 48000.f) {
+            slice.stopRecord();
+            recordArm = NoArm;
+            menuCommand.exchange(0, std::memory_order_acq_rel);
+            lastRec = params[REC_PARAM].getValue() > 0.5f;
+            lastRecJack = recGate.update(inputs[REC_INPUT].isConnected() ?
+                inputs[REC_INPUT].getVoltage() : 0.f);
+            lastClock = clockGate.update(inputs[CLOCK_INPUT].isConnected() ?
+                inputs[CLOCK_INPUT].getVoltage() : 0.f);
+            if (reel) reel->maintenanceTick();
             outputs[AUDIO_L_OUTPUT].setVoltage(l);
             outputs[AUDIO_R_OUTPUT].setVoltage(r);
+            outputs[CV_OUTPUT].setVoltage(0.f);
+            outputs[EOSG_OUTPUT].setVoltage(0.f);
             lights[ERROR_LIGHT].setBrightness(1.f);
             return;
         }
-        slice.setPlay(!inputs[PLAY_INPUT].isConnected() || inputs[PLAY_INPUT].getVoltage() >= 2.5f);
+        const bool play = !inputs[PLAY_INPUT].isConnected() ||
+            playGate.update(inputs[PLAY_INPUT].getVoltage());
+        if (!inputs[PLAY_INPUT].isConnected()) playGate.high = true;
+        slice.setPlay(play);
         slice.setInop(inopSetting.load(std::memory_order_relaxed));
         const bool rec = params[REC_PARAM].getValue() > 0.5f;
-        const bool recJack = inputs[REC_INPUT].getVoltage() >= 2.5f;
+        const bool recJack = recGate.update(inputs[REC_INPUT].isConnected() ?
+            inputs[REC_INPUT].getVoltage() : 0.f);
+        const bool clockConnected = inputs[CLOCK_INPUT].isConnected();
+        const bool clock = clockGate.update(clockConnected ?
+            inputs[CLOCK_INPUT].getVoltage() : 0.f);
+        const bool clockRise = clock && !lastClock;
+        lastClock = clock;
         const int command = menuCommand.exchange(0, std::memory_order_acq_rel);
-        if (command == 1 || (rec && !lastRec) || (recJack && !lastRecJack)) {
-            if (slice.recordState() != chimera::Slice::Idle) slice.stopRecord();
-            else slice.startCurrent();
+        if (!clockConnected) recordArm = NoArm;
+        if (command == 3) {
+            recordArm = NoArm;
+            slice.stopRecord();
         }
-        else if (command == 2) slice.startAppend();
-        else if (command == 3) slice.stopRecord();
+        else if (command == 1 || command == 2 ||
+                 (rec && !lastRec) || (recJack && !lastRecJack)) {
+            if (!reel) prepareRequested.store(true, std::memory_order_release);
+            const bool append = command == 2;
+            if (clockConnected) {
+                if (recordArm != NoArm) recordArm = NoArm;
+                else if (slice.recordState() == chimera::Slice::Idle && !reel)
+                    recordNotReady.store(true, std::memory_order_release);
+                else recordArm = slice.recordState() == chimera::Slice::Idle ?
+                    (append ? ArmAppend : ArmCurrent) : ArmStop;
+            }
+            else if (slice.recordState() != chimera::Slice::Idle) slice.stopRecord();
+            else beginRecording(append);
+        }
+        // Resolve REC before this same-frame Clock edge. A coincident arm and
+        // edge therefore includes the start frame and excludes the stop frame.
+        if (clockRise && recordArm != NoArm) {
+            if (recordArm == ArmStop) slice.stopRecord();
+            else beginRecording(recordArm == ArmAppend);
+            recordArm = NoArm;
+        }
         lastRec = rec;
         lastRecJack = recJack;
         chimera::CoreInput in{};
@@ -283,13 +482,22 @@ struct Chimera : Module {
         const chimera::Slice::Output out = slice.step(in);
         outputs[AUDIO_L_OUTPUT].setVoltage(clamp(out.audio.l * 5.f, -12.f, 12.f));
         outputs[AUDIO_R_OUTPUT].setVoltage(clamp(out.audio.r * 5.f, -12.f, 12.f));
-        outputs[CV_OUTPUT].setVoltage(0.f);
-        outputs[EOSG_OUTPUT].setVoltage(0.f);
+        outputs[CV_OUTPUT].setVoltage(out.cv);
+        outputs[EOSG_OUTPUT].setVoltage(out.eosg ? 10.f : 0.f);
         lights[REC_LIGHT].setBrightness(out.recording ? 1.f : 0.f);
-        lights[PLAY_LIGHT].setBrightness(inputs[PLAY_INPUT].isConnected() && inputs[PLAY_INPUT].getVoltage() < 2.5f ? 0.f : 1.f);
+        lights[REC_ARMED_LIGHT].setBrightness(recordArm != NoArm ? 1.f : 0.f);
+        lights[CLOCK_LIGHT].setBrightness(clock ? 1.f : 0.f);
+        lights[PLAY_LIGHT].setBrightness(play ? 1.f : 0.f);
         lights[CLIP_LIGHT].setBrightness(slice.overloaded() ? 1.f : 0.f);
         lights[IO_BUSY_LIGHT].setBrightness(ioBusy.load(std::memory_order_acquire) ? 1.f : 0.f);
-        lights[ERROR_LIGHT].setBrightness(out.full || ioError.load(std::memory_order_acquire) ? 1.f : 0.f);
+        lights[ERROR_LIGHT].setBrightness(out.full || ioError.load(std::memory_order_acquire) ||
+            recordNotReady.load(std::memory_order_acquire) ? 1.f : 0.f);
+    }
+    void beginRecording(bool append) {
+        const bool started = append ? slice.startAppend() : slice.startCurrent();
+        if (started) recordNotReady.store(false, std::memory_order_release);
+        else if (!reel) recordNotReady.store(true, std::memory_order_release);
+        else ioError.store(true, std::memory_order_release);
     }
 };
 
@@ -300,11 +508,16 @@ struct ChimeraWidget : ModuleWidget {
         addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(25, 42)), module, Chimera::SOS_PARAM));
         addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(71, 42)), module, Chimera::VARISPEED_PARAM));
         addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(117, 42)), module, Chimera::SLIDE_PARAM));
-        addParam(createParamCentered<LEDButton>(mm2px(Vec(71, 101)), module, Chimera::REC_PARAM));
+        addParam(createParamCentered<LEDButton>(mm2px(Vec(71, 98)), module, Chimera::REC_PARAM));
         addInput(createInputCentered<PJ301MPort>(mm2px(Vec(25, 70)), module, Chimera::AUDIO_L_INPUT));
         addInput(createInputCentered<PJ301MPort>(mm2px(Vec(53, 70)), module, Chimera::AUDIO_R_INPUT));
         addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(89, 70)), module, Chimera::AUDIO_L_OUTPUT));
         addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(117, 70)), module, Chimera::AUDIO_R_OUTPUT));
+        addInput(createInputCentered<PJ301MPort>(mm2px(Vec(20, 98)), module, Chimera::PLAY_INPUT));
+        addInput(createInputCentered<PJ301MPort>(mm2px(Vec(45, 98)), module, Chimera::CLOCK_INPUT));
+        addInput(createInputCentered<PJ301MPort>(mm2px(Vec(97, 98)), module, Chimera::REC_INPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(45, 117)), module, Chimera::CV_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(97, 117)), module, Chimera::EOSG_OUTPUT));
     }
     void step() override {
         if (Chimera* m = dynamic_cast<Chimera*>(module)) m->serviceStep();
@@ -313,6 +526,18 @@ struct ChimeraWidget : ModuleWidget {
     void appendContextMenu(Menu* menu) override {
         Chimera* m = dynamic_cast<Chimera*>(module);
         if (!m) return;
+        const char* memoryStatus = m->controlActiveHandle ? "Reel ready" :
+            (m->ioError.load(std::memory_order_acquire) ? "Reel preparation failed" :
+             (m->pendingRequestId || m->awaitingHandle ?
+                "Preparing memory - press REC again when ready" :
+                "Reel idle - connect audio or press REC"));
+        menu->addChild(createMenuLabel(memoryStatus));
+        menu->addChild(createMenuLabel("Development build: recorded audio is not saved"));
+        if (!m->controlActiveHandle && m->ioError.load(std::memory_order_acquire))
+            menu->addChild(createMenuItem("Retry Reel preparation", "", [m] {
+                m->ioError.store(false, std::memory_order_release);
+                m->prepareRequested.store(true, std::memory_order_release);
+            }));
         menu->addChild(createMenuItem("Start Append", "", [m] { m->menuCommand.store(2, std::memory_order_release); }));
         menu->addChild(createMenuItem("Stop recording", "", [m] { m->menuCommand.store(3, std::memory_order_release); }));
         menu->addChild(createMenuItem("Writer: live input only", "", [m] {

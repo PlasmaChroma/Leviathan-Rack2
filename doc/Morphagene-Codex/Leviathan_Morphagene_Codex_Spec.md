@@ -890,6 +890,8 @@ Use three storage roles:
 
 Use `leviathanPluginUserRootPath()` for plugin-specific caches rather than hardcode `Leviathan` or `Leviathan-Pro`. [R2] Use Rack's module patch storage APIs after module addition, not in a constructor or `process()`. [R9] Imported source paths are optional provenance/relink hints; patch playback defaults to embedded content.
 
+Rack's inspected patch writer packages that storage as a Zstandard-compressed tar archive at level 1; the Phase 0 saved `.vcv` fixture has the Zstandard file signature. Store only each Reel's valid frames in its embedded WAV, and let Rack compress the patch. Keep canonical float32 WAV for interchange and avoid a second patch-only audio codec unless measurements of representative full-bank saves justify its extra format, decoder, and failure paths. The autosave directory and plugin checkpoint cache are ordinary files before archiving; patch compression alone does not reduce their working-disk usage. Measure both archive size and save/load time with silence, tonal, and noisy recordings in Phase 7.
+
 ### 20.2 Patch JSON
 
 Rack parameters remain in Rack's parameter serialization. Additional state uses this shape:

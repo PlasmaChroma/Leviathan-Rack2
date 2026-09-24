@@ -29,6 +29,9 @@ int main() {
         need(stopped.beginSnapshot(1) && stopped.maintenanceTick() == 1,
              "second stopped-host save progresses");
         owner.releaseMaintenance(550000000ull);
+        need(owner.tryMaintenance(550000001ull),
+             "stopped host can immediately continue maintenance after release");
+        owner.releaseMaintenance(550000001ull);
         need(owner.tryAudio(), "audio resumes after maintenance releases token");
         owner.releaseAudio(550000001ull);
     }

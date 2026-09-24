@@ -27,8 +27,9 @@ public:
         int expected = Idle;
         return owner_.compare_exchange_strong(expected, Maintenance, std::memory_order_acquire);
     }
-    void releaseMaintenance(std::uint64_t nowNs) {
-        heartbeatNs_.store(nowNs, std::memory_order_relaxed);
+    void releaseMaintenance(std::uint64_t) {
+        // Only audio progress resets the silence interval. A stopped host may
+        // need successive short maintenance claims to release and recapture.
         owner_.store(Idle, std::memory_order_release);
     }
     Owner owner() const { return static_cast<Owner>(owner_.load(std::memory_order_acquire)); }

@@ -84,6 +84,8 @@ Add worker-side erase/compact/clear, stable marker metadata edits, file-backed u
 
 Do not return from the save hook before referenced audio assets are complete. Do not use absolute import paths or giant base64 JSON fields as the default persistence implementation. Test paused-host saves and full banks before UI polish.
 
+Write valid frames only to the embedded float32 WAVs. Rack already applies level-1 Zstandard compression to the `.vcv` archive, so benchmark representative patch sizes and save/load time before considering a second codec. Track autosave/checkpoint disk usage separately because those working files are not compressed by the patch archive.
+
 **Deliver:** portable patches and bank interchange, explicit error/recovery paths, recording-safe saves.
 
 **Exit gate:** all IO/WAV/STA cases pass. Use disk-failure injection. An internal marker roundtrip is not advertised as physical Morphagene compatibility.
