@@ -202,9 +202,63 @@ int main() {
     need(std::fabs(modeSwitch.primaryPosition() - 100.0) < 1e-5,
          "full primary reaches mode-switch source coordinate");
     fc.gene = static_cast<float>(gene);
-    modeSwitch.step(reel, region, fc, false, false);
+    const chimera::Grains::Result modeTransition =
+        modeSwitch.step(reel, region, fc, false, false);
     need(std::fabs(modeSwitch.primaryPosition() - 101.0) < 1e-5,
          "full-to-finite transition begins at current source coordinate");
+    need(modeTransition.readers == 2 && !modeTransition.completions,
+         "full-to-finite mode change retains an outgoing transition reader");
+    chimera::Grains retriggered;
+    chimera::CoreOutput transitionControl{};
+    transitionControl.gene = static_cast<float>(gene);
+    transitionControl.morph = 1.f/6.f;
+    transitionControl.rate = 1.f;
+    for (int frame = 0; frame < 100; ++frame)
+        retriggered.step(reel, region, transitionControl);
+    const chimera::Grains::Result retriggerStart =
+        retriggered.step(reel, region, transitionControl, true);
+    need(retriggerStart.readers == 2 && !retriggerStart.completions &&
+         std::fabs(retriggerStart.audio.l - 1.f) < 1e-5f,
+         "forced Play retrigger retains the old reader during its 48-frame tail");
+    for (int frame = 1; frame < 48; ++frame) {
+        const chimera::Grains::Result out = retriggered.step(reel, region, transitionControl);
+        need(out.readers == 2 && !out.completions &&
+             std::fabs(out.audio.l - 1.f) < 1e-5f,
+             "forced tail crossfades without artificial completions or gain swell");
+    }
+    need(retriggered.step(reel, region, transitionControl).readers == 1,
+         "forced transition reader retires after 48 frames");
+    for (int frame = 0; frame < 120; ++frame) {
+        const chimera::Grains::Result out = retriggered.step(reel, region, transitionControl, true);
+        need(out.readers <= 8 && !out.completions &&
+             std::isfinite(out.audio.l) && out.audio.l >= 0.f && out.audio.l <= 1.5f,
+             "repeated retriggers use bounded readers and scalar emergency tails");
+    }
+    chimera::Reel twoRegions(40, 40);
+    for (std::uint32_t i = 0; i < 9600; ++i)
+        need(twoRegions.write(i, chimera::StereoFrame{i < 4800 ? 1.f : -1.f,
+                                                       i < 4800 ? 1.f : -1.f}, i),
+             "prepare two-region forced transition fixture");
+    chimera::Grains selected;
+    for (int frame = 0; frame < 100; ++frame)
+        selected.step(twoRegions, chimera::Region{0, 4800}, transitionControl);
+    const chimera::Grains::Result selectionStart = selected.step(twoRegions,
+        chimera::Region{4800, 9600}, transitionControl);
+    need(selectionStart.readers == 2 && selectionStart.audio.l > 0.99f &&
+         !selectionStart.completions,
+         "selection fade retains the outgoing voice's original source region");
+    for (int frame = 1; frame < 48; ++frame)
+        selected.step(twoRegions, chimera::Region{4800, 9600}, transitionControl);
+    need(selected.step(twoRegions, chimera::Region{4800, 9600}, transitionControl).audio.l < -0.99f,
+         "selection fade reaches the new region on frame 49");
+    chimera::Grains immediateSelection;
+    immediateSelection.setImmediateTransitions(true);
+    for (int frame = 0; frame < 100; ++frame)
+        immediateSelection.step(twoRegions, chimera::Region{0, 4800}, transitionControl);
+    const chimera::Grains::Result immediateChange = immediateSelection.step(twoRegions,
+        chimera::Region{4800, 9600}, transitionControl);
+    need(immediateChange.readers == 1 && immediateChange.audio.l < -0.99f,
+         "immediate Organize bypasses the extra selection transition cursor");
     chimera::Reel maximum(chimera::kMaxPages, chimera::kMaxPages);
     const chimera::Region maximumRegion{0, chimera::kMaxReelFrames};
     const double maximumGene = std::log(480.0 / chimera::kMaxReelFrames) /

@@ -26,7 +26,8 @@ public:
         random_(), smooth_(false), lastWet_{0.f, 0.f}, residual_{0.f, 0.f},
         residualAge_(0), residualLength_(0), residualBlend_(0), pendingResidual_(false),
         pendingCompletions_(0), estimateLength_(1), estimateCountdown_(0),
-        full_(false), primaryTravel_(0), startAtCurrent_(false), modeStartPosition_(0) {
+        full_(false), primaryTravel_(0), startAtCurrent_(false), modeStartPosition_(0),
+        activeRegion_{0, 0} {
         for (std::uint32_t i = 0; i <= 2048; ++i)
             edge_[i] = static_cast<float>(0.5 - 0.5 * std::cos(profile1::kPi * i / 2048.0));
         ratios_[0] = 2.0; ratios_[1] = 3.0; ratios_[2] = 4.0;
@@ -58,6 +59,7 @@ public:
         pendingCompletions_ = 0;
         estimateCountdown_ = 0;
         startAtCurrent_ = false;
+        activeRegion_ = Region{0, 0};
         for (int i = 0; i < 4; ++i) {
             slots_[i] = Voice(); tails_[i] = Voice(); tailAge_[i] = 0; scalarAge_[i] = 48;
             tailLast_[i] = scalar_[i] = StereoFrame{0.f, 0.f};
@@ -76,20 +78,14 @@ public:
         pendingCompletions_ = 0;
         const std::uint32_t length = region.end - region.begin;
         if (!length) { reset(); return result; }
-        if (active_ && full_ != fullMode) {
-            const double priorPosition = primaryPosition_, priorSlide = slide_;
-            const StereoFrame priorWet = lastWet_;
-            reset(priorPosition);
-            slide_ = priorSlide;
-            startAtCurrent_ = true;
+        const bool regionChanged = active_ &&
+            (region.begin != activeRegion_.begin || region.end != activeRegion_.end);
+        if (active_ && (full_ != fullMode || regionChanged)) {
+            const double priorPosition = primaryPosition_;
+            forceTransition();
+            startAtCurrent_ = !regionChanged;
             modeStartPosition_ = priorPosition;
-            if (!immediate_) {
-                lastWet_ = priorWet;
-                pendingResidual_ = true;
-                residualAge_ = 0;
-                residualLength_ = 48;
-                residualBlend_ = 1.f;
-            }
+            if (regionChanged) slide_ = c.slide * (length - 1.0);
         }
         full_ = fullMode;
         const double density = profile1::morphDensity(c.morph);
@@ -103,12 +99,10 @@ public:
                     profile1::wrapPosition(slots_[i].position + delta, region);
             for (int i = 0; i < 4; ++i)
                 if (tails_[i].active) tails_[i].position =
-                    profile1::wrapPosition(tails_[i].position + delta, region);
+                    profile1::wrapPosition(tails_[i].position + delta, tails_[i].region);
         }
         if (!active_ || retrigger) {
-            if (retrigger) for (int i = 0; i < 4; ++i) {
-                slots_[i] = Voice(); tails_[i] = Voice(); scalarAge_[i] = 48;
-            }
+            if (retrigger && active_) forceTransition();
             primaryAge_ = 0;
             primaryLength_ = full_ ? length : profile1::finiteGeneFrames(length, c.gene);
             primaryTravel_ = 0;
@@ -116,6 +110,7 @@ public:
             phase_ = 0;
             nextSlot_ = 0;
             active_ = true;
+            activeRegion_ = region;
             launch(region, c, density, false);
             startAtCurrent_ = false;
         }
@@ -160,13 +155,13 @@ public:
             const double tailFraction = tail.active ? (48.0 - tailAge_[i]) / 48.0 : 0.0;
             if (v.active) {
                 const double w = voiceWeight(v) * (1.0 - tailFraction);
-                const StereoFrame source = read(reel, region, v.position, result.invalidSource);
+                const StereoFrame source = read(reel, v.region, v.position, result.invalidSource);
                 sumL += source.l * v.left * w;
                 sumR += source.r * v.right * w;
                 weightSum += w;
                 ++result.readers;
                 const double increment = profile1::clamp(c.rate * v.ratio, -512.0, 512.0);
-                v.position = profile1::wrapPosition(v.position + increment, region);
+                v.position = profile1::wrapPosition(v.position + increment, v.region);
                 v.travel += std::fabs(increment);
                 if (v.full) {
                     if (v.travel >= v.length) { v.active = false; ++pendingCompletions_; }
@@ -175,7 +170,7 @@ public:
             }
             if (tail.active) {
                 const double w = voiceWeight(tail) * tailFraction;
-                const StereoFrame source = read(reel, region, tail.position, result.invalidSource);
+                const StereoFrame source = read(reel, tail.region, tail.position, result.invalidSource);
                 tailLast_[i] = StereoFrame{static_cast<float>(source.l * tail.left * w),
                                            static_cast<float>(source.r * tail.right * w)};
                 tailWeightLast_[i] = w;
@@ -184,7 +179,7 @@ public:
                 weightSum += w;
                 ++result.readers;
                 const double increment = profile1::clamp(c.rate * tail.ratio, -512.0, 512.0);
-                tail.position = profile1::wrapPosition(tail.position + increment, region);
+                tail.position = profile1::wrapPosition(tail.position + increment, tail.region);
                 tail.travel += std::fabs(increment);
                 if (!tail.full) ++tail.age;
                 if ((tail.full ? tail.travel >= tail.length : tail.age >= tail.length) ||
@@ -237,7 +232,31 @@ private:
         std::uint32_t age = 0, length = 0;
         double position = 0, ratio = 1, unity = 0, left = 1, right = 1;
         double travel = 0, wallEstimate = 1;
+        Region region{0, 0};
     };
+    void forceTransition() {
+        for (int i = 0; i < 4; ++i) {
+            if (immediate_) {
+                tails_[i].active = false;
+                scalarAge_[i] = 48;
+            }
+            else {
+                if (tails_[i].active) {
+                    scalar_[i] = tailLast_[i];
+                    scalarWeight_[i] = tailWeightLast_[i];
+                    scalarAge_[i] = 0;
+                }
+                tails_[i] = slots_[i];
+                tailAge_[i] = 0;
+            }
+            slots_[i] = Voice();
+        }
+        active_ = false;
+        phase_ = 0;
+        primaryTravel_ = 0;
+        pendingResidual_ = false;
+        residualLength_ = 0;
+    }
     float edgeGain(double phase) const {
         const double x = profile1::clamp01(phase) * 2048.0;
         const int i = static_cast<int>(x);
@@ -279,7 +298,7 @@ private:
             tails_[slot] = v;
             tailAge_[slot] = 0;
         }
-        else { tails_[slot].active = false; scalarAge_[slot] = 48; }
+        else if (immediate_) { tails_[slot].active = false; scalarAge_[slot] = 48; }
         const profile1::OnsetChoice choice = profile1::chooseOnset(random_, slot, c.morph, ratios_);
         v = Voice();
         v.active = true;
@@ -288,6 +307,7 @@ private:
             profile1::finiteGeneFrames(region.end - region.begin, c.gene);
         v.wallEstimate = full_ ? v.length / profile1::clamp(std::fabs(c.rate), 1e-6, 512.0) : v.length;
         v.position = origin(region, c.rate * choice.ratio);
+        v.region = region;
         v.ratio = choice.ratio;
         v.smooth = smooth_;
         v.unity = profile1::unityBlend(density, smooth_);
@@ -341,6 +361,7 @@ private:
     double primaryTravel_;
     bool startAtCurrent_;
     double modeStartPosition_;
+    Region activeRegion_;
 };
 
 } // namespace chimera

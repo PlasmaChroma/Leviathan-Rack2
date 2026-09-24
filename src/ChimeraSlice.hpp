@@ -74,10 +74,6 @@ public:
         currentRegion_ = index;
         const Region selected = reel_->region(index);
         position_ = selected.begin;
-        grains_.reset(position_);
-        wasReading_ = false;
-        grains_.reset();
-        wasReading_ = false;
         return true;
     }
 

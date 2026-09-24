@@ -68,6 +68,24 @@ int main() {
          !latched.selectRegion(2),
          "Current writer keeps its latched destination when playback selection changes");
     latched.stopRecord();
+    chimera::Reel transitionReel(40, 40);
+    for (std::uint32_t i = 0; i < 9600; ++i)
+        need(transitionReel.write(i, chimera::StereoFrame{i < 4800 ? 1.f : -1.f,
+                                                           i < 4800 ? 1.f : -1.f}, i),
+             "prepare slice selection transition fixture");
+    need(transitionReel.addMarker(4800), "split slice transition fixture");
+    chimera::Slice selectedSlice(&transitionReel);
+    selectedSlice.setConditioning(false);
+    for (int frame = 0; frame < 200; ++frame)
+        selectedSlice.step(input(0.f, 0.f, 1.f));
+    need(selectedSlice.selectRegion(1), "select second audible region");
+    const chimera::Slice::Output selectedFirst = selectedSlice.step(input(0.f, 0.f, 1.f));
+    need(selectedFirst.audio.l > 0.9f && !selectedFirst.eosg,
+         "Slice selection preserves old-region audio on the first transition frame");
+    for (int frame = 1; frame < 48; ++frame)
+        selectedSlice.step(input(0.f, 0.f, 1.f));
+    need(selectedSlice.step(input(0.f, 0.f, 1.f)).audio.l < -0.9f,
+         "Slice selection reaches the new region after the bounded reader tail");
     const std::uint16_t markersBeforeEmptyAppend = reel.markerCount();
     need(slice.startAppend(), "empty Append may be armed");
     slice.stopRecord();
