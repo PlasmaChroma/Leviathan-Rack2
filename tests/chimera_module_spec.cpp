@@ -171,6 +171,66 @@ int main() {
              "Gene Shift Clock commits queued Splice once without fabricated completion");
     }
     {
+        chimera::Reel menuReel(4, 4);
+        for (std::uint32_t frame = 0; frame < 960; ++frame)
+            need(menuReel.write(frame, chimera::StereoFrame{0.f, 0.f}, frame),
+                 "prepare mouse-complete selection commands");
+        need(menuReel.addMarker(480), "prepare second menu-selectable Splice");
+        Chimera menuSelection;
+        menuSelection.reel = &menuReel;
+        menuSelection.slice.setReel(&menuReel);
+        menuSelection.params[Chimera::GENE_SIZE_PARAM].setValue(0.f);
+        for (int frame = 0; frame < 100; ++frame) menuSelection.process(args);
+        menuSelection.selectionMenuCommands.fetch_or(1u);
+        menuSelection.process(args);
+        need(menuSelection.slice.requestedRegion() == 1 &&
+             menuSelection.slice.currentRegion() == 0,
+             "Next Splice menu command queues one Shift event");
+        const std::uint32_t menuMarkerAddress = static_cast<std::uint32_t>(
+            std::floor(menuSelection.slice.primaryPosition()));
+        menuSelection.selectionMenuCommands.fetch_or(2u);
+        menuSelection.process(args);
+        need(menuReel.markerCount() == 3 &&
+             menuReel.region(1).begin == menuMarkerAddress &&
+             menuSelection.slice.requestedRegion() == 2,
+             "Add Marker menu command captures playback and preserves pending Splice ID");
+        const std::uint16_t beforeRateGuard = menuSelection.slice.requestedRegion();
+        menuSelection.selectionMenuCommands.fetch_or(1u);
+        Module::ProcessArgs wrongRate = args;
+        wrongRate.sampleRate = 96000.f;
+        wrongRate.sampleTime = 1.f/96000.f;
+        menuSelection.process(wrongRate);
+        menuSelection.process(args);
+        need(menuSelection.slice.requestedRegion() == beforeRateGuard,
+             "unsupported-rate guard discards menu selection commands");
+    }
+    {
+        chimera::Reel immediateReel(4, 4);
+        for (std::uint32_t frame = 0; frame < 960; ++frame)
+            need(immediateReel.write(frame, chimera::StereoFrame{
+                     frame < 480 ? 1.f : -1.f, frame < 480 ? 1.f : -1.f}, frame),
+                 "prepare queued omod transition Reel");
+        need(immediateReel.addMarker(480), "prepare omod target Splice");
+        Chimera immediateOption;
+        immediateOption.reel = &immediateReel;
+        immediateOption.slice.setReel(&immediateReel);
+        immediateOption.slice.setConditioning(false);
+        immediateOption.params[Chimera::SOS_PARAM].setValue(1.f);
+        for (int frame = 0; frame < 100; ++frame) immediateOption.process(args);
+        immediateOption.params[Chimera::ORGANIZE_PARAM].setValue(1.f);
+        immediateOption.process(args);
+        need(immediateOption.slice.currentRegion() == 0 &&
+             immediateOption.slice.requestedRegion() == 1,
+             "default omod leaves a mid-cycle Splice request pending");
+        const std::uint64_t beforeImmediate = immediateOption.slice.onsetCount();
+        immediateOption.omodSetting.store(true);
+        immediateOption.process(args);
+        need(immediateOption.slice.currentRegion() == 1 &&
+             immediateOption.slice.onsetCount() == beforeImmediate + 1 &&
+             immediateOption.outputs[Chimera::AUDIO_L_OUTPUT].getVoltage() < -4.5f,
+             "enabling omod commits queued Splice on the next frame without residual fade");
+    }
+    {
         chimera::Reel regions(4, 4);
         for (std::uint32_t frame = 0; frame < 960; ++frame)
             need(regions.write(frame, chimera::StereoFrame{0.f, 0.f}, frame),
@@ -348,6 +408,154 @@ int main() {
         need(unprepared.recordArm == Chimera::NoArm &&
              unprepared.recordNotReady.load() && unprepared.prepareRequested.load(),
              "early clock-connected REC requests memory but never arms a delayed start");
+    }
+    {
+        chimera::Reel quantizedReel(4, 4);
+        for (std::uint32_t frame = 0; frame < 480; ++frame)
+            need(quantizedReel.write(frame, chimera::StereoFrame{0.f, 0.f}, frame),
+                 "prepare quantized REC cancellation Reel");
+        Chimera quantized;
+        quantized.reel = &quantizedReel;
+        quantized.slice.setReel(&quantizedReel);
+        quantized.inputs[Chimera::CLOCK_INPUT].channels = 1;
+        quantized.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
+        quantized.process(args);
+        quantized.menuCommand.store(1);
+        quantized.process(args);
+        need(quantized.recordArm == Chimera::ArmCurrent &&
+             quantized.slice.recordState() == chimera::Slice::Idle,
+             "clock-connected REC arms a Current start");
+        quantized.menuCommand.store(1);
+        quantized.process(args);
+        quantized.inputs[Chimera::CLOCK_INPUT].setVoltage(2.5f);
+        quantized.process(args);
+        need(quantized.recordArm == Chimera::NoArm &&
+             quantized.slice.recordState() == chimera::Slice::Idle,
+             "second REC cancels ArmedStart and the next Clock does not record");
+        quantized.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
+        quantized.process(args);
+        quantized.menuCommand.store(1);
+        quantized.process(args);
+        quantized.inputs[Chimera::CLOCK_INPUT].setVoltage(2.5f);
+        quantized.process(args);
+        need(quantized.slice.recordState() == chimera::Slice::Current &&
+             quantized.slice.writerPosition() == 1,
+             "new armed start includes its Clock frame");
+        quantized.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
+        quantized.process(args);
+        quantized.menuCommand.store(1);
+        quantized.process(args);
+        need(quantized.recordArm == Chimera::ArmStop,
+             "active Current recording arms a quantized stop");
+        quantized.menuCommand.store(1);
+        quantized.process(args);
+        const std::uint32_t beforeCanceledStop = quantized.slice.writerPosition();
+        quantized.inputs[Chimera::CLOCK_INPUT].setVoltage(2.5f);
+        quantized.process(args);
+        need(quantized.recordArm == Chimera::NoArm &&
+             quantized.slice.recordState() == chimera::Slice::Current &&
+             quantized.slice.writerPosition() == beforeCanceledStop + 1,
+             "second REC cancels ArmedStop and Clock recording continues");
+        quantized.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
+        quantized.process(args);
+        const std::uint32_t beforeCoincidentStop = quantized.slice.writerPosition();
+        quantized.menuCommand.store(1);
+        quantized.inputs[Chimera::CLOCK_INPUT].setVoltage(2.5f);
+        quantized.process(args);
+        need(quantized.slice.recordState() == chimera::Slice::Idle &&
+             quantized.slice.writerPosition() == beforeCoincidentStop,
+             "coincident REC stop request and Clock exclude the edge frame");
+        quantized.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
+        quantized.process(args);
+        quantized.menuCommand.store(1);
+        quantized.process(args);
+        need(quantized.recordArm == Chimera::ArmCurrent,
+             "start may be armed after a completed quantized stop");
+        quantized.inputs[Chimera::CLOCK_INPUT].channels = 0;
+        quantized.process(args);
+        need(quantized.recordArm == Chimera::NoArm &&
+             quantized.slice.recordState() == chimera::Slice::Idle &&
+             !quantized.clockEstimator.haveEdge(),
+             "Clock disconnect cancels ArmedStart without a fabricated edge");
+        quantized.inputs[Chimera::CLOCK_INPUT].channels = 1;
+        quantized.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
+        quantized.process(args);
+        quantized.menuCommand.store(1);
+        quantized.process(args);
+        quantized.inputs[Chimera::CLOCK_INPUT].setVoltage(2.5f);
+        quantized.process(args);
+        quantized.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
+        quantized.process(args);
+        quantized.menuCommand.store(1);
+        quantized.process(args);
+        need(quantized.recordArm == Chimera::ArmStop &&
+             quantized.slice.recordState() == chimera::Slice::Current,
+             "running recorder arms a stop before Clock disconnect");
+        const std::uint32_t beforeDisconnect = quantized.slice.writerPosition();
+        quantized.inputs[Chimera::CLOCK_INPUT].channels = 0;
+        quantized.process(args);
+        need(quantized.recordArm == Chimera::NoArm &&
+             quantized.slice.recordState() == chimera::Slice::Current &&
+             quantized.slice.writerPosition() == beforeDisconnect + 1 &&
+             !quantized.clockEstimator.haveEdge(),
+             "Clock disconnect cancels ArmedStop but leaves active recording running");
+    }
+    {
+        chimera::Reel pairedGateReel(4, 4);
+        for (std::uint32_t frame = 0; frame < 1000; ++frame)
+            need(pairedGateReel.write(frame, chimera::StereoFrame{0.f, 0.f}, frame),
+                 "prepare simultaneous REC and SPLICE gate Reel");
+        Chimera pairedGates;
+        pairedGates.reel = &pairedGateReel;
+        pairedGates.slice.setReel(&pairedGateReel);
+        pairedGates.rsopSetting.store(1);
+        pairedGates.inputs[Chimera::REC_INPUT].channels = 1;
+        pairedGates.inputs[Chimera::REC_INPUT].setVoltage(0.f);
+        pairedGates.inputs[Chimera::SPLICE_INPUT].channels = 1;
+        pairedGates.inputs[Chimera::SPLICE_INPUT].setVoltage(0.f);
+        pairedGates.process(args);
+        pairedGates.inputs[Chimera::REC_INPUT].setVoltage(2.5f);
+        pairedGates.inputs[Chimera::SPLICE_INPUT].setVoltage(2.5f);
+        pairedGates.process(args);
+        need(pairedGates.slice.recordState() == chimera::Slice::Append &&
+             pairedGateReel.validFrames() == 1001 &&
+             pairedGateReel.markerCount() == 1 &&
+             pairedGates.slice.writerPosition() == 1001,
+             "same-frame REC and SPLICE gates append while deferring the start marker");
+        pairedGates.menuCommand.store(3);
+        pairedGates.process(args);
+        need(pairedGateReel.markerCount() == 2 &&
+             pairedGateReel.validFrames() == 1001 &&
+             pairedGateReel.region(1).begin == 1000,
+             "Append finalization coalesces the simultaneous start marker");
+        chimera::Reel stopMarkerReel(4, 4);
+        for (std::uint32_t frame = 0; frame < 1000; ++frame)
+            need(stopMarkerReel.write(frame, chimera::StereoFrame{0.f, 0.f}, frame),
+                 "prepare observable simultaneous stop and marker Reel");
+        Chimera stopAndMark;
+        stopAndMark.reel = &stopMarkerReel;
+        stopAndMark.slice.setReel(&stopMarkerReel);
+        stopAndMark.params[Chimera::VARISPEED_PARAM].setValue(0.5f);
+        stopAndMark.params[Chimera::SLIDE_PARAM].setValue(0.5f);
+        stopAndMark.inputs[Chimera::REC_INPUT].channels = 1;
+        stopAndMark.inputs[Chimera::REC_INPUT].setVoltage(0.f);
+        stopAndMark.inputs[Chimera::SPLICE_INPUT].channels = 1;
+        stopAndMark.inputs[Chimera::SPLICE_INPUT].setVoltage(0.f);
+        for (int frame = 0; frame < 30; ++frame) stopAndMark.process(args);
+        stopAndMark.inputs[Chimera::REC_INPUT].setVoltage(2.5f);
+        stopAndMark.process(args);
+        need(stopAndMark.slice.recordState() == chimera::Slice::Current,
+             "REC gate starts Current before paired stop fixture");
+        stopAndMark.inputs[Chimera::REC_INPUT].setVoltage(0.f);
+        stopAndMark.process(args);
+        stopAndMark.inputs[Chimera::REC_INPUT].setVoltage(2.5f);
+        stopAndMark.inputs[Chimera::SPLICE_INPUT].setVoltage(2.5f);
+        stopAndMark.process(args);
+        need(stopAndMark.slice.recordState() == chimera::Slice::Idle &&
+             stopMarkerReel.markerCount() == 2 &&
+             stopMarkerReel.region(1).begin > 450 &&
+             stopMarkerReel.region(1).begin < 550,
+             "same-frame REC stop and SPLICE rise remain independent gate events");
     }
     module.process(args);
     module.serviceStep();
@@ -714,6 +922,20 @@ int main() {
         optionModule.process(args);
         need(optionModule.slice.recordState() == chimera::Slice::Append,
              "rsop=0 assigns alternate REC start to Append");
+        optionModule.menuCommand.store(3);
+        optionModule.process(args);
+        optionModule.rsopSetting.store(1);
+        optionModule.menuCommand.store(1);
+        optionModule.process(args);
+        need(optionModule.slice.recordState() == chimera::Slice::Current,
+             "explicit Record Current command ignores rsop assignment");
+        optionModule.menuCommand.store(3);
+        optionModule.process(args);
+        optionModule.rsopSetting.store(0);
+        optionModule.menuCommand.store(2);
+        optionModule.process(args);
+        need(optionModule.slice.recordState() == chimera::Slice::Append,
+             "explicit Record Append command ignores rsop assignment");
         json_t* options = optionModule.dataToJson();
         need(json_integer_value(json_object_get(options, "rsop")) == 0 &&
              json_integer_value(json_object_get(options, "inputGain")) == 1,

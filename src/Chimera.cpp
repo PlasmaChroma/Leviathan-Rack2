@@ -4,6 +4,7 @@
 #include "ChimeraOptionsText.hpp"
 #include "ChimeraOwnership.hpp"
 #include "ChimeraService.hpp"
+#include "PanelSvgUtils.hpp"
 #include "visual/ApertureLight.hpp"
 #include <ui/TextField.hpp>
 #include <osdialog.h>
@@ -114,6 +115,7 @@ struct Chimera : Module {
     std::atomic<bool> ioBusy{false}, ioError{false}, recordNotReady{false};
     std::atomic<bool> prepareRequested{false};
     std::atomic<int> menuCommand{0};
+    std::atomic<unsigned> selectionMenuCommands{0}; // 1 next Splice, 2 add marker.
     std::atomic<bool> inopSetting{false};
     std::atomic<bool> gnsmSetting{false}, cvopSetting{false}, omodSetting{false}, pminSetting{false};
     std::atomic<int> pmodSetting{0}, ckopSetting{0}, vsopSetting{0};
@@ -573,6 +575,7 @@ struct Chimera : Module {
             slice.stopRecord();
             recordArm = NoArm;
             menuCommand.exchange(0, std::memory_order_acq_rel);
+            selectionMenuCommands.exchange(0, std::memory_order_acq_rel);
             lastRecButton = params[REC_PARAM].getValue() > 0.5f;
             lastSpliceButton = params[SPLICE_PARAM].getValue() > 0.5f;
             lastShiftButton = params[SHIFT_PARAM].getValue() > 0.5f;
@@ -647,10 +650,12 @@ struct Chimera : Module {
         const bool spliceButton = params[SPLICE_PARAM].getValue() > 0.5f;
         const bool rec = params[REC_PARAM].getValue() > 0.5f;
         slice.setInputGain(inputGainSetting.load(std::memory_order_relaxed));
+        const unsigned selectionCommands =
+            selectionMenuCommands.exchange(0, std::memory_order_acq_rel);
         const bool shiftJack = shiftGate.update(inputs[SHIFT_INPUT].isConnected() ?
             inputs[SHIFT_INPUT].getVoltage() : 0.f);
         if ((!shiftButton && lastShiftButton && !ignoreShiftRelease) ||
-            (shiftJack && !lastShiftJack))
+            (shiftJack && !lastShiftJack) || (selectionCommands & 1u))
             slice.requestShift();
         if (!shiftButton) ignoreShiftRelease = false;
         lastShiftButton = shiftButton;
@@ -658,7 +663,7 @@ struct Chimera : Module {
         const bool spliceJack = spliceGate.update(inputs[SPLICE_INPUT].isConnected() ?
             inputs[SPLICE_INPUT].getVoltage() : 0.f);
         if ((!spliceButton && lastSpliceButton && !ignoreSpliceRelease) ||
-            (spliceJack && !lastSpliceJack))
+            (spliceJack && !lastSpliceJack) || (selectionCommands & 2u))
             slice.requestSplice();
         if (!spliceButton) ignoreSpliceRelease = false;
         lastSpliceButton = spliceButton;
@@ -789,31 +794,58 @@ struct ChimeraRatioField : ui::TextField {
 struct ChimeraWidget : ModuleWidget {
     ChimeraWidget(Chimera* module) {
         setModule(module);
-        setPanel(createPanel(asset::plugin(pluginInstance, "res/Chimera.svg")));
-        addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(15, 42)), module, Chimera::SOS_PARAM));
-        addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(42, 42)), module, Chimera::GENE_SIZE_PARAM));
-        addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(71, 42)), module, Chimera::VARISPEED_PARAM));
-        addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(100, 42)), module, Chimera::MORPH_PARAM));
-        addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(127, 42)), module, Chimera::SLIDE_PARAM));
-        addParam(createParamCentered<LEDButton>(mm2px(Vec(71, 98)), module, Chimera::REC_PARAM));
-        addInput(createInputCentered<PJ301MPort>(mm2px(Vec(25, 70)), module, Chimera::AUDIO_L_INPUT));
-        addInput(createInputCentered<PJ301MPort>(mm2px(Vec(53, 70)), module, Chimera::AUDIO_R_INPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(89, 70)), module, Chimera::AUDIO_L_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(117, 70)), module, Chimera::AUDIO_R_OUTPUT));
-        addInput(createInputCentered<PJ301MPort>(mm2px(Vec(20, 98)), module, Chimera::PLAY_INPUT));
-        addInput(createInputCentered<PJ301MPort>(mm2px(Vec(45, 98)), module, Chimera::CLOCK_INPUT));
-        addInput(createInputCentered<PJ301MPort>(mm2px(Vec(97, 98)), module, Chimera::REC_INPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(45, 117)), module, Chimera::CV_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(97, 117)), module, Chimera::EOSG_OUTPUT));
-        addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(Vec(10, 26)), module, Chimera::REC_LIGHT));
-        addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(Vec(25, 26)), module, Chimera::REC_ARMED_LIGHT));
-        addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(Vec(40, 26)), module, Chimera::PLAY_LIGHT));
-        addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(Vec(56, 26)), module, Chimera::PENDING_LIGHT));
-        addChild(createLightCentered<SmallAperture<BlueApertureLight>>(mm2px(Vec(72, 26)), module, Chimera::CLOCK_LIGHT));
-        addChild(createLightCentered<SmallAperture<VioletApertureLight>>(mm2px(Vec(88, 26)), module, Chimera::PM_LIGHT));
-        addChild(createLightCentered<SmallAperture<WhiteApertureLight>>(mm2px(Vec(103, 26)), module, Chimera::IO_BUSY_LIGHT));
-        addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(Vec(118, 26)), module, Chimera::CLIP_LIGHT));
-        addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(Vec(133, 26)), module, Chimera::ERROR_LIGHT));
+        const std::string panelPath = asset::plugin(pluginInstance, "res/Chimera.panel.svg");
+        setPanel(createPanel(panelPath));
+        auto* labelCache = new widget::FramebufferWidget;
+        labelCache->box.size = box.size;
+        labelCache->oversample = 2.f;
+        auto* labels = new widget::SvgWidget;
+        labels->setSvg(window::Svg::load(asset::plugin(pluginInstance, "res/Chimera.labels.svg")));
+        labels->box.size = box.size;
+        labelCache->addChild(labels);
+        addChild(labelCache);
+        auto point = [&](const char* id, Vec fallbackMm) {
+            Vec anchor;
+            return panel_svg::loadPointFromSvgMm(panelPath, id, &anchor) ? anchor : fallbackMm;
+        };
+        addParam(createParamCentered<RoundBlackKnob>(mm2px(point("SOS_PARAM", Vec(20, 44))), module, Chimera::SOS_PARAM));
+        addParam(createParamCentered<RoundBlackKnob>(mm2px(point("GENE_SIZE_PARAM", Vec(71, 44))), module, Chimera::GENE_SIZE_PARAM));
+        addParam(createParamCentered<RoundBlackKnob>(mm2px(point("VARISPEED_PARAM", Vec(122, 44))), module, Chimera::VARISPEED_PARAM));
+        addParam(createParamCentered<RoundBlackKnob>(mm2px(point("MORPH_PARAM", Vec(20, 70))), module, Chimera::MORPH_PARAM));
+        addParam(createParamCentered<RoundBlackKnob>(mm2px(point("SLIDE_PARAM", Vec(71, 70))), module, Chimera::SLIDE_PARAM));
+        addParam(createParamCentered<RoundBlackKnob>(mm2px(point("ORGANIZE_PARAM", Vec(122, 70))), module, Chimera::ORGANIZE_PARAM));
+        addParam(createParamCentered<Trimpot>(mm2px(point("GENE_ATT_PARAM", Vec(49, 54))), module, Chimera::GENE_ATT_PARAM));
+        addParam(createParamCentered<Trimpot>(mm2px(point("VARISPEED_ATT_PARAM", Vec(99, 54))), module, Chimera::VARISPEED_ATT_PARAM));
+        addParam(createParamCentered<Trimpot>(mm2px(point("SLIDE_ATT_PARAM", Vec(96, 79))), module, Chimera::SLIDE_ATT_PARAM));
+        addParam(createParamCentered<LEDButton>(mm2px(point("REC_PARAM", Vec(14, 83))), module, Chimera::REC_PARAM));
+        addParam(createParamCentered<LEDButton>(mm2px(point("SPLICE_PARAM", Vec(36, 83))), module, Chimera::SPLICE_PARAM));
+        addParam(createParamCentered<LEDButton>(mm2px(point("SHIFT_PARAM", Vec(58, 83))), module, Chimera::SHIFT_PARAM));
+        addInput(createInputCentered<PJ301MPort>(mm2px(point("SOS_CV_INPUT", Vec(12, 99))), module, Chimera::SOS_CV_INPUT));
+        addInput(createInputCentered<PJ301MPort>(mm2px(point("GENE_SIZE_CV_INPUT", Vec(36, 99))), module, Chimera::GENE_SIZE_CV_INPUT));
+        addInput(createInputCentered<PJ301MPort>(mm2px(point("VARISPEED_CV_INPUT", Vec(60, 99))), module, Chimera::VARISPEED_CV_INPUT));
+        addInput(createInputCentered<PJ301MPort>(mm2px(point("MORPH_CV_INPUT", Vec(84, 99))), module, Chimera::MORPH_CV_INPUT));
+        addInput(createInputCentered<PJ301MPort>(mm2px(point("SLIDE_CV_INPUT", Vec(108, 99))), module, Chimera::SLIDE_CV_INPUT));
+        addInput(createInputCentered<PJ301MPort>(mm2px(point("ORGANIZE_CV_INPUT", Vec(132, 99))), module, Chimera::ORGANIZE_CV_INPUT));
+        addInput(createInputCentered<PJ301MPort>(mm2px(point("CLOCK_INPUT", Vec(20, 112))), module, Chimera::CLOCK_INPUT));
+        addInput(createInputCentered<PJ301MPort>(mm2px(point("PLAY_INPUT", Vec(45, 112))), module, Chimera::PLAY_INPUT));
+        addInput(createInputCentered<PJ301MPort>(mm2px(point("REC_INPUT", Vec(70, 112))), module, Chimera::REC_INPUT));
+        addInput(createInputCentered<PJ301MPort>(mm2px(point("SPLICE_INPUT", Vec(95, 112))), module, Chimera::SPLICE_INPUT));
+        addInput(createInputCentered<PJ301MPort>(mm2px(point("SHIFT_INPUT", Vec(120, 112))), module, Chimera::SHIFT_INPUT));
+        addInput(createInputCentered<PJ301MPort>(mm2px(point("AUDIO_L_INPUT", Vec(12, 123))), module, Chimera::AUDIO_L_INPUT));
+        addInput(createInputCentered<PJ301MPort>(mm2px(point("AUDIO_R_INPUT", Vec(36, 123))), module, Chimera::AUDIO_R_INPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(point("AUDIO_L_OUTPUT", Vec(60, 123))), module, Chimera::AUDIO_L_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(point("AUDIO_R_OUTPUT", Vec(84, 123))), module, Chimera::AUDIO_R_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(point("CV_OUTPUT", Vec(108, 123))), module, Chimera::CV_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(point("EOSG_OUTPUT", Vec(132, 123))), module, Chimera::EOSG_OUTPUT));
+        addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(point("REC_LIGHT", Vec(10, 26))), module, Chimera::REC_LIGHT));
+        addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(point("REC_ARMED_LIGHT", Vec(25, 26))), module, Chimera::REC_ARMED_LIGHT));
+        addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(point("PLAY_LIGHT", Vec(40, 26))), module, Chimera::PLAY_LIGHT));
+        addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(point("PENDING_LIGHT", Vec(56, 26))), module, Chimera::PENDING_LIGHT));
+        addChild(createLightCentered<SmallAperture<BlueApertureLight>>(mm2px(point("CLOCK_LIGHT", Vec(72, 26))), module, Chimera::CLOCK_LIGHT));
+        addChild(createLightCentered<SmallAperture<VioletApertureLight>>(mm2px(point("PM_LIGHT", Vec(88, 26))), module, Chimera::PM_LIGHT));
+        addChild(createLightCentered<SmallAperture<WhiteApertureLight>>(mm2px(point("IO_BUSY_LIGHT", Vec(103, 26))), module, Chimera::IO_BUSY_LIGHT));
+        addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(point("CLIP_LIGHT", Vec(118, 26))), module, Chimera::CLIP_LIGHT));
+        addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(point("ERROR_LIGHT", Vec(133, 26))), module, Chimera::ERROR_LIGHT));
     }
     void step() override {
         if (Chimera* m = dynamic_cast<Chimera*>(module)) m->serviceStep();
@@ -834,11 +866,24 @@ struct ChimeraWidget : ModuleWidget {
                 m->ioError.store(false, std::memory_order_release);
                 m->prepareRequested.store(true, std::memory_order_release);
             }));
-        menu->addChild(createMenuItem("Start Append", "", [m] { m->menuCommand.store(2, std::memory_order_release); }));
-        menu->addChild(createMenuItem("Alternate REC command", "", [m] {
+        menu->addChild(createMenuItem("Record Current (stop/cancel if active)", "", [m] {
+            m->menuCommand.store(1, std::memory_order_release);
+        }));
+        menu->addChild(createMenuItem("Record Append (stop/cancel if active)", "", [m] {
+            m->menuCommand.store(2, std::memory_order_release);
+        }));
+        menu->addChild(createMenuItem("Alternate REC (per assignment; stop/cancel if active)", "", [m] {
             m->menuCommand.store(4, std::memory_order_release);
         }));
-        menu->addChild(createMenuItem("Stop recording", "", [m] { m->menuCommand.store(3, std::memory_order_release); }));
+        menu->addChild(createMenuItem("Stop recording / cancel arm", "", [m] {
+            m->menuCommand.store(3, std::memory_order_release);
+        }));
+        menu->addChild(createMenuItem("Next Splice", "", [m] {
+            m->selectionMenuCommands.fetch_or(1u, std::memory_order_release);
+        }));
+        menu->addChild(createMenuItem("Add Marker", "", [m] {
+            m->selectionMenuCommands.fetch_or(2u, std::memory_order_release);
+        }));
         menu->addChild(createSubmenuItem("REC assignment (rsop)", "", [m](Menu* submenu) {
             const char* labels[2] = {"REC: Current / alternate: Append", "REC: Append / alternate: Current"};
             for (int mode = 0; mode < 2; ++mode)

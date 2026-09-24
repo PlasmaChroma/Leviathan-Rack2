@@ -1,20 +1,82 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="142.24mm" height="128.5mm" viewBox="0 0 142.24 128.5">
-  <rect width="142.24" height="128.5" fill="#17202b"/>
-  <rect x="0" y="0" width="142.24" height="3" fill="#303d4b"/>
-  <rect x="0" y="125.5" width="142.24" height="3" fill="#303d4b"/>
-  <text x="71.12" y="13" text-anchor="middle" fill="#e8dbba" font-family="sans-serif" font-size="8" font-weight="bold">CHIMERA</text>
-  <text x="71.12" y="19" text-anchor="middle" fill="#a8bac7" font-family="sans-serif" font-size="3.5">48 kHz development slice · AUDIO NOT SAVED</text>
-  <g fill="#cbd5dc" font-family="sans-serif" font-size="2.5" text-anchor="middle">
-    <text x="10" y="22">REC</text><text x="25" y="22">ARM</text><text x="40" y="22">PLAY</text>
-    <text x="56" y="22">PEND</text><text x="72" y="22">CLK</text><text x="88" y="22">PM</text>
-    <text x="103" y="22">BUSY</text><text x="118" y="22">CLIP</text><text x="133" y="22">ERR</text>
+  <defs>
+    <linearGradient id="chimera-face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e2b38"/>
+      <stop offset="1" stop-color="#111922"/>
+    </linearGradient>
+  </defs>
+  <g id="panel_art">
+    <rect width="142.24" height="128.5" fill="url(#chimera-face)"/>
+    <rect x="0" y="0" width="142.24" height="3" fill="#3b5062"/>
+    <rect x="0" y="125.5" width="142.24" height="3" fill="#3b5062"/>
+    <path d="M5 30H137.24"
+          stroke="#698294" stroke-width=".35" opacity=".7"/>
+    <g id="component_anchors" style="display:none">
+      <circle id="SOS_PARAM" cx="20" cy="44" r=".1"/>
+      <circle id="GENE_SIZE_PARAM" cx="71" cy="44" r=".1"/>
+      <circle id="VARISPEED_PARAM" cx="122" cy="44" r=".1"/>
+      <circle id="MORPH_PARAM" cx="20" cy="70" r=".1"/>
+      <circle id="SLIDE_PARAM" cx="71" cy="70" r=".1"/>
+      <circle id="ORGANIZE_PARAM" cx="122" cy="70" r=".1"/>
+      <circle id="GENE_ATT_PARAM" cx="49" cy="54" r=".1"/>
+      <circle id="VARISPEED_ATT_PARAM" cx="99" cy="54" r=".1"/>
+      <circle id="SLIDE_ATT_PARAM" cx="96" cy="79" r=".1"/>
+      <circle id="REC_PARAM" cx="14" cy="83" r=".1"/>
+      <circle id="SPLICE_PARAM" cx="36" cy="83" r=".1"/>
+      <circle id="SHIFT_PARAM" cx="58" cy="83" r=".1"/>
+      <circle id="SOS_CV_INPUT" cx="12" cy="99" r=".1"/>
+      <circle id="GENE_SIZE_CV_INPUT" cx="36" cy="99" r=".1"/>
+      <circle id="VARISPEED_CV_INPUT" cx="60" cy="99" r=".1"/>
+      <circle id="MORPH_CV_INPUT" cx="84" cy="99" r=".1"/>
+      <circle id="SLIDE_CV_INPUT" cx="108" cy="99" r=".1"/>
+      <circle id="ORGANIZE_CV_INPUT" cx="132" cy="99" r=".1"/>
+      <circle id="CLOCK_INPUT" cx="20" cy="112" r=".1"/>
+      <circle id="PLAY_INPUT" cx="45" cy="112" r=".1"/>
+      <circle id="REC_INPUT" cx="70" cy="112" r=".1"/>
+      <circle id="SPLICE_INPUT" cx="95" cy="112" r=".1"/>
+      <circle id="SHIFT_INPUT" cx="120" cy="112" r=".1"/>
+      <circle id="AUDIO_L_INPUT" cx="12" cy="123" r=".1"/>
+      <circle id="AUDIO_R_INPUT" cx="36" cy="123" r=".1"/>
+      <circle id="AUDIO_L_OUTPUT" cx="60" cy="123" r=".1"/>
+      <circle id="AUDIO_R_OUTPUT" cx="84" cy="123" r=".1"/>
+      <circle id="CV_OUTPUT" cx="108" cy="123" r=".1"/>
+      <circle id="EOSG_OUTPUT" cx="132" cy="123" r=".1"/>
+      <circle id="REC_LIGHT" cx="10" cy="26" r=".1"/>
+      <circle id="REC_ARMED_LIGHT" cx="25" cy="26" r=".1"/>
+      <circle id="PLAY_LIGHT" cx="40" cy="26" r=".1"/>
+      <circle id="PENDING_LIGHT" cx="56" cy="26" r=".1"/>
+      <circle id="CLOCK_LIGHT" cx="72" cy="26" r=".1"/>
+      <circle id="PM_LIGHT" cx="88" cy="26" r=".1"/>
+      <circle id="IO_BUSY_LIGHT" cx="103" cy="26" r=".1"/>
+      <circle id="CLIP_LIGHT" cx="118" cy="26" r=".1"/>
+      <circle id="ERROR_LIGHT" cx="133" cy="26" r=".1"/>
+    </g>
   </g>
-  <g fill="#cbd5dc" font-family="sans-serif" font-size="3.5" text-anchor="middle">
-    <text x="15" y="32">S.O.S.</text><text x="42" y="32">GENE</text><text x="71" y="32">VARI-SPEED</text><text x="100" y="32">MORPH</text><text x="127" y="32">SLIDE</text>
-    <text x="25" y="62">INPUT L</text><text x="53" y="62">INPUT R</text><text x="89" y="62">OUT L</text><text x="117" y="62">OUT R</text>
-    <text x="20" y="88">PLAY</text><text x="45" y="88">CLOCK</text>
-    <text x="71" y="88">REC</text><text x="97" y="88">REC IN</text>
-    <text x="45" y="107">CV OUT</text><text x="97" y="107">EOSG</text>
+  <g id="labels" fill="#d7e2e8" font-family="sans-serif" text-anchor="middle">
+    <text x="71.12" y="11" fill="#e8dbba" font-size="8" font-weight="bold">CHIMERA</text>
+    <text x="71.12" y="16" fill="#a8bac7" font-size="3">48 kHz development slice · AUDIO NOT SAVED</text>
+    <g font-size="2.5">
+      <text x="10" y="22">REC</text><text x="25" y="22">ARM</text><text x="40" y="22">PLAY</text>
+      <text x="56" y="22">PEND</text><text x="72" y="22">CLK</text><text x="88" y="22">PM</text>
+      <text x="103" y="22">BUSY</text><text x="118" y="22">CLIP</text><text x="133" y="22">ERR</text>
+    </g>
+    <g font-size="3.1">
+      <text x="20" y="33">S.O.S.</text><text x="71" y="33">GENE SIZE</text><text x="122" y="33">VARI-SPEED</text>
+      <text x="20" y="59">MORPH</text><text x="71" y="59">SLIDE</text><text x="122" y="59">ORGANIZE</text>
+    </g>
+    <g font-size="2.35" fill="#9fc8d0">
+      <text x="49" y="61">GENE CV ±</text><text x="99" y="61">RATE CV ±</text><text x="96" y="87">SLIDE CV ±</text>
+    </g>
+    <g font-size="2.7">
+      <text x="14" y="89">REC</text><text x="36" y="89">SPLICE</text><text x="58" y="89">SHIFT</text>
+    </g>
+    <g font-size="2.3">
+      <text x="12" y="93">S.O.S.</text><text x="36" y="93">GENE</text><text x="60" y="93">RATE</text>
+      <text x="84" y="93">MORPH</text><text x="108" y="93">SLIDE</text><text x="132" y="93">ORG</text>
+      <text x="20" y="106">CLOCK</text><text x="45" y="106">PLAY</text><text x="70" y="106">REC</text>
+      <text x="95" y="106">SPLICE</text><text x="120" y="106">SHIFT</text>
+      <text x="12" y="118">IN L</text><text x="36" y="118">IN R</text><text x="60" y="118">OUT L</text>
+      <text x="84" y="118">OUT R</text><text x="108" y="118">CV OUT</text><text x="132" y="118">EOSG</text>
+    </g>
   </g>
-  <path d="M10 54h122M10 79h122" stroke="#657585" stroke-width=".5"/>
 </svg>

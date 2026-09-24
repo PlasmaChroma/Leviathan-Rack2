@@ -671,7 +671,7 @@ Each panel button resolves on its own release. Gate inputs are independent sampl
 
 ### 14.1.1 Mouse-complete UI contract
 
-The production Rack widget must make every MVP action reachable with one mouse pointer. The temporary development panel is incomplete: it currently draws REC but not the SHIFT and SPLICE buttons or the Organize control, even though their parameter IDs exist. Finish the following mapping before calling the UI complete:
+The production Rack widget must make every MVP action reachable with one mouse pointer. The Phase 5 development panel exposes REC, SHIFT, SPLICE, Organize, and the remaining control jacks; its display and detailed state feedback are still incomplete. Finish the following mapping before calling the UI complete:
 
 | User action | Panel path | Context-menu path / feedback |
 |---|---|---|
