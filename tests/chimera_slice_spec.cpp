@@ -270,6 +270,46 @@ int main() {
              "fast CV envelope tracks attack/release reference within 1 mV");
         if (i == 5999) need(out.cv > 7.99f, "anti-phase constant input reaches 8 V");
     }
+    chimera::Slice leftEnergy, rightEnergy;
+    leftEnergy.setConditioning(false);
+    rightEnergy.setConditioning(false);
+    float leftCv = 0.f, rightCv = 0.f;
+    for (int i = 0; i < 12000; ++i) {
+        leftCv = leftEnergy.step(input(5.f, 0.f)).cv;
+        rightCv = rightEnergy.step(input(0.f, 5.f)).cv;
+    }
+    need(near(leftCv, 8.f / std::sqrt(2.f), 0.001f) &&
+         near(rightCv, leftCv, 0.001f),
+         "CV follower uses both post-mix stereo channels equally");
+    chimera::Reel rightWetReel(1, 1);
+    for (int i = 0; i < 16; ++i)
+        need(rightWetReel.write(i, chimera::StereoFrame{0.f, 1.f}, i),
+             "prepare right-only wet CV fixture");
+    chimera::Slice rightWet(&rightWetReel);
+    rightWet.setConditioning(false);
+    float wetCv = 0.f;
+    for (int i = 0; i < 12000; ++i)
+        wetCv = rightWet.step(input(0.f, 0.f, 1.f)).cv;
+    need(near(wetCv, rightCv, 0.001f),
+         "CV follower includes wet right channel after S.O.S. mixing");
+    chimera::Slice sineFollower;
+    sineFollower.setConditioning(false);
+    double sineSum = 0.0;
+    float sineMin = 8.f, sineMax = 0.f;
+    for (int frame = 0; frame < 96000; ++frame) {
+        const float voltage = 5.f * static_cast<float>(
+            std::sin(2.0 * chimera::profile1::kPi * 1000.0 * frame / 48000.0));
+        const float cv = sineFollower.step(input(voltage, voltage)).cv;
+        if (frame >= 48000) {
+            sineSum += cv;
+            if (cv < sineMin) sineMin = cv;
+            if (cv > sineMax) sineMax = cv;
+        }
+    }
+    need(std::fabs(sineSum / 48000.0 - 7.390832249895503) < 0.001 &&
+         near(sineMin, 7.385726544253625f, 0.001f) &&
+         near(sineMax, 7.395930369732668f, 0.001f),
+         "unit-peak stereo sine follower matches profile-1 mean/min/max vectors");
     chimera::Slice stopped(&tagged);
     stopped.setPlay(false);
     need(stopped.startCurrent(), "stopped writer starts");
@@ -326,6 +366,27 @@ int main() {
         }
     }
     need(fadedTicks == 48, "Stop fade began within bounded rate-control settling");
+    chimera::Slice transportFade(&constant);
+    transportFade.setConditioning(false);
+    for (int i = 0; i < 1000; ++i)
+        transportFade.step(input(0.f, 0.f, 1.f));
+    transportFade.setPlay(false);
+    for (int frame = 0; frame < 48; ++frame) {
+        const chimera::Slice::Output out = transportFade.step(input(0.f, 0.f, 1.f));
+        need(near(out.audio.l, float(47 - frame) / 48.f, 1e-5f) &&
+             near(out.audio.r, float(47 - frame) / 48.f, 1e-5f) && !out.eosg,
+             "PLAY stop fades the last wet sample over exactly 48 core frames");
+    }
+    chimera::Slice quickReturn(&constant);
+    quickReturn.setConditioning(false);
+    for (int i = 0; i < 1000; ++i)
+        quickReturn.step(input(0.f, 0.f, 1.f));
+    quickReturn.setPlay(false);
+    const float lowFrame = quickReturn.step(input(0.f, 0.f, 1.f)).audio.l;
+    quickReturn.setPlay(true);
+    const float returnFrame = quickReturn.step(input(0.f, 0.f, 1.f)).audio.l;
+    need(std::fabs(returnFrame - lowFrame) < 0.05f && returnFrame > 0.9f,
+         "brief PLAY-low interval crossfades its scalar tail into new playback");
     chimera::Reel corrupt(1, 1);
     need(corrupt.write(0, chimera::StereoFrame{
         std::numeric_limits<float>::quiet_NaN(),
@@ -362,6 +423,52 @@ int main() {
     need(firstFiniteBoundary == 480 && firstFinitePulse == 480 &&
          finiteSlice.onsetCount() >= 2,
          "finite completion drives primary boundary and EOSG in integrated slice");
+    chimera::Slice densePulse(&finiteReel);
+    densePulse.setConditioning(false);
+    densePulse.setPlay(false);
+    chimera::CoreInput denseInput = finiteInput;
+    denseInput.controls.morph = 1.f;
+    densePulse.step(denseInput);
+    densePulse.setPlay(true);
+    for (int frame = 0; frame < 480; ++frame)
+        need(!densePulse.step(denseInput).eosg,
+             "dense finite voices cannot pulse EOSG before natural completion");
+    for (int frame = 0; frame < 54; ++frame)
+        need(densePulse.step(denseInput).eosg,
+             "maximum Morph shortens natural EOSG pulse to 54 core frames");
+    need(!densePulse.step(denseInput).eosg,
+         "dense EOSG pulse returns low before the next completion");
+    chimera::Slice overlappingRamp(&finiteReel);
+    overlappingRamp.setConditioning(false);
+    overlappingRamp.setRampCv(true);
+    overlappingRamp.setPlay(false);
+    chimera::CoreInput overlapInput = finiteInput;
+    overlapInput.controls.morph = 1.f;
+    overlappingRamp.step(overlapInput);
+    overlappingRamp.setPlay(true);
+    for (int frame = 0; frame <= 480; ++frame) {
+        const chimera::Slice::Output out = overlappingRamp.step(overlapInput);
+        if (frame == 120 || frame == 240 || frame == 360)
+            need(near(out.cv, 8.f * frame / 480.f, 0.001f),
+                 "secondary overlap leaves finite primary CV ramp untouched");
+        if (frame == 480)
+            need(near(out.cv, 0.f) && out.naturalBoundary,
+                 "overlapping finite primary ramp resets only on primary boundary");
+    }
+    chimera::Slice reverseRamp(&finiteReel);
+    reverseRamp.setConditioning(false);
+    reverseRamp.setRampCv(true);
+    reverseRamp.setPlay(false);
+    chimera::CoreInput reverseInput = finiteInput;
+    reverseInput.controls.rate = 1.f/6.f;
+    reverseRamp.step(reverseInput);
+    reverseRamp.setPlay(true);
+    for (int frame = 0; frame <= 240; ++frame) {
+        const chimera::Slice::Output out = reverseRamp.step(reverseInput);
+        if (frame == 240)
+            need(near(out.cv, 4.f, 0.001f),
+                 "reverse finite playback keeps a rising primary CV ramp");
+    }
     chimera::Slice fullRamp(&constant);
     fullRamp.setConditioning(false);
     fullRamp.setRampCv(true);
@@ -372,6 +479,20 @@ int main() {
         if (frame == 8)
             need(near(out.cv, 4.f), "full-Splice primary ramp follows traveled distance");
     }
+    chimera::Slice heldRamp(&finiteReel);
+    heldRamp.setConditioning(false);
+    heldRamp.setRampCv(true);
+    for (int frame = 0; frame < 600; ++frame)
+        heldRamp.step(input(0.f, 0.f, 1.f));
+    float stoppedPhase = 0.f;
+    for (int frame = 0; frame < 600; ++frame)
+        stoppedPhase = heldRamp.step(input(0.f, 0.f, 1.f, 0.5f)).cv;
+    for (int frame = 0; frame < 200; ++frame)
+        need(near(heldRamp.step(input(0.f, 0.f, 1.f, 0.5f)).cv, stoppedPhase, 0.001f),
+             "full-Splice CV ramp holds after Vari-Speed settles at Stop");
+    heldRamp.setPlay(false);
+    need(near(heldRamp.step(input(0.f, 0.f, 1.f, 0.5f)).cv, 0.f),
+         "stopped transport reports zero ramp CV");
     chimera::Slice fullMorph(&finiteReel);
     fullMorph.setConditioning(false);
     chimera::CoreInput chordInput = input(0.f, 0.f, 1.f);
@@ -385,5 +506,101 @@ int main() {
     }
     need(secondaryEosg,
          "high-Morph full-Splice secondary completion contributes EOSG");
+    chimera::Selection arbitration;
+    arbitration.observe(0.f, 3, false);
+    arbitration.observe(0.34f, 3, false);
+    need(arbitration.organizeBin() == 0, "Organize ignores near-boundary upward dither");
+    arbitration.observe(0.37f, 3, false);
+    arbitration.observe(0.31f, 3, false);
+    need(arbitration.organizeBin() == 1, "Organize enters bin one and holds its lower hysteresis band");
+    arbitration.observe(0.29f, 3, false);
+    need(arbitration.organizeBin() == 0, "Organize exits bin one after downward hysteresis");
+    arbitration.observe(1.f, 3, false);
+    need(arbitration.organizeBin() == 2, "large Organize jump reaches final equal-width bin");
+    arbitration.observe(1.f, 3, true);
+    arbitration.observe(1.f, 3, false);
+    need(arbitration.requested() == 0 && arbitration.organizeBin() == 2,
+         "stationary Organize does not undo wrapped Shift request");
+    arbitration.observe(0.1f, 3, true);
+    need(arbitration.organizeBin() == 0 && arbitration.requested() == 1,
+         "same-frame Organize change resolves before Shift increment");
+    arbitration.observe(1.f, chimera::kMaxSplices, false);
+    arbitration.setRequested(chimera::kMaxSplices - 1, chimera::kMaxSplices);
+    arbitration.observe(1.f, chimera::kMaxSplices, true);
+    need(arbitration.organizeBin() == chimera::kMaxSplices - 1 &&
+         arbitration.requested() == 0,
+         "maximum marker count maps endpoint and wrapped Shift without overflow");
+    chimera::Reel selectedReel(4, 4);
+    for (std::uint32_t frame = 0; frame < 960; ++frame)
+        need(selectedReel.write(frame, chimera::StereoFrame{
+            frame < 480 ? 1.f : -1.f, frame < 480 ? 1.f : -1.f}, frame),
+            "prepare two Splices for queued selection");
+    need(selectedReel.addMarker(480), "prepare second Splice marker");
+    chimera::CoreInput selectedInput = input(0.f, 0.f, 1.f);
+    selectedInput.controls.morph = 1.f;
+    chimera::Slice queued(&selectedReel);
+    queued.setConditioning(false);
+    for (int frame = 0; frame < 100; ++frame) queued.step(selectedInput);
+    selectedInput.controls.organize = 1.f;
+    bool secondaryBeforePrimary = false;
+    for (int frame = 100; frame < 480; ++frame) {
+        const chimera::Slice::Output out = queued.step(selectedInput);
+        if (out.eosg && !out.naturalBoundary) secondaryBeforePrimary = true;
+        need(queued.currentRegion() == 0 && queued.requestedRegion() == 1,
+             "pending Splice waits for primary full-Splice boundary");
+    }
+    const chimera::Slice::Output committed = queued.step(selectedInput);
+    need(secondaryBeforePrimary && committed.naturalBoundary &&
+         queued.currentRegion() == 1,
+         "secondary completions leave pending selection for the primary cycle");
+    chimera::Reel appendedReel(2, 2);
+    for (std::uint32_t frame = 0; frame < 480; ++frame)
+        need(appendedReel.write(frame, chimera::StereoFrame{1.f, 1.f}, frame),
+             "prepare running Append selection fixture");
+    chimera::Slice appendedSlice(&appendedReel);
+    appendedSlice.setConditioning(false);
+    need(appendedSlice.startAppend(), "Append begins beside running old Splice");
+    chimera::CoreInput appendInput = input(-5.f, -5.f, 0.f);
+    for (int frame = 0; frame < 4; ++frame) appendedSlice.step(appendInput);
+    appendedSlice.stopRecord();
+    need(appendedSlice.currentRegion() == 0 && appendedSlice.requestedRegion() == 1,
+         "Append finalization requests new Splice without interrupting active playback");
+    appendInput.controls.sos = 1.f;
+    for (int frame = 4; frame < 480; ++frame) {
+        const chimera::Slice::Output out = appendedSlice.step(appendInput);
+        need(appendedSlice.currentRegion() == 0 &&
+             (frame < 200 || out.audio.l > 0.9f),
+             "running old Splice remains audible until its primary boundary");
+    }
+    appendedSlice.step(appendInput);
+    need(appendedSlice.currentRegion() == 1,
+         "Append auto-request commits at the next primary boundary");
+    chimera::Slice retriggerSelection(&selectedReel);
+    retriggerSelection.setConditioning(false);
+    selectedInput.controls.organize = 0.f;
+    selectedInput.controls.slide = 0.f;
+    for (int frame = 0; frame < 100; ++frame) retriggerSelection.step(selectedInput);
+    selectedInput.controls.organize = 1.f;
+    selectedInput.controls.slide = 0.25f;
+    retriggerSelection.step(selectedInput);
+    need(retriggerSelection.currentRegion() == 0 &&
+         retriggerSelection.requestedRegion() == 1,
+         "selection remains pending before Play retrigger");
+    retriggerSelection.setPlay(false);
+    retriggerSelection.setPlay(true);
+    retriggerSelection.step(selectedInput);
+    need(retriggerSelection.currentRegion() == 1 &&
+         std::fabs(retriggerSelection.primaryPosition() - 600.75) < 1e-4,
+         "Play retrigger commits selection before using new-region Slide origin");
+    chimera::Slice immediate(&selectedReel);
+    immediate.setConditioning(false);
+    immediate.setImmediateTransitions(true);
+    selectedInput.controls.organize = 0.f;
+    selectedInput.controls.morph = 1.f/6.f;
+    for (int frame = 0; frame < 100; ++frame) immediate.step(selectedInput);
+    selectedInput.controls.organize = 1.f;
+    const chimera::Slice::Output immediateOutput = immediate.step(selectedInput);
+    need(immediate.currentRegion() == 1 && immediateOutput.audio.l < -0.9f,
+         "immediate Organize commits on its event frame without old-region fade");
     std::puts("PASS: Chimera 48 kHz slice initial capture, Current, Append, and TLA");
 }

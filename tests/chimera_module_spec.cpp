@@ -41,6 +41,37 @@ int main() {
     args.sampleRate = 48000.f;
     args.sampleTime = 1.f/48000.f;
     {
+        chimera::Reel regions(4, 4);
+        for (std::uint32_t frame = 0; frame < 960; ++frame)
+            need(regions.write(frame, chimera::StereoFrame{0.f, 0.f}, frame),
+                 "prepare Rack-facing Shift fixture");
+        need(regions.addMarker(480), "prepare two Rack-facing Splices");
+        Chimera selectionModule;
+        selectionModule.reel = &regions;
+        selectionModule.slice.setReel(&regions);
+        selectionModule.process(args);
+        selectionModule.params[Chimera::SHIFT_PARAM].setValue(1.f);
+        selectionModule.process(args);
+        need(selectionModule.slice.requestedRegion() == 0,
+             "SHIFT button press waits for release");
+        selectionModule.params[Chimera::SHIFT_PARAM].setValue(0.f);
+        selectionModule.process(args);
+        need(selectionModule.slice.requestedRegion() == 1 &&
+             selectionModule.slice.currentRegion() == 0 &&
+             selectionModule.lights[Chimera::PENDING_LIGHT].getBrightness() == 1.f,
+             "SHIFT button release queues next Splice and lights pending state");
+        selectionModule.inputs[Chimera::SHIFT_INPUT].channels = 1;
+        selectionModule.inputs[Chimera::SHIFT_INPUT].setVoltage(2.5f);
+        selectionModule.process(args);
+        need(selectionModule.slice.requestedRegion() == 0 &&
+             selectionModule.lights[Chimera::PENDING_LIGHT].getBrightness() == 0.f,
+             "SHIFT jack rise wraps requested Splice without waiting for release");
+        selectionModule.inputs[Chimera::SHIFT_INPUT].setVoltage(1.8f);
+        selectionModule.process(args);
+        need(selectionModule.slice.requestedRegion() == 0,
+             "SHIFT jack Schmitt band does not repeat an event");
+    }
+    {
         Chimera unprepared;
         unprepared.inputs[Chimera::CLOCK_INPUT].channels = 1;
         unprepared.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);

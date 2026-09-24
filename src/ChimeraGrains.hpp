@@ -69,6 +69,10 @@ public:
     std::uint64_t onsetCount() const { return onsetCount_; }
     std::uint32_t randomState() const { return random_.state; }
     double primaryPosition() const { return primaryPosition_; }
+    bool primaryBoundaryDue() const {
+        return active_ && (full_ ? primaryTravel_ >= activeRegion_.end - activeRegion_.begin :
+                                  primaryAge_ >= primaryLength_);
+    }
     double slotRatio(std::uint8_t slot) const { return slot < 4 ? slots_[slot].ratio : 0.0; }
     bool slotActive(std::uint8_t slot) const { return slot < 4 && slots_[slot].active; }
 

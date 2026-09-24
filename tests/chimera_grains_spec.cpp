@@ -60,6 +60,38 @@ int main() {
     }
     need(peakReaders == 4 && overlap.onsetCount() == 40,
          "maximum density reaches four bounded slots at fractional-hop cadence");
+    chimera::Reel stereo(20, 20);
+    for (std::uint32_t i = 0; i < 4800; ++i)
+        need(stereo.write(i, chimera::StereoFrame{1.f, -0.25f}, i),
+             "prepare independent stereo channels");
+    chimera::Grains centered;
+    c.morph = 1.f/6.f;
+    for (int frame = 0; frame < 960; ++frame) {
+        const chimera::Grains::Result out = centered.step(stereo, region, c);
+        if (frame >= 120)
+            need(std::fabs(out.audio.l - 1.f) < 1e-5f &&
+                 std::fabs(out.audio.r + 0.25f) < 1e-5f,
+                 "center pan preserves independent channels at unity gain");
+    }
+    double hardLeft = 0, hardRight = 0;
+    chimera::profile1::stereoBalance(-1.0, hardLeft, hardRight);
+    need(std::fabs(hardLeft - std::sqrt(2.0)) < 1e-12 &&
+         std::fabs(hardRight) < 1e-12,
+         "hard-left balance preserves left source and mutes right");
+    chimera::profile1::stereoBalance(1.0, hardLeft, hardRight);
+    need(std::fabs(hardLeft) < 1e-12 &&
+         std::fabs(hardRight - std::sqrt(2.0)) < 1e-12,
+         "hard-right balance preserves right source and mutes left");
+    chimera::Grains centeredOverlap;
+    c.morph = 5.f/6.f; // Three centered voices, with no random pan.
+    bool sawMultipleReaders = false;
+    for (int frame = 0; frame < 4800; ++frame) {
+        const chimera::Grains::Result out = centeredOverlap.step(reel, region, c);
+        if (out.readers >= 3) sawMultipleReaders = true;
+        need(out.audio.l <= 1.f + 1e-5f && out.audio.r <= 1.f + 1e-5f,
+             "common normalization bounds centered constant-source overlap");
+    }
+    need(sawMultipleReaders, "centered normalization fixture exercised overlap");
     chimera::Grains gap;
     c.morph = 0.f;
     bool foundGap = false;
@@ -178,6 +210,37 @@ int main() {
          "signed high-Morph secondary full-Splice voice completes before primary");
     need(std::fabs(fullChord.primaryPosition() - 799.0) < 1e-5,
          "secondary chord motion never changes independent primary marker address");
+    chimera::Grains stoppedFull;
+    fc.morph = 1.f/6.f;
+    fc.rate = 1.f;
+    for (int frame = 0; frame < 137; ++frame) stoppedFull.step(reel, region, fc, false, true);
+    const double heldAddress = stoppedFull.primaryPosition();
+    fc.rate = 0.f;
+    float heldPhase = -1.f;
+    for (int frame = 0; frame < 10000; ++frame) {
+        const chimera::Grains::Result out = stoppedFull.step(reel, region, fc, false, true);
+        if (frame == 0) heldPhase = out.primaryPhase;
+        need(!out.primaryBoundary && out.completions == 0 &&
+             std::fabs(out.primaryPosition - heldAddress) < 1e-5 &&
+             std::fabs(out.primaryPhase - heldPhase) < 1e-6f,
+             "full-Splice Stop holds primary address/phase without new onsets");
+    }
+    need(stoppedFull.onsetCount() == 1,
+         "full-Splice Stop cannot accumulate stationary onsets");
+    chimera::Grains stoppedFinite;
+    chimera::CoreOutput stopControl{};
+    stopControl.gene = static_cast<float>(gene);
+    stopControl.morph = 1.f/6.f;
+    stopControl.rate = 0.f;
+    std::uint32_t finiteStops = 0;
+    for (int frame = 0; frame <= 960; ++frame) {
+        const chimera::Grains::Result out = stoppedFinite.step(reel, region, stopControl);
+        finiteStops += out.primaryBoundary ? 1u : 0u;
+        need(std::fabs(out.primaryPosition) < 1e-5,
+             "finite Stop keeps source address while primary timer advances");
+    }
+    need(finiteStops == 2 && stoppedFinite.onsetCount() == 3,
+         "finite Gene timer and onsets remain defined at Stop");
     for (int length = 1; length <= 3; ++length) {
         chimera::Reel tiny(1, 1);
         for (int i = 0; i < length; ++i)

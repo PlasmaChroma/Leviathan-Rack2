@@ -113,9 +113,11 @@ struct Chimera : Module {
     bool lastRec = false;
     bool lastRecJack = false;
     bool lastClock = false;
+    bool lastShiftButton = false;
+    bool lastShiftJack = false;
     enum ArmState { NoArm, ArmCurrent, ArmAppend, ArmStop };
     ArmState recordArm = NoArm;
-    Gate playGate, recGate, clockGate;
+    Gate playGate, recGate, clockGate, shiftGate;
 
     Chimera() : slice(nullptr) {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
@@ -439,6 +441,9 @@ struct Chimera : Module {
                 inputs[REC_INPUT].getVoltage() : 0.f);
             lastClock = clockGate.update(inputs[CLOCK_INPUT].isConnected() ?
                 inputs[CLOCK_INPUT].getVoltage() : 0.f);
+            lastShiftButton = params[SHIFT_PARAM].getValue() > 0.5f;
+            lastShiftJack = shiftGate.update(inputs[SHIFT_INPUT].isConnected() ?
+                inputs[SHIFT_INPUT].getVoltage() : 0.f);
             if (reel) reel->maintenanceTick();
             outputs[AUDIO_L_OUTPUT].setVoltage(l);
             outputs[AUDIO_R_OUTPUT].setVoltage(r);
@@ -458,6 +463,13 @@ struct Chimera : Module {
         slice.setChordRatios(mcrSetting[0].load(std::memory_order_relaxed),
                              mcrSetting[1].load(std::memory_order_relaxed),
                              mcrSetting[2].load(std::memory_order_relaxed));
+        const bool shiftButton = params[SHIFT_PARAM].getValue() > 0.5f;
+        const bool shiftJack = shiftGate.update(inputs[SHIFT_INPUT].isConnected() ?
+            inputs[SHIFT_INPUT].getVoltage() : 0.f);
+        if ((!shiftButton && lastShiftButton) || (shiftJack && !lastShiftJack))
+            slice.requestShift();
+        lastShiftButton = shiftButton;
+        lastShiftJack = shiftJack;
         const bool rec = params[REC_PARAM].getValue() > 0.5f;
         const bool recJack = recGate.update(inputs[REC_INPUT].isConnected() ?
             inputs[REC_INPUT].getVoltage() : 0.f);
@@ -523,6 +535,7 @@ struct Chimera : Module {
         lights[REC_ARMED_LIGHT].setBrightness(recordArm != NoArm ? 1.f : 0.f);
         lights[CLOCK_LIGHT].setBrightness(clock ? 1.f : 0.f);
         lights[PLAY_LIGHT].setBrightness(play ? 1.f : 0.f);
+        lights[PENDING_LIGHT].setBrightness(slice.requestedRegion() != slice.currentRegion() ? 1.f : 0.f);
         lights[CLIP_LIGHT].setBrightness(slice.overloaded() ? 1.f : 0.f);
         lights[IO_BUSY_LIGHT].setBrightness(ioBusy.load(std::memory_order_acquire) ? 1.f : 0.f);
         lights[ERROR_LIGHT].setBrightness(out.full || ioError.load(std::memory_order_acquire) ||
