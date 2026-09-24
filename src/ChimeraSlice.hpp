@@ -63,6 +63,11 @@ public:
         }
         play_ = play;
     }
+    void requestPlayRetrigger() {
+        if (play_) retrigger_ = true;
+    }
+    bool playing() const { return play_; }
+    bool primaryBoundaryDue() const { return wasReading_ && grains_.primaryBoundaryDue(); }
     void setConditioning(bool enabled) {
         if (conditioning_ != enabled) {
             inputDc_[0] = inputDc_[1] = DcBlocker();

@@ -24,6 +24,7 @@ void operator delete(void* p) noexcept { std::free(p); }
 void operator delete[](void* p) noexcept { std::free(p); }
 
 Plugin* pluginInstance = nullptr;
+bool isDragonKingDebugEnabled() { return false; }
 #include "../src/Chimera.cpp"
 
 static void need(bool ok, const char* what) {
@@ -91,6 +92,71 @@ int main() {
         selectionModule.process(args);
         need(regions.markerCount() == 4,
              "SPLICE jack Schmitt band does not repeat");
+    }
+    {
+        chimera::Reel playReel(2, 2);
+        for (std::uint32_t frame = 0; frame < 256; ++frame)
+            need(playReel.write(frame, chimera::StereoFrame{1.f, 1.f}, frame),
+                 "prepare Play mode Reel");
+        Chimera initialLow;
+        initialLow.reel = &playReel;
+        initialLow.slice.setReel(&playReel);
+        initialLow.inputs[Chimera::PLAY_INPUT].channels = 1;
+        initialLow.inputs[Chimera::PLAY_INPUT].setVoltage(0.f);
+        initialLow.process(args);
+        need(!initialLow.transportPlay && !initialLow.slice.playing() &&
+             initialLow.slice.onsetCount() == 0,
+             "patched-low PLAY at initialization never starts playback");
+        initialLow.inputs[Chimera::PLAY_INPUT].setVoltage(2.5f);
+        initialLow.process(args);
+        need(initialLow.transportPlay && initialLow.slice.onsetCount() == 1,
+             "PLAY rise starts a stopped transport");
+        for (int frame = 0; frame < 15; ++frame) initialLow.process(args);
+        initialLow.inputs[Chimera::PLAY_INPUT].setVoltage(0.f);
+        initialLow.process(args);
+        need(initialLow.transportPlay && initialLow.stopAtPrimaryBoundary,
+             "default PLAY fall queues a primary-boundary stop");
+        for (int frame = 0; frame < 240; ++frame) initialLow.process(args);
+        need(!initialLow.transportPlay && !initialLow.stopAtPrimaryBoundary &&
+             !initialLow.slice.playing(),
+             "default PLAY mode stops at the primary boundary");
+        initialLow.inputs[Chimera::PLAY_INPUT].channels = 0;
+        initialLow.process(args);
+        need(initialLow.transportPlay && initialLow.slice.onsetCount() >= 2,
+             "unpatched PLAY normal-high creates one rise after logical low");
+        const std::uint64_t beforeHighCable = initialLow.slice.onsetCount();
+        initialLow.inputs[Chimera::PLAY_INPUT].channels = 1;
+        initialLow.inputs[Chimera::PLAY_INPUT].setVoltage(5.f);
+        initialLow.process(args);
+        need(initialLow.slice.onsetCount() == beforeHighCable,
+             "inserting an already-high PLAY cable does not retrigger");
+        initialLow.inputs[Chimera::PLAY_INPUT].setVoltage(0.f);
+        initialLow.process(args);
+        need(initialLow.stopAtPrimaryBoundary && initialLow.transportPlay,
+             "second default PLAY fall waits for its boundary");
+        initialLow.inputs[Chimera::PLAY_INPUT].setVoltage(5.f);
+        const std::uint64_t beforeCancelRise = initialLow.slice.onsetCount();
+        initialLow.process(args);
+        need(!initialLow.stopAtPrimaryBoundary && initialLow.transportPlay &&
+             initialLow.slice.onsetCount() == beforeCancelRise + 1,
+             "PLAY rise cancels pending boundary stop and retriggers once");
+
+        Chimera retriggerOnly;
+        retriggerOnly.reel = &playReel;
+        retriggerOnly.slice.setReel(&playReel);
+        retriggerOnly.pmodSetting.store(2);
+        retriggerOnly.process(args);
+        const std::uint64_t beforeLow = retriggerOnly.slice.onsetCount();
+        retriggerOnly.inputs[Chimera::PLAY_INPUT].channels = 1;
+        retriggerOnly.inputs[Chimera::PLAY_INPUT].setVoltage(0.f);
+        retriggerOnly.process(args);
+        need(retriggerOnly.transportPlay && retriggerOnly.slice.onsetCount() == beforeLow,
+             "retrigger-only PLAY low leaves running transport active");
+        retriggerOnly.inputs[Chimera::PLAY_INPUT].setVoltage(5.f);
+        retriggerOnly.process(args);
+        need(retriggerOnly.transportPlay &&
+             retriggerOnly.slice.onsetCount() == beforeLow + 1,
+             "retrigger-only PLAY rise forces exactly one onset");
     }
     {
         chimera::Reel pmRegion(4, 4);
@@ -202,6 +268,7 @@ int main() {
         sawLow |= voltage == 0.f;
     }
     need(sawPulse && sawLow, "Rack EOSG emits a core-timed 0/10 V boundary pulse");
+    module.pmodSetting.store(1);
     module.inputs[Chimera::PLAY_INPUT].channels = 1;
     module.inputs[Chimera::PLAY_INPUT].setVoltage(0.f);
     module.process(args);
@@ -345,12 +412,21 @@ int main() {
     json_object_set_new(data, "gnsm", json_integer(1));
     json_object_set_new(data, "cvop", json_integer(1));
     json_object_set_new(data, "omod", json_integer(1));
+    json_object_set_new(data, "pmod", json_integer(2));
     json_object_set_new(data, "mcr1", json_real(-2.5));
     json_object_set_new(data, "mcr2", json_real(0.0));
     module.dataFromJson(data);
     need(module.inopSetting.load() && module.gnsmSetting.load() &&
          module.cvopSetting.load() && module.omodSetting.load(),
          "writer, smooth-window, ramp, and immediate options persist through JSON");
+    json_t* persistedPlay = module.dataToJson();
+    need(module.pmodSetting.load() == 2 &&
+         json_integer_value(json_object_get(persistedPlay, "pmod")) == 2,
+         "PLAY mode persists through JSON");
+    json_decref(persistedPlay);
+    json_object_set_new(data, "pmod", json_integer(3));
+    module.dataFromJson(data);
+    need(module.pmodSetting.load() == 2, "invalid PLAY mode is ignored");
     need(module.mcrSetting[0].load() == -2.5f && module.mcrSetting[1].load() == 3.f,
          "signed chord ratio loads while invalid zero retains default");
     json_decref(data);

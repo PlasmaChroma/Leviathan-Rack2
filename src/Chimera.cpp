@@ -2,6 +2,7 @@
 #include "ChimeraSlice.hpp"
 #include "ChimeraOwnership.hpp"
 #include "ChimeraService.hpp"
+#include "visual/ApertureLight.hpp"
 #include <ui/TextField.hpp>
 #include <atomic>
 #include <chrono>
@@ -109,6 +110,7 @@ struct Chimera : Module {
     std::atomic<int> menuCommand{0};
     std::atomic<bool> inopSetting{false};
     std::atomic<bool> gnsmSetting{false}, cvopSetting{false}, omodSetting{false}, pminSetting{false};
+    std::atomic<int> pmodSetting{0};
     std::atomic<float> mcrSetting[3]{{2.f}, {3.f}, {4.f}};
     bool lastRec = false;
     bool lastRecJack = false;
@@ -117,6 +119,9 @@ struct Chimera : Module {
     bool lastShiftJack = false;
     bool lastSpliceButton = false;
     bool lastSpliceJack = false;
+    bool playInitialized = false, lastPlayLogical = true, transportPlay = true;
+    bool stopAtPrimaryBoundary = false;
+    int lastPlayMode = 0;
     enum ArmState { NoArm, ArmCurrent, ArmAppend, ArmStop };
     ArmState recordArm = NoArm;
     Gate playGate, recGate, clockGate, shiftGate, spliceGate;
@@ -152,6 +157,15 @@ struct Chimera : Module {
         configOutput(AUDIO_R_OUTPUT, "Audio right");
         configOutput(CV_OUTPUT, "CV");
         configOutput(EOSG_OUTPUT, "EOSG");
+        configLight(REC_LIGHT, "Recording");
+        configLight(REC_ARMED_LIGHT, "Record armed");
+        configLight(PLAY_LIGHT, "Playing");
+        configLight(PENDING_LIGHT, "Splice selection pending");
+        configLight(CLOCK_LIGHT, "Clock high");
+        configLight(PM_LIGHT, "Phase modulation active");
+        configLight(IO_BUSY_LIGHT, "Reel operation busy");
+        configLight(CLIP_LIGHT, "Input overload or invalid audio source");
+        configLight(ERROR_LIGHT, "Reel or recording error");
         configBypass(AUDIO_L_INPUT, AUDIO_L_OUTPUT);
         configBypass(AUDIO_R_INPUT, AUDIO_R_OUTPUT);
     }
@@ -379,6 +393,7 @@ struct Chimera : Module {
         json_object_set_new(root, "cvop", json_integer(cvopSetting.load(std::memory_order_acquire) ? 1 : 0));
         json_object_set_new(root, "omod", json_integer(omodSetting.load(std::memory_order_acquire) ? 1 : 0));
         json_object_set_new(root, "pmin", json_integer(pminSetting.load(std::memory_order_acquire) ? 1 : 0));
+        json_object_set_new(root, "pmod", json_integer(pmodSetting.load(std::memory_order_acquire)));
         for (int i = 0; i < 3; ++i) {
             const char* key = i == 0 ? "mcr1" : (i == 1 ? "mcr2" : "mcr3");
             json_object_set_new(root, key, json_real(mcrSetting[i].load(std::memory_order_acquire)));
@@ -401,6 +416,9 @@ struct Chimera : Module {
         json_t* pmin = json_object_get(root, "pmin");
         if (json_is_integer(pmin) && (json_integer_value(pmin) == 0 || json_integer_value(pmin) == 1))
             pminSetting.store(json_integer_value(pmin) == 1, std::memory_order_release);
+        json_t* pmod = json_object_get(root, "pmod");
+        if (json_is_integer(pmod) && json_integer_value(pmod) >= 0 && json_integer_value(pmod) <= 2)
+            pmodSetting.store(static_cast<int>(json_integer_value(pmod)), std::memory_order_release);
         for (int i = 0; i < 3; ++i) {
             const char* key = i == 0 ? "mcr1" : (i == 1 ? "mcr2" : "mcr3");
             json_t* ratio = json_object_get(root, key);
@@ -443,6 +461,8 @@ struct Chimera : Module {
             recordArm = NoArm;
             menuCommand.exchange(0, std::memory_order_acq_rel);
             lastRec = params[REC_PARAM].getValue() > 0.5f;
+            playInitialized = false;
+            stopAtPrimaryBoundary = false;
             lastRecJack = recGate.update(inputs[REC_INPUT].isConnected() ?
                 inputs[REC_INPUT].getVoltage() : 0.f);
             lastClock = clockGate.update(inputs[CLOCK_INPUT].isConnected() ?
@@ -462,10 +482,41 @@ struct Chimera : Module {
             lights[ERROR_LIGHT].setBrightness(1.f);
             return;
         }
-        const bool play = !inputs[PLAY_INPUT].isConnected() ||
-            playGate.update(inputs[PLAY_INPUT].getVoltage());
-        if (!inputs[PLAY_INPUT].isConnected()) playGate.high = true;
-        slice.setPlay(play);
+        const bool playConnected = inputs[PLAY_INPUT].isConnected();
+        const bool playLogical = !playConnected || playGate.update(inputs[PLAY_INPUT].getVoltage());
+        if (!playConnected) playGate.high = true;
+        const int playMode = pmodSetting.load(std::memory_order_relaxed);
+        if (!playInitialized) {
+            transportPlay = playLogical;
+            stopAtPrimaryBoundary = false;
+            playInitialized = true;
+        }
+        else {
+            if (playMode != lastPlayMode && !playLogical) {
+                if (playMode == 0) stopAtPrimaryBoundary = transportPlay;
+                else {
+                    stopAtPrimaryBoundary = false;
+                    if (playMode == 1) transportPlay = false;
+                }
+            }
+            if (playLogical && !lastPlayLogical) {
+                transportPlay = true;
+                stopAtPrimaryBoundary = false;
+                slice.setPlay(true);
+                slice.requestPlayRetrigger();
+            }
+            else if (!playLogical && lastPlayLogical) {
+                if (playMode == 0) stopAtPrimaryBoundary = transportPlay;
+                else if (playMode == 1) transportPlay = false;
+            }
+            if (stopAtPrimaryBoundary && slice.primaryBoundaryDue()) {
+                transportPlay = false;
+                stopAtPrimaryBoundary = false;
+            }
+        }
+        slice.setPlay(transportPlay);
+        lastPlayLogical = playLogical;
+        lastPlayMode = playMode;
         slice.setInop(inopSetting.load(std::memory_order_relaxed));
         slice.setSmoothGenes(gnsmSetting.load(std::memory_order_relaxed));
         slice.setRampCv(cvopSetting.load(std::memory_order_relaxed));
@@ -555,7 +606,7 @@ struct Chimera : Module {
         lights[REC_LIGHT].setBrightness(out.recording ? 1.f : 0.f);
         lights[REC_ARMED_LIGHT].setBrightness(recordArm != NoArm ? 1.f : 0.f);
         lights[CLOCK_LIGHT].setBrightness(clock ? 1.f : 0.f);
-        lights[PLAY_LIGHT].setBrightness(play ? 1.f : 0.f);
+        lights[PLAY_LIGHT].setBrightness(transportPlay ? 1.f : 0.f);
         lights[PENDING_LIGHT].setBrightness(slice.requestedRegion() != slice.currentRegion() ? 1.f : 0.f);
         lights[PM_LIGHT].setBrightness(slice.pmBlend());
         lights[CLIP_LIGHT].setBrightness(slice.overloaded() ? 1.f : 0.f);
@@ -613,6 +664,15 @@ struct ChimeraWidget : ModuleWidget {
         addInput(createInputCentered<PJ301MPort>(mm2px(Vec(97, 98)), module, Chimera::REC_INPUT));
         addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(45, 117)), module, Chimera::CV_OUTPUT));
         addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(97, 117)), module, Chimera::EOSG_OUTPUT));
+        addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(Vec(10, 26)), module, Chimera::REC_LIGHT));
+        addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(Vec(25, 26)), module, Chimera::REC_ARMED_LIGHT));
+        addChild(createLightCentered<SmallAperture<GreenApertureLight>>(mm2px(Vec(40, 26)), module, Chimera::PLAY_LIGHT));
+        addChild(createLightCentered<SmallAperture<AmberApertureLight>>(mm2px(Vec(56, 26)), module, Chimera::PENDING_LIGHT));
+        addChild(createLightCentered<SmallAperture<BlueApertureLight>>(mm2px(Vec(72, 26)), module, Chimera::CLOCK_LIGHT));
+        addChild(createLightCentered<SmallAperture<VioletApertureLight>>(mm2px(Vec(88, 26)), module, Chimera::PM_LIGHT));
+        addChild(createLightCentered<SmallAperture<WhiteApertureLight>>(mm2px(Vec(103, 26)), module, Chimera::IO_BUSY_LIGHT));
+        addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(Vec(118, 26)), module, Chimera::CLIP_LIGHT));
+        addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(Vec(133, 26)), module, Chimera::ERROR_LIGHT));
     }
     void step() override {
         if (Chimera* m = dynamic_cast<Chimera*>(module)) m->serviceStep();
@@ -650,6 +710,13 @@ struct ChimeraWidget : ModuleWidget {
         menu->addChild(createCheckMenuItem("Right input: phase modulation (pmin)", "",
             [m] { return m->pminSetting.load(std::memory_order_acquire); },
             [m] { m->pminSetting.store(!m->pminSetting.load(std::memory_order_relaxed), std::memory_order_release); }));
+        menu->addChild(createSubmenuItem("PLAY mode (pmod)", "", [m](Menu* submenu) {
+            const char* labels[3] = {"Stop at primary boundary", "Stop immediately", "Retrigger only"};
+            for (int mode = 0; mode < 3; ++mode)
+                submenu->addChild(createCheckMenuItem(labels[mode], "",
+                    [m, mode] { return m->pmodSetting.load(std::memory_order_acquire) == mode; },
+                    [m, mode] { m->pmodSetting.store(mode, std::memory_order_release); }));
+        }));
         menu->addChild(createSubmenuItem("Chord ratios (mcr1–3)", "", [m](Menu* submenu) {
             for (int i = 0; i < 3; ++i) {
                 submenu->addChild(createMenuLabel(i == 0 ? "Slot 1 ratio" :
