@@ -394,7 +394,40 @@ int main() {
          "later playback selection leaves active writer in its latched region");
     module.menuCommand.store(3);
     module.process(args);
+    need(module.slice.selectRegion(0), "prepare selection for coincident Shift and Clock");
+    module.ckopSetting.store(1);
+    module.inputs[Chimera::SHIFT_INPUT].channels = 1;
+    module.inputs[Chimera::SHIFT_INPUT].setVoltage(2.5f);
+    module.params[Chimera::REC_PARAM].setValue(1.f);
+    module.inputs[Chimera::CLOCK_INPUT].setVoltage(2.5f);
+    module.process(args);
+    need(module.slice.currentRegion() == 1 &&
+         module.slice.recordState() == chimera::Slice::Current &&
+         module.slice.writerPosition() == 3,
+         "coincident Shift, REC, and Clock latch the newly selected Splice");
+    module.menuCommand.store(3);
+    module.process(args);
+    module.inputs[Chimera::SHIFT_INPUT].setVoltage(0.f);
+    module.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
+    module.params[Chimera::REC_PARAM].setValue(0.f);
+    module.process(args);
+    need(module.slice.selectRegion(0), "prepare Organize and Shift priority fixture");
+    module.params[Chimera::ORGANIZE_PARAM].setValue(1.f);
+    module.inputs[Chimera::SHIFT_INPUT].setVoltage(2.5f);
+    module.inputs[Chimera::CLOCK_INPUT].setVoltage(2.5f);
+    module.params[Chimera::REC_PARAM].setValue(1.f);
+    module.process(args);
+    need(module.slice.organizeBin() == 1 && module.slice.currentRegion() == 0 &&
+         module.slice.recordState() == chimera::Slice::Current &&
+         module.slice.writerPosition() == 1,
+         "same-frame Organize selects first, then Shift wraps before Clock starts Current");
+    module.menuCommand.store(3);
+    module.process(args);
+    module.params[Chimera::ORGANIZE_PARAM].setValue(0.f);
+    module.inputs[Chimera::SHIFT_INPUT].channels = 0;
+    module.params[Chimera::REC_PARAM].setValue(0.f);
     module.inputs[Chimera::CLOCK_INPUT].channels = 0;
+    need(module.slice.selectRegion(0), "restore first region for snapshot overwrite fixture");
     const chimera::StereoFrame frozenFirst = module.reel->readActive(0);
     need(module.requestSnapshot(), "module queues an exact core snapshot cut");
     trapAllocations = true;

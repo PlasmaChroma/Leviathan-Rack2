@@ -555,6 +555,33 @@ struct Chimera : Module {
         lastClock = clock;
         const chimera::ClockEstimator::Update clockUpdate =
             clockEstimator.step(clockConnected, clockRise, slice.frame());
+        const int clockOption = ckopSetting.load(std::memory_order_relaxed);
+        slice.setClockPlayback(clockConnected, clockUpdate.acceptedEdge,
+            clockEstimator.havePeriod() ? clockEstimator.periodFrames() : 0,
+            clockEstimator.waiting(), clockOption);
+        chimera::CoreInput in{};
+        in.live = chimera::StereoFrame{l, r};
+        in.pmRightVolts = inputs[AUDIO_R_INPUT].isConnected() ?
+            inputs[AUDIO_R_INPUT].getVoltage() : 0.f;
+        in.pmRightConnected = inputs[AUDIO_R_INPUT].isConnected();
+        chimera::ControlFrame& c = in.controls;
+        c.sos = params[SOS_PARAM].getValue();
+        c.gene = params[GENE_SIZE_PARAM].getValue();
+        c.rate = params[VARISPEED_PARAM].getValue();
+        c.morph = params[MORPH_PARAM].getValue();
+        c.slide = params[SLIDE_PARAM].getValue();
+        c.organize = params[ORGANIZE_PARAM].getValue();
+        c.geneAtt = params[GENE_ATT_PARAM].getValue();
+        c.rateAtt = params[VARISPEED_ATT_PARAM].getValue();
+        c.slideAtt = params[SLIDE_ATT_PARAM].getValue();
+        c.sosPatched = inputs[SOS_CV_INPUT].isConnected();
+        c.sosCv = inputs[SOS_CV_INPUT].getVoltage();
+        c.geneCv = inputs[GENE_SIZE_CV_INPUT].getVoltage();
+        c.rateCv = inputs[VARISPEED_CV_INPUT].getVoltage();
+        c.morphCv = inputs[MORPH_CV_INPUT].getVoltage();
+        c.slideCv = inputs[SLIDE_CV_INPUT].getVoltage();
+        c.organizeCv = inputs[ORGANIZE_CV_INPUT].getVoltage();
+        slice.prepareFrameSelection(in);
         const int command = menuCommand.exchange(0, std::memory_order_acq_rel);
         if (!clockConnected) recordArm = NoArm;
         if (command == 3) {
@@ -584,38 +611,12 @@ struct Chimera : Module {
         }
         lastRec = rec;
         lastRecJack = recJack;
-        const int clockOption = ckopSetting.load(std::memory_order_relaxed);
         if (stopAtPrimaryBoundary && clockUpdate.acceptedEdge && clockConnected &&
-            (clockOption == 1 || (clockOption == 0 && !slice.hybridStretch()))) {
+            slice.clockShiftMode()) {
             transportPlay = false;
             stopAtPrimaryBoundary = false;
             slice.setPlay(false);
         }
-        slice.setClockPlayback(clockConnected, clockUpdate.acceptedEdge,
-            clockEstimator.havePeriod() ? clockEstimator.periodFrames() : 0,
-            clockEstimator.waiting(), clockOption);
-        chimera::CoreInput in{};
-        in.live = chimera::StereoFrame{l, r};
-        in.pmRightVolts = inputs[AUDIO_R_INPUT].isConnected() ?
-            inputs[AUDIO_R_INPUT].getVoltage() : 0.f;
-        in.pmRightConnected = inputs[AUDIO_R_INPUT].isConnected();
-        chimera::ControlFrame& c = in.controls;
-        c.sos = params[SOS_PARAM].getValue();
-        c.gene = params[GENE_SIZE_PARAM].getValue();
-        c.rate = params[VARISPEED_PARAM].getValue();
-        c.morph = params[MORPH_PARAM].getValue();
-        c.slide = params[SLIDE_PARAM].getValue();
-        c.organize = params[ORGANIZE_PARAM].getValue();
-        c.geneAtt = params[GENE_ATT_PARAM].getValue();
-        c.rateAtt = params[VARISPEED_ATT_PARAM].getValue();
-        c.slideAtt = params[SLIDE_ATT_PARAM].getValue();
-        c.sosPatched = inputs[SOS_CV_INPUT].isConnected();
-        c.sosCv = inputs[SOS_CV_INPUT].getVoltage();
-        c.geneCv = inputs[GENE_SIZE_CV_INPUT].getVoltage();
-        c.rateCv = inputs[VARISPEED_CV_INPUT].getVoltage();
-        c.morphCv = inputs[MORPH_CV_INPUT].getVoltage();
-        c.slideCv = inputs[SLIDE_CV_INPUT].getVoltage();
-        c.organizeCv = inputs[ORGANIZE_CV_INPUT].getVoltage();
         const chimera::Slice::Output out = slice.step(in);
         outputs[AUDIO_L_OUTPUT].setVoltage(clamp(out.audio.l * 5.f, -12.f, 12.f));
         outputs[AUDIO_R_OUTPUT].setVoltage(clamp(out.audio.r * 5.f, -12.f, 12.f));

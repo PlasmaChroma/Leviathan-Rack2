@@ -70,7 +70,7 @@ Test every option as behavior, not just a serialized checkbox. Test connected-bu
 
 Prepare Speex converters and fixed FIFOs outside real-time execution. Integrate delayed continuous-control sampling, host-edge timestamp capture, logical core event mapping, output CV/EOSG alignment, 48 kHz bypass, and sample-rate-change handoff. Implement bypass and lifecycle behavior against the actual Rack API.
 
-Instrument queue bounds, maximum work per callback, SRC delay, and converter ownership. Stress highest source-read rates, smallest Genes, lowest/highest host rates, snapshots, and changing sample rates while recording. Keep all diagnostics fixed-size on the audio side.
+Instrument queue bounds, maximum work per callback, SRC delay, and converter ownership. Stress highest source-read rates, smallest Genes, lowest/highest host rates, snapshots, and changing sample rates while recording. Treat 8 and 768 kHz as boundedness/recovery extremes; assess practical real-time playback on the required 44.1–192 kHz rates, and report host overload separately from module cost. Keep all diagnostics fixed-size on the audio side.
 
 **Deliver:** host-rate-independent 48 kHz Reel engine, predictable event alignment, zero-allocation callbacks.
 

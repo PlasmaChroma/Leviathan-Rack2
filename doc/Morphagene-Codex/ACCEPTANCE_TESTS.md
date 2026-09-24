@@ -131,7 +131,7 @@ Exact integer expectations apply to counts, addresses, IDs, revisions, PRNG stat
 |---|---|---|
 | RT-001 | Host 48 kHz. | Direct core path; no SRC buffering latency or converter allocation on each callback. |
 | RT-002 | Host 44.1/48/88.2/96/176.4/192 kHz; capture known duration and pitch. | Reel stays 48 kHz and correct duration; pitch stable; conversions use calibrated input/output latency, not simply one core tick per host tick. |
-| RT-003 | Host extremes 8 kHz and 768 kHz plus invalid rates. | Declared rates remain within FIFO/iteration limits; invalid settings get defined error/silence; no unbounded catch-up loop. |
+| RT-003 | Host extremes 8 kHz and 768 kHz plus invalid rates. | Stress bounded FIFO/iteration work and defined error/silence recovery; no unbounded catch-up loop. Record whether the host actually sustains each extreme separately. Do not infer full-patch real-time playability from this test. |
 | RT-004 | Host gate pulses shorter than one core period, multiple timestamps collapsing to one core tick. | Detected host edges preserved in bounded event queue and ordered; gating not low-pass resampled as audio. |
 | RT-005 | Simultaneous audio impulse and PLAY/REC/Clock events through SRC. | Events act on matching delayed input frames; audio/CV/EOSG output alignment matches declared measured bridge latency. |
 | RT-006 | Change host sample rate during playback, Current record, and ArmedStart. | Preserve Reel/core positions; pause/prepare/re-prime per spec; cancel armed transition; no old-rate writer drift or converter allocation/free on audio. |

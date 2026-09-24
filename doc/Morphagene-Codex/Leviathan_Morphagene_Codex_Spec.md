@@ -254,7 +254,7 @@ Store and process Reel data at 48 kHz regardless of Rack rate. A 1-second 48 kHz
 
 At exactly 48 kHz, use a direct single-frame path: no SRC state, no batching latency, one core frame per host frame. At other rates, use preallocated input/core/output FIFOs and prepared stereo SRC states. Initial target: Speex quality 5; measure and expose the resulting latency, not an invented fixed number.
 
-Support positive finite integer host sample rates from 8,000 through 768,000 Hz, with required release tests at 44,100, 48,000, 88,200, 96,000, 176,400, and 192,000 Hz. Reject unsupported/fractional rates explicitly rather than silently round and drift. This range is a software support policy, not a statement of every rate Rack exposes in its UI.
+Support positive finite integer host sample rates from 8,000 through 768,000 Hz, with required release tests at 44,100, 48,000, 88,200, 96,000, 176,400, and 192,000 Hz. Reject unsupported/fractional rates explicitly rather than silently round and drift. This range is a software support policy, not a statement of every rate Rack exposes in its UI. The 8 and 768 kHz endpoints are boundedness and failure-recovery stress cases, not a real-time performance promise for a full Rack patch. At those extremes, report whether the actual host sustains the requested rate separately from Chimera's processing and recovery behavior.
 
 ### 6.2 Preparation and bounded work
 

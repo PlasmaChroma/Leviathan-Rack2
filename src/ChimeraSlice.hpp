@@ -55,6 +55,7 @@ public:
         stopTailRemaining_ = 0;
         clockEdge_ = false;
         hybridStretch_ = false;
+        framePrepared_ = false;
     }
     void setPlay(bool play) {
         if (play && !play_) retrigger_ = true;
@@ -98,6 +99,13 @@ public:
     }
     bool clockShiftMode() const { return clockOption_ == 1 || (clockOption_ == 0 && !hybridStretch_); }
     bool hybridStretch() const { return hybridStretch_; }
+    // Resolve this frame's controls and selection before a Clock-armed writer
+    // latches its Current region. step() consumes the prepared result once.
+    void prepareFrameSelection(const CoreInput& input) {
+        preparedControls_ = controls_.step(input);
+        preparedNaturalBoundary_ = resolveSelection(preparedControls_);
+        framePrepared_ = true;
+    }
     double trajectoryOffset() const { return grains_.trajectoryOffset(); }
     bool pmActive() const { return pmActive_; }
     float pmBlend() const { return pmBlend_; }
@@ -171,29 +179,16 @@ public:
     }
 
     Output step(const CoreInput& input) {
-        bool naturalBoundary = false;
+        bool naturalBoundary = framePrepared_ ? preparedNaturalBoundary_ : false;
         bool naturalCompletion = false;
-        const CoreOutput c = controls_.step(input);
-        const double density = profile1::morphDensity(c.morph);
-        if (density > 2.02) hybridStretch_ = true;
-        else if (density < 1.98) hybridStretch_ = false;
+        const CoreOutput c = framePrepared_ ? preparedControls_ : controls_.step(input);
+        if (!framePrepared_) naturalBoundary = resolveSelection(c);
+        framePrepared_ = false;
         const int clockMode = clockConnected_ ?
             (clockOption_ == 1 ? 1 : (clockOption_ == 2 || hybridStretch_ ? 2 : 1)) : 0;
         const bool clockShift = clockEdge_ && clockMode == 1;
         const Grains::ClockDrive clockDrive(clockMode, clockEdge_, clockPeriod_, clockWaiting_);
         clockEdge_ = false;
-        if (reel_) {
-            selection_.observe(c.organize, reel_->markerCount(), shiftRequested_);
-            const std::uint16_t requested = selection_.requested();
-            if (requested != currentRegion_ &&
-                (!play_ || immediateTransitions_ || retrigger_ || !wasReading_ ||
-                grains_.primaryBoundaryDue() || clockShift)) {
-                const bool dueBoundary = wasReading_ && grains_.primaryBoundaryDue();
-                selectRegion(requested);
-                naturalBoundary = dueBoundary;
-            }
-        }
-        shiftRequested_ = false;
         const float normalizedLeft = profile1::audio(input.live.l) * 0.2f;
         const float leftPower = normalizedLeft * normalizedLeft;
         leftEnergy_ += 0.0020811647f * (leftPower - leftEnergy_);
@@ -341,6 +336,25 @@ public:
     }
 
 private:
+    bool resolveSelection(const CoreOutput& c) {
+        const double density = profile1::morphDensity(c.morph);
+        if (density > 2.02) hybridStretch_ = true;
+        else if (density < 1.98) hybridStretch_ = false;
+        const bool clockShift = clockEdge_ && clockShiftMode();
+        bool naturalBoundary = false;
+        if (reel_) {
+            selection_.observe(c.organize, reel_->markerCount(), shiftRequested_);
+            const std::uint16_t requested = selection_.requested();
+            if (requested != currentRegion_ &&
+                (!play_ || immediateTransitions_ || retrigger_ || !wasReading_ ||
+                 grains_.primaryBoundaryDue() || clockShift)) {
+                naturalBoundary = wasReading_ && grains_.primaryBoundaryDue();
+                selectRegion(requested);
+            }
+        }
+        shiftRequested_ = false;
+        return naturalBoundary;
+    }
     void insertMarker(std::uint32_t frame, Region playbackRegion) {
         if (!reel_ || frame >= reel_->validFrames() ||
             reel_->markerCount() >= kMaxSplices -
@@ -423,6 +437,8 @@ private:
     std::uint32_t clockPeriod_;
     int clockOption_;
     bool hybridStretch_;
+    CoreOutput preparedControls_{};
+    bool framePrepared_ = false, preparedNaturalBoundary_ = false;
     DcBlocker inputDc_[2], outputDc_[2];
 };
 
