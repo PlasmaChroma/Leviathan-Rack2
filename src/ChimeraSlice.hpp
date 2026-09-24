@@ -1,15 +1,16 @@
 #pragma once
 
 #include "ChimeraCore.hpp"
+#include "ChimeraGrains.hpp"
 #include "ChimeraReel.hpp"
 #include <cmath>
 #include <cstdint>
 
 namespace chimera {
 
-// The first audible 48 kHz slice. Owns no allocation; its Reel is prepared
-// off audio and outlives this engine. Later phases replace its single reader
-// with the bounded musical voice scheduler.
+// 48 kHz audio slice. Owns no audio-thread allocation; its Reel is prepared
+// off audio and outlives this engine. Playback uses the bounded musical slots
+// while the Current/Append writer remains independent.
 class Slice {
 public:
     enum RecordState { Idle, Current, Append };
@@ -21,20 +22,22 @@ public:
 
     explicit Slice(Reel* reel = 0) : reel_(reel), state_(Idle), play_(true), retrigger_(false),
         inop_(false), currentRegion_(0), writer_(0), appendStart_(0),
-        position_(0.0), slide_(0.0), travel_(0.0), boundaryPending_(false),
+        position_(0.0),
         wetGain_(1.f), sourceBlend_(0.f),
         frame_(0), lastBoundaryFrame_(0), eosgRemaining_(0), hadBoundary_(false),
         energyState_(0.f),
-        overloaded_(false), conditioning_(true) {}
+        overloaded_(false), conditioning_(true), wasReading_(false),
+        rampCv_(false), primaryPhase_(0.f), ratioA_(2), ratioB_(3), ratioC_(4) {}
 
     void setReel(Reel* reel) {
         reel_ = reel;
         state_ = Idle;
         currentRegion_ = 0;
-        position_ = slide_ = travel_ = 0.0;
-        boundaryPending_ = false;
+        position_ = 0.0;
         eosgRemaining_ = 0;
         hadBoundary_ = false;
+        grains_.reset();
+        wasReading_ = false;
     }
     void setPlay(bool play) {
         if (play && !play_) retrigger_ = true;
@@ -48,6 +51,16 @@ public:
         }
         conditioning_ = enabled;
     }
+    void setSmoothGenes(bool enabled) { grains_.setSmooth(enabled); }
+    void setImmediateTransitions(bool enabled) { grains_.setImmediateTransitions(enabled); }
+    void setRampCv(bool enabled) { rampCv_ = enabled; }
+    void setChordRatios(double a, double b, double c) {
+        if (a == ratioA_ && b == ratioB_ && c == ratioC_) return;
+        ratioA_ = a; ratioB_ = b; ratioC_ = c;
+        grains_.setChordRatios(a, b, c);
+    }
+    std::uint64_t onsetCount() const { return grains_.onsetCount(); }
+    double primaryPosition() const { return position_; }
     void setInop(bool inop) {
         inop_ = inop;
         if (state_ == Idle) sourceBlend_ = inop ? 1.f : 0.f;
@@ -61,8 +74,10 @@ public:
         currentRegion_ = index;
         const Region selected = reel_->region(index);
         position_ = selected.begin;
-        slide_ = travel_ = 0.0;
-        boundaryPending_ = false;
+        grains_.reset(position_);
+        wasReading_ = false;
+        grains_.reset();
+        wasReading_ = false;
         return true;
     }
 
@@ -92,14 +107,15 @@ public:
             }
             else currentRegion_ = 0;
             position_ = static_cast<double>(reel_->region(currentRegion_).begin);
-            travel_ = slide_ = 0.0;
+            grains_.reset(position_);
+            wasReading_ = false;
         }
         state_ = Idle;
     }
 
     Output step(const CoreInput& input) {
-        const bool naturalBoundary = boundaryPending_;
-        boundaryPending_ = false;
+        bool naturalBoundary = false;
+        bool naturalCompletion = false;
         const CoreOutput c = controls_.step(input);
         const StereoFrame live = conditioning_ ?
             StereoFrame{inputDc_[0].step(c.live.l), inputDc_[1].step(c.live.r)} : c.live;
@@ -114,24 +130,22 @@ public:
                 region.end = appendStart_;
         }
         const bool canRead = play_ && region.end > region.begin;
+        const bool finiteGene = !controls_.fullGene();
         const double length = region.end - region.begin;
+        if (!canRead && wasReading_) { grains_.reset(position_); wasReading_ = false; }
         if (canRead) {
-            const double target = c.slide * (length - 1.0);
-            const double delta = profile1::clamp(target - slide_, -64.0, 64.0);
-            slide_ += delta;
-            if (retrigger_) {
-                position_ = profile1::wrapPosition(region.begin + slide_ +
-                    (c.rate < 0.f ? -1.0 : 0.0), region);
-                travel_ = 0.0;
-                retrigger_ = false;
-            }
-            else position_ = profile1::wrapPosition(position_ + delta, region);
-            if (position_ < region.begin || position_ >= region.end)
-                position_ = region.begin + slide_;
-            wet = read(region, position_);
-            wet.l = guard(wet.l);
-            wet.r = guard(wet.r);
+            if (!wasReading_) { grains_.reset(position_); wasReading_ = true; }
+            const Grains::Result g = grains_.step(*reel_, region, c, retrigger_, !finiteGene);
+            wet = g.audio;
+            position_ = g.primaryPosition;
+            primaryPhase_ = g.primaryPhase;
+            naturalBoundary = naturalBoundary || g.primaryBoundary;
+            naturalCompletion = g.completions != 0;
+            overloaded_ = overloaded_ || g.invalidSource;
+            retrigger_ = false;
         }
+        wet.l = guard(wet.l);
+        wet.r = guard(wet.r);
         const float gainTarget = canRead && c.rate != 0.f ? 1.f : 0.f;
         wetGain_ += profile1::clamp(gainTarget - wetGain_, -1.f/48.f, 1.f/48.f);
         wet.l *= wetGain_;
@@ -162,18 +176,10 @@ public:
                 }
             }
         }
-        if (canRead && c.rate != 0.f) {
-            position_ = profile1::wrapPosition(position_ + c.rate, region);
-            travel_ += std::fabs(c.rate);
-            if (travel_ >= length) {
-                boundaryPending_ = true;
-                travel_ = std::fmod(travel_, length); // Retain fractional excess.
-            }
-        }
         // A natural completion starts a core-timed pulse. Keep it shorter than
         // half the expected interval so rapid traversals remain distinguishable.
-        if (naturalBoundary && canRead && c.rate != 0.f) {
-            double interval = length / std::fabs(c.rate);
+        if ((naturalCompletion || naturalBoundary) && canRead && (finiteGene || c.rate != 0.f)) {
+            double interval = finiteGene ? profile1::finiteGeneFrames(static_cast<std::uint32_t>(length), c.gene) / profile1::morphDensity(c.morph) : length / std::fabs(c.rate);
             if (hadBoundary_) {
                 const std::uint64_t spacing = frame_ - lastBoundaryFrame_;
                 if (spacing && spacing < interval) interval = double(spacing);
@@ -183,7 +189,7 @@ public:
             lastBoundaryFrame_ = frame_;
             hadBoundary_ = true;
         }
-        if (!canRead || c.rate == 0.f) eosgRemaining_ = 0;
+        if (!canRead || (!finiteGene && c.rate == 0.f)) eosgRemaining_ = 0;
         const bool eosg = eosgRemaining_ != 0;
         if (eosg) --eosgRemaining_;
         if (reel_) reel_->maintenanceTick();
@@ -193,7 +199,8 @@ public:
         const float energy = 0.5f * (heard.l * heard.l + heard.r * heard.r);
         const float alpha = energy > energyState_ ? 0.00415799815f : 0.00026038276f;
         energyState_ += alpha * (energy - energyState_);
-        const float cv = 8.f * fastSqrt(energyState_ < 1.f ? energyState_ : 1.f);
+        const float cv = rampCv_ ? (canRead ? 8.f * primaryPhase_ : 0.f) :
+            8.f * fastSqrt(energyState_ < 1.f ? energyState_ : 1.f);
         return Output{heard, cv, state_ != Idle, full, naturalBoundary, eosg};
     }
 
@@ -220,17 +227,6 @@ private:
             return output;
         }
     };
-    StereoFrame read(Region r, double coordinate) const {
-        const double p = profile1::wrapPosition(coordinate, r);
-        const std::int64_t base = static_cast<std::int64_t>(std::floor(p));
-        const double t = p - base;
-        const StereoFrame a = reel_->readActive(profile1::wrapTap(base, -1, r));
-        const StereoFrame b = reel_->readActive(profile1::wrapTap(base,  0, r));
-        const StereoFrame c = reel_->readActive(profile1::wrapTap(base,  1, r));
-        const StereoFrame d = reel_->readActive(profile1::wrapTap(base,  2, r));
-        return StereoFrame{static_cast<float>(profile1::cubic(a.l,b.l,c.l,d.l,t)),
-                           static_cast<float>(profile1::cubic(a.r,b.r,c.r,d.r,t))};
-    }
     float guard(float value) {
         if (!profile1::finite(value)) { overloaded_ = true; return 0.f; }
         if (value > 64.f) { overloaded_ = true; return 64.f; }
@@ -239,14 +235,14 @@ private:
     }
 
     Core controls_;
+    Grains grains_;
     Reel* reel_;
     RecordState state_;
     bool play_, retrigger_, inop_;
     std::uint16_t currentRegion_;
     Region recordRegion_;
     std::uint32_t writer_, appendStart_;
-    double position_, slide_, travel_;
-    bool boundaryPending_;
+    double position_;
     float wetGain_, sourceBlend_;
     std::uint64_t frame_;
     std::uint64_t lastBoundaryFrame_;
@@ -255,6 +251,9 @@ private:
     float energyState_;
     bool overloaded_;
     bool conditioning_;
+    bool wasReading_, rampCv_;
+    float primaryPhase_;
+    double ratioA_, ratioB_, ratioC_;
     DcBlocker inputDc_[2], outputDc_[2];
 };
 

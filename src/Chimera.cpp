@@ -2,8 +2,11 @@
 #include "ChimeraSlice.hpp"
 #include "ChimeraOwnership.hpp"
 #include "ChimeraService.hpp"
+#include <ui/TextField.hpp>
 #include <atomic>
 #include <chrono>
+#include <cmath>
+#include <cstdlib>
 #include <memory>
 
 struct Chimera : Module {
@@ -105,6 +108,8 @@ struct Chimera : Module {
     std::atomic<bool> prepareRequested{false};
     std::atomic<int> menuCommand{0};
     std::atomic<bool> inopSetting{false};
+    std::atomic<bool> gnsmSetting{false}, cvopSetting{false}, omodSetting{false};
+    std::atomic<float> mcrSetting[3]{{2.f}, {3.f}, {4.f}};
     bool lastRec = false;
     bool lastRecJack = false;
     bool lastClock = false;
@@ -366,12 +371,36 @@ struct Chimera : Module {
         json_t* root = json_object();
         json_object_set_new(root, "audioStatus", json_string("unsaved-development-slice"));
         json_object_set_new(root, "inop", json_boolean(inopSetting.load(std::memory_order_acquire)));
+        json_object_set_new(root, "gnsm", json_integer(gnsmSetting.load(std::memory_order_acquire) ? 1 : 0));
+        json_object_set_new(root, "cvop", json_integer(cvopSetting.load(std::memory_order_acquire) ? 1 : 0));
+        json_object_set_new(root, "omod", json_integer(omodSetting.load(std::memory_order_acquire) ? 1 : 0));
+        for (int i = 0; i < 3; ++i) {
+            const char* key = i == 0 ? "mcr1" : (i == 1 ? "mcr2" : "mcr3");
+            json_object_set_new(root, key, json_real(mcrSetting[i].load(std::memory_order_acquire)));
+        }
         return root;
     }
     void dataFromJson(json_t* root) override {
         json_t* inop = json_object_get(root, "inop");
         if (json_is_boolean(inop))
             inopSetting.store(json_is_true(inop), std::memory_order_release);
+        json_t* gnsm = json_object_get(root, "gnsm");
+        if (json_is_integer(gnsm) && (json_integer_value(gnsm) == 0 || json_integer_value(gnsm) == 1))
+            gnsmSetting.store(json_integer_value(gnsm) == 1, std::memory_order_release);
+        json_t* cvop = json_object_get(root, "cvop");
+        if (json_is_integer(cvop) && (json_integer_value(cvop) == 0 || json_integer_value(cvop) == 1))
+            cvopSetting.store(json_integer_value(cvop) == 1, std::memory_order_release);
+        json_t* omod = json_object_get(root, "omod");
+        if (json_is_integer(omod) && (json_integer_value(omod) == 0 || json_integer_value(omod) == 1))
+            omodSetting.store(json_integer_value(omod) == 1, std::memory_order_release);
+        for (int i = 0; i < 3; ++i) {
+            const char* key = i == 0 ? "mcr1" : (i == 1 ? "mcr2" : "mcr3");
+            json_t* ratio = json_object_get(root, key);
+            const double value = json_number_value(ratio);
+            if (json_is_number(ratio) && chimera::profile1::finite(value) &&
+                std::fabs(value) >= 0.0625 && std::fabs(value) <= 16.0)
+                mcrSetting[i].store(static_cast<float>(value), std::memory_order_release);
+        }
     }
 
     void process(const ProcessArgs& args) override {
@@ -423,6 +452,12 @@ struct Chimera : Module {
         if (!inputs[PLAY_INPUT].isConnected()) playGate.high = true;
         slice.setPlay(play);
         slice.setInop(inopSetting.load(std::memory_order_relaxed));
+        slice.setSmoothGenes(gnsmSetting.load(std::memory_order_relaxed));
+        slice.setRampCv(cvopSetting.load(std::memory_order_relaxed));
+        slice.setImmediateTransitions(omodSetting.load(std::memory_order_relaxed));
+        slice.setChordRatios(mcrSetting[0].load(std::memory_order_relaxed),
+                             mcrSetting[1].load(std::memory_order_relaxed),
+                             mcrSetting[2].load(std::memory_order_relaxed));
         const bool rec = params[REC_PARAM].getValue() > 0.5f;
         const bool recJack = recGate.update(inputs[REC_INPUT].isConnected() ?
             inputs[REC_INPUT].getVoltage() : 0.f);
@@ -501,13 +536,38 @@ struct Chimera : Module {
     }
 };
 
+struct ChimeraRatioField : ui::TextField {
+    Chimera* owner = nullptr;
+    int slot = 0;
+    void onSelectKey(const event::SelectKey& e) override {
+        if (e.action == GLFW_PRESS &&
+            (e.isKeyCommand(GLFW_KEY_ENTER) || e.isKeyCommand(GLFW_KEY_KP_ENTER))) {
+            char* end = nullptr;
+            const float value = std::strtof(text.c_str(), &end);
+            while (end && *end == ' ') ++end;
+            if (owner && end != text.c_str() && end && *end == '\0' &&
+                chimera::profile1::finite(value) &&
+                std::fabs(value) >= 0.0625f && std::fabs(value) <= 16.f) {
+                owner->mcrSetting[slot].store(value, std::memory_order_release);
+                if (ui::MenuOverlay* overlay = getAncestorOfType<ui::MenuOverlay>())
+                    overlay->requestDelete();
+            }
+            e.consume(this);
+            return;
+        }
+        ui::TextField::onSelectKey(e);
+    }
+};
+
 struct ChimeraWidget : ModuleWidget {
     ChimeraWidget(Chimera* module) {
         setModule(module);
         setPanel(createPanel(asset::plugin(pluginInstance, "res/Chimera.svg")));
-        addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(25, 42)), module, Chimera::SOS_PARAM));
+        addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(15, 42)), module, Chimera::SOS_PARAM));
+        addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(42, 42)), module, Chimera::GENE_SIZE_PARAM));
         addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(71, 42)), module, Chimera::VARISPEED_PARAM));
-        addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(117, 42)), module, Chimera::SLIDE_PARAM));
+        addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(100, 42)), module, Chimera::MORPH_PARAM));
+        addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(127, 42)), module, Chimera::SLIDE_PARAM));
         addParam(createParamCentered<LEDButton>(mm2px(Vec(71, 98)), module, Chimera::REC_PARAM));
         addInput(createInputCentered<PJ301MPort>(mm2px(Vec(25, 70)), module, Chimera::AUDIO_L_INPUT));
         addInput(createInputCentered<PJ301MPort>(mm2px(Vec(53, 70)), module, Chimera::AUDIO_R_INPUT));
@@ -542,6 +602,27 @@ struct ChimeraWidget : ModuleWidget {
         menu->addChild(createMenuItem("Stop recording", "", [m] { m->menuCommand.store(3, std::memory_order_release); }));
         menu->addChild(createMenuItem("Writer: live input only", "", [m] {
             m->inopSetting.store(!m->inopSetting.load(std::memory_order_relaxed), std::memory_order_release);
+        }));
+        menu->addChild(createCheckMenuItem("Smooth Gene window", "",
+            [m] { return m->gnsmSetting.load(std::memory_order_acquire); },
+            [m] { m->gnsmSetting.store(!m->gnsmSetting.load(std::memory_order_relaxed), std::memory_order_release); }));
+        menu->addChild(createCheckMenuItem("CV OUT: primary ramp", "",
+            [m] { return m->cvopSetting.load(std::memory_order_acquire); },
+            [m] { m->cvopSetting.store(!m->cvopSetting.load(std::memory_order_relaxed), std::memory_order_release); }));
+        menu->addChild(createCheckMenuItem("Immediate transitions", "",
+            [m] { return m->omodSetting.load(std::memory_order_acquire); },
+            [m] { m->omodSetting.store(!m->omodSetting.load(std::memory_order_relaxed), std::memory_order_release); }));
+        menu->addChild(createSubmenuItem("Chord ratios (mcr1–3)", "", [m](Menu* submenu) {
+            for (int i = 0; i < 3; ++i) {
+                submenu->addChild(createMenuLabel(i == 0 ? "Slot 1 ratio" :
+                    (i == 1 ? "Slot 2 ratio" : "Slot 3 ratio")));
+                ChimeraRatioField* field = new ChimeraRatioField;
+                field->owner = m;
+                field->slot = i;
+                field->box.size = Vec(180.f, 24.f);
+                field->setText(std::to_string(m->mcrSetting[i].load(std::memory_order_acquire)));
+                submenu->addChild(field);
+            }
         }));
     }
 };

@@ -24,7 +24,7 @@ public:
         rateCoordinate_.setTau(0.001);
         pitchVolts_.setTau(0.00025);
         morph_.setTau(0.002);
-        ratios_[0] = ratios_[1] = ratios_[2] = 1.0;
+        ratios_[0] = 2.0; ratios_[1] = 3.0; ratios_[2] = 4.0;
     }
 
     void setRateMode(int mode) { rateMode_ = mode >= 0 && mode <= 2 ? mode : 0; }

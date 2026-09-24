@@ -258,9 +258,34 @@ int main() {
     need(data && json_is_string(json_object_get(data, "audioStatus")),
          "development JSON explicitly declares unsaved audio");
     json_object_set_new(data, "inop", json_true());
+    json_object_set_new(data, "gnsm", json_integer(1));
+    json_object_set_new(data, "cvop", json_integer(1));
+    json_object_set_new(data, "omod", json_integer(1));
+    json_object_set_new(data, "mcr1", json_real(-2.5));
+    json_object_set_new(data, "mcr2", json_real(0.0));
     module.dataFromJson(data);
-    need(module.inopSetting.load(), "writer source option persists through JSON");
+    need(module.inopSetting.load() && module.gnsmSetting.load() &&
+         module.cvopSetting.load() && module.omodSetting.load(),
+         "writer, smooth-window, ramp, and immediate options persist through JSON");
+    need(module.mcrSetting[0].load() == -2.5f && module.mcrSetting[1].load() == 3.f,
+         "signed chord ratio loads while invalid zero retains default");
     json_decref(data);
+    module.params[Chimera::GENE_SIZE_PARAM].setValue(1.f);
+    module.params[Chimera::MORPH_PARAM].setValue(1.f);
+    trapAllocations = true;
+    for (int i = 0; i < 100; ++i) module.process(args);
+    trapAllocations = false;
+    need(audioAllocations == 0 && module.slice.onsetCount() > 0 &&
+         std::isfinite(module.outputs[Chimera::CV_OUTPUT].getVoltage()),
+         "Rack finite-Gene audio and CV path allocate no heap");
+    module.params[Chimera::GENE_SIZE_PARAM].setValue(0.f);
+    for (int i = 0; i < 1000; ++i) module.process(args); // Cross Gene hysteresis.
+    trapAllocations = true;
+    for (int i = 0; i < 100; ++i) module.process(args);
+    trapAllocations = false;
+    need(audioAllocations == 0 &&
+         std::isfinite(module.outputs[Chimera::AUDIO_L_OUTPUT].getVoltage()),
+         "Rack full-Splice high-Morph scheduler allocates no heap");
     args.sampleRate = 96000.f;
     args.sampleTime = 1.f/96000.f;
     module.process(args);

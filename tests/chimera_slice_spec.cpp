@@ -318,5 +318,54 @@ int main() {
     need(guarded.overloaded() && std::isfinite(safe.audio.l) &&
          std::isfinite(safe.audio.r) && std::isfinite(safe.cv),
          "nonfinite stored source cannot poison audio or CV state");
+    chimera::Reel finiteReel(20, 20);
+    for (int i = 0; i < 4800; ++i)
+        need(finiteReel.write(i, chimera::StereoFrame{1.f, 1.f}, i),
+             "prepare finite Slice fixture");
+    chimera::Slice finiteSlice(&finiteReel);
+    finiteSlice.setConditioning(false);
+    finiteSlice.setRampCv(true);
+    finiteSlice.setPlay(false);
+    chimera::CoreInput finiteInput = input(0.f, 0.f, 1.f);
+    finiteInput.controls.gene = static_cast<float>(
+        std::log(480.0 / 4800.0) / std::log(16.0 / 4800.0));
+    finiteSlice.step(finiteInput); // Initialize the control smoother while stopped.
+    finiteSlice.setPlay(true);
+    int firstFiniteBoundary = -1, firstFinitePulse = -1;
+    for (int frame = 0; frame <= 500; ++frame) {
+        const chimera::Slice::Output out = finiteSlice.step(finiteInput);
+        if (out.naturalBoundary && firstFiniteBoundary < 0) firstFiniteBoundary = frame;
+        if (out.eosg && firstFinitePulse < 0) firstFinitePulse = frame;
+        if (frame == 0 || frame == 480)
+            need(out.cv < 0.05f, "primary ramp resets on finite onset/boundary");
+        if (frame > 100 && frame < 479)
+            need(near(out.audio.l, 1.f, 1e-5f), "finite wet plateau reaches Rack slice");
+    }
+    need(firstFiniteBoundary == 480 && firstFinitePulse == 480 &&
+         finiteSlice.onsetCount() >= 2,
+         "finite completion drives primary boundary and EOSG in integrated slice");
+    chimera::Slice fullRamp(&constant);
+    fullRamp.setConditioning(false);
+    fullRamp.setRampCv(true);
+    for (int frame = 0; frame <= 16; ++frame) {
+        const chimera::Slice::Output out = fullRamp.step(input(0.f, 0.f, 1.f));
+        if (frame == 0 || frame == 16)
+            need(near(out.cv, 0.f), "full-Splice primary ramp resets on source traversal");
+        if (frame == 8)
+            need(near(out.cv, 4.f), "full-Splice primary ramp follows traveled distance");
+    }
+    chimera::Slice fullMorph(&finiteReel);
+    fullMorph.setConditioning(false);
+    chimera::CoreInput chordInput = input(0.f, 0.f, 1.f);
+    chordInput.controls.morph = 1.f;
+    bool secondaryEosg = false;
+    for (int frame = 0; frame < 4000; ++frame) {
+        const chimera::Slice::Output out = fullMorph.step(chordInput);
+        if (out.eosg && !out.naturalBoundary && frame > 3000) secondaryEosg = true;
+        need(!out.naturalBoundary,
+             "high-Morph secondary completion does not reset full-Splice primary");
+    }
+    need(secondaryEosg,
+         "high-Morph full-Splice secondary completion contributes EOSG");
     std::puts("PASS: Chimera 48 kHz slice initial capture, Current, Append, and TLA");
 }

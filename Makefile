@@ -485,6 +485,11 @@ test-chimera-phase3: | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc tests/chimera_slice_spec.cpp -o build/tests/chimera_slice_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_slice_spec$(if $(ARCH_WIN),.exe,)
 
+.PHONY: test-chimera-phase4
+test-chimera-phase4: | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -fno-fast-math -fno-unsafe-math-optimizations -Isrc tests/chimera_grains_spec.cpp -o build/tests/chimera_grains_spec$(if $(ARCH_WIN),.exe,)
+	build/tests/chimera_grains_spec$(if $(ARCH_WIN),.exe,)
+
 test-chimera-phase3-sanitize: | build/tests
 	$(CXX) -std=c++11 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-fast-math -pthread -Isrc tests/chimera_slice_spec.cpp -o build/tests/chimera_slice_sanitize_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_slice_sanitize_spec$(if $(ARCH_WIN),.exe,)
