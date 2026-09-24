@@ -469,5 +469,114 @@ int main() {
          positive.markerPosition == 0.0 && negative.markerPosition == 0.0 &&
          displaced.primaryPosition() == 0.0,
          "PM shifts read taps in both directions without moving primary or marker cursor");
+    // Clock advances the source origin without changing finite Gene lifetime.
+    chimera::CoreOutput clockControl{};
+    clockControl.gene = static_cast<float>(gene);
+    clockControl.morph = 1.f/6.f;
+    clockControl.rate = 1.f;
+    chimera::Grains shifted;
+    shifted.step(reel, region, clockControl, false, false, false, 0.0,
+                 chimera::Grains::ClockDrive(1));
+    const std::uint64_t beforeShift = shifted.onsetCount();
+    const chimera::Grains::Result shiftEdge = shifted.step(
+        reel, region, clockControl, false, false, false, 0.0,
+        chimera::Grains::ClockDrive(1, true));
+    need(beforeShift == 1 && shifted.onsetCount() == 2 &&
+         std::fabs(shiftEdge.markerPosition - 480.0) < 1e-6 &&
+         !shiftEdge.primaryBoundary && !shiftEdge.completions,
+         "Gene Shift forces one onset at the stepped origin without fabricated EOSG");
+    const chimera::Grains::Result disconnected = shifted.step(
+        reel, region, clockControl, false, false, false, 0.0,
+        chimera::Grains::ClockDrive());
+    need(std::fabs(disconnected.markerPosition) < 1e-6 &&
+         std::fabs(shifted.trajectoryOffset()) < 1e-6,
+         "Clock disconnect restores the free-running Slide origin");
+    chimera::Reel clockTone(20, 20);
+    for (std::uint32_t frame = 0; frame < 4800; ++frame) {
+        const float sample = static_cast<float>(std::sin(2.0 * chimera::profile1::kPi *
+                                                         261.626 * frame / 48000.0));
+        need(clockTone.write(frame, chimera::StereoFrame{sample, sample}, frame),
+             "prepare phase-misaligned Clock transition fixture");
+    }
+    chimera::Grains smoothClock;
+    clockControl.rate = 1.f;
+    double lastClockSample = 0.0, largestClockStep = 0.0;
+    for (int frame = 0; frame < 350; ++frame) {
+        const bool edge = frame == 100 || frame == 200 || frame == 300;
+        const chimera::Grains::Result out = smoothClock.step(
+            clockTone, region, clockControl, false, false, false, 0.0,
+            chimera::Grains::ClockDrive(1, edge));
+        if (frame >= 100) {
+            const double change = std::fabs(out.audio.l - lastClockSample);
+            if (frame >= 100 && change > largestClockStep) largestClockStep = change;
+        }
+        lastClockSample = out.audio.l;
+    }
+    need(largestClockStep < 0.15,
+         "forced Gene Shift crossfades phase-misaligned tones across all voice slots");
+    chimera::Grains coincidentShift;
+    coincidentShift.step(reel, region, clockControl, false, false, false, 0.0,
+                         chimera::Grains::ClockDrive(1));
+    for (int frame = 1; frame < 480; ++frame)
+        coincidentShift.step(reel, region, clockControl, false, false, false, 0.0,
+                             chimera::Grains::ClockDrive(1));
+    const std::uint64_t beforeCoincident = coincidentShift.onsetCount();
+    const chimera::Grains::Result coincidentEdge = coincidentShift.step(
+        reel, region, clockControl, false, false, false, 0.0,
+        chimera::Grains::ClockDrive(1, true));
+    need(beforeCoincident == 1 && coincidentShift.onsetCount() == 2 &&
+         coincidentEdge.completions == 1 && !coincidentEdge.primaryBoundary,
+         "coincident natural completion and Clock Shift keep one completion and one onset");
+    chimera::Grains reverseShift;
+    clockControl.rate = -1.f;
+    reverseShift.step(reel, region, clockControl, false, false, false, 0.0,
+                      chimera::Grains::ClockDrive(1));
+    const chimera::Grains::Result reverseEdge = reverseShift.step(
+        reel, region, clockControl, false, false, false, 0.0,
+        chimera::Grains::ClockDrive(1, true));
+    need(std::fabs(reverseEdge.markerPosition - 4319.0) < 1e-6,
+         "Gene Shift follows reverse base-rate direction");
+    chimera::Grains fullShift;
+    clockControl.rate = 1.f;
+    fullShift.step(reel, region, clockControl, false, true, false, 0.0,
+                   chimera::Grains::ClockDrive(1));
+    const chimera::Grains::Result fullEdge = fullShift.step(
+        reel, region, clockControl, false, true, false, 0.0,
+        chimera::Grains::ClockDrive(1, true));
+    need(fullShift.onsetCount() == 2 && std::fabs(fullEdge.markerPosition) < 1e-6,
+         "full-Splice Clock step wraps and retriggers the same region");
+    for (int rateCase = 0; rateCase < 2; ++rateCase) {
+        chimera::Grains stretched;
+        clockControl.rate = rateCase ? 2.f : 0.5f;
+        stretched.step(reel, region, clockControl, false, false, false, 0.0,
+                       chimera::Grains::ClockDrive(2, true));
+        for (int frame = 0; frame < 99; ++frame)
+            stretched.step(reel, region, clockControl, false, false, false, 0.0,
+                           chimera::Grains::ClockDrive(2));
+        need(stretched.trajectoryOffset() == 0.0,
+             "Stretch holds source trajectory before its second edge");
+        const std::uint64_t beforePeriod = stretched.onsetCount();
+        stretched.step(reel, region, clockControl, false, false, false, 0.0,
+                       chimera::Grains::ClockDrive(2, true, 2400));
+        need(stretched.onsetCount() == beforePeriod &&
+             std::fabs(stretched.trajectoryOffset() - 480.2) < 1e-5,
+             "Stretch edge reanchors source without forcing a musical onset");
+        for (int frame = 0; frame < 99; ++frame)
+            stretched.step(reel, region, clockControl, false, false, false, 0.0,
+                           chimera::Grains::ClockDrive(2, false, 2400));
+        need(std::fabs(stretched.trajectoryOffset() - 500.0) < 1e-4,
+             "Stretch source speed is Gene length divided by Clock period, independent of pitch");
+        clockControl.rate = rateCase ? -2.f : -0.5f;
+        for (int frame = 0; frame < 10; ++frame)
+            stretched.step(reel, region, clockControl, false, false, false, 0.0,
+                           chimera::Grains::ClockDrive(2, false, 2400));
+        need(std::fabs(stretched.trajectoryOffset() - 498.0) < 1e-4,
+             "Stretch reverses source trajectory when base pitch direction reverses");
+        for (int frame = 0; frame < 48000; ++frame)
+            stretched.step(reel, region, clockControl, false, false, false, 0.0,
+                           chimera::Grains::ClockDrive(2, false, 2400, true));
+        need(std::fabs(stretched.trajectoryOffset() - 498.0) < 1e-4,
+             "stopped Stretch Clock freezes source trajectory");
+    }
     std::puts("PASS: Chimera finite-Gene timing, unity plateau, and four-slot density");
 }

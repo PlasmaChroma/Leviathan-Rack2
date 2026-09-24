@@ -141,6 +141,26 @@ int main() {
              initialLow.slice.onsetCount() == beforeCancelRise + 1,
              "PLAY rise cancels pending boundary stop and retriggers once");
 
+        Chimera clockStop;
+        clockStop.reel = &playReel;
+        clockStop.slice.setReel(&playReel);
+        clockStop.ckopSetting.store(1);
+        clockStop.inputs[Chimera::CLOCK_INPUT].channels = 1;
+        clockStop.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
+        clockStop.inputs[Chimera::PLAY_INPUT].channels = 1;
+        clockStop.inputs[Chimera::PLAY_INPUT].setVoltage(5.f);
+        clockStop.process(args);
+        clockStop.inputs[Chimera::PLAY_INPUT].setVoltage(0.f);
+        clockStop.process(args);
+        need(clockStop.stopAtPrimaryBoundary && clockStop.transportPlay,
+             "PLAY fall queues stop before explicit Gene Shift edge");
+        const std::uint64_t beforeClockStop = clockStop.slice.onsetCount();
+        clockStop.inputs[Chimera::CLOCK_INPUT].setVoltage(5.f);
+        clockStop.process(args);
+        need(!clockStop.transportPlay && !clockStop.stopAtPrimaryBoundary &&
+             clockStop.slice.onsetCount() == beforeClockStop,
+             "Gene Shift Clock edge stops pending PLAY without a new onset");
+
         Chimera retriggerOnly;
         retriggerOnly.reel = &playReel;
         retriggerOnly.slice.setReel(&playReel);
@@ -321,7 +341,8 @@ int main() {
     module.process(args);
     need(module.recordArm == Chimera::NoArm &&
          module.slice.recordState() == chimera::Slice::Current &&
-         module.slice.writerPosition() == 1,
+         module.slice.writerPosition() == 1 &&
+         module.clockEstimator.haveEdge() && !module.clockEstimator.havePeriod(),
          "Clock start includes its edge frame");
     module.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
     module.process(args);
@@ -335,7 +356,8 @@ int main() {
     module.inputs[Chimera::CLOCK_INPUT].setVoltage(2.5f);
     module.process(args);
     need(module.slice.recordState() == chimera::Slice::Idle &&
-         module.slice.writerPosition() == 3,
+         module.slice.writerPosition() == 3 &&
+         module.clockEstimator.havePeriod() && module.clockEstimator.periodFrames() == 3,
          "Clock stop excludes its edge frame");
     module.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
     module.process(args);
@@ -350,6 +372,8 @@ int main() {
     module.inputs[Chimera::CLOCK_INPUT].channels = 0;
     module.params[Chimera::REC_PARAM].setValue(0.f);
     module.process(args);
+    need(!module.clockEstimator.connected() && !module.clockEstimator.havePeriod(),
+         "Clock disconnect resets playback estimator");
     need(module.reel->addMarker(2) && module.slice.selectRegion(0),
          "prepare two committed regions for quantized writer destination");
     module.inputs[Chimera::CLOCK_INPUT].channels = 1;
@@ -413,6 +437,7 @@ int main() {
     json_object_set_new(data, "cvop", json_integer(1));
     json_object_set_new(data, "omod", json_integer(1));
     json_object_set_new(data, "pmod", json_integer(2));
+    json_object_set_new(data, "ckop", json_integer(1));
     json_object_set_new(data, "mcr1", json_real(-2.5));
     json_object_set_new(data, "mcr2", json_real(0.0));
     module.dataFromJson(data);
@@ -421,12 +446,16 @@ int main() {
          "writer, smooth-window, ramp, and immediate options persist through JSON");
     json_t* persistedPlay = module.dataToJson();
     need(module.pmodSetting.load() == 2 &&
-         json_integer_value(json_object_get(persistedPlay, "pmod")) == 2,
-         "PLAY mode persists through JSON");
+         json_integer_value(json_object_get(persistedPlay, "pmod")) == 2 &&
+         module.ckopSetting.load() == 1 &&
+         json_integer_value(json_object_get(persistedPlay, "ckop")) == 1,
+         "PLAY and CLOCK modes persist through JSON");
     json_decref(persistedPlay);
     json_object_set_new(data, "pmod", json_integer(3));
+    json_object_set_new(data, "ckop", json_integer(-1));
     module.dataFromJson(data);
-    need(module.pmodSetting.load() == 2, "invalid PLAY mode is ignored");
+    need(module.pmodSetting.load() == 2 && module.ckopSetting.load() == 1,
+         "invalid PLAY and CLOCK modes are ignored");
     need(module.mcrSetting[0].load() == -2.5f && module.mcrSetting[1].load() == 3.f,
          "signed chord ratio loads while invalid zero retains default");
     json_decref(data);

@@ -6,6 +6,7 @@
 #include <vector>
 
 Plugin* pluginInstance = nullptr;
+bool isDragonKingDebugEnabled() { return false; }
 #include "../src/Chimera.cpp"
 
 // Offline Rack-linked callback benchmark, intentionally outside test-fast.
@@ -13,7 +14,8 @@ Plugin* pluginInstance = nullptr;
 // g++ -std=c++11 -O3 -DNDEBUG -Wno-unused-parameter -Isrc \
 //   -I../Rack-SDK/include -I../Rack-SDK/dep/include \
 //   tools/chimera_phase4_module_bench.cpp src/ChimeraService.cpp \
-//   -L../Rack-SDK -lRack -Wl,-rpath,$PWD/../Rack-SDK -pthread \
+//   src/visual/ApertureLight.cpp src/NvgGraphicsLifecycle.cpp \
+//   -L../Rack-SDK -lRack -lGL -Wl,-rpath,$PWD/../Rack-SDK -pthread \
 //   -o /tmp/chimera_phase4_module_bench
 // Includes Chimera::process(), but not Rack's graph scheduler, GUI, or host SRC.
 int main() {

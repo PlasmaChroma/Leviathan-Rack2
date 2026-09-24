@@ -1,5 +1,6 @@
 #include "plugin.hpp"
 #include "ChimeraSlice.hpp"
+#include "ChimeraClock.hpp"
 #include "ChimeraOwnership.hpp"
 #include "ChimeraService.hpp"
 #include "visual/ApertureLight.hpp"
@@ -89,6 +90,7 @@ struct Chimera : Module {
     chimera::SnapshotReaders snapshotReaders;
     chimera::Reel* reel = nullptr; // Borrowed from the off-audio registry.
     chimera::Slice slice;
+    chimera::ClockEstimator clockEstimator;
     std::shared_ptr<chimera::IoService> service;
     std::shared_ptr<chimera::JobGeneration> generation{new chimera::JobGeneration};
     std::uint64_t nextRequestId = 1, pendingRequestId = 0, retirementRequestId = 0;
@@ -110,7 +112,7 @@ struct Chimera : Module {
     std::atomic<int> menuCommand{0};
     std::atomic<bool> inopSetting{false};
     std::atomic<bool> gnsmSetting{false}, cvopSetting{false}, omodSetting{false}, pminSetting{false};
-    std::atomic<int> pmodSetting{0};
+    std::atomic<int> pmodSetting{0}, ckopSetting{0};
     std::atomic<float> mcrSetting[3]{{2.f}, {3.f}, {4.f}};
     bool lastRec = false;
     bool lastRecJack = false;
@@ -394,6 +396,7 @@ struct Chimera : Module {
         json_object_set_new(root, "omod", json_integer(omodSetting.load(std::memory_order_acquire) ? 1 : 0));
         json_object_set_new(root, "pmin", json_integer(pminSetting.load(std::memory_order_acquire) ? 1 : 0));
         json_object_set_new(root, "pmod", json_integer(pmodSetting.load(std::memory_order_acquire)));
+        json_object_set_new(root, "ckop", json_integer(ckopSetting.load(std::memory_order_acquire)));
         for (int i = 0; i < 3; ++i) {
             const char* key = i == 0 ? "mcr1" : (i == 1 ? "mcr2" : "mcr3");
             json_object_set_new(root, key, json_real(mcrSetting[i].load(std::memory_order_acquire)));
@@ -419,6 +422,9 @@ struct Chimera : Module {
         json_t* pmod = json_object_get(root, "pmod");
         if (json_is_integer(pmod) && json_integer_value(pmod) >= 0 && json_integer_value(pmod) <= 2)
             pmodSetting.store(static_cast<int>(json_integer_value(pmod)), std::memory_order_release);
+        json_t* ckop = json_object_get(root, "ckop");
+        if (json_is_integer(ckop) && json_integer_value(ckop) >= 0 && json_integer_value(ckop) <= 2)
+            ckopSetting.store(static_cast<int>(json_integer_value(ckop)), std::memory_order_release);
         for (int i = 0; i < 3; ++i) {
             const char* key = i == 0 ? "mcr1" : (i == 1 ? "mcr2" : "mcr3");
             json_t* ratio = json_object_get(root, key);
@@ -547,6 +553,8 @@ struct Chimera : Module {
             inputs[CLOCK_INPUT].getVoltage() : 0.f);
         const bool clockRise = clock && !lastClock;
         lastClock = clock;
+        const chimera::ClockEstimator::Update clockUpdate =
+            clockEstimator.step(clockConnected, clockRise, slice.frame());
         const int command = menuCommand.exchange(0, std::memory_order_acq_rel);
         if (!clockConnected) recordArm = NoArm;
         if (command == 3) {
@@ -576,6 +584,16 @@ struct Chimera : Module {
         }
         lastRec = rec;
         lastRecJack = recJack;
+        const int clockOption = ckopSetting.load(std::memory_order_relaxed);
+        if (stopAtPrimaryBoundary && clockUpdate.acceptedEdge && clockConnected &&
+            (clockOption == 1 || (clockOption == 0 && !slice.hybridStretch()))) {
+            transportPlay = false;
+            stopAtPrimaryBoundary = false;
+            slice.setPlay(false);
+        }
+        slice.setClockPlayback(clockConnected, clockUpdate.acceptedEdge,
+            clockEstimator.havePeriod() ? clockEstimator.periodFrames() : 0,
+            clockEstimator.waiting(), clockOption);
         chimera::CoreInput in{};
         in.live = chimera::StereoFrame{l, r};
         in.pmRightVolts = inputs[AUDIO_R_INPUT].isConnected() ?
@@ -716,6 +734,13 @@ struct ChimeraWidget : ModuleWidget {
                 submenu->addChild(createCheckMenuItem(labels[mode], "",
                     [m, mode] { return m->pmodSetting.load(std::memory_order_acquire) == mode; },
                     [m, mode] { m->pmodSetting.store(mode, std::memory_order_release); }));
+        }));
+        menu->addChild(createSubmenuItem("CLOCK mode (ckop)", "", [m](Menu* submenu) {
+            const char* labels[3] = {"Hybrid by Morph", "Gene Shift", "Stretch"};
+            for (int mode = 0; mode < 3; ++mode)
+                submenu->addChild(createCheckMenuItem(labels[mode], "",
+                    [m, mode] { return m->ckopSetting.load(std::memory_order_acquire) == mode; },
+                    [m, mode] { m->ckopSetting.store(mode, std::memory_order_release); }));
         }));
         menu->addChild(createSubmenuItem("Chord ratios (mcr1–3)", "", [m](Menu* submenu) {
             for (int i = 0; i < 3; ++i) {

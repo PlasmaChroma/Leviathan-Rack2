@@ -33,7 +33,9 @@ public:
         metadataRegionPending_(false), frozenRegion_{0, 0},
         pmEnabled_(false), pmActive_(false), pmBlend_(0.f), leftEnergy_(0.f),
         quietFrames_(0), loudFrames_(0),
-        primaryPhase_(0.f), ratioA_(2), ratioB_(3), ratioC_(4) {}
+        primaryPhase_(0.f), ratioA_(2), ratioB_(3), ratioC_(4),
+        clockConnected_(false), clockEdge_(false), clockWaiting_(false),
+        clockPeriod_(0), clockOption_(0), hybridStretch_(false) {}
 
     void setReel(Reel* reel) {
         reel_ = reel;
@@ -51,6 +53,8 @@ public:
         wasReading_ = false;
         lastWet_ = stopTail_ = StereoFrame{0.f, 0.f};
         stopTailRemaining_ = 0;
+        clockEdge_ = false;
+        hybridStretch_ = false;
     }
     void setPlay(bool play) {
         if (play && !play_) retrigger_ = true;
@@ -84,6 +88,17 @@ public:
     void requestSplice() { spliceRequested_ = true; }
     void setRampCv(bool enabled) { rampCv_ = enabled; }
     void setPmEnabled(bool enabled) { pmEnabled_ = enabled; }
+    void setClockPlayback(bool connected, bool acceptedEdge, std::uint32_t period,
+                          bool waiting, int option) {
+        clockConnected_ = connected;
+        clockEdge_ = acceptedEdge;
+        clockPeriod_ = period;
+        clockWaiting_ = waiting;
+        clockOption_ = option;
+    }
+    bool clockShiftMode() const { return clockOption_ == 1 || (clockOption_ == 0 && !hybridStretch_); }
+    bool hybridStretch() const { return hybridStretch_; }
+    double trajectoryOffset() const { return grains_.trajectoryOffset(); }
     bool pmActive() const { return pmActive_; }
     float pmBlend() const { return pmBlend_; }
     void setChordRatios(double a, double b, double c) {
@@ -112,6 +127,7 @@ public:
         selection_.setRequested(index, reel_->markerCount());
         const Region selected = reel_->region(index);
         position_ = selected.begin;
+        grains_.resetTrajectory();
         return true;
     }
 
@@ -158,12 +174,20 @@ public:
         bool naturalBoundary = false;
         bool naturalCompletion = false;
         const CoreOutput c = controls_.step(input);
+        const double density = profile1::morphDensity(c.morph);
+        if (density > 2.02) hybridStretch_ = true;
+        else if (density < 1.98) hybridStretch_ = false;
+        const int clockMode = clockConnected_ ?
+            (clockOption_ == 1 ? 1 : (clockOption_ == 2 || hybridStretch_ ? 2 : 1)) : 0;
+        const bool clockShift = clockEdge_ && clockMode == 1;
+        const Grains::ClockDrive clockDrive(clockMode, clockEdge_, clockPeriod_, clockWaiting_);
+        clockEdge_ = false;
         if (reel_) {
             selection_.observe(c.organize, reel_->markerCount(), shiftRequested_);
             const std::uint16_t requested = selection_.requested();
             if (requested != currentRegion_ &&
                 (!play_ || immediateTransitions_ || retrigger_ || !wasReading_ ||
-                 grains_.primaryBoundaryDue())) {
+                grains_.primaryBoundaryDue() || clockShift)) {
                 const bool dueBoundary = wasReading_ && grains_.primaryBoundaryDue();
                 selectRegion(requested);
                 naturalBoundary = dueBoundary;
@@ -205,7 +229,7 @@ public:
         if (reel_ && reel_->markerCount()) {
             const bool metadataDue = metadataRegionPending_ &&
                 (!wasReading_ || !play_ || retrigger_ ||
-                 grains_.primaryBoundaryDue());
+                 grains_.primaryBoundaryDue() || clockShift);
             if (metadataDue) metadataRegionPending_ = false;
             region = metadataRegionPending_ ? frozenRegion_ : reel_->region(currentRegion_);
             // An initial Append is never audible until finalized.
@@ -223,7 +247,7 @@ public:
         if (canRead) {
             if (!wasReading_) { grains_.reset(position_); wasReading_ = true; }
             const Grains::Result g = grains_.step(*reel_, region, c, retrigger_, !finiteGene,
-                                                   metadataRefresh, pmOffset);
+                                                   metadataRefresh, pmOffset, clockDrive);
             wet = g.audio;
             position_ = g.primaryPosition;
             markerPosition = g.markerPosition;
@@ -395,6 +419,10 @@ private:
     std::uint8_t loudFrames_;
     float primaryPhase_;
     double ratioA_, ratioB_, ratioC_;
+    bool clockConnected_, clockEdge_, clockWaiting_;
+    std::uint32_t clockPeriod_;
+    int clockOption_;
+    bool hybridStretch_;
     DcBlocker inputDc_[2], outputDc_[2];
 };
 

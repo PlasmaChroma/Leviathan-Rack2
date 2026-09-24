@@ -11,6 +11,13 @@ namespace chimera {
 // table; step() neither allocates nor evaluates transcendental functions.
 class Grains {
 public:
+    struct ClockDrive {
+        int mode; // 0 free, 1 Gene Shift, 2 Stretch
+        bool edge, waiting;
+        std::uint32_t period;
+        ClockDrive(int m = 0, bool e = false, std::uint32_t p = 0, bool w = false)
+            : mode(m), edge(e), waiting(w), period(p) {}
+    };
     struct Result {
         StereoFrame audio;
         bool primaryBoundary;
@@ -28,7 +35,8 @@ public:
         residualAge_(0), residualLength_(0), residualBlend_(0), pendingResidual_(false),
         pendingCompletions_(0), estimateLength_(1), estimateCountdown_(0),
         full_(false), primaryTravel_(0), startAtCurrent_(false), modeStartPosition_(0),
-        activeRegion_{0, 0} {
+        activeRegion_{0, 0}, transitionRemaining_(0), clockMode_(0), trajectoryOffset_(0),
+        stretchAnchor_(0), stretchStep_(0), stretchVelocity_(0), lastDirection_(1) {
         for (std::uint32_t i = 0; i <= 2048; ++i)
             edge_[i] = static_cast<float>(0.5 - 0.5 * std::cos(profile1::kPi * i / 2048.0));
         ratios_[0] = 2.0; ratios_[1] = 3.0; ratios_[2] = 4.0;
@@ -59,8 +67,12 @@ public:
         residualAge_ = residualLength_ = 0; pendingResidual_ = false;
         pendingCompletions_ = 0;
         estimateCountdown_ = 0;
+        transitionRemaining_ = 0;
         startAtCurrent_ = false;
         activeRegion_ = Region{0, 0};
+        clockMode_ = 0;
+        resetTrajectory();
+        lastDirection_ = 1;
         for (int i = 0; i < 4; ++i) {
             slots_[i] = Voice(); tails_[i] = Voice(); tailAge_[i] = 0; scalarAge_[i] = 48;
             tailLast_[i] = scalar_[i] = StereoFrame{0.f, 0.f};
@@ -76,17 +88,21 @@ public:
     }
     double slotRatio(std::uint8_t slot) const { return slot < 4 ? slots_[slot].ratio : 0.0; }
     bool slotActive(std::uint8_t slot) const { return slot < 4 && slots_[slot].active; }
+    double trajectoryOffset() const { return trajectoryOffset_; }
+    void resetTrajectory() {
+        trajectoryOffset_ = stretchAnchor_ = stretchStep_ = stretchVelocity_ = 0;
+    }
 
     Result step(const Reel& reel, Region region, const CoreOutput& c,
                 bool retrigger = false, bool fullMode = false, bool metadataRefresh = false,
-                double pmOffset = 0.0) {
+                double pmOffset = 0.0, ClockDrive clock = ClockDrive()) {
         Result result = {StereoFrame{0.f, 0.f}, false, pendingCompletions_, primaryPosition_, primaryPosition_, 0.f, 0, false};
         pendingCompletions_ = 0;
         const std::uint32_t length = region.end - region.begin;
         if (!length) { reset(); return result; }
         const bool regionChanged = active_ &&
             (region.begin != activeRegion_.begin || region.end != activeRegion_.end);
-        const bool metadataRestart = active_ && regionChanged && metadataRefresh &&
+        bool metadataRestart = active_ && regionChanged && metadataRefresh &&
             full_ == fullMode && !retrigger;
         if (active_ && (full_ != fullMode || regionChanged) && !metadataRestart) {
             const double priorPosition = primaryPosition_;
@@ -108,6 +124,43 @@ public:
             for (int i = 0; i < 4; ++i)
                 if (tails_[i].active) tails_[i].position =
                     profile1::wrapPosition(tails_[i].position + delta, tails_[i].region);
+        }
+        if (c.rate > 0.f) lastDirection_ = 1;
+        else if (c.rate < 0.f) lastDirection_ = -1;
+        if (clockMode_ == 2 && ((stretchVelocity_ > 0 && lastDirection_ < 0) ||
+                                (stretchVelocity_ < 0 && lastDirection_ > 0)))
+            stretchVelocity_ = -stretchVelocity_;
+        if (clock.mode != clockMode_) {
+            const bool hadActive = active_;
+            const double rebaseOffset = hadActive && clock.mode != 0 ? wrapOffset(
+                primaryPosition_ - region.begin - slide_, length) : 0.0;
+            if (active_) forceTransition();
+            metadataRestart = false;
+            clockMode_ = clock.mode;
+            resetTrajectory();
+            // Keep the first onset of the new mode near the current source
+            // address; subsequent clock motion remains relative to this anchor.
+            trajectoryOffset_ = rebaseOffset;
+            stretchAnchor_ = trajectoryOffset_;
+        }
+        const double stepFrames = clock.edge && clockMode_ != 0 ?
+            (full_ ? double(length) : double(profile1::finiteGeneFrames(length, c.gene))) : 0.0;
+        if (clock.edge && clockMode_ == 1) {
+            trajectoryOffset_ = wrapOffset(trajectoryOffset_ + lastDirection_ * stepFrames, length);
+            if (active_) forceTransition();
+        }
+        else if (clock.edge && clockMode_ == 2) {
+            if (clock.period) {
+                stretchAnchor_ = wrapOffset(stretchAnchor_ + stretchStep_, length);
+                trajectoryOffset_ = stretchAnchor_;
+                stretchVelocity_ = lastDirection_ * stepFrames / clock.period;
+                primaryPosition_ = origin(region, c.rate);
+            }
+            else {
+                stretchAnchor_ = trajectoryOffset_;
+                stretchVelocity_ = 0;
+            }
+            stretchStep_ = lastDirection_ * stepFrames;
         }
         if (metadataRestart) {
             // A marker edit changes the next primary region at this natural
@@ -179,12 +232,14 @@ public:
         }
 
         double sumL = 0, sumR = 0, weightSum = 0;
+        const double transitionFraction = double(transitionRemaining_) / 48.0;
         for (int i = 0; i < 4; ++i) {
             Voice& v = slots_[i];
             Voice& tail = tails_[i];
             const double tailFraction = tail.active ? (48.0 - tailAge_[i]) / 48.0 : 0.0;
             if (v.active) {
-                const double w = voiceWeight(v) * (1.0 - tailFraction);
+                const double w = voiceWeight(v) * (transitionRemaining_ ?
+                    (1.0 - transitionFraction) : (1.0 - tailFraction));
                 const StereoFrame source = read(reel, v.region, v.position + pmOffset, result.invalidSource);
                 sumL += source.l * v.left * w;
                 sumR += source.r * v.right * w;
@@ -252,6 +307,9 @@ public:
             static_cast<float>(profile1::clamp01(double(primaryAge_) / primaryLength_)) : 0.f;
         if (full_) primaryTravel_ += std::fabs(c.rate);
         if (!full_) ++primaryAge_;
+        if (transitionRemaining_) --transitionRemaining_;
+        if (clockMode_ == 2 && !clock.waiting && stretchVelocity_ != 0)
+            trajectoryOffset_ = wrapOffset(trajectoryOffset_ + stretchVelocity_, length);
         return result;
     }
 
@@ -266,7 +324,9 @@ private:
         Region region{0, 0};
     };
     void forceTransition() {
+        bool hadOutgoing = false;
         for (int i = 0; i < 4; ++i) {
+            hadOutgoing = hadOutgoing || slots_[i].active || tails_[i].active;
             if (immediate_) {
                 tails_[i].active = false;
                 scalarAge_[i] = 48;
@@ -287,6 +347,7 @@ private:
         primaryTravel_ = 0;
         pendingResidual_ = false;
         residualLength_ = 0;
+        transitionRemaining_ = !immediate_ && hadOutgoing ? 48 : 0;
     }
     float edgeGain(double phase) const {
         const double x = profile1::clamp01(phase) * 2048.0;
@@ -313,7 +374,11 @@ private:
     }
     double origin(Region region, double rate) const {
         if (startAtCurrent_) return profile1::wrapPosition(modeStartPosition_, region);
-        return profile1::wrapPosition(region.begin + slide_ + (rate < 0 ? -1.0 : 0.0), region);
+        return profile1::wrapPosition(region.begin + slide_ + trajectoryOffset_ +
+            (rate < 0 ? -1.0 : 0.0), region);
+    }
+    static double wrapOffset(double offset, std::uint32_t length) {
+        return profile1::wrapPosition(offset, Region{0, length});
     }
     void launch(Region region, const CoreOutput& c, double density, bool natural) {
         const std::uint8_t slot = nextSlot_;
@@ -393,6 +458,10 @@ private:
     bool startAtCurrent_;
     double modeStartPosition_;
     Region activeRegion_;
+    std::uint8_t transitionRemaining_;
+    int clockMode_;
+    double trajectoryOffset_, stretchAnchor_, stretchStep_, stretchVelocity_;
+    int lastDirection_;
 };
 
 } // namespace chimera

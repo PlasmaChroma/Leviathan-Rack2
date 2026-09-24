@@ -828,5 +828,57 @@ int main() {
     need(combinedReel.state() == chimera::Reel::Idle &&
          combinedReel.freePages() == 20,
          "combined stress returns all snapshot reserve pages");
+    chimera::Slice clocked(&transitionReel);
+    clocked.setConditioning(false);
+    chimera::CoreInput clockInput = input(0.f, 0.f, 1.f);
+    clockInput.controls.gene = static_cast<float>(
+        std::log(480.0 / 4800.0) / std::log(16.0 / 4800.0));
+    for (int frame = 0; frame < 100; ++frame) {
+        clocked.setClockPlayback(true, false, 0, false, 1);
+        clocked.step(clockInput);
+    }
+    const std::uint64_t beforeClockShift = clocked.onsetCount();
+    clocked.requestShift();
+    clocked.setClockPlayback(true, true, 0, false, 1);
+    const chimera::Slice::Output clockSelection = clocked.step(clockInput);
+    need(clocked.currentRegion() == 1 && clocked.onsetCount() == beforeClockShift + 1 &&
+         std::fabs(clocked.trajectoryOffset() - 480.0) < 1e-5 &&
+         !clockSelection.naturalBoundary && !clockSelection.eosg,
+         "Clock Shift commits queued region before one forced onset without false EOSG");
+    clocked.setPlay(false);
+    const std::uint64_t stoppedClockOnsets = clocked.onsetCount();
+    clocked.setClockPlayback(true, true, 480, false, 1);
+    clocked.step(clockInput);
+    need(clocked.onsetCount() == stoppedClockOnsets,
+         "Clock cannot restart a PLAY-stopped transport");
+    chimera::Slice hybrid(&transitionReel);
+    hybrid.setConditioning(false);
+    chimera::CoreInput hybridInput = input(0.f, 0.f, 1.f);
+    hybridInput.controls.morph = 0.55f;
+    for (int frame = 0; frame < 1000; ++frame) {
+        hybrid.setClockPlayback(true, false, 480, false, 0);
+        hybrid.step(hybridInput);
+    }
+    need(hybrid.hybridStretch() && !hybrid.clockShiftMode(),
+         "high Morph chooses Stretch in hybrid Clock mode");
+    hybridInput.controls.morph = 0.5f;
+    for (int frame = 0; frame < 1000; ++frame) {
+        hybrid.setClockPlayback(true, false, 480, false, 0);
+        hybrid.step(hybridInput);
+    }
+    need(hybrid.hybridStretch(), "hybrid density hysteresis holds at the threshold");
+    hybridInput.controls.morph = 0.45f;
+    for (int frame = 0; frame < 1000; ++frame) {
+        hybrid.setClockPlayback(true, false, 480, false, 0);
+        hybrid.step(hybridInput);
+    }
+    need(!hybrid.hybridStretch() && hybrid.clockShiftMode(),
+         "low Morph returns hybrid Clock mode to Gene Shift");
+    hybrid.setClockPlayback(true, false, 480, false, 2);
+    hybrid.step(hybridInput);
+    need(!hybrid.clockShiftMode(), "explicit Stretch ignores Morph-selected mode");
+    hybrid.setClockPlayback(true, false, 480, false, 1);
+    hybrid.step(hybridInput);
+    need(hybrid.clockShiftMode(), "explicit Gene Shift ignores Morph-selected mode");
     std::puts("PASS: Chimera 48 kHz slice initial capture, Current, Append, and TLA");
 }
