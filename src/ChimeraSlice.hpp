@@ -249,7 +249,12 @@ public:
         const double length = region.end - region.begin;
         const bool metadataRefresh = metadataRefreshDue_ && !metadataRegionPending_ && canRead;
         if (metadataRefresh) metadataRefreshDue_ = false;
-        if (!canRead && wasReading_) { grains_.reset(position_); wasReading_ = false; }
+        if (!canRead && wasReading_) {
+            naturalBoundary = naturalBoundary || grains_.primaryBoundaryDue();
+            naturalCompletion = grains_.takePendingCompletions() != 0;
+            grains_.reset(position_);
+            wasReading_ = false;
+        }
         if (canRead) {
             if (!wasReading_) { grains_.reset(position_); wasReading_ = true; }
             const Grains::Result g = grains_.step(*reel_, region, c, retrigger_, !finiteGene,
@@ -320,8 +325,12 @@ public:
         }
         // A natural completion starts a core-timed pulse. Keep it shorter than
         // half the expected interval so rapid traversals remain distinguishable.
-        if ((naturalCompletion || naturalBoundary) && canRead && (finiteGene || c.rate != 0.f)) {
-            double interval = finiteGene ? profile1::finiteGeneFrames(static_cast<std::uint32_t>(length), c.gene) / profile1::morphDensity(c.morph) : length / std::fabs(c.rate);
+        if ((naturalCompletion || (naturalBoundary && canRead)) &&
+            (finiteGene || c.rate != 0.f || naturalCompletion)) {
+            double interval = finiteGene ?
+                profile1::finiteGeneFrames(static_cast<std::uint32_t>(length), c.gene) /
+                    profile1::morphDensity(c.morph) :
+                length / (c.rate != 0.f ? std::fabs(c.rate) : 1.0);
             if (hadBoundary_) {
                 const std::uint64_t spacing = frame_ - lastBoundaryFrame_;
                 if (spacing && spacing < interval) interval = double(spacing);
@@ -331,7 +340,8 @@ public:
             lastBoundaryFrame_ = frame_;
             hadBoundary_ = true;
         }
-        if (!canRead || (!finiteGene && c.rate == 0.f)) eosgRemaining_ = 0;
+        if ((!canRead && !naturalCompletion) ||
+            (!finiteGene && c.rate == 0.f && !naturalCompletion)) eosgRemaining_ = 0;
         const bool eosg = eosgRemaining_ != 0;
         if (eosg) --eosgRemaining_;
         if (reel_) reel_->maintenanceTick();

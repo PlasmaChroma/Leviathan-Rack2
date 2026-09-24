@@ -867,6 +867,44 @@ int main() {
     clocked.step(clockInput);
     need(clocked.onsetCount() == stoppedClockOnsets,
          "Clock cannot restart a PLAY-stopped transport");
+    chimera::Slice collided(&transitionReel);
+    collided.setConditioning(false);
+    collided.setInop(true);
+    collided.setPlay(false);
+    collided.setClockPlayback(true, false, 480, false, 1);
+    collided.step(clockInput); // Settle the finite-Gene control before playback.
+    collided.setPlay(true);
+    for (int frame = 0; frame < 480; ++frame) {
+        collided.setClockPlayback(true, false, 480, false, 1);
+        collided.step(clockInput);
+    }
+    need(collided.primaryBoundaryDue(),
+         "prepare natural completion at the same logical frame as controls");
+    const std::uint64_t beforeCollisionOnsets = collided.onsetCount();
+    collided.requestShift();
+    collided.requestPlayRetrigger();
+    collided.setClockPlayback(true, true, 480, false, 1);
+    collided.prepareFrameSelection(clockInput);
+    need(collided.currentRegion() == 1 && collided.startCurrent(),
+         "same-frame Shift selects writer destination before REC start");
+    const chimera::Slice::Output collision = collided.step(clockInput);
+    need(collision.naturalBoundary && collision.eosg &&
+         collided.onsetCount() == beforeCollisionOnsets + 1 &&
+         collided.writerPosition() == 4801,
+         "natural completion survives Shift/PLAY/REC/Clock collision with one new onset");
+    collided.stopRecord();
+    chimera::Slice stoppedAtDue(&transitionReel);
+    stoppedAtDue.setConditioning(false);
+    stoppedAtDue.setPlay(false);
+    stoppedAtDue.step(clockInput);
+    stoppedAtDue.setPlay(true);
+    for (int frame = 0; frame < 480; ++frame) stoppedAtDue.step(clockInput);
+    need(stoppedAtDue.primaryBoundaryDue(), "prepare natural completion on PLAY stop");
+    stoppedAtDue.setPlay(false);
+    const chimera::Slice::Output stopDue = stoppedAtDue.step(clockInput);
+    const chimera::Slice::Output laterStopped = stoppedAtDue.step(clockInput);
+    need(stopDue.naturalBoundary && stopDue.eosg && !laterStopped.eosg,
+         "PLAY stop retains a due natural completion once, then clears EOSG");
     chimera::Slice hybrid(&transitionReel);
     hybrid.setConditioning(false);
     chimera::CoreInput hybridInput = input(0.f, 0.f, 1.f);

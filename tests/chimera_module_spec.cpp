@@ -67,6 +67,64 @@ int main() {
          std::fabs(forwardOnlyStop) < 0.001,
          "module vsop modes drive bidirectional and forward-only 1 V/oct playback");
     {
+        chimera::Reel eventReel(40, 40);
+        for (std::uint32_t frame = 0; frame < 9600; ++frame)
+            need(eventReel.write(frame, chimera::StereoFrame{0.f, 0.f}, frame),
+                 "prepare same-frame event Reel");
+        need(eventReel.addMarker(4800), "prepare second same-frame event Splice");
+        Chimera eventModule;
+        eventModule.reel = &eventReel;
+        eventModule.slice.setReel(&eventReel);
+        eventModule.pmodSetting.store(2);
+        eventModule.ckopSetting.store(1);
+        eventModule.params[Chimera::GENE_SIZE_PARAM].setValue(static_cast<float>(
+            std::log(480.0 / 4800.0) / std::log(16.0 / 4800.0)));
+        eventModule.inputs[Chimera::PLAY_INPUT].channels = 1;
+        eventModule.inputs[Chimera::PLAY_INPUT].setVoltage(5.f);
+        eventModule.inputs[Chimera::CLOCK_INPUT].channels = 1;
+        eventModule.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
+        eventModule.inputs[Chimera::SHIFT_INPUT].channels = 1;
+        eventModule.inputs[Chimera::SHIFT_INPUT].setVoltage(0.f);
+        for (int frame = 0; frame < 480; ++frame) {
+            if (frame == 479) eventModule.inputs[Chimera::PLAY_INPUT].setVoltage(0.f);
+            eventModule.process(args);
+        }
+        need(eventModule.slice.primaryBoundaryDue(),
+             "Rack callback reaches primary completion before coincident events");
+        const std::uint64_t onsetBefore = eventModule.slice.onsetCount();
+        eventModule.inputs[Chimera::PLAY_INPUT].setVoltage(5.f);
+        eventModule.inputs[Chimera::SHIFT_INPUT].setVoltage(2.5f);
+        eventModule.inputs[Chimera::CLOCK_INPUT].setVoltage(2.5f);
+        eventModule.menuCommand.store(1);
+        eventModule.process(args);
+        need(eventModule.slice.currentRegion() == 1 &&
+             eventModule.slice.recordState() == chimera::Slice::Current &&
+             eventModule.slice.writerPosition() == 4801 &&
+             eventModule.slice.onsetCount() == onsetBefore + 1 &&
+             eventModule.outputs[Chimera::EOSG_OUTPUT].getVoltage() == 10.f,
+             "natural completion plus Shift/PLAY/REC/Clock commits once and retains EOSG");
+        Chimera boundaryStop;
+        boundaryStop.reel = &eventReel;
+        boundaryStop.slice.setReel(&eventReel);
+        boundaryStop.params[Chimera::GENE_SIZE_PARAM].setValue(static_cast<float>(
+            std::log(480.0 / 4800.0) / std::log(16.0 / 4800.0)));
+        boundaryStop.inputs[Chimera::PLAY_INPUT].channels = 1;
+        boundaryStop.inputs[Chimera::PLAY_INPUT].setVoltage(5.f);
+        for (int frame = 0; frame < 480; ++frame) {
+            if (frame == 479) boundaryStop.inputs[Chimera::PLAY_INPUT].setVoltage(0.f);
+            boundaryStop.process(args);
+        }
+        need(boundaryStop.stopAtPrimaryBoundary && boundaryStop.slice.primaryBoundaryDue(),
+             "pmod=0 low waits for an actual primary boundary");
+        boundaryStop.process(args);
+        need(!boundaryStop.transportPlay &&
+             boundaryStop.outputs[Chimera::EOSG_OUTPUT].getVoltage() == 10.f,
+             "pmod=0 boundary stop preserves completion pulse on its stop frame");
+        boundaryStop.process(args);
+        need(boundaryStop.outputs[Chimera::EOSG_OUTPUT].getVoltage() == 0.f,
+             "stopped Rack callback clears EOSG after the due completion");
+    }
+    {
         chimera::Reel regions(4, 4);
         for (std::uint32_t frame = 0; frame < 960; ++frame)
             need(regions.write(frame, chimera::StereoFrame{0.f, 0.f}, frame),

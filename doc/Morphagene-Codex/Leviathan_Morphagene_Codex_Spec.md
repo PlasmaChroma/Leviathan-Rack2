@@ -613,6 +613,8 @@ This section is the authoritative event-order rule when a higher-level processin
 
 A finite voice born at core frame b renders ages 0 through N-1 on frames b through b+N-1; its natural completion is due at the beginning of b+N. At frame entry, determine due natural voice/primary boundaries from the preceding state without committing selection yet. After steps 1–6 and before step 7, resolve the due primary boundary against the now-current requested selection and Play state, emit due natural completion events, and schedule any normal onset not superseded by a forced onset that frame. An actual prior natural completion still counts once when it coincides with a retrigger; the retrigger itself adds no completion event. Full-Splice travel is accumulated after rendering and uses the same next-frame completion convention.
 
+A natural completion already due at frame entry is still emitted once if a same-frame PLAY action stops transport. The stop frame may carry that EOSG pulse; subsequent stopped frames clear it. A forced abort before a completion becomes due emits no completion.
+
 A start and Clock at the same timestamp include that frame in the recording. A stop and Clock at the same timestamp exclude it. A marker on the same timestamp as a start uses the new recording cursor before the first write. REC and SPLICE **gate jacks** are independent events.
 
 ### 13.3 Current-Splice/TLA recording

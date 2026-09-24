@@ -80,6 +80,11 @@ public:
         }
     }
     std::uint64_t onsetCount() const { return onsetCount_; }
+    std::uint8_t takePendingCompletions() {
+        const std::uint8_t count = pendingCompletions_;
+        pendingCompletions_ = 0;
+        return count;
+    }
     std::uint32_t randomState() const { return random_.state; }
     double primaryPosition() const { return primaryPosition_; }
     bool primaryBoundaryDue() const {
