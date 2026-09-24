@@ -38,7 +38,7 @@ Implement service/control-dispatch queues with exactly documented producers and 
 
 ## Phase 3 — First audible vertical slice: full-Splice playback and recording
 
-Wire one full-Splice read head, signed classic rate, stereo normalization, Slide, Play, direct live monitor, linear S.O.S., and independent Current/Append writer. Establish read-before-write ordering, fixed 48 kHz write advancement, valid-length handling, sample guards, and inop routing. A temporary developer panel is acceptable; a monolithic final module is not.
+Register exactly one `modelChimera` and `Chimera` manifest entry at the start of this phase, with a temporary developer panel. Wire one full-Splice read head, signed classic rate, stereo normalization, Slide, Play, direct live monitor, linear S.O.S., and independent Current/Append writer. Establish read-before-write ordering, fixed 48 kHz write advancement, valid-length handling, sample guards, and inop routing. A monolithic final module is not acceptable.
 
 Use tiny buffers to prove the TLA recurrence, one-frame read/write ordering, initial recording, append capacity, and exact start/stop frame inclusion. Add DC conditioning only after the unconditioned recurrence tests are stable.
 
@@ -90,7 +90,7 @@ Do not return from the save hook before referenced audio assets are complete. Do
 
 ## Phase 8 — Original panel, cached display, and production widget
 
-Register the actual model and manifest entry if not already done with a temporary panel. Use the current Leviathan panel/labels/anchors and existing knobs/jacks. Implement the 28HP starting layout, accessible states, gain/options/reel menus, waveform cache and bounded playhead overlays, null-module rendering, and visible job/error state.
+Keep the model and manifest entry registered in Phase 3; replace its temporary developer panel with the production widget. Use the current Leviathan panel/labels/anchors and existing knobs/jacks. Implement the 28HP starting layout, accessible states, gain/options/reel menus, waveform cache and bounded playhead overlays, null-module rendering, and visible job/error state.
 
 Build waveform peaks off audio, incrementally publish record changes, and avoid scanning all samples from `draw()` or rebuilding textures every frame. Respect current GL context ownership; no bespoke shader system is required.
 

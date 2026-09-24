@@ -282,6 +282,14 @@
         "Digital"
       ],
       "hidden": false
+    },
+    {
+      "slug": "Chimera",
+      "name": "Chimera",
+      "description": "Nonpersistent 48 kHz development slice of a stereo reel recorder and splicer.",
+      "tags": ["Sampler", "Delay"],
+      "capabilities": {"polyphony": 1},
+      "hidden": false
     }
   ]
 }

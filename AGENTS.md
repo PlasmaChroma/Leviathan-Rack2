@@ -79,6 +79,25 @@ This repo is developed primarily for **Windows VCV Rack plugin builds**.
   process path.
 - `test-rack` remains a work in progress. Use `test-fast` as the routine suite
   unless a task explicitly targets one of the Rack-hosted tests.
+- ThreadSanitizer (TSAN) checks are Linux-side focused concurrency tests, not
+  a substitute for the authoritative native Windows `plugin.dll` build. On
+  this machine, Ubuntu 22.04 under WSL2 kernel 6.18 with GCC 11/Clang 14 can
+  compile TSAN binaries that fail *before `main()`* with
+  `FATAL: ThreadSanitizer: unexpected memory mapping`. A one-line program
+  reproduced it, so this error alone is not evidence of a race in the test.
+  Run the binary with a per-process address-layout workaround:
+
+  ```sh
+  g++ -std=c++11 -O1 -g -fno-omit-frame-pointer -fsanitize=thread -fPIE -pie -pthread -Isrc tests/chimera_reel_concurrency_spec.cpp -o /tmp/chimera_reel_tsan_spec
+  setarch x86_64 -R /tmp/chimera_reel_tsan_spec
+  ```
+
+  This allowed the Chimera snapshot, job, and service concurrency tests to
+  execute and pass under GCC TSAN on 2026-09-23. Use `setarch` only for the
+  instrumented process; do not change system-wide ASLR settings. Verify the
+  workaround with a tiny TSAN smoke test if the environment changes, and use
+  a compatible Linux VM/CI runner if it stops working. A passing TSAN run
+  covers only exercised paths; record which tests actually ran.
 
 ## Practical Expectation
 

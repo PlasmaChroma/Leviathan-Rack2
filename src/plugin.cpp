@@ -1,5 +1,6 @@
 #include "plugin.hpp"
 #include "BifurxWorker.hpp"
+#include "ChimeraService.hpp"
 #include "theme/ThemePersistence.hpp"
 #include "visual/VisualAssets.hpp"
 
@@ -238,12 +239,14 @@ void init(Plugin* p) {
 	p->addModel(modelSibyl);
 	p->addModel(modelMoirai);
 	p->addModel(modelPhonex);
+	p->addModel(modelChimera);
 	// Any other plugin initialization may go here.
 	// As an alternative, consider lazy-loading assets and lookup tables when your module is created to reduce startup times of Rack.
 }
 
 void destroy() {
 	// Explicit plugin-lifecycle shutdown avoids static-destruction order hazards across TUs.
+	chimera::shutdownChimeraIoService();
 	bifurx::shutdownBifurxRenderService();
 	leviathan::theme::persistence::saveToUserStorage();
 	visual_assets::saveSettings();
