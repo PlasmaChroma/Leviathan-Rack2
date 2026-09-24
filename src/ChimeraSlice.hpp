@@ -29,7 +29,10 @@ public:
         frame_(0), lastBoundaryFrame_(0), eosgRemaining_(0), hadBoundary_(false),
         energyState_(0.f),
         overloaded_(false), conditioning_(true), wasReading_(false),
-        rampCv_(false), immediateTransitions_(false), shiftRequested_(false),
+        rampCv_(false), immediateTransitions_(false), shiftRequested_(false), spliceRequested_(false),
+        metadataRegionPending_(false), frozenRegion_{0, 0},
+        pmEnabled_(false), pmActive_(false), pmBlend_(0.f), leftEnergy_(0.f),
+        quietFrames_(0), loudFrames_(0),
         primaryPhase_(0.f), ratioA_(2), ratioB_(3), ratioC_(4) {}
 
     void setReel(Reel* reel) {
@@ -41,6 +44,10 @@ public:
         hadBoundary_ = false;
         grains_.reset();
         selection_.reset();
+        shiftRequested_ = spliceRequested_ = metadataRegionPending_ = metadataRefreshDue_ = false;
+        pmActive_ = false;
+        pmBlend_ = leftEnergy_ = 0.f;
+        quietFrames_ = loudFrames_ = 0;
         wasReading_ = false;
         lastWet_ = stopTail_ = StereoFrame{0.f, 0.f};
         stopTailRemaining_ = 0;
@@ -69,7 +76,11 @@ public:
         grains_.setImmediateTransitions(enabled);
     }
     void requestShift() { shiftRequested_ = true; }
+    void requestSplice() { spliceRequested_ = true; }
     void setRampCv(bool enabled) { rampCv_ = enabled; }
+    void setPmEnabled(bool enabled) { pmEnabled_ = enabled; }
+    bool pmActive() const { return pmActive_; }
+    float pmBlend() const { return pmBlend_; }
     void setChordRatios(double a, double b, double c) {
         if (a == ratioA_ && b == ratioB_ && c == ratioC_) return;
         ratioA_ = a; ratioB_ = b; ratioC_ = c;
@@ -91,6 +102,8 @@ public:
     bool selectRegion(std::uint16_t index) {
         if (!reel_ || index >= reel_->markerCount()) return false;
         currentRegion_ = index;
+        metadataRegionPending_ = false;
+        metadataRefreshDue_ = false;
         selection_.setRequested(index, reel_->markerCount());
         const Region selected = reel_->region(index);
         position_ = selected.begin;
@@ -119,7 +132,9 @@ public:
         if (state_ == Append && reel_ && writer_ > appendStart_) {
             if (appendStart_) {
                 reel_->addMarker(appendStart_);
-                const std::uint16_t appended = reel_->markerCount() - 1;
+                std::uint16_t appended = 0;
+                while (appended + 1 < reel_->markerCount() &&
+                       reel_->region(appended).begin != appendStart_) ++appended;
                 selection_.setRequested(appended, reel_->markerCount());
                 if (!play_) selectRegion(appended);
             }
@@ -150,12 +165,44 @@ public:
             }
         }
         shiftRequested_ = false;
-        const StereoFrame live = conditioning_ ?
+        const float normalizedLeft = profile1::audio(input.live.l) * 0.2f;
+        const float leftPower = normalizedLeft * normalizedLeft;
+        leftEnergy_ += 0.0020811647f * (leftPower - leftEnergy_);
+        if (!pmEnabled_ || !input.pmRightConnected) {
+            pmActive_ = false;
+            quietFrames_ = loudFrames_ = 0;
+        }
+        else if (!pmActive_) {
+            if (leftEnergy_ < 1e-6f) {
+                if (++quietFrames_ >= 144000) {
+                    pmActive_ = true;
+                    loudFrames_ = 0;
+                }
+            }
+            else quietFrames_ = 0;
+        }
+        else if (leftEnergy_ > 4e-6f) {
+            if (++loudFrames_ >= 16) {
+                pmActive_ = false;
+                quietFrames_ = 0;
+            }
+        }
+        else loudFrames_ = 0;
+        pmBlend_ += profile1::clamp((pmActive_ ? 1.f : 0.f) - pmBlend_, -1.f/240.f, 1.f/240.f);
+        const double pmOffset = pmBlend_ *
+            profile1::clamp(profile1::audio(input.pmRightVolts), -10.f, 10.f) * 96.0;
+        StereoFrame live = conditioning_ ?
             StereoFrame{inputDc_[0].step(c.live.l), inputDc_[1].step(c.live.r)} : c.live;
+        live.r *= 1.f - pmBlend_;
         StereoFrame wet{0.f, 0.f};
+        double markerPosition = position_;
         Region region{0, 0};
         if (reel_ && reel_->markerCount()) {
-            region = reel_->region(currentRegion_);
+            const bool metadataDue = metadataRegionPending_ &&
+                (!wasReading_ || !play_ || retrigger_ ||
+                 grains_.primaryBoundaryDue());
+            if (metadataDue) metadataRegionPending_ = false;
+            region = metadataRegionPending_ ? frozenRegion_ : reel_->region(currentRegion_);
             // An initial Append is never audible until finalized.
             if (state_ == Append && appendStart_ == 0) region.end = region.begin;
             // Existing playback bounds remain frozen during Append.
@@ -165,21 +212,35 @@ public:
         const bool canRead = play_ && region.end > region.begin;
         const bool finiteGene = !controls_.fullGene();
         const double length = region.end - region.begin;
+        const bool metadataRefresh = metadataRefreshDue_ && !metadataRegionPending_ && canRead;
+        if (metadataRefresh) metadataRefreshDue_ = false;
         if (!canRead && wasReading_) { grains_.reset(position_); wasReading_ = false; }
         if (canRead) {
             if (!wasReading_) { grains_.reset(position_); wasReading_ = true; }
-            const Grains::Result g = grains_.step(*reel_, region, c, retrigger_, !finiteGene);
+            const Grains::Result g = grains_.step(*reel_, region, c, retrigger_, !finiteGene,
+                                                   metadataRefresh, pmOffset);
             wet = g.audio;
             position_ = g.primaryPosition;
+            markerPosition = g.markerPosition;
             primaryPhase_ = g.primaryPhase;
             naturalBoundary = naturalBoundary || g.primaryBoundary;
             naturalCompletion = g.completions != 0;
             overloaded_ = overloaded_ || g.invalidSource;
             retrigger_ = false;
         }
+        const bool splice = spliceRequested_;
+        spliceRequested_ = false;
+        const bool deferredSplice = splice && state_ == Append;
+        if (splice && reel_ && state_ != Append && reel_->validFrames()) {
+            const double address = state_ == Current ? double(writer_) :
+                canRead ? markerPosition : position_;
+            if (state_ == Current || region.end > region.begin)
+                insertMarker(static_cast<std::uint32_t>(std::floor(state_ == Current ?
+                    address : profile1::wrapPosition(address, region))), region);
+        }
         wet.l = guard(wet.l);
         wet.r = guard(wet.r);
-        const float gainTarget = canRead && c.rate != 0.f ? 1.f : 0.f;
+        const float gainTarget = canRead && (c.rate != 0.f || pmBlend_ > 0.f) ? 1.f : 0.f;
         wetGain_ += profile1::clamp(gainTarget - wetGain_, -1.f/48.f, 1.f/48.f);
         wet.l *= wetGain_;
         wet.r *= wetGain_;
@@ -204,6 +265,7 @@ public:
                                (1.f-sourceBlend_)*bus.r + sourceBlend_*live.r};
             source.l = guard(source.l);
             source.r = guard(source.r);
+            const std::uint32_t writtenFrame = writer_;
             if (!reel_->write(writer_, source, frame_)) {
                 full = true;
                 stopRecord();
@@ -213,6 +275,7 @@ public:
                 if (writer_ == recordRegion_.end) writer_ = recordRegion_.begin;
             }
             else if (state_ == Append) {
+                if (deferredSplice) insertMarker(writtenFrame, region);
                 ++writer_;
                 if (writer_ == reel_->capacityFrames()) {
                     full = true;
@@ -249,6 +312,26 @@ public:
     }
 
 private:
+    void insertMarker(std::uint32_t frame, Region playbackRegion) {
+        if (!reel_ || frame >= reel_->validFrames() ||
+            reel_->markerCount() >= kMaxSplices -
+                (state_ == Append && appendStart_ != 0 ? 1 : 0) ||
+            (state_ == Append && frame == appendStart_)) return;
+        const std::uint32_t currentId = reel_->markerId(currentRegion_);
+        const std::uint32_t requestedId = reel_->markerId(selection_.requested());
+        if (!reel_->addMarker(frame)) return;
+        const std::uint16_t count = reel_->markerCount();
+        const std::uint16_t remappedCurrent = reel_->findMarkerId(currentId);
+        const std::uint16_t remappedRequested = reel_->findMarkerId(requestedId);
+        if (remappedCurrent < count) currentRegion_ = remappedCurrent;
+        selection_.setRequested(remappedRequested < count ? remappedRequested : currentRegion_, count);
+        const Region updated = reel_->region(currentRegion_);
+        if (wasReading_ && (updated.begin != playbackRegion.begin || updated.end != playbackRegion.end)) {
+            frozenRegion_ = playbackRegion;
+            metadataRegionPending_ = true;
+            metadataRefreshDue_ = true;
+        }
+    }
     static float fastSqrt(float x) {
         if (x <= 0.f) return 0.f;
         std::uint32_t bits;
@@ -298,7 +381,13 @@ private:
     float energyState_;
     bool overloaded_;
     bool conditioning_;
-    bool wasReading_, rampCv_, immediateTransitions_, shiftRequested_;
+    bool wasReading_, rampCv_, immediateTransitions_, shiftRequested_, spliceRequested_;
+    bool metadataRegionPending_, metadataRefreshDue_ = false;
+    Region frozenRegion_;
+    bool pmEnabled_, pmActive_;
+    float pmBlend_, leftEnergy_;
+    std::uint32_t quietFrames_;
+    std::uint8_t loudFrames_;
     float primaryPhase_;
     double ratioA_, ratioB_, ratioC_;
     DcBlocker inputDc_[2], outputDc_[2];

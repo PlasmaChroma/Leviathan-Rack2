@@ -15,6 +15,7 @@ public:
         StereoFrame audio;
         bool primaryBoundary;
         std::uint8_t completions;
+        double markerPosition;
         double primaryPosition;
         float primaryPhase;
         std::uint8_t readers;
@@ -77,14 +78,17 @@ public:
     bool slotActive(std::uint8_t slot) const { return slot < 4 && slots_[slot].active; }
 
     Result step(const Reel& reel, Region region, const CoreOutput& c,
-                bool retrigger = false, bool fullMode = false) {
-        Result result = {StereoFrame{0.f, 0.f}, false, pendingCompletions_, primaryPosition_, 0.f, 0, false};
+                bool retrigger = false, bool fullMode = false, bool metadataRefresh = false,
+                double pmOffset = 0.0) {
+        Result result = {StereoFrame{0.f, 0.f}, false, pendingCompletions_, primaryPosition_, primaryPosition_, 0.f, 0, false};
         pendingCompletions_ = 0;
         const std::uint32_t length = region.end - region.begin;
         if (!length) { reset(); return result; }
         const bool regionChanged = active_ &&
             (region.begin != activeRegion_.begin || region.end != activeRegion_.end);
-        if (active_ && (full_ != fullMode || regionChanged)) {
+        const bool metadataRestart = active_ && regionChanged && metadataRefresh &&
+            full_ == fullMode && !retrigger;
+        if (active_ && (full_ != fullMode || regionChanged) && !metadataRestart) {
             const double priorPosition = primaryPosition_;
             forceTransition();
             startAtCurrent_ = !regionChanged;
@@ -96,14 +100,35 @@ public:
         const double targetSlide = c.slide * (length - 1.0);
         const double delta = profile1::clamp(targetSlide - slide_, -64.0, 64.0);
         slide_ += delta;
-        if (active_) {
+        if (active_ && !metadataRestart) {
             primaryPosition_ = profile1::wrapPosition(primaryPosition_ + delta, region);
             for (int i = 0; i < 4; ++i)
                 if (slots_[i].active) slots_[i].position =
-                    profile1::wrapPosition(slots_[i].position + delta, region);
+                    profile1::wrapPosition(slots_[i].position + delta, slots_[i].region);
             for (int i = 0; i < 4; ++i)
                 if (tails_[i].active) tails_[i].position =
                     profile1::wrapPosition(tails_[i].position + delta, tails_[i].region);
+        }
+        if (metadataRestart) {
+            // A marker edit changes the next primary region at this natural
+            // boundary, but it does not itself schedule a musical onset.
+            // Existing slots retain their captured regions and normal ages.
+            result.primaryBoundary = true;
+            primaryAge_ = 0;
+            primaryLength_ = full_ ? length : profile1::finiteGeneFrames(length, c.gene);
+            if (full_) {
+                const std::uint32_t oldLength = activeRegion_.end - activeRegion_.begin;
+                primaryTravel_ -= std::floor(primaryTravel_ / oldLength) * oldLength;
+            }
+            else primaryTravel_ = 0;
+            primaryPosition_ = profile1::wrapPosition(origin(region, c.rate) +
+                (c.rate < 0.f ? -primaryTravel_ : primaryTravel_), region);
+            activeRegion_ = region;
+            startAtCurrent_ = false;
+            if (!full_) {
+                estimateLength_ = primaryLength_;
+                estimateCountdown_ = 32;
+            }
         }
         if (!active_ || retrigger) {
             if (retrigger && active_) forceTransition();
@@ -119,8 +144,9 @@ public:
             startAtCurrent_ = false;
         }
         else {
-            bool boundaryThisFrame = false;
-            if ((full_ && primaryTravel_ >= length) || (!full_ && primaryAge_ >= primaryLength_)) {
+            bool boundaryThisFrame = metadataRestart;
+            if (!metadataRestart && ((full_ && primaryTravel_ >= length) ||
+                                     (!full_ && primaryAge_ >= primaryLength_))) {
                 result.primaryBoundary = true;
                 boundaryThisFrame = true;
                 primaryAge_ = 0;
@@ -159,7 +185,7 @@ public:
             const double tailFraction = tail.active ? (48.0 - tailAge_[i]) / 48.0 : 0.0;
             if (v.active) {
                 const double w = voiceWeight(v) * (1.0 - tailFraction);
-                const StereoFrame source = read(reel, v.region, v.position, result.invalidSource);
+                const StereoFrame source = read(reel, v.region, v.position + pmOffset, result.invalidSource);
                 sumL += source.l * v.left * w;
                 sumR += source.r * v.right * w;
                 weightSum += w;
@@ -174,7 +200,7 @@ public:
             }
             if (tail.active) {
                 const double w = voiceWeight(tail) * tailFraction;
-                const StereoFrame source = read(reel, tail.region, tail.position, result.invalidSource);
+                const StereoFrame source = read(reel, tail.region, tail.position + pmOffset, result.invalidSource);
                 tailLast_[i] = StereoFrame{static_cast<float>(source.l * tail.left * w),
                                            static_cast<float>(source.r * tail.right * w)};
                 tailWeightLast_[i] = w;
@@ -218,6 +244,7 @@ public:
             }
             lastWet_ = result.audio;
         }
+        result.markerPosition = primaryPosition_;
         if (c.rate != 0.f)
             primaryPosition_ = profile1::wrapPosition(primaryPosition_ + c.rate, region);
         result.primaryPosition = primaryPosition_;

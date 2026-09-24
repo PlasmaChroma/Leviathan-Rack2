@@ -602,5 +602,231 @@ int main() {
     const chimera::Slice::Output immediateOutput = immediate.step(selectedInput);
     need(immediate.currentRegion() == 1 && immediateOutput.audio.l < -0.9f,
          "immediate Organize commits on its event frame without old-region fade");
+    chimera::Reel spliceReel(2, 2);
+    for (std::uint32_t frame = 0; frame < 480; ++frame)
+        need(spliceReel.write(frame, chimera::StereoFrame{
+            frame < 100 ? 1.f : -1.f, frame < 100 ? 1.f : -1.f}, frame),
+            "prepare live Splice capture fixture");
+    chimera::Slice spliceSlice(&spliceReel);
+    spliceSlice.setConditioning(false);
+    for (int frame = 0; frame < 100; ++frame) spliceSlice.step(input(0.f, 0.f, 1.f));
+    spliceSlice.requestSplice();
+    spliceSlice.step(input(0.f, 0.f, 1.f));
+    need(spliceReel.markerCount() == 2 && spliceReel.region(1).begin == 100 &&
+         spliceSlice.currentRegion() == 0,
+         "playing Splice captures primary address before this frame advances");
+    for (int frame = 101; frame < 200; ++frame) {
+        const chimera::Slice::Output out = spliceSlice.step(input(0.f, 0.f, 1.f));
+        if (frame == 150)
+            need(out.audio.l < -0.9f && spliceSlice.currentRegion() == 0,
+                 "old voice keeps its captured bounds until natural primary boundary");
+    }
+    spliceSlice.requestSplice();
+    spliceSlice.step(input(0.f, 0.f, 1.f));
+    need(spliceReel.markerCount() == 3 && spliceReel.region(2).begin == 200,
+         "second live Splice uses the continuing primary coordinate");
+    for (int frame = 201; frame < 480; ++frame)
+        spliceSlice.step(input(0.f, 0.f, 1.f));
+    const chimera::Slice::Output spliceBoundary = spliceSlice.step(input(0.f, 0.f, 1.f));
+    need(spliceBoundary.naturalBoundary && spliceSlice.currentRegion() == 0,
+         "queued marker table becomes active at the old primary boundary");
+    spliceSlice.setPlay(false);
+    spliceSlice.requestSplice();
+    spliceSlice.step(input(0.f, 0.f, 1.f));
+    need(spliceReel.markerCount() == 4 && spliceReel.region(1).begin == 1,
+         "stopped Splice captures the retained primary cursor");
+    spliceSlice.requestSplice();
+    spliceSlice.step(input(0.f, 0.f, 1.f));
+    need(spliceReel.markerCount() == 4,
+         "duplicate stopped cursor marker is harmless");
+    chimera::Reel writerReel(2, 2);
+    for (std::uint32_t frame = 0; frame < 480; ++frame)
+        need(writerReel.write(frame, chimera::StereoFrame{0.f, 0.f}, frame),
+             "prepare writer marker fixture");
+    need(writerReel.addMarker(240), "prepare selected marker identity");
+    const std::uint32_t selectedId = writerReel.markerId(1);
+    chimera::Slice writerSlice(&writerReel);
+    writerSlice.setConditioning(false);
+    writerSlice.setPlay(false);
+    need(writerSlice.startCurrent() && writerSlice.selectRegion(1),
+         "latch Current writer then change selection");
+    for (int frame = 0; frame < 40; ++frame) writerSlice.step(input(0.f, 0.f));
+    writerSlice.requestSplice();
+    writerSlice.step(input(0.f, 0.f));
+    need(writerReel.region(1).begin == 40 && writerReel.findMarkerId(selectedId) == 2 &&
+         writerSlice.currentRegion() == 2 && writerSlice.requestedRegion() == 2 &&
+         writerSlice.writerPosition() == 41,
+         "Current Splice takes pre-write address and remaps selected stable marker ID");
+    writerSlice.stopRecord();
+    chimera::Slice appendSplice(&writerReel);
+    appendSplice.setPlay(false);
+    need(appendSplice.startAppend(), "start Append for deferred endpoint Splice");
+    appendSplice.requestSplice();
+    appendSplice.step(input(0.f, 0.f));
+    need(writerReel.validFrames() == 481 && writerReel.markerCount() == 3,
+         "Append Splice at first writer frame defers and coalesces endpoint marker");
+    appendSplice.step(input(0.f, 0.f));
+    appendSplice.requestSplice();
+    appendSplice.step(input(0.f, 0.f));
+    need(writerReel.markerCount() == 4 && writerReel.region(3).begin == 482,
+         "Append Splice inserts only after its addressed frame is written");
+    appendSplice.stopRecord();
+    need(writerReel.markerCount() == 5 && writerReel.region(3).begin == 480 &&
+         appendSplice.requestedRegion() == 3,
+         "Append finalization selects first appended marker before interior markers");
+    chimera::Reel overlapReelA(2, 2), overlapReelB(2, 2);
+    for (std::uint32_t frame = 0; frame < 480; ++frame) {
+        need(overlapReelA.write(frame, chimera::StereoFrame{1.f, 1.f}, frame) &&
+             overlapReelB.write(frame, chimera::StereoFrame{1.f, 1.f}, frame),
+             "prepare paired finite marker fixtures");
+    }
+    chimera::CoreInput overlapping = input(0.f, 0.f, 1.f);
+    overlapping.controls.gene = 1.f;
+    overlapping.controls.morph = 1.f;
+    overlapping.controls.slide = 0.25f;
+    chimera::Slice overlapA(&overlapReelA), overlapB(&overlapReelB);
+    overlapA.setConditioning(false);
+    overlapB.setConditioning(false);
+    overlapB.setChordRatios(-4.0, 7.0, -8.0);
+    bool foundFiniteBoundary = false;
+    for (int frame = 0; frame < 2000; ++frame) {
+        const chimera::Slice::Output a = overlapA.step(overlapping);
+        overlapB.step(overlapping);
+        if (frame > 200 && a.naturalBoundary && overlapA.onsetCount() > 10) {
+            foundFiniteBoundary = true;
+            break;
+        }
+    }
+    need(foundFiniteBoundary &&
+         std::fabs(overlapA.primaryPosition() - overlapB.primaryPosition()) < 1e-7,
+         "finite primary cursor ignores divergent secondary chord ratios");
+    const std::uint32_t overlapAddress =
+        static_cast<std::uint32_t>(std::floor(overlapA.primaryPosition()));
+    overlapA.requestSplice();
+    overlapB.requestSplice();
+    const chimera::Slice::Output overlapOutput = overlapA.step(overlapping);
+    overlapB.step(overlapping);
+    need(overlapOutput.audio.l > 0.f && overlapAddress > 100 &&
+         overlapReelA.region(1).begin == overlapAddress &&
+         overlapReelB.region(1).begin == overlapAddress,
+         "overlapping/chord finite Genes capture the Slide-adjusted primary address once");
+    chimera::Reel gapReel(2, 2);
+    for (std::uint32_t frame = 0; frame < 480; ++frame)
+        need(gapReel.write(frame, chimera::StereoFrame{1.f, 1.f}, frame),
+             "prepare density-gap marker fixture");
+    chimera::CoreInput sparse = input(0.f, 0.f, 1.f);
+    sparse.controls.gene = 1.f;
+    sparse.controls.morph = 0.f;
+    sparse.controls.slide = 0.37f;
+    chimera::Slice gapReference(&gapReel);
+    gapReference.setConditioning(false);
+    int gapFrame = -1;
+    std::uint32_t gapAddress = 0;
+    bool previousQuiet = false;
+    for (int frame = 0; frame < 4000; ++frame) {
+        const double before = gapReference.primaryPosition();
+        const chimera::Slice::Output out = gapReference.step(sparse);
+        const bool quiet = std::fabs(out.audio.l) < 1e-6f;
+        if (frame > 200 && previousQuiet && quiet && !out.naturalBoundary && before > 100.0) {
+            gapFrame = frame;
+            gapAddress = static_cast<std::uint32_t>(std::floor(before));
+            break;
+        }
+        previousQuiet = quiet;
+    }
+    need(gapFrame >= 0, "find deterministic finite-Gene no-voice gap");
+    chimera::Slice gapCapture(&gapReel);
+    gapCapture.setConditioning(false);
+    for (int frame = 0; frame < gapFrame; ++frame) gapCapture.step(sparse);
+    gapCapture.requestSplice();
+    const chimera::Slice::Output gapOutput = gapCapture.step(sparse);
+    need(std::fabs(gapOutput.audio.l) < 1e-6f &&
+         gapReel.region(1).begin == gapAddress,
+         "density gap retains independent primary marker address without a musical reader");
+    chimera::Reel pmReel(4, 4);
+    for (std::uint32_t frame = 0; frame < 1000; ++frame)
+        need(pmReel.write(frame, chimera::StereoFrame{
+            frame < 500 ? 1.f : -1.f, frame < 500 ? 1.f : -1.f}, frame),
+            "prepare stationary-cursor PM fixture");
+    chimera::Slice pmSlice(&pmReel);
+    pmSlice.setConditioning(false);
+    pmSlice.setPmEnabled(true);
+    chimera::CoreInput pmInput = input(0.f, 5.f, 1.f, 0.5f);
+    pmInput.controls.slide = 0.25f;
+    pmInput.pmRightVolts = 5.f;
+    pmInput.pmRightConnected = true;
+    for (int frame = 0; frame < 143999; ++frame) pmSlice.step(pmInput);
+    need(!pmSlice.pmActive() && pmSlice.pmBlend() == 0.f,
+         "quiet-right presence waits for three full seconds before PM entry");
+    pmSlice.step(pmInput);
+    need(pmSlice.pmActive() && near(pmSlice.pmBlend(), 1.f/240.f, 1e-6f),
+         "PM entry begins a 240-frame routing/depth fade");
+    chimera::Slice::Output pmSound{};
+    for (int frame = 0; frame < 239; ++frame) pmSound = pmSlice.step(pmInput);
+    need(pmSlice.pmBlend() > 0.999f && pmSound.audio.l < -0.9f,
+         "audio-rate PM sounds a displaced stationary cursor at Vari-Speed Stop");
+    const std::uint32_t unmodulatedAddress =
+        static_cast<std::uint32_t>(std::floor(pmSlice.primaryPosition()));
+    pmSlice.requestSplice();
+    pmSlice.step(pmInput);
+    need(pmReel.markerCount() == 2 && pmReel.region(1).begin == unmodulatedAddress &&
+         unmodulatedAddress < 500,
+         "SPLICE marker excludes 480-frame PM displacement");
+    pmInput.controls.sos = 0.f;
+    need(pmSlice.startCurrent(), "Current recording starts while PM is active");
+    std::uint32_t pmWrittenAddress = 0;
+    for (int frame = 0; frame < 400; ++frame) {
+        pmWrittenAddress = pmSlice.writerPosition();
+        pmSlice.step(pmInput);
+    }
+    need(std::fabs(pmReel.readActive(pmWrittenAddress).l) < 0.01f &&
+         std::fabs(pmReel.readActive(pmWrittenAddress).r) < 0.01f,
+         "active PM removes right CV from the live Current recording source");
+    pmSlice.stopRecord();
+    pmInput.controls.sos = 1.f;
+    for (int frame = 0; frame < 400; ++frame) pmSlice.step(pmInput);
+    pmInput.live.l = 5.f;
+    for (int frame = 0; frame < 16; ++frame) pmSlice.step(pmInput);
+    need(!pmSlice.pmActive(), "left signal exits PM after 16 detected frames");
+    for (int frame = 0; frame < 300; ++frame) pmSound = pmSlice.step(pmInput);
+    need(pmSlice.pmBlend() == 0.f && std::fabs(pmSound.audio.l) < 0.05f,
+         "PM exit fades displacement and restores wet Stop silence");
+    chimera::Reel combinedReel(20, 20);
+    for (std::uint32_t frame = 0; frame < 4800; ++frame)
+        need(combinedReel.write(frame, chimera::StereoFrame{1.f, -1.f}, frame),
+             "prepare combined PM/snapshot stress Reel");
+    chimera::Slice combined(&combinedReel);
+    combined.setConditioning(false);
+    combined.setPmEnabled(true);
+    combined.setInop(true);
+    chimera::CoreInput combinedInput = input(0.f, 5.f, 1.f);
+    combinedInput.controls.gene = 1.f;
+    combinedInput.controls.morph = 1.f;
+    combinedInput.pmRightVolts = 5.f;
+    combinedInput.pmRightConnected = true;
+    for (int frame = 0; frame < 144240; ++frame) combined.step(combinedInput);
+    need(combined.pmActive() && combined.startCurrent(),
+         "combined stress begins Current recording with PM active");
+    for (int frame = 0; frame < 7000; ++frame) {
+        if (frame == 1000)
+            need(combinedReel.beginSnapshot(combined.frame()),
+                 "snapshot starts during dense PM/Current processing");
+        combinedInput.pmRightVolts = (frame / 16) & 1 ? 5.f : -5.f;
+        combinedInput.controls.rate = (frame / 250) & 1 ? 1.f/6.f : 5.f/6.f;
+        const chimera::Slice::Output out = combined.step(combinedInput);
+        need(std::isfinite(out.audio.l) && std::isfinite(out.audio.r) &&
+             !combined.overloaded(),
+             "dense PM/reversal/Current/snapshot pass stays finite");
+    }
+    need(combinedReel.readyForWorker() && combinedReel.cowCopies() > 0 &&
+         near(combinedReel.readSnapshot(2000).l, 1.f) &&
+         near(combinedReel.readActive(2000).l, 0.f, 0.02f),
+         "frozen snapshot survives PM recording and active-page replacement");
+    combined.stopRecord();
+    need(combinedReel.beginRelease(), "combined snapshot release accepted");
+    for (int frame = 0; frame < 10; ++frame) combinedReel.maintenanceTick();
+    need(combinedReel.state() == chimera::Reel::Idle &&
+         combinedReel.freePages() == 20,
+         "combined stress returns all snapshot reserve pages");
     std::puts("PASS: Chimera 48 kHz slice initial capture, Current, Append, and TLA");
 }

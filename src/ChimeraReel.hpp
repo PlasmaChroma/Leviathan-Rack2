@@ -56,6 +56,14 @@ public:
     std::uint32_t capacityFrames() const { return capacityFrames_; }
     std::uint32_t validFrames() const { return validFrames_; }
     std::uint16_t markerCount() const { return markerCount_; }
+    std::uint32_t markerId(std::uint16_t index) const {
+        return index < markerCount_ ? markers_[index].id : 0;
+    }
+    std::uint16_t findMarkerId(std::uint32_t id) const {
+        for (std::uint16_t i = 0; i < markerCount_; ++i)
+            if (markers_[i].id == id) return i;
+        return markerCount_;
+    }
     Region region(std::uint16_t index) const {
         if (index >= markerCount_) return Region{0, 0};
         return Region{markers_[index].frame,

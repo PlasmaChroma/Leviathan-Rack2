@@ -302,6 +302,41 @@ int main() {
         need(twoRegions.write(i, chimera::StereoFrame{i < 4800 ? 1.f : -1.f,
                                                        i < 4800 ? 1.f : -1.f}, i),
              "prepare two-region forced transition fixture");
+    chimera::Grains editedMetadata, unchangedMetadata;
+    chimera::CoreOutput metadataControl{};
+    metadataControl.gene = static_cast<float>(gene);
+    metadataControl.morph = 0.7f; // Fractional onset hop; no onset is due at frame 480.
+    metadataControl.rate = 1.f;
+    for (int frame = 0; frame < 480; ++frame) {
+        editedMetadata.step(twoRegions, region, metadataControl);
+        unchangedMetadata.step(twoRegions, region, metadataControl);
+    }
+    const std::uint64_t onsetsBeforeEdit = editedMetadata.onsetCount();
+    const chimera::Grains::Result metadataBoundary = editedMetadata.step(
+        twoRegions, chimera::Region{4800, 7200}, metadataControl, false, false, true);
+    const chimera::Grains::Result unchangedBoundary = unchangedMetadata.step(
+        twoRegions, region, metadataControl);
+    need(metadataBoundary.primaryBoundary && unchangedBoundary.primaryBoundary &&
+         editedMetadata.onsetCount() == onsetsBeforeEdit &&
+         editedMetadata.onsetCount() == unchangedMetadata.onsetCount() &&
+         metadataBoundary.readers == unchangedBoundary.readers &&
+         std::fabs(metadataBoundary.audio.l - unchangedBoundary.audio.l) < 1e-5f,
+         "marker metadata handoff preserves old voices without an extra Morph onset");
+    bool newRegionOnset = false;
+    for (int frame = 481; frame < 600; ++frame) {
+        const chimera::Grains::Result edited = editedMetadata.step(
+            twoRegions, chimera::Region{4800, 7200}, metadataControl);
+        const chimera::Grains::Result unchanged = unchangedMetadata.step(
+            twoRegions, region, metadataControl);
+        if (editedMetadata.onsetCount() == onsetsBeforeEdit) {
+            need(edited.readers == unchanged.readers &&
+                 std::fabs(edited.audio.l - unchanged.audio.l) < 1e-5f,
+                 "old Morph voices retain captured source through marker edit");
+        }
+        else if (edited.audio.l < unchanged.audio.l - 0.01f) newRegionOnset = true;
+    }
+    need(newRegionOnset && editedMetadata.onsetCount() == unchangedMetadata.onsetCount(),
+         "next scheduled Morph onset adopts refreshed region without changing cadence");
     chimera::Grains selected;
     for (int frame = 0; frame < 100; ++frame)
         selected.step(twoRegions, chimera::Region{0, 4800}, transitionControl);
@@ -386,5 +421,53 @@ int main() {
              "existing Gene retains its unity/window policy after gnsm change");
     need(latchedWindow.step(reel, region, lc).audio.l < 0.05f,
          "next Gene adopts newly selected smooth window");
+    for (std::uint32_t length = 1; length <= 3; ++length) {
+        chimera::Reel tiny(1, 1);
+        for (std::uint32_t frame = 0; frame < length; ++frame)
+            need(tiny.write(frame, chimera::StereoFrame{float(frame + 1), -float(frame + 1)}, frame),
+                 "prepare tiny-region PM stress fixture");
+        chimera::Grains pmStress;
+        pmStress.setChordRatios(16.0, -16.0, 16.0);
+        chimera::CoreOutput pc{};
+        pc.rate = 32.f;
+        pc.morph = 1.f;
+        for (int frame = 0; frame < 100; ++frame) {
+            const chimera::Grains::Result out = pmStress.step(
+                tiny, chimera::Region{0, length}, pc, false, true, false,
+                frame & 1 ? 960.0 : -960.0);
+            need(out.readers <= 8 && std::isfinite(out.audio.l) && std::isfinite(out.audio.r),
+                 "tiny full-Splice high-rate PM stays bounded and finite");
+        }
+        pc.rate = 0.f;
+        const std::uint64_t beforeStop = pmStress.onsetCount();
+        for (int frame = 0; frame < 100; ++frame) {
+            const chimera::Grains::Result out = pmStress.step(
+                tiny, chimera::Region{0, length}, pc, false, true, false,
+                frame & 1 ? 960.0 : -960.0);
+            need(out.readers <= 8 && std::isfinite(out.audio.l) && std::isfinite(out.audio.r) &&
+                 (frame == 0 || !out.primaryBoundary),
+                 "tiny full-Splice PM at Stop has no extra primary wrap or invalid read");
+        }
+        need(pmStress.onsetCount() == beforeStop,
+             "PM at Stop does not accumulate new full-Splice onsets");
+    }
+    chimera::Reel pmGradient(4, 4);
+    for (std::uint32_t frame = 0; frame < 1000; ++frame)
+        need(pmGradient.write(frame, chimera::StereoFrame{frame / 1000.f, -frame / 1000.f}, frame),
+             "prepare exact PM displacement fixture");
+    chimera::Grains displaced;
+    chimera::CoreOutput stopped{};
+    stopped.morph = 1.f/6.f;
+    stopped.rate = 0.f;
+    const chimera::Region gradientRegion{0, 1000};
+    const chimera::Grains::Result positive = displaced.step(
+        pmGradient, gradientRegion, stopped, false, true, false, 96.0);
+    const chimera::Grains::Result negative = displaced.step(
+        pmGradient, gradientRegion, stopped, false, true, false, -96.0);
+    need(std::fabs(positive.audio.l - 0.096f) < 1e-5f &&
+         std::fabs(negative.audio.l - 0.904f) < 1e-5f &&
+         positive.markerPosition == 0.0 && negative.markerPosition == 0.0 &&
+         displaced.primaryPosition() == 0.0,
+         "PM shifts read taps in both directions without moving primary or marker cursor");
     std::puts("PASS: Chimera finite-Gene timing, unity plateau, and four-slot density");
 }

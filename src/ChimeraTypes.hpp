@@ -54,6 +54,8 @@ struct CoreInput {
     StereoFrame live;
     ControlFrame controls;
     std::uint32_t events;
+    float pmRightVolts;
+    bool pmRightConnected;
 };
 
 struct CoreOutput {

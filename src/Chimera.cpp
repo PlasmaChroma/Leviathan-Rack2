@@ -108,16 +108,18 @@ struct Chimera : Module {
     std::atomic<bool> prepareRequested{false};
     std::atomic<int> menuCommand{0};
     std::atomic<bool> inopSetting{false};
-    std::atomic<bool> gnsmSetting{false}, cvopSetting{false}, omodSetting{false};
+    std::atomic<bool> gnsmSetting{false}, cvopSetting{false}, omodSetting{false}, pminSetting{false};
     std::atomic<float> mcrSetting[3]{{2.f}, {3.f}, {4.f}};
     bool lastRec = false;
     bool lastRecJack = false;
     bool lastClock = false;
     bool lastShiftButton = false;
     bool lastShiftJack = false;
+    bool lastSpliceButton = false;
+    bool lastSpliceJack = false;
     enum ArmState { NoArm, ArmCurrent, ArmAppend, ArmStop };
     ArmState recordArm = NoArm;
-    Gate playGate, recGate, clockGate, shiftGate;
+    Gate playGate, recGate, clockGate, shiftGate, spliceGate;
 
     Chimera() : slice(nullptr) {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
@@ -376,6 +378,7 @@ struct Chimera : Module {
         json_object_set_new(root, "gnsm", json_integer(gnsmSetting.load(std::memory_order_acquire) ? 1 : 0));
         json_object_set_new(root, "cvop", json_integer(cvopSetting.load(std::memory_order_acquire) ? 1 : 0));
         json_object_set_new(root, "omod", json_integer(omodSetting.load(std::memory_order_acquire) ? 1 : 0));
+        json_object_set_new(root, "pmin", json_integer(pminSetting.load(std::memory_order_acquire) ? 1 : 0));
         for (int i = 0; i < 3; ++i) {
             const char* key = i == 0 ? "mcr1" : (i == 1 ? "mcr2" : "mcr3");
             json_object_set_new(root, key, json_real(mcrSetting[i].load(std::memory_order_acquire)));
@@ -395,6 +398,9 @@ struct Chimera : Module {
         json_t* omod = json_object_get(root, "omod");
         if (json_is_integer(omod) && (json_integer_value(omod) == 0 || json_integer_value(omod) == 1))
             omodSetting.store(json_integer_value(omod) == 1, std::memory_order_release);
+        json_t* pmin = json_object_get(root, "pmin");
+        if (json_is_integer(pmin) && (json_integer_value(pmin) == 0 || json_integer_value(pmin) == 1))
+            pminSetting.store(json_integer_value(pmin) == 1, std::memory_order_release);
         for (int i = 0; i < 3; ++i) {
             const char* key = i == 0 ? "mcr1" : (i == 1 ? "mcr2" : "mcr3");
             json_t* ratio = json_object_get(root, key);
@@ -444,11 +450,15 @@ struct Chimera : Module {
             lastShiftButton = params[SHIFT_PARAM].getValue() > 0.5f;
             lastShiftJack = shiftGate.update(inputs[SHIFT_INPUT].isConnected() ?
                 inputs[SHIFT_INPUT].getVoltage() : 0.f);
+            lastSpliceButton = params[SPLICE_PARAM].getValue() > 0.5f;
+            lastSpliceJack = spliceGate.update(inputs[SPLICE_INPUT].isConnected() ?
+                inputs[SPLICE_INPUT].getVoltage() : 0.f);
             if (reel) reel->maintenanceTick();
             outputs[AUDIO_L_OUTPUT].setVoltage(l);
             outputs[AUDIO_R_OUTPUT].setVoltage(r);
             outputs[CV_OUTPUT].setVoltage(0.f);
             outputs[EOSG_OUTPUT].setVoltage(0.f);
+            lights[PM_LIGHT].setBrightness(0.f);
             lights[ERROR_LIGHT].setBrightness(1.f);
             return;
         }
@@ -460,6 +470,7 @@ struct Chimera : Module {
         slice.setSmoothGenes(gnsmSetting.load(std::memory_order_relaxed));
         slice.setRampCv(cvopSetting.load(std::memory_order_relaxed));
         slice.setImmediateTransitions(omodSetting.load(std::memory_order_relaxed));
+        slice.setPmEnabled(pminSetting.load(std::memory_order_relaxed));
         slice.setChordRatios(mcrSetting[0].load(std::memory_order_relaxed),
                              mcrSetting[1].load(std::memory_order_relaxed),
                              mcrSetting[2].load(std::memory_order_relaxed));
@@ -470,6 +481,13 @@ struct Chimera : Module {
             slice.requestShift();
         lastShiftButton = shiftButton;
         lastShiftJack = shiftJack;
+        const bool spliceButton = params[SPLICE_PARAM].getValue() > 0.5f;
+        const bool spliceJack = spliceGate.update(inputs[SPLICE_INPUT].isConnected() ?
+            inputs[SPLICE_INPUT].getVoltage() : 0.f);
+        if ((!spliceButton && lastSpliceButton) || (spliceJack && !lastSpliceJack))
+            slice.requestSplice();
+        lastSpliceButton = spliceButton;
+        lastSpliceJack = spliceJack;
         const bool rec = params[REC_PARAM].getValue() > 0.5f;
         const bool recJack = recGate.update(inputs[REC_INPUT].isConnected() ?
             inputs[REC_INPUT].getVoltage() : 0.f);
@@ -509,6 +527,9 @@ struct Chimera : Module {
         lastRecJack = recJack;
         chimera::CoreInput in{};
         in.live = chimera::StereoFrame{l, r};
+        in.pmRightVolts = inputs[AUDIO_R_INPUT].isConnected() ?
+            inputs[AUDIO_R_INPUT].getVoltage() : 0.f;
+        in.pmRightConnected = inputs[AUDIO_R_INPUT].isConnected();
         chimera::ControlFrame& c = in.controls;
         c.sos = params[SOS_PARAM].getValue();
         c.gene = params[GENE_SIZE_PARAM].getValue();
@@ -536,6 +557,7 @@ struct Chimera : Module {
         lights[CLOCK_LIGHT].setBrightness(clock ? 1.f : 0.f);
         lights[PLAY_LIGHT].setBrightness(play ? 1.f : 0.f);
         lights[PENDING_LIGHT].setBrightness(slice.requestedRegion() != slice.currentRegion() ? 1.f : 0.f);
+        lights[PM_LIGHT].setBrightness(slice.pmBlend());
         lights[CLIP_LIGHT].setBrightness(slice.overloaded() ? 1.f : 0.f);
         lights[IO_BUSY_LIGHT].setBrightness(ioBusy.load(std::memory_order_acquire) ? 1.f : 0.f);
         lights[ERROR_LIGHT].setBrightness(out.full || ioError.load(std::memory_order_acquire) ||
@@ -625,6 +647,9 @@ struct ChimeraWidget : ModuleWidget {
         menu->addChild(createCheckMenuItem("Immediate transitions", "",
             [m] { return m->omodSetting.load(std::memory_order_acquire); },
             [m] { m->omodSetting.store(!m->omodSetting.load(std::memory_order_relaxed), std::memory_order_release); }));
+        menu->addChild(createCheckMenuItem("Right input: phase modulation (pmin)", "",
+            [m] { return m->pminSetting.load(std::memory_order_acquire); },
+            [m] { m->pminSetting.store(!m->pminSetting.load(std::memory_order_relaxed), std::memory_order_release); }));
         menu->addChild(createSubmenuItem("Chord ratios (mcr1–3)", "", [m](Menu* submenu) {
             for (int i = 0; i < 3; ++i) {
                 submenu->addChild(createMenuLabel(i == 0 ? "Slot 1 ratio" :

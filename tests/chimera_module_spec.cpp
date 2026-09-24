@@ -70,6 +70,59 @@ int main() {
         selectionModule.process(args);
         need(selectionModule.slice.requestedRegion() == 0,
              "SHIFT jack Schmitt band does not repeat an event");
+        selectionModule.params[Chimera::SPLICE_PARAM].setValue(1.f);
+        selectionModule.process(args);
+        need(regions.markerCount() == 2,
+             "SPLICE button press waits for release");
+        const std::uint32_t buttonAddress = static_cast<std::uint32_t>(
+            std::floor(selectionModule.slice.primaryPosition()));
+        selectionModule.params[Chimera::SPLICE_PARAM].setValue(0.f);
+        selectionModule.process(args);
+        need(regions.markerCount() == 3 && regions.region(1).begin == buttonAddress,
+             "SPLICE button release captures Rack-facing primary cursor");
+        selectionModule.inputs[Chimera::SPLICE_INPUT].channels = 1;
+        selectionModule.inputs[Chimera::SPLICE_INPUT].setVoltage(2.5f);
+        const std::uint32_t jackAddress = static_cast<std::uint32_t>(
+            std::floor(selectionModule.slice.primaryPosition()));
+        selectionModule.process(args);
+        need(regions.markerCount() == 4 && regions.region(2).begin == jackAddress,
+             "SPLICE jack rising edge captures next primary cursor");
+        selectionModule.inputs[Chimera::SPLICE_INPUT].setVoltage(1.8f);
+        selectionModule.process(args);
+        need(regions.markerCount() == 4,
+             "SPLICE jack Schmitt band does not repeat");
+    }
+    {
+        chimera::Reel pmRegion(4, 4);
+        for (std::uint32_t frame = 0; frame < 1000; ++frame)
+            need(pmRegion.write(frame, chimera::StereoFrame{
+                frame < 500 ? 1.f : -1.f, frame < 500 ? 1.f : -1.f}, frame),
+                "prepare Rack-facing PM fixture");
+        Chimera pmModule;
+        pmModule.reel = &pmRegion;
+        pmModule.slice.setReel(&pmRegion);
+        pmModule.slice.setConditioning(false);
+        pmModule.pminSetting.store(true);
+        pmModule.params[Chimera::SOS_PARAM].setValue(1.f);
+        pmModule.params[Chimera::VARISPEED_PARAM].setValue(0.5f);
+        pmModule.params[Chimera::SLIDE_PARAM].setValue(0.25f);
+        pmModule.inputs[Chimera::AUDIO_L_INPUT].channels = 1;
+        pmModule.inputs[Chimera::AUDIO_L_INPUT].setVoltage(0.f);
+        pmModule.inputs[Chimera::AUDIO_R_INPUT].channels = 1;
+        pmModule.inputs[Chimera::AUDIO_R_INPUT].setVoltage(5.f);
+        for (int frame = 0; frame < 144240; ++frame) pmModule.process(args);
+        need(pmModule.slice.pmActive() &&
+             pmModule.lights[Chimera::PM_LIGHT].getBrightness() > 0.99f &&
+             pmModule.outputs[Chimera::AUDIO_L_OUTPUT].getVoltage() < -4.5f,
+             "quiet connected left input permits PM after dwell and sounds at Stop");
+        pmModule.inputs[Chimera::AUDIO_L_INPUT].setVoltage(5.f);
+        for (int frame = 0; frame < 17; ++frame) pmModule.process(args);
+        need(!pmModule.slice.pmActive(),
+             "Rack left signal exits PM after presence threshold");
+        json_t* pmJson = pmModule.dataToJson();
+        need(json_integer_value(json_object_get(pmJson, "pmin")) == 1,
+             "PM enable persists in module state");
+        json_decref(pmJson);
     }
     {
         Chimera unprepared;
