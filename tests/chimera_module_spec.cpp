@@ -41,6 +41,31 @@ int main() {
     Module::ProcessArgs args{};
     args.sampleRate = 48000.f;
     args.sampleTime = 1.f/48000.f;
+    auto ratePosition = [&args](int mode, float knob) {
+        chimera::Reel rateReel(4, 4);
+        for (std::uint32_t frame = 0; frame < 1000; ++frame)
+            need(rateReel.write(frame, chimera::StereoFrame{0.f, 0.f}, frame),
+                 "prepare Vari-Speed mode fixture");
+        Chimera rateModule;
+        rateModule.reel = &rateReel;
+        rateModule.slice.setReel(&rateReel);
+        rateModule.vsopSetting.store(mode);
+        rateModule.params[Chimera::VARISPEED_PARAM].setValue(knob);
+        rateModule.params[Chimera::VARISPEED_ATT_PARAM].setValue(1.f);
+        rateModule.inputs[Chimera::VARISPEED_CV_INPUT].channels = 1;
+        rateModule.inputs[Chimera::VARISPEED_CV_INPUT].setVoltage(1.f);
+        rateModule.process(args);
+        return rateModule.slice.primaryPosition();
+    };
+    const double forwardPitch = ratePosition(1, 5.f/6.f);
+    const double reversePitch = ratePosition(1, 1.f/6.f);
+    const double forwardOnlyPitch = ratePosition(2, 0.75f);
+    const double forwardOnlyStop = ratePosition(2, 0.f);
+    need(std::fabs(forwardPitch - 2.0) < 0.001 &&
+         std::fabs(reversePitch - 997.0) < 0.001 &&
+         std::fabs(forwardOnlyPitch - 2.0) < 0.001 &&
+         std::fabs(forwardOnlyStop) < 0.001,
+         "module vsop modes drive bidirectional and forward-only 1 V/oct playback");
     {
         chimera::Reel regions(4, 4);
         for (std::uint32_t frame = 0; frame < 960; ++frame)
@@ -214,7 +239,7 @@ int main() {
         Chimera unprepared;
         unprepared.inputs[Chimera::CLOCK_INPUT].channels = 1;
         unprepared.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
-        unprepared.params[Chimera::REC_PARAM].setValue(1.f);
+        unprepared.menuCommand.store(1);
         unprepared.process(args);
         need(unprepared.recordArm == Chimera::NoArm &&
              unprepared.recordNotReady.load() && unprepared.prepareRequested.load(),
@@ -227,7 +252,7 @@ int main() {
          "untouched empty module starts no worker or full Reel");
     module.inputs[Chimera::AUDIO_L_INPUT].channels = 1;
     module.inputs[Chimera::AUDIO_L_INPUT].setVoltage(5.f);
-    module.params[Chimera::REC_PARAM].setValue(1.f);
+    module.menuCommand.store(1);
     trapAllocations = true;
     module.process(args);
     trapAllocations = false;
@@ -264,7 +289,7 @@ int main() {
          "L-only input monitors to both channels");
     need(module.outputs[Chimera::CV_OUTPUT].getVoltage() > 0.f,
          "Rack CV output follows the conditioned audio envelope");
-    module.params[Chimera::REC_PARAM].setValue(1.f);
+    module.menuCommand.store(1);
     trapAllocations = true;
     module.process(args);
     need(!module.recordNotReady.load(), "successful retry clears readiness error");
@@ -273,7 +298,7 @@ int main() {
     trapAllocations = false;
     need(audioAllocations == 0, "recording callbacks allocate no heap");
     need(module.reel->validFrames() == 4, "Rack process records four exact frames");
-    module.params[Chimera::REC_PARAM].setValue(1.f);
+    module.menuCommand.store(1);
     module.process(args);
     need(module.reel->validFrames() == 4 && module.slice.recordState() == chimera::Slice::Idle,
          "stop edge excludes current frame");
@@ -330,7 +355,7 @@ int main() {
     module.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
     module.params[Chimera::REC_PARAM].setValue(0.f);
     module.process(args);
-    module.params[Chimera::REC_PARAM].setValue(1.f);
+    module.menuCommand.store(1);
     module.process(args);
     need(module.recordArm == Chimera::ArmCurrent &&
          module.slice.recordState() == chimera::Slice::Idle &&
@@ -346,7 +371,7 @@ int main() {
          "Clock start includes its edge frame");
     module.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
     module.process(args);
-    module.params[Chimera::REC_PARAM].setValue(1.f);
+    module.menuCommand.store(1);
     module.process(args);
     need(module.recordArm == Chimera::ArmStop &&
          module.slice.recordState() == chimera::Slice::Current &&
@@ -361,7 +386,7 @@ int main() {
          "Clock stop excludes its edge frame");
     module.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
     module.process(args);
-    module.params[Chimera::REC_PARAM].setValue(1.f);
+    module.menuCommand.store(1);
     module.inputs[Chimera::CLOCK_INPUT].setVoltage(2.5f);
     module.process(args);
     need(module.slice.recordState() == chimera::Slice::Current &&
@@ -378,7 +403,7 @@ int main() {
          "prepare two committed regions for quantized writer destination");
     module.inputs[Chimera::CLOCK_INPUT].channels = 1;
     module.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
-    module.params[Chimera::REC_PARAM].setValue(1.f);
+    module.menuCommand.store(1);
     module.process(args);
     need(module.recordArm == Chimera::ArmCurrent && module.slice.selectRegion(1),
          "selection may change while Current start is armed");
@@ -398,7 +423,7 @@ int main() {
     module.ckopSetting.store(1);
     module.inputs[Chimera::SHIFT_INPUT].channels = 1;
     module.inputs[Chimera::SHIFT_INPUT].setVoltage(2.5f);
-    module.params[Chimera::REC_PARAM].setValue(1.f);
+    module.menuCommand.store(1);
     module.inputs[Chimera::CLOCK_INPUT].setVoltage(2.5f);
     module.process(args);
     need(module.slice.currentRegion() == 1 &&
@@ -415,7 +440,7 @@ int main() {
     module.params[Chimera::ORGANIZE_PARAM].setValue(1.f);
     module.inputs[Chimera::SHIFT_INPUT].setVoltage(2.5f);
     module.inputs[Chimera::CLOCK_INPUT].setVoltage(2.5f);
-    module.params[Chimera::REC_PARAM].setValue(1.f);
+    module.menuCommand.store(1);
     module.process(args);
     need(module.slice.organizeBin() == 1 && module.slice.currentRegion() == 0 &&
          module.slice.recordState() == chimera::Slice::Current &&
@@ -471,6 +496,7 @@ int main() {
     json_object_set_new(data, "omod", json_integer(1));
     json_object_set_new(data, "pmod", json_integer(2));
     json_object_set_new(data, "ckop", json_integer(1));
+    json_object_set_new(data, "vsop", json_integer(2));
     json_object_set_new(data, "mcr1", json_real(-2.5));
     json_object_set_new(data, "mcr2", json_real(0.0));
     module.dataFromJson(data);
@@ -481,14 +507,18 @@ int main() {
     need(module.pmodSetting.load() == 2 &&
          json_integer_value(json_object_get(persistedPlay, "pmod")) == 2 &&
          module.ckopSetting.load() == 1 &&
-         json_integer_value(json_object_get(persistedPlay, "ckop")) == 1,
-         "PLAY and CLOCK modes persist through JSON");
+         json_integer_value(json_object_get(persistedPlay, "ckop")) == 1 &&
+         module.vsopSetting.load() == 2 &&
+         json_integer_value(json_object_get(persistedPlay, "vsop")) == 2,
+         "PLAY, CLOCK, and Vari-Speed modes persist through JSON");
     json_decref(persistedPlay);
     json_object_set_new(data, "pmod", json_integer(3));
     json_object_set_new(data, "ckop", json_integer(-1));
+    json_object_set_new(data, "vsop", json_integer(3));
     module.dataFromJson(data);
-    need(module.pmodSetting.load() == 2 && module.ckopSetting.load() == 1,
-         "invalid PLAY and CLOCK modes are ignored");
+    need(module.pmodSetting.load() == 2 && module.ckopSetting.load() == 1 &&
+         module.vsopSetting.load() == 2,
+         "invalid PLAY, CLOCK, and Vari-Speed modes are ignored");
     need(module.mcrSetting[0].load() == -2.5f && module.mcrSetting[1].load() == 3.f,
          "signed chord ratio loads while invalid zero retains default");
     json_decref(data);
@@ -515,7 +545,7 @@ int main() {
          module.outputs[Chimera::CV_OUTPUT].getVoltage() == 0.f &&
          module.outputs[Chimera::EOSG_OUTPUT].getVoltage() == 0.f,
          "unsupported host rate never writes incorrect Reel time");
-    module.params[Chimera::REC_PARAM].setValue(1.f);
+    module.menuCommand.store(1);
     module.process(args);
     args.sampleRate = 48000.f;
     args.sampleTime = 1.f/48000.f;
@@ -549,6 +579,81 @@ int main() {
     }
     need(module.retiringHandle == 0 && module.stores.chargedBytes() == 4096ull,
          "worker retirement releases old payload credit off audio");
+    chimera::Reel optionReel(1, 1);
+    for (std::uint32_t i = 0; i < 4; ++i)
+        need(optionReel.write(i, chimera::StereoFrame{0.f, 0.f}, i),
+             "prepare REC assignment fixture");
+    {
+        Chimera optionModule;
+        optionModule.reel = &optionReel;
+        optionModule.slice.setReel(&optionReel);
+        optionModule.rsopSetting.store(1);
+        optionModule.params[Chimera::REC_PARAM].setValue(1.f);
+        optionModule.process(args);
+        need(optionModule.slice.recordState() == chimera::Slice::Idle,
+             "REC button press waits for release");
+        optionModule.params[Chimera::REC_PARAM].setValue(0.f);
+        optionModule.process(args);
+        need(optionModule.slice.recordState() == chimera::Slice::Append &&
+             optionModule.slice.writerPosition() == 5,
+             "REC button release uses rsop=1 Append assignment");
+        optionModule.menuCommand.store(3);
+        optionModule.process(args);
+        optionModule.menuCommand.store(4);
+        optionModule.process(args);
+        need(optionModule.slice.recordState() == chimera::Slice::Current,
+             "rsop=1 assigns alternate REC start to Current");
+        optionModule.menuCommand.store(3);
+        optionModule.process(args);
+        optionModule.rsopSetting.store(0);
+        optionModule.menuCommand.store(4);
+        optionModule.process(args);
+        need(optionModule.slice.recordState() == chimera::Slice::Append,
+             "rsop=0 assigns alternate REC start to Append");
+        json_t* options = optionModule.dataToJson();
+        need(json_integer_value(json_object_get(options, "rsop")) == 0 &&
+             json_integer_value(json_object_get(options, "inputGain")) == 1,
+             "REC assignment and gain persist in patch state");
+        json_decref(options);
+        json_t* edits = json_object();
+        json_object_set_new(edits, "rsop", json_integer(1));
+        json_object_set_new(edits, "inputGain", json_integer(3));
+        optionModule.dataFromJson(edits);
+        need(optionModule.rsopSetting.load() == 1 && optionModule.inputGainSetting.load() == 3,
+             "valid REC assignment and gain reload");
+        json_object_set_new(edits, "rsop", json_integer(2));
+        json_object_set_new(edits, "inputGain", json_integer(-1));
+        optionModule.dataFromJson(edits);
+        need(optionModule.rsopSetting.load() == 1 && optionModule.inputGainSetting.load() == 3,
+             "invalid REC assignment and gain retain previous values");
+        json_decref(edits);
+        optionModule.menuCommand.store(3);
+        optionModule.process(args);
+        optionModule.inputs[Chimera::REC_INPUT].channels = 1;
+        optionModule.inputs[Chimera::REC_INPUT].setVoltage(0.f);
+        optionModule.params[Chimera::SPLICE_PARAM].setValue(1.f);
+        optionModule.process(args);
+        optionModule.inputs[Chimera::REC_INPUT].setVoltage(2.5f);
+        optionModule.process(args);
+        need(optionModule.slice.recordState() == chimera::Slice::Append,
+             "REC gate remains independent of a held SPLICE button");
+        optionModule.menuCommand.store(3);
+        optionModule.process(args);
+        optionModule.params[Chimera::SPLICE_PARAM].setValue(0.f);
+        optionModule.process(args);
+        optionModule.inputs[Chimera::REC_INPUT].channels = 0;
+        args.sampleRate = 96000.f;
+        args.sampleTime = 1.f/96000.f;
+        optionModule.params[Chimera::REC_PARAM].setValue(1.f);
+        optionModule.process(args);
+        args.sampleRate = 48000.f;
+        args.sampleTime = 1.f/48000.f;
+        optionModule.process(args);
+        optionModule.params[Chimera::REC_PARAM].setValue(0.f);
+        optionModule.process(args);
+        need(optionModule.slice.recordState() == chimera::Slice::Idle,
+             "REC held through unsupported host rate does not fire on release");
+    }
     std::shared_ptr<chimera::JobGeneration> removedToken;
     {
         Chimera removed;

@@ -112,15 +112,17 @@ struct Chimera : Module {
     std::atomic<int> menuCommand{0};
     std::atomic<bool> inopSetting{false};
     std::atomic<bool> gnsmSetting{false}, cvopSetting{false}, omodSetting{false}, pminSetting{false};
-    std::atomic<int> pmodSetting{0}, ckopSetting{0};
+    std::atomic<int> pmodSetting{0}, ckopSetting{0}, vsopSetting{0};
+    std::atomic<int> rsopSetting{0}, inputGainSetting{1};
     std::atomic<float> mcrSetting[3]{{2.f}, {3.f}, {4.f}};
-    bool lastRec = false;
     bool lastRecJack = false;
+    bool lastRecButton = false;
     bool lastClock = false;
-    bool lastShiftButton = false;
     bool lastShiftJack = false;
-    bool lastSpliceButton = false;
+    bool lastShiftButton = false;
     bool lastSpliceJack = false;
+    bool lastSpliceButton = false;
+    bool ignoreRecRelease = false, ignoreShiftRelease = false, ignoreSpliceRelease = false;
     bool playInitialized = false, lastPlayLogical = true, transportPlay = true;
     bool stopAtPrimaryBoundary = false;
     int lastPlayMode = 0;
@@ -397,6 +399,9 @@ struct Chimera : Module {
         json_object_set_new(root, "pmin", json_integer(pminSetting.load(std::memory_order_acquire) ? 1 : 0));
         json_object_set_new(root, "pmod", json_integer(pmodSetting.load(std::memory_order_acquire)));
         json_object_set_new(root, "ckop", json_integer(ckopSetting.load(std::memory_order_acquire)));
+        json_object_set_new(root, "vsop", json_integer(vsopSetting.load(std::memory_order_acquire)));
+        json_object_set_new(root, "rsop", json_integer(rsopSetting.load(std::memory_order_acquire)));
+        json_object_set_new(root, "inputGain", json_integer(inputGainSetting.load(std::memory_order_acquire)));
         for (int i = 0; i < 3; ++i) {
             const char* key = i == 0 ? "mcr1" : (i == 1 ? "mcr2" : "mcr3");
             json_object_set_new(root, key, json_real(mcrSetting[i].load(std::memory_order_acquire)));
@@ -425,6 +430,15 @@ struct Chimera : Module {
         json_t* ckop = json_object_get(root, "ckop");
         if (json_is_integer(ckop) && json_integer_value(ckop) >= 0 && json_integer_value(ckop) <= 2)
             ckopSetting.store(static_cast<int>(json_integer_value(ckop)), std::memory_order_release);
+        json_t* vsop = json_object_get(root, "vsop");
+        if (json_is_integer(vsop) && json_integer_value(vsop) >= 0 && json_integer_value(vsop) <= 2)
+            vsopSetting.store(static_cast<int>(json_integer_value(vsop)), std::memory_order_release);
+        json_t* rsop = json_object_get(root, "rsop");
+        if (json_is_integer(rsop) && (json_integer_value(rsop) == 0 || json_integer_value(rsop) == 1))
+            rsopSetting.store(static_cast<int>(json_integer_value(rsop)), std::memory_order_release);
+        json_t* gain = json_object_get(root, "inputGain");
+        if (json_is_integer(gain) && json_integer_value(gain) >= 0 && json_integer_value(gain) <= 3)
+            inputGainSetting.store(static_cast<int>(json_integer_value(gain)), std::memory_order_release);
         for (int i = 0; i < 3; ++i) {
             const char* key = i == 0 ? "mcr1" : (i == 1 ? "mcr2" : "mcr3");
             json_t* ratio = json_object_get(root, key);
@@ -466,17 +480,20 @@ struct Chimera : Module {
             slice.stopRecord();
             recordArm = NoArm;
             menuCommand.exchange(0, std::memory_order_acq_rel);
-            lastRec = params[REC_PARAM].getValue() > 0.5f;
+            lastRecButton = params[REC_PARAM].getValue() > 0.5f;
+            lastSpliceButton = params[SPLICE_PARAM].getValue() > 0.5f;
+            lastShiftButton = params[SHIFT_PARAM].getValue() > 0.5f;
+            ignoreRecRelease = lastRecButton;
+            ignoreSpliceRelease = lastSpliceButton;
+            ignoreShiftRelease = lastShiftButton;
             playInitialized = false;
             stopAtPrimaryBoundary = false;
             lastRecJack = recGate.update(inputs[REC_INPUT].isConnected() ?
                 inputs[REC_INPUT].getVoltage() : 0.f);
             lastClock = clockGate.update(inputs[CLOCK_INPUT].isConnected() ?
                 inputs[CLOCK_INPUT].getVoltage() : 0.f);
-            lastShiftButton = params[SHIFT_PARAM].getValue() > 0.5f;
             lastShiftJack = shiftGate.update(inputs[SHIFT_INPUT].isConnected() ?
                 inputs[SHIFT_INPUT].getVoltage() : 0.f);
-            lastSpliceButton = params[SPLICE_PARAM].getValue() > 0.5f;
             lastSpliceJack = spliceGate.update(inputs[SPLICE_INPUT].isConnected() ?
                 inputs[SPLICE_INPUT].getVoltage() : 0.f);
             if (reel) reel->maintenanceTick();
@@ -528,24 +545,33 @@ struct Chimera : Module {
         slice.setRampCv(cvopSetting.load(std::memory_order_relaxed));
         slice.setImmediateTransitions(omodSetting.load(std::memory_order_relaxed));
         slice.setPmEnabled(pminSetting.load(std::memory_order_relaxed));
+        slice.setRateMode(vsopSetting.load(std::memory_order_relaxed));
         slice.setChordRatios(mcrSetting[0].load(std::memory_order_relaxed),
                              mcrSetting[1].load(std::memory_order_relaxed),
                              mcrSetting[2].load(std::memory_order_relaxed));
         const bool shiftButton = params[SHIFT_PARAM].getValue() > 0.5f;
+        const bool spliceButton = params[SPLICE_PARAM].getValue() > 0.5f;
+        const bool rec = params[REC_PARAM].getValue() > 0.5f;
+        slice.setInputGain(inputGainSetting.load(std::memory_order_relaxed));
         const bool shiftJack = shiftGate.update(inputs[SHIFT_INPUT].isConnected() ?
             inputs[SHIFT_INPUT].getVoltage() : 0.f);
-        if ((!shiftButton && lastShiftButton) || (shiftJack && !lastShiftJack))
+        if ((!shiftButton && lastShiftButton && !ignoreShiftRelease) ||
+            (shiftJack && !lastShiftJack))
             slice.requestShift();
+        if (!shiftButton) ignoreShiftRelease = false;
         lastShiftButton = shiftButton;
         lastShiftJack = shiftJack;
-        const bool spliceButton = params[SPLICE_PARAM].getValue() > 0.5f;
         const bool spliceJack = spliceGate.update(inputs[SPLICE_INPUT].isConnected() ?
             inputs[SPLICE_INPUT].getVoltage() : 0.f);
-        if ((!spliceButton && lastSpliceButton) || (spliceJack && !lastSpliceJack))
+        if ((!spliceButton && lastSpliceButton && !ignoreSpliceRelease) ||
+            (spliceJack && !lastSpliceJack))
             slice.requestSplice();
+        if (!spliceButton) ignoreSpliceRelease = false;
         lastSpliceButton = spliceButton;
         lastSpliceJack = spliceJack;
-        const bool rec = params[REC_PARAM].getValue() > 0.5f;
+        const bool recButtonReleased = !rec && lastRecButton && !ignoreRecRelease;
+        if (!rec) ignoreRecRelease = false;
+        lastRecButton = rec;
         const bool recJack = recGate.update(inputs[REC_INPUT].isConnected() ?
             inputs[REC_INPUT].getVoltage() : 0.f);
         const bool clockConnected = inputs[CLOCK_INPUT].isConnected();
@@ -588,10 +614,13 @@ struct Chimera : Module {
             recordArm = NoArm;
             slice.stopRecord();
         }
-        else if (command == 1 || command == 2 ||
-                 (rec && !lastRec) || (recJack && !lastRecJack)) {
+        else if (command == 1 || command == 2 || command == 4 || recButtonReleased ||
+                 (recJack && !lastRecJack)) {
             if (!reel) prepareRequested.store(true, std::memory_order_release);
-            const bool append = command == 2;
+            const bool append = command == 2 ||
+                (command != 1 && (command == 4 ?
+                    rsopSetting.load(std::memory_order_relaxed) == 0 :
+                    rsopSetting.load(std::memory_order_relaxed) == 1));
             if (clockConnected) {
                 if (recordArm != NoArm) recordArm = NoArm;
                 else if (slice.recordState() == chimera::Slice::Idle && !reel)
@@ -609,7 +638,6 @@ struct Chimera : Module {
             else beginRecording(recordArm == ArmAppend);
             recordArm = NoArm;
         }
-        lastRec = rec;
         lastRecJack = recJack;
         if (stopAtPrimaryBoundary && clockUpdate.acceptedEdge && clockConnected &&
             slice.clockShiftMode()) {
@@ -713,7 +741,24 @@ struct ChimeraWidget : ModuleWidget {
                 m->prepareRequested.store(true, std::memory_order_release);
             }));
         menu->addChild(createMenuItem("Start Append", "", [m] { m->menuCommand.store(2, std::memory_order_release); }));
+        menu->addChild(createMenuItem("Alternate REC command", "", [m] {
+            m->menuCommand.store(4, std::memory_order_release);
+        }));
         menu->addChild(createMenuItem("Stop recording", "", [m] { m->menuCommand.store(3, std::memory_order_release); }));
+        menu->addChild(createSubmenuItem("REC assignment (rsop)", "", [m](Menu* submenu) {
+            const char* labels[2] = {"REC: Current / alternate: Append", "REC: Append / alternate: Current"};
+            for (int mode = 0; mode < 2; ++mode)
+                submenu->addChild(createCheckMenuItem(labels[mode], "",
+                    [m, mode] { return m->rsopSetting.load(std::memory_order_acquire) == mode; },
+                    [m, mode] { m->rsopSetting.store(mode, std::memory_order_release); }));
+        }));
+        menu->addChild(createSubmenuItem("Input gain", "", [m](Menu* submenu) {
+            const char* labels[4] = {"-3 dB", "0 dB (modular)", "+6 dB", "+12 dB"};
+            for (int mode = 0; mode < 4; ++mode)
+                submenu->addChild(createCheckMenuItem(labels[mode], "",
+                    [m, mode] { return m->inputGainSetting.load(std::memory_order_acquire) == mode; },
+                    [m, mode] { m->inputGainSetting.store(mode, std::memory_order_release); }));
+        }));
         menu->addChild(createMenuItem("Writer: live input only", "", [m] {
             m->inopSetting.store(!m->inopSetting.load(std::memory_order_relaxed), std::memory_order_release);
         }));
@@ -742,6 +787,13 @@ struct ChimeraWidget : ModuleWidget {
                 submenu->addChild(createCheckMenuItem(labels[mode], "",
                     [m, mode] { return m->ckopSetting.load(std::memory_order_acquire) == mode; },
                     [m, mode] { m->ckopSetting.store(mode, std::memory_order_release); }));
+        }));
+        menu->addChild(createSubmenuItem("Vari-Speed mode (vsop)", "", [m](Menu* submenu) {
+            const char* labels[3] = {"Classic rate CV", "Bidirectional 1 V/oct", "Forward-only 1 V/oct"};
+            for (int mode = 0; mode < 3; ++mode)
+                submenu->addChild(createCheckMenuItem(labels[mode], "",
+                    [m, mode] { return m->vsopSetting.load(std::memory_order_acquire) == mode; },
+                    [m, mode] { m->vsopSetting.store(mode, std::memory_order_release); }));
         }));
         menu->addChild(createSubmenuItem("Chord ratios (mcr1–3)", "", [m](Menu* submenu) {
             for (int i = 0; i < 3; ++i) {

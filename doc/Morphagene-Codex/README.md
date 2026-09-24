@@ -1,8 +1,8 @@
 # Leviathan Chimera — Codex specification package
 
-Start with **`REVIEW_NOTES.md`** for the one-pass review and remaining decisions, then **`CODEX_START.md`** for the task text to give an implementation agent. The main specification is **`Leviathan_Morphagene_Codex_Spec.md`**, document revision 4. This is a design and verification package, not a compiled VCV Rack module or recovered Morphagene firmware.
+Start with **`REVIEW_NOTES.md`** for the one-pass review and remaining decisions, then **`CODEX_START.md`** for the task text to give an implementation agent. The main specification is **`Leviathan_Morphagene_Codex_Spec.md`**, updated for the one-Reel MVP. This is a design and verification package, not recovered Morphagene firmware.
 
-The Leviathan module identity is **Chimera**: model slug `Chimera`, C++ namespace `chimera`, and semantic capability `leviathan.chimera.reel-engine`. The existing package directory and specification filename remain unchanged for continuity; Morphagene references in the source brief and hardware comparisons retain their original meaning. DSP profile 1, acceptance IDs, and hardware-oriented `mg*.wav` interchange names are unchanged.
+The Leviathan module identity is **Chimera**: model slug `Chimera`, C++ namespace `chimera`, and semantic capability `leviathan.chimera.reel-engine`. The MVP holds one Reel per module and uses WAV files for Reel import/export; multiple module instances provide simultaneous Reels. The existing package directory and specification filename remain unchanged for continuity; Morphagene references in the source brief and hardware comparisons retain their original meaning. DSP profile 1 and acceptance IDs are unchanged.
 
 ## Contents
 

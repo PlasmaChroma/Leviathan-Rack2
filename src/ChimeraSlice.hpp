@@ -89,6 +89,17 @@ public:
     void requestSplice() { spliceRequested_ = true; }
     void setRampCv(bool enabled) { rampCv_ = enabled; }
     void setPmEnabled(bool enabled) { pmEnabled_ = enabled; }
+    void setRateMode(int mode) { controls_.setRateMode(mode); }
+    void setInputGain(int index) {
+        if (index < 0 || index > 3 || index == gainIndex_) return;
+        static const float gains[4] = {0.70794578f, 1.f, 1.99526231f, 3.98107171f};
+        gainIndex_ = index;
+        gainStart_ = gainCurrent_;
+        gainTarget_ = gains[index];
+        gainRemaining_ = 240;
+    }
+    int inputGain() const { return gainIndex_; }
+    float inputGainMultiplier() const { return gainCurrent_; }
     void setClockPlayback(bool connected, bool acceptedEdge, std::uint32_t period,
                           bool waiting, int option) {
         clockConnected_ = connected;
@@ -102,7 +113,7 @@ public:
     // Resolve this frame's controls and selection before a Clock-armed writer
     // latches its Current region. step() consumes the prepared result once.
     void prepareFrameSelection(const CoreInput& input) {
-        preparedControls_ = controls_.step(input);
+        preparedControls_ = stepControls(input);
         preparedNaturalBoundary_ = resolveSelection(preparedControls_);
         framePrepared_ = true;
     }
@@ -181,7 +192,7 @@ public:
     Output step(const CoreInput& input) {
         bool naturalBoundary = framePrepared_ ? preparedNaturalBoundary_ : false;
         bool naturalCompletion = false;
-        const CoreOutput c = framePrepared_ ? preparedControls_ : controls_.step(input);
+        const CoreOutput c = framePrepared_ ? preparedControls_ : stepControls(input);
         if (!framePrepared_) naturalBoundary = resolveSelection(c);
         framePrepared_ = false;
         const int clockMode = clockConnected_ ?
@@ -336,6 +347,17 @@ public:
     }
 
 private:
+    CoreOutput stepControls(const CoreInput& input) {
+        if (gainRemaining_) {
+            const std::uint16_t elapsed = static_cast<std::uint16_t>(241 - gainRemaining_);
+            gainCurrent_ = gainStart_ + (gainTarget_ - gainStart_) * (float(elapsed) / 240.f);
+            --gainRemaining_;
+        }
+        CoreInput gained = input;
+        gained.live.l *= gainCurrent_;
+        gained.live.r *= gainCurrent_;
+        return controls_.step(gained);
+    }
     bool resolveSelection(const CoreOutput& c) {
         const double density = profile1::morphDensity(c.morph);
         if (density > 2.02) hybridStretch_ = true;
@@ -437,6 +459,9 @@ private:
     std::uint32_t clockPeriod_;
     int clockOption_;
     bool hybridStretch_;
+    int gainIndex_ = 1;
+    float gainCurrent_ = 1.f, gainStart_ = 1.f, gainTarget_ = 1.f;
+    std::uint16_t gainRemaining_ = 0;
     CoreOutput preparedControls_{};
     bool framePrepared_ = false, preparedNaturalBoundary_ = false;
     DcBlocker inputDc_[2], outputDc_[2];

@@ -20,6 +20,22 @@ static bool near(float a, float b, float eps = 0.0002f) {
 }
 
 int main() {
+    chimera::Slice gainSlice(nullptr);
+    gainSlice.setConditioning(false);
+    gainSlice.setInputGain(2);
+    const float firstGain = gainSlice.step(input(5.f, -5.f)).audio.l;
+    for (int i = 1; i < 240; ++i) gainSlice.step(input(5.f, -5.f));
+    need(near(firstGain, 1.f + (1.99526231f - 1.f) / 240.f) &&
+         near(gainSlice.inputGainMultiplier(), 1.99526231f),
+         "+6 dB input gain reaches its target on frame 240");
+    gainSlice.setInputGain(3);
+    for (int i = 0; i < 120; ++i) gainSlice.step(input(5.f, -5.f));
+    const float interrupted = gainSlice.inputGainMultiplier();
+    gainSlice.setInputGain(0);
+    const float resumed = gainSlice.step(input(5.f, -5.f)).audio.l;
+    need(near(resumed, interrupted + (0.70794578f - interrupted) / 240.f) &&
+         gainSlice.inputGain() == 0,
+         "interrupted gain fade restarts from its current multiplier");
     chimera::Reel reel(2, 2);
     chimera::Slice slice(&reel);
     slice.setConditioning(false); // Exact unconditioned TLA reference.

@@ -10,7 +10,7 @@
 
 ## 0. Read this before implementing
 
-Implement **Chimera**, an independent, Morphagene-inspired **shared-Reel, independent-record-head, multi-playback-head instrument**. Do not implement a generic granular effect and rename its controls. The sound-memory feedback topology, full-Splice endpoint, clocked origin movement, queued selection, and separation of playback rate from finite Gene duration are essential.
+Implement **Chimera**, an independent, Morphagene-inspired **shared-Reel, independent-record-head, multi-playback-head instrument**. Do not implement a generic granular effect and rename its controls. The sound-memory feedback topology, full-Splice endpoint, clocked origin movement, queued selection, and separation of playback rate from finite Gene duration are essential. The MVP has **one Reel per module instance**; users patch multiple Chimera instances when they need multiple Reels. Hardware-style 32-slot banking is outside MVP scope.
 
 This specification makes deliberate numerical choices where the source brief does not establish the hardware implementation. Those choices are normative for **this software implementation**, not assertions about Make Noise firmware. Matching this specification is not evidence of bit-exact or perceptually indistinguishable hardware emulation.
 
@@ -33,7 +33,7 @@ The brief's A–D categories and its uncertainty must remain visible in develope
 - One stereo instrument, not sixteen independent polyphonic Reel engines.
 - Fixed **48,000 Hz** core and Reel sample domain. Rack's host rate is adapted at the boundary.
 - **8,352,000 stereo frames / 174 seconds** maximum Reel length; float32 samples; double read positions.
-- **300 Splices** and **32 Reel slots**. The brief flags 99-versus-300 as a documentation conflict; 300 is our explicit choice.
+- **300 Splices in one Reel per module**. The brief flags 99-versus-300 as a documentation conflict; 300 is our explicit choice.
 - Four musical Gene slots; bounded short-lived transition cursors are allowed for de-clicking and are not additional musical voices.
 - Cubic interpolation, short cosine-edge windows, logarithmic finite Gene duration, deterministic high-Morph randomness.
 - A single audio-thread-owned mutable Reel. Workers never read mutable sample memory without the immutable snapshot protocol.
@@ -63,7 +63,7 @@ The following source references use headings in the supplied brief. Original cit
 | MG-008 | Clock modes | Clock can advance Gene origins or control source-time traversal independently from within-Gene pitch. Exact stride is D. |
 | MG-009 | Control/jack tables | Preserve every named control, three attenuverters, six continuous CVs, five gate/clock inputs, stereo audio I/O, CV OUT, EOSG. |
 | MG-010 | Firmware-controlled behavior | Implement `ckop`, `vsop`, `inop`, `pmin`, `omod`, `gnsm`, `rsop`, `pmod`, `cvop`, `mcr1`, `mcr2`, `mcr3`. |
-| MG-011 | Hardware, memory, files | Canonical export is stereo 48 kHz float32 WAV; sample-frame markers; 32 named Reel slots. Exact hardware RIFF conventions remain unverified. |
+| MG-011 | Hardware, memory, files | Canonical export is stereo 48 kHz float32 WAV with sample-frame markers; the MVP stores one Reel per module. Exact hardware RIFF conventions remain unverified. |
 | MG-012 | Unspecified primitives | Numerical approximations live in a versioned compatibility profile and are covered by deterministic tests. |
 
 Acceptance test IDs in the companion matrix map to these requirements. A release checklist MUST distinguish specification conformance from hardware comparison, which requires a physical reference unit or independently supplied measurements.
@@ -133,7 +133,7 @@ All normalized primary controls use `[0,1]`. Attenuverters use `[-1,1]`. Buttons
 | 2 | `VARISPEED_PARAM` | Vari-Speed | 5/6 | Classic forward 1×. |
 | 3 | `MORPH_PARAM` | Morph | 1/6 | Seamless nominal 1/1 density. |
 | 4 | `SLIDE_PARAM` | Slide | 0 | Source origin offset. |
-| 5 | `ORGANIZE_PARAM` | Organize | 0 | Requested Splice, or candidate Reel in Reel Mode. |
+| 5 | `ORGANIZE_PARAM` | Organize | 0 | Requested Splice in this module's Reel. |
 | 6 | `GENE_ATT_PARAM` | Gene CV amount | 0 | Gene attenuverter. |
 | 7 | `VARISPEED_ATT_PARAM` | Vari-Speed CV amount | 0 | Rate/pitch attenuverter. |
 | 8 | `SLIDE_ATT_PARAM` | Slide CV amount | 0 | Slide attenuverter. |
@@ -606,14 +606,14 @@ This section is the authoritative event-order rule when a higher-level processin
 1. Adopt metadata/options transactions already eligible before this frame.
 2. Organize bin changes, then SHIFT events.
 3. PLAY edge/level transition; a rising Play may commit the pending selection.
-4. Record command requests, including resolved button chords.
+4. Record command requests, including single-button releases and menu actions.
 5. Clock rising edge: resolve recording arm/stop, then clock-playback action.
 6. SPLICE marker requests.
 7. Render pre-write playback, compute bus, and write the frame if recording.
 
 A finite voice born at core frame b renders ages 0 through N-1 on frames b through b+N-1; its natural completion is due at the beginning of b+N. At frame entry, determine due natural voice/primary boundaries from the preceding state without committing selection yet. After steps 1–6 and before step 7, resolve the due primary boundary against the now-current requested selection and Play state, emit due natural completion events, and schedule any normal onset not superseded by a forced onset that frame. An actual prior natural completion still counts once when it coincides with a retrigger; the retrigger itself adds no completion event. Full-Splice travel is accumulated after rendering and uses the same next-frame completion convention.
 
-A start and Clock at the same timestamp include that frame in the recording. A stop and Clock at the same timestamp exclude it. A marker on the same timestamp as a start uses the new recording cursor before the first write. Separate REC and SPLICE **gate jacks** do not automatically form a button chord; they are independent events.
+A start and Clock at the same timestamp include that frame in the recording. A stop and Clock at the same timestamp exclude it. A marker on the same timestamp as a start uses the new recording cursor before the first write. REC and SPLICE **gate jacks** are independent events.
 
 ### 13.3 Current-Splice/TLA recording
 
@@ -651,9 +651,9 @@ Insertion does not cut or move audio. Existing voices keep their captured region
 
 Keep marker insertion bounded by 300 entries in a fixed array. No vector growth or sorting allocation in the audio callback. The metadata commit carries a monotonically increasing revision and stable marker IDs.
 
-## 14. Buttons, Reel Mode, and destructive actions
+## 14. Buttons and destructive actions
 
-The brief establishes release-resolved REC, chords, and long-hold erase behavior in general, but not enough detail to recover every hardware gesture. Do not label the following complete interaction map as exact hardware reproduction.
+The brief establishes release-resolved REC, chords, and long-hold erase behavior in general, but Rack's ordinary mouse interaction cannot reliably hold two module buttons together. Chimera's MVP uses one-button actions and context-menu commands. Do not label this software interaction map as exact hardware reproduction.
 
 ### 14.1 Software interaction map
 
@@ -662,23 +662,31 @@ The brief establishes release-resolved REC, chords, and long-hold erase behavior
 | REC press/release alone | Default recording command; if already recording, request stop. |
 | SPLICE press/release alone | Add a marker. |
 | SHIFT press/release alone | Request next Splice. |
-| REC+SPLICE chord | Alternate recording command (`Current`/`Append` assignments follow `rsop`). |
-| SHIFT+REC chord | Cycle input gain −3 → 0 → +6 → +12 → −3 dB. |
-| SHIFT+SPLICE chord | Enter/leave Reel Mode. |
+| Alternate recording context command | Alternate `Current`/`Append` assignment following `rsop`. |
+| Input gain context command | Select −3, 0, +6, or +12 dB. |
 
-Resolve a chord on the first release after both participating buttons overlap. Suppress both single-button release actions until both buttons are up. Third-button involvement cancels the gesture without mutating audio. Mouse/touch input cannot always hold two controls conveniently, so every chord action also has a named context-menu command. Gate inputs are sample-timed; manual UI commands occur at the next mapped core event boundary.
+Each panel button resolves on its own release. Gate inputs are independent sample-timed events; manual menu commands occur at the next mapped core event boundary. No MVP function requires simultaneous button presses. If a later feature genuinely requires a combination, the panel must offer a visible latching mode so a mouse user can activate its parts sequentially.
+
+### 14.1.1 Mouse-complete UI contract
+
+The production Rack widget must make every MVP action reachable with one mouse pointer. The temporary development panel is incomplete: it currently draws REC but not the SHIFT and SPLICE buttons or the Organize control, even though their parameter IDs exist. Finish the following mapping before calling the UI complete:
+
+| User action | Panel path | Context-menu path / feedback |
+|---|---|---|
+| Default record start, stop, or cancel arm | Click and release REC once for each request. | Show Idle, Armed Current/Append/Stop, and Recording Current/Append as distinct text plus the REC/ARM lights; do not imply a release has recorded audio until the Clock edge applies. |
+| Choose recording destination | REC uses `rsop` only when an idle start is requested. | Provide explicit **Record Current** and **Record Append** actions, plus **Stop recording / cancel arm** and a clearly labeled alternate REC action. Their labels must state whether an active session will stop or an arm will cancel. |
+| Select and cut Splices | Organize knob chooses a Splice; click and release SHIFT for next Splice; click and release SPLICE to add a marker. | Show current and pending Splice numbers and marker count; expose **Next Splice** and **Add Marker** menu alternatives if the production layout omits either button. |
+| Change input gain and behavior options | No button combination. | Gain submenu has −3/0/+6/+12 dB radio choices with the active value checked. The Chimera behavior submenu contains descriptive, checked choices for `ckop`, `vsop`, `inop`, `pmin`, `omod`, `gnsm`, `rsop`, `pmod`, `cvop`, and the three signed ratios. |
+| Use another Reel | Patch another Chimera instance for simultaneous use. | **Load Reel WAV** replaces this instance's Reel only after an explicit occupied-Reel confirmation; **Export Reel WAV** writes a chosen destination with overwrite confirmation. Show progress, dirty state, and errors. Ordinary Rack patch save embeds the Reel independently of its source WAV. |
+| Edit or recover audio | Select a Splice before editing. | Provide named Add/Move/Remove Marker, Erase Splice Audio, Delete Splice, Clear Reel, Rename Reel/Splice, Undo/Redo, and Restore pre-record checkpoint actions as they are implemented. Destructive commands require confirmation and are disabled while recording or armed. |
+
+No latching button is required for the MVP actions above. If a later feature truly requires a two-step combination, its first click must visibly latch a named mode; the next click performs exactly one named action and unlatches. Clicking the latch again, Escape, reset, or module reload cancels it without mutation. A tooltip alone is insufficient feedback. Do not add a hidden simultaneous-button shortcut as the only path.
 
 Do not add undocumented three-second destructive button gestures in v1. Erase, clear, and delete operations are explicit menu/semantic transactions with confirmation or an explicit destructive flag. This is an intentional UI divergence to avoid accidental data loss, not an omitted hidden behavior.
 
-### 14.2 Reel Mode
+### 14.2 One Reel per instance
 
-Reel Mode is a UI selection state, not a second DSP engine. Organize's **knob only** selects one of 32 slot bins. Organize CV does not initiate or continually retarget disk operations in this mode. The current Reel continues sounding while previewing a slot.
-
-SHIFT confirms the candidate slot; REC or SPLICE cancels Reel Mode without performing their ordinary actions. A second SHIFT+SPLICE exits without changing Reels. Resetting the UI cancels Reel Mode. No preview alone reads a full WAV.
-
-A confirmed switch while recording or clock-armed is rejected with “Stop or cancel recording before changing Reels.” For a dirty stopped Reel, first obtain and commit an immutable checkpoint to its module-owned cache; then prepare the target Reel. If persistence fails, retain the old Reel and show the error. An empty slot prepares an empty Reel rather than pretending a missing external file is a valid blank recording.
-
-Only after the complete target data and metadata validate may the audio thread adopt it. Fade old playback over 5 ms, adopt the new store, initialize transport, and fade in over 5 ms. Do not require both full engines to render during a swap. Retain the old store until all audio references and worker snapshot leases have been released.
+The module has one active Reel, containing up to 300 Splices. Organize selects Splices only. To use another Reel at the same time, add another Chimera module and patch it independently. Importing a WAV into an occupied Reel is an explicit replacement operation with the destructive acknowledgement and snapshot ownership rules below. There is no Reel Mode, slot candidate, or intra-module bank switch in the MVP.
 
 ### 14.3 Editing commands
 
@@ -686,7 +694,7 @@ Implement Add Marker, Move Marker, Remove Marker, Erase Splice Audio (replace re
 
 Heavy edits run off-thread from an immutable snapshot and yield a replacement Reel. Disable destructive audio edits during recording or an armed recording transition. A later explicit command may stop-and-edit, but a delete request itself must not silently stop recording. Moving/removing markers uses a validated fixed metadata transaction and normal boundary adoption.
 
-Deleting a Splice remaps subsequent marker positions by the removed length, preserves stable IDs for surviving markers, and selects the nearest surviving region. Deleting the last region leaves an empty Reel. Importing a new file into a nonempty slot is destructive and requires the same explicit acknowledgement as Clear.
+Deleting a Splice remaps subsequent marker positions by the removed length, preserves stable IDs for surviving markers, and selects the nearest surviving region. Deleting the last region leaves an empty Reel. Importing a new file over a nonempty Reel is destructive and requires the same explicit acknowledgement as Clear.
 
 ## 15. CV OUT, EOSG, and phase modulation
 
@@ -815,7 +823,7 @@ Default audio payload budget per populated module: one active+reserve store, abo
 
 Retired stores with outstanding leases count toward this same budget. Before admitting another prepared store, wait for retirement or return `busy`; never permit active + prepared + leased retired full stores. Cancellation does not release payload credit until destruction actually occurs off-thread.
 
-A 32-slot bank does not keep 32 full mutable Reels in memory. Inactive Reels are immutable cached files plus small metadata. Only active and one prepared replacement are resident. Expose a memory estimate in diagnostics. Browser previews and truly empty modules remain lightweight.
+One module owns one active Reel. An import replacement may prepare one additional store while the old one remains resident until readers and snapshot leases release it. Expose a memory estimate in diagnostics. Browser previews and truly empty modules remain lightweight.
 
 ## 18. Worker service, queues, and lifecycle
 
@@ -848,7 +856,7 @@ Do not synchronously join a private per-module thread from the audio callback. T
 
 If no safe reusable executor exists in the actual checkout, implement the small dedicated service rather than weakening these lifetime guarantees. Add a repeated add/remove/load/save stress test under ASan and TSAN.
 
-## 19. WAV, markers, and bank interchange
+## 19. WAV, markers, and single-Reel interchange
 
 ### 19.1 Canonical representation
 
@@ -870,11 +878,9 @@ Default overlength policy is **reject** with reported duration; expose an explic
 
 Ignore safe unknown RIFF chunks, check file bounds before seeking/reading them, and cap label metadata to 1 MiB total. Validate frame count, format agreement, integer multiplications, alignment, and chunk overlap before allocating a store. No parser may trust the extension alone.
 
-### 19.3 Reel bank
+### 19.3 Single-Reel interchange
 
-Map zero-based slot 0..31 to `mg1.wav`..`mg9.wav`, then `mga.wav`..`mgw.wav`. Keep the active slot separate from whether a slot contains audio. Directory import examines only these expected filenames; it does not recursively search the user's filesystem or execute arbitrary options files.
-
-Directory export writes canonical Reels and an optional software-side manifest to a user-selected destination. It does not format a device or require FAT32. An overwrite request must be explicit; all in-plugin recordings first live in module-owned storage, never in the imported original directory.
+Import or export one canonical Reel WAV for this module instance. The user chooses an explicit file; the plugin does not scan a 32-slot directory or require hardware-style filenames. Export never overwrites an existing file without an explicit request. In-plugin recordings first live in module-owned storage, never in the imported original file.
 
 Names, colors, and software-specific marker IDs live in the manifest/patch metadata and optional label chunks. Audio compatibility must not depend on an unknown private WAV chunk. Content hashes are calculated on canonical frames and marker positions with a versioned hash description; filesystem mtime alone is not identity.
 
@@ -890,7 +896,7 @@ Use three storage roles:
 
 Use `leviathanPluginUserRootPath()` for plugin-specific caches rather than hardcode `Leviathan` or `Leviathan-Pro`. [R2] Use Rack's module patch storage APIs after module addition, not in a constructor or `process()`. [R9] Imported source paths are optional provenance/relink hints; patch playback defaults to embedded content.
 
-Rack's inspected patch writer packages that storage as a Zstandard-compressed tar archive at level 1; the Phase 0 saved `.vcv` fixture has the Zstandard file signature. Store only each Reel's valid frames in its embedded WAV, and let Rack compress the patch. Keep canonical float32 WAV for interchange and avoid a second patch-only audio codec unless measurements of representative full-bank saves justify its extra format, decoder, and failure paths. The autosave directory and plugin checkpoint cache are ordinary files before archiving; patch compression alone does not reduce their working-disk usage. Measure both archive size and save/load time with silence, tonal, and noisy recordings in Phase 7.
+Rack's inspected patch writer packages that storage as a Zstandard-compressed tar archive at level 1; the Phase 0 saved `.vcv` fixture has the Zstandard file signature. Store only the Reel's valid frames in its embedded WAV, and let Rack compress the patch. Keep canonical float32 WAV for interchange and avoid a second patch-only audio codec unless measurements justify its extra format, decoder, and failure paths. The autosave directory and plugin checkpoint cache are ordinary files before archiving; patch compression alone does not reduce their working-disk usage. Measure archive size and save/load time with silence, tonal, and noisy recordings in Phase 7.
 
 ### 20.2 Patch JSON
 
@@ -900,8 +906,7 @@ Rack parameters remain in Rack's parameter serialization. Additional state uses 
 {
   "schemaVersion": 1,
   "dspProfile": 1,
-  "bankId": "random-non-secret-identifier",
-  "activeSlot": 0,
+  "reelId": "random-non-secret-identifier",
   "selectedSpliceId": "s1",
   "seed": 1831565813,
   "inputGainDb": 0,
@@ -912,7 +917,7 @@ Rack parameters remain in Rack's parameter serialization. Additional state uses 
   },
   "storage": {
     "mode": "embedded",
-    "manifest": "chimera/bank-bundle42.json",
+    "manifest": "chimera/reel-bundle42.json",
     "savedDocumentRevision": "42",
     "savedAudioRevision": "1203"
   },
@@ -920,25 +925,25 @@ Rack parameters remain in Rack's parameter serialization. Additional state uses 
 }
 ```
 
-The example revisions are illustrative. The bank manifest enumerates slot, relative audio filename, content hash, valid frames, marker IDs/frames/names/colors, and cache format version. Empty slots have no dummy 174-second WAV. Reject absolute paths and traversal components inside embedded asset references; resolve and verify containment within this module's storage directory.
+The example revisions are illustrative. The Reel manifest records its relative audio filename, content hash, valid frames, marker IDs/frames/names/colors, and cache format version. An empty Reel has no dummy 174-second WAV. Reject absolute paths and traversal components inside embedded asset references; resolve and verify containment within this module's storage directory.
 
-Separate **document revision** (authored options, markers, bank selection) from **audio revision** (recorded/edited sample state). A record session increments an audio mutation counter once per write block (256 frames), plus a final partial-block revision on stop/snapshot cut. Snapshot identity also includes exact captured core frame/write count so revisions cannot conceal a partial page.
+Separate **document revision** (authored options and markers) from **audio revision** (recorded/edited sample state). A record session increments an audio mutation counter once per write block (256 frames), plus a final partial-block revision on stop/snapshot cut. Snapshot identity also includes exact captured core frame/write count so revisions cannot conceal a partial page.
 
 Do not serialize armed recording, active record state, pressed buttons, live job handles, FIFO contents, PRNG cursor, PM presence countdown, gate detector state, or fractional running transport. Reload starts with recorder Idle, no armed transitions, no queued jobs, and deterministic fresh transport at the selected region. Unpatched PLAY may autoplay; a patched low gate suppresses it according to `pmod` after the first connected-input observation.
 
 ### 20.3 Save transaction
 
-A save must first settle or explicitly exclude pending metadata/reel edits. Fence the control dispatcher, capture a coherent `SaveBundle` containing options, bank selection, markers, exact audio snapshot, and both revisions, then serialize **that bundle**. New live changes after the cut are permitted but belong to a newer unsaved revision. Do not serialize newest marker metadata against older audio.
+A save must first settle or explicitly exclude pending metadata/reel edits. Fence the control dispatcher, capture a coherent `SaveBundle` containing options, markers, the exact Reel audio snapshot, and both revisions, then serialize **that bundle**. New live changes after the cut are permitted but belong to a newer unsaved revision. Do not serialize newest marker metadata against older audio.
 
 `onSave` requests/coalesces the needed immutable snapshot and waits on the non-RT side for its files to be committed. The worker writes temporary files, flushes/closes them, and renames to revision-specific final names; the manifest is committed last. `dataToJson()` returns the corresponding saved bundle metadata for that save transaction. Serialization for clipboard/history outside a save returns a safe authored snapshot, never a direct scan of audio-owned state.
 
-Use revision-specific manifests as well as audio filenames: write `chimera/bank-<bundleId>.json` and publish that path only after all referenced assets exist. Ordinary `dataToJson()` calls also occur without `onSave` (autosave/history); they must identify their actual durable audio cut and must not serialize newer marker bounds over older audio. Keep unsaved authored state separately where necessary, with an explicit recovery warning.
+Use revision-specific manifests as well as audio filenames: write `chimera/reel-<bundleId>.json` and publish that path only after all referenced assets exist. Ordinary `dataToJson()` calls also occur without `onSave` (autosave/history); they must identify their actual durable audio cut and must not serialize newer marker bounds over older audio. Keep unsaved authored state separately where necessary, with an explicit recovery warning.
 
 **Host failure policy / Phase 0 proof:** the installed SDK declares `onSave()` as `void`. The local Rack source also calls it during patch-manager destruction, so blindly throwing from every failed hook is not safe. Do not promise that a module error automatically cancels Rack's patch archive or preserves an existing `.vcv` file. On failure retain the last coherent bundle, keep dirty/error state visible, and serialize a `saveFailure` diagnostic identifying the unsaved revision; with no prior bundle, serialize a missing-audio state rather than reference partial assets. Successful saves still require the exact requested cut. Phase 0 must test Save, Save As, periodic autosave, duplication, and shutdown on the supported runtime and record whether safe host-level cancellation exists. Do not add an unverified exception/engine-lock workaround. Whole-patch atomicity is a host integration limitation, separate from atomic module-owned assets.
 
 Rack's documented save contract requires assets ready in `onSave`; the inspected patch manager calls save preparation before archiving. Simply queueing a future WAV write and returning is incorrect. [R9–R10] Do not assume save preparation excludes engine processing; inspect the working SDK locking contract and retain the ownership protocol even if a particular host happens to pause. [R13] Report any timeout, disk-full, permission, or rename failure; preserve the last valid checkpoint and old assets. Never return success with a partially written referenced asset.
 
-Save to a new location and load on another machine must work with the original source directory removed. An embedded bank can reach roughly 2.14 GB of raw audio if all 32 slots are full; display that potential size before a bulk embed/export. Do not unexpectedly keep those 32 Reels resident in RAM.
+Save to a new location and load on another machine must work with the original source directory removed. One full-length stereo float32 Reel can occupy about 66.8 MB before patch compression; show storage errors clearly and never assume an imported source path remains available.
 
 ### 20.4 Autosave and crash recovery
 
@@ -950,9 +955,9 @@ Keep a journal of committed immutable cache revisions, prune only unreferenced g
 
 Missing/corrupt embedded audio keeps metadata available for relinking, shows an error, and produces no Reel audio; live monitoring remains available. Do not silently replace it with a factory Reel.
 
-Duplicate/module-preset/clipboard workflows may not automatically carry the same assets as a full Rack patch. Verify the actual SDK's behavior. Implement a new instance cache identity and content-addressed immutable checkpoint references with copy-on-write; the two instances must never share a writable store. A cross-machine preset without its assets reports a missing asset and offers relink/export-bank instructions. A same-process duplicate must copy/link the checkpoint off-thread and become independently editable. Do not promise portable audio in a bare JSON clipboard payload.
+Duplicate/module-preset/clipboard workflows may not automatically carry the same assets as a full Rack patch. Verify the actual SDK's behavior. Implement a new instance cache identity and content-addressed immutable checkpoint references with copy-on-write; the two instances must never share a writable store. A cross-machine preset without its assets reports a missing asset and offers relink/export-Reel instructions. A same-process duplicate must copy/link the checkpoint off-thread and become independently editable. Do not promise portable audio in a bare JSON clipboard payload.
 
-Reset stops/cancels recording, clears transient transport/options to defaults and ordinary parameters through the base hook, but **preserves recorded audio and markers**. Clear Reel is explicit and destructive. Randomize affects continuous musical controls only, not buttons, files, bank identity, or destructive commands. Bypass stops/cancels recording, freezes Reel playback, zeros CV/EOSG, and directly passes normalized L/R audio without S.O.S. On unbypass, reinitialize edge detectors from current levels and fade playback in; a held REC gate is not a fresh rising edge.
+Reset stops/cancels recording, clears transient transport/options to defaults and ordinary parameters through the base hook, but **preserves recorded audio and markers**. Clear Reel is explicit and destructive. Randomize affects continuous musical controls only, not buttons, files, Reel identity, or destructive commands. Bypass stops/cancels recording, freezes Reel playback, zeros CV/EOSG, and directly passes normalized L/R audio without S.O.S. On unbypass, reinitialize edge detectors from current levels and fade playback in; a held REC gate is not a fresh rising edge.
 
 ### 20.6 Undo boundary
 
@@ -968,7 +973,7 @@ Capability identifier: **`leviathan.chimera.reel-engine`**. Schema version: 1. T
 
 ### 21.1 Authored document versus telemetry
 
-`GET_DOCUMENT` returns options, input gain, seed/profile, active slot, slot summaries, and marker metadata for the requested slot. It contains no sample arrays, base64 WAV, per-sample logs, or thousands of waveform points. Default response is the active slot; all-slot summaries are an explicit request.
+`GET_DOCUMENT` returns options, input gain, seed/profile, Reel identity, and marker metadata. It contains no sample arrays, base64 WAV, per-sample logs, or thousands of waveform points.
 
 `GET_STATUS` returns at least:
 
@@ -976,7 +981,7 @@ Capability identifier: **`leviathan.chimera.reel-engine`**. Schema version: 1. T
 schemaVersion, moduleGeneration
 acceptedDocumentRevision, activeDocumentRevision, pendingDocumentRevision
 activeAudioRevision, durableAudioRevision, capturedThroughFrame
-activeSlot, requestedSlot, currentSpliceId, requestedSpliceId
+reelId, currentSpliceId, requestedSpliceId
 validFrames, capacityFrames, storageReadiness, playbackActive, recordingState
 recordDestination, recordCursor, recordArmed
 baseRate, finiteGeneFrames or fullSplice, density, activeMusicalVoices
@@ -1024,10 +1029,8 @@ Required commands:
 | `play.stop` | Stop immediately with de-click; does not change PLAY parameter/cable voltage. |
 | `splice.select` | Select by stable ID; `boundary` or explicit `immediate` commitment. |
 | `splice.next` | Relative increment, not a knob mutation. |
-| `reel.select` | Select a slot asynchronously with dirty-Reel checkpoint handling. |
-| `reel.import` | Explicit local path/asset handle, slot, import policy, and replacement acknowledgement. |
+| `reel.import` | Explicit local path/asset handle, import policy, and replacement acknowledgement. |
 | `reel.export` | Explicit destination and overwrite flag; snapshot coherent audio. |
-| `bank.import` / `bank.export` | Asynchronous 32-slot directory interchange with progress and per-slot results. |
 | `splice.eraseAudio` / `splice.delete` | Snapshot-based destructive transaction; idle-only. |
 | `reel.clear` | Explicit destructive acknowledgement; idle-only. |
 | `job.cancel` | Cancel preparation before adoption; already applied mutations require undo. |
@@ -1035,7 +1038,7 @@ Required commands:
 
 Semantic playback stop sets an internal stop latch; Play rising or `play.retrigger` clears it. A continuously high PLAY cable does not immediately undo an explicit stop on the next sample. `pmod=1` still responds to the next real level transition. Report the latch in status.
 
-For commands that replace/delete existing audio, move/remove existing markers, clear/restore a Reel, or import over a populated slot, require `expectedRevision` plus `expectedAudioRevision` or a matching snapshot token, and `destructive:true`. Starting Current/TLA over existing audio requires this explicit acknowledgement at acceptance; an ordinary successful recording does not require repeated revision checks on every frame. Nondestructive marker additions/options edits use document-revision checks. `record.stop`, `record.cancelArmed`, `record.prepare`, `play.stop`, and `job.cancel` never require a destructive flag or a current audio revision; a stale client must still be able to stop recording safely. File overwrite is a separate `overwrite:true`. Restrict paths to user-selected or existing authorized project/plugin storage roots through the current Octavia permission model; a capability request does not authorize arbitrary filesystem mutation.
+For commands that replace/delete existing audio, move/remove existing markers, clear/restore a Reel, or import over a populated Reel, require `expectedRevision` plus `expectedAudioRevision` or a matching snapshot token, and `destructive:true`. Starting Current/TLA over existing audio requires this explicit acknowledgement at acceptance; an ordinary successful recording does not require repeated revision checks on every frame. Nondestructive marker additions/options edits use document-revision checks. `record.stop`, `record.cancelArmed`, `record.prepare`, `play.stop`, and `job.cancel` never require a destructive flag or a current audio revision; a stale client must still be able to stop recording safely. File overwrite is a separate `overwrite:true`. Restrict paths to user-selected or existing authorized project/plugin storage roots through the current Octavia permission model; a capability request does not authorize arbitrary filesystem mutation.
 
 Return `requestId`, `status` (`accepted`, `armed`, `preparing`, `applied`, `rejected`, `cancelled`), relevant revisions, and an application frame when known. Assign idempotency keys so a retried network request does not start and then stop a recording or duplicate a marker. The bounded deduplication cache belongs off-thread; use the last 256 command IDs per module generation.
 
@@ -1082,7 +1085,6 @@ Show the active Reel's stereo envelope overview, current Splice shading, pending
 | Stereo Reel base | Two legible L/R min/max lanes share one time axis. Solid marker cuts delimit Splices; the selected region has a restrained fill and a pending selection has a distinct outline. At 300 markers, cluster or thin labels/ticks without changing marker positions or hiding the selected boundary. |
 | Playback/Gene overlay | A prominent primary transport cursor and up to four finer Gene reader traces use true source positions, direction, age, and envelope to communicate overlap and Morph density. A short fading trace may indicate each active reader's recent motion; its geometry is UI-only and never drives audio. Natural completions may create a brief local accent, while forced aborts do not impersonate an EOSG event. |
 | Recording graft | A separate write head and bounded recent-peak overlay reveal audio written since the cached overview. Current overwrite and Append growth need distinct edge/shading treatments. When the worker publishes a new overview, reconcile the bright overlay into the base without an apparent jump in audio position. Text distinguishes live unsaved audio, a committed checkpoint, armed recording, and a save error; brightness alone must not imply durability. |
-| Reel-bank view | An alternate compact overview shows all 32 slots as empty/occupied/active/queued/missing, with the chosen Reel name or number and relevant error text. It reads slot summaries and cached thumbnails only; switching views must not decode 32 WAVs or prepare 32 mutable stores. |
 
 Prefer one coherent display with modes and overlays over several tiny competing animations. Keep ordinary controls and cable endpoints readable; decorative accents around S.O.S., Morph, or a Splice control may echo the display's state but must not be the sole indicator of recording, pending edits, clipping, or errors. Use text, shape, and contrast as well as color in dark and light themes.
 
@@ -1090,9 +1092,9 @@ Display click can request a seek/Slide change; dragging a marker performs a prev
 
 The waveform does not draw every sample. Use worker-built stereo min/max bins, default 1,024 bins, with min/max pyramids for zoom. Build from immutable snapshots. Rebuild a stopped/imported Reel once per audio revision. During recording, publish bounded peak summaries for written pages/blocks and overlay them over the latest completed overview; do not snapshot the entire Reel at 30 Hz merely to animate its waveform.
 
-Define the display's data handoff before Phase 4 voice work is frozen. A bounded latest-value telemetry packet carries valid length, selected/pending region identity, primary transport position, up to four actual reader positions/ages/envelopes/directions, writer frame/mode, and record/armed/busy/error flags. Marker tables, bank summaries, and waveform bins change by revision and arrive as separate immutable results, rather than being copied into every UI tick. The display consumes these at the rates in section 22.3; it never reads a mutable Reel page or an audio-owned cursor directly.
+Define the display's data handoff before Phase 4 voice work is frozen. A bounded latest-value telemetry packet carries valid length, selected/pending region identity, primary transport position, up to four actual reader positions/ages/envelopes/directions, writer frame/mode, and record/armed/busy/error flags. Marker tables and waveform bins change by revision and arrive as separate immutable results, rather than being copied into every UI tick. The display consumes these at the rates in section 22.3; it never reads a mutable Reel page or an audio-owned cursor directly.
 
-Before final panel artwork, review mock states for empty/not-ready, full Reel with dense markers, Current and Append recording, four simultaneous Genes, pending selection, bank view, and missing/save-failed audio. Include `module==nullptr` browser preview and dark/light/high-DPI layouts. These states are the layout fit check for the 28 HP display, not just cosmetic variants.
+Before final panel artwork, review mock states for empty/not-ready, full Reel with dense markers, Current and Append recording, four simultaneous Genes, pending selection and missing/save-failed audio. Include `module==nullptr` browser preview and dark/light/high-DPI layouts. These states are the layout fit check for the 28 HP display, not just cosmetic variants.
 
 ### 22.3 Rendering contract
 

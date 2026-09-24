@@ -58,13 +58,13 @@ Test finite-duration invariance against speed and source travel at full-Splice s
 
 ## Phase 5 — Transport arbitration, Clock, buttons, and remaining firmware options
 
-Add Organize hysteresis and stable-knob/Shift arbitration, queued/immediate selection, all Play modes, host-independent timestamp ordering, Clock estimator/Gene Shift/Stretch/hybrid behavior, clocked recorder arms, exact same-frame precedence, REC/SPLICE/SHIFT button release/chord state, Reel Mode selection, rsop, gain switching, options transactions, and PM signal-presence/routing.
+Add Organize hysteresis and stable-knob/Shift arbitration, queued/immediate selection, all Play modes, host-independent timestamp ordering, Clock estimator/Gene Shift/Stretch/hybrid behavior, clocked recorder arms, exact same-frame precedence, REC/SPLICE/SHIFT single-button release actions, rsop, gain switching, options transactions, and PM signal-presence/routing. One Reel belongs to each module instance; there is no Reel Mode or bank switch in the MVP.
 
-Test every option as behavior, not just a serialized checkbox. Test connected-but-stopped Clock separately from disconnected Clock. Keep the proposed clock stride, PM scale, and button choreography visibly labeled software design choices.
+Test every option as behavior, not just a serialized checkbox. Test connected-but-stopped Clock separately from disconnected Clock. Keep the proposed clock stride and PM scale visibly labeled software design choices. Alternate recording and gain actions remain accessible through the context menu without simultaneous button presses.
 
 **Deliver:** all original control names and mode options function at 48 kHz; complete explicit state machines.
 
-**Exit gate:** all TRN tests, REC-007/008/011..014, all OPT tests, and OUT-006..008 pass; no double onset on an edge or hidden gate/button-chord conflation.
+**Exit gate:** all TRN tests, REC-007/008/011..014, all MVP OPT tests, and OUT-006..008 pass; no double onset on an edge or hidden gate/button coupling.
 
 ## Phase 6 — Host-rate bridge and realtime hardening
 
@@ -76,23 +76,23 @@ Instrument queue bounds, maximum work per callback, SRC delay, and converter own
 
 **Exit gate:** RT-001..011 pass at required rates; delays are measured rather than assumed; audio timing and event timing remain coupled through SRC. Record any performance-target miss separately from functional failures.
 
-## Phase 7 — WAV/banks, portable patches, destructive editing, and undo
+## Phase 7 — WAV, portable patches, destructive editing, and undo
 
-Implement bounded RIFF reader/writer and strict/convenience import around verified existing dependencies. Add frame-based cues, 32-slot filename mapping, immutable cache files, module-relative embedded assets, manifest/schema migration, coherent SaveBundle fencing, atomic staged commits, autosave checkpoints, missing-source diagnostics, and safe duplication.
+Implement bounded RIFF reader/writer and strict/convenience import around verified existing dependencies. Add frame-based cues, one Reel asset per module, immutable cache files, module-relative embedded assets, manifest/schema migration, coherent SaveBundle fencing, atomic staged commits, autosave checkpoints, missing-source diagnostics, and safe duplication.
 
 Add worker-side erase/compact/clear, stable marker metadata edits, file-backed undo/redo and pre-record checkpoint restoration. Confirm destructive operations and external overwrites independently. Test with original files moved away and with a clean temporary plugin data directory.
 
-Do not return from the save hook before referenced audio assets are complete. Do not use absolute import paths or giant base64 JSON fields as the default persistence implementation. Test paused-host saves and full banks before UI polish.
+Do not return from the save hook before referenced audio assets are complete. Do not use absolute import paths or giant base64 JSON fields as the default persistence implementation. Test paused-host saves and a full-length Reel before UI polish.
 
 Write valid frames only to the embedded float32 WAVs. Rack already applies level-1 Zstandard compression to the `.vcv` archive, so benchmark representative patch sizes and save/load time before considering a second codec. Track autosave/checkpoint disk usage separately because those working files are not compressed by the patch archive.
 
-**Deliver:** portable patches and bank interchange, explicit error/recovery paths, recording-safe saves.
+**Deliver:** portable single-Reel patches and WAV interchange, explicit error/recovery paths, recording-safe saves.
 
 **Exit gate:** all IO/WAV/STA cases pass. Use disk-failure injection. An internal marker roundtrip is not advertised as physical Morphagene compatibility.
 
 ## Phase 8 — Original panel, cached display, and production widget
 
-Keep the model and manifest entry registered in Phase 3; replace its temporary developer panel with the production widget. Use the current Leviathan panel/labels/anchors and existing knobs/jacks. Implement the 28HP starting layout, accessible states, gain/options/reel menus, waveform cache and bounded playhead overlays, null-module rendering, and visible job/error state.
+Keep the model and manifest entry registered in Phase 3; replace its temporary developer panel with the production widget. Use the current Leviathan panel/labels/anchors and existing knobs/jacks. Apply the mouse-complete action map in spec section 14.1.1: place clickable SHIFT and SPLICE buttons plus Organize on the panel; label REC and its armed/current/append states; provide explicit Current/Append/Stop menu actions, input gain and behavior submenus, single-Reel WAV Load/Export, and named edit/recovery actions. Implement the 28HP starting layout, accessible states, waveform cache and bounded playhead overlays, null-module rendering, and visible job/error state. If a later feature truly needs a multi-button action, provide a visible latching button mode that a mouse user can operate sequentially.
 
 Build waveform peaks off audio, incrementally publish record changes, and avoid scanning all samples from `draw()` or rebuilding textures every frame. Respect current GL context ownership; no bespoke shader system is required.
 
