@@ -1,6 +1,7 @@
 #include "plugin.hpp"
 #include "ChimeraSlice.hpp"
 #include "ChimeraClock.hpp"
+#include "ChimeraRateBridge.hpp"
 #include "ChimeraOptionsText.hpp"
 #include "ChimeraOwnership.hpp"
 #include "ChimeraService.hpp"
@@ -113,6 +114,7 @@ struct Chimera : Module {
     std::uint32_t heartbeatDivider = 0; // Audio callback only.
     bool readyForPrepare = true; // Control dispatcher only.
     std::atomic<bool> ioBusy{false}, ioError{false}, recordNotReady{false};
+    std::atomic<bool> bridgeError{false};
     std::atomic<bool> prepareRequested{false};
     std::atomic<int> menuCommand{0};
     std::atomic<unsigned> selectionMenuCommands{0}; // 1 next Splice, 2 add marker.
@@ -140,6 +142,15 @@ struct Chimera : Module {
     enum ArmState { NoArm, ArmCurrent, ArmAppend, ArmStop };
     ArmState recordArm = NoArm;
     Gate playGate, recGate, clockGate, shiftGate, spliceGate;
+    // The widget/control dispatcher prepares and reclaims bridges. The audio
+    // callback only swaps raw pointers after a matching rate has been published.
+    std::atomic<unsigned> requestedHostRate{48000}, activeHostRate{48000};
+    bool rateServiceRegistered = false; // Control dispatcher only.
+    std::atomic<int> bridgeInputLatencyHost{0}, bridgeOutputLatencyHost{0};
+    std::atomic<chimera::RateBridge*> preparedBridge{nullptr}, retiredBridge{nullptr};
+    chimera::RateBridge* activeBridge = nullptr; // Audio owner only.
+    bool bypassActive = false;
+    unsigned unbypassFadeRemaining = 0;
 
     Chimera() : slice(nullptr) {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
@@ -185,8 +196,29 @@ struct Chimera : Module {
         configBypass(AUDIO_R_INPUT, AUDIO_R_OUTPUT);
     }
     ~Chimera() override {
+        if (rateServiceRegistered) chimera::unregisterRateBridge(&preparedBridge);
         if (service) service->cancel(generation); // No worker carries this Module pointer.
         else generation->close();
+        delete activeBridge;
+        delete preparedBridge.exchange(nullptr, std::memory_order_acq_rel);
+        delete retiredBridge.exchange(nullptr, std::memory_order_acq_rel);
+    }
+    void onSampleRateChange(const SampleRateChangeEvent& e) override {
+        requestedHostRate.store(chimera::RateBridge::supported(e.sampleRate) ?
+            static_cast<unsigned>(e.sampleRate) : 0u, std::memory_order_release);
+    }
+    void ensureRateService() {
+        if (rateServiceRegistered) return;
+        chimera::registerRateBridge({&requestedHostRate, &activeHostRate,
+            &preparedBridge, &retiredBridge, &bridgeError});
+        rateServiceRegistered = true;
+    }
+    void onAdd(const AddEvent&) override { ensureRateService(); }
+    void onRemove(const RemoveEvent&) override {
+        if (rateServiceRegistered) {
+            chimera::unregisterRateBridge(&preparedBridge);
+            rateServiceRegistered = false;
+        }
     }
     chimera::IoService::Status requestPreparedStore(std::uint32_t pages,
                                                      std::uint32_t reservePages) {
@@ -306,6 +338,7 @@ struct Chimera : Module {
         ownership.releaseMaintenance(now);
     }
     void serviceStep() {
+        ensureRateService();
         if (prepareRequested.exchange(false, std::memory_order_acq_rel) &&
             !ioError.load(std::memory_order_acquire) &&
             !controlActiveHandle && !pendingRequestId && !awaitingHandle &&
@@ -561,49 +594,193 @@ struct Chimera : Module {
         }
         ownership.releaseAudio(audioHeartbeatNs);
     }
-    void processOwned(const ProcessArgs& args) {
-        if (!reel && (inputs[AUDIO_L_INPUT].isConnected() ||
-                      inputs[AUDIO_R_INPUT].isConnected()))
-            prepareRequested.store(true, std::memory_order_release);
-        const float l = inputs[AUDIO_L_INPUT].isConnected() ?
-            chimera::profile1::audio(inputs[AUDIO_L_INPUT].getVoltage()) : 0.f;
-        const float r = inputs[AUDIO_R_INPUT].isConnected() ?
-            chimera::profile1::audio(inputs[AUDIO_R_INPUT].getVoltage()) : l;
-        // The host-rate converter arrives in Phase 6. Do not record 48 kHz
-        // Reel frames at an incorrect host rate in this development slice.
-        if (args.sampleRate != 48000.f) {
+    void processBypass(const ProcessArgs& args) override {
+        (void) args;
+        if (ownership.tryAudio()) {
+            coreCommands();
             slice.stopRecord();
             recordArm = NoArm;
             menuCommand.exchange(0, std::memory_order_acq_rel);
             selectionMenuCommands.exchange(0, std::memory_order_acq_rel);
-            lastRecButton = params[REC_PARAM].getValue() > 0.5f;
-            lastSpliceButton = params[SPLICE_PARAM].getValue() > 0.5f;
-            lastShiftButton = params[SHIFT_PARAM].getValue() > 0.5f;
+            if (reel) reel->maintenanceTick();
+            coreSnapshotProgress();
+            ownership.releaseAudio(steadyNs());
+        }
+        bypassActive = true;
+        const chimera::HostState host = captureHost();
+        lastRecButton = host.params[REC_PARAM] > 0.5f;
+        lastSpliceButton = host.params[SPLICE_PARAM] > 0.5f;
+        lastShiftButton = host.params[SHIFT_PARAM] > 0.5f;
+        ignoreRecRelease = lastRecButton;
+        ignoreSpliceRelease = lastSpliceButton;
+        ignoreShiftRelease = lastShiftButton;
+        lastRecJack = recGate.update(host.connected[REC_INPUT] ? host.volts[REC_INPUT] : 0.f);
+        lastClock = clockGate.update(host.connected[CLOCK_INPUT] ? host.volts[CLOCK_INPUT] : 0.f);
+        lastShiftJack = shiftGate.update(host.connected[SHIFT_INPUT] ? host.volts[SHIFT_INPUT] : 0.f);
+        lastSpliceJack = spliceGate.update(host.connected[SPLICE_INPUT] ? host.volts[SPLICE_INPUT] : 0.f);
+        const float left = host.connected[AUDIO_L_INPUT] ?
+            chimera::profile1::audio(host.volts[AUDIO_L_INPUT]) : 0.f;
+        const float right = host.connected[AUDIO_R_INPUT] ?
+            chimera::profile1::audio(host.volts[AUDIO_R_INPUT]) : left;
+        writeOutput({left, right, 0.f, false});
+        lights[REC_LIGHT].setBrightness(0.f);
+        lights[REC_ARMED_LIGHT].setBrightness(0.f);
+    }
+    chimera::HostState captureHost() {
+        chimera::HostState state;
+        state.command = menuCommand.exchange(0, std::memory_order_acq_rel);
+        state.selectionCommands =
+            selectionMenuCommands.exchange(0, std::memory_order_acq_rel);
+        for (int i = 0; i < NUM_PARAMS; ++i)
+            state.params[i] = params[i].getValue();
+        for (int i = 0; i < NUM_INPUTS; ++i) {
+            state.connected[i] = inputs[i].isConnected();
+            state.volts[i] = state.connected[i] ? inputs[i].getVoltage() : 0.f;
+        }
+        return state;
+    }
+    void writeOutput(const chimera::HostOutput& out) {
+        outputs[AUDIO_L_OUTPUT].setVoltage(out.left);
+        outputs[AUDIO_R_OUTPUT].setVoltage(out.right);
+        outputs[CV_OUTPUT].setVoltage(out.cv);
+        outputs[EOSG_OUTPUT].setVoltage(out.eosg ? 10.f : 0.f);
+    }
+    void processOwned(const ProcessArgs& args) {
+        if (!reel && (inputs[AUDIO_L_INPUT].isConnected() ||
+                      inputs[AUDIO_R_INPUT].isConnected()))
+            prepareRequested.store(true, std::memory_order_release);
+        const chimera::HostState host = captureHost();
+        if (bypassActive) {
+            bypassActive = false;
+            playInitialized = false;
+            unbypassFadeRemaining = 48;
+        }
+        const bool supported = chimera::RateBridge::supported(args.sampleRate);
+        const unsigned rate = supported ? static_cast<unsigned>(args.sampleRate) : 0u;
+        requestedHostRate.store(rate, std::memory_order_release);
+        if (!rate) {
+            slice.stopRecord();
+            recordArm = NoArm;
+            // A resumed supported rate must adopt a freshly primed bridge.
+            // Keep the old allocation for off-audio retirement below.
+            activeHostRate.store(0, std::memory_order_release);
+            menuCommand.exchange(0, std::memory_order_acq_rel);
+            selectionMenuCommands.exchange(0, std::memory_order_acq_rel);
+            lastRecButton = host.params[REC_PARAM] > 0.5f;
+            lastSpliceButton = host.params[SPLICE_PARAM] > 0.5f;
+            lastShiftButton = host.params[SHIFT_PARAM] > 0.5f;
             ignoreRecRelease = lastRecButton;
             ignoreSpliceRelease = lastSpliceButton;
             ignoreShiftRelease = lastShiftButton;
             playInitialized = false;
             stopAtPrimaryBoundary = false;
-            lastRecJack = recGate.update(inputs[REC_INPUT].isConnected() ?
-                inputs[REC_INPUT].getVoltage() : 0.f);
-            lastClock = clockGate.update(inputs[CLOCK_INPUT].isConnected() ?
-                inputs[CLOCK_INPUT].getVoltage() : 0.f);
-            lastShiftJack = shiftGate.update(inputs[SHIFT_INPUT].isConnected() ?
-                inputs[SHIFT_INPUT].getVoltage() : 0.f);
-            lastSpliceJack = spliceGate.update(inputs[SPLICE_INPUT].isConnected() ?
-                inputs[SPLICE_INPUT].getVoltage() : 0.f);
+            lastRecJack = recGate.update(host.connected[REC_INPUT] ? host.volts[REC_INPUT] : 0.f);
+            lastClock = clockGate.update(host.connected[CLOCK_INPUT] ? host.volts[CLOCK_INPUT] : 0.f);
+            lastShiftJack = shiftGate.update(host.connected[SHIFT_INPUT] ? host.volts[SHIFT_INPUT] : 0.f);
+            lastSpliceJack = spliceGate.update(host.connected[SPLICE_INPUT] ? host.volts[SPLICE_INPUT] : 0.f);
             if (reel) reel->maintenanceTick();
-            outputs[AUDIO_L_OUTPUT].setVoltage(l);
-            outputs[AUDIO_R_OUTPUT].setVoltage(r);
-            outputs[CV_OUTPUT].setVoltage(0.f);
-            outputs[EOSG_OUTPUT].setVoltage(0.f);
+            writeOutput({});
+            bridgeError.store(true, std::memory_order_release);
+            lights[IO_BUSY_LIGHT].setBrightness(0.f);
             lights[PM_LIGHT].setBrightness(0.f);
             lights[ERROR_LIGHT].setBrightness(1.f);
             return;
         }
+        if (rate != activeHostRate.load(std::memory_order_relaxed)) {
+            slice.stopRecord();
+            recordArm = NoArm;
+            playInitialized = false;
+            stopAtPrimaryBoundary = false;
+            menuCommand.exchange(0, std::memory_order_acq_rel);
+            selectionMenuCommands.exchange(0, std::memory_order_acq_rel);
+            lastRecButton = host.params[REC_PARAM] > 0.5f;
+            lastSpliceButton = host.params[SPLICE_PARAM] > 0.5f;
+            lastShiftButton = host.params[SHIFT_PARAM] > 0.5f;
+            ignoreRecRelease = lastRecButton;
+            ignoreSpliceRelease = lastSpliceButton;
+            ignoreShiftRelease = lastShiftButton;
+            lastRecJack = recGate.update(host.connected[REC_INPUT] ? host.volts[REC_INPUT] : 0.f);
+            lastClock = clockGate.update(host.connected[CLOCK_INPUT] ? host.volts[CLOCK_INPUT] : 0.f);
+            lastShiftJack = shiftGate.update(host.connected[SHIFT_INPUT] ? host.volts[SHIFT_INPUT] : 0.f);
+            lastSpliceJack = spliceGate.update(host.connected[SPLICE_INPUT] ? host.volts[SPLICE_INPUT] : 0.f);
+            if (activeBridge) {
+                chimera::RateBridge* empty = nullptr;
+                if (!retiredBridge.compare_exchange_strong(empty, activeBridge,
+                        std::memory_order_acq_rel)) {
+                    writeOutput({});
+                    lights[IO_BUSY_LIGHT].setBrightness(1.f);
+                    return;
+                }
+                activeBridge = nullptr;
+            }
+            if (rate != 48000) {
+                if (retiredBridge.load(std::memory_order_acquire)) {
+                    writeOutput({});
+                    lights[IO_BUSY_LIGHT].setBrightness(1.f);
+                    return;
+                }
+                chimera::RateBridge* ready = preparedBridge.exchange(nullptr,
+                    std::memory_order_acq_rel);
+                if (!ready || ready->rate() != rate) {
+                    if (ready) {
+                        chimera::RateBridge* empty = nullptr;
+                        retiredBridge.compare_exchange_strong(empty, ready,
+                            std::memory_order_acq_rel);
+                    }
+                    writeOutput({});
+                    lights[IO_BUSY_LIGHT].setBrightness(1.f);
+                    return;
+                }
+                activeBridge = ready;
+                bridgeInputLatencyHost.store(ready->inputLatencyHost(),
+                    std::memory_order_release);
+                bridgeOutputLatencyHost.store(ready->outputLatencyHost(),
+                    std::memory_order_release);
+            }
+            else {
+                bridgeInputLatencyHost.store(0, std::memory_order_release);
+                bridgeOutputLatencyHost.store(0, std::memory_order_release);
+            }
+            lastRecButton = host.params[REC_PARAM] > 0.5f;
+            lastSpliceButton = host.params[SPLICE_PARAM] > 0.5f;
+            lastShiftButton = host.params[SHIFT_PARAM] > 0.5f;
+            ignoreRecRelease = lastRecButton;
+            ignoreSpliceRelease = lastSpliceButton;
+            ignoreShiftRelease = lastShiftButton;
+            lastRecJack = recGate.update(host.connected[REC_INPUT] ? host.volts[REC_INPUT] : 0.f);
+            lastClock = clockGate.update(host.connected[CLOCK_INPUT] ? host.volts[CLOCK_INPUT] : 0.f);
+            lastShiftJack = shiftGate.update(host.connected[SHIFT_INPUT] ? host.volts[SHIFT_INPUT] : 0.f);
+            lastSpliceJack = spliceGate.update(host.connected[SPLICE_INPUT] ? host.volts[SPLICE_INPUT] : 0.f);
+            activeHostRate.store(rate, std::memory_order_release);
+            bridgeError.store(false, std::memory_order_release);
+            lights[IO_BUSY_LIGHT].setBrightness(0.f);
+        }
+        if (rate == 48000) {
+            processCore(host);
+            return;
+        }
+        const chimera::HostOutput out = activeBridge->step(host,
+            [this](const chimera::HostState& delayed) { return processCore(delayed); });
+        writeOutput(out);
+        if (activeBridge->failed()) {
+            slice.stopRecord();
+            recordArm = NoArm;
+            // The next callback retires this faulted converter; the service
+            // prepares a replacement without work on the audio thread.
+            activeHostRate.store(0, std::memory_order_release);
+            bridgeError.store(true, std::memory_order_release);
+            lights[ERROR_LIGHT].setBrightness(1.f);
+        }
+    }
+    chimera::HostOutput processCore(const chimera::HostState& host) {
+        const float l = host.connected[AUDIO_L_INPUT] ?
+            chimera::profile1::audio(host.volts[AUDIO_L_INPUT]) : 0.f;
+        const float r = host.connected[AUDIO_R_INPUT] ?
+            chimera::profile1::audio(host.volts[AUDIO_R_INPUT]) : l;
         adoptOptionsText();
-        const bool playConnected = inputs[PLAY_INPUT].isConnected();
-        const bool playLogical = !playConnected || playGate.update(inputs[PLAY_INPUT].getVoltage());
+        const bool playConnected = host.connected[PLAY_INPUT];
+        const bool playLogical = !playConnected ||
+            playGate.update(host.volts[PLAY_INPUT]) || host.rises[0] != 0;
         if (!playConnected) playGate.high = true;
         const int playMode = pmodSetting.load(std::memory_order_relaxed);
         if (!playInitialized) {
@@ -646,24 +823,23 @@ struct Chimera : Module {
         slice.setChordRatios(mcrSetting[0].load(std::memory_order_relaxed),
                              mcrSetting[1].load(std::memory_order_relaxed),
                              mcrSetting[2].load(std::memory_order_relaxed));
-        const bool shiftButton = params[SHIFT_PARAM].getValue() > 0.5f;
-        const bool spliceButton = params[SPLICE_PARAM].getValue() > 0.5f;
-        const bool rec = params[REC_PARAM].getValue() > 0.5f;
+        const bool shiftButton = host.params[SHIFT_PARAM] > 0.5f;
+        const bool spliceButton = host.params[SPLICE_PARAM] > 0.5f;
+        const bool rec = host.params[REC_PARAM] > 0.5f;
         slice.setInputGain(inputGainSetting.load(std::memory_order_relaxed));
-        const unsigned selectionCommands =
-            selectionMenuCommands.exchange(0, std::memory_order_acq_rel);
-        const bool shiftJack = shiftGate.update(inputs[SHIFT_INPUT].isConnected() ?
-            inputs[SHIFT_INPUT].getVoltage() : 0.f);
+        const unsigned selectionCommands = host.selectionCommands;
+        const bool shiftJack = shiftGate.update(host.connected[SHIFT_INPUT] ?
+            host.volts[SHIFT_INPUT] : 0.f);
         if ((!shiftButton && lastShiftButton && !ignoreShiftRelease) ||
-            (shiftJack && !lastShiftJack) || (selectionCommands & 1u))
+            (shiftJack && !lastShiftJack) || host.rises[4] || (selectionCommands & 1u))
             slice.requestShift();
         if (!shiftButton) ignoreShiftRelease = false;
         lastShiftButton = shiftButton;
         lastShiftJack = shiftJack;
-        const bool spliceJack = spliceGate.update(inputs[SPLICE_INPUT].isConnected() ?
-            inputs[SPLICE_INPUT].getVoltage() : 0.f);
+        const bool spliceJack = spliceGate.update(host.connected[SPLICE_INPUT] ?
+            host.volts[SPLICE_INPUT] : 0.f);
         if ((!spliceButton && lastSpliceButton && !ignoreSpliceRelease) ||
-            (spliceJack && !lastSpliceJack) || (selectionCommands & 2u))
+            (spliceJack && !lastSpliceJack) || host.rises[3] || (selectionCommands & 2u))
             slice.requestSplice();
         if (!spliceButton) ignoreSpliceRelease = false;
         lastSpliceButton = spliceButton;
@@ -671,12 +847,12 @@ struct Chimera : Module {
         const bool recButtonReleased = !rec && lastRecButton && !ignoreRecRelease;
         if (!rec) ignoreRecRelease = false;
         lastRecButton = rec;
-        const bool recJack = recGate.update(inputs[REC_INPUT].isConnected() ?
-            inputs[REC_INPUT].getVoltage() : 0.f);
-        const bool clockConnected = inputs[CLOCK_INPUT].isConnected();
+        const bool recJack = recGate.update(host.connected[REC_INPUT] ?
+            host.volts[REC_INPUT] : 0.f);
+        const bool clockConnected = host.connected[CLOCK_INPUT];
         const bool clock = clockGate.update(clockConnected ?
-            inputs[CLOCK_INPUT].getVoltage() : 0.f);
-        const bool clockRise = clock && !lastClock;
+            host.volts[CLOCK_INPUT] : 0.f);
+        const bool clockRise = (clock && !lastClock) || host.rises[1] != 0;
         lastClock = clock;
         const chimera::ClockEstimator::Update clockUpdate =
             clockEstimator.step(clockConnected, clockRise, slice.frame());
@@ -686,35 +862,39 @@ struct Chimera : Module {
             clockEstimator.waiting(), clockOption);
         chimera::CoreInput in{};
         in.live = chimera::StereoFrame{l, r};
-        in.pmRightVolts = inputs[AUDIO_R_INPUT].isConnected() ?
-            inputs[AUDIO_R_INPUT].getVoltage() : 0.f;
-        in.pmRightConnected = inputs[AUDIO_R_INPUT].isConnected();
+        in.pmRightVolts = host.connected[AUDIO_R_INPUT] ?
+            host.volts[AUDIO_R_INPUT] : 0.f;
+        in.pmRightConnected = host.connected[AUDIO_R_INPUT];
         chimera::ControlFrame& c = in.controls;
-        c.sos = params[SOS_PARAM].getValue();
-        c.gene = params[GENE_SIZE_PARAM].getValue();
-        c.rate = params[VARISPEED_PARAM].getValue();
-        c.morph = params[MORPH_PARAM].getValue();
-        c.slide = params[SLIDE_PARAM].getValue();
-        c.organize = params[ORGANIZE_PARAM].getValue();
-        c.geneAtt = params[GENE_ATT_PARAM].getValue();
-        c.rateAtt = params[VARISPEED_ATT_PARAM].getValue();
-        c.slideAtt = params[SLIDE_ATT_PARAM].getValue();
-        c.sosPatched = inputs[SOS_CV_INPUT].isConnected();
-        c.sosCv = inputs[SOS_CV_INPUT].getVoltage();
-        c.geneCv = inputs[GENE_SIZE_CV_INPUT].getVoltage();
-        c.rateCv = inputs[VARISPEED_CV_INPUT].getVoltage();
-        c.morphCv = inputs[MORPH_CV_INPUT].getVoltage();
-        c.slideCv = inputs[SLIDE_CV_INPUT].getVoltage();
-        c.organizeCv = inputs[ORGANIZE_CV_INPUT].getVoltage();
+        c.sos = host.params[SOS_PARAM];
+        c.gene = host.params[GENE_SIZE_PARAM];
+        c.rate = host.params[VARISPEED_PARAM];
+        c.morph = host.params[MORPH_PARAM];
+        c.slide = host.params[SLIDE_PARAM];
+        c.organize = host.params[ORGANIZE_PARAM];
+        c.geneAtt = host.params[GENE_ATT_PARAM];
+        c.rateAtt = host.params[VARISPEED_ATT_PARAM];
+        c.slideAtt = host.params[SLIDE_ATT_PARAM];
+        c.sosPatched = host.connected[SOS_CV_INPUT];
+        c.sosCv = host.volts[SOS_CV_INPUT];
+        c.geneCv = host.volts[GENE_SIZE_CV_INPUT];
+        c.rateCv = host.volts[VARISPEED_CV_INPUT];
+        c.morphCv = host.volts[MORPH_CV_INPUT];
+        c.slideCv = host.volts[SLIDE_CV_INPUT];
+        c.organizeCv = host.volts[ORGANIZE_CV_INPUT];
         slice.prepareFrameSelection(in);
-        const int command = menuCommand.exchange(0, std::memory_order_acq_rel);
+        const int command = host.command;
         if (!clockConnected) recordArm = NoArm;
         if (command == 3) {
             recordArm = NoArm;
             slice.stopRecord();
         }
-        else if (command == 1 || command == 2 || command == 4 || recButtonReleased ||
-                 (recJack && !lastRecJack)) {
+        else {
+            const unsigned jackRises = host.rises[2] ? host.rises[2] :
+                ((recJack && !lastRecJack) ? 1u : 0u);
+            const unsigned requests = jackRises +
+                ((command == 1 || command == 2 || command == 4 || recButtonReleased) ? 1u : 0u);
+            for (unsigned request = 0; request < requests; ++request) {
             if (!reel) prepareRequested.store(true, std::memory_order_release);
             const bool append = command == 2 ||
                 (command != 1 && (command == 4 ?
@@ -729,6 +909,7 @@ struct Chimera : Module {
             }
             else if (slice.recordState() != chimera::Slice::Idle) slice.stopRecord();
             else beginRecording(append);
+            }
         }
         // Resolve REC before this same-frame Clock edge. A coincident arm and
         // edge therefore includes the start frame and excludes the stop frame.
@@ -749,6 +930,12 @@ struct Chimera : Module {
         outputs[AUDIO_R_OUTPUT].setVoltage(clamp(out.audio.r * 5.f, -12.f, 12.f));
         outputs[CV_OUTPUT].setVoltage(out.cv);
         outputs[EOSG_OUTPUT].setVoltage(out.eosg ? 10.f : 0.f);
+        if (unbypassFadeRemaining) {
+            const float gain = float(49 - unbypassFadeRemaining) / 48.f;
+            outputs[AUDIO_L_OUTPUT].setVoltage(outputs[AUDIO_L_OUTPUT].getVoltage() * gain);
+            outputs[AUDIO_R_OUTPUT].setVoltage(outputs[AUDIO_R_OUTPUT].getVoltage() * gain);
+            --unbypassFadeRemaining;
+        }
         lights[REC_LIGHT].setBrightness(out.recording ? 1.f : 0.f);
         lights[REC_ARMED_LIGHT].setBrightness(recordArm != NoArm ? 1.f : 0.f);
         lights[CLOCK_LIGHT].setBrightness(clock ? 1.f : 0.f);
@@ -758,7 +945,10 @@ struct Chimera : Module {
         lights[CLIP_LIGHT].setBrightness(slice.overloaded() ? 1.f : 0.f);
         lights[IO_BUSY_LIGHT].setBrightness(ioBusy.load(std::memory_order_acquire) ? 1.f : 0.f);
         lights[ERROR_LIGHT].setBrightness(out.full || ioError.load(std::memory_order_acquire) ||
+            bridgeError.load(std::memory_order_acquire) ||
             recordNotReady.load(std::memory_order_acquire) ? 1.f : 0.f);
+        return {outputs[AUDIO_L_OUTPUT].getVoltage(),
+                outputs[AUDIO_R_OUTPUT].getVoltage(), out.cv, out.eosg};
     }
     void beginRecording(bool append) {
         const bool started = append ? slice.startAppend() : slice.startCurrent();
@@ -860,6 +1050,22 @@ struct ChimeraWidget : ModuleWidget {
                 "Preparing memory - press REC again when ready" :
                 "Reel idle - connect audio or press REC"));
         menu->addChild(createMenuLabel(memoryStatus));
+        const unsigned requestedRate = m->requestedHostRate.load(std::memory_order_acquire);
+        const unsigned currentRate = m->activeHostRate.load(std::memory_order_acquire);
+        if (!requestedRate)
+            menu->addChild(createMenuLabel("Unsupported host sample rate"));
+        else if (requestedRate != currentRate)
+            menu->addChild(createMenuLabel("Preparing sample rate"));
+        else if (currentRate == 48000)
+            menu->addChild(createMenuLabel("48 kHz direct path: 0 bridge frames"));
+        else {
+            const int inputDelay = m->bridgeInputLatencyHost.load(std::memory_order_acquire);
+            const int outputDelay = m->bridgeOutputLatencyHost.load(std::memory_order_acquire);
+            menu->addChild(createMenuLabel("Bridge at " + std::to_string(currentRate) +
+                " Hz: " + std::to_string(inputDelay + outputDelay) +
+                " host frames (" + std::to_string(inputDelay) + " in + " +
+                std::to_string(outputDelay) + " out)"));
+        }
         menu->addChild(createMenuLabel("Development build: recorded audio is not saved"));
         if (!m->controlActiveHandle && m->ioError.load(std::memory_order_acquire))
             menu->addChild(createMenuItem("Retry Reel preparation", "", [m] {

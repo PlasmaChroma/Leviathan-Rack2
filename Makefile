@@ -495,6 +495,16 @@ test-chimera-clock: | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc tests/chimera_clock_spec.cpp -o build/tests/chimera_clock_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_clock_spec$(if $(ARCH_WIN),.exe,)
 
+.PHONY: test-chimera-rate-bridge
+test-chimera-rate-bridge: | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_rate_bridge_spec.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_rate_bridge_spec$(if $(ARCH_WIN),.exe,)
+	$(call run_rack_test_bin,build/tests/chimera_rate_bridge_spec$(if $(ARCH_WIN),.exe,))
+
+.PHONY: bench-chimera-phase6
+bench-chimera-phase6: | build/tests
+	$(CXX) -std=c++11 -O3 -DNDEBUG -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tools/chimera_phase6_module_bench.cpp src/ChimeraService.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp src/visual/ApertureLight.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32,-lGL) -pthread -o build/tests/chimera_phase6_module_bench$(if $(ARCH_WIN),.exe,)
+	$(call run_rack_test_bin,build/tests/chimera_phase6_module_bench$(if $(ARCH_WIN),.exe,))
+
 test-chimera-phase3-sanitize: | build/tests
 	$(CXX) -std=c++11 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-fast-math -pthread -Isrc tests/chimera_slice_spec.cpp -o build/tests/chimera_slice_sanitize_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_slice_sanitize_spec$(if $(ARCH_WIN),.exe,)
@@ -506,8 +516,8 @@ test-chimera-phase2: | build/tests
 	build/tests/chimera_reel_concurrency_spec$(if $(ARCH_WIN),.exe,)
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread -Isrc tests/chimera_jobs_spec.cpp -o build/tests/chimera_jobs_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_jobs_spec$(if $(ARCH_WIN),.exe,)
-	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread -Isrc tests/chimera_service_lifecycle_spec.cpp src/ChimeraService.cpp -o build/tests/chimera_service_lifecycle_spec$(if $(ARCH_WIN),.exe,)
-	build/tests/chimera_service_lifecycle_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_service_lifecycle_spec.cpp src/ChimeraService.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_service_lifecycle_spec$(if $(ARCH_WIN),.exe,)
+	$(call run_rack_test_bin,build/tests/chimera_service_lifecycle_spec$(if $(ARCH_WIN),.exe,))
 
 test-chimera-phase2-sanitize: | build/tests
 	$(CXX) -std=c++11 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -pthread -Isrc tests/chimera_reel_spec.cpp -o build/tests/chimera_reel_sanitize_spec$(if $(ARCH_WIN),.exe,)
@@ -516,8 +526,8 @@ test-chimera-phase2-sanitize: | build/tests
 	build/tests/chimera_reel_concurrency_sanitize_spec$(if $(ARCH_WIN),.exe,)
 	$(CXX) -std=c++11 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -pthread -Isrc tests/chimera_jobs_spec.cpp -o build/tests/chimera_jobs_sanitize_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_jobs_sanitize_spec$(if $(ARCH_WIN),.exe,)
-	$(CXX) -std=c++11 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -pthread -Isrc tests/chimera_service_lifecycle_spec.cpp src/ChimeraService.cpp -o build/tests/chimera_service_lifecycle_sanitize_spec$(if $(ARCH_WIN),.exe,)
-	build/tests/chimera_service_lifecycle_sanitize_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -pthread -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_service_lifecycle_spec.cpp src/ChimeraService.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_service_lifecycle_sanitize_spec$(if $(ARCH_WIN),.exe,)
+	$(call run_rack_test_bin,build/tests/chimera_service_lifecycle_sanitize_spec$(if $(ARCH_WIN),.exe,))
 
 test-sibyl-tsan: build/tests/sibyl_module_tsan_spec
 	@TSAN_OPTIONS=halt_on_error=1 \

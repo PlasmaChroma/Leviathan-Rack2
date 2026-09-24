@@ -1,3 +1,4 @@
+#define CHIMERA_RATE_BRIDGE_TEST_HOOKS 1
 #include "../src/plugin.hpp"
 #include <cmath>
 #include <cstdio>
@@ -6,8 +7,9 @@
 #include <new>
 #include <thread>
 
-static bool trapAllocations = false;
-static std::size_t audioAllocations = 0;
+static thread_local bool trapAllocations = false;
+static thread_local std::size_t audioAllocations = 0;
+static thread_local std::size_t audioDeallocations = 0;
 void* operator new(std::size_t size) {
     if (trapAllocations) ++audioAllocations;
     void* p = std::malloc(size);
@@ -20,8 +22,14 @@ void* operator new[](std::size_t size) {
     if (!p) throw std::bad_alloc();
     return p;
 }
-void operator delete(void* p) noexcept { std::free(p); }
-void operator delete[](void* p) noexcept { std::free(p); }
+void operator delete(void* p) noexcept {
+    if (trapAllocations) ++audioDeallocations;
+    std::free(p);
+}
+void operator delete[](void* p) noexcept {
+    if (trapAllocations) ++audioDeallocations;
+    std::free(p);
+}
 
 Plugin* pluginInstance = nullptr;
 bool isDragonKingDebugEnabled() { return false; }
@@ -41,6 +49,274 @@ int main() {
     Module::ProcessArgs args{};
     args.sampleRate = 48000.f;
     args.sampleTime = 1.f/48000.f;
+    auto awaitRateBridge = [](Chimera& target, unsigned rate) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while ((!target.preparedBridge.load(std::memory_order_acquire) ||
+                target.preparedBridge.load(std::memory_order_acquire)->rate() != rate) &&
+               std::chrono::steady_clock::now() < deadline)
+            std::this_thread::yield();
+        need(target.preparedBridge.load(std::memory_order_acquire) &&
+             target.preparedBridge.load(std::memory_order_acquire)->rate() == rate,
+             "background service prepared requested host-rate bridge");
+    };
+    {
+        Chimera noWidget;
+        noWidget.onAdd(Module::AddEvent{});
+        Module::ProcessArgs doubled = args;
+        doubled.sampleRate = 96000.f;
+        doubled.sampleTime = 1.f / 96000.f;
+        const std::size_t beforeRateEventAllocations = audioAllocations;
+        trapAllocations = true;
+        noWidget.onSampleRateChange(Module::SampleRateChangeEvent{96000.f, 1.f/96000.f});
+        trapAllocations = false;
+        need(audioAllocations == beforeRateEventAllocations,
+             "sample-rate change callback publishes without heap allocation");
+        noWidget.process(doubled);
+        awaitRateBridge(noWidget, 96000);
+        noWidget.process(doubled);
+        need(noWidget.activeHostRate.load() == 96000,
+             "engine-added module prepares host rate without widget stepping");
+        noWidget.onRemove(Module::RemoveEvent{});
+    }
+    {
+        chimera::Reel bridgeReel(40, 40);
+        for (std::uint32_t frame = 0; frame < 9600; ++frame)
+            need(bridgeReel.write(frame, chimera::StereoFrame{0.2f, 0.2f}, frame),
+                 "prepare rate-bridge fixture Reel");
+        Chimera bridgeModule;
+        bridgeModule.reel = &bridgeReel;
+        bridgeModule.slice.setReel(&bridgeReel);
+        bridgeModule.slice.setConditioning(false);
+        bridgeModule.params[Chimera::SOS_PARAM].setValue(1.f);
+        Module::ProcessArgs twiceRate = args;
+        twiceRate.sampleRate = 96000.f;
+        twiceRate.sampleTime = 1.f / 96000.f;
+        bridgeModule.process(twiceRate);
+        need(bridgeModule.slice.frame() == 0 &&
+             bridgeModule.lights[Chimera::IO_BUSY_LIGHT].getBrightness() == 1.f,
+             "unprepared rate pauses core and reports preparation");
+        bridgeModule.serviceStep();
+        awaitRateBridge(bridgeModule, 96000);
+        need(bridgeModule.preparedBridge.load() &&
+             bridgeModule.preparedBridge.load()->rate() == 96000,
+             "converter preparation occurs on control dispatcher");
+        trapAllocations = true;
+        const std::size_t beforeBridgeAllocations = audioAllocations;
+        float peak = 0.f;
+        for (int frame = 0; frame < 96000; ++frame) {
+            bridgeModule.process(twiceRate);
+            peak = std::max(peak, std::fabs(
+                bridgeModule.outputs[Chimera::AUDIO_L_OUTPUT].getVoltage()));
+        }
+        trapAllocations = false;
+        need(audioAllocations == beforeBridgeAllocations &&
+             bridgeModule.slice.frame() == 48000 &&
+             bridgeModule.activeHostRate.load() == 96000 &&
+             bridgeModule.activeBridge && !bridgeModule.activeBridge->failed() &&
+             peak > 0.5f,
+             "96 kHz Rack callback advances 48 kHz core without allocations");
+        bridgeModule.process(args);
+        bridgeModule.serviceStep();
+        need(bridgeModule.activeHostRate.load() == 48000 &&
+             bridgeModule.activeBridge == nullptr &&
+             bridgeModule.slice.frame() == 48001,
+             "return to direct 48 kHz path preserves core time and retires bridge off audio");
+    }
+    {
+        Chimera recovering;
+        Module::ProcessArgs rate96 = args;
+        rate96.sampleRate = 96000.f;
+        rate96.sampleTime = 1.f / 96000.f;
+        recovering.process(rate96);
+        recovering.serviceStep();
+        awaitRateBridge(recovering, 96000);
+        recovering.process(rate96);
+        need(recovering.activeHostRate.load() == 96000 && recovering.activeBridge,
+             "prepared converter becomes active");
+        Module::ProcessArgs invalid = args;
+        invalid.sampleRate = 47999.5f;
+        invalid.sampleTime = 1.f / invalid.sampleRate;
+        recovering.process(invalid);
+        need(recovering.activeHostRate.load() == 0 &&
+             recovering.bridgeError.load() &&
+             recovering.outputs[Chimera::AUDIO_L_OUTPUT].getVoltage() == 0.f,
+             "fractional host rate signals error and silences output");
+        recovering.process(rate96); // Retire the stale converter.
+        need(recovering.activeBridge == nullptr &&
+             recovering.activeHostRate.load() == 0,
+             "same-rate recovery never resumes stale converter state");
+        awaitRateBridge(recovering, 96000);
+        recovering.process(rate96);
+        need(recovering.activeHostRate.load() == 96000 &&
+             recovering.activeBridge &&
+             !recovering.bridgeError.load(),
+             "supported rate adopts a fresh primed converter after invalid rate");
+    }
+    {
+        chimera::Reel faultReel(40, 40);
+        for (std::uint32_t frame = 0; frame < 2000; ++frame)
+            need(faultReel.write(frame, chimera::StereoFrame{0.f, 0.f}, frame),
+                 "prepare fault-recovery Reel");
+        Chimera faulted;
+        faulted.reel = &faultReel;
+        faulted.slice.setReel(&faultReel);
+        faulted.inputs[Chimera::AUDIO_L_INPUT].channels = 1;
+        faulted.inputs[Chimera::AUDIO_L_INPUT].setVoltage(1.f);
+        Module::ProcessArgs rate96 = args;
+        rate96.sampleRate = 96000.f;
+        rate96.sampleTime = 1.f / 96000.f;
+        faulted.process(rate96);
+        faulted.serviceStep();
+        awaitRateBridge(faulted, 96000);
+        faulted.process(rate96);
+        faulted.menuCommand.store(1);
+        for (int frame = 0; frame < 300; ++frame) faulted.process(rate96);
+        need(faulted.slice.recordState() == chimera::Slice::Current,
+             "fault fixture is recording through host SRC");
+        const std::uint64_t beforeFault = faulted.slice.writerPosition();
+        faulted.activeBridge->fillEventQueueForTest();
+        faulted.inputs[Chimera::REC_INPUT].channels = 1; // New jack event overflows the full queue.
+        faulted.process(rate96);
+        need(faulted.slice.recordState() == chimera::Slice::Idle &&
+             faulted.recordArm == Chimera::NoArm && faulted.bridgeError.load() &&
+             faulted.slice.writerPosition() == beforeFault &&
+             faulted.activeHostRate.load() == 0,
+             "event queue overflow stops writes and latches visible error");
+        faulted.process(rate96); // Retire the failed bridge off audio.
+        awaitRateBridge(faulted, 96000);
+        faulted.process(rate96);
+        for (int frame = 0; frame < 200; ++frame) faulted.process(rate96);
+        need(faulted.activeHostRate.load() == 96000 &&
+             faulted.slice.recordState() == chimera::Slice::Idle &&
+             faulted.slice.writerPosition() == beforeFault,
+             "fresh converter never resumes failed recording automatically");
+        faulted.menuCommand.store(1);
+        for (int frame = 0; frame < 200; ++frame) faulted.process(rate96);
+        need(faulted.slice.recordState() == chimera::Slice::Current,
+             "explicit fresh REC starts after converter recovery");
+    }
+    for (int playMode = 0; playMode < 3; ++playMode) {
+        Chimera bypassMode;
+        bypassMode.pmodSetting.store(playMode);
+        bypassMode.inputs[Chimera::AUDIO_L_INPUT].channels = 1;
+        bypassMode.inputs[Chimera::AUDIO_L_INPUT].setVoltage(3.f);
+        bypassMode.inputs[Chimera::REC_INPUT].channels = 1;
+        bypassMode.inputs[Chimera::REC_INPUT].setVoltage(10.f);
+        bypassMode.processBypass(args);
+        need(bypassMode.outputs[Chimera::AUDIO_L_OUTPUT].getVoltage() == 3.f &&
+             bypassMode.outputs[Chimera::AUDIO_R_OUTPUT].getVoltage() == 3.f &&
+             bypassMode.outputs[Chimera::CV_OUTPUT].getVoltage() == 0.f &&
+             bypassMode.outputs[Chimera::EOSG_OUTPUT].getVoltage() == 0.f,
+             "all Play modes bypass to normalized dry audio with CV/EOSG cleared");
+        bypassMode.process(args);
+        need(bypassMode.slice.recordState() == chimera::Slice::Idle &&
+             bypassMode.recordArm == Chimera::NoArm,
+             "held REC cannot retrigger after bypass in any Play mode");
+    }
+    {
+        chimera::Reel queuedReel(40, 40);
+        for (std::uint32_t frame = 0; frame < 1000; ++frame)
+            need(queuedReel.write(frame, chimera::StereoFrame{0.f, 0.f}, frame),
+                 "prepare queued-recording Reel");
+        Chimera queued;
+        queued.reel = &queuedReel;
+        queued.slice.setReel(&queuedReel);
+        queued.inputs[Chimera::AUDIO_L_INPUT].channels = 1;
+        queued.inputs[Chimera::AUDIO_L_INPUT].setVoltage(2.f);
+        const chimera::AudioCommand stale = {0, 0, 0, 0, 0, nullptr};
+        for (int i = 0; i < 64; ++i)
+            need(queued.commands.tryPush(stale), "fill audio command queue");
+        need(!queued.commands.tryPush(stale), "audio command queue reports full");
+        queued.menuCommand.store(1);
+        queued.process(args);
+        need(queued.slice.recordState() == chimera::Slice::Current &&
+             queued.slice.writerPosition() == 1,
+             "saturated service command queue does not silently drop REC");
+    }
+    {
+        chimera::Reel recordReel(40, 40);
+        for (std::uint32_t frame = 0; frame < 1000; ++frame)
+            need(recordReel.write(frame, chimera::StereoFrame{0.f, 0.f}, frame),
+                 "prepare rate-change recording Reel");
+        Chimera changing;
+        changing.reel = &recordReel;
+        changing.slice.setReel(&recordReel);
+        changing.inputs[Chimera::AUDIO_L_INPUT].channels = 1;
+        changing.inputs[Chimera::AUDIO_L_INPUT].setVoltage(2.f);
+        changing.menuCommand.store(1);
+        for (int frame = 0; frame < 100; ++frame) changing.process(args);
+        need(changing.slice.recordState() == chimera::Slice::Current &&
+             changing.slice.writerPosition() == 100,
+             "direct-rate Current recording advances in core frames");
+        Module::ProcessArgs changedRate = args;
+        changedRate.sampleRate = 96000.f;
+        changedRate.sampleTime = 1.f / 96000.f;
+        changing.process(changedRate);
+        need(changing.slice.recordState() == chimera::Slice::Idle &&
+             changing.slice.writerPosition() == 100,
+             "host-rate change stops writer without old-rate drift");
+        changing.serviceStep();
+        awaitRateBridge(changing, 96000);
+        for (int frame = 0; frame < 400; ++frame) changing.process(changedRate);
+        need(changing.activeHostRate.load() == 96000 &&
+             changing.slice.recordState() == chimera::Slice::Idle,
+             "prepared rate resumes playback without restarting recording");
+        changing.inputs[Chimera::CLOCK_INPUT].channels = 1;
+        changing.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
+        changing.menuCommand.store(1);
+        for (int frame = 0; frame < 120; ++frame) changing.process(changedRate);
+        need(changing.recordArm == Chimera::ArmCurrent,
+             "Clock-connected REC request arms at converted host rate");
+        changing.process(args);
+        need(changing.recordArm == Chimera::NoArm &&
+             changing.slice.recordState() == chimera::Slice::Idle,
+             "rate change cancels armed recording without writing");
+        changing.inputs[Chimera::CLOCK_INPUT].channels = 0;
+        changing.menuCommand.store(1);
+        changing.processBypass(args);
+        need(changing.slice.recordState() == chimera::Slice::Idle &&
+             changing.outputs[Chimera::AUDIO_L_OUTPUT].getVoltage() == 2.f &&
+             changing.outputs[Chimera::AUDIO_R_OUTPUT].getVoltage() == 2.f &&
+             changing.outputs[Chimera::CV_OUTPUT].getVoltage() == 0.f &&
+             changing.outputs[Chimera::EOSG_OUTPUT].getVoltage() == 0.f,
+             "bypass clears queued REC and passes normalized dry audio with zero CV/EOSG");
+        changing.process(args);
+        need(changing.slice.recordState() == chimera::Slice::Idle,
+             "unbypass does not replay queued REC");
+        changing.serviceStep();
+        changing.process(changedRate);
+        // The widget/control dispatcher is not stepped for this second change.
+        // The shared rate worker must still prepare and reclaim bridges.
+        awaitRateBridge(changing, 96000);
+        changing.process(changedRate); // Adopt prepared 96 kHz bridge.
+        need(changing.activeHostRate.load() == 96000,
+             "rate bridge is ready for exact-duration recording fixture");
+        const std::uint32_t beforeAppend = recordReel.validFrames();
+        changing.menuCommand.store(2); // Explicit Append at a host timestamp.
+        for (int frame = 0; frame < 9600; ++frame) changing.process(changedRate);
+        changing.menuCommand.store(3); // Stop exactly 100 ms later.
+        for (int frame = 0; frame < 200; ++frame) changing.process(changedRate);
+        need(changing.slice.recordState() == chimera::Slice::Idle &&
+             recordReel.validFrames() - beforeAppend == 4800,
+             "100 ms at 96 kHz records exactly 4800 delayed 48 kHz Reel frames");
+        changing.inputs[Chimera::REC_INPUT].channels = 1;
+        changing.inputs[Chimera::REC_INPUT].setVoltage(0.f);
+        for (int frame = 0; frame < 100; ++frame) changing.process(changedRate);
+        changing.inputs[Chimera::REC_INPUT].setVoltage(10.f);
+        changing.process(changedRate);
+        changing.inputs[Chimera::REC_INPUT].setVoltage(0.f);
+        for (int frame = 0; frame < 200; ++frame) changing.process(changedRate);
+        need(changing.slice.recordState() == chimera::Slice::Current,
+             "single-host-frame REC pulse starts Current through SRC");
+        changing.inputs[Chimera::REC_INPUT].setVoltage(10.f);
+        changing.process(changedRate);
+        changing.inputs[Chimera::REC_INPUT].setVoltage(0.f);
+        for (int frame = 0; frame < 200; ++frame) changing.process(changedRate);
+        need(changing.slice.recordState() == chimera::Slice::Idle,
+             "second single-host-frame REC pulse stops Current through SRC");
+        changing.process(args);
+        changing.serviceStep();
+    }
     const std::string optionsFixture =
         "# Chimera options\nckop 2\nvsop 1\ninop 1\npmin 1\nomod 1\n"
         "gnsm 1\nrsop 0\npmod 2\ncvop 1\nmcr1 -2.5\n"
@@ -202,7 +478,7 @@ int main() {
         menuSelection.process(wrongRate);
         menuSelection.process(args);
         need(menuSelection.slice.requestedRegion() == beforeRateGuard,
-             "unsupported-rate guard discards menu selection commands");
+             "preparation interval discards stale menu selection commands");
     }
     {
         chimera::Reel immediateReel(4, 4);
@@ -853,17 +1129,17 @@ int main() {
     args.sampleRate = 96000.f;
     args.sampleTime = 1.f/96000.f;
     module.process(args);
-    need(module.reel->validFrames() == 4 && module.lights[Chimera::ERROR_LIGHT].getBrightness() == 1.f &&
+    need(module.reel->validFrames() == 4 && module.lights[Chimera::IO_BUSY_LIGHT].getBrightness() == 1.f &&
          module.outputs[Chimera::CV_OUTPUT].getVoltage() == 0.f &&
          module.outputs[Chimera::EOSG_OUTPUT].getVoltage() == 0.f,
-         "unsupported host rate never writes incorrect Reel time");
+         "unprepared host rate pauses without writing incorrect Reel time");
     module.menuCommand.store(1);
     module.process(args);
     args.sampleRate = 48000.f;
     args.sampleTime = 1.f/48000.f;
     module.process(args);
     need(module.slice.recordState() == chimera::Slice::Idle,
-         "REC held across unsupported-rate interval is not replayed late");
+         "REC held across preparation interval is not replayed late");
     module.params[Chimera::REC_PARAM].setValue(0.f);
     module.process(args);
     need(module.requestPreparedStore(1, 1) == chimera::IoService::Accepted,
@@ -978,7 +1254,7 @@ int main() {
         optionModule.params[Chimera::REC_PARAM].setValue(0.f);
         optionModule.process(args);
         need(optionModule.slice.recordState() == chimera::Slice::Idle,
-             "REC held through unsupported host rate does not fire on release");
+             "REC held through rate preparation does not fire on release");
         std::string textError;
         std::vector<std::string> textWarnings;
         need(optionModule.importOptionsText(optionsFixture, textError, textWarnings) &&
@@ -1037,5 +1313,7 @@ int main() {
     chimera::shutdownChimeraIoService();
     need(removedToken->closed.load() && removedToken->outstanding.load() == 0,
          "module removal leaves no pending worker credit or dangling module pointer");
+    need(audioDeallocations == 0,
+         "exercised real-time callbacks perform no heap deallocation");
     std::puts("PASS: Chimera registered Rack module schema, monitoring, recording, and rate guard");
 }
