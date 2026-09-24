@@ -469,6 +469,36 @@ int main() {
          positive.markerPosition == 0.0 && negative.markerPosition == 0.0 &&
          displaced.primaryPosition() == 0.0,
          "PM shifts read taps in both directions without moving primary or marker cursor");
+    chimera::Reel pmOriginal(20, 20), pmShifted(20, 20);
+    for (std::uint32_t frame = 0; frame < 4800; ++frame) {
+        const std::uint32_t shifted = (frame + 96) % 4800;
+        const auto sample = [](std::uint32_t address) {
+            return chimera::StereoFrame{
+                float((address * 37) % 997) / 997.f - 0.5f,
+                float((address * 71) % 991) / 991.f - 0.5f};
+        };
+        need(pmOriginal.write(frame, sample(frame), frame) &&
+             pmShifted.write(frame, sample(shifted), frame),
+             "prepare shifted stereo source for multi-reader PM");
+    }
+    chimera::Grains modulatedReaders, shiftedSourceReaders;
+    chimera::CoreOutput multiPm{};
+    multiPm.gene = static_cast<float>(gene);
+    multiPm.morph = 1.f;
+    multiPm.rate = 1.25f;
+    std::uint8_t pmPeakReaders = 0;
+    for (int frame = 0; frame < 2400; ++frame) {
+        const chimera::Grains::Result modulated = modulatedReaders.step(
+            pmOriginal, region, multiPm, false, false, false, 96.0);
+        const chimera::Grains::Result shiftedSource = shiftedSourceReaders.step(
+            pmShifted, region, multiPm);
+        if (modulated.readers > pmPeakReaders) pmPeakReaders = modulated.readers;
+        need(std::fabs(modulated.audio.l - shiftedSource.audio.l) < 1e-5f &&
+             std::fabs(modulated.audio.r - shiftedSource.audio.r) < 1e-5f &&
+             modulated.primaryPosition == shiftedSource.primaryPosition,
+             "PM applies the same 96-frame displacement to every moving reader");
+    }
+    need(pmPeakReaders >= 4, "multi-reader PM fixture exercises high Morph overlap");
     // Clock advances the source origin without changing finite Gene lifetime.
     chimera::CoreOutput clockControl{};
     clockControl.gene = static_cast<float>(gene);

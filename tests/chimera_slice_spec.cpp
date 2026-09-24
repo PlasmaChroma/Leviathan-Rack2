@@ -807,6 +807,72 @@ int main() {
     for (int frame = 0; frame < 300; ++frame) pmSound = pmSlice.step(pmInput);
     need(pmSlice.pmBlend() == 0.f && std::fabs(pmSound.audio.l) < 0.05f,
          "PM exit fades displacement and restores wet Stop silence");
+    chimera::Slice routeSlice(nullptr);
+    routeSlice.setConditioning(false);
+    routeSlice.setPmEnabled(true);
+    chimera::CoreInput routeInput = input(0.f, 5.f, 0.f);
+    routeInput.pmRightConnected = true;
+    routeInput.pmRightVolts = 5.f;
+    for (int frame = 0; frame < 143999; ++frame) {
+        const chimera::Slice::Output out = routeSlice.step(routeInput);
+        if (frame == 143998)
+            need(!routeSlice.pmActive() && near(out.audio.r, 1.f),
+                 "quiet connected left retains right live audio until PM entry");
+    }
+    chimera::Slice::Output routeOut = routeSlice.step(routeInput);
+    need(routeSlice.pmActive() && near(routeOut.audio.l, 0.f) &&
+         near(routeOut.audio.r, 239.f/240.f),
+         "PM entry begins a 240-frame right live-audio fade without left copying");
+    for (int frame = 0; frame < 239; ++frame) routeOut = routeSlice.step(routeInput);
+    need(routeSlice.pmBlend() > 0.999f && near(routeOut.audio.r, 0.f),
+         "active PM removes right CV from live monitoring");
+    routeInput.live.l = 5.f;
+    for (int frame = 0; frame < 16; ++frame) routeOut = routeSlice.step(routeInput);
+    need(!routeSlice.pmActive() && near(routeOut.audio.l, 1.f) &&
+         near(routeOut.audio.r, 1.f/240.f),
+         "left presence starts right-audio restoration without copying left");
+    for (int frame = 0; frame < 239; ++frame) routeOut = routeSlice.step(routeInput);
+    need(routeSlice.pmBlend() < 0.001f && near(routeOut.audio.r, 1.f),
+         "PM exit restores the full right live-audio path in 5 ms");
+    chimera::Slice rawDetector(nullptr);
+    rawDetector.setConditioning(false);
+    rawDetector.setPmEnabled(true);
+    rawDetector.setInputGain(3);
+    chimera::CoreInput rawInput = input(0.004f, 1.f, 0.f);
+    rawInput.pmRightConnected = true;
+    rawInput.pmRightVolts = 1.f;
+    for (int frame = 0; frame < 144000; ++frame) rawDetector.step(rawInput);
+    need(rawDetector.pmActive(),
+         "PM presence detector uses raw left level before input gain");
+    chimera::Reel offsetReel(4, 4);
+    for (std::uint32_t frame = 0; frame < 1000; ++frame) {
+        const float sample = (float(frame) - 500.f) / 500.f;
+        need(offsetReel.write(frame, chimera::StereoFrame{sample, sample}, frame),
+             "prepare linear PM address fixture");
+    }
+    chimera::Slice offsetSlice(&offsetReel);
+    offsetSlice.setConditioning(false);
+    offsetSlice.setPmEnabled(true);
+    chimera::CoreInput offsetInput = input(0.f, 0.f, 1.f, 0.5f);
+    offsetInput.controls.slide = 0.25f;
+    offsetInput.pmRightConnected = true;
+    for (int frame = 0; frame < 144240; ++frame) offsetSlice.step(offsetInput);
+    need(offsetSlice.pmActive() && offsetSlice.pmBlend() > 0.999f,
+         "linear PM fixture reaches full modulation depth");
+    const double stationary = offsetSlice.primaryPosition();
+    const float pmVoltages[4] = {1.f, -1.f, 20.f, -20.f};
+    for (float voltage : pmVoltages) {
+        offsetInput.pmRightVolts = voltage;
+        const chimera::Slice::Output out = offsetSlice.step(offsetInput);
+        const double bounded = chimera::profile1::clamp(double(voltage), -10.0, 10.0);
+        const double address = chimera::profile1::wrapPosition(
+            stationary + bounded * 96.0, chimera::Region{0, 1000});
+        const float expected = float((address - 500.0) / 500.0);
+        need(near(out.audio.l, expected, 0.01f) &&
+             near(out.audio.r, expected, 0.01f) &&
+             near(float(offsetSlice.primaryPosition()), float(stationary)),
+             "PM uses signed 96 frames/V with a raw 10 V clamp and fixed cursor");
+    }
     chimera::Reel combinedReel(20, 20);
     for (std::uint32_t frame = 0; frame < 4800; ++frame)
         need(combinedReel.write(frame, chimera::StereoFrame{1.f, -1.f}, frame),

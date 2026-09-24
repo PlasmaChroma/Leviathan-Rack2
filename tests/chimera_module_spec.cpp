@@ -41,6 +41,27 @@ int main() {
     Module::ProcessArgs args{};
     args.sampleRate = 48000.f;
     args.sampleTime = 1.f/48000.f;
+    const std::string optionsFixture =
+        "# Chimera options\nckop 2\nvsop 1\ninop 1\npmin 1\nomod 1\n"
+        "gnsm 1\nrsop 0\npmod 2\ncvop 1\nmcr1 -2.5\n"
+        "mcr2 0.0625\nmcr3 16\nfuture_mode v1 # retained\n";
+    const auto parsedOptions = chimera::optionsText::parse(optionsFixture);
+    need(parsedOptions.valid && parsedOptions.values.ckop == 2 &&
+         parsedOptions.values.vsop == 1 && parsedOptions.values.mcr[0] == -2.5f &&
+         parsedOptions.extras.at("future_mode") == "v1" &&
+         parsedOptions.warnings.size() == 1,
+         "options text parses comments, known values, and retained unknown keys");
+    need(!chimera::optionsText::parse("ckop 1\nckop 2\n").valid &&
+         !chimera::optionsText::parse("mcr1 0\n").valid &&
+         !chimera::optionsText::parse("vsop 3\n").valid &&
+         !chimera::optionsText::parse("pmod 1 trailing\n").valid &&
+         !chimera::optionsText::parse("future/path value\n").valid,
+         "options text rejects duplicate, invalid, extra, and unsafe tokens");
+    const auto reparsedOptions = chimera::optionsText::parse(
+        chimera::optionsText::exportText(parsedOptions.values, parsedOptions.extras));
+    need(reparsedOptions.valid && reparsedOptions.values.mcr[1] == 0.0625f &&
+         reparsedOptions.extras.at("future_mode") == "v1",
+         "options text export round-trips all recognized and unknown fields");
     auto ratePosition = [&args](int mode, float knob) {
         chimera::Reel rateReel(4, 4);
         for (std::uint32_t frame = 0; frame < 1000; ++frame)
@@ -123,6 +144,31 @@ int main() {
         boundaryStop.process(args);
         need(boundaryStop.outputs[Chimera::EOSG_OUTPUT].getVoltage() == 0.f,
              "stopped Rack callback clears EOSG after the due completion");
+        Chimera queuedSelection;
+        queuedSelection.reel = &eventReel;
+        queuedSelection.slice.setReel(&eventReel);
+        queuedSelection.ckopSetting.store(1);
+        queuedSelection.params[Chimera::GENE_SIZE_PARAM].setValue(static_cast<float>(
+            std::log(480.0 / 4800.0) / std::log(16.0 / 4800.0)));
+        queuedSelection.inputs[Chimera::CLOCK_INPUT].channels = 1;
+        queuedSelection.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
+        queuedSelection.inputs[Chimera::SHIFT_INPUT].channels = 1;
+        queuedSelection.inputs[Chimera::SHIFT_INPUT].setVoltage(0.f);
+        for (int frame = 0; frame < 100; ++frame) queuedSelection.process(args);
+        queuedSelection.inputs[Chimera::SHIFT_INPUT].setVoltage(2.5f);
+        queuedSelection.process(args);
+        need(queuedSelection.slice.currentRegion() == 0 &&
+             queuedSelection.slice.requestedRegion() == 1 &&
+             !queuedSelection.slice.primaryBoundaryDue(),
+             "Shift queues a Splice before the natural primary expiry");
+        const std::uint64_t beforeQueuedClock = queuedSelection.slice.onsetCount();
+        queuedSelection.inputs[Chimera::SHIFT_INPUT].setVoltage(0.f);
+        queuedSelection.inputs[Chimera::CLOCK_INPUT].setVoltage(2.5f);
+        queuedSelection.process(args);
+        need(queuedSelection.slice.currentRegion() == 1 &&
+             queuedSelection.slice.onsetCount() == beforeQueuedClock + 1 &&
+             queuedSelection.outputs[Chimera::EOSG_OUTPUT].getVoltage() == 0.f,
+             "Gene Shift Clock commits queued Splice once without fabricated completion");
     }
     {
         chimera::Reel regions(4, 4);
@@ -711,6 +757,50 @@ int main() {
         optionModule.process(args);
         need(optionModule.slice.recordState() == chimera::Slice::Idle,
              "REC held through unsupported host rate does not fire on release");
+        std::string textError;
+        std::vector<std::string> textWarnings;
+        need(optionModule.importOptionsText(optionsFixture, textError, textWarnings) &&
+             optionModule.optionsTextStageState.load() == 1 &&
+             optionModule.ckopSetting.load() == 0 && textWarnings.size() == 1,
+             "validated options text stages without partial immediate adoption");
+        std::string busyError;
+        std::vector<std::string> busyWarnings;
+        need(!optionModule.importOptionsText("ckop 1\n", busyError, busyWarnings) &&
+             optionModule.optionsTextStageState.load() == 1,
+             "second options transaction waits for the first core adoption");
+        json_t* pendingState = optionModule.dataToJson();
+        need(json_integer_value(json_object_get(pendingState, "ckop")) == 2 &&
+             json_is_string(json_object_get(json_object_get(pendingState,
+                 "optionsTextExtras"), "future_mode")),
+             "patch save sees the complete staged options edit");
+        json_decref(pendingState);
+        trapAllocations = true;
+        optionModule.process(args);
+        trapAllocations = false;
+        need(audioAllocations == 0 && optionModule.optionsTextStageState.load() == 0 &&
+             optionModule.ckopSetting.load() == 2 && optionModule.vsopSetting.load() == 1 &&
+             optionModule.inopSetting.load() && optionModule.pminSetting.load() &&
+             optionModule.mcrSetting[0].load() == -2.5f,
+             "one core frame adopts the complete text transaction without allocation");
+        const std::string exportedText = optionModule.exportOptionsText();
+        need(exportedText.find("future_mode v1") != std::string::npos &&
+             exportedText.find("mcr3 16") != std::string::npos,
+             "unknown option survives module export with recognized settings");
+        json_t* extraState = optionModule.dataToJson();
+        need(json_is_string(json_object_get(json_object_get(extraState,
+                 "optionsTextExtras"), "future_mode")),
+             "unknown options survive patch serialization for later re-export");
+        Chimera reloadedOptions;
+        reloadedOptions.dataFromJson(extraState);
+        need(reloadedOptions.exportOptionsText().find("future_mode v1") !=
+                 std::string::npos,
+             "unknown options survive patch reload and re-export");
+        json_decref(extraState);
+        const int retainedClock = optionModule.ckopSetting.load();
+        need(!optionModule.importOptionsText("ckop 1\nvsop 9\n", textError,
+                  textWarnings) && optionModule.ckopSetting.load() == retainedClock &&
+             optionModule.optionsTextStageState.load() == 0,
+             "malformed options file rejects the entire edit without touching state");
     }
     std::shared_ptr<chimera::JobGeneration> removedToken;
     {

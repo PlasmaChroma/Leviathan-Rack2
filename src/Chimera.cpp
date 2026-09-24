@@ -1,15 +1,19 @@
 #include "plugin.hpp"
 #include "ChimeraSlice.hpp"
 #include "ChimeraClock.hpp"
+#include "ChimeraOptionsText.hpp"
 #include "ChimeraOwnership.hpp"
 #include "ChimeraService.hpp"
 #include "visual/ApertureLight.hpp"
 #include <ui/TextField.hpp>
+#include <osdialog.h>
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <fstream>
 #include <memory>
+#include <mutex>
 
 struct Chimera : Module {
     struct Gate {
@@ -115,6 +119,11 @@ struct Chimera : Module {
     std::atomic<int> pmodSetting{0}, ckopSetting{0}, vsopSetting{0};
     std::atomic<int> rsopSetting{0}, inputGainSetting{1};
     std::atomic<float> mcrSetting[3]{{2.f}, {3.f}, {4.f}};
+    // 0 idle, 2 control-side writing, 1 ready, 3 audio-side adopting.
+    std::atomic<int> optionsTextStageState{0};
+    chimera::optionsText::Values stagedOptionsText;
+    std::map<std::string, std::string> optionsTextExtras;
+    std::mutex optionsTextExtrasMutex; // Control/save side only, never process().
     bool lastRecJack = false;
     bool lastRecButton = false;
     bool lastClock = false;
@@ -389,23 +398,91 @@ struct Chimera : Module {
         awaitingHandle = handle;
     }
 
+    chimera::optionsText::Values currentOptionsText() const {
+        const int stage = optionsTextStageState.load(std::memory_order_acquire);
+        if (stage == 1 || stage == 3) return stagedOptionsText;
+        chimera::optionsText::Values v;
+        v.ckop = ckopSetting.load(std::memory_order_acquire);
+        v.vsop = vsopSetting.load(std::memory_order_acquire);
+        v.inop = inopSetting.load(std::memory_order_acquire);
+        v.pmin = pminSetting.load(std::memory_order_acquire);
+        v.omod = omodSetting.load(std::memory_order_acquire);
+        v.gnsm = gnsmSetting.load(std::memory_order_acquire);
+        v.rsop = rsopSetting.load(std::memory_order_acquire);
+        v.pmod = pmodSetting.load(std::memory_order_acquire);
+        v.cvop = cvopSetting.load(std::memory_order_acquire);
+        for (int i = 0; i < 3; ++i)
+            v.mcr[i] = mcrSetting[i].load(std::memory_order_acquire);
+        return v;
+    }
+    bool importOptionsText(const std::string& source, std::string& error,
+                           std::vector<std::string>& warnings) {
+        std::lock_guard<std::mutex> lock(optionsTextExtrasMutex);
+        const chimera::optionsText::Result parsed =
+            chimera::optionsText::parse(source, currentOptionsText());
+        if (!parsed.valid) {
+            error = parsed.line ? "Line " + std::to_string(parsed.line) + ": " +
+                                  parsed.error : parsed.error;
+            return false;
+        }
+        int expected = 0;
+        if (!optionsTextStageState.compare_exchange_strong(expected, 2,
+                std::memory_order_acq_rel)) {
+            error = "A prior options edit is still being applied";
+            return false;
+        }
+        stagedOptionsText = parsed.values;
+        optionsTextExtras = parsed.extras;
+        warnings = parsed.warnings;
+        optionsTextStageState.store(1, std::memory_order_release);
+        return true;
+    }
+    std::string exportOptionsText() {
+        std::lock_guard<std::mutex> lock(optionsTextExtrasMutex);
+        return chimera::optionsText::exportText(currentOptionsText(), optionsTextExtras);
+    }
+    void adoptOptionsText() {
+        int expected = 1;
+        if (!optionsTextStageState.compare_exchange_strong(expected, 3,
+                std::memory_order_acq_rel)) return;
+        const chimera::optionsText::Values& v = stagedOptionsText;
+        ckopSetting.store(v.ckop, std::memory_order_release);
+        vsopSetting.store(v.vsop, std::memory_order_release);
+        inopSetting.store(v.inop != 0, std::memory_order_release);
+        pminSetting.store(v.pmin != 0, std::memory_order_release);
+        omodSetting.store(v.omod != 0, std::memory_order_release);
+        gnsmSetting.store(v.gnsm != 0, std::memory_order_release);
+        rsopSetting.store(v.rsop, std::memory_order_release);
+        pmodSetting.store(v.pmod, std::memory_order_release);
+        cvopSetting.store(v.cvop != 0, std::memory_order_release);
+        for (int i = 0; i < 3; ++i)
+            mcrSetting[i].store(v.mcr[i], std::memory_order_release);
+        optionsTextStageState.store(0, std::memory_order_release);
+    }
+
     json_t* dataToJson() override {
+        std::lock_guard<std::mutex> lock(optionsTextExtrasMutex);
         json_t* root = json_object();
+        const chimera::optionsText::Values settings = currentOptionsText();
         json_object_set_new(root, "audioStatus", json_string("unsaved-development-slice"));
-        json_object_set_new(root, "inop", json_boolean(inopSetting.load(std::memory_order_acquire)));
-        json_object_set_new(root, "gnsm", json_integer(gnsmSetting.load(std::memory_order_acquire) ? 1 : 0));
-        json_object_set_new(root, "cvop", json_integer(cvopSetting.load(std::memory_order_acquire) ? 1 : 0));
-        json_object_set_new(root, "omod", json_integer(omodSetting.load(std::memory_order_acquire) ? 1 : 0));
-        json_object_set_new(root, "pmin", json_integer(pminSetting.load(std::memory_order_acquire) ? 1 : 0));
-        json_object_set_new(root, "pmod", json_integer(pmodSetting.load(std::memory_order_acquire)));
-        json_object_set_new(root, "ckop", json_integer(ckopSetting.load(std::memory_order_acquire)));
-        json_object_set_new(root, "vsop", json_integer(vsopSetting.load(std::memory_order_acquire)));
-        json_object_set_new(root, "rsop", json_integer(rsopSetting.load(std::memory_order_acquire)));
+        json_object_set_new(root, "inop", json_boolean(settings.inop != 0));
+        json_object_set_new(root, "gnsm", json_integer(settings.gnsm));
+        json_object_set_new(root, "cvop", json_integer(settings.cvop));
+        json_object_set_new(root, "omod", json_integer(settings.omod));
+        json_object_set_new(root, "pmin", json_integer(settings.pmin));
+        json_object_set_new(root, "pmod", json_integer(settings.pmod));
+        json_object_set_new(root, "ckop", json_integer(settings.ckop));
+        json_object_set_new(root, "vsop", json_integer(settings.vsop));
+        json_object_set_new(root, "rsop", json_integer(settings.rsop));
         json_object_set_new(root, "inputGain", json_integer(inputGainSetting.load(std::memory_order_acquire)));
         for (int i = 0; i < 3; ++i) {
             const char* key = i == 0 ? "mcr1" : (i == 1 ? "mcr2" : "mcr3");
-            json_object_set_new(root, key, json_real(mcrSetting[i].load(std::memory_order_acquire)));
+            json_object_set_new(root, key, json_real(settings.mcr[i]));
         }
+        json_t* extras = json_object();
+        for (const auto& entry : optionsTextExtras)
+            json_object_set_new(extras, entry.first.c_str(), json_string(entry.second.c_str()));
+        json_object_set_new(root, "optionsTextExtras", extras);
         return root;
     }
     void dataFromJson(json_t* root) override {
@@ -446,6 +523,22 @@ struct Chimera : Module {
             if (json_is_number(ratio) && chimera::profile1::finite(value) &&
                 std::fabs(value) >= 0.0625 && std::fabs(value) <= 16.0)
                 mcrSetting[i].store(static_cast<float>(value), std::memory_order_release);
+        }
+        json_t* extras = json_object_get(root, "optionsTextExtras");
+        if (json_is_object(extras)) {
+            std::map<std::string, std::string> loaded;
+            const char* key = nullptr;
+            json_t* value = nullptr;
+            json_object_foreach(extras, key, value) {
+                if (loaded.size() >= 64 || !json_is_string(value)) continue;
+                const std::string name(key);
+                const std::string token(json_string_value(value));
+                if (chimera::optionsText::safeKey(name) &&
+                    !chimera::optionsText::recognizedKey(name) &&
+                    chimera::optionsText::safeValue(token)) loaded[name] = token;
+            }
+            std::lock_guard<std::mutex> lock(optionsTextExtrasMutex);
+            optionsTextExtras.swap(loaded);
         }
     }
 
@@ -505,6 +598,7 @@ struct Chimera : Module {
             lights[ERROR_LIGHT].setBrightness(1.f);
             return;
         }
+        adoptOptionsText();
         const bool playConnected = inputs[PLAY_INPUT].isConnected();
         const bool playLogical = !playConnected || playGate.update(inputs[PLAY_INPUT].getVoltage());
         if (!playConnected) playGate.high = true;
@@ -794,6 +888,54 @@ struct ChimeraWidget : ModuleWidget {
                 submenu->addChild(createCheckMenuItem(labels[mode], "",
                     [m, mode] { return m->vsopSetting.load(std::memory_order_acquire) == mode; },
                     [m, mode] { m->vsopSetting.store(mode, std::memory_order_release); }));
+        }));
+        menu->addChild(createMenuItem("Import options text…", "TXT", [m] {
+            osdialog_filters* filters = osdialog_filters_parse("Chimera options:txt");
+            char* selected = osdialog_file(OSDIALOG_OPEN, nullptr, nullptr, filters);
+            osdialog_filters_free(filters);
+            if (!selected) return;
+            const std::string path(selected);
+            std::free(selected);
+            std::ifstream file(path, std::ios::binary | std::ios::ate);
+            if (!file || file.tellg() < 0 || file.tellg() > 65536) {
+                osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK,
+                    "Cannot read options text, or file exceeds 64 KiB.");
+                return;
+            }
+            const std::size_t size = static_cast<std::size_t>(file.tellg());
+            std::string source(size, '\0');
+            file.seekg(0);
+            if (size && !file.read(&source[0], size)) {
+                osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, "Cannot read options text.");
+                return;
+            }
+            std::string error;
+            std::vector<std::string> warnings;
+            if (!m->importOptionsText(source, error, warnings)) {
+                osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());
+                return;
+            }
+            if (!warnings.empty()) {
+                std::string message = "Unknown options retained for export:\n";
+                for (std::size_t i = 0; i < warnings.size() && i < 4; ++i)
+                    message += warnings[i] + "\n";
+                if (warnings.size() > 4) message += "…";
+                osdialog_message(OSDIALOG_INFO, OSDIALOG_OK, message.c_str());
+            }
+        }));
+        menu->addChild(createMenuItem("Export options text…", "TXT", [m] {
+            osdialog_filters* filters = osdialog_filters_parse("Chimera options:txt");
+            char* selected = osdialog_file(OSDIALOG_SAVE, nullptr,
+                "chimera-options.txt", filters);
+            osdialog_filters_free(filters);
+            if (!selected) return;
+            const std::string path(selected);
+            std::free(selected);
+            std::ofstream file(path, std::ios::binary | std::ios::trunc);
+            const std::string source = m->exportOptionsText();
+            if (!file || !file.write(source.data(), source.size()) || !file.flush())
+                osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK,
+                    "Cannot write options text.");
         }));
         menu->addChild(createSubmenuItem("Chord ratios (mcr1–3)", "", [m](Menu* submenu) {
             for (int i = 0; i < 3; ++i) {
