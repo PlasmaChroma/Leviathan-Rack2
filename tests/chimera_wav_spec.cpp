@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <sstream>
 #include <string>
 
@@ -62,6 +63,61 @@ static bool sameBits(float a, float b) {
 }
 
 int main() {
+    for (unsigned rate : {8000u, 44100u, 48000u, 96000u, 192000u, 383999u}) {
+        for (unsigned frames : {0u, 1u, 7u}) {
+            std::istringstream stream(simpleWav(3, 32, 2, rate, frames), std::ios::binary);
+            auto converted = chimera::wav::readConvenience(stream, false, 1);
+            need(bool(converted) && converted.reel->validFrames() ==
+                 (std::uint64_t(frames) * 48000 + rate - 1) / rate,
+                 "empty and short clips keep rounded duration at extreme rational rates");
+            for (unsigned i = 0; i < converted.reel->validFrames(); ++i) {
+                const auto value = converted.reel->readActive(i);
+                need(std::fabs(value.l - 0.5f) < 0.001f && std::fabs(value.r + 0.5f) < 0.001f,
+                     "short constant endpoints retain level and stereo polarity");
+            }
+        }
+    }
+    for (unsigned rate : {48000u, 96000u}) {
+        std::string wav = simpleWav(3, 64, 1, rate, 1);
+        const double huge = std::numeric_limits<double>::max();
+        std::memcpy(&wav[44], &huge, sizeof(huge));
+        std::istringstream stream(wav, std::ios::binary);
+        auto converted = chimera::wav::readConvenience(stream, false, 1);
+        need(bool(converted) && converted.nonfiniteSamples == 1 &&
+             converted.reel->readActive(0).l == 0,
+             "finite double outside float range is sanitized before conversion");
+    }
+    for (unsigned rate : {44100u, 96000u, 192000u}) {
+        for (double frequency : {1000.0, 18000.0, 30000.0}) {
+            if (frequency >= rate * 0.5) continue;
+            const unsigned frames = rate / 5;
+            std::string wav = simpleWav(3, 32, 2, rate, frames);
+            for (unsigned i = 0; i < frames; ++i) {
+                const float left = float(std::sin(2.0 * 3.141592653589793 * frequency * i / rate));
+                const float right = -left;
+                std::uint32_t bits;
+                std::memcpy(&bits, &left, 4); set32(wav, 44 + i*8, bits);
+                std::memcpy(&bits, &right, 4); set32(wav, 48 + i*8, bits);
+            }
+            std::istringstream stream(wav, std::ios::binary);
+            auto converted = chimera::wav::readConvenience(stream, false, 40);
+            need(bool(converted) && converted.reel->validFrames() == 9600,
+                 "bandlimited conversion preserves exact duration");
+            double energy = 0, error = 0;
+            for (unsigned i = 1000; i < 8600; ++i) {
+                const auto value = converted.reel->readActive(i);
+                need(std::fabs(value.l + value.r) < 1e-6, "resampling preserves stereo phase");
+                energy += double(value.l) * value.l;
+                const double expected = std::sin(2.0 * 3.141592653589793 * frequency * i / 48000);
+                error += (value.l - expected) * (value.l - expected);
+            }
+            const double rms = std::sqrt(energy / 7600);
+            if (frequency < 24000)
+                need(std::fabs(rms - std::sqrt(0.5)) < 0.002 && std::sqrt(error / 7600) < 0.002,
+                     "conversion preserves passband gain and time alignment");
+            else need(rms < 0.0001, "downsampling rejects ultrasonic alias by at least 77 dB");
+        }
+    }
     chimera::Reel reel(2, 2);
     for (std::uint32_t i = 0; i < 300; ++i)
         need(reel.write(i, {float(i) / 37.f, -float(i) / 53.f}, i),
@@ -165,8 +221,8 @@ int main() {
              converted.reel->markerId(1) == 7,
              "convenience cue maps to 48 kHz frame with stable ID");
         const chimera::StereoFrame sample = converted.reel->readActive(3);
-        need(std::fabs(sample.l - 0.75f) < 0.0001f && sameBits(sample.l, sample.r),
-             "mono duplication and interpolation");
+        need(std::isfinite(sample.l) && sample.l > 0.5f && sameBits(sample.l, sample.r),
+             "mono duplication and bandlimited interpolation");
         std::istringstream strict(pcm, std::ios::binary);
         need(!chimera::wav::readStrict(strict, 1),
              "strict import continues rejecting convenience WAV");

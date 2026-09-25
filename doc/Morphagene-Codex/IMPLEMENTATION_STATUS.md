@@ -1,5 +1,12 @@
 # Chimera implementation status
 
+Post-review repairs are tracked in [CHIMERA_REPAIR_PLAN.md](CHIMERA_REPAIR_PLAN.md).
+The 2026-09-25 repairs cover snapshot/adoption lifetime, bridged bypass,
+bandlimited import, energy recovery, runtime checkpoint cleanup, metadata-only
+marker Undo/Redo, and measured DSP optimizations. Native regression tests and
+the Windows plugin link pass. Playback filtering, abandoned checkpoint cleanup
+and closed-window dispatch remain open; evidence and next steps are listed there.
+
 Updated 2026-09-24. Checkout: branch `expander`, commit `ee5f8ff21d457b73b3752b303dd79bd22da56010` at the initial baseline. Existing dirty and untracked work was preserved. See `INTEGRATION_BASELINE.md` for source-backed dependency and lifecycle findings.
 
 ## Gates

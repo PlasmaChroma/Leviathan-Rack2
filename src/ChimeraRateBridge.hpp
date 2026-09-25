@@ -76,6 +76,16 @@ public:
     std::uint64_t overflows() const { return overflows_; }
     unsigned eventHighWater() const { return eventHighWater_; }
 
+    // Seed a newly prepared bridge before its first frame. Existing high
+    // Schmitt gates (including voltages in the hysteresis band) are baseline
+    // state, not new edges after bypass. This never resets a used resampler.
+    void seedGatesForResume(const HostState& host, const bool (&gateHigh)[5]) {
+        if (hostFrames_ || coreFrames_) return;
+        for (unsigned j = 0; j < 13; ++j) lastConnected_[j] = host.connected[j];
+        for (unsigned k = 0; k < 5; ++k)
+            lastGateHigh_[k] = host.connected[gateId(k)] && gateHigh[k];
+    }
+
     template <class CoreFn>
     HostOutput step(const HostState& host, CoreFn core) {
         if (!valid_ || fault_) return {};

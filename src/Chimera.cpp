@@ -25,6 +25,7 @@
 #include <fstream>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <thread>
 #include <ctime>
 
@@ -107,6 +108,13 @@ struct Chimera : Module {
     debug_terminal::BaselineModuleMetrics debugMetrics;
     chimera::ServiceToAudio commands;
     chimera::AudioToService completions;
+    struct MarkerCommand {
+        std::uint64_t id, revision;
+        unsigned index, frame, kind; // 0 move, 1 remove, 2 undo, 3 redo.
+    };
+    chimera::SpscRing<MarkerCommand, 8> markerCommands;
+    std::uint64_t markerRequestId = 0; // Control dispatcher only.
+    std::atomic<unsigned> publishedMarkerHistory{0};
     chimera::CoreOwnership ownership;
     chimera::SnapshotReaders snapshotReaders;
     chimera::Reel* reel = nullptr; // Borrowed from the off-audio registry.
@@ -195,6 +203,22 @@ struct Chimera : Module {
     int awaitingHistoryAction = -1;
     std::string awaitingCheckpoint;
     std::string undoCheckpoint, redoCheckpoint;
+    std::set<std::string> editCheckpointFiles; // This instance's files only; control/worker side.
+    void pruneEditCheckpoints() {
+        // A restore job may still be reading either history entry. Its done
+        // publication precedes clearing loadTicket on this dispatcher.
+        if (loadTicket) return;
+        for (auto it = editCheckpointFiles.begin(); it != editCheckpointFiles.end();) {
+            if (*it == undoCheckpoint || *it == redoCheckpoint || *it == awaitingCheckpoint) {
+                ++it; continue;
+            }
+            const std::string temporary = *it + ".tmp";
+            const bool removed = !rack::system::exists(*it) || rack::system::remove(*it);
+            const bool tempRemoved = !rack::system::exists(temporary) || rack::system::remove(temporary);
+            if (removed && tempRemoved) it = editCheckpointFiles.erase(it);
+            else ++it; // Retain ownership and retry; never silently forget failed cleanup.
+        }
+    }
     void setIoMessage(const std::string& message) {
         std::lock_guard<std::mutex> lock(ioMessageMutex);
         lastIoMessage = message;
@@ -225,6 +249,7 @@ struct Chimera : Module {
     std::atomic<chimera::RateBridge*> preparedBridge{nullptr}, retiredBridge{nullptr};
     chimera::RateBridge* activeBridge = nullptr; // Audio owner only.
     bool bypassActive = false;
+    bool bridgeResumePending = false;
     unsigned unbypassFadeRemaining = 0;
 
     Chimera() : slice(nullptr) {
@@ -284,6 +309,9 @@ struct Chimera : Module {
         if (rateServiceRegistered) chimera::unregisterRateBridge(&preparedBridge);
         if (service) service->cancel(generation); // No worker carries this Module pointer.
         else generation->close();
+        loadTicket.reset();
+        undoCheckpoint.clear(); redoCheckpoint.clear(); awaitingCheckpoint.clear();
+        pruneEditCheckpoints();
         delete activeBridge;
         delete preparedBridge.exchange(nullptr, std::memory_order_acq_rel);
         delete retiredBridge.exchange(nullptr, std::memory_order_acq_rel);
@@ -335,14 +363,14 @@ struct Chimera : Module {
         } saveScope{saveInProgress};
         // Rack invokes this on a non-audio path before building patch JSON and
         // its archive. Keep the prior manifest on any failure.
-        if (loadTicket || awaitingHandle) {
+        if (loadTicket || awaitingHandle || markerRequestId) {
             const std::uint64_t deadline = steadyNs() + UINT64_C(30000000000);
-            while ((loadTicket || awaitingHandle) && steadyNs() < deadline) {
+            while ((loadTicket || awaitingHandle || markerRequestId) && steadyNs() < deadline) {
                 serviceStep();
-                if (loadTicket || awaitingHandle)
+                if (loadTicket || awaitingHandle || markerRequestId)
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
-            if (loadTicket || awaitingHandle) {
+            if (loadTicket || awaitingHandle || markerRequestId) {
                 saveFailure.store(true); ioError.store(true); return;
             }
         }
@@ -437,7 +465,7 @@ struct Chimera : Module {
         }
     }
     bool requestImportWav(const std::string& path, bool truncate, std::string& error) {
-        if (loadTicket || awaitingHandle || pendingRequestId || retiringHandle ||
+        if (markerRequestId || loadTicket || awaitingHandle || pendingRequestId || retiringHandle ||
             snapshotRequestId || recordingOrArmed.load(std::memory_order_acquire)) {
             error = "Reel operation or recording is active"; return false;
         }
@@ -487,7 +515,7 @@ struct Chimera : Module {
         return true;
     }
     bool requestRecovery(bool preRecord, std::string& error) {
-        if (loadTicket || awaitingHandle || pendingRequestId || retiringHandle ||
+        if (markerRequestId || loadTicket || awaitingHandle || pendingRequestId || retiringHandle ||
             snapshotRequestId || recordingOrArmed.load(std::memory_order_acquire)) {
             error = "Reel operation or recording is active"; return false;
         }
@@ -561,6 +589,12 @@ struct Chimera : Module {
     bool requestHeavyEdit(const chimera::edit::Request* editRequest,
                           const std::string& restorePath, int historyAction,
                           std::string& error) {
+        pruneEditCheckpoints();
+        // Bound disk use even if unlinking an old file repeatedly fails.
+        if (editCheckpointFiles.size() >= 3) {
+            error = "Old edit checkpoints could not be removed; free the files before retrying";
+            return false;
+        }
         if (!recordingOrArmed.load(std::memory_order_acquire) &&
             (recoveryPurpose || recoveryTicket || recoveryPostPending.load())) {
             const std::uint64_t recoveryDeadline = steadyNs() + UINT64_C(30000000000);
@@ -570,7 +604,7 @@ struct Chimera : Module {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         }
-        if (!controlActiveHandle || !service || loadTicket || pendingRequestId ||
+        if (!controlActiveHandle || !service || markerRequestId || loadTicket || pendingRequestId ||
             awaitingHandle || retiringHandle || snapshotRequestId ||
             recordingOrArmed.load(std::memory_order_acquire)) {
             error = "Reel operation or recording is active"; return false;
@@ -606,6 +640,7 @@ struct Chimera : Module {
         ticket->historyAction = historyAction;
         const chimera::edit::Request request = editRequest ?
             *editRequest : chimera::edit::Request{};
+        editCheckpointFiles.insert(checkpoint);
         const chimera::IoService::Status queued = service->execute(generation,
             nextRequestId++, [ticket, frozen, checkpoint, request, restorePath, metadata] {
                 try {
@@ -640,6 +675,7 @@ struct Chimera : Module {
             });
         if (queued != chimera::IoService::Accepted) {
             finishSnapshotReader();
+            pruneEditCheckpoints();
             error = "Reel I/O queue is busy"; return false;
         }
         loadTicket = ticket;
@@ -647,9 +683,27 @@ struct Chimera : Module {
         return true;
     }
     bool requestEdit(const chimera::edit::Request& request, std::string& error) {
+        if (request.kind == chimera::edit::MoveMarker || request.kind == chimera::edit::RemoveMarker)
+            return requestMarkerEdit(request.splice, request.frame,
+                request.kind == chimera::edit::RemoveMarker ? 1u : 0u, error);
         return requestHeavyEdit(&request, "", 0, error);
     }
+    bool requestMarkerEdit(unsigned index, unsigned frame, unsigned kind, std::string& error) {
+        if (!controlActiveHandle || markerRequestId || loadTicket || awaitingHandle ||
+            pendingRequestId || retiringHandle || recordingOrArmed.load(std::memory_order_acquire)) {
+            error = "Reel operation or recording is active"; return false;
+        }
+        const std::uint64_t id = nextRequestId++;
+        const MarkerCommand command{id, publishedDocumentRevision.load(std::memory_order_acquire),
+            index, frame, kind};
+        if (!markerCommands.tryPush(command)) { error = "Marker edit queue is busy"; return false; }
+        markerRequestId = id;
+        ioBusy.store(true, std::memory_order_release);
+        return true;
+    }
     bool requestUndo(bool redo, std::string& error) {
+        if (publishedMarkerHistory.load(std::memory_order_acquire))
+            return requestMarkerEdit(0, 0, redo ? 3u : 2u, error);
         const std::string& path = redo ? redoCheckpoint : undoCheckpoint;
         if (path.empty()) { error = redo ? "Nothing to redo" : "Nothing to undo"; return false; }
         return requestHeavyEdit(nullptr, path, redo ? 2 : 1, error);
@@ -809,17 +863,41 @@ struct Chimera : Module {
         }
     }
     void coreCommands() {
+        MarkerCommand marker{};
+        if (markerCommands.tryPop(marker)) {
+            const bool accepted = reel && recordArm == NoArm &&
+                reel->documentRevision() == marker.revision &&
+                slice.editMarker(marker.index, marker.frame, marker.kind == 1,
+                    marker.kind >= 2 ? marker.kind - 1 : 0);
+            publishedMarkerHistory.store(slice.markerHistoryState(), std::memory_order_release);
+            if (reel) {
+                publishedDocumentRevision.store(reel->documentRevision(), std::memory_order_release);
+                publishedMarkerCount.store(reel->markerCount(), std::memory_order_release);
+                publishedRegion.store(slice.currentRegion(), std::memory_order_release);
+                publishedRequestedRegion.store(slice.requestedRegion(), std::memory_order_release);
+            }
+            const chimera::AudioCompletion ack{generation->value.load(std::memory_order_acquire),
+                marker.id, 8, 0, accepted ? 1u : 0u};
+            completions.tryPushCritical(ack);
+        }
         chimera::AudioCommand command{};
         for (int i = 0; i < 4 && commands.tryPop(command); ++i) {
             if (command.moduleGeneration != generation->value.load(std::memory_order_acquire))
                 continue;
             if ((command.kind == 1 || command.kind == 4 || command.kind == 5) &&
                 command.prepared) {
-                if (command.kind != 1 &&
+                // Automatic recording snapshots may start after control queued
+                // adoption. Claim the same fence as snapshot admission before
+                // swapping; the old store must have no readers or reclaim work.
+                bool unclaimed = false;
+                if ((command.kind != 1 &&
                     (slice.recordState() != chimera::Slice::Idle || recordArm != NoArm ||
                      (command.kind == 5 && reel &&
                       (reel->documentRevision() != command.expectedDocumentRevision ||
-                       reel->audioRevision() != command.expectedAudioRevision)))) {
+                       reel->audioRevision() != command.expectedAudioRevision)))) ||
+                    (reel && reel->state() != chimera::Reel::Idle) ||
+                    !snapshotClaimed.compare_exchange_strong(unclaimed, true,
+                        std::memory_order_acq_rel)) {
                     const chimera::AudioCompletion rejected = {command.moduleGeneration,
                         command.requestId, 6, command.handle, 0};
                     completions.tryPushCritical(rejected);
@@ -829,13 +907,16 @@ struct Chimera : Module {
                 audioActiveHandle = command.handle;
                 reel = command.prepared;
                 slice.setReel(command.prepared);
+                publishedMarkerHistory.store(0, std::memory_order_release);
                 recordArm = NoArm;
+                snapshotClaimed.store(false, std::memory_order_release);
                 const chimera::AudioCompletion ack = {command.moduleGeneration, command.requestId,
                                                       1, command.handle, oldHandle};
                 completions.tryPushCritical(ack);
             }
             else if (command.kind == 2) {
-                const bool accepted = reel && reel->beginSnapshot(slice.frame());
+                const bool accepted = reel && command.handle == audioActiveHandle &&
+                    reel->beginSnapshot(slice.frame());
                 if (accepted) {
                     coreSnapshotRequestId = command.requestId;
                     coreSnapshotReadySent = false;
@@ -845,7 +926,8 @@ struct Chimera : Module {
                 completions.tryPushCritical(ack);
             }
             else if (command.kind == 3) {
-                const bool released = reel && reel->beginRelease();
+                const bool released = reel && command.handle == audioActiveHandle &&
+                    command.requestId == coreSnapshotRequestId && reel->beginRelease();
                 if (released) coreReleaseRequestId = command.requestId;
                 const chimera::AudioCompletion ack = {command.moduleGeneration, command.requestId,
                                                       3, command.handle, released ? 1u : 0u};
@@ -879,7 +961,7 @@ struct Chimera : Module {
         }
     }
     void maintenanceStep() {
-        if (!commands.size() && !snapshotRequestId) return;
+        if (!commands.size() && !markerCommands.size() && !snapshotRequestId) return;
         const std::uint64_t now = steadyNs();
         if (!ownership.tryMaintenance(now)) return;
         coreCommands();
@@ -895,11 +977,13 @@ struct Chimera : Module {
     }
     void serviceStep() {
         ensureRateService();
+        pruneEditCheckpoints();
         if (loadTicket && loadTicket->done.load(std::memory_order_acquire) &&
             loadTicket->usesSnapshot && snapshotReady && snapshotReaders.count())
             finishSnapshotReader();
         if (loadTicket && loadTicket->done.load(std::memory_order_acquire) &&
-            !snapshotRequestId && !snapshotReaders.count()) {
+            !snapshotRequestId && !snapshotReaders.count() &&
+            !snapshotClaimed.load(std::memory_order_acquire)) {
             const unsigned adoptionKind = loadTicket->adoptionKind;
             const std::uint64_t expectedDocument = loadTicket->expectedDocumentRevision;
             const std::uint64_t expectedAudio = loadTicket->expectedAudioRevision;
@@ -966,6 +1050,21 @@ struct Chimera : Module {
         while (completions.tryPop(ack)) {
             if (ack.moduleGeneration != generation->value.load(std::memory_order_acquire))
                 continue;
+            if (ack.kind == 8 && ack.requestId == markerRequestId) {
+                markerRequestId = 0;
+                ioBusy.store(false, std::memory_order_release);
+                if (ack.status) {
+                    undoCheckpoint.clear(); redoCheckpoint.clear();
+                    recoveryPostPending.store(true, std::memory_order_release);
+                    ioError.store(false, std::memory_order_release);
+                    setIoMessage("");
+                }
+                else {
+                    ioError.store(true, std::memory_order_release);
+                    setIoMessage("Marker edit rejected: invalid marker, changed Reel, or recording active");
+                }
+                continue;
+            }
             if (ack.kind == 7 && ack.requestId == kAutomaticSnapshotId) {
                 snapshotRequestId = kAutomaticSnapshotId;
                 snapshotReel = stores.lookup(ack.handle);
@@ -1004,7 +1103,7 @@ struct Chimera : Module {
             }
             if (ack.kind == 6 && ack.handle == awaitingHandle) {
                 stores.releaseOffAudio(awaitingHandle);
-                setIoMessage("Reel changed or recording started before the edit/import handoff");
+                setIoMessage("Reel changed, recording started, or a snapshot is active; retry the edit/import");
                 setIoWarning("");
                 awaitingHandle = 0;
                 awaitingAdoptionKind = 1;
@@ -1062,6 +1161,7 @@ struct Chimera : Module {
             readyForPrepare = true;
             ioBusy.store(retiringHandle != 0, std::memory_order_release);
         }
+        pruneEditCheckpoints();
         recoveryStep();
         if (!service) return;
         if (retiringHandle && retiringPayload && !retirementRequestId) {
@@ -1394,6 +1494,10 @@ struct Chimera : Module {
             bypassActive = false;
             playInitialized = false;
             unbypassFadeRemaining = 48;
+            bridgeResumePending = true;
+            // Reuse the off-audio retirement/preparation path. A used SRC
+            // must not retain pre-bypass audio, commands or gate history.
+            if (activeBridge) activeHostRate.store(0, std::memory_order_release);
         }
         const bool supported = chimera::RateBridge::supported(args.sampleRate);
         const unsigned rate = supported ? static_cast<unsigned>(args.sampleRate) : 0u;
@@ -1502,8 +1606,26 @@ struct Chimera : Module {
             lights[IO_BUSY_LIGHT].setBrightness(0.f);
         }
         if (rate == 48000) {
+            bridgeResumePending = false;
             processCore(host);
             return;
+        }
+        if (bridgeResumePending) {
+            // Clear pre-bypass delayed commands/audio and seed held gates.
+            // Also covers a freshly prepared rate after a bypass-time change.
+            // Construction and stale-bridge destruction stay off audio.
+            const bool gates[5] = {
+                playGate.update(host.connected[PLAY_INPUT] ? host.volts[PLAY_INPUT] : 0.f),
+                clockGate.update(host.connected[CLOCK_INPUT] ? host.volts[CLOCK_INPUT] : 0.f),
+                recGate.update(host.connected[REC_INPUT] ? host.volts[REC_INPUT] : 0.f),
+                spliceGate.update(host.connected[SPLICE_INPUT] ? host.volts[SPLICE_INPUT] : 0.f),
+                shiftGate.update(host.connected[SHIFT_INPUT] ? host.volts[SHIFT_INPUT] : 0.f)};
+            lastClock = gates[1];
+            lastRecJack = gates[2];
+            lastSpliceJack = gates[3];
+            lastShiftJack = gates[4];
+            activeBridge->seedGatesForResume(host, gates);
+            bridgeResumePending = false;
         }
         const chimera::HostOutput out = activeBridge->step(host,
             [this](const chimera::HostState& delayed) { return processCore(delayed); });
@@ -1674,6 +1796,7 @@ struct Chimera : Module {
         }
         const chimera::Slice::Output out = slice.step(in);
         recordingActive.store(out.recording, std::memory_order_release);
+        publishedMarkerHistory.store(slice.markerHistoryState(), std::memory_order_release);
         if (wasRecording && !out.recording)
             recoveryPostPending.store(true, std::memory_order_release);
         if (reel) {

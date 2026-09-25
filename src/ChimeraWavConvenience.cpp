@@ -1,4 +1,5 @@
 #include "ChimeraWav.hpp"
+#include <speex/speex_resampler.h>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -54,7 +55,9 @@ bool sample(std::istream& in, const Format& format, float& out,
         value = double(signed24) / 8388608.0;
     }
     else value = double(std::int32_t(raw)) / 2147483648.0;
-    if (!std::isfinite(value)) { value = 0; ++nonfinite; }
+    if (!std::isfinite(value) || std::fabs(value) > std::numeric_limits<float>::max()) {
+        value = 0; ++nonfinite;
+    }
     out = float(value);
     return true;
 }
@@ -63,6 +66,65 @@ bool frame(std::istream& in, const Format& format, StereoFrame& out,
     if (!sample(in, format, out.l, nonfinite)) return false;
     if (format.channels == 1) out.r = out.l;
     else if (!sample(in, format, out.r, nonfinite)) return false;
+    return true;
+}
+
+// Worker-only, quality-10 bandlimited conversion. Extend endpoints so even
+// very short constant clips retain their level. The prefix is an exact
+// rational-rate period, so discarding it does not shift samples or cue times.
+bool resample(std::istream& in, const Format& format, std::uint32_t sourceFrames,
+              std::uint32_t frames, ImportResult& result) {
+    if (!frames) return true;
+    if (format.rate == kCoreRate) {
+        for (std::uint32_t i = 0; i < frames; ++i) {
+            StereoFrame value{};
+            if (!frame(in, format, value, result.nonfiniteSamples)) return false;
+            result.reel->write(i, value, i);
+        }
+        return true;
+    }
+    int error = 0;
+    std::unique_ptr<SpeexResamplerState, decltype(&speex_resampler_destroy)> converter(
+        speex_resampler_init(2, format.rate, kCoreRate, 10, &error), speex_resampler_destroy);
+    if (!converter || error != RESAMPLER_ERR_SUCCESS) return false;
+    if (speex_resampler_skip_zeros(converter.get()) != RESAMPLER_ERR_SUCCESS) return false;
+    unsigned a = format.rate, b = kCoreRate;
+    while (b) { const unsigned rest = a % b; a = b; b = rest; }
+    const unsigned period = format.rate / a;
+    const unsigned latency = unsigned(speex_resampler_get_input_latency(converter.get()));
+    const unsigned prefix = ((latency + period - 1) / period) * period;
+    const std::uint64_t discard = std::uint64_t(prefix) * kCoreRate / format.rate;
+    StereoFrame current{};
+    if (!frame(in, format, current, result.nonfiniteSamples)) return false;
+    const StereoFrame first = current;
+    std::uint64_t inputIndex = 0, outputIndex = 0;
+    unsigned readFrames = 1, written = 0;
+    float input[2048], output[2048];
+    while (written < frames) {
+        for (unsigned i = 0; i < 1024; ++i, ++inputIndex) {
+            if (inputIndex > prefix && readFrames < sourceFrames) {
+                if (!frame(in, format, current, result.nonfiniteSamples)) return false;
+                ++readFrames;
+            }
+            const StereoFrame value = inputIndex < prefix ? first : current;
+            // Filtering finite but extreme floats must not overflow its state.
+            input[2*i] = std::max(-64.f, std::min(value.l, 64.f));
+            input[2*i+1] = std::max(-64.f, std::min(value.r, 64.f));
+        }
+        unsigned offset = 0;
+        while (offset < 1024 && written < frames) {
+            spx_uint32_t consumed = 1024 - offset, produced = 1024;
+            if (speex_resampler_process_interleaved_float(converter.get(), input + 2*offset,
+                    &consumed, output, &produced) != RESAMPLER_ERR_SUCCESS ||
+                (!consumed && !produced)) return false;
+            offset += consumed;
+            for (unsigned i = 0; i < produced && written < frames; ++i, ++outputIndex) {
+                if (outputIndex < discard) continue;
+                if (!result.reel->write(written, {output[2*i], output[2*i+1]}, written)) return false;
+                ++written;
+            }
+        }
+    }
     return true;
 }
 } // namespace
@@ -194,30 +256,7 @@ ImportResult readConvenience(std::istream& in, bool truncate,
     try { result.reel.reset(new Reel(capacityPages, capacityPages)); }
     catch (...) { return fail("reel_allocation_failed"); }
     if (!at(in, dataOffset)) return fail("seek_data_failed");
-    StereoFrame left{}, right{};
-    std::uint32_t readIndex = 0;
-    if (sourceFrames && !frame(in, format, left, result.nonfiniteSamples))
-        return fail("truncated_data");
-    if (sourceFrames) {
-        right = left;
-        if (sourceFrames > 1 && !frame(in, format, right, result.nonfiniteSamples))
-            return fail("truncated_data");
-    }
-    for (std::uint32_t i = 0; i < frames; ++i) {
-        const std::uint64_t numerator = std::uint64_t(i) * format.rate;
-        const std::uint32_t index = std::uint32_t(numerator / 48000);
-        while (readIndex < index && readIndex + 1 < sourceFrames) {
-            left = right; ++readIndex;
-            if (readIndex + 1 < sourceFrames &&
-                !frame(in, format, right, result.nonfiniteSamples))
-                return fail("truncated_data");
-            else if (readIndex + 1 == sourceFrames) right = left;
-        }
-        const float fraction = float(numerator % 48000) / 48000.f;
-        const StereoFrame output = {left.l + (right.l - left.l) * fraction,
-                                    left.r + (right.r - left.r) * fraction};
-        if (!result.reel->write(i, output, i)) return fail("reel_write_failed");
-    }
+    if (!resample(in, format, sourceFrames, frames, result)) return fail("resample_or_decode_failed");
     if (frames && !result.reel->replaceMarkers(markers.data(),
             std::uint16_t(markers.size()))) return fail("invalid_cue_table");
     if (result.nonfiniteSamples) result.warnings.push_back("nonfinite_samples_zeroed");

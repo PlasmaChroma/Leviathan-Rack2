@@ -136,6 +136,36 @@ public:
         return true;
     }
 
+    // Core-owned bounded metadata edits. Snapshot metadata is a separate cut.
+    bool editMarker(std::uint16_t index, std::uint32_t frame, bool remove,
+                    Marker (&previous)[kMaxSplices], std::uint16_t& previousCount) {
+        if (!index || index >= markerCount_ || (!remove &&
+            (frame <= markers_[index-1].frame || frame >= region(index).end))) return false;
+        previousCount = markerCount_;
+        for (unsigned i = 0; i < markerCount_; ++i) previous[i] = markers_[i];
+        if (remove) {
+            for (unsigned i = index; i + 1 < markerCount_; ++i) markers_[i] = markers_[i+1];
+            --markerCount_;
+        }
+        else markers_[index].frame = frame;
+        ++documentRevision_;
+        return true;
+    }
+    void swapMarkerHistory(Marker (&previous)[kMaxSplices], std::uint16_t& count) {
+        // Only accepts this same Reel's saved, valid table. The caller fences
+        // document revision and invalidates history when the Reel is replaced.
+        const unsigned total = count > markerCount_ ? count : markerCount_;
+        for (unsigned i = 0; i < total; ++i) {
+            const Marker old = i < markerCount_ ? markers_[i] : Marker{0, 0};
+            markers_[i] = i < count ? previous[i] : Marker{0, 0};
+            previous[i] = old;
+        }
+        const std::uint16_t oldCount = markerCount_;
+        markerCount_ = count;
+        count = oldCount;
+        ++documentRevision_;
+    }
+
     // Off-audio import/restore path. Validate the complete table before
     // replacing the active marker identity and ordering.
     bool replaceMarkers(const Marker* markers, std::uint16_t count) {

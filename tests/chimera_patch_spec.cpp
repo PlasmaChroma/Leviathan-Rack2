@@ -182,7 +182,10 @@ int main() {
          clone.reel->readActive(0).l == 0.f &&
          clone.reel->readActive(100).l == 1.f,
          "erase publishes zeroed Splice only after durable Undo checkpoint");
+    const std::string firstUndo = clone.undoCheckpoint;
     need(clone.requestUndo(false, error), "queue Undo from immutable checkpoint");
+    clone.pruneEditCheckpoints();
+    need(rack::system::isFile(firstUndo), "cleanup preserves checkpoint leased by restore worker");
     const auto undoDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     while ((clone.loadTicket || clone.awaitingHandle || clone.retiringHandle) &&
            std::chrono::steady_clock::now() < undoDeadline) {
@@ -192,6 +195,9 @@ int main() {
     need(!clone.loadTicket && clone.reel->readActive(0).l == 19.f &&
          !clone.redoCheckpoint.empty(),
          "Undo restores previous audio and publishes a Redo checkpoint");
+    need(!rack::system::exists(firstUndo) && clone.editCheckpointFiles.size() == 1,
+         "Undo removes superseded full-reel checkpoint after restore finishes");
+    const std::string firstRedo = clone.redoCheckpoint;
     need(clone.requestUndo(true, error), "queue Redo from immutable checkpoint");
     const auto redoDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     while ((clone.loadTicket || clone.awaitingHandle || clone.retiringHandle) &&
@@ -201,7 +207,10 @@ int main() {
     }
     need(!clone.loadTicket && clone.reel->readActive(0).l == 0.f,
          "Redo re-applies the selected destructive edit");
+    need(!rack::system::exists(firstRedo) && clone.editCheckpointFiles.size() == 1,
+         "Redo keeps only the reachable history checkpoint");
     need(clone.requestEdit(erase, error), "queue a second fenced edit");
+    const std::string rejectedCheckpoint = clone.loadTicket->checkpointPath;
     need(clone.reel->write(0, {42.f, 42.f}, 304),
          "mutate audio after the edit snapshot but before adoption");
     const auto staleDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
@@ -213,6 +222,8 @@ int main() {
     need(!clone.loadTicket && !clone.awaitingHandle &&
          clone.reel->readActive(0).l == 42.f && clone.ioError.load(),
          "stale edit is rejected without replacing a newer recording change");
+    need(!rack::system::exists(rejectedCheckpoint) && clone.editCheckpointFiles.size() == 1,
+         "rejected adoption removes its unused checkpoint and retains valid Undo");
     clone.ioError.store(false);
     chimera::edit::Request clear;
     clear.kind = chimera::edit::ClearReel;
@@ -294,6 +305,20 @@ int main() {
     }
     need(!clone.loadTicket && clone.reel->readActive(0).l == 42.f,
          "explicit pre-record recovery adopts the old audio off thread");
+    const auto oldMarkerCount = clone.reel->markerCount();
+    need(oldMarkerCount > 1, "marker save fixture has multiple splices");
+    chimera::edit::Request removeMarker;
+    removeMarker.kind = chimera::edit::RemoveMarker;
+    removeMarker.splice = 1;
+    need(clone.requestEdit(removeMarker, error) && clone.markerRequestId,
+         "queue metadata edit immediately before stopped-engine Save");
+    engine.prepareSaveModule(&clone);
+    auto markerSave = chimera::bundle::load(cloneStorage, clone.committedManifest, 2);
+    need(!clone.markerRequestId && !clone.saveFailure.load() && bool(markerSave) &&
+         markerSave.reel->markerCount() == oldMarkerCount - 1 &&
+         clone.publishedMarkerCount.load() == oldMarkerCount - 1 &&
+         markerSave.reel->readActive(0).l == 42.f,
+         "Save drains metadata handoff without audio callbacks and persists updated markers");
     json_decref(state);
     engine.removeModule(&clone);
     engine.removeModule(&source);

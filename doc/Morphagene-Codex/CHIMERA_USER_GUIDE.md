@@ -12,7 +12,7 @@ The module menu contains the input-gain choices, Play/Clock/Vari-Speed modes, be
 
 ## Editing and recovery
 
-Select a Splice with Organize or SHIFT, then use the named marker, Erase, Delete, or Clear actions in the menu. Destructive actions ask for confirmation. Module-local **Undo Reel edit** and **Redo Reel edit** restore one file-backed edit step; ordinary knob drags use Rack's normal history.
+Select a Splice with Organize or SHIFT, then use the named marker, Erase, Delete, or Clear actions in the menu. Destructive actions ask for confirmation. Module-local **Undo Reel edit** and **Redo Reel edit** restore one edit step; ordinary knob drags use Rack's normal history. Moving or removing a marker preserves playback and stores its Undo in memory. Changed splice boundaries take effect at the natural playback handoff. Audio edits use a file-backed checkpoint. A new edit replaces the previous edit history, and intervening recording or marker changes invalidate marker Undo.
 
 Chimera checkpoints a pre-record cut and, after recording stops, a completed cut. During a long recording it requests a cut no more often than every ten seconds when the snapshot path is free. The dated **Restore pre-recording checkpoint** and **Recover latest checkpoint** menu actions replace this module's Reel. They restore the last *completed* checkpoint; samples written after that cut may be lost. Save the Rack patch after restoring if the restored version is the one you want to keep in the patch archive.
 

@@ -502,8 +502,8 @@ test-chimera-rate-bridge: | build/tests
 
 .PHONY: test-chimera-wav
 test-chimera-wav: | build/tests
-	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc tests/chimera_wav_spec.cpp src/ChimeraWav.cpp src/ChimeraWavConvenience.cpp -o build/tests/chimera_wav_spec$(if $(ARCH_WIN),.exe,)
-	build/tests/chimera_wav_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/dep/include tests/chimera_wav_spec.cpp src/ChimeraWav.cpp src/ChimeraWavConvenience.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_wav_spec$(if $(ARCH_WIN),.exe,)
+	$(call run_rack_test_bin,build/tests/chimera_wav_spec$(if $(ARCH_WIN),.exe,))
 
 .PHONY: test-chimera-edit
 test-chimera-edit: | build/tests

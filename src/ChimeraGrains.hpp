@@ -7,8 +7,9 @@
 
 namespace chimera {
 
-// Fixed four-slot scheduler. Constructed off the audio thread with a fixed window
-// table; step() neither allocates nor evaluates transcendental functions.
+// Fixed four-slot scheduler. Constructed off the audio thread with fixed window
+// and pan tables; step() never allocates. Gene log/exp mapping is cached until its
+// inputs change; grain-launch pan uses a precomputed table.
 class Grains {
 public:
     struct ClockDrive {
@@ -39,6 +40,8 @@ public:
         stretchAnchor_(0), stretchStep_(0), stretchVelocity_(0), lastDirection_(1) {
         for (std::uint32_t i = 0; i <= 2048; ++i)
             edge_[i] = static_cast<float>(0.5 - 0.5 * std::cos(profile1::kPi * i / 2048.0));
+        for (std::uint32_t i = 0; i <= 2048; ++i)
+            pan_[i] = std::sqrt(2.0) * std::cos(profile1::kPi * i / 4096.0);
         ratios_[0] = 2.0; ratios_[1] = 3.0; ratios_[2] = 4.0;
         reset();
     }
@@ -149,7 +152,7 @@ public:
             stretchAnchor_ = trajectoryOffset_;
         }
         const double stepFrames = clock.edge && clockMode_ != 0 ?
-            (full_ ? double(length) : double(profile1::finiteGeneFrames(length, c.gene))) : 0.0;
+            (full_ ? double(length) : double(geneFrames(length, c.gene))) : 0.0;
         if (clock.edge && clockMode_ == 1) {
             trajectoryOffset_ = wrapOffset(trajectoryOffset_ + lastDirection_ * stepFrames, length);
             if (active_) forceTransition();
@@ -173,7 +176,7 @@ public:
             // Existing slots retain their captured regions and normal ages.
             result.primaryBoundary = true;
             primaryAge_ = 0;
-            primaryLength_ = full_ ? length : profile1::finiteGeneFrames(length, c.gene);
+            primaryLength_ = full_ ? length : geneFrames(length, c.gene);
             if (full_) {
                 const std::uint32_t oldLength = activeRegion_.end - activeRegion_.begin;
                 primaryTravel_ -= std::floor(primaryTravel_ / oldLength) * oldLength;
@@ -191,7 +194,7 @@ public:
         if (!active_ || retrigger) {
             if (retrigger && active_) forceTransition();
             primaryAge_ = 0;
-            primaryLength_ = full_ ? length : profile1::finiteGeneFrames(length, c.gene);
+            primaryLength_ = full_ ? length : geneFrames(length, c.gene);
             primaryTravel_ = 0;
             primaryPosition_ = origin(region, c.rate);
             phase_ = 0;
@@ -211,13 +214,13 @@ public:
                 if (full_) primaryTravel_ -=
                     std::floor(primaryTravel_ / length) * length;
                 else {
-                    primaryLength_ = profile1::finiteGeneFrames(length, c.gene);
+                    primaryLength_ = geneFrames(length, c.gene);
                     primaryPosition_ = origin(region, c.rate);
                 }
             }
             // A fixed phase accumulator keeps fractional hops from drifting.
             if (!full_ && !estimateCountdown_) {
-                estimateLength_ = profile1::finiteGeneFrames(length, c.gene);
+                estimateLength_ = geneFrames(length, c.gene);
                 estimateCountdown_ = 32;
             }
             if (!full_) --estimateCountdown_;
@@ -319,6 +322,18 @@ public:
     }
 
 private:
+    std::uint32_t geneFrames(std::uint32_t length, double gene) {
+        if (cachedGeneRegion_ != length || cachedGene_ != gene) {
+            cachedGeneRegion_ = length;
+            cachedGene_ = gene;
+            cachedGeneFrames_ = profile1::finiteGeneFrames(length, gene);
+        }
+        return cachedGeneFrames_;
+    }
+    double panGain(double x) const {
+        const unsigned i = static_cast<unsigned>(x);
+        return i >= 2048 ? pan_[2048] : pan_[i] + (pan_[i+1] - pan_[i]) * (x - i);
+    }
     struct Voice {
         bool active = false;
         bool smooth = false;
@@ -405,14 +420,16 @@ private:
         v.active = true;
         v.full = full_;
         v.length = full_ ? region.end - region.begin :
-            profile1::finiteGeneFrames(region.end - region.begin, c.gene);
+            geneFrames(region.end - region.begin, c.gene);
         v.wallEstimate = full_ ? v.length / profile1::clamp(std::fabs(c.rate), 1e-6, 512.0) : v.length;
         v.position = origin(region, c.rate * choice.ratio);
         v.region = region;
         v.ratio = choice.ratio;
         v.smooth = smooth_;
         v.unity = profile1::unityBlend(density, smooth_);
-        profile1::stereoBalance(choice.pan, v.left, v.right);
+        const double panIndex = (profile1::clamp(choice.pan, -1.0, 1.0) + 1.0) * 1024.0;
+        v.left = panGain(panIndex);
+        v.right = panGain(2048.0 - panIndex);
         ++onsetCount_;
         if (natural && !replacing && v.unity > 0 && !immediate_) {
             pendingResidual_ = true;
@@ -451,6 +468,9 @@ private:
     bool immediate_ = false;
     double ratios_[3];
     float edge_[2049];
+    double pan_[2049];
+    std::uint32_t cachedGeneRegion_ = 0, cachedGeneFrames_ = 0;
+    double cachedGene_ = -1.0;
     StereoFrame lastWet_, residual_;
     std::uint32_t residualAge_, residualLength_;
     float residualBlend_;

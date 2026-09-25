@@ -39,7 +39,199 @@ std::string leviathanPluginUserRootPath() { return "build/tests/chimera_module_c
 static void need(bool ok, const char* what) {
     if (!ok) { std::fprintf(stderr, "FAIL: %s\n", what); std::exit(1); }
 }
+
+static void markerEditRegression() {
+    Chimera m;
+    m.service.reset(new chimera::IoService(0));
+    std::unique_ptr<chimera::Reel> original(new chimera::Reel(4, 4));
+    for (unsigned i = 0; i < 1000; ++i) original->write(i, {0.25f, 0.25f}, i);
+    original->addMarker(500);
+    need(m.stores.accept(1, original, chimera::StoreBudget::Active), "register marker test reel");
+    m.audioActiveHandle = m.controlActiveHandle = 1;
+    m.reel = m.stores.lookup(1);
+    m.slice.setReel(m.reel);
+    m.publishedDocumentRevision.store(m.reel->documentRevision());
+    m.saveInProgress.store(true); // Suppress unrelated display snapshot jobs.
+    auto* identity = m.reel;
+    const auto audioRevision = m.reel->audioRevision();
+    std::string error;
+    auto finish = [&] {
+        trapAllocations = true;
+        m.coreCommands();
+        trapAllocations = false;
+        m.serviceStep();
+        need(!m.markerRequestId && !m.loadTicket && m.editCheckpointFiles.empty() &&
+             m.reel == identity && m.reel->audioRevision() == audioRevision,
+             "metadata completion uses no worker, checkpoint, or audio replacement");
+    };
+    need(m.requestMarkerEdit(1, 600, 0, error), "queue marker move");
+    finish();
+    need(m.reel->region(1).begin == 600 && !m.ioError.load(), "module applies marker move");
+    need(m.requestUndo(false, error), "queue marker Undo");
+    finish();
+    need(m.reel->region(1).begin == 500, "module marker Undo");
+    need(m.requestUndo(true, error), "queue marker Redo");
+    finish();
+    need(m.reel->region(1).begin == 600, "module marker Redo");
+    need(m.requestMarkerEdit(1, 700, 0, error), "queue stale marker edit");
+    m.reel->addMarker(200);
+    finish();
+    need(m.ioError.load() && m.reel->region(2).begin == 600,
+         "revision change rejects marker edit before touching a different marker");
+    need(m.requestMarkerEdit(2, 700, 0, error), "queue recording race marker edit");
+    m.slice.startCurrent();
+    finish();
+    need(m.ioError.load() && m.reel->region(2).begin == 600,
+         "core rejects marker edit if recording began after enqueue");
+    m.slice.stopRecord();
+    need(audioAllocations == 0 && audioDeallocations == 0,
+         "metadata commands do not allocate or free on audio");
+}
+
+static void snapshotAdoptionRegression() {
+    {
+        Chimera m;
+        m.service.reset(new chimera::IoService(0)); // Deterministic control dispatch.
+        std::unique_ptr<chimera::Reel> original(new chimera::Reel(32, 32));
+        for (unsigned i = 0; i < 8192; ++i) original->write(i, {0.25f, 0.25f}, i);
+        need(m.stores.accept(1, original, chimera::StoreBudget::Active), "register leased reel");
+        m.audioActiveHandle = m.controlActiveHandle = 1;
+        m.nextHandle = 2;
+        m.reel = m.stores.lookup(1);
+        m.slice.setReel(m.reel);
+        m.loadTicket.reset(new Chimera::LoadTicket);
+        m.loadTicket->adoptionKind = 4;
+        m.loadTicket->result.reel.reset(new chimera::Reel(32, 32));
+        m.loadTicket->done.store(true);
+        m.beginRecording(false);
+        m.slice.stopRecord();
+        m.saveInProgress.store(true); // Suppress unrelated display refresh requests.
+        m.coreSnapshotProgress(); // Notification is queued, not consumed yet.
+        m.ownership.releaseAudio(Chimera::steadyNs());
+        m.serviceStep();
+        need(m.loadTicket && !m.awaitingHandle && m.audioActiveHandle == 1 &&
+             m.snapshotRequestId == Chimera::kAutomaticSnapshotId,
+             "completed import waits for an unannounced automatic snapshot");
+        m.recoveryPurpose = 0; // Exercise the lease manually, without a disk worker.
+        while (!m.reel->readyForWorker()) m.reel->maintenanceTick();
+        m.coreSnapshotProgress();
+        m.serviceStep();
+        need(m.snapshotReady && m.finishSnapshotReader(), "release automatic snapshot reader");
+        m.serviceStep();
+        m.coreCommands();
+        while (m.reel->state() != chimera::Reel::Idle) m.reel->maintenanceTick();
+        m.coreSnapshotProgress();
+        m.serviceStep();
+        m.serviceStep();
+        m.coreCommands();
+        m.serviceStep();
+        need(m.audioActiveHandle == 2 && m.controlActiveHandle == 2 &&
+             !m.snapshotClaimed.load() && !m.snapshotRequestId,
+             "deferred import adopts after the old snapshot is fully released");
+    }
+    for (unsigned kind : {1u, 4u, 5u}) {
+        for (int phase = 0; phase < 4; ++phase) {
+            chimera::Reel original(2, 2), replacement(2, 2);
+            original.write(0, {0.25f, 0.25f}, 0);
+            Chimera m;
+            m.reel = &original;
+            m.slice.setReel(&original);
+            m.audioActiveHandle = 1;
+            const chimera::AudioCommand adopt = {1, 10, original.documentRevision(),
+                kind, 2, &replacement, original.audioRevision()};
+            need(m.commands.tryPush(adopt), "queue adoption before a snapshot starts");
+            // Includes the control-side claim before its capture command arrives.
+            m.snapshotClaimed.store(true);
+            if (phase != 0) original.beginSnapshot(0);
+            if (phase >= 2) original.maintenanceTick();
+            if (phase == 3) original.beginRelease();
+            const auto allocations = audioAllocations, deallocations = audioDeallocations;
+            trapAllocations = true;
+            m.coreCommands();
+            trapAllocations = false;
+            chimera::AudioCompletion ack{};
+            need(m.completions.tryPop(ack) && ack.kind == 6 &&
+                 m.reel == &original && m.audioActiveHandle == 1 &&
+                 audioAllocations == allocations && audioDeallocations == deallocations,
+                 "audio rejects adoption across claim/capture/read/reclaim without allocation");
+        }
+    }
+}
+
+static void bridgedBypassRegression() {
+    for (unsigned rate : {8000u, 44100u, 88200u, 96000u, 192000u, 768000u}) {
+        for (unsigned scenario = 0; scenario < 3; ++scenario) {
+            if (scenario == 2 && rate != 96000) continue;
+            const bool heldGate = scenario != 0;
+            const unsigned resumeRate = scenario == 2 ? 192000 : rate;
+            chimera::Reel reel(8, 8);
+            for (unsigned i = 0; i < 2048; ++i) reel.write(i, {0.25f, 0.25f}, i);
+            Chimera m;
+            m.reel = &reel;
+            m.slice.setReel(&reel);
+            m.slice.setConditioning(false);
+            m.saveInProgress.store(true); // No recovery worker needed in this fixture.
+            m.activeBridge = new chimera::RateBridge(rate);
+            m.activeHostRate.store(rate);
+            m.requestedHostRate.store(rate);
+            m.onAdd(Module::AddEvent{});
+            m.inputs[Chimera::REC_INPUT].channels = 1;
+            m.inputs[Chimera::AUDIO_L_INPUT].channels = 1;
+            m.inputs[Chimera::AUDIO_R_INPUT].channels = 1;
+            m.inputs[Chimera::AUDIO_L_INPUT].setVoltage(3.f);
+            m.inputs[Chimera::AUDIO_R_INPUT].setVoltage(-3.f);
+            Module::ProcessArgs args{};
+            args.sampleRate = float(rate);
+            args.sampleTime = 1.f / rate;
+            const unsigned settle = rate / 20;
+            for (unsigned i = 0; i < settle; ++i) m.process(args);
+            const auto revision = reel.audioRevision();
+            if (heldGate) m.inputs[Chimera::REC_INPUT].setVoltage(10.f);
+            else { m.menuCommand.store(1); m.process(args); }
+            for (unsigned i = 0; i < settle; ++i) m.processBypass(args);
+            m.inputs[Chimera::AUDIO_L_INPUT].setVoltage(0.f);
+            m.inputs[Chimera::AUDIO_R_INPUT].setVoltage(0.f);
+            args.sampleRate = float(resumeRate);
+            args.sampleTime = 1.f / resumeRate;
+            if (scenario == 2)
+                m.onSampleRateChange(Module::SampleRateChangeEvent{args.sampleRate, args.sampleTime});
+            const auto allocations = audioAllocations, deallocations = audioDeallocations;
+            trapAllocations = true;
+            m.process(args); // Retire old bridge; the independent worker prepares a new one.
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+            while (m.activeHostRate.load() != resumeRate && std::chrono::steady_clock::now() < deadline) {
+                m.process(args);
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            float resumedPeak = 0.f;
+            for (unsigned i = 0; i < settle; ++i) {
+                m.process(args);
+                resumedPeak = std::max(resumedPeak, std::max(
+                    std::fabs(m.outputs[Chimera::AUDIO_L_OUTPUT].getVoltage()),
+                    std::fabs(m.outputs[Chimera::AUDIO_R_OUTPUT].getVoltage())));
+            }
+            trapAllocations = false;
+            need(m.activeHostRate.load() == resumeRate, "resume prepares a new bridge without widget stepping");
+            need(m.slice.recordState() == chimera::Slice::Idle &&
+                 m.recordArm == Chimera::NoArm && reel.audioRevision() == revision,
+                 "bridged bypass discards delayed REC and does not retrigger held REC");
+            need(audioAllocations == allocations && audioDeallocations == deallocations &&
+                 !m.activeBridge->failed(), "bridge resumes without callback heap work");
+            need(resumedPeak < 1e-7f, "resume never replays pre-bypass stereo audio");
+            m.inputs[Chimera::REC_INPUT].setVoltage(0.f);
+            for (unsigned i = 0; i < settle; ++i) m.process(args);
+            m.inputs[Chimera::REC_INPUT].setVoltage(10.f);
+            for (unsigned i = 0; i < settle; ++i) m.process(args);
+            need(m.slice.recordState() == chimera::Slice::Current &&
+                 reel.audioRevision() > revision, "fresh REC edge works after bridged bypass");
+        }
+    }
+}
+
 int main() {
+    markerEditRegression();
+    snapshotAdoptionRegression();
+    bridgedBypassRegression();
     need(modelChimera && modelChimera->slug == "Chimera", "registered model slug");
     {
         Chimera future;

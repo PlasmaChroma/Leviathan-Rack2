@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <algorithm>
 #include <vector>
+#include <cstdlib>
 
 // Offline 48 kHz core benchmark, intentionally outside test-fast.
 // Build on Linux with:
@@ -13,7 +14,10 @@
 // Includes full Reel memory, a 3 s PM presence warmup, dense finite Genes,
 // Current recording, and one full-length snapshot capture/release per run.
 // Timing excludes preparation and omits Rack, host SRC, and GUI overhead.
-int main() {
+int main(int argc, char** argv) {
+    const double geneFrames = argc > 1 ? std::strtod(argv[1], nullptr) : 480.0;
+    const bool modulated = argc > 2;
+    if (geneFrames < 16 || geneFrames > chimera::kMaxReelFrames) return 5;
     chimera::Reel reel(chimera::kMaxPages, chimera::kMaxPages);
     for (unsigned i = 0; i < chimera::kMaxReelFrames; ++i)
         if (!reel.write(i, chimera::StereoFrame{float(i % 37) / 37.f,
@@ -26,10 +30,11 @@ int main() {
     in.pmRightVolts = 5.f;
     in.pmRightConnected = true;
     in.controls.sos = 0.5f;
-    in.controls.gene = float(std::log(480.0 / double(chimera::kMaxReelFrames)) /
+    in.controls.gene = float(std::log(geneFrames / double(chimera::kMaxReelFrames)) /
                              std::log(16.0 / double(chimera::kMaxReelFrames)));
     in.controls.rate = 5.f / 6.f;
     in.controls.morph = 1.f;
+    if (modulated) { slice.setRateMode(1); in.controls.rateAtt = 1.f; }
     for (int i = 0; i < 144240; ++i) slice.step(in);
     if (!slice.pmActive() || !slice.startCurrent()) return 2;
     volatile float sink = 0.f;
@@ -40,6 +45,7 @@ int main() {
         const auto start = std::chrono::steady_clock::now();
         auto blockStart = start;
         for (int i = 0; i < 480000; ++i) {
+            if (modulated) in.controls.rateCv = float(i % 997) / 997.f - 0.5f;
             if (i == 100000 && !reel.beginSnapshot(slice.frame())) return 3;
             if (i == 200000 && !reel.beginRelease()) return 4;
             const chimera::Slice::Output out = slice.step(in);

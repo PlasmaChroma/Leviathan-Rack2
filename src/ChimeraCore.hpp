@@ -78,9 +78,11 @@ public:
         const double pitch = rateMode_ == 0 ? 0.0 :
             pitchVolts_.step(profile1::clamp(aRate * vRate, -8.0, 8.0));
         if (mappedMode_ != rateMode_ || mappedCoordinate_ != coordinate || mappedPitch_ != pitch) {
-            mappedRate_ = rateMode_ == 0 ?
-                profile1::classicRateFromCoordinate(coordinate) :
-                profile1::pitchRate(rateMode_, coordinate, 1.0, pitch);
+            if (mappedMode_ != rateMode_ || mappedCoordinate_ != coordinate)
+                mappedBaseRate_ = rateMode_ == 0 ? profile1::classicRateFromCoordinate(coordinate) :
+                    rateMode_ == 2 ? profile1::forwardBaseRate(coordinate) : profile1::classicRate(coordinate);
+            mappedRate_ = rateMode_ == 0 ? mappedBaseRate_ :
+                profile1::clamp(mappedBaseRate_ * std::exp2(pitch), -32.0, 32.0);
             mappedMode_ = rateMode_;
             mappedCoordinate_ = coordinate;
             mappedPitch_ = pitch;
@@ -133,6 +135,7 @@ private:
     profile1::OnsetChoice lastOnset_;
     int mappedMode_;
     double mappedCoordinate_, mappedPitch_, mappedRate_;
+    double mappedBaseRate_ = 0;
     std::uint64_t rateEvaluations_;
 };
 

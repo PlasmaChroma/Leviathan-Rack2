@@ -20,6 +20,57 @@ static bool near(float a, float b, float eps = 0.0002f) {
 }
 
 int main() {
+    {
+        chimera::Reel markers(4, 4);
+        for (unsigned i = 0; i < 1000; ++i) markers.write(i, {0.25f, 0.25f}, i);
+        markers.addMarker(500);
+        const auto markerId = markers.markerId(1);
+        const auto audioRevision = markers.audioRevision();
+        chimera::Slice liveEdit(&markers);
+        liveEdit.setConditioning(false);
+        for (unsigned i = 0; i < 100; ++i) liveEdit.step(input(0, 0, 1));
+        const auto onsets = liveEdit.onsetCount();
+        const double position = liveEdit.playbackPosition();
+        markers.beginSnapshot(100);
+        while (!markers.readyForWorker()) markers.maintenanceTick();
+        need(liveEdit.editMarker(1, 600, false) && markers.region(1).begin == 600 &&
+             markers.markerId(1) == markerId && markers.audioRevision() == audioRevision,
+             "marker-only move preserves audio and marker identity");
+        need(markers.snapshotMetadata().markers[1].frame == 500,
+             "metadata edit never changes an already leased snapshot cut");
+        liveEdit.step(input(0, 0, 1));
+        need(liveEdit.onsetCount() == onsets && near(float(liveEdit.playbackPosition()), float(position + 1)),
+             "marker edit preserves active voices and playback cursor");
+        need(liveEdit.editMarker(0, 0, false, 1) && markers.region(1).begin == 500 &&
+             liveEdit.editMarker(0, 0, false, 2) && markers.region(1).begin == 600,
+             "marker table Undo/Redo swaps metadata without audio writes");
+        need(!liveEdit.editMarker(0, 12, false) && liveEdit.markerHistoryState() == 1,
+             "invalid marker edit retains previous history");
+        need(liveEdit.selectRegion(1) && liveEdit.editMarker(1, 0, true) &&
+             markers.markerCount() == 1 && liveEdit.currentRegion() == 0,
+             "removing selected marker remaps to merged splice");
+        need(liveEdit.editMarker(0, 0, false, 1) && markers.markerCount() == 2 &&
+             markers.markerId(1) == markerId && markers.audioRevision() == audioRevision,
+             "Undo restores removed stable marker without altering audio");
+        markers.addMarker(200);
+        need(!liveEdit.editMarker(0, 0, false, 2), "intervening marker change fences stale history");
+    }
+    for (float extreme : {1e30f, -1e30f, std::numeric_limits<float>::max()}) {
+        chimera::Slice bounded;
+        bounded.setPmEnabled(true);
+        auto impulse = input(extreme, -extreme);
+        impulse.pmRightConnected = true;
+        auto out = bounded.step(impulse);
+        auto silence = input(0.f, 0.f);
+        silence.pmRightConnected = true;
+        for (unsigned i = 0; i < 480000; ++i) {
+            out = bounded.step(silence);
+            need(std::isfinite(out.audio.l) && std::isfinite(out.audio.r) && std::isfinite(out.cv),
+                 "extreme finite input cannot poison audio or energy state");
+        }
+        need(out.cv < 0.001f && bounded.pmActive() && bounded.overloaded(),
+             "energy and PM detectors recover after extreme finite input");
+    }
     chimera::Slice gainSlice(nullptr);
     gainSlice.setConditioning(false);
     gainSlice.setInputGain(2);

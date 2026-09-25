@@ -12,6 +12,35 @@ int main() {
     const unsigned rates[] = {8000, 44100, 88200, 96000, 176400, 192000, 768000};
     for (unsigned rate : rates) {
         chimera::RateBridge bridge(rate);
+        chimera::HostState state{};
+        for (unsigned j = 0; j < 13; ++j) {
+            state.connected[j] = true;
+            state.volts[j] = 10.f;
+        }
+        const unsigned settle = rate / 20;
+        state.volts[0] = state.volts[1] = 0.f;
+        // Held Schmitt gates remain high inside the hysteresis band.
+        for (unsigned j = 8; j < 13; ++j) state.volts[j] = 1.5f;
+        const bool held[5] = {true, true, true, true, true};
+        bridge.seedGatesForResume(state, held);
+        unsigned coreFrames = 0;
+        for (unsigned i = 0; i < settle; ++i) {
+            const auto out = bridge.step(state, [&](const chimera::HostState& in) {
+                ++coreFrames;
+                need(!in.command && !in.selectionCommands, "fresh bridge has no stale commands");
+                for (unsigned k = 0; k < 5; ++k)
+                    need(!in.rises[k], "resume seeds gate hysteresis without phantom rises");
+                need(std::fabs(in.volts[0]) < 1e-7f && std::fabs(in.volts[1]) < 1e-7f,
+                     "fresh resume has silent input history");
+                return chimera::HostOutput();
+            });
+            need(std::fabs(out.left) < 1e-7f && std::fabs(out.right) < 1e-7f &&
+                 out.cv == 0.f && !out.eosg, "fresh resume has silent output audio/CV/EOSG");
+        }
+        need(coreFrames > 0 && !bridge.failed(), "resume starts a valid core/host timeline");
+    }
+    for (unsigned rate : rates) {
+        chimera::RateBridge bridge(rate);
         need(bridge.valid(), "quality-5 stereo bridge prepares at supported rate");
         chimera::HostState state{};
         state.connected[0] = true;

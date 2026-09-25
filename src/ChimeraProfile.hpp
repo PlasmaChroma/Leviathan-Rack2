@@ -192,7 +192,10 @@ inline double wrapPosition(double p, Region region) {
 inline std::uint32_t wrapTap(std::int64_t base, int offset, Region region) {
     const std::int64_t length = region.end - region.begin;
     if (length <= 0) return region.begin;
-    std::int64_t relative = (base - region.begin + offset) % length;
+    std::int64_t relative = base - region.begin + offset;
+    if (relative >= 0 && relative < length)
+        return region.begin + static_cast<std::uint32_t>(relative);
+    relative %= length;
     if (relative < 0) relative += length;
     return region.begin + static_cast<std::uint32_t>(relative);
 }

@@ -38,6 +38,7 @@ public:
         clockPeriod_(0), clockOption_(0), hybridStretch_(false) {}
 
     void setReel(Reel* reel) {
+        markerHistoryState_ = 0;
         reel_ = reel;
         state_ = Idle;
         currentRegion_ = 0;
@@ -152,6 +153,23 @@ public:
         return true;
     }
 
+    unsigned markerHistoryState() const {
+        return reel_ && reel_->documentRevision() == markerHistoryRevision_ ? markerHistoryState_ : 0;
+    }
+    bool editMarker(unsigned index, std::uint32_t frame, bool remove, unsigned history = 0) {
+        if (!reel_ || state_ != Idle || (history && markerHistoryState() != history)) return false;
+        const Region previousRegion = metadataRegionPending_ ? frozenRegion_ : reel_->region(currentRegion_);
+        const auto currentId = reel_->markerId(currentRegion_);
+        const auto requestedId = reel_->markerId(selection_.requested());
+        if (history) reel_->swapMarkerHistory(markerHistory_, markerHistoryCount_);
+        else if (index >= kMaxSplices || !reel_->editMarker(std::uint16_t(index), frame, remove,
+                     markerHistory_, markerHistoryCount_)) return false;
+        markerHistoryState_ = history == 1 ? 2 : 1;
+        markerHistoryRevision_ = reel_->documentRevision();
+        remapMarkers(currentId, requestedId, previousRegion);
+        return true;
+    }
+
     bool startCurrent() {
         if (!reel_ || state_ != Idle) return false;
         if (!reel_->validFrames()) return startAppend();
@@ -202,8 +220,9 @@ public:
         const bool clockShift = clockEdge_ && clockMode == 1;
         const Grains::ClockDrive clockDrive(clockMode, clockEdge_, clockPeriod_, clockWaiting_);
         clockEdge_ = false;
-        const float normalizedLeft = profile1::audio(input.live.l) * 0.2f;
+        const float normalizedLeft = guard(profile1::audio(input.live.l) * 0.2f);
         const float leftPower = normalizedLeft * normalizedLeft;
+        if (!profile1::finite(leftEnergy_)) leftEnergy_ = 0.f;
         leftEnergy_ += 0.0020811647f * (leftPower - leftEnergy_);
         if (!pmEnabled_ || !input.pmRightConnected) {
             pmActive_ = false;
@@ -228,8 +247,9 @@ public:
         pmBlend_ += profile1::clamp((pmActive_ ? 1.f : 0.f) - pmBlend_, -1.f/240.f, 1.f/240.f);
         const double pmOffset = pmBlend_ *
             profile1::clamp(profile1::audio(input.pmRightVolts), -10.f, 10.f) * 96.0;
+        const StereoFrame boundedLive{guard(c.live.l), guard(c.live.r)};
         StereoFrame live = conditioning_ ?
-            StereoFrame{inputDc_[0].step(c.live.l), inputDc_[1].step(c.live.r)} : c.live;
+            StereoFrame{inputDc_[0].step(boundedLive.l), inputDc_[1].step(boundedLive.r)} : boundedLive;
         live.r *= 1.f - pmBlend_;
         StereoFrame wet{0.f, 0.f};
         double markerPosition = position_;
@@ -350,7 +370,9 @@ public:
         ++frame_;
         const StereoFrame heard = conditioning_ ?
             StereoFrame{outputDc_[0].step(bus.l), outputDc_[1].step(bus.r)} : bus;
-        const float energy = 0.5f * (heard.l * heard.l + heard.r * heard.r);
+        const float energyLeft = guard(heard.l), energyRight = guard(heard.r);
+        const float energy = 0.5f * (energyLeft * energyLeft + energyRight * energyRight);
+        if (!profile1::finite(energyState_)) energyState_ = 0.f;
         const float alpha = energy > energyState_ ? 0.00415799815f : 0.00026038276f;
         energyState_ += alpha * (energy - energyState_);
         const float cv = rampCv_ ? (canRead ? 8.f * primaryPhase_ : 0.f) :
@@ -397,10 +419,18 @@ private:
         const std::uint32_t currentId = reel_->markerId(currentRegion_);
         const std::uint32_t requestedId = reel_->markerId(selection_.requested());
         if (!reel_->addMarker(frame)) return;
+        remapMarkers(currentId, requestedId, playbackRegion);
+    }
+    void remapMarkers(std::uint32_t currentId, std::uint32_t requestedId, Region playbackRegion) {
         const std::uint16_t count = reel_->markerCount();
         const std::uint16_t remappedCurrent = reel_->findMarkerId(currentId);
         const std::uint16_t remappedRequested = reel_->findMarkerId(requestedId);
         if (remappedCurrent < count) currentRegion_ = remappedCurrent;
+        else {
+            currentRegion_ = 0;
+            while (currentRegion_ + 1 < count &&
+                   reel_->region(currentRegion_ + 1).begin <= playbackRegion.begin) ++currentRegion_;
+        }
         selection_.setRequested(remappedRequested < count ? remappedRequested : currentRegion_, count);
         const Region updated = reel_->region(currentRegion_);
         if (wasReading_ && (updated.begin != playbackRegion.begin || updated.end != playbackRegion.end)) {
@@ -439,6 +469,10 @@ private:
     }
 
     Core controls_;
+    Marker markerHistory_[kMaxSplices]{};
+    std::uint16_t markerHistoryCount_ = 0;
+    unsigned markerHistoryState_ = 0; // 1 Undo, 2 Redo.
+    std::uint64_t markerHistoryRevision_ = 0;
     Grains grains_;
     Selection selection_;
     Reel* reel_;
