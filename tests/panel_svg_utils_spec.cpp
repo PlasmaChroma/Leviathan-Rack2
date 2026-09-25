@@ -335,6 +335,8 @@ TestResult testCompactLeviathanLogoBaseline() {
     "res/bifurx.panel.svg",
     "res/deck.svg",
     "res/deck.panel.svg",
+    "res/Chimera.svg",
+    "res/Chimera.panel.svg",
     "res/iris.svg",
     "res/iris.panel.svg",
     "res/mandelwake.svg",
@@ -374,6 +376,8 @@ TestResult testPerfectWaveBrandingDeploymentContract() {
   const PanelContract panels[] = {
     {"res/deck.panel.svg", 101.6f, true, true},
     {"res/deck.svg", 101.6f, true, true},
+    {"res/Chimera.panel.svg", 142.24f, true, true},
+    {"res/Chimera.svg", 142.24f, true, true},
     {"res/bifurx.panel.svg", 71.12f, true, true},
     {"res/bifurx.svg", 71.12f, true, true},
     {"res/crownstep.panel.svg", 91.44f, true, true},

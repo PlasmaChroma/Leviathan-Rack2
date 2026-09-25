@@ -14,6 +14,8 @@
           fill="#091721" stroke="#577982" stroke-width=".35"/>
     <path d="M7 15H135M7 32H135" stroke="#d2a56e" stroke-width=".18" opacity=".7"/>
     <g id="component_anchors" style="display:none">
+      <rect id="BRANDING_WAVE_LEFT_RASTER" x="42.216099" y="123.3819" width="13.06748" height="5.1181002"/>
+      <rect id="BRANDING_WAVE_RIGHT_RASTER" x="86.956742" y="123.3819" width="13.06748" height="5.1181002"/>
       <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="54.760335" y="119.43102" width="32.71933" height="12.24054"/>
       <circle id="DISPLAY_ORIGIN" cx="6" cy="14" r=".1"/>
       <circle id="DISPLAY_END" cx="136" cy="33" r=".1"/>
