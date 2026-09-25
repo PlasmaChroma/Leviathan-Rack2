@@ -50,8 +50,21 @@ public:
             // Folding thousands of repeated kernel taps is equivalent to its
             // mean within filter rejection error, without the tiny-loop spike.
             double left = 0, right = 0;
-            for (unsigned at = r.begin; at < r.end; ++at) {
-                const auto value = reel.readActive(at);
+            // Reuse the live zeroth moments for whole aligned blocks. Only
+            // the two partial 16-frame edges need individual reads (<=30).
+            for (unsigned at = r.begin; at < r.end;) {
+                unsigned block = 0;
+                for (unsigned size : {256u, 64u, 16u}) {
+                    if (at % size == 0 && r.end-at >= size) { block = size; break; }
+                }
+                if (block) {
+                    const auto& sums = reel.playbackMoments(at, block);
+                    invalid = invalid || sums.invalid != 0;
+                    left += sums.left[0]; right += sums.right[0];
+                    at += block;
+                    continue;
+                }
+                const auto value = reel.readActive(at++);
                 invalid = invalid || !profile1::finite(value.l) || !profile1::finite(value.r);
                 left += profile1::clamp(profile1::audio(value.l), -64.0, 64.0);
                 right += profile1::clamp(profile1::audio(value.r), -64.0, 64.0);

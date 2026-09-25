@@ -40,6 +40,7 @@ public:
     void setBandlimitedPlayback(bool enabled) { grains_.setBandlimited(enabled); }
     void setReel(Reel* reel) {
         markerHistoryState_ = 0;
+        overloaded_ = false;
         reel_ = reel;
         state_ = Idle;
         currentRegion_ = 0;
@@ -225,6 +226,7 @@ public:
         const float leftPower = normalizedLeft * normalizedLeft;
         if (!profile1::finite(leftEnergy_)) leftEnergy_ = 0.f;
         leftEnergy_ += 0.0020811647f * (leftPower - leftEnergy_);
+        if (leftEnergy_ < 1e-12f) leftEnergy_ = 0.f;
         if (!pmEnabled_ || !input.pmRightConnected) {
             pmActive_ = false;
             quietFrames_ = loudFrames_ = 0;
@@ -376,6 +378,7 @@ public:
         if (!profile1::finite(energyState_)) energyState_ = 0.f;
         const float alpha = energy > energyState_ ? 0.00415799815f : 0.00026038276f;
         energyState_ += alpha * (energy - energyState_);
+        if (energyState_ < 1e-12f) energyState_ = 0.f;
         const float cv = rampCv_ ? (canRead ? 8.f * primaryPhase_ : 0.f) :
             8.f * fastSqrt(energyState_ < 1.f ? energyState_ : 1.f);
         return Output{heard, cv, state_ != Idle, full, naturalBoundary, eosg};
@@ -458,8 +461,8 @@ private:
         float step(float input) {
             const float output = input - oldInput + 0.9993457156679053f * oldOutput;
             oldInput = input;
-            oldOutput = output;
-            return output;
+            oldOutput = std::fabs(output) < 1e-12f ? 0.f : output;
+            return oldOutput;
         }
     };
     float guard(float value) {

@@ -118,6 +118,27 @@ int main() {
             else need(rms < 0.0001, "downsampling rejects ultrasonic alias by at least 77 dB");
         }
     }
+    {
+        // More than two chunks plus a partial tail; verify bytes after each
+        // writer-buffer boundary and the final short write through roundtrip.
+        const unsigned frames = 2*131072+17;
+        const unsigned pages = (frames+255)/256;
+        chimera::Reel large(pages, pages);
+        for (unsigned i = 0; i < frames; ++i)
+            large.write(i, {float(i%32768)/32768.f, -float(i%8192)/8192.f}, i);
+        large.beginSnapshot(frames);
+        while (!large.readyForWorker()) large.maintenanceTick();
+        std::ostringstream encoded(std::ios::binary);
+        std::string error;
+        need(chimera::wav::writeCanonical(encoded, large, error), "write multiple WAV chunks");
+        std::istringstream decoded(encoded.str(), std::ios::binary);
+        auto restored = chimera::wav::readStrict(decoded, pages);
+        need(bool(restored) && restored.reel->validFrames() == frames, "multi-chunk WAV length");
+        for (unsigned i = 0; i < frames; ++i) {
+            const auto a = large.readSnapshot(i), b = restored.reel->readActive(i);
+            need(sameBits(a.l, b.l) && sameBits(a.r, b.r), "multi-chunk stereo payload exact");
+        }
+    }
     chimera::Reel reel(2, 2);
     for (std::uint32_t i = 0; i < 300; ++i)
         need(reel.write(i, {float(i) / 37.f, -float(i) / 53.f}, i),

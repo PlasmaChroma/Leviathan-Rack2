@@ -38,6 +38,10 @@ int main() {
         chimera::bundle::commit(root, "two", reel, true);
     need(!failed && failed.error == "injected_manifest_failure",
          "manifest-stage failure is reported");
+    need(!rack::system::exists(root + "/chimera/reel-two.wav") &&
+         !rack::system::exists(root + "/chimera/reel-two.wav.tmp") &&
+         !rack::system::exists(root + "/chimera/reel-two.json.tmp"),
+         "failed manifest leaves no new orphan audio or temporary files");
     restored = chimera::bundle::load(root, first.manifest, 2);
     need(bool(restored) && restored.reel->readActive(0).l == 0.f,
          "prior committed bundle survives failure");

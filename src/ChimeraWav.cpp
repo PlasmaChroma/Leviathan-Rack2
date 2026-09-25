@@ -91,11 +91,22 @@ bool writeCanonical(std::ostream& out, const Reel& reel, std::string& error) {
         put32(out, 0); put32(out, 0); put32(out, marker.frame);
     }
     out.write("data", 4); put32(out, std::uint32_t(dataBytes));
-    for (std::uint32_t frame = 0; frame < meta.validFrames; ++frame) {
-        const StereoFrame sample = reel.readSnapshot(frame);
-        put32(out, floatBits(sample.l));
-        put32(out, floatBits(sample.r));
+    // Encode a bounded chunk at a time, preserving canonical little-endian
+    // bytes without two iostream calls for every stereo frame.
+    const unsigned chunkFrames = 131072;
+    std::unique_ptr<char[]> buffer(new char[chunkFrames * 8]);
+    for (std::uint32_t begin = 0; begin < meta.validFrames;) {
+        const unsigned count = std::min(chunkFrames, meta.validFrames-begin);
+        for (unsigned i = 0; i < count; ++i) {
+            const StereoFrame sample = reel.readSnapshot(begin+i);
+            const std::uint32_t bits[2] = {floatBits(sample.l), floatBits(sample.r)};
+            for (unsigned channel = 0; channel < 2; ++channel)
+                for (unsigned byte = 0; byte < 4; ++byte)
+                    buffer[i*8+channel*4+byte] = char(bits[channel] >> (byte*8));
+        }
+        out.write(buffer.get(), count*8);
         if (!out) { error = "write_failed"; return false; }
+        begin += count;
     }
     if (!out) { error = "write_failed"; return false; }
     error.clear();
@@ -229,8 +240,9 @@ ImportResult readStrict(std::istream& in, std::uint32_t capacityPages) {
         float l = fromBits(lBits), r = fromBits(rBits);
         if (!std::isfinite(l)) { l = 0.f; ++result.nonfiniteSamples; }
         if (!std::isfinite(r)) { r = 0.f; ++result.nonfiniteSamples; }
-        if (!result.reel->write(frame, {l, r}, frame)) return failure("reel_write_failed");
+        if (!result.reel->appendImported({l, r})) return failure("reel_write_failed");
     }
+    result.reel->finishImport();
     if (result.nonfiniteSamples) result.warnings.push_back("nonfinite_samples_zeroed");
     if (frames && !result.reel->replaceMarkers(markers.data(),
             std::uint16_t(markers.size()))) return failure("invalid_cue_table");

@@ -293,7 +293,116 @@ static void bridgedBypassRegression() {
     }
 }
 
+// Exercise abandonment before capture, during capture, and after ready, with
+// audio ownership preventing the stopped-host maintenance path from helping.
+static void abandonedSnapshotRegression() {
+    for (unsigned phase = 0; phase < 3; ++phase) {
+        Chimera m;
+        m.service.reset(new chimera::IoService(0));
+        m.saveInProgress.store(true);
+        std::unique_ptr<chimera::Reel> source(new chimera::Reel(32, 32));
+        for (unsigned i = 0; i < 8192; ++i) source->write(i, {0.25f, -0.25f}, i);
+        need(m.stores.accept(1, source, chimera::StoreBudget::Active), "abandon fixture");
+        m.audioActiveHandle = m.controlActiveHandle = 1;
+        m.reel = m.stores.lookup(1); m.slice.setReel(m.reel);
+        need(m.requestSnapshot(), "start snapshot to abandon");
+        if (phase) m.coreCommands();
+        if (phase == 2) {
+            while (!m.reel->readyForWorker()) m.reel->maintenanceTick();
+            m.coreSnapshotProgress();
+            m.ownership.releaseAudio(Chimera::steadyNs());
+            m.serviceStep();
+        }
+        m.abandonSnapshot();
+        need(!m.requestSnapshot(), "abandoned capture retains admission fence");
+        for (unsigned i = 0; i < 32; ++i) {
+            m.coreCommands(); m.reel->maintenanceTick(); m.coreSnapshotProgress();
+            m.ownership.releaseAudio(Chimera::steadyNs()); m.serviceStep();
+        }
+        need(!m.snapshotRequestId && !m.snapshotClaimed.load() &&
+             !m.snapshotReaders.count() && m.reel->state() == chimera::Reel::Idle,
+             "abandoned snapshot releases when its late completion arrives");
+        need(m.requestSnapshot(), "next snapshot can start after abandonment");
+    }
+}
+
+static void snapshotTeardownRegression() {
+    // Hold a real worker until AFTER deletion. Both kinds of snapshot consumer
+    // must retain the source independently of the module and of each other.
+    auto service = std::make_shared<chimera::IoService>(1);
+    std::atomic<bool> entered{false}, resume{false}, readAfterRemoval{false};
+    Chimera* m = new Chimera;
+    m->service = service;
+    std::unique_ptr<chimera::Reel> source(new chimera::Reel(2, 2));
+    source->write(0, {0.75f, -0.5f}, 0);
+    source->beginSnapshot(0); source->maintenanceTick();
+    need(m->stores.accept(1, source, chimera::StoreBudget::Active), "teardown fixture");
+    m->audioActiveHandle = m->controlActiveHandle = 1;
+    auto frozen = m->stores.lookup(1);
+    m->loadTicket = std::make_shared<Chimera::LoadTicket>();
+    m->loadTicket->usesSnapshot = true;
+    m->recoveryTicket = std::make_shared<Chimera::RecoveryTicket>();
+    auto edit = m->loadTicket;
+    auto recovery = m->recoveryTicket;
+    std::weak_ptr<chimera::Reel> retained;
+    need(service->execute(m->generation, 1, [edit, recovery, frozen, &entered, &resume, &readAfterRemoval] {
+        entered.store(true);
+        while (!resume.load()) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        const auto value = frozen->readSnapshot(0);
+        readAfterRemoval.store(value.l == 0.75f && value.r == -0.5f);
+        edit->done.store(true); recovery->done.store(true);
+    }) == chimera::IoService::Accepted, "start retained snapshot reader");
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!entered.load() && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    need(entered.load(), "worker starts before teardown");
+    delete m; // The previous destructor waited forever here.
+    retained = edit->teardownReel;
+    need(!retained.expired() && edit->teardownReel == recovery->teardownReel,
+         "tickets share ownership of the retired source");
+    resume.store(true);
+    service->shutdown();
+    need(readAfterRemoval.load(), "worker can read snapshot after module removal");
+    edit.reset(); recovery.reset();
+    need(retained.expired(), "last ticket destroys source after worker completion");
+
+    Chimera* queued = new Chimera;
+    queued->service.reset(new chimera::IoService(0));
+    queued->loadTicket = std::make_shared<Chimera::LoadTicket>();
+    queued->loadTicket->usesSnapshot = true;
+    auto token = queued->generation;
+    auto ticket = queued->loadTicket;
+    need(queued->service->execute(token, 1, [ticket] { ticket->done.store(true); }) ==
+         chimera::IoService::Accepted, "queue snapshot work with no available worker");
+    delete queued;
+    need(token->closed.load() && !token->outstanding.load(),
+         "queued snapshot job is cancelled without waiting for done");
+}
+
+#ifndef _WIN32
+static void fifoImportRegression() {
+    const std::string path = "build/tests/chimera_fifo_" + std::to_string(Chimera::steadyNs());
+    need(::mkfifo(path.c_str(), 0600) == 0, "create FIFO import fixture");
+    Chimera m;
+    m.service.reset(new chimera::IoService(1));
+    std::string error;
+    need(m.requestImportWav(path, false, error), "submit non-regular import");
+    auto ticket = m.loadTicket;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!ticket->done.load() && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    need(ticket->done.load() && !ticket->result.reel && !ticket->result.error.empty(),
+         "FIFO import rejects promptly without consuming an IO worker");
+    rack::system::remove(path);
+}
+#endif
+
 int main() {
+    abandonedSnapshotRegression();
+    snapshotTeardownRegression();
+#ifndef _WIN32
+    fifoImportRegression();
+#endif
     backgroundDispatchRegression();
     markerEditRegression();
     snapshotAdoptionRegression();

@@ -120,6 +120,23 @@ CommitResult commit(const std::string& moduleRoot, const std::string& bundleId,
     const std::string audioTemp = audioPath + ".tmp";
     const std::string manifestTemp = manifestPath + ".tmp";
     if (exists(audioPath) || exists(manifestPath)) return failed("bundle_id_exists");
+    // Until the manifest commits, all new files belong to this attempt.
+    // Clean them on normal failures and exception unwinding alike.
+    struct PendingFiles {
+        const std::string& audio;
+        const std::string& audioTemp;
+        const std::string& manifestTemp;
+        bool audioCreated = false;
+        bool committed = false;
+        PendingFiles(const std::string& a, const std::string& at, const std::string& mt)
+            : audio(a), audioTemp(at), manifestTemp(mt) {}
+        ~PendingFiles() {
+            if (committed) return;
+            std::remove(audioTemp.c_str());
+            std::remove(manifestTemp.c_str());
+            if (audioCreated) std::remove(audio.c_str());
+        }
+    } pending(audioPath, audioTemp, manifestTemp);
     std::string digest;
     if (metadata.validFrames) {
         std::ofstream file(audioTemp.c_str(), std::ios::binary | std::ios::trunc);
@@ -138,6 +155,7 @@ CommitResult commit(const std::string& moduleRoot, const std::string& bundleId,
             std::remove(audioTemp.c_str());
             return failed("audio_commit_failed");
         }
+        pending.audioCreated = true;
     }
     if (injectManifestFailure) return failed("injected_manifest_failure");
     json_t* root = json_object();
@@ -172,6 +190,7 @@ CommitResult commit(const std::string& moduleRoot, const std::string& bundleId,
         std::remove(manifestTemp.c_str());
         return failed("manifest_commit_failed");
     }
+    pending.committed = true;
     CommitResult result;
     result.manifest = "chimera/" + manifestName;
     result.documentRevision = metadata.documentRevision;

@@ -96,6 +96,22 @@ public:
 
     // Core-owner operation. Valid-length advancement and samples share a cut.
     bool write(std::uint32_t frame, StereoFrame value, std::uint64_t coreFrame) {
+        return writeImpl<true>(frame, value, coreFrame);
+    }
+
+    // Off-audio only, on a fresh, exclusively owned Reel. Append sequentially,
+    // then finishImport() before publishing it or using playback moments.
+    bool appendImported(StereoFrame value) {
+        if (state_ != Idle) return false;
+        return writeImpl<false>(validFrames_, value, validFrames_);
+    }
+    void finishImport() {
+        moments_.buildImported(validFrames_, [this](unsigned frame) { return readActive(frame); });
+    }
+
+private:
+    template<bool UpdateMoments>
+    bool writeImpl(std::uint32_t frame, StereoFrame value, std::uint64_t coreFrame) {
         if (recordingStopped_ || frame >= capacityFrames_) return false;
         const std::uint32_t logical = frame / kPageFrames;
         if (state_ == Capturing || state_ == Ready) {
@@ -115,7 +131,7 @@ public:
         StereoFrame& destination = pool_[active_[logical]].frames[frame % kPageFrames];
         const StereoFrame old = destination;
         destination = value;
-        moments_.update(frame, old, value, [this](unsigned i) {
+        if (UpdateMoments) moments_.update(frame, old, value, [this](unsigned i) {
             return pool_[active_[i/kPageFrames]].frames[i%kPageFrames];
         });
         if (!validFrames_) {
@@ -129,6 +145,7 @@ public:
         return true;
     }
 
+public:
     StereoFrame readActive(std::uint32_t frame) const {
         if (frame >= validFrames_) return StereoFrame{0.f, 0.f};
         return pool_[active_[frame / kPageFrames]].frames[frame % kPageFrames];

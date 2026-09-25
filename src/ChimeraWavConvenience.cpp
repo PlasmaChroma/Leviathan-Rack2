@@ -79,7 +79,7 @@ bool resample(std::istream& in, const Format& format, std::uint32_t sourceFrames
         for (std::uint32_t i = 0; i < frames; ++i) {
             StereoFrame value{};
             if (!frame(in, format, value, result.nonfiniteSamples)) return false;
-            result.reel->write(i, value, i);
+            if (!result.reel->appendImported(value)) return false;
         }
         return true;
     }
@@ -120,7 +120,7 @@ bool resample(std::istream& in, const Format& format, std::uint32_t sourceFrames
             offset += consumed;
             for (unsigned i = 0; i < produced && written < frames; ++i, ++outputIndex) {
                 if (outputIndex < discard) continue;
-                if (!result.reel->write(written, {output[2*i], output[2*i+1]}, written)) return false;
+                if (!result.reel->appendImported({output[2*i], output[2*i+1]})) return false;
                 ++written;
             }
         }
@@ -257,6 +257,7 @@ ImportResult readConvenience(std::istream& in, bool truncate,
     catch (...) { return fail("reel_allocation_failed"); }
     if (!at(in, dataOffset)) return fail("seek_data_failed");
     if (!resample(in, format, sourceFrames, frames, result)) return fail("resample_or_decode_failed");
+    result.reel->finishImport();
     if (frames && !result.reel->replaceMarkers(markers.data(),
             std::uint16_t(markers.size()))) return fail("invalid_cue_table");
     if (result.nonfiniteSamples) result.warnings.push_back("nonfinite_samples_zeroed");

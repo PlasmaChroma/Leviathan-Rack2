@@ -21,6 +21,14 @@ static bool near(float a, float b, float eps = 0.0002f) {
 
 int main() {
     {
+        chimera::Slice decay;
+        decay.step(input(1.f, -1.f));
+        chimera::Slice::Output quiet{};
+        for (unsigned i = 0; i < 480000; ++i) quiet = decay.step(input(0.f, 0.f));
+        need(quiet.audio.l == 0.f && quiet.audio.r == 0.f && quiet.cv == 0.f,
+             "DC blockers and envelope settle to exact zero after silence");
+    }
+    {
         chimera::Reel markers(4, 4);
         for (unsigned i = 0; i < 1000; ++i) markers.write(i, {0.25f, 0.25f}, i);
         markers.addMarker(500);
@@ -464,6 +472,8 @@ int main() {
     need(guarded.overloaded() && std::isfinite(safe.audio.l) &&
          std::isfinite(safe.audio.r) && std::isfinite(safe.cv),
          "nonfinite stored source cannot poison audio or CV state");
+    guarded.setReel(nullptr);
+    need(!guarded.overloaded(), "replacing a reel clears its sticky overload indicator");
     chimera::Reel finiteReel(20, 20);
     for (int i = 0; i < 4800; ++i)
         need(finiteReel.write(i, chimera::StereoFrame{1.f, 1.f}, i),

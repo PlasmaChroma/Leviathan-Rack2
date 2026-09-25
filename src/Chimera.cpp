@@ -170,6 +170,7 @@ struct Chimera : Module {
     bool automaticSnapshotAnnounced = false; // Core owner only.
     bool snapshotReady = false; // Control dispatcher only.
     bool snapshotReleasePending = false; // Control dispatcher only.
+    bool snapshotAbandoned = false; // Release a timed-out request once capture acknowledges.
     std::atomic<bool> snapshotClaimed{false}; // Control and audio coordinate starts.
     chimera::Reel* snapshotReel = nullptr; // Protected by snapshot lease.
     std::uint64_t audioHeartbeatNs = 0; // Audio callback only.
@@ -193,9 +194,11 @@ struct Chimera : Module {
     std::mutex optionsTextExtrasMutex; // Control/save side only, never process().
     struct LoadTicket {
         std::atomic<bool> done{false};
+        std::shared_ptr<chimera::Reel> teardownReel; // Assigned only during module teardown.
         chimera::bundle::LoadResult result;
         std::shared_ptr<const chimera::WaveformSummary> waveform;
         unsigned adoptionKind = 1; // 1 patch load, 4 external import, 5 fenced edit.
+        std::shared_ptr<chimera::CheckpointSession> teardownCheckpointSession;
         bool usesSnapshot = false;
         std::uint64_t expectedDocumentRevision = 0, expectedAudioRevision = 0;
         std::string checkpointPath;
@@ -225,6 +228,7 @@ struct Chimera : Module {
     std::uint64_t lastDisplayAttemptNs = 0;
     struct RecoveryTicket {
         std::atomic<bool> done{false};
+        std::shared_ptr<chimera::Reel> teardownReel; // Worker captures this ticket.
         chimera::recovery::CommitResult result;
         std::shared_ptr<const chimera::WaveformSummary> waveform;
         bool displayOnly = false;
@@ -240,7 +244,7 @@ struct Chimera : Module {
     int awaitingHistoryAction = -1;
     std::string awaitingCheckpoint;
     std::string undoCheckpoint, redoCheckpoint;
-    chimera::CheckpointSession checkpointSession;
+    std::shared_ptr<chimera::CheckpointSession> checkpointSession{new chimera::CheckpointSession};
     std::set<std::string> editCheckpointFiles; // This instance's files only; control/worker side.
     void pruneEditCheckpoints() {
         std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
@@ -337,21 +341,29 @@ struct Chimera : Module {
     }
     ~Chimera() override {
         stopControlDispatcher();
-        // A heavy-edit worker may still be reading a leased snapshot through a
-        // raw Reel pointer. Module teardown is off audio: let that bounded job
-        // finish before the registry destroys its source store.
-        if (loadTicket && loadTicket->usesSnapshot)
-            while (!loadTicket->done.load(std::memory_order_acquire))
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        if (recoveryTicket)
-            while (!recoveryTicket->done.load(std::memory_order_acquire))
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        // Audio and control have stopped. Transfer the leased source to the
+        // tickets captured by workers instead of waiting for disk I/O here.
+        // Workers never access teardownReel itself; their ticket lifetime keeps
+        // the raw snapshot pointer valid even after this module is gone.
+        if ((loadTicket && loadTicket->usesSnapshot) || recoveryTicket) {
+            stores.transition(controlActiveHandle, chimera::StoreBudget::Retired);
+            std::shared_ptr<chimera::Reel> retained(stores.detachRetired(controlActiveHandle));
+            if (loadTicket && loadTicket->usesSnapshot) {
+                loadTicket->teardownReel = retained;
+                loadTicket->teardownCheckpointSession = checkpointSession;
+            }
+            if (recoveryTicket) recoveryTicket->teardownReel = retained;
+        }
+        // An in-flight edit may still read/write these files. Leave its session
+        // for the existing stale-session sweep rather than unlinking underneath it.
+        const bool editInFlight = loadTicket && loadTicket->usesSnapshot &&
+            !loadTicket->done.load(std::memory_order_acquire);
         if (rateServiceRegistered) chimera::unregisterRateBridge(&preparedBridge);
         if (service) service->cancel(generation); // No worker carries this Module pointer.
         else generation->close();
         loadTicket.reset();
         undoCheckpoint.clear(); redoCheckpoint.clear(); awaitingCheckpoint.clear();
-        pruneEditCheckpoints();
+        if (!editInFlight) pruneEditCheckpoints();
         delete activeBridge;
         delete preparedBridge.exchange(nullptr, std::memory_order_acq_rel);
         delete retiredBridge.exchange(nullptr, std::memory_order_acq_rel);
@@ -437,6 +449,8 @@ struct Chimera : Module {
         }
         if (!snapshotReady || !snapshotReel || recoveryPurpose || recoveryTicket ||
             snapshotRequestId == kAutomaticSnapshotId) {
+            if (!recoveryPurpose && !recoveryTicket &&
+                snapshotRequestId != kAutomaticSnapshotId) abandonSnapshot();
             saveFailure.store(true, std::memory_order_release);
             ioError.store(true, std::memory_order_release);
             return;
@@ -525,8 +539,9 @@ struct Chimera : Module {
         const chimera::IoService::Status queued = service->execute(generation,
             nextRequestId++, [ticket, path, truncate] {
                 try {
-                    std::ifstream input(path.c_str(), std::ios::binary);
-                    if (!input) ticket->result.error = "source_wav_missing";
+                    std::ifstream input;
+                    if (rack::system::isFile(path)) input.open(path.c_str(), std::ios::binary);
+                    if (!input.is_open()) ticket->result.error = "source_wav_missing_or_not_regular";
                     else {
                         chimera::wav::ImportResult imported =
                             chimera::wav::readConvenience(input, truncate);
@@ -668,14 +683,15 @@ struct Chimera : Module {
             if (!snapshotReady) std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         if (!snapshotReady || !snapshotReel) {
+            abandonSnapshot();
             error = "Reel snapshot failed"; return false;
         }
-        if (!checkpointSession.ensure(rack::system::join(
+        if (!checkpointSession->ensure(rack::system::join(
                 leviathanPluginUserRootPath(), "Chimera/checkpoints-v1"))) {
             finishSnapshotReader();
             error = "Checkpoint session unavailable or busy; retry the edit"; return false;
         }
-        const std::string& directory = checkpointSession.directory();
+        const std::string& directory = checkpointSession->directory();
         const std::string checkpoint = rack::system::join(directory,
             "reel-" + std::to_string(steadyNs()) + "-" +
             std::to_string(nextRequestId) + ".wav");
@@ -797,9 +813,17 @@ struct Chimera : Module {
             snapshotClaimed.store(false, std::memory_order_release);
             return false;
         }
+        snapshotAbandoned = false;
         snapshotRequestId = id;
         snapshotReel = stores.lookup(controlActiveHandle);
         return true;
+    }
+    void abandonSnapshot() {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
+        snapshotAbandoned = snapshotRequestId != 0;
+        if (snapshotReady) finishSnapshotReader();
+        // Keep the request ID and claim until core capture/reclaim completes.
+        // Clearing them here would admit a second snapshot onto the same Reel.
     }
     bool finishSnapshotReader() {
         std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
@@ -1142,6 +1166,7 @@ struct Chimera : Module {
             if (ack.kind == 2 && ack.requestId == snapshotRequestId) {
                 if (!ack.status) {
                     snapshotRequestId = 0;
+                    snapshotAbandoned = false;
                     snapshotReel = nullptr;
                     snapshotClaimed.store(false, std::memory_order_release);
                     recoveryPurpose = 0;
@@ -1151,7 +1176,8 @@ struct Chimera : Module {
             }
             if (ack.kind == 4 && ack.requestId == snapshotRequestId) {
                 snapshotReady = snapshotReaders.begin();
-                if (!snapshotReady) {
+                if (snapshotReady && snapshotAbandoned) finishSnapshotReader();
+                else if (!snapshotReady) {
                     snapshotReleasePending = true;
                     recoveryPurpose = 0;
                     ioError.store(true, std::memory_order_release);
@@ -1164,6 +1190,7 @@ struct Chimera : Module {
             }
             if (ack.kind == 5 && ack.requestId == snapshotRequestId) {
                 snapshotRequestId = 0;
+                snapshotAbandoned = false;
                 snapshotReel = nullptr;
                 snapshotClaimed.store(false, std::memory_order_release);
                 continue;
@@ -2343,8 +2370,9 @@ struct ChimeraWidget : ModuleWidget {
             if (!selected) return;
             const std::string path(selected);
             std::free(selected);
-            std::ifstream file(path, std::ios::binary | std::ios::ate);
-            if (!file || file.tellg() < 0 || file.tellg() > 65536) {
+            std::ifstream file;
+            if (rack::system::isFile(path)) file.open(path, std::ios::binary | std::ios::ate);
+            if (!file.is_open() || !file || file.tellg() < 0 || file.tellg() > 65536) {
                 osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK,
                     "Cannot read options text, or file exceeds 64 KiB.");
                 return;
