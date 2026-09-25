@@ -47,6 +47,19 @@ int main() {
     restored = chimera::bundle::load(root, second.manifest, 2);
     need(bool(restored) && restored.reel->readActive(0).l == 77.f,
          "new bundle contains newer frozen cut");
+    {
+        std::ofstream unrelated((root + "/chimera/user-notes.txt").c_str());
+        unrelated << "leave this file alone";
+    }
+    need(chimera::bundle::pruneObsolete(root, second.manifest),
+         "prune obsolete module-owned revisions after successful commit");
+    need(!rack::system::isFile(root + "/chimera/reel-one.wav") &&
+         !rack::system::isFile(root + "/chimera/reel-one.json") &&
+         !rack::system::isFile(root + "/chimera/reel-two.wav") &&
+         rack::system::isFile(root + "/chimera/reel-three.wav") &&
+         rack::system::isFile(root + "/chimera/reel-three.json") &&
+         rack::system::isFile(root + "/chimera/user-notes.txt"),
+         "pruning keeps the referenced bundle and unrelated files");
     need(!chimera::bundle::load(root, "chimera/../reel-three.json", 2),
          "manifest traversal rejected before file access");
     need(!chimera::bundle::load(root, "chimera/reel-future.json", 2),
@@ -57,5 +70,5 @@ int main() {
     audio.seekp(100, std::ios::beg); audio.put('\x7f'); audio.close();
     need(!chimera::bundle::load(root, second.manifest, 2),
          "tampered embedded audio fails hash verification");
-    std::puts("PASS: Chimera revisioned patch bundle commit/load/fallback");
+    std::puts("PASS: Chimera revisioned patch bundle commit/load/fallback/pruning");
 }

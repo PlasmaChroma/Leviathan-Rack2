@@ -107,6 +107,11 @@ int main() {
     manifestText = json_string_value(json_object_get(storage, "manifest"));
     need(manifestText && std::string(manifestText) != manifest,
          "duplicate preparation captures newer revision");
+    need(!rack::system::isFile(rack::system::join(sourceStorage, manifest)) &&
+         !rack::system::isFile(rack::system::join(sourceStorage,
+             manifest.substr(0, manifest.size() - 5) + ".wav")) &&
+         bool(chimera::bundle::load(sourceStorage, manifestText, 2)),
+         "successful save prunes obsolete assets before Rack copies module storage");
     Chimera clone;
     clone.model = modelChimera;
     clone.id = source.id + 1;
@@ -120,6 +125,11 @@ int main() {
     need(clone.reel != source.reel && clone.reel->validFrames() == 300 &&
          clone.reel->readActive(0).l == 77.f,
          "duplicate loads its own embedded audio without source file");
+    json_t* reopenedState = clone.dataToJson();
+    need(std::string(json_string_value(json_object_get(reopenedState, "audioStatus"))) ==
+         "embedded" && clone.committedAudioRevision == clone.reel->audioRevision(),
+         "reopened Reel restores committed revision status");
+    json_decref(reopenedState);
     need(clone.reel->write(0, {13.f, 13.f}, 302) &&
          source.reel->readActive(0).l == 77.f,
          "duplicate and original have independent mutable stores");
@@ -141,6 +151,19 @@ int main() {
          clone.reel->readActive(0).l == 77.f &&
          clone.unsavedImport.load(std::memory_order_acquire),
          "import replaces a Reel at the audio-owner handoff and marks it unsaved");
+    {
+        const auto recoveryDeadline = std::chrono::steady_clock::now() +
+            std::chrono::seconds(10);
+        while ((clone.snapshotRequestId || clone.recoveryPurpose || clone.recoveryTicket ||
+                clone.recoveryPostPending.load()) &&
+               std::chrono::steady_clock::now() < recoveryDeadline) {
+            clone.serviceStep(); clone.process(args); clone.serviceStep();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        need(!clone.snapshotRequestId && !clone.recoveryPurpose &&
+             !clone.recoveryTicket && !clone.recoveryPostPending.load(),
+             "import recovery checkpoint settles before destructive edit");
+    }
     need(clone.reel->write(0, {19.f, 19.f}, 303) &&
          source.reel->readActive(0).l == 77.f,
          "imported Reel is independent of exported source");
@@ -218,6 +241,59 @@ int main() {
     }
     need(!clone.loadTicket && clone.reel->readActive(0).l == 42.f,
          "Undo restores the pre-clear audio checkpoint");
+    auto settleRecovery = [&] {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        do {
+            clone.serviceStep(); clone.process(args); clone.serviceStep();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        } while ((clone.snapshotRequestId || clone.recoveryPurpose || clone.recoveryTicket ||
+                  clone.recoveryPostPending.load()) &&
+                 std::chrono::steady_clock::now() < deadline);
+        need(!clone.snapshotRequestId && !clone.recoveryPurpose &&
+             !clone.recoveryTicket && !clone.recoveryPostPending.load(),
+             "recovery snapshot reaches durable idle state");
+    };
+    settleRecovery();
+    clone.params[Chimera::SOS_PARAM].setValue(0.f);
+    clone.menuCommand.store(1); clone.process(args); // Current, first frame overwritten.
+    need(clone.slice.recordState() == chimera::Slice::Current &&
+         clone.reel->readActive(0).l == 0.f,
+         "record starts on its exact core frame while pre-cut is protected");
+    settleRecovery();
+    clone.lastRecoveryNs = Chimera::steadyNs() - UINT64_C(10000000000);
+    clone.recordStartNs.store(clone.lastRecoveryNs, std::memory_order_release);
+    clone.serviceStep();
+    need(clone.recoveryPurpose == 2 && clone.snapshotRequestId,
+         "active recording requests a new cut at the ten-second cadence");
+    settleRecovery();
+    const auto periodicJournal = chimera::recovery::inspect(clone.recoveryRoot());
+    need(bool(periodicJournal.latest), "periodic recording cut is durable");
+    clone.serviceStep();
+    need(!clone.snapshotRequestId && !clone.recoveryPurpose,
+         "periodic capture does not immediately repeat before ten seconds");
+    clone.menuCommand.store(3); clone.process(args);
+    settleRecovery();
+    auto recoveryJournal = chimera::recovery::inspect(clone.recoveryRoot());
+    need(bool(recoveryJournal.preRecord) && bool(recoveryJournal.latest) &&
+         recoveryJournal.latest.capturedAtMs >= recoveryJournal.preRecord.capturedAtMs,
+         "pre-record and completed-session checkpoints are durably journaled");
+    auto preRecord = chimera::recovery::load(clone.recoveryRoot(),
+                                             recoveryJournal.preRecord, 2);
+    auto completed = chimera::recovery::load(clone.recoveryRoot(),
+                                             recoveryJournal.latest, 2);
+    need(bool(preRecord) && bool(completed) &&
+         preRecord.reel->readActive(0).l == 42.f &&
+         completed.reel->readActive(0).l == 0.f,
+         "journaled pre-cut survives the first overwritten frame");
+    need(clone.requestRecovery(true, error), "queue explicit pre-record restore");
+    const auto recoverDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while ((clone.loadTicket || clone.awaitingHandle || clone.retiringHandle) &&
+           std::chrono::steady_clock::now() < recoverDeadline) {
+        clone.serviceStep(); clone.process(args); clone.serviceStep();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    need(!clone.loadTicket && clone.reel->readActive(0).l == 42.f,
+         "explicit pre-record recovery adopts the old audio off thread");
     json_decref(state);
     engine.removeModule(&clone);
     engine.removeModule(&source);

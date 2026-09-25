@@ -33,4 +33,9 @@ CommitResult commit(const std::string& moduleRoot, const std::string& bundleId,
 LoadResult load(const std::string& moduleRoot, const std::string& relativeManifest,
                 std::uint32_t capacityPages = kMaxPages);
 
+// Call only after a new bundle is committed and selected by the module.
+// Removes obsolete module-owned revisions (including orphaned failed commits)
+// so Rack does not archive every prior WAV on each save.
+bool pruneObsolete(const std::string& moduleRoot, const std::string& keepManifest);
+
 } } // namespace chimera::bundle

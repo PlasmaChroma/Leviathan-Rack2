@@ -3,6 +3,7 @@
 #include <system.hpp>
 #include <cstdio>
 #include <cstring>
+#include <dirent.h>
 #include <fstream>
 #include <iomanip>
 #include <limits>
@@ -80,6 +81,29 @@ bool validManifestReference(const std::string& relativeManifest) {
                                  suffix.size(), suffix)) return false;
     return safeId(relativeManifest.substr(prefix.size(),
         relativeManifest.size() - prefix.size() - suffix.size()));
+}
+
+bool pruneObsolete(const std::string& moduleRoot, const std::string& keepManifest) {
+    if (!validManifestReference(keepManifest)) return false;
+    const std::string directory = join(moduleRoot, "chimera");
+    if (!inside(moduleRoot, directory)) return false;
+    DIR* entries = opendir(directory.c_str());
+    if (!entries) return false;
+    const std::string keepId = keepManifest.substr(13, keepManifest.size() - 18);
+    bool ok = true;
+    while (dirent* entry = readdir(entries)) {
+        const std::string name(entry->d_name);
+        if (name.compare(0, 5, "reel-")) continue;
+        const std::size_t dot = name.rfind('.');
+        if (dot == std::string::npos ||
+            (name.substr(dot) != ".json" && name.substr(dot) != ".wav")) continue;
+        const std::string id = name.substr(5, dot - 5);
+        if (!safeId(id) || id == keepId) continue;
+        const std::string path = join(directory, name);
+        if (!inside(directory, path) || std::remove(path.c_str())) ok = false;
+    }
+    if (closedir(entries)) ok = false;
+    return ok;
 }
 
 CommitResult commit(const std::string& moduleRoot, const std::string& bundleId,

@@ -1067,6 +1067,18 @@ int main() {
     module.params[Chimera::REC_PARAM].setValue(0.f);
     module.inputs[Chimera::CLOCK_INPUT].channels = 0;
     need(module.slice.selectRegion(0), "restore first region for snapshot overwrite fixture");
+    {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while ((module.snapshotRequestId || module.recoveryPurpose || module.recoveryTicket ||
+                module.recoveryPostPending.load()) &&
+               std::chrono::steady_clock::now() < deadline) {
+            module.process(args); module.serviceStep();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        need(!module.snapshotRequestId && !module.recoveryPurpose &&
+             !module.recoveryTicket && !module.recoveryPostPending.load(),
+             "automatic recovery snapshots settle before explicit snapshot fixture");
+    }
     const chimera::StereoFrame frozenFirst = module.reel->readActive(0);
     need(module.requestSnapshot(), "module queues an exact core snapshot cut");
     trapAllocations = true;
