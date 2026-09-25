@@ -14,6 +14,25 @@ int main() {
         need(reel.write(i, chimera::StereoFrame{1.f, 1.f}, i), "constant source prepared");
     const chimera::Region region{0, 4800};
     const double gene = std::log(480.0 / 4800.0) / std::log(16.0 / 4800.0);
+    {
+        chimera::Grains quality, original;
+        quality.setBandlimited(true);
+        quality.setChordRatios(2, 4, 16); original.setChordRatios(2, 4, 16);
+        chimera::CoreOutput controls{};
+        controls.gene = 1; controls.morph = 1;
+        for (unsigned i = 0; i < 3000; ++i) {
+            controls.rate = i < 1500 ? 32 : -32;
+            controls.slide = float(i%997)/997;
+            const double pm = 960*std::sin(i*0.03);
+            const auto filtered = quality.step(reel, region, controls, false, false, false, pm);
+            const auto reference = original.step(reel, region, controls, false, false, false, pm);
+            need(std::isfinite(filtered.audio.l) && std::isfinite(filtered.audio.r) &&
+                 filtered.completions == reference.completions &&
+                 filtered.primaryBoundary == reference.primaryBoundary &&
+                 quality.onsetCount() == original.onsetCount(),
+                 "quality playback keeps grain/chord/reverse/PM scheduling unchanged");
+        }
+    }
     need(chimera::profile1::finiteGeneFrames(4800, gene) == 480, "480-frame Gene fixture");
     const float rates[] = {0.5f, 1.f, 2.f, -1.f};
     for (int r = 0; r < 4; ++r) {

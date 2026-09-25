@@ -27,12 +27,12 @@ after the relevant validation completes.
   interpolation with an offline bandlimited resampler. Preserve duration,
   truncation, cue mapping, stereo alignment, and nonfinite handling. Add
   passband and rejection tests for 44.1, 96, and 192 kHz sources.
-- [ ] **P2 — Bound edit checkpoint retention (runtime fix complete).** Every edit/undo/redo wrote
+- [x] **P2 — Bound edit checkpoint retention.** Every edit/undo/redo wrote
   another WAV (about 66.8 MB at full capacity), while old history paths are
   discarded without deleting their files. Remove unreferenced files off
   audio after successful handoff, cover failed/stale jobs, and define a
   bounded abandoned-session cleanup policy. Never delete a leased checkpoint.
-- [ ] **P2 — Choose playback anti-aliasing policy.** Four-tap cubic reading
+- [x] **P2 — Choose playback anti-aliasing policy.** Four-tap cubic reading
   aliases a 15 kHz source at 2x into a full-strength 18 kHz tone. Compare a
   rate-dependent bandlimited reader with prefiltered levels, including live
   recording, reverse/chord playback, splice boundaries, and PM. Benchmark
@@ -41,7 +41,7 @@ after the relevant validation completes.
   overflows energy accumulation and leaves CV near 8 V after ten seconds of
   silence. Bound power inputs and recover nonfinite detector state; test PM
   detection and normal-level behavior.
-- [ ] **Integration — Audit closed-window/headless dispatch.** Rate bridge
+- [x] **Integration — Repair closed-window/headless dispatch.** Rate bridge
   preparation is independent of widgets, but normal reel preparation,
   completion polling, and recovery rely on widget/control calls. Verify
   Rack Pro window close/reopen and hosts that stop widget stepping.
@@ -163,50 +163,114 @@ Second batch completed 2026-09-25:
   installation, staging or commit was performed. No new live listening,
   DAW-window or sanitizer run was performed.
 
-## Work still open
+## Third batch: remaining repairs completed 2026-09-25
 
-### Abandoned checkpoint policy
+### Leased checkpoint sessions
 
-Runtime retention is repaired, but files left by crashes or older versions
-are not swept automatically. Their legacy directories identify a module ID,
-not a live process lease; another Rack instance can use the same namespace.
-Deleting by age or module ID alone could remove another instance's Undo.
-The safe next implementation is a versioned, uniquely named session directory
-with a cross-process exclusive lease. A bounded startup sweep may delete only
-recognized files in unlocked sessions, with an age grace period and a work
-limit. Keep legacy files untouched unless explicitly selected for cleanup.
-This remains unchecked until crash, overlapping-instance and failed-delete
-tests pass. Runtime limits do not bound accumulation across repeated crashes.
+New edit checkpoints live in `Chimera/checkpoints-v1/session-v1-<random-id>`.
+An OS-backed exclusive lease protects each live session. A root lease serializes
+session creation and sweeping, including the close/unlink sequence on Windows.
+A process crash releases the lease automatically. Normal per-instance pruning
+still protects Undo/Redo and any restore worker using a checkpoint.
 
-### Playback filtering
+The background dispatcher sweeps on startup and once per minute. Each pass
+visits at most 128 entries and removes at most 16 sessions, continuing its scan
+on later passes. Only recognized, ordinary files in unlocked sessions older than
+24 hours are eligible; a session with unknown contents or links is retained.
+Failed deletion preserves the lease file for a later retry. Legacy checkpoint
+folders are deliberately untouched because they have no reliable live-owner
+lease. They can still occupy disk until explicitly selected for manual cleanup.
 
-Offline import filtering does not fix playback aliasing. The existing cubic
-reader remains profile 1. A rate-dependent FIR must widen its source support
-with playback increment; a nominal 16-tap unity filter grows toward 512 taps
-at 32x, per voice/channel. Prefiltered octave levels instead approach one
-additional source-sized payload (about 66.8 MB at full capacity), before COW
-or prepared copies. Two active/prepared full-reserve Reels already account
-for 267,264,000 raw bytes against the 256 MiB ledger. Adding levels without
-redesigning that budget is not acceptable.
+Native tests exercise simultaneous live sessions, grace-period retention,
+actual abrupt child-process exit, unknown files, and Windows delete failures.
+These replace age/module-ID-only cleanup, which could delete another Rack
+instance's Undo.
 
-Next: benchmark a bounded multistage reader prototype, define how live writes
-and splice-local filtering update derived data, and measure reverse/chord/PM
-behavior before selecting a new profile or quality setting. Preserve the
-current sound until that comparison and listening validation are complete.
+### Optional bandlimited playback
 
-### Closed-window control dispatch
+The menu now offers **Bandlimited playback (higher CPU)**. It persists in patch
+JSON and defaults off, retaining the existing profile-1 cubic sound and lower
+CPU cost. Switching quality fades over 240 core frames. The reader uses a
+windowed-sinc kernel prepared off audio; runtime lookup/interpolation requires
+no trigonometry or allocation. Each voice's width follows signed playback/chord
+rate plus Slide and PM movement, with a 512-frame width bound. Every source tap
+and accelerated block stays inside that voice's captured Splice. Reverse,
+metadata handoffs and live recording retain their existing timing.
 
-Source audit confirms ordinary `serviceStep()` calls come from widget stepping
-and synchronous non-audio operations (save/edit flows). Audio processing does
-not poll normal reel jobs; the independent rate-preparation worker solves only
-the bridge path. A host that ceases widget stepping can therefore delay normal
-preparation, adoption, retirement and recovery until a control call resumes.
-Actual Rack Pro close/reopen behavior remains unverified.
+A direct FIR was rejected for its extreme-rate cost (about 170% of one core for
+one stereo voice at 512x in the initial probe). The final reader uses live
+polynomial sums over 16/64/256-frame blocks to accelerate wide filters. Partial
+blocks still read raw audio. Tiny loops whose first non-DC Fourier component
+is beyond the filter stopband reduce to their mean. The sums update under core
+ownership on each write and periodically rebuild to bound floating-point drift;
+workers read only raw immutable snapshots. No filtered Reel copy or additional
+COW reserve is required.
 
-Do not call the existing dispatcher concurrently from a timer: its handles,
-tickets, history and SPSC producer state assume a single control owner, and
-persistence paths use host context. Next implementation must serialize all
-control requests through a module-lifetime dispatcher, separate host-context
-operations from worker-safe jobs, and drain on shutdown without audio locks.
-Validate window-close/reopen, stopped-engine save, pending import/edit,
-automatic recovery and removal while jobs are active in the actual host.
+This makes a deliberate memory tradeoff: a full Reel adds 24,664,500 bytes of
+block data. Full active/reserve plus block data is 158,296,500 bytes; two such
+stores total 316,593,000 bytes. The per-module resident-payload ledger now caps
+at **304 MiB**, replacing 256 MiB and accounting for the new data even in cubic
+mode. A third full store remains rejected. This is a payload bound, not a
+process-RSS bound; existing page tables, bridge/UI data and worker metadata are
+additional. Full-reel preparation/commit/reload measured about 0.64/0.60/1.05 s
+in the native regression run.
+
+Validation:
+
+- A 15 kHz input at 2x/reverse-2x produces roughly 0.000789 RMS residual versus
+  0.707 RMS input: about **59 dB attenuation** of the reviewed alias.
+- Spectral passband/rejection cases cover 2x, reverse-2x, 4x, 16x and 512x,
+  with high-valued audio outside the Splice to detect boundary leakage.
+- Random positions, nonaligned and tiny Splices, fractional/changing rates and
+  one million live overwrites differ from the direct FIR by at most about
+  **0.000042** in the exercised cases. Constant signals and stereo polarity
+  remain stable; quality playback reads current COW audio, not its older cut.
+- Grain/chord/reverse/Slide/PM stress preserves completion/onset timing. Native
+  module allocation traps cover the quality mode at extreme rates/ratios.
+- Full-reel short-grain, modulated-pitch, PM, Current-recording/COW benchmark:
+  cubic **1.70–1.81%** of one core; bandlimited **5.83–5.94%**. Median 10 ms
+  blocks were about 0.167/0.578 ms respectively. This excludes Rack scheduling,
+  host-rate conversion and UI work. Reader-only timings vary with speed and
+  alignment; high-rate acceleration avoids the direct FIR's unbounded growth.
+
+This is anti-alias mitigation with a finite transition band, not a claim of
+alias-free arbitrary nonlinear modulation. Near unity it blends with cubic;
+very abrupt PM/Slide movement and motion above the 512-frame width bound can
+still alias. Subjective listening and actual DAW load testing remain worthwhile
+before changing the default quality policy.
+
+### Window-independent control dispatch
+
+A module-lifetime background pump starts from Rack `onAdd`, runs at a 10 ms
+cadence, and joins on removal/destruction. UI, save/edit, JSON and background
+control operations share one recursive control mutex; audio never acquires it.
+The background pump uses try-lock so synchronous save/edit can pump completions
+without competing control owners. SPSC producer state remains serialized.
+The existing nonblocking core ownership token still fences stopped-engine
+maintenance against audio. Host-dependent recovery paths are captured/refreshed
+on host control calls; the background path does not access Rack's thread-local
+`APP`, patch manager or storage-directory APIs.
+
+The automatic native Rack lifecycle fixture exercises real `onAdd`/`onRemove`
+with no widget: preparation, recording recovery, stopped Save, import completion
+and retirement, resumed widget-style polling, and removal during a pending
+import. A separate module fixture exercises stopped-engine destructive edits
+and audio callback allocation/deallocation traps. Existing synchronous patch,
+Undo/Redo and snapshot/bypass regressions also pass.
+
+### Final validation and remaining host checks
+
+- Native phase 0–4, clock, WAV, edit, bundle, recovery, full-save, module, patch,
+  checkpoint-session, playback-reader and automatic-dispatch tests pass.
+- Native MINGW64 Windows `plugin.dll` builds and links successfully.
+- Linux ASan/UBSan playback-reader tests pass, including the million-overwrite
+  comparison. GCC TSAN passes the concurrent snapshot/live-write test using
+  the documented per-process `setarch x86_64 -R` workaround. This TSAN coverage
+  does **not** include the Rack-linked background dispatcher.
+- New focused entry point: `make test-chimera-repairs` (with the documented
+  `RACK_APP_RUNTIME_DIR` for native Rack-linked tests).
+- Actual DAW graphics-window close/reopen and listening tests were not run.
+  The lifecycle fixture verifies missing/resumed widget dispatch, not the DAW
+  graphics stack. The earlier unrelated Sibyl broad-suite failure remains
+  outside this change; the broad suite was not rerun.
+- No installation, staging or commit was performed.

@@ -34,10 +34,58 @@ void operator delete[](void* p) noexcept {
 Plugin* pluginInstance = nullptr;
 bool isDragonKingDebugEnabled() { return false; }
 std::string leviathanPluginUserRootPath() { return "build/tests/chimera_module_cache"; }
+#define CHIMERA_MANUAL_CONTROL_TEST 1 // Deterministic state/ownership fixtures.
 #include "../src/Chimera.cpp"
 
 static void need(bool ok, const char* what) {
     if (!ok) { std::fprintf(stderr, "FAIL: %s\n", what); std::exit(1); }
+}
+
+static void backgroundDispatchRegression() {
+    Chimera m;
+    Module::ProcessArgs args{};
+    args.sampleRate = 48000.f; args.sampleTime = 1.f / 48000.f;
+    m.startControlDispatcher();
+    need(m.requestPreparedStore(4, 4) == chimera::IoService::Accepted,
+         "background dispatch accepts preparation without a widget");
+    auto waitFor = [&](const std::function<bool()>& done, bool audio) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (audio) {
+                trapAllocations = true;
+                for (unsigned i = 0; i < 480; ++i) m.process(args);
+                trapAllocations = false;
+            }
+            { std::lock_guard<std::recursive_mutex> lock(m.controlMutex);
+              if (done()) return; }
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        need(false, "background dispatch deadline");
+    };
+    waitFor([&] { return m.controlActiveHandle && !m.awaitingHandle; }, true);
+    m.menuCommand.store(2); // Append, automatic pre-record cut.
+    waitFor([&] { return m.publishedValidFrames.load() > 200; }, true);
+    m.menuCommand.store(3);
+    waitFor([&] { return !m.recordingActive.load() && !m.recoveryTicket &&
+        !m.recoveryPurpose && !m.snapshotRequestId && !m.recoveryPostPending.load(); }, true);
+    {
+        std::lock_guard<std::recursive_mutex> lock(m.controlMutex);
+        need(bool(chimera::recovery::inspect(m.cachedRecoveryRoot).latest),
+             "record-stop recovery completes with no widget/control pumping");
+    }
+    chimera::edit::Request clear;
+    clear.kind = chimera::edit::ClearReel;
+    std::string error;
+    need(m.requestEdit(clear, error), "headless edit accepted");
+    waitFor([&] { return !m.loadTicket && !m.awaitingHandle && !m.retiringHandle; }, false);
+    {
+        std::lock_guard<std::recursive_mutex> lock(m.controlMutex);
+        need(m.reel->validFrames() == 0 && !m.undoCheckpoint.empty(),
+             "stopped-engine edit adopts and retires without widget/audio callbacks");
+    }
+    m.stopControlDispatcher();
+    need(!m.controlThread.joinable() && audioAllocations == 0 && audioDeallocations == 0,
+         "dispatcher joins off audio and callbacks remain allocation-free");
 }
 
 static void markerEditRegression() {
@@ -51,6 +99,23 @@ static void markerEditRegression() {
     m.reel = m.stores.lookup(1);
     m.slice.setReel(m.reel);
     m.publishedDocumentRevision.store(m.reel->documentRevision());
+    m.bandlimitedPlayback.store(true);
+    json_t* qualityState = m.dataToJson();
+    Chimera restoredQuality;
+    restoredQuality.dataFromJson(qualityState);
+    json_decref(qualityState);
+    need(restoredQuality.bandlimitedPlayback.load(), "playback quality persists in patch state");
+    Module::ProcessArgs qualityArgs{};
+    qualityArgs.sampleRate = 48000.f; qualityArgs.sampleTime = 1.f/48000.f;
+    m.params[Chimera::VARISPEED_PARAM].setValue(1.f);
+    m.params[Chimera::MORPH_PARAM].setValue(1.f);
+    m.params[Chimera::GENE_SIZE_PARAM].setValue(1.f);
+    for (unsigned i = 0; i < 3; ++i) m.mcrSetting[i].store(16.f);
+    trapAllocations = true;
+    for (unsigned i = 0; i < 1000; ++i) m.process(qualityArgs);
+    trapAllocations = false;
+    need(std::isfinite(m.outputs[Chimera::AUDIO_L_OUTPUT].getVoltage()),
+         "quality playback remains finite at extreme rate and chord ratios");
     m.saveInProgress.store(true); // Suppress unrelated display snapshot jobs.
     auto* identity = m.reel;
     const auto audioRevision = m.reel->audioRevision();
@@ -229,6 +294,7 @@ static void bridgedBypassRegression() {
 }
 
 int main() {
+    backgroundDispatchRegression();
     markerEditRegression();
     snapshotAdoptionRegression();
     bridgedBypassRegression();
@@ -1087,7 +1153,7 @@ int main() {
          "audio adopts full worker-prepared Reel without replaying early REC");
     module.serviceStep();
     need(module.readyForPrepare && module.awaitingHandle == 0 &&
-         module.stores.chargedBytes() == 133632000ull,
+         module.stores.chargedBytes() == 158296500ull,
          "audio accepted registry-owned handle through bounded command queue");
     need(module.outputs[Chimera::AUDIO_L_OUTPUT].getVoltage() > 4.9f &&
          std::fabs(module.outputs[Chimera::AUDIO_L_OUTPUT].getVoltage() -
@@ -1379,13 +1445,13 @@ int main() {
         module.serviceStep();
         std::this_thread::yield();
     }
-    need(module.awaitingHandle == 2 && module.stores.chargedBytes() == 133632000ull + 4096ull,
+    need(module.awaitingHandle == 2 && module.stores.chargedBytes() == 158296500ull + 4852ull,
          "worker result charged and queued without touching audio");
     trapAllocations = true;
     module.process(args);
     trapAllocations = false;
     need(audioAllocations == 0, "store adoption callback allocates no heap");
-    need(module.stores.chargedBytes() == 133632000ull + 4096ull,
+    need(module.stores.chargedBytes() == 158296500ull + 4852ull,
          "retired store stays charged before off-audio acknowledgment handling");
     module.serviceStep();
     need(module.awaitingHandle == 0 && module.reel->capacityFrames() == 256,
@@ -1395,7 +1461,7 @@ int main() {
         module.serviceStep();
         std::this_thread::yield();
     }
-    need(module.retiringHandle == 0 && module.stores.chargedBytes() == 4096ull,
+    need(module.retiringHandle == 0 && module.stores.chargedBytes() == 4852ull,
          "worker retirement releases old payload credit off audio");
     chimera::Reel optionReel(1, 1);
     for (std::uint32_t i = 0; i < 4; ++i)

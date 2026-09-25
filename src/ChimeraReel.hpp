@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ChimeraTypes.hpp"
+#include "ChimeraBlockMoments.hpp"
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -32,7 +33,7 @@ public:
 
     Reel(std::uint32_t pages, std::uint32_t reservePages)
         : pages_(checkedPages(pages, reservePages)), reservePages_(reservePages),
-          capacityFrames_(pages_ * kPageFrames),
+          capacityFrames_(pages_ * kPageFrames), moments_(capacityFrames_),
           pool_(new Page[pages_ + reservePages_]), active_(new std::uint32_t[pages_]),
           frozen_(new std::uint32_t[pages_]), captured_(new std::uint8_t[pages_]),
           free_(new std::uint32_t[reservePages ? reservePages : 1]),
@@ -88,6 +89,10 @@ public:
     std::uint64_t rawAudioBytes() const {
         return static_cast<std::uint64_t>(pages_ + reservePages_) * sizeof(Page);
     }
+    std::uint64_t payloadBytes() const { return rawAudioBytes() + moments_.bytes(); }
+    const BlockMoments::Block& playbackMoments(unsigned frame, unsigned size) const {
+        return moments_.get(frame, size);
+    }
 
     // Core-owner operation. Valid-length advancement and samples share a cut.
     bool write(std::uint32_t frame, StereoFrame value, std::uint64_t coreFrame) {
@@ -107,7 +112,12 @@ public:
                 ++cowCopies_;
             }
         }
-        pool_[active_[logical]].frames[frame % kPageFrames] = value;
+        StereoFrame& destination = pool_[active_[logical]].frames[frame % kPageFrames];
+        const StereoFrame old = destination;
+        destination = value;
+        moments_.update(frame, old, value, [this](unsigned i) {
+            return pool_[active_[i/kPageFrames]].frames[i%kPageFrames];
+        });
         if (!validFrames_) {
             markers_[0] = Marker{0, nextMarkerId_++};
             markerCount_ = 1;
@@ -266,6 +276,7 @@ private:
     }
 
     const std::uint32_t pages_, reservePages_, capacityFrames_;
+    BlockMoments moments_;
     std::unique_ptr<Page[]> pool_;
     std::unique_ptr<std::uint32_t[]> active_, frozen_;
     std::unique_ptr<std::uint8_t[]> captured_;

@@ -120,7 +120,8 @@ typedef SpscRing<AudioCompletion, 128, 16> AudioToService;
 class StoreBudget {
 public:
     enum Role { Empty, Active, Prepared, Retired };
-    static const std::uint64_t kPayloadLimit = 256ull * 1024ull * 1024ull;
+    // Two full active/reserve stores plus their core-owned playback moments.
+    static const std::uint64_t kPayloadLimit = 304ull * 1024ull * 1024ull;
     StoreBudget() : used_(0) { for (int i = 0; i < 3; ++i) entries_[i] = Entry{0, 0, Empty}; }
     bool admit(std::uint32_t handle, std::uint64_t bytes, Role role) {
         if (!handle || role == Empty || bytes > kPayloadLimit - used_) return false;
@@ -175,7 +176,7 @@ public:
         }
     }
     bool accept(std::uint32_t handle, std::unique_ptr<Reel>& payload, StoreBudget::Role role) {
-        if (!payload || !budget_.admit(handle, payload->rawAudioBytes(), role)) return false;
+        if (!payload || !budget_.admit(handle, payload->payloadBytes(), role)) return false;
         for (int i = 0; i < 3; ++i) if (!entries_[i].handle) {
             entries_[i].handle = handle;
             entries_[i].role = role;

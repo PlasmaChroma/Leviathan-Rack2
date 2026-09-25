@@ -24,6 +24,7 @@ int main(int argc, char** argv) {
                                                 float(i % 53) / 53.f}, i)) return 1;
     chimera::Slice slice(&reel);
     slice.setConditioning(false);
+    slice.setBandlimitedPlayback(argc > 3);
     slice.setPmEnabled(true);
     chimera::CoreInput in{};
     in.live = chimera::StereoFrame{0.f, 5.f};

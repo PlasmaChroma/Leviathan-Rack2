@@ -2,6 +2,7 @@
 
 #include "ChimeraReel.hpp"
 #include "ChimeraProfile.hpp"
+#include "ChimeraPlaybackReader.hpp"
 #include <cmath>
 #include <cstdint>
 
@@ -46,6 +47,7 @@ public:
         reset();
     }
 
+    void setBandlimited(bool enabled) { bandlimited_ = enabled; }
     void setSmooth(bool enabled) { smooth_ = enabled; }
     void setImmediateTransitions(bool enabled) {
         if (enabled && !immediate_) {
@@ -63,6 +65,7 @@ public:
     }
     void setSeed(std::uint32_t seed) { random_ = profile1::Xorshift32(seed); }
     void reset(double coordinate = 0.0) {
+        havePmOffset_ = false;
         active_ = false; phase_ = 0; primaryAge_ = 0; primaryLength_ = 1;
         primaryTravel_ = 0;
         primaryPosition_ = coordinate; slide_ = 0; nextSlot_ = 0;
@@ -104,6 +107,9 @@ public:
     Result step(const Reel& reel, Region region, const CoreOutput& c,
                 bool retrigger = false, bool fullMode = false, bool metadataRefresh = false,
                 double pmOffset = 0.0, ClockDrive clock = ClockDrive()) {
+        const double pmDelta = havePmOffset_ ? pmOffset - lastPmOffset_ : 0.0;
+        lastPmOffset_ = pmOffset; havePmOffset_ = true;
+        qualityBlend_ += profile1::clamp((bandlimited_ ? 1.0 : 0.0) - qualityBlend_, -1.0/240, 1.0/240);
         Result result = {StereoFrame{0.f, 0.f}, false, pendingCompletions_, primaryPosition_, primaryPosition_, 0.f, 0, false};
         pendingCompletions_ = 0;
         const std::uint32_t length = region.end - region.begin;
@@ -248,7 +254,7 @@ public:
             if (v.active) {
                 const double w = voiceWeight(v) * (transitionRemaining_ ?
                     (1.0 - transitionFraction) : (1.0 - tailFraction));
-                const StereoFrame source = read(reel, v.region, v.position + pmOffset, result.invalidSource);
+                const StereoFrame source = read(reel, v.region, v.position + pmOffset, c.rate * v.ratio + delta + pmDelta, result.invalidSource);
                 sumL += source.l * v.left * w;
                 sumR += source.r * v.right * w;
                 weightSum += w;
@@ -263,7 +269,7 @@ public:
             }
             if (tail.active) {
                 const double w = voiceWeight(tail) * tailFraction;
-                const StereoFrame source = read(reel, tail.region, tail.position + pmOffset, result.invalidSource);
+                const StereoFrame source = read(reel, tail.region, tail.position + pmOffset, c.rate * tail.ratio + delta + pmDelta, result.invalidSource);
                 tailLast_[i] = StereoFrame{static_cast<float>(source.l * tail.left * w),
                                            static_cast<float>(source.r * tail.right * w)};
                 tailWeightLast_[i] = w;
@@ -439,19 +445,19 @@ private:
             residualBlend_ = static_cast<float>(v.unity);
         }
     }
-    static StereoFrame read(const Reel& reel, Region r, double coordinate, bool& invalid) {
-        const double p = profile1::wrapPosition(coordinate, r);
-        const std::int64_t base = static_cast<std::int64_t>(std::floor(p));
-        const double t = p - base;
-        const StereoFrame a = reel.readActive(profile1::wrapTap(base, -1, r));
-        const StereoFrame b = reel.readActive(profile1::wrapTap(base, 0, r));
-        const StereoFrame c = reel.readActive(profile1::wrapTap(base, 1, r));
-        const StereoFrame d = reel.readActive(profile1::wrapTap(base, 2, r));
-        const float left = static_cast<float>(profile1::cubic(a.l,b.l,c.l,d.l,t));
-        const float right = static_cast<float>(profile1::cubic(a.r,b.r,c.r,d.r,t));
-        if (!profile1::finite(left) || !profile1::finite(right)) invalid = true;
-        return StereoFrame{profile1::audio(left), profile1::audio(right)};
+    StereoFrame read(const Reel& reel, Region r, double coordinate, double speed, bool& invalid) {
+        if (qualityBlend_ <= 0) return PlaybackReader::cubic(reel, r, coordinate, invalid);
+        StereoFrame filtered = reader_.read(reel, r, coordinate, speed, invalid);
+        if (qualityBlend_ < 1) {
+            const auto original = PlaybackReader::cubic(reel, r, coordinate, invalid);
+            filtered.l = float(original.l + (filtered.l-original.l)*qualityBlend_);
+            filtered.r = float(original.r + (filtered.r-original.r)*qualityBlend_);
+        }
+        return filtered;
     }
+    PlaybackReader reader_;
+    bool bandlimited_ = false, havePmOffset_ = false;
+    double qualityBlend_ = 0, lastPmOffset_ = 0;
     Voice slots_[4], tails_[4];
     std::uint8_t tailAge_[4];
     StereoFrame tailLast_[4], scalar_[4];

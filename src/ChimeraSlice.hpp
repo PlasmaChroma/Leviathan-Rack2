@@ -37,6 +37,7 @@ public:
         clockConnected_(false), clockEdge_(false), clockWaiting_(false),
         clockPeriod_(0), clockOption_(0), hybridStretch_(false) {}
 
+    void setBandlimitedPlayback(bool enabled) { grains_.setBandlimited(enabled); }
     void setReel(Reel* reel) {
         markerHistoryState_ = 0;
         reel_ = reel;

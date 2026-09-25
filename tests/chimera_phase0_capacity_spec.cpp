@@ -9,8 +9,8 @@ constexpr std::size_t kHostsPerCoreAt768k = 16;
 constexpr std::size_t kInputDelayAt768k = 640; // Measured Speex quality 5.
 constexpr std::size_t kEventsPerCoreLimit = 256;
 constexpr std::size_t kHistoryCapacity = 16384;
-constexpr std::uint64_t kStoreAudioBytes = 2ull * 66816000ull; // Active + COW reserve.
-constexpr std::uint64_t kAudioBudget = 256ull * 1024ull * 1024ull;
+constexpr std::uint64_t kStoreAudioBytes = 2ull * 66816000ull + 24664500ull; // Active/COW + live moments.
+constexpr std::uint64_t kAudioBudget = 304ull * 1024ull * 1024ull;
 static_assert(kJacks * kHostsPerCoreAt768k == 208, "core event burst changed");
 static_assert(kJacks * kHostsPerCoreAt768k < kEventsPerCoreLimit, "core event cap exceeded");
 static_assert(kJacks * kInputDelayAt768k == 8320, "history delay bound changed");

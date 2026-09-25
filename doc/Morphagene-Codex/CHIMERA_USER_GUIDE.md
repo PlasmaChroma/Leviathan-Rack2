@@ -19,3 +19,24 @@ Chimera checkpoints a pre-record cut and, after recording stops, a completed cut
 ## What the display means
 
 **UNSAVED** means the active Reel audio or markers differ from the last embedded save, or no embedded Reel exists yet. **SAVED** means the current Reel revisions match the embedded save. **/ IO** means a Reel I/O job is active. **SAVE ERROR**, **RATE ERROR**, **REEL NOT READY**, and **REEL ERROR** require attention; the module menu provides the available diagnostic text. A flashing or dim light alone does not establish whether audio is durable.
+
+
+## Playback quality and background work
+
+**Bandlimited playback (higher CPU)** in the module menu reduces aliasing when
+speeding up a Reel or using pitched Genes. It is saved with the patch and fades
+in when switched. Leave it off for the original cubic sound and lower CPU use.
+It suppresses the reviewed 15 kHz-at-2x alias by about 59 dB; sharp PM and other
+extreme modulation can still alias. In the dense-grain recording benchmark it
+used about 5.9% of one core versus 1.8% with the setting off, excluding host
+sample-rate conversion and Rack/UI overhead.
+
+Full Reels now use about 151 MiB of accounted audio/filter payload, including
+recording snapshot reserve. A prepared replacement can temporarily bring that
+to about 302 MiB; the payload limit is 304 MiB per module. This storage supports
+instant quality switching and coherent filtering during recording.
+
+Reel jobs and recovery now continue when the host stops stepping the module
+widget. New edit checkpoints use exclusive session leases. Unlocked abandoned
+sessions older than 24 hours are cleaned in bounded background passes; live
+Undo files, unknown files and legacy checkpoint directories are retained.

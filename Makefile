@@ -506,6 +506,13 @@ test-chimera-wav: | build/tests
 	$(call run_rack_test_bin,build/tests/chimera_wav_spec$(if $(ARCH_WIN),.exe,))
 
 .PHONY: test-chimera-edit
+.PHONY: test-chimera-playback-reader test-chimera-checkpoints test-chimera-repairs
+test-chimera-repairs: test-chimera-playback-reader test-chimera-checkpoints test-chimera-dispatch test-chimera-module test-chimera-patch
+
+test-chimera-playback-reader: | build/tests
+	$(CXX) -std=c++11 -O3 $(if $(ARCH_X64),-march=nehalem,) -Wall -Wextra -fno-fast-math -Isrc tests/chimera_playback_reader_spec.cpp -o build/tests/chimera_playback_reader_spec$(if $(ARCH_WIN),.exe,)
+	build/tests/chimera_playback_reader_spec$(if $(ARCH_WIN),.exe,)
+
 test-chimera-edit: | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc tests/chimera_edit_spec.cpp src/ChimeraEdit.cpp -o build/tests/chimera_edit_spec$(if $(ARCH_WIN),.exe,)
 	build/tests/chimera_edit_spec$(if $(ARCH_WIN),.exe,)
@@ -516,6 +523,10 @@ test-chimera-bundle: | build/tests
 	$(call run_rack_test_bin,build/tests/chimera_bundle_spec$(if $(ARCH_WIN),.exe,))
 
 .PHONY: test-chimera-recovery
+test-chimera-checkpoints: | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_checkpoint_session_spec.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_checkpoint_session_spec$(if $(ARCH_WIN),.exe,)
+	$(call run_rack_test_bin,build/tests/chimera_checkpoint_session_spec$(if $(ARCH_WIN),.exe,))
+
 test-chimera-recovery: | build/tests
 	$(CXX) -std=c++11 -O2 -Wall -Wextra -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_recovery_spec.cpp src/ChimeraRecovery.cpp src/ChimeraBundle.cpp src/ChimeraWav.cpp -L$(RACK_DIR) -lRack -o build/tests/chimera_recovery_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_recovery_spec$(if $(ARCH_WIN),.exe,))
@@ -538,6 +549,11 @@ test-chimera-full-save: | build/tests
 test-chimera-patch: | build/tests
 	$(CXX) -std=gnu++17 -O2 -g $(if $(ARCH_X64),-march=nehalem,) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_patch_spec.cpp src/ChimeraService.cpp src/ChimeraBundle.cpp src/ChimeraRecovery.cpp src/ChimeraWav.cpp src/ChimeraWavConvenience.cpp src/ChimeraEdit.cpp src/DebugTerminalTransport.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp src/visual/ApertureLight.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32 -lws2_32,-lGL) -pthread -o build/tests/chimera_patch_spec$(if $(ARCH_WIN),.exe,)
 	$(call run_rack_test_bin,build/tests/chimera_patch_spec$(if $(ARCH_WIN),.exe,))
+
+.PHONY: test-chimera-dispatch
+test-chimera-dispatch: | build/tests
+	$(CXX) -std=gnu++17 -O2 -g $(if $(ARCH_X64),-march=nehalem,) -Wall -Wextra -Wno-unused-parameter -fno-fast-math -fno-unsafe-math-optimizations -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_dispatch_spec.cpp src/ChimeraService.cpp src/ChimeraBundle.cpp src/ChimeraRecovery.cpp src/ChimeraWav.cpp src/ChimeraWavConvenience.cpp src/ChimeraEdit.cpp src/DebugTerminalTransport.cpp src/PanelSvgUtils.cpp src/PanelAnchorAtlas.cpp src/visual/ApertureLight.cpp src/NvgGraphicsLifecycle.cpp -L$(RACK_DIR) -lRack $(if $(filter Windows_NT,$(OS)),-lopengl32 -lws2_32,-lGL) -pthread -o build/tests/chimera_dispatch_spec$(if $(ARCH_WIN),.exe,)
+	$(call run_rack_test_bin,build/tests/chimera_dispatch_spec$(if $(ARCH_WIN),.exe,))
 
 .PHONY: bench-chimera-phase6
 bench-chimera-phase6: | build/tests

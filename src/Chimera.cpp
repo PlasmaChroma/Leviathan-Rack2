@@ -8,6 +8,7 @@
 #include "ChimeraBundle.hpp"
 #include "ChimeraRecovery.hpp"
 #include "ChimeraEdit.hpp"
+#include "ChimeraCheckpointSession.hpp"
 #include "ChimeraWaveform.hpp"
 #include "DebugTerminalMetrics.hpp"
 #include "PanelSvgUtils.hpp"
@@ -104,6 +105,41 @@ struct Chimera : Module {
     CHIMERA_ASSERT_ID(ERROR_LIGHT);
 #undef CHIMERA_ASSERT_ID
 
+    // Control callers (UI, save, and the background pump) share one serialized
+    // owner. Audio never takes this mutex; CoreOwnership still fences stopped-
+    // engine maintenance. Recursive entry allows synchronous save/edit pumping.
+    std::recursive_mutex controlMutex;
+    std::thread controlThread;
+    std::atomic<bool> controlStop{false};
+    std::string cachedRecoveryRoot;
+    std::string checkpointSessionRoot;
+    std::uint64_t nextCheckpointSweepNs = 0;
+    void startControlDispatcher() {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
+        if (controlThread.joinable()) return;
+        cachedRecoveryRoot = recoveryRoot(); // Capture host context on its caller.
+        checkpointSessionRoot = rack::system::join(leviathanPluginUserRootPath(), "Chimera/checkpoints-v1");
+        controlStop.store(false, std::memory_order_release);
+        controlThread = std::thread([this] {
+            while (!controlStop.load(std::memory_order_acquire)) {
+                {
+                    std::unique_lock<std::recursive_mutex> lock(controlMutex, std::try_to_lock);
+                    if (lock.owns_lock()) {
+                        try { serviceStep(false); }
+                        catch (...) {
+                            ioError.store(true, std::memory_order_release);
+                            setIoMessage("Background Reel service failed");
+                        }
+                    }
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+        });
+    }
+    void stopControlDispatcher() {
+        controlStop.store(true, std::memory_order_release);
+        if (controlThread.joinable()) controlThread.join();
+    }
     chimera::StoreRegistry stores;
     debug_terminal::BaselineModuleMetrics debugMetrics;
     chimera::ServiceToAudio commands;
@@ -144,6 +180,7 @@ struct Chimera : Module {
     std::atomic<bool> prepareRequested{false};
     std::atomic<int> menuCommand{0};
     std::atomic<unsigned> selectionMenuCommands{0}; // 1 next Splice, 2 add marker.
+    std::atomic<bool> bandlimitedPlayback{false};
     std::atomic<bool> inopSetting{false};
     std::atomic<bool> gnsmSetting{false}, cvopSetting{false}, omodSetting{false}, pminSetting{false};
     std::atomic<int> pmodSetting{0}, ckopSetting{0}, vsopSetting{0};
@@ -203,8 +240,10 @@ struct Chimera : Module {
     int awaitingHistoryAction = -1;
     std::string awaitingCheckpoint;
     std::string undoCheckpoint, redoCheckpoint;
+    chimera::CheckpointSession checkpointSession;
     std::set<std::string> editCheckpointFiles; // This instance's files only; control/worker side.
     void pruneEditCheckpoints() {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         // A restore job may still be reading either history entry. Its done
         // publication precedes clearing loadTicket on this dispatcher.
         if (loadTicket) return;
@@ -297,6 +336,7 @@ struct Chimera : Module {
         configBypass(AUDIO_R_INPUT, AUDIO_R_OUTPUT);
     }
     ~Chimera() override {
+        stopControlDispatcher();
         // A heavy-edit worker may still be reading a leased snapshot through a
         // raw Reel pointer. Module teardown is off audio: let that bounded job
         // finish before the registry destroys its source store.
@@ -321,13 +361,18 @@ struct Chimera : Module {
             static_cast<unsigned>(e.sampleRate) : 0u, std::memory_order_release);
     }
     void ensureRateService() {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         if (rateServiceRegistered) return;
         chimera::registerRateBridge({&requestedHostRate, &activeHostRate,
             &preparedBridge, &retiredBridge, &bridgeError});
         rateServiceRegistered = true;
     }
     void onAdd(const AddEvent&) override {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         ensureRateService();
+#ifndef CHIMERA_MANUAL_CONTROL_TEST
+        startControlDispatcher();
+#endif
         std::string manifest;
         {
             std::lock_guard<std::mutex> lock(persistenceMutex);
@@ -356,6 +401,7 @@ struct Chimera : Module {
         else ioBusy.store(true, std::memory_order_release);
     }
     void onSave(const SaveEvent&) override {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         saveInProgress.store(true, std::memory_order_release);
         struct SaveScope {
             std::atomic<bool>& flag;
@@ -459,12 +505,15 @@ struct Chimera : Module {
         if (!success || snapshotRequestId) ioError.store(true, std::memory_order_release);
     }
     void onRemove(const RemoveEvent&) override {
+        stopControlDispatcher();
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         if (rateServiceRegistered) {
             chimera::unregisterRateBridge(&preparedBridge);
             rateServiceRegistered = false;
         }
     }
     bool requestImportWav(const std::string& path, bool truncate, std::string& error) {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         if (markerRequestId || loadTicket || awaitingHandle || pendingRequestId || retiringHandle ||
             snapshotRequestId || recordingOrArmed.load(std::memory_order_acquire)) {
             error = "Reel operation or recording is active"; return false;
@@ -515,6 +564,7 @@ struct Chimera : Module {
         return true;
     }
     bool requestRecovery(bool preRecord, std::string& error) {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         if (markerRequestId || loadTicket || awaitingHandle || pendingRequestId || retiringHandle ||
             snapshotRequestId || recordingOrArmed.load(std::memory_order_acquire)) {
             error = "Reel operation or recording is active"; return false;
@@ -548,6 +598,7 @@ struct Chimera : Module {
         return true;
     }
     bool exportWav(const std::string& path, bool overwrite, std::string& error) {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         if (rack::system::exists(path) && !overwrite) {
             error = "Target WAV exists"; return false;
         }
@@ -589,6 +640,7 @@ struct Chimera : Module {
     bool requestHeavyEdit(const chimera::edit::Request* editRequest,
                           const std::string& restorePath, int historyAction,
                           std::string& error) {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         pruneEditCheckpoints();
         // Bound disk use even if unlinking an old file repeatedly fails.
         if (editCheckpointFiles.size() >= 3) {
@@ -618,14 +670,12 @@ struct Chimera : Module {
         if (!snapshotReady || !snapshotReel) {
             error = "Reel snapshot failed"; return false;
         }
-        const std::string directory = rack::system::join(
-            leviathanPluginUserRootPath(), "Chimera/checkpoints/" +
-            std::to_string(getId()));
-        if (!rack::system::isDirectory(directory) &&
-            !rack::system::createDirectories(directory)) {
+        if (!checkpointSession.ensure(rack::system::join(
+                leviathanPluginUserRootPath(), "Chimera/checkpoints-v1"))) {
             finishSnapshotReader();
-            error = "Checkpoint directory unavailable"; return false;
+            error = "Checkpoint session unavailable or busy; retry the edit"; return false;
         }
+        const std::string& directory = checkpointSession.directory();
         const std::string checkpoint = rack::system::join(directory,
             "reel-" + std::to_string(steadyNs()) + "-" +
             std::to_string(nextRequestId) + ".wav");
@@ -683,12 +733,14 @@ struct Chimera : Module {
         return true;
     }
     bool requestEdit(const chimera::edit::Request& request, std::string& error) {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         if (request.kind == chimera::edit::MoveMarker || request.kind == chimera::edit::RemoveMarker)
             return requestMarkerEdit(request.splice, request.frame,
                 request.kind == chimera::edit::RemoveMarker ? 1u : 0u, error);
         return requestHeavyEdit(&request, "", 0, error);
     }
     bool requestMarkerEdit(unsigned index, unsigned frame, unsigned kind, std::string& error) {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         if (!controlActiveHandle || markerRequestId || loadTicket || awaitingHandle ||
             pendingRequestId || retiringHandle || recordingOrArmed.load(std::memory_order_acquire)) {
             error = "Reel operation or recording is active"; return false;
@@ -702,6 +754,7 @@ struct Chimera : Module {
         return true;
     }
     bool requestUndo(bool redo, std::string& error) {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         if (publishedMarkerHistory.load(std::memory_order_acquire))
             return requestMarkerEdit(0, 0, redo ? 3u : 2u, error);
         const std::string& path = redo ? redoCheckpoint : undoCheckpoint;
@@ -710,6 +763,7 @@ struct Chimera : Module {
     }
     chimera::IoService::Status requestPreparedStore(std::uint32_t pages,
                                                      std::uint32_t reservePages) {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         // Only the non-RT control dispatcher calls this and serviceStep().
         if (!readyForPrepare || pendingRequestId || awaitingHandle || retiringHandle ||
             snapshotRequestId || snapshotReaders.count())
@@ -727,6 +781,7 @@ struct Chimera : Module {
         return status;
     }
     bool requestSnapshot() {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         // One control dispatcher is the SPSC producer. No worker touches the
         // live page table; a ready cut keeps its store resident until release.
         if (!controlActiveHandle || pendingRequestId || awaitingHandle || retiringHandle ||
@@ -747,6 +802,7 @@ struct Chimera : Module {
         return true;
     }
     bool finishSnapshotReader() {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         if (!snapshotReady || !snapshotReaders.count()) return false;
         if (!snapshotReaders.finish()) return true; // Other readers retain it.
         snapshotReady = false;
@@ -754,6 +810,7 @@ struct Chimera : Module {
         return true;
     }
     void enqueueSnapshotRelease() {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         if (!snapshotReleasePending) return;
         const chimera::AudioCommand command = {
             generation->value.load(std::memory_order_acquire), snapshotRequestId,
@@ -765,6 +822,7 @@ struct Chimera : Module {
             std::chrono::steady_clock::now().time_since_epoch()).count());
     }
     std::string recoveryRoot() {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         const std::string patchPath = APP && APP->patch ? APP->patch->path : "";
         const std::string source = patchPath.empty() ?
             (APP && APP->patch ? getPatchStorageDirectory() : "unattached-patch") : patchPath;
@@ -792,6 +850,7 @@ struct Chimera : Module {
         return text;
     }
     void recoveryStep() {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         if (recoveryTicket && recoveryTicket->done.load(std::memory_order_acquire)) {
             if (recoveryTicket->waveform)
                 std::atomic_store_explicit(&waveform, recoveryTicket->waveform,
@@ -805,7 +864,7 @@ struct Chimera : Module {
             finishSnapshotReader();
         }
         if (recoveryPurpose && snapshotReady && snapshotReel && !recoveryTicket) {
-            const std::string root = recoveryRoot();
+            const std::string root = cachedRecoveryRoot;
             const std::string id = std::to_string(steadyNs()) + "-" +
                 std::to_string(nextRequestId);
             const std::uint64_t wallMs = std::uint64_t(
@@ -961,6 +1020,7 @@ struct Chimera : Module {
         }
     }
     void maintenanceStep() {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         if (!commands.size() && !markerCommands.size() && !snapshotRequestId) return;
         const std::uint64_t now = steadyNs();
         if (!ownership.tryMaintenance(now)) return;
@@ -975,7 +1035,14 @@ struct Chimera : Module {
         coreSnapshotProgress();
         ownership.releaseMaintenance(now);
     }
-    void serviceStep() {
+    void serviceStep(bool hostContext = true) {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
+        if (hostContext) cachedRecoveryRoot = recoveryRoot();
+        const auto now = steadyNs();
+        if (!checkpointSessionRoot.empty() && now >= nextCheckpointSweepNs) {
+            chimera::CheckpointSession::sweep(checkpointSessionRoot, std::time(nullptr));
+            nextCheckpointSweepNs = now + UINT64_C(60000000000);
+        }
         ensureRateService();
         pruneEditCheckpoints();
         if (loadTicket && loadTicket->done.load(std::memory_order_acquire) &&
@@ -1273,6 +1340,7 @@ struct Chimera : Module {
     }
 
     json_t* dataToJson() override {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         std::lock_guard<std::mutex> lock(optionsTextExtrasMutex);
         json_t* root = json_object();
         const chimera::optionsText::Values settings = currentOptionsText();
@@ -1286,6 +1354,7 @@ struct Chimera : Module {
         }
         json_object_set_new(root, "schemaVersion", json_integer(1));
         json_object_set_new(root, "dspProfile", json_integer(1));
+        json_object_set_new(root, "bandlimitedPlayback", json_boolean(bandlimitedPlayback.load()));
         const bool unsavedAudio = unsavedImport.load(std::memory_order_acquire) ||
             publishedAudioRevision.load(std::memory_order_acquire) > audioRevision;
         json_object_set_new(root, "audioStatus", json_string(manifest.empty() ?
@@ -1324,6 +1393,7 @@ struct Chimera : Module {
         return root;
     }
     void dataFromJson(json_t* root) override {
+        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         json_t* schema = json_object_get(root, "schemaVersion");
         json_t* profile = json_object_get(root, "dspProfile");
         if ((schema && (!json_is_integer(schema) || json_integer_value(schema) != 1)) ||
@@ -1332,6 +1402,7 @@ struct Chimera : Module {
             ioError.store(true, std::memory_order_release);
             return;
         }
+        bandlimitedPlayback.store(json_is_true(json_object_get(root, "bandlimitedPlayback")));
         json_t* storage = json_object_get(root, "storage");
         json_t* manifest = json_object_get(storage, "manifest");
         if (json_is_string(manifest)) {
@@ -1794,6 +1865,7 @@ struct Chimera : Module {
             stopAtPrimaryBoundary = false;
             slice.setPlay(false);
         }
+        slice.setBandlimitedPlayback(bandlimitedPlayback.load(std::memory_order_relaxed));
         const chimera::Slice::Output out = slice.step(in);
         recordingActive.store(out.recording, std::memory_order_release);
         publishedMarkerHistory.store(slice.markerHistoryState(), std::memory_order_release);
@@ -2013,6 +2085,10 @@ struct ChimeraWidget : ModuleWidget {
     void appendContextMenu(Menu* menu) override {
         Chimera* m = dynamic_cast<Chimera*>(module);
         if (!m) return;
+        std::lock_guard<std::recursive_mutex> controlLock(m->controlMutex);
+        menu->addChild(createCheckMenuItem("Bandlimited playback (higher CPU)", "",
+            [m] { return m->bandlimitedPlayback.load(); },
+            [m] { m->bandlimitedPlayback.store(!m->bandlimitedPlayback.load()); }));
         const char* memoryStatus = m->controlActiveHandle ? "Reel ready" :
             (m->ioError.load(std::memory_order_acquire) ? "Reel preparation failed" :
              (m->pendingRequestId || m->awaitingHandle ?

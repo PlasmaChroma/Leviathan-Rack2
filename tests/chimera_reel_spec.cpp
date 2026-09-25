@@ -90,7 +90,7 @@ int main() {
     }
     {
         Reel full(kMaxPages, kMaxPages);
-        need(full.rawAudioBytes() == 133632000ull &&
+        need(full.rawAudioBytes() == 133632000ull && full.payloadBytes() == 158296500ull &&
              full.capacityFrames() == kMaxReelFrames, "full off-audio allocation/budget");
         for (std::uint32_t i = 0; i < kMaxReelFrames; ++i)
             need(full.write(i, StereoFrame{float(i % 4096), -float(i % 4096)}, i),

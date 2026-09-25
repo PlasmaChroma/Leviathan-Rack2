@@ -83,9 +83,9 @@ int main() {
     }
     {
         StoreBudget budget;
-        const std::uint64_t full = 133632000ull;
+        const std::uint64_t full = 158296500ull;
         need(budget.admit(1, full, StoreBudget::Active) &&
-             budget.admit(2, full, StoreBudget::Prepared), "active plus prepared fit 256 MiB");
+             budget.admit(2, full, StoreBudget::Prepared), "active plus prepared fit 304 MiB including playback moments");
         need(budget.transition(1, StoreBudget::Retired) &&
              budget.transition(2, StoreBudget::Active), "old leased store stays charged");
         need(!budget.admit(3, full, StoreBudget::Prepared),
@@ -127,7 +127,7 @@ int main() {
         StoreRegistry registry;
         need(registry.accept(101, result.prepared, StoreBudget::Prepared) &&
              !result.prepared && registry.lookup(101) &&
-             registry.chargedBytes() == 4ull * 2048ull,
+             registry.chargedBytes() == 9704ull,
              "prepared store adopted by service-owned handle registry");
         need(registry.transition(101, StoreBudget::Active) &&
              !registry.releaseOffAudio(101), "active borrowed audio store cannot be destroyed");
