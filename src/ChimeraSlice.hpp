@@ -128,6 +128,8 @@ public:
     std::uint64_t onsetCount() const { return grains_.onsetCount(); }
     double primaryPosition() const { return position_; }
     std::uint16_t currentRegion() const { return currentRegion_; }
+    std::uint32_t writerFrame() const { return writer_; }
+    double playbackPosition() const { return position_; }
     std::uint16_t requestedRegion() const { return selection_.requested(); }
     std::uint16_t organizeBin() const { return selection_.organizeBin(); }
     void setInop(bool inop) {

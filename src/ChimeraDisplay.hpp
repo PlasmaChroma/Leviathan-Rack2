@@ -1,0 +1,164 @@
+#pragma once
+
+// Included by Chimera.cpp after Chimera is complete. The waveform layer is
+// cached by Rack's FramebufferWidget; only the small overlay redraws per frame.
+struct ChimeraWaveformLayer : Widget {
+    std::shared_ptr<const chimera::WaveformSummary> summary;
+
+    void draw(const DrawArgs& args) override {
+        NVGcontext* vg = args.vg;
+        const float w = box.size.x, h = box.size.y;
+        nvgBeginPath(vg);
+        nvgRoundedRect(vg, 0.f, 0.f, w, h, 4.f);
+        nvgFillColor(vg, nvgRGB(8, 21, 30));
+        nvgFill(vg);
+        const float traceTop = 4.f, traceBottom = h * 0.56f;
+        const float mid = (traceTop + traceBottom) * 0.5f;
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, 5.f, mid);
+        nvgLineTo(vg, w - 5.f, mid);
+        nvgStrokeColor(vg, nvgRGBA(83, 125, 135, 95));
+        nvgStrokeWidth(vg, 1.f);
+        nvgStroke(vg);
+        if (!summary || !summary->frames) return;
+        const float left = 5.f, width = w - 10.f;
+        const float scale = (traceBottom - traceTop) * 0.46f /
+            std::max(summary->peak, 0.015f);
+        nvgBeginPath(vg);
+        for (std::size_t i = 0; i < chimera::WaveformSummary::kBins; ++i) {
+            const float x = left + width * (float(i) + 0.5f) /
+                float(chimera::WaveformSummary::kBins);
+            nvgMoveTo(vg, x, mid - summary->high[i] * scale);
+            nvgLineTo(vg, x, mid - summary->low[i] * scale);
+        }
+        nvgStrokeColor(vg, nvgRGB(106, 221, 215));
+        nvgStrokeWidth(vg, std::max(1.f, width / float(chimera::WaveformSummary::kBins) * 0.78f));
+        nvgStroke(vg);
+        nvgBeginPath(vg);
+        for (std::uint16_t i = 1; i < summary->markerCount; ++i) {
+            const float x = left + width * float(summary->markers[i]) /
+                float(summary->frames);
+            nvgMoveTo(vg, x, traceTop);
+            nvgLineTo(vg, x, traceBottom);
+        }
+        nvgStrokeColor(vg, nvgRGBA(235, 183, 104, 200));
+        nvgStrokeWidth(vg, 1.f);
+        nvgStroke(vg);
+    }
+};
+
+struct ChimeraDisplayOverlay : Widget {
+    Chimera* owner = nullptr;
+    std::shared_ptr<const chimera::WaveformSummary> summary;
+    std::string stateText = "REEL READY";
+    std::string detailText = "NO REEL";
+    std::string saveText;
+    int cachedState = -1;
+    int cachedErrorKind = -1;
+    bool cachedBusy = false, cachedDirty = false;
+    std::uint32_t cachedFrames = UINT32_MAX;
+    unsigned cachedCount = UINT32_MAX, cachedCurrent = UINT32_MAX;
+    unsigned cachedRequested = UINT32_MAX;
+
+    void step() override {
+        if (!owner) {
+            stateText = "CHIMERA";
+            detailText = "REEL ENGINE";
+            saveText.clear();
+            return;
+        }
+        const int state = owner->publishedRecordState.load(std::memory_order_acquire);
+        const bool saveError = owner->saveFailure.load(std::memory_order_acquire);
+        const bool error = saveError || owner->ioError.load(std::memory_order_acquire) ||
+            owner->bridgeError.load(std::memory_order_acquire) ||
+            owner->recordNotReady.load(std::memory_order_acquire);
+        const int errorKind = saveError ? 1 :
+            owner->bridgeError.load(std::memory_order_acquire) ? 2 :
+            owner->recordNotReady.load(std::memory_order_acquire) ? 3 : error ? 4 : 0;
+        const bool busy = owner->ioBusy.load(std::memory_order_acquire) ||
+            owner->saveInProgress.load(std::memory_order_acquire);
+        const std::uint32_t frames = owner->publishedValidFrames.load(std::memory_order_acquire);
+        const unsigned count = owner->publishedMarkerCount.load(std::memory_order_acquire);
+        const unsigned current = owner->publishedRegion.load(std::memory_order_acquire);
+        const unsigned requested = owner->publishedRequestedRegion.load(std::memory_order_acquire);
+        const bool dirty = owner->unsavedImport.load(std::memory_order_acquire) ||
+            owner->publishedAudioRevision.load(std::memory_order_acquire) !=
+                owner->savedAudioRevision.load(std::memory_order_acquire) ||
+            owner->publishedDocumentRevision.load(std::memory_order_acquire) !=
+                owner->savedDocumentRevision.load(std::memory_order_acquire) ||
+            !owner->hasSavedReel.load(std::memory_order_acquire);
+        if (state == cachedState && errorKind == cachedErrorKind && busy == cachedBusy &&
+            dirty == cachedDirty && frames / 48000 == cachedFrames / 48000 &&
+            count == cachedCount && current == cachedCurrent &&
+            requested == cachedRequested) return;
+        cachedState = state;
+        cachedErrorKind = errorKind;
+        cachedBusy = busy;
+        cachedDirty = dirty;
+        cachedFrames = frames;
+        cachedCount = count;
+        cachedCurrent = current;
+        cachedRequested = requested;
+        static const char* states[] = {"IDLE", "ARM CURRENT", "ARM APPEND",
+            "ARM STOP", "REC CURRENT", "REC APPEND"};
+        stateText = states[std::max(0, std::min(state, 5))];
+        if (saveError) stateText = "SAVE ERROR";
+        else if (owner->bridgeError.load(std::memory_order_acquire)) stateText = "RATE ERROR";
+        else if (owner->recordNotReady.load(std::memory_order_acquire)) stateText = "REEL NOT READY";
+        else if (error) stateText = "REEL ERROR";
+        else if (busy) stateText += " / IO";
+        saveText = frames ? (dirty ? "UNSAVED" : "SAVED") : "";
+        if (!frames) detailText = "NO AUDIO";
+        else {
+            detailText = std::to_string(frames / 48000) + "s  SPL " +
+                std::to_string(current + 1) + "/" + std::to_string(count);
+            if (requested != current)
+                detailText += " >" + std::to_string(requested + 1);
+        }
+        Widget::step();
+    }
+
+    void draw(const DrawArgs& args) override {
+        if (!APP || !APP->window || !APP->window->uiFont) return;
+        NVGcontext* vg = args.vg;
+        const float w = box.size.x, h = box.size.y;
+        const float left = 5.f, width = w - 10.f;
+        const float traceTop = 4.f, traceBottom = h * 0.56f;
+        if (owner && summary && summary->frames) {
+            const auto xFor = [&](std::uint32_t frame) {
+                return left + width * float(std::min(frame, summary->frames)) /
+                    float(summary->frames);
+            };
+            const int record = owner->publishedRecordState.load(std::memory_order_acquire);
+            if (record == 4 || record == 5 ||
+                owner->publishedAudioRevision.load(std::memory_order_acquire) >
+                    summary->audioRevision) {
+                const float x1 = xFor(owner->publishedRecordStartFrame.load(std::memory_order_acquire));
+                const float x2 = xFor(owner->publishedRecordFrame.load(std::memory_order_acquire));
+                nvgBeginPath(vg);
+                nvgRect(vg, std::min(x1, x2), traceTop, std::max(1.f, std::fabs(x2 - x1)),
+                        traceBottom - traceTop);
+                nvgFillColor(vg, nvgRGBA(243, 113, 89, 52));
+                nvgFill(vg);
+            }
+            const float playX = xFor(owner->publishedPlayFrame.load(std::memory_order_acquire));
+            nvgBeginPath(vg);
+            nvgMoveTo(vg, playX, traceTop);
+            nvgLineTo(vg, playX, traceBottom);
+            nvgStrokeColor(vg, nvgRGB(246, 234, 168));
+            nvgStrokeWidth(vg, 1.5f);
+            nvgStroke(vg);
+        }
+        nvgFontFaceId(vg, APP->window->uiFont->handle);
+        nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+        nvgFontSize(vg, 9.f);
+        nvgFillColor(vg, nvgRGB(246, 231, 193));
+        nvgText(vg, 6.f, h * 0.72f, stateText.c_str(), nullptr);
+        nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+        nvgText(vg, w - 6.f, h * 0.72f, saveText.c_str(), nullptr);
+        nvgFontSize(vg, 8.5f);
+        nvgFillColor(vg, nvgRGB(166, 209, 212));
+        nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+        nvgText(vg, 6.f, h * 0.91f, detailText.c_str(), nullptr);
+    }
+};

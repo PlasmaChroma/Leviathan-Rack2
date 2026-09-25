@@ -1348,6 +1348,42 @@ int main() {
              chimera::IoService::Accepted,
              "worker may prepare while a second module is removed");
     }
+    {
+        ChimeraDisplayOverlay display;
+        display.owner = &module;
+        module.publishedValidFrames.store(48000);
+        module.publishedMarkerCount.store(2);
+        module.publishedRegion.store(0);
+        module.publishedRequestedRegion.store(1);
+        module.publishedRecordState.store(2);
+        module.publishedDocumentRevision.store(3);
+        module.savedDocumentRevision.store(2);
+        module.publishedAudioRevision.store(10);
+        module.savedAudioRevision.store(10);
+        module.hasSavedReel.store(true);
+        module.unsavedImport.store(false);
+        module.ioError.store(false);
+        module.saveFailure.store(false);
+        module.bridgeError.store(false);
+        module.recordNotReady.store(false);
+        module.ioBusy.store(false);
+        display.step();
+        need(display.stateText == "ARM APPEND" &&
+             display.detailText.find(">2") != std::string::npos &&
+             display.saveText == "UNSAVED",
+             "panel text distinguishes an armed Append and unsaved marker edit");
+        module.publishedRecordState.store(0);
+        module.savedDocumentRevision.store(3);
+        module.publishedRequestedRegion.store(0);
+        display.step();
+        need(display.stateText == "IDLE" &&
+             display.saveText == "SAVED",
+             "panel text updates after a saved handoff");
+        display.owner = nullptr;
+        display.step();
+        need(display.detailText == "REEL ENGINE" && display.saveText.empty(),
+             "browser preview has null-module text");
+    }
     chimera::shutdownChimeraIoService();
     need(removedToken->closed.load() && removedToken->outstanding.load() == 0,
          "module removal leaves no pending worker credit or dangling module pointer");

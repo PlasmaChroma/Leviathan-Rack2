@@ -8,6 +8,8 @@
 #include "ChimeraBundle.hpp"
 #include "ChimeraRecovery.hpp"
 #include "ChimeraEdit.hpp"
+#include "ChimeraWaveform.hpp"
+#include "DebugTerminalMetrics.hpp"
 #include "PanelSvgUtils.hpp"
 #include "visual/ApertureLight.hpp"
 #include <ui/TextField.hpp>
@@ -15,6 +17,7 @@
 #include <system.hpp>
 #include <patch.hpp>
 #include <atomic>
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -24,6 +27,8 @@
 #include <mutex>
 #include <thread>
 #include <ctime>
+
+namespace { std::atomic<std::uint32_t> gChimeraDebugInstanceCounter{1u}; }
 
 struct Chimera : Module {
     static constexpr std::uint64_t kAutomaticSnapshotId = UINT64_MAX;
@@ -99,6 +104,7 @@ struct Chimera : Module {
 #undef CHIMERA_ASSERT_ID
 
     chimera::StoreRegistry stores;
+    debug_terminal::BaselineModuleMetrics debugMetrics;
     chimera::ServiceToAudio commands;
     chimera::AudioToService completions;
     chimera::CoreOwnership ownership;
@@ -143,6 +149,7 @@ struct Chimera : Module {
     struct LoadTicket {
         std::atomic<bool> done{false};
         chimera::bundle::LoadResult result;
+        std::shared_ptr<const chimera::WaveformSummary> waveform;
         unsigned adoptionKind = 1; // 1 patch load, 4 external import, 5 fenced edit.
         bool usesSnapshot = false;
         std::uint64_t expectedDocumentRevision = 0, expectedAudioRevision = 0;
@@ -151,12 +158,17 @@ struct Chimera : Module {
         std::string warning;
     };
     std::shared_ptr<LoadTicket> loadTicket; // Control dispatcher only.
+    std::shared_ptr<const chimera::WaveformSummary> waveform;
+    std::shared_ptr<const chimera::WaveformSummary> awaitingWaveform;
     std::mutex persistenceMutex;
     std::mutex ioMessageMutex;
     std::string lastIoMessage;
     std::string lastIoWarning;
     std::string committedManifest;
     std::uint64_t committedDocumentRevision = 0, committedAudioRevision = 0;
+    std::atomic<std::uint64_t> savedDocumentRevision{0};
+    std::atomic<std::uint64_t> savedAudioRevision{0};
+    std::atomic<bool> hasSavedReel{false};
     std::atomic<std::uint64_t> publishedDocumentRevision{0}, publishedAudioRevision{0};
     std::atomic<bool> saveFailure{false};
     std::atomic<bool> unsavedImport{false}, recordingOrArmed{false};
@@ -164,14 +176,21 @@ struct Chimera : Module {
     std::atomic<std::uint64_t> recordStartNs{0};
     std::atomic<bool> saveInProgress{false};
     std::uint64_t lastRecoveryNs = 0; // Control dispatcher only.
-    int recoveryPurpose = 0; // 0 none, 1 pre-record, 2 latest.
+    int recoveryPurpose = 0; // 0 none, 1 pre-record, 2 latest, 3 display refresh.
+    std::uint64_t lastDisplayAttemptNs = 0;
     struct RecoveryTicket {
         std::atomic<bool> done{false};
         chimera::recovery::CommitResult result;
+        std::shared_ptr<const chimera::WaveformSummary> waveform;
+        bool displayOnly = false;
     };
     std::shared_ptr<RecoveryTicket> recoveryTicket;
     std::atomic<std::uint32_t> publishedValidFrames{0};
     std::atomic<std::uint16_t> publishedRegion{0};
+    std::atomic<std::uint16_t> publishedRequestedRegion{0}, publishedMarkerCount{0};
+    std::atomic<std::uint32_t> publishedPlayFrame{0}, publishedRecordFrame{0};
+    std::atomic<std::uint32_t> publishedRecordStartFrame{0};
+    std::atomic<int> publishedRecordState{0}; // Idle, armed Current/Append/Stop, recording Current/Append.
     unsigned awaitingAdoptionKind = 1; // Control dispatcher only.
     int awaitingHistoryAction = -1;
     std::string awaitingCheckpoint;
@@ -209,6 +228,7 @@ struct Chimera : Module {
     unsigned unbypassFadeRemaining = 0;
 
     Chimera() : slice(nullptr) {
+        debugMetrics.assignInstanceId(gChimeraDebugInstanceCounter);
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
         configParam(SOS_PARAM, 0.f, 1.f, 0.f, "S.O.S.");
         configParam(GENE_SIZE_PARAM, 0.f, 1.f, 0.f, "Gene Size");
@@ -295,6 +315,10 @@ struct Chimera : Module {
             nextRequestId++, [ticket, root, manifest] {
                 try { ticket->result = chimera::bundle::load(root, manifest); }
                 catch (...) { ticket->result.error = "patch_load_exception"; }
+                if (ticket->result.reel) {
+                    try { ticket->waveform = chimera::WaveformSummary::fromActive(*ticket->result.reel); }
+                    catch (...) {} // Audio loading must not depend on display allocation.
+                }
                 ticket->done.store(true, std::memory_order_release);
             });
         if (queued != chimera::IoService::Accepted) {
@@ -381,6 +405,9 @@ struct Chimera : Module {
                     committedDocumentRevision = ticket->result.documentRevision;
                     committedAudioRevision = ticket->result.audioRevision;
                 }
+                savedAudioRevision.store(ticket->result.audioRevision, std::memory_order_release);
+                savedDocumentRevision.store(ticket->result.documentRevision, std::memory_order_release);
+                hasSavedReel.store(true, std::memory_order_release);
                 if (!chimera::bundle::pruneObsolete(storageRoot, ticket->result.manifest))
                     setIoWarning("Obsolete Reel assets could not all be pruned");
             }
@@ -446,6 +473,10 @@ struct Chimera : Module {
                     }
                 }
                 catch (...) { ticket->result.error = "wav_import_exception"; }
+                if (ticket->result.reel) {
+                    try { ticket->waveform = chimera::WaveformSummary::fromActive(*ticket->result.reel); }
+                    catch (...) {}
+                }
                 ticket->done.store(true, std::memory_order_release);
             });
         if (queued != chimera::IoService::Accepted) {
@@ -475,6 +506,10 @@ struct Chimera : Module {
             nextRequestId++, [ticket, root, entry] {
                 try { ticket->result = chimera::recovery::load(root, entry); }
                 catch (...) { ticket->result.error = "recovery_load_exception"; }
+                if (ticket->result.reel) {
+                    try { ticket->waveform = chimera::WaveformSummary::fromActive(*ticket->result.reel); }
+                    catch (...) {}
+                }
                 ticket->done.store(true, std::memory_order_release);
             });
         if (queued != chimera::IoService::Accepted) {
@@ -597,6 +632,10 @@ struct Chimera : Module {
                     }
                 }
                 catch (...) { ticket->result.error = "edit_worker_exception"; }
+                if (ticket->result.reel) {
+                    try { ticket->waveform = chimera::WaveformSummary::fromActive(*ticket->result.reel); }
+                    catch (...) {}
+                }
                 ticket->done.store(true, std::memory_order_release);
             });
         if (queued != chimera::IoService::Accepted) {
@@ -700,7 +739,10 @@ struct Chimera : Module {
     }
     void recoveryStep() {
         if (recoveryTicket && recoveryTicket->done.load(std::memory_order_acquire)) {
-            if (!recoveryTicket->result) {
+            if (recoveryTicket->waveform)
+                std::atomic_store_explicit(&waveform, recoveryTicket->waveform,
+                                           std::memory_order_release);
+            if (!recoveryTicket->displayOnly && !recoveryTicket->result) {
                 setIoWarning("Recovery checkpoint failed: " + recoveryTicket->result.error);
                 ioError.store(true, std::memory_order_release);
             }
@@ -717,18 +759,23 @@ struct Chimera : Module {
                     std::chrono::system_clock::now().time_since_epoch()).count());
             const chimera::recovery::Role role = recoveryPurpose == 1 ?
                 chimera::recovery::PreRecord : chimera::recovery::Latest;
+            const bool displayOnly = recoveryPurpose == 3;
             chimera::Reel* const frozen = snapshotReel;
             std::shared_ptr<RecoveryTicket> ticket(new RecoveryTicket);
+            ticket->displayOnly = displayOnly;
             const chimera::IoService::Status queued = service->execute(generation,
-                nextRequestId++, [ticket, root, id, frozen, role, wallMs] {
-                    try { ticket->result = chimera::recovery::commit(
-                        root, id, *frozen, role, wallMs); }
+                nextRequestId++, [ticket, root, id, frozen, role, wallMs, displayOnly] {
+                    try {
+                        ticket->waveform = chimera::WaveformSummary::fromSnapshot(*frozen);
+                        if (!displayOnly) ticket->result = chimera::recovery::commit(
+                            root, id, *frozen, role, wallMs);
+                    }
                     catch (...) { ticket->result.error = "recovery_worker_exception"; }
                     ticket->done.store(true, std::memory_order_release);
                 });
             if (queued == chimera::IoService::Accepted) recoveryTicket = ticket;
             else {
-                setIoWarning("Recovery checkpoint queue is busy");
+                if (!displayOnly) setIoWarning("Recovery checkpoint queue is busy");
                 recoveryPurpose = 0;
                 finishSnapshotReader();
             }
@@ -747,6 +794,18 @@ struct Chimera : Module {
             recoveryPurpose = 2;
             lastRecoveryNs = now;
             if (stopped) recoveryPostPending.store(false, std::memory_order_release);
+        }
+        else if (!stopped && !recordingActive.load(std::memory_order_acquire) &&
+                 now - lastDisplayAttemptNs >= UINT64_C(1000000000)) {
+            const auto cached = std::atomic_load_explicit(&waveform,
+                std::memory_order_acquire);
+            const std::uint64_t document = publishedDocumentRevision.load(std::memory_order_acquire);
+            const std::uint64_t audio = publishedAudioRevision.load(std::memory_order_acquire);
+            if ((!cached || cached->documentRevision != document ||
+                 cached->audioRevision != audio) && requestSnapshot()) {
+                recoveryPurpose = 3;
+                lastDisplayAttemptNs = now;
+            }
         }
     }
     void coreCommands() {
@@ -847,6 +906,8 @@ struct Chimera : Module {
             const std::string checkpoint = loadTicket->checkpointPath;
             const int historyAction = loadTicket->historyAction;
             const std::string warning = loadTicket->warning;
+            const std::shared_ptr<const chimera::WaveformSummary> loadedWaveform =
+                std::move(loadTicket->waveform);
             chimera::bundle::LoadResult loaded = std::move(loadTicket->result);
             const std::uint64_t loadedDocumentRevision = loaded.documentRevision;
             const std::uint64_t loadedAudioRevision = loaded.audioRevision;
@@ -888,6 +949,7 @@ struct Chimera : Module {
                         awaitingAudioRevision = loadedAudioRevision;
                         awaitingHistoryAction = historyAction;
                         awaitingCheckpoint = checkpoint;
+                        awaitingWaveform = loadedWaveform;
                     }
                 }
             }
@@ -947,6 +1009,7 @@ struct Chimera : Module {
                 awaitingHandle = 0;
                 awaitingAdoptionKind = 1;
                 awaitingCheckpoint.clear();
+                awaitingWaveform.reset();
                 awaitingHistoryAction = -1;
                 ioBusy.store(false, std::memory_order_release);
                 ioError.store(true, std::memory_order_release);
@@ -957,10 +1020,16 @@ struct Chimera : Module {
             ioError.store(false, std::memory_order_release);
             setIoMessage("");
             controlActiveHandle = ack.handle;
+            std::atomic_store_explicit(&waveform, awaitingWaveform,
+                                       std::memory_order_release);
+            awaitingWaveform.reset();
             if (awaitingAdoptionKind == 1) {
                 std::lock_guard<std::mutex> lock(persistenceMutex);
                 committedDocumentRevision = awaitingDocumentRevision;
                 committedAudioRevision = awaitingAudioRevision;
+                savedAudioRevision.store(awaitingAudioRevision, std::memory_order_release);
+                savedDocumentRevision.store(awaitingDocumentRevision, std::memory_order_release);
+                hasSavedReel.store(true, std::memory_order_release);
             }
             stores.transition(ack.handle, chimera::StoreBudget::Active);
             if (ack.status) {
@@ -1235,11 +1304,15 @@ struct Chimera : Module {
     }
 
     void process(const ProcessArgs& args) override {
+        const bool measurePerf = isDragonKingDebugEnabled();
+        const auto processStart = debug_terminal::debugTimerStart(measurePerf);
         if (!ownership.tryAudio()) {
             outputs[AUDIO_L_OUTPUT].setVoltage(0.f);
             outputs[AUDIO_R_OUTPUT].setVoltage(0.f);
             outputs[CV_OUTPUT].setVoltage(0.f);
             outputs[EOSG_OUTPUT].setVoltage(0.f);
+            if (measurePerf) debugMetrics.recordProcess(
+                debug_terminal::elapsedNsSince(processStart));
             return;
         }
         coreCommands();
@@ -1250,8 +1323,12 @@ struct Chimera : Module {
             heartbeatDivider = 0;
         }
         ownership.releaseAudio(audioHeartbeatNs);
+        if (measurePerf) debugMetrics.recordProcess(
+            debug_terminal::elapsedNsSince(processStart));
     }
     void processBypass(const ProcessArgs& args) override {
+        const bool measurePerf = isDragonKingDebugEnabled();
+        const auto processStart = debug_terminal::debugTimerStart(measurePerf);
         (void) args;
         if (ownership.tryAudio()) {
             coreCommands();
@@ -1260,6 +1337,7 @@ struct Chimera : Module {
             slice.stopRecord();
             recordArm = NoArm;
             recordingOrArmed.store(false, std::memory_order_release);
+            publishedRecordState.store(0, std::memory_order_release);
             menuCommand.exchange(0, std::memory_order_acq_rel);
             selectionMenuCommands.exchange(0, std::memory_order_acq_rel);
             if (reel) reel->maintenanceTick();
@@ -1285,6 +1363,8 @@ struct Chimera : Module {
         writeOutput({left, right, 0.f, false});
         lights[REC_LIGHT].setBrightness(0.f);
         lights[REC_ARMED_LIGHT].setBrightness(0.f);
+        if (measurePerf) debugMetrics.recordProcess(
+            debug_terminal::elapsedNsSince(processStart));
     }
     chimera::HostState captureHost() {
         chimera::HostState state;
@@ -1323,6 +1403,7 @@ struct Chimera : Module {
                 recoveryPostPending.store(true, std::memory_order_release);
             slice.stopRecord();
             recordArm = NoArm;
+            publishedRecordState.store(0, std::memory_order_release);
             // A resumed supported rate must adopt a freshly primed bridge.
             // Keep the old allocation for off-audio retirement below.
             activeHostRate.store(0, std::memory_order_release);
@@ -1353,6 +1434,7 @@ struct Chimera : Module {
                 recoveryPostPending.store(true, std::memory_order_release);
             slice.stopRecord();
             recordArm = NoArm;
+            publishedRecordState.store(0, std::memory_order_release);
             playInitialized = false;
             stopAtPrimaryBoundary = false;
             menuCommand.exchange(0, std::memory_order_acq_rel);
@@ -1599,6 +1681,20 @@ struct Chimera : Module {
             publishedAudioRevision.store(reel->audioRevision(), std::memory_order_release);
             publishedValidFrames.store(reel->validFrames(), std::memory_order_release);
             publishedRegion.store(slice.currentRegion(), std::memory_order_release);
+            publishedRequestedRegion.store(slice.requestedRegion(), std::memory_order_release);
+            publishedMarkerCount.store(reel->markerCount(), std::memory_order_release);
+        }
+        const int displayRecordState = recordArm == ArmCurrent ? 1 :
+            recordArm == ArmAppend ? 2 : recordArm == ArmStop ? 3 :
+            slice.recordState() == chimera::Slice::Current ? 4 :
+            slice.recordState() == chimera::Slice::Append ? 5 : 0;
+        publishedRecordState.store(displayRecordState, std::memory_order_release);
+        if ((slice.frame() & 255u) == 0 || wasRecording != out.recording) {
+            const double position = slice.playbackPosition();
+            publishedPlayFrame.store(position > 0.0 ?
+                std::uint32_t(std::min(position, double(UINT32_MAX))) : 0u,
+                std::memory_order_release);
+            publishedRecordFrame.store(slice.writerFrame(), std::memory_order_release);
         }
         recordingOrArmed.store(out.recording || recordArm != NoArm,
                                std::memory_order_release);
@@ -1631,6 +1727,7 @@ struct Chimera : Module {
         if (started) {
             recordNotReady.store(false, std::memory_order_release);
             recordStartNs.store(steadyNs(), std::memory_order_release);
+            publishedRecordStartFrame.store(slice.writerFrame(), std::memory_order_release);
             bool unclaimed = false;
             if (reel && !saveInProgress.load(std::memory_order_acquire) &&
                 snapshotClaimed.compare_exchange_strong(unclaimed, true,
@@ -1671,7 +1768,14 @@ struct ChimeraRatioField : ui::TextField {
     }
 };
 
+#include "ChimeraDisplay.hpp"
+
 struct ChimeraWidget : ModuleWidget {
+    debug_terminal::BaselineWidgetMetrics debugWidgetMetrics;
+    widget::FramebufferWidget* waveformCache = nullptr;
+    ChimeraWaveformLayer* waveformLayer = nullptr;
+    ChimeraDisplayOverlay* displayOverlay = nullptr;
+    std::shared_ptr<const chimera::WaveformSummary> displayedWaveform;
     ChimeraWidget(Chimera* module) {
         setModule(module);
         const std::string panelPath = asset::plugin(pluginInstance, "res/Chimera.panel.svg");
@@ -1688,6 +1792,21 @@ struct ChimeraWidget : ModuleWidget {
             Vec anchor;
             return panel_svg::loadPointFromSvgMm(panelPath, id, &anchor) ? anchor : fallbackMm;
         };
+        const Vec displayOrigin = mm2px(point("DISPLAY_ORIGIN", Vec(6, 17.5f)));
+        const Vec displayEnd = mm2px(point("DISPLAY_END", Vec(136, 42.5f)));
+        waveformCache = new widget::FramebufferWidget;
+        waveformCache->box.pos = displayOrigin;
+        waveformCache->box.size = displayEnd.minus(displayOrigin);
+        waveformCache->oversample = 1.f;
+        waveformLayer = new ChimeraWaveformLayer;
+        waveformLayer->box.size = waveformCache->box.size;
+        waveformCache->addChild(waveformLayer);
+        addChild(waveformCache);
+        displayOverlay = new ChimeraDisplayOverlay;
+        displayOverlay->owner = module;
+        displayOverlay->box.pos = displayOrigin;
+        displayOverlay->box.size = waveformCache->box.size;
+        addChild(displayOverlay);
         addParam(createParamCentered<RoundBlackKnob>(mm2px(point("SOS_PARAM", Vec(20, 44))), module, Chimera::SOS_PARAM));
         addParam(createParamCentered<RoundBlackKnob>(mm2px(point("GENE_SIZE_PARAM", Vec(71, 44))), module, Chimera::GENE_SIZE_PARAM));
         addParam(createParamCentered<RoundBlackKnob>(mm2px(point("VARISPEED_PARAM", Vec(122, 44))), module, Chimera::VARISPEED_PARAM));
@@ -1728,8 +1847,45 @@ struct ChimeraWidget : ModuleWidget {
         addChild(createLightCentered<SmallAperture<RedApertureLight>>(mm2px(point("ERROR_LIGHT", Vec(133, 26))), module, Chimera::ERROR_LIGHT));
     }
     void step() override {
-        if (Chimera* m = dynamic_cast<Chimera*>(module)) m->serviceStep();
+        const bool measurePerf = isDragonKingDebugEnabled();
+        const auto stepStart = debug_terminal::debugTimerStart(measurePerf);
+        Chimera* m = dynamic_cast<Chimera*>(module);
+        displayOverlay->owner = m;
+        if (m) {
+            m->serviceStep();
+            auto next = std::atomic_load_explicit(&m->waveform,
+                std::memory_order_acquire);
+            if (next != displayedWaveform) {
+                displayedWaveform = next;
+                waveformLayer->summary = next;
+                displayOverlay->summary = next;
+                waveformCache->setDirty();
+            }
+        }
+        else if (displayedWaveform) {
+            displayedWaveform.reset();
+            waveformLayer->summary.reset();
+            displayOverlay->summary.reset();
+            waveformCache->setDirty();
+        }
         ModuleWidget::step();
+        if (measurePerf)
+            debugWidgetMetrics.recordStep(debug_terminal::elapsedUsSince(stepStart));
+    }
+    void draw(const DrawArgs& args) override {
+        const bool measurePerf = module && isDragonKingDebugEnabled();
+        const auto drawStart = debug_terminal::debugTimerStart(measurePerf);
+        ModuleWidget::draw(args);
+        Chimera* m = dynamic_cast<Chimera*>(module);
+        if (!m || !measurePerf) return;
+        debug_terminal::drawDebugInstanceId(args.vg, box.size, m->debugMetrics.instanceId);
+        debugWidgetMetrics.recordDraw(debug_terminal::elapsedUsSince(drawStart));
+        if (debug_terminal::baselineSubmitDue("Chimera", m->debugMetrics.instanceId,
+                system::getTime()))
+            debug_terminal::submitBaselineMetrics("Chimera", m->debugMetrics.instanceId,
+                m->debugMetrics.consumeProcessRange(),
+                debugWidgetMetrics.consumeStepRange(),
+                debugWidgetMetrics.consumeDrawRange());
     }
     void appendContextMenu(Menu* menu) override {
         Chimera* m = dynamic_cast<Chimera*>(module);
@@ -1832,7 +1988,12 @@ struct ChimeraWidget : ModuleWidget {
         menu->addChild(createMenuItem("Add Marker", "", [m] {
             m->selectionMenuCommands.fetch_or(2u, std::memory_order_release);
         }));
-        menu->addChild(createMenuItem("Move selected marker to frame…", "", [m] {
+        auto addReelAction = [m, menu](MenuItem* item) {
+            item->disabled = !m->controlActiveHandle ||
+                m->recordingOrArmed.load(std::memory_order_acquire);
+            menu->addChild(item);
+        };
+        addReelAction(createMenuItem("Move selected marker to frame…", "", [m] {
             char* entered = osdialog_prompt(OSDIALOG_INFO,
                 "New 48 kHz sample-frame position for the selected marker:", "");
             if (!entered) return;
@@ -1852,7 +2013,7 @@ struct ChimeraWidget : ModuleWidget {
             if (!m->requestEdit(request, error))
                 osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());
         }));
-        menu->addChild(createMenuItem("Remove selected marker…", "", [m] {
+        addReelAction(createMenuItem("Remove selected marker…", "", [m] {
             if (!osdialog_message(OSDIALOG_WARNING, OSDIALOG_YES_NO,
                     "Remove this marker and merge its Splice into the preceding one?")) return;
             chimera::edit::Request request;
@@ -1862,7 +2023,7 @@ struct ChimeraWidget : ModuleWidget {
             if (!m->requestEdit(request, error))
                 osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());
         }));
-        menu->addChild(createMenuItem("Erase selected Splice audio…", "", [m] {
+        addReelAction(createMenuItem("Erase selected Splice audio…", "", [m] {
             if (!osdialog_message(OSDIALOG_WARNING, OSDIALOG_YES_NO,
                     "Replace the selected Splice audio with silence? An Undo checkpoint will be created first.")) return;
             chimera::edit::Request request;
@@ -1872,7 +2033,7 @@ struct ChimeraWidget : ModuleWidget {
             if (!m->requestEdit(request, error))
                 osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());
         }));
-        menu->addChild(createMenuItem("Delete selected Splice…", "", [m] {
+        addReelAction(createMenuItem("Delete selected Splice…", "", [m] {
             if (!osdialog_message(OSDIALOG_WARNING, OSDIALOG_YES_NO,
                     "Delete and compact the selected Splice? An Undo checkpoint will be created first.")) return;
             chimera::edit::Request request;
@@ -1882,7 +2043,7 @@ struct ChimeraWidget : ModuleWidget {
             if (!m->requestEdit(request, error))
                 osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());
         }));
-        menu->addChild(createMenuItem("Clear Reel…", "", [m] {
+        addReelAction(createMenuItem("Clear Reel…", "", [m] {
             if (!osdialog_message(OSDIALOG_WARNING, OSDIALOG_YES_NO,
                     "Clear all audio and markers in this Reel? An Undo checkpoint will be created first.")) return;
             chimera::edit::Request request;
@@ -1891,12 +2052,12 @@ struct ChimeraWidget : ModuleWidget {
             if (!m->requestEdit(request, error))
                 osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());
         }));
-        menu->addChild(createMenuItem("Undo Reel edit", "", [m] {
+        addReelAction(createMenuItem("Undo Reel edit", "", [m] {
             std::string error;
             if (!m->requestUndo(false, error))
                 osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());
         }));
-        menu->addChild(createMenuItem("Redo Reel edit", "", [m] {
+        addReelAction(createMenuItem("Redo Reel edit", "", [m] {
             std::string error;
             if (!m->requestUndo(true, error))
                 osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());
@@ -1906,7 +2067,7 @@ struct ChimeraWidget : ModuleWidget {
         if (recovery.latest) {
             const std::string label = "Recover latest checkpoint (" +
                 Chimera::checkpointTime(recovery.latest) + ")…";
-            menu->addChild(createMenuItem(label, "", [m] {
+            addReelAction(createMenuItem(label, "", [m] {
                 if (!osdialog_message(OSDIALOG_WARNING, OSDIALOG_YES_NO,
                         "Replace this Reel with the latest completed recovery checkpoint? Changes after that checkpoint will be lost.")) return;
                 std::string error;
@@ -1917,7 +2078,7 @@ struct ChimeraWidget : ModuleWidget {
         if (recovery.preRecord) {
             const std::string label = "Restore pre-recording checkpoint (" +
                 Chimera::checkpointTime(recovery.preRecord) + ")…";
-            menu->addChild(createMenuItem(label, "", [m] {
+            addReelAction(createMenuItem(label, "", [m] {
                 if (!osdialog_message(OSDIALOG_WARNING, OSDIALOG_YES_NO,
                         "Replace this Reel with the last pre-recording checkpoint? Recorded changes since that capture will be lost.")) return;
                 std::string error;
@@ -1925,6 +2086,7 @@ struct ChimeraWidget : ModuleWidget {
                     osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());
             }));
         }
+        auto addBehavior = [m](Menu* menu) {
         menu->addChild(createSubmenuItem("REC assignment (rsop)", "", [m](Menu* submenu) {
             const char* labels[2] = {"REC: Current / alternate: Append", "REC: Append / alternate: Current"};
             for (int mode = 0; mode < 2; ++mode)
@@ -1939,9 +2101,9 @@ struct ChimeraWidget : ModuleWidget {
                     [m, mode] { return m->inputGainSetting.load(std::memory_order_acquire) == mode; },
                     [m, mode] { m->inputGainSetting.store(mode, std::memory_order_release); }));
         }));
-        menu->addChild(createMenuItem("Writer: live input only", "", [m] {
-            m->inopSetting.store(!m->inopSetting.load(std::memory_order_relaxed), std::memory_order_release);
-        }));
+        menu->addChild(createCheckMenuItem("Writer: live input only (inop)", "",
+            [m] { return m->inopSetting.load(std::memory_order_acquire); },
+            [m] { m->inopSetting.store(!m->inopSetting.load(std::memory_order_relaxed), std::memory_order_release); }));
         menu->addChild(createCheckMenuItem("Smooth Gene window", "",
             [m] { return m->gnsmSetting.load(std::memory_order_acquire); },
             [m] { m->gnsmSetting.store(!m->gnsmSetting.load(std::memory_order_relaxed), std::memory_order_release); }));
@@ -2035,6 +2197,8 @@ struct ChimeraWidget : ModuleWidget {
                 submenu->addChild(field);
             }
         }));
+        };
+        menu->addChild(createSubmenuItem("Chimera behavior", "", addBehavior));
     }
 };
 
