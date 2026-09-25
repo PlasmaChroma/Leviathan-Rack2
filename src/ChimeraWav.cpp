@@ -1,4 +1,5 @@
 #include "ChimeraWav.hpp"
+#include "ChimeraWavReadBuffer.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -23,7 +24,8 @@ bool get16(std::istream& in, std::uint16_t& v) {
     v = std::uint16_t(b[0]) | (std::uint16_t(b[1]) << 8);
     return true;
 }
-bool get32(std::istream& in, std::uint32_t& v) {
+template<class Reader>
+bool get32(Reader& in, std::uint32_t& v) {
     unsigned char b[4];
     if (!in.read(reinterpret_cast<char*>(b), 4)) return false;
     v = std::uint32_t(b[0]) | (std::uint32_t(b[1]) << 8) |
@@ -234,9 +236,10 @@ ImportResult readStrict(std::istream& in, std::uint32_t capacityPages) {
     try { result.reel.reset(new Reel(capacityPages, capacityPages)); }
     catch (...) { return failure("reel_allocation_failed"); }
     if (!seek(in, dataOffset)) return failure("seek_data_failed");
+    SampleBuffer samples(in, dataBytes);
     for (std::uint32_t frame = 0; frame < frames; ++frame) {
         std::uint32_t lBits = 0, rBits = 0;
-        if (!get32(in, lBits) || !get32(in, rBits)) return failure("truncated_data");
+        if (!get32(samples, lBits) || !get32(samples, rBits)) return failure("truncated_data");
         float l = fromBits(lBits), r = fromBits(rBits);
         if (!std::isfinite(l)) { l = 0.f; ++result.nonfiniteSamples; }
         if (!std::isfinite(r)) { r = 0.f; ++result.nonfiniteSamples; }

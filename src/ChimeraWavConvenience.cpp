@@ -1,4 +1,5 @@
 #include "ChimeraWav.hpp"
+#include "ChimeraWavReadBuffer.hpp"
 #include <speex/speex_resampler.h>
 #include <algorithm>
 #include <cmath>
@@ -34,7 +35,7 @@ struct Format {
     std::uint16_t code = 0, channels = 0, bits = 0, align = 0;
     std::uint32_t rate = 0;
 };
-bool sample(std::istream& in, const Format& format, float& out,
+bool sample(SampleBuffer& in, const Format& format, float& out,
             std::uint32_t& nonfinite) {
     unsigned char b[8] = {};
     const unsigned bytes = format.bits / 8;
@@ -61,7 +62,7 @@ bool sample(std::istream& in, const Format& format, float& out,
     out = float(value);
     return true;
 }
-bool frame(std::istream& in, const Format& format, StereoFrame& out,
+bool frame(SampleBuffer& in, const Format& format, StereoFrame& out,
            std::uint32_t& nonfinite) {
     if (!sample(in, format, out.l, nonfinite)) return false;
     if (format.channels == 1) out.r = out.l;
@@ -75,10 +76,11 @@ bool frame(std::istream& in, const Format& format, StereoFrame& out,
 bool resample(std::istream& in, const Format& format, std::uint32_t sourceFrames,
               std::uint32_t frames, ImportResult& result) {
     if (!frames) return true;
+    SampleBuffer samples(in, std::uint64_t(sourceFrames)*format.align);
     if (format.rate == kCoreRate) {
         for (std::uint32_t i = 0; i < frames; ++i) {
             StereoFrame value{};
-            if (!frame(in, format, value, result.nonfiniteSamples)) return false;
+            if (!frame(samples, format, value, result.nonfiniteSamples)) return false;
             if (!result.reel->appendImported(value)) return false;
         }
         return true;
@@ -95,7 +97,7 @@ bool resample(std::istream& in, const Format& format, std::uint32_t sourceFrames
     const unsigned prefix = ((latency + period - 1) / period) * period;
     const std::uint64_t discard = std::uint64_t(prefix) * kCoreRate / format.rate;
     StereoFrame current{};
-    if (!frame(in, format, current, result.nonfiniteSamples)) return false;
+    if (!frame(samples, format, current, result.nonfiniteSamples)) return false;
     const StereoFrame first = current;
     std::uint64_t inputIndex = 0, outputIndex = 0;
     unsigned readFrames = 1, written = 0;
@@ -103,7 +105,7 @@ bool resample(std::istream& in, const Format& format, std::uint32_t sourceFrames
     while (written < frames) {
         for (unsigned i = 0; i < 1024; ++i, ++inputIndex) {
             if (inputIndex > prefix && readFrames < sourceFrames) {
-                if (!frame(in, format, current, result.nonfiniteSamples)) return false;
+                if (!frame(samples, format, current, result.nonfiniteSamples)) return false;
                 ++readFrames;
             }
             const StereoFrame value = inputIndex < prefix ? first : current;

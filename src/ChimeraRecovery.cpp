@@ -108,11 +108,11 @@ CommitResult commit(const std::string& root, const std::string& id,
                     const Reel& frozen, Role role, std::uint64_t wallTimeMs) {
     CommitResult result;
     if (!safeId(id) || !wallTimeMs) { result.error = "invalid_recovery_id"; return result; }
-    if (!rack::system::isDirectory(root) && !rack::system::createDirectories(root)) {
+    if (!rack::system::createDirectories(root) && !rack::system::isDirectory(root)) {
         result.error = "recovery_directory_unavailable"; return result;
     }
     const std::string directory = join(root, "chimera");
-    if (!rack::system::isDirectory(directory) && !rack::system::createDirectories(directory)) {
+    if (!rack::system::createDirectories(directory) && !rack::system::isDirectory(directory)) {
         result.error = "recovery_directory_unavailable"; return result;
     }
     const bundle::CommitResult stored = bundle::commit(root, id, frozen);

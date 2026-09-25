@@ -1211,3 +1211,16 @@ build/tests/sibyl_note_edit_spec build/tests/sibyl_module_spec build/tests/sibyl
 build/tests/sibyl_note_edit_spec: tests/sibyl_pitch_edit_cases.hpp
 
 build/tests/sibyl_codec_spec build/tests/sibyl_note_edit_spec build/tests/sibyl_module_spec build/tests/sibyl_legacy_golden_spec: $(wildcard src/Sibyl*.hpp) $(wildcard tests/sibyl_*cases.hpp) tests/sibyl_native_fixture.hpp
+
+.PHONY: test-chimera-opus test-chimera-fast-math test-chimera-rate-preparation
+test-chimera-opus: test-chimera-fast-math test-chimera-rate-preparation test-chimera-module test-chimera-patch test-chimera-wav test-chimera-bundle test-chimera-recovery test-chimera-checkpoints
+
+test-chimera-fast-math: | build/tests
+	$(CXX) -std=c++11 -O3 $(if $(ARCH_X64),-march=nehalem,) -Wall -Wextra -fno-fast-math -Isrc tests/chimera_fast_math_spec.cpp -o build/tests/chimera_fast_math_spec$(if $(ARCH_WIN),.exe,)
+	build/tests/chimera_fast_math_spec$(if $(ARCH_WIN),.exe,)
+	$(CXX) -std=c++11 -O3 $(if $(ARCH_X64),-march=nehalem,) -Wall -Wextra -ffast-math -Isrc tests/chimera_fast_math_spec.cpp -o build/tests/chimera_fast_math_fast_spec$(if $(ARCH_WIN),.exe,)
+	build/tests/chimera_fast_math_fast_spec$(if $(ARCH_WIN),.exe,)
+
+test-chimera-rate-preparation: | build/tests
+	$(CXX) -std=c++11 -O2 -Wall -Wextra -DCHIMERA_RATE_SERVICE_TEST_HOOKS -Isrc -I$(RACK_DIR)/include -I$(RACK_DIR)/dep/include tests/chimera_rate_preparation_spec.cpp src/ChimeraService.cpp -L$(RACK_DIR) -lRack -pthread -o build/tests/chimera_rate_preparation_spec$(if $(ARCH_WIN),.exe,)
+	$(call run_rack_test_bin,build/tests/chimera_rate_preparation_spec)

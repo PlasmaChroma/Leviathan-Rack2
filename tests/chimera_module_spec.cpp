@@ -397,7 +397,87 @@ static void fifoImportRegression() {
 }
 #endif
 
+static void boundedSaveRegression() {
+    const auto prepare = [](Chimera& m) {
+        std::unique_ptr<chimera::Reel> source(new chimera::Reel(2, 2));
+        source->write(0, {0.75f, -0.5f}, 0);
+        need(m.stores.accept(1, source, chimera::StoreBudget::Active), "bounded save fixture");
+        m.audioActiveHandle = m.controlActiveHandle = 1;
+        m.reel = m.stores.lookup(1); m.slice.setReel(m.reel);
+        m.committedManifest = "chimera/reel-previous.json";
+        m.controlWaitNs = UINT64_C(50000000);
+    };
+    {
+        // Saturated worker: encoding starts only AFTER onSave has returned.
+        Chimera m; prepare(m);
+        m.service = std::make_shared<chimera::IoService>(1);
+        std::atomic<bool> resume{false};
+        need(m.service->execute(m.generation, 99, [&] {
+            while (!resume.load()) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }) == chimera::IoService::Accepted, "occupy save worker");
+        const auto start = std::chrono::steady_clock::now();
+        m.onSave({});
+        const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
+        need(seconds < 1 && m.saveFailure.load() && m.pendingSave && m.pendingSave->abandoned &&
+             m.snapshotReaders.count() && m.committedManifest == "chimera/reel-previous.json",
+             "save timeout retains snapshot, reports failure and keeps previous manifest");
+        auto ticket = m.pendingSave;
+        const auto stagedPath = ticket->staging.directory() + "/reel-" + ticket->id;
+        resume.store(true);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (!ticket->done.load() && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        need(ticket->done.load() && bool(ticket->result), "late encoding finishes only in private staging");
+        m.saveInProgress.store(true); // Suppress unrelated display snapshots while reclaiming.
+        while ((m.pendingSave || m.snapshotRequestId) && std::chrono::steady_clock::now() < deadline)
+            m.serviceStep();
+        need(!m.pendingSave && !m.snapshotRequestId && !m.snapshotReaders.count() &&
+             m.committedManifest == "chimera/reel-previous.json" && m.saveFailure.load(),
+             "late completion releases lease without declaring an incomplete save successful");
+        ticket.reset();
+        need(!rack::system::exists(stagedPath + ".wav") && !rack::system::exists(stagedPath + ".json"),
+             "abandoned save staging files are removed");
+    }
+    {
+        // Stop inside the real save task, then destroy the module before it
+        // reads the frozen page table. The worker still owns its ticket/lease.
+        auto service = std::make_shared<chimera::IoService>(1);
+        std::atomic<bool> entered{false}, resume{false};
+        Chimera* m = new Chimera; prepare(*m);
+        m->service = service;
+        m->saveEncodingHookForTest = [&] {
+            entered.store(true);
+            while (!resume.load()) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        };
+        m->onSave({});
+        need(entered.load() && m->pendingSave && m->saveFailure.load(), "save encoding pauses before timeout");
+        auto ticket = m->pendingSave;
+        delete m;
+        need(bool(ticket->teardownReel), "in-flight save owns its source after module removal");
+        resume.store(true);
+        service->shutdown();
+        need(ticket->done.load() && bool(ticket->result), "in-flight save finishes safely after removal");
+        std::weak_ptr<chimera::Reel> retained = ticket->teardownReel;
+        ticket.reset();
+        need(retained.expired(), "last save ticket releases the source off audio");
+    }
+    {
+        // A queued save can be cancelled during removal even if no worker will
+        // ever execute it. No done flag or lease-release acknowledgement is needed.
+        Chimera* m = new Chimera; prepare(*m);
+        m->service = std::make_shared<chimera::IoService>(0);
+        m->onSave({});
+        need(m->pendingSave && m->saveFailure.load(), "save queued before removal");
+        auto ticket = m->pendingSave;
+        auto generation = m->generation;
+        delete m;
+        need(ticket->teardownReel && generation->closed.load() && !generation->outstanding.load(),
+             "module removal cancels queued save and retains its raw snapshot safely");
+    }
+}
+
 int main() {
+    boundedSaveRegression();
     abandonedSnapshotRegression();
     snapshotTeardownRegression();
 #ifndef _WIN32

@@ -72,6 +72,33 @@ int main(int argc, char** argv) {
     fileLease.close();
     need(chimera::CheckpointSession::sweep(root, later) == 1, "failed unlink retries on later sweep");
 #endif
+    {
+        // Unknown files cannot starve valid sessions when callers alternate
+        // between the undo and save-staging roots on every bounded sweep.
+        const std::string roots[2] = {root + "-undo", root + "-save"};
+        for (const auto& directory : roots) {
+            rack::system::createDirectories(directory);
+            for (unsigned i = 0; i < 512; ++i) {
+                std::ofstream file(directory + "/000-unknown-" + std::to_string(i));
+                file << "keep";
+            }
+            for (unsigned i = 0; i < 32; ++i) {
+                chimera::CheckpointSession session;
+                need(session.ensure(directory), "multi-root session");
+                std::ofstream file(session.directory() + "/reel-1-2.json");
+                file << "staged manifest";
+            }
+        }
+        unsigned removed[2]{};
+        for (unsigned pass = 0; pass < 40; ++pass)
+            for (unsigned i = 0; i < 2; ++i)
+                removed[i] += chimera::CheckpointSession::sweep(roots[i], later);
+        need(removed[0] == 32 && removed[1] == 32, "alternating roots preserve bounded scan progress");
+        for (const auto& directory : roots) {
+            need(rack::system::isFile(directory + "/000-unknown-511"), "sweeps retain unknown files");
+            rack::system::removeRecursively(directory);
+        }
+    }
     rack::system::remove(root + "/owner.lock");
     rack::system::remove(root);
     std::cout << "PASS: checkpoint sessions, live leases, grace period, crash and unknown-file retention\n";

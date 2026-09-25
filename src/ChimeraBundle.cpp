@@ -106,13 +106,13 @@ bool pruneObsolete(const std::string& moduleRoot, const std::string& keepManifes
     return ok;
 }
 
-CommitResult commit(const std::string& moduleRoot, const std::string& bundleId,
-                    const Reel& frozen, bool injectManifestFailure) {
+static CommitResult commitImpl(const std::string& moduleRoot, const std::string& bundleId,
+                    const Reel& frozen, bool injectManifestFailure, bool flat) {
     if (!safeId(bundleId)) return failed("invalid_bundle_id");
     if (!frozen.readyForWorker()) return failed("snapshot_not_ready");
     const SnapshotMetadata& metadata = frozen.snapshotMetadata();
-    const std::string directory = join(moduleRoot, "chimera");
-    if (!inside(moduleRoot, directory)) return failed("storage_directory_escape");
+    const std::string directory = flat ? moduleRoot : join(moduleRoot, "chimera");
+    if (!flat && !inside(moduleRoot, directory)) return failed("storage_directory_escape");
     const std::string audioName = "reel-" + bundleId + ".wav";
     const std::string manifestName = "reel-" + bundleId + ".json";
     const std::string audioPath = join(directory, audioName);
@@ -193,9 +193,55 @@ CommitResult commit(const std::string& moduleRoot, const std::string& bundleId,
     pending.committed = true;
     CommitResult result;
     result.manifest = "chimera/" + manifestName;
+    result.validFrames = metadata.validFrames;
     result.documentRevision = metadata.documentRevision;
     result.audioRevision = metadata.audioRevision;
     return result;
+}
+
+CommitResult commit(const std::string& moduleRoot, const std::string& bundleId,
+                    const Reel& frozen, bool injectManifestFailure) {
+    return commitImpl(moduleRoot, bundleId, frozen, injectManifestFailure, false);
+}
+CommitResult stage(const std::string& directory, const std::string& bundleId, const Reel& frozen) {
+    return commitImpl(directory, bundleId, frozen, false, true);
+}
+CommitResult publishStaged(const std::string& directory, const std::string& moduleRoot,
+                          const CommitResult& staged) {
+    if (!staged || !validManifestReference(staged.manifest)) return failed("invalid_staged_bundle");
+    const std::string destination = join(moduleRoot, "chimera");
+    if ((!rack::system::createDirectories(destination) && !rack::system::isDirectory(destination)) ||
+        !inside(moduleRoot, destination)) return failed("storage_directory_unavailable");
+    const std::string name = staged.manifest.substr(8);
+    const std::string audioName = name.substr(0, name.size()-5) + ".wav";
+    const std::string manifest = join(destination, name), audio = join(destination, audioName);
+    if (rack::system::exists(manifest) || rack::system::exists(audio)) return failed("bundle_id_exists");
+    bool audioPublished = false;
+    // Same-volume publication is a metadata-only rename. A cache on another
+    // volume falls back to copy + temporary-file rename; neither path changes
+    // the old selected manifest on failure.
+    const auto publish = [&](const std::string& leaf, const std::string& target) {
+        const std::string source = join(directory, leaf);
+        if (std::rename(source.c_str(), target.c_str()) == 0) return true;
+        const std::string temp = target + ".tmp";
+        if (!rack::system::copy(source, temp) ||
+            std::rename(temp.c_str(), target.c_str())) {
+            std::remove(temp.c_str()); return false;
+        }
+        return true;
+    };
+    try {
+        if (staged.validFrames) {
+            if (!publish(audioName, audio)) return failed("staged_audio_publish_failed");
+            audioPublished = true;
+        }
+        if (publish(name, manifest)) return staged;
+    }
+    catch (...) {}
+    std::remove((manifest + ".tmp").c_str());
+    std::remove((audio + ".tmp").c_str());
+    if (audioPublished) std::remove(audio.c_str());
+    return failed("staged_manifest_publish_failed");
 }
 
 LoadResult load(const std::string& moduleRoot, const std::string& relativeManifest,

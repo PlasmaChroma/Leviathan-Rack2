@@ -75,6 +75,7 @@ template <class T, std::uint32_t Capacity, std::uint32_t Reserved = 0>
 class SpscRing {
     static_assert(std::is_trivially_copyable<T>::value, "RT queue payload must be POD");
     static_assert(Capacity > Reserved && Capacity > 1, "queue capacity invalid");
+    static_assert((Capacity & (Capacity - 1)) == 0, "queue capacity must be a power of two");
 public:
     SpscRing() : head_(0), tail_(0) {}
     bool tryPush(const T& value) { return push(value, Capacity - Reserved); }

@@ -15,6 +15,9 @@ struct RateBridgeSlot {
 };
 // Register only from the non-realtime control dispatcher. A single shared
 // worker then follows rate changes even while the Rack widget is hidden.
+#ifdef CHIMERA_RATE_SERVICE_TEST_HOOKS
+void setRatePreparationHook(void (*hook)(unsigned));
+#endif
 void registerRateBridge(const RateBridgeSlot& slot);
 void unregisterRateBridge(std::atomic<RateBridge*>* prepared);
 

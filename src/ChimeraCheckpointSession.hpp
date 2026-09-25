@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 #include <mutex>
+#include <map>
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -107,28 +108,28 @@ private:
         const auto dash = name.find('-', 5), dot = name.find('.', 5);
         if (dash == std::string::npos || dot == std::string::npos || dash == 5 || dot <= dash + 1)
             return false;
-        if (name.substr(dot) != ".wav" && name.substr(dot) != ".wav.tmp") return false;
+        if (name.substr(dot) != ".wav" && name.substr(dot) != ".wav.tmp" &&
+            name.substr(dot) != ".json" && name.substr(dot) != ".json.tmp") return false;
         return name.substr(5, dash-5).find_first_not_of("0123456789") == std::string::npos &&
             name.substr(dash+1, dot-dash-1).find_first_not_of("0123456789") == std::string::npos;
     }
     static unsigned sweepLocked(const std::string& root, std::time_t now, unsigned grace) {
-        // Resume bounded scans so live/unknown entries cannot indefinitely
-        // starve sessions later in a large directory. One cached iterator only.
+        // Resume each root independently: undo checkpoints and save staging
+        // alternate roots, and neither may restart the other's bounded scan.
         struct Cursor {
-            std::mutex mutex;
-            std::string root;
             DIR* entries = nullptr;
             ~Cursor() { if (entries) closedir(entries); }
         };
-        static Cursor cursor;
-        std::lock_guard<std::mutex> guard(cursor.mutex);
-        if (cursor.root != root) {
-            if (cursor.entries) closedir(cursor.entries);
-            cursor.entries = nullptr; cursor.root = root;
-        }
+        struct Cursors {
+            std::mutex mutex;
+            std::map<std::string, Cursor> roots;
+        };
+        static Cursors cursors;
+        std::lock_guard<std::mutex> guard(cursors.mutex);
+        Cursor& cursor = cursors.roots[root];
         if (!cursor.entries) cursor.entries = opendir(root.c_str());
         DIR* entries = cursor.entries;
-        if (!entries) return 0;
+        if (!entries) { cursors.roots.erase(root); return 0; }
         unsigned visited = 0, removed = 0;
         while (visited < 128 && removed < 16) {
             dirent* entry = readdir(entries);
@@ -161,6 +162,7 @@ private:
             if (eligible && rack::system::remove(path + "/owner.lock") &&
                 rack::system::remove(path)) ++removed; // Nonrecursive, empty directory only.
         }
+        if (!cursor.entries) cursors.roots.erase(root);
         return removed;
     }
     CheckpointLease lease_;

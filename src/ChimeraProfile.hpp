@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ChimeraTypes.hpp"
+#include "FastAudioMath.hpp"
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -66,9 +67,9 @@ inline double classicRateFromCoordinate(double x) {
     // traversal at the default 5/6 knob does not gain a frame over time.
     if (std::fabs(magnitude - 2.0/3.0) < 1e-7) return x < 0.0 ? -1.0 : 1.0;
     const double q = (magnitude - kStopEpsilon) / (1.0 - kStopEpsilon);
-    const double qUnity = (2.0 / 3.0 - kStopEpsilon) / (1.0 - kStopEpsilon);
-    const double gamma = std::log(0.5) / std::log(qUnity);
-    return (x < 0.0 ? -1.0 : 1.0) * 2.0 * std::pow(q, gamma);
+    // Offline: log(0.5) / log((2/3 - kStopEpsilon)/(1-kStopEpsilon)).
+    const double gamma = 1.7093004823153926;
+    return (x < 0.0 ? -1.0 : 1.0) * 2.0 * levi_math::powUnitAudio(q, gamma);
 }
 inline double classicRate(double knob, double att = 0.0, double cv = 0.0) {
     return classicRateFromCoordinate(2.0 * clamp01(knob) - 1.0 +
@@ -78,13 +79,13 @@ inline double forwardBaseRate(double knob) {
     const double k = clamp01(knob);
     if (k <= kStopEpsilon) return 0.0;
     const double q = (k - kStopEpsilon) / (1.0 - kStopEpsilon);
-    const double qUnity = (0.75 - kStopEpsilon) / (1.0 - kStopEpsilon);
-    return 2.0 * std::pow(q, std::log(0.5) / std::log(qUnity));
+    // Offline: log(0.5) / log((0.75-kStopEpsilon)/(1-kStopEpsilon)).
+    return 2.0 * levi_math::powUnitAudio(q, 2.409141663090681);
 }
 inline double pitchRate(int mode, double knob, double att, double cv) {
     const double base = mode == 2 ? forwardBaseRate(knob) : classicRate(knob);
     const double pitchVolts = clamp(clamp(att, -1.0, 1.0) * clamp(cv, -24.0, 24.0), -8.0, 8.0);
-    return clamp(base * std::exp2(pitchVolts), -32.0, 32.0);
+    return clamp(base * levi_math::exp2Pitch(pitchVolts), -32.0, 32.0);
 }
 inline double rate(int mode, double knob, double att, double cv) {
     return mode == 0 ? classicRate(knob, att, cv) : pitchRate(mode, knob, att, cv);
@@ -139,8 +140,9 @@ struct GeneMode {
 inline std::uint32_t finiteGeneFrames(std::uint32_t regionLength, double normalized) {
     if (!regionLength) return 0;
     const std::uint32_t minimum = regionLength < 16 ? regionLength : 16;
-    const double x = std::exp(std::log(static_cast<double>(regionLength)) + clamp01(normalized) *
-                              (std::log(static_cast<double>(minimum)) - std::log(static_cast<double>(regionLength))));
+    const double logLength = levi_math::log2Audio(double(regionLength));
+    const double logMinimum = minimum == 16 ? 4.0 : logLength;
+    const double x = levi_math::exp2Audio(logLength + clamp01(normalized)*(logMinimum-logLength));
     const std::uint32_t n = roundNonnegative(x);
     return n < 1 ? 1 : (n > regionLength ? regionLength : n);
 }

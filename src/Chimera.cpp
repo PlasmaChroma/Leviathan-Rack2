@@ -222,6 +222,33 @@ struct Chimera : Module {
     std::atomic<bool> unsavedImport{false}, recordingOrArmed{false};
     std::atomic<bool> recordingActive{false}, recoveryPostPending{false};
     std::atomic<std::uint64_t> recordStartNs{0};
+    struct SaveTicket {
+        std::atomic<bool> done{false};
+        std::shared_ptr<chimera::Reel> teardownReel;
+        chimera::CheckpointSession staging;
+        chimera::bundle::CommitResult result;
+        std::string id;
+        bool abandoned = false; // Control owner only.
+#ifdef CHIMERA_MANUAL_CONTROL_TEST
+        std::function<void()> beforeEncode;
+#endif
+        ~SaveTicket() {
+            try {
+                if (staging.directory().empty() || id.empty()) return;
+                const std::string base = staging.directory() + "/reel-" + id;
+                for (const char* suffix : {".wav", ".wav.tmp", ".json", ".json.tmp"})
+                    rack::system::remove(base + suffix);
+            }
+            catch (...) {} // Failed cleanup remains eligible for the session sweep.
+        }
+    };
+    std::shared_ptr<SaveTicket> pendingSave; // Holds its snapshot until the worker finishes.
+#ifdef CHIMERA_MANUAL_CONTROL_TEST
+    std::uint64_t controlWaitNs = UINT64_C(2000000000);
+    std::function<void()> saveEncodingHookForTest;
+#else
+    static constexpr std::uint64_t controlWaitNs = UINT64_C(2000000000);
+#endif
     std::atomic<bool> saveInProgress{false};
     std::uint64_t lastRecoveryNs = 0; // Control dispatcher only.
     int recoveryPurpose = 0; // 0 none, 1 pre-record, 2 latest, 3 display refresh.
@@ -345,7 +372,7 @@ struct Chimera : Module {
         // tickets captured by workers instead of waiting for disk I/O here.
         // Workers never access teardownReel itself; their ticket lifetime keeps
         // the raw snapshot pointer valid even after this module is gone.
-        if ((loadTicket && loadTicket->usesSnapshot) || recoveryTicket) {
+        if ((loadTicket && loadTicket->usesSnapshot) || recoveryTicket || pendingSave) {
             stores.transition(controlActiveHandle, chimera::StoreBudget::Retired);
             std::shared_ptr<chimera::Reel> retained(stores.detachRetired(controlActiveHandle));
             if (loadTicket && loadTicket->usesSnapshot) {
@@ -353,6 +380,7 @@ struct Chimera : Module {
                 loadTicket->teardownCheckpointSession = checkpointSession;
             }
             if (recoveryTicket) recoveryTicket->teardownReel = retained;
+            if (pendingSave) pendingSave->teardownReel = retained;
         }
         // An in-flight edit may still read/write these files. Leave its session
         // for the existing stale-session sweep rather than unlinking underneath it.
@@ -419,29 +447,37 @@ struct Chimera : Module {
             std::atomic<bool>& flag;
             ~SaveScope() { flag.store(false, std::memory_order_release); }
         } saveScope{saveInProgress};
-        // Rack invokes this on a non-audio path before building patch JSON and
-        // its archive. Keep the prior manifest on any failure.
-        if (loadTicket || awaitingHandle || markerRequestId) {
-            const std::uint64_t deadline = steadyNs() + UINT64_C(30000000000);
-            while ((loadTicket || awaitingHandle || markerRequestId) && steadyNs() < deadline) {
-                serviceStep();
-                if (loadTicket || awaitingHandle || markerRequestId)
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        // One budget for all worker/capture waits, rather than a new 30-second
+        // deadline per phase. Filesystem publication itself is synchronous:
+        // Rack needs a completed manifest before it builds the patch archive.
+        const std::uint64_t deadline = steadyNs() + controlWaitNs;
+        const auto failSave = [&](const std::string& reason) {
+            saveFailure.store(true, std::memory_order_release);
+            ioError.store(true, std::memory_order_release);
+            std::string retained;
+            {
+                std::lock_guard<std::mutex> lock(persistenceMutex);
+                retained = committedManifest.empty() ? "; Reel audio has not been saved." :
+                    "; previous saved Reel retained.";
             }
-            if (loadTicket || awaitingHandle || markerRequestId) {
-                saveFailure.store(true); ioError.store(true); return;
-            }
+            setIoMessage("Save incomplete: " + reason + "; retry Save" + retained);
+        };
+        while ((loadTicket || awaitingHandle || markerRequestId || pendingSave) && steadyNs() < deadline) {
+            serviceStep();
+            if (loadTicket || awaitingHandle || markerRequestId || pendingSave)
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        if (loadTicket || awaitingHandle || markerRequestId || pendingSave) {
+            failSave("Reel operation is still running"); return;
         }
         if (!controlActiveHandle) {
             std::lock_guard<std::mutex> lock(persistenceMutex);
             saveFailure.store(!committedManifest.empty(), std::memory_order_release);
             return;
         }
-        const std::uint64_t deadline = steadyNs() + UINT64_C(30000000000);
         while (steadyNs() < deadline) {
             serviceStep();
-            if (!recoveryPurpose && !recoveryTicket &&
-                snapshotRequestId != kAutomaticSnapshotId) {
+            if (!recoveryPurpose && !recoveryTicket && snapshotRequestId != kAutomaticSnapshotId) {
                 if (snapshotReady) break;
                 if (!snapshotRequestId) requestSnapshot();
             }
@@ -449,74 +485,82 @@ struct Chimera : Module {
         }
         if (!snapshotReady || !snapshotReel || recoveryPurpose || recoveryTicket ||
             snapshotRequestId == kAutomaticSnapshotId) {
-            if (!recoveryPurpose && !recoveryTicket &&
-                snapshotRequestId != kAutomaticSnapshotId) abandonSnapshot();
-            saveFailure.store(true, std::memory_order_release);
-            ioError.store(true, std::memory_order_release);
-            return;
+            if (!recoveryPurpose && !recoveryTicket && snapshotRequestId != kAutomaticSnapshotId)
+                abandonSnapshot();
+            failSave("snapshot is not ready"); return;
         }
-        struct SaveTicket {
-            std::atomic<bool> done{false};
-            chimera::bundle::CommitResult result;
-        };
-        const std::shared_ptr<SaveTicket> ticket(new SaveTicket);
+        const auto ticket = std::make_shared<SaveTicket>();
+        ticket->id = std::to_string(steadyNs()) + "-" + std::to_string(nextRequestId);
+#ifdef CHIMERA_MANUAL_CONTROL_TEST
+        ticket->beforeEncode = saveEncodingHookForTest;
+#endif
         bool submitted = false;
+        try {
+            if (ticket->staging.ensure(rack::system::join(
+                    leviathanPluginUserRootPath(), "Chimera/save-staging-v1"))) {
+                chimera::Reel* const frozen = snapshotReel;
+                submitted = service->execute(generation, nextRequestId++, [ticket, frozen] {
+                    try {
+#ifdef CHIMERA_MANUAL_CONTROL_TEST
+                        if (ticket->beforeEncode) ticket->beforeEncode();
+#endif
+                        ticket->result = chimera::bundle::stage(ticket->staging.directory(), ticket->id, *frozen);
+                    }
+                    catch (...) { ticket->result.error = "patch_save_exception"; }
+                    ticket->done.store(true, std::memory_order_release);
+                }) == chimera::IoService::Accepted;
+            }
+        }
+        catch (...) {}
+        if (!submitted) {
+            finishSnapshotReader(); failSave("could not stage Reel audio"); return;
+        }
+        pendingSave = ticket;
+        while (!ticket->done.load(std::memory_order_acquire) && steadyNs() < deadline) {
+            serviceStep();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        if (!ticket->done.load(std::memory_order_acquire)) {
+            ticket->abandoned = true;
+            // The dispatcher releases this reader only after done. Teardown
+            // transfers its Reel to the ticket if a worker is still running.
+            failSave("audio encoding exceeded the wait budget"); return;
+        }
+        chimera::bundle::CommitResult published;
         std::string storageRoot;
         try {
-            const std::string root = createPatchStorageDirectory();
-            storageRoot = root;
-            const std::string directory = rack::system::join(root, "chimera");
-            if (rack::system::isDirectory(directory) ||
-                rack::system::createDirectories(directory)) {
-                const std::string bundleId = std::to_string(steadyNs()) + "-" +
-                    std::to_string(nextRequestId);
-                chimera::Reel* const frozen = snapshotReel;
-                const chimera::IoService::Status queued = service->execute(generation,
-                    nextRequestId++, [ticket, root, bundleId, frozen] {
-                        try { ticket->result = chimera::bundle::commit(root, bundleId, *frozen); }
-                        catch (...) { ticket->result.error = "patch_save_exception"; }
-                        ticket->done.store(true, std::memory_order_release);
-                    });
-                submitted = queued == chimera::IoService::Accepted;
-            }
-        }
-        catch (...) { submitted = false; }
-        if (submitted) {
-            while (!ticket->done.load(std::memory_order_acquire)) {
-                serviceStep();
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
             if (ticket->result) {
-                {
-                    std::lock_guard<std::mutex> lock(persistenceMutex);
-                    committedManifest = ticket->result.manifest;
-                    committedDocumentRevision = ticket->result.documentRevision;
-                    committedAudioRevision = ticket->result.audioRevision;
-                }
-                savedAudioRevision.store(ticket->result.audioRevision, std::memory_order_release);
-                savedDocumentRevision.store(ticket->result.documentRevision, std::memory_order_release);
-                hasSavedReel.store(true, std::memory_order_release);
-                if (!chimera::bundle::pruneObsolete(storageRoot, ticket->result.manifest))
-                    setIoWarning("Obsolete Reel assets could not all be pruned");
+                storageRoot = createPatchStorageDirectory();
+                published = chimera::bundle::publishStaged(ticket->staging.directory(), storageRoot, ticket->result);
             }
+            else published.error = ticket->result.error;
         }
-        const bool success = submitted && bool(ticket->result);
-        if (!success)
-            setIoMessage(submitted ? ticket->result.error :
-                         "Could not queue or stage the Reel asset");
+        catch (...) { published.error = "patch_publish_exception"; }
+        finishSnapshotReader();
+        pendingSave.reset();
+        if (!published) failSave(published.error);
         else {
+            {
+                std::lock_guard<std::mutex> lock(persistenceMutex);
+                committedManifest = published.manifest;
+                committedDocumentRevision = published.documentRevision;
+                committedAudioRevision = published.audioRevision;
+            }
+            savedAudioRevision.store(published.audioRevision, std::memory_order_release);
+            savedDocumentRevision.store(published.documentRevision, std::memory_order_release);
+            hasSavedReel.store(true, std::memory_order_release);
+            unsavedImport.store(false, std::memory_order_release);
+            saveFailure.store(false, std::memory_order_release);
             ioError.store(false, std::memory_order_release);
             setIoMessage("");
+            if (!chimera::bundle::pruneObsolete(storageRoot, published.manifest))
+                setIoWarning("Obsolete Reel assets could not all be pruned");
         }
-        if (success) unsavedImport.store(false, std::memory_order_release);
-        finishSnapshotReader();
-        const std::uint64_t releaseDeadline = steadyNs() + UINT64_C(30000000000);
-        while (snapshotRequestId && steadyNs() < releaseDeadline) {
+        // Reclamation can finish on the dispatcher after Rack serializes.
+        while (snapshotRequestId && steadyNs() < deadline) {
             serviceStep();
             if (snapshotRequestId) std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
-        saveFailure.store(!success, std::memory_order_release);
-        if (!success || snapshotRequestId) ioError.store(true, std::memory_order_release);
     }
     void onRemove(const RemoveEvent&) override {
         stopControlDispatcher();
@@ -657,6 +701,7 @@ struct Chimera : Module {
                           std::string& error) {
         std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
         pruneEditCheckpoints();
+        const std::uint64_t deadline = steadyNs() + controlWaitNs;
         // Bound disk use even if unlinking an old file repeatedly fails.
         if (editCheckpointFiles.size() >= 3) {
             error = "Old edit checkpoints could not be removed; free the files before retrying";
@@ -664,7 +709,7 @@ struct Chimera : Module {
         }
         if (!recordingOrArmed.load(std::memory_order_acquire) &&
             (recoveryPurpose || recoveryTicket || recoveryPostPending.load())) {
-            const std::uint64_t recoveryDeadline = steadyNs() + UINT64_C(30000000000);
+            const std::uint64_t recoveryDeadline = deadline;
             while ((recoveryPurpose || recoveryTicket || recoveryPostPending.load() ||
                     snapshotRequestId) && steadyNs() < recoveryDeadline) {
                 serviceStep();
@@ -677,7 +722,6 @@ struct Chimera : Module {
             error = "Reel operation or recording is active"; return false;
         }
         if (!requestSnapshot()) { error = "Reel snapshot is busy"; return false; }
-        const std::uint64_t deadline = steadyNs() + UINT64_C(30000000000);
         while (!snapshotReady && snapshotRequestId && steadyNs() < deadline) {
             serviceStep();
             if (!snapshotReady) std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -1068,6 +1112,10 @@ struct Chimera : Module {
             nextCheckpointSweepNs = now + UINT64_C(60000000000);
         }
         ensureRateService();
+        if (pendingSave && pendingSave->abandoned && pendingSave->done.load(std::memory_order_acquire)) {
+            finishSnapshotReader();
+            pendingSave.reset(); // Never publish an attempt whose caller timed out.
+        }
         pruneEditCheckpoints();
         if (loadTicket && loadTicket->done.load(std::memory_order_acquire) &&
             loadTicket->usesSnapshot && snapshotReady && snapshotReaders.count())

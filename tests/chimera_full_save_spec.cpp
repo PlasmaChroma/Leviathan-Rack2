@@ -22,8 +22,10 @@ int main() {
     need(reel.beginSnapshot(chimera::kMaxReelFrames), "freeze full Reel");
     while (!reel.readyForWorker()) reel.maintenanceTick();
     const auto prepared = std::chrono::steady_clock::now();
+    need(rack::system::createDirectories(root + "/staging"), "create private save staging");
+    const auto staged = chimera::bundle::stage(root + "/staging", "full", reel);
     const chimera::bundle::CommitResult committed =
-        chimera::bundle::commit(root, "full", reel);
+        chimera::bundle::publishStaged(root + "/staging", root, staged);
     need(bool(committed), "commit full-length embedded Reel");
     const auto saved = std::chrono::steady_clock::now();
     const std::string audio = root + "/chimera/reel-full.wav";

@@ -29,6 +29,32 @@ int main() {
          restored.reel->markerCount() == 2 &&
          restored.reel->readActive(200).r == -1.f,
          "load embedded audio and marker manifest without a source path");
+    {
+        const std::string staging = root + "/private-stage";
+        need(rack::system::createDirectories(staging), "private staging directory");
+        const auto staged = chimera::bundle::stage(staging, "stage-1", reel);
+        need(bool(staged) && !rack::system::exists(root + "/chimera/reel-stage-1.wav"),
+             "stage creates no patch-visible bundle");
+        // Force publication to fail AFTER audio publication: the source
+        // manifest disappears. The newly copied audio must be unwound.
+        need(rack::system::remove(staging + "/reel-stage-1.json"), "inject missing staged manifest");
+        need(!chimera::bundle::publishStaged(staging, root, staged) &&
+             !rack::system::exists(root + "/chimera/reel-stage-1.wav") &&
+             bool(chimera::bundle::load(root, first.manifest, 2)),
+             "publication failure cleans new audio and preserves previous bundle");
+        const auto fresh = chimera::bundle::stage(staging, "stage-2", reel);
+        const auto published = chimera::bundle::publishStaged(staging, root, fresh);
+        need(bool(published) && bool(chimera::bundle::load(root, published.manifest, 2)),
+             "completed staged audio and manifest publish as a loadable bundle");
+        need(!chimera::bundle::publishStaged(staging, root, fresh),
+             "publication cannot overwrite an existing revision");
+        chimera::Reel empty(1, 1);
+        empty.beginSnapshot(0);
+        const auto emptyStage = chimera::bundle::stage(staging, "stage-3", empty);
+        const auto emptyPublished = chimera::bundle::publishStaged(staging, root, emptyStage);
+        need(bool(emptyPublished) && bool(chimera::bundle::load(root, emptyPublished.manifest, 2)) &&
+             !rack::system::exists(root + "/chimera/reel-stage-3.wav"), "empty staged Reel requires no WAV");
+    }
     need(reel.beginRelease(), "release first cut");
     while (reel.state() != chimera::Reel::Idle) reel.maintenanceTick();
     need(reel.write(0, {77.f, 77.f}, 301), "mutate after first save");

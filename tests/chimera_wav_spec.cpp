@@ -62,6 +62,30 @@ static bool sameBits(float a, float b) {
     return std::memcmp(&a, &b, sizeof(float)) == 0;
 }
 
+struct CountingInput : std::stringbuf {
+    unsigned reads = 0;
+    explicit CountingInput(const std::string& bytes) : std::stringbuf(bytes, std::ios::in) {}
+    std::streamsize xsgetn(char* output, std::streamsize count) override {
+        ++reads;
+        return std::stringbuf::xsgetn(output, count);
+    }
+};
+
+struct FailingInput : std::stringbuf {
+    explicit FailingInput(const std::string& bytes) : std::stringbuf(bytes, std::ios::in) {}
+    std::streamsize xsgetn(char* output, std::streamsize count) override {
+        // Length/RIFF validation succeeds, then an actual payload read is short.
+        return std::stringbuf::xsgetn(output, count > 1024 ? count-1 : count);
+    }
+};
+struct FailingOutput : std::streambuf {
+    std::streamsize remaining = 1000;
+    std::streamsize xsputn(const char*, std::streamsize count) override {
+        const auto written = std::min(count, remaining);
+        remaining -= written; return written;
+    }
+};
+
 int main() {
     for (unsigned rate : {8000u, 44100u, 48000u, 96000u, 192000u, 383999u}) {
         for (unsigned frames : {0u, 1u, 7u}) {
@@ -152,6 +176,38 @@ int main() {
     std::string error;
     need(chimera::wav::writeCanonical(out, reel, error), "write canonical snapshot WAV");
     const std::string bytes = out.str();
+    {
+        FailingOutput storage;
+        std::ostream broken(&storage);
+        need(!chimera::wav::writeCanonical(broken, reel, error) && error == "write_failed",
+             "short payload write reports failure instead of a complete WAV");
+        FailingInput strictStorage(bytes);
+        std::istream strictInput(&strictStorage);
+        need(!chimera::wav::readStrict(strictInput, 2), "strict payload short read is rejected");
+        FailingInput ordinaryStorage(simpleWav(1, 24, 2, 48000, 40001));
+        std::istream ordinaryInput(&ordinaryStorage);
+        need(!chimera::wav::readConvenience(ordinaryInput, false, 160),
+             "convenience payload short read is rejected after successful RIFF validation");
+    }
+
+    {
+        const auto many = simpleWav(1, 24, 2, 48000, 40001);
+        CountingInput storage(many);
+        std::istream stream(&storage);
+        auto decoded = chimera::wav::readConvenience(stream, false, 160);
+        need(bool(decoded) && decoded.reel->validFrames() == 40001 && storage.reads < 100,
+             "24-bit frames crossing refill boundaries use bounded chunk reads");
+        for (unsigned i = 0; i < 40001; ++i)
+            need(decoded.reel->readActive(i).l == 0.5f && decoded.reel->readActive(i).r == -0.5f,
+                 "sample boundaries remain exact across 64 KiB buffers");
+    }
+    {
+        CountingInput storage(bytes);
+        std::istream stream(&storage);
+        need(bool(chimera::wav::readStrict(stream, 2)) && storage.reads < 100,
+             "strict decoder reads sample payload in chunks");
+    }
+
     need(bytes.compare(0, 4, "RIFF") == 0 &&
          bytes.compare(8, 4, "WAVE") == 0 &&
          u32(bytes, 4) + 8 == bytes.size(), "RIFF size covers all chunks");

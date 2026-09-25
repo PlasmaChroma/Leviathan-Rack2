@@ -81,8 +81,10 @@ public:
             if (mappedMode_ != rateMode_ || mappedCoordinate_ != coordinate)
                 mappedBaseRate_ = rateMode_ == 0 ? profile1::classicRateFromCoordinate(coordinate) :
                     rateMode_ == 2 ? profile1::forwardBaseRate(coordinate) : profile1::classicRate(coordinate);
+            if (rateMode_ != 0 && (mappedMode_ != rateMode_ || mappedPitch_ != pitch))
+                mappedPitchScale_ = levi_math::exp2Pitch(pitch);
             mappedRate_ = rateMode_ == 0 ? mappedBaseRate_ :
-                profile1::clamp(mappedBaseRate_ * std::exp2(pitch), -32.0, 32.0);
+                profile1::clamp(mappedBaseRate_ * mappedPitchScale_, -32.0, 32.0);
             mappedMode_ = rateMode_;
             mappedCoordinate_ = coordinate;
             mappedPitch_ = pitch;
@@ -135,7 +137,7 @@ private:
     profile1::OnsetChoice lastOnset_;
     int mappedMode_;
     double mappedCoordinate_, mappedPitch_, mappedRate_;
-    double mappedBaseRate_ = 0;
+    double mappedBaseRate_ = 0, mappedPitchScale_ = 1;
     std::uint64_t rateEvaluations_;
 };
 
