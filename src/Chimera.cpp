@@ -199,11 +199,8 @@ struct Chimera : Module {
         chimera::bundle::LoadResult result;
         std::shared_ptr<const chimera::WaveformSummary> waveform;
         unsigned adoptionKind = 1; // 1 patch load, 4 external import, 5 fenced edit.
-        std::shared_ptr<chimera::CheckpointSession> teardownCheckpointSession;
         bool usesSnapshot = false;
         std::uint64_t expectedDocumentRevision = 0, expectedAudioRevision = 0;
-        std::string checkpointPath;
-        int historyAction = -1; // 0 edit, 1 undo, 2 redo.
         std::string warning;
     };
     std::shared_ptr<LoadTicket> loadTicket; // Control dispatcher only.
@@ -222,6 +219,7 @@ struct Chimera : Module {
     std::atomic<bool> saveFailure{false};
     std::atomic<bool> unsavedImport{false}, recordingOrArmed{false};
     std::atomic<bool> recordingActive{false}, recoveryPostPending{false};
+    std::atomic<std::uint64_t> displayHeartbeatNs{0}; // UI widget step; no Reel access.
     std::atomic<std::uint64_t> recordStartNs{0};
     struct SaveTicket {
         std::atomic<bool> done{false};
@@ -269,27 +267,6 @@ struct Chimera : Module {
     std::atomic<std::uint32_t> publishedRecordStartFrame{0};
     std::atomic<int> publishedRecordState{0}; // Idle, armed Current/Append/Stop, recording Current/Append.
     unsigned awaitingAdoptionKind = 1; // Control dispatcher only.
-    int awaitingHistoryAction = -1;
-    std::string awaitingCheckpoint;
-    std::string undoCheckpoint, redoCheckpoint;
-    std::shared_ptr<chimera::CheckpointSession> checkpointSession{new chimera::CheckpointSession};
-    std::set<std::string> editCheckpointFiles; // This instance's files only; control/worker side.
-    void pruneEditCheckpoints() {
-        std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
-        // A restore job may still be reading either history entry. Its done
-        // publication precedes clearing loadTicket on this dispatcher.
-        if (loadTicket) return;
-        for (auto it = editCheckpointFiles.begin(); it != editCheckpointFiles.end();) {
-            if (*it == undoCheckpoint || *it == redoCheckpoint || *it == awaitingCheckpoint) {
-                ++it; continue;
-            }
-            const std::string temporary = *it + ".tmp";
-            const bool removed = !rack::system::exists(*it) || rack::system::remove(*it);
-            const bool tempRemoved = !rack::system::exists(temporary) || rack::system::remove(temporary);
-            if (removed && tempRemoved) it = editCheckpointFiles.erase(it);
-            else ++it; // Retain ownership and retry; never silently forget failed cleanup.
-        }
-    }
     void setIoMessage(const std::string& message) {
         std::lock_guard<std::mutex> lock(ioMessageMutex);
         lastIoMessage = message;
@@ -378,21 +355,14 @@ struct Chimera : Module {
             std::shared_ptr<chimera::Reel> retained(stores.detachRetired(controlActiveHandle));
             if (loadTicket && loadTicket->usesSnapshot) {
                 loadTicket->teardownReel = retained;
-                loadTicket->teardownCheckpointSession = checkpointSession;
             }
             if (recoveryTicket) recoveryTicket->teardownReel = retained;
             if (pendingSave) pendingSave->teardownReel = retained;
         }
-        // An in-flight edit may still read/write these files. Leave its session
-        // for the existing stale-session sweep rather than unlinking underneath it.
-        const bool editInFlight = loadTicket && loadTicket->usesSnapshot &&
-            !loadTicket->done.load(std::memory_order_acquire);
         if (rateServiceRegistered) chimera::unregisterRateBridge(&preparedBridge);
         if (service) service->cancel(generation); // No worker carries this Module pointer.
         else generation->close();
         loadTicket.reset();
-        undoCheckpoint.clear(); redoCheckpoint.clear(); awaitingCheckpoint.clear();
-        if (!editInFlight) pruneEditCheckpoints();
         delete activeBridge;
         delete preparedBridge.exchange(nullptr, std::memory_order_acq_rel);
         delete retiredBridge.exchange(nullptr, std::memory_order_acq_rel);
@@ -681,38 +651,13 @@ struct Chimera : Module {
         }
         return true;
     }
-    static bool writeCheckpoint(const chimera::Reel& frozen,
-                                const std::string& path, std::string& error) {
-        const std::string temp = path + ".tmp";
-        std::ofstream output(temp.c_str(), std::ios::binary | std::ios::trunc);
-        if (!output) { error = "checkpoint_open_failed"; return false; }
-        const bool written = chimera::wav::writeCanonical(output, frozen, error);
-        output.flush();
-        const bool flushed = bool(output);
-        output.close();
-        if (!written || !flushed || !output || !rack::system::rename(temp, path)) {
-            std::remove(temp.c_str());
-            if (error.empty()) error = "checkpoint_commit_failed";
-            return false;
-        }
-        return true;
-    }
-    bool requestHeavyEdit(const chimera::edit::Request* editRequest,
-                          const std::string& restorePath, int historyAction,
-                          std::string& error) {
+    bool requestHeavyEdit(const chimera::edit::Request& request, std::string& error) {
         std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
-        pruneEditCheckpoints();
         const std::uint64_t deadline = steadyNs() + controlWaitNs;
-        // Bound disk use even if unlinking an old file repeatedly fails.
-        if (editCheckpointFiles.size() >= 3) {
-            error = "Old edit checkpoints could not be removed; free the files before retrying";
-            return false;
-        }
         if (!recordingOrArmed.load(std::memory_order_acquire) &&
             (recoveryPurpose || recoveryTicket || recoveryPostPending.load())) {
-            const std::uint64_t recoveryDeadline = deadline;
             while ((recoveryPurpose || recoveryTicket || recoveryPostPending.load() ||
-                    snapshotRequestId) && steadyNs() < recoveryDeadline) {
+                    snapshotRequestId) && steadyNs() < deadline) {
                 serviceStep();
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
@@ -731,15 +676,6 @@ struct Chimera : Module {
             abandonSnapshot();
             error = "Reel snapshot failed"; return false;
         }
-        if (!checkpointSession->ensure(rack::system::join(
-                leviathanPluginUserRootPath(), "Chimera/checkpoints-v1"))) {
-            finishSnapshotReader();
-            error = "Checkpoint session unavailable or busy; retry the edit"; return false;
-        }
-        const std::string& directory = checkpointSession->directory();
-        const std::string checkpoint = rack::system::join(directory,
-            "reel-" + std::to_string(steadyNs()) + "-" +
-            std::to_string(nextRequestId) + ".wav");
         const chimera::SnapshotMetadata metadata = snapshotReel->snapshotMetadata();
         chimera::Reel* const frozen = snapshotReel;
         std::shared_ptr<LoadTicket> ticket(new LoadTicket);
@@ -747,35 +683,12 @@ struct Chimera : Module {
         ticket->usesSnapshot = true;
         ticket->expectedDocumentRevision = metadata.documentRevision;
         ticket->expectedAudioRevision = metadata.audioRevision;
-        ticket->checkpointPath = checkpoint;
-        ticket->historyAction = historyAction;
-        const chimera::edit::Request request = editRequest ?
-            *editRequest : chimera::edit::Request{};
-        editCheckpointFiles.insert(checkpoint);
         const chimera::IoService::Status queued = service->execute(generation,
-            nextRequestId++, [ticket, frozen, checkpoint, request, restorePath, metadata] {
+            nextRequestId++, [ticket, frozen, request] {
                 try {
-                    std::string checkpointError;
-                    if (!writeCheckpoint(*frozen, checkpoint, checkpointError))
-                        ticket->result.error = checkpointError;
-                    else if (restorePath.empty()) {
-                        chimera::edit::Result edited =
-                            chimera::edit::build(*frozen, request);
-                        if (edited) ticket->result.reel = std::move(edited.reel);
-                        else ticket->result.error = edited.error;
-                    }
-                    else {
-                        std::ifstream input(restorePath.c_str(), std::ios::binary);
-                        chimera::wav::ImportResult restored =
-                            chimera::wav::readStrict(input);
-                        if (!restored) ticket->result.error = restored.error;
-                        else {
-                            restored.reel->restoreRevisions(
-                                metadata.documentRevision + 1,
-                                metadata.audioRevision + 1);
-                            ticket->result.reel = std::move(restored.reel);
-                        }
-                    }
+                    chimera::edit::Result edited = chimera::edit::build(*frozen, request);
+                    if (edited) ticket->result.reel = std::move(edited.reel);
+                    else ticket->result.error = edited.error;
                 }
                 catch (...) { ticket->result.error = "edit_worker_exception"; }
                 if (ticket->result.reel) {
@@ -786,7 +699,6 @@ struct Chimera : Module {
             });
         if (queued != chimera::IoService::Accepted) {
             finishSnapshotReader();
-            pruneEditCheckpoints();
             error = "Reel I/O queue is busy"; return false;
         }
         loadTicket = ticket;
@@ -798,7 +710,7 @@ struct Chimera : Module {
         if (request.kind == chimera::edit::MoveMarker || request.kind == chimera::edit::RemoveMarker)
             return requestMarkerEdit(request.splice, request.frame,
                 request.kind == chimera::edit::RemoveMarker ? 1u : 0u, error);
-        return requestHeavyEdit(&request, "", 0, error);
+        return requestHeavyEdit(request, error);
     }
     bool requestMarkerEdit(unsigned index, unsigned frame, unsigned kind, std::string& error) {
         std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
@@ -816,11 +728,10 @@ struct Chimera : Module {
     }
     bool requestUndo(bool redo, std::string& error) {
         std::lock_guard<std::recursive_mutex> controlLock(controlMutex);
-        if (publishedMarkerHistory.load(std::memory_order_acquire))
+        if (publishedMarkerHistory.load(std::memory_order_acquire) == (redo ? 2u : 1u))
             return requestMarkerEdit(0, 0, redo ? 3u : 2u, error);
-        const std::string& path = redo ? redoCheckpoint : undoCheckpoint;
-        if (path.empty()) { error = redo ? "Nothing to redo" : "Nothing to undo"; return false; }
-        return requestHeavyEdit(nullptr, path, redo ? 2 : 1, error);
+        error = redo ? "No marker edit to redo" : "No marker edit to undo";
+        return false;
     }
     chimera::IoService::Status requestPreparedStore(std::uint32_t pages,
                                                      std::uint32_t reservePages) {
@@ -972,13 +883,17 @@ struct Chimera : Module {
         const std::uint64_t since = lastRecoveryNs > start ? lastRecoveryNs : start;
         const bool periodic = recordingActive.load(std::memory_order_acquire) &&
             since && now - since >= UINT64_C(10000000000);
+        const std::uint64_t displayStep = displayHeartbeatNs.load(std::memory_order_acquire);
+        const bool displayRecentlyStepped = displayStep && now >= displayStep &&
+            now - displayStep < UINT64_C(500000000);
         if ((stopped || periodic) && requestSnapshot()) {
             recoveryPurpose = 2;
             lastRecoveryNs = now;
             if (stopped) recoveryPostPending.store(false, std::memory_order_release);
         }
-        else if (!stopped && !recordingActive.load(std::memory_order_acquire) &&
-                 now - lastDisplayAttemptNs >= UINT64_C(1000000000)) {
+        else if (!stopped && now - lastDisplayAttemptNs >= UINT64_C(1000000000) &&
+                 (!recordingActive.load(std::memory_order_acquire) ||
+                  displayRecentlyStepped)) {
             const auto cached = std::atomic_load_explicit(&waveform,
                 std::memory_order_acquire);
             const std::uint64_t document = publishedDocumentRevision.load(std::memory_order_acquire);
@@ -1117,7 +1032,6 @@ struct Chimera : Module {
             finishSnapshotReader();
             pendingSave.reset(); // Never publish an attempt whose caller timed out.
         }
-        pruneEditCheckpoints();
         if (loadTicket && loadTicket->done.load(std::memory_order_acquire) &&
             loadTicket->usesSnapshot && snapshotReady && snapshotReaders.count())
             finishSnapshotReader();
@@ -1127,8 +1041,6 @@ struct Chimera : Module {
             const unsigned adoptionKind = loadTicket->adoptionKind;
             const std::uint64_t expectedDocument = loadTicket->expectedDocumentRevision;
             const std::uint64_t expectedAudio = loadTicket->expectedAudioRevision;
-            const std::string checkpoint = loadTicket->checkpointPath;
-            const int historyAction = loadTicket->historyAction;
             const std::string warning = loadTicket->warning;
             const std::shared_ptr<const chimera::WaveformSummary> loadedWaveform =
                 std::move(loadTicket->waveform);
@@ -1171,8 +1083,6 @@ struct Chimera : Module {
                         awaitingAdoptionKind = adoptionKind;
                         awaitingDocumentRevision = loadedDocumentRevision;
                         awaitingAudioRevision = loadedAudioRevision;
-                        awaitingHistoryAction = historyAction;
-                        awaitingCheckpoint = checkpoint;
                         awaitingWaveform = loadedWaveform;
                     }
                 }
@@ -1194,7 +1104,6 @@ struct Chimera : Module {
                 markerRequestId = 0;
                 ioBusy.store(false, std::memory_order_release);
                 if (ack.status) {
-                    undoCheckpoint.clear(); redoCheckpoint.clear();
                     recoveryPostPending.store(true, std::memory_order_release);
                     ioError.store(false, std::memory_order_release);
                     setIoMessage("");
@@ -1250,9 +1159,7 @@ struct Chimera : Module {
                 setIoWarning("");
                 awaitingHandle = 0;
                 awaitingAdoptionKind = 1;
-                awaitingCheckpoint.clear();
                 awaitingWaveform.reset();
-                awaitingHistoryAction = -1;
                 ioBusy.store(false, std::memory_order_release);
                 ioError.store(true, std::memory_order_release);
                 continue;
@@ -1284,27 +1191,10 @@ struct Chimera : Module {
                 unsavedImport.store(true, std::memory_order_release);
             if (awaitingAdoptionKind == 4 || awaitingAdoptionKind == 5)
                 recoveryPostPending.store(true, std::memory_order_release);
-            if (awaitingAdoptionKind == 5) {
-                if (awaitingHistoryAction == 0) {
-                    undoCheckpoint = awaitingCheckpoint;
-                    redoCheckpoint.clear();
-                }
-                else if (awaitingHistoryAction == 1) {
-                    redoCheckpoint = awaitingCheckpoint;
-                    undoCheckpoint.clear();
-                }
-                else if (awaitingHistoryAction == 2) {
-                    undoCheckpoint = awaitingCheckpoint;
-                    redoCheckpoint.clear();
-                }
-            }
             awaitingAdoptionKind = 1;
-            awaitingHistoryAction = -1;
-            awaitingCheckpoint.clear();
             readyForPrepare = true;
             ioBusy.store(retiringHandle != 0, std::memory_order_release);
         }
-        pruneEditCheckpoints();
         recoveryStep();
         if (!service) return;
         if (retiringHandle && retiringPayload && !retirementRequestId) {
@@ -2124,6 +2014,7 @@ struct ChimeraWidget : ModuleWidget {
         Chimera* m = dynamic_cast<Chimera*>(module);
         displayOverlay->owner = m;
         if (m) {
+            m->displayHeartbeatNs.store(Chimera::steadyNs(), std::memory_order_release);
             m->serviceStep();
             auto next = std::atomic_load_explicit(&m->waveform,
                 std::memory_order_acquire);
@@ -2301,7 +2192,7 @@ struct ChimeraWidget : ModuleWidget {
         }));
         addReelAction(createMenuItem("Erase selected Splice audio…", "", [m] {
             if (!osdialog_message(OSDIALOG_WARNING, OSDIALOG_YES_NO,
-                    "Replace the selected Splice audio with silence? An Undo checkpoint will be created first.")) return;
+                    "Replace the selected Splice audio with silence? This cannot be undone.")) return;
             chimera::edit::Request request;
             request.kind = chimera::edit::EraseSplice;
             request.splice = m->publishedRegion.load(std::memory_order_acquire);
@@ -2311,7 +2202,7 @@ struct ChimeraWidget : ModuleWidget {
         }));
         addReelAction(createMenuItem("Delete selected Splice…", "", [m] {
             if (!osdialog_message(OSDIALOG_WARNING, OSDIALOG_YES_NO,
-                    "Delete and compact the selected Splice? An Undo checkpoint will be created first.")) return;
+                    "Delete and compact the selected Splice? This cannot be undone.")) return;
             chimera::edit::Request request;
             request.kind = chimera::edit::DeleteSplice;
             request.splice = m->publishedRegion.load(std::memory_order_acquire);
@@ -2321,19 +2212,19 @@ struct ChimeraWidget : ModuleWidget {
         }));
         addReelAction(createMenuItem("Clear Reel…", "", [m] {
             if (!osdialog_message(OSDIALOG_WARNING, OSDIALOG_YES_NO,
-                    "Clear all audio and markers in this Reel? An Undo checkpoint will be created first.")) return;
+                    "Clear all audio and markers in this Reel? This cannot be undone.")) return;
             chimera::edit::Request request;
             request.kind = chimera::edit::ClearReel;
             std::string error;
             if (!m->requestEdit(request, error))
                 osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());
         }));
-        addReelAction(createMenuItem("Undo Reel edit", "", [m] {
+        addReelAction(createMenuItem("Undo marker edit", "", [m] {
             std::string error;
             if (!m->requestUndo(false, error))
                 osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());
         }));
-        addReelAction(createMenuItem("Redo Reel edit", "", [m] {
+        addReelAction(createMenuItem("Redo marker edit", "", [m] {
             std::string error;
             if (!m->requestUndo(true, error))
                 osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, error.c_str());

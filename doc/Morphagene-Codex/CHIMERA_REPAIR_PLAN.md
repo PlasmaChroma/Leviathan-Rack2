@@ -4,6 +4,10 @@ Review date: 2026-09-25. This document tracks fixes from the stability,
 performance, correctness, and audio-quality review. Status is updated only
 after the relevant validation completes.
 
+The checkpoint and Undo/Redo sections below record the earlier repair work.
+Chimera now keeps only marker Undo/Redo; audio edits no longer create edit
+checkpoint WAVs. Recovery and patch-save snapshots remain separate safeguards.
+
 ## First repair batch: ownership and bypass
 
 - [x] **P1 — Protect snapshot leases during reel replacement.** An automatic

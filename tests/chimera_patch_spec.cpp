@@ -171,47 +171,20 @@ int main() {
     chimera::edit::Request erase;
     erase.kind = chimera::edit::EraseSplice;
     erase.splice = 0;
-    need(clone.requestEdit(erase, error), "queue frozen destructive edit with checkpoint");
+    need(clone.requestEdit(erase, error), "queue frozen destructive edit");
     const auto editDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     while ((clone.loadTicket || clone.awaitingHandle || clone.retiringHandle) &&
            std::chrono::steady_clock::now() < editDeadline) {
         clone.serviceStep(); clone.process(args); clone.serviceStep();
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    need(!clone.loadTicket && !clone.awaitingHandle && !clone.undoCheckpoint.empty() &&
-         rack::system::isFile(clone.undoCheckpoint) &&
+    need(!clone.loadTicket && !clone.awaitingHandle &&
          clone.reel->readActive(0).l == 0.f &&
          clone.reel->readActive(100).l == 1.f,
-         "erase publishes zeroed Splice only after durable Undo checkpoint");
-    const std::string firstUndo = clone.undoCheckpoint;
-    need(clone.requestUndo(false, error), "queue Undo from immutable checkpoint");
-    clone.pruneEditCheckpoints();
-    need(rack::system::isFile(firstUndo), "cleanup preserves checkpoint leased by restore worker");
-    const auto undoDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-    while ((clone.loadTicket || clone.awaitingHandle || clone.retiringHandle) &&
-           std::chrono::steady_clock::now() < undoDeadline) {
-        clone.serviceStep(); clone.process(args); clone.serviceStep();
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-    need(!clone.loadTicket && clone.reel->readActive(0).l == 19.f &&
-         !clone.redoCheckpoint.empty(),
-         "Undo restores previous audio and publishes a Redo checkpoint");
-    need(!rack::system::exists(firstUndo) && clone.editCheckpointFiles.size() == 1,
-         "Undo removes superseded full-reel checkpoint after restore finishes");
-    const std::string firstRedo = clone.redoCheckpoint;
-    need(clone.requestUndo(true, error), "queue Redo from immutable checkpoint");
-    const auto redoDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-    while ((clone.loadTicket || clone.awaitingHandle || clone.retiringHandle) &&
-           std::chrono::steady_clock::now() < redoDeadline) {
-        clone.serviceStep(); clone.process(args); clone.serviceStep();
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-    need(!clone.loadTicket && clone.reel->readActive(0).l == 0.f,
-         "Redo re-applies the selected destructive edit");
-    need(!rack::system::exists(firstRedo) && clone.editCheckpointFiles.size() == 1,
-         "Redo keeps only the reachable history checkpoint");
+         "erase publishes zeroed Splice after a fenced replacement");
+    need(!clone.requestUndo(false, error) && error == "No marker edit to undo",
+         "audio edit does not create an Undo action");
     need(clone.requestEdit(erase, error), "queue a second fenced edit");
-    const std::string rejectedCheckpoint = clone.loadTicket->checkpointPath;
     need(clone.reel->write(0, {42.f, 42.f}, 304),
          "mutate audio after the edit snapshot but before adoption");
     const auto staleDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
@@ -223,12 +196,10 @@ int main() {
     need(!clone.loadTicket && !clone.awaitingHandle &&
          clone.reel->readActive(0).l == 42.f && clone.ioError.load(),
          "stale edit is rejected without replacing a newer recording change");
-    need(!rack::system::exists(rejectedCheckpoint) && clone.editCheckpointFiles.size() == 1,
-         "rejected adoption removes its unused checkpoint and retains valid Undo");
     clone.ioError.store(false);
     chimera::edit::Request clear;
     clear.kind = chimera::edit::ClearReel;
-    need(clone.requestEdit(clear, error), "queue explicit Clear Reel with Undo checkpoint");
+    need(clone.requestEdit(clear, error), "queue explicit Clear Reel");
     const auto clearDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     while ((clone.loadTicket || clone.awaitingHandle || clone.retiringHandle) &&
            std::chrono::steady_clock::now() < clearDeadline) {
@@ -244,15 +215,16 @@ int main() {
     need(emptyManifest && bool(chimera::bundle::load(cloneStorage, emptyManifest, 2)),
          "empty Reel saves a valid manifest without dummy full-length audio");
     json_decref(emptyState);
-    need(clone.requestUndo(false, error), "Undo can restore an explicitly cleared Reel");
-    const auto restoreDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    need(clone.requestImportWav(interchange, false, error),
+         "import creates a new working Reel after committed Clear");
+    const auto newReelDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     while ((clone.loadTicket || clone.awaitingHandle || clone.retiringHandle) &&
-           std::chrono::steady_clock::now() < restoreDeadline) {
+           std::chrono::steady_clock::now() < newReelDeadline) {
         clone.serviceStep(); clone.process(args); clone.serviceStep();
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    need(!clone.loadTicket && clone.reel->readActive(0).l == 42.f,
-         "Undo restores the pre-clear audio checkpoint");
+    need(!clone.loadTicket && clone.reel->write(0, {42.f, 42.f}, 305),
+         "new working Reel is independent of the cleared Reel");
     auto settleRecovery = [&] {
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
         do {
@@ -328,5 +300,5 @@ int main() {
     context.history = nullptr;
     context.engine = nullptr;
     rack::contextSet(nullptr);
-    std::puts("PASS: Rack Chimera patch, import/export, destructive edit, Undo/Redo");
+    std::puts("PASS: Rack Chimera patch, import/export, committed edit, and recovery");
 }

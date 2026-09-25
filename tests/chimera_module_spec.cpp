@@ -80,12 +80,35 @@ static void backgroundDispatchRegression() {
     waitFor([&] { return !m.loadTicket && !m.awaitingHandle && !m.retiringHandle; }, false);
     {
         std::lock_guard<std::recursive_mutex> lock(m.controlMutex);
-        need(m.reel->validFrames() == 0 && !m.undoCheckpoint.empty(),
+        need(m.reel->validFrames() == 0,
              "stopped-engine edit adopts and retires without widget/audio callbacks");
     }
     m.stopControlDispatcher();
     need(!m.controlThread.joinable() && audioAllocations == 0 && audioDeallocations == 0,
          "dispatcher joins off audio and callbacks remain allocation-free");
+}
+
+static void recordingDisplayRefreshRegression() {
+    Chimera m;
+    m.service.reset(new chimera::IoService(0));
+    std::unique_ptr<chimera::Reel> original(new chimera::Reel(4, 4));
+    original->write(0, {0.25f, -0.25f}, 0);
+    need(m.stores.accept(1, original, chimera::StoreBudget::Active),
+         "register recording display reel");
+    m.audioActiveHandle = m.controlActiveHandle = 1;
+    m.reel = m.stores.lookup(1);
+    m.slice.setReel(m.reel);
+    m.publishedAudioRevision.store(m.reel->audioRevision());
+    m.recordingActive.store(true);
+
+    m.recoveryStep();
+    need(!m.snapshotRequestId && !m.recoveryPurpose,
+         "headless recording does not request display-only snapshots");
+
+    m.displayHeartbeatNs.store(Chimera::steadyNs());
+    m.recoveryStep();
+    need(m.snapshotRequestId && m.recoveryPurpose == 3,
+         "visible recording requests a display-only waveform snapshot");
 }
 
 static void markerEditRegression() {
@@ -125,7 +148,7 @@ static void markerEditRegression() {
         m.coreCommands();
         trapAllocations = false;
         m.serviceStep();
-        need(!m.markerRequestId && !m.loadTicket && m.editCheckpointFiles.empty() &&
+        need(!m.markerRequestId && !m.loadTicket &&
              m.reel == identity && m.reel->audioRevision() == audioRevision,
              "metadata completion uses no worker, checkpoint, or audio replacement");
     };
@@ -484,6 +507,7 @@ int main() {
     fifoImportRegression();
 #endif
     backgroundDispatchRegression();
+    recordingDisplayRefreshRegression();
     markerEditRegression();
     snapshotAdoptionRegression();
     bridgedBypassRegression();
