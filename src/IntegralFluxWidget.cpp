@@ -182,144 +182,6 @@ struct IntegralFluxFittedSvgWidget final : TransparentWidget {
 	}
 };
 
-struct IntegralFluxLogoCrystalButton final : OpaqueWidget {
-	ui::Tooltip* tooltip = nullptr;
-	float previewProgressionPhase = -1.f;
-
-	~IntegralFluxLogoCrystalButton() {
-		destroyTooltip();
-	}
-
-	void createTooltip() {
-		if (settings::tooltips && !tooltip) {
-			tooltip = new ui::Tooltip();
-			tooltip->text = visual_assets::isPanelGlassColorCycleEnabled() ? "Deactivate crystal" : "Activate crystal";
-			APP->scene->addChild(tooltip);
-		}
-	}
-
-	void destroyTooltip() {
-		if (tooltip) {
-			APP->scene->removeChild(tooltip);
-			delete tooltip;
-			tooltip = nullptr;
-		}
-	}
-
-	void onButton(const event::Button& e) override {
-		if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
-			visual_assets::togglePanelGlassColorCycle();
-			destroyTooltip();
-			createTooltip();
-			e.consume(this);
-			return;
-		}
-		OpaqueWidget::onButton(e);
-	}
-
-	void onEnter(const event::Enter& e) override {
-		OpaqueWidget::onEnter(e);
-		createTooltip();
-	}
-
-	void onLeave(const event::Leave& e) override {
-		OpaqueWidget::onLeave(e);
-		destroyTooltip();
-	}
-
-	void draw(const DrawArgs& args) override {
-		visual_assets::ScopedPanelGlassPreviewProgression previewProgression(
-			previewProgressionPhase);
-		if (!visual_assets::isPanelGlassColorCycleEnabled()) {
-			return;
-		}
-		const Vec center = box.size.mult(0.5f);
-		const float w = mm2px(2.4f);
-		const float h = mm2px(1.6f);
-
-		const float intensity = 0.3f + 0.7f * clamp(visual_assets::panelGlassTintAmount() / 0.28f, 0.f, 1.f);
-		NVGcolor glowColor = visual_assets::panelGlassCrystalGlowColor();
-		NVGcolor strokeColor = visual_assets::panelGlassCrystalStrokeColor();
-
-		nvgSave(args.vg);
-		nvgGlobalCompositeOperation(args.vg, NVG_LIGHTER);
-		nvgTranslate(args.vg, center.x, center.y);
-		nvgScale(args.vg, w * 0.5f, h * 0.5f);
-
-		// Draw the bloom (outer softer layer)
-		nvgBeginPath(args.vg);
-		nvgCircle(args.vg, 0.f, 0.f, 2.2f);
-		nvgFillPaint(args.vg, nvgRadialGradient(
-			args.vg,
-			0.f,
-			0.f,
-			0.1f,
-			2.2f,
-			nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, (45.f / 255.f) * intensity),
-			nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 0)));
-		nvgFill(args.vg);
-
-		// Draw the main bright glow (middle layer)
-		nvgBeginPath(args.vg);
-		nvgCircle(args.vg, 0.f, 0.f, 1.2f);
-		NVGcolor coreColor = nvgRGBAf(
-			glowColor.r + (1.f - glowColor.r) * 0.7f,
-			glowColor.g + (1.f - glowColor.g) * 0.7f,
-			glowColor.b + (1.f - glowColor.b) * 0.7f,
-			(130.f / 255.f) * intensity
-		);
-		nvgFillPaint(args.vg, nvgRadialGradient(
-			args.vg,
-			0.f,
-			0.f,
-			0.1f,
-			1.2f,
-			coreColor,
-			nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, 0)));
-		nvgFill(args.vg);
-
-		// Draw the center hotspot highlight
-		nvgBeginPath(args.vg);
-		nvgCircle(args.vg, 0.f, 0.f, 0.4f);
-		nvgFillColor(args.vg, nvgRGBA(255, 255, 255, int(110 * intensity)));  // Pure white hotspot
-		nvgFill(args.vg);
-		nvgRestore(args.vg);
-
-		// Draw the diamond shape matching the actual crystal dimensions
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, center.x, center.y - h * 0.5f);
-		nvgLineTo(args.vg, center.x + w * 0.5f, center.y);
-		nvgLineTo(args.vg, center.x, center.y + h * 0.5f);
-		nvgLineTo(args.vg, center.x - w * 0.5f, center.y);
-		nvgClosePath(args.vg);
-		nvgStrokeWidth(args.vg, 1.0f);
-		nvgStrokePaint(args.vg, nvgLinearGradient(
-			args.vg,
-			center.x - w * 0.5f,
-			center.y - h * 0.5f,
-			center.x + w * 0.5f,
-			center.y + h * 0.5f,
-			nvgRGBAf(strokeColor.r, strokeColor.g, strokeColor.b, (110.f / 255.f) * intensity),
-			nvgRGBAf(glowColor.r, glowColor.g, glowColor.b, (130.f / 255.f) * intensity)));
-		nvgStroke(args.vg);
-
-		// Debug print showing phase percentage next to the logo crystal
-		if (isDragonKingDebugEnabled() && APP && APP->window && APP->window->uiFont) {
-			const float pct = visual_assets::panelGlassCyclePhase() * 100.f;
-			char buf[32];
-			std::snprintf(buf, sizeof(buf), "%.1f%%", pct);
-
-			nvgSave(args.vg);
-			nvgFontFaceId(args.vg, APP->window->uiFont->handle);
-			nvgFontSize(args.vg, 7.5f);
-			nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-			nvgFillColor(args.vg, nvgRGBA(0x1c, 0xcc, 0xd9, 180));
-			nvgText(args.vg, box.size.x + mm2px(1.5f), box.size.y * 0.5f, buf, nullptr);
-			nvgRestore(args.vg);
-		}
-	}
-};
-
 // Create a bigger basic button
 struct BigTL1105 : TL1105 {
     BigTL1105() {
@@ -1964,6 +1826,7 @@ struct IntegralFluxWidget : ModuleWidget {
 		visual_assets::SplitPanelRenderer splitPanel(this, "res/flux.panel.svg");
 		const std::string& panelBasePath = splitPanel.panelPath();
 		splitPanel.addLabels("res/flux.labels.svg");
+		splitPanel.addPerfectWaveBranding();
 		nautiloidGlass = visual_assets::addFractalGlassOverlay(
 			this, panelBasePath, splitPanel.panelSurfaceEffectWidget());
 		if (widget::FramebufferWidget* conduits =
@@ -1988,20 +1851,11 @@ struct IntegralFluxWidget : ModuleWidget {
 		}
 		previewBuildTimer.markPanelDone();
 		{
-			const Vec logoPosMm(27.8f, 120.25f);
-			const Vec logoSizeMm(46.0f, 7.85f);
-			Widget* logo = visual_assets::createAspectFitRasterImageWidget(
-				"res/icon/Leviathan_Logo.png",
-				math::Rect(logoPosMm, logoSizeMm));
-			addChild(logo);
-
-			IntegralFluxLogoCrystalButton* crystalButton =
-				new IntegralFluxLogoCrystalButton();
-			crystalButton->previewProgressionPhase =
-				splitPanel.previewProgressionPhase();
-			crystalButton->box.pos = mm2px(Vec(48.96f, 125.30f));
-			crystalButton->box.size = mm2px(Vec(5.0f, 2.5f));
-			addChild(crystalButton);
+			math::Rect logoRectMm(Vec(34.44015f, 119.43102f), Vec(32.71933f, 12.24054f));
+			panel_svg::loadRectFromSvgMm(
+				panelBasePath, "BRANDING_LEVIATHAN_LOGO_RASTER", &logoRectMm);
+			addChild(visual_assets::createAspectFitRasterImageWidget(
+				"res/icon/Leviathan_Logo_S2.png", logoRectMm));
 		}
 
         // use LeviathanHaloKnob2 for surge/sink and curve shape knobs
@@ -2563,10 +2417,6 @@ struct IntegralFluxWidget : ModuleWidget {
 					addDivItem(32, "Control rate (/32)");
 				}
 			));
-			menu->addChild(createMenuLabel("Plugin"));
-			menu->addChild(createMenuItem("Reset Crystal", "", [=]() {
-				visual_assets::resetPanelGlassColorCycle();
-			}));
 			if (isDragonKingDebugEnabled()) {
 				const bool hasNautiloid = leftNautiloidForIntegralFlux(maths) != nullptr;
 				menu->addChild(new MenuSeparator());

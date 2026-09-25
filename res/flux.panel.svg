@@ -162,4 +162,9 @@
     <rect style="display:inline;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:#1ccad8;stroke-width:24.3378;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1" id="CH4_PREVIEW" width="2475.6621" height="1475.6621" x="7474.6689" y="6212.1689" />
     <rect style="display:inline;opacity:1;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:#1ccad8;stroke-width:24.338;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1" id="CH1_PREVIEW" width="2475.6621" height="1475.6666" x="198.16904" y="6212.1689" />
   </g>
+  <g id="branding_components" style="display:none">
+    <rect id="BRANDING_WAVE_LEFT_RASTER" x="2189.6099" y="12338.19" width="1306.748" height="511.81002" />
+    <rect id="BRANDING_WAVE_RIGHT_RASTER" x="6663.6742" y="12338.19" width="1306.748" height="511.81002" />
+    <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="3444.0151" y="11943.102" width="3271.933" height="1224.054" />
+  </g>
 </svg>

@@ -1,88 +1,515 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="142.24mm" height="128.5mm" viewBox="0 0 142.24 128.5">
-  <defs>
-    <linearGradient id="chimera-face" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#1e2b38"/>
-      <stop offset="1" stop-color="#111922"/>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="142.24mm"
+   height="128.5mm"
+   viewBox="0 0 142.24 128.5"
+   version="1.1"
+   id="svg43"
+   sodipodi:docname="Chimera.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview43"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="2.4193418"
+     inkscape:cx="268.66812"
+     inkscape:cy="242.83465"
+     inkscape:window-width="2560"
+     inkscape:window-height="1377"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="labels" />
+  <defs
+     id="defs2">
+    <linearGradient
+       id="chimera-face"
+       x1="0"
+       y1="0"
+       x2="0"
+       y2="1">
+      <stop
+         offset="0"
+         stop-color="#1e2b38"
+         id="stop1" />
+      <stop
+         offset="1"
+         stop-color="#111922"
+         id="stop2"
+         style="stop-color:#000000;stop-opacity:1;" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient22"
+       id="linearGradient36"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(0.00996908,0,0,0.00996908,10.176204,-8.7190724)"
+       x1="5021.8892"
+       y1="1496.1719"
+       x2="7176.0854"
+       y2="1489.1353" />
+    <linearGradient
+       id="linearGradient22"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#7a5cff;stop-opacity:1;"
+         offset="0"
+         id="stop22" />
+      <stop
+         style="stop-color:#1cccd9;stop-opacity:1;"
+         offset="1"
+         id="stop23" />
     </linearGradient>
   </defs>
-  <g id="panel_art">
-    <rect width="142.24" height="128.5" fill="url(#chimera-face)"/>
-    <rect x="0" y="0" width="142.24" height="3" fill="#3b5062"/>
-    <rect x="0" y="127.5" width="142.24" height="1" fill="#3b5062"/>
-    <path d="M5 43H137.24" stroke="#698294" stroke-width=".35" opacity=".7"/>
-    <rect x="5.4" y="13.5" width="131.44" height="20" rx="1.6"
-          fill="#091721" stroke="#577982" stroke-width=".35"/>
-    <path d="M7 15H135M7 32H135" stroke="#d2a56e" stroke-width=".18" opacity=".7"/>
-    <g id="component_anchors" style="display:none">
-      <rect id="BRANDING_WAVE_LEFT_RASTER" x="42.216099" y="123.3819" width="13.06748" height="5.1181002"/>
-      <rect id="BRANDING_WAVE_RIGHT_RASTER" x="86.956742" y="123.3819" width="13.06748" height="5.1181002"/>
-      <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="54.760335" y="119.43102" width="32.71933" height="12.24054"/>
-      <circle id="DISPLAY_ORIGIN" cx="6" cy="14" r=".1"/>
-      <circle id="DISPLAY_END" cx="136" cy="33" r=".1"/>
-      <circle id="SOS_PARAM" cx="20" cy="51" r=".1"/>
-      <circle id="GENE_SIZE_PARAM" cx="71" cy="51" r=".1"/>
-      <circle id="VARISPEED_PARAM" cx="122" cy="51" r=".1"/>
-      <circle id="MORPH_PARAM" cx="20" cy="70" r=".1"/>
-      <circle id="SLIDE_PARAM" cx="71" cy="70" r=".1"/>
-      <circle id="ORGANIZE_PARAM" cx="122" cy="70" r=".1"/>
-      <circle id="GENE_ATT_PARAM" cx="49" cy="56" r=".1"/>
-      <circle id="VARISPEED_ATT_PARAM" cx="99" cy="56" r=".1"/>
-      <circle id="SLIDE_ATT_PARAM" cx="96" cy="73" r=".1"/>
-      <circle id="REC_PARAM" cx="14" cy="79" r=".1"/>
-      <circle id="SPLICE_PARAM" cx="36" cy="79" r=".1"/>
-      <circle id="SHIFT_PARAM" cx="58" cy="79" r=".1"/>
-      <circle id="SOS_CV_INPUT" cx="12" cy="93" r=".1"/>
-      <circle id="GENE_SIZE_CV_INPUT" cx="36" cy="93" r=".1"/>
-      <circle id="VARISPEED_CV_INPUT" cx="60" cy="93" r=".1"/>
-      <circle id="MORPH_CV_INPUT" cx="84" cy="93" r=".1"/>
-      <circle id="SLIDE_CV_INPUT" cx="108" cy="93" r=".1"/>
-      <circle id="ORGANIZE_CV_INPUT" cx="132" cy="93" r=".1"/>
-      <circle id="CLOCK_INPUT" cx="20" cy="103" r=".1"/>
-      <circle id="PLAY_INPUT" cx="45" cy="103" r=".1"/>
-      <circle id="REC_INPUT" cx="70" cy="103" r=".1"/>
-      <circle id="SPLICE_INPUT" cx="95" cy="103" r=".1"/>
-      <circle id="SHIFT_INPUT" cx="120" cy="103" r=".1"/>
-      <circle id="AUDIO_L_INPUT" cx="12" cy="111" r=".1"/>
-      <circle id="AUDIO_R_INPUT" cx="36" cy="111" r=".1"/>
-      <circle id="AUDIO_L_OUTPUT" cx="60" cy="111" r=".1"/>
-      <circle id="AUDIO_R_OUTPUT" cx="84" cy="111" r=".1"/>
-      <circle id="CV_OUTPUT" cx="108" cy="111" r=".1"/>
-      <circle id="EOSG_OUTPUT" cx="132" cy="111" r=".1"/>
-      <circle id="REC_LIGHT" cx="10" cy="39" r=".1"/>
-      <circle id="REC_ARMED_LIGHT" cx="25" cy="39" r=".1"/>
-      <circle id="PLAY_LIGHT" cx="40" cy="39" r=".1"/>
-      <circle id="PENDING_LIGHT" cx="56" cy="39" r=".1"/>
-      <circle id="CLOCK_LIGHT" cx="72" cy="39" r=".1"/>
-      <circle id="PM_LIGHT" cx="88" cy="39" r=".1"/>
-      <circle id="IO_BUSY_LIGHT" cx="103" cy="39" r=".1"/>
-      <circle id="CLIP_LIGHT" cx="118" cy="39" r=".1"/>
-      <circle id="ERROR_LIGHT" cx="133" cy="39" r=".1"/>
+  <g
+     id="panel_art">
+    <rect
+       width="142.24"
+       height="128.5"
+       fill="url(#chimera-face)"
+       id="rect2" />
+    <path
+       d="M5 43H137.24"
+       stroke="#698294"
+       stroke-width=".35"
+       opacity=".7"
+       id="path4" />
+    <rect
+       x="5.4"
+       y="13.5"
+       width="131.44"
+       height="20"
+       rx="1.6"
+       fill="#091721"
+       stroke="#577982"
+       stroke-width=".35"
+       id="rect5" />
+    <path
+       d="M7 15H135M7 32H135"
+       stroke="#d2a56e"
+       stroke-width=".18"
+       opacity=".7"
+       id="path5" />
+    <g
+       id="component_anchors"
+       style="display:none">
+      <rect
+         id="BRANDING_WAVE_LEFT_RASTER"
+         x="42.216099"
+         y="123.3819"
+         width="13.06748"
+         height="5.1181002" />
+      <rect
+         id="BRANDING_WAVE_RIGHT_RASTER"
+         x="86.956742"
+         y="123.3819"
+         width="13.06748"
+         height="5.1181002" />
+      <rect
+         id="BRANDING_LEVIATHAN_LOGO_RASTER"
+         x="54.760335"
+         y="119.43102"
+         width="32.71933"
+         height="12.24054" />
+      <circle
+         id="DISPLAY_ORIGIN"
+         cx="6"
+         cy="14"
+         r=".1" />
+      <circle
+         id="DISPLAY_END"
+         cx="136"
+         cy="33"
+         r=".1" />
+      <circle
+         id="SOS_PARAM"
+         cx="20"
+         cy="51"
+         r=".1" />
+      <circle
+         id="GENE_SIZE_PARAM"
+         cx="71"
+         cy="51"
+         r=".1" />
+      <circle
+         id="VARISPEED_PARAM"
+         cx="122"
+         cy="51"
+         r=".1" />
+      <circle
+         id="MORPH_PARAM"
+         cx="20"
+         cy="70"
+         r=".1" />
+      <circle
+         id="SLIDE_PARAM"
+         cx="71"
+         cy="70"
+         r=".1" />
+      <circle
+         id="ORGANIZE_PARAM"
+         cx="122"
+         cy="70"
+         r=".1" />
+      <circle
+         id="GENE_ATT_PARAM"
+         cx="49"
+         cy="56"
+         r=".1" />
+      <circle
+         id="VARISPEED_ATT_PARAM"
+         cx="99"
+         cy="56"
+         r=".1" />
+      <circle
+         id="SLIDE_ATT_PARAM"
+         cx="96"
+         cy="73"
+         r=".1" />
+      <circle
+         id="REC_PARAM"
+         cx="14"
+         cy="79"
+         r=".1" />
+      <circle
+         id="SPLICE_PARAM"
+         cx="36"
+         cy="79"
+         r=".1" />
+      <circle
+         id="SHIFT_PARAM"
+         cx="58"
+         cy="79"
+         r=".1" />
+      <circle
+         id="SOS_CV_INPUT"
+         cx="12"
+         cy="93"
+         r=".1" />
+      <circle
+         id="GENE_SIZE_CV_INPUT"
+         cx="36"
+         cy="93"
+         r=".1" />
+      <circle
+         id="VARISPEED_CV_INPUT"
+         cx="60"
+         cy="93"
+         r=".1" />
+      <circle
+         id="MORPH_CV_INPUT"
+         cx="84"
+         cy="93"
+         r=".1" />
+      <circle
+         id="SLIDE_CV_INPUT"
+         cx="108"
+         cy="93"
+         r=".1" />
+      <circle
+         id="ORGANIZE_CV_INPUT"
+         cx="132"
+         cy="93"
+         r=".1" />
+      <circle
+         id="CLOCK_INPUT"
+         cx="20"
+         cy="103"
+         r=".1" />
+      <circle
+         id="PLAY_INPUT"
+         cx="45"
+         cy="103"
+         r=".1" />
+      <circle
+         id="REC_INPUT"
+         cx="70"
+         cy="103"
+         r=".1" />
+      <circle
+         id="SPLICE_INPUT"
+         cx="95"
+         cy="103"
+         r=".1" />
+      <circle
+         id="SHIFT_INPUT"
+         cx="120"
+         cy="103"
+         r=".1" />
+      <circle
+         id="AUDIO_L_INPUT"
+         cx="12"
+         cy="111"
+         r=".1" />
+      <circle
+         id="AUDIO_R_INPUT"
+         cx="36"
+         cy="111"
+         r=".1" />
+      <circle
+         id="AUDIO_L_OUTPUT"
+         cx="60"
+         cy="111"
+         r=".1" />
+      <circle
+         id="AUDIO_R_OUTPUT"
+         cx="84"
+         cy="111"
+         r=".1" />
+      <circle
+         id="CV_OUTPUT"
+         cx="108"
+         cy="111"
+         r=".1" />
+      <circle
+         id="EOSG_OUTPUT"
+         cx="132"
+         cy="111"
+         r=".1" />
+      <circle
+         id="REC_LIGHT"
+         cx="10"
+         cy="39"
+         r=".1" />
+      <circle
+         id="REC_ARMED_LIGHT"
+         cx="25"
+         cy="39"
+         r=".1" />
+      <circle
+         id="PLAY_LIGHT"
+         cx="40"
+         cy="39"
+         r=".1" />
+      <circle
+         id="PENDING_LIGHT"
+         cx="56"
+         cy="39"
+         r=".1" />
+      <circle
+         id="CLOCK_LIGHT"
+         cx="72"
+         cy="39"
+         r=".1" />
+      <circle
+         id="PM_LIGHT"
+         cx="88"
+         cy="39"
+         r=".1" />
+      <circle
+         id="IO_BUSY_LIGHT"
+         cx="103"
+         cy="39"
+         r=".1" />
+      <circle
+         id="CLIP_LIGHT"
+         cx="118"
+         cy="39"
+         r=".1" />
+      <circle
+         id="ERROR_LIGHT"
+         cx="133"
+         cy="39"
+         r=".1" />
     </g>
   </g>
-  <g id="labels" fill="#d7e2e8" font-family="sans-serif" text-anchor="middle">
-    <text x="71.12" y="11" fill="#e8dbba" font-size="8" font-weight="bold">CHIMERA</text>
-    <g font-size="2.5">
-      <text x="10" y="36">REC</text><text x="25" y="36">ARM</text><text x="40" y="36">PLAY</text>
-      <text x="56" y="36">PEND</text><text x="72" y="36">CLK</text><text x="88" y="36">PM</text>
-      <text x="103" y="36">BUSY</text><text x="118" y="36">CLIP</text><text x="133" y="36">ERR</text>
+  <g
+     id="labels"
+     fill="#d7e2e8"
+     font-family="sans-serif"
+     text-anchor="middle">
+    <g
+       font-size="2.5"
+       id="g14">
+      <text
+         x="10"
+         y="36"
+         id="text6">REC</text>
+      <text
+         x="25"
+         y="36"
+         id="text7">ARM</text>
+      <text
+         x="40"
+         y="36"
+         id="text8">PLAY</text>
+      <text
+         x="56"
+         y="36"
+         id="text9">PEND</text>
+      <text
+         x="72"
+         y="36"
+         id="text10">CLK</text>
+      <text
+         x="88"
+         y="36"
+         id="text11">PM</text>
+      <text
+         x="103"
+         y="36"
+         id="text12">BUSY</text>
+      <text
+         x="118"
+         y="36"
+         id="text13">CLIP</text>
+      <text
+         x="133"
+         y="36"
+         id="text14">ERR</text>
     </g>
-    <g font-size="3.1">
-      <text x="20" y="46">S.O.S.</text><text x="71" y="46">GENE SIZE</text><text x="122" y="46">VARI-SPEED</text>
-      <text x="20" y="65">MORPH</text><text x="71" y="65">SLIDE</text><text x="122" y="65">ORGANIZE</text>
+    <g
+       font-size="3.1"
+       id="g20">
+      <text
+         x="20"
+         y="46"
+         id="text15">S.O.S.</text>
+      <text
+         x="71"
+         y="46"
+         id="text16">GENE SIZE</text>
+      <text
+         x="122"
+         y="46"
+         id="text17">VARI-SPEED</text>
+      <text
+         x="20"
+         y="65"
+         id="text18">MORPH</text>
+      <text
+         x="71"
+         y="65"
+         id="text19">SLIDE</text>
+      <text
+         x="122"
+         y="65"
+         id="text20">ORGANIZE</text>
     </g>
-    <g font-size="2.35" fill="#9fc8d0">
-      <text x="49" y="63">GENE CV ±</text><text x="99" y="63">RATE CV ±</text><text x="96" y="80">SLIDE CV ±</text>
+    <g
+       font-size="2.35"
+       fill="#9fc8d0"
+       id="g23">
+      <text
+         x="49"
+         y="63"
+         id="text21">GENE CV ±</text>
+      <text
+         x="99"
+         y="63"
+         id="text22">RATE CV ±</text>
+      <text
+         x="96"
+         y="80"
+         id="text23">SLIDE CV ±</text>
     </g>
-    <g font-size="2.7">
-      <text x="14" y="85">REC</text><text x="36" y="85">SPLICE</text><text x="58" y="85">SHIFT</text>
+    <g
+       font-size="2.7"
+       id="g26">
+      <text
+         x="14"
+         y="85"
+         id="text24">REC</text>
+      <text
+         x="36"
+         y="85"
+         id="text25">SPLICE</text>
+      <text
+         x="58"
+         y="85"
+         id="text26">SHIFT</text>
     </g>
-    <g font-size="2.3">
-      <text x="12" y="88">S.O.S.</text><text x="36" y="88">GENE</text><text x="60" y="88">RATE</text>
-      <text x="84" y="88">MORPH</text><text x="108" y="88">SLIDE</text><text x="132" y="88">ORG</text>
-      <text x="20" y="98">CLOCK</text><text x="45" y="98">PLAY</text><text x="70" y="98">REC</text>
-      <text x="95" y="98">SPLICE</text><text x="120" y="98">SHIFT</text>
-      <text x="12" y="106">IN L</text><text x="36" y="106">IN R</text><text x="60" y="106">OUT L</text>
-      <text x="84" y="106">OUT R</text><text x="108" y="106">CV OUT</text><text x="132" y="106">EOSG</text>
+    <g
+       font-size="2.3"
+       id="g43">
+      <text
+         x="12"
+         y="88"
+         id="text27">S.O.S.</text>
+      <text
+         x="36"
+         y="88"
+         id="text28">GENE</text>
+      <text
+         x="60"
+         y="88"
+         id="text29">RATE</text>
+      <text
+         x="84"
+         y="88"
+         id="text30">MORPH</text>
+      <text
+         x="108"
+         y="88"
+         id="text31">SLIDE</text>
+      <text
+         x="132"
+         y="88"
+         id="text32">ORG</text>
+      <text
+         x="20"
+         y="98"
+         id="text33">CLOCK</text>
+      <text
+         x="45"
+         y="98"
+         id="text34">PLAY</text>
+      <text
+         x="70"
+         y="98"
+         id="text35">REC</text>
+      <text
+         x="95"
+         y="98"
+         id="text36">SPLICE</text>
+      <text
+         x="120"
+         y="98"
+         id="text37">SHIFT</text>
+      <text
+         x="12"
+         y="106"
+         id="text38">IN L</text>
+      <text
+         x="36"
+         y="106"
+         id="text39">IN R</text>
+      <text
+         x="60"
+         y="106"
+         id="text40">OUT L</text>
+      <text
+         x="84"
+         y="106"
+         id="text41">OUT R</text>
+      <text
+         x="108"
+         y="106"
+         id="text42">CV OUT</text>
+      <text
+         x="132"
+         y="106"
+         id="text43">EOSG</text>
     </g>
+    <text
+       id="reworked_module_title_text"
+       x="71.138527"
+       y="4.6363811"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.29167px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 600;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient36);stroke-width:0.281347"
+       xml:space="preserve"><tspan
+         sodipodi:role="line"
+         id="tspan43"
+         style="fill:url(#linearGradient36)">Chimera</tspan></text>
   </g>
 </svg>

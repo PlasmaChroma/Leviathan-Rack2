@@ -88,7 +88,6 @@ int addCompactLeviathanLogoBranding(
 Widget* createPanelSurfaceEffectWidget(
 	const std::string& svgPath,
 	Vec panelSizePx,
-	float previewProgressionPhase = -1.f,
 	const Widget* themePollOwner = nullptr);
 void setPanelSurfaceColorPreview(
 	Widget* panelSurface,
@@ -110,7 +109,6 @@ class SplitPanelRenderer final {
 	std::string labelsAssetPath_;
 	std::string themeTextInputAssetPath_;
 	std::string themeTextOutputAssetPath_;
-	float previewProgressionPhase_ = -1.f;
 	float leviathanLogoOpacity_ = 1.f;
 	bool addLeviathanLogo_ = false;
 
@@ -120,7 +118,6 @@ public:
 	~SplitPanelRenderer();
 	const std::string& panelPath() const;
 	Widget* panelSurfaceEffectWidget() const;
-	float previewProgressionPhase() const;
 	int addPerfectWaveBranding(float opacity = 1.f);
 	int addPerfectWaveSoloBranding(float opacity = 1.f);
 	void addCompactLeviathanLogoBranding(float opacity = 1.f);
@@ -130,30 +127,6 @@ public:
 	void addThemedLabels(const char* labelsAssetPath, const char* inputTextAssetPath, const char* outputTextAssetPath);
 };
 
-bool isPanelGlassColorCycleEnabled();
-void togglePanelGlassColorCycle();
-float panelGlassTintAmount();
-NVGcolor panelGlassCrystalGlowColor();
-NVGcolor panelGlassCrystalStrokeColor();
-float panelGlassCyclePhase();
-
-class ScopedPanelGlassPreviewProgression {
-public:
-	explicit ScopedPanelGlassPreviewProgression(float normalizedPhase);
-	~ScopedPanelGlassPreviewProgression();
-
-	ScopedPanelGlassPreviewProgression(
-		const ScopedPanelGlassPreviewProgression&) = delete;
-	ScopedPanelGlassPreviewProgression& operator=(
-		const ScopedPanelGlassPreviewProgression&) = delete;
-
-private:
-	bool active = false;
-};
-
-void loadSettings();
-void saveSettings();
-void resetPanelGlassColorCycle();
 int addSvgRect3DEffectWidgets(Widget* parent, const std::string& svgPath, const std::string& idSubstring = "ENHANCE");
 void resetEclipseShadowDrawMetrics();
 uint64_t eclipseShadowDrawNs();

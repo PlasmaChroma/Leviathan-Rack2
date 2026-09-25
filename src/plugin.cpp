@@ -208,7 +208,6 @@ ModuleTeardownTimer::~ModuleTeardownTimer() {
 void init(Plugin* p) {
 	pluginInstance = p;
 	refreshDragonKingDebugEnabled();
-	visual_assets::loadSettings();
 	leviathan::theme::persistence::initializeFromUserStorage();
 
 	// Add modules here
@@ -249,5 +248,4 @@ void destroy() {
 	chimera::shutdownChimeraIoService();
 	bifurx::shutdownBifurxRenderService();
 	leviathan::theme::persistence::saveToUserStorage();
-	visual_assets::saveSettings();
 }

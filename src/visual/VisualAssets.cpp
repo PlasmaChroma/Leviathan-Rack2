@@ -31,119 +31,6 @@ thread_local uint64_t gEclipseShadowDrawNs = 0u;
 thread_local uint64_t gEclipseShadowDrawCount = 0u;
 constexpr float kSemanticGlassPigmentAlpha = 0.33f;
 
-struct PanelGlassTintState {
-	bool enabled = false;
-	uint64_t generation = 0u;
-	double accumulatedTimeSec = 0.0;
-	double lastUpdateSec = 0.0;
-	double lastColorUpdateAccumSec = 0.0;
-	float currentAmount = 0.f;
-	NVGcolor currentTintColor = nvgRGBf(1.f, 0.22f, 1.f);
-	NVGcolor currentWashColor = nvgRGBA(255, 0, 255, 0);
-	NVGcolor currentCrystalGlowColor = nvgRGB(0x1c, 0xcc, 0xd9);
-	NVGcolor currentCrystalStrokeColor = nvgRGB(0x2a, 0xab, 0xef);
-};
-
-PanelGlassTintState gPanelGlassTint;
-std::vector<PanelGlassTintState> gPanelGlassPreviewStateStack;
-
-void applyPanelGlassProgression(double cycleTime) {
-	cycleTime = std::fmod(std::max(0.0, cycleTime), 180.0);
-	float amount = 0.f;
-	NVGcolor tintColor = nvgRGBf(1.f, 0.22f, 1.f);
-	NVGcolor washColor;
-	NVGcolor glowColor = nvgRGB(0x1c, 0xcc, 0xd9);
-	NVGcolor strokeColor = nvgRGB(0x2a, 0xab, 0xef);
-
-	if (cycleTime < 60.0) {
-		float t = float(cycleTime / 60.0);
-		amount = 0.28f * t;
-		washColor = nvgRGBA(255, 0, 255, int(std::round(32.f * t)));
-	}
-	else if (cycleTime < 120.0) {
-		float t = float((cycleTime - 60.0) / 60.0);
-		amount = 0.28f;
-		tintColor = nvgRGBf(
-			1.f + (0.95f - 1.f) * t,
-			0.22f + (0.05f - 0.22f) * t,
-			1.f + (0.15f - 1.f) * t);
-		washColor = nvgRGBA(
-			int(std::round(255.f + (242.f - 255.f) * t)),
-			int(std::round(12.f * t)),
-			int(std::round(255.f + (38.f - 255.f) * t)),
-			32);
-		glowColor = nvgRGB(
-			28 + int(227.f * t),
-			204 - int(174.f * t),
-			217 - int(151.f * t));
-		strokeColor = nvgRGB(
-			42 + int(162.f * t),
-			171 - int(171.f * t),
-			239 - int(205.f * t));
-	}
-	else {
-		float t = float((cycleTime - 120.0) / 60.0);
-		amount = 0.28f * (1.f - t);
-		tintColor = nvgRGBf(0.95f, 0.05f, 0.15f);
-		washColor = nvgRGBA(
-			242, 12, 38, int(std::round(32.f * (1.f - t))));
-		glowColor = nvgRGB(
-			255 - int(227.f * t),
-			30 + int(174.f * t),
-			66 + int(151.f * t));
-		strokeColor = nvgRGB(
-			204 - int(162.f * t),
-			int(171.f * t),
-			34 + int(205.f * t));
-	}
-
-	gPanelGlassTint.currentAmount = amount;
-	gPanelGlassTint.currentTintColor = tintColor;
-	gPanelGlassTint.currentWashColor = washColor;
-	gPanelGlassTint.currentCrystalGlowColor = glowColor;
-	gPanelGlassTint.currentCrystalStrokeColor = strokeColor;
-}
-
-void updatePanelGlassTint() {
-	if (!gPanelGlassPreviewStateStack.empty()) {
-		return;
-	}
-	double now = system::getTime();
-	if (gPanelGlassTint.lastUpdateSec <= 0.0) {
-		gPanelGlassTint.lastUpdateSec = now;
-		return;
-	}
-
-	double dt = now - gPanelGlassTint.lastUpdateSec;
-	gPanelGlassTint.lastUpdateSec = now;
-
-	if (!gPanelGlassTint.enabled) {
-		return;
-	}
-
-	gPanelGlassTint.accumulatedTimeSec += dt;
-
-	// Only update once per second
-	if (gPanelGlassTint.accumulatedTimeSec - gPanelGlassTint.lastColorUpdateAccumSec >= 1.0) {
-		gPanelGlassTint.lastColorUpdateAccumSec = std::floor(gPanelGlassTint.accumulatedTimeSec);
-		applyPanelGlassProgression(gPanelGlassTint.accumulatedTimeSec);
-		++gPanelGlassTint.generation;
-	}
-}
-
-NVGcolor applyPanelGlassTint(NVGcolor color) {
-	const float amount = gPanelGlassTint.currentAmount;
-	if (amount <= 0.f) {
-		return color;
-	}
-	const NVGcolor tint = gPanelGlassTint.currentTintColor;
-	return nvgRGBAf(
-		color.r + (tint.r - color.r) * amount,
-		color.g + (tint.g - color.g) * amount,
-		color.b + (tint.b - color.b) * amount,
-		color.a);
-}
-
 } // namespace
 
 std::shared_ptr<window::Svg> loadPluginSvgCached(const char* path) {
@@ -434,10 +321,8 @@ struct PreviewFrameEnhancementWidget : TransparentWidget {
 struct PanelSurfaceEffectWidget : TransparentWidget {
 	widget::FramebufferWidget* framebuffer = nullptr;
 	leviathan::theme::ThemeUiPoller themeUiPoller;
-	uint64_t tintGeneration = 0u;
 	uint64_t themeColorGeneration = 0u;
 	bool hasSemanticGlass = false;
-	float previewProgressionPhase = -1.f;
 	bool colorPreviewValid[4] = {};
 	leviathan::theme::ThemeColor colorPreviews[4];
 
@@ -498,7 +383,7 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		leviathan::theme::ThemeRole role,
 		NVGcolor authoredColor) const {
 		if (role == leviathan::theme::ThemeRole::None) {
-			return applyPanelGlassTint(authoredColor);
+			return authoredColor;
 		}
 		const int previewIndex = colorPreviewIndex(role);
 		if (previewIndex >= 0 && colorPreviewValid[previewIndex])
@@ -705,8 +590,8 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 		const float r = clamp(sourceRadius, 0.f, std::min(w, h) * 0.5f);
 		const bool semantic = glass.themeRole != leviathan::theme::ThemeRole::None;
 		const NVGcolor base = resolveGlassPigment(glass.themeRole, glass.baseColor);
-		const NVGcolor cyan = semantic ? nvgRGB(0x1c, 0xcc, 0xd9) : applyPanelGlassTint(nvgRGB(0x1c, 0xcc, 0xd9));
-		const NVGcolor violet = semantic ? nvgRGB(0x7a, 0x5c, 0xff) : applyPanelGlassTint(nvgRGB(0x7a, 0x5c, 0xff));
+		const NVGcolor cyan = nvgRGB(0x1c, 0xcc, 0xd9);
+		const NVGcolor violet = nvgRGB(0x7a, 0x5c, 0xff);
 		const float smallBoost = clamp((90.f - std::min(w, h)) / 55.f, 0.f, 1.f);
 		const float glowAlpha = 0.105f + smallBoost * 0.08f;
 		const float baseWashAlpha = semantic ? kSemanticGlassPigmentAlpha : (0.055f + smallBoost * 0.07f);
@@ -755,14 +640,6 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 			nvgStroke(args.vg);
 		}
 
-		if (!semantic && gPanelGlassTint.currentAmount > 0.f) {
-			// Retain the strong magenta wash from the useful portion of the
-			// earlier diagnostic treatment, without its white debug border.
-			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, x + 0.6f, y + 0.6f, w - 1.2f, h - 1.2f, r);
-			nvgFillColor(args.vg, gPanelGlassTint.currentWashColor);
-			nvgFill(args.vg);
-		}
 
 		nvgRestore(args.vg);
 	}
@@ -1023,8 +900,8 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 
 		const bool semantic = glass.themeRole != leviathan::theme::ThemeRole::None;
 		const NVGcolor base = resolveGlassPigment(glass.themeRole, glass.baseColor);
-		const NVGcolor cyan = semantic ? nvgRGB(0x1c, 0xcc, 0xd9) : applyPanelGlassTint(nvgRGB(0x1c, 0xcc, 0xd9));
-		const NVGcolor violet = semantic ? nvgRGB(0x7a, 0x5c, 0xff) : applyPanelGlassTint(nvgRGB(0x7a, 0x5c, 0xff));
+		const NVGcolor cyan = nvgRGB(0x1c, 0xcc, 0xd9);
+		const NVGcolor violet = nvgRGB(0x7a, 0x5c, 0xff);
 		const float smallBoost = clamp((90.f - std::min(w, h)) / 55.f, 0.f, 1.f);
 		const float edgeAlphaBoost = 1.f + smallBoost * 0.7f;
 		const float glassBaseAlpha = semantic ? kSemanticGlassPigmentAlpha : (0.05f + smallBoost * 0.032f);
@@ -1075,12 +952,6 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 			nvgRGBA(0, 0, 0, int(std::round(30.f + smallBoost * 16.f)))));
 		nvgStroke(args.vg);
 
-		if (!semantic && gPanelGlassTint.currentAmount > 0.f) {
-			nvgBeginPath(args.vg);
-			appendGlassPath(args.vg, glass);
-			nvgFillColor(args.vg, gPanelGlassTint.currentWashColor);
-			nvgFill(args.vg);
-		}
 
 		nvgRestore(args.vg);
 	}
@@ -1156,8 +1027,6 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 	}
 
 	void draw(const DrawArgs& args) override {
-		ScopedPanelGlassPreviewProgression previewProgression(
-			previewProgressionPhase);
 		for (const MetalRectArt& metal : metalRects) {
 			drawMetalRect(args, metal);
 		}
@@ -1170,16 +1039,13 @@ struct PanelSurfaceEffectWidget : TransparentWidget {
 	}
 
 	void step() override {
-		updatePanelGlassTint();
-		const bool tintChanged = tintGeneration != gPanelGlassTint.generation;
 		uint64_t currentThemeColorGeneration = themeColorGeneration;
 		bool themeChanged = false;
 		if (hasSemanticGlass && themeUiPoller.shouldPoll()) {
 			currentThemeColorGeneration = leviathan::theme::colorGeneration();
 			themeChanged = themeColorGeneration != currentThemeColorGeneration;
 		}
-		if (tintChanged || themeChanged) {
-			tintGeneration = gPanelGlassTint.generation;
+		if (themeChanged) {
 			themeColorGeneration = currentThemeColorGeneration;
 			if (framebuffer) {
 				framebuffer->setDirty();
@@ -1291,184 +1157,6 @@ PanelSurfaceEffectDefinition loadPanelSurfaceEffectDefinition(const std::string&
 
 } // namespace
 
-bool isPanelGlassColorCycleEnabled() {
-	return gPanelGlassTint.enabled;
-}
-
-void togglePanelGlassColorCycle() {
-	gPanelGlassTint.enabled = !gPanelGlassTint.enabled;
-	++gPanelGlassTint.generation;
-}
-
-float panelGlassTintAmount() {
-	return gPanelGlassTint.currentAmount;
-}
-
-NVGcolor panelGlassCrystalGlowColor() {
-	return gPanelGlassTint.currentCrystalGlowColor;
-}
-
-NVGcolor panelGlassCrystalStrokeColor() {
-	return gPanelGlassTint.currentCrystalStrokeColor;
-}
-
-float panelGlassCyclePhase() {
-	return float(std::fmod(gPanelGlassTint.lastColorUpdateAccumSec, 180.0) / 180.0);
-}
-
-ScopedPanelGlassPreviewProgression::ScopedPanelGlassPreviewProgression(
-	float normalizedPhase) {
-	if (!gPanelGlassTint.enabled
-		|| !std::isfinite(normalizedPhase)
-		|| normalizedPhase < 0.f) {
-		return;
-	}
-	gPanelGlassPreviewStateStack.push_back(gPanelGlassTint);
-	active = true;
-	const float phase = std::max(0.f, std::min(normalizedPhase, 1.f));
-	gPanelGlassTint.accumulatedTimeSec = 180.0 * double(phase);
-	gPanelGlassTint.lastColorUpdateAccumSec =
-		std::floor(gPanelGlassTint.accumulatedTimeSec);
-	applyPanelGlassProgression(gPanelGlassTint.accumulatedTimeSec);
-	++gPanelGlassTint.generation;
-}
-
-ScopedPanelGlassPreviewProgression::~ScopedPanelGlassPreviewProgression() {
-	if (!active || gPanelGlassPreviewStateStack.empty()) {
-		return;
-	}
-	gPanelGlassTint = gPanelGlassPreviewStateStack.back();
-	gPanelGlassPreviewStateStack.pop_back();
-}
-
-void saveSettings() {
-	json_t* rootJ = json_object();
-	json_object_set_new(rootJ, "enabled", json_boolean(gPanelGlassTint.enabled));
-	json_object_set_new(rootJ, "accumulatedTimeSec", json_real(gPanelGlassTint.accumulatedTimeSec));
-	json_object_set_new(rootJ, "lastColorUpdateAccumSec", json_real(gPanelGlassTint.lastColorUpdateAccumSec));
-	json_object_set_new(rootJ, "currentAmount", json_real(gPanelGlassTint.currentAmount));
-
-	json_t* tintJ = json_array();
-	json_array_append_new(tintJ, json_real(gPanelGlassTint.currentTintColor.r));
-	json_array_append_new(tintJ, json_real(gPanelGlassTint.currentTintColor.g));
-	json_array_append_new(tintJ, json_real(gPanelGlassTint.currentTintColor.b));
-	json_object_set_new(rootJ, "currentTintColor", tintJ);
-
-	json_t* washJ = json_array();
-	json_array_append_new(washJ, json_real(gPanelGlassTint.currentWashColor.r));
-	json_array_append_new(washJ, json_real(gPanelGlassTint.currentWashColor.g));
-	json_array_append_new(washJ, json_real(gPanelGlassTint.currentWashColor.b));
-	json_array_append_new(washJ, json_real(gPanelGlassTint.currentWashColor.a));
-	json_object_set_new(rootJ, "currentWashColor", washJ);
-
-	json_t* glowJ = json_array();
-	json_array_append_new(glowJ, json_real(gPanelGlassTint.currentCrystalGlowColor.r));
-	json_array_append_new(glowJ, json_real(gPanelGlassTint.currentCrystalGlowColor.g));
-	json_array_append_new(glowJ, json_real(gPanelGlassTint.currentCrystalGlowColor.b));
-	json_object_set_new(rootJ, "currentCrystalGlowColor", glowJ);
-
-	json_t* strokeJ = json_array();
-	json_array_append_new(strokeJ, json_real(gPanelGlassTint.currentCrystalStrokeColor.r));
-	json_array_append_new(strokeJ, json_real(gPanelGlassTint.currentCrystalStrokeColor.g));
-	json_array_append_new(strokeJ, json_real(gPanelGlassTint.currentCrystalStrokeColor.b));
-	json_object_set_new(rootJ, "currentCrystalStrokeColor", strokeJ);
-
-	const std::string dir = leviathanPluginUserRootPath();
-	system::createDirectories(dir);
-	const std::string path = system::join(dir, "settings.json");
-	FILE* file = std::fopen(path.c_str(), "w");
-	if (file) {
-		json_dumpf(rootJ, file, JSON_INDENT(2));
-		std::fclose(file);
-	}
-	json_decref(rootJ);
-}
-
-void loadSettings() {
-	const std::string dir = leviathanPluginUserRootPath();
-	const std::string path = system::join(dir, "settings.json");
-	FILE* file = std::fopen(path.c_str(), "r");
-	if (!file) {
-		return;
-	}
-	json_error_t error;
-	json_t* rootJ = json_loadf(file, 0, &error);
-	std::fclose(file);
-	if (!rootJ) {
-		return;
-	}
-
-	json_t* enabledJ = json_object_get(rootJ, "enabled");
-	if (enabledJ) {
-		gPanelGlassTint.enabled = json_boolean_value(enabledJ);
-	}
-
-	json_t* accumJ = json_object_get(rootJ, "accumulatedTimeSec");
-	if (accumJ) {
-		gPanelGlassTint.accumulatedTimeSec = json_number_value(accumJ);
-	}
-
-	json_t* lastColorJ = json_object_get(rootJ, "lastColorUpdateAccumSec");
-	if (lastColorJ) {
-		gPanelGlassTint.lastColorUpdateAccumSec = json_number_value(lastColorJ);
-	}
-
-	json_t* amountJ = json_object_get(rootJ, "currentAmount");
-	if (amountJ) {
-		gPanelGlassTint.currentAmount = json_number_value(amountJ);
-	}
-
-	json_t* tintJ = json_object_get(rootJ, "currentTintColor");
-	if (tintJ && json_is_array(tintJ) && json_array_size(tintJ) >= 3) {
-		gPanelGlassTint.currentTintColor.r = json_number_value(json_array_get(tintJ, 0));
-		gPanelGlassTint.currentTintColor.g = json_number_value(json_array_get(tintJ, 1));
-		gPanelGlassTint.currentTintColor.b = json_number_value(json_array_get(tintJ, 2));
-		gPanelGlassTint.currentTintColor.a = 1.f;
-	}
-
-	json_t* washJ = json_object_get(rootJ, "currentWashColor");
-	if (washJ && json_is_array(washJ) && json_array_size(washJ) >= 4) {
-		gPanelGlassTint.currentWashColor.r = json_number_value(json_array_get(washJ, 0));
-		gPanelGlassTint.currentWashColor.g = json_number_value(json_array_get(washJ, 1));
-		gPanelGlassTint.currentWashColor.b = json_number_value(json_array_get(washJ, 2));
-		gPanelGlassTint.currentWashColor.a = json_number_value(json_array_get(washJ, 3));
-	}
-
-	json_t* glowJ = json_object_get(rootJ, "currentCrystalGlowColor");
-	if (glowJ && json_is_array(glowJ) && json_array_size(glowJ) >= 3) {
-		gPanelGlassTint.currentCrystalGlowColor.r = json_number_value(json_array_get(glowJ, 0));
-		gPanelGlassTint.currentCrystalGlowColor.g = json_number_value(json_array_get(glowJ, 1));
-		gPanelGlassTint.currentCrystalGlowColor.b = json_number_value(json_array_get(glowJ, 2));
-		gPanelGlassTint.currentCrystalGlowColor.a = 1.f;
-	}
-
-	json_t* strokeJ = json_object_get(rootJ, "currentCrystalStrokeColor");
-	if (strokeJ && json_is_array(strokeJ) && json_array_size(strokeJ) >= 3) {
-		gPanelGlassTint.currentCrystalStrokeColor.r = json_number_value(json_array_get(strokeJ, 0));
-		gPanelGlassTint.currentCrystalStrokeColor.g = json_number_value(json_array_get(strokeJ, 1));
-		gPanelGlassTint.currentCrystalStrokeColor.b = json_number_value(json_array_get(strokeJ, 2));
-		gPanelGlassTint.currentCrystalStrokeColor.a = 1.f;
-	}
-
-	// Trigger a single frame invalidation to force-draw the restored color state
-	++gPanelGlassTint.generation;
-
-	json_decref(rootJ);
-}
-
-void resetPanelGlassColorCycle() {
-	gPanelGlassTint.enabled = false;
-	gPanelGlassTint.accumulatedTimeSec = 0.0;
-	gPanelGlassTint.lastColorUpdateAccumSec = 0.0;
-	gPanelGlassTint.currentAmount = 0.f;
-	gPanelGlassTint.currentTintColor = nvgRGBf(1.f, 0.22f, 1.f);
-	gPanelGlassTint.currentWashColor = nvgRGBA(255, 0, 255, 0);
-	gPanelGlassTint.currentCrystalGlowColor = nvgRGB(0x1c, 0xcc, 0xd9);
-	gPanelGlassTint.currentCrystalStrokeColor = nvgRGB(0x2a, 0xab, 0xef);
-	++gPanelGlassTint.generation;
-	saveSettings();
-}
-
 Widget* createSvgRect3DEffectWidget(math::Rect rectMm) {
 	return createSvgRect3DEffectWidget(rectMm, nvgRGB(87, 64, 191));
 }
@@ -1536,7 +1224,6 @@ Widget* createPreviewFrameEnhancementWidget(math::Rect rectMm, NVGcolor highligh
 Widget* createPanelSurfaceEffectWidget(
 	const std::string& svgPath,
 	Vec panelSizePx,
-	float previewProgressionPhase,
 	const Widget* themePollOwner) {
 	if (svgPath.empty() || panelSizePx.x <= 0.f || panelSizePx.y <= 0.f) {
 		Widget* empty = new Widget();
@@ -1557,10 +1244,8 @@ Widget* createPanelSurfaceEffectWidget(
 	PanelSurfaceEffectWidget* effect = new PanelSurfaceEffectWidget();
 	effect->framebuffer = fb;
 	effect->themeUiPoller.setOwner(themePollOwner);
-	effect->tintGeneration = gPanelGlassTint.generation;
 	effect->themeColorGeneration = leviathan::theme::colorGeneration();
 	effect->hasSemanticGlass = it->second.hasSemanticGlass;
-	effect->previewProgressionPhase = previewProgressionPhase;
 	effect->box.size = panelSizePx;
 	effect->metalRects = it->second.metalRects;
 	effect->glassRects = it->second.glassRects;
@@ -1762,14 +1447,11 @@ SplitPanelRenderer::SplitPanelRenderer(ModuleWidget* parent, const char* panelAs
 		return;
 	}
 	panelPath_ = asset::plugin(pluginInstance, panelAssetPath);
-	// Browser previews and live modules should share the same crystal color
-	// state instead of assigning every preview a random progression phase.
-	previewProgressionPhase_ = -1.f;
 	parent_->setPanel(originalBackgroundAssetPath && originalBackgroundAssetPath[0]
 		? new ThemeBackgroundPanel(panelPath_, originalBackgroundAssetPath, parent_)
 		: createPanel(panelPath_));
 	panelSurfaceEffect_ = createPanelSurfaceEffectWidget(
-		panelPath_, parent_->box.size, previewProgressionPhase_, parent_);
+		panelPath_, parent_->box.size, parent_);
 	parent_->addChild(panelSurfaceEffect_);
 }
 
@@ -1779,10 +1461,6 @@ const std::string& SplitPanelRenderer::panelPath() const {
 
 Widget* SplitPanelRenderer::panelSurfaceEffectWidget() const {
 	return panelSurfaceEffect_;
-}
-
-float SplitPanelRenderer::previewProgressionPhase() const {
-	return previewProgressionPhase_;
 }
 
 int SplitPanelRenderer::addPerfectWaveBranding(float opacity) {

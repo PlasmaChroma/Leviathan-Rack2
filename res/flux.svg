@@ -1217,4 +1217,10 @@
    id="text34"
    aria-label="generator • slew limiter • attenuverters • mix/logic" />
         
-      </g></svg>
+      </g>
+  <g id="branding_components" style="display:none">
+    <rect id="BRANDING_WAVE_LEFT_RASTER" x="2189.6099" y="12338.19" width="1306.748" height="511.81002" />
+    <rect id="BRANDING_WAVE_RIGHT_RASTER" x="6663.6742" y="12338.19" width="1306.748" height="511.81002" />
+    <rect id="BRANDING_LEVIATHAN_LOGO_RASTER" x="3444.0151" y="11943.102" width="3271.933" height="1224.054" />
+  </g>
+</svg>
