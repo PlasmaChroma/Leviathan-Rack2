@@ -33,6 +33,44 @@
 
 namespace { std::atomic<std::uint32_t> gChimeraDebugInstanceCounter{1u}; }
 
+struct ChimeraRateQuantity : ParamQuantity {
+    std::atomic<int>* rateMode = nullptr;
+
+    double speedAt(float knob) const {
+        const int mode = rateMode ? rateMode->load(std::memory_order_relaxed) : 0;
+        return mode == 2 ? chimera::profile1::forwardBaseRate(knob)
+                         : chimera::profile1::classicRate(knob);
+    }
+
+    float getDisplayValue() override { return static_cast<float>(speedAt(getValue())); }
+
+    void setDisplayValue(float speed) override {
+        const bool forwardOnly = rateMode && rateMode->load(std::memory_order_relaxed) == 2;
+        if (!std::isfinite(speed)) return;
+        const float target = clamp(speed, forwardOnly ? 0.f : -2.f, 2.f);
+        float low = 0.f, high = 1.f;
+        for (int i = 0; i < 24; ++i) {
+            const float mid = 0.5f * (low + high);
+            if (speedAt(mid) < target) low = mid;
+            else high = mid;
+        }
+        setImmediateValue(0.5f * (low + high));
+    }
+
+    std::string getDisplayValueString() override {
+        return string::f("%+.2f", getDisplayValue());
+    }
+};
+
+struct ChimeraBipolarHaloKnob : LeviathanHaloKnob2 {
+    ChimeraBipolarHaloKnob() : LeviathanHaloKnob2(bipolarConfig()) {}
+    static Config bipolarConfig() {
+        Config config;
+        config.bipolar = true;
+        return config;
+    }
+};
+
 struct Chimera : Module {
     static constexpr std::uint64_t kAutomaticSnapshotId = UINT64_MAX;
     struct Gate {
@@ -305,7 +343,9 @@ struct Chimera : Module {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
         configParam(SOS_PARAM, 0.f, 1.f, 0.f, "S.O.S.");
         configParam(GENE_SIZE_PARAM, 0.f, 1.f, 0.f, "Gene Size");
-        configParam(VARISPEED_PARAM, 0.f, 1.f, 5.f/6.f, "Vari-Speed");
+        auto* rateQuantity = configParam<ChimeraRateQuantity>(VARISPEED_PARAM, 0.f, 1.f,
+            5.f/6.f, "Vari-Speed", "×");
+        rateQuantity->rateMode = &vsopSetting;
         configParam(MORPH_PARAM, 0.f, 1.f, 1.f/6.f, "Morph");
         configParam(SLIDE_PARAM, 0.f, 1.f, 0.f, "Slide");
         configParam(ORGANIZE_PARAM, 0.f, 1.f, 0.f, "Organize");
@@ -1976,7 +2016,7 @@ struct ChimeraWidget : ModuleWidget {
         addChild(displayOverlay);
         addParam(createParamCentered<RoundBlackKnob>(mm2px(point("SOS_PARAM", Vec(20, 51))), module, Chimera::SOS_PARAM));
         addParam(createParamCentered<RoundBlackKnob>(mm2px(point("GENE_SIZE_PARAM", Vec(71, 51))), module, Chimera::GENE_SIZE_PARAM));
-        addParam(createParamCentered<RoundBlackKnob>(mm2px(point("VARISPEED_PARAM", Vec(122, 51))), module, Chimera::VARISPEED_PARAM));
+        addParam(createParamCentered<ChimeraBipolarHaloKnob>(mm2px(point("VARISPEED_PARAM", Vec(122, 51))), module, Chimera::VARISPEED_PARAM));
         addParam(createParamCentered<RoundBlackKnob>(mm2px(point("MORPH_PARAM", Vec(20, 70))), module, Chimera::MORPH_PARAM));
         addParam(createParamCentered<RoundBlackKnob>(mm2px(point("SLIDE_PARAM", Vec(71, 70))), module, Chimera::SLIDE_PARAM));
         addParam(createParamCentered<RoundBlackKnob>(mm2px(point("ORGANIZE_PARAM", Vec(122, 70))), module, Chimera::ORGANIZE_PARAM));

@@ -581,6 +581,7 @@ struct LeviathanHaloKnob2 : app::Knob {
 	struct Config {
 		LedArcConfig ledArc;
 		BloomConfig bloom;
+		bool bipolar = false;
 	};
 
 	struct GlowArcWidget : TransparentWidget {
@@ -588,6 +589,7 @@ struct LeviathanHaloKnob2 : app::Knob {
 		float maxAngle = 0.83f * M_PI;
 		float valueNorm = 0.5f;
 		bool foreground = false;
+		bool bipolar = false;
 		BloomConfig config;
 
 		void draw(const DrawArgs& args) override;
@@ -597,6 +599,7 @@ struct LeviathanHaloKnob2 : app::Knob {
 		float minAngle = -0.83f * M_PI;
 		float maxAngle = 0.83f * M_PI;
 		float valueNorm = 0.5f;
+		bool bipolar = false;
 		LedArcConfig config;
 		BloomConfig bloomConfig;
 
@@ -607,6 +610,7 @@ struct LeviathanHaloKnob2 : app::Knob {
 		float minAngle = -0.83f * M_PI;
 		float maxAngle = 0.83f * M_PI;
 		float valueNorm = 0.5f;
+		bool bipolar = false;
 		BloomConfig config;
 
 		void draw(const DrawArgs& args) override;

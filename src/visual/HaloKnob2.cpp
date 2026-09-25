@@ -104,8 +104,8 @@ void drawCoalescedHaloSegments(
 	float activeAngle,
 	NVGcolor activeColor,
 	NVGcolor inactiveColor,
-	DrawArc&& drawArc) {
-	constexpr int segmentCount = 16;
+	DrawArc&& drawArc,
+	int segmentCount = 16) {
 	const float step = (endAngle - startAngle) / float(segmentCount);
 	const float position = clamp((activeAngle - startAngle) / std::max(step, 1e-6f), 0.f, float(segmentCount));
 	const int completedSegments = std::min(segmentCount, int(position));
@@ -124,6 +124,28 @@ void drawCoalescedHaloSegments(
 	}
 	if (inactiveStart < endAngle) {
 		drawArc(inactiveStart, endAngle, inactiveColor);
+	}
+}
+
+template <typename DrawArc>
+void drawHaloSegments(float startAngle, float endAngle, float valueNorm, bool bipolar,
+	NVGcolor activeColor, NVGcolor inactiveColor, DrawArc&& drawArc) {
+	const float valueAngle = crossfade(startAngle, endAngle, clamp(valueNorm, 0.f, 1.f));
+	if (!bipolar) {
+		drawCoalescedHaloSegments(startAngle, endAngle, valueAngle, activeColor, inactiveColor, drawArc);
+		return;
+	}
+	const float centerAngle = 0.5f * (startAngle + endAngle);
+	// Each half retains eight of the original sixteen segments.
+	if (valueAngle < centerAngle) {
+		drawCoalescedHaloSegments(startAngle, centerAngle, valueAngle,
+			inactiveColor, activeColor, drawArc, 8);
+		drawArc(centerAngle, endAngle, inactiveColor);
+	}
+	else {
+		drawArc(startAngle, centerAngle, inactiveColor);
+		drawCoalescedHaloSegments(centerAngle, endAngle, valueAngle,
+			activeColor, inactiveColor, drawArc, 8);
 	}
 }
 
@@ -159,7 +181,6 @@ void LeviathanHaloKnob2::GlowArcWidget::draw(const DrawArgs& args) {
 	const float scale = diameterPx / 46.f;
 	const float mainRadius = diameterPx * (18.15f / 46.f);
 	const float startAngle = -0.5f * M_PI + minAngle;
-	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
 	const float endAngle = -0.5f * M_PI + maxAngle;
 	const float bloom = haloBloomAmount(settings::haloBrightness);
 	if (bloom <= 0.001f) return;
@@ -174,7 +195,7 @@ void LeviathanHaloKnob2::GlowArcWidget::draw(const DrawArgs& args) {
 		nvgStroke(args.vg);
 	};
 	auto drawSegmented = [&](float width, NVGcolor active, NVGcolor inactive) {
-		drawCoalescedHaloSegments(startAngle, endAngle, activeAngle, active, inactive,
+		drawHaloSegments(startAngle, endAngle, valueNorm, bipolar, active, inactive,
 			[&](float a0, float a1, NVGcolor color) { drawStroke(a0, a1, width, color); });
 	};
 	nvgSave(args.vg);
@@ -198,6 +219,7 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 	const float startAngle = -0.5f * M_PI + minAngle;
 	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
 	const float endAngle = -0.5f * M_PI + maxAngle;
+	const float zeroAngle = 0.5f * (startAngle + endAngle);
 	const float mainRadius = diameterPx * (18.15f / 46.f);
 	const float mainWidth = std::max(1.35f, diameterPx * (1.85f / 46.f));
 	const float segmentWidth = mainWidth + 0.95f * scale;
@@ -249,19 +271,20 @@ void LeviathanHaloKnob2::LightArcWidget::draw(const DrawArgs& args) {
 		const float total = endAngle - startAngle;
 		const float gap = std::max(0.010f, total * 0.009f);
 		const float step = total / float(count);
+		const float lo = bipolar ? std::min(activeAngle, zeroAngle) : startAngle;
+		const float hi = bipolar ? std::max(activeAngle, zeroAngle) : activeAngle;
 		for (int i = 0; i < count; ++i) {
 			const float a0 = startAngle + step * float(i) + 0.5f * gap;
 			const float a1 = startAngle + step * float(i + 1) - 0.5f * gap;
-			float mix = 0.f;
-			if (activeAngle >= a1) mix = 1.f;
-			else if (activeAngle > a0) mix = (activeAngle - a0) / std::max(a1 - a0, 1e-6f);
+			const float mix = clamp((hi - a0) / std::max(a1 - a0, 1e-6f), 0.f, 1.f)
+				- clamp((lo - a0) / std::max(a1 - a0, 1e-6f), 0.f, 1.f);
 			drawSegmentBand(a0, a1,
 				blendHaloColor(config.inactiveColor, config.activeColor, mix),
 				blendHaloColor(config.inactiveHighlightColor, config.activeHighlightColor, mix));
 		}
 	};
 	auto drawReflection = [&](float radius, float width, NVGcolor active, NVGcolor inactive) {
-		drawCoalescedHaloSegments(startAngle, endAngle, activeAngle, active, inactive,
+		drawHaloSegments(startAngle, endAngle, valueNorm, bipolar, active, inactive,
 			[&](float a0, float a1, NVGcolor color) { drawStroke(a0, a1, radius, width, color); });
 	};
 	auto drawTerminator = [&](float angle, float direction) {
@@ -316,6 +339,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 	bool initAttempted = false;
 	GLint uniformLogicalSize = -1;
 	GLint uniformValue = -1;
+	GLint uniformBipolar = -1;
 	GLint uniformBloomAmount = -1;
 	GLint uniformLed = -1;
 	GLint uniformBloom = -1;
@@ -349,18 +373,21 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		fallbackBackgroundGlow = new GlowArcWidget();
 		fallbackBackgroundGlow->box.size = Vec(46.f, 46.f);
 		fallbackBackgroundGlow->config = config.bloom;
+		fallbackBackgroundGlow->bipolar = config.bipolar;
 		fallbackRoot->addChild(fallbackBackgroundGlow);
 
 		fallbackLightArc = new LightArcWidget();
 		fallbackLightArc->box.size = Vec(46.f, 46.f);
 		fallbackLightArc->config = config.ledArc;
 		fallbackLightArc->bloomConfig = config.bloom;
+		fallbackLightArc->bipolar = config.bipolar;
 		fallbackRoot->addChild(fallbackLightArc);
 
 		fallbackForegroundGlow = new GlowArcWidget();
 		fallbackForegroundGlow->box.size = Vec(46.f, 46.f);
 		fallbackForegroundGlow->foreground = true;
 		fallbackForegroundGlow->config = config.bloom;
+		fallbackForegroundGlow->bipolar = config.bipolar;
 		fallbackRoot->addChild(fallbackForegroundGlow);
 
 		// OpenGlWidget bypasses its framebuffer in browser previews and after a
@@ -370,6 +397,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		fallbackCapReflection = new CapReflectionWidget();
 		fallbackCapReflection->box.size = Vec(46.f, 46.f);
 		fallbackCapReflection->config = config.bloom;
+		fallbackCapReflection->bipolar = config.bipolar;
 		fallbackRoot->addChild(fallbackCapReflection);
 	}
 
@@ -420,7 +448,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		}
 		program = vertexShader = fragmentShader = vbo = capTexture = 0;
 		initAttempted = false;
-		uniformLogicalSize = uniformValue = uniformBloomAmount = uniformLed = uniformBloom = -1;
+		uniformLogicalSize = uniformValue = uniformBipolar = uniformBloomAmount = uniformLed = uniformBloom = -1;
 		uniformCapReflection = -1;
 		uniformCapAtlas = uniformCenterLit = uniformCapRotation = -1;
 	}
@@ -547,6 +575,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 			varying vec2 vPos;
 			uniform vec2 uLogicalSize;
 			uniform float uValue;
+			uniform float uBipolar;
 			uniform float uBloomAmount;
 			uniform vec4 uLed[4];
 			uniform vec4 uBloom[17];
@@ -597,8 +626,12 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 				float gapEdge = max(fwidth(segmentLocal), 0.012);
 				float segmentMask = smoothstep(0.072, 0.072 + gapEdge, segmentLocal)
 					* (1.0 - smoothstep(0.928 - gapEdge, 0.928, segmentLocal));
-				float haloMix = clamp(uValue * 16.0 - segmentIndex, 0.0, 1.0);
-				float activeMix = clamp((uValue * 16.0 - segmentIndex - 0.072) / 0.856, 0.0, 1.0);
+				float lowValue = uBipolar > 0.5 ? min(uValue, 0.5) : 0.0;
+				float highValue = uBipolar > 0.5 ? max(uValue, 0.5) : uValue;
+				float haloMix = clamp(highValue * 16.0 - segmentIndex, 0.0, 1.0)
+					- clamp(lowValue * 16.0 - segmentIndex, 0.0, 1.0);
+				float activeMix = clamp((highValue * 16.0 - segmentIndex - 0.072) / 0.856, 0.0, 1.0)
+					- clamp((lowValue * 16.0 - segmentIndex - 0.072) / 0.856, 0.0, 1.0);
 				float cursorIndex = floor(clamp(uValue * 16.0 - 0.0001, 0.0, 15.9999));
 				float cursorSegment = (1.0 - step(0.5, abs(segmentIndex - cursorIndex))) * step(0.0001, uValue);
 				vec4 core = mix(uLed[2], uLed[0], activeMix);
@@ -766,6 +799,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		}
 		uniformLogicalSize = glGetUniformLocation(program, "uLogicalSize");
 		uniformValue = glGetUniformLocation(program, "uValue");
+		uniformBipolar = glGetUniformLocation(program, "uBipolar");
 		uniformBloomAmount = glGetUniformLocation(program, "uBloomAmount");
 		uniformLed = glGetUniformLocation(program, "uLed[0]");
 		uniformBloom = glGetUniformLocation(program, "uBloom[0]");
@@ -773,7 +807,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		uniformCapAtlas = glGetUniformLocation(program, "uCapAtlas");
 		uniformCenterLit = glGetUniformLocation(program, "uCenterLit");
 		uniformCapRotation = glGetUniformLocation(program, "uCapRotation");
-		if (uniformLogicalSize < 0 || uniformValue < 0 || uniformBloomAmount < 0
+		if (uniformLogicalSize < 0 || uniformValue < 0 || uniformBipolar < 0 || uniformBloomAmount < 0
 			|| uniformLed < 0 || uniformBloom < 0 || uniformCapReflection < 0 || uniformCapAtlas < 0
 			|| uniformCenterLit < 0 || uniformCapRotation < 0) {
 			WARN("HaloKnob2 shader uniform lookup failed");
@@ -809,7 +843,10 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		for (int i = 0; i < 16; ++i) {
 			const float a0 = start + sweep * (float(i) + 0.08f) / 16.f;
 			const float a1 = start + sweep * (float(i) + 0.92f) / 16.f;
-			const float mix = clamp(valueNorm * 16.f - float(i), 0.f, 1.f);
+			const float low = config.bipolar ? std::min(valueNorm, 0.5f) : 0.f;
+			const float high = config.bipolar ? std::max(valueNorm, 0.5f) : valueNorm;
+			const float mix = clamp(high * 16.f - float(i), 0.f, 1.f)
+				- clamp(low * 16.f - float(i), 0.f, 1.f);
 			const NVGcolor color = blendHaloColor(config.ledArc.inactiveColor, config.ledArc.activeColor, mix);
 			glColor4f(color.r, color.g, color.b, color.a);
 			glVertex2f(cx + std::cos(a0) * radius, cy + std::sin(a0) * radius);
@@ -830,8 +867,11 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		const int activeWidth = std::max(1, int(std::lround(framebufferSize.x)));
 		const int activeHeight = std::max(1, int(std::lround(framebufferSize.y)));
 		glViewport(0, viewportY, activeWidth, activeHeight);
-		glEnable(GL_SCISSOR_TEST);
-		glScissor(0, viewportY, activeWidth, activeHeight);
+		// Filtering the retained texture at fractional zoom can reach beyond
+		// the active viewport. Keep all padding transparent, including pixels
+		// left over from an earlier larger render. This only runs on redraw.
+		glDisable(GL_SCISSOR_TEST);
+		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 		glClearColor(0.f, 0.f, 0.f, 0.f);
 		glClear(GL_COLOR_BUFFER_BIT);
 		glDisable(GL_SCISSOR_TEST);
@@ -907,6 +947,7 @@ struct LeviathanHaloKnob2::HaloGlSurface final : widget::OpenGlWidget {
 		glUseProgram(program);
 		glUniform2f(uniformLogicalSize, w, h);
 		glUniform1f(uniformValue, valueNorm);
+		glUniform1f(uniformBipolar, config.bipolar ? 1.f : 0.f);
 		glUniform1f(uniformBloomAmount, bloomAmount);
 		uploadHaloColorArray(uniformLed, ledColors, 4);
 		uploadHaloColorArray(uniformBloom, bloomColors, 17);
@@ -946,7 +987,6 @@ void LeviathanHaloKnob2::CapReflectionWidget::draw(const DrawArgs& args) {
 	const float scale = diameterPx / 46.f;
 	const float rimRadius = diameterPx * (14.62f / 46.f);
 	const float startAngle = -0.5f * M_PI + minAngle;
-	const float activeAngle = -0.5f * M_PI + crossfade(minAngle, maxAngle, clamp(valueNorm, 0.f, 1.f));
 	const float endAngle = -0.5f * M_PI + maxAngle;
 	const float bloom = haloBloomAmount(settings::haloBrightness);
 	if (bloom <= 0.001f) return;
@@ -961,10 +1001,10 @@ void LeviathanHaloKnob2::CapReflectionWidget::draw(const DrawArgs& args) {
 		nvgStroke(args.vg);
 	};
 	nvgSave(args.vg);
-	drawCoalescedHaloSegments(startAngle, endAngle, activeAngle,
+	drawHaloSegments(startAngle, endAngle, valueNorm, bipolar,
 		bloomColor(config.capReflectionOuterActiveColor), bloomColor(config.capReflectionOuterInactiveColor),
 		[&](float a0, float a1, NVGcolor color) { strokeArc(a0, a1, rimRadius, std::max(0.30f, 0.42f * scale), color); });
-	drawCoalescedHaloSegments(startAngle, endAngle, activeAngle,
+	drawHaloSegments(startAngle, endAngle, valueNorm, bipolar,
 		bloomColor(config.capReflectionInnerActiveColor), bloomColor(config.capReflectionInnerInactiveColor),
 		[&](float a0, float a1, NVGcolor color) { strokeArc(a0, a1, rimRadius - 0.34f * scale, std::max(0.12f, 0.17f * scale), color); });
 	nvgRestore(args.vg);
