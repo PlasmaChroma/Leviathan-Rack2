@@ -87,11 +87,11 @@ Exact integer expectations apply to counts, addresses, IDs, revisions, PRNG stat
 | ID | Stimulus | Required result |
 |---|---|---|
 | REC-001 | Prepared empty Reel; immediate Current start at frame 100, stop at 110. | Initial Append; exactly ten frames captured, covering 100..109; writer rate is fixed 48 kHz. |
-| REC-002 | Existing Splice; Current recording with Vari-Speed 0.5, -1, 2, and Stop. | Writer always advances +1 per core tick in its latched destination; Play stop does not stop recording. |
+| REC-002 | Existing Splice; start Current while the playhead is mid-Splice with Vari-Speed 0.5, -1, 2, and Stop. | First write uses the frame under the primary playhead; the writer then advances +1 per core tick within that Splice, independent of Vari-Speed. Play stop does not stop recording. |
 | REC-003 | Aligned single-reader loop, bypass conditioning, constant old buffer B and input X, settled S.O.S.=s. | Each write equals `(1-s)*X+s*renderedOldBuffer`, read-before-write; no extra `+= oldDestination`. |
 | REC-004 | Same as REC-003 but `inop=1`, then transition inop during record. | Stored frames equal live input after source transition; heard S.O.S. mix remains independent; 48-frame source crossfade is exact. |
 | REC-005 | Reader and writer same address; impulse and one-frame-region fixtures. | All head reads precede that frame's write; no algebraic zero-delay feedback or dependence on voice processing order. |
-| REC-006 | Arm Current, change selection, Clock start; then change selection again while recording. | Destination latches actual committed region at start; remains fixed during session despite later audible selection changes. |
+| REC-006 | Arm Current, change selection, Clock start; then request another selection while recording. | Start uses the region and playhead address committed on its Clock edge. A pending selection leaves writes in that region; the frame that commits the next Splice writes at its primary playhead address, then wraps within the newly selected Splice. |
 | REC-007 | Clock-connected REC toggle twice before start; repeat while ArmedStop. | First pair arms then cancels start; second pair arms then cancels stop; never immediate recording by accident. |
 | REC-008 | REC start request and Clock at same timestamp; later stop request and Clock together. | Start frame included, stop frame excluded; output record length is exact, not one frame off. |
 | REC-009 | Append to populated Reel while old region plays. | Old playback persists; validFrames grows exactly with writes; unwritten capacity never audible; finalization creates/request-selects new region. |

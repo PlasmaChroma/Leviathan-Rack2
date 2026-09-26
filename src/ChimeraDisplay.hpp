@@ -12,7 +12,7 @@ struct ChimeraWaveformLayer : Widget {
         nvgRoundedRect(vg, 0.f, 0.f, w, h, 4.f);
         nvgFillColor(vg, nvgRGB(8, 21, 30));
         nvgFill(vg);
-        const float traceTop = 4.f, traceBottom = h * 0.69f;
+        const float traceTop = 4.f, traceBottom = h * 0.82f;
         const bool stereo = summary && summary->stereo;
         const float laneHeight = stereo ? (traceBottom - traceTop - 4.f) * 0.5f :
             traceBottom - traceTop;
@@ -135,7 +135,7 @@ struct ChimeraDisplayOverlay : Widget {
         NVGcontext* vg = args.vg;
         const float w = box.size.x, h = box.size.y;
         const float left = 5.f, width = w - 10.f;
-        const float traceTop = 4.f, traceBottom = h * 0.69f;
+        const float traceTop = 4.f, traceBottom = h * 0.82f;
         // Marker metadata comes directly from the core, independently of the
         // slower waveform scan. The summary only supplies the waveform backdrop.
         const std::uint32_t displayFrames = owner ? std::max(markers.frames,
@@ -175,24 +175,15 @@ struct ChimeraDisplayOverlay : Widget {
             nvgStroke(vg);
         }
         nvgFontFaceId(vg, APP->window->uiFont->handle);
-        if (summary && summary->stereo) {
-            const float laneHeight = (traceBottom - traceTop - 4.f) * 0.5f;
-            nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-            nvgFontSize(vg, 8.f);
-            nvgFillColor(vg, nvgRGB(106, 221, 215));
-            nvgText(vg, 8.f, traceTop + laneHeight * 0.5f - 7.f, "L", nullptr);
-            nvgFillColor(vg, nvgRGB(177, 157, 239));
-            nvgText(vg, 8.f, traceTop + laneHeight * 1.5f - 3.f, "R", nullptr);
-        }
         nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
         nvgFontSize(vg, 9.f);
         nvgFillColor(vg, nvgRGB(246, 231, 193));
-        nvgText(vg, 6.f, h * 0.79f, stateText.c_str(), nullptr);
+        nvgText(vg, 6.f, h * 0.92f, stateText.c_str(), nullptr);
         nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-        nvgText(vg, w - 6.f, h * 0.79f, saveText.c_str(), nullptr);
+        nvgText(vg, w - 6.f, h * 0.92f, saveText.c_str(), nullptr);
         nvgFontSize(vg, 8.5f);
         nvgFillColor(vg, nvgRGB(166, 209, 212));
-        nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-        nvgText(vg, 6.f, h * 0.94f, detailText.c_str(), nullptr);
+        nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+        nvgText(vg, w * 0.5f, h * 0.92f, detailText.c_str(), nullptr);
     }
 };

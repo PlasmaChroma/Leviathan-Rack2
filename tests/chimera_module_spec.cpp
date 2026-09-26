@@ -937,7 +937,12 @@ int main() {
         eventModule.process(args);
         need(eventModule.slice.currentRegion() == 1 &&
              eventModule.slice.recordState() == chimera::Slice::Current &&
-             eventModule.slice.writerPosition() == 4801 &&
+             eventModule.slice.recordSegmentStartFrame() >= 4800 &&
+             eventModule.slice.recordSegmentStartFrame() < 9600 &&
+             eventModule.slice.writerPosition() ==
+                 eventModule.slice.recordSegmentStartFrame() + 1 &&
+             eventModule.publishedRecordStartFrame.load() ==
+                 eventModule.slice.recordSegmentStartFrame() &&
              eventModule.slice.onsetCount() == onsetBefore + 1 &&
              eventModule.outputs[Chimera::EOSG_OUTPUT].getVoltage() == 10.f,
              "natural completion plus Shift/PLAY/REC/Clock commits once and retains EOSG");
@@ -1268,10 +1273,13 @@ int main() {
         quantized.process(args);
         quantized.menuCommand.store(1);
         quantized.process(args);
+        const auto revisionBeforeClockStart = quantizedReel.audioRevision();
         quantized.inputs[Chimera::CLOCK_INPUT].setVoltage(2.5f);
         quantized.process(args);
         need(quantized.slice.recordState() == chimera::Slice::Current &&
-             quantized.slice.writerPosition() == 1,
+             quantized.slice.writerPosition() ==
+                 quantized.slice.recordSegmentStartFrame() + 1 &&
+             quantizedReel.audioRevision() == revisionBeforeClockStart + 1,
              "new armed start includes its Clock frame");
         quantized.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
         quantized.process(args);
@@ -1508,24 +1516,30 @@ int main() {
     module.params[Chimera::REC_PARAM].setValue(0.f);
     module.inputs[Chimera::CLOCK_INPUT].setVoltage(2.5f);
     module.process(args);
+    const auto nextWriter = [&](std::uint32_t frame) {
+        const auto region = module.reel->region(module.slice.currentRegion());
+        return frame + 1 == region.end ? region.begin : frame + 1;
+    };
     need(module.recordArm == Chimera::NoArm &&
          module.slice.recordState() == chimera::Slice::Current &&
-         module.slice.writerPosition() == 1 &&
+         module.slice.writerPosition() == nextWriter(module.slice.recordSegmentStartFrame()) &&
          module.clockEstimator.haveEdge() && !module.clockEstimator.havePeriod(),
          "Clock start includes its edge frame");
     module.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
     module.process(args);
+    const auto beforeArmedStop = module.slice.writerPosition();
     module.menuCommand.store(1);
     module.process(args);
     need(module.recordArm == Chimera::ArmStop &&
          module.slice.recordState() == chimera::Slice::Current &&
-         module.slice.writerPosition() == 3,
+         module.slice.writerPosition() == nextWriter(beforeArmedStop),
          "clock-connected stop request keeps writing while armed");
+    const auto beforeClockStop = module.slice.writerPosition();
     module.params[Chimera::REC_PARAM].setValue(0.f);
     module.inputs[Chimera::CLOCK_INPUT].setVoltage(2.5f);
     module.process(args);
     need(module.slice.recordState() == chimera::Slice::Idle &&
-         module.slice.writerPosition() == 3 &&
+         module.slice.writerPosition() == beforeClockStop &&
          module.clockEstimator.havePeriod() && module.clockEstimator.periodFrames() == 3,
          "Clock stop excludes its edge frame");
     module.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
@@ -1534,7 +1548,7 @@ int main() {
     module.inputs[Chimera::CLOCK_INPUT].setVoltage(2.5f);
     module.process(args);
     need(module.slice.recordState() == chimera::Slice::Current &&
-         module.slice.writerPosition() == 1,
+         module.slice.writerPosition() == nextWriter(module.slice.recordSegmentStartFrame()),
          "coincident REC and Clock resolve start before the same-frame edge");
     module.menuCommand.store(3);
     module.process(args);
@@ -1555,12 +1569,18 @@ int main() {
     module.inputs[Chimera::CLOCK_INPUT].setVoltage(2.5f);
     module.process(args);
     need(module.slice.recordState() == chimera::Slice::Current &&
-         module.slice.writerPosition() == 3 && module.slice.selectRegion(0),
-         "Clock start latches selection committed on its edge");
+         module.slice.writerPosition() == nextWriter(module.slice.recordSegmentStartFrame()),
+         "Clock start uses the selection committed on its edge");
     module.inputs[Chimera::CLOCK_INPUT].setVoltage(0.f);
+    module.omodSetting.store(true);
+    module.selectionMenuCommands.store(1);
     module.process(args);
-    need(module.slice.writerPosition() == 2,
-         "later playback selection leaves active writer in its latched region");
+    need(module.slice.currentRegion() == 0 &&
+         module.slice.writerPosition() == nextWriter(module.slice.recordSegmentStartFrame()) &&
+         module.publishedRecordStartFrame.load() == module.slice.recordSegmentStartFrame() &&
+         module.publishedRecordFrame.load() == module.slice.writerPosition(),
+         "Shift selection retargets Current writer and display span on its commit frame");
+    module.omodSetting.store(false);
     module.menuCommand.store(3);
     module.process(args);
     need(module.slice.selectRegion(0), "prepare selection for coincident Shift and Clock");
@@ -1572,7 +1592,7 @@ int main() {
     module.process(args);
     need(module.slice.currentRegion() == 1 &&
          module.slice.recordState() == chimera::Slice::Current &&
-         module.slice.writerPosition() == 3,
+         module.slice.writerPosition() == nextWriter(module.slice.recordSegmentStartFrame()),
          "coincident Shift, REC, and Clock latch the newly selected Splice");
     module.menuCommand.store(3);
     module.process(args);
@@ -1588,7 +1608,7 @@ int main() {
     module.process(args);
     need(module.slice.organizeBin() == 1 && module.slice.currentRegion() == 0 &&
          module.slice.recordState() == chimera::Slice::Current &&
-         module.slice.writerPosition() == 1,
+         module.slice.writerPosition() == nextWriter(module.slice.recordSegmentStartFrame()),
          "same-frame Organize selects first, then Shift wraps before Clock starts Current");
     module.menuCommand.store(3);
     module.process(args);
@@ -1609,7 +1629,9 @@ int main() {
              !module.recoveryTicket && !module.recoveryPostPending.load(),
              "automatic recovery snapshots settle before explicit snapshot fixture");
     }
-    const chimera::StereoFrame frozenFirst = module.reel->readActive(0);
+    chimera::StereoFrame frozenFrames[4];
+    for (std::uint32_t frame = 0; frame < 4; ++frame)
+        frozenFrames[frame] = module.reel->readActive(frame);
     need(module.requestSnapshot(), "module queues an exact core snapshot cut");
     trapAllocations = true;
     module.process(args);
@@ -1622,9 +1644,11 @@ int main() {
     need(module.slice.startCurrent(), "writer continues after snapshot publication");
     module.inputs[Chimera::AUDIO_L_INPUT].setVoltage(-3.f);
     module.process(args);
+    const auto overwrittenFrame = module.slice.recordSegmentStartFrame();
     module.slice.stopRecord();
-    need(module.reel->readActive(0).l != frozenFirst.l &&
-         module.snapshotReel->readSnapshot(0).l == frozenFirst.l,
+    need(overwrittenFrame < 4 &&
+         module.reel->readActive(overwrittenFrame).l != frozenFrames[overwrittenFrame].l &&
+         module.snapshotReel->readSnapshot(overwrittenFrame).l == frozenFrames[overwrittenFrame].l,
          "worker-facing frozen page survives concurrent active overwrite");
     need(module.finishSnapshotReader() && module.snapshotReady &&
          module.finishSnapshotReader() && !module.snapshotReady,

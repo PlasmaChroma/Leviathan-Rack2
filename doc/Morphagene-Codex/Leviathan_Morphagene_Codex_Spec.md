@@ -597,7 +597,7 @@ Keep actual state, requested state, and destination separate. Button/semantic co
 - Capacity reached during Append: finalize immediately even when a clocked stop is pending.
 - Switching destination while already recording is rejected as `recording_busy`; an ordinary toggle means stop, not a silent destination switch.
 
-A clock-armed start latches the selected record region **when it actually starts**, not when the button was first pressed. An active Current session retains that region even if Organize subsequently changes playback to another Splice. This behavior is D and is tested explicitly.
+A clock-armed start uses the selected record region **when it actually starts**, not when the button was first pressed. The first Current write uses the primary playhead address on that frame, wrapped into the selected Splice. During an active Current session, the fixed-rate writer follows each committed playback Splice selection, starting at the new Splice's playhead address on its commit frame. A pending selection leaves the writer in the current Splice until it commits. This behavior is D and is tested explicitly.
 
 ### 13.2 Same-frame event priority
 
@@ -649,7 +649,7 @@ A SPLICE event records an integer frame address:
 
 These address-selection choices are D because the brief leaves the exact priority unclear. Quantize to a frame, not a scalar channel sample. Ignore a duplicate address and return a non-error “already exists” outcome. Reject addresses outside valid audio; an Append marker exactly at the soon-to-be-written endpoint is staged and committed only after that frame is actually written.
 
-Insertion does not cut or move audio. Existing voices keep their captured region until their natural end; new selection tables become effective at the next primary boundary. A Current writer keeps its latched destination, even if a marker splits that region. No marker edit may invalidate a retained reader/writer region.
+Insertion does not cut or move audio. Existing voices keep their captured region until their natural end; new selection tables become effective at the next primary boundary. A marker inserted during Current recording does not itself retarget the writer; the writer follows a later committed Splice selection. No marker edit may invalidate a retained reader/writer region.
 
 Keep marker insertion bounded by 300 entries in a fixed array. No vector growth or sorting allocation in the audio callback. The metadata commit carries a monotonically increasing revision and stable marker IDs.
 

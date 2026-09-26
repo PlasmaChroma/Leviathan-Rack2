@@ -121,6 +121,69 @@ int main() {
     need(near(reel.readActive(0).l, 11.f/5.f), "Current replaced frame zero on wrap");
     slice.stopRecord();
 
+    chimera::Reel playheadReel(2, 2);
+    for (std::uint32_t frame = 0; frame < 64; ++frame)
+        need(playheadReel.write(frame, {0.f, 0.f}, frame),
+             "prepare playhead-aligned Current fixture");
+    need(playheadReel.addMarker(32), "prepare second playhead fixture Splice");
+    chimera::Slice playheadWriter(&playheadReel);
+    playheadWriter.setConditioning(false);
+    playheadWriter.setInop(true);
+    auto seekInput = input(0.f, 0.f);
+    for (int frame = 0; frame < 10; ++frame) playheadWriter.step(seekInput);
+    const std::uint32_t movingAddress = static_cast<std::uint32_t>(
+        std::floor(playheadWriter.playbackPosition()));
+    need(movingAddress > 0 && movingAddress < 32 && playheadWriter.startCurrent(),
+         "start Current with the playhead inside the first Splice");
+    seekInput.live = {5.f, 5.f};
+    playheadWriter.step(seekInput);
+    need(playheadWriter.recordSegmentStartFrame() == movingAddress &&
+         playheadWriter.writerPosition() == movingAddress + 1 &&
+         near(playheadReel.readActive(movingAddress).l, 1.f) &&
+         near(playheadReel.readActive(0).l, 0.f),
+         "first Current write replaces the playhead frame, not the Splice start");
+    playheadWriter.stopRecord();
+    playheadWriter.setPlay(false);
+    playheadWriter.step(input(0.f, 0.f));
+    const std::uint32_t stoppedAddress = static_cast<std::uint32_t>(
+        std::floor(playheadWriter.playbackPosition()));
+    need(playheadWriter.startCurrent(), "restart Current with Play stopped");
+    playheadWriter.step(seekInput);
+    need(playheadWriter.recordSegmentStartFrame() == stoppedAddress &&
+         playheadWriter.writerPosition() == stoppedAddress + 1 &&
+         near(playheadReel.readActive(stoppedAddress).l, 1.f),
+         "stopped Play retains its playhead address for a new Current pass");
+    playheadWriter.stopRecord();
+    playheadWriter.setPlay(true);
+    seekInput.controls.slide = 0.5f;
+    need(playheadWriter.startCurrent(), "start Current before moving to second Splice");
+    playheadWriter.step(seekInput);
+    need(playheadWriter.selectRegion(1), "commit second Splice with Slide offset");
+    playheadWriter.step(seekInput);
+    need(playheadWriter.recordSegmentStartFrame() == 47 &&
+         playheadWriter.writerPosition() == 48 &&
+         near(playheadReel.readActive(47).l, 1.f) &&
+         near(playheadReel.readActive(32).l, 0.f),
+         "active Current moves to the new Splice's playhead, including Slide");
+    playheadWriter.stopRecord();
+
+    chimera::Slice reverseWriter(&playheadReel);
+    reverseWriter.setConditioning(false);
+    reverseWriter.setInop(true);
+    auto reverseSeekInput = input(0.f, 0.f, 0.f, 1.f/6.f);
+    for (int frame = 0; frame < 10; ++frame) reverseWriter.step(reverseSeekInput);
+    const std::uint32_t reverseAddress = static_cast<std::uint32_t>(
+        std::floor(reverseWriter.playbackPosition()));
+    need(reverseAddress > 0 && reverseAddress < 64 && reverseWriter.startCurrent(),
+         "start Current during reverse playback");
+    reverseSeekInput.live = {5.f, 5.f};
+    reverseWriter.step(reverseSeekInput);
+    need(reverseWriter.recordSegmentStartFrame() == reverseAddress &&
+         reverseWriter.writerPosition() == reverseAddress + 1 &&
+         near(playheadReel.readActive(reverseAddress).l, 1.f),
+         "reverse playback starts recording at its playhead while writes advance forward");
+    reverseWriter.stopRecord();
+
     // Append extends only the valid region, and a final marker selects it.
     need(slice.startAppend(), "Append starts");
     for (int i = 0; i < 4; ++i) {
@@ -133,16 +196,24 @@ int main() {
          reel.region(1).begin == 10 && reel.region(1).end == 14,
          "Append finalization creates stable new region");
     need(near(reel.readActive(13).l, 0.4f), "Append includes final frame");
-    chimera::Slice latched(&reel);
-    latched.setConditioning(false);
-    latched.setInop(true);
-    need(latched.selectRegion(0) && latched.startCurrent() &&
-         latched.selectRegion(1), "change audible selection after Current begins");
-    latched.step(input(4.f, -4.f));
-    need(latched.writerPosition() == 1 && near(reel.readActive(0).l, 0.8f) &&
-         !latched.selectRegion(2),
-         "Current writer keeps its latched destination when playback selection changes");
-    latched.stopRecord();
+    chimera::Slice following(&reel);
+    following.setConditioning(false);
+    following.setInop(true);
+    const float untouchedFirst = reel.readActive(0).l;
+    need(following.selectRegion(0) && following.startCurrent() &&
+         following.selectRegion(1), "change audible selection after Current begins");
+    following.step(input(4.f, -4.f));
+    need(following.writerPosition() == 11 && near(reel.readActive(10).l, 0.8f) &&
+         near(reel.readActive(0).l, untouchedFirst) && !following.selectRegion(2),
+         "Current writer follows the committed Splice without touching the old one");
+    for (int i = 0; i < 3; ++i) following.step(input(4.f, -4.f));
+    need(following.writerPosition() == 10,
+         "Current writer wraps inside the newly selected Splice");
+    need(following.selectRegion(0), "select the first Splice again while recording");
+    following.step(input(3.f, -3.f));
+    need(following.writerPosition() == 1 && near(reel.readActive(0).l, 0.6f),
+         "Current writer follows a return selection on its first frame");
+    following.stopRecord();
     chimera::Reel transitionReel(40, 40);
     for (std::uint32_t i = 0; i < 9600; ++i)
         need(transitionReel.write(i, chimera::StereoFrame{i < 4800 ? 1.f : -1.f,
@@ -619,6 +690,7 @@ int main() {
     queued.setConditioning(false);
     // Settle the recovered continuous Morph ramp before testing selection.
     for (int frame = 0; frame < 1060; ++frame) queued.step(selectedInput);
+    need(queued.startCurrent(), "start Current before queued Splice selection");
     selectedInput.controls.organize = 1.f;
     bool secondaryBeforePrimary = false;
     for (int frame = 1060; frame < 1440; ++frame) {
@@ -627,10 +699,13 @@ int main() {
         need(queued.currentRegion() == 0 && queued.requestedRegion() == 1,
              "pending Splice waits for primary full-Splice boundary");
     }
+    need(queued.writerPosition() < 480 && near(selectedReel.readActive(480).l, -1.f),
+         "pending selection keeps Current writes in the still-playing Splice");
     const chimera::Slice::Output committed = queued.step(selectedInput);
     need(secondaryBeforePrimary && committed.naturalBoundary &&
-         queued.currentRegion() == 1,
-         "secondary completions leave pending selection for the primary cycle");
+         queued.currentRegion() == 1 && queued.writerPosition() == 481,
+         "primary selection commit moves the Current writer to the new Splice");
+    queued.stopRecord();
     chimera::Reel appendedReel(2, 2);
     for (std::uint32_t frame = 0; frame < 480; ++frame)
         need(appendedReel.write(frame, chimera::StereoFrame{1.f, 1.f}, frame),
@@ -726,15 +801,14 @@ int main() {
     chimera::Slice writerSlice(&writerReel);
     writerSlice.setConditioning(false);
     writerSlice.setPlay(false);
-    need(writerSlice.startCurrent() && writerSlice.selectRegion(1),
-         "latch Current writer then change selection");
+    need(writerSlice.startCurrent(), "start Current writer before marker split");
     for (int frame = 0; frame < 40; ++frame) writerSlice.step(input(0.f, 0.f));
     writerSlice.requestSplice();
     writerSlice.step(input(0.f, 0.f));
     need(writerReel.region(1).begin == 40 && writerReel.findMarkerId(selectedId) == 2 &&
-         writerSlice.currentRegion() == 2 && writerSlice.requestedRegion() == 2 &&
+         writerSlice.currentRegion() == 0 && writerSlice.requestedRegion() == 0 &&
          writerSlice.writerPosition() == 41,
-         "Current Splice takes pre-write address and remaps selected stable marker ID");
+         "Current Splice takes pre-write address without retargeting on marker insertion");
     writerSlice.stopRecord();
     chimera::Slice appendSplice(&writerReel);
     appendSplice.setPlay(false);
@@ -1018,7 +1092,9 @@ int main() {
     const chimera::Slice::Output collision = collided.step(clockInput);
     need(collision.naturalBoundary && collision.eosg &&
          collided.onsetCount() == beforeCollisionOnsets + 1 &&
-         collided.writerPosition() == 4801,
+         collided.recordSegmentStartFrame() >= 4800 &&
+         collided.recordSegmentStartFrame() < 9600 &&
+         collided.writerPosition() == collided.recordSegmentStartFrame() + 1,
          "natural completion survives Shift/PLAY/REC/Clock collision with one new onset");
     collided.stopRecord();
     chimera::Slice stoppedAtDue(&transitionReel);

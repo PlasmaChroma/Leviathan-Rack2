@@ -95,13 +95,16 @@ int main() {
         for(int i=0;i<3000;++i){slice.step(in);monitor.step(in);}
         need(append?slice.startAppend():slice.startCurrent(),"transformed capture starts");
         audioThread=true;
-        for(unsigned i=0;i<32;++i){const unsigned address=slice.writerPosition();
+        for(unsigned i=0;i<32;++i){const unsigned before=slice.writerPosition();
             const auto expectedOut=monitor.step(in);const auto out=slice.step(in);
+            const unsigned address=(!append && i==0)?slice.recordSegmentStartFrame():before;
             const auto recorded=reel.readActive(address);
             need(near(out.audio.l,expectedOut.audio.l) && near(out.audio.r,expectedOut.audio.r),
                  "reversed Morph/Gene/Slide playback matches independent renderer");
             need(near(recorded.l,inop?1:out.audio.l) && near(recorded.r,inop?-.5:out.audio.r),
                  "rendered transformations enter recording only with inop zero");
+            if (!append) need(reference.write(address,recorded,3000+i),
+                 "reference renderer receives the same completed overdub write");
             need(slice.writerPosition()==address+1,"reverse playback never reverses writer");}
         audioThread=false;
     }

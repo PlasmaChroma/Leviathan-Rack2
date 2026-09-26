@@ -1845,7 +1845,10 @@ struct Chimera : Module {
         c.morphCv = host.volts[MORPH_CV_INPUT];
         c.slideCv = host.volts[SLIDE_CV_INPUT];
         c.organizeCv = host.volts[ORGANIZE_CV_INPUT];
+        const std::uint16_t regionBeforeSelection = slice.currentRegion();
         slice.prepareFrameSelection(in);
+        const bool recordDestinationChanged = slice.recordState() == chimera::Slice::Current &&
+            slice.currentRegion() != regionBeforeSelection;
         const int command = host.command;
         if (!clockConnected) recordArm = NoArm;
         if (command == 3) {
@@ -1890,6 +1893,10 @@ struct Chimera : Module {
         }
         slice.setBandlimitedPlayback(bandlimitedPlayback.load(std::memory_order_relaxed));
         const chimera::Slice::Output out = slice.step(in);
+        if (out.recording && slice.recordState() == chimera::Slice::Current &&
+            (recordDestinationChanged || !wasRecording))
+            publishedRecordStartFrame.store(slice.recordSegmentStartFrame(),
+                std::memory_order_release);
         recordingActive.store(out.recording, std::memory_order_release);
         publishedMarkerHistory.store(slice.markerHistoryState(), std::memory_order_release);
         if (wasRecording && !out.recording)
@@ -1907,7 +1914,8 @@ struct Chimera : Module {
             slice.recordState() == chimera::Slice::Current ? 4 :
             slice.recordState() == chimera::Slice::Append ? 5 : 0;
         publishedRecordState.store(displayRecordState, std::memory_order_release);
-        if ((slice.frame() & 255u) == 0 || wasRecording != out.recording) {
+        if ((slice.frame() & 255u) == 0 || wasRecording != out.recording ||
+            recordDestinationChanged) {
             const double position = slice.playbackPosition();
             publishedPlayFrame.store(position > 0.0 ?
                 std::uint32_t(std::min(position, double(UINT32_MAX))) : 0u,

@@ -10,8 +10,8 @@
 namespace chimera {
 
 // 48 kHz audio slice. Owns no audio-thread allocation; its Reel is prepared
-// off audio and outlives this engine. Playback uses the bounded musical slots
-// while the Current/Append writer remains independent.
+// off audio and outlives this engine. Playback uses the bounded musical slots;
+// the Current writer follows committed Splice selections at its own fixed rate.
 class Slice {
 public:
     enum RecordState { Idle, Current, Append };
@@ -43,6 +43,8 @@ public:
         overloaded_ = false;
         reel_ = reel;
         state_ = Idle;
+        recordSegmentStart_ = 0;
+        recordSeekPending_ = false;
         currentRegion_ = 0;
         position_ = 0.0;
         eosgRemaining_ = 0;
@@ -132,6 +134,7 @@ public:
     double primaryPosition() const { return position_; }
     std::uint16_t currentRegion() const { return currentRegion_; }
     std::uint32_t writerFrame() const { return writer_; }
+    std::uint32_t recordSegmentStartFrame() const { return recordSegmentStart_; }
     double playbackPosition() const { return position_; }
     std::uint16_t requestedRegion() const { return selection_.requested(); }
     std::uint16_t organizeBin() const { return selection_.organizeBin(); }
@@ -145,11 +148,18 @@ public:
     bool overloaded() const { return overloaded_; }
     bool selectRegion(std::uint16_t index) {
         if (!reel_ || index >= reel_->markerCount()) return false;
+        const bool retargetWriter = state_ == Current && index != currentRegion_;
         currentRegion_ = index;
         metadataRegionPending_ = false;
         metadataRefreshDue_ = false;
         selection_.setRequested(index, reel_->markerCount());
         const Region selected = reel_->region(index);
+        if (retargetWriter) {
+            recordRegion_ = selected;
+            writer_ = selected.begin;
+            recordSegmentStart_ = writer_;
+            recordSeekPending_ = true;
+        }
         position_ = selected.begin;
         grains_.resetTrajectory();
         return true;
@@ -178,7 +188,9 @@ public:
         const Region r = reel_->region(currentRegion_);
         if (r.end <= r.begin) return false;
         recordRegion_ = r;
-        writer_ = r.begin;
+        writer_ = static_cast<std::uint32_t>(std::floor(profile1::wrapPosition(position_, r)));
+        recordSegmentStart_ = writer_;
+        recordSeekPending_ = true;
         state_ = Current;
         return true;
     }
@@ -187,6 +199,7 @@ public:
         if (reel_->validFrames() && reel_->markerCount() >= kMaxSplices) return false;
         appendStart_ = reel_->validFrames();
         writer_ = appendStart_;
+        recordSeekPending_ = false;
         state_ = Append;
         return true;
     }
@@ -209,6 +222,7 @@ public:
             }
         }
         state_ = Idle;
+        recordSeekPending_ = false;
     }
 
     Output step(const CoreInput& input) {
@@ -292,6 +306,15 @@ public:
             naturalCompletion = g.completions != 0;
             overloaded_ = overloaded_ || g.invalidSource;
             retrigger_ = false;
+        }
+        if (state_ == Current && recordSeekPending_) {
+            // The reader has now resolved Slide, rate direction, and any
+            // same-frame retrigger. Seek only once; subsequent writes stay
+            // fixed-rate and independent of playback speed.
+            writer_ = static_cast<std::uint32_t>(std::floor(
+                profile1::wrapPosition(markerPosition, recordRegion_)));
+            recordSegmentStart_ = writer_;
+            recordSeekPending_ = false;
         }
         const bool splice = spliceRequested_;
         spliceRequested_ = false;
@@ -488,6 +511,8 @@ private:
     std::uint16_t currentRegion_;
     Region recordRegion_;
     std::uint32_t writer_, appendStart_;
+    std::uint32_t recordSegmentStart_ = 0;
+    bool recordSeekPending_ = false;
     double position_;
     float wetGain_, sourceBlend_;
     StereoFrame lastWet_, stopTail_;
