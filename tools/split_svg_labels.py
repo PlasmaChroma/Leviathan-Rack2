@@ -15,8 +15,9 @@ fonts. Pass --keep-label-text to keep font-backed text in the labels output.
 
 Use --background-only for legacy panels whose labels and artwork must stay
 together. This mode extracts the background and explicitly marked theme text.
-Individual text elements or outlined glyphs can use data-theme-text="input"
-or data-theme-text="output" without rearranging their authored groups.
+Use named theme_text_input/theme_text_output groups for labels editable in
+Inkscape. Individual data-theme-text="input"/"output" attributes remain
+supported for compatibility with older masters.
 
 Expected source convention:
   <g id="labels"> ... </g>
@@ -481,12 +482,13 @@ def split_background_only(source_path: Path, overwrite: bool = False, cleanup: b
     background_path = Path(f"{stem}.background.svg")
     if not overwrite and (panel_path.exists() or background_path.exists()):
         raise RuntimeError(f"{source_path}: generated files exist; pass --overwrite")
+    theme_ids = {"theme_text_input": "input", "theme_text_output": "output"}
     panel_root = copy.deepcopy(root)
     extract_background(root, panel_root, background_path, cleanup)
     # Legacy panels retain their static artwork and anchors. Explicit semantic
     # labels are extracted with their complete transform/style ancestry.
     for role in ("input", "output"):
-        selected = select_theme_text_layer(root, role, {})
+        selected = select_theme_text_layer(root, role, theme_ids)
         if selected is None:
             continue
         text_path = Path(f"{stem}.theme-text-{role}.svg")
@@ -503,7 +505,7 @@ def split_background_only(source_path: Path, overwrite: bool = False, cleanup: b
         ET.ElementTree(text_root).write(text_path, encoding="utf-8", xml_declaration=True)
         if outline_label_text:
             outline_text_with_inkscape(text_path, inkscape_path, inkscape_timeout_sec)
-    panel_root = select_theme_text_layer(panel_root, None, {})
+    panel_root = select_theme_text_layer(panel_root, None, theme_ids)
     if cleanup:
         remove_editor_junk(panel_root)
     ET.indent(panel_root, space="  ")

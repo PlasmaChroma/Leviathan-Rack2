@@ -190,23 +190,23 @@
    stop-color="#182682"
    id="stop_wave_3" />
     </linearGradient>
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-  
-    
-    
-    
-    
-    
-    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   <linearGradient
    inkscape:collect="always"
    xlink:href="#oceanWaveGrad"
@@ -305,7 +305,7 @@
    inkscape:current-layer="svg488"
    showgrid="false"
    inkscape:pageshadow="2" />
-  
+
   <g
    id="panel_art"
    style="display:inline">
@@ -313,7 +313,7 @@
    id="Background_Rect"
    style="display:inline"
    transform="matrix(0.99673566,0,0,0.99708035,-982.96277,-994.31744)">
-      
+
       <g id="theme_background"><rect
    x="986.18201"
    y="997.229"
@@ -339,7 +339,7 @@
    style="fill:#7a5cff"
    d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
    id="path151" />
-        
+
         <path
    style="fill:#1cccd9"
    d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
@@ -356,7 +356,7 @@
    style="fill:#7a5cff"
    d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
    id="path160" />
-        
+
         <path
    style="fill:#1cccd9"
    d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
@@ -374,11 +374,11 @@
    stroke-width="60"
    id="gray_outline"
    style="display:none;stroke:#3c3f42;stroke-opacity:1" />
-      
+
     </g>
-    
-    
-    
+
+
+
     <g
    id="panel_graphics"
    style="display:inline"
@@ -387,8 +387,8 @@
    id="grp_frame"
    inkscape:label="Frame"
    style="display:inline">
-        
-        
+
+
         <g
    id="glass"><g
    id="glass_input"><rect
@@ -434,12 +434,12 @@
    id="outputs-3"
    style="display:none;opacity:0.33;fill:url(#linearGradient34)"
    inkscape:label="under_widget_blend" />
-        
+
       </g>
-      
+
     </g>
-    
-    
+
+
   <path
    d="M 427.73558,952.18282 H 8716.2649"
    stroke="url(#accentGrad)"
@@ -469,110 +469,38 @@
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient35);fill-rule:evenodd;stroke-width:37.088"
    xml:space="preserve"
    inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        <text
-   id="clk_lbl"
-   x="548.15698"
-   y="12042.952"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve" data-theme-text="input"><tspan
-     sodipodi:role="line"
-     id="tspan8"
-     x="548.15698"
-     y="12042.952">STEP</tspan></text><text
-   id="clk_lbl-6"
-   x="1633.2771"
-   y="12042.941"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
-   xml:space="preserve" data-theme-text="input"><tspan
-     sodipodi:role="line"
-     id="tspan5"
-     x="1633.2771"
-     y="12042.941">RESET</tspan></text><text
-   id="transpose_lbl"
-   x="2807.0771"
-   y="12048.708"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
-   xml:space="preserve" data-theme-text="input"><tspan
-     sodipodi:role="line"
-     id="tspan4"
-     x="2807.0771"
-     y="12048.708">TRANS</tspan></text><text
-   id="transpose_lbl-1"
-   x="3866.7202"
-   y="12048.743"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
-   xml:space="preserve" data-theme-text="input"><tspan
-     sodipodi:role="line"
-     id="tspan3"
-     x="3866.7202"
-     y="12048.743">ROOT</tspan></text>
-        
-        
-        
-        
-        
-        
-        <text
-   id="acc_lbl"
-   x="5326.9639"
-   y="12040.399"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
-   xml:space="preserve" data-theme-text="output"><tspan
-     sodipodi:role="line"
-     id="tspan9"
-     x="5326.9639"
-     y="12040.399">ACC</tspan></text><text
-   id="pitch_lbl"
-   x="7493.6675"
-   y="12069.399"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
-   xml:space="preserve" data-theme-text="output"><tspan
-     sodipodi:role="line"
-     id="tspan10"
-     x="7493.6675"
-     y="12069.399">PITCH</tspan></text><text
-   id="mod_lbl"
-   x="8589.8779"
-   y="12042.941"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
-   xml:space="preserve" data-theme-text="output"><tspan
-     sodipodi:role="line"
-     id="tspan11"
-     x="8589.8779"
-     y="12042.941">MOD</tspan></text><text
-   id="lbl_eoc"
-   x="6423.2915"
-   y="12048.742"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
-   xml:space="preserve" data-theme-text="output"><tspan
-     sodipodi:role="line"
-     id="tspan7"
-     x="6423.2915"
-     y="12048.742">EoC</tspan></text>
-        
-        
-        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         <text
    id="reworked_module_description"
    x="4568.8252"
@@ -583,8 +511,94 @@
      id="tspan2"
      x="4568.8252"
      y="725.24072">sequencer</tspan></text>
-        
-      </g><g
+
+
+    <g id="theme_text_input" inkscape:label="Input Text">
+<text
+   id="clk_lbl"
+   x="548.15698"
+   y="12042.952"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan8"
+     x="548.15698"
+     y="12042.952">STEP</tspan></text>
+<text
+   id="clk_lbl-6"
+   x="1633.2771"
+   y="12042.941"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan5"
+     x="1633.2771"
+     y="12042.941">RESET</tspan></text>
+<text
+   id="transpose_lbl"
+   x="2807.0771"
+   y="12048.708"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan4"
+     x="2807.0771"
+     y="12048.708">TRANS</tspan></text>
+<text
+   id="transpose_lbl-1"
+   x="3866.7202"
+   y="12048.743"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan3"
+     x="3866.7202"
+     y="12048.743">ROOT</tspan></text>
+    </g>
+
+    <g id="theme_text_output" inkscape:label="Output Text">
+<text
+   id="acc_lbl"
+   x="5326.9639"
+   y="12040.399"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan9"
+     x="5326.9639"
+     y="12040.399">ACC</tspan></text>
+<text
+   id="pitch_lbl"
+   x="7493.6675"
+   y="12069.399"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan10"
+     x="7493.6675"
+     y="12069.399">PITCH</tspan></text>
+<text
+   id="mod_lbl"
+   x="8589.8779"
+   y="12042.941"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan11"
+     x="8589.8779"
+     y="12042.941">MOD</tspan></text>
+<text
+   id="lbl_eoc"
+   x="6423.2915"
+   y="12048.742"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"><tspan
+     sodipodi:role="line"
+     id="tspan7"
+     x="6423.2915"
+     y="12048.742">EoC</tspan></text>
+    </g>
+</g><g
    id="components"
    style="display:none"><circle
      id="SEQ_LENGTH_PARAM"

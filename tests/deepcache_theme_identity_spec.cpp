@@ -29,12 +29,17 @@ int main() {
     need(themeVisualIdentity(hidden) != themeVisualIdentity(base), "enabled background hue changes identity");
     need(themeVisualIdentity(leviathan::theme::canonicalDefault()) == original, "identity survives restart/reset");
     ThemeRefreshDebounce debounce(original);
-    debounce.observe(original + 1, 1.0);
-    need(debounce.pending() && !debounce.applyIfSettled(1.2), "wait during a drag");
-    debounce.observe(original + 2, 1.2);
-    need(!debounce.applyIfSettled(1.4) && debounce.applyIfSettled(1.6), "coalesce edits until settled");
-    need(debounce.applied() == original + 2 && !debounce.pending(), "publish newest identity once");
-    debounce.observe(original + 3, 2.0); debounce.observe(original + 2, 2.1);
-    need(!debounce.pending() && !debounce.applyIfSettled(3), "reverted drag needs no refresh");
+    // Match the picker's one-second publication cadence over a sustained drag.
+    for (unsigned edit = 1; edit <= 6; ++edit) {
+        debounce.observe(original + edit, double(edit));
+        need(debounce.pending() && !debounce.applyIfSettled(double(edit) + 0.9),
+             "no rebuild between one-second drag publications");
+    }
+    need(!debounce.applyIfSettled(8.99) && debounce.applyIfSettled(9.0),
+         "refresh only after three seconds without another edit");
+    need(debounce.applied() == original + 6 && !debounce.pending() &&
+         !debounce.applyIfSettled(10.0), "publish newest identity exactly once");
+    debounce.observe(original + 7, 11.0); debounce.observe(original + 6, 11.1);
+    need(!debounce.pending() && !debounce.applyIfSettled(15.0), "reverted drag needs no refresh");
     std::puts("PASS: Leviathan-only theme fingerprint and refresh debounce");
 }

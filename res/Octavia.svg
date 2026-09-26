@@ -265,72 +265,15 @@
          id="tspan6"
          x="29.292398"
          y="90.757484">WR</tspan></text>
-    <text
-       id="PORT_LABEL"
-       x="5.8895702"
-       y="60.699997"
-       font-size="2.257778"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400" data-theme-text="input"><tspan
-         sodipodi:role="line"
-         id="tspan2"
-         x="5.8895702"
-         y="60.699997">PORT</tspan></text>
-    <text
-       id="MASTER_L_LABEL"
-       x="6.4513106"
-       y="117"
-       font-size="1.975556"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400" data-theme-text="input"><tspan
-         sodipodi:role="line"
-         id="tspan3"
-         x="6.4513106"
-         y="117">MON L</tspan></text>
-    <text
-       id="MASTER_R_LABEL"
-       x="18.992056"
-       y="117"
-       font-size="1.97556px"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400" data-theme-text="input"><tspan
-         sodipodi:role="line"
-         id="tspan4"
-         x="18.992056"
-         y="117">MON R</tspan></text>
-    <text
-       id="MONITOR_A_LABEL"
-       x="37.5"
-       y="67.300232"
-       font-size="1.97556px"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400" data-theme-text="input">A</text>
-    <text
-       id="MONITOR_B_LABEL"
-       x="37.5"
-       y="79.014748"
-       font-size="1.97556px"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400" data-theme-text="input">B</text>
-    <text
-       id="MONITOR_C_LABEL"
-       x="37.5"
-       y="90.757484"
-       font-size="1.97556px"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400" data-theme-text="input">C</text>
-    <text
-       id="MONITOR_D_LABEL"
-       x="37.5"
-       y="102.50022"
-       font-size="1.97556px"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400" data-theme-text="input">D</text>
-    <text
-       id="CONTROL_A_LABEL"
-       x="31.788002"
-       y="117"
-       font-size="1.55222px"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400" data-theme-text="output">CTRL A</text>
-    <text
-       id="CONTROL_B_LABEL"
-       x="44.348499"
-       y="117"
-       font-size="1.55222px"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400" data-theme-text="output">CTRL B</text>
+
+
+
+
+
+
+
+
+
     <text
        id="LUFS_LABEL"
        x="6.5444441"
@@ -364,5 +307,77 @@
          id="tspan8"
          x="25.36825"
          y="8.1524353">mcp orchestration server</tspan></text>
-  </g>
+
+    <g id="theme_text_input" inkscape:label="Input Text">
+<text
+       id="PORT_LABEL"
+       x="5.8895702"
+       y="60.699997"
+       font-size="2.257778"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan2"
+         x="5.8895702"
+         y="60.699997">PORT</tspan></text>
+<text
+       id="MASTER_L_LABEL"
+       x="6.4513106"
+       y="117"
+       font-size="1.975556"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan3"
+         x="6.4513106"
+         y="117">MON L</tspan></text>
+<text
+       id="MASTER_R_LABEL"
+       x="18.992056"
+       y="117"
+       font-size="1.97556px"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400"><tspan
+         sodipodi:role="line"
+         id="tspan4"
+         x="18.992056"
+         y="117">MON R</tspan></text>
+<text
+       id="MONITOR_A_LABEL"
+       x="37.5"
+       y="67.300232"
+       font-size="1.97556px"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">A</text>
+<text
+       id="MONITOR_B_LABEL"
+       x="37.5"
+       y="79.014748"
+       font-size="1.97556px"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">B</text>
+<text
+       id="MONITOR_C_LABEL"
+       x="37.5"
+       y="90.757484"
+       font-size="1.97556px"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">C</text>
+<text
+       id="MONITOR_D_LABEL"
+       x="37.5"
+       y="102.50022"
+       font-size="1.97556px"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">D</text>
+    </g>
+
+    <g id="theme_text_output" inkscape:label="Output Text">
+<text
+       id="CONTROL_A_LABEL"
+       x="31.788002"
+       y="117"
+       font-size="1.55222px"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">CTRL A</text>
+<text
+       id="CONTROL_B_LABEL"
+       x="44.348499"
+       y="117"
+       font-size="1.55222px"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">CTRL B</text>
+    </g>
+</g>
 </svg>

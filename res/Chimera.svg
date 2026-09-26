@@ -380,136 +380,10 @@
          y="48"
          id="text14">ERR</text>
     </g>
-    <g
-       id="g20">
-      <text
-         x="118.24"
-         y="64.5"
-         id="text15" data-theme-text="input">S.O.S.</text>
-      <text
-         x="24"
-         y="64.5"
-         id="text16" data-theme-text="input">GENE SIZE</text>
-      <text
-         x="71.12"
-         y="64.5"
-         id="text17" data-theme-text="input">VARI-SPEED</text>
-      <text
-         x="24"
-         y="88"
-         id="text18" data-theme-text="input">MORPH</text>
-      <text
-         x="71.12"
-         y="88"
-         id="text19" data-theme-text="input">SLIDE</text>
-      <text
-         x="118.24"
-         y="88"
-         id="text20" data-theme-text="input">ORGANIZE</text>
-    </g>
-    <g
-       fill="#9fc8d0"
-       id="g23">
-      <text
-         x="34"
-         y="75.5"
-         id="text21" data-theme-text="input">GENE CV ±</text>
-      <text
-         x="81.12"
-         y="75.5"
-         id="text22" data-theme-text="input">RATE CV ±</text>
-      <text
-         x="81.12"
-         y="99.5"
-         id="text23" data-theme-text="input">SLIDE CV ±</text>
-    </g>
-    <g
-       id="g26">
-      <text x="96" y="108.5" id="unsplice_label" data-theme-text="input">UNSPLICE</text>
-      <text
-         x="60"
-         y="108.5"
-         id="text24" data-theme-text="input">REC</text>
-      <text
-         x="72"
-         y="108.5"
-         id="text25" data-theme-text="input">SPLICE</text>
-      <text
-         x="84"
-         y="108.5"
-         id="text26" data-theme-text="input">SHIFT</text>
-    </g>
-    <g
-       id="g43">
-      <text
-         x="118.24"
-         y="75.5"
-         id="text27" data-theme-text="input">S.O.S.</text>
-      <text
-         x="14"
-         y="75.5"
-         id="text28" data-theme-text="input">GENE</text>
-      <text
-         x="61.12"
-         y="75.5"
-         id="text29" data-theme-text="input">RATE</text>
-      <text
-         x="24"
-         y="99.5"
-         id="text30" data-theme-text="input">MORPH</text>
-      <text
-         x="61.12"
-         y="99.5"
-         id="text31" data-theme-text="input">SLIDE</text>
-      <text
-         x="118.24"
-         y="99.5"
-         id="text32" data-theme-text="input">ORG</text>
-      <text
-         x="36"
-         y="119.5"
-         id="text33" data-theme-text="input">CLOCK</text>
-      <text
-         x="48"
-         y="119.5"
-         id="text34" data-theme-text="input">PLAY</text>
-      <text
-         x="60"
-         y="119.5"
-         id="text35" data-theme-text="input">REC</text>
-      <text
-         x="72"
-         y="119.5"
-         id="text36" data-theme-text="input">SPLICE</text>
-      <text
-         x="84"
-         y="119.5"
-         id="text37" data-theme-text="input">SHIFT</text>
-      <text
-         x="12"
-         y="119.5"
-         id="text38" data-theme-text="input">IN L</text>
-      <text
-         x="24"
-         y="119.5"
-         id="text39" data-theme-text="input">IN R</text>
-      <text
-         x="96"
-         y="119.5"
-         id="text40" data-theme-text="output">OUT L</text>
-      <text
-         x="108"
-         y="119.5"
-         id="text41" data-theme-text="output">OUT R</text>
-      <text
-         x="120"
-         y="119.5"
-         id="text42" data-theme-text="output">CV OUT</text>
-      <text
-         x="132"
-         y="119.5"
-         id="text43" data-theme-text="output">EOSG</text>
-    </g>
+
+
+
+
     <text
        id="reworked_module_title_text"
        x="71.138527"
@@ -519,5 +393,161 @@
          sodipodi:role="line"
          id="tspan43"
          style="fill:url(#linearGradient36)">Chimera</tspan></text>
-  </g>
+
+    <g id="theme_text_input" inkscape:label="Input Text">
+<g
+       id="g20">
+      <text
+         x="118.24"
+         y="64.5"
+         id="text15">S.O.S.</text>
+      <text
+         x="24"
+         y="64.5"
+         id="text16">GENE SIZE</text>
+      <text
+         x="71.12"
+         y="64.5"
+         id="text17">VARI-SPEED</text>
+      <text
+         x="24"
+         y="88"
+         id="text18">MORPH</text>
+      <text
+         x="71.12"
+         y="88"
+         id="text19">SLIDE</text>
+      <text
+         x="118.24"
+         y="88"
+         id="text20">ORGANIZE</text>
+    </g>
+<g
+       fill="#9fc8d0"
+       id="g23">
+      <text
+         x="34"
+         y="75.5"
+         id="text21">GENE CV ±</text>
+      <text
+         x="81.12"
+         y="75.5"
+         id="text22">RATE CV ±</text>
+      <text
+         x="81.12"
+         y="99.5"
+         id="text23">SLIDE CV ±</text>
+    </g>
+<g
+       id="g26">
+      <text x="96" y="108.5" id="unsplice_label">UNSPLICE</text>
+      <text
+         x="60"
+         y="108.5"
+         id="text24">REC</text>
+      <text
+         x="72"
+         y="108.5"
+         id="text25">SPLICE</text>
+      <text
+         x="84"
+         y="108.5"
+         id="text26">SHIFT</text>
+    </g>
+<g
+       id="g43_input">
+      <text
+         x="118.24"
+         y="75.5"
+         id="text27">S.O.S.</text>
+      <text
+         x="14"
+         y="75.5"
+         id="text28">GENE</text>
+      <text
+         x="61.12"
+         y="75.5"
+         id="text29">RATE</text>
+      <text
+         x="24"
+         y="99.5"
+         id="text30">MORPH</text>
+      <text
+         x="61.12"
+         y="99.5"
+         id="text31">SLIDE</text>
+      <text
+         x="118.24"
+         y="99.5"
+         id="text32">ORG</text>
+      <text
+         x="36"
+         y="119.5"
+         id="text33">CLOCK</text>
+      <text
+         x="48"
+         y="119.5"
+         id="text34">PLAY</text>
+      <text
+         x="60"
+         y="119.5"
+         id="text35">REC</text>
+      <text
+         x="72"
+         y="119.5"
+         id="text36">SPLICE</text>
+      <text
+         x="84"
+         y="119.5"
+         id="text37">SHIFT</text>
+      <text
+         x="12"
+         y="119.5"
+         id="text38">IN L</text>
+      <text
+         x="24"
+         y="119.5"
+         id="text39">IN R</text>
+
+
+
+
+    </g>
+    </g>
+
+    <g id="theme_text_output" inkscape:label="Output Text">
+<g
+       id="g43_output">
+
+
+
+
+
+
+
+
+
+
+
+
+
+      <text
+         x="96"
+         y="119.5"
+         id="text40">OUT L</text>
+      <text
+         x="108"
+         y="119.5"
+         id="text41">OUT R</text>
+      <text
+         x="120"
+         y="119.5"
+         id="text42">CV OUT</text>
+      <text
+         x="132"
+         y="119.5"
+         id="text43">EOSG</text>
+    </g>
+    </g>
+</g>
 </svg>

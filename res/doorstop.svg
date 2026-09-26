@@ -335,7 +335,13 @@
          id="tspan27"
          x="762"
          y="815.24359">phys. model</tspan></text>
-    <text
+
+
+
+
+
+    <g id="theme_text_input" inkscape:label="Input Text">
+<text
        x="762"
        y="9185.0098"
        fill="#e0eef6"
@@ -343,8 +349,8 @@
        font-weight="600"
        letter-spacing="18"
        id="text24"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400" data-theme-text="input">TRIG</text>
-    <text
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">TRIG</text>
+<text
        x="753.95654"
        y="7849.1284"
        fill="#e0eef6"
@@ -352,12 +358,12 @@
        font-weight="600"
        letter-spacing="18"
        id="en-label"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;letter-spacing:18;display:inline;fill:#e0eef6" data-theme-text="input"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;letter-spacing:18;display:inline;fill:#e0eef6"><tspan
          sodipodi:role="line"
          id="tspan28"
          x="762.95654"
          y="7849.1284">ENERGY</tspan></text>
-    <text
+<text
        x="762"
        y="10585.011"
        fill="#e0eef6"
@@ -365,8 +371,11 @@
        font-weight="600"
        letter-spacing="18"
        id="text25"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400" data-theme-text="input">VEL</text>
-    <text
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">VEL</text>
+    </g>
+
+    <g id="theme_text_output" inkscape:label="Output Text">
+<text
        x="762"
        y="11970.025"
        fill="#e1f6f7"
@@ -374,6 +383,7 @@
        font-weight="600"
        letter-spacing="18"
        id="text26"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400" data-theme-text="output">OUT</text>
-  </g>
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400">OUT</text>
+    </g>
+</g>
 </svg>

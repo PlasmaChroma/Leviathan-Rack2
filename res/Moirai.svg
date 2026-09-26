@@ -9,11 +9,34 @@
  </g>
  <g id="labels" inkscape:label="Labels" fill="#e7f1f6" font-family="sans-serif" font-weight="600" text-anchor="middle">
   <text x="3048" y="650" font-size="360">MOIRAI</text>
-  <text x="1200" y="4850" font-size="210" data-theme-text="input">LANE</text><text x="3048" y="4850" font-size="210" data-theme-text="input">CHANNEL</text><text x="4900" y="4850" font-size="210" data-theme-text="input">TRIGGER</text>
-  <text x="1200" y="6450" font-size="210" data-theme-text="input">TIME</text><text x="3048" y="6450" font-size="210" data-theme-text="input">CURVE</text><text x="4900" y="6450" font-size="210" data-theme-text="input">LEVEL</text>
-  <text x="500" y="8500" font-size="180" data-theme-text="input">GATE</text><text x="1350" y="8500" font-size="180" data-theme-text="input">VEL</text><text x="2200" y="8500" font-size="180" data-theme-text="input">M1</text><text x="3050" y="8500" font-size="180" data-theme-text="input">M2</text><text x="3900" y="8500" font-size="180" data-theme-text="input">M3</text><text x="4750" y="8500" font-size="180" data-theme-text="input">CLOCK</text><text x="5600" y="8500" font-size="180" data-theme-text="input">RESET</text>
-  <text x="800" y="10900" font-size="200" data-theme-text="output">A</text><text x="2200" y="10900" font-size="200" data-theme-text="output">EOC A</text><text x="3900" y="10900" font-size="200" data-theme-text="output">B</text><text x="5300" y="10900" font-size="200" data-theme-text="output">EOC B</text>
- </g>
+
+
+
+
+
+    <g id="theme_text_input" inkscape:label="Input Text">
+<text x="1200" y="4850" font-size="210">LANE</text>
+<text x="3048" y="4850" font-size="210">CHANNEL</text>
+<text x="4900" y="4850" font-size="210">TRIGGER</text>
+<text x="1200" y="6450" font-size="210">TIME</text>
+<text x="3048" y="6450" font-size="210">CURVE</text>
+<text x="4900" y="6450" font-size="210">LEVEL</text>
+<text x="500" y="8500" font-size="180">GATE</text>
+<text x="1350" y="8500" font-size="180">VEL</text>
+<text x="2200" y="8500" font-size="180">M1</text>
+<text x="3050" y="8500" font-size="180">M2</text>
+<text x="3900" y="8500" font-size="180">M3</text>
+<text x="4750" y="8500" font-size="180">CLOCK</text>
+<text x="5600" y="8500" font-size="180">RESET</text>
+    </g>
+
+    <g id="theme_text_output" inkscape:label="Output Text">
+<text x="800" y="10900" font-size="200">A</text>
+<text x="2200" y="10900" font-size="200">EOC A</text>
+<text x="3900" y="10900" font-size="200">B</text>
+<text x="5300" y="10900" font-size="200">EOC B</text>
+    </g>
+</g>
  <g id="components" inkscape:label="Component anchors" style="display:none">
   <rect id="MOIRAI_DISPLAY" x="300" y="1100" width="5496" height="3000" rx="120"/>
   <circle id="LANE_PARAM" cx="1200" cy="5300" r="270"/><circle id="CHANNEL_PARAM" cx="3048" cy="5300" r="450"/><circle id="MANUAL_TRIGGER_PARAM" cx="4900" cy="5300" r="270"/>

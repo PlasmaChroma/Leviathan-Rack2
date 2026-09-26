@@ -653,7 +653,7 @@
      id="tspan2"
      x="3555.2595"
      y="815.19421">filter</tspan></text>
-        <g id="theme_text_input">
+        <g id="theme_text_input" inkscape:label="Input Text">
 <text
    id="signal_in"
    x="2591.3838"
@@ -755,7 +755,7 @@
      x="4254.6919"
      y="9019.8945">XM</tspan></text>
 </g>
-<g id="theme_text_output">
+<g id="theme_text_output" inkscape:label="Output Text">
 <text
    id="signal_out"
    x="4509.9985"

@@ -81,8 +81,6 @@
       <circle id="absorb_knob_art" cx="4705" cy="8170" r="205" />
       <circle id="motion_knob_art" cx="7375" cy="8170" r="205" />
     </g>
-    <g id="knob_labels" style="font-size:180px;font-family:Rubik;dominant-baseline:middle;text-anchor:middle;fill:#ffffff;fill-opacity:0.82" transform="translate(-0.01821617,830.00035)">
-    </g>
     <g id="jack_mockups" style="fill:none;stroke:#ffffff;stroke-opacity:0.72;stroke-width:30">
       <circle id="lst_x_jack_art" cx="900" cy="10350" r="180" />
       <circle id="lst_y_jack_art" cx="1940" cy="10350" r="180" />
@@ -94,8 +92,6 @@
       <circle id="in_r_jack_art" cx="1940" cy="11350" r="195" />
       <circle id="out_l_jack_art" cx="6100" cy="11350" r="195" />
       <circle id="out_r_jack_art" cx="7228" cy="11350" r="195" />
-    </g>
-    <g id="jack_labels" style="font-size:145px;font-family:Rubik;text-anchor:middle;dominant-baseline:middle;fill:#ffffff;fill-opacity:0.82">
     </g>
   </g>
   <g id="components" style="display:inline">

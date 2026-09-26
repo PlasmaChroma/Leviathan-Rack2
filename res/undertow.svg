@@ -174,23 +174,23 @@
    stop-color="#182682"
    id="stop_wave_3" />
     </linearGradient>
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-  
-    
-    
-    
-    
-    
-    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   <linearGradient
    inkscape:collect="always"
    xlink:href="#oceanWaveGrad"
@@ -257,7 +257,7 @@
    inkscape:current-layer="Background_Rect"
    showgrid="false"
    inkscape:pageshadow="2" />
-  
+
   <g
    id="panel_art"
    style="display:inline">
@@ -291,7 +291,7 @@
    style="fill:#7a5cff"
    d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
    id="path151" />
-        
+
         <path
    style="fill:#1cccd9"
    d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
@@ -308,7 +308,7 @@
    style="fill:#7a5cff"
    d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
    id="path160" />
-        
+
         <path
    style="fill:#1cccd9"
    d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
@@ -326,7 +326,7 @@
    stroke-width="60"
    id="gray_outline"
    style="display:none;stroke:#3c3f42;stroke-opacity:1" />
-      
+
     </g><g
    id="glass"><g
    id="glass_output"><rect
@@ -365,12 +365,12 @@
    fill="none"
    id="top_horizontal_line"
    style="display:none;opacity:1;stroke:#5740bf;stroke-width:49.8;stroke-dasharray:none;stroke-opacity:1" />
-    
-    
-    
-    
-    
-    
+
+
+
+
+
+
   <g
    id="plasma_conduit_anchors"
    inkscape:label="Plasma Conduit Anchors"><path
@@ -539,38 +539,38 @@
      style="fill:url(#linearGradient500)"
      x="2021.6813"
      y="447.27814">Undertow</tspan></text>
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         <text
    id="reworked_module_description"
    x="2027.7665"
@@ -581,103 +581,122 @@
      id="tspan2"
      x="2027.7665"
      y="815.19421">oscillator</tspan></text>
-        
+
       <text
    id="reworked_LEVIATHAN_LOGO"
    x="2304.9004"
    y="12598.224"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:none;fill:url(#linearGradient1);stroke:none;stroke-width:37.1;stroke-dasharray:none"
    xml:space="preserve"
-   inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text><text
-   x="3280"
-   y="11950.023"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
-   xml:space="preserve"
-   id="label_shape_output" data-theme-text="output"><tspan
-     sodipodi:role="line"
-     id="tspan21"
-     x="3280"
-     y="11950.023">MORPH</tspan></text><text
-   x="2031.8342"
-   y="11950.023"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
-   xml:space="preserve"
-   id="label_sub_output" data-theme-text="output">SUB</text><text
-   x="781.42719"
-   y="11950.023"
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
-   xml:space="preserve"
-   id="label_sine_output" data-theme-text="output">SINE</text><text
+   inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
+    <g id="theme_text_input" inkscape:label="Input Text">
+<text
    x="919.9942"
    y="2860.0002"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_coarse_param" data-theme-text="input"><tspan
+   id="label_coarse_param"><tspan
      sodipodi:role="line"
      id="tspan35"
      x="919.9942"
-     y="2860.0002">FREQ</tspan></text><text
+     y="2860.0002">FREQ</tspan></text>
+<text
    x="2004.54"
    y="3639.7786"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_fine_param" data-theme-text="input">FINE</text><text
+   id="label_fine_param">FINE</text>
+<text
    x="860"
    y="8310"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_lin_fm_param" data-theme-text="input">LIN FM</text><text
+   id="label_lin_fm_param">LIN FM</text>
+<text
    x="3136.696"
    y="8310"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_shape_param" data-theme-text="input"><tspan
+   id="label_shape_param"><tspan
      sodipodi:role="line"
      id="tspan20"
      x="3136.696"
-     y="8310">MORPH</tspan></text><text
+     y="8310">MORPH</tspan></text>
+<text
    x="2003.4113"
    y="8220"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_shape_param-1" data-theme-text="input"><tspan
+   id="label_shape_param-1"><tspan
      sodipodi:role="line"
      id="tspan4"
      x="2003.4113"
-     y="8220">EDGE</tspan></text><text
+     y="8220">EDGE</tspan></text>
+<text
    x="2008.3501"
    y="6910.0137"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_expo_input" data-theme-text="input"><tspan
+   id="label_expo_input"><tspan
      sodipodi:role="line"
      id="tspan19"
      x="2008.3501"
-     y="6910.0137">EXPO</tspan></text><text
+     y="6910.0137">EXPO</tspan></text>
+<text
    x="3135.5542"
    y="2588.0493"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_v_oct_input" data-theme-text="input">V/OCT</text><text
+   id="label_v_oct_input">V/OCT</text>
+<text
    x="860"
    y="4910.0493"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_sync_input" data-theme-text="input">SYNC</text><text
+   id="label_sync_input">SYNC</text>
+<text
    x="3136.6833"
    y="4910.0493"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_s_gate_input" data-theme-text="input">S GATE</text><text
+   id="label_s_gate_input">S GATE</text>
+<text
    x="2009.761"
    y="5385.1001"
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
    xml:space="preserve"
-   id="label_s_gate_input-9" data-theme-text="input"><tspan
+   id="label_s_gate_input-9"><tspan
      sodipodi:role="line"
      id="tspan3"
      x="2009.761"
-     y="5385.1001">OCT</tspan></text></g>
+     y="5385.1001">OCT</tspan></text>
+    </g>
+
+    <g id="theme_text_output" inkscape:label="Output Text">
+<text
+   x="3280"
+   y="11950.023"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"
+   id="label_shape_output"><tspan
+     sodipodi:role="line"
+     id="tspan21"
+     x="3280"
+     y="11950.023">MORPH</tspan></text>
+<text
+   x="2031.8342"
+   y="11950.023"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"
+   id="label_sub_output">SUB</text>
+<text
+   x="781.42719"
+   y="11950.023"
+   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.223px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variation-settings:'wght' 400;dominant-baseline:middle;text-anchor:middle;display:inline;fill:#ffffff"
+   xml:space="preserve"
+   id="label_sine_output">SINE</text>
+    </g>
+</g>
 <g id="perfect_wave_raster_anchors" style="display:none">
   <rect id="BRANDING_WAVE_LEFT_RASTER" x="0" y="12338.190" width="1306.748" height="511.810" />
 </g>

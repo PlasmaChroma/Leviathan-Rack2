@@ -299,58 +299,10 @@
   </g>
   <g
      id="labels">
-    <text
-       x="946.89569"
-       y="10639.935"
-       text-anchor="middle"
-       font-family="DejaVu Sans, Arial, sans-serif"
-       font-size="260"
-       fill="#d9e5f7"
-       id="zoom_lbl"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7" data-theme-text="input"><tspan
-         sodipodi:role="line"
-         id="tspan6"
-         x="946.89569"
-         y="10639.935">ZOOM-V</tspan></text>
-    <text
-       x="3853.7031"
-       y="12066.577"
-       text-anchor="middle"
-       font-family="DejaVu Sans, Arial, sans-serif"
-       font-size="260"
-       fill="#d9e5f7"
-       id="lcode_lbl"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7" data-theme-text="input"><tspan
-         sodipodi:role="line"
-         id="tspan3"
-         x="3853.7031"
-         y="12066.577">LOC CODE</tspan></text>
-    <text
-       x="2251.2947"
-       y="10639.935"
-       text-anchor="middle"
-       font-family="DejaVu Sans, Arial, sans-serif"
-       font-size="260"
-       fill="#d9e5f7"
-       id="x_lbl"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7" data-theme-text="input"><tspan
-         sodipodi:role="line"
-         id="tspan7"
-         x="2251.2947"
-         y="10639.935">X-V</tspan></text>
-    <text
-       x="3550.448"
-       y="10639.935"
-       text-anchor="middle"
-       font-family="DejaVu Sans, Arial, sans-serif"
-       font-size="260"
-       fill="#d9e5f7"
-       id="y_lbl"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7" data-theme-text="input"><tspan
-         sodipodi:role="line"
-         id="tspan8"
-         x="3550.448"
-         y="10639.935">Y-V</tspan></text>
+
+
+
+
     <text
        id="module_title"
        x="5077.354"
@@ -384,7 +336,62 @@
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;fill:url(#linearGradient74);stroke:none;stroke-width:75"
          x="3963.6721"
          y="12732.525">Leviathan</tspan></text>
-  </g>
+
+    <g id="theme_text_input" inkscape:label="Input Text">
+<text
+       x="946.89569"
+       y="10639.935"
+       text-anchor="middle"
+       font-family="DejaVu Sans, Arial, sans-serif"
+       font-size="260"
+       fill="#d9e5f7"
+       id="zoom_lbl"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7"><tspan
+         sodipodi:role="line"
+         id="tspan6"
+         x="946.89569"
+         y="10639.935">ZOOM-V</tspan></text>
+<text
+       x="3853.7031"
+       y="12066.577"
+       text-anchor="middle"
+       font-family="DejaVu Sans, Arial, sans-serif"
+       font-size="260"
+       fill="#d9e5f7"
+       id="lcode_lbl"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7"><tspan
+         sodipodi:role="line"
+         id="tspan3"
+         x="3853.7031"
+         y="12066.577">LOC CODE</tspan></text>
+<text
+       x="2251.2947"
+       y="10639.935"
+       text-anchor="middle"
+       font-family="DejaVu Sans, Arial, sans-serif"
+       font-size="260"
+       fill="#d9e5f7"
+       id="x_lbl"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7"><tspan
+         sodipodi:role="line"
+         id="tspan7"
+         x="2251.2947"
+         y="10639.935">X-V</tspan></text>
+<text
+       x="3550.448"
+       y="10639.935"
+       text-anchor="middle"
+       font-family="DejaVu Sans, Arial, sans-serif"
+       font-size="260"
+       fill="#d9e5f7"
+       id="y_lbl"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#d9e5f7"><tspan
+         sodipodi:role="line"
+         id="tspan8"
+         x="3550.448"
+         y="10639.935">Y-V</tspan></text>
+    </g>
+</g>
   <g id="perfect_wave_raster_anchors" style="display:none">
     <rect id="BRANDING_WAVE_LEFT_RASTER" x="2189.610" y="12338.190" width="1306.748" height="511.810" />
     <rect id="BRANDING_WAVE_RIGHT_RASTER" x="6663.674" y="12338.190" width="1306.748" height="511.810" />

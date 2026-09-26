@@ -182,23 +182,23 @@
    stop-color="#182682"
    id="stop_wave_3" />
     </linearGradient>
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-  
-    
-    
-    
-    
-    
-    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   <linearGradient
    inkscape:collect="always"
    xlink:href="#oceanWaveGrad"
@@ -258,7 +258,7 @@
    inkscape:current-layer="svg488"
    showgrid="false"
    inkscape:pageshadow="2" />
-  
+
   <g
    id="panel_art"
    style="display:inline">
@@ -292,7 +292,7 @@
    style="fill:#7a5cff"
    d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
    id="path151" />
-        
+
         <path
    style="fill:#1cccd9"
    d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
@@ -309,20 +309,20 @@
    style="fill:#7a5cff"
    d="m 372.784,338.875 c 42.5,0 125.678,-65.875 75.213,-144.378 C 412.71,139.6 316.321,128.5 247.714,197.107 179.179,265.642 219.7,398.411 0.644,413.201 9.193,412.412 101.283,402.321 136,328.25 172.429,250.536 166.357,98.751 343.642,98.751 c 38.869,0 81.43,18.384 104.731,34.607 116.874,81.357 61.625,248.321 -75.589,205.517 z"
    id="path160" />
-        
+
         <path
    style="fill:#1cccd9"
    d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z"
    id="path164" />
       </g></g>
-      
+
     </g>
-    
-    
-    
-    
-    
-    
+
+
+
+
+
+
   </g>
   <g
    id="panel_labels_reworked"
@@ -345,38 +345,38 @@
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:635px;font-family:Ancient;-inkscape-font-specification:'Ancient, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;dominant-baseline:middle;text-anchor:middle;display:inline;fill:url(#linearGradient300);fill-rule:evenodd;stroke-width:37.088"
    xml:space="preserve"
    inkscape:label="reworked_LEVIATHAN_LOGO">Leviathan</text>
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         <text
    id="reworked_module_description"
    x="4061.354"
@@ -387,7 +387,7 @@
      id="tspan2"
      x="4061.354"
      y="815.19421">reverb</tspan></text>
-        
+
       </g>
 <g
    id="bulkhead_panel_mockup"
@@ -401,16 +401,16 @@
    rx="0"
    ry="0"
    style="display:inline;fill:#080b10;fill-opacity:0.95;stroke:#1cccd9;stroke-width:36.4263;stroke-opacity:0.65" />
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
+
+
+
+
+
+
+
+
+
+
   <g
    id="knob_mockups"
    style="fill:none;stroke:#ffffff;stroke-width:34;stroke-opacity:0.72"
@@ -435,39 +435,14 @@
    cx="4705"
    cy="8170"
    r="205" />
-    
+
     <circle
    id="motion_knob_art"
    cx="7375"
    cy="8170"
    r="205" />
   </g>
-  <g
-   id="knob_labels"
-   style="font-size:180px;font-family:Rubik;dominant-baseline:middle;text-anchor:middle;fill:#ffffff;fill-opacity:0.82"
-   transform="translate(-0.01821617,830.00035)">
-    <text
-   x="700"
-   y="8510"
-   id="text1" data-theme-text="input">DECAY</text>
-    <text
-   x="2035"
-   y="8510"
-   id="text2" data-theme-text="input">DIFF</text>
-    <text
-   x="3370"
-   y="8510"
-   id="text3" data-theme-text="input">MIX</text>
-    <text
-   x="4705"
-   y="8510"
-   id="text4" data-theme-text="input">ABS</text>
-    
-    <text
-   x="7375"
-   y="8510"
-   id="text6" data-theme-text="input">MOTION</text>
-  </g>
+
   <g
    id="jack_mockups"
    style="fill:none;stroke:#ffffff;stroke-opacity:0.72;stroke-width:30">
@@ -522,50 +497,97 @@
    cy="11350"
    r="195" />
   </g>
-  <g
-   id="jack_labels"
+
+
+    <g id="theme_text_input" inkscape:label="Input Text">
+<g
+   id="knob_labels"
+   style="font-size:180px;font-family:Rubik;dominant-baseline:middle;text-anchor:middle;fill:#ffffff;fill-opacity:0.82"
+   transform="translate(-0.01821617,830.00035)">
+    <text
+   x="700"
+   y="8510"
+   id="text1">DECAY</text>
+    <text
+   x="2035"
+   y="8510"
+   id="text2">DIFF</text>
+    <text
+   x="3370"
+   y="8510"
+   id="text3">MIX</text>
+    <text
+   x="4705"
+   y="8510"
+   id="text4">ABS</text>
+
+    <text
+   x="7375"
+   y="8510"
+   id="text6">MOTION</text>
+  </g>
+<g
+   id="jack_labels_input"
    style="font-size:145px;font-family:Rubik;text-anchor:middle;dominant-baseline:middle;fill:#ffffff;fill-opacity:0.82">
     <text
    x="900"
    y="10685"
-   id="text7" data-theme-text="input">LST X</text>
+   id="text7">LST X</text>
     <text
    x="1940"
    y="10685"
-   id="text8" data-theme-text="input">LST Y</text>
+   id="text8">LST Y</text>
     <text
    x="2980"
    y="10685"
-   id="text9" data-theme-text="input">LEFT</text>
+   id="text9">LEFT</text>
     <text
    x="4020"
    y="10685"
-   id="text10" data-theme-text="input">RIGHT</text>
+   id="text10">RIGHT</text>
     <text
    x="5060"
    y="10685"
-   id="text11" data-theme-text="input">FRONT</text>
+   id="text11">FRONT</text>
     <text
    x="6100"
    y="10685"
-   id="text12" data-theme-text="input">BACK</text>
+   id="text12">BACK</text>
     <text
    x="900"
    y="11725"
-   id="text13" data-theme-text="input">IN L</text>
+   id="text13">IN L</text>
     <text
    x="1940"
    y="11725"
-   id="text14" data-theme-text="input">IN R</text>
+   id="text14">IN R</text>
+
+
+  </g>
+    </g>
+
+    <g id="theme_text_output" inkscape:label="Output Text">
+<g
+   id="jack_labels_output"
+   style="font-size:145px;font-family:Rubik;text-anchor:middle;dominant-baseline:middle;fill:#ffffff;fill-opacity:0.82">
+
+
+
+
+
+
+
+
     <text
    x="6100"
    y="11725"
-   id="text15" data-theme-text="output">OUT L</text>
+   id="text15">OUT L</text>
     <text
    x="7228"
    y="11725"
-   id="text16" data-theme-text="output">OUT R</text>
+   id="text16">OUT R</text>
   </g>
+    </g>
 </g>
 <g
    id="components"
@@ -601,7 +623,7 @@
    cy="9000"
    r="205"
    style="fill:#a95555;fill-opacity:0.95" />
-  
+
   <circle
    id="motion_param"
    cx="7375"

@@ -171,81 +171,13 @@
   </g>
   <g
      id="labels">
-    <text
-       x="1994.9664"
-       y="10499.721"
-       text-anchor="middle"
-       font-family="'DejaVu Sans', sans-serif"
-       font-size="155px"
-       fill="#ffe7a5"
-       id="text13"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1" data-theme-text="input"><tspan
-         sodipodi:role="line"
-         id="tspan8"
-         x="1994.9666"
-         y="10499.721">━━━━ PUFF ━━━━</tspan></text>
-    <text
-       x="4274.5742"
-       y="10330.878"
-       text-anchor="middle"
-       font-family="'DejaVu Sans', sans-serif"
-       font-size="155px"
-       fill="#ffe7a5"
-       id="text14"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1" data-theme-text="input"><tspan
-         sodipodi:role="line"
-         id="tspan4"
-         x="4274.5742"
-         y="10330.878">SENS</tspan></text>
-    <text
-       x="5477.2314"
-       y="10330.878"
-       text-anchor="middle"
-       font-family="'DejaVu Sans', sans-serif"
-       font-size="155px"
-       fill="#ffe7a5"
-       id="mix_label"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1" data-theme-text="input"><tspan
-         sodipodi:role="line"
-         id="tspan1"
-         x="5477.2314"
-         y="10330.878">WET</tspan></text>
-    <text
-       x="650"
-       y="11903.639"
-       text-anchor="middle"
-       font-family="'DejaVu Sans', sans-serif"
-       font-size="120px"
-       fill="#ffdfa0"
-       id="text18"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1" data-theme-text="input">IN L</text>
-    <text
-       x="2050"
-       y="11903.639"
-       text-anchor="middle"
-       font-family="'DejaVu Sans', sans-serif"
-       font-size="120px"
-       fill="#ffdfa0"
-       id="text19"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1" data-theme-text="input">IN R</text>
-    <text
-       x="4050"
-       y="11903.639"
-       text-anchor="middle"
-       font-family="'DejaVu Sans', sans-serif"
-       font-size="120px"
-       fill="#ffdfa0"
-       id="text20"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1" data-theme-text="output">OUT L</text>
-    <text
-       x="5450"
-       y="11903.639"
-       text-anchor="middle"
-       font-family="'DejaVu Sans', sans-serif"
-       font-size="120px"
-       fill="#ffdfa0"
-       id="text21"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1" data-theme-text="output">OUT R</text>
+
+
+
+
+
+
+
     <text
        id="reworked_module_title_text"
        x="3032.9185"
@@ -267,7 +199,88 @@
          id="tspan2"
          x="3044.825"
          y="813.54999">saturator</tspan></text>
-  </g>
+
+    <g id="theme_text_input" inkscape:label="Input Text">
+<text
+       x="1994.9664"
+       y="10499.721"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="155px"
+       fill="#ffe7a5"
+       id="text13"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1"><tspan
+         sodipodi:role="line"
+         id="tspan8"
+         x="1994.9666"
+         y="10499.721">━━━━ PUFF ━━━━</tspan></text>
+<text
+       x="4274.5742"
+       y="10330.878"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="155px"
+       fill="#ffe7a5"
+       id="text14"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1"><tspan
+         sodipodi:role="line"
+         id="tspan4"
+         x="4274.5742"
+         y="10330.878">SENS</tspan></text>
+<text
+       x="5477.2314"
+       y="10330.878"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="155px"
+       fill="#ffe7a5"
+       id="mix_label"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, @wght=400';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'wght' 400;text-anchor:middle;fill:#ffffff;fill-opacity:1"><tspan
+         sodipodi:role="line"
+         id="tspan1"
+         x="5477.2314"
+         y="10330.878">WET</tspan></text>
+<text
+       x="650"
+       y="11903.639"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="120px"
+       fill="#ffdfa0"
+       id="text18"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">IN L</text>
+<text
+       x="2050"
+       y="11903.639"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="120px"
+       fill="#ffdfa0"
+       id="text19"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">IN R</text>
+    </g>
+
+    <g id="theme_text_output" inkscape:label="Output Text">
+<text
+       x="4050"
+       y="11903.639"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="120px"
+       fill="#ffdfa0"
+       id="text20"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">OUT L</text>
+<text
+       x="5450"
+       y="11903.639"
+       text-anchor="middle"
+       font-family="'DejaVu Sans', sans-serif"
+       font-size="120px"
+       fill="#ffdfa0"
+       id="text21"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:282.222px;font-family:Rubik;-inkscape-font-specification:'Rubik, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1">OUT R</text>
+    </g>
+</g>
   <g
      id="components"
      opacity="0"

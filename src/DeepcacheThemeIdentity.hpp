@@ -41,8 +41,10 @@ public:
         changedAt_ = now;
     }
     bool pending() const { return observed_ != applied_; }
+    // The picker publishes at one-second intervals while dragging. Wait longer
+    // than that cadence so intermediate colors do not repeatedly rebuild previews.
     bool applyIfSettled(double now) {
-        if (!pending() || !std::isfinite(now) || now - changedAt_ < 0.35) return false;
+        if (!pending() || !std::isfinite(now) || now - changedAt_ < 3.0) return false;
         applied_ = observed_;
         return true;
     }

@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" height="128.5mm" version="1.1" viewBox="0 0 101.6 128.5" width="101.6mm" id="svg1713" sodipodi:docname="deck.svg" inkscape:version="1.4.4 (1:1.4.4+202605061432+dcaf3e7d9e)" inkscape:label="art">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" height="128.5mm" version="1.1" viewBox="0 0 101.6 128.5" width="101.6mm" id="svg1713" sodipodi:docname="deck.svg" inkscape:version="1.4.3 (0d15f75, 2025-12-25)" inkscape:label="art">
   <defs id="defs1527">
     <linearGradient id="linearGradient72" inkscape:collect="always">
       <stop style="stop-color:#7a5cff;stop-opacity:1;" offset="0" id="stop72" />
@@ -52,7 +52,6 @@
         <path style="fill:#1cccd9" d="M 495.426,413.249 H 268.433 C 242.935,402.664 232.851,365.455 246.5,310.035 c 15.166,-61.576 44.686,-94.762 88.642,-101.999 26.411,-4.347 46.895,4.299 59.973,12.945 -25.087,-13.418 -59.464,-4.238 -67.259,29.556 -8.998,38.929 -3.644,156.641 167.57,162.712 z" id="path164" />
       </g>
     </g>
-    <path d="M 8.527272,107.9163 7.5970965,106.335 h 1.8603523 z" id="Normal_L_R" style="font-size:3.175px;font-family:'Cascadia Mono';-inkscape-font-specification:'Cascadia Mono, @wght=700';font-variation-settings:'wght' 700;opacity:1;fill:#ffffff;fill-opacity:0.8;fill-rule:evenodd;stroke:none;stroke-width:1.144;stroke-linejoin:round;stroke-opacity:1" aria-label="▼" />
   </g>
   <g id="components" style="display:none">
     <circle cx="8.4081755" cy="17.086493" id="BUFFER" r="4" style="display:inline;fill:#ff0000;fill-opacity:1" />

@@ -95,11 +95,11 @@ def main() -> int:
             "theme text output excludes static title": all(elem.attrib.get("id") != "static-title" for elem in theme_text_root.iter()),
         }
 
-        legacy_panel, legacy_background = splitter.split_background_only(source, overwrite=True)
+        legacy_panel, legacy_background = splitter.split_background_only(source, overwrite=True, outline_label_text=False)
         legacy_root = ET.parse(legacy_panel).getroot()
         legacy_bg = ET.parse(legacy_background).getroot()
         checks.update({
-            "legacy mode keeps font text and directional labels": by_id(legacy_root, "static-title").text == "TITLE" and by_id(legacy_root, "out-label").text == "OUT",
+            "legacy mode keeps static text and extracts named directional groups": by_id(legacy_root, "static-title").text == "TITLE" and by_id(ET.parse(theme_text["output"]).getroot(), "out-label").text == "OUT" and all(e.get("id") != "out-label" for e in legacy_root.iter()),
             "legacy mode preserves authored foreground pigment": "fill:#5740bf" in by_id(legacy_root, "input").get("style"),
             "legacy mode extracts only background": all(e.get("id") != "base-fill" for e in legacy_root.iter()) and by_id(legacy_root, "background-highlight") is not None,
             "legacy background retains transform": by_id(legacy_bg, "background-transform").get("transform") == "translate(2 3)",
@@ -134,6 +134,19 @@ def main() -> int:
         checks["legacy role extraction removes duplicate labels"] = not any(e.get("id") in ("input", "output") for e in legacy.iter())
         checks["legacy extraction preserves anchors and static title"] = by_id(legacy, "anchor").get("cx") == "5" and by_id(legacy, "title").text == "TITLE"
         checks["legacy role extraction keeps inherited opacity"] = by_id(ET.parse(roles["input"]).getroot(), "labels").get("opacity") == "0.7"
+
+    # Keep the authored organization discoverable in Inkscape, including panels
+    # that use legacy background-only generation.
+    panel_names = "bifurx Sibyl bulkhead Cantor Chimera crownstep deck doorstop flux iris Moirai nautiloid Octavia Phonex proc Puffy sil undertow wyrm".split()
+    for panel_name in panel_names:
+        master = ET.parse(ROOT / "res" / (panel_name + ".svg")).getroot()
+        groups = [e for e in master.iter() if e.get("id") in ("theme_text_input", "theme_text_output")]
+        expected = 1 if panel_name == "nautiloid" else 2
+        checks[panel_name + " has editable named text groups"] = len(groups) == expected and all(
+            e.tag == "{http://www.w3.org/2000/svg}g" and
+            e.get("{http://www.inkscape.org/namespaces/inkscape}label") ==
+            ("Input Text" if e.get("id") == "theme_text_input" else "Output Text") for e in groups)
+        checks[panel_name + " needs no per-label role tags"] = not any(e.get("data-theme-text") for e in master.iter())
 
     for name, passed in checks.items():
         print(f"[{'PASS' if passed else 'FAIL'}] {name}")
